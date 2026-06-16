@@ -627,6 +627,109 @@
     margin-top: 12px;
     line-height: 1.55;
   }
+
+  /* === Whoop Tune Database === */
+  .tune-disclaimer {
+    background: rgba(255,77,26,.08);
+    border-left: 3px solid var(--orange);
+    border-radius: 0 6px 6px 0;
+    padding: .75rem 1rem;
+    font-size: .8rem;
+    color: var(--muted);
+    line-height: 1.55;
+    margin-bottom: 1.5rem;
+  }
+  .tune-scroll-hint {
+    display: none;
+    text-align: center;
+    font-size: .72rem;
+    color: var(--muted);
+    margin-bottom: .5rem;
+  }
+  @media (max-width: 860px) { .tune-scroll-hint { display: block; } }
+  .tune-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; }
+  .tune-table {
+    border-collapse: collapse;
+    min-width: 820px;
+    width: 100%;
+    table-layout: fixed;
+  }
+  .tune-table th {
+    background: var(--panel);
+    color: var(--orange);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    padding: .65rem .75rem;
+    text-align: left;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .tune-table th:first-child { width: 64px; }
+  .tune-table td { vertical-align: top; border: 1px solid var(--border); padding: .6rem .65rem; }
+  .tune-row-label {
+    background: var(--panel) !important;
+    color: var(--orange);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .85rem;
+    font-weight: 700;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .tune-pair { display: flex; gap: .5rem; }
+  .tune-block {
+    flex: 1;
+    background: var(--bg);
+    border-radius: 6px;
+    padding: .5rem .55rem;
+    min-width: 0;
+  }
+  .tune-block-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .58rem;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: .25rem;
+    margin-bottom: .3rem;
+  }
+  .tune-block-label.ryfly { color: var(--orange); }
+  .tune-sh {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .52rem;
+    color: rgba(255,255,255,.22);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    margin: .3rem 0 .12rem;
+  }
+  .pid-cols, .pid-row {
+    display: grid;
+    grid-template-columns: .9rem 1fr 1fr 1fr;
+    gap: 2px;
+    margin-bottom: 1px;
+  }
+  .pid-ch { font-family: 'JetBrains Mono', monospace; font-size: .5rem; color: rgba(255,255,255,.18); text-align: center; }
+  .pid-ax { font-family: 'JetBrains Mono', monospace; font-size: .56rem; color: rgba(255,255,255,.32); display: flex; align-items: center; }
+  .pid-v {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .6rem;
+    color: var(--green);
+    text-align: center;
+    background: rgba(61,220,151,.06);
+    border-radius: 2px;
+    padding: 1px 0;
+  }
+  .rate-type { font-family: 'JetBrains Mono', monospace; font-size: .56rem; color: rgba(255,255,255,.3); margin-bottom: 2px; }
+  .tune-filter {
+    font-size: .58rem;
+    color: rgba(255,255,255,.28);
+    font-style: italic;
+    margin-top: .3rem;
+    padding-top: .25rem;
+    border-top: 1px solid var(--border);
+  }
 </style>
 </head>
 <body>
@@ -639,6 +742,7 @@
       <a href="#guide">Guide</a>
       <a href="#motor-guide">Motors</a>
       <a href="#tools">Tools</a>
+      <a href="#tunes">Tunes</a>
     </nav>
   </div>
 </header>
@@ -964,6 +1068,236 @@
         <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">400–600g</span></div>
         <p class="frame-note">Built for distance, not punch. Lower KV and larger props maximize propulsive efficiency. Common with GPS, long-range links (ELRS), and HD cameras.</p>
       </div>
+    </div>
+  </section>
+
+  <section class="section" id="tunes">
+    <h2>Whoop Tune Database</h2>
+    <p class="tune-disclaimer">Starting points only. Motor KV, prop brand, battery C-rating, and frame stiffness all affect how a tune responds. Always bench-test before flying and check motor temps after your first pack. Adjust to your own build — no two whoops fly identically.</p>
+    <p class="tune-scroll-hint">← swipe to see all FC brands →</p>
+    <div class="tune-table-wrap">
+      <table class="tune-table">
+        <thead>
+          <tr>
+            <th>Frame</th>
+            <th>BetaFPV</th>
+            <th>Happymodel</th>
+            <th>NewBeeDrone</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="tune-row-label">65mm</td>
+            <td>
+              <div class="tune-pair">
+                <div class="tune-block">
+                  <div class="tune-block-label">Stock</div>
+                  <div class="tune-sh">PIDs</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-sh">Rates</div>
+                  <div class="rate-type">Type: [TBD]</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-filter">Filter: [TBD]</div>
+                </div>
+                <div class="tune-block">
+                  <div class="tune-block-label ryfly">RyFly</div>
+                  <div class="tune-sh">PIDs</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-sh">Rates</div>
+                  <div class="rate-type">Type: [TBD]</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-filter">Filter: [TBD]</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div class="tune-pair">
+                <div class="tune-block">
+                  <div class="tune-block-label">Stock</div>
+                  <div class="tune-sh">PIDs</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-sh">Rates</div>
+                  <div class="rate-type">Type: [TBD]</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-filter">Filter: [TBD]</div>
+                </div>
+                <div class="tune-block">
+                  <div class="tune-block-label ryfly">RyFly</div>
+                  <div class="tune-sh">PIDs</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-sh">Rates</div>
+                  <div class="rate-type">Type: [TBD]</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-filter">Filter: [TBD]</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div class="tune-pair">
+                <div class="tune-block">
+                  <div class="tune-block-label">Stock</div>
+                  <div class="tune-sh">PIDs</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-sh">Rates</div>
+                  <div class="rate-type">Type: [TBD]</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-filter">Filter: [TBD]</div>
+                </div>
+                <div class="tune-block">
+                  <div class="tune-block-label ryfly">RyFly</div>
+                  <div class="tune-sh">PIDs</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-sh">Rates</div>
+                  <div class="rate-type">Type: [TBD]</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-filter">Filter: [TBD]</div>
+                </div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="tune-row-label">75mm</td>
+            <td>
+              <div class="tune-pair">
+                <div class="tune-block">
+                  <div class="tune-block-label">Stock</div>
+                  <div class="tune-sh">PIDs</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-sh">Rates</div>
+                  <div class="rate-type">Type: [TBD]</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-filter">Filter: [TBD]</div>
+                </div>
+                <div class="tune-block">
+                  <div class="tune-block-label ryfly">RyFly</div>
+                  <div class="tune-sh">PIDs</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-sh">Rates</div>
+                  <div class="rate-type">Type: [TBD]</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-filter">Filter: [TBD]</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div class="tune-pair">
+                <div class="tune-block">
+                  <div class="tune-block-label">Stock</div>
+                  <div class="tune-sh">PIDs</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-sh">Rates</div>
+                  <div class="rate-type">Type: [TBD]</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-filter">Filter: [TBD]</div>
+                </div>
+                <div class="tune-block">
+                  <div class="tune-block-label ryfly">RyFly</div>
+                  <div class="tune-sh">PIDs</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-sh">Rates</div>
+                  <div class="rate-type">Type: [TBD]</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-filter">Filter: [TBD]</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div class="tune-pair">
+                <div class="tune-block">
+                  <div class="tune-block-label">Stock</div>
+                  <div class="tune-sh">PIDs</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-sh">Rates</div>
+                  <div class="rate-type">Type: [TBD]</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-filter">Filter: [TBD]</div>
+                </div>
+                <div class="tune-block">
+                  <div class="tune-block-label ryfly">RyFly</div>
+                  <div class="tune-sh">PIDs</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-sh">Rates</div>
+                  <div class="rate-type">Type: [TBD]</div>
+                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
+                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
+                  <div class="tune-filter">Filter: [TBD]</div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </section>
 </div>
