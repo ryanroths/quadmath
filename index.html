@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuadMath — FPV Motor &amp; Build Calculator</title>
+<meta name="description" content="FPV build calculator for drone pilots. Estimate top speed, flight time, and thrust-to-weight for any motor, prop, and battery combo. Compare motors side-by-side. Covers 65mm whoops, 3-inch micros, 5-inch freestyle, and 7-inch long range builds.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0D0E12;
+    --panel: #15171D;
+    --text: #E8E6E1;
+    --muted: #6B6F76;
+    --orange: #FF4D1A;
+    --green: #3DDC97;
+    --border: #2A2D35;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ===== HEADER ===== */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0;
+  }
+  .header-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .logo {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo .dot { color: var(--orange); }
+  nav a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+    margin-left: 24px;
+    transition: color 0.15s;
+  }
+  nav a:hover { color: var(--text); }
+
+  /* ===== HERO / CALCULATOR ===== */
+  .hero {
+    padding: 48px 0 32px;
+  }
+  .hero h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.8rem, 5vw, 2.8rem);
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+  .hero h1 .accent { color: var(--orange); }
+  .hero p.sub {
+    color: var(--muted);
+    font-size: 1rem;
+    max-width: 520px;
+    margin-bottom: 32px;
+  }
+
+  /* Frame size selector */
+  .frame-select {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .frame-btn {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 10px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .frame-btn:hover {
+    border-color: var(--muted);
+    color: var(--text);
+  }
+  .frame-btn.active {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: #0D0E12;
+    font-weight: 700;
+  }
+
+  /* Calculator grid */
+  .calc-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  @media (min-width: 800px) {
+    .calc-grid { grid-template-columns: 380px 1fr; gap: 24px; }
+  }
+
+  .inputs-panel, .osd-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+  }
+
+  .panel-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-label::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: var(--green);
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .field {
+    margin-bottom: 18px;
+  }
+  .field label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text);
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+  .field .field-hint {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .field select, .field input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.95rem;
+    padding: 10px 12px;
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .field select:focus, .field input:focus {
+    border-color: var(--orange);
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* ===== OSD RESULTS PANEL ===== */
+  .osd-panel {
+    background: #0A0B0E;
+    position: relative;
+    overflow: hidden;
+    min-height: 380px;
+    display: flex;
+    flex-direction: column;
+  }
+  /* corner brackets - OSD style */
+  .osd-panel::before, .osd-panel::after,
+  .osd-corner-tl, .osd-corner-br {
+    content: '';
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--green);
+    opacity: 0.4;
+  }
+  .osd-panel::before {
+    top: 12px; left: 12px;
+    border-right: none; border-bottom: none;
+  }
+  .osd-panel::after {
+    bottom: 12px; right: 12px;
+    border-left: none; border-top: none;
+  }
+  .osd-corner-tl {
+    top: 12px; right: 12px;
+    border-left: none; border-bottom: none;
+  }
+  .osd-corner-br {
+    bottom: 12px; left: 12px;
+    border-right: none; border-top: none;
+  }
+
+  .osd-stats {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    margin-top: 8px;
+  }
+  .osd-stat {
+    background: #0A0B0E;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .osd-stat.full {
+    grid-column: 1 / -1;
+  }
+  .osd-stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .osd-stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--green);
+    line-height: 1;
+  }
+  .osd-stat-value .unit {
+    font-size: 1rem;
+    color: var(--muted);
+    font-weight: 400;
+    margin-left: 6px;
+  }
+  .osd-stat-value.warn { color: var(--orange); }
+  .osd-stat-sub {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* big speed stat */
+  .speed-hero {
+    background: linear-gradient(135deg, rgba(255,77,26,0.08), transparent);
+    border-bottom: 1px solid var(--border);
+    padding: 28px 20px;
+    text-align: center;
+  }
+  .speed-hero-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--orange);
+    margin-bottom: 8px;
+  }
+  .speed-hero-value {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 3.5rem;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .speed-hero-value .unit {
+    font-size: 1.2rem;
+    color: var(--muted);
+    font-weight: 500;
+    margin-left: 8px;
+  }
+  .speed-hero-note {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 8px;
+    max-width: 360px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* ===== AD SLOTS ===== */
+  .ad-slot {
+    background: var(--panel);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 32px 0;
+  }
+  .ad-slot.inline {
+    margin: 24px 0;
+  }
+
+  /* ===== CONTENT SECTIONS ===== */
+  .section {
+    padding: 40px 0;
+    border-top: 1px solid var(--border);
+  }
+  .section h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 1.4rem;
+    margin-bottom: 16px;
+    letter-spacing: -0.01em;
+  }
+  .section p {
+    color: var(--muted);
+    font-size: 0.95rem;
+    max-width: 680px;
+    margin-bottom: 12px;
+  }
+
+  /* disclaimer */
+  .disclaimer {
+    font-size: 0.78rem;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    margin-top: 16px;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  footer .footer-logo .dot { color: var(--orange); }
+
+  /* ===== COMPARISON PANEL ===== */
+  .compare-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin-top: 24px;
+  }
+  .compare-note {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-left: 8px;
+  }
+  .compare-motors {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 16px;
+    align-items: end;
+    margin: 16px 0 20px;
+  }
+  .compare-col-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .compare-vs {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-align: center;
+    padding-bottom: 44px;
+  }
+  .cmp-select, .cmp-kv {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    padding: 10px 12px;
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.15s;
+    display: block;
+    box-sizing: border-box;
+  }
+  .cmp-select:focus, .cmp-kv:focus { border-color: var(--orange); }
+  .cmp-select { margin-bottom: 8px; }
+  .compare-table {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .compare-row {
+    display: grid;
+    grid-template-columns: 110px 1fr 1fr;
+    border-bottom: 1px solid var(--border);
+  }
+  .compare-row:last-child { border-bottom: none; }
+  .compare-metric {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 16px;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+  }
+  .compare-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--muted);
+    padding: 16px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-left: 1px solid var(--border);
+    transition: color 0.15s;
+  }
+  .compare-val.filled { color: var(--text); }
+  .compare-val.winner { color: var(--green); }
+  .cmp-unit {
+    font-size: 0.65rem;
+    font-weight: 400;
+    color: var(--muted);
+    margin-left: 3px;
+    align-self: flex-end;
+    padding-bottom: 3px;
+  }
+
+  /* ===== ADDITIONAL TOOLS ===== */
+  .tool-details {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 12px;
+  }
+  .tool-summary {
+    padding: 16px 24px;
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text);
+    user-select: none;
+    transition: background 0.15s;
+  }
+  .tool-summary::-webkit-details-marker { display: none; }
+  .tool-summary:hover { background: rgba(255,255,255,0.03); }
+  .tool-summary::after { content: '+'; color: var(--orange); font-size: 1.1rem; font-weight: 700; }
+  details[open] > .tool-summary::after { content: '−'; }
+  .tool-body {
+    padding: 24px;
+    border-top: 1px solid var(--border);
+  }
+  .tool-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  @media (min-width: 640px) {
+    .tool-grid { grid-template-columns: 260px 1fr; }
+  }
+  .tool-results {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .tool-stat { background: var(--bg); padding: 16px; }
+  .tool-stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .tool-stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--green);
+    line-height: 1.1;
+  }
+  .tool-stat-value .tunit { font-size: 0.8rem; font-weight: 400; color: var(--muted); margin-left: 3px; }
+  .tool-stat-value.warn { color: var(--orange); }
+  .batt-status {
+    margin-top: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    padding: 10px 14px;
+    border-radius: 4px;
+    background: rgba(61,220,151,0.08);
+    color: var(--green);
+    border: 1px solid rgba(61,220,151,0.2);
+    line-height: 1.5;
+  }
+  .batt-status.warn {
+    background: rgba(255,77,26,0.08);
+    color: var(--orange);
+    border-color: rgba(255,77,26,0.2);
+  }
+  .pitch-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .pitch-table th {
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .pitch-table td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .pitch-table tr:last-child td { border-bottom: none; }
+  .pitch-table td.pitch-speed { color: var(--text); font-weight: 700; }
+  .pitch-table tr.current-pitch td { background: rgba(61,220,151,0.06); }
+  .pitch-table tr.current-pitch td.pitch-speed { color: var(--green); }
+
+  /* ===== FRAME REFERENCE CARDS ===== */
+  .frame-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 20px;
+  }
+  @media (min-width: 560px) { .frame-grid { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 860px) { .frame-grid { grid-template-columns: repeat(3, 1fr); } }
+  .frame-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 18px;
+  }
+  .frame-card-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text);
+    margin-bottom: 3px;
+  }
+  .frame-card-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--orange);
+    display: block;
+    margin-bottom: 14px;
+  }
+  .frame-spec {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 0.82rem;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .frame-spec:last-of-type { border-bottom: none; padding-bottom: 0; }
+  .frame-spec-key { color: var(--muted); white-space: nowrap; }
+  .frame-spec-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text);
+    text-align: right;
+  }
+  .frame-note {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 12px;
+    line-height: 1.55;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container header-inner">
+    <div class="logo">QuadMath<span class="dot">.</span></div>
+    <nav>
+      <a href="#calculator">Calculator</a>
+      <a href="#guide">Guide</a>
+      <a href="#motor-guide">Motors</a>
+      <a href="#tools">Tools</a>
+    </nav>
+  </div>
+</header>
+
+<div class="container">
+  <section class="hero" id="calculator">
+    <h1>Know your build<br>before you <span class="accent">solder it</span>.</h1>
+    <p class="sub">Enter your motor KV, prop pitch, and battery — get estimated top speed, flight time, and thrust-to-weight. Compare motors side by side. Covers 65mm indoor whoops, 3" micros, 5" freestyle, and 7" long range builds.</p>
+
+    <div class="frame-select">
+      <button class="frame-btn active" data-frame="65">65mm Whoop</button>
+      <button class="frame-btn" data-frame="75">75mm Whoop</button>
+      <button class="frame-btn" data-frame="3">3" Freestyle</button>
+      <button class="frame-btn" data-frame="5">5" Freestyle</button>
+      <button class="frame-btn" data-frame="7">7" Long Range</button>
+    </div>
+
+    <div class="calc-grid">
+      <!-- INPUTS -->
+      <div class="inputs-panel">
+        <div class="panel-label">Build Inputs</div>
+
+        <div class="field">
+          <label for="motorSelect">Motor</label>
+          <select id="motorSelect">
+            <option value="">— Select a motor or enter KV below —</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="motorKV">Motor KV</label>
+          <input type="number" id="motorKV" value="27000" step="500">
+          <div class="field-hint">Auto-filled from motor selection above, or enter manually</div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="cells">Battery Cells (S)</label>
+            <select id="cells">
+              <option value="1">1S</option>
+              <option value="2" selected>2S</option>
+              <option value="3">3S</option>
+              <option value="4">4S</option>
+              <option value="6">6S</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="capacity">Capacity (mAh)</label>
+            <input type="number" id="capacity" value="450" step="50">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="propPitch">Prop Pitch (inches)</label>
+          <input type="number" id="propPitch" value="1.5" step="0.1">
+          <div class="field-hint">e.g. a "31xx" prop has a 3.1" pitch</div>
+        </div>
+
+        <div class="field">
+          <label for="weight">All-Up Weight (grams)</label>
+          <input type="number" id="weight" value="27" step="1">
+        </div>
+      </div>
+
+      <!-- RESULTS / OSD -->
+      <div class="osd-panel">
+        <div class="osd-corner-tl"></div>
+        <div class="osd-corner-br"></div>
+
+        <div class="speed-hero">
+          <div class="speed-hero-label">Estimated Top Speed</div>
+          <div class="speed-hero-value" id="topSpeed">38<span class="unit">mph</span></div>
+          <div class="speed-hero-note">Based on drag-equilibrium: load-limited motor RPM vs. aerodynamic drag. Real-world speed varies with airflow, battery sag, and pilot throttle habits.</div>
+        </div>
+
+        <div class="osd-stats">
+          <div class="osd-stat">
+            <div class="osd-stat-label">Flight Time</div>
+            <div class="osd-stat-value" id="flightTime">2.1<span class="unit">min</span></div>
+            <div class="osd-stat-sub">Aggressive freestyle throttle</div>
+          </div>
+          <div class="osd-stat">
+            <div class="osd-stat-label">Thrust-to-Weight</div>
+            <div class="osd-stat-value" id="thrustWeight">3.2<span class="unit">:1</span></div>
+            <div class="osd-stat-sub" id="twRating">Punchy</div>
+          </div>
+          <div class="osd-stat full">
+            <div class="osd-stat-label">Estimated Total Thrust</div>
+            <div class="osd-stat-value" id="totalThrust">86<span class="unit">g</span></div>
+            <div class="osd-stat-sub">At full throttle, all 4 motors combined</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="disclaimer">
+      These are <strong>estimates</strong> based on community benchmark data and theoretical prop pitch speed — not bench-tested results. Actual performance depends on motor efficiency, ESC, frame drag, and battery C-rating. Use this to compare builds, not as a guarantee.
+    </div>
+  </section>
+
+  <!-- MOTOR COMPARISON -->
+  <div class="compare-wrap">
+    <div class="panel-label">Motor Comparison<span class="compare-note">— same frame, battery &amp; weight as above</span></div>
+    <div class="compare-motors">
+      <div>
+        <div class="compare-col-label">Motor A</div>
+        <select id="cmpSelectA" class="cmp-select"><option value="">— Pick a motor —</option></select>
+        <input type="number" id="cmpKvA" class="cmp-kv" placeholder="or enter KV" step="500">
+      </div>
+      <div class="compare-vs">VS</div>
+      <div>
+        <div class="compare-col-label">Motor B</div>
+        <select id="cmpSelectB" class="cmp-select"><option value="">— Pick a motor —</option></select>
+        <input type="number" id="cmpKvB" class="cmp-kv" placeholder="or enter KV" step="500">
+      </div>
+    </div>
+    <div class="compare-table">
+      <div class="compare-row">
+        <div class="compare-metric">Top Speed</div>
+        <div class="compare-val" id="cmpSpeedA">—</div>
+        <div class="compare-val" id="cmpSpeedB">—</div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-metric">T:W Ratio</div>
+        <div class="compare-val" id="cmpTwA">—</div>
+        <div class="compare-val" id="cmpTwB">—</div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-metric">Total Thrust</div>
+        <div class="compare-val" id="cmpThrustA">—</div>
+        <div class="compare-val" id="cmpThrustB">—</div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-metric">Flight Time</div>
+        <div class="compare-val" id="cmpTimeA">—</div>
+        <div class="compare-val" id="cmpTimeB">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AD SLOT 1 - below the fold, after primary tool interaction -->
+  <div class="ad-slot">Ad placement — leaderboard (728×90 / responsive)</div>
+
+  <section class="section" id="guide">
+    <h2>How these numbers are calculated</h2>
+    <p>
+      <strong>Top speed</strong> uses a drag-equilibrium model: effective motor RPM under load (not free-spin RPM) sets a pitch-speed ceiling, then aerodynamic frame drag — which grows with the square of velocity — determines where thrust and drag balance. Small whoops spin at a much lower fraction of no-load RPM than 5"+ quads because tiny high-KV motors drop significantly under electrical load, which is why naive pitch×RPM formulas drastically overestimate whoop top speeds.
+    </p>
+    <p>
+      <strong>Flight time</strong> is modeled from your battery capacity, an 80% usable discharge window (to protect cell health), and an estimated average current draw based on frame size and motor specs — tuned for aggressive freestyle flying rather than gentle cruising.
+    </p>
+    <p>
+      <strong>Thrust-to-weight</strong> uses community static-thrust benchmarks for common motor/prop/cell combinations at each frame size, since true thrust requires a bench test rig. A ratio above 2:1 is generally freestyle-capable; whoops often run lower due to prop and motor constraints at their scale.
+    </p>
+  </section>
+
+  <!-- AD SLOT 2 - in content flow -->
+  <div class="ad-slot inline">Ad placement — in-content rectangle (300×250)</div>
+
+  <section class="section" id="tools">
+    <h2>More Calculators</h2>
+
+    <details class="tool-details">
+      <summary class="tool-summary">Battery C-Rating &amp; Voltage Sag</summary>
+      <div class="tool-body">
+        <div class="tool-grid">
+          <div>
+            <div class="field">
+              <label for="battCells">Battery Cells (S)</label>
+              <select id="battCells">
+                <option value="1">1S</option>
+                <option value="2">2S</option>
+                <option value="3">3S</option>
+                <option value="4" selected>4S</option>
+                <option value="6">6S</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="battMah">Capacity (mAh)</label>
+                <input type="number" id="battMah" value="1300" step="50">
+              </div>
+              <div class="field">
+                <label for="battC">C-Rating</label>
+                <input type="number" id="battC" value="100" step="5">
+              </div>
+            </div>
+            <div class="field">
+              <label for="battPeakA">Peak Draw (A, all 4 motors)</label>
+              <input type="number" id="battPeakA" value="60" step="5">
+            </div>
+          </div>
+          <div>
+            <div class="tool-results">
+              <div class="tool-stat">
+                <div class="tool-stat-label">Max Rated Current</div>
+                <div class="tool-stat-value" id="battMaxA">—<span class="tunit">A</span></div>
+              </div>
+              <div class="tool-stat">
+                <div class="tool-stat-label">Current Headroom</div>
+                <div class="tool-stat-value" id="battHeadroom">—<span class="tunit">%</span></div>
+              </div>
+              <div class="tool-stat">
+                <div class="tool-stat-label">Voltage Sag</div>
+                <div class="tool-stat-value" id="battSag">—<span class="tunit">V</span></div>
+              </div>
+              <div class="tool-stat">
+                <div class="tool-stat-label">Effective Voltage</div>
+                <div class="tool-stat-value" id="battEffV">—<span class="tunit">V</span></div>
+              </div>
+            </div>
+            <div class="batt-status" id="battStatus">Enter your battery specs above.</div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="tool-details">
+      <summary class="tool-summary">Prop Pitch Speed Reference</summary>
+      <div class="tool-body">
+        <div class="tool-grid">
+          <div>
+            <div class="field">
+              <label for="pitchKV">Motor KV</label>
+              <input type="number" id="pitchKV" value="1900" step="100">
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="pitchCells">Battery (S)</label>
+                <select id="pitchCells">
+                  <option value="1">1S</option>
+                  <option value="2">2S</option>
+                  <option value="3">3S</option>
+                  <option value="4">4S</option>
+                  <option value="6" selected>6S</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="pitchFrame">Frame</label>
+                <select id="pitchFrame">
+                  <option value="65">65mm</option>
+                  <option value="75">75mm</option>
+                  <option value="3">3"</option>
+                  <option value="5" selected>5"</option>
+                  <option value="7">7"</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-hint">Highlighted row = your current prop pitch from the main calc above.</div>
+          </div>
+          <div>
+            <table class="pitch-table">
+              <thead><tr><th>Pitch</th><th>Est. Top Speed</th></tr></thead>
+              <tbody id="pitchTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="motor-guide">
+    <h2>How to choose a motor</h2>
+    <p>
+      <strong>KV and cell count are linked.</strong> KV is how fast the motor spins per volt. More cells means lower KV to keep your prop RPM in a useful range without over-spinning. Rule of thumb for 5" props: 4S builds use 2300–2450KV; 6S builds use 1700–1950KV. Going too high on KV for your voltage generates heat and shortens motor life.
+    </p>
+    <p>
+      <strong>Stator size sets the torque ceiling.</strong> The four-digit stator number tells you everything — "2207" means 22mm diameter, 7mm tall. Wider diameter adds torque and power but also weight. For 5" freestyle a 2207 or 2306 hits the sweet spot. For long range, a taller stator (2807, 2808) provides more torque to spin larger props at lower RPM efficiently.
+    </p>
+    <p>
+      <strong>Match thrust-to-weight to your flying style.</strong> Casual freestyle and cruising works well at 4:1–6:1. Aggressive freestyle pilots often target 8:1–12:1 for snappy response. Long range builds prioritize efficiency over punch — 3:1–5:1 is typical. Whoops are size-constrained and land wherever the motor and prop math allows.
+    </p>
+    <p>
+      <strong>Don't cheap out on C-rating.</strong> An underpowered battery sags badly under load, robbing motor performance and degrading cells quickly. For 5" freestyle on 6S, target at least 50C continuous on a 1300mAh pack — or a 1100mAh 100C pack for cleaner power delivery. Use the battery calculator in the Tools section to check your specific pack against your estimated peak draw.
+    </p>
+  </section>
+
+  <section class="section" id="frame-guide">
+    <h2>Frame size reference</h2>
+    <div class="frame-grid">
+      <div class="frame-card">
+        <div class="frame-card-title">65mm Whoop</div>
+        <span class="frame-card-tag">Indoor / Learning</span>
+        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">0802, 15–22K KV</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">1S, 250–300mAh</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">31–40mm</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">20–28g</span></div>
+        <p class="frame-note">Pure indoor build. Every gram matters — 0802 motors weigh under 2g each. Prioritize motor weight and efficiency over raw power output.</p>
+      </div>
+      <div class="frame-card">
+        <div class="frame-card-title">75mm Whoop</div>
+        <span class="frame-card-tag">Indoor / Outdoor Hybrid</span>
+        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">1102–1103, 8–22K KV</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">1S, 300–450mAh</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">40mm</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">25–35g</span></div>
+        <p class="frame-note">The Mobula7 class — always 1S. More versatile than 65mm, handles light outdoor wind. A good first whoop for pilots coming off simulators.</p>
+      </div>
+      <div class="frame-card">
+        <div class="frame-card-title">3" Freestyle</div>
+        <span class="frame-card-tag">Micro / Cinema</span>
+        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">1404–1507, 3.5–5K KV</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">2–4S, 650–850mAh</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">3" bi/tri-blade</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">100–160g</span></div>
+        <p class="frame-note">Bridges micro and full-size. Popular for cinewhoops (with prop guards) and tight indoor freestyle. Good punch without the footprint of a 5".</p>
+      </div>
+      <div class="frame-card">
+        <div class="frame-card-title">5" Freestyle</div>
+        <span class="frame-card-tag">Freestyle / Racing</span>
+        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">2207–2306, 1700–2450 KV</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">4–6S, 1300–1800mAh</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">5" bi/tri-blade</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">250–350g</span></div>
+        <p class="frame-note">The dominant class with the widest ecosystem. On 6S use 1700–1950KV; on 4S use 2300–2450KV. Nearly all freestyle content you see online is 5".</p>
+      </div>
+      <div class="frame-card">
+        <div class="frame-card-title">7" Long Range</div>
+        <span class="frame-card-tag">Efficiency / Distance</span>
+        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">2506–2808, 900–1500 KV</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">6S, 1800–3000mAh</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">7" bi-blade</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">400–600g</span></div>
+        <p class="frame-note">Built for distance, not punch. Lower KV and larger props maximize propulsive efficiency. Common with GPS, long-range links (ELRS), and HD cameras.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="container header-inner" style="width: 100%;">
+    <div class="footer-logo">QuadMath<span class="dot">.</span></div>
+    <div>Estimates only — always verify with bench testing. Fly safe.</div>
+  </div>
+</footer>
+
+<script>
+  // ===== Frame size presets (typical defaults) =====
+  const framePresets = {
+    65: { kv: 19000, cells: 1, capacity: 300, pitch: 1.0, weight: 24 },  // AUW: ~17g frame + 7g 1S battery
+    75: { kv: 10000, cells: 1, capacity: 300, pitch: 2.0, weight: 27 },  // 1S only; ~20g frame + 7g battery
+    3:  { kv: 7000,  cells: 4, capacity: 850, pitch: 2.5, weight: 120 },
+    5:  { kv: 1900,  cells: 6, capacity: 1300, pitch: 5.1, weight: 280 },
+    7:  { kv: 1300,  cells: 6, capacity: 1800, pitch: 6.0, weight: 420 },
+  };
+
+  // Real motor database by frame size — brand, stator, KV
+  const motorDB = {
+    65: [
+      { name: 'BetaFPV 0802',           kv: 19000 },
+      { name: 'BetaFPV 0802',           kv: 22000 },
+      { name: 'Happymodel SE0802',       kv: 19000 },
+      { name: 'Happymodel SE0802',       kv: 22000 },
+      { name: 'Emax 0802',              kv: 15000 },
+      { name: 'BetaFPV 1102',           kv: 18000 },
+    ],
+    75: [
+      { name: 'Happymodel 1103',         kv: 10000 },
+      { name: 'BetaFPV 0802',           kv: 19000 },
+      { name: 'Emax RS1103',            kv: 8000  },
+      { name: 'BetaFPV 1103',           kv: 8000  },
+      { name: 'Happymodel SE1102',       kv: 13500 },
+    ],
+    3: [
+      { name: 'T-Motor Velox V1404',     kv: 4600 },
+      { name: 'BetaFPV 1404',           kv: 4500 },
+      { name: 'Emax RS1408',            kv: 4100 },
+      { name: 'T-Motor Velox V1506',     kv: 3800 },
+      { name: 'BrotherHobby T1404',     kv: 4600 },
+      { name: 'Xing 1404',              kv: 3500 },
+    ],
+    5: [
+      { name: 'T-Motor Velox V2207',     kv: 1950 },
+      { name: 'T-Motor F40 PRO IV',      kv: 2400 },
+      { name: 'Emax ECO II 2207',        kv: 2400 },
+      { name: 'Iflight XING 2208',       kv: 1800 },
+      { name: 'BrotherHobby 2207',       kv: 1700 },
+      { name: 'T-Motor Pacer 2306',      kv: 2150 },
+      { name: 'SucceX-E 2207',           kv: 2450 },
+    ],
+    7: [
+      { name: 'Emax ECO II 2807',        kv: 1300 },
+      { name: 'Iflight XING 2806',       kv: 1300 },
+      { name: 'T-Motor Navigator 2808',  kv: 900  },
+      { name: 'BrotherHobby 2807',       kv: 1300 },
+      { name: 'Sunnysky X2806',          kv: 1250 },
+      { name: 'T-Motor Velox V2207',     kv: 1750 },
+    ],
+  };
+
+  // Approx static thrust benchmark (grams of thrust per watt) by frame size — rough community averages
+  const thrustPerWatt = {
+    65: 3.5,
+    75: 3.8,
+    3:  4.2,
+    5:  4.5,
+    7:  4.8,
+  };
+
+  // Frontal drag coefficient × area (m²) per frame — drives aerodynamic speed limit.
+  const frameCdA = {
+    65: 0.0020,
+    75: 0.0030,
+    3:  0.0075,
+    5:  0.0140,
+    7:  0.0200,
+  };
+
+  // Fraction of no-load RPM actually achieved under combined aero + electrical load.
+  // Small high-KV motors sag dramatically due to winding resistance at high current.
+  const motorLoadFraction = {
+    65: 0.52,
+    75: 0.48,
+    3:  0.65,
+    5:  0.74,
+    7:  0.78,
+  };
+
+  // Calibrated static thrust per motor (g) at each frame's preset KV/cell combo.
+  // Tuned against community-reported top speeds; separate from the OSD thrust display.
+  const speedThrustPerMotor = {
+    65: 25,
+    75: 60,
+    3:  180,
+    5:  800,
+    7:  900,
+  };
+
+  // Approx average current draw as a fraction of theoretical max, tuned per frame size (aggressive flying)
+  const avgCurrentFraction = {
+    65: 0.55,
+    75: 0.55,
+    3:  0.45,
+    5:  0.40,
+    7:  0.35,
+  };
+
+  // Rough max current draw estimate (A) per motor at given KV/cell combo — simplified model
+  function estMaxCurrentPerMotor(kv, cells, frame) {
+    const voltage = cells * 3.7;
+    // crude scaling: bigger frame = bigger motor = more current capacity
+    const frameCurrentBase = { 65: 4, 75: 6, 3: 12, 5: 25, 7: 30 };
+    const base = frameCurrentBase[frame];
+    // scale slightly with KV/voltage relationship vs a reference
+    return base * (voltage / (cells === 1 ? 4.2 : voltage)) * (kv / framePresets[frame].kv);
+  }
+
+  let currentFrame = '65';
+
+  const els = {
+    motorKV: document.getElementById('motorKV'),
+    cells: document.getElementById('cells'),
+    capacity: document.getElementById('capacity'),
+    propPitch: document.getElementById('propPitch'),
+    weight: document.getElementById('weight'),
+    topSpeed: document.getElementById('topSpeed'),
+    flightTime: document.getElementById('flightTime'),
+    thrustWeight: document.getElementById('thrustWeight'),
+    twRating: document.getElementById('twRating'),
+    totalThrust: document.getElementById('totalThrust'),
+  };
+
+  const motorSelect = document.getElementById('motorSelect');
+
+  function populateMotorSelect(frame) {
+    motorSelect.innerHTML = '<option value="">— Select a motor or enter KV below —</option>';
+    (motorDB[frame] || []).forEach((m, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `${m.name}  —  ${m.kv.toLocaleString()} KV`;
+      motorSelect.appendChild(opt);
+    });
+    motorSelect.value = '';
+  }
+
+  function populateCompareSelects(frame) {
+    ['cmpSelectA', 'cmpSelectB'].forEach(id => {
+      const sel = document.getElementById(id);
+      sel.innerHTML = '<option value="">— Pick a motor —</option>';
+      (motorDB[frame] || []).forEach((m, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = `${m.name}  —  ${m.kv.toLocaleString()} KV`;
+        sel.appendChild(opt);
+      });
+      sel.value = '';
+    });
+    document.getElementById('cmpKvA').value = '';
+    document.getElementById('cmpKvB').value = '';
+  }
+
+  function applyPreset(frame) {
+    const p = framePresets[frame];
+    els.motorKV.value = p.kv;
+    els.cells.value = p.cells;
+    els.capacity.value = p.capacity;
+    els.propPitch.value = p.pitch;
+    els.weight.value = p.weight;
+  }
+
+  document.querySelectorAll('.frame-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.frame-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFrame = btn.dataset.frame;
+      populateMotorSelect(currentFrame);
+      populateCompareSelects(currentFrame);
+      applyPreset(currentFrame);
+      calculate();
+    });
+  });
+
+  motorSelect.addEventListener('change', () => {
+    const idx = parseInt(motorSelect.value);
+    if (!isNaN(idx) && motorDB[currentFrame]?.[idx]) {
+      els.motorKV.value = motorDB[currentFrame][idx].kv;
+      calculate();
+    }
+  });
+
+  els.motorKV.addEventListener('input', () => { motorSelect.value = ''; });
+
+  function computeStats(kv, cells, capacity, pitch, weight) {
+    const voltage = cells * 3.7;
+    const rpm_eff    = kv * voltage * motorLoadFraction[currentFrame];
+    const pitch_m    = pitch * 0.0254;
+    const v_pitch_ms = (pitch_m * rpm_eff) / 60;
+    const kvRef      = framePresets[currentFrame].kv;
+    const T_total_N  = (speedThrustPerMotor[currentFrame] * 4 * (kv / kvRef) / 1000) * 9.81;
+    const rho = 1.225, CdA = frameCdA[currentFrame];
+    const a_c = 0.5 * rho * CdA, b_c = T_total_N / v_pitch_ms;
+    const disc = b_c * b_c + 4 * a_c * T_total_N;
+    const v_ms    = disc >= 0 ? (-b_c + Math.sqrt(disc)) / (2 * a_c) : 0;
+    const speedMph = Math.min(v_ms * 2.23694, v_pitch_ms * 2.23694 * 0.92);
+    const maxCurrentPerMotor = estMaxCurrentPerMotor(kv, cells, currentFrame);
+    const totalThrust  = maxCurrentPerMotor * voltage * thrustPerWatt[currentFrame] * 4;
+    const tw           = totalThrust / weight;
+    const avgCurrent   = maxCurrentPerMotor * 4 * avgCurrentFraction[currentFrame];
+    const flightTimeMin = ((capacity / 1000) * 0.8 / avgCurrent) * 60;
+    return { speedMph, totalThrust, tw, flightTimeMin };
+  }
+
+  function calculate() {
+    const kv       = parseFloat(els.motorKV.value)   || 0;
+    const cells    = parseFloat(els.cells.value)     || 1;
+    const capacity = parseFloat(els.capacity.value)  || 0;
+    const pitch    = parseFloat(els.propPitch.value) || 0;
+    const weight   = parseFloat(els.weight.value)    || 1;
+    const s = computeStats(kv, cells, capacity, pitch, weight);
+
+    els.topSpeed.innerHTML    = s.speedMph.toFixed(0)    + '<span class="unit">mph</span>';
+    els.totalThrust.innerHTML = s.totalThrust.toFixed(0) + '<span class="unit">g</span>';
+
+    const tw = s.tw;
+    els.thrustWeight.innerHTML = tw.toFixed(1) + '<span class="unit">:1</span>';
+    let rating = 'Mild / long-range tuned', warn = false;
+    if      (tw >= 2 && tw < 4) { rating = 'Punchy'; }
+    else if (tw >= 4 && tw < 6) { rating = 'Aggressive freestyle'; }
+    else if (tw >= 6)           { rating = 'Extreme — wheelie warning'; warn = true; }
+    els.twRating.textContent = rating;
+    els.thrustWeight.classList.toggle('warn', warn);
+
+    els.flightTime.innerHTML = s.flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
+    compareCalculate();
+  }
+
+  function compareCalculate() {
+    const kvA      = parseFloat(document.getElementById('cmpKvA').value);
+    const kvB      = parseFloat(document.getElementById('cmpKvB').value);
+    const cells    = parseFloat(els.cells.value)     || 1;
+    const capacity = parseFloat(els.capacity.value)  || 0;
+    const pitch    = parseFloat(els.propPitch.value) || 0;
+    const weight   = parseFloat(els.weight.value)    || 1;
+    const sA = (!isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, weight) : null;
+    const sB = (!isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, weight) : null;
+
+    function setPair(idA, idB, vA, vB, fmt) {
+      const eA = document.getElementById(idA), eB = document.getElementById(idB);
+      if (vA !== null) { eA.innerHTML = fmt(vA); eA.classList.add('filled'); }
+      else             { eA.innerHTML = '—';     eA.classList.remove('filled'); }
+      if (vB !== null) { eB.innerHTML = fmt(vB); eB.classList.add('filled'); }
+      else             { eB.innerHTML = '—';     eB.classList.remove('filled'); }
+      eA.classList.remove('winner'); eB.classList.remove('winner');
+      if (vA !== null && vB !== null && vA !== vB)
+        (vA > vB ? eA : eB).classList.add('winner');
+    }
+
+    setPair('cmpSpeedA',  'cmpSpeedB',  sA ? sA.speedMph      : null, sB ? sB.speedMph      : null, v => `${v.toFixed(0)}<span class="cmp-unit">mph</span>`);
+    setPair('cmpTwA',     'cmpTwB',     sA ? sA.tw            : null, sB ? sB.tw            : null, v => `${v.toFixed(1)}<span class="cmp-unit">:1</span>`);
+    setPair('cmpThrustA', 'cmpThrustB', sA ? sA.totalThrust   : null, sB ? sB.totalThrust   : null, v => `${v.toFixed(0)}<span class="cmp-unit">g</span>`);
+    setPair('cmpTimeA',   'cmpTimeB',   sA ? sA.flightTimeMin : null, sB ? sB.flightTimeMin : null, v => `${v.toFixed(1)}<span class="cmp-unit">min</span>`);
+  }
+
+  function wireCompareInput(selectId, kvId) {
+    const sel  = document.getElementById(selectId);
+    const kvEl = document.getElementById(kvId);
+    sel.addEventListener('change', () => {
+      const idx = parseInt(sel.value);
+      if (!isNaN(idx) && motorDB[currentFrame]?.[idx]) kvEl.value = motorDB[currentFrame][idx].kv;
+      compareCalculate();
+    });
+    kvEl.addEventListener('input', () => { sel.value = ''; compareCalculate(); });
+  }
+
+  wireCompareInput('cmpSelectA', 'cmpKvA');
+  wireCompareInput('cmpSelectB', 'cmpKvB');
+
+  // ===== Battery C-Rating & Voltage Sag =====
+  function calcBattery() {
+    const cells   = parseInt(document.getElementById('battCells').value)   || 1;
+    const mah     = parseFloat(document.getElementById('battMah').value)   || 0;
+    const cRating = parseFloat(document.getElementById('battC').value)     || 1;
+    const peakA   = parseFloat(document.getElementById('battPeakA').value) || 0;
+
+    const maxRatedA  = cRating * (mah / 1000);
+    const headroom   = ((maxRatedA - peakA) / maxRatedA) * 100;
+    const esrOhms    = (cells * (1000 / cRating)) / 1000; // rough ESR model
+    const sag        = peakA * esrOhms;
+    const effV       = Math.max(0, cells * 4.2 - sag);
+
+    document.getElementById('battMaxA').innerHTML    = maxRatedA.toFixed(0) + '<span class="tunit">A</span>';
+    document.getElementById('battSag').innerHTML     = sag.toFixed(2)       + '<span class="tunit">V</span>';
+    document.getElementById('battEffV').innerHTML    = effV.toFixed(2)       + '<span class="tunit">V</span>';
+
+    const hEl = document.getElementById('battHeadroom');
+    hEl.innerHTML = headroom.toFixed(0) + '<span class="tunit">%</span>';
+    hEl.classList.toggle('warn', headroom < 10);
+
+    const sEl = document.getElementById('battStatus');
+    if (headroom >= 25) {
+      sEl.textContent = 'Good — battery is well within its rated draw for this build.';
+      sEl.className = 'batt-status';
+    } else if (headroom >= 0) {
+      sEl.textContent = 'Marginal — within spec but little headroom. Consider a higher C-rating or lower peak current.';
+      sEl.className = 'batt-status warn';
+    } else {
+      sEl.textContent = `Overdrawing by ${Math.abs(headroom).toFixed(0)}% — battery not rated for this current. Expect heat, sag, and reduced cell life.`;
+      sEl.className = 'batt-status warn';
+    }
+  }
+
+  // ===== Prop Pitch Speed Reference Table =====
+  const PITCH_LIST = [0.8, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.1, 5.5, 6.0];
+
+  function buildPitchTable() {
+    const kv           = parseFloat(document.getElementById('pitchKV').value)    || 0;
+    const cells        = parseInt(document.getElementById('pitchCells').value)   || 1;
+    const frame        = document.getElementById('pitchFrame').value;
+    const currentPitch = parseFloat(els.propPitch.value) || 0;
+    const rpm_eff      = kv * (cells * 3.7) * (motorLoadFraction[frame] || 0.75);
+    const tbody        = document.getElementById('pitchTableBody');
+    tbody.innerHTML    = '';
+
+    PITCH_LIST.forEach(p => {
+      const speedMph  = (p * rpm_eff * 60) / 63360;
+      const isCurrent = Math.abs(p - currentPitch) < 0.05;
+      const tr        = document.createElement('tr');
+      if (isCurrent) tr.className = 'current-pitch';
+      tr.innerHTML = `<td>${p.toFixed(1)}"</td><td class="pitch-speed">${speedMph.toFixed(0)} mph</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // initial calc — sync inputs to active frame button before first render
+  populateMotorSelect(currentFrame);
+  populateCompareSelects(currentFrame);
+  applyPreset(currentFrame);
+  calculate();
+
+  // recalc on any input change
+  Object.values(els).forEach(el => {
+    if (el.tagName === 'INPUT' || el.tagName === 'SELECT') {
+      el.addEventListener('input', calculate);
+    }
+  });
+
+  // Battery calculator listeners
+  ['battCells', 'battMah', 'battC', 'battPeakA'].forEach(id =>
+    document.getElementById(id).addEventListener('input', calcBattery)
+  );
+
+  // Pitch table listeners — also rebuild when main prop pitch changes
+  ['pitchKV', 'pitchCells', 'pitchFrame'].forEach(id =>
+    document.getElementById(id).addEventListener('input', buildPitchTable)
+  );
+  els.propPitch.addEventListener('input', buildPitchTable);
+
+  calcBattery();
+  buildPitchTable();
+</script>
+
+</body>
+</html>
