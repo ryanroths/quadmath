@@ -3,8 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QuadMath — FPV Motor &amp; Build Calculator</title>
-<meta name="description" content="FPV build calculator for drone pilots. Estimate top speed, flight time, and thrust-to-weight for any motor, prop, and battery combo. Compare motors side-by-side. Covers 65mm whoops, 3-inch micros, 5-inch freestyle, and 7-inch long range builds.">
+<title>QuadMath — FPV Build Calculator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -362,374 +361,6 @@
     gap: 12px;
   }
   footer .footer-logo .dot { color: var(--orange); }
-
-  /* ===== COMPARISON PANEL ===== */
-  .compare-wrap {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 24px;
-    margin-top: 24px;
-  }
-  .compare-note {
-    font-family: 'Inter', sans-serif;
-    font-weight: 400;
-    letter-spacing: 0;
-    text-transform: none;
-    font-size: 0.8rem;
-    color: var(--muted);
-    margin-left: 8px;
-  }
-  .compare-motors {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    gap: 16px;
-    align-items: end;
-    margin: 16px 0 20px;
-  }
-  .compare-col-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 8px;
-  }
-  .compare-vs {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    color: var(--muted);
-    text-align: center;
-    padding-bottom: 44px;
-  }
-  .cmp-select, .cmp-kv {
-    width: 100%;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.9rem;
-    padding: 10px 12px;
-    border-radius: 4px;
-    outline: none;
-    transition: border-color 0.15s;
-    display: block;
-    box-sizing: border-box;
-  }
-  .cmp-select:focus, .cmp-kv:focus { border-color: var(--orange); }
-  .cmp-select { margin-bottom: 8px; }
-  .compare-table {
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-  .compare-row {
-    display: grid;
-    grid-template-columns: 110px 1fr 1fr;
-    border-bottom: 1px solid var(--border);
-  }
-  .compare-row:last-child { border-bottom: none; }
-  .compare-metric {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.65rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted);
-    padding: 16px;
-    background: var(--bg);
-    display: flex;
-    align-items: center;
-  }
-  .compare-val {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--muted);
-    padding: 16px;
-    text-align: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-left: 1px solid var(--border);
-    transition: color 0.15s;
-  }
-  .compare-val.filled { color: var(--text); }
-  .compare-val.winner { color: var(--green); }
-  .cmp-unit {
-    font-size: 0.65rem;
-    font-weight: 400;
-    color: var(--muted);
-    margin-left: 3px;
-    align-self: flex-end;
-    padding-bottom: 3px;
-  }
-
-  /* ===== ADDITIONAL TOOLS ===== */
-  .tool-details {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    margin-top: 12px;
-  }
-  .tool-summary {
-    padding: 16px 24px;
-    cursor: pointer;
-    list-style: none;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text);
-    user-select: none;
-    transition: background 0.15s;
-  }
-  .tool-summary::-webkit-details-marker { display: none; }
-  .tool-summary:hover { background: rgba(255,255,255,0.03); }
-  .tool-summary::after { content: '+'; color: var(--orange); font-size: 1.1rem; font-weight: 700; }
-  details[open] > .tool-summary::after { content: '−'; }
-  .tool-body {
-    padding: 24px;
-    border-top: 1px solid var(--border);
-  }
-  .tool-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-  @media (min-width: 640px) {
-    .tool-grid { grid-template-columns: 260px 1fr; }
-  }
-  .tool-results {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1px;
-    background: var(--border);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
-  }
-  .tool-stat { background: var(--bg); padding: 16px; }
-  .tool-stat-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.65rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 6px;
-  }
-  .tool-stat-value {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--green);
-    line-height: 1.1;
-  }
-  .tool-stat-value .tunit { font-size: 0.8rem; font-weight: 400; color: var(--muted); margin-left: 3px; }
-  .tool-stat-value.warn { color: var(--orange); }
-  .batt-status {
-    margin-top: 14px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.78rem;
-    padding: 10px 14px;
-    border-radius: 4px;
-    background: rgba(61,220,151,0.08);
-    color: var(--green);
-    border: 1px solid rgba(61,220,151,0.2);
-    line-height: 1.5;
-  }
-  .batt-status.warn {
-    background: rgba(255,77,26,0.08);
-    color: var(--orange);
-    border-color: rgba(255,77,26,0.2);
-  }
-  .pitch-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-  .pitch-table th {
-    font-size: 0.65rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted);
-    text-align: left;
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg);
-  }
-  .pitch-table td {
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--border);
-    color: var(--muted);
-  }
-  .pitch-table tr:last-child td { border-bottom: none; }
-  .pitch-table td.pitch-speed { color: var(--text); font-weight: 700; }
-  .pitch-table tr.current-pitch td { background: rgba(61,220,151,0.06); }
-  .pitch-table tr.current-pitch td.pitch-speed { color: var(--green); }
-
-  /* ===== FRAME REFERENCE CARDS ===== */
-  .frame-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-    margin-top: 20px;
-  }
-  @media (min-width: 560px) { .frame-grid { grid-template-columns: 1fr 1fr; } }
-  @media (min-width: 860px) { .frame-grid { grid-template-columns: repeat(3, 1fr); } }
-  .frame-card {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 18px;
-  }
-  .frame-card-title {
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 700;
-    font-size: 1rem;
-    color: var(--text);
-    margin-bottom: 3px;
-  }
-  .frame-card-tag {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.68rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--orange);
-    display: block;
-    margin-bottom: 14px;
-  }
-  .frame-spec {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 8px;
-    font-size: 0.82rem;
-    padding: 5px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .frame-spec:last-of-type { border-bottom: none; padding-bottom: 0; }
-  .frame-spec-key { color: var(--muted); white-space: nowrap; }
-  .frame-spec-val {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
-    color: var(--text);
-    text-align: right;
-  }
-  .frame-note {
-    font-size: 0.78rem;
-    color: var(--muted);
-    margin-top: 12px;
-    line-height: 1.55;
-  }
-
-  /* === Whoop Tune Database === */
-  .tune-disclaimer {
-    background: rgba(255,77,26,.08);
-    border-left: 3px solid var(--orange);
-    border-radius: 0 6px 6px 0;
-    padding: .75rem 1rem;
-    font-size: .8rem;
-    color: var(--muted);
-    line-height: 1.55;
-    margin-bottom: 1.5rem;
-  }
-  .tune-scroll-hint {
-    display: none;
-    text-align: center;
-    font-size: .72rem;
-    color: var(--muted);
-    margin-bottom: .5rem;
-  }
-  @media (max-width: 860px) { .tune-scroll-hint { display: block; } }
-  .tune-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; }
-  .tune-table {
-    border-collapse: collapse;
-    min-width: 820px;
-    width: 100%;
-    table-layout: fixed;
-  }
-  .tune-table th {
-    background: var(--panel);
-    color: var(--orange);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: .72rem;
-    text-transform: uppercase;
-    letter-spacing: .08em;
-    padding: .65rem .75rem;
-    text-align: left;
-    border: 1px solid var(--border);
-    white-space: nowrap;
-  }
-  .tune-table th:first-child { width: 64px; }
-  .tune-table td { vertical-align: top; border: 1px solid var(--border); padding: .6rem .65rem; }
-  .tune-row-label {
-    background: var(--panel) !important;
-    color: var(--orange);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: .85rem;
-    font-weight: 700;
-    white-space: nowrap;
-    text-align: center;
-  }
-  .tune-pair { display: flex; gap: .5rem; }
-  .tune-block {
-    flex: 1;
-    background: var(--bg);
-    border-radius: 6px;
-    padding: .5rem .55rem;
-    min-width: 0;
-  }
-  .tune-block-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: .58rem;
-    text-transform: uppercase;
-    letter-spacing: .12em;
-    color: var(--muted);
-    border-bottom: 1px solid var(--border);
-    padding-bottom: .25rem;
-    margin-bottom: .3rem;
-  }
-  .tune-block-label.ryfly { color: var(--orange); }
-  .tune-sh {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: .52rem;
-    color: rgba(255,255,255,.22);
-    text-transform: uppercase;
-    letter-spacing: .07em;
-    margin: .3rem 0 .12rem;
-  }
-  .pid-cols, .pid-row {
-    display: grid;
-    grid-template-columns: .9rem 1fr 1fr 1fr;
-    gap: 2px;
-    margin-bottom: 1px;
-  }
-  .pid-ch { font-family: 'JetBrains Mono', monospace; font-size: .5rem; color: rgba(255,255,255,.18); text-align: center; }
-  .pid-ax { font-family: 'JetBrains Mono', monospace; font-size: .56rem; color: rgba(255,255,255,.32); display: flex; align-items: center; }
-  .pid-v {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: .6rem;
-    color: var(--green);
-    text-align: center;
-    background: rgba(61,220,151,.06);
-    border-radius: 2px;
-    padding: 1px 0;
-  }
-  .rate-type { font-family: 'JetBrains Mono', monospace; font-size: .56rem; color: rgba(255,255,255,.3); margin-bottom: 2px; }
-  .tune-filter {
-    font-size: .58rem;
-    color: rgba(255,255,255,.28);
-    font-style: italic;
-    margin-top: .3rem;
-    padding-top: .25rem;
-    border-top: 1px solid var(--border);
-  }
 </style>
 </head>
 <body>
@@ -740,9 +371,6 @@
     <nav>
       <a href="#calculator">Calculator</a>
       <a href="#guide">Guide</a>
-      <a href="#motor-guide">Motors</a>
-      <a href="#tools">Tools</a>
-      <a href="#tunes">Tunes</a>
     </nav>
   </div>
 </header>
@@ -750,7 +378,7 @@
 <div class="container">
   <section class="hero" id="calculator">
     <h1>Know your build<br>before you <span class="accent">solder it</span>.</h1>
-    <p class="sub">Enter your motor KV, prop pitch, and battery — get estimated top speed, flight time, and thrust-to-weight. Compare motors side by side. Covers 65mm indoor whoops, 3" micros, 5" freestyle, and 7" long range builds.</p>
+    <p class="sub">Plug in your motor, prop, and battery setup — get estimated top speed, flight time, and thrust-to-weight. Works for everything from 65mm whoops to 7" long range.</p>
 
     <div class="frame-select">
       <button class="frame-btn active" data-frame="65">65mm Whoop</button>
@@ -766,16 +394,9 @@
         <div class="panel-label">Build Inputs</div>
 
         <div class="field">
-          <label for="motorSelect">Motor</label>
-          <select id="motorSelect">
-            <option value="">— Select a motor or enter KV below —</option>
-          </select>
-        </div>
-
-        <div class="field">
           <label for="motorKV">Motor KV</label>
           <input type="number" id="motorKV" value="27000" step="500">
-          <div class="field-hint">Auto-filled from motor selection above, or enter manually</div>
+          <div class="field-hint">Stator size auto-suggests a typical range per frame size</div>
         </div>
 
         <div class="field-row">
@@ -815,7 +436,7 @@
         <div class="speed-hero">
           <div class="speed-hero-label">Estimated Top Speed</div>
           <div class="speed-hero-value" id="topSpeed">38<span class="unit">mph</span></div>
-          <div class="speed-hero-note">Based on drag-equilibrium: load-limited motor RPM vs. aerodynamic drag. Real-world speed varies with airflow, battery sag, and pilot throttle habits.</div>
+          <div class="speed-hero-note">Based on prop pitch speed at ~85% efficiency. Real-world speed varies with airflow, voltage sag, and pilot weight tolerance.</div>
         </div>
 
         <div class="osd-stats">
@@ -843,53 +464,13 @@
     </div>
   </section>
 
-  <!-- MOTOR COMPARISON -->
-  <div class="compare-wrap">
-    <div class="panel-label">Motor Comparison<span class="compare-note">— same frame, battery &amp; weight as above</span></div>
-    <div class="compare-motors">
-      <div>
-        <div class="compare-col-label">Motor A</div>
-        <select id="cmpSelectA" class="cmp-select"><option value="">— Pick a motor —</option></select>
-        <input type="number" id="cmpKvA" class="cmp-kv" placeholder="or enter KV" step="500">
-      </div>
-      <div class="compare-vs">VS</div>
-      <div>
-        <div class="compare-col-label">Motor B</div>
-        <select id="cmpSelectB" class="cmp-select"><option value="">— Pick a motor —</option></select>
-        <input type="number" id="cmpKvB" class="cmp-kv" placeholder="or enter KV" step="500">
-      </div>
-    </div>
-    <div class="compare-table">
-      <div class="compare-row">
-        <div class="compare-metric">Top Speed</div>
-        <div class="compare-val" id="cmpSpeedA">—</div>
-        <div class="compare-val" id="cmpSpeedB">—</div>
-      </div>
-      <div class="compare-row">
-        <div class="compare-metric">T:W Ratio</div>
-        <div class="compare-val" id="cmpTwA">—</div>
-        <div class="compare-val" id="cmpTwB">—</div>
-      </div>
-      <div class="compare-row">
-        <div class="compare-metric">Total Thrust</div>
-        <div class="compare-val" id="cmpThrustA">—</div>
-        <div class="compare-val" id="cmpThrustB">—</div>
-      </div>
-      <div class="compare-row">
-        <div class="compare-metric">Flight Time</div>
-        <div class="compare-val" id="cmpTimeA">—</div>
-        <div class="compare-val" id="cmpTimeB">—</div>
-      </div>
-    </div>
-  </div>
-
   <!-- AD SLOT 1 - below the fold, after primary tool interaction -->
   <div class="ad-slot">Ad placement — leaderboard (728×90 / responsive)</div>
 
   <section class="section" id="guide">
     <h2>How these numbers are calculated</h2>
     <p>
-      <strong>Top speed</strong> uses a drag-equilibrium model: effective motor RPM under load (not free-spin RPM) sets a pitch-speed ceiling, then aerodynamic frame drag — which grows with the square of velocity — determines where thrust and drag balance. Small whoops spin at a much lower fraction of no-load RPM than 5"+ quads because tiny high-KV motors drop significantly under electrical load, which is why naive pitch×RPM formulas drastically overestimate whoop top speeds.
+      <strong>Top speed</strong> comes from prop pitch speed: each prop rotation theoretically moves the quad forward by one "pitch length." We multiply that by estimated motor RPM (KV × voltage × ~0.85 efficiency factor to account for slip and load) and convert to mph.
     </p>
     <p>
       <strong>Flight time</strong> is modeled from your battery capacity, an 80% usable discharge window (to protect cell health), and an estimated average current draw based on frame size and motor specs — tuned for aggressive freestyle flying rather than gentle cruising.
@@ -902,403 +483,14 @@
   <!-- AD SLOT 2 - in content flow -->
   <div class="ad-slot inline">Ad placement — in-content rectangle (300×250)</div>
 
-  <section class="section" id="tools">
-    <h2>More Calculators</h2>
-
-    <details class="tool-details">
-      <summary class="tool-summary">Battery C-Rating &amp; Voltage Sag</summary>
-      <div class="tool-body">
-        <div class="tool-grid">
-          <div>
-            <div class="field">
-              <label for="battCells">Battery Cells (S)</label>
-              <select id="battCells">
-                <option value="1">1S</option>
-                <option value="2">2S</option>
-                <option value="3">3S</option>
-                <option value="4" selected>4S</option>
-                <option value="6">6S</option>
-              </select>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label for="battMah">Capacity (mAh)</label>
-                <input type="number" id="battMah" value="1300" step="50">
-              </div>
-              <div class="field">
-                <label for="battC">C-Rating</label>
-                <input type="number" id="battC" value="100" step="5">
-              </div>
-            </div>
-            <div class="field">
-              <label for="battPeakA">Peak Draw (A, all 4 motors)</label>
-              <input type="number" id="battPeakA" value="60" step="5">
-            </div>
-          </div>
-          <div>
-            <div class="tool-results">
-              <div class="tool-stat">
-                <div class="tool-stat-label">Max Rated Current</div>
-                <div class="tool-stat-value" id="battMaxA">—<span class="tunit">A</span></div>
-              </div>
-              <div class="tool-stat">
-                <div class="tool-stat-label">Current Headroom</div>
-                <div class="tool-stat-value" id="battHeadroom">—<span class="tunit">%</span></div>
-              </div>
-              <div class="tool-stat">
-                <div class="tool-stat-label">Voltage Sag</div>
-                <div class="tool-stat-value" id="battSag">—<span class="tunit">V</span></div>
-              </div>
-              <div class="tool-stat">
-                <div class="tool-stat-label">Effective Voltage</div>
-                <div class="tool-stat-value" id="battEffV">—<span class="tunit">V</span></div>
-              </div>
-            </div>
-            <div class="batt-status" id="battStatus">Enter your battery specs above.</div>
-          </div>
-        </div>
-      </div>
-    </details>
-
-    <details class="tool-details">
-      <summary class="tool-summary">Prop Pitch Speed Reference</summary>
-      <div class="tool-body">
-        <div class="tool-grid">
-          <div>
-            <div class="field">
-              <label for="pitchKV">Motor KV</label>
-              <input type="number" id="pitchKV" value="1900" step="100">
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label for="pitchCells">Battery (S)</label>
-                <select id="pitchCells">
-                  <option value="1">1S</option>
-                  <option value="2">2S</option>
-                  <option value="3">3S</option>
-                  <option value="4">4S</option>
-                  <option value="6" selected>6S</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="pitchFrame">Frame</label>
-                <select id="pitchFrame">
-                  <option value="65">65mm</option>
-                  <option value="75">75mm</option>
-                  <option value="3">3"</option>
-                  <option value="5" selected>5"</option>
-                  <option value="7">7"</option>
-                </select>
-              </div>
-            </div>
-            <div class="field-hint">Highlighted row = your current prop pitch from the main calc above.</div>
-          </div>
-          <div>
-            <table class="pitch-table">
-              <thead><tr><th>Pitch</th><th>Est. Top Speed</th></tr></thead>
-              <tbody id="pitchTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </details>
-  </section>
-
-  <section class="section" id="motor-guide">
-    <h2>How to choose a motor</h2>
-    <p>
-      <strong>KV and cell count are linked.</strong> KV is how fast the motor spins per volt. More cells means lower KV to keep your prop RPM in a useful range without over-spinning. Rule of thumb for 5" props: 4S builds use 2300–2450KV; 6S builds use 1700–1950KV. Going too high on KV for your voltage generates heat and shortens motor life.
-    </p>
-    <p>
-      <strong>Stator size sets the torque ceiling.</strong> The four-digit stator number tells you everything — "2207" means 22mm diameter, 7mm tall. Wider diameter adds torque and power but also weight. For 5" freestyle a 2207 or 2306 hits the sweet spot. For long range, a taller stator (2807, 2808) provides more torque to spin larger props at lower RPM efficiently.
-    </p>
-    <p>
-      <strong>Match thrust-to-weight to your flying style.</strong> Casual freestyle and cruising works well at 4:1–6:1. Aggressive freestyle pilots often target 8:1–12:1 for snappy response. Long range builds prioritize efficiency over punch — 3:1–5:1 is typical. Whoops are size-constrained and land wherever the motor and prop math allows.
-    </p>
-    <p>
-      <strong>Don't cheap out on C-rating.</strong> An underpowered battery sags badly under load, robbing motor performance and degrading cells quickly. For 5" freestyle on 6S, target at least 50C continuous on a 1300mAh pack — or a 1100mAh 100C pack for cleaner power delivery. Use the battery calculator in the Tools section to check your specific pack against your estimated peak draw.
-    </p>
-  </section>
-
-  <section class="section" id="frame-guide">
+  <section class="section">
     <h2>Frame size reference</h2>
-    <div class="frame-grid">
-      <div class="frame-card">
-        <div class="frame-card-title">65mm Whoop</div>
-        <span class="frame-card-tag">Indoor / Learning</span>
-        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">0802, 15–22K KV</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">1S, 250–300mAh</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">31–40mm</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">20–28g</span></div>
-        <p class="frame-note">Pure indoor build. Every gram matters — 0802 motors weigh under 2g each. Prioritize motor weight and efficiency over raw power output.</p>
-      </div>
-      <div class="frame-card">
-        <div class="frame-card-title">75mm Whoop</div>
-        <span class="frame-card-tag">Indoor / Outdoor Hybrid</span>
-        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">1102–1103, 8–22K KV</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">1S, 300–450mAh</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">40mm</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">25–35g</span></div>
-        <p class="frame-note">The Mobula7 class — always 1S. More versatile than 65mm, handles light outdoor wind. A good first whoop for pilots coming off simulators.</p>
-      </div>
-      <div class="frame-card">
-        <div class="frame-card-title">3" Freestyle</div>
-        <span class="frame-card-tag">Micro / Cinema</span>
-        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">1404–1507, 3.5–5K KV</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">2–4S, 650–850mAh</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">3" bi/tri-blade</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">100–160g</span></div>
-        <p class="frame-note">Bridges micro and full-size. Popular for cinewhoops (with prop guards) and tight indoor freestyle. Good punch without the footprint of a 5".</p>
-      </div>
-      <div class="frame-card">
-        <div class="frame-card-title">5" Freestyle</div>
-        <span class="frame-card-tag">Freestyle / Racing</span>
-        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">2207–2306, 1700–2450 KV</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">4–6S, 1300–1800mAh</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">5" bi/tri-blade</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">250–350g</span></div>
-        <p class="frame-note">The dominant class with the widest ecosystem. On 6S use 1700–1950KV; on 4S use 2300–2450KV. Nearly all freestyle content you see online is 5".</p>
-      </div>
-      <div class="frame-card">
-        <div class="frame-card-title">7" Long Range</div>
-        <span class="frame-card-tag">Efficiency / Distance</span>
-        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">2506–2808, 900–1500 KV</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">6S, 1800–3000mAh</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">7" bi-blade</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">400–600g</span></div>
-        <p class="frame-note">Built for distance, not punch. Lower KV and larger props maximize propulsive efficiency. Common with GPS, long-range links (ELRS), and HD cameras.</p>
-      </div>
-    </div>
-  </section>
-
-  <section class="section" id="tunes">
-    <h2>Whoop Tune Database</h2>
-    <p class="tune-disclaimer">Starting points only. Motor KV, prop brand, battery C-rating, and frame stiffness all affect how a tune responds. Always bench-test before flying and check motor temps after your first pack. Adjust to your own build — no two whoops fly identically.</p>
-    <p class="tune-scroll-hint">← swipe to see all FC brands →</p>
-    <div class="tune-table-wrap">
-      <table class="tune-table">
-        <thead>
-          <tr>
-            <th>Frame</th>
-            <th>BetaFPV</th>
-            <th>Happymodel</th>
-            <th>NewBeeDrone</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td class="tune-row-label">65mm</td>
-            <td>
-              <div class="tune-pair">
-                <div class="tune-block">
-                  <div class="tune-block-label">Stock</div>
-                  <div class="tune-sh">PIDs</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">36</span><span class="pid-v">61</span><span class="pid-v">27</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">37</span><span class="pid-v">64</span><span class="pid-v">29</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">36</span><span class="pid-v">61</span><span class="pid-v">0</span></div>
-                  <div class="tune-sh">Rates</div>
-                  <div class="rate-type">Type: BETAFLIGHT</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-filter">Air65 II Champion stock tune</div>
-                </div>
-                <div class="tune-block">
-                  <div class="tune-block-label ryfly">RyFly</div>
-                  <div class="tune-sh">PIDs</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-sh">Rates</div>
-                  <div class="rate-type">Type: [TBD]</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-filter">Filter: [TBD]</div>
-                </div>
-              </div>
-            </td>
-            <td>
-              <div class="tune-pair">
-                <div class="tune-block">
-                  <div class="tune-block-label">Stock</div>
-                  <div class="tune-sh">PIDs</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-sh">Rates</div>
-                  <div class="rate-type">Type: [TBD]</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-filter">Filter: [TBD]</div>
-                </div>
-                <div class="tune-block">
-                  <div class="tune-block-label ryfly">RyFly</div>
-                  <div class="tune-sh">PIDs</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-sh">Rates</div>
-                  <div class="rate-type">Type: [TBD]</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-filter">Filter: [TBD]</div>
-                </div>
-              </div>
-            </td>
-            <td>
-              <div class="tune-pair">
-                <div class="tune-block">
-                  <div class="tune-block-label">Stock</div>
-                  <div class="tune-sh">PIDs</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-sh">Rates</div>
-                  <div class="rate-type">Type: [TBD]</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-filter">Filter: [TBD]</div>
-                </div>
-                <div class="tune-block">
-                  <div class="tune-block-label ryfly">RyFly</div>
-                  <div class="tune-sh">PIDs</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-sh">Rates</div>
-                  <div class="rate-type">Type: [TBD]</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-filter">Filter: [TBD]</div>
-                </div>
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td class="tune-row-label">75mm</td>
-            <td>
-              <div class="tune-pair">
-                <div class="tune-block">
-                  <div class="tune-block-label">Stock</div>
-                  <div class="tune-sh">PIDs</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-sh">Rates</div>
-                  <div class="rate-type">Type: [TBD]</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-filter">Filter: [TBD]</div>
-                </div>
-                <div class="tune-block">
-                  <div class="tune-block-label ryfly">RyFly</div>
-                  <div class="tune-sh">PIDs</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-sh">Rates</div>
-                  <div class="rate-type">Type: [TBD]</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-filter">Filter: [TBD]</div>
-                </div>
-              </div>
-            </td>
-            <td>
-              <div class="tune-pair">
-                <div class="tune-block">
-                  <div class="tune-block-label">Stock</div>
-                  <div class="tune-sh">PIDs</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-sh">Rates</div>
-                  <div class="rate-type">Type: [TBD]</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-filter">Filter: [TBD]</div>
-                </div>
-                <div class="tune-block">
-                  <div class="tune-block-label ryfly">RyFly</div>
-                  <div class="tune-sh">PIDs</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-sh">Rates</div>
-                  <div class="rate-type">Type: [TBD]</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-filter">Filter: [TBD]</div>
-                </div>
-              </div>
-            </td>
-            <td>
-              <div class="tune-pair">
-                <div class="tune-block">
-                  <div class="tune-block-label">Stock</div>
-                  <div class="tune-sh">PIDs</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-sh">Rates</div>
-                  <div class="rate-type">Type: [TBD]</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-filter">Filter: [TBD]</div>
-                </div>
-                <div class="tune-block">
-                  <div class="tune-block-label ryfly">RyFly</div>
-                  <div class="tune-sh">PIDs</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">P</span><span class="pid-ch">I</span><span class="pid-ch">D</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-sh">Rates</div>
-                  <div class="rate-type">Type: [TBD]</div>
-                  <div class="pid-cols"><span></span><span class="pid-ch">RC</span><span class="pid-ch">SR</span><span class="pid-ch">Ex</span></div>
-                  <div class="pid-row"><span class="pid-ax">R</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">P</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="pid-row"><span class="pid-ax">Y</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span><span class="pid-v">[TBD]</span></div>
-                  <div class="tune-filter">Filter: [TBD]</div>
-                </div>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <p>
+      <strong>65mm whoops</strong> typically run 0802–1102 motors at 18-30K KV on 1S, with 31mm-40mm props. <strong>75mm whoops</strong> step up slightly to 1103-1404 motors, often on 2S, with 40mm props for more punch.
+    </p>
+    <p>
+      <strong>3" freestyle</strong> bridges micro and mini quads — 1404-1606 motors, 2-4S, built for tight indoor/outdoor freestyle. <strong>5" freestyle</strong> is the standard competition size — 2207-2306 motors on 4-6S. <strong>7" long range</strong> prioritizes efficiency — larger props, lower KV, optimized for distance over raw punch.
+    </p>
   </section>
 </div>
 
@@ -1312,58 +504,11 @@
 <script>
   // ===== Frame size presets (typical defaults) =====
   const framePresets = {
-    65: { kv: 19000, cells: 1, capacity: 300, pitch: 1.0, weight: 24 },  // AUW: ~17g frame + 7g 1S battery
-    75: { kv: 10000, cells: 1, capacity: 300, pitch: 2.0, weight: 27 },  // 1S only; ~20g frame + 7g battery
+    65: { kv: 19000, cells: 1, capacity: 300, pitch: 1.0, weight: 28 },
+    75: { kv: 22000, cells: 2, capacity: 450, pitch: 1.5, weight: 38 },
     3:  { kv: 7000,  cells: 4, capacity: 850, pitch: 2.5, weight: 120 },
     5:  { kv: 1900,  cells: 6, capacity: 1300, pitch: 5.1, weight: 280 },
     7:  { kv: 1300,  cells: 6, capacity: 1800, pitch: 6.0, weight: 420 },
-  };
-
-  // Real motor database by frame size — brand, stator, KV
-  const motorDB = {
-    65: [
-      { name: 'BetaFPV 0702 II',              kv: 23000 },
-      { name: 'VCI Spark 0702',               kv: 25000 },
-      { name: 'VCI Spark 0702',               kv: 27000 },
-      { name: 'NewBeeDrone Flow 0702',         kv: 29000 },
-      { name: 'VCI Spark 0702',               kv: 29000 },
-      { name: 'BetaFPV 0702 II',              kv: 30000 },
-      { name: 'weBLEEDfpv SKRRRT 0702',       kv: 40000 },
-    ],
-    75: [
-      { name: 'NewBeeDrone Flow 0802',         kv: 19000 },
-      { name: 'BetaFPV 0802SE',               kv: 23000 },
-      { name: 'NewBeeDrone Flow 0802',         kv: 25000 },
-      { name: 'weBLEEDfpv SKYSCRAPERS 0802',  kv: 25000 },
-      { name: 'NewBeeDrone Flow 0802',         kv: 27000 },
-      { name: 'NewBeeDrone Flow 0802',         kv: 30000 },
-      { name: 'weBLEEDfpv TREETOPPERS 0802',  kv: 32500 },
-    ],
-    3: [
-      { name: 'T-Motor Velox V1404',     kv: 4600 },
-      { name: 'BetaFPV 1404',           kv: 4500 },
-      { name: 'Emax RS1408',            kv: 4100 },
-      { name: 'T-Motor Velox V1506',     kv: 3800 },
-      { name: 'BrotherHobby T1404',     kv: 4600 },
-      { name: 'Xing 1404',              kv: 3500 },
-    ],
-    5: [
-      { name: 'T-Motor Velox V2207',     kv: 1950 },
-      { name: 'T-Motor F40 PRO IV',      kv: 2400 },
-      { name: 'Emax ECO II 2207',        kv: 2400 },
-      { name: 'Iflight XING 2208',       kv: 1800 },
-      { name: 'BrotherHobby 2207',       kv: 1700 },
-      { name: 'T-Motor Pacer 2306',      kv: 2150 },
-      { name: 'SucceX-E 2207',           kv: 2450 },
-    ],
-    7: [
-      { name: 'Emax ECO II 2807',        kv: 1300 },
-      { name: 'Iflight XING 2806',       kv: 1300 },
-      { name: 'T-Motor Navigator 2808',  kv: 900  },
-      { name: 'BrotherHobby 2807',       kv: 1300 },
-      { name: 'Sunnysky X2806',          kv: 1250 },
-      { name: 'T-Motor Velox V2207',     kv: 1750 },
-    ],
   };
 
   // Approx static thrust benchmark (grams of thrust per watt) by frame size — rough community averages
@@ -1373,35 +518,6 @@
     3:  4.2,
     5:  4.5,
     7:  4.8,
-  };
-
-  // Frontal drag coefficient × area (m²) per frame — drives aerodynamic speed limit.
-  const frameCdA = {
-    65: 0.0020,
-    75: 0.0030,
-    3:  0.0075,
-    5:  0.0140,
-    7:  0.0200,
-  };
-
-  // Fraction of no-load RPM actually achieved under combined aero + electrical load.
-  // Small high-KV motors sag dramatically due to winding resistance at high current.
-  const motorLoadFraction = {
-    65: 0.52,
-    75: 0.48,
-    3:  0.65,
-    5:  0.74,
-    7:  0.78,
-  };
-
-  // Calibrated static thrust per motor (g) at each frame's preset KV/cell combo.
-  // Tuned against community-reported top speeds; separate from the OSD thrust display.
-  const speedThrustPerMotor = {
-    65: 25,
-    75: 60,
-    3:  180,
-    5:  800,
-    7:  900,
   };
 
   // Approx average current draw as a fraction of theoretical max, tuned per frame size (aggressive flying)
@@ -1438,35 +554,6 @@
     totalThrust: document.getElementById('totalThrust'),
   };
 
-  const motorSelect = document.getElementById('motorSelect');
-
-  function populateMotorSelect(frame) {
-    motorSelect.innerHTML = '<option value="">— Select a motor or enter KV below —</option>';
-    (motorDB[frame] || []).forEach((m, i) => {
-      const opt = document.createElement('option');
-      opt.value = i;
-      opt.textContent = `${m.name}  —  ${m.kv.toLocaleString()} KV`;
-      motorSelect.appendChild(opt);
-    });
-    motorSelect.value = '';
-  }
-
-  function populateCompareSelects(frame) {
-    ['cmpSelectA', 'cmpSelectB'].forEach(id => {
-      const sel = document.getElementById(id);
-      sel.innerHTML = '<option value="">— Pick a motor —</option>';
-      (motorDB[frame] || []).forEach((m, i) => {
-        const opt = document.createElement('option');
-        opt.value = i;
-        opt.textContent = `${m.name}  —  ${m.kv.toLocaleString()} KV`;
-        sel.appendChild(opt);
-      });
-      sel.value = '';
-    });
-    document.getElementById('cmpKvA').value = '';
-    document.getElementById('cmpKvB').value = '';
-  }
-
   function applyPreset(frame) {
     const p = framePresets[frame];
     els.motorKV.value = p.kv;
@@ -1481,168 +568,55 @@
       document.querySelectorAll('.frame-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentFrame = btn.dataset.frame;
-      populateMotorSelect(currentFrame);
-      populateCompareSelects(currentFrame);
       applyPreset(currentFrame);
       calculate();
     });
   });
 
-  motorSelect.addEventListener('change', () => {
-    const idx = parseInt(motorSelect.value);
-    if (!isNaN(idx) && motorDB[currentFrame]?.[idx]) {
-      els.motorKV.value = motorDB[currentFrame][idx].kv;
-      calculate();
-    }
-  });
-
-  els.motorKV.addEventListener('input', () => { motorSelect.value = ''; });
-
-  function computeStats(kv, cells, capacity, pitch, weight) {
-    const voltage = cells * 3.7;
-    const rpm_eff    = kv * voltage * motorLoadFraction[currentFrame];
-    const pitch_m    = pitch * 0.0254;
-    const v_pitch_ms = (pitch_m * rpm_eff) / 60;
-    const kvRef      = framePresets[currentFrame].kv;
-    const T_total_N  = (speedThrustPerMotor[currentFrame] * 4 * (kv / kvRef) / 1000) * 9.81;
-    const rho = 1.225, CdA = frameCdA[currentFrame];
-    const a_c = 0.5 * rho * CdA, b_c = T_total_N / v_pitch_ms;
-    const disc = b_c * b_c + 4 * a_c * T_total_N;
-    const v_ms    = disc >= 0 ? (-b_c + Math.sqrt(disc)) / (2 * a_c) : 0;
-    const speedMph = Math.min(v_ms * 2.23694, v_pitch_ms * 2.23694 * 0.92);
-    const maxCurrentPerMotor = estMaxCurrentPerMotor(kv, cells, currentFrame);
-    const totalThrust  = maxCurrentPerMotor * voltage * thrustPerWatt[currentFrame] * 4;
-    const tw           = totalThrust / weight;
-    const avgCurrent   = maxCurrentPerMotor * 4 * avgCurrentFraction[currentFrame];
-    const flightTimeMin = ((capacity / 1000) * 0.8 / avgCurrent) * 60;
-    return { speedMph, totalThrust, tw, flightTimeMin };
-  }
-
   function calculate() {
-    const kv       = parseFloat(els.motorKV.value)   || 0;
-    const cells    = parseFloat(els.cells.value)     || 1;
-    const capacity = parseFloat(els.capacity.value)  || 0;
-    const pitch    = parseFloat(els.propPitch.value) || 0;
-    const weight   = parseFloat(els.weight.value)    || 1;
-    const s = computeStats(kv, cells, capacity, pitch, weight);
+    const kv = parseFloat(els.motorKV.value) || 0;
+    const cells = parseFloat(els.cells.value) || 1;
+    const capacity = parseFloat(els.capacity.value) || 0;
+    const pitch = parseFloat(els.propPitch.value) || 0;
+    const weight = parseFloat(els.weight.value) || 1;
+    const voltage = cells * 3.7;
 
-    els.topSpeed.innerHTML    = s.speedMph.toFixed(0)    + '<span class="unit">mph</span>';
-    els.totalThrust.innerHTML = s.totalThrust.toFixed(0) + '<span class="unit">g</span>';
+    // --- TOP SPEED ---
+    // RPM = KV * voltage * efficiency factor (slip/load)
+    const efficiency = 0.85;
+    const rpm = kv * voltage * efficiency;
+    // speed (mph) = pitch (in) * rpm * 60 / 63360 (inches per mile)
+    const speedMph = (pitch * rpm * 60) / 63360;
+    els.topSpeed.innerHTML = speedMph.toFixed(0) + '<span class="unit">mph</span>';
 
-    const tw = s.tw;
+    // --- THRUST ---
+    const maxCurrentPerMotor = estMaxCurrentPerMotor(kv, cells, currentFrame);
+    const wattsPerMotor = maxCurrentPerMotor * voltage;
+    const thrustPerMotor = wattsPerMotor * thrustPerWatt[currentFrame];
+    const totalThrust = thrustPerMotor * 4;
+    els.totalThrust.innerHTML = totalThrust.toFixed(0) + '<span class="unit">g</span>';
+
+    // --- THRUST TO WEIGHT ---
+    const tw = totalThrust / weight;
     els.thrustWeight.innerHTML = tw.toFixed(1) + '<span class="unit">:1</span>';
-    let rating = 'Mild / long-range tuned', warn = false;
-    if      (tw >= 2 && tw < 4) { rating = 'Punchy'; }
+    let rating = 'Cruiser';
+    let ratingClass = '';
+    if (tw >= 2 && tw < 4) { rating = 'Punchy'; }
     else if (tw >= 4 && tw < 6) { rating = 'Aggressive freestyle'; }
-    else if (tw >= 6)           { rating = 'Extreme — wheelie warning'; warn = true; }
+    else if (tw >= 6) { rating = 'Extreme — wheelie warning'; ratingClass = 'warn'; }
+    else { rating = 'Mild / long-range tuned'; }
     els.twRating.textContent = rating;
-    els.thrustWeight.classList.toggle('warn', warn);
+    els.thrustWeight.classList.toggle('warn', ratingClass === 'warn');
 
-    els.flightTime.innerHTML = s.flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
-    compareCalculate();
+    // --- FLIGHT TIME ---
+    const totalWatts = wattsPerMotor * 4 * avgCurrentFraction[currentFrame] / avgCurrentFraction[currentFrame]; // placeholder, recompute below
+    const avgCurrentTotal = maxCurrentPerMotor * 4 * avgCurrentFraction[currentFrame];
+    const usableCapacityAh = (capacity / 1000) * 0.8;
+    const flightTimeMin = (usableCapacityAh / avgCurrentTotal) * 60;
+    els.flightTime.innerHTML = flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
   }
 
-  function compareCalculate() {
-    const kvA      = parseFloat(document.getElementById('cmpKvA').value);
-    const kvB      = parseFloat(document.getElementById('cmpKvB').value);
-    const cells    = parseFloat(els.cells.value)     || 1;
-    const capacity = parseFloat(els.capacity.value)  || 0;
-    const pitch    = parseFloat(els.propPitch.value) || 0;
-    const weight   = parseFloat(els.weight.value)    || 1;
-    const sA = (!isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, weight) : null;
-    const sB = (!isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, weight) : null;
-
-    function setPair(idA, idB, vA, vB, fmt) {
-      const eA = document.getElementById(idA), eB = document.getElementById(idB);
-      if (vA !== null) { eA.innerHTML = fmt(vA); eA.classList.add('filled'); }
-      else             { eA.innerHTML = '—';     eA.classList.remove('filled'); }
-      if (vB !== null) { eB.innerHTML = fmt(vB); eB.classList.add('filled'); }
-      else             { eB.innerHTML = '—';     eB.classList.remove('filled'); }
-      eA.classList.remove('winner'); eB.classList.remove('winner');
-      if (vA !== null && vB !== null && vA !== vB)
-        (vA > vB ? eA : eB).classList.add('winner');
-    }
-
-    setPair('cmpSpeedA',  'cmpSpeedB',  sA ? sA.speedMph      : null, sB ? sB.speedMph      : null, v => `${v.toFixed(0)}<span class="cmp-unit">mph</span>`);
-    setPair('cmpTwA',     'cmpTwB',     sA ? sA.tw            : null, sB ? sB.tw            : null, v => `${v.toFixed(1)}<span class="cmp-unit">:1</span>`);
-    setPair('cmpThrustA', 'cmpThrustB', sA ? sA.totalThrust   : null, sB ? sB.totalThrust   : null, v => `${v.toFixed(0)}<span class="cmp-unit">g</span>`);
-    setPair('cmpTimeA',   'cmpTimeB',   sA ? sA.flightTimeMin : null, sB ? sB.flightTimeMin : null, v => `${v.toFixed(1)}<span class="cmp-unit">min</span>`);
-  }
-
-  function wireCompareInput(selectId, kvId) {
-    const sel  = document.getElementById(selectId);
-    const kvEl = document.getElementById(kvId);
-    sel.addEventListener('change', () => {
-      const idx = parseInt(sel.value);
-      if (!isNaN(idx) && motorDB[currentFrame]?.[idx]) kvEl.value = motorDB[currentFrame][idx].kv;
-      compareCalculate();
-    });
-    kvEl.addEventListener('input', () => { sel.value = ''; compareCalculate(); });
-  }
-
-  wireCompareInput('cmpSelectA', 'cmpKvA');
-  wireCompareInput('cmpSelectB', 'cmpKvB');
-
-  // ===== Battery C-Rating & Voltage Sag =====
-  function calcBattery() {
-    const cells   = parseInt(document.getElementById('battCells').value)   || 1;
-    const mah     = parseFloat(document.getElementById('battMah').value)   || 0;
-    const cRating = parseFloat(document.getElementById('battC').value)     || 1;
-    const peakA   = parseFloat(document.getElementById('battPeakA').value) || 0;
-
-    const maxRatedA  = cRating * (mah / 1000);
-    const headroom   = ((maxRatedA - peakA) / maxRatedA) * 100;
-    const esrOhms    = (cells * (1000 / cRating)) / 1000; // rough ESR model
-    const sag        = peakA * esrOhms;
-    const effV       = Math.max(0, cells * 4.2 - sag);
-
-    document.getElementById('battMaxA').innerHTML    = maxRatedA.toFixed(0) + '<span class="tunit">A</span>';
-    document.getElementById('battSag').innerHTML     = sag.toFixed(2)       + '<span class="tunit">V</span>';
-    document.getElementById('battEffV').innerHTML    = effV.toFixed(2)       + '<span class="tunit">V</span>';
-
-    const hEl = document.getElementById('battHeadroom');
-    hEl.innerHTML = headroom.toFixed(0) + '<span class="tunit">%</span>';
-    hEl.classList.toggle('warn', headroom < 10);
-
-    const sEl = document.getElementById('battStatus');
-    if (headroom >= 25) {
-      sEl.textContent = 'Good — battery is well within its rated draw for this build.';
-      sEl.className = 'batt-status';
-    } else if (headroom >= 0) {
-      sEl.textContent = 'Marginal — within spec but little headroom. Consider a higher C-rating or lower peak current.';
-      sEl.className = 'batt-status warn';
-    } else {
-      sEl.textContent = `Overdrawing by ${Math.abs(headroom).toFixed(0)}% — battery not rated for this current. Expect heat, sag, and reduced cell life.`;
-      sEl.className = 'batt-status warn';
-    }
-  }
-
-  // ===== Prop Pitch Speed Reference Table =====
-  const PITCH_LIST = [0.8, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.1, 5.5, 6.0];
-
-  function buildPitchTable() {
-    const kv           = parseFloat(document.getElementById('pitchKV').value)    || 0;
-    const cells        = parseInt(document.getElementById('pitchCells').value)   || 1;
-    const frame        = document.getElementById('pitchFrame').value;
-    const currentPitch = parseFloat(els.propPitch.value) || 0;
-    const rpm_eff      = kv * (cells * 3.7) * (motorLoadFraction[frame] || 0.75);
-    const tbody        = document.getElementById('pitchTableBody');
-    tbody.innerHTML    = '';
-
-    PITCH_LIST.forEach(p => {
-      const speedMph  = (p * rpm_eff * 60) / 63360;
-      const isCurrent = Math.abs(p - currentPitch) < 0.05;
-      const tr        = document.createElement('tr');
-      if (isCurrent) tr.className = 'current-pitch';
-      tr.innerHTML = `<td>${p.toFixed(1)}"</td><td class="pitch-speed">${speedMph.toFixed(0)} mph</td>`;
-      tbody.appendChild(tr);
-    });
-  }
-
-  // initial calc — sync inputs to active frame button before first render
-  populateMotorSelect(currentFrame);
-  populateCompareSelects(currentFrame);
-  applyPreset(currentFrame);
+  // initial calc
   calculate();
 
   // recalc on any input change
@@ -1651,20 +625,6 @@
       el.addEventListener('input', calculate);
     }
   });
-
-  // Battery calculator listeners
-  ['battCells', 'battMah', 'battC', 'battPeakA'].forEach(id =>
-    document.getElementById(id).addEventListener('input', calcBattery)
-  );
-
-  // Pitch table listeners — also rebuild when main prop pitch changes
-  ['pitchKV', 'pitchCells', 'pitchFrame'].forEach(id =>
-    document.getElementById(id).addEventListener('input', buildPitchTable)
-  );
-  els.propPitch.addEventListener('input', buildPitchTable);
-
-  calcBattery();
-  buildPitchTable();
 </script>
 
 </body>
