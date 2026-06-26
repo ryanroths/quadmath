@@ -730,6 +730,157 @@
     padding-top: .25rem;
     border-top: 1px solid var(--border);
   }
+
+  /* === RYFLY SECTION === */
+  .affiliate-disclosure {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 28px;
+    max-width: 680px;
+  }
+  .ryfly-subhead {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: -0.01em;
+    color: var(--orange);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    margin-bottom: 16px;
+    margin-top: 36px;
+  }
+  .builds-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 8px;
+  }
+  @media (max-width: 700px) { .builds-grid { grid-template-columns: 1fr; } }
+  .build-card {
+    background: #0A0B0E;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 20px 20px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .bc-corner {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--green);
+    opacity: 0.45;
+  }
+  .bc-tl { top: 10px; left: 10px; border-right: none; border-bottom: none; }
+  .bc-tr { top: 10px; right: 10px; border-left: none; border-bottom: none; }
+  .bc-bl { bottom: 10px; left: 10px; border-right: none; border-top: none; }
+  .bc-br { bottom: 10px; right: 10px; border-left: none; border-top: none; }
+  .build-card-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--orange);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .build-card-label::before {
+    content: '';
+    width: 6px; height: 6px;
+    background: var(--green);
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .build-spec-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+  }
+  .build-spec-row:last-child { border-bottom: none; }
+  .spec-key {
+    color: var(--muted);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    min-width: 72px;
+  }
+  .spec-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--text);
+    flex: 1;
+    line-height: 1.3;
+  }
+  .buy-btn {
+    display: inline-block;
+    background: var(--orange);
+    color: #0D0E12;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 9px;
+    border-radius: 999px;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+  }
+  .buy-btn:hover { opacity: 0.8; }
+  .picks-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-top: 4px;
+  }
+  @media (max-width: 800px) { .picks-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 500px) { .picks-grid { grid-template-columns: 1fr; } }
+  .pick-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .pick-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .pick-blurb {
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.5;
+    flex: 1;
+  }
+  .shop-btn {
+    display: inline-block;
+    background: var(--orange);
+    color: #0D0E12;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 6px 14px;
+    border-radius: 4px;
+    text-decoration: none;
+    text-align: center;
+    transition: opacity 0.15s;
+    align-self: flex-start;
+    margin-top: 4px;
+  }
+  .shop-btn:hover { opacity: 0.8; }
 </style>
 </head>
 <body>
@@ -743,6 +894,7 @@
       <a href="#motor-guide">Motors</a>
       <a href="#tools">Tools</a>
       <a href="#tunes">Tunes</a>
+      <a href="#ryfly">RyFly's Gear</a>
     </nav>
   </div>
 </header>
@@ -1298,6 +1450,81 @@
           </tr>
         </tbody>
       </table>
+    </div>
+  </section>
+
+  <section class="section" id="ryfly">
+    <h2>What RyFly Is Flying</h2>
+    <p class="affiliate-disclosure">This page contains affiliate links — if you buy through my links I may earn a small commission at no extra cost to you. I only recommend gear I actually fly.</p>
+
+    <p class="ryfly-subhead">Current Builds</p>
+    <div class="builds-grid">
+
+      <div class="build-card">
+        <div class="bc-corner bc-tl"></div>
+        <div class="bc-corner bc-tr"></div>
+        <div class="bc-corner bc-bl"></div>
+        <div class="bc-corner bc-br"></div>
+        <div class="build-card-label">Analog Daily Driver</div>
+        <div class="build-spec-row"><span class="spec-key">Frame</span><span class="spec-val">BetaFPV Air65</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+        <div class="build-spec-row"><span class="spec-key">FC</span><span class="spec-val">BetaFPV 4-in-1 AIO</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+        <div class="build-spec-row"><span class="spec-key">Receiver</span><span class="spec-val">Separate ELRS receiver</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+        <div class="build-spec-row"><span class="spec-key">Motors</span><span class="spec-val">VCI Spark 0702 29000KV ×4</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+        <div class="build-spec-row"><span class="spec-key">Props</span><span class="spec-val">Gemfan 31mm Triblade</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+        <div class="build-spec-row"><span class="spec-key">Battery</span><span class="spec-val">BetaFPV Lava 1S 300mAh</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+        <div class="build-spec-row"><span class="spec-key">VTX</span><span class="spec-val">Analog — R8</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+        <div class="build-spec-row"><span class="spec-key">Radio</span><span class="spec-val">RadioMaster TX16S</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+      </div>
+
+      <div class="build-card">
+        <div class="bc-corner bc-tl"></div>
+        <div class="bc-corner bc-tr"></div>
+        <div class="bc-corner bc-bl"></div>
+        <div class="bc-corner bc-br"></div>
+        <div class="build-card-label">HD Build</div>
+        <div class="build-spec-row"><span class="spec-key">Frame</span><span class="spec-val">Happymodel Mobula 6 (2024)</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+        <div class="build-spec-row"><span class="spec-key">FC</span><span class="spec-val">HDZero AIO15</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+        <div class="build-spec-row"><span class="spec-key">Camera</span><span class="spec-val">HDZero Lux</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+        <div class="build-spec-row"><span class="spec-key">Motors</span><span class="spec-val">Happymodel 0702 28000KV ×4</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+        <div class="build-spec-row"><span class="spec-key">Props</span><span class="spec-val">Gemfan 31mm Triblade</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+        <div class="build-spec-row"><span class="spec-key">Battery</span><span class="spec-val">BetaFPV Lava 1S 300mAh</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+        <div class="build-spec-row"><span class="spec-key">Radio</span><span class="spec-val">RadioMaster TX16S</span><a href="[AFFILIATE_LINK]" class="buy-btn">Buy</a></div>
+      </div>
+
+    </div>
+
+    <p class="ryfly-subhead">RyFly's Picks</p>
+    <div class="picks-grid">
+      <div class="pick-card">
+        <div class="pick-name">RadioMaster TX16S</div>
+        <div class="pick-blurb">My daily radio. Hall gimbals, multiprotocol, runs EdgeTX out of the box.</div>
+        <a href="[AFFILIATE_LINK]" class="shop-btn">Shop</a>
+      </div>
+      <div class="pick-card">
+        <div class="pick-name">Gemfan 31mm Triblade Props</div>
+        <div class="pick-blurb">Best prop for 65mm freestyle. Durable and consistent flight feel.</div>
+        <a href="[AFFILIATE_LINK]" class="shop-btn">Shop</a>
+      </div>
+      <div class="pick-card">
+        <div class="pick-name">BetaFPV Lava 1S 300mAh</div>
+        <div class="pick-blurb">The battery I trust in both builds. Punchy and holds voltage well.</div>
+        <a href="[AFFILIATE_LINK]" class="shop-btn">Shop</a>
+      </div>
+      <div class="pick-card">
+        <div class="pick-name">BetaFPV Air65 Frame</div>
+        <div class="pick-blurb">My go-to analog 65mm. Solid ducts, great motor spacing.</div>
+        <a href="[AFFILIATE_LINK]" class="shop-btn">Shop</a>
+      </div>
+      <div class="pick-card">
+        <div class="pick-name">Happymodel Mobula 6 2024</div>
+        <div class="pick-blurb">Best HD whoop available right now. HDZero on a 65mm is a game changer.</div>
+        <a href="[AFFILIATE_LINK]" class="shop-btn">Shop</a>
+      </div>
+      <div class="pick-card">
+        <div class="pick-name">VCI Spark 0702 29000KV</div>
+        <div class="pick-blurb">The motor in my analog build. Locked in, runs cool, punchy on 1S.</div>
+        <a href="[AFFILIATE_LINK]" class="shop-btn">Shop</a>
+      </div>
     </div>
   </section>
 </div>
