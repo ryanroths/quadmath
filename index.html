@@ -907,6 +907,7 @@
     <div class="frame-select">
       <button class="frame-btn active" data-frame="65">65mm Whoop</button>
       <button class="frame-btn" data-frame="75">75mm Whoop</button>
+      <button class="frame-btn" data-frame="85">85mm Whoop</button>
       <button class="frame-btn" data-frame="3">3" Freestyle</button>
       <button class="frame-btn" data-frame="5">5" Freestyle</button>
       <button class="frame-btn" data-frame="7">7" Long Range</button>
@@ -1192,6 +1193,15 @@
         <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">40mm</span></div>
         <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">25–35g</span></div>
         <p class="frame-note">The Mobula7 class — typically flown 1S or 2S depending on the build and pilot preference. More versatile than 65mm, handles light outdoor wind. A good first whoop for pilots coming off simulators.</p>
+      </div>
+      <div class="frame-card">
+        <div class="frame-card-title">85mm Whoop</div>
+        <span class="frame-card-tag">Micro / Outdoor</span>
+        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">1103, 11K KV</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">2S, 350–450mAh</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">40mm</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">55–70g</span></div>
+        <p class="frame-note">85mm whoops typically run 1103 motors on 2S. Bridge between micro whoop and toothpick — more punch than a 75mm, still indoor-capable.</p>
       </div>
       <div class="frame-card">
         <div class="frame-card-title">3" Freestyle</div>
@@ -1540,7 +1550,8 @@
   // ===== Frame size presets (typical defaults) =====
   const framePresets = {
     65: { kv: 19000, cells: 1, capacity: 300, pitch: 1.0, weight: 24 },  // AUW: ~17g frame + 7g 1S battery
-    75: { kv: 10000, cells: 1, capacity: 300, pitch: 2.0, weight: 27 },  // 1S only; ~20g frame + 7g battery
+    75: { kv: 10000, cells: 1, capacity: 300, pitch: 2.0, weight: 27 },
+    85: { kv: 11000, cells: 2, capacity: 450, pitch: 1.6, weight: 60 },
     3:  { kv: 7000,  cells: 4, capacity: 850, pitch: 2.5, weight: 120 },
     5:  { kv: 1900,  cells: 6, capacity: 1300, pitch: 5.1, weight: 280 },
     7:  { kv: 1300,  cells: 6, capacity: 1800, pitch: 6.0, weight: 420 },
@@ -1556,6 +1567,10 @@
       { name: 'VCI Spark 0702',               kv: 29000 },
       { name: 'BetaFPV 0702 II',              kv: 30000 },
       { name: 'weBLEEDfpv SKRRRT 0702',       kv: 40000 },
+    ],
+    85: [
+      { name: 'BetaFPV 1103',                 kv: 11000 },
+      { name: 'Happymodel EX1103',             kv: 11000 },
     ],
     75: [
       { name: 'NewBeeDrone Flow 0802',         kv: 19000 },
@@ -1597,6 +1612,7 @@
   const thrustPerWatt = {
     65: 3.5,
     75: 3.8,
+    85: 4.0,
     3:  4.2,
     5:  4.5,
     7:  4.8,
@@ -1606,6 +1622,7 @@
   const frameCdA = {
     65: 0.0020,
     75: 0.0030,
+    85: 0.0035,
     3:  0.0075,
     5:  0.0140,
     7:  0.0200,
@@ -1616,6 +1633,7 @@
   const motorLoadFraction = {
     65: 0.52,
     75: 0.48,
+    85: 0.55,
     3:  0.65,
     5:  0.74,
     7:  0.78,
@@ -1626,6 +1644,7 @@
   const speedThrustPerMotor = {
     65: 25,
     75: 60,
+    85: 85,
     3:  180,
     5:  800,
     7:  900,
@@ -1635,6 +1654,7 @@
   const avgCurrentFraction = {
     65: 0.55,
     75: 0.55,
+    85: 0.50,
     3:  0.45,
     5:  0.40,
     7:  0.35,
@@ -1644,7 +1664,7 @@
   function estMaxCurrentPerMotor(kv, cells, frame) {
     const voltage = cells * 3.7;
     // crude scaling: bigger frame = bigger motor = more current capacity
-    const frameCurrentBase = { 65: 4, 75: 6, 3: 12, 5: 25, 7: 30 };
+    const frameCurrentBase = { 65: 4, 75: 6, 85: 8, 3: 12, 5: 25, 7: 30 };
     const base = frameCurrentBase[frame];
     // scale slightly with KV/voltage relationship vs a reference
     return base * (voltage / (cells === 1 ? 4.2 : voltage)) * (kv / framePresets[frame].kv);
