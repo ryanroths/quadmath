@@ -305,6 +305,59 @@
     margin-right: auto;
   }
 
+  /* BUILD SCORE HERO */
+  .build-score-hero {
+    background: linear-gradient(135deg, rgba(61,220,151,0.06), transparent);
+    border-bottom: 1px solid var(--border);
+    padding: 22px 20px 18px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .bs-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .bs-number {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 4rem;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--green);
+  }
+  .bs-personality {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--orange);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    margin-top: 2px;
+  }
+  .bs-bar-track {
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  .bs-bar-fill {
+    height: 100%;
+    background: linear-gradient(to right, #FF4D1A 0%, #FF4D1A 50%, #3DDC97 75%, #3DDC97 100%);
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.4s ease;
+  }
+
   /* ===== AD SLOTS ===== */
   .ad-slot {
     background: var(--panel);
@@ -965,10 +1018,13 @@
         <div class="osd-corner-tl"></div>
         <div class="osd-corner-br"></div>
 
-        <div class="speed-hero">
-          <div class="speed-hero-label">Estimated Top Speed</div>
-          <div class="speed-hero-value" id="topSpeed">38<span class="unit">mph</span></div>
-          <div class="speed-hero-note">Based on drag-equilibrium: load-limited motor RPM vs. aerodynamic drag. Real-world speed varies with airflow, battery sag, and pilot throttle habits.</div>
+        <div class="build-score-hero">
+          <div class="bs-label">BUILD SCORE</div>
+          <div class="bs-number" id="buildScoreNum">—</div>
+          <div class="bs-personality" id="buildPersonality">—</div>
+          <div class="bs-bar-track">
+            <div class="bs-bar-fill" id="buildScoreBar"></div>
+          </div>
         </div>
 
         <div class="osd-stats">
@@ -1678,7 +1734,6 @@
     capacity: document.getElementById('capacity'),
     propPitch: document.getElementById('propPitch'),
     weight: document.getElementById('weight'),
-    topSpeed: document.getElementById('topSpeed'),
     flightTime: document.getElementById('flightTime'),
     thrustWeight: document.getElementById('thrustWeight'),
     twRating: document.getElementById('twRating'),
@@ -1773,7 +1828,6 @@
     const weight   = parseFloat(els.weight.value)    || 1;
     const s = computeStats(kv, cells, capacity, pitch, weight);
 
-    els.topSpeed.innerHTML    = s.speedMph.toFixed(0)    + '<span class="unit">mph</span>';
     els.totalThrust.innerHTML = s.totalThrust.toFixed(0) + '<span class="unit">g</span>';
 
     const tw = s.tw;
@@ -1786,6 +1840,21 @@
     els.thrustWeight.classList.toggle('warn', warn);
 
     els.flightTime.innerHTML = s.flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
+
+    const twScore    = Math.min(tw / 6 * 100, 100) * 0.50;
+    const ftScore    = Math.min(s.flightTimeMin / 5 * 100, 100) * 0.30;
+    const spdScore   = Math.min(s.speedMph / 80 * 100, 100) * 0.20;
+    const buildScore = Math.round(twScore + ftScore + spdScore);
+    let personality;
+    if      (buildScore >= 90) personality = 'WHEELIE WARNING ⚡';
+    else if (buildScore >= 75) personality = 'COMPETITION READY';
+    else if (buildScore >= 60) personality = 'AGGRESSIVE FREESTYLE';
+    else if (buildScore >= 45) personality = 'LOCKED IN FREESTYLE';
+    else if (buildScore >= 25) personality = 'RELAXED CRUISER';
+    else                       personality = 'FLOATY — NEEDS MORE PUNCH';
+    document.getElementById('buildScoreNum').textContent  = buildScore;
+    document.getElementById('buildPersonality').textContent = personality;
+    document.getElementById('buildScoreBar').style.width  = buildScore + '%';
     compareCalculate();
   }
 
