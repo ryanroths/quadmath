@@ -934,6 +934,138 @@
     margin-top: 4px;
   }
   .shop-btn:hover { opacity: 0.8; }
+
+  /* === HIRE / CONTACT === */
+  .hire-sub {
+    color: var(--muted);
+    font-size: 0.88rem;
+    margin-bottom: 6px;
+  }
+  .hire-intro {
+    color: var(--muted);
+    font-size: 0.92rem;
+    max-width: 600px;
+    margin-bottom: 28px;
+    line-height: 1.6;
+  }
+  .hire-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 36px;
+  }
+  @media (max-width: 640px) { .hire-cards { grid-template-columns: 1fr; } }
+  .hire-card {
+    background: #0A0B0E;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hire-card-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--orange);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .hire-card-title::before {
+    content: '';
+    width: 6px; height: 6px;
+    background: var(--green);
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .hire-card ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .hire-card ul li {
+    font-size: 0.85rem;
+    color: var(--muted);
+    padding-left: 14px;
+    position: relative;
+    line-height: 1.4;
+  }
+  .hire-card ul li::before {
+    content: '—';
+    position: absolute;
+    left: 0;
+    color: var(--orange);
+    font-size: 0.75rem;
+  }
+  .contact-form-wrap { max-width: 600px; }
+  .contact-form-wrap .field { margin-bottom: 16px; }
+  .contact-form-wrap .field label {
+    display: block;
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .contact-form-wrap .field input,
+  .contact-form-wrap .field select,
+  .contact-form-wrap .field textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    padding: 10px 12px;
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .contact-form-wrap .field input:focus,
+  .contact-form-wrap .field select:focus,
+  .contact-form-wrap .field textarea:focus { border-color: var(--orange); }
+  .contact-form-wrap .field textarea { resize: vertical; min-height: 110px; }
+  .contact-submit {
+    width: 100%;
+    background: var(--orange);
+    border: none;
+    color: #0D0E12;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 13px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .contact-submit:hover { opacity: 0.85; }
+  .contact-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+  .contact-success {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88rem;
+    color: var(--green);
+    padding: 16px;
+    border: 1px solid rgba(61,220,151,0.25);
+    border-radius: 4px;
+    display: none;
+  }
+  .contact-error {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 10px;
+    display: none;
+  }
+  .contact-email-line {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 14px;
+  }
+  .contact-email-line a { color: var(--orange); text-decoration: none; }
+  .contact-email-line a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -948,6 +1080,7 @@
       <a href="#tools">Tools</a>
       <a href="#tunes">Tunes</a>
       <a href="#ryfly">RyFly's Gear</a>
+      <a href="#hire">Hire</a>
     </nav>
   </div>
 </header>
@@ -1593,6 +1726,83 @@
       </div>
     </div>
   </section>
+
+  <section class="section" id="hire">
+    <h2>Work With RyFly</h2>
+    <p class="hire-sub">FPV Freestyle Pilot · IGOW Competitor · Content Creator · Mesa, Arizona</p>
+    <p class="hire-intro">Available for freestyle filming, event appearances, and social media content creation. Based in Arizona — open to travel for the right project.</p>
+
+    <div class="hire-cards">
+      <div class="hire-card">
+        <div class="bc-corner bc-tl"></div>
+        <div class="bc-corner bc-tr"></div>
+        <div class="bc-corner bc-bl"></div>
+        <div class="bc-corner bc-br"></div>
+        <div class="hire-card-title">Freestyle &amp; Film</div>
+        <ul>
+          <li>FPV freestyle footage for social media, ads, and promotional content</li>
+          <li>Indoor and outdoor locations</li>
+          <li>DaVinci Resolve post-production included</li>
+          <li>Analog and HDZero HD formats available</li>
+        </ul>
+      </div>
+      <div class="hire-card">
+        <div class="bc-corner bc-tl"></div>
+        <div class="bc-corner bc-tr"></div>
+        <div class="bc-corner bc-bl"></div>
+        <div class="bc-corner bc-br"></div>
+        <div class="hire-card-title">Events &amp; Social Media</div>
+        <ul>
+          <li>Live event demo flying and appearances</li>
+          <li>Social media content creation and management</li>
+          <li>Competition-level pilot — IGOW6 competitor</li>
+          <li>Brand partnership and ambassador opportunities</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="contact-form-wrap">
+      <div class="contact-success" id="contactSuccess">Message received — I'll be in touch within 48 hours.</div>
+      <form id="contactForm" action="https://formspree.io/f/xqevbedy" method="POST">
+        <input type="hidden" name="_replyto" id="replyToField">
+        <div class="field">
+          <label for="contactName">Name</label>
+          <input type="text" id="contactName" name="name" required>
+        </div>
+        <div class="field">
+          <label for="contactEmail">Email</label>
+          <input type="email" id="contactEmail" name="email" required>
+        </div>
+        <div class="field">
+          <label for="contactType">Project Type</label>
+          <select id="contactType" name="project_type">
+            <option>Freestyle Filming</option>
+            <option>Event Appearance</option>
+            <option>Social Media Content</option>
+            <option>Brand Partnership</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="contactBudget">Budget Range</label>
+          <select id="contactBudget" name="budget">
+            <option>Under $500</option>
+            <option>$500–$1,500</option>
+            <option>$1,500–$5,000</option>
+            <option>$5,000+</option>
+            <option>Let's Discuss</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="contactMessage">Message</label>
+          <textarea id="contactMessage" name="message" placeholder="Tell me about your project..." required></textarea>
+        </div>
+        <button type="submit" class="contact-submit" id="contactSubmit">Send Inquiry</button>
+        <div class="contact-error" id="contactError">Something went wrong — please try again or email directly.</div>
+      </form>
+      <p class="contact-email-line">Prefer email? Reach out directly at <a href="mailto:ryan.roths@gmail.com">ryan.roths@gmail.com</a></p>
+    </div>
+  </section>
 </div>
 
 <footer>
@@ -1981,6 +2191,39 @@
 
   calcBattery();
   buildPitchTable();
+
+  // ---- CONTACT FORM ----
+  const contactForm = document.getElementById('contactForm');
+  if (contactForm) {
+    document.getElementById('contactEmail').addEventListener('input', function() {
+      document.getElementById('replyToField').value = this.value;
+    });
+    contactForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const btn = document.getElementById('contactSubmit');
+      const errEl = document.getElementById('contactError');
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+      errEl.style.display = 'none';
+      try {
+        const res = await fetch(contactForm.action, {
+          method: 'POST',
+          body: new FormData(contactForm),
+          headers: { 'Accept': 'application/json' }
+        });
+        if (res.ok) {
+          contactForm.style.display = 'none';
+          document.getElementById('contactSuccess').style.display = 'block';
+        } else {
+          throw new Error('non-ok');
+        }
+      } catch (_) {
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Send Inquiry';
+      }
+    });
+  }
 </script>
 
 </body>
