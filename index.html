@@ -1825,9 +1825,9 @@
 <script>
   // ===== Frame size presets (typical defaults) =====
   const framePresets = {
-    65: { kv: 19000, cells: 1, capacity: 300, pitch: 1.0, weight: 24 },  // AUW: ~17g frame + 7g 1S battery
-    75: { kv: 10000, cells: 1, capacity: 300, pitch: 2.0, weight: 27 },
-    85: { kv: 11000, cells: 2, capacity: 450, pitch: 1.6, weight: 60 },
+    65: { kv: 19000, cells: 1, capacity: 300, pitch: 1.0, weight: 28  },
+    75: { kv: 22000, cells: 1, capacity: 450, pitch: 1.4, weight: 38  },
+    85: { kv: 11000, cells: 2, capacity: 450, pitch: 1.6, weight: 65  },
     3:  { kv: 7000,  cells: 4, capacity: 850, pitch: 2.5, weight: 120 },
     5:  { kv: 1900,  cells: 6, capacity: 1300, pitch: 5.1, weight: 280 },
     7:  { kv: 1300,  cells: 6, capacity: 1800, pitch: 6.0, weight: 420 },
@@ -1980,6 +1980,7 @@
       opt.value = i;
       opt.setAttribute('data-kv', m.kv);
       opt.setAttribute('data-pitch', m.propPitch);
+      opt.setAttribute('data-weight', m.weightPerMotor);
       opt.textContent = `${m.name}  —  ${m.kv.toLocaleString()} KV`;
       motorSelect.appendChild(opt);
     });
@@ -2023,12 +2024,19 @@
     });
   });
 
+  function currentFrameBaseWeight() {
+    const baseWeights = { 65: 15, 75: 20, 85: 35, 3: 80, 5: 180, 7: 280 };
+    return baseWeights[currentFrame] || 20;
+  }
+
   motorSelect.addEventListener('change', () => {
     const opt = motorSelect.options[motorSelect.selectedIndex];
     const kv = opt.getAttribute('data-kv');
     const pitch = opt.getAttribute('data-pitch');
+    const weight = opt.getAttribute('data-weight');
     if (kv) els.motorKV.value = kv;
     if (pitch) els.propPitch.value = pitch;
+    if (weight) els.weight.value = parseFloat(weight) * 4 + currentFrameBaseWeight();
     calculate();
   });
 
