@@ -1978,6 +1978,8 @@
     (motorDB[frame] || []).forEach((m, i) => {
       const opt = document.createElement('option');
       opt.value = i;
+      opt.setAttribute('data-kv', m.kv);
+      opt.setAttribute('data-pitch', m.propPitch);
       opt.textContent = `${m.name}  —  ${m.kv.toLocaleString()} KV`;
       motorSelect.appendChild(opt);
     });
@@ -2022,13 +2024,12 @@
   });
 
   motorSelect.addEventListener('change', () => {
-    const idx = parseInt(motorSelect.value);
-    if (!isNaN(idx) && motorDB[currentFrame]?.[idx]) {
-      const m = motorDB[currentFrame][idx];
-      els.motorKV.value   = m.kv;
-      els.propPitch.value = m.propPitch;
-      calculate();
-    }
+    const opt = motorSelect.options[motorSelect.selectedIndex];
+    const kv = opt.getAttribute('data-kv');
+    const pitch = opt.getAttribute('data-pitch');
+    if (kv) els.motorKV.value = kv;
+    if (pitch) els.propPitch.value = pitch;
+    calculate();
   });
 
   els.motorKV.addEventListener('input', () => { motorSelect.value = ''; });
