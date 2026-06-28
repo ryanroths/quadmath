@@ -1119,6 +1119,15 @@
         </div>
 
         <div class="field">
+          <label for="propSelect">Propeller</label>
+          <select id="propSelect">
+            <option value="">— Select a prop or enter pitch below —</option>
+          </select>
+          <div class="field-hint">Selecting a prop updates pitch automatically</div>
+          <div id="propShaftWarn" class="field-hint" style="color:var(--orange);display:none">⚠️ Verify shaft size — this prop uses 1.5mm, confirm your motor shaft matches.</div>
+        </div>
+
+        <div class="field">
           <label for="motorKV">Motor KV</label>
           <input type="number" id="motorKV" value="27000" step="500">
           <div class="field-hint">Auto-filled from motor selection above, or enter manually</div>
@@ -1378,7 +1387,15 @@
         <span class="frame-card-tag">Indoor / Learning</span>
         <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">0702, 15–22K KV</span></div>
         <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">1S, 250–300mAh</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">31–40mm</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">31–35mm (Gemfan 1207 reference)</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Pitch</span><span class="frame-spec-val">0.7"</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Prop weight</span><span class="frame-spec-val">0.15g each</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Center thickness</span><span class="frame-spec-val">3.3mm</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Max prop width</span><span class="frame-spec-val">6.8mm</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Shaft</span><span class="frame-spec-val">1.0mm</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Material</span><span class="frame-spec-val">PC (polycarbonate)</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Colors</span><span class="frame-spec-val">Transparent Gray / Clear</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Max AUW</span><span class="frame-spec-val">up to 30g</span></div>
         <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">20–28g</span></div>
         <p class="frame-note">Pure indoor build. Every gram matters — 0702 motors weigh under 2g each. Prioritize motor weight and efficiency over raw power output.</p>
       </div>
@@ -1387,16 +1404,29 @@
         <span class="frame-card-tag">Indoor / Outdoor Hybrid</span>
         <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">1102–1103, 8–22K KV</span></div>
         <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">1S, 300–450mAh</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">40mm</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">40mm (Gemfan 1611 reference)</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Pitch</span><span class="frame-spec-val">1.1"</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Prop weight</span><span class="frame-spec-val">0.085g each (0.34g/set)</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Center thickness</span><span class="frame-spec-val">4mm</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Max prop width</span><span class="frame-spec-val">8.5mm</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Shaft</span><span class="frame-spec-val">1.5mm</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Material</span><span class="frame-spec-val">PC (polycarbonate)</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Max AUW</span><span class="frame-spec-val">40–80g</span></div>
         <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">25–35g</span></div>
         <p class="frame-note">The Mobula7 class — typically flown 1S or 2S depending on the build and pilot preference. More versatile than 65mm, handles light outdoor wind. A good first whoop for pilots coming off simulators.</p>
       </div>
       <div class="frame-card">
         <div class="frame-card-title">85mm Whoop</div>
         <span class="frame-card-tag">Micro / Outdoor</span>
-        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">1103, 11K KV</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">1002–1102 stator</span></div>
         <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">2S, 350–450mAh</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">40mm</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">2" (51.3mm disk)</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Pitch</span><span class="frame-spec-val">0.9"</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Prop weight</span><span class="frame-spec-val">0.4g each</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Mount</span><span class="frame-spec-val">T-mount, 1.5mm shaft</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Material</span><span class="frame-spec-val">PC (polycarbonate)</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Colors</span><span class="frame-spec-val">Clear Gray, Orange, Purple, Blue</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Dimensions</span><span class="frame-spec-val">4.5mm thick · 8.2mm wide</span></div>
         <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">55–70g</span></div>
         <p class="frame-note">85mm whoops typically run 1103 motors on 2S. Bridge between micro whoop and toothpick — more punch than a 75mm, still indoor-capable.</p>
       </div>
@@ -1825,9 +1855,9 @@
 <script>
   // ===== Frame size presets (typical defaults) =====
   const framePresets = {
-    65: { kv: 19000, cells: 1, capacity: 300, pitch: 1.0, weight: 28  },
-    75: { kv: 22000, cells: 1, capacity: 450, pitch: 1.4, weight: 38  },
-    85: { kv: 11000, cells: 2, capacity: 450, pitch: 1.6, weight: 65  },
+    65: { kv: 19000, cells: 1, capacity: 300, pitch: 0.7, weight: 28  },
+    75: { kv: 22000, cells: 1, capacity: 450, pitch: 1.1, weight: 38  },
+    85: { kv: 11000, cells: 2, capacity: 450, pitch: 0.9, weight: 65  },
     3:  { kv: 7000,  cells: 4, capacity: 850, pitch: 2.5, weight: 120 },
     5:  { kv: 1900,  cells: 6, capacity: 1300, pitch: 5.1, weight: 280 },
     7:  { kv: 1300,  cells: 6, capacity: 1800, pitch: 6.0, weight: 420 },
@@ -1836,37 +1866,37 @@
   // Real motor database by frame size — brand, stator, KV
   const motorDB = {
     65: [
-      { name: 'BetaFPV 0702 II',             kv: 23000, propPitch: 1.0, weightPerMotor: 1.50 },
-      { name: 'Happymodel SE0702',            kv: 23000, propPitch: 1.0, weightPerMotor: 1.46 },
-      { name: 'VCI Spark 0702',              kv: 25000, propPitch: 1.0, weightPerMotor: 1.52 },
-      { name: 'Happymodel SE0702',            kv: 26000, propPitch: 1.0, weightPerMotor: 1.46 },
-      { name: 'BetaFPV 0702 II',             kv: 27000, propPitch: 1.0, weightPerMotor: 1.50 },
-      { name: 'VCI Spark 0702',              kv: 27000, propPitch: 1.0, weightPerMotor: 1.52 },
-      { name: 'Happymodel SE0702',            kv: 28000, propPitch: 1.0, weightPerMotor: 1.46 },
-      { name: 'NewBeeDrone Flow 0702',        kv: 29000, propPitch: 1.0, weightPerMotor: 1.58 },
-      { name: 'VCI Spark 0702',              kv: 29000, propPitch: 1.0, weightPerMotor: 1.52 },
-      { name: 'BetaFPV 0702 II',             kv: 30000, propPitch: 1.0, weightPerMotor: 1.50 },
-      { name: 'weBLEEDfpv SKRRRT 0702',      kv: 40000, propPitch: 1.0, weightPerMotor: 1.60 },
+      { name: 'BetaFPV 0702 II',             kv: 23000, propPitch: 0.7, weightPerMotor: 1.50 },
+      { name: 'Happymodel SE0702',            kv: 23000, propPitch: 0.7, weightPerMotor: 1.46 },
+      { name: 'VCI Spark 0702',              kv: 25000, propPitch: 0.7, weightPerMotor: 1.52 },
+      { name: 'Happymodel SE0702',            kv: 26000, propPitch: 0.7, weightPerMotor: 1.46 },
+      { name: 'BetaFPV 0702 II',             kv: 27000, propPitch: 0.7, weightPerMotor: 1.50 },
+      { name: 'VCI Spark 0702',              kv: 27000, propPitch: 0.7, weightPerMotor: 1.52 },
+      { name: 'Happymodel SE0702',            kv: 28000, propPitch: 0.7, weightPerMotor: 1.46 },
+      { name: 'NewBeeDrone Flow 0702',        kv: 29000, propPitch: 0.7, weightPerMotor: 1.58 },
+      { name: 'VCI Spark 0702',              kv: 29000, propPitch: 0.7, weightPerMotor: 1.52 },
+      { name: 'BetaFPV 0702 II',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.50 },
+      { name: 'weBLEEDfpv SKRRRT 0702',      kv: 40000, propPitch: 0.7, weightPerMotor: 1.60 },
     ],
     75: [
-      { name: 'Happymodel RS0802',            kv: 19000, propPitch: 1.4, weightPerMotor: 1.80 },
-      { name: 'Happymodel EX0802',            kv: 19000, propPitch: 1.4, weightPerMotor: 1.80 },
-      { name: 'NewBeeDrone Flow 0802',        kv: 19000, propPitch: 1.4, weightPerMotor: 1.90 },
-      { name: 'RCinPower GTS V3 0802',       kv: 22000, propPitch: 1.5, weightPerMotor: 1.90 },
-      { name: 'iFlight XING NANO X0802',     kv: 22000, propPitch: 1.5, weightPerMotor: 2.00 },
-      { name: 'BetaFPV 0802SE',              kv: 23000, propPitch: 1.5, weightPerMotor: 1.90 },
-      { name: 'NewBeeDrone Flow 0802',        kv: 25000, propPitch: 1.5, weightPerMotor: 1.90 },
-      { name: 'Happymodel RS0802',            kv: 25000, propPitch: 1.5, weightPerMotor: 1.80 },
-      { name: 'weBLEEDfpv Skyscrapers 0802', kv: 25000, propPitch: 1.5, weightPerMotor: 2.00 },
-      { name: 'NewBeeDrone Flow 0802',        kv: 27000, propPitch: 1.5, weightPerMotor: 1.90 },
-      { name: 'NewBeeDrone Flow 0802',        kv: 30000, propPitch: 1.5, weightPerMotor: 1.90 },
-      { name: 'weBLEEDfpv Treetoppers 0802', kv: 32500, propPitch: 1.5, weightPerMotor: 2.10 },
+      { name: 'Happymodel RS0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.80 },
+      { name: 'Happymodel EX0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.80 },
+      { name: 'NewBeeDrone Flow 0802',        kv: 19000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { name: 'RCinPower GTS V3 0802',       kv: 22000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { name: 'iFlight XING NANO X0802',     kv: 22000, propPitch: 1.1, weightPerMotor: 2.00 },
+      { name: 'BetaFPV 0802SE',              kv: 23000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { name: 'NewBeeDrone Flow 0802',        kv: 25000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { name: 'Happymodel RS0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 1.80 },
+      { name: 'weBLEEDfpv Skyscrapers 0802', kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 },
+      { name: 'NewBeeDrone Flow 0802',        kv: 27000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { name: 'NewBeeDrone Flow 0802',        kv: 30000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { name: 'weBLEEDfpv Treetoppers 0802', kv: 32500, propPitch: 1.1, weightPerMotor: 2.10 },
     ],
     85: [
-      { name: 'BetaFPV 1103',               kv:  8000, propPitch: 1.6, weightPerMotor: 3.20 },
-      { name: 'BetaFPV 1103',               kv: 11000, propPitch: 1.6, weightPerMotor: 3.20 },
-      { name: 'Happymodel EX1103',           kv: 11000, propPitch: 1.6, weightPerMotor: 3.20 },
-      { name: 'Flywoo ROBO 1002',            kv: 23500, propPitch: 1.6, weightPerMotor: 2.50 },
+      { name: 'BetaFPV 1103',               kv:  8000, propPitch: 0.9, weightPerMotor: 3.20 },
+      { name: 'BetaFPV 1103',               kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
+      { name: 'Happymodel EX1103',           kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
+      { name: 'Flywoo ROBO 1002',            kv: 23500, propPitch: 0.9, weightPerMotor: 2.50 },
     ],
     3: [
       { name: 'T-Motor Velox V1404',   kv: 4600, propPitch: 2.5, weightPerMotor: 12 },
@@ -1987,6 +2017,60 @@
     motorSelect.value = '';
   }
 
+  const propDB = {
+    65: [
+      { name: 'Gemfan 1207 3-blade',              pitch: 0.7, weight: 0.15, shaft: '1.0mm' },
+      { name: 'Gemfan 1208 3-blade',              pitch: 0.8, weight: 0.21, shaft: '1.5mm' },
+      { name: 'Gemfan 1219S 3-blade',             pitch: 1.9, weight: 0.18, shaft: '1.0mm' },
+      { name: 'HQ Ultralight 1.2x0.9x3',         pitch: 0.9, weight: 0.18, shaft: '1.0mm' },
+      { name: 'HQ Ultralight 31mm 3-blade High',  pitch: 1.0, weight: 0.16, shaft: '1.0mm' },
+      { name: 'HQ Ultralight 1.2x1.2 2-blade',   pitch: 1.2, weight: 0.14, shaft: '1.0mm' },
+    ],
+    75: [
+      { name: 'Gemfan 1611 3-blade',                    pitch: 1.1, weight: 0.085, shaft: '1.5mm' },
+      { name: 'Gemfan 1610 2-blade',                    pitch: 1.0, weight: 0.18,  shaft: '1.0mm' },
+      { name: 'Gemfan 1635 3-blade',                    pitch: 3.5, weight: 0.54,  shaft: '1.0mm' },
+      { name: 'HQ Ultralight 40mm 1.6x1.1x3',          pitch: 1.1, weight: 0.28,  shaft: '1.0/1.5mm' },
+      { name: 'HQ Ultralight 40mm 1.6x1x3',            pitch: 1.0, weight: 0.25,  shaft: '1.0/1.5mm' },
+      { name: 'HQ Ultralight 40mm 2-blade 1.6x1.2',    pitch: 1.2, weight: 0.20,  shaft: '1.0/1.5mm' },
+    ],
+    85: [
+      { name: 'Gemfan 2" T-mount 3-blade',        pitch: 0.9, weight: 0.4,  shaft: 'T-mount 1.5mm' },
+      { name: 'Gemfan 2020 T-mount 3-blade',      pitch: 1.9, weight: 0.4,  shaft: 'T-mount 1.5mm' },
+      { name: 'Gemfan Hurricane 2015 2-blade',    pitch: 1.5, weight: 0.5,  shaft: '1.5mm' },
+      { name: 'HQ T2x2x3 T-mount 3-blade',        pitch: 2.0, weight: 0.35, shaft: 'T-mount' },
+    ],
+  };
+
+  const propSelect = document.getElementById('propSelect');
+
+  function populatePropSelect(frame) {
+    propSelect.innerHTML = '<option value="">— Select a prop or enter pitch below —</option>';
+    (propDB[frame] || []).forEach((p, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.setAttribute('data-pitch', p.pitch);
+      opt.setAttribute('data-weight', p.weight);
+      opt.setAttribute('data-shaft', p.shaft);
+      opt.textContent = `${p.name}  (${p.pitch}" pitch)`;
+      propSelect.appendChild(opt);
+    });
+    propSelect.value = '';
+    document.getElementById('propShaftWarn').style.display = 'none';
+  }
+
+  propSelect.addEventListener('change', () => {
+    const opt = propSelect.options[propSelect.selectedIndex];
+    const pitch = opt.getAttribute('data-pitch');
+    const shaft = opt.getAttribute('data-shaft') || '';
+    if (pitch) els.propPitch.value = pitch;
+    const motorOpt = motorSelect.options[motorSelect.selectedIndex];
+    const motorWeight = motorOpt ? parseFloat(motorOpt.getAttribute('data-weight')) : NaN;
+    const shaftWarn = shaft.includes('1.5mm') && !isNaN(motorWeight) && motorWeight < 1.6;
+    document.getElementById('propShaftWarn').style.display = shaftWarn ? 'block' : 'none';
+    calculate();
+  });
+
   function populateCompareSelects(frame) {
     ['cmpSelectA', 'cmpSelectB'].forEach(id => {
       const sel = document.getElementById(id);
@@ -2018,6 +2102,7 @@
       btn.classList.add('active');
       currentFrame = btn.dataset.frame;
       populateMotorSelect(currentFrame);
+      populatePropSelect(currentFrame);
       populateCompareSelects(currentFrame);
       applyPreset(currentFrame);
       calculate();
@@ -2219,6 +2304,7 @@
 
   // initial calc — sync inputs to active frame button before first render
   populateMotorSelect(currentFrame);
+  populatePropSelect(currentFrame);
   populateCompareSelects(currentFrame);
   applyPreset(currentFrame);
   calculate();
