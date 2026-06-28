@@ -2084,9 +2084,9 @@
     els.flightTime.innerHTML = s.flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
 
     const frameMaxes = {
-      65: { tw: 6.0,  ft: 3.5,  spd: 45  },
-      75: { tw: 5.5,  ft: 4.0,  spd: 55  },
-      85: { tw: 5.0,  ft: 5.0,  spd: 60  },
+      65: { tw: 6.0,  ft: 3.5,  spd: 35  },
+      75: { tw: 5.5,  ft: 4.0,  spd: 45  },
+      85: { tw: 5.0,  ft: 5.0,  spd: 55  },
       3:  { tw: 8.0,  ft: 4.0,  spd: 70  },
       5:  { tw: 10.0, ft: 5.0,  spd: 100 },
       7:  { tw: 4.0,  ft: 20.0, spd: 80  },
@@ -2096,17 +2096,27 @@
     const ftScore  = Math.min(s.flightTimeMin / maxes.ft * 100, 100) * 0.30;
     const spdScore = Math.min(s.speedMph / maxes.spd * 100, 100) * 0.20;
     const buildScore = Math.round(twScore + ftScore + spdScore);
+    let kvBonus = 0;
+    if (['65','75','85'].includes(String(currentFrame))) {
+      const kvRef = { '65': 23000, '75': 19000, '85': 8000 };
+      const kvMax = { '65': 40000, '75': 32500, '85': 11000 };
+      const ref = kvRef[String(currentFrame)];
+      const max = kvMax[String(currentFrame)];
+      kvBonus = Math.round(Math.min((kv - ref) / (max - ref), 1) * 15);
+      if (kvBonus < 0) kvBonus = 0;
+    }
+    const finalScore = Math.min(buildScore + kvBonus, 100);
     let personality;
-    if      (buildScore >= 90) personality = 'WHEELIE WARNING ⚡';
-    else if (buildScore >= 75) personality = 'COMPETITION READY';
-    else if (buildScore >= 60) personality = 'AGGRESSIVE FREESTYLE';
-    else if (buildScore >= 45) personality = 'LOCKED IN FREESTYLE';
-    else if (buildScore >= 25) personality = 'RELAXED CRUISER';
+    if      (finalScore >= 90) personality = 'WHEELIE WARNING ⚡';
+    else if (finalScore >= 75) personality = 'COMPETITION READY';
+    else if (finalScore >= 60) personality = 'AGGRESSIVE FREESTYLE';
+    else if (finalScore >= 45) personality = 'LOCKED IN FREESTYLE';
+    else if (finalScore >= 25) personality = 'RELAXED CRUISER';
     else                       personality = 'FLOATY — NEEDS MORE PUNCH';
-    document.getElementById('buildScoreNum').textContent    = buildScore;
+    document.getElementById('buildScoreNum').textContent    = finalScore;
     document.getElementById('buildPersonality').textContent  = personality;
     document.getElementById('buildScoreClass').textContent   = 'scored within ' + currentFrame + 'mm class';
-    document.getElementById('buildScoreBar').style.width     = buildScore + '%';
+    document.getElementById('buildScoreBar').style.width     = finalScore + '%';
     compareCalculate();
   }
 
