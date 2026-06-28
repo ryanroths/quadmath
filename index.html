@@ -1836,51 +1836,62 @@
   // Real motor database by frame size — brand, stator, KV
   const motorDB = {
     65: [
-      { name: 'BetaFPV 0702 II',              kv: 23000 },
-      { name: 'VCI Spark 0702',               kv: 25000 },
-      { name: 'VCI Spark 0702',               kv: 27000 },
-      { name: 'NewBeeDrone Flow 0702',         kv: 29000 },
-      { name: 'VCI Spark 0702',               kv: 29000 },
-      { name: 'BetaFPV 0702 II',              kv: 30000 },
-      { name: 'weBLEEDfpv SKRRRT 0702',       kv: 40000 },
-    ],
-    85: [
-      { name: 'BetaFPV 1103',                 kv: 11000 },
-      { name: 'Happymodel EX1103',             kv: 11000 },
+      { name: 'BetaFPV 0702 II',             kv: 23000, propPitch: 1.0, weightPerMotor: 1.50 },
+      { name: 'Happymodel SE0702',            kv: 23000, propPitch: 1.0, weightPerMotor: 1.46 },
+      { name: 'VCI Spark 0702',              kv: 25000, propPitch: 1.0, weightPerMotor: 1.52 },
+      { name: 'Happymodel SE0702',            kv: 26000, propPitch: 1.0, weightPerMotor: 1.46 },
+      { name: 'BetaFPV 0702 II',             kv: 27000, propPitch: 1.0, weightPerMotor: 1.50 },
+      { name: 'VCI Spark 0702',              kv: 27000, propPitch: 1.0, weightPerMotor: 1.52 },
+      { name: 'Happymodel SE0702',            kv: 28000, propPitch: 1.0, weightPerMotor: 1.46 },
+      { name: 'NewBeeDrone Flow 0702',        kv: 29000, propPitch: 1.0, weightPerMotor: 1.58 },
+      { name: 'VCI Spark 0702',              kv: 29000, propPitch: 1.0, weightPerMotor: 1.52 },
+      { name: 'BetaFPV 0702 II',             kv: 30000, propPitch: 1.0, weightPerMotor: 1.50 },
+      { name: 'weBLEEDfpv SKRRRT 0702',      kv: 40000, propPitch: 1.0, weightPerMotor: 1.60 },
     ],
     75: [
-      { name: 'NewBeeDrone Flow 0802',         kv: 19000 },
-      { name: 'BetaFPV 0802SE',               kv: 23000 },
-      { name: 'NewBeeDrone Flow 0802',         kv: 25000 },
-      { name: 'weBLEEDfpv SKYSCRAPERS 0802',  kv: 25000 },
-      { name: 'NewBeeDrone Flow 0802',         kv: 27000 },
-      { name: 'NewBeeDrone Flow 0802',         kv: 30000 },
-      { name: 'weBLEEDfpv TREETOPPERS 0802',  kv: 32500 },
+      { name: 'Happymodel RS0802',            kv: 19000, propPitch: 1.4, weightPerMotor: 1.80 },
+      { name: 'Happymodel EX0802',            kv: 19000, propPitch: 1.4, weightPerMotor: 1.80 },
+      { name: 'NewBeeDrone Flow 0802',        kv: 19000, propPitch: 1.4, weightPerMotor: 1.90 },
+      { name: 'RCinPower GTS V3 0802',       kv: 22000, propPitch: 1.5, weightPerMotor: 1.90 },
+      { name: 'iFlight XING NANO X0802',     kv: 22000, propPitch: 1.5, weightPerMotor: 2.00 },
+      { name: 'BetaFPV 0802SE',              kv: 23000, propPitch: 1.5, weightPerMotor: 1.90 },
+      { name: 'NewBeeDrone Flow 0802',        kv: 25000, propPitch: 1.5, weightPerMotor: 1.90 },
+      { name: 'Happymodel RS0802',            kv: 25000, propPitch: 1.5, weightPerMotor: 1.80 },
+      { name: 'weBLEEDfpv Skyscrapers 0802', kv: 25000, propPitch: 1.5, weightPerMotor: 2.00 },
+      { name: 'NewBeeDrone Flow 0802',        kv: 27000, propPitch: 1.5, weightPerMotor: 1.90 },
+      { name: 'NewBeeDrone Flow 0802',        kv: 30000, propPitch: 1.5, weightPerMotor: 1.90 },
+      { name: 'weBLEEDfpv Treetoppers 0802', kv: 32500, propPitch: 1.5, weightPerMotor: 2.10 },
+    ],
+    85: [
+      { name: 'BetaFPV 1103',               kv:  8000, propPitch: 1.6, weightPerMotor: 3.20 },
+      { name: 'BetaFPV 1103',               kv: 11000, propPitch: 1.6, weightPerMotor: 3.20 },
+      { name: 'Happymodel EX1103',           kv: 11000, propPitch: 1.6, weightPerMotor: 3.20 },
+      { name: 'Flywoo ROBO 1002',            kv: 23500, propPitch: 1.6, weightPerMotor: 2.50 },
     ],
     3: [
-      { name: 'T-Motor Velox V1404',     kv: 4600 },
-      { name: 'BetaFPV 1404',           kv: 4500 },
-      { name: 'Emax RS1408',            kv: 4100 },
-      { name: 'T-Motor Velox V1506',     kv: 3800 },
-      { name: 'BrotherHobby T1404',     kv: 4600 },
-      { name: 'Xing 1404',              kv: 3500 },
+      { name: 'T-Motor Velox V1404',   kv: 4600, propPitch: 2.5, weightPerMotor: 12 },
+      { name: 'BetaFPV 1404',         kv: 4500, propPitch: 2.5, weightPerMotor: 12 },
+      { name: 'Emax RS1408',          kv: 4100, propPitch: 2.5, weightPerMotor: 13 },
+      { name: 'T-Motor Velox V1506',   kv: 3800, propPitch: 2.5, weightPerMotor: 14 },
+      { name: 'BrotherHobby T1404',   kv: 4600, propPitch: 2.5, weightPerMotor: 12 },
+      { name: 'Xing 1404',            kv: 3500, propPitch: 2.5, weightPerMotor: 12 },
     ],
     5: [
-      { name: 'T-Motor Velox V2207',     kv: 1950 },
-      { name: 'T-Motor F40 PRO IV',      kv: 2400 },
-      { name: 'Emax ECO II 2207',        kv: 2400 },
-      { name: 'Iflight XING 2208',       kv: 1800 },
-      { name: 'BrotherHobby 2207',       kv: 1700 },
-      { name: 'T-Motor Pacer 2306',      kv: 2150 },
-      { name: 'SucceX-E 2207',           kv: 2450 },
+      { name: 'T-Motor Velox V2207',   kv: 1950, propPitch: 5.1, weightPerMotor: 32 },
+      { name: 'T-Motor F40 PRO IV',    kv: 2400, propPitch: 5.1, weightPerMotor: 30 },
+      { name: 'Emax ECO II 2207',      kv: 2400, propPitch: 5.1, weightPerMotor: 28 },
+      { name: 'Iflight XING 2208',     kv: 1800, propPitch: 5.1, weightPerMotor: 34 },
+      { name: 'BrotherHobby 2207',    kv: 1700, propPitch: 5.1, weightPerMotor: 30 },
+      { name: 'T-Motor Pacer 2306',    kv: 2150, propPitch: 5.1, weightPerMotor: 28 },
+      { name: 'SucceX-E 2207',         kv: 2450, propPitch: 5.1, weightPerMotor: 30 },
     ],
     7: [
-      { name: 'Emax ECO II 2807',        kv: 1300 },
-      { name: 'Iflight XING 2806',       kv: 1300 },
-      { name: 'T-Motor Navigator 2808',  kv: 900  },
-      { name: 'BrotherHobby 2807',       kv: 1300 },
-      { name: 'Sunnysky X2806',          kv: 1250 },
-      { name: 'T-Motor Velox V2207',     kv: 1750 },
+      { name: 'Emax ECO II 2807',        kv: 1300, propPitch: 6.0, weightPerMotor: 52 },
+      { name: 'Iflight XING 2806',       kv: 1300, propPitch: 6.0, weightPerMotor: 50 },
+      { name: 'T-Motor Navigator 2808',  kv:  900, propPitch: 6.0, weightPerMotor: 58 },
+      { name: 'BrotherHobby 2807',      kv: 1300, propPitch: 6.0, weightPerMotor: 52 },
+      { name: 'Sunnysky X2806',          kv: 1250, propPitch: 6.0, weightPerMotor: 50 },
+      { name: 'T-Motor Velox V2207',     kv: 1750, propPitch: 6.0, weightPerMotor: 32 },
     ],
   };
 
@@ -2013,7 +2024,9 @@
   motorSelect.addEventListener('change', () => {
     const idx = parseInt(motorSelect.value);
     if (!isNaN(idx) && motorDB[currentFrame]?.[idx]) {
-      els.motorKV.value = motorDB[currentFrame][idx].kv;
+      const m = motorDB[currentFrame][idx];
+      els.motorKV.value   = m.kv;
+      els.propPitch.value = m.propPitch;
       calculate();
     }
   });
