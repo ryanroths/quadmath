@@ -1073,6 +1073,87 @@
   }
   .contact-email-line a { color: var(--orange); text-decoration: none; }
   .contact-email-line a:hover { text-decoration: underline; }
+
+  /* ===== MEET RYFLY ===== */
+  .meet-ryfly-panel {
+    background: #0A0B0E;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 40px;
+    position: relative;
+    margin-top: 24px;
+  }
+  .meet-ryfly-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    align-items: start;
+  }
+  @media (max-width: 680px) {
+    .meet-ryfly-grid { grid-template-columns: 1fr; gap: 32px; }
+    .meet-ryfly-panel { padding: 28px 20px; }
+  }
+  .ryfly-logo-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+  .ryfly-logo-wrap img {
+    max-width: 280px;
+    width: 100%;
+    display: block;
+  }
+  .ryfly-bio {
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.65;
+    max-width: none;
+    margin-bottom: 0;
+  }
+  .gif-placeholder {
+    background: var(--panel);
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    height: 260px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+  .gif-placeholder span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+  .ryfly-social {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .social-btn {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 0.88rem;
+    padding: 12px 24px;
+    border-radius: 9999px;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    transition: opacity 0.15s;
+  }
+  .social-btn:hover { opacity: 0.85; }
+  .social-btn.yt { background: #FF0000; }
+  .social-btn.ig { background: linear-gradient(45deg, #833ab4, #fd1d1d, #fcb045); }
+  .ryfly-follow-note {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 0;
+  }
 </style>
 </head>
 <body>
@@ -1086,6 +1167,7 @@
       <a href="#motor-guide">Motors</a>
       <a href="#tools">Tools</a>
       <a href="#tunes">Tunes</a>
+      <a href="#meet-ryfly">RyFly.</a>
       <a href="#ryfly">RyFly's Gear</a>
       <a href="#hire">Hire</a>
     </nav>
@@ -1691,6 +1773,35 @@
           </tr>
         </tbody>
       </table>
+    </div>
+  </section>
+
+  <section class="section" id="meet-ryfly">
+    <h2>Meet RyFly</h2>
+    <div class="meet-ryfly-panel">
+      <div class="bc-corner bc-tl"></div>
+      <div class="bc-corner bc-tr"></div>
+      <div class="bc-corner bc-bl"></div>
+      <div class="bc-corner bc-br"></div>
+      <div class="meet-ryfly-grid">
+        <div>
+          <div class="ryfly-logo-wrap">
+            <img src="./RYFLYClear.png" alt="RyFly logo">
+          </div>
+          <p class="ryfly-bio">RyFly is a competitive FPV freestyle pilot based in Mesa, Arizona. Currently competing in IGOW6, flying 65–85mm whoops with analog and HDZero HD setups. Builder, tinkerer, and the pilot behind QuadMath.</p>
+        </div>
+        <div>
+          <!-- swap this div for <img src="./ryfly.gif"> when ready -->
+          <div class="gif-placeholder">
+            <span>[ FOOTAGE COMING SOON ]</span>
+          </div>
+          <div class="ryfly-social">
+            <a href="https://www.youtube.com/@ryfly" class="social-btn yt" target="_blank" rel="noopener">▶ YouTube</a>
+            <a href="https://www.instagram.com/ryfly_fpv" class="social-btn ig" target="_blank" rel="noopener">◉ Instagram</a>
+          </div>
+          <p class="ryfly-follow-note">Follow along for builds, competition flying, and IGOW updates.</p>
+        </div>
+      </div>
     </div>
   </section>
 
