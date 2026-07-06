@@ -306,6 +306,16 @@ function updateGates(){
 }
 updateGateUI();
 
+// ---------- Tunnel (half-cylinder arch, open-ended, fly-through) ----------
+{
+  const tun=new THREE.Mesh(
+    new THREE.CylinderGeometry(8,8,70,24,1,true,0,Math.PI), // open ends, half sweep = arch
+    new THREE.MeshStandardMaterial({color:0x17181d,roughness:0.95,side:THREE.DoubleSide}));
+  tun.rotation.z=Math.PI/2; // lay on side: axis along X, flat cut on the ground
+  tun.position.set(90,0,120); // spans x 55..125 between the east building clusters
+  scene.add(tun);
+}
+
 // ---------- GLTF asset pipeline ----------
 // assets/manifest.json format:
 // { "tiles":[ {"file":"building-a.glb","scale":4,"count":30},
@@ -383,6 +393,22 @@ window._tryAssets=async function(){
       const src=await load(p.file);
       place(src,p.x,p.z,p.scale||1,p.ry||0);
     }
+    // code-placed extras: elevated overpasses + street-level awning details
+    async function placeAt(file,x,y,z,scale,ry,collide){
+      const m=(await load(file)).clone(true);
+      m.scale.setScalar(scale);m.position.set(x,y,z);m.rotation.y=ry||0;
+      placedRoot.add(m);
+      if(collide)colliders.push(new THREE.Box3().setFromObject(m));
+    }
+    // overpasses — road-bridge decks spanning the street corridors, flyable underneath
+    await placeAt('road-bridge.glb',70,11,0,8,0,true);
+    await placeAt('road-bridge.glb',0,15,-90,8,Math.PI/2,true);
+    // awning details near building blocks (no colliders, small dressing)
+    await placeAt('detail-awning.glb',      52,0, 38,5, 0);
+    await placeAt('detail-awning-wide.glb', -55,0, 62,5, Math.PI);
+    await placeAt('detail-awning.glb',     -62,0,-48,5, Math.PI/2);
+    await placeAt('detail-awning-wide.glb', 115,0,-65,5,-Math.PI/2);
+    await placeAt('detail-awning.glb',      38,0,115,5, Math.PI);
     // swap: hide procedural, clear its colliders (rebuilt above)
     scene.add(placedRoot);
     proceduralGroup.visible=false;
