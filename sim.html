@@ -13,6 +13,7 @@
   .osd{position:fixed;pointer-events:none;font-size:13px;letter-spacing:.5px;text-shadow:0 0 4px rgba(0,0,0,.9)}
   #osdTL{top:14px;left:16px} #osdTR{top:14px;right:16px;text-align:right}
   #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
+  #osdGate{top:14px;left:50%;transform:translateX(-50%);color:var(--txt);font-weight:600}
   .armed{color:var(--green)} .disarmed{color:var(--orange)}
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7}
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
@@ -82,6 +83,7 @@
 <div class="osd" id="osdTL"></div>
 <div class="osd" id="osdTR"></div>
 <div class="osd" id="osdBC"></div>
+<div class="osd" id="osdGate"></div>
 <div id="crosshair"></div>
 <div id="toast"></div>
 <div id="legend">
@@ -245,6 +247,64 @@ function addCollider(x,y,z,w,h,d){
     new THREE.MeshStandardMaterial({map:gtex,roughness:1}));
   ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
 }
+
+// ---------- Race gates & dive rings ----------
+const gates=[];let gateIdx=0,lapCount=0;
+function addGate(x,y,z,rotationY,size){
+  size=size||7;
+  const col=gates.length%2===0?0xff3b2f:0x2f7bff; // alternate red/blue
+  const ring=new THREE.Mesh(
+    new THREE.TorusGeometry(size,size*0.07,10,36),
+    new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.85,roughness:0.4}));
+  ring.position.set(x,y,z);ring.rotation.y=rotationY||0;
+  scene.add(ring);
+  gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring});
+  return ring;
+}
+function addDiveRing(x,y,z,rx,ry,size){
+  size=size||3.5;
+  const ring=new THREE.Mesh(
+    new THREE.TorusGeometry(size,size*0.035,8,28),
+    new THREE.MeshStandardMaterial({color:0x3DDC97,emissive:0x3DDC97,emissiveIntensity:0.7,roughness:0.5}));
+  ring.position.set(x,y,z);ring.rotation.set(rx||0,ry||0,0);
+  scene.add(ring);
+  return ring;
+}
+// race loop: circles the city, varied height/heading for an interesting line
+addGate( 140,  8,    0, -0.00, 8);
+addGate( 115, 14,   85, -0.63, 7);
+addGate(  45, 22,  135, -1.24, 7);
+addGate( -45, 10,  135, -1.90, 8);
+addGate(-115, 18,   85, -2.51, 6.5);
+addGate(-140,  7,    0, -3.14, 8);
+addGate(-115, 25,  -85, -3.77, 7);
+addGate( -45, 12, -135, -4.40, 7.5);
+addGate(  45, 20, -135, -5.03, 6.5);
+addGate( 115,  9,  -85, -5.65, 8);
+// freestyle dive rings near building blocks — visual/skill targets, no counter
+addDiveRing(  75, 30,  70, Math.PI/2, 0,   4);   // horizontal: dive down through
+addDiveRing( -80, 24, -75, Math.PI/2, 0,   3.5);
+addDiveRing( 130, 18, 130, Math.PI/2, 0,   4.5);
+addDiveRing(-130, 34, 130, Math.PI/2, 0,   3.5);
+addDiveRing(  70,  6, -70, 0.3,       0.8, 3);   // tilted: power-loop / flick lines
+addDiveRing( -70,  9,  70, -0.4,      2.2, 3.5);
+addDiveRing( 180, 12, -40, 0.5,       1.1, 4);
+addDiveRing(-180, 15,  40, -0.35,     4.0, 3);
+const gateUI=document.getElementById('osdGate');
+function updateGateUI(){gateUI.textContent='GATE '+gateIdx+'/'+gates.length+(lapCount>0?' · LAP '+lapCount:'');}
+function updateGates(){
+  if(!gates.length)return;
+  const g=gates[gateIdx%gates.length];
+  g.mesh.material.emissiveIntensity=0.9+Math.sin(performance.now()*0.006)*0.35; // pulse target
+  if(state.pos.distanceTo(g.pos)<g.r){
+    g.mesh.material.emissiveIntensity=0.85;
+    gateIdx++;
+    if(gateIdx>=gates.length){gateIdx=0;lapCount++;toast('LAP '+lapCount+' COMPLETE');}
+    else toast('GATE '+gateIdx+' PASSED');
+    updateGateUI();
+  }
+}
+updateGateUI();
 
 // ---------- GLTF asset pipeline ----------
 // assets/manifest.json format:
@@ -787,7 +847,7 @@ function loop(now){
   readInput(dt);
   acc+=dt;
   while(acc>=STEP){physics(STEP);acc-=STEP;}
-  updateCamera();updateOSD();
+  updateCamera();updateOSD();updateGates();
   renderer.render(scene,camera);
 }
 toast('Enter = ARM. Tab = tune.');
