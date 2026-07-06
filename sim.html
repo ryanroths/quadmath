@@ -263,22 +263,33 @@ window._tryAssets=async function(){
     if(!r.ok) throw 0;
     manifest=await r.json();
   }catch(e){
-    assetEl.textContent='no assets/manifest.json found — procedural city active. See setup notes for GLTF pack.';
-    return;
+    // manifest unavailable — built-in tile layout using the city-kit GLBs shipped in assets/
+    // (same format as the sample above: tiles scattered on grid blocks, placed = fixed landmarks)
+    manifest={
+      tiles:[
+        {file:'building-a.glb',scale:5,count:14},
+        {file:'building-c.glb',scale:5,count:12},
+        {file:'building-f.glb',scale:5,count:10},
+        {file:'building-j.glb',scale:5,count:8}
+      ],
+      placed:[
+        {file:'building-skyscraper-a.glb',x:-70,z:70,scale:8},
+        {file:'building-skyscraper-c.glb',x:120,z:-120,scale:8}
+      ]
+    };
+    assetEl.textContent='manifest.json unavailable — built-in city layout active.';
   }
   assetEl.textContent='loading GLTF assets…';
-  // missing texture fallback: redirect any external texture reference (e.g. colormap.png,
-  // not shipped with the GLB pack) to a 1x1 flat-color pixel so materials render flat
-  // instead of 404ing in console. Geometry/embedded data unaffected.
-  const flatPx=(()=>{const c=document.createElement('canvas');c.width=c.height=1;
-    const g=c.getContext('2d');g.fillStyle='#b9bdc4';g.fillRect(0,0,1,1);return c.toDataURL();})();
-  const texMgr=new THREE.LoadingManager();
-  texMgr.setURLModifier(u=>/\.(png|jpe?g|webp)(\?.*)?$/i.test(u)&&!u.startsWith('data:')?flatPx:u);
-  const loader=new THREE.GLTFLoader(texMgr);
+  // GLBs reference "Textures/colormap.png" relative to themselves; the paired texture
+  // lives in assets/Models/GLB format/Textures/, so load GLBs from that folder and
+  // anchor the resource path there so texture refs resolve to the real file.
+  const GLB_DIR='assets/Models/GLB format/';
+  const loader=new THREE.GLTFLoader();
+  loader.setResourcePath(GLB_DIR);
   const cache={};
   async function load(file){
     if(cache[file]) return cache[file];
-    const gltf=await loader.loadAsync('assets/'+file);
+    const gltf=await loader.loadAsync(GLB_DIR+file);
     gltf.scene.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}});
     cache[file]=gltf.scene;
     return gltf.scene;
