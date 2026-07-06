@@ -228,16 +228,16 @@ function addCollider(x,y,z,w,h,d){
 {
   const gtex=canvasTex(512,512,(g,s)=>{
     g.fillStyle='#b09468';g.fillRect(0,0,s,s);
-    for(let i=0;i<4000;i++){const v=Math.random();
-      g.fillStyle=`rgba(${120+v*70|0},${95+v*55|0},${60+v*35|0},${Math.random()*.35})`;
-      g.fillRect(Math.random()*s,Math.random()*s,1+Math.random()*2,1+Math.random()*2);}
-    for(let i=0;i<26;i++){g.fillStyle=`rgba(${70+Math.random()*30|0},${80+Math.random()*30|0},40,.25)`;
-      g.beginPath();g.arc(Math.random()*s,Math.random()*s,4+Math.random()*10,0,7);g.fill();}
+    for(let i=0;i<4000;i++){const v=rnd();
+      g.fillStyle=`rgba(${120+v*70|0},${95+v*55|0},${60+v*35|0},${rnd()*.35})`;
+      g.fillRect(rnd()*s,rnd()*s,1+rnd()*2,1+rnd()*2);}
+    for(let i=0;i<26;i++){g.fillStyle=`rgba(${70+rnd()*30|0},${80+rnd()*30|0},40,.25)`;
+      g.beginPath();g.arc(rnd()*s,rnd()*s,4+rnd()*10,0,7);g.fill();}
     const rw=s*.16,sw=s*.035;
     g.fillStyle='#c2b49a';g.fillRect(0,0,s,rw+sw);g.fillRect(0,0,rw+sw,s);
     g.fillStyle='#35383d';g.fillRect(0,0,s,rw);g.fillRect(0,0,rw,s);
-    for(let i=0;i<1500;i++){const x=Math.random()*s,y=Math.random()*s;
-      if(y<rw||x<rw){g.fillStyle=`rgba(${60+Math.random()*30|0},${60+Math.random()*30|0},${65+Math.random()*30|0},.3)`;g.fillRect(x,y,2,2);}}
+    for(let i=0;i<1500;i++){const x=rnd()*s,y=rnd()*s;
+      if(y<rw||x<rw){g.fillStyle=`rgba(${60+rnd()*30|0},${60+rnd()*30|0},${65+rnd()*30|0},.3)`;g.fillRect(x,y,2,2);}}
     g.strokeStyle='#d8c860';g.setLineDash([14,16]);g.lineWidth=3;
     g.beginPath();g.moveTo(0,rw/2);g.lineTo(s,rw/2);g.moveTo(rw/2,0);g.lineTo(rw/2,s);g.stroke();
   },10,10);
