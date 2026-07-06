@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RyFly Sim v3 — FPV Freestyle</title>
+<style>
+  :root{--bg:#0D0E12;--panel:#15171D;--orange:#FF4D1A;--green:#3DDC97;--txt:#E8E9ED;--dim:#7A7F8C}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;overflow:hidden}
+  #c{display:block;width:100vw;height:100vh}
+  .osd{position:fixed;pointer-events:none;font-size:13px;letter-spacing:.5px;text-shadow:0 0 4px rgba(0,0,0,.9)}
+  #osdTL{top:14px;left:16px} #osdTR{top:14px;right:16px;text-align:right}
+  #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
+  .armed{color:var(--green)} .disarmed{color:var(--orange)}
+  #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7}
+  #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
+  #crosshair::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
+  #crosshair::after{top:50%;left:0;height:1px;width:100%;transform:translateY(-50%)}
+  #panel{position:fixed;top:0;right:0;height:100vh;width:300px;background:rgba(21,23,29,.96);
+    border-left:1px solid #262A33;padding:18px 16px;overflow-y:auto;transform:translateX(100%);
+    transition:transform .18s ease;z-index:10}
+  #panel.open{transform:translateX(0)}
+  #panel h1{font-size:15px;color:var(--orange);margin-bottom:2px}
+  #panel .sub{font-size:11px;color:var(--dim);margin-bottom:14px}
+  #panel h2{font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:1.5px;margin:16px 0 8px;
+    border-bottom:1px solid #262A33;padding-bottom:4px}
+  .row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px}
+  .row .val{color:var(--orange);min-width:52px;text-align:right}
+  input[type=range]{width:100%;margin:0 0 10px;accent-color:var(--orange);height:4px}
+  button{background:transparent;border:1px solid var(--orange);color:var(--orange);
+    font-family:inherit;font-size:12px;padding:6px 12px;cursor:pointer;width:100%;margin-top:6px}
+  button:hover{background:var(--orange);color:var(--bg)}
+  #gear{position:fixed;top:12px;right:12px;z-index:11;width:auto;padding:6px 10px;
+    background:rgba(21,23,29,.85);border:1px solid #262A33;color:var(--txt);font-size:12px}
+  #gear:hover{border-color:var(--orange);color:var(--orange);background:rgba(21,23,29,.85)}
+  .kbd{color:var(--dim);font-size:11px;line-height:1.7}
+  .kbd b{color:var(--txt);font-weight:600}
+  #toast{position:fixed;top:44%;left:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:700;
+    color:var(--orange);text-shadow:0 0 12px rgba(255,77,26,.6);pointer-events:none;opacity:0;
+    transition:opacity .3s;text-align:center}
+  /* calibration overlay */
+  #calib{position:fixed;inset:0;background:rgba(13,14,18,.92);z-index:20;display:none;
+    align-items:center;justify-content:center;flex-direction:column;text-align:center}
+  #calib.show{display:flex}
+  #calib h2{color:var(--green);font-size:14px;letter-spacing:2px;margin-bottom:12px}
+  #calibStep{font-size:26px;font-weight:700;color:var(--orange);margin-bottom:8px}
+  #calibHint{color:var(--dim);font-size:13px;margin-bottom:20px}
+  #calibBars{font-size:12px;color:var(--txt);text-align:left;line-height:1.8}
+  #calibCancel{width:200px;margin-top:24px}
+  #assetStatus{font-size:11px;color:var(--dim);margin-bottom:8px;line-height:1.6}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="osd" id="osdTL"></div>
+<div class="osd" id="osdTR"></div>
+<div class="osd" id="osdBC"></div>
+<div id="crosshair"></div>
+<div id="toast"></div>
+
+<div id="calib">
+  <h2>RADIO CALIBRATION</h2>
+  <div id="calibStep"></div>
+  <div id="calibHint"></div>
+  <div id="calibBars"></div>
+  <button id="calibCancel">CANCEL</button>
+</div>
+
+<button id="gear">⚙ TUNE [Tab]</button>
+<div id="panel">
+  <h1>RYFLY SIM v3</h1>
+  <div class="sub">acro only. no training wheels.</div>
+
+  <h2>Radio</h2>
+  <div class="kbd" id="radioInfo">no gamepad detected</div>
+  <button id="btnCalib">CALIBRATE RADIO / STICKS</button>
+
+  <h2>Rates (Betaflight)</h2>
+  <div class="row"><label>RC Rate</label><span class="val" id="v_rc"></span></div>
+  <input type="range" id="s_rc" min="0.5" max="2.5" step="0.01" value="1.10">
+  <div class="row"><label>Super Rate</label><span class="val" id="v_sr"></span></div>
+  <input type="range" id="s_sr" min="0" max="0.95" step="0.01" value="0.72">
+  <div class="row"><label>Expo</label><span class="val" id="v_ex"></span></div>
+  <input type="range" id="s_ex" min="0" max="1" step="0.01" value="0.25">
+  <div class="row"><label>Max rate</label><span class="val" id="v_max"></span></div>
+
+  <h2>Camera</h2>
+  <div class="row"><label>Cam angle</label><span class="val" id="v_cam"></span></div>
+  <input type="range" id="s_cam" min="0" max="60" step="1" value="25">
+  <div class="row"><label>FOV</label><span class="val" id="v_fov"></span></div>
+  <input type="range" id="s_fov" min="80" max="160" step="1" value="105">
+
+  <h2>Physics</h2>
+  <div class="row"><label>Thrust:weight</label><span class="val" id="v_twr"></span></div>
+  <input type="range" id="s_twr" min="2" max="14" step="0.1" value="6">
+  <div class="row"><label>Drag</label><span class="val" id="v_drag"></span></div>
+  <input type="range" id="s_drag" min="0.05" max="0.8" step="0.01" value="0.28">
+  <div class="row"><label>Mass (g)</label><span class="val" id="v_mass"></span></div>
+  <input type="range" id="s_mass" min="25" max="800" step="5" value="550">
+
+  <h2>GLTF Assets</h2>
+  <div id="assetStatus">checking assets/manifest.json…</div>
+
+  <h2>Controls</h2>
+  <div class="kbd">
+    TX16S: EdgeTX USB mode = <b>Joystick</b>. Move stick after plug-in.<br>
+    <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
+    <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
+    <b>R</b> reset &nbsp;<b>Enter</b> arm &nbsp;<b>Tab</b> panel<br>
+    Arm blocked if throttle &gt;5%.
+  </div>
+  <button id="btnReset">RESET QUAD [R]</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// GLTFLoader — jsdelivr (works when run locally / via http.server; blocked inside claude.ai preview)
+(function(){
+  const s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js';
+  s.onload=()=>{ window._gltfReady=true; if(window._tryAssets) window._tryAssets(); };
+  s.onerror=()=>{ window._gltfReady=false; const el=document.getElementById('assetStatus');
+    if(el) el.textContent='GLTFLoader blocked (claude.ai preview). Run locally for GLTF assets. Procedural city active.'; };
+  document.head.appendChild(s);
+})();
+</script>
+<script>
+"use strict";
+const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,twr:6.0,drag:0.28,massG:550};
+const G=9.81;
+
+// ---------- Renderer ----------
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.05;
+renderer.outputEncoding=THREE.sRGBEncoding;
+const scene=new THREE.Scene();
+scene.fog=new THREE.Fog(0xc7d5df,250,1100);
+const camera=new THREE.PerspectiveCamera(CFG.fov,innerWidth/innerHeight,0.05,3000);
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+// ---------- Sky + light ----------
+{
+  const cv=document.createElement('canvas');cv.width=16;cv.height=512;
+  const g=cv.getContext('2d');
+  const gr=g.createLinearGradient(0,0,0,512);
+  gr.addColorStop(0,'#2e6cb8');gr.addColorStop(.45,'#7fb2dd');
+  gr.addColorStop(.72,'#cfe0e8');gr.addColorStop(.78,'#e8d9b8');gr.addColorStop(1,'#e8d9b8');
+  g.fillStyle=gr;g.fillRect(0,0,16,512);
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(1800,24,16),
+    new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),side:THREE.BackSide,fog:false})));
+  const scv=document.createElement('canvas');scv.width=scv.height=128;
+  const sg=scv.getContext('2d');
+  const rad=sg.createRadialGradient(64,64,2,64,64,64);
+  rad.addColorStop(0,'rgba(255,250,230,1)');rad.addColorStop(.2,'rgba(255,240,200,.9)');rad.addColorStop(1,'rgba(255,240,200,0)');
+  sg.fillStyle=rad;sg.fillRect(0,0,128,128);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(scv),fog:false,depthWrite:false}));
+  sp.scale.set(300,300,1);sp.position.set(900,1100,500);scene.add(sp);
+}
+const sun=new THREE.DirectionalLight(0xfff0d8,1.35);
+sun.position.set(140,220,90);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left=-260;sun.shadow.camera.right=260;
+sun.shadow.camera.top=260;sun.shadow.camera.bottom=-260;
+sun.shadow.camera.far=700;sun.shadow.bias=-0.0004;
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xa8c4de,0x8a7052,0.85));
+
+// ---------- helpers ----------
+function canvasTex(w,h,draw,rx=1,ry=1){
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  draw(cv.getContext('2d'),w,h);
+  const t=new THREE.CanvasTexture(cv);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(rx,ry);t.anisotropy=8;t.encoding=THREE.sRGBEncoding;
+  return t;
+}
+let seed=1337;function rnd(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646;}
+const colliders=[];
+function addCollider(x,y,z,w,h,d){
+  colliders.push(new THREE.Box3(new THREE.Vector3(x-w/2,y,z-d/2),new THREE.Vector3(x+w/2,y+h,z+d/2)));
+}
+
+// ---------- Ground ----------
+{
+  const gtex=canvasTex(512,512,(g,s)=>{
+    g.fillStyle='#b09468';g.fillRect(0,0,s,s);
+    for(let i=0;i<4000;i++){const v=Math.random();
+      g.fillStyle=`rgba(${120+v*70|0},${95+v*55|0},${60+v*35|0},${Math.random()*.35})`;
+      g.fillRect(Math.random()*s,Math.random()*s,1+Math.random()*2,1+Math.random()*2);}
+    for(let i=0;i<26;i++){g.fillStyle=`rgba(${70+Math.random()*30|0},${80+Math.random()*30|0},40,.25)`;
+      g.beginPath();g.arc(Math.random()*s,Math.random()*s,4+Math.random()*10,0,7);g.fill();}
+    const rw=s*.16,sw=s*.035;
+    g.fillStyle='#c2b49a';g.fillRect(0,0,s,rw+sw);g.fillRect(0,0,rw+sw,s);
+    g.fillStyle='#35383d';g.fillRect(0,0,s,rw);g.fillRect(0,0,rw,s);
+    for(let i=0;i<1500;i++){const x=Math.random()*s,y=Math.random()*s;
+      if(y<rw||x<rw){g.fillStyle=`rgba(${60+Math.random()*30|0},${60+Math.random()*30|0},${65+Math.random()*30|0},.3)`;g.fillRect(x,y,2,2);}}
+    g.strokeStyle='#d8c860';g.setLineDash([14,16]);g.lineWidth=3;
+    g.beginPath();g.moveTo(0,rw/2);g.lineTo(s,rw/2);g.moveTo(rw/2,0);g.lineTo(rw/2,s);g.stroke();
+  },10,10);
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400),
+    new THREE.MeshStandardMaterial({map:gtex,roughness:1}));
+  ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+}
+
+// ---------- GLTF asset pipeline ----------
+// assets/manifest.json format:
+// { "tiles":[ {"file":"building-a.glb","scale":4,"count":30},
+//             {"file":"building-b.glb","scale":4,"count":20} ],
+//   "placed":[ {"file":"tower.glb","x":-70,"z":70,"scale":6,"ry":0} ] }
+// scatter: tiles placed on city grid blocks. AABB colliders auto-computed.
+const proceduralGroup=new THREE.Group(); scene.add(proceduralGroup);
+let usingGltf=false;
+const assetEl=document.getElementById('assetStatus');
+window._tryAssets=async function(){
+  if(!window._gltfReady) return;
+  let manifest;
+  try{
+    const r=await fetch('assets/manifest.json');
+    if(!r.ok) throw 0;
+    manifest=await r.json();
+  }catch(e){
+    assetEl.textContent='no assets/manifest.json found — procedural city active. See setup notes for GLTF pack.';
+    return;
+  }
+  assetEl.textContent='loading GLTF assets…';
+  const loader=new THREE.GLTFLoader();
+  const cache={};
+  async function load(file){
+    if(cache[file]) return cache[file];
+    const gltf=await loader.loadAsync('assets/'+file);
+    gltf.scene.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}});
+    cache[file]=gltf.scene;
+    return gltf.scene;
+  }
+  const placedRoot=new THREE.Group();
+  function place(src,x,z,scale,ry){
+    const m=src.clone(true);
+    m.scale.setScalar(scale);m.position.set(x,0,z);m.rotation.y=ry||0;
+    placedRoot.add(m);
+    // collider from bbox
+    const bb=new THREE.Box3().setFromObject(m);
+    colliders.push(bb);
+  }
+  try{
+    // scatter tiles on grid blocks (skip streets + spawn plaza)
+    const spots=[];
+    for(let gx=-4;gx<=4;gx++)for(let gz=-4;gz<=4;gz++){
+      if(gx===0||gz===0)continue;
+      if(Math.abs(gx)===1&&Math.abs(gz)===1)continue;
+      spots.push([gx*60,gz*60]);
+    }
+    let spotIdx=0; seed=4242;
+    for(const t of (manifest.tiles||[])){
+      const src=await load(t.file);
+      for(let i=0;i<(t.count||10);i++){
+        const [cx,cz]=spots[spotIdx%spots.length];spotIdx++;
+        place(src,cx+(rnd()-.5)*26,cz+(rnd()-.5)*26,t.scale||1,rnd()*Math.PI*2);
+      }
+    }
+    for(const p of (manifest.placed||[])){
+      const src=await load(p.file);
+      place(src,p.x,p.z,p.scale||1,p.ry||0);
+    }
+    // swap: hide procedural, clear its colliders (rebuilt above)
+    scene.add(placedRoot);
+    proceduralGroup.visible=false;
+    // remove procedural colliders (they were added first, before gltf)
+    colliders.splice(0,proceduralColliderCount);
+    usingGltf=true;
+    assetEl.textContent='GLTF city loaded: '+placedRoot.children.length+' objects.';
+    toast('GLTF ASSETS LOADED');
+  }catch(e){
+    assetEl.textContent='GLTF load failed: '+e.message+' — procedural city active.';
+  }
+};
+
+// ---------- Procedural city (fallback / default) ----------
+const facadeCache=[];
+function facadeTex(base,lit){
+  return canvasTex(256,512,(g)=>{
+    g.fillStyle=base;g.fillRect(0,0,256,512);
+    for(let i=0;i<900;i++){g.fillStyle=`rgba(0,0,0,${Math.random()*.08})`;
+      g.fillRect(Math.random()*256,Math.random()*512,3,3);}
+    const cols=6,rows=14,wx=256/cols,wy=512/rows;
+    for(let r=1;r<rows;r++)for(let c=0;c<cols;c++){
+      const on=Math.random()<lit,sh=40+Math.random()*40|0;
+      g.fillStyle=on?`rgb(${200+Math.random()*55|0},${180+Math.random()*40|0},120)`:`rgb(${sh},${sh+15},${sh+30})`;
+      g.fillRect(c*wx+wx*.18,r*wy+wy*.2,wx*.64,wy*.55);
+      g.fillStyle='rgba(0,0,0,.35)';g.fillRect(c*wx+wx*.18,r*wy+wy*.2,wx*.64,2);}
+    g.fillStyle='rgba(20,22,26,.85)';g.fillRect(0,512-wy,256,wy);
+  });
+}
+['#c9b8a3','#9aa3ad','#b08d6e','#8f8f94','#d0c0a8','#7e6f5f','#a3855f']
+  .forEach(c=>facadeCache.push(facadeTex(c,0.10+rnd()*0.12)));
+const roofMat=new THREE.MeshStandardMaterial({color:0x6e6a63,roughness:1});
+const parapetMat=new THREE.MeshStandardMaterial({color:0x8c8478,roughness:.95});
+function makeBuilding(x,z,w,d,h){
+  const tex=facadeCache[(rnd()*facadeCache.length)|0].clone();
+  tex.needsUpdate=true;tex.repeat.set(Math.max(1,Math.round(w/8)),Math.max(1,Math.round(h/28)));
+  const wm=new THREE.MeshStandardMaterial({map:tex,roughness:.9});
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),[wm,wm,roofMat,roofMat,wm,wm]);
+  m.position.set(x,h/2,z);m.castShadow=m.receiveShadow=true;proceduralGroup.add(m);
+  addCollider(x,0,z,w,h,d);
+  const p=new THREE.Mesh(new THREE.BoxGeometry(w+.6,.8,d+.6),parapetMat);
+  p.position.set(x,h+.4,z);p.castShadow=true;proceduralGroup.add(p);
+  if(h>14&&rnd()>.35){
+    const aw=w*.22,ad=d*.22,ax=x+(rnd()-.5)*w*.4,az=z+(rnd()-.5)*d*.4;
+    const ac=new THREE.Mesh(new THREE.BoxGeometry(aw,1.6,ad),
+      new THREE.MeshStandardMaterial({color:0x9aa0a8,roughness:.7,metalness:.3}));
+    ac.position.set(ax,h+.8,az);ac.castShadow=true;proceduralGroup.add(ac);
+    addCollider(ax,h,az,aw,1.6,ad);
+  }
+}
+for(let gx=-4;gx<=4;gx++)for(let gz=-4;gz<=4;gz++){
+  if(gx===0||gz===0)continue;
+  if(Math.abs(gx)===1&&Math.abs(gz)===1)continue;
+  const cx=gx*60,cz=gz*60,n=1+((rnd()*2)|0);
+  for(let i=0;i<n;i++){
+    const w=12+rnd()*22,d=12+rnd()*22,h=7+Math.pow(rnd(),1.6)*70;
+    makeBuilding(cx+(rnd()-.5)*26,cz+(rnd()-.5)*26,w,d,h);
+  }
+}
+// palms
+const trunkMat=new THREE.MeshStandardMaterial({color:0x8a6a45,roughness:1});
+const frondMat=new THREE.MeshStandardMaterial({color:0x3f7a34,roughness:.9,side:THREE.DoubleSide});
+function palm(x,z){
+  const h=6+rnd()*5;
+  const t=new THREE.Mesh(new THREE.CylinderGeometry(.14,.26,h,6),trunkMat);
+  t.position.set(x,h/2,z);t.rotation.z=(rnd()-.5)*.12;t.castShadow=true;proceduralGroup.add(t);
+  for(let i=0;i<7;i++){
+    const f=new THREE.Mesh(new THREE.PlaneGeometry(3.2,.7,4,1),frondMat);
+    const a=i/7*Math.PI*2;
+    f.position.set(x+Math.cos(a)*1.3,h+.3,z+Math.sin(a)*1.3);
+    f.rotation.y=-a;f.rotation.z=-.5-rnd()*.3;f.castShadow=true;proceduralGroup.add(f);
+  }
+  addCollider(x,0,z,.5,h,.5);
+}
+for(let i=0;i<40;i++){
+  const gx=(1+(rnd()*4|0))*(rnd()>.5?1:-1),gz=(1+(rnd()*4|0))*(rnd()>.5?1:-1);
+  palm(gx*60-30+(rnd()-.5)*8,gz*60-30+(rnd()-.5)*8);
+}
+// arches + tower
+function arch(x,z,ry){
+  const mat=new THREE.MeshStandardMaterial({color:0xFF4D1A,roughness:.5,metalness:.2});
+  const grp=new THREE.Group();
+  const g1=new THREE.Mesh(new THREE.BoxGeometry(1.2,14,1.2),mat);
+  const g2=g1.clone(),top=new THREE.Mesh(new THREE.BoxGeometry(10,1.2,1.2),mat);
+  g1.position.set(-4.4,7,0);g2.position.set(4.4,7,0);top.position.set(0,14,0);
+  grp.add(g1,g2,top);grp.position.set(x,0,z);grp.rotation.y=ry;
+  grp.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  proceduralGroup.add(grp);
+}
+arch(0,-40,0);arch(30,60,Math.PI/4);
+{
+  const tw=new THREE.Mesh(new THREE.CylinderGeometry(.8,1.6,55,8),
+    new THREE.MeshStandardMaterial({color:0x788089,roughness:.6,metalness:.5}));
+  tw.position.set(-70,27.5,70);tw.castShadow=true;proceduralGroup.add(tw);
+  addCollider(-70,0,70,3.2,55,3.2);
+}
+const proceduralColliderCount=colliders.length; // for gltf swap
+// mesas (always visible, not part of swap)
+const mesaTex=canvasTex(256,256,(g,s)=>{
+  g.fillStyle='#a3673f';g.fillRect(0,0,s,s);
+  for(let y=0;y<s;y+=6+Math.random()*10){
+    g.fillStyle=`rgba(${140+Math.random()*50|0},${80+Math.random()*40|0},${50+Math.random()*20|0},.5)`;
+    g.fillRect(0,y,s,3+Math.random()*5);}
+  for(let i=0;i<1200;i++){g.fillStyle=`rgba(0,0,0,${Math.random()*.12})`;
+    g.fillRect(Math.random()*s,Math.random()*s,2,2);}
+},3,1);
+for(let i=0;i<7;i++){
+  const r=60+rnd()*90,h=40+rnd()*60,a=rnd()*Math.PI*2,dist=520+rnd()*300;
+  const mesa=new THREE.Mesh(new THREE.CylinderGeometry(r*.72,r,h,12,3),
+    new THREE.MeshStandardMaterial({map:mesaTex,roughness:1,flatShading:true}));
+  mesa.position.set(Math.cos(a)*dist,h/2-4,Math.sin(a)*dist);
+  scene.add(mesa);
+}
+if(window._gltfReady) window._tryAssets();
+
+// ---------- Quad state ----------
+const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
+  q:new THREE.Quaternion(),armed:false,crashes:0,t0:performance.now()};
+function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
+  state.armed=false;toast('RESET');}
+
+// ---------- Radio: axis map + calibration ----------
+// axisMap: {r:{i,sign}, p:{i,sign}, y:{i,sign}, t:{i,min,max}}
+let axisMap=null;
+try{
+  const saved=localStorage.getItem('ryflyAxisMap'); // local run only; claude.ai preview blocks storage
+  if(saved) axisMap=JSON.parse(saved);
+}catch(e){}
+function saveMap(){try{localStorage.setItem('ryflyAxisMap',JSON.stringify(axisMap));}catch(e){}}
+
+function isRadio(gp){
+  return /opentx|edgetx|radiomaster|tx16|frsky|taranis|jumper|betafpv|flysky/i.test(gp.id);
+}
+function defaultMapFor(gp){
+  if(isRadio(gp)){
+    // EdgeTX joystick, AETR channel order: 0=roll 1=pitch 2=throttle 3=yaw
+    return {r:{i:0,sign:1},p:{i:1,sign:-1},y:{i:3,sign:1},t:{i:2,min:-1,max:1}};
+  }
+  // spring gamepad, mode 2: LX=yaw LY=thr RX=roll RY=pitch, throttle center=0
+  return {r:{i:2,sign:1},p:{i:3,sign:-1},y:{i:0,sign:1},t:{i:1,min:0,max:-1,spring:true}};
+}
+
+// Calibration wizard
+const calibEl=document.getElementById('calib');
+const calibStepEl=document.getElementById('calibStep');
+const calibHintEl=document.getElementById('calibHint');
+const calibBarsEl=document.getElementById('calibBars');
+let calib=null;
+const CAL_STEPS=[
+  {key:'center', label:'CENTER ALL STICKS, THROTTLE LOW', hint:'hold 1 sec'},
+  {key:'r', label:'ROLL — RIGHT STICK FULL RIGHT', hint:'hold deflection'},
+  {key:'p', label:'PITCH — RIGHT STICK FULL UP', hint:'hold deflection'},
+  {key:'y', label:'YAW — LEFT STICK FULL RIGHT', hint:'hold deflection'},
+  {key:'tlo', label:'THROTTLE FULL DOWN', hint:'hold'},
+  {key:'thi', label:'THROTTLE FULL UP', hint:'hold'},
+];
+function startCalib(){
+  const gp=navigator.getGamepads&&navigator.getGamepads()[0];
+  if(!gp){toast('NO GAMEPAD — plug in, wiggle stick');return;}
+  calib={step:0,timer:0,center:null,result:{},used:new Set()};
+  calibEl.classList.add('show');
+}
+document.getElementById('btnCalib').onclick=startCalib;
+document.getElementById('calibCancel').onclick=()=>{calib=null;calibEl.classList.remove('show');};
+function runCalib(gp,dt){
+  const st=CAL_STEPS[calib.step];
+  calibStepEl.textContent=st.label;
+  calibHintEl.textContent=st.hint;
+  calibBarsEl.innerHTML=gp.axes.map((a,i)=>
+    `ax${i} ${'▮'.repeat(Math.round((a+1)*5)).padEnd(10,'▯')} ${a.toFixed(2)}`).join('<br>');
+  const ax=gp.axes;
+  if(st.key==='center'){
+    calib.timer+=dt;
+    if(calib.timer>1){calib.center=[...ax];calib.step++;calib.timer=0;}
+    return;
+  }
+  // find axis with max |delta| from center, exceeding 0.6
+  let best=-1,bestD=0;
+  for(let i=0;i<ax.length;i++){
+    if(calib.used.has(i)&&st.key!=='thi')continue;
+    const d=ax[i]-calib.center[i];
+    if(Math.abs(d)>Math.abs(bestD)){bestD=d;best=i;}
+  }
+  if(st.key==='thi'){
+    const ti=calib.result.t.i;
+    const d=ax[ti]-calib.result.t.min;
+    if(Math.abs(d)>0.8){
+      calib.timer+=dt;
+      if(calib.timer>0.6){
+        calib.result.t.max=ax[ti];
+        finishCalib();
+      }
+    } else calib.timer=0;
+    return;
+  }
+  if(best>=0&&Math.abs(bestD)>0.6){
+    calib.timer+=dt;
+    if(calib.timer>0.6){
+      if(st.key==='tlo'){
+        calib.result.t={i:best,min:ax[best],max:0};
+      } else {
+        calib.result[st.key]={i:best,sign:Math.sign(bestD)};
+      }
+      calib.used.add(best);
+      calib.step++;calib.timer=0;
+    }
+  } else calib.timer=0;
+}
+function finishCalib(){
+  axisMap=calib.result;
+  saveMap();
+  calib=null;calibEl.classList.remove('show');
+  toast('CALIBRATED — SAVED');
+  updateRadioInfo();
+}
+
+// ---------- Input ----------
+const stick={r:0,p:0,y:0,t:0};
+const keys={};
+function tryArm(){
+  if(state.armed){state.armed=false;toast('DISARMED');return;}
+  if(stick.t>0.05){toast('ARM BLOCKED — THROTTLE HIGH');return;}
+  state.armed=true;toast('ARMED');
+}
+addEventListener('keydown',e=>{
+  if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
+  keys[e.key.toLowerCase()]=true;
+  if(e.key==='Enter')tryArm();
+  if(e.key.toLowerCase()==='r')resetQuad();
+  if(e.key.startsWith('Arrow'))e.preventDefault();
+});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+let kbThrottle=0,gpConnected=false,prevGpArm=false,gpName='';
+addEventListener('gamepadconnected',e=>{
+  gpConnected=true;gpName=e.gamepad.id;
+  toast(isRadio(e.gamepad)?'RADIO DETECTED':'GAMEPAD CONNECTED');
+  updateRadioInfo();
+});
+addEventListener('gamepaddisconnected',()=>{gpConnected=false;gpName='';updateRadioInfo();});
+function updateRadioInfo(){
+  const el=document.getElementById('radioInfo');
+  if(!gpConnected){el.textContent='no gamepad detected. TX16S: plug USB, pick Joystick on radio popup, wiggle a stick.';return;}
+  el.innerHTML='<b>'+gpName.slice(0,40)+'</b><br>'+
+    (axisMap?'custom calibration active':'default map ('+(isRadio({id:gpName})?'EdgeTX AETR':'spring pad')+')');
+}
+function dz(v,d=0.03){return Math.abs(v)<d?0:v;}
+function readInput(dt){
+  const gp=navigator.getGamepads&&navigator.getGamepads()[0];
+  if(gp&&gpConnected){
+    if(calib){runCalib(gp,dt);stick.r=stick.p=stick.y=0;stick.t=0;return;}
+    const map=axisMap||defaultMapFor(gp);
+    const ax=gp.axes;
+    stick.r=dz((ax[map.r.i]||0)*map.r.sign);
+    stick.p=dz((ax[map.p.i]||0)*map.p.sign);
+    stick.y=dz((ax[map.y.i]||0)*map.y.sign);
+    const traw=ax[map.t.i]||0;
+    if(map.t.spring){
+      stick.t=THREE.MathUtils.clamp(-traw,0,1); // pad: up = -1
+    } else {
+      const span=map.t.max-map.t.min;
+      stick.t=Math.abs(span)<0.1?0:THREE.MathUtils.clamp((traw-map.t.min)/span,0,1);
+    }
+    const b0=gp.buttons[0]&&gp.buttons[0].pressed;
+    if(b0&&!prevGpArm)tryArm();
+    prevGpArm=b0;
+  } else {
+    const tR=(keys['arrowright']?1:0)-(keys['arrowleft']?1:0);
+    const tP=(keys['arrowup']?1:0)-(keys['arrowdown']?1:0);
+    const tY=(keys['d']?1:0)-(keys['a']?1:0);
+    const sm=1-Math.pow(0.0001,dt);
+    stick.r+=(tR-stick.r)*sm;stick.p+=(tP-stick.p)*sm;stick.y+=(tY-stick.y)*sm;
+    if(keys['w'])kbThrottle+=1.4*dt;
+    if(keys['s'])kbThrottle-=1.4*dt;
+    kbThrottle=THREE.MathUtils.clamp(kbThrottle,0,1);
+    stick.t=kbThrottle;
+  }
+}
+
+// ---------- Betaflight rates ----------
+function bfRate(x,rc,sr,ex){
+  const a=Math.abs(x);
+  x=x*Math.pow(a,3)*ex+x*(1-ex);
+  let rate=200*rc*x;
+  if(sr>0)rate*=1/THREE.MathUtils.clamp(1-Math.abs(x)*sr,0.01,1);
+  return rate;
+}
+function maxRateDps(){return Math.abs(bfRate(1,CFG.rcRate,CFG.superRate,CFG.expo));}
+
+// ---------- Physics ----------
+const tmpV=new THREE.Vector3(),up=new THREE.Vector3();
+const dq=new THREE.Quaternion(),axis=new THREE.Vector3();
+function physics(dt){
+  const rr=THREE.MathUtils.degToRad(bfRate(stick.r,CFG.rcRate,CFG.superRate,CFG.expo));
+  const pr=THREE.MathUtils.degToRad(bfRate(stick.p,CFG.rcRate,CFG.superRate,CFG.expo));
+  const yr=THREE.MathUtils.degToRad(bfRate(stick.y,CFG.rcRate,CFG.superRate,CFG.expo));
+  const wx=pr,wy=-yr,wz=-rr;
+  const mag=Math.sqrt(wx*wx+wy*wy+wz*wz);
+  if(mag>1e-8){axis.set(wx/mag,wy/mag,wz/mag);dq.setFromAxisAngle(axis,mag*dt);state.q.multiply(dq).normalize();}
+  const mass=CFG.massG/1000;
+  up.set(0,1,0).applyQuaternion(state.q);
+  const F=tmpV.copy(up).multiplyScalar(state.armed?Math.pow(stick.t,1.15)*CFG.twr*mass*G:0);
+  F.y-=mass*G;
+  const v=state.vel,sp=v.length();
+  if(sp>0){const df=CFG.drag*.02*sp*sp+CFG.drag*.15*sp;F.addScaledVector(v,-df*mass/Math.max(sp,1e-6));}
+  v.addScaledVector(F,dt/mass);
+  state.pos.addScaledVector(v,dt);
+  if(state.pos.y<0.12){
+    const impact=-v.y;state.pos.y=0.12;
+    if(impact>4.5&&state.armed)crash();
+    else{v.y=Math.max(v.y,0);v.x*=.85;v.z*=.85;}
+  }
+  for(const bb of colliders){
+    if(bb.containsPoint(state.pos)){
+      // resolve along smallest penetration axis; crash only if impact
+      // *into* that face is hard (perpendicular speed), grazes/taps bounce
+      const CRASH_INTO=11; // m/s into wall = crash
+      const dx=Math.min(state.pos.x-bb.min.x,bb.max.x-state.pos.x);
+      const dy=Math.min(state.pos.y-bb.min.y,bb.max.y-state.pos.y);
+      const dzp=Math.min(state.pos.z-bb.min.z,bb.max.z-state.pos.z);
+      let into;
+      if(dx<dy&&dx<dzp){
+        into=Math.abs(v.x);
+        state.pos.x+=(state.pos.x-(bb.min.x+bb.max.x)/2>0?dx:-dx);
+        v.x*=-.25; v.y*=.9; v.z*=.9;
+      } else if(dy<dzp){
+        into=Math.abs(v.y);
+        state.pos.y+=(state.pos.y-(bb.min.y+bb.max.y)/2>0?dy:-dy);
+        v.y*=-.25; v.x*=.9; v.z*=.9;
+      } else {
+        into=Math.abs(v.z);
+        state.pos.z+=(state.pos.z-(bb.min.z+bb.max.z)/2>0?dzp:-dzp);
+        v.z*=-.25; v.x*=.9; v.y*=.9;
+      }
+      if(into>CRASH_INTO&&state.armed)crash();
+      else if(state.armed)toast('TAP');
+      break;
+    }
+  }
+}
+function crash(){state.crashes++;state.armed=false;state.vel.set(0,0,0);
+  toast('CRASH #'+state.crashes+' — R resets');}
+
+// ---------- Camera ----------
+const camTilt=new THREE.Quaternion();
+function updateCamera(){
+  camTilt.setFromAxisAngle(new THREE.Vector3(1,0,0),THREE.MathUtils.degToRad(CFG.camDeg));
+  camera.quaternion.copy(state.q).multiply(camTilt);
+  camera.position.copy(state.pos);
+}
+
+// ---------- OSD ----------
+const osdTL=document.getElementById('osdTL'),osdTR=document.getElementById('osdTR'),osdBC=document.getElementById('osdBC');
+const toastEl=document.getElementById('toast');let toastTimer;
+function toast(m){toastEl.textContent=m;toastEl.style.opacity=1;
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.style.opacity=0,1500);}
+function updateOSD(){
+  const spd=(state.vel.length()*3.6).toFixed(0),alt=state.pos.y.toFixed(1);
+  const t=((performance.now()-state.t0)/1000)|0;
+  osdTL.innerHTML=`<span class="${state.armed?'armed':'disarmed'}">${state.armed?'ARMED':'DISARMED'}</span><br>SPD ${spd} km/h<br>ALT ${alt} m`;
+  osdTR.innerHTML=`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):'KEYBOARD'}${axisMap&&gpConnected?' (CAL)':''}<br>`+
+    `RATES ${CFG.rcRate.toFixed(2)}/${CFG.superRate.toFixed(2)}/${CFG.expo.toFixed(2)}<br>`+
+    `CAM ${CFG.camDeg}° FOV ${CFG.fov}${usingGltf?'<br>GLTF MAP':''}`;
+  osdBC.innerHTML=`THR ${'█'.repeat(Math.round(stick.t*10)).padEnd(10,'░')} ${(stick.t*100)|0}%`+
+    `&nbsp;&nbsp;FLT ${String(t/60|0).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+}
+
+// ---------- Panel ----------
+const panel=document.getElementById('panel');
+document.getElementById('gear').onclick=()=>panel.classList.toggle('open');
+document.getElementById('btnReset').onclick=resetQuad;
+function bind(id,key,fmt,post){
+  const s=document.getElementById('s_'+id),v=document.getElementById('v_'+id);
+  const u=()=>{CFG[key]=parseFloat(s.value);v.textContent=fmt(CFG[key]);if(post)post();refreshMax();};
+  s.addEventListener('input',u);u();
+}
+function refreshMax(){document.getElementById('v_max').textContent=maxRateDps().toFixed(0)+' °/s';}
+bind('rc','rcRate',x=>x.toFixed(2));
+bind('sr','superRate',x=>x.toFixed(2));
+bind('ex','expo',x=>x.toFixed(2));
+bind('cam','camDeg',x=>x+'°');
+bind('fov','fov',x=>x+'°',()=>{camera.fov=CFG.fov;camera.updateProjectionMatrix();});
+bind('twr','twr',x=>x.toFixed(1)+':1');
+bind('drag','drag',x=>x.toFixed(2));
+bind('mass','massG',x=>x+'g');
+updateRadioInfo();
+
+// ---------- Loop ----------
+let last=performance.now(),acc=0;
+const STEP=1/240;
+function loop(now){
+  requestAnimationFrame(loop);
+  let dt=(now-last)/1000;last=now;dt=Math.min(dt,.05);
+  readInput(dt);
+  acc+=dt;
+  while(acc>=STEP){physics(STEP);acc-=STEP;}
+  updateCamera();updateOSD();
+  renderer.render(scene,camera);
+}
+toast('Enter = ARM. Tab = tune.');
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

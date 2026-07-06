@@ -1,0 +1,20 @@
+{
+  "tiles": [
+    {"file": "building-a.glb", "scale": 5, "count": 12},
+    {"file": "building-b.glb", "scale": 5, "count": 12},
+    {"file": "building-c.glb", "scale": 5, "count": 10},
+    {"file": "building-d.glb", "scale": 5, "count": 10},
+    {"file": "building-e.glb", "scale": 5, "count": 10},
+    {"file": "building-f.glb", "scale": 5, "count": 8},
+    {"file": "building-g.glb", "scale": 5, "count": 8},
+    {"file": "building-h.glb", "scale": 5, "count": 8},
+    {"file": "building-i.glb", "scale": 5, "count": 6},
+    {"file": "building-j.glb", "scale": 5, "count": 6}
+  ],
+  "placed": [
+    {"file": "building-skyscraper-a.glb", "x": -70, "z": 70, "scale": 8},
+    {"file": "building-skyscraper-b.glb", "x": 120, "z": -120, "scale": 8},
+    {"file": "building-skyscraper-c.glb", "x": -180, "z": -60, "scale": 8},
+    {"file": "building-skyscraper-d.glb", "x": 60, "z": 180, "scale": 8}
+  ]
+}

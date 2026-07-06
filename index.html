@@ -1169,6 +1169,115 @@
     color: var(--muted);
     margin-bottom: 0;
   }
+
+  /* ===== RYFLY SIM PROMO ===== */
+  #ryfly-sim h2 {
+    font-size: clamp(2rem, 5vw, 2.8rem);
+    letter-spacing: -0.01em;
+  }
+  .sim-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--green);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .sim-feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+    margin: 28px 0 32px;
+  }
+  .sim-feature-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 16px;
+    border-radius: 4px;
+  }
+  .sim-feature-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    color: var(--orange);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .sim-feature-card p {
+    font-size: 0.85rem;
+    color: var(--text);
+    line-height: 1.55;
+    margin: 0;
+    max-width: none;
+  }
+  .sim-launch-btn {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    letter-spacing: 0.06em;
+    color: var(--orange);
+    border: 2px solid var(--orange);
+    padding: 14px 34px;
+    text-decoration: none;
+    border-radius: 3px;
+    transition: all 0.15s;
+  }
+  .sim-launch-btn:hover {
+    background: var(--orange);
+    color: var(--bg);
+  }
+  .sim-req-note {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 12px;
+    margin-bottom: 0;
+  }
+  .sim-teaser-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    height: 260px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    text-decoration: none;
+    padding: 24px;
+    margin-bottom: 20px;
+    transition: border-color 0.15s;
+    gap: 8px;
+  }
+  .sim-teaser-card:hover { border-color: var(--orange); }
+  .sim-teaser-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    color: var(--green);
+    text-transform: uppercase;
+  }
+  .sim-teaser-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .sim-teaser-sub {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.5;
+    margin: 0;
+    max-width: none;
+  }
+  .sim-teaser-cta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.1em;
+    color: var(--orange);
+    margin-top: 6px;
+  }
 </style>
 </head>
 <body>
@@ -1182,6 +1291,7 @@
       <a href="#motor-guide">Motors</a>
       <a href="#tools">Tools</a>
       <a href="#tunes">Tunes</a>
+      <a href="#ryfly-sim">Sim</a>
       <a href="#meet-ryfly">RyFly.</a>
       <a href="#ryfly">RyFly's Gear</a>
       <a href="#hire">Hire</a>
@@ -1780,10 +1890,12 @@
           <p class="ryfly-bio">RyFly is a competitive FPV freestyle pilot based in Mesa, Arizona. Currently competing in IGOW6, flying 65–85mm whoops with analog and HDZero HD setups. Builder, tinkerer, and the pilot behind QuadMath.</p>
         </div>
         <div>
-          <!-- swap this div for <img src="./ryfly.gif"> when ready -->
-          <div class="gif-placeholder">
-            <span>[ FOOTAGE COMING SOON ]</span>
-          </div>
+          <a href="sim.html" class="sim-teaser-card">
+            <div class="sim-teaser-label">// free browser sim</div>
+            <div class="sim-teaser-title">RYFLY <span class="accent">SIM</span></div>
+            <p class="sim-teaser-sub">Real Betaflight rates · acro + angle · 3-lap race · portal</p>
+            <div class="sim-teaser-cta">LAUNCH SIM →</div>
+          </a>
           <div class="ryfly-social">
             <a href="https://www.youtube.com/@ryfly" class="social-btn yt" target="_blank" rel="noopener">▶ YouTube</a>
             <a href="https://www.instagram.com/ryfly_fpv" class="social-btn ig" target="_blank" rel="noopener">◉ Instagram</a>
@@ -1792,6 +1904,28 @@
         </div>
       </div>
     </div>
+  </section>
+
+  <section class="section" id="ryfly-sim">
+    <div class="sim-eyebrow">// new — fly it in your browser</div>
+    <h2>RYFLY <span class="accent">SIM</span></h2>
+    <p>Free browser FPV simulator. Real Betaflight rate math, acro and angle mode, a 3-lap race course, and a portal to somewhere weird. Plug in your radio and send it.</p>
+    <div class="sim-feature-grid">
+      <div class="sim-feature-card">
+        <div class="sim-feature-label">PHYSICS</div>
+        <p>Real Betaflight rates — RC Rate / Super / Expo. Tunable TWR, drag, mass, cam angle, FOV.</p>
+      </div>
+      <div class="sim-feature-card">
+        <div class="sim-feature-label">RADIO</div>
+        <p>TX16S / EdgeTX auto-detect over USB joystick, plus a full calibration wizard for anything else.</p>
+      </div>
+      <div class="sim-feature-card">
+        <div class="sim-feature-label">MODES</div>
+        <p>3-lap gate race with nav beam, dive shafts, playground bash spot, dreamland portal, lofi soundtrack.</p>
+      </div>
+    </div>
+    <a href="sim.html" class="sim-launch-btn">LAUNCH SIM →</a>
+    <p class="sim-req-note">Desktop + gamepad or radio recommended. Keyboard works in a pinch.</p>
   </section>
 
   <section class="section" id="ryfly">
