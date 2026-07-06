@@ -50,6 +50,16 @@
   #calibBars{font-size:12px;color:var(--txt);text-align:left;line-height:1.8}
   #calibCancel{width:200px;margin-top:24px}
   #assetStatus{font-size:11px;color:var(--dim);margin-bottom:8px;line-height:1.6}
+  /* key legend */
+  #legend{position:fixed;bottom:16px;left:16px;z-index:5;background:rgba(13,14,18,.72);
+    border:1px solid #262A33;padding:10px 14px;font-size:11px;line-height:1.9;
+    color:var(--dim);letter-spacing:.5px;pointer-events:none}
+  #legend b{color:var(--txt);font-weight:600}
+  .lgc{position:absolute;width:8px;height:8px;border:1px solid var(--green);opacity:.45}
+  .lgc-tl{top:-1px;left:-1px;border-right:none;border-bottom:none}
+  .lgc-tr{top:-1px;right:-1px;border-left:none;border-bottom:none}
+  .lgc-bl{bottom:-1px;left:-1px;border-right:none;border-top:none}
+  .lgc-br{bottom:-1px;right:-1px;border-left:none;border-top:none}
 </style>
 </head>
 <body>
@@ -74,6 +84,17 @@
 <div class="osd" id="osdBC"></div>
 <div id="crosshair"></div>
 <div id="toast"></div>
+<div id="legend">
+  <div class="lgc lgc-tl"></div>
+  <div class="lgc lgc-tr"></div>
+  <div class="lgc lgc-bl"></div>
+  <div class="lgc lgc-br"></div>
+  <b>ENTER — Arm / Disarm</b><br>
+  <b>M — Music On/Off</b><br>
+  <b>F — Angle / Acro Mode</b><br>
+  <b>R — Reset Quad</b><br>
+  <b>TAB — Tune Panel</b>
+</div>
 
 <div id="calib">
   <h2>RADIO CALIBRATION</h2>
@@ -86,7 +107,7 @@
 <button id="gear">⚙ TUNE [Tab]</button>
 <div id="panel">
   <h1>RYFLY SIM v3</h1>
-  <div class="sub">acro only. no training wheels.</div>
+  <div class="sub">acro by default. F toggles angle mode.</div>
 
   <h2>Radio</h2>
   <div class="kbd" id="radioInfo">no gamepad detected</div>
@@ -124,7 +145,7 @@
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
     <b>R</b> reset &nbsp;<b>Enter</b> arm &nbsp;<b>Tab</b> panel<br>
-    🔊 <b>M</b>: Music<br>
+    🔊 <b>M</b>: Music &nbsp;<b>F</b>: angle/acro<br>
     Arm blocked if throttle &gt;5%.
   </div>
   <button id="btnReset">RESET QUAD [R]</button>
@@ -569,6 +590,7 @@ addEventListener('keydown',e=>{
   if(e.key==='Enter')tryArm();
   if(e.key.toLowerCase()==='r')resetQuad();
   if(e.key.toLowerCase()==='m')toggleMusic();
+  if(e.key.toLowerCase()==='f')toggleFlightMode();
   if(e.key.startsWith('Arrow'))e.preventDefault();
 });
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
@@ -628,14 +650,33 @@ function bfRate(x,rc,sr,ex){
 }
 function maxRateDps(){return Math.abs(bfRate(1,CFG.rcRate,CFG.superRate,CFG.expo));}
 
+// ---------- Flight mode (acro = raw rates, angle = self-level) ----------
+let flightMode='acro';
+const ANGLE_MAX=50,ANGLE_P=7; // max lean deg, self-level strength
+function toggleFlightMode(){
+  flightMode=flightMode==='acro'?'angle':'acro';
+  toast(flightMode==='angle'?'ANGLE MODE':'ACRO MODE');
+}
+
 // ---------- Physics ----------
 const tmpV=new THREE.Vector3(),up=new THREE.Vector3();
 const dq=new THREE.Quaternion(),axis=new THREE.Vector3();
+const eulTmp=new THREE.Euler();
 function physics(dt){
-  const rr=THREE.MathUtils.degToRad(bfRate(stick.r,CFG.rcRate,CFG.superRate,CFG.expo));
-  const pr=THREE.MathUtils.degToRad(bfRate(stick.p,CFG.rcRate,CFG.superRate,CFG.expo));
   const yr=THREE.MathUtils.degToRad(bfRate(stick.y,CFG.rcRate,CFG.superRate,CFG.expo));
-  const wx=pr,wy=-yr,wz=-rr;
+  let wx,wz;
+  if(flightMode==='angle'){
+    // sticks command target lean angle; P-controller levels toward it
+    eulTmp.setFromQuaternion(state.q,'YXZ');
+    wx=(THREE.MathUtils.degToRad(stick.p*ANGLE_MAX)-eulTmp.x)*ANGLE_P;
+    wz=(THREE.MathUtils.degToRad(-stick.r*ANGLE_MAX)-eulTmp.z)*ANGLE_P;
+    const cap=THREE.MathUtils.degToRad(maxRateDps());
+    wx=THREE.MathUtils.clamp(wx,-cap,cap);wz=THREE.MathUtils.clamp(wz,-cap,cap);
+  }else{
+    wx=THREE.MathUtils.degToRad(bfRate(stick.p,CFG.rcRate,CFG.superRate,CFG.expo));
+    wz=-THREE.MathUtils.degToRad(bfRate(stick.r,CFG.rcRate,CFG.superRate,CFG.expo));
+  }
+  const wy=-yr;
   const mag=Math.sqrt(wx*wx+wy*wy+wz*wz);
   if(mag>1e-8){axis.set(wx/mag,wy/mag,wz/mag);dq.setFromAxisAngle(axis,mag*dt);state.q.multiply(dq).normalize();}
   const mass=CFG.massG/1000;
