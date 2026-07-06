@@ -395,11 +395,27 @@ window._tryAssets=async function(){
       const m=(await load(file)).clone(true);
       m.scale.setScalar(scale);m.position.set(x,y,z);m.rotation.y=ry||0;
       placedRoot.add(m);
-      if(collide)colliders.push(new THREE.Box3().setFromObject(m));
+      if(collide==='deck'){
+        // thin slab collider at deck level only — space underneath stays flyable
+        const bb=new THREE.Box3().setFromObject(m);
+        bb.max.y=Math.min(bb.max.y,bb.min.y+2.5);
+        colliders.push(bb);
+      }else if(collide)colliders.push(new THREE.Box3().setFromObject(m));
+    }
+    // visual+collidable support pillar: concrete cylinder from deck height to ground
+    function addPillar(x,z,topY){
+      const p=new THREE.Mesh(new THREE.CylinderGeometry(1,1.3,topY,10),
+        new THREE.MeshStandardMaterial({color:0x8e9096,roughness:0.9}));
+      p.position.set(x,topY/2,z);
+      placedRoot.add(p);
+      colliders.push(new THREE.Box3().setFromObject(p)); // thin — weave between them
     }
     // overpasses — road-bridge decks spanning the street corridors, flyable underneath
-    await placeAt('road-bridge.glb',70,11,0,8,0,true);
-    await placeAt('road-bridge.glb',0,15,-90,8,Math.PI/2,true);
+    await placeAt('road-bridge.glb',70,11,0,8,0,'deck');
+    await placeAt('road-bridge.glb',0,15,-90,8,Math.PI/2,'deck');
+    // support columns at each deck's corners
+    addPillar(58,-6,11);addPillar(82,-6,11);addPillar(58,6,11);addPillar(82,6,11);
+    addPillar(-6,-102,15);addPillar(6,-102,15);addPillar(-6,-78,15);addPillar(6,-78,15);
     // awning details near building blocks (no colliders, small dressing)
     await placeAt('detail-awning.glb',      52,0, 38,5, 0);
     await placeAt('detail-awning-wide.glb', -55,0, 62,5, Math.PI);
@@ -625,52 +641,35 @@ function finishCalib(){
 // ---------- Input ----------
 const stick={r:0,p:0,y:0,t:0};
 const keys={};
-// ---------- procedural music (Web Audio, no files) — M to toggle, off by default ----------
-let musicOn=false,musicCtx=null,musicGain=null,musicTimer=null,musicDrones=[];
-const MUSIC_SCALE=[110,130.81,146.83,164.81,196,220,261.63,293.66]; // A minor pentatonic-ish, moody
-function startMusic(){
-  if(!musicCtx)musicCtx=new (window.AudioContext||window.webkitAudioContext)();
-  if(musicCtx.state==='suspended')musicCtx.resume();
-  musicGain=musicCtx.createGain();
-  musicGain.gain.setValueAtTime(0,musicCtx.currentTime);
-  musicGain.gain.linearRampToValueAtTime(0.11,musicCtx.currentTime+1.5); // moderate, under UI sounds
-  musicGain.connect(musicCtx.destination);
-  // low drone pad: two slightly detuned saws through a lowpass
-  const lp=musicCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=420;lp.Q.value=0.7;
-  lp.connect(musicGain);
-  [55,55.35,110.2].forEach(f=>{
-    const o=musicCtx.createOscillator(),g=musicCtx.createGain();
-    o.type='sawtooth';o.frequency.value=f;g.gain.value=0.16;
-    o.connect(g);g.connect(lp);o.start();musicDrones.push(o);
-  });
-  // slow arpeggio on top: soft triangle plucks
-  let step=0;const pattern=[0,3,5,4,7,5,3,1];
-  musicTimer=setInterval(()=>{
-    if(!musicCtx)return;
-    const t=musicCtx.currentTime;
-    const f=MUSIC_SCALE[pattern[step%pattern.length]]*(step%32<16?1:2);
-    const o=musicCtx.createOscillator(),g=musicCtx.createGain();
-    o.type='triangle';o.frequency.value=f;
-    g.gain.setValueAtTime(0.0001,t);
-    g.gain.linearRampToValueAtTime(0.35,t+0.04);
-    g.gain.exponentialRampToValueAtTime(0.0001,t+1.4);
-    o.connect(g);g.connect(musicGain);o.start(t);o.stop(t+1.5);
-    step++;
-  },440);
-}
-function stopMusic(){
-  if(musicTimer){clearInterval(musicTimer);musicTimer=null;}
-  if(musicGain&&musicCtx){
-    const g=musicGain,t=musicCtx.currentTime;
-    g.gain.cancelScheduledValues(t);g.gain.setValueAtTime(g.gain.value,t);
-    g.gain.linearRampToValueAtTime(0.0001,t+0.4);
-    setTimeout(()=>{musicDrones.forEach(o=>{try{o.stop();}catch(_){}});musicDrones=[];g.disconnect();},500);
+// ---------- background music playlist (assets/bg-music-*.mp3) — M to toggle, paused by default ----------
+const MUSIC_TRACKS=['assets/bg-music-1.mp3','assets/bg-music-2.mp3','assets/bg-music-3.mp3',
+  'assets/bg-music-4.mp3','assets/bg-music-5.mp3'];
+let musicOn=false,musicOrder=[],musicIdx=0;
+const musicEl=new Audio();
+musicEl.volume=0.4;
+function shuffleOrder(){
+  musicOrder=MUSIC_TRACKS.map((_,i)=>i);
+  for(let i=musicOrder.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [musicOrder[i],musicOrder[j]]=[musicOrder[j],musicOrder[i]];
   }
-  musicGain=null;
+  musicIdx=0;
 }
+function playCurrentTrack(){
+  musicEl.src=MUSIC_TRACKS[musicOrder[musicIdx]];
+  musicEl.play().catch(()=>{});
+}
+musicEl.addEventListener('ended',()=>{
+  musicIdx++;
+  if(musicIdx>=musicOrder.length)shuffleOrder(); // reshuffle each full loop
+  playCurrentTrack();
+});
 function toggleMusic(){
   musicOn=!musicOn;
-  if(musicOn)startMusic();else stopMusic();
+  if(musicOn){
+    if(!musicOrder.length)shuffleOrder();
+    if(musicEl.src)musicEl.play().catch(()=>{});else playCurrentTrack();
+  }else musicEl.pause();
   toast(musicOn?'♪ MUSIC ON':'MUSIC OFF');
 }
 addEventListener('keydown',e=>{
