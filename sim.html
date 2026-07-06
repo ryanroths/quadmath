@@ -14,7 +14,6 @@
   #osdTL{top:14px;left:16px} #osdTR{top:14px;right:16px;text-align:right}
   #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
   #osdGate{top:14px;left:50%;transform:translateX(-50%);color:var(--txt);font-weight:600}
-  .armed{color:var(--green)} .disarmed{color:var(--orange)}
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7}
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
   #crosshair::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
@@ -91,7 +90,6 @@
   <div class="lgc lgc-tr"></div>
   <div class="lgc lgc-bl"></div>
   <div class="lgc lgc-br"></div>
-  <b>ENTER — Arm / Disarm</b><br>
   <b>M — Music On/Off</b><br>
   <b>F — Angle / Acro Mode</b><br>
   <b>R — Reset Quad</b><br>
@@ -146,9 +144,8 @@
     TX16S: EdgeTX USB mode = <b>Joystick</b>. Move stick after plug-in.<br>
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
-    <b>R</b> reset &nbsp;<b>Enter</b> arm &nbsp;<b>Tab</b> panel<br>
-    🔊 <b>M</b>: Music &nbsp;<b>F</b>: angle/acro<br>
-    Arm blocked if throttle &gt;5%.
+    <b>R</b> reset &nbsp;<b>Tab</b> panel<br>
+    🔊 <b>M</b>: Music &nbsp;<b>F</b>: angle/acro
   </div>
   <button id="btnReset">RESET QUAD [R]</button>
 </div>
@@ -526,9 +523,9 @@ if(window._gltfReady) window._tryAssets();
 
 // ---------- Quad state ----------
 const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
-  q:new THREE.Quaternion(),armed:false,crashes:0,t0:performance.now()};
+  q:new THREE.Quaternion(),bounces:0,t0:performance.now()};
 function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
-  state.armed=false;toast('RESET');}
+  toast('RESET');}
 
 // ---------- Radio: axis map + calibration ----------
 // axisMap: {r:{i,sign}, p:{i,sign}, y:{i,sign}, t:{i,min,max}}
@@ -628,11 +625,6 @@ function finishCalib(){
 // ---------- Input ----------
 const stick={r:0,p:0,y:0,t:0};
 const keys={};
-function tryArm(){
-  if(state.armed){state.armed=false;toast('DISARMED');return;}
-  if(stick.t>0.05){toast('ARM BLOCKED — THROTTLE HIGH');return;}
-  state.armed=true;toast('ARMED');
-}
 // ---------- procedural music (Web Audio, no files) — M to toggle, off by default ----------
 let musicOn=false,musicCtx=null,musicGain=null,musicTimer=null,musicDrones=[];
 const MUSIC_SCALE=[110,130.81,146.83,164.81,196,220,261.63,293.66]; // A minor pentatonic-ish, moody
@@ -684,14 +676,13 @@ function toggleMusic(){
 addEventListener('keydown',e=>{
   if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
   keys[e.key.toLowerCase()]=true;
-  if(e.key==='Enter')tryArm();
   if(e.key.toLowerCase()==='r')resetQuad();
   if(e.key.toLowerCase()==='m')toggleMusic();
   if(e.key.toLowerCase()==='f')toggleFlightMode();
   if(e.key.startsWith('Arrow'))e.preventDefault();
 });
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
-let kbThrottle=0,gpConnected=false,prevGpArm=false,gpName='';
+let kbThrottle=0,gpConnected=false,gpName='';
 addEventListener('gamepadconnected',e=>{
   gpConnected=true;gpName=e.gamepad.id;
   toast(isRadio(e.gamepad)?'RADIO DETECTED':'GAMEPAD CONNECTED');
@@ -721,9 +712,6 @@ function readInput(dt){
       const span=map.t.max-map.t.min;
       stick.t=Math.abs(span)<0.1?0:THREE.MathUtils.clamp((traw-map.t.min)/span,0,1);
     }
-    const b0=gp.buttons[0]&&gp.buttons[0].pressed;
-    if(b0&&!prevGpArm)tryArm();
-    prevGpArm=b0;
   } else {
     const tR=(keys['arrowright']?1:0)-(keys['arrowleft']?1:0);
     const tP=(keys['arrowup']?1:0)-(keys['arrowdown']?1:0);
@@ -778,7 +766,7 @@ function physics(dt){
   if(mag>1e-8){axis.set(wx/mag,wy/mag,wz/mag);dq.setFromAxisAngle(axis,mag*dt);state.q.multiply(dq).normalize();}
   const mass=CFG.massG/1000;
   up.set(0,1,0).applyQuaternion(state.q);
-  const F=tmpV.copy(up).multiplyScalar(state.armed?Math.pow(stick.t,1.15)*CFG.twr*mass*G:0);
+  const F=tmpV.copy(up).multiplyScalar(Math.pow(stick.t,1.15)*CFG.twr*mass*G);
   F.y-=mass*G;
   const v=state.vel,sp=v.length();
   if(sp>0){const df=CFG.drag*.02*sp*sp+CFG.drag*.15*sp;F.addScaledVector(v,-df*mass/Math.max(sp,1e-6));}
@@ -786,14 +774,14 @@ function physics(dt){
   state.pos.addScaledVector(v,dt);
   if(state.pos.y<0.12){
     const impact=-v.y;state.pos.y=0.12;
-    if(impact>4.5&&state.armed)crash();
+    if(impact>4.5){v.y=-v.y*0.45;v.x*=.7;v.z*=.7;bounce();} // reflect off ground, damped
     else{v.y=Math.max(v.y,0);v.x*=.85;v.z*=.85;}
   }
   for(const bb of colliders){
     if(bb.containsPoint(state.pos)){
-      // resolve along smallest penetration axis; crash only if impact
-      // *into* that face is hard (perpendicular speed), grazes/taps bounce
-      const CRASH_INTO=11; // m/s into wall = crash
+      // resolve along smallest penetration axis; reflect velocity off that
+      // face's normal with damping — bounce and keep flying, no reset needed
+      const HARD_INTO=11; // m/s into wall = hard bounce (toast feedback)
       const dx=Math.min(state.pos.x-bb.min.x,bb.max.x-state.pos.x);
       const dy=Math.min(state.pos.y-bb.min.y,bb.max.y-state.pos.y);
       const dzp=Math.min(state.pos.z-bb.min.z,bb.max.z-state.pos.z);
@@ -801,24 +789,23 @@ function physics(dt){
       if(dx<dy&&dx<dzp){
         into=Math.abs(v.x);
         state.pos.x+=(state.pos.x-(bb.min.x+bb.max.x)/2>0?dx:-dx);
-        v.x*=-.25; v.y*=.9; v.z*=.9;
+        v.x*=-.45; v.y*=.9; v.z*=.9;
       } else if(dy<dzp){
         into=Math.abs(v.y);
         state.pos.y+=(state.pos.y-(bb.min.y+bb.max.y)/2>0?dy:-dy);
-        v.y*=-.25; v.x*=.9; v.z*=.9;
+        v.y*=-.45; v.x*=.9; v.z*=.9;
       } else {
         into=Math.abs(v.z);
         state.pos.z+=(state.pos.z-(bb.min.z+bb.max.z)/2>0?dzp:-dzp);
-        v.z*=-.25; v.x*=.9; v.y*=.9;
+        v.z*=-.45; v.x*=.9; v.y*=.9;
       }
-      if(into>CRASH_INTO&&state.armed)crash();
-      else if(state.armed)toast('TAP');
+      if(into>HARD_INTO)bounce();
+      else toast('TAP');
       break;
     }
   }
 }
-function crash(){state.crashes++;state.armed=false;state.vel.set(0,0,0);
-  toast('CRASH #'+state.crashes+' — R resets');}
+function bounce(){state.bounces++;toast('BOUNCE #'+state.bounces);}
 
 // ---------- Camera ----------
 const camTilt=new THREE.Quaternion();
@@ -836,7 +823,7 @@ function toast(m){toastEl.textContent=m;toastEl.style.opacity=1;
 function updateOSD(){
   const spd=(state.vel.length()*3.6).toFixed(0),alt=state.pos.y.toFixed(1);
   const t=((performance.now()-state.t0)/1000)|0;
-  osdTL.innerHTML=`<span class="${state.armed?'armed':'disarmed'}">${state.armed?'ARMED':'DISARMED'}</span><br>SPD ${spd} km/h<br>ALT ${alt} m`;
+  osdTL.innerHTML=`SPD ${spd} km/h<br>ALT ${alt} m`;
   osdTR.innerHTML=`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):'KEYBOARD'}${axisMap&&gpConnected?' (CAL)':''}<br>`+
     `RATES ${CFG.rcRate.toFixed(2)}/${CFG.superRate.toFixed(2)}/${CFG.expo.toFixed(2)}<br>`+
     `CAM ${CFG.camDeg}° FOV ${CFG.fov}${usingGltf?'<br>GLTF MAP':''}`;
@@ -876,7 +863,7 @@ function loop(now){
   updateCamera();updateOSD();updateGates();
   renderer.render(scene,camera);
 }
-toast('Enter = ARM. Tab = tune.');
+toast('Throttle up to fly. Tab = tune.');
 requestAnimationFrame(loop);
 </script>
 <footer>
