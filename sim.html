@@ -124,6 +124,7 @@
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
     <b>R</b> reset &nbsp;<b>Enter</b> arm &nbsp;<b>Tab</b> panel<br>
+    🔊 <b>M</b>: Music<br>
     Arm blocked if throttle &gt;5%.
   </div>
   <button id="btnReset">RESET QUAD [R]</button>
@@ -245,7 +246,14 @@ window._tryAssets=async function(){
     return;
   }
   assetEl.textContent='loading GLTF assets…';
-  const loader=new THREE.GLTFLoader();
+  // missing texture fallback: redirect any external texture reference (e.g. colormap.png,
+  // not shipped with the GLB pack) to a 1x1 flat-color pixel so materials render flat
+  // instead of 404ing in console. Geometry/embedded data unaffected.
+  const flatPx=(()=>{const c=document.createElement('canvas');c.width=c.height=1;
+    const g=c.getContext('2d');g.fillStyle='#b9bdc4';g.fillRect(0,0,1,1);return c.toDataURL();})();
+  const texMgr=new THREE.LoadingManager();
+  texMgr.setURLModifier(u=>/\.(png|jpe?g|webp)(\?.*)?$/i.test(u)&&!u.startsWith('data:')?flatPx:u);
+  const loader=new THREE.GLTFLoader(texMgr);
   const cache={};
   async function load(file){
     if(cache[file]) return cache[file];
@@ -507,11 +515,60 @@ function tryArm(){
   if(stick.t>0.05){toast('ARM BLOCKED — THROTTLE HIGH');return;}
   state.armed=true;toast('ARMED');
 }
+// ---------- procedural music (Web Audio, no files) — M to toggle, off by default ----------
+let musicOn=false,musicCtx=null,musicGain=null,musicTimer=null,musicDrones=[];
+const MUSIC_SCALE=[110,130.81,146.83,164.81,196,220,261.63,293.66]; // A minor pentatonic-ish, moody
+function startMusic(){
+  if(!musicCtx)musicCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(musicCtx.state==='suspended')musicCtx.resume();
+  musicGain=musicCtx.createGain();
+  musicGain.gain.setValueAtTime(0,musicCtx.currentTime);
+  musicGain.gain.linearRampToValueAtTime(0.11,musicCtx.currentTime+1.5); // moderate, under UI sounds
+  musicGain.connect(musicCtx.destination);
+  // low drone pad: two slightly detuned saws through a lowpass
+  const lp=musicCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=420;lp.Q.value=0.7;
+  lp.connect(musicGain);
+  [55,55.35,110.2].forEach(f=>{
+    const o=musicCtx.createOscillator(),g=musicCtx.createGain();
+    o.type='sawtooth';o.frequency.value=f;g.gain.value=0.16;
+    o.connect(g);g.connect(lp);o.start();musicDrones.push(o);
+  });
+  // slow arpeggio on top: soft triangle plucks
+  let step=0;const pattern=[0,3,5,4,7,5,3,1];
+  musicTimer=setInterval(()=>{
+    if(!musicCtx)return;
+    const t=musicCtx.currentTime;
+    const f=MUSIC_SCALE[pattern[step%pattern.length]]*(step%32<16?1:2);
+    const o=musicCtx.createOscillator(),g=musicCtx.createGain();
+    o.type='triangle';o.frequency.value=f;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.linearRampToValueAtTime(0.35,t+0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+1.4);
+    o.connect(g);g.connect(musicGain);o.start(t);o.stop(t+1.5);
+    step++;
+  },440);
+}
+function stopMusic(){
+  if(musicTimer){clearInterval(musicTimer);musicTimer=null;}
+  if(musicGain&&musicCtx){
+    const g=musicGain,t=musicCtx.currentTime;
+    g.gain.cancelScheduledValues(t);g.gain.setValueAtTime(g.gain.value,t);
+    g.gain.linearRampToValueAtTime(0.0001,t+0.4);
+    setTimeout(()=>{musicDrones.forEach(o=>{try{o.stop();}catch(_){}});musicDrones=[];g.disconnect();},500);
+  }
+  musicGain=null;
+}
+function toggleMusic(){
+  musicOn=!musicOn;
+  if(musicOn)startMusic();else stopMusic();
+  toast(musicOn?'♪ MUSIC ON':'MUSIC OFF');
+}
 addEventListener('keydown',e=>{
   if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
   keys[e.key.toLowerCase()]=true;
   if(e.key==='Enter')tryArm();
   if(e.key.toLowerCase()==='r')resetQuad();
+  if(e.key.toLowerCase()==='m')toggleMusic();
   if(e.key.startsWith('Arrow'))e.preventDefault();
 });
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
