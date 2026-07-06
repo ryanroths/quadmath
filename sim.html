@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RyFly Sim v3 — FPV Freestyle</title>
+<link rel="stylesheet" href="style.css">
 <style>
   :root{--bg:#0D0E12;--panel:#15171D;--orange:#FF4D1A;--green:#3DDC97;--txt:#E8E9ED;--dim:#7A7F8C}
   *{box-sizing:border-box;margin:0;padding:0}
@@ -52,6 +53,21 @@
 </style>
 </head>
 <body>
+<header>
+  <div class="container header-inner">
+    <div class="logo">QuadMath<span class="dot">.</span></div>
+    <nav>
+      <a href="index.html#calculator">Calculator</a>
+      <a href="index.html#guide">Guide</a>
+      <a href="index.html#motor-guide">Motors</a>
+      <a href="index.html#tools">Tools</a>
+      <a href="tune-database.html">Tunes</a>
+      <a href="sim.html" class="active" aria-current="page" style="color:#FF4D1A">Sim</a>
+      <a href="gear.html">Gear</a>
+      <a href="hire.html">Hire</a>
+    </nav>
+  </div>
+</header>
 <canvas id="c"></canvas>
 <div class="osd" id="osdTL"></div>
 <div class="osd" id="osdTR"></div>
@@ -668,5 +684,11 @@ function loop(now){
 toast('Enter = ARM. Tab = tune.');
 requestAnimationFrame(loop);
 </script>
+<footer>
+  <div class="container header-inner" style="width: 100%;">
+    <div class="footer-logo">QuadMath<span class="dot">.</span></div>
+    <div>Estimates only — always verify with bench testing. Fly safe.</div>
+  </div>
+</footer>
 </body>
 </html>
