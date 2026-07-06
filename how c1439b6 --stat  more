@@ -1,0 +1,59 @@
+[33mcommit c1439b6872990ac36b0ccfcf3c6fc0f09c96680a[m
+Author: ryanroths <ryan.roths@gmail.com>
+Date:   Mon Jul 6 11:35:16 2026 -0700
+
+    Add Meet RyFly section, RyFly Sim page, and sim promo integration
+    
+    - Meet RyFly section: bio, logo, social buttons, OSD corner brackets, sim teaser card
+    - RyFly Sim section: PHYSICS/RADIO/MODES feature cards, LAUNCH SIM CTA
+    - Nav links for both new sections
+    - sim.html: Three.js FPV simulator (single-file, Betaflight rates, race/acro/angle)
+    - assets/: Kenney City Kit GLBs (40 files, ~3.7MB, CC0) loaded by sim
+    - CLAUDE-CODE-HANDOFF.md, PROJECT_NOTES.md, sim-promo-section.html: dev reference
+    
+    Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+ CLAUDE-CODE-HANDOFF.md                |  40 [32m++[m
+ PROJECT_NOTES.md                      |  64 [32m++++[m
+ assets/building-a.glb                 | Bin [31m0[m -> [32m108936[m bytes
+ assets/building-b.glb                 | Bin [31m0[m -> [32m106408[m bytes
+ assets/building-c.glb                 | Bin [31m0[m -> [32m102788[m bytes
+ assets/building-d.glb                 | Bin [31m0[m -> [32m95160[m bytes
+ assets/building-e.glb                 | Bin [31m0[m -> [32m128208[m bytes
+ assets/building-f.glb                 | Bin [31m0[m -> [32m148952[m bytes
+ assets/building-g.glb                 | Bin [31m0[m -> [32m166356[m bytes
+ assets/building-h.glb                 | Bin [31m0[m -> [32m127384[m bytes
+ assets/building-i.glb                 | Bin [31m0[m -> [32m209728[m bytes
+ assets/building-j.glb                 | Bin [31m0[m -> [32m440652[m bytes
+ assets/building-k.glb                 | Bin [31m0[m -> [32m246976[m bytes
+ assets/building-l.glb                 | Bin [31m0[m -> [32m290516[m bytes
+ assets/building-m.glb                 | Bin [31m0[m -> [32m301004[m bytes
+ assets/building-n.glb                 | Bin [31m0[m -> [32m341232[m bytes
+ assets/building-skyscraper-a.glb      | Bin [31m0[m -> [32m111336[m bytes
+ assets/building-skyscraper-b.glb      | Bin [31m0[m -> [32m138480[m bytes
+ assets/building-skyscraper-c.glb      | Bin [31m0[m -> [32m149524[m bytes
+ assets/building-skyscraper-d.glb      | Bin [31m0[m -> [32m167148[m bytes
+ assets/building-skyscraper-e.glb      | Bin [31m0[m -> [32m101880[m bytes
+ assets/detail-awning-wide.glb         | Bin [31m0[m -> [32m5544[m bytes
+ assets/detail-awning.glb              | Bin [31m0[m -> [32m5528[m bytes
+ assets/detail-overhang-wide.glb       | Bin [31m0[m -> [32m6716[m bytes
+ assets/detail-overhang.glb            | Bin [31m0[m -> [32m6704[m bytes
+ assets/detail-parasol-a.glb           | Bin [31m0[m -> [32m10320[m bytes
+ assets/detail-parasol-b.glb           | Bin [31m0[m -> [32m12120[m bytes
+ assets/low-detail-building-a.glb      | Bin [31m0[m -> [32m14340[m bytes
+ assets/low-detail-building-b.glb      | Bin [31m0[m -> [32m16336[m bytes
+ assets/low-detail-building-c.glb      | Bin [31m0[m -> [32m12284[m bytes
+ assets/low-detail-building-d.glb      | Bin [31m0[m -> [32m8716[m bytes
+ assets/low-detail-building-e.glb      | Bin [31m0[m -> [32m8240[m bytes
+ assets/low-detail-building-f.glb      | Bin [31m0[m -> [32m6932[m bytes
+ assets/low-detail-building-g.glb      | Bin [31m0[m -> [32m16320[m bytes
+ assets/low-detail-building-h.glb      | Bin [31m0[m -> [32m26812[m bytes
+ assets/low-detail-building-i.glb      | Bin [31m0[m -> [32m11768[m bytes
+ assets/low-detail-building-j.glb      | Bin [31m0[m -> [32m16404[m bytes
+ assets/low-detail-building-k.glb      | Bin [31m0[m -> [32m7556[m bytes
+ assets/low-detail-building-l.glb      | Bin [31m0[m -> [32m12128[m bytes
+ assets/low-detail-building-m.glb      | Bin [31m0[m -> [32m15112[m bytes
+ assets/low-detail-building-n.glb      | Bin [31m0[m -> [32m5904[m bytes
+ assets/low-detail-building-wide-a.glb | Bin [31m0[m -> [32m12736[m bytes
+ assets/low-detail-building-wide-b.glb | Bin [31m0[m -> [32m18736[m bytes
+ assets/manifest.json                  |  20 
