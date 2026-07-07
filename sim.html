@@ -401,9 +401,17 @@ window._tryAssets=async function(){
     const m=src.clone(true);
     m.scale.setScalar(scale);m.position.set(x,0,z);m.rotation.y=ry||0;
     placedRoot.add(m);
-    // collider from bbox
-    const bb=new THREE.Box3().setFromObject(m);
-    colliders.push(bb);
+    // building colliders: one box per child mesh when multi-mesh (tighter fit
+    // on irregular shapes), each contracted ~12% (6% per side, capped by the
+    // smallest dimension so thin parts never invert) — quad can fly visually
+    // close before a hit registers. Bounce response elsewhere is unchanged.
+    const meshes=[];m.traverse(o=>{if(o.isMesh)meshes.push(o);});
+    for(const part of (meshes.length>1?meshes:[m])){
+      const bb=new THREE.Box3().setFromObject(part);
+      const sz=bb.getSize(new THREE.Vector3());
+      bb.expandByScalar(-Math.min(sz.x,sz.y,sz.z)*0.06);
+      colliders.push(bb);
+    }
   }
   try{
     // scatter tiles on grid blocks (skip streets + spawn plaza)
@@ -556,13 +564,20 @@ function facadeTex(base,lit){
   .forEach(c=>facadeCache.push(facadeTex(c,0.10+rnd()*0.12)));
 const roofMat=new THREE.MeshStandardMaterial({color:0x6e6a63,roughness:1});
 const parapetMat=new THREE.MeshStandardMaterial({color:0x8c8478,roughness:.95});
+// building-only collider, contracted ~12% like the gltf ones (fly close before
+// hit); palms/tower/bridges/stack keep exact addCollider boxes
+function addBuildingCollider(x,y,z,w,h,d){
+  const bb=new THREE.Box3(new THREE.Vector3(x-w/2,y,z-d/2),new THREE.Vector3(x+w/2,y+h,z+d/2));
+  bb.expandByScalar(-Math.min(w,h,d)*0.06);
+  colliders.push(bb);
+}
 function makeBuilding(x,z,w,d,h){
   const tex=facadeCache[(rnd()*facadeCache.length)|0].clone();
   tex.needsUpdate=true;tex.repeat.set(Math.max(1,Math.round(w/8)),Math.max(1,Math.round(h/28)));
   const wm=new THREE.MeshStandardMaterial({map:tex,roughness:.9});
   const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),[wm,wm,roofMat,roofMat,wm,wm]);
   m.position.set(x,h/2,z);m.castShadow=m.receiveShadow=true;proceduralGroup.add(m);
-  addCollider(x,0,z,w,h,d);
+  addBuildingCollider(x,0,z,w,h,d);
   const p=new THREE.Mesh(new THREE.BoxGeometry(w+.6,.8,d+.6),parapetMat);
   p.position.set(x,h+.4,z);p.castShadow=true;proceduralGroup.add(p);
   if(h>14&&rnd()>.35){
@@ -570,7 +585,7 @@ function makeBuilding(x,z,w,d,h){
     const ac=new THREE.Mesh(new THREE.BoxGeometry(aw,1.6,ad),
       new THREE.MeshStandardMaterial({color:0x9aa0a8,roughness:.7,metalness:.3}));
     ac.position.set(ax,h+.8,az);ac.castShadow=true;proceduralGroup.add(ac);
-    addCollider(ax,h,az,aw,1.6,ad);
+    addBuildingCollider(ax,h,az,aw,1.6,ad);
   }
 }
 for(let gx=-4;gx<=4;gx++)for(let gz=-4;gz<=4;gz++){
