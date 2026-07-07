@@ -422,6 +422,29 @@ window._tryAssets=async function(){
     await placePillar('bridge-pillar.glb',      82,   0, 11, 0);
     await placePillar('bridge-pillar-wide.glb',  0,-100, 15, Math.PI/2);
     await placePillar('bridge-pillar-wide.glb',  0, -80, 15, Math.PI/2);
+    // walk-in "abandoned building" shells — 4 Building Kit walls per room, open-top.
+    // sides: [south,east,north,west] piece names; each is scaled so its width = room size.
+    // solid walls get colliders; door/window pieces stay collision-free so their gaps
+    // are open airspace (fly in through the door, the window, or drop in from above).
+    async function buildRoom(cx,cz,size,sides){
+      const ROT=[0,Math.PI/2,Math.PI,-Math.PI/2];
+      const POS=[[0,size/2],[size/2,0],[0,-size/2],[-size/2,0]];
+      for(let s=0;s<4;s++){
+        const src=await load(sides[s]);
+        const nb=new THREE.Box3().setFromObject(src);
+        const w=Math.max(nb.max.x-nb.min.x,0.001);
+        const m=src.clone(true);
+        m.scale.setScalar(size/w);
+        m.position.set(cx+POS[s][0],0,cz+POS[s][1]);
+        m.rotation.y=ROT[s];
+        placedRoot.add(m);
+        if(!/door|window/.test(sides[s]))colliders.push(new THREE.Box3().setFromObject(m));
+      }
+    }
+    // three rooms on the cleared street corridors, spaced from gates/bridges/tunnel
+    await buildRoom( 170,   0, 12, ['wall-a-door.glb','wall-a-window.glb','wall-a-flat.glb','wall-a-flat.glb']);
+    await buildRoom(   0, 150, 14, ['wall-a-flat.glb','wall-a-door.glb','wall-a-window.glb','wall-a-window.glb']);
+    await buildRoom(-170,   0, 11, ['wall-a-window.glb','wall-a-flat.glb','wall-a-door.glb','wall-a-flat.glb']);
     // awning details near building blocks (no colliders, small dressing)
     await placeAt('detail-awning.glb',      52,0, 38,5, 0);
     await placeAt('detail-awning-wide.glb', -55,0, 62,5, Math.PI);
