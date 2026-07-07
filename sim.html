@@ -111,6 +111,8 @@
 
   <h2>Radio</h2>
   <div class="kbd" id="radioInfo">no gamepad detected</div>
+  <div class="row"><label>Preset</label></div>
+  <select id="radioPreset"></select>
   <button id="btnCalib">CALIBRATE RADIO / STICKS</button>
 
   <h2>Rates (Betaflight)</h2>
@@ -129,6 +131,8 @@
   <input type="range" id="s_fov" min="80" max="160" step="1" value="105">
 
   <h2>Physics</h2>
+  <div class="row"><label>Drone type</label></div>
+  <select id="droneType"></select>
   <div class="row"><label>Thrust:weight</label><span class="val" id="v_twr"></span></div>
   <input type="range" id="s_twr" min="2" max="14" step="0.1" value="6">
   <div class="row"><label>Drag</label><span class="val" id="v_drag"></span></div>
@@ -683,14 +687,30 @@ function saveMap(){try{localStorage.setItem('ryflyAxisMap',JSON.stringify(axisMa
 function isRadio(gp){
   return /opentx|edgetx|radiomaster|tx16|frsky|taranis|jumper|betafpv|flysky/i.test(gp.id);
 }
+// EdgeTX/OpenTX joystick, AETR channel order: 0=roll 1=pitch 2=throttle 3=yaw
+const AETR_MAP={r:{i:0,sign:1},p:{i:1,sign:-1},y:{i:3,sign:1},t:{i:2,min:-1,max:1}};
+// spring gamepad, mode 2: LX=yaw LY=thr RX=roll RY=pitch, throttle center=0
+const PAD_MAP={r:{i:2,sign:1},p:{i:3,sign:-1},y:{i:0,sign:1},t:{i:1,min:0,max:-1,spring:true}};
 function defaultMapFor(gp){
-  if(isRadio(gp)){
-    // EdgeTX joystick, AETR channel order: 0=roll 1=pitch 2=throttle 3=yaw
-    return {r:{i:0,sign:1},p:{i:1,sign:-1},y:{i:3,sign:1},t:{i:2,min:-1,max:1}};
-  }
-  // spring gamepad, mode 2: LX=yaw LY=thr RX=roll RY=pitch, throttle center=0
-  return {r:{i:2,sign:1},p:{i:3,sign:-1},y:{i:0,sign:1},t:{i:1,min:0,max:-1,spring:true}};
+  return isRadio(gp)?AETR_MAP:PAD_MAP;
 }
+// preset dropdown: fixed maps. precedence = calibration > preset > auto-detect
+const RADIO_PRESETS={
+  auto:          {label:'Auto-detect',map:null},
+  radiomaster:   {label:'RadioMaster TX16S / Zorro / Boxer / Pocket (EdgeTX AETR)',map:AETR_MAP},
+  frsky:         {label:'FrSky Taranis X9D / QX7 (OpenTX AETR)',map:AETR_MAP},
+  jumper:        {label:'Jumper T-Lite / T20 (EdgeTX AETR)',map:AETR_MAP},
+  literadio:     {label:'BetaFPV LiteRadio (AETR)',map:AETR_MAP},
+  literadioTaer: {label:'BetaFPV LiteRadio (TAER)',
+                  map:{t:{i:0,min:-1,max:1},r:{i:1,sign:1},p:{i:2,sign:-1},y:{i:3,sign:1}}},
+  flysky:        {label:'FlySky (AETR)',map:AETR_MAP},
+  pad:           {label:'Xbox / PlayStation controller',map:PAD_MAP},
+  custom:        {label:'Custom — run calibration',map:null}
+};
+let radioPreset='auto';
+try{radioPreset=localStorage.getItem('ryflyRadioPreset')||'auto';}catch(e){}
+if(!RADIO_PRESETS[radioPreset])radioPreset='auto';
+function presetMap(){return RADIO_PRESETS[radioPreset].map;}
 
 // Calibration wizard
 const calibEl=document.getElementById('calib');
@@ -766,6 +786,23 @@ function finishCalib(){
   updateRadioInfo();
 }
 
+// preset dropdown wiring — persists to localStorage, calibration still wins
+const presetSel=document.getElementById('radioPreset');
+for(const[k,p]of Object.entries(RADIO_PRESETS)){
+  const o=document.createElement('option');o.value=k;o.textContent=p.label;
+  presetSel.appendChild(o);
+}
+presetSel.value=radioPreset;
+presetSel.onchange=()=>{
+  radioPreset=presetSel.value;
+  try{localStorage.setItem('ryflyRadioPreset',radioPreset);}catch(e){}
+  if(radioPreset==='custom'){startCalib();updateRadioInfo();return;}
+  // preset (or auto) takes effect immediately — drop any saved calibration
+  axisMap=null;try{localStorage.removeItem('ryflyAxisMap');}catch(e){}
+  toast(radioPreset==='auto'?'RADIO: AUTO-DETECT':'PRESET SET');
+  updateRadioInfo();
+};
+
 // ---------- Input ----------
 const stick={r:0,p:0,y:0,t:0};
 const keys={};
@@ -820,14 +857,16 @@ function updateRadioInfo(){
   const el=document.getElementById('radioInfo');
   if(!gpConnected){el.textContent='no gamepad detected. TX16S: plug USB, pick Joystick on radio popup, wiggle a stick.';return;}
   el.innerHTML='<b>'+gpName.slice(0,40)+'</b><br>'+
-    (axisMap?'custom calibration active':'default map ('+(isRadio({id:gpName})?'EdgeTX AETR':'spring pad')+')');
+    (axisMap?'custom calibration active':
+     presetMap()?'preset: '+RADIO_PRESETS[radioPreset].label:
+     'default map ('+(isRadio({id:gpName})?'EdgeTX AETR':'spring pad')+')');
 }
 function dz(v,d=0.03){return Math.abs(v)<d?0:v;}
 function readInput(dt){
   const gp=navigator.getGamepads&&navigator.getGamepads()[0];
   if(gp&&gpConnected){
     if(calib){runCalib(gp,dt);stick.r=stick.p=stick.y=0;stick.t=0;return;}
-    const map=axisMap||defaultMapFor(gp);
+    const map=axisMap||presetMap()||defaultMapFor(gp);
     const ax=gp.axes;
     stick.r=dz((ax[map.r.i]||0)*map.r.sign);
     stick.p=dz((ax[map.p.i]||0)*map.p.sign);
@@ -976,6 +1015,38 @@ bind('fov','fov',x=>x+'°',()=>{camera.fov=CFG.fov;camera.updateProjectionMatrix
 bind('twr','twr',x=>x.toFixed(1)+':1');
 bind('drag','drag',x=>x.toFixed(2));
 bind('mass','massG',x=>x+'g');
+// drone-type presets — applied by driving the physics sliders through their
+// bind handlers so CFG, labels and max-rate readout all update in one path.
+// sim scale: 550g ≈ a 30g 65mm whoop, so a 38g 75mm ≈ 700g sim-equivalent.
+const DRONE_TYPES={
+  whoop65:{label:'65mm Whoop',twr:6.0,drag:0.28,mass:550,sr:0.72},
+  whoop75:{label:'75mm Whoop',twr:5.5,drag:0.32,mass:700,sr:0.68} // lazier rotation via lower super rate
+};
+let droneType='whoop65';
+try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
+if(!DRONE_TYPES[droneType])droneType='whoop65';
+const droneSel=document.getElementById('droneType');
+for(const[k,d]of Object.entries(DRONE_TYPES)){
+  const o=document.createElement('option');o.value=k;o.textContent=d.label;
+  droneSel.appendChild(o);
+}
+droneSel.value=droneType;
+function setSlider(id,val){
+  const s=document.getElementById('s_'+id);
+  s.value=val;s.dispatchEvent(new Event('input'));
+}
+function applyDroneType(){
+  const d=DRONE_TYPES[droneType];
+  setSlider('twr',d.twr);setSlider('drag',d.drag);
+  setSlider('mass',d.mass);setSlider('sr',d.sr);
+}
+droneSel.onchange=()=>{
+  droneType=droneSel.value;
+  try{localStorage.setItem('ryflyDroneType',droneType);}catch(e){}
+  applyDroneType();
+  toast(DRONE_TYPES[droneType].label.toUpperCase());
+};
+applyDroneType(); // restore persisted type on load
 updateRadioInfo();
 
 // ---------- Loop ----------
