@@ -246,16 +246,17 @@ function addCollider(x,y,z,w,h,d){
 }
 
 // ---------- Race gates & dive rings ----------
-const gates=[];let gateIdx=0,lapCount=0;
+const gates=[];let nextGateIndex=0,lapCount=0;
 function addGate(x,y,z,rotationY,size){
   size=size||7;
   const col=gates.length%2===0?0xff3b2f:0x2f7bff; // alternate red/blue
   const ring=new THREE.Mesh(
     new THREE.TorusGeometry(size,size*0.07,10,36),
-    new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.85,roughness:0.4}));
+    new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.4,roughness:0.4}));
   ring.position.set(x,y,z);ring.rotation.y=rotationY||0;
   scene.add(ring);
-  gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring});
+  gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col}); // col = dim base color
+  gates[gates.length-1].idx=gates.length-1;
   return ring;
 }
 function addDiveRing(x,y,z,rx,ry,size){
@@ -287,21 +288,47 @@ addDiveRing(  70,  6, -70, 0.3,       0.8, 3);   // tilted: power-loop / flick l
 addDiveRing( -70,  9,  70, -0.4,      2.2, 3.5);
 addDiveRing( 180, 12, -40, 0.5,       1.1, 4);
 addDiveRing(-180, 15,  40, -0.35,     4.0, 3);
+// "START" label floating above gate 0 — canvas-text sprite, always faces camera
+{
+  const cv=document.createElement('canvas');cv.width=256;cv.height=64;
+  const g=cv.getContext('2d');
+  g.font='bold 48px monospace';g.textAlign='center';g.textBaseline='middle';
+  g.lineWidth=8;g.strokeStyle='#000';g.strokeText('START',128,32);
+  g.fillStyle='#fff';g.fillText('START',128,32);
+  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));
+  spr.position.copy(gates[0].pos);spr.position.y+=12;
+  spr.scale.set(16,4,1);
+  scene.add(spr);
+}
 const gateUI=document.getElementById('osdGate');
-function updateGateUI(){gateUI.textContent='GATE '+gateIdx+'/'+gates.length+(lapCount>0?' · LAP '+lapCount:'');}
-function updateGates(){
-  if(!gates.length)return;
-  const g=gates[gateIdx%gates.length];
-  g.mesh.material.emissiveIntensity=0.9+Math.sin(performance.now()*0.006)*0.35; // pulse target
-  if(state.pos.distanceTo(g.pos)<g.r){
-    g.mesh.material.emissiveIntensity=0.85;
-    gateIdx++;
-    if(gateIdx>=gates.length){gateIdx=0;lapCount++;toast('LAP '+lapCount+' COMPLETE');}
-    else toast('GATE '+gateIdx+' PASSED');
-    updateGateUI();
+function updateGateUI(){gateUI.textContent='GATE '+nextGateIndex+'/'+gates.length+(lapCount>0?' · LAP '+lapCount:'');}
+// next gate: bright white + pulsing scale; all others dim in their base red/blue
+function updateGateHighlight(){
+  for(const g of gates){
+    const m=g.mesh.material;
+    if(g.idx===nextGateIndex){
+      m.color.setHex(0xFFFFFF);m.emissive.setHex(0xFFFFFF);m.emissiveIntensity=1.5;
+      g.mesh.scale.setScalar(1+Math.sin(performance.now()*0.005)*0.08);
+    }else{
+      m.color.setHex(g.col);m.emissive.setHex(g.col);m.emissiveIntensity=0.4;
+      g.mesh.scale.setScalar(1);
+    }
   }
 }
-updateGateUI();
+function updateGates(){
+  if(!gates.length)return;
+  updateGateHighlight(); // every frame — drives the pulse on the target gate
+  const g=gates[nextGateIndex];
+  // only the in-sequence gate advances; passing any other gate does nothing
+  if(state.pos.distanceTo(g.pos)<g.r){
+    nextGateIndex=(nextGateIndex+1)%gates.length;
+    if(nextGateIndex===0){lapCount++;toast('LAP '+lapCount+' COMPLETE');}
+    else toast('GATE '+nextGateIndex+' PASSED');
+    updateGateUI();
+    updateGateHighlight();
+  }
+}
+updateGateUI();updateGateHighlight();
 
 // ---------- Tunnel (half-cylinder arch, open-ended, fly-through) ----------
 {
