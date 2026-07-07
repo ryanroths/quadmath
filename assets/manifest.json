@@ -1,20 +1,30 @@
 {
   "tiles": [
-    {"file": "building-a.glb", "scale": 5, "count": 12},
-    {"file": "building-b.glb", "scale": 5, "count": 12},
-    {"file": "building-c.glb", "scale": 5, "count": 10},
-    {"file": "building-d.glb", "scale": 5, "count": 10},
-    {"file": "building-e.glb", "scale": 5, "count": 10},
-    {"file": "building-f.glb", "scale": 5, "count": 8},
-    {"file": "building-g.glb", "scale": 5, "count": 8},
-    {"file": "building-h.glb", "scale": 5, "count": 8},
-    {"file": "building-i.glb", "scale": 5, "count": 6},
-    {"file": "building-j.glb", "scale": 5, "count": 6}
+    {"file": "building-a.glb", "scale": 18, "count": 2},
+    {"file": "building-b.glb", "scale": 16, "count": 1},
+    {"file": "building-c.glb", "scale": 20, "count": 2},
+    {"file": "building-d.glb", "scale": 18, "count": 1},
+    {"file": "building-e.glb", "scale": 22, "count": 2},
+    {"file": "building-f.glb", "scale": 16, "count": 1},
+    {"file": "building-g.glb", "scale": 18, "count": 2},
+    {"file": "building-h.glb", "scale": 20, "count": 1},
+    {"file": "building-i.glb", "scale": 18, "count": 2},
+    {"file": "building-j.glb", "scale": 16, "count": 1},
+    {"file": "building-k.glb", "scale": 20, "count": 2},
+    {"file": "building-l.glb", "scale": 18, "count": 1},
+    {"file": "building-m.glb", "scale": 22, "count": 2},
+    {"file": "building-n.glb", "scale": 18, "count": 1},
+    {"file": "low-detail-building-a.glb", "scale": 16, "count": 1},
+    {"file": "low-detail-building-e.glb", "scale": 18, "count": 1},
+    {"file": "low-detail-building-i.glb", "scale": 16, "count": 1},
+    {"file": "low-detail-building-m.glb", "scale": 14, "count": 1},
+    {"file": "low-detail-building-wide-a.glb", "scale": 16, "count": 1}
   ],
   "placed": [
-    {"file": "building-skyscraper-a.glb", "x": -70, "z": 70, "scale": 8},
-    {"file": "building-skyscraper-b.glb", "x": 120, "z": -120, "scale": 8},
-    {"file": "building-skyscraper-c.glb", "x": -180, "z": -60, "scale": 8},
-    {"file": "building-skyscraper-d.glb", "x": 60, "z": 180, "scale": 8}
+    {"file": "building-skyscraper-a.glb", "x": -70, "z": 70, "scale": 24},
+    {"file": "building-skyscraper-b.glb", "x": 120, "z": -120, "scale": 24},
+    {"file": "building-skyscraper-c.glb", "x": -180, "z": -60, "scale": 24},
+    {"file": "building-skyscraper-d.glb", "x": 60, "z": 180, "scale": 24},
+    {"file": "building-skyscraper-e.glb", "x": -120, "z": 175, "scale": 21}
   ]
 }
