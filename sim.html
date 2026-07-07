@@ -404,7 +404,7 @@ window._tryAssets=async function(){
     }
     let spotIdx=0; seed=4242;
     // gate exclusion: skip any building landing within 15 units of a race gate center
-    const GATE_CLEAR=15;
+    const GATE_CLEAR=35;
     function nearGate(x,z){
       return gates.some(g=>{const dx=g.pos.x-x,dz=g.pos.z-z;return dx*dx+dz*dz<GATE_CLEAR*GATE_CLEAR;});
     }
