@@ -348,9 +348,9 @@ window._tryAssets=async function(){
   }
   assetEl.textContent='loading GLTF assets…';
   // GLBs reference "Textures/colormap.png" relative to themselves; the paired texture
-  // lives in assets/Models/GLB format/Textures/, so load GLBs from that folder and
+  // lives in assets/Models/GLB-format/Textures/, so load GLBs from that folder and
   // anchor the resource path there so texture refs resolve to the real file.
-  const GLB_DIR='assets/Models/GLB format/';
+  const GLB_DIR='assets/Models/GLB-format/';
   const loader=new THREE.GLTFLoader();
   loader.setResourcePath(GLB_DIR);
   const cache={};
