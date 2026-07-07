@@ -333,15 +333,12 @@ window._tryAssets=async function(){
     // manifest unavailable — built-in tile layout using the city-kit GLBs shipped in assets/
     // (same format as the sample above: tiles scattered on grid blocks, placed = fixed landmarks)
     manifest={
-      tiles:[
-        {file:'building-a.glb',scale:5,count:14},
-        {file:'building-c.glb',scale:5,count:12},
-        {file:'building-f.glb',scale:5,count:10},
-        {file:'building-j.glb',scale:5,count:8}
-      ],
+      // all 14 building models ×2 = 28 scattered + 3 skyscraper landmarks ≈ 31 total
+      tiles:'abcdefghijklmn'.split('').map((c,i)=>({file:'building-'+c+'.glb',scale:4.5+(i%4)*0.5,count:2})),
       placed:[
         {file:'building-skyscraper-a.glb',x:-70,z:70,scale:8},
-        {file:'building-skyscraper-c.glb',x:120,z:-120,scale:8}
+        {file:'building-skyscraper-c.glb',x:120,z:-120,scale:8},
+        {file:'building-skyscraper-e.glb',x:-120,z:175,scale:7}
       ]
     };
     assetEl.textContent='manifest.json unavailable — built-in city layout active.';
@@ -379,14 +376,22 @@ window._tryAssets=async function(){
       spots.push([gx*60,gz*60]);
     }
     let spotIdx=0; seed=4242;
+    // gate exclusion: skip any building landing within 15 units of a race gate center
+    const GATE_CLEAR=15;
+    function nearGate(x,z){
+      return gates.some(g=>{const dx=g.pos.x-x,dz=g.pos.z-z;return dx*dx+dz*dz<GATE_CLEAR*GATE_CLEAR;});
+    }
     for(const t of (manifest.tiles||[])){
       const src=await load(t.file);
       for(let i=0;i<(t.count||10);i++){
         const [cx,cz]=spots[spotIdx%spots.length];spotIdx++;
-        place(src,cx+(rnd()-.5)*26,cz+(rnd()-.5)*26,t.scale||1,rnd()*Math.PI*2);
+        const x=cx+(rnd()-.5)*26,z=cz+(rnd()-.5)*26,sc=(t.scale||1)*(0.85+rnd()*0.4);
+        if(nearGate(x,z))continue; // keep the race line clear
+        place(src,x,z,sc,rnd()*Math.PI*2);
       }
     }
     for(const p of (manifest.placed||[])){
+      if(nearGate(p.x,p.z))continue;
       const src=await load(p.file);
       place(src,p.x,p.z,p.scale||1,p.ry||0);
     }
@@ -422,29 +427,6 @@ window._tryAssets=async function(){
     await placePillar('bridge-pillar.glb',      82,   0, 11, 0);
     await placePillar('bridge-pillar-wide.glb',  0,-100, 15, Math.PI/2);
     await placePillar('bridge-pillar-wide.glb',  0, -80, 15, Math.PI/2);
-    // walk-in "abandoned building" shells — 4 Building Kit walls per room, open-top.
-    // sides: [south,east,north,west] piece names; each is scaled so its width = room size.
-    // solid walls get colliders; door/window pieces stay collision-free so their gaps
-    // are open airspace (fly in through the door, the window, or drop in from above).
-    async function buildRoom(cx,cz,size,sides){
-      const ROT=[0,Math.PI/2,Math.PI,-Math.PI/2];
-      const POS=[[0,size/2],[size/2,0],[0,-size/2],[-size/2,0]];
-      for(let s=0;s<4;s++){
-        const src=await load(sides[s]);
-        const nb=new THREE.Box3().setFromObject(src);
-        const w=Math.max(nb.max.x-nb.min.x,0.001);
-        const m=src.clone(true);
-        m.scale.setScalar(size/w);
-        m.position.set(cx+POS[s][0],0,cz+POS[s][1]);
-        m.rotation.y=ROT[s];
-        placedRoot.add(m);
-        if(!/door|window/.test(sides[s]))colliders.push(new THREE.Box3().setFromObject(m));
-      }
-    }
-    // three rooms on the cleared street corridors, spaced from gates/bridges/tunnel
-    await buildRoom( 170,   0, 12, ['wall-a-door.glb','wall-a-window.glb','wall-a-flat.glb','wall-a-flat.glb']);
-    await buildRoom(   0, 150, 14, ['wall-a-flat.glb','wall-a-door.glb','wall-a-window.glb','wall-a-window.glb']);
-    await buildRoom(-170,   0, 11, ['wall-a-window.glb','wall-a-flat.glb','wall-a-door.glb','wall-a-flat.glb']);
     // awning details near building blocks (no colliders, small dressing)
     await placeAt('detail-awning.glb',      52,0, 38,5, 0);
     await placeAt('detail-awning-wide.glb', -55,0, 62,5, Math.PI);
