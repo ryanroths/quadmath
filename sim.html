@@ -433,6 +433,58 @@ window._tryAssets=async function(){
     await placeAt('detail-awning.glb',     -62,0,-48,5, Math.PI/2);
     await placeAt('detail-awning-wide.glb', 115,0,-65,5,-Math.PI/2);
     await placeAt('detail-awning.glb',      38,0,115,5, Math.PI);
+    // ground clutter: trees, benches, trucks, dumpsters, scaffolding, stairs —
+    // seeded scatter with the same nearGate race-line exclusion as the tile pass
+    async function scatter(file,count,scale,mode){
+      const src=await load(file);
+      for(let i=0;i<count;i++){
+        let x,z;
+        if(mode==='road'){
+          // along the two main street corridors, off the exact centerline
+          if(rnd()<0.5){x=(rnd()-.5)*14;z=(rnd()-.5)*420;}
+          else{x=(rnd()-.5)*420;z=(rnd()-.5)*14;}
+        }else{
+          const [cx,cz]=spots[spotIdx%spots.length];spotIdx++;
+          if(mode==='edge'){
+            // building-adjacent: hug the block perimeter (alleys/sidewalks)
+            const a=rnd()*Math.PI*2;
+            x=cx+Math.cos(a)*24+(rnd()-.5)*4;
+            z=cz+Math.sin(a)*24+(rnd()-.5)*4;
+          }else{
+            x=cx+(rnd()-.5)*48;z=cz+(rnd()-.5)*48;
+          }
+        }
+        if(nearGate(x,z))continue; // keep the race line clear
+        const m=src.clone(true);
+        m.scale.setScalar(scale*(0.85+rnd()*0.3));
+        m.position.set(x,0,z);m.rotation.y=rnd()*Math.PI*2;
+        placedRoot.add(m);
+        if(mode==='road'){
+          // trucks: thin low collider — minor obstacle, flyable just above
+          const bb=new THREE.Box3().setFromObject(m);
+          bb.max.y=Math.min(bb.max.y,bb.min.y+2);
+          colliders.push(bb);
+        }else if(mode!=='none')colliders.push(new THREE.Box3().setFromObject(m));
+      }
+    }
+    // trees — 18 total scattered across blocks as ground clutter
+    await scatter('tree-large.glb',5,4.5);
+    await scatter('tree-park-large.glb',5,4);
+    await scatter('tree-pine-large.glb',5,5);
+    await scatter('tree-shrub.glb',3,3,'none');
+    // benches near buildings
+    await scatter('detail-bench.glb',9,2,'edge');
+    // trucks on the street corridors
+    await scatter('truck-green.glb',2,3,'road');
+    await scatter('truck-grey.glb',2,3,'road');
+    await scatter('truck-green-cargo.glb',2,3,'road');
+    // dumpsters — alley / building-adjacent
+    await scatter('detail-dumpster-closed.glb',3,2,'edge');
+    await scatter('detail-dumpster-open.glb',3,2,'edge');
+    // scaffolding — tall flyable obstacle beside buildings
+    await scatter('scaffolding-structure.glb',4,3,'edge');
+    // stairs — ground-level detail
+    await scatter('stairs-open.glb',4,2.5);
     // swap: hide procedural, clear its colliders (rebuilt above)
     scene.add(placedRoot);
     proceduralGroup.visible=false;
