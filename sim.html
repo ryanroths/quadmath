@@ -396,26 +396,32 @@ window._tryAssets=async function(){
       m.scale.setScalar(scale);m.position.set(x,y,z);m.rotation.y=ry||0;
       placedRoot.add(m);
       if(collide==='deck'){
-        // thin slab collider at deck level only — space underneath stays flyable
+        // thin slab hugging the deck's TOP surface only — landable on top,
+        // everything below (including directly under the deck) stays flyable
         const bb=new THREE.Box3().setFromObject(m);
-        bb.max.y=Math.min(bb.max.y,bb.min.y+2.5);
+        bb.min.y=Math.max(bb.min.y,bb.max.y-2);
         colliders.push(bb);
       }else if(collide)colliders.push(new THREE.Box3().setFromObject(m));
     }
-    // visual+collidable support pillar: concrete cylinder from deck height to ground
-    function addPillar(x,z,topY){
-      const p=new THREE.Mesh(new THREE.CylinderGeometry(1,1.3,topY,10),
-        new THREE.MeshStandardMaterial({color:0x8e9096,roughness:0.9}));
-      p.position.set(x,topY/2,z);
-      placedRoot.add(p);
-      colliders.push(new THREE.Box3().setFromObject(p)); // thin — weave between them
+    // Kenney pillar asset, uniform-scaled so its top meets the deck height
+    async function placePillar(file,x,z,topY,ry){
+      const src=await load(file);
+      const nat=new THREE.Box3().setFromObject(src);
+      const h=Math.max(nat.max.y-nat.min.y,0.001);
+      const m=src.clone(true);
+      m.scale.setScalar(topY/h);m.position.set(x,0,z);m.rotation.y=ry||0;
+      placedRoot.add(m);
+      colliders.push(new THREE.Box3().setFromObject(m)); // thin — weave between them
     }
     // overpasses — road-bridge decks spanning the street corridors, flyable underneath
     await placeAt('road-bridge.glb',70,11,0,8,0,'deck');
     await placeAt('road-bridge.glb',0,15,-90,8,Math.PI/2,'deck');
-    // support columns at each deck's corners
-    addPillar(58,-6,11);addPillar(82,-6,11);addPillar(58,6,11);addPillar(82,6,11);
-    addPillar(-6,-102,15);addPillar(6,-102,15);addPillar(-6,-78,15);addPillar(6,-78,15);
+    // support columns beneath each deck, spaced along its length
+    await placePillar('bridge-pillar.glb',      58,   0, 11, 0);
+    await placePillar('bridge-pillar.glb',      70,   0, 11, 0);
+    await placePillar('bridge-pillar.glb',      82,   0, 11, 0);
+    await placePillar('bridge-pillar-wide.glb',  0,-100, 15, Math.PI/2);
+    await placePillar('bridge-pillar-wide.glb',  0, -80, 15, Math.PI/2);
     // awning details near building blocks (no colliders, small dressing)
     await placeAt('detail-awning.glb',      52,0, 38,5, 0);
     await placeAt('detail-awning-wide.glb', -55,0, 62,5, Math.PI);
