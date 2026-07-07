@@ -427,6 +427,12 @@ window._tryAssets=async function(){
     const m=src.clone(true);
     m.scale.setScalar(scale);m.position.set(x,0,z);m.rotation.y=ry||0;
     placedRoot.add(m);
+    // Box3.setFromObject() only refreshes matrixWorld top-down through ITS OWN
+    // recursive call — calling it directly on a deep child (as the per-mesh
+    // branch below does) skips that cascade and reads a stale, pre-transform
+    // matrixWorld. m is freshly repositioned and never rendered yet, so force
+    // one explicit update before measuring anything under it.
+    m.updateMatrixWorld(true);
     // building colliders: one box per child mesh when multi-mesh (tighter fit
     // on irregular shapes), each contracted ~12% (6% per side, capped by the
     // smallest dimension so thin parts never invert) — quad can fly visually
@@ -565,6 +571,50 @@ window._tryAssets=async function(){
     await scatter('scaffolding-structure.glb',4,3,'edge');
     // stairs — ground-level detail
     await scatter('stairs-open.glb',4,2.5);
+    // ---- low_poly_city_game-ready.glb — costoWRLD (Sketchfab, CC BY 4.0) ----
+    // https://sketchfab.com/3d-models/low-poly-city-game-ready-c7e3a158515c4e9da31ae52c30403cef
+    // One monolithic Sketchfab export: a single "Sketchfab_model" root with
+    // ~970 mesh nodes named generically (Object_0..Object_969, no per-building
+    // names) — confirmed offline by parsing the GLB's JSON chunk directly, and
+    // re-checked below at runtime. Not a modular kit, so it's placed as one
+    // scene rather than picked apart into reusable pieces.
+    {
+      const cityModel=await load('low_poly_city_game-ready.glb');
+      const nativeBox=new THREE.Box3().setFromObject(cityModel);
+      console.log('low_poly_city_game-ready.glb bounding box:',nativeBox);
+      const nativeSize=nativeBox.getSize(new THREE.Vector3());
+      console.log('low_poly_city_game-ready.glb size:',nativeSize);
+      // native footprint ~509x165x509 → scale 0.75 puts the footprint at
+      // ~382 units (within the requested 200-400 span)
+      const CITY_SCALE=0.75;
+      const cx=0,cz=-500; // due south: clear of the building grid (±240),
+      // the gate loop (max |x|~150, z<=295) and the triple stack at (0,300)
+      const m=cityModel.clone(true);
+      m.scale.setScalar(CITY_SCALE);
+      // sit the model's own lowest point on the ground plane (y=0)
+      m.position.set(cx,-nativeBox.min.y*CITY_SCALE,cz);
+      placedRoot.add(m);
+      // force matrixWorld to reflect the transform just set, top-down through
+      // the whole subtree — Box3.setFromObject() called on a deep child (as
+      // the per-mesh loop below does) only self-refreshes via its own
+      // recursive cascade starting from whatever node you pass it; called
+      // directly on a nested mesh it reads a stale, never-rendered
+      // matrixWorld and silently returns a near-origin, untransformed box
+      m.updateMatrixWorld(true);
+      // per-mesh colliders: a single box for the whole city would seal off
+      // every street as solid, so every sub-mesh gets its own tightened Box3
+      // (~12%, same contraction as the building-kit colliders) — expensive
+      // once at load time (970 meshes), cheap forever after as plain AABB checks
+      const cityMeshes=[];m.traverse(o=>{if(o.isMesh)cityMeshes.push(o);});
+      for(const part of cityMeshes){
+        const bb=new THREE.Box3().setFromObject(part);
+        const sz=bb.getSize(new THREE.Vector3());
+        if(sz.x<1e-4||sz.y<1e-4||sz.z<1e-4)continue; // skip degenerate/flat decals
+        bb.expandByScalar(-Math.min(sz.x,sz.y,sz.z)*0.06);
+        colliders.push(bb);
+      }
+      console.log('low_poly_city_game-ready.glb: '+cityMeshes.length+' sub-meshes, colliders added.');
+    }
     // swap: hide procedural, clear its colliders (rebuilt above)
     scene.add(placedRoot);
     proceduralGroup.visible=false;
@@ -1203,6 +1253,9 @@ requestAnimationFrame(loop);
   <div class="container header-inner" style="width: 100%;">
     <div class="footer-logo">QuadMath<span class="dot">.</span></div>
     <div>Estimates only — always verify with bench testing. Fly safe.</div>
+  </div>
+  <div class="container" style="width:100%;font-size:11px;opacity:.6;margin-top:4px;">
+    City model by costoWRLD (Sketchfab, CC BY)
   </div>
 </footer>
 </body>
