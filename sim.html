@@ -582,6 +582,37 @@ arch(0,-40,0);arch(30,60,Math.PI/4);
   addCollider(-70,0,70,3.2,55,3.2);
 }
 const proceduralColliderCount=colliders.length; // for gltf swap
+// ---------- Triple stack (freestyle trick-practice scaffold) ----------
+// three stacked horizontal fly-through slots: gap centers 3/7/11, ~2.2 clearance
+// each — cube ejects, baranis. Solid decks + posts collide; slots are open air.
+// Added after the collider snapshot + straight to scene so it survives the
+// gltf swap and exists in both procedural and gltf modes.
+function addTripleStack(x,z){
+  const W=14,D=10;
+  const steel=new THREE.MeshStandardMaterial({color:0x8a8f96,roughness:.5,metalness:.55});
+  const plank=new THREE.MeshStandardMaterial({color:0x9a7b4f,roughness:.9});
+  const grp=new THREE.Group();grp.position.set(x,0,z);scene.add(grp);
+  function slab(cy,h,mat){ // full-footprint deck, center height cy
+    const m=new THREE.Mesh(new THREE.BoxGeometry(W,h,D),mat);
+    m.position.set(0,cy,0);m.castShadow=m.receiveShadow=true;grp.add(m);
+    addCollider(x,cy-h/2,z,W,h,D);
+  }
+  // decks bound the three slots: open bands 1.9-4.1, 5.9-8.1, 9.9-12.1
+  slab(0.95,1.9,plank);  // base block — slot 1 floor
+  slab(5.0, 1.8,plank);  // slot 1 ceiling / slot 2 floor
+  slab(9.0, 1.8,plank);  // slot 2 ceiling / slot 3 floor
+  slab(12.45,0.7,plank); // top cap — slot 3 ceiling
+  // posts: 4 corners + mid-depth pair on the ±X edges. All collidable —
+  // primary line along Z stays clear; X entries thread past the mid posts.
+  for(const px of[-W/2+.3,W/2-.3])for(const pz of[-D/2+.3,0,D/2-.3]){
+    const p=new THREE.Mesh(new THREE.BoxGeometry(.5,12.8,.5),steel);
+    p.position.set(px,6.4,pz);p.castShadow=true;grp.add(p);
+    addCollider(x+px,0,z+pz,.5,12.8,.5);
+  }
+}
+// standalone on the open corridor extension south of the city — buildings end
+// ~|z|=264, gate loop |z|<=135, dive rings <=180: clear runway both directions
+addTripleStack(0,300);
 // mesas (always visible, not part of swap)
 const mesaTex=canvasTex(256,256,(g,s)=>{
   g.fillStyle='#a3673f';g.fillRect(0,0,s,s);
