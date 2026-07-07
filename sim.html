@@ -454,25 +454,33 @@ window._tryAssets=async function(){
         colliders.push(bb);
       }else if(collide)colliders.push(new THREE.Box3().setFromObject(m));
     }
-    // Kenney pillar asset, uniform-scaled so its top meets the deck height
+    // Kenney pillar asset, y-scaled so its top meets the deck height; x/z
+    // scale clamped independently so the column stays thin (footprint ≤3)
+    // whatever the model's proportions
     async function placePillar(file,x,z,topY,ry){
       const src=await load(file);
       const nat=new THREE.Box3().setFromObject(src);
       const h=Math.max(nat.max.y-nat.min.y,0.001);
+      const s=topY/h;
+      const natW=Math.max(nat.max.x-nat.min.x,nat.max.z-nat.min.z,0.001);
+      const sxz=(natW*s>4)?3/natW:s; // width check: >4 scaled → clamp to 3
       const m=src.clone(true);
-      m.scale.setScalar(topY/h);m.position.set(x,0,z);m.rotation.y=ry||0;
+      m.scale.set(sxz,s,sxz);m.position.set(x,0,z);m.rotation.y=ry||0;
       placedRoot.add(m);
-      colliders.push(new THREE.Box3().setFromObject(m)); // thin — weave between them
+      const bb=new THREE.Box3().setFromObject(m);
+      // contract ~15% of pillar width (7.5% per side) — weave close, no phantom hits
+      const w=Math.max(bb.max.x-bb.min.x,bb.max.z-bb.min.z);
+      bb.expandByScalar(-w*0.075);
+      colliders.push(bb);
     }
     // overpasses — road-bridge decks spanning the street corridors, flyable underneath
     await placeAt('road-bridge.glb',70,11,0,8,0,'deck');
     await placeAt('road-bridge.glb',0,15,-90,8,Math.PI/2,'deck');
-    // support columns beneath each deck, spaced along its length
-    await placePillar('bridge-pillar.glb',      58,   0, 11, 0);
-    await placePillar('bridge-pillar.glb',      70,   0, 11, 0);
-    await placePillar('bridge-pillar.glb',      82,   0, 11, 0);
-    await placePillar('bridge-pillar-wide.glb',  0,-100, 15, Math.PI/2);
-    await placePillar('bridge-pillar-wide.glb',  0, -80, 15, Math.PI/2);
+    // support columns at the span ends only — underpass gap stays clear
+    await placePillar('bridge-pillar.glb',      52,   0, 11, 0);
+    await placePillar('bridge-pillar.glb',      88,   0, 11, 0);
+    await placePillar('bridge-pillar-wide.glb',  0,-104, 15, Math.PI/2);
+    await placePillar('bridge-pillar-wide.glb',  0, -76, 15, Math.PI/2);
     // awning details near building blocks (no colliders, small dressing)
     await placeAt('detail-awning.glb',      52,0, 38,5, 0);
     await placeAt('detail-awning-wide.glb', -55,0, 62,5, Math.PI);
