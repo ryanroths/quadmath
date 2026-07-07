@@ -14,6 +14,7 @@
   #osdTL{top:14px;left:16px} #osdTR{top:14px;right:16px;text-align:right}
   #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
   #osdGate{top:14px;left:50%;transform:translateX(-50%);color:var(--txt);font-weight:600}
+  #osdLap{top:64px;left:16px;font-weight:600}
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7}
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
   #crosshair::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
@@ -83,6 +84,7 @@
 <div class="osd" id="osdTR"></div>
 <div class="osd" id="osdBC"></div>
 <div class="osd" id="osdGate"></div>
+<div class="osd" id="osdLap"></div>
 <div id="crosshair"></div>
 <div id="toast"></div>
 <div id="legend">
@@ -251,6 +253,13 @@ function addCollider(x,y,z,w,h,d){
 
 // ---------- Race gates & dive rings ----------
 const gates=[];let nextGateIndex=0,lapCount=0;
+// lap timer — clock starts on gate 0, laps run back-to-back on sequence wrap
+let lapStartTime=0,lapActive=false,lastLapMs=0,bestLapMs=0,lapFlashUntil=0;
+try{bestLapMs=parseFloat(localStorage.getItem('quadmath_bestLap'))||0;}catch(e){}
+function fmtLap(ms){
+  const m=Math.floor(ms/60000),s=Math.floor(ms%60000/1000),h=Math.floor(ms%1000/10);
+  return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+'.'+String(h).padStart(2,'0');
+}
 function addGate(x,y,z,rotationY,size){
   size=size||7;
   const col=gates.length%2===0?0xff3b2f:0x2f7bff; // alternate red/blue
@@ -332,8 +341,23 @@ function updateGates(){
   const g=gates[nextGateIndex];
   // only the in-sequence gate advances; passing any other gate does nothing
   if(state.pos.distanceTo(g.pos)<g.r){
+    const passed=nextGateIndex;
     nextGateIndex=(nextGateIndex+1)%gates.length;
-    if(nextGateIndex===0){lapCount++;toast('LAP '+lapCount+' COMPLETE');}
+    if(passed===0&&!lapActive){lapActive=true;lapStartTime=performance.now();} // clock starts at gate 0
+    if(nextGateIndex===0){ // wrapped after gate 9 — full sequence done
+      lapCount++;
+      if(lapActive){
+        const t=performance.now()-lapStartTime;
+        lastLapMs=t;
+        if(!bestLapMs||t<bestLapMs){
+          bestLapMs=t;
+          try{localStorage.setItem('quadmath_bestLap',String(t));}catch(e){}
+          lapFlashUntil=performance.now()+1500;
+          toast('NEW BEST LAP!');
+        }else toast('LAP '+lapCount+' — '+fmtLap(t));
+        lapStartTime=performance.now(); // back-to-back: next lap clock runs immediately
+      }else toast('LAP '+lapCount+' COMPLETE');
+    }
     else toast('GATE '+nextGateIndex+' PASSED');
     updateGateUI();
     updateGateHighlight();
@@ -696,6 +720,9 @@ if(window._gltfReady) window._tryAssets();
 const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
   q:new THREE.Quaternion(),bounces:0,t0:performance.now()};
 function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
+  // restart the sequence clean: lap progress + running clock cleared, best kept
+  nextGateIndex=0;lapActive=false;lapStartTime=0;
+  updateGateUI();updateGateHighlight();
   toast('RESET');}
 
 // ---------- Radio: axis map + calibration ----------
@@ -1006,6 +1033,14 @@ function updateCamera(){
 
 // ---------- OSD ----------
 const osdTL=document.getElementById('osdTL'),osdTR=document.getElementById('osdTR'),osdBC=document.getElementById('osdBC');
+const osdLap=document.getElementById('osdLap');
+function updateLapOSD(){
+  const now=performance.now();
+  osdLap.style.color=now<lapFlashUntil?'#3DDC97':''; // green flash on new best
+  osdLap.innerHTML='LAP '+(lapActive?fmtLap(now-lapStartTime):'--:--.--')+
+    '<br>LAST '+(lastLapMs?fmtLap(lastLapMs):'--:--.--')+
+    '<br>BEST '+(bestLapMs?fmtLap(bestLapMs):'--:--.--');
+}
 const toastEl=document.getElementById('toast');let toastTimer;
 function toast(m){toastEl.textContent=m;toastEl.style.opacity=1;
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.style.opacity=0,1500);}
@@ -1018,6 +1053,7 @@ function updateOSD(){
     `CAM ${CFG.camDeg}° FOV ${CFG.fov}${usingGltf?'<br>GLTF MAP':''}`;
   osdBC.innerHTML=`THR ${'█'.repeat(Math.round(stick.t*10)).padEnd(10,'░')} ${(stick.t*100)|0}%`+
     `&nbsp;&nbsp;FLT ${String(t/60|0).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+  updateLapOSD();
 }
 
 // ---------- Panel ----------
