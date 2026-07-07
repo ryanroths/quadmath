@@ -15,6 +15,7 @@
   #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
   #osdGate{top:14px;left:50%;transform:translateX(-50%);color:var(--txt);font-weight:600}
   #osdLap{top:64px;left:16px;font-weight:600}
+  #osdTrick{top:132px;left:16px;font-weight:600}
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7}
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
   #crosshair::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
@@ -85,6 +86,7 @@
 <div class="osd" id="osdBC"></div>
 <div class="osd" id="osdGate"></div>
 <div class="osd" id="osdLap"></div>
+<div class="osd" id="osdTrick"></div>
 <div id="crosshair"></div>
 <div id="toast"></div>
 <div id="legend">
@@ -722,6 +724,9 @@ const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
 function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
   // restart the sequence clean: lap progress + running clock cleared, best kept
   nextGateIndex=0;lapActive=false;lapStartTime=0;
+  // cancel any in-progress trick window (orientation snapped, accum is stale);
+  // combo/session score untouched — a manual reset isn't a crash
+  trickRoll=trickPitch=trickYaw=0;trickStableTimer=0;
   updateGateUI();updateGateHighlight();
   toast('RESET');}
 
@@ -959,6 +964,49 @@ function toggleFlightMode(){
   toast(flightMode==='angle'?'ANGLE MODE':'ACRO MODE');
 }
 
+// ---------- Trick/combo scoring ----------
+// per-axis rotation accumulates while the quad is actively rotating; the
+// window "lands" (classifies + scores) once orientation returns near-level
+// and angular rate stays low for TRICK_STABLE_HOLD seconds.
+let trickRoll=0,trickPitch=0,trickYaw=0,trickStableTimer=0;
+let comboCount=0,comboScore=0,comboMultiplier=1,comboActive=false,lastTrickTime=0,comboFlashUntil=0;
+let sessionScore=0,bestComboScore=0;
+try{bestComboScore=parseFloat(localStorage.getItem('quadmath_bestCombo'))||0;}catch(e){}
+const TRICK_STABLE_MAG=0.6,TRICK_STABLE_UPY=0.92,TRICK_STABLE_HOLD=0.3,COMBO_WINDOW_MS=2500,TRICK_CHAIN_MS=2000;
+// classify by dominant accumulated axis (rough heuristic, degrees)
+function classifyTrick(rollDeg,pitchDeg,yawDeg){
+  const maxD=Math.max(rollDeg,pitchDeg,yawDeg);
+  if(maxD<180)return null; // too small — no trick
+  const highCount=[rollDeg,pitchDeg,yawDeg].filter(d=>d>=180).length;
+  if(highCount>=3)return{name:'FREESTYLE COMBO',mag:rollDeg+pitchDeg+yawDeg};
+  if(rollDeg>150&&pitchDeg>150)return{name:'BARANI',mag:Math.max(rollDeg,pitchDeg)}; // combined roll+pitch
+  if(yawDeg>=rollDeg&&yawDeg>=pitchDeg)return{name:yawDeg>=720?'720':'360',mag:yawDeg};
+  if(rollDeg>=pitchDeg)return{name:'ROLL',mag:rollDeg};
+  return{name:'FLIP',mag:pitchDeg};
+}
+function breakCombo(){
+  if(comboScore>bestComboScore){
+    bestComboScore=comboScore;
+    try{localStorage.setItem('quadmath_bestCombo',String(bestComboScore));}catch(e){}
+    comboFlashUntil=performance.now()+1500;
+    toast('NEW BEST COMBO! '+bestComboScore+'pts');
+  }
+  comboCount=0;comboScore=0;comboMultiplier=1;comboActive=false;
+}
+function landTrick(rollDeg,pitchDeg,yawDeg){
+  const trick=classifyTrick(rollDeg,pitchDeg,yawDeg);
+  if(!trick)return;
+  const now=performance.now();
+  // chain within TRICK_CHAIN_MS of the previous trick, else start a fresh combo
+  comboCount=(comboCount>0&&now-lastTrickTime<TRICK_CHAIN_MS)?comboCount+1:1;
+  comboMultiplier=comboCount;
+  lastTrickTime=now;
+  const score=Math.round(THREE.MathUtils.clamp(80+trick.mag*0.35,100,300))*comboMultiplier;
+  comboScore+=score;sessionScore+=score;
+  comboActive=comboCount>=2; // solo trick lands quietly; chain of 2+ shows the combo banner
+  toast(trick.name+' +'+score);
+}
+
 // ---------- Physics ----------
 const tmpV=new THREE.Vector3(),up=new THREE.Vector3();
 const dq=new THREE.Quaternion(),axis=new THREE.Vector3();
@@ -980,8 +1028,21 @@ function physics(dt){
   const wy=-yr;
   const mag=Math.sqrt(wx*wx+wy*wy+wz*wz);
   if(mag>1e-8){axis.set(wx/mag,wy/mag,wz/mag);dq.setFromAxisAngle(axis,mag*dt);state.q.multiply(dq).normalize();}
-  const mass=CFG.massG/1000;
   up.set(0,1,0).applyQuaternion(state.q);
+  // trick/combo: accumulate |rate|*dt per axis (deg) while rotating; once the
+  // quad sits near-level (up.y close to 1) with low angular rate for
+  // TRICK_STABLE_HOLD seconds, the window "lands" — classify + score it
+  trickRoll+=Math.abs(wz)*dt*THREE.MathUtils.RAD2DEG;   // wz drives roll
+  trickPitch+=Math.abs(wx)*dt*THREE.MathUtils.RAD2DEG;  // wx drives pitch
+  trickYaw+=Math.abs(wy)*dt*THREE.MathUtils.RAD2DEG;    // wy drives yaw
+  if(mag<TRICK_STABLE_MAG&&up.y>TRICK_STABLE_UPY){
+    trickStableTimer+=dt;
+    if(trickStableTimer>=TRICK_STABLE_HOLD){
+      landTrick(trickRoll,trickPitch,trickYaw);
+      trickRoll=trickPitch=trickYaw=0;trickStableTimer=0;
+    }
+  } else trickStableTimer=0;
+  const mass=CFG.massG/1000;
   const F=tmpV.copy(up).multiplyScalar(Math.pow(stick.t,1.15)*CFG.twr*mass*G);
   F.y-=mass*G;
   const v=state.vel,sp=v.length();
@@ -1021,7 +1082,11 @@ function physics(dt){
     }
   }
 }
-function bounce(){state.bounces++;toast('BOUNCE #'+state.bounces);}
+function bounce(){
+  state.bounces++;toast('BOUNCE #'+state.bounces);
+  trickRoll=trickPitch=trickYaw=0;trickStableTimer=0; // crash mid-trick invalidates the attempt
+  breakCombo();
+}
 
 // ---------- Camera ----------
 const camTilt=new THREE.Quaternion();
@@ -1034,6 +1099,16 @@ function updateCamera(){
 // ---------- OSD ----------
 const osdTL=document.getElementById('osdTL'),osdTR=document.getElementById('osdTR'),osdBC=document.getElementById('osdBC');
 const osdLap=document.getElementById('osdLap');
+const osdTrick=document.getElementById('osdTrick');
+function updateTrickOSD(){
+  const now=performance.now();
+  if(comboCount>0&&now-lastTrickTime>COMBO_WINDOW_MS)breakCombo(); // combo timeout
+  let html='SCORE '+sessionScore;
+  if(comboActive)html+='<br>COMBO x'+comboMultiplier+' — '+comboScore+'pts';
+  html+='<br>BEST COMBO '+bestComboScore+'pts';
+  osdTrick.style.color=now<comboFlashUntil?'#3DDC97':'';
+  osdTrick.innerHTML=html;
+}
 function updateLapOSD(){
   const now=performance.now();
   osdLap.style.color=now<lapFlashUntil?'#3DDC97':''; // green flash on new best
@@ -1054,6 +1129,7 @@ function updateOSD(){
   osdBC.innerHTML=`THR ${'█'.repeat(Math.round(stick.t*10)).padEnd(10,'░')} ${(stick.t*100)|0}%`+
     `&nbsp;&nbsp;FLT ${String(t/60|0).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
   updateLapOSD();
+  updateTrickOSD();
 }
 
 // ---------- Panel ----------
