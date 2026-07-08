@@ -1045,29 +1045,40 @@ let comboCount=0,comboScore=0,comboMultiplier=1,comboActive=false,lastTrickTime=
 let sessionScore=0,bestComboScore=0;
 try{bestComboScore=parseFloat(localStorage.getItem('quadmath_bestCombo'))||0;}catch(e){}
 const TRICK_STABLE_MAG=0.6,TRICK_STABLE_UPY=0.92,TRICK_STABLE_HOLD=0.3,COMBO_WINDOW_MS=2500,TRICK_CHAIN_MS=2000;
-// classify by dominant accumulated axis (rough heuristic, degrees)
 // Real trick names (prowhooper.com Tricktionary), still purely rotation-based
 // off state.q pitch/roll/yaw accumulation — no position/velocity/proximity
 // tracking exists yet, so ground/obstacle/gap-relative tricks (Wall Tricks,
 // Powerloops, Split-S, Pole Dancing, Rewinds, Gaps) aren't representable here
 // and are future scope pending that data.
+// Classification: dominant axis must clear a 200° noise floor before anything
+// fires. A second axis only counts as part of a combined trick (Barani /
+// Rubik's Cube) if it's within 55% of the dominant axis's magnitude — minor
+// bleed into other axes is ignored, not treated as a combo. Labels are driven
+// by rotation count (round(dominant/360)), not narrow degree bands, so
+// overshoot (e.g. 942°) still resolves to a clean "3 rotations" rather than
+// falling into a broken in-between value.
 function classifyTrick(rollDeg,pitchDeg,yawDeg){
-  const maxD=Math.max(rollDeg,pitchDeg,yawDeg);
-  if(maxD<90)return null; // pure noise, not even a deliberate flick
+  const dominant=Math.max(rollDeg,pitchDeg,yawDeg);
+  if(dominant<200)return null; // below this: flight wobble, not a trick
+  const bar=dominant*0.55;
+  const rollSig=rollDeg>=bar,pitchSig=pitchDeg>=bar,yawSig=yawDeg>=bar;
+  const sigCount=(rollSig?1:0)+(pitchSig?1:0)+(yawSig?1:0);
+  const rot=Math.max(1,Math.round(dominant/360));
   const sum=rollDeg+pitchDeg+yawDeg;
-  const highCount=[rollDeg,pitchDeg,yawDeg].filter(d=>d>=200).length; // "significant" bar
-  // all three axes significant — Rubik's Cube, escalating to Cubik's Rube at huge sum
-  if(highCount>=3)return sum>1200?{name:"Cubik's Rube",mag:sum}:{name:"Rubik's Cube",mag:sum};
-  // diagonal flip+roll combo — yaw must stay low or it's really a 3-axis trick above
-  if(rollDeg>=300&&pitchDeg>=300&&yawDeg<200){
-    return rollDeg>=700&&pitchDeg>=700
-      ? {name:'True Barani',mag:rollDeg+pitchDeg}
-      : {name:'Barani',mag:rollDeg+pitchDeg};
+  // rotation-count → name for a single axis: 1=base, 2=double-variant, 3+="Triple <base>"
+  function axisName(base,doubleVariant){
+    if(rot===1)return base;
+    if(rot===2)return doubleVariant;
+    return 'Triple '+base;
   }
-  if(maxD<200)return{name:'Juicy Flick',mag:maxD}; // deliberate partial, 90-200°
-  if(yawDeg>=rollDeg&&yawDeg>=pitchDeg)return{name:yawDeg>=720?'Inverted Yaw Spin':'Yaw Spin',mag:yawDeg};
-  if(rollDeg>=pitchDeg)return{name:rollDeg>=720?'Double Roll':'Roll',mag:rollDeg};
-  return{name:pitchDeg>=720?'Double Flip':'Flip',mag:pitchDeg};
+  if(sigCount>=3) // all three axes genuinely significant
+    return{name:rot>=3?"Cubik's Rube":"Rubik's Cube",mag:sum};
+  if(rollSig&&pitchSig) // diagonal roll+pitch combo, yaw not significant (excluded above)
+    return{name:rot>=2?'True Barani':'Barani',mag:rollDeg+pitchDeg};
+  // single-axis dominant — any minor bleed in the other two axes is ignored
+  if(yawDeg>=rollDeg&&yawDeg>=pitchDeg)return{name:axisName('Yaw Spin','Inverted Yaw Spin'),mag:yawDeg};
+  if(rollDeg>=pitchDeg)return{name:axisName('Roll','Double Roll'),mag:rollDeg};
+  return{name:axisName('Flip','Double Flip'),mag:pitchDeg};
 }
 function breakCombo(){
   if(comboScore>bestComboScore){
