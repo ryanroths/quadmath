@@ -630,7 +630,7 @@ window._tryAssets=async function(){
       const m=cityModel.clone(true);
       m.scale.setScalar(CITY_SCALE);
       // sit the model's own lowest point on the ground plane (y=0)
-      m.position.set(cx,-nativeBox.min.y*CITY_SCALE,cz);
+      m.position.set(cx,-nativeBox.min.y*CITY_SCALE-6,cz);
       placedRoot.add(m);
       m.updateMatrixWorld(true);
       // fully non-collidable — pure visual landmark, fly through freely.
