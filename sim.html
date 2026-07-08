@@ -796,11 +796,14 @@ const mesaTex=canvasTex(256,256,(g,s)=>{
   for(let i=0;i<1200;i++){g.fillStyle=`rgba(0,0,0,${Math.random()*.12})`;
     g.fillRect(Math.random()*s,Math.random()*s,2,2);}
 },3,1);
+const CITY_POS_X=-900,CITY_POS_Z=900,CITY_EXCLUDE_R=300; // keep mesas clear of the city landmark
 for(let i=0;i<7;i++){
   const r=60+rnd()*90,h=40+rnd()*60,a=rnd()*Math.PI*2,dist=520+rnd()*300;
+  const mx=Math.cos(a)*dist,mz=Math.sin(a)*dist;
+  if(Math.hypot(mx-CITY_POS_X,mz-CITY_POS_Z)<CITY_EXCLUDE_R)continue; // skip — lands too close to the city
   const mesa=new THREE.Mesh(new THREE.CylinderGeometry(r*.72,r,h,12,3),
     new THREE.MeshStandardMaterial({map:mesaTex,roughness:1,flatShading:true}));
-  mesa.position.set(Math.cos(a)*dist,h/2-4,Math.sin(a)*dist);
+  mesa.position.set(mx,h/2-4,mz);
   scene.add(mesa);
 }
 if(window._gltfReady) window._tryAssets();
