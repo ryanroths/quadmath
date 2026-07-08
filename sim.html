@@ -630,10 +630,10 @@ window._tryAssets=async function(){
       // boosts height to match Kenney skyscraper scale (~110u tall) without
       // over-widening the footprint the way a uniform scale would
       console.log('CITY SCALE applied: xz 2.9 y 5.0');
-      // pushed far out — distance ~1273 units from map center, well clear of
-      // the mesa ring (520-820) and every race element (gates/buildings/
-      // triple-stack all sit within ~300 units of center)
-      const cx=-900,cz=900;
+      // pure distant backdrop — pushed to ~3111 units from map center, well
+      // beyond any flyable range (mesa ring tops out at 820). Skyline
+      // silhouette only; not meant to be approached or flown through.
+      const cx=-2200,cz=2200;
       const m=cityModel.clone(true);
       m.scale.set(2.9,5.0,2.9);
       // sit the model's own lowest point on the ground plane (y=0) — offset
@@ -796,14 +796,11 @@ const mesaTex=canvasTex(256,256,(g,s)=>{
   for(let i=0;i<1200;i++){g.fillStyle=`rgba(0,0,0,${Math.random()*.12})`;
     g.fillRect(Math.random()*s,Math.random()*s,2,2);}
 },3,1);
-const CITY_POS_X=-900,CITY_POS_Z=900,CITY_EXCLUDE_R=300; // keep mesas clear of the city landmark
 for(let i=0;i<7;i++){
   const r=60+rnd()*90,h=40+rnd()*60,a=rnd()*Math.PI*2,dist=520+rnd()*300;
-  const mx=Math.cos(a)*dist,mz=Math.sin(a)*dist;
-  if(Math.hypot(mx-CITY_POS_X,mz-CITY_POS_Z)<CITY_EXCLUDE_R)continue; // skip — lands too close to the city
   const mesa=new THREE.Mesh(new THREE.CylinderGeometry(r*.72,r,h,12,3),
     new THREE.MeshStandardMaterial({map:mesaTex,roughness:1,flatShading:true}));
-  mesa.position.set(mx,h/2-4,mz);
+  mesa.position.set(Math.cos(a)*dist,h/2-4,Math.sin(a)*dist);
   scene.add(mesa);
 }
 if(window._gltfReady) window._tryAssets();
