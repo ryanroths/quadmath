@@ -601,6 +601,21 @@ window._tryAssets=async function(){
           console.log(child.name,(b.max.x-b.min.x).toFixed(1),(b.max.y-b.min.y).toFixed(1),(b.max.z-b.min.z).toFixed(1));
         }
       });
+      // strip the dome/sky mesh (Object_1723, size matched the full model
+      // bbox exactly) and the base ground plane (Object_1725, flat 488x0x488)
+      // — identified from the inventory above by size, since every mesh in
+      // this export is named generically. Both caused the visible bubble.
+      // Collect first, remove after — mutating .children mid-traverse skips
+      // siblings (these two are adjacent in the hierarchy).
+      const STRIP_NAMES=new Set(['Object_1723','Object_1725']);
+      const toStrip=[];
+      cityModel.traverse(child=>{
+        if(child.isMesh&&STRIP_NAMES.has(child.name))toStrip.push(child);
+      });
+      for(const child of toStrip){
+        if(child.parent)child.parent.remove(child);
+      }
+      console.log('CITY meshes stripped:',toStrip.map(c=>c.name).join(', ')||'(none found)');
       // native footprint ~509x165x509 → scale 0.45 puts the footprint at
       // real-district scale, matching the density of the existing buildings
       const CITY_SCALE=0.45;
