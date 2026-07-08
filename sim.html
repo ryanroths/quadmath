@@ -423,7 +423,47 @@ window._tryAssets=async function(){
     return gltf.scene;
   }
   const placedRoot=new THREE.Group();
-  function place(src,x,z,scale,ry){
+  // Voxel-decompose an object's mesh geometry into several tight colliders.
+  // For irregular/open structures (scaffolding, sample buildings, bridge
+  // decks) a whole-object Box3 seals every gap between structural members as
+  // solid. The obvious fix — one box per child mesh — turns out to be a
+  // no-op for these specific GLBs: verified offline that scaffolding-
+  // structure/poles, road-bridge, and all 7 building-sample-* files are each
+  // a SINGLE mesh (1 mesh, 1 node) — the diagonal beams / patio openings /
+  // underpass gap all live inside that one mesh's geometry, not between
+  // sibling meshes. So instead: bucket every vertex into a coarse grid over
+  // the mesh's own bounds and keep a tight box only for cells that actually
+  // contain geometry — empty cells (the real gaps) get no collider at all.
+  function voxelColliders(obj,gridRes){
+    gridRes=gridRes||3;
+    obj.updateMatrixWorld(true);
+    const world=new THREE.Vector3();
+    obj.traverse(mesh=>{
+      if(!mesh.isMesh)return;
+      const pos=mesh.geometry.attributes.position;
+      if(!pos)return;
+      const bb=new THREE.Box3().setFromObject(mesh);
+      const size=bb.getSize(new THREE.Vector3());
+      const cells=new Map();
+      for(let i=0;i<pos.count;i++){
+        world.set(pos.getX(i),pos.getY(i),pos.getZ(i)).applyMatrix4(mesh.matrixWorld);
+        const ix=Math.min(gridRes-1,Math.max(0,Math.floor((world.x-bb.min.x)/Math.max(size.x/gridRes,1e-6))));
+        const iy=Math.min(gridRes-1,Math.max(0,Math.floor((world.y-bb.min.y)/Math.max(size.y/gridRes,1e-6))));
+        const iz=Math.min(gridRes-1,Math.max(0,Math.floor((world.z-bb.min.z)/Math.max(size.z/gridRes,1e-6))));
+        const key=ix+','+iy+','+iz;
+        let cell=cells.get(key);
+        if(!cell){cell=new THREE.Box3();cells.set(key,cell);}
+        cell.expandByPoint(world);
+      }
+      for(const cell of cells.values()){
+        const sz=cell.getSize(new THREE.Vector3());
+        if(sz.x<1e-4||sz.y<1e-4||sz.z<1e-4)continue; // degenerate slice — skip
+        cell.expandByScalar(-Math.min(sz.x,sz.y,sz.z)*0.1); // tighten, avoid phantom edge hits
+        colliders.push(cell);
+      }
+    });
+  }
+  function place(src,x,z,scale,ry,voxel){
     const m=src.clone(true);
     m.scale.setScalar(scale);m.position.set(x,0,z);m.rotation.y=ry||0;
     placedRoot.add(m);
@@ -433,6 +473,7 @@ window._tryAssets=async function(){
     // matrixWorld. m is freshly repositioned and never rendered yet, so force
     // one explicit update before measuring anything under it.
     m.updateMatrixWorld(true);
+    if(voxel){voxelColliders(m,4);return;} // irregular structure — decompose, don't seal
     // building colliders: one box per child mesh when multi-mesh (tighter fit
     // on irregular shapes), each contracted ~12% (6% per side, capped by the
     // smallest dimension so thin parts never invert) — quad can fly visually
@@ -484,6 +525,8 @@ window._tryAssets=async function(){
         const bb=new THREE.Box3().setFromObject(m);
         bb.min.y=Math.max(bb.min.y,bb.max.y-2);
         colliders.push(bb);
+      }else if(collide==='voxel'){
+        voxelColliders(m,4); // irregular single-mesh structure — decompose, don't seal
       }else if(collide)colliders.push(new THREE.Box3().setFromObject(m));
     }
     // Kenney pillar asset, y-scaled so its top meets the deck height; x/z
@@ -505,9 +548,11 @@ window._tryAssets=async function(){
       bb.expandByScalar(-w*0.075);
       colliders.push(bb);
     }
-    // overpasses — road-bridge decks spanning the street corridors, flyable underneath
-    await placeAt('road-bridge.glb',70,11,0,8,0,'deck');
-    await placeAt('road-bridge.glb',0,15,-90,8,Math.PI/2,'deck');
+    // overpasses — road-bridge decks spanning the street corridors, flyable
+    // underneath. Voxel-decomposed (single-mesh GLB) so the deck surface
+    // collides while gaps in railings/trusses and the full underpass stay open.
+    await placeAt('road-bridge.glb',70,11,0,8,0,'voxel');
+    await placeAt('road-bridge.glb',0,15,-90,8,Math.PI/2,'voxel');
     // support columns at the span ends only — underpass gap stays clear
     await placePillar('bridge-pillar.glb',      52,   0, 11, 0);
     await placePillar('bridge-pillar.glb',      88,   0, 11, 0);
@@ -521,7 +566,7 @@ window._tryAssets=async function(){
     await placeAt('detail-awning.glb',      38,0,115,5, Math.PI);
     // ground clutter: trees, benches, trucks, dumpsters, scaffolding, stairs —
     // seeded scatter with the same nearGate race-line exclusion as the tile pass
-    async function scatter(file,count,scale,mode){
+    async function scatter(file,count,scale,mode,voxel){
       const src=await load(file);
       for(let i=0;i<count;i++){
         let x,z;
@@ -545,7 +590,9 @@ window._tryAssets=async function(){
         m.scale.setScalar(scale*(0.85+rnd()*0.3));
         m.position.set(x,0,z);m.rotation.y=rnd()*Math.PI*2;
         placedRoot.add(m);
-        if(mode==='road'){
+        if(voxel){
+          voxelColliders(m,3); // irregular single-mesh structure — decompose, don't seal
+        }else if(mode==='road'){
           // trucks: thin low collider — minor obstacle, flyable just above
           const bb=new THREE.Box3().setFromObject(m);
           bb.max.y=Math.min(bb.max.y,bb.min.y+2);
@@ -571,8 +618,8 @@ window._tryAssets=async function(){
     await scatter('detail-dumpster-open.glb',3,10,'edge');
     // scaffolding — tall flyable obstacle beside buildings (structure already
     // scattered at scale 18 from an earlier density pass; poles are new)
-    await scatter('scaffolding-structure.glb',4,18,'edge');
-    await scatter('scaffolding-poles.glb',6,12,'edge');
+    await scatter('scaffolding-structure.glb',4,18,'edge',true);
+    await scatter('scaffolding-poles.glb',6,12,'edge',true);
     // stairs — ground-level detail (open bumped to match building density;
     // center is new)
     await scatter('stairs-open.glb',4,10);
@@ -600,7 +647,7 @@ window._tryAssets=async function(){
     ];
     for(const [file,x,z,scale,ry] of sampleCluster){
       const src=await load(file);
-      place(src,x,z,scale,ry); // whole-object collider — walls solid, gaps between buildings stay flyable
+      place(src,x,z,scale,ry,true); // voxel-decomposed — walls solid, patio openings stay flyable
     }
     // ---- low_poly_city_game-ready.glb — costoWRLD (Sketchfab, CC BY 4.0) ----
     // https://sketchfab.com/3d-models/low-poly-city-game-ready-c7e3a158515c4e9da31ae52c30403cef
