@@ -581,12 +581,14 @@ window._tryAssets=async function(){
     {
       const cityModel=await load('low_poly_city_game-ready.glb');
       const nativeBox=new THREE.Box3().setFromObject(cityModel);
-      console.log('low_poly_city_game-ready.glb bounding box:',nativeBox);
+      console.log('CITY BBOX min:',nativeBox.min.x.toFixed(1),nativeBox.min.y.toFixed(1),nativeBox.min.z.toFixed(1));
+      console.log('CITY BBOX max:',nativeBox.max.x.toFixed(1),nativeBox.max.y.toFixed(1),nativeBox.max.z.toFixed(1));
       const nativeSize=nativeBox.getSize(new THREE.Vector3());
-      console.log('low_poly_city_game-ready.glb size:',nativeSize);
+      console.log('CITY BBOX size:',nativeSize.x.toFixed(1),nativeSize.y.toFixed(1),nativeSize.z.toFixed(1));
       // native footprint ~509x165x509 → scale 0.75 puts the footprint at
       // ~382 units (within the requested 200-400 span)
       const CITY_SCALE=0.75;
+      console.log('CITY SCALE applied:',CITY_SCALE);
       const cx=0,cz=-500; // due south: clear of the building grid (±240),
       // the gate loop (max |x|~150, z<=295) and the triple stack at (0,300)
       const m=cityModel.clone(true);
@@ -606,14 +608,17 @@ window._tryAssets=async function(){
       // (~12%, same contraction as the building-kit colliders) — expensive
       // once at load time (970 meshes), cheap forever after as plain AABB checks
       const cityMeshes=[];m.traverse(o=>{if(o.isMesh)cityMeshes.push(o);});
+      let cityColliderCount=0; // tracked separately from colliders.length (which mixes in the rest of the map)
       for(const part of cityMeshes){
         const bb=new THREE.Box3().setFromObject(part);
         const sz=bb.getSize(new THREE.Vector3());
         if(sz.x<1e-4||sz.y<1e-4||sz.z<1e-4)continue; // skip degenerate/flat decals
         bb.expandByScalar(-Math.min(sz.x,sz.y,sz.z)*0.06);
         colliders.push(bb);
+        cityColliderCount++;
       }
-      console.log('low_poly_city_game-ready.glb: '+cityMeshes.length+' sub-meshes, colliders added.');
+      console.log('CITY sub-meshes:',cityMeshes.length);
+      console.log('CITY colliders added:',cityColliderCount);
     }
     // swap: hide procedural, clear its colliders (rebuilt above)
     scene.add(placedRoot);
