@@ -580,10 +580,10 @@ window._tryAssets=async function(){
     // scene rather than picked apart into reusable pieces.
     {
       const cityModel=await load('low_poly_city_game-ready.glb');
-      const nativeBox=new THREE.Box3().setFromObject(cityModel);
+      let nativeBox=new THREE.Box3().setFromObject(cityModel);
       console.log('CITY BBOX min:',nativeBox.min.x.toFixed(1),nativeBox.min.y.toFixed(1),nativeBox.min.z.toFixed(1));
       console.log('CITY BBOX max:',nativeBox.max.x.toFixed(1),nativeBox.max.y.toFixed(1),nativeBox.max.z.toFixed(1));
-      const nativeSize=nativeBox.getSize(new THREE.Vector3());
+      let nativeSize=nativeBox.getSize(new THREE.Vector3());
       console.log('CITY BBOX size:',nativeSize.x.toFixed(1),nativeSize.y.toFixed(1),nativeSize.z.toFixed(1));
       // diagnostic only — log every sub-mesh's name + size to find the
       // dome/ground/backdrop mesh (likely the largest, or named accordingly)
@@ -616,6 +616,14 @@ window._tryAssets=async function(){
         if(child.parent)child.parent.remove(child);
       }
       console.log('CITY meshes stripped:',toStrip.map(c=>c.name).join(', ')||'(none found)');
+      // recompute AFTER stripping — the pre-strip box's min.y was set by the
+      // now-removed dome mesh (Object_1723), so the ground-offset formula
+      // below would over-lift the model by that mesh's extra depth if it
+      // kept using the stale box (confirmed: this was exactly the source of
+      // the observed float — dome min.y -13.16 vs real geometry min.y -0.62)
+      nativeBox=new THREE.Box3().setFromObject(cityModel);
+      nativeSize=nativeBox.getSize(new THREE.Vector3());
+      console.log('CITY BBOX (post-strip) min.y:',nativeBox.min.y.toFixed(2));
       // native footprint ~509x165x509 → scale 1.1 = real large-district size
       const CITY_SCALE=1.1;
       console.log('CITY SCALE applied:',CITY_SCALE);
@@ -626,16 +634,19 @@ window._tryAssets=async function(){
       const m=cityModel.clone(true);
       m.scale.setScalar(CITY_SCALE);
       // sit the model's own lowest point on the ground plane (y=0)
-      m.position.set(cx,-nativeBox.min.y*CITY_SCALE-6,cz);
+      m.position.set(cx,-nativeBox.min.y*CITY_SCALE,cz);
       placedRoot.add(m);
       m.updateMatrixWorld(true);
       // fully non-collidable — pure visual landmark, fly through freely.
-      // Box3 computed only for the size log below, never pushed to colliders.
-      const cityBox=new THREE.Box3().setFromObject(m);
+      // Box3 computed only for logging below, never pushed to colliders.
+      const placedBox=new THREE.Box3().setFromObject(m);
+      // diagnostic: is the pure formula actually landing at y=0, or is a
+      // GLTF pivot offset / nested transform introducing the observed float?
+      console.log('CITY PLACED min.y (should be ~0):',placedBox.min.y.toFixed(2));
       console.log('CITY placed bbox size:',
-        (cityBox.max.x-cityBox.min.x).toFixed(1),
-        (cityBox.max.y-cityBox.min.y).toFixed(1),
-        (cityBox.max.z-cityBox.min.z).toFixed(1));
+        (placedBox.max.x-placedBox.min.x).toFixed(1),
+        (placedBox.max.y-placedBox.min.y).toFixed(1),
+        (placedBox.max.z-placedBox.min.z).toFixed(1));
     }
     // swap: hide procedural, clear its colliders (rebuilt above)
     scene.add(placedRoot);
