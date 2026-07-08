@@ -585,40 +585,37 @@ window._tryAssets=async function(){
       console.log('CITY BBOX max:',nativeBox.max.x.toFixed(1),nativeBox.max.y.toFixed(1),nativeBox.max.z.toFixed(1));
       const nativeSize=nativeBox.getSize(new THREE.Vector3());
       console.log('CITY BBOX size:',nativeSize.x.toFixed(1),nativeSize.y.toFixed(1),nativeSize.z.toFixed(1));
-      // native footprint ~509x165x509 → scale 0.75 puts the footprint at
-      // ~382 units (within the requested 200-400 span)
-      const CITY_SCALE=0.75;
+      // native footprint ~509x165x509 → scale 0.135 puts the footprint at
+      // ~70x95 units: one dense neighborhood feature, not a district you fly
+      // through (0.75 was sized like a second flyable city and dwarfed the
+      // ~400-unit main map)
+      const CITY_SCALE=0.135;
       console.log('CITY SCALE applied:',CITY_SCALE);
-      const cx=0,cz=-500; // due south: clear of the building grid (±240),
-      // the gate loop (max |x|~150, z<=295) and the triple stack at (0,300)
+      // northwest open zone: clear of every manifest skyscraper, the gate
+      // loop, the triple stack (0,300), and the dive rings (all within
+      // |x|,|z|<=190). z=320 (not the nearer 300) checked explicitly against
+      // the closest building-grid cell (-240,240), whose scattered tiles can
+      // land up to 13u off-center — a 300 offset left only a 5-unit gap to
+      // that cell's worst-case reach (z=253); 320 gives a 25-unit margin
+      const cx=-300,cz=320;
       const m=cityModel.clone(true);
       m.scale.setScalar(CITY_SCALE);
       // sit the model's own lowest point on the ground plane (y=0)
       m.position.set(cx,-nativeBox.min.y*CITY_SCALE,cz);
       placedRoot.add(m);
-      // force matrixWorld to reflect the transform just set, top-down through
-      // the whole subtree — Box3.setFromObject() called on a deep child (as
-      // the per-mesh loop below does) only self-refreshes via its own
-      // recursive cascade starting from whatever node you pass it; called
-      // directly on a nested mesh it reads a stale, never-rendered
-      // matrixWorld and silently returns a near-origin, untransformed box
       m.updateMatrixWorld(true);
-      // per-mesh colliders: a single box for the whole city would seal off
-      // every street as solid, so every sub-mesh gets its own tightened Box3
-      // (~12%, same contraction as the building-kit colliders) — expensive
-      // once at load time (970 meshes), cheap forever after as plain AABB checks
-      const cityMeshes=[];m.traverse(o=>{if(o.isMesh)cityMeshes.push(o);});
-      let cityColliderCount=0; // tracked separately from colliders.length (which mixes in the rest of the map)
-      for(const part of cityMeshes){
-        const bb=new THREE.Box3().setFromObject(part);
-        const sz=bb.getSize(new THREE.Vector3());
-        if(sz.x<1e-4||sz.y<1e-4||sz.z<1e-4)continue; // skip degenerate/flat decals
-        bb.expandByScalar(-Math.min(sz.x,sz.y,sz.z)*0.06);
-        colliders.push(bb);
-        cityColliderCount++;
-      }
-      console.log('CITY sub-meshes:',cityMeshes.length);
-      console.log('CITY colliders added:',cityColliderCount);
+      // single outer collider for the whole neighborhood — at this scale it
+      // reads as one dense landmark to fly around (like a big building),
+      // not a street grid to fly through, so per-street gaps aren't needed;
+      // 955 per-submesh boxes here was overkill and fragmented the collision
+      const cityBox=new THREE.Box3().setFromObject(m);
+      colliders.push(cityBox);
+      const cityColliderCount=1;
+      console.log('CITY collider count:',cityColliderCount);
+      console.log('CITY placed bbox size:',
+        (cityBox.max.x-cityBox.min.x).toFixed(1),
+        (cityBox.max.y-cityBox.min.y).toFixed(1),
+        (cityBox.max.z-cityBox.min.z).toFixed(1));
     }
     // swap: hide procedural, clear its colliders (rebuilt above)
     scene.add(placedRoot);
