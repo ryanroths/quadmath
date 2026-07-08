@@ -554,21 +554,23 @@ window._tryAssets=async function(){
       }
     }
     // trees — 18 total scattered across blocks as ground clutter
-    await scatter('tree-large.glb',5,4.5);
-    await scatter('tree-park-large.glb',5,4);
-    await scatter('tree-pine-large.glb',5,5);
-    await scatter('tree-shrub.glb',3,3,'none');
+    // scale bumped to match building density (16-24 range); shrub kept
+    // smaller than full trees since it's ground-level bush clutter
+    await scatter('tree-large.glb',5,20);
+    await scatter('tree-park-large.glb',5,18);
+    await scatter('tree-pine-large.glb',5,22);
+    await scatter('tree-shrub.glb',3,10,'none');
     // benches near buildings
-    await scatter('detail-bench.glb',9,2,'edge');
+    await scatter('detail-bench.glb',9,9,'edge');
     // trucks on the street corridors
-    await scatter('truck-green.glb',2,3,'road');
-    await scatter('truck-grey.glb',2,3,'road');
-    await scatter('truck-green-cargo.glb',2,3,'road');
+    await scatter('truck-green.glb',2,12,'road');
+    await scatter('truck-grey.glb',2,12,'road');
+    await scatter('truck-green-cargo.glb',2,12,'road');
     // dumpsters — alley / building-adjacent
-    await scatter('detail-dumpster-closed.glb',3,2,'edge');
-    await scatter('detail-dumpster-open.glb',3,2,'edge');
+    await scatter('detail-dumpster-closed.glb',3,10,'edge');
+    await scatter('detail-dumpster-open.glb',3,10,'edge');
     // scaffolding — tall flyable obstacle beside buildings
-    await scatter('scaffolding-structure.glb',4,3,'edge');
+    await scatter('scaffolding-structure.glb',4,18,'edge');
     // stairs — ground-level detail
     await scatter('stairs-open.glb',4,2.5);
     // ---- low_poly_city_game-ready.glb — costoWRLD (Sketchfab, CC BY 4.0) ----
