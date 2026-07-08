@@ -622,8 +622,8 @@ window._tryAssets=async function(){
     await scatter('scaffolding-poles.glb',6,12,'edge',true);
     // stairs — ground-level detail (open bumped to match building density;
     // center is new)
-    await scatter('stairs-open.glb',4,10);
-    await scatter('stairs-center.glb',5,10);
+    await scatter('stairs-open.glb',4,10,undefined,true);
+    await scatter('stairs-center.glb',5,10,undefined,true);
     // pallets — small ground clutter, building-adjacent
     await scatter('pallet.glb',6,6,'edge');
     await scatter('pallet-small.glb',6,6,'edge');
