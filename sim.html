@@ -630,7 +630,7 @@ window._tryAssets=async function(){
       // pushed further northwest to stay clear of main map action at this
       // larger footprint — nearest building-grid cell (-240,240) still has a
       // ~33-unit gap to the city's post-strip geometry at this scale/offset
-      const cx=-550,cz=550;
+      const cx=-280,cz=280;
       const m=cityModel.clone(true);
       m.scale.setScalar(CITY_SCALE);
       // sit the model's own lowest point on the ground plane (y=0)
