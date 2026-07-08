@@ -585,11 +585,25 @@ window._tryAssets=async function(){
       console.log('CITY BBOX max:',nativeBox.max.x.toFixed(1),nativeBox.max.y.toFixed(1),nativeBox.max.z.toFixed(1));
       const nativeSize=nativeBox.getSize(new THREE.Vector3());
       console.log('CITY BBOX size:',nativeSize.x.toFixed(1),nativeSize.y.toFixed(1),nativeSize.z.toFixed(1));
-      // native footprint ~509x165x509 → scale 0.135 puts the footprint at
-      // ~70x95 units: one dense neighborhood feature, not a district you fly
-      // through (0.75 was sized like a second flyable city and dwarfed the
-      // ~400-unit main map)
-      const CITY_SCALE=0.135;
+      // diagnostic only — log every sub-mesh's name + size to find the
+      // dome/ground/backdrop mesh (likely the largest, or named accordingly)
+      // before deciding what to strip. Nothing removed yet.
+      // matrixWorld isn't guaranteed fresh on a just-loaded, never-rendered
+      // scene when Box3.setFromObject() is called directly on a deep child
+      // (it only self-corrects via its own top-down recursive cascade when
+      // called on the node you pass it, not on children measured one-off) —
+      // force one update first so these sizes are trustworthy.
+      cityModel.updateMatrixWorld(true);
+      console.log('=== CITY sub-mesh inventory ===');
+      cityModel.traverse(child=>{
+        if(child.isMesh){
+          const b=new THREE.Box3().setFromObject(child);
+          console.log(child.name,(b.max.x-b.min.x).toFixed(1),(b.max.y-b.min.y).toFixed(1),(b.max.z-b.min.z).toFixed(1));
+        }
+      });
+      // native footprint ~509x165x509 → scale 0.45 puts the footprint at
+      // real-district scale, matching the density of the existing buildings
+      const CITY_SCALE=0.45;
       console.log('CITY SCALE applied:',CITY_SCALE);
       // northwest open zone: clear of every manifest skyscraper, the gate
       // loop, the triple stack (0,300), and the dive rings (all within
