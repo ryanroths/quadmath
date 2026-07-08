@@ -566,13 +566,42 @@ window._tryAssets=async function(){
     await scatter('truck-green.glb',2,12,'road');
     await scatter('truck-grey.glb',2,12,'road');
     await scatter('truck-green-cargo.glb',2,12,'road');
-    // dumpsters — alley / building-adjacent
+    // dumpsters — alley / building-adjacent (already scattered, left as-is)
     await scatter('detail-dumpster-closed.glb',3,10,'edge');
     await scatter('detail-dumpster-open.glb',3,10,'edge');
-    // scaffolding — tall flyable obstacle beside buildings
+    // scaffolding — tall flyable obstacle beside buildings (structure already
+    // scattered at scale 18 from an earlier density pass; poles are new)
     await scatter('scaffolding-structure.glb',4,18,'edge');
-    // stairs — ground-level detail
-    await scatter('stairs-open.glb',4,2.5);
+    await scatter('scaffolding-poles.glb',6,12,'edge');
+    // stairs — ground-level detail (open bumped to match building density;
+    // center is new)
+    await scatter('stairs-open.glb',4,10);
+    await scatter('stairs-center.glb',5,10);
+    // pallets — small ground clutter, building-adjacent
+    await scatter('pallet.glb',6,6,'edge');
+    await scatter('pallet-small.glb',6,6,'edge');
+    // second explorable zone: complete single-piece sample structures (not
+    // the fragile wall-by-wall buildRoom approach) — southeast pocket at
+    // ~(380,-220), verified clear of the race gates, the main building
+    // grid's worst-case scatter reach (closest approach ~73u), and the mesa
+    // ring (farthest cluster point ~485u from origin vs the ring's 520u
+    // floor — deterministically safe since mesas never spawn closer than
+    // that). Nudged off the exact (350,-350) diagonal suggestion because
+    // that point sits right where the building grid's outer corner and the
+    // mesa ring's inner edge are both closest simultaneously.
+    const sampleCluster=[
+      ['building-sample-tower-a.glb',380,-220,18,0.3],
+      ['building-sample-house-a.glb',422,-205,16,1.1],
+      ['building-sample-tower-b.glb',388,-173,19,2.4],
+      ['building-sample-house-b.glb',342,-198,15,0.7],
+      ['building-sample-house-c.glb',340,-243,17,3.0],
+      ['building-sample-tower-c.glb',372,-263,20,1.8],
+      ['building-sample-tower-d.glb',416,-250,18,2.9],
+    ];
+    for(const [file,x,z,scale,ry] of sampleCluster){
+      const src=await load(file);
+      place(src,x,z,scale,ry); // whole-object collider — walls solid, gaps between buildings stay flyable
+    }
     // ---- low_poly_city_game-ready.glb — costoWRLD (Sketchfab, CC BY 4.0) ----
     // https://sketchfab.com/3d-models/low-poly-city-game-ready-c7e3a158515c4e9da31ae52c30403cef
     // One monolithic Sketchfab export: a single "Sketchfab_model" root with
