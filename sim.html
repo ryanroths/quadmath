@@ -604,14 +604,9 @@ window._tryAssets=async function(){
       m.position.set(cx,-nativeBox.min.y*CITY_SCALE,cz);
       placedRoot.add(m);
       m.updateMatrixWorld(true);
-      // single outer collider for the whole neighborhood — at this scale it
-      // reads as one dense landmark to fly around (like a big building),
-      // not a street grid to fly through, so per-street gaps aren't needed;
-      // 955 per-submesh boxes here was overkill and fragmented the collision
+      // fully non-collidable — pure visual landmark, fly through freely.
+      // Box3 computed only for the size log below, never pushed to colliders.
       const cityBox=new THREE.Box3().setFromObject(m);
-      colliders.push(cityBox);
-      const cityColliderCount=1;
-      console.log('CITY collider count:',cityColliderCount);
       console.log('CITY placed bbox size:',
         (cityBox.max.x-cityBox.min.x).toFixed(1),
         (cityBox.max.y-cityBox.min.y).toFixed(1),
