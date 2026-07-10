@@ -456,14 +456,25 @@ window._tryAssets=async function(){
         cell.expandByPoint(world);
       }
       for(const cell of cells.values()){
+        // low-poly models are often built from zero-thickness flat quads
+        // (a stair tread's top face, a wall panel) — at fine grid resolutions
+        // a cell can isolate just ONE such face, giving a truly zero-extent
+        // axis even though the surface is real geometry, not a stray point.
+        // Pad the collapsed axis to a thin slab instead of discarding it;
+        // only a cell with near-zero extent on ALL three axes (a genuine
+        // single-point/duplicate-vertex artifact) gets skipped.
+        const MIN_THICK=0.3;
+        if(cell.max.x-cell.min.x<1e-4)cell.max.x+=MIN_THICK;
+        if(cell.max.y-cell.min.y<1e-4)cell.max.y+=MIN_THICK;
+        if(cell.max.z-cell.min.z<1e-4)cell.max.z+=MIN_THICK;
         const sz=cell.getSize(new THREE.Vector3());
-        if(sz.x<1e-4||sz.y<1e-4||sz.z<1e-4)continue; // degenerate slice — skip
+        if(sz.x<1e-4||sz.y<1e-4||sz.z<1e-4)continue; // still degenerate — true point artifact
         cell.expandByScalar(-Math.min(sz.x,sz.y,sz.z)*0.1); // tighten, avoid phantom edge hits
         colliders.push(cell);
       }
     });
   }
-  function place(src,x,z,scale,ry,voxel){
+  function place(src,x,z,scale,ry,voxel,gridRes){
     const m=src.clone(true);
     m.scale.setScalar(scale);m.position.set(x,0,z);m.rotation.y=ry||0;
     placedRoot.add(m);
@@ -473,7 +484,7 @@ window._tryAssets=async function(){
     // matrixWorld. m is freshly repositioned and never rendered yet, so force
     // one explicit update before measuring anything under it.
     m.updateMatrixWorld(true);
-    if(voxel){voxelColliders(m,4);return;} // irregular structure — decompose, don't seal
+    if(voxel){voxelColliders(m,gridRes||4);return;} // irregular structure — decompose, don't seal
     // building colliders: one box per child mesh when multi-mesh (tighter fit
     // on irregular shapes), each contracted ~12% (6% per side, capped by the
     // smallest dimension so thin parts never invert) — quad can fly visually
@@ -506,13 +517,13 @@ window._tryAssets=async function(){
         const [cx,cz]=spots[spotIdx%spots.length];spotIdx++;
         const x=cx+(rnd()-.5)*26,z=cz+(rnd()-.5)*26,sc=(t.scale||1)*(0.85+rnd()*0.4);
         if(nearGate(x,z))continue; // keep the race line clear
-        place(src,x,z,sc,rnd()*Math.PI*2);
+        place(src,x,z,sc,rnd()*Math.PI*2,true,5);
       }
     }
     for(const p of (manifest.placed||[])){
       if(nearGate(p.x,p.z))continue;
       const src=await load(p.file);
-      place(src,p.x,p.z,p.scale||1,p.ry||0);
+      place(src,p.x,p.z,p.scale||1,p.ry||0,true,5);
     }
     // code-placed extras: elevated overpasses + street-level awning details
     async function placeAt(file,x,y,z,scale,ry,collide){
