@@ -566,7 +566,7 @@ window._tryAssets=async function(){
     await placeAt('detail-awning.glb',      38,0,115,5, Math.PI);
     // ground clutter: trees, benches, trucks, dumpsters, scaffolding, stairs —
     // seeded scatter with the same nearGate race-line exclusion as the tile pass
-    async function scatter(file,count,scale,mode,voxel){
+    async function scatter(file,count,scale,mode,voxel,gridRes){
       const src=await load(file);
       for(let i=0;i<count;i++){
         let x,z;
@@ -591,7 +591,7 @@ window._tryAssets=async function(){
         m.position.set(x,0,z);m.rotation.y=rnd()*Math.PI*2;
         placedRoot.add(m);
         if(voxel){
-          voxelColliders(m,3); // irregular single-mesh structure — decompose, don't seal
+          voxelColliders(m,gridRes||3); // irregular single-mesh structure — decompose, don't seal
         }else if(mode==='road'){
           // trucks: thin low collider — minor obstacle, flyable just above
           const bb=new THREE.Box3().setFromObject(m);
@@ -603,7 +603,7 @@ window._tryAssets=async function(){
     // trees — 18 total scattered across blocks as ground clutter
     // scale bumped to match building density (16-24 range); shrub kept
     // smaller than full trees since it's ground-level bush clutter
-    await scatter('tree-large.glb',5,20);
+    await scatter('tree-large.glb',5,20,undefined,true);
     await scatter('tree-park-large.glb',5,18);
     await scatter('tree-pine-large.glb',5,22);
     await scatter('tree-shrub.glb',3,10,'none');
@@ -622,8 +622,8 @@ window._tryAssets=async function(){
     await scatter('scaffolding-poles.glb',6,12,'edge',true);
     // stairs — ground-level detail (open bumped to match building density;
     // center is new)
-    await scatter('stairs-open.glb',4,10,undefined,true);
-    await scatter('stairs-center.glb',5,10,undefined,true);
+    await scatter('stairs-open.glb',4,10,undefined,true,8);
+    await scatter('stairs-center.glb',5,10,undefined,true,8);
     // pallets — small ground clutter, building-adjacent
     await scatter('pallet.glb',6,6,'edge');
     await scatter('pallet-small.glb',6,6,'edge');
