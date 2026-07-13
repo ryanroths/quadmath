@@ -1332,9 +1332,12 @@ function classifyTrick(rollDeg,pitchDeg,yawDeg){
   }
   if(sigCount>=3) // all three axes genuinely significant
     return{name:rot>=3?"Cubik's Rube":"Rubik's Cube",mag:sum};
-  if(rollSig&&pitchSig) // diagonal roll+pitch combo, yaw not significant (excluded above)
-    return{name:rot>=2?'True Barani':'Barani',mag:rollDeg+pitchDeg};
-  // single-axis dominant — any minor bleed in the other two axes is ignored
+  if(pitchSig&&yawSig) // Barani: front flip with yaw-driven twist — pitch+yaw combo, roll not significant (excluded above)
+    return{name:rot>=2?'True Barani':'Barani',mag:pitchDeg+yawDeg};
+  // single-axis dominant — any minor bleed in the other two axes is ignored.
+  // Note: roll+pitch alone (no yaw) no longer gets a combo name — Barani now
+  // keys off pitch+yaw specifically, so that case falls through to whichever
+  // of roll/pitch is truly dominant (plain Roll or Flip).
   if(yawDeg>=rollDeg&&yawDeg>=pitchDeg)return{name:axisName('Yaw Spin','Inverted Yaw Spin'),mag:yawDeg};
   if(rollDeg>=pitchDeg)return{name:axisName('Roll','Double Roll'),mag:rollDeg};
   return{name:axisName('Flip','Double Flip'),mag:pitchDeg};
