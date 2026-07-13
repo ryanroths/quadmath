@@ -970,6 +970,46 @@ function diveShaft(x,z,radius,height,segments){
     wallMesh.updateMatrixWorld(true);
     colliders.push(new THREE.Box3().setFromObject(wallMesh));
   }
+  // EXIT DOORWAY marker: two vertical light-strip posts at the exact
+  // angular edges of the collision gap, plus a floor glow strip across the
+  // threshold — same orange as the DIVE marker below, so it reads as part
+  // of the same landmark.
+  // The edge angle is NOT the theoretical chordAngle*1.5 segment boundary —
+  // verified empirically that the 1.08 overlap padding on the adjacent
+  // SOLID segments encroaches a few degrees into the gap (measured ~30.0°
+  // actual vs 33.75° theoretical for the default 16-segment shaft), so a
+  // hardcoded formula would place the markers just outside the real
+  // flyable opening. Instead, binary-search the actual `colliders` array
+  // for where solid really starts — guaranteed to match the collision-skip
+  // exactly, and stays correct if segLen/overlap/gridRes are ever retuned.
+  function findDoorEdge(dir){
+    let lo=0,hi=chordAngle*2.5; // hi is comfortably inside a normal solid segment
+    const testY=EXIT_HEIGHT*0.5;
+    for(let iter=0;iter<24;iter++){
+      const mid=(lo+hi)/2,a=dir*mid;
+      const pt=new THREE.Vector3(x+Math.cos(a)*radius,testY,z+Math.sin(a)*radius);
+      if(colliders.some(bb=>bb.containsPoint(pt)))hi=mid;else lo=mid;
+    }
+    return dir*(lo+hi)/2;
+  }
+  const doorEdgeNeg=findDoorEdge(-1),doorEdgePos=findDoorEdge(1);
+  const doorMat=new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:1.1,roughness:0.4});
+  for(const da of [doorEdgeNeg,doorEdgePos]){
+    const dpx=x+Math.cos(da)*radius,dpz=z+Math.sin(da)*radius;
+    const post=new THREE.Mesh(new THREE.BoxGeometry(0.8,EXIT_HEIGHT,0.8),doorMat);
+    post.position.set(dpx,EXIT_HEIGHT/2,dpz); // floor-to-doorway-ceiling, matches EXIT_HEIGHT exactly
+    scene.add(post);
+  }
+  // floor glow strip across the doorway threshold — width computed from the
+  // same measured edges (not assumed-symmetric trig) so it matches the real
+  // opening; a=0 tangent runs along world Z at this shaft's orientation, so
+  // no rotation needed
+  const edgeNegPt=new THREE.Vector3(x+Math.cos(doorEdgeNeg)*radius,0,z+Math.sin(doorEdgeNeg)*radius);
+  const edgePosPt=new THREE.Vector3(x+Math.cos(doorEdgePos)*radius,0,z+Math.sin(doorEdgePos)*radius);
+  const doorChord=edgeNegPt.distanceTo(edgePosPt);
+  const threshold=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.15,doorChord),doorMat);
+  threshold.position.set(x+radius,0.15,z);
+  scene.add(threshold);
   // DIVE marker: bright glowing ring + text at the top entrance, gate-style
   // visual language but a distinct color (orange) so it reads as its own
   // landmark type against the red/blue gates and green dive rings
