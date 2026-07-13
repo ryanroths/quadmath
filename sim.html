@@ -934,9 +934,23 @@ addTripleStack(0,300);
 function diveShaft(x,z,radius,height,segments){
   radius=radius||9;height=height||90;segments=segments||16;
   const grp=new THREE.Group();grp.position.set(x,0,z);scene.add(grp);
-  // visual: open-ended hollow tube, dark concrete — same material as the tunnel
+  const chordAngle=(Math.PI*2)/segments;
+  // 3-segment-wide gap centered on world angle a=0 (+X) — same formula
+  // drives BOTH the visual cutout and the collision skip below, so they
+  // can never drift apart (previously a marker-strip's angle had to be
+  // measured empirically because the visual tube was a full closed
+  // cylinder; now there's nothing to measure, the geometry itself is cut).
+  const doorHalfAngle=chordAngle*1.5;
+  // visual: open-ended hollow tube, dark concrete — same material as the
+  // tunnel, but with a genuine angular gap via thetaStart/thetaLength
+  // instead of a full 360° sweep. NOTE: this gap runs the FULL shaft
+  // height (floor to roof) since CylinderGeometry's theta cut applies
+  // uniformly along the whole height axis — there's no way to bound it to
+  // just a ground-level doorway with a single cylinder like the previous
+  // marker-lit version did. No marker lights needed: the opening itself is
+  // now visible.
   const tube=new THREE.Mesh(
-    new THREE.CylinderGeometry(radius,radius,height,24,1,true),
+    new THREE.CylinderGeometry(radius,radius,height,24,1,true,doorHalfAngle+Math.PI/2,Math.PI*2-doorHalfAngle*2),
     new THREE.MeshStandardMaterial({color:0x17181d,roughness:0.95,side:THREE.DoubleSide}));
   tube.position.y=height/2;
   grp.add(tube);
@@ -945,71 +959,23 @@ function diveShaft(x,z,radius,height,segments){
   // the dive line itself (this sim's colliders are axis-aligned Box3 only,
   // so each angled segment's AABB is computed via a throwaway rotated mesh,
   // same trick used for the voxel-decomposed structures elsewhere)
-  const chordAngle=(Math.PI*2)/segments;
   // overlap trimmed 1.15->1.08 — 1.15 was pulling neighboring panels'
   // AABBs into a double-thickness overlap at their shared edge (a snag
   // point); geometry/rotation math itself checks out per-segment (each
   // panel's length axis correctly tracks the tangent, thickness axis the
   // radius — verified, no index-specific bug), so this alone should clear it
   const segLen=2*radius*Math.sin(chordAngle/2)*1.08;
-  // ground-level exit doorway: 3 consecutive panels centered on a=0 (+X)
-  // skip their LOWER portion only — wall keeps standing above doorway
-  // height so the shaft still reads as an enclosed tube, but pilots can
-  // fly out horizontally near the ground instead of only through the open
-  // top/bottom of the tube
-  const EXIT_HEIGHT=16;
   for(let i=0;i<segments;i++){
+    const isExit=i===0||i===1||i===segments-1; // same 3 segments as the visual gap
+    if(isExit)continue; // no collider at all here — matches the open visual cutout exactly
     const a=i*chordAngle;
-    const isExit=i===0||i===1||i===segments-1; // symmetric ~67.5° gap around a=0
-    const wallH=isExit?height-EXIT_HEIGHT:height;
-    const wallY=isExit?EXIT_HEIGHT:0;
     const px=x+Math.cos(a)*radius,pz=z+Math.sin(a)*radius;
-    const wallMesh=new THREE.Mesh(new THREE.BoxGeometry(1.5,wallH,segLen));
-    wallMesh.position.set(px,wallY+wallH/2,pz);
+    const wallMesh=new THREE.Mesh(new THREE.BoxGeometry(1.5,height,segLen));
+    wallMesh.position.set(px,height/2,pz);
     wallMesh.rotation.y=-a; // orient the segment's local Z (its length) along the tangent
     wallMesh.updateMatrixWorld(true);
     colliders.push(new THREE.Box3().setFromObject(wallMesh));
   }
-  // EXIT DOORWAY marker: two vertical light-strip posts at the exact
-  // angular edges of the collision gap, plus a floor glow strip across the
-  // threshold — same orange as the DIVE marker below, so it reads as part
-  // of the same landmark.
-  // The edge angle is NOT the theoretical chordAngle*1.5 segment boundary —
-  // verified empirically that the 1.08 overlap padding on the adjacent
-  // SOLID segments encroaches a few degrees into the gap (measured ~30.0°
-  // actual vs 33.75° theoretical for the default 16-segment shaft), so a
-  // hardcoded formula would place the markers just outside the real
-  // flyable opening. Instead, binary-search the actual `colliders` array
-  // for where solid really starts — guaranteed to match the collision-skip
-  // exactly, and stays correct if segLen/overlap/gridRes are ever retuned.
-  function findDoorEdge(dir){
-    let lo=0,hi=chordAngle*2.5; // hi is comfortably inside a normal solid segment
-    const testY=EXIT_HEIGHT*0.5;
-    for(let iter=0;iter<24;iter++){
-      const mid=(lo+hi)/2,a=dir*mid;
-      const pt=new THREE.Vector3(x+Math.cos(a)*radius,testY,z+Math.sin(a)*radius);
-      if(colliders.some(bb=>bb.containsPoint(pt)))hi=mid;else lo=mid;
-    }
-    return dir*(lo+hi)/2;
-  }
-  const doorEdgeNeg=findDoorEdge(-1),doorEdgePos=findDoorEdge(1);
-  const doorMat=new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:1.1,roughness:0.4});
-  for(const da of [doorEdgeNeg,doorEdgePos]){
-    const dpx=x+Math.cos(da)*radius,dpz=z+Math.sin(da)*radius;
-    const post=new THREE.Mesh(new THREE.BoxGeometry(0.8,EXIT_HEIGHT,0.8),doorMat);
-    post.position.set(dpx,EXIT_HEIGHT/2,dpz); // floor-to-doorway-ceiling, matches EXIT_HEIGHT exactly
-    scene.add(post);
-  }
-  // floor glow strip across the doorway threshold — width computed from the
-  // same measured edges (not assumed-symmetric trig) so it matches the real
-  // opening; a=0 tangent runs along world Z at this shaft's orientation, so
-  // no rotation needed
-  const edgeNegPt=new THREE.Vector3(x+Math.cos(doorEdgeNeg)*radius,0,z+Math.sin(doorEdgeNeg)*radius);
-  const edgePosPt=new THREE.Vector3(x+Math.cos(doorEdgePos)*radius,0,z+Math.sin(doorEdgePos)*radius);
-  const doorChord=edgeNegPt.distanceTo(edgePosPt);
-  const threshold=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.15,doorChord),doorMat);
-  threshold.position.set(x+radius,0.15,z);
-  scene.add(threshold);
   // DIVE marker: bright glowing ring + text at the top entrance, gate-style
   // visual language but a distinct color (orange) so it reads as its own
   // landmark type against the red/blue gates and green dive rings
