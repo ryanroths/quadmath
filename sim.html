@@ -946,12 +946,26 @@ function diveShaft(x,z,radius,height,segments){
   // so each angled segment's AABB is computed via a throwaway rotated mesh,
   // same trick used for the voxel-decomposed structures elsewhere)
   const chordAngle=(Math.PI*2)/segments;
-  const segLen=2*radius*Math.sin(chordAngle/2)*1.15; // slight overlap, no seams between panels
+  // overlap trimmed 1.15->1.08 — 1.15 was pulling neighboring panels'
+  // AABBs into a double-thickness overlap at their shared edge (a snag
+  // point); geometry/rotation math itself checks out per-segment (each
+  // panel's length axis correctly tracks the tangent, thickness axis the
+  // radius — verified, no index-specific bug), so this alone should clear it
+  const segLen=2*radius*Math.sin(chordAngle/2)*1.08;
+  // ground-level exit doorway: 3 consecutive panels centered on a=0 (+X)
+  // skip their LOWER portion only — wall keeps standing above doorway
+  // height so the shaft still reads as an enclosed tube, but pilots can
+  // fly out horizontally near the ground instead of only through the open
+  // top/bottom of the tube
+  const EXIT_HEIGHT=16;
   for(let i=0;i<segments;i++){
     const a=i*chordAngle;
+    const isExit=i===0||i===1||i===segments-1; // symmetric ~67.5° gap around a=0
+    const wallH=isExit?height-EXIT_HEIGHT:height;
+    const wallY=isExit?EXIT_HEIGHT:0;
     const px=x+Math.cos(a)*radius,pz=z+Math.sin(a)*radius;
-    const wallMesh=new THREE.Mesh(new THREE.BoxGeometry(1.5,height,segLen));
-    wallMesh.position.set(px,height/2,pz);
+    const wallMesh=new THREE.Mesh(new THREE.BoxGeometry(1.5,wallH,segLen));
+    wallMesh.position.set(px,wallY+wallH/2,pz);
     wallMesh.rotation.y=-a; // orient the segment's local Z (its length) along the tangent
     wallMesh.updateMatrixWorld(true);
     colliders.push(new THREE.Box3().setFromObject(wallMesh));
