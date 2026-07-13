@@ -996,6 +996,42 @@ function diveShaft(x,z,radius,height,segments){
   scene.add(spr);
 }
 diveShaft(150,-150,9,90,16);
+// ---------- Wall Ride (large angled panel for close-proximity skim-flying) ----------
+// Standalone flat panel, not GLTF/voxel — a simple flat slab has no internal
+// gaps to preserve, so a single whole-object Box3 is correct here (unlike
+// the irregular structures elsewhere that need per-cell decomposition).
+// Placed after proceduralColliderCount (like the tunnel/triple stack/dive
+// shaft above) so its collider survives the GLTF swap.
+function addWallRide(x,z,width,height,thickness,leanDeg,ry){
+  width=width||70;height=height||35;thickness=thickness||2;leanDeg=leanDeg===undefined?12:leanDeg;ry=ry||0;
+  const grp=new THREE.Group();
+  grp.position.set(x,height/2,z);
+  grp.rotation.y=ry;
+  grp.rotation.z=THREE.MathUtils.degToRad(leanDeg); // off-vertical lean — reads as a rideable bank, not a flat blocking wall
+  scene.add(grp);
+  const panel=new THREE.Mesh(
+    new THREE.BoxGeometry(width,height,thickness),
+    new THREE.MeshStandardMaterial({color:0x17181d,roughness:0.95})); // same dark concrete as the tunnel/dive shaft
+  grp.add(panel);
+  grp.updateMatrixWorld(true);
+  colliders.push(new THREE.Box3().setFromObject(panel)); // whole-object — flat panel, no gaps to preserve
+  // base stripe: bright cyan light strip along the bottom front edge — a
+  // color not already claimed by gates (red/blue), dive rings (green), or
+  // the dive shaft (orange), so it reads as its own distinct landmark type
+  // signaling "wall-ride surface" rather than a regular building
+  const stripe=new THREE.Mesh(
+    new THREE.BoxGeometry(width*0.96,1.2,thickness+0.4),
+    new THREE.MeshStandardMaterial({color:0x00E5FF,emissive:0x00E5FF,emissiveIntensity:1.0,roughness:0.4}));
+  stripe.position.set(0,-height/2+1,0);
+  grp.add(stripe);
+}
+// on the permanently-clear z=0 street corridor (gz==0 building-grid cells
+// are always skipped, so z=12 has zero chance of a scattered building
+// landing anywhere near it, regardless of x) — well clear of the race gate
+// loop, skyscraper-b (dist ~138), gate 8 (dist ~109), and the dive shaft
+// (dist ~162). Oriented along +X (ry=0) so pilots can skim its face flying
+// east-west down the corridor, with open runway both directions.
+addWallRide(160,12,70,35,2,12,0);
 // mesas (always visible, not part of swap)
 const mesaTex=canvasTex(256,256,(g,s)=>{
   g.fillStyle='#a3673f';g.fillRect(0,0,s,s);
