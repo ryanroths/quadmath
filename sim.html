@@ -874,6 +874,62 @@ function addTripleStack(x,z){
 // standalone on the open corridor extension south of the city — buildings end
 // ~|z|=264, gate loop |z|<=135, dive rings <=180: clear runway both directions
 addTripleStack(0,300);
+// ---------- Dive Shaft (standalone tall vertical tube, signature big-dive line) ----------
+// Same open-ended-cylinder technique as the tunnel earlier in the file.
+// Placed after proceduralColliderCount (like addTripleStack above) so its
+// colliders survive the GLTF swap instead of being spliced out as "procedural."
+// Positioned near skyscraper-b (120,-120, manifest scale 24 — tied for
+// tallest) but offset to (150,-150): the midpoint of the four surrounding
+// building-grid cells (120,-120)/(180,-120)/(120,-180)/(180,-180), each
+// ~42u away. Grid tiles scatter up to 13u off their block center, so this
+// midpoint keeps a ~29u buffer from worst-case building reach in every
+// direction while still reading as "next to the tower." Checked clear of
+// every gate/dive-ring too (nearest is gate8 at dist 128).
+function diveShaft(x,z,radius,height,segments){
+  radius=radius||9;height=height||90;segments=segments||16;
+  const grp=new THREE.Group();grp.position.set(x,0,z);scene.add(grp);
+  // visual: open-ended hollow tube, dark concrete — same material as the tunnel
+  const tube=new THREE.Mesh(
+    new THREE.CylinderGeometry(radius,radius,height,24,1,true),
+    new THREE.MeshStandardMaterial({color:0x17181d,roughness:0.95,side:THREE.DoubleSide}));
+  tube.position.y=height/2;
+  grp.add(tube);
+  // wall collision: a ring of thin radial box segments approximating the
+  // cylinder — real risk on the walls, interior stays fully open/hollow for
+  // the dive line itself (this sim's colliders are axis-aligned Box3 only,
+  // so each angled segment's AABB is computed via a throwaway rotated mesh,
+  // same trick used for the voxel-decomposed structures elsewhere)
+  const chordAngle=(Math.PI*2)/segments;
+  const segLen=2*radius*Math.sin(chordAngle/2)*1.15; // slight overlap, no seams between panels
+  for(let i=0;i<segments;i++){
+    const a=i*chordAngle;
+    const px=x+Math.cos(a)*radius,pz=z+Math.sin(a)*radius;
+    const wallMesh=new THREE.Mesh(new THREE.BoxGeometry(1.5,height,segLen));
+    wallMesh.position.set(px,height/2,pz);
+    wallMesh.rotation.y=-a; // orient the segment's local Z (its length) along the tangent
+    wallMesh.updateMatrixWorld(true);
+    colliders.push(new THREE.Box3().setFromObject(wallMesh));
+  }
+  // DIVE marker: bright glowing ring + text at the top entrance, gate-style
+  // visual language but a distinct color (orange) so it reads as its own
+  // landmark type against the red/blue gates and green dive rings
+  const marker=new THREE.Mesh(
+    new THREE.TorusGeometry(radius*0.85,radius*0.06,10,32),
+    new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:1.1,roughness:0.4}));
+  marker.position.set(x,height+1.5,z);
+  marker.rotation.x=Math.PI/2; // lay flat — horizontal ring over the top opening
+  scene.add(marker);
+  const cv=document.createElement('canvas');cv.width=256;cv.height=64;
+  const g=cv.getContext('2d');
+  g.font='bold 48px monospace';g.textAlign='center';g.textBaseline='middle';
+  g.lineWidth=8;g.strokeStyle='#000';g.strokeText('DIVE',128,32);
+  g.fillStyle='#FF6A00';g.fillText('DIVE',128,32);
+  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));
+  spr.position.set(x,height+8,z);
+  spr.scale.set(16,4,1);
+  scene.add(spr);
+}
+diveShaft(150,-150,9,90,16);
 // mesas (always visible, not part of swap)
 const mesaTex=canvasTex(256,256,(g,s)=>{
   g.fillStyle='#a3673f';g.fillRect(0,0,s,s);
