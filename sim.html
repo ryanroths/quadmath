@@ -598,7 +598,7 @@ window._tryAssets=async function(){
     await placeAt('detail-awning.glb',      38,0,115,5, Math.PI);
     // ground clutter: trees, benches, trucks, dumpsters, scaffolding, stairs —
     // seeded scatter with the same nearGate race-line exclusion as the tile pass
-    async function scatter(file,count,scale,mode,voxel,gridRes){
+    async function scatter(file,count,scale,mode,voxel,gridRes,trunkOnly){
       const src=await load(file);
       for(let i=0;i<count;i++){
         let x,z;
@@ -619,10 +619,15 @@ window._tryAssets=async function(){
         }
         if(nearGate(x,z))continue; // keep the race line clear
         const m=src.clone(true);
-        m.scale.setScalar(scale*(0.85+rnd()*0.3));
+        const actualScale=scale*(0.85+rnd()*0.3); // captured — trunk collider must match what's actually rendered, not the base param
+        m.scale.setScalar(actualScale);
         m.position.set(x,0,z);m.rotation.y=rnd()*Math.PI*2;
         placedRoot.add(m);
-        if(voxel){
+        if(trunkOnly){
+          // trees: thin trunk-width collider only — canopy stays fully
+          // open/flyable, only the actual trunk registers a hit
+          addCollider(x,0,z,1.2,actualScale*0.65,1.2);
+        }else if(voxel){
           voxelColliders(m,gridRes||3); // irregular single-mesh structure — decompose, don't seal
         }else if(mode==='road'){
           // trucks: thin low collider — minor obstacle, flyable just above
@@ -632,13 +637,14 @@ window._tryAssets=async function(){
         }else if(mode!=='none')colliders.push(new THREE.Box3().setFromObject(m));
       }
     }
-    // trees — 18 total scattered across blocks as ground clutter
-    // scale bumped to match building density (16-24 range); shrub kept
-    // smaller than full trees since it's ground-level bush clutter
-    await scatter('tree-large.glb',5,20,undefined,true);
-    await scatter('tree-park-large.glb',5,18);
-    await scatter('tree-pine-large.glb',5,22);
-    await scatter('tree-shrub.glb',3,10,'none');
+    // trees — 18 total scattered across blocks as ground clutter. All use
+    // trunk-only collision now (addCollider, 1.2x(scale*0.65)x1.2 at the
+    // trunk) instead of the previous mixed voxel/whole-object/none
+    // treatment — canopy stays open, only the trunk is a real obstacle.
+    await scatter('tree-large.glb',5,20,undefined,false,undefined,true);
+    await scatter('tree-park-large.glb',5,18,undefined,false,undefined,true);
+    await scatter('tree-pine-large.glb',5,22,undefined,false,undefined,true);
+    await scatter('tree-shrub.glb',3,10,'none',false,undefined,true);
     // benches near buildings
     await scatter('detail-bench.glb',9,9,'edge');
     // trucks on the street corridors
@@ -814,16 +820,26 @@ window._tryAssets=async function(){
       // (all well outside the 80-radius gate loop), for scale reference in
       // otherwise-empty space. Same voxel-decomposed collision treatment
       // as their main-map counterparts.
-      async function dreamPlace(file,x,z,scale){
+      async function dreamPlace(file,x,z,scale,trunkOnly){
         const src=await load(file);
-        place(src,x,z,scale,rnd()*Math.PI*2,true);
+        if(trunkOnly){
+          // trees: same trunk-only treatment as the main map — thin
+          // trunk-width collider only, canopy stays open/flyable
+          const m=src.clone(true);
+          m.scale.setScalar(scale);
+          m.position.set(x,0,z);m.rotation.y=rnd()*Math.PI*2;
+          placedRoot.add(m);
+          addCollider(x,0,z,1.2,scale*0.65,1.2);
+        }else{
+          place(src,x,z,scale,rnd()*Math.PI*2,true);
+        }
       }
-      await dreamPlace('tree-large.glb',              DX-130, DZ+60,  20);
-      await dreamPlace('tree-large.glb',              DX+140, DZ-40,  20);
-      await dreamPlace('tree-large.glb',              DX-40,  DZ-140, 20);
-      await dreamPlace('tree-pine-large.glb',          DX+60,  DZ+130, 22);
-      await dreamPlace('tree-pine-large.glb',          DX-140, DZ-60,  22);
-      await dreamPlace('tree-pine-large.glb',          DX+120, DZ+100, 22);
+      await dreamPlace('tree-large.glb',              DX-130, DZ+60,  20, true);
+      await dreamPlace('tree-large.glb',              DX+140, DZ-40,  20, true);
+      await dreamPlace('tree-large.glb',              DX-40,  DZ-140, 20, true);
+      await dreamPlace('tree-pine-large.glb',          DX+60,  DZ+130, 22, true);
+      await dreamPlace('tree-pine-large.glb',          DX-140, DZ-60,  22, true);
+      await dreamPlace('tree-pine-large.glb',          DX+120, DZ+100, 22, true);
       await dreamPlace('building-sample-tower-a.glb',  DX+100, DZ-120, 18);
       await dreamPlace('building-sample-tower-b.glb',  DX-120, DZ+90,  19);
       await dreamPlace('building-sample-tower-c.glb',  DX+20,  DZ+140, 17);
