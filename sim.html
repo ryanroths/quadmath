@@ -42,6 +42,8 @@
   #toast{position:fixed;top:44%;left:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:700;
     color:var(--orange);text-shadow:0 0 12px rgba(255,77,26,.6);pointer-events:none;opacity:0;
     transition:opacity .3s;text-align:center}
+  #portalFlash{position:fixed;inset:0;background:#B14EFF;opacity:0;pointer-events:none;
+    transition:opacity .3s;z-index:15}
   /* calibration overlay */
   #calib{position:fixed;inset:0;background:rgba(13,14,18,.92);z-index:20;display:none;
     align-items:center;justify-content:center;flex-direction:column;text-align:center}
@@ -89,6 +91,7 @@
 <div class="osd" id="osdTrick"></div>
 <div id="crosshair"></div>
 <div id="toast"></div>
+<div id="portalFlash"></div>
 <div id="legend">
   <div class="lgc lgc-tl"></div>
   <div class="lgc lgc-tr"></div>
@@ -1052,6 +1055,73 @@ function addWallRide(x,z,width,height,thickness,leanDeg,ry){
 // east-west down the corridor, with open runway both directions. Flat
 // vertical (leanDeg=0) per the latest revision.
 addWallRide(160,12,70,35,2,0,0);
+// ---------- Portal system (round-trip teleport) ----------
+// Purely visual + a proximity/teleport check — no collider, so unlike the
+// tunnel/triple-stack/dive-shaft/wall-ride above, placement relative to
+// proceduralColliderCount doesn't matter here.
+const portals=[];
+const portalFlashEl=document.getElementById('portalFlash');
+const PORTAL_SPAWN_HEIGHT=15;
+// after any teleport, proximity checks are suppressed until this timestamp —
+// without it, landing at Portal B's exact stated position would sit inside
+// Portal B's OWN trigger radius and immediately warp you right back to
+// Portal A's position (which is itself inside Portal A's trigger radius),
+// an infinite same-frame ping-pong. This keeps the two portals at the exact
+// coordinates given rather than needing an artificial landing offset.
+let portalCooldownUntil=0;
+function addPortal(x,z,destX,destZ,label,radius){
+  radius=radius||12;
+  const y=PORTAL_SPAWN_HEIGHT;
+  // large glowing ring — purple/violet, a color not used by any other
+  // landmark (gates red/blue, dive rings green, dive shaft orange, wall-ride
+  // cyan) so a portal always reads as its own distinct thing
+  const mat=new THREE.MeshStandardMaterial({color:0x9B30FF,emissive:0x9B30FF,emissiveIntensity:1.0,roughness:0.4});
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(radius,radius*0.09,12,40),mat);
+  ring.position.set(x,y,z);
+  scene.add(ring);
+  // floating label — same canvas-text-sprite technique as the gate-0 START marker
+  const cv=document.createElement('canvas');cv.width=256;cv.height=64;
+  const g=cv.getContext('2d');
+  g.font='bold 44px monospace';g.textAlign='center';g.textBaseline='middle';
+  g.lineWidth=8;g.strokeStyle='#000';g.strokeText(label,128,32);
+  g.fillStyle='#C77DFF';g.fillText(label,128,32);
+  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));
+  spr.position.set(x,y+radius*0.85,z);
+  spr.scale.set(20,5,1);
+  scene.add(spr);
+  const portal={pos:new THREE.Vector3(x,y,z),r:radius*0.85,destX,destZ,mesh:ring};
+  portals.push(portal);
+  return portal;
+}
+function flashPortal(){
+  portalFlashEl.style.opacity=0.55;
+  setTimeout(()=>{portalFlashEl.style.opacity=0;},150); // CSS transition (.3s) handles the fade back to 0
+}
+function updatePortals(){
+  const t=performance.now();
+  for(const p of portals){
+    // continuous shimmer — pulsing emissive glow + gentle scale breathing,
+    // same sine-pulse technique as the active race gate's highlight
+    p.mesh.material.emissiveIntensity=1.0+Math.sin(t*0.004)*0.4;
+    p.mesh.scale.setScalar(1+Math.sin(t*0.003)*0.06);
+    if(t<portalCooldownUntil)continue; // just teleported — let the pilot clear the trigger zone first
+    if(state.pos.distanceTo(p.pos)<p.r){
+      state.pos.set(p.destX,PORTAL_SPAWN_HEIGHT,p.destZ);
+      state.vel.set(0,0,0); // clean teleport — no carried momentum smashing into destination geometry
+      portalCooldownUntil=t+1200;
+      flashPortal();
+      toast('WARP');
+    }
+  }
+}
+// round trip: Portal A on the main map, clear of the mesa ring (dist from
+// origin ~495, under the ring's 520 floor) and every other landmark
+// (skyscraper-b ~325, dive shaft ~283, sample cluster ~108) — leads to
+// empty space far out at (1500,1500), well beyond the mesa ring (dist
+// ~2121) so there's nothing out there yet. Portal B at that destination
+// leads back to Portal A's exact coordinates.
+addPortal(350,-350,1500,1500,'PORTAL');
+addPortal(1500,1500,350,-350,'RETURN');
 // mesas (always visible, not part of swap)
 const mesaTex=canvasTex(256,256,(g,s)=>{
   g.fillStyle='#a3673f';g.fillRect(0,0,s,s);
@@ -1575,7 +1645,7 @@ function loop(now){
   readInput(dt);
   acc+=dt;
   while(acc>=STEP){physics(STEP);acc-=STEP;}
-  updateCamera();updateOSD();updateGates();
+  updateCamera();updateOSD();updateGates();updatePortals();
   renderer.render(scene,camera);
 }
 toast('Throttle up to fly. Tab = tune.');
