@@ -760,6 +760,87 @@ window._tryAssets=async function(){
         (placedBox.max.y-placedBox.min.y).toFixed(1),
         (placedBox.max.z-placedBox.min.z).toFixed(1));
     }
+    // ---- Dreamland — small self-contained zone at the portal destination
+    // (1500,1500), distinct dreamlike mood from the main city ----
+    {
+      const DX=1500,DZ=1500;
+      // 1. ground — 300x300 plane, purple-to-blue gradient with a faint
+      // star-speckle, distinct from the main map's dirt/road texture. The
+      // main 1400x1400 ground plane only reaches to ±700, nowhere near
+      // (1500,1500), so without this the destination was bare void.
+      const dreamTex=canvasTex(512,512,(g,s)=>{
+        const grad=g.createLinearGradient(0,0,0,s);
+        grad.addColorStop(0,'#3a2a6b');
+        grad.addColorStop(0.5,'#5b4a9e');
+        grad.addColorStop(1,'#7a6bc4');
+        g.fillStyle=grad;g.fillRect(0,0,s,s);
+        for(let i=0;i<500;i++){
+          const v=rnd();
+          g.fillStyle=`rgba(255,255,255,${(0.15+v*0.35).toFixed(2)})`;
+          g.fillRect(rnd()*s,rnd()*s,1+rnd()*1.5,1+rnd()*1.5);
+        }
+      },1,1);
+      const dreamGround=new THREE.Mesh(new THREE.PlaneGeometry(300,300),
+        new THREE.MeshStandardMaterial({map:dreamTex,roughness:0.9}));
+      dreamGround.rotation.x=-Math.PI/2;
+      dreamGround.position.set(DX,0,DZ);
+      dreamGround.receiveShadow=true;
+      scene.add(dreamGround);
+
+      // 2. compact 5-gate mini-loop, ~80 unit radius, varied height 5-15 —
+      // reuses addGate() for the exact same visual construction, then
+      // immediately strips the entries back out of the shared `gates`
+      // array so the main 10-gate race/lap sequence is completely
+      // unaffected (the visual rings stay in the scene either way, since
+      // scene.add already happened inside addGate before the splice) —
+      // visual-only bonus mini-course, no lap-counter integration
+      const mainGateCount=gates.length;
+      const loopR=80;
+      const loopSpecs=[
+        {ang:0,   h:8,   size:7},
+        {ang:72,  h:12,  size:6},
+        {ang:144, h:6,   size:8},
+        {ang:216, h:15,  size:5.5},
+        {ang:288, h:10,  size:7},
+      ];
+      for(const s of loopSpecs){
+        const rad=s.ang*Math.PI/180;
+        const gx=DX+Math.cos(rad)*loopR,gz=DZ+Math.sin(rad)*loopR;
+        addGate(gx,s.h,gz,rad+Math.PI/2,s.size);
+      }
+      gates.length=mainGateCount; // strip back out — main race untouched
+
+      // 3. scattered dressing — trees + sample towers around the perimeter
+      // (all well outside the 80-radius gate loop), for scale reference in
+      // otherwise-empty space. Same voxel-decomposed collision treatment
+      // as their main-map counterparts.
+      async function dreamPlace(file,x,z,scale){
+        const src=await load(file);
+        place(src,x,z,scale,rnd()*Math.PI*2,true);
+      }
+      await dreamPlace('tree-large.glb',              DX-130, DZ+60,  20);
+      await dreamPlace('tree-large.glb',              DX+140, DZ-40,  20);
+      await dreamPlace('tree-large.glb',              DX-40,  DZ-140, 20);
+      await dreamPlace('tree-pine-large.glb',          DX+60,  DZ+130, 22);
+      await dreamPlace('tree-pine-large.glb',          DX-140, DZ-60,  22);
+      await dreamPlace('tree-pine-large.glb',          DX+120, DZ+100, 22);
+      await dreamPlace('building-sample-tower-a.glb',  DX+100, DZ-120, 18);
+      await dreamPlace('building-sample-tower-b.glb',  DX-120, DZ+90,  19);
+      await dreamPlace('building-sample-tower-c.glb',  DX+20,  DZ+140, 17);
+
+      // 4. bonus dive shaft — same mechanic as the main map's, own location
+      // and slightly different proportions so it doesn't feel like a copy-paste
+      diveShaft(DX-130, DZ+20, 10, 80, 16);
+
+      // 5. localized ambient tweak — a soft, wide-falloff cool-purple point
+      // light centered on the zone, distance-capped so it can't reach back
+      // to the main city (2100+ units away, far outside its 450-unit
+      // falloff). Makes Dreamland read as its own place immediately on
+      // arrival without globally re-tinting the main map's lighting.
+      const dreamLight=new THREE.PointLight(0x8f6bff,0.6,450,2);
+      dreamLight.position.set(DX,120,DZ);
+      scene.add(dreamLight);
+    }
     // swap: hide procedural, clear its colliders (rebuilt above)
     scene.add(placedRoot);
     proceduralGroup.visible=false;
