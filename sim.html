@@ -1592,7 +1592,7 @@ function physics(dt){
     }
   } else trickStableTimer=0;
   const mass=CFG.massG/1000;
-  const F=tmpV.copy(up).multiplyScalar(Math.pow(stick.t,1.15)*CFG.twr*mass*G);
+  const F=tmpV.copy(up).multiplyScalar(Math.pow(stick.t,2.2)*CFG.twr*mass*G);
   F.y-=mass*G;
   const v=state.vel,sp=v.length();
   if(sp>0){const df=CFG.drag*.02*sp*sp+CFG.drag*.15*sp;F.addScaledVector(v,-df*mass/Math.max(sp,1e-6));}
