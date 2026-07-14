@@ -342,7 +342,7 @@ function fmtLap(ms){
   const m=Math.floor(ms/60000),s=Math.floor(ms%60000/1000),h=Math.floor(ms%1000/10);
   return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+'.'+String(h).padStart(2,'0');
 }
-function addGate(x,y,z,rotationY,size){
+function addGate(x,y,z,rotationY,size,solidGate){
   size=size||7;
   const col=gates.length%2===0?0xff3b2f:0x2f7bff; // alternate red/blue
   const ring=new THREE.Mesh(
@@ -352,6 +352,18 @@ function addGate(x,y,z,rotationY,size){
   scene.add(ring);
   gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col}); // col = dim base color
   gates[gates.length-1].idx=gates.length-1;
+  if(solidGate){
+    // real collision on the ring FRAME only: trace the torus curve with
+    // overlapping axis-aligned box colliders (same decomposition approach as
+    // voxelColliders elsewhere) — the open middle gets no collider at all, so
+    // flying through the hole is clean but clipping the frame triggers bounce()
+    const rot=rotationY||0,cosR=Math.cos(rot),sinR=Math.sin(rot),segs=28;
+    const spacing=2*Math.PI*size/segs,boxSize=Math.max(spacing*1.5,size*0.07*4);
+    for(let i=0;i<segs;i++){
+      const t=(i/segs)*Math.PI*2,lx=size*Math.cos(t),ly=size*Math.sin(t);
+      addCollider(x+lx*cosR,y+ly-boxSize/2,z-lx*sinR,boxSize,boxSize,boxSize);
+    }
+  }
   return ring;
 }
 function addDiveRing(x,y,z,rx,ry,size){
@@ -1152,6 +1164,72 @@ function addWallRide(x,z,width,height,thickness,leanDeg,ry){
 // east-west down the corridor, with open runway both directions. Flat
 // vertical (leanDeg=0) per the latest revision.
 addWallRide(160,12,70,35,2,0,0);
+// ---------- Zigzag Circuit (standalone track, far side of the map) ----------
+// New location, isolated from every other structure: centered near
+// (900,-900), bounding box x:[760,1040] z:[-1070,-730]. Nearest corner of
+// that box (700,-700) is ~989 units from the origin — outside the mesa
+// ring's 820-unit max radius, so no mesa ever lands here regardless of
+// angle. Also clear of the main gate loop (all within roughly +-150/-150..
+// 285), portal A (350,-350, dist ~850+ from this box), Dreamland (1500,1500,
+// dist ~2470+) and the distant city backdrop (-2200,2200, dist ~3100+).
+// Zigzag shape (not a flat circle): the line alternately swings far left/
+// far right of the x=900 spine while climbing to a 46-unit apex at the
+// midpoint gate and diving back down twice, for genuine elevation variety.
+// Gates append directly onto the shared `gates` array (indices 10-21) so
+// the existing lap timer, gate-sequence highlighting and START marker all
+// keep working unmodified across the extended, now-22-gate circuit —
+// passing gate 21 wraps back to gate 0 and closes the lap exactly like
+// before, with the long transfer flight back to the main track counted as
+// part of the same continuous lap.
+// Solid gates (solidGate=true): real collision this time — clipping the
+// ring frame (not the open hole) triggers bounce physics, unlike the main
+// track's visual-only rings.
+const arrowMat=new THREE.MeshStandardMaterial({color:0xFFD400,emissive:0xFFD400,emissiveIntensity:0.9,roughness:0.4});
+const arrowMarkers=[];
+function addArrowMarker(from,to){
+  const dir=new THREE.Vector3().subVectors(to,from).normalize();
+  const mid=new THREE.Vector3().addVectors(from,to).multiplyScalar(0.5);
+  const grp=new THREE.Group();
+  const shaft=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,6,8),arrowMat);
+  shaft.position.y=-1.75;
+  const head=new THREE.Mesh(new THREE.ConeGeometry(1.6,3.5,10),arrowMat);
+  head.position.y=3.25;
+  grp.add(shaft,head);
+  grp.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir); // orient local +Y (arrow tip) along the flight direction
+  grp.position.copy(mid);grp.position.y+=4; // float above the flight line, clear of the gates
+  scene.add(grp);
+  arrowMarkers.push({mesh:grp,baseY:grp.position.y,phase:arrowMarkers.length*0.57}); // deterministic phase offset, no rnd() — keeps the seeded PRNG sequence used by mesas/Dreamland untouched
+}
+function updateArrowMarkers(){
+  const t=performance.now();
+  for(const a of arrowMarkers){
+    a.mesh.position.y=a.baseY+Math.sin(t*0.0018+a.phase)*2; // float bob
+    a.mesh.rotateY(0.015); // spin around its own pointing axis — shimmer without losing direction
+  }
+}
+addGate(760,  8,  -730,  0.30, 9, true);  // 11 entry, low + wide
+addGate(1040, 14, -775,  1.95, 7, true);  // 12 hard swing right
+addGate(770,  26, -820, -1.95, 7, true);  // 13 swing left + climb
+addGate(1030, 40, -865,  1.95, 6, true);  // 14 swing right, near-peak, tight
+addGate(900,  46, -900,  3.14, 6, true);  // 15 CENTER apex — highest point, tight technical gate
+addGate(770,  28, -935, -1.95, 7, true);  // 16 dive left, descending
+addGate(1040, 16, -970,  1.95, 7, true);  // 17 swing right, descending
+addGate(900,  10, -1005, 3.14, 8, true);  // 18 low center gate, near-ground fast pass
+addGate(770,  18, -1040,-1.95, 7, true);  // 19 swing left
+addGate(1030, 12, -1065, 1.60, 7, true);  // 20 swing right, near south edge
+addGate(900,  22, -1070, 0.90, 8, true);  // 21 south turnaround apex
+addGate(830,  10, -790, -2.60, 9, true);  // 22 long return leg, wide finish — closes the loop
+addArrowMarker(new THREE.Vector3(760,8,-730),   new THREE.Vector3(1040,14,-775));
+addArrowMarker(new THREE.Vector3(1040,14,-775), new THREE.Vector3(770,26,-820));
+addArrowMarker(new THREE.Vector3(770,26,-820),  new THREE.Vector3(1030,40,-865));
+addArrowMarker(new THREE.Vector3(1030,40,-865), new THREE.Vector3(900,46,-900));
+addArrowMarker(new THREE.Vector3(900,46,-900),  new THREE.Vector3(770,28,-935));
+addArrowMarker(new THREE.Vector3(770,28,-935),  new THREE.Vector3(1040,16,-970));
+addArrowMarker(new THREE.Vector3(1040,16,-970), new THREE.Vector3(900,10,-1005));
+addArrowMarker(new THREE.Vector3(900,10,-1005), new THREE.Vector3(770,18,-1040));
+addArrowMarker(new THREE.Vector3(770,18,-1040), new THREE.Vector3(1030,12,-1065));
+addArrowMarker(new THREE.Vector3(1030,12,-1065),new THREE.Vector3(900,22,-1070));
+addArrowMarker(new THREE.Vector3(900,22,-1070), new THREE.Vector3(830,10,-790));
 // ---------- Portal system (round-trip teleport) ----------
 // Purely visual + a proximity/teleport check — no collider, so unlike the
 // tunnel/triple-stack/dive-shaft/wall-ride above, placement relative to
@@ -1778,7 +1856,7 @@ function loop(now){
   acc+=dt;
   while(acc>=STEP){physics(STEP);acc-=STEP;}
   updateMotorSound();
-  updateCamera();updateOSD();updateGates();updatePortals();
+  updateCamera();updateOSD();updateGates();updatePortals();updateArrowMarkers();
   renderer.render(scene,camera);
 }
 toast('Throttle up to fly. Tab = tune.');
