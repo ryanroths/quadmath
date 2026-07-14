@@ -59,6 +59,9 @@
     border:1px solid #262A33;padding:10px 14px;font-size:11px;line-height:1.9;
     color:var(--dim);letter-spacing:.5px;pointer-events:none}
   #legend b{color:var(--txt);font-weight:600}
+  #audioHint{position:fixed;bottom:118px;left:16px;z-index:5;color:var(--dim);
+    font-size:11px;letter-spacing:.5px;pointer-events:none;opacity:1;transition:opacity 1s ease}
+  #audioHint.hide{opacity:0}
   .lgc{position:absolute;width:8px;height:8px;border:1px solid var(--green);opacity:.45}
   .lgc-tl{top:-1px;left:-1px;border-right:none;border-bottom:none}
   .lgc-tr{top:-1px;right:-1px;border-left:none;border-bottom:none}
@@ -92,6 +95,7 @@
 <div id="crosshair"></div>
 <div id="toast"></div>
 <div id="portalFlash"></div>
+<div id="audioHint">🔊 Press M to enable audio (music + motor sound)</div>
 <div id="legend">
   <div class="lgc lgc-tl"></div>
   <div class="lgc lgc-tr"></div>
@@ -1481,22 +1485,31 @@ musicEl.addEventListener('ended',()=>{
   if(musicIdx>=musicOrder.length)shuffleOrder(); // reshuffle each full loop
   playCurrentTrack();
 });
+const audioHintEl=document.getElementById('audioHint');
+function dismissAudioHint(){
+  if(!audioHintEl)return;
+  audioHintEl.classList.add('hide');
+  setTimeout(()=>audioHintEl.remove(),1000); // remove after the fade transition finishes
+}
+setTimeout(dismissAudioHint,6000); // fades on its own even if M is never pressed
 function toggleMusic(){
+  dismissAudioHint(); // first M press dismisses it immediately, pre-empting the 6s timer
   musicOn=!musicOn;
   if(musicOn){
     if(!musicOrder.length)shuffleOrder();
     if(musicEl.src)musicEl.play().catch(()=>{});else playCurrentTrack();
-    initMotorAudio();
-    motorAudioCtx.resume().catch(()=>{});
-  }else{
-    musicEl.pause();
-    if(motorGainMaster)motorGainMaster.gain.setTargetAtTime(0,motorAudioCtx.currentTime,0.05);
-  }
+  }else musicEl.pause();
+  // 'm' is the only user-gesture available, so it's still what unlocks the
+  // motor AudioContext — but this runs on every press regardless of which
+  // way musicOn flips, and motor volume itself no longer depends on musicOn
+  initMotorAudio();
+  motorAudioCtx.resume().catch(()=>{});
   toast(musicOn?'♪ MUSIC ON':'MUSIC OFF');
 }
 
-// ---------- motor whine (Web Audio oscillators, 4x detuned sawtooth) — same M toggle as music ----------
+// ---------- motor whine (Web Audio oscillators, 4x detuned sawtooth) — independent of the music toggle; 'm' just unlocks its AudioContext ----------
 let motorAudioCtx=null,motorGainMaster=null,motorOsc=[];
+let motorSoundOn=true;
 const MOTOR_DETUNE=[-7,-2,3,8]; // cents — avoids perfect unison, gives a fuller "buzz"
 function initMotorAudio(){
   if(motorAudioCtx)return;
@@ -1517,7 +1530,7 @@ function initMotorAudio(){
   }
 }
 function updateMotorSound(){
-  if(!motorAudioCtx||!musicOn)return;
+  if(!motorAudioCtx||!motorSoundOn)return;
   const t=motorAudioCtx.currentTime;
   const freq=90+Math.pow(stick.t,1.4)*430;      // idle ~90Hz -> full throttle ~520Hz
   const vol=0.015+Math.pow(stick.t,1.2)*0.16;   // near-silent idle -> mixed under the music
