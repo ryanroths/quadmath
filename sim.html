@@ -1408,8 +1408,43 @@ function toggleMusic(){
   if(musicOn){
     if(!musicOrder.length)shuffleOrder();
     if(musicEl.src)musicEl.play().catch(()=>{});else playCurrentTrack();
-  }else musicEl.pause();
+    initMotorAudio();
+    motorAudioCtx.resume().catch(()=>{});
+  }else{
+    musicEl.pause();
+    if(motorGainMaster)motorGainMaster.gain.setTargetAtTime(0,motorAudioCtx.currentTime,0.05);
+  }
   toast(musicOn?'♪ MUSIC ON':'MUSIC OFF');
+}
+
+// ---------- motor whine (Web Audio oscillators, 4x detuned sawtooth) — same M toggle as music ----------
+let motorAudioCtx=null,motorGainMaster=null,motorOsc=[];
+const MOTOR_DETUNE=[-7,-2,3,8]; // cents — avoids perfect unison, gives a fuller "buzz"
+function initMotorAudio(){
+  if(motorAudioCtx)return;
+  motorAudioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  motorGainMaster=motorAudioCtx.createGain();
+  motorGainMaster.gain.value=0;
+  motorGainMaster.connect(motorAudioCtx.destination);
+  for(let i=0;i<4;i++){
+    const osc=motorAudioCtx.createOscillator();
+    osc.type='sawtooth';
+    osc.frequency.value=90;
+    osc.detune.value=MOTOR_DETUNE[i];
+    const g=motorAudioCtx.createGain();
+    g.gain.value=0.22; // per-motor trim, summed into master so 4 voices don't clip
+    osc.connect(g);g.connect(motorGainMaster);
+    osc.start();
+    motorOsc.push(osc);
+  }
+}
+function updateMotorSound(){
+  if(!motorAudioCtx||!musicOn)return;
+  const t=motorAudioCtx.currentTime;
+  const freq=90+Math.pow(stick.t,1.4)*430;      // idle ~90Hz -> full throttle ~520Hz
+  const vol=0.015+Math.pow(stick.t,1.2)*0.16;   // near-silent idle -> mixed under the music
+  for(const osc of motorOsc)osc.frequency.setTargetAtTime(freq,t,0.05);
+  motorGainMaster.gain.setTargetAtTime(vol,t,0.08);
 }
 addEventListener('keydown',e=>{
   if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
@@ -1742,6 +1777,7 @@ function loop(now){
   readInput(dt);
   acc+=dt;
   while(acc>=STEP){physics(STEP);acc-=STEP;}
+  updateMotorSound();
   updateCamera();updateOSD();updateGates();updatePortals();
   renderer.render(scene,camera);
 }
