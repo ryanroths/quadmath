@@ -1211,11 +1211,12 @@
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 6px;
-    height: 260px;
+    overflow: hidden;
+    height: auto;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     text-align: center;
     text-decoration: none;
     padding: 24px;
@@ -1224,6 +1225,23 @@
     gap: 8px;
   }
   .sim-teaser-card:hover { border-color: var(--orange); }
+  .sim-teaser-card img {
+    /* negative margins only SHIFT a box, they don't grow it — width:100%
+       resolves against the padded content area (same as the text below),
+       so a plain 100% + negative margin still falls short of the card's
+       true edges. Explicitly widen the box by the padding removed on each
+       side (24px + 24px) so it actually reaches full-bleed. */
+    width: calc(100% + 48px);
+    height: auto;
+    max-height: 200px;
+    object-fit: cover;
+    display: block;
+    align-self: stretch;
+    border-radius: 6px 6px 0 0;
+    /* pull flush to the card's own edges despite its 24px padding, so the
+       image's top corners actually land on the card's rounded corners */
+    margin: -24px -24px 4px -24px;
+  }
   .sim-teaser-label {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.65rem;
