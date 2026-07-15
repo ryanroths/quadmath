@@ -1627,7 +1627,7 @@ let trickRoll=0,trickPitch=0,trickYaw=0,trickStableTimer=0,trickRotStopTimer=0;
 let comboCount=0,comboScore=0,comboMultiplier=1,comboActive=false,lastTrickTime=0,comboFlashUntil=0;
 let sessionScore=0,bestComboScore=0;
 try{bestComboScore=parseFloat(localStorage.getItem('quadmath_bestCombo'))||0;}catch(e){}
-const TRICK_STABLE_MAG=0.6,TRICK_STABLE_UPY=0.92,TRICK_STABLE_HOLD=0.3,COMBO_WINDOW_MS=2500,TRICK_CHAIN_MS=2000;
+const TRICK_STABLE_MAG=0.6,TRICK_STABLE_UPY=0.92,TRICK_STABLE_HOLD=0.5,COMBO_WINDOW_MS=2500,TRICK_CHAIN_MS=2000;
 const TRICK_RATE_FLOOR=0.15; // rad/s - below this, treat as noise, don't accumulate
 // Real trick names (prowhooper.com Tricktionary), still purely rotation-based
 // off state.q pitch/roll/yaw accumulation — no position/velocity/proximity
@@ -1643,7 +1643,11 @@ const TRICK_RATE_FLOOR=0.15; // rad/s - below this, treat as noise, don't accumu
 // falling into a broken in-between value.
 function classifyTrick(rollDeg,pitchDeg,yawDeg){
   const dominant=Math.max(rollDeg,pitchDeg,yawDeg);
-  if(dominant<200)return null; // below this: flight wobble, not a trick
+  if(dominant<90)return null; // below this: flight wobble, not a trick
+  // Juicy Flick: a quick partial flick (90-200°), below the full-rotation
+  // band — classified before the combo/single-axis logic that assumes a
+  // near-complete rotation on the dominant axis
+  if(dominant>=90&&dominant<200)return{name:'Juicy Flick',mag:dominant};
   const bar=dominant*0.55;
   const rollSig=rollDeg>=bar,pitchSig=pitchDeg>=bar,yawSig=yawDeg>=bar;
   const sigCount=(rollSig?1:0)+(pitchSig?1:0)+(yawSig?1:0);
