@@ -1240,83 +1240,38 @@ function addWallRide(x,z,width,height,thickness,leanDeg,ry){
 // east-west down the corridor, with open runway both directions. Flat
 // vertical (leanDeg=0) per the latest revision.
 addWallRide(160,12,70,35,2,0,0);
-// ---------- Zigzag Circuit (standalone track, moved closer to the main map) ----------
-// Shifted by (dx=-550,dz=+165) from its original center (900,-900) to
-// (350,-735) — roughly two-thirds of the original distance from the origin
-// (was ~1272, now ~814), bounding box x:[210,490] z:[-905,-565].
-// This distance band (520-820 from origin) overlaps the mesa ring, so unlike
-// the original placement, clearance here can't be proven by "outside the
-// ring's max radius" — it was instead checked against the 7 mesas' ACTUAL
-// positions (the ring uses a fixed PRNG seed, so they're deterministic, not
-// resampled per load). The requested target (350,-600) turned out to sit
-// almost inside mesa #4's footprint (426.9,-451.1,r=84.4), with mesa #6
-// (-102.3,-533.1,r=126.3) and mesa #2 (28.3,-806.6,r=103.3) also crowding
-// the same corner — a brute-force search over nearby centers found (350,-735)
-// as the closest point to the target that still clears all 7 mesas with a
-// >=29-unit margin (in line with this file's existing 35-unit GATE_CLEAR
-// convention). Still clear of the main gate loop (all within roughly
-// +-150/-150..285), portal A (350,-350, dist ~215 from this box — no
-// functional overlap, portal trigger radius is only 20), Dreamland
-// (1500,1500), and the city backdrop (-2200,2200).
+// ---------- Zigzag Circuit (standalone track, fitted onto the ground plane) ----------
+// Center (350,-515), bounding box x:[210,490] z:[-685,-345]. The z span was
+// pulled +220 from the previous placement (which ran to z=-905) so the whole
+// loop sits within the 1400×1400 ground plane's z∈[-700,+700]; before, half
+// the gates hung off the world edge. Well clear of the main map's buildings
+// (which end around |z|=264) and portal A (350,-350).
+// Note: this z band overlaps the decorative mesa ring; the mesas are visual
+// only (no colliders), so any cosmetic overlap doesn't block flight, but see
+// the clearance note reported alongside this change.
 // Zigzag shape (not a flat circle): the line alternately swings far left/
 // far right of the x=350 spine while climbing to a 46-unit apex at the
 // midpoint gate and diving back down twice, for genuine elevation variety.
-// Gates append directly onto the shared `gates` array (indices 10-21) so
-// the existing lap timer, gate-sequence highlighting and START marker all
-// keep working unmodified across the extended, now-22-gate circuit —
-// passing gate 21 wraps back to gate 0 and closes the lap exactly like
-// before, with the long transfer flight back to the main track counted as
-// part of the same continuous lap.
-// Solid gates (solidGate=true): real collision this time — clipping the
-// ring frame (not the open hole) triggers bounce physics, unlike the main
-// track's visual-only rings.
-const arrowMat=new THREE.MeshStandardMaterial({color:0xFFD400,emissive:0xFFD400,emissiveIntensity:0.9,roughness:0.4});
-const arrowMarkers=[];
-function addArrowMarker(from,to){
-  const dir=new THREE.Vector3().subVectors(to,from).normalize();
-  const mid=new THREE.Vector3().addVectors(from,to).multiplyScalar(0.5);
-  const grp=new THREE.Group();
-  const shaft=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,6,8),arrowMat);
-  shaft.position.y=-1.75;
-  const head=new THREE.Mesh(new THREE.ConeGeometry(1.6,3.5,10),arrowMat);
-  head.position.y=3.25;
-  grp.add(shaft,head);
-  grp.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir); // orient local +Y (arrow tip) along the flight direction
-  grp.position.copy(mid);grp.position.y+=4; // float above the flight line, clear of the gates
-  scene.add(grp);
-  arrowMarkers.push({mesh:grp,baseY:grp.position.y,phase:arrowMarkers.length*0.57}); // deterministic phase offset, no rnd() — keeps the seeded PRNG sequence used by mesas/Dreamland untouched
-}
-function updateArrowMarkers(){
-  const t=performance.now();
-  for(const a of arrowMarkers){
-    a.mesh.position.y=a.baseY+Math.sin(t*0.0018+a.phase)*2; // float bob
-    a.mesh.rotateY(0.015); // spin around its own pointing axis — shimmer without losing direction
-  }
-}
-// standalone zigzag track — trackId=1 so it keeps its own sequence/lap timing
-addGate(210,  8,  -565,  0.30, 9, true, 1);  // 1 entry, low + wide (this track's gate 0)
-addGate(490,  14, -610,  1.95, 7, true, 1);  // 2 hard swing right
-addGate(220,  26, -655, -1.95, 7, true, 1);  // 3 swing left + climb
-addGate(480,  40, -700,  1.95, 6, true, 1);  // 4 swing right, near-peak, tight
-addGate(350,  46, -735,  3.14, 6, true, 1);  // 5 CENTER apex — highest point, tight technical gate
-addGate(220,  28, -770, -1.95, 7, true, 1);  // 6 dive left, descending
-addGate(490,  16, -805,  1.95, 7, true, 1);  // 7 swing right, descending
-addGate(350,  10, -840,  3.14, 8, true, 1);  // 8 low center gate, near-ground fast pass
-addGate(220,  18, -875, -1.95, 7, true, 1);  // 9 swing left
-addGate(480,  12, -900,  1.60, 7, true, 1);  // 10 swing right, near south edge
-addGate(350,  22, -905,  0.90, 8, true, 1);  // 11 south turnaround apex
-addGate(280,  10, -625, -2.60, 9, true, 1);  // 12 long return leg, wide finish — closes the loop
-addArrowMarker(new THREE.Vector3(210,8,-565),   new THREE.Vector3(490,14,-610));
-addArrowMarker(new THREE.Vector3(490,14,-610),  new THREE.Vector3(220,26,-655));
-addArrowMarker(new THREE.Vector3(220,26,-655),  new THREE.Vector3(480,40,-700));
-addArrowMarker(new THREE.Vector3(480,40,-700),  new THREE.Vector3(350,46,-735));
-addArrowMarker(new THREE.Vector3(350,46,-735),  new THREE.Vector3(220,28,-770));
-addArrowMarker(new THREE.Vector3(220,28,-770),  new THREE.Vector3(490,16,-805));
-addArrowMarker(new THREE.Vector3(490,16,-805),  new THREE.Vector3(350,10,-840));
-addArrowMarker(new THREE.Vector3(350,10,-840),  new THREE.Vector3(220,18,-875));
-addArrowMarker(new THREE.Vector3(220,18,-875),  new THREE.Vector3(480,12,-900));
-addArrowMarker(new THREE.Vector3(480,12,-900),  new THREE.Vector3(350,22,-905));
-addArrowMarker(new THREE.Vector3(350,22,-905),  new THREE.Vector3(280,10,-625));
+// Gates carry trackId=1, so they form their own independent sequence/lap on
+// the shared `gates` array — track 0's race is untouched.
+// Solid gates (solidGate=true): real collision — clipping the ring frame
+// (not the open hole) triggers bounce physics, unlike track 0's visual rings.
+// standalone zigzag track — trackId=1 so it keeps its own sequence/lap timing.
+// Shifted +220 on z from the previous placement so the whole loop sits on the
+// 1400×1400 ground plane (z∈[-700,+700]); previously it ran to z=-905, hanging
+// half its gates off the world edge. New z span: -345 to -685.
+addGate(210,  8,  -345,  0.30, 9, true, 1);  // 1 entry, low + wide (this track's gate 0)
+addGate(490,  14, -390,  1.95, 7, true, 1);  // 2 hard swing right
+addGate(220,  26, -435, -1.95, 7, true, 1);  // 3 swing left + climb
+addGate(480,  40, -480,  1.95, 6, true, 1);  // 4 swing right, near-peak, tight
+addGate(350,  46, -515,  3.14, 6, true, 1);  // 5 CENTER apex — highest point, tight technical gate
+addGate(220,  28, -550, -1.95, 7, true, 1);  // 6 dive left, descending
+addGate(490,  16, -585,  1.95, 7, true, 1);  // 7 swing right, descending
+addGate(350,  10, -620,  3.14, 8, true, 1);  // 8 low center gate, near-ground fast pass
+addGate(220,  18, -655, -1.95, 7, true, 1);  // 9 swing left
+addGate(480,  12, -680,  1.60, 7, true, 1);  // 10 swing right, near south edge
+addGate(350,  22, -685,  0.90, 8, true, 1);  // 11 south turnaround apex
+addGate(280,  10, -405, -2.60, 9, true, 1);  // 12 long return leg, wide finish — closes the loop
 // ---------- Portal system (round-trip teleport) ----------
 // Purely visual + a proximity/teleport check — no collider, so unlike the
 // tunnel/triple-stack/dive-shaft/wall-ride above, placement relative to
@@ -1938,7 +1893,7 @@ function loop(now){
   acc+=dt;
   while(acc>=STEP){physics(STEP);acc-=STEP;}
   updateMotorSound();
-  updateCamera();updateOSD();updateGates();updateGhost();updatePortals();updateArrowMarkers();
+  updateCamera();updateOSD();updateGates();updateGhost();updatePortals();
   renderer.render(scene,camera);
 }
 toast('Throttle up to fly. Tab = tune.');
