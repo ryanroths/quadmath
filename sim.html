@@ -1374,9 +1374,18 @@ const mesaTex=canvasTex(256,256,(g,s)=>{
 },3,1);
 for(let i=0;i<7;i++){
   const r=60+rnd()*90,h=40+rnd()*60,a=rnd()*Math.PI*2,dist=520+rnd()*300;
+  const mx=Math.cos(a)*dist,mz=Math.sin(a)*dist;
+  // track-1 exclusion: the standalone race track (x=210-490, z=-345..-685)
+  // sits inside the mesa spawn band, so skip any mesa that would land on it.
+  // Clearance scales with this mesa's OWN radius (60-150) + a 120 buffer, so a
+  // large mesa is pushed off the track by more than a small one. (rnd() for
+  // r/h/a/dist is already consumed above, so skipping keeps the seeded
+  // sequence deterministic for the remaining mesas — we just place fewer.)
+  const clear=r+120;
+  if(trackGates(1).some(g=>{const dx=g.pos.x-mx,dz=g.pos.z-mz;return dx*dx+dz*dz<clear*clear;}))continue;
   const mesa=new THREE.Mesh(new THREE.CylinderGeometry(r*.72,r,h,12,3),
     new THREE.MeshStandardMaterial({map:mesaTex,roughness:1,flatShading:true}));
-  mesa.position.set(Math.cos(a)*dist,h/2-4,Math.sin(a)*dist);
+  mesa.position.set(mx,h/2-4,mz);
   scene.add(mesa);
 }
 if(window._gltfReady) window._tryAssets();
