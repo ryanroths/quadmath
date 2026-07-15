@@ -1750,7 +1750,9 @@ function physics(dt){
       trickPeak[ax]=Math.abs(trickAcc[ax]); // consumed by the rotation; remainder starts fresh
       graceDeadline=nowT+TRICK_GRACE_MS;      // (re)open the multi-rotation merge window
       logTrick('bank '+ax);
-    }else if(a<45&&trickPeak[ax]>=90){
+    }else if(a<45&&trickPeak[ax]>=90
+             &&!bankedRotations.some(b=>b.axis===ax) // this axis already banked → this is its remainder, not a standalone flick
+             &&!['roll','pitch','yaw'].some(o=>o!==ax&&Math.abs(trickAcc[o])>=90)){ // another axis mid-rotation → part of a larger trick, not a solo flick
       // axis netted back near zero after a partial excursion without banking a
       // full rotation: a 90-200° peak is a Juicy Flick; anything else is spent flow
       if(trickPeak[ax]<=200){scoreTrick({name:'Juicy Flick',mag:trickPeak[ax]});logTrick('juicy '+ax);}
