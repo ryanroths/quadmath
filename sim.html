@@ -429,18 +429,21 @@ addDiveRing(  70,  6, -70, 0.3,       0.8, 3);   // tilted: power-loop / flick l
 addDiveRing( -70,  9,  70, -0.4,      2.2, 3.5);
 addDiveRing( 180, 12, -40, 0.5,       1.1, 4);
 addDiveRing(-180, 15,  40, -0.35,     4.0, 3);
-// "START" label floating above gate 0 — canvas-text sprite, always faces camera
-{
+// "START" label floating above a gate — canvas-text sprite, always faces the
+// camera and always visible, so a pilot can find either track's start gate.
+function addStartMarker(pos){
   const cv=document.createElement('canvas');cv.width=256;cv.height=64;
   const g=cv.getContext('2d');
   g.font='bold 48px monospace';g.textAlign='center';g.textBaseline='middle';
   g.lineWidth=8;g.strokeStyle='#000';g.strokeText('START',128,32);
   g.fillStyle='#fff';g.fillText('START',128,32);
   const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));
-  spr.position.copy(gates[0].pos);spr.position.y+=12;
+  spr.position.copy(pos);spr.position.y+=12;
   spr.scale.set(16,4,1);
   scene.add(spr);
+  return spr;
 }
+addStartMarker(trackGates(0)[0].pos); // track 0 gate 0
 const gateUI=document.getElementById('osdGate');
 function updateGateUI(){
   const list=trackGates(activeTrackId); // position shown within the active track only
@@ -1272,6 +1275,7 @@ addGate(220,  18, -655, -1.95, 7, true, 1);  // 9 swing left
 addGate(480,  12, -680,  1.60, 7, true, 1);  // 10 swing right, near south edge
 addGate(350,  22, -685,  0.90, 8, true, 1);  // 11 south turnaround apex
 addGate(280,  10, -405, -2.60, 9, true, 1);  // 12 long return leg, wide finish — closes the loop
+addStartMarker(trackGates(1)[0].pos); // track 1 gate 0 — its own START label
 // ---------- Portal system (round-trip teleport) ----------
 // Purely visual + a proximity/teleport check — no collider, so unlike the
 // tunnel/triple-stack/dive-shaft/wall-ride above, placement relative to
