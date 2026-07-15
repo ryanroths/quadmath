@@ -1641,35 +1641,46 @@ const TRICK_RATE_FLOOR=0.15; // rad/s - below this, treat as noise, don't accumu
 // state.q pitch/roll/yaw accumulation — no position/velocity/proximity
 // tracking exists yet, so ground/obstacle/gap-relative tricks (Wall Tricks,
 // Powerloops, Split-S, Pole Dancing, Rewinds, Gaps) aren't representable here.
-// Classification now runs on BANKED ROTATIONS (one per ±360 crossing on an
-// axis), collected within a single grace window, instead of raw accumulated
-// magnitudes: pitch+yaw → Barani, all three axes → Rubik's Cube, otherwise
-// the dominant axis names it (Flip/Roll/Yaw Spin), with Double/Triple driven
-// by how many rotations banked on that axis. "2+" on any axis upgrades the
-// combo variant (True Barani / Cubik's Rube).
-function axisSingle(axis,count){
-  if(axis==='roll') return count===1?'Roll':count===2?'Double Roll':'Triple Roll';
-  if(axis==='pitch')return count===1?'Flip':count===2?'Double Flip':'Triple Flip';
-  return count===1?'Yaw Spin':count===2?'Inverted Yaw Spin':'Triple Yaw Spin'; // yaw
+// Classification runs on BANKED HALF-ROTATIONS (one per ±180 crossing on an
+// axis), collected within a single grace window. Naming counts halves per
+// axis: 1 half alone → Half Roll / Half Flip / 180 Yaw; 2 halves (same axis)
+// → one full rotation (Roll/Flip/Yaw Spin); 4 → Double, 6 → Triple. Combo
+// logic is preserved but keyed on halves/2: pitch+yaw halves → Barani, all
+// three axes → Rubik's Cube; an axis reaching 2 full rotations (4 halves)
+// upgrades the combo variant (True Barani / Cubik's Rube).
+function axisSingle(axis,rot){ // rot = full-rotation count (2 halves each)
+  if(axis==='roll') return rot===1?'Roll':rot===2?'Double Roll':'Triple Roll';
+  if(axis==='pitch')return rot===1?'Flip':rot===2?'Double Flip':'Triple Flip';
+  return rot===1?'Yaw Spin':rot===2?'Inverted Yaw Spin':'Triple Yaw Spin'; // yaw
+}
+function halfName(axis){ // a single standalone 180° half-rotation
+  if(axis==='roll') return 'Half Roll';
+  if(axis==='pitch')return 'Half Flip';
+  return '180 Yaw'; // yaw
+}
+// name one axis from its HALF-rotation count: 1 → Half variant, else halves/2 full rotations
+function axisNameHalves(axis,halves){
+  if(halves===1)return halfName(axis);
+  return axisSingle(axis,Math.round(halves/2)); // 2→1 base, 4→2 Double, 6→3 Triple
 }
 function classifyBanked(banks){
   if(!banks.length)return null;
-  const cnt={roll:0,pitch:0,yaw:0};
+  const cnt={roll:0,pitch:0,yaw:0}; // half-rotation banks per axis
   for(const b of banks)cnt[b.axis]++;
   const axesHit=['roll','pitch','yaw'].filter(a=>cnt[a]>0);
-  const maxCount=Math.max(cnt.roll,cnt.pitch,cnt.yaw);
-  const mag=banks.length*360; // total banked rotation, feeds the unchanged score formula
+  const maxRot=Math.max(cnt.roll,cnt.pitch,cnt.yaw)/2; // full rotations on the busiest axis (halves/2)
+  const mag=banks.length*180; // each bank is a half-rotation (180°); feeds the unchanged score formula
   if(axesHit.length>=3) // all three axes banked within the window
-    return{name:maxCount>=2?"Cubik's Rube":"Rubik's Cube",mag:mag};
+    return{name:maxRot>=2?"Cubik's Rube":"Rubik's Cube",mag:mag};
   if(cnt.pitch>0&&cnt.yaw>0) // pitch+yaw combo → Barani (front flip with yaw twist)
-    return{name:maxCount>=2?'True Barani':'Barani',mag:mag};
+    return{name:maxRot>=2?'True Barani':'Barani',mag:mag};
   // single dominant axis (also covers roll+pitch / roll+yaw pairs, which keep
   // the old fall-through to whichever axis banked more). Tie priority yaw>roll>pitch.
   let dom;
   if(cnt.yaw>=cnt.roll&&cnt.yaw>=cnt.pitch)dom='yaw';
   else if(cnt.roll>=cnt.pitch)dom='roll';
   else dom='pitch';
-  return{name:axisSingle(dom,cnt[dom]),mag:mag};
+  return{name:axisNameHalves(dom,cnt[dom]),mag:mag};
 }
 // TEMP: tuning dump — signed accumulators + banked rotations at each land/flick
 function logTrick(tag){
@@ -1742,20 +1753,22 @@ function physics(dt){
     if(Math.abs(w)>TRICK_RATE_FLOOR){trickAcc[ax]+=w*dt*THREE.MathUtils.RAD2DEG;anyRotating=true;} // signed
     const a=Math.abs(trickAcc[ax]);
     if(a>trickPeak[ax])trickPeak[ax]=a;
-    if(a>=360){
-      // full rotation → bank a quantum (axis+direction), carry signed remainder
+    if(a>=180){
+      // half rotation → bank a quantum (axis+direction), carry signed remainder.
+      // 180° granularity so half-rotations (180 yaw / matty, half flip/roll) register.
       const sign=trickAcc[ax]<0?-1:1;
       bankRotation(ax,sign,nowT);
-      trickAcc[ax]-=360*sign;
-      trickPeak[ax]=Math.abs(trickAcc[ax]); // consumed by the rotation; remainder starts fresh
+      trickAcc[ax]-=180*sign;
+      trickPeak[ax]=Math.abs(trickAcc[ax]); // consumed by the half-rotation; remainder starts fresh
       graceDeadline=nowT+TRICK_GRACE_MS;      // (re)open the multi-rotation merge window
       logTrick('bank '+ax);
     }else if(a<45&&trickPeak[ax]>=90
              &&!bankedRotations.some(b=>b.axis===ax) // this axis already banked → this is its remainder, not a standalone flick
              &&!['roll','pitch','yaw'].some(o=>o!==ax&&Math.abs(trickAcc[o])>=90)){ // another axis mid-rotation → part of a larger trick, not a solo flick
       // axis netted back near zero after a partial excursion without banking a
-      // full rotation: a 90-200° peak is a Juicy Flick; anything else is spent flow
-      if(trickPeak[ax]<=200){scoreTrick({name:'Juicy Flick',mag:trickPeak[ax]});logTrick('juicy '+ax);}
+      // half-rotation: a 90-170° peak is a Juicy Flick (ceiling kept under the
+      // 180 bank threshold so the two can't overlap); anything else is spent flow
+      if(trickPeak[ax]<=170){scoreTrick({name:'Juicy Flick',mag:trickPeak[ax]});logTrick('juicy '+ax);}
       trickAcc[ax]=0;trickPeak[ax]=0;
     }
   }
