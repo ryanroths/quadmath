@@ -1168,16 +1168,26 @@ function addWallRide(x,z,width,height,thickness,leanDeg,ry){
 // east-west down the corridor, with open runway both directions. Flat
 // vertical (leanDeg=0) per the latest revision.
 addWallRide(160,12,70,35,2,0,0);
-// ---------- Zigzag Circuit (standalone track, far side of the map) ----------
-// New location, isolated from every other structure: centered near
-// (900,-900), bounding box x:[760,1040] z:[-1070,-730]. Nearest corner of
-// that box (700,-700) is ~989 units from the origin — outside the mesa
-// ring's 820-unit max radius, so no mesa ever lands here regardless of
-// angle. Also clear of the main gate loop (all within roughly +-150/-150..
-// 285), portal A (350,-350, dist ~850+ from this box), Dreamland (1500,1500,
-// dist ~2470+) and the distant city backdrop (-2200,2200, dist ~3100+).
+// ---------- Zigzag Circuit (standalone track, moved closer to the main map) ----------
+// Shifted by (dx=-550,dz=+165) from its original center (900,-900) to
+// (350,-735) — roughly two-thirds of the original distance from the origin
+// (was ~1272, now ~814), bounding box x:[210,490] z:[-905,-565].
+// This distance band (520-820 from origin) overlaps the mesa ring, so unlike
+// the original placement, clearance here can't be proven by "outside the
+// ring's max radius" — it was instead checked against the 7 mesas' ACTUAL
+// positions (the ring uses a fixed PRNG seed, so they're deterministic, not
+// resampled per load). The requested target (350,-600) turned out to sit
+// almost inside mesa #4's footprint (426.9,-451.1,r=84.4), with mesa #6
+// (-102.3,-533.1,r=126.3) and mesa #2 (28.3,-806.6,r=103.3) also crowding
+// the same corner — a brute-force search over nearby centers found (350,-735)
+// as the closest point to the target that still clears all 7 mesas with a
+// >=29-unit margin (in line with this file's existing 35-unit GATE_CLEAR
+// convention). Still clear of the main gate loop (all within roughly
+// +-150/-150..285), portal A (350,-350, dist ~215 from this box — no
+// functional overlap, portal trigger radius is only 20), Dreamland
+// (1500,1500), and the city backdrop (-2200,2200).
 // Zigzag shape (not a flat circle): the line alternately swings far left/
-// far right of the x=900 spine while climbing to a 46-unit apex at the
+// far right of the x=350 spine while climbing to a 46-unit apex at the
 // midpoint gate and diving back down twice, for genuine elevation variety.
 // Gates append directly onto the shared `gates` array (indices 10-21) so
 // the existing lap timer, gate-sequence highlighting and START marker all
@@ -1211,29 +1221,29 @@ function updateArrowMarkers(){
     a.mesh.rotateY(0.015); // spin around its own pointing axis — shimmer without losing direction
   }
 }
-addGate(760,  8,  -730,  0.30, 9, true);  // 11 entry, low + wide
-addGate(1040, 14, -775,  1.95, 7, true);  // 12 hard swing right
-addGate(770,  26, -820, -1.95, 7, true);  // 13 swing left + climb
-addGate(1030, 40, -865,  1.95, 6, true);  // 14 swing right, near-peak, tight
-addGate(900,  46, -900,  3.14, 6, true);  // 15 CENTER apex — highest point, tight technical gate
-addGate(770,  28, -935, -1.95, 7, true);  // 16 dive left, descending
-addGate(1040, 16, -970,  1.95, 7, true);  // 17 swing right, descending
-addGate(900,  10, -1005, 3.14, 8, true);  // 18 low center gate, near-ground fast pass
-addGate(770,  18, -1040,-1.95, 7, true);  // 19 swing left
-addGate(1030, 12, -1065, 1.60, 7, true);  // 20 swing right, near south edge
-addGate(900,  22, -1070, 0.90, 8, true);  // 21 south turnaround apex
-addGate(830,  10, -790, -2.60, 9, true);  // 22 long return leg, wide finish — closes the loop
-addArrowMarker(new THREE.Vector3(760,8,-730),   new THREE.Vector3(1040,14,-775));
-addArrowMarker(new THREE.Vector3(1040,14,-775), new THREE.Vector3(770,26,-820));
-addArrowMarker(new THREE.Vector3(770,26,-820),  new THREE.Vector3(1030,40,-865));
-addArrowMarker(new THREE.Vector3(1030,40,-865), new THREE.Vector3(900,46,-900));
-addArrowMarker(new THREE.Vector3(900,46,-900),  new THREE.Vector3(770,28,-935));
-addArrowMarker(new THREE.Vector3(770,28,-935),  new THREE.Vector3(1040,16,-970));
-addArrowMarker(new THREE.Vector3(1040,16,-970), new THREE.Vector3(900,10,-1005));
-addArrowMarker(new THREE.Vector3(900,10,-1005), new THREE.Vector3(770,18,-1040));
-addArrowMarker(new THREE.Vector3(770,18,-1040), new THREE.Vector3(1030,12,-1065));
-addArrowMarker(new THREE.Vector3(1030,12,-1065),new THREE.Vector3(900,22,-1070));
-addArrowMarker(new THREE.Vector3(900,22,-1070), new THREE.Vector3(830,10,-790));
+addGate(210,  8,  -565,  0.30, 9, true);  // 11 entry, low + wide
+addGate(490,  14, -610,  1.95, 7, true);  // 12 hard swing right
+addGate(220,  26, -655, -1.95, 7, true);  // 13 swing left + climb
+addGate(480,  40, -700,  1.95, 6, true);  // 14 swing right, near-peak, tight
+addGate(350,  46, -735,  3.14, 6, true);  // 15 CENTER apex — highest point, tight technical gate
+addGate(220,  28, -770, -1.95, 7, true);  // 16 dive left, descending
+addGate(490,  16, -805,  1.95, 7, true);  // 17 swing right, descending
+addGate(350,  10, -840,  3.14, 8, true);  // 18 low center gate, near-ground fast pass
+addGate(220,  18, -875, -1.95, 7, true);  // 19 swing left
+addGate(480,  12, -900,  1.60, 7, true);  // 20 swing right, near south edge
+addGate(350,  22, -905,  0.90, 8, true);  // 21 south turnaround apex
+addGate(280,  10, -625, -2.60, 9, true);  // 22 long return leg, wide finish — closes the loop
+addArrowMarker(new THREE.Vector3(210,8,-565),   new THREE.Vector3(490,14,-610));
+addArrowMarker(new THREE.Vector3(490,14,-610),  new THREE.Vector3(220,26,-655));
+addArrowMarker(new THREE.Vector3(220,26,-655),  new THREE.Vector3(480,40,-700));
+addArrowMarker(new THREE.Vector3(480,40,-700),  new THREE.Vector3(350,46,-735));
+addArrowMarker(new THREE.Vector3(350,46,-735),  new THREE.Vector3(220,28,-770));
+addArrowMarker(new THREE.Vector3(220,28,-770),  new THREE.Vector3(490,16,-805));
+addArrowMarker(new THREE.Vector3(490,16,-805),  new THREE.Vector3(350,10,-840));
+addArrowMarker(new THREE.Vector3(350,10,-840),  new THREE.Vector3(220,18,-875));
+addArrowMarker(new THREE.Vector3(220,18,-875),  new THREE.Vector3(480,12,-900));
+addArrowMarker(new THREE.Vector3(480,12,-900),  new THREE.Vector3(350,22,-905));
+addArrowMarker(new THREE.Vector3(350,22,-905),  new THREE.Vector3(280,10,-625));
 // ---------- Portal system (round-trip teleport) ----------
 // Purely visual + a proximity/teleport check — no collider, so unlike the
 // tunnel/triple-stack/dive-shaft/wall-ride above, placement relative to
@@ -1327,7 +1337,7 @@ function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identi
   nextGateIndex=0;lapActive=false;lapStartTime=0;
   // cancel any in-progress trick window (orientation snapped, accum is stale);
   // combo/session score untouched — a manual reset isn't a crash
-  trickRoll=trickPitch=trickYaw=0;trickStableTimer=0;
+  trickRoll=trickPitch=trickYaw=0;trickStableTimer=0;trickRotStopTimer=0;
   updateGateUI();updateGateHighlight();
   toast('RESET');}
 
@@ -1613,7 +1623,7 @@ function toggleFlightMode(){
 // per-axis rotation accumulates while the quad is actively rotating; the
 // window "lands" (classifies + scores) once orientation returns near-level
 // and angular rate stays low for TRICK_STABLE_HOLD seconds.
-let trickRoll=0,trickPitch=0,trickYaw=0,trickStableTimer=0;
+let trickRoll=0,trickPitch=0,trickYaw=0,trickStableTimer=0,trickRotStopTimer=0;
 let comboCount=0,comboScore=0,comboMultiplier=1,comboActive=false,lastTrickTime=0,comboFlashUntil=0;
 let sessionScore=0,bestComboScore=0;
 try{bestComboScore=parseFloat(localStorage.getItem('quadmath_bestCombo'))||0;}catch(e){}
@@ -1702,21 +1712,28 @@ function physics(dt){
   const mag=Math.sqrt(wx*wx+wy*wy+wz*wz);
   if(mag>1e-8){axis.set(wx/mag,wy/mag,wz/mag);dq.setFromAxisAngle(axis,mag*dt);state.q.multiply(dq).normalize();}
   up.set(0,1,0).applyQuaternion(state.q);
-  // trick/combo: accumulate |rate|*dt per axis (deg) while rotating; once the
-  // quad sits near-level (up.y close to 1) with low angular rate for
-  // TRICK_STABLE_HOLD seconds, the window "lands" — classify + score it
+  // trick/combo: accumulate |rate|*dt per axis (deg) while rotating; the
+  // window "lands" (classify + score) via EITHER of two independent paths:
+  //   1. level-based — quad returns near-level (up.y close to 1) with low
+  //      angular rate for TRICK_STABLE_HOLD seconds (clean landing).
+  //   2. rotation-stop — angular rate stays low for TRICK_STABLE_HOLD
+  //      seconds regardless of orientation. In real freestyle flow the pilot
+  //      is rarely level between moves, so without this path separate tricks
+  //      merge into one window and misclassify as huge multi-rotation tricks.
+  //      A trick ends when rotation stops, not only when the quad levels out.
   if(Math.abs(wz)>TRICK_RATE_FLOOR)trickRoll+=Math.abs(wz)*dt*THREE.MathUtils.RAD2DEG;   // wz drives roll
   if(Math.abs(wx)>TRICK_RATE_FLOOR)trickPitch+=Math.abs(wx)*dt*THREE.MathUtils.RAD2DEG;  // wx drives pitch
   if(Math.abs(wy)>TRICK_RATE_FLOOR)trickYaw+=Math.abs(wy)*dt*THREE.MathUtils.RAD2DEG;    // wy drives yaw
-  if(mag<TRICK_STABLE_MAG&&up.y>TRICK_STABLE_UPY){
-    trickStableTimer+=dt;
-    if(trickStableTimer>=TRICK_STABLE_HOLD){
-      // TEMP: pre-classification accumulation dump for threshold tuning
-      console.log('TRICK WINDOW: roll',trickRoll.toFixed(0),'pitch',trickPitch.toFixed(0),'yaw',trickYaw.toFixed(0));
-      landTrick(trickRoll,trickPitch,trickYaw);
-      trickRoll=trickPitch=trickYaw=0;trickStableTimer=0;
-    }
-  } else trickStableTimer=0;
+  // path 2 timer: accumulates purely on low rotation, independent of level
+  if(mag<TRICK_STABLE_MAG)trickRotStopTimer+=dt; else trickRotStopTimer=0;
+  // path 1 timer: additionally requires near-level orientation
+  if(mag<TRICK_STABLE_MAG&&up.y>TRICK_STABLE_UPY)trickStableTimer+=dt; else trickStableTimer=0;
+  if(trickStableTimer>=TRICK_STABLE_HOLD||trickRotStopTimer>=TRICK_STABLE_HOLD){
+    // TEMP: pre-classification accumulation dump for threshold tuning
+    console.log('TRICK WINDOW: roll',trickRoll.toFixed(0),'pitch',trickPitch.toFixed(0),'yaw',trickYaw.toFixed(0));
+    landTrick(trickRoll,trickPitch,trickYaw);
+    trickRoll=trickPitch=trickYaw=0;trickStableTimer=0;trickRotStopTimer=0;
+  }
   const mass=CFG.massG/1000;
   const F=tmpV.copy(up).multiplyScalar(Math.pow(stick.t,2.2)*CFG.twr*mass*G);
   F.y-=mass*G;
@@ -1759,7 +1776,7 @@ function physics(dt){
 }
 function bounce(){
   state.bounces++;toast('BOUNCE #'+state.bounces);
-  trickRoll=trickPitch=trickYaw=0;trickStableTimer=0; // crash mid-trick invalidates the attempt
+  trickRoll=trickPitch=trickYaw=0;trickStableTimer=0;trickRotStopTimer=0; // crash mid-trick invalidates the attempt
   breakCombo();
 }
 
