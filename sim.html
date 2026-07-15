@@ -343,14 +343,25 @@ function voxelColliders(obj,gridRes,snapToGrid){
 const gates=[];
 let activeTrackId=0;                 // which track's sequence is currently live
 let nextGateIndex=0;                 // index WITHIN the active track (not the global array)
-let lapCount=[0,0];                  // per-track completed-lap counter
-// lap timer — clock starts on a track's gate 0, laps run back-to-back on wrap
-let lapStartTime=0,lapActive=false,lapFlashUntil=0;
-let lastLapMs=[0,0],bestLapMs=[0,0]; // per-track records
-function loadBest(id){try{return parseFloat(localStorage.getItem('quadmath_bestLap_'+id))||0;}catch(e){return 0;}}
-bestLapMs[0]=loadBest(0);bestLapMs[1]=loadBest(1);
+// 3-lap RUN timing. A run begins on gate 0 (no run active), times RUN_LAPS
+// laps back-to-back, then ends — clock stops (no auto lap 4), splits + total
+// shown, best total stored per track. Passing gate 0 again starts a fresh run.
+const RUN_LAPS=3;
+let runActive=false;                 // a run (laps 1..RUN_LAPS) is in progress
+let runStartTime=0;                  // performance.now() at run start (gate 0)
+let lapStartTime=0;                  // current lap's start — for the live clock + split
+let runLap=0;                        // 1-based lap number within the current run
+let runSplits=[];                    // completed lap durations this run
+let lastRunSplits=[[],[]];           // per-track: last finished run's splits (results panel)
+let lastRunTotal=[0,0];              // per-track: last finished run's total
+let lapFlashUntil=0;                 // green flash on a new best (lap or run total)
+let lastLapMs=[0,0],bestLapMs=[0,0]; // per-track per-lap records (still tracked)
+let bestRunMs=[0,0];                 // per-track best RUN total
+function loadNum(k){try{return parseFloat(localStorage.getItem(k))||0;}catch(e){return 0;}}
+bestLapMs[0]=loadNum('quadmath_bestLap_0');bestLapMs[1]=loadNum('quadmath_bestLap_1');
+bestRunMs[0]=loadNum('quadmath_bestRun_0');bestRunMs[1]=loadNum('quadmath_bestRun_1');
 // migrate a pre-split single best-lap record into track 0's slot if present
-if(!bestLapMs[0]){try{bestLapMs[0]=parseFloat(localStorage.getItem('quadmath_bestLap'))||0;}catch(e){}}
+if(!bestLapMs[0])bestLapMs[0]=loadNum('quadmath_bestLap');
 // ordered list of gates on a track (filter preserves insertion order)
 function trackGates(id){return gates.filter(g=>g.trackId===id);}
 function fmtLap(ms){
@@ -433,7 +444,7 @@ addDiveRing(-180, 15,  40, -0.35,     4.0, 3);
 const gateUI=document.getElementById('osdGate');
 function updateGateUI(){
   const list=trackGates(activeTrackId); // position shown within the active track only
-  gateUI.textContent='T'+(activeTrackId+1)+' GATE '+nextGateIndex+'/'+list.length+(lapCount[activeTrackId]>0?' · LAP '+lapCount[activeTrackId]:'');
+  gateUI.textContent='T'+(activeTrackId+1)+' GATE '+nextGateIndex+'/'+list.length+(runActive?' · LAP '+runLap+'/'+RUN_LAPS:'');
 }
 // next gate: bright white + pulsing scale; all others dim in their base red/blue.
 // The target is the active track's current gate, identified by object reference.
@@ -450,20 +461,48 @@ function updateGateHighlight(){
     }
   }
 }
+// begin a 3-lap run on the active track: reset splits, start both the run and
+// lap-1 clocks, and start the ghost recording (which spans the whole run)
+function startRun(){
+  runActive=true;
+  runStartTime=performance.now();
+  lapStartTime=runStartTime;
+  runLap=1;
+  runSplits=[];
+  startGhostRec();
+}
+// run over: stop the clock, stash results, store best total + ghost on a new
+// best, and announce total + the three splits
+function finishRun(){
+  runActive=false;
+  const id=activeTrackId;
+  const total=runSplits.reduce((a,b)=>a+b,0);
+  lastRunTotal[id]=total;
+  lastRunSplits[id]=runSplits.slice();
+  let best=false;
+  if(!bestRunMs[id]||total<bestRunMs[id]){
+    bestRunMs[id]=total;
+    try{localStorage.setItem('quadmath_bestRun_'+id,String(total));}catch(e){}
+    commitGhost(id);                 // ghost = the whole 3-lap run
+    lapFlashUntil=performance.now()+2500;
+    best=true;
+  }
+  // total + the three splits (the lap OSD panel keeps them on screen after)
+  toast('RUN '+fmtLap(total)+' ['+runSplits.map(fmtLap).join(' / ')+']'+(best?' — NEW BEST!':''));
+}
 function updateGates(){
   if(!gates.length)return;
   updateGateHighlight(); // every frame — drives the pulse on the active track's target gate
   // track switch: flying through gate 0 of a NON-active track makes that track
-  // active and starts its lap clock (advancing to that track's gate 1).
+  // active and starts a fresh run there (advancing to that track's gate 1).
   for(const id of [0,1]){
     if(id===activeTrackId)continue;
     const g0=trackGates(id)[0];
     if(g0&&state.pos.distanceTo(g0.pos)<g0.r){
       activeTrackId=id;
       nextGateIndex=1%trackGates(id).length; // gate 0 just passed
-      lapActive=true;lapStartTime=performance.now();
-      startGhostRec(); // begin recording this new track's lap
-      toast('TRACK '+(id+1)+' — LAP START');
+      startRun();
+      toast('TRACK '+(id+1)+' — RUN START');
       updateGateUI();updateGateHighlight();
       return; // handled this frame
     }
@@ -474,22 +513,20 @@ function updateGates(){
   if(g&&state.pos.distanceTo(g.pos)<g.r){
     const passed=nextGateIndex;
     nextGateIndex=(nextGateIndex+1)%list.length; // wraps at THIS track's length
-    if(passed===0&&!lapActive){lapActive=true;lapStartTime=performance.now();startGhostRec();} // clock starts at gate 0
-    if(nextGateIndex===0){ // wrapped past this track's last gate — full lap done
-      lapCount[activeTrackId]++;
-      if(lapActive){
-        const t=performance.now()-lapStartTime;
-        lastLapMs[activeTrackId]=t;
-        if(!bestLapMs[activeTrackId]||t<bestLapMs[activeTrackId]){
-          bestLapMs[activeTrackId]=t;
-          try{localStorage.setItem('quadmath_bestLap_'+activeTrackId,String(t));}catch(e){}
-          commitGhost(activeTrackId); // new best → save this lap's recording as the ghost
-          lapFlashUntil=performance.now()+1500;
-          toast('NEW BEST LAP!');
-        }else toast('LAP '+lapCount[activeTrackId]+' — '+fmtLap(t));
-        lapStartTime=performance.now(); // back-to-back: next lap clock runs immediately
-        startGhostRec();                // begin recording the next lap from scratch
-      }else toast('LAP '+lapCount[activeTrackId]+' COMPLETE');
+    if(passed===0&&!runActive){ // gate 0 with no run active → start a fresh run
+      startRun();
+      toast('RUN START — LAP 1/'+RUN_LAPS);
+    }else if(nextGateIndex===0&&runActive){ // wrapped a full sequence → a run lap completed
+      const now=performance.now();
+      const split=now-lapStartTime;
+      runSplits.push(split);
+      lastLapMs[activeTrackId]=split;
+      if(!bestLapMs[activeTrackId]||split<bestLapMs[activeTrackId]){ // per-lap best still tracked
+        bestLapMs[activeTrackId]=split;
+        try{localStorage.setItem('quadmath_bestLap_'+activeTrackId,String(split));}catch(e){}
+      }
+      if(runLap>=RUN_LAPS)finishRun();  // lap 3 done → run ends, no auto lap 4
+      else{toast('LAP '+runLap+' — '+fmtLap(split));runLap++;lapStartTime=now;} // next lap; ghost keeps recording
     }
     else toast('GATE '+nextGateIndex+' PASSED');
     updateGateUI();
@@ -1371,7 +1408,7 @@ const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
 function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
   // restart the sequence clean: back on track 0, lap progress + running clock
   // cleared, per-track best kept
-  activeTrackId=0;nextGateIndex=0;lapActive=false;lapStartTime=0;
+  activeTrackId=0;nextGateIndex=0;runActive=false;runLap=0;runSplits=[];lapStartTime=0;runStartTime=0;
   clearGhostRec(); // drop the in-progress recording — this run is void
   updateGateUI();updateGateHighlight();
   toast('RESET');}
@@ -1735,9 +1772,22 @@ const osdLap=document.getElementById('osdLap');
 function updateLapOSD(){
   const now=performance.now();
   osdLap.style.color=now<lapFlashUntil?'#3DDC97':''; // green flash on new best
-  osdLap.innerHTML='T'+(activeTrackId+1)+' LAP '+(lapActive?fmtLap(now-lapStartTime):'--:--.--')+
-    '<br>LAST '+(lastLapMs[activeTrackId]?fmtLap(lastLapMs[activeTrackId]):'--:--.--')+
-    '<br>BEST '+(bestLapMs[activeTrackId]?fmtLap(bestLapMs[activeTrackId]):'--:--.--');
+  const id=activeTrackId;
+  let html='T'+(id+1);
+  if(runActive){ // live: current lap clock + running total + splits banked so far
+    html+=' RUN · LAP '+runLap+'/'+RUN_LAPS+
+      '<br>LAP '+fmtLap(now-lapStartTime)+
+      '<br>TOTAL '+fmtLap(now-runStartTime);
+    for(let i=0;i<runSplits.length;i++)html+='<br> L'+(i+1)+' '+fmtLap(runSplits[i]);
+  }else if(lastRunTotal[id]){ // results: finished run's total + its three splits
+    html+=' RESULT · TOTAL '+fmtLap(lastRunTotal[id]);
+    const sp=lastRunSplits[id];
+    for(let i=0;i<sp.length;i++)html+='<br> L'+(i+1)+' '+fmtLap(sp[i]);
+    html+='<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
+  }else{ // idle, no run yet on this track
+    html+=' RUN --:--.--<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
+  }
+  osdLap.innerHTML=html;
 }
 const toastEl=document.getElementById('toast');let toastTimer;
 function toast(m){toastEl.textContent=m;toastEl.style.opacity=1;
@@ -1811,8 +1861,8 @@ updateRadioInfo();
 // best lap the recording becomes that track's ghost. On later laps a
 // translucent cyan quad plays the ghost back indexed by current elapsed lap
 // time, so it flies in real sync. Per-track, persisted at 2-decimal precision.
-const GHOST_MAX=900; // sample cap (~30s at 30 Hz); downsample rather than fail to store
-let ghosts=[null,null];               // per-track best-lap recordings
+const GHOST_MAX=1500; // sample cap (a full 3-lap run at 30 Hz); downsample rather than fail to store
+let ghosts=[null,null];               // per-track best-RUN recordings (all 3 laps)
 let ghostRec=null,ghostFrame=0;       // in-progress recording + its frame counter
 let ghostVisible=true;
 const _gr2=v=>Math.round(v*100)/100;   // 2-decimal coords (visual ghost — plenty)
@@ -1856,16 +1906,16 @@ function makeGhostMesh(){
 const ghostMesh=makeGhostMesh();
 const _gqa=new THREE.Quaternion(),_gqb=new THREE.Quaternion();
 function sampleGhost(){
-  if(!ghostRec||!lapActive)return;
-  if((++ghostFrame)%2!==0)return; // every 2nd frame
-  const t=performance.now()-lapStartTime;
+  if(!ghostRec||!runActive)return; // record across the whole run, stamped from run start
+  if((++ghostFrame)%2!==0)return;  // every 2nd frame
+  const t=performance.now()-runStartTime;
   ghostRec.push([Math.round(t),_gr2(state.pos.x),_gr2(state.pos.y),_gr2(state.pos.z),
     _gr3(state.q.x),_gr3(state.q.y),_gr3(state.q.z),_gr3(state.q.w)]);
 }
 function playbackGhost(){
   const g=ghosts[activeTrackId];
-  if(!ghostVisible||!lapActive||!g||!g.length){ghostMesh.visible=false;return;}
-  const elapsed=performance.now()-lapStartTime;
+  if(!ghostVisible||!runActive||!g||!g.length){ghostMesh.visible=false;return;}
+  const elapsed=performance.now()-runStartTime; // index by run-elapsed time (whole run)
   let a,b; // bracket the current elapsed time between two time-ordered samples
   if(elapsed<=g[0][0]){a=b=g[0];}
   else if(elapsed>=g[g.length-1][0]){a=b=g[g.length-1];} // ghost finished — hold final pose
