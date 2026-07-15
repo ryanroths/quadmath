@@ -15,7 +15,6 @@
   #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
   #osdGate{top:14px;left:50%;transform:translateX(-50%);color:var(--txt);font-weight:600}
   #osdLap{top:64px;left:16px;font-weight:600}
-  #osdTrick{top:132px;left:16px;font-weight:600}
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7}
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
   #crosshair::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
@@ -91,7 +90,6 @@
 <div class="osd" id="osdBC"></div>
 <div class="osd" id="osdGate"></div>
 <div class="osd" id="osdLap"></div>
-<div class="osd" id="osdTrick"></div>
 <div id="crosshair"></div>
 <div id="toast"></div>
 <div id="portalFlash"></div>
@@ -1335,9 +1333,6 @@ const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
 function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
   // restart the sequence clean: lap progress + running clock cleared, best kept
   nextGateIndex=0;lapActive=false;lapStartTime=0;
-  // cancel any in-progress trick window (orientation snapped, accum is stale);
-  // combo/session score untouched — a manual reset isn't a crash
-  resetTrickState();
   updateGateUI();updateGateHighlight();
   toast('RESET');}
 
@@ -1619,107 +1614,6 @@ function toggleFlightMode(){
   toast(flightMode==='angle'?'ANGLE MODE':'ACRO MODE');
 }
 
-// ---------- Trick/combo scoring ----------
-// SIGNED accumulation + quanta segmentation. Each axis accumulates a signed
-// angle (no abs), so a there-and-back flick nets toward zero and never banks
-// a rotation, while a genuine full spin crosses ±360 and "banks" a rotation
-// quantum (axis + direction), carrying the signed remainder forward. This
-// structurally separates flow transitions from trick boundaries — the old
-// abs()+stop-detection model could not, which is why single tricks merged or
-// fragmented no matter how the stop thresholds were tuned.
-let trickAcc={roll:0,pitch:0,yaw:0};   // signed degrees per axis, remainder carries after each bank
-let trickPeak={roll:0,pitch:0,yaw:0};  // peak |accumulated| since last bank/reset — drives Juicy Flick
-let bankedRotations=[];                // pending banks this window: {axis,sign,t}
-let graceDeadline=0;                   // performance.now()+GRACE; land the banked set once now passes it
-let comboCount=0,comboScore=0,comboMultiplier=1,comboActive=false,lastTrickTime=0,comboFlashUntil=0;
-let sessionScore=0,bestComboScore=0;
-try{bestComboScore=parseFloat(localStorage.getItem('quadmath_bestCombo'))||0;}catch(e){}
-const COMBO_WINDOW_MS=2500,TRICK_CHAIN_MS=2000,TRICK_GRACE_MS=700; // GRACE: multi-rotation merge window after a bank
-const TRICK_WINDOW_CEIL_MS=3000; // hard ceiling since first bank — force a land even if an axis is still mid-rotation, so a window can't hang open forever
-const TRICK_RATE_FLOOR=0.15; // rad/s - below this, treat as noise, don't accumulate (applied to |w|)
-// Real trick names (prowhooper.com Tricktionary), purely rotation-based off
-// state.q pitch/roll/yaw accumulation — no position/velocity/proximity
-// tracking exists yet, so ground/obstacle/gap-relative tricks (Wall Tricks,
-// Powerloops, Split-S, Pole Dancing, Rewinds, Gaps) aren't representable here.
-// Classification runs on BANKED HALF-ROTATIONS (one per ±180 crossing on an
-// axis), collected within a single grace window. Naming counts halves per
-// axis: 1 half alone → Half Roll / Half Flip / 180 Yaw; 2 halves (same axis)
-// → one full rotation (Roll/Flip/Yaw Spin); 4 → Double, 6 → Triple. Combo
-// logic is preserved but keyed on halves/2: pitch+yaw halves → Barani, all
-// three axes → Rubik's Cube; an axis reaching 2 full rotations (4 halves)
-// upgrades the combo variant (True Barani / Cubik's Rube).
-function axisSingle(axis,rot){ // rot = full-rotation count (2 halves each)
-  if(axis==='roll') return rot===1?'Roll':rot===2?'Double Roll':'Triple Roll';
-  if(axis==='pitch')return rot===1?'Flip':rot===2?'Double Flip':'Triple Flip';
-  return rot===1?'Yaw Spin':rot===2?'Inverted Yaw Spin':'Triple Yaw Spin'; // yaw
-}
-function halfName(axis){ // a single standalone 180° half-rotation
-  if(axis==='roll') return 'Half Roll';
-  if(axis==='pitch')return 'Half Flip';
-  return '180 Yaw'; // yaw
-}
-// name one axis from its HALF-rotation count: 1 → Half variant, else halves/2 full rotations
-function axisNameHalves(axis,halves){
-  if(halves===1)return halfName(axis);
-  return axisSingle(axis,Math.round(halves/2)); // 2→1 base, 4→2 Double, 6→3 Triple
-}
-function classifyBanked(banks){
-  if(!banks.length)return null;
-  const cnt={roll:0,pitch:0,yaw:0}; // half-rotation banks per axis
-  for(const b of banks)cnt[b.axis]++;
-  const axesHit=['roll','pitch','yaw'].filter(a=>cnt[a]>0);
-  const maxRot=Math.max(cnt.roll,cnt.pitch,cnt.yaw)/2; // full rotations on the busiest axis (halves/2)
-  const mag=banks.length*180; // each bank is a half-rotation (180°); feeds the unchanged score formula
-  if(axesHit.length>=3) // all three axes banked within the window
-    return{name:maxRot>=2?"Cubik's Rube":"Rubik's Cube",mag:mag};
-  if(cnt.pitch>0&&cnt.yaw>0) // pitch+yaw combo → Barani (front flip with yaw twist)
-    return{name:maxRot>=2?'True Barani':'Barani',mag:mag};
-  // single dominant axis (also covers roll+pitch / roll+yaw pairs, which keep
-  // the old fall-through to whichever axis banked more). Tie priority yaw>roll>pitch.
-  let dom;
-  if(cnt.yaw>=cnt.roll&&cnt.yaw>=cnt.pitch)dom='yaw';
-  else if(cnt.roll>=cnt.pitch)dom='roll';
-  else dom='pitch';
-  return{name:axisNameHalves(dom,cnt[dom]),mag:mag};
-}
-// TEMP: tuning dump — signed accumulators + banked rotations at each land/flick
-function logTrick(tag){
-  console.log('TRICK WINDOW ['+tag+'] acc r/p/y',
-    trickAcc.roll.toFixed(0),trickAcc.pitch.toFixed(0),trickAcc.yaw.toFixed(0),
-    'banked',JSON.stringify(bankedRotations.map(b=>b.axis+(b.sign<0?'-':'+'))));
-}
-function resetTrickState(){
-  trickAcc.roll=trickAcc.pitch=trickAcc.yaw=0;
-  trickPeak.roll=trickPeak.pitch=trickPeak.yaw=0;
-  bankedRotations.length=0;graceDeadline=0;
-}
-// record one full-rotation quantum (axis + direction) into the pending window
-function bankRotation(axis,sign,t){bankedRotations.push({axis:axis,sign:sign,t:t});}
-function breakCombo(){
-  if(comboScore>bestComboScore){
-    bestComboScore=comboScore;
-    try{localStorage.setItem('quadmath_bestCombo',String(bestComboScore));}catch(e){}
-    comboFlashUntil=performance.now()+1500;
-    toast('NEW BEST COMBO! '+bestComboScore+'pts');
-  }
-  comboCount=0;comboScore=0;comboMultiplier=1;comboActive=false;
-}
-// score/combo/toast — UNCHANGED from the old landTrick; only its input (an
-// already-classified trick) is new. Everything downstream (chain window,
-// multiplier, clamp formula, combo banner) is identical.
-function scoreTrick(trick){
-  if(!trick)return;
-  const now=performance.now();
-  // chain within TRICK_CHAIN_MS of the previous trick, else start a fresh combo
-  comboCount=(comboCount>0&&now-lastTrickTime<TRICK_CHAIN_MS)?comboCount+1:1;
-  comboMultiplier=comboCount;
-  lastTrickTime=now;
-  const score=Math.round(THREE.MathUtils.clamp(80+trick.mag*0.35,100,300))*comboMultiplier;
-  comboScore+=score;sessionScore+=score;
-  comboActive=comboCount>=2; // solo trick lands quietly; chain of 2+ shows the combo banner
-  toast(trick.name+' +'+score);
-}
-
 // ---------- Physics ----------
 const tmpV=new THREE.Vector3(),up=new THREE.Vector3();
 const dq=new THREE.Quaternion(),axis=new THREE.Vector3();
@@ -1742,54 +1636,6 @@ function physics(dt){
   const mag=Math.sqrt(wx*wx+wy*wy+wz*wz);
   if(mag>1e-8){axis.set(wx/mag,wy/mag,wz/mag);dq.setFromAxisAngle(axis,mag*dt);state.q.multiply(dq).normalize();}
   up.set(0,1,0).applyQuaternion(state.q);
-  // trick/combo: SIGNED per-axis accumulation, then quanta segmentation.
-  // (wz→roll, wx→pitch, wy→yaw). Noise gate is applied to |w| but the value
-  // added is signed, so a there-and-back flick nets toward zero.
-  const nowT=performance.now();
-  const wMap={roll:wz,pitch:wx,yaw:wy};
-  let anyRotating=false;
-  for(const ax of ['roll','pitch','yaw']){
-    const w=wMap[ax];
-    if(Math.abs(w)>TRICK_RATE_FLOOR){trickAcc[ax]+=w*dt*THREE.MathUtils.RAD2DEG;anyRotating=true;} // signed
-    const a=Math.abs(trickAcc[ax]);
-    if(a>trickPeak[ax])trickPeak[ax]=a;
-    if(a>=180){
-      // half rotation → bank a quantum (axis+direction), carry signed remainder.
-      // 180° granularity so half-rotations (180 yaw / matty, half flip/roll) register.
-      const sign=trickAcc[ax]<0?-1:1;
-      bankRotation(ax,sign,nowT);
-      trickAcc[ax]-=180*sign;
-      trickPeak[ax]=Math.abs(trickAcc[ax]); // consumed by the half-rotation; remainder starts fresh
-      graceDeadline=nowT+TRICK_GRACE_MS;      // (re)open the multi-rotation merge window
-      logTrick('bank '+ax);
-    }else if(a<45&&trickPeak[ax]>=90
-             &&!bankedRotations.some(b=>b.axis===ax) // this axis already banked → this is its remainder, not a standalone flick
-             &&!['roll','pitch','yaw'].some(o=>o!==ax&&Math.abs(trickAcc[o])>=90)){ // another axis mid-rotation → part of a larger trick, not a solo flick
-      // axis netted back near zero after a partial excursion without banking a
-      // half-rotation: a 90-170° peak is a Juicy Flick (ceiling kept under the
-      // 180 bank threshold so the two can't overlap); anything else is spent flow
-      if(trickPeak[ax]<=170){scoreTrick({name:'Juicy Flick',mag:trickPeak[ax]});logTrick('juicy '+ax);}
-      trickAcc[ax]=0;trickPeak[ax]=0;
-    }
-  }
-  // hold the grace window open while ANYTHING is still turning — the trick
-  // isn't over while an axis is mid-rotation (e.g. inverted yaw spin: pitch
-  // banks first, yaw still accumulating). Extending each rotating frame keeps
-  // the window alive until all axes settle, so the second bank still merges.
-  if(anyRotating&&bankedRotations.length)graceDeadline=Math.max(graceDeadline,nowT+TRICK_GRACE_MS);
-  // don't land while any axis is mid-rotation (|acc|>=90) even if the grace
-  // window lapsed during a momentary stick pause — that partial rotation will
-  // bank and belongs to the same maneuver (e.g. yaw banks while pitch sits at
-  // 141° mid-flip). Hold until every non-banked axis is back under 90 (spent
-  // flow) or has banked. A hard ceiling since the first bank forces a land so
-  // a window can't hang open forever.
-  const midRotation=Math.abs(trickAcc.roll)>=90||Math.abs(trickAcc.pitch)>=90||Math.abs(trickAcc.yaw)>=90;
-  const firstBankT=bankedRotations.length?bankedRotations[0].t:nowT;
-  if(bankedRotations.length&&nowT>=graceDeadline&&(!midRotation||nowT-firstBankT>=TRICK_WINDOW_CEIL_MS)){
-    logTrick('land');
-    scoreTrick(classifyBanked(bankedRotations));
-    bankedRotations.length=0;graceDeadline=0;
-  }
   const mass=CFG.massG/1000;
   const F=tmpV.copy(up).multiplyScalar(Math.pow(stick.t,2.2)*CFG.twr*mass*G);
   F.y-=mass*G;
@@ -1832,8 +1678,6 @@ function physics(dt){
 }
 function bounce(){
   state.bounces++;toast('BOUNCE #'+state.bounces);
-  resetTrickState(); // crash mid-trick invalidates the attempt
-  breakCombo();
 }
 
 // ---------- Camera ----------
@@ -1847,16 +1691,6 @@ function updateCamera(){
 // ---------- OSD ----------
 const osdTL=document.getElementById('osdTL'),osdTR=document.getElementById('osdTR'),osdBC=document.getElementById('osdBC');
 const osdLap=document.getElementById('osdLap');
-const osdTrick=document.getElementById('osdTrick');
-function updateTrickOSD(){
-  const now=performance.now();
-  if(comboCount>0&&now-lastTrickTime>COMBO_WINDOW_MS)breakCombo(); // combo timeout
-  let html='SCORE '+sessionScore;
-  if(comboActive)html+='<br>COMBO x'+comboMultiplier+' — '+comboScore+'pts';
-  html+='<br>BEST COMBO '+bestComboScore+'pts';
-  osdTrick.style.color=now<comboFlashUntil?'#3DDC97':'';
-  osdTrick.innerHTML=html;
-}
 function updateLapOSD(){
   const now=performance.now();
   osdLap.style.color=now<lapFlashUntil?'#3DDC97':''; // green flash on new best
@@ -1877,7 +1711,6 @@ function updateOSD(){
   osdBC.innerHTML=`THR ${'█'.repeat(Math.round(stick.t*10)).padEnd(10,'░')} ${(stick.t*100)|0}%`+
     `&nbsp;&nbsp;FLT ${String(t/60|0).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
   updateLapOSD();
-  updateTrickOSD();
 }
 
 // ---------- Panel ----------
