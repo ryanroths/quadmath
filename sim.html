@@ -1337,7 +1337,7 @@ function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identi
   nextGateIndex=0;lapActive=false;lapStartTime=0;
   // cancel any in-progress trick window (orientation snapped, accum is stale);
   // combo/session score untouched — a manual reset isn't a crash
-  trickRoll=trickPitch=trickYaw=0;trickStableTimer=0;trickRotStopTimer=0;
+  resetTrickState();
   updateGateUI();updateGateHighlight();
   toast('RESET');}
 
@@ -1620,57 +1620,69 @@ function toggleFlightMode(){
 }
 
 // ---------- Trick/combo scoring ----------
-// per-axis rotation accumulates while the quad is actively rotating; the
-// window "lands" (classifies + scores) once orientation returns near-level
-// and angular rate stays low for TRICK_STABLE_HOLD seconds.
-let trickRoll=0,trickPitch=0,trickYaw=0,trickStableTimer=0,trickRotStopTimer=0;
+// SIGNED accumulation + quanta segmentation. Each axis accumulates a signed
+// angle (no abs), so a there-and-back flick nets toward zero and never banks
+// a rotation, while a genuine full spin crosses ±360 and "banks" a rotation
+// quantum (axis + direction), carrying the signed remainder forward. This
+// structurally separates flow transitions from trick boundaries — the old
+// abs()+stop-detection model could not, which is why single tricks merged or
+// fragmented no matter how the stop thresholds were tuned.
+let trickAcc={roll:0,pitch:0,yaw:0};   // signed degrees per axis, remainder carries after each bank
+let trickPeak={roll:0,pitch:0,yaw:0};  // peak |accumulated| since last bank/reset — drives Juicy Flick
+let bankedRotations=[];                // pending banks this window: {axis,sign,t}
+let graceDeadline=0;                   // performance.now()+GRACE; land the banked set once now passes it
 let comboCount=0,comboScore=0,comboMultiplier=1,comboActive=false,lastTrickTime=0,comboFlashUntil=0;
 let sessionScore=0,bestComboScore=0;
 try{bestComboScore=parseFloat(localStorage.getItem('quadmath_bestCombo'))||0;}catch(e){}
-const TRICK_STABLE_MAG=0.25,TRICK_STABLE_UPY=0.92,TRICK_STABLE_HOLD=0.5,COMBO_WINDOW_MS=2500,TRICK_CHAIN_MS=2000;
-const TRICK_RATE_FLOOR=0.15; // rad/s - below this, treat as noise, don't accumulate
-// Real trick names (prowhooper.com Tricktionary), still purely rotation-based
-// off state.q pitch/roll/yaw accumulation — no position/velocity/proximity
+const COMBO_WINDOW_MS=2500,TRICK_CHAIN_MS=2000,TRICK_GRACE_MS=250; // GRACE: multi-rotation merge window after a bank
+const TRICK_RATE_FLOOR=0.15; // rad/s - below this, treat as noise, don't accumulate (applied to |w|)
+// Real trick names (prowhooper.com Tricktionary), purely rotation-based off
+// state.q pitch/roll/yaw accumulation — no position/velocity/proximity
 // tracking exists yet, so ground/obstacle/gap-relative tricks (Wall Tricks,
-// Powerloops, Split-S, Pole Dancing, Rewinds, Gaps) aren't representable here
-// and are future scope pending that data.
-// Classification: dominant axis must clear a 200° noise floor before anything
-// fires. A second axis only counts as part of a combined trick (Barani /
-// Rubik's Cube) if it's within 55% of the dominant axis's magnitude — minor
-// bleed into other axes is ignored, not treated as a combo. Labels are driven
-// by rotation count (round(dominant/360)), not narrow degree bands, so
-// overshoot (e.g. 942°) still resolves to a clean "3 rotations" rather than
-// falling into a broken in-between value.
-function classifyTrick(rollDeg,pitchDeg,yawDeg){
-  const dominant=Math.max(rollDeg,pitchDeg,yawDeg);
-  if(dominant<90)return null; // below this: flight wobble, not a trick
-  // Juicy Flick: a quick partial flick (90-200°), below the full-rotation
-  // band — classified before the combo/single-axis logic that assumes a
-  // near-complete rotation on the dominant axis
-  if(dominant>=90&&dominant<200)return{name:'Juicy Flick',mag:dominant};
-  const bar=dominant*0.55;
-  const rollSig=rollDeg>=bar,pitchSig=pitchDeg>=bar,yawSig=yawDeg>=bar;
-  const sigCount=(rollSig?1:0)+(pitchSig?1:0)+(yawSig?1:0);
-  const rot=Math.max(1,Math.round(dominant/360));
-  const sum=rollDeg+pitchDeg+yawDeg;
-  // rotation-count → name for a single axis: 1=base, 2=double-variant, 3+="Triple <base>"
-  function axisName(base,doubleVariant){
-    if(rot===1)return base;
-    if(rot===2)return doubleVariant;
-    return 'Triple '+base;
-  }
-  if(sigCount>=3) // all three axes genuinely significant
-    return{name:rot>=3?"Cubik's Rube":"Rubik's Cube",mag:sum};
-  if(pitchSig&&yawSig) // Barani: front flip with yaw-driven twist — pitch+yaw combo, roll not significant (excluded above)
-    return{name:rot>=2?'True Barani':'Barani',mag:pitchDeg+yawDeg};
-  // single-axis dominant — any minor bleed in the other two axes is ignored.
-  // Note: roll+pitch alone (no yaw) no longer gets a combo name — Barani now
-  // keys off pitch+yaw specifically, so that case falls through to whichever
-  // of roll/pitch is truly dominant (plain Roll or Flip).
-  if(yawDeg>=rollDeg&&yawDeg>=pitchDeg)return{name:axisName('Yaw Spin','Inverted Yaw Spin'),mag:yawDeg};
-  if(rollDeg>=pitchDeg)return{name:axisName('Roll','Double Roll'),mag:rollDeg};
-  return{name:axisName('Flip','Double Flip'),mag:pitchDeg};
+// Powerloops, Split-S, Pole Dancing, Rewinds, Gaps) aren't representable here.
+// Classification now runs on BANKED ROTATIONS (one per ±360 crossing on an
+// axis), collected within a single grace window, instead of raw accumulated
+// magnitudes: pitch+yaw → Barani, all three axes → Rubik's Cube, otherwise
+// the dominant axis names it (Flip/Roll/Yaw Spin), with Double/Triple driven
+// by how many rotations banked on that axis. "2+" on any axis upgrades the
+// combo variant (True Barani / Cubik's Rube).
+function axisSingle(axis,count){
+  if(axis==='roll') return count===1?'Roll':count===2?'Double Roll':'Triple Roll';
+  if(axis==='pitch')return count===1?'Flip':count===2?'Double Flip':'Triple Flip';
+  return count===1?'Yaw Spin':count===2?'Inverted Yaw Spin':'Triple Yaw Spin'; // yaw
 }
+function classifyBanked(banks){
+  if(!banks.length)return null;
+  const cnt={roll:0,pitch:0,yaw:0};
+  for(const b of banks)cnt[b.axis]++;
+  const axesHit=['roll','pitch','yaw'].filter(a=>cnt[a]>0);
+  const maxCount=Math.max(cnt.roll,cnt.pitch,cnt.yaw);
+  const mag=banks.length*360; // total banked rotation, feeds the unchanged score formula
+  if(axesHit.length>=3) // all three axes banked within the window
+    return{name:maxCount>=2?"Cubik's Rube":"Rubik's Cube",mag:mag};
+  if(cnt.pitch>0&&cnt.yaw>0) // pitch+yaw combo → Barani (front flip with yaw twist)
+    return{name:maxCount>=2?'True Barani':'Barani',mag:mag};
+  // single dominant axis (also covers roll+pitch / roll+yaw pairs, which keep
+  // the old fall-through to whichever axis banked more). Tie priority yaw>roll>pitch.
+  let dom;
+  if(cnt.yaw>=cnt.roll&&cnt.yaw>=cnt.pitch)dom='yaw';
+  else if(cnt.roll>=cnt.pitch)dom='roll';
+  else dom='pitch';
+  return{name:axisSingle(dom,cnt[dom]),mag:mag};
+}
+// TEMP: tuning dump — signed accumulators + banked rotations at each land/flick
+function logTrick(tag){
+  console.log('TRICK WINDOW ['+tag+'] acc r/p/y',
+    trickAcc.roll.toFixed(0),trickAcc.pitch.toFixed(0),trickAcc.yaw.toFixed(0),
+    'banked',JSON.stringify(bankedRotations.map(b=>b.axis+(b.sign<0?'-':'+'))));
+}
+function resetTrickState(){
+  trickAcc.roll=trickAcc.pitch=trickAcc.yaw=0;
+  trickPeak.roll=trickPeak.pitch=trickPeak.yaw=0;
+  bankedRotations.length=0;graceDeadline=0;
+}
+// record one full-rotation quantum (axis + direction) into the pending window
+function bankRotation(axis,sign,t){bankedRotations.push({axis:axis,sign:sign,t:t});}
 function breakCombo(){
   if(comboScore>bestComboScore){
     bestComboScore=comboScore;
@@ -1680,8 +1692,10 @@ function breakCombo(){
   }
   comboCount=0;comboScore=0;comboMultiplier=1;comboActive=false;
 }
-function landTrick(rollDeg,pitchDeg,yawDeg){
-  const trick=classifyTrick(rollDeg,pitchDeg,yawDeg);
+// score/combo/toast — UNCHANGED from the old landTrick; only its input (an
+// already-classified trick) is new. Everything downstream (chain window,
+// multiplier, clamp formula, combo banner) is identical.
+function scoreTrick(trick){
   if(!trick)return;
   const now=performance.now();
   // chain within TRICK_CHAIN_MS of the previous trick, else start a fresh combo
@@ -1716,27 +1730,36 @@ function physics(dt){
   const mag=Math.sqrt(wx*wx+wy*wy+wz*wz);
   if(mag>1e-8){axis.set(wx/mag,wy/mag,wz/mag);dq.setFromAxisAngle(axis,mag*dt);state.q.multiply(dq).normalize();}
   up.set(0,1,0).applyQuaternion(state.q);
-  // trick/combo: accumulate |rate|*dt per axis (deg) while rotating; the
-  // window "lands" (classify + score) via EITHER of two independent paths:
-  //   1. level-based — quad returns near-level (up.y close to 1) with low
-  //      angular rate for TRICK_STABLE_HOLD seconds (clean landing).
-  //   2. rotation-stop — angular rate stays low for TRICK_STABLE_HOLD
-  //      seconds regardless of orientation. In real freestyle flow the pilot
-  //      is rarely level between moves, so without this path separate tricks
-  //      merge into one window and misclassify as huge multi-rotation tricks.
-  //      A trick ends when rotation stops, not only when the quad levels out.
-  if(Math.abs(wz)>TRICK_RATE_FLOOR)trickRoll+=Math.abs(wz)*dt*THREE.MathUtils.RAD2DEG;   // wz drives roll
-  if(Math.abs(wx)>TRICK_RATE_FLOOR)trickPitch+=Math.abs(wx)*dt*THREE.MathUtils.RAD2DEG;  // wx drives pitch
-  if(Math.abs(wy)>TRICK_RATE_FLOOR)trickYaw+=Math.abs(wy)*dt*THREE.MathUtils.RAD2DEG;    // wy drives yaw
-  // path 2 timer: accumulates purely on low rotation, independent of level
-  if(mag<TRICK_STABLE_MAG)trickRotStopTimer+=dt; else trickRotStopTimer=0;
-  // path 1 timer: additionally requires near-level orientation
-  if(mag<TRICK_STABLE_MAG&&up.y>TRICK_STABLE_UPY)trickStableTimer+=dt; else trickStableTimer=0;
-  if(trickStableTimer>=TRICK_STABLE_HOLD||trickRotStopTimer>=TRICK_STABLE_HOLD){
-    // TEMP: pre-classification accumulation dump for threshold tuning
-    console.log('TRICK WINDOW: roll',trickRoll.toFixed(0),'pitch',trickPitch.toFixed(0),'yaw',trickYaw.toFixed(0));
-    landTrick(trickRoll,trickPitch,trickYaw);
-    trickRoll=trickPitch=trickYaw=0;trickStableTimer=0;trickRotStopTimer=0;
+  // trick/combo: SIGNED per-axis accumulation, then quanta segmentation.
+  // (wz→roll, wx→pitch, wy→yaw). Noise gate is applied to |w| but the value
+  // added is signed, so a there-and-back flick nets toward zero.
+  const nowT=performance.now();
+  const wMap={roll:wz,pitch:wx,yaw:wy};
+  for(const ax of ['roll','pitch','yaw']){
+    const w=wMap[ax];
+    if(Math.abs(w)>TRICK_RATE_FLOOR)trickAcc[ax]+=w*dt*THREE.MathUtils.RAD2DEG; // signed
+    const a=Math.abs(trickAcc[ax]);
+    if(a>trickPeak[ax])trickPeak[ax]=a;
+    if(a>=360){
+      // full rotation → bank a quantum (axis+direction), carry signed remainder
+      const sign=trickAcc[ax]<0?-1:1;
+      bankRotation(ax,sign,nowT);
+      trickAcc[ax]-=360*sign;
+      trickPeak[ax]=Math.abs(trickAcc[ax]); // consumed by the rotation; remainder starts fresh
+      graceDeadline=nowT+TRICK_GRACE_MS;      // (re)open the multi-rotation merge window
+      logTrick('bank '+ax);
+    }else if(a<45&&trickPeak[ax]>=90){
+      // axis netted back near zero after a partial excursion without banking a
+      // full rotation: a 90-200° peak is a Juicy Flick; anything else is spent flow
+      if(trickPeak[ax]<=200){scoreTrick({name:'Juicy Flick',mag:trickPeak[ax]});logTrick('juicy '+ax);}
+      trickAcc[ax]=0;trickPeak[ax]=0;
+    }
+  }
+  // grace window expired with banks pending → classify the whole set + land it
+  if(bankedRotations.length&&nowT>=graceDeadline){
+    logTrick('land');
+    scoreTrick(classifyBanked(bankedRotations));
+    bankedRotations.length=0;graceDeadline=0;
   }
   const mass=CFG.massG/1000;
   const F=tmpV.copy(up).multiplyScalar(Math.pow(stick.t,2.2)*CFG.twr*mass*G);
@@ -1780,7 +1803,7 @@ function physics(dt){
 }
 function bounce(){
   state.bounces++;toast('BOUNCE #'+state.bounces);
-  trickRoll=trickPitch=trickYaw=0;trickStableTimer=0;trickRotStopTimer=0; // crash mid-trick invalidates the attempt
+  resetTrickState(); // crash mid-trick invalidates the attempt
   breakCombo();
 }
 
