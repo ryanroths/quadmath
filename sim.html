@@ -336,24 +336,37 @@ function voxelColliders(obj,gridRes,snapToGrid){
 }
 
 // ---------- Race gates & dive rings ----------
-const gates=[];let nextGateIndex=0,lapCount=0;
-// lap timer — clock starts on gate 0, laps run back-to-back on sequence wrap
-let lapStartTime=0,lapActive=false,lastLapMs=0,bestLapMs=0,lapFlashUntil=0;
-try{bestLapMs=parseFloat(localStorage.getItem('quadmath_bestLap'))||0;}catch(e){}
+// Two independent tracks share this array; each gate carries a trackId (0 =
+// original city loop, 1 = standalone zigzag). Sequencing/highlight/lap all
+// operate within one track at a time via trackGates() + a within-track index.
+const gates=[];
+let activeTrackId=0;                 // which track's sequence is currently live
+let nextGateIndex=0;                 // index WITHIN the active track (not the global array)
+let lapCount=[0,0];                  // per-track completed-lap counter
+// lap timer — clock starts on a track's gate 0, laps run back-to-back on wrap
+let lapStartTime=0,lapActive=false,lapFlashUntil=0;
+let lastLapMs=[0,0],bestLapMs=[0,0]; // per-track records
+function loadBest(id){try{return parseFloat(localStorage.getItem('quadmath_bestLap_'+id))||0;}catch(e){return 0;}}
+bestLapMs[0]=loadBest(0);bestLapMs[1]=loadBest(1);
+// migrate a pre-split single best-lap record into track 0's slot if present
+if(!bestLapMs[0]){try{bestLapMs[0]=parseFloat(localStorage.getItem('quadmath_bestLap'))||0;}catch(e){}}
+// ordered list of gates on a track (filter preserves insertion order)
+function trackGates(id){return gates.filter(g=>g.trackId===id);}
 function fmtLap(ms){
   const m=Math.floor(ms/60000),s=Math.floor(ms%60000/1000),h=Math.floor(ms%1000/10);
   return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+'.'+String(h).padStart(2,'0');
 }
-function addGate(x,y,z,rotationY,size,solidGate){
+function addGate(x,y,z,rotationY,size,solidGate,trackId){
   size=size||7;
-  const col=gates.length%2===0?0xff3b2f:0x2f7bff; // alternate red/blue
+  trackId=trackId||0; // default track 0 = original city loop
+  const trackIdx=gates.filter(g=>g.trackId===trackId).length; // position within its OWN track
+  const col=trackIdx%2===0?0xff3b2f:0x2f7bff; // alternate red/blue, per-track
   const ring=new THREE.Mesh(
     new THREE.TorusGeometry(size,size*0.07,10,36),
     new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.4,roughness:0.4}));
   ring.position.set(x,y,z);ring.rotation.y=rotationY||0;
   scene.add(ring);
-  gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col}); // col = dim base color
-  gates[gates.length-1].idx=gates.length-1;
+  gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col,trackId:trackId,trackIdx:trackIdx}); // col = dim base color
   if(solidGate){
     // real collision on the ring FRAME only: trace the torus curve with
     // overlapping axis-aligned box colliders (same decomposition approach as
@@ -417,12 +430,17 @@ addDiveRing(-180, 15,  40, -0.35,     4.0, 3);
   scene.add(spr);
 }
 const gateUI=document.getElementById('osdGate');
-function updateGateUI(){gateUI.textContent='GATE '+nextGateIndex+'/'+gates.length+(lapCount>0?' · LAP '+lapCount:'');}
-// next gate: bright white + pulsing scale; all others dim in their base red/blue
+function updateGateUI(){
+  const list=trackGates(activeTrackId); // position shown within the active track only
+  gateUI.textContent='T'+(activeTrackId+1)+' GATE '+nextGateIndex+'/'+list.length+(lapCount[activeTrackId]>0?' · LAP '+lapCount[activeTrackId]:'');
+}
+// next gate: bright white + pulsing scale; all others dim in their base red/blue.
+// The target is the active track's current gate, identified by object reference.
 function updateGateHighlight(){
+  const target=trackGates(activeTrackId)[nextGateIndex];
   for(const g of gates){
     const m=g.mesh.material;
-    if(g.idx===nextGateIndex){
+    if(g===target){
       m.color.setHex(0xFFFFFF);m.emissive.setHex(0xFFFFFF);m.emissiveIntensity=1.5;
       g.mesh.scale.setScalar(1+Math.sin(performance.now()*0.005)*0.08);
     }else{
@@ -433,26 +451,41 @@ function updateGateHighlight(){
 }
 function updateGates(){
   if(!gates.length)return;
-  updateGateHighlight(); // every frame — drives the pulse on the target gate
-  const g=gates[nextGateIndex];
-  // only the in-sequence gate advances; passing any other gate does nothing
-  if(state.pos.distanceTo(g.pos)<g.r){
+  updateGateHighlight(); // every frame — drives the pulse on the active track's target gate
+  // track switch: flying through gate 0 of a NON-active track makes that track
+  // active and starts its lap clock (advancing to that track's gate 1).
+  for(const id of [0,1]){
+    if(id===activeTrackId)continue;
+    const g0=trackGates(id)[0];
+    if(g0&&state.pos.distanceTo(g0.pos)<g0.r){
+      activeTrackId=id;
+      nextGateIndex=1%trackGates(id).length; // gate 0 just passed
+      lapActive=true;lapStartTime=performance.now();
+      toast('TRACK '+(id+1)+' — LAP START');
+      updateGateUI();updateGateHighlight();
+      return; // handled this frame
+    }
+  }
+  // in-sequence advance, scoped to the active track only
+  const list=trackGates(activeTrackId);
+  const g=list[nextGateIndex];
+  if(g&&state.pos.distanceTo(g.pos)<g.r){
     const passed=nextGateIndex;
-    nextGateIndex=(nextGateIndex+1)%gates.length;
+    nextGateIndex=(nextGateIndex+1)%list.length; // wraps at THIS track's length
     if(passed===0&&!lapActive){lapActive=true;lapStartTime=performance.now();} // clock starts at gate 0
-    if(nextGateIndex===0){ // wrapped after gate 9 — full sequence done
-      lapCount++;
+    if(nextGateIndex===0){ // wrapped past this track's last gate — full lap done
+      lapCount[activeTrackId]++;
       if(lapActive){
         const t=performance.now()-lapStartTime;
-        lastLapMs=t;
-        if(!bestLapMs||t<bestLapMs){
-          bestLapMs=t;
-          try{localStorage.setItem('quadmath_bestLap',String(t));}catch(e){}
+        lastLapMs[activeTrackId]=t;
+        if(!bestLapMs[activeTrackId]||t<bestLapMs[activeTrackId]){
+          bestLapMs[activeTrackId]=t;
+          try{localStorage.setItem('quadmath_bestLap_'+activeTrackId,String(t));}catch(e){}
           lapFlashUntil=performance.now()+1500;
           toast('NEW BEST LAP!');
-        }else toast('LAP '+lapCount+' — '+fmtLap(t));
+        }else toast('LAP '+lapCount[activeTrackId]+' — '+fmtLap(t));
         lapStartTime=performance.now(); // back-to-back: next lap clock runs immediately
-      }else toast('LAP '+lapCount+' COMPLETE');
+      }else toast('LAP '+lapCount[activeTrackId]+' COMPLETE');
     }
     else toast('GATE '+nextGateIndex+' PASSED');
     updateGateUI();
@@ -1219,18 +1252,19 @@ function updateArrowMarkers(){
     a.mesh.rotateY(0.015); // spin around its own pointing axis — shimmer without losing direction
   }
 }
-addGate(210,  8,  -565,  0.30, 9, true);  // 11 entry, low + wide
-addGate(490,  14, -610,  1.95, 7, true);  // 12 hard swing right
-addGate(220,  26, -655, -1.95, 7, true);  // 13 swing left + climb
-addGate(480,  40, -700,  1.95, 6, true);  // 14 swing right, near-peak, tight
-addGate(350,  46, -735,  3.14, 6, true);  // 15 CENTER apex — highest point, tight technical gate
-addGate(220,  28, -770, -1.95, 7, true);  // 16 dive left, descending
-addGate(490,  16, -805,  1.95, 7, true);  // 17 swing right, descending
-addGate(350,  10, -840,  3.14, 8, true);  // 18 low center gate, near-ground fast pass
-addGate(220,  18, -875, -1.95, 7, true);  // 19 swing left
-addGate(480,  12, -900,  1.60, 7, true);  // 20 swing right, near south edge
-addGate(350,  22, -905,  0.90, 8, true);  // 21 south turnaround apex
-addGate(280,  10, -625, -2.60, 9, true);  // 22 long return leg, wide finish — closes the loop
+// standalone zigzag track — trackId=1 so it keeps its own sequence/lap timing
+addGate(210,  8,  -565,  0.30, 9, true, 1);  // 1 entry, low + wide (this track's gate 0)
+addGate(490,  14, -610,  1.95, 7, true, 1);  // 2 hard swing right
+addGate(220,  26, -655, -1.95, 7, true, 1);  // 3 swing left + climb
+addGate(480,  40, -700,  1.95, 6, true, 1);  // 4 swing right, near-peak, tight
+addGate(350,  46, -735,  3.14, 6, true, 1);  // 5 CENTER apex — highest point, tight technical gate
+addGate(220,  28, -770, -1.95, 7, true, 1);  // 6 dive left, descending
+addGate(490,  16, -805,  1.95, 7, true, 1);  // 7 swing right, descending
+addGate(350,  10, -840,  3.14, 8, true, 1);  // 8 low center gate, near-ground fast pass
+addGate(220,  18, -875, -1.95, 7, true, 1);  // 9 swing left
+addGate(480,  12, -900,  1.60, 7, true, 1);  // 10 swing right, near south edge
+addGate(350,  22, -905,  0.90, 8, true, 1);  // 11 south turnaround apex
+addGate(280,  10, -625, -2.60, 9, true, 1);  // 12 long return leg, wide finish — closes the loop
 addArrowMarker(new THREE.Vector3(210,8,-565),   new THREE.Vector3(490,14,-610));
 addArrowMarker(new THREE.Vector3(490,14,-610),  new THREE.Vector3(220,26,-655));
 addArrowMarker(new THREE.Vector3(220,26,-655),  new THREE.Vector3(480,40,-700));
@@ -1331,8 +1365,9 @@ if(window._gltfReady) window._tryAssets();
 const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
   q:new THREE.Quaternion(),bounces:0,t0:performance.now()};
 function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
-  // restart the sequence clean: lap progress + running clock cleared, best kept
-  nextGateIndex=0;lapActive=false;lapStartTime=0;
+  // restart the sequence clean: back on track 0, lap progress + running clock
+  // cleared, per-track best kept
+  activeTrackId=0;nextGateIndex=0;lapActive=false;lapStartTime=0;
   updateGateUI();updateGateHighlight();
   toast('RESET');}
 
@@ -1694,9 +1729,9 @@ const osdLap=document.getElementById('osdLap');
 function updateLapOSD(){
   const now=performance.now();
   osdLap.style.color=now<lapFlashUntil?'#3DDC97':''; // green flash on new best
-  osdLap.innerHTML='LAP '+(lapActive?fmtLap(now-lapStartTime):'--:--.--')+
-    '<br>LAST '+(lastLapMs?fmtLap(lastLapMs):'--:--.--')+
-    '<br>BEST '+(bestLapMs?fmtLap(bestLapMs):'--:--.--');
+  osdLap.innerHTML='T'+(activeTrackId+1)+' LAP '+(lapActive?fmtLap(now-lapStartTime):'--:--.--')+
+    '<br>LAST '+(lastLapMs[activeTrackId]?fmtLap(lastLapMs[activeTrackId]):'--:--.--')+
+    '<br>BEST '+(bestLapMs[activeTrackId]?fmtLap(bestLapMs[activeTrackId]):'--:--.--');
 }
 const toastEl=document.getElementById('toast');let toastTimer;
 function toast(m){toastEl.textContent=m;toastEl.style.opacity=1;
