@@ -1627,7 +1627,7 @@ let trickRoll=0,trickPitch=0,trickYaw=0,trickStableTimer=0,trickRotStopTimer=0;
 let comboCount=0,comboScore=0,comboMultiplier=1,comboActive=false,lastTrickTime=0,comboFlashUntil=0;
 let sessionScore=0,bestComboScore=0;
 try{bestComboScore=parseFloat(localStorage.getItem('quadmath_bestCombo'))||0;}catch(e){}
-const TRICK_STABLE_MAG=0.6,TRICK_STABLE_UPY=0.92,TRICK_STABLE_HOLD=0.5,COMBO_WINDOW_MS=2500,TRICK_CHAIN_MS=2000;
+const TRICK_STABLE_MAG=0.25,TRICK_STABLE_UPY=0.92,TRICK_STABLE_HOLD=0.5,COMBO_WINDOW_MS=2500,TRICK_CHAIN_MS=2000;
 const TRICK_RATE_FLOOR=0.15; // rad/s - below this, treat as noise, don't accumulate
 // Real trick names (prowhooper.com Tricktionary), still purely rotation-based
 // off state.q pitch/roll/yaw accumulation — no position/velocity/proximity
