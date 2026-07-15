@@ -495,21 +495,26 @@ function finishRun(){
 }
 function updateGates(){
   if(!gates.length)return;
-  updateGateHighlight(); // every frame — drives the pulse on the active track's target gate
-  // track switch: flying through gate 0 of a NON-active track makes that track
-  // active and starts a fresh run there (advancing to that track's gate 1).
-  for(const id of [0,1]){
-    if(id===activeTrackId)continue;
-    const g0=trackGates(id)[0];
-    if(g0&&state.pos.distanceTo(g0.pos)<g0.r){
-      activeTrackId=id;
-      nextGateIndex=1%trackGates(id).length; // gate 0 just passed
-      startRun();
-      toast('TRACK '+(id+1)+' — RUN START');
-      updateGateUI();updateGateHighlight();
-      return; // handled this frame
+  // Proximity track selection when idle: with no run active, make whichever
+  // track's gate 0 is nearest the quad the active track, so its START lights
+  // up and can be entered. LOCKED for the duration of a run — once runActive
+  // is true this block is skipped, so proximity can't switch tracks mid-run.
+  // Unlocks automatically when the run ends (runActive back to false).
+  if(!runActive){
+    let nearest=activeTrackId,bestD=Infinity;
+    for(const id of [0,1]){
+      const g0=trackGates(id)[0];
+      if(!g0)continue;
+      const d=state.pos.distanceTo(g0.pos);
+      if(d<bestD){bestD=d;nearest=id;}
+    }
+    if(nearest!==activeTrackId){
+      activeTrackId=nearest;
+      nextGateIndex=0; // aim at the newly-selected track's gate 0
+      updateGateUI();
     }
   }
+  updateGateHighlight(); // every frame — drives the pulse on the active track's target gate
   // in-sequence advance, scoped to the active track only
   const list=trackGates(activeTrackId);
   const g=list[nextGateIndex];
@@ -1365,9 +1370,10 @@ if(window._gltfReady) window._tryAssets();
 const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
   q:new THREE.Quaternion(),bounces:0,t0:performance.now()};
 function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
-  // restart the sequence clean: back on track 0, lap progress + running clock
-  // cleared, per-track best kept
-  activeTrackId=0;nextGateIndex=0;runActive=false;runLap=0;runSplits=[];lapStartTime=0;runStartTime=0;
+  // clear run state; leave activeTrackId alone so proximity selection re-picks
+  // the nearest track's start next frame (the quad respawns by track 0's start,
+  // so that's what it'll land on — but we don't hard-force it)
+  nextGateIndex=0;runActive=false;runLap=0;runSplits=[];lapStartTime=0;runStartTime=0;
   clearGhostRec(); // drop the in-progress recording — this run is void
   updateGateUI();updateGateHighlight();
   toast('RESET');}
