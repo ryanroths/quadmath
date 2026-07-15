@@ -1635,6 +1635,7 @@ let comboCount=0,comboScore=0,comboMultiplier=1,comboActive=false,lastTrickTime=
 let sessionScore=0,bestComboScore=0;
 try{bestComboScore=parseFloat(localStorage.getItem('quadmath_bestCombo'))||0;}catch(e){}
 const COMBO_WINDOW_MS=2500,TRICK_CHAIN_MS=2000,TRICK_GRACE_MS=700; // GRACE: multi-rotation merge window after a bank
+const TRICK_WINDOW_CEIL_MS=3000; // hard ceiling since first bank — force a land even if an axis is still mid-rotation, so a window can't hang open forever
 const TRICK_RATE_FLOOR=0.15; // rad/s - below this, treat as noise, don't accumulate (applied to |w|)
 // Real trick names (prowhooper.com Tricktionary), purely rotation-based off
 // state.q pitch/roll/yaw accumulation — no position/velocity/proximity
@@ -1761,8 +1762,15 @@ function physics(dt){
   // banks first, yaw still accumulating). Extending each rotating frame keeps
   // the window alive until all axes settle, so the second bank still merges.
   if(anyRotating&&bankedRotations.length)graceDeadline=Math.max(graceDeadline,nowT+TRICK_GRACE_MS);
-  // grace window expired with banks pending → classify the whole set + land it
-  if(bankedRotations.length&&nowT>=graceDeadline){
+  // don't land while any axis is mid-rotation (|acc|>=90) even if the grace
+  // window lapsed during a momentary stick pause — that partial rotation will
+  // bank and belongs to the same maneuver (e.g. yaw banks while pitch sits at
+  // 141° mid-flip). Hold until every non-banked axis is back under 90 (spent
+  // flow) or has banked. A hard ceiling since the first bank forces a land so
+  // a window can't hang open forever.
+  const midRotation=Math.abs(trickAcc.roll)>=90||Math.abs(trickAcc.pitch)>=90||Math.abs(trickAcc.yaw)>=90;
+  const firstBankT=bankedRotations.length?bankedRotations[0].t:nowT;
+  if(bankedRotations.length&&nowT>=graceDeadline&&(!midRotation||nowT-firstBankT>=TRICK_WINDOW_CEIL_MS)){
     logTrick('land');
     scoreTrick(classifyBanked(bankedRotations));
     bankedRotations.length=0;graceDeadline=0;
