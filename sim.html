@@ -101,6 +101,7 @@
   <div class="lgc lgc-br"></div>
   <b>M — Music On/Off</b><br>
   <b>F — Angle / Acro Mode</b><br>
+  <b>G — Ghost Replay</b><br>
   <b>R — Reset Quad</b><br>
   <b>TAB — Tune Panel</b>
 </div>
@@ -158,7 +159,7 @@
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
     <b>R</b> reset &nbsp;<b>Tab</b> panel<br>
-    🔊 <b>M</b>: Music &nbsp;<b>F</b>: angle/acro
+    🔊 <b>M</b>: Music &nbsp;<b>F</b>: angle/acro &nbsp;<b>G</b>: ghost
   </div>
   <button id="btnReset">RESET QUAD [R]</button>
 </div>
@@ -461,6 +462,7 @@ function updateGates(){
       activeTrackId=id;
       nextGateIndex=1%trackGates(id).length; // gate 0 just passed
       lapActive=true;lapStartTime=performance.now();
+      startGhostRec(); // begin recording this new track's lap
       toast('TRACK '+(id+1)+' — LAP START');
       updateGateUI();updateGateHighlight();
       return; // handled this frame
@@ -472,7 +474,7 @@ function updateGates(){
   if(g&&state.pos.distanceTo(g.pos)<g.r){
     const passed=nextGateIndex;
     nextGateIndex=(nextGateIndex+1)%list.length; // wraps at THIS track's length
-    if(passed===0&&!lapActive){lapActive=true;lapStartTime=performance.now();} // clock starts at gate 0
+    if(passed===0&&!lapActive){lapActive=true;lapStartTime=performance.now();startGhostRec();} // clock starts at gate 0
     if(nextGateIndex===0){ // wrapped past this track's last gate — full lap done
       lapCount[activeTrackId]++;
       if(lapActive){
@@ -481,10 +483,12 @@ function updateGates(){
         if(!bestLapMs[activeTrackId]||t<bestLapMs[activeTrackId]){
           bestLapMs[activeTrackId]=t;
           try{localStorage.setItem('quadmath_bestLap_'+activeTrackId,String(t));}catch(e){}
+          commitGhost(activeTrackId); // new best → save this lap's recording as the ghost
           lapFlashUntil=performance.now()+1500;
           toast('NEW BEST LAP!');
         }else toast('LAP '+lapCount[activeTrackId]+' — '+fmtLap(t));
         lapStartTime=performance.now(); // back-to-back: next lap clock runs immediately
+        startGhostRec();                // begin recording the next lap from scratch
       }else toast('LAP '+lapCount[activeTrackId]+' COMPLETE');
     }
     else toast('GATE '+nextGateIndex+' PASSED');
@@ -1368,6 +1372,7 @@ function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identi
   // restart the sequence clean: back on track 0, lap progress + running clock
   // cleared, per-track best kept
   activeTrackId=0;nextGateIndex=0;lapActive=false;lapStartTime=0;
+  clearGhostRec(); // drop the in-progress recording — this run is void
   updateGateUI();updateGateHighlight();
   toast('RESET');}
 
@@ -1583,6 +1588,7 @@ addEventListener('keydown',e=>{
   if(e.key.toLowerCase()==='r')resetQuad();
   if(e.key.toLowerCase()==='m')toggleMusic();
   if(e.key.toLowerCase()==='f')toggleFlightMode();
+  if(e.key.toLowerCase()==='g'){ghostVisible=!ghostVisible;toast(ghostVisible?'GHOST ON':'GHOST OFF');}
   if(e.key.startsWith('Arrow'))e.preventDefault();
 });
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
@@ -1800,6 +1806,78 @@ droneSel.onchange=()=>{
 applyDroneType(); // restore persisted type on load
 updateRadioInfo();
 
+// ---------- Ghost replay (built on the lap timer) ----------
+// Records quad pose every 2nd frame with elapsed-lap-time stamps; on a new
+// best lap the recording becomes that track's ghost. On later laps a
+// translucent cyan quad plays the ghost back indexed by current elapsed lap
+// time, so it flies in real sync. Per-track, persisted at 2-decimal precision.
+const GHOST_MAX=900; // sample cap (~30s at 30 Hz); downsample rather than fail to store
+let ghosts=[null,null];               // per-track best-lap recordings
+let ghostRec=null,ghostFrame=0;       // in-progress recording + its frame counter
+let ghostVisible=true;
+const _gr2=v=>Math.round(v*100)/100;   // 2-decimal coords (visual ghost — plenty)
+const _gr3=v=>Math.round(v*1000)/1000; // slightly finer for quaternion smoothness
+function loadGhost(id){try{const s=localStorage.getItem('quadmath_bestGhost_'+id);return s?JSON.parse(s):null;}catch(e){return null;}}
+ghosts[0]=loadGhost(0);ghosts[1]=loadGhost(1);
+function startGhostRec(){ghostRec=[];ghostFrame=0;}   // begin a fresh lap recording
+function clearGhostRec(){ghostRec=null;}              // void the in-progress recording
+// persist, downsampling further on a quota error rather than failing to store
+function persistGhost(id,rec){
+  let data=rec;
+  for(let a=0;a<5;a++){
+    try{localStorage.setItem('quadmath_bestGhost_'+id,JSON.stringify(data));return data;}
+    catch(e){data=data.filter((_,i)=>i%2===0);} // halve and retry
+  }
+  return data;
+}
+// save the just-finished recording as track id's ghost (called on a new best)
+function commitGhost(id){
+  if(!ghostRec||!ghostRec.length)return;
+  let rec=ghostRec;
+  if(rec.length>GHOST_MAX){const stride=Math.ceil(rec.length/GHOST_MAX);rec=rec.filter((_,i)=>i%stride===0);}
+  ghosts[id]=persistGhost(id,rec);
+}
+// translucent cyan quad — no existing quad mesh to reuse (this is an FPV sim,
+// the camera IS the quad), so build a small readable body + arms + nose
+function makeGhostMesh(){
+  const grp=new THREE.Group();
+  const mat=new THREE.MeshStandardMaterial({color:0x00e5ff,emissive:0x00e5ff,emissiveIntensity:0.6,
+    transparent:true,opacity:0.35,depthWrite:false,roughness:0.4});
+  grp.add(new THREE.Mesh(new THREE.BoxGeometry(1.4,0.3,1.4),mat));
+  for(const c of [[1,1],[1,-1],[-1,1],[-1,-1]]){
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.25,0.2,8),mat);
+    m.position.set(c[0]*0.8,0.05,c[1]*0.8);grp.add(m);
+  }
+  const nose=new THREE.Mesh(new THREE.ConeGeometry(0.25,0.7,8),mat);
+  nose.rotation.x=-Math.PI/2;nose.position.set(0,0,-0.9);grp.add(nose); // points -Z = quad forward
+  grp.visible=false;scene.add(grp);
+  return grp;
+}
+const ghostMesh=makeGhostMesh();
+const _gqa=new THREE.Quaternion(),_gqb=new THREE.Quaternion();
+function sampleGhost(){
+  if(!ghostRec||!lapActive)return;
+  if((++ghostFrame)%2!==0)return; // every 2nd frame
+  const t=performance.now()-lapStartTime;
+  ghostRec.push([Math.round(t),_gr2(state.pos.x),_gr2(state.pos.y),_gr2(state.pos.z),
+    _gr3(state.q.x),_gr3(state.q.y),_gr3(state.q.z),_gr3(state.q.w)]);
+}
+function playbackGhost(){
+  const g=ghosts[activeTrackId];
+  if(!ghostVisible||!lapActive||!g||!g.length){ghostMesh.visible=false;return;}
+  const elapsed=performance.now()-lapStartTime;
+  let a,b; // bracket the current elapsed time between two time-ordered samples
+  if(elapsed<=g[0][0]){a=b=g[0];}
+  else if(elapsed>=g[g.length-1][0]){a=b=g[g.length-1];} // ghost finished — hold final pose
+  else{a=b=g[0];for(let i=0;i<g.length-1;i++){if(g[i][0]<=elapsed&&g[i+1][0]>=elapsed){a=g[i];b=g[i+1];break;}}}
+  const span=b[0]-a[0],f=span>0?(elapsed-a[0])/span:0;
+  ghostMesh.position.set(a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f,a[3]+(b[3]-a[3])*f);
+  _gqa.set(a[4],a[5],a[6],a[7]);_gqb.set(b[4],b[5],b[6],b[7]);
+  ghostMesh.quaternion.copy(_gqa).slerp(_gqb,f);
+  ghostMesh.visible=true;
+}
+function updateGhost(){sampleGhost();playbackGhost();}
+
 // ---------- Loop ----------
 let last=performance.now(),acc=0;
 const STEP=1/240;
@@ -1810,7 +1888,7 @@ function loop(now){
   acc+=dt;
   while(acc>=STEP){physics(STEP);acc-=STEP;}
   updateMotorSound();
-  updateCamera();updateOSD();updateGates();updatePortals();updateArrowMarkers();
+  updateCamera();updateOSD();updateGates();updateGhost();updatePortals();updateArrowMarkers();
   renderer.render(scene,camera);
 }
 toast('Throttle up to fly. Tab = tune.');
