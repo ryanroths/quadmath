@@ -1634,7 +1634,7 @@ let graceDeadline=0;                   // performance.now()+GRACE; land the bank
 let comboCount=0,comboScore=0,comboMultiplier=1,comboActive=false,lastTrickTime=0,comboFlashUntil=0;
 let sessionScore=0,bestComboScore=0;
 try{bestComboScore=parseFloat(localStorage.getItem('quadmath_bestCombo'))||0;}catch(e){}
-const COMBO_WINDOW_MS=2500,TRICK_CHAIN_MS=2000,TRICK_GRACE_MS=250; // GRACE: multi-rotation merge window after a bank
+const COMBO_WINDOW_MS=2500,TRICK_CHAIN_MS=2000,TRICK_GRACE_MS=700; // GRACE: multi-rotation merge window after a bank
 const TRICK_RATE_FLOOR=0.15; // rad/s - below this, treat as noise, don't accumulate (applied to |w|)
 // Real trick names (prowhooper.com Tricktionary), purely rotation-based off
 // state.q pitch/roll/yaw accumulation — no position/velocity/proximity
@@ -1735,9 +1735,10 @@ function physics(dt){
   // added is signed, so a there-and-back flick nets toward zero.
   const nowT=performance.now();
   const wMap={roll:wz,pitch:wx,yaw:wy};
+  let anyRotating=false;
   for(const ax of ['roll','pitch','yaw']){
     const w=wMap[ax];
-    if(Math.abs(w)>TRICK_RATE_FLOOR)trickAcc[ax]+=w*dt*THREE.MathUtils.RAD2DEG; // signed
+    if(Math.abs(w)>TRICK_RATE_FLOOR){trickAcc[ax]+=w*dt*THREE.MathUtils.RAD2DEG;anyRotating=true;} // signed
     const a=Math.abs(trickAcc[ax]);
     if(a>trickPeak[ax])trickPeak[ax]=a;
     if(a>=360){
@@ -1755,6 +1756,11 @@ function physics(dt){
       trickAcc[ax]=0;trickPeak[ax]=0;
     }
   }
+  // hold the grace window open while ANYTHING is still turning — the trick
+  // isn't over while an axis is mid-rotation (e.g. inverted yaw spin: pitch
+  // banks first, yaw still accumulating). Extending each rotating frame keeps
+  // the window alive until all axes settle, so the second bank still merges.
+  if(anyRotating&&bankedRotations.length)graceDeadline=Math.max(graceDeadline,nowT+TRICK_GRACE_MS);
   // grace window expired with banks pending → classify the whole set + land it
   if(bankedRotations.length&&nowT>=graceDeadline){
     logTrick('land');
