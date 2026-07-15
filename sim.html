@@ -449,15 +449,30 @@ function updateGateUI(){
   const list=trackGates(activeTrackId); // position shown within the active track only
   gateUI.textContent='T'+(activeTrackId+1)+' GATE '+nextGateIndex+'/'+list.length+(runActive?' · LAP '+runLap+'/'+RUN_LAPS:'');
 }
-// next gate: bright white + pulsing scale; all others dim in their base red/blue.
-// The target is the active track's current gate, identified by object reference.
+// tall translucent column rising from the active target gate — visible over
+// terrain and from across the map so the pilot always knows where to go next.
+// No collision (never added to colliders), depthWrite off so it blends cleanly.
+const beacon=new THREE.Mesh(
+  new THREE.CylinderGeometry(1.5,1.5,200,12),
+  new THREE.MeshStandardMaterial({color:0xaaffff,emissive:0xaaffff,emissiveIntensity:1.4,
+    transparent:true,opacity:0.25,depthWrite:false}));
+beacon.renderOrder=999;beacon.visible=false;scene.add(beacon);
+let beaconTarget=null; // last gate the beacon was moved to (reposition only on change)
+// next gate: bright white + strong pulsing scale; all others dim in their base
+// red/blue. The target is the active track's current gate, by object reference.
 function updateGateHighlight(){
   const target=trackGates(activeTrackId)[nextGateIndex];
+  // move the beacon whenever the target changes (nextGateIndex OR active track)
+  if(target&&target!==beaconTarget){
+    beacon.position.set(target.pos.x,target.pos.y+100,target.pos.z); // base at the gate, 200 tall
+    beaconTarget=target;
+  }
+  beacon.visible=!!target;
   for(const g of gates){
     const m=g.mesh.material;
     if(g===target){
-      m.color.setHex(0xFFFFFF);m.emissive.setHex(0xFFFFFF);m.emissiveIntensity=1.5;
-      g.mesh.scale.setScalar(1+Math.sin(performance.now()*0.005)*0.08);
+      m.color.setHex(0xFFFFFF);m.emissive.setHex(0xFFFFFF);m.emissiveIntensity=3.0;
+      g.mesh.scale.setScalar(1+Math.sin(performance.now()*0.005)*0.2);
     }else{
       m.color.setHex(g.col);m.emissive.setHex(g.col);m.emissiveIntensity=0.4;
       g.mesh.scale.setScalar(1);
