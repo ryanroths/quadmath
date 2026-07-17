@@ -1118,6 +1118,50 @@ function addTripleStack(x,z){
 // standalone on the open corridor extension south of the city — buildings end
 // ~|z|=264, gate loop |z|<=135, dive rings <=180: clear runway both directions
 addTripleStack(0,300);
+// ---------- Windmill cross (axial / dizzy-spin practice landmark) ----------
+// Tall central pole with 4 perpendicular arms (N/E/S/W, 90° apart) partway up,
+// each tipped with a distinctly-colored emissive ball (red/green/blue/yellow)
+// so the pilot can read their own rotation mid-spin from any angle. Pole + arms
+// are solid AABB colliders, so hard contact crashes exactly like the power
+// tower / walls (shared HARD_INTO threshold). Added after the collider snapshot
+// and straight to `scene`, so it survives the GLTF swap. Same primitive+collider
+// pattern as addTripleStack / the power tower above.
+function addWindmill(x,z){
+  const POLE_H=18,POLE_R=0.3,ARM_Y=12,ARM_LEN=6,ARM_R=0.2;
+  const steel=new THREE.MeshStandardMaterial({color:0x8a8f96,roughness:.5,metalness:.55});
+  const grp=new THREE.Group();grp.position.set(x,0,z);scene.add(grp);
+  // central pole (full height, solid)
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(POLE_R,POLE_R,POLE_H,10),steel);
+  pole.position.set(0,POLE_H/2,0);pole.castShadow=true;grp.add(pole);
+  addCollider(x,0,z,POLE_R*2,POLE_H,POLE_R*2);
+  // four arms, each laid horizontal along its outward direction, tipped with a
+  // colored emissive ball. dir = unit [dx,dz] out from the pole.
+  const arms=[
+    {dx: 0,dz: 1,color:0xff3b2f}, // N — red
+    {dx: 1,dz: 0,color:0x2fdd6a}, // E — green
+    {dx: 0,dz:-1,color:0x2f7bff}, // S — blue
+    {dx:-1,dz: 0,color:0xffd400}, // W — yellow
+  ];
+  for(const a of arms){
+    const arm=new THREE.Mesh(new THREE.CylinderGeometry(ARM_R,ARM_R,ARM_LEN,8),steel);
+    if(a.dx!==0)arm.rotation.z=Math.PI/2;   // cylinder is +Y by default → lay along X (E/W)
+    else arm.rotation.x=Math.PI/2;          // → lay along Z (N/S)
+    arm.position.set(a.dx*ARM_LEN/2,ARM_Y,a.dz*ARM_LEN/2); // centered half-length out
+    arm.castShadow=true;grp.add(arm);
+    // collider: thin box spanning the arm's length, thin in the two off-axis dims
+    const cw=a.dx!==0?ARM_LEN:ARM_R*2, cd=a.dz!==0?ARM_LEN:ARM_R*2;
+    addCollider(x+a.dx*ARM_LEN/2, ARM_Y-ARM_R, z+a.dz*ARM_LEN/2, cw, ARM_R*2, cd);
+    // emissive tip ball at the far end — orientation marker, no collider
+    const ball=new THREE.Mesh(new THREE.SphereGeometry(0.45,12,10),
+      new THREE.MeshStandardMaterial({color:a.color,emissive:a.color,emissiveIntensity:1.4,roughness:.4}));
+    ball.position.set(a.dx*ARM_LEN,ARM_Y,a.dz*ARM_LEN);grp.add(ball);
+  }
+}
+// west corridor along the z=0 axis: the building grid skips the axes (gx==0 ||
+// gz==0 cells are never placed), so this lane is clear; sits past the building
+// belt (edge ~|x|=264) and well inside the mesa ring (~520+). Open sightlines
+// all around for dizzy-spin practice. Verified clear of mesas/colliders at load.
+addWindmill(-330,0);
 // ---------- Tunnel (half-cylinder arch, open-ended, fly-through) ----------
 // Moved here (after proceduralColliderCount, alongside addTripleStack) so
 // its collider survives the GLTF swap — it's added straight to `scene`
