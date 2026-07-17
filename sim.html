@@ -159,11 +159,11 @@
   <div class="row"><label>Drone type</label></div>
   <select id="droneType"></select>
   <div class="row"><label>Thrust:weight</label><span class="val" id="v_twr"></span></div>
-  <input type="range" id="s_twr" min="2" max="14" step="0.1" value="6">
+  <input type="range" id="s_twr" min="2" max="14" step="0.1" value="5" disabled title="Derived from thrust ÷ weight — adjust Mass to change it">
   <div class="row"><label>Drag</label><span class="val" id="v_drag"></span></div>
   <input type="range" id="s_drag" min="0.05" max="0.8" step="0.01" value="0.28">
   <div class="row"><label>Mass (g)</label><span class="val" id="v_mass"></span></div>
-  <input type="range" id="s_mass" min="25" max="800" step="5" value="550">
+  <input type="range" id="s_mass" min="15" max="80" step="1" value="28">
 
   <h2>GLTF Assets</h2>
   <div id="assetStatus">checking assets/manifest.json…</div>
@@ -193,7 +193,7 @@
 </script>
 <script>
 "use strict";
-const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,twr:5.0,drag:0.55,massG:28};
+const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:1.4,drag:0.55,massG:28};
 const G=9.81;
 
 // ---------- Renderer ----------
@@ -1719,7 +1719,9 @@ function physics(dt){
   if(mag>1e-8){axis.set(wx/mag,wy/mag,wz/mag);dq.setFromAxisAngle(axis,mag*dt);state.q.multiply(dq).normalize();}
   up.set(0,1,0).applyQuaternion(state.q);
   const mass=CFG.massG/1000;
-  const F=tmpV.copy(up).multiplyScalar(Math.pow(stick.t,2.2)*CFG.twr*mass*G);
+  // absolute thrust in Newtons (independent of mass) — with a=F/mass below,
+  // a lighter quad now genuinely accelerates harder. Peak thrust = CFG.maxThrustN.
+  const F=tmpV.copy(up).multiplyScalar(Math.pow(stick.t,2.2)*CFG.maxThrustN);
   F.y-=mass*G;
   const v=state.vel,sp=v.length();
   if(sp>0){const df=CFG.drag*.02*sp*sp+CFG.drag*.15*sp;F.addScaledVector(v,-df*mass/Math.max(sp,1e-6));}
@@ -1818,20 +1820,30 @@ function bind(id,key,fmt,post){
   s.addEventListener('input',u);u();
 }
 function refreshMax(){document.getElementById('v_max').textContent=maxRateDps().toFixed(0)+' °/s';}
+// twr is now a DISPLAY-ONLY readout: physics runs on absolute CFG.maxThrustN,
+// so thrust:weight is derived (thrust ÷ weight), not a physics driver.
+// Recomputing it on every mass change is what makes massG actually change the
+// felt acceleration (a = F/mass) instead of cancelling out.
+function refreshTwr(){
+  const twr=CFG.maxThrustN/((CFG.massG/1000)*G);
+  document.getElementById('s_twr').value=Math.max(2,Math.min(14,twr)); // thumb reflects the ratio (clamped to slider range)
+  document.getElementById('v_twr').textContent=twr.toFixed(1)+':1';
+}
 bind('rc','rcRate',x=>x.toFixed(2));
 bind('sr','superRate',x=>x.toFixed(2));
 bind('ex','expo',x=>x.toFixed(2));
 bind('cam','camDeg',x=>x+'°');
 bind('fov','fov',x=>x+'°',()=>{camera.fov=CFG.fov;camera.updateProjectionMatrix();});
-bind('twr','twr',x=>x.toFixed(1)+':1');
 bind('drag','drag',x=>x.toFixed(2));
-bind('mass','massG',x=>x+'g');
+bind('mass','massG',x=>x+'g',refreshTwr); // mass change → recompute the thrust:weight readout
 // drone-type presets — applied by driving the physics sliders through their
 // bind handlers so CFG, labels and max-rate readout all update in one path.
-// sim scale: 550g ≈ a 30g 65mm whoop, so a 38g 75mm ≈ 700g sim-equivalent.
+// Masses are now REAL AUW (grams) and thrust is absolute (maxThrustN, Newtons),
+// so a lighter drone genuinely accelerates harder. drag matches the authentic
+// less-floaty tuning (0.55+), not the old floaty 0.28.
 const DRONE_TYPES={
-  whoop65:{label:'65mm Whoop',twr:6.0,drag:0.28,mass:550,sr:0.72},
-  whoop75:{label:'75mm Whoop',twr:5.5,drag:0.32,mass:700,sr:0.68} // lazier rotation via lower super rate
+  whoop65:{label:'65mm Whoop',maxThrustN:1.4,drag:0.55,mass:28,sr:0.72}, // ~5:1 at 28g AUW
+  whoop75:{label:'75mm Whoop',maxThrustN:2.0,drag:0.60,mass:38,sr:0.68}  // ~5.4:1 at 38g AUW, lazier yaw
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
@@ -1848,8 +1860,9 @@ function setSlider(id,val){
 }
 function applyDroneType(){
   const d=DRONE_TYPES[droneType];
-  setSlider('twr',d.twr);setSlider('drag',d.drag);
-  setSlider('mass',d.mass);setSlider('sr',d.sr);
+  CFG.maxThrustN=d.maxThrustN;                       // absolute thrust for this drone (Newtons)
+  setSlider('drag',d.drag);setSlider('mass',d.mass);setSlider('sr',d.sr);
+  refreshTwr();                                      // update the derived thrust:weight readout
 }
 droneSel.onchange=()=>{
   droneType=droneSel.value;
