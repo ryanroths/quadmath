@@ -197,7 +197,7 @@
 </script>
 <script>
 "use strict";
-const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:6.2,drag:0.55,massG:28,spoolTau:0.04,gravMult:1.6};
+const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:4.8,drag:0.55,massG:28,spoolTau:0.04,gravMult:1.6,idlePct:0.055};
 // base gravity — the world geometry is ~3.5x visual scale, so real 9.81 reads
 // as slow-motion against oversized reference; effective gravity everywhere is
 // G*CFG.gravMult (standard FPV-sim practice runs 1.3-1.8x)
@@ -1777,7 +1777,14 @@ function physics(dt){
   // Motor spool lag: first-order filter so thrust chases the commanded value
   // with time constant spoolTau instead of responding instantly — throttle
   // punches ramp in over ~2-3 tau and momentum carries briefly after chop.
-  const thrustCommanded=Math.pow(stick.t,2.2)*CFG.maxThrustN;
+  // Betaflight-style motor idle: armed motors never sit at true zero — the
+  // stick maps onto [idlePct..1] before the ^2.2 curve. Idle thrust rides the
+  // body-up axis (F uses `up` below), so upright it cushions descent while
+  // inverted it pushes toward the ground — inverted falls noticeably harder,
+  // matching real whoop behavior. (This sim has no disarm state; the quad is
+  // always armed, so the floor always applies.)
+  const stickEffective=CFG.idlePct+stick.t*(1-CFG.idlePct);
+  const thrustCommanded=Math.pow(stickEffective,2.2)*CFG.maxThrustN;
   thrustActual+=(thrustCommanded-thrustActual)*(dt/CFG.spoolTau);
   const F=tmpV.copy(up).multiplyScalar(thrustActual);
   F.y-=mass*G*CFG.gravMult; // effective gravity — scaled for the oversized world
@@ -1902,8 +1909,8 @@ bind('grav','gravMult',x=>x.toFixed(2)+'×',refreshTwr); // gravity scale — ef
 // so a lighter drone genuinely accelerates harder. drag matches the authentic
 // less-floaty tuning (0.55+), not the old floaty 0.28.
 const DRONE_TYPES={
-  whoop65:{label:'65mm Whoop',maxThrustN:6.2,drag:0.55,mass:28,sr:0.72,spool:0.04}, // hover ~30% stick (0.30^2.2 curve), snappy 0702 spool
-  whoop75:{label:'75mm Whoop',maxThrustN:8.5,drag:0.60,mass:38,sr:0.68,spool:0.05}  // hover ~30% stick at 38g AUW, lazier yaw + slower 0802 spool
+  whoop65:{label:'65mm Whoop',maxThrustN:4.8,drag:0.55,mass:28,sr:0.72,spool:0.04}, // hover ~30% stick (idle floor + ^2.2 curve), snappy 0702 spool
+  whoop75:{label:'75mm Whoop',maxThrustN:6.5,drag:0.60,mass:38,sr:0.68,spool:0.05}  // hover ~30% stick at 38g AUW, lazier yaw + slower 0802 spool
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
