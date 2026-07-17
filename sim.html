@@ -164,6 +164,8 @@
   <input type="range" id="s_drag" min="0.05" max="0.8" step="0.01" value="0.28">
   <div class="row"><label>Mass (g)</label><span class="val" id="v_mass"></span></div>
   <input type="range" id="s_mass" min="15" max="80" step="1" value="28">
+  <div class="row"><label>Motor Response</label><span class="val" id="v_spool"></span></div>
+  <input type="range" id="s_spool" min="0.02" max="0.15" step="0.005" value="0.04">
 
   <h2>GLTF Assets</h2>
   <div id="assetStatus">checking assets/manifest.json…</div>
@@ -193,7 +195,7 @@
 </script>
 <script>
 "use strict";
-const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:1.4,drag:0.55,massG:28};
+const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:1.4,drag:0.55,massG:28,spoolTau:0.04};
 const G=9.81;
 
 // ---------- Renderer ----------
@@ -1452,7 +1454,9 @@ if(window._gltfReady) window._tryAssets();
 // ---------- Quad state ----------
 const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
   q:new THREE.Quaternion(),bounces:0,t0:performance.now()};
+let thrustActual=0; // motor spool state — filtered thrust (N); starts at 0 so no jump on arm
 function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
+  thrustActual=0; // motors spool from zero on re-arm — no thrust jump
   // clear run state; leave activeTrackId alone so proximity selection re-picks
   // the nearest track's start next frame (the quad respawns by track 0's start,
   // so that's what it'll land on — but we don't hard-force it)
@@ -1765,7 +1769,12 @@ function physics(dt){
   const mass=CFG.massG/1000;
   // absolute thrust in Newtons (independent of mass) — with a=F/mass below,
   // a lighter quad now genuinely accelerates harder. Peak thrust = CFG.maxThrustN.
-  const F=tmpV.copy(up).multiplyScalar(Math.pow(stick.t,2.2)*CFG.maxThrustN);
+  // Motor spool lag: first-order filter so thrust chases the commanded value
+  // with time constant spoolTau instead of responding instantly — throttle
+  // punches ramp in over ~2-3 tau and momentum carries briefly after chop.
+  const thrustCommanded=Math.pow(stick.t,2.2)*CFG.maxThrustN;
+  thrustActual+=(thrustCommanded-thrustActual)*(dt/CFG.spoolTau);
+  const F=tmpV.copy(up).multiplyScalar(thrustActual);
   F.y-=mass*G;
   const v=state.vel,sp=v.length();
   if(sp>0){const df=CFG.drag*.02*sp*sp+CFG.drag*.15*sp;F.addScaledVector(v,-df*mass/Math.max(sp,1e-6));}
@@ -1880,14 +1889,15 @@ bind('cam','camDeg',x=>x+'°');
 bind('fov','fov',x=>x+'°',()=>{camera.fov=CFG.fov;camera.updateProjectionMatrix();});
 bind('drag','drag',x=>x.toFixed(2));
 bind('mass','massG',x=>x+'g',refreshTwr); // mass change → recompute the thrust:weight readout
+bind('spool','spoolTau',x=>(x*1000).toFixed(0)+'ms'); // motor spool time constant
 // drone-type presets — applied by driving the physics sliders through their
 // bind handlers so CFG, labels and max-rate readout all update in one path.
 // Masses are now REAL AUW (grams) and thrust is absolute (maxThrustN, Newtons),
 // so a lighter drone genuinely accelerates harder. drag matches the authentic
 // less-floaty tuning (0.55+), not the old floaty 0.28.
 const DRONE_TYPES={
-  whoop65:{label:'65mm Whoop',maxThrustN:1.4,drag:0.55,mass:28,sr:0.72}, // ~5:1 at 28g AUW
-  whoop75:{label:'75mm Whoop',maxThrustN:2.0,drag:0.60,mass:38,sr:0.68}  // ~5.4:1 at 38g AUW, lazier yaw
+  whoop65:{label:'65mm Whoop',maxThrustN:1.4,drag:0.55,mass:28,sr:0.72,spool:0.04}, // ~5:1 at 28g AUW, snappy 0702 spool
+  whoop75:{label:'75mm Whoop',maxThrustN:2.0,drag:0.60,mass:38,sr:0.68,spool:0.05}  // ~5.4:1 at 38g AUW, lazier yaw + slower 0802 spool
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
@@ -1906,6 +1916,7 @@ function applyDroneType(){
   const d=DRONE_TYPES[droneType];
   CFG.maxThrustN=d.maxThrustN;                       // absolute thrust for this drone (Newtons)
   setSlider('drag',d.drag);setSlider('mass',d.mass);setSlider('sr',d.sr);
+  setSlider('spool',d.spool);                        // per-drone motor spool time constant
   refreshTwr();                                      // update the derived thrust:weight readout
 }
 droneSel.onchange=()=>{
