@@ -1127,7 +1127,7 @@ addTripleStack(0,300);
 // and straight to `scene`, so it survives the GLTF swap. Same primitive+collider
 // pattern as addTripleStack / the power tower above.
 function addWindmill(x,z){
-  const POLE_H=18,POLE_R=0.3,ARM_Y=12,ARM_LEN=6,ARM_R=0.2;
+  const POLE_H=63,POLE_R=1.05,ARM_Y=42,ARM_LEN=21,ARM_R=0.7; // 3.5× the original 18/0.3/12/6/0.2
   const steel=new THREE.MeshStandardMaterial({color:0x8a8f96,roughness:.5,metalness:.55});
   const grp=new THREE.Group();grp.position.set(x,0,z);scene.add(grp);
   // central pole (full height, solid)
@@ -1152,7 +1152,7 @@ function addWindmill(x,z){
     const cw=a.dx!==0?ARM_LEN:ARM_R*2, cd=a.dz!==0?ARM_LEN:ARM_R*2;
     addCollider(x+a.dx*ARM_LEN/2, ARM_Y-ARM_R, z+a.dz*ARM_LEN/2, cw, ARM_R*2, cd);
     // emissive tip ball at the far end — orientation marker, no collider
-    const ball=new THREE.Mesh(new THREE.SphereGeometry(0.45,12,10),
+    const ball=new THREE.Mesh(new THREE.SphereGeometry(1.575,12,10),
       new THREE.MeshStandardMaterial({color:a.color,emissive:a.color,emissiveIntensity:1.4,roughness:.4}));
     ball.position.set(a.dx*ARM_LEN,ARM_Y,a.dz*ARM_LEN);grp.add(ball);
   }
