@@ -166,6 +166,8 @@
   <input type="range" id="s_mass" min="15" max="80" step="1" value="28">
   <div class="row"><label>Motor Response</label><span class="val" id="v_spool"></span></div>
   <input type="range" id="s_spool" min="0.02" max="0.15" step="0.005" value="0.04">
+  <div class="row"><label>Gravity Scale</label><span class="val" id="v_grav"></span></div>
+  <input type="range" id="s_grav" min="1.0" max="2.5" step="0.05" value="1.6">
 
   <h2>GLTF Assets</h2>
   <div id="assetStatus">checking assets/manifest.json…</div>
@@ -195,8 +197,11 @@
 </script>
 <script>
 "use strict";
-const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:1.4,drag:0.55,massG:28,spoolTau:0.04};
-const G=9.81;
+const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:6.2,drag:0.55,massG:28,spoolTau:0.04,gravMult:1.6};
+// base gravity — the world geometry is ~3.5x visual scale, so real 9.81 reads
+// as slow-motion against oversized reference; effective gravity everywhere is
+// G*CFG.gravMult (standard FPV-sim practice runs 1.3-1.8x)
+let G=9.81;
 
 // ---------- Renderer ----------
 const canvas=document.getElementById('c');
@@ -1775,7 +1780,7 @@ function physics(dt){
   const thrustCommanded=Math.pow(stick.t,2.2)*CFG.maxThrustN;
   thrustActual+=(thrustCommanded-thrustActual)*(dt/CFG.spoolTau);
   const F=tmpV.copy(up).multiplyScalar(thrustActual);
-  F.y-=mass*G;
+  F.y-=mass*G*CFG.gravMult; // effective gravity — scaled for the oversized world
   const v=state.vel,sp=v.length();
   if(sp>0){const df=CFG.drag*.02*sp*sp+CFG.drag*.15*sp;F.addScaledVector(v,-df*mass/Math.max(sp,1e-6));}
   v.addScaledVector(F,dt/mass);
@@ -1878,7 +1883,7 @@ function refreshMax(){document.getElementById('v_max').textContent=maxRateDps().
 // Recomputing it on every mass change is what makes massG actually change the
 // felt acceleration (a = F/mass) instead of cancelling out.
 function refreshTwr(){
-  const twr=CFG.maxThrustN/((CFG.massG/1000)*G);
+  const twr=CFG.maxThrustN/((CFG.massG/1000)*G*CFG.gravMult); // effective weight includes gravity scale
   document.getElementById('s_twr').value=Math.max(2,Math.min(14,twr)); // thumb reflects the ratio (clamped to slider range)
   document.getElementById('v_twr').textContent=twr.toFixed(1)+':1';
 }
@@ -1890,14 +1895,15 @@ bind('fov','fov',x=>x+'°',()=>{camera.fov=CFG.fov;camera.updateProjectionMatrix
 bind('drag','drag',x=>x.toFixed(2));
 bind('mass','massG',x=>x+'g',refreshTwr); // mass change → recompute the thrust:weight readout
 bind('spool','spoolTau',x=>(x*1000).toFixed(0)+'ms'); // motor spool time constant
+bind('grav','gravMult',x=>x.toFixed(2)+'×',refreshTwr); // gravity scale — effective weight changes, so re-derive thrust:weight
 // drone-type presets — applied by driving the physics sliders through their
 // bind handlers so CFG, labels and max-rate readout all update in one path.
 // Masses are now REAL AUW (grams) and thrust is absolute (maxThrustN, Newtons),
 // so a lighter drone genuinely accelerates harder. drag matches the authentic
 // less-floaty tuning (0.55+), not the old floaty 0.28.
 const DRONE_TYPES={
-  whoop65:{label:'65mm Whoop',maxThrustN:1.4,drag:0.55,mass:28,sr:0.72,spool:0.04}, // ~5:1 at 28g AUW, snappy 0702 spool
-  whoop75:{label:'75mm Whoop',maxThrustN:2.0,drag:0.60,mass:38,sr:0.68,spool:0.05}  // ~5.4:1 at 38g AUW, lazier yaw + slower 0802 spool
+  whoop65:{label:'65mm Whoop',maxThrustN:6.2,drag:0.55,mass:28,sr:0.72,spool:0.04}, // hover ~30% stick (0.30^2.2 curve), snappy 0702 spool
+  whoop75:{label:'75mm Whoop',maxThrustN:8.5,drag:0.60,mass:38,sr:0.68,spool:0.05}  // hover ~30% stick at 38g AUW, lazier yaw + slower 0802 spool
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
