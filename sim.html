@@ -189,7 +189,8 @@
 {
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+    "@sparkjsdev/spark": "https://sparkjs.dev/releases/spark/2.1.0/spark.module.js"
   }
 }
 </script>
@@ -197,6 +198,7 @@
 "use strict";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 window._gltfReady=true; // loader now bundled via module import — always available
 const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:1.3,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,idlePct:0.055};
 // base gravity — the world geometry is ~3.5x visual scale, so real 9.81 reads
@@ -1420,6 +1422,7 @@ function updatePortals(){
       portalCooldownUntil=t+1200;
       flashPortal();
       toast('WARP');
+      if(p.onWarp)p.onWarp(); // per-portal hook (lazy splat-zone init)
     }
   }
 }
@@ -1431,6 +1434,35 @@ function updatePortals(){
 // leads back to Portal A's exact coordinates.
 addPortal(350,-350,1500,1500,'PORTAL');
 addPortal(1500,1500,350,-350,'RETURN');
+// ---- Splat Zone — photoreal Gaussian-splat scans (Spark renderer) ----
+// Mirror-side of Dreamland: zone at (-1500,1500), portal pair on main map.
+// v1: Spark demo butterfly proves the pipeline; citrus-garden scan replaces
+// SPLAT_URL later, then real Mesa bando scans. Splat loads lazily on first
+// warp — zero cost for pilots who never enter.
+const SPLAT_X=-1500,SPLAT_Z=1500;
+const SPLAT_URL='https://sparkjs.dev/assets/splats/butterfly.spz';
+let sparkRenderer=null,splatLoaded=false;
+function initSplatZone(){
+  if(splatLoaded)return;splatLoaded=true;
+  if(!sparkRenderer){sparkRenderer=new SparkRenderer({renderer});scene.add(sparkRenderer);}
+  const splat=new SplatMesh({url:SPLAT_URL});
+  splat.quaternion.set(1,0,0,0); // 3DGS trainers output y-down — flip to y-up
+  splat.position.set(SPLAT_X,6,SPLAT_Z);
+  splat.scale.setScalar(8);
+  scene.add(splat);
+  // landing pad — splat objects carry no geometry; pad gives floor reference
+  const pad=new THREE.Mesh(new THREE.PlaneGeometry(80,80),
+    new THREE.MeshStandardMaterial({color:0x15171D,roughness:.95}));
+  pad.rotation.x=-Math.PI/2;pad.position.set(SPLAT_X,0.01,SPLAT_Z);
+  scene.add(pad);
+  // zone mood light (physical units)
+  const zl=new THREE.PointLight(0x3DDC97,0.5*Math.PI,300,2);
+  zl.position.set(SPLAT_X,60,SPLAT_Z);scene.add(zl);
+  // future scans: push AABB wall/floor proxies here via addCollider(x,y,z,w,h,d)
+}
+const splatPortal=addPortal(-350,350,SPLAT_X,SPLAT_Z,'SCAN');
+splatPortal.onWarp=initSplatZone;
+addPortal(SPLAT_X,SPLAT_Z,-350,350,'RETURN');
 // mesas (always visible, not part of swap)
 const mesaTex=canvasTex(256,256,(g,s)=>{
   g.fillStyle='#a3673f';g.fillRect(0,0,s,s);
