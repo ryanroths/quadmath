@@ -167,7 +167,7 @@
   <div class="row"><label>Motor Response</label><span class="val" id="v_spool"></span></div>
   <input type="range" id="s_spool" min="0.02" max="0.15" step="0.005" value="0.04">
   <div class="row"><label>Gravity Scale</label><span class="val" id="v_grav"></span></div>
-  <input type="range" id="s_grav" min="1.0" max="2.5" step="0.05" value="1.6">
+  <input type="range" id="s_grav" min="1.0" max="5.0" step="0.05" value="3.5">
   <div class="row"><label>Throttle Curve</label><span class="val" id="v_thc"></span></div>
   <input type="range" id="s_thc" min="1.0" max="2.6" step="0.1" value="1.3">
 
@@ -199,10 +199,11 @@
 </script>
 <script>
 "use strict";
-const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:1.8,thrCurve:1.3,drag:0.55,massG:28,spoolTau:0.04,gravMult:1.6,idlePct:0.055};
+const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:1.3,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,idlePct:0.055};
 // base gravity — the world geometry is ~3.5x visual scale, so real 9.81 reads
 // as slow-motion against oversized reference; effective gravity everywhere is
-// G*CFG.gravMult (standard FPV-sim practice runs 1.3-1.8x)
+// G*CFG.gravMult. Baseline 3.5 matches the world scale 1:1 — a 1s fall covers
+// 3.5x the world units, reading as real-speed against oversized geometry.
 let G=9.81;
 
 // ---------- Renderer ----------
@@ -1753,6 +1754,7 @@ function toggleFlightMode(){
 
 // ---------- Physics ----------
 const tmpV=new THREE.Vector3(),up=new THREE.Vector3();
+const qInv=new THREE.Quaternion(),vBody=new THREE.Vector3(),dragB=new THREE.Vector3();
 const dq=new THREE.Quaternion(),axis=new THREE.Vector3();
 const eulTmp=new THREE.Euler();
 function physics(dt){
@@ -1791,7 +1793,21 @@ function physics(dt){
   const F=tmpV.copy(up).multiplyScalar(thrustActual);
   F.y-=mass*G*CFG.gravMult; // effective gravity — scaled for the oversized world
   const v=state.vel,sp=v.length();
-  if(sp>0){const df=CFG.drag*.02*sp*sp+CFG.drag*.15*sp;F.addScaledVector(v,-df*mass/Math.max(sp,1e-6));}
+  if(sp>1e-6){
+    // mass-INDEPENDENT drag force in Newtons (no *mass — the old code multiplied
+    // by mass then divided by it in a=F/m, so every mass carried momentum
+    // identically). K2/K1 tuned so a throttle-chop free fall at the 65mm preset
+    // (drag 0.55, 28g) reaches terminal ~38 u/s (~11 m/s real at 3.5x world
+    // scale): drag decel there equals G*gravMult. Heavier = higher terminal.
+    // Anisotropic body drag: velocity into body frame, prop disks + ducts
+    // resist lateral (body XZ) flow ~1.75x more than axial (body Y) flow.
+    const K2=0.001,K1=0.007,LAT=1.75;
+    const perU=CFG.drag*(K2*sp*sp+K1*sp)/sp; // N per unit velocity
+    qInv.copy(state.q).invert();
+    vBody.copy(v).applyQuaternion(qInv);
+    dragB.set(-vBody.x*perU*LAT,-vBody.y*perU,-vBody.z*perU*LAT);
+    F.add(dragB.applyQuaternion(state.q)); // back to world frame
+  }
   v.addScaledVector(F,dt/mass);
   state.pos.addScaledVector(v,dt);
   if(state.pos.y<0.12){
@@ -1912,8 +1928,8 @@ bind('thc','thrCurve',x=>'^'+x.toFixed(1)); // throttle curve exponent — shape
 // so a lighter drone genuinely accelerates harder. drag matches the authentic
 // less-floaty tuning (0.55+), not the old floaty 0.28.
 const DRONE_TYPES={
-  whoop65:{label:'65mm Whoop',maxThrustN:1.8,drag:0.55,mass:28,sr:0.72,spool:0.04}, // hover ~30% stick (idle floor + ^1.3 curve), ~4.1x hover at full stick
-  whoop75:{label:'75mm Whoop',maxThrustN:2.4,drag:0.60,mass:38,sr:0.68,spool:0.05}  // hover ~30% stick at 38g AUW, lazier yaw + slower 0802 spool
+  whoop65:{label:'65mm Whoop',maxThrustN:3.9,drag:0.55,mass:28,sr:0.72,spool:0.04}, // hover ~30% stick at 3.5x gravity (idle floor + ^1.3 curve), ~4.1x hover at full stick
+  whoop75:{label:'75mm Whoop',maxThrustN:5.3,drag:0.60,mass:38,sr:0.68,spool:0.05}  // hover ~30% stick at 38g AUW under 3.5x gravity, lazier yaw + slower 0802 spool
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
