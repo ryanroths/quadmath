@@ -47,6 +47,9 @@
   input[type=range]{width:100%;margin:0 0 10px;accent-color:var(--orange);height:4px}
   button{background:transparent;border:1px solid var(--orange);color:var(--orange);
     font-family:inherit;font-size:12px;padding:6px 12px;cursor:pointer;width:100%;margin-top:6px}
+  #cliPaste{width:100%;background:var(--bg);border:1px solid #262A33;color:var(--txt);
+    font-family:inherit;font-size:11px;padding:6px;resize:vertical}
+  #cliPaste:focus{outline:none;border-color:var(--orange)}
   button:hover{background:var(--orange);color:var(--bg)}
   #gear{position:fixed;top:12px;right:12px;z-index:11;width:auto;padding:6px 10px;
     background:rgba(21,23,29,.85);border:1px solid #262A33;color:var(--txt);font-size:12px}
@@ -149,6 +152,10 @@
   <input type="range" id="s_ex" min="0" max="1" step="0.01" value="0.25">
   <div class="row"><label>Max rate</label><span class="val" id="v_max"></span></div>
 
+  <h2>Paste Betaflight CLI dump</h2>
+  <textarea id="cliPaste" rows="4" placeholder="set roll_rc_rate = 110&#10;set roll_srate = 72&#10;set roll_expo = 25&#10;…or a full diff / dump rates"></textarea>
+  <button id="btnCliImport">IMPORT CLI</button>
+
   <h2>Camera</h2>
   <div class="row"><label>Cam angle</label><span class="val" id="v_cam"></span></div>
   <input type="range" id="s_cam" min="0" max="60" step="1" value="25">
@@ -170,6 +177,8 @@
   <input type="range" id="s_grav" min="1.0" max="5.0" step="0.05" value="3.5">
   <div class="row"><label>Throttle Curve</label><span class="val" id="v_thc"></span></div>
   <input type="range" id="s_thc" min="1.0" max="2.6" step="0.1" value="1.3">
+  <div class="row"><label>Prop Wash</label><span class="val" id="v_wash"></span></div>
+  <input type="range" id="s_wash" min="0" max="2" step="0.05" value="1">
 
   <h2>GLTF Assets</h2>
   <div id="assetStatus">checking assets/manifest.json…</div>
@@ -199,7 +208,7 @@
 </script>
 <script>
 "use strict";
-const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:1.3,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,idlePct:0.055};
+const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:1.3,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,idlePct:0.055,washStrength:1.0};
 // base gravity — the world geometry is ~3.5x visual scale, so real 9.81 reads
 // as slow-motion against oversized reference; effective gravity everywhere is
 // G*CFG.gravMult. Baseline 3.5 matches the world scale 1:1 — a 1s fall covers
@@ -1463,8 +1472,16 @@ if(window._gltfReady) window._tryAssets();
 const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
   q:new THREE.Quaternion(),bounces:0,t0:performance.now()};
 let thrustActual=0; // motor spool state — filtered thrust (N); starts at 0 so no jump on arm
+// ---------- prop wash state ----------
+// ring buffer of recent path positions: sampled every 4th physics step (~60Hz),
+// 90 entries ≈ 1.5s of history. Entries start far below the world so
+// uninitialized slots can never trigger a proximity match.
+const WASH_N=90;
+const washTrail=Array.from({length:WASH_N},()=>new THREE.Vector3(0,-999,0));
+let washIdx=0,washCount=0,washFrame=0,washNx=0,washNz=0,washActive=0,camShake=0;
 function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
   thrustActual=0; // motors spool from zero on re-arm — no thrust jump
+  washCount=0;washIdx=0;washActive=0;camShake=0; // stale trail must not wash the respawned quad
   // clear run state; leave activeTrackId alone so proximity selection re-picks
   // the nearest track's start next frame (the quad respawns by track 0's start,
   // so that's what it'll land on — but we don't hard-force it)
@@ -1680,6 +1697,7 @@ function updateMotorSound(){
   motorGainMaster.gain.setTargetAtTime(vol,t,0.08);
 }
 addEventListener('keydown',e=>{
+  if(e.target&&e.target.tagName==='TEXTAREA')return; // typing in the CLI paste box must not trigger R/M/F/G hotkeys
   if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
   keys[e.key.toLowerCase()]=true;
   if(e.key.toLowerCase()==='r')resetQuad();
@@ -1772,6 +1790,50 @@ function physics(dt){
     wz=-THREE.MathUtils.degToRad(bfRate(stick.r,CFG.rcRate,CFG.superRate,CFG.expo));
   }
   const wy=-yr;
+  // ---------- prop wash disturbance ----------
+  // Flying back through your own downwash: descending into either (a) a spot
+  // the quad occupied in the last ~1.5s, or (b) your own column during a
+  // near-vertical low-forward-speed drop. Applies a smoothed random roll/pitch
+  // rate disturbance scaled by descent rate and throttle (worst case: high
+  // throttle, fast descent), and feeds the camera shake. Thresholds are specced
+  // in real meters ×WS (world runs at ~3.5 world units per real meter).
+  {
+    const WS=3.5;
+    if(CFG.washStrength>0){
+      if((washFrame++&3)===0){ // sample trail at ~60Hz
+        washTrail[washIdx].copy(state.pos);
+        washIdx=(washIdx+1)%WASH_N;
+        if(washCount<WASH_N)washCount++;
+      }
+      washActive=0;
+      const vy=state.vel.y;
+      if(vy<-2*WS){ // descending faster than ~2 m/s real
+        const hSp=Math.hypot(state.vel.x,state.vel.z);
+        let near=hSp<3*WS; // (b) near-vertical descent through own column
+        if(!near){
+          const R2=(1.5*WS)*(1.5*WS); // (a) within ~1.5m of recent path
+          // skip the newest ~0.4s (24 samples) — those are always near the quad
+          for(let i=24;i<washCount;i++){
+            const j=(washIdx-1-i+WASH_N*2)%WASH_N;
+            if(washTrail[j].distanceToSquared(state.pos)<R2){near=true;break;}
+          }
+        }
+        if(near){
+          const descent=Math.min(1.5,(-vy-2*WS)/(4*WS)); // 0 at threshold → 1 by ~6 m/s real descent
+          washActive=CFG.washStrength*descent*(0.3+0.7*stick.t);
+        }
+      }
+      // smoothed random walk → low-frequency wobble, not white-noise jitter
+      washNx=washNx*0.92+(Math.random()*2-1)*0.35;
+      washNz=washNz*0.92+(Math.random()*2-1)*0.35;
+      if(washActive>0){
+        const A=2.5*washActive; // rad/s peak — a real fight on the sticks, not a tumble
+        wx+=washNx*A;
+        wz+=washNz*A;
+        camShake=Math.min(1.2,camShake+washActive*0.12);
+      }
+    }
+  }
   const mag=Math.sqrt(wx*wx+wy*wy+wz*wz);
   if(mag>1e-8){axis.set(wx/mag,wy/mag,wz/mag);dq.setFromAxisAngle(axis,mag*dt);state.q.multiply(dq).normalize();}
   up.set(0,1,0).applyQuaternion(state.q);
@@ -1849,9 +1911,18 @@ function bounce(){
 
 // ---------- Camera ----------
 const camTilt=new THREE.Quaternion();
+const camJit=new THREE.Quaternion(),camJitEul=new THREE.Euler();
 function updateCamera(){
   camTilt.setFromAxisAngle(new THREE.Vector3(1,0,0),THREE.MathUtils.degToRad(CFG.camDeg));
   camera.quaternion.copy(state.q).multiply(camTilt);
+  // camera shake — fed by prop wash (and available to future effects): small
+  // random rotational jitter that decays every rendered frame
+  if(camShake>0.002){
+    camJitEul.set((Math.random()-0.5)*0.035*camShake,(Math.random()-0.5)*0.035*camShake,(Math.random()-0.5)*0.02*camShake);
+    camJit.setFromEuler(camJitEul);
+    camera.quaternion.multiply(camJit);
+    camShake*=0.93;
+  }
   camera.position.copy(state.pos);
 }
 
@@ -1922,6 +1993,7 @@ bind('mass','massG',x=>x+'g',refreshTwr); // mass change → recompute the thrus
 bind('spool','spoolTau',x=>(x*1000).toFixed(0)+'ms'); // motor spool time constant
 bind('grav','gravMult',x=>x.toFixed(2)+'×',refreshTwr); // gravity scale — effective weight changes, so re-derive thrust:weight
 bind('thc','thrCurve',x=>'^'+x.toFixed(1)); // throttle curve exponent — shape of stick→thrust mapping
+bind('wash','washStrength',x=>x.toFixed(2)+'×'); // prop wash disturbance strength (0 = off)
 // drone-type presets — applied by driving the physics sliders through their
 // bind handlers so CFG, labels and max-rate readout all update in one path.
 // Masses are now REAL AUW (grams) and thrust is absolute (maxThrustN, Newtons),
@@ -1959,6 +2031,69 @@ droneSel.onchange=()=>{
 };
 applyDroneType(); // restore persisted type on load
 updateRadioInfo();
+
+// ---------- Betaflight CLI paste-import ----------
+// Scans a pasted diff / dump / dump rates for `set <axis>_(rc_rate|srate|expo)`
+// and `set rates_type`, maps them onto the sim's shared rate params. Values on
+// Betaflight's integer scale (rc_rate 110 = 1.10) are divided by 100; already-
+// decimal values pass through. The sim has one shared rate set, so roll+pitch
+// are averaged; a differing yaw is noted in the toast. rates_type ACTUAL is
+// converted approximately (center sensitivity → rcRate, max rate → srate).
+function importCli(text){
+  const vals={};
+  let ratesType=null;
+  for(const line of text.split(/\r?\n/)){
+    const m=line.match(/^\s*set\s+([a-z_]+)\s*=\s*"?([\w.\-]+)"?/i);
+    if(!m)continue;
+    const key=m[1].toLowerCase();
+    if(key==='rates_type'){ratesType=m[2].toLowerCase();continue;}
+    if(/^(roll|pitch|yaw)_(rc_rate|srate|expo)$/.test(key))vals[key]=parseFloat(m[2]);
+  }
+  if(Object.keys(vals).length===0){toast('No rate commands found');return;}
+  // shared value = average of roll+pitch, falling back to whichever exists
+  function rp(base){
+    const r=vals['roll_'+base],p=vals['pitch_'+base];
+    if(r!==undefined&&p!==undefined)return(r+p)/2;
+    return r!==undefined?r:p;
+  }
+  const norm=v=>v===undefined?undefined:(v>3?v/100:v); // int scale (110) vs already-decimal (1.10)
+  const isActual=ratesType==='actual'||ratesType==='3'||ratesType==='1';
+  const knownBf=ratesType===null||ratesType==='betaflight'||ratesType==='0';
+  let rc,sr,notice='';
+  const ex=norm(rp('expo')); // expo normalizes the same in both systems
+  if(isActual){
+    // ACTUAL stores center sensitivity (rc_rate) and max rate (srate) in deg/s
+    // ÷10 on the CLI. Approximate a Betaflight equivalent: near center BF's
+    // slope is ~200·rcRate deg/s, so rcRate = centerSens/200, then pick srate
+    // so the full-stick max rate matches.
+    let cs=rp('rc_rate'),mx=rp('srate');
+    if(cs!==undefined&&mx!==undefined){
+      cs=cs<30?cs*10:cs;   // 7 → 70 deg/s center sensitivity
+      mx=mx<200?mx*10:mx;  // 67 → 670 deg/s max rate
+      rc=Math.min(2.5,Math.max(0.5,cs/200));
+      sr=Math.min(0.95,Math.max(0,1-(200*rc)/mx));
+      notice=' · ACTUAL rates — approximated';
+    }
+  }else{
+    rc=norm(rp('rc_rate'));
+    sr=norm(rp('srate'));
+    if(!knownBf)notice=' · '+ratesType.toUpperCase()+' rates — applied as-is';
+  }
+  if(rc===undefined&&sr===undefined&&ex===undefined){toast('No rate commands found');return;}
+  // apply through the sliders' bind path so CFG, labels and max-rate all update
+  if(rc!==undefined)setSlider('rc',rc);
+  if(sr!==undefined)setSlider('sr',sr);
+  if(ex!==undefined)setSlider('ex',ex);
+  // yaw noted separately when it differs from the applied shared values
+  let yawNote='';
+  const ny={rc:norm(vals['yaw_rc_rate']),sr:norm(vals['yaw_srate']),ex:norm(vals['yaw_expo'])};
+  if(!isActual&&((ny.rc!==undefined&&rc!==undefined&&Math.abs(ny.rc-rc)>0.005)||
+     (ny.sr!==undefined&&sr!==undefined&&Math.abs(ny.sr-sr)>0.005)||
+     (ny.ex!==undefined&&ex!==undefined&&Math.abs(ny.ex-ex)>0.005)))
+    yawNote=' · yaw differs (shared-rate sim)';
+  toast('CLI: RC '+CFG.rcRate.toFixed(2)+' SR '+CFG.superRate.toFixed(2)+' EX '+CFG.expo.toFixed(2)+notice+yawNote);
+}
+document.getElementById('btnCliImport').onclick=()=>importCli(document.getElementById('cliPaste').value);
 
 // ---------- Ghost replay (built on the lap timer) ----------
 // Records quad pose every 2nd frame with elapsed-lap-time stamps; on a new
