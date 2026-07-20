@@ -1838,7 +1838,10 @@ function physics(dt){
         const A=2.5*washActive; // rad/s peak — a real fight on the sticks, not a tumble
         wx+=washNx*A;
         wz+=washNz*A;
-        camShake=Math.min(1.2,camShake+washActive*0.12);
+        // wash-specific shake scaling — camShake is the shared channel (future
+        // crash/impact shake feeds it at full strength); only wash is damped
+        const WASH_SHAKE=0.45;
+        camShake=Math.min(1.2,camShake+washActive*0.12*WASH_SHAKE);
       }
     }
   }
