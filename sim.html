@@ -179,6 +179,7 @@
   <input type="range" id="s_thc" min="1.0" max="2.6" step="0.1" value="1.3">
   <div class="row"><label>Prop Wash</label><span class="val" id="v_wash"></span></div>
   <input type="range" id="s_wash" min="0" max="2" step="0.05" value="1">
+  <div class="row"><label>Sag affects thrust</label><input type="checkbox" id="cbSagThrust" checked style="accent-color:var(--orange)"></div>
 
   <h2>GLTF Assets</h2>
   <div id="assetStatus">checking assets/manifest.json…</div>
@@ -208,7 +209,7 @@
 </script>
 <script>
 "use strict";
-const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:1.3,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,idlePct:0.055,washStrength:1.0};
+const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:1.3,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,idlePct:0.055,washStrength:1.0,sagAffectsThrust:true};
 // base gravity — the world geometry is ~3.5x visual scale, so real 9.81 reads
 // as slow-motion against oversized reference; effective gravity everywhere is
 // G*CFG.gravMult. Baseline 3.5 matches the world scale 1:1 — a 1s fall covers
@@ -1479,9 +1480,16 @@ let thrustActual=0; // motor spool state — filtered thrust (N); starts at 0 so
 const WASH_N=90;
 const washTrail=Array.from({length:WASH_N},()=>new THREE.Vector3(0,-999,0));
 let washIdx=0,washCount=0,washFrame=0,washNx=0,washNz=0,washActive=0,camShake=0;
+// ---------- battery state ----------
+// 1S pack: charge drains with load (hover ~4min, full-throttle ~100s), resting
+// voltage tracks charge, sag under load grows as the pack empties (rising IR),
+// and the measured voltage is smoothed (~0.15s) like a real vbat filter.
+const BATT_FULL=4.2,BATT_EMPTY=3.5;
+let battCharge=1,battV=BATT_FULL;
 function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
   thrustActual=0; // motors spool from zero on re-arm — no thrust jump
   washCount=0;washIdx=0;washActive=0;camShake=0; // stale trail must not wash the respawned quad
+  battCharge=1;battV=BATT_FULL; // reset = fresh pack
   // clear run state; leave activeTrackId alone so proximity selection re-picks
   // the nearest track's start next frame (the quad respawns by track 0's start,
   // so that's what it'll land on — but we don't hard-force it)
@@ -1850,7 +1858,22 @@ function physics(dt){
   // matching real whoop behavior. (This sim has no disarm state; the quad is
   // always armed, so the floor always applies.)
   const stickEffective=CFG.idlePct+stick.t*(1-CFG.idlePct);
-  const thrustCommanded=Math.pow(stickEffective,CFG.thrCurve)*CFG.maxThrustN;
+  let thrustCommanded=Math.pow(stickEffective,CFG.thrCurve)*CFG.maxThrustN;
+  // ---------- battery drain + sag → thrust coupling ----------
+  // Load (previous step's filtered thrust) drains charge and pulls the pack
+  // down; resting voltage tracks charge; sag worsens as the pack empties
+  // (rising internal resistance); the readout voltage is smoothed ~0.15s.
+  {
+    const loadFrac=Math.min(1,thrustActual/CFG.maxThrustN);
+    battCharge=Math.max(0,battCharge-dt*(0.25+1.5*loadFrac)/180); // hover ~4min, punch-outs eat it faster
+    const vRest=BATT_EMPTY+(BATT_FULL-BATT_EMPTY)*battCharge;
+    const vTarget=vRest-loadFrac*(0.25+0.35*(1-battCharge));
+    battV+=(vTarget-battV)*(dt/0.15);
+  }
+  // Thrust scales ~V^1.5 for brushless (RPM ∝ V, thrust ∝ RPM², prop unload
+  // compensates): fresh pack = full punch, sagged pack = mushy punch-outs and
+  // a hover point that creeps up the stick — toggleable for pure practice.
+  if(CFG.sagAffectsThrust)thrustCommanded*=Math.pow(Math.max(0.5,battV/BATT_FULL),1.5);
   thrustActual+=(thrustCommanded-thrustActual)*(dt/CFG.spoolTau);
   const F=tmpV.copy(up).multiplyScalar(thrustActual);
   F.y-=mass*G*CFG.gravMult; // effective gravity — scaled for the oversized world
@@ -1955,7 +1978,7 @@ function toast(m){toastEl.textContent=m;toastEl.style.opacity=1;
 function updateOSD(){
   const spd=(state.vel.length()*3.6).toFixed(0),alt=state.pos.y.toFixed(1);
   const t=((performance.now()-state.t0)/1000)|0;
-  osdTL.innerHTML=`SPD ${spd} km/h<br>ALT ${alt} m`;
+  osdTL.innerHTML=`SPD ${spd} km/h<br>ALT ${alt} m<br><span style="color:${battV<3.5?'#ff3b2f':battV<3.7?'#ffd400':'inherit'}">BATT ${battV.toFixed(2)}V</span>`;
   osdTR.innerHTML=`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):'KEYBOARD'}${axisMap&&gpConnected?' (CAL)':''}<br>`+
     `RATES ${CFG.rcRate.toFixed(2)}/${CFG.superRate.toFixed(2)}/${CFG.expo.toFixed(2)}<br>`+
     `CAM ${CFG.camDeg}° FOV ${CFG.fov}${usingGltf?'<br>GLTF MAP':''}`;
@@ -1994,6 +2017,7 @@ bind('spool','spoolTau',x=>(x*1000).toFixed(0)+'ms'); // motor spool time consta
 bind('grav','gravMult',x=>x.toFixed(2)+'×',refreshTwr); // gravity scale — effective weight changes, so re-derive thrust:weight
 bind('thc','thrCurve',x=>'^'+x.toFixed(1)); // throttle curve exponent — shape of stick→thrust mapping
 bind('wash','washStrength',x=>x.toFixed(2)+'×'); // prop wash disturbance strength (0 = off)
+document.getElementById('cbSagThrust').onchange=e=>{CFG.sagAffectsThrust=e.target.checked;toast(e.target.checked?'SAG → THRUST ON':'SAG → THRUST OFF');};
 // drone-type presets — applied by driving the physics sliders through their
 // bind handlers so CFG, labels and max-rate readout all update in one path.
 // Masses are now REAL AUW (grams) and thrust is absolute (maxThrustN, Newtons),
