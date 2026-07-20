@@ -1871,7 +1871,7 @@ function physics(dt){
         wz+=washNz*A;
         // wash-specific shake scaling — camShake is the shared channel (future
         // crash/impact shake feeds it at full strength); only wash is damped
-        const WASH_SHAKE=0.45;
+        const WASH_SHAKE=0.25;
         camShake=Math.min(1.2,camShake+washActive*0.12*WASH_SHAKE);
       }
     }
