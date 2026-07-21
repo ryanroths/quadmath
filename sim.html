@@ -30,6 +30,9 @@
   #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
   #osdGate{top:14px;left:50%;transform:translateX(-50%);color:var(--txt);font-weight:600}
   #osdLap{top:64px;left:16px;font-weight:600}
+  #osdLand{position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);z-index:6;
+    font-size:34px;font-weight:700;letter-spacing:3px;color:#ff3b2f;
+    text-shadow:0 0 16px rgba(255,59,47,.7);pointer-events:none;display:none}
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7}
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
   #crosshair::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
@@ -108,6 +111,7 @@
 <div class="osd" id="osdBC"></div>
 <div class="osd" id="osdGate"></div>
 <div class="osd" id="osdLap"></div>
+<div id="osdLand">LAND NOW</div>
 <div id="crosshair"></div>
 <div id="toast"></div>
 <div id="portalFlash"></div>
@@ -179,7 +183,8 @@
   <input type="range" id="s_thc" min="1.0" max="2.6" step="0.1" value="1.3">
   <div class="row"><label>Prop Wash</label><span class="val" id="v_wash"></span></div>
   <input type="range" id="s_wash" min="0" max="2" step="0.05" value="1">
-  <div class="row"><label>Sag affects thrust</label><input type="checkbox" id="cbSagThrust" checked style="accent-color:var(--orange)"></div>
+  <div class="row"><label>Battery Simulation</label><input type="checkbox" id="cbBattSim" checked style="accent-color:var(--orange)"></div>
+  <div class="row"><label style="padding-left:14px">↳ Sag affects thrust</label><input type="checkbox" id="cbSagThrust" checked style="accent-color:var(--orange)"></div>
 
   <h2>GLTF Assets</h2>
   <div id="assetStatus">checking assets/manifest.json…</div>
@@ -209,7 +214,7 @@
 </script>
 <script>
 "use strict";
-const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:1.3,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,idlePct:0.055,washStrength:1.0,sagAffectsThrust:true};
+const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:1.3,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,idlePct:0.055,washStrength:1.0,battSimOn:true,sagAffectsThrust:true};
 // base gravity — the world geometry is ~3.5x visual scale, so real 9.81 reads
 // as slow-motion against oversized reference; effective gravity everywhere is
 // G*CFG.gravMult. Baseline 3.5 matches the world scale 1:1 — a 1s fall covers
@@ -1485,6 +1490,9 @@ let washIdx=0,washCount=0,washFrame=0,washNx=0,washNz=0,washActive=0,camShake=0;
 // voltage tracks charge, sag under load grows as the pack empties (rising IR),
 // and the measured voltage is smoothed (~0.15s) like a real vbat filter.
 const BATT_FULL=4.2,BATT_EMPTY=3.5;
+// Betaflight-style 1S warning thresholds, checked against the SAGGED live
+// voltage (battV includes load sag), so punch-outs flicker warnings early
+const BATT_WARN=3.5,BATT_CRIT=3.3;
 let battCharge=1,battV=BATT_FULL;
 function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
   thrustActual=0; // motors spool from zero on re-arm — no thrust jump
@@ -1980,17 +1988,18 @@ function physics(dt){
   // Load (previous step's filtered thrust) drains charge and pulls the pack
   // down; resting voltage tracks charge; sag worsens as the pack empties
   // (rising internal resistance); the readout voltage is smoothed ~0.15s.
-  {
+  if(CFG.battSimOn){
     const loadFrac=Math.min(1,thrustActual/CFG.maxThrustN);
     battCharge=Math.max(0,battCharge-dt*(0.25+1.5*loadFrac)/180); // hover ~4min, punch-outs eat it faster
     const vRest=BATT_EMPTY+(BATT_FULL-BATT_EMPTY)*battCharge;
     const vTarget=vRest-loadFrac*(0.25+0.35*(1-battCharge));
     battV+=(vTarget-battV)*(dt/0.15);
-  }
+  }else{battCharge=1;battV=BATT_FULL;} // master off = infinite fresh pack
   // Thrust scales ~V^1.5 for brushless (RPM ∝ V, thrust ∝ RPM², prop unload
   // compensates): fresh pack = full punch, sagged pack = mushy punch-outs and
   // a hover point that creeps up the stick — toggleable for pure practice.
-  if(CFG.sagAffectsThrust)thrustCommanded*=Math.pow(Math.max(0.5,battV/BATT_FULL),1.5);
+  // sagAffectsThrust is a sub-option of the master battery sim.
+  if(CFG.battSimOn&&CFG.sagAffectsThrust)thrustCommanded*=Math.pow(Math.max(0.5,battV/BATT_FULL),1.5);
   thrustActual+=(thrustCommanded-thrustActual)*(dt/CFG.spoolTau);
   const F=tmpV.copy(up).multiplyScalar(thrustActual);
   F.y-=mass*G*CFG.gravMult; // effective gravity — scaled for the oversized world
@@ -2095,7 +2104,21 @@ function toast(m){toastEl.textContent=m;toastEl.style.opacity=1;
 function updateOSD(){
   const spd=(state.vel.length()*3.6).toFixed(0),alt=state.pos.y.toFixed(1);
   const t=((performance.now()-state.t0)/1000)|0;
-  osdTL.innerHTML=`SPD ${spd} km/h<br>ALT ${alt} m<br><span style="color:${battV<3.5?'#ff3b2f':battV<3.7?'#ffd400':'inherit'}">BATT ${battV.toFixed(2)}V</span>`;
+  // Betaflight-style low-battery warnings off the SAGGED voltage: punch-outs
+  // flicker the warning early, exactly like a real 1S on the edge. Master
+  // battery sim off = no voltage readout, no warnings. (Sim is always armed.)
+  let battLine='';
+  const landEl=document.getElementById('osdLand');
+  if(CFG.battSimOn){
+    const flash=(Math.floor(performance.now()/250)%2)===0; // ~2Hz blink
+    let bCol='inherit';
+    if(battV<=BATT_CRIT)bCol=flash?'#ff3b2f':'rgba(255,59,47,.25)';        // critical: red flash
+    else if(battV<=BATT_WARN)bCol=flash?'#ffd400':'rgba(255,212,0,.3)';    // warning: amber flash
+    battLine=`<br><span style="color:${bCol}">BATT ${battV.toFixed(2)}V</span>`;
+    landEl.style.display=battV<=BATT_CRIT?'block':'none';                  // LAND NOW center-screen
+    if(battV<=BATT_CRIT)landEl.style.opacity=flash?'1':'0.15';
+  }else landEl.style.display='none';
+  osdTL.innerHTML=`SPD ${spd} km/h<br>ALT ${alt} m${battLine}`;
   osdTR.innerHTML=`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):'KEYBOARD'}${axisMap&&gpConnected?' (CAL)':''}<br>`+
     `RATES ${CFG.rcRate.toFixed(2)}/${CFG.superRate.toFixed(2)}/${CFG.expo.toFixed(2)}<br>`+
     `CAM ${CFG.camDeg}° FOV ${CFG.fov}${usingGltf?'<br>GLTF MAP':''}`;
@@ -2135,6 +2158,12 @@ bind('grav','gravMult',x=>x.toFixed(2)+'×',refreshTwr); // gravity scale — ef
 bind('thc','thrCurve',x=>'^'+x.toFixed(1)); // throttle curve exponent — shape of stick→thrust mapping
 bind('wash','washStrength',x=>x.toFixed(2)+'×'); // prop wash disturbance strength (0 = off)
 document.getElementById('cbSagThrust').onchange=e=>{CFG.sagAffectsThrust=e.target.checked;toast(e.target.checked?'SAG → THRUST ON':'SAG → THRUST OFF');};
+document.getElementById('cbBattSim').onchange=e=>{
+  CFG.battSimOn=e.target.checked;
+  document.getElementById('cbSagThrust').disabled=!CFG.battSimOn; // sag is a sub-option of the master sim
+  battCharge=1;battV=BATT_FULL; // toggling either way starts from a fresh pack
+  toast(CFG.battSimOn?'BATTERY SIM ON':'BATTERY SIM OFF — INFINITE PACK');
+};
 // drone-type presets — applied by driving the physics sliders through their
 // bind handlers so CFG, labels and max-rate readout all update in one path.
 // Masses are now REAL AUW (grams) and thrust is absolute (maxThrustN, Newtons),
