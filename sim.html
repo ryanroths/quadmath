@@ -1705,34 +1705,67 @@ function toggleMusic(){
   toast(musicOn?'♪ MUSIC ON':'MUSIC OFF');
 }
 
-// ---------- motor whine (Web Audio oscillators, 4x detuned sawtooth) — independent of the music toggle; 'm' just unlocks its AudioContext ----------
-let motorAudioCtx=null,motorGainMaster=null,motorOsc=[];
+// ---------- motor audio: layered whoop synth — independent of the music toggle; 'm' just unlocks its AudioContext ----------
+// Layers per the real 0702-class sound signature:
+//  (1) fundamental sawtooth tracking motor RPM — driven by thrustActual (the
+//      spool-lagged value, not raw stick), so pitch lags throttle exactly like
+//      real motors spooling. ~180Hz idle → ~950Hz full.
+//  (2) blade-pass harmonic at 2× fundamental (2-blade props), +4Hz detune so
+//      the layers beat against each other like 4 motors never quite in sync,
+//      mixed at 40% of the fundamental.
+//  (3) bandpassed noise (~2.5kHz, Q≈1) with gain ∝ throttle^1.5 — air-rip.
+//  (4) ±2% pitch wobble from the prop wash signal — motors loading/unloading
+//      in dirty air.  (5) ~3% pitch overshoot on punch-out, then settle.
+let motorAudioCtx=null,motorGainMaster=null;
+let motorFund=null,motorHarm=null,motorNoiseGain=null;
 let motorSoundOn=true;
-const MOTOR_DETUNE=[-7,-2,3,8]; // cents — avoids perfect unison, gives a fuller "buzz"
+let audioPrevFrac=0,audioOver=1; // punch-out overshoot state
 function initMotorAudio(){
   if(motorAudioCtx)return;
   motorAudioCtx=new(window.AudioContext||window.webkitAudioContext)();
   motorGainMaster=motorAudioCtx.createGain();
   motorGainMaster.gain.value=0;
   motorGainMaster.connect(motorAudioCtx.destination);
-  for(let i=0;i<4;i++){
-    const osc=motorAudioCtx.createOscillator();
-    osc.type='sawtooth';
-    osc.frequency.value=90;
-    osc.detune.value=MOTOR_DETUNE[i];
-    const g=motorAudioCtx.createGain();
-    g.gain.value=0.22; // per-motor trim, summed into master so 4 voices don't clip
-    osc.connect(g);g.connect(motorGainMaster);
-    osc.start();
-    motorOsc.push(osc);
-  }
+  // (1) fundamental saw
+  motorFund=motorAudioCtx.createOscillator();
+  motorFund.type='sawtooth';motorFund.frequency.value=180;
+  const fundGain=motorAudioCtx.createGain();fundGain.gain.value=0.45;
+  motorFund.connect(fundGain);fundGain.connect(motorGainMaster);
+  motorFund.start();
+  // (2) blade-pass harmonic: 2× fundamental, slightly detuned, 40% mix
+  motorHarm=motorAudioCtx.createOscillator();
+  motorHarm.type='sawtooth';motorHarm.frequency.value=364;
+  const harmGain=motorAudioCtx.createGain();harmGain.gain.value=0.18; // 40% of the 0.45 fundamental
+  motorHarm.connect(harmGain);harmGain.connect(motorGainMaster);
+  motorHarm.start();
+  // (3) air-rip: looped white noise → bandpass 2.5kHz Q1 → throttle-tracked gain
+  const nb=motorAudioCtx.createBuffer(1,motorAudioCtx.sampleRate,motorAudioCtx.sampleRate);
+  const nd=nb.getChannelData(0);
+  for(let i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;
+  const noiseSrc=motorAudioCtx.createBufferSource();
+  noiseSrc.buffer=nb;noiseSrc.loop=true;
+  const bp=motorAudioCtx.createBiquadFilter();
+  bp.type='bandpass';bp.frequency.value=2500;bp.Q.value=1;
+  motorNoiseGain=motorAudioCtx.createGain();motorNoiseGain.gain.value=0;
+  noiseSrc.connect(bp);bp.connect(motorNoiseGain);motorNoiseGain.connect(motorGainMaster);
+  noiseSrc.start();
 }
 function updateMotorSound(){
   if(!motorAudioCtx||!motorSoundOn)return;
   const t=motorAudioCtx.currentTime;
-  const freq=90+Math.pow(stick.t,1.4)*430;      // idle ~90Hz -> full throttle ~520Hz
-  const vol=0.015+Math.pow(stick.t,1.2)*0.16;   // near-silent idle -> mixed under the music
-  for(const osc of motorOsc)osc.frequency.setTargetAtTime(freq,t,0.05);
+  // pitch follows the SPOOLED thrust, so audio lags stick exactly like the motors
+  const frac=Math.max(0,Math.min(1,thrustActual/CFG.maxThrustN));
+  // (5) punch-out overshoot: rapid rise kicks pitch ~3% high, then settles
+  if(frac-audioPrevFrac>0.04)audioOver=1.03;
+  audioOver+=(1-audioOver)*0.06;
+  audioPrevFrac=frac;
+  // (4) wash pitch wobble: ±2% while flying through dirty air
+  const wob=washActive>0?1+0.02*Math.max(-1,Math.min(1,washNx))*Math.min(1,washActive):1;
+  const f=(180+770*frac)*wob*audioOver;        // ~180Hz idle → ~950Hz full
+  motorFund.frequency.setTargetAtTime(f,t,0.03);
+  motorHarm.frequency.setTargetAtTime(2*f+4,t,0.03); // blade-pass, +4Hz beat
+  motorNoiseGain.gain.setTargetAtTime(Math.pow(frac,1.5)*0.35,t,0.05); // air-rip ∝ throttle^1.5
+  const vol=0.015+Math.pow(frac,1.2)*0.16;     // same master mix level under the music as before
   motorGainMaster.gain.setTargetAtTime(vol,t,0.08);
 }
 addEventListener('keydown',e=>{
