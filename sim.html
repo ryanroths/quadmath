@@ -1500,12 +1500,13 @@ function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identi
 
 // ---------- Radio: axis map + calibration ----------
 // axisMap: {r:{i,sign}, p:{i,sign}, y:{i,sign}, t:{i,min,max}}
+// Calibration + preset are stored PER DEVICE (keyed by sanitized gamepad id),
+// loaded when a controller is selected — a TX16S and an Xbox pad no longer
+// stomp each other's profiles. Legacy global keys are deleted on load.
 let axisMap=null;
-try{
-  const saved=localStorage.getItem('ryflyAxisMap'); // local run only; claude.ai preview blocks storage
-  if(saved) axisMap=JSON.parse(saved);
-}catch(e){}
-function saveMap(){try{localStorage.setItem('ryflyAxisMap',JSON.stringify(axisMap));}catch(e){}}
+try{localStorage.removeItem('ryflyAxisMap');localStorage.removeItem('ryflyRadioPreset');}catch(e){}
+function sanitizeId(id){return String(id).replace(/[^a-z0-9]+/gi,'_').slice(0,64);}
+function saveMap(){try{localStorage.setItem('ryflyAxisMap_'+sanitizeId(gpName),JSON.stringify(axisMap));}catch(e){}}
 
 function isRadio(gp){
   return /opentx|edgetx|radiomaster|tx16|frsky|taranis|jumper|betafpv|flysky/i.test(gp.id);
@@ -1530,9 +1531,7 @@ const RADIO_PRESETS={
   pad:           {label:'Xbox / PlayStation controller',map:PAD_MAP},
   custom:        {label:'Custom — run calibration',map:null}
 };
-let radioPreset='auto';
-try{radioPreset=localStorage.getItem('ryflyRadioPreset')||'auto';}catch(e){}
-if(!RADIO_PRESETS[radioPreset])radioPreset='auto';
+let radioPreset='auto'; // per-device — loaded by loadDeviceProfile() when a controller is selected
 function presetMap(){return RADIO_PRESETS[radioPreset].map;}
 
 // Calibration wizard
@@ -1541,16 +1540,21 @@ const calibStepEl=document.getElementById('calibStep');
 const calibHintEl=document.getElementById('calibHint');
 const calibBarsEl=document.getElementById('calibBars');
 let calib=null;
+// Throttle is identified at FULL UP first: the center pose is captured with
+// throttle LOW, so full-up is the big detectable delta (a radio's -1-rest
+// throttle axis shows ~+2). The old order asked FULL DOWN first, whose delta
+// from the throttle-low center is ~0 — undetectable on radios.
 const CAL_STEPS=[
   {key:'center', label:'CENTER ALL STICKS, THROTTLE LOW', hint:'hold 1 sec'},
   {key:'r', label:'ROLL — RIGHT STICK FULL RIGHT', hint:'hold deflection'},
   {key:'p', label:'PITCH — RIGHT STICK FULL UP', hint:'hold deflection'},
   {key:'y', label:'YAW — LEFT STICK FULL RIGHT', hint:'hold deflection'},
-  {key:'tlo', label:'THROTTLE FULL DOWN', hint:'hold'},
   {key:'thi', label:'THROTTLE FULL UP', hint:'hold'},
+  {key:'tlo', label:'THROTTLE FULL DOWN', hint:'hold'},
 ];
 function startCalib(){
-  const gp=navigator.getGamepads&&navigator.getGamepads()[0];
+  const pads=navigator.getGamepads&&navigator.getGamepads();
+  const gp=gpIndex>=0&&pads?pads[gpIndex]:null; // calibrate the SELECTED device, never blindly index 0
   if(!gp){toast('NO GAMEPAD — plug in, wiggle stick');return;}
   calib={step:0,timer:0,center:null,result:{},used:new Set()};
   calibEl.classList.add('show');
@@ -1569,30 +1573,33 @@ function runCalib(gp,dt){
     if(calib.timer>1){calib.center=[...ax];calib.step++;calib.timer=0;}
     return;
   }
-  // find axis with max |delta| from center, exceeding 0.6
-  let best=-1,bestD=0;
-  for(let i=0;i<ax.length;i++){
-    if(calib.used.has(i)&&st.key!=='thi')continue;
-    const d=ax[i]-calib.center[i];
-    if(Math.abs(d)>Math.abs(bestD)){bestD=d;best=i;}
-  }
-  if(st.key==='thi'){
+  // final step: throttle axis already identified at FULL UP — wait for it to
+  // travel >0.8 away from the captured max, hold, capture as min. Handles a
+  // -1-rest radio throttle (max +1 → min -1) and inverted axes alike.
+  if(st.key==='tlo'){
     const ti=calib.result.t.i;
-    const d=ax[ti]-calib.result.t.min;
+    const d=ax[ti]-calib.result.t.max;
     if(Math.abs(d)>0.8){
       calib.timer+=dt;
       if(calib.timer>0.6){
-        calib.result.t.max=ax[ti];
+        calib.result.t.min=ax[ti];
         finishCalib();
       }
     } else calib.timer=0;
     return;
   }
+  // r/p/y/thi: fresh axis with max |delta| from center, exceeding 0.6
+  let best=-1,bestD=0;
+  for(let i=0;i<ax.length;i++){
+    if(calib.used.has(i))continue;
+    const d=ax[i]-calib.center[i];
+    if(Math.abs(d)>Math.abs(bestD)){bestD=d;best=i;}
+  }
   if(best>=0&&Math.abs(bestD)>0.6){
     calib.timer+=dt;
     if(calib.timer>0.6){
-      if(st.key==='tlo'){
-        calib.result.t={i:best,min:ax[best],max:0};
+      if(st.key==='thi'){
+        calib.result.t={i:best,max:ax[best],min:0}; // min captured in the tlo step
       } else {
         calib.result[st.key]={i:best,sign:Math.sign(bestD)};
       }
@@ -1618,10 +1625,10 @@ for(const[k,p]of Object.entries(RADIO_PRESETS)){
 presetSel.value=radioPreset;
 presetSel.onchange=()=>{
   radioPreset=presetSel.value;
-  try{localStorage.setItem('ryflyRadioPreset',radioPreset);}catch(e){}
+  if(gpName)try{localStorage.setItem('ryflyRadioPreset_'+sanitizeId(gpName),radioPreset);}catch(e){}
   if(radioPreset==='custom'){startCalib();updateRadioInfo();return;}
-  // preset (or auto) takes effect immediately — drop any saved calibration
-  axisMap=null;try{localStorage.removeItem('ryflyAxisMap');}catch(e){}
+  // preset (or auto) takes effect immediately — drop this device's calibration
+  axisMap=null;if(gpName)try{localStorage.removeItem('ryflyAxisMap_'+sanitizeId(gpName));}catch(e){}
   toast(radioPreset==='auto'?'RADIO: AUTO-DETECT':'PRESET SET');
   updateRadioInfo();
 };
@@ -1749,12 +1756,76 @@ addEventListener('keydown',e=>{
 });
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
 let kbThrottle=0,gpConnected=false,gpName='';
-addEventListener('gamepadconnected',e=>{
-  gpConnected=true;gpName=e.gamepad.id;
-  toast(isRadio(e.gamepad)?'RADIO DETECTED':'GAMEPAD CONNECTED');
+// ---------- gamepad selection ----------
+// Never assume index 0: scan ALL non-null pads, prefer radios. A TX16S
+// enumerates with mapping:"" (empty — the old standard-mapping assumption is
+// exactly what hid it behind an Xbox pad at index 0).
+let gpIndex=-1;          // selected gamepad index (-1 = none)
+let armGate=false;       // safety: throttle dead after device connect/change until sticks proven safe
+let gpPickerEl=null;
+const GP_ID_KEY='ryflyGamepadId';
+function radioScore(gp){
+  // radios first (TX16S/Zorro/EdgeTX/OpenTX/"Joystick"/vendor 1209 + existing
+  // brand patterns), unknown devices middle, generic standard-mapping pads last
+  if(/tx16|zorro|edgetx|opentx|joystick|1209|radiomaster|frsky|taranis|jumper|betafpv|flysky/i.test(gp.id))return 2;
+  if(gp.mapping==='standard')return 0;
+  return 1;
+}
+function listPads(){
+  const out=[],pads=navigator.getGamepads?navigator.getGamepads():[];
+  for(const gp of pads)if(gp)out.push(gp);
+  return out;
+}
+function loadDeviceProfile(id){
+  const sid=sanitizeId(id);
+  try{
+    radioPreset=localStorage.getItem('ryflyRadioPreset_'+sid)||'auto';
+    if(!RADIO_PRESETS[radioPreset])radioPreset='auto';
+    const m=localStorage.getItem('ryflyAxisMap_'+sid);
+    axisMap=m?JSON.parse(m):null;
+  }catch(e){radioPreset='auto';axisMap=null;}
+  presetSel.value=radioPreset;
+}
+function selectPad(gp,remember){
+  gpIndex=gp.index;gpConnected=true;gpName=gp.id;
+  if(remember)try{localStorage.setItem(GP_ID_KEY,gp.id);}catch(e){}
+  loadDeviceProfile(gp.id);   // per-device preset + calibration
+  armGate=true;               // block throttle until sticks proven safe once
+  toast(radioScore(gp)===2?'RADIO SELECTED':'GAMEPAD SELECTED');
   updateRadioInfo();
-});
-addEventListener('gamepaddisconnected',()=>{gpConnected=false;gpName='';updateRadioInfo();});
+}
+function showGpPicker(pads){
+  if(!gpPickerEl){
+    gpPickerEl=document.createElement('div');
+    gpPickerEl.id='gpPicker';
+    gpPickerEl.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:30;'+
+      'background:rgba(13,14,18,.95);border:1px solid #262A33;padding:16px;max-width:440px;width:90%;'+
+      'font-size:12px;color:var(--txt)';
+    document.body.appendChild(gpPickerEl);
+  }
+  gpPickerEl.innerHTML='<div style="color:var(--green);font-size:11px;letter-spacing:1.5px;margin-bottom:4px">MULTIPLE CONTROLLERS — PICK YOUR RADIO</div>'+
+    '<div style="color:var(--dim);font-size:11px">choice is remembered per device</div>';
+  for(const gp of pads){
+    const b=document.createElement('button');
+    b.textContent=(radioScore(gp)===2?'📻 ':'🎮 ')+gp.id.slice(0,60);
+    b.style.marginTop='6px';b.style.textAlign='left';
+    b.onclick=()=>{selectPad(gp,true);gpPickerEl.remove();gpPickerEl=null;};
+    gpPickerEl.appendChild(b);
+  }
+}
+function pickGamepad(){
+  const pads=listPads();
+  if(!pads.length){gpIndex=-1;gpConnected=false;gpName='';if(gpPickerEl){gpPickerEl.remove();gpPickerEl=null;}updateRadioInfo();return;}
+  let remembered=null;try{remembered=localStorage.getItem(GP_ID_KEY);}catch(e){}
+  const match=remembered&&pads.find(p=>p.id===remembered);
+  if(match){selectPad(match,false);return;}
+  pads.sort((a,b)=>radioScore(b)-radioScore(a)); // radios first, standard pads last
+  if(pads.length===1){selectPad(pads[0],true);return;}
+  selectPad(pads[0],false);  // best candidate goes live immediately...
+  showGpPicker(pads);        // ...while the picker lets the pilot override + remember
+}
+addEventListener('gamepadconnected',()=>pickGamepad());
+addEventListener('gamepaddisconnected',()=>{gpIndex=-1;gpConnected=false;gpName='';pickGamepad();});
 function updateRadioInfo(){
   const el=document.getElementById('radioInfo');
   if(!gpConnected){el.textContent='no gamepad detected. TX16S: plug USB, pick Joystick on radio popup, wiggle a stick.';return;}
@@ -1765,7 +1836,9 @@ function updateRadioInfo(){
 }
 function dz(v,d=0.03){return Math.abs(v)<d?0:v;}
 function readInput(dt){
-  const gp=navigator.getGamepads&&navigator.getGamepads()[0];
+  const pads=navigator.getGamepads&&navigator.getGamepads();
+  let gp=gpConnected&&pads?pads[gpIndex]:null;
+  if(gpConnected&&!gp){pickGamepad();gp=pads?pads[gpIndex]:null;} // index shifted (unplug/replug) — re-scan
   if(gp&&gpConnected){
     if(calib){runCalib(gp,dt);stick.r=stick.p=stick.y=0;stick.t=0;return;}
     const map=axisMap||presetMap()||defaultMapFor(gp);
@@ -1779,6 +1852,14 @@ function readInput(dt){
     } else {
       const span=map.t.max-map.t.min;
       stick.t=Math.abs(span)<0.1?0:THREE.MathUtils.clamp((traw-map.t.min)/span,0,1);
+    }
+    // safety gate: after connect/device change, throttle stays dead until the
+    // sticks have been seen safe once (throttle <5%, r/p/y near center) — a
+    // pad plugged in mid-flight or a wrong map can't punch the quad away
+    if(armGate){
+      if(stick.t<0.05&&Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15&&Math.abs(stick.y)<0.15){
+        armGate=false;toast('STICKS SAFE — LIVE');
+      }else stick.t=0;
     }
   } else {
     const tR=(keys['arrowright']?1:0)-(keys['arrowleft']?1:0);
