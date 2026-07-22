@@ -65,6 +65,16 @@
     margin-bottom: 8px;
   }
   .hero h1 .accent { color: var(--orange); }
+  .calc-scope-note {
+    color: var(--green);
+    font-size: 0.8rem;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.04em;
+    border-left: 2px solid var(--green);
+    padding-left: 10px;
+    margin: -20px 0 24px;
+    max-width: 560px;
+  }
   .hero p.sub {
     color: var(--muted);
     font-size: 1rem;
