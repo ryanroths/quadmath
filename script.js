@@ -1,11 +1,10 @@
   // ===== Frame size presets (typical defaults) =====
+  // Whoop classes only (65/75/85mm) — the calculator's models are calibrated
+  // against real whoop builds and are NOT valid for 3"/5"/7" quads.
   const framePresets = {
     65: { kv: 19000, cells: 1, capacity: 300, pitch: 0.7, weight: 28  },
     75: { kv: 22000, cells: 1, capacity: 450, pitch: 1.1, weight: 38  },
     85: { kv: 11000, cells: 2, capacity: 450, pitch: 0.9, weight: 65  },
-    3:  { kv: 7000,  cells: 4, capacity: 850, pitch: 2.5, weight: 120 },
-    5:  { kv: 1900,  cells: 6, capacity: 1300, pitch: 5.1, weight: 280 },
-    7:  { kv: 1300,  cells: 6, capacity: 1800, pitch: 6.0, weight: 420 },
   };
 
   // Real motor database by frame size — brand, stator, KV
@@ -43,31 +42,6 @@
       { name: 'Happymodel EX1103',           kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
       { name: 'Flywoo ROBO 1002',            kv: 23500, propPitch: 0.9, weightPerMotor: 2.50 },
     ],
-    3: [
-      { name: 'T-Motor Velox V1404',   kv: 4600, propPitch: 2.5, weightPerMotor: 12 },
-      { name: 'BetaFPV 1404',         kv: 4500, propPitch: 2.5, weightPerMotor: 12 },
-      { name: 'Emax RS1408',          kv: 4100, propPitch: 2.5, weightPerMotor: 13 },
-      { name: 'T-Motor Velox V1506',   kv: 3800, propPitch: 2.5, weightPerMotor: 14 },
-      { name: 'BrotherHobby T1404',   kv: 4600, propPitch: 2.5, weightPerMotor: 12 },
-      { name: 'Xing 1404',            kv: 3500, propPitch: 2.5, weightPerMotor: 12 },
-    ],
-    5: [
-      { name: 'T-Motor Velox V2207',   kv: 1950, propPitch: 5.1, weightPerMotor: 32 },
-      { name: 'T-Motor F40 PRO IV',    kv: 2400, propPitch: 5.1, weightPerMotor: 30 },
-      { name: 'Emax ECO II 2207',      kv: 2400, propPitch: 5.1, weightPerMotor: 28 },
-      { name: 'Iflight XING 2208',     kv: 1800, propPitch: 5.1, weightPerMotor: 34 },
-      { name: 'BrotherHobby 2207',    kv: 1700, propPitch: 5.1, weightPerMotor: 30 },
-      { name: 'T-Motor Pacer 2306',    kv: 2150, propPitch: 5.1, weightPerMotor: 28 },
-      { name: 'SucceX-E 2207',         kv: 2450, propPitch: 5.1, weightPerMotor: 30 },
-    ],
-    7: [
-      { name: 'Emax ECO II 2807',        kv: 1300, propPitch: 6.0, weightPerMotor: 52 },
-      { name: 'Iflight XING 2806',       kv: 1300, propPitch: 6.0, weightPerMotor: 50 },
-      { name: 'T-Motor Navigator 2808',  kv:  900, propPitch: 6.0, weightPerMotor: 58 },
-      { name: 'BrotherHobby 2807',      kv: 1300, propPitch: 6.0, weightPerMotor: 52 },
-      { name: 'Sunnysky X2806',          kv: 1250, propPitch: 6.0, weightPerMotor: 50 },
-      { name: 'T-Motor Velox V2207',     kv: 1750, propPitch: 6.0, weightPerMotor: 32 },
-    ],
   };
 
   // Approx static thrust benchmark (grams of thrust per watt) by frame size — rough community averages
@@ -75,58 +49,48 @@
     65: 3.5,
     75: 3.8,
     85: 4.0,
-    3:  4.2,
-    5:  4.5,
-    7:  4.8,
   };
 
   // Frontal drag coefficient × area (m²) per frame — drives aerodynamic speed limit.
+  // Calibrated so preset builds land on real whoop top speeds (see motorLoadFraction).
   const frameCdA = {
-    65: 0.0020,
-    75: 0.0030,
+    65: 0.0015,
+    75: 0.0025,
     85: 0.0035,
-    3:  0.0075,
-    5:  0.0140,
-    7:  0.0200,
   };
 
-  // Fraction of no-load RPM actually achieved under combined aero + electrical load.
-  // Small high-KV motors sag dramatically due to winding resistance at high current.
+  // Fraction of no-load RPM reached at TOP SPEED (props unload as airspeed
+  // builds, so this sits far above the static-hover load fraction). Calibrated
+  // with speedThrustPerMotor/frameCdA against real whoop GPS numbers:
+  // Air65-class 65mm ≈ 40mph, 75mm 1S ≈ 42mph, 85mm 2S ≈ 37mph.
   const motorLoadFraction = {
-    65: 0.52,
-    75: 0.48,
-    85: 0.55,
-    3:  0.65,
-    5:  0.74,
-    7:  0.78,
+    65: 0.95,
+    75: 0.65,
+    85: 0.65,
   };
 
   // Calibrated static thrust per motor (g) at each frame's preset KV/cell combo.
   // Tuned against community-reported top speeds; separate from the OSD thrust display.
   const speedThrustPerMotor = {
-    65: 25,
+    65: 70,
     75: 60,
     85: 85,
-    3:  180,
-    5:  800,
-    7:  900,
   };
 
-  // Approx average current draw as a fraction of theoretical max, tuned per frame size (aggressive flying)
+  // Average current as a fraction of theoretical max. Calibrated against real
+  // whoop pack times: Air65-class 300mAh 1S ≈ 3.5min, 75mm 450 1S ≈ 4min,
+  // 85mm 450 2S ≈ 4.5min.
   const avgCurrentFraction = {
-    65: 0.55,
-    75: 0.55,
-    85: 0.50,
-    3:  0.45,
-    5:  0.40,
-    7:  0.35,
+    65: 0.29,
+    75: 0.26,
+    85: 0.15,
   };
 
   // Rough max current draw estimate (A) per motor at given KV/cell combo — simplified model
   function estMaxCurrentPerMotor(kv, cells, frame) {
     const voltage = cells * 3.7;
     // crude scaling: bigger frame = bigger motor = more current capacity
-    const frameCurrentBase = { 65: 4, 75: 6, 85: 8, 3: 12, 5: 25, 7: 30 };
+    const frameCurrentBase = { 65: 4, 75: 6, 85: 8 };
     const base = frameCurrentBase[frame];
     // scale slightly with KV/voltage relationship vs a reference
     return base * (voltage / (cells === 1 ? 4.2 : voltage)) * (kv / framePresets[frame].kv);
@@ -256,7 +220,7 @@
   });
 
   function currentFrameBaseWeight() {
-    const baseWeights = { 65: 15, 75: 20, 85: 35, 3: 80, 5: 180, 7: 280 };
+    const baseWeights = { 65: 15, 75: 20, 85: 35 };
     return baseWeights[currentFrame] || 20;
   }
 
@@ -293,12 +257,22 @@
     return { speedMph, totalThrust, tw, flightTimeMin };
   }
 
+  // Whoop-realistic input clamps (0602–1103 motors, ≤2" props, 1S–2S, whoop AUW).
+  // HTML min/max only guards the spinners — typed values get clamped here too.
+  function clampRange(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+  const WHOOP_RANGES = {
+    kv:       [8000, 40000],  // 0602–1103 class motors
+    cells:    [1, 2],         // 1S–2S only
+    capacity: [200, 800],     // mAh — whoop packs
+    pitch:    [0.5, 3.5],     // inches of PITCH on ≤2"-diameter whoop props
+    weight:   [18, 90],       // g AUW — ~18–45g for 65/75mm, 2S 85mm up to ~90g
+  };
   function calculate() {
-    const kv       = parseFloat(els.motorKV.value)   || 0;
-    const cells    = parseFloat(els.cells.value)     || 1;
-    const capacity = parseFloat(els.capacity.value)  || 0;
-    const pitch    = parseFloat(els.propPitch.value) || 0;
-    const weight   = parseFloat(els.weight.value)    || 1;
+    const kv       = clampRange(parseFloat(els.motorKV.value)   || 0, ...WHOOP_RANGES.kv);
+    const cells    = clampRange(parseFloat(els.cells.value)     || 1, ...WHOOP_RANGES.cells);
+    const capacity = clampRange(parseFloat(els.capacity.value)  || 0, ...WHOOP_RANGES.capacity);
+    const pitch    = clampRange(parseFloat(els.propPitch.value) || 0, ...WHOOP_RANGES.pitch);
+    const weight   = clampRange(parseFloat(els.weight.value)    || 1, ...WHOOP_RANGES.weight);
     const s = computeStats(kv, cells, capacity, pitch, weight);
 
     els.totalThrust.innerHTML = s.totalThrust.toFixed(0) + '<span class="unit">g</span>';
@@ -315,12 +289,9 @@
     els.flightTime.innerHTML = s.flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
 
     const frameMaxes = {
-      65: { tw: 6.0,  ft: 3.5,  spd: 35  },
-      75: { tw: 5.5,  ft: 4.0,  spd: 45  },
-      85: { tw: 5.0,  ft: 5.0,  spd: 55  },
-      3:  { tw: 8.0,  ft: 4.0,  spd: 70  },
-      5:  { tw: 10.0, ft: 5.0,  spd: 100 },
-      7:  { tw: 4.0,  ft: 20.0, spd: 80  },
+      65: { tw: 6.0,  ft: 3.5,  spd: 45  },
+      75: { tw: 5.5,  ft: 4.0,  spd: 48  },
+      85: { tw: 5.0,  ft: 5.0,  spd: 45  },
     };
     const maxes    = frameMaxes[currentFrame];
     const twScore  = Math.min(tw / maxes.tw * 100, 100) * 0.50;
@@ -352,12 +323,14 @@
   }
 
   function compareCalculate() {
-    const kvA      = parseFloat(document.getElementById('cmpKvA').value);
-    const kvB      = parseFloat(document.getElementById('cmpKvB').value);
-    const cells    = parseFloat(els.cells.value)     || 1;
-    const capacity = parseFloat(els.capacity.value)  || 0;
-    const pitch    = parseFloat(els.propPitch.value) || 0;
-    const weight   = parseFloat(els.weight.value)    || 1;
+    let kvA        = parseFloat(document.getElementById('cmpKvA').value);
+    let kvB        = parseFloat(document.getElementById('cmpKvB').value);
+    if (!isNaN(kvA)) kvA = clampRange(kvA, ...WHOOP_RANGES.kv);
+    if (!isNaN(kvB)) kvB = clampRange(kvB, ...WHOOP_RANGES.kv);
+    const cells    = clampRange(parseFloat(els.cells.value)     || 1, ...WHOOP_RANGES.cells);
+    const capacity = clampRange(parseFloat(els.capacity.value)  || 0, ...WHOOP_RANGES.capacity);
+    const pitch    = clampRange(parseFloat(els.propPitch.value) || 0, ...WHOOP_RANGES.pitch);
+    const weight   = clampRange(parseFloat(els.weight.value)    || 1, ...WHOOP_RANGES.weight);
     const sA = (!isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, weight) : null;
     const sB = (!isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, weight) : null;
 
@@ -426,12 +399,12 @@
     }
   }
 
-  // ===== Prop Pitch Speed Reference Table =====
-  const PITCH_LIST = [0.8, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.1, 5.5, 6.0];
+  // ===== Prop Pitch Speed Reference Table ===== (whoop pitch band only)
+  const PITCH_LIST = [0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.5, 1.9, 2.0, 2.5, 3.0, 3.5];
 
   function buildPitchTable() {
-    const kv           = parseFloat(document.getElementById('pitchKV').value)    || 0;
-    const cells        = parseInt(document.getElementById('pitchCells').value)   || 1;
+    const kv           = clampRange(parseFloat(document.getElementById('pitchKV').value) || 0, ...WHOOP_RANGES.kv);
+    const cells        = clampRange(parseInt(document.getElementById('pitchCells').value) || 1, ...WHOOP_RANGES.cells);
     const frame        = document.getElementById('pitchFrame').value;
     const currentPitch = parseFloat(els.propPitch.value) || 0;
     const rpm_eff      = kv * (cells * 3.7) * (motorLoadFraction[frame] || 0.75);

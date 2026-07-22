@@ -65,15 +65,13 @@
 <div class="container">
   <section class="hero" id="calculator">
     <h1>Know your build<br>before you <span class="accent">solder it</span>.</h1>
-    <p class="sub">Enter your motor KV, prop pitch, and battery — get estimated top speed, flight time, and thrust-to-weight. Compare motors side by side. Covers 65mm indoor whoops, 3" micros, 5" freestyle, and 7" long range builds.</p>
+    <p class="sub">Enter your motor KV, prop pitch, and battery — get estimated top speed, flight time, and thrust-to-weight. Compare motors side by side.</p>
+    <p class="calc-scope-note">Built for 65–85mm whoops — accuracy calibrated against real whoop builds. Not for 5-inch quads.</p>
 
     <div class="frame-select">
       <button class="frame-btn active" data-frame="65">65mm Whoop</button>
       <button class="frame-btn" data-frame="75">75mm Whoop</button>
       <button class="frame-btn" data-frame="85">85mm Whoop</button>
-      <button class="frame-btn" data-frame="3">3" Freestyle</button>
-      <button class="frame-btn" data-frame="5">5" Freestyle</button>
-      <button class="frame-btn" data-frame="7">7" Long Range</button>
     </div>
 
     <div class="calc-grid">
@@ -99,36 +97,34 @@
 
         <div class="field">
           <label for="motorKV">Motor KV</label>
-          <input type="number" id="motorKV" value="27000" step="500">
-          <div class="field-hint">Auto-filled from motor selection above, or enter manually</div>
+          <input type="number" id="motorKV" value="27000" step="500" min="8000" max="40000">
+          <div class="field-hint">Auto-filled from motor selection above, or enter manually (whoop motors: 0602–1103, 8,000–40,000 KV)</div>
         </div>
 
         <div class="field-row">
           <div class="field">
             <label for="cells">Battery Cells (S)</label>
             <select id="cells">
-              <option value="1">1S</option>
-              <option value="2" selected>2S</option>
-              <option value="3">3S</option>
-              <option value="4">4S</option>
-              <option value="6">6S</option>
+              <option value="1" selected>1S</option>
+              <option value="2">2S</option>
             </select>
           </div>
           <div class="field">
             <label for="capacity">Capacity (mAh)</label>
-            <input type="number" id="capacity" value="450" step="50">
+            <input type="number" id="capacity" value="450" step="50" min="200" max="800">
           </div>
         </div>
 
         <div class="field">
           <label for="propPitch">Prop Pitch (inches)</label>
-          <input type="number" id="propPitch" value="1.5" step="0.1">
-          <div class="field-hint">e.g. a "31xx" prop has a 3.1" pitch</div>
+          <input type="number" id="propPitch" value="1.5" step="0.1" min="0.5" max="3.5">
+          <div class="field-hint">Whoop props (≤2" diameter) run 0.7"–3.5" pitch — e.g. a Gemfan 1219S is 1.9"</div>
         </div>
 
         <div class="field">
           <label for="weight">All-Up Weight (grams)</label>
-          <input type="number" id="weight" value="27" step="1">
+          <input type="number" id="weight" value="27" step="1" min="18" max="90">
+          <div class="field-hint">Whoop AUW with battery: ~18–45g for 65/75mm, up to ~90g for 2S 85mm</div>
         </div>
       </div>
 
@@ -242,26 +238,23 @@
             <div class="field">
               <label for="battCells">Battery Cells (S)</label>
               <select id="battCells">
-                <option value="1">1S</option>
+                <option value="1" selected>1S</option>
                 <option value="2">2S</option>
-                <option value="3">3S</option>
-                <option value="4" selected>4S</option>
-                <option value="6">6S</option>
               </select>
             </div>
             <div class="field-row">
               <div class="field">
                 <label for="battMah">Capacity (mAh)</label>
-                <input type="number" id="battMah" value="1300" step="50">
+                <input type="number" id="battMah" value="450" step="50" min="200" max="800">
               </div>
               <div class="field">
                 <label for="battC">C-Rating</label>
-                <input type="number" id="battC" value="100" step="5">
+                <input type="number" id="battC" value="100" step="5" min="30" max="150">
               </div>
             </div>
             <div class="field">
               <label for="battPeakA">Peak Draw (A, all 4 motors)</label>
-              <input type="number" id="battPeakA" value="60" step="5">
+              <input type="number" id="battPeakA" value="12" step="1" min="2" max="40">
             </div>
           </div>
           <div>
@@ -296,27 +289,22 @@
           <div>
             <div class="field">
               <label for="pitchKV">Motor KV</label>
-              <input type="number" id="pitchKV" value="1900" step="100">
+              <input type="number" id="pitchKV" value="23000" step="500" min="8000" max="40000">
             </div>
             <div class="field-row">
               <div class="field">
                 <label for="pitchCells">Battery (S)</label>
                 <select id="pitchCells">
-                  <option value="1">1S</option>
+                  <option value="1" selected>1S</option>
                   <option value="2">2S</option>
-                  <option value="3">3S</option>
-                  <option value="4">4S</option>
-                  <option value="6" selected>6S</option>
                 </select>
               </div>
               <div class="field">
                 <label for="pitchFrame">Frame</label>
                 <select id="pitchFrame">
-                  <option value="65">65mm</option>
+                  <option value="65" selected>65mm</option>
                   <option value="75">75mm</option>
-                  <option value="3">3"</option>
-                  <option value="5" selected>5"</option>
-                  <option value="7">7"</option>
+                  <option value="85">85mm</option>
                 </select>
               </div>
             </div>
