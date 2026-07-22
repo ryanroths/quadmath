@@ -33,6 +33,19 @@
   #osdLand{position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);z-index:6;
     font-size:34px;font-weight:700;letter-spacing:3px;color:#ff3b2f;
     text-shadow:0 0 16px rgba(255,59,47,.7);pointer-events:none;display:none}
+  /* mobile landing gate — shown instead of the sim on touch/coarse devices */
+  #mobileGate{display:none;position:fixed;inset:0;z-index:40;background:#0D0E12;
+    flex-direction:column;align-items:center;justify-content:center;text-align:center;
+    padding:24px;gap:14px}
+  #mobileGate .mg-logo{font-size:20px;font-weight:700;color:var(--txt)}
+  #mobileGate .mg-logo span{color:var(--orange)}
+  #mobileGate .mg-title{font-size:26px;font-weight:700;letter-spacing:3px;color:var(--orange)}
+  #mobileGate .mg-pitch{color:var(--txt);font-size:14px;max-width:340px;line-height:1.5}
+  #mobileGate .mg-note{color:var(--green);font-size:12px;letter-spacing:1px;text-transform:uppercase}
+  #mobileGate .mg-btn{display:inline-block;border:1px solid var(--orange);color:var(--orange);
+    padding:10px 22px;font-size:13px;text-decoration:none;margin-top:6px}
+  #mobileGate .mg-btn:active{background:var(--orange);color:var(--bg)}
+  #mobileGate .mg-try{color:var(--dim);font-size:11px;text-decoration:underline;cursor:pointer;margin-top:10px}
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7}
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
   #crosshair::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
@@ -112,6 +125,37 @@
 <div class="osd" id="osdGate"></div>
 <div class="osd" id="osdLap"></div>
 <div id="osdLand">LAND NOW</div>
+<div id="mobileGate">
+  <div class="mg-logo">QuadMath<span>.</span></div>
+  <div class="mg-title">QUADMATH SIM</div>
+  <p class="mg-pitch">Browser FPV whoop sim — real Betaflight rates, no install.</p>
+  <p class="mg-note">Desktop + controller/radio required</p>
+  <a class="mg-btn" href="https://quadmath.com/">← Back to QuadMath.com</a>
+  <a class="mg-try" id="mgTry">Try anyway (tablet + gamepad)</a>
+</div>
+<script>
+// mobile gate — classic script, runs before the sim module loads. Touch-capable
+// coarse-pointer devices (or small coarse-pointer screens) get the landing
+// overlay instead of the canvas; desktop is untouched. "Try anyway" dismisses
+// for the session (tablet + gamepad pilots).
+(function(){
+  function isMobileDevice(){
+    const coarse=matchMedia('(pointer: coarse)').matches;
+    const touch=('ontouchstart' in window)&&navigator.maxTouchPoints>0;
+    const small=Math.min(screen.width,screen.height)<768;
+    return (touch&&coarse)||(small&&coarse);
+  }
+  const gate=document.getElementById('mobileGate');
+  document.getElementById('mgTry').onclick=e=>{
+    e.preventDefault();
+    gate.style.display='none';
+    try{sessionStorage.setItem('quadmathSimTryAnyway','1');}catch(err){}
+  };
+  let skip=false;
+  try{skip=sessionStorage.getItem('quadmathSimTryAnyway')==='1';}catch(err){}
+  if(!skip&&isMobileDevice())gate.style.display='flex';
+})();
+</script>
 <div id="crosshair"></div>
 <div id="toast"></div>
 <div id="portalFlash"></div>
