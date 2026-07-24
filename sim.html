@@ -63,9 +63,10 @@
   input[type=range]{width:100%;margin:0 0 10px;accent-color:var(--orange);height:4px}
   button{background:transparent;border:1px solid var(--orange);color:var(--orange);
     font-family:inherit;font-size:12px;padding:6px 12px;cursor:pointer;width:100%;margin-top:6px}
-  #cliPaste{width:100%;background:var(--bg);border:1px solid #262A33;color:var(--txt);
+  #cliPaste,#ghostCode,#pilotName{width:100%;background:var(--bg);border:1px solid #262A33;color:var(--txt);
     font-family:inherit;font-size:11px;padding:6px;resize:vertical}
-  #cliPaste:focus{outline:none;border-color:var(--orange)}
+  #cliPaste:focus,#ghostCode:focus,#pilotName:focus{outline:none;border-color:var(--orange)}
+  #pilotName{margin-bottom:4px}
   button:hover{background:var(--orange);color:var(--bg)}
   #gear{position:fixed;top:12px;right:12px;z-index:11;width:auto;padding:6px 10px;
     background:rgba(21,23,29,.85);border:1px solid #262A33;color:var(--txt);font-size:12px}
@@ -229,6 +230,13 @@
   <input type="range" id="s_wash" min="0" max="2" step="0.05" value="1">
   <div class="row"><label>Battery Simulation</label><input type="checkbox" id="cbBattSim" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Sag affects thrust</label><input type="checkbox" id="cbSagThrust" checked style="accent-color:var(--orange)"></div>
+
+  <h2>Ghost Sharing</h2>
+  <div class="row"><label>Pilot name</label></div>
+  <input type="text" id="pilotName" maxlength="16" placeholder="PILOT" autocomplete="off">
+  <button id="btnGhostCopy">COPY GHOST CODE</button>
+  <textarea id="ghostCode" rows="3" placeholder="paste a friend's ghost code here"></textarea>
+  <button id="btnGhostLoad">LOAD GHOST CODE</button>
 
   <h2>GLTF Assets</h2>
   <div id="assetStatus">checking assets/manifest.json…</div>
@@ -1797,7 +1805,7 @@ function updateMotorSound(){
   motorGainMaster.gain.setTargetAtTime(vol,t,0.08);
 }
 addEventListener('keydown',e=>{
-  if(e.target&&e.target.tagName==='TEXTAREA')return; // typing in the CLI paste box must not trigger R/M/F/G hotkeys
+  if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&e.target.type==='text')))return; // typing in the CLI/ghost/pilot-name boxes must not trigger R/M/F/G hotkeys
   if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
   keys[e.key.toLowerCase()]=true;
   if(e.key.toLowerCase()==='r')resetQuad();
@@ -2140,6 +2148,8 @@ function updateLapOSD(){
   }else{ // idle, no run yet on this track
     html+=' RUN --:--.--<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
   }
+  const rv=activeRival(); // racing a shared/hosted ghost — show who + their time
+  if(rv)html+='<br><span style="color:#FF4D1A">VS '+rv.name+(rv.lapTime?' '+fmtLap(rv.lapTime):'')+'</span>';
   osdLap.innerHTML=html;
 }
 const toastEl=document.getElementById('toast');let toastTimer;
@@ -2342,9 +2352,10 @@ function commitGhost(id){
 }
 // translucent cyan quad — no existing quad mesh to reuse (this is an FPV sim,
 // the camera IS the quad), so build a small readable body + arms + nose
-function makeGhostMesh(){
+function makeGhostMesh(color){
+  color=color===undefined?0x00e5ff:color; // own ghost cyan; rival gets its own color
   const grp=new THREE.Group();
-  const mat=new THREE.MeshStandardMaterial({color:0x00e5ff,emissive:0x00e5ff,emissiveIntensity:0.6,
+  const mat=new THREE.MeshStandardMaterial({color:color,emissive:color,emissiveIntensity:0.6,
     transparent:true,opacity:0.35,depthWrite:false,roughness:0.4});
   grp.add(new THREE.Mesh(new THREE.BoxGeometry(1.4,0.3,1.4),mat));
   for(const c of [[1,1],[1,-1],[-1,1],[-1,-1]]){
@@ -2356,7 +2367,30 @@ function makeGhostMesh(){
   grp.visible=false;scene.add(grp);
   return grp;
 }
-const ghostMesh=makeGhostMesh();
+const ghostMesh=makeGhostMesh();            // own best-run ghost (cyan)
+const rivalMesh=makeGhostMesh(0xFF4D1A);    // imported / hosted rival (orange)
+// floating name label above the rival — camera-facing canvas sprite
+const rivalLabel=new THREE.Sprite(new THREE.SpriteMaterial({transparent:true,depthTest:false}));
+rivalLabel.scale.set(10,2.5,1);rivalLabel.visible=false;scene.add(rivalLabel);
+function setRivalLabel(name){
+  const cv=document.createElement('canvas');cv.width=256;cv.height=64;
+  const g=cv.getContext('2d');
+  g.font='bold 34px monospace';g.textAlign='center';g.textBaseline='middle';
+  g.lineWidth=6;g.strokeStyle='#000';g.strokeText(name,128,32);
+  g.fillStyle='#FF4D1A';g.fillText(name,128,32);
+  if(rivalLabel.material.map)rivalLabel.material.map.dispose();
+  rivalLabel.material.map=new THREE.CanvasTexture(cv);
+  rivalLabel.material.needsUpdate=true;
+}
+// rival ghost state: an explicitly imported code wins; otherwise the hosted
+// default for the active track (fetched at load) fills in
+let rivalGhost=null;                 // {track,name,lapTime,samples} from a pasted code
+let rivalLabelName='';               // name currently baked into the label sprite
+const defaultRivals=[null,null];     // per-track hosted defaults (/ghosts/track_{id}.json)
+function activeRival(){
+  if(rivalGhost&&rivalGhost.track===activeTrackId)return rivalGhost;
+  return defaultRivals[activeTrackId];
+}
 const _gqa=new THREE.Quaternion(),_gqb=new THREE.Quaternion();
 function sampleGhost(){
   if(!ghostRec||!runActive)return; // record across the whole run, stamped from run start
@@ -2365,21 +2399,116 @@ function sampleGhost(){
   ghostRec.push([Math.round(t),_gr2(state.pos.x),_gr2(state.pos.y),_gr2(state.pos.z),
     _gr3(state.q.x),_gr3(state.q.y),_gr3(state.q.z),_gr3(state.q.w)]);
 }
-function playbackGhost(){
-  const g=ghosts[activeTrackId];
-  if(!ghostVisible||!runActive||!g||!g.length){ghostMesh.visible=false;return;}
-  const elapsed=performance.now()-runStartTime; // index by run-elapsed time (whole run)
+// pose one ghost mesh from a sample array at the given run-elapsed time
+function poseGhost(g,mesh,elapsed){
   let a,b; // bracket the current elapsed time between two time-ordered samples
   if(elapsed<=g[0][0]){a=b=g[0];}
   else if(elapsed>=g[g.length-1][0]){a=b=g[g.length-1];} // ghost finished — hold final pose
   else{a=b=g[0];for(let i=0;i<g.length-1;i++){if(g[i][0]<=elapsed&&g[i+1][0]>=elapsed){a=g[i];b=g[i+1];break;}}}
   const span=b[0]-a[0],f=span>0?(elapsed-a[0])/span:0;
-  ghostMesh.position.set(a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f,a[3]+(b[3]-a[3])*f);
+  mesh.position.set(a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f,a[3]+(b[3]-a[3])*f);
   _gqa.set(a[4],a[5],a[6],a[7]);_gqb.set(b[4],b[5],b[6],b[7]);
-  ghostMesh.quaternion.copy(_gqa).slerp(_gqb,f);
-  ghostMesh.visible=true;
+  mesh.quaternion.copy(_gqa).slerp(_gqb,f);
+  mesh.visible=true;
+}
+function playbackGhost(){
+  const elapsed=performance.now()-runStartTime; // index by run-elapsed time (whole run)
+  const own=ghosts[activeTrackId];
+  if(ghostVisible&&runActive&&own&&own.length)poseGhost(own,ghostMesh,elapsed);
+  else ghostMesh.visible=false;
+  const rv=activeRival();
+  if(ghostVisible&&runActive&&rv&&rv.samples.length){
+    poseGhost(rv.samples,rivalMesh,elapsed);
+    if(rv.name!==rivalLabelName){setRivalLabel(rv.name);rivalLabelName=rv.name;} // track switch may swap rivals
+    rivalLabel.position.copy(rivalMesh.position);rivalLabel.position.y+=2.2;
+    rivalLabel.visible=true;
+  }else{rivalMesh.visible=false;rivalLabel.visible=false;}
 }
 function updateGhost(){sampleGhost();playbackGhost();}
+
+// ---------- ghost sharing v1 ----------
+// Format (version-tagged for future changes):
+//   {v:1, track:0|1, lapTime:ms, name:string, samples:[[t,x,y,z,qx,qy,qz,qw],...]}
+// Export: JSON → gzip (CompressionStream) → base64 → clipboard.
+// Import: base64 → gunzip → validate → rival ghost. Raw uncompressed JSON is
+// also accepted (it's the hosted-default file format).
+async function gzipB64(str){
+  const cs=new CompressionStream('gzip');
+  const ab=await new Response(new Blob([str]).stream().pipeThrough(cs)).arrayBuffer();
+  const bytes=new Uint8Array(ab);
+  let s='';const CH=0x8000;
+  for(let i=0;i<bytes.length;i+=CH)s+=String.fromCharCode.apply(null,bytes.subarray(i,i+CH));
+  return btoa(s);
+}
+async function gunzipB64(b64){
+  const bin=atob(b64.replace(/\s+/g,''));
+  const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  const ds=new DecompressionStream('gzip');
+  return await new Response(new Blob([bytes]).stream().pipeThrough(ds)).text();
+}
+const pilotNameEl=document.getElementById('pilotName');
+try{pilotNameEl.value=localStorage.getItem('quadmath_pilotName')||'';}catch(e){}
+pilotNameEl.addEventListener('input',()=>{try{localStorage.setItem('quadmath_pilotName',pilotNameEl.value);}catch(e){}});
+// validate a parsed payload; expectTrack=null skips the track-match rule
+// (hosted defaults are validated per-file, not against the active track)
+function ghostPayloadError(p,expectTrack){
+  if(!p||p.v!==1||!Array.isArray(p.samples)||p.samples.length<2)return 'BAD GHOST CODE';
+  if(p.track!==0&&p.track!==1)return 'BAD GHOST TRACK';
+  if(expectTrack!==null&&p.track!==expectTrack)return 'GHOST IS FOR TRACK '+(p.track+1)+' — SWITCH TRACKS TO RACE IT';
+  let lastT=-1;
+  for(const s of p.samples){
+    if(!Array.isArray(s)||s.length<8||s.some(n=>typeof n!=='number'||!isFinite(n)))return 'BAD GHOST DATA';
+    if(!(s[0]>=0&&s[0]<6e5&&s[0]>=lastT))return 'BAD GHOST TIMESTAMPS';
+    if(Math.abs(s[1])>3000||Math.abs(s[3])>3000||s[2]<-50||s[2]>1200)return 'GHOST OUT OF BOUNDS';
+    lastT=s[0];
+  }
+  return null;
+}
+async function exportGhost(){
+  const id=activeTrackId,g=ghosts[id];
+  if(!g||!g.length){toast('NO GHOST YET — SET A BEST RUN FIRST');return;}
+  const payload={v:1,track:id,lapTime:bestRunMs[id]||0,
+    name:(pilotNameEl.value.trim()||'PILOT').slice(0,16),samples:g};
+  let code;
+  try{code=await gzipB64(JSON.stringify(payload));}
+  catch(e){toast('EXPORT FAILED');return;}
+  try{
+    await navigator.clipboard.writeText(code);
+    toast('GHOST CODE COPIED ('+Math.round(code.length/1024)+'KB)');
+  }catch(e){
+    // clipboard blocked (permissions/insecure context) — drop it in the box to copy by hand
+    const ta=document.getElementById('ghostCode');
+    ta.value=code;ta.select();
+    toast('CLIPBOARD BLOCKED — CODE IS IN THE BOX, COPY IT');
+  }
+}
+async function importGhost(){
+  const code=document.getElementById('ghostCode').value.trim();
+  if(!code){toast('PASTE A GHOST CODE FIRST');return;}
+  let p=null;
+  try{p=JSON.parse(await gunzipB64(code));}
+  catch(e){try{p=JSON.parse(code);}catch(e2){}} // raw JSON fallback (hosted format)
+  const err=ghostPayloadError(p,activeTrackId);
+  if(err){toast(err);return;}
+  rivalGhost={track:p.track,name:String(p.name||'RIVAL').slice(0,16),lapTime:+p.lapTime||0,samples:p.samples};
+  setRivalLabel(rivalGhost.name);
+  toast('RIVAL LOADED: '+rivalGhost.name+(rivalGhost.lapTime?' — '+fmtLap(rivalGhost.lapTime):''));
+}
+document.getElementById('btnGhostCopy').onclick=exportGhost;
+document.getElementById('btnGhostLoad').onclick=importGhost;
+// hosted defaults: static per-track ghost files, same payload uncompressed.
+// 404 / network error = no default ghost for that track — fail silently.
+for(const id of [0,1]){
+  fetch('ghosts/track_'+id+'.json')
+    .then(r=>r.ok?r.json():null)
+    .then(p=>{
+      if(!p||ghostPayloadError(p,id))return;
+      defaultRivals[id]={track:id,name:String(p.name||'RyFly').slice(0,16),lapTime:+p.lapTime||0,samples:p.samples};
+      if(!rivalGhost&&id===activeTrackId)setRivalLabel(defaultRivals[id].name);
+    })
+    .catch(()=>{});
+}
 
 // ---------- Loop ----------
 let last=performance.now(),acc=0;
