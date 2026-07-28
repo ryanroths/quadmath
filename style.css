@@ -365,24 +365,6 @@
     transition: width 0.4s ease;
   }
 
-  /* ===== AD SLOTS ===== */
-  .ad-slot {
-    background: var(--panel);
-    border: 1px dashed var(--border);
-    border-radius: 8px;
-    padding: 16px;
-    text-align: center;
-    color: var(--muted);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin: 32px 0;
-  }
-  .ad-slot.inline {
-    margin: 24px 0;
-  }
-
   /* ===== CONTENT SECTIONS ===== */
   .section {
     padding: 40px 0;
