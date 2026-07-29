@@ -1,0 +1,89 @@
+diff --git a/gear.html b/gear.html
+index b4967e1..3472acd 100644
+--- a/gear.html
++++ b/gear.html
+@@ -50,10 +50,10 @@
+   <div class="container header-inner">
+     <div class="logo">QuadMath<span class="dot">.</span></div>
+     <nav>
+-      <a href="index.html#calculator">Calculator</a>
+-      <a href="index.html#guide">Guide</a>
+-      <a href="index.html#motor-guide">Motors</a>
+-      <a href="index.html#tools">Tools</a>
++      <a href="/#calculator">Calculator</a>
++      <a href="/#guide">Guide</a>
++      <a href="/#motor-guide">Motors</a>
++      <a href="/#tools">Tools</a>
+       <a href="tune-database.html">Tunes</a>
+       <a href="sim.html">Sim</a>
+       <a href="gear.html" class="active" aria-current="page" style="color:#FF4D1A">Gear</a>
+diff --git a/hire.html b/hire.html
+index 4032359..4c0ee86 100644
+--- a/hire.html
++++ b/hire.html
+@@ -50,10 +50,10 @@
+   <div class="container header-inner">
+     <div class="logo">QuadMath<span class="dot">.</span></div>
+     <nav>
+-      <a href="index.html#calculator">Calculator</a>
+-      <a href="index.html#guide">Guide</a>
+-      <a href="index.html#motor-guide">Motors</a>
+-      <a href="index.html#tools">Tools</a>
++      <a href="/#calculator">Calculator</a>
++      <a href="/#guide">Guide</a>
++      <a href="/#motor-guide">Motors</a>
++      <a href="/#tools">Tools</a>
+       <a href="tune-database.html">Tunes</a>
+       <a href="sim.html">Sim</a>
+       <a href="gear.html">Gear</a>
+diff --git a/sim.html b/sim.html
+index 3e47506..ccb1210 100644
+--- a/sim.html
++++ b/sim.html
+@@ -88,10 +88,10 @@
+   <div class="container header-inner">
+     <div class="logo">QuadMath<span class="dot">.</span></div>
+     <nav>
+-      <a href="index.html#calculator">Calculator</a>
+-      <a href="index.html#guide">Guide</a>
+-      <a href="index.html#motor-guide">Motors</a>
+-      <a href="index.html#tools">Tools</a>
++      <a href="/#calculator">Calculator</a>
++      <a href="/#guide">Guide</a>
++      <a href="/#motor-guide">Motors</a>
++      <a href="/#tools">Tools</a>
+       <a href="tune-database.html">Tunes</a>
+       <a href="sim.html" class="active" aria-current="page" style="color:#FF4D1A">Sim</a>
+       <a href="gear.html">Gear</a>
+diff --git a/sitemap.xml b/sitemap.xml
+index eacbca5..cb60e12 100644
+--- a/sitemap.xml
++++ b/sitemap.xml
+@@ -11,7 +11,7 @@
+     <priority>0.9</priority>
+   </url>
+   <url>
+-    <loc>https://quadmath.com/simulator.html</loc>
++    <loc>https://quadmath.com/sim.html</loc>
+     <changefreq>monthly</changefreq>
+     <priority>0.8</priority>
+   </url>
+diff --git a/tune-database.html b/tune-database.html
+index 5021884..042f43d 100644
+--- a/tune-database.html
++++ b/tune-database.html
+@@ -50,10 +50,10 @@
+   <div class="container header-inner">
+     <div class="logo">QuadMath<span class="dot">.</span></div>
+     <nav>
+-      <a href="index.html#calculator">Calculator</a>
+-      <a href="index.html#guide">Guide</a>
+-      <a href="index.html#motor-guide">Motors</a>
+-      <a href="index.html#tools">Tools</a>
++      <a href="/#calculator">Calculator</a>
++      <a href="/#guide">Guide</a>
++      <a href="/#motor-guide">Motors</a>
++      <a href="/#tools">Tools</a>
+       <a href="tune-database.html" class="active" aria-current="page" style="color:#FF4D1A">Tunes</a>
+       <a href="sim.html">Sim</a>
+       <a href="gear.html">Gear</a>
