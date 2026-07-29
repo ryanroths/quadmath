@@ -93,7 +93,11 @@
     const frameCurrentBase = { 65: 4, 75: 6, 85: 8 };
     const base = frameCurrentBase[frame];
     // scale slightly with KV/voltage relationship vs a reference
-    return base * (voltage / (cells === 1 ? 4.2 : voltage)) * (kv / framePresets[frame].kv);
+    // Derate nominal (3.7V/cell) against full charge (4.2V/cell) — 0.881 at any
+    // cell count. Previously written as (cells === 1 ? 4.2 : voltage), which for
+    // 2S reduced to voltage/voltage = 1.0 and skipped the derate entirely,
+    // handing 2S builds 1.135x the current of 1S for no physical reason.
+    return base * (voltage / (cells * 4.2)) * (kv / framePresets[frame].kv);
   }
 
   let currentFrame = '65';
