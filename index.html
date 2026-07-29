@@ -318,21 +318,21 @@
   <section class="section" id="motor-guide">
     <h2>How to choose a motor</h2>
     <p>
-      <strong>KV and cell count are linked.</strong> KV is how fast the motor spins per volt. More cells means lower KV to keep your prop RPM in a useful range without over-spinning. Rule of thumb for 5" props: 4S builds use 2300–2450KV; 6S builds use 1700–1950KV. Going too high on KV for your voltage generates heat and shortens motor life.
+      <strong>KV and cell count are linked.</strong> KV is how fast the motor spins per volt. More cells means lower KV to keep your prop RPM in a useful range without over-spinning. On whoops that tradeoff is stark: a 1S 65mm build runs 0702 motors at 15,000–22,000KV, while 75/85mm 1102–1103 motors span 8,000–22,000KV — the high end for 1S, the low end for 2S. Going too high on KV for your voltage generates heat and shortens motor life.
     </p>
     <p>
-      <strong>Stator size sets the torque ceiling.</strong> The four-digit stator number tells you everything — "2207" means 22mm diameter, 7mm tall. Wider diameter adds torque and power but also weight. For 5" freestyle a 2207 or 2306 hits the sweet spot. For long range, a taller stator (2807, 2808) provides more torque to spin larger props at lower RPM efficiently.
+      <strong>Stator size sets the torque ceiling.</strong> The four-digit stator number tells you everything — "1102" means 11mm diameter, 2mm tall. Wider diameter adds torque and power but also weight. On a whoop that weight penalty is unforgiving: a 0702 is under 2g and suits 65mm indoor builds, while a 1102–1103 adds the torque a 75mm or 85mm needs to swing a bigger prop.
     </p>
     <p>
-      <strong>Match thrust-to-weight to your flying style.</strong> Casual freestyle and cruising works well at 4:1–6:1. Aggressive freestyle pilots often target 8:1–12:1 for snappy response. Long range builds prioritize efficiency over punch — 3:1–5:1 is typical. Whoops are size-constrained and land wherever the motor and prop math allows.
+      <strong>Match thrust-to-weight to your flying style.</strong> Whoops are size-constrained, so T:W lands wherever the motor, prop, and cell count allow. Under 2:1 is mild and cruise-oriented — common on heavier 1S 65mm indoor builds. 2:1–4:1 is punchy, where most well-sorted 1S whoops sit. 4:1–6:1 is aggressive freestyle territory, usually a light 2S 75mm or 85mm build. Above 6:1 a whoop turns wheelie-prone and hard to fly smoothly in tight spaces.
     </p>
     <p>
-      <strong>Don't cheap out on C-rating.</strong> An underpowered battery sags badly under load, robbing motor performance and degrading cells quickly. For 5" freestyle on 6S, target at least 50C continuous on a 1300mAh pack — or a 1100mAh 100C pack for cleaner power delivery. Use the battery calculator in the Tools section to check your specific pack against your estimated peak draw.
+      <strong>Don't cheap out on C-rating.</strong> An underpowered battery sags badly under load, robbing motor performance and degrading cells quickly. Whoop packs are small enough that C-rating matters more, not less — on a 1S 300mAh pack look for 60C or better, roughly 18A rated against the 8–12A a 65mm whoop actually peaks at. On a 2S 450mAh 85mm build, 75C+ keeps sag low when all four motors punch at once. Use the battery calculator in the Tools section to check your specific pack against your estimated peak draw.
     </p>
   </section>
 
   <section class="section" id="frame-guide">
-    <h2>Frame size reference</h2>
+    <h2>Whoop size reference</h2>
     <div class="frame-grid">
       <div class="frame-card">
         <div class="frame-card-title">65mm Whoop</div>
@@ -381,33 +381,6 @@
         <div class="frame-spec"><span class="frame-spec-key">Dimensions</span><span class="frame-spec-val">4.5mm thick · 8.2mm wide</span></div>
         <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">55–70g</span></div>
         <p class="frame-note">85mm whoops typically run 1103 motors on 2S. Bridge between micro whoop and toothpick — more punch than a 75mm, still indoor-capable.</p>
-      </div>
-      <div class="frame-card">
-        <div class="frame-card-title">3" Toothpick</div>
-        <span class="frame-card-tag">Micro / Outdoor</span>
-        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">1404–1507, 3.5–5K KV</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">2–4S, 650–850mAh</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">3" bi/tri-blade</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">100–160g</span></div>
-        <p class="frame-note">Genuine 3" toothpick — open props, no guards, outdoor only. More speed and range than any whoop class, but too exposed and too fast for tight indoor spaces. Bridges the gap between whoops and full 5" freestyle.</p>
-      </div>
-      <div class="frame-card">
-        <div class="frame-card-title">5" Freestyle</div>
-        <span class="frame-card-tag">Freestyle / Racing</span>
-        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">2207–2306, 1700–2450 KV</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">4–6S, 1300–1800mAh</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">5" bi/tri-blade</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">250–350g</span></div>
-        <p class="frame-note">The dominant class with the widest ecosystem. On 6S use 1700–1950KV; on 4S use 2300–2450KV. Nearly all freestyle content you see online is 5".</p>
-      </div>
-      <div class="frame-card">
-        <div class="frame-card-title">7" Long Range</div>
-        <span class="frame-card-tag">Efficiency / Distance</span>
-        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">2506–2808, 900–1500 KV</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">6S, 1800–3000mAh</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">7" bi-blade</span></div>
-        <div class="frame-spec"><span class="frame-spec-key">Typical AUW</span><span class="frame-spec-val">400–600g</span></div>
-        <p class="frame-note">Built for distance, not punch. Lower KV and larger props maximize propulsive efficiency. Common with GPS, long-range links (ELRS), and HD cameras.</p>
       </div>
     </div>
   </section>
