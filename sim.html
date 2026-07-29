@@ -252,20 +252,49 @@
   <button id="btnReset">RESET QUAD [R]</button>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-// GLTFLoader — jsdelivr (works when run locally / via http.server; blocked inside claude.ai preview)
+// Boot watchdog — classic script, so it runs even when the module below never does.
+// three.js core is vendored (see importmap) so a CDN outage can't stop the sim, but
+// an unsupported importmap or a corrupt vendor file still kills the module outright.
+// Without THREE there is no scene to fall back into, so the honest degradation is a
+// stated reason in #assetStatus rather than a blank canvas.
 (function(){
-  const s=document.createElement('script');
-  s.src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js';
-  s.onload=()=>{ window._gltfReady=true; if(window._tryAssets) window._tryAssets(); };
-  s.onerror=()=>{ window._gltfReady=false; const el=document.getElementById('assetStatus');
-    if(el) el.textContent='GLTFLoader blocked (claude.ai preview). Run locally for GLTF assets. Procedural city active.'; };
-  document.head.appendChild(s);
+  var reported=false;
+  function fail(msg){
+    if(reported||window._simBooted)return;reported=true;
+    var el=document.getElementById('assetStatus');
+    if(el)el.textContent=msg;
+  }
+  // capture phase — resource load errors don't bubble
+  window.addEventListener('error',function(e){
+    if(e.target&&e.target.tagName==='SCRIPT')fail('engine failed to load — check your connection and reload.');
+  },true);
+  window.addEventListener('DOMContentLoaded',function(){
+    setTimeout(function(){
+      fail('three.js failed to initialize — sim unavailable. Reload, or try a browser with import map support.');
+    },8000);
+  });
 })();
 </script>
-<script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
 "use strict";
+import * as THREE from "three";
+window._simBooted=true; // tells the watchdog above the module actually executed
+// GLTFLoader is imported dynamically, not statically: a static import failure aborts
+// the whole module and takes the sim with it. Loaded this way, an addon/CDN failure
+// is catchable and degrades to the procedural city exactly as the r128 build did.
+let GLTFLoader=null;
+const gltfReady=import("three/addons/loaders/GLTFLoader.js")
+  .then(function(m){GLTFLoader=m.GLTFLoader;window._gltfReady=true;return true;})
+  .catch(function(){window._gltfReady=false;return false;});
 const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:1.3,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,idlePct:0.055,washStrength:1.0,battSimOn:true,sagAffectsThrust:true};
 // base gravity — the world geometry is ~3.5x visual scale, so real 9.81 reads
 // as slow-motion against oversized reference; effective gravity everywhere is
@@ -281,7 +310,7 @@ renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.05;
-renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
 const scene=new THREE.Scene();
 scene.fog=new THREE.Fog(0xc7d5df,250,1100);
 const camera=new THREE.PerspectiveCamera(CFG.fov,innerWidth/innerHeight,0.05,3000);
@@ -320,7 +349,7 @@ function canvasTex(w,h,draw,rx=1,ry=1){
   const cv=document.createElement('canvas');cv.width=w;cv.height=h;
   draw(cv.getContext('2d'),w,h);
   const t=new THREE.CanvasTexture(cv);
-  t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(rx,ry);t.anisotropy=8;t.encoding=THREE.sRGBEncoding;
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(rx,ry);t.anisotropy=8;t.colorSpace=THREE.SRGBColorSpace;
   return t;
 }
 let seed=1337;function rnd(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646;}
@@ -660,7 +689,10 @@ const proceduralGroup=new THREE.Group(); scene.add(proceduralGroup);
 let usingGltf=false;
 const assetEl=document.getElementById('assetStatus');
 window._tryAssets=async function(){
-  if(!window._gltfReady) return;
+  if(!await gltfReady){
+    assetEl.textContent='GLTFLoader blocked — procedural city active.';
+    return;
+  }
   let manifest;
   try{
     const r=await fetch('assets/manifest.json');
@@ -685,7 +717,7 @@ window._tryAssets=async function(){
   // lives in assets/Models/GLB-format/Textures/, so load GLBs from that folder and
   // anchor the resource path there so texture refs resolve to the real file.
   const GLB_DIR='assets/Models/GLB-format/';
-  const loader=new THREE.GLTFLoader();
+  const loader=new GLTFLoader();
   loader.setResourcePath(GLB_DIR);
   const cache={};
   async function load(file){
@@ -1056,7 +1088,7 @@ window._tryAssets=async function(){
       // to the main city (2100+ units away, far outside its 450-unit
       // falloff). Makes Dreamland read as its own place immediately on
       // arrival without globally re-tinting the main map's lighting.
-      const dreamLight=new THREE.PointLight(0x8f6bff,0.6,450,2);
+      const dreamLight=new THREE.PointLight(0x8f6bff,0.6*Math.PI,450,2);
       dreamLight.position.set(DX,120,DZ);
       scene.add(dreamLight);
     }
@@ -1524,7 +1556,7 @@ for(let i=0;i<7;i++){
   mesa.position.set(mx,h/2-4,mz);
   scene.add(mesa);
 }
-if(window._gltfReady) window._tryAssets();
+window._tryAssets(); // readiness is awaited inside — safe to call before the loader resolves
 
 // ---------- Quad state ----------
 const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),

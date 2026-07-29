@@ -1,0 +1,3 @@
+# Vendored third-party builds — keep byte-identical to upstream so they can be
+# re-verified against the published artifact. No EOL conversion, no diffing.
+vendor/** -text -diff linguist-vendored
