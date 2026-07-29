@@ -44,12 +44,49 @@
     ],
   };
 
-  // Approx static thrust benchmark (grams of thrust per watt) by frame size — rough community averages
-  const thrustPerWatt = {
-    65: 3.5,
-    75: 3.8,
-    85: 4.0,
+  // ===== Static thrust model: thrust_g = k * watts^THRUST_EXPONENT =====
+  // Replaces a flat grams-per-watt constant, which could not represent the fact
+  // that prop efficiency FALLS as power rises (g/W declined monotonically
+  // 2.91 -> 1.79 across the measured sweep below).
+  //
+  // THRUST_EXPONENT is fitted from ONE dataset: the 9-point Happymodel EX1103
+  // KV11000 test-stand sweep at 7.4V on a 2023R prop, which gives 0.781 with
+  // R^2 = 0.998 log-log. Rounded to 0.78. That set is the sole source of the
+  // exponent. A 2-point SE0702 sweep sits at 0.769, but two points define a
+  // log-log line exactly, so it measures the local slope between two throttle
+  // levels and independently confirms nothing about the curve shape.
+  const THRUST_EXPONENT = 0.78;
+
+  // Per-frame k, fitted with the exponent held at 0.78.
+  //   65: Happymodel SE0702 KV28000 + Gemfan 1219 31mm tri-blade, 1S 3.7V.
+  //       2 measured points, residuals +/-0.8%.
+  //   85: Happymodel EX1103 KV11000 + 2023R, 2S 7.4V. 9 measured points,
+  //       residuals within +4.6/-2.5%. NOTE: 2023R is 2.3" pitch; the 85mm
+  //       frame card specifies 0.9" pitch, so this transfers only loosely.
+  //   75: NOT MEASURED. No manufacturer test data exists for the 0802 motors
+  //       in motorDB (weBLEEDfpv publishes none). Interpolated from the 65mm
+  //       anchor by momentum-theory disk-area scaling, k ~ A^(1/3), for 40mm
+  //       props. The same scaling under-predicts the measured 85mm k by 28%,
+  //       so treat 75mm as +/-30% and replace it as soon as bench data exists.
+  const thrustCoeffK = {
+    65: 2.655,
+    75: 3.147,  // interpolated, not measured
+    85: 4.739,
   };
+
+  function staticThrustPerMotor(amps, voltage, frame) {
+    const watts = amps * voltage;
+    if (watts <= 0) return 0;
+    return thrustCoeffK[frame] * Math.pow(watts, THRUST_EXPONENT);
+  }
+
+  // Current the pack can actually source: capacity(Ah) * C-rating, split 4 ways.
+  // Manufacturer bench rows routinely demand more than a whoop pack can give —
+  // the EX1103's top row wants 36.8A, which is 82C from a 450mAh 2S.
+  function packCurrentLimitPerMotor(capacityMah, cRating) {
+    if (!capacityMah || !cRating) return Infinity;
+    return ((capacityMah / 1000) * cRating) / 4;
+  }
 
   // Frontal drag coefficient × area (m²) per frame — drives aerodynamic speed limit.
   // Calibrated so preset builds land on real whoop top speeds (see motorLoadFraction).
@@ -112,6 +149,10 @@
     thrustWeight: document.getElementById('thrustWeight'),
     twRating: document.getElementById('twRating'),
     totalThrust: document.getElementById('totalThrust'),
+    thrustSub:   document.getElementById('thrustSub'),
+    benchTw:     document.getElementById('benchTw'),
+    benchSub:    document.getElementById('benchSub'),
+    packC:       document.getElementById('packC'),
   };
 
   const motorSelect = document.getElementById('motorSelect');
@@ -241,7 +282,7 @@
 
   els.motorKV.addEventListener('input', () => { motorSelect.value = ''; });
 
-  function computeStats(kv, cells, capacity, pitch, weight) {
+  function computeStats(kv, cells, capacity, pitch, weight, cRating) {
     const voltage = cells * 3.7;
     const rpm_eff    = kv * voltage * motorLoadFraction[currentFrame];
     const pitch_m    = pitch * 0.0254;
@@ -253,12 +294,25 @@
     const disc = b_c * b_c + 4 * a_c * T_total_N;
     const v_ms    = disc >= 0 ? (-b_c + Math.sqrt(disc)) / (2 * a_c) : 0;
     const speedMph = Math.min(v_ms * 2.23694, v_pitch_ms * 2.23694 * 0.92);
+    // Bench figure: what the motors would pull on an unlimited supply.
     const maxCurrentPerMotor = estMaxCurrentPerMotor(kv, cells, currentFrame);
-    const totalThrust  = maxCurrentPerMotor * voltage * thrustPerWatt[currentFrame] * 4;
-    const tw           = totalThrust / weight;
+    const benchThrust = staticThrustPerMotor(maxCurrentPerMotor, voltage, currentFrame) * 4;
+    const twBench     = benchThrust / weight;
+
+    // Headline figure: clamp per-motor current to what the pack can source.
+    const packLimitPerMotor  = packCurrentLimitPerMotor(capacity, cRating);
+    const effCurrentPerMotor = Math.min(maxCurrentPerMotor, packLimitPerMotor);
+    const totalThrust = staticThrustPerMotor(effCurrentPerMotor, voltage, currentFrame) * 4;
+    const tw          = totalThrust / weight;
+    const packLimited = packLimitPerMotor < maxCurrentPerMotor;
+
+    // Flight time still runs off the unclamped current: avgCurrentFraction was
+    // fitted on top of it, so re-pointing this at effCurrentPerMotor would shift
+    // every flight time. Deferred until avgCurrentFraction is refitted.
     const avgCurrent   = maxCurrentPerMotor * 4 * avgCurrentFraction[currentFrame];
     const flightTimeMin = ((capacity / 1000) * 0.8 / avgCurrent) * 60;
-    return { speedMph, totalThrust, tw, flightTimeMin };
+    return { speedMph, totalThrust, tw, flightTimeMin, benchThrust, twBench,
+             packLimited, effCurrentPerMotor, maxCurrentPerMotor };
   }
 
   // Whoop-realistic input clamps (0602–1103 motors, ≤2" props, 1S–2S, whoop AUW).
@@ -270,6 +324,7 @@
     capacity: [200, 800],     // mAh — whoop packs
     pitch:    [0.5, 3.5],     // inches of PITCH on ≤2"-diameter whoop props
     weight:   [18, 90],       // g AUW — ~18–45g for 65/75mm, 2S 85mm up to ~90g
+    cRating:  [30, 150],      // C — whoop pack range, matches the battery tool
   };
   function calculate() {
     const kv       = clampRange(parseFloat(els.motorKV.value)   || 0, ...WHOOP_RANGES.kv);
@@ -277,9 +332,18 @@
     const capacity = clampRange(parseFloat(els.capacity.value)  || 0, ...WHOOP_RANGES.capacity);
     const pitch    = clampRange(parseFloat(els.propPitch.value) || 0, ...WHOOP_RANGES.pitch);
     const weight   = clampRange(parseFloat(els.weight.value)    || 1, ...WHOOP_RANGES.weight);
-    const s = computeStats(kv, cells, capacity, pitch, weight);
+    const cRating  = clampRange(parseFloat(els.packC.value)     || 0, ...WHOOP_RANGES.cRating);
+    const s = computeStats(kv, cells, capacity, pitch, weight, cRating);
 
     els.totalThrust.innerHTML = s.totalThrust.toFixed(0) + '<span class="unit">g</span>';
+    els.thrustSub.textContent = s.packLimited
+      ? `Pack-limited: ${(s.effCurrentPerMotor * 4).toFixed(1)}A available vs ${(s.maxCurrentPerMotor * 4).toFixed(1)}A the motors want`
+      : `Motor-limited: pack can supply ${(s.effCurrentPerMotor * 4).toFixed(1)}A and the motors only draw that much`;
+
+    els.benchTw.innerHTML = s.twBench.toFixed(1) + '<span class="unit">:1</span>';
+    els.benchSub.textContent = s.packLimited
+      ? `${s.benchThrust.toFixed(0)}g on an unlimited supply — a higher C-rating closes this gap`
+      : `${s.benchThrust.toFixed(0)}g — pack is not the constraint on this build`;
 
     const tw = s.tw;
     els.thrustWeight.innerHTML = tw.toFixed(1) + '<span class="unit">:1</span>';
@@ -335,8 +399,9 @@
     const capacity = clampRange(parseFloat(els.capacity.value)  || 0, ...WHOOP_RANGES.capacity);
     const pitch    = clampRange(parseFloat(els.propPitch.value) || 0, ...WHOOP_RANGES.pitch);
     const weight   = clampRange(parseFloat(els.weight.value)    || 1, ...WHOOP_RANGES.weight);
-    const sA = (!isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, weight) : null;
-    const sB = (!isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, weight) : null;
+    const cRating  = clampRange(parseFloat(els.packC.value)     || 0, ...WHOOP_RANGES.cRating);
+    const sA = (!isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, weight, cRating) : null;
+    const sB = (!isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, weight, cRating) : null;
 
     function setPair(idA, idB, vA, vB, fmt) {
       const eA = document.getElementById(idA), eB = document.getElementById(idB);

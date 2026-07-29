@@ -116,6 +116,12 @@
         </div>
 
         <div class="field">
+          <label for="packC">Battery C-Rating</label>
+          <input type="number" id="packC" value="100" step="5" min="30" max="150">
+          <div class="field-hint">Caps how much current the pack can actually deliver — capacity × C. Sets the headline thrust number.</div>
+        </div>
+
+        <div class="field">
           <label for="propPitch">Prop Pitch (inches)</label>
           <input type="number" id="propPitch" value="1.5" step="0.1" min="0.5" max="3.5">
           <div class="field-hint">Whoop props (≤2" diameter) run 0.7"–3.5" pitch — e.g. a Gemfan 1219S is 1.9"</div>
@@ -157,7 +163,12 @@
           <div class="osd-stat full">
             <div class="osd-stat-label">Estimated Total Thrust</div>
             <div class="osd-stat-value" id="totalThrust">86<span class="unit">g</span></div>
-            <div class="osd-stat-sub">At full throttle, all 4 motors combined</div>
+            <div class="osd-stat-sub" id="thrustSub">What your pack can actually deliver, all 4 motors</div>
+          </div>
+          <div class="osd-stat full">
+            <div class="osd-stat-label">Bench Max — Unlimited Supply</div>
+            <div class="osd-stat-value" id="benchTw">—<span class="unit">:1</span></div>
+            <div class="osd-stat-sub" id="benchSub">What the motors could pull if the pack were not the limit</div>
           </div>
         </div>
       </div>
