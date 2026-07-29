@@ -42,7 +42,11 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    color: var(--text);
+    text-decoration: none;
+    transition: opacity 0.15s;
   }
+  .logo:hover { opacity: 0.75; }
   .logo .dot { color: var(--orange); }
   nav a {
     color: var(--orange);
@@ -1083,6 +1087,7 @@
   .ryfly-logo-wrap img {
     max-width: 280px;
     width: 100%;
+    height: auto; /* override the height="560" attribute, which stretched it to 280x560 */
     display: block;
   }
   .ryfly-bio {
