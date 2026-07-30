@@ -1,0 +1,39 @@
+name: Agent PR Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  agent-gate:
+    name: Validate agent-authored changes
+    runs-on: ubuntu-latest
+    # A human reviewer can wave a PR through by adding the 'human-override' label.
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'human-override') }}
+
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          # The gate needs the merge base, so shallow clones will not do.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch base branch
+        run: |
+          git fetch --no-tags origin \
+            "+refs/heads/${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}"
+
+      - name: Validate pull request against base policy
+        run: |
+          python scripts/ci/validate_agent_pr.py \
+            --base "origin/${{ github.event.pull_request.base.ref }}" \
+            --policy scripts/ci/agent_policy.json
