@@ -142,6 +142,7 @@ CLOSES_P = {
 
 LINK_ATTRS = ("href", "src")
 SCRIPT_SRC = "script-src"  # pseudo-attr marking a <script src>, judged separately
+JSONLD_TYPE = "application/ld+json"  # the only inline script type ever exemptable
 SKIP_SCHEMES = ("mailto:", "tel:", "data:", "javascript:", "sms:", "ftp:")
 
 
@@ -156,6 +157,9 @@ class PageParser(HTMLParser):
         self.script_srcs: list[tuple[int, str]] = []
         self.meta_descriptions: list[str] = []
         self.links: list[tuple[int, str, str]] = []  # line, attr, url
+        self.jsonld_blocks: list[tuple[int, str]] = []  # line, raw body
+        self._ld_open: int | None = None
+        self._ld_chunks: list[str] = []
 
     # -- structure ---------------------------------------------------------
 
@@ -197,7 +201,15 @@ class PageParser(HTMLParser):
         # <div/> style self-closing: never pushed, so never unbalanced.
         self._collect(tag, dict(attrs))
 
+    def handle_data(self, data):
+        if self._ld_open is not None:
+            self._ld_chunks.append(data)
+
     def handle_endtag(self, tag):
+        if tag == "script" and self._ld_open is not None:
+            self.jsonld_blocks.append((self._ld_open, "".join(self._ld_chunks)))
+            self._ld_open = None
+            self._ld_chunks = []
         if tag in VOID_TAGS:
             return
         open_names = [name for name, _ in self.stack]
@@ -239,6 +251,12 @@ class PageParser(HTMLParser):
                 # does not re-judge it against the *page* host allowlist; the
                 # script-host allowlist above is the authority for these.
                 self.links.append((line, SCRIPT_SRC, src))
+            elif (attrs.get("type") or "").strip().lower() == JSONLD_TYPE:
+                # Recorded separately rather than as an inline script. Whether
+                # that is an exemption or just a differently-worded violation is
+                # check_html's call, driven by html_checks.allow_jsonld.
+                self._ld_open = line
+                self._ld_chunks = []
             else:
                 self.inline_scripts.append(line)
             return
@@ -293,6 +311,29 @@ def check_html(path: str, text: str, policy: dict, tracked: set[str], repo_root:
     if html_checks.get("forbid_inline_script", True):
         for line in parser.inline_scripts:
             violation("HTML: inline <script> is forbidden", path, line)
+        # JSON-LD is the one inline script the SEO setup depends on, so it is
+        # exemptable -- but only when it actually parses. An exemption that let
+        # through a broken structured-data block would be worse than no
+        # exemption, since search engines drop the whole block silently.
+        if html_checks.get("allow_jsonld", True):
+            for line, body in parser.jsonld_blocks:
+                try:
+                    json.loads(body)
+                except json.JSONDecodeError as exc:
+                    violation(
+                        'HTML: <script type="%s"> does not contain valid JSON (%s)'
+                        % (JSONLD_TYPE, exc),
+                        path,
+                        line,
+                    )
+        else:
+            for line, _ in parser.jsonld_blocks:
+                violation(
+                    'HTML: inline <script> is forbidden (set html_checks.allow_jsonld '
+                    'to permit <script type="%s">)' % JSONLD_TYPE,
+                    path,
+                    line,
+                )
 
     allowed_hosts = html_checks.get("allowed_script_hosts") or []
     for line, src in parser.script_srcs:
