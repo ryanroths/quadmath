@@ -1,3 +1,4 @@
 # local env files
 .env*
 !.env.example
+build_go_links.py
