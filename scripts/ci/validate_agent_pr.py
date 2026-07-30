@@ -520,15 +520,31 @@ def parse_numstat(raw: str) -> dict[str, tuple[int, int]]:
 # ---------------------------------------------------------------------------
 
 
-def load_base_policy(base_sha: str, policy_path: str) -> dict | None:
-    """Load the policy from the merge-base commit.
+def resolve_commit(ref: str) -> str | None:
+    """Resolve a ref to a commit sha, or None if it does not resolve."""
+    ok, raw = git_ok("rev-parse", "--verify", "%s^{commit}" % ref)
+    return raw.strip() if ok and raw.strip() else None
 
-    Returns None when the base commit has no policy at all, which means this
-    pull request is introducing the gate itself; there is nothing to enforce
-    against and nothing a PR could weaken (the base is immutable from the PR's
-    point of view).
+
+def load_base_policy(base_tip_sha: str, policy_path: str) -> dict | None:
+    """Load the policy from the tip of the base branch.
+
+    Deliberately the base *tip*, not the merge base: the merge base is where
+    the pull request forked, so a long-lived branch would be judged by whatever
+    policy existed back then and would be grandfathered past any tightening
+    since. The tip is the rules in force now.
+
+    Either way the commit is unreachable from the pull request, which is the
+    property that matters -- reading the head copy would let a PR relax the
+    guardrails in the same commit CI is checking.
+
+    `base_tip_sha` must already be a resolved commit sha (see resolve_commit).
+    That is what makes the None below unambiguous: the commit exists, so a
+    failed read means the policy is genuinely absent from it, not that a ref
+    failed to resolve. Conflating those would let a fetch problem silently
+    downgrade the gate to the skip-enforcement path.
     """
-    ok, raw = git_ok("show", "%s:%s" % (base_sha, policy_path))
+    ok, raw = git_ok("show", "%s:%s" % (base_tip_sha, policy_path))
     if not ok:
         return None
     try:
@@ -554,6 +570,18 @@ def main(argv: list[str] | None = None) -> int:
 
     repo_root = git("rev-parse", "--show-toplevel").strip()
 
+    # Resolve the base ref before anything else. An unresolvable base is a CI
+    # misconfiguration (shallow clone, unfetched branch), never a green build:
+    # hard-fail rather than fall through to the skip-enforcement path.
+    base_tip_sha = resolve_commit(args.base)
+    if base_tip_sha is None:
+        sys.stderr.write(
+            "::error::base ref %r does not resolve to a commit; the gate cannot "
+            "run. Check that the base branch was fetched (fetch-depth: 0).\n"
+            % args.base
+        )
+        return 2
+
     ok, raw_base = git_ok("merge-base", args.base, args.head)
     if not ok or not raw_base.strip():
         sys.stderr.write(
@@ -562,18 +590,21 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     base_sha = raw_base.strip()
     head_sha = git("rev-parse", args.head).strip()
-    print("Base ref %s -> merge-base %s" % (args.base, base_sha[:12]))
+    print("Base ref %s -> tip %s, merge-base %s" % (args.base, base_tip_sha[:12], base_sha[:12]))
     print("Head %s -> %s" % (args.head, head_sha[:12]))
 
-    policy = load_base_policy(base_sha, args.policy)
+    policy = load_base_policy(base_tip_sha, args.policy)
     if policy is None:
         notice(
-            "%s does not exist at the merge base (%s); treating this as the "
+            "%s does not exist at the tip of %s (%s); treating this as the "
             "bootstrap PR that introduces the gate and skipping enforcement."
-            % (args.policy, base_sha[:12])
+            % (args.policy, args.base, base_tip_sha[:12])
         )
         return 0
-    print("Policy loaded from %s:%s (base commit, not the working tree)" % (base_sha[:12], args.policy))
+    print(
+        "Policy loaded from %s:%s (tip of %s, not the working tree)"
+        % (base_tip_sha[:12], args.policy, args.base)
+    )
 
     entries = parse_name_status(
         git("diff", "--no-renames", "-z", "--name-status", base_sha, head_sha)
