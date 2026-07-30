@@ -1,0 +1,49 @@
+name: Agent Signals
+
+# Runs the signal collector's tests, including the fixture pin on script.js.
+# A reformat of the calculator's component lists breaks this job rather than
+# silently reducing the collector to reporting zero gaps.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  collector-tests:
+    name: Test signal collector
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          # Fixtures build scratch repos and the collector reads a base ref.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run collector tests
+        run: python -m unittest discover -s scripts/agent -p 'test_*.py' -v
+
+      - name: Smoke-run the collector against the base branch
+        env:
+          BASE: ${{ github.event.pull_request.base.ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
+          # Writes outside the repo tree on purpose; the collector refuses --out
+          # paths inside it. Exit 3 here means script.js drifted.
+          python scripts/agent/collect_signals.py \
+            --ref "origin/$BASE" \
+            --out "$RUNNER_TEMP/signals.json"
+          python -c "import json,sys; d=json.load(open('$RUNNER_TEMP/signals.json')); print('rows:', d['counts']['total'])"
