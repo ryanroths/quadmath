@@ -1,0 +1,107 @@
+{
+  "_comment": "Policy for agent-authored pull requests. This file is ALWAYS loaded from the merge-base commit, never from the PR head, so a PR cannot relax its own guardrails. Edits here require a human reviewer (see deny_paths: scripts/ci/**).",
+
+  "max_changed_lines": 200,
+  "max_changed_files": 12,
+  "max_new_files": 6,
+
+  "allow_paths": [
+    "data/tunes/*.json",
+    "data/gear/*.json",
+    "data/builds/*.json",
+    "content/tunes/*.html",
+    "content/guides/*.html",
+    "tune-database.html",
+    "gear.html"
+  ],
+
+  "deny_paths": [
+    "sim.html",
+    "sim/**",
+    "assets/sim/**",
+    ".github/**",
+    "scripts/ci/**",
+    "CNAME",
+    "robots.txt",
+    "sitemap.xml",
+    "**/*.py",
+    "**/*.yml",
+    "**/*.sh"
+  ],
+
+  "html_checks": {
+    "forbid_inline_script": true,
+    "allowed_script_hosts": [
+      "static.cloudflareinsights.com"
+    ],
+    "require_meta_description": true
+  },
+
+  "link_checks": {
+    "check_internal": true,
+    "allowed_external_hosts": [
+      "betafpv.com",
+      "webleedfpv.com",
+      "bit.ly",
+      "quadmath.com",
+      "github.com",
+      "betaflight.com"
+    ]
+  },
+
+  "tune_schema": {
+    "required_fields": [
+      "id",
+      "name",
+      "frame_size_mm",
+      "fc",
+      "motor_kv",
+      "prop",
+      "rate_type",
+      "pids",
+      "source"
+    ],
+    "string_fields": [
+      "id",
+      "name",
+      "fc",
+      "prop",
+      "source"
+    ],
+    "frame_size_mm_min": 50,
+    "frame_size_mm_max": 120,
+    "pid_axes": [
+      "roll",
+      "pitch",
+      "yaw"
+    ],
+    "pid_terms": [
+      "p",
+      "i",
+      "d"
+    ],
+    "pid_min": 0,
+    "pid_max": 255,
+    "rate_types": [
+      "BETAFLIGHT",
+      "ACTUAL",
+      "QUICK",
+      "RACEFLIGHT",
+      "KISS"
+    ],
+    "source_must_contain_any": [
+      "cli",
+      "dump",
+      "diff",
+      "verified"
+    ],
+    "placeholder_values": [
+      "TBD",
+      "TODO",
+      "FIXME",
+      "XXX",
+      "N/A",
+      "???"
+    ]
+  }
+}
