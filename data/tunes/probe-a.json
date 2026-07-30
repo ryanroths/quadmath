@@ -1,0 +1,15 @@
+{
+  "id": "beta65-probe-a",
+  "name": "Beta65 Pro 2 freestyle",
+  "frame_size_mm": 65,
+  "fc": "BETAFPV F4 1S 5A AIO",
+  "motor_kv": 25000,
+  "prop": "BETAFPV 31mm 4-blade",
+  "rate_type": "BETAFLIGHT",
+  "pids": {
+    "roll":  {"p": 58, "i": 84, "d": 44},
+    "pitch": {"p": 60, "i": 88, "d": 46},
+    "yaw":   {"p": 68, "i": 88, "d": 0}
+  },
+  "source": "betaflight 4.5.1 cli diff all, verified in flight"
+}
