@@ -2,7 +2,7 @@
   // Whoop classes only (65/75/85mm) — the calculator's models are calibrated
   // against real whoop builds and are NOT valid for 3"/5"/7" quads.
   const framePresets = {
-    65: { kv: 19000, cells: 1, capacity: 300, pitch: 0.7, weight: 28  },
+    65: { kv: 28000, cells: 1, capacity: 300, pitch: 0.7, weight: 28  },
     75: { kv: 22000, cells: 1, capacity: 450, pitch: 1.1, weight: 38  },
     85: { kv: 11000, cells: 2, capacity: 450, pitch: 0.9, weight: 65  },
   };
