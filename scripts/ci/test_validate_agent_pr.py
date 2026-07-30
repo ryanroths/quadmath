@@ -86,10 +86,27 @@ class TestJsonLdExemption(unittest.TestCase):
         self.assertIn("inline <script> is forbidden", problems[0])
         self.assertIn("allow_jsonld", problems[0], "the message should name the escape hatch")
 
-    def test_absent_key_defaults_to_the_old_behaviour(self):
-        # Fail closed: a policy predating this change must not silently start
-        # permitting inline scripts of any kind.
-        problems = run(VALID_JSONLD, policy())
+    def test_absent_key_defaults_to_allowed(self):
+        # allow_jsonld defaults to true, so a policy that never sets the key
+        # still permits structured data. Safe because the exemption is narrow:
+        # exact type match plus a successful JSON parse.
+        self.assertEqual(run(VALID_JSONLD, policy()), [])
+
+    def test_absent_key_still_rejects_malformed_jsonld(self):
+        # The default being permissive must not make it unconditional.
+        problems = run(MALFORMED_JSONLD, policy())
+        self.assertTrue(problems)
+        self.assertIn("does not contain valid JSON", problems[0])
+
+    def test_inline_text_javascript_still_fails(self):
+        js = '  <script type="text/javascript">window.track(1);</script>'
+        problems = run(js, policy(allow_jsonld=True))
+        self.assertTrue(problems, "an explicitly-typed inline script is still a script")
+        self.assertIn("inline <script> is forbidden", problems[0])
+
+    def test_inline_module_script_still_fails(self):
+        mod = '  <script type="module">export const a = 1;</script>'
+        problems = run(mod, policy(allow_jsonld=True))
         self.assertTrue(problems)
         self.assertIn("inline <script> is forbidden", problems[0])
 

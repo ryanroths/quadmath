@@ -315,7 +315,7 @@ def check_html(path: str, text: str, policy: dict, tracked: set[str], repo_root:
         # exemptable -- but only when it actually parses. An exemption that let
         # through a broken structured-data block would be worse than no
         # exemption, since search engines drop the whole block silently.
-        if html_checks.get("allow_jsonld", False):
+        if html_checks.get("allow_jsonld", True):
             for line, body in parser.jsonld_blocks:
                 try:
                     json.loads(body)

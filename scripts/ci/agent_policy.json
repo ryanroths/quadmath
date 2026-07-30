@@ -33,7 +33,7 @@
 
   "html_checks": {
     "forbid_inline_script": true,
-    "_allow_jsonld_comment": "Exempts <script type=\"application/ld+json\"> from forbid_inline_script, but only when the block contains valid JSON. Every other inline script stays forbidden. Set false to restore the blanket ban.",
+    "_allow_jsonld_comment": "Exempts <script type=\"application/ld+json\"> from forbid_inline_script, but only when the block contains valid JSON. Every other inline script stays forbidden, including type=\"text/javascript\". Defaults to true when the key is absent; set false to restore the blanket ban.",
     "allow_jsonld": true,
     "allowed_script_hosts": [
       "static.cloudflareinsights.com"
