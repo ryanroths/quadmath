@@ -12,9 +12,9 @@
     "content/tunes/*.html",
     "content/guides/*.html",
     "tune-database.html",
-    "gear.html"
+    "gear.html",
     "go/*/index.html",
-    "go_map.json",
+    "go_map.json"
   ],
 
   "deny_paths": [
@@ -47,12 +47,12 @@
       "bit.ly",
       "quadmath.com",
       "github.com",
-      "betaflight.com"
+      "betaflight.com",
       "fonts.googleapis.com",
       "fonts.gstatic.com",
       "www.youtube.com",
       "www.instagram.com",
-      "www.racedayquads.com",
+      "www.racedayquads.com"
     ]
   },
 
