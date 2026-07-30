@@ -28,12 +28,33 @@ jobs:
           python-version: '3.12'
 
       - name: Fetch base branch
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
         run: |
-          git fetch --no-tags origin \
-            "+refs/heads/${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}"
+          git fetch --no-tags origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
+
+      - name: Resolve the gate script from the base branch
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          # Run the validator from the BASE branch, not from the PR head. The
+          # policy is already loaded from the base, but the checkout for a
+          # pull_request event gives us the PR's copy of the script itself --
+          # so a PR that rewrites validate_agent_pr.py down to `sys.exit(0)`
+          # would otherwise approve its own changes.
+          if git cat-file -e "origin/$BASE:scripts/ci/validate_agent_pr.py" 2>/dev/null; then
+            git show "origin/$BASE:scripts/ci/validate_agent_pr.py" > "$RUNNER_TEMP/agent_gate.py"
+            echo "Gate script taken from the tip of $BASE."
+          else
+            echo "::notice::No gate script at the tip of $BASE; bootstrap PR, falling back to the head copy."
+            cp scripts/ci/validate_agent_pr.py "$RUNNER_TEMP/agent_gate.py"
+          fi
 
       - name: Validate pull request against base policy
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
         run: |
-          python scripts/ci/validate_agent_pr.py \
-            --base "origin/${{ github.event.pull_request.base.ref }}" \
+          python "$RUNNER_TEMP/agent_gate.py" \
+            --base "origin/$BASE" \
             --policy scripts/ci/agent_policy.json
