@@ -228,7 +228,7 @@
       <strong>Flight time</strong> is modeled from your battery capacity, an 80% usable discharge window (to protect cell health), and an estimated average current draw based on frame size and motor specs — tuned for aggressive freestyle flying rather than gentle cruising.
     </p>
     <p>
-      <strong>Thrust-to-weight</strong> uses community static-thrust benchmarks for common motor/prop/cell combinations at each frame size, since true thrust requires a bench test rig. A ratio above 2:1 is generally freestyle-capable; whoops often run lower due to prop and motor constraints at their scale.
+      <strong>Thrust-to-weight</strong> uses a bench-fitted power model: thrust = k × watts<sup>0.78</sup>, fitted from manufacturer test-stand sweeps (Happymodel EX1103 and SE0702), with a per-frame coefficient. The headline thrust number is then clamped to the current your pack can actually source (capacity × C-rating) — the separate bench figure shows what the motors could pull on an unlimited supply. A ratio above 2:1 is generally freestyle-capable; whoops often run lower due to prop and motor constraints at their scale.
     </p>
   </section>
 
@@ -329,13 +329,13 @@
   <section class="section" id="motor-guide">
     <h2>How to choose a motor</h2>
     <p>
-      <strong>KV and cell count are linked.</strong> KV is how fast the motor spins per volt. More cells means lower KV to keep your prop RPM in a useful range without over-spinning. On whoops that tradeoff is stark: a 1S 65mm build runs 0702 motors at 15,000–22,000KV, while 75/85mm 1102–1103 motors span 8,000–22,000KV — the high end for 1S, the low end for 2S. Going too high on KV for your voltage generates heat and shortens motor life.
+      <strong>KV and cell count are linked.</strong> KV is how fast the motor spins per volt. More cells means lower KV to keep your prop RPM in a useful range without over-spinning. On whoops that tradeoff is stark: a 1S 65mm build runs 0702 motors at 23,000–30,000KV (race builds push 40K), a 75mm runs 0802 motors at 19,000–32,500KV on 1S, and an 85mm runs 1002–1103 motors at 8,000–23,500KV on 2S. Going too high on KV for your voltage generates heat and shortens motor life.
     </p>
     <p>
-      <strong>Stator size sets the torque ceiling.</strong> The four-digit stator number tells you everything — "1102" means 11mm diameter, 2mm tall. Wider diameter adds torque and power but also weight. On a whoop that weight penalty is unforgiving: a 0702 is under 2g and suits 65mm indoor builds, while a 1102–1103 adds the torque a 75mm or 85mm needs to swing a bigger prop.
+      <strong>Stator size sets the torque ceiling.</strong> The four-digit stator number tells you everything — "1102" means 11mm diameter, 2mm tall. Wider diameter adds torque and power but also weight. On a whoop that weight penalty is unforgiving: a 0702 is under 2g and suits 65mm indoor builds, while an 0802 gives a 75mm its balance of torque and weight, and a 1002–1103 adds the torque an 85mm needs to swing a 2" prop on 2S.
     </p>
     <p>
-      <strong>Match thrust-to-weight to your flying style.</strong> Casual freestyle and cruising works well at 2:1–3:1 — a 1S 65mm on 19,000KV motors lands right about there, enough to climb out of a dive without feeling twitchy. Aggressive freestyle pilots want 4:1 or better for snappy punch-outs, which on a whoop means trimming AUW and running the top of the motor's KV range rather than fitting a bigger stator. A 2S 85mm clears it comfortably. Above 6:1 a whoop gets wheelie-prone and hard to fly smoothly in tight spaces. Whoops sit well below what a 5" freestyle build pulls — prop diameter and 1S/2S voltage cap what the motors can do at this scale.
+      <strong>Match thrust-to-weight to your flying style.</strong> Casual freestyle and cruising works well at 2:1–3:1 — a 1S 65mm on 27,000–28,000KV motors lands right about there (~3:1 on the calculator's preset build), enough to climb out of a dive without feeling twitchy. Aggressive freestyle pilots want 4:1 or better for snappy punch-outs, which on a whoop means trimming AUW and running the top of the motor's KV range rather than fitting a bigger stator. A 2S 85mm clears it comfortably. Above 6:1 a whoop gets wheelie-prone and hard to fly smoothly in tight spaces. Whoops sit well below what a 5" freestyle build pulls — prop diameter and 1S/2S voltage cap what the motors can do at this scale.
     </p>
     <p>
       <strong>Don't cheap out on C-rating.</strong> An underpowered battery sags badly under load, robbing motor performance and degrading cells quickly. Whoop packs are small enough that C-rating matters more, not less. Manufacturer bench data puts a 0702 at 28,000KV near 4.7A per motor at full throttle — about 19A for all four, so a 1S 300mAh pack at 60C (18A rated) is already marginal and 75C+ is the safer floor. On a 2S 450mAh 85mm build, figure high-20s amps at full punch and 75C+ to keep sag low. Use the battery calculator in the Tools section to check your specific pack against your estimated peak draw.
@@ -365,7 +365,7 @@
       <div class="frame-card">
         <div class="frame-card-title">75mm Whoop</div>
         <span class="frame-card-tag">Indoor / Outdoor Hybrid</span>
-        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">1102–1103, 8–22K KV</span></div>
+        <div class="frame-spec"><span class="frame-spec-key">Motor</span><span class="frame-spec-val">0802, 19–32.5K KV</span></div>
         <div class="frame-spec"><span class="frame-spec-key">Battery</span><span class="frame-spec-val">1S, 300–450mAh</span></div>
         <div class="frame-spec"><span class="frame-spec-key">Props</span><span class="frame-spec-val">40mm (Gemfan 1611 reference)</span></div>
         <div class="frame-spec"><span class="frame-spec-key">Pitch</span><span class="frame-spec-val">1.1"</span></div>

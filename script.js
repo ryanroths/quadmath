@@ -443,7 +443,10 @@
 
     const maxRatedA  = cRating * (mah / 1000);
     const headroom   = ((maxRatedA - peakA) / maxRatedA) * 100;
-    const esrOhms    = (cells * (1000 / cRating)) / 1000; // rough ESR model
+    // Cell IR fitted so full rated draw (C × Ah) sags ~0.6V/cell, plus ~20mΩ/cell
+    // for PCB, tabs, connector. Capacity-aware — old cells/C model was not.
+    const cellIR     = mah > 0 ? 0.6 / (cRating * (mah / 1000)) : 0;
+    const esrOhms    = cells * (cellIR + 0.02);
     const sag        = peakA * esrOhms;
     const effV       = Math.max(0, cells * 4.2 - sag);
 
@@ -469,19 +472,30 @@
   }
 
   // ===== Prop Pitch Speed Reference Table ===== (whoop pitch band only)
-  const PITCH_LIST = [0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.5, 1.9, 2.0, 2.5, 3.0, 3.5];
+  // Uses the SAME drag-equilibrium model as the main calc so both agree.
+  const PITCH_LIST = [0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.5, 1.9, 2.0, 2.3];
+
+  function pitchSpeedMph(pitch, kv, cells, frame) {
+    const rpm_eff    = kv * (cells * 3.7) * motorLoadFraction[frame];
+    const v_pitch_ms = (pitch * 0.0254 * rpm_eff) / 60;
+    if (v_pitch_ms <= 0) return 0;
+    const T_total_N  = (speedThrustPerMotor[frame] * 4 * (kv / framePresets[frame].kv) / 1000) * 9.81;
+    const a_c = 0.5 * 1.225 * frameCdA[frame], b_c = T_total_N / v_pitch_ms;
+    const disc = b_c * b_c + 4 * a_c * T_total_N;
+    const v_ms = disc >= 0 ? (-b_c + Math.sqrt(disc)) / (2 * a_c) : 0;
+    return Math.min(v_ms * 2.23694, v_pitch_ms * 2.23694 * 0.92);
+  }
 
   function buildPitchTable() {
     const kv           = clampRange(parseFloat(document.getElementById('pitchKV').value) || 0, ...WHOOP_RANGES.kv);
     const cells        = clampRange(parseInt(document.getElementById('pitchCells').value) || 1, ...WHOOP_RANGES.cells);
     const frame        = document.getElementById('pitchFrame').value;
     const currentPitch = parseFloat(els.propPitch.value) || 0;
-    const rpm_eff      = kv * (cells * 3.7) * (motorLoadFraction[frame] || 0.75);
     const tbody        = document.getElementById('pitchTableBody');
     tbody.innerHTML    = '';
 
     PITCH_LIST.forEach(p => {
-      const speedMph  = (p * rpm_eff * 60) / 63360;
+      const speedMph  = pitchSpeedMph(p, kv, cells, frame);
       const isCurrent = Math.abs(p - currentPitch) < 0.05;
       const tr        = document.createElement('tr');
       if (isCurrent) tr.className = 'current-pitch';
