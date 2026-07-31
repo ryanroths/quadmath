@@ -25,4 +25,9 @@
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
+  <url>
+    <loc>https://quadmath.com/content/guides/65mm-happymodel-se0702-gemfan-1207-3-blade.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
 </urlset>
