@@ -8,6 +8,10 @@
   <meta property="og:title" content="65mm SE0702 28000KV + Gemfan 1207 3-blade Build & Tune">
   <meta property="og:description" content="Practical guide: 65mm whoop build using Happymodel SE0702 28000KV and Gemfan 1207 3-blade. Betaflight configuration, filtering strategy, and tune direction.">
   <meta property="og:url" content="https://quadmath.com/content/guides/65mm-happymodel-se0702-gemfan-1207-3-blade.html">
+  <!-- Provisional noindex: this guide has no measured PIDs, thrust, or
+       flight-time data yet. Remove once bench data lands so the page can
+       compete in search on substance rather than filler. -->
+  <meta name="robots" content="noindex">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -35,10 +39,10 @@
 
     <h2>Hardware Checklist</h2>
     <ul>
-      <li><strong>Frame:</strong> 65mm motor-to-motor, 1mm arm stock minimum — thicker preferred with this motor torque</li>
+      <li><strong>Frame:</strong> 65mm whoop frame — inspect duct integrity (no cracks or ovaled duct rings; a warped duct costs thrust and adds vibration), confirm canopy fit over the AIO stack, and prefer injection-molded nylon/PA12 over brittle materials that crack at the motor mounts. Keep all-up weight near the ~28g class target with battery</li>
       <li><strong>Motors:</strong> Happymodel SE0702 28000KV — verify stator temp after first hover; these motors run warm under load</li>
       <li><strong>Props:</strong> Gemfan 1207 3-blade — inspect hub fit on motor shaft; 1mm and 1.5mm shaft variants exist, confirm before ordering</li>
-      <li><strong>Battery:</strong> 1S or 2S depending on FC/ESC rating — confirm ESC voltage tolerance before wiring</li>
+      <li><strong>Battery:</strong> 1S only — the SE0702 at 28000KV is a 1S motor; on 2S it would spin toward ~235,000 RPM theoretical no-load and destroy itself. Typical packs for this class are 1S 260–450mAh (300mAh is the calculator preset); use HV cells with low internal resistance</li>
       <li><strong>FC/ESC:</strong> AIO boards rated for the cell count; solder joints on a 65mm chassis carry high pulsed current — use quality solder and short wire runs</li>
     </ul>
 
