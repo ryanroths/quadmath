@@ -13,6 +13,12 @@ Hard rules, by design:
     CLI dump is data poisoning. These rows are reported and skipped.
   * gear_gap rows are skipped in v1. Affiliate links must be real referral
     URLs; prices/specs must come from a source, not a guess.
+  * build_orphan rows are refused unless first-hand measured data for that
+    exact build exists at data/bench/<slug>.json (read from origin/main) and
+    validates against bench_schema in the agent policy. A guide without
+    measured AUW, pack times, and a named source is scaled thin content.
+    Refused combos are emitted as a worklist -- a to-do list of builds to
+    bench -- not silently skipped.
   * One gap -> one branch -> one PR. Small diffs, reviewable, under the
     gate's caps.
   * Everything the generator writes is validated locally against
@@ -56,6 +62,113 @@ SKIP_REASONS = {
     "data_error": "collector input problem -- fix data, not content",
 }
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+BENCH_DIR = "data/bench"
+
+
+def slugify(target: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", target.lower()).strip("-") or "guide"
+
+
+def bench_path_for(target: str) -> str:
+    return "%s/%s.json" % (BENCH_DIR, slugify(target))
+
+
+# --------------------------------------------------------------------------
+# bench data guard for build_orphan
+#
+# tune_gap and gear_gap are hard-refused above because generating them means
+# inventing data. build_orphan gets the same treatment with an unlock: a guide
+# may only be generated when first-hand measured numbers for that exact build
+# exist at data/bench/<slug>.json (read from origin/main, like every other
+# source). Without them a guide is scaled thin content -- PR #25 shipped with
+# no PIDs, no thrust, no flight time, and two factual errors.
+# --------------------------------------------------------------------------
+
+
+def _is_placeholder(value, placeholders) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        stripped = value.strip()
+        return not stripped or stripped.upper() in {p.upper() for p in placeholders}
+    return False
+
+
+def validate_bench(bench, schema: dict, target: str) -> list[str]:
+    """Validate one bench file against policy bench_schema. Empty list = valid."""
+    problems: list[str] = []
+    if not isinstance(bench, dict):
+        return ["bench file is not a JSON object"]
+    placeholders = schema.get("placeholder_values", ["TBD"])
+
+    for field in schema.get("required_fields", []):
+        if field not in bench:
+            problems.append("missing required field %r" % field)
+        elif _is_placeholder(bench[field], placeholders):
+            problems.append("field %r is a placeholder or empty (%r)" % (field, bench[field]))
+
+    for field in schema.get("string_fields", []):
+        if field in bench and not isinstance(bench[field], str):
+            problems.append("field %r must be a string" % field)
+
+    for field, bounds in (schema.get("numeric_ranges") or {}).items():
+        if field not in bench:
+            continue
+        value = bench[field]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            problems.append("field %r must be numeric, got %r" % (field, value))
+        elif not bounds[0] <= value <= bounds[1]:
+            problems.append(
+                "field %r value %s outside allowed range %s-%s" % (field, value, bounds[0], bounds[1])
+            )
+
+    needles = schema.get("source_must_contain_any") or []
+    source = bench.get("source")
+    if isinstance(source, str) and source.strip() and needles:
+        if not any(n.lower() in source.lower() for n in needles):
+            problems.append(
+                "source %r does not name a measurement method (must contain one of: %s)"
+                % (source, ", ".join(needles))
+            )
+
+    # The file must describe THIS build, not merely be valid. Target looks like
+    # "65mm/Happymodel SE0702/Gemfan 1207 3-blade".
+    parts = target.split("/")
+    frame_match = re.match(r"(\d+)mm$", parts[0]) if parts else None
+    if frame_match and isinstance(bench.get("frame_size_mm"), (int, float)):
+        if int(bench["frame_size_mm"]) != int(frame_match.group(1)):
+            problems.append(
+                "frame_size_mm %s does not match target frame %s"
+                % (bench["frame_size_mm"], parts[0])
+            )
+    if len(parts) >= 2 and isinstance(bench.get("motor"), str):
+        if parts[1].lower() not in bench["motor"].lower():
+            problems.append("motor %r does not match target motor %r" % (bench["motor"], parts[1]))
+    if len(parts) >= 3 and isinstance(bench.get("prop"), str):
+        if parts[2].lower() not in bench["prop"].lower():
+            problems.append("prop %r does not match target prop %r" % (bench["prop"], parts[2]))
+    return problems
+
+
+def bench_for_gap(gap: dict, base_read, policy: dict):
+    """Return (bench_dict, None) when valid bench data exists, else (None, reason)."""
+    schema = policy.get("bench_schema")
+    if not isinstance(schema, dict) or not schema.get("required_fields"):
+        # Fail closed: no schema in the base policy means nothing can prove the
+        # data is real, so nothing gets generated.
+        return None, "policy at base ref has no bench_schema -- refusing to generate"
+    path = bench_path_for(gap.get("target", ""))
+    raw = base_read(path)
+    if raw is None:
+        return None, "no bench data at %s -- measure this build, then re-run" % path
+    try:
+        bench = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return None, "%s is not valid JSON (%s)" % (path, exc)
+    problems = validate_bench(bench, schema, gap.get("target", ""))
+    if problems:
+        return None, "%s failed bench_schema: %s" % (path, "; ".join(problems))
+    return bench, None
 
 # --------------------------------------------------------------------------
 # shell helpers
@@ -191,8 +304,17 @@ def validate_diff_caps(files: dict[str, str], base_texts: dict[str, str], policy
 # --------------------------------------------------------------------------
 
 
-def pick_gap(rows: list[dict], policy: dict) -> tuple[dict | None, list[str]]:
+def pick_gap(
+    rows: list[dict], policy: dict, base_read
+) -> tuple[dict | None, list[str], list[dict]]:
+    """Select one actionable gap.
+
+    Returns (gap_or_None, notes, worklist). The worklist holds build_orphan
+    rows refused for lack of valid bench data -- the combos that need a human
+    with a scale, a stopwatch, and a bench before any page can exist.
+    """
     notes: list[str] = []
+    worklist: list[dict] = []
     candidates = []
     for r in rows:
         kind = r.get("type")
@@ -210,9 +332,23 @@ def pick_gap(rows: list[dict], policy: dict) -> tuple[dict | None, list[str]]:
                     % (r.get("target"), why)
                 )
                 continue
+        if kind == "build_orphan":
+            bench, reason = bench_for_gap(r, base_read, policy)
+            if bench is None:
+                notes.append("NEEDS BENCH DATA [build_orphan] %s -- %s" % (r.get("target"), reason))
+                worklist.append(
+                    {
+                        "type": kind,
+                        "target": r.get("target"),
+                        "severity": r.get("severity"),
+                        "bench_path": bench_path_for(r.get("target", "")),
+                        "reason": reason,
+                    }
+                )
+                continue
         candidates.append(r)
     candidates.sort(key=lambda r: SEVERITY_ORDER.get(r.get("severity"), 99))
-    return (candidates[0] if candidates else None), notes
+    return (candidates[0] if candidates else None), notes, worklist
 
 
 # --------------------------------------------------------------------------
@@ -253,7 +389,7 @@ Change the minimum number of lines. Meta description: 140-160 chars, plain, \
 specific to the page. OG tags mirror title/description; og:url uses \
 https://quadmath.com/<page>. No markdown fences in your reply."""
 
-SYSTEM_GUIDE = SYSTEM_GUIDE = """You write one HTML guide page for quadmath.com, a whoop FPV \
+SYSTEM_GUIDE = """You write one HTML guide page for quadmath.com, a whoop FPV \
 site (65-85mm builds, Betaflight). Audience: whoop pilots. Voice: terse, \
 technical, no marketing fluff. Return ONLY a complete HTML file, no markdown \
 fences. Hard constraints: total file under 170 lines; <link rel="stylesheet" \
@@ -266,10 +402,13 @@ og:title/og:description/og:url; internal links ONLY from this exact set: \
 exact motor and prop named in the task -- no other model numbers, no \
 substitute hardware; factual hardware claims only where certain -- prefer \
 principles over invented specs; never state PID values, never invent \
-prices."""
+prices. The task includes measured bench data for this exact build; present \
+those numbers as measured (AUW, hover and freestyle pack times, and any top \
+speed or current figures provided), name the measurement source, and do not \
+state performance numbers beyond what the bench data contains."""
 
 
-def generate_for_gap(gap: dict, base_read, api_key: str) -> dict[str, str]:
+def generate_for_gap(gap: dict, base_read, api_key: str, policy: dict) -> dict[str, str]:
     kind = gap["type"]
     if kind == "metadata_gap":
         path = gap["target"]
@@ -283,12 +422,26 @@ def generate_for_gap(gap: dict, base_read, api_key: str) -> dict[str, str]:
         fixed = call_api(api_key, SYSTEM_METADATA, user)
         return {path: _strip_fences(fixed)}
     if kind == "build_orphan":
-        slug = re.sub(r"[^a-z0-9]+", "-", gap["target"].lower()).strip("-") or "guide"
-        path = "content/guides/%s.html" % slug
+        # pick_gap already gated on bench data; re-check here so this function
+        # is safe to call directly and can never generate without it.
+        bench, reason = bench_for_gap(gap, base_read, policy)
+        if bench is None:
+            raise RuntimeError("build_orphan %s refused: %s" % (gap["target"], reason))
+        path = "content/guides/%s.html" % slugify(gap["target"])
         user = (
             "Write the guide page.\nTarget build/topic: %s\nWhy it is needed "
             "(collector detail): %s\nOutput path will be /%s so og:url is "
-            "https://quadmath.com/%s" % (gap["target"], gap["detail"], path, path)
+            "https://quadmath.com/%s\n\nMeasured bench data for this exact "
+            "build (from %s) -- these are the ONLY performance numbers the "
+            "page may state:\n%s"
+            % (
+                gap["target"],
+                gap["detail"],
+                path,
+                path,
+                bench_path_for(gap["target"]),
+                json.dumps(bench, indent=2, sort_keys=True),
+            )
         )
         page = call_api(api_key, SYSTEM_GUIDE, user)
         return {path: _strip_fences(page)}
@@ -350,6 +503,10 @@ def main() -> int:
     ap.add_argument("--ref", default="origin/main", help="base ref (default origin/main)")
     ap.add_argument("--base-branch", default="main")
     ap.add_argument("--dry-run", action="store_true", help="generate + validate, no push, no PR")
+    ap.add_argument(
+        "--worklist",
+        help="write refused build_orphan rows (combos needing bench data) to this JSON file",
+    )
     args = ap.parse_args()
     root = os.path.abspath(os.path.expanduser(args.root))
 
@@ -365,16 +522,33 @@ def main() -> int:
     git(root, "fetch", "origin")
     policy = load_policy(root, args.ref)
 
-    with open(os.path.expanduser(args.gaps), "r", errors="replace") as fh:
+    with open(os.path.expanduser(args.gaps), "r", encoding="utf-8", errors="replace") as fh:
         payload = json.load(fh)
     rows = payload.get("rows") if isinstance(payload, dict) else payload
     if not isinstance(rows, list):
         sys.stderr.write("error: gaps file has no row list\n")
         return 2
 
-    gap, notes = pick_gap(rows, policy)
+    def base_read(path: str) -> str | None:
+        try:
+            return git(root, "show", "%s:%s" % (args.ref, path))
+        except RuntimeError:
+            return None
+
+    gap, notes, worklist = pick_gap(rows, policy, base_read)
     for note in notes:
         sys.stderr.write(note + "\n")
+    if worklist:
+        sys.stderr.write(
+            "%d build_orphan combo(s) need bench data before a guide can exist:\n" % len(worklist)
+        )
+        for item in worklist:
+            sys.stderr.write("  %s -> create %s\n" % (item["target"], item["bench_path"]))
+        if args.worklist:
+            with open(os.path.expanduser(args.worklist), "w", encoding="utf-8") as fh:
+                json.dump({"needs_bench_data": worklist}, fh, indent=2, sort_keys=True)
+                fh.write("\n")
+            sys.stderr.write("worklist written to %s\n" % args.worklist)
     if gap is None:
         sys.stderr.write("no actionable gaps -- nothing to do\n")
         return 0
@@ -383,13 +557,7 @@ def main() -> int:
         % (gap["severity"], gap["type"], gap["target"], gap["detail"])
     )
 
-    def base_read(path: str) -> str | None:
-        try:
-            return git(root, "show", "%s:%s" % (args.ref, path))
-        except RuntimeError:
-            return None
-
-    files = generate_for_gap(gap, base_read, api_key)
+    files = generate_for_gap(gap, base_read, api_key, policy)
 
     # ---- validate against the gate before anything touches git ----
     problems: list[str] = []
@@ -430,7 +598,7 @@ def main() -> int:
     for path, text in files.items():
         full = os.path.join(root, path)
         os.makedirs(os.path.dirname(full), exist_ok=True)
-        with open(full, "w") as fh:
+        with open(full, "w", encoding="utf-8") as fh:
             fh.write(text)
         git(root, "add", path)
     title = "agent: %s -- %s" % (gap["type"], gap["target"])
@@ -459,4 +627,3 @@ if __name__ == "__main__":
     except RuntimeError as exc:
         sys.stderr.write("error: %s\n" % exc)
         sys.exit(1)
-  

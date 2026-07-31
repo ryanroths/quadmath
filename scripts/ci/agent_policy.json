@@ -58,6 +58,62 @@
     ]
   },
 
+  "bench_schema": {
+    "_comment": "Schema for data/bench/<slug>.json files: first-hand measured data for one build, keyed by the build_orphan slug. The generator refuses to write a build_orphan guide unless a file matching this schema exists at origin/main. Same validation style as tune_schema: required fields, numeric ranges, placeholder rejection, and a source that names how the numbers were measured.",
+    "required_fields": [
+      "build_id",
+      "frame_size_mm",
+      "motor",
+      "motor_kv",
+      "prop",
+      "battery",
+      "auw_g",
+      "hover_time_s",
+      "freestyle_time_s",
+      "source"
+    ],
+    "optional_fields": [
+      "top_speed_mph",
+      "max_current_a",
+      "notes"
+    ],
+    "string_fields": [
+      "build_id",
+      "motor",
+      "prop",
+      "battery",
+      "source",
+      "notes"
+    ],
+    "numeric_ranges": {
+      "frame_size_mm": [50, 120],
+      "motor_kv": [5000, 45000],
+      "auw_g": [15, 120],
+      "hover_time_s": [30, 1200],
+      "freestyle_time_s": [30, 1200],
+      "top_speed_mph": [5, 120],
+      "max_current_a": [1, 100]
+    },
+    "source_must_contain_any": [
+      "measured",
+      "bench",
+      "gps",
+      "osd",
+      "blackbox",
+      "stopwatch",
+      "logged",
+      "verified"
+    ],
+    "placeholder_values": [
+      "TBD",
+      "TODO",
+      "FIXME",
+      "XXX",
+      "N/A",
+      "???"
+    ]
+  },
+
   "tune_schema": {
     "required_fields": [
       "id",
