@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>65mm SE0702 28000KV + Gemfan 1207 3-blade Build & Tune | quadmath.com</title>
+  <meta name="description" content="Build and tune guide for 65mm whoop with Happymodel SE0702 28000KV motors and Gemfan 1207 3-blade props. Betaflight setup, filtering, and flight tips.">
+  <meta property="og:title" content="65mm SE0702 28000KV + Gemfan 1207 3-blade Build & Tune">
+  <meta property="og:description" content="Practical guide: 65mm whoop build using Happymodel SE0702 28000KV and Gemfan 1207 3-blade. Betaflight configuration, filtering strategy, and tune direction.">
+  <meta property="og:url" content="https://quadmath.com/content/guides/65mm-happymodel-se0702-gemfan-1207-3-blade.html">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <a href="/">quadmath.com</a>
+  </header>
+
+  <main>
+    <h1>65mm Build: Happymodel SE0702 28000KV + Gemfan 1207 3-blade</h1>
+    <p>
+      This combination sits at the aggressive end of 65mm. The SE0702 at 28000KV is a high-RPM
+      motor for this frame class; the Gemfan 1207 3-blade loads it harder than a 2-blade would.
+      The result is strong punch for indoor ripping, with a penalty in efficiency and heat.
+      Plan your tune and filtering accordingly.
+    </p>
+
+    <nav aria-label="Related tools">
+      <ul>
+        <li><a href="/">Build calculator — verify AUW and thrust-to-weight for this combo</a></li>
+        <li><a href="/tune-database.html">Tune database — nearest 65mm reference tunes</a></li>
+        <li><a href="/gear.html">Gear list — frames, FC stacks, batteries</a></li>
+        <li><a href="/sim.html">Sim setup — practice before maiden</a></li>
+      </ul>
+    </nav>
+
+    <h2>Hardware Checklist</h2>
+    <ul>
+      <li><strong>Frame:</strong> 65mm motor-to-motor, 1mm arm stock minimum — thicker preferred with this motor torque</li>
+      <li><strong>Motors:</strong> Happymodel SE0702 28000KV — verify stator temp after first hover; these motors run warm under load</li>
+      <li><strong>Props:</strong> Gemfan 1207 3-blade — inspect hub fit on motor shaft; 1mm and 1.5mm shaft variants exist, confirm before ordering</li>
+      <li><strong>Battery:</strong> 1S or 2S depending on FC/ESC rating — confirm ESC voltage tolerance before wiring</li>
+      <li><strong>FC/ESC:</strong> AIO boards rated for the cell count; solder joints on a 65mm chassis carry high pulsed current — use quality solder and short wire runs</li>
+    </ul>
+
+    <h2>Betaflight Setup</h2>
+    <p>Reference: <a href="https://betaflight.com" rel="noopener">betaflight.com</a> — use the current stable release.</p>
+
+    <h3>Configuration Tab</h3>
+    <ul>
+      <li>ESC/Motor protocol: DSHOT300 minimum; DSHOT600 if FC supports it cleanly at this loop rate</li>
+      <li>Gyro and PID loop: 4k/4k is a safe starting point; 8k/8k only if your FC handles it without scheduler overload</li>
+      <li>Motor direction: props-out (recommended for whoops — better washout handling in tight spaces)</li>
+      <li>Bidirectional DSHOT + RPM filtering: strongly recommended with high-KV motors — reduces noise without aggressive static filters</li>
+    </ul>
+
+    <h3>Filtering</h3>
+    <p>
+      High KV + 3-blade props generate substantial mid-to-high frequency noise. Start with RPM
+      filtering enabled and dynamic notches active. Avoid over-filtering — excess filter delay
+      will make fast direction changes feel mushy and hurt propwash recovery.
+    </p>
+    <ul>
+      <li>Dynamic notch: medium width, count 3–4</li>
+      <li>Gyro lowpass: keep as high as the noise floor allows — lower only if motors get hot</li>
+      <li>D-term lowpass: tune after P is settled; lowering this is the first move if motors warm quickly</li>
+    </ul>
+
+    <h3>Tune Direction</h3>
+    <p>
+      This is not a beginner-tune combo. The high KV and 3-blade load mean the quad responds
+      quickly and amplifies tune errors into oscillations fast.
+    </p>
+    <ul>
+      <li>Start P lower than you think you need — increase until you see roll/pitch tracking sharpen, back off at first sign of oscillation</li>
+      <li>D should be enough to dampen P, not so much that motors overheat within a pack</li>
+      <li>I: use the Betaflight iterm_relax feature; anti-gravity helps on throttle punches</li>
+      <li>Check the <a href="/tune-database.html">tune database</a> for submitted 65mm SE0702 baselines before flying blind</li>
+    </ul>
+
+    <h2>Maiden Flight Protocol</h2>
+    <ol>
+      <li>Hover at 30–40% throttle for 30 seconds; land and check motor temperature by touch</li>
+      <li>If motors are hot immediately, reduce D-term lowpass cutoff before any other change</li>
+      <li>Progress to short indoor runs — full throttle punches against ceiling clearance, not wide-open outdoor flights</li>
+      <li>Log blackbox from the first pack; examine gyro vs. P-term trace before adjusting anything</li>
+    </ol>
+
+    <h2>Known Gotchas</h2>
+    <ul>
+      <li>Prop shaft fit: loose props on 28000KV motors strip hubs fast — check torque fit before every session</li>
+      <li>Battery sag: high-KV, 3-blade on 1S will sag a weak cell hard; use cells with low internal resistance</li>
+      <li>Heat: back-to-back packs without cool-down can demagnetize small stators — let motors cool between packs</li>
+      <li>AUW creep: every gram matters on 65mm; weigh the finished build in the <a href="/">calculator</a> to verify thrust-to-weight before tuning</li>
+    </ul>
+  </main>
+
+  <footer>
+    <p><a href="/">Calculator</a> · <a href="/tune-database.html">Tunes</a> · <a href="/gear.html">Gear</a> · <a href="/sim.html">Sim</a></p>
+  </footer>
+</body>
+</html>
