@@ -253,16 +253,20 @@ Change the minimum number of lines. Meta description: 140-160 chars, plain, \
 specific to the page. OG tags mirror title/description; og:url uses \
 https://quadmath.com/<page>. No markdown fences in your reply."""
 
-SYSTEM_GUIDE = """You write one HTML guide page for quadmath.com, a whoop FPV \
+SYSTEM_GUIDE = SYSTEM_GUIDE = """You write one HTML guide page for quadmath.com, a whoop FPV \
 site (65-85mm builds, Betaflight). Audience: whoop pilots. Voice: terse, \
 technical, no marketing fluff. Return ONLY a complete HTML file, no markdown \
 fences. Hard constraints: total file under 170 lines; <link rel="stylesheet" \
 href="/style.css"> for styling, ZERO <script> tags, ZERO inline styles beyond \
 what is essential; must include <meta name="description"> (140-160 chars) and \
-og:title/og:description/og:url; internal links relative; external links only \
-to betaflight.com or quadmath.com pages; factual hardware claims only where \
-certain -- prefer principles over invented specs; never state PID values, \
-never invent prices."""
+og:title/og:description/og:url; internal links ONLY from this exact set: \
+"/" (the build calculator), "/tune-database.html", "/gear.html", \
+"/sim.html" -- never "/calculator", never directory paths like \
+"/content/guides/"; external links only to betaflight.com; mention ONLY the \
+exact motor and prop named in the task -- no other model numbers, no \
+substitute hardware; factual hardware claims only where certain -- prefer \
+principles over invented specs; never state PID values, never invent \
+prices."""
 
 
 def generate_for_gap(gap: dict, base_read, api_key: str) -> dict[str, str]:
