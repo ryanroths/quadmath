@@ -185,6 +185,8 @@
   // smoothly in tight spaces — see the "How to choose a motor" section.
   // Advisory only: the calculator flags it, it does not clamp or block.
   const TW_CEILING = 6;
+  // Second tier for the comparison table's colour coding only.
+  const TW_DANGER  = 8;
 
   const motorSelect = document.getElementById('motorSelect');
 
@@ -444,6 +446,14 @@
     compareCalculate();
   }
 
+  // Comparison-table T:W colour tiers. Same thresholds as the OSD badge.
+  const TW_TIER_CLASSES = ['tw-ok', 'tw-warn', 'tw-danger'];
+  function twTier(v) {
+    if (v > TW_DANGER)  return 'tw-danger';
+    if (v > TW_CEILING) return 'tw-warn';
+    return 'tw-ok';
+  }
+
   function compareCalculate() {
     let kvA        = parseFloat(document.getElementById('cmpKvA').value);
     let kvB        = parseFloat(document.getElementById('cmpKvB').value);
@@ -457,7 +467,9 @@
     const sA = (!isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, weight, cRating) : null;
     const sB = (!isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, weight, cRating) : null;
 
-    function setPair(idA, idB, vA, vB, fmt) {
+    // Optional tierFor(value) returns a colour class for the cell — used by the
+    // T:W row, where the number's absolute value matters more than who wins.
+    function setPair(idA, idB, vA, vB, fmt, tierFor) {
       const eA = document.getElementById(idA), eB = document.getElementById(idB);
       if (vA !== null) { eA.innerHTML = fmt(vA); eA.classList.add('filled'); }
       else             { eA.innerHTML = '—';     eA.classList.remove('filled'); }
@@ -466,10 +478,14 @@
       eA.classList.remove('winner'); eB.classList.remove('winner');
       if (vA !== null && vB !== null && vA !== vB)
         (vA > vB ? eA : eB).classList.add('winner');
+      [[eA, vA], [eB, vB]].forEach(([el, v]) => {
+        el.classList.remove(...TW_TIER_CLASSES);
+        if (tierFor && v !== null) el.classList.add(tierFor(v));
+      });
     }
 
     setPair('cmpSpeedA',  'cmpSpeedB',  sA ? sA.speedMph      : null, sB ? sB.speedMph      : null, v => `${v.toFixed(0)}<span class="cmp-unit">mph</span>`);
-    setPair('cmpTwA',     'cmpTwB',     sA ? sA.tw            : null, sB ? sB.tw            : null, v => `${v.toFixed(1)}<span class="cmp-unit">:1</span>`);
+    setPair('cmpTwA',     'cmpTwB',     sA ? sA.tw            : null, sB ? sB.tw            : null, v => `${v.toFixed(1)}<span class="cmp-unit">:1</span>`, twTier);
     setPair('cmpThrustA', 'cmpThrustB', sA ? sA.totalThrust   : null, sB ? sB.totalThrust   : null, v => `${v.toFixed(0)}<span class="cmp-unit">g</span>`);
     setPair('cmpTimeA',   'cmpTimeB',   sA ? sA.flightTimeMin : null, sB ? sB.flightTimeMin : null, v => `${v.toFixed(1)}<span class="cmp-unit">min</span>`);
   }

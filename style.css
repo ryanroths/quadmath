@@ -5,6 +5,9 @@
     --muted: #6B6F76;
     --orange: #FF4D1A;
     --green: #3DDC97;
+    /* Mid-orange caution tier — sits between --green and --orange so the
+       T:W scale reads green -> amber -> red without leaving the palette. */
+    --amber: #FF9A1A;
     --border: #2A2D35;
   }
 
@@ -517,6 +520,10 @@
   }
   .compare-val.filled { color: var(--text); }
   .compare-val.winner { color: var(--green); }
+  /* T:W row only — absolute value outranks who wins, so these follow .winner. */
+  .compare-val.tw-ok     { color: var(--green); }
+  .compare-val.tw-warn   { color: var(--amber); }
+  .compare-val.tw-danger { color: var(--orange); }
   .cmp-unit {
     font-size: 0.65rem;
     font-weight: 400;
