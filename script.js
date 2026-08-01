@@ -8,18 +8,25 @@
   };
 
   // Real motor database by frame size — brand, stator, KV
+  // Entries marked "2026" are the current-season additions. Weights are
+  // manufacturer per-motor figures; no thrust/current is stored here, so
+  // nothing in this table is a bench-derived performance claim.
   const motorDB = {
     65: [
+      { name: 'NewBeeDrone 0703 Silver Edition', kv: 16420, propPitch: 0.7, weightPerMotor: 1.90 }, // 2026
       { name: 'BetaFPV 0702 II',             kv: 23000, propPitch: 0.7, weightPerMotor: 1.50 },
       { name: 'Happymodel SE0702',            kv: 23000, propPitch: 0.7, weightPerMotor: 1.46 },
       { name: 'VCI Spark 0702',              kv: 25000, propPitch: 0.7, weightPerMotor: 1.52 },
       { name: 'Happymodel SE0702',            kv: 26000, propPitch: 0.7, weightPerMotor: 1.46 },
       { name: 'BetaFPV 0702 II',             kv: 27000, propPitch: 0.7, weightPerMotor: 1.50 },
       { name: 'VCI Spark 0702',              kv: 27000, propPitch: 0.7, weightPerMotor: 1.52 },
+      { name: 'NewBeeDrone Flow 0702 (dual ball bearing)', kv: 27000, propPitch: 0.7, weightPerMotor: 1.60 }, // 2026
       { name: 'Happymodel SE0702',            kv: 28000, propPitch: 0.7, weightPerMotor: 1.46 },
       { name: 'NewBeeDrone Flow 0702',        kv: 29000, propPitch: 0.7, weightPerMotor: 1.58 },
       { name: 'VCI Spark 0702',              kv: 29000, propPitch: 0.7, weightPerMotor: 1.52 },
       { name: 'BetaFPV 0702 II',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.50 },
+      { name: 'BetaFPV 0702 2026 Edition',   kv: 30000, propPitch: 0.7, weightPerMotor: 1.50 }, // 2026, 0.10mm stator laminations
+      { name: 'weBLEEDfpv Champion 0702',    kv: 36000, propPitch: 0.7, weightPerMotor: 1.50 }, // 2026
       { name: 'weBLEEDfpv SKRRRT 0702',      kv: 40000, propPitch: 0.7, weightPerMotor: 1.60 },
     ],
     75: [
@@ -27,19 +34,24 @@
       { name: 'Happymodel EX0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.80 },
       { name: 'NewBeeDrone Flow 0802',        kv: 19000, propPitch: 1.1, weightPerMotor: 1.90 },
       { name: 'RCinPower GTS V3 0802',       kv: 22000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { name: 'BetaFPV 0802 2026 Edition',   kv: 22000, propPitch: 1.1, weightPerMotor: 1.90 }, // 2026
       { name: 'iFlight XING NANO X0802',     kv: 22000, propPitch: 1.1, weightPerMotor: 2.00 },
       { name: 'BetaFPV 0802SE',              kv: 23000, propPitch: 1.1, weightPerMotor: 1.90 },
       { name: 'NewBeeDrone Flow 0802',        kv: 25000, propPitch: 1.1, weightPerMotor: 1.90 },
       { name: 'Happymodel RS0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 1.80 },
       { name: 'weBLEEDfpv Skyscrapers 0802', kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 },
+      { name: 'Happymodel EX0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { name: 'NewBeeDrone Flow 0802',        kv: 27000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { name: 'weBLEEDfpv Champion 0802',    kv: 28000, propPitch: 1.1, weightPerMotor: 1.90 }, // 2026
       { name: 'NewBeeDrone Flow 0802',        kv: 30000, propPitch: 1.1, weightPerMotor: 1.90 },
       { name: 'weBLEEDfpv Treetoppers 0802', kv: 32500, propPitch: 1.1, weightPerMotor: 2.10 },
     ],
     85: [
       { name: 'BetaFPV 1103',               kv:  8000, propPitch: 0.9, weightPerMotor: 3.20 },
+      { name: 'RCinPower 1003',              kv: 10000, propPitch: 0.9, weightPerMotor: 3.45 }, // 2026
       { name: 'BetaFPV 1103',               kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
       { name: 'Happymodel EX1103',           kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
+      { name: 'BetaFPV 1103',               kv: 15000, propPitch: 0.9, weightPerMotor: 3.30 }, // 2026, 1S
       { name: 'Flywoo ROBO 1002',            kv: 23500, propPitch: 0.9, weightPerMotor: 2.50 },
     ],
   };
@@ -171,31 +183,45 @@
     motorSelect.value = '';
   }
 
+  // Prop database, keyed by frame class: 65 = 31mm, 75 = 40mm, 85 = 2".
+  // `blades` drives the (bi)/(tri)/(quad) suffix in the dropdown label.
+  // Pitch on 2026 additions is read from the model designation (Gemfan 1220
+  // = 1.2" diameter, 2.0" pitch) — same convention the existing rows follow.
   const propDB = {
     65: [
-      { name: 'Gemfan 1207 3-blade',              pitch: 0.7, weight: 0.15, shaft: '1.0mm' },
-      { name: 'Gemfan 1208 3-blade',              pitch: 0.8, weight: 0.21, shaft: '1.5mm' },
-      { name: 'Gemfan 1219S 3-blade',             pitch: 1.9, weight: 0.18, shaft: '1.0mm' },
-      { name: 'HQ Ultralight 1.2x0.9x3',         pitch: 0.9, weight: 0.18, shaft: '1.0mm' },
-      { name: 'HQ Ultralight 31mm 3-blade High',  pitch: 1.0, weight: 0.16, shaft: '1.0mm' },
-      { name: 'HQ Ultralight 1.2x1.2 2-blade',   pitch: 1.2, weight: 0.14, shaft: '1.0mm' },
-      { name: 'Gemfan 1210-2 2-blade',           pitch: 1.0, weight: 0.19, shaft: '1.0mm' },
+      { name: 'Gemfan 1207 3-blade',              pitch: 0.7, weight: 0.15, shaft: '1.0mm', blades: 3 },
+      { name: 'Gemfan 1207S 3-blade (2026)',      pitch: 0.7, weight: 0.30, shaft: '1.0mm', blades: 3 }, // 2026
+      { name: 'Gemfan 1208 3-blade',              pitch: 0.8, weight: 0.21, shaft: '1.5mm', blades: 3 },
+      { name: 'Gemfan 1219S 3-blade',             pitch: 1.9, weight: 0.18, shaft: '1.0mm', blades: 3 },
+      { name: 'HQ Ultralight 1.2x0.9x3',         pitch: 0.9, weight: 0.18, shaft: '1.0mm', blades: 3 },
+      { name: 'HQ Ultralight 31mm 3-blade High',  pitch: 1.0, weight: 0.16, shaft: '1.0mm', blades: 3 },
+      { name: 'HQ Ultralight 1.2x1.2 2-blade',   pitch: 1.2, weight: 0.14, shaft: '1.0mm', blades: 2 },
+      { name: 'Gemfan 1210-2 2-blade',           pitch: 1.0, weight: 0.19, shaft: '1.0mm', blades: 2 },
+      { name: 'Gemfan 1220-4 quad-blade',        pitch: 2.0, weight: 0.40, shaft: '1.0mm', blades: 4 }, // 2026
     ],
     75: [
-      { name: 'Gemfan 1611 3-blade',                    pitch: 1.1, weight: 0.085, shaft: '1.5mm' },
-      { name: 'Gemfan 1610 2-blade',                    pitch: 1.0, weight: 0.18,  shaft: '1.0mm' },
-      { name: 'Gemfan 1635 3-blade',                    pitch: 3.5, weight: 0.54,  shaft: '1.0mm' },
-      { name: 'HQ Ultralight 40mm 1.6x1.1x3',          pitch: 1.1, weight: 0.28,  shaft: '1.0/1.5mm' },
-      { name: 'HQ Ultralight 40mm 1.6x1x3',            pitch: 1.0, weight: 0.25,  shaft: '1.0/1.5mm' },
-      { name: 'HQ Ultralight 40mm 2-blade 1.6x1.2',    pitch: 1.2, weight: 0.20,  shaft: '1.0/1.5mm' },
+      { name: 'Gemfan 1611 3-blade',                    pitch: 1.1, weight: 0.085, shaft: '1.5mm',     blades: 3 },
+      { name: 'Gemfan 1610 2-blade',                    pitch: 1.0, weight: 0.18,  shaft: '1.0mm',     blades: 2 },
+      { name: 'Gemfan 1614 3-blade',                    pitch: 1.4, weight: 0.50,  shaft: '1.0/1.5mm', blades: 3 }, // 2026
+      { name: 'Gemfan 1635 3-blade',                    pitch: 3.5, weight: 0.54,  shaft: '1.0mm',     blades: 3 },
+      { name: 'Gemfan 1636 4-blade',                    pitch: 3.6, weight: 0.80,  shaft: '1.0/1.5mm', blades: 4 }, // 2026
+      { name: 'HQ Ultralight 40mm 1.6x1.1x3',          pitch: 1.1, weight: 0.28,  shaft: '1.0/1.5mm', blades: 3 },
+      { name: 'HQ Ultralight 40mm 1.6x1x3',            pitch: 1.0, weight: 0.25,  shaft: '1.0/1.5mm', blades: 3 },
+      { name: 'HQ Ultralight 40mm 2-blade 1.6x1.2',    pitch: 1.2, weight: 0.20,  shaft: '1.0/1.5mm', blades: 2 },
     ],
     85: [
-      { name: 'Gemfan 2" T-mount 3-blade',        pitch: 0.9, weight: 0.4,  shaft: 'T-mount 1.5mm' },
-      { name: 'Gemfan 2020 T-mount 3-blade',      pitch: 1.9, weight: 0.4,  shaft: 'T-mount 1.5mm' },
-      { name: 'Gemfan Hurricane 2015 2-blade',    pitch: 1.5, weight: 0.5,  shaft: '1.5mm' },
-      { name: 'HQ T2x2x3 T-mount 3-blade',        pitch: 2.0, weight: 0.35, shaft: 'T-mount' },
+      { name: 'Gemfan 2" T-mount 3-blade',        pitch: 0.9, weight: 0.4,  shaft: 'T-mount 1.5mm', blades: 3 },
+      { name: 'Emax Avan Micro 2" 3-blade',       pitch: 1.2, weight: 0.75, shaft: 'T-mount 1.5mm', blades: 3 }, // 2026
+      { name: 'Gemfan Hurricane 2015 2-blade',    pitch: 1.5, weight: 0.5,  shaft: '1.5mm',         blades: 2 },
+      { name: 'Gemfan 2020 T-mount 3-blade',      pitch: 1.9, weight: 0.4,  shaft: 'T-mount 1.5mm', blades: 3 },
+      { name: 'HQ T2x2x3 T-mount 3-blade',        pitch: 2.0, weight: 0.35, shaft: 'T-mount',       blades: 3 },
+      { name: 'HQ Durable T2x2x3',                pitch: 2.0, weight: 0.75, shaft: 'T-mount',       blades: 3 }, // 2026
+      { name: 'Gemfan 2035 4-blade',              pitch: 3.5, weight: 1.00, shaft: 'T-mount 1.5mm', blades: 4 }, // 2026, needs 1103+
     ],
   };
+
+  // Blade-count suffix shown in the prop dropdown label.
+  const bladeTag = { 2: 'bi', 3: 'tri', 4: 'quad' };
 
   const propSelect = document.getElementById('propSelect');
 
@@ -207,7 +233,8 @@
       opt.setAttribute('data-pitch', p.pitch);
       opt.setAttribute('data-weight', p.weight);
       opt.setAttribute('data-shaft', p.shaft);
-      opt.textContent = `${p.name}  (${p.pitch}" pitch)`;
+      const tag = bladeTag[p.blades];
+      opt.textContent = `${p.name}  (${p.pitch}" pitch${tag ? ', ' + tag : ''})`;
       propSelect.appendChild(opt);
     });
     propSelect.value = '';
