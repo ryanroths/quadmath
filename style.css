@@ -166,6 +166,7 @@
     color: var(--muted);
     margin-top: 4px;
   }
+  .field .field-hint.warn { color: var(--orange); }
   .field select, .field input {
     width: 100%;
     background: var(--bg);

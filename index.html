@@ -128,9 +128,10 @@
         </div>
 
         <div class="field">
-          <label for="weight">All-Up Weight (grams)</label>
-          <input type="number" id="weight" value="27" step="1" min="18" max="90">
-          <div class="field-hint">Whoop AUW with battery: ~18–45g for 65/75mm, up to ~90g for 2S 85mm</div>
+          <label for="weight">Dry Weight — no battery (grams)</label>
+          <input type="number" id="weight" value="20" step="0.5" min="14" max="80">
+          <div class="field-hint">Weigh the build without a pack — battery weight is added automatically from capacity (BT2.0/LAVA-class pack weights, ×2 for 2S)</div>
+          <div class="field-hint" id="auwReadout"></div>
         </div>
       </div>
 
