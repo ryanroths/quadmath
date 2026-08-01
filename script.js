@@ -11,6 +11,12 @@
   // Entries marked "2026" are the current-season additions. Weights are
   // manufacturer per-motor figures; no thrust/current is stored here, so
   // nothing in this table is a bench-derived performance claim.
+  //
+  // `cells` is OPTIONAL and only set where the motor ships in a known cell
+  // configuration that differs from — or needs pinning against — the frame
+  // preset. Selecting such a motor drives the cell count, which changes
+  // voltage and therefore both thrust figures. Omit it and the frame preset
+  // wins (65/75 = 1S, 85 = 2S).
   const motorDB = {
     65: [
       { name: 'NewBeeDrone 0703 Silver Edition', kv: 16420, propPitch: 0.7, weightPerMotor: 1.90 }, // 2026
@@ -54,11 +60,11 @@
     85: [
       { name: 'BetaFPV 1103',               kv:  8000, propPitch: 0.9, weightPerMotor: 3.20 },
       { name: 'RCinPower 1003',              kv: 10000, propPitch: 0.9, weightPerMotor: 3.45 }, // 2026
-      { name: 'Happymodel RS1102',           kv: 10000, propPitch: 0.9, weightPerMotor: 2.80 }, // 2026, 2S
+      { name: 'Happymodel RS1102',           kv: 10000, propPitch: 0.9, weightPerMotor: 2.80, cells: 2 }, // 2026, Mobula7 O4 stock
       { name: 'BetaFPV 1103',               kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
       { name: 'Happymodel EX1103',           kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
-      { name: 'Happymodel RS1102',           kv: 13500, propPitch: 0.9, weightPerMotor: 2.80 }, // 2026
-      { name: 'BetaFPV 1103',               kv: 15000, propPitch: 0.9, weightPerMotor: 3.30 }, // 2026, 1S
+      { name: 'Happymodel RS1102',           kv: 13500, propPitch: 0.9, weightPerMotor: 2.80, cells: 1 }, // 2026
+      { name: 'BetaFPV 1103',               kv: 15000, propPitch: 0.9, weightPerMotor: 3.30, cells: 1 }, // 2026
       { name: 'Flywoo ROBO 1002',            kv: 23500, propPitch: 0.9, weightPerMotor: 2.50 },
     ],
   };
@@ -172,7 +178,13 @@
     benchTw:     document.getElementById('benchTw'),
     benchSub:    document.getElementById('benchSub'),
     packC:       document.getElementById('packC'),
+    twCeilingBadge: document.getElementById('twCeilingBadge'),
   };
+
+  // Above this thrust-to-weight a whoop gets wheelie-prone and hard to fly
+  // smoothly in tight spaces — see the "How to choose a motor" section.
+  // Advisory only: the calculator flags it, it does not clamp or block.
+  const TW_CEILING = 6;
 
   const motorSelect = document.getElementById('motorSelect');
 
@@ -184,7 +196,9 @@
       opt.setAttribute('data-kv', m.kv);
       opt.setAttribute('data-pitch', m.propPitch);
       opt.setAttribute('data-weight', m.weightPerMotor);
-      opt.textContent = `${m.name}  —  ${m.kv.toLocaleString()} KV`;
+      if (m.cells) opt.setAttribute('data-cells', m.cells);
+      opt.textContent = `${m.name}  —  ${m.kv.toLocaleString()} KV`
+                      + (m.cells ? `  ·  ${m.cells}S` : '');
       motorSelect.appendChild(opt);
     });
     motorSelect.value = '';
@@ -308,8 +322,12 @@
     const kv = opt.getAttribute('data-kv');
     const pitch = opt.getAttribute('data-pitch');
     const weight = opt.getAttribute('data-weight');
+    const cells = opt.getAttribute('data-cells');
     if (kv) els.motorKV.value = kv;
     if (pitch) els.propPitch.value = pitch;
+    // Motors with a pinned cell count drive the selector; the rest fall back to
+    // the frame preset, so a 1S pick does not stay latched on the next motor.
+    els.cells.value = cells || framePresets[currentFrame].cells;
     if (weight) els.weight.value = parseFloat(weight) * 4 + currentFrameBaseWeight();
     calculate();
   });
@@ -387,6 +405,8 @@
     else if (tw >= 6)           { rating = 'Extreme — wheelie warning'; warn = true; }
     els.twRating.textContent = rating;
     els.thrustWeight.classList.toggle('warn', warn);
+    // Advisory ceiling flag — never blocks or clamps the figure.
+    els.twCeilingBadge.hidden = tw <= TW_CEILING;
 
     els.flightTime.innerHTML = s.flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
 

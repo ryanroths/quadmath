@@ -264,6 +264,24 @@
     margin-left: 6px;
   }
   .osd-stat-value.warn { color: var(--orange); }
+  /* Advisory only — the T:W number still renders, this just flags the ceiling. */
+  .tw-ceiling-badge {
+    display: inline-block;
+    /* .osd-stat is a flex column, which blockifies children — keep it a chip. */
+    align-self: start;
+    width: fit-content;
+    max-width: 100%;
+    margin-top: 8px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--orange);
+    background: rgba(255,77,26,0.08);
+    border: 1px solid rgba(255,77,26,0.25);
+  }
+  .tw-ceiling-badge[hidden] { display: none; }
   .osd-stat-sub {
     font-size: 0.75rem;
     color: var(--muted);
