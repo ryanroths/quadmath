@@ -39,8 +39,8 @@ cs = _load_module()
 # commit as the script.js change, after checking the collector still parses it.
 SCRIPT_JS_PIN = {
     "framePresets": {65: 1, 75: 1, 85: 1},
-    "motorDB": {65: 11, 75: 12, 85: 4},
-    "propDB": {65: 7, 75: 6, 85: 4},
+    "motorDB": {65: 15, 75: 20, 85: 8},
+    "propDB": {65: 9, 75: 8, 85: 7},
 }
 
 MINI_SCRIPT_JS = """(function(){

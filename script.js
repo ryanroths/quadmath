@@ -41,38 +41,63 @@
   }
 
   // Real motor database by frame size — brand, stator, KV
+  // Entries marked "2026" are the current-season additions. Weights are
+  // manufacturer per-motor figures; no thrust/current is stored here, so
+  // nothing in this table is a bench-derived performance claim.
+  //
+  // `cells` is OPTIONAL and only set where the motor ships in a known cell
+  // configuration that differs from — or needs pinning against — the frame
+  // preset. Selecting such a motor drives the cell count, which changes
+  // voltage and therefore both thrust figures. Omit it and the frame preset
+  // wins (65/75 = 1S, 85 = 2S).
   const motorDB = {
     65: [
+      { name: 'NewBeeDrone 0703 Silver Edition', kv: 16420, propPitch: 0.7, weightPerMotor: 1.90 }, // 2026
       { name: 'BetaFPV 0702 II',             kv: 23000, propPitch: 0.7, weightPerMotor: 1.50 },
       { name: 'Happymodel SE0702',            kv: 23000, propPitch: 0.7, weightPerMotor: 1.46 },
       { name: 'VCI Spark 0702',              kv: 25000, propPitch: 0.7, weightPerMotor: 1.52 },
       { name: 'Happymodel SE0702',            kv: 26000, propPitch: 0.7, weightPerMotor: 1.46 },
       { name: 'BetaFPV 0702 II',             kv: 27000, propPitch: 0.7, weightPerMotor: 1.50 },
       { name: 'VCI Spark 0702',              kv: 27000, propPitch: 0.7, weightPerMotor: 1.52 },
+      { name: 'NewBeeDrone Flow 0702 (dual ball bearing)', kv: 27000, propPitch: 0.7, weightPerMotor: 1.60 }, // 2026
       { name: 'Happymodel SE0702',            kv: 28000, propPitch: 0.7, weightPerMotor: 1.46 },
       { name: 'NewBeeDrone Flow 0702',        kv: 29000, propPitch: 0.7, weightPerMotor: 1.58 },
       { name: 'VCI Spark 0702',              kv: 29000, propPitch: 0.7, weightPerMotor: 1.52 },
       { name: 'BetaFPV 0702 II',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.50 },
+      { name: 'BetaFPV 0702 2026 Edition',   kv: 30000, propPitch: 0.7, weightPerMotor: 1.50 }, // 2026, 0.10mm stator laminations
+      { name: 'weBLEEDfpv Champion 0702',    kv: 36000, propPitch: 0.7, weightPerMotor: 1.50 }, // 2026
       { name: 'weBLEEDfpv SKRRRT 0702',      kv: 40000, propPitch: 0.7, weightPerMotor: 1.60 },
     ],
     75: [
       { name: 'Happymodel RS0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.80 },
       { name: 'Happymodel EX0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.80 },
       { name: 'NewBeeDrone Flow 0802',        kv: 19000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { name: 'Tiny Whoop Onesie 0802 Boost Juice', kv: 19000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { name: 'RCinPower GTS V3 0802',       kv: 22000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { name: 'Tiny Whoop Onesie 0802 Deuce Juice', kv: 22000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
+      { name: 'BetaFPV 0802 2026 Edition',   kv: 22000, propPitch: 1.1, weightPerMotor: 1.90 }, // 2026
       { name: 'iFlight XING NANO X0802',     kv: 22000, propPitch: 1.1, weightPerMotor: 2.00 },
       { name: 'BetaFPV 0802SE',              kv: 23000, propPitch: 1.1, weightPerMotor: 1.90 },
       { name: 'NewBeeDrone Flow 0802',        kv: 25000, propPitch: 1.1, weightPerMotor: 1.90 },
       { name: 'Happymodel RS0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 1.80 },
       { name: 'weBLEEDfpv Skyscrapers 0802', kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 },
+      { name: 'Happymodel EX0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
+      { name: 'Tiny Whoop Onesie 0802 Zeus Juice',  kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
+      { name: 'RCinPower GTS V3 0802',       kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { name: 'NewBeeDrone Flow 0802',        kv: 27000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { name: 'RCinPower GTS V3 0802',       kv: 27000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
+      { name: 'weBLEEDfpv Champion 0802',    kv: 28000, propPitch: 1.1, weightPerMotor: 1.90 }, // 2026
       { name: 'NewBeeDrone Flow 0802',        kv: 30000, propPitch: 1.1, weightPerMotor: 1.90 },
       { name: 'weBLEEDfpv Treetoppers 0802', kv: 32500, propPitch: 1.1, weightPerMotor: 2.10 },
     ],
     85: [
       { name: 'BetaFPV 1103',               kv:  8000, propPitch: 0.9, weightPerMotor: 3.20 },
+      { name: 'RCinPower 1003',              kv: 10000, propPitch: 0.9, weightPerMotor: 3.45 }, // 2026
+      { name: 'Happymodel RS1102',           kv: 10000, propPitch: 0.9, weightPerMotor: 2.80, cells: 2 }, // 2026, Mobula7 O4 stock
       { name: 'BetaFPV 1103',               kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
       { name: 'Happymodel EX1103',           kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
+      { name: 'Happymodel RS1102',           kv: 13500, propPitch: 0.9, weightPerMotor: 2.80, cells: 1 }, // 2026
+      { name: 'BetaFPV 1103',               kv: 15000, propPitch: 0.9, weightPerMotor: 3.30, cells: 1 }, // 2026
       { name: 'Flywoo ROBO 1002',            kv: 23500, propPitch: 0.9, weightPerMotor: 2.50 },
     ],
   };
@@ -186,7 +211,15 @@
     benchTw:     document.getElementById('benchTw'),
     benchSub:    document.getElementById('benchSub'),
     packC:       document.getElementById('packC'),
+    twCeilingBadge: document.getElementById('twCeilingBadge'),
   };
+
+  // Above this thrust-to-weight a whoop gets wheelie-prone and hard to fly
+  // smoothly in tight spaces — see the "How to choose a motor" section.
+  // Advisory only: the calculator flags it, it does not clamp or block.
+  const TW_CEILING = 6;
+  // Second tier for the comparison table's colour coding only.
+  const TW_DANGER  = 8;
 
   const motorSelect = document.getElementById('motorSelect');
 
@@ -198,37 +231,53 @@
       opt.setAttribute('data-kv', m.kv);
       opt.setAttribute('data-pitch', m.propPitch);
       opt.setAttribute('data-weight', m.weightPerMotor);
-      opt.textContent = `${m.name}  —  ${m.kv.toLocaleString()} KV`;
+      if (m.cells) opt.setAttribute('data-cells', m.cells);
+      opt.textContent = `${m.name}  —  ${m.kv.toLocaleString()} KV`
+                      + (m.cells ? `  ·  ${m.cells}S` : '');
       motorSelect.appendChild(opt);
     });
     motorSelect.value = '';
   }
 
+  // Prop database, keyed by frame class: 65 = 31mm, 75 = 40mm, 85 = 2".
+  // `blades` drives the (bi)/(tri)/(quad) suffix in the dropdown label.
+  // Pitch on 2026 additions is read from the model designation (Gemfan 1220
+  // = 1.2" diameter, 2.0" pitch) — same convention the existing rows follow.
   const propDB = {
     65: [
-      { name: 'Gemfan 1207 3-blade',              pitch: 0.7, weight: 0.15, shaft: '1.0mm' },
-      { name: 'Gemfan 1208 3-blade',              pitch: 0.8, weight: 0.21, shaft: '1.5mm' },
-      { name: 'Gemfan 1219S 3-blade',             pitch: 1.9, weight: 0.18, shaft: '1.0mm' },
-      { name: 'HQ Ultralight 1.2x0.9x3',         pitch: 0.9, weight: 0.18, shaft: '1.0mm' },
-      { name: 'HQ Ultralight 31mm 3-blade High',  pitch: 1.0, weight: 0.16, shaft: '1.0mm' },
-      { name: 'HQ Ultralight 1.2x1.2 2-blade',   pitch: 1.2, weight: 0.14, shaft: '1.0mm' },
-      { name: 'Gemfan 1210-2 2-blade',           pitch: 1.0, weight: 0.19, shaft: '1.0mm' },
+      { name: 'Gemfan 1207 3-blade',              pitch: 0.7, weight: 0.15, shaft: '1.0mm', blades: 3 },
+      { name: 'Gemfan 1207S 3-blade (2026)',      pitch: 0.7, weight: 0.30, shaft: '1.0mm', blades: 3 }, // 2026
+      { name: 'Gemfan 1208 3-blade',              pitch: 0.8, weight: 0.21, shaft: '1.5mm', blades: 3 },
+      { name: 'Gemfan 1219S 3-blade',             pitch: 1.9, weight: 0.18, shaft: '1.0mm', blades: 3 },
+      { name: 'HQ Ultralight 1.2x0.9x3',         pitch: 0.9, weight: 0.18, shaft: '1.0mm', blades: 3 },
+      { name: 'HQ Ultralight 31mm 3-blade High',  pitch: 1.0, weight: 0.16, shaft: '1.0mm', blades: 3 },
+      { name: 'HQ Ultralight 1.2x1.2 2-blade',   pitch: 1.2, weight: 0.14, shaft: '1.0mm', blades: 2 },
+      { name: 'Gemfan 1210-2 2-blade',           pitch: 1.0, weight: 0.19, shaft: '1.0mm', blades: 2 },
+      { name: 'Gemfan 1220-4 quad-blade',        pitch: 2.0, weight: 0.40, shaft: '1.0mm', blades: 4 }, // 2026
     ],
     75: [
-      { name: 'Gemfan 1611 3-blade',                    pitch: 1.1, weight: 0.085, shaft: '1.5mm' },
-      { name: 'Gemfan 1610 2-blade',                    pitch: 1.0, weight: 0.18,  shaft: '1.0mm' },
-      { name: 'Gemfan 1635 3-blade',                    pitch: 3.5, weight: 0.54,  shaft: '1.0mm' },
-      { name: 'HQ Ultralight 40mm 1.6x1.1x3',          pitch: 1.1, weight: 0.28,  shaft: '1.0/1.5mm' },
-      { name: 'HQ Ultralight 40mm 1.6x1x3',            pitch: 1.0, weight: 0.25,  shaft: '1.0/1.5mm' },
-      { name: 'HQ Ultralight 40mm 2-blade 1.6x1.2',    pitch: 1.2, weight: 0.20,  shaft: '1.0/1.5mm' },
+      { name: 'Gemfan 1611 3-blade',                    pitch: 1.1, weight: 0.085, shaft: '1.5mm',     blades: 3 },
+      { name: 'Gemfan 1610 2-blade',                    pitch: 1.0, weight: 0.18,  shaft: '1.0mm',     blades: 2 },
+      { name: 'Gemfan 1614 3-blade',                    pitch: 1.4, weight: 0.50,  shaft: '1.0/1.5mm', blades: 3 }, // 2026
+      { name: 'Gemfan 1635 3-blade',                    pitch: 3.5, weight: 0.54,  shaft: '1.0mm',     blades: 3 },
+      { name: 'Gemfan 1636 4-blade',                    pitch: 3.6, weight: 0.80,  shaft: '1.0/1.5mm', blades: 4 }, // 2026
+      { name: 'HQ Ultralight 40mm 1.6x1.1x3',          pitch: 1.1, weight: 0.28,  shaft: '1.0/1.5mm', blades: 3 },
+      { name: 'HQ Ultralight 40mm 1.6x1x3',            pitch: 1.0, weight: 0.25,  shaft: '1.0/1.5mm', blades: 3 },
+      { name: 'HQ Ultralight 40mm 2-blade 1.6x1.2',    pitch: 1.2, weight: 0.20,  shaft: '1.0/1.5mm', blades: 2 },
     ],
     85: [
-      { name: 'Gemfan 2" T-mount 3-blade',        pitch: 0.9, weight: 0.4,  shaft: 'T-mount 1.5mm' },
-      { name: 'Gemfan 2020 T-mount 3-blade',      pitch: 1.9, weight: 0.4,  shaft: 'T-mount 1.5mm' },
-      { name: 'Gemfan Hurricane 2015 2-blade',    pitch: 1.5, weight: 0.5,  shaft: '1.5mm' },
-      { name: 'HQ T2x2x3 T-mount 3-blade',        pitch: 2.0, weight: 0.35, shaft: 'T-mount' },
+      { name: 'Gemfan 2" T-mount 3-blade',        pitch: 0.9, weight: 0.4,  shaft: 'T-mount 1.5mm', blades: 3 },
+      { name: 'Emax Avan Micro 2" 3-blade',       pitch: 1.2, weight: 0.75, shaft: 'T-mount 1.5mm', blades: 3 }, // 2026
+      { name: 'Gemfan Hurricane 2015 2-blade',    pitch: 1.5, weight: 0.5,  shaft: '1.5mm',         blades: 2 },
+      { name: 'Gemfan 2020 T-mount 3-blade',      pitch: 1.9, weight: 0.4,  shaft: 'T-mount 1.5mm', blades: 3 },
+      { name: 'HQ T2x2x3 T-mount 3-blade',        pitch: 2.0, weight: 0.35, shaft: 'T-mount',       blades: 3 },
+      { name: 'HQ Durable T2x2x3',                pitch: 2.0, weight: 0.75, shaft: 'T-mount',       blades: 3 }, // 2026
+      { name: 'Gemfan 2035 4-blade',              pitch: 3.5, weight: 1.00, shaft: 'T-mount 1.5mm', blades: 4 }, // 2026, needs 1103+
     ],
   };
+
+  // Blade-count suffix shown in the prop dropdown label.
+  const bladeTag = { 2: 'bi', 3: 'tri', 4: 'quad' };
 
   const propSelect = document.getElementById('propSelect');
 
@@ -240,7 +289,8 @@
       opt.setAttribute('data-pitch', p.pitch);
       opt.setAttribute('data-weight', p.weight);
       opt.setAttribute('data-shaft', p.shaft);
-      opt.textContent = `${p.name}  (${p.pitch}" pitch)`;
+      const tag = bladeTag[p.blades];
+      opt.textContent = `${p.name}  (${p.pitch}" pitch${tag ? ', ' + tag : ''})`;
       propSelect.appendChild(opt);
     });
     propSelect.value = '';
@@ -307,8 +357,12 @@
     const kv = opt.getAttribute('data-kv');
     const pitch = opt.getAttribute('data-pitch');
     const weight = opt.getAttribute('data-weight');
+    const cells = opt.getAttribute('data-cells');
     if (kv) els.motorKV.value = kv;
     if (pitch) els.propPitch.value = pitch;
+    // Motors with a pinned cell count drive the selector; the rest fall back to
+    // the frame preset, so a 1S pick does not stay latched on the next motor.
+    els.cells.value = cells || framePresets[currentFrame].cells;
     // DRY estimate: motors + bare frame/electronics. This used to be written
     // into an all-up-weight field with no battery term at all, which silently
     // dropped ~12g of pack from every TWR (132g thrust / 27.6g "AUW" = 4.8:1
@@ -406,6 +460,8 @@
     else if (tw >= 6)           { rating = 'Extreme — wheelie warning'; warn = true; }
     els.twRating.textContent = rating;
     els.thrustWeight.classList.toggle('warn', warn);
+    // Advisory ceiling flag — never blocks or clamps the figure.
+    els.twCeilingBadge.hidden = tw <= TW_CEILING;
 
     els.flightTime.innerHTML = s.flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
 
@@ -443,6 +499,14 @@
     compareCalculate();
   }
 
+  // Comparison-table T:W colour tiers. Same thresholds as the OSD badge.
+  const TW_TIER_CLASSES = ['tw-ok', 'tw-warn', 'tw-danger'];
+  function twTier(v) {
+    if (v > TW_DANGER)  return 'tw-danger';
+    if (v > TW_CEILING) return 'tw-warn';
+    return 'tw-ok';
+  }
+
   function compareCalculate() {
     let kvA        = parseFloat(document.getElementById('cmpKvA').value);
     let kvB        = parseFloat(document.getElementById('cmpKvB').value);
@@ -458,7 +522,9 @@
     const sA = (!isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, auw, cRating) : null;
     const sB = (!isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, auw, cRating) : null;
 
-    function setPair(idA, idB, vA, vB, fmt) {
+    // Optional tierFor(value) returns a colour class for the cell — used by the
+    // T:W row, where the number's absolute value matters more than who wins.
+    function setPair(idA, idB, vA, vB, fmt, tierFor) {
       const eA = document.getElementById(idA), eB = document.getElementById(idB);
       if (vA !== null) { eA.innerHTML = fmt(vA); eA.classList.add('filled'); }
       else             { eA.innerHTML = '—';     eA.classList.remove('filled'); }
@@ -467,10 +533,14 @@
       eA.classList.remove('winner'); eB.classList.remove('winner');
       if (vA !== null && vB !== null && vA !== vB)
         (vA > vB ? eA : eB).classList.add('winner');
+      [[eA, vA], [eB, vB]].forEach(([el, v]) => {
+        el.classList.remove(...TW_TIER_CLASSES);
+        if (tierFor && v !== null) el.classList.add(tierFor(v));
+      });
     }
 
     setPair('cmpSpeedA',  'cmpSpeedB',  sA ? sA.speedMph      : null, sB ? sB.speedMph      : null, v => `${v.toFixed(0)}<span class="cmp-unit">mph</span>`);
-    setPair('cmpTwA',     'cmpTwB',     sA ? sA.tw            : null, sB ? sB.tw            : null, v => `${v.toFixed(1)}<span class="cmp-unit">:1</span>`);
+    setPair('cmpTwA',     'cmpTwB',     sA ? sA.tw            : null, sB ? sB.tw            : null, v => `${v.toFixed(1)}<span class="cmp-unit">:1</span>`, twTier);
     setPair('cmpThrustA', 'cmpThrustB', sA ? sA.totalThrust   : null, sB ? sB.totalThrust   : null, v => `${v.toFixed(0)}<span class="cmp-unit">g</span>`);
     setPair('cmpTimeA',   'cmpTimeB',   sA ? sA.flightTimeMin : null, sB ? sB.flightTimeMin : null, v => `${v.toFixed(1)}<span class="cmp-unit">min</span>`);
   }

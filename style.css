@@ -5,6 +5,9 @@
     --muted: #6B6F76;
     --orange: #FF4D1A;
     --green: #3DDC97;
+    /* Mid-orange caution tier — sits between --green and --orange so the
+       T:W scale reads green -> amber -> red without leaving the palette. */
+    --amber: #FF9A1A;
     --border: #2A2D35;
   }
 
@@ -265,6 +268,24 @@
     margin-left: 6px;
   }
   .osd-stat-value.warn { color: var(--orange); }
+  /* Advisory only — the T:W number still renders, this just flags the ceiling. */
+  .tw-ceiling-badge {
+    display: inline-block;
+    /* .osd-stat is a flex column, which blockifies children — keep it a chip. */
+    align-self: start;
+    width: fit-content;
+    max-width: 100%;
+    margin-top: 8px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--orange);
+    background: rgba(255,77,26,0.08);
+    border: 1px solid rgba(255,77,26,0.25);
+  }
+  .tw-ceiling-badge[hidden] { display: none; }
   .osd-stat-sub {
     font-size: 0.75rem;
     color: var(--muted);
@@ -500,6 +521,10 @@
   }
   .compare-val.filled { color: var(--text); }
   .compare-val.winner { color: var(--green); }
+  /* T:W row only — absolute value outranks who wins, so these follow .winner. */
+  .compare-val.tw-ok     { color: var(--green); }
+  .compare-val.tw-warn   { color: var(--amber); }
+  .compare-val.tw-danger { color: var(--orange); }
   .cmp-unit {
     font-size: 0.65rem;
     font-weight: 400;
