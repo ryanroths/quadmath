@@ -253,6 +253,9 @@
       { name: 'HQ Ultralight 31mm 3-blade High',  pitch: 1.0, weight: 0.16, shaft: '1.0mm', blades: 3 },
       { name: 'HQ Ultralight 1.2x1.2 2-blade',   pitch: 1.2, weight: 0.14, shaft: '1.0mm', blades: 2 },
       { name: 'Gemfan 1210-2 2-blade',           pitch: 1.0, weight: 0.19, shaft: '1.0mm', blades: 2 },
+      // Same 1210-2 mould as the row above, 1.5mm hub — the shaft the SKRRRT
+      // and other 1.5mm whoop motors take.
+      { name: 'Gemfan 1210-2 2-blade (1.5mm)',   pitch: 1.0, weight: 0.19, shaft: '1.5mm', blades: 2 }, // 2026
       { name: 'Gemfan 1220-4 quad-blade',        pitch: 2.0, weight: 0.40, shaft: '1.0mm', blades: 4 }, // 2026
     ],
     75: [

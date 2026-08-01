@@ -1043,6 +1043,24 @@
     flex-shrink: 0;
   }
   .buy-btn:hover { opacity: 0.8; }
+  /* Build-specific setup gotcha, e.g. an inverted board's CLI alignment. */
+  .build-note {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 0.74rem;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+  .build-note code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--green);
+    background: rgba(61,220,151,.08);
+    border-radius: 3px;
+    padding: 1px 4px;
+    white-space: nowrap;
+  }
   .picks-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
