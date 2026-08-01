@@ -5,6 +5,9 @@
     --muted: #6B6F76;
     --orange: #FF4D1A;
     --green: #3DDC97;
+    /* Mid-orange caution tier — sits between --green and --orange so the
+       T:W scale reads green -> amber -> red without leaving the palette. */
+    --amber: #FF9A1A;
     --border: #2A2D35;
   }
 
@@ -265,6 +268,24 @@
     margin-left: 6px;
   }
   .osd-stat-value.warn { color: var(--orange); }
+  /* Advisory only — the T:W number still renders, this just flags the ceiling. */
+  .tw-ceiling-badge {
+    display: inline-block;
+    /* .osd-stat is a flex column, which blockifies children — keep it a chip. */
+    align-self: start;
+    width: fit-content;
+    max-width: 100%;
+    margin-top: 8px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--orange);
+    background: rgba(255,77,26,0.08);
+    border: 1px solid rgba(255,77,26,0.25);
+  }
+  .tw-ceiling-badge[hidden] { display: none; }
   .osd-stat-sub {
     font-size: 0.75rem;
     color: var(--muted);
@@ -500,6 +521,10 @@
   }
   .compare-val.filled { color: var(--text); }
   .compare-val.winner { color: var(--green); }
+  /* T:W row only — absolute value outranks who wins, so these follow .winner. */
+  .compare-val.tw-ok     { color: var(--green); }
+  .compare-val.tw-warn   { color: var(--amber); }
+  .compare-val.tw-danger { color: var(--orange); }
   .cmp-unit {
     font-size: 0.65rem;
     font-weight: 400;
@@ -684,96 +709,236 @@
     line-height: 1.55;
     margin-bottom: 1.5rem;
   }
-  .tune-scroll-hint {
-    display: none;
-    text-align: center;
-    font-size: .72rem;
-    color: var(--muted);
-    margin-bottom: .5rem;
+  /* Filter bar */
+  .tune-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
   }
-  @media (max-width: 860px) { .tune-scroll-hint { display: block; } }
-  .tune-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; }
-  .tune-table {
-    border-collapse: collapse;
-    min-width: 820px;
-    width: 100%;
-    table-layout: fixed;
-  }
-  .tune-table th {
-    background: var(--panel);
-    color: var(--orange);
+  .tune-filters { display: flex; flex-wrap: wrap; gap: 14px; }
+  .tune-filter-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .tune-filter-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: .72rem;
-    text-transform: uppercase;
-    letter-spacing: .08em;
-    padding: .65rem .75rem;
-    text-align: left;
-    border: 1px solid var(--border);
-    white-space: nowrap;
-  }
-  .tune-table th:first-child { width: 64px; }
-  .tune-table td { vertical-align: top; border: 1px solid var(--border); padding: .6rem .65rem; }
-  .tune-row-label {
-    background: var(--panel) !important;
-    color: var(--orange);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: .85rem;
-    font-weight: 700;
-    white-space: nowrap;
-    text-align: center;
-  }
-  .tune-pair { display: flex; gap: .5rem; }
-  .tune-block {
-    flex: 1;
-    background: var(--bg);
-    border-radius: 6px;
-    padding: .5rem .55rem;
-    min-width: 0;
-  }
-  .tune-block-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: .58rem;
+    font-size: .62rem;
     text-transform: uppercase;
     letter-spacing: .12em;
     color: var(--muted);
-    border-bottom: 1px solid var(--border);
-    padding-bottom: .25rem;
-    margin-bottom: .3rem;
+    margin-right: 2px;
   }
-  .tune-block-label.ryfly { color: var(--orange); }
-  .tune-sh {
+  .tune-chip {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--muted);
     font-family: 'JetBrains Mono', monospace;
-    font-size: .52rem;
-    color: rgba(255,255,255,.22);
-    text-transform: uppercase;
-    letter-spacing: .07em;
-    margin: .3rem 0 .12rem;
+    font-size: .72rem;
+    padding: 5px 11px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all .15s;
   }
-  .pid-cols, .pid-row {
+  .tune-chip:hover { border-color: var(--muted); color: var(--text); }
+  .tune-chip.on {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: #0D0E12;
+    font-weight: 700;
+  }
+  .tune-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .72rem;
+    color: var(--muted);
+    white-space: nowrap;
+    padding-top: 4px;
+  }
+
+  /* Card grid — 1 col mobile, 2 tablet, 3 desktop */
+  .tune-grid {
     display: grid;
-    grid-template-columns: .9rem 1fr 1fr 1fr;
-    gap: 2px;
-    margin-bottom: 1px;
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
-  .pid-ch { font-family: 'JetBrains Mono', monospace; font-size: .5rem; color: rgba(255,255,255,.18); text-align: center; }
-  .pid-ax { font-family: 'JetBrains Mono', monospace; font-size: .56rem; color: rgba(255,255,255,.32); display: flex; align-items: center; }
-  .pid-v {
+  @media (min-width: 620px)  { .tune-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1000px) { .tune-grid { grid-template-columns: repeat(3, 1fr); } }
+
+  .tune-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .tune-card-head {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+    margin-bottom: 4px;
+  }
+  .tune-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .tune-frame {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .78rem;
+    font-weight: 700;
+    color: var(--orange);
+    letter-spacing: .04em;
+  }
+  .tune-badge {
     font-family: 'JetBrains Mono', monospace;
     font-size: .6rem;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    color: var(--muted);
+    background: rgba(107,111,118,.12);
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .tune-badge.ryfly {
+    color: var(--orange);
+    background: rgba(255,77,26,.1);
+    border-color: rgba(255,77,26,.35);
+  }
+  .tune-card-fc {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: .92rem;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    overflow-wrap: anywhere;
+  }
+  .tune-card-combo {
+    font-size: .74rem;
+    color: var(--muted);
+    margin-top: 3px;
+    overflow-wrap: anywhere;
+  }
+  .tune-sh {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .6rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    margin: 12px 0 6px;
+  }
+
+  /* PID / rate matrix — one value per cell, never concatenated. */
+  .tune-matrix {
+    display: grid;
+    grid-template-columns: 1.1rem repeat(3, 1fr);
+    gap: 3px;
+  }
+  .tm-col {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .58rem;
+    color: var(--muted);
+    text-align: center;
+    letter-spacing: .04em;
+  }
+  .tm-axis {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .68rem;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+  }
+  .tm-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .82rem;
+    font-weight: 500;
     color: var(--green);
     text-align: center;
-    background: rgba(61,220,151,.06);
-    border-radius: 2px;
-    padding: 1px 0;
+    background: rgba(61,220,151,.07);
+    border-radius: 3px;
+    padding: 4px 2px;
   }
-  .rate-type { font-family: 'JetBrains Mono', monospace; font-size: .56rem; color: rgba(255,255,255,.3); margin-bottom: 2px; }
-  .tune-filter {
-    font-size: .58rem;
-    color: rgba(255,255,255,.28);
+  .tune-rates-missing {
+    font-size: .72rem;
+    color: var(--muted);
     font-style: italic;
-    margin-top: .3rem;
-    padding-top: .25rem;
+  }
+
+  .tune-notes {
+    margin-top: 12px;
     border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+  .tune-notes summary {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .66rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .tune-notes summary:hover { color: var(--text); }
+  .tune-notes ul { margin: 8px 0 0 16px; }
+  .tune-notes li {
+    font-size: .74rem;
+    color: var(--muted);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  .tune-copy {
+    margin-top: 14px;
+    background: transparent;
+    border: 1px solid rgba(255,77,26,.4);
+    color: var(--orange);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .72rem;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all .15s;
+    width: 100%;
+  }
+  .tune-copy:hover { background: rgba(255,77,26,.1); }
+  .tune-copy.copied {
+    border-color: var(--green);
+    color: var(--green);
+    background: rgba(61,220,151,.1);
+  }
+  .tune-copy.failed { border-color: var(--muted); color: var(--muted); }
+
+  .tune-empty {
+    color: var(--muted);
+    font-size: .85rem;
+    padding: 24px 0;
+  }
+  .tune-pending {
+    margin-top: 28px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .tune-pending summary {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .74rem;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .tune-pending summary:hover { color: var(--text); }
+  .tune-pending ul { margin: 12px 0 0 18px; }
+  .tune-pending li {
+    font-size: .78rem;
+    color: var(--muted);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+  .tune-pending-combo {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text);
   }
 
   /* === RYFLY SECTION === */
