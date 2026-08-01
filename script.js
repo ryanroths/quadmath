@@ -1,11 +1,44 @@
   // ===== Frame size presets (typical defaults) =====
   // Whoop classes only (65/75/85mm) — the calculator's models are calibrated
   // against real whoop builds and are NOT valid for 3"/5"/7" quads.
+  // weight here is DRY weight (no battery). Pack weight is added in
+  // calculate() from capacity via packWeightG(), so AUW = dry + pack.
+  // Dry values chosen so each preset's AUW matches the old all-up figures:
+  // 65: 19.5+8.5=28, 75: 25.3+12.7=38, 85: 39.6+2*12.7=65.
   const framePresets = {
-    65: { kv: 28000, cells: 1, capacity: 300, pitch: 0.7, weight: 28  },
-    75: { kv: 22000, cells: 1, capacity: 450, pitch: 1.1, weight: 38  },
-    85: { kv: 11000, cells: 2, capacity: 450, pitch: 0.9, weight: 65  },
+    65: { kv: 28000, cells: 1, capacity: 300, pitch: 0.7, weight: 19.5 },
+    75: { kv: 22000, cells: 1, capacity: 450, pitch: 1.1, weight: 25.3 },
+    85: { kv: 11000, cells: 2, capacity: 450, pitch: 0.9, weight: 39.6 },
   };
+
+  // Real 1S whoop pack weights (BetaFPV BT2.0 / LAVA-class), grams. Linear
+  // interpolation between points, per-mAh extrapolation past the ends,
+  // multiplied by cell count for 2S. 480 sits below 450 because the LAVA II
+  // 480 really is lighter than the BT2.0 450 -- these are scale numbers,
+  // not a smooth model.
+  const PACK_WEIGHTS = [
+    [300, 8.5], [450, 12.7], [480, 12.6], [550, 14.5], [660, 16.5], [680, 16.5],
+  ];
+  function packWeightG(capacityMah, cells) {
+    if (!capacityMah || capacityMah <= 0) return 0;
+    const pts = PACK_WEIGHTS;
+    let oneCell;
+    if (capacityMah <= pts[0][0]) {
+      oneCell = capacityMah * (pts[0][1] / pts[0][0]);
+    } else if (capacityMah >= pts[pts.length - 1][0]) {
+      oneCell = capacityMah * (pts[pts.length - 1][1] / pts[pts.length - 1][0]);
+    } else {
+      oneCell = pts[pts.length - 1][1];
+      for (let i = 1; i < pts.length; i++) {
+        if (capacityMah <= pts[i][0]) {
+          const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+          oneCell = y0 + (y1 - y0) * (capacityMah - x0) / (x1 - x0);
+          break;
+        }
+      }
+    }
+    return oneCell * (cells || 1);
+  }
 
   // Real motor database by frame size — brand, stator, KV
   const motorDB = {
@@ -276,7 +309,12 @@
     const weight = opt.getAttribute('data-weight');
     if (kv) els.motorKV.value = kv;
     if (pitch) els.propPitch.value = pitch;
-    if (weight) els.weight.value = parseFloat(weight) * 4 + currentFrameBaseWeight();
+    // DRY estimate: motors + bare frame/electronics. This used to be written
+    // into an all-up-weight field with no battery term at all, which silently
+    // dropped ~12g of pack from every TWR (132g thrust / 27.6g "AUW" = 4.8:1
+    // and a wheelie warning for builds that really fly at 3.7:1). The pack is
+    // now added in calculate() from capacity.
+    if (weight) els.weight.value = (parseFloat(weight) * 4 + currentFrameBaseWeight()).toFixed(1);
     calculate();
   });
 
@@ -312,7 +350,7 @@
     const avgCurrent   = maxCurrentPerMotor * 4 * avgCurrentFraction[currentFrame];
     const flightTimeMin = ((capacity / 1000) * 0.8 / avgCurrent) * 60;
     return { speedMph, totalThrust, tw, flightTimeMin, benchThrust, twBench,
-             packLimited, effCurrentPerMotor, maxCurrentPerMotor };
+             packLimited, effCurrentPerMotor, maxCurrentPerMotor, packLimitPerMotor };
   }
 
   // Whoop-realistic input clamps (0602–1103 motors, ≤2" props, 1S–2S, whoop AUW).
@@ -323,7 +361,7 @@
     cells:    [1, 2],         // 1S–2S only
     capacity: [200, 800],     // mAh — whoop packs
     pitch:    [0.5, 3.5],     // inches of PITCH on ≤2"-diameter whoop props
-    weight:   [18, 90],       // g AUW — ~18–45g for 65/75mm, 2S 85mm up to ~90g
+    weight:   [14, 80],       // g DRY (no battery) — pack weight added from capacity
     cRating:  [30, 150],      // C — whoop pack range, matches the battery tool
   };
   function calculate() {
@@ -331,14 +369,29 @@
     const cells    = clampRange(parseFloat(els.cells.value)     || 1, ...WHOOP_RANGES.cells);
     const capacity = clampRange(parseFloat(els.capacity.value)  || 0, ...WHOOP_RANGES.capacity);
     const pitch    = clampRange(parseFloat(els.propPitch.value) || 0, ...WHOOP_RANGES.pitch);
-    const weight   = clampRange(parseFloat(els.weight.value)    || 1, ...WHOOP_RANGES.weight);
+    const dryWeight = clampRange(parseFloat(els.weight.value)   || 1, ...WHOOP_RANGES.weight);
     const cRating  = clampRange(parseFloat(els.packC.value)     || 0, ...WHOOP_RANGES.cRating);
-    const s = computeStats(kv, cells, capacity, pitch, weight, cRating);
+    // AUW = dry weight + real pack weight. TWR, the build score, and the
+    // wheelie warning all key off this; omitting the pack inflated TWR ~30%.
+    const packG = packWeightG(capacity, cells);
+    const auw   = dryWeight + packG;
+    const s = computeStats(kv, cells, capacity, pitch, auw, cRating);
+
+    const auwEl = document.getElementById('auwReadout');
+    if (auwEl) {
+      const floors = { 65: 20, 75: 30, 85: 40 };
+      const floor = floors[currentFrame] || 0;
+      let text = `AUW used: ${auw.toFixed(1)}g = ${dryWeight.toFixed(1)}g dry + ${packG.toFixed(1)}g pack (${capacity.toFixed(0)}mAh ${cells}S)`;
+      const light = auw < floor;
+      if (light) text += ` — check weights: under ${floor}g is unusually light for a ${currentFrame}mm build`;
+      auwEl.textContent = text;
+      auwEl.classList.toggle('warn', light);
+    }
 
     els.totalThrust.innerHTML = s.totalThrust.toFixed(0) + '<span class="unit">g</span>';
     els.thrustSub.textContent = s.packLimited
       ? `Pack-limited: ${(s.effCurrentPerMotor * 4).toFixed(1)}A available vs ${(s.maxCurrentPerMotor * 4).toFixed(1)}A the motors want`
-      : `Motor-limited: pack can supply ${(s.effCurrentPerMotor * 4).toFixed(1)}A and the motors only draw that much`;
+      : `Motor-limited: motors draw ${(s.maxCurrentPerMotor * 4).toFixed(1)}A, under the pack's ${(s.packLimitPerMotor * 4).toFixed(1)}A limit`;
 
     els.benchTw.innerHTML = s.twBench.toFixed(1) + '<span class="unit">:1</span>';
     els.benchSub.textContent = s.packLimited
@@ -398,10 +451,12 @@
     const cells    = clampRange(parseFloat(els.cells.value)     || 1, ...WHOOP_RANGES.cells);
     const capacity = clampRange(parseFloat(els.capacity.value)  || 0, ...WHOOP_RANGES.capacity);
     const pitch    = clampRange(parseFloat(els.propPitch.value) || 0, ...WHOOP_RANGES.pitch);
-    const weight   = clampRange(parseFloat(els.weight.value)    || 1, ...WHOOP_RANGES.weight);
+    const dryWeight = clampRange(parseFloat(els.weight.value)   || 1, ...WHOOP_RANGES.weight);
     const cRating  = clampRange(parseFloat(els.packC.value)     || 0, ...WHOOP_RANGES.cRating);
-    const sA = (!isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, weight, cRating) : null;
-    const sB = (!isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, weight, cRating) : null;
+    // Same AUW assembly as the main panel, so the comparison rows agree.
+    const auw = dryWeight + packWeightG(capacity, cells);
+    const sA = (!isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, auw, cRating) : null;
+    const sB = (!isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, auw, cRating) : null;
 
     function setPair(idA, idB, vA, vB, fmt) {
       const eA = document.getElementById(idA), eB = document.getElementById(idB);
