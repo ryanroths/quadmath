@@ -42,6 +42,9 @@ OVERRIDES = {
     "https://webleedfpv.com/products/webleedfpv-1-5mm-0702-32500kv?bg_ref=9qGDmIxyuc": "wb-0702-32k5",
     "https://webleedfpv.com/products/webleedfpv-1-5mm-0802-32-500kv-moefpv-treetoppers-w-knurled-shaft-design-set-of-4-motors?bg_ref=9qGDmIxyuc": "wb-treetopper-0802",
     "https://webleedfpv.com/products/webleedfpv-1-5mm-25-000kv-vs-w-knurled-shaft-design-set-of-4-motors?bg_ref=9qGDmIxyuc": "wb-vs-25k",
+    # 1.5mm-shaft biblade — distinct from wb-gemfan-31mm, which is the 1mm-shaft
+    # 1219S triblade. The 1.5mm shaft is what the SKRRRT motors take.
+    "https://webleedfpv.com/products/special-edition-gemfan-props-31mm-1-5mm-2-blades?bg_ref=9qGDmIxyuc": "wb-gemfan-31mm-bi",
 }
 
 HREF_RE = re.compile(r'href="(https?://[^"]+)"')
