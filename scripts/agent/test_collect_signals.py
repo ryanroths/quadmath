@@ -40,7 +40,7 @@ cs = _load_module()
 SCRIPT_JS_PIN = {
     "framePresets": {65: 1, 75: 1, 85: 1},
     "motorDB": {65: 15, 75: 20, 85: 8},
-    "propDB": {65: 9, 75: 8, 85: 7},
+    "propDB": {65: 10, 75: 8, 85: 7},
 }
 
 MINI_SCRIPT_JS = """(function(){
