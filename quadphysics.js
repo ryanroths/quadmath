@@ -10,37 +10,42 @@
 // Derived from real-world averages. Tweak freely; calculator can feed these.
 // ---------------------------------------------------------------------------
 export const PRESETS = {
-  // kQ raised ~25x across the board. At the original values the yaw axis could
+  // Whoop thrust set to ~4.1:1 TWR, matching what this sim ran before the
+  // physics swap (3.9 world-N over 28g). The module's original 3:1 was 28% less
+  // thrust and 34% less climb acceleration, which read as rotation being wildly
+  // faster than throttle.
+  //
+  // kQ raised ~50x across the board. At the original values the yaw axis could
   // not reach its own commanded rate (95 deg/s of a commanded 286) and the loop
   // sat saturated, so a yaw spin carried for more than a full rotation after the
   // stick centred. Relative spacing between presets is unchanged.
   whoop65: {
     name: '65mm whoop',
     mass: 0.027, wheelbase: 0.065, propDiameter: 0.031,
-    maxThrustPerMotor: 0.20,      // ~0.8N total, ~3:1 TWR
+    maxThrustPerMotor: 0.27,      // ~1.08N total, ~4.1:1 TWR
     motorTau: 0.020,               // tiny props spool fast
-    kQ: 0.30,                      // yaw torque per unit thrust (N·m per N, scaled by arm)
+    kQ: 0.60,                      // yaw torque per unit thrust (N·m per N, scaled by arm)
     idleThrottle: 0.055,
   },
   whoop75: {
     name: '75mm whoop',
     mass: 0.032, wheelbase: 0.075, propDiameter: 0.040,
-    maxThrustPerMotor: 0.26, motorTau: 0.024, kQ: 0.325, idleThrottle: 0.055,
+    maxThrustPerMotor: 0.32, motorTau: 0.024, kQ: 0.65, idleThrottle: 0.055,
   },
   whoop85: {
     name: '85mm whoop',
     mass: 0.048, wheelbase: 0.085, propDiameter: 0.048,
-    maxThrustPerMotor: 0.40, motorTau: 0.028, kQ: 0.35, idleThrottle: 0.055,
+    maxThrustPerMotor: 0.48, motorTau: 0.028, kQ: 0.70, idleThrottle: 0.055,
   },
   freestyle25: {
     name: '2.5" freestyle',
     mass: 0.120, wheelbase: 0.115, propDiameter: 0.063,
-    maxThrustPerMotor: 1.4, motorTau: 0.040, kQ: 0.40, idleThrottle: 0.045,
+    maxThrustPerMotor: 1.4, motorTau: 0.040, kQ: 0.80, idleThrottle: 0.045,
   },
   freestyle5: {
     name: '5" freestyle',
     mass: 0.650, wheelbase: 0.225, propDiameter: 0.127,
-    maxThrustPerMotor: 9.0, motorTau: 0.060, kQ: 0.50, idleThrottle: 0.040,
+    maxThrustPerMotor: 9.0, motorTau: 0.060, kQ: 1.00, idleThrottle: 0.040,
   },
 };
 

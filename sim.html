@@ -225,7 +225,7 @@
   <div class="row"><label>Gravity Scale</label><span class="val" id="v_grav"></span></div>
   <input type="range" id="s_grav" min="1.0" max="5.0" step="0.05" value="3.5">
   <div class="row"><label>Throttle Curve</label><span class="val" id="v_thc"></span></div>
-  <input type="range" id="s_thc" min="0.4" max="2.6" step="0.05" value="0.55">
+  <input type="range" id="s_thc" min="0.4" max="2.6" step="0.05" value="0.7">
   <div class="row"><label>Battery Simulation</label><input type="checkbox" id="cbBattSim" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Sag affects thrust</label><input type="checkbox" id="cbSagThrust" checked style="accent-color:var(--orange)"></div>
 
@@ -294,7 +294,7 @@ let GLTFLoader=null;
 const gltfReady=import("three/addons/loaders/GLTFLoader.js")
   .then(function(m){GLTFLoader=m.GLTFLoader;window._gltfReady=true;return true;})
   .catch(function(){window._gltfReady=false;return false;});
-const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:0.55,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
+const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:0.68,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
 // thrCurve recalibrated for the new physics core: motor thrust is now
 // proportional to output SQUARED, so at TWR 3 the motors must sit at 1/sqrt(3)
 // = 0.58 of full output to hover. The old linear-thrust model needed an
@@ -1601,9 +1601,9 @@ window._qp=qp; // debug handle, same convention as _simBooted/_gltfReady above
 // 18% overshoot is what makes yaw feel right.
 const STOCK_TUNES={
   whoop65:{rollP:36,rollI:61,rollD:27,pitchP:37,pitchI:64,pitchD:29,yawP:36,yawI:61,yawD:0,
-           rollF:15,pitchF:16,yawF:120},
+           rollF:15,pitchF:16,yawF:20},
   whoop75:{rollP:33,rollI:60,rollD:25,pitchP:35,pitchI:63,pitchD:28,yawP:33,yawI:60,yawD:0,
-           rollF:15,pitchF:16,yawF:120},
+           rollF:15,pitchF:16,yawF:20},
 };
 qp.setTune(STOCK_TUNES.whoop65);
 // Base thrust before voltage sag scales it each frame.
