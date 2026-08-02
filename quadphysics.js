@@ -10,33 +10,37 @@
 // Derived from real-world averages. Tweak freely; calculator can feed these.
 // ---------------------------------------------------------------------------
 export const PRESETS = {
+  // kQ raised ~25x across the board. At the original values the yaw axis could
+  // not reach its own commanded rate (95 deg/s of a commanded 286) and the loop
+  // sat saturated, so a yaw spin carried for more than a full rotation after the
+  // stick centred. Relative spacing between presets is unchanged.
   whoop65: {
     name: '65mm whoop',
     mass: 0.027, wheelbase: 0.065, propDiameter: 0.031,
     maxThrustPerMotor: 0.20,      // ~0.8N total, ~3:1 TWR
     motorTau: 0.020,               // tiny props spool fast
-    kQ: 0.012,                     // yaw torque per unit thrust (N·m per N, scaled by arm)
+    kQ: 0.30,                      // yaw torque per unit thrust (N·m per N, scaled by arm)
     idleThrottle: 0.055,
   },
   whoop75: {
     name: '75mm whoop',
     mass: 0.032, wheelbase: 0.075, propDiameter: 0.040,
-    maxThrustPerMotor: 0.26, motorTau: 0.024, kQ: 0.013, idleThrottle: 0.055,
+    maxThrustPerMotor: 0.26, motorTau: 0.024, kQ: 0.325, idleThrottle: 0.055,
   },
   whoop85: {
     name: '85mm whoop',
     mass: 0.048, wheelbase: 0.085, propDiameter: 0.048,
-    maxThrustPerMotor: 0.40, motorTau: 0.028, kQ: 0.014, idleThrottle: 0.055,
+    maxThrustPerMotor: 0.40, motorTau: 0.028, kQ: 0.35, idleThrottle: 0.055,
   },
   freestyle25: {
     name: '2.5" freestyle',
     mass: 0.120, wheelbase: 0.115, propDiameter: 0.063,
-    maxThrustPerMotor: 1.4, motorTau: 0.040, kQ: 0.016, idleThrottle: 0.045,
+    maxThrustPerMotor: 1.4, motorTau: 0.040, kQ: 0.40, idleThrottle: 0.045,
   },
   freestyle5: {
     name: '5" freestyle',
     mass: 0.650, wheelbase: 0.225, propDiameter: 0.127,
-    maxThrustPerMotor: 9.0, motorTau: 0.060, kQ: 0.020, idleThrottle: 0.040,
+    maxThrustPerMotor: 9.0, motorTau: 0.060, kQ: 0.50, idleThrottle: 0.040,
   },
 };
 
@@ -54,10 +58,16 @@ export const DEFAULT_TUNE = {
 
 // Betaflight-value → physical-gain scaling. One knob set for all crafts;
 // per-craft feel differences then come from inertia/thrust, which is the point.
-const P_SCALE = 0.00008;
-const I_SCALE = 0.00060;
-const D_SCALE = 0.0000022;
-const F_SCALE = 0.0000045;
+// Retuned as a set against the 65mm preset. The original ratio put ki/kp at
+// ~12.7 s^-1 — an 0.08s integrator time constant — so on any axis that
+// saturated, the I-term ran away and dominated P by ~30x. Releasing the stick
+// after a yaw spin then made the rate keep RISING before ringing +/-5 rad/s.
+// P up 5x, I down ~8x, D and F up with P: rate tracking is now 1.0 with ~3%
+// overshoot on roll, and yaw stops in under half a second instead of never.
+const P_SCALE = 0.00040;
+const I_SCALE = 0.000072;
+const D_SCALE = 0.0000055;
+const F_SCALE = 0.0000225;
 
 const G = 9.81;
 const PHYSICS_HZ = 240;

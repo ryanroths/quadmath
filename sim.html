@@ -226,8 +226,6 @@
   <input type="range" id="s_grav" min="1.0" max="5.0" step="0.05" value="3.5">
   <div class="row"><label>Throttle Curve</label><span class="val" id="v_thc"></span></div>
   <input type="range" id="s_thc" min="0.4" max="2.6" step="0.05" value="0.55">
-  <div class="row"><label>Prop Wash</label><span class="val" id="v_wash"></span></div>
-  <input type="range" id="s_wash" min="0" max="2" step="0.05" value="1">
   <div class="row"><label>Battery Simulation</label><input type="checkbox" id="cbBattSim" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Sag affects thrust</label><input type="checkbox" id="cbSagThrust" checked style="accent-color:var(--orange)"></div>
 
@@ -296,7 +294,7 @@ let GLTFLoader=null;
 const gltfReady=import("three/addons/loaders/GLTFLoader.js")
   .then(function(m){GLTFLoader=m.GLTFLoader;window._gltfReady=true;return true;})
   .catch(function(){window._gltfReady=false;return false;});
-const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:0.55,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,washStrength:1.0,battSimOn:true,sagAffectsThrust:true};
+const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:0.55,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
 // thrCurve recalibrated for the new physics core: motor thrust is now
 // proportional to output SQUARED, so at TWR 3 the motors must sit at 1/sqrt(3)
 // = 0.58 of full output to hover. The old linear-thrust model needed an
@@ -1630,7 +1628,6 @@ qp.externalDrag=(vel)=>{
 // Collision hook: runs inside every 240Hz substep. Works in world units against
 // the existing collider set, then writes the result back in SI.
 const _cp=new THREE.Vector3(),_cv=new THREE.Vector3();
-let pendingWashKick=0;
 qp.onSubstep=(s)=>{
   mod2world(s.position,_cp);
   mod2world(s.velocity,_cv);
@@ -1675,30 +1672,20 @@ qp.onSubstep=(s)=>{
     s.omega.y+=(Math.random()-0.5)*k;
     s.omega.z+=(Math.random()-0.5)*k*0.5;
   }
-  // prop wash: a disturbance torque, NOT a setpoint change — feeding it to the
-  // setpoint would make the FC dutifully track the wobble instead of fight it.
-  if(pendingWashKick>0){
-    s.omega.x+=washNx*pendingWashKick*PHYS_DT_HZ;
-    s.omega.y+=washNz*pendingWashKick*PHYS_DT_HZ;
-  }
 };
 const PHYS_DT_HZ=1/240;
 
 // Mirror the module state into the three.js-space `state` object every frame so
-// camera, OSD, gates, ghosts and prop wash keep reading exactly what they did.
+// camera, OSD, gates and ghosts keep reading exactly what they did.
 function syncStateFromQp(){
   mod2world(qp.position,state.pos);
   mod2world(qp.velocity,state.vel);
   const q=qp.quaternion;
   state.q.set(-q.y,q.z,-q.x,q.w); // same permutation as mod2world
 }
-// ---------- prop wash state ----------
-// ring buffer of recent path positions: sampled every 4th physics step (~60Hz),
-// 90 entries ≈ 1.5s of history. Entries start far below the world so
-// uninitialized slots can never trigger a proximity match.
-const WASH_N=90;
-const washTrail=Array.from({length:WASH_N},()=>new THREE.Vector3(0,-999,0));
-let washIdx=0,washCount=0,washFrame=0,washNx=0,washNz=0,washActive=0,camShake=0;
+// camShake is the shared screen-shake channel — impacts feed it, and it decays
+// every rendered frame in updateCamera().
+let camShake=0;
 // ---------- battery state ----------
 // 1S pack: charge drains with load (hover ~4min, full-throttle ~100s), resting
 // voltage tracks charge, sag under load grows as the pack empties (rising IR),
@@ -1714,7 +1701,7 @@ function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identi
   qp.cfg.maxThrustPerMotor=baseThrustPerMotor;
   syncStateFromQp();
   thrustActual=0; // motors spool from zero on re-arm — no thrust jump
-  washCount=0;washIdx=0;washActive=0;camShake=0; // stale trail must not wash the respawned quad
+  camShake=0;
   battCharge=1;battV=BATT_FULL; // reset = fresh pack
   // clear run state; leave activeTrackId alone so proximity selection re-picks
   // the nearest track's start next frame (the quad respawns by track 0's start,
@@ -1916,7 +1903,7 @@ function toggleMusic(){
 //      the layers beat against each other like 4 motors never quite in sync,
 //      mixed at 40% of the fundamental.
 //  (3) bandpassed noise (~2.5kHz, Q≈1) with gain ∝ throttle^1.5 — air-rip.
-//  (4) ±2% pitch wobble from the prop wash signal — motors loading/unloading
+//  (4) pitch wobble hook — retired with the prop wash model, held at 1.0
 //      in dirty air.  (5) ~3% pitch overshoot on punch-out, then settle.
 let motorAudioCtx=null,motorGainMaster=null;
 let motorFund=null,motorHarm=null,motorNoiseGain=null;
@@ -1961,8 +1948,8 @@ function updateMotorSound(){
   if(frac-audioPrevFrac>0.04)audioOver=1.03;
   audioOver+=(1-audioOver)*0.06;
   audioPrevFrac=frac;
-  // (4) wash pitch wobble: ±2% while flying through dirty air
-  const wob=washActive>0?1+0.02*Math.max(-1,Math.min(1,washNx))*Math.min(1,washActive):1;
+  // (4) wobble retired with prop wash — kept as a constant so the chain below is unchanged
+  const wob=1;
   const f=(180+770*frac)*wob*audioOver;        // ~180Hz idle → ~950Hz full
   motorFund.frequency.setTargetAtTime(f,t,0.03);
   motorHarm.frequency.setTargetAtTime(2*f+4,t,0.03); // blade-pass, +4Hz beat
@@ -2122,6 +2109,15 @@ function toggleFlightMode(){
 const eulTmp=new THREE.Euler();
 // Rate setpoint handed to the FC each frame, in the module's body frame.
 const qpSetpoint={roll:0,pitch:0,yaw:0};
+// Live axis diagnostic: window._axis() in the console prints what each stick is
+// actually asking for and what the airframe actually did. Same debug-handle
+// convention as _qp / _simBooted.
+window._axis=()=>({
+  stick:{r:+stick.r.toFixed(2),p:+stick.p.toFixed(2),y:+stick.y.toFixed(2),t:+stick.t.toFixed(2)},
+  setpoint:{roll:+qpSetpoint.roll.toFixed(2),pitch:+qpSetpoint.pitch.toFixed(2),yaw:+qpSetpoint.yaw.toFixed(2)},
+  omega:{roll:+qp.omega.x.toFixed(2),pitch:+qp.omega.y.toFixed(2),yaw:+qp.omega.z.toFixed(2)},
+  mode:flightMode,
+});
 // Sign bridge between three.js body rates (wx pitch / wy yaw / wz roll) and the
 // module's X-forward, Y-left, Z-up axes. Verified empirically — see the axis
 // check in the commit; flip one of these if a stick ever drives the wrong way.
@@ -2141,54 +2137,6 @@ function physics(dt){
     wz=-THREE.MathUtils.degToRad(bfRate(stick.r,CFG.rcRate,CFG.superRate,CFG.expo));
   }
   const wy=-yr;
-  // ---------- prop wash disturbance ----------
-  // Flying back through your own downwash: descending into either (a) a spot
-  // the quad occupied in the last ~1.5s, or (b) your own column during a
-  // near-vertical low-forward-speed drop. Applies a smoothed random roll/pitch
-  // rate disturbance scaled by descent rate and throttle (worst case: high
-  // throttle, fast descent), and feeds the camera shake. Thresholds are specced
-  // in real meters ×WS (world runs at ~3.5 world units per real meter).
-  {
-    const WS=3.5;
-    if(CFG.washStrength>0){
-      if((washFrame++&3)===0){ // sample trail at ~60Hz
-        washTrail[washIdx].copy(state.pos);
-        washIdx=(washIdx+1)%WASH_N;
-        if(washCount<WASH_N)washCount++;
-      }
-      washActive=0;
-      const vy=state.vel.y;
-      if(vy<-2*WS){ // descending faster than ~2 m/s real
-        const hSp=Math.hypot(state.vel.x,state.vel.z);
-        let near=hSp<3*WS; // (b) near-vertical descent through own column
-        if(!near){
-          const R2=(1.5*WS)*(1.5*WS); // (a) within ~1.5m of recent path
-          // skip the newest ~0.4s (24 samples) — those are always near the quad
-          for(let i=24;i<washCount;i++){
-            const j=(washIdx-1-i+WASH_N*2)%WASH_N;
-            if(washTrail[j].distanceToSquared(state.pos)<R2){near=true;break;}
-          }
-        }
-        if(near){
-          const descent=Math.min(1.5,(-vy-2*WS)/(4*WS)); // 0 at threshold → 1 by ~6 m/s real descent
-          washActive=CFG.washStrength*descent*(0.3+0.7*stick.t);
-        }
-      }
-      // smoothed random walk → low-frequency wobble, not white-noise jitter
-      washNx=washNx*0.92+(Math.random()*2-1)*0.35;
-      washNz=washNz*0.92+(Math.random()*2-1)*0.35;
-      if(washActive>0){
-        // Disturbance, not setpoint: handed to onSubstep as an angular kick so
-        // the FC has to fight it. Adding it to the setpoint would make the PID
-        // track the wobble and the quad would fly perfectly through its own wash.
-        pendingWashKick=2.5*washActive;
-        // wash-specific shake scaling — camShake is the shared channel (future
-        // crash/impact shake feeds it at full strength); only wash is damped
-        const WASH_SHAKE=0.10;
-        camShake=Math.min(1.2,camShake+washActive*0.12*WASH_SHAKE);
-      }
-    }
-  }
   // wx/wy/wz are three.js-frame body rates (rad/s) from the Betaflight rate
   // curve — unchanged maths. They become the FC's rate SETPOINT; the PID loop
   // owns orientation now, so nothing here touches state.q directly.
@@ -2223,7 +2171,6 @@ function physics(dt){
   const throttle=Math.pow(Math.max(0,Math.min(1,stick.t)),CFG.thrCurve);
 
   qp.step(dt,qpSetpoint,throttle);
-  pendingWashKick=0;
   syncStateFromQp();
   thrustActual=qp.totalThrustN*WS; // world newtons, for audio + battery load
 }
@@ -2237,7 +2184,7 @@ const camJit=new THREE.Quaternion(),camJitEul=new THREE.Euler();
 function updateCamera(){
   camTilt.setFromAxisAngle(new THREE.Vector3(1,0,0),THREE.MathUtils.degToRad(CFG.camDeg));
   camera.quaternion.copy(state.q).multiply(camTilt);
-  // camera shake — fed by prop wash (and available to future effects): small
+  // camera shake — fed by impacts (and available to future effects): small
   // random rotational jitter that decays every rendered frame
   if(camShake>0.002){
     camJitEul.set((Math.random()-0.5)*0.035*camShake,(Math.random()-0.5)*0.035*camShake,(Math.random()-0.5)*0.02*camShake);
@@ -2353,7 +2300,6 @@ bind('mass','massG',x=>x+'g',()=>{applyCfgToQp();refreshTwr();}); // mass change
 bind('spool','spoolTau',x=>(x*1000).toFixed(0)+'ms',applyCfgToQp); // motor spool time constant
 bind('grav','gravMult',x=>x.toFixed(2)+'×',refreshTwr); // gravity scale — effective weight changes, so re-derive thrust:weight
 bind('thc','thrCurve',x=>'^'+x.toFixed(1)); // throttle curve exponent — shape of stick→thrust mapping
-bind('wash','washStrength',x=>x.toFixed(2)+'×'); // prop wash disturbance strength (0 = off)
 document.getElementById('cbSagThrust').onchange=e=>{CFG.sagAffectsThrust=e.target.checked;toast(e.target.checked?'SAG → THRUST ON':'SAG → THRUST OFF');};
 document.getElementById('cbBattSim').onchange=e=>{
   CFG.battSimOn=e.target.checked;
