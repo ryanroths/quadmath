@@ -1577,9 +1577,19 @@ let thrustActual=0; // spooled thrust in WORLD newtons — audio + battery load 
 // way out reproduces the old feel exactly: 9.81 × 3.5 = 34.3 u/s², which is the
 // G*gravMult the hand-rolled physics used.
 const WS=3.5;                    // world units per real metre
-// Module frame is Z-up / X-forward; three.js is Y-up. Note 1 remap, both ways.
-const mod2world=(m,out)=>out.set(m.x*WS, m.z*WS, -m.y*WS);
-const world2mod=(w,out)=>{out.x=w.x/WS; out.y=-w.z/WS; out.z=w.y/WS; return out;};
+// Module frame is Z-up / X-forward / Y-left; three.js is Y-up and, for this
+// scene, -Z-forward (the camera looks down its own -Z).
+//
+// The note-1 remap in quadphysics.js sends module +X to world +X, which parks
+// the quad's nose on the scene's RIGHT axis. The frame is then yawed 90° from
+// the camera, roll and pitch land on each other's axes, and every control reads
+// backwards. Mapping module-forward onto world -Z instead keeps the body axes
+// and the camera agreed:
+//     X_m (forward) -> -Z_w        Y_m (left) -> -X_w        Z_m (up) -> +Y_w
+// Determinant +1, so it is a rotation and the quaternion components permute the
+// same way as the vector components.
+const mod2world=(m,out)=>out.set(-m.y*WS, m.z*WS, -m.x*WS);
+const world2mod=(w,out)=>{out.x=-w.z/WS; out.y=-w.x/WS; out.z=w.y/WS; return out;};
 
 const qp=new QuadPhysics(PRESETS.whoop65);
 window._qp=qp; // debug handle, same convention as _simBooted/_gltfReady above
@@ -1603,18 +1613,18 @@ qp.externalDrag=(vel)=>{
   const K2=0.001,K1=0.007,LAT=1.75;
   const perU=CFG.drag*(K2*spW*spW+K1*spW)/spW;  // world N per unit world velocity
   // into three.js world frame, then body frame, so LAT still lands on the prop plane
-  mod2world(vel,_dv);
+  mod2world(vel,_dv);                 // already world units/s — do NOT scale again
   _dq.copy(state.q).invert();
-  _db.copy(_dv).multiplyScalar(WS).applyQuaternion(_dq);
+  _db.copy(_dv).applyQuaternion(_dq); // into body frame so LAT lands on the prop plane
   _db.set(-_db.x*perU*LAT,-_db.y*perU,-_db.z*perU*LAT).applyQuaternion(state.q);
-  // world newtons → SI newtons, and three.js axes → module axes
-  const s=1/WS;
-  let fx=_db.x*s, fy=-_db.z*s, fz=_db.y*s;
+  // world newtons (kg·u/s²) → SI newtons, three.js axes → module axes.
+  // world2mod does both: the same axis permutation and the ÷WS.
+  const f=world2mod(_db,{x:0,y:0,z:0});
   // gravMult above the 3.5 baseline is an extra downward force, so the slider
   // keeps working without the module leaving SI.
   const extraG=(CFG.gravMult/WS)-1;
-  if(extraG!==0)fz-=extraG*qp.cfg.mass*9.81;
-  return {x:fx,y:fy,z:fz};
+  if(extraG!==0)f.z-=extraG*qp.cfg.mass*9.81;
+  return f;
 };
 
 // Collision hook: runs inside every 240Hz substep. Works in world units against
@@ -1680,7 +1690,7 @@ function syncStateFromQp(){
   mod2world(qp.position,state.pos);
   mod2world(qp.velocity,state.vel);
   const q=qp.quaternion;
-  state.q.set(q.x,q.z,-q.y,q.w);
+  state.q.set(-q.y,q.z,-q.x,q.w); // same permutation as mod2world
 }
 // ---------- prop wash state ----------
 // ring buffer of recent path positions: sampled every 4th physics step (~60Hz),
