@@ -1592,9 +1592,18 @@ const world2mod=(w,out)=>{out.x=-w.z/WS; out.y=-w.x/WS; out.z=w.y/WS; return out
 const qp=new QuadPhysics(PRESETS.whoop65);
 window._qp=qp; // debug handle, same convention as _simBooted/_gltfReady above
 // Air65 II Champion stock tune from the tune database — raw Betaflight values.
+// Feedforward is set explicitly. These tunes carry only P/I/D, so without an F
+// they inherited DEFAULT_TUNE's 120/125/120 — and on roll/pitch, which have far
+// more authority per unit FF than yaw, that overshot a commanded rate by 152%
+// on an 80ms stick flick. That is the "twitchy" feel. RyFly's own 65mm tunes in
+// the database run FF off; a token 15/16 keeps some crispness at 4.5% overshoot.
+// Yaw keeps the full 120: it is reaction-torque driven, needs the help, and its
+// 18% overshoot is what makes yaw feel right.
 const STOCK_TUNES={
-  whoop65:{rollP:36,rollI:61,rollD:27,pitchP:37,pitchI:64,pitchD:29,yawP:36,yawI:61,yawD:0},
-  whoop75:{rollP:33,rollI:60,rollD:25,pitchP:35,pitchI:63,pitchD:28,yawP:33,yawI:60,yawD:0},
+  whoop65:{rollP:36,rollI:61,rollD:27,pitchP:37,pitchI:64,pitchD:29,yawP:36,yawI:61,yawD:0,
+           rollF:15,pitchF:16,yawF:120},
+  whoop75:{rollP:33,rollI:60,rollD:25,pitchP:35,pitchI:63,pitchD:28,yawP:33,yawI:60,yawD:0,
+           rollF:15,pitchF:16,yawF:120},
 };
 qp.setTune(STOCK_TUNES.whoop65);
 // Base thrust before voltage sag scales it each frame.
