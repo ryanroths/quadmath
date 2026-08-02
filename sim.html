@@ -219,13 +219,13 @@
   <div class="row"><label>Drag</label><span class="val" id="v_drag"></span></div>
   <input type="range" id="s_drag" min="0.05" max="0.8" step="0.01" value="0.28">
   <div class="row"><label>Mass (g)</label><span class="val" id="v_mass"></span></div>
-  <input type="range" id="s_mass" min="15" max="80" step="1" value="28">
+  <input type="range" id="s_mass" min="15" max="700" step="1" value="27">
   <div class="row"><label>Motor Response</label><span class="val" id="v_spool"></span></div>
   <input type="range" id="s_spool" min="0.02" max="0.15" step="0.005" value="0.04">
   <div class="row"><label>Gravity Scale</label><span class="val" id="v_grav"></span></div>
   <input type="range" id="s_grav" min="1.0" max="5.0" step="0.05" value="3.5">
   <div class="row"><label>Throttle Curve</label><span class="val" id="v_thc"></span></div>
-  <input type="range" id="s_thc" min="1.0" max="2.6" step="0.1" value="1.3">
+  <input type="range" id="s_thc" min="0.4" max="2.6" step="0.05" value="0.55">
   <div class="row"><label>Prop Wash</label><span class="val" id="v_wash"></span></div>
   <input type="range" id="s_wash" min="0" max="2" step="0.05" value="1">
   <div class="row"><label>Battery Simulation</label><input type="checkbox" id="cbBattSim" checked style="accent-color:var(--orange)"></div>
@@ -287,6 +287,7 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
+import {QuadPhysics,PRESETS} from "./quadphysics.js";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, not statically: a static import failure aborts
 // the whole module and takes the sim with it. Loaded this way, an addon/CDN failure
@@ -295,12 +296,18 @@ let GLTFLoader=null;
 const gltfReady=import("three/addons/loaders/GLTFLoader.js")
   .then(function(m){GLTFLoader=m.GLTFLoader;window._gltfReady=true;return true;})
   .catch(function(){window._gltfReady=false;return false;});
-const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:1.3,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,idlePct:0.055,washStrength:1.0,battSimOn:true,sagAffectsThrust:true};
+const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:0.55,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,washStrength:1.0,battSimOn:true,sagAffectsThrust:true};
+// thrCurve recalibrated for the new physics core: motor thrust is now
+// proportional to output SQUARED, so at TWR 3 the motors must sit at 1/sqrt(3)
+// = 0.58 of full output to hover. The old linear-thrust model needed an
+// exponent above 1 to reach the same place; a quadratic one needs 0.55, which
+// puts the hover point back at ~1/3 stick where it has always been.
 // base gravity — the world geometry is ~3.5x visual scale, so real 9.81 reads
-// as slow-motion against oversized reference; effective gravity everywhere is
-// G*CFG.gravMult. Baseline 3.5 matches the world scale 1:1 — a 1s fall covers
-// 3.5x the world units, reading as real-speed against oversized geometry.
-let G=9.81;
+// as slow-motion against oversized reference. Gravity now lives inside
+// quadphysics.js at a true 9.81 m/s²; the 3.5 shows up as the world-unit scale
+// (WS) applied when module metres are mapped to the scene, which comes to the
+// same 34.3 u/s² the old G*gravMult produced. gravMult above 3.5 is applied as
+// an extra downward force in the drag hook so the slider still bites.
 
 // ---------- Renderer ----------
 const canvas=document.getElementById('c');
@@ -1561,7 +1568,120 @@ window._tryAssets(); // readiness is awaited inside — safe to call before the 
 // ---------- Quad state ----------
 const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
   q:new THREE.Quaternion(),bounces:0,t0:performance.now()};
-let thrustActual=0; // motor spool state — filtered thrust (N); starts at 0 so no jump on arm
+let thrustActual=0; // spooled thrust in WORLD newtons — audio + battery load read this
+
+// ---------- Physics core (quadphysics.js) ----------
+// The module is pure SI: metres, kg, 9.81 m/s². This world is ~3.5 world units
+// per real metre (that scale is what CFG.gravMult used to fake), so everything
+// crossing the boundary is converted. Running true SI inside and scaling on the
+// way out reproduces the old feel exactly: 9.81 × 3.5 = 34.3 u/s², which is the
+// G*gravMult the hand-rolled physics used.
+const WS=3.5;                    // world units per real metre
+// Module frame is Z-up / X-forward; three.js is Y-up. Note 1 remap, both ways.
+const mod2world=(m,out)=>out.set(m.x*WS, m.z*WS, -m.y*WS);
+const world2mod=(w,out)=>{out.x=w.x/WS; out.y=-w.z/WS; out.z=w.y/WS; return out;};
+
+const qp=new QuadPhysics(PRESETS.whoop65);
+window._qp=qp; // debug handle, same convention as _simBooted/_gltfReady above
+// Air65 II Champion stock tune from the tune database — raw Betaflight values.
+const STOCK_TUNES={
+  whoop65:{rollP:36,rollI:61,rollD:27,pitchP:37,pitchI:64,pitchD:29,yawP:36,yawI:61,yawD:0},
+  whoop75:{rollP:33,rollI:60,rollD:25,pitchP:35,pitchI:63,pitchD:28,yawP:33,yawI:60,yawD:0},
+};
+qp.setTune(STOCK_TUNES.whoop65);
+// Base thrust before voltage sag scales it each frame.
+let baseThrustPerMotor=qp.cfg.maxThrustPerMotor;
+
+// Drag hook: the existing anisotropic body-frame model, unchanged in shape.
+// The old constants were tuned against world-unit speeds and produced a force
+// in kg·u/s², so speed is scaled up on the way in and force scaled down on the
+// way out to hand the module real newtons.
+const _dv=new THREE.Vector3(),_dq=new THREE.Quaternion(),_db=new THREE.Vector3();
+qp.externalDrag=(vel)=>{
+  const spW=Math.hypot(vel.x,vel.y,vel.z)*WS;   // world units/s
+  if(spW<1e-6)return {x:0,y:0,z:0};
+  const K2=0.001,K1=0.007,LAT=1.75;
+  const perU=CFG.drag*(K2*spW*spW+K1*spW)/spW;  // world N per unit world velocity
+  // into three.js world frame, then body frame, so LAT still lands on the prop plane
+  mod2world(vel,_dv);
+  _dq.copy(state.q).invert();
+  _db.copy(_dv).multiplyScalar(WS).applyQuaternion(_dq);
+  _db.set(-_db.x*perU*LAT,-_db.y*perU,-_db.z*perU*LAT).applyQuaternion(state.q);
+  // world newtons → SI newtons, and three.js axes → module axes
+  const s=1/WS;
+  let fx=_db.x*s, fy=-_db.z*s, fz=_db.y*s;
+  // gravMult above the 3.5 baseline is an extra downward force, so the slider
+  // keeps working without the module leaving SI.
+  const extraG=(CFG.gravMult/WS)-1;
+  if(extraG!==0)fz-=extraG*qp.cfg.mass*9.81;
+  return {x:fx,y:fy,z:fz};
+};
+
+// Collision hook: runs inside every 240Hz substep. Works in world units against
+// the existing collider set, then writes the result back in SI.
+const _cp=new THREE.Vector3(),_cv=new THREE.Vector3();
+let pendingWashKick=0;
+qp.onSubstep=(s)=>{
+  mod2world(s.position,_cp);
+  mod2world(s.velocity,_cv);
+  let hitSpeed=0;
+  if(_cp.y<0.12){
+    const impact=-_cv.y;_cp.y=0.12;
+    if(impact>4.5){_cv.y=-_cv.y*0.45;_cv.x*=.7;_cv.z*=.7;hitSpeed=impact;bounce();}
+    else{_cv.y=Math.max(_cv.y,0);_cv.x*=.85;_cv.z*=.85;}
+  }
+  for(const bb of colliders){
+    if(bb.containsPoint(_cp)){
+      const HARD_INTO=11;
+      const dx=Math.min(_cp.x-bb.min.x,bb.max.x-_cp.x);
+      const dy=Math.min(_cp.y-bb.min.y,bb.max.y-_cp.y);
+      const dzp=Math.min(_cp.z-bb.min.z,bb.max.z-_cp.z);
+      let into;
+      if(dx<dy&&dx<dzp){
+        into=Math.abs(_cv.x);
+        _cp.x+=(_cp.x-(bb.min.x+bb.max.x)/2>0?dx:-dx);
+        _cv.x*=-.45;_cv.y*=.9;_cv.z*=.9;
+      }else if(dy<dzp){
+        into=Math.abs(_cv.y);
+        _cp.y+=(_cp.y-(bb.min.y+bb.max.y)/2>0?dy:-dy);
+        _cv.y*=-.45;_cv.x*=.9;_cv.z*=.9;
+      }else{
+        into=Math.abs(_cv.z);
+        _cp.z+=(_cp.z-(bb.min.z+bb.max.z)/2>0?dzp:-dzp);
+        _cv.z*=-.45;_cv.x*=.9;_cv.y*=.9;
+      }
+      if(into>HARD_INTO){hitSpeed=Math.max(hitSpeed,into);bounce();}
+      else toast('TAP');
+      break;
+    }
+  }
+  world2mod(_cp,s.position);
+  world2mod(_cv,s.velocity);
+  // note 5: hard contact throws the airframe off its axis — the tumble is the
+  // PID's problem to catch, which is the whole point of a real rate loop.
+  if(hitSpeed>0){
+    const k=Math.min(1,hitSpeed/(11*WS))*6;
+    s.omega.x+=(Math.random()-0.5)*k;
+    s.omega.y+=(Math.random()-0.5)*k;
+    s.omega.z+=(Math.random()-0.5)*k*0.5;
+  }
+  // prop wash: a disturbance torque, NOT a setpoint change — feeding it to the
+  // setpoint would make the FC dutifully track the wobble instead of fight it.
+  if(pendingWashKick>0){
+    s.omega.x+=washNx*pendingWashKick*PHYS_DT_HZ;
+    s.omega.y+=washNz*pendingWashKick*PHYS_DT_HZ;
+  }
+};
+const PHYS_DT_HZ=1/240;
+
+// Mirror the module state into the three.js-space `state` object every frame so
+// camera, OSD, gates, ghosts and prop wash keep reading exactly what they did.
+function syncStateFromQp(){
+  mod2world(qp.position,state.pos);
+  mod2world(qp.velocity,state.vel);
+  const q=qp.quaternion;
+  state.q.set(q.x,q.z,-q.y,q.w);
+}
 // ---------- prop wash state ----------
 // ring buffer of recent path positions: sampled every 4th physics step (~60Hz),
 // 90 entries ≈ 1.5s of history. Entries start far below the world so
@@ -1579,6 +1699,10 @@ const BATT_FULL=4.2,BATT_EMPTY=3.5;
 const BATT_WARN=3.5,BATT_CRIT=3.3;
 let battCharge=1,battV=BATT_FULL;
 function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
+  // module owns the truth now — reset it, then mirror back into `state`
+  qp.reset(world2mod(state.pos,{x:0,y:0,z:0}));
+  qp.cfg.maxThrustPerMotor=baseThrustPerMotor;
+  syncStateFromQp();
   thrustActual=0; // motors spool from zero on re-arm — no thrust jump
   washCount=0;washIdx=0;washActive=0;camShake=0; // stale trail must not wash the respawned quad
   battCharge=1;battV=BATT_FULL; // reset = fresh pack
@@ -1985,10 +2109,13 @@ function toggleFlightMode(){
 }
 
 // ---------- Physics ----------
-const tmpV=new THREE.Vector3(),up=new THREE.Vector3();
-const qInv=new THREE.Quaternion(),vBody=new THREE.Vector3(),dragB=new THREE.Vector3();
-const dq=new THREE.Quaternion(),axis=new THREE.Vector3();
 const eulTmp=new THREE.Euler();
+// Rate setpoint handed to the FC each frame, in the module's body frame.
+const qpSetpoint={roll:0,pitch:0,yaw:0};
+// Sign bridge between three.js body rates (wx pitch / wy yaw / wz roll) and the
+// module's X-forward, Y-left, Z-up axes. Verified empirically — see the axis
+// check in the commit; flip one of these if a stick ever drives the wrong way.
+const SGN_ROLL=-1,SGN_PITCH=-1,SGN_YAW=1;
 function physics(dt){
   const yr=THREE.MathUtils.degToRad(bfRate(stick.y,CFG.rcRate,CFG.superRate,CFG.expo));
   let wx,wz;
@@ -2041,9 +2168,10 @@ function physics(dt){
       washNx=washNx*0.92+(Math.random()*2-1)*0.35;
       washNz=washNz*0.92+(Math.random()*2-1)*0.35;
       if(washActive>0){
-        const A=2.5*washActive; // rad/s peak — a real fight on the sticks, not a tumble
-        wx+=washNx*A;
-        wz+=washNz*A;
+        // Disturbance, not setpoint: handed to onSubstep as an angular kick so
+        // the FC has to fight it. Adding it to the setpoint would make the PID
+        // track the wobble and the quad would fly perfectly through its own wash.
+        pendingWashKick=2.5*washActive;
         // wash-specific shake scaling — camShake is the shared channel (future
         // crash/impact shake feeds it at full strength); only wash is damped
         const WASH_SHAKE=0.10;
@@ -2051,29 +2179,20 @@ function physics(dt){
       }
     }
   }
-  const mag=Math.sqrt(wx*wx+wy*wy+wz*wz);
-  if(mag>1e-8){axis.set(wx/mag,wy/mag,wz/mag);dq.setFromAxisAngle(axis,mag*dt);state.q.multiply(dq).normalize();}
-  up.set(0,1,0).applyQuaternion(state.q);
-  const mass=CFG.massG/1000;
-  // absolute thrust in Newtons (independent of mass) — with a=F/mass below,
-  // a lighter quad now genuinely accelerates harder. Peak thrust = CFG.maxThrustN.
-  // Motor spool lag: first-order filter so thrust chases the commanded value
-  // with time constant spoolTau instead of responding instantly — throttle
-  // punches ramp in over ~2-3 tau and momentum carries briefly after chop.
-  // Betaflight-style motor idle: armed motors never sit at true zero — the
-  // stick maps onto [idlePct..1] before the ^2.2 curve. Idle thrust rides the
-  // body-up axis (F uses `up` below), so upright it cushions descent while
-  // inverted it pushes toward the ground — inverted falls noticeably harder,
-  // matching real whoop behavior. (This sim has no disarm state; the quad is
-  // always armed, so the floor always applies.)
-  const stickEffective=CFG.idlePct+stick.t*(1-CFG.idlePct);
-  let thrustCommanded=Math.pow(stickEffective,CFG.thrCurve)*CFG.maxThrustN;
+  // wx/wy/wz are three.js-frame body rates (rad/s) from the Betaflight rate
+  // curve — unchanged maths. They become the FC's rate SETPOINT; the PID loop
+  // owns orientation now, so nothing here touches state.q directly.
+  qpSetpoint.roll  = SGN_ROLL  * wz;
+  qpSetpoint.pitch = SGN_PITCH * wx;
+  qpSetpoint.yaw   = SGN_YAW   * wy;
+
   // ---------- battery drain + sag → thrust coupling ----------
-  // Load (previous step's filtered thrust) drains charge and pulls the pack
-  // down; resting voltage tracks charge; sag worsens as the pack empties
-  // (rising internal resistance); the readout voltage is smoothed ~0.15s.
+  // Unchanged model. Load is read from the module's spooled thrust instead of a
+  // local filter; the sag factor now scales maxThrustPerMotor (note 8) rather
+  // than a single thrust scalar.
+  const maxThrustWorld=qp.cfg.maxThrustPerMotor*4*WS;
   if(CFG.battSimOn){
-    const loadFrac=Math.min(1,thrustActual/CFG.maxThrustN);
+    const loadFrac=Math.min(1,thrustActual/Math.max(1e-6,maxThrustWorld));
     battCharge=Math.max(0,battCharge-dt*(0.25+1.5*loadFrac)/180); // hover ~4min, punch-outs eat it faster
     const vRest=BATT_EMPTY+(BATT_FULL-BATT_EMPTY)*battCharge;
     const vTarget=vRest-loadFrac*(0.25+0.35*(1-battCharge));
@@ -2082,61 +2201,21 @@ function physics(dt){
   // Thrust scales ~V^1.5 for brushless (RPM ∝ V, thrust ∝ RPM², prop unload
   // compensates): fresh pack = full punch, sagged pack = mushy punch-outs and
   // a hover point that creeps up the stick — toggleable for pure practice.
-  // sagAffectsThrust is a sub-option of the master battery sim.
-  if(CFG.battSimOn&&CFG.sagAffectsThrust)thrustCommanded*=Math.pow(Math.max(0.5,battV/BATT_FULL),1.5);
-  thrustActual+=(thrustCommanded-thrustActual)*(dt/CFG.spoolTau);
-  const F=tmpV.copy(up).multiplyScalar(thrustActual);
-  F.y-=mass*G*CFG.gravMult; // effective gravity — scaled for the oversized world
-  const v=state.vel,sp=v.length();
-  if(sp>1e-6){
-    // mass-INDEPENDENT drag force in Newtons (no *mass — the old code multiplied
-    // by mass then divided by it in a=F/m, so every mass carried momentum
-    // identically). K2/K1 tuned so a throttle-chop free fall at the 65mm preset
-    // (drag 0.55, 28g) reaches terminal ~38 u/s (~11 m/s real at 3.5x world
-    // scale): drag decel there equals G*gravMult. Heavier = higher terminal.
-    // Anisotropic body drag: velocity into body frame, prop disks + ducts
-    // resist lateral (body XZ) flow ~1.75x more than axial (body Y) flow.
-    const K2=0.001,K1=0.007,LAT=1.75;
-    const perU=CFG.drag*(K2*sp*sp+K1*sp)/sp; // N per unit velocity
-    qInv.copy(state.q).invert();
-    vBody.copy(v).applyQuaternion(qInv);
-    dragB.set(-vBody.x*perU*LAT,-vBody.y*perU,-vBody.z*perU*LAT);
-    F.add(dragB.applyQuaternion(state.q)); // back to world frame
-  }
-  v.addScaledVector(F,dt/mass);
-  state.pos.addScaledVector(v,dt);
-  if(state.pos.y<0.12){
-    const impact=-v.y;state.pos.y=0.12;
-    if(impact>4.5){v.y=-v.y*0.45;v.x*=.7;v.z*=.7;bounce();} // reflect off ground, damped
-    else{v.y=Math.max(v.y,0);v.x*=.85;v.z*=.85;}
-  }
-  for(const bb of colliders){
-    if(bb.containsPoint(state.pos)){
-      // resolve along smallest penetration axis; reflect velocity off that
-      // face's normal with damping — bounce and keep flying, no reset needed
-      const HARD_INTO=11; // m/s into wall = hard bounce (toast feedback)
-      const dx=Math.min(state.pos.x-bb.min.x,bb.max.x-state.pos.x);
-      const dy=Math.min(state.pos.y-bb.min.y,bb.max.y-state.pos.y);
-      const dzp=Math.min(state.pos.z-bb.min.z,bb.max.z-state.pos.z);
-      let into;
-      if(dx<dy&&dx<dzp){
-        into=Math.abs(v.x);
-        state.pos.x+=(state.pos.x-(bb.min.x+bb.max.x)/2>0?dx:-dx);
-        v.x*=-.45; v.y*=.9; v.z*=.9;
-      } else if(dy<dzp){
-        into=Math.abs(v.y);
-        state.pos.y+=(state.pos.y-(bb.min.y+bb.max.y)/2>0?dy:-dy);
-        v.y*=-.45; v.x*=.9; v.z*=.9;
-      } else {
-        into=Math.abs(v.z);
-        state.pos.z+=(state.pos.z-(bb.min.z+bb.max.z)/2>0?dzp:-dzp);
-        v.z*=-.45; v.x*=.9; v.y*=.9;
-      }
-      if(into>HARD_INTO)bounce();
-      else toast('TAP');
-      break;
-    }
-  }
+  const sag=(CFG.battSimOn&&CFG.sagAffectsThrust)?Math.pow(Math.max(0.5,battV/BATT_FULL),1.5):1;
+  qp.cfg.maxThrustPerMotor=baseThrustPerMotor*sag;
+
+  // Arm gate: the safety gate that used to only deaden throttle now actually
+  // disarms the FC, which is what the module expects (note 6).
+  if(armGate)qp.disarm(); else if(!qp.armed)qp.arm();
+
+  // Throttle curve stays here; the module applies the Betaflight idle floor
+  // itself, so the old idlePct blend is gone.
+  const throttle=Math.pow(Math.max(0,Math.min(1,stick.t)),CFG.thrCurve);
+
+  qp.step(dt,qpSetpoint,throttle);
+  pendingWashKick=0;
+  syncStateFromQp();
+  thrustActual=qp.totalThrustN*WS; // world newtons, for audio + battery load
 }
 function bounce(){
   state.bounces++;toast('BOUNCE #'+state.bounces);
@@ -2208,8 +2287,15 @@ function updateOSD(){
   osdTR.innerHTML=`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):'KEYBOARD'}${axisMap&&gpConnected?' (CAL)':''}<br>`+
     `RATES ${CFG.rcRate.toFixed(2)}/${CFG.superRate.toFixed(2)}/${CFG.expo.toFixed(2)}<br>`+
     `CAM ${CFG.camDeg}° FOV ${CFG.fov}${usingGltf?'<br>GLTF MAP':''}`;
+  // Per-motor outputs straight off the mixer — a yaw input shows the CW pair
+  // rising while the CCW pair drops, which is the tell that the mixer is real.
+  const mo=qp.motorOutputs;
+  const bar=v=>'█'.repeat(Math.round(v*6)).padEnd(6,'░');
   osdBC.innerHTML=`THR ${'█'.repeat(Math.round(stick.t*10)).padEnd(10,'░')} ${(stick.t*100)|0}%`+
-    `&nbsp;&nbsp;FLT ${String(t/60|0).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+    `&nbsp;&nbsp;FLT ${String(t/60|0).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`+
+    `&nbsp;&nbsp;TWR ${qp.twr.toFixed(1)}`+
+    `<br><span style="font-size:.85em;opacity:.85">`+
+    `M1 ${bar(mo[0])} M2 ${bar(mo[1])} M3 ${bar(mo[2])} M4 ${bar(mo[3])}</span>`;
   updateLapOSD();
 }
 
@@ -2228,7 +2314,10 @@ function refreshMax(){document.getElementById('v_max').textContent=maxRateDps().
 // Recomputing it on every mass change is what makes massG actually change the
 // felt acceleration (a = F/mass) instead of cancelling out.
 function refreshTwr(){
-  const twr=CFG.maxThrustN/((CFG.massG/1000)*G*CFG.gravMult); // effective weight includes gravity scale
+  // Max static thrust:weight straight off the physics core — four motors at
+  // full output over the current mass. Real SI on both sides, so no world-scale
+  // factor: this is the number a bench test would give.
+  const twr=(baseThrustPerMotor*4)/((CFG.massG/1000)*9.81);
   document.getElementById('s_twr').value=Math.max(2,Math.min(14,twr)); // thumb reflects the ratio (clamped to slider range)
   document.getElementById('v_twr').textContent=twr.toFixed(1)+':1';
 }
@@ -2237,9 +2326,21 @@ bind('sr','superRate',x=>x.toFixed(2));
 bind('ex','expo',x=>x.toFixed(2));
 bind('cam','camDeg',x=>x+'°');
 bind('fov','fov',x=>x+'°',()=>{camera.fov=CFG.fov;camera.updateProjectionMatrix();});
+// Push panel values into the physics core. Mass changes must re-derive the
+// inertia tensor (same flat-box formula the module uses) or a 28g quad would
+// keep a 5"-sized rotational inertia; motors are left spooled so dragging a
+// slider mid-flight does not stall the props.
+function applyCfgToQp(){
+  qp.cfg.mass=CFG.massG/1000;
+  qp.cfg.motorTau=CFG.spoolTau;
+  const m=qp.cfg.mass,w=qp.cfg.wheelbase,h=w*0.35;
+  qp.inertia.x=(m/12)*(w*w+h*h);
+  qp.inertia.y=qp.inertia.x;
+  qp.inertia.z=(m/12)*(w*w*2);
+}
 bind('drag','drag',x=>x.toFixed(2));
-bind('mass','massG',x=>x+'g',refreshTwr); // mass change → recompute the thrust:weight readout
-bind('spool','spoolTau',x=>(x*1000).toFixed(0)+'ms'); // motor spool time constant
+bind('mass','massG',x=>x+'g',()=>{applyCfgToQp();refreshTwr();}); // mass change → inertia + thrust:weight readout
+bind('spool','spoolTau',x=>(x*1000).toFixed(0)+'ms',applyCfgToQp); // motor spool time constant
 bind('grav','gravMult',x=>x.toFixed(2)+'×',refreshTwr); // gravity scale — effective weight changes, so re-derive thrust:weight
 bind('thc','thrCurve',x=>'^'+x.toFixed(1)); // throttle curve exponent — shape of stick→thrust mapping
 bind('wash','washStrength',x=>x.toFixed(2)+'×'); // prop wash disturbance strength (0 = off)
@@ -2256,8 +2357,10 @@ document.getElementById('cbBattSim').onchange=e=>{
 // so a lighter drone genuinely accelerates harder. drag matches the authentic
 // less-floaty tuning (0.55+), not the old floaty 0.28.
 const DRONE_TYPES={
-  whoop65:{label:'65mm Whoop',maxThrustN:3.9,drag:0.55,mass:28,sr:0.72,spool:0.04}, // hover ~30% stick at 3.5x gravity (idle floor + ^1.3 curve), ~4.1x hover at full stick
-  whoop75:{label:'75mm Whoop',maxThrustN:5.3,drag:0.60,mass:38,sr:0.68,spool:0.05}  // hover ~30% stick at 38g AUW under 3.5x gravity, lazier yaw + slower 0802 spool
+  whoop65:{label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020}, // TWR ~3:1, hovers ~0.33 throttle
+  whoop75:{label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024}, // lazier yaw + slower 0802 spool
+  whoop85:{label:'85mm Whoop',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028},
+  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060} // heavy: inertia does the work, no other changes
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
@@ -2274,9 +2377,15 @@ function setSlider(id,val){
 }
 function applyDroneType(){
   const d=DRONE_TYPES[droneType];
-  CFG.maxThrustN=d.maxThrustN;                       // absolute thrust for this drone (Newtons)
+  // Physics core first: the preset carries mass, wheelbase, per-motor thrust,
+  // spool and yaw-torque ratio, and rebuilds the motor layout + inertia tensor.
+  qp.setPreset(PRESETS[d.preset]);
+  qp.setTune(STOCK_TUNES[d.preset]||STOCK_TUNES.whoop65);
+  baseThrustPerMotor=qp.cfg.maxThrustPerMotor;
+  CFG.maxThrustN=baseThrustPerMotor*4*WS;            // world-newton mirror, for audio + readouts
   setSlider('drag',d.drag);setSlider('mass',d.mass);setSlider('sr',d.sr);
   setSlider('spool',d.spool);                        // per-drone motor spool time constant
+  applyCfgToQp();                                    // slider values win over the preset's mass/tau
   refreshTwr();                                      // update the derived thrust:weight readout
 }
 droneSel.onchange=()=>{
