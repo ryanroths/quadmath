@@ -193,6 +193,11 @@
   <button id="btnCalib">CALIBRATE RADIO / STICKS</button>
 
   <h2>Rates (Betaflight)</h2>
+  <div class="frame-select" style="margin-bottom:10px">
+    <button class="frame-btn active" id="ax_roll" data-axis="roll">Roll</button>
+    <button class="frame-btn" id="ax_pitch" data-axis="pitch">Pitch</button>
+    <button class="frame-btn" id="ax_yaw" data-axis="yaw">Yaw</button>
+  </div>
   <div class="row"><label>RC Rate</label><span class="val" id="v_rc"></span></div>
   <input type="range" id="s_rc" min="0.5" max="2.5" step="0.01" value="1.10">
   <div class="row"><label>Super Rate</label><span class="val" id="v_sr"></span></div>
@@ -2139,13 +2144,38 @@ function axisRate(axis,x){
   return bfCurve(x,a.rcRate,a.srate,a.expo);
 }
 function maxRateDps(axis){return Math.abs(axisRate(axis||'roll',1));}
-// Slider edits are Betaflight-style and apply to all three axes, which also
-// drops the craft back onto the BETAFLIGHT curve.
+// Which axis the sliders are editing. The sim always flies CFG.axisRates —
+// the sliders are a view onto one axis of it, never the source of truth.
+let rateAxis='roll';
+// Slider edit -> write ONLY the selected axis.
 function syncAxisRatesFromSliders(){
-  CFG.ratesType='BETAFLIGHT';
-  for(const ax of ['roll','pitch','yaw'])
-    CFG.axisRates[ax]={rcRate:CFG.rcRate,srate:CFG.superRate,expo:CFG.expo};
+  if(CFG.ratesType!=='BETAFLIGHT')return;   // sliders are disabled under ACTUAL
+  CFG.axisRates[rateAxis]={rcRate:CFG.rcRate,srate:CFG.superRate,expo:CFG.expo};
   updateRatesTypeBadge();
+}
+// Selected axis -> slider positions and labels. Does not touch axisRates.
+function syncSlidersFromAxis(){
+  const a=CFG.axisRates[rateAxis];
+  const actual=CFG.ratesType==='ACTUAL';
+  ['rc','sr','ex'].forEach(id=>{const el=document.getElementById('s_'+id);if(el)el.disabled=actual;});
+  if(actual){
+    document.getElementById('v_rc').textContent='—';
+    document.getElementById('v_sr').textContent='—';
+    document.getElementById('v_ex').textContent=(a.expo||0).toFixed(2);
+    refreshMax();return;
+  }
+  CFG.rcRate=a.rcRate;CFG.superRate=a.srate;CFG.expo=a.expo;
+  const set=(id,v,fmt)=>{const el=document.getElementById('s_'+id);if(el)el.value=v;
+    document.getElementById('v_'+id).textContent=fmt;};
+  set('rc',a.rcRate,a.rcRate.toFixed(2));
+  set('sr',a.srate,a.srate.toFixed(2));
+  set('ex',a.expo,a.expo.toFixed(2));
+  refreshMax();
+}
+function setRateAxis(ax){
+  rateAxis=ax;
+  ['roll','pitch','yaw'].forEach(a=>document.getElementById('ax_'+a).classList.toggle('active',a===ax));
+  syncSlidersFromAxis();
 }
 function updateRatesTypeBadge(){
   const el=document.getElementById('ratesTypeBadge');
@@ -2300,7 +2330,10 @@ function updateOSD(){
   }else landEl.style.display='none';
   osdTL.innerHTML=`SPD ${spd} km/h<br>ALT ${alt} m${battLine}`;
   osdTR.innerHTML=`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):'KEYBOARD'}${axisMap&&gpConnected?' (CAL)':''}<br>`+
-    `RATES ${CFG.rcRate.toFixed(2)}/${CFG.superRate.toFixed(2)}/${CFG.expo.toFixed(2)}<br>`+
+    // Rates are per axis now; name the one being shown so it cannot read as global.
+    `RATES ${CFG.ratesType==='ACTUAL'
+      ? rateAxis.toUpperCase()+' '+maxRateDps(rateAxis).toFixed(0)+'°/s ACTUAL'
+      : rateAxis.toUpperCase()+' '+CFG.rcRate.toFixed(2)+'/'+CFG.superRate.toFixed(2)+'/'+CFG.expo.toFixed(2)}<br>`+
     `CAM ${CFG.camDeg}° FOV ${CFG.fov}${usingGltf?'<br>GLTF MAP':''}`;
   // Per-motor outputs straight off the mixer — a yaw input shows the CW pair
   // rising while the CCW pair drops, which is the tell that the mixer is real.
@@ -2323,7 +2356,11 @@ function bind(id,key,fmt,post){
   const u=()=>{CFG[key]=parseFloat(s.value);v.textContent=fmt(CFG[key]);if(post)post();refreshMax();};
   s.addEventListener('input',u);u();
 }
-function refreshMax(){document.getElementById('v_max').textContent=maxRateDps('roll').toFixed(0)+' °/s';}
+function refreshMax(){
+  const m=a=>maxRateDps(a).toFixed(0);
+  document.getElementById('v_max').textContent=
+    m(rateAxis)+' °/s  ·  R'+m('roll')+' P'+m('pitch')+' Y'+m('yaw');
+}
 // twr is now a DISPLAY-ONLY readout: physics runs on absolute CFG.maxThrustN,
 // so thrust:weight is derived (thrust ÷ weight), not a physics driver.
 // Recomputing it on every mass change is what makes massG actually change the
@@ -2336,6 +2373,9 @@ function refreshTwr(){
   document.getElementById('s_twr').value=Math.max(2,Math.min(14,twr)); // thumb reflects the ratio (clamped to slider range)
   document.getElementById('v_twr').textContent=twr.toFixed(1)+':1';
 }
+['roll','pitch','yaw'].forEach(a=>{
+  document.getElementById('ax_'+a).addEventListener('click',()=>setRateAxis(a));
+});
 bind('rc','rcRate',x=>x.toFixed(2),syncAxisRatesFromSliders);
 bind('sr','superRate',x=>x.toFixed(2),syncAxisRatesFromSliders);
 bind('ex','expo',x=>x.toFixed(2),syncAxisRatesFromSliders);
@@ -2484,19 +2524,33 @@ function importCli(text){
   }
   const type=p.ratesType||CFG.ratesType;   // no rates_type line = keep current
   const anyRates=['roll','pitch','yaw'].some(ax=>Object.keys(p.rates[ax]).length);
+  // Axes absent from the dump keep whatever they had. They are never filled in
+  // from another axis, but the pilot is told which ones went untouched.
+  const missing=['roll','pitch','yaw'].filter(ax=>!Object.keys(p.rates[ax]).length);
 
   if(anyRates){
     // Partial dumps must not zero anything: start from what each axis has now,
     // converting the defaults across if the curve family changed.
     for(const ax of ['roll','pitch','yaw']){
       const cur=CFG.axisRates[ax],src=p.rates[ax];
+      // If the dump changes curve family, CONVERT each axis's existing rates
+      // rather than falling back to a default — otherwise an axis the dump does
+      // not mention silently loses its tune. (Defaulting sent untouched axes
+      // from 786 to 200 deg/s.) The conversion matches centre slope and full-
+      // stick maximum, which is as close as the two families get.
       let base;
-      if(type==='ACTUAL')base={center:cur.center!==undefined?cur.center:200*(cur.rcRate||1),
-                               max:cur.max!==undefined?cur.max:maxRateDps(ax),
-                               expo:cur.expo||0};
-      else base={rcRate:cur.rcRate!==undefined?cur.rcRate:1.0,
-                 srate:cur.srate!==undefined?cur.srate:0,
-                 expo:cur.expo||0};
+      if(type==='ACTUAL'){
+        base=cur.center!==undefined
+          ? {center:cur.center,max:cur.max,expo:cur.expo||0}
+          : {center:200*(cur.rcRate||1),max:maxRateDps(ax),expo:cur.expo||0};
+      }else{
+        if(cur.rcRate!==undefined)base={rcRate:cur.rcRate,srate:cur.srate,expo:cur.expo||0};
+        else{
+          const rcRate=THREE.MathUtils.clamp((cur.center||200)/200,0.01,5);
+          const srate=THREE.MathUtils.clamp(1-(cur.center||200)/(cur.max||cur.center||200),0,0.95);
+          base={rcRate,srate,expo:cur.expo||0};
+        }
+      }
       const merged=Object.assign(base,src);
       // drop anything belonging to the other curve family so a later type
       // switch cannot resurrect stale numbers
@@ -2506,21 +2560,11 @@ function importCli(text){
     CFG.ratesType=type;
     // Sliders mirror the roll axis. Set CFG/labels directly rather than through
     // setSlider, whose bind handler would stamp roll's values over all axes.
-    const roll=CFG.axisRates.roll;
-    if(type==='BETAFLIGHT'){
-      CFG.rcRate=roll.rcRate;CFG.superRate=roll.srate;CFG.expo=roll.expo;
-      const set=(id,v)=>{const s=document.getElementById('s_'+id);if(s)s.value=v;};
-      set('rc',CFG.rcRate);set('sr',CFG.superRate);set('ex',CFG.expo);
-      document.getElementById('v_rc').textContent=CFG.rcRate.toFixed(2);
-      document.getElementById('v_sr').textContent=CFG.superRate.toFixed(2);
-      document.getElementById('v_ex').textContent=CFG.expo.toFixed(2);
-    }else{
-      // ACTUAL has no rcRate/srate equivalent — the sliders cannot represent it,
-      // so they are shown disabled rather than displaying a misleading number.
-      notice=' · ACTUAL: '+roll.center.toFixed(0)+'/'+roll.max.toFixed(0)+' °/s';
-    }
-    ['rc','sr','ex'].forEach(id=>{const s=document.getElementById('s_'+id);if(s)s.disabled=(type==='ACTUAL');});
-    refreshMax();updateRatesTypeBadge();
+    // Always land on Roll after an import — never leave the sliders showing
+    // whichever axis happened to be parsed last.
+    setRateAxis('roll');
+    if(missing.length)notice+=' · no '+missing.join('/')+' in dump — kept previous';
+    updateRatesTypeBadge();
   }
 
   // PIDs straight into the flight controller
@@ -2533,6 +2577,9 @@ function importCli(text){
   if(p.idle!==null){qp.cfg.idleThrottle=THREE.MathUtils.clamp(p.idle,0,0.2);notice+=' · idle '+(p.idle*100).toFixed(1)+'%';}
 
   const perAxis=['pitch','yaw'].some(ax=>JSON.stringify(CFG.axisRates[ax])!==JSON.stringify(CFG.axisRates.roll));
+  // Full parsed state, so an import can always be checked against the dump.
+  console.info('[CLI import] type=%s  rates=%o  pids=%o  idle=%o',
+    CFG.ratesType,JSON.parse(JSON.stringify(CFG.axisRates)),p.pids,p.idle);
   toast('CLI '+CFG.ratesType+': max '+maxRateDps('roll').toFixed(0)+'°/s'+
         (perAxis?' · per-axis':'')+notice);
   return p;
