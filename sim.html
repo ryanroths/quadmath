@@ -193,17 +193,26 @@
   <button id="btnCalib">CALIBRATE RADIO / STICKS</button>
 
   <h2>Rates (Betaflight)</h2>
-  <div class="row"><label>RC Rate</label><span class="val" id="v_rc"></span></div>
-  <input type="range" id="s_rc" min="0.5" max="2.5" step="0.01" value="1.10">
-  <div class="row"><label>Super Rate</label><span class="val" id="v_sr"></span></div>
-  <input type="range" id="s_sr" min="0" max="0.95" step="0.01" value="0.72">
-  <div class="row"><label>Expo</label><span class="val" id="v_ex"></span></div>
-  <input type="range" id="s_ex" min="0" max="1" step="0.01" value="0.25">
+  <div class="frame-select" style="margin-bottom:6px">
+    <button class="frame-btn active" id="ax_roll" data-axis="roll">Roll</button>
+    <button class="frame-btn" id="ax_pitch" data-axis="pitch">Pitch</button>
+    <button class="frame-btn" id="ax_yaw" data-axis="yaw">Yaw</button>
+  </div>
+  <!-- Max rate is a READOUT, never a slider. It sits above the sliders so no
+       slider can be mistaken for belonging to it. -->
   <div class="row"><label>Max rate</label><span class="val" id="v_max"></span></div>
+  <div class="row" style="opacity:.65;font-size:.8em"><span id="v_maxAll"></span></div>
+  <div class="row"><label>RC Rate</label><span class="val" id="v_rc"></span></div>
+  <input type="range" id="s_rc" data-field="rcRate" min="0.5" max="2.5" step="0.01" value="1.10">
+  <div class="row"><label>Super Rate</label><span class="val" id="v_sr"></span></div>
+  <input type="range" id="s_sr" data-field="srate" min="0" max="0.95" step="0.01" value="0.72">
+  <div class="row"><label>Expo</label><span class="val" id="v_ex"></span></div>
+  <input type="range" id="s_ex" data-field="expo" min="0" max="1" step="0.01" value="0.25">
 
   <h2>Paste Betaflight CLI dump</h2>
   <textarea id="cliPaste" rows="4" placeholder="set roll_rc_rate = 110&#10;set roll_srate = 72&#10;set roll_expo = 25&#10;…or a full diff / dump rates"></textarea>
   <button id="btnCliImport">IMPORT CLI</button>
+  <span class="val" id="ratesTypeBadge" style="margin-left:8px">BETAFLIGHT</span>
 
   <h2>Camera</h2>
   <div class="row"><label>Cam angle</label><span class="val" id="v_cam"></span></div>
@@ -294,7 +303,8 @@ let GLTFLoader=null;
 const gltfReady=import("three/addons/loaders/GLTFLoader.js")
   .then(function(m){GLTFLoader=m.GLTFLoader;window._gltfReady=true;return true;})
   .catch(function(){window._gltfReady=false;return false;});
-const CFG={rcRate:1.10,superRate:0.72,expo:0.25,camDeg:25,fov:105,maxThrustN:3.9,thrCurve:0.68,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
+const CFG={
+  camDeg:25,fov:105,maxThrustN:3.9,thrCurve:0.68,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
 // thrCurve recalibrated for the new physics core: motor thrust is now
 // proportional to output SQUARED, so at TWR 3 the motors must sit at 1/sqrt(3)
 // = 0.58 of full output to hover. The old linear-thrust model needed an
@@ -2097,14 +2107,99 @@ function readInput(dt){
 }
 
 // ---------- Betaflight rates ----------
-function bfRate(x,rc,sr,ex){
-  const a=Math.abs(x);
-  x=x*Math.pow(a,3)*ex+x*(1-ex);
-  let rate=200*rc*x;
-  if(sr>0)rate*=1/THREE.MathUtils.clamp(1-Math.abs(x)*sr,0.01,1);
+// ---------- Betaflight rate curves ----------
+// Ported from Betaflight rc.c. Two curve families, and they are NOT
+// interchangeable: BETAFLIGHT stores rcRate/srate as integers x100 (100 = 1.00),
+// ACTUAL stores them as deg/s over 10 (rc_rate 7 = 70 deg/s centre sensitivity,
+// srate 67 = 670 deg/s max). Expo is /100 in both. Scaling is applied at parse
+// time, so everything below works in real units.
+//
+// Per axis, always. The sim stores roll/pitch/yaw separately even though the
+// sliders drive one shared set — a CLI dump routinely carries a different yaw.
+function bfCurve(x,rcRate,srate,expo){
+  const absX=Math.abs(x);                      // pre-expo, as Betaflight does it
+  if(expo)x=x*Math.pow(absX,3)*expo+x*(1-expo);
+  let rr=rcRate;
+  if(rr>2.0)rr+=14.54*(rr-2.0);                // RC_RATE_INCREMENTAL
+  let rate=200*rr*x;
+  if(srate>0)rate*=1/THREE.MathUtils.clamp(1-absX*srate,0.01,1);
   return rate;
 }
-function maxRateDps(){return Math.abs(bfRate(1,CFG.rcRate,CFG.superRate,CFG.expo));}
+function actualCurve(x,centerSens,maxRate,expo){
+  const absX=Math.abs(x);
+  const blend=absX*(Math.pow(x,5)*expo+x*(1-expo));
+  const stickMovement=Math.max(0,maxRate-centerSens);
+  return x*centerSens+stickMovement*blend;
+}
+// ---------------------------------------------------------------------------
+// RATES — single source of truth. Sliders, readouts, OSD and the setpoint math
+// all read this object. Nothing caches a copy; the sliders own no state.
+//   BETAFLIGHT: rcRate 1.00 = CLI 100,  srate 0.73 = CLI 73,  expo 0.25
+//   ACTUAL:     rcRate 7 = 70 deg/s centre, srate 67 = 670 deg/s max
+// ---------------------------------------------------------------------------
+const rates={
+  type:'BETAFLIGHT',
+  roll: {rcRate:1.10,srate:0.72,expo:0.25},
+  pitch:{rcRate:1.10,srate:0.72,expo:0.25},
+  yaw:  {rcRate:1.10,srate:0.72,expo:0.25},
+};
+let rateAxis='roll';
+const RATE_AXES=['roll','pitch','yaw'];
+
+// Rates the pilot has set (slider or CLI import) outlive a reload and outrank
+// the drone-type preset, which would otherwise stamp its super-rate over them
+// on every load.
+let ratesAreCustom=false;
+try{const saved=JSON.parse(localStorage.getItem('ryflyRates')||'null');
+  if(saved&&saved.type&&saved.roll){rates.type=saved.type;ratesAreCustom=true;
+    for(const ax of RATE_AXES)if(saved[ax])Object.assign(rates[ax],saved[ax]);}
+}catch(e){}
+function saveRates(){ratesAreCustom=true;try{localStorage.setItem('ryflyRates',JSON.stringify(rates));}catch(e){}}
+
+function axisRate(axis,x){
+  const a=rates[axis];
+  if(rates.type==='ACTUAL')return actualCurve(x,a.rcRate*10,a.srate*10,a.expo);
+  return bfCurve(x,a.rcRate,a.srate,a.expo);
+}
+function maxRateDps(axis){
+  const a=rates[axis||rateAxis];
+  if(rates.type==='ACTUAL')return a.srate*10;
+  let rc=a.rcRate; if(rc>2)rc+=14.54*(rc-2);
+  return 200*rc/Math.max(0.01,1-a.srate);
+}
+
+// Slider bindings: one explicit handler per element, each reading its own
+// data-field. No loop closure, no index arithmetic — the previous version's
+// crossed wiring is impossible to reproduce here.
+function onRateSlider(inputEl){
+  const field=inputEl.dataset.field;              // 'rcRate' | 'srate' | 'expo'
+  rates[rateAxis][field]=parseFloat(inputEl.value);
+  refreshRatesUI();
+  saveRates();
+}
+function refreshRatesUI(){
+  const a=rates[rateAxis],actual=rates.type==='ACTUAL';
+  const S=id=>document.getElementById(id);
+  // slider positions are SET, never dispatched — dispatching would re-enter
+  // onRateSlider and clobber freshly parsed values with slider-clamped ones
+  S('s_rc').value=a.rcRate; S('s_sr').value=a.srate; S('s_ex').value=a.expo;
+  S('v_rc').textContent=actual?(a.rcRate*10).toFixed(0)+' °/s':a.rcRate.toFixed(2);
+  S('v_sr').textContent=actual?(a.srate*10).toFixed(0)+' °/s':a.srate.toFixed(2);
+  S('v_ex').textContent=a.expo.toFixed(2);
+  S('v_max').textContent=maxRateDps(rateAxis).toFixed(0)+' °/s';
+  S('v_maxAll').textContent='max R '+maxRateDps('roll').toFixed(0)+
+    ' / P '+maxRateDps('pitch').toFixed(0)+' / Y '+maxRateDps('yaw').toFixed(0)+' °/s';
+  RATE_AXES.forEach(ax=>S('ax_'+ax).classList.toggle('active',ax===rateAxis));
+  const badge=S('ratesTypeBadge');
+  if(badge){
+    const perAxis=['pitch','yaw'].some(ax=>JSON.stringify(rates[ax])!==JSON.stringify(rates.roll));
+    badge.textContent=rates.type+(perAxis?' · per-axis':'');
+    badge.style.color=actual?'var(--green)':'';
+  }
+}
+function setRateAxis(ax){rateAxis=ax;refreshRatesUI();}
+// Kept for callers that only know the old name.
+function refreshMax(){refreshRatesUI();}
 
 // ---------- Flight mode (acro = raw rates, angle = self-level) ----------
 let flightMode='acro';
@@ -2132,18 +2227,18 @@ window._axis=()=>({
 // check in the commit; flip one of these if a stick ever drives the wrong way.
 const SGN_ROLL=-1,SGN_PITCH=-1,SGN_YAW=1;
 function physics(dt){
-  const yr=THREE.MathUtils.degToRad(bfRate(stick.y,CFG.rcRate,CFG.superRate,CFG.expo));
+  const yr=THREE.MathUtils.degToRad(axisRate('yaw',stick.y));
   let wx,wz;
   if(flightMode==='angle'){
     // sticks command target lean angle; P-controller levels toward it
     eulTmp.setFromQuaternion(state.q,'YXZ');
     wx=(THREE.MathUtils.degToRad(stick.p*ANGLE_MAX)-eulTmp.x)*ANGLE_P;
     wz=(THREE.MathUtils.degToRad(-stick.r*ANGLE_MAX)-eulTmp.z)*ANGLE_P;
-    const cap=THREE.MathUtils.degToRad(maxRateDps());
+    const cap=THREE.MathUtils.degToRad(maxRateDps('roll'));
     wx=THREE.MathUtils.clamp(wx,-cap,cap);wz=THREE.MathUtils.clamp(wz,-cap,cap);
   }else{
-    wx=THREE.MathUtils.degToRad(bfRate(stick.p,CFG.rcRate,CFG.superRate,CFG.expo));
-    wz=-THREE.MathUtils.degToRad(bfRate(stick.r,CFG.rcRate,CFG.superRate,CFG.expo));
+    wx=THREE.MathUtils.degToRad(axisRate('pitch',stick.p));
+    wz=-THREE.MathUtils.degToRad(axisRate('roll',stick.r));
   }
   const wy=-yr;
   // wx/wy/wz are three.js-frame body rates (rad/s) from the Betaflight rate
@@ -2251,7 +2346,10 @@ function updateOSD(){
   }else landEl.style.display='none';
   osdTL.innerHTML=`SPD ${spd} km/h<br>ALT ${alt} m${battLine}`;
   osdTR.innerHTML=`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):'KEYBOARD'}${axisMap&&gpConnected?' (CAL)':''}<br>`+
-    `RATES ${CFG.rcRate.toFixed(2)}/${CFG.superRate.toFixed(2)}/${CFG.expo.toFixed(2)}<br>`+
+    // Rates are per axis; name the one being shown so it cannot read as global.
+    `RATES ${rateAxis.toUpperCase()} ${rates.type==='ACTUAL'
+      ? maxRateDps(rateAxis).toFixed(0)+'°/s ACTUAL'
+      : rates[rateAxis].rcRate.toFixed(2)+'/'+rates[rateAxis].srate.toFixed(2)+'/'+rates[rateAxis].expo.toFixed(2)}<br>`+
     `CAM ${CFG.camDeg}° FOV ${CFG.fov}${usingGltf?'<br>GLTF MAP':''}`;
   // Per-motor outputs straight off the mixer — a yaw input shows the CW pair
   // rising while the CCW pair drops, which is the tell that the mixer is real.
@@ -2274,7 +2372,6 @@ function bind(id,key,fmt,post){
   const u=()=>{CFG[key]=parseFloat(s.value);v.textContent=fmt(CFG[key]);if(post)post();refreshMax();};
   s.addEventListener('input',u);u();
 }
-function refreshMax(){document.getElementById('v_max').textContent=maxRateDps().toFixed(0)+' °/s';}
 // twr is now a DISPLAY-ONLY readout: physics runs on absolute CFG.maxThrustN,
 // so thrust:weight is derived (thrust ÷ weight), not a physics driver.
 // Recomputing it on every mass change is what makes massG actually change the
@@ -2287,9 +2384,15 @@ function refreshTwr(){
   document.getElementById('s_twr').value=Math.max(2,Math.min(14,twr)); // thumb reflects the ratio (clamped to slider range)
   document.getElementById('v_twr').textContent=twr.toFixed(1)+':1';
 }
-bind('rc','rcRate',x=>x.toFixed(2));
-bind('sr','superRate',x=>x.toFixed(2));
-bind('ex','expo',x=>x.toFixed(2));
+// Three explicit handlers, three explicit tab handlers. Written out rather
+// than generated in a loop so a shared closure variable cannot cross them.
+document.getElementById('s_rc').addEventListener('input',function(){onRateSlider(this);});
+document.getElementById('s_sr').addEventListener('input',function(){onRateSlider(this);});
+document.getElementById('s_ex').addEventListener('input',function(){onRateSlider(this);});
+document.getElementById('ax_roll').addEventListener('click',function(){setRateAxis('roll');});
+document.getElementById('ax_pitch').addEventListener('click',function(){setRateAxis('pitch');});
+document.getElementById('ax_yaw').addEventListener('click',function(){setRateAxis('yaw');});
+refreshRatesUI();
 bind('cam','camDeg',x=>x+'°');
 bind('fov','fov',x=>x+'°',()=>{camera.fov=CFG.fov;camera.updateProjectionMatrix();});
 // Push panel values into the physics core. Mass changes must re-derive the
@@ -2348,7 +2451,11 @@ function applyDroneType(){
   qp.setTune(STOCK_TUNES[d.preset]||STOCK_TUNES.whoop65);
   baseThrustPerMotor=qp.cfg.maxThrustPerMotor;
   CFG.maxThrustN=baseThrustPerMotor*4*WS;            // world-newton mirror, for audio + readouts
-  setSlider('drag',d.drag);setSlider('mass',d.mass);setSlider('sr',d.sr);
+  setSlider('drag',d.drag);setSlider('mass',d.mass);
+  if(!ratesAreCustom){                              // per-drone feel, defaults only
+    for(const ax of RATE_AXES)rates[ax].srate=d.sr;
+  }
+  refreshRatesUI();
   setSlider('spool',d.spool);                        // per-drone motor spool time constant
   applyCfgToQp();                                    // slider values win over the preset's mass/tau
   refreshTwr();                                      // update the derived thrust:weight readout
@@ -2363,67 +2470,125 @@ applyDroneType(); // restore persisted type on load
 updateRadioInfo();
 
 // ---------- Betaflight CLI paste-import ----------
-// Scans a pasted diff / dump / dump rates for `set <axis>_(rc_rate|srate|expo)`
-// and `set rates_type`, maps them onto the sim's shared rate params. Values on
-// Betaflight's integer scale (rc_rate 110 = 1.10) are divided by 100; already-
-// decimal values pass through. The sim has one shared rate set, so roll+pitch
-// are averaged; a differing yaw is noted in the toast. rates_type ACTUAL is
-// converted approximately (center sensitivity → rcRate, max rate → srate).
-function importCli(text){
-  const vals={};
-  let ratesType=null;
-  for(const line of text.split(/\r?\n/)){
-    const m=line.match(/^\s*set\s+([a-z_]+)\s*=\s*"?([\w.\-]+)"?/i);
+// Reads rates_type FIRST, because the scaling and the curve both depend on it,
+// then parses every axis separately. The previous version averaged roll+pitch
+// into one shared value and squeezed ACTUAL dumps into Betaflight parameters,
+// which clamped rcRate to the slider floor and produced garbage (an ACTUAL dump
+// read as RC 0.50 / SR 0.74 / 385 deg/s).
+// Returns the parsed dump without touching any state, so it is testable.
+// Tolerates CRLF, arbitrary whitespace, `#`/`//` comments, quoted values and
+// partial dumps — anything absent is simply left out of the result.
+// currentType is used when the dump carries no `set rates_type` line: the
+// scaling depends entirely on the family, so assuming BETAFLIGHT would silently
+// mis-scale a partial ACTUAL dump.
+function parseCli(text,currentType){
+  const AXES=['roll','pitch','yaw'];
+  const out={ratesType:null,rates:{roll:{},pitch:{},yaw:{}},pids:{},idle:null,found:0};
+  const TYPE_BY_NUM={'0':'BETAFLIGHT','1':'RACEFLIGHT','2':'KISS','3':'ACTUAL','4':'QUICK'};
+  for(let line of String(text).split(/\r?\n/)){
+    line=line.replace(/(^|\s)(#|\/\/).*$/,'');            // strip trailing comments
+    const m=line.match(/^\s*set\s+([A-Za-z0-9_]+)\s*=\s*"?\s*([-\w.]+)\s*"?\s*$/i);
     if(!m)continue;
-    const key=m[1].toLowerCase();
-    if(key==='rates_type'){ratesType=m[2].toLowerCase();continue;}
-    if(/^(roll|pitch|yaw)_(rc_rate|srate|expo)$/.test(key))vals[key]=parseFloat(m[2]);
-  }
-  if(Object.keys(vals).length===0){toast('No rate commands found');return;}
-  // shared value = average of roll+pitch, falling back to whichever exists
-  function rp(base){
-    const r=vals['roll_'+base],p=vals['pitch_'+base];
-    if(r!==undefined&&p!==undefined)return(r+p)/2;
-    return r!==undefined?r:p;
-  }
-  const norm=v=>v===undefined?undefined:(v>3?v/100:v); // int scale (110) vs already-decimal (1.10)
-  const isActual=ratesType==='actual'||ratesType==='3'||ratesType==='1';
-  const knownBf=ratesType===null||ratesType==='betaflight'||ratesType==='0';
-  let rc,sr,notice='';
-  const ex=norm(rp('expo')); // expo normalizes the same in both systems
-  if(isActual){
-    // ACTUAL stores center sensitivity (rc_rate) and max rate (srate) in deg/s
-    // ÷10 on the CLI. Approximate a Betaflight equivalent: near center BF's
-    // slope is ~200·rcRate deg/s, so rcRate = centerSens/200, then pick srate
-    // so the full-stick max rate matches.
-    let cs=rp('rc_rate'),mx=rp('srate');
-    if(cs!==undefined&&mx!==undefined){
-      cs=cs<30?cs*10:cs;   // 7 → 70 deg/s center sensitivity
-      mx=mx<200?mx*10:mx;  // 67 → 670 deg/s max rate
-      rc=Math.min(2.5,Math.max(0.5,cs/200));
-      sr=Math.min(0.95,Math.max(0,1-(200*rc)/mx));
-      notice=' · ACTUAL rates — approximated';
+    const key=m[1].toLowerCase(),raw=m[2];
+    if(key==='rates_type'){
+      const v=raw.toUpperCase();
+      out.ratesType=TYPE_BY_NUM[v]||v;
+      out.found++;continue;
     }
-  }else{
-    rc=norm(rp('rc_rate'));
-    sr=norm(rp('srate'));
-    if(!knownBf)notice=' · '+ratesType.toUpperCase()+' rates — applied as-is';
+    const num=parseFloat(raw);
+    if(!isFinite(num))continue;
+    let mm;
+    if((mm=key.match(/^(roll|pitch|yaw)_(rc_rate|srate|expo)$/))){
+      out.rates[mm[1]][mm[2]]=num;out.found++;continue;
+    }
+    // PIDs: both `p_roll` and `roll_p` orderings appear in the wild
+    if((mm=key.match(/^([pidf])_(roll|pitch|yaw)$/))||(mm=key.match(/^(roll|pitch|yaw)_([pidf])$/))){
+      const term=mm[1].length===1?mm[1]:mm[2], axis=mm[1].length===1?mm[2]:mm[1];
+      out.pids[axis+term.toUpperCase()]=num;out.found++;continue;
+    }
+    if(key==='idle_min_rpm'||key==='dshot_idle_value'||key==='motor_idle'){
+      // dshot_idle_value is in 0.01% units (550 = 5.5%); the others are direct
+      out.idle=key==='dshot_idle_value'?num/10000:num/100;out.found++;continue;
+    }
   }
-  if(rc===undefined&&sr===undefined&&ex===undefined){toast('No rate commands found');return;}
-  // apply through the sliders' bind path so CFG, labels and max-rate all update
-  if(rc!==undefined)setSlider('rc',rc);
-  if(sr!==undefined)setSlider('sr',sr);
-  if(ex!==undefined)setSlider('ex',ex);
-  // yaw noted separately when it differs from the applied shared values
-  let yawNote='';
-  const ny={rc:norm(vals['yaw_rc_rate']),sr:norm(vals['yaw_srate']),ex:norm(vals['yaw_expo'])};
-  if(!isActual&&((ny.rc!==undefined&&rc!==undefined&&Math.abs(ny.rc-rc)>0.005)||
-     (ny.sr!==undefined&&sr!==undefined&&Math.abs(ny.sr-sr)>0.005)||
-     (ny.ex!==undefined&&ex!==undefined&&Math.abs(ny.ex-ex)>0.005)))
-    yawNote=' · yaw differs (shared-rate sim)';
-  toast('CLI: RC '+CFG.rcRate.toFixed(2)+' SR '+CFG.superRate.toFixed(2)+' EX '+CFG.expo.toFixed(2)+notice+yawNote);
+  // Scale per rate family. BETAFLIGHT stores rcRate/srate as integers x100;
+  // ACTUAL stores them as deg/s over 10 and is kept raw here, with the x10
+  // applied in axisRate/maxRateDps. Expo is /100 in both. Field names are the
+  // same in both families so the state object never carries stray keys.
+  const actual=(out.ratesType||currentType||'BETAFLIGHT')==='ACTUAL';
+  for(const ax of AXES){
+    const r=out.rates[ax];
+    if(r.expo!==undefined)r.expo=r.expo/100;
+    if(r.rc_rate!==undefined){r.rcRate=actual?r.rc_rate:r.rc_rate/100;delete r.rc_rate;}
+    if(r.srate!==undefined&&!actual)r.srate=r.srate/100;
+  }
+  return out;
+}
+
+function importCli(text){
+  const p=parseCli(text,rates.type);
+  if(!p.found){toast('No recognised CLI commands found');return p;}
+  if(p.ratesType&&!['BETAFLIGHT','ACTUAL'].includes(p.ratesType)){
+    toast(p.ratesType+' rates not supported yet — import skipped');
+    return p;
+  }
+  const type=p.ratesType||rates.type;      // no rates_type line = keep current
+  const anyRates=RATE_AXES.some(ax=>Object.keys(p.rates[ax]).length);
+  // Axes the dump never mentions keep what they had, and are never filled in
+  // from another axis. The pilot is told which ones went untouched.
+  const missing=RATE_AXES.filter(ax=>!Object.keys(p.rates[ax]).length);
+  let notice='';
+
+  if(anyRates){
+    const familyChanged=type!==rates.type;
+    for(const ax of RATE_AXES){
+      const cur=rates[ax];
+      // On a family switch, CONVERT an axis rather than defaulting it —
+      // otherwise an axis absent from the dump silently loses its tune.
+      let base={rcRate:cur.rcRate,srate:cur.srate,expo:cur.expo};
+      if(familyChanged){
+        if(type==='ACTUAL'){
+          let rc=cur.rcRate; if(rc>2)rc+=14.54*(rc-2);
+          base={rcRate:20*rc,                                   // centre/10
+                srate:(200*rc/Math.max(0.01,1-cur.srate))/10,   // max/10
+                expo:cur.expo};
+        }else{
+          const centre=cur.rcRate*10,max=Math.max(centre,cur.srate*10);
+          base={rcRate:THREE.MathUtils.clamp(centre/200,0.01,5),
+                srate:THREE.MathUtils.clamp(1-centre/max,0,0.95),
+                expo:cur.expo};
+        }
+      }
+      Object.assign(rates[ax],base,p.rates[ax]);
+    }
+    rates.type=type;
+    if(missing.length)notice+=' · no '+missing.join('/')+' in dump — kept previous';
+  }
+
+  const pidKeys=Object.keys(p.pids);
+  if(pidKeys.length){
+    qp.setTune(Object.assign({},qp.tune,p.pids));
+    notice+=' · PIDs '+pidKeys.length;
+  }
+  if(p.idle!==null){qp.cfg.idleThrottle=THREE.MathUtils.clamp(p.idle,0,0.2);
+    notice+=' · idle '+(p.idle*100).toFixed(1)+'%';}
+
+  // State is written; ONE refresh reads it back into the UI. Slider values are
+  // assigned, never dispatched, so nothing re-enters the input handler.
+  rateAxis='roll';
+  refreshRatesUI();
+  saveRates();
+  console.log('[CLI import] rates =',JSON.parse(JSON.stringify(rates)),
+              ' pids =',p.pids,' idle =',p.idle);
+  const perAxis=['pitch','yaw'].some(ax=>JSON.stringify(rates[ax])!==JSON.stringify(rates.roll));
+  toast('CLI '+rates.type+': max '+maxRateDps('roll').toFixed(0)+'°/s'+
+        (perAxis?' · per-axis':'')+notice);
+  return p;
 }
 document.getElementById('btnCliImport').onclick=()=>importCli(document.getElementById('cliPaste').value);
+window._parseCli=parseCli; // debug handle, same convention as _qp/_axis
+window._rates=()=>({state:JSON.parse(JSON.stringify(rates)),axis:rateAxis,
+  maxDps:{roll:+maxRateDps('roll').toFixed(0),pitch:+maxRateDps('pitch').toFixed(0),yaw:+maxRateDps('yaw').toFixed(0)}});
 
 // ---------- Ghost replay (built on the lap timer) ----------
 // Records quad pose every 2nd frame with elapsed-lap-time stamps; on a new
