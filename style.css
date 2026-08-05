@@ -268,6 +268,43 @@
     margin-left: 6px;
   }
   .osd-stat-value.warn { color: var(--orange); }
+  /* ===== Bench data table ===== */
+  /* Wide table, narrow phones: the table scrolls inside this box rather than
+     pushing the page sideways. */
+  .bench-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .bench-table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 680px;
+    font-size: .82rem;
+  }
+  .bench-table th {
+    background: var(--panel);
+    color: var(--green);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    padding: .6rem .7rem;
+    text-align: left;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .bench-table td {
+    border: 1px solid var(--border);
+    padding: .55rem .7rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text);
+  }
+  .bench-table td:first-child { font-family: 'Inter', sans-serif; }
+  .bench-note {
+    font-size: .78rem;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-top: 12px;
+  }
+  .bench-note a { color: var(--orange); }
+
   /* Flight time backed by a bench measurement rather than the model. */
   .osd-stat-sub.measured { color: var(--green); }
   /* Advisory only — the T:W number still renders, this just flags the ceiling. */

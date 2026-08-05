@@ -106,6 +106,16 @@
         </div>
 
         <div class="field">
+          <label for="flightStyle">Flying Style</label>
+          <select id="flightStyle">
+            <option value="cruise" selected>Cruise</option>
+            <option value="freestyle">Freestyle</option>
+            <option value="aggressive">Aggressive</option>
+          </select>
+          <div class="field-hint">Scales estimated current draw. Cruise is the style the bench runs measured.</div>
+        </div>
+
+        <div class="field">
           <label for="motorKV">Motor KV</label>
           <input type="number" id="motorKV" value="27000" step="500" min="8000" max="40000">
           <div class="field-hint">Auto-filled from motor selection above, or enter manually (whoop motors: 0602–1103, 8,000–40,000 KV)</div>
@@ -237,10 +247,48 @@
       <strong>Top speed</strong> uses a drag-equilibrium model: effective motor RPM under load (not free-spin RPM) sets a pitch-speed ceiling, then aerodynamic frame drag — which grows with the square of velocity — determines where thrust and drag balance. Small whoops spin at a much lower fraction of no-load RPM than 5"+ quads because tiny high-KV motors drop significantly under electrical load, which is why naive pitch×RPM formulas drastically overestimate whoop top speeds.
     </p>
     <p>
-      <strong>Flight time</strong> is modeled from your battery capacity, an 80% usable discharge window (to protect cell health), and an estimated average current draw based on frame size and motor specs — tuned for aggressive freestyle flying rather than gentle cruising.
+      <strong>Flight time</strong> is modeled from your battery capacity, a usable discharge window, and an average current draw estimated from frame size and motor specs, scaled by the flying style you pick. Where a build matches one of our measured runs, the estimate is replaced outright by the measured average current and the discharge window that run actually delivered — 90%, not the generic 80%. Cruise is the style we have measured; freestyle and aggressive are scaled from it and remain estimates.
     </p>
     <p>
-      <strong>Thrust-to-weight</strong> uses a bench-fitted power model: thrust = k × watts<sup>0.78</sup>, fitted from manufacturer test-stand sweeps (Happymodel EX1103 and SE0702), with a per-frame coefficient. The headline thrust number is then clamped to the current your pack can actually source (capacity × C-rating) — the separate bench figure shows what the motors could pull on an unlimited supply. A ratio above 2:1 is generally freestyle-capable; whoops often run lower due to prop and motor constraints at their scale.
+      <strong>Thrust-to-weight</strong> uses a bench-fitted power model: thrust = k × watts<sup>0.78</sup>, fitted from manufacturer test-stand sweeps (Happymodel EX1103 and SE0702), with a per-frame coefficient. The weights it divides by are measured rather than assumed — airframe base weight and pack weight both come from real 65mm builds weighed on a scale, and flight-time estimates for those builds are anchored to full-discharge runs. The headline thrust number is then clamped to the current your pack can actually source (capacity × C-rating) — the separate bench figure shows what the motors could pull on an unlimited supply. A ratio above 2:1 is generally freestyle-capable; whoops often run lower due to prop and motor constraints at their scale.
+    </p>
+  </section>
+
+  <section class="section" id="bench-data">
+    <h2>Bench Data</h2>
+    <p class="sub">
+      Everything above is a model. These are not. Two 65mm builds, weighed on a scale and
+      flown to a full discharge on the same pack model and props — the numbers the
+      calculator's 65mm estimates are anchored to.
+    </p>
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <thead>
+          <tr><th>Build</th><th>Video</th><th>AUW</th><th>Pack</th><th>Avg current</th><th>Flight time</th><th>Style</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Air65 — VCI 0702 PRO DB 30000KV</td>
+            <td>Analog</td><td>25.42 g</td><td>LAVA 300mAh 1S HV</td>
+            <td>4.2 A</td><td>233 s (3:53)</td><td>Cruise</td>
+          </tr>
+          <tr>
+            <td>Mobula6 2024 — Happymodel SE0702 28000KV</td>
+            <td>HDZero</td><td>27.73 g</td><td>LAVA 300mAh 1S HV</td>
+            <td>6.3 A</td><td>154 s (2:34)</td><td>Cruise</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bench-note">
+      Measured 2026-08-05. Both packs run 4.35 V to roughly 3.3 V under load, delivering about
+      270 mAh of a nominal 300. Current is corrected against a full-discharge anchor — the
+      onboard sensors read 20% cold and 25% hot out of the box — which leaves roughly 8%
+      uncertainty on the current figures. Durations are stopwatch and carry no such caveat.
+      Hover and freestyle runs are not measured yet.
+      Raw records:
+      <a href="https://github.com/ryanroths/quadmath/blob/main/data/bench/air65-analog-vci0702-30k.json" rel="noopener">air65-analog-vci0702-30k.json</a>,
+      <a href="https://github.com/ryanroths/quadmath/blob/main/data/bench/mobula6-2024-hdzero-se0702-28k.json" rel="noopener">mobula6-2024-hdzero-se0702-28k.json</a>.
     </p>
   </section>
 
