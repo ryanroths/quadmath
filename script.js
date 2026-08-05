@@ -198,21 +198,27 @@
   // one. usableFraction is 0.9 because the discharge anchor delivered 270mAh
   // from a 300mAh LiHV pack, not the 0.8 the generic model assumes.
   //
-  // Matching is deliberately narrow: frame + KV + AUW within 15%. Anything
-  // outside that falls back to the model rather than borrowing someone else's
+  // Matching is deliberately narrow — see benchAnchorFor below. Anything
+  // outside it falls back to the model rather than borrowing another build's
   // numbers.
   const BENCH_ANCHORS = [
     { id: 'air65-analog-vci0702-30k',   frame: '65', kv: 30000, auwG: 25.42,
       avgCurrentA: 4.2, usableFraction: 0.9, video: 'analog',
       note: 'measured — Air65 analog, 233s cruise' },
     { id: 'mobula6-2024-hdzero-se0702-28k', frame: '65', kv: 28000, auwG: 27.73,
-      avgCurrentA: 6.3, usableFraction: 0.9, video: 'HDZero',
+      avgCurrentA: 6.3, usableFraction: 0.9, video: 'hdzero',
       note: 'measured — Mobula6 HDZero, 154s cruise' },
   ];
-  function benchAnchorFor(kv, frame, auw) {
+  // Match on frame + KV + video system + AUW. Video matters because the video
+  // system IS most of the difference between these two anchors — without it a
+  // DJI build picked up the analog anchor's flight time. The AUW window is 5%
+  // now that the weight model is bench-derived: predicted AUW lands within 0.3%
+  // of measured for both anchors, so the window no longer carries the match.
+  function benchAnchorFor(kv, frame, auw, video) {
     return BENCH_ANCHORS.find(a =>
       a.frame === String(frame) && a.kv === kv &&
-      Math.abs(auw - a.auwG) / a.auwG <= 0.15) || null;
+      a.video === (video || 'analog') &&
+      Math.abs(auw - a.auwG) / a.auwG <= 0.05) || null;
   }
 
   // Rough max current draw estimate (A) per motor at given KV/cell combo — simplified model
@@ -246,6 +252,8 @@
     benchTw:     document.getElementById('benchTw'),
     benchSub:    document.getElementById('benchSub'),
     packC:       document.getElementById('packC'),
+    videoSystem: document.getElementById('videoSystem'),
+    videoHint:   document.getElementById('videoHint'),
     twCeilingBadge: document.getElementById('twCeilingBadge'),
   };
 
@@ -381,13 +389,51 @@
       populatePropSelect(currentFrame);
       populateCompareSelects(currentFrame);
       applyPreset(currentFrame);
+      updateVideoHint();
       calculate();
     });
   });
 
-  function currentFrameBaseWeight() {
-    const baseWeights = { 65: 15, 75: 20, 85: 35 };
-    return baseWeights[currentFrame] || 20;
+  // ===== Dry-weight model: frame base + video system =====
+  // Base = everything that is not motors: frame, FC/ESC, receiver, canopy,
+  // props, wiring. Derived by subtracting 4x the motor weight from a measured
+  // dry weight, so it carries whatever the airframe actually is.
+  //
+  //   65mm analog  11.3g  = 17.22 dry - 4x1.49  (data/bench/air65-analog-vci0702-30k.json)
+  //   65mm HDZero  13.7g  = 19.53 dry - 4x1.46  (data/bench/mobula6-2024-hdzero-se0702-28k.json)
+  //   video delta   2.4g  = 13.7 - 11.3
+  //
+  // bench-derived n=2, revisit as bench data grows
+  // Two frames only (Air65, Mobula6 2024). Other 65mm frames vary about
+  // +/-1.5g, so treat the base as a class figure, not a per-frame spec.
+  //
+  // 75/85mm have no bench data and keep the previous estimates. DJI/Walksnail
+  // has no measured delta either, so that combination falls back to the old
+  // flat 15g rather than inventing an adder — flagged as estimated in the UI.
+  const FRAME_BASE_G = {
+    65: { value: 11.3, measured: true },
+    75: { value: 20,   measured: false },
+    85: { value: 35,   measured: false },
+  };
+  const VIDEO_ADDER_G = {
+    analog:  { value: 0,    measured: true  },  // baseline, already in the base
+    hdzero:  { value: 2.4,  measured: true  },
+    digital: { value: null, measured: false },  // no bench data — see fallback
+  };
+  const LEGACY_BASE_G = { 65: 15, 75: 20, 85: 35 };  // pre-bench flat estimate
+
+  function currentVideoSystem() {
+    return (els.videoSystem && els.videoSystem.value) || 'analog';
+  }
+  // Returns { grams, measured } so callers can say which it is.
+  function currentFrameBaseWeight(video) {
+    const v = video || currentVideoSystem();
+    const frame = FRAME_BASE_G[currentFrame];
+    const adder = VIDEO_ADDER_G[v];
+    if (!frame || !adder || adder.value === null) {
+      return { grams: LEGACY_BASE_G[currentFrame] || 20, measured: false };
+    }
+    return { grams: frame.value + adder.value, measured: frame.measured && adder.measured };
   }
 
   motorSelect.addEventListener('change', () => {
@@ -406,11 +452,34 @@
     // dropped ~12g of pack from every TWR (132g thrust / 27.6g "AUW" = 4.8:1
     // and a wheelie warning for builds that really fly at 3.7:1). The pack is
     // now added in calculate() from capacity.
-    if (weight) els.weight.value = (parseFloat(weight) * 4 + currentFrameBaseWeight()).toFixed(1);
+    if (weight) els.weight.value = (parseFloat(weight) * 4 + currentFrameBaseWeight().grams).toFixed(1);
     calculate();
   });
 
   els.motorKV.addEventListener('input', () => { motorSelect.value = ''; });
+
+  // Video system feeds the dry-weight model, so changing it re-derives the
+  // weight from the selected motor exactly as picking a motor would.
+  function reDeriveDryWeight() {
+    const opt = motorSelect.options[motorSelect.selectedIndex];
+    const w = opt ? opt.getAttribute('data-weight') : null;
+    if (w) els.weight.value = (parseFloat(w) * 4 + currentFrameBaseWeight().grams).toFixed(1);
+  }
+  function updateVideoHint() {
+    if (!els.videoHint) return;
+    const base = currentFrameBaseWeight();
+    els.videoHint.textContent = base.measured
+      ? 'Airframe base ' + base.grams.toFixed(1) + 'g — bench-measured (n=2)'
+      : 'Airframe base ' + base.grams.toFixed(1) + 'g — estimated, no bench data for this combination';
+    els.videoHint.classList.toggle('warn', !base.measured);
+  }
+  if (els.videoSystem) {
+    els.videoSystem.addEventListener('change', () => {
+      reDeriveDryWeight();
+      updateVideoHint();
+      calculate();
+    });
+  }
 
   function computeStats(kv, cells, capacity, pitch, weight, cRating) {
     const voltage = cells * 3.7;
@@ -442,7 +511,7 @@
     // A matching bench anchor replaces the fitted estimate outright: measured
     // average current, and the 0.9 usable fraction the discharge anchor showed
     // (270mAh delivered from a 300mAh LiHV pack) instead of the generic 0.8.
-    const anchor = benchAnchorFor(kv, currentFrame, weight);
+    const anchor = benchAnchorFor(kv, currentFrame, weight, currentVideoSystem());
     const avgCurrent   = anchor
       ? anchor.avgCurrentA
       : maxCurrentPerMotor * 4 * avgCurrentFraction[currentFrame];
@@ -685,6 +754,7 @@
   populatePropSelect(currentFrame);
   populateCompareSelects(currentFrame);
   applyPreset(currentFrame);
+  updateVideoHint();
   calculate();
 
   // recalc on any input change
