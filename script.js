@@ -63,7 +63,7 @@
       { name: 'BetaFPV 0702 II',             kv: 27000, propPitch: 0.7, weightPerMotor: 1.50 },
       { name: 'VCI Spark 0702',              kv: 27000, propPitch: 0.7, weightPerMotor: 1.52 },
       { name: 'NewBeeDrone Flow 0702 (dual ball bearing)', kv: 27000, propPitch: 0.7, weightPerMotor: 1.60 }, // 2026
-      { name: 'Happymodel SE0702',            kv: 28000, propPitch: 0.7, weightPerMotor: 1.46 },
+      { name: 'Happymodel SE0702',            kv: 28000, propPitch: 0.7, weightPerMotor: 1.46, benchVerified: true }, // mobula6-2024-hdzero-se0702-28k.json
       { name: 'NewBeeDrone Flow 0702',        kv: 29000, propPitch: 0.7, weightPerMotor: 1.58 },
       { name: 'VCI Spark 0702',              kv: 29000, propPitch: 0.7, weightPerMotor: 1.52 },
       { name: 'BetaFPV 0702 II',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.50 },
@@ -74,7 +74,7 @@
       // page, 1mm shaft, 07*L2mm stator); the build sheet's ~2.2g estimate is
       // out of family for any 0702 and is not used. Flown in
       // data/bench/air65-analog-vci0702-30k.json.
-      { name: 'VCI 0702 PRO DB',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.49 }, // 2026, bench-flown
+      { name: 'VCI 0702 PRO DB',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.49, benchVerified: true }, // 2026, air65-analog-vci0702-30k.json
       { name: 'weBLEEDfpv Champion 0702',    kv: 36000, propPitch: 0.7, weightPerMotor: 1.50 }, // 2026
       { name: 'weBLEEDfpv SKRRRT 0702',      kv: 40000, propPitch: 0.7, weightPerMotor: 1.60 },
     ],
@@ -191,6 +191,27 @@
     85: 0.15,
   };
 
+  // ===== Flying style =====
+  // The style multiplier scales the MODELLED propulsion current. Cruise is 1.0
+  // because that is what the model actually predicts: avgCurrentFraction was
+  // calibrated against ~3.5min on a 300mAh 1S, and the measured Air65 analog
+  // cruise run came in at 3.9min / 4.2A against a model estimate of 4.38A —
+  // 4% out. The old copy called this "aggressive freestyle"; the bench data
+  // says it is a cruise number, so cruise anchors the scale and the harder
+  // styles scale UP from it.
+  //
+  // freestyle/aggressive are ESTIMATED — no measured hover or freestyle runs
+  // exist yet. They slot in as extra anchors when those runs land.
+  const FLIGHT_STYLES = {
+    cruise:     { label: 'Cruise',     mult: 1.00, measured: true  },
+    freestyle:  { label: 'Freestyle',  mult: 1.35, measured: false },
+    aggressive: { label: 'Aggressive', mult: 1.70, measured: false },
+  };
+  function currentStyle() {
+    const v = els.flightStyle && els.flightStyle.value;
+    return FLIGHT_STYLES[v] ? v : 'cruise';
+  }
+
   // ===== Measured bench anchors =====
   // First-hand flight data from data/bench/*.json. Where a selected build
   // matches one of these, flight time comes from the measured average current
@@ -214,7 +235,11 @@
   // DJI build picked up the analog anchor's flight time. The AUW window is 5%
   // now that the weight model is bench-derived: predicted AUW lands within 0.3%
   // of measured for both anchors, so the window no longer carries the match.
-  function benchAnchorFor(kv, frame, auw, video) {
+  // Anchors are cruise runs, so they only apply in cruise. Comparing a measured
+  // cruise flight against a freestyle estimate was the ambiguity that made the
+  // old AUW margin fragile; matching style keeps it like for like.
+  function benchAnchorFor(kv, frame, auw, video, style) {
+    if (style !== 'cruise') return null;
     return BENCH_ANCHORS.find(a =>
       a.frame === String(frame) && a.kv === kv &&
       a.video === (video || 'analog') &&
@@ -253,6 +278,7 @@
     benchSub:    document.getElementById('benchSub'),
     packC:       document.getElementById('packC'),
     videoSystem: document.getElementById('videoSystem'),
+    flightStyle: document.getElementById('flightStyle'),
     videoHint:   document.getElementById('videoHint'),
     twCeilingBadge: document.getElementById('twCeilingBadge'),
   };
@@ -276,7 +302,9 @@
       opt.setAttribute('data-weight', m.weightPerMotor);
       if (m.cells) opt.setAttribute('data-cells', m.cells);
       opt.textContent = `${m.name}  —  ${m.kv.toLocaleString()} KV`
-                      + (m.cells ? `  ·  ${m.cells}S` : '');
+                      + (m.cells ? `  ·  ${m.cells}S` : '')
+                      + (m.benchVerified ? '  ·  ✓ bench-verified' : '');
+      if (m.benchVerified) opt.title = 'Flown and measured — see data/bench/';
       motorSelect.appendChild(opt);
     });
     motorSelect.value = '';
@@ -480,6 +508,9 @@
       calculate();
     });
   }
+  // Style only scales current, so no weight re-derive — but it must recalc on
+  // 'change' as well as 'input', or the readout lags one selection behind.
+  if (els.flightStyle) els.flightStyle.addEventListener('change', calculate);
 
   function computeStats(kv, cells, capacity, pitch, weight, cRating) {
     const voltage = cells * 3.7;
@@ -511,14 +542,17 @@
     // A matching bench anchor replaces the fitted estimate outright: measured
     // average current, and the 0.9 usable fraction the discharge anchor showed
     // (270mAh delivered from a 300mAh LiHV pack) instead of the generic 0.8.
-    const anchor = benchAnchorFor(kv, currentFrame, weight, currentVideoSystem());
+    const styleKey = currentStyle();
+    const style    = FLIGHT_STYLES[styleKey];
+    const anchor = benchAnchorFor(kv, currentFrame, weight, currentVideoSystem(), styleKey);
     const avgCurrent   = anchor
       ? anchor.avgCurrentA
-      : maxCurrentPerMotor * 4 * avgCurrentFraction[currentFrame];
+      : maxCurrentPerMotor * 4 * avgCurrentFraction[currentFrame] * style.mult;
     const usableFrac   = anchor ? anchor.usableFraction : 0.8;
     const flightTimeMin = ((capacity / 1000) * usableFrac / avgCurrent) * 60;
     return { speedMph, totalThrust, tw, flightTimeMin, benchThrust, twBench,
-             packLimited, effCurrentPerMotor, maxCurrentPerMotor, packLimitPerMotor, anchor };
+             packLimited, effCurrentPerMotor, maxCurrentPerMotor, packLimitPerMotor,
+             anchor, style, styleKey };
   }
 
   // Whoop-realistic input clamps (0602–1103 motors, ≤2" props, 1S–2S, whoop AUW).
@@ -580,8 +614,8 @@
     els.flightTime.innerHTML = s.flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
     if (els.flightSub) {
       els.flightSub.textContent = s.anchor
-        ? s.anchor.note + ' (' + s.anchor.avgCurrentA + 'A avg)'
-        : 'Aggressive freestyle throttle — estimated';
+        ? s.style.label + ' — anchored to measured data (' + s.anchor.avgCurrentA + 'A avg)'
+        : s.style.label + ' — estimated';
       els.flightSub.classList.toggle('measured', !!s.anchor);
     }
 
