@@ -268,6 +268,8 @@
     margin-left: 6px;
   }
   .osd-stat-value.warn { color: var(--orange); }
+  /* Flight time backed by a bench measurement rather than the model. */
+  .osd-stat-sub.measured { color: var(--green); }
   /* Advisory only — the T:W number still renders, this just flags the ceiling. */
   .tw-ceiling-badge {
     display: inline-block;

@@ -1,10 +1,8 @@
 {
   "_comment": "Policy for agent-authored pull requests. This file is ALWAYS loaded from the merge-base commit, never from the PR head, so a PR cannot relax its own guardrails. Edits here require a human reviewer (see deny_paths: scripts/ci/**).",
-
   "max_changed_lines": 200,
   "max_changed_files": 12,
   "max_new_files": 6,
-
   "allow_paths": [
     "data/tunes/*.json",
     "data/gear/*.json",
@@ -16,7 +14,6 @@
     "go/*/index.html",
     "go_map.json"
   ],
-
   "deny_paths": [
     "sim.html",
     "sim/**",
@@ -28,9 +25,9 @@
     "sitemap.xml",
     "**/*.py",
     "**/*.yml",
-    "**/*.sh"
+    "**/*.sh",
+    "data/bench/**"
   ],
-
   "html_checks": {
     "forbid_inline_script": true,
     "_allow_jsonld_comment": "Exempts <script type=\"application/ld+json\"> from forbid_inline_script, but only when the block contains valid JSON. Every other inline script stays forbidden, including type=\"text/javascript\". Defaults to true when the key is absent; set false to restore the blanket ban.",
@@ -40,7 +37,6 @@
     ],
     "require_meta_description": true
   },
-
   "link_checks": {
     "check_internal": true,
     "allowed_external_hosts": [
@@ -57,9 +53,8 @@
       "www.racedayquads.com"
     ]
   },
-
   "bench_schema": {
-    "_comment": "Schema for data/bench/<slug>.json files: first-hand measured data for one build, keyed by the build_orphan slug. The generator refuses to write a build_orphan guide unless a file matching this schema exists at origin/main. Same validation style as tune_schema: required fields, numeric ranges, placeholder rejection, and a source that names how the numbers were measured.",
+    "_comment": "Schema for data/bench/<slug>.json files: first-hand measured data for one build, keyed by the build_orphan slug. The generator refuses to write a build_orphan guide unless a file matching this schema exists at origin/main. Same validation style as tune_schema: required fields, numeric ranges, placeholder rejection, and a source that names how the numbers were measured. Flight-time fields: at least one of hover_time_s / cruise_time_s / freestyle_time_s must be present and measured. They are not all required -- a real bench session often yields one flight type first, and demanding the others invites invented numbers, which is the exact failure this gate exists to prevent.",
     "required_fields": [
       "build_id",
       "frame_size_mm",
@@ -68,14 +63,15 @@
       "prop",
       "battery",
       "auw_g",
-      "hover_time_s",
-      "freestyle_time_s",
       "source"
     ],
     "optional_fields": [
       "top_speed_mph",
       "max_current_a",
-      "notes"
+      "notes",
+      "hover_time_s",
+      "cruise_time_s",
+      "freestyle_time_s"
     ],
     "string_fields": [
       "build_id",
@@ -86,13 +82,38 @@
       "notes"
     ],
     "numeric_ranges": {
-      "frame_size_mm": [50, 120],
-      "motor_kv": [5000, 45000],
-      "auw_g": [15, 120],
-      "hover_time_s": [30, 1200],
-      "freestyle_time_s": [30, 1200],
-      "top_speed_mph": [5, 120],
-      "max_current_a": [1, 100]
+      "frame_size_mm": [
+        50,
+        120
+      ],
+      "motor_kv": [
+        5000,
+        45000
+      ],
+      "auw_g": [
+        15,
+        120
+      ],
+      "hover_time_s": [
+        30,
+        1200
+      ],
+      "freestyle_time_s": [
+        30,
+        1200
+      ],
+      "top_speed_mph": [
+        5,
+        120
+      ],
+      "max_current_a": [
+        1,
+        100
+      ],
+      "cruise_time_s": [
+        30,
+        1200
+      ]
     },
     "source_must_contain_any": [
       "measured",
@@ -111,9 +132,13 @@
       "XXX",
       "N/A",
       "???"
+    ],
+    "require_any_of": [
+      "hover_time_s",
+      "cruise_time_s",
+      "freestyle_time_s"
     ]
   },
-
   "tune_schema": {
     "required_fields": [
       "id",

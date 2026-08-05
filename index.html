@@ -96,6 +96,16 @@
         </div>
 
         <div class="field">
+          <label for="videoSystem">Video System</label>
+          <select id="videoSystem">
+            <option value="analog" selected>Analog</option>
+            <option value="hdzero">HDZero</option>
+            <option value="digital">DJI / Walksnail</option>
+          </select>
+          <div class="field-hint" id="videoHint"></div>
+        </div>
+
+        <div class="field">
           <label for="motorKV">Motor KV</label>
           <input type="number" id="motorKV" value="27000" step="500" min="8000" max="40000">
           <div class="field-hint">Auto-filled from motor selection above, or enter manually (whoop motors: 0602–1103, 8,000–40,000 KV)</div>
@@ -154,7 +164,7 @@
           <div class="osd-stat">
             <div class="osd-stat-label">Flight Time</div>
             <div class="osd-stat-value" id="flightTime">2.1<span class="unit">min</span></div>
-            <div class="osd-stat-sub">Aggressive freestyle throttle</div>
+            <div class="osd-stat-sub" id="flightSub">Aggressive freestyle throttle — estimated</div>
           </div>
           <div class="osd-stat">
             <div class="osd-stat-label">Thrust-to-Weight</div>
