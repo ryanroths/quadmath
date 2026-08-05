@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HDZero vs Analog on a 65mm Whoop — Measured 34% Flight-Time Cost | quadmath.com</title>
+  <meta name="description" content="Measured back-to-back: a 65mm HDZero whoop flew 154s against 233s for an analog build on the same pack and props. What the 34% costs you, and what it buys.">
+  <meta property="og:title" content="HDZero vs Analog on a 65mm Whoop — Measured 34% Flight-Time Cost">
+  <meta property="og:description" content="Two 65mm whoops, same pack, same props, one analog and one HDZero. 233s versus 154s, measured. The numbers and the caveats.">
+  <meta property="og:url" content="https://quadmath.com/content/guides/hdzero-vs-analog-65mm-flight-time.html">
+  <link rel="canonical" href="https://quadmath.com/content/guides/hdzero-vs-analog-65mm-flight-time.html">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <a href="/">quadmath.com</a>
+  </header>
+
+  <main>
+    <h1>HDZero vs Analog on a 65mm Whoop: a Measured 34% Flight-Time Cost</h1>
+
+    <p>
+      Everyone knows digital video costs flight time on a whoop. Almost nobody publishes the
+      number. Here are two 65mm builds flown on the same day, on the same pack model, on the
+      same props: one analog, one HDZero. The analog build flew <strong>233 seconds</strong>.
+      The HDZero build flew <strong>154 seconds</strong>. That is a 34% reduction.
+    </p>
+
+    <h2>The two builds</h2>
+    <table>
+      <thead><tr><th></th><th>Analog</th><th>HDZero</th></tr></thead>
+      <tbody>
+        <tr><td>Airframe</td><td>Air65</td><td>Mobula6 2024</td></tr>
+        <tr><td>Motors</td><td>VCI 0702 PRO DB 30000KV</td><td>Happymodel SE0702 28000KV</td></tr>
+        <tr><td>Props</td><td>Gemfan 1219 tri, 1.0mm shaft</td><td>Gemfan 1219 tri, 1.5mm shaft</td></tr>
+        <tr><td>Pack</td><td colspan="2">BetaFPV LAVA 300mAh 1S LiHV, BT2.0 — 8.2 g measured</td></tr>
+        <tr><td>Dry weight</td><td>17.22 g</td><td>19.53 g</td></tr>
+        <tr><td>All-up weight</td><td>25.42 g</td><td>27.73 g</td></tr>
+      </tbody>
+    </table>
+
+    <h2>The measurement</h2>
+    <table>
+      <thead><tr><th></th><th>Analog</th><th>HDZero</th></tr></thead>
+      <tbody>
+        <tr><td>Cruise flight time</td><td>233 s (3:53)</td><td>154 s (2:34)</td></tr>
+        <tr><td>Average current</td><td>4.2 A</td><td>6.3 A</td></tr>
+        <tr><td>Delivered capacity</td><td colspan="2">270 mAh (4.35 V to ~3.3 V under load)</td></tr>
+      </tbody>
+    </table>
+
+    <p>
+      Same pace both flights — slow cruise, not racing, not hovering. Both packs taken from
+      4.35 V to roughly 3.3 V under load, delivering about 270 mAh of their nominal 300.
+      Current is the honest headline: <strong>4.2 A against 6.3 A</strong>, a 50% increase in
+      draw for the same flying.
+    </p>
+
+    <h2>Why it is not just the weight</h2>
+    <p>
+      The HDZero build is 2.31 g heavier all-up, about 9%. That alone does not explain a 50%
+      current increase. A 9% weight penalty costs roughly 9% more current to hold altitude,
+      not fifty. The rest is the video system drawing power directly — the VTX runs whether
+      you are moving or not, and on a 25-gram aircraft a transmitter that would be a rounding
+      error on a 5-inch is a large fraction of the total budget.
+    </p>
+    <p>
+      That is the useful takeaway: the cost is mostly <em>fixed</em>, not proportional. It
+      does not scale down if you fly gently, and it does not go away with a lighter frame.
+    </p>
+
+    <h2>What the numbers do not say</h2>
+    <p>
+      One run each. Not an average of five. Different airframes and different motors, because
+      these are two real aircraft rather than one aircraft with the video system swapped — the
+      clean experiment would fly the same frame twice, and this is not that. Treat 34% as the
+      right order of magnitude for this class, not a constant.
+    </p>
+    <p>
+      The current figures come from onboard sensors that were well off out of the box: the
+      analog build read about 20% cold, the HDZero build about 25% hot. Both were corrected
+      against a full-discharge anchor, which leaves roughly 8% uncertainty on the current
+      numbers. The <em>durations</em> are stopwatch and carry no such caveat.
+    </p>
+    <p>
+      Hover and freestyle times are not measured yet, only cruise. Punch-heavy flying will
+      compress both numbers and may not preserve the ratio.
+    </p>
+
+    <h2>Deciding</h2>
+    <p>
+      If your 65mm sessions are already ending at three minutes, HDZero takes you to roughly
+      two and a half. Whether that is worth a picture that does not break up is a question
+      about how you fly, not one this page can answer. What it can tell you is the size of the
+      trade, measured rather than guessed.
+    </p>
+    <p>
+      A 450mAh pack recovers some of the time at a weight penalty — the
+      <a href="/">build calculator</a> will estimate that for your own numbers, though note
+      that the measured anchors on this page apply to the 300mAh configuration as flown.
+    </p>
+
+    <h2>Source data</h2>
+    <p>
+      Raw bench records, including per-flight voltages, sensor correction factors and what
+      remains unmeasured:
+      <a href="https://github.com/ryanroths/quadmath/blob/main/data/bench/air65-analog-vci0702-30k.json">air65-analog-vci0702-30k.json</a>
+      and
+      <a href="https://github.com/ryanroths/quadmath/blob/main/data/bench/mobula6-2024-hdzero-se0702-28k.json">mobula6-2024-hdzero-se0702-28k.json</a>.
+      Measured 2026-08-05.
+    </p>
+
+    <nav aria-label="Related tools">
+      <ul>
+        <li><a href="/">Build calculator — flight time and thrust-to-weight for your build</a></li>
+        <li><a href="/tune-database.html">Tune database — 65mm reference tunes</a></li>
+        <li><a href="/gear.html">Gear list — the parts in both builds</a></li>
+      </ul>
+    </nav>
+  </main>
+</body>
+</html>
