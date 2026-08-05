@@ -4,7 +4,8 @@
   // weight here is DRY weight (no battery). Pack weight is added in
   // calculate() from capacity via packWeightG(), so AUW = dry + pack.
   // Dry values chosen so each preset's AUW matches the old all-up figures:
-  // 65: 19.5+8.5=28, 75: 25.3+12.7=38, 85: 39.6+2*12.7=65.
+  // 65: 19.5+8.2=27.7, 75: 25.3+12.7=38, 85: 39.6+2*12.7=65.
+  // (65mm shifted when the LAVA 300 pack was measured at 8.2g, not 8.5g.)
   const framePresets = {
     65: { kv: 28000, cells: 1, capacity: 300, pitch: 0.7, weight: 19.5 },
     75: { kv: 22000, cells: 1, capacity: 450, pitch: 1.1, weight: 25.3 },
@@ -16,8 +17,10 @@
   // multiplied by cell count for 2S. 480 sits below 450 because the LAVA II
   // 480 really is lighter than the BT2.0 450 -- these are scale numbers,
   // not a smooth model.
+  // 300 is measured: BetaFPV LAVA 300mAh 1S HV, n=2 (8.14, 8.21) -> 8.2g.
+  // See data/bench/*.json. The rest are still spec/estimated.
   const PACK_WEIGHTS = [
-    [300, 8.5], [450, 12.7], [480, 12.6], [550, 14.5], [660, 16.5], [680, 16.5],
+    [300, 8.2], [450, 12.7], [480, 12.6], [550, 14.5], [660, 16.5], [680, 16.5],
   ];
   function packWeightG(capacityMah, cells) {
     if (!capacityMah || capacityMah <= 0) return 0;
@@ -181,6 +184,30 @@
     85: 0.15,
   };
 
+  // ===== Measured bench anchors =====
+  // First-hand flight data from data/bench/*.json. Where a selected build
+  // matches one of these, flight time comes from the measured average current
+  // instead of the avgCurrentFraction estimate — a real number beats a fitted
+  // one. usableFraction is 0.9 because the discharge anchor delivered 270mAh
+  // from a 300mAh LiHV pack, not the 0.8 the generic model assumes.
+  //
+  // Matching is deliberately narrow: frame + KV + AUW within 15%. Anything
+  // outside that falls back to the model rather than borrowing someone else's
+  // numbers.
+  const BENCH_ANCHORS = [
+    { id: 'air65-analog-vci0702-30k',   frame: '65', kv: 30000, auwG: 25.42,
+      avgCurrentA: 4.2, usableFraction: 0.9, video: 'analog',
+      note: 'measured — Air65 analog, 233s cruise' },
+    { id: 'mobula6-2024-hdzero-se0702-28k', frame: '65', kv: 28000, auwG: 27.73,
+      avgCurrentA: 6.3, usableFraction: 0.9, video: 'HDZero',
+      note: 'measured — Mobula6 HDZero, 154s cruise' },
+  ];
+  function benchAnchorFor(kv, frame, auw) {
+    return BENCH_ANCHORS.find(a =>
+      a.frame === String(frame) && a.kv === kv &&
+      Math.abs(auw - a.auwG) / a.auwG <= 0.15) || null;
+  }
+
   // Rough max current draw estimate (A) per motor at given KV/cell combo — simplified model
   function estMaxCurrentPerMotor(kv, cells, frame) {
     const voltage = cells * 3.7;
@@ -204,6 +231,7 @@
     propPitch: document.getElementById('propPitch'),
     weight: document.getElementById('weight'),
     flightTime: document.getElementById('flightTime'),
+    flightSub:  document.getElementById('flightSub'),
     thrustWeight: document.getElementById('thrustWeight'),
     twRating: document.getElementById('twRating'),
     totalThrust: document.getElementById('totalThrust'),
@@ -404,10 +432,17 @@
     // Flight time still runs off the unclamped current: avgCurrentFraction was
     // fitted on top of it, so re-pointing this at effCurrentPerMotor would shift
     // every flight time. Deferred until avgCurrentFraction is refitted.
-    const avgCurrent   = maxCurrentPerMotor * 4 * avgCurrentFraction[currentFrame];
-    const flightTimeMin = ((capacity / 1000) * 0.8 / avgCurrent) * 60;
+    // A matching bench anchor replaces the fitted estimate outright: measured
+    // average current, and the 0.9 usable fraction the discharge anchor showed
+    // (270mAh delivered from a 300mAh LiHV pack) instead of the generic 0.8.
+    const anchor = benchAnchorFor(kv, currentFrame, weight);
+    const avgCurrent   = anchor
+      ? anchor.avgCurrentA
+      : maxCurrentPerMotor * 4 * avgCurrentFraction[currentFrame];
+    const usableFrac   = anchor ? anchor.usableFraction : 0.8;
+    const flightTimeMin = ((capacity / 1000) * usableFrac / avgCurrent) * 60;
     return { speedMph, totalThrust, tw, flightTimeMin, benchThrust, twBench,
-             packLimited, effCurrentPerMotor, maxCurrentPerMotor, packLimitPerMotor };
+             packLimited, effCurrentPerMotor, maxCurrentPerMotor, packLimitPerMotor, anchor };
   }
 
   // Whoop-realistic input clamps (0602–1103 motors, ≤2" props, 1S–2S, whoop AUW).
@@ -467,6 +502,12 @@
     els.twCeilingBadge.hidden = tw <= TW_CEILING;
 
     els.flightTime.innerHTML = s.flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
+    if (els.flightSub) {
+      els.flightSub.textContent = s.anchor
+        ? s.anchor.note + ' (' + s.anchor.avgCurrentA + 'A avg)'
+        : 'Aggressive freestyle throttle — estimated';
+      els.flightSub.classList.toggle('measured', !!s.anchor);
+    }
 
     const frameMaxes = {
       65: { tw: 6.0,  ft: 3.5,  spd: 45  },

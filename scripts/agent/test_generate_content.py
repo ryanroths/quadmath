@@ -117,11 +117,39 @@ class BenchGuard(unittest.TestCase):
 
     def test_missing_required_field_refuses(self):
         bench = dict(VALID_BENCH)
-        del bench["freestyle_time_s"]
+        del bench["battery"]
         read = fake_base_read({BENCH_PATH: json.dumps(bench)})
         gap, _, worklist = gc.pick_gap([orphan_row()], self.policy, read)
         self.assertIsNone(gap)
-        self.assertIn("freestyle_time_s", worklist[0]["reason"])
+        self.assertIn("battery", worklist[0]["reason"])
+
+    def test_one_flight_time_is_enough(self):
+        # A bench session usually lands one flight type first. Requiring all
+        # three is what pushes people to invent the missing ones.
+        bench = dict(VALID_BENCH)
+        del bench["freestyle_time_s"]
+        read = fake_base_read({BENCH_PATH: json.dumps(bench)})
+        gap, _, worklist = gc.pick_gap([orphan_row()], self.policy, read)
+        self.assertIsNotNone(gap, "hover_time_s alone should satisfy the gate")
+        self.assertEqual(worklist, [])
+
+    def test_cruise_time_alone_is_enough(self):
+        bench = dict(VALID_BENCH)
+        del bench["freestyle_time_s"]
+        del bench["hover_time_s"]
+        bench["cruise_time_s"] = 233
+        read = fake_base_read({BENCH_PATH: json.dumps(bench)})
+        gap, _, worklist = gc.pick_gap([orphan_row()], self.policy, read)
+        self.assertIsNotNone(gap, "a measured cruise run is real data")
+
+    def test_no_flight_time_at_all_refuses(self):
+        bench = dict(VALID_BENCH)
+        del bench["freestyle_time_s"]
+        del bench["hover_time_s"]
+        read = fake_base_read({BENCH_PATH: json.dumps(bench)})
+        gap, _, worklist = gc.pick_gap([orphan_row()], self.policy, read)
+        self.assertIsNone(gap)
+        self.assertIn("measured flight time", worklist[0]["reason"])
 
     def test_placeholder_value_refuses(self):
         bench = dict(VALID_BENCH)
@@ -211,9 +239,18 @@ class BenchGuard(unittest.TestCase):
         self.assertEqual(
             schema["required_fields"],
             ["build_id", "frame_size_mm", "motor", "motor_kv", "prop", "battery",
-             "auw_g", "hover_time_s", "freestyle_time_s", "source"],
+             "auw_g", "source"],
         )
-        self.assertEqual(schema["optional_fields"], ["top_speed_mph", "max_current_a", "notes"])
+        # Flight times moved out of required_fields and into require_any_of.
+        self.assertEqual(
+            schema["require_any_of"],
+            ["hover_time_s", "cruise_time_s", "freestyle_time_s"],
+        )
+        self.assertEqual(
+            schema["optional_fields"],
+            ["top_speed_mph", "max_current_a", "notes",
+             "hover_time_s", "cruise_time_s", "freestyle_time_s"],
+        )
         self.assertIn("TBD", schema["placeholder_values"])
 
 

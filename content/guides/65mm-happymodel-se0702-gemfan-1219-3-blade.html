@@ -3,15 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>65mm SE0702 28000KV + Gemfan 1207 3-blade Build & Tune | quadmath.com</title>
-  <meta name="description" content="Build and tune guide for 65mm whoop with Happymodel SE0702 28000KV motors and Gemfan 1207 3-blade props. Betaflight setup, filtering, and flight tips.">
-  <meta property="og:title" content="65mm SE0702 28000KV + Gemfan 1207 3-blade Build & Tune">
-  <meta property="og:description" content="Practical guide: 65mm whoop build using Happymodel SE0702 28000KV and Gemfan 1207 3-blade. Betaflight configuration, filtering strategy, and tune direction.">
-  <meta property="og:url" content="https://quadmath.com/content/guides/65mm-happymodel-se0702-gemfan-1207-3-blade.html">
-  <!-- Provisional noindex: this guide has no measured PIDs, thrust, or
-       flight-time data yet. Remove once bench data lands so the page can
-       compete in search on substance rather than filler. -->
-  <meta name="robots" content="noindex">
+  <title>65mm SE0702 28000KV + Gemfan 1219 3-blade Build & Tune | quadmath.com</title>
+  <meta name="description" content="Build and tune guide for 65mm whoop with Happymodel SE0702 28000KV motors and Gemfan 1219 3-blade props. Betaflight setup, filtering, and flight tips.">
+  <meta property="og:title" content="65mm SE0702 28000KV + Gemfan 1219 3-blade Build & Tune">
+  <meta property="og:description" content="Practical guide: 65mm whoop build using Happymodel SE0702 28000KV and Gemfan 1219 3-blade. Betaflight configuration, filtering strategy, and tune direction.">
+  <meta property="og:url" content="https://quadmath.com/content/guides/65mm-happymodel-se0702-gemfan-1219-3-blade.html">
+  <link rel="canonical" href="https://quadmath.com/content/guides/65mm-happymodel-se0702-gemfan-1219-3-blade.html">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -20,10 +17,10 @@
   </header>
 
   <main>
-    <h1>65mm Build: Happymodel SE0702 28000KV + Gemfan 1207 3-blade</h1>
+    <h1>65mm Build: Happymodel SE0702 28000KV + Gemfan 1219 3-blade</h1>
     <p>
       This combination sits at the aggressive end of 65mm. The SE0702 at 28000KV is a high-RPM
-      motor for this frame class; the Gemfan 1207 3-blade loads it harder than a 2-blade would.
+      motor for this frame class; the Gemfan 1219 3-blade is a high-pitch (1.9") 31mm tri-blade that loads it harder than a low-pitch or 2-blade prop would.
       The result is strong punch for indoor ripping, with a penalty in efficiency and heat.
       Plan your tune and filtering accordingly.
     </p>
@@ -41,10 +38,39 @@
     <ul>
       <li><strong>Frame:</strong> 65mm whoop frame — inspect duct integrity (no cracks or ovaled duct rings; a warped duct costs thrust and adds vibration), confirm canopy fit over the AIO stack, and prefer injection-molded nylon/PA12 over brittle materials that crack at the motor mounts. Keep all-up weight near the ~28g class target with battery</li>
       <li><strong>Motors:</strong> Happymodel SE0702 28000KV — verify stator temp after first hover; these motors run warm under load</li>
-      <li><strong>Props:</strong> Gemfan 1207 3-blade — inspect hub fit on motor shaft; 1mm and 1.5mm shaft variants exist, confirm before ordering</li>
+      <li><strong>Props:</strong> Gemfan 1219 3-blade — inspect hub fit on motor shaft; 1mm and 1.5mm shaft variants exist, confirm before ordering</li>
       <li><strong>Battery:</strong> 1S only — the SE0702 at 28000KV is a 1S motor; on 2S it would spin toward ~235,000 RPM theoretical no-load and destroy itself. Typical packs for this class are 1S 260–450mAh (300mAh is the calculator preset); use HV cells with low internal resistance</li>
       <li><strong>FC/ESC:</strong> AIO boards rated for the cell count; solder joints on a 65mm chassis carry high pulsed current — use quality solder and short wire runs</li>
     </ul>
+
+    <h2>Measured Flight Time</h2>
+    <p>
+      First-hand numbers from this build, not model output. Source:
+      <a href="https://github.com/ryanroths/quadmath/blob/main/data/bench/mobula6-2024-hdzero-se0702-28k.json">data/bench/mobula6-2024-hdzero-se0702-28k.json</a>.
+    </p>
+    <table>
+      <thead><tr><th>Measure</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>All-up weight</td><td>27.73 g (19.53 g dry + 8.2 g pack)</td></tr>
+        <tr><td>Pack</td><td>BetaFPV LAVA 300mAh 1S LiHV, BT2.0</td></tr>
+        <tr><td>Cruise flight time</td><td>154 s (2:34)</td></tr>
+        <tr><td>Average current</td><td>6.3 A</td></tr>
+        <tr><td>Delivered capacity</td><td>270 mAh (4.35 V to ~3.3 V under load)</td></tr>
+      </tbody>
+    </table>
+    <p>
+      One cruise run, 2026-08-05. The onboard current sensor read about 25% hot and is
+      corrected by a 0.79 factor calibrated against a full-discharge anchor, so the current
+      figure carries roughly 8% uncertainty. Hover and freestyle runs are not yet measured —
+      those numbers are absent here rather than estimated.
+    </p>
+    <p>
+      For context, the same pack and props on a 25.42 g analog 65mm running VCI 0702 PRO
+      30000KV gave 233 s at 4.2 A — this HDZero build costs about 34% of the flight time.
+      The video system is the dominant difference; the 2.3 g of extra airframe weight is
+      secondary. See
+      <a href="https://github.com/ryanroths/quadmath/blob/main/data/bench/air65-analog-vci0702-30k.json">data/bench/air65-analog-vci0702-30k.json</a>.
+    </p>
 
     <h2>Betaflight Setup</h2>
     <p>Reference: <a href="https://betaflight.com" rel="noopener">betaflight.com</a> — use the current stable release.</p>

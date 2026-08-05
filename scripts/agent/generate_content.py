@@ -107,6 +107,17 @@ def validate_bench(bench, schema: dict, target: str) -> list[str]:
         elif _is_placeholder(bench[field], placeholders):
             problems.append("field %r is a placeholder or empty (%r)" % (field, bench[field]))
 
+    # At least one measured flight time. Not all three: a bench session usually
+    # yields one flight type first, and demanding the rest invites invented
+    # numbers -- the exact failure this gate exists to stop.
+    any_of = schema.get("require_any_of") or []
+    if any_of and not any(
+        f in bench and not _is_placeholder(bench[f], placeholders) for f in any_of
+    ):
+        problems.append(
+            "needs at least one measured flight time (one of: %s)" % ", ".join(any_of)
+        )
+
     for field in schema.get("string_fields", []):
         if field in bench and not isinstance(bench[field], str):
             problems.append("field %r must be a string" % field)
@@ -157,17 +168,35 @@ def bench_for_gap(gap: dict, base_read, policy: dict):
         # Fail closed: no schema in the base policy means nothing can prove the
         # data is real, so nothing gets generated.
         return None, "policy at base ref has no bench_schema -- refusing to generate"
-    path = bench_path_for(gap.get("target", ""))
+    target = gap.get("target", "")
+    path = bench_path_for(target)
     raw = base_read(path)
+    if raw is None:
+        # Fall back to any bench file that explicitly claims this target in its
+        # applies_to list. Bench files are named after the build, not after the
+        # collector's target string, and the two differ whenever the component
+        # database spells a part differently from the box it came in.
+        for candidate in sorted(base_read.list_dir(BENCH_DIR) if hasattr(base_read, "list_dir") else []):
+            craw = base_read("%s/%s" % (BENCH_DIR, candidate))
+            if craw is None:
+                continue
+            try:
+                cb = json.loads(craw)
+            except json.JSONDecodeError:
+                continue
+            if target in (cb.get("applies_to") or []):
+                path, raw, bench = "%s/%s" % (BENCH_DIR, candidate), craw, cb
+                break
     if raw is None:
         return None, "no bench data at %s -- measure this build, then re-run" % path
     try:
         bench = json.loads(raw)
     except json.JSONDecodeError as exc:
         return None, "%s is not valid JSON (%s)" % (path, exc)
-    problems = validate_bench(bench, schema, gap.get("target", ""))
+    problems = validate_bench(bench, schema, target)
     if problems:
         return None, "%s failed bench_schema: %s" % (path, "; ".join(problems))
+    bench["_bench_path"] = path      # guides must cite the file backing them
     return bench, None
 
 # --------------------------------------------------------------------------
@@ -424,6 +453,7 @@ def generate_for_gap(gap: dict, base_read, api_key: str, policy: dict) -> dict[s
     if kind == "build_orphan":
         # pick_gap already gated on bench data; re-check here so this function
         # is safe to call directly and can never generate without it.
+        # The bench file's own path travels with the data so the page can cite it.
         bench, reason = bench_for_gap(gap, base_read, policy)
         if bench is None:
             raise RuntimeError("build_orphan %s refused: %s" % (gap["target"], reason))
@@ -439,7 +469,7 @@ def generate_for_gap(gap: dict, base_read, api_key: str, policy: dict) -> dict[s
                 gap["detail"],
                 path,
                 path,
-                bench_path_for(gap["target"]),
+                bench.get("_bench_path") or bench_path_for(gap["target"]),
                 json.dumps(bench, indent=2, sort_keys=True),
             )
         )

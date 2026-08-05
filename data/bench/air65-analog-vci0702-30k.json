@@ -1,0 +1,53 @@
+{
+  "build_id": "air65-analog-vci0702-30k",
+  "name": "Air65 Analog",
+  "class_mm": 65,
+  "frame_size_mm": 65,
+  "video": "analog",
+  "motor": "VCI 0702 PRO",
+  "motor_kv": 30000,
+  "prop": "Gemfan 1219 3-blade",
+  "battery": "BetaFPV LAVA 300mAh 1S LiHV BT2.0",
+  "auw_g": 25.42,
+  "cruise_time_s": 233,
+  "source": "measured 2026-08-05 — stopwatch duration, OSD mAh, current sensor calibrated against a full-discharge anchor",
+  "motor_detail": { "model": "VCI 0702 PRO", "kv": 30000 },
+  "prop_detail": { "model": "Gemfan 1219", "blades": 3, "size_mm": 31 },
+  "firmware": { "type": "betaflight", "note": "PIDs/rates per tune DB entry" },
+  "weights_g": {
+    "dry": 17.22,
+    "pack": 8.2,
+    "auw": 25.42,
+    "source": "measured 2026-08-05, kitchen scale"
+  },
+  "pack": {
+    "brand": "BetaFPV LAVA",
+    "capacity_mah": 300,
+    "cells": "1S LiHV",
+    "connector": "BT2.0",
+    "weight_g": 8.2,
+    "weight_source": "measured, n=2 (8.14, 8.21)"
+  },
+  "current_sensor": {
+    "status": "present, reads ~20% cold",
+    "correction_factor": 1.24,
+    "calibration_method": "full-discharge anchor, assumed 270mAh delivered (4.35V LiHV to ~3.3V load cutoff)",
+    "uncertainty_pct": 8
+  },
+  "flights": [
+    {
+      "run": 1,
+      "date": "2026-08-05",
+      "type": "cruise",
+      "duration_s": 233,
+      "start_v": 4.36,
+      "cutoff_v_load": 3.28,
+      "rest_v_post": null,
+      "mah_osd_raw": 217,
+      "mah_corrected": 270,
+      "avg_current_a_corrected": 4.2,
+      "notes": "OSD showed 4.21 at start. Slow cruise pace. Initial OSD mAh misread as 21, corrected to 217 post-flight."
+    }
+  ],
+  "pending": ["hover run", "repeat cruise run", "rest voltage logging", "top speed (calm air)"]
+}
