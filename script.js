@@ -68,6 +68,13 @@
       { name: 'VCI Spark 0702',              kv: 29000, propPitch: 0.7, weightPerMotor: 1.52 },
       { name: 'BetaFPV 0702 II',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.50 },
       { name: 'BetaFPV 0702 2026 Edition',   kv: 30000, propPitch: 0.7, weightPerMotor: 1.50 }, // 2026, 0.10mm stator laminations
+      // VCI 0702 PRO DB — a SEPARATE line from VCI Spark 0702 above, not a
+      // relabel: Spark is the 22-29K dual-bearing series at 1.52g, PRO DB is
+      // 30K only. Both kept. 1.49g is the vendor figure (weBLEEDfpv product
+      // page, 1mm shaft, 07*L2mm stator); the build sheet's ~2.2g estimate is
+      // out of family for any 0702 and is not used. Flown in
+      // data/bench/air65-analog-vci0702-30k.json.
+      { name: 'VCI 0702 PRO DB',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.49 }, // 2026, bench-flown
       { name: 'weBLEEDfpv Champion 0702',    kv: 36000, propPitch: 0.7, weightPerMotor: 1.50 }, // 2026
       { name: 'weBLEEDfpv SKRRRT 0702',      kv: 40000, propPitch: 0.7, weightPerMotor: 1.60 },
     ],

@@ -39,7 +39,7 @@ cs = _load_module()
 # commit as the script.js change, after checking the collector still parses it.
 SCRIPT_JS_PIN = {
     "framePresets": {65: 1, 75: 1, 85: 1},
-    "motorDB": {65: 15, 75: 20, 85: 8},
+    "motorDB": {65: 16, 75: 20, 85: 8},
     "propDB": {65: 10, 75: 8, 85: 7},
 }
 

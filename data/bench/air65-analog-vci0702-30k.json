@@ -4,16 +4,28 @@
   "class_mm": 65,
   "frame_size_mm": 65,
   "video": "analog",
-  "motor": "VCI 0702 PRO",
+  "motor": "VCI 0702 PRO DB",
   "motor_kv": 30000,
-  "prop": "Gemfan 1219 3-blade",
+  "prop": "Gemfan 1219 3-blade, 1.0mm shaft",
   "battery": "BetaFPV LAVA 300mAh 1S LiHV BT2.0",
   "auw_g": 25.42,
   "cruise_time_s": 233,
   "source": "measured 2026-08-05 — stopwatch duration, OSD mAh, current sensor calibrated against a full-discharge anchor",
-  "motor_detail": { "model": "VCI 0702 PRO", "kv": 30000 },
-  "prop_detail": { "model": "Gemfan 1219", "blades": 3, "size_mm": 31 },
-  "firmware": { "type": "betaflight", "note": "PIDs/rates per tune DB entry" },
+  "motor_detail": {
+    "model": "VCI 0702 PRO DB",
+    "kv": 30000,
+    "shaft_mm": 1.0
+  },
+  "prop_detail": {
+    "model": "Gemfan 1219",
+    "blades": 3,
+    "size_mm": 31,
+    "shaft_mm": 1.0
+  },
+  "firmware": {
+    "type": "betaflight",
+    "note": "PIDs/rates per tune DB entry"
+  },
   "weights_g": {
     "dry": 17.22,
     "pack": 8.2,
@@ -49,5 +61,13 @@
       "notes": "OSD showed 4.21 at start. Slow cruise pace. Initial OSD mAh misread as 21, corrected to 217 post-flight."
     }
   ],
-  "pending": ["hover run", "repeat cruise run", "rest voltage logging", "top speed (calm air)"]
+  "pending": [
+    "hover run",
+    "repeat cruise run",
+    "rest voltage logging",
+    "top speed (calm air)"
+  ],
+  "applies_to": [
+    "65mm/VCI 0702 PRO DB/Gemfan 1219S 3-blade"
+  ]
 }

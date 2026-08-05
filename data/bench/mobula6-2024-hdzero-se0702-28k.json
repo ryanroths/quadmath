@@ -6,15 +6,29 @@
   "video": "hdzero",
   "motor": "Happymodel SE0702",
   "motor_kv": 28000,
-  "prop": "Gemfan 1219 3-blade",
+  "prop": "Gemfan 1219 3-blade, 1.5mm shaft",
   "battery": "BetaFPV LAVA 300mAh 1S LiHV BT2.0",
   "auw_g": 27.73,
   "cruise_time_s": 154,
   "source": "measured 2026-08-05 — stopwatch duration, OSD mAh, current sensor calibrated against a full-discharge anchor",
-  "applies_to": ["65mm/Happymodel SE0702/Gemfan 1219S 3-blade"],
-  "motor_detail": { "model": "SE0702", "kv": 28000 },
-  "prop_detail": { "model": "Gemfan 1219", "blades": 3, "size_mm": 31 },
-  "firmware": { "type": "betaflight", "note": "PIDs/rates per tune DB entry" },
+  "applies_to": [
+    "65mm/Happymodel SE0702/Gemfan 1219S 3-blade"
+  ],
+  "motor_detail": {
+    "model": "SE0702",
+    "kv": 28000,
+    "shaft_mm": 1.5
+  },
+  "prop_detail": {
+    "model": "Gemfan 1219",
+    "blades": 3,
+    "size_mm": 31,
+    "shaft_mm": 1.5
+  },
+  "firmware": {
+    "type": "betaflight",
+    "note": "PIDs/rates per tune DB entry"
+  },
   "weights_g": {
     "dry": 19.53,
     "pack": 8.2,
@@ -50,5 +64,10 @@
       "notes": "OSD showed 4.15 at start (connector drop + ADC offset). Slow cruise pace."
     }
   ],
-  "pending": ["hover run", "repeat cruise run", "rest voltage logging", "top speed (calm air)"]
+  "pending": [
+    "hover run",
+    "repeat cruise run",
+    "rest voltage logging",
+    "top speed (calm air)"
+  ]
 }
