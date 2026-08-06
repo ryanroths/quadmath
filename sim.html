@@ -28,6 +28,8 @@
   .osd{position:fixed;pointer-events:none;font-size:13px;letter-spacing:.5px;text-shadow:0 0 4px rgba(0,0,0,.9)}
   #osdTL{top:14px;left:16px} #osdTR{top:14px;right:16px;text-align:right}
   #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
+  #osdBL{display:none}
+  #osdBR{bottom:18px;right:16px;text-align:right}
   #osdGate{top:14px;left:50%;transform:translateX(-50%);color:var(--txt);font-weight:600}
   #osdLap{top:64px;left:16px;font-weight:600}
   #osdLand{position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);z-index:6;
@@ -123,6 +125,8 @@
 <div class="osd" id="osdTL"></div>
 <div class="osd" id="osdTR"></div>
 <div class="osd" id="osdBC"></div>
+<div class="osd" id="osdBL"></div>
+<div class="osd" id="osdBR"></div>
 <div class="osd" id="osdGate"></div>
 <div class="osd" id="osdLap"></div>
 <div id="osdLand">LAND NOW</div>
@@ -1702,6 +1706,20 @@ qp.onSubstep=(s)=>{
     s.omega.z+=(Math.random()-0.5)*k*0.5;
   }
 };
+// Ground-effect clearance: height above whatever is directly underneath — open
+// ground (world y=0.12 hover floor) or a rooftop the drone is over. Scans the
+// same AABB collider set as the crash check; returns SI meters for the module.
+const _gp=new THREE.Vector3();
+qp.groundClearance=(s)=>{
+  mod2world(s.position,_gp);
+  let top=0.12;
+  for(const bb of colliders){
+    if(_gp.x>=bb.min.x&&_gp.x<=bb.max.x&&_gp.z>=bb.min.z&&_gp.z<=bb.max.z&&bb.max.y<=_gp.y&&bb.max.y>top){
+      top=bb.max.y;
+    }
+  }
+  return (_gp.y-top)/WS;
+};
 const PHYS_DT_HZ=1/240;
 
 // Mirror the module state into the three.js-space `state` object every frame so
@@ -2363,13 +2381,18 @@ function updateOSD(){
     `CAM ${CFG.camDeg}° FOV ${CFG.fov}${usingGltf?'<br>GLTF MAP':''}`;
   // Per-motor outputs straight off the mixer — a yaw input shows the CW pair
   // rising while the CCW pair drops, which is the tell that the mixer is real.
+  // Spread across the bottom: throttle bottom-left, flight stats center,
+  // motors bottom-right in their PHYSICAL quad-X layout (front row on top:
+  // M4 front-left, M2 front-right / M3 rear-left, M1 rear-right).
   const mo=qp.motorOutputs;
   const bar=v=>'█'.repeat(Math.round(v*6)).padEnd(6,'░');
+  osdBL.innerHTML='';
   osdBC.innerHTML=`THR ${'█'.repeat(Math.round(stick.t*10)).padEnd(10,'░')} ${(stick.t*100)|0}%`+
-    `&nbsp;&nbsp;FLT ${String(t/60|0).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`+
-    `&nbsp;&nbsp;TWR ${qp.twr.toFixed(1)}`+
-    `<br><span style="font-size:.85em;opacity:.85">`+
-    `M1 ${bar(mo[0])} M2 ${bar(mo[1])} M3 ${bar(mo[2])} M4 ${bar(mo[3])}</span>`;
+    `<br>FLT ${String(t/60|0).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`+
+    `&nbsp;&nbsp;TWR ${qp.twr.toFixed(1)}`;
+  osdBR.innerHTML=`<span style="font-size:.85em;opacity:.85">`+
+    `M4 ${bar(mo[3])}&nbsp;M2 ${bar(mo[1])}<br>`+
+    `M3 ${bar(mo[2])}&nbsp;M1 ${bar(mo[0])}</span>`;
   updateLapOSD();
 }
 
