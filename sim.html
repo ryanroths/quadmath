@@ -28,6 +28,8 @@
   .osd{position:fixed;pointer-events:none;font-size:13px;letter-spacing:.5px;text-shadow:0 0 4px rgba(0,0,0,.9)}
   #osdTL{top:14px;left:16px} #osdTR{top:14px;right:16px;text-align:right}
   #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
+  #osdBL{display:none}
+  #osdBR{bottom:18px;right:16px;text-align:right}
   #osdGate{top:14px;left:50%;transform:translateX(-50%);color:var(--txt);font-weight:600}
   #osdLap{top:64px;left:16px;font-weight:600}
   #osdLand{position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);z-index:6;
@@ -123,6 +125,8 @@
 <div class="osd" id="osdTL"></div>
 <div class="osd" id="osdTR"></div>
 <div class="osd" id="osdBC"></div>
+<div class="osd" id="osdBL"></div>
+<div class="osd" id="osdBR"></div>
 <div class="osd" id="osdGate"></div>
 <div class="osd" id="osdLap"></div>
 <div id="osdLand">LAND NOW</div>
@@ -1614,6 +1618,16 @@ const STOCK_TUNES={
            rollF:15,pitchF:16,yawF:20},
   whoop75:{rollP:33,rollI:60,rollD:25,pitchP:35,pitchI:63,pitchD:28,yawP:33,yawI:60,yawD:0,
            rollF:15,pitchF:16,yawF:20},
+  // 85mm: real PIDs from the tune DB (85-happymodel-ryfly, CrazyBee F4 DX).
+  // FF kept in the sim's calibrated 15/16/20 family — the build's FF 180/187 is
+  // on the Betaflight scale, not this module's reduced F_SCALE feel.
+  whoop85:{rollP:67,rollI:120,rollD:40,pitchP:70,pitchI:126,pitchD:45,yawP:67,yawI:120,yawD:0,
+           rollF:15,pitchF:16,yawF:20},
+  // Freestyle classes: Betaflight 4.x default-flavored, same FF family.
+  freestyle25:{rollP:48,rollI:85,rollD:35,pitchP:50,pitchI:88,pitchD:38,yawP:48,yawI:85,yawD:0,
+           rollF:15,pitchF:16,yawF:20},
+  freestyle5:{rollP:45,rollI:80,rollD:30,pitchP:47,pitchI:84,pitchD:34,yawP:45,yawI:80,yawD:0,
+           rollF:15,pitchF:16,yawF:20},
 };
 qp.setTune(STOCK_TUNES.whoop65);
 // Base thrust before voltage sag scales it each frame.
@@ -1651,8 +1665,9 @@ qp.onSubstep=(s)=>{
   mod2world(s.position,_cp);
   mod2world(s.velocity,_cv);
   let hitSpeed=0;
+  let floorHit=false;
   if(_cp.y<0.12){
-    const impact=-_cv.y;_cp.y=0.12;
+    const impact=-_cv.y;_cp.y=0.12;floorHit=true;
     if(impact>4.5){_cv.y=-_cv.y*0.45;_cv.x*=.7;_cv.z*=.7;hitSpeed=impact;bounce();}
     else{_cv.y=Math.max(_cv.y,0);_cv.x*=.85;_cv.z*=.85;}
   }
@@ -1677,7 +1692,6 @@ qp.onSubstep=(s)=>{
         _cv.z*=-.45;_cv.x*=.9;_cv.y*=.9;
       }
       if(into>HARD_INTO){hitSpeed=Math.max(hitSpeed,into);bounce();}
-      else toast('TAP');
       break;
     }
   }
@@ -1685,12 +1699,48 @@ qp.onSubstep=(s)=>{
   world2mod(_cv,s.velocity);
   // note 5: hard contact throws the airframe off its axis — the tumble is the
   // PID's problem to catch, which is the whole point of a real rate loop.
+  // Roadmap step 7 (crash tumble): the kick is now COUPLED to how you hit.
+  // Sliding into the floor nose-first pitches you over forward; carrying
+  // sideways speed rolls you — tangential velocity at impact drives the spin,
+  // with only a small random garnish for crash-to-crash variety. Deterministic
+  // in flight, physical in crashes.
   if(hitSpeed>0){
     const k=Math.min(1,hitSpeed/(11*WS))*6;
-    s.omega.x+=(Math.random()-0.5)*k;
-    s.omega.y+=(Math.random()-0.5)*k;
-    s.omega.z+=(Math.random()-0.5)*k*0.5;
+    if(floorHit){
+      // module frame: x fwd, y left, z up. Tangential ground speed → tumble:
+      // forward speed pitches over the nose, lateral speed rolls over a side.
+      const tk=Math.min(1,Math.hypot(s.velocity.x,s.velocity.y)/(8))*4;
+      s.omega.y+=s.velocity.x*tk*0.6;
+      s.omega.x-=s.velocity.y*tk*0.6;
+      s.omega.x+=(Math.random()-0.5)*k*0.5;
+      s.omega.y+=(Math.random()-0.5)*k*0.5;
+      s.omega.z+=(Math.random()-0.5)*k*0.3;
+    }else{
+      s.omega.x+=(Math.random()-0.5)*k;
+      s.omega.y+=(Math.random()-0.5)*k;
+      s.omega.z+=(Math.random()-0.5)*k*0.5;
+    }
   }
+  // Ground scrub: frame and props dragging on the floor bleed rotation fast —
+  // a tumble SETTLES within ~half a second of ground contact instead of
+  // spinning in place forever. 0.97^240 per second ≈ hard decay, contact only.
+  if(floorHit){
+    s.omega.x*=0.97;s.omega.y*=0.97;s.omega.z*=0.97;
+  }
+};
+// Ground-effect clearance: height above whatever is directly underneath — open
+// ground (world y=0.12 hover floor) or a rooftop the drone is over. Scans the
+// same AABB collider set as the crash check; returns SI meters for the module.
+const _gp=new THREE.Vector3();
+qp.groundClearance=(s)=>{
+  mod2world(s.position,_gp);
+  let top=0.12;
+  for(const bb of colliders){
+    if(_gp.x>=bb.min.x&&_gp.x<=bb.max.x&&_gp.z>=bb.min.z&&_gp.z<=bb.max.z&&bb.max.y<=_gp.y&&bb.max.y>top){
+      top=bb.max.y;
+    }
+  }
+  return (_gp.y-top)/WS;
 };
 const PHYS_DT_HZ=1/240;
 
@@ -2279,7 +2329,8 @@ function physics(dt){
   thrustActual=qp.totalThrustN*WS; // world newtons, for audio + battery load
 }
 function bounce(){
-  state.bounces++;toast('BOUNCE #'+state.bounces);
+  state.bounces++;   // counter kept for stats; the BOUNCE #N toast is gone —
+                     // camera shake + tumble already sell the impact.
 }
 
 // ---------- Camera ----------
@@ -2353,13 +2404,18 @@ function updateOSD(){
     `CAM ${CFG.camDeg}° FOV ${CFG.fov}${usingGltf?'<br>GLTF MAP':''}`;
   // Per-motor outputs straight off the mixer — a yaw input shows the CW pair
   // rising while the CCW pair drops, which is the tell that the mixer is real.
+  // Spread across the bottom: throttle bottom-left, flight stats center,
+  // motors bottom-right in their PHYSICAL quad-X layout (front row on top:
+  // M4 front-left, M2 front-right / M3 rear-left, M1 rear-right).
   const mo=qp.motorOutputs;
   const bar=v=>'█'.repeat(Math.round(v*6)).padEnd(6,'░');
+  osdBL.innerHTML='';
   osdBC.innerHTML=`THR ${'█'.repeat(Math.round(stick.t*10)).padEnd(10,'░')} ${(stick.t*100)|0}%`+
-    `&nbsp;&nbsp;FLT ${String(t/60|0).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`+
-    `&nbsp;&nbsp;TWR ${qp.twr.toFixed(1)}`+
-    `<br><span style="font-size:.85em;opacity:.85">`+
-    `M1 ${bar(mo[0])} M2 ${bar(mo[1])} M3 ${bar(mo[2])} M4 ${bar(mo[3])}</span>`;
+    `<br>FLT ${String(t/60|0).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`+
+    `&nbsp;&nbsp;TWR ${qp.twr.toFixed(1)}`;
+  osdBR.innerHTML=`<span style="font-size:.85em;opacity:.85">`+
+    `M4 ${bar(mo[3])}&nbsp;M2 ${bar(mo[1])}<br>`+
+    `M3 ${bar(mo[2])}&nbsp;M1 ${bar(mo[0])}</span>`;
   updateLapOSD();
 }
 
@@ -2425,10 +2481,11 @@ document.getElementById('cbBattSim').onchange=e=>{
 // so a lighter drone genuinely accelerates harder. drag matches the authentic
 // less-floaty tuning (0.55+), not the old floaty 0.28.
 const DRONE_TYPES={
-  whoop65:{label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020}, // TWR ~3:1, hovers ~0.33 throttle
-  whoop75:{label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024}, // lazier yaw + slower 0802 spool
-  whoop85:{label:'85mm Whoop',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028},
-  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060} // heavy: inertia does the work, no other changes
+  whoop65:{label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:23}, // TWR ~3:1, hovers ~0.33 throttle
+  whoop75:{label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:25}, // lazier yaw + slower 0802 spool
+  whoop85:{label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:27},
+  freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30}, // toothpick-adjacent middle class
+  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:33} // heavy: inertia does the work, no other changes
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
@@ -2443,22 +2500,36 @@ function setSlider(id,val){
   const s=document.getElementById('s_'+id);
   s.value=val;s.dispatchEvent(new Event('input'));
 }
+// Camera tilt follows the class default (whoops fly low tilt, 5" flies high)
+// until the pilot moves the slider themselves — then their choice sticks,
+// mirroring the ratesAreCustom pattern. setSlider() dispatches synthetic
+// 'input' events, so a suppress flag separates user drags from class switches.
+let camIsCustom=false;
+try{camIsCustom=localStorage.getItem('ryflyCamCustom')==='1';}catch(e){}
+let applyingType=false;
+document.getElementById('s_cam').addEventListener('input',()=>{
+  if(!applyingType){camIsCustom=true;try{localStorage.setItem('ryflyCamCustom','1');}catch(e){}}
+});
 function applyDroneType(){
   const d=DRONE_TYPES[droneType];
-  // Physics core first: the preset carries mass, wheelbase, per-motor thrust,
-  // spool and yaw-torque ratio, and rebuilds the motor layout + inertia tensor.
-  qp.setPreset(PRESETS[d.preset]);
-  qp.setTune(STOCK_TUNES[d.preset]||STOCK_TUNES.whoop65);
-  baseThrustPerMotor=qp.cfg.maxThrustPerMotor;
-  CFG.maxThrustN=baseThrustPerMotor*4*WS;            // world-newton mirror, for audio + readouts
-  setSlider('drag',d.drag);setSlider('mass',d.mass);
-  if(!ratesAreCustom){                              // per-drone feel, defaults only
-    for(const ax of RATE_AXES)rates[ax].srate=d.sr;
-  }
-  refreshRatesUI();
-  setSlider('spool',d.spool);                        // per-drone motor spool time constant
-  applyCfgToQp();                                    // slider values win over the preset's mass/tau
-  refreshTwr();                                      // update the derived thrust:weight readout
+  applyingType=true;
+  try{
+    // Physics core first: the preset carries mass, wheelbase, per-motor thrust,
+    // spool and yaw-torque ratio, and rebuilds the motor layout + inertia tensor.
+    qp.setPreset(PRESETS[d.preset]);
+    qp.setTune(STOCK_TUNES[d.preset]||STOCK_TUNES.whoop65);
+    baseThrustPerMotor=qp.cfg.maxThrustPerMotor;
+    CFG.maxThrustN=baseThrustPerMotor*4*WS;            // world-newton mirror, for audio + readouts
+    setSlider('drag',d.drag);setSlider('mass',d.mass);
+    if(!ratesAreCustom){                              // per-drone feel, defaults only
+      for(const ax of RATE_AXES)rates[ax].srate=d.sr;
+    }
+    refreshRatesUI();
+    setSlider('spool',d.spool);                        // per-drone motor spool time constant
+    if(!camIsCustom&&d.cam!=null)setSlider('cam',d.cam); // class camera tilt, defaults only
+    applyCfgToQp();                                    // slider values win over the preset's mass/tau
+    refreshTwr();                                      // update the derived thrust:weight readout
+  }finally{applyingType=false;}
 }
 droneSel.onchange=()=>{
   droneType=droneSel.value;

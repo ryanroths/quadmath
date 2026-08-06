@@ -34,7 +34,7 @@ export const PRESETS = {
   },
   whoop85: {
     name: '85mm whoop',
-    mass: 0.048, wheelbase: 0.085, propDiameter: 0.048,
+    mass: 0.048, wheelbase: 0.085, propDiameter: 0.051,   // 2" props
     maxThrustPerMotor: 0.48, motorTau: 0.028, kQ: 0.70, idleThrottle: 0.055,
   },
   freestyle25: {
@@ -214,6 +214,10 @@ export class QuadPhysics {
     this.externalDrag = null;
     // hook: collision. fn(state) called after each substep; mutate position/velocity there.
     this.onSubstep = null;
+    // hook: ground effect. fn(state) -> clearance above the surface directly
+    // below, in meters (SI). When set, thrust picks up a smooth cushion bonus
+    // below ~2 prop diameters. Null disables the effect entirely.
+    this.groundClearance = null;
   }
 
   setPreset(preset) {
@@ -327,11 +331,28 @@ export class QuadPhysics {
       this.motors[i].step(dt);
     }
 
+    // ---- Ground effect ----
+    // Smooth thrust bonus in the cushion zone below ~2 prop diameters.
+    // Quadratic fade with height, fully deterministic, no oscillation — this is
+    // free lift the pilot can exploit (float landings, floor skims), never a
+    // disturbance that fights the sticks. kGE is the max bonus at zero
+    // clearance; presets may override via cfg.groundEffect.
+    let geMult = 1;
+    if (this.groundClearance) {
+      const clr = this.groundClearance(this);
+      const ceil = 2 * cfg.propDiameter;
+      if (clr < ceil) {
+        const x = 1 - Math.max(0, clr) / ceil;
+        const kGE = cfg.groundEffect != null ? cfg.groundEffect : 0.12;
+        geMult = 1 + kGE * x * x;
+      }
+    }
+
     // ---- Forces & torques (body frame) ----
     let totalThrust = 0;
     let torque = v3();
     for (const mo of this.motors) {
-      const t = mo.thrust();
+      const t = mo.thrust() * geMult;
       totalThrust += t;
       // thrust along body +Z at motor position → roll/pitch torque = pos × F
       torque = vAdd(torque, vCross(mo.pos, v3(0, 0, t)));
