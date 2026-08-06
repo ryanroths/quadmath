@@ -1665,8 +1665,9 @@ qp.onSubstep=(s)=>{
   mod2world(s.position,_cp);
   mod2world(s.velocity,_cv);
   let hitSpeed=0;
+  let floorHit=false;
   if(_cp.y<0.12){
-    const impact=-_cv.y;_cp.y=0.12;
+    const impact=-_cv.y;_cp.y=0.12;floorHit=true;
     if(impact>4.5){_cv.y=-_cv.y*0.45;_cv.x*=.7;_cv.z*=.7;hitSpeed=impact;bounce();}
     else{_cv.y=Math.max(_cv.y,0);_cv.x*=.85;_cv.z*=.85;}
   }
@@ -1691,7 +1692,6 @@ qp.onSubstep=(s)=>{
         _cv.z*=-.45;_cv.x*=.9;_cv.y*=.9;
       }
       if(into>HARD_INTO){hitSpeed=Math.max(hitSpeed,into);bounce();}
-      else toast('TAP');
       break;
     }
   }
@@ -1699,11 +1699,33 @@ qp.onSubstep=(s)=>{
   world2mod(_cv,s.velocity);
   // note 5: hard contact throws the airframe off its axis — the tumble is the
   // PID's problem to catch, which is the whole point of a real rate loop.
+  // Roadmap step 7 (crash tumble): the kick is now COUPLED to how you hit.
+  // Sliding into the floor nose-first pitches you over forward; carrying
+  // sideways speed rolls you — tangential velocity at impact drives the spin,
+  // with only a small random garnish for crash-to-crash variety. Deterministic
+  // in flight, physical in crashes.
   if(hitSpeed>0){
     const k=Math.min(1,hitSpeed/(11*WS))*6;
-    s.omega.x+=(Math.random()-0.5)*k;
-    s.omega.y+=(Math.random()-0.5)*k;
-    s.omega.z+=(Math.random()-0.5)*k*0.5;
+    if(floorHit){
+      // module frame: x fwd, y left, z up. Tangential ground speed → tumble:
+      // forward speed pitches over the nose, lateral speed rolls over a side.
+      const tk=Math.min(1,Math.hypot(s.velocity.x,s.velocity.y)/(8))*4;
+      s.omega.y+=s.velocity.x*tk*0.6;
+      s.omega.x-=s.velocity.y*tk*0.6;
+      s.omega.x+=(Math.random()-0.5)*k*0.5;
+      s.omega.y+=(Math.random()-0.5)*k*0.5;
+      s.omega.z+=(Math.random()-0.5)*k*0.3;
+    }else{
+      s.omega.x+=(Math.random()-0.5)*k;
+      s.omega.y+=(Math.random()-0.5)*k;
+      s.omega.z+=(Math.random()-0.5)*k*0.5;
+    }
+  }
+  // Ground scrub: frame and props dragging on the floor bleed rotation fast —
+  // a tumble SETTLES within ~half a second of ground contact instead of
+  // spinning in place forever. 0.97^240 per second ≈ hard decay, contact only.
+  if(floorHit){
+    s.omega.x*=0.97;s.omega.y*=0.97;s.omega.z*=0.97;
   }
 };
 // Ground-effect clearance: height above whatever is directly underneath — open
@@ -2307,7 +2329,8 @@ function physics(dt){
   thrustActual=qp.totalThrustN*WS; // world newtons, for audio + battery load
 }
 function bounce(){
-  state.bounces++;toast('BOUNCE #'+state.bounces);
+  state.bounces++;   // counter kept for stats; the BOUNCE #N toast is gone —
+                     // camera shake + tumble already sell the impact.
 }
 
 // ---------- Camera ----------
