@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>RyFly Ground Station — Entertainment OSD</title>
+<style>
+  :root{
+    --bg:#0D0E12;
+    --panel:#14161C;
+    --line:#23262F;
+    --orange:#FF4D1A;
+    --green:#3DDC97;
+    --amber:#FFC24D;
+    --text:#E8EAF0;
+    --dim:#8B90A0;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto} *{animation:none!important;transition:none!important}}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:"Inter","Segoe UI",system-ui,sans-serif;
+    line-height:1.5;
+  }
+  .mono{font-family:"JetBrains Mono","Cascadia Code",monospace}
+
+  /* ===== OSD frame (signature) ===== */
+  .osd-corner{position:fixed;width:34px;height:34px;border:2px solid var(--green);opacity:.5;pointer-events:none;z-index:50}
+  .osd-tl{top:10px;left:10px;border-right:none;border-bottom:none}
+  .osd-tr{top:10px;right:10px;border-left:none;border-bottom:none}
+  .osd-bl{bottom:10px;left:10px;border-right:none;border-top:none}
+  .osd-br{bottom:10px;right:10px;border-left:none;border-top:none}
+
+  header{
+    padding:56px 24px 32px;
+    max-width:1100px;margin:0 auto;
+  }
+  .hud-line{
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;
+    font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--green);
+    letter-spacing:.08em;text-transform:uppercase;margin-bottom:18px;
+  }
+  h1{
+    font-family:"Space Grotesk","Inter",sans-serif;
+    font-size:clamp(30px,5.5vw,52px);
+    font-weight:700;letter-spacing:-.02em;line-height:1.05;
+  }
+  h1 .accent{color:var(--orange)}
+  .sub{color:var(--dim);margin-top:12px;max-width:640px;font-size:15px}
+
+  nav{
+    max-width:1100px;margin:0 auto;padding:0 24px 8px;
+    display:flex;flex-wrap:wrap;gap:8px;
+  }
+  nav a{
+    font-family:"JetBrains Mono",monospace;font-size:12px;
+    color:var(--dim);text-decoration:none;border:1px solid var(--line);
+    padding:6px 12px;border-radius:4px;letter-spacing:.05em;
+    transition:color .15s,border-color .15s;
+  }
+  nav a:hover,nav a:focus-visible{color:var(--orange);border-color:var(--orange);outline:none}
+
+  main{max-width:1100px;margin:0 auto;padding:24px}
+  section{margin-bottom:56px;scroll-margin-top:24px}
+  .sec-head{
+    display:flex;align-items:baseline;gap:14px;margin-bottom:6px;
+    border-bottom:1px solid var(--line);padding-bottom:10px;
+  }
+  .sec-head h2{
+    font-family:"Space Grotesk",sans-serif;font-size:24px;font-weight:700;
+  }
+  .sec-tag{
+    font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--green);
+    letter-spacing:.1em;text-transform:uppercase;
+  }
+  .premium-tip{
+    font-size:13px;color:var(--amber);margin:10px 0 18px;
+    font-family:"JetBrains Mono",monospace;
+  }
+  .premium-tip::before{content:"▲ PREMIUM MODE: ";color:var(--amber)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:16px;transition:border-color .15s;
+  }
+  .card:hover{border-color:var(--orange)}
+  .card{display:block;text-decoration:none;cursor:pointer}
+  .card-title{
+    color:var(--text);font-weight:600;font-size:15px;
+    font-family:"Space Grotesk",sans-serif;display:block;
+  }
+  .card:hover .card-title,.card:focus-visible .card-title{color:var(--orange)}
+  .card:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+  .card .best{color:var(--dim);font-size:13px;margin-top:6px}
+  .card .use{
+    color:var(--green);font-size:12px;margin-top:10px;
+    font-family:"JetBrains Mono",monospace;line-height:1.55;
+  }
+  .use::before{content:"» "}
+
+  footer{
+    max-width:1100px;margin:0 auto;padding:24px;color:var(--dim);
+    font-family:"JetBrains Mono",monospace;font-size:11px;
+    border-top:1px solid var(--line);letter-spacing:.05em;
+  }
+</style>
+</head>
+<body>
+<div class="osd-corner osd-tl"></div>
+<div class="osd-corner osd-tr"></div>
+<div class="osd-corner osd-bl"></div>
+<div class="osd-corner osd-br"></div>
+
+<header>
+  <div class="hud-line">
+    <span>◈ SIGNAL: LOCKED</span>
+    <span>COST: $0.00/mo</span>
+    <span>LEGAL: 100%</span>
+  </div>
+  <h1>RyFly <span class="accent">Ground Station</span></h1>
+  <p class="sub">Entertainment OSD. All free, all legal. Pin as browser homepage. Arm switch = bookmark bar.</p>
+</header>
+
+<nav>
+  <a href="#movies">MOVIES</a>
+  <a href="#tv">TV</a>
+  <a href="#music">MUSIC</a>
+  <a href="#podcasts">PODCASTS</a>
+  <a href="#books">BOOKS</a>
+  <a href="#games">GAMES</a>
+  <a href="#docs">DOCS</a>
+  <a href="#learning">LEARNING</a>
+</nav>
+
+<main>
+
+<!-- MOVIES -->
+<section id="movies">
+  <div class="sec-head"><h2>Movies</h2><span class="sec-tag">CH 01</span></div>
+  <p class="premium-tip">Kanopy + Tubi + Plex covers 90% of paid catalog. Library card = key.</p>
+  <div class="grid">
+    <a class="card" href="https://www.tubitv.com" target="_blank" rel="noopener"><span class="card-title">Tubi</span><p class="best">Biggest free catalog. Real studio films, cult classics, horror deep cuts.</p>
+      <p class="use">Make account. Build watchlist. Ads shorter than cable.</p></a>
+    <a class="card" href="https://www.kanopy.com" target="_blank" rel="noopener"><span class="card-title">Kanopy</span><p class="best">A24, Criterion-tier, arthouse. Zero ads. Needs library card.</p>
+      <p class="use">Get Mesa library card. Instant premium indie cinema, no ads ever.</p></a>
+    <a class="card" href="https://www.plex.tv" target="_blank" rel="noopener"><span class="card-title">Plex</span><p class="best">Free movies + personal media server. One app for both.</p>
+      <p class="use">Run Plex server on Pi. Own DVR'd FPV edits + free catalog, one interface.</p></a>
+    <a class="card" href="https://pluto.tv" target="_blank" rel="noopener"><span class="card-title">Pluto TV</span><p class="best">On-demand movies + 24/7 themed movie channels.</p>
+      <p class="use">Channel-surf mode when decision fatigue hits. Zero login needed.</p></a>
+    <a class="card" href="https://archive.org/details/movies" target="_blank" rel="noopener"><span class="card-title">Internet Archive</span><p class="best">Public-domain films, noir, silent era, old sci-fi.</p>
+      <p class="use">Download classics legally. Good b-roll study for edit pacing.</p></a>
+  </div>
+</section>
+
+<!-- TV -->
+<section id="tv">
+  <div class="sec-head"><h2>TV Shows</h2><span class="sec-tag">CH 02</span></div>
+  <p class="premium-tip">Roku Channel + Tubi = binge library. Pluto = background channel noise.</p>
+  <div class="grid">
+    <a class="card" href="https://therokuchannel.roku.com" target="_blank" rel="noopener"><span class="card-title">The Roku Channel</span><p class="best">Full seasons of real network shows. No Roku hardware needed — works in browser.</p>
+      <p class="use">Treat as free Hulu. Watchlist + continue-watching sync.</p></a>
+    <a class="card" href="https://www.tubitv.com" target="_blank" rel="noopener"><span class="card-title">Tubi</span><p class="best">Deep TV back-catalog, anime section strong.</p>
+      <p class="use">Anime + old cable shows live here. Sort by "Only on Tubi" originals.</p></a>
+    <a class="card" href="https://pluto.tv" target="_blank" rel="noopener"><span class="card-title">Pluto TV</span><p class="best">Single-show 24/7 channels (whole channels of one series).</p>
+      <p class="use">Workshop background TV while building whoops. Set channel, forget.</p></a>
+    <a class="card" href="https://www.pbs.org/shows" target="_blank" rel="noopener"><span class="card-title">PBS</span><p class="best">Drama, Masterpiece, NOVA. Broadcast quality, no account.</p>
+      <p class="use">Passport tier free with small library donation — unlocks full archive.</p></a>
+    <a class="card" href="https://www.crackle.com" target="_blank" rel="noopener"><span class="card-title">Crackle</span><p class="best">Originals + rotating network shows.</p>
+      <p class="use">Check monthly — catalog rotates. Grab shows before they cycle out.</p></a>
+  </div>
+</section>
+
+<!-- MUSIC -->
+<section id="music">
+  <div class="sec-head"><h2>Music</h2><span class="sec-tag">CH 03</span></div>
+  <p class="premium-tip">Spotify free on laptop = full on-demand play. Bandcamp Fridays = support artists direct.</p>
+  <div class="grid">
+    <a class="card" href="https://open.spotify.com" target="_blank" rel="noopener"><span class="card-title">Spotify Free</span><p class="best">Desktop free tier = on-demand, any track, playlists. Only mobile is shuffle-locked.</p>
+      <p class="use">Laptop = full premium behavior minus offline. Build edit-music playlists here.</p></a>
+    <a class="card" href="https://soundcloud.com" target="_blank" rel="noopener"><span class="card-title">SoundCloud</span><p class="best">Underground, remixes, lofi, unreleased tracks.</p>
+      <p class="use">Hunt copyright-safe tracks for FPV edits. Filter by CC license.</p></a>
+    <a class="card" href="https://bandcamp.com" target="_blank" rel="noopener"><span class="card-title">Bandcamp</span><p class="best">Full-album streaming free, artist-direct.</p>
+      <p class="use">Stream free, buy what sticks. Many artists allow full listens forever.</p></a>
+    <a class="card" href="https://www.freegalmusic.com" target="_blank" rel="noopener"><span class="card-title">Freegal</span><p class="best">Free song downloads via library card. Keep files forever.</p>
+      <p class="use">Weekly download allowance. Actual MP3 ownership, DRM-free.</p></a>
+    <a class="card" href="https://radio.garden" target="_blank" rel="noopener"><span class="card-title">Radio Garden</span><p class="best">Spin globe, hear live radio anywhere on Earth.</p>
+      <p class="use">Discovery engine. Tokyo city-pop station while soldering = elite.</p></a>
+  </div>
+</section>
+
+<!-- PODCASTS -->
+<section id="podcasts">
+  <div class="sec-head"><h2>Podcasts</h2><span class="sec-tag">CH 04</span></div>
+  <p class="premium-tip">Pocket Casts web + trim-silence = premium listening. All podcasts free by nature.</p>
+  <div class="grid">
+    <a class="card" href="https://pocketcasts.com" target="_blank" rel="noopener"><span class="card-title">Pocket Casts</span><p class="best">Best free web player. Queue, speed control, sync.</p>
+      <p class="use">Web player free. Sync queue laptop ↔ S25+.</p></a>
+    <a class="card" href="https://antennapod.org" target="_blank" rel="noopener"><span class="card-title">AntennaPod</span><p class="best">Open-source, zero ads, zero tracking. Android.</p>
+      <p class="use">Pair with laptop RSS. Full control, no algorithm.</p></a>
+    <a class="card" href="https://www.youtube.com/podcasts" target="_blank" rel="noopener"><span class="card-title">YouTube Podcasts</span><p class="best">Video podcasts, FPV pilot pods, interviews.</p>
+      <p class="use">Watch mode for gear-review pods. Chapters = skip to answer.</p></a>
+    <a class="card" href="https://podcasts.apple.com" target="_blank" rel="noopener"><span class="card-title">Apple Podcasts Web</span><p class="best">Clean browser player, huge directory, no account.</p>
+      <p class="use">Fast lookup when someone recommends show. Zero friction.</p></a>
+    <a class="card" href="https://player.fm" target="_blank" rel="noopener"><span class="card-title">Player FM</span><p class="best">Topic-based discovery. Strong niche categories.</p>
+      <p class="use">Browse "drones", "Python", "trading" verticals. Find niche shows algorithms miss.</p></a>
+  </div>
+</section>
+
+<!-- BOOKS -->
+<section id="books">
+  <div class="sec-head"><h2>Books</h2><span class="sec-tag">CH 05</span></div>
+  <p class="premium-tip">Libby = free Kindle Unlimited. Library card unlocks everything.</p>
+  <div class="grid">
+    <a class="card" href="https://libbyapp.com" target="_blank" rel="noopener"><span class="card-title">Libby</span><p class="best">Real current ebooks + audiobooks via library.</p>
+      <p class="use">Stack Mesa + Phoenix + county cards = triple catalog. Send to Kindle.</p></a>
+    <a class="card" href="https://www.gutenberg.org" target="_blank" rel="noopener"><span class="card-title">Project Gutenberg</span><p class="best">70k+ public-domain classics. Download, own forever.</p>
+      <p class="use">EPUB direct to any reader. No account, no DRM.</p></a>
+    <a class="card" href="https://standardebooks.org" target="_blank" rel="noopener"><span class="card-title">Standard Ebooks</span><p class="best">Gutenberg books, professionally re-typeset. Gorgeous.</p>
+      <p class="use">Premium-feeling editions of free classics. Best formatting in game.</p></a>
+    <a class="card" href="https://openlibrary.org" target="_blank" rel="noopener"><span class="card-title">Open Library</span><p class="best">Borrow scanned books, huge out-of-print catalog.</p>
+      <p class="use">Old tech manuals, RC/aviation books not sold anywhere.</p></a>
+    <a class="card" href="https://www.hoopladigital.com" target="_blank" rel="noopener"><span class="card-title">Hoopla</span><p class="best">Instant borrows — comics, audiobooks, no waitlist.</p>
+      <p class="use">Monthly borrow allowance, zero holds. Comics reader strong.</p></a>
+  </div>
+</section>
+
+<!-- GAMES -->
+<section id="games">
+  <div class="sec-head"><h2>Games</h2><span class="sec-tag">CH 06</span></div>
+  <p class="premium-tip">Epic weekly claims = free library worth hundreds/yr. Claim even if not playing now.</p>
+  <div class="grid">
+    <a class="card" href="https://store.epicgames.com/en-US/free-games" target="_blank" rel="noopener"><span class="card-title">Epic Free Games</span><p class="best">1–2 full paid games free every week. Keep forever.</p>
+      <p class="use">Set Thursday reminder. Claim weekly. Library compounds like index fund.</p></a>
+    <a class="card" href="https://itch.io" target="_blank" rel="noopener"><span class="card-title">itch.io</span><p class="best">Indie games, experimental, name-your-price.</p>
+      <p class="use">Filter free + browser-playable. Game-jam gems here first.</p></a>
+    <a class="card" href="https://store.steampowered.com/genre/Free%20to%20Play/" target="_blank" rel="noopener"><span class="card-title">Steam F2P</span><p class="best">Big F2P titles + free weekends of paid games.</p>
+      <p class="use">Watch free-weekend rotation. Full AAA trials, no cost.</p></a>
+    <a class="card" href="https://www.nvidia.com/en-us/geforce-now/" target="_blank" rel="noopener"><span class="card-title">GeForce NOW Free</span><p class="best">Cloud gaming, free tier. Plays owned/free games on any laptop.</p>
+      <p class="use">Runs heavy games on potato hardware. 1-hr sessions, queue at peak.</p></a>
+    <a class="card" href="https://quadmath.com" target="_blank" rel="noopener"><span class="card-title">RyFly Sim</span><p class="best">Own browser FPV sim. Real Betaflight rates, 240Hz physics.</p>
+      <p class="use">Dogfood own product. TX16S in, practice cube ejects between sessions.</p></a>
+  </div>
+</section>
+
+<!-- DOCUMENTARIES -->
+<section id="docs">
+  <div class="sec-head"><h2>Documentaries</h2><span class="sec-tag">CH 07</span></div>
+  <p class="premium-tip">DW + PBS + Kanopy = broadcast-grade docs, zero ads on two of three.</p>
+  <div class="grid">
+    <a class="card" href="https://www.youtube.com/@DWDocumentary" target="_blank" rel="noopener"><span class="card-title">DW Documentary</span><p class="best">German public broadcaster. Constant high-quality full docs.</p>
+      <p class="use">Subscribe. New broadcast-grade doc almost daily.</p></a>
+    <a class="card" href="https://www.pbs.org/franchise/frontline/" target="_blank" rel="noopener"><span class="card-title">PBS Frontline / NOVA</span><p class="best">Investigative + science. Best journalism on free web.</p>
+      <p class="use">Full episodes on site + YouTube. Archive goes back decades.</p></a>
+    <a class="card" href="https://www.kanopy.com" target="_blank" rel="noopener"><span class="card-title">Kanopy</span><p class="best">Award-winning festival docs. Ad-free via library.</p>
+      <p class="use">Sundance-tier docs paid platforms charge for.</p></a>
+    <a class="card" href="https://www.tubitv.com" target="_blank" rel="noopener"><span class="card-title">Tubi Docs</span><p class="best">Huge doc section — true crime, sports, music.</p>
+      <p class="use">Doc category deeper than Netflix's. Sort by year for fresh.</p></a>
+    <a class="card" href="https://www.youtube.com/@bbcearth" target="_blank" rel="noopener"><span class="card-title">Nature/Space channels</span><p class="best">BBC Earth, NASA, Real Engineering, Veritasium.</p>
+      <p class="use">Build "Docs" YT playlist folder. Cast to TV = nature channel.</p></a>
+  </div>
+</section>
+
+<!-- LEARNING -->
+<section id="learning">
+  <div class="sec-head"><h2>Learning</h2><span class="sec-tag">CH 08</span></div>
+  <p class="premium-tip">MIT OCW + freeCodeCamp = university CS degree, $0. Audit mode = free Coursera.</p>
+  <div class="grid">
+    <a class="card" href="https://www.freecodecamp.org" target="_blank" rel="noopener"><span class="card-title">freeCodeCamp</span><p class="best">Full coding curriculum + certs. Python track solid.</p>
+      <p class="use">Scientific Computing with Python cert. Feeds directly into Pi bot work.</p></a>
+    <a class="card" href="https://ocw.mit.edu" target="_blank" rel="noopener"><span class="card-title">MIT OpenCourseWare</span><p class="best">Real MIT courses — lectures, problem sets, exams.</p>
+      <p class="use">6.0001 Intro CS in Python. Actual MIT class, free.</p></a>
+    <a class="card" href="https://www.khanacademy.org" target="_blank" rel="noopener"><span class="card-title">Khan Academy</span><p class="best">Math, physics, finance fundamentals.</p>
+      <p class="use">Stats + probability units sharpen trading-bot math.</p></a>
+    <a class="card" href="https://www.coursera.org" target="_blank" rel="noopener"><span class="card-title">Coursera (Audit)</span><p class="best">University courses. "Audit" = free full content, no cert.</p>
+      <p class="use">Click Enroll → Audit. All videos + readings unlocked.</p></a>
+    <a class="card" href="https://www.youtube.com" target="_blank" rel="noopener"><span class="card-title">YouTube Learning</span><p class="best">Corey Schafer (Python), Joshua Bardwell (FPV), 3Blue1Brown (math).</p>
+      <p class="use">Playlist folders per skill. 1.5x speed + captions = premium mode.</p></a>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  RYFLY GROUND STATION // ALL SOURCES FREE + LEGAL // BATT: ∞ // COST: $0.00
+</footer>
+
+</body>
+</html>
