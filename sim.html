@@ -1614,6 +1614,16 @@ const STOCK_TUNES={
            rollF:15,pitchF:16,yawF:20},
   whoop75:{rollP:33,rollI:60,rollD:25,pitchP:35,pitchI:63,pitchD:28,yawP:33,yawI:60,yawD:0,
            rollF:15,pitchF:16,yawF:20},
+  // 85mm: real PIDs from the tune DB (85-happymodel-ryfly, CrazyBee F4 DX).
+  // FF kept in the sim's calibrated 15/16/20 family — the build's FF 180/187 is
+  // on the Betaflight scale, not this module's reduced F_SCALE feel.
+  whoop85:{rollP:67,rollI:120,rollD:40,pitchP:70,pitchI:126,pitchD:45,yawP:67,yawI:120,yawD:0,
+           rollF:15,pitchF:16,yawF:20},
+  // Freestyle classes: Betaflight 4.x default-flavored, same FF family.
+  freestyle25:{rollP:48,rollI:85,rollD:35,pitchP:50,pitchI:88,pitchD:38,yawP:48,yawI:85,yawD:0,
+           rollF:15,pitchF:16,yawF:20},
+  freestyle5:{rollP:45,rollI:80,rollD:30,pitchP:47,pitchI:84,pitchD:34,yawP:45,yawI:80,yawD:0,
+           rollF:15,pitchF:16,yawF:20},
 };
 qp.setTune(STOCK_TUNES.whoop65);
 // Base thrust before voltage sag scales it each frame.
@@ -2425,10 +2435,11 @@ document.getElementById('cbBattSim').onchange=e=>{
 // so a lighter drone genuinely accelerates harder. drag matches the authentic
 // less-floaty tuning (0.55+), not the old floaty 0.28.
 const DRONE_TYPES={
-  whoop65:{label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020}, // TWR ~3:1, hovers ~0.33 throttle
-  whoop75:{label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024}, // lazier yaw + slower 0802 spool
-  whoop85:{label:'85mm Whoop',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028},
-  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060} // heavy: inertia does the work, no other changes
+  whoop65:{label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:23}, // TWR ~3:1, hovers ~0.33 throttle
+  whoop75:{label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:25}, // lazier yaw + slower 0802 spool
+  whoop85:{label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:27},
+  freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30}, // toothpick-adjacent middle class
+  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:33} // heavy: inertia does the work, no other changes
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
@@ -2443,22 +2454,36 @@ function setSlider(id,val){
   const s=document.getElementById('s_'+id);
   s.value=val;s.dispatchEvent(new Event('input'));
 }
+// Camera tilt follows the class default (whoops fly low tilt, 5" flies high)
+// until the pilot moves the slider themselves — then their choice sticks,
+// mirroring the ratesAreCustom pattern. setSlider() dispatches synthetic
+// 'input' events, so a suppress flag separates user drags from class switches.
+let camIsCustom=false;
+try{camIsCustom=localStorage.getItem('ryflyCamCustom')==='1';}catch(e){}
+let applyingType=false;
+document.getElementById('s_cam').addEventListener('input',()=>{
+  if(!applyingType){camIsCustom=true;try{localStorage.setItem('ryflyCamCustom','1');}catch(e){}}
+});
 function applyDroneType(){
   const d=DRONE_TYPES[droneType];
-  // Physics core first: the preset carries mass, wheelbase, per-motor thrust,
-  // spool and yaw-torque ratio, and rebuilds the motor layout + inertia tensor.
-  qp.setPreset(PRESETS[d.preset]);
-  qp.setTune(STOCK_TUNES[d.preset]||STOCK_TUNES.whoop65);
-  baseThrustPerMotor=qp.cfg.maxThrustPerMotor;
-  CFG.maxThrustN=baseThrustPerMotor*4*WS;            // world-newton mirror, for audio + readouts
-  setSlider('drag',d.drag);setSlider('mass',d.mass);
-  if(!ratesAreCustom){                              // per-drone feel, defaults only
-    for(const ax of RATE_AXES)rates[ax].srate=d.sr;
-  }
-  refreshRatesUI();
-  setSlider('spool',d.spool);                        // per-drone motor spool time constant
-  applyCfgToQp();                                    // slider values win over the preset's mass/tau
-  refreshTwr();                                      // update the derived thrust:weight readout
+  applyingType=true;
+  try{
+    // Physics core first: the preset carries mass, wheelbase, per-motor thrust,
+    // spool and yaw-torque ratio, and rebuilds the motor layout + inertia tensor.
+    qp.setPreset(PRESETS[d.preset]);
+    qp.setTune(STOCK_TUNES[d.preset]||STOCK_TUNES.whoop65);
+    baseThrustPerMotor=qp.cfg.maxThrustPerMotor;
+    CFG.maxThrustN=baseThrustPerMotor*4*WS;            // world-newton mirror, for audio + readouts
+    setSlider('drag',d.drag);setSlider('mass',d.mass);
+    if(!ratesAreCustom){                              // per-drone feel, defaults only
+      for(const ax of RATE_AXES)rates[ax].srate=d.sr;
+    }
+    refreshRatesUI();
+    setSlider('spool',d.spool);                        // per-drone motor spool time constant
+    if(!camIsCustom&&d.cam!=null)setSlider('cam',d.cam); // class camera tilt, defaults only
+    applyCfgToQp();                                    // slider values win over the preset's mass/tau
+    refreshTwr();                                      // update the derived thrust:weight readout
+  }finally{applyingType=false;}
 }
 droneSel.onchange=()=>{
   droneType=droneSel.value;
