@@ -1339,40 +1339,65 @@ function diveShaft(x,z,radius,height,segments){
   // measured empirically because the visual tube was a full closed
   // cylinder; now there's nothing to measure, the geometry itself is cut).
   const doorHalfAngle=chordAngle*1.5;
-  // visual: open-ended hollow tube, dark concrete — same material as the
-  // tunnel, but with a genuine angular gap via thetaStart/thetaLength
-  // instead of a full 360° sweep. NOTE: this gap runs the FULL shaft
-  // height (floor to roof) since CylinderGeometry's theta cut applies
-  // uniformly along the whole height axis — there's no way to bound it to
-  // just a ground-level doorway with a single cylinder like the previous
-  // marker-lit version did. No marker lights needed: the opening itself is
-  // now visible.
-  const tube=new THREE.Mesh(
-    new THREE.CylinderGeometry(radius,radius,height,24,1,true,doorHalfAngle+Math.PI/2,Math.PI*2-doorHalfAngle*2),
-    new THREE.MeshStandardMaterial({color:0x17181d,roughness:0.95,side:THREE.DoubleSide}));
-  tube.position.y=height/2;
-  grp.add(tube);
-  // wall collision: a ring of thin radial box segments approximating the
-  // cylinder — real risk on the walls, interior stays fully open/hollow for
-  // the dive line itself (this sim's colliders are axis-aligned Box3 only,
-  // so each angled segment's AABB is computed via a throwaway rotated mesh,
-  // same trick used for the voxel-decomposed structures elsewhere)
-  // overlap trimmed 1.15->1.08 — 1.15 was pulling neighboring panels'
-  // AABBs into a double-thickness overlap at their shared edge (a snag
-  // point); geometry/rotation math itself checks out per-segment (each
-  // panel's length axis correctly tracks the tangent, thickness axis the
-  // radius — verified, no index-specific bug), so this alone should clear it
+  const wallMat=new THREE.MeshStandardMaterial({color:0x17181d,roughness:0.95,side:THREE.DoubleSide});
+  // branch junction params — defined BEFORE the walls so both the visual
+  // bands and the wall colliders can cut matching holes where the horizontal
+  // tubes feed into the bore
+  const br=radius*0.55;                 // branch bore radius
+  const holeHalf=br+0.8;                // vertical half-extent of junction hole
+  const holeHalfAngle=Math.asin(Math.min(0.95,(br+0.5)/radius)); // angular half-width
+  const branches=[{fy:0.35,dirA:Math.PI,len:50},{fy:0.75,dirA:Math.PI/2,len:50}];
+  branches.forEach(b=>b.by=height*b.fy);
+  const TAU=Math.PI*2;
+  // visual: stacked open-ended cylinder bands instead of one full-height
+  // cylinder — a single CylinderGeometry takes only ONE theta arc, so the
+  // door gap could never coexist with mid-height branch holes. Plain bands
+  // carry just the door gap (full-height, like before); each junction band
+  // carries door gap + its branch hole, built from the solid arcs between
+  // gaps. Theta convention: world angle a maps to theta = PI/2 - a (cylinder
+  // theta is sin→x/cos→z, world placement is cos→x/sin→z).
+  function addArcBand(y0,y1,ts,tl){
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,y1-y0,24,1,true,ts,tl),wallMat);
+    m.position.y=(y0+y1)/2;grp.add(m);
+  }
+  function addBand(y0,y1,gaps){
+    if(y1-y0<0.05)return;
+    const iv=gaps.map(g=>[((g.c-g.h)%TAU+TAU)%TAU,((g.c+g.h)%TAU+TAU)%TAU])
+      .map(([s,e])=>e<s?[[s,TAU],[0,e]]:[[s,e]]).flat().sort((p,q)=>p[0]-q[0]);
+    let cur=0;const solids=[];
+    for(const [s,e] of iv){if(s>cur)solids.push([cur,s]);cur=Math.max(cur,e);}
+    if(cur<TAU)solids.push([cur,TAU]);
+    for(const [s,e] of solids)addArcBand(y0,y1,s,e-s);
+  }
+  const doorGap={c:Math.PI/2,h:doorHalfAngle}; // world a=0 → theta PI/2
+  const cuts=branches.map(b=>({y0:b.by-holeHalf,y1:b.by+holeHalf,gap:{c:Math.PI/2-b.dirA,h:holeHalfAngle}})).sort((p,q)=>p.y0-q.y0);
+  let yCur=0;
+  for(const c of cuts){addBand(yCur,c.y0,[doorGap]);addBand(c.y0,c.y1,[doorGap,c.gap]);yCur=c.y1;}
+  addBand(yCur,height,[doorGap]);
+  // wall collision: ring of thin radial box segments, same throwaway-
+  // rotated-mesh AABB trick as before (overlap 1.08 per the earlier snag
+  // fix). NEW: panels whose angle overlaps a branch junction are split
+  // vertically into a below-box and an above-box around the hole, so the
+  // collision opening matches the visual hole exactly — same never-drift
+  // principle as the door gap.
   const segLen=2*radius*Math.sin(chordAngle/2)*1.08;
-  for(let i=0;i<segments;i++){
-    const isExit=i===0||i===1||i===segments-1; // same 3 segments as the visual gap
-    if(isExit)continue; // no collider at all here — matches the open visual cutout exactly
-    const a=i*chordAngle;
+  function pushWallBox(a,y0,y1){
+    if(y1-y0<0.05)return;
     const px=x+Math.cos(a)*radius,pz=z+Math.sin(a)*radius;
-    const wallMesh=new THREE.Mesh(new THREE.BoxGeometry(1.5,height,segLen));
-    wallMesh.position.set(px,height/2,pz);
-    wallMesh.rotation.y=-a; // orient the segment's local Z (its length) along the tangent
-    wallMesh.updateMatrixWorld(true);
-    colliders.push(new THREE.Box3().setFromObject(wallMesh));
+    const wm=new THREE.Mesh(new THREE.BoxGeometry(1.5,y1-y0,segLen));
+    wm.position.set(px,(y0+y1)/2,pz);
+    wm.rotation.y=-a; // segment's local Z (length) along the tangent
+    wm.updateMatrixWorld(true);
+    colliders.push(new THREE.Box3().setFromObject(wm));
+  }
+  const angDist=(p,q)=>{let d=Math.abs(p-q)%TAU;return d>Math.PI?TAU-d:d;};
+  for(let i=0;i<segments;i++){
+    const isExit=i===0||i===1||i===segments-1; // same 3 segments as the door gap
+    if(isExit)continue;
+    const a=i*chordAngle;
+    const hit=branches.find(b=>angDist(a,b.dirA)<holeHalfAngle+chordAngle/2);
+    if(hit){pushWallBox(a,0,hit.by-holeHalf);pushWallBox(a,hit.by+holeHalf,height);}
+    else pushWallBox(a,0,height);
   }
   // DIVE marker: bright glowing ring + text at the top entrance, gate-style
   // visual language but a distinct color (orange) so it reads as its own
@@ -1392,8 +1417,89 @@ function diveShaft(x,z,radius,height,segments){
   spr.position.set(x,height+8,z);
   spr.scale.set(16,4,1);
   scene.add(spr);
+  // interior LED rings: emissive strips every 15u so the bore reads clearly
+  // during the dive (interior concrete is near-black; emissive shows even
+  // unlit). Full 360 rings — visual only, no collider, sits at 0.92R so the
+  // center line stays clean. PointLight every 3rd ring for real wall glow;
+  // short falloff + capped count keeps light cost bounded on tall shafts.
+  const ledGeo=new THREE.TorusGeometry(radius*0.92,radius*0.025,6,32);
+  const ledMat=new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:1.6,roughness:0.4});
+  let ledIdx=0;
+  for(let yy=15;yy<height-2;yy+=15){
+    if(branches.some(b=>Math.abs(yy-b.by)<holeHalf+1)){ledIdx++;continue;} // don't cross a junction hole
+    const led=new THREE.Mesh(ledGeo,ledMat);
+    led.position.set(x,yy,z);
+    led.rotation.x=Math.PI/2;
+    scene.add(led);
+    if(ledIdx%3===1){
+      const pl=new THREE.PointLight(0xFF8A40,150,radius*5,2);
+      pl.position.set(x,yy,z);
+      scene.add(pl);
+    }
+    ledIdx++;
+  }
+  // horizontal branch tubes: fly-through loop lines feeding INTO the shaft
+  // at 0.35h / 0.75h through matching junction holes cut in the visual bands
+  // and wall colliders above. Loop line: dive shaft → out a branch → wrap →
+  // back in the other → climb the bore → exit top.
+  // Directions restricted to axis-aligned so panel AABBs stay tight-ish.
+  function branchTube(fy,dirA,len){
+    const by=height*fy; // br shared with the junction-hole params above
+    // inner end reaches 1.5u INTO the shaft wall so the bore mates with the
+    // junction hole — no gap, no lip; slight panel intrusion into the shaft
+    // sits at r≈7.5–9, well off the center dive line
+    const bx=x+Math.cos(dirA)*(radius+len/2-1.5),bz=z+Math.sin(dirA)*(radius+len/2-1.5);
+    const t=new THREE.Mesh(
+      new THREE.CylinderGeometry(br,br,len,16,1,true),
+      new THREE.MeshStandardMaterial({color:0x17181d,roughness:0.95,side:THREE.DoubleSide}));
+    // bake axis Y→X into geometry, then yaw the mesh onto dirA — rotation.y
+    // of -dirA maps +X to (cos dirA, 0, sin dirA)
+    t.geometry.rotateZ(Math.PI/2);
+    t.rotation.y=-dirA;
+    t.position.set(bx,by,bz);
+    scene.add(t);
+    // wall colliders: 12 radial panels via the same throwaway-rotated-mesh
+    // AABB trick as the shaft; interior stays hollow, both ends open
+    const bSegs=12,bChord=(Math.PI*2)/bSegs,bSegLen=2*br*Math.sin(bChord/2)*1.08;
+    const qY=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),-dirA);
+    for(let i=0;i<bSegs;i++){
+      const sa=i*bChord;
+      const pm=new THREE.Mesh(new THREE.BoxGeometry(len,1.2,bSegLen));
+      const qX=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),sa);
+      pm.quaternion.copy(qY).multiply(qX);
+      // radial offset in the tube's local YZ plane, then yawed into world
+      const off=new THREE.Vector3(0,Math.cos(sa)*br,Math.sin(sa)*br).applyQuaternion(qY);
+      pm.position.set(bx+off.x,by+off.y,bz+off.z);
+      pm.updateMatrixWorld(true);
+      colliders.push(new THREE.Box3().setFromObject(pm));
+    }
+    // interior LEDs: 2 rings along the bore — outer half only; a ring at the
+    // inner end would sit in the junction throat
+    const bLedGeo=new THREE.TorusGeometry(br*0.9,br*0.05,6,24);
+    for(let k=0;k<=1;k++){
+      const bl=new THREE.Mesh(bLedGeo,ledMat);
+      const ax=new THREE.Vector3(Math.cos(dirA),0,Math.sin(dirA));
+      bl.position.set(bx+ax.x*k*(len/2-4),by,bz+ax.z*k*(len/2-4));
+      bl.rotation.y=-dirA+Math.PI/2; // torus faces along the tube axis
+      scene.add(bl);
+    }
+    // mouth marker: glowing ring at the OUTER open end only — inner end now
+    // lives inside the shaft junction, a ring there would float in the bore
+    const mGeo=new THREE.TorusGeometry(br*1.05,br*0.08,8,24);
+    const mMat=new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:1.1,roughness:0.4});
+    {
+      const mm=new THREE.Mesh(mGeo,mMat);
+      const ax=new THREE.Vector3(Math.cos(dirA),0,Math.sin(dirA));
+      mm.position.set(bx+ax.x*(len/2+0.5),by,bz+ax.z*(len/2+0.5));
+      mm.rotation.y=-dirA+Math.PI/2;
+      scene.add(mm);
+    }
+  }
+  // branches drive from the shared array so junction holes and tubes can
+  // never disagree on height/angle/bore
+  for(const b of branches)branchTube(b.fy,b.dirA,b.len);
 }
-diveShaft(150,-150,9,90,16);
+diveShaft(150,-150,9,180,16);
 // ---------- Wall Ride (large angled panel for close-proximity skim-flying) ----------
 // Standalone flat panel, not GLTF/voxel — a simple flat slab has no internal
 // gaps to preserve, so a single whole-object Box3 is correct here (unlike
