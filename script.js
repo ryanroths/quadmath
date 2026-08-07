@@ -397,6 +397,31 @@
     });
     document.getElementById('cmpKvA').value = '';
     document.getElementById('cmpKvB').value = '';
+    // Seed a real default matchup so the comparison never opens as a wall of
+    // dashes: A = the first bench-verified motor for this frame, B = the other
+    // bench-verified motor if one exists (a measured-vs-measured matchup),
+    // else the closest different KV. Runtime lookup, so reordering the motor
+    // DB never breaks the seed.
+    const list = motorDB[frame] || [];
+    if (list.length >= 2) {
+      let ia = list.findIndex(m => m.benchVerified);
+      if (ia < 0) ia = 0;
+      let ib = list.findIndex((m, i) => i !== ia && m.benchVerified);
+      if (ib < 0) {
+        let best = Infinity;
+        list.forEach((m, i) => {
+          if (i === ia || m.kv === list[ia].kv) return;
+          const d = Math.abs(m.kv - list[ia].kv);
+          if (d < best) { best = d; ib = i; }
+        });
+      }
+      if (ib < 0) ib = ia === 0 ? 1 : 0;
+      document.getElementById('cmpSelectA').value = String(ia);
+      document.getElementById('cmpSelectB').value = String(ib);
+      document.getElementById('cmpKvA').value = list[ia].kv;
+      document.getElementById('cmpKvB').value = list[ib].kv;
+      compareCalculate();
+    }
   }
 
   function applyPreset(frame) {
@@ -622,7 +647,11 @@
     const frameMaxes = {
       65: { tw: 6.0,  ft: 3.5,  spd: 45  },
       75: { tw: 5.5,  ft: 4.0,  spd: 48  },
-      85: { tw: 5.0,  ft: 5.0,  spd: 45  },
+      // 85mm ceilings recalibrated: the old {5.0, 5.0, 45} sat BELOW what the
+      // model outputs for ordinary 2S builds (stock preset = 6.4:1 TW, 5.1min),
+      // so every component capped and the whole class scored 92-100. Ranges
+      // observed across realistic builds: TW 4.6-7.0, FT 4.5-7.0min, 21-41mph.
+      85: { tw: 7.5,  ft: 7.5,  spd: 48  },
     };
     const maxes    = frameMaxes[currentFrame];
     const twScore  = Math.min(tw / maxes.tw * 100, 100) * 0.50;
@@ -632,7 +661,9 @@
     let kvBonus = 0;
     if (['65','75','85'].includes(String(currentFrame))) {
       const kvRef = { '65': 23000, '75': 19000, '85': 8000 };
-      const kvMax = { '65': 40000, '75': 32500, '85': 11000 };
+      // 85 kvMax raised 11000 -> 13000: 11000KV is the STOCK preset, so the old
+      // ceiling handed every default 2S build the full +15 bonus.
+      const kvMax = { '65': 40000, '75': 32500, '85': 13000 };
       const ref = kvRef[String(currentFrame)];
       const max = kvMax[String(currentFrame)];
       kvBonus = Math.round(Math.min((kv - ref) / (max - ref), 1) * 15);
@@ -651,6 +682,7 @@
     document.getElementById('buildScoreClass').textContent   = 'scored within ' + currentFrame + 'mm class';
     document.getElementById('buildScoreBar').style.width     = finalScore + '%';
     compareCalculate();
+    writeUrlParams();   // keep the address bar a shareable link to this build
   }
 
   // Comparison-table T:W colour tiers. Same thresholds as the OSD badge.
@@ -783,11 +815,71 @@
     });
   }
 
+  // ===== Shareable build URLs =====
+  // ?frame=65&kv=28000&cells=1&mah=300&pitch=0.7&dry=19.5&video=hdzero&style=cruise
+  // Read once on load (overrides the frame preset), written back into the
+  // address bar by calculate() via replaceState — so the URL in the bar is
+  // always a link to the build on screen. Drop it in a Discord or a YouTube
+  // description and the calculator opens pre-filled.
+  const URL_KEYS = [
+    ['kv',    () => els.motorKV,     v => els.motorKV.value = v],
+    ['cells', () => els.cells,       v => els.cells.value = v],
+    ['mah',   () => els.capacity,    v => els.capacity.value = v],
+    ['pitch', () => els.propPitch,   v => els.propPitch.value = v],
+    ['dry',   () => els.weight,      v => els.weight.value = v],
+    ['c',     () => els.packC,       v => els.packC.value = v],
+  ];
+  function applyUrlParams() {
+    const q = new URLSearchParams(location.search);
+    if (![...q.keys()].length) return false;
+    const f = q.get('frame');
+    if (f && framePresets[f]) {
+      currentFrame = f;
+      document.querySelectorAll('.frame-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.frame === f));
+      populateMotorSelect(f); populatePropSelect(f); populateCompareSelects(f);
+      applyPreset(f);
+    }
+    let any = !!(f && framePresets[f]);
+    for (const [key, , set] of URL_KEYS) {
+      const v = q.get(key);
+      if (v !== null && v !== '' && isFinite(parseFloat(v))) { set(v); any = true; }
+    }
+    const vid = q.get('video');
+    if (vid && els.videoSystem && [...els.videoSystem.options].some(o => o.value === vid)) {
+      els.videoSystem.value = vid; any = true;
+    }
+    const sty = q.get('style');
+    if (sty && els.flightStyle && [...els.flightStyle.options].some(o => o.value === sty)) {
+      els.flightStyle.value = sty; any = true;
+    }
+    if (any) { motorSelect.value = ''; updateVideoHint(); }
+    return any;
+  }
+  function writeUrlParams() {
+    const q = new URLSearchParams();
+    q.set('frame', currentFrame);
+    for (const [key, get] of URL_KEYS) {
+      const el = get(); if (el && el.value !== '') q.set(key, el.value);
+    }
+    if (els.videoSystem) q.set('video', els.videoSystem.value);
+    if (els.flightStyle) q.set('style', els.flightStyle.value);
+    try { history.replaceState(null, '', location.pathname + '?' + q.toString() + location.hash); } catch (e) {}
+  }
+  const copyBtn = document.getElementById('copyBuildLink');
+  if (copyBtn) copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(location.href).then(() => {
+      copyBtn.textContent = 'LINK COPIED ✓';
+      setTimeout(() => { copyBtn.textContent = 'COPY BUILD LINK'; }, 1600);
+    }).catch(() => { copyBtn.textContent = location.href; });
+  });
+
   // initial calc — sync inputs to active frame button before first render
   populateMotorSelect(currentFrame);
   populatePropSelect(currentFrame);
   populateCompareSelects(currentFrame);
   applyPreset(currentFrame);
+  applyUrlParams();
   updateVideoHint();
   calculate();
 

@@ -168,6 +168,7 @@
           <div class="bs-bar-track">
             <div class="bs-bar-fill" id="buildScoreBar"></div>
           </div>
+          <button id="copyBuildLink" class="copy-link-btn" type="button" title="Copies a URL that reopens this exact build">COPY BUILD LINK</button>
         </div>
 
         <div class="osd-stats">
@@ -198,6 +199,18 @@
 
     <div class="disclaimer">
       These are <strong>estimates</strong> based on community benchmark data and theoretical prop pitch speed — not bench-tested results. Actual performance depends on motor efficiency, ESC, frame drag, and battery C-rating. Use this to compare builds, not as a guarantee.
+    </div>
+
+    <div class="bench-validation">
+      <div class="bv-title">MODEL vs SCALE &amp; STOPWATCH</div>
+      <p class="bv-sub">Two of our own builds are flown, weighed, and timed — when your inputs match one, the calculator swaps its estimate for the measured number. Raw logs in <code>data/bench/</code>.</p>
+      <table class="bv-table">
+        <thead><tr><th>Build</th><th>AUW measured</th><th>Weight model</th><th>Cruise time measured</th></tr></thead>
+        <tbody>
+          <tr><td>Air65 analog · VCI 0702 PRO 30000KV · LAVA 300</td><td>25.42&nbsp;g</td><td>within 0.3%</td><td>3:53</td></tr>
+          <tr><td>Mobula6 2024 HDZero · SE0702 28000KV · LAVA 300</td><td>27.73&nbsp;g</td><td>within 0.3%</td><td>2:34</td></tr>
+        </tbody>
+      </table>
     </div>
   </section>
 
