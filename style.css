@@ -1529,3 +1529,8 @@
   }
   .bv-table td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--border); color: var(--text); }
   .bv-table tr:last-child td { border-bottom: none; }
+
+  /* Clickable bench rows — load the measured build into the calculator */
+  .bv-row { cursor: pointer; transition: background .12s; }
+  .bv-row:hover td, .bv-row:focus-visible td { background: rgba(61,220,151,.06); color: var(--green); }
+  .bv-row:focus-visible { outline: 1px solid var(--green); outline-offset: -1px; }

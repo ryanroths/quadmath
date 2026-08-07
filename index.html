@@ -203,12 +203,12 @@
 
     <div class="bench-validation">
       <div class="bv-title">MODEL vs SCALE &amp; STOPWATCH</div>
-      <p class="bv-sub">Two of our own builds are flown, weighed, and timed — when your inputs match one, the calculator swaps its estimate for the measured number. Raw logs in <code>data/bench/</code>.</p>
+      <p class="bv-sub">Two of our own builds are flown, weighed, and timed — when your inputs match one, the calculator swaps its estimate for the measured number. <strong>Click a row to load that build into the calculator.</strong> Raw logs in <code>data/bench/</code>.</p>
       <table class="bv-table">
         <thead><tr><th>Build</th><th>AUW measured</th><th>Weight model</th><th>Cruise time measured</th></tr></thead>
         <tbody>
-          <tr><td>Air65 analog · VCI 0702 PRO 30000KV · LAVA 300</td><td>25.42&nbsp;g</td><td>within 0.3%</td><td>3:53</td></tr>
-          <tr><td>Mobula6 2024 HDZero · SE0702 28000KV · LAVA 300</td><td>27.73&nbsp;g</td><td>within 0.3%</td><td>2:34</td></tr>
+          <tr class="bv-row" data-frame="65" data-kv="30000" data-video="analog" data-dry="17.22" data-mah="300" data-pitch="1.9" tabindex="0" role="button" title="Load this build into the calculator"><td>Air65 analog · VCI 0702 PRO 30000KV · LAVA 300</td><td>25.42&nbsp;g</td><td>within 0.3%</td><td>3:53</td></tr>
+          <tr class="bv-row" data-frame="65" data-kv="28000" data-video="hdzero" data-dry="19.53" data-mah="300" data-pitch="1.9" tabindex="0" role="button" title="Load this build into the calculator"><td>Mobula6 2024 HDZero · SE0702 28000KV · LAVA 300</td><td>27.73&nbsp;g</td><td>within 0.3%</td><td>2:34</td></tr>
         </tbody>
       </table>
     </div>

@@ -866,6 +866,38 @@
     if (els.flightStyle) q.set('style', els.flightStyle.value);
     try { history.replaceState(null, '', location.pathname + '?' + q.toString() + location.hash); } catch (e) {}
   }
+  // ===== Clickable bench rows =====
+  // Clicking a validation-table row loads that measured build into the
+  // calculator: frame, KV, video system, dry weight, capacity, pitch — and
+  // flips the style to cruise so the bench ANCHOR fires and the flight-time
+  // readout switches from estimate to "anchored to measured data". Instant
+  // demonstration of what the table means.
+  document.querySelectorAll('.bv-row').forEach(row => {
+    const load = () => {
+      const d = row.dataset;
+      if (framePresets[d.frame]) {
+        currentFrame = d.frame;
+        document.querySelectorAll('.frame-btn').forEach(b =>
+          b.classList.toggle('active', b.dataset.frame === d.frame));
+        populateMotorSelect(d.frame); populatePropSelect(d.frame); populateCompareSelects(d.frame);
+      }
+      els.motorKV.value   = d.kv;
+      els.cells.value     = '1';
+      els.capacity.value  = d.mah;
+      els.propPitch.value = d.pitch;
+      els.weight.value    = d.dry;
+      if (els.videoSystem) els.videoSystem.value = d.video;
+      if (els.flightStyle) els.flightStyle.value = 'cruise';
+      motorSelect.value = '';
+      updateVideoHint();
+      calculate();
+      const calc = document.getElementById('calculator') || document.querySelector('.frame-btn');
+      if (calc) calc.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    row.addEventListener('click', load);
+    row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); load(); } });
+  });
+
   const copyBtn = document.getElementById('copyBuildLink');
   if (copyBtn) copyBtn.addEventListener('click', () => {
     navigator.clipboard.writeText(location.href).then(() => {
