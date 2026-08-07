@@ -1489,3 +1489,43 @@
     color: var(--orange);
     margin-top: 6px;
   }
+
+  /* Copy build link — shareable URL button under the build score */
+  .copy-link-btn {
+    margin-top: 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .copy-link-btn:hover { color: var(--orange); border-color: var(--orange); }
+
+  /* Bench validation — model vs measured table under the disclaimer */
+  .bench-validation {
+    max-width: 760px;
+    margin: 18px auto 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 16px 18px;
+  }
+  .bv-title {
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+    color: var(--green);
+    margin-bottom: 6px;
+  }
+  .bv-sub { font-size: 0.8rem; color: var(--muted); margin-bottom: 12px; line-height: 1.6; }
+  .bv-sub code { color: var(--text); font-size: 0.75rem; }
+  .bv-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .bv-table th {
+    text-align: left; color: var(--muted); font-weight: 600;
+    font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border);
+  }
+  .bv-table td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--border); color: var(--text); }
+  .bv-table tr:last-child td { border-bottom: none; }
