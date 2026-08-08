@@ -2,7 +2,10 @@
     --bg: #0D0E12;
     --panel: #15171D;
     --text: #E8E6E1;
-    --muted: #6B6F76;
+    /* Lightened from #6B6F76 for WCAG AA. The old value read 3.16-3.90:1
+       depending on the panel it sat on — under 4.5:1 everywhere. Same hue,
+       raised luminance; worst case is now 4.90:1 (.tune-badge). */
+    --muted: #8A8F98;
     --orange: #FF4D1A;
     --green: #3DDC97;
     /* Mid-orange caution tier — sits between --green and --orange so the
