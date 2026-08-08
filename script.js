@@ -591,6 +591,35 @@
     weight:   [14, 80],       // g DRY (no battery) — pack weight added from capacity
     cRating:  [30, 150],      // C — whoop pack range, matches the battery tool
   };
+  // ===== WEIGHT SCORING =====
+  // All-up weight decides how a whoop flies, but the raw gram figure means
+  // nothing across classes: 30g is heavy for a 65mm and light for an 85mm. Each
+  // class therefore gets its own ideal and practical maximum, and the score is
+  // scaled by how far past ideal the build actually sits.
+  //
+  // The 65mm ideal is the Air65 bench build — 25.42g on a scale, the same
+  // machine BENCH_ANCHORS uses for flight time — rounded to 25.5g, so the one
+  // build we have physically measured scores unpenalised by construction.
+  const WEIGHT_BANDS = {
+    65: { ideal: 25.5, max: 32 },
+    75: { ideal: 32,   max: 42 },
+    85: { ideal: 42,   max: 55 },
+  };
+
+  // 1.0 at or under ideal, then a quadratic falloff to a 0.6 floor reached
+  // exactly at max. Quadratic rather than linear so the first gram over ideal
+  // costs almost nothing (t=0.15 is still x0.99) and the penalty steepens as the
+  // build gets genuinely porky. Past max it clamps at the floor instead of
+  // running to zero — an overweight whoop still flies, it just flies badly, and
+  // a score of 0 would say something the model cannot support.
+  function weightScore(auw, frame) {
+    const band = WEIGHT_BANDS[frame];
+    if (!band || !auw || auw <= 0) return { multiplier: 1, band: null, t: 0 };
+    if (auw <= band.ideal)         return { multiplier: 1, band, t: 0 };
+    const t = (auw - band.ideal) / (band.max - band.ideal);
+    return { multiplier: Math.max(0.6, 1 - 0.4 * t * t), band, t };
+  }
+
   function calculate() {
     const kv       = clampRange(parseFloat(els.motorKV.value)   || 0, ...WHOOP_RANGES.kv);
     const cells    = clampRange(parseFloat(els.cells.value)     || 1, ...WHOOP_RANGES.cells);
@@ -669,7 +698,12 @@
       kvBonus = Math.round(Math.min((kv - ref) / (max - ref), 1) * 15);
       if (kvBonus < 0) kvBonus = 0;
     }
-    const finalScore = Math.min(buildScore + kvBonus, 100);
+    // Weight scales the whole composite, KV bonus included: a heavy build does
+    // not get to buy the penalty back by fitting hotter motors. T:W keeps its
+    // own warnings above and is deliberately untouched by this — the two say
+    // different things, and a build can be both punchy and too heavy.
+    const w = weightScore(auw, currentFrame);
+    const finalScore = Math.min(Math.round((buildScore + kvBonus) * w.multiplier), 100);
     let personality;
     if      (finalScore >= 90) personality = 'WHEELIE WARNING ⚡';
     else if (finalScore >= 75) personality = 'COMPETITION READY';
@@ -681,6 +715,31 @@
     document.getElementById('buildPersonality').textContent  = personality;
     document.getElementById('buildScoreClass').textContent   = 'scored within ' + currentFrame + 'mm class';
     document.getElementById('buildScoreBar').style.width     = finalScore + '%';
+
+    const wEl = document.getElementById('buildScoreWeight');
+    if (wEl) {
+      const atFloor = w.t >= 1;
+      wEl.textContent = !w.band
+        ? ''
+        : w.multiplier === 1
+          ? `WEIGHT ×1.00 · ${auw.toFixed(1)}g, at or under the ${w.band.ideal}g ideal`
+          : `WEIGHT ×${w.multiplier.toFixed(2)} · ${auw.toFixed(1)}g vs ${w.band.ideal}g ideal, ${w.band.max}g max`;
+      wEl.classList.toggle('penalized', w.multiplier < 1 && !atFloor);
+      wEl.classList.toggle('floored', atFloor);
+    }
+
+    // Dry weight and pack share reported separately: the pack is the one part
+    // of AUW you change without rebuilding, and on a whoop it is a quarter of
+    // the airframe, so it deserves its own number rather than being folded in.
+    const auwValEl = document.getElementById('auwValue');
+    if (auwValEl) auwValEl.innerHTML = auw.toFixed(1) + '<span class="unit">g</span>';
+    const auwSubEl = document.getElementById('auwBreakdown');
+    if (auwSubEl) {
+      const packPct = auw > 0 ? (packG / auw) * 100 : 0;
+      auwSubEl.textContent =
+        `${dryWeight.toFixed(1)}g dry · pack ${packG.toFixed(1)}g = ${packPct.toFixed(0)}% of AUW`;
+    }
+
     compareCalculate();
     writeUrlParams();   // keep the address bar a shareable link to this build
   }
