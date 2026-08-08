@@ -41,6 +41,11 @@
 }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<!-- The font files themselves come from gstatic, not googleapis, so this is the
+     connection worth opening early. crossorigin is required: fonts are fetched
+     in CORS mode, and without it the browser opens a second, separate
+     connection and the preconnect is wasted. -->
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <!-- Sets the flag the scroll-reveal styles hang off, before first paint so
@@ -485,7 +490,7 @@
 
   <section class="section reveal" id="ryfly-sim">
     <h2>QUADMATH FLIGHT SIMULATOR</h2>
-    <p class="sub" style="opacity:.7">Built by RyFly — FPV pilot &amp; IGOW competitor.</p>
+    <p class="sub">Built by RyFly — FPV pilot &amp; IGOW competitor.</p>
     <p class="sub">Free browser-based FPV flight simulator with real Betaflight rates, acro and angle mode, a 3-lap race course, and TX16S/EdgeTX radio support.</p>
     <a href="sim.html" class="sim-launch-btn">EXPLORE THE SIMULATOR →</a>
   </section>

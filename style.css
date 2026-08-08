@@ -73,6 +73,11 @@
   nav a {
     color: var(--orange);
     text-decoration: none;
+    /* Stated explicitly rather than inherited. sim.html sets JetBrains Mono on
+       its body, which cascaded into the nav and made that page the only one
+       with a monospace nav — and a wider one, which pushed its single-line
+       requirement past the 767px breakpoint once the real webfont loaded. */
+    font-family: 'Inter', sans-serif;
     font-size: 0.875rem;
     margin-left: 24px;
     transition: color 0.15s;
@@ -444,44 +449,6 @@
     font-size: 0.75rem;
     color: var(--muted);
     margin-top: 6px;
-  }
-
-  /* big speed stat */
-  .speed-hero {
-    background: linear-gradient(135deg, rgba(255,77,26,0.08), transparent);
-    border-bottom: 1px solid var(--border);
-    padding: 28px 20px;
-    text-align: center;
-  }
-  .speed-hero-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--orange);
-    margin-bottom: 8px;
-  }
-  .speed-hero-value {
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 700;
-    font-size: 3.0625rem;
-    font-variant-numeric: tabular-nums;
-    line-height: 1.2;
-    letter-spacing: -0.02em;
-  }
-  .speed-hero-value .unit {
-    font-size: 1.25rem;
-    color: var(--muted);
-    font-weight: 500;
-    margin-left: 8px;
-  }
-  .speed-hero-note {
-    font-size: 0.75rem;
-    color: var(--muted);
-    margin-top: 8px;
-    max-width: 360px;
-    margin-left: auto;
-    margin-right: auto;
   }
 
   /* BUILD SCORE HERO */
@@ -1447,22 +1414,6 @@
     max-width: none;
     margin-bottom: 0;
   }
-  .gif-placeholder {
-    background: var(--panel);
-    border: 1px dashed var(--border);
-    border-radius: 6px;
-    height: 260px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 20px;
-  }
-  .gif-placeholder span {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    color: var(--muted);
-    letter-spacing: 0.08em;
-  }
   .ryfly-social {
     display: flex;
     gap: 12px;
@@ -1497,41 +1448,6 @@
     font-size: 1.5625rem;
     letter-spacing: -0.02em;
   }
-  .sim-eyebrow {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    letter-spacing: 0.08em;
-    color: var(--green);
-    text-transform: uppercase;
-    margin-bottom: 10px;
-  }
-  .sim-feature-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 14px;
-    margin: 28px 0 32px;
-  }
-  .sim-feature-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    padding: 16px;
-    border-radius: 4px;
-  }
-  .sim-feature-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    letter-spacing: 0.08em;
-    color: var(--orange);
-    text-transform: uppercase;
-    margin-bottom: 8px;
-  }
-  .sim-feature-card p {
-    font-size: 0.875rem;
-    color: var(--text);
-    line-height: 1.5;
-    margin: 0;
-    max-width: none;
-  }
   .sim-launch-btn {
     display: inline-block;
     font-family: 'JetBrains Mono', monospace;
@@ -1547,12 +1463,6 @@
   .sim-launch-btn:hover {
     background: var(--orange);
     color: var(--bg);
-  }
-  .sim-req-note {
-    font-size: 0.75rem;
-    color: var(--muted);
-    margin-top: 12px;
-    margin-bottom: 0;
   }
   .sim-teaser-card {
     background: var(--panel);
