@@ -23,8 +23,41 @@
 <style>
   :root{--bg:#0D0E12;--panel:#15171D;--orange:#FF4D1A;--green:#3DDC97;--txt:#E8E9ED;--dim:#7A7F8C}
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--txt);font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;overflow:hidden}
-  #c{display:block;width:100vw;height:100vh}
+  html{height:100%}
+  /* The header is in normal flow above the canvas, so a 100vh canvas ran a
+     header's height (71px here) past the bottom of the viewport and
+     overflow:hidden cut that strip off for good. Laying the
+     page out as a flex column gives the canvas exactly the space that is left.
+     100dvh rather than 100vh: on mobile 100vh is the *largest* the viewport can
+     get, so the bottom of the canvas hid behind the browser UI. */
+  body{background:var(--bg);color:var(--txt);font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;
+    overflow:hidden;height:100vh;height:100dvh;display:flex;flex-direction:column}
+  header{flex:0 0 auto}
+  /* min-height:0 so the canvas can shrink below its intrinsic size instead of
+     forcing the column taller than the viewport. */
+  #c{display:block;flex:1 1 auto;width:100%;min-height:0}
+
+  /* The site footer carries the CC BY credit for the city model. In normal flow
+     it sat below a full-height canvas and was unreachable with overflow:hidden,
+     so the licence notice was never actually displayed. Fixed to the bottom
+     edge, and above the mobile gate's z-index 40 so it stays visible there too.
+     Kept to a 14px band: #legend reserves from 16px up and the bottom OSD
+     readouts from 18px up, so this clears both without moving any of them. */
+  footer{position:fixed;left:0;right:0;bottom:0;z-index:45;
+    display:flex;align-items:center;justify-content:center;gap:0 14px;flex-wrap:wrap;
+    padding:0 10px;font-size:10px;line-height:14px;
+    color:var(--txt);background:rgba(13,14,18,.85);
+    border:0;border-top:1px solid #262A33;text-align:center}
+  footer .sf-logo .dot{color:var(--orange)}
+  /* No dimmed colour on this bar. At 10px over a live scene --dim only reaches
+     3.5:1; everything here inherits --txt, which holds 10.5:1 even against a
+     blown-out white sky. */
+  /* On a phone all three pieces wrap to three rows (43px) and the bar climbs
+     into #legend and the bottom OSD readouts. The licence notice is the part
+     that has to stay, so the calculator boilerplate drops out first. */
+  @media (max-width:559px){
+    footer .sf-note{display:none}
+  }
   .osd{position:fixed;pointer-events:none;font-size:13px;letter-spacing:.5px;text-shadow:0 0 4px rgba(0,0,0,.9)}
   #osdTL{top:14px;left:16px} #osdTR{top:14px;right:16px;text-align:right}
   #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
@@ -52,7 +85,7 @@
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
   #crosshair::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
   #crosshair::after{top:50%;left:0;height:1px;width:100%;transform:translateY(-50%)}
-  #panel{position:fixed;top:0;right:0;height:100vh;width:300px;background:rgba(21,23,29,.96);
+  #panel{position:fixed;top:0;right:0;height:100vh;height:100dvh;width:300px;background:rgba(21,23,29,.96);
     border-left:1px solid #262A33;padding:18px 16px;overflow-y:auto;transform:translateX(100%);
     transition:transform .18s ease;z-index:10}
   #panel.open{transform:translateX(0)}
@@ -332,9 +365,25 @@ renderer.toneMappingExposure=1.05;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 const scene=new THREE.Scene();
 scene.fog=new THREE.Fog(0xc7d5df,250,1100);
-const camera=new THREE.PerspectiveCamera(CFG.fov,innerWidth/innerHeight,0.05,3000);
-function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
-addEventListener('resize',resize);resize();
+const camera=new THREE.PerspectiveCamera(CFG.fov,(canvas.clientWidth||1)/(canvas.clientHeight||1),0.05,3000);
+// Size from the canvas box, not the window. The canvas no longer spans the full
+// viewport (the header sits above it), so innerWidth/innerHeight would stretch
+// the render target past the visible area and skew the aspect ratio. The third
+// argument to setSize is updateStyle=false: three.js would otherwise write
+// inline width/height onto the canvas and break the flex sizing.
+function resize(){
+  const w=canvas.clientWidth||1,h=canvas.clientHeight||1;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize',resize);
+// A window resize is not the only thing that changes the canvas box — mobile
+// browser UI collapsing changes 100dvh, and the header can rewrap. Observing the
+// element catches those. No feedback loop: setSize with updateStyle=false leaves
+// the CSS box alone.
+if(window.ResizeObserver)new ResizeObserver(resize).observe(canvas);
+resize();
 
 // ---------- Sky + light ----------
 {
@@ -2974,14 +3023,15 @@ function loop(now){
 toast('Throttle up to fly. Tab = tune.');
 requestAnimationFrame(loop);
 </script>
+<!-- Flattened to single-line spans so the whole thing fits the fixed 14px bar.
+     The .container wrappers and the opacity:.6 on the credit are gone: the
+     containers centred a 1100px column that fought the fixed bar, and the
+     licence notice has to be legible, not faded to 60%. Same three pieces of
+     text as before. -->
 <footer>
-  <div class="container header-inner" style="width: 100%;">
-    <div class="footer-logo">QuadMath<span class="dot">.</span></div>
-    <div>Estimates only — always verify with bench testing. Fly safe.</div>
-  </div>
-  <div class="container" style="width:100%;font-size:11px;opacity:.6;margin-top:4px;">
-    City model by costoWRLD (Sketchfab, CC BY)
-  </div>
+  <span class="sf-logo">QuadMath<span class="dot">.</span></span>
+  <span class="sf-note">Estimates only — always verify with bench testing. Fly safe.</span>
+  <span class="sf-credit">City model by costoWRLD (Sketchfab, CC BY)</span>
 </footer>
 </body>
 </html>
