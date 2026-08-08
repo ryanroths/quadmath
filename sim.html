@@ -19,6 +19,14 @@
 <meta name="twitter:image" content="https://quadmath.com/og-sim.png">
 
 <link rel="canonical" href="https://quadmath.com/sim.html">
+<!-- This page was the only one not loading the webfonts, so the shared header,
+     logo and nav fell back to system faces here and matched nothing else on the
+     site. Same three families as the other pages. `display=swap` keeps the sim
+     itself paintable while they arrive — text renders in the fallback first and
+     is never blocked on the font. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <style>
   :root{--bg:#0D0E12;--panel:#15171D;--orange:#FF4D1A;--green:#3DDC97;--txt:#E8E9ED;--dim:#7A7F8C}
