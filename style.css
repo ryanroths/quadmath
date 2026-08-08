@@ -16,13 +16,30 @@
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  /* ===== TYPE SCALE =====
+     One ratio, one set of steps. Sizes are 12 / 14 / 16 / 20 / 25 / 31 / 39 px
+     (~1.25), extended to 49 and 61 for the two display numerals. Expressed in
+     rem against a 16px root so the whole scale still responds to a user's
+     browser text size. Line-height is 1.2 on headings and display numerals,
+     1.5 on everything that is read as prose. Tracking is -0.02em on the
+     Space Grotesk display faces, 0.08em on uppercase mono labels, and normal
+     elsewhere — nothing else. */
   body {
     background: var(--bg);
     color: var(--text);
     font-family: 'Inter', sans-serif;
+    font-size: 1rem;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
+
+  /* Form controls do not inherit line-height, so they were computing `normal`
+     and sitting outside the 1.2/1.5 rhythm. Single-line controls take the
+     heading step; the textarea holds running copy. */
+  button, input, select { line-height: 1.2; }
+  textarea { line-height: 1.5; }
+  /* Default UA sizing is `smaller`, which lands at 13px — off the scale. */
+  sup, sub { font-size: 0.75rem; }
 
   .container {
     max-width: 1100px;
@@ -45,6 +62,7 @@
     font-weight: 700;
     font-size: 1.25rem;
     letter-spacing: -0.02em;
+    line-height: 1.2;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -55,7 +73,7 @@
   nav a {
     color: var(--orange);
     text-decoration: none;
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     margin-left: 24px;
     transition: color 0.15s;
   }
@@ -159,16 +177,17 @@
   .hero h1 {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
-    font-size: clamp(1.8rem, 5vw, 2.8rem);
+    font-size: clamp(1.9375rem, 5vw, 3.0625rem);
     letter-spacing: -0.02em;
+    line-height: 1.2;
     margin-bottom: 8px;
   }
   .hero h1 .accent { color: var(--orange); }
   .calc-scope-note {
     color: var(--green);
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.08em;
     border-left: 2px solid var(--green);
     padding-left: 10px;
     margin: -20px 0 24px;
@@ -193,7 +212,7 @@
     border: 1px solid var(--border);
     color: var(--muted);
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     font-weight: 500;
     padding: 10px 16px;
     border-radius: 4px;
@@ -230,8 +249,8 @@
 
   .panel-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted);
     margin-bottom: 20px;
@@ -253,7 +272,7 @@
   }
   .field label {
     display: block;
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     color: var(--text);
     margin-bottom: 6px;
     font-weight: 500;
@@ -270,7 +289,7 @@
     border: 1px solid var(--border);
     color: var(--text);
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.95rem;
+    font-size: 1rem;
     padding: 10px 12px;
     border-radius: 4px;
     outline: none;
@@ -342,18 +361,19 @@
   }
   .osd-stat-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted);
     margin-bottom: 8px;
   }
   .osd-stat-value {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 2rem;
+    font-size: 1.9375rem;
+    font-variant-numeric: tabular-nums;
     font-weight: 700;
     color: var(--green);
-    line-height: 1;
+    line-height: 1.2;
   }
   .osd-stat-value .unit {
     font-size: 1rem;
@@ -370,15 +390,15 @@
     border-collapse: collapse;
     width: 100%;
     min-width: 680px;
-    font-size: .82rem;
+    font-size: 0.875rem;
   }
   .bench-table th {
     background: var(--panel);
     color: var(--green);
     font-family: 'JetBrains Mono', monospace;
-    font-size: .68rem;
+    font-size: 0.75rem;
     text-transform: uppercase;
-    letter-spacing: .08em;
+    letter-spacing: 0.08em;
     padding: .6rem .7rem;
     text-align: left;
     border: 1px solid var(--border);
@@ -387,14 +407,15 @@
   .bench-table td {
     border: 1px solid var(--border);
     padding: .55rem .7rem;
+    font-variant-numeric: tabular-nums;
     font-family: 'JetBrains Mono', monospace;
     color: var(--text);
   }
   .bench-table td:first-child { font-family: 'Inter', sans-serif; }
   .bench-note {
-    font-size: .78rem;
+    font-size: 0.75rem;
     color: var(--muted);
-    line-height: 1.6;
+    line-height: 1.5;
     margin-top: 12px;
   }
   .bench-note a { color: var(--orange); }
@@ -411,9 +432,9 @@
     margin-top: 8px;
     padding: 3px 8px;
     border-radius: 4px;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     font-weight: 500;
-    line-height: 1.3;
+    line-height: 1.5;
     color: var(--orange);
     background: rgba(255,77,26,0.08);
     border: 1px solid rgba(255,77,26,0.25);
@@ -435,7 +456,7 @@
   .speed-hero-label {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.75rem;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--orange);
     margin-bottom: 8px;
@@ -443,18 +464,19 @@
   .speed-hero-value {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
-    font-size: 3.5rem;
-    line-height: 1;
+    font-size: 3.0625rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
     letter-spacing: -0.02em;
   }
   .speed-hero-value .unit {
-    font-size: 1.2rem;
+    font-size: 1.25rem;
     color: var(--muted);
     font-weight: 500;
     margin-left: 8px;
   }
   .speed-hero-note {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--muted);
     margin-top: 8px;
     max-width: 360px;
@@ -475,8 +497,8 @@
   }
   .bs-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.15em;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted);
     margin-bottom: 2px;
@@ -484,26 +506,28 @@
   .bs-number {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
-    font-size: 4rem;
-    line-height: 1;
+    font-size: 3.8125rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
     letter-spacing: -0.02em;
     color: var(--green);
   }
   .bs-personality {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
-    font-size: 1.05rem;
+    font-size: 1rem;
     color: var(--orange);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.08em;
     line-height: 1.2;
     margin-top: 2px;
   }
   .bs-class-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.6rem;
+    font-size: 0.75rem;
     color: var(--muted);
     letter-spacing: 0.08em;
+    line-height: 1.5;
     margin-top: 2px;
   }
   .bs-bar-track {
@@ -530,20 +554,21 @@
   .section h2 {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
-    font-size: 1.4rem;
+    font-size: 1.5625rem;
     margin-bottom: 16px;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
   }
   .section p {
     color: var(--muted);
-    font-size: 0.95rem;
+    font-size: 1rem;
     max-width: 680px;
     margin-bottom: 12px;
   }
 
   /* disclaimer */
   .disclaimer {
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     color: var(--muted);
     border-top: 1px solid var(--border);
     padding-top: 16px;
@@ -554,7 +579,7 @@
     border-top: 1px solid var(--border);
     padding: 32px 0;
     color: var(--muted);
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     display: flex;
     justify-content: space-between;
     flex-wrap: wrap;
@@ -575,7 +600,7 @@
     font-weight: 400;
     letter-spacing: 0;
     text-transform: none;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--muted);
     margin-left: 8px;
   }
@@ -588,8 +613,8 @@
   }
   .compare-col-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted);
     margin-bottom: 8px;
@@ -607,7 +632,7 @@
     border: 1px solid var(--border);
     color: var(--text);
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     padding: 10px 12px;
     border-radius: 4px;
     outline: none;
@@ -630,8 +655,8 @@
   .compare-row:last-child { border-bottom: none; }
   .compare-metric {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.65rem;
-    letter-spacing: 0.1em;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted);
     padding: 16px;
@@ -641,8 +666,10 @@
   }
   .compare-val {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 1.5rem;
+    font-size: 1.5625rem;
+    font-variant-numeric: tabular-nums;
     font-weight: 700;
+    line-height: 1.2;
     color: var(--muted);
     padding: 16px;
     text-align: center;
@@ -659,7 +686,7 @@
   .compare-val.tw-warn   { color: var(--amber); }
   .compare-val.tw-danger { color: var(--orange); }
   .cmp-unit {
-    font-size: 0.65rem;
+    font-size: 0.75rem;
     font-weight: 400;
     color: var(--muted);
     margin-left: 3px;
@@ -682,7 +709,7 @@
     justify-content: space-between;
     align-items: center;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     font-weight: 500;
     color: var(--text);
     user-select: none;
@@ -690,7 +717,7 @@
   }
   .tool-summary::-webkit-details-marker { display: none; }
   .tool-summary:hover { background: rgba(255,255,255,0.03); }
-  .tool-summary::after { content: '+'; color: var(--orange); font-size: 1.1rem; font-weight: 700; }
+  .tool-summary::after { content: '+'; color: var(--orange); font-size: 1rem; font-weight: 700; }
   details[open] > .tool-summary::after { content: '−'; }
   .tool-body {
     padding: 24px;
@@ -716,25 +743,26 @@
   .tool-stat { background: var(--bg); padding: 16px; }
   .tool-stat-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.65rem;
-    letter-spacing: 0.1em;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted);
     margin-bottom: 6px;
   }
   .tool-stat-value {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 1.5rem;
+    font-size: 1.5625rem;
+    font-variant-numeric: tabular-nums;
     font-weight: 700;
     color: var(--green);
-    line-height: 1.1;
+    line-height: 1.2;
   }
-  .tool-stat-value .tunit { font-size: 0.8rem; font-weight: 400; color: var(--muted); margin-left: 3px; }
+  .tool-stat-value .tunit { font-size: 0.75rem; font-weight: 400; color: var(--muted); margin-left: 3px; }
   .tool-stat-value.warn { color: var(--orange); }
   .batt-status {
     margin-top: 14px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     padding: 10px 14px;
     border-radius: 4px;
     background: rgba(61,220,151,0.08);
@@ -751,14 +779,15 @@
     width: 100%;
     border-collapse: collapse;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
     border: 1px solid var(--border);
     border-radius: 4px;
     overflow: hidden;
   }
   .pitch-table th {
-    font-size: 0.65rem;
-    letter-spacing: 0.1em;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted);
     text-align: left;
@@ -795,13 +824,14 @@
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
     font-size: 1rem;
+    line-height: 1.2;
     color: var(--text);
     margin-bottom: 3px;
   }
   .frame-card-tag {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.68rem;
-    letter-spacing: 0.1em;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--orange);
     display: block;
@@ -812,7 +842,7 @@
     justify-content: space-between;
     align-items: baseline;
     gap: 8px;
-    font-size: 0.82rem;
+    font-size: 0.875rem;
     padding: 5px 0;
     border-bottom: 1px solid var(--border);
   }
@@ -820,15 +850,16 @@
   .frame-spec-key { color: var(--muted); white-space: nowrap; }
   .frame-spec-val {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
     color: var(--text);
     text-align: right;
   }
   .frame-note {
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     color: var(--muted);
     margin-top: 12px;
-    line-height: 1.55;
+    line-height: 1.5;
   }
 
   /* === Whoop Tune Database === */
@@ -837,9 +868,9 @@
     border-left: 3px solid var(--orange);
     border-radius: 0 6px 6px 0;
     padding: .75rem 1rem;
-    font-size: .8rem;
+    font-size: 0.75rem;
     color: var(--muted);
-    line-height: 1.55;
+    line-height: 1.5;
     margin-bottom: 1.5rem;
   }
   /* Filter bar */
@@ -855,9 +886,9 @@
   .tune-filter-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .tune-filter-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: .62rem;
+    font-size: 0.75rem;
     text-transform: uppercase;
-    letter-spacing: .12em;
+    letter-spacing: 0.08em;
     color: var(--muted);
     margin-right: 2px;
   }
@@ -866,7 +897,7 @@
     border: 1px solid var(--border);
     color: var(--muted);
     font-family: 'JetBrains Mono', monospace;
-    font-size: .72rem;
+    font-size: 0.75rem;
     padding: 5px 11px;
     border-radius: 999px;
     cursor: pointer;
@@ -881,7 +912,7 @@
   }
   .tune-count {
     font-family: 'JetBrains Mono', monospace;
-    font-size: .72rem;
+    font-size: 0.75rem;
     color: var(--muted);
     white-space: nowrap;
     padding-top: 4px;
@@ -919,16 +950,16 @@
   }
   .tune-frame {
     font-family: 'JetBrains Mono', monospace;
-    font-size: .78rem;
+    font-size: 0.75rem;
     font-weight: 700;
     color: var(--orange);
-    letter-spacing: .04em;
+    letter-spacing: 0.08em;
   }
   .tune-badge {
     font-family: 'JetBrains Mono', monospace;
-    font-size: .6rem;
+    font-size: 0.75rem;
     text-transform: uppercase;
-    letter-spacing: .1em;
+    letter-spacing: 0.08em;
     padding: 3px 8px;
     border-radius: 999px;
     color: var(--muted);
@@ -943,24 +974,24 @@
   }
   .tune-card-fc {
     font-family: 'Space Grotesk', sans-serif;
-    font-size: .92rem;
+    font-size: 0.875rem;
     font-weight: 700;
-    line-height: 1.25;
-    letter-spacing: -0.01em;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
     overflow-wrap: anywhere;
   }
   .tune-card-combo {
-    font-size: .74rem;
+    font-size: 0.75rem;
     color: var(--muted);
     margin-top: 3px;
     overflow-wrap: anywhere;
   }
   .tune-sh {
     font-family: 'JetBrains Mono', monospace;
-    font-size: .6rem;
+    font-size: 0.75rem;
     color: var(--muted);
     text-transform: uppercase;
-    letter-spacing: .12em;
+    letter-spacing: 0.08em;
     margin: 12px 0 6px;
   }
 
@@ -972,21 +1003,22 @@
   }
   .tm-col {
     font-family: 'JetBrains Mono', monospace;
-    font-size: .58rem;
+    font-size: 0.75rem;
     color: var(--muted);
     text-align: center;
-    letter-spacing: .04em;
+    letter-spacing: 0.08em;
   }
   .tm-axis {
     font-family: 'JetBrains Mono', monospace;
-    font-size: .68rem;
+    font-size: 0.75rem;
     color: var(--muted);
     display: flex;
     align-items: center;
   }
   .tm-cell {
     font-family: 'JetBrains Mono', monospace;
-    font-size: .82rem;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
     font-weight: 500;
     color: var(--green);
     text-align: center;
@@ -995,7 +1027,7 @@
     padding: 4px 2px;
   }
   .tune-rates-missing {
-    font-size: .72rem;
+    font-size: 0.75rem;
     color: var(--muted);
     font-style: italic;
   }
@@ -1007,16 +1039,16 @@
   }
   .tune-notes summary {
     font-family: 'JetBrains Mono', monospace;
-    font-size: .66rem;
+    font-size: 0.75rem;
     text-transform: uppercase;
-    letter-spacing: .08em;
+    letter-spacing: 0.08em;
     color: var(--muted);
     cursor: pointer;
   }
   .tune-notes summary:hover { color: var(--text); }
   .tune-notes ul { margin: 8px 0 0 16px; }
   .tune-notes li {
-    font-size: .74rem;
+    font-size: 0.75rem;
     color: var(--muted);
     line-height: 1.5;
     overflow-wrap: anywhere;
@@ -1028,7 +1060,7 @@
     border: 1px solid rgba(255,77,26,.4);
     color: var(--orange);
     font-family: 'JetBrains Mono', monospace;
-    font-size: .72rem;
+    font-size: 0.75rem;
     padding: 8px 12px;
     border-radius: 4px;
     cursor: pointer;
@@ -1045,7 +1077,7 @@
 
   .tune-empty {
     color: var(--muted);
-    font-size: .85rem;
+    font-size: 0.875rem;
     padding: 24px 0;
   }
   .tune-pending {
@@ -1057,16 +1089,16 @@
   }
   .tune-pending summary {
     font-family: 'JetBrains Mono', monospace;
-    font-size: .74rem;
+    font-size: 0.75rem;
     color: var(--muted);
     cursor: pointer;
   }
   .tune-pending summary:hover { color: var(--text); }
   .tune-pending ul { margin: 12px 0 0 18px; }
   .tune-pending li {
-    font-size: .78rem;
+    font-size: 0.75rem;
     color: var(--muted);
-    line-height: 1.6;
+    line-height: 1.5;
     overflow-wrap: anywhere;
   }
   .tune-pending-combo {
@@ -1076,7 +1108,7 @@
 
   /* === RYFLY SECTION === */
   .affiliate-disclosure {
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     color: var(--muted);
     margin-bottom: 28px;
     max-width: 680px;
@@ -1084,12 +1116,14 @@
   .ryfly-subhead {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
-    font-size: 1.05rem;
-    letter-spacing: -0.01em;
     color: var(--orange);
     text-transform: uppercase;
+    /* This rule used to declare font-size and letter-spacing twice; the first
+       pair (16px / -0.02em) was dead, overridden by the pair below. Removed so
+       the eyebrow states its size once. */
     font-size: 0.75rem;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
+    line-height: 1.5;
     margin-bottom: 16px;
     margin-top: 36px;
   }
@@ -1121,9 +1155,9 @@
   .bc-br { bottom: 10px; right: 10px; border-left: none; border-top: none; }
   .build-card-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.08em;
     color: var(--orange);
     margin-bottom: 16px;
     display: flex;
@@ -1143,7 +1177,7 @@
     gap: 8px;
     padding: 7px 0;
     border-bottom: 1px solid var(--border);
-    font-size: 0.82rem;
+    font-size: 0.875rem;
   }
   .build-spec-row:last-child { border-bottom: none; }
   .spec-key {
@@ -1154,20 +1188,21 @@
   }
   .spec-val {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
     color: var(--text);
     flex: 1;
-    line-height: 1.3;
+    line-height: 1.5;
   }
   .buy-btn {
     display: inline-block;
     background: var(--orange);
     color: #0D0E12;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.62rem;
+    font-size: 0.75rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     padding: 3px 9px;
     border-radius: 999px;
     text-decoration: none;
@@ -1181,13 +1216,13 @@
     margin-top: 10px;
     padding-top: 10px;
     border-top: 1px solid var(--border);
-    font-size: 0.74rem;
+    font-size: 0.75rem;
     color: var(--muted);
-    line-height: 1.55;
+    line-height: 1.5;
   }
   .build-note code {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-size: 0.75rem;
     color: var(--green);
     background: rgba(61,220,151,.08);
     border-radius: 3px;
@@ -1213,13 +1248,13 @@
   }
   .pick-name {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.82rem;
+    font-size: 0.875rem;
     font-weight: 700;
     color: var(--text);
-    line-height: 1.3;
+    line-height: 1.2;
   }
   .pick-blurb {
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     color: var(--muted);
     line-height: 1.5;
     flex: 1;
@@ -1229,10 +1264,10 @@
     background: var(--orange);
     color: #0D0E12;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     padding: 6px 14px;
     border-radius: 4px;
     text-decoration: none;
@@ -1246,15 +1281,15 @@
   /* === HIRE / CONTACT === */
   .hire-sub {
     color: var(--muted);
-    font-size: 0.88rem;
+    font-size: 0.875rem;
     margin-bottom: 6px;
   }
   .hire-intro {
     color: var(--muted);
-    font-size: 0.92rem;
+    font-size: 0.875rem;
     max-width: 600px;
     margin-bottom: 28px;
-    line-height: 1.6;
+    line-height: 1.5;
   }
   .hire-cards {
     display: grid;
@@ -1273,9 +1308,9 @@
   }
   .hire-card-title {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.08em;
     color: var(--orange);
     margin-bottom: 14px;
     display: flex;
@@ -1297,11 +1332,11 @@
     gap: 8px;
   }
   .hire-card ul li {
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     color: var(--muted);
     padding-left: 14px;
     position: relative;
-    line-height: 1.4;
+    line-height: 1.5;
   }
   .hire-card ul li::before {
     content: '—';
@@ -1314,7 +1349,7 @@
   .contact-form-wrap .field { margin-bottom: 16px; }
   .contact-form-wrap .field label {
     display: block;
-    font-size: 0.82rem;
+    font-size: 0.875rem;
     color: var(--muted);
     margin-bottom: 6px;
   }
@@ -1326,7 +1361,7 @@
     border: 1px solid var(--border);
     color: var(--text);
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     padding: 10px 12px;
     border-radius: 4px;
     outline: none;
@@ -1342,9 +1377,9 @@
     border: none;
     color: #0D0E12;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.88rem;
+    font-size: 0.875rem;
     font-weight: 700;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     padding: 13px;
     border-radius: 4px;
     cursor: pointer;
@@ -1354,7 +1389,7 @@
   .contact-submit:disabled { opacity: 0.5; cursor: not-allowed; }
   .contact-success {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.88rem;
+    font-size: 0.875rem;
     color: var(--green);
     padding: 16px;
     border: 1px solid rgba(61,220,151,0.25);
@@ -1362,13 +1397,13 @@
     display: none;
   }
   .contact-error {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--muted);
     margin-top: 10px;
     display: none;
   }
   .contact-email-line {
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     color: var(--muted);
     margin-top: 14px;
   }
@@ -1407,8 +1442,8 @@
   }
   .ryfly-bio {
     color: var(--muted);
-    font-size: 0.95rem;
-    line-height: 1.65;
+    font-size: 1rem;
+    line-height: 1.5;
     max-width: none;
     margin-bottom: 0;
   }
@@ -1426,7 +1461,7 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.75rem;
     color: var(--muted);
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
   }
   .ryfly-social {
     display: flex;
@@ -1437,7 +1472,7 @@
   .social-btn {
     font-family: 'Inter', sans-serif;
     font-weight: 600;
-    font-size: 0.88rem;
+    font-size: 0.875rem;
     padding: 12px 24px;
     border-radius: 9999px;
     border: none;
@@ -1452,20 +1487,20 @@
   .social-btn.yt { background: #FF0000; }
   .social-btn.ig { background: linear-gradient(45deg, #833ab4, #fd1d1d, #fcb045); }
   .ryfly-follow-note {
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     color: var(--muted);
     margin-bottom: 0;
   }
 
   /* ===== RYFLY SIM PROMO ===== */
   #ryfly-sim h2 {
-    font-size: clamp(2rem, 5vw, 2.8rem);
-    letter-spacing: -0.01em;
+    font-size: 1.5625rem;
+    letter-spacing: -0.02em;
   }
   .sim-eyebrow {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
-    letter-spacing: 0.18em;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
     color: var(--green);
     text-transform: uppercase;
     margin-bottom: 10px;
@@ -1484,24 +1519,24 @@
   }
   .sim-feature-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
-    letter-spacing: 0.12em;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
     color: var(--orange);
     text-transform: uppercase;
     margin-bottom: 8px;
   }
   .sim-feature-card p {
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     color: var(--text);
-    line-height: 1.55;
+    line-height: 1.5;
     margin: 0;
     max-width: none;
   }
   .sim-launch-btn {
     display: inline-block;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.9rem;
-    letter-spacing: 0.06em;
+    font-size: 0.875rem;
+    letter-spacing: 0.08em;
     color: var(--orange);
     border: 2px solid var(--orange);
     padding: 14px 34px;
@@ -1556,21 +1591,22 @@
   }
   .sim-teaser-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.65rem;
-    letter-spacing: 0.15em;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
     color: var(--green);
     text-transform: uppercase;
   }
   .sim-teaser-title {
     font-family: 'Space Grotesk', sans-serif;
-    font-size: 1.6rem;
+    font-size: 1.5625rem;
     font-weight: 700;
     color: var(--text);
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
   }
   .sim-teaser-sub {
     font-family: 'Inter', sans-serif;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     color: var(--muted);
     line-height: 1.5;
     margin: 0;
@@ -1578,8 +1614,8 @@
   }
   .sim-teaser-cta {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.78rem;
-    letter-spacing: 0.1em;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
     color: var(--orange);
     margin-top: 6px;
   }
@@ -1591,8 +1627,8 @@
     border: 1px solid var(--border);
     color: var(--muted);
     font: inherit;
-    font-size: 0.72rem;
-    letter-spacing: 0.12em;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
     padding: 7px 14px;
     cursor: pointer;
     transition: color .15s, border-color .15s;
@@ -1609,19 +1645,24 @@
   }
   .bv-title {
     font-size: 0.75rem;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.08em;
     color: var(--green);
     margin-bottom: 6px;
   }
-  .bv-sub { font-size: 0.8rem; color: var(--muted); margin-bottom: 12px; line-height: 1.6; }
+  .bv-sub { font-size: 0.75rem; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
   .bv-sub code { color: var(--text); font-size: 0.75rem; }
-  .bv-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .bv-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
   .bv-table th {
     text-align: left; color: var(--muted); font-weight: 600;
-    font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
+    font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase;
     padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border);
   }
-  .bv-table td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--border); color: var(--text); }
+  .bv-table td {
+    padding: 8px 10px 8px 0; border-bottom: 1px solid var(--border); color: var(--text);
+    /* AUW / percentage / m:ss columns in Inter — proportional digits drift, so
+       pin them to tabular. */
+    font-variant-numeric: tabular-nums;
+  }
   .bv-table tr:last-child td { border-bottom: none; }
 
   /* Clickable bench rows — load the measured build into the calculator */
