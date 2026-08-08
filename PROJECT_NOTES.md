@@ -22,7 +22,8 @@ Working features:
 
 ## Design system (keep consistent if extending)
 
-- Colors: bg #0D0E12, panel #15171D, text #E8E6E1, muted #6B6F76,
+- Colors: bg #0D0E12, panel #15171D, text #E8E6E1, muted #8A8F98 (WCAG AA — do not
+  darken below this; it clears 4.5:1 by only 0.4 on .tune-badge),
   orange #FF4D1A (prop-stripe accent), green #3DDC97 (telemetry stat color), border #2A2D35.
 - Fonts: Space Grotesk (display/headings), Inter (body), JetBrains Mono (numbers/stats/labels).
 - Signature element: the OSD results panel. Don't lose it.
