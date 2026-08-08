@@ -43,6 +43,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<!-- Sets the flag the scroll-reveal styles hang off, before first paint so
+     revealed content never flashes in and back out. Only when the observer
+     exists, so unsupported browsers are never left with hidden content. -->
+<script>if('IntersectionObserver' in window)document.documentElement.classList.add('js-motion');</script>
 </head>
 <body>
 
@@ -69,7 +73,7 @@
 </header>
 
 <div class="container">
-  <section class="section" id="tunes">
+  <section class="section reveal" id="tunes">
     <h2>Whoop Tune &amp; PID Database</h2>
     <p class="tune-disclaimer">Starting points only. Motor KV, prop brand, battery C-rating, and frame stiffness all affect how a tune responds. Always bench-test before flying and check motor temps after your first pack. Adjust to your own build — no two whoops fly identically.</p>
 
@@ -95,6 +99,7 @@
 </footer>
 
 <script src="nav.js" defer></script>
+<script src="motion.js" defer></script>
 <script src="tune-database.js"></script>
 
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->

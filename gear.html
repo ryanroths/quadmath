@@ -43,6 +43,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<!-- Sets the flag the scroll-reveal styles hang off, before first paint so
+     revealed content never flashes in and back out. Only when the observer
+     exists, so unsupported browsers are never left with hidden content. -->
+<script>if('IntersectionObserver' in window)document.documentElement.classList.add('js-motion');</script>
 </head>
 <body>
 
@@ -69,7 +73,7 @@
 </header>
 
 <div class="container">
-  <section class="section" id="meet-ryfly">
+  <section class="section reveal" id="meet-ryfly">
     <h2>Meet RyFly</h2>
     <div class="meet-ryfly-panel">
       <div class="bc-corner bc-tl"></div>
@@ -101,6 +105,9 @@
     </div>
   </section>
 
+  <!-- No .reveal on this section, and none on anything inside it: every
+       affiliate CTA on the site lives here, and they must be at full opacity
+       from first paint rather than waiting on an observer. -->
   <section class="section" id="ryfly">
     <h2>What RyFly Is Flying</h2>
     <p class="affiliate-disclosure">This page contains affiliate links — if you buy through my links I may earn a small commission at no extra cost to you. I only recommend gear I actually fly.</p>
@@ -226,6 +233,7 @@
 </footer>
 
 <script src="nav.js" defer></script>
+<script src="motion.js" defer></script>
 <script src="script.js"></script>
 
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
