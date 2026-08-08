@@ -497,6 +497,21 @@
     line-height: 1.5;
     margin-top: 2px;
   }
+  /* Weight multiplier line under the score. Amber once the build is over its
+     class ideal, orange once it has bottomed out at the 0.6 floor — the same
+     green/amber/orange tiering the T:W column uses, though the two readings are
+     independent of each other. */
+  .bs-weight {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    line-height: 1.5;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .bs-weight.penalized { color: var(--amber); }
+  .bs-weight.floored   { color: var(--orange); }
+
   .bs-bar-track {
     width: 100%;
     height: 4px;
