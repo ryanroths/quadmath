@@ -142,7 +142,13 @@
 <header>
   <div class="container header-inner">
     <a href="/" class="logo" aria-label="QuadMath home">QuadMath<span class="dot">.</span></a>
-    <nav>
+    <button class="nav-toggle" id="navToggle" type="button"
+            aria-expanded="false" aria-controls="site-nav" aria-label="Menu">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </button>
+    <nav id="site-nav">
       <a href="/#calculator">Calculator</a>
       <a href="/#guide">Guide</a>
       <a href="/#motor-guide">Motors</a>
@@ -3033,5 +3039,6 @@ requestAnimationFrame(loop);
   <span class="sf-note">Estimates only — always verify with bench testing. Fly safe.</span>
   <span class="sf-credit">City model by costoWRLD (Sketchfab, CC BY)</span>
 </footer>
+<script src="nav.js" defer></script>
 </body>
 </html>
