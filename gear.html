@@ -49,7 +49,13 @@
 <header>
   <div class="container header-inner">
     <a href="/" class="logo" aria-label="QuadMath home">QuadMath<span class="dot">.</span></a>
-    <nav>
+    <button class="nav-toggle" id="navToggle" type="button"
+            aria-expanded="false" aria-controls="site-nav" aria-label="Menu">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </button>
+    <nav id="site-nav">
       <a href="/#calculator">Calculator</a>
       <a href="/#guide">Guide</a>
       <a href="/#motor-guide">Motors</a>
@@ -219,6 +225,7 @@
   </div>
 </footer>
 
+<script src="nav.js" defer></script>
 <script src="script.js"></script>
 
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->

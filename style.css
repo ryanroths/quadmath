@@ -61,6 +61,97 @@
   }
   nav a:hover { color: var(--text); }
 
+  /* ===== MOBILE NAV =====
+     The eight links are inline, so on a narrow screen they never overflowed the
+     page — they wrapped, four rows deep at 320px, turning an 85px header into a
+     137px one. Under the breakpoint they collapse into a panel behind a toggle
+     instead. Above it nothing here applies and the header is the original row. */
+  .nav-toggle { display: none; }
+
+  /* Breakpoint is measured, not guessed. Forcing the nav to one line and reading
+     its width gives: logo 111 + links 544 + 48px container gutter = 703px on the
+     Inter pages, and 742px on sim.html, whose nav inherits JetBrains Mono from
+     that page's own body rule and so runs wider. 767 clears the worst case with
+     room for font-loading variance, and matches the 768px threshold sim.html's
+     mobile gate already uses. Below this the links wrapped to four rows and grew
+     the header from 85px to 137px. */
+  @media (max-width: 767px) {
+    /* Positioning context for the panel. z-index sits above sim.html's canvas
+       chrome (max 20) but below its mobile gate (40), which must stay on top. */
+    header {
+      position: relative;
+      z-index: 30;
+    }
+
+    .nav-toggle {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 5px;
+      /* explicit box: sim.html's inline stylesheet sets a global
+         `button { width: 100% }` that would otherwise stretch this */
+      width: 44px;   /* 44px minimum touch target */
+      height: 44px;
+      flex: none;
+      padding: 0 10px;
+      margin: 0;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .nav-toggle:focus-visible {
+      outline: 2px solid var(--orange);
+      outline-offset: 2px;
+    }
+    .nav-toggle-bar {
+      display: block;
+      width: 100%;
+      height: 2px;
+      background: var(--orange);
+      border-radius: 1px;
+      transition: transform 0.18s ease, opacity 0.18s ease;
+    }
+    .nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(1) {
+      transform: translateY(7px) rotate(45deg);
+    }
+    .nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(2) {
+      opacity: 0;
+    }
+    .nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(3) {
+      transform: translateY(-7px) rotate(-45deg);
+    }
+
+    /* Absolute rather than fixed: anchored to the header's own bottom edge, so
+       there is no hardcoded header height to keep in sync. left/right 0 pins it
+       to the viewport, so it cannot introduce horizontal scroll at any width.
+       top:100% resolves against the padding box, so the panel overlaps the
+       header's 1px bottom border by 1px rather than leaving a seam. */
+    #site-nav {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      display: none;
+      flex-direction: column;
+      padding: 6px 0 10px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
+    }
+    #site-nav.nav-open { display: flex; }
+    /* Layout only — color, size and weight stay as the desktop rule set them. */
+    #site-nav a {
+      display: block;
+      margin-left: 0;
+      padding: 12px 24px; /* 24px aligns to the .container gutter */
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .nav-toggle-bar { transition: none; }
+  }
+
   /* ===== HERO / CALCULATOR ===== */
   .hero {
     padding: 48px 0 32px;
