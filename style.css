@@ -293,7 +293,7 @@
     padding: 10px 12px;
     border-radius: 4px;
     outline: none;
-    transition: border-color 0.15s;
+    transition: border-color 200ms ease-out;
   }
   .field select:focus, .field input:focus {
     border-color: var(--orange);
@@ -543,7 +543,7 @@
     background: linear-gradient(to right, #FF4D1A 0%, #FF4D1A 50%, #3DDC97 75%, #3DDC97 100%);
     border-radius: 2px;
     width: 0%;
-    transition: width 0.4s ease;
+    transition: width 260ms ease-out;
   }
 
   /* ===== CONTENT SECTIONS ===== */
@@ -636,7 +636,7 @@
     padding: 10px 12px;
     border-radius: 4px;
     outline: none;
-    transition: border-color 0.15s;
+    transition: border-color 200ms ease-out;
     display: block;
     box-sizing: border-box;
   }
@@ -677,7 +677,7 @@
     align-items: center;
     justify-content: center;
     border-left: 1px solid var(--border);
-    transition: color 0.15s;
+    transition: color 200ms ease-out;
   }
   .compare-val.filled { color: var(--text); }
   .compare-val.winner { color: var(--green); }
@@ -713,7 +713,7 @@
     font-weight: 500;
     color: var(--text);
     user-select: none;
-    transition: background 0.15s;
+    transition: background-color 200ms ease-out;
   }
   .tool-summary::-webkit-details-marker { display: none; }
   .tool-summary:hover { background: rgba(255,255,255,0.03); }
@@ -901,7 +901,7 @@
     padding: 5px 11px;
     border-radius: 999px;
     cursor: pointer;
-    transition: all .15s;
+    transition: background-color 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out;
   }
   .tune-chip:hover { border-color: var(--muted); color: var(--text); }
   .tune-chip.on {
@@ -1064,7 +1064,7 @@
     padding: 8px 12px;
     border-radius: 4px;
     cursor: pointer;
-    transition: all .15s;
+    transition: background-color 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out;
     width: 100%;
   }
   .tune-copy:hover { background: rgba(255,77,26,.1); }
@@ -1481,7 +1481,7 @@
     color: #ffffff;
     display: inline-flex;
     align-items: center;
-    transition: opacity 0.15s;
+    transition: opacity 200ms ease-out;
   }
   .social-btn:hover { opacity: 0.85; }
   .social-btn.yt { background: #FF0000; }
@@ -1542,7 +1542,7 @@
     padding: 14px 34px;
     text-decoration: none;
     border-radius: 3px;
-    transition: all 0.15s;
+    transition: background-color 200ms ease-out, color 200ms ease-out;
   }
   .sim-launch-btn:hover {
     background: var(--orange);
@@ -1568,7 +1568,7 @@
     text-decoration: none;
     padding: 24px;
     margin-bottom: 20px;
-    transition: border-color 0.15s;
+    transition: border-color 200ms ease-out;
     gap: 8px;
   }
   .sim-teaser-card:hover { border-color: var(--orange); }
@@ -1631,7 +1631,7 @@
     letter-spacing: 0.08em;
     padding: 7px 14px;
     cursor: pointer;
-    transition: color .15s, border-color .15s;
+    transition: color 200ms ease-out, border-color 200ms ease-out;
   }
   .copy-link-btn:hover { color: var(--orange); border-color: var(--orange); }
 
@@ -1666,6 +1666,69 @@
   .bv-table tr:last-child td { border-bottom: none; }
 
   /* Clickable bench rows — load the measured build into the calculator */
-  .bv-row { cursor: pointer; transition: background .12s; }
+  .bv-row { cursor: pointer; transition: background-color 200ms ease-out, color 200ms ease-out; }
   .bv-row:hover td, .bv-row:focus-visible td { background: rgba(61,220,151,.06); color: var(--green); }
   .bv-row:focus-visible { outline: 1px solid var(--green); outline-offset: -1px; }
+
+  /* ===== MOTION =====
+     Scroll reveal and card hover feedback for index, gear and tune-database.
+     Everything runs 200-300ms ease-out. Nothing scales, nothing overshoots,
+     nothing re-hides once it has been shown.
+
+     Deliberately left alone: nav a, .frame-btn, .nav-toggle-bar, header and
+     footer are all shared with sim.html, so their existing timings are
+     untouched rather than risk anything on that page's frame budget.
+     .buy-btn and .shop-btn are the affiliate CTAs — no reveal wrapper ever
+     hides them and no hover moves them. */
+
+  /* The hover cue itself is not motion, so it stays for reduced-motion users
+     too; only the easing and the lift below are conditional. */
+  .frame-card:hover,
+  .tune-card:hover,
+  .pick-card:hover,
+  .build-card:hover { border-color: var(--orange); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .frame-card, .tune-card, .pick-card, .build-card {
+      transition: border-color 200ms ease-out, transform 200ms ease-out;
+    }
+    /* 2px lift, no scale. .pick-card and .build-card are omitted on purpose:
+       both carry affiliate CTAs, so they take the border cue only and never
+       shift under the pointer. */
+    .frame-card:hover,
+    .tune-card:hover { transform: translateY(-2px); }
+
+    /* Scroll reveal. `.js-motion` is set by a one-line inline script in each
+       page's <head>, and only when IntersectionObserver exists — so with JS
+       disabled, or on a browser without the observer, this never applies and
+       nothing is hidden. */
+    .js-motion .reveal {
+      opacity: 0;
+      transform: translateY(12px);
+      transition: opacity 260ms ease-out, transform 260ms ease-out;
+    }
+    .js-motion .reveal.is-visible {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Reduced motion: every transition this pass introduced or retimed is turned
+     off. The reveal needs no entry here — its hidden state lives inside the
+     no-preference query above, so it simply never applies, and motion.js drops
+     the .js-motion flag as well.
+
+     This is a listed set rather than the usual `*` sledgehammer on purpose:
+     a universal rule would reach sim.html through this shared stylesheet and
+     kill that page's panel slide and toast fades, and sim.html is out of scope
+     for this pass. Every selector below is absent from that page. */
+  @media (prefers-reduced-motion: reduce) {
+    .frame-card, .tune-card, .pick-card, .build-card,
+    .tune-chip, .tune-copy, .sim-launch-btn, .sim-teaser-card,
+    .copy-link-btn, .social-btn, .tool-summary, .compare-val,
+    .bv-row, .bs-bar-fill,
+    .field select, .field input, .cmp-select, .cmp-kv,
+    .reveal {
+      transition: none !important;
+    }
+  }
