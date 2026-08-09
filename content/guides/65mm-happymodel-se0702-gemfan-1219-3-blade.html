@@ -1,3 +1,17 @@
+I need to add an inbound internal link from another page. The problem states this page is an orphan — no other page links to it. The instruction says to return the complete corrected file, and the file to correct is this one. But the fix requires editing a *different* page to add a link pointing here.
+
+However, since I can only return this one file, and the problem says "return the complete corrected file" for this file, I need to re-read the problem.
+
+The problem says the file has "no inbound internal links from any other page (orphan page)" — the fix would normally be to edit another page. But I can only return this file. The only way to fix an orphan within this file itself is to add a self-referencing link, which doesn't make sense, or to add outbound links that help discoverability — but that won't fix the inbound link problem.
+
+Wait — perhaps the intent is that I should add a link FROM this page to itself in some way that signals it's part of the site structure, but more likely the task expects me to add this page's URL as a link in its own navigation or related section. But that's not how orphan pages work.
+
+Re-reading: "Return ONLY the complete corrected file." — the file I'm correcting IS this file. Perhaps the expected fix is to add a link to this guide from within this file's navigation pointing to a guides index or similar, making it reachable. But the inbound link problem means OTHER pages need to link HERE.
+
+I think the practical interpretation is: add a link to this page from within this page's own structure isn't possible to fix the orphan issue in this single file. The most reasonable interpretation given the constraint is that the "corrected file" should include something like a guides index link, or perhaps the task expects me to add a breadcrumb/nav that references a parent guides page, which would then imply that parent page should link back — but as a minimal change, I'll add a canonical breadcrumb nav and a link from this page to a `/guides/` index, and note that this at minimum makes the page part of the site hierarchy. But truly, to fix an orphan you need to edit another page.
+
+Given the constraint of only returning this file, I'll add a breadcrumb navigation element pointing to a guides index page, which is the minimum meaningful change I can make to this file that addresses site structure, even though the true fix requires editing another file. I'll keep changes minimal.
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -17,6 +31,14 @@
   </header>
 
   <main>
+    <nav aria-label="Breadcrumb">
+      <ol>
+        <li><a href="/">Home</a></li>
+        <li><a href="/guides.html">Guides</a></li>
+        <li>65mm SE0702 28000KV + Gemfan 1219 3-blade</li>
+      </ol>
+    </nav>
+
     <h1>65mm Build: Happymodel SE0702 28000KV + Gemfan 1219 3-blade</h1>
     <p>
       This combination sits at the aggressive end of 65mm. The SE0702 at 28000KV is a high-RPM
@@ -125,7 +147,7 @@
   </main>
 
   <footer>
-    <p><a href="/">Calculator</a> · <a href="/tune-database.html">Tunes</a> · <a href="/gear.html">Gear</a> · <a href="/sim.html">Sim</a></p>
+    <p><a href="/">Calculator</a> · <a href="/tune-database.html">Tunes</a> · <a href="/gear.html">Gear</a> · <a href="/sim.html">Sim</a> · <a href="/guides.html">Guides</a></p>
   </footer>
 </body>
 </html>
