@@ -234,17 +234,19 @@ class BenchGuard(unittest.TestCase):
         self.assertEqual(gap["type"], "metadata_gap")
         self.assertEqual(worklist, [])
 
-    def test_orphan_metadata_gap_is_skipped_not_selected(self):
-        # An orphan is fixed by editing the page that should link IN, never the
-        # orphan itself. The generator returns exactly one corrected file, so it
-        # structurally cannot do that -- it must skip loudly rather than emit a
-        # no-op edit to the wrong file. See agent PR #52.
+    def test_metadata_gap_orphan_is_skipped(self):
+        # Deliberately the same row as the test above, changing only `detail`,
+        # so the two read as a pair: an ordinary metadata gap is selected, an
+        # orphan one is refused. The fix for an orphan is an inbound link on a
+        # DIFFERENT page, and the generator only ever returns the gap's own
+        # target -- agent PR #52 produced a breadcrumb no-op on the orphan
+        # itself and left it just as unreachable.
         rows = [
             {
                 "type": "metadata_gap",
-                "target": "content/guides/orphan-page.html",
+                "target": "content/guides/some-page.html",
                 "detail": "no inbound internal link from any indexed page",
-                "severity": "high",
+                "severity": "low",
             }
         ]
         gap, notes, worklist = gc.pick_gap(rows, self.policy, fake_base_read({}))
