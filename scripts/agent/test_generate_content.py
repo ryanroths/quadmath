@@ -234,6 +234,54 @@ class BenchGuard(unittest.TestCase):
         self.assertEqual(gap["type"], "metadata_gap")
         self.assertEqual(worklist, [])
 
+    def test_orphan_metadata_gap_is_skipped_not_selected(self):
+        # An orphan is fixed by editing the page that should link IN, never the
+        # orphan itself. The generator returns exactly one corrected file, so it
+        # structurally cannot do that -- it must skip loudly rather than emit a
+        # no-op edit to the wrong file. See agent PR #52.
+        rows = [
+            {
+                "type": "metadata_gap",
+                "target": "content/guides/orphan-page.html",
+                "detail": "no inbound internal link from any indexed page",
+                "severity": "high",
+            }
+        ]
+        gap, notes, worklist = gc.pick_gap(rows, self.policy, fake_base_read({}))
+        self.assertIsNone(gap, "orphan gaps must never be selected for generation")
+        self.assertEqual(worklist, [], "orphan skips are not bench worklist items")
+        self.assertTrue(any("orphan fix means editing a different page" in n for n in notes))
+
+    def test_orphan_detail_wording_variants_all_skip(self):
+        for detail in (
+            "Page is an orphan -- nothing links to it",
+            "missing inbound internal link",
+            "ORPHAN: unreachable by crawl",
+        ):
+            rows = [
+                {
+                    "type": "metadata_gap",
+                    "target": "content/guides/x.html",
+                    "detail": detail,
+                    "severity": "high",
+                }
+            ]
+            gap, _, _ = gc.pick_gap(rows, self.policy, fake_base_read({}))
+            self.assertIsNone(gap, "should have skipped for detail: %s" % detail)
+
+    def test_missing_detail_key_does_not_crash(self):
+        # detail is optional in collector output; the orphan check must not
+        # explode on rows that omit it.
+        rows = [
+            {
+                "type": "metadata_gap",
+                "target": "content/guides/some-page.html",
+                "severity": "low",
+            }
+        ]
+        gap, _, _ = gc.pick_gap(rows, self.policy, fake_base_read({}))
+        self.assertIsNotNone(gap, "a metadata_gap without detail is still actionable")
+
     def test_schema_shape_matches_spec(self):
         schema = self.policy["bench_schema"]
         self.assertEqual(
