@@ -354,6 +354,14 @@ def pick_gap(
             notes.append("skip [%s] %s -- unknown type" % (kind, r.get("target")))
             continue
         if kind == "metadata_gap":
+            detail = (r.get("detail") or "").lower()
+            if "inbound internal link" in detail or "orphan" in detail:
+                notes.append(
+                    "skip [metadata_gap] %s -- orphan fix means editing a different page "
+                    "(the one that should link in); single-file generator cannot do that -- human task"
+                    % r.get("target")
+                )
+                continue
             ok, why = path_allowed(r.get("target", ""), policy)
             if not ok:
                 notes.append(
