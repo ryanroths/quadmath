@@ -393,6 +393,17 @@ def pick_gap(
 # --------------------------------------------------------------------------
 
 
+class ModelRefusal(RuntimeError):
+    """The model declined, or returned no usable text.
+
+    A refusal is a successful HTTP 200 with stop_reason "refusal" and an empty
+    or partial content array -- not an exception, so nothing upstream notices
+    unless we look. Deliberately not recovered from: no fallback model, no
+    retry. A refusal means a human should read the gap and decide, and quietly
+    re-running the same request somewhere else would hide that.
+    """
+
+
 def call_api(api_key: str, system: str, user: str) -> str:
     body = json.dumps(
         {
@@ -414,8 +425,15 @@ def call_api(api_key: str, system: str, user: str) -> str:
     )
     with urllib.request.urlopen(req, timeout=120) as resp:
         data = json.loads(resp.read().decode())
+    stop_reason = data.get("stop_reason")
     parts = [b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"]
-    return "".join(parts).strip()
+    text = "".join(parts).strip()
+    # Empty text is checked alongside stop_reason because they are the same
+    # failure: without it an empty body would travel on and fail validate_html
+    # as a missing meta description, which names the wrong cause.
+    if stop_reason == "refusal" or not text:
+        raise ModelRefusal("model refused generation (stop_reason=%s)" % stop_reason)
+    return text
 
 
 SYSTEM_METADATA = """You edit HTML pages for quadmath.com, a whoop FPV build \
@@ -595,7 +613,18 @@ def main() -> int:
         % (gap["severity"], gap["type"], gap["target"], gap["detail"])
     )
 
-    files = generate_for_gap(gap, base_read, api_key, policy)
+    try:
+        files = generate_for_gap(gap, base_read, api_key, policy)
+    except ModelRefusal as exc:
+        # Skip the gap without reaching the gate: there is no output to
+        # validate, and validate_html would report a missing meta description
+        # rather than the refusal that actually happened.
+        sys.stderr.write("%s\n" % exc)
+        sys.stderr.write(
+            "skipping [%s] %s -- nothing generated, nothing pushed\n"
+            % (gap["type"], gap["target"])
+        )
+        return 1
 
     # ---- validate against the gate before anything touches git ----
     problems: list[str] = []
