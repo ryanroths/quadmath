@@ -16,7 +16,7 @@
 
 ## The content agent
 
-Part of the site's content is produced by an autonomous pipeline that runs weekly on a Raspberry Pi:
+Part of the site's content is produced by an autonomous pipeline that runs on a weekly schedule:
 
 1. `scripts/agent/collect_signals.py` reads the site **from `origin/main`** (never the working tree — a pull request cannot manufacture its own signals) and emits a ranked list of content gaps: builds the calculator offers with no coverage, missing metadata, and similar.
 2. `scripts/agent/generate_content.py` picks one gap, generates a fix via the Anthropic API, validates it, and opens a pull request. A human reviews every PR before merge.
