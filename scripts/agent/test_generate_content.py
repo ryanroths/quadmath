@@ -325,5 +325,71 @@ class CosmeticFixes(unittest.TestCase):
         self.assertEqual(undeclared, [], "every file open must pin encoding='utf-8'")
 
 
+class _FakeResponse:
+    """Stand-in for the urlopen context manager, so call_api can be driven
+    with a canned API body without touching the network."""
+
+    def __init__(self, payload: dict):
+        self._body = json.dumps(payload).encode()
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def call_api_with(payload: dict) -> str:
+    original = gc.urllib.request.urlopen
+    gc.urllib.request.urlopen = lambda req, timeout=None: _FakeResponse(payload)
+    try:
+        return gc.call_api("fake-key", "system", "user")
+    finally:
+        gc.urllib.request.urlopen = original
+
+
+class RefusalGuard(unittest.TestCase):
+    """A refusal is an HTTP 200 with stop_reason 'refusal' and no usable text.
+    Left unchecked it reaches validate_html and is reported as a missing meta
+    description, which names the wrong cause. See PR #55."""
+
+    def test_refusal_stop_reason_raises(self):
+        with self.assertRaises(gc.ModelRefusal) as ctx:
+            call_api_with({"stop_reason": "refusal", "content": []})
+        self.assertIn("model refused generation", str(ctx.exception))
+        self.assertIn("stop_reason=refusal", str(ctx.exception))
+
+    def test_empty_text_raises_even_on_normal_stop_reason(self):
+        # Same failure wearing a different hat: nothing usable came back.
+        with self.assertRaises(gc.ModelRefusal) as ctx:
+            call_api_with({"stop_reason": "end_turn", "content": []})
+        self.assertIn("stop_reason=end_turn", str(ctx.exception))
+
+    def test_whitespace_only_text_raises(self):
+        with self.assertRaises(gc.ModelRefusal):
+            call_api_with(
+                {"stop_reason": "end_turn", "content": [{"type": "text", "text": "   \n"}]}
+            )
+
+    def test_refusal_is_not_recovered_from(self):
+        # No fallback model, no retry -- a refusal must surface to a human.
+        with open(os.path.join(HERE, "generate_content.py"), encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertNotIn("fallbacks", src, "refusals must not reroute to another model")
+
+    def test_normal_response_still_returns_text(self):
+        # The guard must not fire on a healthy generation.
+        out = call_api_with(
+            {
+                "stop_reason": "end_turn",
+                "content": [{"type": "text", "text": "<html>ok</html>\n"}],
+            }
+        )
+        self.assertEqual(out, "<html>ok</html>")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
