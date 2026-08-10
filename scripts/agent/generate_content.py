@@ -50,7 +50,7 @@ import urllib.request
 
 API_URL = "https://api.anthropic.com/v1/messages"
 API_VERSION = "2023-06-01"
-MODEL = "claude-sonnet-4-6"
+MODEL = "claude-fable-5"
 MAX_TOKENS = 4096
 GITHUB_API = "https://api.github.com"
 POLICY_PATH = "scripts/ci/agent_policy.json"
