@@ -11,6 +11,7 @@
   "auw_g": 27.73,
   "cruise_time_s": 154,
   "source": "measured 2026-08-05 — stopwatch duration, OSD mAh, current sensor calibrated against a full-discharge anchor",
+  "controlled": true,
   "applies_to": [
     "65mm/Happymodel SE0702/Gemfan 1219S 3-blade"
   ],
@@ -61,6 +62,7 @@
       "mah_osd_raw": 340,
       "mah_corrected": 270,
       "avg_current_a_corrected": 6.3,
+      "controlled": true,
       "notes": "OSD showed 4.15 at start (connector drop + ADC offset). Slow cruise pace."
     }
   ],

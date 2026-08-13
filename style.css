@@ -424,6 +424,62 @@
     margin-top: 12px;
   }
   .bench-note a { color: var(--orange); }
+  /* Frame-class heading inside the bench summary. Smaller sibling of
+     .section h2 — the page has no h3 rules of its own. */
+  .bench-class-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    margin: 28px 0 12px;
+  }
+  .bench-class-title:first-of-type { margin-top: 8px; }
+
+  /* ===== Provisional bench builds =====
+     A build whose current sensor has no correction factor, or whose runs were
+     not flown under controlled conditions, is still published — flagged rather
+     than withheld. Amber is the palette's existing caution tier, one step short
+     of the orange that marks real warnings. */
+  .bench-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--amber);
+    background: rgba(255,154,26,.1);
+    border: 1px solid rgba(255,154,26,.35);
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  /* Raw sensor readings. Amber plus an explicit marker on the same cell, so an
+     uncorrected number can never be read as a corrected one at a glance. */
+  .bench-table td.raw { color: var(--amber); }
+  .bench-raw-mark {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.6875rem;
+    letter-spacing: 0.04em;
+    color: var(--amber);
+    opacity: .85;
+    white-space: nowrap;
+  }
+  .bench-caveat {
+    margin-top: 12px;
+    padding: .7rem .85rem;
+    border-radius: 4px;
+    border: 1px solid rgba(255,154,26,.35);
+    background: rgba(255,154,26,.06);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .bench-caveat strong { color: var(--amber); }
+  .bench-caveat a { color: var(--orange); }
 
   /* Flight time backed by a bench measurement rather than the model. */
   .osd-stat-sub.measured { color: var(--green); }

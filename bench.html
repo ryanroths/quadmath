@@ -3,19 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QuadMath Bench Data — Measured 65mm Whoop Flight Times, Weights &amp; Current Draw</title>
-<meta name="description" content="Real bench-tested numbers for 65mm FPV whoops — measured AUW, full-discharge flight times, and calibrated current draw for Air65 analog and Mobula6 HDZero builds. Not estimates.">
-<meta name="keywords" content="whoop flight time, 65mm whoop weight, tinywhoop bench test, Air65 flight time, Mobula6 HDZero flight time, whoop current draw, FPV bench data">
+<title>QuadMath Bench Data — Measured 65mm &amp; 75mm Whoop Flight Times, Weights &amp; Current Draw</title>
+<meta name="description" content="Real bench-tested numbers for 65mm and 75mm FPV whoops — measured AUW, flight times, and current draw for Air65 analog and Mobula6 HDZero, plus a provisional 75mm TreeTopper 0802 build on an uncalibrated sensor. Not estimates.">
+<meta name="keywords" content="whoop flight time, 65mm whoop weight, 75mm whoop flight time, 75mm whoop weight, tinywhoop bench test, Air65 flight time, Mobula6 HDZero flight time, TreeTopper 0802, 0802 motor flight time, Gemfan 1610, whoop current draw, FPV bench data">
 
-<meta property="og:title" content="QuadMath Bench Data — Measured 65mm Whoop Numbers">
-<meta property="og:description" content="Real bench-tested numbers for 65mm FPV whoops — measured AUW, full-discharge flight times, and calibrated current draw. Not estimates.">
+<meta property="og:title" content="QuadMath Bench Data — Measured 65mm &amp; 75mm Whoop Numbers">
+<meta property="og:description" content="Real bench-tested numbers for 65mm and 75mm FPV whoops — measured AUW, flight times, and current draw. Corrected where the sensor is calibrated, flagged raw where it is not.">
 <meta property="og:image" content="https://quadmath.com/og-image.png">
 <meta property="og:url" content="https://quadmath.com/bench.html">
 <meta property="og:type" content="website">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="QuadMath Bench Data — Measured 65mm Whoop Numbers">
-<meta name="twitter:description" content="Real bench-tested numbers for 65mm FPV whoops — measured AUW, full-discharge flight times, and calibrated current draw. Not estimates.">
+<meta name="twitter:title" content="QuadMath Bench Data — Measured 65mm &amp; 75mm Whoop Numbers">
+<meta name="twitter:description" content="Real bench-tested numbers for 65mm and 75mm FPV whoops — measured AUW, flight times, and current draw. Corrected where the sensor is calibrated, flagged raw where it is not.">
 <meta name="twitter:image" content="https://quadmath.com/og-image.png">
 
 <link rel="icon" type="image/png" href="./favicon.png">
@@ -24,8 +24,8 @@
 {
   "@context": "https://schema.org",
   "@type": "Dataset",
-  "name": "QuadMath 65mm Whoop Bench Data",
-  "description": "Measured all-up weights, full-discharge flight times, and calibrated current draw for 65mm FPV whoop builds (Air65 analog, Mobula6 2024 HDZero). Stopwatch durations, kitchen-scale weights, current corrected against a full-discharge anchor.",
+  "name": "QuadMath 65mm & 75mm Whoop Bench Data",
+  "description": "Measured all-up weights, flight times, and current draw for 65mm and 75mm FPV whoop builds (Air65 analog, Mobula6 2024 HDZero, TreeTopper 75 analog). Stopwatch durations, kitchen-scale weights. Current is corrected against a full-discharge anchor on the two 65mm builds; the 75mm build is provisional — uncalibrated sensor, uncontrolled runs, raw OSD figures published unmodified and flagged as such.",
   "url": "https://quadmath.com/bench.html",
   "license": "https://github.com/ryanroths/quadmath",
   "creator": {
@@ -42,6 +42,11 @@
       "@type": "DataDownload",
       "encodingFormat": "application/json",
       "contentUrl": "https://raw.githubusercontent.com/ryanroths/quadmath/master/data/bench/mobula6-2024-hdzero-se0702-28k.json"
+    },
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "application/json",
+      "contentUrl": "https://raw.githubusercontent.com/ryanroths/quadmath/master/data/bench/treetopper75-analog-0802-32500k.json"
     }
   ]
 }
@@ -90,11 +95,15 @@
     <h2>Bench Data</h2>
     <p class="sub">
       The calculator is a model. This page is not. Every number here was measured — builds
-      weighed on a scale, flown to a full discharge, timed with a stopwatch, current
-      corrected against a known-capacity anchor. Two 65mm builds so far, same pack model,
-      same props, one analog and one HDZero. These are the numbers QuadMath's 65mm
-      estimates are anchored to.
+      weighed on a scale, timed with a stopwatch, current read off the onboard sensor.
+      Three builds so far across two frame classes. The two 65mm builds were flown to a
+      full discharge against a known-capacity anchor and their corrected figures are what
+      QuadMath's 65mm estimates rest on. The 75mm build is provisional: its current sensor
+      has never been calibrated and neither run was controlled, so its current and mAh
+      figures are published raw and feed nothing.
     </p>
+
+    <h3 class="bench-class-title">65mm</h3>
 
     <div class="bench-table-wrap">
       <table class="bench-table">
@@ -120,6 +129,38 @@
       delivering about 270&nbsp;mAh of a nominal 300. Durations are stopwatch — no sensor
       caveats. Current figures carry roughly 8% uncertainty; see
       <a href="#methodology">methodology</a> for why.
+    </p>
+
+    <h3 class="bench-class-title">75mm</h3>
+
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <thead>
+          <tr><th>Build</th><th>Video</th><th>AUW</th><th>Pack</th><th>Avg current</th><th>Flight time</th><th>Style</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>TreeTopper 75 — TreeTopper 0802 32500KV <span class="bench-badge">Provisional</span></td>
+            <td>Analog</td><td>34.57 g</td><td>BetaFPV 450mAh 1S HV</td>
+            <td class="raw">5.96 A<span class="bench-raw-mark">raw, uncorrected</span></td>
+            <td>163 s (2:43)</td><td>Freestyle</td>
+          </tr>
+          <tr>
+            <td>TreeTopper 75 — TreeTopper 0802 32500KV <span class="bench-badge">Provisional</span></td>
+            <td>Analog</td><td>35.22 g</td><td>BetaFPV 480mAh 1S HV</td>
+            <td class="raw">5.82 A<span class="bench-raw-mark">raw, uncorrected</span></td>
+            <td>201 s (3:21)</td><td>Freestyle</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bench-note">
+      Measured 2026-08-13. Durations and weights are sound — stopwatch and scale, same as
+      the 65mm builds. The current column is not: this sensor has never been run against a
+      full-discharge anchor, so there is no correction factor and no uncertainty figure to
+      quote. Both runs were also uncontrolled — different start voltages, different
+      cutoffs, freestyle throttle that does not repeat — so the two rows are not a pack
+      comparison. Full record and caveats: <a href="#build-treetopper75">below</a>.
     </p>
   </section>
 
@@ -220,12 +261,85 @@
     </p>
   </section>
 
+  <section class="section reveal" id="build-treetopper75">
+    <h2>TreeTopper 75 Analog — Full Record <span class="bench-badge">Provisional</span></h2>
+    <p class="bench-caveat">
+      <strong>Uncalibrated sensor, uncontrolled runs.</strong> Every current and mAh number
+      in this section is the raw OSD reading. It has not been corrected, because there is
+      nothing to correct it against — this build has never been flown to a full discharge,
+      so it has no anchor and no correction factor. The two 65mm builds read 20% cold and
+      25% hot out of the box; assume an error of that order here until it is measured.
+      Both runs were also uncontrolled: undercharged starts, mismatched cutoffs, and a
+      freestyle throttle profile that does not repeat. The two runs are therefore not a
+      pack A/B comparison, and this build feeds no calculator estimate.
+    </p>
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <tbody>
+          <tr><td>Motors</td><td>TreeTopper 0802, 32500KV, 1.5mm knurled shaft</td></tr>
+          <tr><td>Props</td><td>Gemfan 1610 bi-blade, 40mm, 1.5mm shaft</td></tr>
+          <tr><td>Flight controller</td><td>NewBeeDrone</td></tr>
+          <tr><td>Packs</td><td>BetaFPV 450mAh 1S LiHV BT2.0 (11.97 g) · BetaFPV 480mAh 1S LiHV BT2.0 (12.61 g), both measured n=1</td></tr>
+          <tr><td>Dry weight</td><td>22.60 g (derived — AUW minus pack, agrees to 0.01 g across both packs)</td></tr>
+          <tr><td>AUW</td><td>34.57 g on the 450, 35.22 g on the 480</td></tr>
+          <tr><td>Connectors</td><td>Quad wired A30, packs are BT2.0 — flown through an A30↔BT2.0 adapter. Adapter mass is included in the weights above; the extra contact resistance is not accounted for anywhere.</td></tr>
+          <tr><td>Firmware</td><td>Betaflight — PIDs/rates not yet logged to the <a href="tune-database.html">tune database</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="bench-table-wrap" style="margin-top:12px">
+      <table class="bench-table">
+        <thead>
+          <tr><th>Run</th><th>Date</th><th>Type</th><th>Pack</th><th>AUW</th><th>Duration</th><th>Start V</th><th>Cutoff V (load)</th><th>mAh</th><th>Avg A</th><th>mAh/min</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td><td>2026-08-13</td><td>Freestyle</td><td>450mAh</td><td>34.57 g</td>
+            <td>163 s</td><td>4.10</td><td>3.50</td>
+            <td class="raw">270<span class="bench-raw-mark">raw, uncorrected</span></td>
+            <td class="raw">5.96<span class="bench-raw-mark">raw, uncorrected</span></td>
+            <td class="raw">99.4<span class="bench-raw-mark">raw, uncorrected</span></td>
+          </tr>
+          <tr>
+            <td>2</td><td>2026-08-13</td><td>Freestyle</td><td>480mAh</td><td>35.22 g</td>
+            <td>201 s</td><td>4.25</td><td>3.36</td>
+            <td class="raw">325<span class="bench-raw-mark">raw, uncorrected</span></td>
+            <td class="raw">5.82<span class="bench-raw-mark">raw, uncorrected</span></td>
+            <td class="raw">97.0<span class="bench-raw-mark">raw, uncorrected</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bench-note">
+      Run 1 started at 4.10&nbsp;V against a 4.35&nbsp;V LiHV full charge and pulled roughly
+      60% of rated capacity; run 2 started at 4.25&nbsp;V, ran to a deeper cutoff, and pulled
+      roughly 68%. Neither is a discharge curve. Durations and weights carry no sensor
+      caveat and stand on their own.
+      Raw record: <a href="https://github.com/ryanroths/quadmath/blob/main/data/bench/treetopper75-analog-0802-32500k.json" rel="noopener">treetopper75-analog-0802-32500k.json</a>.
+      Pending: current sensor calibration against a full-discharge anchor, matched-condition
+      A/B (same charge state, same cutoff, same profile), n=3 per pack, a controlled cruise
+      run, rest-voltage logging.
+    </p>
+  </section>
+
   <section class="section reveal" id="methodology">
     <h2>Methodology</h2>
     <p class="sub">
-      Whoop-scale current sensors are not trustworthy out of the box — one of these two
-      builds read 20% cold, the other 25% hot. Every current and mAh figure on this page
-      is corrected before it is published.
+      Whoop-scale current sensors are not trustworthy out of the box — one 65mm build read
+      20% cold, the other 25% hot. The policy is that every current and mAh figure gets
+      corrected against a full-discharge anchor before it is published.
+    </p>
+    <p class="sub">
+      One build on this page does not meet that bar yet. The 75mm TreeTopper has never been
+      flown to a full discharge, so it has no anchor, no correction factor, and no
+      uncertainty figure. The choice there is publish it raw or withhold it, and withholding
+      it is the worse of the two — a missing build teaches nothing, while a flagged one
+      still carries usable durations and weights. So it is published raw: every uncorrected
+      figure is marked <span class="bench-badge">Provisional</span> on the row, rendered in
+      amber with a "raw, uncorrected" marker on the cell, and spelled out in full under the
+      build's own record. Provisional builds are excluded from cross-build comparisons and
+      never feed a calculator estimate. They lose the flag when the sensor is calibrated and
+      the runs are re-flown controlled — not before.
     </p>
     <div class="bench-table-wrap">
       <table class="bench-table">
@@ -233,15 +347,17 @@
           <tr><td>Weights</td><td>Kitchen scale, measured per component. Pack weight averaged over two packs.</td></tr>
           <tr><td>Duration</td><td>Stopwatch, plug-in to landing at load cutoff. No sensor involved — no correction needed.</td></tr>
           <tr><td>Discharge window</td><td>4.35 V LiHV full charge down to ~3.3 V under load, assumed 270 mAh delivered of a nominal 300.</td></tr>
-          <tr><td>Current correction</td><td>Full-discharge anchor: raw OSD mAh scaled so the run totals the assumed 270 mAh delivered. Per-build correction factor stored in the raw JSON.</td></tr>
-          <tr><td>Uncertainty</td><td>Roughly ±8% on current and mAh figures, driven by the assumed delivered capacity. Durations and weights carry no such caveat.</td></tr>
-          <tr><td>Flight style</td><td>Cruise — slow, steady laps. Hover and freestyle numbers pending; freestyle will run meaningfully shorter.</td></tr>
+          <tr><td>Current correction</td><td>Full-discharge anchor: raw OSD mAh scaled so the run totals the assumed 270 mAh delivered. Per-build correction factor stored in the raw JSON. A null factor means no anchor run exists — that build is provisional and its figures are raw.</td></tr>
+          <tr><td>Controlled runs</td><td>Same charge state, same cutoff, repeatable throttle profile. A run failing any of those is marked <code>"controlled": false</code> in the raw JSON and cannot be compared against another run.</td></tr>
+          <tr><td>Uncertainty</td><td>Roughly ±8% on corrected current and mAh figures, driven by the assumed delivered capacity. Raw figures on provisional builds carry no stated uncertainty — the sensor error is unmeasured, and the two calibrated builds bracket it at 20% cold to 25% hot. Durations and weights carry no such caveat on any build.</td></tr>
+          <tr><td>Flight style</td><td>Cruise — slow, steady laps. Hover numbers pending. The 75mm runs are freestyle and run meaningfully shorter than a cruise run would; they are not comparable to the 65mm cruise figures.</td></tr>
         </tbody>
       </table>
     </div>
     <p class="bench-note">
-      When your inputs in the <a href="/#calculator">calculator</a> match one of these
-      builds, it swaps its estimate for the measured number. Everything on this page is
+      When your inputs in the <a href="/#calculator">calculator</a> match one of the
+      calibrated builds, it swaps its estimate for the measured number. Provisional builds
+      are not wired in — the 75mm TreeTopper changes no estimate. Everything on this page is
       reproducible from the raw JSON in
       <a href="https://github.com/ryanroths/quadmath/tree/master/data/bench" rel="noopener">data/bench/</a>.
       More builds get added as they cross the bench.
