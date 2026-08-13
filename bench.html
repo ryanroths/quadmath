@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuadMath Bench Data — Measured 65mm Whoop Flight Times, Weights &amp; Current Draw</title>
+<meta name="description" content="Real bench-tested numbers for 65mm FPV whoops — measured AUW, full-discharge flight times, and calibrated current draw for Air65 analog and Mobula6 HDZero builds. Not estimates.">
+<meta name="keywords" content="whoop flight time, 65mm whoop weight, tinywhoop bench test, Air65 flight time, Mobula6 HDZero flight time, whoop current draw, FPV bench data">
+
+<meta property="og:title" content="QuadMath Bench Data — Measured 65mm Whoop Numbers">
+<meta property="og:description" content="Real bench-tested numbers for 65mm FPV whoops — measured AUW, full-discharge flight times, and calibrated current draw. Not estimates.">
+<meta property="og:image" content="https://quadmath.com/og-image.png">
+<meta property="og:url" content="https://quadmath.com/bench.html">
+<meta property="og:type" content="website">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="QuadMath Bench Data — Measured 65mm Whoop Numbers">
+<meta name="twitter:description" content="Real bench-tested numbers for 65mm FPV whoops — measured AUW, full-discharge flight times, and calibrated current draw. Not estimates.">
+<meta name="twitter:image" content="https://quadmath.com/og-image.png">
+
+<link rel="icon" type="image/png" href="./favicon.png">
+<link rel="canonical" href="https://quadmath.com/bench.html">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Dataset",
+  "name": "QuadMath 65mm Whoop Bench Data",
+  "description": "Measured all-up weights, full-discharge flight times, and calibrated current draw for 65mm FPV whoop builds (Air65 analog, Mobula6 2024 HDZero). Stopwatch durations, kitchen-scale weights, current corrected against a full-discharge anchor.",
+  "url": "https://quadmath.com/bench.html",
+  "license": "https://github.com/ryanroths/quadmath",
+  "creator": {
+    "@type": "Person",
+    "name": "RyFly"
+  },
+  "distribution": [
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "application/json",
+      "contentUrl": "https://raw.githubusercontent.com/ryanroths/quadmath/master/data/bench/air65-analog-vci0702-30k.json"
+    },
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "application/json",
+      "contentUrl": "https://raw.githubusercontent.com/ryanroths/quadmath/master/data/bench/mobula6-2024-hdzero-se0702-28k.json"
+    }
+  ]
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<!-- The font files themselves come from gstatic, not googleapis, so this is the
+     connection worth opening early. crossorigin is required: fonts are fetched
+     in CORS mode, and without it the browser opens a second, separate
+     connection and the preconnect is wasted. -->
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<!-- Sets the flag the scroll-reveal styles hang off, before first paint so
+     revealed content never flashes in and back out. Only when the observer
+     exists, so unsupported browsers are never left with hidden content. -->
+<script>if('IntersectionObserver' in window)document.documentElement.classList.add('js-motion');</script>
+</head>
+<body>
+
+<header>
+  <div class="container header-inner">
+    <a href="/" class="logo" aria-label="QuadMath home">QuadMath<span class="dot">.</span></a>
+    <button class="nav-toggle" id="navToggle" type="button"
+            aria-expanded="false" aria-controls="site-nav" aria-label="Menu">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </button>
+    <nav id="site-nav">
+      <a href="/#calculator">Calculator</a>
+      <a href="/#guide">Guide</a>
+      <a href="/#motor-guide">Motors</a>
+      <a href="/#tools">Tools</a>
+      <a href="tune-database.html">Tunes</a>
+      <a href="bench.html" class="active" aria-current="page" style="color:#FF4D1A">Bench</a>
+      <a href="sim.html">Sim</a>
+      <a href="gear.html">Gear</a>
+      <a href="hire.html">Hire</a>
+    </nav>
+  </div>
+</header>
+
+<div class="container">
+
+  <section class="section reveal" id="bench">
+    <h2>Bench Data</h2>
+    <p class="sub">
+      The calculator is a model. This page is not. Every number here was measured — builds
+      weighed on a scale, flown to a full discharge, timed with a stopwatch, current
+      corrected against a known-capacity anchor. Two 65mm builds so far, same pack model,
+      same props, one analog and one HDZero. These are the numbers QuadMath's 65mm
+      estimates are anchored to.
+    </p>
+
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <thead>
+          <tr><th>Build</th><th>Video</th><th>AUW</th><th>Pack</th><th>Avg current</th><th>Flight time</th><th>Style</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Air65 — VCI 0702 PRO DB 30000KV</td>
+            <td>Analog</td><td>25.42 g</td><td>LAVA 300mAh 1S HV</td>
+            <td>4.2 A</td><td>233 s (3:53)</td><td>Cruise</td>
+          </tr>
+          <tr>
+            <td>Mobula6 2024 — Happymodel SE0702 28000KV</td>
+            <td>HDZero</td><td>27.73 g</td><td>LAVA 300mAh 1S HV</td>
+            <td>6.3 A</td><td>154 s (2:34)</td><td>Cruise</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bench-note">
+      Measured 2026-08-05. Both packs run 4.35&nbsp;V down to roughly 3.3&nbsp;V under load,
+      delivering about 270&nbsp;mAh of a nominal 300. Durations are stopwatch — no sensor
+      caveats. Current figures carry roughly 8% uncertainty; see
+      <a href="#methodology">methodology</a> for why.
+    </p>
+  </section>
+
+  <section class="section reveal" id="hdzero-cost">
+    <h2>What HDZero Costs</h2>
+    <p class="sub">
+      Same frame class, same pack, same Gemfan 1219 3-blade props. The only meaningful
+      difference between these two builds is the video system and motor spec — and the
+      digital build gives up a third of its flight time for the picture.
+    </p>
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <thead>
+          <tr><th>Delta</th><th>Analog (Air65)</th><th>HDZero (Mobula6)</th><th>Cost of digital</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Dry weight</td><td>17.22 g</td><td>19.53 g</td><td>+2.31 g</td></tr>
+          <tr><td>AUW</td><td>25.42 g</td><td>27.73 g</td><td>+9.1%</td></tr>
+          <tr><td>Avg current, cruise</td><td>4.2 A</td><td>6.3 A</td><td>+50%</td></tr>
+          <tr><td>Flight time, cruise</td><td>233 s</td><td>154 s</td><td>−79 s (−34%)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bench-note">
+      The current delta is bigger than the weight delta alone predicts — the HDZero VTX
+      draws its own supply on top of what the heavier build asks from the motors. Full
+      write-up: <a href="/content/guides/hdzero-vs-analog-65mm-flight-time.html">HDZero vs
+      analog — what video weight costs in flight time</a>.
+    </p>
+  </section>
+
+  <section class="section reveal" id="build-air65">
+    <h2>Air65 Analog — Full Record</h2>
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <tbody>
+          <tr><td>Motors</td><td>VCI 0702 PRO DB, 30000KV, 1.0mm shaft</td></tr>
+          <tr><td>Props</td><td>Gemfan 1219 3-blade, 31mm, 1.0mm shaft</td></tr>
+          <tr><td>Pack</td><td>BetaFPV LAVA 300mAh 1S LiHV, BT2.0</td></tr>
+          <tr><td>Dry weight</td><td>17.22 g</td></tr>
+          <tr><td>Pack weight</td><td>8.2 g (measured, n=2: 8.14, 8.21)</td></tr>
+          <tr><td>AUW</td><td>25.42 g</td></tr>
+          <tr><td>Firmware</td><td>Betaflight — PIDs/rates per <a href="tune-database.html">tune database</a> entry</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="bench-table-wrap" style="margin-top:12px">
+      <table class="bench-table">
+        <thead>
+          <tr><th>Run</th><th>Date</th><th>Type</th><th>Duration</th><th>Start V</th><th>Cutoff V (load)</th><th>mAh (corrected)</th><th>Avg A (corrected)</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>2026-08-05</td><td>Cruise</td><td>233 s</td><td>4.36</td><td>3.28</td><td>270</td><td>4.2</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bench-note">
+      Onboard current sensor reads about 20% cold out of the box — raw OSD showed
+      217&nbsp;mAh for a run that delivered roughly 270. Correction factor 1.24, anchored to a
+      full discharge. Slow cruise pace throughout.
+      Raw record: <a href="https://github.com/ryanroths/quadmath/blob/main/data/bench/air65-analog-vci0702-30k.json" rel="noopener">air65-analog-vci0702-30k.json</a>.
+      Pending: hover run, repeat cruise, rest-voltage logging, top speed in calm air.
+    </p>
+  </section>
+
+  <section class="section reveal" id="build-mobula6">
+    <h2>Mobula6 2024 HDZero — Full Record</h2>
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <tbody>
+          <tr><td>Motors</td><td>Happymodel SE0702, 28000KV, 1.5mm shaft</td></tr>
+          <tr><td>Props</td><td>Gemfan 1219 3-blade, 31mm, 1.5mm shaft</td></tr>
+          <tr><td>Pack</td><td>BetaFPV LAVA 300mAh 1S LiHV, BT2.0</td></tr>
+          <tr><td>Dry weight</td><td>19.53 g</td></tr>
+          <tr><td>Pack weight</td><td>8.2 g (measured, n=2: 8.14, 8.21)</td></tr>
+          <tr><td>AUW</td><td>27.73 g</td></tr>
+          <tr><td>Firmware</td><td>Betaflight — PIDs/rates per <a href="tune-database.html">tune database</a> entry</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="bench-table-wrap" style="margin-top:12px">
+      <table class="bench-table">
+        <thead>
+          <tr><th>Run</th><th>Date</th><th>Type</th><th>Duration</th><th>Start V</th><th>Cutoff V (load)</th><th>mAh (corrected)</th><th>Avg A (corrected)</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>2026-08-05</td><td>Cruise</td><td>154 s</td><td>4.35</td><td>3.35</td><td>270</td><td>6.3</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bench-note">
+      Opposite sensor problem to the Air65 — this one reads about 25% hot. Raw OSD claimed
+      340&nbsp;mAh from a 300&nbsp;mAh pack; correction factor 0.79. OSD also showed 4.15&nbsp;V at
+      plug-in against a true 4.35 (connector drop plus ADC offset). Slow cruise pace.
+      Raw record: <a href="https://github.com/ryanroths/quadmath/blob/main/data/bench/mobula6-2024-hdzero-se0702-28k.json" rel="noopener">mobula6-2024-hdzero-se0702-28k.json</a>.
+      Pending: hover run, repeat cruise, rest-voltage logging, top speed in calm air.
+      Build write-up: <a href="/content/guides/65mm-happymodel-se0702-gemfan-1219-3-blade.html">65mm SE0702 + Gemfan 1219 build guide</a>.
+    </p>
+  </section>
+
+  <section class="section reveal" id="methodology">
+    <h2>Methodology</h2>
+    <p class="sub">
+      Whoop-scale current sensors are not trustworthy out of the box — one of these two
+      builds read 20% cold, the other 25% hot. Every current and mAh figure on this page
+      is corrected before it is published.
+    </p>
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <tbody>
+          <tr><td>Weights</td><td>Kitchen scale, measured per component. Pack weight averaged over two packs.</td></tr>
+          <tr><td>Duration</td><td>Stopwatch, plug-in to landing at load cutoff. No sensor involved — no correction needed.</td></tr>
+          <tr><td>Discharge window</td><td>4.35 V LiHV full charge down to ~3.3 V under load, assumed 270 mAh delivered of a nominal 300.</td></tr>
+          <tr><td>Current correction</td><td>Full-discharge anchor: raw OSD mAh scaled so the run totals the assumed 270 mAh delivered. Per-build correction factor stored in the raw JSON.</td></tr>
+          <tr><td>Uncertainty</td><td>Roughly ±8% on current and mAh figures, driven by the assumed delivered capacity. Durations and weights carry no such caveat.</td></tr>
+          <tr><td>Flight style</td><td>Cruise — slow, steady laps. Hover and freestyle numbers pending; freestyle will run meaningfully shorter.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bench-note">
+      When your inputs in the <a href="/#calculator">calculator</a> match one of these
+      builds, it swaps its estimate for the measured number. Everything on this page is
+      reproducible from the raw JSON in
+      <a href="https://github.com/ryanroths/quadmath/tree/master/data/bench" rel="noopener">data/bench/</a>.
+      More builds get added as they cross the bench.
+    </p>
+  </section>
+
+</div>
+
+<footer>
+  <div class="container header-inner" style="width: 100%;">
+    <div class="footer-logo">QuadMath<span class="dot">.</span></div>
+    <div>Estimates only — always verify with bench testing. Fly safe.</div>
+  </div>
+</footer>
+
+<script src="nav.js" defer></script>
+<script src="motion.js" defer></script>
+
+<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
