@@ -11,6 +11,7 @@
   "auw_g": 25.42,
   "cruise_time_s": 233,
   "source": "measured 2026-08-05 — stopwatch duration, OSD mAh, current sensor calibrated against a full-discharge anchor",
+  "controlled": true,
   "motor_detail": {
     "model": "VCI 0702 PRO DB",
     "kv": 30000,
@@ -58,6 +59,7 @@
       "mah_osd_raw": 217,
       "mah_corrected": 270,
       "avg_current_a_corrected": 4.2,
+      "controlled": true,
       "notes": "OSD showed 4.21 at start. Slow cruise pace. Initial OSD mAh misread as 21, corrected to 217 post-flight."
     }
   ],

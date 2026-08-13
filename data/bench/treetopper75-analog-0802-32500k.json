@@ -1,0 +1,124 @@
+{
+  "build_id": "treetopper75-analog-0802-32500k",
+  "name": "TreeTopper 75 Analog",
+  "class_mm": 75,
+  "frame_size_mm": 75,
+  "video": "analog",
+  "motor": "weBLEEDfpv Treetoppers 0802",
+  "motor_kv": 32500,
+  "prop": "Gemfan 1610 bi-blade, 1.5mm shaft",
+  "battery": "BetaFPV 450mAh / BetaFPV 480mAh 1S LiHV BT2.0",
+  "auw_g": 34.57,
+  "cruise_time_s": null,
+  "source": "measured 2026-08-13 — stopwatch durations and raw OSD mAh; current sensor UNCALIBRATED (no full-discharge anchor run), both flights uncontrolled",
+  "controlled": false,
+  "applies_to": [],
+  "connector_note": "Quad wired A30; packs are BT2.0. Runs through an A30↔BT2.0 adapter — added contact resistance vs native BT2.0 builds. Adapter mass is included in the weights below.",
+  "motor_detail": {
+    "model": "weBLEEDfpv Treetoppers 0802",
+    "kv": 32500,
+    "shaft_mm": 1.5,
+    "shaft_type": "knurled"
+  },
+  "prop_detail": {
+    "model": "Gemfan 1610",
+    "blades": 2,
+    "size_mm": 40,
+    "shaft_mm": 1.5
+  },
+  "firmware": {
+    "type": "betaflight",
+    "note": "NewBeeDrone FC — PIDs/rates not yet logged to tune DB"
+  },
+  "weights_g": {
+    "dry": 22.6,
+    "pack": null,
+    "auw": 34.57,
+    "includes": [
+      "frame",
+      "motors",
+      "fc",
+      "camera",
+      "vtx",
+      "antenna",
+      "canopy",
+      "props",
+      "hardware"
+    ],
+    "source": "dry and pack measured 2026-08-13, kitchen scale, n=1 per pack; auw derived (dry + pack); dry measured props-on"
+  },
+  "weights_crosscheck": {
+    "auw_measured_g": { "bfpv-450": 34.58, "bfpv-lava-480": 35.21 },
+    "auw_derived_g":  { "bfpv-450": 34.57, "bfpv-lava-480": 35.22 },
+    "note": "Independent scale reading vs dry+pack sum. Agree within 0.01 g. Derived values used throughout for internal consistency."
+  },
+  "packs": {
+    "bfpv-450": {
+      "brand": "BetaFPV",
+      "capacity_mah": 450,
+      "cells": "1S LiHV",
+      "connector": "BT2.0",
+      "weight_g": 11.97,
+      "weight_source": "measured, n=1"
+    },
+    "bfpv-lava-480": {
+      "brand": "BetaFPV",
+      "capacity_mah": 480,
+      "cells": "1S LiHV",
+      "connector": "BT2.0",
+      "weight_g": 12.61,
+      "weight_source": "measured, n=1"
+    }
+  },
+  "current_sensor": {
+    "status": "present, uncalibrated — no full-discharge anchor run",
+    "correction_factor": null,
+    "calibration_method": null,
+    "uncertainty_pct": null
+  },
+  "flights": [
+    {
+      "run": 1,
+      "date": "2026-08-13",
+      "type": "freestyle",
+      "pack_id": "bfpv-450",
+      "auw_g": 34.57,
+      "duration_s": 163,
+      "start_v": 4.10,
+      "cutoff_v_load": 3.50,
+      "rest_v_post": null,
+      "mah_osd_raw": 270,
+      "mah_corrected": null,
+      "avg_current_a_raw": 5.96,
+      "avg_current_a_corrected": null,
+      "mah_per_min_raw": 99.4,
+      "controlled": false,
+      "notes": "Uncontrolled: undercharged start (4.10 vs 4.35 LiHV full), cutoff not matched to run 2, and freestyle throttle profile not repeatable between runs. ~60% of rated capacity pulled. Not valid for pack A/B comparison."
+    },
+    {
+      "run": 2,
+      "date": "2026-08-13",
+      "type": "freestyle",
+      "pack_id": "bfpv-lava-480",
+      "auw_g": 35.22,
+      "duration_s": 201,
+      "start_v": 4.25,
+      "cutoff_v_load": 3.36,
+      "rest_v_post": null,
+      "mah_osd_raw": 325,
+      "mah_corrected": null,
+      "avg_current_a_raw": 5.82,
+      "avg_current_a_corrected": null,
+      "mah_per_min_raw": 97.0,
+      "controlled": false,
+      "notes": "Uncontrolled: undercharged start (4.25), deeper cutoff than run 1, and freestyle throttle profile not repeatable between runs. ~68% of rated capacity pulled. Not valid for pack A/B comparison."
+    }
+  ],
+  "pending": [
+    "current sensor calibration (full-discharge anchor)",
+    "matched-condition A/B — same charge state, same cutoff, same flight profile",
+    "n=3 per pack",
+    "controlled cruise run",
+    "rest voltage logging"
+  ]
+}
