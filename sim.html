@@ -272,6 +272,11 @@
   <div class="row"><label>FOV</label><span class="val" id="v_fov"></span></div>
   <input type="range" id="s_fov" min="80" max="160" step="1" value="105">
 
+  <h2>Audio</h2>
+  <div class="row"><label>Music volume</label><span class="val" id="v_musicVol"></span></div>
+  <input type="range" id="musicVol" min="0" max="1" step="0.05" value="0.35">
+  <button id="musicBtn">🔊 MUSIC [M]</button>
+
   <h2>Physics</h2>
   <div class="row"><label>Drone type</label></div>
   <select id="droneType"></select>
@@ -2088,14 +2093,37 @@ presetSel.onchange=()=>{
 // ---------- Input ----------
 const stick={r:0,p:0,y:0,t:0};
 const keys={};
-// ---------- background music playlist (assets/bg-music-*.mp3) — M to toggle, paused by default ----------
-const MUSIC_TRACKS=['assets/bg-music-1.mp3','assets/bg-music-2.mp3','assets/bg-music-3.mp3',
-  'assets/bg-music-4.mp3','assets/bg-music-5.mp3'];
+// ---------- background music playlist (audio/track*.mp3) — M to toggle, paused by default ----------
+const TRACKS=['audio/track1.mp3','audio/track2.mp3','audio/track3.mp3'];
+const MUSIC_VOL_KEY='ryflyMusicVol';
 let musicOn=false,musicOrder=[],musicIdx=0;
+let musicStarted=false;    // first-gesture unlock latch (see startMusic)
+let musicUnlockTries=0;    // bounded retries so a blocked/missing track can't hammer the network
+let trackFailStreak=0;     // consecutive load failures — stops the skip chain when every file is missing
 const musicEl=new Audio();
-musicEl.volume=0.4;
+const musicVolEl=document.getElementById('musicVol');
+const musicBtnEl=document.getElementById('musicBtn');
+const musicVolLabel=document.getElementById('v_musicVol');
+function loadMusicVol(){
+  let v=NaN;
+  try{v=parseFloat(localStorage.getItem(MUSIC_VOL_KEY));}catch(e){}
+  return Number.isFinite(v)?THREE.MathUtils.clamp(v,0,1):0.35;
+}
+function setMusicVol(v){
+  v=THREE.MathUtils.clamp(Number(v)||0,0,1);
+  musicEl.volume=v;
+  try{localStorage.setItem(MUSIC_VOL_KEY,String(v));}catch(e){}
+  syncMusicUI();
+  return v;
+}
+function syncMusicUI(){
+  if(musicBtnEl)musicBtnEl.textContent=(musicOn?'🔊':'🔇')+' MUSIC [M]';
+  if(musicVolEl&&parseFloat(musicVolEl.value)!==musicEl.volume)musicVolEl.value=musicEl.volume;
+  if(musicVolLabel)musicVolLabel.textContent=Math.round(musicEl.volume*100)+'%';
+}
+musicEl.volume=loadMusicVol();
 function shuffleOrder(){
-  musicOrder=MUSIC_TRACKS.map((_,i)=>i);
+  musicOrder=TRACKS.map((_,i)=>i);
   for(let i=musicOrder.length-1;i>0;i--){
     const j=Math.floor(Math.random()*(i+1));
     [musicOrder[i],musicOrder[j]]=[musicOrder[j],musicOrder[i]];
@@ -2103,13 +2131,23 @@ function shuffleOrder(){
   musicIdx=0;
 }
 function playCurrentTrack(){
-  musicEl.src=MUSIC_TRACKS[musicOrder[musicIdx]];
+  musicEl.src=TRACKS[musicOrder[musicIdx]];
   musicEl.play().catch(()=>{});
 }
-musicEl.addEventListener('ended',()=>{
+function nextTrack(){
   musicIdx++;
   if(musicIdx>=musicOrder.length)shuffleOrder(); // reshuffle each full loop
   playCurrentTrack();
+}
+musicEl.addEventListener('playing',()=>{trackFailStreak=0;});
+musicEl.addEventListener('ended',()=>nextTrack());
+// A 404 or decode failure never fires 'ended', so without this the playlist
+// stalls on the first missing file. Skip to the next one, and give up quietly
+// once every track in the list has failed back to back.
+musicEl.addEventListener('error',()=>{
+  if(!musicOn)return;
+  if(++trackFailStreak>=TRACKS.length){musicOn=false;syncMusicUI();return;}
+  nextTrack();
 });
 const audioHintEl=document.getElementById('audioHint');
 function dismissAudioHint(){
@@ -2122,8 +2160,12 @@ function toggleMusic(){
   dismissAudioHint(); // first M press dismisses it immediately, pre-empting the 6s timer
   musicOn=!musicOn;
   if(musicOn){
+    trackFailStreak=0;
     if(!musicOrder.length)shuffleOrder();
-    if(musicEl.src)musicEl.play().catch(()=>{});else playCurrentTrack();
+    // An element left in an error state does not re-fire 'error' when you call
+    // play() again, so resuming a dead track would stall the skip chain and
+    // leave the button claiming 🔊 over silence. Reload it instead of un-pausing.
+    if(musicEl.src&&!musicEl.error)musicEl.play().catch(()=>{});else playCurrentTrack();
   }else musicEl.pause();
   // 'm' is the only user-gesture available, so it's still what unlocks the
   // motor AudioContext — but this runs on every press regardless of which
@@ -2131,7 +2173,37 @@ function toggleMusic(){
   initMotorAudio();
   motorAudioCtx.resume().catch(()=>{});
   toast(musicOn?'♪ MUSIC ON':'MUSIC OFF');
+  musicStarted=true;   // M is itself the unlock; don't let a later stick move re-trigger
+  syncMusicUI();
+  return !musicOn;     // muted state
 }
+// First-gesture unlock for radio-only pilots. A TX16S pilot never touches the
+// keyboard or mouse, so the gamepad poll calls this on first stick deflection.
+// Chrome does not count gamepad input as user activation, so play() can still
+// be blocked — on rejection the latch is released so M (or the next deflection)
+// still works, capped at a few attempts so a missing file can't hammer.
+function startMusic(){
+  if(musicStarted||musicOn||musicUnlockTries>=3)return;
+  musicStarted=true;musicUnlockTries++;
+  if(!musicOrder.length)shuffleOrder();
+  musicEl.src=TRACKS[musicOrder[musicIdx]];
+  musicEl.play().then(()=>{
+    musicOn=true;trackFailStreak=0;
+    dismissAudioHint();
+    initMotorAudio();
+    motorAudioCtx.resume().catch(()=>{});
+    toast('♪ MUSIC ON');
+    syncMusicUI();
+  }).catch(()=>{musicStarted=false;});
+}
+// Wired here, not inline onclick: module scope means an inline handler cannot
+// see these functions.
+if(musicVolEl){
+  musicVolEl.value=musicEl.volume;   // initialise from the stored volume, not the markup default
+  musicVolEl.addEventListener('input',e=>setMusicVol(e.target.value));
+}
+if(musicBtnEl)musicBtnEl.addEventListener('click',()=>toggleMusic());
+syncMusicUI();
 
 // ---------- motor audio: layered whoop synth — independent of the music toggle; 'm' just unlocks its AudioContext ----------
 // Layers per the real 0702-class sound signature:
@@ -2298,6 +2370,10 @@ function readInput(dt){
     stick.r=dz((ax[map.r.i]||0)*map.r.sign);
     stick.p=dz((ax[map.p.i]||0)*map.p.sign);
     stick.y=dz((ax[map.y.i]||0)*map.y.sign);
+    // Radio-only pilots make no keyboard or mouse gesture, so a stick deflection
+    // is what unlocks audio for them. Roll/pitch/yaw only — a ratcheted TX16S
+    // throttle sits wherever it was left and would fire this with no gesture.
+    if(!musicStarted&&(Math.abs(stick.r)>0.15||Math.abs(stick.p)>0.15||Math.abs(stick.y)>0.15))startMusic();
     const traw=ax[map.t.i]||0;
     if(map.t.spring){
       stick.t=THREE.MathUtils.clamp(-traw,0,1); // pad: up = -1
