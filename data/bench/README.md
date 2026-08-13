@@ -39,6 +39,7 @@ renders those with a badge, amber raw-value cells, and an inline caveat.
 | `avg_current_a_raw` | flight | Raw OSD average current. Uncorrected. |
 | `connector_note` | build | Connector mismatches, adapters, and what that does to resistance or measured weight. |
 | `motor_detail.shaft_type` | build | Shaft finish, e.g. `knurled`. Optional. |
+| `weights_g.includes` | build | What the dry weight actually covers, e.g. `frame`, `motors`, `fc`, `camera`, `vtx`, `antenna`, `canopy`, `props`, `hardware`. Add it only where the convention is confirmed — an absent array means unrecorded, not props-off. |
 | `weights_crosscheck` | build | Corroboration, not conflict. Holds `auw_measured_g` and `auw_derived_g` keyed by `pack_id` — an independent scale reading against the dry+pack sum — plus a `note` recording the agreement and which set the file uses throughout. |
 
 `motor` and `motor_detail.model` carry the motor DB `name` verbatim from the `motorDB`

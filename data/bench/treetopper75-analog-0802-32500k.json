@@ -34,7 +34,18 @@
     "dry": 22.6,
     "pack": null,
     "auw": 34.57,
-    "source": "dry and pack measured 2026-08-13, kitchen scale, n=1 per pack; auw derived (dry + pack)"
+    "includes": [
+      "frame",
+      "motors",
+      "fc",
+      "camera",
+      "vtx",
+      "antenna",
+      "canopy",
+      "props",
+      "hardware"
+    ],
+    "source": "dry and pack measured 2026-08-13, kitchen scale, n=1 per pack; auw derived (dry + pack); dry measured props-on"
   },
   "weights_crosscheck": {
     "auw_measured_g": { "bfpv-450": 34.58, "bfpv-lava-480": 35.21 },
@@ -107,7 +118,6 @@
     "current sensor calibration (full-discharge anchor)",
     "matched-condition A/B — same charge state, same cutoff, same flight profile",
     "n=3 per pack",
-    "props-on dry weight confirmation",
     "controlled cruise run",
     "rest voltage logging"
   ]
