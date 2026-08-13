@@ -468,6 +468,18 @@
     opacity: .85;
     white-space: nowrap;
   }
+  /* The Style column stopped being uniform once a freestyle build joined the
+     cruise ones, and a freestyle duration next to a cruise duration invites a
+     comparison neither number supports. Mark it on the cell rather than trusting
+     the note underneath to be read. */
+  .bench-style-mark {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.6875rem;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    white-space: nowrap;
+  }
   .bench-caveat {
     margin-top: 12px;
     padding: .7rem .85rem;

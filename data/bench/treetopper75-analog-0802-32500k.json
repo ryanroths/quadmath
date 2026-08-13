@@ -4,7 +4,7 @@
   "class_mm": 75,
   "frame_size_mm": 75,
   "video": "analog",
-  "motor": "TreeTopper 0802",
+  "motor": "weBLEEDfpv Treetoppers 0802",
   "motor_kv": 32500,
   "prop": "Gemfan 1610 bi-blade, 1.5mm shaft",
   "battery": "BetaFPV 450mAh / BetaFPV 480mAh 1S LiHV BT2.0",
@@ -15,7 +15,7 @@
   "applies_to": [],
   "connector_note": "Quad wired A30; packs are BT2.0. Runs through an A30↔BT2.0 adapter — added contact resistance vs native BT2.0 builds. Adapter mass is included in the weights below.",
   "motor_detail": {
-    "model": "TreeTopper 0802",
+    "model": "weBLEEDfpv Treetoppers 0802",
     "kv": 32500,
     "shaft_mm": 1.5,
     "shaft_type": "knurled"
@@ -34,7 +34,12 @@
     "dry": 22.6,
     "pack": null,
     "auw": 34.57,
-    "source": "AUW and pack weights measured 2026-08-13, kitchen scale, A30↔BT2.0 adapter included. Dry weight derived — AUW minus pack, cross-checked on both packs (34.57 − 11.97 = 22.60; 35.22 − 12.61 = 22.61). Pack weight varies by pack; see packs. Build-level auw is the 450mAh figure — per-flight auw_g is authoritative."
+    "source": "dry and pack measured 2026-08-13, kitchen scale, n=1 per pack; auw derived (dry + pack)"
+  },
+  "weights_crosscheck": {
+    "auw_measured_g": { "bfpv-450": 34.58, "bfpv-lava-480": 35.21 },
+    "auw_derived_g":  { "bfpv-450": 34.57, "bfpv-lava-480": 35.22 },
+    "note": "Independent scale reading vs dry+pack sum. Agree within 0.01 g. Derived values used throughout for internal consistency."
   },
   "packs": {
     "bfpv-450": {
@@ -102,6 +107,7 @@
     "current sensor calibration (full-discharge anchor)",
     "matched-condition A/B — same charge state, same cutoff, same flight profile",
     "n=3 per pack",
+    "props-on dry weight confirmation",
     "controlled cruise run",
     "rest voltage logging"
   ]

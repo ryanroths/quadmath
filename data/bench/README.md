@@ -39,6 +39,12 @@ renders those with a badge, amber raw-value cells, and an inline caveat.
 | `avg_current_a_raw` | flight | Raw OSD average current. Uncorrected. |
 | `connector_note` | build | Connector mismatches, adapters, and what that does to resistance or measured weight. |
 | `motor_detail.shaft_type` | build | Shaft finish, e.g. `knurled`. Optional. |
+| `weights_crosscheck` | build | Corroboration, not conflict. Holds `auw_measured_g` and `auw_derived_g` keyed by `pack_id` — an independent scale reading against the dry+pack sum — plus a `note` recording the agreement and which set the file uses throughout. |
+
+`motor` and `motor_detail.model` carry the motor DB `name` verbatim from the `motorDB`
+table in `script.js`, with KV in the separate `motor_kv` field. The display label a user
+sees in the calculator (`name  —  32,500 KV  ·  ✓ bench-verified`) is assembled at render
+time and is not what gets stored here.
 
 On a provisional build set `cruise_time_s`, `mah_corrected`, `correction_factor`, and
 `avg_current_a_corrected` to null, and leave `applies_to` empty. Null `cruise_time_s`
