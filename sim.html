@@ -275,7 +275,10 @@
   <h2>Audio</h2>
   <div class="row"><label>Music volume</label><span class="val" id="v_musicVol"></span></div>
   <input type="range" id="musicVol" min="0" max="1" step="0.05" value="0.35">
-  <button id="musicBtn">🔊 MUSIC [M]</button>
+  <!-- 🔇 matches the real initial state: music is paused until M. syncMusicUI()
+       corrects this on boot anyway, so the only time this markup is what you
+       see is when the module never ran — and then it must not claim sound. -->
+  <button id="musicBtn">🔇 MUSIC [M]</button>
 
   <h2>Physics</h2>
   <div class="row"><label>Drone type</label></div>
@@ -2132,6 +2135,7 @@ function shuffleOrder(){
 }
 function playCurrentTrack(){
   musicEl.src=TRACKS[musicOrder[musicIdx]];
+  console.log('[music] playCurrentTrack →',(musicIdx+1)+'/'+musicOrder.length,musicEl.src);
   musicEl.play().catch(()=>{});
 }
 function nextTrack(){
@@ -2183,10 +2187,14 @@ function toggleMusic(){
 // be blocked — on rejection the latch is released so M (or the next deflection)
 // still works, capped at a few attempts so a missing file can't hammer.
 function startMusic(){
-  if(musicStarted||musicOn||musicUnlockTries>=3)return;
+  if(musicStarted||musicOn||musicUnlockTries>=3){
+    console.log('[music] startMusic skipped — started:'+musicStarted+' on:'+musicOn+' tries:'+musicUnlockTries);
+    return;
+  }
   musicStarted=true;musicUnlockTries++;
   if(!musicOrder.length)shuffleOrder();
   musicEl.src=TRACKS[musicOrder[musicIdx]];
+  console.log('[music] startMusic — first gesture, attempt '+musicUnlockTries+' →',musicEl.src);
   musicEl.play().then(()=>{
     musicOn=true;trackFailStreak=0;
     dismissAudioHint();
@@ -2194,7 +2202,8 @@ function startMusic(){
     motorAudioCtx.resume().catch(()=>{});
     toast('♪ MUSIC ON');
     syncMusicUI();
-  }).catch(()=>{musicStarted=false;});
+    console.log('[music] startMusic ok — playing');
+  }).catch(()=>{musicStarted=false;console.log('[music] startMusic blocked — latch released, M still works');});
 }
 // Wired here, not inline onclick: module scope means an inline handler cannot
 // see these functions.
