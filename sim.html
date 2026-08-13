@@ -331,6 +331,18 @@
     if(reported||window._simBooted)return;reported=true;
     var el=document.getElementById('assetStatus');
     if(el)el.textContent=msg;
+    // #assetStatus alone is not enough: it lives inside the Tab-hidden tune
+    // panel, so it is invisible exactly when it matters and a dead sim reads as
+    // an unexplained frozen canvas. #audioHint is already on screen, and if left
+    // alone it sits there advising "Press M to enable audio" on a page that can
+    // no longer hear M — so the failure notice replaces it rather than adding
+    // another element. Classic script, no module dependency, no CSS class needed.
+    var hint=document.getElementById('audioHint');
+    if(hint){
+      hint.textContent='⚠ '+msg;
+      hint.style.color='var(--orange)';
+      hint.classList.remove('hide');
+    }
   }
   // capture phase — resource load errors don't bubble
   window.addEventListener('error',function(e){
