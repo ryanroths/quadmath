@@ -424,13 +424,19 @@
     }
   }
 
+  // Dry weight is deliberately NOT preset — see dryWeightInput(). framePresets
+  // still carries a .weight per class because the AUW figures the rest of the
+  // model is calibrated against were built from it (see the table comment), but
+  // nothing writes it into the field any more. Switching class clears whatever
+  // was there: a 65mm dry weight is meaningless on an 85mm.
   function applyPreset(frame) {
     const p = framePresets[frame];
     els.motorKV.value = p.kv;
     els.cells.value = p.cells;
     els.capacity.value = p.capacity;
     els.propPitch.value = p.pitch;
-    els.weight.value = p.weight;
+    els.weight.value = '';
+    delete els.weight.dataset.derived;
   }
 
   document.querySelectorAll('.frame-btn').forEach(btn => {
@@ -505,18 +511,32 @@
     // dropped ~12g of pack from every TWR (132g thrust / 27.6g "AUW" = 4.8:1
     // and a wheelie warning for builds that really fly at 3.7:1). The pack is
     // now added in calculate() from capacity.
-    if (weight) els.weight.value = (parseFloat(weight) * 4 + currentFrameBaseWeight().grams).toFixed(1);
+    // Flagged as derived so the AUW readout can label it an estimate. Picking a
+    // motor is an explicit act, so filling the field here is not a silent
+    // default — but it is still catalogue arithmetic, not a scale.
+    if (weight) {
+      els.weight.value = (parseFloat(weight) * 4 + currentFrameBaseWeight().grams).toFixed(1);
+      els.weight.dataset.derived = '1';
+    }
     calculate();
   });
 
   els.motorKV.addEventListener('input', () => { motorSelect.value = ''; });
+
+  // Typing in the weight box means it was weighed — drop the estimate label.
+  // Registered before the generic recalc loop at the bottom of init so the flag
+  // is already cleared by the time calculate() reads it.
+  els.weight.addEventListener('input', () => { delete els.weight.dataset.derived; });
 
   // Video system feeds the dry-weight model, so changing it re-derives the
   // weight from the selected motor exactly as picking a motor would.
   function reDeriveDryWeight() {
     const opt = motorSelect.options[motorSelect.selectedIndex];
     const w = opt ? opt.getAttribute('data-weight') : null;
-    if (w) els.weight.value = (parseFloat(w) * 4 + currentFrameBaseWeight().grams).toFixed(1);
+    if (w) {
+      els.weight.value = (parseFloat(w) * 4 + currentFrameBaseWeight().grams).toFixed(1);
+      els.weight.dataset.derived = '1';
+    }
   }
   function updateVideoHint() {
     if (!els.videoHint) return;
@@ -620,13 +640,73 @@
     return { multiplier: Math.max(0.6, 1 - 0.4 * t * t), band, t };
   }
 
+  // ===== DRY WEIGHT: no default, on purpose =====
+  // This is the highest-leverage input on the page. It sets AUW, AUW divides
+  // thrust for T:W (50% of the composite), and it drives the weightScore
+  // multiplier that scales the whole score including the KV bonus. A preset
+  // here is indistinguishable from a measurement once it is sitting in the box,
+  // and every class preset we could pick is wrong for some real build in that
+  // class — the 75mm preset alone put every default build 6g over its own
+  // WEIGHT_BANDS ideal and silently cost x0.856. It is also the one input a
+  // scale settles in ten seconds. So the field ships blank and the calculator
+  // refuses to produce numbers until it is filled.
+  //
+  // Returns null when unset/unparseable — callers must handle that, NOT
+  // substitute a fallback. The old `parseFloat(...) || 1` turned blank into 1g,
+  // which clamped to 14g and rendered a full set of confident wrong results.
+  function dryWeightInput() {
+    const raw = els.weight.value;
+    if (raw === null || String(raw).trim() === '') return null;
+    const n = parseFloat(raw);
+    if (!isFinite(n) || n <= 0) return null;
+    return clampRange(n, ...WHOOP_RANGES.weight);
+  }
+
+  // Blank every derived readout and tell the user why. Nagging beats a silent
+  // wrong number: an empty OSD is obviously incomplete, a plausible one is not.
+  const AWAIT_WEIGHT_MSG = 'Enter the dry weight above to calculate — no default is assumed, because a guessed weight changes every number below.';
+  function showAwaitingWeight() {
+    const dash = '<span class="unit">—</span>';
+    els.totalThrust.innerHTML  = dash;
+    els.benchTw.innerHTML      = dash;
+    els.thrustWeight.innerHTML = dash;
+    els.flightTime.innerHTML   = dash;
+    els.thrustSub.textContent  = 'Awaiting dry weight';
+    els.benchSub.textContent   = 'Awaiting dry weight';
+    els.twRating.textContent   = '—';
+    els.thrustWeight.classList.remove('warn');
+    els.twCeilingBadge.hidden  = true;
+    if (els.flightSub) {
+      els.flightSub.textContent = 'Awaiting dry weight';
+      els.flightSub.classList.remove('measured');
+    }
+    document.getElementById('buildScoreNum').textContent   = '—';
+    document.getElementById('buildPersonality').textContent = 'WEIGH IT FIRST';
+    document.getElementById('buildScoreClass').textContent  = 'scored within ' + currentFrame + 'mm class';
+    document.getElementById('buildScoreBar').style.width    = '0%';
+    const wEl = document.getElementById('buildScoreWeight');
+    if (wEl) { wEl.textContent = ''; wEl.classList.remove('penalized', 'floored'); }
+    const auwValEl = document.getElementById('auwValue');
+    if (auwValEl) auwValEl.innerHTML = dash;
+    const auwSubEl = document.getElementById('auwBreakdown');
+    if (auwSubEl) auwSubEl.textContent = 'dry weight not set';
+    const auwEl = document.getElementById('auwReadout');
+    if (auwEl) { auwEl.textContent = AWAIT_WEIGHT_MSG; auwEl.classList.add('warn'); }
+  }
+
   function calculate() {
     const kv       = clampRange(parseFloat(els.motorKV.value)   || 0, ...WHOOP_RANGES.kv);
     const cells    = clampRange(parseFloat(els.cells.value)     || 1, ...WHOOP_RANGES.cells);
     const capacity = clampRange(parseFloat(els.capacity.value)  || 0, ...WHOOP_RANGES.capacity);
     const pitch    = clampRange(parseFloat(els.propPitch.value) || 0, ...WHOOP_RANGES.pitch);
-    const dryWeight = clampRange(parseFloat(els.weight.value)   || 1, ...WHOOP_RANGES.weight);
+    const dryWeight = dryWeightInput();
     const cRating  = clampRange(parseFloat(els.packC.value)     || 0, ...WHOOP_RANGES.cRating);
+    if (dryWeight === null) {
+      showAwaitingWeight();
+      compareCalculate();
+      writeUrlParams();
+      return;
+    }
     // AUW = dry weight + real pack weight. TWR, the build score, and the
     // wheelie warning all key off this; omitting the pack inflated TWR ~30%.
     const packG = packWeightG(capacity, cells);
@@ -638,10 +718,16 @@
       const floors = { 65: 20, 75: 30, 85: 40 };
       const floor = floors[currentFrame] || 0;
       let text = `AUW used: ${auw.toFixed(1)}g = ${dryWeight.toFixed(1)}g dry + ${packG.toFixed(1)}g pack (${capacity.toFixed(0)}mAh ${cells}S)`;
+      // Picking a motor fills the dry weight from 4x its catalogue mass plus the
+      // frame base. That is an ESTIMATE the user opted into, not a measurement,
+      // and it must say so — the whole point of blanking the default is that an
+      // unlabelled number in this box gets read as a scale reading.
+      const derived = els.weight.dataset.derived === '1';
+      if (derived) text += ' — dry weight ESTIMATED from motor + frame base, not weighed';
       const light = auw < floor;
       if (light) text += ` — check weights: under ${floor}g is unusually light for a ${currentFrame}mm build`;
       auwEl.textContent = text;
-      auwEl.classList.toggle('warn', light);
+      auwEl.classList.toggle('warn', light || derived);
     }
 
     els.totalThrust.innerHTML = s.totalThrust.toFixed(0) + '<span class="unit">g</span>';
@@ -760,12 +846,14 @@
     const cells    = clampRange(parseFloat(els.cells.value)     || 1, ...WHOOP_RANGES.cells);
     const capacity = clampRange(parseFloat(els.capacity.value)  || 0, ...WHOOP_RANGES.capacity);
     const pitch    = clampRange(parseFloat(els.propPitch.value) || 0, ...WHOOP_RANGES.pitch);
-    const dryWeight = clampRange(parseFloat(els.weight.value)   || 1, ...WHOOP_RANGES.weight);
+    const dryWeight = dryWeightInput();
     const cRating  = clampRange(parseFloat(els.packC.value)     || 0, ...WHOOP_RANGES.cRating);
-    // Same AUW assembly as the main panel, so the comparison rows agree.
-    const auw = dryWeight + packWeightG(capacity, cells);
-    const sA = (!isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, auw, cRating) : null;
-    const sB = (!isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, auw, cRating) : null;
+    // Same AUW assembly as the main panel, so the comparison rows agree — and
+    // the same refusal to invent a dry weight. Both columns stay dashed until
+    // the weight is entered; setPair renders null as an em dash.
+    const auw = dryWeight === null ? null : dryWeight + packWeightG(capacity, cells);
+    const sA = (auw !== null && !isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, auw, cRating) : null;
+    const sB = (auw !== null && !isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, auw, cRating) : null;
 
     // Optional tierFor(value) returns a colour class for the cell — used by the
     // T:W row, where the number's absolute value matters more than who wins.
@@ -885,7 +973,9 @@
     ['cells', () => els.cells,       v => els.cells.value = v],
     ['mah',   () => els.capacity,    v => els.capacity.value = v],
     ['pitch', () => els.propPitch,   v => els.propPitch.value = v],
-    ['dry',   () => els.weight,      v => els.weight.value = v],
+    // A shared link's dry weight is whatever the sharer put on a scale, so it
+    // arrives unflagged — clear any 'derived' left over from applyPreset order.
+    ['dry',   () => els.weight,      v => { els.weight.value = v; delete els.weight.dataset.derived; }],
     ['c',     () => els.packC,       v => els.packC.value = v],
   ];
   function applyUrlParams() {
@@ -944,7 +1034,9 @@
       els.cells.value     = '1';
       els.capacity.value  = d.mah;
       els.propPitch.value = d.pitch;
+      // Bench rows carry a real scale reading — not derived, not a default.
       els.weight.value    = d.dry;
+      delete els.weight.dataset.derived;
       if (els.videoSystem) els.videoSystem.value = d.video;
       if (els.flightStyle) els.flightStyle.value = 'cruise';
       motorSelect.value = '';
