@@ -48,6 +48,12 @@
   // manufacturer per-motor figures; no thrust/current is stored here, so
   // nothing in this table is a bench-derived performance claim.
   //
+  // `shaft` is OPTIONAL: '1mm' or '1.5mm', and set ONLY where the vendor
+  // states it or the owner confirmed it on a unit in hand. It drives the
+  // prop shaft-mismatch warning. Leave it undefined rather than guessing --
+  // an undefined shaft falls back to a mass heuristic, but a WRONG shaft
+  // silently suppresses or fabricates the warning.
+  //
   // `cells` is OPTIONAL and only set where the motor ships in a known cell
   // configuration that differs from — or needs pinning against — the frame
   // preset. Selecting such a motor drives the cell count, which changes
@@ -89,10 +95,34 @@
       // naming for the Air65 II family) -- do not re-attribute these to the
       // reseller. Weight corrected 1.50 -> 1.59 from the vendor spec table.
       // Source: betafpv.com/products/0702-brushless-motors-2026.
+      // OWNER-MEASURED WEIGHT -- the only row in this table not taken from a
+      // vendor spec, and NOT on the same basis as the rows around it.
+      //
+      // No vendor, retailer, or aggregator publishes a per-motor weight for
+      // this SKU. Four units weighed at 0.01g: 1.43, 1.43, 1.37, 1.43.
+      // Median 1.43 used, not mean: ~0.06g is roughly 10mm of lead across
+      // three phase wires, so the 1.37 outlier is almost certainly a longer
+      // trim cut rather than a lighter motor.
+      //
+      // BASIS DIFFERS FROM EVERY OTHER ROW. These were weighed with leads cut
+      // to 25mm and plugs removed; every other entry is a vendor as-shipped
+      // figure. As-shipped here is probably ~1.58g (BetaFPV publishes a 0.07g
+      // connector delta, and weBLEEDfpv states 40mm stock leads, so about
+      // 15mm x 3 conductors was removed). That ~0.15g/motor is deliberately
+      // NOT applied -- it is an estimate stack, not a measurement.
+      // Consequence: this motor auto-derives a dry weight roughly 0.6g light
+      // against its peers, which flatters T:W and the build score. See the
+      // weight-basis note in PROJECT_NOTES.md.
+      //
+      // Units are old stock, bought before the current listing. weBLEEDfpv
+      // revises SKUs (a 0702 SPECIAL EDITION V2 ships alongside a V1), so
+      // current production may differ. 1mm shaft confirmed by owner --
+      // a distinct SKU from the 1.5mm SCREAMERS.
+      { name: 'weBLEEDfpv SCREAMERS 0702 (1mm)', kv: 32500, propPitch: 0.7, weightPerMotor: 1.43, shaft: '1mm' },
       { name: 'BetaFPV 0702 Champion (2026)', kv: 36000, propPitch: 0.7, weightPerMotor: 1.59 }, // 2026, dual-ball bearings
       // Vendor advises ~10 min rest between packs; continuous back-to-back
       // flights risk ESC damage at this KV.
-      { name: 'weBLEEDfpv SKRRRT 0702',      kv: 40000, propPitch: 0.7, weightPerMotor: 1.60 },
+      { name: 'weBLEEDfpv SKRRRT 0702',      kv: 40000, propPitch: 0.7, weightPerMotor: 1.60, shaft: '1mm' }, // shaft per vendor listing
     ],
     75: [
       { name: 'Happymodel RS0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.80 },
@@ -114,7 +144,7 @@
       // Full vendor title, for searchability: "weBLEEDfpv 0802 (1.5MM) VEGAN aka
       // SKYSCRAPERS 25,000kv w/Knurled Shaft Design". Listed here under the
       // short name pilots actually use.
-      { name: 'weBLEEDfpv Skyscrapers 0802', kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 },
+      { name: 'weBLEEDfpv Skyscrapers 0802', kv: 25000, propPitch: 1.1, weightPerMotor: 2.00, shaft: '1.5mm' }, // shaft per vendor title (1.5MM)
       { name: 'Happymodel EX0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { name: 'Tiny Whoop Onesie 0802 Zeus Juice',  kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { name: 'RCinPower GTS V3 0802',       kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
@@ -127,7 +157,7 @@
       { name: 'NewBeeDrone Flow 0802',        kv: 30000, propPitch: 1.1, weightPerMotor: 1.90 },
       // Co-branded with MoeFPV. Vendor title: "weBLEEDfpv (1.5MM) 0802 32,500kv
       // MOEFPV TREETOPPERS w/Knurled Shaft Design".
-      { name: 'weBLEEDfpv x MoeFPV Treetoppers 0802', kv: 32500, propPitch: 1.1, weightPerMotor: 2.10 },
+      { name: 'weBLEEDfpv x MoeFPV Treetoppers 0802', kv: 32500, propPitch: 1.1, weightPerMotor: 2.10, shaft: '1.5mm' }, // shaft per vendor title (1.5MM)
     ],
     85: [
       { name: 'BetaFPV 1103',               kv:  8000, propPitch: 0.9, weightPerMotor: 3.20 },
@@ -330,6 +360,7 @@
       opt.setAttribute('data-pitch', m.propPitch);
       opt.setAttribute('data-weight', m.weightPerMotor);
       if (m.cells) opt.setAttribute('data-cells', m.cells);
+      if (m.shaft) opt.setAttribute('data-motor-shaft', m.shaft);
       opt.textContent = `${m.name}  —  ${m.kv.toLocaleString()} KV`
                       + (m.cells ? `  ·  ${m.cells}S` : '')
                       + (m.benchVerified ? '  ·  ✓ bench-verified' : '');
@@ -400,15 +431,40 @@
     document.getElementById('propShaftWarn').style.display = 'none';
   }
 
+  // Shaft-mismatch warning. Fires when a 1.5mm-bore prop is paired with a
+  // motor known to have a 1mm shaft.
+  //
+  // The motor's `shaft` field is authoritative wherever it is set. Where it
+  // is not, fall back to the original mass heuristic (under 1.6g implies a
+  // 1mm shaft), which is only a proxy and generates false negatives:
+  // weBLEEDfpv SKRRRT 0702 is a 1mm motor at exactly 1.60g, so the heuristic
+  // alone never warned on it. The fallback should shrink as `shaft` gets
+  // populated, and can be deleted once every row carries one.
+  function updateShaftWarn() {
+    const propOpt  = propSelect.options[propSelect.selectedIndex];
+    const motorOpt = motorSelect.options[motorSelect.selectedIndex];
+    const propShaft = propOpt ? (propOpt.getAttribute('data-shaft') || '') : '';
+    // Some props are sold with both bores ('1.0/1.5mm') and fit either shaft,
+    // so only a 1.5mm-ONLY prop can mismatch.
+    const propIs15Only = propShaft.includes('1.5mm') && !propShaft.includes('1.0/');
+    let warn = false;
+    if (propIs15Only && motorOpt) {
+      const motorShaft = motorOpt.getAttribute('data-motor-shaft');
+      if (motorShaft) {
+        warn = motorShaft === '1mm';
+      } else {
+        const motorWeight = parseFloat(motorOpt.getAttribute('data-weight'));
+        warn = !isNaN(motorWeight) && motorWeight < 1.6;
+      }
+    }
+    document.getElementById('propShaftWarn').style.display = warn ? 'block' : 'none';
+  }
+
   propSelect.addEventListener('change', () => {
     const opt = propSelect.options[propSelect.selectedIndex];
     const pitch = opt.getAttribute('data-pitch');
-    const shaft = opt.getAttribute('data-shaft') || '';
     if (pitch) els.propPitch.value = pitch;
-    const motorOpt = motorSelect.options[motorSelect.selectedIndex];
-    const motorWeight = motorOpt ? parseFloat(motorOpt.getAttribute('data-weight')) : NaN;
-    const shaftWarn = shaft.includes('1.5mm') && !isNaN(motorWeight) && motorWeight < 1.6;
-    document.getElementById('propShaftWarn').style.display = shaftWarn ? 'block' : 'none';
+    updateShaftWarn();
     calculate();
   });
 
@@ -526,6 +582,10 @@
 
   motorSelect.addEventListener('change', () => {
     const opt = motorSelect.options[motorSelect.selectedIndex];
+    // The warning depends on BOTH selections, so it has to be re-evaluated
+    // here as well. Previously only the prop handler did it, which left a
+    // stale or missing warning whenever the motor was the second pick.
+    updateShaftWarn();
     const kv = opt.getAttribute('data-kv');
     const pitch = opt.getAttribute('data-pitch');
     const weight = opt.getAttribute('data-weight');

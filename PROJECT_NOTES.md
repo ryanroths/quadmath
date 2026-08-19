@@ -59,10 +59,6 @@ weight. Weight drives AUW, thrust-to-weight, and the build score, so an
 invented figure is worse than an absent entry. Do not re-research these from
 scratch — they need a scale, not another search.
 
-- **weBLEEDfpv SCREAMERS 0702 32500 (1mm)** — no published weight. Checked
-  webleedfpv (both the 1mm and 1.5mm SKUs), wrekd, RaceDayQuads, RotorBuilds.
-  The affiliate link `/go/wb-0702-32k5/` is live for this SKU with no
-  calculator entry behind it.
 - **BetaFPV 0702 Freestyle (2026) 25000** — the weight cell is blank in
   BetaFPV's own 2026 spec table. Champion (1.59g) and Racing (1.50g) are
   populated, Freestyle is not. Same gap on the 0802 Freestyle, which is why
@@ -74,8 +70,33 @@ scratch — they need a scale, not another search.
   mass; 23/4 = 5.75g against an 0802 family range of 1.80-2.10g.
 
 **Unblock condition:** one reading per motor at 0.01g resolution, weighed
-as-shipped with the plug attached, to match how every other `weightPerMotor`
-figure in the table is defined. One number each is enough to add all three.
+as-shipped with leads and plug attached. One number each is enough to add
+both. Use as-shipped rather than the trimmed basis used for the SCREAMERS
+row -- see "Known data-quality issues" below for why that row is the
+exception and not the pattern to copy.
+
+## Known data-quality issues
+
+`motorDB` `weightPerMotor` has no single basis. Rows are a mix of vendor
+as-shipped figures, vendor no-connector figures, and now one owner measurement
+taken with cut leads and no plug. BetaFPV alone publishes both conventions for
+the same motor (1.52g with connector, 1.45g without), and the two VCI rows
+(Spark 1.52, PRO DB 1.49) come from different pages using different
+conventions.
+
+`weightPerMotor` x 4 feeds the derived dry weight, so the inconsistency
+propagates into AUW, thrust-to-weight, and the build score.
+
+The fix is to pick one convention — recommend as-shipped, wires and plug on
+— record the basis per row, and re-source. Not urgent: worst-case spread is
+about 0.15g per motor, roughly 0.6g on a 25g build. But it should not grow, so
+new rows should record their basis even before the back-fill happens.
+
+The clearest current example is `weBLEEDfpv SCREAMERS 0702 (1mm)`, which is
+owner-measured at 1.43g with leads cut to 25mm and plugs off. As-shipped is
+probably ~1.58g. The delta is not applied, because it is an estimate stack
+rather than a measurement, so that motor currently derives a dry weight about
+0.6g light against its peers.
 
 ## Deployment plan (not started)
 
