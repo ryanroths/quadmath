@@ -51,6 +51,32 @@ Working features:
 4. Add more calculators: voltage sag estimator, prop pitch speed reference table,
    battery C-rating headroom check.
 
+## Blocked on measurement
+
+Motors deliberately left out of `motorDB` in `script.js`. Each was researched
+against the vendor, retailers, and aggregators; none publishes a per-motor
+weight. Weight drives AUW, thrust-to-weight, and the build score, so an
+invented figure is worse than an absent entry. Do not re-research these from
+scratch — they need a scale, not another search.
+
+- **weBLEEDfpv SCREAMERS 0702 32500 (1mm)** — no published weight. Checked
+  webleedfpv (both the 1mm and 1.5mm SKUs), wrekd, RaceDayQuads, RotorBuilds.
+  The affiliate link `/go/wb-0702-32k5/` is live for this SKU with no
+  calculator entry behind it.
+- **BetaFPV 0702 Freestyle (2026) 25000** — the weight cell is blank in
+  BetaFPV's own 2026 spec table. Champion (1.59g) and Racing (1.50g) are
+  populated, Freestyle is not. Same gap on the 0802 Freestyle, which is why
+  that entry carries an unsourced 1.90 marked `weight UNSOURCED`. Note that
+  search summaries will happily claim Freestyle matches Racing — that is a
+  misread of the table, the cell is empty.
+- **weBLEEDfpv BORGSLAYER 0802 21500** — no published weight. wrekd's Shopify
+  data exposes `weight: 23`, which is package mass for the 4-pack, not motor
+  mass; 23/4 = 5.75g against an 0802 family range of 1.80-2.10g.
+
+**Unblock condition:** one reading per motor at 0.01g resolution, weighed
+as-shipped with the plug attached, to match how every other `weightPerMotor`
+figure in the table is defined. One number each is enough to add all three.
+
 ## Deployment plan (not started)
 
 - Host as static site — Netlify, Cloudflare Pages, or GitHub Pages (all free, easy).
