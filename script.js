@@ -56,18 +56,27 @@
   const motorDB = {
     65: [
       { name: 'NewBeeDrone 0703 Silver Edition', kv: 16420, propPitch: 0.7, weightPerMotor: 1.90 }, // 2026
-      { name: 'BetaFPV 0702 II',             kv: 23000, propPitch: 0.7, weightPerMotor: 1.50 },
+      // BetaFPV sells this family under two names on one page: the 23K and 27K
+      // are 0702SE II (brass bushings), the 30K is 0702 II (dual ball bearing).
+      // Weights differ per variant and were previously all carried as 1.50.
+      // Source: betafpv.com/products/0702-ii-brushless-motors spec table.
+      { name: 'BetaFPV 0702SE II',           kv: 23000, propPitch: 0.7, weightPerMotor: 1.45 },
       { name: 'Happymodel SE0702',            kv: 23000, propPitch: 0.7, weightPerMotor: 1.46 },
       { name: 'VCI Spark 0702',              kv: 25000, propPitch: 0.7, weightPerMotor: 1.52 },
       { name: 'Happymodel SE0702',            kv: 26000, propPitch: 0.7, weightPerMotor: 1.46 },
-      { name: 'BetaFPV 0702 II',             kv: 27000, propPitch: 0.7, weightPerMotor: 1.50 },
+      { name: 'BetaFPV 0702SE II',           kv: 27000, propPitch: 0.7, weightPerMotor: 1.47 },
       { name: 'VCI Spark 0702',              kv: 27000, propPitch: 0.7, weightPerMotor: 1.52 },
       { name: 'NewBeeDrone Flow 0702 (dual ball bearing)', kv: 27000, propPitch: 0.7, weightPerMotor: 1.60 }, // 2026
       { name: 'Happymodel SE0702',            kv: 28000, propPitch: 0.7, weightPerMotor: 1.46, benchVerified: true }, // mobula6-2024-hdzero-se0702-28k.json
       { name: 'NewBeeDrone Flow 0702',        kv: 29000, propPitch: 0.7, weightPerMotor: 1.58 },
       { name: 'VCI Spark 0702',              kv: 29000, propPitch: 0.7, weightPerMotor: 1.52 },
-      { name: 'BetaFPV 0702 II',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.50 },
-      { name: 'BetaFPV 0702 2026 Edition',   kv: 30000, propPitch: 0.7, weightPerMotor: 1.50 }, // 2026, 0.10mm stator laminations
+      { name: 'BetaFPV 0702 II',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.55 },
+      // Name collision worth keeping straight: BetaFPV states the 0702 II 30000KV
+      // is the same motor that shipped in the limited-edition first-gen Air65
+      // "Champion Version". So "Champion" means 0702 II 30K on the old Air65, and
+      // 0702 2026 36K on the Air65 II. Year + trim in the label is what separates
+      // them; do not collapse these into a single "Champion" entry.
+      { name: 'BetaFPV 0702 Racing (2026)',  kv: 30000, propPitch: 0.7, weightPerMotor: 1.50 }, // 2026, 0.10mm stator laminations; 1.50g per betafpv.com 0702 2026 spec table
       // VCI 0702 PRO DB — a SEPARATE line from VCI Spark 0702 above, not a
       // relabel: Spark is the 22-29K dual-bearing series at 1.52g, PRO DB is
       // 30K only. Both kept. 1.49g is the vendor figure (weBLEEDfpv product
@@ -75,30 +84,50 @@
       // out of family for any 0702 and is not used. Flown in
       // data/bench/air65-analog-vci0702-30k.json.
       { name: 'VCI 0702 PRO DB',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.49, benchVerified: true }, // 2026, air65-analog-vci0702-30k.json
-      { name: 'weBLEEDfpv Champion 0702',    kv: 36000, propPitch: 0.7, weightPerMotor: 1.50 }, // 2026
+      // BetaFPV product, not a weBLEEDfpv house motor. weBLEEDfpv resells the
+      // BetaFPV 2026 trims (Champion/Racing/Freestyle is BetaFPV's own trim
+      // naming for the Air65 II family) -- do not re-attribute these to the
+      // reseller. Weight corrected 1.50 -> 1.59 from the vendor spec table.
+      // Source: betafpv.com/products/0702-brushless-motors-2026.
+      { name: 'BetaFPV 0702 Champion (2026)', kv: 36000, propPitch: 0.7, weightPerMotor: 1.59 }, // 2026, dual-ball bearings
+      // Vendor advises ~10 min rest between packs; continuous back-to-back
+      // flights risk ESC damage at this KV.
       { name: 'weBLEEDfpv SKRRRT 0702',      kv: 40000, propPitch: 0.7, weightPerMotor: 1.60 },
     ],
     75: [
       { name: 'Happymodel RS0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.80 },
       { name: 'Happymodel EX0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.80 },
+      { name: 'Happymodel SE0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.90 }, // 1.9g per happymodel.cn SE0802 spec list
       { name: 'NewBeeDrone Flow 0802',        kv: 19000, propPitch: 1.1, weightPerMotor: 1.90 },
       { name: 'Tiny Whoop Onesie 0802 Boost Juice', kv: 19000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { name: 'RCinPower GTS V3 0802',       kv: 22000, propPitch: 1.1, weightPerMotor: 1.90 },
       { name: 'Tiny Whoop Onesie 0802 Deuce Juice', kv: 22000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
-      { name: 'BetaFPV 0802 2026 Edition',   kv: 22000, propPitch: 1.1, weightPerMotor: 1.90 }, // 2026
+      // BetaFPV publishes no weight for the 0802 Freestyle trim -- the 2026 spec
+      // table fills in Champion and Racing only. 1.90 is the pre-existing
+      // in-family figure, carried forward unsourced rather than invented.
+      { name: 'BetaFPV 0802 Freestyle (2026)', kv: 22000, propPitch: 1.1, weightPerMotor: 1.90 }, // 2026, weight UNSOURCED
       { name: 'iFlight XING NANO X0802',     kv: 22000, propPitch: 1.1, weightPerMotor: 2.00 },
       { name: 'BetaFPV 0802SE',              kv: 23000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { name: 'BetaFPV 0802 Racing (2026)',  kv: 25000, propPitch: 1.1, weightPerMotor: 1.88 }, // 2026, brass bushings; 1.88g per betafpv.com 0802 2026 spec table
       { name: 'NewBeeDrone Flow 0802',        kv: 25000, propPitch: 1.1, weightPerMotor: 1.90 },
       { name: 'Happymodel RS0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 1.80 },
+      // Full vendor title, for searchability: "weBLEEDfpv 0802 (1.5MM) VEGAN aka
+      // SKYSCRAPERS 25,000kv w/Knurled Shaft Design". Listed here under the
+      // short name pilots actually use.
       { name: 'weBLEEDfpv Skyscrapers 0802', kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 },
       { name: 'Happymodel EX0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { name: 'Tiny Whoop Onesie 0802 Zeus Juice',  kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { name: 'RCinPower GTS V3 0802',       kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { name: 'NewBeeDrone Flow 0802',        kv: 27000, propPitch: 1.1, weightPerMotor: 1.90 },
       { name: 'RCinPower GTS V3 0802',       kv: 27000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
-      { name: 'weBLEEDfpv Champion 0802',    kv: 28000, propPitch: 1.1, weightPerMotor: 1.90 }, // 2026
+      // BetaFPV product, not a weBLEEDfpv house motor -- see the 0702 Champion
+      // note above. Weight corrected 1.90 -> 1.95 from the vendor spec table.
+      // Source: betafpv.com/products/0802-brushless-motors-2026.
+      { name: 'BetaFPV 0802 Champion (2026)', kv: 28000, propPitch: 1.1, weightPerMotor: 1.95 }, // 2026, dual-ball bearings
       { name: 'NewBeeDrone Flow 0802',        kv: 30000, propPitch: 1.1, weightPerMotor: 1.90 },
-      { name: 'weBLEEDfpv Treetoppers 0802', kv: 32500, propPitch: 1.1, weightPerMotor: 2.10 },
+      // Co-branded with MoeFPV. Vendor title: "weBLEEDfpv (1.5MM) 0802 32,500kv
+      // MOEFPV TREETOPPERS w/Knurled Shaft Design".
+      { name: 'weBLEEDfpv x MoeFPV Treetoppers 0802', kv: 32500, propPitch: 1.1, weightPerMotor: 2.10 },
     ],
     85: [
       { name: 'BetaFPV 1103',               kv:  8000, propPitch: 0.9, weightPerMotor: 3.20 },
