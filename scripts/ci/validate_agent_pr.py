@@ -18,6 +18,8 @@ Standard library only.
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import os
 import posixpath
@@ -153,13 +155,15 @@ class PageParser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.stack: list[tuple[str, int]] = []
         self.structure_errors: list[tuple[int, str]] = []
-        self.inline_scripts: list[int] = []
+        self.inline_scripts: list[tuple[int, str]] = []  # line, raw body
         self.script_srcs: list[tuple[int, str]] = []
         self.meta_descriptions: list[str] = []
         self.links: list[tuple[int, str, str]] = []  # line, attr, url
         self.jsonld_blocks: list[tuple[int, str]] = []  # line, raw body
         self._ld_open: int | None = None
         self._ld_chunks: list[str] = []
+        self._inline_open: int | None = None
+        self._inline_chunks: list[str] = []
 
     # -- structure ---------------------------------------------------------
 
@@ -202,14 +206,22 @@ class PageParser(HTMLParser):
         self._collect(tag, dict(attrs))
 
     def handle_data(self, data):
+        # HTMLParser switches to CDATA mode inside <script>, so this is the raw
+        # body with no entity conversion -- which is what has to be hashed.
         if self._ld_open is not None:
             self._ld_chunks.append(data)
+        elif self._inline_open is not None:
+            self._inline_chunks.append(data)
 
     def handle_endtag(self, tag):
         if tag == "script" and self._ld_open is not None:
             self.jsonld_blocks.append((self._ld_open, "".join(self._ld_chunks)))
             self._ld_open = None
             self._ld_chunks = []
+        elif tag == "script" and self._inline_open is not None:
+            self.inline_scripts.append((self._inline_open, "".join(self._inline_chunks)))
+            self._inline_open = None
+            self._inline_chunks = []
         if tag in VOID_TAGS:
             return
         open_names = [name for name, _ in self.stack]
@@ -232,6 +244,11 @@ class PageParser(HTMLParser):
 
     def close(self):
         super().close()
+        # An unterminated <script> still has to be reported, not dropped.
+        if self._inline_open is not None:
+            self.inline_scripts.append((self._inline_open, "".join(self._inline_chunks)))
+            self._inline_open = None
+            self._inline_chunks = []
         for name, opened_at in self.stack:
             if name not in OPTIONAL_END_TAGS:
                 self.structure_errors.append(
@@ -258,7 +275,10 @@ class PageParser(HTMLParser):
                 self._ld_open = line
                 self._ld_chunks = []
             else:
-                self.inline_scripts.append(line)
+                # Body captured on the closing tag so it can be hashed against
+                # html_checks.allow_inline_script_hashes.
+                self._inline_open = line
+                self._inline_chunks = []
             return
         if tag == "meta":
             if (attrs.get("name") or "").strip().lower() == "description":
@@ -293,6 +313,33 @@ def is_external(url: str) -> bool:
     return url.startswith("//") or bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", url))
 
 
+def inline_script_hash(body: str) -> str:
+    """CSP-style `sha256-<base64>` for an inline script's text content.
+
+    Two normalisations, and only two:
+
+    * line endings are folded to LF. These files are CRLF in the working tree
+      and LF in the object store, so without this the same script hashes two
+      ways depending on where the check runs -- a check that passes on CI and
+      fails on a maintainer's laptop is worse than no check.
+    * leading and trailing whitespace is stripped, so reindenting a page does
+      not break the build over a pinned script nobody touched.
+
+    INTERNAL whitespace is left exactly as written. Collapsing it would let two
+    different scripts hash the same, and the space between tokens is precisely
+    where something could be slipped in.
+
+    The tag and its attributes are not hashed -- only the body -- which matches
+    what a CSP `script-src 'sha256-...'` covers. For a script whose source has
+    no surrounding whitespace (the pinned one below is a single line inside its
+    tags), the value here is byte-for-byte the value a browser computes, so it
+    can be pasted straight into a real CSP header.
+    """
+    normalized = body.replace("\r\n", "\n").replace("\r", "\n").strip()
+    digest = hashlib.sha256(normalized.encode("utf-8")).digest()
+    return "sha256-" + base64.b64encode(digest).decode("ascii")
+
+
 def check_html(path: str, text: str, policy: dict, tracked: set[str], repo_root: str) -> None:
     html_checks = policy.get("html_checks") or {}
     link_checks = policy.get("link_checks") or {}
@@ -309,8 +356,32 @@ def check_html(path: str, text: str, policy: dict, tracked: set[str], repo_root:
         violation("HTML: " + message, path, line)
 
     if html_checks.get("forbid_inline_script", True):
-        for line in parser.inline_scripts:
-            violation("HTML: inline <script> is forbidden", path, line)
+        # Exact-content allowlist. The hash IS the identity: a pinned script can
+        # keep its exemption only for as long as it stays character-for-character
+        # what a human reviewed. One edit and it is an unknown script again.
+        #
+        # Deliberately NOT keyed on type or on filename. allow_jsonld can be,
+        # because JSON-LD is inert data a browser never executes; these are
+        # executable, and a per-type or per-file rule would exempt *any* inline
+        # script in the blast radius -- the hole this check exists to close.
+        # Absent key means an empty allowlist, so the blanket ban is the default.
+        allowed_hashes = html_checks.get("allow_inline_script_hashes") or {}
+        for line, body in parser.inline_scripts:
+            digest = inline_script_hash(body)
+            if digest in allowed_hashes:
+                notice(
+                    "%s:%d inline <script> allowed by pinned hash %s"
+                    % (path, line, digest)
+                )
+                continue
+            violation(
+                "HTML: inline <script> is forbidden (computed %s). If this "
+                "script is legitimate, a human reviewer can pin it by adding "
+                "that hash to html_checks.allow_inline_script_hashes with a "
+                "note on why it has to be inline." % digest,
+                path,
+                line,
+            )
         # JSON-LD is the one inline script the SEO setup depends on, so it is
         # exemptable -- but only when it actually parses. An exemption that let
         # through a broken structured-data block would be worse than no
