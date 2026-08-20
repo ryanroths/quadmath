@@ -98,6 +98,25 @@
       <ul id="tunePendingList"></ul>
     </details>
 
+    <!-- Submission CTA. Sits directly under the pending list on purpose: that
+         list is the moment a reader finds out their combo has no published
+         numbers, which is the only moment they have a reason to send one in.
+
+         No .reveal — this can sit above the fold on desktop, and PR #78
+         removed scroll-reveal from above-the-fold content to stop it holding
+         up the LCP paint.
+
+         The inline margin is here rather than in style.css because a bare
+         .frame-card carries no top margin and .tune-pending carries no bottom
+         one, so without it the two bordered boxes render flush and read as a
+         layout bug. 20px is the gap .frame-grid already uses below. -->
+    <div class="frame-card" style="margin-top:20px">
+      <div class="frame-card-title">Your combo not here?</div>
+      <span class="frame-card-tag">Contribute</span>
+      <p class="frame-note">Paste your Betaflight diff all and the PIDs, rates, and filter settings are read straight out of it — no retyping numbers. The rest is a few questions the diff can't answer: motor, prop, and how it actually flies. Every submission is read by a person before anything goes on this page.</p>
+      <a class="sim-launch-btn" href="https://github.com/ryanroths/quadmath/issues/new?template=tune-submission.yml" target="_blank" rel="noopener">SUBMIT A TUNE</a>
+    </div>
+
     <div class="frame-grid">
       <div class="frame-card">
         <div class="frame-card-title">Build Calculator</div>
