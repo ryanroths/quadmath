@@ -1,0 +1,89 @@
+name: Tune submission
+description: Share a Betaflight tune for the QuadMath tune database
+title: "[Tune] "
+labels: ["tune-submission", "needs-review"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for contributing. Most of what's needed is already inside your
+        `diff all` — paste it and the rest gets filled in automatically.
+
+        **Before you paste:** run `diff all`, not `dump`. A `dump` includes
+        every default and can't be parsed. Then read the output for anything
+        personal — `craft_name` especially — and scrub it.
+
+  - type: dropdown
+    id: frame
+    attributes:
+      label: Frame size
+      options:
+        - 65mm
+        - 75mm
+        - 85mm
+    validations:
+      required: true
+
+  - type: input
+    id: motor
+    attributes:
+      label: Motor
+      description: Brand, stator size, KV. Not in the diff — has to come from you.
+      placeholder: VCI 0702 PRO DB 30000KV
+    validations:
+      required: true
+
+  - type: input
+    id: prop
+    attributes:
+      label: Prop
+      description: Model, size, blade count, shaft bore.
+      placeholder: Gemfan 1219S 31mm 3-blade, 1mm bore
+    validations:
+      required: true
+
+  - type: textarea
+    id: diff
+    attributes:
+      label: Betaflight diff all
+      description: Full output. Don't trim it — the filter and rate lines matter.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: flies
+    attributes:
+      label: How does it fly?
+      description: >
+        The part no dump can tell us. Propwash, throttle feel, what it's good
+        at and what it isn't. Be honest about the weaknesses — a tune with
+        stated tradeoffs is more useful than one claimed perfect.
+    validations:
+      required: true
+
+  - type: input
+    id: packs
+    attributes:
+      label: Roughly how many packs on this tune?
+      placeholder: "20"
+    validations:
+      required: true
+
+  - type: input
+    id: pilot
+    attributes:
+      label: Credit as
+      description: Handle for the tune card. Leave blank to stay anonymous.
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirm
+      options:
+        - label: I have actually flown this tune, not just typed it out.
+          required: true
+        - label: I scrubbed anything personal from the diff.
+          required: true
+        - label: I'm OK with this being published on quadmath.com with credit as above.
+          required: true

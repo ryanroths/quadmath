@@ -3,7 +3,9 @@
   "max_changed_lines": 200,
   "max_changed_files": 12,
   "max_new_files": 6,
+  "_allow_paths_comment": "tune-database.js is the one executable file on this list. scripts/agent/ingest_tunes.py appends community tune entries to its TUNES array, and the array is the source of truth for the cards, so there is nowhere else for an entry to go on a site with no backend. Three things bound it: the entry is written through tune_db.render_entry, which emits every string via json.dumps and refuses keys outside the known schema; max_changed_lines caps how much of the file one PR can touch; and the PR is still a proposal that a human merges. Widening this list further -- especially to script.js, quadphysics.js, or a glob -- is not a policy tweak, it is handing the agent the site's behaviour.",
   "allow_paths": [
+    "tune-database.js",
     "data/tunes/*.json",
     "data/gear/*.json",
     "data/builds/*.json",

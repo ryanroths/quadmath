@@ -7,6 +7,13 @@
  * one collapsed line at the bottom of the page rather than an empty card, so
  * the grid never shows a tune that does not exist.
  *
+ * `source` is who the tune came from and it is the card's whole provenance
+ * signal, so it is never inferred: 'RyFly' and 'Stock' are first-party and
+ * reserved, and a community submission carries the pilot's handle (or
+ * 'Community' when they asked to stay anonymous) plus sourceType:'community'.
+ * scripts/parse_tune_diff.py refuses to let a submitter claim a reserved
+ * name; sourceClass() below is what the badge and the filter chips read.
+ *
  * pids/rates are [roll, pitch, yaw] rows of three columns:
  *   pids  -> [P, I, D]
  *   rates -> [RC rate, Super rate, Expo]
@@ -183,10 +190,22 @@
     { frame: 85, brand: 'NewBeeDrone', source: 'RyFly', reason: 'tune in testing' },
   ];
 
+  // Provenance class, as opposed to the display source. A community tune's
+  // source is the pilot's handle, which is one value per submitter and so
+  // useless as a filter chip -- this collapses them onto one chip while the
+  // card keeps showing who actually sent it.
+  var FIRST_PARTY = ['RyFly', 'Stock'];
+
+  function sourceClass(tune) {
+    if (tune.sourceType === 'community') return 'Community';
+    return FIRST_PARTY.indexOf(tune.source) === -1 ? 'Community' : tune.source;
+  }
+
   var FILTERS = [
     { key: 'frame',  label: 'Frame',  values: [65, 75, 85] },
     { key: 'brand',  label: 'Brand',  values: ['BetaFPV', 'Happymodel', 'NewBeeDrone'] },
-    { key: 'source', label: 'Source', values: ['Stock', 'RyFly'] },
+    { key: 'source', label: 'Source', values: ['Stock', 'RyFly', 'Community'],
+      valueOf: sourceClass },
   ];
 
   var AXES = [
@@ -249,9 +268,13 @@
   }
 
   function cardHtml(tune) {
-    var badgeClass = tune.source === 'RyFly' ? 'tune-badge ryfly' : 'tune-badge';
+    var provenance = sourceClass(tune);
+    var badgeClass = 'tune-badge';
+    if (provenance === 'RyFly') badgeClass += ' ryfly';
+    else if (provenance === 'Community') badgeClass += ' community';
     var html = '<article class="tune-card" data-frame="' + tune.frame +
-               '" data-brand="' + esc(tune.brand) + '" data-source="' + esc(tune.source) + '">';
+               '" data-brand="' + esc(tune.brand) + '" data-source="' + esc(tune.source) +
+               '" data-provenance="' + esc(provenance) + '">';
 
     html += '<header class="tune-card-head">';
     html += '<div class="tune-card-top">';
@@ -260,6 +283,17 @@
     html += '</div>';
     html += '<h3 class="tune-card-fc">' + esc(tune.fc) + '</h3>';
     if (tune.combo) html += '<p class="tune-card-combo">' + esc(tune.combo) + '</p>';
+    // Provenance, spelled out rather than left to the badge. Someone deciding
+    // whether to flash this needs to know whether it was measured on RyFly's
+    // bench or arrived through a form, and the difference has to be legible
+    // on the card itself -- not in a page footnote nobody scrolls to.
+    if (provenance === 'Community') {
+      html += '<p class="tune-card-provenance">' +
+              (tune.source === 'Community'
+                ? 'Submitted anonymously, parsed from the'
+                : 'Submitted by ' + esc(tune.source) + ', parsed from their') +
+              ' Betaflight diff. Not flown or bench-verified here.</p>';
+    }
     html += '</header>';
 
     html += gridBlock('PIDs', ['P', 'I', 'D'], AXES.map(function (axis) {
@@ -293,7 +327,8 @@
   function matches(tune) {
     return FILTERS.every(function (group) {
       var picked = active[group.key];
-      return picked.size === 0 || picked.has(String(tune[group.key]));
+      var value = group.valueOf ? group.valueOf(tune) : tune[group.key];
+      return picked.size === 0 || picked.has(String(value));
     });
   }
 
@@ -408,5 +443,7 @@
   });
 
   // Exposed for verification and for any future page that wants the same data.
-  window.QuadMathTunes = { tunes: TUNES, pending: PENDING, cliFor: cliFor };
+  window.QuadMathTunes = {
+    tunes: TUNES, pending: PENDING, cliFor: cliFor, sourceClass: sourceClass,
+  };
 })();
