@@ -1,8 +1,19 @@
 name: Agent Signals
 
-# Runs the signal collector's tests, including the fixture pin on script.js.
-# A reformat of the calculator's component lists breaks this job rather than
-# silently reducing the collector to reporting zero gaps.
+# Two jobs, deliberately separate rather than two steps in one.
+#
+# collector-tests runs the signal collector's tests, including the fixture pin
+# on script.js. A reformat of the calculator's component lists breaks this job
+# rather than silently reducing the collector to reporting zero gaps.
+#
+# gate-tests runs the agent gate's own tests. Steps fail fast, so a step added
+# after the collector's would not run at all while that script.js pin is red --
+# and the gate's tests are the last thing that should be waiting on an
+# unrelated fixture. Separate jobs run independently and report separately.
+#
+# Neither the workflow name, the file name, nor the collector-tests job name
+# may change: branch protection Rulesets reference required checks by string,
+# and a rename detaches the requirement without saying so.
 
 on:
   pull_request:
@@ -47,3 +58,27 @@ jobs:
             --ref "origin/$BASE" \
             --out "$RUNNER_TEMP/signals.json"
           python -c "import json,sys; d=json.load(open('$RUNNER_TEMP/signals.json')); print('rows:', d['counts']['total'])"
+
+  gate-tests:
+    name: Test agent gate
+    runs-on: ubuntu-latest
+
+    steps:
+      # Shallow is enough: these tests call check_html directly and never read
+      # a base ref or build a scratch repo, unlike the collector's fixtures.
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # scripts/ci/validate_agent_pr.py is what stands between a community tune
+      # submission and executable JavaScript on the site. Its tests cover the
+      # path allow/deny lists, forbid_inline_script, the JSON-LD carve-out and
+      # the hash-pinned inline-script allowlist -- and until now nothing ran
+      # them, so a refactor of the validator could leave CI green while the
+      # gate quietly stopped gating.
+      - name: Run agent gate tests
+        run: python -m unittest discover -s scripts/ci -p 'test_*.py' -v
