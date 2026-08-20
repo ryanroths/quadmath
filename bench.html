@@ -91,7 +91,16 @@
 
 <div class="container">
 
-  <section class="section reveal" id="bench">
+  <!-- No .reveal on the first section on purpose. Scroll-reveal on an element
+       that is already inside the viewport has no visual effect anyway: the
+       observer fires immediately on load, so the element goes from hidden to
+       shown in the same frame the user would have seen it in regardless. The
+       animation is only meaningful for content scrolled into view. Removing it
+       costs nothing visually and lets the LCP element paint without waiting on
+       deferred JS — with .reveal here the browser could not record LCP until
+       motion.js had loaded, parsed and run its observer. Every later section
+       keeps .reveal. -->
+  <section class="section" id="bench">
     <h2>Bench Data</h2>
     <p class="sub">
       The calculator is a model. This page is not. Every number here was measured — builds
@@ -380,7 +389,11 @@
 </footer>
 
 <script src="nav.js" defer></script>
-<script src="motion.js" defer></script>
+<!-- onerror is the one failure this file cannot cover from the inside: if
+     motion.js never loads (404, offline, blocked), the .js-motion flag set
+     in the head has nothing left to lift it and every .reveal section stays
+     at opacity 0 forever. Dropping the flag here shows them unanimated. -->
+<script src="motion.js" defer onerror="document.documentElement.classList.remove('js-motion')"></script>
 
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
