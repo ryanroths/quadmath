@@ -1022,6 +1022,27 @@
     background: rgba(255,77,26,.1);
     border-color: rgba(255,77,26,.35);
   }
+  /* Community submissions. Full-strength text rather than --muted, because
+     this badge carries a pilot handle that has to be readable, and a dashed
+     border to mark it as unverified without adding a colour to a palette
+     where orange already means RyFly and green already means measured. */
+  .tune-badge.community {
+    color: var(--text);
+    background: rgba(232,230,225,.07);
+    border-style: dashed;
+  }
+  /* The disclosure under the card header. Orange rule because this is the
+     prop-warning cue: it is the line that tells a reader the numbers below
+     were not measured here before they decide to flash them. */
+  .tune-card-provenance {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--muted);
+    margin-top: 6px;
+    padding-left: 8px;
+    border-left: 2px solid rgba(255,77,26,.45);
+    overflow-wrap: anywhere;
+  }
   .tune-card-fc {
     font-family: 'Space Grotesk', sans-serif;
     font-size: 0.875rem;

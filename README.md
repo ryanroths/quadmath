@@ -20,6 +20,25 @@ Part of the site's content is produced by an autonomous pipeline that runs on a 
 
 1. `scripts/agent/collect_signals.py` reads the site **from `origin/main`** (never the working tree — a pull request cannot manufacture its own signals) and emits a ranked list of content gaps: builds the calculator offers with no coverage, missing metadata, and similar.
 2. `scripts/agent/generate_content.py` picks one gap, generates a fix via the Anthropic API, validates it, and opens a pull request. A human reviews every PR before merge.
+3. `scripts/agent/ingest_tunes.py` turns approved community tune submissions into pull requests: it parses the pilot's `diff all` with `scripts/parse_tune_diff.py`, appends the entry to the `TUNES` array in `tune-database.js`, and links the issue.
+
+Both run weekly on a Raspberry Pi, Sunday 09:00, in the `mesh_env` virtualenv:
+
+```cron
+0 9 * * 0 cd ~/quadmath && ~/mesh_env/bin/python scripts/agent/collect_signals.py --ref origin/main --out ~/quadmath_gaps.json && ~/mesh_env/bin/python scripts/agent/generate_content.py --gaps ~/quadmath_gaps.json --root ~/quadmath && ~/mesh_env/bin/python scripts/agent/ingest_tunes.py --root ~/quadmath
+```
+
+### Community tune submissions
+
+Anyone can send a tune through the [issue form](.github/ISSUE_TEMPLATE/tune-submission.yml). What happens to it:
+
+- The form collects the hardware the firmware cannot report — motor, prop, frame size — plus the raw `diff all` and a credit handle.
+- **A human reads it and adds the `approved` label.** Nothing else starts the pipeline. The agent never applies that label; `ingest_tunes.py` raises if asked to, and a test pins it. Submissions are untrusted input from the internet, and a gate the agent can open is not a gate.
+- The parser refuses more than it accepts: a `dump` instead of a `diff` (a dump prints every default, so everything would read as a deliberate choice), PIDs outside 0–255, rates outside the Configurator's range, a truncated diff, a partial rate block. A refusal names the missing `set` lines and writes nothing.
+- Nothing is inferred. A parameter absent from a diff produces no note — the notes on a card are only what the firmware actually reported.
+- The resulting PR goes through the same `agent-gate` job as every other agent PR and still needs a human to merge. Nothing auto-merges.
+
+Community tunes carry the submitter's handle as their `source` (or `Community` when anonymous), a dashed badge rather than the RyFly one, and a line on the card saying so. `RyFly` and `Stock` are reserved: a submitter who types either into the credit field gets `Community` instead. Someone deciding whether to flash a tune should be able to tell from the card whether it was measured here or arrived through a form.
 
 The interesting part is what it **refuses to do**:
 
@@ -39,7 +58,8 @@ quadphysics.js        sim physics module
 tune-database.*       tune DB page + logic
 data/bench/           measured build data (JSON)
 content/guides/       build guides
-scripts/agent/        signal collector + content generator + tests
+scripts/parse_tune_diff.py   Betaflight `diff all` -> one TUNES entry
+scripts/agent/        signal collector + content generator + tune ingest + tests
 scripts/ci/           agent policy (allowlists, schemas, caps)
 go/                   affiliate redirect stubs
 ```
