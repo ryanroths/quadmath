@@ -79,7 +79,10 @@
 </header>
 
 <div class="container">
-  <section class="section reveal" id="tunes">
+  <!-- No .reveal here: this is the first section, above the fold on load, so
+       the reveal has no visual effect and only delays the LCP paint. See the
+       longer note in bench.html. The nested section below keeps .reveal. -->
+  <section class="section" id="tunes">
     <h2>Whoop Tune &amp; PID Database</h2>
     <p class="tune-disclaimer">Starting points only. Motor KV, prop brand, battery C-rating, and frame stiffness all affect how a tune responds. Always bench-test before flying and check motor temps after your first pack. Adjust to your own build — no two whoops fly identically.</p>
 
@@ -151,7 +154,11 @@
 </footer>
 
 <script src="nav.js" defer></script>
-<script src="motion.js" defer></script>
+<!-- onerror is the one failure this file cannot cover from the inside: if
+     motion.js never loads (404, offline, blocked), the .js-motion flag set
+     in the head has nothing left to lift it and every .reveal section stays
+     at opacity 0 forever. Dropping the flag here shows them unanimated. -->
+<script src="motion.js" defer onerror="document.documentElement.classList.remove('js-motion')"></script>
 <script src="tune-database.js"></script>
 
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->

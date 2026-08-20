@@ -528,7 +528,11 @@
 </footer>
 
 <script src="nav.js" defer></script>
-<script src="motion.js" defer></script>
+<!-- onerror is the one failure this file cannot cover from the inside: if
+     motion.js never loads (404, offline, blocked), the .js-motion flag set
+     in the head has nothing left to lift it and every .reveal section stays
+     at opacity 0 forever. Dropping the flag here shows them unanimated. -->
+<script src="motion.js" defer onerror="document.documentElement.classList.remove('js-motion')"></script>
 <script src="script.js"></script>
 
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
