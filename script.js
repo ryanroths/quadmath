@@ -783,7 +783,12 @@
     if (auwEl) { auwEl.textContent = AWAIT_WEIGHT_MSG; auwEl.classList.add('warn'); }
   }
 
-  function calculate() {
+  // evt is the 'input' event when this runs as a listener, and undefined at
+  // every other call site — that is the only signal for whether the URL write
+  // should be debounced, so it is read here rather than tracked in a flag.
+  function calculate(evt) {
+    const t = evt && evt.target;
+    const smooth = !!(t && t.tagName === 'INPUT' && (t.type === 'number' || t.type === 'range'));
     const kv       = clampRange(parseFloat(els.motorKV.value)   || 0, ...WHOOP_RANGES.kv);
     const cells    = clampRange(parseFloat(els.cells.value)     || 1, ...WHOOP_RANGES.cells);
     const capacity = clampRange(parseFloat(els.capacity.value)  || 0, ...WHOOP_RANGES.capacity);
@@ -793,7 +798,7 @@
     if (dryWeight === null) {
       showAwaitingWeight();
       compareCalculate();
-      writeUrlParams();
+      scheduleUrlWrite(!smooth);
       return;
     }
     // AUW = dry weight + real pack weight. TWR, the build score, and the
@@ -916,7 +921,7 @@
     }
 
     compareCalculate();
-    writeUrlParams();   // keep the address bar a shareable link to this build
+    scheduleUrlWrite(!smooth);   // keep the address bar a shareable link to this build
   }
 
   // Comparison-table T:W colour tiers. Same thresholds as the OSD badge.
@@ -1052,11 +1057,16 @@
   }
 
   // ===== Shareable build URLs =====
-  // ?frame=65&kv=28000&cells=1&mah=300&pitch=0.7&dry=19.5&video=hdzero&style=cruise
+  // ?frame=85&kv=11000&mah=550&dry=41.2&video=hdzero
   // Read once on load (overrides the frame preset), written back into the
   // address bar by calculate() via replaceState — so the URL in the bar is
   // always a link to the build on screen. Drop it in a Discord or a YouTube
   // description and the calculator opens pre-filled.
+  //
+  // Only params that differ from the default build are written, so a bare load
+  // leaves the bar on https://quadmath.com/ with no query string at all and a
+  // one-field change gets a one-param link. The read path is unchanged: a full
+  // nine-param URL from an older share still deserialises exactly as before.
   const URL_KEYS = [
     ['kv',    () => els.motorKV,     v => els.motorKV.value = v],
     ['cells', () => els.cells,       v => els.cells.value = v],
@@ -1067,6 +1077,42 @@
     ['dry',   () => els.weight,      v => { els.weight.value = v; delete els.weight.dataset.derived; }],
     ['c',     () => els.packC,       v => els.packC.value = v],
   ];
+
+  // The default build, in URL-key terms — the state a bare load lands on, and
+  // the state applyPreset() restores when a param is absent. Deliberately not a
+  // second source of truth: the four preset-driven keys read straight out of
+  // framePresets (the same numbers applyPreset writes), and the rest read the
+  // DOM's own initial state, so editing a preset or index.html moves the
+  // default with it. Frame-dependent keys are functions of the frame because
+  // "default" means something different per class — an 85mm defaults to 2S, so
+  // a 1S 85mm build is NOT default and has to keep its cells param.
+  const DEFAULT_FRAME = currentFrame;
+  const initialSelectValue = sel => {
+    const o = [...sel.options].find(opt => opt.defaultSelected);
+    return o ? o.value : (sel.options[0] ? sel.options[0].value : '');
+  };
+  const DEFAULTS = {
+    frame: ()  => DEFAULT_FRAME,
+    kv:    f   => framePresets[f].kv,
+    cells: f   => framePresets[f].cells,
+    mah:   f   => framePresets[f].capacity,
+    pitch: f   => framePresets[f].pitch,
+    // Dry weight ships blank on purpose (see dryWeightInput) — '' is its default.
+    dry:   ()  => els.weight.defaultValue,
+    c:     ()  => els.packC.defaultValue,
+    video: ()  => initialSelectValue(els.videoSystem),
+    style: ()  => initialSelectValue(els.flightStyle),
+  };
+  // Compare numerically whenever both sides parse as numbers, so a pitch typed
+  // "1.10" still counts as the 1.1 default instead of bloating the URL. Falls
+  // back to a string compare for the selects and for the blank dry weight.
+  function isDefault(key, value, frame) {
+    const d = DEFAULTS[key](frame);
+    const a = parseFloat(value), b = parseFloat(d);
+    if (isFinite(a) && isFinite(b)) return a === b;
+    return String(value) === String(d);
+  }
+
   function applyUrlParams() {
     const q = new URLSearchParams(location.search);
     if (![...q.keys()].length) return false;
@@ -1095,14 +1141,34 @@
     return any;
   }
   function writeUrlParams() {
+    const frame = String(currentFrame);
     const q = new URLSearchParams();
-    q.set('frame', currentFrame);
+    const put = (key, value) => {
+      if (value === undefined || value === null) return;
+      if (isDefault(key, value, frame)) return;
+      q.set(key, value);
+    };
+    put('frame', frame);
     for (const [key, get] of URL_KEYS) {
-      const el = get(); if (el && el.value !== '') q.set(key, el.value);
+      const el = get(); if (el) put(key, el.value);
     }
-    if (els.videoSystem) q.set('video', els.videoSystem.value);
-    if (els.flightStyle) q.set('style', els.flightStyle.value);
-    try { history.replaceState(null, '', location.pathname + '?' + q.toString() + location.hash); } catch (e) {}
+    if (els.videoSystem) put('video', els.videoSystem.value);
+    if (els.flightStyle) put('style', els.flightStyle.value);
+    const qs = q.toString();
+    const url = location.pathname + (qs ? '?' + qs : '') + location.hash;
+    // replaceState, never pushState: a slider drag or a held spinner would
+    // otherwise stack a back-button entry per frame and trap the user.
+    try { history.replaceState(null, '', url); } catch (e) {}
+  }
+  // Number inputs fire on every keystroke and every spinner tick, so their URL
+  // write is debounced; discrete events (selects, frame buttons, bench rows,
+  // the copy button) flush straight through so the bar is never stale.
+  const URL_WRITE_DELAY = 300;
+  let urlWriteTimer = null;
+  function scheduleUrlWrite(immediate) {
+    if (urlWriteTimer !== null) { clearTimeout(urlWriteTimer); urlWriteTimer = null; }
+    if (immediate) { writeUrlParams(); return; }
+    urlWriteTimer = setTimeout(() => { urlWriteTimer = null; writeUrlParams(); }, URL_WRITE_DELAY);
   }
   // ===== Clickable bench rows =====
   // Clicking a validation-table row loads that measured build into the
@@ -1140,6 +1206,7 @@
 
   const copyBtn = document.getElementById('copyBuildLink');
   if (copyBtn) copyBtn.addEventListener('click', () => {
+    scheduleUrlWrite(true);   // flush a mid-debounce edit so the copied link is current
     navigator.clipboard.writeText(location.href).then(() => {
       copyBtn.textContent = 'LINK COPIED ✓';
       setTimeout(() => { copyBtn.textContent = 'COPY BUILD LINK'; }, 1600);
