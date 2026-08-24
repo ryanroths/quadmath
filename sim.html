@@ -4,18 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QuadMath Sim — FPV Freestyle</title>
-<meta name="description" content="Free browser-based FPV drone simulator with real Betaflight rates, acro and angle mode, 3-lap race courses, ghost replay, and TX16S/EdgeTX radio support. No download — fly in your browser.">
+<meta name="description" content="Free browser-based FPV drone simulator that flies your own Betaflight rates — paste a diff or CLI rates in — with acro and angle mode, 3-lap race courses, ghost replay, and TX16S/EdgeTX radio support. No download — fly in your browser.">
 <meta name="keywords" content="FPV simulator, browser FPV sim, free drone simulator, Betaflight rates simulator, tiny whoop simulator, FPV practice">
 
 <meta property="og:title" content="QuadMath Sim — Free Browser FPV Simulator">
-<meta property="og:description" content="Free browser-based FPV drone simulator with real Betaflight rates, acro and angle mode, 3-lap race courses, ghost replay, and TX16S/EdgeTX radio support. No download — fly in your browser.">
+<meta property="og:description" content="Free browser-based FPV drone simulator that flies your own Betaflight rates — paste a diff or CLI rates in — with acro and angle mode, 3-lap race courses, ghost replay, and TX16S/EdgeTX radio support. No download — fly in your browser.">
 <meta property="og:image" content="https://quadmath.com/og-sim.png">
 <meta property="og:url" content="https://quadmath.com/sim.html">
 <meta property="og:type" content="website">
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="QuadMath Sim — Free Browser FPV Simulator">
-<meta name="twitter:description" content="Free browser-based FPV drone simulator with real Betaflight rates, acro and angle mode, 3-lap race courses, ghost replay, and TX16S/EdgeTX radio support. No download — fly in your browser.">
+<meta name="twitter:description" content="Free browser-based FPV drone simulator that flies your own Betaflight rates — paste a diff or CLI rates in — with acro and angle mode, 3-lap race courses, ghost replay, and TX16S/EdgeTX radio support. No download — fly in your browser.">
 <meta name="twitter:image" content="https://quadmath.com/og-sim.png">
 
 <link rel="canonical" href="https://quadmath.com/sim.html">
@@ -181,7 +181,7 @@
 <div id="mobileGate">
   <div class="mg-logo">QuadMath<span>.</span></div>
   <div class="mg-title">QUADMATH SIM</div>
-  <p class="mg-pitch">Browser FPV whoop sim — real Betaflight rates, no install.</p>
+  <p class="mg-pitch">Browser FPV whoop sim — paste your own Betaflight rates, no install.</p>
   <p class="mg-note">Desktop + controller/radio required</p>
   <a class="mg-btn" href="https://quadmath.com/">← Back to QuadMath.com</a>
   <a class="mg-try" id="mgTry">Try anyway (tablet + gamepad)</a>
@@ -1795,7 +1795,7 @@ const world2mod=(w,out)=>{out.x=-w.z/WS; out.y=-w.x/WS; out.z=w.y/WS; return out
 
 const qp=new QuadPhysics(PRESETS.whoop65);
 window._qp=qp; // debug handle, same convention as _simBooted/_gltfReady above
-// Air65 II Champion stock tune from the tune database — raw Betaflight values.
+// Air65 II Champion stock tune from the tune DB (65-betafpv-stock) — raw Betaflight values.
 // Feedforward is set explicitly. These tunes carry only P/I/D, so without an F
 // they inherited DEFAULT_TUNE's 120/125/120 — and on roll/pitch, which have far
 // more authority per unit FF than yaw, that overshot a commanded rate by 152%
