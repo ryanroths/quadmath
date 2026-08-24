@@ -25,6 +25,25 @@
 
   var TUNES = [
     {
+      id: '65-betafpv-stock',
+      frame: 65,
+      brand: 'BetaFPV',
+      source: 'Stock',
+      fc: 'BetaFPV Air65 II AIO',
+      combo: 'Air65 II Champion, stock motor/prop',
+      rateType: 'BETAFLIGHT',
+      pids:  { roll: [36, 61, 27], pitch: [37, 64, 29], yaw: [36, 61, 0] },
+      // Rates not recorded with the June 2026 dump — rate type was, values
+      // were not. Card hides the CLI button rather than exporting a half
+      // tune, same as 75-betafpv-stock.
+      rates: null,
+      notes: [
+        'Rates N/A — rate type BETAFLIGHT recorded with the dump, values not',
+        'BF 4.5 target, dumped June 2026 while the quad ran stock',
+        'Same values ship as the sim\'s 65mm stock tune',
+      ],
+    },
+    {
       id: '65-betafpv-ryfly-1219s',
       frame: 65,
       brand: 'BetaFPV',
@@ -177,7 +196,6 @@
   // Combos with nothing published yet. Rendered as one collapsed line, never
   // as a card.
   var PENDING = [
-    { frame: 65, brand: 'BetaFPV',     source: 'Stock', reason: 'N/A — custom build (BetaFPV G473 BEFH · VCI Spark 0702 29K KV · board AIR65 RYFLY)' },
     { frame: 65, brand: 'NewBeeDrone', source: 'RyFly', reason: 'running stock, no custom profile yet' },
     { frame: 75, brand: 'Happymodel',  source: 'Stock', reason: 'tune in testing' },
     { frame: 75, brand: 'Happymodel',  source: 'RyFly', reason: 'tune in testing' },
