@@ -23,25 +23,25 @@ REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 COLLECTOR = os.path.join(HERE, "collect_signals.py")
 
 
-def _load_module():
-    spec = importlib.util.spec_from_file_location("collect_signals", COLLECTOR)
+def _load_module(name: str, path: str):
+    spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-cs = _load_module()
+cs = _load_module("collect_signals", COLLECTOR)
+refresh_pins = _load_module("refresh_pins", os.path.join(HERE, "refresh_pins.py"))
 
 
-# The shape of script.js that the scraper is pinned to. If a reformat, a switch
-# to `new Map([...])`, or a motor/prop edit changes these counts, this test
-# fails -- which is the point. Update the numbers deliberately, in the same
-# commit as the script.js change, after checking the collector still parses it.
-SCRIPT_JS_PIN = {
-    "framePresets": {65: 1, 75: 1, 85: 1},
-    "motorDB": {65: 16, 75: 20, 85: 8},
-    "propDB": {65: 10, 75: 8, 85: 7},
-}
+# The shape of script.js that the scraper is pinned to lives in
+# script_js.pin.json, not in this file. If a reformat, a switch to
+# `new Map([...])`, or a motor/prop edit changes these counts, this test fails
+# -- which is the point. Refresh it deliberately, in the same commit as the
+# script.js change, with `python scripts/agent/refresh_pins.py`; that script
+# recomputes the shape through the same helpers used below and refuses to write
+# anything if script.js stops parsing.
+SCRIPT_JS_PIN = refresh_pins.read_pin()
 
 MINI_SCRIPT_JS = """(function(){
   // ===== Frame size presets =====
@@ -486,22 +486,63 @@ class TestRealScriptJsPin(unittest.TestCase):
         path = os.path.join(REPO_ROOT, "script.js")
         if not os.path.exists(path):
             self.skipTest("script.js not present in this checkout")
-        with open(path, errors="replace") as handle:
-            clean = cs.strip_js_comments(handle.read())
-        actual = {}
-        for name in cs.REQUIRED_JS_LITERALS:
-            parsed = cs.normalise_frame_keys(cs.extract_js_literal(clean, name))
-            actual[name] = {
-                frame: (1 if name == "framePresets" else len(value))
-                for frame, value in sorted(parsed.items())
-            }
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            source = handle.read()
+        actual = refresh_pins.script_js_shape(source)
         self.assertEqual(
             actual,
             SCRIPT_JS_PIN,
-            "script.js shape drifted from the pin in test_collect_signals.py. "
-            "Confirm the collector still parses it, then update SCRIPT_JS_PIN in "
-            "the same commit.",
+            "script.js shape drifted from scripts/agent/script_js.pin.json. "
+            "Confirm the collector still parses it, then refresh the pin in the "
+            "same commit with `python scripts/agent/refresh_pins.py`.",
         )
+
+
+class TestRefreshPins(unittest.TestCase):
+    """The refresher is the only sanctioned way to move the pin, so it has to
+    be at least as strict as the test it feeds."""
+
+    def _run(self, root: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, os.path.join(HERE, "refresh_pins.py"), "--root", root, "--check"],
+            capture_output=True,
+            text=True,
+        )
+
+    def test_broken_script_js_is_refused_rather_than_pinned(self):
+        with tempfile.TemporaryDirectory() as root:
+            with open(os.path.join(root, "script.js"), "w") as handle:
+                handle.write(MINI_SCRIPT_JS.replace("const motorDB = {", "const motorDB = new Map(["))
+            proc = self._run(root)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("refusing to refresh the pin", proc.stderr)
+        self.assertIn("motorDB", proc.stderr)
+
+    def test_missing_script_js_is_refused(self):
+        with tempfile.TemporaryDirectory() as root:
+            proc = self._run(root)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("refusing to refresh", proc.stderr)
+
+    def test_empty_per_frame_list_is_refused(self):
+        with tempfile.TemporaryDirectory() as root:
+            with open(os.path.join(root, "script.js"), "w") as handle:
+                handle.write(
+                    MINI_SCRIPT_JS.replace(
+                        "    85: [ { name: 'BetaFPV 1103',      kv: 11000, "
+                        "propPitch: 0.9, weightPerMotor: 3.20 } ],",
+                        "    85: [],",
+                    )
+                )
+            proc = self._run(root)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("motorDB[85]", proc.stderr)
+
+    def test_checked_in_pin_is_current(self):
+        # --check writes nothing; it just says whether the committed JSON still
+        # describes the committed script.js.
+        proc = self._run(REPO_ROOT)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 
 
 if __name__ == "__main__":
