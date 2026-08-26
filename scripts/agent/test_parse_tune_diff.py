@@ -28,6 +28,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import os
+import re
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -69,6 +70,19 @@ def load_entries() -> dict[str, dict]:
 #             than papered over.
 
 FIXTURES = {
+    # Added by hand in the June 2026 stock dump. The dump recorded PIDs and the
+    # rate type but no rate values and no filter/feedforward lines, so the
+    # fixture carries no settings and every note is editorial.
+    "65-betafpv-stock": {
+        "board": "BetaFPV Air65 II AIO",
+        "settings": {},
+        "editorial": [
+            "Rates N/A — rate type BETAFLIGHT recorded with the dump, values not",
+            "BF 4.5 target, dumped June 2026 while the quad ran stock",
+            "Same values ship as the sim's 65mm stock tune",
+        ],
+        "gaps": {},
+    },
     "65-betafpv-ryfly-1219s": {
         "board": "AIR65 RYFLY",
         "settings": {
@@ -555,11 +569,24 @@ class TuneDbIO(unittest.TestCase):
     def setUp(self):
         self.text = read_db_text()
 
-    def test_reads_all_eight_entries(self):
+    def test_reads_every_entry_in_the_database(self):
+        # Relative, not a literal count: the database is designed to grow, and
+        # a pinned length turned every legitimate tune addition red. The count
+        # is cross-checked against an independent scan of the raw text, so a
+        # parser that silently drops an entry still fails here.
         entries = tune_db.read_tunes(self.text)
-        self.assertEqual(len(entries), 8)
-        self.assertEqual(entries[0]["id"], "65-betafpv-ryfly-1219s")
-        self.assertIsNone(entries[5]["rates"])
+        # PENDING carries no ids today, but scan only the TUNES block so it
+        # cannot start contributing false ones.
+        tunes_block = self.text.split("var PENDING = [", 1)[0]
+        raw_ids = re.findall(r"^\s*id: '([^']+)'", tunes_block, re.M)
+        self.assertEqual([e["id"] for e in entries], raw_ids)
+        self.assertTrue(entries, "the tune database should never read as empty")
+
+    def test_absent_rates_read_as_null(self):
+        # Looked up by id, not by index -- an entry inserted above this one
+        # must not be able to break the assertion.
+        by_id = {e["id"]: e for e in tune_db.read_tunes(self.text)}
+        self.assertIsNone(by_id["75-betafpv-stock"]["rates"])
 
     def test_append_adds_exactly_one_entry(self):
         entry = parse_good(pilot="whoopdad")
@@ -600,7 +627,10 @@ class TuneDbIO(unittest.TestCase):
         written = tune_db.read_tunes(updated)[-1]
         self.assertEqual(written["fc"], entry["fc"])
         self.assertEqual(written["notes"], entry["notes"])
-        self.assertEqual(len(tune_db.read_tunes(updated)), 9)
+        self.assertEqual(
+            len(tune_db.read_tunes(updated)),
+            len(tune_db.read_tunes(self.text)) + 1,
+        )
 
     def test_unknown_keys_are_refused(self):
         entry = parse_good(pilot="whoopdad")
