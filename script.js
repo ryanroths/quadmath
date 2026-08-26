@@ -1110,6 +1110,32 @@
   // flips the style to cruise so the bench ANCHOR fires and the flight-time
   // readout switches from estimate to "anchored to measured data". Instant
   // demonstration of what the table means.
+  // Bench rows name their motor and prop with the exact motorDB/propDB `name`
+  // string — the same key data/bench/*.json already uses in `applies_to`. The
+  // options are built with value = index into the DB list, so the name is the
+  // only stable handle a row can carry: an index would quietly point at a
+  // different motor the next time the list grows.
+  //
+  // Motor names are not unique (several models appear at more than one KV), so
+  // the row's KV disambiguates. No exact match leaves the select on its
+  // placeholder. Picking the nearest thing instead would be worse than picking
+  // nothing: the shaft-mismatch warning and the dry-weight estimate both read
+  // the selected option, so a near-miss would hand the pilot a warning — or a
+  // reassuring absence of one — about hardware they are not flying.
+  function selectDbEntryByName(select, list, name, kv) {
+    if (!name) return false;
+    const index = (list || []).findIndex(item =>
+      item.name === name && (kv == null || String(item.kv) === String(kv)));
+    if (index < 0) return false;
+    select.value = String(index);
+    // The same pair, in the same order, that a manual pick fires — so the
+    // shaft warning, cell count and derived weight land exactly as they would
+    // if the pilot had chosen this option themselves.
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+
   document.querySelectorAll('.bv-row').forEach(row => {
     const load = () => {
       const d = row.dataset;
@@ -1122,13 +1148,28 @@
       els.motorKV.value   = d.kv;
       els.cells.value     = '1';
       els.capacity.value  = d.mah;
-      els.propPitch.value = d.pitch;
-      // Bench rows carry a real scale reading — not derived, not a default.
-      els.weight.value    = d.dry;
-      delete els.weight.dataset.derived;
+      // Video first: the motor handler derives dry weight from the airframe
+      // base, and the base depends on the video system.
       if (els.videoSystem) els.videoSystem.value = d.video;
       if (els.flightStyle) els.flightStyle.value = 'cruise';
+      // Motor then prop — the order a manual build lands in. The motor handler
+      // writes the motor's own prop pitch into the pitch field; the prop
+      // handler writes the prop's, which is the one that should stand.
       motorSelect.value = '';
+      propSelect.value  = '';
+      selectDbEntryByName(motorSelect, motorDB[currentFrame], d.motor, d.kv);
+      selectDbEntryByName(propSelect,  propDB[currentFrame],  d.prop);
+      els.propPitch.value = d.pitch;
+      // Bench rows carry a real scale reading — not derived, not a default.
+      // Re-asserted after the motor handler, which fills the same field with
+      // catalogue arithmetic (4 x motor + airframe base) and flags it derived.
+      // The two agree to within 0.04g on both anchors, but the measured number
+      // is the one the row exists to show.
+      els.weight.value    = d.dry;
+      delete els.weight.dataset.derived;
+      // Both selects are set by now, so re-evaluate the pairing once with the
+      // final state rather than trusting whichever handler ran last.
+      updateShaftWarn();
       updateVideoHint();
       calculate();
       const calc = document.getElementById('calculator') || document.querySelector('.frame-btn');

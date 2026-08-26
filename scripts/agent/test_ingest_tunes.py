@@ -272,7 +272,10 @@ class EntryBuilding(unittest.TestCase):
         entry, _ = ingest.entry_for_issue(issue(), set())
         updated = tune_db.append_tune(text, entry)
         written = tune_db.read_tunes(updated)
-        self.assertEqual(len(written), 9)
+        # Relative, not a literal count. The tune database is designed to grow;
+        # pinning its length here meant every successful ingest turned the
+        # ingest pipeline's own tests red.
+        self.assertEqual(len(written), len(tune_db.read_tunes(text)) + 1)
         self.assertEqual(written[-1], entry)
 
 
