@@ -793,7 +793,6 @@
     if (dryWeight === null) {
       showAwaitingWeight();
       compareCalculate();
-      writeUrlParams();
       return;
     }
     // AUW = dry weight + real pack weight. TWR, the build score, and the
@@ -916,7 +915,6 @@
     }
 
     compareCalculate();
-    writeUrlParams();   // keep the address bar a shareable link to this build
   }
 
   // Comparison-table T:W colour tiers. Same thresholds as the OSD badge.
@@ -1053,10 +1051,11 @@
 
   // ===== Shareable build URLs =====
   // ?frame=65&kv=28000&cells=1&mah=300&pitch=0.7&dry=19.5&video=hdzero&style=cruise
-  // Read once on load (overrides the frame preset), written back into the
-  // address bar by calculate() via replaceState — so the URL in the bar is
-  // always a link to the build on screen. Drop it in a Discord or a YouTube
-  // description and the calculator opens pre-filled.
+  // Read once on load (overrides the frame preset). The address bar is left
+  // alone — it used to be rewritten on every calculate(), which turned the
+  // homepage into a wall of query params for anyone just poking at inputs.
+  // COPY BUILD LINK builds the URL on demand from buildShareUrl(). Drop it in
+  // a Discord or a YouTube description and the calculator opens pre-filled.
   const URL_KEYS = [
     ['kv',    () => els.motorKV,     v => els.motorKV.value = v],
     ['cells', () => els.cells,       v => els.cells.value = v],
@@ -1094,7 +1093,7 @@
     if (any) { motorSelect.value = ''; updateVideoHint(); }
     return any;
   }
-  function writeUrlParams() {
+  function buildShareUrl() {
     const q = new URLSearchParams();
     q.set('frame', currentFrame);
     for (const [key, get] of URL_KEYS) {
@@ -1102,7 +1101,7 @@
     }
     if (els.videoSystem) q.set('video', els.videoSystem.value);
     if (els.flightStyle) q.set('style', els.flightStyle.value);
-    try { history.replaceState(null, '', location.pathname + '?' + q.toString() + location.hash); } catch (e) {}
+    return location.origin + location.pathname + '?' + q.toString() + '#calculator';
   }
   // ===== Clickable bench rows =====
   // Clicking a validation-table row loads that measured build into the
@@ -1181,10 +1180,11 @@
 
   const copyBtn = document.getElementById('copyBuildLink');
   if (copyBtn) copyBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(location.href).then(() => {
+    const url = buildShareUrl();
+    navigator.clipboard.writeText(url).then(() => {
       copyBtn.textContent = 'LINK COPIED ✓';
       setTimeout(() => { copyBtn.textContent = 'COPY BUILD LINK'; }, 1600);
-    }).catch(() => { copyBtn.textContent = location.href; });
+    }).catch(() => { copyBtn.textContent = url; });
   });
 
   // initial calc — sync inputs to active frame button before first render
