@@ -22,8 +22,12 @@ Hard rules, by design:
   * One gap -> one branch -> one PR. Small diffs, reviewable, under the
     gate's caps.
   * Everything the generator writes is validated locally against
-    agent_policy.json BEFORE commit. If it would fail the gate, nothing is
-    pushed.
+    agent_policy.json BEFORE commit. The local HTML check matches the CI
+    gate: <script type="application/ld+json"> is allowed when
+    html_checks.allow_jsonld is true (the default) and the body is valid
+    JSON; every other inline script stays forbidden. If a candidate would
+    still fail the gate, it is skipped and the next one is tried. Nothing
+    is pushed unless a candidate is clean.
   * The policy is read from origin/main via `git show`, same pattern as the
     gate itself, so a compromised working tree cannot loosen the rules.
 
@@ -262,13 +266,21 @@ def path_allowed(path: str, policy: dict) -> tuple[bool, str]:
 # local validation mirroring the gate
 # --------------------------------------------------------------------------
 
+JSONLD_TYPE = "application/ld+json"  # the only inline script type ever exemptable
 _SCRIPT_RE = re.compile(r"<script\b([^>]*)>", re.IGNORECASE)
+_SCRIPT_CLOSE_RE = re.compile(r"</script\s*>", re.IGNORECASE)
 _SRC_RE = re.compile(r"""src\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+_TYPE_RE = re.compile(r"""type\s*=\s*["']([^"']*)["']""", re.IGNORECASE)
 _META_DESC_RE = re.compile(
     r"""<meta\s[^>]*name\s*=\s*["']description["'][^>]*content\s*=\s*["'][^"']+["']""",
     re.IGNORECASE,
 )
 _HREF_RE = re.compile(r"""href\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+
+
+def _script_type(attrs: str) -> str:
+    match = _TYPE_RE.search(attrs)
+    return (match.group(1) if match else "").strip().lower()
 
 
 def validate_html(path: str, text: str, policy: dict) -> list[str]:
@@ -280,13 +292,29 @@ def validate_html(path: str, text: str, policy: dict) -> list[str]:
     for match in _SCRIPT_RE.finditer(text):
         attrs = match.group(1)
         src = _SRC_RE.search(attrs)
-        if src is None:
-            if checks.get("forbid_inline_script", True):
-                problems.append("%s: inline <script> forbidden" % path)
-        else:
+        if src is not None:
             host = re.sub(r"^https?://", "", src.group(1)).split("/")[0]
             if checks.get("forbid_external_script_src", True) and host not in allowed_hosts:
                 problems.append("%s: external script src %s not allowed" % (path, host))
+            continue
+        if not checks.get("forbid_inline_script", True):
+            continue
+        # Match the CI gate: JSON-LD is inert data a browser never executes,
+        # so it is exemptable -- but only when the body actually parses.
+        # Every other inline script stays forbidden, including an explicit
+        # type="text/javascript" or a near-miss type="application/json".
+        if _script_type(attrs) == JSONLD_TYPE:
+            if checks.get("allow_jsonld", True):
+                close = _SCRIPT_CLOSE_RE.search(text, match.end())
+                body = text[match.end() : close.start()] if close else ""
+                try:
+                    json.loads(body)
+                except json.JSONDecodeError as exc:
+                    problems.append("%s: JSON-LD is not valid JSON (%s)" % (path, exc))
+            else:
+                problems.append("%s: inline <script> forbidden" % path)
+            continue
+        problems.append("%s: inline <script> forbidden" % path)
     if checks.get("require_meta_description", True) and not _META_DESC_RE.search(text):
         problems.append("%s: missing <meta name=\"description\">" % path)
     link_checks = policy.get("link_checks", {})
@@ -299,6 +327,24 @@ def validate_html(path: str, text: str, policy: dict) -> list[str]:
                 bare = host[4:] if host.startswith("www.") else host
                 if host not in allowed_ext and bare not in allowed_ext:
                     problems.append("%s: external link host %s not allowed" % (path, host))
+    return problems
+
+
+def validate_generated(files: dict[str, str], policy: dict, base_read) -> list[str]:
+    """Run the same path / HTML / diff-cap checks the CI gate will run."""
+    problems: list[str] = []
+    base_texts: dict[str, str] = {}
+    for path in files:
+        ok, why = path_allowed(path, policy)
+        if not ok:
+            problems.append("%s: %s" % (path, why))
+        existing = base_read(path)
+        if existing is not None:
+            base_texts[path] = existing
+    for path, text in files.items():
+        if path.endswith(".html"):
+            problems.extend(validate_html(path, text, policy))
+    problems.extend(validate_diff_caps(files, base_texts, policy))
     return problems
 
 
@@ -333,18 +379,24 @@ def validate_diff_caps(files: dict[str, str], base_texts: dict[str, str], policy
 # --------------------------------------------------------------------------
 
 
-def pick_gap(
+def rank_gaps(
     rows: list[dict], policy: dict, base_read
-) -> tuple[dict | None, list[str], list[dict]]:
-    """Select one actionable gap.
+) -> tuple[list[dict], list[str], list[dict]]:
+    """Rank every actionable gap the generator is allowed to attempt.
 
-    Returns (gap_or_None, notes, worklist). The worklist holds build_orphan
-    rows refused for lack of valid bench data -- the combos that need a human
-    with a scale, a stopwatch, and a bench before any page can exist.
+    Returns (candidates, notes, worklist). Candidates are sorted by severity
+    (high first). The worklist holds build_orphan rows refused for lack of
+    valid bench data -- the combos that need a human with a scale, a
+    stopwatch, and a bench before any page can exist.
+
+    JSON-LD metadata_gaps stay in the candidate list when the policy permits
+    them (html_checks.allow_jsonld, default true). If a later generate-and-
+    validate still fails the gate, try_candidates skips that row and moves on.
     """
     notes: list[str] = []
     worklist: list[dict] = []
     candidates = []
+    html_checks = policy.get("html_checks") or {}
     for r in rows:
         kind = r.get("type")
         if kind in SKIP_REASONS:
@@ -362,6 +414,15 @@ def pick_gap(
                     % r.get("target")
                 )
                 continue
+            if "json-ld" in detail or "ld+json" in detail:
+                if html_checks.get("forbid_inline_script", True) and not html_checks.get(
+                    "allow_jsonld", True
+                ):
+                    notes.append(
+                        "skip [metadata_gap] %s -- JSON-LD would fail "
+                        "forbid_inline_script (allow_jsonld is off)" % r.get("target")
+                    )
+                    continue
             ok, why = path_allowed(r.get("target", ""), policy)
             if not ok:
                 notes.append(
@@ -385,7 +446,54 @@ def pick_gap(
                 continue
         candidates.append(r)
     candidates.sort(key=lambda r: SEVERITY_ORDER.get(r.get("severity"), 99))
+    return candidates, notes, worklist
+
+
+def pick_gap(
+    rows: list[dict], policy: dict, base_read
+) -> tuple[dict | None, list[str], list[dict]]:
+    """Select the highest-severity actionable gap.
+
+    Returns (gap_or_None, notes, worklist). Wrapper around rank_gaps for
+    callers that only need the first candidate.
+    """
+    candidates, notes, worklist = rank_gaps(rows, policy, base_read)
     return (candidates[0] if candidates else None), notes, worklist
+
+
+def try_candidates(candidates: list[dict], produce, policy: dict, base_read):
+    """Generate and validate candidates in order until one is gate-clean.
+
+    `produce(gap)` must return a {path: text} dict or raise ModelRefusal.
+    Returns (gap, files, notes). files is None when every candidate was
+    skipped -- that is a completed run with nothing to push, not an abort.
+    """
+    notes: list[str] = []
+    for gap in candidates:
+        notes.append(
+            "selected: [%s] %s %s -- %s"
+            % (gap.get("severity"), gap.get("type"), gap.get("target"), gap.get("detail"))
+        )
+        try:
+            files = produce(gap)
+        except ModelRefusal as exc:
+            notes.append("%s" % exc)
+            notes.append(
+                "skipping [%s] %s -- nothing generated, trying next"
+                % (gap.get("type"), gap.get("target"))
+            )
+            continue
+        problems = validate_generated(files, policy, base_read)
+        if problems:
+            notes.extend("validation: %s" % p for p in problems)
+            notes.append(
+                "skipping [%s] %s -- generated output would FAIL the gate; trying next"
+                % (gap.get("type"), gap.get("target"))
+            )
+            continue
+        notes.append("validation: clean (paths, html, caps)")
+        return gap, files, notes
+    return None, None, notes
 
 
 # --------------------------------------------------------------------------
@@ -439,7 +547,11 @@ def call_api(api_key: str, system: str, user: str) -> str:
 SYSTEM_METADATA = """You edit HTML pages for quadmath.com, a whoop FPV build \
 calculator and tune database. You will receive a full HTML file and an \
 instruction describing missing metadata. Return ONLY the complete corrected \
-HTML file. Do not add scripts, do not restructure, do not reword body copy. \
+HTML file. Do not add executable scripts (no type, type=text/javascript, \
+type=module). When the instruction asks for JSON-LD, add exactly one \
+<script type="application/ld+json"> block in <head> containing valid JSON \
+(Article schema; headline/description/url matching the page). Do not add \
+any other <script> tags. Do not restructure, do not reword body copy. \
 Change the minimum number of lines. Meta description: 140-160 chars, plain, \
 specific to the page. OG tags mirror title/description; og:url uses \
 https://quadmath.com/<page>. No markdown fences in your reply."""
@@ -448,15 +560,16 @@ SYSTEM_GUIDE = """You write one HTML guide page for quadmath.com, a whoop FPV \
 site (65-85mm builds, Betaflight). Audience: whoop pilots. Voice: terse, \
 technical, no marketing fluff. Return ONLY a complete HTML file, no markdown \
 fences. Hard constraints: total file under 170 lines; <link rel="stylesheet" \
-href="/style.css"> for styling, ZERO <script> tags, ZERO inline styles beyond \
-what is essential; must include <meta name="description"> (140-160 chars) and \
-og:title/og:description/og:url; internal links ONLY from this exact set: \
-"/" (the build calculator), "/tune-database.html", "/gear.html", \
-"/sim.html" -- never "/calculator", never directory paths like \
-"/content/guides/"; external links only to betaflight.com; mention ONLY the \
-exact motor and prop named in the task -- no other model numbers, no \
-substitute hardware; factual hardware claims only where certain -- prefer \
-principles over invented specs; never state PID values, never invent \
+href="/style.css"> for styling; ZERO executable <script> tags (a single \
+application/ld+json block in <head> is allowed and preferred); ZERO inline \
+styles beyond what is essential; must include <meta name="description"> \
+(140-160 chars) and og:title/og:description/og:url; internal links ONLY \
+from this exact set: "/" (the build calculator), "/tune-database.html", \
+"/gear.html", "/sim.html" -- never "/calculator", never directory paths \
+like "/content/guides/"; external links only to betaflight.com; mention \
+ONLY the exact motor and prop named in the task -- no other model numbers, \
+no substitute hardware; factual hardware claims only where certain -- \
+prefer principles over invented specs; never state PID values, never invent \
 prices. The task includes measured bench data for this exact build; present \
 those numbers as measured (AUW, hover and freestyle pack times, and any top \
 speed or current figures provided), name the measurement source, and do not \
@@ -591,7 +704,7 @@ def main() -> int:
         except RuntimeError:
             return None
 
-    gap, notes, worklist = pick_gap(rows, policy, base_read)
+    candidates, notes, worklist = rank_gaps(rows, policy, base_read)
     for note in notes:
         sys.stderr.write(note + "\n")
     if worklist:
@@ -605,47 +718,22 @@ def main() -> int:
                 json.dump({"needs_bench_data": worklist}, fh, indent=2, sort_keys=True)
                 fh.write("\n")
             sys.stderr.write("worklist written to %s\n" % args.worklist)
-    if gap is None:
+    if not candidates:
         sys.stderr.write("no actionable gaps -- nothing to do\n")
         return 0
-    sys.stderr.write(
-        "selected: [%s] %s %s -- %s\n"
-        % (gap["severity"], gap["type"], gap["target"], gap["detail"])
-    )
 
-    try:
-        files = generate_for_gap(gap, base_read, api_key, policy)
-    except ModelRefusal as exc:
-        # Skip the gap without reaching the gate: there is no output to
-        # validate, and validate_html would report a missing meta description
-        # rather than the refusal that actually happened.
-        sys.stderr.write("%s\n" % exc)
-        sys.stderr.write(
-            "skipping [%s] %s -- nothing generated, nothing pushed\n"
-            % (gap["type"], gap["target"])
-        )
-        return 1
+    def produce(gap: dict) -> dict[str, str]:
+        return generate_for_gap(gap, base_read, api_key, policy)
 
-    # ---- validate against the gate before anything touches git ----
-    problems: list[str] = []
-    base_texts: dict[str, str] = {}
-    for path in files:
-        ok, why = path_allowed(path, policy)
-        if not ok:
-            problems.append("%s: %s" % (path, why))
-        existing = base_read(path)
-        if existing is not None:
-            base_texts[path] = existing
-    for path, text in files.items():
-        if path.endswith(".html"):
-            problems.extend(validate_html(path, text, policy))
-    problems.extend(validate_diff_caps(files, base_texts, policy))
-    if problems:
-        for p in problems:
-            sys.stderr.write("validation: %s\n" % p)
-        sys.stderr.write("generated output would FAIL the gate -- aborting, nothing pushed\n")
-        return 1
-    sys.stderr.write("validation: clean (paths, html, caps)\n")
+    gap, files, attempt_notes = try_candidates(candidates, produce, policy, base_read)
+    for note in attempt_notes:
+        sys.stderr.write(note + "\n")
+    if gap is None or files is None:
+        # Exhausted the list without a gate-clean page. That is a completed
+        # Sunday run with nothing to push -- not an abort. Exit 0 so cron
+        # does not look like a failed pipeline.
+        sys.stderr.write("no candidate produced gate-clean output -- nothing pushed\n")
+        return 0
 
     if args.dry_run:
         for path, text in files.items():

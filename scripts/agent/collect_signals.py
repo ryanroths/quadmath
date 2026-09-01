@@ -79,14 +79,13 @@ data_error    high   always. A data file that cannot be parsed hides whatever
                      gaps it contained.
 
 
-KNOWN POLICY CONFLICT
+JSON-LD IS ACTIONABLE
 ---------------------
-metadata_gap reports missing JSON-LD, but `scripts/ci/agent_policy.json` sets
-html_checks.forbid_inline_script, and the validator treats any <script> without
-a src as inline -- including <script type="application/ld+json">. Acting on a
-JSON-LD signal would therefore fail the agent gate. Either the policy needs to
-exempt application/ld+json or this signal needs to be dropped; flagging rather
-than silently emitting unactionable work.
+metadata_gap reports missing JSON-LD. The CI gate and the generator's local
+validator both allow <script type="application/ld+json"> when
+html_checks.allow_jsonld is true (the default) and the body is valid JSON.
+Other inline scripts stay forbidden. A JSON-LD metadata_gap is therefore
+work the generator can legally emit.
 """
 
 from __future__ import annotations
@@ -846,8 +845,7 @@ def collect_metadata_gaps(pages: dict[str, PageParser], inbound: dict[str, int])
                 row(
                     "metadata_gap",
                     path,
-                    'missing JSON-LD (<script type="application/ld+json">); note this '
-                    "conflicts with html_checks.forbid_inline_script in the agent policy",
+                    'missing JSON-LD (<script type="application/ld+json">)',
                     "medium",
                 )
             )
