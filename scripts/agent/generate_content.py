@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import importlib.util
 import json
 import os
 import re
@@ -67,6 +68,14 @@ SKIP_REASONS = {
 }
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 BENCH_DIR = "data/bench"
+
+
+def _load_stamp():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ci", "stamp_asset_cache.py")
+    spec = importlib.util.spec_from_file_location("stamp_asset_cache", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def slugify(target: str) -> str:
@@ -723,7 +732,12 @@ def main() -> int:
         return 0
 
     def produce(gap: dict) -> dict[str, str]:
-        return generate_for_gap(gap, base_read, api_key, policy)
+        files = generate_for_gap(gap, base_read, api_key, policy)
+        # Content-hash query strings on first-party CSS/JS. The model prompt
+        # still says href="/style.css"; without this, a new guide would ship
+        # unhashed and sit behind the 4-hour CDN TTL, and a metadata rewrite
+        # could drop a stamp the last human PR added.
+        return _load_stamp().apply_to_html_map(root, files)
 
     gap, files, attempt_notes = try_candidates(candidates, produce, policy, base_read)
     for note in attempt_notes:

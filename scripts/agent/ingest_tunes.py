@@ -89,6 +89,10 @@ parser_mod = _load(
 )
 tune_db = _load("tune_db", os.path.join(HERE, "tune_db.py"))
 generate_content = _load("generate_content", os.path.join(HERE, "generate_content.py"))
+stamp_asset_cache = _load(
+    "stamp_asset_cache",
+    os.path.join(os.path.dirname(HERE), "ci", "stamp_asset_cache.py"),
+)
 
 git = generate_content.git
 path_allowed = generate_content.path_allowed
@@ -485,6 +489,13 @@ def process(issue, root, ref, base_branch, policy, slug, token, dry_run, out) ->
     with open(os.path.join(root, TUNE_DB_PATH), "w", encoding="utf-8", newline="") as fh:
         fh.write(updated)
     git(root, "add", TUNE_DB_PATH)
+    # Appending a tune changes tune-database.js bytes, so the HTML ?v= stamp
+    # has to move with it. Otherwise Pages deploys new JS under the old query
+    # string and Cloudflare keeps serving the previous file for four hours --
+    # the "0 of N tunes" failure. tune-database.html is on the agent allowlist.
+    stamped = stamp_asset_cache.stamp_tree(root)
+    if stamped:
+        git(root, "add", *stamped)
     title = "agent: tune submission #%s -- %smm %s (%s)" % (
         number, entry["frame"], entry["brand"], entry["source"])
     git(root, "commit", "-m", title)
