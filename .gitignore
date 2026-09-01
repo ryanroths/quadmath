@@ -1,6 +1,7 @@
 # local env files
 .env*
 !.env.example
+.agent_env
 
 # Python bytecode
 __pycache__/
