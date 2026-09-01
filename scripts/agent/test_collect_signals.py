@@ -234,6 +234,11 @@ class TestSignalTypes(RepoFixture):
         self.assertIn("no inbound internal links", joined)
         self.assertIn("missing JSON-LD", joined)
         self.assertIn("missing OG tags", joined)
+        self.assertNotIn(
+            "conflicts with html_checks",
+            joined,
+            "JSON-LD is legal work; the collector must not mark it as a conflict",
+        )
 
     def test_linked_page_is_not_flagged_as_orphan(self):
         _, payload, _ = run_collector(self.root)
