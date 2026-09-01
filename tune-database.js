@@ -223,7 +223,7 @@
     { key: 'frame',  label: 'Frame',  values: [65, 75, 85] },
     { key: 'brand',  label: 'Brand',  values: ['BetaFPV', 'Happymodel', 'NewBeeDrone'] },
     { key: 'source', label: 'Source', values: ['Stock', 'RyFly', 'Community'],
-      valueOf: sourceClass },
+      read: sourceClass },
   ];
 
   var AXES = [
@@ -345,7 +345,7 @@
   function matches(tune) {
     return FILTERS.every(function (group) {
       var picked = active[group.key];
-      var value = group.valueOf ? group.valueOf(tune) : tune[group.key];
+      var value = group.read ? group.read(tune) : tune[group.key];
       return picked.size === 0 || picked.has(String(value));
     });
   }
