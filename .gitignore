@@ -7,3 +7,7 @@
 __pycache__/
 *.py[cod]
 .claude/
+
+# local scratch
+backtest.py
+*.patch
