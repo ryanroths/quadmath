@@ -449,7 +449,11 @@
     });
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
+  // This file is loaded as a plain <script> at the end of <body>, so every
+  // element it touches is already parsed. Rendering right now puts the cards
+  // in the first paint; waiting for DOMContentLoaded painted the empty grid
+  // first and then shoved everything below it down (~0.4 CLS on desktop).
+  function init() {
     grid = document.getElementById('tuneGrid');
     countEl = document.getElementById('tuneCount');
     pendingList = document.getElementById('tunePendingList');
@@ -458,7 +462,9 @@
     renderPending();
     wireCopy();
     render();
-  });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 
   // Exposed for verification and for any future page that wants the same data.
   window.QuadMathTunes = {

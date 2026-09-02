@@ -966,6 +966,10 @@
     color: var(--muted);
     white-space: nowrap;
     padding-top: 4px;
+    /* Reserve the width of the rendered count ("NN tunes") so the placeholder
+       dash does not let the row reflow when the number lands. */
+    min-width: 8ch;
+    text-align: right;
   }
 
   /* Card grid — 1 col mobile, 2 tablet, 3 desktop */
@@ -974,6 +978,13 @@
     grid-template-columns: 1fr;
     gap: 16px;
   }
+  /* Before tune-database.js fills it the grid is empty. If the browser paints
+     before that script runs, the pending list, bench card and frame grid sit
+     right under the filters and then get shoved a screen or more down when the
+     cards land (~0.4 CLS). Holding a viewport of height while empty keeps that
+     content below the fold at first paint, so the fill moves nothing visible.
+     Data-independent on purpose: the real height varies with filters. */
+  .tune-grid:empty { min-height: 100vh; }
   @media (min-width: 620px)  { .tune-grid { grid-template-columns: repeat(2, 1fr); } }
   @media (min-width: 1000px) { .tune-grid { grid-template-columns: repeat(3, 1fr); } }
 
