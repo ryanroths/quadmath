@@ -42,7 +42,9 @@ FIRST_PARTY_ASSETS = (
 )
 
 HASH_LEN = 12
-SKIP_DIR_NAMES = {".git", "node_modules", "__pycache__"}
+# .claude holds Claude Code worktrees: full checkouts of other branches whose
+# pages must never be stamped or checked against this tree.
+SKIP_DIR_NAMES = {".git", ".claude", "node_modules", "__pycache__"}
 
 _ASSET_ALT = "|".join(re.escape(name) for name in FIRST_PARTY_ASSETS)
 # Quoted local reference: "style.css", "./quadphysics.js", "/style.css",
@@ -56,9 +58,17 @@ QUOTED_REF = re.compile(
 
 
 def file_digest(path: str) -> str:
+    """Content hash of an asset, independent of line endings.
+
+    The repo stores LF and CI checks out LF, but a Windows clone with
+    core.autocrlf materialises CRLF in the working tree. Hashing raw bytes
+    there produced stamps that CI (hashing LF bytes) rejected as stale, so
+    every asset is normalised to LF before hashing. Pages served from a
+    Linux deploy are LF anyway, so the stamp still tracks what ships.
+    """
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
-        digest.update(handle.read())
+        digest.update(handle.read().replace(b"\r\n", b"\n"))
     return digest.hexdigest()[:HASH_LEN]
 
 
