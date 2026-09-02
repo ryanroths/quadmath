@@ -1051,11 +1051,17 @@
 
   // ===== Shareable build URLs =====
   // ?frame=65&kv=28000&cells=1&mah=300&pitch=0.7&dry=19.5&video=hdzero&style=cruise
-  // Read once on load (overrides the frame preset). The address bar is left
-  // alone — it used to be rewritten on every calculate(), which turned the
-  // homepage into a wall of query params for anyone just poking at inputs.
-  // COPY BUILD LINK builds the URL on demand from buildShareUrl(). Drop it in
-  // a Discord or a YouTube description and the calculator opens pre-filled.
+  // Read once on load (overrides the frame preset). calculate() does not write
+  // the address bar — PR #88 stopped that, because every keystroke used to
+  // turn the homepage into a wall of query params. COPY BUILD LINK builds the
+  // URL on demand from buildShareUrl(). Drop it in a Discord or a YouTube
+  // description and the calculator opens pre-filled.
+  //
+  // Old calculate() still left the 65mm analog cruise defaults in bookmarks
+  // and indexed links. applyUrlParams() only reads, so loading that query
+  // kept it in the bar. stripLandingDefaultQuery() uses replaceState to put
+  // those back to the bare path. A share with dry= or any non-default
+  // kv/video/style is left alone so it stays reloadable.
   const URL_KEYS = [
     ['kv',    () => els.motorKV,     v => els.motorKV.value = v],
     ['cells', () => els.cells,       v => els.cells.value = v],
@@ -1066,6 +1072,45 @@
     ['dry',   () => els.weight,      v => { els.weight.value = v; delete els.weight.dataset.derived; }],
     ['c',     () => els.packC,       v => els.packC.value = v],
   ];
+  function landingDefaultParams() {
+    const p = framePresets['65'];
+    return {
+      frame: '65',
+      kv: String(p.kv),
+      cells: String(p.cells),
+      mah: String(p.capacity),
+      pitch: String(p.pitch),
+      c: '100',
+      video: 'analog',
+      style: 'cruise',
+    };
+  }
+  function queryValueMatches(expected, actual) {
+    if (actual === expected) return true;
+    const n = parseFloat(actual), e = parseFloat(expected);
+    return isFinite(n) && isFinite(e) && n === e;
+  }
+  function isLandingDefaultQuery(q) {
+    const keys = [...q.keys()];
+    if (!keys.length) return false;
+    // dry= pre-fills the blank weight field — a real share, even when the
+    // number happens to be the 65mm catalogue figure.
+    if (q.has('dry')) return false;
+    const defaults = landingDefaultParams();
+    for (const key of keys) {
+      if (!(key in defaults)) return false;
+      if (!q.getAll(key).every(v => queryValueMatches(defaults[key], v))) return false;
+    }
+    return true;
+  }
+  function stripLandingDefaultQuery() {
+    const search = location.search;
+    if (!search) return;
+    const q = new URLSearchParams(search);
+    // Bare "?" has no keys; still strip so the bar is origin+path.
+    if ([...q.keys()].length && !isLandingDefaultQuery(q)) return;
+    try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
+  }
   function applyUrlParams() {
     const q = new URLSearchParams(location.search);
     if (![...q.keys()].length) return false;
@@ -1193,6 +1238,7 @@
   populateCompareSelects(currentFrame);
   applyPreset(currentFrame);
   applyUrlParams();
+  stripLandingDefaultQuery();
   updateVideoHint();
   calculate();
 
