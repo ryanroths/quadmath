@@ -1709,6 +1709,13 @@ function updatePortals(){
     if(state.pos.distanceTo(p.pos)<p.r){
       state.pos.set(p.destX,PORTAL_SPAWN_HEIGHT,p.destZ);
       state.vel.set(0,0,0); // clean teleport — no carried momentum smashing into destination geometry
+      // The physics module owns position/velocity — syncStateFromQp() mirrors
+      // qp -> state every frame, so writing only `state` was overwritten
+      // before render (toast fired, quad never moved). Push the teleport
+      // into qp too. Attitude, arm state and motor spool are left alone so
+      // the pilot comes out the other side still flying.
+      world2mod(state.pos,qp.position);
+      world2mod(state.vel,qp.velocity);
       portalCooldownUntil=t+1200;
       flashPortal();
       toast('WARP');
