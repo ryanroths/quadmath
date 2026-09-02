@@ -147,6 +147,18 @@ class StampTreeAndCheck(unittest.TestCase):
             self.assertIn("style.css?v=%s" % digest, text)
             self.assertIn("https://static.cloudflareinsights.com/beacon.min.js", text)
 
+    def test_digest_ignores_line_endings(self):
+        # A Windows checkout with core.autocrlf sees CRLF; CI sees LF. Both
+        # must stamp identically or local restamps fail the CI check.
+        with tempfile.TemporaryDirectory() as tmp:
+            lf = os.path.join(tmp, "lf.js")
+            crlf = os.path.join(tmp, "crlf.js")
+            with open(lf, "wb") as handle:
+                handle.write(b"const a = 1;\nconst b = 2;\n")
+            with open(crlf, "wb") as handle:
+                handle.write(b"const a = 1;\r\nconst b = 2;\r\n")
+            self.assertEqual(stamp.file_digest(lf), stamp.file_digest(crlf))
+
     def test_changing_asset_makes_check_fail_until_restamp(self):
         with tempfile.TemporaryDirectory() as tmp:
             _write(tmp, "script.js", "const a=1;\n")
