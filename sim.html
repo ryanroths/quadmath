@@ -32,15 +32,13 @@
   :root{--bg:#0D0E12;--panel:#15171D;--orange:#FF4D1A;--green:#3DDC97;--txt:#E8E9ED;--dim:#7A7F8C}
   *{box-sizing:border-box;margin:0;padding:0}
   html{height:100%}
-  /* The header is in normal flow above the canvas, so a 100vh canvas ran a
-     header's height (71px here) past the bottom of the viewport and
-     overflow:hidden cut that strip off for good. Laying the
-     page out as a flex column gives the canvas exactly the space that is left.
+  /* No site header on this page: the OSD is position:fixed from the top edge
+     and at 1024-1280px it sat on the logo and nav. The canvas owns the whole
+     viewport; the way back to the site is the footer logo and the panel link.
      100dvh rather than 100vh: on mobile 100vh is the *largest* the viewport can
      get, so the bottom of the canvas hid behind the browser UI. */
   body{background:var(--bg);color:var(--txt);font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;
     overflow:hidden;height:100vh;height:100dvh;display:flex;flex-direction:column}
-  header{flex:0 0 auto}
   /* min-height:0 so the canvas can shrink below its intrinsic size instead of
      forcing the column taller than the viewport. */
   #c{display:block;flex:1 1 auto;width:100%;min-height:0}
@@ -56,7 +54,14 @@
     padding:0 10px;font-size:10px;line-height:14px;
     color:var(--txt);background:rgba(13,14,18,.85);
     border:0;border-top:1px solid #262A33;text-align:center}
+  footer .sf-logo{color:var(--txt);text-decoration:none}
+  footer .sf-logo:hover{color:var(--orange)}
   footer .sf-logo .dot{color:var(--orange)}
+  #panelHome{display:inline-block;color:var(--dim);font-size:11px;text-decoration:none;margin-bottom:8px}
+  #panelHome:hover{color:var(--orange)}
+  /* G does nothing until a ghost exists (own best run, or a hosted/pasted
+     rival), so the hint reads dimmed until then. */
+  #legend b.off,.kbd b.off{color:var(--dim);font-weight:400}
   /* No dimmed colour on this bar. At 10px over a live scene --dim only reaches
      3.5:1; everything here inherits --txt, which holds 10.5:1 even against a
      blown-out white sky. */
@@ -67,12 +72,12 @@
     footer .sf-note{display:none}
   }
   .osd{position:fixed;pointer-events:none;font-size:13px;letter-spacing:.5px;text-shadow:0 0 4px rgba(0,0,0,.9)}
-  #osdTL{top:14px;left:16px} #osdTR{top:14px;right:16px;text-align:right}
+  #osdTL{top:14px;left:16px} #osdTR{top:48px;right:16px;text-align:right}
   #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
   #osdBL{display:none}
   #osdBR{bottom:18px;right:16px;text-align:right}
   #osdGate{top:14px;left:50%;transform:translateX(-50%);color:var(--txt);font-weight:600}
-  #osdLap{top:64px;left:16px;font-weight:600}
+  #osdLap{top:84px;left:16px;font-weight:600}
   #osdLand{position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);z-index:6;
     font-size:34px;font-weight:700;letter-spacing:3px;color:#ff3b2f;
     text-shadow:0 0 16px rgba(255,59,47,.7);pointer-events:none;display:none}
@@ -136,7 +141,7 @@
     border:1px solid #262A33;padding:10px 14px;font-size:11px;line-height:1.9;
     color:var(--dim);letter-spacing:.5px;pointer-events:none}
   #legend b{color:var(--txt);font-weight:600}
-  #audioHint{position:fixed;bottom:118px;left:16px;z-index:5;color:var(--dim);
+  #audioHint{position:fixed;bottom:150px;left:16px;z-index:5;color:var(--dim);
     font-size:11px;letter-spacing:.5px;pointer-events:none;opacity:1;transition:opacity 1s ease}
   #audioHint.hide{opacity:0}
   .lgc{position:absolute;width:8px;height:8px;border:1px solid var(--green);opacity:.45}
@@ -147,28 +152,6 @@
 </style>
 </head>
 <body>
-<header>
-  <div class="container header-inner">
-    <a href="/" class="logo" aria-label="QuadMath home">QuadMath<span class="dot">.</span></a>
-    <button class="nav-toggle" id="navToggle" type="button"
-            aria-expanded="false" aria-controls="site-nav" aria-label="Menu">
-      <span class="nav-toggle-bar"></span>
-      <span class="nav-toggle-bar"></span>
-      <span class="nav-toggle-bar"></span>
-    </button>
-    <nav id="site-nav">
-      <a href="/#calculator">Calculator</a>
-      <a href="/#guide">Guide</a>
-      <a href="/#motor-guide">Motors</a>
-      <a href="/#tools">Tools</a>
-      <a href="tune-database.html">Tunes</a>
-      <a href="bench.html">Bench</a>
-      <a href="sim.html" class="active" aria-current="page" style="color:#FF4D1A">Sim</a>
-      <a href="gear.html">Gear</a>
-      <a href="hire.html">Hire</a>
-    </nav>
-  </div>
-</header>
 <canvas id="c"></canvas>
 <div class="osd" id="osdTL"></div>
 <div class="osd" id="osdTR"></div>
@@ -220,7 +203,7 @@
   <div class="lgc lgc-br"></div>
   <b>M — Music On/Off</b><br>
   <b>F — Angle / Acro Mode</b><br>
-  <b>G — Ghost Replay</b><br>
+  <b id="legendGhost">G — Ghost Replay</b><br>
   <b>R — Reset Quad</b><br>
   <b>TAB — Tune Panel</b>
 </div>
@@ -235,6 +218,7 @@
 
 <button id="gear">⚙ TUNE [Tab]</button>
 <div id="panel">
+  <a id="panelHome" href="/">← Back to QuadMath</a>
   <h1>QUADMATH SIM</h1>
   <div class="sub">acro by default. F toggles angle mode.</div>
 
@@ -314,7 +298,7 @@
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
     <b>R</b> reset &nbsp;<b>Tab</b> panel<br>
-    🔊 <b>M</b>: Music &nbsp;<b>F</b>: angle/acro &nbsp;<b>G</b>: ghost
+    🔊 <b>M</b>: Music &nbsp;<b>F</b>: angle/acro &nbsp;<b id="kbdGhost">G</b>: ghost
   </div>
   <button id="btnReset">RESET QUAD [R]</button>
 </div>
@@ -401,9 +385,8 @@ renderer.outputColorSpace=THREE.SRGBColorSpace;
 const scene=new THREE.Scene();
 scene.fog=new THREE.Fog(0xc7d5df,250,1100);
 const camera=new THREE.PerspectiveCamera(CFG.fov,(canvas.clientWidth||1)/(canvas.clientHeight||1),0.05,3000);
-// Size from the canvas box, not the window. The canvas no longer spans the full
-// viewport (the header sits above it), so innerWidth/innerHeight would stretch
-// the render target past the visible area and skew the aspect ratio. The third
+// Size from the canvas box, not the window, so the render target always
+// matches the visible area and the aspect ratio cannot skew. The third
 // argument to setSize is updateStyle=false: three.js would otherwise write
 // inline width/height onto the canvas and break the flex sizing.
 function resize(){
@@ -414,7 +397,7 @@ function resize(){
 }
 addEventListener('resize',resize);
 // A window resize is not the only thing that changes the canvas box — mobile
-// browser UI collapsing changes 100dvh, and the header can rewrap. Observing the
+// browser UI collapsing changes 100dvh. Observing the
 // element catches those. No feedback loop: setSize with updateStyle=false leaves
 // the CSS box alone.
 if(window.ResizeObserver)new ResizeObserver(resize).observe(canvas);
@@ -2296,7 +2279,10 @@ addEventListener('keydown',e=>{
   if(e.key.toLowerCase()==='r')resetQuad();
   if(e.key.toLowerCase()==='m')toggleMusic();
   if(e.key.toLowerCase()==='f')toggleFlightMode();
-  if(e.key.toLowerCase()==='g'){ghostVisible=!ghostVisible;toast(ghostVisible?'GHOST ON':'GHOST OFF');}
+  if(e.key.toLowerCase()==='g'){
+    if(!ghostAvailable()){toast('NO GHOST YET — FINISH A RUN');return;}
+    ghostVisible=!ghostVisible;toast(ghostVisible?'GHOST ON':'GHOST OFF');
+  }
   if(e.key.startsWith('Arrow'))e.preventDefault();
 });
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
@@ -3033,7 +3019,21 @@ function playbackGhost(){
     rivalLabel.visible=true;
   }else{rivalMesh.visible=false;rivalLabel.visible=false;}
 }
-function updateGhost(){sampleGhost();playbackGhost();}
+// Is there anything for G to show on this track? Own best run, a hosted
+// default, or a pasted rival. Until then the G hints read dimmed and the key
+// explains itself instead of toggling nothing.
+function ghostAvailable(){
+  const own=ghosts[activeTrackId];
+  return !!((own&&own.length)||activeRival());
+}
+let _ghostHintOn=null;
+function updateGhostHint(){
+  const on=ghostAvailable();
+  if(on===_ghostHintOn)return;
+  _ghostHintOn=on;
+  for(const id of ['legendGhost','kbdGhost']){const el=document.getElementById(id);if(el)el.classList.toggle('off',!on);}
+}
+function updateGhost(){sampleGhost();playbackGhost();updateGhostHint();}
 
 // ---------- ghost sharing v1 ----------
 // Format (version-tagged for future changes):
@@ -3141,10 +3141,9 @@ requestAnimationFrame(loop);
      licence notice has to be legible, not faded to 60%. Same three pieces of
      text as before. -->
 <footer>
-  <span class="sf-logo">QuadMath<span class="dot">.</span></span>
+  <a class="sf-logo" href="/" aria-label="Back to QuadMath">← QuadMath<span class="dot">.</span></a>
   <span class="sf-note">Estimates only — always verify with bench testing. Fly safe.</span>
   <span class="sf-credit">City model by costoWRLD (Sketchfab, CC BY)</span>
 </footer>
-<script src="nav.js?v=0a5aa631939b" defer></script>
 </body>
 </html>
