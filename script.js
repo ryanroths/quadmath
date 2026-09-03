@@ -225,7 +225,7 @@
 
   // Fraction of no-load RPM reached at TOP SPEED (props unload as airspeed
   // builds, so this sits far above the static-hover load fraction). Calibrated
-  // with speedThrustPerMotor/frameCdA against real whoop GPS numbers:
+  // with speedModelThrustFudge/frameCdA against real whoop GPS numbers:
   // Air65-class 65mm ≈ 40mph, 75mm 1S ≈ 42mph, 85mm 2S ≈ 37mph.
   const motorLoadFraction = {
     65: 0.95,
@@ -233,9 +233,16 @@
     85: 0.65,
   };
 
-  // Calibrated static thrust per motor (g) at each frame's preset KV/cell combo.
-  // Tuned against community-reported top speeds; separate from the OSD thrust display.
-  const speedThrustPerMotor = {
+  // NOT A THRUST MEASUREMENT. A per-frame fudge factor (nominal grams per
+  // motor) that the top-speed drag solve multiplies by 4 * kv/kvRef to get a
+  // propulsive force. It was tuned so preset top speeds land on GPS-reported
+  // whoop numbers, absorbing whatever error frameCdA and motorLoadFraction
+  // carry. It is not comparable to staticThrustPerMotor() (the W^0.78 law
+  // behind T:W and the OSD): at the presets it reads 3.6x higher on 65mm and
+  // 1.2x lower on 85mm, and it scales linearly in KV with no ceiling.
+  // Issue #4 tracks replacing it with staticThrustPerMotor() and refitting
+  // frameCdA/motorLoadFraction, once #2/#5 give that function measured inputs.
+  const speedModelThrustFudge = {
     65: 70,
     75: 60,
     85: 85,
@@ -652,7 +659,7 @@
     const pitch_m    = pitch * 0.0254;
     const v_pitch_ms = (pitch_m * rpm_eff) / 60;
     const kvRef      = framePresets[currentFrame].kv;
-    const T_total_N  = (speedThrustPerMotor[currentFrame] * 4 * (kv / kvRef) / 1000) * 9.81;
+    const T_total_N  = (speedModelThrustFudge[currentFrame] * 4 * (kv / kvRef) / 1000) * 9.81;
     const rho = 1.225, CdA = frameCdA[currentFrame];
     const a_c = 0.5 * rho * CdA, b_c = T_total_N / v_pitch_ms;
     const disc = b_c * b_c + 4 * a_c * T_total_N;
@@ -1024,7 +1031,7 @@
     const rpm_eff    = kv * (cells * 3.7) * motorLoadFraction[frame];
     const v_pitch_ms = (pitch * 0.0254 * rpm_eff) / 60;
     if (v_pitch_ms <= 0) return 0;
-    const T_total_N  = (speedThrustPerMotor[frame] * 4 * (kv / framePresets[frame].kv) / 1000) * 9.81;
+    const T_total_N  = (speedModelThrustFudge[frame] * 4 * (kv / framePresets[frame].kv) / 1000) * 9.81;
     const a_c = 0.5 * 1.225 * frameCdA[frame], b_c = T_total_N / v_pitch_ms;
     const disc = b_c * b_c + 4 * a_c * T_total_N;
     const v_ms = disc >= 0 ? (-b_c + Math.sqrt(disc)) / (2 * a_c) : 0;
