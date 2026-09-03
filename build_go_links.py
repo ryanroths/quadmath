@@ -54,6 +54,7 @@ STUB = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="robots" content="noindex,nofollow">
+<meta name="description" content="Redirecting to the store page.">
 <meta http-equiv="refresh" content="0;url={url}">
 <link rel="canonical" href="{url}">
 <title>Redirecting…</title>
@@ -72,7 +73,6 @@ STUB = """<!DOCTYPE html>
   <p>Redirecting…</p>
   <p><a href="{url}">Continue</a></p>
 </div>
-<script>window.location.replace({url_js});</script>
 </body>
 </html>
 """
@@ -153,7 +153,7 @@ def main():
         d = os.path.join(GO_DIR, slug)
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
-            f.write(STUB.format(url=u, url_js=json.dumps(u)))
+            f.write(STUB.format(url=u))
 
     # 2. rewrite hrefs
     total = 0
