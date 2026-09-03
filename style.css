@@ -601,6 +601,7 @@
     padding: 40px 0;
     border-top: 1px solid var(--border);
   }
+  .section h1,
   .section h2 {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
