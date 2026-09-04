@@ -47,7 +47,7 @@
      connection and the preconnect is wasted. -->
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=optional" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=eb02c42fce60">
+<link rel="stylesheet" href="style.css?v=await-weight-1">
 <!-- Sets the flag the scroll-reveal styles hang off, before first paint so
      revealed content never flashes in and back out. Only when the observer
      exists, so unsupported browsers are never left with hidden content. -->
@@ -97,6 +97,13 @@
           <select id="motorSelect">
             <option value="">— Select a motor or enter KV below —</option>
           </select>
+        </div>
+
+        <div class="field">
+          <label for="weight">Dry Weight — no battery (grams)</label>
+          <input type="number" id="weight" placeholder="put it on a scale" step="0.5" min="14" max="80">
+          <div class="field-hint">Highest-leverage input on the page — T:W and the build score will not guess it. Weigh the airframe <strong>without a pack</strong>; pack weight is added from capacity. Selecting a motor can fill an estimate, labelled as such, never as a scale reading.</div>
+          <div class="field-hint" id="auwReadout"></div>
         </div>
 
         <div class="field">
@@ -159,25 +166,18 @@
           <input type="number" id="propPitch" value="1.5" step="0.1" min="0.5" max="3.5">
           <div class="field-hint">Whoop props (≤2" diameter) run 0.7"–3.5" pitch — e.g. a Gemfan 1219S is 1.9"</div>
         </div>
-
-        <div class="field">
-          <label for="weight">Dry Weight — no battery (grams)</label>
-          <input type="number" id="weight" placeholder="put it on a scale" step="0.5" min="14" max="80">
-          <div class="field-hint">Weigh the build <strong>without a pack</strong> — battery weight is added automatically from capacity (BT2.0/LAVA-class pack weights, ×2 for 2S). Deliberately blank: dry weight moves thrust-to-weight and the build score more than any other single input, so this calculator asks rather than guesses.</div>
-          <div class="field-hint" id="auwReadout"></div>
-        </div>
       </div>
 
       <!-- RESULTS / OSD -->
-      <div class="osd-panel">
+      <div class="osd-panel awaiting-weight">
         <div class="osd-corner-tl"></div>
         <div class="osd-corner-br"></div>
 
         <div class="build-score-hero">
           <div class="bs-label">BUILD SCORE</div>
           <div class="bs-number" id="buildScoreNum">—</div>
-          <div class="bs-personality" id="buildPersonality">—</div>
-          <div class="bs-class-label" id="buildScoreClass">scored within class</div>
+          <div class="bs-personality" id="buildPersonality">WEIGH IT FIRST</div>
+          <div class="bs-class-label" id="buildScoreClass">T:W and score wait on a scale reading</div>
           <div class="bs-weight" id="buildScoreWeight"></div>
           <div class="bs-bar-track">
             <div class="bs-bar-fill" id="buildScoreBar"></div>
@@ -188,29 +188,29 @@
         <div class="osd-stats">
           <div class="osd-stat">
             <div class="osd-stat-label">Flight Time</div>
-            <div class="osd-stat-value" id="flightTime">2.1<span class="unit">min</span></div>
-            <div class="osd-stat-sub" id="flightSub">Aggressive freestyle throttle — estimated</div>
+            <div class="osd-stat-value" id="flightTime">—<span class="unit">min</span></div>
+            <div class="osd-stat-sub" id="flightSub">Current-draw estimate — fills from motor and pack</div>
           </div>
-          <div class="osd-stat">
+          <div class="osd-stat osd-stat-locked">
             <div class="osd-stat-label">Thrust-to-Weight</div>
-            <div class="osd-stat-value" id="thrustWeight">3.2<span class="unit">:1</span></div>
+            <div class="osd-stat-value" id="thrustWeight">—<span class="unit">:1</span></div>
             <div class="tw-ceiling-badge" id="twCeilingBadge" title="Exceeds 6:1 thrust-to-weight — wheelie-prone per motor guide" hidden>⚠ &gt;6:1 wheelie risk</div>
-            <div class="osd-stat-sub" id="twRating">Punchy</div>
+            <div class="osd-stat-sub" id="twRating">Needs dry weight</div>
           </div>
           <div class="osd-stat full">
             <div class="osd-stat-label">Estimated Total Thrust</div>
-            <div class="osd-stat-value" id="totalThrust">86<span class="unit">g</span></div>
-            <div class="osd-stat-sub" id="thrustSub">What your pack can actually deliver, all 4 motors</div>
+            <div class="osd-stat-value" id="totalThrust">—<span class="unit">g</span></div>
+            <div class="osd-stat-sub" id="thrustSub">Pack and motor current — does not need a scale</div>
           </div>
           <div class="osd-stat full">
             <div class="osd-stat-label">All-Up Weight</div>
             <div class="osd-stat-value" id="auwValue">—<span class="unit">g</span></div>
-            <div class="osd-stat-sub" id="auwBreakdown">Dry airframe and the pack's share of all-up weight</div>
+            <div class="osd-stat-sub" id="auwBreakdown">Pack weight fills from capacity; dry is the missing term</div>
           </div>
-          <div class="osd-stat full">
+          <div class="osd-stat full osd-stat-locked">
             <div class="osd-stat-label">Bench Max — Unlimited Supply</div>
             <div class="osd-stat-value" id="benchTw">—<span class="unit">:1</span></div>
-            <div class="osd-stat-sub" id="benchSub">What the motors could pull if the pack were not the limit</div>
+            <div class="osd-stat-sub" id="benchSub">Thrust grams can fill; the ratio waits on dry weight</div>
           </div>
         </div>
       </div>
@@ -530,7 +530,7 @@
      in the head has nothing left to lift it and every .reveal section stays
      at opacity 0 forever. Dropping the flag here shows them unanimated. -->
 <script src="motion.js?v=0515ee8a5594" defer onerror="document.documentElement.classList.remove('js-motion')"></script>
-<script src="script.js?v=f0009a493e40"></script>
+<script src="script.js?v=68072169a656"></script>
 
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
