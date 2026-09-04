@@ -668,13 +668,16 @@
     // Bench figure: what the motors would pull on an unlimited supply.
     const maxCurrentPerMotor = estMaxCurrentPerMotor(kv, cells, currentFrame);
     const benchThrust = staticThrustPerMotor(maxCurrentPerMotor, voltage, currentFrame) * 4;
-    const twBench     = benchThrust / weight;
+    // weight is AUW. Null when dry weight is blank — thrust and current still
+    // compute; T:W and bench-anchor matching do not.
+    const hasAuw = weight != null && isFinite(weight) && weight > 0;
+    const twBench     = hasAuw ? benchThrust / weight : null;
 
     // Headline figure: clamp per-motor current to what the pack can source.
     const packLimitPerMotor  = packCurrentLimitPerMotor(capacity, cRating);
     const effCurrentPerMotor = Math.min(maxCurrentPerMotor, packLimitPerMotor);
     const totalThrust = staticThrustPerMotor(effCurrentPerMotor, voltage, currentFrame) * 4;
-    const tw          = totalThrust / weight;
+    const tw          = hasAuw ? totalThrust / weight : null;
     const packLimited = packLimitPerMotor < maxCurrentPerMotor;
 
     // Flight time still runs off the unclamped current: avgCurrentFraction was
@@ -685,7 +688,9 @@
     // (270mAh delivered from a 300mAh LiHV pack) instead of the generic 0.8.
     const styleKey = currentStyle();
     const style    = FLIGHT_STYLES[styleKey];
-    const anchor = benchAnchorFor(kv, currentFrame, weight, currentVideoSystem(), styleKey);
+    const anchor = hasAuw
+      ? benchAnchorFor(kv, currentFrame, weight, currentVideoSystem(), styleKey)
+      : null;
     const avgCurrent   = anchor
       ? anchor.avgCurrentA
       : maxCurrentPerMotor * 4 * avgCurrentFraction[currentFrame] * style.mult;
@@ -758,34 +763,58 @@
     return clampRange(n, ...WHOOP_RANGES.weight);
   }
 
-  // Blank every derived readout and tell the user why. Nagging beats a silent
-  // wrong number: an empty OSD is obviously incomplete, a plausible one is not.
-  const AWAIT_WEIGHT_MSG = 'Enter the dry weight above to calculate — no default is assumed, because a guessed weight changes every number below.';
+  // Waiting state: score, T:W, and AUW stay locked. Everything that does not
+  // divide by dry weight still computes — pack mass, pack-limited thrust,
+  // unlimited-supply thrust grams, current-draw flight time. A fully dashed
+  // OSD reads as broken; a guessed AUW reads as a measurement. This is the
+  // third path.
+  const AWAIT_WEIGHT_MSG = 'Pack weight is in. Dry weight is not — T:W and the build score wait on a scale reading, not a guess.';
   function showAwaitingWeight() {
-    const dash = '<span class="unit">—</span>';
-    els.totalThrust.innerHTML  = dash;
-    els.benchTw.innerHTML      = dash;
-    els.thrustWeight.innerHTML = dash;
-    els.flightTime.innerHTML   = dash;
-    els.thrustSub.textContent  = 'Awaiting dry weight';
-    els.benchSub.textContent   = 'Awaiting dry weight';
-    els.twRating.textContent   = '—';
-    els.thrustWeight.classList.remove('warn');
-    els.twCeilingBadge.hidden  = true;
+    const osd = document.querySelector('.osd-panel');
+    if (osd) osd.classList.add('awaiting-weight');
+
+    const kv       = clampRange(parseFloat(els.motorKV.value)   || 0, ...WHOOP_RANGES.kv);
+    const cells    = clampRange(parseFloat(els.cells.value)     || 1, ...WHOOP_RANGES.cells);
+    const capacity = clampRange(parseFloat(els.capacity.value)  || 0, ...WHOOP_RANGES.capacity);
+    const pitch    = clampRange(parseFloat(els.propPitch.value) || 0, ...WHOOP_RANGES.pitch);
+    const cRating  = clampRange(parseFloat(els.packC.value)     || 0, ...WHOOP_RANGES.cRating);
+    const s = computeStats(kv, cells, capacity, pitch, null, cRating);
+    const packG = packWeightG(capacity, cells);
+
+    els.totalThrust.innerHTML = s.totalThrust.toFixed(0) + '<span class="unit">g</span>';
+    els.thrustSub.textContent = s.packLimited
+      ? `Pack-limited: ${(s.effCurrentPerMotor * 4).toFixed(1)}A available vs ${(s.maxCurrentPerMotor * 4).toFixed(1)}A the motors want`
+      : `Motor-limited: motors draw ${(s.maxCurrentPerMotor * 4).toFixed(1)}A, under the pack's ${(s.packLimitPerMotor * 4).toFixed(1)}A limit`;
+
+    els.flightTime.innerHTML = s.flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
     if (els.flightSub) {
-      els.flightSub.textContent = 'Awaiting dry weight';
+      els.flightSub.textContent = s.style.label + ' — estimated from current draw (not a measured anchor)';
       els.flightSub.classList.remove('measured');
     }
-    document.getElementById('buildScoreNum').textContent   = '—';
+
+    const dash = '<span class="unit">—</span>';
+    els.benchTw.innerHTML      = dash;
+    els.benchSub.textContent   = s.benchThrust.toFixed(0) + 'g on an unlimited supply — ratio waits on dry weight';
+    els.thrustWeight.innerHTML = dash;
+    els.twRating.textContent   = 'Needs dry weight';
+    els.thrustWeight.classList.remove('warn');
+    els.twCeilingBadge.hidden  = true;
+    els.thrustWeight.closest('.osd-stat')?.classList.add('osd-stat-locked');
+    els.benchTw.closest('.osd-stat')?.classList.add('osd-stat-locked');
+
+    document.getElementById('buildScoreNum').textContent    = '—';
     document.getElementById('buildPersonality').textContent = 'WEIGH IT FIRST';
-    document.getElementById('buildScoreClass').textContent  = 'scored within ' + currentFrame + 'mm class';
+    document.getElementById('buildScoreClass').textContent  = 'T:W and score wait on a scale reading';
     document.getElementById('buildScoreBar').style.width    = '0%';
     const wEl = document.getElementById('buildScoreWeight');
     if (wEl) { wEl.textContent = ''; wEl.classList.remove('penalized', 'floored'); }
+
     const auwValEl = document.getElementById('auwValue');
-    if (auwValEl) auwValEl.innerHTML = dash;
+    if (auwValEl) auwValEl.innerHTML = packG.toFixed(1) + '<span class="unit">g</span>';
     const auwSubEl = document.getElementById('auwBreakdown');
-    if (auwSubEl) auwSubEl.textContent = 'dry weight not set';
+    if (auwSubEl) {
+      auwSubEl.textContent = packG.toFixed(1) + 'g pack (' + capacity.toFixed(0) + 'mAh ' + cells + 'S) — dry weight not set, AUW incomplete';
+    }
     const auwEl = document.getElementById('auwReadout');
     if (auwEl) { auwEl.textContent = AWAIT_WEIGHT_MSG; auwEl.classList.add('warn'); }
   }
@@ -804,6 +833,8 @@
     }
     // AUW = dry weight + real pack weight. TWR, the build score, and the
     // wheelie warning all key off this; omitting the pack inflated TWR ~30%.
+    const osd = document.querySelector('.osd-panel');
+    if (osd) osd.classList.remove('awaiting-weight');
     const packG = packWeightG(capacity, cells);
     const auw   = dryWeight + packG;
     const s = computeStats(kv, cells, capacity, pitch, auw, cRating);
@@ -843,6 +874,8 @@
     else if (tw >= 6)           { rating = 'Extreme — wheelie warning'; warn = true; }
     els.twRating.textContent = rating;
     els.thrustWeight.classList.toggle('warn', warn);
+    els.thrustWeight.closest('.osd-stat')?.classList.remove('osd-stat-locked');
+    els.benchTw.closest('.osd-stat')?.classList.remove('osd-stat-locked');
     // Advisory ceiling flag — never blocks or clamps the figure.
     els.twCeilingBadge.hidden = tw <= TW_CEILING;
 
@@ -946,8 +979,10 @@
     // the same refusal to invent a dry weight. Both columns stay dashed until
     // the weight is entered; setPair renders null as an em dash.
     const auw = dryWeight === null ? null : dryWeight + packWeightG(capacity, cells);
-    const sA = (auw !== null && !isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, auw, cRating) : null;
-    const sB = (auw !== null && !isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, auw, cRating) : null;
+    // Thrust, speed, and flight time do not need AUW. T:W stays dashed until
+    // dry weight is set — computeStats returns tw: null in that case.
+    const sA = (!isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, auw, cRating) : null;
+    const sB = (!isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, auw, cRating) : null;
 
     // Optional tierFor(value) returns a colour class for the cell — used by the
     // T:W row, where the number's absolute value matters more than who wins.

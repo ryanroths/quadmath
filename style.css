@@ -319,6 +319,19 @@
     display: flex;
     flex-direction: column;
   }
+  /* Waiting on dry weight: the panel is live, not empty. Score/T:W stay
+     muted so a dashed ratio is not read as a broken page. Computable
+     stats (thrust, pack, current-draw time) keep full contrast. */
+  .osd-panel.awaiting-weight .bs-number {
+    color: var(--muted);
+  }
+  .osd-panel.awaiting-weight .bs-bar-fill {
+    width: 0 !important;
+    opacity: 0.35;
+  }
+  .osd-stat-locked .osd-stat-value {
+    color: var(--muted);
+  }
   /* corner brackets - OSD style */
   .osd-panel::before, .osd-panel::after,
   .osd-corner-tl, .osd-corner-br {
