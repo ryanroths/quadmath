@@ -1,0 +1,3 @@
+Apply with: git apply patches/awaiting-weight.patch
+
+See PR description for the behavior change.
