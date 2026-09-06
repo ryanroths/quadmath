@@ -6,7 +6,7 @@
 
 **Build calculator** (`index.html`, `script.js`) — pick frame class, motor, prop, battery; get thrust-to-weight, AUW scoring, flight-time estimates, and C-rating sanity checks. Flying-style selector (Cruise / Freestyle / Aggressive) weights the scoring. Motor/prop combos with incoherent pitch pairings are filtered out. Shareable build links.
 
-**Bench data** (`data/bench/`) — first-hand measured numbers: AUW on a scale, flight times on a stopwatch, per-build JSON with the pack, style, and method recorded. No manufacturer claims, no estimates dressed up as measurements. Flight-time estimates in the calculator are anchored to these files.
+**Bench data** (`data/bench/`) — first-hand measured numbers: AUW on a scale, flight times on a stopwatch, per-build JSON with the pack, style, and method recorded. No manufacturer claims, no estimates dressed up as measurements. Nothing here is read at runtime: the calculator carries a hardcoded `BENCH_ANCHORS` list, and a build only replaces a flight-time estimate once it is added there by hand. Provisional builds anchor nothing — see `data/bench/README.md`.
 
 **Tune database** (`tune-database.html`, `tune-database.js`) — real Betaflight CLI dumps from flown builds. Every tune names its hardware and firmware target.
 
