@@ -59,37 +59,41 @@
   // preset. Selecting such a motor drives the cell count, which changes
   // voltage and therefore both thrust figures. Omit it and the frame preset
   // wins (65/75 = 1S, 85 = 2S).
+  //
+  // `id` is the stable URL key used by shared builds. Once shipped, never
+  // rename or reuse one: display names can improve and rows can move without
+  // invalidating links already posted in Discord, YouTube, or forums.
   const motorDB = {
     65: [
-      { name: 'NewBeeDrone 0703 Silver Edition', kv: 16420, propPitch: 0.7, weightPerMotor: 1.90 }, // 2026
+      { id: 'nbd-0703-silver-16420', name: 'NewBeeDrone 0703 Silver Edition', kv: 16420, propPitch: 0.7, weightPerMotor: 1.90 }, // 2026
       // BetaFPV sells this family under two names on one page: the 23K and 27K
       // are 0702SE II (brass bushings), the 30K is 0702 II (dual ball bearing).
       // Weights differ per variant and were previously all carried as 1.50.
       // Source: betafpv.com/products/0702-ii-brushless-motors spec table.
-      { name: 'BetaFPV 0702SE II',           kv: 23000, propPitch: 0.7, weightPerMotor: 1.45 },
-      { name: 'Happymodel SE0702',            kv: 23000, propPitch: 0.7, weightPerMotor: 1.46 },
-      { name: 'VCI Spark 0702',              kv: 25000, propPitch: 0.7, weightPerMotor: 1.52 },
-      { name: 'Happymodel SE0702',            kv: 26000, propPitch: 0.7, weightPerMotor: 1.46 },
-      { name: 'BetaFPV 0702SE II',           kv: 27000, propPitch: 0.7, weightPerMotor: 1.47 },
-      { name: 'VCI Spark 0702',              kv: 27000, propPitch: 0.7, weightPerMotor: 1.52 },
-      { name: 'NewBeeDrone Flow 0702 (dual ball bearing)', kv: 27000, propPitch: 0.7, weightPerMotor: 1.60 }, // 2026
-      { name: 'Happymodel SE0702',            kv: 28000, propPitch: 0.7, weightPerMotor: 1.46, benchVerified: true }, // mobula6-2024-hdzero-se0702-28k.json
-      { name: 'NewBeeDrone Flow 0702',        kv: 29000, propPitch: 0.7, weightPerMotor: 1.58 },
-      { name: 'VCI Spark 0702',              kv: 29000, propPitch: 0.7, weightPerMotor: 1.52 },
-      { name: 'BetaFPV 0702 II',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.55 },
+      { id: 'betafpv-0702se-ii-23000', name: 'BetaFPV 0702SE II',           kv: 23000, propPitch: 0.7, weightPerMotor: 1.45 },
+      { id: 'happymodel-se0702-23000', name: 'Happymodel SE0702',            kv: 23000, propPitch: 0.7, weightPerMotor: 1.46 },
+      { id: 'vci-spark-0702-25000', name: 'VCI Spark 0702',              kv: 25000, propPitch: 0.7, weightPerMotor: 1.52 },
+      { id: 'happymodel-se0702-26000', name: 'Happymodel SE0702',            kv: 26000, propPitch: 0.7, weightPerMotor: 1.46 },
+      { id: 'betafpv-0702se-ii-27000', name: 'BetaFPV 0702SE II',           kv: 27000, propPitch: 0.7, weightPerMotor: 1.47 },
+      { id: 'vci-spark-0702-27000', name: 'VCI Spark 0702',              kv: 27000, propPitch: 0.7, weightPerMotor: 1.52 },
+      { id: 'nbd-flow-0702-db-27000', name: 'NewBeeDrone Flow 0702 (dual ball bearing)', kv: 27000, propPitch: 0.7, weightPerMotor: 1.60 }, // 2026
+      { id: 'happymodel-se0702-28000', name: 'Happymodel SE0702',            kv: 28000, propPitch: 0.7, weightPerMotor: 1.46, benchVerified: true }, // mobula6-2024-hdzero-se0702-28k.json
+      { id: 'nbd-flow-0702-29000', name: 'NewBeeDrone Flow 0702',        kv: 29000, propPitch: 0.7, weightPerMotor: 1.58 },
+      { id: 'vci-spark-0702-29000', name: 'VCI Spark 0702',              kv: 29000, propPitch: 0.7, weightPerMotor: 1.52 },
+      { id: 'betafpv-0702-ii-30000', name: 'BetaFPV 0702 II',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.55 },
       // Name collision worth keeping straight: BetaFPV states the 0702 II 30000KV
       // is the same motor that shipped in the limited-edition first-gen Air65
       // "Champion Version". So "Champion" means 0702 II 30K on the old Air65, and
       // 0702 2026 36K on the Air65 II. Year + trim in the label is what separates
       // them; do not collapse these into a single "Champion" entry.
-      { name: 'BetaFPV 0702 Racing (2026)',  kv: 30000, propPitch: 0.7, weightPerMotor: 1.50 }, // 2026, 0.10mm stator laminations; 1.50g per betafpv.com 0702 2026 spec table
+      { id: 'betafpv-0702-racing-2026-30000', name: 'BetaFPV 0702 Racing (2026)',  kv: 30000, propPitch: 0.7, weightPerMotor: 1.50 }, // 2026, 0.10mm stator laminations; 1.50g per betafpv.com 0702 2026 spec table
       // VCI 0702 PRO DB — a SEPARATE line from VCI Spark 0702 above, not a
       // relabel: Spark is the 22-29K dual-bearing series at 1.52g, PRO DB is
       // 30K only. Both kept. 1.49g is the vendor figure (weBLEEDfpv product
       // page, 1mm shaft, 07*L2mm stator); the build sheet's ~2.2g estimate is
       // out of family for any 0702 and is not used. Flown in
       // data/bench/air65-analog-vci0702-30k.json.
-      { name: 'VCI 0702 PRO DB',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.49, benchVerified: true }, // 2026, air65-analog-vci0702-30k.json
+      { id: 'vci-0702-pro-db-30000', name: 'VCI 0702 PRO DB',             kv: 30000, propPitch: 0.7, weightPerMotor: 1.49, benchVerified: true }, // 2026, air65-analog-vci0702-30k.json
       // BetaFPV product, not a weBLEEDfpv house motor. weBLEEDfpv resells the
       // BetaFPV 2026 trims (Champion/Racing/Freestyle is BetaFPV's own trim
       // naming for the Air65 II family) -- do not re-attribute these to the
@@ -118,56 +122,56 @@
       // revises SKUs (a 0702 SPECIAL EDITION V2 ships alongside a V1), so
       // current production may differ. 1mm shaft confirmed by owner --
       // a distinct SKU from the 1.5mm SCREAMERS.
-      { name: 'weBLEEDfpv SCREAMERS 0702 (1mm)', kv: 32500, propPitch: 0.7, weightPerMotor: 1.43, shaft: '1mm' },
-      { name: 'BetaFPV 0702 Champion (2026)', kv: 36000, propPitch: 0.7, weightPerMotor: 1.59 }, // 2026, dual-ball bearings
+      { id: 'webleed-screamers-0702-1mm-32500', name: 'weBLEEDfpv SCREAMERS 0702 (1mm)', kv: 32500, propPitch: 0.7, weightPerMotor: 1.43, shaft: '1mm' },
+      { id: 'betafpv-0702-champion-2026-36000', name: 'BetaFPV 0702 Champion (2026)', kv: 36000, propPitch: 0.7, weightPerMotor: 1.59 }, // 2026, dual-ball bearings
       // Vendor advises ~10 min rest between packs; continuous back-to-back
       // flights risk ESC damage at this KV.
-      { name: 'weBLEEDfpv SKRRRT 0702',      kv: 40000, propPitch: 0.7, weightPerMotor: 1.60, shaft: '1mm' }, // shaft per vendor listing
+      { id: 'webleed-skrrrt-0702-40000', name: 'weBLEEDfpv SKRRRT 0702',      kv: 40000, propPitch: 0.7, weightPerMotor: 1.60, shaft: '1mm' }, // shaft per vendor listing
     ],
     75: [
-      { name: 'Happymodel RS0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.80 },
-      { name: 'Happymodel EX0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.80 },
-      { name: 'Happymodel SE0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.90 }, // 1.9g per happymodel.cn SE0802 spec list
-      { name: 'NewBeeDrone Flow 0802',        kv: 19000, propPitch: 1.1, weightPerMotor: 1.90 },
-      { name: 'Tiny Whoop Onesie 0802 Boost Juice', kv: 19000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
-      { name: 'RCinPower GTS V3 0802',       kv: 22000, propPitch: 1.1, weightPerMotor: 1.90 },
-      { name: 'Tiny Whoop Onesie 0802 Deuce Juice', kv: 22000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
+      { id: 'happymodel-rs0802-19000', name: 'Happymodel RS0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.80 },
+      { id: 'happymodel-ex0802-19000', name: 'Happymodel EX0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.80 },
+      { id: 'happymodel-se0802-19000', name: 'Happymodel SE0802',            kv: 19000, propPitch: 1.1, weightPerMotor: 1.90 }, // 1.9g per happymodel.cn SE0802 spec list
+      { id: 'nbd-flow-0802-19000', name: 'NewBeeDrone Flow 0802',        kv: 19000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { id: 'tinywhoop-onesie-boost-19000', name: 'Tiny Whoop Onesie 0802 Boost Juice', kv: 19000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
+      { id: 'rcinpower-gts-v3-0802-22000', name: 'RCinPower GTS V3 0802',       kv: 22000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { id: 'tinywhoop-onesie-deuce-22000', name: 'Tiny Whoop Onesie 0802 Deuce Juice', kv: 22000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       // BetaFPV publishes no weight for the 0802 Freestyle trim -- the 2026 spec
       // table fills in Champion and Racing only. 1.90 is the pre-existing
       // in-family figure, carried forward unsourced rather than invented.
-      { name: 'BetaFPV 0802 Freestyle (2026)', kv: 22000, propPitch: 1.1, weightPerMotor: 1.90 }, // 2026, weight UNSOURCED
-      { name: 'iFlight XING NANO X0802',     kv: 22000, propPitch: 1.1, weightPerMotor: 2.00 },
-      { name: 'BetaFPV 0802SE',              kv: 23000, propPitch: 1.1, weightPerMotor: 1.90 },
-      { name: 'BetaFPV 0802 Racing (2026)',  kv: 25000, propPitch: 1.1, weightPerMotor: 1.88 }, // 2026, brass bushings; 1.88g per betafpv.com 0802 2026 spec table
-      { name: 'NewBeeDrone Flow 0802',        kv: 25000, propPitch: 1.1, weightPerMotor: 1.90 },
-      { name: 'Happymodel RS0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 1.80 },
+      { id: 'betafpv-0802-freestyle-2026-22000', name: 'BetaFPV 0802 Freestyle (2026)', kv: 22000, propPitch: 1.1, weightPerMotor: 1.90 }, // 2026, weight UNSOURCED
+      { id: 'iflight-xing-nano-x0802-22000', name: 'iFlight XING NANO X0802',     kv: 22000, propPitch: 1.1, weightPerMotor: 2.00 },
+      { id: 'betafpv-0802se-23000', name: 'BetaFPV 0802SE',              kv: 23000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { id: 'betafpv-0802-racing-2026-25000', name: 'BetaFPV 0802 Racing (2026)',  kv: 25000, propPitch: 1.1, weightPerMotor: 1.88 }, // 2026, brass bushings; 1.88g per betafpv.com 0802 2026 spec table
+      { id: 'nbd-flow-0802-25000', name: 'NewBeeDrone Flow 0802',        kv: 25000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { id: 'happymodel-rs0802-25000', name: 'Happymodel RS0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 1.80 },
       // Full vendor title, for searchability: "weBLEEDfpv 0802 (1.5MM) VEGAN aka
       // SKYSCRAPERS 25,000kv w/Knurled Shaft Design". Listed here under the
       // short name pilots actually use.
-      { name: 'weBLEEDfpv Skyscrapers 0802', kv: 25000, propPitch: 1.1, weightPerMotor: 2.00, shaft: '1.5mm' }, // shaft per vendor title (1.5MM)
-      { name: 'Happymodel EX0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
-      { name: 'Tiny Whoop Onesie 0802 Zeus Juice',  kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
-      { name: 'RCinPower GTS V3 0802',       kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
-      { name: 'NewBeeDrone Flow 0802',        kv: 27000, propPitch: 1.1, weightPerMotor: 1.90 },
-      { name: 'RCinPower GTS V3 0802',       kv: 27000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
+      { id: 'webleed-skyscrapers-0802-25000', name: 'weBLEEDfpv Skyscrapers 0802', kv: 25000, propPitch: 1.1, weightPerMotor: 2.00, shaft: '1.5mm' }, // shaft per vendor title (1.5MM)
+      { id: 'happymodel-ex0802-25000', name: 'Happymodel EX0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
+      { id: 'tinywhoop-onesie-zeus-25000', name: 'Tiny Whoop Onesie 0802 Zeus Juice',  kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
+      { id: 'rcinpower-gts-v3-0802-25000', name: 'RCinPower GTS V3 0802',       kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
+      { id: 'nbd-flow-0802-27000', name: 'NewBeeDrone Flow 0802',        kv: 27000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { id: 'rcinpower-gts-v3-0802-27000', name: 'RCinPower GTS V3 0802',       kv: 27000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       // BetaFPV product, not a weBLEEDfpv house motor -- see the 0702 Champion
       // note above. Weight corrected 1.90 -> 1.95 from the vendor spec table.
       // Source: betafpv.com/products/0802-brushless-motors-2026.
-      { name: 'BetaFPV 0802 Champion (2026)', kv: 28000, propPitch: 1.1, weightPerMotor: 1.95 }, // 2026, dual-ball bearings
-      { name: 'NewBeeDrone Flow 0802',        kv: 30000, propPitch: 1.1, weightPerMotor: 1.90 },
+      { id: 'betafpv-0802-champion-2026-28000', name: 'BetaFPV 0802 Champion (2026)', kv: 28000, propPitch: 1.1, weightPerMotor: 1.95 }, // 2026, dual-ball bearings
+      { id: 'nbd-flow-0802-30000', name: 'NewBeeDrone Flow 0802',        kv: 30000, propPitch: 1.1, weightPerMotor: 1.90 },
       // Co-branded with MoeFPV. Vendor title: "weBLEEDfpv (1.5MM) 0802 32,500kv
       // MOEFPV TREETOPPERS w/Knurled Shaft Design".
-      { name: 'weBLEEDfpv x MoeFPV Treetoppers 0802', kv: 32500, propPitch: 1.1, weightPerMotor: 2.10, shaft: '1.5mm' }, // shaft per vendor title (1.5MM)
+      { id: 'webleed-moefpv-treetoppers-0802-32500', name: 'weBLEEDfpv x MoeFPV Treetoppers 0802', kv: 32500, propPitch: 1.1, weightPerMotor: 2.10, shaft: '1.5mm' }, // shaft per vendor title (1.5MM)
     ],
     85: [
-      { name: 'BetaFPV 1103',               kv:  8000, propPitch: 0.9, weightPerMotor: 3.20 },
-      { name: 'RCinPower 1003',              kv: 10000, propPitch: 0.9, weightPerMotor: 3.45 }, // 2026
-      { name: 'Happymodel RS1102',           kv: 10000, propPitch: 0.9, weightPerMotor: 2.80, cells: 2 }, // 2026, Mobula7 O4 stock
-      { name: 'BetaFPV 1103',               kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
-      { name: 'Happymodel EX1103',           kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
-      { name: 'Happymodel RS1102',           kv: 13500, propPitch: 0.9, weightPerMotor: 2.80, cells: 1 }, // 2026
-      { name: 'BetaFPV 1103',               kv: 15000, propPitch: 0.9, weightPerMotor: 3.30, cells: 1 }, // 2026
-      { name: 'Flywoo ROBO 1002',            kv: 23500, propPitch: 0.9, weightPerMotor: 2.50 },
+      { id: 'betafpv-1103-8000', name: 'BetaFPV 1103',               kv:  8000, propPitch: 0.9, weightPerMotor: 3.20 },
+      { id: 'rcinpower-1003-10000', name: 'RCinPower 1003',              kv: 10000, propPitch: 0.9, weightPerMotor: 3.45 }, // 2026
+      { id: 'happymodel-rs1102-10000', name: 'Happymodel RS1102',           kv: 10000, propPitch: 0.9, weightPerMotor: 2.80, cells: 2 }, // 2026, Mobula7 O4 stock
+      { id: 'betafpv-1103-11000', name: 'BetaFPV 1103',               kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
+      { id: 'happymodel-ex1103-11000', name: 'Happymodel EX1103',           kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
+      { id: 'happymodel-rs1102-13500', name: 'Happymodel RS1102',           kv: 13500, propPitch: 0.9, weightPerMotor: 2.80, cells: 1 }, // 2026
+      { id: 'betafpv-1103-15000', name: 'BetaFPV 1103',               kv: 15000, propPitch: 0.9, weightPerMotor: 3.30, cells: 1 }, // 2026
+      { id: 'flywoo-robo-1002-23500', name: 'Flywoo ROBO 1002',            kv: 23500, propPitch: 0.9, weightPerMotor: 2.50 },
     ],
   };
 
@@ -290,25 +294,40 @@
   // numbers.
   const BENCH_ANCHORS = [
     { id: 'air65-analog-vci0702-30k',   frame: '65', kv: 30000, auwG: 25.42,
-      avgCurrentA: 4.2, usableFraction: 0.9, video: 'analog',
+      avgCurrentA: 4.2, usableFraction: 0.9, video: 'analog', pitchIn: 1.9,
       note: 'measured — Air65 analog, 233s cruise' },
     { id: 'mobula6-2024-hdzero-se0702-28k', frame: '65', kv: 28000, auwG: 27.73,
-      avgCurrentA: 6.3, usableFraction: 0.9, video: 'hdzero',
+      avgCurrentA: 6.3, usableFraction: 0.9, video: 'hdzero', pitchIn: 1.9,
       note: 'measured — Mobula6 HDZero, 154s cruise' },
   ];
-  // Match on frame + KV + video system + AUW. Video matters because the video
-  // system IS most of the difference between these two anchors — without it a
-  // DJI build picked up the analog anchor's flight time. The AUW window is 5%
-  // now that the weight model is bench-derived: predicted AUW lands within 0.3%
-  // of measured for both anchors, so the window no longer carries the match.
-  // Anchors are cruise runs, so they only apply in cruise. Comparing a measured
-  // cruise flight against a freestyle estimate was the ambiguity that made the
-  // old AUW margin fragile; matching style keeps it like for like.
-  function benchAnchorFor(kv, frame, auw, video, style) {
+  // Prop pitch window for an anchor match, in inches. Tight on purpose: both
+  // anchors flew a Gemfan 1219 at 1.9", and the next prop up the 65mm DB is the
+  // 1220-4 quad-blade at 2.0", so anything looser than 0.1" would hand a
+  // quad-blade a tri-blade's measured current. 0.05" rejects it while still
+  // absorbing the rounding a shared ?pitch= link can carry.
+  const ANCHOR_PITCH_WINDOW_IN = 0.05;
+  // Match on frame + KV + video system + prop pitch + AUW. Video matters because
+  // the video system IS most of the difference between these two anchors —
+  // without it a DJI build picked up the analog anchor's flight time. Pitch is
+  // here for the same reason, and it is the property that used to leak: pitch is
+  // the only prop attribute the model reads, so a 0.7" Gemfan 1207 satisfied
+  // every other key and inherited a flight time measured on a prop with nearly
+  // three times the pitch — reported as "anchored to measured data". The AUW
+  // window is 5% now that the weight model is bench-derived: predicted AUW lands
+  // within 0.3% of measured for both anchors, so the window no longer carries
+  // the match. Anchors are cruise runs, so they only apply in cruise. Comparing
+  // a measured cruise flight against a freestyle estimate was the ambiguity that
+  // made the old AUW margin fragile; matching style keeps it like for like.
+  //
+  // A non-finite pitch fails the window and falls back to the model, which is
+  // the safe direction: an estimate labelled as one beats a measurement that
+  // was not taken on this build.
+  function benchAnchorFor(kv, frame, auw, video, style, pitch) {
     if (style !== 'cruise') return null;
     return BENCH_ANCHORS.find(a =>
       a.frame === String(frame) && a.kv === kv &&
       a.video === (video || 'analog') &&
+      Math.abs(pitch - a.pitchIn) <= ANCHOR_PITCH_WINDOW_IN &&
       Math.abs(auw - a.auwG) / a.auwG <= 0.05) || null;
   }
 
@@ -363,6 +382,7 @@
     (motorDB[frame] || []).forEach((m, i) => {
       const opt = document.createElement('option');
       opt.value = i;
+      opt.setAttribute('data-component-id', m.id);
       opt.setAttribute('data-kv', m.kv);
       opt.setAttribute('data-pitch', m.propPitch);
       opt.setAttribute('data-weight', m.weightPerMotor);
@@ -381,39 +401,40 @@
   // `blades` drives the (bi)/(tri)/(quad) suffix in the dropdown label.
   // Pitch on 2026 additions is read from the model designation (Gemfan 1220
   // = 1.2" diameter, 2.0" pitch) — same convention the existing rows follow.
+  // `id` has the same permanent shared-link contract as motorDB.id.
   const propDB = {
     65: [
-      { name: 'Gemfan 1207 3-blade',              pitch: 0.7, weight: 0.15, shaft: '1.0mm', blades: 3 },
-      { name: 'Gemfan 1207S 3-blade (2026)',      pitch: 0.7, weight: 0.30, shaft: '1.0mm', blades: 3 }, // 2026
-      { name: 'Gemfan 1208 3-blade',              pitch: 0.8, weight: 0.21, shaft: '1.5mm', blades: 3 },
-      { name: 'Gemfan 1219S 3-blade',             pitch: 1.9, weight: 0.18, shaft: '1.0mm', blades: 3 },
-      { name: 'HQ Ultralight 1.2x0.9x3',         pitch: 0.9, weight: 0.18, shaft: '1.0mm', blades: 3 },
-      { name: 'HQ Ultralight 31mm 3-blade High',  pitch: 1.0, weight: 0.16, shaft: '1.0mm', blades: 3 },
-      { name: 'HQ Ultralight 1.2x1.2 2-blade',   pitch: 1.2, weight: 0.14, shaft: '1.0mm', blades: 2 },
-      { name: 'Gemfan 1210-2 2-blade',           pitch: 1.0, weight: 0.19, shaft: '1.0mm', blades: 2 },
+      { id: 'gemfan-1207-3', name: 'Gemfan 1207 3-blade',              pitch: 0.7, weight: 0.15, shaft: '1.0mm', blades: 3 },
+      { id: 'gemfan-1207s-3-2026', name: 'Gemfan 1207S 3-blade (2026)',      pitch: 0.7, weight: 0.30, shaft: '1.0mm', blades: 3 }, // 2026
+      { id: 'gemfan-1208-3', name: 'Gemfan 1208 3-blade',              pitch: 0.8, weight: 0.21, shaft: '1.5mm', blades: 3 },
+      { id: 'gemfan-1219s-3', name: 'Gemfan 1219S 3-blade',             pitch: 1.9, weight: 0.18, shaft: '1.0mm', blades: 3 },
+      { id: 'hq-12x09x3', name: 'HQ Ultralight 1.2x0.9x3',         pitch: 0.9, weight: 0.18, shaft: '1.0mm', blades: 3 },
+      { id: 'hq-31mm-3-high', name: 'HQ Ultralight 31mm 3-blade High',  pitch: 1.0, weight: 0.16, shaft: '1.0mm', blades: 3 },
+      { id: 'hq-12x12-2', name: 'HQ Ultralight 1.2x1.2 2-blade',   pitch: 1.2, weight: 0.14, shaft: '1.0mm', blades: 2 },
+      { id: 'gemfan-1210-2-1mm', name: 'Gemfan 1210-2 2-blade',           pitch: 1.0, weight: 0.19, shaft: '1.0mm', blades: 2 },
       // Same 1210-2 mould as the row above, 1.5mm hub — the shaft the SKRRRT
       // and other 1.5mm whoop motors take.
-      { name: 'Gemfan 1210-2 2-blade (1.5mm)',   pitch: 1.0, weight: 0.19, shaft: '1.5mm', blades: 2 }, // 2026
-      { name: 'Gemfan 1220-4 quad-blade',        pitch: 2.0, weight: 0.40, shaft: '1.0mm', blades: 4 }, // 2026
+      { id: 'gemfan-1210-2-15mm', name: 'Gemfan 1210-2 2-blade (1.5mm)',   pitch: 1.0, weight: 0.19, shaft: '1.5mm', blades: 2 }, // 2026
+      { id: 'gemfan-1220-4', name: 'Gemfan 1220-4 quad-blade',        pitch: 2.0, weight: 0.40, shaft: '1.0mm', blades: 4 }, // 2026
     ],
     75: [
-      { name: 'Gemfan 1611 3-blade',                    pitch: 1.1, weight: 0.085, shaft: '1.5mm',     blades: 3 },
-      { name: 'Gemfan 1610 2-blade',                    pitch: 1.0, weight: 0.18,  shaft: '1.0mm',     blades: 2 },
-      { name: 'Gemfan 1614 3-blade',                    pitch: 1.4, weight: 0.50,  shaft: '1.0/1.5mm', blades: 3 }, // 2026
-      { name: 'Gemfan 1635 3-blade',                    pitch: 3.5, weight: 0.54,  shaft: '1.0mm',     blades: 3 },
-      { name: 'Gemfan 1636 4-blade',                    pitch: 3.6, weight: 0.80,  shaft: '1.0/1.5mm', blades: 4 }, // 2026
-      { name: 'HQ Ultralight 40mm 1.6x1.1x3',          pitch: 1.1, weight: 0.28,  shaft: '1.0/1.5mm', blades: 3 },
-      { name: 'HQ Ultralight 40mm 1.6x1x3',            pitch: 1.0, weight: 0.25,  shaft: '1.0/1.5mm', blades: 3 },
-      { name: 'HQ Ultralight 40mm 2-blade 1.6x1.2',    pitch: 1.2, weight: 0.20,  shaft: '1.0/1.5mm', blades: 2 },
+      { id: 'gemfan-1611-3', name: 'Gemfan 1611 3-blade',                    pitch: 1.1, weight: 0.085, shaft: '1.5mm',     blades: 3 },
+      { id: 'gemfan-1610-2', name: 'Gemfan 1610 2-blade',                    pitch: 1.0, weight: 0.18,  shaft: '1.0mm',     blades: 2 },
+      { id: 'gemfan-1614-3', name: 'Gemfan 1614 3-blade',                    pitch: 1.4, weight: 0.50,  shaft: '1.0/1.5mm', blades: 3 }, // 2026
+      { id: 'gemfan-1635-3', name: 'Gemfan 1635 3-blade',                    pitch: 3.5, weight: 0.54,  shaft: '1.0mm',     blades: 3 },
+      { id: 'gemfan-1636-4', name: 'Gemfan 1636 4-blade',                    pitch: 3.6, weight: 0.80,  shaft: '1.0/1.5mm', blades: 4 }, // 2026
+      { id: 'hq-40mm-16x11x3', name: 'HQ Ultralight 40mm 1.6x1.1x3',          pitch: 1.1, weight: 0.28,  shaft: '1.0/1.5mm', blades: 3 },
+      { id: 'hq-40mm-16x10x3', name: 'HQ Ultralight 40mm 1.6x1x3',            pitch: 1.0, weight: 0.25,  shaft: '1.0/1.5mm', blades: 3 },
+      { id: 'hq-40mm-16x12-2', name: 'HQ Ultralight 40mm 2-blade 1.6x1.2',    pitch: 1.2, weight: 0.20,  shaft: '1.0/1.5mm', blades: 2 },
     ],
     85: [
-      { name: 'Gemfan 2" T-mount 3-blade',        pitch: 0.9, weight: 0.4,  shaft: 'T-mount 1.5mm', blades: 3 },
-      { name: 'Emax Avan Micro 2" 3-blade',       pitch: 1.2, weight: 0.75, shaft: 'T-mount 1.5mm', blades: 3 }, // 2026
-      { name: 'Gemfan Hurricane 2015 2-blade',    pitch: 1.5, weight: 0.5,  shaft: '1.5mm',         blades: 2 },
-      { name: 'Gemfan 2020 T-mount 3-blade',      pitch: 1.9, weight: 0.4,  shaft: 'T-mount 1.5mm', blades: 3 },
-      { name: 'HQ T2x2x3 T-mount 3-blade',        pitch: 2.0, weight: 0.35, shaft: 'T-mount',       blades: 3 },
-      { name: 'HQ Durable T2x2x3',                pitch: 2.0, weight: 0.75, shaft: 'T-mount',       blades: 3 }, // 2026
-      { name: 'Gemfan 2035 4-blade',              pitch: 3.5, weight: 1.00, shaft: 'T-mount 1.5mm', blades: 4 }, // 2026, needs 1103+
+      { id: 'gemfan-2in-tmount-3', name: 'Gemfan 2" T-mount 3-blade',        pitch: 0.9, weight: 0.4,  shaft: 'T-mount 1.5mm', blades: 3 },
+      { id: 'emax-avan-micro-2in-3', name: 'Emax Avan Micro 2" 3-blade',       pitch: 1.2, weight: 0.75, shaft: 'T-mount 1.5mm', blades: 3 }, // 2026
+      { id: 'gemfan-hurricane-2015-2', name: 'Gemfan Hurricane 2015 2-blade',    pitch: 1.5, weight: 0.5,  shaft: '1.5mm',         blades: 2 },
+      { id: 'gemfan-2020-tmount-3', name: 'Gemfan 2020 T-mount 3-blade',      pitch: 1.9, weight: 0.4,  shaft: 'T-mount 1.5mm', blades: 3 },
+      { id: 'hq-t2x2x3-tmount-3', name: 'HQ T2x2x3 T-mount 3-blade',        pitch: 2.0, weight: 0.35, shaft: 'T-mount',       blades: 3 },
+      { id: 'hq-durable-t2x2x3-3', name: 'HQ Durable T2x2x3',                pitch: 2.0, weight: 0.75, shaft: 'T-mount',       blades: 3 }, // 2026
+      { id: 'gemfan-2035-4', name: 'Gemfan 2035 4-blade',              pitch: 3.5, weight: 1.00, shaft: 'T-mount 1.5mm', blades: 4 }, // 2026, needs 1103+
     ],
   };
 
@@ -427,6 +448,7 @@
     (propDB[frame] || []).forEach((p, i) => {
       const opt = document.createElement('option');
       opt.value = i;
+      opt.setAttribute('data-component-id', p.id);
       opt.setAttribute('data-pitch', p.pitch);
       opt.setAttribute('data-weight', p.weight);
       opt.setAttribute('data-shaft', p.shaft);
@@ -598,7 +620,11 @@
     const weight = opt.getAttribute('data-weight');
     const cells = opt.getAttribute('data-cells');
     if (kv) els.motorKV.value = kv;
-    if (pitch) els.propPitch.value = pitch;
+    // propPitch on a motor is only a starting point. Do not overwrite a real
+    // prop the pilot already picked: that left the dropdown naming one prop
+    // while the numeric field described another, and no shared URL could
+    // represent both truthfully.
+    if (pitch && !propSelect.value) els.propPitch.value = pitch;
     // Motors with a pinned cell count drive the selector; the rest fall back to
     // the frame preset, so a 1S pick does not stay latched on the next motor.
     els.cells.value = cells || framePresets[currentFrame].cells;
@@ -617,7 +643,17 @@
     calculate();
   });
 
-  els.motorKV.addEventListener('input', () => { motorSelect.value = ''; });
+  // Manual numeric overrides mean the catalogue identity is no longer exact.
+  // Clear the corresponding selection so copied URLs cannot claim a specific
+  // component, and immediately remove any shaft warning that depended on it.
+  els.motorKV.addEventListener('input', () => {
+    motorSelect.value = '';
+    updateShaftWarn();
+  });
+  els.propPitch.addEventListener('input', () => {
+    propSelect.value = '';
+    updateShaftWarn();
+  });
 
   // Typing in the weight box means it was weighed — drop the estimate label.
   // Registered before the generic recalc loop at the bottom of init so the flag
@@ -668,13 +704,16 @@
     // Bench figure: what the motors would pull on an unlimited supply.
     const maxCurrentPerMotor = estMaxCurrentPerMotor(kv, cells, currentFrame);
     const benchThrust = staticThrustPerMotor(maxCurrentPerMotor, voltage, currentFrame) * 4;
-    const twBench     = benchThrust / weight;
+    // weight is AUW. Null when dry weight is blank — thrust and current still
+    // compute; T:W and bench-anchor matching do not.
+    const hasAuw = weight != null && isFinite(weight) && weight > 0;
+    const twBench     = hasAuw ? benchThrust / weight : null;
 
     // Headline figure: clamp per-motor current to what the pack can source.
     const packLimitPerMotor  = packCurrentLimitPerMotor(capacity, cRating);
     const effCurrentPerMotor = Math.min(maxCurrentPerMotor, packLimitPerMotor);
     const totalThrust = staticThrustPerMotor(effCurrentPerMotor, voltage, currentFrame) * 4;
-    const tw          = totalThrust / weight;
+    const tw          = hasAuw ? totalThrust / weight : null;
     const packLimited = packLimitPerMotor < maxCurrentPerMotor;
 
     // Flight time still runs off the unclamped current: avgCurrentFraction was
@@ -685,7 +724,9 @@
     // (270mAh delivered from a 300mAh LiHV pack) instead of the generic 0.8.
     const styleKey = currentStyle();
     const style    = FLIGHT_STYLES[styleKey];
-    const anchor = benchAnchorFor(kv, currentFrame, weight, currentVideoSystem(), styleKey);
+    const anchor = hasAuw
+      ? benchAnchorFor(kv, currentFrame, weight, currentVideoSystem(), styleKey, pitch)
+      : null;
     const avgCurrent   = anchor
       ? anchor.avgCurrentA
       : maxCurrentPerMotor * 4 * avgCurrentFraction[currentFrame] * style.mult;
@@ -758,34 +799,58 @@
     return clampRange(n, ...WHOOP_RANGES.weight);
   }
 
-  // Blank every derived readout and tell the user why. Nagging beats a silent
-  // wrong number: an empty OSD is obviously incomplete, a plausible one is not.
-  const AWAIT_WEIGHT_MSG = 'Enter the dry weight above to calculate — no default is assumed, because a guessed weight changes every number below.';
+  // Waiting state: score, T:W, and AUW stay locked. Everything that does not
+  // divide by dry weight still computes — pack mass, pack-limited thrust,
+  // unlimited-supply thrust grams, current-draw flight time. A fully dashed
+  // OSD reads as broken; a guessed AUW reads as a measurement. This is the
+  // third path.
+  const AWAIT_WEIGHT_MSG = 'Pack weight is in. Dry weight is not — T:W and the build score wait on a scale reading, not a guess.';
   function showAwaitingWeight() {
-    const dash = '<span class="unit">—</span>';
-    els.totalThrust.innerHTML  = dash;
-    els.benchTw.innerHTML      = dash;
-    els.thrustWeight.innerHTML = dash;
-    els.flightTime.innerHTML   = dash;
-    els.thrustSub.textContent  = 'Awaiting dry weight';
-    els.benchSub.textContent   = 'Awaiting dry weight';
-    els.twRating.textContent   = '—';
-    els.thrustWeight.classList.remove('warn');
-    els.twCeilingBadge.hidden  = true;
+    const osd = document.querySelector('.osd-panel');
+    if (osd) osd.classList.add('awaiting-weight');
+
+    const kv       = clampRange(parseFloat(els.motorKV.value)   || 0, ...WHOOP_RANGES.kv);
+    const cells    = clampRange(parseFloat(els.cells.value)     || 1, ...WHOOP_RANGES.cells);
+    const capacity = clampRange(parseFloat(els.capacity.value)  || 0, ...WHOOP_RANGES.capacity);
+    const pitch    = clampRange(parseFloat(els.propPitch.value) || 0, ...WHOOP_RANGES.pitch);
+    const cRating  = clampRange(parseFloat(els.packC.value)     || 0, ...WHOOP_RANGES.cRating);
+    const s = computeStats(kv, cells, capacity, pitch, null, cRating);
+    const packG = packWeightG(capacity, cells);
+
+    els.totalThrust.innerHTML = s.totalThrust.toFixed(0) + '<span class="unit">g</span>';
+    els.thrustSub.textContent = s.packLimited
+      ? `Pack-limited: ${(s.effCurrentPerMotor * 4).toFixed(1)}A available vs ${(s.maxCurrentPerMotor * 4).toFixed(1)}A the motors want`
+      : `Motor-limited: motors draw ${(s.maxCurrentPerMotor * 4).toFixed(1)}A, under the pack's ${(s.packLimitPerMotor * 4).toFixed(1)}A limit`;
+
+    els.flightTime.innerHTML = s.flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
     if (els.flightSub) {
-      els.flightSub.textContent = 'Awaiting dry weight';
+      els.flightSub.textContent = s.style.label + ' — estimated from current draw (not a measured anchor)';
       els.flightSub.classList.remove('measured');
     }
-    document.getElementById('buildScoreNum').textContent   = '—';
+
+    const dash = '<span class="unit">—</span>';
+    els.benchTw.innerHTML      = dash;
+    els.benchSub.textContent   = s.benchThrust.toFixed(0) + 'g on an unlimited supply — ratio waits on dry weight';
+    els.thrustWeight.innerHTML = dash;
+    els.twRating.textContent   = 'Needs dry weight';
+    els.thrustWeight.classList.remove('warn');
+    els.twCeilingBadge.hidden  = true;
+    els.thrustWeight.closest('.osd-stat')?.classList.add('osd-stat-locked');
+    els.benchTw.closest('.osd-stat')?.classList.add('osd-stat-locked');
+
+    document.getElementById('buildScoreNum').textContent    = '—';
     document.getElementById('buildPersonality').textContent = 'WEIGH IT FIRST';
-    document.getElementById('buildScoreClass').textContent  = 'scored within ' + currentFrame + 'mm class';
+    document.getElementById('buildScoreClass').textContent  = 'T:W and score wait on a scale reading';
     document.getElementById('buildScoreBar').style.width    = '0%';
     const wEl = document.getElementById('buildScoreWeight');
     if (wEl) { wEl.textContent = ''; wEl.classList.remove('penalized', 'floored'); }
+
     const auwValEl = document.getElementById('auwValue');
-    if (auwValEl) auwValEl.innerHTML = dash;
+    if (auwValEl) auwValEl.innerHTML = packG.toFixed(1) + '<span class="unit">g</span>';
     const auwSubEl = document.getElementById('auwBreakdown');
-    if (auwSubEl) auwSubEl.textContent = 'dry weight not set';
+    if (auwSubEl) {
+      auwSubEl.textContent = packG.toFixed(1) + 'g pack (' + capacity.toFixed(0) + 'mAh ' + cells + 'S) — dry weight not set, AUW incomplete';
+    }
     const auwEl = document.getElementById('auwReadout');
     if (auwEl) { auwEl.textContent = AWAIT_WEIGHT_MSG; auwEl.classList.add('warn'); }
   }
@@ -804,6 +869,8 @@
     }
     // AUW = dry weight + real pack weight. TWR, the build score, and the
     // wheelie warning all key off this; omitting the pack inflated TWR ~30%.
+    const osd = document.querySelector('.osd-panel');
+    if (osd) osd.classList.remove('awaiting-weight');
     const packG = packWeightG(capacity, cells);
     const auw   = dryWeight + packG;
     const s = computeStats(kv, cells, capacity, pitch, auw, cRating);
@@ -843,6 +910,8 @@
     else if (tw >= 6)           { rating = 'Extreme — wheelie warning'; warn = true; }
     els.twRating.textContent = rating;
     els.thrustWeight.classList.toggle('warn', warn);
+    els.thrustWeight.closest('.osd-stat')?.classList.remove('osd-stat-locked');
+    els.benchTw.closest('.osd-stat')?.classList.remove('osd-stat-locked');
     // Advisory ceiling flag — never blocks or clamps the figure.
     els.twCeilingBadge.hidden = tw <= TW_CEILING;
 
@@ -946,8 +1015,10 @@
     // the same refusal to invent a dry weight. Both columns stay dashed until
     // the weight is entered; setPair renders null as an em dash.
     const auw = dryWeight === null ? null : dryWeight + packWeightG(capacity, cells);
-    const sA = (auw !== null && !isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, auw, cRating) : null;
-    const sB = (auw !== null && !isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, auw, cRating) : null;
+    // Thrust, speed, and flight time do not need AUW. T:W stays dashed until
+    // dry weight is set — computeStats returns tw: null in that case.
+    const sA = (!isNaN(kvA) && kvA > 0) ? computeStats(kvA, cells, capacity, pitch, auw, cRating) : null;
+    const sB = (!isNaN(kvB) && kvB > 0) ? computeStats(kvB, cells, capacity, pitch, auw, cRating) : null;
 
     // Optional tierFor(value) returns a colour class for the cell — used by the
     // T:W row, where the number's absolute value matters more than who wins.
@@ -1057,7 +1128,8 @@
   }
 
   // ===== Shareable build URLs =====
-  // ?frame=65&kv=28000&cells=1&mah=300&pitch=0.7&dry=19.5&video=hdzero&style=cruise
+  // ?frame=65&motor=happymodel-se0702-28000&prop=gemfan-1219s-3
+  //   &kv=28000&cells=1&mah=300&pitch=1.9&dry=19.5&video=hdzero&style=cruise
   // Read once on load (overrides the frame preset). calculate() does not write
   // the address bar — PR #88 stopped that, because every keystroke used to
   // turn the homepage into a wall of query params. COPY BUILD LINK builds the
@@ -1096,6 +1168,24 @@
     if (actual === expected) return true;
     const n = parseFloat(actual), e = parseFloat(expected);
     return isFinite(n) && isFinite(e) && n === e;
+  }
+  function selectedComponentId(select) {
+    const opt = select.options[select.selectedIndex];
+    return opt && opt.value !== '' ? (opt.getAttribute('data-component-id') || '') : '';
+  }
+  // IDs are stable; option indexes are not. Restore by ID, but only when the
+  // numeric value in the same URL still describes that component. A stale,
+  // hand-edited or cross-frame ID falls back to the numeric build with a blank
+  // dropdown rather than displaying hardware the numbers do not represent.
+  function restoreComponentSelection(select, list, id, numericKey, numericValue) {
+    if (!id) return null;
+    const index = (list || []).findIndex(item =>
+      item.id === id &&
+      (numericValue == null || numericValue === '' ||
+       queryValueMatches(String(item[numericKey]), numericValue)));
+    if (index < 0) return null;
+    select.value = String(index);
+    return list[index];
   }
   function isLandingDefaultQuery(q) {
     const keys = [...q.keys()];
@@ -1142,12 +1232,35 @@
     if (sty && els.flightStyle && [...els.flightStyle.options].some(o => o.value === sty)) {
       els.flightStyle.value = sty; any = true;
     }
-    if (any) { motorSelect.value = ''; updateVideoHint(); }
+    const sharedMotor = restoreComponentSelection(
+      motorSelect, motorDB[currentFrame], q.get('motor'), 'kv', q.get('kv'));
+    if (sharedMotor) {
+      // Component-only URLs are valid too; full URLs still carry the numeric
+      // value so old clients and humans can read them without the DB.
+      if (!q.has('kv')) els.motorKV.value = sharedMotor.kv;
+      any = true;
+    }
+    const sharedProp = restoreComponentSelection(
+      propSelect, propDB[currentFrame], q.get('prop'), 'pitch', q.get('pitch'));
+    if (sharedProp) {
+      if (!q.has('pitch')) els.propPitch.value = sharedProp.pitch;
+      any = true;
+    }
+    if (any) {
+      if (!sharedMotor) motorSelect.value = '';
+      if (!sharedProp) propSelect.value = '';
+      updateShaftWarn();
+      updateVideoHint();
+    }
     return any;
   }
   function buildShareUrl() {
     const q = new URLSearchParams();
     q.set('frame', currentFrame);
+    const motorId = selectedComponentId(motorSelect);
+    const propId  = selectedComponentId(propSelect);
+    if (motorId) q.set('motor', motorId);
+    if (propId)  q.set('prop', propId);
     for (const [key, get] of URL_KEYS) {
       const el = get(); if (el && el.value !== '') q.set(key, el.value);
     }

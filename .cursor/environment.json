@@ -1,0 +1,17 @@
+{
+  "name": "QuadMath",
+  "install": "python3 --version && node --version",
+  "terminals": [
+    {
+      "name": "site",
+      "command": "python3 -m http.server 8000",
+      "description": "Serves the static QuadMath site (build calculator at /, flight sim at /sim.html, tune database at /tune-database.html) on http://localhost:8000."
+    }
+  ],
+  "ports": [
+    {
+      "name": "site",
+      "port": 8000
+    }
+  ]
+}
