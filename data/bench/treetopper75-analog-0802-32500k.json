@@ -10,10 +10,10 @@
   "battery": "BetaFPV 450mAh / BetaFPV 480mAh 1S LiHV BT2.0",
   "auw_g": 34.57,
   "cruise_time_s": null,
-  "source": "measured 2026-08-13 — stopwatch durations and raw OSD mAh; current sensor UNCALIBRATED (no full-discharge anchor run), both flights uncontrolled",
+  "source": "measured 2026-08-13 \u2014 stopwatch durations and raw OSD mAh; current sensor UNCALIBRATED (no full-discharge anchor run), both flights uncontrolled; 2026-09-04 run 3 added (full charge, weBLEEDfpv 450), still uncalibrated/uncontrolled",
   "controlled": false,
   "applies_to": [],
-  "connector_note": "Quad wired A30; packs are BT2.0. Runs through an A30↔BT2.0 adapter — added contact resistance vs native BT2.0 builds. Adapter mass is included in the weights below.",
+  "connector_note": "Quad wired A30; packs are BT2.0. Runs through an A30\u2194BT2.0 adapter \u2014 added contact resistance vs native BT2.0 builds. Adapter mass is included in the weights below.",
   "motor_detail": {
     "model": "weBLEEDfpv Treetoppers 0802",
     "kv": 32500,
@@ -28,7 +28,7 @@
   },
   "firmware": {
     "type": "betaflight",
-    "note": "NewBeeDrone FC — PIDs/rates not yet logged to tune DB"
+    "note": "NewBeeDrone FC \u2014 PIDs/rates not yet logged to tune DB"
   },
   "weights_g": {
     "dry": 22.6,
@@ -48,9 +48,17 @@
     "source": "dry and pack measured 2026-08-13, kitchen scale, n=1 per pack; auw derived (dry + pack); dry measured props-on"
   },
   "weights_crosscheck": {
-    "auw_measured_g": { "bfpv-450": 34.58, "bfpv-lava-480": 35.21 },
-    "auw_derived_g":  { "bfpv-450": 34.57, "bfpv-lava-480": 35.22 },
-    "note": "Independent scale reading vs dry+pack sum. Agree within 0.01 g. Derived values used throughout for internal consistency."
+    "auw_measured_g": {
+      "bfpv-450": 34.58,
+      "bfpv-lava-480": 35.21,
+      "wbf-450": 35.5
+    },
+    "auw_derived_g": {
+      "bfpv-450": 34.57,
+      "bfpv-lava-480": 35.22,
+      "wbf-450": 35.4
+    },
+    "note": "Independent scale reading vs dry+pack sum. Agree within 0.01 g. Derived values used throughout for internal consistency. wbf-450 (2026-09-04): measured 35.5 vs derived 35.4 \u2014 0.1 g; dry may have shifted since 08-13."
   },
   "packs": {
     "bfpv-450": {
@@ -68,10 +76,18 @@
       "connector": "BT2.0",
       "weight_g": 12.61,
       "weight_source": "measured, n=1"
+    },
+    "wbf-450": {
+      "brand": "weBLEEDfpv",
+      "capacity_mah": 450,
+      "cells": "1S LiHV",
+      "connector": null,
+      "weight_g": 12.8,
+      "weight_source": "derived (auw - dry), consistent to 0.04 g across three builds"
     }
   },
   "current_sensor": {
-    "status": "present, uncalibrated — no full-discharge anchor run",
+    "status": "present, uncalibrated \u2014 no full-discharge anchor run",
     "correction_factor": null,
     "calibration_method": null,
     "uncertainty_pct": null
@@ -84,8 +100,8 @@
       "pack_id": "bfpv-450",
       "auw_g": 34.57,
       "duration_s": 163,
-      "start_v": 4.10,
-      "cutoff_v_load": 3.50,
+      "start_v": 4.1,
+      "cutoff_v_load": 3.5,
       "rest_v_post": null,
       "mah_osd_raw": 270,
       "mah_corrected": null,
@@ -112,13 +128,32 @@
       "mah_per_min_raw": 97.0,
       "controlled": false,
       "notes": "Uncontrolled: undercharged start (4.25), deeper cutoff than run 1, and freestyle throttle profile not repeatable between runs. ~68% of rated capacity pulled. Not valid for pack A/B comparison."
+    },
+    {
+      "run": 3,
+      "date": "2026-09-04",
+      "type": "freestyle",
+      "pack_id": "wbf-450",
+      "auw_g": 35.5,
+      "duration_s": 269,
+      "start_v": 4.35,
+      "cutoff_v_load": 3.4,
+      "rest_v_post": null,
+      "mah_osd_raw": 438,
+      "mah_corrected": null,
+      "avg_current_a_raw": 5861.71,
+      "avg_current_a_corrected": null,
+      "mah_per_min_raw": 97.7,
+      "controlled": false,
+      "notes": "Indoors, 79F. Full LiHV charge 4.35V, landed 3.40V under load. Freestyle throttle profile not repeatable run-to-run. Unlike runs 1-2: full 4.35V start. 97% of rated capacity pulled \u2014 pack check for puff advised."
     }
   ],
   "pending": [
     "current sensor calibration (full-discharge anchor)",
-    "matched-condition A/B — same charge state, same cutoff, same flight profile",
+    "matched-condition A/B \u2014 same charge state, same cutoff, same flight profile",
     "n=3 per pack",
     "controlled cruise run",
     "rest voltage logging"
-  ]
+  ],
+  "freestyle_time_s": 269
 }

@@ -1,0 +1,91 @@
+{
+  "build_id": "fractal75-analog-rcinpower0802-25k",
+  "name": "Fractal 75 Analog",
+  "class_mm": 75,
+  "frame_size_mm": 75,
+  "video": "analog",
+  "motor": "RCinPower GTS V3 0802",
+  "motor_kv": 25000,
+  "prop": "Gemfan 1610 bi-blade, 1.5mm shaft",
+  "battery": "weBLEEDfpv 450mAh 1S LiHV",
+  "auw_g": 35.72,
+  "freestyle_time_s": 327,
+  "cruise_time_s": null,
+  "source": "measured 2026-09-04 \u2014 kitchen scale AUW, stopwatch durations, raw OSD mAh; current sensor UNCALIBRATED; single-session freestyle, uncontrolled",
+  "controlled": false,
+  "applies_to": [],
+  "motor_detail": {
+    "model": "RCinPower GTS V3 0802",
+    "kv": 25000,
+    "shaft_mm": 1.5
+  },
+  "prop_detail": {
+    "model": "Gemfan 1610",
+    "blades": 2,
+    "size_mm": 40,
+    "shaft_mm": 1.5
+  },
+  "firmware": {
+    "type": "betaflight",
+    "note": "BetaFPV 5-in-1 FC \u2014 PIDs/rates not yet logged to tune DB"
+  },
+  "weights_g": {
+    "dry": 22.9,
+    "pack": 12.8,
+    "auw": 35.72,
+    "includes": [
+      "frame",
+      "motors",
+      "fc",
+      "camera",
+      "vtx",
+      "antenna",
+      "canopy",
+      "props",
+      "hardware"
+    ],
+    "source": "dry measured earlier props-on; auw measured 2026-09-04 pack-on, kitchen scale, n=1; pack derived"
+  },
+  "packs": {
+    "wbf-450": {
+      "brand": "weBLEEDfpv",
+      "capacity_mah": 450,
+      "cells": "1S LiHV",
+      "connector": null,
+      "weight_g": 12.8,
+      "weight_source": "derived (auw - dry), consistent to 0.04 g across three builds"
+    }
+  },
+  "current_sensor": {
+    "status": "present, uncalibrated \u2014 no full-discharge anchor run",
+    "correction_factor": null,
+    "calibration_method": null,
+    "uncertainty_pct": null
+  },
+  "flights": [
+    {
+      "run": 1,
+      "date": "2026-09-04",
+      "type": "freestyle",
+      "pack_id": "wbf-450",
+      "auw_g": 35.72,
+      "duration_s": 327,
+      "start_v": 4.35,
+      "cutoff_v_load": 3.4,
+      "rest_v_post": null,
+      "mah_osd_raw": 392,
+      "mah_corrected": null,
+      "avg_current_a_raw": 4315.6,
+      "avg_current_a_corrected": null,
+      "mah_per_min_raw": 71.9,
+      "controlled": false,
+      "notes": "Indoors, 79F. Full LiHV charge 4.35V, landed 3.40V under load. Freestyle throttle profile not repeatable run-to-run. 87% of rated capacity pulled."
+    }
+  ],
+  "pending": [
+    "current sensor calibration (full-discharge anchor)",
+    "n=3 matched-condition runs",
+    "controlled cruise run",
+    "rest voltage logging"
+  ]
+}
