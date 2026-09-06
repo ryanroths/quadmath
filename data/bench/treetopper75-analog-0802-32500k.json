@@ -141,7 +141,7 @@
       "rest_v_post": null,
       "mah_osd_raw": 438,
       "mah_corrected": null,
-      "avg_current_a_raw": 5861.71,
+      "avg_current_a_raw": 5.86,
       "avg_current_a_corrected": null,
       "mah_per_min_raw": 97.7,
       "controlled": false,
