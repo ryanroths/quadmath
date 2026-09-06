@@ -290,25 +290,40 @@
   // numbers.
   const BENCH_ANCHORS = [
     { id: 'air65-analog-vci0702-30k',   frame: '65', kv: 30000, auwG: 25.42,
-      avgCurrentA: 4.2, usableFraction: 0.9, video: 'analog',
+      avgCurrentA: 4.2, usableFraction: 0.9, video: 'analog', pitchIn: 1.9,
       note: 'measured — Air65 analog, 233s cruise' },
     { id: 'mobula6-2024-hdzero-se0702-28k', frame: '65', kv: 28000, auwG: 27.73,
-      avgCurrentA: 6.3, usableFraction: 0.9, video: 'hdzero',
+      avgCurrentA: 6.3, usableFraction: 0.9, video: 'hdzero', pitchIn: 1.9,
       note: 'measured — Mobula6 HDZero, 154s cruise' },
   ];
-  // Match on frame + KV + video system + AUW. Video matters because the video
-  // system IS most of the difference between these two anchors — without it a
-  // DJI build picked up the analog anchor's flight time. The AUW window is 5%
-  // now that the weight model is bench-derived: predicted AUW lands within 0.3%
-  // of measured for both anchors, so the window no longer carries the match.
-  // Anchors are cruise runs, so they only apply in cruise. Comparing a measured
-  // cruise flight against a freestyle estimate was the ambiguity that made the
-  // old AUW margin fragile; matching style keeps it like for like.
-  function benchAnchorFor(kv, frame, auw, video, style) {
+  // Prop pitch window for an anchor match, in inches. Tight on purpose: both
+  // anchors flew a Gemfan 1219 at 1.9", and the next prop up the 65mm DB is the
+  // 1220-4 quad-blade at 2.0", so anything looser than 0.1" would hand a
+  // quad-blade a tri-blade's measured current. 0.05" rejects it while still
+  // absorbing the rounding a shared ?pitch= link can carry.
+  const ANCHOR_PITCH_WINDOW_IN = 0.05;
+  // Match on frame + KV + video system + prop pitch + AUW. Video matters because
+  // the video system IS most of the difference between these two anchors —
+  // without it a DJI build picked up the analog anchor's flight time. Pitch is
+  // here for the same reason, and it is the property that used to leak: pitch is
+  // the only prop attribute the model reads, so a 0.7" Gemfan 1207 satisfied
+  // every other key and inherited a flight time measured on a prop with nearly
+  // three times the pitch — reported as "anchored to measured data". The AUW
+  // window is 5% now that the weight model is bench-derived: predicted AUW lands
+  // within 0.3% of measured for both anchors, so the window no longer carries
+  // the match. Anchors are cruise runs, so they only apply in cruise. Comparing
+  // a measured cruise flight against a freestyle estimate was the ambiguity that
+  // made the old AUW margin fragile; matching style keeps it like for like.
+  //
+  // A non-finite pitch fails the window and falls back to the model, which is
+  // the safe direction: an estimate labelled as one beats a measurement that
+  // was not taken on this build.
+  function benchAnchorFor(kv, frame, auw, video, style, pitch) {
     if (style !== 'cruise') return null;
     return BENCH_ANCHORS.find(a =>
       a.frame === String(frame) && a.kv === kv &&
       a.video === (video || 'analog') &&
+      Math.abs(pitch - a.pitchIn) <= ANCHOR_PITCH_WINDOW_IN &&
       Math.abs(auw - a.auwG) / a.auwG <= 0.05) || null;
   }
 
@@ -689,7 +704,7 @@
     const styleKey = currentStyle();
     const style    = FLIGHT_STYLES[styleKey];
     const anchor = hasAuw
-      ? benchAnchorFor(kv, currentFrame, weight, currentVideoSystem(), styleKey)
+      ? benchAnchorFor(kv, currentFrame, weight, currentVideoSystem(), styleKey, pitch)
       : null;
     const avgCurrent   = anchor
       ? anchor.avgCurrentA
