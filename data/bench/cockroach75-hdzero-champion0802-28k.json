@@ -1,0 +1,111 @@
+{
+  "build_id": "cockroach75-hdzero-champion0802-28k",
+  "name": "Cockroach 75 HDZero",
+  "class_mm": 75,
+  "frame_size_mm": 75,
+  "video": "hdzero",
+  "motor": "BetaFPV 0802 Champion (2026)",
+  "motor_kv": 28000,
+  "prop": "Gemfan 1610 bi-blade, 1.5mm shaft",
+  "battery": "weBLEEDfpv 450mAh 1S LiHV",
+  "auw_g": 36.34,
+  "freestyle_time_s": 181,
+  "cruise_time_s": null,
+  "source": "measured 2026-09-04 \u2014 kitchen scale AUW, stopwatch durations, raw OSD mAh; current sensor UNCALIBRATED; single-session freestyle, uncontrolled",
+  "controlled": false,
+  "applies_to": [],
+  "motor_detail": {
+    "model": "BetaFPV 0802 Champion (2026)",
+    "kv": 28000,
+    "shaft_mm": 1.5
+  },
+  "prop_detail": {
+    "model": "Gemfan 1610",
+    "blades": 2,
+    "size_mm": 40,
+    "shaft_mm": 1.5
+  },
+  "firmware": {
+    "type": "betaflight",
+    "note": "HDZero AIO5 FC \u2014 PIDs/rates not yet logged to tune DB; wobble at pack start reported, tune pending"
+  },
+  "weights_g": {
+    "dry": 23.56,
+    "pack": 12.8,
+    "auw": 36.34,
+    "includes": [
+      "frame",
+      "motors",
+      "fc",
+      "camera",
+      "vtx",
+      "antenna",
+      "canopy",
+      "props",
+      "hardware"
+    ],
+    "source": "dry measured earlier props-on; auw measured 2026-09-04 pack-on, kitchen scale, n=1; pack derived"
+  },
+  "packs": {
+    "wbf-450": {
+      "brand": "weBLEEDfpv",
+      "capacity_mah": 450,
+      "cells": "1S LiHV",
+      "connector": null,
+      "weight_g": 12.8,
+      "weight_source": "derived (auw - dry), consistent to 0.04 g across three builds"
+    }
+  },
+  "current_sensor": {
+    "status": "present, MISCALIBRATED \u2014 read 542 mAh on a 450 mAh pack; raw discarded",
+    "correction_factor": null,
+    "calibration_method": null,
+    "uncertainty_pct": null
+  },
+  "flights": [
+    {
+      "run": 1,
+      "date": "2026-09-04",
+      "type": "freestyle",
+      "pack_id": "wbf-450",
+      "auw_g": 36.55,
+      "duration_s": 164,
+      "start_v": 4.35,
+      "cutoff_v_load": 3.4,
+      "rest_v_post": null,
+      "mah_osd_raw": null,
+      "mah_corrected": null,
+      "avg_current_a_raw": null,
+      "avg_current_a_corrected": null,
+      "mah_per_min_raw": null,
+      "controlled": false,
+      "notes": "Indoors, 79F. Full LiHV charge 4.35V, landed 3.40V under load. Freestyle throttle profile not repeatable run-to-run. Cutoff voltage and mAh not captured."
+    },
+    {
+      "run": 2,
+      "date": "2026-09-04",
+      "type": "freestyle",
+      "pack_id": "wbf-450",
+      "auw_g": 36.34,
+      "duration_s": 181,
+      "start_v": 4.35,
+      "cutoff_v_load": 3.4,
+      "rest_v_post": null,
+      "mah_osd_raw": null,
+      "mah_corrected": null,
+      "avg_current_a_raw": null,
+      "avg_current_a_corrected": null,
+      "mah_per_min_raw": null,
+      "controlled": false,
+      "notes": "Indoors, 79F. Full LiHV charge 4.35V, landed 3.40V under load. Freestyle throttle profile not repeatable run-to-run. OSD reported 542 mAh on a 450 mAh pack and 18 A peak \u2014 current_meter_scale grossly off; raw values discarded."
+    }
+  ],
+  "pending": [
+    "current sensor calibration (full-discharge anchor)",
+    "n=3 matched-condition runs",
+    "controlled cruise run",
+    "rest voltage logging",
+    "current_meter_scale is wrong by >20% \u2014 calibrate before any current data is kept",
+    "PID tune for start-of-pack wobble"
+  ]
+}
