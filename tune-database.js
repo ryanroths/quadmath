@@ -31,14 +31,23 @@
       source: 'Stock',
       fc: 'BetaFPV Air65 II AIO',
       combo: 'Air65 II Champion, stock motor/prop',
-      rateType: 'BETAFLIGHT',
+      rateType: 'ACTUAL',
       pids:  { roll: [36, 61, 27], pitch: [37, 64, 29], yaw: [36, 61, 0] },
-      // Rates not recorded with the June 2026 dump — rate type was, values
-      // were not. Card hides the CLI button rather than exporting a half
-      // tune, same as 75-betafpv-stock.
-      rates: null,
+      // Rates are from BetaFPV's factory CLI for the Air65 II Champion
+      // ("A65 II C_0702_Champion_GF 1207_2026_6_0 20260421.txt" on support
+      // article 54654422544409), which matches this card's P/I and d_max
+      // exactly, so it is the config this quad shipped with. The factory diff
+      // sets only the srates; rc_rate 7 and expo 0 are Betaflight defaults,
+      // made explicit here so the CLI export emits a complete rate profile.
+      // rates_type is absent from the diff too — the firmware default has
+      // been ACTUAL since BF 4.3, so the June 2026 dump note that recorded
+      // the type as BETAFLIGHT was wrong, and rateType is corrected to match
+      // the factory file.
+      rates: { roll: [7, 58, 0],  pitch: [7, 58, 0],  yaw: [7, 50, 0] },
       notes: [
-        'Rates N/A — rate type BETAFLIGHT recorded with the dump, values not',
+        'Rates from BetaFPV\'s factory CLI (20260421) — ACTUAL type, centre 70°/s, max 580/580/500°/s',
+        'Only the srates are set in the factory diff; rc_rate 7 / expo 0 are BF defaults',
+        'Factory throttle curve: mid 28 / expo 35 / hover 22',
         'BF 4.5 target, dumped June 2026 while the quad ran stock',
         'Same values ship as the sim\'s 65mm stock tune',
       ],
@@ -140,13 +149,19 @@
       source: 'Stock',
       fc: 'BetaFPV G473_V2',
       combo: 'Air75 II Champion, stock motor/prop',
-      rateType: 'BETAFLIGHT',
+      rateType: 'ACTUAL',
       pids:  { roll: [33, 60, 25], pitch: [35, 63, 28], yaw: [33, 60, 0] },
-      // Rates not yet pulled from a stock diff — the card says so and the CLI
-      // button stays hidden rather than exporting a half tune.
-      rates: null,
+      // Rates are from BetaFPV's factory CLI for the Air75 II Champion
+      // ("A75 II C_0802_Champion_GF 1614_2026_6_0 20260421.txt" on support
+      // article 54653618858521), which matches this card's P/I and d_max
+      // exactly. Same shape as the 65: only the srates are set, rc_rate 7 /
+      // expo 0 are Betaflight defaults made explicit for the CLI export, and
+      // rates_type absent from the diff means the ACTUAL firmware default.
+      rates: { roll: [7, 58, 0],  pitch: [7, 58, 0],  yaw: [7, 50, 0] },
       notes: [
-        'Rates N/A — not yet pulled, will follow with the stock diff',
+        'Rates from BetaFPV\'s factory CLI (20260421) — ACTUAL type, centre 70°/s, max 580/580/500°/s',
+        'Only the srates are set in the factory diff; rc_rate 7 / expo 0 are BF defaults',
+        'Factory throttle curve: mid 25 / expo 45 / hover 16',
         'BF 4.5.3',
         'Optimized for stock motor/prop per BetaFPV spec',
       ],
