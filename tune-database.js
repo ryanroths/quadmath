@@ -49,7 +49,7 @@
         'Only the srates are set in the factory diff; rc_rate 7 / expo 0 are BF defaults',
         'Factory throttle curve: mid 28 / expo 35 / hover 22',
         'BF 4.5 target, dumped June 2026 while the quad ran stock',
-        'Same values ship as the sim\'s 65mm stock tune',
+        'Same PID values ship as the sim\'s 65mm stock tune (the sim keeps its own rates)',
       ],
     },
     {
