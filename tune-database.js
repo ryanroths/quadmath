@@ -19,6 +19,14 @@
  *   rates -> [RC rate, Super rate, Expo]
  * Values are stored exactly as they appear in the pilot's Betaflight diff, so
  * the CLI export can emit them verbatim without unit conversion.
+ *
+ * rateType: a diff never prints rates_type while it sits at the firmware
+ * default, and the default has been ACTUAL since Betaflight 4.3 — so a diff
+ * with rate lines but no type line means ACTUAL. Every card here was
+ * originally labelled BETAFLIGHT on that misread (corrected 2026-09). The
+ * stored values only make sense on the ACTUAL scale anyway: rc_rate 4 is a
+ * 40°/s centre there, while on the BETAFLIGHT scale it would be 0.04 — an
+ * unflyable ~30°/s max rate.
  */
 (function () {
   'use strict';
@@ -49,7 +57,7 @@
         'Only the srates are set in the factory diff; rc_rate 7 / expo 0 are BF defaults',
         'Factory throttle curve: mid 28 / expo 35 / hover 22',
         'BF 4.5 target, dumped June 2026 while the quad ran stock',
-        'Same values ship as the sim\'s 65mm stock tune',
+        'Same PID values ship as the sim\'s 65mm stock tune (the sim keeps its own rates)',
       ],
     },
     {
@@ -59,7 +67,7 @@
       source: 'RyFly',
       fc: 'BetaFPV G473 (BEFH)',
       combo: 'VCI Spark 0702 29K KV · Gemfan 1219S',
-      rateType: 'BETAFLIGHT',
+      rateType: 'ACTUAL',
       pids:  { roll: [54, 77, 38], pitch: [62, 89, 52], yaw: [54, 77, 0] },
       rates: { roll: [4, 74, 56],  pitch: [4, 74, 56],  yaw: [4, 70, 56] },
       notes: [
@@ -80,7 +88,7 @@
       source: 'RyFly',
       fc: 'BetaFPV G473 (BEFH)',
       combo: 'VCI Spark 0702 29K KV · HQ 31mm',
-      rateType: 'BETAFLIGHT',
+      rateType: 'ACTUAL',
       pids:  { roll: [61, 110, 41], pitch: [67, 121, 51], yaw: [61, 110, 0] },
       rates: { roll: [4, 74, 56],   pitch: [4, 74, 56],   yaw: [4, 70, 56] },
       notes: [
@@ -98,7 +106,7 @@
       source: 'Stock',
       fc: 'Happymodel CrazyBee F4 SX',
       combo: '0702 28K KV',
-      rateType: 'BETAFLIGHT',
+      rateType: 'ACTUAL',
       pids:  { roll: [41, 70, 37], pitch: [41, 70, 37], yaw: [41, 70, 0] },
       rates: { roll: [4, 74, 56],  pitch: [4, 74, 56],  yaw: [4, 70, 56] },
       notes: [
@@ -113,7 +121,7 @@
       source: 'RyFly',
       fc: 'Happymodel CrazyBee F4 SX',
       combo: '0702 28K KV',
-      rateType: 'BETAFLIGHT',
+      rateType: 'ACTUAL',
       pids:  { roll: [42, 83, 31], pitch: [44, 87, 38], yaw: [41, 70, 0] },
       rates: { roll: [4, 74, 56],  pitch: [4, 74, 56],  yaw: [4, 70, 56] },
       notes: [
@@ -134,7 +142,7 @@
       source: 'Stock',
       fc: 'NewBeeDrone Hummingbird RaceSpec V2',
       combo: 'Stock BF 4.5.1 defaults',
-      rateType: 'BETAFLIGHT',
+      rateType: 'ACTUAL',
       pids:  { roll: [45, 80, 40], pitch: [47, 84, 46], yaw: [45, 80, 0] },
       rates: { roll: [4, 74, 56],  pitch: [4, 74, 56],  yaw: [4, 70, 56] },
       notes: [
@@ -173,7 +181,7 @@
       source: 'RyFly',
       fc: 'BetaFPV G473 (BETAFPVG473, board RY75)',
       combo: 'Gemfan 40mm',
-      rateType: 'BETAFLIGHT',
+      rateType: 'ACTUAL',
       pids:  { roll: [61, 110, 0], pitch: [64, 115, 0], yaw: [61, 110, 0] },
       rates: { roll: [4, 74, 56],  pitch: [4, 74, 56],  yaw: [4, 70, 56] },
       notes: [
@@ -192,7 +200,7 @@
       source: 'RyFly',
       fc: 'Happymodel CrazyBee F4 DX (HAMO)',
       combo: 'Custom 85mm build',
-      rateType: 'BETAFLIGHT',
+      rateType: 'ACTUAL',
       pids:  { roll: [67, 120, 40], pitch: [70, 126, 45], yaw: [67, 120, 0] },
       rates: { roll: [5, 74, 56],   pitch: [5, 74, 56],   yaw: [5, 70, 56] },
       notes: [
