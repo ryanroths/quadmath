@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>404 — Page Not Found | QuadMath</title>
+<meta name="description" content="That page doesn't exist on QuadMath. Jump to the whoop calculator, tune database, bench data, flight simulator, or gear guide.">
+<meta name="robots" content="noindex">
+
+<!-- GitHub Pages serves this file for every missing path at any depth, so
+     every reference on this page must be absolute. -->
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=optional" rel="stylesheet">
+<link rel="stylesheet" href="/style.css?v=b4667ca1d695">
+<style>
+  /* .section p in style.css carries 0-1-1 specificity, so these rules are
+     scoped under .section to outrank it. */
+  .section .nf-code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(4rem, 16vw, 8rem);
+    font-weight: 700;
+    color: var(--orange);
+    line-height: 1;
+    margin: 0 0 0.15em;
+  }
+  .section .nf-links { list-style: none; padding: 0; margin: 1.5em 0 0; }
+  .section .nf-links li { margin: 0.5em 0; }
+  .section .nf-links a {
+    color: var(--orange);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255, 77, 26, 0.35);
+  }
+  .section .nf-links a:hover { border-bottom-color: var(--orange); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container header-inner">
+    <a href="/" class="logo" aria-label="QuadMath home">QuadMath<span class="dot">.</span></a>
+    <button class="nav-toggle" id="navToggle" type="button"
+            aria-expanded="false" aria-controls="site-nav" aria-label="Menu">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </button>
+    <nav id="site-nav">
+      <a href="/#calculator">Calculator</a>
+      <a href="/sim.html">Sim</a>
+      <a href="/tune-database.html">Tunes</a>
+      <a href="/bench.html">Bench</a>
+      <a href="/gear.html">Gear</a>
+      <a href="/hire.html">Hire</a>
+    </nav>
+  </div>
+</header>
+
+<div class="container">
+  <section class="section" id="not-found">
+    <p class="nf-code">404</p>
+    <h1>Lost signal — that page doesn't exist</h1>
+    <p>The URL you typed or followed isn't on the map. Everything on the site is one hop away:</p>
+    <ul class="nf-links">
+      <li><a href="/">Home — whoop build calculator</a></li>
+      <li><a href="/tune-database.html">Tune database — Betaflight PIDs &amp; rates</a></li>
+      <li><a href="/bench.html">Bench data — measured flight times &amp; current</a></li>
+      <li><a href="/sim.html">RyFly Sim — free browser FPV simulator</a></li>
+      <li><a href="/gear.html">Gear guide — builds, motors, props</a></li>
+      <li><a href="/hire.html">Hire RyFly — freestyle pilot &amp; event coverage</a></li>
+    </ul>
+  </section>
+</div>
+
+<footer>
+  <div class="container header-inner" style="width: 100%;">
+    <div class="footer-logo">QuadMath<span class="dot">.</span></div>
+    <div>Estimates only — always verify with bench testing. Fly safe.</div>
+  </div>
+</footer>
+
+<script src="/nav.js?v=0a5aa631939b" defer></script>
+
+<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
