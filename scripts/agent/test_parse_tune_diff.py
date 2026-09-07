@@ -583,10 +583,16 @@ class TuneDbIO(unittest.TestCase):
         self.assertTrue(entries, "the tune database should never read as empty")
 
     def test_absent_rates_read_as_null(self):
-        # Looked up by id, not by index -- an entry inserted above this one
-        # must not be able to break the assertion.
-        by_id = {e["id"]: e for e in tune_db.read_tunes(self.text)}
-        self.assertIsNone(by_id["75-betafpv-stock"]["rates"])
+        # No live card carries rates: null since the stock cards gained
+        # factory rates, so the null path is exercised end to end instead: an
+        # entry appended without rates is written as `rates: null` and must
+        # read back as None. Looked up by id, not by index -- an entry
+        # inserted above it must not be able to break the assertion.
+        entry = parse_good(pilot="norates")
+        entry.pop("rates", None)
+        updated = tune_db.append_tune(self.text, entry)
+        by_id = {e["id"]: e for e in tune_db.read_tunes(updated)}
+        self.assertIsNone(by_id[entry["id"]]["rates"])
 
     def test_append_adds_exactly_one_entry(self):
         entry = parse_good(pilot="whoopdad")
