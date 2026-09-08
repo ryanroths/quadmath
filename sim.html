@@ -289,7 +289,7 @@
   <textarea id="ghostCode" rows="3" placeholder="paste a friend's ghost code here"></textarea>
   <button id="btnGhostLoad">LOAD GHOST CODE</button>
 
-  <h2>GLTF Assets</h2>
+  <h2 id="assetHead">GLTF Assets</h2>
   <div id="assetStatus">checking assets/manifest.json…</div>
 
   <h2>Controls</h2>
@@ -798,7 +798,15 @@ window._tryAssets=async function(){
     };
     assetEl.textContent='manifest.json unavailable — built-in city layout active.';
   }
-  assetEl.textContent='loading GLTF assets…';
+  // The pipeline pulls ~40 GLBs one after another, one of them 46 MB, so a
+  // single static write here leaves the panel reading 'loading…' for tens of
+  // seconds while the procedural city renders behind it — indistinguishable
+  // from a hang. Report models done, plus byte percent for the big downloads.
+  let loadedCount=0;
+  function setLoading(extra){
+    assetEl.textContent='loading GLTF assets… '+loadedCount+' models'+(extra||'');
+  }
+  setLoading();
   // GLBs reference "Textures/colormap.png" relative to themselves; the paired texture
   // lives in assets/Models/GLB-format/Textures/, so load GLBs from that folder and
   // anchor the resource path there so texture refs resolve to the real file.
@@ -808,9 +816,13 @@ window._tryAssets=async function(){
   const cache={};
   async function load(file){
     if(cache[file]) return cache[file];
-    const gltf=await loader.loadAsync(GLB_DIR+file);
+    const gltf=await loader.loadAsync(GLB_DIR+file,function(ev){
+      if(ev.lengthComputable&&ev.total>2e6)
+        setLoading(' — '+file+' '+Math.round(ev.loaded/ev.total*100)+'%');
+    });
     gltf.scene.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}});
     cache[file]=gltf.scene;
+    loadedCount++;setLoading();
     return gltf.scene;
   }
   const placedRoot=new THREE.Group();
@@ -1186,8 +1198,20 @@ window._tryAssets=async function(){
     usingGltf=true;
     assetEl.textContent='GLTF city loaded: '+placedRoot.children.length+' objects.';
     toast('GLTF ASSETS LOADED');
+    // Nothing left to report once the swap is done — the toast already said it.
+    // Leaving a permanent status row in the tune panel is just dead chrome.
+    setTimeout(function(){
+      const h=document.getElementById('assetHead');
+      if(h)h.style.display='none';
+      assetEl.style.display='none';
+    },6000);
   }catch(e){
     assetEl.textContent='GLTF load failed: '+e.message+' — procedural city active.';
+  }finally{
+    // Belt and braces: any exit path that reaches neither branch above must not
+    // strand the panel mid-sentence. Failure text stays put — it is terminal too.
+    if(/^loading GLTF assets/.test(assetEl.textContent))
+      assetEl.textContent=usingGltf?'GLTF city loaded.':'procedural city active.';
   }
 };
 
