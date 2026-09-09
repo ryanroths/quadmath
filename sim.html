@@ -1557,8 +1557,19 @@ function diveShaft(x,z,radius,height,segments){
   // its own mesh (addArcBand makes one per solid arc), so picking a material
   // per band costs no extra geometry, puts a hard edge exactly on the line,
   // and avoids hanging a colour attribute off every band.
-  const wallMat=new THREE.MeshStandardMaterial({color:0xC9B458,roughness:0.9,metalness:0,side:THREE.DoubleSide});
-  const skirtMat=new THREE.MeshStandardMaterial({color:0x8A7A3A,roughness:0.9,metalness:0,side:THREE.DoubleSide});
+  // shadowSide is load-bearing. These are DoubleSide (you fly INSIDE the
+  // bore, so the inner faces have to draw) and they cast shadows. three only
+  // defaults shadowSide to BackSide for FrontSide materials; a DoubleSide one
+  // writes its FRONT faces into the shadow map at exactly the depth they are
+  // later shaded at, so every lit face occludes itself and the whole shaft
+  // renders near-black. No value of bias or normalBias fixes that - the
+  // occluder and the receiver are the same surface at zero separation.
+  // Writing only back faces to the shadow map is the standard remedy and
+  // still leaves the shaft casting a correct shadow on the deck.
+  const wallMat=new THREE.MeshStandardMaterial({color:0xC9B458,roughness:0.9,metalness:0,
+    side:THREE.DoubleSide,shadowSide:THREE.BackSide});
+  const skirtMat=new THREE.MeshStandardMaterial({color:0x8A7A3A,roughness:0.9,metalness:0,
+    side:THREE.DoubleSide,shadowSide:THREE.BackSide});
   const skirtTop=height*0.1;
   // branch junction params — defined BEFORE the walls so both the visual
   // bands and the wall colliders can cut matching holes where the horizontal
