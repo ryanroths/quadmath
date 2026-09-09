@@ -107,3 +107,51 @@ test('whoop fallback profile in sim.html matches the documented defaults', () =>
   assert.deepEqual(grab('pitch'), { center: 75, max: 650, expo: 0.5 });
   assert.deepEqual(grab('yaw'), { center: 80, max: 550, expo: 0.4 });
 });
+
+// Regression guard for the Actual slider ranges. The markup ranges are
+// Betaflight-scaled (rc 0.5-2.5, srate 0-0.95) but ACTUAL stores centre and
+// max as deg/s over 10, so rcRate 7 / srate 58 sat far outside them: the thumbs
+// clamped and one nudge wrote the clamped Betaflight number straight into the
+// Actual profile, collapsing a 70 deg/s centre to 25.
+function sliderRanges() {
+  const body = extract('applyRateSliderRanges');
+  const elseAt = body.indexOf('}else{');
+  assert.notEqual(elseAt, -1, 'applyRateSliderRanges has no else branch');
+  const num = (chunk, key) => {
+    const at = chunk.indexOf(key);
+    assert.notEqual(at, -1, key + ' not found');
+    const from = chunk.indexOf(String.fromCharCode(39), at) + 1;
+    return Number(chunk.slice(from, chunk.indexOf(String.fromCharCode(39), from)));
+  };
+  const grab = (chunk) => ({
+    rc: [num(chunk, 'rc.min'), num(chunk, 'rc.max')],
+    sr: [num(chunk, 'sr.min'), num(chunk, 'sr.max')],
+  });
+  return { actual: grab(body.slice(0, elseAt)), betaflight: grab(body.slice(elseAt)) };
+}
+
+test('Actual slider ranges cover every profile the sim can load', () => {
+  const { actual } = sliderRanges();
+  // state stores centre/10 and max/10, so these are the slider-scale values
+  const needRc = [7, 7.5, 8, 5];        // 70/75/80 deg/s centres, and the 85mm card's 50
+  const needSr = [65, 58, 55, 50, 74];  // 650/580/550/500/740 deg/s maxima
+  for (const v of needRc)
+    assert.ok(v >= actual.rc[0] && v <= actual.rc[1],
+      'centre ' + v * 10 + ' deg/s outside slider range ' + actual.rc);
+  for (const v of needSr)
+    assert.ok(v >= actual.sr[0] && v <= actual.sr[1],
+      'max ' + v * 10 + ' deg/s outside slider range ' + actual.sr);
+});
+
+test('Betaflight branch restores the ranges the markup declares', () => {
+  const { betaflight } = sliderRanges();
+  const attr = (id, name) => {
+    const at = src.indexOf('id=' + String.fromCharCode(34) + id + String.fromCharCode(34));
+    assert.notEqual(at, -1, id + ' not in markup');
+    const tag = src.slice(at, src.indexOf('>', at));
+    const k = tag.indexOf(name + '=' + String.fromCharCode(34)) + name.length + 2;
+    return Number(tag.slice(k, tag.indexOf(String.fromCharCode(34), k)));
+  };
+  assert.deepEqual(betaflight.rc, [attr('s_rc', 'min'), attr('s_rc', 'max')]);
+  assert.deepEqual(betaflight.sr, [attr('s_sr', 'min'), attr('s_sr', 'max')]);
+});

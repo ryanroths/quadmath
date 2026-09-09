@@ -2749,9 +2749,23 @@ function onRateSlider(inputEl){
   refreshRatesUI();
   saveRates();
 }
+function applyRateSliderRanges(actual){
+  // ACTUAL stores centre/max as deg/s over 10 (rcRate 7 = 70 °/s, srate 67 =
+  // 670 °/s). The markup ranges are Betaflight (0.5–2.5 / 0–0.95); leaving
+  // them in place clamps the thumbs and any drag writes BF-scale into ACTUAL.
+  const rc=document.getElementById('s_rc'), sr=document.getElementById('s_sr');
+  if(actual){
+    rc.min='1'; rc.max='25'; rc.step='0.1';
+    sr.min='5'; sr.max='200'; sr.step='0.5';
+  }else{
+    rc.min='0.5'; rc.max='2.5'; rc.step='0.01';
+    sr.min='0'; sr.max='0.95'; sr.step='0.01';
+  }
+}
 function refreshRatesUI(){
   const a=rates[rateAxis],actual=rates.type==='ACTUAL';
   const S=id=>document.getElementById(id);
+  applyRateSliderRanges(actual);
   // slider positions are SET, never dispatched — dispatching would re-enter
   // onRateSlider and clobber freshly parsed values with slider-clamped ones
   S('s_rc').value=a.rcRate; S('s_sr').value=a.srate; S('s_ex').value=a.expo;
