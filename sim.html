@@ -252,7 +252,7 @@
 
   <h2>Camera</h2>
   <div class="row"><label>Cam angle</label><span class="val" id="v_cam"></span></div>
-  <input type="range" id="s_cam" min="0" max="60" step="1" value="25">
+  <input type="range" id="s_cam" min="0" max="60" step="1" value="30">
   <div class="row"><label>FOV</label><span class="val" id="v_fov"></span></div>
   <input type="range" id="s_fov" min="80" max="160" step="1" value="105">
 
@@ -371,7 +371,7 @@ const gltfReady=import("three/addons/loaders/GLTFLoader.js")
   .then(function(m){GLTFLoader=m.GLTFLoader;window._gltfReady=true;return true;})
   .catch(function(){window._gltfReady=false;return false;});
 const CFG={
-  camDeg:25,fov:105,maxThrustN:3.9,thrCurve:0.68,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
+  camDeg:30,fov:105,maxThrustN:3.9,thrCurve:0.68,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
 // thrCurve recalibrated for the new physics core: motor thrust is now
 // proportional to output SQUARED, so at TWR 3 the motors must sit at 1/sqrt(3)
 // = 0.58 of full output to hover. The old linear-thrust model needed an
@@ -3050,11 +3050,11 @@ function rateProfileForClass(d){
   return RATE_FALLBACK;
 }
 const DRONE_TYPES={
-  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:23}, // TWR ~3:1, hovers ~0.33 throttle
-  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:25}, // lazier yaw + slower 0802 spool
-  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:27},
+  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:30}, // TWR ~3:1, hovers ~0.33 throttle
+  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:30}, // lazier yaw + slower 0802 spool
+  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:30},
   freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30}, // toothpick-adjacent middle class
-  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:33} // heavy: inertia does the work, no other changes
+  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:30} // heavy: inertia does the work, no other changes
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
@@ -3069,7 +3069,9 @@ function setSlider(id,val){
   const s=document.getElementById('s_'+id);
   s.value=val;s.dispatchEvent(new Event('input'));
 }
-// Camera tilt follows the class default (whoops fly low tilt, 5" flies high)
+// Camera tilt follows the class default - every class now defaults to the
+// same 30 degrees, the field is kept per class so one can be re-tuned
+// without reinstating the whole ladder -
 // until the pilot moves the slider themselves — then their choice sticks,
 // mirroring the ratesAreCustom pattern. setSlider() dispatches synthetic
 // 'input' events, so a suppress flag separates user drags from class switches.
@@ -3115,7 +3117,7 @@ function applyDroneType(){
     }
     refreshRatesUI();
     setSlider('spool',d.spool);                        // per-drone motor spool time constant
-    if(!camIsCustom&&d.cam!=null)setSlider('cam',d.cam); // class camera tilt, defaults only
+    if(!camIsCustom&&d.cam!=null)setSlider('cam',d.cam); // class camera tilt, defaults only (all classes 30 today)
     applyCfgToQp();                                    // slider values win over the preset's mass/tau
     refreshTwr();                                      // update the derived thrust:weight readout
   }finally{applyingType=false;}
