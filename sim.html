@@ -267,6 +267,11 @@
   <h2>Physics</h2>
   <div class="row"><label>Drone type</label></div>
   <select id="droneType"></select>
+  <div class="row"><label>Rate type</label></div>
+  <select id="ratesType">
+    <option value="ACTUAL">Actual</option>
+    <option value="BETAFLIGHT">Betaflight</option>
+  </select>
   <div class="row"><label>Thrust:weight</label><span class="val" id="v_twr"></span></div>
   <input type="range" id="s_twr" min="2" max="14" step="0.1" value="5" disabled title="Derived from thrust ÷ weight — adjust Mass to change it">
   <div class="row"><label>Drag</label><span class="val" id="v_drag"></span></div>
@@ -339,6 +344,12 @@
   });
 })();
 </script>
+<!-- Rate profiles for the class presets come from the tune cards, which
+     tune-database.js already publishes on window.QuadMathTunes. Classic
+     script, so it runs before the module below and the data is there by
+     the time applyDroneType() first fires. Its own init() no-ops here:
+     it returns early when there is no #tuneGrid on the page. -->
+<script src="tune-database.js?v=0610f7b0d176"></script>
 <script type="importmap">
 {
   "imports": {
@@ -2622,11 +2633,17 @@ function bfCurve(x,rcRate,srate,expo){
   if(srate>0)rate*=1/THREE.MathUtils.clamp(1-absX*srate,0.01,1);
   return rate;
 }
-function actualCurve(x,centerSens,maxRate,expo){
+// Betaflight Actual Rates (applyActualRates in rc.c). x is stick -1..1,
+// center is the deg/s the stick asks for per unit of travel around centre,
+// maxRate is the deg/s at full stick, expo 0..1 bends travel toward the
+// ends. Returns deg/s; physics() converts to rad/s at the module boundary.
+//   actualRate(1,75,650,0.5)   = 650      (full stick always lands on max)
+//   actualRate(0.1,75,650,0.5) = 10.375   (7.5 centre term + 2.875 expo)
+function actualRate(x,center,maxRate,expo){
   const absX=Math.abs(x);
   const blend=absX*(Math.pow(x,5)*expo+x*(1-expo));
-  const stickMovement=Math.max(0,maxRate-centerSens);
-  return x*centerSens+stickMovement*blend;
+  const stickMovement=Math.max(0,maxRate-center);
+  return x*center+stickMovement*blend;
 }
 // ---------------------------------------------------------------------------
 // RATES — single source of truth. Sliders, readouts, OSD and the setpoint math
@@ -2653,9 +2670,24 @@ try{const saved=JSON.parse(localStorage.getItem('ryflyRates')||'null');
 }catch(e){}
 function saveRates(){ratesAreCustom=true;try{localStorage.setItem('ryflyRates',JSON.stringify(rates));}catch(e){}}
 
+// Convert one axis between rate families. Extracted from importCli so the
+// rate-type selector and a CLI dump that switches family do the same thing:
+// a switch CONVERTS the tune rather than defaulting it.
+function convertAxisFamily(cur,toType){
+  if(toType==='ACTUAL'){
+    let rc=cur.rcRate; if(rc>2)rc+=14.54*(rc-2);
+    return {rcRate:20*rc,                                   // centre/10
+            srate:(200*rc/Math.max(0.01,1-cur.srate))/10,   // max/10
+            expo:cur.expo};
+  }
+  const centre=cur.rcRate*10,max=Math.max(centre,cur.srate*10);
+  return {rcRate:THREE.MathUtils.clamp(centre/200,0.01,5),
+          srate:THREE.MathUtils.clamp(1-centre/max,0,0.95),
+          expo:cur.expo};
+}
 function axisRate(axis,x){
   const a=rates[axis];
-  if(rates.type==='ACTUAL')return actualCurve(x,a.rcRate*10,a.srate*10,a.expo);
+  if(rates.type==='ACTUAL')return actualRate(x,a.rcRate*10,a.srate*10,a.expo);
   return bfCurve(x,a.rcRate,a.srate,a.expo);
 }
 function maxRateDps(axis){
@@ -2687,6 +2719,7 @@ function refreshRatesUI(){
   S('v_maxAll').textContent='max R '+maxRateDps('roll').toFixed(0)+
     ' / P '+maxRateDps('pitch').toFixed(0)+' / Y '+maxRateDps('yaw').toFixed(0)+' °/s';
   RATE_AXES.forEach(ax=>S('ax_'+ax).classList.toggle('active',ax===rateAxis));
+  const typeSel=S('ratesType'); if(typeSel)typeSel.value=rates.type; // a CLI dump can switch family too
   const badge=S('ratesTypeBadge');
   if(badge){
     const perAxis=['pitch','yaw'].some(ax=>JSON.stringify(rates[ax])!==JSON.stringify(rates.roll));
@@ -2927,10 +2960,39 @@ document.getElementById('cbBattSim').onchange=e=>{
 // Masses are now REAL AUW (grams) and thrust is absolute (maxThrustN, Newtons),
 // so a lighter drone genuinely accelerates harder. drag matches the authentic
 // less-floaty tuning (0.55+), not the old floaty 0.28.
+// Actual-rate profile per class, in real units: center/max are deg/s, expo
+// 0..1. The tune cards are the source of truth for what these quads really
+// fly, and tune-database.js publishes them on window.QuadMathTunes for
+// exactly this; the card scale is rc_rate/srate over 10 and expo over 100,
+// converted on the way in. Classes with no card (the two freestyle sizes)
+// and a missing/failed tune DB both land on the whoop fallback.
+// Betaflight-family class defaults, mirroring the rates{} initialiser above.
+const BF_CLASS_DEFAULT={rcRate:1.10,expo:0.25};
+const RATE_FALLBACK={
+  type:'ACTUAL',
+  roll: {center:75,max:650,expo:0.5},
+  pitch:{center:75,max:650,expo:0.5},
+  yaw:  {center:80,max:550,expo:0.4}
+};
+function rateProfileForClass(d){
+  const db=window.QuadMathTunes&&window.QuadMathTunes.tunes;
+  if(db&&d.frame){
+    // prefer the factory entry: a class preset should feel like the quad
+    // out of the box, not like somebody's race tune
+    const forFrame=db.filter(t=>t.frame===d.frame&&t.rateType==='ACTUAL'&&t.rates);
+    const t=forFrame.find(e=>e.source==='Stock')||forFrame[0];
+    if(t){
+      const ax=r=>({center:r[0]*10,max:r[1]*10,expo:r[2]/100});
+      return {type:'ACTUAL',src:t.id,
+              roll:ax(t.rates.roll),pitch:ax(t.rates.pitch),yaw:ax(t.rates.yaw)};
+    }
+  }
+  return RATE_FALLBACK;
+}
 const DRONE_TYPES={
-  whoop65:{label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:23}, // TWR ~3:1, hovers ~0.33 throttle
-  whoop75:{label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:25}, // lazier yaw + slower 0802 spool
-  whoop85:{label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:27},
+  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:23}, // TWR ~3:1, hovers ~0.33 throttle
+  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:25}, // lazier yaw + slower 0802 spool
+  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:27},
   freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30}, // toothpick-adjacent middle class
   freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:33} // heavy: inertia does the work, no other changes
 };
@@ -2957,6 +3019,26 @@ let applyingType=false;
 document.getElementById('s_cam').addEventListener('input',()=>{
   if(!applyingType){camIsCustom=true;try{localStorage.setItem('ryflyCamCustom','1');}catch(e){}}
 });
+// Seed the rate sliders for a class. ACTUAL takes the card profile straight
+// (state stores centre/max over 10, which is the tune DB's own scale);
+// BETAFLIGHT keeps the old per-class super-rate and nothing else moves.
+function applyClassRates(d){
+  if(rates.type==='ACTUAL'){
+    const prof=rateProfileForClass(d);
+    for(const ax of RATE_AXES){
+      rates[ax].rcRate=prof[ax].center/10;
+      rates[ax].srate=prof[ax].max/10;
+      rates[ax].expo=prof[ax].expo;
+    }
+  }else{
+    // Seed rcRate and expo too, not just the super-rate. Before the family
+    // could be switched they were always still at the initialiser values so
+    // srate alone was enough; coming back from ACTUAL they hold a centre/10
+    // figure (rcRate 7) that reads as an unflyable ~57000 deg/s here.
+    for(const ax of RATE_AXES)
+      Object.assign(rates[ax],{rcRate:BF_CLASS_DEFAULT.rcRate,srate:d.sr,expo:BF_CLASS_DEFAULT.expo});
+  }
+}
 function applyDroneType(){
   const d=DRONE_TYPES[droneType];
   applyingType=true;
@@ -2969,7 +3051,7 @@ function applyDroneType(){
     CFG.maxThrustN=baseThrustPerMotor*4*WS;            // world-newton mirror, for audio + readouts
     setSlider('drag',d.drag);setSlider('mass',d.mass);
     if(!ratesAreCustom){                              // per-drone feel, defaults only
-      for(const ax of RATE_AXES)rates[ax].srate=d.sr;
+      applyClassRates(d);
     }
     refreshRatesUI();
     setSlider('spool',d.spool);                        // per-drone motor spool time constant
@@ -2984,6 +3066,36 @@ droneSel.onchange=()=>{
   applyDroneType();
   toast(DRONE_TYPES[droneType].label.toUpperCase());
 };
+// Rate-family selector, sat next to the class preset. Switching CONVERTS the
+// current tune through convertAxisFamily rather than resetting it, so a
+// pilot who pasted a CLI dump does not lose it by touching this dropdown.
+// An untouched (non-custom) tune is re-seeded from the class instead, which
+// is what makes switching to Actual pick up the card rates.
+// The chosen family lives under its own key. Folding it into ryflyRates
+// would trip ratesAreCustom on the next load, and a pilot who only ever
+// touched this dropdown would then never get class rates again.
+try{const t=localStorage.getItem('ryflyRatesType');
+  if(t==='ACTUAL'||t==='BETAFLIGHT')rates.type=t;}catch(e){}
+const rateTypeSel=document.getElementById('ratesType');
+if(rateTypeSel){
+  rateTypeSel.value=rates.type;
+  rateTypeSel.onchange=()=>{
+    const to=rateTypeSel.value;
+    if(to===rates.type)return;
+    if(ratesAreCustom){
+      // a tune the pilot actually set: convert it, do not throw it away
+      for(const ax of RATE_AXES)Object.assign(rates[ax],convertAxisFamily(rates[ax],to));
+      rates.type=to;
+      saveRates();
+    }else{
+      rates.type=to;
+      applyClassRates(DRONE_TYPES[droneType]);   // untouched: re-seed from the class
+    }
+    try{localStorage.setItem('ryflyRatesType',to);}catch(e){}
+    refreshRatesUI();
+    toast(to+' RATES');
+  };
+}
 applyDroneType(); // restore persisted type on load
 updateRadioInfo();
 
@@ -3064,19 +3176,7 @@ function importCli(text){
       // On a family switch, CONVERT an axis rather than defaulting it —
       // otherwise an axis absent from the dump silently loses its tune.
       let base={rcRate:cur.rcRate,srate:cur.srate,expo:cur.expo};
-      if(familyChanged){
-        if(type==='ACTUAL'){
-          let rc=cur.rcRate; if(rc>2)rc+=14.54*(rc-2);
-          base={rcRate:20*rc,                                   // centre/10
-                srate:(200*rc/Math.max(0.01,1-cur.srate))/10,   // max/10
-                expo:cur.expo};
-        }else{
-          const centre=cur.rcRate*10,max=Math.max(centre,cur.srate*10);
-          base={rcRate:THREE.MathUtils.clamp(centre/200,0.01,5),
-                srate:THREE.MathUtils.clamp(1-centre/max,0,0.95),
-                expo:cur.expo};
-        }
-      }
+      if(familyChanged)base=convertAxisFamily(cur,type);
       Object.assign(rates[ax],base,p.rates[ax]);
     }
     rates.type=type;
