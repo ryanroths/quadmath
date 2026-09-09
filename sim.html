@@ -392,7 +392,18 @@ const LIGHTING={
   shadowMapSize:2048,
   shadowBias:-0.0005,
   shadowNormalBias:0.02,
-  shadowPadding:40        // world units of slack around the gate bounds
+  shadowPadding:40,       // world units of slack around the gate bounds
+  // Selective bloom. Threshold sits at 1.0 so only emissives pushed into HDR
+  // get through: the composer renders to a HalfFloat target, where the gate
+  // and marker emissives at intensity 4 land well above 1.0 while sky, ground
+  // and everything lit by the sun stay under it.
+  bloomStrength:0.6,
+  bloomRadius:0.4,
+  bloomThreshold:1.0,
+  bloomScale:1.0,         // bloom chain resolution vs the frame (0.5 = half res)
+  postSamples:4,          // MSAA on the composer target - the canvas's own antialias:true does not apply once we render off-screen
+  gateEmissive:4,         // brand-coloured inactive gates, markers, dive rings
+  gateEmissiveActive:4    // the white next-gate ring
 };
 // Unit vector pointing FROM the arena TOWARD the sun.
 const sunDir=new THREE.Vector3();
@@ -404,7 +415,7 @@ const sunDir=new THREE.Vector3();
 // ---------- Renderer ----------
 const canvas=document.getElementById('c');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); // capped lower than before: the post chain now renders at this ratio too
 renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
@@ -420,11 +431,26 @@ const camera=new THREE.PerspectiveCamera(CFG.fov,(canvas.clientWidth||1)/(canvas
 // matches the visible area and the aspect ratio cannot skew. The third
 // argument to setSize is updateStyle=false: three.js would otherwise write
 // inline width/height onto the canvas and break the flex sizing.
+let composer=null,bloomPass=null;   // set once the post chain finishes loading, below
 function resize(){
   const w=canvas.clientWidth||1,h=canvas.clientHeight||1;
   renderer.setSize(w,h,false);
   camera.aspect=w/h;
   camera.updateProjectionMatrix();
+  sizeComposer();
+}
+// EffectComposer.setSize takes CSS pixels and applies the renderer's pixel
+// ratio itself, so it gets the same w/h as renderer.setSize. It also resizes
+// every pass, which is why the bloom override has to come after it.
+function sizeComposer(){
+  if(!composer)return;
+  const w=canvas.clientWidth||1,h=canvas.clientHeight||1;
+  composer.setSize(w,h);
+  if(bloomPass&&LIGHTING.bloomScale!==1){
+    const pr=renderer.getPixelRatio();
+    bloomPass.setSize(Math.max(1,Math.round(w*pr*LIGHTING.bloomScale)),
+                      Math.max(1,Math.round(h*pr*LIGHTING.bloomScale)));
+  }
 }
 addEventListener('resize',resize);
 // A window resize is not the only thing that changes the canvas box — mobile
@@ -434,6 +460,45 @@ addEventListener('resize',resize);
 if(window.ResizeObserver)new ResizeObserver(resize).observe(canvas);
 resize();
 window._sim={renderer,scene,camera}; // debug handle, same convention as _qp/_simBooted
+
+// ---------- Post chain (selective bloom) ----------
+// Imported dynamically for the same reason GLTFLoader is: these live on the
+// addons CDN, not in the vendored core, and a static import that fails takes
+// the whole module down with it. Loaded this way a CDN outage just means no
+// bloom - the loop falls back to rendering the scene directly.
+//
+// renderer.toneMapping stays set to ACES on purpose. three applies tone
+// mapping only when drawing to the default framebuffer, so the RenderPass
+// writing into the composer's HalfFloat target leaves the values in HDR
+// (which is what gives the bloom threshold something to bite on), and
+// OutputPass reads toneMapping + outputColorSpace back off the renderer and
+// applies them once, last. Clearing renderer.toneMapping here would not stop
+// a double tone map, it would remove the only one.
+Promise.all([
+  import('three/addons/postprocessing/EffectComposer.js'),
+  import('three/addons/postprocessing/RenderPass.js'),
+  import('three/addons/postprocessing/UnrealBloomPass.js'),
+  import('three/addons/postprocessing/OutputPass.js')
+]).then(function(m){
+  const EffectComposer=m[0].EffectComposer,RenderPass=m[1].RenderPass,
+        UnrealBloomPass=m[2].UnrealBloomPass,OutputPass=m[3].OutputPass;
+  const c=new EffectComposer(renderer);
+  // The canvas was created with antialias:true, but that only ever applied to
+  // the default framebuffer. Rendering the scene into the composer's target
+  // instead drops MSAA entirely and every gate ring and roofline goes jagged,
+  // so ask for it back on the target itself.
+  c.renderTarget1.samples=LIGHTING.postSamples;
+  c.renderTarget2.samples=LIGHTING.postSamples;
+  c.addPass(new RenderPass(scene,camera));
+  bloomPass=new UnrealBloomPass(new THREE.Vector2(1,1),
+    LIGHTING.bloomStrength,LIGHTING.bloomRadius,LIGHTING.bloomThreshold);
+  c.addPass(bloomPass);
+  c.addPass(new OutputPass());   // last: ACES + sRGB, once
+  composer=c;
+  sizeComposer();
+  Object.assign(window._sim,{composer,bloomPass});
+  window._bloomReady=true;return true;
+}).catch(function(){composer=null;bloomPass=null;window._bloomReady=false;return false;});
 
 // ---------- Sky + light ----------
 {
@@ -623,10 +688,10 @@ function addGate(x,y,z,rotationY,size,solidGate,trackId){
   size=size||7;
   trackId=trackId||0; // default track 0 = original city loop
   const trackIdx=gates.filter(g=>g.trackId===trackId).length; // position within its OWN track
-  const col=trackIdx%2===0?0xff3b2f:0x2f7bff; // alternate red/blue, per-track
+  const col=trackIdx%2===0?0xFF4D1A:0x3DDC97; // alternate brand orange/green, per-track
   const ring=new THREE.Mesh(
     new THREE.TorusGeometry(size,size*0.07,10,36),
-    new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.4,roughness:0.4}));
+    new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:LIGHTING.gateEmissive,roughness:0.4}));
   ring.position.set(x,y,z);ring.rotation.y=rotationY||0;
   ring.castShadow=ring.receiveShadow=true; // long thin ring shadow on the deck is the main read for gate height
   scene.add(ring);
@@ -649,7 +714,7 @@ function addDiveRing(x,y,z,rx,ry,size){
   size=size||3.5;
   const ring=new THREE.Mesh(
     new THREE.TorusGeometry(size,size*0.035,8,28),
-    new THREE.MeshStandardMaterial({color:0x3DDC97,emissive:0x3DDC97,emissiveIntensity:0.7,roughness:0.5}));
+    new THREE.MeshStandardMaterial({color:0x3DDC97,emissive:0x3DDC97,emissiveIntensity:LIGHTING.gateEmissive,roughness:0.5}));
   ring.position.set(x,y,z);ring.rotation.set(rx||0,ry||0,0);
   ring.castShadow=ring.receiveShadow=true;
   scene.add(ring);
@@ -712,7 +777,7 @@ const beacon=new THREE.Mesh(
 beacon.renderOrder=999;beacon.visible=false;scene.add(beacon);
 let beaconTarget=null; // last gate the beacon was moved to (reposition only on change)
 // next gate: bright white + strong pulsing scale; all others dim in their base
-// red/blue. The target is the active track's current gate, by object reference.
+// brand orange/green. The target is the active track's current gate, by object reference.
 function updateGateHighlight(){
   const target=trackGates(activeTrackId)[nextGateIndex];
   // move the beacon whenever the target changes (nextGateIndex OR active track)
@@ -724,10 +789,10 @@ function updateGateHighlight(){
   for(const g of gates){
     const m=g.mesh.material;
     if(g===target){
-      m.color.setHex(0xFFFFFF);m.emissive.setHex(0xFFFFFF);m.emissiveIntensity=3.0;
+      m.color.setHex(0xFFFFFF);m.emissive.setHex(0xFFFFFF);m.emissiveIntensity=LIGHTING.gateEmissiveActive;
       g.mesh.scale.setScalar(1+Math.sin(performance.now()*0.005)*0.2);
     }else{
-      m.color.setHex(g.col);m.emissive.setHex(g.col);m.emissiveIntensity=0.4;
+      m.color.setHex(g.col);m.emissive.setHex(g.col);m.emissiveIntensity=LIGHTING.gateEmissive;
       g.mesh.scale.setScalar(1);
     }
   }
@@ -1538,10 +1603,10 @@ function diveShaft(x,z,radius,height,segments){
   }
   // DIVE marker: bright glowing ring + text at the top entrance, gate-style
   // visual language but a distinct color (orange) so it reads as its own
-  // landmark type against the red/blue gates and green dive rings
+  // landmark type against the orange/green gates and green dive rings
   const marker=new THREE.Mesh(
     new THREE.TorusGeometry(radius*0.85,radius*0.06,10,32),
-    new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:1.1,roughness:0.4}));
+    new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:LIGHTING.gateEmissive,roughness:0.4}));
   marker.position.set(x,height+1.5,z);
   marker.rotation.x=Math.PI/2; // lay flat — horizontal ring over the top opening
   scene.add(marker);
@@ -1560,7 +1625,7 @@ function diveShaft(x,z,radius,height,segments){
   // center line stays clean. PointLight every 3rd ring for real wall glow;
   // short falloff + capped count keeps light cost bounded on tall shafts.
   const ledGeo=new THREE.TorusGeometry(radius*0.92,radius*0.025,6,32);
-  const ledMat=new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:1.6,roughness:0.4});
+  const ledMat=new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:LIGHTING.gateEmissive,roughness:0.4});
   let ledIdx=0;
   for(let yy=15;yy<height-2;yy+=15){
     if(branches.some(b=>Math.abs(yy-b.by)<holeHalf+1)){ledIdx++;continue;} // don't cross a junction hole
@@ -1623,7 +1688,7 @@ function diveShaft(x,z,radius,height,segments){
     // mouth marker: glowing ring at the OUTER open end only — inner end now
     // lives inside the shaft junction, a ring there would float in the bore
     const mGeo=new THREE.TorusGeometry(br*1.05,br*0.08,8,24);
-    const mMat=new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:1.1,roughness:0.4});
+    const mMat=new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:LIGHTING.gateEmissive,roughness:0.4});
     {
       const mm=new THREE.Mesh(mGeo,mMat);
       const ax=new THREE.Vector3(Math.cos(dirA),0,Math.sin(dirA));
@@ -3259,7 +3324,9 @@ function loop(now){
   while(acc>=STEP){physics(STEP);acc-=STEP;}
   updateMotorSound();
   updateCamera();updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();
-  renderer.render(scene,camera);
+  // composer is null until the post chain resolves, and stays null if the
+  // addons CDN is unreachable - either way the sim keeps rendering.
+  if(composer)composer.render();else renderer.render(scene,camera);
 }
 toast('Throttle up to fly. Tab = tune.');
 requestAnimationFrame(loop);
