@@ -1552,7 +1552,14 @@ function diveShaft(x,z,radius,height,segments){
   // measured empirically because the visual tube was a full closed
   // cylinder; now there's nothing to measure, the geometry itself is cut).
   const doorHalfAngle=chordAngle*1.5;
-  const wallMat=new THREE.MeshStandardMaterial({color:0x17181d,roughness:0.95,side:THREE.DoubleSide});
+  // Sand-coloured shaft walls with a darker scuff band along the bottom
+  // tenth. Two materials rather than vertex colours: every band is already
+  // its own mesh (addArcBand makes one per solid arc), so picking a material
+  // per band costs no extra geometry, puts a hard edge exactly on the line,
+  // and avoids hanging a colour attribute off every band.
+  const wallMat=new THREE.MeshStandardMaterial({color:0xC9B458,roughness:0.9,metalness:0,side:THREE.DoubleSide});
+  const skirtMat=new THREE.MeshStandardMaterial({color:0x8A7A3A,roughness:0.9,metalness:0,side:THREE.DoubleSide});
+  const skirtTop=height*0.1;
   // branch junction params — defined BEFORE the walls so both the visual
   // bands and the wall colliders can cut matching holes where the horizontal
   // tubes feed into the bore
@@ -1570,8 +1577,17 @@ function diveShaft(x,z,radius,height,segments){
   // gaps. Theta convention: world angle a maps to theta = PI/2 - a (cylinder
   // theta is sin→x/cos→z, world placement is cos→x/sin→z).
   function addArcBand(y0,y1,ts,tl){
-    const m=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,y1-y0,24,1,true,ts,tl),wallMat);
-    m.position.y=(y0+y1)/2;grp.add(m);
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,y1-y0,24,1,true,ts,tl),
+      y1<=skirtTop+1e-6?skirtMat:wallMat);
+    m.position.y=(y0+y1)/2;
+    m.castShadow=m.receiveShadow=true;
+    grp.add(m);
+  }
+  // A band that straddles the skirt line has to be cut, otherwise the colour
+  // change lands on whatever band boundary happens to be nearest.
+  function addBandSplit(y0,y1,gaps){
+    if(y0<skirtTop&&y1>skirtTop){addBand(y0,skirtTop,gaps);addBand(skirtTop,y1,gaps);}
+    else addBand(y0,y1,gaps);
   }
   function addBand(y0,y1,gaps){
     if(y1-y0<0.05)return;
@@ -1585,8 +1601,8 @@ function diveShaft(x,z,radius,height,segments){
   const doorGap={c:Math.PI/2,h:doorHalfAngle}; // world a=0 → theta PI/2
   const cuts=branches.map(b=>({y0:b.by-holeHalf,y1:b.by+holeHalf,gap:{c:Math.PI/2-b.dirA,h:holeHalfAngle}})).sort((p,q)=>p.y0-q.y0);
   let yCur=0;
-  for(const c of cuts){addBand(yCur,c.y0,[doorGap]);addBand(c.y0,c.y1,[doorGap,c.gap]);yCur=c.y1;}
-  addBand(yCur,height,[doorGap]);
+  for(const c of cuts){addBandSplit(yCur,c.y0,[doorGap]);addBandSplit(c.y0,c.y1,[doorGap,c.gap]);yCur=c.y1;}
+  addBandSplit(yCur,height,[doorGap]);
   // wall collision: ring of thin radial box segments, same throwaway-
   // rotated-mesh AABB trick as before (overlap 1.08 per the earlier snag
   // fix). NEW: panels whose angle overlaps a branch junction are split
@@ -3413,6 +3429,133 @@ for(const id of [0,1]){
     .catch(()=>{});
 }
 
+// ---------- Prop-wash dust ----------
+// Pooled GPU points, no per-frame allocation. PointsMaterial already gives fog,
+// vertex-colour alpha and correct colour-space handling for free, so the only
+// shader change is a per-particle gl_PointSize patched in through
+// onBeforeCompile. A hand-written ShaderMaterial would mean re-deriving all of
+// that by hand and getting the composer's linear target wrong.
+//
+// The spec is in real metres; the scene is in world units at WS per metre, so
+// every length and speed below converts on the way in.
+const DUST={
+  max:600,
+  color:0xB8A070,
+  opacity:0.35,
+  aglM:0.6,              // only emit below this height above the deck
+  throttleMin:0.25,
+  rate:420,              // particles/sec at full intensity
+  radialMS:[1.5,3.0],    // outward kick
+  upMS:[0.5,1.5],
+  jitterM:0.25,          // spawn scatter around the ground point
+  dragAlong:0.3,         // fraction of the quad's horizontal velocity carried along
+  lifeS:[0.6,1.2],
+  sizeM:[0.1,0.4],       // grows first -> second across its life
+  damp:1.6,              // 1/s velocity decay, so it settles instead of streaking
+  arenaHalf:700          // world units - the ground plane is 1400 across
+};
+const dust=(function(){
+  const n=DUST.max;
+  const geo=new THREE.BufferGeometry();
+  const pos=new Float32Array(n*3),col=new Float32Array(n*4),siz=new Float32Array(n);
+  for(let i=0;i<n;i++)col[i*4]=col[i*4+1]=col[i*4+2]=1; // rgb constant, alpha carries the fade
+  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('color',new THREE.BufferAttribute(col,4)); // itemSize 4 is what turns on vertex alpha
+  geo.setAttribute('aSize',new THREE.BufferAttribute(siz,1));
+  geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e5); // never recomputed
+  // soft round sprite, drawn once into a canvas - no asset to ship
+  const cv=document.createElement('canvas');cv.width=cv.height=64;
+  const g2=cv.getContext('2d');
+  const rg=g2.createRadialGradient(32,32,0,32,32,32);
+  rg.addColorStop(0,'rgba(255,255,255,1)');
+  rg.addColorStop(0.45,'rgba(255,255,255,0.55)');
+  rg.addColorStop(1,'rgba(255,255,255,0)');
+  g2.fillStyle=rg;g2.fillRect(0,0,64,64);
+  const mat=new THREE.PointsMaterial({
+    map:new THREE.CanvasTexture(cv),color:DUST.color,
+    transparent:true,opacity:DUST.opacity,blending:THREE.NormalBlending,
+    vertexColors:true,depthWrite:false,fog:true,sizeAttenuation:true});
+  // Per-particle size. three's points shader has a single `size` uniform, so
+  // swap it for an attribute and leave the attenuation maths below it alone.
+  let sizePatched=false;
+  mat.onBeforeCompile=function(s){
+    sizePatched=s.vertexShader.indexOf('gl_PointSize = size;')!==-1;
+    s.vertexShader='attribute float aSize;'+String.fromCharCode(10)+
+      s.vertexShader.replace('gl_PointSize = size;','gl_PointSize = aSize;');
+  };
+  const pts=new THREE.Points(geo,mat);
+  pts.frustumCulled=false;pts.visible=false;pts.renderOrder=10;scene.add(pts);
+  return {geo,pos,col,siz,pts,
+    vel:new Float32Array(n*3),life:new Float32Array(n),span:new Float32Array(n),
+    acc:0,cursor:0,wasAlive:false,sizePatched:function(){return sizePatched;}};
+})();
+Object.assign(window._sim,{dust,DUST}); // debug handle, same convention as _qp/_sim.sun
+// Driven from the render loop on frame dt, not from the fixed physics step:
+// this is decoration and must not change with the 240Hz substep count.
+function updateDust(dt){
+  const d=dust,n=DUST.max;
+  const px=state.pos.x,py=state.pos.y,pz=state.pos.z;
+  // Off-arena gets nothing. That covers the portal's dreamland out at
+  // (1500,1500) as well: there is no ground plane out there to kick up.
+  const inArena=Math.abs(px)<=DUST.arenaHalf&&Math.abs(pz)<=DUST.arenaHalf;
+  const aglU=DUST.aglM*WS;
+  let spawn=0;
+  if(inArena&&py<aglU&&py>-1&&stick.t>DUST.throttleMin){
+    const k=(1-py/aglU)*stick.t;
+    d.acc+=DUST.rate*k*k*dt;               // quadratic in height-and-throttle
+    spawn=d.acc|0;d.acc-=spawn;
+  }else d.acc=0;
+  // Spawn into dead slots, walking a cursor so a full pool costs one lap, not
+  // a scan per particle.
+  const jit=DUST.jitterM*WS,r0=DUST.radialMS[0]*WS,r1=DUST.radialMS[1]*WS,
+        u0=DUST.upMS[0]*WS,u1=DUST.upMS[1]*WS,
+        vx=state.vel.x*DUST.dragAlong,vz=state.vel.z*DUST.dragAlong;
+  let cur=d.cursor;
+  for(let s=0;s<spawn;s++){
+    let slot=-1;
+    for(let t=0;t<n;t++){const c=cur;cur=cur+1<n?cur+1:0;if(d.life[c]<=0){slot=c;break;}}
+    if(slot<0)break;                        // pool full: drop the rest this frame
+    const a=Math.random()*Math.PI*2,j=jit*Math.sqrt(Math.random()),i3=slot*3;
+    const ca=Math.cos(a),sa=Math.sin(a);
+    d.pos[i3]=px+ca*j; d.pos[i3+1]=0.05; d.pos[i3+2]=pz+sa*j;
+    const rad=r0+Math.random()*(r1-r0);
+    d.vel[i3]=ca*rad+vx;
+    d.vel[i3+1]=u0+Math.random()*(u1-u0);
+    d.vel[i3+2]=sa*rad+vz;
+    const lf=DUST.lifeS[0]+Math.random()*(DUST.lifeS[1]-DUST.lifeS[0]);
+    d.life[slot]=lf;d.span[slot]=lf;
+  }
+  d.cursor=cur;
+  // Integrate + age.
+  const damp=Math.exp(-DUST.damp*dt),s0=DUST.sizeM[0]*WS,s1=DUST.sizeM[1]*WS;
+  let alive=false;
+  for(let i=0;i<n;i++){
+    let L=d.life[i];
+    if(L<=0){d.siz[i]=0;continue;}
+    L-=dt;
+    if(L<=0){d.life[i]=0;d.siz[i]=0;d.col[i*4+3]=0;continue;}
+    d.life[i]=L;
+    const i3=i*3;
+    d.vel[i3]*=damp;d.vel[i3+1]*=damp;d.vel[i3+2]*=damp;
+    d.pos[i3]+=d.vel[i3]*dt;
+    d.pos[i3+1]+=d.vel[i3+1]*dt;
+    d.pos[i3+2]+=d.vel[i3+2]*dt;
+    const t=1-L/d.span[i];                  // 0 at birth, 1 at death
+    d.siz[i]=s0+(s1-s0)*t;
+    d.col[i*4+3]=1-t;
+    alive=true;
+  }
+  // Only touch the GPU when something moved. Idle flying uploads nothing and
+  // draws nothing.
+  if(alive||d.wasAlive){
+    d.geo.attributes.position.needsUpdate=true;
+    d.geo.attributes.color.needsUpdate=true;
+    d.geo.attributes.aSize.needsUpdate=true;
+  }
+  d.pts.visible=alive;
+  d.wasAlive=alive;
+}
+
 // ---------- Loop ----------
 let last=performance.now(),acc=0;
 const STEP=1/240;
@@ -3423,7 +3566,7 @@ function loop(now){
   acc+=dt;
   while(acc>=STEP){physics(STEP);acc-=STEP;}
   updateMotorSound();
-  updateCamera();updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();
+  updateCamera();updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();updateDust(dt);
   // composer is null until the post chain resolves, and stays null if the
   // addons CDN is unreachable - either way the sim keeps rendering.
   if(composer)composer.render();else renderer.render(scene,camera);
