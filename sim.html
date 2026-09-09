@@ -2565,9 +2565,18 @@ function showGpPicker(pads){
     gpPickerEl.appendChild(b);
   }
 }
+function dropPad(){
+  gpIndex=-1;gpConnected=false;gpName='';
+  armGate=false; // keyboard must not stay FC-disarmed after the pad is gone
+  if(gpPickerEl){gpPickerEl.remove();gpPickerEl=null;}
+  updateRadioInfo();
+}
 function pickGamepad(){
   const pads=listPads();
-  if(!pads.length){gpIndex=-1;gpConnected=false;gpName='';if(gpPickerEl){gpPickerEl.remove();gpPickerEl=null;}updateRadioInfo();return;}
+  // Chrome returns an empty GamepadList until the first stick wiggle, and
+  // sometimes an empty poll while the device is still plugged in. That is
+  // not an unplug — only gamepaddisconnected should drop the radio.
+  if(!pads.length)return;
   let remembered=null;try{remembered=localStorage.getItem(GP_ID_KEY);}catch(e){}
   const match=remembered&&pads.find(p=>p.id===remembered);
   if(match){selectPad(match,false);return;}
@@ -2577,7 +2586,10 @@ function pickGamepad(){
   showGpPicker(pads);        // ...while the picker lets the pilot override + remember
 }
 addEventListener('gamepadconnected',()=>pickGamepad());
-addEventListener('gamepaddisconnected',()=>{gpIndex=-1;gpConnected=false;gpName='';pickGamepad();});
+addEventListener('gamepaddisconnected',()=>{
+  dropPad();
+  pickGamepad();
+});
 function updateRadioInfo(){
   const el=document.getElementById('radioInfo');
   if(!gpConnected){el.textContent='no gamepad detected. TX16S: plug USB, pick Joystick on radio popup, wiggle a stick.';return;}
@@ -2587,11 +2599,26 @@ function updateRadioInfo(){
      'default map ('+(isRadio({id:gpName})?'EdgeTX AETR':'spring pad')+')');
 }
 function dz(v,d=0.03){return Math.abs(v)<d?0:v;}
+let padLive=false; // this frame actually read a gamepad (not an empty Chrome poll)
 function readInput(dt){
   const pads=navigator.getGamepads&&navigator.getGamepads();
   let gp=gpConnected&&pads?pads[gpIndex]:null;
-  if(gpConnected&&!gp){pickGamepad();gp=pads?pads[gpIndex]:null;} // index shifted (unplug/replug) — re-scan
-  if(gp&&gpConnected){
+  if(gpConnected&&!gp){
+    const live=listPads();
+    if(live.length){
+      // index shifted (unplug/replug) — keep the same device if it is still
+      // there. Do not call selectPad: that would re-arm the safety gate.
+      const same=gpName&&live.find(p=>p.id===gpName);
+      if(same){gpIndex=same.index;gp=same;}
+      else{
+        pickGamepad();
+        const again=navigator.getGamepads&&navigator.getGamepads();
+        gp=gpConnected&&again?again[gpIndex]:null;
+      }
+    }
+  }
+  padLive=!!(gp&&gpConnected);
+  if(padLive){
     if(calib){runCalib(gp,dt);stick.r=stick.p=stick.y=0;stick.t=0;return;}
     const map=axisMap||presetMap()||defaultMapFor(gp);
     const ax=gp.axes;
@@ -2812,9 +2839,12 @@ function physics(dt){
   const sag=(CFG.battSimOn&&CFG.sagAffectsThrust)?Math.pow(Math.max(0.5,battV/BATT_FULL),1.5):1;
   qp.cfg.maxThrustPerMotor=baseThrustPerMotor*sag;
 
-  // Arm gate: the safety gate that used to only deaden throttle now actually
-  // disarms the FC, which is what the module expects (note 6).
-  if(armGate)qp.disarm(); else if(!qp.armed)qp.arm();
+  // Arm gate: deaden the FC only while a live pad is still gated. An empty
+  // poll or a disconnect must not leave keyboard thrust disarmed forever.
+  // padLive can flip frame to frame if a pad polls intermittently, which
+  // churns arm/disarm - harmless, because armGate is only ever true before
+  // the pilot has proven the sticks safe, i.e. before anyone is flying.
+  if(armGate&&padLive)qp.disarm(); else if(!qp.armed)qp.arm();
 
   // Throttle curve stays here; the module applies the Betaflight idle floor
   // itself, so the old idlePct blend is gone.
