@@ -373,6 +373,34 @@ const CFG={
 // same 34.3 u/s² the old G*gravMult produced. gravMult above 3.5 is applied as
 // an extra downward force in the drag hook so the slider still bites.
 
+// ---------- Lighting tunables ----------
+// Hard low afternoon sun, cool sky bounce, warm ground bounce. Every knob the
+// look depends on lives here so it can be retuned without hunting through the
+// scene build. Angles are degrees; azimuth is measured clockwise from +Z.
+const LIGHTING={
+  sunElevation:18,        // degrees above the horizon - low enough for long shadows
+  sunAzimuth:118,         // degrees clockwise from +Z
+  sunColor:0xffd9b0,      // warm key
+  sunIntensity:3.0,
+  exposure:0.9,           // renderer.toneMappingExposure (ACES filmic)
+  hemiSky:0x8ab4ff,       // cool sky bounce
+  hemiGround:0x3a2a1a,    // warm dark ground bounce
+  hemiIntensity:0.6,
+  fillIntensity:0.3,      // shadowless bounce light opposite the sun
+  fogDensity:0.00085,     // FogExp2 - distant haze only, gates stay clean
+  fogColor:0xdcb389,      // matches the sky's horizon band
+  shadowMapSize:2048,
+  shadowBias:-0.0005,
+  shadowNormalBias:0.02,
+  shadowPadding:40        // world units of slack around the gate bounds
+};
+// Unit vector pointing FROM the arena TOWARD the sun.
+const sunDir=new THREE.Vector3();
+{
+  const e=LIGHTING.sunElevation*Math.PI/180,a=LIGHTING.sunAzimuth*Math.PI/180;
+  sunDir.set(Math.cos(e)*Math.sin(a),Math.sin(e),Math.cos(e)*Math.cos(a)).normalize();
+}
+
 // ---------- Renderer ----------
 const canvas=document.getElementById('c');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
@@ -380,10 +408,13 @@ renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
 renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.05;
+renderer.toneMappingExposure=LIGHTING.exposure;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 const scene=new THREE.Scene();
-scene.fog=new THREE.Fog(0xc7d5df,250,1100);
+// Exponential-squared haze instead of the old linear 250..1100 ramp: at this
+// density a gate 300u out picks up ~6% fog and stays fully readable, while the
+// mesa ring and the far ground edge sit back in the horizon murk.
+scene.fog=new THREE.FogExp2(LIGHTING.fogColor,LIGHTING.fogDensity);
 const camera=new THREE.PerspectiveCamera(CFG.fov,(canvas.clientWidth||1)/(canvas.clientHeight||1),0.05,3000);
 // Size from the canvas box, not the window, so the render target always
 // matches the visible area and the aspect ratio cannot skew. The third
@@ -402,14 +433,15 @@ addEventListener('resize',resize);
 // the CSS box alone.
 if(window.ResizeObserver)new ResizeObserver(resize).observe(canvas);
 resize();
+window._sim={renderer,scene,camera}; // debug handle, same convention as _qp/_simBooted
 
 // ---------- Sky + light ----------
 {
   const cv=document.createElement('canvas');cv.width=16;cv.height=512;
   const g=cv.getContext('2d');
   const gr=g.createLinearGradient(0,0,0,512);
-  gr.addColorStop(0,'#2e6cb8');gr.addColorStop(.45,'#7fb2dd');
-  gr.addColorStop(.72,'#cfe0e8');gr.addColorStop(.78,'#e8d9b8');gr.addColorStop(1,'#e8d9b8');
+  gr.addColorStop(0,'#123a70');gr.addColorStop(.42,'#3f78b4');
+  gr.addColorStop(.70,'#a8bfc6');gr.addColorStop(.80,'#d8ae83');gr.addColorStop(1,'#e9c9a2');
   g.fillStyle=gr;g.fillRect(0,0,16,512);
   scene.add(new THREE.Mesh(new THREE.SphereGeometry(1800,24,16),
     new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),side:THREE.BackSide,fog:false})));
@@ -419,16 +451,28 @@ resize();
   rad.addColorStop(0,'rgba(255,250,230,1)');rad.addColorStop(.2,'rgba(255,240,200,.9)');rad.addColorStop(1,'rgba(255,240,200,0)');
   sg.fillStyle=rad;sg.fillRect(0,0,128,128);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(scv),fog:false,depthWrite:false}));
-  sp.scale.set(300,300,1);sp.position.set(900,1100,500);scene.add(sp);
+  // Park the glow on the real sun vector rather than a fixed corner, so moving
+  // sunAzimuth/sunElevation moves the disc and the shadows together.
+  sp.scale.set(300,300,1);sp.position.copy(sunDir).multiplyScalar(1500);scene.add(sp);
 }
-const sun=new THREE.DirectionalLight(0xfff0d8,1.35);
-sun.position.set(140,220,90);sun.castShadow=true;
-sun.shadow.mapSize.set(2048,2048);
-sun.shadow.camera.left=-260;sun.shadow.camera.right=260;
-sun.shadow.camera.top=260;sun.shadow.camera.bottom=-260;
-sun.shadow.camera.far=700;sun.shadow.bias=-0.0004;
-scene.add(sun);
-scene.add(new THREE.HemisphereLight(0xa8c4de,0x8a7052,0.85));
+// Single hard key light. The shadow frustum is NOT set here: it is sized from
+// the real gate bounds once the world exists (see updateSunShadow below), because
+// the old hardcoded +/-260 box around the origin left track 1 entirely outside
+// the shadow camera and that whole track rendered unshadowed.
+const sun=new THREE.DirectionalLight(LIGHTING.sunColor,LIGHTING.sunIntensity);
+sun.castShadow=true;
+sun.shadow.mapSize.set(LIGHTING.shadowMapSize,LIGHTING.shadowMapSize);
+sun.shadow.bias=LIGHTING.shadowBias;
+sun.shadow.normalBias=LIGHTING.shadowNormalBias;
+scene.add(sun);scene.add(sun.target);
+let shadowHelper=null;               // CameraHelper on the shadow frustum, L toggles it
+// Cool sky over warm dark ground - this is what keeps the shadowed side of a
+// building blue instead of flat grey.
+scene.add(new THREE.HemisphereLight(LIGHTING.hemiSky,LIGHTING.hemiGround,LIGHTING.hemiIntensity));
+// Shadowless bounce from the anti-sun side so the dark faces do not crush to black.
+const sunFill=new THREE.DirectionalLight(0x9fc2ff,LIGHTING.fillIntensity);
+sunFill.position.set(-sunDir.x*400,260,-sunDir.z*400);
+scene.add(sunFill);
 
 // ---------- helpers ----------
 function canvasTex(w,h,draw,rx=1,ry=1){
@@ -539,7 +583,7 @@ function voxelColliders(obj,gridRes,snapToGrid){
     g.beginPath();g.moveTo(0,rw/2);g.lineTo(s,rw/2);g.moveTo(rw/2,0);g.lineTo(rw/2,s);g.stroke();
   },10,10);
   const ground=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400),
-    new THREE.MeshStandardMaterial({map:gtex,roughness:1}));
+    new THREE.MeshStandardMaterial({map:gtex,roughness:0.95,metalness:0}));
   ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
 }
 
@@ -584,6 +628,7 @@ function addGate(x,y,z,rotationY,size,solidGate,trackId){
     new THREE.TorusGeometry(size,size*0.07,10,36),
     new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.4,roughness:0.4}));
   ring.position.set(x,y,z);ring.rotation.y=rotationY||0;
+  ring.castShadow=ring.receiveShadow=true; // long thin ring shadow on the deck is the main read for gate height
   scene.add(ring);
   gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col,trackId:trackId,trackIdx:trackIdx}); // col = dim base color
   if(solidGate){
@@ -606,6 +651,7 @@ function addDiveRing(x,y,z,rx,ry,size){
     new THREE.TorusGeometry(size,size*0.035,8,28),
     new THREE.MeshStandardMaterial({color:0x3DDC97,emissive:0x3DDC97,emissiveIntensity:0.7,roughness:0.5}));
   ring.position.set(x,y,z);ring.rotation.set(rx||0,ry||0,0);
+  ring.castShadow=ring.receiveShadow=true;
   scene.add(ring);
   return ring;
 }
@@ -1754,6 +1800,52 @@ function updatePortals(){
 // leads back to Portal A's exact coordinates.
 addPortal(350,-350,1500,1500,'PORTAL');
 addPortal(1500,1500,350,-350,'RETURN');
+
+// ---------- Sun shadow frustum ----------
+// Sized from where the pilot can actually race - every gate on every track -
+// instead of a hardcoded box. Track 1 sits at x 210..490 / z -345..-685, so the
+// old +/-260-around-the-origin frustum missed it completely and that track drew
+// with no shadows at all.
+const ARENA=new THREE.Box3();
+for(const g of gates)ARENA.expandByPoint(g.pos);
+ARENA.expandByScalar(LIGHTING.shadowPadding);ARENA.min.y=0;
+const ARENA_SIZE=ARENA.getSize(new THREE.Vector3());
+const ARENA_MID_Y=ARENA.getCenter(new THREE.Vector3()).y;
+// One static ortho box cannot both span a ~1270u arena and stay sharp at 2048px
+// (that is under 2 shadow texels per world unit), so the box rides along under
+// the pilot instead and the arena only sets its size.
+// The box has to contain the CASTER as well as the ground its shadow lands on,
+// or the shadow is never recorded at all. At this elevation a shadow travels
+// (arena height / tan elevation) across the ground - ~265u at 18 degrees - so
+// cover the union of the receivers around the pilot and that same disc pushed
+// up-sun by the reach. Drops out of the tunables: a lower sun automatically
+// gets a longer, wider box.
+const SUN_VIEW_R=THREE.MathUtils.clamp(Math.hypot(ARENA_SIZE.x,ARENA_SIZE.z)/12,90,180);
+const SUN_REACH=ARENA_SIZE.y/Math.tan(LIGHTING.sunElevation*Math.PI/180);
+const SUN_R=SUN_VIEW_R+SUN_REACH/2;
+const SUN_DIST=ARENA_SIZE.y+SUN_R*2;
+// horizontal offset from the pilot to the centre of that union
+const _sOff=new THREE.Vector3(sunDir.x,0,sunDir.z).normalize().multiplyScalar(SUN_REACH/2);
+sun.shadow.camera.left=-SUN_R;sun.shadow.camera.right=SUN_R;
+sun.shadow.camera.top=SUN_R;sun.shadow.camera.bottom=-SUN_R;
+sun.shadow.camera.near=0.5;sun.shadow.camera.far=SUN_DIST*2;
+sun.shadow.camera.updateProjectionMatrix();
+// Light-space basis, used to snap the frustum centre to the shadow map's own
+// texel grid. Without the snap every shadow edge crawls and shimmers as you fly.
+const _sRight=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),sunDir).normalize();
+const _sUp=new THREE.Vector3().crossVectors(sunDir,_sRight).normalize();
+const _sC=new THREE.Vector3();
+const SUN_TEXEL=(2*SUN_R)/LIGHTING.shadowMapSize;
+function updateSunShadow(){
+  _sC.set(camera.position.x+_sOff.x,ARENA_MID_Y,camera.position.z+_sOff.z);
+  _sC.addScaledVector(_sRight,Math.round(_sC.dot(_sRight)/SUN_TEXEL)*SUN_TEXEL-_sC.dot(_sRight));
+  _sC.addScaledVector(_sUp,Math.round(_sC.dot(_sUp)/SUN_TEXEL)*SUN_TEXEL-_sC.dot(_sUp));
+  sun.target.position.copy(_sC);sun.target.updateMatrixWorld();
+  sun.position.copy(_sC).addScaledVector(sunDir,SUN_DIST);sun.updateMatrixWorld();
+  if(shadowHelper&&shadowHelper.visible)shadowHelper.update();
+}
+updateSunShadow();
+Object.assign(window._sim,{sun,updateSunShadow}); // lets the frame-time bench drive the shadow box from a fixed viewpoint
 // mesas (always visible, not part of swap)
 const mesaTex=canvasTex(256,256,(g,s)=>{
   g.fillStyle='#a3673f';g.fillRect(0,0,s,s);
@@ -2313,6 +2405,12 @@ addEventListener('keydown',e=>{
   if(e.key.toLowerCase()==='g'){
     if(!ghostAvailable()){toast('NO GHOST YET — FINISH A RUN');return;}
     ghostVisible=!ghostVisible;toast(ghostVisible?'GHOST ON':'GHOST OFF');
+  }
+  if(e.key.toLowerCase()==='l'){
+    if(!shadowHelper){shadowHelper=new THREE.CameraHelper(sun.shadow.camera);shadowHelper.visible=false;scene.add(shadowHelper);}
+    shadowHelper.visible=!shadowHelper.visible;
+    if(shadowHelper.visible)shadowHelper.update();
+    toast(shadowHelper.visible?'SHADOW CAM ON':'SHADOW CAM OFF');
   }
   if(e.key.startsWith('Arrow'))e.preventDefault();
 });
@@ -3160,7 +3258,7 @@ function loop(now){
   acc+=dt;
   while(acc>=STEP){physics(STEP);acc-=STEP;}
   updateMotorSound();
-  updateCamera();updateOSD();updateGates();updateGhost();updatePortals();
+  updateCamera();updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();
   renderer.render(scene,camera);
 }
 toast('Throttle up to fly. Tab = tune.');
