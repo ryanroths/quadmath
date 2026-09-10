@@ -11,3 +11,6 @@ __pycache__/
 # local scratch
 backtest.py
 *.patch
+
+# Local Betaflight SITL clone, never part of the site
+betaflight/
