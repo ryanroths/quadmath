@@ -1,0 +1,12 @@
+{
+  "build_id": "cockroach75-hdzero",
+  "frame_size_mm": 75,
+  "motor": "BetaFPV Champion 0802",
+  "motor_kv": 28000,
+  "prop": "Gemfan 1610 bi-blade 40mm",
+  "battery": "weBLEEDfpv 1S 450mAh HV",
+  "auw_g": 36.34,
+  "freestyle_time_s": 181,
+  "source": "measured: scale AUW, stopwatch; 2026-09-04",
+  "notes": "FC HDZero AIO5, Lux cam, HDZero VTX. Dry 23.56g. Indoors, 79F. Start 4.35V, landed 3.4V under load. Two flights: 164s and 181s, best kept. OSD mAh/current omitted - current_meter_scale uncalibrated (read 542mAh on 450 pack)."
+}

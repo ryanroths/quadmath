@@ -1,0 +1,12 @@
+{
+  "build_id": "fractal-75",
+  "frame_size_mm": 75,
+  "motor": "RCinpower 0802",
+  "motor_kv": 25000,
+  "prop": "Gemfan 1610 bi-blade 40mm",
+  "battery": "weBLEEDfpv 1S 450mAh HV",
+  "auw_g": 35.72,
+  "freestyle_time_s": 327,
+  "source": "measured: scale AUW, stopwatch, OSD mAh; 2026-09-04",
+  "notes": "FC BetaFPV 5-in-1. Dry 22.9g. Indoors, 79F. Start 4.35V, landed 3.4V under load. OSD 392mAh used (current sensor not charger-verified). Freestyle, one flight."
+}

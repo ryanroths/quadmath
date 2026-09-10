@@ -18,6 +18,12 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://quadmath.com/blackbox.html</loc>
+    <lastmod>2026-09-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://quadmath.com/sim.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuadMath Blackbox Analyzer — Betaflight Log Noise, Step Response &amp; Tune Suggestions in the Browser</title>
+<meta name="description" content="Drop a Betaflight blackbox log (.bbl / .bfl) and get gyro noise spectra, throttle-vs-frequency heatmaps, PID step response, motor saturation and propwash checks — with plain-language tune suggestions and a ready-to-paste CLI diff. Runs entirely in your browser; the log never uploads.">
+<meta name="keywords" content="blackbox analyzer, betaflight blackbox, blackbox log viewer online, PID step response, gyro noise FFT, PIDtoolbox alternative, blackbox explorer, tinywhoop tuning, whoop blackbox, betaflight tune suggestions, propwash analysis, dterm noise">
+
+<meta property="og:title" content="QuadMath Blackbox Analyzer — Betaflight Logs, Decoded in Your Browser">
+<meta property="og:description" content="Noise spectra, step response, motor saturation, propwash — and a CLI diff to try. No upload, no install.">
+<meta property="og:image" content="https://quadmath.com/og-image.png">
+<meta property="og:url" content="https://quadmath.com/blackbox.html">
+<meta property="og:type" content="website">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="QuadMath Blackbox Analyzer">
+<meta name="twitter:description" content="Drop a Betaflight .bbl. Get noise spectra, step response and tune suggestions. Nothing leaves your browser.">
+<meta name="twitter:image" content="https://quadmath.com/og-image.png">
+
+<link rel="icon" type="image/png" href="./favicon.png">
+<link rel="canonical" href="https://quadmath.com/blackbox.html">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "QuadMath Blackbox Analyzer",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "Any (browser)",
+  "url": "https://quadmath.com/blackbox.html",
+  "description": "Client-side Betaflight blackbox log analyzer: gyro noise spectra, throttle-frequency heatmap, PID step response, motor saturation, propwash detection and tune suggestions.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "creator": { "@type": "Person", "name": "RyFly" }
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=optional" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=b4667ca1d695">
+<link rel="stylesheet" href="blackbox.css">
+<!-- Preload the WASM-bearing module so the worker does not pay for it on the
+     first drop. It is ~265 KB and only ever fetched once. -->
+<link rel="modulepreload" href="vendor/blackbox-log.module.js">
+</head>
+<body>
+
+<header>
+  <div class="container header-inner">
+    <a href="/" class="logo" aria-label="QuadMath home">QuadMath<span class="dot">.</span></a>
+    <button class="nav-toggle" id="navToggle" type="button"
+            aria-expanded="false" aria-controls="site-nav" aria-label="Menu">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </button>
+    <nav id="site-nav">
+      <a href="/#calculator">Calculator</a>
+      <a href="sim.html">Sim</a>
+      <a href="tune-database.html">Tunes</a>
+      <a href="blackbox.html" class="active" aria-current="page" style="color:#FF4D1A">Blackbox</a>
+      <a href="bench.html">Bench</a>
+      <a href="gear.html">Gear</a>
+      <a href="hire.html">Hire</a>
+    </nav>
+  </div>
+</header>
+
+<div class="container">
+
+  <section class="section" id="blackbox">
+    <h2>Blackbox Analyzer</h2>
+    <p class="sub">
+      Drop a Betaflight log. You get the four things a tune actually hinges on — what noise
+      reaches the PID loop, how each axis follows the stick, whether the motors have headroom,
+      and whether propwash is eating your dives — plus a CLI diff to try one change at a time.
+      Everything runs in this tab. The log is never uploaded.
+    </p>
+
+    <label class="bb-drop" id="drop" tabindex="0" role="button" aria-label="Choose or drop a blackbox log file">
+      <div class="bb-drop-title">Drop a .bbl / .bfl / .txt here</div>
+      <div class="bb-drop-sub">or click to choose. Flash dumps with several logs are fine — pick the flight after.</div>
+      <div class="bb-privacy"><b>local only</b> — decoded in a Web Worker, nothing leaves the browser</div>
+      <input type="file" id="file" accept=".bbl,.bfl,.txt,.log,.BBL,.BFL,.TXT">
+    </label>
+
+    <div class="bb-toolbar" id="toolbar" hidden>
+      <span id="fileName"></span>
+      <label>log <select id="logSelect" aria-label="Which log in the file"></select></label>
+      <span class="bb-status" id="status" aria-live="polite"></span>
+    </div>
+    <p class="bb-status" id="statusIdle" aria-live="polite"></p>
+  </section>
+
+  <div id="results" hidden>
+
+    <section class="section" id="summary">
+      <div class="panel-label">Log</div>
+      <div class="bb-summary" id="summaryGrid"></div>
+    </section>
+
+    <section class="section" id="findings">
+      <h2>Findings</h2>
+      <p class="sub">Ranked worst first. Each one says what was measured, what it usually means, and one thing to try. A log gives direction, not magnitude — change one thing, fly, log again.</p>
+      <div class="bb-findings" id="findingList"></div>
+    </section>
+
+    <section class="section" id="cli">
+      <h2>Suggested CLI</h2>
+      <p class="sub">Only the concrete changes from the findings above. Paste into the Betaflight CLI. <em>Do not paste the lot at once</em> — comment lines out and try them one flight at a time.</p>
+      <pre class="bb-cli" id="cliBlock"></pre>
+      <div class="bb-actions">
+        <button class="bb-btn" id="copyCli" type="button">Copy CLI</button>
+        <button class="bb-btn is-secondary" id="copyJson" type="button">Copy metrics JSON</button>
+        <button class="bb-btn is-secondary" id="downloadJson" type="button">Download metrics JSON</button>
+      </div>
+      <p class="bb-chart-sub" style="margin-top:10px">The metrics JSON is what the QuadMath Tune Advisor reads — numbers only, never samples. Attach it when you ask for a second opinion.</p>
+    </section>
+
+    <section class="section" id="charts">
+      <h2>Charts</h2>
+      <div class="bb-grid">
+
+        <div class="bb-chart is-wide">
+          <div class="bb-chart-head">
+            <div><div class="bb-chart-title">Gyro vs setpoint</div><div class="bb-chart-sub">deg/s over the whole log. Envelope of the filtered gyro; setpoint drawn on top. Throttle underneath.</div></div>
+            <div class="bb-axis-tabs" id="tsTabs" role="group" aria-label="Axis">
+              <button type="button" data-axis="0" aria-pressed="true">Roll</button>
+              <button type="button" data-axis="1" aria-pressed="false">Pitch</button>
+              <button type="button" data-axis="2" aria-pressed="false">Yaw</button>
+            </div>
+          </div>
+          <div class="bb-legend" id="tsLegend"><span class="c-roll" id="tsLegendGyro">gyro</span><span class="c-text">setpoint</span><span class="c-muted">throttle</span></div>
+          <div class="bb-canvas-wrap is-tall"><canvas id="tsCanvas" role="img" aria-label="Gyro and setpoint time series"></canvas><div class="bb-tip" id="tsTip"></div></div>
+        </div>
+
+        <div class="bb-chart">
+          <div class="bb-chart-head"><div><div class="bb-chart-title">Noise spectrum — filtered gyro</div><div class="bb-chart-sub">Welch PSD, in-flight samples only. Peaks marked.</div></div></div>
+          <div class="bb-legend"><span class="c-roll">roll</span><span class="c-pitch">pitch</span><span class="c-yaw">yaw</span></div>
+          <div class="bb-canvas-wrap"><canvas id="psdCanvas" role="img" aria-label="Gyro noise spectrum"></canvas><div class="bb-tip" id="psdTip"></div></div>
+        </div>
+
+        <div class="bb-chart" id="psdRawChart">
+          <div class="bb-chart-head"><div><div class="bb-chart-title">Noise spectrum — unfiltered gyro</div><div class="bb-chart-sub" id="psdRawSub">What the filters are up against (debug_mode GYRO_SCALED).</div></div></div>
+          <div class="bb-legend"><span class="c-roll">roll</span><span class="c-pitch">pitch</span><span class="c-yaw">yaw</span></div>
+          <div class="bb-canvas-wrap"><canvas id="psdRawCanvas" role="img" aria-label="Unfiltered gyro noise spectrum"></canvas><div class="bb-tip" id="psdRawTip"></div></div>
+        </div>
+
+        <div class="bb-chart">
+          <div class="bb-chart-head"><div><div class="bb-chart-title">D-term spectrum</div><div class="bb-chart-sub">Noise here is motor heat with no control benefit.</div></div></div>
+          <div class="bb-legend"><span class="c-roll">roll</span><span class="c-pitch">pitch</span></div>
+          <div class="bb-canvas-wrap"><canvas id="psdDCanvas" role="img" aria-label="D-term spectrum"></canvas><div class="bb-tip" id="psdDTip"></div></div>
+        </div>
+
+        <div class="bb-chart">
+          <div class="bb-chart-head"><div><div class="bb-chart-title">Step response</div><div class="bb-chart-sub">Wiener-deconvolved setpoint → gyro, 500 ms. 1.0 = tracking exactly.</div></div></div>
+          <div class="bb-legend"><span class="c-roll">roll</span><span class="c-pitch">pitch</span><span class="c-yaw">yaw</span></div>
+          <div class="bb-canvas-wrap"><canvas id="stepCanvas" role="img" aria-label="PID step response"></canvas><div class="bb-tip" id="stepTip"></div></div>
+        </div>
+
+        <div class="bb-chart">
+          <div class="bb-chart-head"><div><div class="bb-chart-title">Noise by throttle — roll</div><div class="bb-chart-sub">Throttle band vs frequency. Lines that climb with throttle are motors; flat lines are the frame.</div></div></div>
+          <div class="bb-canvas-wrap"><canvas id="heatRollCanvas" role="img" aria-label="Roll noise by throttle heatmap"></canvas><div class="bb-tip" id="heatRollTip"></div></div>
+        </div>
+
+        <div class="bb-chart">
+          <div class="bb-chart-head"><div><div class="bb-chart-title">Noise by throttle — pitch</div><div class="bb-chart-sub">Same view, pitch axis.</div></div></div>
+          <div class="bb-canvas-wrap"><canvas id="heatPitchCanvas" role="img" aria-label="Pitch noise by throttle heatmap"></canvas><div class="bb-tip" id="heatPitchTip"></div></div>
+        </div>
+
+        <div class="bb-chart is-wide">
+          <div class="bb-chart-head"><div><div class="bb-chart-title">Motors</div><div class="bb-chart-sub">Output as % of range. Flat tops at 100% are saturation.</div></div></div>
+          <div class="bb-legend"><span class="c-roll">M1</span><span class="c-pitch">M2</span><span class="c-yaw">M3</span><span class="c-m4">M4</span></div>
+          <div class="bb-canvas-wrap"><canvas id="motorCanvas" role="img" aria-label="Motor outputs"></canvas><div class="bb-tip" id="motorTip"></div></div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="section" id="settings">
+      <details class="bb-details">
+        <summary>Tune &amp; filter settings read from the log</summary>
+        <table class="bb-settings" id="settingsTable"></table>
+      </details>
+      <details class="bb-details">
+        <summary>How the numbers are made</summary>
+        <ul class="bb-method">
+          <li><b>Flight gating.</b> Only samples above 15% throttle feed the spectra and step response. Bench idling is not flying.</li>
+          <li><b>Noise spectra.</b> Welch PSD: Hann window, 50% overlap, 1024-point FFT at 2 kHz+ (shorter at lower log rates). Peaks are reported by prominence over a running 80 Hz median floor, so a broad hump does not count and a narrow resonance does.</li>
+          <li><b>Step response.</b> Wiener deconvolution of setpoint → gyro over 2 s windows with 10% stride, Tukey-windowed and zero-padded, regularised above 25 Hz. Only windows with real stick input are kept, weighted by amplitude. Same family of method as PID-Analyzer and PIDtoolbox.</li>
+          <li><b>Propwash.</b> Pitch tracking error in 20–90 Hz after a throttle chop (fell &gt; 35% in 0.5 s) versus the same band in mid-throttle cruise.</li>
+          <li><b>Motor saturation.</b> Share of in-flight samples with any motor at ≥ 98% of its output range.</li>
+          <li><b>Parser.</b> <a href="https://github.com/blackbox-log/blackbox-log" rel="noopener">blackbox-log</a> (MIT) compiled to WebAssembly. Betaflight and INAV logs; EmuFlight is untested.</li>
+        </ul>
+      </details>
+    </section>
+
+  </div>
+
+</div>
+
+<footer>
+  <div class="container header-inner" style="width: 100%;">
+    <div class="footer-logo">QuadMath<span class="dot">.</span></div>
+    <div>Suggestions, not gospel — change one thing per flight. Fly safe.</div>
+  </div>
+</footer>
+
+<script src="nav.js?v=0a5aa631939b" defer></script>
+<script type="module" src="blackbox.js"></script>
+
+<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
