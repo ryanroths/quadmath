@@ -34,7 +34,7 @@ export function buildFindings(m, s) {
   if (m.battery) {
     const b = m.battery;
     if (b.perCellMin != null && b.perCellMin < 2.8) add('bad', `Hard voltage sag (${b.perCellMin} V/cell)`, `Min in flight ${b.vminFlying} V on ${b.cells}S. Below 2.8 V/cell the pack is the limit, not the tune — motor saturation and soft response below are partly this.`);
-    else if (b.perCellMin != null && b.perCellMin < 3.1) add('info', `Sag to ${b.perCellMin} V/cell`, `Normal for a punchy whoop pack near the end of a flight. Watch it against saturation below.`);
+    else if (b.perCellMin != null && b.perCellMin < 3.1) add('info', `Sag to ${b.perCellMin} V/cell`, `Normal for a hard-flown pack near the end of a flight. Watch it against saturation below.`);
   }
 
   // ---- motors ----
@@ -118,8 +118,8 @@ export function buildFindings(m, s) {
   // ---- propwash ----
   const pw = m.propwash;
   if (pw && pw.ratio != null) {
-    if (pw.ratio > 3) add('warn', `Propwash ${pw.ratio}x`, `Pitch tracking error in the 20–90 Hz band is ${pw.ratio}x higher after throttle chops than in cruise. Whoop fixes, in order: raise dyn_idle / idle, more D (with D-min raised too), then lower D filtering slightly so D can see the wash. Don't chase it with P.`);
-    else if (pw.ratio > 1.8) add('info', `Some propwash (${pw.ratio}x)`, `Mild. Normal for a ducted whoop diving. Raising idle a touch is the cheap fix.`);
+    if (pw.ratio > 3) add('warn', `Propwash ${pw.ratio}x`, `Pitch tracking error in the 20–90 Hz band is ${pw.ratio}x higher after throttle chops than in cruise. Fixes, in order: raise dyn_idle / idle, more D (with D-min raised too), then lower D filtering slightly so D can see the wash. Don't chase it with P.`);
+    else if (pw.ratio > 1.8) add('info', `Some propwash (${pw.ratio}x)`, `Mild. Normal when diving. Raising idle a touch is the cheap fix.`);
     else add('good', 'Propwash under control', `Chop-window error only ${pw.ratio}x cruise level.`);
   } else if (pw) add('info', 'No throttle chops found', 'Propwash check needs a few sharp throttle cuts from mid-throttle. Dive at something and log it.');
 
