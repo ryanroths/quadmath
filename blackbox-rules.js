@@ -143,7 +143,13 @@ export function advisorPayload(m, s, findings) {
   return {
     firmware: s.firmware, board: s.board, craft: s.craft, debugMode: s.debugMode,
     log: { fs: m.fs, durationS: m.durationS, flightFraction: m.flightFraction, droppedFrames: m.droppedFrames },
-    pids: s.pids, ff: s.ff, dMin: s.dMin, filters: s.filters, simplified: s.simplifiedTuning,
+    pids: s.pids, ff: s.ff, filters: s.filters, simplified: s.simplifiedTuning,
+    // The date-versioned Betaflight releases (2025.x+) inverted the D-min
+    // scheme: d_* became the floor and d_max_* the ceiling; 4.5 still has d_min. Tell the model which scheme this log uses and the
+    // exact CLI names, so it cannot emit d_min_* on a firmware that has none.
+    dScheme: s.dMax ? { kind: 'd_max', floor: 'd_<axis>', ceiling: 'd_max_<axis>', values: { floor: [s.pids.roll?.d, s.pids.pitch?.d, s.pids.yaw?.d], ceiling: s.dMax } }
+                    : { kind: 'd_min', floor: 'd_min_<axis>', ceiling: 'd_<axis>', values: { floor: s.dMin, ceiling: [s.pids.roll?.d, s.pids.pitch?.d, s.pids.yaw?.d] } },
+    cliNames: s.cliNames,
     axes: m.axes.map(A => ({ name: A.name, peaks: A.peaks, peaksRaw: A.peaksRaw, noise: A.noise, step: A.step ? { ...A.step.metrics, windows: A.step.windows } : null })),
     motors: m.motors, battery: m.battery, propwash: m.propwash, throttle: m.throttle,
     findings: findings.map(f => ({ sev: f.sev, title: f.title })),

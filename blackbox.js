@@ -216,7 +216,7 @@ function renderAdvisor(text) {
   for (let raw of lines) {
     let l = raw.trimEnd();
     if (/^```/.test(l)) { inFence = !inFence; continue; }
-    if (/^(READ|FINDINGS CHECK|FLY THIS NEXT|AFTER THAT)\s*:?\s*$/.test(l)) { out.push(`<span class="h">${l.replace(/:$/, '')}</span>`); continue; }
+    if (/^(READ|FINDINGS CHECK|FLY THIS NEXT|AFTER THAT|CHECK)\s*:?\s*$/.test(l)) { out.push(`<span class="h">${l.replace(/:$/, '')}</span>`); continue; }
     l = l.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     l = l.replace(/`([^`]+)`/g, '<code>$1</code>');
     if (inFence || /^(set|profile|save|diff|get|rateprofile)\b/.test(l)) { out.push(`<code>${l}</code>`); continue; }
