@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Air65 PID Tune: Three Published 65mm BetaFPV Tunes and How to Apply One | quadmath.com</title>
+  <meta name="description" content="The published 65mm BetaFPV tunes on quadmath: stock Air65 II Champion, and two RyFly tunes on VCI Spark 0702 29K with Gemfan 1219S and HQ 31mm props. Exact PIDs and rates, how to apply one safely, and what to do when your motor and prop do not match a card.">
+  <meta property="og:title" content="Air65 PID Tune: Three Published 65mm BetaFPV Tunes and How to Apply One">
+  <meta property="og:description" content="Exact PIDs and rates from the tune database, plus the props-off apply and the motor-temp check that decides whether it stays.">
+  <meta property="og:url" content="https://quadmath.com/content/guides/air65-pid-tune.html">
+  <link rel="canonical" href="https://quadmath.com/content/guides/air65-pid-tune.html">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=optional" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css?v=e98c5b34a90c">
+</head>
+<body>
+  <header>
+  <div class="container header-inner">
+    <a href="/" class="logo" aria-label="QuadMath home">QuadMath<span class="dot">.</span></a>
+    <button class="nav-toggle" id="navToggle" type="button"
+            aria-expanded="false" aria-controls="site-nav" aria-label="Menu">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </button>
+    <nav id="site-nav">
+      <a href="/#calculator">Calculator</a>
+      <a href="/sim.html">Sim</a>
+      <a href="/tune-database.html">Tunes</a>
+      <a href="/blackbox.html">Blackbox</a>
+      <a href="/bench.html">Bench</a>
+      <a href="/gear.html">Gear</a>
+      <a href="/guides.html" class="active" aria-current="page" style="color:#FF4D1A">Guides</a>
+      <a href="/hire.html">Hire</a>
+    </nav>
+  </div>
+</header>
+
+  <div class="container">
+<main class="section guide">
+    <h1>Air65 PID Tune: The Three Published 65mm BetaFPV Tunes</h1>
+
+    <p>
+      Short version: there are three published 65mm BetaFPV cards in the
+      <a href="/tune-database.html">tune database</a> — the stock Air65 II Champion tune, and two
+      RyFly tunes on VCI Spark 0702 29000KV with different props. Pick the card that matches your
+      <strong>motor and prop</strong>, not the one that matches your frame. Apply it with props
+      off, fly one pack, and check motor temps before you fly a second.
+    </p>
+    <p>
+      To find them on the database page, tick <strong>Frame 65</strong> and
+      <strong>Brand BetaFPV</strong>. Every card has a copy-paste CLI export.
+    </p>
+
+    <h2>The three cards</h2>
+    <table>
+      <thead><tr><th>Tune</th><th>Combo</th><th>P / I / D roll · pitch</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Stock</td>
+          <td>Air65 II Champion, stock motor/prop</td>
+          <td>36/61/27 · 37/64/29</td>
+          <td>Factory CLI, April 2026. Rates ACTUAL, rc_rate 7, srate 58/58/50, expo 0.</td>
+        </tr>
+        <tr>
+          <td>RyFly</td>
+          <td>VCI Spark 0702 29K · Gemfan 1219S</td>
+          <td>54/77/38 · 62/89/52</td>
+          <td>D floor R36/P49, TPA 60, FF off, RPM filter on bidir DSHOT300.</td>
+        </tr>
+        <tr>
+          <td>RyFly</td>
+          <td>VCI Spark 0702 29K · HQ 31mm</td>
+          <td>61/110/41 · 67/121/51</td>
+          <td>D floor R41/P51, TPA 60, FF off. Same filter config as the 1219S tune.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Both RyFly cards run the same rates: ACTUAL, rc_rate 4, srate 74/74/70, expo 56. Yaw D is 0
+      on all three, which is correct and not an omission.
+    </p>
+    <p>
+      One naming trap. On Betaflight 4.2–4.5 the D floor is <code>d_min_&lt;axis&gt;</code> and the
+      value in the table above is the ceiling, <code>d_&lt;axis&gt;</code>. On the 2025.x and later
+      date-versioned releases those names moved: <code>d_&lt;axis&gt;</code> is the floor and
+      <code>d_max_&lt;axis&gt;</code> is the ceiling. Same two numbers, swapped labels. Paste the
+      card's CLI rather than typing parameter names from memory, and check that your floor is
+      below your ceiling before you save.
+    </p>
+
+    <h2>Applying one without cooking motors</h2>
+    <ul>
+      <li>Props off. Paste the diff into the CLI, <code>save</code>, let it reboot.</li>
+      <li>Props on, hover at knee height for thirty seconds. Listen for a hot, buzzy oscillation — that is too much D for your build, and it is audible before it is visible.</li>
+      <li>Land and touch the motors. Warm is normal. Too hot to keep a finger on means back the D ceiling off by 5 per axis and fly it again.</li>
+      <li>Fly one full pack before you decide anything. First-thirty-seconds impressions are mostly rates.</li>
+      <li>Change one thing per pack. Two changes and a better flight tells you nothing.</li>
+    </ul>
+
+    <h2>If your combo is not on a card</h2>
+    <p>
+      The analog daily driver behind the <a href="/bench.html">bench numbers</a> — 25.42 g all-up,
+      3:53 cruise — runs <a href="/go/wb-vci-0702-30k/">VCI 0702 PRO DB 30000KV</a> with
+      <a href="/go/wb-gemfan-31mm/">Gemfan 31mm triblades</a>. That is a different motor from the
+      Spark 29K on the two RyFly cards, so <strong>none of the published tunes is that build's
+      tune</strong>. Rather than publish numbers I have not flown on it:
+    </p>
+    <pre><code># VCI 0702 PRO DB 30000KV · Gemfan 31mm — daily driver
+# diff not published yet. This block fills in when the tune is flown,
+# logged, and added to the tune database as its own card.</code></pre>
+    <p>
+      For any unlisted combo, start from the nearest card by motor KV and prop size, drop the D
+      ceiling 10–15%, and fly it. A higher-KV motor on the same prop wants less D, not more. Then
+      put the log through the <a href="/blackbox.html">blackbox analyzer</a> — it will tell you
+      whether the noise you are hearing is motor noise, prop wash, or a D-term that is fighting
+      the filter stack.
+    </p>
+
+    <h2>Before the first pack</h2>
+    <p>
+      Load the rates into the <a href="/sim.html">browser sim</a> with your real radio so your
+      thumbs already know what srate 74 and expo 56 feel like. Check thrust-to-weight for your
+      actual motor, prop and pack in the <a href="/#calculator">calculator</a> — a tune fights a
+      bad prop choice and loses.
+    </p>
+    <p class="tune-disclaimer">
+      Starting points only. Motor KV, prop brand, pack C-rating and frame stiffness all change how
+      a tune responds. Gear links marked /go/ are affiliate redirects to parts I fly; they cost you
+      nothing extra and do not change what gets recommended.
+    </p>
+
+    <nav class="guide-related" aria-label="Related tools">
+      <ul>
+        <li><a href="/tune-database.html">Tune database — the three cards with copy-paste CLI</a></li>
+        <li><a href="/blackbox.html">Blackbox analyzer — check the tune against a log</a></li>
+        <li><a href="/bench.html">Bench data — the Air65 build these numbers sit next to</a></li>
+        <li><a href="/content/guides/first-tiny-whoop-setup.html">First tiny whoop — the stack before the tune</a></li>
+      </ul>
+    </nav>
+  </main>
+</div>
+
+<footer>
+  <div class="container header-inner" style="width: 100%;">
+    <div class="footer-logo">QuadMath<span class="dot">.</span></div>
+    <div>Measured where it says measured. Fly safe.</div>
+  </div>
+</footer>
+
+<script src="/nav.js?v=0a5aa631939b" defer></script>
+
+<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
