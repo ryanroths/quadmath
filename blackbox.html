@@ -114,7 +114,17 @@
         <button class="bb-btn is-secondary" id="copyJson" type="button">Copy metrics JSON</button>
         <button class="bb-btn is-secondary" id="downloadJson" type="button">Download metrics JSON</button>
       </div>
-      <p class="bb-chart-sub" style="margin-top:10px">The metrics JSON is what the QuadMath Tune Advisor reads — numbers only, never samples. Attach it when you ask for a second opinion.</p>
+      <p class="bb-chart-sub" style="margin-top:10px">The metrics JSON is what the Tune Advisor reads — numbers only, never samples.</p>
+    </section>
+
+    <section class="section" id="advisor">
+      <h2>Tune Advisor</h2>
+      <p class="sub">A second opinion on the findings above from a model that reads the numbers — spectra peaks, step response, saturation, your PIDs and filters — and argues back when a rule got it wrong. Sends the metrics JSON only; the log itself never leaves this tab. Ten reads an hour per person.</p>
+      <div class="bb-actions">
+        <button class="bb-btn" id="askAdvisor" type="button">Ask the Advisor</button>
+        <span class="bb-status" id="advisorStatus" aria-live="polite"></span>
+      </div>
+      <pre class="bb-cli bb-advisor" id="advisorOut" hidden></pre>
     </section>
 
     <section class="section" id="charts">
