@@ -88,8 +88,16 @@ export default {
       return json({ error: `upstream ${r.status}`, detail: t.slice(0, 300) }, 502, cors);
     }
     const out = await r.json();
-    const text = (out.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
-    return json({ text, model: out.model, usage: out.usage }, 200, cors);
+    const blocks = out.content || [];
+    const text = blocks.filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
+    if (!text) {
+      // A model that answers only with non-text blocks (thinking, tool use) or
+      // stops before emitting text must fail loudly, not as a blank card.
+      return json({
+        error: `empty reply from ${out.model || env.MODEL} (stop_reason ${out.stop_reason || '?'}, blocks: ${blocks.map(b => b.type).join(',') || 'none'})`,
+      }, 502, cors);
+    }
+    return json({ text, model: out.model, usage: out.usage, stop_reason: out.stop_reason }, 200, cors);
   },
 };
 
