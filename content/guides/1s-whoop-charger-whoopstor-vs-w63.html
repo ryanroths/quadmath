@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1S Whoop Charger: WhoopStor V3 First, WooPower W63 When You Outgrow It | quadmath.com</title>
+  <meta name="description" content="The 1S charger decision for tiny whoops: a WhoopStor V3 for a first pilot, a WooPower W63 when you want more per-port control and power. What each one locks you into, the one setting that bites everyone, and why the power supply matters more than the charger.">
+  <meta property="og:title" content="1S Whoop Charger: WhoopStor V3 First, WooPower W63 When You Outgrow It">
+  <meta property="og:description" content="One charger for a first pilot, one for later. Plus the supply mistake that cooks packs.">
+  <meta property="og:url" content="https://quadmath.com/content/guides/1s-whoop-charger-whoopstor-vs-w63.html">
+  <link rel="canonical" href="https://quadmath.com/content/guides/1s-whoop-charger-whoopstor-vs-w63.html">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=optional" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css?v=e98c5b34a90c">
+</head>
+<body>
+  <header>
+  <div class="container header-inner">
+    <a href="/" class="logo" aria-label="QuadMath home">QuadMath<span class="dot">.</span></a>
+    <button class="nav-toggle" id="navToggle" type="button"
+            aria-expanded="false" aria-controls="site-nav" aria-label="Menu">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </button>
+    <nav id="site-nav">
+      <a href="/#calculator">Calculator</a>
+      <a href="sim.html">Sim</a>
+      <a href="tune-database.html">Tunes</a>
+      <a href="blackbox.html">Blackbox</a>
+      <a href="bench.html">Bench</a>
+      <a href="gear.html">Gear</a>
+      <a href="guides.html" class="active" aria-current="page" style="color:#FF4D1A">Guides</a>
+      <a href="hire.html">Hire</a>
+    </nav>
+  </div>
+</header>
+
+  <div class="container">
+<main class="section guide">
+    <h1>1S Whoop Charger: WhoopStor V3 First, WooPower W63 When You Outgrow It</h1>
+
+    <p>
+      Short version: buy a <strong>WhoopStor V3</strong> with your first whoop. It charges six 1S
+      packs at once, does LiHV, and has a storage mode, which is most of what a whoop pilot ever
+      needs from a charger. The <strong>WooPower W63</strong> is the step up when you want more
+      control per port and more power behind it — not a better first buy, a different one.
+    </p>
+    <p>
+      Whichever you pick, the thing that actually damages packs is the power supply you plug it
+      into. That section is short and it is the one to read twice.
+    </p>
+
+    <h2>WhoopStor V3: the default</h2>
+    <p>
+      Six ports, BT2.0 and PH2.0, LiPo or LiHV selectable, adjustable charge current, storage
+      mode. It runs off a USB-C supply, fits in a jacket pocket, and every whoop pilot at the
+      gym has one. It is the charger behind every pack on the <a href="/bench.html">bench
+      page</a> — the Air65 numbers were flown on packs it charged to 4.35 V.
+    </p>
+    <p>
+      The one thing to understand before you buy: <strong>the settings are shared across all
+      six ports.</strong> Pick LiHV and 1 A and every pack on the board gets LiHV at 1 A. That is
+      fine when your packs match — six LAVA 300s, say — and a trap when they do not. A 300 mAh
+      pack at 1 A is 3.3C, brisk but survivable; put a 200 mAh pack in the same row and it is
+      getting 5C. Charge like packs together, or turn the current down to suit the smallest one.
+    </p>
+    <p>
+      Storage mode matters more than it sounds. Whoop packs left at 4.35 V for a week puff. Six
+      packs back to storage voltage in one press, walk away, is the feature that keeps a set of
+      packs alive for a season.
+    </p>
+
+    <h2>WooPower W63: more control, more power, more to get wrong</h2>
+    <p>
+      The W63 is the flexible option: independent per-port settings, so a 200 and a 450 can sit
+      side by side on their own current, and a discharge function that takes packs down rather
+      than just holding them. It also wants a proper supply behind it to deliver on that.
+    </p>
+    <p>
+      That flexibility is exactly why it is not the first buy. Every port is a decision, and a
+      new pilot with one type of pack does not need six decisions. Get it when you are running
+      mixed capacities, or when you have started caring about internal resistance and cycle
+      counts and want to bring packs down before storage on your own terms.
+    </p>
+    <p>
+      On the discharge side: treat any charger's discharge rating as a bench figure, not a
+      promise. Small chargers dump discharge energy as heat through a small resistor; they are
+      slow at it and warm while doing it. Fine for storage, not a substitute for flying a pack
+      down.
+    </p>
+
+    <h2>The power supply is the part that cooks packs</h2>
+    <p>
+      A 1S charger pushing six packs at 1 A is drawing well over 30 W from its input. A dumb
+      5 V phone brick or a laptop USB port cannot supply that. What you get is not a slower
+      charge — it is a charger that browns out, resets mid-cycle, or reports full on packs that
+      are not, and packs that sag on the first punch because they never actually took the
+      charge. Symptoms people blame on the packs.
+    </p>
+    <ul>
+      <li>Use the supply the charger's spec calls for — a USB-C PD brick that can actually hold the wattage, or a proper DC supply where the charger takes one.</li>
+      <li>No USB hubs, no laptop ports, no car-adapter mystery bricks.</li>
+      <li>If the charger restarts or the readout flickers when the sixth pack goes on, the supply is the problem, not the charger.</li>
+    </ul>
+
+    <h2>Settings for the starter pack</h2>
+    <p>
+      For the <a href="/content/guides/first-tiny-whoop-setup.html">first whoop stack</a> —
+      six LAVA 300 mAh 1S HV on an Air65 — the WhoopStor settings are: <strong>LiHV</strong>,
+      <strong>1 A</strong>, and storage mode after any session where the packs will not be flown
+      again within a day or two. Full charge lands at 4.35 V; do not use LiPo mode on an HV pack
+      and wonder why it only reaches 4.20 V and flies short.
+    </p>
+
+    <h2>The rule</h2>
+    <ul>
+      <li>First whoop: WhoopStor V3, matched packs, one setting for all of them.</li>
+      <li>Mixed packs or you have opinions about discharge: W63.</li>
+      <li>Either way: the supply the spec calls for. That line is the whole guide.</li>
+    </ul>
+
+    <nav class="guide-related" aria-label="Related tools">
+      <ul>
+        <li><a href="/content/guides/first-tiny-whoop-setup.html">First tiny whoop — the packs these chargers will see</a></li>
+        <li><a href="/bench.html">Bench data — flight times on packs charged to 4.35 V</a></li>
+        <li><a href="/gear.html">Gear list — the packs and the whoop</a></li>
+        <li><a href="/">Build calculator — flight time by pack capacity</a></li>
+      </ul>
+    </nav>
+  </main>
+</div>
+
+<footer>
+  <div class="container header-inner" style="width: 100%;">
+    <div class="footer-logo">QuadMath<span class="dot">.</span></div>
+    <div>Measured where it says measured. Fly safe.</div>
+  </div>
+</footer>
+
+<script src="/nav.js?v=0a5aa631939b" defer></script>
+
+<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
