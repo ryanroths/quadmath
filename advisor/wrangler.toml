@@ -21,4 +21,4 @@ ALLOWED_ORIGINS = "https://quadmath.com,https://www.quadmath.com"
 # then paste the id below.
 [[kv_namespaces]]
 binding = "ADVISOR_RL"
-id = "REPLACE_WITH_KV_ID"
+id = "7784044a0d254ddfafb07a153c627a62"
