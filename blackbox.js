@@ -178,6 +178,42 @@ async function copy(text, btn, label) {
   setTimeout(() => { btn.textContent = label; }, 1500);
 }
 
+// ---------- Tune Advisor ----------
+
+const ADVISOR_URL = 'https://advisor.quadmath.com/v1/blackbox';
+const askBtn = $('askAdvisor'), advisorOut = $('advisorOut'), advisorStatus = $('advisorStatus');
+
+askBtn.addEventListener('click', async () => {
+  if (!current) { advisorStatus.textContent = 'analyze a log first'; return; }
+  askBtn.disabled = true;
+  advisorStatus.textContent = 'reading the numbers…';
+  advisorStatus.classList.remove('is-error');
+  try {
+    const r = await fetch(ADVISOR_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(current.advisor),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `advisor ${r.status}`);
+    advisorOut.innerHTML = renderAdvisor(d.text || '');
+    advisorOut.hidden = false;
+    advisorStatus.textContent = d.model ? `${d.model}` : '';
+  } catch (err) {
+    advisorStatus.textContent = err.message === 'Failed to fetch' ? 'advisor unreachable — try again in a minute' : err.message;
+    advisorStatus.classList.add('is-error');
+  } finally {
+    askBtn.disabled = false;
+  }
+});
+
+/* Advisor replies are plain text with fixed uppercase headers and `set`
+   lines. Escape everything, then dress those two things up. */
+function renderAdvisor(text) {
+  return esc(text)
+    .replace(/^(READ|FINDINGS CHECK|FLY THIS NEXT|AFTER THAT)\s*$/gm, '<span class="h">$1</span>')
+    .replace(/^((?:set|profile|save|diff|get)\b[^\n]*)$/gm, '<code>$1</code>');
+}
+
 // ---------- charts ----------
 
 $('tsTabs').addEventListener('click', e => {

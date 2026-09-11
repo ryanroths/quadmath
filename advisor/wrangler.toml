@@ -1,0 +1,24 @@
+# QuadMath Tune Advisor — Cloudflare Worker.
+# Deploy from the repo root on a machine with wrangler logged in:
+#   cd advisor && npx wrangler deploy
+# Secrets (never in this file):
+#   npx wrangler secret put ANTHROPIC_API_KEY
+name = "quadmath-advisor"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+routes = [
+  { pattern = "advisor.quadmath.com", custom_domain = true }
+]
+
+[vars]
+MODEL = "claude-sonnet-4-5"
+MAX_OUTPUT_TOKENS = "700"
+RATE_LIMIT_PER_HOUR = "10"
+ALLOWED_ORIGINS = "https://quadmath.com,https://www.quadmath.com"
+
+# Per-IP hourly counter. Create once:  npx wrangler kv namespace create ADVISOR_RL
+# then paste the id below.
+[[kv_namespaces]]
+binding = "ADVISOR_RL"
+id = "REPLACE_WITH_KV_ID"

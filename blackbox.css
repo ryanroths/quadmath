@@ -124,6 +124,10 @@
   font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; line-height: 1.5; white-space: pre; overflow-x: auto; color: var(--text);
 }
 .bb-cli-empty { color: var(--muted); font-style: italic; }
+.bb-advisor { white-space: pre-wrap; margin-top: 14px; font-family: 'Inter', sans-serif; font-size: 0.9375rem; line-height: 1.55; }
+.bb-advisor .h { display: block; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--green); margin: 14px 0 4px; }
+.bb-advisor .h:first-child { margin-top: 0; }
+.bb-advisor code { font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; color: var(--orange); }
 .bb-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
 .bb-btn {
   background: transparent; border: 1px solid rgba(255,77,26,.4); color: var(--orange);
