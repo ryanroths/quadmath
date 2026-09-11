@@ -138,6 +138,20 @@ function cliText(cli, s) {
   return lines.join('\n');
 }
 
+/* Which D scheme this firmware uses, with the current values under their
+   exact CLI names so nothing has to be inferred from array positions. */
+function dScheme(s) {
+  const d = [s.pids.roll?.d, s.pids.pitch?.d, s.pids.yaw?.d];
+  const ax = ['roll', 'pitch', 'yaw'];
+  const current = {};
+  if (s.dMax) {
+    ax.forEach((a, i) => { current[`d_${a}`] = d[i]; current[`d_max_${a}`] = s.dMax[i]; });
+    return { kind: 'd_max', floorParam: 'd_<axis>', ceilingParam: 'd_max_<axis>', current };
+  }
+  ax.forEach((a, i) => { current[`d_min_${a}`] = s.dMin ? s.dMin[i] : null; current[`d_${a}`] = d[i]; });
+  return { kind: 'd_min', floorParam: 'd_min_<axis>', ceilingParam: 'd_<axis>', current };
+}
+
 /* Compact JSON for the Tune Advisor — metrics only, never raw samples. */
 export function advisorPayload(m, s, findings) {
   return {
@@ -147,8 +161,7 @@ export function advisorPayload(m, s, findings) {
     // The date-versioned Betaflight releases (2025.x+) inverted the D-min
     // scheme: d_* became the floor and d_max_* the ceiling; 4.5 still has d_min. Tell the model which scheme this log uses and the
     // exact CLI names, so it cannot emit d_min_* on a firmware that has none.
-    dScheme: s.dMax ? { kind: 'd_max', floor: 'd_<axis>', ceiling: 'd_max_<axis>', values: { floor: [s.pids.roll?.d, s.pids.pitch?.d, s.pids.yaw?.d], ceiling: s.dMax } }
-                    : { kind: 'd_min', floor: 'd_min_<axis>', ceiling: 'd_<axis>', values: { floor: s.dMin, ceiling: [s.pids.roll?.d, s.pids.pitch?.d, s.pids.yaw?.d] } },
+    dScheme: dScheme(s),
     cliNames: s.cliNames,
     axes: m.axes.map(A => ({ name: A.name, peaks: A.peaks, peaksRaw: A.peaksRaw, noise: A.noise, step: A.step ? { ...A.step.metrics, windows: A.step.windows } : null })),
     motors: m.motors, battery: m.battery, propwash: m.propwash, throttle: m.throttle,
