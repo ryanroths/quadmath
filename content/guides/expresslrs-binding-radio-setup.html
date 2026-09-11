@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ExpressLRS on a Whoop: Bind Phrase, Packet Rate, Failsafe — Then Fly | quadmath.com</title>
+  <meta name="description" content="The whole ELRS setup for a tiny whoop in one pass: put the same bind phrase in radio and quad, pick a packet rate that suits indoor whoops, build the EdgeTX model, prove failsafe with props off. No screenshots, no menu archaeology.">
+  <meta property="og:title" content="ExpressLRS on a Whoop: Bind Phrase, Packet Rate, Failsafe — Then Fly">
+  <meta property="og:description" content="Bind phrase in both places, one packet rate, one failsafe test. The ELRS setup that does not need a video.">
+  <meta property="og:url" content="https://quadmath.com/content/guides/expresslrs-binding-radio-setup.html">
+  <link rel="canonical" href="https://quadmath.com/content/guides/expresslrs-binding-radio-setup.html">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=optional" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css?v=e98c5b34a90c">
+</head>
+<body>
+  <header>
+  <div class="container header-inner">
+    <a href="/" class="logo" aria-label="QuadMath home">QuadMath<span class="dot">.</span></a>
+    <button class="nav-toggle" id="navToggle" type="button"
+            aria-expanded="false" aria-controls="site-nav" aria-label="Menu">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </button>
+    <nav id="site-nav">
+      <a href="/#calculator">Calculator</a>
+      <a href="sim.html">Sim</a>
+      <a href="tune-database.html">Tunes</a>
+      <a href="blackbox.html">Blackbox</a>
+      <a href="bench.html">Bench</a>
+      <a href="gear.html">Gear</a>
+      <a href="guides.html" class="active" aria-current="page" style="color:#FF4D1A">Guides</a>
+      <a href="hire.html">Hire</a>
+    </nav>
+  </div>
+</header>
+
+  <div class="container">
+<main class="section guide">
+    <h1>ExpressLRS on a Whoop: Bind Phrase, Packet Rate, Failsafe — Then Fly</h1>
+
+    <p>
+      Short version: flash the <strong>same bind phrase</strong> into the radio and the whoop, set
+      the radio to <strong>250 Hz</strong>, make one EdgeTX model with an arm switch, and prove
+      that <strong>failsafe kills the motors</strong> with the props off. That is the whole job.
+      Everything else in an ELRS menu is for later.
+    </p>
+    <p>
+      This is the setup behind every log on this site: a RadioMaster TX16S with ELRS
+      (<a href="/go/wb-tx16s/">the one I fly</a>, affiliate link) talking to a BetaFPV Air65.
+      The RadioMaster Pocket is the same firmware in a smaller box — everything below applies.
+    </p>
+
+    <h2>1. Bind phrase, not the bind button</h2>
+    <p>
+      ELRS binds by a shared secret, not by a pairing dance. Put a phrase into the radio's ELRS
+      firmware and the same phrase into the whoop's receiver firmware, and they are bound forever —
+      every new whoop you flash with that phrase just connects. Use the ExpressLRS Configurator
+      (or the web flasher) and type the phrase in the <em>Binding Phrase</em> field before you
+      flash either side. Pick something you will remember; it is not a password.
+    </p>
+    <p>
+      The bind button and the three-power-cycles trick still work. Treat them as the fallback for
+      a BNF that shipped without your phrase, and flash the phrase in afterwards so you never do it
+      again.
+    </p>
+
+    <h2>2. Packet rate: 250 Hz, and stop there</h2>
+    <p>
+      On the radio's ELRS Lua script set the rate to <strong>250 Hz</strong>. It is the sweet spot
+      for whoops: low latency, plenty of range for a gym, and it leaves the 2.4 GHz band quieter
+      than 500 Hz or F1000 for the people flying next to you. Telemetry ratio at the default is fine.
+      Higher rates buy nothing you can feel on a 25-gram aircraft and cost link margin in a
+      concrete building.
+    </p>
+    <p>
+      Leave the TX power at the lowest setting that gives full link quality indoors — 25 mW is
+      usually plenty. More power warms the radio and does nothing for a whoop ten metres away.
+    </p>
+
+    <h2>3. One EdgeTX model</h2>
+    <p>
+      Make a fresh model, not a copy of something that came with the radio. It needs exactly four
+      things:
+    </p>
+    <ul>
+      <li>Internal (or external) module set to <strong>CRSF</strong> — that is what ELRS speaks.</li>
+      <li>Channels 1–4 as <strong>AETR</strong>: aileron, elevator, throttle, rudder. Betaflight assumes it.</li>
+      <li>A two-position switch on <strong>AUX1</strong> for arm. Nothing else on that switch, ever.</li>
+      <li>Optionally a switch on AUX2 for flight mode and one for beeper. That is the whole list.</li>
+    </ul>
+    <p>
+      Name the model after the quad. When you have three whoops with different tunes, you will be
+      glad you did.
+    </p>
+
+    <h2>4. Prove it with the props off</h2>
+    <p>
+      Props off. Plug in USB, open Betaflight Configurator, Receiver tab. Move the sticks: the bars
+      should track instantly, throttle low at 1000, centre sticks near 1500, full deflection near
+      2000. If a channel is reversed, fix it in the radio's Outputs page, not in Betaflight.
+    </p>
+    <p>
+      Then the test that matters: switch the radio off with the quad powered. The receiver tab
+      should drop to failsafe values within a second and Betaflight should show
+      <strong>RXLOSS</strong> and refuse to arm. Switch the radio on, confirm it re-links, arm on
+      the bench with props off, listen for the motors, disarm. Only now do props go on.
+    </p>
+
+    <h2>5. Before you fly it, fly it in the sim</h2>
+    <p>
+      The same radio plugs into the <a href="/sim.html">browser sim</a> as a USB joystick
+      (EdgeTX: hold the radio's USB mode on connect, pick <em>USB Joystick</em>). Same sticks,
+      same arm switch, same rates from the <a href="/tune-database.html">tune database</a>. Ten
+      minutes here beats a broken prop on the first real pack.
+    </p>
+
+    <h2>When it does not link</h2>
+    <ul>
+      <li>Radio shows no link at all — the phrases do not match. Reflash one side; you typed it differently.</li>
+      <li>Links, then drops in and out — receiver firmware is older than the radio's. Update the receiver to match the radio's ELRS version.</li>
+      <li>Betaflight sees nothing on the Receiver tab — the serial port for the receiver is not set to Serial RX, or the provider is not CRSF. Ports tab first, then Receiver tab.</li>
+      <li>Everything links but it will not arm — look at the arming-disabled flags at the bottom of the Setup tab. It is almost always the arm switch range or a level sensor calibration.</li>
+    </ul>
+
+    <nav class="guide-related" aria-label="Related tools">
+      <ul>
+        <li><a href="/content/guides/first-tiny-whoop-setup.html">First tiny whoop — what to buy before any of this</a></li>
+        <li><a href="/sim.html">Browser sim — fly the radio before the maiden</a></li>
+        <li><a href="/tune-database.html">Tune database — rates for the model</a></li>
+        <li><a href="/gear.html">Gear list — the TX16S and the Air65</a></li>
+      </ul>
+    </nav>
+  </main>
+</div>
+
+<footer>
+  <div class="container header-inner" style="width: 100%;">
+    <div class="footer-logo">QuadMath<span class="dot">.</span></div>
+    <div>Measured where it says measured. Fly safe.</div>
+  </div>
+</footer>
+
+<script src="/nav.js?v=0a5aa631939b" defer></script>
+
+<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
