@@ -206,12 +206,24 @@ askBtn.addEventListener('click', async () => {
   }
 });
 
-/* Advisor replies are plain text with fixed uppercase headers and `set`
-   lines. Escape everything, then dress those two things up. */
+/* Advisor replies are plain text with fixed uppercase headers, `set`
+   lines, and — whatever the prompt says — some markdown. Escape everything,
+   then dress up the handful of things that recur. */
 function renderAdvisor(text) {
-  return esc(text)
-    .replace(/^(READ|FINDINGS CHECK|FLY THIS NEXT|AFTER THAT)\s*$/gm, '<span class="h">$1</span>')
-    .replace(/^((?:set|profile|save|diff|get)\b[^\n]*)$/gm, '<code>$1</code>');
+  const lines = esc(text).replace(/\r/g, '').split('\n');
+  const out = [];
+  let inFence = false;
+  for (let raw of lines) {
+    let l = raw.trimEnd();
+    if (/^```/.test(l)) { inFence = !inFence; continue; }
+    if (/^(READ|FINDINGS CHECK|FLY THIS NEXT|AFTER THAT|CHECK)\s*:?\s*$/.test(l)) { out.push(`<span class="h">${l.replace(/:$/, '')}</span>`); continue; }
+    l = l.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    l = l.replace(/`([^`]+)`/g, '<code>$1</code>');
+    if (inFence || /^(set|profile|save|diff|get|rateprofile)\b/.test(l)) { out.push(`<code>${l}</code>`); continue; }
+    if (/^[-•]\s+/.test(l)) { out.push(`<span class="li">${l.replace(/^[-•]\s+/, '')}</span>`); continue; }
+    out.push(l);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
 // ---------- charts ----------

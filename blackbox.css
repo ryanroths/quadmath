@@ -128,6 +128,9 @@
 .bb-advisor .h { display: block; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--green); margin: 14px 0 4px; }
 .bb-advisor .h:first-child { margin-top: 0; }
 .bb-advisor code { font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; color: var(--orange); }
+.bb-advisor .li { display: block; padding-left: 14px; text-indent: -14px; }
+.bb-advisor .li::before { content: '→ '; color: var(--green); font-family: 'JetBrains Mono', monospace; }
+.bb-advisor strong { color: var(--text); font-weight: 600; }
 .bb-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
 .bb-btn {
   background: transparent; border: 1px solid rgba(255,77,26,.4); color: var(--orange);
