@@ -196,8 +196,15 @@
     border-left: 2px solid var(--green);
     padding-left: 10px;
     margin: -20px 0 24px;
-    max-width: 560px;
+    max-width: 720px;
+    line-height: 1.55;
   }
+  .calc-scope-note a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .calc-scope-note a:hover { color: var(--text); }
   .hero p.sub {
     color: var(--muted);
     font-size: 1rem;
@@ -234,6 +241,30 @@
     color: #0D0E12;
     font-weight: 700;
   }
+
+  /* Whoop-only parts picker — feeds the calculator, does not replace it */
+  .parts-picker {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px 8px;
+    margin-bottom: 24px;
+    max-width: 760px;
+  }
+  .parts-picker .panel-label { margin-bottom: 10px; }
+  .picker-lede {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin: 0 0 16px;
+    line-height: 1.5;
+    max-width: 640px;
+  }
+  .picker-row { margin-bottom: 0; }
+  #pickerCompat {
+    margin: 0 0 16px;
+    min-height: 1.2em;
+  }
+  #pickerCompat.warn { color: var(--orange); }
 
   /* Calculator grid */
   .calc-grid {
