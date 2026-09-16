@@ -10,13 +10,18 @@ script.js to assert its shape has not drifted.
 
 from __future__ import annotations
 
+import errno
 import importlib.util
 import json
 import os
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -114,12 +119,59 @@ INDEX_PAGE = """<!doctype html><html lang="en"><head>
 
 
 def git(root: str, *args: str) -> None:
+    env = os.environ.copy()
+    # Stop git from taking optional locks / kicking background work that can
+    # write into .git after the fixture commit has already returned.
+    env["GIT_OPTIONAL_LOCKS"] = "0"
     subprocess.run(
         ("git", "-C", root) + args,
         check=True,
         capture_output=True,
         text=True,
+        env=env,
     )
+
+
+def rmtree_force(path: str, attempts: int = 8, delay: float = 0.02) -> None:
+    """Remove a scratch git tree without failing the test on teardown races.
+
+    GitHub-hosted runners (git 2.55 on ubuntu-24.04) can still be writing
+    loose objects or pack files when unittest calls TemporaryDirectory.cleanup.
+    shutil.rmtree then hits OSError errno 39 (Directory not empty) on `.git`
+    or `.git/objects` and the test ERRORs even though the assertion passed.
+    Retry, then ignore leftovers -- CI runners are ephemeral.
+    """
+    if not path or not os.path.exists(path):
+        return
+
+    def _writable(target: str) -> None:
+        try:
+            os.chmod(target, os.stat(target).st_mode | stat.S_IWUSR)
+        except OSError:
+            pass
+
+    def onexc(func, target, err):
+        _writable(target)
+        try:
+            func(target)
+        except OSError:
+            raise err
+
+    for i in range(attempts):
+        try:
+            shutil.rmtree(path, onexc=onexc)
+            return
+        except OSError as err:
+            if err.errno not in (
+                errno.ENOTEMPTY,
+                errno.ENOENT,
+                errno.EBUSY,
+                errno.EACCES,
+                errno.EPERM,
+            ):
+                break
+            time.sleep(delay * (i + 1))
+    shutil.rmtree(path, ignore_errors=True)
 
 
 def write(root: str, path: str, content: str) -> None:
@@ -134,6 +186,9 @@ def make_repo(root: str, kind: str = "full") -> None:
     git(root, "init", "-q", "-b", "main")
     git(root, "config", "user.email", "t@example.com")
     git(root, "config", "user.name", "Tester")
+    git(root, "config", "gc.auto", "0")
+    git(root, "config", "gc.autoDetach", "false")
+    git(root, "config", "maintenance.auto", "false")
 
     if kind == "empty":
         write(root, "README.md", "placeholder\n")
@@ -186,11 +241,12 @@ class RepoFixture(unittest.TestCase):
     kind = "full"
 
     def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.root = self._tmp.name
         make_repo(self.root, self.kind)
 
     def tearDown(self) -> None:
+        rmtree_force(self.root)
         self._tmp.cleanup()
 
     def types(self, payload: dict) -> dict:
@@ -548,6 +604,56 @@ class TestRefreshPins(unittest.TestCase):
         # describes the committed script.js.
         proc = self._run(REPO_ROOT)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+
+class TestTempGitCleanup(unittest.TestCase):
+    """RepoFixture.tearDown used to ERROR the suite on a cleanup race.
+
+    The collector assertions had already passed; shutil.rmtree then hit
+    ENOTEMPTY on the scratch `.git` tree. This is that failure, forced.
+    """
+
+    def test_rmtree_force_retries_enotempty_on_git_objects(self):
+        tmp = tempfile.mkdtemp(prefix="quadmath-git-cleanup-")
+        objects = os.path.join(tmp, ".git", "objects")
+        os.makedirs(objects)
+        with open(os.path.join(objects, "keep"), "w") as handle:
+            handle.write("x")
+        real_rmdir = os.rmdir
+        hits = {"n": 0}
+
+        def flaky_rmdir(name, *args, **kwargs):
+            # First two rmdirs of .git/objects fail the way CI does: a file
+            # appeared after the listing, so the directory is not empty.
+            basename = os.path.basename(name)
+            if basename == "objects" and hits["n"] < 2:
+                hits["n"] += 1
+                raise OSError(errno.ENOTEMPTY, "Directory not empty", name)
+            return real_rmdir(name, *args, **kwargs)
+
+        try:
+            with mock.patch("os.rmdir", flaky_rmdir):
+                rmtree_force(tmp, attempts=6, delay=0.0)
+            self.assertFalse(os.path.exists(tmp), "scratch tree should be gone")
+            self.assertGreaterEqual(hits["n"], 1)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_rmtree_force_swallows_a_stubborn_tree(self):
+        # Last resort for CI: if the tree still cannot be removed, the helper
+        # must not raise. Leftover /tmp on a GitHub runner dies with the job.
+        tmp = tempfile.mkdtemp(prefix="quadmath-git-cleanup-")
+        os.makedirs(os.path.join(tmp, ".git"))
+
+        def always_busy(_name, *args, **kwargs):
+            raise OSError(errno.ENOTEMPTY, "Directory not empty", _name)
+
+        try:
+            with mock.patch("os.rmdir", always_busy):
+                rmtree_force(tmp, attempts=2, delay=0.0)
+        finally:
+            # Restore rmdir and actually delete so this process does not leak.
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":
