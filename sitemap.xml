@@ -58,7 +58,7 @@
   </url>
   <url>
     <loc>https://quadmath.com/guides.html</loc>
-    <lastmod>2026-09-14</lastmod>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -88,7 +88,13 @@
   </url>
   <url>
     <loc>https://quadmath.com/content/guides/betafpv-air-vs-meteor-pavo.html</loc>
-    <lastmod>2026-09-13</lastmod>
+    <lastmod>2026-09-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://quadmath.com/content/guides/air65-ii-freestyle-vs-racing-vs-champion.html</loc>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>

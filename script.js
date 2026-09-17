@@ -441,6 +441,43 @@
   // Blade-count suffix shown in the prop dropdown label.
   const bladeTag = { 2: 'bi', 3: 'tri', 4: 'quad' };
 
+  // ===== Whoop parts picker (v0) =====
+  // Short curated lists — IDs already in motorDB / propDB, plus named packs
+  // the site already cites. The picker fills calculator inputs; it does not
+  // own thrust or time. 65 / 75 / 85 only. No 3" / 5" / 7" catalog.
+  const PICKER_MOTOR_IDS = {
+    65: [
+      'vci-0702-pro-db-30000', 'happymodel-se0702-28000', 'vci-spark-0702-29000',
+      'happymodel-se0702-26000', 'happymodel-se0702-23000', 'betafpv-0702-ii-30000',
+      'webleed-screamers-0702-1mm-32500', 'betafpv-0702-champion-2026-36000',
+      'webleed-skrrrt-0702-40000',
+    ],
+    75: [
+      'betafpv-0802-champion-2026-28000', 'webleed-moefpv-treetoppers-0802-32500',
+      'webleed-skyscrapers-0802-25000', 'happymodel-rs0802-19000',
+      'happymodel-rs0802-25000', 'happymodel-ex0802-25000',
+      'rcinpower-gts-v3-0802-22000',
+    ],
+    85: [
+      'happymodel-ex1103-11000', 'happymodel-rs1102-10000', 'happymodel-rs1102-13500',
+      'betafpv-1103-8000', 'betafpv-1103-11000', 'betafpv-1103-15000',
+      'flywoo-robo-1002-23500',
+    ],
+  };
+  const PICKER_PROP_IDS = {
+    65: ['gemfan-1219s-3', 'gemfan-1207-3', 'gemfan-1210-2-1mm', 'gemfan-1210-2-15mm', 'hq-31mm-3-high'],
+    75: ['gemfan-1611-3', 'gemfan-1610-2', 'gemfan-1614-3', 'hq-40mm-16x11x3'],
+    85: ['gemfan-2in-tmount-3', 'gemfan-hurricane-2015-2', 'hq-t2x2x3-tmount-3'],
+  };
+  // C-rating is the calculator default (100), not a vendor claim — the model
+  // already uses that default when a pack is not named.
+  const PICKER_PACKS = [
+    { id: 'lava-300-1s', name: 'BetaFPV LAVA 300mAh 1S HV', cells: 1, mah: 300, c: 100, frames: ['65', '75'] },
+    { id: 'wb-450-1s', name: 'weBLEEDfpv 450mAh 1S BT2.0', cells: 1, mah: 450, c: 100, frames: ['65', '75'] },
+    { id: 'lava-ii-480-1s', name: 'BetaFPV LAVA II 480mAh 1S', cells: 1, mah: 480, c: 100, frames: ['65', '75'] },
+    { id: 'whoop-450-2s', name: '450mAh 2S (85mm class)', cells: 2, mah: 450, c: 100, frames: ['85'] },
+  ];
+
   const propSelect = document.getElementById('propSelect');
 
   function populatePropSelect(frame) {
@@ -561,8 +598,10 @@
       populateMotorSelect(currentFrame);
       populatePropSelect(currentFrame);
       populateCompareSelects(currentFrame);
+      populatePicker(currentFrame);
       applyPreset(currentFrame);
       updateVideoHint();
+      updatePickerCompat();
       calculate();
     });
   });
@@ -1286,6 +1325,127 @@
   // nothing: the shaft-mismatch warning and the dry-weight estimate both read
   // the selected option, so a near-miss would hand the pilot a warning — or a
   // reassuring absence of one — about hardware they are not flying.
+  function selectDbEntryById(select, list, id) {
+    if (!id) return false;
+    const index = (list || []).findIndex(item => item.id === id);
+    if (index < 0) return false;
+    select.value = String(index);
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+
+  function pickerLookup(list, id) {
+    return (list || []).find(item => item.id === id) || null;
+  }
+  function pickerEntries(db, ids) {
+    return (ids || []).map(id => pickerLookup(db, id)).filter(Boolean);
+  }
+
+  const pickerEls = {
+    motor: document.getElementById('pickerMotor'),
+    prop:  document.getElementById('pickerProp'),
+    pack:  document.getElementById('pickerPack'),
+    dry:   document.getElementById('pickerDry'),
+    compat: document.getElementById('pickerCompat'),
+  };
+
+  function populatePicker(frame) {
+    if (!pickerEls.motor) return;
+    pickerEls.motor.innerHTML = '<option value="">— Pick a whoop motor —</option>';
+    pickerEntries(motorDB[frame], PICKER_MOTOR_IDS[frame]).forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.name + '  —  ' + m.kv.toLocaleString() + ' KV'
+        + (m.benchVerified ? '  ·  ✓ bench-verified' : '');
+      pickerEls.motor.appendChild(opt);
+    });
+    pickerEls.prop.innerHTML = '<option value="">— Pick a whoop prop —</option>';
+    pickerEntries(propDB[frame], PICKER_PROP_IDS[frame]).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      const tag = bladeTag[p.blades];
+      opt.textContent = p.name + '  (' + p.pitch + '" pitch' + (tag ? ', ' + tag : '') + ')';
+      pickerEls.prop.appendChild(opt);
+    });
+    pickerEls.pack.innerHTML = '<option value="">— Pick a whoop pack —</option>';
+    PICKER_PACKS.filter(pk => pk.frames.includes(String(frame))).forEach(pk => {
+      const opt = document.createElement('option');
+      opt.value = pk.id;
+      opt.textContent = pk.name;
+      pickerEls.pack.appendChild(opt);
+    });
+    pickerEls.motor.value = '';
+    pickerEls.prop.value = '';
+    pickerEls.pack.value = '';
+    if (pickerEls.dry) pickerEls.dry.value = '';
+  }
+
+  function applyPickerDryOverride() {
+    if (!pickerEls.dry) return;
+    const raw = pickerEls.dry.value;
+    if (raw === null || String(raw).trim() === '') return;
+    const n = parseFloat(raw);
+    if (!isFinite(n) || n <= 0) return;
+    els.weight.value = clampRange(n, ...WHOOP_RANGES.weight);
+    delete els.weight.dataset.derived;
+  }
+
+  function applyPickerToCalc() {
+    if (!pickerEls.motor) return;
+    const motorId = pickerEls.motor.value;
+    const propId  = pickerEls.prop.value;
+    const pack    = pickerLookup(PICKER_PACKS, pickerEls.pack.value);
+    if (motorId) selectDbEntryById(motorSelect, motorDB[currentFrame], motorId);
+    if (propId)  selectDbEntryById(propSelect,  propDB[currentFrame],  propId);
+    if (pack) {
+      els.cells.value    = String(pack.cells);
+      els.capacity.value = String(pack.mah);
+      els.packC.value    = String(pack.c);
+    }
+    applyPickerDryOverride();
+    updatePickerCompat();
+    calculate();
+  }
+
+  function updatePickerCompat() {
+    if (!pickerEls.compat) return;
+    const msgs = [];
+    const motor = pickerLookup(motorDB[currentFrame], pickerEls.motor && pickerEls.motor.value);
+    const pack  = pickerLookup(PICKER_PACKS, pickerEls.pack && pickerEls.pack.value);
+    if (motor && pack) {
+      if (motor.cells && pack.cells !== motor.cells) {
+        msgs.push(motor.name + ' is a ' + motor.cells + 'S motor — this pack is ' + pack.cells + 'S.');
+      } else if (!motor.cells && pack.cells === 2 && motor.kv >= 19000) {
+        msgs.push(motor.kv.toLocaleString() + ' KV is a 1S whoop motor — 2S will overspeed it.');
+      }
+      const peakA  = estMaxCurrentPerMotor(motor.kv, pack.cells, currentFrame) * 4;
+      const ratedA = pack.c * (pack.mah / 1000);
+      const headroom = ratedA > 0 ? ((ratedA - peakA) / ratedA) * 100 : 0;
+      if (headroom < 0) {
+        msgs.push('Pack C vs peak draw: overdrawing by ' + Math.abs(headroom).toFixed(0) + '% — same check as the battery helper.');
+      } else if (headroom < 10) {
+        msgs.push('Pack C vs peak draw: marginal (' + headroom.toFixed(0) + '% headroom).');
+      }
+    }
+    if (motor && motor.benchVerified) {
+      msgs.push('Bench-verified motor — Analog + LAVA 300 + Gemfan 1219S matches Air65; HDZero + the same pack/prop matches Mobula6.');
+    }
+    pickerEls.compat.textContent = msgs.join(' ');
+    pickerEls.compat.classList.toggle('warn', msgs.some(m =>
+      m.indexOf('overspeed') >= 0 || m.indexOf('is a ') >= 0 || m.indexOf('overdrawing') >= 0 || m.indexOf('marginal') >= 0));
+  }
+
+  if (pickerEls.motor) {
+    ['motor', 'prop', 'pack'].forEach(key => {
+      pickerEls[key].addEventListener('change', applyPickerToCalc);
+    });
+    pickerEls.dry.addEventListener('input', () => {
+      applyPickerDryOverride();
+      calculate();
+    });
+  }
+
   function selectDbEntryByName(select, list, name, kv) {
     if (!name) return false;
     const index = (list || []).findIndex(item =>
@@ -1356,10 +1516,12 @@
   populateMotorSelect(currentFrame);
   populatePropSelect(currentFrame);
   populateCompareSelects(currentFrame);
+  populatePicker(currentFrame);
   applyPreset(currentFrame);
   applyUrlParams();
   stripLandingDefaultQuery();
   updateVideoHint();
+  updatePickerCompat();
   calculate();
 
   // recalc on any input change

@@ -48,7 +48,7 @@
      connection and the preconnect is wasted. -->
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=optional" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=await-weight-1">
+<link rel="stylesheet" href="style.css?v=5b43fd8fb509">
 <!-- Sets the flag the scroll-reveal styles hang off, before first paint so
      revealed content never flashes in and back out. Only when the observer
      exists, so unsupported browsers are never left with hidden content. -->
@@ -82,12 +82,44 @@
   <section class="hero" id="calculator">
     <h1>Know your build<br>before you <span class="accent">solder it</span>.</h1>
     <p class="sub">Enter your motor KV, prop pitch, and battery — get estimated top speed, flight time, and thrust-to-weight. Compare motors side by side.</p>
-    <p class="calc-scope-note">Built for 65–85mm whoops — accuracy calibrated against real whoop builds. Not for 5-inch quads.</p>
+    <p class="calc-scope-note">Built for 65–85mm whoops — accuracy calibrated against real whoop builds. Not for 5-inch quads, and not a 5-inch parts picker. Estimates swap in measured numbers when your inputs match our <a href="bench.html#build-air65">Air65</a> and <a href="bench.html#build-mobula6">Mobula6</a> bench runs.</p>
 
     <div class="frame-select">
       <button class="frame-btn active" data-frame="65">65mm Whoop</button>
       <button class="frame-btn" data-frame="75">75mm Whoop</button>
       <button class="frame-btn" data-frame="85">85mm Whoop</button>
+    </div>
+
+    <div class="parts-picker" id="parts-picker">
+      <div class="panel-label">Whoop parts picker</div>
+      <p class="picker-lede">Curated 65 / 75 / 85mm parts already on this site. Selecting a part fills the calculator — T:W and time still come from the model and bench data. Not a 5-inch catalog.</p>
+      <div class="field-row picker-row">
+        <div class="field">
+          <label for="pickerMotor">Motor</label>
+          <select id="pickerMotor">
+            <option value="">— Pick a whoop motor —</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="pickerProp">Prop</label>
+          <select id="pickerProp">
+            <option value="">— Pick a whoop prop —</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row picker-row">
+        <div class="field">
+          <label for="pickerPack">Pack</label>
+          <select id="pickerPack">
+            <option value="">— Pick a whoop pack —</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="pickerDry">Dry weight — optional (grams)</label>
+          <input type="number" id="pickerDry" placeholder="leave blank to use the motor estimate" step="0.5" min="14" max="80">
+        </div>
+      </div>
+      <div class="field-hint" id="pickerCompat"></div>
     </div>
 
     <div class="calc-grid">
@@ -533,7 +565,7 @@
      in the head has nothing left to lift it and every .reveal section stays
      at opacity 0 forever. Dropping the flag here shows them unanimated. -->
 <script src="motion.js?v=0515ee8a5594" defer onerror="document.documentElement.classList.remove('js-motion')"></script>
-<script src="script.js?v=22139cfaff35"></script>
+<script src="script.js?v=b5edf9b1b826"></script>
 
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
