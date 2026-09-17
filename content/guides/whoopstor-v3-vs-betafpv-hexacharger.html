@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoopStor V3 vs BETAFPV HexaCharger: Keep the Default or Go USB-C Kit? | quadmath.com</title>
+  <meta name="description" content="For a first 1S whoop fleet, QuadMath still defaults to WhoopStor V3. HexaCharger is a USB-C desk fork when you already live on capable PD — not a reason to overturn the default.">
+  <meta property="og:title" content="WhoopStor V3 vs BETAFPV HexaCharger: Keep the Default or Go USB-C Kit?">
+  <meta property="og:description" content="WhoopStor V3 stays the beginner default. HexaCharger is a USB-C desk fork when PD already lives on the desk.">
+  <meta property="og:url" content="https://quadmath.com/content/guides/whoopstor-v3-vs-betafpv-hexacharger.html">
+  <link rel="canonical" href="https://quadmath.com/content/guides/whoopstor-v3-vs-betafpv-hexacharger.html">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=optional" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css?v=5b43fd8fb509">
+</head>
+<body>
+  <header>
+  <div class="container header-inner">
+    <a href="/" class="logo" aria-label="QuadMath home">QuadMath<span class="dot">.</span></a>
+    <button class="nav-toggle" id="navToggle" type="button"
+            aria-expanded="false" aria-controls="site-nav" aria-label="Menu">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </button>
+    <nav id="site-nav">
+      <a href="/#calculator">Calculator</a>
+      <a href="/sim.html">Sim</a>
+      <a href="/tune-database.html">Tunes</a>
+      <a href="/blackbox.html">Blackbox</a>
+      <a href="/bench.html">Bench</a>
+      <a href="/gear.html">Gear</a>
+      <a href="/guides.html" class="active" aria-current="page" style="color:#FF4D1A">Guides</a>
+      <a href="/hire.html">Hire</a>
+    </nav>
+  </div>
+</header>
+
+  <div class="container">
+<main class="section guide">
+    <h1>WhoopStor V3 vs BETAFPV HexaCharger — Keep the Default or Go USB-C Kit?</h1>
+
+    <p>
+      Short version: For a first 1S whoop fleet, QuadMath still defaults to
+      <strong>WhoopStor V3</strong>. <strong>HexaCharger</strong> (or HexaCharger Pro) is a fine
+      USB-C desk fork when you already live on capable PD and do not need XT60 or field power —
+      not a reason to overturn the default. Need per-port control or the flexible/power path?
+      That comparison lives on
+      <a href="/content/guides/1s-whoop-charger-whoopstor-vs-w63.html">WhoopStor vs W63</a>;
+      this page only answers the Hexa cart question.
+    </p>
+    <p>
+      This guide covers 65–85mm whoops. Chargers are <strong>name-only</strong> until Gear has
+      <code>/go/</code> cards. Specs below are manufacturer / Oscar Liang claims — not QuadMath
+      amp benches.
+    </p>
+
+    <h2>What both do well</h2>
+    <p>
+      Six ports, PH2.0 and BT2.0 (one connector per channel), LiPo 4.20 V / LiHV 4.35 V, storage
+      mode, and a color screen. Both beat a dumb USB brick. Both also share the same trap:
+      <strong>current and target voltage are shared across ports</strong> — independent channels,
+      not independent settings.
+    </p>
+
+    <h2>The real fork: power input and current steps</h2>
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>WhoopStor V3</th>
+          <th>HexaCharger / Pro</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Power in</td><td>USB-C PD, <strong>XT60</strong>, DC 5.5×2.1</td><td><strong>USB-C only</strong></td></tr>
+        <tr><td>Charge current</td><td>0.3–1.3 A, <strong>0.1 A</strong> steps</td><td>0.5 A min, <strong>0.5 A</strong> steps (Oscar); Pro up to 3 A all ports</td></tr>
+        <tr><td>Storage</td><td>3.80 / 3.85 V</td><td>3.85 V</td></tr>
+        <tr><td>PD class</td><td>~40 W for full capability; not plain 5 V USB</td><td>Non-Pro ≥30 W; Pro ≥100 W (BETAFPV)</td></tr>
+      </tbody>
+    </table>
+    <p>
+      WhoopStor still wins when you might charge from a field LiPo or a barrel brick. Hexa wins
+      when the desk already has a real PD supply and you will never miss XT60. On ~300 mAh packs,
+      WhoopStor can dial a true ~0.3 A (about 1C); Hexa’s 0.5 A floor is the gentlest step Oscar
+      documents — workable, just not as fine.
+    </p>
+
+    <h2>Keep WhoopStor V3 if…</h2>
+    <p>
+      You are buying the first multi-pack charger for a matched 65mm fleet, want XT60/DC later,
+      prefer 0.1 A steps for gentle currents, or simply want to stay on QuadMath’s beginner path.
+      That is the locked default here.
+    </p>
+
+    <h2>HexaCharger is fine if…</h2>
+    <p>
+      Your cart already pairs a Hexa with a USB-C whoop desk life, you own a capable PD brick,
+      you do not need field XT60, and shared settings plus 0.5 A steps are acceptable. Storage
+      at 3.85 V is real — this is still a smart multi-port charger.
+    </p>
+    <p>
+      <strong>Pro vs non-Pro:</strong> Pro’s ≥100 W PD and up-to-3 A-all-ports headroom is
+      overkill for many 65mm ~300 mAh packs. Non-Pro with ≥30 W PD is enough for gentle whoop
+      currents for most buyers. Do not upsell Pro by default.
+    </p>
+
+    <h2>Caveats worth one pass</h2>
+    <p>
+      Buy a real PD adapter (Hexa packages usually do not include one). Plain phone 5 V USB will
+      not unlock either charger’s full capability. Match LiPo vs LiHV to the pack label; do not
+      slam 3 A into small packs. Soft tip from Oscar’s Hexa review: reverse-insert can fry a
+      port, and he observed no reverse-polarity protection — check PH2.0/BT2.0 orientation and
+      do not force plugs. Charge attended on a non-flammable surface.
+    </p>
+
+    <h2>Next on QuadMath</h2>
+    <p>
+      Deep charger pick and W63:
+      <a href="/content/guides/1s-whoop-charger-whoopstor-vs-w63.html">WhoopStor vs W63</a>.
+      First cart: <a href="/content/guides/first-tiny-whoop-setup.html">First Tiny Whoop Setup</a>.
+      Packs and props: <a href="/gear.html">Gear</a>. Sanity-check AUW in the
+      <a href="/#calculator">calculator</a>. Optional while gear ships:
+      <a href="/content/guides/sim-to-first-pack.html">sim to first pack</a>.
+    </p>
+
+    <nav class="guide-related" aria-label="Related tools">
+      <ul>
+        <li><a href="/content/guides/1s-whoop-charger-whoopstor-vs-w63.html">WhoopStor vs W63 — per-port control and the power-supply path</a></li>
+        <li><a href="/content/guides/first-tiny-whoop-setup.html">First tiny whoop — the packs these chargers will see</a></li>
+        <li><a href="/gear.html">Gear list — the packs and the whoop</a></li>
+        <li><a href="/#calculator">Build calculator — sanity-check AUW</a></li>
+        <li><a href="/content/guides/sim-to-first-pack.html">Sim to first pack — optional while gear ships</a></li>
+      </ul>
+    </nav>
+  </main>
+</div>
+
+<footer>
+  <div class="container header-inner" style="width: 100%;">
+    <div class="footer-logo">QuadMath<span class="dot">.</span></div>
+    <div>Measured where it says measured. Fly safe.</div>
+  </div>
+</footer>
+
+<script src="/nav.js?v=0a5aa631939b" defer></script>
+
+<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>

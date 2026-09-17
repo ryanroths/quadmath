@@ -58,7 +58,7 @@
   </url>
   <url>
     <loc>https://quadmath.com/guides.html</loc>
-    <lastmod>2026-09-16</lastmod>
+    <lastmod>2026-09-17</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -100,7 +100,13 @@
   </url>
   <url>
     <loc>https://quadmath.com/content/guides/1s-whoop-charger-whoopstor-vs-w63.html</loc>
-    <lastmod>2026-09-11</lastmod>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://quadmath.com/content/guides/whoopstor-v3-vs-betafpv-hexacharger.html</loc>
+    <lastmod>2026-09-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
