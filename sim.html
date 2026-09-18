@@ -3470,7 +3470,7 @@ for(const id of [0,1]){
     .then(r=>r.ok?r.json():null)
     .then(p=>{
       if(!p||ghostPayloadError(p,id))return;
-      defaultRivals[id]={track:id,name:String(p.name||'RyFly').slice(0,16),lapTime:+p.lapTime||0,samples:p.samples};
+      defaultRivals[id]={track:id,name:String(p.name||'PACE BOT').slice(0,16),lapTime:+p.lapTime||0,samples:p.samples};
       if(!rivalGhost&&id===activeTrackId)setRivalLabel(defaultRivals[id].name);
     })
     .catch(()=>{});

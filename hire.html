@@ -158,6 +158,41 @@
 </footer>
 
 <script src="nav.js?v=0a5aa631939b" defer></script>
+<script>
+// Formspree submit, kept inline on purpose. script.js builds its `els` map with
+// unguarded getElementById calls and binds pitchKV/pitchCells/pitchFrame at
+// script.js:1540 -- none of which exist here -- so loading it on this page throws
+// before the contact handler is ever reached.
+(function () {
+  var form = document.getElementById('contactForm');
+  if (!form) return;
+  var email = document.getElementById('contactEmail');
+  var replyTo = document.getElementById('replyToField');
+  email.addEventListener('input', function () { replyTo.value = this.value; });
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var btn = document.getElementById('contactSubmit');
+    var errEl = document.getElementById('contactError');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    errEl.style.display = 'none';
+    try {
+      var res = await fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { 'Accept': 'application/json' }
+      });
+      if (!res.ok) throw new Error('non-ok');
+      form.style.display = 'none';
+      document.getElementById('contactSuccess').style.display = 'block';
+    } catch (_) {
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Send Inquiry';
+    }
+  });
+})();
+</script>
 
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
