@@ -1,5 +1,8 @@
 """Generate the hosted default rival ghosts (ghosts/track_{0,1}.json).
 
+Synthetic, and labelled as such: the ghost is named PACE BOT, never RyFly.
+A pilot racing it is racing a constant-speed spline, not a flown lap.
+
 Synthetic: a closed Catmull-Rom spline through each track's gate centres in
 sequence, flown at constant SPEED for 3 laps (gate 0 -> ... -> last gate of
 lap 3, matching the run timer), sampled at HZ with heading along the path,
@@ -76,7 +79,7 @@ def gen(tid):
         r2=lambda x:round(float(x),2); r3=lambda x:round(float(x),3)
         samples.append([int(round(t*1000)),r2(p[0]),r2(p[1]),r2(p[2]),r3(q[0]),r3(q[1]),r3(q[2]),r3(q[3])])
         t+=1.0/HZ
-    return {"v":1,"track":tid,"lapTime":int(round(T*1000)),"name":"RyFly","samples":samples}, L, T
+    return {"v":1,"track":tid,"lapTime":int(round(T*1000)),"name":"PACE BOT","samples":samples}, L, T
 
 if __name__=="__main__":
     root=os.path.join(os.path.dirname(os.path.abspath(__file__)),"..")

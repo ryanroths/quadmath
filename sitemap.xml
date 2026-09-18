@@ -2,118 +2,82 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://quadmath.com/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>https://quadmath.com/tune-database.html</loc>
-    <lastmod>2026-08-01</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://quadmath.com/bench.html</loc>
-    <lastmod>2026-08-13</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://quadmath.com/blackbox.html</loc>
-    <lastmod>2026-09-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://quadmath.com/sim.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://quadmath.com/gear.html</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://quadmath.com/hire.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://quadmath.com/content/guides/65mm-happymodel-se0702-gemfan-1219-3-blade.html</loc>
-    <lastmod>2026-08-05</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://quadmath.com/content/guides/hdzero-vs-analog-65mm-flight-time.html</loc>
-    <lastmod>2026-08-05</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://quadmath.com/content/guides/first-tiny-whoop-setup.html</loc>
-    <lastmod>2026-09-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <lastmod>2026-09-17</lastmod>
   </url>
   <url>
     <loc>https://quadmath.com/guides.html</loc>
     <lastmod>2026-09-17</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://quadmath.com/content/guides/us-tiny-whoop-rules-checklist.html</loc>
-    <lastmod>2026-09-13</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://quadmath.com/sim.html</loc>
+    <lastmod>2026-09-17</lastmod>
   </url>
   <url>
-    <loc>https://quadmath.com/content/guides/expresslrs-binding-radio-setup.html</loc>
-    <lastmod>2026-09-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://quadmath.com/blackbox.html</loc>
+    <lastmod>2026-09-17</lastmod>
   </url>
   <url>
-    <loc>https://quadmath.com/content/guides/sim-to-first-pack.html</loc>
-    <lastmod>2026-09-14</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://quadmath.com/tune-database.html</loc>
+    <lastmod>2026-09-17</lastmod>
   </url>
   <url>
-    <loc>https://quadmath.com/content/guides/whoop-video-analog-vs-digital.html</loc>
-    <lastmod>2026-09-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://quadmath.com/bench.html</loc>
+    <lastmod>2026-09-17</lastmod>
   </url>
   <url>
-    <loc>https://quadmath.com/content/guides/betafpv-air-vs-meteor-pavo.html</loc>
-    <lastmod>2026-09-16</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://quadmath.com/gear.html</loc>
+    <lastmod>2026-09-17</lastmod>
   </url>
   <url>
-    <loc>https://quadmath.com/content/guides/air65-ii-freestyle-vs-racing-vs-champion.html</loc>
-    <lastmod>2026-09-16</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://quadmath.com/hire.html</loc>
+    <lastmod>2026-09-17</lastmod>
   </url>
   <url>
     <loc>https://quadmath.com/content/guides/1s-whoop-charger-whoopstor-vs-w63.html</loc>
     <lastmod>2026-09-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://quadmath.com/content/guides/whoopstor-v3-vs-betafpv-hexacharger.html</loc>
+    <loc>https://quadmath.com/content/guides/65mm-happymodel-se0702-gemfan-1219-3-blade.html</loc>
     <lastmod>2026-09-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://quadmath.com/content/guides/air65-ii-freestyle-vs-racing-vs-champion.html</loc>
+    <lastmod>2026-09-16</lastmod>
   </url>
   <url>
     <loc>https://quadmath.com/content/guides/air65-pid-tune.html</loc>
     <lastmod>2026-09-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://quadmath.com/content/guides/betafpv-air-vs-meteor-pavo.html</loc>
+    <lastmod>2026-09-16</lastmod>
+  </url>
+  <url>
+    <loc>https://quadmath.com/content/guides/expresslrs-binding-radio-setup.html</loc>
+    <lastmod>2026-09-11</lastmod>
+  </url>
+  <url>
+    <loc>https://quadmath.com/content/guides/first-tiny-whoop-setup.html</loc>
+    <lastmod>2026-09-11</lastmod>
+  </url>
+  <url>
+    <loc>https://quadmath.com/content/guides/hdzero-vs-analog-65mm-flight-time.html</loc>
+    <lastmod>2026-09-11</lastmod>
+  </url>
+  <url>
+    <loc>https://quadmath.com/content/guides/sim-to-first-pack.html</loc>
+    <lastmod>2026-09-13</lastmod>
+  </url>
+  <url>
+    <loc>https://quadmath.com/content/guides/us-tiny-whoop-rules-checklist.html</loc>
+    <lastmod>2026-09-13</lastmod>
+  </url>
+  <url>
+    <loc>https://quadmath.com/content/guides/whoop-video-analog-vs-digital.html</loc>
+    <lastmod>2026-09-11</lastmod>
+  </url>
+  <url>
+    <loc>https://quadmath.com/content/guides/whoopstor-v3-vs-betafpv-hexacharger.html</loc>
+    <lastmod>2026-09-17</lastmod>
   </url>
 </urlset>

@@ -14,3 +14,11 @@ backtest.py
 
 # Local Betaflight SITL clone, never part of the site
 betaflight/
+
+# Cloudflare Worker source. GitHub Pages serves every tracked file, so keeping
+# this here published advisor/src/index.js and advisor/wrangler.toml at
+# https://quadmath.com/advisor/... Lives in its own repo now.
+advisor/
+
+# Derived bench JSON that contradicted the canonical files in data/bench/.
+Claude outputs/

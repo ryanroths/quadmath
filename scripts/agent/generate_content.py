@@ -292,19 +292,54 @@ def _script_type(attrs: str) -> str:
     return (match.group(1) if match else "").strip().lower()
 
 
+def _is_external_url(url: str) -> bool:
+    """Same rule as validate_agent_pr.is_external: scheme-relative or absolute."""
+    return url.startswith("//") or bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", url))
+
+
+def _url_host(url: str) -> str:
+    rest = url
+    if "//" in rest:
+        rest = rest.split("//", 1)[1]
+    rest = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+    if "@" in rest:
+        rest = rest.rsplit("@", 1)[1]
+    if rest.startswith("["):  # IPv6 literal
+        return rest.split("]", 1)[0].lstrip("[").lower()
+    return rest.split(":", 1)[0].lower()
+
+
+def _host_allowed(host: str, allowed: list) -> bool:
+    for candidate in allowed:
+        candidate = candidate.lower()
+        if host == candidate or host.endswith("." + candidate):
+            return True
+    return False
+
+
 def validate_html(path: str, text: str, policy: dict) -> list[str]:
     problems: list[str] = []
     checks = policy.get("html_checks", {})
     if not checks.get("enabled", True):
         return problems
-    allowed_hosts = set(checks.get("allowed_script_src_hosts", []))
+    # Key and semantics both have to match scripts/ci/validate_agent_pr.py, or
+    # this pre-flight refuses work the real gate would have passed. Two bugs
+    # lived here: the key was read as "allowed_script_src_hosts" while the
+    # policy has always spelled it "allowed_script_hosts" (so the allowlist was
+    # silently empty), and a root-relative src like "/nav.js" reduced to an
+    # empty host and was then rejected as external. Between them the generator
+    # could not emit a page carrying nav.js or the analytics beacon -- which is
+    # why the one agent-written guide shipped with no script tags at all.
+    allowed_hosts = list(checks.get("allowed_script_hosts", []))
     for match in _SCRIPT_RE.finditer(text):
         attrs = match.group(1)
         src = _SRC_RE.search(attrs)
         if src is not None:
-            host = re.sub(r"^https?://", "", src.group(1)).split("/")[0]
-            if checks.get("forbid_external_script_src", True) and host not in allowed_hosts:
-                problems.append("%s: external script src %s not allowed" % (path, host))
+            url = src.group(1)
+            if _is_external_url(url) and checks.get("forbid_external_script_src", True):
+                host = _url_host(url)
+                if not _host_allowed(host, allowed_hosts):
+                    problems.append("%s: external script src %s not allowed" % (path, host))
             continue
         if not checks.get("forbid_inline_script", True):
             continue

@@ -1,0 +1,9 @@
+# Deliberately not disallowing /go/ -- all 18 affiliate stubs already carry
+# <meta name="robots" content="noindex,nofollow">, and a Disallow would stop
+# crawlers reading that noindex, which is exactly how affiliate stubs end up
+# indexed as bare URLs.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://quadmath.com/sitemap.xml
