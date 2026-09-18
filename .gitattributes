@@ -1,3 +1,5 @@
 # Vendored third-party builds — keep byte-identical to upstream so they can be
 # re-verified against the published artifact. No EOL conversion, no diffing.
 vendor/** -text -diff linguist-vendored
+# Served verbatim by GitHub Pages; keep it LF and free of any BOM.
+robots.txt text eol=lf
