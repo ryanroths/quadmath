@@ -38,13 +38,16 @@ FIRST_PARTY_ASSETS = (
     "style.css",
     "script.js",
     "motion.js",
+    "contact.js",
     "nav.js",
 )
 
 HASH_LEN = 12
 # .claude holds Claude Code worktrees: full checkouts of other branches whose
 # pages must never be stamped or checked against this tree.
-SKIP_DIR_NAMES = {".git", ".claude", "node_modules", "__pycache__"}
+# betaflight/ is the gitignored local SITL clone -- never part of the site, and
+# its vendored Release_Notes.html files are cp1252, which used to abort the walk.
+SKIP_DIR_NAMES = {".git", ".claude", "node_modules", "__pycache__", "betaflight"}
 
 _ASSET_ALT = "|".join(re.escape(name) for name in FIRST_PARTY_ASSETS)
 # Quoted local reference: "style.css", "./quadphysics.js", "/style.css",
@@ -119,13 +122,29 @@ def apply_to_html_map(root: str, files: dict[str, str]) -> dict[str, str]:
     return out
 
 
+def _read_utf8(full: str):
+    """Read an HTML file, or None if it is not UTF-8.
+
+    Returning None rather than raising matters because ingest_tunes.py calls
+    stamp_tree() after `git add` and before `commit`: an abort mid-walk leaves
+    a dirty branch with staged changes and no commit.
+    """
+    try:
+        with open(full, encoding="utf-8", newline="") as handle:
+            return handle.read()
+    except UnicodeDecodeError:
+        print("warning: %s is not UTF-8, skipped" % full, file=sys.stderr)
+        return None
+
+
 def stamp_tree(root: str) -> list[str]:
     """Rewrite HTML files on disk. Returns repo-relative paths that changed."""
     hashes = asset_hashes(root)
     changed: list[str] = []
     for full in iter_html_paths(root):
-        with open(full, encoding="utf-8", newline="") as handle:
-            original = handle.read()
+        original = _read_utf8(full)
+        if original is None:
+            continue
         stamped = stamp_html_text(original, hashes)
         if stamped == original:
             continue
@@ -140,8 +159,9 @@ def check_tree(root: str) -> list[str]:
     hashes = asset_hashes(root)
     stale: list[str] = []
     for full in iter_html_paths(root):
-        with open(full, encoding="utf-8", newline="") as handle:
-            original = handle.read()
+        original = _read_utf8(full)
+        if original is None:
+            continue
         if stamp_html_text(original, hashes) != original:
             stale.append(os.path.relpath(full, root).replace(os.sep, "/"))
     return stale
