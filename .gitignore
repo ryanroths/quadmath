@@ -22,3 +22,5 @@ advisor/
 
 # Derived bench JSON that contradicted the canonical files in data/bench/.
 Claude outputs/
+
+slicer-daily/
