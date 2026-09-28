@@ -1743,7 +1743,7 @@ function addWallRide(x,z,width,height,thickness,leanDeg,ry){
   grp.rotation.y=ry;
   grp.rotation.z=THREE.MathUtils.degToRad(leanDeg); // leanDeg=0 default: flat vertical wall
   scene.add(grp);
-  const mat=new THREE.MeshStandardMaterial({color:0x17181d,roughness:0.95}); // same dark concrete as the tunnel/dive shaft
+  const mat=new THREE.MeshStandardMaterial({color:0xc9a97a,roughness:0.95}); // sandstone — reads as its own landmark, not tunnel concrete
   // base stripe color: cyan, not already claimed by gates (red/blue), dive
   // rings (green), or the dive shaft (orange) — reads as its own landmark type
   const stripeMat=new THREE.MeshStandardMaterial({color:0x00E5FF,emissive:0x00E5FF,emissiveIntensity:1.0,roughness:0.4});
