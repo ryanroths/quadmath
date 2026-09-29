@@ -45,6 +45,7 @@ OVERRIDES = {
     # 1.5mm-shaft biblade — distinct from wb-gemfan-31mm, which is the 1mm-shaft
     # 1219S triblade. The 1.5mm shaft is what the SKRRRT motors take.
     "https://webleedfpv.com/products/special-edition-gemfan-props-31mm-1-5mm-2-blades?bg_ref=9qGDmIxyuc": "wb-gemfan-31mm-bi",
+    "https://webleedfpv.com/products/webleedfpv-340mah-1s-bt2-0?bg_ref=9qGDmIxyuc": "wb-340-bt20",
 }
 
 HREF_RE = re.compile(r'href="(https?://[^"]+)"')
