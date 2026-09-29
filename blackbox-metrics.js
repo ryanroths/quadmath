@@ -421,6 +421,9 @@ export function analyze(log) {
     fs: +fs.toFixed(1), n: log.n, durationS: +(log.n / fs).toFixed(1),
     flightFraction: +fraction.toFixed(3), nyquist: +nyq.toFixed(0),
     hasRaw: !!log.gyroRaw,
+    // Why hasRaw is false, which is a different question from whether it is.
+    debugModeRaw: !!log.debugModeRaw,
+    hasDebugFields: !!log.hasDebugFields,
     axes,
     motors: motorStats(log.motors, throttle, mask, log.motorRange),
     battery: batteryStats(log.vbat, log.amps, mask),
