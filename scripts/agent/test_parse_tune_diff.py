@@ -189,7 +189,156 @@ FIXTURES = {
         # 'thrust_linear 20' lower-case in this entry, 'Thrust linear 20' in
         # 65-happymodel-ryfly. The parser has to pick one; it picks the form
         # used by the majority of the hand-authored entries.
-        "gaps": {"Thrust linear 20": "thrust_linear 20"},
+        #
+        # The D-min note gained an explanatory clause in #148. The parser can
+        # report the two numbers; it cannot know that d_min_roll 40 sits above
+        # d_roll 30 and is therefore inert, which is the part worth saying.
+        "gaps": {
+            "Thrust linear 20": "thrust_linear 20",
+            "D-min R40/P45": (
+                "D-min R40/P45 — roll D-min sits above roll D (30, BF default), "
+                "so D-min is inactive on roll; effective roll D is 30"
+            ),
+        },
+    },
+    # --- added in #148 / #149, from the Sept 2026 dumps ---------------------
+    #
+    # These four pack several parameters into one hand-written note, so almost
+    # every derived note lands in `gaps`: the parser states one fact per note
+    # and the entry states four. That is wording, not disagreement -- every
+    # number below is read off the entry's own notes and nothing is added.
+    # Where a note records something the parser has no parameter for (D-term
+    # filters, dyn idle, battery scaling, simplified *gyro* multiplier, prose
+    # about frames and profiles) it is editorial, not a parser gap.
+    "75-happymodel-aio-stock": {
+        "board": "Happymodel CrazyBee F4 SX1280 HD AIO (HAMO)",
+        "version": "4.5.1",
+        "settings": {
+            "f_roll": "111", "f_pitch": "110", "f_yaw": "111",
+            "d_min_roll": "37", "d_min_pitch": "37",
+            # The note says the mode is on and gives the master; it does not
+            # say RP or RPY. Only "not OFF" is load-bearing -- the emitted note
+            # is the same either way -- and the sibling 65mm factory card this
+            # one reports identical PIDs to is RPY.
+            "simplified_pids_mode": "RPY", "simplified_master_multiplier": "155",
+            "thrust_linear": "20",
+            "gyro_lpf1_static_hz": "0",
+            "gyro_lpf1_dyn_min_hz": "275", "gyro_lpf1_dyn_max_hz": "550",
+            "dyn_notch_count": "1", "dyn_notch_q": "500",
+            "dyn_notch_min_hz": "130", "dyn_notch_max_hz": "400",
+            # The note says "bidir DSHOT" with no speed, so no
+            # motor_pwm_protocol: no parameter, no claim.
+            "dshot_bidir": "ON",
+        },
+        "editorial": [
+            "This is the AIO board's shipped tune, not a Happymodel 75mm BNF tune — the frame it was dumped from is BetaFPV",
+            "Factory profile 0 — identical PIDs to the 65mm Happymodel stock card",
+            "BETAFLIGHT rate type, rc 1.00 / super 0.70 / expo 0 (factory rateprofile 0)",
+        ],
+        "gaps": {
+            "FF R111/P110/Y111": "FF R111/P110/Y111, D-min R37/P37",
+            "D-min R37/P37": "FF R111/P110/Y111, D-min R37/P37",
+            "Thrust linear 20": "Thrust linear 20, I-term relax cutoff 30, I-term limit 500, vbat sag comp 100",
+            "RPM filter ON": "RPM filter ON, 1 harmonic, weights 100/20/100, fade 120hz, bidir DSHOT",
+            "Gyro LPF1 dyn 275–550hz": "Gyro LPF1 off, gyro dyn LPF 275–550hz, dyn notch 1×Q500 130–400hz",
+            "Dyn notch 1×Q500 130–400hz": "Gyro LPF1 off, gyro dyn LPF 275–550hz, dyn notch 1×Q500 130–400hz",
+            "Simplified PID mode, master ×155": "Simplified PID mode, master ×155, I 95, D 80, PI 60, FF 60, pitch D 90, pitch PI 95",
+        },
+    },
+    "75-betafpv-ryfly-hamo-45mm": {
+        "board": "Happymodel CrazyBee F4 SX1280 HD AIO (HAMO) in a Meteor75 Pro frame",
+        "version": "4.5.1",
+        "settings": {
+            "f_roll": "151", "f_pitch": "157", "f_yaw": "140",
+            "d_min_roll": "52", "d_min_pitch": "59",
+            "tpa_rate": "75",
+            "thrust_linear": "20",
+            # This entry does name the mode: "Simplified mode RP". No master
+            # is given, so the parser reports the mode, not a multiplier.
+            "simplified_pids_mode": "RP",
+        },
+        "editorial": [
+            "Profile 2 on the board; profile 0 is the AIO factory card (75-happymodel-aio-stock)",
+            "Frame is BetaFPV, AIO is Happymodel — the BetaFPV stock card does not apply to this build",
+            "Dyn idle 1200 rpm (dyn_idle_min_rpm 12), P gain 35 — low on purpose",
+            "D-term dyn 67–135hz, expo 7; D-term filter multiplier 90",
+            "Same gyro/notch/RPM filter config as the AIO factory card",
+            "Actual rates, centre 20°/s, max 740/740/700°/s, expo 0.56",
+        ],
+        "gaps": {
+            "FF R151/P157/Y140": "FF R151/P157/Y140, 2-point averaging, smooth 45, jitter 9, boost 18, max rate limit 100",
+            "D-min R52/P59": "D-min R52/P59, D-max gain 0, D-max advance 37",
+            "Thrust linear 20": "Crash recovery ON, thrust linear 20, I-term relax cutoff 45, vbat sag comp 100",
+            "Simplified PID mode, RP": "Simplified mode RP: I 110, D 80, PI 95, FF 115, pitch D 105",
+        },
+    },
+    "75-betafpv-ryfly-o4-gf1811": {
+        "board": "BetaFPV G473 (BEFH), Meteor75 Pro",
+        "version": "2025.12.5-alpha",
+        "settings": {
+            "f_roll": "56", "f_pitch": "73", "f_yaw": "56",
+            # D-max, not D-min: on the 2025.12 naming D is the base and D-max
+            # the ceiling. Reported under the name the diff used.
+            "d_max_roll": "30", "d_max_pitch": "48",
+            "tpa_rate": "70",
+            "gyro_lpf1_static_hz": "0",
+            "dyn_notch_count": "1", "dyn_notch_q": "500",
+            "dyn_notch_min_hz": "160", "dyn_notch_max_hz": "500",
+            "simplified_pids_mode": "RP", "simplified_master_multiplier": "85",
+            "dshot_bidir": "ON", "motor_pwm_protocol": "DSHOT300",
+        },
+        "editorial": [
+            'Profile "GF 1811" — different quad and prop from the gf40 card',
+            "Dyn idle 3000 rpm",
+            "D-term dyn 82–165hz, LPF2 165hz; D-term filter multiplier 110",
+            "Current: ibata_scale 550, offset -100",
+            "Actual rates, centre 20°/s, max 730/730/700°/s, expo 0.56",
+        ],
+        # 'BF 2025.12.5' against a header reading 2025.12.5-alpha: the version
+        # regex in parse_tune_diff.py stops at the numeric part, so a
+        # pre-release build is reported as the release. The only entry here
+        # whose gap is a parser defect rather than a wording difference.
+        "gaps": {
+            "FF R56/P73/Y56": "FF R56/P73/Y56, smooth 60, jitter 12",
+            "D-max R30/P48": "D-max R30/P48 (BF 2025.12 naming: D is the base, D-max the high)",
+            "TPA 70": "TPA 70, throttle boost 0",
+            "RPM filter ON, bidir DSHOT300": "Bidir DSHOT300, 12 poles, fpv_mix 30°",
+            "Gyro LPF1 off": "Gyro LPF1 off, LPF2 625hz, dyn notch 1×Q500 160–500hz, simplified gyro multiplier 125",
+            "Dyn notch 1×Q500 160–500hz": "Gyro LPF1 off, LPF2 625hz, dyn notch 1×Q500 160–500hz, simplified gyro multiplier 125",
+            "Simplified PID mode, master ×85": "Simplified: master 85, I 95, D 105, PI 105, D-max 40, FF 55, pitch D 140, pitch PI 125",
+            "BF 2025.12.5": "BF 2025.12.5-alpha (G473), dumped Sept 2026",
+        },
+    },
+    "75-newbeedrone-ryfly": {
+        "board": "Happymodel CrazyBee F4 SX1280 (HAMO) in a Cockroach 75",
+        "version": "4.5.1",
+        "settings": {
+            "f_roll": "111", "f_pitch": "110", "f_yaw": "111",
+            "d_min_roll": "37", "d_min_pitch": "35",
+            "thrust_linear": "20",
+            "gyro_lpf1_static_hz": "0",
+            "gyro_lpf1_dyn_min_hz": "225", "gyro_lpf1_dyn_max_hz": "450",
+            # The note gives count and Q but only an upper bound ("up to
+            # 650hz"), so no dyn_notch_min_hz/max_hz. The parser then reports
+            # count and Q alone, which is all the entry actually pins down.
+            "dyn_notch_count": "2", "dyn_notch_q": "600",
+            "dshot_bidir": "ON",
+        },
+        "editorial": [
+            "Happymodel HD stock preset with small edits: pitch D 35, dyn idle 4500 rpm, 2 notches",
+            "Simplified gyro filter multiplier 90",
+            "Battery: vbat_scale 112, ibata_scale 1189, capacity 450, forced 1S",
+            "Actual rates, centre 20°/s, max 740/740/700°/s, expo 0.56",
+            "Frame is NewBeeDrone; the AIO is Happymodel, so there is no NBD stock tune for this build",
+        ],
+        "gaps": {
+            "FF R111/P110/Y111": "FF R111/P110/Y111, D-min R37/P35",
+            "D-min R37/P35": "FF R111/P110/Y111, D-min R37/P35",
+            "RPM filter ON": "RPM filter weights 100/20/100, fade 100hz, bidir DSHOT",
+            "Gyro LPF1 dyn 225–450hz": "Gyro LPF1 off, LPF2 450hz, gyro dyn LPF 225–450hz, dyn notch 2×Q600 up to 650hz",
+            "Dyn notch 2×Q600": "Gyro LPF1 off, LPF2 450hz, gyro dyn LPF 225–450hz, dyn notch 2×Q600 up to 650hz",
+            "BF 4.5.1": "BF 4.5.1, dumped Sept 2026 — same board as data/bench/cockroach75-hdzero-champion0802-28k.json",
+        },
     },
 }
 
