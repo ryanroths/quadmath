@@ -216,12 +216,12 @@
       ],
     },
     {
-      id: '75-happymodel-stock',
+      id: '75-happymodel-aio-stock',
       frame: 75,
       brand: 'Happymodel',
       source: 'Stock',
-      fc: 'Happymodel CrazyBee F4 SX1280 (HAMO)',
-      combo: '1102 22K KV · HDZero, stock motor/prop',
+      fc: 'Happymodel CrazyBee F4 SX1280 HD AIO (HAMO)',
+      combo: 'HDZero AIO factory profile — dumped in a BetaFPV Meteor75 Pro frame, 1102 22K KV, 45mm props',
       rateType: 'BETAFLIGHT',
       pids:  { roll: [41, 70, 37], pitch: [41, 70, 37], yaw: [41, 70, 0] },
       // Profile 0 / rateprofile 0 of an untouched factory board, dumped Sept
@@ -232,6 +232,7 @@
       // board, so Happymodel runs one HD tune across the line.
       rates: { roll: [100, 70, 0], pitch: [100, 70, 0], yaw: [100, 70, 0] },
       notes: [
+        'This is the AIO board\'s shipped tune, not a Happymodel 75mm BNF tune — the frame it was dumped from is BetaFPV',
         'Factory profile 0 — identical PIDs to the 65mm Happymodel stock card',
         'BETAFLIGHT rate type, rc 1.00 / super 0.70 / expo 0 (factory rateprofile 0)',
         'FF R111/P110/Y111, D-min R37/P37',
@@ -243,24 +244,25 @@
       ],
     },
     {
-      id: '75-happymodel-ryfly',
+      id: '75-betafpv-ryfly-hamo-45mm',
       frame: 75,
-      brand: 'Happymodel',
+      brand: 'BetaFPV',
       source: 'RyFly',
-      fc: 'Happymodel CrazyBee F4 SX1280 (HAMO)',
-      combo: '1102 22K KV · HDZero',
+      fc: 'Happymodel CrazyBee F4 SX1280 HD AIO (HAMO) in a Meteor75 Pro frame',
+      combo: 'Meteor75 Pro · Happymodel HD AIO · 1102 22K KV · 45mm props · HDZero',
       rateType: 'ACTUAL',
       pids:  { roll: [48, 95, 54], pitch: [50, 99, 62], yaw: [45, 70, 0] },
       rates: { roll: [2, 74, 56],  pitch: [2, 74, 56],  yaw: [2, 70, 56] },
       notes: [
-        'Profile 2 on the board; profile 0 is the untouched stock card',
+        'Profile 2 on the board; profile 0 is the AIO factory card (75-happymodel-aio-stock)',
+        'Frame is BetaFPV, AIO is Happymodel — the BetaFPV stock card does not apply to this build',
         'FF R151/P157/Y140, 2-point averaging, smooth 45, jitter 9, boost 18, max rate limit 100',
         'D-min R52/P59, D-max gain 0, D-max advance 37',
         'TPA 75',
         'Crash recovery ON, thrust linear 20, I-term relax cutoff 45, vbat sag comp 100',
         'Dyn idle 1200 rpm (dyn_idle_min_rpm 12), P gain 35 — low on purpose',
         'D-term dyn 67–135hz, expo 7; D-term filter multiplier 90',
-        'Same gyro/notch/RPM filter config as the stock card',
+        'Same gyro/notch/RPM filter config as the AIO factory card',
         'Simplified mode RP: I 110, D 80, PI 95, FF 115, pitch D 105',
         'Actual rates, centre 20°/s, max 740/740/700°/s, expo 0.56',
         'BF 4.5.1',
@@ -319,6 +321,7 @@
   // Combos with nothing published yet. Rendered as one collapsed line, never
   // as a card.
   var PENDING = [
+    { frame: 75, brand: 'Happymodel',  source: 'Stock', reason: 'need a diff all from a Happymodel 75mm BNF (Mobula7 1S HD) — the AIO factory profile is published separately' },
     { frame: 75, brand: 'NewBeeDrone', source: 'Stock', reason: 'need a diff all from a Cockroach 75 that shipped with an NBD AIO — ours runs a Happymodel board' },
     { frame: 85, brand: 'BetaFPV',     source: 'Stock', reason: 'need a diff all from an owner' },
     { frame: 85, brand: 'NewBeeDrone', source: 'Stock', reason: 'need a diff all from an owner' },
