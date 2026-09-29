@@ -294,10 +294,10 @@ FIXTURES = {
             "Current: ibata_scale 550, offset -100",
             "Actual rates, centre 20°/s, max 730/730/700°/s, expo 0.56",
         ],
-        # 'BF 2025.12.5' against a header reading 2025.12.5-alpha: the version
-        # regex in parse_tune_diff.py stops at the numeric part, so a
-        # pre-release build is reported as the release. The only entry here
-        # whose gap is a parser defect rather than a wording difference.
+        # The parser keeps the pre-release suffix now, so it reports
+        # 'BF 2025.12.5-alpha' rather than claiming the 2025.12.5 release.
+        # What is left is an ordinary wording gap: the entry note also carries
+        # the board and the dump date, which no diff line can supply.
         "gaps": {
             "FF R56/P73/Y56": "FF R56/P73/Y56, smooth 60, jitter 12",
             "D-max R30/P48": "D-max R30/P48 (BF 2025.12 naming: D is the base, D-max the high)",
@@ -306,7 +306,7 @@ FIXTURES = {
             "Gyro LPF1 off": "Gyro LPF1 off, LPF2 625hz, dyn notch 1×Q500 160–500hz, simplified gyro multiplier 125",
             "Dyn notch 1×Q500 160–500hz": "Gyro LPF1 off, LPF2 625hz, dyn notch 1×Q500 160–500hz, simplified gyro multiplier 125",
             "Simplified PID mode, master ×85": "Simplified: master 85, I 95, D 105, PI 105, D-max 40, FF 55, pitch D 140, pitch PI 125",
-            "BF 2025.12.5": "BF 2025.12.5-alpha (G473), dumped Sept 2026",
+            "BF 2025.12.5-alpha": "BF 2025.12.5-alpha (G473), dumped Sept 2026",
         },
     },
     "75-newbeedrone-ryfly": {
@@ -699,6 +699,71 @@ class BetaflightNaming(unittest.TestCase):
 
     def test_version_header_becomes_a_note(self):
         self.assertIn("BF 4.5.1", parse_good()["notes"])
+
+    def _version_note(self, token: str) -> str:
+        """The note produced by a header carrying `token` as the version."""
+        # Swap only the version token in GOOD_DIFF's own header, so this
+        # keeps working if that fixture is ever reworded.
+        text, count = re.subn(
+            r"(^# Betaflight / \S+ \([^)]*\) )\S+",
+            lambda m: m.group(1) + token, GOOD_DIFF, count=1, flags=re.MULTILINE)
+        self.assertEqual(count, 1, "version token was not substituted in")
+        notes = parser.parse_tune_diff(text, frame=65, brand="BetaFPV")["notes"]
+        found = [n for n in notes if n.startswith("BF ")]
+        self.assertEqual(len(found), 1, "expected exactly one BF note, got %r" % found)
+        return found[0]
+
+    def test_prerelease_suffix_survives(self):
+        """A calver pre-release must not be reported as the release.
+
+        The suffix is the whole point: PID and filter defaults move between
+        builds, so "2025.12.5" and "2025.12.5-alpha" are different tunes.
+        """
+        self.assertEqual(self._version_note("2025.12.5-alpha"), "BF 2025.12.5-alpha")
+
+    def test_plain_versions_are_unchanged(self):
+        """Every 4.x build prints a bare version.
+
+        Including release candidates: through 4.x there is no suffix
+        mechanism at all, so a 4.3.0-RC6 build prints "4.3.0" and the RC
+        marker lives only in the git tag. These are the overwhelming
+        majority of pasted diffs and must not regress.
+        """
+        for token in ("4.5.1", "4.2.3", "4.4.3", "2026.1.0"):
+            with self.subTest(version=token):
+                self.assertEqual(self._version_note(token), "BF %s" % token)
+
+    def test_version_does_not_run_into_the_build_date(self):
+        """A hyphenated build date cannot be swallowed into the version.
+
+        The suffix group has to start with a literal "-" and a space ends
+        the match, so the date is out of reach however it is formatted.
+        """
+        header = ("# Betaflight / STM32F411 (S411) 4.5.1 2024-06-12 / "
+                  "05:11:31 (77d01ba3b)")
+        self.assertEqual(
+            parser.parse_header(header)["version"], "4.5.1")
+
+    def test_degenerate_suffixes_fall_back_to_the_numbers(self):
+        """A trailing or doubled dot is not part of a version.
+
+        Capture the numeric part rather than carrying punctuation onto the
+        tune card.
+        """
+        for token, expected in (("4.5.1-", "4.5.1"),
+                                ("4.5.1-alpha.", "4.5.1-alpha"),
+                                ("4.5.1-alpha..2", "4.5.1-alpha")):
+            with self.subTest(version=token):
+                header = ("# Betaflight / STM32G473 (SG47) %s Feb 14 2025 / "
+                          "09:12:44 (abc1234)" % token)
+                self.assertEqual(parser.parse_header(header)["version"], expected)
+
+    def test_target_and_manufacturer_id_are_unaffected(self):
+        header = ("# Betaflight / STM32G473 (SG47) 2025.12.5-alpha Feb 14 2025 / "
+                  "09:12:44 (abc1234)")
+        parsed = parser.parse_header(header)
+        self.assertEqual(parsed["target"], "STM32G473")
+        self.assertEqual(parsed["manufacturer_id"], "SG47")
 
     def test_last_profile_block_wins(self):
         # `diff all` prints every PID profile; Betaflight replays the file top

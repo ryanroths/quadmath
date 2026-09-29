@@ -134,8 +134,28 @@ _DIFF_MARKER = re.compile(r"^\s*#?\s*diff(?:\s+\w+)*\s*$", re.MULTILINE)
 _DUMP_MARKER = re.compile(r"^\s*#?\s*dump(?:\s+\w+)*\s*$", re.MULTILINE)
 
 # "# Betaflight / STM32F411 (S411) 4.5.1 Jun 12 2024 / 05:11:31 (77d01ba3b)"
+# "# Betaflight / STM32G473 (SG47) 2025.12.5-alpha Feb 14 2025 / 09:12:44 (abc1234)"
+#
+# The optional suffix exists because the calver releases carry one and the
+# 4.x line never did. Through 4.x, build/version.h defines FC_VERSION_STRING
+# as major "." minor "." patch with no suffix term at all -- a 4.3.0-RC6
+# build prints a bare "4.3.0", the RC marker living only in the git tag. The
+# calver scheme added FC_VERSION_SUFFIX, appended by FC_VERSION_SUFFIX_STR as
+# one "-" and one token ("alpha"), which is why this is a single optional
+# group rather than a repeated one: upstream cannot emit "4.5.1-rc1-dirty".
+#
+# Without it a pilot who flew a pre-release reads as having flown the
+# release. The version is the one thing a tune card cannot be vague about,
+# since PID and filter defaults move between builds.
+#
+# The inner "(?:\.[0-9A-Za-z]+)*" is tolerance, not an observed format:
+# FC_VERSION_SUFFIX is a free-form C string constrained only by a length
+# assert, so a future "rc.1" would survive. A suffix using some other
+# separator would simply not be captured, degrading to the old
+# truncated-but-correct-prefix behaviour rather than failing the parse.
 _VERSION_RE = re.compile(
-    r"^#\s*Betaflight\s*/\s*(\S+)\s*\(([^)]*)\)\s*(\d+\.\d+\.\d+)",
+    r"^#\s*Betaflight\s*/\s*(\S+)\s*\(([^)]*)\)\s*"
+    r"(\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?)",
     re.MULTILINE | re.IGNORECASE,
 )
 
