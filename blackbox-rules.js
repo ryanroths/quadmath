@@ -27,7 +27,23 @@ export function buildFindings(m, s) {
   if (m.flightFraction < 0.5) add('info', 'Mostly on the ground', `Only ${r0(m.flightFraction * 100)}% of samples above 15% throttle. Spectra use in-flight samples only, so the effective log is shorter than it looks.`);
   if (m.fs < 600) add('warn', `Low log rate (${r0(m.fs)} Hz)`, `Spectrum tops out at ${m.nyquist} Hz — motor noise on a whoop lives well above that, so the noise findings below only cover the low band. Set blackbox_sample_rate to 1/2 or better (4.3+), or lower P ratio on 4.2.`);
   else if (m.fs < 1500) add('info', `Log rate ${r0(m.fs)} Hz`, `Spectrum tops out at ${m.nyquist} Hz. Fine for tuning; raise the rate if you are chasing high-frequency motor noise.`);
-  if (!m.hasRaw) add('info', 'No unfiltered gyro in log', 'debug_mode is not GYRO_SCALED, so the pre-filter spectrum is unavailable. Set debug_mode = GYRO_SCALED to see what the filters are removing and get filter suggestions.');
+  // Three ways to end up without a pre-filter spectrum, and they do not share a
+  // fix. Telling a pilot whose debug_mode is already GYRO_SCALED to set
+  // debug_mode = GYRO_SCALED sends them to re-check a setting that is correct.
+  if (!m.hasRaw) {
+    if (m.debugModeRaw && !m.hasDebugFields) {
+      add('info', 'Debug logging disabled',
+        'debug_mode is GYRO_SCALED, but no debug fields were recorded, so the pre-filter spectrum is unavailable. The mode is right; the fields were switched off at the logger. Turn debug logging back on, save, and refly.',
+        'set blackbox_disable_debug = OFF');
+    } else if (m.hasDebugFields) {
+      add('info', 'No unfiltered gyro in log',
+        'debug_mode is not GYRO_SCALED, so the pre-filter spectrum is unavailable. Set debug_mode = GYRO_SCALED to see what the filters are removing and get filter suggestions.');
+    } else {
+      add('info', 'No unfiltered gyro in log',
+        'debug_mode is not GYRO_SCALED and no debug fields were recorded, so the pre-filter spectrum is unavailable. Both have to be right: the mode picks what goes into debug[0..3], and blackbox_disable_debug decides whether those fields are written at all.',
+        'set debug_mode = GYRO_SCALED\nset blackbox_disable_debug = OFF');
+    }
+  }
   if (m.droppedFrames > m.n * 0.01) add('warn', 'Dropped frames', `~${m.droppedFrames} frames missing (${(100 * m.droppedFrames / m.n).toFixed(1)}%). Flash is too slow for this rate, or the log was corrupted. Lower the rate or use a fresh chip.`);
 
   // ---- battery ----

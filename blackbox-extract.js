@@ -10,6 +10,25 @@ const AXIS = 3;
 function num(v, d = null) { const n = Number(v); return Number.isFinite(n) ? n : d; }
 function list(v) { return v == null ? null : String(v).split(',').map(x => num(x.trim())); }
 
+/* Betaflight's DEBUG_GYRO_SCALED. New modes are appended to the enum in
+   src/main/build/debug.h rather than inserted, so the index has been 6 since
+   3.x and still is on the date-versioned releases. Only consulted when the
+   header carries a bare number, i.e. when the parser could not name it. */
+const DEBUG_GYRO_SCALED = 6;
+
+/* True when debug_mode logs the pre-filter gyro into debug[0..2].
+
+   Accepts the resolved name (GYRO_SCALED, and GYRO_RAW which carries the same
+   payload on the firmwares that have it) or a bare numeric header value. The
+   numeric form shows up when the log's debug_mode is outside the range the
+   parser knows, which is normal on a firmware newer than the vendored WASM. */
+export function debugModeIsRaw(debugMode) {
+  if (debugMode == null) return false;
+  const v = String(debugMode).trim();
+  if (/GYRO_SCALED|GYRO_RAW/i.test(v)) return true;
+  return /^\d+$/.test(v) && Number(v) === DEBUG_GYRO_SCALED;
+}
+
 /* Every Betaflight setting we care about lives in the header block. The
    wrapper exposes recognised ones as properties and the rest under
    `unknown`, which for tuning purposes is where all the good stuff is. */
@@ -93,8 +112,15 @@ export function extractLog(headers, dataParser, settings) {
   const debug = [0, 1, 2, 3].map(d => (want(`debug[${d}]`) ? mk() : null));
   // GYRO_SCALED debug mode logs the pre-filter gyro in debug[0..2]. That is
   // the only way to see what the filters are removing.
-  const rawMode = /GYRO_SCALED|GYRO_RAW/i.test(settings.debugMode || '');
-  const gyroRaw = rawMode && debug[0] && debug[1] && debug[2] ? [mk(), mk(), mk()] : null;
+  //
+  // These two are reported separately, not just ANDed into gyroRaw, because
+  // they fail for opposite reasons and want opposite fixes: the mode is wrong
+  // (set debug_mode) or the fields were never written despite the right mode
+  // (blackbox_disable_debug = ON). Collapsing them made the rules layer blame
+  // debug_mode for a log that had it set correctly.
+  const debugModeRaw = debugModeIsRaw(settings.debugMode);
+  const hasDebugFields = !!(debug[0] && debug[1] && debug[2]);
+  const gyroRaw = debugModeRaw && hasDebugFields ? [mk(), mk(), mk()] : null;
 
   for (let i = 0; i < n; i++) {
     const f = frames[i].fields;
@@ -139,7 +165,7 @@ export function extractLog(headers, dataParser, settings) {
     motorRange = mn < 900 ? [0, Math.max(mx, 2000)] : [1000, 2000];
   }
 
-  return { fs, n, t, gyro, gyroRaw, setpoint, pidP, pidI, pidD, pidF, throttle, motors, vbat, amps, motorRange, droppedFrames: dropped, durationS: t[n - 1] - t[0] };
+  return { fs, n, t, gyro, gyroRaw, debugModeRaw, hasDebugFields, setpoint, pidP, pidI, pidD, pidF, throttle, motors, vbat, amps, motorRange, droppedFrames: dropped, durationS: t[n - 1] - t[0] };
 }
 
 /* Down-sample the time series for the charts. The analysis runs on the full
