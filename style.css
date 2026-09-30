@@ -1887,7 +1887,7 @@
 
   /* Guide-table buy links: `.guide table a` zeroed their only hover cue. */
   .guide table a[href*="/go/"] { display: inline-block; white-space: nowrap; padding: 1px 8px; border: 1px solid rgba(255,77,26,.5); border-radius: 999px; font: .75rem 'JetBrains Mono', monospace; }
-  .guide table a[href*="/go/"]::after { content: ' ↗'; }
+  .guide table a[href*="/go/"]::after { content: ' →'; }
   .guide table a[href*="/go/"]:is(:hover, :focus-visible) { background: var(--orange); border-color: var(--orange); color: var(--bg); }
   .frame-card.frame-card-shop:hover { transform: none; }
   .hero .frame-btn { transition-property: border-color, color, background-color; }
