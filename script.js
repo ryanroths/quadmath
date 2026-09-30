@@ -843,9 +843,33 @@
   // unlimited-supply thrust grams, current-draw flight time. A fully dashed
   // OSD reads as broken; a guessed AUW reads as a measurement. This is the
   // third path.
+  // OSD count-up: a changed result tweens from the number on screen. Never
+  // from a dash (there is no number to count from), never for a measured
+  // anchor (a reading, not a computation), never on first paint or with
+  // reduced motion -- those all land on the final value at once.
+  const RM = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: true };
+  let osdLive = false;
+  function setNum(el, v, fmt, snap) {
+    if (!el) return;
+    cancelAnimationFrame(el._raf);
+    const from = el._shown, t0 = performance.now();
+    const end = () => { el._shown = v; el.innerHTML = fmt(v); };
+    if (snap || !osdLive || RM.matches || from === undefined || fmt(from) === fmt(v)) return end();
+    (function tick(now) {
+      const k = Math.min(1, Math.max(0, (now - t0) / 180));
+      if (k === 1) return end();
+      el._shown = from + (v - from) * (1 - (1 - k) ** 3);
+      el.innerHTML = fmt(el._shown);
+      el._raf = requestAnimationFrame(tick);
+    })(t0);
+  }
+  function setDash(el, html) { if (el) { cancelAnimationFrame(el._raf); el._shown = undefined; el.innerHTML = html; } }
+  const unit = (d, u) => v => v.toFixed(d) + '<span class="unit">' + u + '</span>';
+
   const AWAIT_WEIGHT_MSG = 'Pack weight is in. Dry weight is not — T:W and the build score wait on a scale reading, not a guess.';
   function showAwaitingWeight() {
     const osd = document.querySelector('.osd-panel');
+    const flip = osd && !osd.classList.contains('awaiting-weight');
     if (osd) osd.classList.add('awaiting-weight');
 
     const kv       = clampRange(parseFloat(els.motorKV.value)   || 0, ...WHOOP_RANGES.kv);
@@ -856,36 +880,36 @@
     const s = computeStats(kv, cells, capacity, pitch, null, cRating);
     const packG = packWeightG(capacity, cells);
 
-    els.totalThrust.innerHTML = s.totalThrust.toFixed(0) + '<span class="unit">g</span>';
+    setNum(els.totalThrust, s.totalThrust, unit(0, 'g'));
     els.thrustSub.textContent = s.packLimited
       ? `Pack-limited: ${(s.effCurrentPerMotor * 4).toFixed(1)}A available vs ${(s.maxCurrentPerMotor * 4).toFixed(1)}A the motors want`
       : `Motor-limited: motors draw ${(s.maxCurrentPerMotor * 4).toFixed(1)}A, under the pack's ${(s.packLimitPerMotor * 4).toFixed(1)}A limit`;
 
-    els.flightTime.innerHTML = s.flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
+    setNum(els.flightTime, s.flightTimeMin, unit(1, 'min'));
     if (els.flightSub) {
       els.flightSub.textContent = s.style.label + ' — estimated from current draw (not a measured anchor)';
       els.flightSub.classList.remove('measured');
     }
 
     const dash = '<span class="unit">—</span>';
-    els.benchTw.innerHTML      = dash;
+    setDash(els.benchTw, dash);
     els.benchSub.textContent   = s.benchThrust.toFixed(0) + 'g on an unlimited supply — ratio waits on dry weight';
-    els.thrustWeight.innerHTML = dash;
+    setDash(els.thrustWeight, dash);
     els.twRating.textContent   = 'Needs dry weight';
     els.thrustWeight.classList.remove('warn');
     els.twCeilingBadge.hidden  = true;
     els.thrustWeight.closest('.osd-stat')?.classList.add('osd-stat-locked');
     els.benchTw.closest('.osd-stat')?.classList.add('osd-stat-locked');
 
-    document.getElementById('buildScoreNum').textContent    = '—';
+    setDash(document.getElementById('buildScoreNum'), '—');
     document.getElementById('buildPersonality').textContent = 'WEIGH IT FIRST';
     document.getElementById('buildScoreClass').textContent  = 'T:W and score wait on a scale reading';
-    document.getElementById('buildScoreBar').style.width    = '0%';
+    document.getElementById('buildScoreBar').style.transform = 'scaleX(0)';
     const wEl = document.getElementById('buildScoreWeight');
     if (wEl) { wEl.textContent = ''; wEl.classList.remove('penalized', 'floored'); }
 
     const auwValEl = document.getElementById('auwValue');
-    if (auwValEl) auwValEl.innerHTML = packG.toFixed(1) + '<span class="unit">g</span>';
+    setNum(auwValEl, packG, unit(1, 'g'), flip);
     const auwSubEl = document.getElementById('auwBreakdown');
     if (auwSubEl) {
       auwSubEl.textContent = packG.toFixed(1) + 'g pack (' + capacity.toFixed(0) + 'mAh ' + cells + 'S) — dry weight not set, AUW incomplete';
@@ -909,6 +933,7 @@
     // AUW = dry weight + real pack weight. TWR, the build score, and the
     // wheelie warning all key off this; omitting the pack inflated TWR ~30%.
     const osd = document.querySelector('.osd-panel');
+    const flip = osd && osd.classList.contains('awaiting-weight');
     if (osd) osd.classList.remove('awaiting-weight');
     const packG = packWeightG(capacity, cells);
     const auw   = dryWeight + packG;
@@ -931,18 +956,18 @@
       auwEl.classList.toggle('warn', light || derived);
     }
 
-    els.totalThrust.innerHTML = s.totalThrust.toFixed(0) + '<span class="unit">g</span>';
+    setNum(els.totalThrust, s.totalThrust, unit(0, 'g'));
     els.thrustSub.textContent = s.packLimited
       ? `Pack-limited: ${(s.effCurrentPerMotor * 4).toFixed(1)}A available vs ${(s.maxCurrentPerMotor * 4).toFixed(1)}A the motors want`
       : `Motor-limited: motors draw ${(s.maxCurrentPerMotor * 4).toFixed(1)}A, under the pack's ${(s.packLimitPerMotor * 4).toFixed(1)}A limit`;
 
-    els.benchTw.innerHTML = s.twBench.toFixed(1) + '<span class="unit">:1</span>';
+    setNum(els.benchTw, s.twBench, unit(1, ':1'));
     els.benchSub.textContent = s.packLimited
       ? `${s.benchThrust.toFixed(0)}g on an unlimited supply — a higher C-rating closes this gap`
       : `${s.benchThrust.toFixed(0)}g — pack is not the constraint on this build`;
 
     const tw = s.tw;
-    els.thrustWeight.innerHTML = tw.toFixed(1) + '<span class="unit">:1</span>';
+    setNum(els.thrustWeight, tw, unit(1, ':1'));
     let rating = 'Mild / long-range tuned', warn = false;
     if      (tw >= 2 && tw < 4) { rating = 'Punchy'; }
     else if (tw >= 4 && tw < 6) { rating = 'Aggressive freestyle'; }
@@ -954,7 +979,7 @@
     // Advisory ceiling flag — never blocks or clamps the figure.
     els.twCeilingBadge.hidden = tw <= TW_CEILING;
 
-    els.flightTime.innerHTML = s.flightTimeMin.toFixed(1) + '<span class="unit">min</span>';
+    setNum(els.flightTime, s.flightTimeMin, unit(1, 'min'), !!s.anchor);
     if (els.flightSub) {
       els.flightSub.textContent = s.anchor
         ? s.style.label + ' — anchored to measured data (' + s.anchor.avgCurrentA + 'A avg)'
@@ -1000,10 +1025,13 @@
     else if (finalScore >= 45) personality = 'LOCKED IN FREESTYLE';
     else if (finalScore >= 25) personality = 'RELAXED CRUISER';
     else                       personality = 'FLOATY — NEEDS MORE PUNCH';
-    document.getElementById('buildScoreNum').textContent    = finalScore;
+    setNum(document.getElementById('buildScoreNum'), finalScore, Math.round);
     document.getElementById('buildPersonality').textContent  = personality;
     document.getElementById('buildScoreClass').textContent   = 'scored within ' + currentFrame + 'mm class';
-    document.getElementById('buildScoreBar').style.width     = finalScore + '%';
+    document.getElementById('buildScoreBar').style.transform = 'scaleX(' + finalScore / 100 + ')';
+    // Dry weight just went in: the score unlocks once, on user input only.
+    if (flip && osdLive && !RM.matches) document.querySelector('.build-score-hero')?.animate?.(
+      [{ opacity: .4, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'ease-out' });
 
     const wEl = document.getElementById('buildScoreWeight');
     if (wEl) {
@@ -1021,7 +1049,7 @@
     // of AUW you change without rebuilding, and on a whoop it is a quarter of
     // the airframe, so it deserves its own number rather than being folded in.
     const auwValEl = document.getElementById('auwValue');
-    if (auwValEl) auwValEl.innerHTML = auw.toFixed(1) + '<span class="unit">g</span>';
+    setNum(auwValEl, auw, unit(1, 'g'), flip);
     const auwSubEl = document.getElementById('auwBreakdown');
     if (auwSubEl) {
       const packPct = auw > 0 ? (packG / auw) * 100 : 0;
@@ -1061,12 +1089,12 @@
 
     // Optional tierFor(value) returns a colour class for the cell — used by the
     // T:W row, where the number's absolute value matters more than who wins.
-    function setPair(idA, idB, vA, vB, fmt, tierFor) {
+    function setPair(idA, idB, vA, vB, fmt, tierFor, aA, aB) {
       const eA = document.getElementById(idA), eB = document.getElementById(idB);
-      if (vA !== null) { eA.innerHTML = fmt(vA); eA.classList.add('filled'); }
-      else             { eA.innerHTML = '—';     eA.classList.remove('filled'); }
-      if (vB !== null) { eB.innerHTML = fmt(vB); eB.classList.add('filled'); }
-      else             { eB.innerHTML = '—';     eB.classList.remove('filled'); }
+      if (vA !== null) { setNum(eA, vA, fmt, aA); eA.classList.add('filled'); }
+      else             { setDash(eA, '—');    eA.classList.remove('filled'); }
+      if (vB !== null) { setNum(eB, vB, fmt, aB); eB.classList.add('filled'); }
+      else             { setDash(eB, '—');    eB.classList.remove('filled'); }
       eA.classList.remove('winner'); eB.classList.remove('winner');
       if (vA !== null && vB !== null && vA !== vB)
         (vA > vB ? eA : eB).classList.add('winner');
@@ -1079,7 +1107,7 @@
     setPair('cmpSpeedA',  'cmpSpeedB',  sA ? sA.speedMph      : null, sB ? sB.speedMph      : null, v => `${v.toFixed(0)}<span class="cmp-unit">mph</span>`);
     setPair('cmpTwA',     'cmpTwB',     sA ? sA.tw            : null, sB ? sB.tw            : null, v => `${v.toFixed(1)}<span class="cmp-unit">:1</span>`, twTier);
     setPair('cmpThrustA', 'cmpThrustB', sA ? sA.totalThrust   : null, sB ? sB.totalThrust   : null, v => `${v.toFixed(0)}<span class="cmp-unit">g</span>`);
-    setPair('cmpTimeA',   'cmpTimeB',   sA ? sA.flightTimeMin : null, sB ? sB.flightTimeMin : null, v => `${v.toFixed(1)}<span class="cmp-unit">min</span>`);
+    setPair('cmpTimeA',   'cmpTimeB',   sA ? sA.flightTimeMin : null, sB ? sB.flightTimeMin : null, v => `${v.toFixed(1)}<span class="cmp-unit">min</span>`, 0, !!sA?.anchor, !!sB?.anchor);
   }
 
   function wireCompareInput(selectId, kvId) {
@@ -1523,6 +1551,7 @@
   updateVideoHint();
   updatePickerCompat();
   calculate();
+  osdLive = true;
 
   // recalc on any input change
   Object.values(els).forEach(el => {
