@@ -82,7 +82,7 @@
     margin-left: 24px;
     transition: color 0.15s;
   }
-  nav a:hover { color: var(--text); }
+  nav a:is(:hover, :focus-visible) { color: var(--text); }
 
   /* ===== MOBILE NAV =====
      The eight links are inline, so on a narrow screen they never overflowed the
@@ -204,7 +204,7 @@
     text-decoration: underline;
     text-underline-offset: 2px;
   }
-  .calc-scope-note a:hover { color: var(--text); }
+  .calc-scope-note a:is(:hover, :focus-visible) { color: var(--text); }
   .hero p.sub {
     color: var(--muted);
     font-size: 1rem;
@@ -231,7 +231,7 @@
     cursor: pointer;
     transition: all 0.15s;
   }
-  .frame-btn:hover {
+  .frame-btn:hover, .hero .frame-btn:is(:focus-visible) {
     border-color: var(--muted);
     color: var(--text);
   }
@@ -357,7 +357,7 @@
     color: var(--muted);
   }
   .osd-panel.awaiting-weight .bs-bar-fill {
-    width: 0 !important;
+    transform: scaleX(0) !important;
     opacity: 0.35;
   }
   .osd-stat-locked .osd-stat-value {
@@ -635,9 +635,10 @@
   .bs-bar-fill {
     height: 100%;
     background: linear-gradient(to right, #FF4D1A 0%, #FF4D1A 50%, #3DDC97 75%, #3DDC97 100%);
-    border-radius: 2px;
-    width: 0%;
-    transition: width 260ms ease-out;
+    width: 100%;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 260ms ease-out;
   }
 
   /* ===== CONTENT SECTIONS ===== */
@@ -811,7 +812,7 @@
     transition: background-color 200ms ease-out;
   }
   .tool-summary::-webkit-details-marker { display: none; }
-  .tool-summary:hover { background: rgba(255,255,255,0.03); }
+  .tool-summary:is(:hover, :focus-visible) { background: rgba(255,255,255,0.03); }
   .tool-summary::after { content: '+'; color: var(--orange); font-size: 1rem; font-weight: 700; }
   details[open] > .tool-summary::after { content: '−'; }
   .tool-body {
@@ -998,7 +999,7 @@
     cursor: pointer;
     transition: background-color 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out;
   }
-  .tune-chip:hover { border-color: var(--muted); color: var(--text); }
+  .tune-chip:is(:hover, :focus-visible) { border-color: var(--muted); color: var(--text); }
   .tune-chip.on {
     background: var(--orange);
     border-color: var(--orange);
@@ -1172,7 +1173,7 @@
     color: var(--muted);
     cursor: pointer;
   }
-  .tune-notes summary:hover { color: var(--text); }
+  .tune-notes summary:is(:hover, :focus-visible) { color: var(--text); }
   .tune-notes ul { margin: 8px 0 0 16px; }
   .tune-notes li {
     font-size: 0.75rem;
@@ -1194,7 +1195,7 @@
     transition: background-color 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out;
     width: 100%;
   }
-  .tune-copy:hover { background: rgba(255,77,26,.1); }
+  .tune-copy:is(:hover, :focus-visible) { background: rgba(255,77,26,.1); }
   .tune-copy.copied {
     border-color: var(--green);
     color: var(--green);
@@ -1220,7 +1221,7 @@
     color: var(--muted);
     cursor: pointer;
   }
-  .tune-pending summary:hover { color: var(--text); }
+  .tune-pending summary:is(:hover, :focus-visible) { color: var(--text); }
   .tune-pending ul { margin: 12px 0 0 18px; }
   .tune-pending li {
     font-size: 0.75rem;
@@ -1334,10 +1335,8 @@
     border-radius: 999px;
     text-decoration: none;
     white-space: nowrap;
-    transition: opacity 0.15s;
     flex-shrink: 0;
   }
-  .buy-btn:hover { opacity: 0.8; }
   /* Build-specific setup gotcha, e.g. an inverted board's CLI alignment. */
   .build-note {
     margin-top: 10px;
@@ -1399,11 +1398,9 @@
     border-radius: 4px;
     text-decoration: none;
     text-align: center;
-    transition: opacity 0.15s;
     align-self: flex-start;
     margin-top: 4px;
   }
-  .shop-btn:hover { opacity: 0.8; }
 
   /* === HIRE / CONTACT === */
   .hire-sub {
@@ -1512,7 +1509,7 @@
     cursor: pointer;
     transition: opacity 0.15s;
   }
-  .contact-submit:hover { opacity: 0.85; }
+  .contact-submit:is(:hover, :focus-visible) { opacity: 0.85; }
   .contact-submit:disabled { opacity: 0.5; cursor: not-allowed; }
   .contact-success {
     font-family: 'JetBrains Mono', monospace;
@@ -1535,7 +1532,7 @@
     margin-top: 14px;
   }
   .contact-email-line a { color: var(--orange); text-decoration: none; }
-  .contact-email-line a:hover { text-decoration: underline; }
+  .contact-email-line a:is(:hover, :focus-visible) { text-decoration: underline; }
 
   /* ===== MEET RYFLY ===== */
   .meet-ryfly-panel {
@@ -1594,7 +1591,7 @@
     align-items: center;
     transition: opacity 200ms ease-out;
   }
-  .social-btn:hover { opacity: 0.85; }
+  .social-btn:is(:hover, :focus-visible) { opacity: 0.85; }
   .social-btn.yt { background: #FF0000; }
   .social-btn.ig { background: linear-gradient(45deg, #833ab4, #fd1d1d, #fcb045); }
   .ryfly-follow-note {
@@ -1620,7 +1617,7 @@
     border-radius: 3px;
     transition: background-color 200ms ease-out, color 200ms ease-out;
   }
-  .sim-launch-btn:hover {
+  .sim-launch-btn:is(:hover, :focus-visible) {
     background: var(--orange);
     color: var(--bg);
   }
@@ -1641,7 +1638,7 @@
     transition: border-color 200ms ease-out;
     gap: 8px;
   }
-  .sim-teaser-card:hover { border-color: var(--orange); }
+  .sim-teaser-card:is(:hover, :focus-visible) { border-color: var(--orange); }
   .sim-teaser-card img {
     /* negative margins only SHIFT a box, they don't grow it — width:100%
        resolves against the padded content area (same as the text below),
@@ -1703,7 +1700,7 @@
     cursor: pointer;
     transition: color 200ms ease-out, border-color 200ms ease-out;
   }
-  .copy-link-btn:hover { color: var(--orange); border-color: var(--orange); }
+  .copy-link-btn:is(:hover, :focus-visible) { color: var(--orange); border-color: var(--orange); }
 
   /* Bench validation — model vs measured table under the disclaimer */
   .bench-validation {
@@ -1753,10 +1750,10 @@
 
   /* The hover cue itself is not motion, so it stays for reduced-motion users
      too; only the easing and the lift below are conditional. */
-  .frame-card:hover,
-  .tune-card:hover,
-  .pick-card:hover,
-  .build-card:hover { border-color: var(--orange); }
+  .frame-card:hover, .frame-card:focus-within,
+  .tune-card:hover, .tune-card:focus-within,
+  .pick-card:hover, .pick-card:focus-within,
+  .build-card:hover, .build-card:focus-within { border-color: var(--orange); }
 
   @media (prefers-reduced-motion: no-preference) {
     .frame-card, .tune-card, .pick-card, .build-card {
@@ -1807,8 +1804,8 @@
   .guides-list { grid-template-columns: 1fr 1fr 1fr; }
   @media (max-width: 900px) { .guides-list { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 640px) { .guides-list { grid-template-columns: 1fr; } }
-  .guide-card { display: block; color: inherit; text-decoration: none; transition: border-color .15s; }
-  .guide-card:hover { border-color: var(--orange); }
+  .guide-card { display: block; color: inherit; text-decoration: none; }
+  .guide-card:is(:hover, :focus-visible) { border-color: var(--orange); }
   .guide-card p { color: var(--muted); font-size: 0.875rem; margin: 0; }
   .guide-kicker {
     font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; letter-spacing: 0.08em;
@@ -1830,7 +1827,7 @@
   .guide strong { color: var(--text); font-weight: 600; }
   .guide em { color: var(--green); font-style: normal; }
   .guide a { color: var(--orange); text-decoration: none; border-bottom: 1px solid rgba(255,77,26,.35); }
-  .guide a:hover { border-bottom-color: var(--orange); }
+  .guide a:is(:hover, :focus-visible) { border-bottom-color: var(--orange); }
   .guide ul { margin: 0 0 14px 20px; line-height: 1.6; }
   .guide li { margin-bottom: 6px; }
   .guide table {
@@ -1851,13 +1848,84 @@
     background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
     font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; line-height: 1.5; overflow-x: auto; margin: 0 0 14px;
   }
-  .guide-related {
-    margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--border);
-  }
+  .guide-related { position: relative; margin-top: 36px; padding: 22px 24px 16px; background: #0A0B0E; border: 1px solid var(--border); border-radius: 6px; }
   .guide-related ul { list-style: none; margin: 0; }
-  .guide-related li { margin-bottom: 8px; }
-  .guide-related li::before { content: '→ '; color: var(--green); font-family: 'JetBrains Mono', monospace; }
+  .guide-related ul::before { content: '// next'; display: block; margin-bottom: 8px; font: .75rem 'JetBrains Mono', monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--green); }
+  .guide-related li { display: flex; align-items: baseline; margin-bottom: 4px; }
+  .guide-related li::before { content: '→'; display: inline-block; color: var(--green); font-family: 'JetBrains Mono', monospace; }
+  .guide-related li:is(:hover, :focus-within)::before { color: var(--orange); }
+  .guide-related a { padding: 4px 0; margin-left: 12px; border-bottom: 0; }
   @media (max-width: 600px) {
     .guide h1 { font-size: 1.5625rem; }
     .guide table { display: block; overflow-x: auto; }
+    /* phones: wrap the label column and tighten cells so buy pills are not clipped at the scroll edge */
+    .guide td:first-child { white-space: normal; }
+    .guide th, .guide td { padding-left: 8px; padding-right: 8px; }
+  }
+
+  /* ===== JUICE PASS =====
+     Transform/opacity only, 150-300ms ease-out. Transitions and positional
+     nudges live only in the no-preference query at the end, so `reduce` gets
+     the same cues with no movement. Every :hover has a :focus-visible twin.
+     Affiliate CTAs never move. `header ~ *` scopes the base rules: sim.html
+     shares this sheet but has no <header>. */
+  :root { --focus: var(--green); }
+
+  /* Base link. There was none, so a link outside a styled context fell back
+     to browser blue. :where() keeps it at zero specificity: every contextual
+     rule above still wins. Green ring: orange vanishes on orange buttons. */
+  :where(header ~ * a) { color: var(--orange); text-decoration-color: rgba(255,77,26,.4); text-underline-offset: 3px; }
+  :where(header ~ * a:hover) { text-decoration-color: currentColor; }
+  :where(:is(header, header ~ *) :is(a, button, summary, [role="button"], [tabindex]):focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .field select:focus, .field input:focus { box-shadow: 0 0 0 1px var(--orange); }
+
+  /* Affiliate buttons: a light wipe crosses the fill; the box never moves. */
+  .buy-btn, .shop-btn { position: relative; overflow: hidden; isolation: isolate; }
+  .buy-btn::before, .shop-btn::before { content: ''; position: absolute; inset: 0; z-index: -1; background: #fff; opacity: .22; transform: scaleX(0); transform-origin: left; }
+  .buy-btn:is(:hover, :focus-visible)::before, .shop-btn:is(:hover, :focus-visible)::before { transform: none; }
+  .shop-btn::after { content: '→'; display: inline-block; margin-left: 6px; }
+
+  /* Guide-table buy links: `.guide table a` zeroed their only hover cue. */
+  .guide table a[href*="/go/"] { display: inline-block; white-space: nowrap; padding: 1px 8px; border: 1px solid rgba(255,77,26,.5); border-radius: 999px; font: .75rem 'JetBrains Mono', monospace; }
+  .guide table a[href*="/go/"]::after { content: ' ↗'; }
+  .guide table a[href*="/go/"]:is(:hover, :focus-visible) { background: var(--orange); border-color: var(--orange); color: var(--bg); }
+  .frame-card.frame-card-shop:hover { transform: none; }
+  .hero .frame-btn { transition-property: border-color, color, background-color; }
+
+  .guide-card::after { content: 'Read →'; display: inline-block; margin-top: 14px; font: .75rem 'JetBrains Mono', monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--orange); }
+  .guide-card:is(:hover, :focus-visible) .bc-corner { opacity: 1; border-color: var(--orange); }
+
+  /* Nav: the current page was marked with the same orange as every link.
+     `transform: none` is the on state for the bar in both orientations. */
+  #site-nav a { position: relative; }
+  #site-nav a::after { content: ''; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px; background: var(--orange); transform: scaleX(0); transform-origin: left; }
+  #site-nav a[aria-current="page"] { color: var(--text); }
+  #site-nav a:is(:hover, :focus-visible, [aria-current="page"])::after { transform: none; }
+  @media (max-width: 767px) {
+    #site-nav a::after { top: 12px; bottom: 12px; right: auto; width: 2px; height: auto; transform: scaleY(0); }
+  }
+
+  /* Corner brackets, the OSD panel's two-corner motif. blackbox.js already
+     sets .is-over on drag; label.bb-drop outranks blackbox.css, loaded later. */
+  .bb-drop { position: relative; }
+  .bb-drop::before, .bb-drop::after, .guide-related::before, .guide-related::after { content: ''; position: absolute; width: 18px; height: 18px; border: 2px solid var(--green); opacity: .45; pointer-events: none; }
+  .bb-drop::before, .guide-related::before { top: 10px; left: 10px; border-right: 0; border-bottom: 0; }
+  .bb-drop::after, .guide-related::after { bottom: 10px; right: 10px; border-left: 0; border-top: 0; }
+  .bb-drop:is(:hover, .is-over, :focus-visible)::before, .bb-drop:is(:hover, .is-over, :focus-visible)::after { opacity: 1; border-color: var(--orange); }
+  label.bb-drop:focus-visible { outline-color: var(--focus); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .buy-btn::before, .shop-btn::before { transition: transform 220ms ease-out; }
+    .shop-btn::after, .guide-card::after, .guide-related li::before, #site-nav a::after { transition: transform 200ms ease-out, color 200ms ease-out; }
+    .guide-card { transition: border-color 200ms ease-out, transform 200ms ease-out; }
+    .guide-card .bc-corner, .bb-drop::before, .bb-drop::after { transition: transform 200ms ease-out, opacity 200ms ease-out, border-color 200ms ease-out; }
+    .shop-btn:is(:hover, :focus-visible)::after, .guide-related li:is(:hover, :focus-within)::before { transform: translateX(3px); }
+    .guide-card:hover { transform: translateY(-2px); }
+    .guide-card:is(:hover, :focus-visible)::after { transform: translateX(4px); }
+    .guide-card:is(:hover, :focus-visible) .bc-tl { transform: translate(3px, 3px); }
+    .guide-card:is(:hover, :focus-visible) .bc-tr { transform: translate(-3px, 3px); }
+    .guide-card:is(:hover, :focus-visible) .bc-bl { transform: translate(3px, -3px); }
+    .guide-card:is(:hover, :focus-visible) .bc-br { transform: translate(-3px, -3px); }
+    .bb-drop:is(:hover, .is-over, :focus-visible)::before { transform: translate(4px, 4px); }
+    .bb-drop:is(:hover, .is-over, :focus-visible)::after { transform: translate(-4px, -4px); }
   }
