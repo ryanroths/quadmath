@@ -1,0 +1,14 @@
+# Version updates for the Actions the workflows use. Grouped, so a release
+# day is one PR rather than one per action. These PRs touch .github/**,
+# which agent_policy.json denies, so they need human-override to merge.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(ci)"
