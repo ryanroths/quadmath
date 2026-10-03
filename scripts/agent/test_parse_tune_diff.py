@@ -377,8 +377,11 @@ def rebuild_diff(entry: dict, fixture: dict) -> str:
             lines.append("set d_%s = %d" % (axis, d_term))
 
     lines += ["#", "# rateprofile 0", "rateprofile 0"]
+    # Always carried, even with no rate values: a rates-null entry still
+    # recorded its type (65-betafpv-stock), and leaving it out made that entry
+    # depend on the parser's absent-line default instead of its own data.
+    lines.append("set rates_type = %s" % entry["rateType"])
     if entry["rates"]:
-        lines.append("set rates_type = %s" % entry["rateType"])
         for axis in AXES:
             rc_rate, srate, expo = entry["rates"][axis]
             lines.append("set %s_rc_rate = %d" % (axis, rc_rate))
@@ -567,10 +570,65 @@ class Refusals(unittest.TestCase):
 
     def test_no_rate_lines_emits_null_rates(self):
         # 75-betafpv-stock is exactly this case: the card hides the CLI button.
+        # The split also drops the rates_type line, so on this 4.5.1 header the
+        # firmware default applies -- ACTUAL, not the BETAFLIGHT this test used
+        # to assert, which was the misread tune-database.js documents.
         no_rates = GOOD_DIFF.split("# rateprofile 0")[0] + "save\n"
         entry = parser.parse_tune_diff(no_rates, frame=65, brand="BetaFPV")
         self.assertIsNone(entry["rates"])
-        self.assertEqual(entry["rateType"], "BETAFLIGHT")
+        self.assertEqual(entry["rateType"], "ACTUAL")
+
+    def _without_type_line(self, version: str | None) -> str:
+        """GOOD_DIFF with its rates_type line removed and the header set to
+        `version` -- or removed entirely when version is None."""
+        text = GOOD_DIFF.replace("set rates_type = BETAFLIGHT\n", "")
+        self.assertNotIn("rates_type", text)
+        header = "# Betaflight / STM32G473 (SG47) 4.5.1 Feb 14 2025 / 09:12:44 (abc1234)\n"
+        self.assertIn(header, text)
+        if version is None:
+            return text.replace(header, "")
+        return text.replace(header, header.replace("4.5.1", version))
+
+    def test_absent_rates_type_follows_the_firmware_default(self):
+        """Betaflight defaults rates_type to BETAFLIGHT through 4.2 and to
+        ACTUAL from 4.3.0 on (controlrate_profile.c), and a diff omits a
+        setting at its default -- so the version decides."""
+        for version, expected in (("4.2.11", "BETAFLIGHT"), ("4.2.0", "BETAFLIGHT"),
+                                  ("4.3.0", "ACTUAL"), ("4.5.1", "ACTUAL"),
+                                  ("2025.12.5-alpha", "ACTUAL"), ("2026.6.1", "ACTUAL")):
+            with self.subTest(version=version):
+                entry = parser.parse_tune_diff(self._without_type_line(version),
+                                               frame=65, brand="BetaFPV")
+                self.assertEqual(entry["rateType"], expected)
+
+    def test_explicit_rates_type_wins_over_the_default(self):
+        entry = parser.parse_tune_diff(GOOD_DIFF, frame=65, brand="BetaFPV")
+        self.assertEqual(entry["rateType"], "BETAFLIGHT", "GOOD_DIFF says so on a 4.5.1 header")
+
+    def test_rate_values_with_no_type_and_no_version_are_refused(self):
+        """Without the header the scale cannot be known, and guessing it is
+        the misread that once labelled every card BETAFLIGHT."""
+        exc = self.assert_refused(self._without_type_line(None), "rate scale is ambiguous")
+        self.assertIn("set rates_type", " ".join(exc.reasons))
+
+    def test_indented_paste_still_reads_the_version_header(self):
+        """A diff pasted as an indented markdown code block keeps each
+        line's leading spaces. `set` lines already tolerate that; the header
+        must too, or a 4.3+ diff with no rates_type is refused for a header
+        it does have."""
+        flat = self._without_type_line("4.5.1")
+        text = "".join("    " + line for line in flat.splitlines(True))
+        entry = parser.parse_tune_diff(text, frame=65, brand="BetaFPV")
+        self.assertEqual(entry["rateType"], "ACTUAL")
+        self.assertIn("BF 4.5.1", entry["notes"])
+
+    def test_no_rates_no_type_no_version_is_not_refused(self):
+        """With no rate values the type is moot -- a PIDs-only diff must not
+        be refused over a field nothing reads."""
+        text = self._without_type_line(None).split("# rateprofile 0")[0] + "save\n"
+        entry = parser.parse_tune_diff(text, frame=65, brand="BetaFPV")
+        self.assertIsNone(entry["rates"])
+        self.assertEqual(entry["rateType"], "ACTUAL")
 
     def test_pid_over_255_is_refused(self):
         self.assert_refused(GOOD_DIFF.replace("set p_roll = 54", "set p_roll = 300"),

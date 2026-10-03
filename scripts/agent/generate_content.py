@@ -55,8 +55,18 @@ import urllib.request
 
 API_URL = "https://api.anthropic.com/v1/messages"
 API_VERSION = "2023-06-01"
-MODEL = "claude-fable-5"
-MAX_TOKENS = 4096
+# Same tier and per-token price as claude-fable-5, which it succeeds. The
+# request below is single-turn with no tools, thinking config, sampling
+# params or prefill, so none of 5.1's request-surface changes apply.
+MODEL = "claude-fable-5-1"
+# Fable thinks on every request and the thinking counts against this cap,
+# on top of the reply. A metadata_gap reply is a whole HTML file -- gear.html
+# alone is ~5-6K tokens -- so 4096 could end mid-file. A cut-off reply is
+# caught by stop_reason in call_api either way; this just makes it rare.
+MAX_TOKENS = 16000
+# Non-streaming: nothing arrives until generation ends, so the single read
+# must outlast the longest reply MAX_TOKENS allows.
+API_TIMEOUT_S = 600
 GITHUB_API = "https://api.github.com"
 POLICY_PATH = "scripts/ci/agent_policy.json"
 ACTIONABLE = ("metadata_gap", "build_orphan")
@@ -556,6 +566,22 @@ class ModelRefusal(RuntimeError):
     """
 
 
+class ModelTruncated(ModelRefusal):
+    """The reply stopped before it finished: usable text, but not all of it.
+
+    A subclass so try_candidates skips the gap and names it exactly as it
+    does a refusal -- same treatment, distinct message.
+    """
+
+
+# The stops that mean the model ended its reply on purpose. With no tools and
+# no streaming nothing else should arrive, and whatever else does --
+# model_context_window_exceeded, or a reason added later -- is an HTTP 200
+# whose text may be a partial page. An allowlist, so a new reason is held
+# back by default instead of written.
+FINISHED_STOPS = ("end_turn", "stop_sequence")
+
+
 def call_api(api_key: str, system: str, user: str) -> str:
     body = json.dumps(
         {
@@ -575,9 +601,17 @@ def call_api(api_key: str, system: str, user: str) -> str:
         },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=120) as resp:
+    with urllib.request.urlopen(req, timeout=API_TIMEOUT_S) as resp:
         data = json.loads(resp.read().decode())
     stop_reason = data.get("stop_reason")
+    # A max_tokens stop returns HTTP 200 with partial text. For a full-file
+    # rewrite that is a truncated page, and validation does not reliably
+    # notice a missing tail -- so it never travels further than here.
+    if stop_reason == "max_tokens":
+        raise ModelTruncated(
+            "model output was cut off at max_tokens=%d -- a partial file is "
+            "never written" % MAX_TOKENS
+        )
     parts = [b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"]
     text = "".join(parts).strip()
     # Empty text is checked alongside stop_reason because they are the same
@@ -585,6 +619,11 @@ def call_api(api_key: str, system: str, user: str) -> str:
     # as a missing meta description, which names the wrong cause.
     if stop_reason == "refusal" or not text:
         raise ModelRefusal("model refused generation (stop_reason=%s)" % stop_reason)
+    if stop_reason not in FINISHED_STOPS:
+        raise ModelTruncated(
+            "model stopped without finishing (stop_reason=%s) -- a partial "
+            "file is never written" % stop_reason
+        )
     return text
 
 
