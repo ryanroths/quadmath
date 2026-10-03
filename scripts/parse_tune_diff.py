@@ -158,8 +158,12 @@ _DUMP_MARKER = re.compile(r"^\s*#?\s*dump(?:\s+\w+)*\s*$", re.MULTILINE)
 # assert, so a future "rc.1" would survive. A suffix using some other
 # separator would simply not be captured, degrading to the old
 # truncated-but-correct-prefix behaviour rather than failing the parse.
+#
+# Leading whitespace is allowed, as in _SET_RE: a diff pasted as an indented
+# markdown code block keeps its header, and from 4.3 on the header is what
+# says an absent rates_type means ACTUAL.
 _VERSION_RE = re.compile(
-    r"^#\s*Betaflight\s*/\s*(\S+)\s*\(([^)]*)\)\s*"
+    r"^\s*#\s*Betaflight\s*/\s*(\S+)\s*\(([^)]*)\)\s*"
     r"(\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?)",
     re.MULTILINE | re.IGNORECASE,
 )

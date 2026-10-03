@@ -611,6 +611,17 @@ class Refusals(unittest.TestCase):
         exc = self.assert_refused(self._without_type_line(None), "rate scale is ambiguous")
         self.assertIn("set rates_type", " ".join(exc.reasons))
 
+    def test_indented_paste_still_reads_the_version_header(self):
+        """A diff pasted as an indented markdown code block keeps each
+        line's leading spaces. `set` lines already tolerate that; the header
+        must too, or a 4.3+ diff with no rates_type is refused for a header
+        it does have."""
+        flat = self._without_type_line("4.5.1")
+        text = "".join("    " + line for line in flat.splitlines(True))
+        entry = parser.parse_tune_diff(text, frame=65, brand="BetaFPV")
+        self.assertEqual(entry["rateType"], "ACTUAL")
+        self.assertIn("BF 4.5.1", entry["notes"])
+
     def test_no_rates_no_type_no_version_is_not_refused(self):
         """With no rate values the type is moot -- a PIDs-only diff must not
         be refused over a field nothing reads."""
