@@ -75,7 +75,7 @@
       Drop a Betaflight log. You get the four things a tune actually hinges on — what noise
       reaches the PID loop, how each axis follows the stick, whether the motors have headroom,
       and whether propwash is eating your dives — plus a CLI diff to try one change at a time.
-      Everything runs in this tab. The log is never uploaded.
+      The analysis runs in this tab. The log is never uploaded.
     </p>
 
     <label class="bb-drop" id="drop" tabindex="0" role="button" aria-label="Choose or drop a blackbox log file">
@@ -120,7 +120,7 @@
 
     <section class="section" id="advisor">
       <h2>Tune Advisor</h2>
-      <p class="sub">A second opinion on the findings above from a model that reads the numbers — spectra peaks, step response, saturation, your PIDs and filters — and argues back when a rule got it wrong. Sends the metrics JSON only — the numbers above plus the firmware, board and craft name from the log header; the log itself never leaves this tab. Ten reads an hour per person.</p>
+      <p class="sub">A second opinion on the findings above from a model that reads the numbers — spectra peaks, step response, saturation, your PIDs and filters — and argues back when a rule got it wrong. Sends the analysis as JSON only — the metrics and findings above plus the firmware, board, craft name and debug mode from the log header; the log itself never leaves this tab. Ten reads an hour per person.</p>
       <div class="bb-actions">
         <button class="bb-btn" id="askAdvisor" type="button">Ask the Advisor</button>
         <span class="bb-status" id="advisorStatus" aria-live="polite"></span>

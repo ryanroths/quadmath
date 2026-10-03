@@ -1,6 +1,6 @@
 # QuadMath
 
-**[quadmath.com](https://quadmath.com)** — build math, tunes, and a flight sim for tiny whoops (65–85mm FPV drones). Static site with no accounts and no cookies: the only third-party script is cookieless Cloudflare Web Analytics, and the only backend is the optional Tune Advisor Worker behind the blackbox analyzer. Built and maintained by [RyFly](https://quadmath.com/hire.html).
+**[quadmath.com](https://quadmath.com)** — build math, tunes, and a flight sim for tiny whoops (65–85mm FPV drones). Static site with no accounts and no cookies. Third parties it loads: cookieless Cloudflare Web Analytics and Google Fonts on every page, and three.js add-ons from jsDelivr on the sim. The hire form posts to Formspree, and the only backend of its own is the optional Tune Advisor Worker behind the blackbox analyzer. Built and maintained by [RyFly](https://quadmath.com/hire.html).
 
 ## What's here
 
