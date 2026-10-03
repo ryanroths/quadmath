@@ -380,6 +380,26 @@ class RefusalGuard(unittest.TestCase):
             src = fh.read()
         self.assertNotIn("fallbacks", src, "refusals must not reroute to another model")
 
+    def test_max_tokens_stop_raises_even_with_text(self):
+        """A cut-off full-file rewrite is a truncated page. It must never
+        reach validation, however much of the file did come back."""
+        with self.assertRaises(gc.ModelTruncated) as ctx:
+            call_api_with({"stop_reason": "max_tokens",
+                           "content": [{"type": "text", "text": "<html><head>"}]})
+        self.assertIn("max_tokens", str(ctx.exception))
+
+    def test_truncation_is_skipped_like_a_refusal(self):
+        """try_candidates catches ModelRefusal; truncation must ride the same
+        path so the gap is named and the run moves on."""
+        self.assertTrue(issubclass(gc.ModelTruncated, gc.ModelRefusal))
+
+    def test_thinking_blocks_are_not_read_as_text(self):
+        """Fable returns thinking blocks before the reply; only text is used."""
+        out = call_api_with({"stop_reason": "end_turn", "content": [
+            {"type": "thinking", "thinking": "", "signature": "x"},
+            {"type": "text", "text": "<html>ok</html>"}]})
+        self.assertEqual(out, "<html>ok</html>")
+
     def test_normal_response_still_returns_text(self):
         # The guard must not fire on a healthy generation.
         out = call_api_with(
