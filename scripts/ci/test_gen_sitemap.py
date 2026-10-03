@@ -5,8 +5,9 @@
 
 The generator used to emit CRLF, so its --check matched only a Windows
 checkout with core.autocrlf=true and could never pass on Linux CI or the Pi.
-These pin the LF output and the EOL-blind comparison. They read git history
-(CI checks out with fetch-depth 0) and write nothing.
+These pin the LF output and the EOL-blind comparison. They shell out to git
+and write nothing. CI runs them on a shallow checkout, where every page dates
+to the one commit present; nothing here compares dates, so that is fine.
 
 There is deliberately no pin on the checked-in sitemap.xml: <lastmod> comes
 from commit dates, and a squash merge can land on a later day than the branch
