@@ -16,7 +16,7 @@
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="QuadMath Blackbox Analyzer">
-<meta name="twitter:description" content="Drop a Betaflight .bbl. Get noise spectra, step response and tune suggestions. Nothing leaves your browser.">
+<meta name="twitter:description" content="Drop a Betaflight .bbl. Get noise spectra, step response and tune suggestions. The log never leaves your browser.">
 <meta name="twitter:image" content="https://quadmath.com/og-image.png">
 
 <link rel="icon" type="image/png" href="./favicon.png">
@@ -81,7 +81,7 @@
     <label class="bb-drop" id="drop" tabindex="0" role="button" aria-label="Choose or drop a blackbox log file">
       <div class="bb-drop-title">Drop a .bbl / .bfl / .txt here</div>
       <div class="bb-drop-sub">or click to choose. Flash dumps with several logs are fine — pick the flight after.</div>
-      <div class="bb-privacy"><b>local only</b> — decoded in a Web Worker, nothing leaves the browser</div>
+      <div class="bb-privacy"><b>local only</b> — decoded in a Web Worker, the log never leaves the browser</div>
       <input type="file" id="file" accept=".bbl,.bfl,.txt,.log,.BBL,.BFL,.TXT">
     </label>
 
@@ -120,7 +120,7 @@
 
     <section class="section" id="advisor">
       <h2>Tune Advisor</h2>
-      <p class="sub">A second opinion on the findings above from a model that reads the numbers — spectra peaks, step response, saturation, your PIDs and filters — and argues back when a rule got it wrong. Sends the metrics JSON only; the log itself never leaves this tab. Ten reads an hour per person.</p>
+      <p class="sub">A second opinion on the findings above from a model that reads the numbers — spectra peaks, step response, saturation, your PIDs and filters — and argues back when a rule got it wrong. Sends the metrics JSON only — the numbers above plus the firmware, board and craft name from the log header; the log itself never leaves this tab. Ten reads an hour per person.</p>
       <div class="bb-actions">
         <button class="bb-btn" id="askAdvisor" type="button">Ask the Advisor</button>
         <span class="bb-status" id="advisorStatus" aria-live="polite"></span>
