@@ -112,7 +112,19 @@ def build():
             out.append(f"    <lastmod>{lastmod}</lastmod>")
         out.append("  </url>")
     out.append("</urlset>")
-    return "\r\n".join(out) + "\r\n"
+    # LF, matching the index (.gitattributes pins sitemap.xml to eol=lf). This
+    # used to emit CRLF, which matched only a Windows checkout with
+    # core.autocrlf=true, so --check could never pass on Linux CI or the Pi.
+    return "\n".join(out) + "\n"
+
+
+def is_current(old, new):
+    """True when the file on disk already says what build() would write.
+
+    Line endings are folded first, so a checkout that still has CRLF on disk
+    is not reported stale over an EOL difference git itself ignores.
+    """
+    return old is not None and old.replace("\r\n", "\n") == new
 
 
 def main():
@@ -127,7 +139,7 @@ def main():
         old = None
 
     if args.check:
-        if old != new:
+        if not is_current(old, new):
             print("sitemap.xml is stale -- run: python scripts/ci/gen_sitemap.py")
             return 1
         print("sitemap.xml is current")
@@ -135,7 +147,7 @@ def main():
 
     io.open("sitemap.xml", "w", encoding="utf-8", newline="").write(new)
     n = new.count("<loc>")
-    print(f"sitemap.xml written: {n} urls" + ("" if old != new else " (unchanged)"))
+    print(f"sitemap.xml written: {n} urls" + (" (unchanged)" if is_current(old, new) else ""))
     return 0
 
 

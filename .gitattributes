@@ -3,3 +3,6 @@
 vendor/** -text -diff linguist-vendored
 # Served verbatim by GitHub Pages; keep it LF and free of any BOM.
 robots.txt text eol=lf
+# Written LF by scripts/ci/gen_sitemap.py; pinned so every checkout (Windows,
+# Linux CI, the Pi) holds the bytes its --check compares against.
+sitemap.xml text eol=lf
