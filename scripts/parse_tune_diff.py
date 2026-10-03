@@ -36,10 +36,15 @@ value the pilot is flying. So:
                 assumed default: the schema in tune-database.js defines the
                 yaw row as [P, I, 0], and all eight hand-authored entries
                 carry 0 there.
-  * rateType -- `rates_type` absent means BETAFLIGHT. This is the one default
-                the parser applies, because the rate *type* default is the
-                same on every target across BF 4.4 and 4.5, unlike the
-                numeric defaults above.
+  * rateType -- a diff omits rates_type while it sits at the firmware
+                default, so an absent line means that firmware's default:
+                BETAFLIGHT through 4.2, ACTUAL from 4.3.0 on, including the
+                date-versioned releases (controlrate_profile.c at 4.2.11 vs
+                4.3.0). The version comes from the `# Betaflight` header.
+                With no header the scale is ambiguous, so rate values with
+                no type line are refused rather than guessed -- the misread
+                that once labelled every card BETAFLIGHT. With no rate
+                values at all the type is moot and recorded as ACTUAL.
 
 UNITS
 -----
@@ -153,8 +158,12 @@ _DUMP_MARKER = re.compile(r"^\s*#?\s*dump(?:\s+\w+)*\s*$", re.MULTILINE)
 # assert, so a future "rc.1" would survive. A suffix using some other
 # separator would simply not be captured, degrading to the old
 # truncated-but-correct-prefix behaviour rather than failing the parse.
+#
+# Leading whitespace is allowed, as in _SET_RE: a diff pasted as an indented
+# markdown code block keeps its header, and from 4.3 on the header is what
+# says an absent rates_type means ACTUAL.
 _VERSION_RE = re.compile(
-    r"^#\s*Betaflight\s*/\s*(\S+)\s*\(([^)]*)\)\s*"
+    r"^\s*#\s*Betaflight\s*/\s*(\S+)\s*\(([^)]*)\)\s*"
     r"(\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?)",
     re.MULTILINE | re.IGNORECASE,
 )
@@ -171,6 +180,20 @@ def parse_settings(text: str) -> dict[str, str]:
     for match in _SET_RE.finditer(text):
         found[match.group(1).lower()] = match.group(2).strip()
     return found
+
+
+def default_rate_type(version: str | None) -> str | None:
+    """Betaflight's rates_type default for the firmware that wrote a diff.
+
+    BETAFLIGHT through 4.2, ACTUAL from 4.3.0 on -- src/main/fc/
+    controlrate_profile.c sets RATES_TYPE_BETAFLIGHT at 4.2.11 and
+    RATES_TYPE_ACTUAL at 4.3.0, 4.5.1 and the date-versioned master. None
+    when the version is unknown. A pre-release suffix does not matter here.
+    """
+    match = re.match(r"(\d+)\.(\d+)", version or "")
+    if not match:
+        return None
+    return "BETAFLIGHT" if (int(match.group(1)), int(match.group(2))) < (4, 3) else "ACTUAL"
 
 
 def parse_header(text: str) -> dict[str, str | None]:
@@ -518,7 +541,18 @@ def parse_tune_diff(
     rates = extract_rates(settings, problems)
     check_ranges(pids, rates, problems)
 
-    rate_type = (settings.get("rates_type") or "BETAFLIGHT").strip().upper()
+    rate_type = (settings.get("rates_type") or "").strip().upper()
+    if not rate_type:
+        rate_type = default_rate_type(header.get("version"))
+        if rate_type is None:
+            if rates is not None:
+                problems.append(
+                    "no `set rates_type` line and no `# Betaflight` version header, "
+                    "so the rate scale is ambiguous (an absent rates_type means "
+                    "BETAFLIGHT before 4.3 and ACTUAL from 4.3) -- paste the full "
+                    "`diff all` including its header, or add `set rates_type = ...`"
+                )
+            rate_type = "ACTUAL"
     if rate_type not in RATE_TYPES:
         problems.append("rates_type %r is not one of %s" % (rate_type, ", ".join(RATE_TYPES)))
 

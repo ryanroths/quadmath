@@ -1,0 +1,20 @@
+# GitHub Pages builds this repo with Jekyll (3.10). Jekyll already skips
+# dotfiles and anything starting with "_", and Pages always drops CNAME, but
+# everything else is published -- including repo tooling and notes that were
+# never meant to be pages. Listing them here keeps them in the repo and off
+# quadmath.com.
+#
+# Directories need the trailing "/". Jekyll matches a bare entry as a path
+# prefix, so "tools" would also drop the tools.html redirect stub.
+#
+# Do not add anything the site loads: vendor/ (blackbox.html imports the log
+# parser from it), data/, content/, ghosts/, go/, assets/, audio/.
+exclude:
+  - README.md
+  - PROJECT_NOTES.md
+  - CLAUDE-CODE-HANDOFF.md
+  - scripts/
+  - tools/
+  - fdm.py
+  - build_go_links.py
+  - go_map.json

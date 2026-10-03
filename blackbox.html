@@ -16,7 +16,7 @@
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="QuadMath Blackbox Analyzer">
-<meta name="twitter:description" content="Drop a Betaflight .bbl. Get noise spectra, step response and tune suggestions. Nothing leaves your browser.">
+<meta name="twitter:description" content="Drop a Betaflight .bbl. Get noise spectra, step response and tune suggestions. The log never leaves your browser.">
 <meta name="twitter:image" content="https://quadmath.com/og-image.png">
 
 <link rel="icon" type="image/png" href="./favicon.png">
@@ -37,7 +37,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=optional" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=5b43fd8fb509">
+<link rel="stylesheet" href="style.css?v=2f595d174b9d">
 <link rel="stylesheet" href="blackbox.css">
 <!-- Preload the WASM-bearing module so the worker does not pay for it on the
      first drop. It is ~265 KB and only ever fetched once. -->
@@ -58,7 +58,7 @@
       <a href="/#calculator">Calculator</a>
       <a href="sim.html">Sim</a>
       <a href="tune-database.html">Tunes</a>
-      <a href="blackbox.html" class="active" aria-current="page" style="color:#FF4D1A">Blackbox</a>
+      <a href="blackbox.html" class="active" aria-current="page">Blackbox</a>
       <a href="bench.html">Bench</a>
       <a href="gear.html">Gear</a>
       <a href="guides.html">Guides</a>
@@ -75,13 +75,13 @@
       Drop a Betaflight log. You get the four things a tune actually hinges on — what noise
       reaches the PID loop, how each axis follows the stick, whether the motors have headroom,
       and whether propwash is eating your dives — plus a CLI diff to try one change at a time.
-      Everything runs in this tab. The log is never uploaded.
+      The analysis runs in this tab. The log is never uploaded.
     </p>
 
     <label class="bb-drop" id="drop" tabindex="0" role="button" aria-label="Choose or drop a blackbox log file">
       <div class="bb-drop-title">Drop a .bbl / .bfl / .txt here</div>
       <div class="bb-drop-sub">or click to choose. Flash dumps with several logs are fine — pick the flight after.</div>
-      <div class="bb-privacy"><b>local only</b> — decoded in a Web Worker, nothing leaves the browser</div>
+      <div class="bb-privacy"><b>local only</b> — decoded in a Web Worker, the log never leaves the browser</div>
       <input type="file" id="file" accept=".bbl,.bfl,.txt,.log,.BBL,.BFL,.TXT">
     </label>
 
@@ -120,7 +120,7 @@
 
     <section class="section" id="advisor">
       <h2>Tune Advisor</h2>
-      <p class="sub">A second opinion on the findings above from a model that reads the numbers — spectra peaks, step response, saturation, your PIDs and filters — and argues back when a rule got it wrong. Sends the metrics JSON only; the log itself never leaves this tab. Ten reads an hour per person.</p>
+      <p class="sub">A second opinion on the findings above from a model that reads the numbers — spectra peaks, step response, saturation, your PIDs and filters — and argues back when a rule got it wrong. Sends the analysis as JSON only — the metrics and findings above plus the firmware, board, craft name and debug mode from the log header; the log itself never leaves this tab. Ten reads an hour per person.</p>
       <div class="bb-actions">
         <button class="bb-btn" id="askAdvisor" type="button">Ask the Advisor</button>
         <span class="bb-status" id="advisorStatus" aria-live="polite"></span>
