@@ -567,11 +567,19 @@ class ModelRefusal(RuntimeError):
 
 
 class ModelTruncated(ModelRefusal):
-    """The reply hit max_tokens: usable text, but not all of it.
+    """The reply stopped before it finished: usable text, but not all of it.
 
     A subclass so try_candidates skips the gap and names it exactly as it
     does a refusal -- same treatment, distinct message.
     """
+
+
+# The stops that mean the model ended its reply on purpose. With no tools and
+# no streaming nothing else should arrive, and whatever else does --
+# model_context_window_exceeded, or a reason added later -- is an HTTP 200
+# whose text may be a partial page. An allowlist, so a new reason is held
+# back by default instead of written.
+FINISHED_STOPS = ("end_turn", "stop_sequence")
 
 
 def call_api(api_key: str, system: str, user: str) -> str:
@@ -611,6 +619,11 @@ def call_api(api_key: str, system: str, user: str) -> str:
     # as a missing meta description, which names the wrong cause.
     if stop_reason == "refusal" or not text:
         raise ModelRefusal("model refused generation (stop_reason=%s)" % stop_reason)
+    if stop_reason not in FINISHED_STOPS:
+        raise ModelTruncated(
+            "model stopped without finishing (stop_reason=%s) -- a partial "
+            "file is never written" % stop_reason
+        )
     return text
 
 

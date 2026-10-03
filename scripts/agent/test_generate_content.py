@@ -388,10 +388,38 @@ class RefusalGuard(unittest.TestCase):
                            "content": [{"type": "text", "text": "<html><head>"}]})
         self.assertIn("max_tokens", str(ctx.exception))
 
+    def test_unfinished_stop_with_text_raises(self):
+        """Only end_turn and stop_sequence mean the reply is whole. Anything
+        else that arrives with text is held back, including reasons the API
+        adds later."""
+        for reason in ("model_context_window_exceeded", "pause_turn",
+                       "some_future_reason", None):
+            with self.subTest(stop_reason=reason):
+                with self.assertRaises(gc.ModelTruncated) as ctx:
+                    call_api_with({"stop_reason": reason,
+                                   "content": [{"type": "text", "text": "<html><head>"}]})
+                self.assertIn("stop_reason=%s" % reason, str(ctx.exception))
+
+    def test_stop_sequence_returns_text(self):
+        out = call_api_with({"stop_reason": "stop_sequence",
+                             "content": [{"type": "text", "text": "<html>ok</html>"}]})
+        self.assertEqual(out, "<html>ok</html>")
+
     def test_truncation_is_skipped_like_a_refusal(self):
-        """try_candidates catches ModelRefusal; truncation must ride the same
-        path so the gap is named and the run moves on."""
-        self.assertTrue(issubclass(gc.ModelTruncated, gc.ModelRefusal))
+        """The gap that came back cut off is named and skipped, and the run
+        takes the next candidate -- the same path a refusal takes."""
+        def produce(gap):
+            if gap["target"] == GUIDE_PATH:
+                raise gc.ModelTruncated("model output was cut off at max_tokens=16000")
+            return {OG_GAP["target"]: clean_page()}
+
+        gap, files, notes = gc.try_candidates(
+            [JSONLD_GAP, OG_GAP], produce, load_real_policy(), fake_base_read({})
+        )
+        self.assertEqual(gap["target"], OG_GAP["target"])
+        self.assertIsNotNone(files)
+        self.assertTrue(any("cut off at max_tokens" in n for n in notes))
+        self.assertTrue(any(GUIDE_PATH in n and "trying next" in n for n in notes))
 
     def test_thinking_blocks_are_not_read_as_text(self):
         """Fable returns thinking blocks before the reply; only text is used."""
