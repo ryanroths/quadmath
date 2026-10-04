@@ -152,6 +152,12 @@
       { id: 'happymodel-ex0802-25000', name: 'Happymodel EX0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { id: 'tinywhoop-onesie-zeus-25000', name: 'Tiny Whoop Onesie 0802 Zeus Juice',  kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { id: 'rcinpower-gts-v3-0802-25000', name: 'RCinPower GTS V3 0802',       kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
+      // Same GEPRC SPEEDX2 1002 25000KV as the 85mm row -- specs and source there.
+      // GEPRC lists it for 1.6-2 inch props; flown on a 75mm frame per a pilot
+      // report the owner relayed (2026-10-04). 1S matches this class's preset, so no
+      // cells pin. Thrust comes from the 75mm class k, which is interpolated, not
+      // measured. ids are global shared-link keys, so this row carries -75mm.
+      { id: 'geprc-speedx2-1002-25000-75mm', name: 'GEPRC SPEEDX2 1002',     kv: 25000, propPitch: 1.1, weightPerMotor: 2.50, shaft: '1.5mm' }, // 2026
       { id: 'nbd-flow-0802-27000', name: 'NewBeeDrone Flow 0802',        kv: 27000, propPitch: 1.1, weightPerMotor: 1.90 },
       { id: 'rcinpower-gts-v3-0802-27000', name: 'RCinPower GTS V3 0802',       kv: 27000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       // BetaFPV product, not a weBLEEDfpv house motor -- see the 0702 Champion
@@ -172,6 +178,13 @@
       { id: 'happymodel-rs1102-13500', name: 'Happymodel RS1102',           kv: 13500, propPitch: 0.9, weightPerMotor: 2.80, cells: 1 }, // 2026
       { id: 'betafpv-1103-15000', name: 'BetaFPV 1103',               kv: 15000, propPitch: 0.9, weightPerMotor: 3.30, cells: 1 }, // 2026
       { id: 'flywoo-robo-1002-23500', name: 'Flywoo ROBO 1002',            kv: 23500, propPitch: 0.9, weightPerMotor: 2.50 },
+      // GEPRC spec: 10mm x 2mm stator, 9N12P, 1.5mm shaft, 6.6 x 6.6mm M1.4
+      // mounting, rated 1S (so cells: 1 against the 2S class preset), 2.5g with
+      // 50mm leads. Stock on GEPRC's own T-Cube18: 87mm wheelbase, 45mm props, 1S.
+      // No thrust data from GEPRC or the bench -- like every 85mm row it uses the
+      // class k fitted to the EX1103 sweep, not a measurement of this motor.
+      // Source: geprc.com/product/geprc-speedx2-1002-25000kv-18000kv-motor/
+      { id: 'geprc-speedx2-1002-25000', name: 'GEPRC SPEEDX2 1002',          kv: 25000, propPitch: 0.9, weightPerMotor: 2.50, shaft: '1.5mm', cells: 1 }, // 2026
     ],
   };
 
