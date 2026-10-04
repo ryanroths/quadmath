@@ -482,12 +482,16 @@
     75: ['gemfan-1611-3', 'gemfan-1610-2', 'gemfan-1614-3', 'hq-40mm-16x11x3'],
     85: ['gemfan-2in-tmount-3', 'gemfan-hurricane-2015-2', 'hq-t2x2x3-tmount-3'],
   };
-  // C-rating is the calculator default (100), not a vendor claim — the model
-  // already uses that default when a pack is not named.
+  // C-ratings are each listing's figure, not a measurement: LAVA 300 75C and
+  // LAVA II 480 95C from BetaFPV's spec text. The weBLEEDfpv 450's listing text
+  // gives none, so its 95C is what the pack labels in the listing photos print.
+  // Picking a pack writes this into the C field, where a blanket 100 read as the
+  // pack's own rating. The generic 2S row names no product and keeps the
+  // calculator default (100).
   const PICKER_PACKS = [
-    { id: 'lava-300-1s', name: 'BetaFPV LAVA 300mAh 1S HV', cells: 1, mah: 300, c: 100, frames: ['65', '75'] },
-    { id: 'wb-450-1s', name: 'weBLEEDfpv 450mAh 1S BT2.0', cells: 1, mah: 450, c: 100, frames: ['65', '75'] },
-    { id: 'lava-ii-480-1s', name: 'BetaFPV LAVA II 480mAh 1S', cells: 1, mah: 480, c: 100, frames: ['65', '75'] },
+    { id: 'lava-300-1s', name: 'BetaFPV LAVA 300mAh 1S HV', cells: 1, mah: 300, c: 75, frames: ['65', '75'] },
+    { id: 'wb-450-1s', name: 'weBLEEDfpv 450mAh 1S BT2.0', cells: 1, mah: 450, c: 95, frames: ['65', '75'] },
+    { id: 'lava-ii-480-1s', name: 'BetaFPV LAVA II 480mAh 1S', cells: 1, mah: 480, c: 95, frames: ['65', '75'] },
     { id: 'whoop-450-2s', name: '450mAh 2S (85mm class)', cells: 2, mah: 450, c: 100, frames: ['85'] },
   ];
 
@@ -598,6 +602,9 @@
     els.motorKV.value = p.kv;
     els.cells.value = p.cells;
     els.capacity.value = p.capacity;
+    // The preset is a whole pack, so C resets with cells and capacity. Without
+    // this a picked pack's rating would ride along onto the next class's pack.
+    els.packC.value = els.packC.defaultValue;
     els.propPitch.value = p.pitch;
     els.weight.value = '';
     delete els.weight.dataset.derived;
@@ -1297,6 +1304,7 @@
       document.querySelectorAll('.frame-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.frame === f));
       populateMotorSelect(f); populatePropSelect(f); populateCompareSelects(f);
+      populatePicker(f);
       applyPreset(f);
     }
     let any = !!(f && framePresets[f]);
@@ -1509,10 +1517,15 @@
         document.querySelectorAll('.frame-btn').forEach(b =>
           b.classList.toggle('active', b.dataset.frame === d.frame));
         populateMotorSelect(d.frame); populatePropSelect(d.frame); populateCompareSelects(d.frame);
+        populatePicker(d.frame);
       }
       els.motorKV.value   = d.kv;
       els.cells.value     = '1';
       els.capacity.value  = d.mah;
+      // The row names its pack, so C follows it like cells and capacity do —
+      // otherwise a C left by the picker would ride along onto the anchor build.
+      const rowPack = pickerLookup(PICKER_PACKS, d.pack);
+      els.packC.value = rowPack ? String(rowPack.c) : els.packC.defaultValue;
       // Video first: the motor handler derives dry weight from the airframe
       // base, and the base depends on the video system.
       if (els.videoSystem) els.videoSystem.value = d.video;
@@ -1536,6 +1549,7 @@
       // final state rather than trusting whichever handler ran last.
       updateShaftWarn();
       updateVideoHint();
+      updatePickerCompat();
       calculate();
       const calc = document.getElementById('calculator') || document.querySelector('.frame-btn');
       if (calc) calc.scrollIntoView({ behavior: 'smooth', block: 'start' });
