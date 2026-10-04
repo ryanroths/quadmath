@@ -152,6 +152,12 @@
       { id: 'happymodel-ex0802-25000', name: 'Happymodel EX0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { id: 'tinywhoop-onesie-zeus-25000', name: 'Tiny Whoop Onesie 0802 Zeus Juice',  kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { id: 'rcinpower-gts-v3-0802-25000', name: 'RCinPower GTS V3 0802',       kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
+      // Same GEPRC SPEEDX2 1002 25000KV as the 85mm row -- specs and source there.
+      // GEPRC lists it for 1.6-2 inch props; flown on a 75mm frame per a pilot
+      // report the owner relayed (2026-10-04). 1S matches this class's preset, so no
+      // cells pin. Thrust comes from the 75mm class k, which is interpolated, not
+      // measured. ids are global shared-link keys, so this row carries -75mm.
+      { id: 'geprc-speedx2-1002-25000-75mm', name: 'GEPRC SPEEDX2 1002',     kv: 25000, propPitch: 1.1, weightPerMotor: 2.50, shaft: '1.5mm' }, // 2026
       { id: 'nbd-flow-0802-27000', name: 'NewBeeDrone Flow 0802',        kv: 27000, propPitch: 1.1, weightPerMotor: 1.90 },
       { id: 'rcinpower-gts-v3-0802-27000', name: 'RCinPower GTS V3 0802',       kv: 27000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       // BetaFPV product, not a weBLEEDfpv house motor -- see the 0702 Champion
