@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Measured Whoop Bench Data: Flight Time & AUW | QuadMath</title>
-<meta name="description" content="Bench-measured AUW, flight times and current draw for 65mm and 75mm whoops — Air65 analog, Mobula6 HDZero, TreeTopper 0802. Numbers, not estimates.">
-<meta name="keywords" content="whoop flight time, 65mm whoop weight, 75mm whoop flight time, 75mm whoop weight, tinywhoop bench test, Air65 flight time, Mobula6 HDZero flight time, TreeTopper 0802, 0802 motor flight time, Gemfan 1610, whoop current draw, FPV bench data">
+<meta name="description" content="Bench-measured AUW, flight times and current draw for 65mm and 75mm whoops: Air65 analog, Mobula6 HDZero and three 0802 builds. Numbers, not estimates.">
+<meta name="keywords" content="whoop flight time, 65mm whoop weight, 75mm whoop flight time, 75mm whoop weight, tinywhoop bench test, Air65 flight time, Mobula6 HDZero flight time, TreeTopper 0802, Fractal 75, Cockroach 75, 0802 motor flight time, Gemfan 1610, whoop current draw, FPV bench data">
 
 <meta property="og:title" content="QuadMath Bench Data — Measured 65mm &amp; 75mm Whoop Numbers">
 <meta property="og:site_name" content="QuadMath">
@@ -26,7 +26,7 @@
   "@context": "https://schema.org",
   "@type": "Dataset",
   "name": "QuadMath 65mm & 75mm Whoop Bench Data",
-  "description": "Measured all-up weights, flight times, and current draw for 65mm and 75mm FPV whoop builds (Air65 analog, Mobula6 2024 HDZero, TreeTopper 75 analog). Stopwatch durations, kitchen-scale weights. Current is corrected against a full-discharge anchor on the two 65mm builds; the 75mm build is provisional — uncalibrated sensor, uncontrolled runs, raw OSD figures published unmodified and flagged as such.",
+  "description": "Measured all-up weights, flight times, and current draw for 65mm and 75mm FPV whoop builds (Air65 analog, Mobula6 2024 HDZero, TreeTopper 75 analog, Fractal 75 analog, Cockroach 75 HDZero). Stopwatch durations, kitchen-scale weights. Current is corrected against a full-discharge anchor on the two 65mm builds; the three 75mm builds are provisional — uncalibrated or miscalibrated sensors, uncontrolled runs, raw OSD mAh and the figures worked out from it published uncorrected and flagged as such, except where a sensor was judged miscalibrated and its figures discarded.",
   "url": "https://quadmath.com/bench.html",
   "license": "https://github.com/ryanroths/quadmath",
   "creator": {
@@ -48,6 +48,16 @@
       "@type": "DataDownload",
       "encodingFormat": "application/json",
       "contentUrl": "https://raw.githubusercontent.com/ryanroths/quadmath/main/data/bench/treetopper75-analog-0802-32500k.json"
+    },
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "application/json",
+      "contentUrl": "https://raw.githubusercontent.com/ryanroths/quadmath/main/data/bench/fractal75-analog-rcinpower0802-25k.json"
+    },
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "application/json",
+      "contentUrl": "https://raw.githubusercontent.com/ryanroths/quadmath/main/data/bench/cockroach75-hdzero-champion0802-28k.json"
     }
   ]
 }
@@ -105,11 +115,12 @@
     <p class="sub">
       The calculator is a model. This page is not. Every number here was measured — builds
       weighed on a scale, timed with a stopwatch, current read off the onboard sensor.
-      Three builds so far across two frame classes. The two 65mm builds were flown to a
+      Five builds so far across two frame classes. The two 65mm builds were flown to a
       full discharge against a known-capacity anchor and their corrected figures are what
-      QuadMath's 65mm estimates rest on. The 75mm build is provisional: its current sensor
-      has never been calibrated and neither run was controlled, so its current and mAh
-      figures are published raw and feed nothing.
+      QuadMath's 65mm estimates rest on. The three 75mm builds are provisional: none of
+      their current sensors has been calibrated and no run was controlled, so their
+      current and mAh figures are published raw — or, where a sensor read far off, not at
+      all — and feed nothing.
     </p>
 
     <h3 class="bench-class-title">65mm</h3>
@@ -162,16 +173,50 @@
             <td>201 s (3:21)</td>
             <td>Freestyle<span class="bench-style-mark">not comparable to cruise</span></td>
           </tr>
+          <tr>
+            <td>TreeTopper 75 — weBLEEDfpv Treetoppers 0802 32500KV <span class="bench-badge">Provisional</span></td>
+            <td>Analog</td><td>35.5 g</td><td>weBLEEDfpv 450mAh 1S HV</td>
+            <td class="raw">5.86 A<span class="bench-raw-mark">raw, uncorrected</span></td>
+            <td>269 s (4:29)</td>
+            <td>Freestyle<span class="bench-style-mark">not comparable to cruise</span></td>
+          </tr>
+          <tr>
+            <td>Fractal 75 — RCinPower GTS V3 0802 25000KV <span class="bench-badge">Provisional</span></td>
+            <td>Analog</td><td>35.72 g</td><td>weBLEEDfpv 450mAh 1S HV</td>
+            <td class="raw">4.32 A<span class="bench-raw-mark">raw, uncorrected</span></td>
+            <td>327 s (5:27)</td>
+            <td>Freestyle<span class="bench-style-mark">not comparable to cruise</span></td>
+          </tr>
+          <tr>
+            <td>Cockroach 75 — BetaFPV 0802 Champion (2026) 28000KV <span class="bench-badge">Provisional</span></td>
+            <td>HDZero</td><td>36.55 g</td><td>weBLEEDfpv 450mAh 1S HV</td>
+            <td>—<span class="bench-style-mark">not captured</span></td>
+            <td>164 s (2:44)</td>
+            <td>Freestyle<span class="bench-style-mark">not comparable to cruise</span></td>
+          </tr>
+          <tr>
+            <td>Cockroach 75 — BetaFPV 0802 Champion (2026) 28000KV <span class="bench-badge">Provisional</span></td>
+            <td>HDZero</td><td>36.34 g</td><td>weBLEEDfpv 450mAh 1S HV</td>
+            <td>—<span class="bench-style-mark">discarded</span></td>
+            <td>181 s (3:01)</td>
+            <td>Freestyle<span class="bench-style-mark">not comparable to cruise</span></td>
+          </tr>
         </tbody>
       </table>
     </div>
     <p class="bench-note">
-      Measured 2026-08-13. Durations and weights are sound — stopwatch and scale, same as
-      the 65mm builds. The current column is not: this sensor has never been run against a
-      full-discharge anchor, so there is no correction factor and no uncertainty figure to
-      quote. Both runs were also uncontrolled — different start voltages, different
-      cutoffs, freestyle throttle that does not repeat — so the two rows are not a pack
-      comparison. Full record and caveats: <a href="#build-treetopper75">below</a>.
+      The first two TreeTopper rows were measured 2026-08-13; the rest 2026-09-04.
+      Durations and weights are sound — stopwatch and scale, same as the 65mm builds. The
+      current column is not: none of these sensors has been run against a full-discharge
+      anchor, so there is no correction factor and no uncertainty figure to quote. The
+      Cockroach 75's sensor read so far off on run 2 that those figures were discarded, and
+      run 1's were not captured. Every run was also
+      uncontrolled — the 2026-08-13 runs started undercharged with different cutoffs, and
+      all of them are freestyle on a throttle profile that does not repeat — so no two rows
+      are a pack or build comparison. Full records and caveats:
+      <a href="#build-treetopper75">TreeTopper 75</a>,
+      <a href="#build-fractal75">Fractal 75</a>,
+      <a href="#build-cockroach75">Cockroach 75</a>.
     </p>
   </section>
 
@@ -275,14 +320,16 @@
   <section class="section reveal" id="build-treetopper75">
     <h2>TreeTopper 75 Analog — Full Record <span class="bench-badge">Provisional</span></h2>
     <p class="bench-caveat">
-      <strong>Uncalibrated sensor, uncontrolled runs.</strong> Every current and mAh number
-      in this section is the raw OSD reading. It has not been corrected, because there is
+      <strong>Uncalibrated sensor, uncontrolled runs.</strong> The mAh figures in this section
+      are raw OSD readings, and Avg A and mAh/min are worked out from them and the stopwatch
+      time. None has been corrected, because there is
       nothing to correct it against — this build has never been flown to a full discharge,
       so it has no anchor and no correction factor. The two 65mm builds read 20% cold and
       25% hot out of the box; assume an error of that order here until it is measured.
-      Both runs were also uncontrolled: undercharged starts, mismatched cutoffs, and a
-      freestyle throttle profile that does not repeat. The two runs are therefore not a
-      pack A/B comparison, and this build feeds no calculator estimate.
+      All three runs were uncontrolled: runs 1 and 2 started undercharged with mismatched
+      cutoffs, and every run used a freestyle throttle profile that does not repeat. The
+      runs are therefore not a pack A/B comparison, and this build feeds no calculator
+      estimate.
     </p>
     <div class="bench-table-wrap">
       <table class="bench-table">
@@ -290,9 +337,9 @@
           <tr><td>Motors</td><td>weBLEEDfpv Treetoppers 0802, 32500KV, 1.5mm knurled shaft</td></tr>
           <tr><td>Props</td><td>Gemfan 1610 bi-blade, 40mm, 1.5mm shaft</td></tr>
           <tr><td>Flight controller</td><td>NewBeeDrone</td></tr>
-          <tr><td>Packs</td><td>BetaFPV 450mAh 1S LiHV BT2.0 (11.97 g) · BetaFPV 480mAh 1S LiHV BT2.0 (12.61 g), both measured n=1</td></tr>
+          <tr><td>Packs</td><td>BetaFPV 450mAh 1S LiHV BT2.0 (11.97 g) · BetaFPV 480mAh 1S LiHV BT2.0 (12.61 g), both measured n=1 · weBLEEDfpv 450mAh 1S LiHV (12.8 g in the record, derived, not weighed on its own)</td></tr>
           <tr><td>Dry weight</td><td>22.60 g (measured props-on, kitchen scale) — frame, motors, FC, camera, VTX, antenna, canopy, props, hardware</td></tr>
-          <tr><td>AUW</td><td>34.57 g on the 450, 35.22 g on the 480 — derived, dry + pack. An independent scale reading of each agrees within 0.01 g.</td></tr>
+          <tr><td>AUW</td><td>34.57 g on the BetaFPV 450, 35.22 g on the 480 — derived, dry + pack. An independent scale reading of each agrees within 0.01 g. 35.5 g on the weBLEEDfpv 450 (2026-09-04) — a scale reading; dry + 12.8 g gives 35.4, and the record notes the dry weight may have shifted since 08-13.</td></tr>
           <tr><td>Connectors</td><td>Quad wired A30, packs are BT2.0 — flown through an A30↔BT2.0 adapter. Adapter mass is included in the weights above; the extra contact resistance is not accounted for anywhere.</td></tr>
           <tr><td>Firmware</td><td>Betaflight — PIDs/rates not yet logged to the <a href="tune-database.html">tune database</a></td></tr>
         </tbody>
@@ -307,7 +354,7 @@
           <tr>
             <td>1</td><td>2026-08-13</td>
             <td>Freestyle<span class="bench-style-mark">not comparable to cruise</span></td>
-            <td>450mAh</td><td>34.57 g</td>
+            <td>BetaFPV 450mAh</td><td>34.57 g</td>
             <td>163 s</td><td>4.10</td><td>3.50</td>
             <td class="raw">270<span class="bench-raw-mark">raw, uncorrected</span></td>
             <td class="raw">5.96<span class="bench-raw-mark">raw, uncorrected</span></td>
@@ -316,11 +363,20 @@
           <tr>
             <td>2</td><td>2026-08-13</td>
             <td>Freestyle<span class="bench-style-mark">not comparable to cruise</span></td>
-            <td>480mAh</td><td>35.22 g</td>
+            <td>BetaFPV 480mAh</td><td>35.22 g</td>
             <td>201 s</td><td>4.25</td><td>3.36</td>
             <td class="raw">325<span class="bench-raw-mark">raw, uncorrected</span></td>
             <td class="raw">5.82<span class="bench-raw-mark">raw, uncorrected</span></td>
             <td class="raw">97.0<span class="bench-raw-mark">raw, uncorrected</span></td>
+          </tr>
+          <tr>
+            <td>3</td><td>2026-09-04</td>
+            <td>Freestyle<span class="bench-style-mark">not comparable to cruise</span></td>
+            <td>weBLEEDfpv 450mAh</td><td>35.5 g</td>
+            <td>269 s</td><td>4.35</td><td>3.40</td>
+            <td class="raw">438<span class="bench-raw-mark">raw, uncorrected</span></td>
+            <td class="raw">5.86<span class="bench-raw-mark">raw, uncorrected</span></td>
+            <td class="raw">97.7<span class="bench-raw-mark">raw, uncorrected</span></td>
           </tr>
         </tbody>
       </table>
@@ -328,12 +384,125 @@
     <p class="bench-note">
       Run 1 started at 4.10&nbsp;V against a 4.35&nbsp;V LiHV full charge and pulled roughly
       60% of rated capacity; run 2 started at 4.25&nbsp;V, ran to a deeper cutoff, and pulled
-      roughly 68%. Neither is a discharge curve. Durations and weights carry no sensor
+      roughly 68%. Run 3 started from a full 4.35&nbsp;V on a weBLEEDfpv 450, indoors at 79&nbsp;°F, landed at
+      3.40&nbsp;V, and its raw count is 97% of rated capacity — the record advises a puff
+      check on that pack. None is a discharge curve. Durations and weights carry no sensor
       caveat and stand on their own.
       Raw record: <a href="https://github.com/ryanroths/quadmath/blob/main/data/bench/treetopper75-analog-0802-32500k.json" rel="noopener">treetopper75-analog-0802-32500k.json</a>.
       Pending: current sensor calibration against a full-discharge anchor, matched-condition
       A/B (same charge state, same cutoff, same profile), n=3 per pack, a controlled cruise
       run, rest-voltage logging.
+    </p>
+  </section>
+
+  <section class="section reveal" id="build-fractal75">
+    <h2>Fractal 75 Analog — Full Record <span class="bench-badge">Provisional</span></h2>
+    <p class="bench-caveat">
+      <strong>Uncalibrated sensor, uncontrolled run.</strong> The mAh figure in this section
+      is the raw OSD reading; Avg A and mAh/min are worked out from it and the stopwatch
+      time, so all three carry the same uncorrected sensor error. This build has never been
+      flown to a full discharge, so it has no anchor and no correction factor. The 65mm
+      sensors read 20% cold and 25% hot out of the box; nothing bounds this one. One freestyle run, on a throttle profile
+      that does not repeat. It feeds no calculator estimate.
+    </p>
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <tbody>
+          <tr><td>Motors</td><td>RCinPower GTS V3 0802, 25000KV, 1.5mm shaft</td></tr>
+          <tr><td>Props</td><td>Gemfan 1610 bi-blade, 40mm, 1.5mm shaft</td></tr>
+          <tr><td>Flight controller</td><td>BetaFPV 5-in-1</td></tr>
+          <tr><td>Pack</td><td>weBLEEDfpv 450mAh 1S LiHV — 12.8 g in the record, derived (all-up minus dry), not weighed on its own</td></tr>
+          <tr><td>Dry weight</td><td>22.9 g (measured earlier, props-on; date not recorded) — frame, motors, FC, camera, VTX, antenna, canopy, props, hardware</td></tr>
+          <tr><td>AUW</td><td>35.72 g — kitchen scale, pack on, 2026-09-04</td></tr>
+          <tr><td>Firmware</td><td>Betaflight</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="bench-table-wrap" style="margin-top:12px">
+      <table class="bench-table">
+        <thead>
+          <tr><th>Run</th><th>Date</th><th>Type</th><th>Pack</th><th>AUW</th><th>Duration</th><th>Start V</th><th>Cutoff V (load)</th><th>mAh</th><th>Avg A</th><th>mAh/min</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td><td>2026-09-04</td>
+            <td>Freestyle<span class="bench-style-mark">not comparable to cruise</span></td>
+            <td>weBLEEDfpv 450mAh</td><td>35.72 g</td>
+            <td>327 s</td><td>4.35</td><td>3.40</td>
+            <td class="raw">392<span class="bench-raw-mark">raw, uncorrected</span></td>
+            <td class="raw">4.32<span class="bench-raw-mark">raw, uncorrected</span></td>
+            <td class="raw">71.9<span class="bench-raw-mark">raw, uncorrected</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bench-note">
+      Full 4.35&nbsp;V LiHV start, landed at 3.40&nbsp;V under load, indoors at 79&nbsp;°F. The
+      raw OSD count is 87% of rated capacity. Durations and weights carry no sensor caveat.
+      Raw record: <a href="https://github.com/ryanroths/quadmath/blob/main/data/bench/fractal75-analog-rcinpower0802-25k.json" rel="noopener">fractal75-analog-rcinpower0802-25k.json</a>.
+      Pending: current sensor calibration against a full-discharge anchor, n=3
+      matched-condition runs, a controlled cruise run, rest-voltage logging.
+    </p>
+  </section>
+
+  <section class="section reveal" id="build-cockroach75">
+    <h2>Cockroach 75 HDZero — Full Record <span class="bench-badge">Provisional</span></h2>
+    <p class="bench-caveat">
+      <strong>Miscalibrated sensor, uncontrolled runs.</strong> On run 2 this build's current
+      sensor read 542&nbsp;mAh on a 450&nbsp;mAh pack and an 18&nbsp;A peak, so run 2's current
+      and mAh readings were discarded rather than published raw; run 1's were never
+      captured. The record has no current or mAh figure for either run. Both runs were
+      freestyle on a throttle profile that does not repeat. Durations and weights
+      stand on their own; this build feeds no calculator estimate.
+    </p>
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <tbody>
+          <tr><td>Motors</td><td>BetaFPV 0802 Champion (2026), 28000KV, 1.5mm shaft</td></tr>
+          <tr><td>Props</td><td>Gemfan 1610 bi-blade, 40mm, 1.5mm shaft</td></tr>
+          <tr><td>Flight controller</td><td>HDZero AIO5 (as recorded)</td></tr>
+          <tr><td>Pack</td><td>weBLEEDfpv 450mAh 1S LiHV — 12.8 g in the record, derived from run 2's all-up minus dry, not weighed on its own</td></tr>
+          <tr><td>Dry weight</td><td>23.56 g (measured earlier, props-on; date not recorded) — frame, motors, FC, camera, VTX, antenna, canopy, props, hardware</td></tr>
+          <tr><td>AUW</td><td>36.34 g — kitchen scale, pack on, 2026-09-04, n=1. The record also gives 36.55 g for run 1 without saying how it was weighed.</td></tr>
+          <tr><td>Firmware</td><td>Betaflight — wobble at pack start reported, tune pending</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="bench-table-wrap" style="margin-top:12px">
+      <table class="bench-table">
+        <thead>
+          <tr><th>Run</th><th>Date</th><th>Type</th><th>Pack</th><th>AUW</th><th>Duration</th><th>Start V</th><th>Cutoff V (load)</th><th>mAh</th><th>Avg A</th><th>mAh/min</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td><td>2026-09-04</td>
+            <td>Freestyle<span class="bench-style-mark">not comparable to cruise</span></td>
+            <td>weBLEEDfpv 450mAh</td><td>36.55 g</td>
+            <td>164 s</td><td>4.35</td><td>3.40<span class="bench-style-mark">unconfirmed, see note</span></td>
+            <td>—<span class="bench-style-mark">not captured</span></td>
+            <td>—<span class="bench-style-mark">not captured</span></td>
+            <td>—<span class="bench-style-mark">not captured</span></td>
+          </tr>
+          <tr>
+            <td>2</td><td>2026-09-04</td>
+            <td>Freestyle<span class="bench-style-mark">not comparable to cruise</span></td>
+            <td>weBLEEDfpv 450mAh</td><td>36.34 g</td>
+            <td>181 s</td><td>4.35</td><td>3.40</td>
+            <td>—<span class="bench-style-mark">discarded</span></td>
+            <td>—<span class="bench-style-mark">discarded</span></td>
+            <td>—<span class="bench-style-mark">discarded</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bench-note">
+      Both runs started from a full 4.35&nbsp;V LiHV charge, indoors at 79&nbsp;°F. The record
+      gives a 3.40&nbsp;V landing under load for both, but run 1's notes also say its cutoff
+      and mAh were not captured, so that landing figure is unconfirmed.
+      Raw record: <a href="https://github.com/ryanroths/quadmath/blob/main/data/bench/cockroach75-hdzero-champion0802-28k.json" rel="noopener">cockroach75-hdzero-champion0802-28k.json</a>.
+      Pending: fix current_meter_scale before any current data is kept, then a full-discharge
+      anchor; n=3 matched-condition runs; a controlled cruise run; rest-voltage logging; a
+      PID tune for the start-of-pack wobble.
     </p>
   </section>
 
@@ -345,11 +514,14 @@
       corrected against a full-discharge anchor before it is published.
     </p>
     <p class="sub">
-      One build on this page does not meet that bar yet. The 75mm TreeTopper has never been
-      flown to a full discharge, so it has no anchor, no correction factor, and no
-      uncertainty figure. The choice there is publish it raw or withhold it, and withholding
-      it is the worse of the two — a missing build teaches nothing, while a flagged one
-      still carries usable durations and weights. So it is published raw: every uncorrected
+      Three builds on this page do not meet that bar yet. None of the 75mm builds has been
+      flown to a full discharge, so none has an anchor, a correction factor, or an
+      uncertainty figure. The choice there is publish raw or withhold, and withholding is
+      the worse of the two — a missing build teaches nothing, while a flagged one still
+      carries usable durations and weights. So they are published raw, except where the
+      record judges a sensor grossly miscalibrated (the Cockroach 75, which read 542&nbsp;mAh
+      on a 450&nbsp;mAh pack and an 18&nbsp;A peak on run 2), and those figures are dropped
+      instead. Every uncorrected
       figure is marked <span class="bench-badge">Provisional</span> on the row, rendered in
       amber with a "raw, uncorrected" marker on the cell, and spelled out in full under the
       build's own record. Provisional builds are excluded from cross-build comparisons and
@@ -359,20 +531,20 @@
     <div class="bench-table-wrap">
       <table class="bench-table">
         <tbody>
-          <tr><td>Weights</td><td>Kitchen scale, measured per component. Pack weight averaged over two packs.</td></tr>
+          <tr><td>Weights</td><td>Kitchen scale, measured per component. 65mm pack weight averaged over two packs; 75mm pack weights are per pack, measured or derived (all-up minus dry) as each record says.</td></tr>
           <tr><td>Duration</td><td>Stopwatch, plug-in to landing at load cutoff. No sensor involved — no correction needed.</td></tr>
-          <tr><td>Discharge window</td><td>4.35 V LiHV full charge down to ~3.3 V under load, assumed 270 mAh delivered of a nominal 300.</td></tr>
-          <tr><td>Current correction</td><td>Full-discharge anchor: raw OSD mAh scaled so the run totals the assumed 270 mAh delivered. Per-build correction factor stored in the raw JSON. A null factor means no anchor run exists — that build is provisional and its figures are raw.</td></tr>
+          <tr><td>Discharge window</td><td>65mm anchor builds: 4.35 V LiHV full charge down to ~3.3 V under load, assumed 270 mAh delivered of a nominal 300.</td></tr>
+          <tr><td>Current correction</td><td>Full-discharge anchor (the 65mm builds): raw OSD mAh scaled so the run totals the assumed 270 mAh delivered. Per-build correction factor stored in the raw JSON. A null factor means no anchor run exists — that build is provisional and its figures are raw, or dropped where the record found the sensor miscalibrated.</td></tr>
           <tr><td>Controlled runs</td><td>Same charge state, same cutoff, repeatable throttle profile. A run failing any of those is marked <code>"controlled": false</code> in the raw JSON and cannot be compared against another run.</td></tr>
-          <tr><td>Uncertainty</td><td>Roughly ±8% on corrected current and mAh figures, driven by the assumed delivered capacity. Raw figures on provisional builds carry no stated uncertainty — the sensor error is unmeasured, and the two calibrated builds bracket it at 20% cold to 25% hot. Durations and weights carry no such caveat on any build.</td></tr>
-          <tr><td>Flight style</td><td>Cruise — slow, steady laps — is the only style with anchor-grade data behind it. Hover pending. Freestyle numbers now exist on the 75mm build, but they are provisional and anchor nothing. A freestyle run is shorter than a cruise run on the same build, so freestyle and cruise durations are marked on the cell and never compared on this page.</td></tr>
+          <tr><td>Uncertainty</td><td>Roughly ±8% on corrected current and mAh figures, driven by the assumed delivered capacity. Raw figures on provisional builds carry no stated uncertainty — the sensor error is unmeasured. The two calibrated 65mm builds read 20% cold and 25% hot; that is an example of the spread, not a bound on it. Durations and weights carry no such caveat on any build.</td></tr>
+          <tr><td>Flight style</td><td>Cruise — slow, steady laps — is the only style with anchor-grade data behind it. Hover pending. Freestyle numbers now exist on the 75mm builds, but they are provisional and anchor nothing. A freestyle run is shorter than a cruise run on the same build, so freestyle and cruise durations are marked on the cell and never compared on this page.</td></tr>
         </tbody>
       </table>
     </div>
     <p class="bench-note">
       When your inputs in the <a href="/#calculator">calculator</a> match one of the
       calibrated builds, it swaps its estimate for the measured number. Provisional builds
-      are not wired in — the 75mm TreeTopper changes no estimate. Everything on this page is
+      are not wired in — none of the 75mm builds changes an estimate. Everything on this page is
       reproducible from the raw JSON in
       <a href="https://github.com/ryanroths/quadmath/tree/main/data/bench" rel="noopener">data/bench/</a>.
       More builds get added as they cross the bench.

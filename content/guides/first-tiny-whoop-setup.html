@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>First Tiny Whoop: Buy a 65mm Analog BNF, ELRS Radio, Any Goggles | quadmath.com</title>
-  <meta name="description" content="The first-whoop shopping list with no hedging: 65mm analog bind-and-fly, an ExpressLRS radio, whatever goggles you can afford, six packs. The exact Air65 stack behind the numbers — 25.42 g, 3:53 cruise, measured.">
+  <meta name="description" content="The first-whoop shopping list with no hedging: 65mm analog bind-and-fly, an ExpressLRS radio, whatever goggles you can afford, a charger's worth of packs. The measured Air65 analog stack — 25.42 g, 3:53 cruise.">
   <meta property="og:title" content="First Tiny Whoop: Buy a 65mm Analog BNF, ELRS Radio, Any Goggles">
   <meta property="og:description" content="One decision, one measured build. 65mm analog first; 75/85mm, HDZero and race motors come later.">
   <meta property="og:url" content="https://quadmath.com/content/guides/first-tiny-whoop-setup.html">
@@ -44,14 +44,15 @@
 
     <p>
       Short version: buy a <strong>65mm analog bind-and-fly</strong>, an <strong>ExpressLRS</strong>
-      radio, the cheapest goggles you can stand, and six packs. Fly it indoors until it is boring.
+      radio, the cheapest goggles you can stand, and enough packs to fill a six-port charger. Fly it
+      indoors until it is boring.
       Everything else — 75mm, 85mm, HDZero, race motors, 5-inch — is a second purchase, and a
       better one for having flown first.
     </p>
     <p>
       This page covers 65–85mm whoops only. The numbers on it are measured on the
       <a href="/bench.html">bench</a>, not copied from a product page. Links marked /go/ are
-      affiliate redirects to gear I fly.
+      affiliate redirects to gear I fly; the BetaFPV ones open the store's home page.
     </p>
 
     <h2>Size: 65mm, and not because it is cheap</h2>
@@ -66,8 +67,8 @@
     <p>
       Bind-and-fly unless you already solder small pads without thinking about it. A first build
       adds three failure points — the AIO, the receiver, the motor solder joints — to a hobby
-      that already has enough. The BNF Air65 is the airframe behind every 65mm number on this
-      site.
+      that already has enough. The Air65 is the airframe behind the site's analog 65mm numbers;
+      the HDZero ones come from a Mobula6 2024.
     </p>
 
     <h2>The stack I actually fly</h2>
@@ -75,17 +76,23 @@
       <thead><tr><th>Part</th><th>What</th><th></th></tr></thead>
       <tbody>
         <tr><td>Whoop</td><td>BetaFPV Air65 BNF, ELRS, analog</td><td><a href="/go/betafpv/">BetaFPV</a></td></tr>
-        <tr><td>Motors (stock)</td><td>VCI 0702 PRO DB 30000KV</td><td><a href="/go/wb-vci-0702-30k/">weBLEEDfpv</a></td></tr>
+        <tr><td>Motors (as benched)</td><td>VCI 0702 PRO DB 30000KV (a swap)</td><td><a href="/go/wb-vci-0702-30k/">weBLEEDfpv</a></td></tr>
         <tr><td>Props</td><td>Gemfan 31mm tri — buy spares on day one</td><td><a href="/go/wb-gemfan-31mm/">weBLEEDfpv</a></td></tr>
-        <tr><td>Packs</td><td>BetaFPV LAVA 300mAh 1S HV, six of them</td><td><a href="/go/betafpv/">BetaFPV</a></td></tr>
+        <tr><td>Packs</td><td>BetaFPV LAVA 300mAh 1S HV (the benched pack)</td><td><a href="/go/betafpv/">BetaFPV</a></td></tr>
         <tr><td>Charger</td><td><a href="/content/guides/1s-whoop-charger-whoopstor-vs-w63.html">WhoopStor V3</a> — six ports, LiHV, storage mode</td><td></td></tr>
         <tr><td>Radio</td><td>RadioMaster TX16S (or the Pocket if you want smaller)</td><td><a href="/go/wb-tx16s/">weBLEEDfpv</a></td></tr>
         <tr><td>Goggles</td><td>Anything analog — see below</td><td></td></tr>
       </tbody>
     </table>
     <p>
+      BetaFPV's store now shows the Air65 BNF and the LAVA 300 sold out and tags both
+      Discontinued. It sells the Air65 II, and its LAVA II page compares the LAVA 300 with the
+      LAVA II 320; neither is benched. The LAVA 300 sold in fives. No Air65 BNF shipped with VCI
+      motors — those are a swap.
+    </p>
+    <p>
       Measured: <strong>25.42 g</strong> all-up with a LAVA 300, <strong>3:53</strong> cruise,
-      4.2 A average draw. The raw record is on the <a href="/bench.html">bench page</a>.
+      4.2 A average draw (sensor-corrected, ±8%). The raw record is on the <a href="/bench.html">bench page</a>.
     </p>
 
     <h2>Radio: ExpressLRS, no exceptions</h2>
@@ -124,7 +131,7 @@
       Then: props on the right way, failsafe checked, pack seated, clear floor, short hops.
       Land and touch the motors — warm is fine, hot is a problem. Packs go on
       <a href="/content/guides/1s-whoop-charger-whoopstor-vs-w63.html">LiHV at 1 A</a> — LiPo mode
-      on an HV pack costs you a third of the flight.
+      stops an HV pack at 4.20 V, short of its 4.35 V full charge.
     </p>
 
     <h2>Sanity-check before you order</h2>
@@ -138,7 +145,7 @@
       <ul>
         <li><a href="/">Build calculator — flight time and thrust-to-weight for your build</a></li>
         <li><a href="/bench.html">Bench data — the measured Air65 record</a></li>
-        <li><a href="/gear.html">Gear list — everything in the table above</a></li>
+        <li><a href="/gear.html">Gear list — the builds, motors, props and radio</a></li>
         <li><a href="/blackbox.html">Blackbox analyzer — for when you start tuning</a></li>
       </ul>
     </nav>
