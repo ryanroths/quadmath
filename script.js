@@ -469,12 +469,12 @@
       'betafpv-0802-champion-2026-28000', 'webleed-moefpv-treetoppers-0802-32500',
       'webleed-skyscrapers-0802-25000', 'happymodel-rs0802-19000',
       'happymodel-rs0802-25000', 'happymodel-ex0802-25000',
-      'rcinpower-gts-v3-0802-22000',
+      'rcinpower-gts-v3-0802-22000', 'geprc-speedx2-1002-25000-75mm',
     ],
     85: [
       'happymodel-ex1103-11000', 'happymodel-rs1102-10000', 'happymodel-rs1102-13500',
       'betafpv-1103-8000', 'betafpv-1103-11000', 'betafpv-1103-15000',
-      'flywoo-robo-1002-23500',
+      'flywoo-robo-1002-23500', 'geprc-speedx2-1002-25000',
     ],
   };
   const PICKER_PROP_IDS = {
