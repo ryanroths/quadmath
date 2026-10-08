@@ -273,7 +273,7 @@
       frame: 75,
       brand: 'NewBeeDrone',
       source: 'RyFly',
-      fc: 'Happymodel CrazyBee F4 SX1280 (HAMO) in a Cockroach 75',
+      fc: 'HDZero AIO5 (Happymodel CrazyBee F4 SX1280 target, HAMO) in a Cockroach 75',
       combo: 'Cockroach 75 · Champion 0802 28K KV · HDZero',
       rateType: 'ACTUAL',
       pids:  { roll: [41, 70, 37], pitch: [41, 70, 35], yaw: [41, 70, 0] },
@@ -287,7 +287,7 @@
         'Simplified gyro filter multiplier 90',
         'Battery: vbat_scale 112, ibata_scale 1189, capacity 450, forced 1S',
         'Actual rates, centre 20°/s, max 740/740/700°/s, expo 0.56',
-        'Frame is NewBeeDrone; the AIO is Happymodel, so there is no NBD stock tune for this build',
+        'Frame is NewBeeDrone; the AIO is an HDZero AIO5 on the Happymodel target, so there is no NBD stock tune for this build',
         'BF 4.5.1, dumped Sept 2026 — same board as data/bench/cockroach75-hdzero-champion0802-28k.json',
       ],
     },
@@ -322,7 +322,7 @@
   // as a card.
   var PENDING = [
     { frame: 75, brand: 'Happymodel',  source: 'Stock', reason: 'need a diff all from a Happymodel 75mm BNF (Mobula7 1S HD) — the AIO factory profile is published separately' },
-    { frame: 75, brand: 'NewBeeDrone', source: 'Stock', reason: 'need a diff all from a Cockroach 75 that shipped with an NBD AIO — ours runs a Happymodel board' },
+    { frame: 75, brand: 'NewBeeDrone', source: 'Stock', reason: 'need a diff all from a Cockroach 75 that shipped with an NBD AIO — ours runs an HDZero AIO5' },
     { frame: 85, brand: 'BetaFPV',     source: 'Stock', reason: 'need a diff all from an owner' },
     { frame: 85, brand: 'NewBeeDrone', source: 'Stock', reason: 'need a diff all from an owner' },
   ];
