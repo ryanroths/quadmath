@@ -643,12 +643,22 @@
   // Two frames only (Air65, Mobula6 2024). Other 65mm frames vary about
   // +/-1.5g, so treat the base as a class figure, not a per-frame spec.
   //
-  // 75/85mm have no bench data and keep the previous estimates. DJI/Walksnail
+  //   75mm analog  14.2g  = 22.6 dry - 4x2.10  (data/bench/treetopper75-analog-0802-32500k.json)
+  //   75mm analog  14.9g  = 22.9 dry - 4x2.00  (data/bench/fractal75-analog-rcinpower0802-25k.json)
+  //   75mm base    14.6g  = mean of the two analog builds
+  //   cross-check: 75mm HDZero 15.8g = 23.56 dry - 4x1.95 (cockroach75-hdzero-champion0802-28k.json);
+  //   14.6 + the 2.4g 65mm video delta = 17.0, so 1.2g over -- inside the
+  //   +/-1.5g frame-to-frame spread. The video delta stays the 65mm figure.
+  // Three frames (TreeTopper, Fractal, Cockroach), all weighed props-on. The
+  // TreeTopper's dry includes an A30-to-BT2.0 adapter, so it reads a little high.
+  // The previous 75mm figure was an unmeasured 20g, 5-6g heavy against these.
+  //
+  // 85mm has no bench data and keeps the previous estimate. DJI/Walksnail
   // has no measured delta either, so that combination falls back to the old
-  // flat 15g rather than inventing an adder — flagged as estimated in the UI.
+  // flat figure rather than inventing an adder — flagged as estimated in the UI.
   const FRAME_BASE_G = {
-    65: { value: 11.3, measured: true },
-    75: { value: 20,   measured: false },
+    65: { value: 11.3, measured: true, n: 2 },
+    75: { value: 14.6, measured: true, n: 2 },
     85: { value: 35,   measured: false },
   };
   const VIDEO_ADDER_G = {
@@ -736,8 +746,13 @@
   function updateVideoHint() {
     if (!els.videoHint) return;
     const base = currentFrameBaseWeight();
+    const frame = FRAME_BASE_G[currentFrame];
+    const video = currentVideoSystem();
+    // The HDZero delta was measured on the 65mm pair only; on 75mm it is borrowed.
+    const borrowed = base.measured && currentFrame !== '65' && video === 'hdzero'
+      ? '; HDZero delta from the 65mm pair' : '';
     els.videoHint.textContent = base.measured
-      ? 'Airframe base ' + base.grams.toFixed(1) + 'g — bench-measured (n=2)'
+      ? 'Airframe base ' + base.grams.toFixed(1) + 'g — bench-measured (n=' + frame.n + ')' + borrowed
       : 'Airframe base ' + base.grams.toFixed(1) + 'g — estimated, no bench data for this combination';
     els.videoHint.classList.toggle('warn', !base.measured);
   }
