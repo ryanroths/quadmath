@@ -152,6 +152,12 @@
       { id: 'happymodel-ex0802-25000', name: 'Happymodel EX0802',            kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { id: 'tinywhoop-onesie-zeus-25000', name: 'Tiny Whoop Onesie 0802 Zeus Juice',  kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       { id: 'rcinpower-gts-v3-0802-25000', name: 'RCinPower GTS V3 0802',       kv: 25000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
+      // Same GEPRC SPEEDX2 1002 25000KV as the 85mm row -- specs and source there.
+      // GEPRC lists it for 1.6-2 inch props; flown on a 75mm frame per a pilot
+      // report the owner relayed (2026-10-04). 1S matches this class's preset, so no
+      // cells pin. Thrust comes from the 75mm class k, which is interpolated, not
+      // measured. ids are global shared-link keys, so this row carries -75mm.
+      { id: 'geprc-speedx2-1002-25000-75mm', name: 'GEPRC SPEEDX2 1002',     kv: 25000, propPitch: 1.1, weightPerMotor: 2.50, shaft: '1.5mm' }, // 2026
       { id: 'nbd-flow-0802-27000', name: 'NewBeeDrone Flow 0802',        kv: 27000, propPitch: 1.1, weightPerMotor: 1.90 },
       { id: 'rcinpower-gts-v3-0802-27000', name: 'RCinPower GTS V3 0802',       kv: 27000, propPitch: 1.1, weightPerMotor: 2.00 }, // 2026
       // BetaFPV product, not a weBLEEDfpv house motor -- see the 0702 Champion
@@ -172,6 +178,13 @@
       { id: 'happymodel-rs1102-13500', name: 'Happymodel RS1102',           kv: 13500, propPitch: 0.9, weightPerMotor: 2.80, cells: 1 }, // 2026
       { id: 'betafpv-1103-15000', name: 'BetaFPV 1103',               kv: 15000, propPitch: 0.9, weightPerMotor: 3.30, cells: 1 }, // 2026
       { id: 'flywoo-robo-1002-23500', name: 'Flywoo ROBO 1002',            kv: 23500, propPitch: 0.9, weightPerMotor: 2.50 },
+      // GEPRC spec: 10mm x 2mm stator, 9N12P, 1.5mm shaft, 6.6 x 6.6mm M1.4
+      // mounting, rated 1S (so cells: 1 against the 2S class preset), 2.5g with
+      // 50mm leads. Stock on GEPRC's own T-Cube18: 87mm wheelbase, 45mm props, 1S.
+      // No thrust data from GEPRC or the bench -- like every 85mm row it uses the
+      // class k fitted to the EX1103 sweep, not a measurement of this motor.
+      // Source: geprc.com/product/geprc-speedx2-1002-25000kv-18000kv-motor/
+      { id: 'geprc-speedx2-1002-25000', name: 'GEPRC SPEEDX2 1002',          kv: 25000, propPitch: 0.9, weightPerMotor: 2.50, shaft: '1.5mm', cells: 1 }, // 2026
     ],
   };
 
@@ -456,12 +469,12 @@
       'betafpv-0802-champion-2026-28000', 'webleed-moefpv-treetoppers-0802-32500',
       'webleed-skyscrapers-0802-25000', 'happymodel-rs0802-19000',
       'happymodel-rs0802-25000', 'happymodel-ex0802-25000',
-      'rcinpower-gts-v3-0802-22000',
+      'rcinpower-gts-v3-0802-22000', 'geprc-speedx2-1002-25000-75mm',
     ],
     85: [
       'happymodel-ex1103-11000', 'happymodel-rs1102-10000', 'happymodel-rs1102-13500',
       'betafpv-1103-8000', 'betafpv-1103-11000', 'betafpv-1103-15000',
-      'flywoo-robo-1002-23500',
+      'flywoo-robo-1002-23500', 'geprc-speedx2-1002-25000',
     ],
   };
   const PICKER_PROP_IDS = {
@@ -469,12 +482,16 @@
     75: ['gemfan-1611-3', 'gemfan-1610-2', 'gemfan-1614-3', 'hq-40mm-16x11x3'],
     85: ['gemfan-2in-tmount-3', 'gemfan-hurricane-2015-2', 'hq-t2x2x3-tmount-3'],
   };
-  // C-rating is the calculator default (100), not a vendor claim — the model
-  // already uses that default when a pack is not named.
+  // C-ratings are each listing's figure, not a measurement: LAVA 300 75C and
+  // LAVA II 480 95C from BetaFPV's spec text. The weBLEEDfpv 450's listing text
+  // gives none, so its 95C is what the pack labels in the listing photos print.
+  // Picking a pack writes this into the C field, where a blanket 100 read as the
+  // pack's own rating. The generic 2S row names no product and keeps the
+  // calculator default (100).
   const PICKER_PACKS = [
-    { id: 'lava-300-1s', name: 'BetaFPV LAVA 300mAh 1S HV', cells: 1, mah: 300, c: 100, frames: ['65', '75'] },
-    { id: 'wb-450-1s', name: 'weBLEEDfpv 450mAh 1S BT2.0', cells: 1, mah: 450, c: 100, frames: ['65', '75'] },
-    { id: 'lava-ii-480-1s', name: 'BetaFPV LAVA II 480mAh 1S', cells: 1, mah: 480, c: 100, frames: ['65', '75'] },
+    { id: 'lava-300-1s', name: 'BetaFPV LAVA 300mAh 1S HV', cells: 1, mah: 300, c: 75, frames: ['65', '75'] },
+    { id: 'wb-450-1s', name: 'weBLEEDfpv 450mAh 1S BT2.0', cells: 1, mah: 450, c: 95, frames: ['65', '75'] },
+    { id: 'lava-ii-480-1s', name: 'BetaFPV LAVA II 480mAh 1S', cells: 1, mah: 480, c: 95, frames: ['65', '75'] },
     { id: 'whoop-450-2s', name: '450mAh 2S (85mm class)', cells: 2, mah: 450, c: 100, frames: ['85'] },
   ];
 
@@ -585,6 +602,9 @@
     els.motorKV.value = p.kv;
     els.cells.value = p.cells;
     els.capacity.value = p.capacity;
+    // The preset is a whole pack, so C resets with cells and capacity. Without
+    // this a picked pack's rating would ride along onto the next class's pack.
+    els.packC.value = els.packC.defaultValue;
     els.propPitch.value = p.pitch;
     els.weight.value = '';
     delete els.weight.dataset.derived;
@@ -1284,6 +1304,7 @@
       document.querySelectorAll('.frame-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.frame === f));
       populateMotorSelect(f); populatePropSelect(f); populateCompareSelects(f);
+      populatePicker(f);
       applyPreset(f);
     }
     let any = !!(f && framePresets[f]);
@@ -1496,10 +1517,15 @@
         document.querySelectorAll('.frame-btn').forEach(b =>
           b.classList.toggle('active', b.dataset.frame === d.frame));
         populateMotorSelect(d.frame); populatePropSelect(d.frame); populateCompareSelects(d.frame);
+        populatePicker(d.frame);
       }
       els.motorKV.value   = d.kv;
       els.cells.value     = '1';
       els.capacity.value  = d.mah;
+      // The row names its pack, so C follows it like cells and capacity do —
+      // otherwise a C left by the picker would ride along onto the anchor build.
+      const rowPack = pickerLookup(PICKER_PACKS, d.pack);
+      els.packC.value = rowPack ? String(rowPack.c) : els.packC.defaultValue;
       // Video first: the motor handler derives dry weight from the airframe
       // base, and the base depends on the video system.
       if (els.videoSystem) els.videoSystem.value = d.video;
@@ -1523,6 +1549,7 @@
       // final state rather than trusting whichever handler ran last.
       updateShaftWarn();
       updateVideoHint();
+      updatePickerCompat();
       calculate();
       const calc = document.getElementById('calculator') || document.querySelector('.frame-btn');
       if (calc) calc.scrollIntoView({ behavior: 'smooth', block: 'start' });

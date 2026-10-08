@@ -193,7 +193,7 @@
         <div class="field">
           <label for="packC">Battery C-Rating</label>
           <input type="number" id="packC" value="100" step="5" min="30" max="150">
-          <div class="field-hint">Caps how much current the pack can actually deliver — capacity × C. Sets the headline thrust number.</div>
+          <div class="field-hint">Caps how much current the pack can deliver — capacity × C. Picking a named pack fills in its seller's listed C, not a measured one. Sets the headline thrust number.</div>
         </div>
 
         <div class="field">
@@ -257,12 +257,12 @@
 
     <div class="bench-validation">
       <div class="bv-title">MODEL vs SCALE &amp; STOPWATCH</div>
-      <p class="bv-sub">Two of our own builds are flown, weighed, and timed — when your inputs match one, the calculator swaps its estimate for the measured number. <strong>Click a row to load that build into the calculator.</strong> Raw logs in <code>data/bench/</code>.</p>
+      <p class="bv-sub">Two calibrated builds of our own anchor the calculator — flown, weighed, and timed. When your inputs match one, the calculator swaps its estimate for the measured number. <strong>Click a row to load that build into the calculator.</strong> Raw logs in <code>data/bench/</code>.</p>
       <table class="bv-table">
         <thead><tr><th>Build</th><th>AUW measured</th><th>Weight model</th><th>Cruise time measured</th></tr></thead>
         <tbody>
-          <tr class="bv-row" data-frame="65" data-kv="30000" data-video="analog" data-motor="VCI 0702 PRO DB" data-prop="Gemfan 1219S 3-blade" data-dry="17.22" data-mah="300" data-pitch="1.9" tabindex="0" role="button" title="Load this build into the calculator"><td>Air65 analog · VCI 0702 PRO 30000KV · LAVA 300</td><td>25.42&nbsp;g</td><td>within 0.3%</td><td>3:53</td></tr>
-          <tr class="bv-row" data-frame="65" data-kv="28000" data-video="hdzero" data-motor="Happymodel SE0702" data-prop="Gemfan 1219S 3-blade" data-dry="19.53" data-mah="300" data-pitch="1.9" tabindex="0" role="button" title="Load this build into the calculator"><td>Mobula6 2024 HDZero · SE0702 28000KV · LAVA 300</td><td>27.73&nbsp;g</td><td>within 0.3%</td><td>2:34</td></tr>
+          <tr class="bv-row" data-frame="65" data-kv="30000" data-pack="lava-300-1s" data-video="analog" data-motor="VCI 0702 PRO DB" data-prop="Gemfan 1219S 3-blade" data-dry="17.22" data-mah="300" data-pitch="1.9" tabindex="0" role="button" title="Load this build into the calculator"><td>Air65 analog · VCI 0702 PRO 30000KV · LAVA 300</td><td>25.42&nbsp;g</td><td>within 0.3%</td><td>3:53</td></tr>
+          <tr class="bv-row" data-frame="65" data-kv="28000" data-pack="lava-300-1s" data-video="hdzero" data-motor="Happymodel SE0702" data-prop="Gemfan 1219S 3-blade" data-dry="19.53" data-mah="300" data-pitch="1.9" tabindex="0" role="button" title="Load this build into the calculator"><td>Mobula6 2024 HDZero · SE0702 28000KV · LAVA 300</td><td>27.73&nbsp;g</td><td>within 0.3%</td><td>2:34</td></tr>
         </tbody>
       </table>
     </div>
@@ -352,7 +352,7 @@
       270 mAh of a nominal 300. Current is corrected against a full-discharge anchor — the
       onboard sensors read 20% cold and 25% hot out of the box — which leaves roughly 8%
       uncertainty on the current figures. Durations are stopwatch and carry no such caveat.
-      Hover and freestyle runs are not measured yet.
+      Hover and freestyle runs are not measured yet on these two builds.
       Full records, sensor-correction methodology, and the HDZero-vs-analog cost table:
       <a href="bench.html">bench page</a>.
       Raw records:
@@ -565,7 +565,7 @@
      in the head has nothing left to lift it and every .reveal section stays
      at opacity 0 forever. Dropping the flag here shows them unanimated. -->
 <script src="motion.js?v=0515ee8a5594" defer onerror="document.documentElement.classList.remove('js-motion')"></script>
-<script src="script.js?v=848463ec2c0e"></script>
+<script src="script.js?v=2542a4d97124"></script>
 
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
