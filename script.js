@@ -177,7 +177,11 @@
       { id: 'happymodel-ex1103-11000', name: 'Happymodel EX1103',           kv: 11000, propPitch: 0.9, weightPerMotor: 3.20 },
       { id: 'happymodel-rs1102-13500', name: 'Happymodel RS1102',           kv: 13500, propPitch: 0.9, weightPerMotor: 2.80, cells: 1 }, // 2026
       { id: 'betafpv-1103-15000', name: 'BetaFPV 1103',               kv: 15000, propPitch: 0.9, weightPerMotor: 3.30, cells: 1 }, // 2026
-      { id: 'flywoo-robo-1002-23500', name: 'Flywoo ROBO 1002',            kv: 23500, propPitch: 0.9, weightPerMotor: 2.50 },
+      // Flywoo sells the ROBO 1002 in a low-KV wind for 2S and the 23500KV wind
+      // for 1S (owner-confirmed 2026-10-08; Flywoo pairs the 23500KV with its 1S
+      // Firefly16). Without the pin the 85mm class's 2S preset ran it at 2S.
+      // Source: flywoo.net/products/flywoo-robo-1002-19800kv-23500kv-fpv-motor-1pc
+      { id: 'flywoo-robo-1002-23500', name: 'Flywoo ROBO 1002',            kv: 23500, propPitch: 0.9, weightPerMotor: 2.50, cells: 1 },
       // GEPRC spec: 10mm x 2mm stator, 9N12P, 1.5mm shaft, 6.6 x 6.6mm M1.4
       // mounting, rated 1S (so cells: 1 against the 2S class preset), 2.5g with
       // 50mm leads. Stock on GEPRC's own T-Cube18: 87mm wheelbase, 45mm props, 1S.

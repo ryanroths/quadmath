@@ -350,6 +350,9 @@ FC_IS_PROSE = {
     "65-betafpv-ryfly-1219s",
     "65-betafpv-ryfly-hq31",
     "75-betafpv-ryfly-gf40",
+    # The dump names the Happymodel target it was flashed with; the entry names
+    # the board itself, an HDZero AIO5 (owner-confirmed 2026-10-08).
+    "75-newbeedrone-ryfly",
 }
 
 AXES = ("roll", "pitch", "yaw")

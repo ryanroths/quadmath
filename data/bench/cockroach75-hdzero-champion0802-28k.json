@@ -27,7 +27,7 @@
   },
   "firmware": {
     "type": "betaflight",
-    "note": "HDZero AIO5 FC \u2014 PIDs/rates not yet logged to tune DB; wobble at pack start reported, tune pending"
+    "note": "HDZero AIO5 FC (Happymodel CrazyBee F4 SX1280 target, HAMO) \u2014 a Sept 2026 dump of this board is tune DB entry 75-newbeedrone-ryfly; wobble at pack start reported, tune pending"
   },
   "weights_g": {
     "dry": 23.56,
