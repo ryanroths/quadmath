@@ -317,7 +317,7 @@
       <strong>Flight time</strong> is modeled from your battery capacity, a usable discharge window, and an average current draw estimated from frame size and motor specs, scaled by the flying style you pick. Where a build matches one of our measured runs, the estimate is replaced outright by the measured average current and the discharge window that run actually delivered — 90%, not the generic 80%. Cruise is the style we have measured; freestyle and aggressive are scaled from it and remain estimates.
     </p>
     <p>
-      <strong>Thrust-to-weight</strong> uses a bench-fitted power model: thrust = k × watts<sup>0.78</sup>, fitted from manufacturer test-stand sweeps (Happymodel EX1103 and SE0702), with a per-frame coefficient. The weights it divides by are measured rather than assumed — airframe base weight and pack weight both come from real 65mm builds weighed on a scale, and flight-time estimates for those builds are anchored to full-discharge runs. The headline thrust number is then clamped to the current your pack can actually source (capacity × C-rating) — the separate bench figure shows what the motors could pull on an unlimited supply. A ratio above 2:1 is generally freestyle-capable; whoops often run lower due to prop and motor constraints at their scale.
+      <strong>Thrust-to-weight</strong> uses a bench-fitted power model: thrust = k × watts<sup>0.78</sup>, fitted from manufacturer test-stand sweeps (Happymodel EX1103 and SE0702), with a per-frame coefficient. On 65mm and 75mm the airframe base weight it divides by comes from real builds weighed on a scale, as does the 300mAh pack weight; other pack weights and the 85mm and DJI / Walksnail bases are still estimates. Flight-time estimates for the two 65mm builds are anchored to full-discharge runs. The headline thrust number is then clamped to the current your pack can actually source (capacity × C-rating) — the separate bench figure shows what the motors could pull on an unlimited supply. A ratio above 2:1 is generally freestyle-capable; whoops often run lower due to prop and motor constraints at their scale.
     </p>
   </section>
 
@@ -565,7 +565,7 @@
      in the head has nothing left to lift it and every .reveal section stays
      at opacity 0 forever. Dropping the flag here shows them unanimated. -->
 <script src="motion.js?v=0515ee8a5594" defer onerror="document.documentElement.classList.remove('js-motion')"></script>
-<script src="script.js?v=bbd886dfe091"></script>
+<script src="script.js?v=801e2f551ce5"></script>
 
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
 </body>

@@ -112,9 +112,16 @@
 
     <h2>Sanity-check the flight time</h2>
     <p>
-      The <a href="/#calculator">calculator</a> takes the video system as an input and shows the
-      hit against the measured Air65 row. Put your candidate in with analog, then with HDZero,
-      and look at the two numbers before you decide the picture is worth it.
+      The <a href="/#calculator">calculator</a> takes the video system as an input, but it only
+      changes the airframe weight: 2.4 g more for HDZero (the two benched 65mm airframes'
+      difference with the motors taken out), and a flat estimated base for DJI / Walksnail.
+      Thrust-to-weight moves; the flight-time estimate does not, because it has no term for
+      the VTX's draw or for weight. On the two measured builds it shows the measured run, and
+      switching video there just drops it back to the model. For the flight-time cost, use the
+      measured pair instead: 233 s analog (Air65) against 154 s HDZero (Mobula6 2024) on the
+      same pack model, one cruise run each, on different frames and motors —
+      <a href="/content/guides/hdzero-vs-analog-65mm-flight-time.html">HDZero vs analog</a>
+      covers what that comparison does and does not show.
     </p>
 
     <nav class="guide-related" aria-label="Related tools">
