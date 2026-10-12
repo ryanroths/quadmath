@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1S Whoop Battery Connectors: BT2.0, A30, PH2.0, NX69, EM2.0 | quadmath.com</title>
+  <meta name="description" content="BT2.0 and A30 are cross-compatible. NX69 takes PH2.0, not BT2.0. EM2.0 fits nothing else. Pick one connector and re-pigtail the rest. 65–85mm 1S whoops only.">
+  <meta property="og:title" content="1S Whoop Battery Connectors: BT2.0, A30, PH2.0, NX69, EM2.0">
+  <meta property="og:description" content="BT2.0 and A30 are cross-compatible. Pick one connector and re-pigtail the rest. 65–85mm 1S whoops only.">
+  <meta property="og:url" content="https://quadmath.com/content/guides/1s-whoop-battery-connectors.html">
+  <link rel="canonical" href="https://quadmath.com/content/guides/1s-whoop-battery-connectors.html">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=optional" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css?v=2f595d174b9d">
+</head>
+<body>
+  <header>
+  <div class="container header-inner">
+    <a href="/" class="logo" aria-label="QuadMath home">QuadMath<span class="dot">.</span></a>
+    <button class="nav-toggle" id="navToggle" type="button"
+            aria-expanded="false" aria-controls="site-nav" aria-label="Menu">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </button>
+    <nav id="site-nav">
+      <a href="/#calculator">Calculator</a>
+      <a href="/sim.html">Sim</a>
+      <a href="/tune-database.html">Tunes</a>
+      <a href="/blackbox.html">Blackbox</a>
+      <a href="/bench.html">Bench</a>
+      <a href="/gear.html">Gear</a>
+      <a href="/guides.html" class="active" aria-current="page">Guides</a>
+      <a href="/hire.html">Hire</a>
+    </nav>
+  </div>
+</header>
+
+  <div class="container">
+<main class="section guide">
+    <h1>1S Whoop Battery Connectors: BT2.0, A30, PH2.0, NX69, EM2.0 — What Fits What</h1>
+
+    <p>
+      <strong>Short version:</strong> BT2.0 and A30 are cross-compatible, so a BT2.0 fleet covers A30 whoops like the Mobula6 2024 and Caddx Curve Micro 16. NX69 accepts PH2.0 plugs, not BT2.0. EMAX's EM2.0 fits nothing else. My rule: pick one connector and stick to it. If a new quad arrives on something weird, chop the plug off and solder on yours. For me that's BT2.0, with a sprinkle of A30, because they connect to each other. 65–85mm 1S whoops only.
+    </p>
+    <p>
+      Store links go through <code>/go/</code> affiliate redirects; they cost you nothing extra.
+    </p>
+
+    <h2>The table</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Connector</th>
+          <th>Used by</th>
+          <th>Mates with</th>
+          <th>WhoopStor V3</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>BT2.0</td><td>BETAFPV Air65/Air75/Meteor, LAVA II packs</td><td>A30</td><td>Native BT2.0 port</td></tr>
+        <tr><td>A30 (GNB)</td><td>Mobula6 2024, Curve Micro 16 HD</td><td>BT2.0</td><td>BT2.0 port (some fit loosely)</td></tr>
+        <tr><td>PH2.0</td><td>Older whoops, older Tinyhawk packs</td><td>NX69 quads take PH2.0 packs</td><td>Native PH2.0 port (recessed)</td></tr>
+        <tr><td>NX69</td><td>Hummingbird V4.1, Hummingbird RS V2</td><td>PH2.0</td><td>Via PH2.0 pigtail</td></tr>
+        <tr><td>EM2.0</td><td>Tinyhawk Aero, Nanoscout</td><td>Nothing else</td><td>Adapter only</td></tr>
+      </tbody>
+    </table>
+    <p>
+      Skip XT30 (1.6 g a pair vs BT2.0's 0.6 g) and GNB27 (heavier, harder to unplug), per Oscar Liang.
+    </p>
+
+    <h2>BT2.0 and A30: same family, use either</h2>
+    <p>
+      Oscar Liang flew them together for weeks and calls them compatible; in his 12 A test BT2.0 was only marginally ahead. Per KiwiQuads, A30 packs in a BT2.0 quad is officially supported; BT2.0 packs in an A30 quad is not (the A30 has a notch), though it is widely flown.
+    </p>
+
+    <h2>PH2.0: legacy, retire it on brushless</h2>
+    <p>
+      PH2.0 is the lightest plug (0.4 g) and showed the most sag in Oscar's test, which cost flight time. Don't buy new PH2.0 packs; it lives on as a charger port.
+    </p>
+
+    <h2>NX69: a PH2.0 cousin, not BT2.0</h2>
+    <p>
+      NewBeeDrone moved the Hummingbird V4 series to NX69 on August 29, 2025; the RS V2 uses it too. It's backward-compatible with PH2.0, not BT2.0. NBD recommends its Nitro Nectar 300mAh 1S HV NX69 packs (none ship with the quad) and claims 26.38 A peak versus 25.17 A on BT2.0. That's a manufacturer claim.
+    </p>
+
+    <h2>EM2.0: its own island</h2>
+    <p>
+      The Tinyhawk Aero's EM2.0 isn't plug-compatible with BT2.0, A30 or PH2.0 (Unmanned Tech). EMAX rates it at 10 A continuous, 20 A burst and 12.5 mΩ; it recommends its 1S HV 320mAh EM2.0 pack (270–750 mAh in store) and includes none.
+    </p>
+
+    <h2>One connector, re-pigtail everything else</h2>
+    <p>
+      Standardize on one plug and convert any quad that ships on another. Mine is BT2.0, plus some A30 packs, because the two inter-connect. That's my practice, not a test result. An A30 quad needs nothing; an EM2.0 or NX69 quad gets its pigtail swapped to BT2.0. Unmanned Tech notes the Aero's lead is long enough to re-solder. EMAX warns that converting moves you off the electrical path it tested. Adapters are for charging only: Oscar's test shows a weaker joint means more sag, and an adapter adds a joint and weight.
+    </p>
+
+    <h2>Charging on a WhoopStor V3</h2>
+    <p>
+      The <a href="/content/guides/1s-whoop-charger-whoopstor-vs-w63.html">WhoopStor V3</a> has PH2.0 and BT2.0 ports and does LiPo or LiHV. Oscar confirms A30 packs fit the BT2.0 ports, though some commenters report a loose fit. NX69 packs charge through the PH2.0 port with NBD's pigtail, which NBD bundles with a WhoopStor 3 in its starter kit. EM2.0 needs an adapter or EMAX's charger.
+    </p>
+
+    <h2>What I fly</h2>
+    <p>
+      All my packs are BT2.0: the <a href="/go/wb-340-bt20/" rel="sponsored noopener" target="_blank">weBLEEDfpv 340</a> on 65mm, and the <a href="/go/betafpv/" rel="sponsored noopener" target="_blank">LAVA II 480</a> or <a href="/go/wb-450-bt20/" rel="sponsored noopener" target="_blank">weBLEEDfpv 450</a> on 75mm. New to this? See <a href="/content/guides/first-tiny-whoop-setup.html">First Tiny Whoop Setup</a> and the <a href="/">calculator</a>.
+    </p>
+    <p>
+      <strong>Next:</strong> pick your pack size in <a href="/content/guides/1s-whoop-battery-by-size.html">1S Whoop Battery by Size</a>, and buy it in BT2.0.
+    </p>
+
+    <nav class="guide-related" aria-label="Related tools">
+      <ul>
+        <li><a href="/content/guides/1s-whoop-battery-by-size.html">1S whoop battery by size — what the bench flew on 65mm and 75mm</a></li>
+        <li><a href="/content/guides/1s-whoop-charger-whoopstor-vs-w63.html">1S charger — WhoopStor V3 first, W63 when you outgrow it</a></li>
+        <li><a href="/content/guides/first-tiny-whoop-setup.html">First tiny whoop setup — the full first cart</a></li>
+        <li><a href="/bench.html">Bench data — every run behind the numbers on this site</a></li>
+        <li><a href="/#calculator">Build calculator — flight time for your whoop and pack</a></li>
+      </ul>
+    </nav>
+  </main>
+</div>
+
+<footer>
+  <div class="container header-inner" style="width: 100%;">
+    <div class="footer-logo">QuadMath<span class="dot">.</span></div>
+    <div>Measured where it says measured. Fly safe.</div>
+  </div>
+</footer>
+
+<script src="/nav.js?v=0a5aa631939b" defer></script>
+
+<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
