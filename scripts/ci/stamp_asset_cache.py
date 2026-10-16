@@ -36,6 +36,7 @@ FIRST_PARTY_ASSETS = (
     "tune-database.js",
     "quadphysics.js",
     "sim-feel.js",
+    "sim-build.js",
     "style.css",
     "script.js",
     "motion.js",

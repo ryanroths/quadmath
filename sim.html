@@ -250,6 +250,12 @@
   #feelTutMsg{font-size:14px;font-weight:600;margin-bottom:8px}
   #feelTutorial button{width:auto;display:inline-block;margin:4px 6px}
   button.primary{background:var(--orange);color:#140802;border-color:var(--orange)}
+  /* W1 Your build — isolated from M1/M2 chrome */
+  #buildPreset,#buildFrame,#buildProp,#buildBlades,#buildCells{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
+    color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
+  .build-note{font-size:11px;color:var(--dim);line-height:1.45;margin:0 0 8px}
+  #buildCode{width:100%;min-height:44px;background:rgba(8,9,12,.55);border:1px solid var(--line);color:var(--txt);
+    font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;padding:8px;border-radius:10px;margin-bottom:8px}
 </style>
 </head>
 <body class="menu-open">
@@ -261,6 +267,7 @@
     <p class="menu-lead">Browser FPV whoop sim. Paste your Betaflight rates. No install.</p>
     <button class="primary" id="menuFly">Fly</button>
     <button id="menuTracks">Tracks</button>
+    <button id="menuBuild">Your build</button>
     <button id="menuBuilder">Track builder</button>
     <button id="menuTune">Tune</button>
     <button id="menuControls">Controls</button>
@@ -440,6 +447,43 @@
        see is when the module never ran — and then it must not claim sound. -->
   <button id="musicBtn">🔇 MUSIC [M]</button>
 
+  <h2>Your build</h2>
+  <p class="build-note">Approximate whoop physics — not a thrust-stand log. Feeds mass, inertia, thrust, spool, and battery sag. Betaflight CLI paste still sets rates/filters only.</p>
+  <div class="row"><label>Preset</label></div>
+  <select id="buildPreset"></select>
+  <div class="row"><label>Frame</label></div>
+  <select id="buildFrame">
+    <option value="65">65mm</option>
+    <option value="75">75mm</option>
+    <option value="85">85mm</option>
+  </select>
+  <div class="row"><label>Motor KV</label><span class="val" id="v_buildKv"></span></div>
+  <input type="range" id="s_buildKv" min="8000" max="40000" step="500" value="23000">
+  <div class="row"><label>Prop</label></div>
+  <select id="buildProp">
+    <option value="31">31mm</option>
+    <option value="40">40mm</option>
+    <option value="51">51mm (2")</option>
+  </select>
+  <div class="row"><label>Blades</label></div>
+  <select id="buildBlades">
+    <option value="2">2</option>
+    <option value="3">3</option>
+    <option value="4">4</option>
+  </select>
+  <div class="row"><label>Cells</label></div>
+  <select id="buildCells">
+    <option value="1">1S</option>
+    <option value="2">2S</option>
+  </select>
+  <div class="row"><label>Battery mAh</label><span class="val" id="v_buildMah"></span></div>
+  <input type="range" id="s_buildMah" min="200" max="680" step="10" value="300">
+  <div class="row"><label>AUW (g)</label><span class="val" id="v_buildAuw"></span></div>
+  <input type="range" id="s_buildAuw" min="18" max="80" step="0.1" value="27">
+  <p class="build-note" id="buildHint">Values are approximate.</p>
+  <textarea id="buildCode" rows="2" readonly spellcheck="false"></textarea>
+  <button type="button" id="btnBuildShare">COPY BUILD LINK</button>
+
   <h2>Physics</h2>
   <div class="row"><label>Drone type</label></div>
   <select id="droneType"></select>
@@ -554,6 +598,11 @@ import {
 } from "./sim-tracks.js?v=m2c";
 import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=m2c";
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=5f21c0324f8c";
+import {
+  BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
+  normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
+  loadBuild, saveBuild, buildDeepLink, matchPresetId, classDefault,
+} from "./sim-build.js?v=6264dd38e42a";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, not statically: a static import failure aborts
 // the whole module and takes the sim with it. Loaded this way, an addon/CDN failure
@@ -2524,10 +2573,11 @@ let camShake=0;
 // 1S pack: charge drains with load (hover ~4min, full-throttle ~100s), resting
 // voltage tracks charge, sag under load grows as the pack empties (rising IR),
 // and the measured voltage is smoothed (~0.15s) like a real vbat filter.
-const BATT_FULL=4.2,BATT_EMPTY=3.5;
-// Betaflight-style 1S warning thresholds, checked against the SAGGED live
-// voltage (battV includes load sag), so punch-outs flicker warnings early
-const BATT_WARN=3.5,BATT_CRIT=3.3;
+let BATT_FULL=4.2,BATT_EMPTY=3.5;
+// Warning thresholds track cell count (1S 3.5/3.3, 2S 7.0/6.6). Checked
+// against the SAGGED live voltage, so punch-outs flicker warnings early.
+let BATT_WARN=3.5,BATT_CRIT=3.3;
+let battHoverS=180,battSagDrop=0.25;
 let battCharge=1,battV=BATT_FULL;
 function resetSpawnPos(){
   if(currentMap==='city')return {x:0,y:.15,z:20}; // historic city reset — do not move
@@ -3325,9 +3375,9 @@ function physics(dt){
   const maxThrustWorld=qp.cfg.maxThrustPerMotor*4*WS;
   if(CFG.battSimOn){
     const loadFrac=Math.min(1,thrustActual/Math.max(1e-6,maxThrustWorld));
-    battCharge=Math.max(0,battCharge-dt*(0.25+1.5*loadFrac)/180); // hover ~4min, punch-outs eat it faster
+    battCharge=Math.max(0,battCharge-dt*(0.25+1.5*loadFrac)/battHoverS); // hover ~pack-scaled, punch-outs eat it faster
     const vRest=BATT_EMPTY+(BATT_FULL-BATT_EMPTY)*battCharge;
-    const vTarget=vRest-loadFrac*(0.25+0.35*(1-battCharge));
+    const vTarget=vRest-loadFrac*(battSagDrop+0.35*(1-battCharge));
     battV+=(vTarget-battV)*(dt/0.15);
   }else{battCharge=1;battV=BATT_FULL;} // master off = infinite fresh pack
   // Thrust scales ~V^1.5 for brushless (RPM ∝ V, thrust ∝ RPM², prop unload
@@ -3762,8 +3812,10 @@ function wireBuilderUI(){
 function wireLooksUI(){
   const fly=document.getElementById('menuFly');
   if(fly)fly.onclick=()=>{hideMenuLayer();toggleStartMenu(false);sessionLive=true;toast('Space to arm. 1/2/3 = mode.');};
-  document.getElementById('menuTune').onclick=()=>{hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');};
+  document.getElementById('menuTune').onclick=()=>{hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');syncBuildUI();};
   document.getElementById('menuTracks').onclick=()=>openTrackPicker();
+  const btnBuild=document.getElementById('menuBuild');
+  if(btnBuild)btnBuild.onclick=()=>openBuildPicker();
   const btnBuilder=document.getElementById('menuBuilder');
   if(btnBuilder)btnBuilder.onclick=()=>{hideMenuLayer();toggleStartMenu(false);openBuilder();};
   document.getElementById('menuControls').onclick=()=>{
@@ -3978,6 +4030,9 @@ droneSel.onchange=()=>{
   droneType=droneSel.value;
   try{localStorage.setItem('ryflyDroneType',droneType);}catch(e){}
   applyDroneType();
+  const d=DRONE_TYPES[droneType];
+  if(d&&d.frame) applyBuild(classDefault(d.frame),{save:true,announce:false});
+  else saveBuild(null);
   toast(DRONE_TYPES[droneType].label.toUpperCase());
 };
 // Rate-family selector, sat next to the class preset. Switching CONVERTS the
@@ -4012,6 +4067,140 @@ if(rateTypeSel){
 }
 applyDroneType(); // restore persisted type on load
 updateRadioInfo();
+
+// ---------- W1 Your build (new key quadmathSimBuild only) ----------
+let currentBuild=normalizeBuild(DEFAULT_BUILD);
+let syncingBuildUI=false;
+function applyPackFromBuild(b){
+  const pack=batteryFromBuild(b);
+  BATT_FULL=pack.full;BATT_EMPTY=pack.empty;BATT_WARN=pack.warn;BATT_CRIT=pack.crit;
+  battHoverS=pack.hoverS;battSagDrop=pack.sagDrop;
+  battCharge=1;battV=BATT_FULL;
+}
+function shareTrackParam(){
+  const t=currentTrackObj||findTrack(activeTrackId);
+  if(t&&t.id)return t.id;
+  return activeTrackId;
+}
+function syncBuildUI(){
+  const b=currentBuild;
+  syncingBuildUI=true;
+  try{
+    const preset=document.getElementById('buildPreset');
+    if(preset)preset.value=matchPresetId(b);
+    const setv=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+    setv('buildFrame',String(b.frameMm));
+    setv('s_buildKv',b.kv);
+    setv('buildProp',String(b.propMm));
+    setv('buildBlades',String(b.blades));
+    setv('buildCells',String(b.cells));
+    setv('s_buildMah',b.mah);
+    setv('s_buildAuw',b.auwG);
+    const kv=document.getElementById('v_buildKv');if(kv)kv.textContent=b.kv+' KV';
+    const mah=document.getElementById('v_buildMah');if(mah)mah.textContent=b.mah+' mAh';
+    const auw=document.getElementById('v_buildAuw');if(auw)auw.textContent=b.auwG+' g';
+    const hint=document.getElementById('buildHint');
+    const p=BUILD_PRESETS[matchPresetId(b)];
+    if(hint)hint.textContent=p?('Approximate. '+(p.note||'')):'Approximate custom whoop. Not a thrust-stand log.';
+    const code=document.getElementById('buildCode');
+    if(code)code.value=buildDeepLink({origin:location.origin,build:b,track:shareTrackParam(),mode:qp.flightMode||'angle'});
+  }finally{syncingBuildUI=false;}
+}
+function applyBuild(raw,opts){
+  const o=opts||{};
+  currentBuild=normalizeBuild(raw);
+  if(o.save!==false)saveBuild(currentBuild);
+  const phys=physicsFromBuild(currentBuild);
+  applyPackFromBuild(currentBuild);
+  applyingType=true;
+  try{
+    qp.setPreset(phys.preset); // mass/wheelbase/thrust/spool/kQ — does not touch rates or CLI
+    baseThrustPerMotor=phys.preset.maxThrustPerMotor;
+    CFG.maxThrustN=baseThrustPerMotor*4*WS;
+    setSlider('drag',phys.drag);
+    setSlider('mass',phys.massG);
+    setSlider('spool',phys.spoolTau);
+    applyCfgToQp();
+    refreshTwr();
+    droneType=phys.droneType;
+    droneSel.value=droneType;
+  }finally{applyingType=false;}
+  syncBuildUI();
+  if(o.announce!==false)toast(phys.label.toUpperCase()+' ≈');
+  return phys;
+}
+function readBuildForm(){
+  return normalizeBuild({
+    frameMm:+document.getElementById('buildFrame').value,
+    kv:+document.getElementById('s_buildKv').value,
+    propMm:+document.getElementById('buildProp').value,
+    blades:+document.getElementById('buildBlades').value,
+    cells:+document.getElementById('buildCells').value,
+    mah:+document.getElementById('s_buildMah').value,
+    auwG:+document.getElementById('s_buildAuw').value,
+  });
+}
+function wireBuildUI(){
+  const sel=document.getElementById('buildPreset');
+  if(sel&&!sel.options.length){
+    const blank=document.createElement('option');blank.value='';blank.textContent='Custom';
+    sel.appendChild(blank);
+    for(const p of Object.values(BUILD_PRESETS)){
+      const o=document.createElement('option');o.value=p.id;o.textContent=p.label+(p.approx?' ≈':'');
+      sel.appendChild(o);
+    }
+  }
+  if(sel)sel.onchange=()=>{if(!sel.value)return;applyBuild(BUILD_PRESETS[sel.value]);};
+  ['buildFrame','buildProp','buildBlades','buildCells','s_buildKv','s_buildMah','s_buildAuw'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.addEventListener('input',()=>{
+      if(syncingBuildUI)return;
+      applyBuild(readBuildForm());
+    });
+  });
+  const share=document.getElementById('btnBuildShare');
+  if(share)share.onclick=async()=>{
+    syncBuildUI();
+    const code=document.getElementById('buildCode').value;
+    try{await navigator.clipboard.writeText(code);toast('BUILD LINK COPIED');}
+    catch(e){document.getElementById('buildCode').select();toast('COPY THE LINK IN THE BOX');}
+  };
+}
+function openBuildPicker(){
+  const layer=document.getElementById('menuLayer');
+  const rows=Object.values(BUILD_PRESETS).map(p=>{
+    const on=matchPresetId(currentBuild)===p.id?'on':'';
+    return '<button type="button" class="'+on+'" data-bid="'+p.id+'"><span>'+p.label+(p.approx?' ≈':'')+'</span><span class="best">'+p.frameMm+'mm '+p.cells+'S</span></button>';
+  }).join('');
+  showMenuLayer('<h2>Your build</h2><p>Approximate whoop physics. Named presets use bench AUW where noted. Customize in Tune.</p>'+
+    '<div class="track-list">'+rows+'</div>'+
+    '<button type="button" id="buildOpenTune">Customize in Tune</button>'+
+    '<button type="button" id="layerClose">Close</button>');
+  if(layer)layer.classList.add('wide');
+  document.querySelectorAll('#menuLayer [data-bid]').forEach(b=>{
+    b.onclick=()=>{applyBuild(BUILD_PRESETS[b.dataset.bid]);hideMenuLayer();};
+  });
+  const tune=document.getElementById('buildOpenTune');
+  if(tune)tune.onclick=()=>{hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');syncBuildUI();};
+  document.getElementById('layerClose').onclick=hideMenuLayer;
+}
+{
+  const saved=loadBuild();
+  if(saved) applyBuild(saved,{save:false,announce:false});
+  else syncBuildUI();
+  wireBuildUI();
+  const gearBtn=document.getElementById('gear');
+  if(gearBtn){
+    const prev=gearBtn.onclick;
+    gearBtn.onclick=function(e){
+      if(typeof prev==='function')prev.call(this,e);
+      if(panel.classList.contains('open'))syncBuildUI();
+    };
+  }
+}
+
+window._build={encodeBuild,decodeBuild,applyBuild,BUILD_KEY,BUILD_PREFIX};
 
 // ---------- Betaflight CLI paste-import ----------
 // Reads rates_type FIRST, because the scaling and the curve both depend on it,
@@ -4572,12 +4761,25 @@ function applyQueryBoot(){
   const track=trackRaw&&isLegacyTrackId(trackRaw)?+trackRaw:trackRaw;
   if(map){
     setMap(map,track);
-    if(q.get('menu')!=='1')toggleStartMenu(false);
     resetQuad();
+  }else if(trackRaw){
+    const t=findTrack(track);
+    if(t){setMap(t.map,t.legacyId!=null?t.legacyId:t.id);resetQuad();}
   }
+  const buildRaw=q.get('build');
+  if(buildRaw){
+    const decoded=decodeBuild(buildRaw);
+    if(decoded) applyBuild(decoded,{save:true,announce:true});
+  }
+  const modeRaw=(q.get('mode')||'').toLowerCase();
+  if(modeRaw==='angle'||modeRaw==='horizon'||modeRaw==='acro'){
+    setFlightMode(modeRaw);flightMode=modeRaw;
+  }
+  if((map||trackRaw||buildRaw||modeRaw)&&q.get('menu')!=='1')toggleStartMenu(false);
   if(q.get('look')&&looks)looks.setLookSpot(q.get('look'));
   if(q.get('quality')&&looks)looks.setQuality(q.get('quality'));
   if(q.get('builder')==='1'){toggleStartMenu(false);openBuilder();}
+  syncBuildUI();
 }
 fetchBuiltinTracks().then(list=>{
   builtinTracks=list;
@@ -4590,7 +4792,8 @@ fetchBuiltinTracks().then(list=>{
 Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
   QUALITY_KEY,FLOATINESS_KEY,setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
-  physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness});
+  physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
+  encodeBuild,decodeBuild,BUILD_KEY});
 </script>
 <!-- Flattened to single-line spans so the whole thing fits the fixed 14px bar.
      The .container wrappers and the opacity:.6 on the credit are gone: the
