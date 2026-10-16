@@ -76,6 +76,7 @@ class StampHtmlText(unittest.TestCase):
             "motion.js": "ddd444ddd444",
             "tune-database.js": "eee555eee555",
             "quadphysics.js": "fff666fff666",
+            "sim-feel.js": "aabbcc112233",
             "vendor/three.module.min.js": "abc123abc123",
         }
 
