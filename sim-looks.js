@@ -11,6 +11,11 @@ export const LOOK_SPOTS = {
   t1mid:  { pos: [322, 50, -478], target: [350, 46, -515] },
   street: { pos: [6, 2.8, 90], target: [0, 3.5, -30] },
   roof:   { pos: [-40, 48, 95], target: [-20, 12, 10] },
+  living: { pos: [0, 4.6, 8], target: [0, 1.8, -6] },
+  garage: { pos: [0, 5.2, 12], target: [2, 2.2, -6] },
+  warehouse: { pos: [0, 7.5, 36], target: [0, 3.2, -8] },
+  backyard: { pos: [0, 8, 22], target: [0, 2, -8] },
+  builder: { pos: [0, 14, 0.1], target: [0, 0, 0] },
 };
 
 const ASSET = 'assets/sim-looks';
@@ -211,6 +216,8 @@ export async function createLooks(ctx) {
   let fpv = loadFpv();
   let lookSpot = null;
   let menuOpen = true;
+  let orbit = { cx: 0, cy: 5, cz: 0, r: 92, h: 22, fov: 62 };
+  let cityLighting = null;
   let skyMesh = null, sunSprite = null, groundMesh = null;
   let composer = null, bloomPass = null, aoPass = null, fpvPass = null, motionPass = null;
   let env1k = null, env2k = null, envLevel = null;
@@ -542,6 +549,29 @@ export async function createLooks(ctx) {
           }
           m.needsUpdate = true;
         }
+        const set = m.userData.looksSet;
+        if (set) {
+          const pack = set === 'wood' ? facade
+            : set === 'grass' ? grass
+            : set === 'asphalt' ? asphalt
+            : set === 'concrete' ? concrete
+            : facade;
+          if (pack && pack.diff && !m.userData.looksComposed && !m.map) {
+            m.map = pack.diff;
+            if (m.map.repeat) m.map.repeat.set(2, 2);
+          }
+          if (maps === 'pbr' && pack.nor) {
+            m.normalMap = pack.nor;
+            m.normalScale = new THREE.Vector2(set === 'wood' ? 0.35 : 0.7, set === 'wood' ? 0.35 : 0.7);
+            m.roughnessMap = pack.rough;
+            m.roughness = 1;
+          } else {
+            m.normalMap = null;
+            m.roughnessMap = null;
+          }
+          m.envMapIntensity = 0.8;
+          m.needsUpdate = true;
+        }
       }
     });
     applyAniso(scene, Math.min(maxAniso, p.anisotropy));
@@ -577,6 +607,7 @@ export async function createLooks(ctx) {
     if (ctx.onResize) ctx.onResize();
     try { await ensureHdr(p.hdri); } catch (e) { console.warn('looks HDRI', e); }
     try { await applyWorldMaps(); } catch (e) { console.warn('looks PBR', e); }
+    applyMapLooksNow();
     fps.lowMs = 0;
     return applied;
   }
@@ -606,9 +637,10 @@ export async function createLooks(ctx) {
     }
     if (menuOpen) {
       const t = performance.now() * 0.00007 + 2.4;
-      camera.position.set(Math.sin(t) * 92, 22, Math.cos(t) * 92);
-      camera.lookAt(0, 5, 0);
-      if (camera.fov !== 62) { camera.fov = 62; camera.updateProjectionMatrix(); }
+      camera.position.set(orbit.cx + Math.sin(t) * orbit.r, orbit.h, orbit.cz + Math.cos(t) * orbit.r);
+      camera.lookAt(orbit.cx, orbit.cy, orbit.cz);
+      const fov = orbit.fov || 62;
+      if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
       return true;
     }
     return false;
@@ -619,6 +651,35 @@ export async function createLooks(ctx) {
     const el = document.getElementById('startMenu');
     if (el) el.classList.toggle('open', menuOpen);
     document.body.classList.toggle('menu-open', menuOpen);
+  }
+
+  function setOrbit(next) {
+    if (!next) return orbit;
+    orbit = Object.assign({}, orbit, next);
+    return orbit;
+  }
+
+  let mapLooksSpec = null;
+  function applyMapLooksNow() {
+    const spec = mapLooksSpec;
+    if (!spec) return;
+    if (scene.fog && spec.fog != null) scene.fog.density = spec.fog;
+    if (spec.sun != null) sun.intensity = spec.sun;
+    if (hemi && spec.hemi != null) hemi.intensity = spec.hemi;
+    if ('environmentIntensity' in scene && spec.env != null) scene.environmentIntensity = spec.env;
+    if ('backgroundIntensity' in scene && spec.bg != null) scene.backgroundIntensity = spec.bg;
+  }
+  function setMapLooks(spec) {
+    if (!spec) return;
+    if (cityLighting == null) {
+      cityLighting = {
+        fog: scene.fog ? scene.fog.density : LIGHTING.fogDensity,
+        sun: sun.intensity,
+        hemi: hemi ? hemi.intensity : LIGHTING.hemiIntensity,
+      };
+    }
+    mapLooksSpec = spec;
+    applyMapLooksNow();
   }
 
   function tick(now) {
@@ -689,7 +750,11 @@ export async function createLooks(ctx) {
       }
     } catch (e) { /* ignore */ }
     // New keys must not collide
-    out.newKeys = { quality: QUALITY_KEY, fpv: FPV_KEY };
+    out.newKeys = {
+      quality: QUALITY_KEY, fpv: FPV_KEY,
+      customTracks: 'quadmathSimCustomTracks',
+      selectedTrack: 'quadmathSimTrack',
+    };
     return out;
   }
 
@@ -713,6 +778,8 @@ export async function createLooks(ctx) {
     setLookSpot,
     applyLookSpot,
     setMenuOpen,
+    setOrbit,
+    setMapLooks,
     tick,
     afterFirstFrame,
     upgradeMaterials,

@@ -1,0 +1,18 @@
+{
+  "id": "warehouse-catwalk",
+  "map": "warehouse",
+  "name": "Catwalk",
+  "class": "whoop",
+  "gates": [
+    { "x": 0.0, "y": 2.8, "z": 32.0, "ry": 0.00, "size": 2.0, "solid": true },
+    { "x": -14.0, "y": 8.5, "z": 16.0, "ry": 0.10, "size": 1.8, "solid": true },
+    { "x": -14.0, "y": 11.5, "z": -8.0, "ry": 0.00, "size": 1.7, "solid": true },
+    { "x": 0.0, "y": 12.0, "z": -28.0, "ry": 1.57, "size": 1.8, "solid": true },
+    { "x": 14.0, "y": 11.2, "z": -8.0, "ry": 3.14, "size": 1.7, "solid": true },
+    { "x": 14.0, "y": 6.5, "z": 14.0, "ry": 3.05, "size": 1.8, "solid": true },
+    { "x": 0.0, "y": 3.2, "z": 20.0, "ry": 3.14, "size": 2.0, "solid": true }
+  ],
+  "flags": [
+    { "x": 0.0, "y": 12.5, "z": 0.0, "ry": 0 }
+  ]
+}

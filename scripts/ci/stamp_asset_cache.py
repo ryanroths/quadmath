@@ -35,6 +35,8 @@ FIRST_PARTY_ASSETS = (
     "vendor/three.module.min.js",
     "tune-database.js",
     "quadphysics.js",
+    "sim-feel.js",
+    "sim-build.js",
     "style.css",
     "script.js",
     "motion.js",

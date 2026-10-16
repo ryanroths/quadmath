@@ -197,10 +197,65 @@
   .menu-layer ol{padding-left:18px}
   .menu-layer button{width:auto;margin-top:12px}
   body.menu-open #legend,body.menu-open #audioHint,body.menu-open #gear,body.menu-open #fpsHud,
-  body.menu-open .osd{opacity:0}
+    body.menu-open .osd,body.menu-open #feelHud,body.menu-open #feelTutorial{opacity:0}
+  body:has(#panel.open) #feelHud{opacity:0}
   .seg{display:flex;gap:6px;margin-bottom:10px}
-  #radioPreset,#droneType,#ratesType,#fpvStyle,#qualityPanel{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
+  #radioPreset,#droneType,#ratesType,#ratePreset,#fpvStyle,#qualityPanel{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
     color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
+  .menu-layer.wide{width:min(420px,92vw)}
+  .track-maps{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
+  .track-maps button,.track-list button{width:auto;flex:1;min-width:72px;margin-top:0;padding:7px 8px;font-size:11px;
+    border-color:var(--line);color:var(--txt)}
+  .track-maps button.on,.track-list button.on{border-color:var(--orange);color:var(--orange);background:rgba(255,77,26,.12)}
+  .track-list{display:flex;flex-direction:column;gap:6px}
+  .track-list button{width:100%;text-align:left;display:flex;justify-content:space-between;gap:8px}
+  .track-list .best{color:var(--dim);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px}
+  #builder{display:none;position:fixed;left:16px;right:16px;bottom:22px;z-index:24;pointer-events:none}
+  #builder.show{display:block}
+  .builder-bar{pointer-events:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+    background:var(--glass);border:1px solid var(--line);border-radius:16px;padding:10px 12px;
+    backdrop-filter:blur(16px)}
+  .builder-bar button{width:auto;margin:0;padding:6px 10px;font-size:11px}
+  .builder-bar button.on{border-color:var(--orange);color:var(--orange);background:rgba(255,77,26,.12)}
+  .builder-bar b{font-size:12px;margin-right:6px}
+  #builderLen{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:var(--green);margin-right:8px}
+  #builderDock{pointer-events:auto;margin-top:8px;display:flex;gap:8px;align-items:flex-start}
+  #builderCode{flex:1;min-height:52px;background:rgba(8,9,12,.55);border:1px solid var(--line);color:var(--txt);
+    font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;padding:8px;border-radius:10px}
+  #builderList{min-width:160px;max-height:140px;overflow:auto;margin:0;padding:8px 12px;
+    background:var(--glass);border:1px solid var(--line);border-radius:12px;font-size:11px;color:var(--dim)}
+  #builderList li{cursor:pointer;padding:2px 0}
+  #builderList li.on{color:var(--orange)}
+  body.builder-on #legend,body.builder-on #audioHint,body.builder-on #gear,body.builder-on #fpsHud,
+  body.builder-on .osd,body.builder-on #startMenu,body.builder-on #feelHud,body.builder-on #feelTutorial{opacity:0;pointer-events:none}
+  #calib{z-index:28}
+  #feelPrompt{position:fixed;inset:0;z-index:26;display:none;align-items:center;justify-content:center;
+    padding:32px;background:rgba(8,10,14,.45)}
+  #feelPrompt.show{display:flex}
+  #feelHud{position:fixed;right:16px;bottom:86px;z-index:12;display:flex;align-items:flex-end;gap:10px;
+    pointer-events:none;flex-direction:row-reverse}
+  #feelHud.hide{display:none}
+  .stick-pad{width:72px;height:72px;border:1px solid var(--line);border-radius:12px;background:var(--glass);
+    backdrop-filter:blur(12px);position:relative}
+  .stick-pad i{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--orange);
+    transform:translate(-50%,-50%);left:50%;top:50%;box-shadow:0 0 8px rgba(255,77,26,.6)}
+  .feel-meta{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid var(--line);
+    border-radius:12px;background:var(--glass);backdrop-filter:blur(12px);font-size:11px;min-width:108px}
+  .feel-meta span{color:var(--txt)}
+  #hudArm.on{color:var(--green)}
+  #feelTutorial{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:13;display:none;
+    width:min(420px,92vw);padding:14px 16px;background:var(--glass);border:1px solid var(--line);
+    border-radius:16px;backdrop-filter:blur(16px);text-align:center}
+  #feelTutorial.show{display:block}
+  #feelTutMsg{font-size:14px;font-weight:600;margin-bottom:8px}
+  #feelTutorial button{width:auto;display:inline-block;margin:4px 6px}
+  button.primary{background:var(--orange);color:#140802;border-color:var(--orange)}
+  /* W1 Your build — isolated from M1/M2 chrome */
+  #buildPreset,#buildFrame,#buildProp,#buildBlades,#buildCells{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
+    color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
+  .build-note{font-size:11px;color:var(--dim);line-height:1.45;margin:0 0 8px}
+  #buildCode{width:100%;min-height:44px;background:rgba(8,9,12,.55);border:1px solid var(--line);color:var(--txt);
+    font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;padding:8px;border-radius:10px;margin-bottom:8px}
 </style>
 </head>
 <body class="menu-open">
@@ -212,6 +267,8 @@
     <p class="menu-lead">Browser FPV whoop sim. Paste your Betaflight rates. No install.</p>
     <button class="primary" id="menuFly">Fly</button>
     <button id="menuTracks">Tracks</button>
+    <button id="menuBuild">Your build</button>
+    <button id="menuBuilder">Track builder</button>
     <button id="menuTune">Tune</button>
     <button id="menuControls">Controls</button>
     <button id="menuHowTo">How to</button>
@@ -267,6 +324,26 @@
 <div id="crosshair"></div>
 <div id="toast"></div>
 <div id="portalFlash"></div>
+<div id="builder">
+  <div class="builder-bar">
+    <b>Track builder</b>
+    <span id="builderLen">0.0 m</span>
+    <button type="button" data-btool="gate" class="on">Gate</button>
+    <button type="button" data-btool="flag">Flag</button>
+    <button type="button" data-btool="select">Select</button>
+    <button type="button" id="builderRot">Rotate 15°</button>
+    <button type="button" id="builderDel">Delete</button>
+    <button type="button" id="builderSave">Save local</button>
+    <button type="button" id="builderShare">Copy share code</button>
+    <button type="button" id="builderImport">Import</button>
+    <button type="button" id="builderFly">Fly this</button>
+    <button type="button" id="builderClose">Close</button>
+  </div>
+  <div id="builderDock">
+    <textarea id="builderCode" rows="3" placeholder="paste a QM2. share code here"></textarea>
+    <ol id="builderList"></ol>
+  </div>
+</div>
 <div id="audioHint">🔊 Press M to enable audio (music + motor sound)</div>
 <div id="legend">
   <div class="lgc lgc-tl"></div>
@@ -274,10 +351,28 @@
   <div class="lgc lgc-bl"></div>
   <div class="lgc lgc-br"></div>
   <b>M — Music On/Off</b><br>
-  <b>F — Angle / Acro Mode</b><br>
+  <b>1/2/3 — Angle / Horizon / Acro</b><br>
+  <b>Space — Arm / Disarm</b><br>
+  <b>H — Stick HUD</b><br>
   <b id="legendGhost">G — Ghost Replay</b><br>
-  <b>R — Reset Quad</b><br>
+  <b>R — Respawn last gate</b><br>
   <b>TAB — Tune Panel</b>
+</div>
+<div id="feelPrompt" aria-hidden="true"></div>
+<div id="feelHud">
+  <div class="stick-pad" aria-hidden="true"><i id="stickDotL"></i></div>
+  <div class="stick-pad" aria-hidden="true"><i id="stickDotR"></i></div>
+  <div class="feel-meta">
+    <span id="hudThr">THR 0%</span>
+    <span id="hudBatt">BATT --</span>
+    <span id="hudMode">ANGLE</span>
+    <span id="hudArm">DISARMED</span>
+  </div>
+</div>
+<div id="feelTutorial">
+  <div id="feelTutMsg">Tutorial</div>
+  <button type="button" id="feelTutSkip">Skip</button>
+  <button type="button" class="primary" id="feelTutLap" style="display:none">Now try a lap</button>
 </div>
 
 <div id="calib">
@@ -286,13 +381,14 @@
   <div id="calibHint"></div>
   <div id="calibBars"></div>
   <button id="calibCancel">CANCEL</button>
+  <button id="calibSkip" style="display:none">SKIP AUX</button>
 </div>
 
 <button id="gear">⚙ TUNE [Tab]</button>
 <div id="panel">
   <a id="panelHome" href="/">← Back to QuadMath</a>
   <h1>QUADMATH SIM</h1>
-  <div class="sub">acro by default. F toggles angle mode.</div>
+  <div class="sub">angle by default. 1/2/3 mode · Space arm · H HUD</div>
 
   <h2>Radio</h2>
   <div class="kbd" id="radioInfo">no gamepad detected</div>
@@ -324,9 +420,9 @@
 
   <h2>Camera</h2>
   <div class="row"><label>Cam angle</label><span class="val" id="v_cam"></span></div>
-  <input type="range" id="s_cam" min="0" max="60" step="1" value="30">
+  <input type="range" id="s_cam" min="0" max="60" step="1" value="15">
   <div class="row"><label>FOV</label><span class="val" id="v_fov"></span></div>
-  <input type="range" id="s_fov" min="80" max="160" step="1" value="105">
+  <input type="range" id="s_fov" min="80" max="160" step="1" value="110">
   <div class="row"><label>FPV look</label><input type="checkbox" id="cbFpvLook" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label>Look style</label></div>
   <select id="fpvStyle">
@@ -351,6 +447,43 @@
        see is when the module never ran — and then it must not claim sound. -->
   <button id="musicBtn">🔇 MUSIC [M]</button>
 
+  <h2>Your build</h2>
+  <p class="build-note">Approximate whoop physics — not a thrust-stand log. Feeds mass, inertia, thrust, spool, and battery sag. Betaflight CLI paste still sets rates/filters only.</p>
+  <div class="row"><label>Preset</label></div>
+  <select id="buildPreset"></select>
+  <div class="row"><label>Frame</label></div>
+  <select id="buildFrame">
+    <option value="65">65mm</option>
+    <option value="75">75mm</option>
+    <option value="85">85mm</option>
+  </select>
+  <div class="row"><label>Motor KV</label><span class="val" id="v_buildKv"></span></div>
+  <input type="range" id="s_buildKv" min="8000" max="40000" step="500" value="23000">
+  <div class="row"><label>Prop</label></div>
+  <select id="buildProp">
+    <option value="31">31mm</option>
+    <option value="40">40mm</option>
+    <option value="51">51mm (2")</option>
+  </select>
+  <div class="row"><label>Blades</label></div>
+  <select id="buildBlades">
+    <option value="2">2</option>
+    <option value="3">3</option>
+    <option value="4">4</option>
+  </select>
+  <div class="row"><label>Cells</label></div>
+  <select id="buildCells">
+    <option value="1">1S</option>
+    <option value="2">2S</option>
+  </select>
+  <div class="row"><label>Battery mAh</label><span class="val" id="v_buildMah"></span></div>
+  <input type="range" id="s_buildMah" min="200" max="680" step="10" value="300">
+  <div class="row"><label>AUW (g)</label><span class="val" id="v_buildAuw"></span></div>
+  <input type="range" id="s_buildAuw" min="18" max="80" step="0.1" value="27">
+  <p class="build-note" id="buildHint">Values are approximate.</p>
+  <textarea id="buildCode" rows="2" readonly spellcheck="false"></textarea>
+  <button type="button" id="btnBuildShare">COPY BUILD LINK</button>
+
   <h2>Physics</h2>
   <div class="row"><label>Drone type</label></div>
   <select id="droneType"></select>
@@ -359,8 +492,12 @@
     <option value="ACTUAL">Actual</option>
     <option value="BETAFLIGHT">Betaflight</option>
   </select>
+  <div class="row"><label>Rate preset</label></div>
+  <select id="ratePreset"></select>
   <div class="row"><label>Thrust:weight</label><span class="val" id="v_twr"></span></div>
   <input type="range" id="s_twr" min="2" max="14" step="0.1" value="5" disabled title="Derived from thrust ÷ weight — adjust Mass to change it">
+  <div class="row"><label>Floatiness</label><span class="val" id="v_float"></span></div>
+  <input type="range" id="s_float" min="0" max="1" step="0.01" value="0.32" title="Lower is snappier. Saved separately from rates.">
   <div class="row"><label>Drag</label><span class="val" id="v_drag"></span></div>
   <input type="range" id="s_drag" min="0.05" max="0.8" step="0.01" value="0.28">
   <div class="row"><label>Mass (g)</label><span class="val" id="v_mass"></span></div>
@@ -389,8 +526,9 @@
     TX16S: EdgeTX USB mode = <b>Joystick</b>. Move stick after plug-in.<br>
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
-    <b>R</b> reset &nbsp;<b>Tab</b> panel<br>
-    🔊 <b>M</b>: Music &nbsp;<b>F</b>: angle/acro &nbsp;<b id="kbdGhost">G</b>: ghost
+    <b>R</b> last-gate respawn &nbsp;<b>Tab</b> panel<br>
+    🔊 <b>M</b> music &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
+    <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost
   </div>
   <button id="btnReset">RESET QUAD [R]</button>
 </div>
@@ -448,8 +586,23 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS} from "./quadphysics.js?v=ff076e751452";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT} from "./quadphysics.js?v=9e5ae5988b68";
 import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js";
+import {
+  FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
+  cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
+  encodeShare, decodeShare, loadCustomTracks, saveCustomTracks, loadSelected, saveSelected,
+  ghostStorageKey, bestLapStorageKey, bestRunStorageKey, isLegacyTrackId, legacyIndex,
+  hostedGhostUrl, fetchBuiltinTracks, makePaceGhost,
+  BUILTIN_TRACK_FILES, SHARE_PREFIX, applyMissPenalty, enteredGate,
+} from "./sim-tracks.js?v=m2c";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=m2c";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=5f21c0324f8c";
+import {
+  BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
+  normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
+  loadBuild, saveBuild, buildDeepLink, matchPresetId, classDefault,
+} from "./sim-build.js?v=6264dd38e42a";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, not statically: a static import failure aborts
 // the whole module and takes the sim with it. Loaded this way, an addon/CDN failure
@@ -459,7 +612,7 @@ const gltfReady=import("three/addons/loaders/GLTFLoader.js")
   .then(function(m){GLTFLoader=m.GLTFLoader;window._gltfReady=true;return true;})
   .catch(function(){window._gltfReady=false;return false;});
 const CFG={
-  camDeg:30,fov:105,maxThrustN:3.9,thrCurve:0.68,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
+  camDeg:15,fov:110,maxThrustN:3.9,thrCurve:0.68,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
 // thrCurve recalibrated for the new physics core: motor thrust is now
 // proportional to output SQUARED, so at TWR 3 the motors must sit at 1/sqrt(3)
 // = 0.58 of full output to hover. The old linear-thrust model needed an
@@ -521,6 +674,19 @@ renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=LIGHTING.exposure;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 const scene=new THREE.Scene();
+const cityWorld=new THREE.Group();cityWorld.name='cityWorld';scene.add(cityWorld);
+const indoorWorld=new THREE.Group();indoorWorld.name='indoorWorld';indoorWorld.visible=false;scene.add(indoorWorld);
+const raceGroup=new THREE.Group();raceGroup.name='raceGroup';scene.add(raceGroup);
+let currentMap='city';
+let builtinTracks=[cityTrackJson(0),cityTrackJson(1)];
+let customTracks=[];
+let currentTrackObj=null;
+const flagMeshes=[];
+const startMarkers=[];
+let indoorBuilt={};
+let indoorLights=[];
+let cityColliderSnap=null;
+let builderOn=false;
 // Exponential-squared haze instead of the old linear 250..1100 ramp: at this
 // density a gate 300u out picks up ~6% fog and stays fully readable, while the
 // mesa ring and the far ground edge sit back in the horizon murk.
@@ -532,6 +698,7 @@ const camera=new THREE.PerspectiveCamera(CFG.fov,(canvas.clientWidth||1)/(canvas
 // inline width/height onto the canvas and break the flex sizing.
 let composer=null,bloomPass=null;   // set once the looks post chain finishes
 let looks=null;
+let feel=null;
 function resize(){
   const w=canvas.clientWidth||1,h=canvas.clientHeight||1;
   renderer.setSize(w,h,false);
@@ -642,8 +809,11 @@ function canvasTex(w,h,draw,rx=1,ry=1){
 }
 let seed=1337;function rnd(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646;}
 const colliders=[];
-function addCollider(x,y,z,w,h,d){
-  colliders.push(new THREE.Box3(new THREE.Vector3(x-w/2,y,z-d/2),new THREE.Vector3(x+w/2,y+h,z+d/2)));
+function addCollider(x,y,z,w,h,d,tag){
+  const b=new THREE.Box3(new THREE.Vector3(x-w/2,y,z-d/2),new THREE.Vector3(x+w/2,y+h,z+d/2));
+  b._tag=tag||'map';
+  colliders.push(b);
+  return b;
 }
 // Voxel-decompose an object's mesh geometry into several tight colliders.
 // For irregular/open structures (scaffolding, sample buildings, bridge
@@ -751,8 +921,9 @@ function voxelColliders(obj,gridRes,snapToGrid){
 // original city loop, 1 = standalone zigzag). Sequencing/highlight/lap all
 // operate within one track at a time via trackGates() + a within-track index.
 const gates=[];
-let activeTrackId=0;                 // which track's sequence is currently live
+let activeTrackId=0;                 // which track's sequence is currently live (0/1 city, or string id)
 let nextGateIndex=0;                 // index WITHIN the active track (not the global array)
+let lastPassedGate=null;             // world xyz of last racing gate flown (R respawn)
 // 3-lap RUN timing. A run begins on gate 0 (no run active), times RUN_LAPS
 // laps back-to-back, then ends — clock stops (no auto lap 4), splits + total
 // shown, best total stored per track. Passing gate 0 again starts a fresh run.
@@ -762,12 +933,30 @@ let runStartTime=0;                  // performance.now() at run start (gate 0)
 let lapStartTime=0;                  // current lap's start — for the live clock + split
 let runLap=0;                        // 1-based lap number within the current run
 let runSplits=[];                    // completed lap durations this run
-let lastRunSplits=[[],[]];           // per-track: last finished run's splits (results panel)
-let lastRunTotal=[0,0];              // per-track: last finished run's total
+let lastRunSplits={0:[],1:[]};       // per-track: last finished run's splits (results panel)
+let lastRunTotal={0:0,1:0};          // per-track: last finished run's total
+let lastGateSplits={0:[],1:[]};      // per-track last run's per-gate splits
 let lapFlashUntil=0;                 // green flash on a new best (lap or run total)
-let lastLapMs=[0,0],bestLapMs=[0,0]; // per-track per-lap records (still tracked)
-let bestRunMs=[0,0];                 // per-track best RUN total
+let lastLapMs={0:0,1:0},bestLapMs={0:0,1:0}; // per-track per-lap records (still tracked)
+let bestRunMs={0:0,1:0};                 // per-track best RUN total
+let gateSplitStart=0;
+let runGateSplits=[];                // per-gate splits this lap
+let missesThisLap=0;
+let missTotal=0;
+let lastGateSplit=0;
+const prevGatePos=new THREE.Vector3(0,.15,20);
 function loadNum(k){try{return parseFloat(localStorage.getItem(k))||0;}catch(e){return 0;}}
+function trackStatId(id){const L=legacyIndex(id);return L!==null?L:id;}
+function ensureTrackStats(id){
+  const k=trackStatId(id);
+  if(bestLapMs[k]==null)bestLapMs[k]=loadNum(bestLapStorageKey(k));
+  if(bestRunMs[k]==null)bestRunMs[k]=loadNum(bestRunStorageKey(k));
+  if(lastRunSplits[k]==null)lastRunSplits[k]=[];
+  if(lastGateSplits[k]==null)lastGateSplits[k]=[];
+  if(lastRunTotal[k]==null)lastRunTotal[k]=0;
+  if(lastLapMs[k]==null)lastLapMs[k]=0;
+  return k;
+}
 bestLapMs[0]=loadNum('quadmath_bestLap_0');bestLapMs[1]=loadNum('quadmath_bestLap_1');
 bestRunMs[0]=loadNum('quadmath_bestRun_0');bestRunMs[1]=loadNum('quadmath_bestRun_1');
 // migrate a pre-split single best-lap record into track 0's slot if present
@@ -778,9 +967,9 @@ function fmtLap(ms){
   const m=Math.floor(ms/60000),s=Math.floor(ms%60000/1000),h=Math.floor(ms%1000/10);
   return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+'.'+String(h).padStart(2,'0');
 }
-function addGate(x,y,z,rotationY,size,solidGate,trackId){
+function addGate(x,y,z,rotationY,size,solidGate,trackId,parent){
   size=size||7;
-  trackId=trackId||0; // default track 0 = original city loop
+  trackId=trackId===undefined||trackId===null?0:trackId; // default track 0 = original city loop
   const trackIdx=gates.filter(g=>g.trackId===trackId).length; // position within its OWN track
   const col=trackIdx%2===0?0xFF4D1A:0x3DDC97; // alternate brand orange/green, per-track
   const ring=new THREE.Mesh(
@@ -789,8 +978,8 @@ function addGate(x,y,z,rotationY,size,solidGate,trackId){
   ring.position.set(x,y,z);ring.rotation.y=rotationY||0;
   ring.castShadow=ring.receiveShadow=true; // long thin ring shadow on the deck is the main read for gate height
   decorateGate(THREE,ring,size,col);
-  scene.add(ring);
-  gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col,trackId:trackId,trackIdx:trackIdx}); // col = dim base color
+  (parent||raceGroup).add(ring);
+  gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col,trackId:trackId,trackIdx:trackIdx,ry:rotationY||0,size:size,solid:!!solidGate}); // col = dim base color
   if(solidGate){
     // real collision on the ring FRAME only: trace the torus curve with
     // overlapping axis-aligned box colliders (same decomposition approach as
@@ -800,7 +989,7 @@ function addGate(x,y,z,rotationY,size,solidGate,trackId){
     const spacing=2*Math.PI*size/segs,boxSize=Math.max(spacing*1.5,size*0.07*4);
     for(let i=0;i<segs;i++){
       const t=(i/segs)*Math.PI*2,lx=size*Math.cos(t),ly=size*Math.sin(t);
-      addCollider(x+lx*cosR,y+ly-boxSize/2,z-lx*sinR,boxSize,boxSize,boxSize);
+      addCollider(x+lx*cosR,y+ly-boxSize/2,z-lx*sinR,boxSize,boxSize,boxSize,'gate');
     }
   }
   return ring;
@@ -823,16 +1012,8 @@ function addDiveRing(x,y,z,rx,ry,size){
 // block, 9 lined up on the triple-stack middle slot (ring sits 10 before the
 // z=295 entry face — a torus can't fit inside the 2.2-high gap), 10 wide
 // fast finish pointing back at gate 1.
-addGate(-140,  7, -120,  0.00, 8);   // 1 west edge, low + fast
-addGate(-150,  6,  -30,  0.15, 8);   // 2
-addGate(-140,  9,   55, -0.20, 8);   // 3
-addGate( -70, 24,  110,  0.90, 7);   // 4 climb, beside skyscraper-a
-addGate( -25,  5.5, 70, -0.65, 7);   // 5 dive exit, 60 past gate 4
-addGate(   0,  6,  -90,  1.57, 5.5); // 6 overpass underpass, between pillars
-addGate(  45, 10,  -70,  0.70, 5.5); // 7 slalom L
-addGate(  70, 12,  -50, -0.70, 6);   // 8 slalom R, 32 from gate 7
-addGate(   0,  7,  285,  0.00, 5.5); // 9 triple-stack middle-slot line
-addGate( -40,  8, -150,  0.10, 9);   // 10 wide finish, back toward gate 1
+// City loop (legacy track 0) from frozen JSON — numbers must stay bit-identical.
+spawnTrackData(cityTrackJson(0),0);
 // freestyle dive rings near building blocks — visual/skill targets, no counter
 addDiveRing(  75, 30,  70, Math.PI/2, 0,   4);   // horizontal: dive down through
 addDiveRing( -80, 24, -75, Math.PI/2, 0,   3.5);
@@ -851,16 +1032,45 @@ function addStartMarker(pos){
   g.lineWidth=8;g.strokeStyle='#000';g.strokeText('START',128,32);
   g.fillStyle='#fff';g.fillText('START',128,32);
   const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));
-  spr.position.copy(pos);spr.position.y+=12;
-  spr.scale.set(16,4,1);
-  scene.add(spr);
+  const indoor=currentMap!=='city';
+  spr.position.copy(pos);spr.position.y+=indoor?1.5:12;
+  spr.scale.set(indoor?1.5:16,indoor?0.38:4,1);
+  raceGroup.add(spr);
+  startMarkers.push(spr);
   return spr;
 }
-addStartMarker(trackGates(0)[0].pos); // track 0 gate 0
+function addTrackFlag(f,col){
+  const mesh=makeFlagMesh(THREE,col||0xFF4D1A);
+  mesh.position.set(f.x,0,f.z);
+  mesh.rotation.y=f.ry||0;
+  const indoor=currentMap!=='city';
+  mesh.scale.setScalar(indoor?1:2.2);
+  if(f.y)mesh.position.y=Math.max(0,f.y-2.2);
+  raceGroup.add(mesh);
+  flagMeshes.push(mesh);
+  return mesh;
+}
+function spawnTrackData(track,trackId,parent){
+  const id=track.legacyId!=null?track.legacyId:trackId;
+  for(const g of track.gates){
+    addGate(g.x,g.y,g.z,g.ry,g.size,g.solid,id,parent);
+  }
+  for(const f of track.flags||[])addTrackFlag(f,0x3DDC97);
+  const list=trackGates(id);
+  if(list[0])addStartMarker(list[0].pos);
+  ensureTrackStats(id);
+  return id;
+}
 const gateUI=document.getElementById('osdGate');
+function trackLabel(id){
+  const t=findTrack(id);
+  return t&&t.name?t.name:(isLegacyTrackId(id)?'T'+(legacyIndex(id)+1):String(id));
+}
 function updateGateUI(){
   const list=trackGates(activeTrackId); // position shown within the active track only
-  gateUI.textContent='T'+(activeTrackId+1)+' GATE '+nextGateIndex+'/'+list.length+(runActive?' · LAP '+runLap+'/'+RUN_LAPS:'');
+  const miss=missTotal?(' · MISS +'+(missTotal*MISS_PENALTY_MS/1000).toFixed(1)+'s'):'';
+  const split=lastGateSplit?(' · SPLIT '+fmtLap(lastGateSplit)):'';
+  gateUI.textContent=trackLabel(activeTrackId)+' GATE '+nextGateIndex+'/'+list.length+(runActive?' · LAP '+runLap+'/'+RUN_LAPS:'')+split+miss;
 }
 // tall translucent column rising from the active target gate — visible over
 // terrain and from across the map so the pilot always knows where to go next.
@@ -869,7 +1079,7 @@ const beacon=new THREE.Mesh(
   new THREE.CylinderGeometry(1.5,1.5,200,12),
   new THREE.MeshStandardMaterial({color:0xaaffff,emissive:0xaaffff,emissiveIntensity:1.4,
     transparent:true,opacity:0.25,depthWrite:false}));
-beacon.renderOrder=999;beacon.visible=false;scene.add(beacon);
+beacon.renderOrder=999;beacon.visible=false;raceGroup.add(beacon);
 let beaconTarget=null; // last gate the beacon was moved to (reposition only on change)
 // next gate: bright white + strong pulsing scale; all others dim in their base
 // brand orange/green. The target is the active track's current gate, by object reference.
@@ -877,7 +1087,9 @@ function updateGateHighlight(){
   const target=trackGates(activeTrackId)[nextGateIndex];
   // move the beacon whenever the target changes (nextGateIndex OR active track)
   if(target&&target!==beaconTarget){
-    beacon.position.set(target.pos.x,target.pos.y+100,target.pos.z); // base at the gate, 200 tall
+    const bh=currentMap==='city'?200:6;
+    beacon.scale.set(currentMap==='city'?1:0.25,bh/200,currentMap==='city'?1:0.25);
+    beacon.position.set(target.pos.x,target.pos.y+bh/2,target.pos.z);
     beaconTarget=target;
   }
   beacon.visible=!!target;
@@ -892,22 +1104,28 @@ function startRun(){
   runActive=true;
   runStartTime=performance.now();
   lapStartTime=runStartTime;
+  gateSplitStart=runStartTime;
   runLap=1;
   runSplits=[];
+  runGateSplits=[];
+  missesThisLap=0;
+  missTotal=0;
+  lastGateSplit=0;
   startGhostRec();
 }
 // run over: stop the clock, stash results, store best total + ghost on a new
 // best, and announce total + the three splits
 function finishRun(){
   runActive=false;
-  const id=activeTrackId;
+  const id=ensureTrackStats(activeTrackId);
   const total=runSplits.reduce((a,b)=>a+b,0);
   lastRunTotal[id]=total;
   lastRunSplits[id]=runSplits.slice();
+  lastGateSplits[id]=runGateSplits.slice();
   let best=false;
   if(!bestRunMs[id]||total<bestRunMs[id]){
     bestRunMs[id]=total;
-    try{localStorage.setItem('quadmath_bestRun_'+id,String(total));}catch(e){}
+    try{localStorage.setItem(bestRunStorageKey(id),String(total));}catch(e){}
     commitGhost(id);                 // ghost = the whole 3-lap run
     lapFlashUntil=performance.now()+2500;
     best=true;
@@ -915,8 +1133,15 @@ function finishRun(){
   // total + the three splits (the lap OSD panel keeps them on screen after)
   toast('RUN '+fmtLap(total)+' ['+runSplits.map(fmtLap).join(' / ')+']'+(best?' — NEW BEST!':''));
 }
+function liveTrackIds(){
+  const ids=[];
+  for(const g of gates){
+    if(ids.indexOf(g.trackId)<0)ids.push(g.trackId);
+  }
+  return ids;
+}
 function updateGates(){
-  if(!gates.length)return;
+  if(!gates.length||builderOn)return;
   // Proximity track selection when idle: with no run active, make whichever
   // track's gate 0 is nearest the quad the active track, so its START lights
   // up and can be entered. LOCKED for the duration of a run — once runActive
@@ -924,7 +1149,7 @@ function updateGates(){
   // Unlocks automatically when the run ends (runActive back to false).
   if(!runActive){
     let nearest=activeTrackId,bestD=Infinity;
-    for(const id of [0,1]){
+    for(const id of liveTrackIds()){
       const g0=trackGates(id)[0];
       if(!g0)continue;
       const d=state.pos.distanceTo(g0.pos);
@@ -933,35 +1158,55 @@ function updateGates(){
     if(nearest!==activeTrackId){
       activeTrackId=nearest;
       nextGateIndex=0; // aim at the newly-selected track's gate 0
+      lastPassedGate=null;
+      currentTrackObj=findTrack(nearest)||currentTrackObj;
       updateGateUI();
     }
   }
   updateGateHighlight(); // every frame — drives the pulse on the active track's target gate
   // in-sequence advance, scoped to the active track only
   const list=trackGates(activeTrackId);
-  const g=list[nextGateIndex];
-  if(g&&state.pos.distanceTo(g.pos)<g.r){
-    const passed=nextGateIndex;
-    nextGateIndex=(nextGateIndex+1)%list.length; // wraps at THIS track's length
-    if(passed===0&&!runActive){ // gate 0 with no run active → start a fresh run
-      startRun();
-      toast('RUN START — LAP 1/'+RUN_LAPS);
-    }else if(nextGateIndex===0&&runActive){ // wrapped a full sequence → a run lap completed
-      const now=performance.now();
-      const split=now-lapStartTime;
-      runSplits.push(split);
-      lastLapMs[activeTrackId]=split;
-      if(!bestLapMs[activeTrackId]||split<bestLapMs[activeTrackId]){ // per-lap best still tracked
-        bestLapMs[activeTrackId]=split;
-        try{localStorage.setItem('quadmath_bestLap_'+activeTrackId,String(split));}catch(e){}
-      }
-      if(runLap>=RUN_LAPS)finishRun();  // lap 3 done → run ends, no auto lap 4
-      else{toast('LAP '+runLap+' — '+fmtLap(split));runLap++;lapStartTime=now;} // next lap; ghost keeps recording
-    }
-    else toast('GATE '+nextGateIndex+' PASSED');
+  const gateObjs=list.map(g=>({x:g.pos.x,y:g.pos.y,z:g.pos.z,r:g.r}));
+  const hit=detectPassOrMiss(prevGatePos,state.pos,gateObjs,nextGateIndex);
+  prevGatePos.copy(state.pos);
+  if(hit.type==='miss'){
+    missesThisLap++;
+    missTotal++;
+    toast('MISSED GATE +'+(MISS_PENALTY_MS/1000).toFixed(1)+'s');
     updateGateUI();
-    updateGateHighlight();
+    return;
   }
+  if(hit.type!=='pass')return;
+  const now=performance.now();
+  const passed=nextGateIndex;
+  const passedGate=list[passed];
+  if(passedGate) lastPassedGate={x:passedGate.pos.x,y:passedGate.pos.y,z:passedGate.pos.z};
+  if(runActive){
+    lastGateSplit=now-gateSplitStart;
+    runGateSplits.push(lastGateSplit);
+    gateSplitStart=now;
+  }
+  nextGateIndex=(nextGateIndex+1)%list.length; // wraps at THIS track's length
+  if(passed===0&&!runActive){ // gate 0 with no run active → start a fresh run
+    startRun();
+    toast('RUN START — LAP 1/'+RUN_LAPS);
+  }else if(nextGateIndex===0&&runActive){ // wrapped a full sequence → a run lap completed
+    const raw=now-lapStartTime;
+    const split=applyMissPenalty(raw,missesThisLap);
+    missesThisLap=0;
+    const id=ensureTrackStats(activeTrackId);
+    runSplits.push(split);
+    lastLapMs[id]=split;
+    if(!bestLapMs[id]||split<bestLapMs[id]){ // per-lap best still tracked
+      bestLapMs[id]=split;
+      try{localStorage.setItem(bestLapStorageKey(id),String(split));}catch(e){}
+    }
+    if(runLap>=RUN_LAPS)finishRun();  // lap 3 done → run ends, no auto lap 4
+    else{toast('LAP '+runLap+' — '+fmtLap(split));runLap++;lapStartTime=now;runGateSplits=[];} // next lap; ghost keeps recording
+  }
+  else toast('GATE '+nextGateIndex+' PASSED'+(lastGateSplit?' '+fmtLap(lastGateSplit):''));
+  updateGateUI();
+  updateGateHighlight();
 }
 updateGateUI();updateGateHighlight();
 
@@ -1324,7 +1569,7 @@ window._tryAssets=async function(){
       dreamGround.rotation.x=-Math.PI/2;
       dreamGround.position.set(DX,0,DZ);
       dreamGround.receiveShadow=true;
-      scene.add(dreamGround);
+      cityWorld.add(dreamGround);
 
       // 2. compact 5-gate mini-loop, ~80 unit radius, varied height 5-15 —
       // reuses addGate() for the exact same visual construction, then
@@ -1345,7 +1590,7 @@ window._tryAssets=async function(){
       for(const s of loopSpecs){
         const rad=s.ang*Math.PI/180;
         const gx=DX+Math.cos(rad)*loopR,gz=DZ+Math.sin(rad)*loopR;
-        addGate(gx,s.h,gz,rad+Math.PI/2,s.size);
+        addGate(gx,s.h,gz,rad+Math.PI/2,s.size,false,0,cityWorld);
       }
       gates.length=mainGateCount; // strip back out — main race untouched
 
@@ -1388,10 +1633,10 @@ window._tryAssets=async function(){
       // arrival without globally re-tinting the main map's lighting.
       const dreamLight=new THREE.PointLight(0x8f6bff,0.6*Math.PI,450,2);
       dreamLight.position.set(DX,120,DZ);
-      scene.add(dreamLight);
+      cityWorld.add(dreamLight);
     }
     // swap: hide procedural, clear its colliders (rebuilt above)
-    scene.add(placedRoot);
+    cityWorld.add(placedRoot);
     proceduralGroup.visible=false;
     // remove procedural colliders (they were added first, before gltf)
     colliders.splice(0,proceduralColliderCount);
@@ -1413,6 +1658,8 @@ window._tryAssets=async function(){
     // strand the panel mid-sentence. Failure text stays put — it is terminal too.
     if(/^loading GLTF assets/.test(assetEl.textContent))
       assetEl.textContent=usingGltf?'GLTF city loaded.':'procedural city active.';
+    wrapCityWorld();
+    snapCityColliders();
   }
 };
 
@@ -1887,19 +2134,8 @@ addWallRide(160,12,70,35,2,0,0);
 // Shifted +220 on z from the previous placement so the whole loop sits on the
 // 1400×1400 ground plane (z∈[-700,+700]); previously it ran to z=-905, hanging
 // half its gates off the world edge. New z span: -345 to -685.
-addGate(210,  8,  -345,  0.30, 9, true, 1);  // 1 entry, low + wide (this track's gate 0)
-addGate(490,  14, -390,  1.95, 7, true, 1);  // 2 hard swing right
-addGate(220,  26, -435, -1.95, 7, true, 1);  // 3 swing left + climb
-addGate(480,  40, -480,  1.95, 6, true, 1);  // 4 swing right, near-peak, tight
-addGate(350,  46, -515,  3.14, 6, true, 1);  // 5 CENTER apex — highest point, tight technical gate
-addGate(220,  28, -550, -1.95, 7, true, 1);  // 6 dive left, descending
-addGate(490,  16, -585,  1.95, 7, true, 1);  // 7 swing right, descending
-addGate(350,  10, -620,  3.14, 8, true, 1);  // 8 low center gate, near-ground fast pass
-addGate(220,  18, -655, -1.95, 7, true, 1);  // 9 swing left
-addGate(480,  12, -680,  1.60, 7, true, 1);  // 10 swing right, near south edge
-addGate(350,  22, -685,  0.90, 8, true, 1);  // 11 south turnaround apex
-addGate(280,  10, -405, -2.60, 9, true, 1);  // 12 long return leg, wide finish — closes the loop
-addStartMarker(trackGates(1)[0].pos); // track 1 gate 0 — its own START label
+// Mesa zigzag (legacy track 1) from frozen JSON — numbers must stay bit-identical.
+spawnTrackData(cityTrackJson(1),1);
 // ---------- Portal system (round-trip teleport) ----------
 // Purely visual + a proximity/teleport check — no collider, so unlike the
 // tunnel/triple-stack/dive-shaft/wall-ride above, placement relative to
@@ -2046,6 +2282,113 @@ for(let i=0;i<7;i++){
   scene.add(mesa);
 }
 window._tryAssets(); // readiness is awaited inside — safe to call before the loader resolves
+
+function wrapCityWorld(){
+  const keep=new Set([cityWorld,indoorWorld,raceGroup,skyMesh,sunSprite,sun,sun.target,sunFill,hemi]);
+  const move=[];
+  for(const c of scene.children){
+    if(keep.has(c)||c.isLight||c.isCamera||c.isPoints)continue;
+    if(c.userData&&c.userData.keepInScene)continue;
+    move.push(c);
+  }
+  for(const c of move)cityWorld.add(c);
+}
+wrapCityWorld();
+function snapCityColliders(){
+  cityColliderSnap=colliders.filter(c=>c._tag!=='gate').slice();
+}
+function restoreColliders(mapCols){
+  for(let i=colliders.length-1;i>=0;i--){
+    if(colliders[i]._tag!=='gate')colliders.splice(i,1);
+  }
+  for(const c of mapCols||[])colliders.push(c);
+}
+function clearRace(){
+  for(const g of gates){if(g.mesh&&g.mesh.parent)g.mesh.parent.remove(g.mesh);}
+  gates.length=0;
+  for(const f of flagMeshes){if(f.parent)f.parent.remove(f);}
+  flagMeshes.length=0;
+  for(const s of startMarkers){if(s.parent)s.parent.remove(s);}
+  startMarkers.length=0;
+  for(let i=colliders.length-1;i>=0;i--){
+    if(colliders[i]._tag==='gate')colliders.splice(i,1);
+  }
+  beaconTarget=null;
+}
+function findTrack(id){
+  const L=legacyIndex(id);
+  const all=builtinTracks.concat(customTracks);
+  for(const t of all){
+    if(t.id===id||(L!==null&&t.legacyId===L)||String(t.legacyId)===String(id))return t;
+  }
+  if(L!==null)return cityTrackJson(L);
+  return null;
+}
+function tracksForMap(mapId){
+  return builtinTracks.concat(customTracks).filter(t=>t.map===mapId);
+}
+function spawnCityRaces(){
+  clearRace();
+  spawnTrackData(cityTrackJson(0),0);
+  spawnTrackData(cityTrackJson(1),1);
+}
+function ensureIndoor(mapId){
+  if(indoorBuilt[mapId])return indoorBuilt[mapId];
+  const built=buildMap(THREE,mapId);
+  indoorWorld.add(built.group);
+  indoorBuilt[mapId]=built;
+  if(looks){
+    looks.upgradeMaterials(built.group);
+    if(looks.setQuality)looks.setQuality(looks.choice);
+  }
+  return built;
+}
+function applyMapLooks(mapId){
+  const spec=MAP_LOOKS[mapId]||MAP_LOOKS.city;
+  if(looks&&looks.setMapLooks)looks.setMapLooks(spec);
+  if(looks&&looks.setOrbit)looks.setOrbit(MAP_ORBIT[mapId]||MAP_ORBIT.city);
+  if(skyMesh)skyMesh.visible=mapId==='city'||mapId==='backyard';
+  if(sunSprite)sunSprite.visible=mapId==='city'||mapId==='backyard';
+  setIndoorLights(indoorLights,looks?looks.applied:'med');
+}
+async function setMap(mapId,trackId){
+  if(!cityColliderSnap)snapCityColliders();
+  currentMap=mapId||'city';
+  if(currentMap==='city'){
+    cityWorld.visible=true;
+    indoorWorld.visible=false;
+    restoreColliders(cityColliderSnap);
+    spawnCityRaces();
+    const t=findTrack(trackId!=null?trackId:0)||cityTrackJson(0);
+    currentTrackObj=t;
+    activeTrackId=t.legacyId!=null?t.legacyId:t.id;
+    if(t&&t.legacyId==null)spawnTrackData(t,t.id);
+  }else{
+    cityWorld.visible=false;
+    indoorWorld.visible=true;
+    for(const k of Object.keys(indoorBuilt))indoorBuilt[k].group.visible=k===currentMap;
+    const built=ensureIndoor(currentMap);
+    indoorLights=built.lights||[];
+    restoreColliders(built.colliders);
+    clearRace();
+    const list=tracksForMap(currentMap);
+    const t=findTrack(trackId)||list[0];
+    if(t){
+      currentTrackObj=t;
+      activeTrackId=t.legacyId!=null?t.legacyId:t.id;
+      spawnTrackData(t,activeTrackId);
+    }
+  }
+  applyMapLooks(currentMap);
+  nextGateIndex=0;
+  runActive=false;
+  lastPassedGate=null;
+  updateGateUI();updateGateHighlight();
+  saveSelected({map:currentMap,track:activeTrackId});
+  const k=trackStatId(activeTrackId);
+  if(ghosts[k]==null)ghosts[k]=loadGhost(k);
+  if(defaultRivals[k]==null)loadHostedGhost(k);
+}
 
 // ---------- Quad state ----------
 const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
@@ -2195,7 +2538,9 @@ qp.onSubstep=(s)=>{
   // a tumble SETTLES within ~half a second of ground contact instead of
   // spinning in place forever. 0.97^240 per second ≈ hard decay, contact only.
   if(floorHit){
-    s.omega.x*=0.97;s.omega.y*=0.97;s.omega.z*=0.97;
+    // 0.97 per 240 Hz step ≈ e^(-7.3 t). Keep the same settle time at 500/1000 Hz.
+    const k=Math.exp(-(s.physicsDt||1/500)*7.3);
+    s.omega.x*=k;s.omega.y*=k;s.omega.z*=k;
   }
 };
 // Ground-effect clearance: height above whatever is directly underneath — open
@@ -2212,7 +2557,6 @@ qp.groundClearance=(s)=>{
   }
   return (_gp.y-top)/WS;
 };
-const PHYS_DT_HZ=1/240;
 
 // Mirror the module state into the three.js-space `state` object every frame so
 // camera, OSD, gates and ghosts keep reading exactly what they did.
@@ -2229,26 +2573,57 @@ let camShake=0;
 // 1S pack: charge drains with load (hover ~4min, full-throttle ~100s), resting
 // voltage tracks charge, sag under load grows as the pack empties (rising IR),
 // and the measured voltage is smoothed (~0.15s) like a real vbat filter.
-const BATT_FULL=4.2,BATT_EMPTY=3.5;
-// Betaflight-style 1S warning thresholds, checked against the SAGGED live
-// voltage (battV includes load sag), so punch-outs flicker warnings early
-const BATT_WARN=3.5,BATT_CRIT=3.3;
+let BATT_FULL=4.2,BATT_EMPTY=3.5;
+// Warning thresholds track cell count (1S 3.5/3.3, 2S 7.0/6.6). Checked
+// against the SAGGED live voltage, so punch-outs flicker warnings early.
+let BATT_WARN=3.5,BATT_CRIT=3.3;
+let battHoverS=180,battSagDrop=0.25;
 let battCharge=1,battV=BATT_FULL;
-function resetQuad(){state.pos.set(0,.15,20);state.vel.set(0,0,0);state.q.identity();
-  // module owns the truth now — reset it, then mirror back into `state`
+function resetSpawnPos(){
+  if(currentMap==='city')return {x:0,y:.15,z:20}; // historic city reset — do not move
+  const t=currentTrackObj||findTrack(activeTrackId);
+  return startPad(t||{gates:[]});
+}
+function placeQuadAt(x,y,z,yaw){
+  state.pos.set(x,Math.max(0.15,y),z);state.vel.set(0,0,0);state.q.identity();
+  prevGatePos.copy(state.pos);
   qp.reset(world2mod(state.pos,{x:0,y:0,z:0}));
+  if(yaw){
+    const h=yaw*0.5;
+    qp.quaternion={x:0,y:0,z:Math.sin(h),w:Math.cos(h)};
+  }
   qp.cfg.maxThrustPerMotor=baseThrustPerMotor;
   syncStateFromQp();
   thrustActual=0; // motors spool from zero on re-arm — no thrust jump
   camShake=0;
-  battCharge=1;battV=BATT_FULL; // reset = fresh pack
-  // clear run state; leave activeTrackId alone so proximity selection re-picks
-  // the nearest track's start next frame (the quad respawns by track 0's start,
-  // so that's what it'll land on — but we don't hard-force it)
-  nextGateIndex=0;runActive=false;runLap=0;runSplits=[];lapStartTime=0;runStartTime=0;
+}
+function resetQuad(){
+  // Crash / flip recovery: R respawns at the last passed JSON-track gate and
+  // keeps gate-progress (nextGateIndex / run / splits). Tutorial has its own pad.
+  // No last gate → map start (city historic pad, indoor startPad).
+  const tut=feel&&feel.isTutorial();
+  const hasGate=!!lastPassedGate&&!tut;
+  if(tut){
+    const p=feel.spawnForTutorial();
+    placeQuadAt(p.x,p.y,p.z,p.yaw);
+    toast('TUTORIAL RESET');
+    return;
+  }
+  if(hasGate){
+    placeQuadAt(lastPassedGate.x,lastPassedGate.y,lastPassedGate.z);
+    toast('RESPAWN — LAST GATE');
+    return;
+  }
+  const pad=resetSpawnPos();
+  placeQuadAt(pad.x,pad.y,pad.z);
+  battCharge=1;battV=BATT_FULL; // fresh pack only on a full map-start reset
+  nextGateIndex=0;runActive=false;runLap=0;runSplits=[];runGateSplits=[];lapStartTime=0;runStartTime=0;
+  missesThisLap=0;missTotal=0;lastGateSplit=0;
+  lastPassedGate=null;
   clearGhostRec(); // drop the in-progress recording — this run is void
   updateGateUI();updateGateHighlight();
-  toast('RESET');}
+  toast('RESET');
+}
 
 // ---------- Radio: axis map + calibration ----------
 // axisMap: {r:{i,sign}, p:{i,sign}, y:{i,sign}, t:{i,min,max}}
@@ -2303,6 +2678,8 @@ const CAL_STEPS=[
   {key:'y', label:'YAW — LEFT STICK FULL RIGHT', hint:'hold deflection'},
   {key:'thi', label:'THROTTLE FULL UP', hint:'hold'},
   {key:'tlo', label:'THROTTLE FULL DOWN', hint:'hold'},
+  {key:'arm', label:'ARM SWITCH — FLIP IT', hint:'or Skip Aux and use Space'},
+  {key:'mode', label:'MODE SWITCH — MOVE IT', hint:'3-pos Angle / Horizon / Acro — or Skip Aux'},
 ];
 function startCalib(){
   const pads=navigator.getGamepads&&navigator.getGamepads();
@@ -2312,11 +2689,20 @@ function startCalib(){
   calibEl.classList.add('show');
 }
 document.getElementById('btnCalib').onclick=startCalib;
-document.getElementById('calibCancel').onclick=()=>{calib=null;calibEl.classList.remove('show');};
+document.getElementById('calibCancel').onclick=()=>{calib=null;calibEl.classList.remove('show');document.getElementById('calibSkip').style.display='none';};
+document.getElementById('calibSkip').onclick=()=>{
+  if(!calib)return;
+  const st=CAL_STEPS[calib.step];
+  if(st&&(st.key==='arm'||st.key==='mode')){
+    calib.step++;calib.timer=0;
+    if(calib.step>=CAL_STEPS.length)finishCalib();
+  }
+};
 function runCalib(gp,dt){
   const st=CAL_STEPS[calib.step];
   calibStepEl.textContent=st.label;
   calibHintEl.textContent=st.hint;
+  document.getElementById('calibSkip').style.display=(st.key==='arm'||st.key==='mode')?'':'none';
   calibBarsEl.innerHTML=gp.axes.map((a,i)=>
     `ax${i} ${'▮'.repeat(Math.round((a+1)*5)).padEnd(10,'▯')} ${a.toFixed(2)}`).join('<br>');
   const ax=gp.axes;
@@ -2335,9 +2721,43 @@ function runCalib(gp,dt){
       calib.timer+=dt;
       if(calib.timer>0.6){
         calib.result.t.min=ax[ti];
-        finishCalib();
+        calib.step++;calib.timer=0;
+        if(calib.step>=CAL_STEPS.length)finishCalib();
       }
     } else calib.timer=0;
+    return;
+  }
+  if(st.key==='arm'||st.key==='mode'){
+    let best=-1,bestD=0;
+    for(let i=0;i<ax.length;i++){
+      if(calib.used.has(i))continue;
+      const d=ax[i]-calib.center[i];
+      if(Math.abs(d)>Math.abs(bestD)){bestD=d;best=i;}
+    }
+    if(best>=0&&Math.abs(bestD)>0.5){
+      calib.timer+=dt;
+      if(calib.timer>0.45){
+        calib.result[st.key]={i:best,sign:Math.sign(bestD)||1};
+        calib.used.add(best);
+        calib.step++;calib.timer=0;
+        if(calib.step>=CAL_STEPS.length)finishCalib();
+      }
+    }else{
+      let btn=-1;
+      if(gp.buttons){
+        for(let i=0;i<gp.buttons.length;i++){
+          if(gp.buttons[i]&&(gp.buttons[i].pressed||gp.buttons[i].value>0.6)){btn=i;break;}
+        }
+      }
+      if(btn>=0){
+        calib.timer+=dt;
+        if(calib.timer>0.35){
+          calib.result[st.key]={button:btn};
+          calib.step++;calib.timer=0;
+          if(calib.step>=CAL_STEPS.length)finishCalib();
+        }
+      } else calib.timer=0;
+    }
     return;
   }
   // r/p/y/thi: fresh axis with max |delta| from center, exceeding 0.6
@@ -2364,6 +2784,7 @@ function finishCalib(){
   axisMap=calib.result;
   saveMap();
   calib=null;calibEl.classList.remove('show');
+  document.getElementById('calibSkip').style.display='none';
   toast('CALIBRATED — SAVED');
   updateRadioInfo();
 }
@@ -2571,9 +2992,21 @@ function updateMotorSound(){
 }
 addEventListener('keydown',e=>{
   if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&e.target.type==='text')))return; // typing in the CLI/ghost/pilot-name boxes must not trigger R/M/F/G hotkeys
-  if(e.key==='Escape'){e.preventDefault();toggleStartMenu();return;}
+  if(builderOn){
+    if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();document.getElementById('builderDel').click();return;}
+    if(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E'){e.preventDefault();document.getElementById('builderRot').click();return;}
+    return;
+  }
+  if(e.key==='Escape'){e.preventDefault();if(builderOn){closeBuilder();return;}toggleStartMenu();return;}
   if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
+  if(e.code==='Space'){e.preventDefault();toggleArm();return;}
   keys[e.key.toLowerCase()]=true;
+  if(e.key==='1')setFlightMode('angle');
+  if(e.key==='2')setFlightMode('horizon');
+  if(e.key==='3')setFlightMode('acro');
+  if(e.key.toLowerCase()==='h'){
+    if(feel)toast(feel.toggleHud()?'HUD ON':'HUD OFF');
+  }
   if(e.key.toLowerCase()==='r')resetQuad();
   if(e.key.toLowerCase()==='m')toggleMusic();
   if(e.key.toLowerCase()==='f')toggleFlightMode();
@@ -2628,6 +3061,8 @@ function selectPad(gp,remember){
   armGate=true;               // block throttle until sticks proven safe once
   toast(radioScore(gp)===2?'RADIO SELECTED':'GAMEPAD SELECTED');
   updateRadioInfo();
+  if(feel&&feel.promptOpen)feel.showFirstRun({hasGamepad:true,gpName});
+  else if(feel&&(sessionLive||feel.loadInputChoice()==='keyboard'))feel.onGamepadConnected({gpName});
 }
 function showGpPicker(pads){
   if(!gpPickerEl){
@@ -2726,6 +3161,17 @@ function readInput(dt){
       if(stick.t<0.05&&Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15&&Math.abs(stick.y)<0.15){
         armGate=false;toast('STICKS SAFE — LIVE');
       }else stick.t=0;
+    }
+    if(map.arm&&feel){
+      const v=feel.auxValue(gp,map.arm);
+      if(v!=null){
+        if(v>0.25&&!qp.armed)tryArm();
+        else if(v<-0.25&&qp.armed){qp.disarm();toast('DISARMED');}
+      }
+    }
+    if(map.mode&&feel){
+      const m=feel.modeFromAux(feel.auxValue(gp,map.mode));
+      if(m&&m!==qp.flightMode)setFlightMode(m);
     }
   } else {
     const tR=(keys['arrowright']?1:0)-(keys['arrowleft']?1:0);
@@ -2871,16 +3317,30 @@ function setRateAxis(ax){rateAxis=ax;refreshRatesUI();}
 // Kept for callers that only know the old name.
 function refreshMax(){refreshRatesUI();}
 
-// ---------- Flight mode (acro = raw rates, angle = self-level) ----------
-let flightMode='acro';
-const ANGLE_MAX=50,ANGLE_P=7; // max lean deg, self-level strength
-function toggleFlightMode(){
-  flightMode=flightMode==='acro'?'angle':'acro';
-  toast(flightMode==='angle'?'ANGLE MODE':'ACRO MODE');
+// ---------- Flight mode (angle / horizon / acro live in quadphysics.js) ----------
+let flightMode='angle';
+let sessionLive=false;
+function setFlightMode(mode){
+  flightMode=qp.setFlightMode(mode);
+  toast(flightMode.toUpperCase()+' MODE');
+  return flightMode;
 }
+function toggleFlightMode(){
+  const order=['angle','horizon','acro'];
+  setFlightMode(order[(order.indexOf(qp.flightMode)+1)%order.length]);
+}
+function tryArm(){
+  if(armGate&&padLive){toast('STICKS NOT SAFE');return false;}
+  if(stick.t>0.05){toast('THROTTLE HIGH — CANNOT ARM');return false;}
+  qp.arm();toast('ARMED');return true;
+}
+function toggleArm(){
+  if(qp.armed){qp.disarm();toast('DISARMED');}
+  else tryArm();
+}
+qp.setFlightMode('angle');
 
 // ---------- Physics ----------
-const eulTmp=new THREE.Euler();
 // Rate setpoint handed to the FC each frame, in the module's body frame.
 const qpSetpoint={roll:0,pitch:0,yaw:0};
 // Live axis diagnostic: window._axis() in the console prints what each stick is
@@ -2898,18 +3358,8 @@ window._axis=()=>({
 const SGN_ROLL=-1,SGN_PITCH=-1,SGN_YAW=1;
 function physics(dt){
   const yr=THREE.MathUtils.degToRad(axisRate('yaw',stick.y));
-  let wx,wz;
-  if(flightMode==='angle'){
-    // sticks command target lean angle; P-controller levels toward it
-    eulTmp.setFromQuaternion(state.q,'YXZ');
-    wx=(THREE.MathUtils.degToRad(stick.p*ANGLE_MAX)-eulTmp.x)*ANGLE_P;
-    wz=(THREE.MathUtils.degToRad(-stick.r*ANGLE_MAX)-eulTmp.z)*ANGLE_P;
-    const cap=THREE.MathUtils.degToRad(maxRateDps('roll'));
-    wx=THREE.MathUtils.clamp(wx,-cap,cap);wz=THREE.MathUtils.clamp(wz,-cap,cap);
-  }else{
-    wx=THREE.MathUtils.degToRad(axisRate('pitch',stick.p));
-    wz=-THREE.MathUtils.degToRad(axisRate('roll',stick.r));
-  }
+  const wx=THREE.MathUtils.degToRad(axisRate('pitch',stick.p));
+  const wz=-THREE.MathUtils.degToRad(axisRate('roll',stick.r));
   const wy=-yr;
   // wx/wy/wz are three.js-frame body rates (rad/s) from the Betaflight rate
   // curve — unchanged maths. They become the FC's rate SETPOINT; the PID loop
@@ -2925,9 +3375,9 @@ function physics(dt){
   const maxThrustWorld=qp.cfg.maxThrustPerMotor*4*WS;
   if(CFG.battSimOn){
     const loadFrac=Math.min(1,thrustActual/Math.max(1e-6,maxThrustWorld));
-    battCharge=Math.max(0,battCharge-dt*(0.25+1.5*loadFrac)/180); // hover ~4min, punch-outs eat it faster
+    battCharge=Math.max(0,battCharge-dt*(0.25+1.5*loadFrac)/battHoverS); // hover ~pack-scaled, punch-outs eat it faster
     const vRest=BATT_EMPTY+(BATT_FULL-BATT_EMPTY)*battCharge;
-    const vTarget=vRest-loadFrac*(0.25+0.35*(1-battCharge));
+    const vTarget=vRest-loadFrac*(battSagDrop+0.35*(1-battCharge));
     battV+=(vTarget-battV)*(dt/0.15);
   }else{battCharge=1;battV=BATT_FULL;} // master off = infinite fresh pack
   // Thrust scales ~V^1.5 for brushless (RPM ∝ V, thrust ∝ RPM², prop unload
@@ -2936,18 +3386,15 @@ function physics(dt){
   const sag=(CFG.battSimOn&&CFG.sagAffectsThrust)?Math.pow(Math.max(0.5,battV/BATT_FULL),1.5):1;
   qp.cfg.maxThrustPerMotor=baseThrustPerMotor*sag;
 
-  // Arm gate: deaden the FC only while a live pad is still gated. An empty
-  // poll or a disconnect must not leave keyboard thrust disarmed forever.
-  // padLive can flip frame to frame if a pad polls intermittently, which
-  // churns arm/disarm - harmless, because armGate is only ever true before
-  // the pilot has proven the sticks safe, i.e. before anyone is flying.
-  if(armGate&&padLive)qp.disarm(); else if(!qp.armed)qp.arm();
+  // Arm is sticky: Space or a mapped aux switch. The connect safety gate
+  // still drops arm until sticks are proven safe.
+  if(armGate&&padLive&&qp.armed)qp.disarm();
 
   // Throttle curve stays here; the module applies the Betaflight idle floor
-  // itself, so the old idlePct blend is gone.
-  const throttle=Math.pow(Math.max(0,Math.min(1,stick.t)),CFG.thrCurve);
+  // itself, so the old idlePct blend is gone. Disarmed = no throttle to the FC.
+  const throttle=qp.armed?Math.pow(Math.max(0,Math.min(1,stick.t)),CFG.thrCurve):0;
 
-  qp.step(dt,qpSetpoint,throttle);
+  qp.step(dt,qpSetpoint,throttle,stick);
   syncStateFromQp();
   thrustActual=qp.totalThrustN*WS; // world newtons, for audio + battery load
 }
@@ -2960,6 +3407,7 @@ function bounce(){
 const camTilt=new THREE.Quaternion();
 const camJit=new THREE.Quaternion(),camJitEul=new THREE.Euler();
 function updateCamera(){
+  if(builderOn){applyBuilderCam();return;}
   if(looks&&looks.applyLookSpot())return;
   if(camera.fov!==CFG.fov){camera.fov=CFG.fov;camera.updateProjectionMatrix();}
   camTilt.setFromAxisAngle(new THREE.Vector3(1,0,0),THREE.MathUtils.degToRad(CFG.camDeg));
@@ -2981,17 +3429,21 @@ const osdLap=document.getElementById('osdLap');
 function updateLapOSD(){
   const now=performance.now();
   osdLap.style.color=now<lapFlashUntil?'#3DDC97':''; // green flash on new best
-  const id=activeTrackId;
-  let html='T'+(id+1);
+  const id=ensureTrackStats(activeTrackId);
+  let html=trackLabel(activeTrackId);
   if(runActive){ // live: current lap clock + running total + splits banked so far
     html+=' RUN · LAP '+runLap+'/'+RUN_LAPS+
       '<br>LAP '+fmtLap(now-lapStartTime)+
       '<br>TOTAL '+fmtLap(now-runStartTime);
     for(let i=0;i<runSplits.length;i++)html+='<br> L'+(i+1)+' '+fmtLap(runSplits[i]);
+    if(lastGateSplit)html+='<br>GSPLIT '+fmtLap(lastGateSplit);
+    if(missTotal)html+='<br>MISS +'+(missTotal*MISS_PENALTY_MS/1000).toFixed(1)+'s';
   }else if(lastRunTotal[id]){ // results: finished run's total + its three splits
     html+=' RESULT · TOTAL '+fmtLap(lastRunTotal[id]);
-    const sp=lastRunSplits[id];
+    const sp=lastRunSplits[id]||[];
     for(let i=0;i<sp.length;i++)html+='<br> L'+(i+1)+' '+fmtLap(sp[i]);
+    const gs=lastGateSplits[id]||[];
+    if(gs.length)html+='<br>GATES '+gs.map(fmtLap).join(' / ');
     html+='<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
   }else{ // idle, no run yet on this track
     html+=' RUN --:--.--<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
@@ -3049,8 +3501,18 @@ const panel=document.getElementById('panel');
 document.getElementById('gear').onclick=()=>panel.classList.toggle('open');
 document.getElementById('btnReset').onclick=resetQuad;
 function setActiveTrack(id){
-  activeTrackId=id?1:0;
+  const t=findTrack(id);
+  if(t&&t.map&&t.map!==currentMap){
+    setMap(t.map,t.legacyId!=null?t.legacyId:t.id);
+    resetQuad();
+    return;
+  }
+  activeTrackId=t&&t.legacyId!=null?t.legacyId:(id||0);
+  currentTrackObj=t||currentTrackObj;
   nextGateIndex=0;
+  lastPassedGate=null;
+  ensureTrackStats(activeTrackId);
+  saveSelected({map:currentMap,track:activeTrackId});
   updateGateUI();updateGateHighlight();
 }
 function toggleStartMenu(force){
@@ -3063,6 +3525,7 @@ function toggleStartMenu(force){
 }
 function syncQualityUI(){
   if(!looks)return;
+  setIndoorLights(indoorLights,looks.applied);
   const q=looks.choice;
   document.querySelectorAll('#qualityBtns [data-q]').forEach(b=>b.classList.toggle('on',b.dataset.q===q));
   const sel=document.getElementById('qualityPanel');
@@ -3078,6 +3541,7 @@ function syncQualityUI(){
 function showMenuLayer(html){
   const el=document.getElementById('menuLayer');
   if(!el)return;
+  el.classList.remove('wide');
   el.innerHTML=html;
   el.classList.add('show');
 }
@@ -3085,36 +3549,296 @@ function hideMenuLayer(){
   const el=document.getElementById('menuLayer');
   if(el)el.classList.remove('show');
 }
+function bestText(id){
+  const k=ensureTrackStats(id);
+  return bestLapMs[k]?fmtLap(bestLapMs[k]):'—';
+}
+let pickerMap=currentMap;
+function openTrackPicker(){
+  pickerMap=currentMap;
+  const layer=document.getElementById('menuLayer');
+  if(layer)layer.classList.add('wide');
+  function render(){
+    const maps=MAPS.map(m=>'<button type="button" data-map="'+m.id+'" class="'+(m.id===pickerMap?'on':'')+'">'+m.name+'</button>').join('');
+    const list=tracksForMap(pickerMap);
+    const rows=list.map(t=>{
+      const id=t.legacyId!=null?t.legacyId:t.id;
+      const on=String(id)===String(activeTrackId)&&pickerMap===currentMap?'on':'';
+      return '<button type="button" class="'+on+'" data-tid="'+id+'"><span>'+t.name+'</span><span class="best">'+bestText(id)+'</span></button>';
+    }).join('')||'<p>No tracks on this map.</p>';
+    showMenuLayer('<h2>Tracks</h2><p>Map + course. Best lap is local.</p>'+
+      '<div class="track-maps">'+maps+'</div>'+
+      '<div class="track-list">'+rows+'</div>'+
+      '<button type="button" id="pickerBuild">Build on this map</button>'+
+      '<button type="button" id="layerClose">Close</button>');
+    if(layer)layer.classList.add('wide');
+    document.querySelectorAll('.track-maps [data-map]').forEach(b=>{
+      b.onclick=()=>{
+        pickerMap=b.dataset.map;
+        const first=tracksForMap(pickerMap)[0];
+        if(first&&pickerMap!==currentMap){
+          setMap(pickerMap,first.legacyId!=null?first.legacyId:first.id);
+          resetQuad();
+        }
+        render();
+      };
+    });
+    document.querySelectorAll('.track-list [data-tid]').forEach(b=>{
+      b.onclick=()=>{
+        const id=isLegacyTrackId(b.dataset.tid)?+b.dataset.tid:b.dataset.tid;
+        if(pickerMap!==currentMap){setMap(pickerMap,id);resetQuad();}
+        else setActiveTrack(id);
+        toast(trackLabel(activeTrackId));
+        render();
+      };
+    });
+    const pb=document.getElementById('pickerBuild');
+    if(pb)pb.onclick=()=>{hideMenuLayer();toggleStartMenu(false);if(pickerMap!==currentMap){setMap(pickerMap);resetQuad();}openBuilder();};
+    document.getElementById('layerClose').onclick=hideMenuLayer;
+  }
+  render();
+}
+
+const builder={
+  tool:'gate',
+  draft:{id:'custom',map:'city',name:'Custom',gates:[],flags:[]},
+  sel:{kind:'gate',index:0},
+  cam:{yaw:0.35,pitch:0.85,dist:22,cx:0,cy:1.5,cz:0},
+  dragging:false,
+};
+function builderDefaults(){
+  const indoor=currentMap!=='city';
+  return {y:indoor?2.3:7,size:indoor?1.8:7,solid:indoor};
+}
+function syncBuilderRace(){
+  clearRace();
+  try{
+    const t=normalizeTrack(builder.draft);
+    currentTrackObj=t;
+    activeTrackId=t.id;
+    spawnTrackData(t,t.id);
+    nextGateIndex=0;updateGateUI();updateGateHighlight();
+  }catch(e){ /* 0-1 gates while editing */ }
+}
+function builderLenReadout(){
+  const el=document.getElementById('builderLen');
+  if(!el)return;
+  const n=builder.draft.gates.length;
+  el.textContent=n<2?'place 2+ gates':lapLengthMetres(builder.draft.gates).toFixed(1)+' m';
+}
+function renderBuilderList(){
+  const ol=document.getElementById('builderList');
+  if(!ol)return;
+  const items=[];
+  builder.draft.gates.forEach((g,i)=>{
+    items.push('<li data-kind="gate" data-i="'+i+'" class="'+(builder.sel.kind==='gate'&&builder.sel.index===i?'on':'')+'">G'+(i+1)+'  '+g.x.toFixed(1)+','+g.z.toFixed(1)+'</li>');
+  });
+  builder.draft.flags.forEach((f,i)=>{
+    items.push('<li data-kind="flag" data-i="'+i+'" class="'+(builder.sel.kind==='flag'&&builder.sel.index===i?'on':'')+'">F'+(i+1)+'</li>');
+  });
+  ol.innerHTML=items.join('')||'<li>Click the ground to place</li>';
+  ol.querySelectorAll('li[data-kind]').forEach(li=>{
+    li.onclick=()=>{builder.sel={kind:li.dataset.kind,index:+li.dataset.i};renderBuilderList();};
+  });
+  builderLenReadout();
+}
+function selectedBuilderObj(){
+  const list=builder.sel.kind==='flag'?builder.draft.flags:builder.draft.gates;
+  return list[builder.sel.index]||null;
+}
+function openBuilder(){
+  builderOn=true;
+  document.body.classList.add('builder-on');
+  document.getElementById('builder').classList.add('show');
+  const src=currentTrackObj&&currentTrackObj.map===currentMap?currentTrackObj:{map:currentMap,name:'Custom',gates:[],flags:[]};
+  builder.draft={
+    id:'custom-'+Date.now().toString(36),
+    map:currentMap,
+    name:(src.name||'Custom')+' copy',
+    gates:(src.gates||[]).map(g=>({x:g.x,y:g.y,z:g.z,ry:g.ry||0,size:g.size||1.8,solid:!!g.solid})),
+    flags:(src.flags||[]).map(f=>({x:f.x,y:f.y,z:f.z,ry:f.ry||0})),
+  };
+  if(src.id==='city-loop'||src.id==='city-zigzag'||src.legacyId===0||src.legacyId===1){
+    builder.draft.gates=(src.gates||[]).map(g=>({x:g.x,y:g.y,z:g.z,ry:g.ry||0,size:g.size||1.8,solid:!!g.solid}));
+    builder.draft.name='Custom '+currentMap;
+  }
+  const o=MAP_ORBIT[currentMap]||MAP_ORBIT.city;
+  builder.cam={yaw:0.4,pitch:0.9,dist:o.r*0.55,cx:o.cx,cy:o.cy,cz:o.cz};
+  if(looks)looks.setMenuOpen(false);
+  syncBuilderRace();
+  renderBuilderList();
+  toast('BUILDER — click to place, drag to move');
+}
+function closeBuilder(){
+  builderOn=false;
+  document.body.classList.remove('builder-on');
+  document.getElementById('builder').classList.remove('show');
+  if(currentMap==='city')spawnCityRaces();
+  else if(currentTrackObj){clearRace();spawnTrackData(currentTrackObj,currentTrackObj.legacyId!=null?currentTrackObj.legacyId:currentTrackObj.id);}
+  updateGateUI();updateGateHighlight();
+}
+function builderRay(ev){
+  const rect=canvas.getBoundingClientRect();
+  const ndc=new THREE.Vector2(((ev.clientX-rect.left)/rect.width)*2-1,-((ev.clientY-rect.top)/rect.height)*2+1);
+  const ray=new THREE.Raycaster();
+  ray.setFromCamera(ndc,camera);
+  const plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+  const hit=new THREE.Vector3();
+  ray.ray.intersectPlane(plane,hit);
+  return hit;
+}
+function pickBuilderAt(hit){
+  let best=null,bestD=4;
+  builder.draft.gates.forEach((g,i)=>{
+    const d=Math.hypot(g.x-hit.x,g.z-hit.z);
+    if(d<bestD){bestD=d;best={kind:'gate',index:i};}
+  });
+  builder.draft.flags.forEach((f,i)=>{
+    const d=Math.hypot(f.x-hit.x,f.z-hit.z);
+    if(d<bestD){bestD=d;best={kind:'flag',index:i};}
+  });
+  return best;
+}
+function applyBuilderCam(){
+  const c=builder.cam;
+  const cp=Math.cos(c.pitch),sp=Math.sin(c.pitch);
+  camera.position.set(c.cx+Math.sin(c.yaw)*cp*c.dist,c.cy+sp*c.dist,c.cz+Math.cos(c.yaw)*cp*c.dist);
+  camera.lookAt(c.cx,c.cy,c.cz);
+  if(camera.fov!==58){camera.fov=58;camera.updateProjectionMatrix();}
+}
+canvas.addEventListener('pointerdown',ev=>{
+  if(!builderOn)return;
+  if(ev.button===0){
+    const hit=builderRay(ev);
+    if(!hit)return;
+    const d=builderDefaults();
+    if(builder.tool==='gate'){
+      builder.draft.gates.push({x:+hit.x.toFixed(2),y:d.y,z:+hit.z.toFixed(2),ry:0,size:d.size,solid:d.solid});
+      builder.sel={kind:'gate',index:builder.draft.gates.length-1};
+      syncBuilderRace();renderBuilderList();
+    }else if(builder.tool==='flag'){
+      builder.draft.flags.push({x:+hit.x.toFixed(2),y:d.y,z:+hit.z.toFixed(2),ry:0});
+      builder.sel={kind:'flag',index:builder.draft.flags.length-1};
+      syncBuilderRace();renderBuilderList();
+    }else{
+      const p=pickBuilderAt(hit);
+      if(p){builder.sel=p;builder.dragging=true;renderBuilderList();}
+    }
+  }else{builder.dragging='orbit';builder._lx=ev.clientX;builder._ly=ev.clientY;}
+});
+addEventListener('pointermove',ev=>{
+  if(!builderOn)return;
+  if(builder.dragging===true){
+    const hit=builderRay(ev);if(!hit)return;
+    const obj=selectedBuilderObj();if(!obj)return;
+    obj.x=+hit.x.toFixed(2);obj.z=+hit.z.toFixed(2);
+    syncBuilderRace();renderBuilderList();
+  }else if(builder.dragging==='orbit'){
+    const dx=ev.clientX-builder._lx,dy=ev.clientY-builder._ly;
+    builder._lx=ev.clientX;builder._ly=ev.clientY;
+    builder.cam.yaw-=dx*0.01;builder.cam.pitch=Math.max(0.15,Math.min(1.4,builder.cam.pitch+dy*0.01));
+  }
+});
+addEventListener('pointerup',()=>{builder.dragging=false;});
+canvas.addEventListener('wheel',ev=>{
+  if(!builderOn)return;
+  ev.preventDefault();
+  builder.cam.dist=Math.max(6,Math.min(80,builder.cam.dist+ev.deltaY*0.02));
+},{passive:false});
+function wireBuilderUI(){
+  document.querySelectorAll('#builder [data-btool]').forEach(b=>{
+    b.onclick=()=>{
+      builder.tool=b.dataset.btool;
+      document.querySelectorAll('#builder [data-btool]').forEach(x=>x.classList.toggle('on',x===b));
+    };
+  });
+  document.getElementById('builderRot').onclick=()=>{
+    const obj=selectedBuilderObj();if(!obj)return;
+    obj.ry=((obj.ry||0)+Math.PI/12)%(Math.PI*2);
+    syncBuilderRace();renderBuilderList();
+  };
+  document.getElementById('builderDel').onclick=()=>{
+    const list=builder.sel.kind==='flag'?builder.draft.flags:builder.draft.gates;
+    if(!list.length)return;
+    list.splice(builder.sel.index,1);
+    builder.sel.index=Math.max(0,list.length-1);
+    syncBuilderRace();renderBuilderList();
+  };
+  document.getElementById('builderSave').onclick=()=>{
+    try{
+      const t=normalizeTrack(builder.draft);
+      customTracks=loadCustomTracks().filter(c=>c.id!==t.id);
+      customTracks.push(t);
+      saveCustomTracks(customTracks);
+      currentTrackObj=t;
+      toast('SAVED LOCAL ('+t.gates.length+' gates)');
+    }catch(e){toast(e.message||'NEED 2+ GATES');}
+  };
+  document.getElementById('builderShare').onclick=async()=>{
+    try{
+      const code=encodeShare(builder.draft);
+      const ta=document.getElementById('builderCode');
+      ta.value=code;
+      try{await navigator.clipboard.writeText(code);toast('SHARE CODE COPIED');}
+      catch(e){ta.select();toast('COPY THE CODE IN THE BOX');}
+    }catch(e){toast(e.message||'NEED 2+ GATES');}
+  };
+  document.getElementById('builderImport').onclick=()=>{
+    try{
+      const t=decodeShare(document.getElementById('builderCode').value);
+      t.map=t.map||currentMap;
+      builder.draft=t;
+      if(t.map!==currentMap)setMap(t.map,t.id);
+      syncBuilderRace();renderBuilderList();
+      toast('IMPORTED '+t.name);
+    }catch(e){toast(e.message||'BAD TRACK CODE');}
+  };
+  document.getElementById('builderFly').onclick=()=>{
+    try{
+      const t=normalizeTrack(builder.draft);
+      customTracks=loadCustomTracks().filter(c=>c.id!==t.id);
+      customTracks.push(t);
+      saveCustomTracks(customTracks);
+      currentTrackObj=t;
+      closeBuilder();
+      setMap(t.map,t.id);
+      resetQuad();
+      toast('FLYING '+t.name);
+    }catch(e){toast(e.message||'NEED 2+ GATES');}
+  };
+  document.getElementById('builderClose').onclick=closeBuilder;
+}
+
 function wireLooksUI(){
   const fly=document.getElementById('menuFly');
-  if(fly)fly.onclick=()=>{hideMenuLayer();toggleStartMenu(false);toast('Throttle up to fly. Tab = tune.');};
-  document.getElementById('menuTune').onclick=()=>{hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');};
-  document.getElementById('menuTracks').onclick=()=>{
-    showMenuLayer('<h2>Tracks</h2><p>Two fixed courses. Gate order and layouts are unchanged.</p>'+
-      '<button type="button" id="pickT0">Track 1 — city loop</button>'+
-      '<button type="button" id="pickT1">Track 2 — mesa zigzag</button>'+
-      '<button type="button" id="layerClose">Close</button>');
-    document.getElementById('pickT0').onclick=()=>{setActiveTrack(0);toast('TRACK 1');};
-    document.getElementById('pickT1').onclick=()=>{setActiveTrack(1);toast('TRACK 2');};
-    document.getElementById('layerClose').onclick=hideMenuLayer;
-  };
+  if(fly)fly.onclick=()=>{hideMenuLayer();toggleStartMenu(false);sessionLive=true;toast('Space to arm. 1/2/3 = mode.');};
+  document.getElementById('menuTune').onclick=()=>{hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');syncBuildUI();};
+  document.getElementById('menuTracks').onclick=()=>openTrackPicker();
+  const btnBuild=document.getElementById('menuBuild');
+  if(btnBuild)btnBuild.onclick=()=>openBuildPicker();
+  const btnBuilder=document.getElementById('menuBuilder');
+  if(btnBuilder)btnBuilder.onclick=()=>{hideMenuLayer();toggleStartMenu(false);openBuilder();};
   document.getElementById('menuControls').onclick=()=>{
     showMenuLayer('<h2>Controls</h2><p>TX16S: EdgeTX USB mode = <b style="color:var(--txt)">Joystick</b>.</p>'+
       '<p><span class="n">W/S</span> throttle · <span class="n">A/D</span> yaw<br>'+
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
-      '<span class="n">R</span> reset · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
-      '<span class="n">M</span> music · <span class="n">F</span> angle/acro · <span class="n">G</span> ghost</p>'+
+      '<span class="n">R</span> last-gate respawn · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
+      '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro<br>'+
+      '<span class="n">H</span> HUD · <span class="n">M</span> music · <span class="n">G</span> ghost</p>'+
       '<button type="button" id="layerClose">Close</button>');
     document.getElementById('layerClose').onclick=hideMenuLayer;
   };
   document.getElementById('menuHowTo').onclick=()=>{
     showMenuLayer('<h2>How to</h2><ol>'+
-      '<li>Click Fly, or plug in a radio (Joystick mode).</li>'+
-      '<li>Throttle up. F toggles angle mode if you want self-level.</li>'+
-      '<li>Fly the lit gate. A 3-lap run starts at gate 1.</li>'+
-      '<li>Tab opens Tune — paste a Betaflight CLI dump to use your rates.</li>'+
-      '<li>G races your best ghost once you have a run.</li>'+
-      '</ol><button type="button" id="layerClose">Close</button>');
+      '<li>Space arms. 1 / 2 / 3 = Angle / Horizon / Acro. Keyboard starts in Angle.</li>'+
+      '<li>How to → Start tutorial: hover, three gates, land (about two minutes, skippable).</li>'+
+      '<li>R respawns at the last gate you passed. H toggles the stick HUD.</li>'+
+      '<li>Fly the lit gate. A 3-lap run starts at gate 1. Splits per gate; missed gates add +2.0s.</li>'+
+      '<li>Tab opens Tune — paste a Betaflight CLI dump. Rate presets do not overwrite a saved tune until you pick one.</li>'+
+      '</ol>'+
+      '<button type="button" class="primary" id="feelStartTut">Start tutorial</button>'+
+      '<button type="button" id="layerClose">Close</button>');
+    document.getElementById('feelStartTut').onclick=launchTutorial;
     document.getElementById('layerClose').onclick=hideMenuLayer;
   };
   document.querySelectorAll('#qualityBtns [data-q]').forEach(b=>{
@@ -3171,6 +3895,18 @@ function applyCfgToQp(){
   qp.inertia.y=qp.inertia.x;
   qp.inertia.z=(m/12)*(w*w*2);
 }
+{
+  const s=document.getElementById('s_float'),v=document.getElementById('v_float');
+  const init=loadFloatiness(FLOATINESS_DEFAULT);
+  s.value=init;
+  qp.setFloatiness(init);
+  v.textContent=Math.round(init*100)+'%';
+  s.addEventListener('input',()=>{
+    const f=qp.setFloatiness(parseFloat(s.value));
+    v.textContent=Math.round(f*100)+'%';
+    saveFloatiness(f);
+  });
+}
 bind('drag','drag',x=>x.toFixed(2));
 bind('mass','massG',x=>x+'g',()=>{applyCfgToQp();refreshTwr();}); // mass change → inertia + thrust:weight readout
 bind('spool','spoolTau',x=>(x*1000).toFixed(0)+'ms',applyCfgToQp); // motor spool time constant
@@ -3218,11 +3954,11 @@ function rateProfileForClass(d){
   return RATE_FALLBACK;
 }
 const DRONE_TYPES={
-  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:30}, // TWR ~3:1, hovers ~0.33 throttle
-  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:30}, // lazier yaw + slower 0802 spool
-  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:30},
-  freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30}, // toothpick-adjacent middle class
-  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:30} // heavy: inertia does the work, no other changes
+  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:15,fov:110},
+  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:15,fov:110},
+  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:15,fov:110},
+  freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30,fov:110},
+  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:30,fov:110}
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
@@ -3285,7 +4021,7 @@ function applyDroneType(){
     }
     refreshRatesUI();
     setSlider('spool',d.spool);                        // per-drone motor spool time constant
-    if(!camIsCustom&&d.cam!=null)setSlider('cam',d.cam); // class camera tilt, defaults only (all classes 30 today)
+    if(!camIsCustom&&d.cam!=null)setSlider('cam',d.cam); // whoop default 15°, freestyle 30 — skip if ryflyCamCustom
     applyCfgToQp();                                    // slider values win over the preset's mass/tau
     refreshTwr();                                      // update the derived thrust:weight readout
   }finally{applyingType=false;}
@@ -3294,6 +4030,9 @@ droneSel.onchange=()=>{
   droneType=droneSel.value;
   try{localStorage.setItem('ryflyDroneType',droneType);}catch(e){}
   applyDroneType();
+  const d=DRONE_TYPES[droneType];
+  if(d&&d.frame) applyBuild(classDefault(d.frame),{save:true,announce:false});
+  else saveBuild(null);
   toast(DRONE_TYPES[droneType].label.toUpperCase());
 };
 // Rate-family selector, sat next to the class preset. Switching CONVERTS the
@@ -3328,6 +4067,140 @@ if(rateTypeSel){
 }
 applyDroneType(); // restore persisted type on load
 updateRadioInfo();
+
+// ---------- W1 Your build (new key quadmathSimBuild only) ----------
+let currentBuild=normalizeBuild(DEFAULT_BUILD);
+let syncingBuildUI=false;
+function applyPackFromBuild(b){
+  const pack=batteryFromBuild(b);
+  BATT_FULL=pack.full;BATT_EMPTY=pack.empty;BATT_WARN=pack.warn;BATT_CRIT=pack.crit;
+  battHoverS=pack.hoverS;battSagDrop=pack.sagDrop;
+  battCharge=1;battV=BATT_FULL;
+}
+function shareTrackParam(){
+  const t=currentTrackObj||findTrack(activeTrackId);
+  if(t&&t.id)return t.id;
+  return activeTrackId;
+}
+function syncBuildUI(){
+  const b=currentBuild;
+  syncingBuildUI=true;
+  try{
+    const preset=document.getElementById('buildPreset');
+    if(preset)preset.value=matchPresetId(b);
+    const setv=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+    setv('buildFrame',String(b.frameMm));
+    setv('s_buildKv',b.kv);
+    setv('buildProp',String(b.propMm));
+    setv('buildBlades',String(b.blades));
+    setv('buildCells',String(b.cells));
+    setv('s_buildMah',b.mah);
+    setv('s_buildAuw',b.auwG);
+    const kv=document.getElementById('v_buildKv');if(kv)kv.textContent=b.kv+' KV';
+    const mah=document.getElementById('v_buildMah');if(mah)mah.textContent=b.mah+' mAh';
+    const auw=document.getElementById('v_buildAuw');if(auw)auw.textContent=b.auwG+' g';
+    const hint=document.getElementById('buildHint');
+    const p=BUILD_PRESETS[matchPresetId(b)];
+    if(hint)hint.textContent=p?('Approximate. '+(p.note||'')):'Approximate custom whoop. Not a thrust-stand log.';
+    const code=document.getElementById('buildCode');
+    if(code)code.value=buildDeepLink({origin:location.origin,build:b,track:shareTrackParam(),mode:qp.flightMode||'angle'});
+  }finally{syncingBuildUI=false;}
+}
+function applyBuild(raw,opts){
+  const o=opts||{};
+  currentBuild=normalizeBuild(raw);
+  if(o.save!==false)saveBuild(currentBuild);
+  const phys=physicsFromBuild(currentBuild);
+  applyPackFromBuild(currentBuild);
+  applyingType=true;
+  try{
+    qp.setPreset(phys.preset); // mass/wheelbase/thrust/spool/kQ — does not touch rates or CLI
+    baseThrustPerMotor=phys.preset.maxThrustPerMotor;
+    CFG.maxThrustN=baseThrustPerMotor*4*WS;
+    setSlider('drag',phys.drag);
+    setSlider('mass',phys.massG);
+    setSlider('spool',phys.spoolTau);
+    applyCfgToQp();
+    refreshTwr();
+    droneType=phys.droneType;
+    droneSel.value=droneType;
+  }finally{applyingType=false;}
+  syncBuildUI();
+  if(o.announce!==false)toast(phys.label.toUpperCase()+' ≈');
+  return phys;
+}
+function readBuildForm(){
+  return normalizeBuild({
+    frameMm:+document.getElementById('buildFrame').value,
+    kv:+document.getElementById('s_buildKv').value,
+    propMm:+document.getElementById('buildProp').value,
+    blades:+document.getElementById('buildBlades').value,
+    cells:+document.getElementById('buildCells').value,
+    mah:+document.getElementById('s_buildMah').value,
+    auwG:+document.getElementById('s_buildAuw').value,
+  });
+}
+function wireBuildUI(){
+  const sel=document.getElementById('buildPreset');
+  if(sel&&!sel.options.length){
+    const blank=document.createElement('option');blank.value='';blank.textContent='Custom';
+    sel.appendChild(blank);
+    for(const p of Object.values(BUILD_PRESETS)){
+      const o=document.createElement('option');o.value=p.id;o.textContent=p.label+(p.approx?' ≈':'');
+      sel.appendChild(o);
+    }
+  }
+  if(sel)sel.onchange=()=>{if(!sel.value)return;applyBuild(BUILD_PRESETS[sel.value]);};
+  ['buildFrame','buildProp','buildBlades','buildCells','s_buildKv','s_buildMah','s_buildAuw'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.addEventListener('input',()=>{
+      if(syncingBuildUI)return;
+      applyBuild(readBuildForm());
+    });
+  });
+  const share=document.getElementById('btnBuildShare');
+  if(share)share.onclick=async()=>{
+    syncBuildUI();
+    const code=document.getElementById('buildCode').value;
+    try{await navigator.clipboard.writeText(code);toast('BUILD LINK COPIED');}
+    catch(e){document.getElementById('buildCode').select();toast('COPY THE LINK IN THE BOX');}
+  };
+}
+function openBuildPicker(){
+  const layer=document.getElementById('menuLayer');
+  const rows=Object.values(BUILD_PRESETS).map(p=>{
+    const on=matchPresetId(currentBuild)===p.id?'on':'';
+    return '<button type="button" class="'+on+'" data-bid="'+p.id+'"><span>'+p.label+(p.approx?' ≈':'')+'</span><span class="best">'+p.frameMm+'mm '+p.cells+'S</span></button>';
+  }).join('');
+  showMenuLayer('<h2>Your build</h2><p>Approximate whoop physics. Named presets use bench AUW where noted. Customize in Tune.</p>'+
+    '<div class="track-list">'+rows+'</div>'+
+    '<button type="button" id="buildOpenTune">Customize in Tune</button>'+
+    '<button type="button" id="layerClose">Close</button>');
+  if(layer)layer.classList.add('wide');
+  document.querySelectorAll('#menuLayer [data-bid]').forEach(b=>{
+    b.onclick=()=>{applyBuild(BUILD_PRESETS[b.dataset.bid]);hideMenuLayer();};
+  });
+  const tune=document.getElementById('buildOpenTune');
+  if(tune)tune.onclick=()=>{hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');syncBuildUI();};
+  document.getElementById('layerClose').onclick=hideMenuLayer;
+}
+{
+  const saved=loadBuild();
+  if(saved) applyBuild(saved,{save:false,announce:false});
+  else syncBuildUI();
+  wireBuildUI();
+  const gearBtn=document.getElementById('gear');
+  if(gearBtn){
+    const prev=gearBtn.onclick;
+    gearBtn.onclick=function(e){
+      if(typeof prev==='function')prev.call(this,e);
+      if(panel.classList.contains('open'))syncBuildUI();
+    };
+  }
+}
+
+window._build={encodeBuild,decodeBuild,applyBuild,BUILD_KEY,BUILD_PREFIX};
 
 // ---------- Betaflight CLI paste-import ----------
 // Reads rates_type FIRST, because the scaling and the curve both depend on it,
@@ -3444,12 +4317,18 @@ window._rates=()=>({state:JSON.parse(JSON.stringify(rates)),axis:rateAxis,
 // translucent cyan quad plays the ghost back indexed by current elapsed lap
 // time, so it flies in real sync. Per-track, persisted at 2-decimal precision.
 const GHOST_MAX=1500; // sample cap (a full 3-lap run at 30 Hz); downsample rather than fail to store
-let ghosts=[null,null];               // per-track best-RUN recordings (all 3 laps)
+let ghosts={0:null,1:null};               // per-track best-RUN recordings (all 3 laps)
 let ghostRec=null,ghostFrame=0;       // in-progress recording + its frame counter
 let ghostVisible=true;
 const _gr2=v=>Math.round(v*100)/100;   // 2-decimal coords (visual ghost — plenty)
 const _gr3=v=>Math.round(v*1000)/1000; // slightly finer for quaternion smoothness
-function loadGhost(id){try{const s=localStorage.getItem('quadmath_bestGhost_'+id);return s?JSON.parse(s):null;}catch(e){return null;}}
+function loadGhost(id){
+  try{
+    const s=localStorage.getItem(ghostStorageKey(id))
+      ||(isLegacyTrackId(id)?localStorage.getItem('quadmath_bestGhost_'+legacyIndex(id)):null);
+    return s?JSON.parse(s):null;
+  }catch(e){return null;}
+}
 ghosts[0]=loadGhost(0);ghosts[1]=loadGhost(1);
 function startGhostRec(){ghostRec=[];ghostFrame=0;}   // begin a fresh lap recording
 function clearGhostRec(){ghostRec=null;}              // void the in-progress recording
@@ -3457,8 +4336,11 @@ function clearGhostRec(){ghostRec=null;}              // void the in-progress re
 function persistGhost(id,rec){
   let data=rec;
   for(let a=0;a<5;a++){
-    try{localStorage.setItem('quadmath_bestGhost_'+id,JSON.stringify(data));return data;}
-    catch(e){data=data.filter((_,i)=>i%2===0);} // halve and retry
+    try{
+      localStorage.setItem(ghostStorageKey(id),JSON.stringify(data));
+      if(isLegacyTrackId(id))localStorage.setItem('quadmath_bestGhost_'+legacyIndex(id),JSON.stringify(data));
+      return data;
+    }catch(e){data=data.filter((_,i)=>i%2===0);}
   }
   return data;
 }
@@ -3483,14 +4365,14 @@ function makeGhostMesh(color){
   }
   const nose=new THREE.Mesh(new THREE.ConeGeometry(0.25,0.7,8),mat);
   nose.rotation.x=-Math.PI/2;nose.position.set(0,0,-0.9);grp.add(nose); // points -Z = quad forward
-  grp.visible=false;scene.add(grp);
+  grp.visible=false;grp.userData.keepInScene=true;scene.add(grp);
   return grp;
 }
 const ghostMesh=makeGhostMesh();            // own best-run ghost (cyan)
 const rivalMesh=makeGhostMesh(0xFF4D1A);    // imported / hosted rival (orange)
 // floating name label above the rival — camera-facing canvas sprite
 const rivalLabel=new THREE.Sprite(new THREE.SpriteMaterial({transparent:true,depthTest:false}));
-rivalLabel.scale.set(10,2.5,1);rivalLabel.visible=false;scene.add(rivalLabel);
+rivalLabel.scale.set(10,2.5,1);rivalLabel.visible=false;rivalLabel.userData.keepInScene=true;scene.add(rivalLabel);
 function setRivalLabel(name){
   const cv=document.createElement('canvas');cv.width=256;cv.height=64;
   const g=cv.getContext('2d');
@@ -3505,10 +4387,15 @@ function setRivalLabel(name){
 // default for the active track (fetched at load) fills in
 let rivalGhost=null;                 // {track,name,lapTime,samples} from a pasted code
 let rivalLabelName='';               // name currently baked into the label sprite
-const defaultRivals=[null,null];     // per-track hosted defaults (/ghosts/track_{id}.json)
+const defaultRivals={0:null,1:null};     // per-track hosted defaults (/ghosts/track_{id}.json)
+function rivalMatches(trackField,id){
+  const a=legacyIndex(trackField),b=legacyIndex(id);
+  if(a!==null&&b!==null)return a===b;
+  return String(trackField)===String(id);
+}
 function activeRival(){
-  if(rivalGhost&&rivalGhost.track===activeTrackId)return rivalGhost;
-  return defaultRivals[activeTrackId];
+  if(rivalGhost&&rivalMatches(rivalGhost.track,activeTrackId))return rivalGhost;
+  return defaultRivals[trackStatId(activeTrackId)];
 }
 const _gqa=new THREE.Quaternion(),_gqb=new THREE.Quaternion();
 function sampleGhost(){
@@ -3562,6 +4449,9 @@ function updateGhost(){sampleGhost();playbackGhost();updateGhostHint();}
 // ---------- ghost sharing v1 ----------
 // Format (version-tagged for future changes):
 //   {v:1, track:0|1, lapTime:ms, name:string, samples:[[t,x,y,z,qx,qy,qz,qw],...]}
+// Samples are wall-clock poses, not physics-step dumps. The 500/1000 Hz feel
+// pass does not change this, so hosted ghosts and old localStorage ghosts still
+// replay. Do not bump v for a physics-feel change.
 // Export: JSON → gzip (CompressionStream) → base64 → clipboard.
 // Import: base64 → gunzip → validate → rival ghost. Raw uncompressed JSON is
 // also accepted (it's the hosted-default file format).
@@ -3587,8 +4477,19 @@ pilotNameEl.addEventListener('input',()=>{try{localStorage.setItem('quadmath_pil
 // (hosted defaults are validated per-file, not against the active track)
 function ghostPayloadError(p,expectTrack){
   if(!p||p.v!==1||!Array.isArray(p.samples)||p.samples.length<2)return 'BAD GHOST CODE';
-  if(p.track!==0&&p.track!==1)return 'BAD GHOST TRACK';
-  if(expectTrack!==null&&p.track!==expectTrack)return 'GHOST IS FOR TRACK '+(p.track+1)+' — SWITCH TRACKS TO RACE IT';
+  const okLegacy=p.track===0||p.track===1;
+  const okNew=typeof p.track==='string'&&p.track.length>0&&p.track.length<48;
+  if(!okLegacy&&!okNew)return 'BAD GHOST TRACK';
+  if(expectTrack!==null&&expectTrack!==undefined){
+    const asLegacy=function(id){
+      if(id===0||id==='0'||id==='city-loop')return 0;
+      if(id===1||id==='1'||id==='city-zigzag')return 1;
+      return null;
+    };
+    const a=asLegacy(p.track),b=asLegacy(expectTrack);
+    const match=a!==null&&b!==null?a===b:String(p.track)===String(expectTrack);
+    if(!match)return 'GHOST IS FOR TRACK '+String(p.track)+' — SWITCH TRACKS TO RACE IT';
+  }
   let lastT=-1;
   for(const s of p.samples){
     if(!Array.isArray(s)||s.length<8||s.some(n=>typeof n!=='number'||!isFinite(n)))return 'BAD GHOST DATA';
@@ -3601,7 +4502,7 @@ function ghostPayloadError(p,expectTrack){
 async function exportGhost(){
   const id=activeTrackId,g=ghosts[id];
   if(!g||!g.length){toast('NO GHOST YET — SET A BEST RUN FIRST');return;}
-  const payload={v:1,track:id,lapTime:bestRunMs[id]||0,
+  const payload={v:1,track:legacyIndex(id)!==null?legacyIndex(id):id,lapTime:bestRunMs[ensureTrackStats(id)]||0,
     name:(pilotNameEl.value.trim()||'PILOT').slice(0,16),samples:g};
   let code;
   try{code=await gzipB64(JSON.stringify(payload));}
@@ -3632,16 +4533,18 @@ document.getElementById('btnGhostCopy').onclick=exportGhost;
 document.getElementById('btnGhostLoad').onclick=importGhost;
 // hosted defaults: static per-track ghost files, same payload uncompressed.
 // 404 / network error = no default ghost for that track — fail silently.
-for(const id of [0,1]){
-  fetch('ghosts/track_'+id+'.json')
+function loadHostedGhost(id){
+  fetch(hostedGhostUrl(id))
     .then(r=>r.ok?r.json():null)
     .then(p=>{
       if(!p||ghostPayloadError(p,id))return;
-      defaultRivals[id]={track:id,name:String(p.name||'PACE BOT').slice(0,16),lapTime:+p.lapTime||0,samples:p.samples};
-      if(!rivalGhost&&id===activeTrackId)setRivalLabel(defaultRivals[id].name);
+      const k=trackStatId(id);
+      defaultRivals[k]={track:p.track,name:String(p.name||'PACE BOT').slice(0,16),lapTime:+p.lapTime||0,samples:p.samples};
+      if(!rivalGhost&&rivalMatches(p.track,activeTrackId))setRivalLabel(defaultRivals[k].name);
     })
     .catch(()=>{});
 }
+for(const id of [0,1])loadHostedGhost(id);
 
 // ---------- Prop-wash dust ----------
 // Pooled GPU points, no per-frame allocation. PointsMaterial already gives fog,
@@ -3771,18 +4674,35 @@ function updateDust(dt){
 }
 
 // ---------- Loop ----------
-let last=performance.now(),acc=0;
-const STEP=1/240;
+let last=performance.now(),hzAdaptAt=0;
+function adaptPhysicsHz(now){
+  if(!looks||!looks.fps||!looks.fps.ready)return;
+  if(now-hzAdaptAt<1500)return;
+  hzAdaptAt=now;
+  const avg=looks.fps.avg;
+  const cur=qp.physicsHz;
+  let hz=cur;
+  if(avg>=58&&cur===PHYSICS_HZ_DEFAULT)hz=PHYSICS_HZ_FAST;
+  else if(avg<48&&cur===PHYSICS_HZ_FAST)hz=PHYSICS_HZ_DEFAULT;
+  if(hz!==cur)qp.setPhysicsHz(hz);
+}
 function loop(now){
   requestAnimationFrame(loop);
   let dt=(now-last)/1000;last=now;dt=Math.min(dt,.05);
   if(looks)looks.tick(now);
-  if(!(looks&&looks.menuOpen)){
+  if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
     readInput(dt);
-    acc+=dt;
-    while(acc>=STEP){physics(STEP);acc-=STEP;}
+    physics(dt);
+    adaptPhysicsHz(now);
     updateMotorSound();
     updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();updateDust(dt);
+    if(feel){
+      state.stickT=stick.t;
+      feel.updateHud({stick,battV,battOn:CFG.battSimOn,mode:qp.flightMode,armed:qp.armed});
+      feel.tickTutorial(state,dt,qp.armed);
+      const att=qp.attitude;
+      feel.noteFlip(Math.abs(att.roll)>2.0||Math.abs(att.pitch)>2.0);
+    }
   }
   updateCamera();
   // composer is null until the post chain resolves, and stays null if the
@@ -3792,12 +4712,88 @@ function loop(now){
 requestAnimationFrame(loop);
 looksReady.then(function(l){
   if(!l)return;
-  requestAnimationFrame(function(){requestAnimationFrame(function(){l.afterFirstFrame();});});
+  requestAnimationFrame(function(){requestAnimationFrame(function(){l.afterFirstFrame().then(function(){applyQueryBoot();});});});
 });
+function launchTutorial(){
+  if(!feel)return;
+  hideMenuLayer();
+  toggleStartMenu(false);
+  sessionLive=true;
+  qp.setFlightMode('angle');flightMode='angle';
+  const p=feel.startTutorial();
+  lastPassedGate=null;
+  placeQuadAt(p.x,p.y,p.z,p.yaw);
+}
+feel=createFeel({
+  THREE,scene,toast,decorateGate,LIGHTING,
+  onCalibrate(){sessionLive=true;toggleStartMenu(false);startCalib();},
+  onKeyboard(){setFlightMode('angle');toast('KEYBOARD — SPACE TO ARM');},
+  onTryLap(){
+    setActiveTrack(0);
+    lastPassedGate=null;
+    const g0=trackGates(0)[0];
+    placeQuadAt(g0.pos.x,Math.max(0.15,g0.pos.y),g0.pos.z+16);
+    nextGateIndex=0;runActive=false;runLap=0;runSplits=[];
+    updateGateUI();updateGateHighlight();
+    sessionLive=true;
+    toast('TRACK 1 — SPACE TO ARM');
+  },
+  onSkipTutorial(){toast('TUTORIAL SKIPPED');},
+});
+feel.fillRatePresetSelect(document.getElementById('ratePreset'));
+document.getElementById('ratePreset').onchange=function(){
+  if(!this.value)return;
+  if(applyRatePreset(rates,this.value)){
+    saveRates();
+    refreshRatesUI();
+    toast(RATE_PRESETS[this.value].label.toUpperCase());
+  }
+};
+feel.maybeFirstRun({hasGamepad:gpConnected,gpName});
+window._feel=feel;
 wireLooksUI();
+wireBuilderUI();
+customTracks=loadCustomTracks();
+function applyQueryBoot(){
+  const q=new URLSearchParams(location.search);
+  const map=q.get('map');
+  const trackRaw=q.get('track');
+  const track=trackRaw&&isLegacyTrackId(trackRaw)?+trackRaw:trackRaw;
+  if(map){
+    setMap(map,track);
+    resetQuad();
+  }else if(trackRaw){
+    const t=findTrack(track);
+    if(t){setMap(t.map,t.legacyId!=null?t.legacyId:t.id);resetQuad();}
+  }
+  const buildRaw=q.get('build');
+  if(buildRaw){
+    const decoded=decodeBuild(buildRaw);
+    if(decoded) applyBuild(decoded,{save:true,announce:true});
+  }
+  const modeRaw=(q.get('mode')||'').toLowerCase();
+  if(modeRaw==='angle'||modeRaw==='horizon'||modeRaw==='acro'){
+    setFlightMode(modeRaw);flightMode=modeRaw;
+  }
+  if((map||trackRaw||buildRaw||modeRaw)&&q.get('menu')!=='1')toggleStartMenu(false);
+  if(q.get('look')&&looks)looks.setLookSpot(q.get('look'));
+  if(q.get('quality')&&looks)looks.setQuality(q.get('quality'));
+  if(q.get('builder')==='1'){toggleStartMenu(false);openBuilder();}
+  syncBuildUI();
+}
+fetchBuiltinTracks().then(list=>{
+  builtinTracks=list;
+  for(const t of list){
+    if(t.legacyId==null)loadHostedGhost(t.id);
+  }
+  Object.assign(window._sim,{tracks:()=>builtinTracks.concat(customTracks)});
+  applyQueryBoot();
+}).catch(()=>{builtinTracks=[cityTrackJson(0),cityTrackJson(1)];applyQueryBoot();});
 Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
-  QUALITY_KEY});
+  QUALITY_KEY,FLOATINESS_KEY,setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
+  physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
+  encodeBuild,decodeBuild,BUILD_KEY});
 </script>
 <!-- Flattened to single-line spans so the whole thing fits the fixed 14px bar.
      The .container wrappers and the opacity:.6 on the credit are gone: the
