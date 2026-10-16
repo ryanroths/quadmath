@@ -20,17 +20,22 @@
 <meta name="twitter:image" content="https://quadmath.com/og-sim.png">
 
 <link rel="canonical" href="https://quadmath.com/sim.html">
-<!-- This page was the only one not loading the webfonts, so the shared header,
-     logo and nav fell back to system faces here and matched nothing else on the
-     site. Same three families as the other pages. `display=optional` keeps the sim
-     itself paintable while they arrive — text renders in the fallback first and
-     is never blocked on the font. -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=optional" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=2f595d174b9d">
 <style>
-  :root{--bg:#0D0E12;--panel:#15171D;--orange:#FF4D1A;--green:#3DDC97;--txt:#E8E9ED;--dim:#7A7F8C}
+  @font-face{font-family:Inter;font-style:normal;font-weight:400;font-display:swap;
+    src:url('assets/sim-looks/fonts/Inter-Regular.woff2') format('woff2')}
+  @font-face{font-family:Inter;font-style:normal;font-weight:500;font-display:swap;
+    src:url('assets/sim-looks/fonts/Inter-Medium.woff2') format('woff2')}
+  @font-face{font-family:Inter;font-style:normal;font-weight:600;font-display:swap;
+    src:url('assets/sim-looks/fonts/Inter-SemiBold.woff2') format('woff2')}
+  @font-face{font-family:Inter;font-style:normal;font-weight:700;font-display:swap;
+    src:url('assets/sim-looks/fonts/Inter-Bold.woff2') format('woff2')}
+  @font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400;font-display:swap;
+    src:url('assets/sim-looks/fonts/JetBrainsMono-Regular.woff2') format('woff2')}
+  @font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:500;font-display:swap;
+    src:url('assets/sim-looks/fonts/JetBrainsMono-Medium.woff2') format('woff2')}
+  :root{--bg:#0D0E12;--panel:#15171D;--orange:#FF4D1A;--green:#3DDC97;--txt:#E8E9ED;--dim:#7A7F8C;
+    --glass:rgba(16,18,24,.82);--line:rgba(255,255,255,.12)}
   *{box-sizing:border-box;margin:0;padding:0}
   html{height:100%}
   /* No site header on this page: the OSD is position:fixed from the top edge
@@ -38,8 +43,11 @@
      viewport; the way back to the site is the footer logo and the panel link.
      100dvh rather than 100vh: on mobile 100vh is the *largest* the viewport can
      get, so the bottom of the canvas hid behind the browser UI. */
-  body{background:var(--bg);color:var(--txt);font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;
-    overflow:hidden;height:100vh;height:100dvh;display:flex;flex-direction:column}
+  body{background:var(--bg);color:var(--txt);font-family:Inter,system-ui,sans-serif;
+    overflow:hidden;height:100vh;height:100dvh;display:flex;flex-direction:column;
+    font-synthesis:none}
+  .n, .val, #osdTL, #osdTR, #osdBC, #osdBR, #osdGate, #osdLap, #fpsHud, #v_max, #v_maxAll,
+  #ratesTypeBadge{font-family:'JetBrains Mono',ui-monospace,Consolas,monospace}
   /* min-height:0 so the canvas can shrink below its intrinsic size instead of
      forcing the column taller than the viewport. */
   #c{display:block;flex:1 1 auto;width:100%;min-height:0}
@@ -53,8 +61,9 @@
   footer{position:fixed;left:0;right:0;bottom:0;z-index:45;
     display:flex;align-items:center;justify-content:center;gap:0 14px;flex-wrap:wrap;
     padding:0 10px;font-size:10px;line-height:14px;
-    color:var(--txt);background:rgba(13,14,18,.85);
-    border:0;border-top:1px solid #262A33;text-align:center}
+    color:var(--txt);background:rgba(13,14,18,.72);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    border:0;border-top:1px solid var(--line);text-align:center}
   footer .sf-logo{color:var(--txt);text-decoration:none}
   footer .sf-logo:hover{color:var(--orange)}
   footer .sf-logo .dot{color:var(--orange)}
@@ -72,7 +81,10 @@
   @media (max-width:559px){
     footer .sf-note{display:none}
   }
-  .osd{position:fixed;pointer-events:none;font-size:13px;letter-spacing:.5px;text-shadow:0 0 4px rgba(0,0,0,.9)}
+  .osd{position:fixed;pointer-events:none;font-size:12px;letter-spacing:.2px;font-weight:500;
+    text-shadow:0 1px 8px rgba(0,0,0,.75)}
+  #fpsHud{position:fixed;top:14px;right:92px;z-index:12;pointer-events:none;font-size:11px;
+    color:var(--dim);text-shadow:0 1px 6px rgba(0,0,0,.8)}
   #osdTL{top:14px;left:16px} #osdTR{top:48px;right:16px;text-align:right}
   #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
   #osdBL{display:none}
@@ -99,27 +111,30 @@
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
   #crosshair::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
   #crosshair::after{top:50%;left:0;height:1px;width:100%;transform:translateY(-50%)}
-  #panel{position:fixed;top:0;right:0;height:100vh;height:100dvh;width:300px;background:rgba(21,23,29,.96);
-    border-left:1px solid #262A33;padding:18px 16px;overflow-y:auto;transform:translateX(100%);
-    transition:transform .18s ease;z-index:10}
+  #panel{position:fixed;top:0;right:0;height:100vh;height:100dvh;width:320px;background:var(--glass);
+    backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);
+    border-left:1px solid var(--line);padding:20px 18px;overflow-y:auto;transform:translateX(100%);
+    transition:transform .2s ease;z-index:10}
   #panel.open{transform:translateX(0)}
-  #panel h1{font-size:15px;color:var(--orange);margin-bottom:2px}
-  #panel .sub{font-size:11px;color:var(--dim);margin-bottom:14px}
-  #panel h2{font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:1.5px;margin:16px 0 8px;
-    border-bottom:1px solid #262A33;padding-bottom:4px}
+  #panel h1{font-size:18px;font-weight:700;color:var(--txt);margin-bottom:2px;letter-spacing:-.02em}
+  #panel .sub{font-size:12px;color:var(--dim);margin-bottom:14px;font-weight:400}
+  #panel h2{font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:1.4px;margin:16px 0 8px;
+    border-bottom:1px solid var(--line);padding-bottom:6px;font-weight:600}
   .row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px}
   .row .val{color:var(--orange);min-width:52px;text-align:right}
   input[type=range]{width:100%;margin:0 0 10px;accent-color:var(--orange);height:4px}
-  button{background:transparent;border:1px solid var(--orange);color:var(--orange);
-    font-family:inherit;font-size:12px;padding:6px 12px;cursor:pointer;width:100%;margin-top:6px}
-  #cliPaste,#ghostCode,#pilotName{width:100%;background:var(--bg);border:1px solid #262A33;color:var(--txt);
-    font-family:inherit;font-size:11px;padding:6px;resize:vertical}
+  button{background:transparent;border:1px solid rgba(255,77,26,.55);color:var(--orange);
+    font-family:inherit;font-size:12px;font-weight:600;padding:8px 12px;cursor:pointer;width:100%;margin-top:6px;
+    border-radius:10px}
+  #cliPaste,#ghostCode,#pilotName{width:100%;background:rgba(8,9,12,.55);border:1px solid var(--line);color:var(--txt);
+    font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;padding:8px;resize:vertical;border-radius:10px}
   #cliPaste:focus,#ghostCode:focus,#pilotName:focus{outline:none;border-color:var(--orange)}
   #pilotName{margin-bottom:4px}
   button:hover{background:var(--orange);color:var(--bg)}
-  #gear{position:fixed;top:12px;right:12px;z-index:11;width:auto;padding:6px 10px;
-    background:rgba(21,23,29,.85);border:1px solid #262A33;color:var(--txt);font-size:12px}
-  #gear:hover{border-color:var(--orange);color:var(--orange);background:rgba(21,23,29,.85)}
+  #gear{position:fixed;top:12px;right:12px;z-index:11;width:auto;padding:8px 12px;
+    background:var(--glass);border:1px solid var(--line);color:var(--txt);font-size:12px;
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  #gear:hover{border-color:var(--orange);color:var(--orange);background:var(--glass)}
   .kbd{color:var(--dim);font-size:11px;line-height:1.7}
   .kbd b{color:var(--txt);font-weight:600}
   #toast{position:fixed;top:44%;left:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:700;
@@ -138,9 +153,10 @@
   #calibCancel{width:200px;margin-top:24px}
   #assetStatus{font-size:11px;color:var(--dim);margin-bottom:8px;line-height:1.6}
   /* key legend */
-  #legend{position:fixed;bottom:16px;left:16px;z-index:5;background:rgba(13,14,18,.72);
-    border:1px solid #262A33;padding:10px 14px;font-size:11px;line-height:1.9;
-    color:var(--dim);letter-spacing:.5px;pointer-events:none}
+  #legend{position:fixed;bottom:16px;left:16px;z-index:5;background:var(--glass);
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border:1px solid var(--line);padding:12px 14px;font-size:12px;line-height:1.8;
+    color:var(--dim);letter-spacing:.2px;pointer-events:none;border-radius:14px}
   #legend b{color:var(--txt);font-weight:600}
   #audioHint{position:fixed;bottom:150px;left:16px;z-index:5;color:var(--dim);
     font-size:11px;letter-spacing:.5px;pointer-events:none;opacity:1;transition:opacity 1s ease}
@@ -150,10 +166,65 @@
   .lgc-tr{top:-1px;right:-1px;border-left:none;border-bottom:none}
   .lgc-bl{bottom:-1px;left:-1px;border-right:none;border-top:none}
   .lgc-br{bottom:-1px;right:-1px;border-left:none;border-top:none}
+  #mobileGate{background:rgba(10,12,16,.88);backdrop-filter:blur(16px)}
+  #mobileGate .mg-btn{border-radius:12px;font-weight:600}
+  #calib{background:rgba(10,12,16,.78);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+  #startMenu{position:fixed;inset:0;z-index:22;display:none;align-items:center;justify-content:flex-start;
+    padding:48px 40px;pointer-events:none;background:linear-gradient(90deg,rgba(8,10,14,.62) 0%,rgba(8,10,14,.12) 58%,transparent 100%)}
+  #startMenu.open{display:flex}
+  .menu-card{pointer-events:auto;width:min(420px,92vw);padding:28px 26px 22px;
+    background:var(--glass);border:1px solid var(--line);border-radius:20px;
+    backdrop-filter:blur(20px) saturate(1.25);-webkit-backdrop-filter:blur(20px) saturate(1.25);
+    box-shadow:0 24px 60px rgba(0,0,0,.35);isolation:isolate;transform:translateZ(0);
+    -webkit-font-smoothing:antialiased}
+  #startMenu, #startMenu *, #panel, #panel *, footer, .osd { text-shadow: none; }
+  .menu-brand{font-size:13px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--orange)}
+  .menu-card h1{font-size:42px;font-weight:700;letter-spacing:-.04em;margin:6px 0 8px;color:var(--txt)}
+  .menu-lead{font-size:14px;line-height:1.5;color:var(--dim);margin-bottom:18px}
+  .menu-card button{margin-top:8px}
+  .menu-card button.primary{background:var(--orange);color:#140802;border-color:var(--orange)}
+  .menu-card button.primary:hover{filter:brightness(1.06)}
+  .menu-quality{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap}
+  .menu-quality button,.qbtn{width:auto;flex:1;min-width:64px;margin-top:0;padding:7px 8px;font-size:11px;
+    border-color:var(--line);color:var(--txt)}
+  .menu-quality button.on,.qbtn.on{border-color:var(--orange);color:var(--orange);background:rgba(255,77,26,.12)}
+  .menu-layer{pointer-events:auto;margin-left:16px;width:min(360px,90vw);padding:22px 20px;
+    background:var(--glass);border:1px solid var(--line);border-radius:20px;
+    backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:none}
+  .menu-layer.show{display:block}
+  .menu-layer h2{font-size:16px;margin-bottom:10px}
+  .menu-layer p,.menu-layer li{font-size:13px;line-height:1.55;color:var(--dim)}
+  .menu-layer ol{padding-left:18px}
+  .menu-layer button{width:auto;margin-top:12px}
+  body.menu-open #legend,body.menu-open #audioHint,body.menu-open #gear,body.menu-open #fpsHud,
+  body.menu-open .osd{opacity:0}
+  .seg{display:flex;gap:6px;margin-bottom:10px}
+  #radioPreset,#droneType,#ratesType,#fpvStyle,#qualityPanel{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
+    color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
 </style>
 </head>
-<body>
+<body class="menu-open">
 <canvas id="c"></canvas>
+<div id="startMenu" class="open">
+  <div class="menu-card">
+    <div class="menu-brand">QuadMath</div>
+    <h1>Sim</h1>
+    <p class="menu-lead">Browser FPV whoop sim. Paste your Betaflight rates. No install.</p>
+    <button class="primary" id="menuFly">Fly</button>
+    <button id="menuTracks">Tracks</button>
+    <button id="menuTune">Tune</button>
+    <button id="menuControls">Controls</button>
+    <button id="menuHowTo">How to</button>
+    <div class="menu-quality" id="qualityBtns">
+      <button type="button" data-q="auto">Auto</button>
+      <button type="button" data-q="low">Low</button>
+      <button type="button" data-q="med">Med</button>
+      <button type="button" data-q="high">High</button>
+    </div>
+  </div>
+  <div class="menu-layer" id="menuLayer"></div>
+</div>
+<div id="fpsHud"></div>
 <div class="osd" id="osdTL"></div>
 <div class="osd" id="osdTR"></div>
 <div class="osd" id="osdBC"></div>
@@ -256,6 +327,21 @@
   <input type="range" id="s_cam" min="0" max="60" step="1" value="30">
   <div class="row"><label>FOV</label><span class="val" id="v_fov"></span></div>
   <input type="range" id="s_fov" min="80" max="160" step="1" value="105">
+  <div class="row"><label>FPV look</label><input type="checkbox" id="cbFpvLook" checked style="accent-color:var(--orange)"></div>
+  <div class="row"><label>Look style</label></div>
+  <select id="fpvStyle">
+    <option value="hd">HD</option>
+    <option value="analog">Analog</option>
+  </select>
+  <div class="row"><label>Motion blur</label><input type="checkbox" id="cbMotionBlur" style="accent-color:var(--orange)"></div>
+
+  <h2>Quality</h2>
+  <select id="qualityPanel">
+    <option value="auto">Auto</option>
+    <option value="low">Low</option>
+    <option value="med">Med</option>
+    <option value="high">High</option>
+  </select>
 
   <h2>Audio</h2>
   <div class="row"><label>Music volume</label><span class="val" id="v_musicVol"></span></div>
@@ -363,6 +449,7 @@
 "use strict";
 import * as THREE from "three";
 import {QuadPhysics,PRESETS} from "./quadphysics.js?v=ff076e751452";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, not statically: a static import failure aborts
 // the whole module and takes the sim with it. Loaded this way, an addon/CDN failure
@@ -393,14 +480,14 @@ const LIGHTING={
   sunElevation:18,        // degrees above the horizon - low enough for long shadows
   sunAzimuth:118,         // degrees clockwise from +Z
   sunColor:0xffd9b0,      // warm key
-  sunIntensity:3.0,
-  exposure:0.9,           // renderer.toneMappingExposure (ACES filmic)
+  sunIntensity:1.7,       // IBL from the HDRI carries most of the sky bounce
+  exposure:0.48,          // HDRI is much hotter than the old canvas sky
   hemiSky:0x8ab4ff,       // cool sky bounce
   hemiGround:0x3a2a1a,    // warm dark ground bounce
-  hemiIntensity:0.6,
-  fillIntensity:0.3,      // shadowless bounce light opposite the sun
-  fogDensity:0.00085,     // FogExp2 - distant haze only, gates stay clean
-  fogColor:0xdcb389,      // matches the sky's horizon band
+  hemiIntensity:0.16,     // lowered — the environment map now fills the shadows
+  fillIntensity:0.12,     // shadowless bounce light opposite the sun
+  fogDensity:0.00035,     // FogExp2 - distant haze only, gates stay clean
+  fogColor:0xc9a57a,      // warm, darker than the HDRI sun so the city stays readable
   shadowMapSize:2048,
   shadowBias:-0.0005,
   shadowNormalBias:0.02,
@@ -443,7 +530,8 @@ const camera=new THREE.PerspectiveCamera(CFG.fov,(canvas.clientWidth||1)/(canvas
 // matches the visible area and the aspect ratio cannot skew. The third
 // argument to setSize is updateStyle=false: three.js would otherwise write
 // inline width/height onto the canvas and break the flex sizing.
-let composer=null,bloomPass=null;   // set once the post chain finishes loading, below
+let composer=null,bloomPass=null;   // set once the looks post chain finishes
+let looks=null;
 function resize(){
   const w=canvas.clientWidth||1,h=canvas.clientHeight||1;
   renderer.setSize(w,h,false);
@@ -455,6 +543,7 @@ function resize(){
 // ratio itself, so it gets the same w/h as renderer.setSize. It also resizes
 // every pass, which is why the bloom override has to come after it.
 function sizeComposer(){
+  if(looks&&looks.sizeComposer){looks.sizeComposer();return;}
   if(!composer)return;
   const w=canvas.clientWidth||1,h=canvas.clientHeight||1;
   composer.setSize(w,h);
@@ -486,33 +575,10 @@ window._sim={renderer,scene,camera}; // debug handle, same convention as _qp/_si
 // OutputPass reads toneMapping + outputColorSpace back off the renderer and
 // applies them once, last. Clearing renderer.toneMapping here would not stop
 // a double tone map, it would remove the only one.
-Promise.all([
-  import('three/addons/postprocessing/EffectComposer.js'),
-  import('three/addons/postprocessing/RenderPass.js'),
-  import('three/addons/postprocessing/UnrealBloomPass.js'),
-  import('three/addons/postprocessing/OutputPass.js')
-]).then(function(m){
-  const EffectComposer=m[0].EffectComposer,RenderPass=m[1].RenderPass,
-        UnrealBloomPass=m[2].UnrealBloomPass,OutputPass=m[3].OutputPass;
-  const c=new EffectComposer(renderer);
-  // The canvas was created with antialias:true, but that only ever applied to
-  // the default framebuffer. Rendering the scene into the composer's target
-  // instead drops MSAA entirely and every gate ring and roofline goes jagged,
-  // so ask for it back on the target itself.
-  c.renderTarget1.samples=LIGHTING.postSamples;
-  c.renderTarget2.samples=LIGHTING.postSamples;
-  c.addPass(new RenderPass(scene,camera));
-  bloomPass=new UnrealBloomPass(new THREE.Vector2(1,1),
-    LIGHTING.bloomStrength,LIGHTING.bloomRadius,LIGHTING.bloomThreshold);
-  c.addPass(bloomPass);
-  c.addPass(new OutputPass());   // last: ACES + sRGB, once
-  composer=c;
-  sizeComposer();
-  Object.assign(window._sim,{composer,bloomPass});
-  window._bloomReady=true;return true;
-}).catch(function(){composer=null;bloomPass=null;window._bloomReady=false;return false;});
+let looksReady=null;
 
 // ---------- Sky + light ----------
+let skyMesh=null,sunSprite=null;
 {
   const cv=document.createElement('canvas');cv.width=16;cv.height=512;
   const g=cv.getContext('2d');
@@ -520,8 +586,9 @@ Promise.all([
   gr.addColorStop(0,'#123a70');gr.addColorStop(.42,'#3f78b4');
   gr.addColorStop(.70,'#a8bfc6');gr.addColorStop(.80,'#d8ae83');gr.addColorStop(1,'#e9c9a2');
   g.fillStyle=gr;g.fillRect(0,0,16,512);
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(1800,24,16),
-    new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),side:THREE.BackSide,fog:false})));
+  skyMesh=new THREE.Mesh(new THREE.SphereGeometry(1800,24,16),
+    new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),side:THREE.BackSide,fog:false}));
+  scene.add(skyMesh);
   const scv=document.createElement('canvas');scv.width=scv.height=128;
   const sg=scv.getContext('2d');
   const rad=sg.createRadialGradient(64,64,2,64,64,64);
@@ -531,6 +598,7 @@ Promise.all([
   // Park the glow on the real sun vector rather than a fixed corner, so moving
   // sunAzimuth/sunElevation moves the disc and the shadows together.
   sp.scale.set(300,300,1);sp.position.copy(sunDir).multiplyScalar(1500);scene.add(sp);
+  sunSprite=sp;
 }
 // Single hard key light. The shadow frustum is NOT set here: it is sized from
 // the real gate bounds once the world exists (see updateSunShadow below), because
@@ -545,11 +613,24 @@ scene.add(sun);scene.add(sun.target);
 let shadowHelper=null;               // CameraHelper on the shadow frustum, L toggles it
 // Cool sky over warm dark ground - this is what keeps the shadowed side of a
 // building blue instead of flat grey.
-scene.add(new THREE.HemisphereLight(LIGHTING.hemiSky,LIGHTING.hemiGround,LIGHTING.hemiIntensity));
+const hemi=new THREE.HemisphereLight(LIGHTING.hemiSky,LIGHTING.hemiGround,LIGHTING.hemiIntensity);
+scene.add(hemi);
 // Shadowless bounce from the anti-sun side so the dark faces do not crush to black.
 const sunFill=new THREE.DirectionalLight(0x9fc2ff,LIGHTING.fillIntensity);
 sunFill.position.set(-sunDir.x*400,260,-sunDir.z*400);
 scene.add(sunFill);
+looksReady=createLooks({
+  THREE,renderer,scene,camera,LIGHTING,sun,sunFill,hemi,
+  onResize(){resize();}
+}).then(function(l){
+  looks=l;composer=l.composer;bloomPass=l.bloomPass;
+  l.attachSky(skyMesh,sunSprite);
+  sizeComposer();
+  Object.assign(window._sim,{composer,bloomPass,looks});
+  window._bloomReady=true;
+  syncQualityUI();
+  return l;
+}).catch(function(){composer=null;bloomPass=null;window._bloomReady=false;return null;});
 
 // ---------- helpers ----------
 function canvasTex(w,h,draw,rx=1,ry=1){
@@ -662,6 +743,7 @@ function voxelColliders(obj,gridRes,snapToGrid){
   const ground=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400),
     new THREE.MeshStandardMaterial({map:gtex,roughness:0.95,metalness:0}));
   ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+  looksReady.then(function(l){if(l)l.attachGround(ground);});
 }
 
 // ---------- Race gates & dive rings ----------
@@ -706,6 +788,7 @@ function addGate(x,y,z,rotationY,size,solidGate,trackId){
     new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:LIGHTING.gateEmissive,roughness:0.4}));
   ring.position.set(x,y,z);ring.rotation.y=rotationY||0;
   ring.castShadow=ring.receiveShadow=true; // long thin ring shadow on the deck is the main read for gate height
+  decorateGate(THREE,ring,size,col);
   scene.add(ring);
   gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col,trackId:trackId,trackIdx:trackIdx}); // col = dim base color
   if(solidGate){
@@ -798,15 +881,9 @@ function updateGateHighlight(){
     beaconTarget=target;
   }
   beacon.visible=!!target;
+  const now=performance.now();
   for(const g of gates){
-    const m=g.mesh.material;
-    if(g===target){
-      m.color.setHex(0xFFFFFF);m.emissive.setHex(0xFFFFFF);m.emissiveIntensity=LIGHTING.gateEmissiveActive;
-      g.mesh.scale.setScalar(1+Math.sin(performance.now()*0.005)*0.2);
-    }else{
-      m.color.setHex(g.col);m.emissive.setHex(g.col);m.emissiveIntensity=LIGHTING.gateEmissive;
-      g.mesh.scale.setScalar(1);
-    }
+    pulseGate(g,g===target,now,LIGHTING);
   }
 }
 // begin a 3-lap run on the active track: reset splits, start both the run and
@@ -1321,6 +1398,7 @@ window._tryAssets=async function(){
     usingGltf=true;
     assetEl.textContent='GLTF city loaded: '+placedRoot.children.length+' objects.';
     toast('GLTF ASSETS LOADED');
+    if(looks)looks.upgradeMaterials(placedRoot);
     // Nothing left to report once the swap is done — the toast already said it.
     // Leaving a permanent status row in the tune panel is just dead chrome.
     setTimeout(function(){
@@ -1357,7 +1435,9 @@ function facadeTex(base,lit){
 ['#c9b8a3','#9aa3ad','#b08d6e','#8f8f94','#d0c0a8','#7e6f5f','#a3855f']
   .forEach(c=>facadeCache.push(facadeTex(c,0.10+rnd()*0.12)));
 const roofMat=new THREE.MeshStandardMaterial({color:0x6e6a63,roughness:1});
+roofMat.userData.looksRoof=true;
 const parapetMat=new THREE.MeshStandardMaterial({color:0x8c8478,roughness:.95});
+parapetMat.userData.looksRoof=true;
 // building-only collider, contracted ~12% like the gltf ones (fly close before
 // hit); palms/tower/bridges/stack keep exact addCollider boxes
 function addBuildingCollider(x,y,z,w,h,d){
@@ -1369,6 +1449,7 @@ function makeBuilding(x,z,w,d,h){
   const tex=facadeCache[(rnd()*facadeCache.length)|0].clone();
   tex.needsUpdate=true;tex.repeat.set(Math.max(1,Math.round(w/8)),Math.max(1,Math.round(h/28)));
   const wm=new THREE.MeshStandardMaterial({map:tex,roughness:.9});
+  wm.userData.looksFacade=true;
   const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),[wm,wm,roofMat,roofMat,wm,wm]);
   m.position.set(x,h/2,z);m.castShadow=m.receiveShadow=true;proceduralGroup.add(m);
   addBuildingCollider(x,0,z,w,h,d);
@@ -2490,6 +2571,7 @@ function updateMotorSound(){
 }
 addEventListener('keydown',e=>{
   if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&e.target.type==='text')))return; // typing in the CLI/ghost/pilot-name boxes must not trigger R/M/F/G hotkeys
+  if(e.key==='Escape'){e.preventDefault();toggleStartMenu();return;}
   if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
   keys[e.key.toLowerCase()]=true;
   if(e.key.toLowerCase()==='r')resetQuad();
@@ -2878,6 +2960,8 @@ function bounce(){
 const camTilt=new THREE.Quaternion();
 const camJit=new THREE.Quaternion(),camJitEul=new THREE.Euler();
 function updateCamera(){
+  if(looks&&looks.applyLookSpot())return;
+  if(camera.fov!==CFG.fov){camera.fov=CFG.fov;camera.updateProjectionMatrix();}
   camTilt.setFromAxisAngle(new THREE.Vector3(1,0,0),THREE.MathUtils.degToRad(CFG.camDeg));
   camera.quaternion.copy(state.q).multiply(camTilt);
   // camera shake — fed by impacts (and available to future effects): small
@@ -2964,6 +3048,89 @@ function updateOSD(){
 const panel=document.getElementById('panel');
 document.getElementById('gear').onclick=()=>panel.classList.toggle('open');
 document.getElementById('btnReset').onclick=resetQuad;
+function setActiveTrack(id){
+  activeTrackId=id?1:0;
+  nextGateIndex=0;
+  updateGateUI();updateGateHighlight();
+}
+function toggleStartMenu(force){
+  const el=document.getElementById('startMenu');
+  const cur=looks?looks.menuOpen:el.classList.contains('open');
+  const next=force==null?!cur:!!force;
+  if(looks)looks.setMenuOpen(next);
+  else{el.classList.toggle('open',next);document.body.classList.toggle('menu-open',next);}
+  if(next)panel.classList.remove('open');
+}
+function syncQualityUI(){
+  if(!looks)return;
+  const q=looks.choice;
+  document.querySelectorAll('#qualityBtns [data-q]').forEach(b=>b.classList.toggle('on',b.dataset.q===q));
+  const sel=document.getElementById('qualityPanel');
+  if(sel)sel.value=q;
+  const fpv=looks.fpv;
+  const cb=document.getElementById('cbFpvLook');
+  if(cb)cb.checked=fpv.enabled;
+  const st=document.getElementById('fpvStyle');
+  if(st)st.value=fpv.style;
+  const mb=document.getElementById('cbMotionBlur');
+  if(mb)mb.checked=fpv.motionBlur;
+}
+function showMenuLayer(html){
+  const el=document.getElementById('menuLayer');
+  if(!el)return;
+  el.innerHTML=html;
+  el.classList.add('show');
+}
+function hideMenuLayer(){
+  const el=document.getElementById('menuLayer');
+  if(el)el.classList.remove('show');
+}
+function wireLooksUI(){
+  const fly=document.getElementById('menuFly');
+  if(fly)fly.onclick=()=>{hideMenuLayer();toggleStartMenu(false);toast('Throttle up to fly. Tab = tune.');};
+  document.getElementById('menuTune').onclick=()=>{hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');};
+  document.getElementById('menuTracks').onclick=()=>{
+    showMenuLayer('<h2>Tracks</h2><p>Two fixed courses. Gate order and layouts are unchanged.</p>'+
+      '<button type="button" id="pickT0">Track 1 — city loop</button>'+
+      '<button type="button" id="pickT1">Track 2 — mesa zigzag</button>'+
+      '<button type="button" id="layerClose">Close</button>');
+    document.getElementById('pickT0').onclick=()=>{setActiveTrack(0);toast('TRACK 1');};
+    document.getElementById('pickT1').onclick=()=>{setActiveTrack(1);toast('TRACK 2');};
+    document.getElementById('layerClose').onclick=hideMenuLayer;
+  };
+  document.getElementById('menuControls').onclick=()=>{
+    showMenuLayer('<h2>Controls</h2><p>TX16S: EdgeTX USB mode = <b style="color:var(--txt)">Joystick</b>.</p>'+
+      '<p><span class="n">W/S</span> throttle · <span class="n">A/D</span> yaw<br>'+
+      '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
+      '<span class="n">R</span> reset · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
+      '<span class="n">M</span> music · <span class="n">F</span> angle/acro · <span class="n">G</span> ghost</p>'+
+      '<button type="button" id="layerClose">Close</button>');
+    document.getElementById('layerClose').onclick=hideMenuLayer;
+  };
+  document.getElementById('menuHowTo').onclick=()=>{
+    showMenuLayer('<h2>How to</h2><ol>'+
+      '<li>Click Fly, or plug in a radio (Joystick mode).</li>'+
+      '<li>Throttle up. F toggles angle mode if you want self-level.</li>'+
+      '<li>Fly the lit gate. A 3-lap run starts at gate 1.</li>'+
+      '<li>Tab opens Tune — paste a Betaflight CLI dump to use your rates.</li>'+
+      '<li>G races your best ghost once you have a run.</li>'+
+      '</ol><button type="button" id="layerClose">Close</button>');
+    document.getElementById('layerClose').onclick=hideMenuLayer;
+  };
+  document.querySelectorAll('#qualityBtns [data-q]').forEach(b=>{
+    b.onclick=()=>{if(looks)looks.setQuality(b.dataset.q).then(syncQualityUI);};
+  });
+  const qp=document.getElementById('qualityPanel');
+  if(qp)qp.onchange=()=>{if(looks)looks.setQuality(qp.value).then(syncQualityUI);};
+  const cb=document.getElementById('cbFpvLook');
+  if(cb)cb.onchange=()=>{if(looks){looks.setFpv({enabled:cb.checked});syncQualityUI();}};
+  const st=document.getElementById('fpvStyle');
+  if(st)st.onchange=()=>{if(looks){looks.setFpv({style:st.value});syncQualityUI();}};
+  const mb=document.getElementById('cbMotionBlur');
+  if(mb)mb.onchange=()=>{if(looks){looks.setFpv({motionBlur:mb.checked});syncQualityUI();}};
+  if(looks)looks.setMenuOpen(true);
+  syncQualityUI();
+}
 function bind(id,key,fmt,post){
   const s=document.getElementById('s_'+id),v=document.getElementById('v_'+id);
   const u=()=>{CFG[key]=parseFloat(s.value);v.textContent=fmt(CFG[key]);if(post)post();refreshMax();};
@@ -3609,17 +3776,28 @@ const STEP=1/240;
 function loop(now){
   requestAnimationFrame(loop);
   let dt=(now-last)/1000;last=now;dt=Math.min(dt,.05);
-  readInput(dt);
-  acc+=dt;
-  while(acc>=STEP){physics(STEP);acc-=STEP;}
-  updateMotorSound();
-  updateCamera();updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();updateDust(dt);
+  if(looks)looks.tick(now);
+  if(!(looks&&looks.menuOpen)){
+    readInput(dt);
+    acc+=dt;
+    while(acc>=STEP){physics(STEP);acc-=STEP;}
+    updateMotorSound();
+    updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();updateDust(dt);
+  }
+  updateCamera();
   // composer is null until the post chain resolves, and stays null if the
   // addons CDN is unreachable - either way the sim keeps rendering.
   if(composer)composer.render();else renderer.render(scene,camera);
 }
-toast('Throttle up to fly. Tab = tune.');
 requestAnimationFrame(loop);
+looksReady.then(function(l){
+  if(!l)return;
+  requestAnimationFrame(function(){requestAnimationFrame(function(){l.afterFirstFrame();});});
+});
+wireLooksUI();
+Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
+  setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
+  QUALITY_KEY});
 </script>
 <!-- Flattened to single-line spans so the whole thing fits the fixed 14px bar.
      The .container wrappers and the opacity:.6 on the credit are gone: the
