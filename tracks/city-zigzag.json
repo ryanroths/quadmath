@@ -1,0 +1,22 @@
+{
+  "id": "city-zigzag",
+  "legacyId": 1,
+  "map": "city",
+  "name": "Mesa Zigzag",
+  "class": "open",
+  "gates": [
+    { "x": 210, "y": 8, "z": -345, "ry": 0.30, "size": 9, "solid": true },
+    { "x": 490, "y": 14, "z": -390, "ry": 1.95, "size": 7, "solid": true },
+    { "x": 220, "y": 26, "z": -435, "ry": -1.95, "size": 7, "solid": true },
+    { "x": 480, "y": 40, "z": -480, "ry": 1.95, "size": 6, "solid": true },
+    { "x": 350, "y": 46, "z": -515, "ry": 3.14, "size": 6, "solid": true },
+    { "x": 220, "y": 28, "z": -550, "ry": -1.95, "size": 7, "solid": true },
+    { "x": 490, "y": 16, "z": -585, "ry": 1.95, "size": 7, "solid": true },
+    { "x": 350, "y": 10, "z": -620, "ry": 3.14, "size": 8, "solid": true },
+    { "x": 220, "y": 18, "z": -655, "ry": -1.95, "size": 7, "solid": true },
+    { "x": 480, "y": 12, "z": -680, "ry": 1.60, "size": 7, "solid": true },
+    { "x": 350, "y": 22, "z": -685, "ry": 0.90, "size": 8, "solid": true },
+    { "x": 280, "y": 10, "z": -405, "ry": -2.60, "size": 9, "solid": true }
+  ],
+  "flags": []
+}

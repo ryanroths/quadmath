@@ -1,0 +1,18 @@
+{
+  "id": "garage-rafters",
+  "map": "garage",
+  "name": "Rafters",
+  "class": "whoop",
+  "gates": [
+    { "x": 0.0, "y": 2.6, "z": 17.0, "ry": 0.00, "size": 2.0, "solid": true },
+    { "x": -5.5, "y": 7.6, "z": 8.0, "ry": 0.20, "size": 1.7, "solid": true },
+    { "x": 5.5, "y": 8.0, "z": 2.7, "ry": 1.57, "size": 1.7, "solid": true },
+    { "x": -5.5, "y": 7.8, "z": -8.0, "ry": -0.20, "size": 1.7, "solid": true },
+    { "x": 0.0, "y": 4.2, "z": -16.0, "ry": 3.14, "size": 1.8, "solid": true },
+    { "x": 6.0, "y": 2.5, "z": -4.0, "ry": -1.40, "size": 1.8, "solid": true },
+    { "x": 0.0, "y": 2.6, "z": 8.5, "ry": 3.14, "size": 2.0, "solid": true }
+  ],
+  "flags": [
+    { "x": 0.0, "y": 8.4, "z": 4.0, "ry": 0 }
+  ]
+}

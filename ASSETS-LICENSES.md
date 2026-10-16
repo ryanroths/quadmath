@@ -57,6 +57,10 @@ Used only for numeric readouts (OSD values, sliders, CLI/ghost fields).
 | Kenney City Kit GLBs under `assets/Models/` | CC0 (`assets/License.txt`) | Kenney (www.kenney.nl) |
 | `assets/Models/GLB-format/low_poly_city_game-ready.glb` | CC BY 4.0 | **City model by costoWRLD (Sketchfab, CC BY)** — kept in the sim footer |
 
+## M2 maps / tracks (no new binary textures)
+
+Indoor whoop maps are procedural boxes that reuse the V1 Poly Haven PBR sets above (concrete, plaster facade, grass, asphalt). Wood floors are a canvas albedo plus the plaster normal/roughness on Med/High. No WebFPV assets, layouts, or code. Track JSON lives in `tracks/`. Hosted pace ghosts for new courses are synthetic splines in `ghosts/<track-id>.json` (city `ghosts/track_{0,1}.json` unchanged).
+
 ## Code (not assets)
 
 Post-processing (EffectComposer, UnrealBloom, GTAO, ShaderPass, Afterimage, RGBELoader) is loaded from the existing three.js r180 addons CDN. three.js is MIT. No WebFPV code or assets.
