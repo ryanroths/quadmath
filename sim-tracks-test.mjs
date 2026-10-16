@@ -83,6 +83,9 @@ assert.equal(detectPassOrMiss(
 assert.equal(applyMissPenalty(10000, 2), 10000 + 2 * MISS_PENALTY_MS);
 assert.ok(enteredGate(justOut, inside, g1));
 assert.ok(!enteredGate(inside, inside, g1));
+// last-gate respawn parks at JSON gate center; next index is the following gate
+const lastGate = { x: g1.x, y: g1.y, z: g1.z };
+assert.equal(detectPassOrMiss(lastGate, lastGate, living.gates, 2).type, 'none');
 
 assert.equal(ghostStorageKey(0), 'quadmath_bestGhost_0');
 assert.equal(ghostStorageKey(1), 'quadmath_bestGhost_1');

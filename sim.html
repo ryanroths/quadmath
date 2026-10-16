@@ -197,9 +197,10 @@
   .menu-layer ol{padding-left:18px}
   .menu-layer button{width:auto;margin-top:12px}
   body.menu-open #legend,body.menu-open #audioHint,body.menu-open #gear,body.menu-open #fpsHud,
-  body.menu-open .osd{opacity:0}
+    body.menu-open .osd,body.menu-open #feelHud,body.menu-open #feelTutorial{opacity:0}
+  body:has(#panel.open) #feelHud{opacity:0}
   .seg{display:flex;gap:6px;margin-bottom:10px}
-  #radioPreset,#droneType,#ratesType,#fpvStyle,#qualityPanel{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
+  #radioPreset,#droneType,#ratesType,#ratePreset,#fpvStyle,#qualityPanel{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
     color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
   .menu-layer.wide{width:min(420px,92vw)}
   .track-maps{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
@@ -226,7 +227,29 @@
   #builderList li{cursor:pointer;padding:2px 0}
   #builderList li.on{color:var(--orange)}
   body.builder-on #legend,body.builder-on #audioHint,body.builder-on #gear,body.builder-on #fpsHud,
-  body.builder-on .osd,body.builder-on #startMenu{opacity:0;pointer-events:none}
+  body.builder-on .osd,body.builder-on #startMenu,body.builder-on #feelHud,body.builder-on #feelTutorial{opacity:0;pointer-events:none}
+  #calib{z-index:28}
+  #feelPrompt{position:fixed;inset:0;z-index:26;display:none;align-items:center;justify-content:center;
+    padding:32px;background:rgba(8,10,14,.45)}
+  #feelPrompt.show{display:flex}
+  #feelHud{position:fixed;right:16px;bottom:86px;z-index:12;display:flex;align-items:flex-end;gap:10px;
+    pointer-events:none;flex-direction:row-reverse}
+  #feelHud.hide{display:none}
+  .stick-pad{width:72px;height:72px;border:1px solid var(--line);border-radius:12px;background:var(--glass);
+    backdrop-filter:blur(12px);position:relative}
+  .stick-pad i{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--orange);
+    transform:translate(-50%,-50%);left:50%;top:50%;box-shadow:0 0 8px rgba(255,77,26,.6)}
+  .feel-meta{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid var(--line);
+    border-radius:12px;background:var(--glass);backdrop-filter:blur(12px);font-size:11px;min-width:108px}
+  .feel-meta span{color:var(--txt)}
+  #hudArm.on{color:var(--green)}
+  #feelTutorial{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:13;display:none;
+    width:min(420px,92vw);padding:14px 16px;background:var(--glass);border:1px solid var(--line);
+    border-radius:16px;backdrop-filter:blur(16px);text-align:center}
+  #feelTutorial.show{display:block}
+  #feelTutMsg{font-size:14px;font-weight:600;margin-bottom:8px}
+  #feelTutorial button{width:auto;display:inline-block;margin:4px 6px}
+  button.primary{background:var(--orange);color:#140802;border-color:var(--orange)}
 </style>
 </head>
 <body class="menu-open">
@@ -321,10 +344,28 @@
   <div class="lgc lgc-bl"></div>
   <div class="lgc lgc-br"></div>
   <b>M — Music On/Off</b><br>
-  <b>F — Angle / Acro Mode</b><br>
+  <b>1/2/3 — Angle / Horizon / Acro</b><br>
+  <b>Space — Arm / Disarm</b><br>
+  <b>H — Stick HUD</b><br>
   <b id="legendGhost">G — Ghost Replay</b><br>
-  <b>R — Reset Quad</b><br>
+  <b>R — Respawn last gate</b><br>
   <b>TAB — Tune Panel</b>
+</div>
+<div id="feelPrompt" aria-hidden="true"></div>
+<div id="feelHud">
+  <div class="stick-pad" aria-hidden="true"><i id="stickDotL"></i></div>
+  <div class="stick-pad" aria-hidden="true"><i id="stickDotR"></i></div>
+  <div class="feel-meta">
+    <span id="hudThr">THR 0%</span>
+    <span id="hudBatt">BATT --</span>
+    <span id="hudMode">ANGLE</span>
+    <span id="hudArm">DISARMED</span>
+  </div>
+</div>
+<div id="feelTutorial">
+  <div id="feelTutMsg">Tutorial</div>
+  <button type="button" id="feelTutSkip">Skip</button>
+  <button type="button" class="primary" id="feelTutLap" style="display:none">Now try a lap</button>
 </div>
 
 <div id="calib">
@@ -333,13 +374,14 @@
   <div id="calibHint"></div>
   <div id="calibBars"></div>
   <button id="calibCancel">CANCEL</button>
+  <button id="calibSkip" style="display:none">SKIP AUX</button>
 </div>
 
 <button id="gear">⚙ TUNE [Tab]</button>
 <div id="panel">
   <a id="panelHome" href="/">← Back to QuadMath</a>
   <h1>QUADMATH SIM</h1>
-  <div class="sub">acro by default. F toggles angle mode.</div>
+  <div class="sub">angle by default. 1/2/3 mode · Space arm · H HUD</div>
 
   <h2>Radio</h2>
   <div class="kbd" id="radioInfo">no gamepad detected</div>
@@ -371,9 +413,9 @@
 
   <h2>Camera</h2>
   <div class="row"><label>Cam angle</label><span class="val" id="v_cam"></span></div>
-  <input type="range" id="s_cam" min="0" max="60" step="1" value="30">
+  <input type="range" id="s_cam" min="0" max="60" step="1" value="15">
   <div class="row"><label>FOV</label><span class="val" id="v_fov"></span></div>
-  <input type="range" id="s_fov" min="80" max="160" step="1" value="105">
+  <input type="range" id="s_fov" min="80" max="160" step="1" value="110">
   <div class="row"><label>FPV look</label><input type="checkbox" id="cbFpvLook" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label>Look style</label></div>
   <select id="fpvStyle">
@@ -406,8 +448,12 @@
     <option value="ACTUAL">Actual</option>
     <option value="BETAFLIGHT">Betaflight</option>
   </select>
+  <div class="row"><label>Rate preset</label></div>
+  <select id="ratePreset"></select>
   <div class="row"><label>Thrust:weight</label><span class="val" id="v_twr"></span></div>
   <input type="range" id="s_twr" min="2" max="14" step="0.1" value="5" disabled title="Derived from thrust ÷ weight — adjust Mass to change it">
+  <div class="row"><label>Floatiness</label><span class="val" id="v_float"></span></div>
+  <input type="range" id="s_float" min="0" max="1" step="0.01" value="0.32" title="Lower is snappier. Saved separately from rates.">
   <div class="row"><label>Drag</label><span class="val" id="v_drag"></span></div>
   <input type="range" id="s_drag" min="0.05" max="0.8" step="0.01" value="0.28">
   <div class="row"><label>Mass (g)</label><span class="val" id="v_mass"></span></div>
@@ -436,8 +482,9 @@
     TX16S: EdgeTX USB mode = <b>Joystick</b>. Move stick after plug-in.<br>
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
-    <b>R</b> reset &nbsp;<b>Tab</b> panel<br>
-    🔊 <b>M</b>: Music &nbsp;<b>F</b>: angle/acro &nbsp;<b id="kbdGhost">G</b>: ghost
+    <b>R</b> last-gate respawn &nbsp;<b>Tab</b> panel<br>
+    🔊 <b>M</b> music &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
+    <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost
   </div>
   <button id="btnReset">RESET QUAD [R]</button>
 </div>
@@ -495,17 +542,18 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS} from "./quadphysics.js?v=ff076e751452";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT} from "./quadphysics.js?v=9e5ae5988b68";
 import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
   encodeShare, decodeShare, loadCustomTracks, saveCustomTracks, loadSelected, saveSelected,
   ghostStorageKey, bestLapStorageKey, bestRunStorageKey, isLegacyTrackId, legacyIndex,
-  ghostPayloadError as trackGhostError, hostedGhostUrl, fetchBuiltinTracks, makePaceGhost,
+  hostedGhostUrl, fetchBuiltinTracks, makePaceGhost,
   BUILTIN_TRACK_FILES, SHARE_PREFIX, applyMissPenalty, enteredGate,
 } from "./sim-tracks.js?v=m2c";
 import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=m2c";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=5f21c0324f8c";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, not statically: a static import failure aborts
 // the whole module and takes the sim with it. Loaded this way, an addon/CDN failure
@@ -515,7 +563,7 @@ const gltfReady=import("three/addons/loaders/GLTFLoader.js")
   .then(function(m){GLTFLoader=m.GLTFLoader;window._gltfReady=true;return true;})
   .catch(function(){window._gltfReady=false;return false;});
 const CFG={
-  camDeg:30,fov:105,maxThrustN:3.9,thrCurve:0.68,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
+  camDeg:15,fov:110,maxThrustN:3.9,thrCurve:0.68,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
 // thrCurve recalibrated for the new physics core: motor thrust is now
 // proportional to output SQUARED, so at TWR 3 the motors must sit at 1/sqrt(3)
 // = 0.58 of full output to hover. The old linear-thrust model needed an
@@ -601,6 +649,7 @@ const camera=new THREE.PerspectiveCamera(CFG.fov,(canvas.clientWidth||1)/(canvas
 // inline width/height onto the canvas and break the flex sizing.
 let composer=null,bloomPass=null;   // set once the looks post chain finishes
 let looks=null;
+let feel=null;
 function resize(){
   const w=canvas.clientWidth||1,h=canvas.clientHeight||1;
   renderer.setSize(w,h,false);
@@ -825,6 +874,7 @@ function voxelColliders(obj,gridRes,snapToGrid){
 const gates=[];
 let activeTrackId=0;                 // which track's sequence is currently live (0/1 city, or string id)
 let nextGateIndex=0;                 // index WITHIN the active track (not the global array)
+let lastPassedGate=null;             // world xyz of last racing gate flown (R respawn)
 // 3-lap RUN timing. A run begins on gate 0 (no run active), times RUN_LAPS
 // laps back-to-back, then ends — clock stops (no auto lap 4), splits + total
 // shown, best total stored per track. Passing gate 0 again starts a fresh run.
@@ -1059,6 +1109,7 @@ function updateGates(){
     if(nearest!==activeTrackId){
       activeTrackId=nearest;
       nextGateIndex=0; // aim at the newly-selected track's gate 0
+      lastPassedGate=null;
       currentTrackObj=findTrack(nearest)||currentTrackObj;
       updateGateUI();
     }
@@ -1079,6 +1130,8 @@ function updateGates(){
   if(hit.type!=='pass')return;
   const now=performance.now();
   const passed=nextGateIndex;
+  const passedGate=list[passed];
+  if(passedGate) lastPassedGate={x:passedGate.pos.x,y:passedGate.pos.y,z:passedGate.pos.z};
   if(runActive){
     lastGateSplit=now-gateSplitStart;
     runGateSplits.push(lastGateSplit);
@@ -2280,6 +2333,7 @@ async function setMap(mapId,trackId){
   applyMapLooks(currentMap);
   nextGateIndex=0;
   runActive=false;
+  lastPassedGate=null;
   updateGateUI();updateGateHighlight();
   saveSelected({map:currentMap,track:activeTrackId});
   const k=trackStatId(activeTrackId);
@@ -2435,7 +2489,9 @@ qp.onSubstep=(s)=>{
   // a tumble SETTLES within ~half a second of ground contact instead of
   // spinning in place forever. 0.97^240 per second ≈ hard decay, contact only.
   if(floorHit){
-    s.omega.x*=0.97;s.omega.y*=0.97;s.omega.z*=0.97;
+    // 0.97 per 240 Hz step ≈ e^(-7.3 t). Keep the same settle time at 500/1000 Hz.
+    const k=Math.exp(-(s.physicsDt||1/500)*7.3);
+    s.omega.x*=k;s.omega.y*=k;s.omega.z*=k;
   }
 };
 // Ground-effect clearance: height above whatever is directly underneath — open
@@ -2452,7 +2508,6 @@ qp.groundClearance=(s)=>{
   }
   return (_gp.y-top)/WS;
 };
-const PHYS_DT_HZ=1/240;
 
 // Mirror the module state into the three.js-space `state` object every frame so
 // camera, OSD, gates and ghosts keep reading exactly what they did.
@@ -2479,25 +2534,46 @@ function resetSpawnPos(){
   const t=currentTrackObj||findTrack(activeTrackId);
   return startPad(t||{gates:[]});
 }
-function resetQuad(){
-  const pad=resetSpawnPos();
-  state.pos.set(pad.x,pad.y,pad.z);state.vel.set(0,0,0);state.q.identity();
+function placeQuadAt(x,y,z,yaw){
+  state.pos.set(x,Math.max(0.15,y),z);state.vel.set(0,0,0);state.q.identity();
   prevGatePos.copy(state.pos);
-  // module owns the truth now — reset it, then mirror back into `state`
   qp.reset(world2mod(state.pos,{x:0,y:0,z:0}));
+  if(yaw){
+    const h=yaw*0.5;
+    qp.quaternion={x:0,y:0,z:Math.sin(h),w:Math.cos(h)};
+  }
   qp.cfg.maxThrustPerMotor=baseThrustPerMotor;
   syncStateFromQp();
   thrustActual=0; // motors spool from zero on re-arm — no thrust jump
   camShake=0;
-  battCharge=1;battV=BATT_FULL; // reset = fresh pack
-  // clear run state; leave activeTrackId alone so proximity selection re-picks
-  // the nearest track's start next frame (the quad respawns by track 0's start,
-  // so that's what it'll land on — but we don't hard-force it)
+}
+function resetQuad(){
+  // Crash / flip recovery: R respawns at the last passed JSON-track gate and
+  // keeps gate-progress (nextGateIndex / run / splits). Tutorial has its own pad.
+  // No last gate → map start (city historic pad, indoor startPad).
+  const tut=feel&&feel.isTutorial();
+  const hasGate=!!lastPassedGate&&!tut;
+  if(tut){
+    const p=feel.spawnForTutorial();
+    placeQuadAt(p.x,p.y,p.z,p.yaw);
+    toast('TUTORIAL RESET');
+    return;
+  }
+  if(hasGate){
+    placeQuadAt(lastPassedGate.x,lastPassedGate.y,lastPassedGate.z);
+    toast('RESPAWN — LAST GATE');
+    return;
+  }
+  const pad=resetSpawnPos();
+  placeQuadAt(pad.x,pad.y,pad.z);
+  battCharge=1;battV=BATT_FULL; // fresh pack only on a full map-start reset
   nextGateIndex=0;runActive=false;runLap=0;runSplits=[];runGateSplits=[];lapStartTime=0;runStartTime=0;
   missesThisLap=0;missTotal=0;lastGateSplit=0;
+  lastPassedGate=null;
   clearGhostRec(); // drop the in-progress recording — this run is void
   updateGateUI();updateGateHighlight();
-  toast('RESET');}
+  toast('RESET');
+}
 
 // ---------- Radio: axis map + calibration ----------
 // axisMap: {r:{i,sign}, p:{i,sign}, y:{i,sign}, t:{i,min,max}}
@@ -2552,6 +2628,8 @@ const CAL_STEPS=[
   {key:'y', label:'YAW — LEFT STICK FULL RIGHT', hint:'hold deflection'},
   {key:'thi', label:'THROTTLE FULL UP', hint:'hold'},
   {key:'tlo', label:'THROTTLE FULL DOWN', hint:'hold'},
+  {key:'arm', label:'ARM SWITCH — FLIP IT', hint:'or Skip Aux and use Space'},
+  {key:'mode', label:'MODE SWITCH — MOVE IT', hint:'3-pos Angle / Horizon / Acro — or Skip Aux'},
 ];
 function startCalib(){
   const pads=navigator.getGamepads&&navigator.getGamepads();
@@ -2561,11 +2639,20 @@ function startCalib(){
   calibEl.classList.add('show');
 }
 document.getElementById('btnCalib').onclick=startCalib;
-document.getElementById('calibCancel').onclick=()=>{calib=null;calibEl.classList.remove('show');};
+document.getElementById('calibCancel').onclick=()=>{calib=null;calibEl.classList.remove('show');document.getElementById('calibSkip').style.display='none';};
+document.getElementById('calibSkip').onclick=()=>{
+  if(!calib)return;
+  const st=CAL_STEPS[calib.step];
+  if(st&&(st.key==='arm'||st.key==='mode')){
+    calib.step++;calib.timer=0;
+    if(calib.step>=CAL_STEPS.length)finishCalib();
+  }
+};
 function runCalib(gp,dt){
   const st=CAL_STEPS[calib.step];
   calibStepEl.textContent=st.label;
   calibHintEl.textContent=st.hint;
+  document.getElementById('calibSkip').style.display=(st.key==='arm'||st.key==='mode')?'':'none';
   calibBarsEl.innerHTML=gp.axes.map((a,i)=>
     `ax${i} ${'▮'.repeat(Math.round((a+1)*5)).padEnd(10,'▯')} ${a.toFixed(2)}`).join('<br>');
   const ax=gp.axes;
@@ -2584,9 +2671,43 @@ function runCalib(gp,dt){
       calib.timer+=dt;
       if(calib.timer>0.6){
         calib.result.t.min=ax[ti];
-        finishCalib();
+        calib.step++;calib.timer=0;
+        if(calib.step>=CAL_STEPS.length)finishCalib();
       }
     } else calib.timer=0;
+    return;
+  }
+  if(st.key==='arm'||st.key==='mode'){
+    let best=-1,bestD=0;
+    for(let i=0;i<ax.length;i++){
+      if(calib.used.has(i))continue;
+      const d=ax[i]-calib.center[i];
+      if(Math.abs(d)>Math.abs(bestD)){bestD=d;best=i;}
+    }
+    if(best>=0&&Math.abs(bestD)>0.5){
+      calib.timer+=dt;
+      if(calib.timer>0.45){
+        calib.result[st.key]={i:best,sign:Math.sign(bestD)||1};
+        calib.used.add(best);
+        calib.step++;calib.timer=0;
+        if(calib.step>=CAL_STEPS.length)finishCalib();
+      }
+    }else{
+      let btn=-1;
+      if(gp.buttons){
+        for(let i=0;i<gp.buttons.length;i++){
+          if(gp.buttons[i]&&(gp.buttons[i].pressed||gp.buttons[i].value>0.6)){btn=i;break;}
+        }
+      }
+      if(btn>=0){
+        calib.timer+=dt;
+        if(calib.timer>0.35){
+          calib.result[st.key]={button:btn};
+          calib.step++;calib.timer=0;
+          if(calib.step>=CAL_STEPS.length)finishCalib();
+        }
+      } else calib.timer=0;
+    }
     return;
   }
   // r/p/y/thi: fresh axis with max |delta| from center, exceeding 0.6
@@ -2613,6 +2734,7 @@ function finishCalib(){
   axisMap=calib.result;
   saveMap();
   calib=null;calibEl.classList.remove('show');
+  document.getElementById('calibSkip').style.display='none';
   toast('CALIBRATED — SAVED');
   updateRadioInfo();
 }
@@ -2827,7 +2949,14 @@ addEventListener('keydown',e=>{
   }
   if(e.key==='Escape'){e.preventDefault();if(builderOn){closeBuilder();return;}toggleStartMenu();return;}
   if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
+  if(e.code==='Space'){e.preventDefault();toggleArm();return;}
   keys[e.key.toLowerCase()]=true;
+  if(e.key==='1')setFlightMode('angle');
+  if(e.key==='2')setFlightMode('horizon');
+  if(e.key==='3')setFlightMode('acro');
+  if(e.key.toLowerCase()==='h'){
+    if(feel)toast(feel.toggleHud()?'HUD ON':'HUD OFF');
+  }
   if(e.key.toLowerCase()==='r')resetQuad();
   if(e.key.toLowerCase()==='m')toggleMusic();
   if(e.key.toLowerCase()==='f')toggleFlightMode();
@@ -2882,6 +3011,8 @@ function selectPad(gp,remember){
   armGate=true;               // block throttle until sticks proven safe once
   toast(radioScore(gp)===2?'RADIO SELECTED':'GAMEPAD SELECTED');
   updateRadioInfo();
+  if(feel&&feel.promptOpen)feel.showFirstRun({hasGamepad:true,gpName});
+  else if(feel&&(sessionLive||feel.loadInputChoice()==='keyboard'))feel.onGamepadConnected({gpName});
 }
 function showGpPicker(pads){
   if(!gpPickerEl){
@@ -2980,6 +3111,17 @@ function readInput(dt){
       if(stick.t<0.05&&Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15&&Math.abs(stick.y)<0.15){
         armGate=false;toast('STICKS SAFE — LIVE');
       }else stick.t=0;
+    }
+    if(map.arm&&feel){
+      const v=feel.auxValue(gp,map.arm);
+      if(v!=null){
+        if(v>0.25&&!qp.armed)tryArm();
+        else if(v<-0.25&&qp.armed){qp.disarm();toast('DISARMED');}
+      }
+    }
+    if(map.mode&&feel){
+      const m=feel.modeFromAux(feel.auxValue(gp,map.mode));
+      if(m&&m!==qp.flightMode)setFlightMode(m);
     }
   } else {
     const tR=(keys['arrowright']?1:0)-(keys['arrowleft']?1:0);
@@ -3125,16 +3267,30 @@ function setRateAxis(ax){rateAxis=ax;refreshRatesUI();}
 // Kept for callers that only know the old name.
 function refreshMax(){refreshRatesUI();}
 
-// ---------- Flight mode (acro = raw rates, angle = self-level) ----------
-let flightMode='acro';
-const ANGLE_MAX=50,ANGLE_P=7; // max lean deg, self-level strength
-function toggleFlightMode(){
-  flightMode=flightMode==='acro'?'angle':'acro';
-  toast(flightMode==='angle'?'ANGLE MODE':'ACRO MODE');
+// ---------- Flight mode (angle / horizon / acro live in quadphysics.js) ----------
+let flightMode='angle';
+let sessionLive=false;
+function setFlightMode(mode){
+  flightMode=qp.setFlightMode(mode);
+  toast(flightMode.toUpperCase()+' MODE');
+  return flightMode;
 }
+function toggleFlightMode(){
+  const order=['angle','horizon','acro'];
+  setFlightMode(order[(order.indexOf(qp.flightMode)+1)%order.length]);
+}
+function tryArm(){
+  if(armGate&&padLive){toast('STICKS NOT SAFE');return false;}
+  if(stick.t>0.05){toast('THROTTLE HIGH — CANNOT ARM');return false;}
+  qp.arm();toast('ARMED');return true;
+}
+function toggleArm(){
+  if(qp.armed){qp.disarm();toast('DISARMED');}
+  else tryArm();
+}
+qp.setFlightMode('angle');
 
 // ---------- Physics ----------
-const eulTmp=new THREE.Euler();
 // Rate setpoint handed to the FC each frame, in the module's body frame.
 const qpSetpoint={roll:0,pitch:0,yaw:0};
 // Live axis diagnostic: window._axis() in the console prints what each stick is
@@ -3152,18 +3308,8 @@ window._axis=()=>({
 const SGN_ROLL=-1,SGN_PITCH=-1,SGN_YAW=1;
 function physics(dt){
   const yr=THREE.MathUtils.degToRad(axisRate('yaw',stick.y));
-  let wx,wz;
-  if(flightMode==='angle'){
-    // sticks command target lean angle; P-controller levels toward it
-    eulTmp.setFromQuaternion(state.q,'YXZ');
-    wx=(THREE.MathUtils.degToRad(stick.p*ANGLE_MAX)-eulTmp.x)*ANGLE_P;
-    wz=(THREE.MathUtils.degToRad(-stick.r*ANGLE_MAX)-eulTmp.z)*ANGLE_P;
-    const cap=THREE.MathUtils.degToRad(maxRateDps('roll'));
-    wx=THREE.MathUtils.clamp(wx,-cap,cap);wz=THREE.MathUtils.clamp(wz,-cap,cap);
-  }else{
-    wx=THREE.MathUtils.degToRad(axisRate('pitch',stick.p));
-    wz=-THREE.MathUtils.degToRad(axisRate('roll',stick.r));
-  }
+  const wx=THREE.MathUtils.degToRad(axisRate('pitch',stick.p));
+  const wz=-THREE.MathUtils.degToRad(axisRate('roll',stick.r));
   const wy=-yr;
   // wx/wy/wz are three.js-frame body rates (rad/s) from the Betaflight rate
   // curve — unchanged maths. They become the FC's rate SETPOINT; the PID loop
@@ -3190,18 +3336,15 @@ function physics(dt){
   const sag=(CFG.battSimOn&&CFG.sagAffectsThrust)?Math.pow(Math.max(0.5,battV/BATT_FULL),1.5):1;
   qp.cfg.maxThrustPerMotor=baseThrustPerMotor*sag;
 
-  // Arm gate: deaden the FC only while a live pad is still gated. An empty
-  // poll or a disconnect must not leave keyboard thrust disarmed forever.
-  // padLive can flip frame to frame if a pad polls intermittently, which
-  // churns arm/disarm - harmless, because armGate is only ever true before
-  // the pilot has proven the sticks safe, i.e. before anyone is flying.
-  if(armGate&&padLive)qp.disarm(); else if(!qp.armed)qp.arm();
+  // Arm is sticky: Space or a mapped aux switch. The connect safety gate
+  // still drops arm until sticks are proven safe.
+  if(armGate&&padLive&&qp.armed)qp.disarm();
 
   // Throttle curve stays here; the module applies the Betaflight idle floor
-  // itself, so the old idlePct blend is gone.
-  const throttle=Math.pow(Math.max(0,Math.min(1,stick.t)),CFG.thrCurve);
+  // itself, so the old idlePct blend is gone. Disarmed = no throttle to the FC.
+  const throttle=qp.armed?Math.pow(Math.max(0,Math.min(1,stick.t)),CFG.thrCurve):0;
 
-  qp.step(dt,qpSetpoint,throttle);
+  qp.step(dt,qpSetpoint,throttle,stick);
   syncStateFromQp();
   thrustActual=qp.totalThrustN*WS; // world newtons, for audio + battery load
 }
@@ -3317,6 +3460,7 @@ function setActiveTrack(id){
   activeTrackId=t&&t.legacyId!=null?t.legacyId:(id||0);
   currentTrackObj=t||currentTrackObj;
   nextGateIndex=0;
+  lastPassedGate=null;
   ensureTrackStats(activeTrackId);
   saveSelected({map:currentMap,track:activeTrackId});
   updateGateUI();updateGateHighlight();
@@ -3617,7 +3761,7 @@ function wireBuilderUI(){
 
 function wireLooksUI(){
   const fly=document.getElementById('menuFly');
-  if(fly)fly.onclick=()=>{hideMenuLayer();toggleStartMenu(false);toast('Throttle up to fly. Tab = tune.');};
+  if(fly)fly.onclick=()=>{hideMenuLayer();toggleStartMenu(false);sessionLive=true;toast('Space to arm. 1/2/3 = mode.');};
   document.getElementById('menuTune').onclick=()=>{hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');};
   document.getElementById('menuTracks').onclick=()=>openTrackPicker();
   const btnBuilder=document.getElementById('menuBuilder');
@@ -3626,19 +3770,23 @@ function wireLooksUI(){
     showMenuLayer('<h2>Controls</h2><p>TX16S: EdgeTX USB mode = <b style="color:var(--txt)">Joystick</b>.</p>'+
       '<p><span class="n">W/S</span> throttle · <span class="n">A/D</span> yaw<br>'+
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
-      '<span class="n">R</span> reset · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
-      '<span class="n">M</span> music · <span class="n">F</span> angle/acro · <span class="n">G</span> ghost</p>'+
+      '<span class="n">R</span> last-gate respawn · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
+      '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro<br>'+
+      '<span class="n">H</span> HUD · <span class="n">M</span> music · <span class="n">G</span> ghost</p>'+
       '<button type="button" id="layerClose">Close</button>');
     document.getElementById('layerClose').onclick=hideMenuLayer;
   };
   document.getElementById('menuHowTo').onclick=()=>{
     showMenuLayer('<h2>How to</h2><ol>'+
-      '<li>Click Fly, or plug in a radio (Joystick mode).</li>'+
-      '<li>Throttle up. F toggles angle mode if you want self-level.</li>'+
+      '<li>Space arms. 1 / 2 / 3 = Angle / Horizon / Acro. Keyboard starts in Angle.</li>'+
+      '<li>How to → Start tutorial: hover, three gates, land (about two minutes, skippable).</li>'+
+      '<li>R respawns at the last gate you passed. H toggles the stick HUD.</li>'+
       '<li>Fly the lit gate. A 3-lap run starts at gate 1. Splits per gate; missed gates add +2.0s.</li>'+
-      '<li>Tab opens Tune — paste a Betaflight CLI dump to use your rates.</li>'+
-      '<li>G races your best ghost once you have a run.</li>'+
-      '</ol><button type="button" id="layerClose">Close</button>');
+      '<li>Tab opens Tune — paste a Betaflight CLI dump. Rate presets do not overwrite a saved tune until you pick one.</li>'+
+      '</ol>'+
+      '<button type="button" class="primary" id="feelStartTut">Start tutorial</button>'+
+      '<button type="button" id="layerClose">Close</button>');
+    document.getElementById('feelStartTut').onclick=launchTutorial;
     document.getElementById('layerClose').onclick=hideMenuLayer;
   };
   document.querySelectorAll('#qualityBtns [data-q]').forEach(b=>{
@@ -3695,6 +3843,18 @@ function applyCfgToQp(){
   qp.inertia.y=qp.inertia.x;
   qp.inertia.z=(m/12)*(w*w*2);
 }
+{
+  const s=document.getElementById('s_float'),v=document.getElementById('v_float');
+  const init=loadFloatiness(FLOATINESS_DEFAULT);
+  s.value=init;
+  qp.setFloatiness(init);
+  v.textContent=Math.round(init*100)+'%';
+  s.addEventListener('input',()=>{
+    const f=qp.setFloatiness(parseFloat(s.value));
+    v.textContent=Math.round(f*100)+'%';
+    saveFloatiness(f);
+  });
+}
 bind('drag','drag',x=>x.toFixed(2));
 bind('mass','massG',x=>x+'g',()=>{applyCfgToQp();refreshTwr();}); // mass change → inertia + thrust:weight readout
 bind('spool','spoolTau',x=>(x*1000).toFixed(0)+'ms',applyCfgToQp); // motor spool time constant
@@ -3742,11 +3902,11 @@ function rateProfileForClass(d){
   return RATE_FALLBACK;
 }
 const DRONE_TYPES={
-  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:30}, // TWR ~3:1, hovers ~0.33 throttle
-  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:30}, // lazier yaw + slower 0802 spool
-  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:30},
-  freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30}, // toothpick-adjacent middle class
-  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:30} // heavy: inertia does the work, no other changes
+  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:15,fov:110},
+  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:15,fov:110},
+  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:15,fov:110},
+  freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30,fov:110},
+  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:30,fov:110}
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
@@ -3809,7 +3969,7 @@ function applyDroneType(){
     }
     refreshRatesUI();
     setSlider('spool',d.spool);                        // per-drone motor spool time constant
-    if(!camIsCustom&&d.cam!=null)setSlider('cam',d.cam); // class camera tilt, defaults only (all classes 30 today)
+    if(!camIsCustom&&d.cam!=null)setSlider('cam',d.cam); // whoop default 15°, freestyle 30 — skip if ryflyCamCustom
     applyCfgToQp();                                    // slider values win over the preset's mass/tau
     refreshTwr();                                      // update the derived thrust:weight readout
   }finally{applyingType=false;}
@@ -3973,7 +4133,13 @@ let ghostRec=null,ghostFrame=0;       // in-progress recording + its frame count
 let ghostVisible=true;
 const _gr2=v=>Math.round(v*100)/100;   // 2-decimal coords (visual ghost — plenty)
 const _gr3=v=>Math.round(v*1000)/1000; // slightly finer for quaternion smoothness
-function loadGhost(id){try{const s=localStorage.getItem(ghostStorageKey(id));return s?JSON.parse(s):null;}catch(e){return null;}}
+function loadGhost(id){
+  try{
+    const s=localStorage.getItem(ghostStorageKey(id))
+      ||(isLegacyTrackId(id)?localStorage.getItem('quadmath_bestGhost_'+legacyIndex(id)):null);
+    return s?JSON.parse(s):null;
+  }catch(e){return null;}
+}
 ghosts[0]=loadGhost(0);ghosts[1]=loadGhost(1);
 function startGhostRec(){ghostRec=[];ghostFrame=0;}   // begin a fresh lap recording
 function clearGhostRec(){ghostRec=null;}              // void the in-progress recording
@@ -3981,8 +4147,11 @@ function clearGhostRec(){ghostRec=null;}              // void the in-progress re
 function persistGhost(id,rec){
   let data=rec;
   for(let a=0;a<5;a++){
-    try{localStorage.setItem(ghostStorageKey(id),JSON.stringify(data));return data;}
-    catch(e){data=data.filter((_,i)=>i%2===0);} // halve and retry
+    try{
+      localStorage.setItem(ghostStorageKey(id),JSON.stringify(data));
+      if(isLegacyTrackId(id))localStorage.setItem('quadmath_bestGhost_'+legacyIndex(id),JSON.stringify(data));
+      return data;
+    }catch(e){data=data.filter((_,i)=>i%2===0);}
   }
   return data;
 }
@@ -4091,6 +4260,9 @@ function updateGhost(){sampleGhost();playbackGhost();updateGhostHint();}
 // ---------- ghost sharing v1 ----------
 // Format (version-tagged for future changes):
 //   {v:1, track:0|1, lapTime:ms, name:string, samples:[[t,x,y,z,qx,qy,qz,qw],...]}
+// Samples are wall-clock poses, not physics-step dumps. The 500/1000 Hz feel
+// pass does not change this, so hosted ghosts and old localStorage ghosts still
+// replay. Do not bump v for a physics-feel change.
 // Export: JSON → gzip (CompressionStream) → base64 → clipboard.
 // Import: base64 → gunzip → validate → rival ghost. Raw uncompressed JSON is
 // also accepted (it's the hosted-default file format).
@@ -4115,7 +4287,28 @@ pilotNameEl.addEventListener('input',()=>{try{localStorage.setItem('quadmath_pil
 // validate a parsed payload; expectTrack=null skips the track-match rule
 // (hosted defaults are validated per-file, not against the active track)
 function ghostPayloadError(p,expectTrack){
-  return trackGhostError(p,expectTrack);
+  if(!p||p.v!==1||!Array.isArray(p.samples)||p.samples.length<2)return 'BAD GHOST CODE';
+  const okLegacy=p.track===0||p.track===1;
+  const okNew=typeof p.track==='string'&&p.track.length>0&&p.track.length<48;
+  if(!okLegacy&&!okNew)return 'BAD GHOST TRACK';
+  if(expectTrack!==null&&expectTrack!==undefined){
+    const asLegacy=function(id){
+      if(id===0||id==='0'||id==='city-loop')return 0;
+      if(id===1||id==='1'||id==='city-zigzag')return 1;
+      return null;
+    };
+    const a=asLegacy(p.track),b=asLegacy(expectTrack);
+    const match=a!==null&&b!==null?a===b:String(p.track)===String(expectTrack);
+    if(!match)return 'GHOST IS FOR TRACK '+String(p.track)+' — SWITCH TRACKS TO RACE IT';
+  }
+  let lastT=-1;
+  for(const s of p.samples){
+    if(!Array.isArray(s)||s.length<8||s.some(n=>typeof n!=='number'||!isFinite(n)))return 'BAD GHOST DATA';
+    if(!(s[0]>=0&&s[0]<6e5&&s[0]>=lastT))return 'BAD GHOST TIMESTAMPS';
+    if(Math.abs(s[1])>3000||Math.abs(s[3])>3000||s[2]<-50||s[2]>1200)return 'GHOST OUT OF BOUNDS';
+    lastT=s[0];
+  }
+  return null;
 }
 async function exportGhost(){
   const id=activeTrackId,g=ghosts[id];
@@ -4292,18 +4485,35 @@ function updateDust(dt){
 }
 
 // ---------- Loop ----------
-let last=performance.now(),acc=0;
-const STEP=1/240;
+let last=performance.now(),hzAdaptAt=0;
+function adaptPhysicsHz(now){
+  if(!looks||!looks.fps||!looks.fps.ready)return;
+  if(now-hzAdaptAt<1500)return;
+  hzAdaptAt=now;
+  const avg=looks.fps.avg;
+  const cur=qp.physicsHz;
+  let hz=cur;
+  if(avg>=58&&cur===PHYSICS_HZ_DEFAULT)hz=PHYSICS_HZ_FAST;
+  else if(avg<48&&cur===PHYSICS_HZ_FAST)hz=PHYSICS_HZ_DEFAULT;
+  if(hz!==cur)qp.setPhysicsHz(hz);
+}
 function loop(now){
   requestAnimationFrame(loop);
   let dt=(now-last)/1000;last=now;dt=Math.min(dt,.05);
   if(looks)looks.tick(now);
-  if(!(looks&&looks.menuOpen)&&!builderOn){
+  if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
     readInput(dt);
-    acc+=dt;
-    while(acc>=STEP){physics(STEP);acc-=STEP;}
+    physics(dt);
+    adaptPhysicsHz(now);
     updateMotorSound();
     updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();updateDust(dt);
+    if(feel){
+      state.stickT=stick.t;
+      feel.updateHud({stick,battV,battOn:CFG.battSimOn,mode:qp.flightMode,armed:qp.armed});
+      feel.tickTutorial(state,dt,qp.armed);
+      const att=qp.attitude;
+      feel.noteFlip(Math.abs(att.roll)>2.0||Math.abs(att.pitch)>2.0);
+    }
   }
   updateCamera();
   // composer is null until the post chain resolves, and stays null if the
@@ -4315,6 +4525,43 @@ looksReady.then(function(l){
   if(!l)return;
   requestAnimationFrame(function(){requestAnimationFrame(function(){l.afterFirstFrame().then(function(){applyQueryBoot();});});});
 });
+function launchTutorial(){
+  if(!feel)return;
+  hideMenuLayer();
+  toggleStartMenu(false);
+  sessionLive=true;
+  qp.setFlightMode('angle');flightMode='angle';
+  const p=feel.startTutorial();
+  lastPassedGate=null;
+  placeQuadAt(p.x,p.y,p.z,p.yaw);
+}
+feel=createFeel({
+  THREE,scene,toast,decorateGate,LIGHTING,
+  onCalibrate(){sessionLive=true;toggleStartMenu(false);startCalib();},
+  onKeyboard(){setFlightMode('angle');toast('KEYBOARD — SPACE TO ARM');},
+  onTryLap(){
+    setActiveTrack(0);
+    lastPassedGate=null;
+    const g0=trackGates(0)[0];
+    placeQuadAt(g0.pos.x,Math.max(0.15,g0.pos.y),g0.pos.z+16);
+    nextGateIndex=0;runActive=false;runLap=0;runSplits=[];
+    updateGateUI();updateGateHighlight();
+    sessionLive=true;
+    toast('TRACK 1 — SPACE TO ARM');
+  },
+  onSkipTutorial(){toast('TUTORIAL SKIPPED');},
+});
+feel.fillRatePresetSelect(document.getElementById('ratePreset'));
+document.getElementById('ratePreset').onchange=function(){
+  if(!this.value)return;
+  if(applyRatePreset(rates,this.value)){
+    saveRates();
+    refreshRatesUI();
+    toast(RATE_PRESETS[this.value].label.toUpperCase());
+  }
+};
+feel.maybeFirstRun({hasGamepad:gpConnected,gpName});
+window._feel=feel;
 wireLooksUI();
 wireBuilderUI();
 customTracks=loadCustomTracks();
@@ -4342,7 +4589,8 @@ fetchBuiltinTracks().then(list=>{
 }).catch(()=>{builtinTracks=[cityTrackJson(0),cityTrackJson(1)];applyQueryBoot();});
 Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
-  QUALITY_KEY,setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare});
+  QUALITY_KEY,FLOATINESS_KEY,setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
+  physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness});
 </script>
 <!-- Flattened to single-line spans so the whole thing fits the fixed 14px bar.
      The .container wrappers and the opacity:.6 on the credit are gone: the
