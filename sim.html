@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>FPV Whoop Simulator in Your Browser | QuadMath</title>
 <meta name="description" content="Free browser FPV sim that flies your own Betaflight rates. Acro and angle, race courses, ghost replay, TX16S/EdgeTX support. No download.">
 <meta name="keywords" content="FPV simulator, browser FPV sim, free drone simulator, Betaflight rates simulator, tiny whoop simulator, FPV practice">
@@ -45,7 +45,8 @@
      get, so the bottom of the canvas hid behind the browser UI. */
   body{background:var(--bg);color:var(--txt);font-family:Inter,system-ui,sans-serif;
     overflow:hidden;height:100vh;height:100dvh;display:flex;flex-direction:column;
-    font-synthesis:none}
+    font-synthesis:none;touch-action:none;overscroll-behavior:none;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
   .n, .val, #osdTL, #osdTR, #osdBC, #osdBR, #osdGate, #osdLap, #fpsHud, #v_max, #v_maxAll,
   #ratesTypeBadge{font-family:'JetBrains Mono',ui-monospace,Consolas,monospace}
   /* min-height:0 so the canvas can shrink below its intrinsic size instead of
@@ -55,7 +56,7 @@
   /* The site footer carries the CC BY credit for the city model. In normal flow
      it sat below a full-height canvas and was unreachable with overflow:hidden,
      so the licence notice was never actually displayed. Fixed to the bottom
-     edge, and above the mobile gate's z-index 40 so it stays visible there too.
+     edge above the canvas; virtual sticks sit above this 14px band.
      Kept to a 14px band: #legend reserves from 16px up and the bottom OSD
      readouts from 18px up, so this clears both without moving any of them. */
   footer{position:fixed;left:0;right:0;bottom:0;z-index:45;
@@ -94,19 +95,32 @@
   #osdLand{position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);z-index:6;
     font-size:34px;font-weight:700;letter-spacing:3px;color:#ff3b2f;
     text-shadow:0 0 16px rgba(255,59,47,.7);pointer-events:none;display:none}
-  /* mobile landing gate — shown instead of the sim on touch/coarse devices */
-  #mobileGate{display:none;position:fixed;inset:0;z-index:40;background:#0D0E12;
-    flex-direction:column;align-items:center;justify-content:center;text-align:center;
-    padding:24px;gap:14px}
-  #mobileGate .mg-logo{font-size:20px;font-weight:700;color:var(--txt)}
-  #mobileGate .mg-logo span{color:var(--orange)}
-  #mobileGate .mg-title{font-size:26px;font-weight:700;letter-spacing:3px;color:var(--orange)}
-  #mobileGate .mg-pitch{color:var(--txt);font-size:14px;max-width:340px;line-height:1.5}
-  #mobileGate .mg-note{color:var(--green);font-size:12px;letter-spacing:1px;text-transform:uppercase}
-  #mobileGate .mg-btn{display:inline-block;border:1px solid var(--orange);color:var(--orange);
-    padding:10px 22px;font-size:13px;text-decoration:none;margin-top:6px}
-  #mobileGate .mg-btn:active{background:var(--orange);color:var(--bg)}
-  #mobileGate .mg-try{color:var(--dim);font-size:11px;text-decoration:underline;cursor:pointer;margin-top:10px}
+  #c{touch-action:none}
+  #panel,#startMenu,#menuLayer,#feelPrompt,#calib{touch-action:pan-y;-webkit-user-select:text;user-select:text}
+  #touchLayer{position:fixed;inset:0;z-index:18;display:none;pointer-events:none;
+    --stick-size:112px;--stick-opacity:.7}
+  #touchLayer.on{display:block}
+  #touchLayer .vstick{position:absolute;bottom:28px;width:var(--stick-size);height:var(--stick-size);
+    border:1px solid var(--line);border-radius:50%;background:rgba(16,18,24,calc(var(--stick-opacity)*0.55));
+    pointer-events:auto;touch-action:none}
+  #touchLayer .vstick.left{left:18px}
+  #touchLayer .vstick.right{right:18px}
+  #touchLayer .vstick i{position:absolute;width:34%;height:34%;border-radius:50%;left:50%;top:50%;
+    transform:translate(-50%,-50%);background:var(--orange);opacity:var(--stick-opacity);
+    box-shadow:0 0 10px rgba(255,77,26,.45);pointer-events:none}
+  #touchBtns{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:8px;
+    pointer-events:auto;z-index:19}
+  #touchBtns button{width:auto;margin:0;padding:8px 12px;font-size:12px;background:var(--glass);
+    border-color:var(--line);color:var(--txt)}
+  #touchBtns button.on{border-color:var(--green);color:var(--green)}
+  #touchLandscape{position:absolute;top:56px;left:50%;transform:translateX(-50%);z-index:19;
+    padding:8px 12px;border-radius:12px;background:var(--glass);border:1px solid var(--line);
+    font-size:12px;color:var(--txt);pointer-events:none}
+  #hudAcro{pointer-events:auto;width:auto;margin:6px 0 0;padding:5px 10px;font-size:11px}
+  #hudAcro.on{border-color:var(--green);color:var(--green)}
+  body.touch-on #legend,body.touch-on #audioHint{opacity:0;pointer-events:none}
+  body.touch-on #feelHud{right:12px;bottom:auto;top:88px;flex-direction:column;align-items:flex-end}
+  body.touch-on #feelHud .stick-pad{display:none}
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7}
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
   #crosshair::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
@@ -166,8 +180,6 @@
   .lgc-tr{top:-1px;right:-1px;border-left:none;border-bottom:none}
   .lgc-bl{bottom:-1px;left:-1px;border-right:none;border-top:none}
   .lgc-br{bottom:-1px;right:-1px;border-left:none;border-top:none}
-  #mobileGate{background:rgba(10,12,16,.88);backdrop-filter:blur(16px)}
-  #mobileGate .mg-btn{border-radius:12px;font-weight:600}
   #calib{background:rgba(10,12,16,.78);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
   #startMenu{position:fixed;inset:0;z-index:22;display:none;align-items:center;justify-content:flex-start;
     padding:48px 40px;pointer-events:none;background:linear-gradient(90deg,rgba(8,10,14,.62) 0%,rgba(8,10,14,.12) 58%,transparent 100%)}
@@ -197,10 +209,11 @@
   .menu-layer ol{padding-left:18px}
   .menu-layer button{width:auto;margin-top:12px}
   body.menu-open #legend,body.menu-open #audioHint,body.menu-open #gear,body.menu-open #fpsHud,
-    body.menu-open .osd,body.menu-open #feelHud,body.menu-open #feelTutorial,body.menu-open #coachHud{opacity:0}
+    body.menu-open .osd,body.menu-open #feelHud,body.menu-open #feelTutorial,body.menu-open #coachHud,
+    body.menu-open #touchLayer{opacity:0;pointer-events:none}
   body:has(#panel.open) #feelHud{opacity:0}
   .seg{display:flex;gap:6px;margin-bottom:10px}
-  #radioPreset,#droneType,#ratesType,#ratePreset,#fpvStyle,#qualityPanel{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
+  #radioPreset,#droneType,#ratesType,#ratePreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
     color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
   .menu-layer.wide{width:min(420px,92vw)}
   .track-maps{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
@@ -233,7 +246,8 @@
   #builderList li{cursor:pointer;padding:2px 0}
   #builderList li.on{color:var(--orange)}
   body.builder-on #legend,body.builder-on #audioHint,body.builder-on #gear,body.builder-on #fpsHud,
-  body.builder-on .osd,body.builder-on #startMenu,body.builder-on #feelHud,body.builder-on #feelTutorial,body.builder-on #coachHud{opacity:0;pointer-events:none}
+  body.builder-on .osd,body.builder-on #startMenu,body.builder-on #feelHud,body.builder-on #feelTutorial,body.builder-on #coachHud,
+  body.builder-on #touchLayer{opacity:0;pointer-events:none}
   #calib{z-index:28}
   #feelPrompt{position:fixed;inset:0;z-index:26;display:none;align-items:center;justify-content:center;
     padding:32px;background:rgba(8,10,14,.45)}
@@ -335,37 +349,16 @@
 <div class="osd" id="osdGate"></div>
 <div class="osd" id="osdLap"></div>
 <div id="osdLand">LAND NOW</div>
-<div id="mobileGate">
-  <div class="mg-logo">QuadMath<span>.</span></div>
-  <div class="mg-title">QUADMATH SIM</div>
-  <p class="mg-pitch">Browser FPV whoop sim — paste your own Betaflight rates, no install.</p>
-  <p class="mg-note">Desktop + controller/radio required</p>
-  <a class="mg-btn" href="https://quadmath.com/">← Back to QuadMath.com</a>
-  <a class="mg-try" id="mgTry">Try anyway (tablet + gamepad)</a>
+<div id="touchLayer" hidden aria-hidden="true">
+  <div id="touchLandscape" data-touch="landscape" hidden>Rotate to landscape for easier sticks</div>
+  <div class="vstick left" data-stick="L"><i></i></div>
+  <div class="vstick right" data-stick="R"><i></i></div>
+  <div id="touchBtns">
+    <button type="button" data-touch="arm" id="touchArm">ARM</button>
+    <button type="button" data-touch="mode" id="touchMode">ANGLE</button>
+    <button type="button" data-touch="respawn" id="touchRespawn">RESPAWN</button>
+  </div>
 </div>
-<script>
-// mobile gate — classic script, runs before the sim module loads. Touch-capable
-// coarse-pointer devices (or small coarse-pointer screens) get the landing
-// overlay instead of the canvas; desktop is untouched. "Try anyway" dismisses
-// for the session (tablet + gamepad pilots).
-(function(){
-  function isMobileDevice(){
-    const coarse=matchMedia('(pointer: coarse)').matches;
-    const touch=('ontouchstart' in window)&&navigator.maxTouchPoints>0;
-    const small=Math.min(screen.width,screen.height)<768;
-    return (touch&&coarse)||(small&&coarse);
-  }
-  const gate=document.getElementById('mobileGate');
-  document.getElementById('mgTry').onclick=e=>{
-    e.preventDefault();
-    gate.style.display='none';
-    try{sessionStorage.setItem('quadmathSimTryAnyway','1');}catch(err){}
-  };
-  let skip=false;
-  try{skip=sessionStorage.getItem('quadmathSimTryAnyway')==='1';}catch(err){}
-  if(!skip&&isMobileDevice())gate.style.display='flex';
-})();
-</script>
 <div id="crosshair"></div>
 <div id="toast"></div>
 <div id="portalFlash"></div>
@@ -413,6 +406,7 @@
     <span id="hudBatt">BATT --</span>
     <span id="hudMode">ANGLE</span>
     <span id="hudArm">DISARMED</span>
+    <button type="button" id="hudAcro">ACRO</button>
   </div>
 </div>
 <div id="feelTutorial">
@@ -446,7 +440,7 @@
 <div id="panel">
   <a id="panelHome" href="/">← Back to QuadMath</a>
   <h1>QUADMATH SIM</h1>
-  <div class="sub">angle by default. 1/2/3 mode · Space arm · H HUD</div>
+  <div class="sub">angle by default. 1/2/3 mode · Space arm · H HUD · touch sticks on phones</div>
 
   <h2>Radio</h2>
   <div class="kbd" id="radioInfo">no gamepad detected</div>
@@ -597,9 +591,26 @@
   <h2 id="assetHead">GLTF Assets</h2>
   <div id="assetStatus">checking assets/manifest.json…</div>
 
+  <h2>Touch sticks</h2>
+  <div class="row"><label>Stick mode</label></div>
+  <select id="touchStickMode">
+    <option value="2">Mode 2 — left throttle/yaw</option>
+    <option value="1">Mode 1 — right throttle/roll</option>
+  </select>
+  <div class="row"><label>Size</label><span class="val" id="v_touchSize"></span></div>
+  <input type="range" id="s_touchSize" min="72" max="168" step="4" value="112">
+  <div class="row"><label>Opacity</label><span class="val" id="v_touchOp"></span></div>
+  <input type="range" id="s_touchOp" min="0.25" max="1" step="0.05" value="0.7">
+  <div class="row"><label>Deadzone</label><span class="val" id="v_touchDz"></span></div>
+  <input type="range" id="s_touchDz" min="0" max="0.3" step="0.01" value="0.08">
+  <div class="row"><label>Expo</label><span class="val" id="v_touchEx"></span></div>
+  <input type="range" id="s_touchEx" min="0" max="0.7" step="0.05" value="0.25">
+  <div class="row"><label>Throttle auto-center</label><input type="checkbox" id="cbThrSpring" style="accent-color:var(--orange)"></div>
+  <p class="build-note">Mode 2 is the default. Throttle holds where you leave it unless auto-center is on.</p>
+
   <h2>Controls</h2>
   <div class="kbd">
-    TX16S: EdgeTX USB mode = <b>Joystick</b>. Move stick after plug-in.<br>
+    Phones/tablets: dual on-screen sticks. TX16S: EdgeTX USB = <b>Joystick</b>.<br>
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
     <b>R</b> last-gate respawn &nbsp;<b>Tab</b> panel<br>
@@ -669,7 +680,12 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples,
 } from "./sim-whoop.js?v=783d7fbeb57b";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=432458f5d9a7";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=4c0d9f18502b";
+import {
+  loadTouch, saveTouch,
+  detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
+  shouldEnableTouch, createTouchControls, guardPageGestures,
+} from "./sim-touch.js?v=42f6b5464808";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -685,7 +701,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=19bee552695d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=c185cc3c32d9";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=da10f348a5a8";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -704,13 +720,18 @@ import {
   validateSubmittedRun, CLASS_IDS,
 } from "./sim-retention.js?v=83066a9f2ec5";
 window._simBooted=true; // tells the watchdog above the module actually executed
-// GLTFLoader is imported dynamically, not statically: a static import failure aborts
-// the whole module and takes the sim with it. Loaded this way, an addon/CDN failure
-// is catchable and degrades to the procedural city exactly as the r128 build did.
+// GLTFLoader is imported dynamically, and only after the first painted frame:
+// kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
 let GLTFLoader=null;
-const gltfReady=import("three/addons/loaders/GLTFLoader.js")
-  .then(function(m){GLTFLoader=m.GLTFLoader;window._gltfReady=true;return true;})
-  .catch(function(){window._gltfReady=false;return false;});
+let gltfReady=null;
+function ensureGltf(){
+  if(!gltfReady){
+    gltfReady=import("three/addons/loaders/GLTFLoader.js")
+      .then(function(m){GLTFLoader=m.GLTFLoader;window._gltfReady=true;return true;})
+      .catch(function(){window._gltfReady=false;return false;});
+  }
+  return gltfReady;
+}
 const CFG={
   camDeg:15,fov:110,maxThrustN:3.9,thrCurve:0.68,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
 let whoopSettings=loadWhoop();
@@ -896,15 +917,18 @@ scene.add(hemi);
 const sunFill=new THREE.DirectionalLight(0x9fc2ff,LIGHTING.fillIntensity);
 sunFill.position.set(-sunDir.x*400,260,-sunDir.z*400);
 scene.add(sunFill);
+const mobileHint=detectMobile(window);
 looksReady=createLooks({
   THREE,renderer,scene,camera,LIGHTING,sun,sunFill,hemi,
-  onResize(){resize();}
+  isMobile:mobileHint,
+  onResize(){resize();},
+  onComposer(c){composer=c;if(looks)bloomPass=looks.bloomPass;window._bloomReady=!!c;}
 }).then(function(l){
   looks=l;composer=l.composer;bloomPass=l.bloomPass;
   l.attachSky(skyMesh,sunSprite);
   sizeComposer();
   Object.assign(window._sim,{composer,bloomPass,looks});
-  window._bloomReady=true;
+  window._bloomReady=!!l.composer;
   syncQualityUI();
   return l;
 }).catch(function(){composer=null;bloomPass=null;window._bloomReady=false;return null;});
@@ -1335,7 +1359,7 @@ const proceduralGroup=new THREE.Group(); scene.add(proceduralGroup);
 let usingGltf=false;
 const assetEl=document.getElementById('assetStatus');
 window._tryAssets=async function(){
-  if(!await gltfReady){
+  if(!await ensureGltf()){
     assetEl.textContent='GLTFLoader blocked — procedural city active.';
     return;
   }
@@ -2396,7 +2420,12 @@ for(let i=0;i<7;i++){
   mesa.position.set(mx,h/2-4,mz);
   scene.add(mesa);
 }
-window._tryAssets(); // readiness is awaited inside — safe to call before the loader resolves
+window._heavyAssetsPending=true;
+function startHeavyAssets(){
+  if(!window._heavyAssetsPending)return;
+  window._heavyAssetsPending=false;
+  window._tryAssets();
+}
 
 function wrapCityWorld(){
   const keep=new Set([cityWorld,indoorWorld,raceGroup,skyMesh,sunSprite,sun,sun.target,sunFill,hemi]);
@@ -3370,6 +3399,10 @@ function readInput(dt){
       const m=feel.modeFromAux(feel.auxValue(gp,map.mode));
       if(m&&m!==qp.flightMode)setFlightMode(m);
     }
+  } else if(touchCtl&&touchCtl.enabled){
+    const ts=touchCtl.read();
+    stick.r=ts.r;stick.p=ts.p;stick.y=ts.y;stick.t=ts.t;
+    if(!musicStarted&&(Math.abs(stick.r)>0.15||Math.abs(stick.p)>0.15||Math.abs(stick.y)>0.15))startMusic();
   } else {
     const tR=(keys['arrowright']?1:0)-(keys['arrowleft']?1:0);
     const tP=(keys['arrowup']?1:0)-(keys['arrowdown']?1:0);
@@ -3515,10 +3548,19 @@ function setRateAxis(ax){rateAxis=ax;refreshRatesUI();}
 function refreshMax(){refreshRatesUI();}
 
 // ---------- Flight mode (angle / horizon / acro live in quadphysics.js) ----------
-let flightMode='angle';
+let flightMode=defaultFlightMode();
 let sessionLive=false;
-function setFlightMode(mode){
+let touchCtl=null;
+function syncTouchModeBtn(){
+  const b=document.getElementById('touchMode');
+  if(b)b.textContent=(qp.flightMode||flightMode||'angle').toUpperCase();
+  const arm=document.getElementById('touchArm');
+  if(arm)arm.classList.toggle('on',!!qp.armed);
+}
+function setFlightMode(mode,persist){
   flightMode=qp.setFlightMode(mode);
+  if(persist!==false)saveFlightMode(flightMode);
+  syncTouchModeBtn();
   toast(flightMode.toUpperCase()+' MODE');
   return flightMode;
 }
@@ -3534,8 +3576,9 @@ function tryArm(){
 function toggleArm(){
   if(qp.armed){qp.disarm();toast('DISARMED');}
   else tryArm();
+  syncTouchModeBtn();
 }
-qp.setFlightMode('angle');
+qp.setFlightMode(flightMode);
 
 // ---------- Physics ----------
 // Rate setpoint handed to the FC each frame, in the module's body frame.
@@ -3666,7 +3709,7 @@ function updateOSD(){
     if(battV<=BATT_CRIT)landEl.style.opacity=flash?'1':'0.15';
   }else landEl.style.display='none';
   osdTL.innerHTML=`SPD ${spd} km/h<br>ALT ${alt} m${battLine}`;
-  osdTR.innerHTML=`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):'KEYBOARD'}${axisMap&&gpConnected?' (CAL)':''}<br>`+
+  osdTR.innerHTML=`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):(touchCtl&&touchCtl.enabled?'TOUCH':'KEYBOARD')}${axisMap&&gpConnected?' (CAL)':''}<br>`+
     // Rates are per axis; name the one being shown so it cannot read as global.
     `RATES ${rateAxis.toUpperCase()} ${rates.type==='ACTUAL'
       ? maxRateDps(rateAxis).toFixed(0)+'°/s ACTUAL'
@@ -5226,6 +5269,10 @@ function adaptPhysicsHz(now){
 }
 function loop(now){
   requestAnimationFrame(loop);
+  if(!window._ttff){
+    window._ttff=now;
+    try{performance.mark('sim-first-frame');}catch(e){}
+  }
   let dt=(now-last)/1000;last=now;dt=Math.min(dt,.05);
   if(looks)looks.tick(now);
   if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
@@ -5259,13 +5306,16 @@ function loop(now){
   updateCamera();
   // composer is null until the post chain resolves, and stays null if the
   // addons CDN is unreachable - either way the sim keeps rendering.
-  if(composer)composer.render();else renderer.render(scene,camera);
+  const c=looks&&looks.composer?looks.composer:composer;
+  if(c)c.render();else renderer.render(scene,camera);
 }
 requestAnimationFrame(loop);
 looksReady.then(function(l){
-  if(!l)return;
-  requestAnimationFrame(function(){requestAnimationFrame(function(){l.afterFirstFrame().then(function(){applyQueryBoot();});});});
-});
+  requestAnimationFrame(function(){requestAnimationFrame(function(){
+    startHeavyAssets();
+    if(l)l.afterFirstFrame().then(function(){applyQueryBoot();});
+  });});
+}).catch(function(){startHeavyAssets();});
 function launchTutorial(){
   if(!feel)return;
   if(coach&&coach.isActive())coach.cancel();
@@ -5324,10 +5374,71 @@ function openCoachPicker(){
   const close=document.getElementById('layerClose');
   if(close)close.onclick=hideMenuLayer;
 }
+guardPageGestures(document);
+function touchViewport(){
+  return {width:innerWidth,height:innerHeight,mobile:mobileHint,touchEnabled:!!(touchCtl&&touchCtl.enabled)};
+}
+function enableTouchLayer(on){
+  if(!touchCtl)return;
+  touchCtl.setEnabled(!!on);
+  touchCtl.syncLandscape(touchViewport());
+  document.body.classList.toggle('touch-on',!!on);
+}
+function syncTouchSettingsUI(s){
+  const st=s||(touchCtl?touchCtl.settings:loadTouch());
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+  set('touchStickMode',String(st.mode));
+  set('s_touchSize',st.size);
+  set('s_touchOp',st.opacity);
+  set('s_touchDz',st.deadzone);
+  set('s_touchEx',st.expo);
+  const cb=document.getElementById('cbThrSpring');
+  if(cb)cb.checked=!!st.thrSpring;
+  const lab=(id,t)=>{const el=document.getElementById(id);if(el)el.textContent=t;};
+  lab('v_touchSize',Math.round(st.size)+'px');
+  lab('v_touchOp',Math.round(st.opacity*100)+'%');
+  lab('v_touchDz',st.deadzone.toFixed(2));
+  lab('v_touchEx',st.expo.toFixed(2));
+}
+function applyTouchFromUI(){
+  if(!touchCtl)return;
+  const next={
+    mode:+document.getElementById('touchStickMode').value||2,
+    size:+document.getElementById('s_touchSize').value,
+    opacity:+document.getElementById('s_touchOp').value,
+    deadzone:+document.getElementById('s_touchDz').value,
+    expo:+document.getElementById('s_touchEx').value,
+    thrSpring:!!document.getElementById('cbThrSpring').checked,
+  };
+  touchCtl.applySettings(next);
+  saveTouch(touchCtl.settings);
+  syncTouchSettingsUI(touchCtl.settings);
+  touchCtl.paint();
+}
+touchCtl=createTouchControls({
+  root:document.getElementById('touchLayer'),
+  settings:loadTouch(),
+  onArm(){toggleArm();},
+  onMode(){toggleFlightMode();},
+  onRespawn(){resetQuad();},
+});
+syncTouchSettingsUI();
+['touchStickMode','s_touchSize','s_touchOp','s_touchDz','s_touchEx','cbThrSpring'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el)el.addEventListener(el.type==='checkbox'||el.tagName==='SELECT'?'change':'input',applyTouchFromUI);
+});
+addEventListener('resize',()=>{if(touchCtl)touchCtl.syncLandscape(touchViewport());});
+addEventListener('orientationchange',()=>{if(touchCtl)touchCtl.syncLandscape(touchViewport());});
+function bootTouchLayer(){
+  const choice=feel?feel.loadInputChoice():null;
+  enableTouchLayer(shouldEnableTouch({inputChoice:choice,mobile:mobileHint}));
+}
 feel=createFeel({
   THREE,scene,toast,decorateGate,LIGHTING,
-  onCalibrate(){sessionLive=true;toggleStartMenu(false);startCalib();},
-  onKeyboard(){setFlightMode('angle');toast('KEYBOARD — SPACE TO ARM');},
+  onCalibrate(){sessionLive=true;toggleStartMenu(false);startCalib();enableTouchLayer(false);},
+  onKeyboard(){setFlightMode('angle',false);toast('KEYBOARD — SPACE TO ARM');enableTouchLayer(false);},
+  onTouch(){setFlightMode(defaultFlightMode(),false);toast('TOUCH STICKS — TAP ARM');enableTouchLayer(true);},
+  onToggleAcro(){setFlightMode(toggleAcro(qp.flightMode||flightMode));},
   onTryLap(){
     setActiveTrack(0);
     lastPassedGate=null;
@@ -5373,7 +5484,9 @@ document.getElementById('ratePreset').onchange=function(){
   }
 };
 feel.maybeFirstRun({hasGamepad:gpConnected,gpName});
+bootTouchLayer();
 window._feel=feel;
+window._touch=touchCtl;
 wireLooksUI();
 wireBuilderUI();
 customTracks=loadCustomTracks();

@@ -47,6 +47,7 @@ FIRST_PARTY_ASSETS = (
     "sim-room.js",
     "sim-coach.js",
     "sim-retention.js",
+    "sim-touch.js",
     "style.css",
     "script.js",
     "motion.js",
