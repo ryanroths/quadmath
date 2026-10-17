@@ -1,6 +1,7 @@
 // QuadMath sim V1 looks — environment, PBR, AO, FPV lens, quality presets.
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv.
+import { resolveAutoQuality } from './sim-touch.js?v=42f6b5464808';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
@@ -216,7 +217,10 @@ export async function createLooks(ctx) {
   }
 
   let choice = loadChoice();
-  let applied = choice === 'auto' ? (gpuHint(renderer).low ? 'low' : 'med') : choice;
+  const mobile = !!(ctx && ctx.isMobile);
+  let applied = choice === 'auto'
+    ? resolveAutoQuality({ mobile, gpuLow: gpuHint(renderer).low })
+    : choice;
   let fpv = loadFpv();
   let lookSpot = null;
   let menuOpen = true;
@@ -600,7 +604,9 @@ export async function createLooks(ctx) {
       choice = name;
       saveChoice(name);
     }
-    const next = name === 'auto' ? (gpuHint(renderer).low ? 'low' : 'med') : name;
+    const next = name === 'auto'
+      ? resolveAutoQuality({ mobile, gpuLow: gpuHint(renderer).low })
+      : name;
     applied = next;
     const p = presetOf(next);
     renderer.setPixelRatio(p.pixelRatio);
@@ -713,6 +719,7 @@ export async function createLooks(ctx) {
   async function afterFirstFrame() {
     if (firstFrameDone) return;
     firstFrameDone = true;
+    try { await ensureComposer(); } catch (e) { /* renderer-only fallback */ }
     try { await setQuality(choice); } catch (e) { console.warn('looks quality', e); }
     fps.ready = true;
     readyResolve();
@@ -759,11 +766,27 @@ export async function createLooks(ctx) {
       customTracks: 'quadmathSimCustomTracks',
       selectedTrack: 'quadmathSimTrack',
       whoop: 'quadmathSimWhoop',
+      touch: 'quadmathSimTouch',
+      flightMode: 'quadmathSimFlightMode',
     };
     return out;
   }
 
-  await buildComposer();
+  // First frame uses the canvas sky + renderer.render. Composer, HDRI, and
+  // PBR maps wait for afterFirstFrame so a phone is not blocked on addons.
+  const bootP = presetOf(applied);
+  renderer.setPixelRatio(bootP.pixelRatio);
+  applyLights(bootP);
+  let composerReady = null;
+  function ensureComposer() {
+    if (!composerReady) {
+      composerReady = buildComposer().then(function (c) {
+        if (ctx.onComposer) ctx.onComposer(c);
+        return c;
+      }).catch(function () { return null; });
+    }
+    return composerReady;
+  }
 
   return {
     get composer() { return composer; },

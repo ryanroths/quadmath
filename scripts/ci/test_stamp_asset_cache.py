@@ -85,6 +85,7 @@ class StampHtmlText(unittest.TestCase):
             "sim-room.js": "a6a6a6a6a6a6",
             "sim-coach.js": "b7b7b7b7b7b7",
             "sim-retention.js": "c8c8c8c8c8c8",
+            "sim-touch.js": "d9d9d9d9d9d9",
             "vendor/three.module.min.js": "abc123abc123",
         }
 
@@ -266,6 +267,15 @@ class RepoPin(unittest.TestCase):
             sim_src = handle.read()
         self.assertRegex(
             sim_src, r'from "\./sim-retention\.js\?v=[0-9a-f]{%d}"' % stamp.HASH_LEN
+        )
+        looks = os.path.join(REPO_ROOT, "sim-looks.js")
+        with open(looks, encoding="utf-8") as handle:
+            looks_src = handle.read()
+        self.assertRegex(
+            looks_src, r"from '\./sim-touch\.js\?v=[0-9a-f]{%d}'" % stamp.HASH_LEN
+        )
+        self.assertRegex(
+            sim_src, r'from "\./sim-touch\.js\?v=[0-9a-f]{%d}"' % stamp.HASH_LEN
         )
 
     def test_live_pages_reference_hashed_first_party_js(self):

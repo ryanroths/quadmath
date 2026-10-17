@@ -46,7 +46,7 @@ export const RATE_PRESETS = {
 export function loadInputChoice() {
   try {
     const v = localStorage.getItem(INPUT_CHOICE_KEY);
-    if (v === 'keyboard' || v === 'calibrate') return v;
+    if (v === 'keyboard' || v === 'calibrate' || v === 'touch') return v;
   } catch (e) { /* ignore */ }
   return null;
 }
@@ -118,7 +118,7 @@ function stepCopy(step) {
 export function createFeel(ctx) {
   const {
     THREE, scene, toast, decorateGate, LIGHTING,
-    onCalibrate, onKeyboard, onTryLap, onSkipTutorial,
+    onCalibrate, onKeyboard, onTouch, onTryLap, onSkipTutorial, onToggleAcro,
   } = ctx;
 
   let hudVisible = true;
@@ -143,6 +143,13 @@ export function createFeel(ctx) {
     return hudVisible;
   }
   setHudVisible(true);
+  const hudAcroBtn = document.getElementById('hudAcro');
+  if (hudAcroBtn) {
+    hudAcroBtn.onclick = function (e) {
+      e.preventDefault();
+      if (onToggleAcro) onToggleAcro();
+    };
+  }
 
   function updateHud(s) {
     if (!hudEl || !hudVisible) return;
@@ -165,6 +172,12 @@ export function createFeel(ctx) {
       hudArm.textContent = on ? 'ARMED' : 'DISARMED';
       hudArm.classList.toggle('on', on);
     }
+    const acro = document.getElementById('hudAcro');
+    if (acro) {
+      const mode = String(s.mode || 'angle').toLowerCase();
+      acro.textContent = mode === 'acro' ? 'ANGLE' : 'ACRO';
+      acro.classList.toggle('on', mode === 'acro');
+    }
   }
 
   function hideFirstRun() {
@@ -182,8 +195,8 @@ export function createFeel(ctx) {
     const name = (info && info.gpName) ? String(info.gpName).slice(0, 48) : '';
     const title = has ? 'Controller / radio detected' : 'No controller';
     const lead = has
-      ? (name ? name : 'Gamepad connected') + ' — calibrate sticks, or fly with the keyboard.'
-      : 'Fly with the keyboard, or plug in a radio (Joystick mode) and wiggle a stick.';
+      ? (name ? name : 'Gamepad connected') + ' — calibrate sticks, fly with the keyboard, or use on-screen sticks.'
+      : 'Fly with on-screen sticks, the keyboard, or plug in a radio (Joystick mode) and wiggle a stick.';
     promptEl.innerHTML =
       '<div class="menu-card feel-card">' +
         '<div class="menu-brand">QuadMath</div>' +
@@ -191,8 +204,10 @@ export function createFeel(ctx) {
         '<p class="menu-lead">' + lead + '</p>' +
         (has
           ? '<button type="button" class="primary" id="feelCalib">Calibrate</button>' +
+            '<button type="button" id="feelTouch">Touch sticks</button>' +
             '<button type="button" id="feelKeys">Fly with keyboard</button>'
-          : '<button type="button" class="primary" id="feelKeys">Fly with keyboard</button>' +
+          : '<button type="button" class="primary" id="feelTouch">Touch sticks</button>' +
+            '<button type="button" id="feelKeys">Fly with keyboard</button>' +
             '<p class="menu-lead" style="margin-top:10px">TX16S: USB Joystick, then wiggle. This prompt comes back if a pad connects.</p>') +
       '</div>';
     promptEl.classList.add('show');
@@ -202,6 +217,12 @@ export function createFeel(ctx) {
       saveInputChoice('keyboard');
       hideFirstRun();
       if (onKeyboard) onKeyboard();
+    };
+    const touchBtn = document.getElementById('feelTouch');
+    if (touchBtn) touchBtn.onclick = function () {
+      saveInputChoice('touch');
+      hideFirstRun();
+      if (onTouch) onTouch();
     };
     const cal = document.getElementById('feelCalib');
     if (cal) cal.onclick = function () {
