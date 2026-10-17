@@ -754,6 +754,7 @@ export async function createLooks(ctx) {
       quality: QUALITY_KEY, fpv: FPV_KEY,
       customTracks: 'quadmathSimCustomTracks',
       selectedTrack: 'quadmathSimTrack',
+      whoop: 'quadmathSimWhoop',
     };
     return out;
   }

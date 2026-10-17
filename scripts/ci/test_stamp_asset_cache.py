@@ -78,6 +78,7 @@ class StampHtmlText(unittest.TestCase):
             "quadphysics.js": "fff666fff666",
             "sim-feel.js": "aabbcc112233",
             "sim-build.js": "b1b1b1b1b1b1",
+            "sim-whoop.js": "c2c2c2c2c2c2",
             "vendor/three.module.min.js": "abc123abc123",
         }
 
