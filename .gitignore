@@ -24,3 +24,7 @@ advisor/
 Claude outputs/
 
 slicer-daily/
+
+# Local Wrangler / npm bits for the sim leaderboard Worker (source stays tracked).
+workers/**/node_modules/
+workers/**/.wrangler/

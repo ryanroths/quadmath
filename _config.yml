@@ -15,6 +15,7 @@ exclude:
   - CLAUDE-CODE-HANDOFF.md
   - scripts/
   - tools/
+  - workers/
   - fdm.py
   - build_go_links.py
   - go_map.json
