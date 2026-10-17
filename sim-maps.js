@@ -4,7 +4,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js';
+import { planRoom } from './sim-room.js?v=19bee552695d';
 
 export const LAYOUT = {
   living: { w: 21, d: 28, h: 9.1, wall: 0.38 },
@@ -36,7 +36,7 @@ export const MAP_LOOKS = {
   backyard: { fog: 0.0025, sun: 1.5, env: 0.72, bg: 0.48, hemi: 0.16 },
   city: { fog: 0.00035, sun: 1.7, env: 0.72, bg: 0.48, hemi: 0.16 },
   office: { fog: 0.0032, sun: 0.48, env: 0.58, bg: 0.34, hemi: 0.36 },
-  gym: { fog: 0.0014, sun: 0.62, env: 0.52, bg: 0.30, hemi: 0.30 },
+  gym: { fog: 0.0010, sun: 0.95, env: 0.70, bg: 0.44, hemi: 0.55 },
   trainer: { fog: 0.0028, sun: 0.58, env: 0.56, bg: 0.33, hemi: 0.34 },
   room: { fog: 0.0045, sun: 0.42, env: 0.55, bg: 0.32, hemi: 0.40 },
 };
@@ -435,7 +435,7 @@ function buildGym(THREE, parent, colliders, lights) {
   const L = LAYOUT.gym;
   const mats = {
     wall: mat(THREE, 0xb8b4aa, 'concrete'),
-    ceil: mat(THREE, 0x8a8e94, 'concrete', { emissive: 0xe8f0ff, emissiveIntensity: 0.12 }),
+    ceil: mat(THREE, 0x8a8e94, 'concrete', { emissive: 0xe8f0ff, emissiveIntensity: 0.28 }),
     floor: mat(THREE, 0x6a4224, 'wood', { map: woodTex(THREE), roughness: 0.7 }),
     wood: mat(THREE, 0x6a4e32, 'wood'),
     metal: mat(THREE, 0x5c6570, 'concrete', { metalness: 0.5, roughness: 0.42 }),
@@ -470,6 +470,12 @@ function buildGym(THREE, parent, colliders, lights) {
   addLight(THREE, parent, lights, 0, 24, 18, 0xe8f0ff, 240, 90);
   addLight(THREE, parent, lights, 0, 24, -18, 0xe8f0ff, 220, 90);
   addLight(THREE, parent, lights, 0, 22, 0, 0xf2f4ff, 160, 80);
+  // Court-level fill: ceiling cans at y=24 fall off as 1/r² on a 28-high gym,
+  // so Court Loop spawn looked near-black. These sit over the paint.
+  addLight(THREE, parent, lights, 0, 12, 20, 0xf2f4ff, 220, 48);
+  addLight(THREE, parent, lights, 0, 12, -20, 0xf2f4ff, 200, 48);
+  addLight(THREE, parent, lights, -12, 11, 0, 0xe8f0ff, 180, 42);
+  addLight(THREE, parent, lights, 12, 11, 0, 0xe8f0ff, 180, 42);
   return { floor, orbit: MAP_ORBIT.gym };
 }
 

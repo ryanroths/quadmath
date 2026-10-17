@@ -8,6 +8,7 @@ import {
   bestRunStorageKey, ghostPayloadError, makePaceGhost, loadCustomTracks,
   saveCustomTracks, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY, loadSelected,
   saveSelected, BUILTIN_TRACK_FILES, SHARE_PREFIX, startPad, gateRadius, MAPS,
+  findTrackIn, resolveSimBoot, firstTrackForMap, knownMapId, isBlankTrackId,
 } from './sim-tracks.js';
 
 function readTrack(file) {
@@ -146,7 +147,11 @@ assert.ok(newGhost.samples.length > 10);
 const pad = startPad(living);
 assert.ok(Number.isFinite(pad.x) && pad.y >= 0.9, 'indoor pad should hover, not sit on carpet');
 assert.ok(Math.abs(pad.z - living.gates[0].z) > 2, 'pad stands off first gate');
+assert.ok(Number.isFinite(pad.yaw), 'pad faces the first gate');
 assert.equal(startPad(city0).y, 0.15);
+const zigPad = startPad(city1);
+assert.ok(Math.hypot(zigPad.x - city1.gates[0].x, zigPad.z - city1.gates[0].z) < 40);
+assert.ok(Math.hypot(zigPad.x, zigPad.z - 20) > 200, 'Mesa Zigzag pad is not City Loop origin');
 
 const metres = lapLengthMetres(living.gates);
 assert.ok(metres > 8 && metres < 80, 'living sofa should be a whoop-scale lap, got ' + metres);
@@ -157,5 +162,37 @@ for (const t of files) {
   const g = JSON.parse(readFileSync(url, 'utf8'));
   assert.equal(ghostPayloadError(g, t.legacyId != null ? t.legacyId : t.id), null, url);
 }
+
+assert.ok(isBlankTrackId(null) && isBlankTrackId(undefined) && isBlankTrackId(''));
+assert.equal(findTrackIn(null, files), null, 'findTrack(null) must not match legacyId null (Sofa Slalom)');
+assert.equal(findTrackIn(undefined, files), null);
+assert.equal(findTrackIn('', files), null);
+assert.equal(findTrackIn('living-sofa', files).id, 'living-sofa');
+assert.equal(findTrackIn(1, files).id, 'city-zigzag');
+assert.equal(knownMapId('office'), 'office');
+assert.equal(knownMapId('narnia'), null);
+assert.equal(firstTrackForMap('office', files).id, 'office-cubicles');
+assert.equal(firstTrackForMap('room', files).id, 'room-practice');
+
+const sofa = files.find((t) => t.id === 'living-sofa');
+assert.equal(resolveSimBoot({ map: 'living' }, null, files).track, 'living-sofa');
+assert.equal(resolveSimBoot({ map: 'office' }, null, files).track, 'office-cubicles');
+assert.equal(resolveSimBoot({ map: 'room' }, null, files).track, 'room-practice');
+assert.equal(resolveSimBoot({ map: 'gym' }, null, files).track, 'gym-court');
+const mismatch = resolveSimBoot({ map: 'city', track: 'living-sofa' }, null, files);
+assert.equal(mismatch.map, 'living');
+assert.equal(mismatch.track, 'living-sofa');
+const unknown = resolveSimBoot({ map: 'narnia' }, { map: 'garage', track: 'garage-bench' }, files);
+assert.equal(unknown.map, 'city');
+assert.equal(unknown.save, false);
+assert.equal(unknown.unknownMap, true);
+const restored = resolveSimBoot({}, { map: 'garage', track: 'garage-bench' }, files);
+assert.equal(restored.map, 'garage');
+assert.equal(restored.track, 'garage-bench');
+assert.equal(restored.save, false);
+assert.equal(restored.restored, true);
+const zigBoot = resolveSimBoot({ map: 'city', track: 'city-zigzag' }, null, files);
+assert.equal(zigBoot.track, 1);
+assert.ok(sofa && String(sofa.legacyId) === String(null), 'legacyId null still stringifies; matcher must not use that');
 
 console.log('ok', files.length, 'tracks; city layouts frozen; share round-trip; miss 100%; old keys untouched');

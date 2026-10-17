@@ -657,7 +657,7 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples,
-} from "./sim-whoop.js?v=5ad6f7e1060d";
+} from "./sim-whoop.js?v=783d7fbeb57b";
 import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=432458f5d9a7";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
@@ -666,14 +666,15 @@ import {
   ghostStorageKey, bestLapStorageKey, bestRunStorageKey, isLegacyTrackId, legacyIndex,
   hostedGhostUrl, fetchBuiltinTracks, makePaceGhost,
   BUILTIN_TRACK_FILES, SHARE_PREFIX, applyMissPenalty, enteredGate,
-} from "./sim-tracks.js?v=87481780fcb6";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=867628a53f93";
+  findTrackIn, resolveSimBoot, knownMapId, trackRefId,
+} from "./sim-tracks.js?v=1c814dba06e8";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=fa956cb845b3";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=3be5dec3aced";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=5f21c0324f8c";
+} from "./sim-room.js?v=19bee552695d";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=c185cc3c32d9";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -2406,14 +2407,9 @@ function roomTrackNow(){
   return planRoom(currentRoom).track;
 }
 function findTrack(id){
+  if(id==null||id==='')return null;
   if(id===ROOM_TRACK_ID||id==='room-practice')return roomTrackNow();
-  const L=legacyIndex(id);
-  const all=builtinTracks.concat(customTracks);
-  for(const t of all){
-    if(t.id===id||(L!==null&&t.legacyId===L)||String(t.legacyId)===String(id))return t;
-  }
-  if(L!==null)return cityTrackJson(L);
-  return null;
+  return findTrackIn(id, builtinTracks.concat(customTracks));
 }
 function tracksForMap(mapId){
   const list=builtinTracks.concat(customTracks).filter(t=>t.map===mapId);
@@ -2483,9 +2479,10 @@ function applyMapLooks(mapId){
   if(sunSprite)sunSprite.visible=mapId==='city'||mapId==='backyard';
   setIndoorLights(indoorLights,looks?looks.applied:'med');
 }
-async function setMap(mapId,trackId){
+async function setMap(mapId,trackId,opts){
   if(!cityColliderSnap)snapCityColliders();
-  currentMap=mapId||'city';
+  const persist=!(opts&&opts.save===false);
+  currentMap=knownMapId(mapId)||'city';
   if(currentMap==='city'){
     cityWorld.visible=true;
     indoorWorld.visible=false;
@@ -2504,7 +2501,7 @@ async function setMap(mapId,trackId){
     restoreColliders(built.colliders);
     clearRace();
     const list=tracksForMap(currentMap);
-    const t=findTrack(trackId)||list[0]||null;
+    const t=findTrack(trackId!=null?trackId:null)||list[0]||null;
     if(t){
       currentTrackObj=t;
       activeTrackId=t.legacyId!=null?t.legacyId:t.id;
@@ -2519,7 +2516,7 @@ async function setMap(mapId,trackId){
   runActive=false;
   lastPassedGate=null;
   updateGateUI();updateGateHighlight();
-  saveSelected({map:currentMap,track:activeTrackId});
+  if(persist)saveSelected({map:currentMap,track:activeTrackId});
   const k=trackStatId(activeTrackId);
   if(ghosts[k]==null)ghosts[k]=loadGhost(k);
   if(defaultRivals[k]==null)loadHostedGhost(k);
@@ -2726,15 +2723,17 @@ let BATT_WARN=3.5,BATT_CRIT=3.3;
 let battHoverS=180,battSagDrop=0.25;
 let battCharge=1,battV=BATT_FULL;
 function resetSpawnPos(){
-  if(currentMap==='city')return {x:0,y:.15,z:20}; // historic city reset — do not move
   const t=currentTrackObj||findTrack(activeTrackId);
+  const legacy=t&&t.legacyId!=null?t.legacyId:legacyIndex(activeTrackId);
+  // Historic city-loop pad stays put so existing muscle memory / ghosts match.
+  if(currentMap==='city'&&(legacy===0||t==null))return {x:0,y:.15,z:20};
   return startPad(t||{gates:[]});
 }
 function placeQuadAt(x,y,z,yaw){
   state.pos.set(x,Math.max(0.15,y),z);state.vel.set(0,0,0);state.q.identity();
   prevGatePos.copy(state.pos);
   qp.reset(world2mod(state.pos,{x:0,y:0,z:0}));
-  if(yaw){
+  if(Number.isFinite(yaw)&&yaw){
     const h=yaw*0.5;
     qp.quaternion={x:0,y:0,z:Math.sin(h),w:Math.cos(h)};
   }
@@ -2769,7 +2768,7 @@ function resetQuad(){
     return;
   }
   const pad=resetSpawnPos();
-  placeQuadAt(pad.x,pad.y,pad.z);
+  placeQuadAt(pad.x,pad.y,pad.z,pad.yaw);
   battCharge=1;battV=BATT_FULL; // fresh pack only on a full map-start reset
   nextGateIndex=0;runActive=false;runLap=0;runSplits=[];runGateSplits=[];lapStartTime=0;runStartTime=0;
   missesThisLap=0;missTotal=0;lastGateSplit=0;
@@ -3662,18 +3661,35 @@ document.getElementById('gear').onclick=()=>panel.classList.toggle('open');
 document.getElementById('btnReset').onclick=resetQuad;
 function setActiveTrack(id){
   const t=findTrack(id);
-  if(t&&t.map&&t.map!==currentMap){
-    setMap(t.map,t.legacyId!=null?t.legacyId:t.id);
+  if(!t)return;
+  if(t.map&&t.map!==currentMap){
+    setMap(t.map,trackRefId(t));
     resetQuad();
     return;
   }
-  activeTrackId=t&&t.legacyId!=null?t.legacyId:(id||0);
-  currentTrackObj=t||currentTrackObj;
+  const tid=trackRefId(t);
+  activeTrackId=tid;
+  currentTrackObj=t;
+  if(currentMap==='city'){
+    spawnCityRaces();
+    if(t.legacyId==null)spawnTrackData(t,t.id);
+  }else{
+    clearRace();
+    spawnTrackData(t,tid);
+    if(currentMap==='room'&&defaultRivals[t.id]==null){
+      defaultRivals[t.id]=makePaceGhost(t.gates,{track:t.id,name:'PACE BOT',speed:6,hz:8,laps:3});
+    }
+  }
   nextGateIndex=0;
   lastPassedGate=null;
+  runActive=false;
   ensureTrackStats(activeTrackId);
   saveSelected({map:currentMap,track:activeTrackId});
+  const k=trackStatId(activeTrackId);
+  if(ghosts[k]==null)ghosts[k]=loadGhost(k);
+  if(defaultRivals[k]==null)loadHostedGhost(k);
   updateGateUI();updateGateHighlight();
+  resetQuad();
 }
 function toggleStartMenu(force){
   const el=document.getElementById('startMenu');
@@ -4976,7 +4992,12 @@ function loop(now){
       feel.updateHud({stick,battV,battOn:CFG.battSimOn,mode:qp.flightMode,armed:qp.armed});
       feel.tickTutorial(state,dt,qp.armed);
       const att=qp.attitude;
-      feel.noteFlip(Math.abs(att.roll)>2.0||Math.abs(att.pitch)>2.0);
+      feel.noteFlip({
+        upsideDown:Math.abs(att.roll)>2.0||Math.abs(att.pitch)>2.0,
+        armed:qp.armed,
+        speed:Math.hypot(state.vel.x,state.vel.y,state.vel.z),
+        height:state.pos.y,
+      });
     }
     if(coach&&coach.isActive()){
       coach.tick(state,dt,{
@@ -5118,17 +5139,18 @@ function applyQueryBoot(){
   const map=q.get('map');
   const trackRaw=q.get('track');
   const track=trackRaw&&isLegacyTrackId(trackRaw)?+trackRaw:trackRaw;
-  if(map){
-    setMap(map,track);
-    resetQuad();
-  }else if(trackRaw){
-    const t=findTrack(track);
-    if(t){setMap(t.map,t.legacyId!=null?t.legacyId:t.id);resetQuad();}
+  const boot=resolveSimBoot({map,track},loadSelected(),builtinTracks.concat(customTracks));
+  if(!boot.unknownMap){
+    const already=currentMap===boot.map&&String(activeTrackId)===String(boot.track);
+    if(map||trackRaw||!already){
+      setMap(boot.map,boot.track,{save:boot.save!==false});
+      resetQuad();
+    }
   }
   const buildRaw=q.get('build');
   if(buildRaw){
     const decoded=decodeBuild(buildRaw);
-    if(decoded) applyBuild(decoded,{save:true,announce:true});
+    if(decoded) applyBuild(decoded,{save:false,announce:true});
   }
   const modeRaw=(q.get('mode')||'').toLowerCase();
   if(modeRaw==='angle'||modeRaw==='horizon'||modeRaw==='acro'){

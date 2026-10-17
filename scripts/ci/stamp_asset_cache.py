@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
-"""Stamp first-party JS/CSS URLs in HTML with a content-hash query string.
+"""Stamp first-party JS/CSS URLs in HTML and JS with a content-hash query string.
 
 quadmath.com is GitHub Pages behind Cloudflare. HTML is Cache-Control
 max-age=600 and Cloudflare-DYNAMIC; JS and CSS are max-age=14400. Script and
 link tags without a version query keep serving the previous file for up to
 four hours after a Pages deploy. That already shipped stale calculator JS
 (address-bar rewrite after PR #88) and stale tune-database.js (filters
-showing "0 of N tunes").
+showing "0 of N tunes"). Module-to-module imports (sim-maps.js -> sim-room.js,
+sim-whoop.js -> sim-build.js) have the same hole: the browser caches the
+unversioned specifier and can mix two deploys.
 
 This rewrites only local first-party asset URLs: <script src>, <link href>,
-ESM import specifiers, and import-map entries. Third-party hosts
-(fonts.googleapis.com, cdn.jsdelivr.net, static.cloudflareinsights.com) are
-left alone. Cloudflare TTL is not touched -- we cannot write that API.
+ESM import specifiers in HTML and in first-party .js, and import-map entries.
+Third-party hosts (fonts.googleapis.com, cdn.jsdelivr.net,
+static.cloudflareinsights.com) are left alone. Cloudflare TTL is not touched
+-- we cannot write that API.
 
 Usage:
-  python scripts/ci/stamp_asset_cache.py           # rewrite HTML in place
-  python scripts/ci/stamp_asset_cache.py --check   # exit 1 if any HTML is stale
+  python scripts/ci/stamp_asset_cache.py           # rewrite HTML/JS in place
+  python scripts/ci/stamp_asset_cache.py --check   # exit 1 if any stamp is stale
 """
 
 from __future__ import annotations
@@ -93,7 +96,10 @@ def asset_hashes(root: str) -> dict[str, str]:
 
 
 def stamp_html_text(text: str, hashes: dict[str, str]) -> str:
-    """Return HTML with first-party asset URLs stamped. Missing hashes are skipped."""
+    """Return text with first-party asset URLs stamped. Missing hashes are skipped.
+
+    Used for HTML and for first-party JS (relative ESM imports).
+    """
 
     def repl(match: re.Match[str]) -> str:
         asset = match.group("asset")
@@ -107,6 +113,12 @@ def stamp_html_text(text: str, hashes: dict[str, str]) -> str:
     return QUOTED_REF.sub(repl, text)
 
 
+def text_digest(text: str) -> str:
+    """Same as file_digest, for an in-memory UTF-8 string."""
+    data = text.replace("\r\n", "\n").encode("utf-8")
+    return hashlib.sha256(data).hexdigest()[:HASH_LEN]
+
+
 def iter_html_paths(root: str) -> list[str]:
     found: list[str] = []
     for dirpath, dirnames, filenames in os.walk(root):
@@ -116,6 +128,64 @@ def iter_html_paths(root: str) -> list[str]:
                 found.append(os.path.join(dirpath, name))
     found.sort()
     return found
+
+
+def iter_js_asset_paths(root: str) -> list[str]:
+    """First-party JS we rewrite so relative imports carry ?v= stamps.
+
+    vendor/ bundles are hashed for HTML import-maps but never rewritten.
+    """
+    found: list[str] = []
+    for asset in FIRST_PARTY_ASSETS:
+        if not asset.endswith(".js") or asset.startswith("vendor/"):
+            continue
+        path = os.path.join(root, asset.replace("/", os.sep))
+        if os.path.isfile(path):
+            found.append(path)
+    found.sort()
+    return found
+
+
+def iter_stamp_paths(root: str) -> list[str]:
+    return iter_html_paths(root) + iter_js_asset_paths(root)
+
+
+def _rel(root: str, full: str) -> str:
+    return os.path.relpath(full, root).replace(os.sep, "/")
+
+
+def load_stampable(root: str) -> dict[str, str]:
+    files: dict[str, str] = {}
+    for full in iter_stamp_paths(root):
+        original = _read_utf8(full)
+        if original is None:
+            continue
+        files[_rel(root, full)] = original
+    return files
+
+
+def hashes_for_texts(root: str, texts: dict[str, str]) -> dict[str, str]:
+    hashes: dict[str, str] = {}
+    for asset in FIRST_PARTY_ASSETS:
+        if asset in texts:
+            hashes[asset] = text_digest(texts[asset])
+            continue
+        path = os.path.join(root, asset.replace("/", os.sep))
+        if os.path.isfile(path):
+            hashes[asset] = file_digest(path)
+    return hashes
+
+
+def stamp_texts(root: str, files: dict[str, str]) -> dict[str, str]:
+    """Fixpoint-stamp HTML + first-party JS. Import hashes follow stamped bytes."""
+    current = dict(files)
+    for _ in range(8):
+        hashes = hashes_for_texts(root, current)
+        nxt = {path: stamp_html_text(text, hashes) for path, text in current.items()}
+        if nxt == current:
+            return nxt
+        current = nxt
+    return current
 
 
 def apply_to_html_map(root: str, files: dict[str, str]) -> dict[str, str]:
@@ -146,33 +216,25 @@ def _read_utf8(full: str):
 
 
 def stamp_tree(root: str) -> list[str]:
-    """Rewrite HTML files on disk. Returns repo-relative paths that changed."""
-    hashes = asset_hashes(root)
+    """Rewrite HTML and first-party JS on disk. Returns repo-relative paths that changed."""
+    original = load_stampable(root)
+    stamped = stamp_texts(root, original)
     changed: list[str] = []
-    for full in iter_html_paths(root):
-        original = _read_utf8(full)
-        if original is None:
+    for rel, text in stamped.items():
+        if text == original.get(rel):
             continue
-        stamped = stamp_html_text(original, hashes)
-        if stamped == original:
-            continue
+        full = os.path.join(root, rel.replace("/", os.sep))
         with open(full, "w", encoding="utf-8", newline="") as handle:
-            handle.write(stamped)
-        changed.append(os.path.relpath(full, root).replace(os.sep, "/"))
+            handle.write(text)
+        changed.append(rel)
     return changed
 
 
 def check_tree(root: str) -> list[str]:
-    """Return repo-relative HTML paths whose stamps do not match file contents."""
-    hashes = asset_hashes(root)
-    stale: list[str] = []
-    for full in iter_html_paths(root):
-        original = _read_utf8(full)
-        if original is None:
-            continue
-        if stamp_html_text(original, hashes) != original:
-            stale.append(os.path.relpath(full, root).replace(os.sep, "/"))
-    return stale
+    """Return repo-relative HTML/JS paths whose stamps do not match file contents."""
+    original = load_stampable(root)
+    stamped = stamp_texts(root, original)
+    return sorted(rel for rel, text in original.items() if stamped.get(rel) != text)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -185,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="exit 1 if any HTML stamp is missing or stale; write nothing",
+        help="exit 1 if any HTML or JS stamp is missing or stale; write nothing",
     )
     args = parser.parse_args(argv)
     root = os.path.abspath(os.path.expanduser(args.root))
@@ -194,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         stale = check_tree(root)
         if stale:
             sys.stderr.write(
-                "stale first-party asset stamps (run scripts/ci/stamp_asset_cache.py):\n"
+                "stale first-party asset stamps in HTML/JS (run scripts/ci/stamp_asset_cache.py):\n"
             )
             for path in stale:
                 sys.stderr.write("  %s\n" % path)
@@ -204,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
 
     changed = stamp_tree(root)
     if not changed:
-        print("no HTML changes")
+        print("no HTML/JS changes")
         return 0
     print("stamped %d file(s):" % len(changed))
     for path in changed:
