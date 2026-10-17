@@ -187,6 +187,13 @@ test('first-run prompt keeps keyboard/calibrate and adds Touch', () => {
   assert.ok(feelSrc.includes('Fly with keyboard') || feelSrc.includes('feelKeys'));
 });
 
+test('M3 touch-only first visit skips No controller overlay and keyboard', () => {
+  assert.ok(feelSrc.includes('touchy && !hasPad') || feelSrc.includes('touchy&&!hasPad'));
+  assert.ok(feelSrc.includes("saveInputChoice('touch')"));
+  assert.ok(feelSrc.includes('const kbBtn = touchy ? \'\'') || feelSrc.includes('const kbBtn=touchy?\'\''));
+  assert.ok(simSrc.includes('touchFirst') || simSrc.includes('touch:touchFirst') || simSrc.includes('touch: touchFirst'));
+});
+
 test('looks auto quality consults mobile and defers heavy assets', () => {
   assert.ok(looksSrc.includes('resolveAutoQuality') || looksSrc.includes('isMobile') || looksSrc.includes('mobile'));
   assert.ok(looksSrc.includes('afterFirstFrame'));

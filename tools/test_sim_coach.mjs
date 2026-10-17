@@ -18,6 +18,7 @@ import {
   defaultSpec, attachDt, samplesToGhost, pickGhostLine, liveDelta,
   formatDelta, tipsFor, guideHref, roomDoorway, livingDoorway,
   attemptFinished, ladderRows, referenceSamples,
+  drillSpawn, drillBox, facesTarget, headingTo,
 } from '../sim-coach.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -200,6 +201,27 @@ test('medals never downgrade; best score can still rise', () => {
   assert.equal(p.best['hover-hold'].score, 94);
 });
 
+function approachThenHold() {
+  const t = { x: 0, y: 2.2, z: 0 };
+  const out = [];
+  for (let i = 0; i < 20; i++) {
+    const u = i / 19;
+    out.push({
+      t: i * 0.1, dt: 0.1,
+      x: 7.2 * (1 - u), y: 0.2 + 2.0 * u, z: 0,
+      vx: 0, vy: 0, vz: 0, roll: 0, pitch: 0, yaw: 0, armed: true,
+    });
+  }
+  for (let i = 0; i < 90; i++) {
+    out.push({
+      t: 2 + i * 0.1, dt: 0.1,
+      x: t.x, y: t.y, z: t.z,
+      vx: 0, vy: 0, vz: 0, roll: 0, pitch: 0, yaw: 0, armed: true,
+    });
+  }
+  return attachDt(out);
+}
+
 test('hover hold scores bronze/silver/gold from flight data', () => {
   const gold = scoreHoverHold(hoverSamples({ n: 90, jitter: 0.04 }));
   assert.equal(gold.pass, true);
@@ -216,6 +238,40 @@ test('hover hold scores bronze/silver/gold from flight data', () => {
   assert.equal(fail.medal, 'none');
   const crash = scoreHoverHold(hoverSamples({ n: 90, crashed: true }));
   assert.equal(crash.medal, 'none');
+});
+
+test('H3 hover hold ignores approach; scripted perfect hold is gold', () => {
+  const perfect = scoreHoverHold(hoverSamples({ n: 90, jitter: 0, dt: 0.1 }));
+  assert.equal(perfect.medal, 'gold');
+  assert.ok(perfect.rmsHoriz < 0.05, perfect.rmsHoriz);
+  const approached = scoreHoverHold(approachThenHold());
+  assert.equal(approached.pass, true);
+  assert.equal(approached.medal, 'gold');
+  assert.ok(approached.rmsHoriz < 0.2, approached.rmsHoriz);
+});
+
+test('H2 every drill spawn is inside the map and faces its target', () => {
+  const targets = {
+    'hover-hold': (s) => s.target,
+    'yaw-spin': (s) => s.target,
+    'straight-line': (s) => s.a,
+    'gate-pass': (s) => s.gates[0],
+    'doorway-pass': (s) => s.doorway,
+    'split-s': () => ({ x: 0, z: 0 }),
+    'power-loop': () => ({ x: 0, z: 0 }),
+  };
+  for (const d of DRILLS) {
+    const spec = defaultSpec(d.id);
+    const box = drillBox(d.id, spec);
+    const spawn = drillSpawn(d.id, spec);
+    const m = 1.4;
+    assert.ok(Math.abs(spawn.x) <= box.w / 2 - m + 1e-6, d.id + ' x=' + spawn.x + ' w=' + box.w);
+    assert.ok(Math.abs(spawn.z) <= box.d / 2 - m + 1e-6, d.id + ' z=' + spawn.z + ' d=' + box.d);
+    const tgt = targets[d.id](spec);
+    assert.equal(facesTarget(spawn, tgt), true, d.id + ' yaw=' + spawn.yaw + ' want=' + headingTo(spawn, tgt));
+  }
+  const gate = drillSpawn('gate-pass', defaultSpec('gate-pass'));
+  assert.ok(gate.z < 18, 'gate-pass must spawn inside trainer z<=18, got ' + gate.z);
 });
 
 test('yaw spin, line, gates, doorway, split-S, loop have clear pass criteria', () => {
@@ -359,4 +415,10 @@ test('sim.html wires Coach without touching old keys or guide HTML', () => {
   for (const k of ['ryflyRates', 'ryflyDroneType', 'quadmath_bestLap_', 'quadmath_bestGhost_', 'ROOM_KEY']) {
     assert.ok(simSrc.includes(k), 'must keep reading old key ' + k);
   }
+});
+
+test('M1 coach result actions use display block so Retry/Next/Menu show', () => {
+  assert.ok(coachSrc.includes("actionsEl.style.display = 'block'"));
+  assert.ok(coachSrc.includes("actionsEl.classList.add('show')"));
+  assert.ok(simSrc.includes('#coachActions.show{display:block}') || simSrc.includes('#coachActions.show { display: block'));
 });
