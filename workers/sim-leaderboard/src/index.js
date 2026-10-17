@@ -8,22 +8,35 @@ import {
   classId,
   normalizeSubmit,
   rateWindowId,
+  pickCorsOrigin,
+  DEFAULT_ALLOWED_ORIGIN,
+  hashPilotToken,
 } from '../../../sim-retention.js';
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
+const CORS_METHODS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Max-Age': '86400',
+  Vary: 'Origin',
 };
 
 const RATE_MAX = 12;
 const JSON_LIMIT = 350_000;
+const TOKEN_RE = /^[a-f0-9]{32,64}$/i;
 
-function json(data, status) {
+function corsHeaders(env, request) {
+  const spec = (env && env.ALLOWED_ORIGIN) || DEFAULT_ALLOWED_ORIGIN;
+  const origin = pickCorsOrigin(spec, request && request.headers.get('Origin'));
+  return {
+    'Access-Control-Allow-Origin': origin,
+    ...CORS_METHODS,
+  };
+}
+
+function json(data, status, env, request) {
   return new Response(JSON.stringify(data), {
     status: status || 200,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders(env, request) },
   });
 }
 
@@ -57,56 +70,73 @@ async function checkRate(env, ip, now) {
 
 async function listBoard(env, week, frameMm) {
   const c = classId(frameMm);
+  const track = weeklyTrackFor(week);
   const { results } = await env.DB.prepare(
-    'SELECT name, time_ms AS timeMs, track_id AS trackId, submitted_ms AS at FROM scores WHERE week = ? AND class = ? ORDER BY time_ms ASC LIMIT 20',
-  ).bind(week, c).all();
+    'SELECT name, time_ms AS timeMs, track_id AS trackId, submitted_ms AS at FROM scores WHERE week = ? AND class = ? AND track_id = ? ORDER BY time_ms ASC LIMIT 20',
+  ).bind(week, c, track.id).all();
   return results || [];
 }
 
+async function claimPilot(env, name, tokenHash) {
+  await env.DB.prepare(
+    'INSERT OR IGNORE INTO pilots (name, token_hash, claimed_ms) VALUES (?, ?, ?)',
+  ).bind(name, tokenHash, Date.now()).run();
+  const row = await env.DB.prepare(
+    'SELECT token_hash FROM pilots WHERE name = ?',
+  ).bind(name).first();
+  if (!row || !row.token_hash) return { ok: false, reason: 'NAME TAKEN' };
+  if (row.token_hash !== tokenHash) return { ok: false, reason: 'NAME TAKEN' };
+  return { ok: true };
+}
+
 export async function handleLeaderboard(request, env) {
-  const origin = (env && env.ALLOWED_ORIGIN) || '*';
-  CORS['Access-Control-Allow-Origin'] = origin;
+  const reply = (data, status) => json(data, status, env, request);
   if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS });
+    return new Response(null, { status: 204, headers: corsHeaders(env, request) });
   }
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, '') || '/';
 
   if (request.method === 'GET' && (path === '/' || path === '/health')) {
-    return json({ ok: true, service: 'quadmath-sim-leaderboard' });
+    return reply({ ok: true, service: 'quadmath-sim-leaderboard' });
   }
 
   if (request.method === 'GET' && path === '/api/week') {
     const week = url.searchParams.get('week') || utcWeekId();
     const track = weeklyTrackFor(week);
-    return json({ week, track });
+    return reply({ week, track });
   }
 
   if (request.method === 'GET' && path === '/api/board') {
     const week = url.searchParams.get('week') || utcWeekId();
     const frameMm = classId(url.searchParams.get('class') || url.searchParams.get('frameMm') || 65);
+    const track = weeklyTrackFor(week);
     if (!env || !env.DB) {
-      return json({ week, class: frameMm, entries: [], online: false, note: 'no D1' });
+      return reply({ week, class: frameMm, trackId: track.id, entries: [], online: false, note: 'no D1' });
     }
     const entries = await listBoard(env, week, frameMm);
-    return json({ week, class: frameMm, entries, online: true });
+    return reply({ week, class: frameMm, trackId: track.id, entries, online: true });
   }
 
   if (request.method === 'POST' && path === '/api/submit') {
-    if (!env || !env.DB) return json({ ok: false, reason: 'NO DATABASE' }, 503);
+    if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);
     const ip = clientIp(request);
     const allowed = await checkRate(env, ip, Date.now());
-    if (!allowed) return json({ ok: false, reason: 'RATE LIMIT' }, 429);
+    if (!allowed) return reply({ ok: false, reason: 'RATE LIMIT' }, 429);
     const parsed = await readJson(request);
-    if (parsed.error) return json({ ok: false, reason: parsed.error }, 400);
+    if (parsed.error) return reply({ ok: false, reason: parsed.error }, 400);
     const checked = normalizeSubmit(parsed.body);
-    if (!checked.ok) return json({ ok: false, reason: checked.reason }, 400);
+    if (!checked.ok) return reply({ ok: false, reason: checked.reason }, 400);
+    if (!TOKEN_RE.test(checked.token || '')) return reply({ ok: false, reason: 'NO TOKEN' }, 400);
+    const tokenHash = await hashPilotToken(checked.token);
+    const claim = await claimPilot(env, checked.name, tokenHash);
+    if (!claim.ok) return reply({ ok: false, reason: claim.reason }, 403);
     const existing = await env.DB.prepare(
       'SELECT time_ms FROM scores WHERE week = ? AND class = ? AND name = ?',
     ).bind(checked.week, checked.frameMm, checked.name).first();
     if (existing && existing.time_ms <= checked.timeMs) {
       const entries = await listBoard(env, checked.week, checked.frameMm);
-      return json({ ok: true, improved: false, timeMs: existing.time_ms, entries });
+      return reply({ ok: true, improved: false, timeMs: existing.time_ms, entries });
     }
     await env.DB.prepare(
       'INSERT INTO scores (week, class, name, time_ms, track_id, submitted_ms) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(week, class, name) DO UPDATE SET time_ms = excluded.time_ms, track_id = excluded.track_id, submitted_ms = excluded.submitted_ms WHERE excluded.time_ms < scores.time_ms',
@@ -114,10 +144,10 @@ export async function handleLeaderboard(request, env) {
       checked.week, checked.frameMm, checked.name, checked.timeMs, checked.trackId, Date.now(),
     ).run();
     const entries = await listBoard(env, checked.week, checked.frameMm);
-    return json({ ok: true, improved: true, timeMs: checked.timeMs, entries });
+    return reply({ ok: true, improved: true, timeMs: checked.timeMs, entries });
   }
 
-  return json({ ok: false, reason: 'NOT FOUND' }, 404);
+  return reply({ ok: false, reason: 'NOT FOUND' }, 404);
 }
 
 export default {
@@ -125,7 +155,7 @@ export default {
     try {
       return await handleLeaderboard(request, env);
     } catch (e) {
-      return json({ ok: false, reason: 'SERVER' }, 500);
+      return json({ ok: false, reason: 'SERVER' }, 500, env, request);
     }
   },
 };

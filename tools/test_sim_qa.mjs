@@ -87,3 +87,22 @@ test('sim.html wires picker rebuild, boot restore, and query-build no-save', () 
   assert.ok(!simSrc.includes('content/guides/'), 'do not edit guide HTML');
   assert.ok(simSrc.includes(SELECTED_TRACK_KEY) || simSrc.includes('loadSelected'));
 });
+
+test('L1 L2 L3 query boot is session-only and runs once', () => {
+  assert.ok(simSrc.includes('let queryBooted=false') || simSrc.includes('let queryBooted = false'));
+  assert.ok(simSrc.includes('if(queryBooted||!tracksReady)return') || simSrc.includes('if (queryBooted || !tracksReady) return'));
+  assert.ok(simSrc.includes("setFlightMode(modeRaw,false)") || simSrc.includes('setFlightMode(modeRaw, false)'));
+  assert.ok(simSrc.includes("setMap(d.map,d.track,{save:false})") || simSrc.includes("setMap(d.map, d.track, { save: false })"));
+});
+
+test('L5 Esc in a drill opens the Coach picker', () => {
+  const esc = simSrc.slice(simSrc.indexOf("if(e.key==='Escape')"), simSrc.indexOf("if(e.key==='Tab')"));
+  assert.ok(esc.includes('openCoachPicker()'));
+  assert.ok(esc.includes('coach.cancel()'));
+});
+
+test('M2 leaderboard names render via textContent not innerHTML', () => {
+  assert.ok(simSrc.includes('function renderBoardBody'));
+  assert.ok(simSrc.includes("b.textContent=(i+1)+' '+sanitizePilotName(r.name)") || simSrc.includes('b.textContent=(i+1)+\' \'+sanitizePilotName(r.name)'));
+  assert.equal(simSrc.includes('boardHtml('), false);
+});

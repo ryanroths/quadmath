@@ -8,7 +8,7 @@
     "traces": { "enabled": true }
   },
   "vars": {
-    "ALLOWED_ORIGIN": "*"
+    "ALLOWED_ORIGIN": "https://quadmath.com"
   },
   "d1_databases": [
     {
