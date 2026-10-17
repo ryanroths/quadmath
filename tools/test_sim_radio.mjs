@@ -9,7 +9,8 @@ import {
   AXIS_MAP_PREFIX, RADIO_PRESET_PREFIX, GP_ID_KEY,
   sanitizeId, isRadio, radioScore, AETR_MAP, defaultMapFor,
   applyAxisMap, loadRadioProfile, saveAxisMap, saveRadioPreset,
-  shouldEnableTouch, createRadioRouter, CAL_STEPS,
+  clearRadioCalibration, isValidAxisMap, shouldEnableTouch,
+  createRadioRouter, CAL_STEPS, createCalibState, stepCalib,
 } from '../sim-touch.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -214,5 +215,196 @@ test('sim.html still owns the Radio panel and per-device keys', () => {
   assert.ok(src.includes('ryflyRadioPreset_'));
   assert.ok(src.includes('ryflyGamepadId'));
   assert.ok(touchSrc.includes('createRadioRouter'));
+  assert.ok(touchSrc.includes('clearRadioCalibration'));
+  assert.ok(simSrc.includes('clearRadioCalibration'));
   assert.equal(CAL_STEPS.length, 8);
+});
+
+test('stick HUD is mode 2: left pad first, no row-reverse', () => {
+  assert.match(simSrc, /#feelHud\{[^}]*pointer-events:none;\s*flex-direction:\s*row;/);
+  assert.equal(/#feelHud\{[^}]*row-reverse/.test(simSrc), false);
+  const l = simSrc.indexOf('id="stickDotL"');
+  const r = simSrc.indexOf('id="stickDotR"');
+  assert.ok(l > 0 && r > l, 'DOM left stick before right stick');
+  const feelSrc = readFileSync(join(root, 'sim-feel.js'), 'utf8');
+  assert.ok(feelSrc.includes('50 + st.y * 42') && feelSrc.includes('92 - st.t * 84'),
+    'left HUD dot is yaw/throttle');
+  assert.ok(feelSrc.includes('50 + st.r * 42') && feelSrc.includes('50 - st.p * 42'),
+    'right HUD dot is roll/pitch');
+});
+
+function sweepThrottle(router, setAxes, rest, full, dt) {
+  const frames = [];
+  const n = 8;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    frames.push(rest + (full - rest) * t);
+  }
+  let last = null;
+  for (const v of frames) {
+    setAxes(v);
+    last = router.tickCalib(dt);
+  }
+  return last;
+}
+
+test('EdgeTX throttle sweep -1 rest → +1 advances thi and tlo', () => {
+  let axes = [0, 0, -1, 0, 0.1, -0.1, 0, 0];
+  const getGamepads = () => [tx16sPad(axes)];
+  const router = createRadioRouter({ storage: memStore(), getGamepads });
+  router.pick();
+  assert.equal(router.startCalib(), true);
+  hold(router, 0.4, 3); // center, throttle already at -1
+  axes = [1, 0, -1, 0, 0.1, -0.1, 0, 0];
+  hold(router, 0.25, 3); // roll
+  axes = [0, -1, -1, 0, 0.1, -0.1, 0, 0];
+  hold(router, 0.25, 3); // pitch
+  axes = [0, 0, -1, 1, 0.1, -0.1, 0, 0];
+  hold(router, 0.25, 3); // yaw
+
+  const setT = (v) => { axes = [0, 0, v, 0, 0.1, -0.1, 0, 0]; };
+  // Pump then pin at +1 (Ryan's live hold). A 0.6s centered-delta hold stalled.
+  sweepThrottle(router, setT, -1, 1, 0.04);
+  setT(1);
+  hold(router, 0.05, 4);
+  const afterThi = router.tickCalib(0.05);
+  assert.equal(afterThi.label, 'THROTTLE FULL DOWN', 'thi advanced after -1→+1 sweep');
+  sweepThrottle(router, setT, 1, -1, 0.04);
+  const afterTlo = router.tickCalib(0.05);
+  assert.equal(afterTlo.skipAux, true, 'tlo advanced into arm/mode');
+  router.skipCalibAux();
+  const finished = router.skipCalibAux();
+  assert.equal(finished.done, true);
+  assert.equal(finished.axisMap.t.i, 2, 'detected by movement, not a hardcoded index');
+  assert.ok(finished.axisMap.t.max > 0.5);
+  assert.ok(finished.axisMap.t.min < -0.5);
+  const mapped = applyAxisMap([0, 0, -1, 0, 0, 0, 0, 0], finished.axisMap);
+  assert.ok(Math.abs(mapped.t) < 0.05, 'rest -1 is throttle 0');
+  const full = applyAxisMap([0, 0, 1, 0, 0, 0, 0, 0], finished.axisMap);
+  assert.ok(full.t > 0.95, 'full +1 is throttle 1');
+});
+
+test('wizard finds throttle on a non-AETR axis (index 3) by movement', () => {
+  // Classic vs Advanced USB Joystick: throttle is NOT assumed on axis 2.
+  let axes = [0, 0, 0, -1, 0, 0, 0, 0];
+  const getGamepads = () => [tx16sPad(axes)];
+  const router = createRadioRouter({ storage: memStore(), getGamepads });
+  router.pick();
+  router.startCalib();
+  hold(router, 0.4, 3);
+  axes = [1, 0, 0, -1, 0, 0, 0, 0];
+  hold(router, 0.25, 3);
+  axes = [0, -1, 0, -1, 0, 0, 0, 0];
+  hold(router, 0.25, 3);
+  axes = [0, 0, 1, -1, 0, 0, 0, 0];
+  hold(router, 0.25, 3);
+  const setT = (v) => { axes = [0, 0, 0, v, 0, 0, 0, 0]; };
+  sweepThrottle(router, setT, -1, 1, 0.04);
+  sweepThrottle(router, setT, 1, -1, 0.04);
+  router.skipCalibAux();
+  const finished = router.skipCalibAux();
+  assert.equal(finished.done, true);
+  assert.equal(finished.axisMap.t.i, 3);
+  assert.equal(finished.axisMap.y.i, 2);
+});
+
+test('r/p/y cannot steal the EdgeTX throttle axis that rested at -1', () => {
+  let axes = [0, 0, -1, 0, 0, 0, 0, 0];
+  const gp = () => tx16sPad(axes);
+  const calib = createCalibState();
+  // center
+  for (let i = 0; i < 4; i++) stepCalib(calib, gp(), 0.4);
+  assert.equal(CAL_STEPS[calib.step].key, 'r');
+  // yaw+throttle both move during the ROLL step — throttle is the bigger
+  // delta, but it was already at an extreme so it must not become roll.
+  axes = [0.7, 0, 1, 0, 0, 0, 0, 0];
+  for (let i = 0; i < 4; i++) stepCalib(calib, gp(), 0.25);
+  assert.equal(calib.result.r.i, 0, 'roll stays on the gimbal that left center');
+  assert.equal(calib.used.has(2), false, 'throttle axis still free for thi');
+});
+
+test('Auto-detect clears a stale ryflyAxisMap even when gpName is empty', () => {
+  const broken = {
+    r: { i: 3, sign: -1 },
+    p: { i: 2, sign: 1 },
+    y: { i: 0, sign: -1 },
+    t: { i: 1, min: 0, max: -1 },
+  };
+  const rates = '{"type":"BETAFLIGHT"}';
+  const store = memStore({
+    ryflyRates: rates,
+    [AXIS_MAP_PREFIX + TX16S_SID]: JSON.stringify(broken),
+    [RADIO_PRESET_PREFIX + TX16S_SID]: 'custom',
+    [GP_ID_KEY]: TX16S_ID,
+  });
+  assert.equal(isValidAxisMap(broken), true);
+  // No live gpName — Tune panel Auto-detect must still use ryflyGamepadId.
+  assert.equal(clearRadioCalibration('', store), true);
+  assert.equal(store.getItem(AXIS_MAP_PREFIX + TX16S_SID), null);
+  assert.equal(store.getItem('ryflyRates'), rates, 'do not wipe other ryfly* keys');
+  const prof = loadRadioProfile(TX16S_ID, store);
+  assert.equal(prof.axisMap, null);
+
+  const router = createRadioRouter({
+    storage: store,
+    getGamepads: () => [tx16sPad()],
+  });
+  // Router with a remembered pad, then clear as Auto-detect does.
+  router.pick();
+  saveAxisMap(TX16S_ID, broken, store);
+  const cleared = router.clearCalibration();
+  assert.equal(cleared.axisMap, null);
+  assert.equal(router.axisMap, null);
+  assert.equal(store.getItem(AXIS_MAP_PREFIX + TX16S_SID), null);
+  assert.equal(store.getItem('ryflyRates'), rates);
+});
+
+test('Ryan live RM TX16S: pinned ax2=1.00 at THROTTLE FULL UP advances; aux -1 ignored', () => {
+  // Live capture, Chrome Windows, device id as reported. Wizard step
+  // 'THROTTLE FULL UP — hold', throttle held full up:
+  const ID = 'RM TX16S Joystick (Vendor: 1209 Product: 4f54)';
+  const rest = [0, 0, -1, 0, -1, -1, -1, -1];
+  const ryanThi = [0.00, 0.01, 1.00, 0.00, -1.00, -1.00, -1.00, -1.00];
+  assert.equal(isRadio({ id: ID }), true);
+  assert.equal(radioScore({ id: ID, mapping: '' }), 2);
+
+  const gp = (axes) => ({ id: ID, index: 0, mapping: '', axes, buttons: [] });
+  const calib = createCalibState();
+  for (let i = 0; i < 4; i++) stepCalib(calib, gp(rest), 0.4);
+  assert.equal(CAL_STEPS[calib.step].key, 'r');
+  assert.equal(calib.thrCand.has(2), true);
+  assert.equal(calib.thrCand.has(4), false, 'aux at -1 is not a throttle candidate');
+  assert.equal(calib.thrCand.has(7), false);
+
+  for (let i = 0; i < 3; i++) stepCalib(calib, gp([1, 0, -1, 0, -1, -1, -1, -1]), 0.25);
+  for (let i = 0; i < 3; i++) stepCalib(calib, gp([0, -1, -1, 0, -1, -1, -1, -1]), 0.25);
+  for (let i = 0; i < 3; i++) stepCalib(calib, gp([0, 0, -1, 1, -1, -1, -1, -1]), 0.25);
+  assert.equal(CAL_STEPS[calib.step].key, 'thi');
+
+  // Jump to the exact live snapshot with no extra rest frame on thi.
+  for (let i = 0; i < 8; i++) stepCalib(calib, gp(ryanThi), 0.05);
+  assert.equal(CAL_STEPS[calib.step].key, 'tlo', 'held ax2=1.00 must advance thi');
+  assert.equal(calib.result.t.i, 2);
+  assert.ok(calib.result.t.max >= 0.95);
+  assert.ok(calib.result.t.min < -0.5);
+  assert.equal(calib.used.has(4), false);
+  assert.equal(calib.used.has(5), false);
+  assert.equal(calib.used.has(6), false);
+  assert.equal(calib.used.has(7), false);
+
+  const mappedUp = applyAxisMap(ryanThi, {
+    r: { i: 0, sign: 1 }, p: { i: 1, sign: -1 }, y: { i: 3, sign: 1 },
+    t: calib.result.t,
+  });
+  assert.ok(mappedUp.t > 0.95, 'pinned full-up is throttle 1');
+});
+
+test('garbage saved axis map is ignored on load', () => {
+  const store = memStore({
+    [AXIS_MAP_PREFIX + TX16S_SID]: '{"nope":true}',
+  });
+  const prof = loadRadioProfile(TX16S_ID, store);
+  assert.equal(prof.axisMap, null);
+  assert.equal(isValidAxisMap(null), false);
+  assert.equal(isValidAxisMap({ r: { i: 0 } }), false);
 });
