@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sim-leaderboard",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-17",
+  "observability": {
+    "enabled": true,
+    "traces": { "enabled": true }
+  },
+  "vars": {
+    "ALLOWED_ORIGIN": "*"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "quadmath-sim-leaderboard",
+      "database_id": "REPLACE_AFTER_D1_CREATE"
+    }
+  ]
+}
