@@ -210,6 +210,12 @@
   .track-list{display:flex;flex-direction:column;gap:6px}
   .track-list button{width:100%;text-align:left;display:flex;justify-content:space-between;gap:8px}
   .track-list .best{color:var(--dim);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px}
+  .room-form{display:grid;grid-template-columns:1fr 1fr 1fr 72px;gap:6px;margin:10px 0 8px;align-items:end}
+  .room-form label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--dim)}
+  .room-form input,.room-form select{width:100%;background:rgba(8,9,12,.55);border:1px solid var(--line);color:var(--txt);
+    border-radius:10px;padding:7px 8px;font-family:inherit}
+  .room-hint{font-size:12px;color:var(--dim);margin:0 0 8px;line-height:1.45}
+  #roomBuild{grid-column:1/-1;margin-top:2px}
   #builder{display:none;position:fixed;left:16px;right:16px;bottom:22px;z-index:24;pointer-events:none}
   #builder.show{display:block}
   .builder-bar{pointer-events:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;
@@ -267,6 +273,7 @@
     <p class="menu-lead">Browser FPV whoop sim. Paste your Betaflight rates. No install.</p>
     <button class="primary" id="menuFly">Fly</button>
     <button id="menuTracks">Tracks</button>
+    <button id="menuRoom">Your room</button>
     <button id="menuBuild">Your build</button>
     <button id="menuBuilder">Track builder</button>
     <button id="menuTune">Tune</button>
@@ -610,7 +617,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples,
 } from "./sim-whoop.js?v=5ad6f7e1060d";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=432458f5d9a7";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -618,8 +625,13 @@ import {
   ghostStorageKey, bestLapStorageKey, bestRunStorageKey, isLegacyTrackId, legacyIndex,
   hostedGhostUrl, fetchBuiltinTracks, makePaceGhost,
   BUILTIN_TRACK_FILES, SHARE_PREFIX, applyMissPenalty, enteredGate,
-} from "./sim-tracks.js?v=m2c";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=m2c";
+} from "./sim-tracks.js?v=87481780fcb6";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=867628a53f93";
+import {
+  ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
+  normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
+  formatRoomSize, parseRoomQuery,
+} from "./sim-room.js?v=3be5dec3aced";
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=5f21c0324f8c";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
@@ -712,6 +724,8 @@ const flagMeshes=[];
 const startMarkers=[];
 let indoorBuilt={};
 let indoorLights=[];
+let currentRoom=loadRoom();
+let roomBuiltSig='';
 let cityColliderSnap=null;
 let builderOn=false;
 // Exponential-squared haze instead of the old linear 250..1100 ramp: at this
@@ -2342,7 +2356,11 @@ function clearRace(){
   }
   beaconTarget=null;
 }
+function roomTrackNow(){
+  return planRoom(currentRoom).track;
+}
 function findTrack(id){
+  if(id===ROOM_TRACK_ID||id==='room-practice')return roomTrackNow();
   const L=legacyIndex(id);
   const all=builtinTracks.concat(customTracks);
   for(const t of all){
@@ -2352,14 +2370,45 @@ function findTrack(id){
   return null;
 }
 function tracksForMap(mapId){
-  return builtinTracks.concat(customTracks).filter(t=>t.map===mapId);
+  const list=builtinTracks.concat(customTracks).filter(t=>t.map===mapId);
+  if(mapId==='room'){
+    const rt=roomTrackNow();
+    return [rt].concat(list.filter(t=>t.id!==rt.id));
+  }
+  return list;
 }
 function spawnCityRaces(){
   clearRace();
   spawnTrackData(cityTrackJson(0),0);
   spawnTrackData(cityTrackJson(1),1);
 }
+function disposeMapBuilt(built){
+  if(!built||!built.group)return;
+  if(built.group.parent)built.group.parent.remove(built.group);
+  built.group.traverse(o=>{
+    if(o.geometry)o.geometry.dispose();
+    const mats=o.material? (Array.isArray(o.material)?o.material:[o.material]) : [];
+    for(const m of mats){
+      if(m.map&&m.map.userData&&m.map.userData.looksComposed)m.map.dispose();
+      m.dispose();
+    }
+  });
+}
 function ensureIndoor(mapId){
+  if(mapId==='room'){
+    const sig=roomSignature(currentRoom);
+    if(indoorBuilt.room&&roomBuiltSig===sig)return indoorBuilt.room;
+    if(indoorBuilt.room)disposeMapBuilt(indoorBuilt.room);
+    const built=buildMap(THREE,'room',{room:currentRoom});
+    indoorWorld.add(built.group);
+    indoorBuilt.room=built;
+    roomBuiltSig=sig;
+    if(looks){
+      looks.upgradeMaterials(built.group);
+      if(looks.setQuality)looks.setQuality(looks.choice);
+    }
+    return built;
+  }
   if(indoorBuilt[mapId])return indoorBuilt[mapId];
   const built=buildMap(THREE,mapId);
   indoorWorld.add(built.group);
@@ -2369,6 +2418,16 @@ function ensureIndoor(mapId){
     if(looks.setQuality)looks.setQuality(looks.choice);
   }
   return built;
+}
+function applyRoomSpec(raw,andFly){
+  currentRoom=normalizeRoomSpec(raw);
+  saveRoom(currentRoom);
+  const t=roomTrackNow();
+  setMap('room',t.id);
+  resetQuad();
+  if(andFly){hideMenuLayer();toggleStartMenu(false);sessionLive=true;}
+  toast('YOUR ROOM — '+formatRoomSize(currentRoom).toUpperCase());
+  return t;
 }
 function applyMapLooks(mapId){
   const spec=MAP_LOOKS[mapId]||MAP_LOOKS.city;
@@ -2399,11 +2458,14 @@ async function setMap(mapId,trackId){
     restoreColliders(built.colliders);
     clearRace();
     const list=tracksForMap(currentMap);
-    const t=findTrack(trackId)||list[0];
+    const t=findTrack(trackId)||list[0]||null;
     if(t){
       currentTrackObj=t;
       activeTrackId=t.legacyId!=null?t.legacyId:t.id;
       spawnTrackData(t,activeTrackId);
+      if(currentMap==='room'&&defaultRivals[t.id]==null){
+        defaultRivals[t.id]=makePaceGhost(t.gates,{track:t.id,name:'PACE BOT',speed:6,hz:8,laps:3});
+      }
     }
   }
   applyMapLooks(currentMap);
@@ -3588,8 +3650,43 @@ function bestText(id){
   return bestLapMs[k]?fmtLap(bestLapMs[k]):'—';
 }
 let pickerMap=currentMap;
-function openTrackPicker(){
-  pickerMap=currentMap;
+function roomFormHtml(){
+  const s=normalizeRoomSpec(currentRoom);
+  return '<p class="room-hint">Enter your room. We build walls, simple furniture, and a practice track that fits. Saved in this browser only.</p>'+
+    '<div class="room-form">'+
+    '<label>Length<input id="roomL" type="number" min="8" max="40" step="0.1" value="'+s.length+'"></label>'+
+    '<label>Width<input id="roomW" type="number" min="8" max="40" step="0.1" value="'+s.width+'"></label>'+
+    '<label>Height<input id="roomH" type="number" min="7" max="16" step="0.1" value="'+s.height+'"></label>'+
+    '<label>Units<select id="roomUnits"><option value="ft"'+(s.units==='ft'?' selected':'')+'>ft</option><option value="m"'+(s.units==='m'?' selected':'')+'>m</option></select></label>'+
+    '<button type="button" id="roomBuild">Build room</button>'+
+    '</div>';
+}
+function bindRoomForm(){
+  const btn=document.getElementById('roomBuild');
+  if(!btn)return;
+  const units=document.getElementById('roomUnits');
+  function lim(){return (units&&units.value)==='m'?{l:[2.4,12],w:[2.4,12],h:[2.1,5]}:{l:[8,40],w:[8,40],h:[7,16]};}
+  function syncLim(){
+    const L=lim();
+    const elL=document.getElementById('roomL'),elW=document.getElementById('roomW'),elH=document.getElementById('roomH');
+    if(elL){elL.min=L.l[0];elL.max=L.l[1];}
+    if(elW){elW.min=L.w[0];elW.max=L.w[1];}
+    if(elH){elH.min=L.h[0];elH.max=L.h[1];}
+  }
+  if(units)units.onchange=syncLim;
+  syncLim();
+  btn.onclick=()=>{
+    applyRoomSpec({
+      length:parseFloat(document.getElementById('roomL').value),
+      width:parseFloat(document.getElementById('roomW').value),
+      height:parseFloat(document.getElementById('roomH').value),
+      units:document.getElementById('roomUnits').value,
+    },false);
+    openTrackPicker('room');
+  };
+}
+function openTrackPicker(startMap){
+  pickerMap=startMap||currentMap;
   const layer=document.getElementById('menuLayer');
   if(layer)layer.classList.add('wide');
   function render(){
@@ -3600,8 +3697,10 @@ function openTrackPicker(){
       const on=String(id)===String(activeTrackId)&&pickerMap===currentMap?'on':'';
       return '<button type="button" class="'+on+'" data-tid="'+id+'"><span>'+t.name+'</span><span class="best">'+bestText(id)+'</span></button>';
     }).join('')||'<p>No tracks on this map.</p>';
+    const roomBlock=pickerMap==='room'?roomFormHtml():'';
     showMenuLayer('<h2>Tracks</h2><p>Map + course. Best lap is local.</p>'+
       '<div class="track-maps">'+maps+'</div>'+
+      roomBlock+
       '<div class="track-list">'+rows+'</div>'+
       '<button type="button" id="pickerBuild">Build on this map</button>'+
       '<button type="button" id="layerClose">Close</button>');
@@ -3626,6 +3725,7 @@ function openTrackPicker(){
         render();
       };
     });
+    bindRoomForm();
     const pb=document.getElementById('pickerBuild');
     if(pb)pb.onclick=()=>{hideMenuLayer();toggleStartMenu(false);if(pickerMap!==currentMap){setMap(pickerMap);resetQuad();}openBuilder();};
     document.getElementById('layerClose').onclick=hideMenuLayer;
@@ -3848,6 +3948,8 @@ function wireLooksUI(){
   if(fly)fly.onclick=()=>{hideMenuLayer();toggleStartMenu(false);sessionLive=true;toast('Space to arm. 1/2/3 = mode.');};
   document.getElementById('menuTune').onclick=()=>{hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');syncBuildUI();};
   document.getElementById('menuTracks').onclick=()=>openTrackPicker();
+  const btnRoom=document.getElementById('menuRoom');
+  if(btnRoom)btnRoom.onclick=()=>openTrackPicker('room');
   const btnBuild=document.getElementById('menuBuild');
   if(btnBuild)btnBuild.onclick=()=>openBuildPicker();
   const btnBuilder=document.getElementById('menuBuilder');
@@ -4862,6 +4964,11 @@ wireBuilderUI();
 customTracks=loadCustomTracks();
 function applyQueryBoot(){
   const q=new URLSearchParams(location.search);
+  const roomRaw=q.get('room');
+  if(roomRaw){
+    const parsed=parseRoomQuery(roomRaw);
+    if(parsed){currentRoom=parsed;saveRoom(currentRoom);}
+  }
   const map=q.get('map');
   const trackRaw=q.get('track');
   const track=trackRaw&&isLegacyTrackId(trackRaw)?+trackRaw:trackRaw;
@@ -4887,19 +4994,26 @@ function applyQueryBoot(){
   if(q.get('builder')==='1'){toggleStartMenu(false);openBuilder();}
   syncBuildUI();
 }
+function publishTracks(){
+  Object.assign(window._sim,{tracks:()=>builtinTracks.concat(customTracks)});
+}
 fetchBuiltinTracks().then(list=>{
   builtinTracks=list;
   for(const t of list){
     if(t.legacyId==null)loadHostedGhost(t.id);
   }
-  Object.assign(window._sim,{tracks:()=>builtinTracks.concat(customTracks)});
+  publishTracks();
   applyQueryBoot();
-}).catch(()=>{builtinTracks=[cityTrackJson(0),cityTrackJson(1)];applyQueryBoot();});
+}).catch(()=>{
+  builtinTracks=[cityTrackJson(0),cityTrackJson(1)];
+  publishTracks();
+  applyQueryBoot();
+});
 Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
-  QUALITY_KEY,FLOATINESS_KEY,setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
+  QUALITY_KEY,FLOATINESS_KEY,  setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
-  encodeBuild,decodeBuild,BUILD_KEY});
+  encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,applyRoomSpec,planRoom});
 </script>
 <!-- Flattened to single-line spans so the whole thing fits the fixed 14px bar.
      The .container wrappers and the opacity:.6 on the credit are gone: the

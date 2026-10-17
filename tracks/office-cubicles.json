@@ -1,0 +1,19 @@
+{
+  "id": "office-cubicles",
+  "map": "office",
+  "name": "Cubicle Weave",
+  "class": "whoop",
+  "gates": [
+    { "x": 13.5, "y": 2.3, "z": 18.2, "ry": 0.00, "size": 1.9, "solid": true },
+    { "x": 13.5, "y": 2.2, "z": 15.5, "ry": 1.57, "size": 1.8, "solid": true },
+    { "x": 4.2, "y": 2.2, "z": 15.5, "ry": 1.57, "size": 1.8, "solid": true },
+    { "x": -8.3, "y": 2.2, "z": 6.0, "ry": 3.14, "size": 1.7, "solid": true },
+    { "x": -8.3, "y": 2.2, "z": -6.0, "ry": 3.14, "size": 1.7, "solid": true },
+    { "x": 4.2, "y": 2.2, "z": -17.4, "ry": -1.20, "size": 1.8, "solid": true },
+    { "x": 13.5, "y": 2.3, "z": -17.4, "ry": 0.00, "size": 1.8, "solid": true },
+    { "x": 13.5, "y": 2.3, "z": 12.0, "ry": 3.14, "size": 1.9, "solid": true }
+  ],
+  "flags": [
+    { "x": 4.0, "y": 2.8, "z": 0.0, "ry": 0 }
+  ]
+}

@@ -79,6 +79,10 @@ class StampHtmlText(unittest.TestCase):
             "sim-feel.js": "aabbcc112233",
             "sim-build.js": "b1b1b1b1b1b1",
             "sim-whoop.js": "c2c2c2c2c2c2",
+            "sim-looks.js": "d3d3d3d3d3d3",
+            "sim-maps.js": "e4e4e4e4e4e4",
+            "sim-tracks.js": "f5f5f5f5f5f5",
+            "sim-room.js": "a6a6a6a6a6a6",
             "vendor/three.module.min.js": "abc123abc123",
         }
 

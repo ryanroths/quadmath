@@ -1,12 +1,19 @@
-// QuadMath sim M2 — original indoor whoop maps. Procedural boxes + V1 PBR tags.
+// QuadMath sim M2/W3 — original indoor whoop maps. Procedural boxes + V1 PBR tags.
 // CC0 Poly Haven textures already shipped in assets/sim-looks (no new downloads).
 // Kenney city kit is not used here so indoor stays cheap on the fps budget.
+// W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
+// Nothing here is copied from WebFPV (GPL).
+
+import { planRoom } from './sim-room.js';
 
 export const LAYOUT = {
   living: { w: 21, d: 28, h: 9.1, wall: 0.38 },
   garage: { w: 21, d: 42, h: 10.5, wall: 0.4 },
   warehouse: { w: 56, d: 84, h: 21, wall: 0.5 },
   backyard: { w: 42, d: 56, h: 0, wall: 0.22 },
+  office: { w: 36, d: 46, h: 9.2, wall: 0.36 },
+  gym: { w: 48, d: 74, h: 28, wall: 0.46 },
+  trainer: { w: 28, d: 36, h: 10.5, wall: 0.34 },
 };
 
 export const MAP_ORBIT = {
@@ -16,6 +23,10 @@ export const MAP_ORBIT = {
   garage: { cx: 0, cy: 2.0, cz: 1.5, r: 7.2, h: 6.4, fov: 60 },
   warehouse: { cx: 0, cy: 2.4, cz: 0, r: 2.2, h: 17.2, fov: 72 },
   backyard: { cx: 0, cy: 2.2, cz: -6, r: 22, h: 11, fov: 58 },
+  office: { cx: 4, cy: 1.8, cz: 2, r: 6.8, h: 6.0, fov: 62 },
+  gym: { cx: 0, cy: 3.4, cz: 2, r: 5.5, h: 16.5, fov: 68 },
+  trainer: { cx: 0, cy: 1.9, cz: 0, r: 8.2, h: 6.6, fov: 60 },
+  room: { cx: 0, cy: 1.6, cz: 0, r: 3.4, h: 4.8, fov: 64 },
 };
 
 export const MAP_LOOKS = {
@@ -24,7 +35,13 @@ export const MAP_LOOKS = {
   warehouse: { fog: 0.0018, sun: 0.55, env: 0.5, bg: 0.28, hemi: 0.28 },
   backyard: { fog: 0.0025, sun: 1.5, env: 0.72, bg: 0.48, hemi: 0.16 },
   city: { fog: 0.00035, sun: 1.7, env: 0.72, bg: 0.48, hemi: 0.16 },
+  office: { fog: 0.0032, sun: 0.48, env: 0.58, bg: 0.34, hemi: 0.36 },
+  gym: { fog: 0.0014, sun: 0.62, env: 0.52, bg: 0.30, hemi: 0.30 },
+  trainer: { fog: 0.0028, sun: 0.58, env: 0.56, bg: 0.33, hemi: 0.34 },
+  room: { fog: 0.0045, sun: 0.42, env: 0.55, bg: 0.32, hemi: 0.40 },
 };
+
+export const MAP_IDS = ['living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room'];
 
 function mat(THREE, hex, set, extras) {
   const m = new THREE.MeshStandardMaterial(Object.assign({
@@ -57,16 +74,18 @@ function woodTex(THREE) {
   return t;
 }
 
-function box(THREE, parent, colliders, x, y, z, w, h, d, material, rx) {
+function box(THREE, parent, colliders, x, y, z, w, h, d, material, rx, collide) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
   mesh.position.set(x, y + h / 2, z);
   if (rx) mesh.rotation.y = rx;
   mesh.castShadow = mesh.receiveShadow = true;
   parent.add(mesh);
-  mesh.updateMatrixWorld(true);
-  const bb = new THREE.Box3().setFromObject(mesh);
-  bb._tag = 'map';
-  colliders.push(bb);
+  if (collide !== false) {
+    mesh.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(mesh);
+    bb._tag = 'map';
+    colliders.push(bb);
+  }
   return mesh;
 }
 
@@ -328,26 +347,226 @@ function buildBackyard(THREE, parent, colliders, lights) {
   return { floor, orbit: MAP_ORBIT.backyard };
 }
 
+function desk(THREE, parent, colliders, x, z, mats, ry) {
+  box(THREE, parent, colliders, x, 0, z, 3.15, 0.82, 1.55, mats.wood, ry);
+  box(THREE, parent, colliders, x, 0.82, z, 3.2, 0.08, 1.6, mats.dark, ry);
+  // Monitor + keyboard — cheap extras so the cubicle reads as a desk, not a box.
+  box(THREE, parent, colliders, x, 0.90, z - 0.42, 1.15, 0.72, 0.08, mats.screen, ry);
+  box(THREE, parent, colliders, x, 0.90, z + 0.18, 1.35, 0.04, 0.55, mats.dark, ry);
+}
+
+function officeChair(THREE, parent, colliders, x, z, mats, ry) {
+  box(THREE, parent, colliders, x, 0.35, z, 1.05, 0.42, 1.05, mats.chair, ry);
+  box(THREE, parent, colliders, x, 0.77, z - 0.38, 1.05, 1.05, 0.14, mats.chair, ry);
+}
+
+function cubicle(THREE, parent, colliders, x, z, mats) {
+  // 6.4 × 7.0 cell, open toward +X so the aisle stays flyable.
+  const w = 6.4, d = 7.0, h = 3.55, t = 0.12;
+  box(THREE, parent, colliders, x - w / 2, 0, z, t, h, d, mats.cube);
+  box(THREE, parent, colliders, x, 0, z - d / 2, w, h, t, mats.cube);
+  box(THREE, parent, colliders, x, 0, z + d / 2, w, h, t, mats.cube);
+  desk(THREE, parent, colliders, x - 1.35, z, mats, 0);
+  officeChair(THREE, parent, colliders, x + 0.55, z, mats, 0);
+}
+
+function buildOffice(THREE, parent, colliders, lights) {
+  const L = LAYOUT.office;
+  const mats = {
+    wall: mat(THREE, 0xd6d0c6, 'facade'),
+    ceil: mat(THREE, 0xe6e2da, 'facade', { emissive: 0xfff4e4, emissiveIntensity: 0.16 }),
+    floor: mat(THREE, 0x8a8478, 'concrete'),
+    wood: mat(THREE, 0x7a5130, 'wood', { map: woodTex(THREE), roughness: 0.72 }),
+    dark: mat(THREE, 0x2c2f36, 'concrete'),
+    cube: mat(THREE, 0xc8c2b6, 'facade'),
+    chair: mat(THREE, 0x3d4a58, 'facade'),
+    screen: mat(THREE, 0x1a2a38, 'facade', { emissive: 0x3a6a88, emissiveIntensity: 0.55 }),
+    glass: mat(THREE, 0xc5d4e0, 'facade', { transparent: true, opacity: 0.18, roughness: 0.22 }),
+  };
+  const floor = makeFloor(THREE, parent, L.w, L.d, mats.floor);
+  roomShell(THREE, parent, colliders, L, mats, {
+    front: { x: 13.5, w: 3.4, h: 6.6 },
+  });
+  // Cubicle farm: two columns × three rows, aisles at x≈-8.3 and z=±6.
+  for (const z of [-12, 0, 12]) {
+    cubicle(THREE, parent, colliders, -13.25, z, mats);
+    cubicle(THREE, parent, colliders, -3.75, z, mats);
+  }
+  // Hallway divider — 6.4-unit corridor along +X, doorways at both ends.
+  box(THREE, parent, colliders, 10.15, 0, -21.6, 0.16, 3.7, 2.8, mats.cube);
+  box(THREE, parent, colliders, 10.15, 0, -1.0, 0.16, 3.7, 28.0, mats.cube);
+  box(THREE, parent, colliders, 10.15, 0, 20.8, 0.16, 3.7, 4.4, mats.cube);
+  // Conference table in the open bay.
+  box(THREE, parent, colliders, 4.6, 0, -16.2, 5.6, 1.12, 2.4, mats.wood);
+  officeChair(THREE, parent, colliders, 4.6, -14.4, mats, 0);
+  officeChair(THREE, parent, colliders, 4.6, -18.0, mats, Math.PI);
+  // Reception desk at the hallway door.
+  box(THREE, parent, colliders, 14.2, 0, 18.4, 3.6, 1.25, 1.5, mats.dark);
+  addLight(THREE, parent, lights, 0, 8.2, 0, 0xffe6c4, 95, 40);
+  addLight(THREE, parent, lights, 13.2, 7.8, 10, 0xffe8c8, 55, 24);
+  addLight(THREE, parent, lights, -8, 7.8, -8, 0xffe4c0, 50, 22);
+  return { floor, orbit: MAP_ORBIT.office };
+}
+
+function bleacherBank(THREE, parent, colliders, x0, dir, mats) {
+  // Four stepped slabs. dir = -1 (west) or +1 (east).
+  for (let i = 0; i < 4; i++) {
+    const x = x0 + dir * (i * 1.35);
+    box(THREE, parent, colliders, x, 0, 0, 1.28, 1.05 + i * 1.05, 54, mats.wood);
+  }
+}
+
+function hoop(THREE, parent, colliders, z, face, mats) {
+  const postZ = z + face * 1.15;
+  cyl(THREE, parent, colliders, 0, 0, postZ, 0.14, 0.16, 10.6, mats.metal);
+  box(THREE, parent, colliders, 0, 9.5, postZ + face * 0.22, 3.6, 2.2, 0.14, mats.back);
+  // Rim is visual only so a whoop can fly the hole. Race gates mark the pass.
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.82, 0.06, 8, 20),
+    mats.rim,
+  );
+  rim.rotation.x = Math.PI / 2;
+  rim.position.set(0, 10.5, z);
+  rim.castShadow = rim.receiveShadow = true;
+  parent.add(rim);
+}
+
+function buildGym(THREE, parent, colliders, lights) {
+  const L = LAYOUT.gym;
+  const mats = {
+    wall: mat(THREE, 0xb8b4aa, 'concrete'),
+    ceil: mat(THREE, 0x8a8e94, 'concrete', { emissive: 0xe8f0ff, emissiveIntensity: 0.12 }),
+    floor: mat(THREE, 0x6a4224, 'wood', { map: woodTex(THREE), roughness: 0.7 }),
+    wood: mat(THREE, 0x6a4e32, 'wood'),
+    metal: mat(THREE, 0x5c6570, 'concrete', { metalness: 0.5, roughness: 0.42 }),
+    back: mat(THREE, 0xe8e4dc, 'facade'),
+    rim: mat(THREE, 0xc45a22, 'facade', { metalness: 0.35, roughness: 0.4 }),
+    line: mat(THREE, 0xfff6d8, 'facade', { emissive: 0xfff0c8, emissiveIntensity: 0.35 }),
+  };
+  const floor = makeFloor(THREE, parent, L.w, L.d, mats.floor);
+  roomShell(THREE, parent, colliders, L, mats, {
+    front: { x: 0, w: 8.5, h: 10 },
+  });
+  // Court paint — thin lines only (no filled slab, no colliders).
+  const lt = 0.16, ly = 0.03;
+  box(THREE, parent, colliders, -14, ly, 0, lt, 0.03, 52, mats.line, 0, false);
+  box(THREE, parent, colliders, 14, ly, 0, lt, 0.03, 52, mats.line, 0, false);
+  box(THREE, parent, colliders, 0, ly, -26, 28.16, 0.03, lt, mats.line, 0, false);
+  box(THREE, parent, colliders, 0, ly, 26, 28.16, 0.03, lt, mats.line, 0, false);
+  box(THREE, parent, colliders, 0, ly, 0, 28, 0.03, lt, mats.line, 0, false);
+  for (const z of [20, -20]) {
+    box(THREE, parent, colliders, 0, ly, z, 12.4, 0.03, lt, mats.line, 0, false);
+    box(THREE, parent, colliders, -6.2, ly, z + Math.sign(z) * 3, lt, 0.03, 6.0, mats.line, 0, false);
+    box(THREE, parent, colliders, 6.2, ly, z + Math.sign(z) * 3, lt, 0.03, 6.0, mats.line, 0, false);
+  }
+  const circle = new THREE.Mesh(new THREE.TorusGeometry(4.2, 0.08, 6, 28), mats.line);
+  circle.rotation.x = Math.PI / 2;
+  circle.position.set(0, 0.05, 0);
+  parent.add(circle);
+  bleacherBank(THREE, parent, colliders, -17.4, -1, mats);
+  bleacherBank(THREE, parent, colliders, 17.4, 1, mats);
+  hoop(THREE, parent, colliders, 24.0, 1, mats);
+  hoop(THREE, parent, colliders, -24.0, -1, mats);
+  addLight(THREE, parent, lights, 0, 24, 18, 0xe8f0ff, 240, 90);
+  addLight(THREE, parent, lights, 0, 24, -18, 0xe8f0ff, 220, 90);
+  addLight(THREE, parent, lights, 0, 22, 0, 0xf2f4ff, 160, 80);
+  return { floor, orbit: MAP_ORBIT.gym };
+}
+
+function trainerFrame(THREE, parent, colliders, x, y, z, size, ry, mats) {
+  const t = 0.09, h = size, w = size * 1.15;
+  box(THREE, parent, colliders, x, y, z, t, h, t, mats.pvc, ry);
+  box(THREE, parent, colliders, x + Math.cos(ry) * w, y, z - Math.sin(ry) * w, t, h, t, mats.pvc, ry);
+  box(THREE, parent, colliders, x + Math.cos(ry) * w * 0.5, y + h - t, z - Math.sin(ry) * w * 0.5, w, t, t, mats.pvc, ry);
+}
+
+function buildTrainer(THREE, parent, colliders, lights) {
+  const L = LAYOUT.trainer;
+  const mats = {
+    wall: mat(THREE, 0xc8c4ba, 'facade'),
+    ceil: mat(THREE, 0xddd8ce, 'facade', { emissive: 0xfff2dc, emissiveIntensity: 0.14 }),
+    floor: mat(THREE, 0x8a8680, 'concrete'),
+    wood: mat(THREE, 0x6a4e32, 'wood'),
+    pvc: mat(THREE, 0xf2f0ea, 'facade'),
+    tape: mat(THREE, 0xc45a22, 'facade'),
+    dark: mat(THREE, 0x2a2c32, 'concrete'),
+  };
+  const floor = makeFloor(THREE, parent, L.w, L.d, mats.floor);
+  roomShell(THREE, parent, colliders, L, mats, {
+    front: { x: 0, w: 3.6, h: 6.6 },
+  });
+  // Floor tape — classic Tiny Trainer grid, no colliders.
+  for (const z of [-10, 0, 10]) {
+    box(THREE, parent, colliders, 0, 0.02, z, 18, 0.03, 0.12, mats.tape, 0, false);
+  }
+  for (const x of [-6, 0, 6]) {
+    box(THREE, parent, colliders, x, 0.02, 0, 0.12, 0.03, 24, mats.tape, 0, false);
+  }
+  // Bench + stacked spare frames against -X (bounce/drafts still hit these).
+  box(THREE, parent, colliders, -12.2, 0, 0, 1.6, 1.15, 8.4, mats.wood);
+  trainerFrame(THREE, parent, colliders, -12.2, 1.15, -2.4, 1.7, 0, mats);
+  trainerFrame(THREE, parent, colliders, -12.2, 1.15, 1.2, 1.7, 0, mats);
+  box(THREE, parent, colliders, 12.2, 0, -12.4, 1.4, 2.2, 3.2, mats.dark);
+  addLight(THREE, parent, lights, 0, 9.2, 6, 0xffe8c8, 90, 36);
+  addLight(THREE, parent, lights, 0, 9.2, -8, 0xffe8c8, 80, 34);
+  return { floor, orbit: MAP_ORBIT.trainer };
+}
+
+function buildRoom(THREE, parent, colliders, lights, spec) {
+  const plan = planRoom(spec);
+  const L = { w: plan.w, d: plan.d, h: plan.h, wall: plan.wall };
+  const mats = {
+    wall: mat(THREE, 0xd8d2c6, 'facade'),
+    ceil: mat(THREE, 0xeee8de, 'facade', { emissive: 0xfff4e0, emissiveIntensity: 0.16 }),
+    wood: mat(THREE, 0x7a5130, 'wood', { map: woodTex(THREE), roughness: 0.72 }),
+    dark: mat(THREE, 0x2a2c32, 'concrete'),
+    sofa: mat(THREE, 0x4a5a6a, 'facade'),
+    cloth: mat(THREE, 0x6a4a38, 'facade'),
+  };
+  const floor = makeFloor(THREE, parent, L.w, L.d, mats.wood);
+  floor.userData.looksSet = 'wood';
+  roomShell(THREE, parent, colliders, L, mats, {
+    front: { x: 0, w: Math.min(2.8, L.w * 0.28), h: Math.min(6.4, L.h * 0.78) },
+  });
+  for (const item of plan.furniture) {
+    const m = item.kind === 'sofa' || item.kind === 'chair' ? mats.sofa
+      : item.kind === 'bed' ? mats.cloth
+      : item.kind === 'desk' || item.kind === 'dresser' || item.kind === 'nightstand' ? mats.wood
+      : mats.dark;
+    box(THREE, parent, colliders, item.x, item.y, item.z, item.w, item.h, item.d, m, item.ry);
+  }
+  addLight(THREE, parent, lights, 0, plan.h - 0.9, 0, 0xffe6c4, 70, Math.max(16, plan.w));
+  addLight(THREE, parent, lights, plan.w * 0.22, plan.h * 0.62, -plan.d * 0.18, 0xffd9a0, 28, 14);
+  return { floor, orbit: plan.orbit || MAP_ORBIT.room, plan };
+}
+
 const BUILDERS = {
   living: buildLiving,
   garage: buildGarage,
   warehouse: buildWarehouse,
   backyard: buildBackyard,
+  office: buildOffice,
+  gym: buildGym,
+  trainer: buildTrainer,
+  room: buildRoom,
 };
 
-export function buildMap(THREE, mapId) {
+export function buildMap(THREE, mapId, opts) {
   const group = new THREE.Group();
   group.name = 'map_' + mapId;
   const colliders = [];
   const lights = [];
   const builder = BUILDERS[mapId];
   if (!builder) return { group, colliders, lights, floor: null, orbit: MAP_ORBIT.city, mapId };
-  const extra = builder(THREE, group, colliders, lights) || {};
+  const extra = mapId === 'room'
+    ? builder(THREE, group, colliders, lights, opts && opts.room)
+    : (builder(THREE, group, colliders, lights) || {});
   return {
     group, colliders, lights,
     floor: extra.floor || null,
     orbit: extra.orbit || MAP_ORBIT[mapId] || MAP_ORBIT.city,
     mapId,
+    plan: extra.plan || null,
   };
 }
 

@@ -15,6 +15,10 @@ export const LOOK_SPOTS = {
   garage: { pos: [0, 5.2, 12], target: [2, 2.2, -6] },
   warehouse: { pos: [0, 7.5, 36], target: [0, 3.2, -8] },
   backyard: { pos: [0, 8, 22], target: [0, 2, -8] },
+  office: { pos: [12.2, 4.6, 16.4], target: [-6, 1.4, -6] },
+  gym: { pos: [9.2, 8.2, 18], target: [0, 2.6, -12] },
+  trainer: { pos: [8, 6.2, 14], target: [0, 1.6, -4] },
+  room: { pos: [3.4, 4.2, 6.2], target: [-1, 1.2, -2] },
   builder: { pos: [0, 14, 0.1], target: [0, 0, 0] },
 };
 

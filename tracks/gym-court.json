@@ -1,0 +1,18 @@
+{
+  "id": "gym-court",
+  "map": "gym",
+  "name": "Court Loop",
+  "class": "whoop",
+  "gates": [
+    { "x": 0.0, "y": 2.6, "z": 28.0, "ry": 0.00, "size": 2.0, "solid": true },
+    { "x": -10.0, "y": 2.4, "z": 16.0, "ry": 0.20, "size": 1.9, "solid": true },
+    { "x": -10.0, "y": 2.4, "z": -16.0, "ry": 0.00, "size": 1.9, "solid": true },
+    { "x": 0.0, "y": 2.6, "z": -28.0, "ry": 1.57, "size": 2.0, "solid": true },
+    { "x": 10.0, "y": 2.4, "z": -16.0, "ry": 3.14, "size": 1.9, "solid": true },
+    { "x": 10.0, "y": 2.4, "z": 16.0, "ry": 3.00, "size": 1.9, "solid": true },
+    { "x": 0.0, "y": 2.6, "z": 20.0, "ry": 3.14, "size": 2.0, "solid": true }
+  ],
+  "flags": [
+    { "x": 0.0, "y": 3.2, "z": 0.0, "ry": 0 }
+  ]
+}

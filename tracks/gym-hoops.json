@@ -1,0 +1,20 @@
+{
+  "id": "gym-hoops",
+  "map": "gym",
+  "name": "Hoop Dive",
+  "class": "whoop",
+  "gates": [
+    { "x": 0.0, "y": 2.8, "z": 30.0, "ry": 0.00, "size": 2.0, "solid": true },
+    { "x": 0.0, "y": 10.5, "z": 23.2, "ry": 0.00, "size": 1.7, "solid": true },
+    { "x": -8.0, "y": 6.2, "z": 8.0, "ry": 0.40, "size": 1.8, "solid": true },
+    { "x": 0.0, "y": 14.0, "z": 0.0, "ry": 1.57, "size": 1.8, "solid": true },
+    { "x": 8.0, "y": 6.2, "z": -8.0, "ry": 2.70, "size": 1.8, "solid": true },
+    { "x": 0.0, "y": 10.5, "z": -23.2, "ry": 3.14, "size": 1.7, "solid": true },
+    { "x": 0.0, "y": 2.8, "z": -30.0, "ry": 3.14, "size": 2.0, "solid": true },
+    { "x": 10.0, "y": 2.6, "z": 0.0, "ry": -1.57, "size": 1.9, "solid": true },
+    { "x": 0.0, "y": 2.8, "z": 22.0, "ry": 3.14, "size": 2.0, "solid": true }
+  ],
+  "flags": [
+    { "x": 0.0, "y": 11.2, "z": 0.0, "ry": 0 }
+  ]
+}

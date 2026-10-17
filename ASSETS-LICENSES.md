@@ -57,6 +57,10 @@ Used only for numeric readouts (OSD values, sliders, CLI/ghost fields).
 | Kenney City Kit GLBs under `assets/Models/` | CC0 (`assets/License.txt`) | Kenney (www.kenney.nl) |
 | `assets/Models/GLB-format/low_poly_city_game-ready.glb` | CC BY 4.0 | **City model by costoWRLD (Sketchfab, CC BY)** — kept in the sim footer |
 
+## W3 indoor maps (no new binary textures)
+
+Office, school gym, Tiny Trainer hall, and Your-room are procedural boxes/cylinders that reuse the same V1 Poly Haven PBR sets (concrete, plaster facade, wood canvas + plaster normal). No new downloads. No WebFPV assets, layouts, or code. Track JSON lives in `tracks/`. Hosted pace ghosts for the new courses are synthetic splines in `ghosts/<track-id>.json`. Your-room dimensions persist in `localStorage` key `quadmathSimRoom` only.
+
 ## M2 maps / tracks (no new binary textures)
 
 Indoor whoop maps are procedural boxes that reuse the V1 Poly Haven PBR sets above (concrete, plaster facade, grass, asphalt). Wood floors are a canvas albedo plus the plaster normal/roughness on Med/High. No WebFPV assets, layouts, or code. Track JSON lives in `tracks/`. Hosted pace ghosts for new courses are synthetic splines in `ghosts/<track-id>.json` (city `ghosts/track_{0,1}.json` unchanged).
