@@ -20,6 +20,7 @@ Swap `build`, `track`, and `mode`:
 | `build` | Share code. Named presets (`QB1.air65`) or full `QB1.65-23000-31x3-1s300-27`. |
 | `track` | Course id (`living-sofa`, `office-cubicles`, `gym-court`, `trainer-figure8`, `city-loop`, `0` / `1` for legacy city). |
 | `mode` | `angle` (default for newcomers), `horizon`, or `acro`. |
+| `drill` | W4 Coach id (`hover-hold`, `yaw-spin`, `straight-line`, `gate-pass`, `doorway-pass`, `split-s`, `power-loop`). Bronze on the previous drill unlocks the next. |
 
 Copy the live code from Tune → Your build → COPY BUILD LINK.
 

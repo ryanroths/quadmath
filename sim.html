@@ -197,7 +197,7 @@
   .menu-layer ol{padding-left:18px}
   .menu-layer button{width:auto;margin-top:12px}
   body.menu-open #legend,body.menu-open #audioHint,body.menu-open #gear,body.menu-open #fpsHud,
-    body.menu-open .osd,body.menu-open #feelHud,body.menu-open #feelTutorial{opacity:0}
+    body.menu-open .osd,body.menu-open #feelHud,body.menu-open #feelTutorial,body.menu-open #coachHud{opacity:0}
   body:has(#panel.open) #feelHud{opacity:0}
   .seg{display:flex;gap:6px;margin-bottom:10px}
   #radioPreset,#droneType,#ratesType,#ratePreset,#fpvStyle,#qualityPanel{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
@@ -233,7 +233,7 @@
   #builderList li{cursor:pointer;padding:2px 0}
   #builderList li.on{color:var(--orange)}
   body.builder-on #legend,body.builder-on #audioHint,body.builder-on #gear,body.builder-on #fpsHud,
-  body.builder-on .osd,body.builder-on #startMenu,body.builder-on #feelHud,body.builder-on #feelTutorial{opacity:0;pointer-events:none}
+  body.builder-on .osd,body.builder-on #startMenu,body.builder-on #feelHud,body.builder-on #feelTutorial,body.builder-on #coachHud{opacity:0;pointer-events:none}
   #calib{z-index:28}
   #feelPrompt{position:fixed;inset:0;z-index:26;display:none;align-items:center;justify-content:center;
     padding:32px;background:rgba(8,10,14,.45)}
@@ -262,6 +262,33 @@
   .build-note{font-size:11px;color:var(--dim);line-height:1.45;margin:0 0 8px}
   #buildCode{width:100%;min-height:44px;background:rgba(8,9,12,.55);border:1px solid var(--line);color:var(--txt);
     font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;padding:8px;border-radius:10px;margin-bottom:8px}
+  /* W4 Coach — same glass card as How-to / tutorial, isolated from race chrome */
+  #coachHud{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:13;display:none;
+    width:min(440px,92vw);padding:14px 16px;background:var(--glass);border:1px solid var(--line);
+    border-radius:16px;backdrop-filter:blur(16px);text-align:center;pointer-events:auto}
+  #coachHud.show{display:block}
+  #coachTitle{font-size:15px;font-weight:700;margin-bottom:6px}
+  #coachMsg{font-size:13px;color:var(--txt);margin-bottom:6px;line-height:1.45}
+  #coachMeta{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:var(--dim);margin-bottom:4px}
+  #coachDelta{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:18px;font-weight:700;color:var(--dim);min-height:1.2em}
+  #coachDelta.ahead{color:var(--green)}
+  #coachDelta.behind{color:var(--orange)}
+  #coachTips{display:flex;flex-direction:column;gap:6px;margin:8px 0;text-align:left}
+  #coachTips a{color:var(--green);font-size:12px;line-height:1.4;text-decoration:none}
+  #coachTips a:hover{color:var(--orange)}
+  #coachActions{display:none;margin-top:6px}
+  #coachActions button{width:auto;display:inline-block;margin:4px 6px}
+  .coach-list{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+  .coach-row{width:100%;text-align:left;display:flex;justify-content:space-between;gap:10px;align-items:center}
+  .coach-row b{display:block;font-size:13px;color:var(--txt)}
+  .coach-row i{display:block;font-style:normal;font-size:11px;color:var(--dim);margin-top:2px}
+  .coach-row.locked{opacity:.45;cursor:not-allowed}
+  .coach-medal{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:var(--dim);white-space:nowrap}
+  .coach-medal.bronze{color:#d08a4a}
+  .coach-medal.silver{color:#d5d8e0}
+  .coach-medal.gold{color:#f0c14b}
+  .coach-toggle{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);margin:8px 0}
+  .coach-toggle input{accent-color:var(--orange)}
 </style>
 </head>
 <body class="menu-open">
@@ -273,6 +300,7 @@
     <p class="menu-lead">Browser FPV whoop sim. Paste your Betaflight rates. No install.</p>
     <button class="primary" id="menuFly">Fly</button>
     <button id="menuTracks">Tracks</button>
+    <button id="menuCoach">Coach</button>
     <button id="menuRoom">Your room</button>
     <button id="menuBuild">Your build</button>
     <button id="menuBuilder">Track builder</button>
@@ -362,6 +390,7 @@
   <b>Space — Arm / Disarm</b><br>
   <b>H — Stick HUD</b><br>
   <b id="legendGhost">G — Ghost Replay</b><br>
+  <b>C — Coach / line</b><br>
   <b>R — Respawn last gate</b><br>
   <b>TAB — Tune Panel</b>
 </div>
@@ -380,6 +409,18 @@
   <div id="feelTutMsg">Tutorial</div>
   <button type="button" id="feelTutSkip">Skip</button>
   <button type="button" class="primary" id="feelTutLap" style="display:none">Now try a lap</button>
+</div>
+<div id="coachHud">
+  <div id="coachTitle">Coach</div>
+  <div id="coachMsg">Short scored drill.</div>
+  <div id="coachMeta"></div>
+  <div id="coachDelta"></div>
+  <div id="coachTips"></div>
+  <div id="coachActions">
+    <button type="button" id="coachRetry">Retry</button>
+    <button type="button" class="primary" id="coachNext">Next</button>
+    <button type="button" id="coachExit">Menu</button>
+  </div>
 </div>
 
 <div id="calib">
@@ -552,7 +593,7 @@
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
     <b>R</b> last-gate respawn &nbsp;<b>Tab</b> panel<br>
     🔊 <b>M</b> music &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
-    <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost
+    <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach
   </div>
   <button id="btnReset">RESET QUAD [R]</button>
 </div>
@@ -638,6 +679,9 @@ import {
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
   loadBuild, saveBuild, buildDeepLink, matchPresetId, classDefault,
 } from "./sim-build.js?v=6264dd38e42a";
+import {
+  COACH_KEY, createCoach, drillById, roomDoorway,
+} from "./sim-coach.js?v=b7edfc0734bd";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, not statically: a static import failure aborts
 // the whole module and takes the sim with it. Loaded this way, an addon/CDN failure
@@ -740,6 +784,7 @@ const camera=new THREE.PerspectiveCamera(CFG.fov,(canvas.clientWidth||1)/(canvas
 let composer=null,bloomPass=null;   // set once the looks post chain finishes
 let looks=null;
 let feel=null;
+let coach=null;
 function resize(){
   const w=canvas.clientWidth||1,h=canvas.clientHeight||1;
   renderer.setSize(w,h,false);
@@ -1182,6 +1227,7 @@ function liveTrackIds(){
   return ids;
 }
 function updateGates(){
+  if(coach&&coach.isActive()){beacon.visible=false;return;}
   if(!gates.length||builderOn)return;
   // Proximity track selection when idle: with no run active, make whichever
   // track's gate 0 is nearest the quad the active track, so its START lights
@@ -2576,6 +2622,7 @@ function applyDuctHit(s,normal,into,floorHit){
   if(hit.crashed){
     bounce();
     camShake=Math.max(camShake,Math.min(1.4,into/16));
+    if(coach&&coach.isActive())coach.noteCrash();
   }else{
     camShake=Math.max(camShake,Math.min(0.45,into/28));
   }
@@ -2700,8 +2747,15 @@ function placeQuadAt(x,y,z,yaw){
 function resetQuad(){
   // Crash / flip recovery: R respawns at the last passed JSON-track gate and
   // keeps gate-progress (nextGateIndex / run / splits). Tutorial has its own pad.
+  // Coach drills respawn on their pad and do not start a race ghost.
   // No last gate → map start (city historic pad, indoor startPad).
   const tut=feel&&feel.isTutorial();
+  if(coach&&coach.isActive()){
+    const p=coach.spawn();
+    if(p)placeQuadAt(p.x,p.y,p.z,p.yaw);
+    toast('DRILL RESET');
+    return;
+  }
   const hasGate=!!lastPassedGate&&!tut;
   if(tut){
     const p=feel.spawnForTutorial();
@@ -3097,7 +3151,13 @@ addEventListener('keydown',e=>{
     if(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E'){e.preventDefault();document.getElementById('builderRot').click();return;}
     return;
   }
-  if(e.key==='Escape'){e.preventDefault();if(builderOn){closeBuilder();return;}toggleStartMenu();return;}
+  if(e.key==='Escape'){
+    e.preventDefault();
+    if(builderOn){closeBuilder();return;}
+    if(coach&&coach.isActive())coach.cancel();
+    toggleStartMenu();
+    return;
+  }
   if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
   if(e.code==='Space'){e.preventDefault();toggleArm();return;}
   keys[e.key.toLowerCase()]=true;
@@ -3113,6 +3173,10 @@ addEventListener('keydown',e=>{
   if(e.key.toLowerCase()==='g'){
     if(!ghostAvailable()){toast('NO GHOST YET — FINISH A RUN');return;}
     ghostVisible=!ghostVisible;toast(ghostVisible?'GHOST ON':'GHOST OFF');
+  }
+  if(e.key.toLowerCase()==='c'){
+    if(coach&&coach.isActive()){coach.toggleRibbon();return;}
+    openCoachPicker();
   }
   if(e.key.toLowerCase()==='l'){
     if(!shadowHelper){shadowHelper=new THREE.CameraHelper(sun.shadow.camera);shadowHelper.visible=false;scene.add(shadowHelper);}
@@ -3948,6 +4012,8 @@ function wireLooksUI(){
   if(fly)fly.onclick=()=>{hideMenuLayer();toggleStartMenu(false);sessionLive=true;toast('Space to arm. 1/2/3 = mode.');};
   document.getElementById('menuTune').onclick=()=>{hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');syncBuildUI();};
   document.getElementById('menuTracks').onclick=()=>openTrackPicker();
+  const btnCoach=document.getElementById('menuCoach');
+  if(btnCoach)btnCoach.onclick=()=>openCoachPicker();
   const btnRoom=document.getElementById('menuRoom');
   if(btnRoom)btnRoom.onclick=()=>openTrackPicker('room');
   const btnBuild=document.getElementById('menuBuild');
@@ -3960,7 +4026,7 @@ function wireLooksUI(){
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
       '<span class="n">R</span> last-gate respawn · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
       '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro<br>'+
-      '<span class="n">H</span> HUD · <span class="n">M</span> music · <span class="n">G</span> ghost</p>'+
+      '<span class="n">H</span> HUD · <span class="n">M</span> music · <span class="n">G</span> ghost · <span class="n">C</span> coach</p>'+
       '<button type="button" id="layerClose">Close</button>');
     document.getElementById('layerClose').onclick=hideMenuLayer;
   };
@@ -3970,6 +4036,7 @@ function wireLooksUI(){
       '<li>How to → Start tutorial: hover, three gates, land (about two minutes, skippable).</li>'+
       '<li>R respawns at the last gate you passed. H toggles the stick HUD.</li>'+
       '<li>Fly the lit gate. A 3-lap run starts at gate 1. Splits per gate; missed gates add +2.0s.</li>'+
+      '<li>Coach: short scored drills (hover, line, gates, doorway, split-S, loop). Bronze unlocks the next.</li>'+
       '<li>Tab opens Tune — paste a Betaflight CLI dump. Rate presets do not overwrite a saved tune until you pick one.</li>'+
       '</ol>'+
       '<button type="button" class="primary" id="feelStartTut">Start tutorial</button>'+
@@ -4911,6 +4978,15 @@ function loop(now){
       const att=qp.attitude;
       feel.noteFlip(Math.abs(att.roll)>2.0||Math.abs(att.pitch)>2.0);
     }
+    if(coach&&coach.isActive()){
+      coach.tick(state,dt,{
+        armed:qp.armed,
+        mode:qp.flightMode,
+        attitude:qp.attitude,
+        throttle:stick.t,
+        crashed:false,
+      });
+    }
   }
   updateCamera();
   // composer is null until the post chain resolves, and stays null if the
@@ -4924,6 +5000,7 @@ looksReady.then(function(l){
 });
 function launchTutorial(){
   if(!feel)return;
+  if(coach&&coach.isActive())coach.cancel();
   hideMenuLayer();
   toggleStartMenu(false);
   sessionLive=true;
@@ -4931,6 +5008,53 @@ function launchTutorial(){
   const p=feel.startTutorial();
   lastPassedGate=null;
   placeQuadAt(p.x,p.y,p.z,p.yaw);
+}
+function coachRoomOpts(){
+  const plan=planRoom(currentRoom);
+  return {room:plan,doorway:roomDoorway(plan)};
+}
+function launchCoachDrill(id){
+  if(!coach)return;
+  if(feel&&feel.isTutorial&&feel.isTutorial()){
+    if(feel.skipTutorial)feel.skipTutorial();
+  }
+  const d=drillById(id);
+  if(!d)return;
+  hideMenuLayer();
+  toggleStartMenu(false);
+  sessionLive=true;
+  runActive=false;
+  clearGhostRec();
+  nextGateIndex=0;
+  lastPassedGate=null;
+  if(d.preferMode==='acro'&&qp.flightMode==='angle'){
+    toast('ACRO RECOMMENDED — PRESS 3');
+  }else if(d.preferMode==='angle'&&qp.flightMode==='acro'){
+    toast('ANGLE IS EASIER — PRESS 1');
+  }
+  setMap(d.map,d.track);
+  const opts=Object.assign({
+    mode:qp.flightMode||d.preferMode,
+    input:gpConnected?'radio':'keyboard',
+    gates:d.id==='gate-pass'&&currentTrackObj?currentTrackObj.gates:null,
+  },d.map==='room'?coachRoomOpts():{});
+  const p=coach.startDrill(id,opts);
+  if(!p){openCoachPicker();return;}
+  placeQuadAt(p.x,p.y,p.z,p.yaw);
+}
+function openCoachPicker(){
+  if(!coach)return;
+  toggleStartMenu(true);
+  showMenuLayer(coach.ladderHtml());
+  const layer=document.getElementById('menuLayer');
+  if(layer)layer.classList.add('wide');
+  document.querySelectorAll('.coach-row[data-drill]').forEach(b=>{
+    b.onclick=()=>launchCoachDrill(b.dataset.drill);
+  });
+  const rb=document.getElementById('coachRibbon');
+  if(rb)rb.onchange=()=>coach.setRibbon(rb.checked);
+  const close=document.getElementById('layerClose');
+  if(close)close.onclick=hideMenuLayer;
 }
 feel=createFeel({
   THREE,scene,toast,decorateGate,LIGHTING,
@@ -4948,6 +5072,28 @@ feel=createFeel({
   },
   onSkipTutorial(){toast('TUTORIAL SKIPPED');},
 });
+coach=createCoach({
+  THREE,scene,toast,decorateGate,LIGHTING,
+  onPrepare(){runActive=false;clearGhostRec();},
+  onFinished(){},
+  onCancel(){},
+});
+window._coach=coach;
+const coachRetry=document.getElementById('coachRetry');
+if(coachRetry)coachRetry.onclick=()=>{
+  const id=coach.currentId();
+  if(id)launchCoachDrill(id);
+};
+const coachNext=document.getElementById('coachNext');
+if(coachNext)coachNext.onclick=()=>{
+  const id=coach.currentId();
+  const order=['hover-hold','yaw-spin','straight-line','gate-pass','doorway-pass','split-s','power-loop'];
+  const next=order[order.indexOf(id)+1];
+  if(next)launchCoachDrill(next);
+  else{coach.cancel();openCoachPicker();}
+};
+const coachExit=document.getElementById('coachExit');
+if(coachExit)coachExit.onclick=()=>{coach.cancel();openCoachPicker();};
 feel.fillRatePresetSelect(document.getElementById('ratePreset'));
 document.getElementById('ratePreset').onchange=function(){
   if(!this.value)return;
@@ -4988,7 +5134,11 @@ function applyQueryBoot(){
   if(modeRaw==='angle'||modeRaw==='horizon'||modeRaw==='acro'){
     setFlightMode(modeRaw);flightMode=modeRaw;
   }
-  if((map||trackRaw||buildRaw||modeRaw)&&q.get('menu')!=='1')toggleStartMenu(false);
+  const drillRaw=q.get('drill');
+  if(drillRaw&&drillById(drillRaw)){
+    launchCoachDrill(drillRaw);
+  }
+  if((map||trackRaw||buildRaw||modeRaw||drillRaw)&&q.get('menu')!=='1')toggleStartMenu(false);
   if(q.get('look')&&looks)looks.setLookSpot(q.get('look'));
   if(q.get('quality')&&looks)looks.setQuality(q.get('quality'));
   if(q.get('builder')==='1'){toggleStartMenu(false);openBuilder();}
@@ -5013,7 +5163,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
   QUALITY_KEY,FLOATINESS_KEY,  setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
-  encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,applyRoomSpec,planRoom});
+  encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,applyRoomSpec,planRoom});
 </script>
 <!-- Flattened to single-line spans so the whole thing fits the fixed 14px bar.
      The .container wrappers and the opacity:.6 on the credit are gone: the
