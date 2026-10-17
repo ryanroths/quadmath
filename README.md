@@ -56,6 +56,7 @@ index.html            calculator + bench table
 sim.html              flight simulator
 quadphysics.js        sim physics module
 sim-whoop.js          W2 whoop feel (bounce, wash, sag, drafts)
+sim-coach.js          W4 Coach drills, medals, ghost line, guide tips
 tune-database.*       tune DB page + logic
 data/bench/           measured build data (JSON)
 content/guides/       build guides

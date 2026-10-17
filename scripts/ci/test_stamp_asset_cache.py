@@ -83,6 +83,7 @@ class StampHtmlText(unittest.TestCase):
             "sim-maps.js": "e4e4e4e4e4e4",
             "sim-tracks.js": "f5f5f5f5f5f5",
             "sim-room.js": "a6a6a6a6a6a6",
+            "sim-coach.js": "b7b7b7b7b7b7",
             "vendor/three.module.min.js": "abc123abc123",
         }
 
