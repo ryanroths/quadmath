@@ -8,7 +8,9 @@ import { dirname, join } from 'node:path';
 import {
   QuadPhysics, PRESETS, FLIGHT_MODES, ANGLE_MAX_DEG, ANGLE_P, attitudeOf,
   PHYSICS_HZ_DEFAULT, PHYSICS_HZ_FAST, PHYSICS_HZ_LEGACY, FLOATINESS_DEFAULT,
+  REVERSE_THRUST_SCALE,
 } from '../quadphysics.js';
+import { mapThrottle3d, THREED_DEADBAND } from '../sim-3d.js';
 import { RATE_PRESETS, applyRatePreset, INPUT_CHOICE_KEY, FLOATINESS_KEY } from '../sim-feel.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -209,6 +211,65 @@ test('floatiness default is tighter than the old 1.0 coast', () => {
   assert.equal(FLOATINESS_KEY, 'quadmathSimFloatiness');
   assert.ok(feelSrc.includes('quadmathSimFloatiness'));
   assert.ok(simSrc.includes('s_float'));
+});
+
+test('3D mixer has no idle at center and reverses below center', () => {
+  const qp = new QuadPhysics(PRESETS.whoop65);
+  qp.setFlightMode('acro');
+  qp.setThreeD(true);
+  qp.reset({ x: 0, y: 0, z: 2 });
+  qp.arm();
+  run(qp, 0.25, { r: 0, p: 0, y: 0 }, { roll: 0, pitch: 0, yaw: 0 }, 0);
+  const idle = Math.max(...qp.motorOutputs.map((v) => Math.abs(v)));
+  assert.ok(idle < 0.03, `3D center still spinning ${idle}`);
+  assert.ok(Math.abs(qp.totalThrustN) < 0.01, `center thrust ${qp.totalThrustN}`);
+
+  const up = new QuadPhysics(PRESETS.whoop65);
+  up.setFlightMode('acro');
+  up.setThreeD(true);
+  up.reset({ x: 0, y: 0, z: 2 });
+  up.arm();
+  run(up, 0.35, { r: 0, p: 0, y: 0 }, { roll: 0, pitch: 0, yaw: 0 }, mapThrottle3d(0.9));
+  assert.ok(up.motorOutputs.every((v) => v > 0.2), `expected forward spin ${up.motorOutputs}`);
+  assert.ok(up.totalThrustN > 0.05, `forward thrust ${up.totalThrustN}`);
+
+  const dn = new QuadPhysics(PRESETS.whoop65);
+  dn.setFlightMode('acro');
+  dn.setThreeD(true);
+  dn.reset({ x: 0, y: 0, z: 2 });
+  dn.arm();
+  run(dn, 0.35, { r: 0, p: 0, y: 0 }, { roll: 0, pitch: 0, yaw: 0 }, mapThrottle3d(0.1));
+  assert.ok(dn.motorOutputs.every((v) => v < -0.2), `expected reverse spin ${dn.motorOutputs}`);
+  assert.ok(dn.totalThrustN < -0.04, `reverse thrust ${dn.totalThrustN}`);
+  assert.ok(Math.abs(dn.totalThrustN) < up.totalThrustN * 1.05,
+    'reverse should not be stronger than the same curve forward');
+  assert.equal(REVERSE_THRUST_SCALE, 0.85);
+  assert.ok(THREED_DEADBAND > 0 && THREED_DEADBAND < 0.2);
+});
+
+test('3D reverse thrust can hold inverted (acro)', () => {
+  const qp = new QuadPhysics(PRESETS.whoop65);
+  qp.setFlightMode('acro');
+  qp.setThreeD(true);
+  qp.reset({ x: 0, y: 0, z: 3 });
+  const s = Math.sin(Math.PI / 2);
+  qp.quaternion = { x: s, y: 0, z: 0, w: 0 }; // 180° roll, body +Z is world -Z
+  qp.arm();
+  const thr = mapThrottle3d(0.12); // below center → reverse → world +Z when inverted
+  assert.ok(thr < 0, `mapped reverse ${thr}`);
+  run(qp, 0.9, { r: 0, p: 0, y: 0 }, { roll: 0, pitch: 0, yaw: 0 }, thr);
+  assert.ok(qp.velocity.z > -0.5, `inverted reverse should lift, vz=${qp.velocity.z.toFixed(2)}`);
+  assert.ok(qp.position.z > 1.5, `dropped through the floor z=${qp.position.z.toFixed(2)}`);
+});
+
+test('2D idle floor is unchanged when 3D is off', () => {
+  const qp = new QuadPhysics(PRESETS.whoop65);
+  qp.setFlightMode('acro');
+  qp.reset({ x: 0, y: 0, z: 2 });
+  qp.arm();
+  run(qp, 0.25, { r: 0, p: 0, y: 0 }, { roll: 0, pitch: 0, yaw: 0 }, 0);
+  const min = Math.min(...qp.motorOutputs);
+  assert.ok(min > 0.04, `2D idle missing, motors ${qp.motorOutputs}`);
 });
 
 test('hosted v1 ghosts are kinematic pose tracks (physics Hz does not gate them)', () => {

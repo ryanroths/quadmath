@@ -136,6 +136,14 @@ test('anti-cheat accepts a 3-lap pace ghost and rejects speed / incomplete / spa
   const mismatch = validateSubmittedRun({ ghost, track, frameMm: 65, timeMs: 9000 });
   assert.equal(mismatch.ok, false);
   assert.equal(mismatch.reason, 'TIME MISMATCH');
+
+  const tagged = Object.assign({}, ghost, { threeD: true });
+  const d3 = validateSubmittedRun({ ghost: tagged, track, frameMm: 65, timeMs: ghost.lapTime });
+  assert.equal(d3.ok, false);
+  assert.equal(d3.reason, '3D MODE');
+  const flag = validateSubmittedRun({ ghost, track, frameMm: 65, timeMs: ghost.lapTime, threeD: true });
+  assert.equal(flag.ok, false);
+  assert.equal(flag.reason, '3D MODE');
 });
 
 test('anti-cheat class speed limits follow W1 65/75/85', () => {

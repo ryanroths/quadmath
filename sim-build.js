@@ -270,12 +270,13 @@ export function saveBuild(build, storage) {
   } catch (e) { /* ignore quota / private mode */ }
 }
 
-export function buildDeepLink({ origin, build, track, mode } = {}) {
+export function buildDeepLink({ origin, build, track, mode, threeD } = {}) {
   const base = origin || 'https://quadmath.com';
   const u = new URL('/sim.html', base.endsWith('/') ? base : base + '/');
   if (build) u.searchParams.set('build', encodeBuild(build));
   if (track != null && track !== '') u.searchParams.set('track', String(track));
   if (mode) u.searchParams.set('mode', String(mode).toLowerCase());
+  if (threeD) u.searchParams.set('3d', '1');
   return u.toString();
 }
 

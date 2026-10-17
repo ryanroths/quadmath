@@ -118,7 +118,7 @@ function stepCopy(step) {
 export function createFeel(ctx) {
   const {
     THREE, scene, toast, decorateGate, LIGHTING,
-    onCalibrate, onKeyboard, onTouch, onTryLap, onSkipTutorial, onToggleAcro,
+    onCalibrate, onKeyboard, onTouch, onTryLap, onSkipTutorial, onToggleAcro, onToggleThreeD,
   } = ctx;
 
   let hudVisible = true;
@@ -150,6 +150,13 @@ export function createFeel(ctx) {
       if (onToggleAcro) onToggleAcro();
     };
   }
+  const hud3dBtn = document.getElementById('hud3d');
+  if (hud3dBtn) {
+    hud3dBtn.onclick = function (e) {
+      e.preventDefault();
+      if (onToggleThreeD) onToggleThreeD();
+    };
+  }
 
   function updateHud(s) {
     if (!hudEl || !hudVisible) return;
@@ -162,7 +169,10 @@ export function createFeel(ctx) {
       dotR.style.left = (50 + st.r * 42) + '%';
       dotR.style.top = (50 - st.p * 42) + '%';
     }
-    if (hudThr) hudThr.textContent = 'THR ' + ((st.t * 100) | 0) + '%';
+    if (hudThr) {
+      if (s.thrText) hudThr.textContent = s.thrText;
+      else hudThr.textContent = 'THR ' + ((st.t * 100) | 0) + '%';
+    }
     if (hudBatt) {
       hudBatt.textContent = s.battOn ? ('BATT ' + Number(s.battV).toFixed(2) + 'V') : 'BATT OFF';
     }
@@ -177,6 +187,13 @@ export function createFeel(ctx) {
       const mode = String(s.mode || 'angle').toLowerCase();
       acro.textContent = mode === 'acro' ? 'ANGLE' : 'ACRO';
       acro.classList.toggle('on', mode === 'acro');
+    }
+    const hud3d = document.getElementById('hud3d');
+    if (hud3d) {
+      const on = !!s.threeD;
+      hud3d.textContent = '3D';
+      hud3d.classList.toggle('on', on);
+      hud3d.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
   }
 

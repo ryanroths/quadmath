@@ -210,19 +210,31 @@ export function createTouchControls(ctx) {
     root, onArm, onMode, onRespawn, onChange, settings: initial,
   } = ctx || {};
   let settings = normalizeTouch(initial);
+  let threeD = !!(ctx && ctx.threeD);
   const state = {
-    left: { x: 0, y: settings.thrSpring || settings.mode === 1 ? 0 : -1 },
+    left: { x: 0, y: 0 },
     right: { x: 0, y: 0 },
     active: { L: null, R: null },
     enabled: false,
   };
-  if (settings.mode === 1 && !settings.thrSpring) state.right.y = -1;
 
   function holdYFor(side) {
     if (settings.thrSpring) return false;
     if (settings.mode === 2) return side === 'L';
     return side === 'R';
   }
+
+  // 2D throttle rests at the bottom (zero). 3D rests at center (zero thrust).
+  // thrSpring already centers; 3D without spring still HOLDS last Y on release
+  // (a 3D radio has a center detent, not a spring).
+  function restY(side) {
+    if (settings.thrSpring) return 0;
+    if (holdYFor(side)) return threeD ? 0 : -1;
+    return 0;
+  }
+
+  state.left.y = restY('L');
+  state.right.y = restY('R');
 
   function shaped() {
     const dz = settings.deadzone;
@@ -266,6 +278,21 @@ export function createTouchControls(ctx) {
     return settings;
   }
   applySettings(settings);
+
+  function snapIdleThrottle() {
+    for (const side of ['L', 'R']) {
+      if (!holdYFor(side)) continue;
+      if (state.active[side] != null) continue;
+      setStick(side, { y: restY(side) });
+    }
+  }
+
+  function setThreeD(on) {
+    threeD = !!on;
+    snapIdleThrottle();
+    paint();
+    return threeD;
+  }
 
   function setStick(side, next) {
     const cur = side === 'R' ? state.right : state.left;
@@ -366,10 +393,12 @@ export function createTouchControls(ctx) {
   return {
     setEnabled,
     applySettings,
+    setThreeD,
     read,
     shaped,
     get settings() { return settings; },
     get state() { return state; },
+    get threeD() { return threeD; },
     get enabled() { return state.enabled; },
     syncLandscape,
     paint,

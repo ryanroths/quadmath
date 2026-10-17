@@ -116,8 +116,8 @@
   #touchLandscape{position:absolute;top:56px;left:50%;transform:translateX(-50%);z-index:19;
     padding:8px 12px;border-radius:12px;background:var(--glass);border:1px solid var(--line);
     font-size:12px;color:var(--txt);pointer-events:none}
-  #hudAcro{pointer-events:auto;width:auto;margin:6px 0 0;padding:5px 10px;font-size:11px}
-  #hudAcro.on{border-color:var(--green);color:var(--green)}
+  #hudAcro,#hud3d{pointer-events:auto;width:auto;margin:6px 0 0;padding:5px 10px;font-size:11px}
+  #hudAcro.on,#hud3d.on{border-color:var(--green);color:var(--green)}
   body.touch-on #legend,body.touch-on #audioHint{opacity:0;pointer-events:none}
   body.touch-on #feelHud{right:12px;bottom:auto;top:88px;flex-direction:column;align-items:flex-end}
   body.touch-on #feelHud .stick-pad{display:none}
@@ -407,6 +407,7 @@
     <span id="hudMode">ANGLE</span>
     <span id="hudArm">DISARMED</span>
     <button type="button" id="hudAcro">ACRO</button>
+    <button type="button" id="hud3d" aria-pressed="false">3D</button>
   </div>
 </div>
 <div id="feelTutorial">
@@ -560,6 +561,8 @@
   <input type="range" id="s_grav" min="1.0" max="5.0" step="0.05" value="3.5">
   <div class="row"><label>Throttle Curve</label><span class="val" id="v_thc"></span></div>
   <input type="range" id="s_thc" min="0.4" max="2.6" step="0.05" value="0.7">
+  <div class="row"><label>3D mode</label><input type="checkbox" id="cb3d" style="accent-color:var(--orange)" title="Reversible motors. Center stick = zero thrust. Acro only."></div>
+  <p class="build-note">Betaflight 3D: throttle center is zero, below center reverses the props. Flown in Acro. 3D runs are not counted on boards or as ghosts.</p>
   <div class="row"><label>Battery Simulation</label><input type="checkbox" id="cbBattSim" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Sag affects thrust</label><input type="checkbox" id="cbSagThrust" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Sag amount</label><span class="val" id="v_sag"></span></div>
@@ -615,6 +618,7 @@
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
     <b>R</b> last-gate respawn &nbsp;<b>Tab</b> panel<br>
     🔊 <b>M</b> music &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
+    3D (Tune panel): center throttle = zero, below = reverse. Acro only. Not counted on boards.<br>
     <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach
   </div>
   <button id="btnReset">RESET QUAD [R]</button>
@@ -673,19 +677,24 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT} from "./quadphysics.js?v=e91b7b74ac94";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT} from "./quadphysics.js?v=4e972edd6a84";
+import {
+  THREED_KEY, THREED_DEADBAND,
+  loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
+  parseThreeDQuery, runCountsForBoards, throttleHudText,
+} from "./sim-3d.js?v=be7be3c97578";
 import {
   WHOOP_KEY, PHYSICS_VER,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples,
-} from "./sim-whoop.js?v=783d7fbeb57b";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=4c0d9f18502b";
+} from "./sim-whoop.js?v=5d2aeafb4839";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=a964fb08b9f8";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
   shouldEnableTouch, createTouchControls, guardPageGestures,
-} from "./sim-touch.js?v=42f6b5464808";
+} from "./sim-touch.js?v=8e81330f7b70";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -701,12 +710,12 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=19bee552695d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=da10f348a5a8";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=f4c74c8dbcba";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
   loadBuild, saveBuild, buildDeepLink, matchPresetId, classDefault,
-} from "./sim-build.js?v=6264dd38e42a";
+} from "./sim-build.js?v=7fc18ae07f3a";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
 } from "./sim-coach.js?v=529b20f2f830";
@@ -718,7 +727,7 @@ import {
   boardRows, leaderboardUrl, onlineBoardsEnabled, SKINS, unlockedSkins, isSkinUnlocked, resolveSkin,
   loadSkinId, saveSkinId, makeCanopyGroup, tintGroup, sanitizePilotName, classId,
   validateSubmittedRun, CLASS_IDS,
-} from "./sim-retention.js?v=c10438cbd1b6";
+} from "./sim-retention.js?v=6b537b909ce3";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1260,14 +1269,15 @@ function finishRun(){
   if(rec&&rec.length>GHOST_MAX){const stride=Math.ceil(rec.length/GHOST_MAX);rec=rec.filter((_,i)=>i%stride===0);}
   lastRunGhostRec=rec;
   let best=false;
-  if(!bestRunMs[id]||total<bestRunMs[id]){
+  const counted=runCountsForBoards(threeD);
+  if(counted && (!bestRunMs[id]||total<bestRunMs[id])){
     bestRunMs[id]=total;
     try{localStorage.setItem(bestRunStorageKey(id),String(total));}catch(e){}
     commitGhost(id);                 // ghost = the whole 3-lap run
     lapFlashUntil=performance.now()+2500;
     best=true;
   }
-  const extra=noteRetentionFinish(id,total,rec);
+  const extra=counted?noteRetentionFinish(id,total,rec):(threeD?'3D — NOT COUNTED':'');
   // total + the three splits (the lap OSD panel keeps them on screen after)
   toast('RUN '+fmtLap(total)+' ['+runSplits.map(fmtLap).join(' / ')+']'+(best?' — NEW BEST!':'')+(extra?' · '+extra:''));
 }
@@ -2756,7 +2766,9 @@ function nearestWallDistSI(s){
   return best/WS;
 }
 qp.externalDisturbance=(s)=>{
-  const thr=qp.armed?(typeof stick!=='undefined'?stick.t:0):0;
+  const thr=qp.armed?(typeof stick!=='undefined'
+    ?(threeD?Math.abs(mapThrottle3d(stick.t,{deadband:THREED_DEADBAND})):stick.t)
+    :0):0;
   const wash=stepPropwash(washState,{pos:s.position,vel:s.velocity,throttle:thr},s.physicsDt||0.002,currentBuild,whoopSettings);
   washState=wash.wake;
   const t=(typeof performance!=='undefined'?performance.now():0)/1000;
@@ -3192,7 +3204,7 @@ function updateMotorSound(){
   if(!motorAudioCtx||!motorSoundOn)return;
   const t=motorAudioCtx.currentTime;
   // pitch follows the SPOOLED thrust, so audio lags stick exactly like the motors
-  const frac=Math.max(0,Math.min(1,thrustActual/CFG.maxThrustN));
+  const frac=Math.max(0,Math.min(1,Math.abs(thrustActual)/CFG.maxThrustN));
   // (5) punch-out overshoot: rapid rise kicks pitch ~3% high, then settles
   if(frac-audioPrevFrac>0.04)audioOver=1.03;
   audioOver+=(1-audioOver)*0.06;
@@ -3250,6 +3262,7 @@ addEventListener('keydown',e=>{
 });
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
 let kbThrottle=0,gpConnected=false,gpName='';
+let threeD=false;
 // ---------- gamepad selection ----------
 // Never assume index 0: scan ALL non-null pads, prefer radios. A TX16S
 // enumerates with mapping:"" (empty — the old standard-mapping assumption is
@@ -3375,18 +3388,25 @@ function readInput(dt){
     if(!musicStarted&&(Math.abs(stick.r)>0.15||Math.abs(stick.p)>0.15||Math.abs(stick.y)>0.15))startMusic();
     const traw=ax[map.t.i]||0;
     if(map.t.spring){
-      stick.t=THREE.MathUtils.clamp(-traw,0,1); // pad: up = -1
+      if(threeD){
+        // 3D needs the full bipolar range; center of a spring pad is zero thrust.
+        stick.t=THREE.MathUtils.clamp((1-traw)/2,0,1);
+      }else{
+        stick.t=THREE.MathUtils.clamp(-traw,0,1); // pad: up = -1
+      }
     } else {
       const span=map.t.max-map.t.min;
       stick.t=Math.abs(span)<0.1?0:THREE.MathUtils.clamp((traw-map.t.min)/span,0,1);
     }
     // safety gate: after connect/device change, throttle stays dead until the
     // sticks have been seen safe once (throttle <5%, r/p/y near center) — a
-    // pad plugged in mid-flight or a wrong map can't punch the quad away
+    // pad plugged in mid-flight or a wrong map can't punch the quad away.
+    // In 3D, "safe" is center (zero thrust). Forcing t=0 would be full reverse.
     if(armGate){
-      if(stick.t<0.05&&Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15&&Math.abs(stick.y)<0.15){
+      const thrOk=throttleSafeToArm(stick.t,threeD);
+      if(thrOk&&Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15&&Math.abs(stick.y)<0.15){
         armGate=false;toast('STICKS SAFE — LIVE');
-      }else stick.t=0;
+      }else stick.t=threeD?0.5:0;
     }
     if(map.arm&&feel){
       const v=feel.auxValue(gp,map.arm);
@@ -3549,6 +3569,7 @@ function refreshMax(){refreshRatesUI();}
 
 // ---------- Flight mode (angle / horizon / acro live in quadphysics.js) ----------
 let flightMode=defaultFlightMode();
+threeD=loadThreeD();
 let sessionLive=false;
 let touchCtl=null;
 function syncTouchModeBtn(){
@@ -3556,8 +3577,20 @@ function syncTouchModeBtn(){
   if(b)b.textContent=(qp.flightMode||flightMode||'angle').toUpperCase();
   const arm=document.getElementById('touchArm');
   if(arm)arm.classList.toggle('on',!!qp.armed);
+  const cb=document.getElementById('cb3d');
+  if(cb)cb.checked=!!threeD;
+  const hud3d=document.getElementById('hud3d');
+  if(hud3d){
+    hud3d.classList.toggle('on',!!threeD);
+    hud3d.setAttribute('aria-pressed',threeD?'true':'false');
+  }
 }
 function setFlightMode(mode,persist){
+  if(threeD && String(mode||'').toLowerCase()!=='acro'){
+    toast('3D IS ACRO ONLY');
+    syncTouchModeBtn();
+    return qp.flightMode;
+  }
   flightMode=qp.setFlightMode(mode);
   if(persist!==false)saveFlightMode(flightMode);
   syncTouchModeBtn();
@@ -3565,12 +3598,34 @@ function setFlightMode(mode,persist){
   return flightMode;
 }
 function toggleFlightMode(){
+  if(threeD){setFlightMode('acro');return;}
   const order=['angle','horizon','acro'];
   setFlightMode(order[(order.indexOf(qp.flightMode)+1)%order.length]);
 }
+function setThreeD(on,persist){
+  const want=!!on;
+  threeD=want;
+  qp.setThreeD(want);
+  if(persist!==false)saveThreeD(want);
+  if(touchCtl&&touchCtl.setThreeD)touchCtl.setThreeD(want);
+  if(!padLive)kbThrottle=want?0.5:0;
+  if(!padLive)stick.t=kbThrottle;
+  if(want && qp.flightMode!=='acro'){
+    flightMode=qp.setFlightMode('acro');
+    if(persist!==false)saveFlightMode(flightMode);
+    toast('3D ON — ACRO');
+  }else{
+    toast(want?'3D ON':'3D OFF');
+  }
+  syncTouchModeBtn();
+  return threeD;
+}
 function tryArm(){
   if(armGate&&padLive){toast('STICKS NOT SAFE');return false;}
-  if(stick.t>0.05){toast('THROTTLE HIGH — CANNOT ARM');return false;}
+  if(!throttleSafeToArm(stick.t,threeD)){
+    toast(threeD?'CENTER THROTTLE TO ARM':'THROTTLE HIGH — CANNOT ARM');
+    return false;
+  }
   qp.arm();toast('ARMED');return true;
 }
 function toggleArm(){
@@ -3579,6 +3634,17 @@ function toggleArm(){
   syncTouchModeBtn();
 }
 qp.setFlightMode(flightMode);
+if(threeD){
+  // Real 3D is acro. Saved 3D + saved Angle would fight inverted hover.
+  if(flightMode!=='acro'){
+    flightMode=qp.setFlightMode('acro');
+    saveFlightMode(flightMode);
+  }
+  qp.setThreeD(true);
+  kbThrottle=0.5;
+  stick.t=0.5;
+}
+syncTouchModeBtn();
 
 // ---------- Physics ----------
 // Rate setpoint handed to the FC each frame, in the module's body frame.
@@ -3591,6 +3657,7 @@ window._axis=()=>({
   setpoint:{roll:+qpSetpoint.roll.toFixed(2),pitch:+qpSetpoint.pitch.toFixed(2),yaw:+qpSetpoint.yaw.toFixed(2)},
   omega:{roll:+qp.omega.x.toFixed(2),pitch:+qp.omega.y.toFixed(2),yaw:+qp.omega.z.toFixed(2)},
   mode:flightMode,
+  threeD,
 });
 // Sign bridge between three.js body rates (wx pitch / wy yaw / wz roll) and the
 // module's X-forward, Y-left, Z-up axes. Verified empirically — see the axis
@@ -3612,7 +3679,7 @@ function physics(dt){
   // Load is the module's spooled thrust. Curve + IR come from sim-whoop.js and
   // the W1 pack (cells / mAh). HUD + OSD read battV.
   const maxThrustWorld=baseThrustPerMotor*4*WS;
-  const loadFrac=Math.min(1,thrustActual/Math.max(1e-6,maxThrustWorld));
+  const loadFrac=Math.min(1,Math.abs(thrustActual)/Math.max(1e-6,maxThrustWorld));
   const batt=stepBattery(
     {charge:battCharge,voltage:battV},
     dt,loadFrac,
@@ -3628,11 +3695,15 @@ function physics(dt){
 
   // Throttle curve stays here; the module applies the Betaflight idle floor
   // itself, so the old idlePct blend is gone. Disarmed = no throttle to the FC.
-  const throttle=qp.armed?Math.pow(Math.max(0,Math.min(1,stick.t)),CFG.thrCurve):0;
+  // 3D: map 0..1 stick through a center deadband onto -1..1 collective.
+  const throttle=qp.armed
+    ?(threeD?mapThrottle3d(stick.t,{curve:CFG.thrCurve,deadband:THREED_DEADBAND})
+      :Math.pow(Math.max(0,Math.min(1,stick.t)),CFG.thrCurve))
+    :0;
 
   qp.step(dt,qpSetpoint,throttle,stick);
   syncStateFromQp();
-  thrustActual=qp.totalThrustN*WS; // world newtons, for audio + battery load
+  thrustActual=(qp.totalThrustAbsN||Math.abs(qp.totalThrustN))*WS; // |N|, audio + battery load
 }
 function bounce(){
   state.bounces++;   // counter kept for stats; the BOUNCE #N toast is gone —
@@ -3721,11 +3792,19 @@ function updateOSD(){
   // motors bottom-right in their PHYSICAL quad-X layout (front row on top:
   // M4 front-left, M2 front-right / M3 rear-left, M1 rear-right).
   const mo=qp.motorOutputs;
-  const bar=v=>'█'.repeat(Math.round(v*6)).padEnd(6,'░');
+  const bar=v=>{
+    const mag=Math.min(1,Math.abs(v||0));
+    const n=Math.round(mag*6);
+    return (v<0?'▒':'█').repeat(n).padEnd(6,'░');
+  };
   osdBL.innerHTML='';
-  osdBC.innerHTML=`THR ${'█'.repeat(Math.round(stick.t*10)).padEnd(10,'░')} ${(stick.t*100)|0}%`+
+  const thrShow=threeD?mapThrottle3d(stick.t,{deadband:THREED_DEADBAND}):stick.t;
+  const thrPct=threeD?((thrShow*100)|0):((stick.t*100)|0);
+  const thrLabel=threeD?(thrPct===0?'0':(thrPct>0?'+':'')+thrPct):String(thrPct);
+  const thrBarSrc=threeD?(thrShow+1)/2:stick.t;
+  osdBC.innerHTML=`THR ${'█'.repeat(Math.round(Math.max(0,Math.min(1,thrBarSrc))*10)).padEnd(10,'░')} ${thrLabel}%`+
     `<br>FLT ${String(t/60|0).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`+
-    `&nbsp;&nbsp;TWR ${qp.twr.toFixed(1)}`;
+    `&nbsp;&nbsp;TWR ${qp.twr.toFixed(1)}`+(threeD?' · 3D':'');
   osdBR.innerHTML=`<span style="font-size:.85em;opacity:.85">`+
     `M4 ${bar(mo[3])}&nbsp;M2 ${bar(mo[1])}<br>`+
     `M3 ${bar(mo[2])}&nbsp;M1 ${bar(mo[0])}</span>`;
@@ -4207,14 +4286,14 @@ function wireLooksUI(){
       '<p><span class="n">W/S</span> throttle · <span class="n">A/D</span> yaw<br>'+
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
       '<span class="n">R</span> last-gate respawn · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
-      '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro<br>'+
+      '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
       '<span class="n">H</span> HUD · <span class="n">M</span> music · <span class="n">G</span> ghost · <span class="n">C</span> coach</p>'+
       '<button type="button" id="layerClose">Close</button>');
     document.getElementById('layerClose').onclick=hideMenuLayer;
   };
   document.getElementById('menuHowTo').onclick=()=>{
     showMenuLayer('<h2>How to</h2><ol>'+
-      '<li>Space arms. 1 / 2 / 3 = Angle / Horizon / Acro. Keyboard starts in Angle.</li>'+
+      '<li>Space arms. 1 / 2 / 3 = Angle / Horizon / Acro. Keyboard starts in Angle. 3D (Tune panel) is reversible-motor acro — center throttle is zero, below center inverts thrust. 3D runs are not counted on boards.</li>'+
       '<li>How to → Start tutorial: hover, three gates, land (about two minutes, skippable).</li>'+
       '<li>R respawns at the last gate you passed. H toggles the stick HUD.</li>'+
       '<li>Fly the lit gate. A 3-lap run starts at gate 1. Splits per gate; missed gates add +2.0s.</li>'+
@@ -4366,6 +4445,9 @@ document.getElementById('cbBattSim').onchange=e=>{
   battCharge=1;battV=BATT_FULL;
   persistWhoopFromUI();
   toast(CFG.battSimOn?'BATTERY SIM ON':'BATTERY SIM OFF — INFINITE PACK');
+};
+document.getElementById('cb3d').onchange=e=>{
+  setThreeD(!!e.target.checked);
 };
 ['cbBounce','s_bounce','s_crash','cbGround','s_ground','cbWash','s_wash','cbDraft','s_draft','s_sag'].forEach(id=>{
   const el=document.getElementById(id);
@@ -4557,7 +4639,7 @@ function syncBuildUI(){
     const p=BUILD_PRESETS[matchPresetId(b)];
     if(hint)hint.textContent=p?('Approximate. '+(p.note||'')):'Approximate custom whoop. Not a thrust-stand log.';
     const code=document.getElementById('buildCode');
-    if(code)code.value=buildDeepLink({origin:location.origin,build:b,track:shareTrackParam(),mode:qp.flightMode||'angle'});
+    if(code)code.value=buildDeepLink({origin:location.origin,build:b,track:shareTrackParam(),mode:qp.flightMode||'angle',threeD});
   }finally{syncingBuildUI=false;}
 }
 function applyBuild(raw,opts){
@@ -4657,6 +4739,7 @@ function openBuildPicker(){
 
 window._build={encodeBuild,decodeBuild,applyBuild,BUILD_KEY,BUILD_PREFIX};
 window._whoop={PHYSICS_VER,WHOOP_KEY,whoopSettings,whoopScale,resolveDuctHit,stepBattery};
+window._threeD=()=>({key:THREED_KEY,on:threeD,deadband:THREED_DEADBAND,mapped:mapThrottle3d(stick.t)});
 
 // ---------- Betaflight CLI paste-import ----------
 // Reads rates_type FIRST, because the scaling and the curve both depend on it,
@@ -5283,7 +5366,7 @@ function loop(now){
     updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();updateDust(dt);
     if(feel){
       state.stickT=stick.t;
-      feel.updateHud({stick,battV,battOn:CFG.battSimOn,mode:qp.flightMode,armed:qp.armed});
+      feel.updateHud({stick,battV,battOn:CFG.battSimOn,mode:qp.flightMode,armed:qp.armed,threeD,thrText:throttleHudText(stick.t,threeD)});
       feel.tickTutorial(state,dt,qp.armed);
       const att=qp.attitude;
       feel.noteFlip({
@@ -5319,6 +5402,7 @@ looksReady.then(function(l){
 function launchTutorial(){
   if(!feel)return;
   if(coach&&coach.isActive())coach.cancel();
+  if(threeD)setThreeD(false);
   hideMenuLayer();
   toggleStartMenu(false);
   sessionLive=true;
@@ -5336,6 +5420,7 @@ function launchCoachDrill(id){
   if(feel&&feel.isTutorial&&feel.isTutorial()){
     if(feel.skipTutorial)feel.skipTutorial();
   }
+  if(threeD){setThreeD(false);toast('3D OFF FOR COACH');}
   const d=drillById(id);
   if(!d)return;
   hideMenuLayer();
@@ -5418,6 +5503,7 @@ function applyTouchFromUI(){
 touchCtl=createTouchControls({
   root:document.getElementById('touchLayer'),
   settings:loadTouch(),
+  threeD,
   onArm(){toggleArm();},
   onMode(){toggleFlightMode();},
   onRespawn(){resetQuad();},
@@ -5439,6 +5525,7 @@ feel=createFeel({
   onKeyboard(){setFlightMode('angle',false);toast('KEYBOARD — SPACE TO ARM');enableTouchLayer(false);},
   onTouch(){setFlightMode(defaultFlightMode(),false);toast('TOUCH STICKS — TAP ARM');enableTouchLayer(true);},
   onToggleAcro(){setFlightMode(toggleAcro(qp.flightMode||flightMode));},
+  onToggleThreeD(){setThreeD(!threeD);},
   onTryLap(){
     setActiveTrack(0);
     lastPassedGate=null;
@@ -5516,9 +5603,11 @@ function applyQueryBoot(){
     const decoded=decodeBuild(buildRaw);
     if(decoded) applyBuild(decoded,{save:false,announce:true});
   }
+  const threeDRaw=parseThreeDQuery(q.get('3d'));
+  if(threeDRaw!=null)setThreeD(threeDRaw);
   const modeRaw=(q.get('mode')||'').toLowerCase();
   if(modeRaw==='angle'||modeRaw==='horizon'||modeRaw==='acro'){
-    setFlightMode(modeRaw);flightMode=modeRaw;
+    if(!(threeD && modeRaw!=='acro'))setFlightMode(modeRaw);
   }
   const drillRaw=q.get('drill');
   if(drillRaw&&drillById(drillRaw)){
@@ -5534,7 +5623,7 @@ function applyQueryBoot(){
     setMap(t.map, t.id, {save:false});
     resetQuad();
   }
-  if((map||trackRaw||buildRaw||modeRaw||drillRaw||q.get('daily')||q.get('weekly'))&&q.get('menu')!=='1')toggleStartMenu(false);
+  if((map||trackRaw||buildRaw||modeRaw||drillRaw||q.get('3d')||q.get('daily')||q.get('weekly'))&&q.get('menu')!=='1')toggleStartMenu(false);
   if(q.get('look')&&looks)looks.setLookSpot(q.get('look'));
   if(q.get('quality')&&looks)looks.setQuality(q.get('quality'));
   if(q.get('builder')==='1'){toggleStartMenu(false);openBuilder();}

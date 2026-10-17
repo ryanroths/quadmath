@@ -98,6 +98,8 @@ export const ANGLE_MAX_DEG = 55;
 export const ANGLE_P = 7.5;
 const ANGLE_MAX_RAD = ANGLE_MAX_DEG * Math.PI / 180;
 const ANGLE_RATE_LIM = 10; // rad/s, attitude-loop ceiling
+// Reverse thrust is a bit less efficient than forward (same curve, scaled).
+export const REVERSE_THRUST_SCALE = 0.85;
 
 // ---------------------------------------------------------------------------
 // Small vec/quat helpers (no deps — keep module standalone)
@@ -195,7 +197,13 @@ class Motor {
   }
   thrust() {
     const e = this.cfg.thrustExp != null ? this.cfg.thrustExp : 2;
-    return this.cfg.maxThrustPerMotor * Math.pow(this.output, e);
+    const mag = Math.abs(this.output);
+    if (mag < 1e-12) return 0;
+    const sign = this.output < 0 ? -1 : 1;
+    const scale = sign < 0
+      ? (this.cfg.reverseThrustScale != null ? this.cfg.reverseThrustScale : 1)
+      : 1;
+    return sign * scale * this.cfg.maxThrustPerMotor * Math.pow(mag, e);
   }
   // reaction torque about body Z: CW prop pushes airframe CCW and vice versa
   yawTorque() { return -this.dir * this.cfg.kQ * this.thrust() * (this.cfg.wheelbase * 0.5); }
@@ -256,6 +264,7 @@ export class QuadPhysics {
     this.physicsDt = 1 / PHYSICS_HZ_DEFAULT;
     this.floatiness = FLOATINESS_DEFAULT;
     this.flightMode = 'angle';
+    this.threeD = false;
     this.rc = { r: 0, p: 0, y: 0 };
     this.accumulator = 0;
     this.setPreset(preset);
@@ -278,6 +287,7 @@ export class QuadPhysics {
 
   setPreset(preset) {
     this.cfg = { ...preset };
+    if (this.cfg.reverseThrustScale == null) this.cfg.reverseThrustScale = REVERSE_THRUST_SCALE;
     const d = this.cfg.wheelbase / (2 * Math.SQRT2); // arm offset per axis, quad-X
     // Quad-X layout, props-out ref (Betaflight motor order):
     // M1 rear-right CW, M2 front-right CCW, M3 rear-left CCW, M4 front-left CW
@@ -359,6 +369,14 @@ export class QuadPhysics {
     return this.flightMode;
   }
 
+  // Betaflight 3D: mixer range -1..1, no idle floor. Reverse thrust is the
+  // same curve with cfg.reverseThrustScale (default 0.85) so reverse is a
+  // bit less efficient. Real 3D is flown in Acro; the page locks the mode.
+  setThreeD(on) {
+    this.threeD = !!on;
+    return this.threeD;
+  }
+
   get attitude() { return attitudeOf(this.quaternion); }
 
   // Mix Angle / Horizon / Acro into a rate setpoint (rad/s).
@@ -396,7 +414,7 @@ export class QuadPhysics {
   //   frameDt: seconds since last frame
   //   setpoint: {roll, pitch, yaw} desired body rates rad/s (feed your existing
   //             Betaflight rates math output here — sticks → rates unchanged)
-  //   throttle: 0..1 (post-curve)
+  //   throttle: 0..1 (post-curve). In 3D mode: -1..1 collective (center = 0).
   //   stick: optional {r,p,y} -1..1; required for Angle/Horizon mixing
   // Fixed physicsHz substeps internally regardless of render rate.
   // -------------------------------------------------------------------------
@@ -417,11 +435,17 @@ export class QuadPhysics {
 
     // ---- FC: rate loop ----
     let r = 0, p = 0, y = 0, thr = 0;
+    const threeD = !!this.threeD;
     if (this.armed) {
       r = this.pid.roll.update(sp.roll, this.omega.x, this.airborne);
       p = this.pid.pitch.update(sp.pitch, this.omega.y, this.airborne);
       y = this.pid.yaw.update(sp.yaw, this.omega.z, this.airborne);
-      thr = cfg.idleThrottle + throttle * (1 - cfg.idleThrottle); // Betaflight idle
+      if (threeD) {
+        // 3D collective is already -1..1. No idle: center stick is true zero.
+        thr = Math.max(-1, Math.min(1, throttle || 0));
+      } else {
+        thr = cfg.idleThrottle + throttle * (1 - cfg.idleThrottle); // Betaflight idle
+      }
     }
 
     // ---- Mixer, quad-X (Betaflight order M1..M4) + airmode desaturation ----
@@ -440,21 +464,38 @@ export class QuadPhysics {
     ];
     // Desaturation: shift the whole set to preserve differential (attitude authority),
     // sacrificing collective (throttle) — this IS airmode.
+    // 3D uses the full -1..1 motor range (Betaflight 3D / reversible DShot).
     const mMax = Math.max(...m), mMin = Math.min(...m);
-    if (mMax - mMin > 1) {
-      // demanded differential exceeds full range: scale differential down
-      const mid = (mMax + mMin) / 2;
-      const scale = 1 / (mMax - mMin);
-      m = m.map(v => 0.5 + (v - mid) * scale);
-    } else if (mMax > 1) {
-      m = m.map(v => v - (mMax - 1));
-    } else if (mMin < (this.armed ? cfg.idleThrottle : 0)) {
-      const floor = this.armed ? cfg.idleThrottle : 0;
-      m = m.map(v => v + (floor - mMin));
-    }
-    for (let i = 0; i < 4; i++) {
-      this.motors[i].command = Math.max(0, Math.min(1, m[i]));
-      this.motors[i].step(dt);
+    if (threeD) {
+      if (mMax - mMin > 2) {
+        const mid = (mMax + mMin) / 2;
+        const scale = 2 / (mMax - mMin);
+        m = m.map(v => (v - mid) * scale);
+      } else if (mMax > 1) {
+        m = m.map(v => v - (mMax - 1));
+      } else if (mMin < -1) {
+        m = m.map(v => v + (-1 - mMin));
+      }
+      for (let i = 0; i < 4; i++) {
+        this.motors[i].command = Math.max(-1, Math.min(1, m[i]));
+        this.motors[i].step(dt);
+      }
+    } else {
+      if (mMax - mMin > 1) {
+        // demanded differential exceeds full range: scale differential down
+        const mid = (mMax + mMin) / 2;
+        const scale = 1 / (mMax - mMin);
+        m = m.map(v => 0.5 + (v - mid) * scale);
+      } else if (mMax > 1) {
+        m = m.map(v => v - (mMax - 1));
+      } else if (mMin < (this.armed ? cfg.idleThrottle : 0)) {
+        const floor = this.armed ? cfg.idleThrottle : 0;
+        m = m.map(v => v + (floor - mMin));
+      }
+      for (let i = 0; i < 4; i++) {
+        this.motors[i].command = Math.max(0, Math.min(1, m[i]));
+        this.motors[i].step(dt);
+      }
     }
 
     // ---- Ground effect ----
@@ -465,7 +506,9 @@ export class QuadPhysics {
     // clearance; presets may override via cfg.groundEffect. W2 sliders write
     // that kGE (0 disables).
     let geMult = 1;
-    if (this.groundClearance) {
+    // Reverse collective is thrusting away from the floor when upright, so
+    // the cushion would be the wrong sign. Skip GE while 3D is pulling down.
+    if (this.groundClearance && !(threeD && thr < 0)) {
       const clr = this.groundClearance(this);
       const kGE = cfg.groundEffect != null ? cfg.groundEffect : 0.12;
       geMult = groundEffectMult(clr, cfg.propDiameter, kGE);
@@ -521,7 +564,7 @@ export class QuadPhysics {
     this.velocity = vAdd(this.velocity, vScale(force, dt / cfg.mass));
     this.position = vAdd(this.position, vScale(this.velocity, dt));
 
-    this.airborne = this.position.z > 0.05 || totalThrust > cfg.mass * G * 0.5;
+    this.airborne = this.position.z > 0.05 || Math.abs(totalThrust) > cfg.mass * G * 0.5;
 
     if (this.onSubstep) this.onSubstep(this);
   }
@@ -529,6 +572,9 @@ export class QuadPhysics {
   // debug/OSD readouts
   get motorOutputs() { return this.motors.map(mo => mo.output); }
   get totalThrustN() { return this.motors.reduce((s, mo) => s + mo.thrust(), 0); }
+  get totalThrustAbsN() {
+    return this.motors.reduce((s, mo) => s + Math.abs(mo.thrust()), 0);
+  }
   get twr() { return this.totalThrustN / (this.cfg.mass * G); }
 }
 

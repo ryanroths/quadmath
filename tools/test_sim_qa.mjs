@@ -82,6 +82,7 @@ test('sim.html wires picker rebuild, boot restore, and query-build no-save', () 
   assert.ok(boot.includes("applyBuild(decoded,{save:false,announce:true})"));
   assert.ok(boot.includes('boot.unknownMap'));
   assert.ok(boot.includes('already'), 'do not resetQuad/toast RESET on a no-op city reload');
+  assert.ok(boot.includes('parseThreeDQuery') || boot.includes("q.get('3d')"));
   assert.ok(simSrc.includes('feel.noteFlip({'));
   assert.ok(simSrc.includes('armed:qp.armed'));
   assert.ok(!simSrc.includes('content/guides/'), 'do not edit guide HTML');
