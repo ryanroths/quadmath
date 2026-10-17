@@ -495,6 +495,10 @@ export function validateSubmittedRun(input) {
   try { track = normalizeTrack(track); }
   catch (e) { return { ok: false, reason: 'BAD TRACK' }; }
 
+  if (src.threeD || (ghost && (ghost.threeD || ghost.mode3d))) {
+    return { ok: false, reason: '3D MODE' };
+  }
+
   const payloadErr = ghostPayloadError(ghost, track.id);
   if (payloadErr) return { ok: false, reason: payloadErr };
 

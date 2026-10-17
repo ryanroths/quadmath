@@ -768,6 +768,7 @@ export async function createLooks(ctx) {
       whoop: 'quadmathSimWhoop',
       touch: 'quadmathSimTouch',
       flightMode: 'quadmathSimFlightMode',
+      threeD: 'quadmathSim3D',
     };
     return out;
   }

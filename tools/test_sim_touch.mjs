@@ -138,6 +138,18 @@ test('auto quality is low on mobile; touch enable / landscape rules', () => {
   }), true);
 });
 
+test('3D touch throttle rests at center without changing 2D rest', () => {
+  const two = createTouchControls({
+    settings: { mode: 2, deadzone: 0, expo: 0, thrSpring: false },
+  });
+  assert.ok(two.read().t < 0.02);
+  const d3 = createTouchControls({
+    threeD: true,
+    settings: { mode: 2, deadzone: 0, expo: 0, thrSpring: false },
+  });
+  assert.ok(Math.abs(d3.read().t - 0.5) < 1e-9);
+});
+
 test('createTouchControls maps multitouch-style left/right state', () => {
   const reads = [];
   const ctl = createTouchControls({

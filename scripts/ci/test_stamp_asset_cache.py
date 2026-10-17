@@ -86,6 +86,7 @@ class StampHtmlText(unittest.TestCase):
             "sim-coach.js": "b7b7b7b7b7b7",
             "sim-retention.js": "c8c8c8c8c8c8",
             "sim-touch.js": "d9d9d9d9d9d9",
+            "sim-3d.js": "e0e0e0e0e0e0",
             "vendor/three.module.min.js": "abc123abc123",
         }
 
@@ -276,6 +277,9 @@ class RepoPin(unittest.TestCase):
         )
         self.assertRegex(
             sim_src, r'from "\./sim-touch\.js\?v=[0-9a-f]{%d}"' % stamp.HASH_LEN
+        )
+        self.assertRegex(
+            sim_src, r'from "\./sim-3d\.js\?v=[0-9a-f]{%d}"' % stamp.HASH_LEN
         )
 
     def test_live_pages_reference_hashed_first_party_js(self):
