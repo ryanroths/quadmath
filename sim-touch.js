@@ -502,6 +502,12 @@ export function applyAxisMap(axes, map) {
   return { r, p, y, t };
 }
 
+export function isValidAxisMap(m) {
+  if (!m || typeof m !== 'object') return false;
+  const ch = (c) => !!(c && Number.isFinite(c.i) && c.i >= 0);
+  return ch(m.r) && ch(m.p) && ch(m.y) && ch(m.t);
+}
+
 export function loadRadioProfile(id, storage) {
   const store = storeOf(storage);
   const sid = sanitizeId(id);
@@ -513,11 +519,31 @@ export function loadRadioProfile(id, storage) {
     if (!RADIO_PRESETS[radioPreset]) radioPreset = 'auto';
     const raw = store.getItem(AXIS_MAP_PREFIX + sid);
     axisMap = raw ? JSON.parse(raw) : null;
+    if (!isValidAxisMap(axisMap)) axisMap = null;
   } catch (e) {
     radioPreset = 'auto';
     axisMap = null;
   }
   return { radioPreset, axisMap };
+}
+
+// Auto-detect / reset: drop this device's saved map. If `id` is empty, fall
+// back to ryflyGamepadId so a Tune-panel click still clears a stale TX16S
+// calibration from a broken run. Never deletes other ryfly* keys.
+export function clearRadioCalibration(id, storage) {
+  const store = storeOf(storage);
+  if (!store) return false;
+  let rawId = id;
+  if (!rawId) {
+    try { rawId = store.getItem(GP_ID_KEY); } catch (e) { rawId = ''; }
+  }
+  if (!rawId) return false;
+  try {
+    store.removeItem(AXIS_MAP_PREFIX + sanitizeId(rawId));
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 export function saveAxisMap(id, axisMap, storage) {
@@ -546,25 +572,101 @@ export const CAL_STEPS = Object.freeze([
 ]);
 
 export function createCalibState() {
-  return { step: 0, timer: 0, center: null, result: {}, used: new Set() };
+  return {
+    step: 0,
+    timer: 0,
+    center: null,
+    result: {},
+    used: new Set(),
+    thrCand: new Set(),
+    lo: null,
+    hi: null,
+  };
 }
 
-function bestUnusedAxis(ax, center, used, minAbs) {
+function listAxes(gp) {
+  const raw = gp && gp.axes;
+  if (!raw) return [];
+  const n = raw.length;
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const v = Number(raw[i]);
+    out[i] = Number.isFinite(v) ? v : 0;
+  }
+  return out;
+}
+
+function markThrottleCandidates(center) {
+  const s = new Set();
+  if (!center) return s;
+  for (let i = 0; i < center.length; i++) {
+    // EdgeTX throttle rests at an extreme (typically -1), not at 0. Never
+    // let r/p/y steal that axis if the stick wiggles during those steps.
+    if (Math.abs(center[i]) >= 0.55) s.add(i);
+  }
+  return s;
+}
+
+function skipForStick(calib, ax) {
+  const cand = calib.thrCand;
+  if (!cand || !cand.size) return null;
+  let free = 0;
+  for (let i = 0; i < ax.length; i++) {
+    if (!calib.used.has(i) && !cand.has(i)) free++;
+  }
+  return free > 0 ? cand : null;
+}
+
+function bestUnusedAxis(ax, center, used, minAbs, skip) {
   let best = -1, bestD = 0;
   for (let i = 0; i < ax.length; i++) {
-    if (used.has(i)) continue;
-    const d = ax[i] - center[i];
+    if (used.has(i) || (skip && skip.has(i))) continue;
+    const d = ax[i] - (center[i] || 0);
     if (Math.abs(d) > Math.abs(bestD)) { bestD = d; best = i; }
   }
   if (best >= 0 && Math.abs(bestD) > minAbs) return { i: best, d: bestD };
   return null;
 }
 
+function trackSweep(calib, ax) {
+  if (!calib.lo || calib.lo.length !== ax.length) {
+    calib.lo = ax.slice();
+    calib.hi = ax.slice();
+    return;
+  }
+  for (let i = 0; i < ax.length; i++) {
+    if (ax[i] < calib.lo[i]) calib.lo[i] = ax[i];
+    if (ax[i] > calib.hi[i]) calib.hi[i] = ax[i];
+  }
+}
+
+function bestSweep(calib, ax, used, minSpan, only) {
+  let best = -1, bestSpan = 0;
+  for (let i = 0; i < ax.length; i++) {
+    if (used.has(i)) continue;
+    if (only && !only.has(i)) continue;
+    const span = calib.hi[i] - calib.lo[i];
+    if (span > bestSpan) { bestSpan = span; best = i; }
+  }
+  if (best < 0 || bestSpan <= minSpan) return null;
+  const rest = calib.center[best];
+  const hi = calib.hi[best];
+  const lo = calib.lo[best];
+  const max = Math.abs(hi - rest) >= Math.abs(lo - rest) ? hi : lo;
+  return { i: best, span: bestSpan, max, min: rest };
+}
+
+function clearSweep(calib) {
+  calib.lo = null;
+  calib.hi = null;
+  calib.timer = 0;
+}
+
 export function skipCalibAux(calib) {
   const st = CAL_STEPS[calib.step];
   if (st && (st.key === 'arm' || st.key === 'mode')) {
     calib.step++;
-    calib.timer = 0;
+    clearSweep(calib);
   }
   return { state: calib, done: calib.step >= CAL_STEPS.length };
 }
@@ -574,29 +676,79 @@ export function stepCalib(calib, gp, dt) {
   if (!st || !gp) {
     return { state: calib, done: false, skipAux: false, label: '', hint: '' };
   }
-  const ax = gp.axes;
+  const ax = listAxes(gp);
   const skipAux = st.key === 'arm' || st.key === 'mode';
   const ui = { state: calib, done: false, skipAux, label: st.label, hint: st.hint };
 
   if (st.key === 'center') {
     calib.timer += dt;
     if (calib.timer > 1) {
-      calib.center = Array.prototype.slice.call(ax);
+      calib.center = ax.slice();
+      calib.thrCand = markThrottleCandidates(calib.center);
       calib.step++;
-      calib.timer = 0;
+      clearSweep(calib);
     }
     ui.done = calib.step >= CAL_STEPS.length;
     return ui;
   }
-  if (st.key === 'tlo') {
-    const ti = calib.result.t.i;
-    const d = ax[ti] - calib.result.t.max;
-    if (Math.abs(d) > 0.8) {
+  if (st.key === 'thi') {
+    // Movement, not a centered-axis hold. EdgeTX throttle rests at -1 and
+    // does not spring back, so a 0.6 |delta| hold on "unused" axes stalls
+    // when the pilot pumps the stick or when r/p/y already stole the axis.
+    trackSweep(calib, ax);
+    const prefer = calib.thrCand && calib.thrCand.size ? calib.thrCand : null;
+    let hit = bestSweep(calib, ax, calib.used, 1.2, prefer);
+    if (!hit) hit = bestSweep(calib, ax, calib.used, 1.2, null);
+    if (hit) {
+      const atPeak = Math.abs(ax[hit.i] - hit.max) <= 0.25;
+      if (!atPeak && hit.span < 1.6) hit = null;
+    }
+    if (!hit && !(calib.thrCand && calib.thrCand.size)) {
+      // Spring/centered throttle (rest ~0): yesterday's unused-axis hold.
+      const moved = bestUnusedAxis(ax, calib.center, calib.used, 0.6, null);
+      if (moved) {
+        hit = {
+          i: moved.i,
+          span: Math.abs(moved.d),
+          max: ax[moved.i],
+          min: calib.center[moved.i],
+        };
+      }
+    }
+    if (hit) {
       calib.timer += dt;
-      if (calib.timer > 0.6) {
-        calib.result.t.min = ax[ti];
+      if (calib.timer > 0.1) {
+        calib.result.t = { i: hit.i, max: hit.max, min: hit.min };
+        calib.used.add(hit.i);
         calib.step++;
-        calib.timer = 0;
+        clearSweep(calib);
+        ui.done = calib.step >= CAL_STEPS.length;
+      }
+    } else calib.timer = 0;
+    return ui;
+  }
+  if (st.key === 'tlo') {
+    const t = calib.result.t;
+    const ti = t && t.i;
+    if (!Number.isFinite(ti)) {
+      calib.step++;
+      clearSweep(calib);
+      ui.done = calib.step >= CAL_STEPS.length;
+      return ui;
+    }
+    const rest = calib.center && Number.isFinite(calib.center[ti])
+      ? calib.center[ti]
+      : (Number.isFinite(t.min) ? t.min : 0);
+    const peak = Number.isFinite(t.max) ? t.max : ax[ti];
+    const nearRest = Math.abs(ax[ti] - rest) <= 0.4;
+    const awayFromMax = Math.abs(ax[ti] - peak) > 0.5;
+    if (nearRest || awayFromMax) {
+      calib.timer += dt;
+      if (calib.timer > 0.1) {
+        calib.result.t.min = nearRest ? ax[ti] : rest;
+        calib.result.t.max = peak;
+        calib.step++;
+        clearSweep(calib);
         ui.done = calib.step >= CAL_STEPS.length;
       }
     } else calib.timer = 0;
@@ -610,7 +762,7 @@ export function stepCalib(calib, gp, dt) {
         calib.result[st.key] = { i: moved.i, sign: Math.sign(moved.d) || 1 };
         calib.used.add(moved.i);
         calib.step++;
-        calib.timer = 0;
+        clearSweep(calib);
         ui.done = calib.step >= CAL_STEPS.length;
       }
     } else {
@@ -625,25 +777,23 @@ export function stepCalib(calib, gp, dt) {
         if (calib.timer > 0.35) {
           calib.result[st.key] = { button: btn };
           calib.step++;
-          calib.timer = 0;
+          clearSweep(calib);
           ui.done = calib.step >= CAL_STEPS.length;
         }
       } else calib.timer = 0;
     }
     return ui;
   }
-  const moved = bestUnusedAxis(ax, calib.center, calib.used, 0.6);
+  // r / p / y: still a hold on a self-centering gimbal, but never assign an
+  // axis that was already at an extreme during CENTER (the throttle).
+  const moved = bestUnusedAxis(ax, calib.center, calib.used, 0.6, skipForStick(calib, ax));
   if (moved) {
     calib.timer += dt;
     if (calib.timer > 0.6) {
-      if (st.key === 'thi') {
-        calib.result.t = { i: moved.i, max: ax[moved.i], min: 0 };
-      } else {
-        calib.result[st.key] = { i: moved.i, sign: Math.sign(moved.d) };
-      }
+      calib.result[st.key] = { i: moved.i, sign: Math.sign(moved.d) || 1 };
       calib.used.add(moved.i);
       calib.step++;
-      calib.timer = 0;
+      clearSweep(calib);
     }
   } else calib.timer = 0;
   ui.done = calib.step >= CAL_STEPS.length;
@@ -756,11 +906,27 @@ export function createRadioRouter(opts) {
     calib = out.state;
     if (out.done) {
       axisMap = calib.result;
+      radioPreset = 'custom';
       saveAxisMap(gpName, axisMap, storage);
+      saveRadioPreset(gpName, 'custom', storage);
       calib = null;
       return { done: true, axisMap, touch: false };
     }
     return { done: false, skipAux: out.skipAux, label: out.label, hint: out.hint, touch: false };
+  }
+
+  function rememberedId() {
+    if (gpName) return gpName;
+    try { return storage ? storage.getItem(GP_ID_KEY) : ''; } catch (e) { return ''; }
+  }
+
+  function clearCalibration() {
+    axisMap = null;
+    radioPreset = 'auto';
+    const id = rememberedId();
+    clearRadioCalibration(id, storage);
+    if (id) saveRadioPreset(id, 'auto', storage);
+    return { axisMap, radioPreset, id };
   }
 
   return {
@@ -769,13 +935,16 @@ export function createRadioRouter(opts) {
     readStick,
     startCalib,
     tickCalib,
+    clearCalibration,
     skipCalibAux() {
       if (!calib) return { done: false };
       const out = skipCalibAux(calib);
       calib = out.state;
       if (out.done) {
         axisMap = calib.result;
+        radioPreset = 'custom';
         saveAxisMap(gpName, axisMap, storage);
+        saveRadioPreset(gpName, 'custom', storage);
         calib = null;
         return { done: true, axisMap };
       }

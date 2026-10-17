@@ -253,8 +253,10 @@
   #feelPrompt{position:fixed;inset:0;z-index:26;display:none;align-items:center;justify-content:center;
     padding:32px;background:rgba(8,10,14,.45)}
   #feelPrompt.show{display:flex}
+  /* Mode 2: DOM order is LEFT (yaw/throttle) then RIGHT (roll/pitch). Do not
+     row-reverse — that painted throttle on the visual right stick. */
   #feelHud{position:fixed;right:16px;bottom:86px;z-index:12;display:flex;align-items:flex-end;gap:10px;
-    pointer-events:none;flex-direction:row-reverse}
+    pointer-events:none;flex-direction:row;}
   #feelHud.hide{display:none}
   .stick-pad{width:72px;height:72px;border:1px solid var(--line);border-radius:12px;background:var(--glass);
     backdrop-filter:blur(12px);position:relative}
@@ -682,15 +684,15 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples,
 } from "./sim-whoop.js?v=783d7fbeb57b";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=afc713d1ca16";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=f34ec2ac7f70";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
   shouldEnableTouch, createTouchControls, guardPageGestures,
   sanitizeId, isRadio, radioScore, RADIO_PRESETS,
   effectiveAxisMap, applyAxisMap, loadRadioProfile, saveAxisMap,
-  saveRadioPreset, GP_ID_KEY, createCalibState, stepCalib, skipCalibAux,
-} from "./sim-touch.js?v=926e7081a749";
+  saveRadioPreset, clearRadioCalibration, GP_ID_KEY, createCalibState, stepCalib, skipCalibAux,
+} from "./sim-touch.js?v=f50105bbffaa";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -2899,12 +2901,16 @@ function runCalib(gp,dt){
   calibStepEl.textContent=out.label;
   calibHintEl.textContent=out.hint;
   document.getElementById('calibSkip').style.display=out.skipAux?'':'none';
-  calibBarsEl.innerHTML=gp.axes.map((a,i)=>
-    `ax${i} ${'▮'.repeat(Math.round((a+1)*5)).padEnd(10,'▯')} ${a.toFixed(2)}`).join('<br>');
+  const ax=Array.prototype.slice.call(gp.axes||[]);
+  calibBarsEl.innerHTML=ax.map((a,i)=>
+    `ax${i} ${'▮'.repeat(Math.round((a+1)*5)).padEnd(10,'▯')} ${Number(a).toFixed(2)}`).join('<br>');
   if(out.done)finishCalib();
 }
 function finishCalib(){
   axisMap=calib.result;
+  radioPreset='custom';
+  if(gpName)saveRadioPreset(gpName,'custom');
+  if(presetSel)presetSel.value='custom';
   saveMap();
   calib=null;setCalibrating(false);calibEl.classList.remove('show');
   document.getElementById('calibSkip').style.display='none';
@@ -2919,12 +2925,20 @@ for(const[k,p]of Object.entries(RADIO_PRESETS)){
   presetSel.appendChild(o);
 }
 presetSel.value=radioPreset;
+function deviceRadioId(){
+  if(gpName)return gpName;
+  try{return localStorage.getItem(GP_ID_KEY)||'';}catch(e){return '';}
+}
 presetSel.onchange=()=>{
   radioPreset=presetSel.value;
-  if(gpName)saveRadioPreset(gpName,radioPreset);
+  const id=deviceRadioId();
+  if(id)saveRadioPreset(id,radioPreset);
   if(radioPreset==='custom'){startCalib();updateRadioInfo();return;}
   // preset (or auto) takes effect immediately — drop this device's calibration
-  axisMap=null;if(gpName)try{localStorage.removeItem('ryflyAxisMap_'+sanitizeId(gpName));}catch(e){}
+  // even if gpName is empty (fall back to ryflyGamepadId). Stale maps from a
+  // broken wizard run must not survive Auto-detect.
+  axisMap=null;
+  clearRadioCalibration(id);
   toast(radioPreset==='auto'?'RADIO: AUTO-DETECT':'PRESET SET');
   updateRadioInfo();
 };
