@@ -237,12 +237,15 @@ class RepoPin(unittest.TestCase):
         whoop = os.path.join(REPO_ROOT, "sim-whoop.js")
         maps = os.path.join(REPO_ROOT, "sim-maps.js")
         room = os.path.join(REPO_ROOT, "sim-room.js")
+        coach = os.path.join(REPO_ROOT, "sim-coach.js")
         with open(whoop, encoding="utf-8") as handle:
             whoop_src = handle.read()
         with open(maps, encoding="utf-8") as handle:
             maps_src = handle.read()
         with open(room, encoding="utf-8") as handle:
             room_src = handle.read()
+        with open(coach, encoding="utf-8") as handle:
+            coach_src = handle.read()
         self.assertRegex(
             whoop_src, r"from '\./sim-build\.js\?v=[0-9a-f]{%d}'" % stamp.HASH_LEN
         )
@@ -251,6 +254,12 @@ class RepoPin(unittest.TestCase):
         )
         self.assertRegex(
             maps_src, r"from '\./sim-room\.js\?v=[0-9a-f]{%d}'" % stamp.HASH_LEN
+        )
+        self.assertRegex(
+            coach_src, r"from '\./sim-tracks\.js\?v=[0-9a-f]{%d}'" % stamp.HASH_LEN
+        )
+        self.assertRegex(
+            coach_src, r"from '\./sim-room\.js\?v=[0-9a-f]{%d}'" % stamp.HASH_LEN
         )
         sim_html = os.path.join(REPO_ROOT, "sim.html")
         with open(sim_html, encoding="utf-8") as handle:
