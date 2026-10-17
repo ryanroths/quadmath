@@ -1,13 +1,15 @@
 // QuadMath sim W5 — Retention: daily whoop, weekly boards, ghost duels, skins.
 // Nothing here is copied from WebFPV (GPL).
-// New localStorage keys only: quadmathSimDaily, quadmathSimBoard, quadmathSimSkin.
-// Optional: quadmathSimLeaderboardUrl (online boards). Do not write old ryfly* keys.
+// New localStorage keys: quadmathSimDaily, quadmathSimBoard, quadmathSimSkin,
+// quadmathSimPilotToken. Optional: quadmathSimLeaderboardUrl (online boards).
+// Do not write old ryfly* keys.
 // This file has no sim-*.js imports so the Cloudflare Worker can bundle it.
 
 export const DAILY_KEY = 'quadmathSimDaily';
 export const BOARD_KEY = 'quadmathSimBoard';
 export const SKIN_KEY = 'quadmathSimSkin';
 export const LEADERBOARD_URL_KEY = 'quadmathSimLeaderboardUrl';
+export const PILOT_TOKEN_KEY = 'quadmathSimPilotToken';
 export const SHARE_PREFIX = 'QM2.';
 export const DUEL_KIND = 'duel';
 export const WS_PER_METRE = 3.5;
@@ -16,6 +18,10 @@ export const LEADERBOARD_URL = 'https://sim-leaderboard.ryan-roths.workers.dev';
 export const CLASS_IDS = Object.freeze([65, 75, 85]);
 export const CLASS_MAX_SPEED = Object.freeze({ 65: 48, 75: 58, 85: 72 });
 export const MISS_PENALTY_MS = 2000;
+export const PHYS_VER = 2;
+export const PILOT_NAME_MAX = 16;
+export const WEEK_GRACE_MS = 36 * 60 * 60 * 1000;
+export const DEFAULT_ALLOWED_ORIGIN = 'https://quadmath.com';
 
 // Indoor fly boxes, numbers copied from sim-maps LAYOUT. Tests pin the match.
 export const DAILY_MAPS = Object.freeze([
@@ -108,6 +114,25 @@ export function utcWeekId(now) {
   const yearStart = new Date(Date.UTC(year, 0, 1));
   const week = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
   return year + '-W' + String(week).padStart(2, '0');
+}
+
+export function previousUtcWeekId(now) {
+  const d = now != null ? new Date(now) : new Date();
+  return utcWeekId(d.getTime() - 7 * 24 * 60 * 60 * 1000);
+}
+
+export function msSinceUtcMonday(now) {
+  const d = now != null ? new Date(now) : new Date();
+  const day = d.getUTCDay() || 7;
+  const monday = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - (day - 1), 0, 0, 0, 0);
+  return d.getTime() - monday;
+}
+
+export function weekAllowed(week, now) {
+  if (typeof week !== 'string' || !/^\d{4}-W\d{2}$/.test(week)) return false;
+  const t = now != null ? now : Date.now();
+  if (week === utcWeekId(t)) return true;
+  return week === previousUtcWeekId(t) && msSinceUtcMonday(t) < WEEK_GRACE_MS;
 }
 
 export function addUtcDays(utc, days) {
@@ -451,6 +476,12 @@ export function classId(frameMm) {
   return 65;
 }
 
+export function classFromBuild(build) {
+  if (!build || typeof build !== 'object') return null;
+  if (build.frameMm == null && build.class == null) return null;
+  return classId(build.frameMm != null ? build.frameMm : build.class);
+}
+
 export function validateSubmittedRun(input) {
   const src = input || {};
   const frameMm = classId(src.frameMm);
@@ -493,9 +524,30 @@ export function validateSubmittedRun(input) {
   return { ok: true, laps, frameMm, timeMs, trackId: track.id };
 }
 
+function nameCharOk(ch) {
+  if (ch === ' ' || ch === '.' || ch === '-' || ch === '_') return true;
+  try { return /\p{L}|\p{N}/u.test(ch); }
+  catch (e) { return /[A-Za-z0-9]/.test(ch); }
+}
+
 export function sanitizePilotName(raw) {
-  const s = String(raw || 'PILOT').replace(/[^\w \-.]/g, '').trim().slice(0, 16);
+  const chars = [];
+  const src = String(raw == null ? 'PILOT' : raw).normalize('NFC');
+  for (const ch of src) {
+    if (nameCharOk(ch)) chars.push(ch);
+    if (chars.length >= PILOT_NAME_MAX) break;
+  }
+  const s = chars.join('').trim();
   return s || 'PILOT';
+}
+
+export function escapeHtml(raw) {
+  return String(raw == null ? '' : raw)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function b64utf8(str) {
@@ -642,13 +694,17 @@ function storageOf(storage) {
   return storage || (typeof localStorage !== 'undefined' ? localStorage : null);
 }
 
-export function loadDaily(storage) {
+export function loadDaily(storage, now, skipReset) {
   const store = storageOf(storage);
-  if (!store) return normalizeDaily(emptyDaily());
+  if (!store) {
+    const empty = normalizeDaily(emptyDaily());
+    return skipReset ? empty : applyMissedDayReset(empty, now).progress;
+  }
   try {
     const raw = store.getItem(DAILY_KEY);
-    if (!raw) return normalizeDaily(emptyDaily());
-    return normalizeDaily(JSON.parse(raw));
+    const parsed = raw ? normalizeDaily(JSON.parse(raw)) : normalizeDaily(emptyDaily());
+    if (skipReset) return parsed;
+    return applyMissedDayReset(parsed, now).progress;
   } catch (e) {
     return normalizeDaily(emptyDaily());
   }
@@ -665,11 +721,35 @@ export function saveDaily(progress, storage) {
   }
 }
 
-export function recordDailyFinish(progress, { utc, timeMs } = {}) {
+export function applyMissedDayReset(progress, now) {
   const p = normalizeDaily(progress);
-  const day = utc || utcDateId();
+  const today = utcDateId(now);
+  if (!p.lastUtc) return { progress: p, reset: false };
+  if (p.lastUtc === today || addUtcDays(p.lastUtc, 1) === today) {
+    return { progress: p, reset: false };
+  }
+  if (p.streak === 0) return { progress: p, reset: false };
+  p.streak = 0;
+  return { progress: p, reset: true };
+}
+
+export function syncDailyStreak(storage, now) {
+  const store = storageOf(storage);
+  const applied = applyMissedDayReset(loadDaily(store, now, true), now);
+  if (applied.reset) saveDaily(applied.progress, store);
+  return applied;
+}
+
+export function recordDailyFinish(progress, { utc, timeMs, trackId } = {}, now) {
+  const p = normalizeDaily(progress);
+  const today = utcDateId(now);
+  const day = utc || today;
   const t = +timeMs;
-  if (!Number.isFinite(t) || t <= 0) return { progress: p, improved: false, streak: p.streak };
+  if (!Number.isFinite(t) || t <= 0) return { progress: p, improved: false, streak: p.streak, counted: false };
+  if (day !== today) return { progress: p, improved: false, streak: p.streak, counted: false };
+  if (trackId && trackId !== dailyIdFor(today)) {
+    return { progress: p, improved: false, streak: p.streak, counted: false };
+  }
   p.playsByDay[day] = (p.playsByDay[day] || 0) + 1;
   let improved = false;
   if (!p.bestByDay[day] || t < p.bestByDay[day]) {
@@ -682,7 +762,7 @@ export function recordDailyFinish(progress, { utc, timeMs } = {}) {
     p.lastUtc = day;
   }
   if (p.streak > p.bestStreak) p.bestStreak = p.streak;
-  return { progress: p, improved, streak: p.streak, bestMs: p.bestByDay[day] };
+  return { progress: p, improved, streak: p.streak, bestMs: p.bestByDay[day], counted: true };
 }
 
 export function emptyBoard() {
@@ -763,13 +843,33 @@ export function boardRows(board, week, frameMm) {
   return (b.weeks[w] && b.weeks[w][c]) || [];
 }
 
+export function isLocalHost(loc) {
+  if (!loc) return false;
+  const host = String(loc.hostname || loc.host || '').split(':')[0].toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+}
+
+export function allowedOriginList(spec) {
+  const raw = spec == null || spec === '' ? DEFAULT_ALLOWED_ORIGIN : String(spec);
+  return raw.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+export function pickCorsOrigin(spec, requestOrigin) {
+  const list = allowedOriginList(spec);
+  if (list.includes('*')) return requestOrigin || '*';
+  if (requestOrigin && list.includes(requestOrigin)) return requestOrigin;
+  return list[0] || DEFAULT_ALLOWED_ORIGIN;
+}
+
 export function leaderboardUrl(storage, loc) {
   const place = loc || (typeof location !== 'undefined' ? location : null);
   try {
-    const search = place && (place.search || '');
-    if (search) {
-      const q = new URLSearchParams(search.startsWith('?') ? search : '?' + search).get('lb');
-      if (q && /^https:\/\//i.test(q)) return q.replace(/\/$/, '');
+    if (isLocalHost(place)) {
+      const search = place && (place.search || '');
+      if (search) {
+        const q = new URLSearchParams(search.startsWith('?') ? search : '?' + search).get('lb');
+        if (q && /^https:\/\//i.test(q)) return q.replace(/\/$/, '');
+      }
     }
   } catch (e) { /* ignore */ }
   const store = storageOf(storage);
@@ -778,6 +878,45 @@ export function leaderboardUrl(storage, loc) {
     if (s && /^https:\/\//i.test(s)) return s.replace(/\/$/, '');
   } catch (e) { /* ignore */ }
   return String(LEADERBOARD_URL || '').replace(/\/$/, '');
+}
+
+function randomHex(n) {
+  const bytes = new Uint8Array(n);
+  const c = typeof globalThis !== 'undefined' ? globalThis.crypto : null;
+  if (c && typeof c.getRandomValues === 'function') c.getRandomValues(bytes);
+  else {
+    for (let i = 0; i < n; i++) bytes[i] = (Math.random() * 256) | 0;
+  }
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += bytes[i].toString(16).padStart(2, '0');
+  return s;
+}
+
+export function issuePilotToken(storage) {
+  const store = storageOf(storage);
+  try {
+    const existing = store && store.getItem(PILOT_TOKEN_KEY);
+    if (existing && /^[a-f0-9]{32,64}$/i.test(existing)) return existing;
+  } catch (e) { /* ignore */ }
+  const token = randomHex(16);
+  try { if (store) store.setItem(PILOT_TOKEN_KEY, token); }
+  catch (e) { /* ignore */ }
+  return token;
+}
+
+export async function hashPilotToken(token) {
+  const text = String(token || '');
+  const bytes = new TextEncoder().encode(text);
+  const c = typeof globalThis !== 'undefined' ? globalThis.crypto : null;
+  if (c && c.subtle && typeof c.subtle.digest === 'function') {
+    const buf = await c.subtle.digest('SHA-256', bytes);
+    const arr = new Uint8Array(buf);
+    let hex = '';
+    for (let i = 0; i < arr.length; i++) hex += arr[i].toString(16).padStart(2, '0');
+    return hex;
+  }
+  const { createHash } = await import('node:crypto');
+  return createHash('sha256').update(text).digest('hex');
 }
 
 export function onlineBoardsEnabled(url) {
@@ -901,20 +1040,135 @@ export function tintGroup(group, skin) {
   });
 }
 
-export function normalizeSubmit(body) {
+function catmullPt(P, i, t) {
+  const n = P.length;
+  const p0 = P[(i - 1 + n) % n], p1 = P[i % n], p2 = P[(i + 1) % n], p3 = P[(i + 2) % n];
+  const t2 = t * t, t3 = t2 * t;
+  return {
+    x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+    y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
+    z: 0.5 * ((2 * p1.z) + (-p0.z + p2.z) * t + (2 * p0.z - 5 * p1.z + 4 * p2.z - p3.z) * t2 + (-p0.z + 3 * p1.z - 3 * p2.z + p3.z) * t3),
+  };
+}
+
+function pacePositions(gates, speed, hz, laps) {
+  const P = (gates || []).map((g) => ({ x: g.x, y: g.y, z: g.z }));
+  const n = P.length;
+  if (n < 2 || !(speed > 0) || !(hz > 0)) return [];
+  const pts = [];
+  const totalSegs = (laps || RUN_LAPS) * n - 1;
+  for (let s = 0; s < totalSegs; s++) {
+    for (let k = 0; k < 40; k++) pts.push(catmullPt(P, s % n, k / 40));
+  }
+  pts.push({ x: P[totalSegs % n].x, y: P[totalSegs % n].y, z: P[totalSegs % n].z });
+  const d = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    d.push(Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y, pts[i + 1].z - pts[i].z));
+  }
+  const cum = [0];
+  for (const x of d) cum.push(cum[cum.length - 1] + x);
+  const L = cum[cum.length - 1];
+  const T = L / speed;
+  const samples = [];
+  let idx = 0;
+  for (let t = 0; t <= T + 1e-9; t += 1 / hz) {
+    const s = Math.min(t * speed, L);
+    while (idx < d.length - 1 && cum[idx + 1] < s) idx++;
+    const f = d[idx] > 0 ? (s - cum[idx]) / d[idx] : 0;
+    const p = pts[idx];
+    const q = pts[idx + 1] || p;
+    samples.push([
+      Math.round(t * 1000),
+      Math.round((p.x + (q.x - p.x) * f) * 100) / 100,
+      Math.round((p.y + (q.y - p.y) * f) * 100) / 100,
+      Math.round((p.z + (q.z - p.z) * f) * 100) / 100,
+    ]);
+  }
+  return samples;
+}
+
+function positionsMatch(a, b, tol) {
+  const n = Math.min(a.length, b.length);
+  if (n < 8) return false;
+  if (Math.abs(a.length - b.length) > 3) return false;
+  const step = Math.max(1, Math.floor(n / 16));
+  let hits = 0, checks = 0;
+  for (let i = 0; i < n; i += step) {
+    checks++;
+    const dx = a[i][1] - b[i][1], dy = a[i][2] - b[i][2], dz = a[i][3] - b[i][3];
+    if (Math.hypot(dx, dy, dz) <= tol) hits++;
+  }
+  return checks > 0 && hits / checks >= 0.9;
+}
+
+export function isPaceBotGhost(ghost, track) {
+  if (!ghost || !Array.isArray(ghost.samples) || ghost.samples.length < 8) return false;
+  const name = String(ghost.name || '').replace(/\s+/g, ' ').trim().toUpperCase();
+  if (name === 'PACE BOT' || name === 'PACE') return true;
+  const gates = track && track.gates;
+  if (!gates || gates.length < 2) return false;
+  let dist = 0;
+  const samples = ghost.samples;
+  for (let i = 1; i < samples.length; i++) {
+    dist += Math.hypot(
+      samples[i][1] - samples[i - 1][1],
+      samples[i][2] - samples[i - 1][2],
+      samples[i][3] - samples[i - 1][3],
+    );
+  }
+  const span = (samples[samples.length - 1][0] - samples[0][0]) / 1000;
+  const speedGuess = span > 0 ? dist / span : 0;
+  const dt = samples.length > 1 ? (samples[1][0] - samples[0][0]) : 0;
+  const hzGuess = dt > 0 ? Math.round(1000 / dt) : 0;
+  const speeds = [6, 8];
+  if (speedGuess > 1) speeds.push(Math.round(speedGuess * 10) / 10, Math.round(speedGuess));
+  const hzs = [8, 12, 16];
+  if (hzGuess >= 4 && hzGuess <= 40) hzs.push(hzGuess);
+  const seen = new Set();
+  for (const speed of speeds) {
+    for (const hz of hzs) {
+      const key = speed + ':' + hz;
+      if (seen.has(key) || !(speed > 0) || !(hz > 0)) continue;
+      seen.add(key);
+      const pace = pacePositions(gates, speed, hz, RUN_LAPS);
+      if (positionsMatch(samples, pace, 0.025)) return true;
+    }
+  }
+  return false;
+}
+
+function submittedTrackId(raw) {
+  if (!raw) return '';
+  if (typeof raw === 'string') return raw;
+  if (typeof raw === 'object' && raw.id != null) return String(raw.id);
+  return '';
+}
+
+export function normalizeSubmit(body, now) {
   if (!body || typeof body !== 'object') return { ok: false, reason: 'BAD JSON' };
   const frameMm = classId(body.frameMm || body.class);
+  const builtClass = classFromBuild(body.build);
+  if (builtClass != null && builtClass !== frameMm) return { ok: false, reason: 'CLASS MISMATCH' };
   const name = sanitizePilotName(body.name);
   const timeMs = +body.timeMs;
   const week = typeof body.week === 'string' && /^\d{4}-W\d{2}$/.test(body.week)
-    ? body.week : utcWeekId();
+    ? body.week : utcWeekId(now);
+  if (!weekAllowed(week, now)) return { ok: false, reason: 'BAD WEEK' };
+  const track = weeklyTrackFor(week);
+  if (!dailyTrackValid(track)) return { ok: false, reason: 'BAD TRACK' };
+  const givenId = submittedTrackId(body.track);
+  if (givenId) {
+    const aliases = [track.id, weeklyIdFor(week), 'weekly'];
+    if (!aliases.includes(givenId)) return { ok: false, reason: 'TRACK MISMATCH' };
+  }
   const ghost = body.ghost;
-  let track = body.track;
-  if (!track) track = weeklyTrackFor(week);
-  if (typeof track === 'string') track = trackFromRetentionId(track);
   if (ghostPayloadError(ghost, null)) return { ok: false, reason: ghostPayloadError(ghost, null) };
+  const ghostPhys = ghost && ghost.phys;
+  if (ghostPhys !== PHYS_VER) return { ok: false, reason: 'PHYS MISMATCH' };
+  if (isPaceBotGhost(ghost, track)) return { ok: false, reason: 'PACE BOT' };
   const checked = validateSubmittedRun({ ghost, track, frameMm, timeMs });
   if (!checked.ok) return checked;
+  const token = typeof body.token === 'string' ? body.token.trim() : '';
   return {
     ok: true,
     week,
@@ -922,6 +1176,7 @@ export function normalizeSubmit(body) {
     name,
     timeMs: timeMs | 0,
     trackId: track.id || checked.trackId,
+    token,
   };
 }
 

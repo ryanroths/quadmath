@@ -9,10 +9,17 @@ CREATE TABLE IF NOT EXISTS scores (
   PRIMARY KEY (week, class, name)
 );
 CREATE INDEX IF NOT EXISTS scores_rank ON scores (week, class, time_ms);
+CREATE INDEX IF NOT EXISTS scores_rank_track ON scores (week, class, track_id, time_ms);
 
 CREATE TABLE IF NOT EXISTS rate_limit (
   ip TEXT NOT NULL,
   window TEXT NOT NULL,
   n INTEGER NOT NULL,
   PRIMARY KEY (ip, window)
+);
+
+CREATE TABLE IF NOT EXISTS pilots (
+  name TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL,
+  claimed_ms INTEGER NOT NULL
 );
