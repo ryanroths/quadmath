@@ -14,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "quadmath-sim-leaderboard",
-      "database_id": "REPLACE_AFTER_D1_CREATE"
+      "database_id": "334e0e13-781a-44e8-ad60-b3a36db9f2c5"
     }
   ]
 }
