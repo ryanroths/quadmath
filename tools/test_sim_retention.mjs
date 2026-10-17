@@ -206,9 +206,12 @@ test('daily streak counts consecutive UTC days; best time can only drop', () => 
   assert.equal(p.bestStreak, 2);
 });
 
-test('local weekly board ranks by class; online UI is off when URL is unset', () => {
-  assert.equal(LEADERBOARD_URL, '');
-  assert.equal(onlineBoardsEnabled(leaderboardUrl(memStore(), { search: '' })), false);
+test('local weekly board ranks by class; online boards follow https LEADERBOARD_URL', () => {
+  assert.equal(LEADERBOARD_URL, 'https://sim-leaderboard.ryan-roths.workers.dev');
+  assert.equal(onlineBoardsEnabled(LEADERBOARD_URL), true);
+  assert.equal(onlineBoardsEnabled(''), false);
+  assert.equal(onlineBoardsEnabled('http://127.0.0.1:8787'), false);
+  assert.equal(leaderboardUrl(memStore(), { search: '' }), LEADERBOARD_URL);
   assert.equal(leaderboardUrl(memStore(), { search: '?lb=https://lb.example.workers.dev/' }), 'https://lb.example.workers.dev');
   let board = recordLocalBoard(null, { week: '2026-W42', frameMm: 65, name: 'A', timeMs: 50000, trackId: 'weekly-2026-W42' });
   board = recordLocalBoard(board, { week: '2026-W42', frameMm: 65, name: 'B', timeMs: 40000, trackId: 'weekly-2026-W42' });
