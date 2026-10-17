@@ -18,7 +18,7 @@ Swap `build`, `track`, and `mode`:
 | Param | What |
 | --- | --- |
 | `build` | Share code. Named presets (`QB1.air65`) or full `QB1.65-23000-31x3-1s300-27`. |
-| `track` | M2 id (`living-sofa`, `garage-bench`, `city-loop`, `0` / `1` for legacy city). |
+| `track` | Course id (`living-sofa`, `office-cubicles`, `gym-court`, `trainer-figure8`, `city-loop`, `0` / `1` for legacy city). |
 | `mode` | `angle` (default for newcomers), `horizon`, or `acro`. |
 
 Copy the live code from Tune → Your build → COPY BUILD LINK.
@@ -38,7 +38,9 @@ Copy the live code from Tune → Your build → COPY BUILD LINK.
 | `QB1.meteor75pro` | 85mm-class 1S 19000KV, 40×4, 480 mAh, 41.5 g | Guide 80mm / 41.5 g O4 Wide; nearest picker class is 85mm. |
 | `QB1.whoop85_2s` | 85mm 2S 11000KV, 51×3, 450 mAh, 48 g | Class ballpark. |
 
-Indoor whoop tracks to prefer: `living-sofa`, `living-circuit`, `garage-bench`, `warehouse-aisle`. City loop remains `city-loop` (legacy `0`).
+Indoor whoop tracks to prefer: `living-sofa`, `living-circuit`, `garage-bench`, `warehouse-aisle`, `office-cubicles`, `gym-court`, `trainer-figure8`. City loop remains `city-loop` (legacy `0`).
+
+Your room (W3) is generated in the sim from L×W×H. Deep-link the last saved cell with `?map=room` or `?track=room-practice`, or pass `?room=16x12x8ft` / `?room=5x4x2.6m`.
 
 ## Existing guides (scan of `content/guides/`)
 
@@ -69,4 +71,18 @@ https://quadmath.com/sim.html?build=QB1.air65&track=living-sofa&mode=angle
 https://quadmath.com/sim.html?build=QB1.mobula6&track=living-circuit&mode=acro
 https://quadmath.com/sim.html?build=QB1.meteor75pro&track=garage-bench&mode=angle
 https://quadmath.com/sim.html?build=QB1.whoop85_2s&track=warehouse-aisle&mode=horizon
+https://quadmath.com/sim.html?build=QB1.air65&track=office-cubicles&mode=angle
+https://quadmath.com/sim.html?build=QB1.air65&track=gym-court&mode=angle
+https://quadmath.com/sim.html?build=QB1.whoop65&track=trainer-figure8&mode=angle
+https://quadmath.com/sim.html?build=QB1.air65&track=trainer-slalom&mode=acro
+https://quadmath.com/sim.html?map=room&room=16x12x8ft&mode=angle
 ```
+
+W3 indoor maps (same `?track=` / `?map=` / `?mode=` scheme as W1):
+
+| Map | Tracks |
+| --- | --- |
+| Office | `office-cubicles`, `office-hallway`, `office-desks` |
+| School gym | `gym-court`, `gym-bleachers`, `gym-hoops` |
+| Tiny Trainer | `trainer-figure8`, `trainer-slalom`, `trainer-hairpin` |
+| Your room | `room-practice` (generated; optional `?room=LxWxHft`) |
