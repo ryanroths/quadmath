@@ -14,6 +14,7 @@ import { RATE_PRESETS, applyRatePreset, INPUT_CHOICE_KEY, FLOATINESS_KEY } from 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const simSrc = readFileSync(join(root, 'sim.html'), 'utf8');
 const feelSrc = readFileSync(join(root, 'sim-feel.js'), 'utf8');
+const touchSrc = readFileSync(join(root, 'sim-touch.js'), 'utf8');
 
 function quatAxisAngle(x, y, z, angle) {
   const s = Math.sin(angle / 2);
@@ -129,8 +130,9 @@ test('existing localStorage keys are still referenced (not renamed)', () => {
     'quadmath_bestLap_', 'quadmath_bestRun_', 'quadmath_bestGhost_',
     'quadmath_pilotName',
   ];
+  const src = simSrc + '\n' + touchSrc;
   for (const k of keys) {
-    assert.ok(simSrc.includes(k), `sim.html lost key ${k}`);
+    assert.ok(src.includes(k), `sim lost key ${k}`);
   }
   assert.ok(feelSrc.includes('quadmathSimInputChoice'), 'new first-run key missing');
   assert.equal(INPUT_CHOICE_KEY, 'quadmathSimInputChoice');

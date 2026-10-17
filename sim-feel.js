@@ -192,25 +192,37 @@ export function createFeel(ctx) {
     if (!promptEl) return;
     promptOpen = true;
     const has = !!(info && info.hasGamepad);
+    const mobile = !!(info && info.mobile);
     const touchy = !!(info && (info.touch || info.mobile));
     const name = (info && info.gpName) ? String(info.gpName).slice(0, 48) : '';
     const title = has ? 'Controller / radio detected' : 'No controller';
     const lead = has
-      ? (name ? name : 'Gamepad connected') + ' — calibrate sticks, fly with the keyboard, or use on-screen sticks.'
-      : 'Fly with on-screen sticks, the keyboard, or plug in a radio (Joystick mode) and wiggle a stick.';
-    const kbBtn = touchy ? '' : '<button type="button" id="feelKeys">Fly with keyboard</button>';
+      ? (name ? name : 'Gamepad connected') + ' — calibrate sticks, or fly with the keyboard. Touch sticks stay off while a radio is connected.'
+      : (mobile
+        ? 'Fly with on-screen sticks, or plug in a radio (Joystick mode) and wiggle a stick.'
+        : 'Fly with the keyboard, or plug in a radio (Joystick mode) and wiggle a stick.');
+    // Hide keyboard only on real phones (detectMobile). Chrome desktop
+    // ontouchstart / maxTouchPoints must not hide Calibrate/Keyboard for a TX16S.
+    const kbBtn = touchy && mobile ? '' : '<button type="button" id="feelKeys">Fly with keyboard</button>';
+    const touchHtml = has
+      ? '<button type="button" id="feelTouch">Touch sticks</button>'
+      : (mobile
+        ? '<button type="button" class="primary" id="feelTouch">Touch sticks</button>'
+        : '<button type="button" id="feelTouch">Touch sticks</button>');
+    const buttons = has
+      ? '<button type="button" class="primary" id="feelCalib">Calibrate</button>' +
+        kbBtn +
+        touchHtml
+      : (mobile
+        ? touchHtml + kbBtn
+        : '<button type="button" class="primary" id="feelKeys">Fly with keyboard</button>' + touchHtml) +
+        '<p class="menu-lead" style="margin-top:10px">TX16S: USB Joystick, then wiggle. This prompt comes back if a pad connects.</p>';
     promptEl.innerHTML =
       '<div class="menu-card feel-card">' +
         '<div class="menu-brand">QuadMath</div>' +
         '<h1>' + title + '</h1>' +
         '<p class="menu-lead">' + lead + '</p>' +
-        (has
-          ? '<button type="button" class="primary" id="feelCalib">Calibrate</button>' +
-            '<button type="button" id="feelTouch">Touch sticks</button>' +
-            kbBtn
-          : '<button type="button" class="primary" id="feelTouch">Touch sticks</button>' +
-            kbBtn +
-            '<p class="menu-lead" style="margin-top:10px">TX16S: USB Joystick, then wiggle. This prompt comes back if a pad connects.</p>') +
+        buttons +
       '</div>';
     promptEl.classList.add('show');
     promptEl.setAttribute('aria-hidden', 'false');
@@ -239,16 +251,25 @@ export function createFeel(ctx) {
     const hasPad = !!(info && info.hasGamepad);
     const touchy = !!(info && (info.touch || info.mobile));
     if (touchy && !hasPad) {
-      saveInputChoice('touch');
-      if (onTouch) onTouch();
-      return false;
+      // Auto-touch only when detectMobile said so. Chrome on Windows exposes
+      // ontouchstart / maxTouchPoints on a desktop — that must not steal a TX16S.
+      if (info && info.mobile) {
+        saveInputChoice('touch');
+        if (onTouch) onTouch();
+        return false;
+      }
     }
     showFirstRun(info || { hasGamepad: false });
     return true;
   }
 
   function onGamepadConnected(info) {
-    showFirstRun({ hasGamepad: true, gpName: info && info.gpName });
+    showFirstRun({
+      hasGamepad: true,
+      gpName: info && info.gpName,
+      mobile: info && info.mobile,
+      touch: info && info.touch,
+    });
   }
 
   function clearTutorialScene() {

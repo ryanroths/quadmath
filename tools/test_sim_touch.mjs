@@ -13,6 +13,7 @@ import {
   detectMobile, resolveAutoQuality, hasSavedSettings,
   loadFlightMode, saveFlightMode, defaultFlightMode, toggleAcro,
   shouldEnableTouch, shouldShowLandscape, createTouchControls,
+  resolveInputSource,
 } from '../sim-touch.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -121,6 +122,12 @@ test('auto quality is low on mobile; touch enable / landscape rules', () => {
   assert.equal(shouldEnableTouch({ inputChoice: 'keyboard', mobile: true }), false);
   assert.equal(shouldEnableTouch({ mobile: true }), true);
   assert.equal(shouldEnableTouch({}), false);
+  assert.equal(shouldEnableTouch({ inputChoice: 'touch', hasGamepad: true }), false);
+  assert.equal(shouldEnableTouch({ mobile: true, gamepadConnected: true }), false);
+  assert.equal(shouldEnableTouch({ mobile: true, padLive: true }), false);
+  assert.equal(resolveInputSource({ hasGamepad: true, touchEnabled: true }), 'gamepad');
+  assert.equal(resolveInputSource({ touchEnabled: true }), 'touch');
+  assert.equal(resolveInputSource({}), 'keyboard');
   assert.equal(shouldShowLandscape({ mobile: true, width: 390, height: 844 }), true);
   assert.equal(shouldShowLandscape({ mobile: true, width: 844, height: 390 }), false);
   assert.equal(detectMobile({
@@ -185,18 +192,31 @@ test('first-run prompt keeps keyboard/calibrate and adds Touch', () => {
   assert.ok(feelSrc.includes('feelTouch') || feelSrc.includes('id="feelTouch"'));
   assert.ok(feelSrc.includes('onTouch'));
   assert.ok(feelSrc.includes('Fly with keyboard') || feelSrc.includes('feelKeys'));
+  assert.ok(feelSrc.includes('Touch sticks stay off while a radio is connected'));
 });
 
 test('M3 touch-only first visit skips No controller overlay and keyboard', () => {
   assert.ok(feelSrc.includes('touchy && !hasPad') || feelSrc.includes('touchy&&!hasPad'));
   assert.ok(feelSrc.includes("saveInputChoice('touch')"));
-  assert.ok(feelSrc.includes('const kbBtn = touchy ? \'\'') || feelSrc.includes('const kbBtn=touchy?\'\''));
+  assert.ok(feelSrc.includes('const kbBtn = touchy') || feelSrc.includes('const kbBtn=touchy'));
   assert.ok(simSrc.includes('touchFirst') || simSrc.includes('touch:touchFirst') || simSrc.includes('touch: touchFirst'));
+  assert.ok(feelSrc.includes('info.mobile'), 'desktop Chrome ontouchstart must not auto-touch');
 });
 
 test('looks auto quality consults mobile and defers heavy assets', () => {
   assert.ok(looksSrc.includes('resolveAutoQuality') || looksSrc.includes('isMobile') || looksSrc.includes('mobile'));
   assert.ok(looksSrc.includes('afterFirstFrame'));
+});
+
+test('sim.html gamepad path does not fall through to touch', () => {
+  assert.ok(simSrc.includes('if(gpConnected)'));
+  assert.ok(simSrc.includes('empty Chrome polls') || simSrc.includes('empty polls'));
+  assert.ok(simSrc.includes('hasGamepad:gpConnected') || simSrc.includes('hasGamepad: gpConnected'));
+  assert.ok(simSrc.includes('RADIO CONNECTED — TOUCH OFF') || simSrc.includes('enableTouchLayer(false)'));
+  assert.ok(simSrc.includes('pickGamepad()'));
+  assert.ok(simSrc.includes('loadRadioProfile'));
+  assert.ok(simSrc.includes('applyAxisMap'));
+  assert.ok(simSrc.includes('body.calibrating'));
 });
 
 test('existing localStorage keys stay in sim.html', () => {
@@ -206,7 +226,8 @@ test('existing localStorage keys stay in sim.html', () => {
     'quadmath_bestLap_', 'quadmath_bestRun_', 'quadmath_bestGhost_',
     'quadmath_pilotName',
   ];
+  const src = simSrc + '\n' + touchSrc;
   for (const k of keys) {
-    assert.ok(simSrc.includes(k), `sim.html lost key ${k}`);
+    assert.ok(src.includes(k), `sim lost key ${k}`);
   }
 });
