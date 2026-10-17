@@ -693,8 +693,8 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples,
-} from "./sim-whoop.js?v=783d7fbeb57b";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=ae095e556386";
+} from "./sim-whoop.js?v=5d2aeafb4839";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=a977981bbe0c";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -702,7 +702,7 @@ import {
   sanitizeId, isRadio, radioScore, RADIO_PRESETS,
   effectiveAxisMap, applyAxisMap, loadRadioProfile, saveAxisMap,
   saveRadioPreset, clearRadioCalibration, GP_ID_KEY, createCalibState, stepCalib, skipCalibAux,
-} from "./sim-touch.js?v=21888a744322";
+} from "./sim-touch.js?v=bf6cd8074ebe";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -718,7 +718,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=19bee552695d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=0118c6a6770a";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=b4de21d738bd";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -736,7 +736,7 @@ import {
   loadSkinId, saveSkinId, makeCanopyGroup, layoutCanopyGroup, canopyFpvVisible,
   loadCanopyOn, saveCanopyOn, CANOPY_KEY, tintGroup, sanitizePilotName, classId,
   validateSubmittedRun, CLASS_IDS, issuePilotToken, syncDailyStreak,
-} from "./sim-retention.js?v=55bda48b17dc";
+} from "./sim-retention.js?v=979956a5134e";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
