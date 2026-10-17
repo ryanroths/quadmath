@@ -290,35 +290,82 @@ export function defaultSpec(id, extras) {
   return base;
 }
 
+export function headingTo(from, to) {
+  return Math.atan2(-(to.x - from.x), -(to.z - from.z));
+}
+
+export function drillBox(id, spec) {
+  const s = spec || defaultSpec(id);
+  if (id === 'yaw-spin' || id === 'doorway-pass') {
+    const room = s.room || planRoom(DEFAULT_ROOM);
+    return { w: room.w, d: room.d, h: room.h };
+  }
+  if (id === 'split-s' || id === 'power-loop') return { w: 48, d: 74, h: 28 };
+  return { w: 28, d: 36, h: 10.5 };
+}
+
+export function spawnInside(pos, box, margin) {
+  const m = margin == null ? 1.3 : margin;
+  const hw = Math.max(0.4, box.w / 2 - m);
+  const hd = Math.max(0.4, box.d / 2 - m);
+  return {
+    x: clamp(pos.x, -hw, hw),
+    y: pos.y,
+    z: clamp(pos.z, -hd, hd),
+    yaw: pos.yaw,
+  };
+}
+
+export function facesTarget(spawn, target, slop) {
+  if (!spawn || !target) return false;
+  const dx = target.x - spawn.x, dz = target.z - spawn.z;
+  if (Math.hypot(dx, dz) < 0.35) return true;
+  const want = headingTo(spawn, target);
+  let d = (spawn.yaw || 0) - want;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return Math.abs(d) <= (slop == null ? 0.2 : slop);
+}
+
 export function drillSpawn(id, spec) {
   const s = spec || defaultSpec(id);
+  const box = drillBox(id, s);
+  let pad;
   if (id === 'hover-hold') {
     const t = s.target;
-    return { x: t.x + 7.2, y: 0.2, z: t.z, yaw: -Math.PI / 2 };
-  }
-  if (id === 'yaw-spin') {
+    pad = { x: t.x, y: 0.2, z: t.z, yaw: 0 };
+  } else if (id === 'yaw-spin') {
     const t = s.target;
-    return { x: t.x, y: 0.2, z: t.z + 2.4, yaw: Math.PI };
-  }
-  if (id === 'straight-line') {
+    pad = { x: t.x, y: 0.2, z: t.z + 2.4, yaw: 0 };
+    pad.yaw = headingTo(pad, t);
+  } else if (id === 'straight-line') {
     const a = s.a;
-    return { x: a.x, y: 0.2, z: a.z + 3.2, yaw: Math.PI };
-  }
-  if (id === 'gate-pass') {
+    pad = { x: a.x, y: 0.2, z: a.z + 3.2, yaw: 0 };
+    pad.yaw = headingTo(pad, a);
+  } else if (id === 'gate-pass') {
     const g = s.gates[0];
-    return { x: g.x, y: 0.2, z: g.z + 4.5, yaw: Math.PI };
-  }
-  if (id === 'doorway-pass') {
+    const dist = (g.size || 1.8) * 2.4;
+    pad = {
+      x: g.x - Math.sin(g.ry || 0) * dist,
+      y: 0.2,
+      z: g.z - Math.cos(g.ry || 0) * dist,
+      yaw: 0,
+    };
+    pad.yaw = headingTo(pad, g);
+  } else if (id === 'doorway-pass') {
     const door = s.doorway;
-    return { x: door.x, y: 0.2, z: door.z - 6.5, yaw: 0 };
+    pad = { x: door.x, y: 0.2, z: door.z - 6.5, yaw: 0 };
+    pad.yaw = headingTo(pad, door);
+  } else if (id === 'split-s') {
+    pad = { x: 0, y: 0.2, z: 10, yaw: 0 };
+    pad.yaw = headingTo(pad, { x: 0, z: 0 });
+  } else if (id === 'power-loop') {
+    pad = { x: 0, y: 0.2, z: 6, yaw: 0 };
+    pad.yaw = headingTo(pad, { x: 0, z: 0 });
+  } else {
+    pad = { x: 0, y: 0.2, z: 4, yaw: 0 };
   }
-  if (id === 'split-s') {
-    return { x: 0, y: 0.2, z: 10, yaw: Math.PI };
-  }
-  if (id === 'power-loop') {
-    return { x: 0, y: 0.2, z: 6, yaw: Math.PI };
-  }
-  return { x: 0, y: 0.2, z: 4, yaw: Math.PI };
+  return spawnInside(pad, box, 1.4);
 }
 
 function finishScore(score, medal, pass) {
@@ -332,24 +379,30 @@ function finishScore(score, medal, pass) {
 export function scoreHoverHold(samples, spec) {
   const s = spec || defaultSpec('hover-hold');
   const t = s.target;
-  const hold = [];
+  const holdH = [];
+  const holdA = [];
+  const holdSpd = [];
   let holdTime = 0;
   let crashes = 0;
-  const speeds = [];
+  let inside = false;
   for (const p of samples) {
     if (p.crashed) crashes++;
     const horiz = Math.hypot(p.x - t.x, p.z - t.z);
     const alt = Math.abs(p.y - t.y);
     const spd = Math.hypot(p.vx || 0, p.vy || 0, p.vz || 0);
-    speeds.push(spd);
-    if (p.armed !== false && horiz <= s.radius && alt <= s.altTol && p.y > 0.6) {
-      hold.push(horiz, alt);
+    const inGlow = p.armed !== false && horiz <= s.radius && alt <= s.altTol && p.y > 0.6;
+    if (inGlow) inside = true;
+    if (!inside) continue;
+    if (inGlow) {
+      holdH.push(horiz);
+      holdA.push(alt);
+      holdSpd.push(spd);
       holdTime += p.dt || 0;
     }
   }
-  const rmsH = rms(samples.map((p) => Math.hypot(p.x - t.x, p.z - t.z)));
-  const rmsA = rms(samples.map((p) => Math.abs(p.y - t.y)));
-  const maxSpd = speeds.length ? Math.max(...speeds) : 0;
+  const rmsH = holdH.length ? rms(holdH) : 99;
+  const rmsA = holdA.length ? rms(holdA) : 99;
+  const maxSpd = holdSpd.length ? Math.max(...holdSpd) : 0;
   let score = 0;
   score += clamp(holdTime / 8, 0, 1) * 46;
   score += (1 - clamp(rmsH / 1.4, 0, 1)) * 24;
@@ -358,9 +411,9 @@ export function scoreHoverHold(samples, spec) {
   if (crashes) score *= 0.45;
   const pass = holdTime >= 4.5 && crashes === 0;
   let medal = 'none';
-  if (pass && holdTime >= 5 && rmsH < 1.15) medal = 'bronze';
-  if (pass && holdTime >= 7 && rmsH < 0.75) medal = 'silver';
-  if (pass && holdTime >= 8 && rmsH < 0.42 && rmsA < 0.35) medal = 'gold';
+  if (pass && holdTime >= 5 && rmsH < 1.2) medal = 'bronze';
+  if (pass && holdTime >= 6.5 && rmsH < 0.85) medal = 'silver';
+  if (pass && holdTime >= 8 && rmsH < 0.45 && rmsA < 0.40) medal = 'gold';
   const out = finishScore(score, medal, pass);
   out.holdTime = holdTime;
   out.rmsHoriz = rmsH;
@@ -1195,7 +1248,10 @@ export function createCoach(ctx) {
     setText(metaEl, 'Space to arm');
     setText(deltaEl, '');
     renderTips([]);
-    if (actionsEl) actionsEl.style.display = 'none';
+    if (actionsEl) {
+      actionsEl.style.display = 'none';
+      actionsEl.classList.remove('show');
+    }
     showHud(true);
   }
 
@@ -1208,7 +1264,10 @@ export function createCoach(ctx) {
       : ('No medal · ' + result.score.toFixed(0)));
     setText(metaEl, result.pass ? 'Retry or unlock the next one.' : 'Retry. Criteria are on the ladder.');
     renderTips(tips);
-    if (actionsEl) actionsEl.style.display = '';
+    if (actionsEl) {
+      actionsEl.style.display = 'block';
+      actionsEl.classList.add('show');
+    }
     showHud(true);
   }
 
