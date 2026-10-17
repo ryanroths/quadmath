@@ -12,7 +12,7 @@ import { ROOM_KEY } from '../sim-room.js';
 import { COACH_KEY } from '../sim-coach.js';
 import { LAYOUT } from '../sim-maps.js';
 import {
-  DAILY_KEY, BOARD_KEY, SKIN_KEY, LEADERBOARD_URL_KEY, LEADERBOARD_URL,
+  DAILY_KEY, BOARD_KEY, SKIN_KEY, CANOPY_KEY, LEADERBOARD_URL_KEY, LEADERBOARD_URL,
   PILOT_TOKEN_KEY, SHARE_PREFIX, DUEL_KIND, DAILY_MAPS, SKINS, CLASS_MAX_SPEED, CLASS_IDS,
   PHYS_VER, WEEK_GRACE_MS, DEFAULT_ALLOWED_ORIGIN,
   utcDateId, utcWeekId, addUtcDays, dailyTrackFor, weeklyTrackFor,
@@ -21,7 +21,9 @@ import {
   duelResult, emptyDaily, recordDailyFinish, loadDaily, saveDaily,
   loadBoard, saveBoard, recordLocalBoard, boardRows, leaderboardUrl,
   onlineBoardsEnabled, unlockedSkins, isSkinUnlocked, resolveSkin,
-  loadSkinId, saveSkinId, sanitizePilotName, normalizeSubmit, fmtMs,
+  loadSkinId, saveSkinId, loadCanopyOn, saveCanopyOn, makeCanopyGroup,
+  layoutCanopyGroup, layoutCanopyPieces, canopyPieceCoverage, canopyFpvVisible,
+  canopyViewBottomY, sanitizePilotName, normalizeSubmit, fmtMs,
   mulberry32, weekAllowed, previousUtcWeekId, isPaceBotGhost, issuePilotToken,
   hashPilotToken, pickCorsOrigin, isLocalHost, escapeHtml, classFromBuild,
   syncDailyStreak, applyMissedDayReset,
@@ -63,6 +65,7 @@ test('new storage keys only; never writes old keys or WebFPV', () => {
   assert.equal(DAILY_KEY, 'quadmathSimDaily');
   assert.equal(BOARD_KEY, 'quadmathSimBoard');
   assert.equal(SKIN_KEY, 'quadmathSimSkin');
+  assert.equal(CANOPY_KEY, 'quadmathSimCanopy');
   assert.ok(retSrc.includes('setItem(DAILY_KEY'));
   assert.ok(retSrc.includes('Nothing here is copied from WebFPV') || retSrc.includes('copied from WebFPV'));
   for (const banned of ['ryflyDroneType', 'ryflyRates', CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY, BUILD_KEY, WHOOP_KEY, ROOM_KEY, COACH_KEY]) {
@@ -479,6 +482,13 @@ test('sim.html wires Daily / Boards / skins and keeps ghost paste', () => {
   assert.ok(simSrc.includes('encodeDuel'));
   assert.ok(simSrc.includes('btnGhostDuel') || simSrc.includes('DUEL'));
   assert.ok(simSrc.includes('makeCanopyGroup'));
+  assert.ok(simSrc.includes('layoutCanopyGroup'));
+  assert.ok(simSrc.includes('canopyFpvVisible'));
+  assert.ok(simSrc.includes('Show canopy'));
+  assert.ok(simSrc.includes('id="cbCanopy"'));
+  assert.ok(!/id="cbCanopy"[^>]*\bchecked\b/.test(simSrc), 'Show canopy defaults off');
+  assert.ok(simSrc.includes('loadCanopyOn') && simSrc.includes('saveCanopyOn'));
+  assert.ok(simSrc.includes('CANOPY_KEY') || simSrc.includes('quadmathSimCanopy'));
   assert.ok(simSrc.includes('renderBoardBody'));
   assert.ok(simSrc.includes("b.textContent"));
   assert.ok(simSrc.includes('Resets 5 PM Phoenix'));
@@ -486,4 +496,99 @@ test('sim.html wires Daily / Boards / skins and keeps ghost paste', () => {
   assert.ok(simSrc.includes('syncDailyStreak'));
   assert.ok(!simSrc.includes('content/guides/'), 'do not edit guide HTML');
   assert.ok(retSrc.includes('copied from WebFPV') || retSrc.includes('Nothing here is copied from WebFPV'));
+});
+
+function mockTHREE() {
+  class Vec {
+    constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
+    set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }
+  }
+  class Obj {
+    constructor() {
+      this.position = new Vec();
+      this.scale = new Vec(1, 1, 1);
+      this.rotation = new Vec();
+      this.userData = {};
+      this.children = [];
+      this.visible = true;
+      this.name = '';
+      this.material = null;
+    }
+    add(c) { this.children.push(c); }
+    traverse(fn) {
+      fn(this);
+      for (const c of this.children) c.traverse(fn);
+    }
+  }
+  class Mesh extends Obj {
+    constructor(geo, mat) {
+      super();
+      this.geometry = geo;
+      this.material = mat;
+    }
+  }
+  return {
+    Group: class extends Obj {},
+    Mesh,
+    BoxGeometry: class { constructor(w, h, d) { this.w = w; this.h = h; this.d = d; } },
+    CylinderGeometry: class { constructor(a, b, h) { this.rTop = a; this.rBot = b; this.h = h; } },
+    MeshStandardMaterial: class {
+      constructor(o) {
+        Object.assign(this, o);
+        this.color = { setHex(v) { this._hex = v; } };
+        this.emissive = { setHex(v) { this._e = v; } };
+      }
+    },
+  };
+}
+
+test('Show canopy defaults off and persists quadmathSimCanopy', () => {
+  assert.equal(loadCanopyOn(memStore()), false);
+  assert.equal(loadCanopyOn(null), false);
+  const store = memStore();
+  assert.equal(saveCanopyOn(true, store), true);
+  assert.equal(store.getItem(CANOPY_KEY), '1');
+  assert.deepEqual(store.keys(), [CANOPY_KEY]);
+  assert.equal(loadCanopyOn(store), true);
+  saveCanopyOn(false, store);
+  assert.equal(store.getItem(CANOPY_KEY), '0');
+  assert.equal(loadCanopyOn(store), false);
+  assert.ok(retSrc.includes('setItem(CANOPY_KEY'));
+  assert.equal(canopyFpvVisible({ on: true }), true);
+  assert.equal(canopyFpvVisible({ on: false }), false);
+  assert.equal(canopyFpvVisible({ on: true, menuOpen: true }), false);
+  assert.equal(canopyFpvVisible({ on: true, lookSpot: true }), false);
+  assert.equal(canopyFpvVisible({ on: true, replay: true }), false);
+  assert.equal(canopyFpvVisible({ on: true, builder: true }), false);
+});
+
+test('no canopy piece covers >10% of view at FOV 110', () => {
+  assert.ok(!retSrc.includes('const visor'), 'overhead visor mesh must be gone');
+  assert.ok(!retSrc.includes('BoxGeometry(0.22'));
+  const fov = 110;
+  for (const aspect of [16 / 9, 4 / 3, 21 / 9, 1]) {
+    const cov = canopyPieceCoverage({ fov, aspect });
+    assert.ok(cov.max <= 0.10, `max coverage ${cov.max} at aspect ${aspect}`);
+    assert.ok(cov.lip <= 0.06 + 1e-9, `lip ${cov.lip} must stay ~6% of view`);
+    for (const d of cov.ducts) {
+      assert.ok(d <= 0.10, `duct coverage ${d}`);
+    }
+    const L = layoutCanopyPieces({ fov, aspect });
+    const bottom = canopyViewBottomY(fov, L.dist);
+    assert.ok(Math.abs(L.lip.y - (bottom + L.lip.sy / 2)) < 1e-9);
+    assert.ok(L.lip.sy / (2 * -bottom) <= 0.06 + 1e-9);
+  }
+  const THREE = mockTHREE();
+  const g = makeCanopyGroup(THREE, SKINS[0]);
+  assert.equal(g.visible, false);
+  assert.equal(g.children.length, 3);
+  assert.ok(g.children.every((c) => c.userData.canopyRole !== 'visor'));
+  assert.equal(g.children.filter((c) => c.userData.canopyRole === 'lip').length, 1);
+  assert.equal(g.children.filter((c) => c.userData.canopyRole === 'duct').length, 2);
+  const wide = layoutCanopyGroup(g, { fov: 110, aspect: 16 / 9 });
+  const tall = layoutCanopyGroup(g, { fov: 150, aspect: 1 });
+  assert.ok(tall.lip.y < wide.lip.y, 'higher FOV drops the lip with the frustum');
+  const lip = g.children.find((c) => c.userData.canopyRole === 'lip');
+  assert.equal(lip.position.y, tall.lip.y);
+  assert.equal(lip.userData.skinPart, 'canopy');
 });

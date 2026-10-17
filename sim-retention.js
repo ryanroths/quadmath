@@ -1,13 +1,15 @@
 // QuadMath sim W5 — Retention: daily whoop, weekly boards, ghost duels, skins.
 // Nothing here is copied from WebFPV (GPL).
 // New localStorage keys: quadmathSimDaily, quadmathSimBoard, quadmathSimSkin,
-// quadmathSimPilotToken. Optional: quadmathSimLeaderboardUrl (online boards).
+// quadmathSimPilotToken, quadmathSimCanopy. Optional: quadmathSimLeaderboardUrl
+// (online boards).
 // Do not write old ryfly* keys.
 // This file has no sim-*.js imports so the Cloudflare Worker can bundle it.
 
 export const DAILY_KEY = 'quadmathSimDaily';
 export const BOARD_KEY = 'quadmathSimBoard';
 export const SKIN_KEY = 'quadmathSimSkin';
+export const CANOPY_KEY = 'quadmathSimCanopy';
 export const LEADERBOARD_URL_KEY = 'quadmathSimLeaderboardUrl';
 export const PILOT_TOKEN_KEY = 'quadmathSimPilotToken';
 export const SHARE_PREFIX = 'QM2.';
@@ -991,38 +993,187 @@ export function resolveSkin(id, progress) {
   return SKINS[0];
 }
 
+export function loadCanopyOn(storage) {
+  const store = storageOf(storage);
+  if (!store) return false;
+  try {
+    return store.getItem(CANOPY_KEY) === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+export function saveCanopyOn(on, storage) {
+  const store = storageOf(storage);
+  if (!store) return false;
+  try {
+    store.setItem(CANOPY_KEY, on ? '1' : '0');
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Thin FPV lip only. No overhead box. Pieces sit on the live frustum so a
+// 110° camera cannot fill the screen the way the old 0.13–0.15 m boxes did.
+export const CANOPY_DIST = 0.12;
+export const CANOPY_LIP_SCREEN = 0.04;
+export const CANOPY_LIP_SCREEN_MAX = 0.06;
+
+export function canopyViewHalfHeight(fovDeg, dist) {
+  const d = Number(dist);
+  const fov = Number(fovDeg);
+  if (!(d > 0) || !Number.isFinite(fov)) return 0;
+  return d * Math.tan((fov * Math.PI / 180) / 2);
+}
+
+export function canopyViewBottomY(fovDeg, dist) {
+  return -canopyViewHalfHeight(fovDeg, dist);
+}
+
+export function canopyFpvVisible(state) {
+  const s = state || {};
+  return !!s.on && !s.menuOpen && !s.lookSpot && !s.replay && !s.builder;
+}
+
+function canopyCam(opts) {
+  const o = opts || {};
+  const fov = Number(o.fov);
+  const aspect = Number(o.aspect);
+  const dist = Number(o.dist);
+  return {
+    fov: Number.isFinite(fov) && fov > 0 ? fov : 110,
+    aspect: Number.isFinite(aspect) && aspect > 0 ? aspect : 16 / 9,
+    dist: Number.isFinite(dist) && dist > 0 ? dist : CANOPY_DIST,
+  };
+}
+
+export function layoutCanopyPieces(opts) {
+  const { fov, aspect, dist } = canopyCam(opts);
+  const halfH = canopyViewHalfHeight(fov, dist);
+  const halfW = halfH * aspect;
+  const lipFrac = Math.min(
+    CANOPY_LIP_SCREEN_MAX,
+    opts && Number.isFinite(Number(opts.lipScreen)) && Number(opts.lipScreen) > 0
+      ? Number(opts.lipScreen)
+      : CANOPY_LIP_SCREEN,
+  );
+  const lipH = 2 * halfH * lipFrac;
+  const lipW = 2 * halfW * 1.04;
+  const lipD = Math.min(0.005, dist * 0.04);
+  const lipY = canopyViewBottomY(fov, dist) + lipH / 2;
+  const ductR = Math.min(0.005, lipH * 0.3);
+  // Sit fully below the frustum so they cannot cover the FPV view.
+  const ductY = canopyViewBottomY(fov, dist + lipD) - ductR * 3;
+  const ductX = halfW * 0.72;
+  return {
+    fov,
+    aspect,
+    dist,
+    lip: { x: 0, y: lipY, z: -dist, sx: lipW, sy: lipH, sz: lipD },
+    ducts: [
+      { x: -ductX, y: ductY, z: -dist, r: ductR, len: lipD },
+      { x: ductX, y: ductY, z: -dist, r: ductR, len: lipD },
+    ],
+  };
+}
+
+function projectNdc(x, y, z, fovDeg, aspect) {
+  const d = -z;
+  const halfH = canopyViewHalfHeight(fovDeg, d);
+  if (!(halfH > 0) || !(d > 0)) return null;
+  return { x: x / (halfH * aspect), y: y / halfH };
+}
+
+export function boxNdcCoverage(box, fovDeg, aspect) {
+  if (!box) return 0;
+  const sx = Number(box.sx) || 0, sy = Number(box.sy) || 0, sz = Number(box.sz) || 0;
+  const hx = sx / 2, hy = sy / 2, hz = sz / 2;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let any = false;
+  for (const dx of [-hx, hx]) {
+    for (const dy of [-hy, hy]) {
+      for (const dz of [-hz, hz]) {
+        const p = projectNdc(box.x + dx, box.y + dy, box.z + dz, fovDeg, aspect);
+        if (!p) continue;
+        any = true;
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+    }
+  }
+  if (!any) return 0;
+  const w = Math.max(0, Math.min(1, maxX) - Math.max(-1, minX));
+  const h = Math.max(0, Math.min(1, maxY) - Math.max(-1, minY));
+  return (w * h) / 4;
+}
+
+export function canopyPieceCoverage(opts) {
+  const L = layoutCanopyPieces(opts);
+  const fov = L.fov;
+  const aspect = L.aspect;
+  const lip = boxNdcCoverage(L.lip, fov, aspect);
+  const ducts = L.ducts.map((d) => boxNdcCoverage({
+    x: d.x, y: d.y, z: d.z, sx: d.r * 2, sy: d.r * 2, sz: d.len,
+  }, fov, aspect));
+  return { lip, ducts, max: Math.max(lip, ...ducts) };
+}
+
+export function layoutCanopyGroup(group, camera) {
+  if (!group) return null;
+  const L = layoutCanopyPieces({
+    fov: camera && camera.fov,
+    aspect: camera && camera.aspect,
+    dist: camera && camera.userData && camera.userData.canopyDist,
+  });
+  const kids = group.children || [];
+  for (const o of kids) {
+    const role = o.userData && o.userData.canopyRole;
+    if (role === 'lip' && L.lip) {
+      o.position.set(L.lip.x, L.lip.y, L.lip.z);
+      if (o.scale && o.scale.set) o.scale.set(L.lip.sx, L.lip.sy, L.lip.sz);
+    } else if (role === 'duct') {
+      const side = o.userData.canopySide < 0 ? 0 : 1;
+      const d = L.ducts[side];
+      o.position.set(d.x, d.y, d.z);
+      if (o.scale && o.scale.set) o.scale.set(d.r, d.len, d.r);
+    }
+  }
+  return L;
+}
+
 export function makeCanopyGroup(THREE, skin) {
   const s = skin || SKINS[0];
   const g = new THREE.Group();
   g.name = 'qmCanopy';
-  const visor = new THREE.Mesh(
-    new THREE.BoxGeometry(0.22, 0.035, 0.16),
-    new THREE.MeshStandardMaterial({ color: 0x111318, roughness: 0.32, metalness: 0.22 }),
-  );
-  visor.position.set(0, 0.055, -0.15);
-  visor.userData.looksSkip = true;
-  g.add(visor);
   const lip = new THREE.Mesh(
-    new THREE.BoxGeometry(0.2, 0.028, 0.07),
+    new THREE.BoxGeometry(1, 1, 1),
     new THREE.MeshStandardMaterial({
       color: s.canopy, emissive: s.canopy, emissiveIntensity: 0.45, roughness: 0.42, metalness: 0.12,
     }),
   );
-  lip.position.set(0, -0.068, -0.13);
+  lip.name = 'qmCanopyLip';
   lip.userData.skinPart = 'canopy';
   lip.userData.looksSkip = true;
+  lip.userData.canopyRole = 'lip';
   g.add(lip);
-  for (const x of [-0.09, 0.09]) {
+  for (const side of [-1, 1]) {
     const duct = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.018, 0.018, 0.05, 8),
+      new THREE.CylinderGeometry(1, 1, 1, 8),
       new THREE.MeshStandardMaterial({ color: s.body, roughness: 0.5, metalness: 0.18 }),
     );
+    duct.name = side < 0 ? 'qmCanopyDuctL' : 'qmCanopyDuctR';
     duct.rotation.z = Math.PI / 2;
-    duct.position.set(x, -0.05, -0.11);
     duct.userData.skinPart = 'body';
     duct.userData.looksSkip = true;
+    duct.userData.canopyRole = 'duct';
+    duct.userData.canopySide = side;
     g.add(duct);
   }
+  layoutCanopyGroup(g, { fov: 110, aspect: 16 / 9 });
+  g.visible = false;
   return g;
 }
 
