@@ -291,6 +291,7 @@
   #coachTips a{color:var(--green);font-size:12px;line-height:1.4;text-decoration:none}
   #coachTips a:hover{color:var(--orange)}
   #coachActions{display:none;margin-top:6px}
+  #coachActions.show{display:block}
   #coachActions button{width:auto;display:inline-block;margin:4px 6px}
   .coach-list{display:flex;flex-direction:column;gap:6px;margin:10px 0}
   .coach-row{width:100%;text-align:left;display:flex;justify-content:space-between;gap:10px;align-items:center}
@@ -701,7 +702,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=19bee552695d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=da10f348a5a8";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=ac1375dcf0b7";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -709,7 +710,7 @@ import {
 } from "./sim-build.js?v=6264dd38e42a";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=529b20f2f830";
+} from "./sim-coach.js?v=d7ee445bc859";
 import {
   DAILY_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -717,8 +718,8 @@ import {
   loadDaily, saveDaily, recordDailyFinish, loadBoard, saveBoard, recordLocalBoard,
   boardRows, leaderboardUrl, onlineBoardsEnabled, SKINS, unlockedSkins, isSkinUnlocked, resolveSkin,
   loadSkinId, saveSkinId, makeCanopyGroup, tintGroup, sanitizePilotName, classId,
-  validateSubmittedRun, CLASS_IDS,
-} from "./sim-retention.js?v=c10438cbd1b6";
+  validateSubmittedRun, CLASS_IDS, issuePilotToken, syncDailyStreak,
+} from "./sim-retention.js?v=482bb85b53c2";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -3216,7 +3217,11 @@ addEventListener('keydown',e=>{
   if(e.key==='Escape'){
     e.preventDefault();
     if(builderOn){closeBuilder();return;}
-    if(coach&&coach.isActive())coach.cancel();
+    if(coach&&coach.isActive()){
+      coach.cancel();
+      openCoachPicker();
+      return;
+    }
     toggleStartMenu();
     return;
   }
@@ -3857,6 +3862,7 @@ function openDailyCard(){
   const best=d.bestByDay[utcDateId()];
   showMenuLayer('<h2>Daily whoop</h2>'+
     '<p>Seeded from UTC '+utcDateId()+'. Same gates for everyone today. Indoor map: <b style="color:var(--txt)">'+t.map+'</b>.</p>'+
+    '<p class="daily-meta">Resets 5 PM Phoenix (UTC midnight).</p>'+
     '<p class="daily-meta">Streak '+d.streak+' · best today '+(best?fmtLap(best):'—')+
     ' · all-time streak '+d.bestStreak+'</p>'+
     '<button type="button" class="primary" id="dailyFly">Fly '+t.name+'</button>'+
@@ -3866,13 +3872,32 @@ function openDailyCard(){
   document.getElementById('dailySkins').onclick=()=>openSkinsCard();
   document.getElementById('layerClose').onclick=hideMenuLayer;
 }
-function boardHtml(week, frameMm, onlineRows){
+function renderBoardBody(el, week, frameMm, onlineRows){
+  if(!el)return;
+  el.textContent='';
   const local=boardRows(loadBoard(), week, frameMm);
   const rows=(onlineRows&&onlineRows.length)?onlineRows:local;
-  if(!rows.length)return '<p class="daily-meta">No times yet.</p>';
-  return '<div class="board-list">'+rows.map((r,i)=>
-    '<div class="board-row"><b>'+(i+1)+' '+r.name+'</b><span>'+fmtMs(r.timeMs||r.time_ms)+'</span></div>'
-  ).join('')+'</div>';
+  if(!rows.length){
+    const p=document.createElement('p');
+    p.className='daily-meta';
+    p.textContent='No times yet.';
+    el.appendChild(p);
+    return;
+  }
+  const wrap=document.createElement('div');
+  wrap.className='board-list';
+  rows.forEach((r,i)=>{
+    const row=document.createElement('div');
+    row.className='board-row';
+    const b=document.createElement('b');
+    b.textContent=(i+1)+' '+sanitizePilotName(r.name);
+    const span=document.createElement('span');
+    span.textContent=fmtMs(r.timeMs||r.time_ms);
+    row.appendChild(b);
+    row.appendChild(span);
+    wrap.appendChild(row);
+  });
+  el.appendChild(wrap);
 }
 function openBoardsCard(){
   const week=utcWeekId();
@@ -3884,7 +3909,7 @@ function openBoardsCard(){
     '<p>'+week+' · class <b style="color:var(--txt)">'+cls+'mm</b> from Your build. Local always. '+
     (online?'Online: on.':'Online: off until a leaderboard URL is set.')+'</p>'+
     '<p class="daily-meta">Course: '+t.name+' · '+t.map+'</p>'+
-    '<div id="boardBody">'+boardHtml(week, cls)+'</div>'+
+    '<div id="boardBody"></div>'+
     (online?'<button type="button" id="boardRefresh">Refresh online</button>':'')+
     '<button type="button" class="primary" id="boardFly">Fly this week</button>'+
     '<button type="button" id="boardSkins">Skins</button>'+
@@ -3892,12 +3917,13 @@ function openBoardsCard(){
   document.getElementById('boardFly').onclick=()=>flyGeneratedTrack(t);
   document.getElementById('boardSkins').onclick=()=>openSkinsCard();
   document.getElementById('layerClose').onclick=hideMenuLayer;
+  renderBoardBody(document.getElementById('boardBody'), week, cls);
   const rf=document.getElementById('boardRefresh');
   if(rf)rf.onclick=async()=>{
     try{
       const r=await fetch(url+'/api/board?week='+encodeURIComponent(week)+'&class='+cls);
       const j=await r.json();
-      document.getElementById('boardBody').innerHTML=boardHtml(week, cls, j.entries);
+      renderBoardBody(document.getElementById('boardBody'), week, cls, j.entries);
     }catch(e){toast('ONLINE UNAVAILABLE');}
   };
 }
@@ -5029,9 +5055,9 @@ function ghostPayloadOf(id, samples, timeMs){
 function noteRetentionFinish(id, total, rec){
   let extra='';
   if(isDailyTrackId(id)){
-    const recd=recordDailyFinish(loadDaily(), { utc: utcDateId(), timeMs: total });
+    const recd=recordDailyFinish(loadDaily(), { utc: utcDateId(), timeMs: total, trackId: id });
     saveDaily(recd.progress);
-    extra='STREAK '+recd.streak;
+    extra=recd.counted===false?'DAILY SKIPPED':'STREAK '+recd.streak;
     applyActiveSkin();
   }
   if(isWeeklyTrackId(id)){
@@ -5058,6 +5084,7 @@ async function maybeSubmitOnline(id, total, rec){
   const body={
     week: utcWeekId(), frameMm: classId(currentBuild&&currentBuild.frameMm),
     name: currentPilotName(), timeMs: total, ghost, track,
+    build: currentBuild, token: issuePilotToken(),
   };
   const checked=validateSubmittedRun({ ghost, track, frameMm: body.frameMm, timeMs: total });
   if(!checked.ok)return;
@@ -5350,7 +5377,7 @@ function launchCoachDrill(id){
   }else if(d.preferMode==='angle'&&qp.flightMode==='acro'){
     toast('ANGLE IS EASIER — PRESS 1');
   }
-  setMap(d.map,d.track);
+  setMap(d.map,d.track,{save:false});
   const opts=Object.assign({
     mode:qp.flightMode||d.preferMode,
     input:gpConnected?'radio':'keyboard',
@@ -5483,14 +5510,24 @@ document.getElementById('ratePreset').onchange=function(){
     toast(RATE_PRESETS[this.value].label.toUpperCase());
   }
 };
-feel.maybeFirstRun({hasGamepad:gpConnected,gpName});
+const touchFirst=!!(mobileHint||('ontouchstart' in window)||(navigator.maxTouchPoints>0));
+feel.maybeFirstRun({hasGamepad:gpConnected,gpName,mobile:mobileHint,touch:touchFirst});
 bootTouchLayer();
 window._feel=feel;
 window._touch=touchCtl;
 wireLooksUI();
 wireBuilderUI();
 customTracks=loadCustomTracks();
+issuePilotToken();
+try{
+  const dailyBoot=syncDailyStreak();
+  if(dailyBoot&&dailyBoot.reset)toast('STREAK RESET — MISSED A DAY');
+}catch(e){}
+let queryBooted=false;
+let tracksReady=false;
 function applyQueryBoot(){
+  if(queryBooted||!tracksReady)return;
+  queryBooted=true;
   const q=new URLSearchParams(location.search);
   const roomRaw=q.get('room');
   if(roomRaw){
@@ -5518,7 +5555,7 @@ function applyQueryBoot(){
   }
   const modeRaw=(q.get('mode')||'').toLowerCase();
   if(modeRaw==='angle'||modeRaw==='horizon'||modeRaw==='acro'){
-    setFlightMode(modeRaw);flightMode=modeRaw;
+    setFlightMode(modeRaw,false);flightMode=modeRaw;
   }
   const drillRaw=q.get('drill');
   if(drillRaw&&drillById(drillRaw)){
@@ -5549,10 +5586,12 @@ fetchBuiltinTracks().then(list=>{
     if(t.legacyId==null)loadHostedGhost(t.id);
   }
   publishTracks();
+  tracksReady=true;
   applyQueryBoot();
 }).catch(()=>{
   builtinTracks=[cityTrackJson(0),cityTrackJson(1)];
   publishTracks();
+  tracksReady=true;
   applyQueryBoot();
 });
 Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
