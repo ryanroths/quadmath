@@ -1,0 +1,18 @@
+{
+  "id": "trainer-slalom",
+  "map": "trainer",
+  "name": "Slalom",
+  "class": "whoop",
+  "gates": [
+    { "x": 0.0, "y": 2.2, "z": 14.0, "ry": 0.00, "size": 1.8, "solid": true },
+    { "x": -4.6, "y": 2.2, "z": 8.0, "ry": 0.35, "size": 1.7, "solid": true },
+    { "x": 4.6, "y": 2.2, "z": 2.0, "ry": -0.35, "size": 1.7, "solid": true },
+    { "x": -4.6, "y": 2.2, "z": -4.0, "ry": 0.35, "size": 1.7, "solid": true },
+    { "x": 4.6, "y": 2.2, "z": -10.0, "ry": -0.35, "size": 1.7, "solid": true },
+    { "x": 0.0, "y": 2.2, "z": -14.2, "ry": 1.57, "size": 1.8, "solid": true },
+    { "x": 0.0, "y": 2.2, "z": 8.5, "ry": 3.14, "size": 1.8, "solid": true }
+  ],
+  "flags": [
+    { "x": 0.0, "y": 2.6, "z": -2.0, "ry": 0 }
+  ]
+}

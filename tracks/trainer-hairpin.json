@@ -1,0 +1,19 @@
+{
+  "id": "trainer-hairpin",
+  "map": "trainer",
+  "name": "Hairpin",
+  "class": "whoop",
+  "gates": [
+    { "x": 0.0, "y": 2.2, "z": 14.2, "ry": 0.00, "size": 1.8, "solid": true },
+    { "x": 0.0, "y": 2.2, "z": 2.0, "ry": 0.00, "size": 1.7, "solid": true },
+    { "x": 0.0, "y": 2.2, "z": -10.0, "ry": 0.00, "size": 1.7, "solid": true },
+    { "x": -6.2, "y": 2.2, "z": -14.2, "ry": 1.40, "size": 1.6, "solid": true },
+    { "x": 0.0, "y": 2.2, "z": -6.0, "ry": 3.14, "size": 1.7, "solid": true },
+    { "x": 6.2, "y": 2.2, "z": 6.0, "ry": -1.40, "size": 1.6, "solid": true },
+    { "x": 0.0, "y": 2.2, "z": 10.0, "ry": 3.14, "size": 1.8, "solid": true }
+  ],
+  "flags": [
+    { "x": -6.2, "y": 2.6, "z": -14.2, "ry": 0.4 },
+    { "x": 6.2, "y": 2.6, "z": 6.0, "ry": -0.4 }
+  ]
+}

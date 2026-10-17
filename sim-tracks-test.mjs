@@ -7,7 +7,7 @@ import {
   applyMissPenalty, MISS_PENALTY_MS, ghostStorageKey, bestLapStorageKey,
   bestRunStorageKey, ghostPayloadError, makePaceGhost, loadCustomTracks,
   saveCustomTracks, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY, loadSelected,
-  saveSelected, BUILTIN_TRACK_FILES, SHARE_PREFIX, startPad, gateRadius,
+  saveSelected, BUILTIN_TRACK_FILES, SHARE_PREFIX, startPad, gateRadius, MAPS,
 } from './sim-tracks.js';
 
 function readTrack(file) {
@@ -47,6 +47,32 @@ assert.ok((byMap.living || 0) >= 2);
 assert.ok((byMap.garage || 0) >= 2);
 assert.ok((byMap.warehouse || 0) >= 2);
 assert.ok((byMap.backyard || 0) >= 2);
+assert.ok((byMap.office || 0) >= 2, 'office needs 2+ tracks');
+assert.ok((byMap.gym || 0) >= 2, 'gym needs 2+ tracks');
+assert.ok((byMap.trainer || 0) >= 2, 'trainer needs 2+ tracks');
+assert.equal(byMap.office, 3);
+assert.equal(byMap.gym, 3);
+assert.equal(byMap.trainer, 3);
+
+for (const t of files.filter((x) => ['office', 'gym', 'trainer'].includes(x.map))) {
+  for (const g of t.gates) {
+    assert.ok(g.size <= 2.2, t.id + ' whoop gate too large: ' + g.size);
+    assert.ok(g.solid, t.id + ' whoop gates should be solid');
+  }
+  assert.ok(lapLengthMetres(t.gates) > 6 && lapLengthMetres(t.gates) < 200, t.id + ' lap m ' + lapLengthMetres(t.gates));
+}
+
+const catalog = JSON.parse(readFileSync('tracks/catalog.json', 'utf8'));
+assert.equal(catalog.tracks.length, BUILTIN_TRACK_FILES.length);
+for (const meta of BUILTIN_TRACK_FILES) {
+  assert.ok(catalog.tracks.some((t) => t.id === meta.id && t.map === meta.map), 'catalog missing ' + meta.id);
+}
+assert.ok(catalog.maps.some((m) => m.id === 'office'));
+assert.ok(catalog.maps.some((m) => m.id === 'gym'));
+assert.ok(catalog.maps.some((m) => m.id === 'trainer'));
+assert.ok(catalog.maps.some((m) => m.id === 'room'));
+assert.ok(MAPS.some((m) => m.id === 'office' && m.indoor));
+assert.ok(MAPS.some((m) => m.id === 'room' && m.indoor));
 
 const living = files.find((t) => t.id === 'living-sofa');
 for (const g of living.gates) {

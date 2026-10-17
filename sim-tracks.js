@@ -46,6 +46,10 @@ export const MAPS = [
   { id: 'garage', name: 'Garage', class: 'whoop', indoor: true },
   { id: 'warehouse', name: 'Warehouse', class: 'whoop', indoor: true },
   { id: 'backyard', name: 'Backyard', class: 'whoop', indoor: false },
+  { id: 'office', name: 'Office', class: 'whoop', indoor: true },
+  { id: 'gym', name: 'School Gym', class: 'whoop', indoor: true },
+  { id: 'trainer', name: 'Tiny Trainer', class: 'whoop', indoor: true },
+  { id: 'room', name: 'Your Room', class: 'whoop', indoor: true },
 ];
 
 export function isLegacyTrackId(id) {
@@ -432,6 +436,15 @@ export const BUILTIN_TRACK_FILES = [
   { id: 'warehouse-catwalk', file: 'tracks/warehouse-catwalk.json', map: 'warehouse', name: 'Catwalk' },
   { id: 'backyard-fence', file: 'tracks/backyard-fence.json', map: 'backyard', name: 'Fence Loop' },
   { id: 'backyard-patio', file: 'tracks/backyard-patio.json', map: 'backyard', name: 'Patio Dive' },
+  { id: 'office-cubicles', file: 'tracks/office-cubicles.json', map: 'office', name: 'Cubicle Weave' },
+  { id: 'office-hallway', file: 'tracks/office-hallway.json', map: 'office', name: 'Hallway Run' },
+  { id: 'office-desks', file: 'tracks/office-desks.json', map: 'office', name: 'Desk Hop' },
+  { id: 'gym-court', file: 'tracks/gym-court.json', map: 'gym', name: 'Court Loop' },
+  { id: 'gym-bleachers', file: 'tracks/gym-bleachers.json', map: 'gym', name: 'Bleacher Climb' },
+  { id: 'gym-hoops', file: 'tracks/gym-hoops.json', map: 'gym', name: 'Hoop Dive' },
+  { id: 'trainer-figure8', file: 'tracks/trainer-figure8.json', map: 'trainer', name: 'Figure 8' },
+  { id: 'trainer-slalom', file: 'tracks/trainer-slalom.json', map: 'trainer', name: 'Slalom' },
+  { id: 'trainer-hairpin', file: 'tracks/trainer-hairpin.json', map: 'trainer', name: 'Hairpin' },
 ];
 
 export function hostedGhostUrl(id) {
@@ -442,8 +455,7 @@ export function hostedGhostUrl(id) {
 
 export async function fetchBuiltinTracks(fetchFn) {
   const f = fetchFn || fetch;
-  const out = [];
-  for (const meta of BUILTIN_TRACK_FILES) {
+  return Promise.all(BUILTIN_TRACK_FILES.map(async (meta) => {
     try {
       const r = await f(meta.file);
       if (!r.ok) throw new Error('missing');
@@ -456,11 +468,10 @@ export async function fetchBuiltinTracks(fetchFn) {
         }
         t.legacyId = meta.legacyId;
       }
-      out.push(t);
+      return t;
     } catch (e) {
-      if (meta.legacyId != null) out.push(normalizeTrack(cityTrackJson(meta.legacyId)));
-      else throw e;
+      if (meta.legacyId != null) return normalizeTrack(cityTrackJson(meta.legacyId));
+      throw e;
     }
-  }
-  return out;
+  }));
 }

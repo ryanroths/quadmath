@@ -1,0 +1,19 @@
+{
+  "id": "gym-bleachers",
+  "map": "gym",
+  "name": "Bleacher Climb",
+  "class": "whoop",
+  "gates": [
+    { "x": 0.0, "y": 2.6, "z": 26.0, "ry": 0.00, "size": 2.0, "solid": true },
+    { "x": -13.6, "y": 2.4, "z": 16.0, "ry": 0.40, "size": 1.8, "solid": true },
+    { "x": -14.2, "y": 3.6, "z": 6.0, "ry": 0.10, "size": 1.7, "solid": true },
+    { "x": -14.2, "y": 4.6, "z": -8.0, "ry": 0.00, "size": 1.7, "solid": true },
+    { "x": -13.6, "y": 2.6, "z": -20.0, "ry": -0.30, "size": 1.8, "solid": true },
+    { "x": 0.0, "y": 2.8, "z": -24.0, "ry": 1.57, "size": 1.9, "solid": true },
+    { "x": 12.0, "y": 2.4, "z": 0.0, "ry": -1.40, "size": 1.8, "solid": true },
+    { "x": 0.0, "y": 2.6, "z": 18.0, "ry": 3.14, "size": 2.0, "solid": true }
+  ],
+  "flags": [
+    { "x": -16.0, "y": 5.2, "z": 0.0, "ry": 0 }
+  ]
+}
