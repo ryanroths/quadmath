@@ -228,9 +228,10 @@ test('hosted v1 ghosts are kinematic pose tracks (physics Hz does not gate them)
   assert.ok(hosted.samples.length > 10);
   assert.equal(hosted.samples[0].length, 8, 'sample is [t,x,y,z,qx,qy,qz,qw]');
   assert.equal(ghostPayloadError(hosted, 0), null);
-  // extra metadata must not break v1 playback
-  const extra = Object.assign({}, hosted, { feel: 2, physicsHz: 1000 });
+  // extra metadata (feel, Hz, W2 phys tag) must not break v1 playback
+  const extra = Object.assign({}, hosted, { feel: 2, physicsHz: 1000, phys: 2 });
   assert.equal(ghostPayloadError(extra, 0), null);
+  assert.equal(ghostPayloadError(hosted, 0), null, 'untagged hosted ghosts still replay');
   // time-index interpolation (what poseGhost does) ignores physics Hz
   const g = hosted.samples;
   const t = (g[0][0] + g[1][0]) / 2;

@@ -510,6 +510,23 @@
   <input type="range" id="s_thc" min="0.4" max="2.6" step="0.05" value="0.7">
   <div class="row"><label>Battery Simulation</label><input type="checkbox" id="cbBattSim" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Sag affects thrust</label><input type="checkbox" id="cbSagThrust" checked style="accent-color:var(--orange)"></div>
+  <div class="row"><label style="padding-left:14px">↳ Sag amount</label><span class="val" id="v_sag"></span></div>
+  <input type="range" id="s_sag" min="0" max="2" step="0.05" value="1" title="How hard the pack sags under load. Tied to Your-build cells/mAh.">
+  <p class="build-note">Whoop feel — duct bounce, wash, cushion, drafts. Strength follows Your build (frame / KV / AUW). Defaults are 65mm indoor.</p>
+  <div class="row"><label>Duct bounce</label><input type="checkbox" id="cbBounce" checked style="accent-color:var(--orange)"></div>
+  <div class="row"><label style="padding-left:14px">↳ Bounce</label><span class="val" id="v_bounce"></span></div>
+  <input type="range" id="s_bounce" min="0" max="1.5" step="0.05" value="0.75" title="Foam-duct rebound. Crash only above the impact slider.">
+  <div class="row"><label style="padding-left:14px">↳ Crash speed</label><span class="val" id="v_crash"></span></div>
+  <input type="range" id="s_crash" min="6" max="28" step="0.5" value="14" title="Impact speed (world units) before a hit becomes a crash tumble.">
+  <div class="row"><label>Ground effect</label><input type="checkbox" id="cbGround" checked style="accent-color:var(--orange)"></div>
+  <div class="row"><label style="padding-left:14px">↳ Cushion</label><span class="val" id="v_ground"></span></div>
+  <input type="range" id="s_ground" min="0" max="2" step="0.05" value="1" title="Extra lift near the floor. Stronger on light whoops / bigger props.">
+  <div class="row"><label>Propwash wobble</label><input type="checkbox" id="cbWash" checked style="accent-color:var(--orange)"></div>
+  <div class="row"><label style="padding-left:14px">↳ Wash</label><span class="val" id="v_wash"></span></div>
+  <input type="range" id="s_wash" min="0" max="2" step="0.05" value="0.7" title="Wobble when you dive or chop throttle through your own wash.">
+  <div class="row"><label>Indoor drafts</label><input type="checkbox" id="cbDraft" checked style="accent-color:var(--orange)"></div>
+  <div class="row"><label style="padding-left:14px">↳ Drafts</label><span class="val" id="v_draft"></span></div>
+  <input type="range" id="s_draft" min="0" max="2" step="0.05" value="0.55" title="Light turbulence near walls. Stronger on small indoor whoops.">
 
   <h2>Ghost Sharing</h2>
   <div class="row"><label>Pilot name</label></div>
@@ -586,7 +603,13 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT} from "./quadphysics.js?v=9e5ae5988b68";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT} from "./quadphysics.js?v=e91b7b74ac94";
+import {
+  WHOOP_KEY, PHYSICS_VER,
+  normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
+  stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
+  emptyWake, tagGhost, ghostSamples,
+} from "./sim-whoop.js?v=5ad6f7e1060d";
 import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
@@ -613,6 +636,10 @@ const gltfReady=import("three/addons/loaders/GLTFLoader.js")
   .catch(function(){window._gltfReady=false;return false;});
 const CFG={
   camDeg:15,fov:110,maxThrustN:3.9,thrCurve:0.68,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
+let whoopSettings=loadWhoop();
+CFG.battSimOn=whoopSettings.batt;
+CFG.sagAffectsThrust=whoopSettings.sagThrust;
+let washState=emptyWake();
 // thrCurve recalibrated for the new physics core: motor thrust is now
 // proportional to output SQUARED, so at TWR 3 the motors must sit at 1/sqrt(3)
 // = 0.58 of full output to hover. The old linear-thrust model needed an
@@ -2471,69 +2498,59 @@ qp.externalDrag=(vel)=>{
   return f;
 };
 
-// Collision hook: runs inside every 240Hz substep. Works in world units against
-// the existing collider set, then writes the result back in SI.
+// Collision hook: world-unit AABBs, then W2 duct bounce (bounce+spin; crash
+// only above a build-scaled impact threshold). Writes SI back to the module.
 const _cp=new THREE.Vector3(),_cv=new THREE.Vector3();
+function applyDuctHit(s,normal,into,floorHit){
+  const hit=resolveDuctHit({
+    vel:{x:_cv.x,y:_cv.y,z:_cv.z},
+    omega:s.omega,
+    normal:normal,
+    into:into,
+    floor:!!floorHit,
+  },currentBuild,whoopSettings);
+  _cv.set(hit.vel.x,hit.vel.y,hit.vel.z);
+  s.omega.x=hit.omega.x;s.omega.y=hit.omega.y;s.omega.z=hit.omega.z;
+  if(hit.crashed){
+    bounce();
+    camShake=Math.max(camShake,Math.min(1.4,into/16));
+  }else{
+    camShake=Math.max(camShake,Math.min(0.45,into/28));
+  }
+  return hit;
+}
 qp.onSubstep=(s)=>{
   mod2world(s.position,_cp);
   mod2world(s.velocity,_cv);
-  let hitSpeed=0;
   let floorHit=false;
   if(_cp.y<0.12){
     const impact=-_cv.y;_cp.y=0.12;floorHit=true;
-    if(impact>4.5){_cv.y=-_cv.y*0.45;_cv.x*=.7;_cv.z*=.7;hitSpeed=impact;bounce();}
+    if(impact>4.5)applyDuctHit(s,{x:0,y:1,z:0},impact,true);
     else{_cv.y=Math.max(_cv.y,0);_cv.x*=.85;_cv.z*=.85;}
   }
   for(const bb of colliders){
     if(bb.containsPoint(_cp)){
-      const HARD_INTO=11;
       const dx=Math.min(_cp.x-bb.min.x,bb.max.x-_cp.x);
       const dy=Math.min(_cp.y-bb.min.y,bb.max.y-_cp.y);
       const dzp=Math.min(_cp.z-bb.min.z,bb.max.z-_cp.z);
-      let into;
       if(dx<dy&&dx<dzp){
-        into=Math.abs(_cv.x);
-        _cp.x+=(_cp.x-(bb.min.x+bb.max.x)/2>0?dx:-dx);
-        _cv.x*=-.45;_cv.y*=.9;_cv.z*=.9;
+        const sx=_cp.x-(bb.min.x+bb.max.x)/2>0?1:-1;
+        _cp.x+=sx*dx;
+        applyDuctHit(s,{x:sx,y:0,z:0},Math.abs(_cv.x),false);
       }else if(dy<dzp){
-        into=Math.abs(_cv.y);
-        _cp.y+=(_cp.y-(bb.min.y+bb.max.y)/2>0?dy:-dy);
-        _cv.y*=-.45;_cv.x*=.9;_cv.z*=.9;
+        const sy=_cp.y-(bb.min.y+bb.max.y)/2>0?1:-1;
+        _cp.y+=sy*dy;
+        applyDuctHit(s,{x:0,y:sy,z:0},Math.abs(_cv.y),sy>0);
       }else{
-        into=Math.abs(_cv.z);
-        _cp.z+=(_cp.z-(bb.min.z+bb.max.z)/2>0?dzp:-dzp);
-        _cv.z*=-.45;_cv.x*=.9;_cv.y*=.9;
+        const sz=_cp.z-(bb.min.z+bb.max.z)/2>0?1:-1;
+        _cp.z+=sz*dzp;
+        applyDuctHit(s,{x:0,y:0,z:sz},Math.abs(_cv.z),false);
       }
-      if(into>HARD_INTO){hitSpeed=Math.max(hitSpeed,into);bounce();}
       break;
     }
   }
   world2mod(_cp,s.position);
   world2mod(_cv,s.velocity);
-  // note 5: hard contact throws the airframe off its axis — the tumble is the
-  // PID's problem to catch, which is the whole point of a real rate loop.
-  // Roadmap step 7 (crash tumble): the kick is now COUPLED to how you hit.
-  // Sliding into the floor nose-first pitches you over forward; carrying
-  // sideways speed rolls you — tangential velocity at impact drives the spin,
-  // with only a small random garnish for crash-to-crash variety. Deterministic
-  // in flight, physical in crashes.
-  if(hitSpeed>0){
-    const k=Math.min(1,hitSpeed/(11*WS))*6;
-    if(floorHit){
-      // module frame: x fwd, y left, z up. Tangential ground speed → tumble:
-      // forward speed pitches over the nose, lateral speed rolls over a side.
-      const tk=Math.min(1,Math.hypot(s.velocity.x,s.velocity.y)/(8))*4;
-      s.omega.y+=s.velocity.x*tk*0.6;
-      s.omega.x-=s.velocity.y*tk*0.6;
-      s.omega.x+=(Math.random()-0.5)*k*0.5;
-      s.omega.y+=(Math.random()-0.5)*k*0.5;
-      s.omega.z+=(Math.random()-0.5)*k*0.3;
-    }else{
-      s.omega.x+=(Math.random()-0.5)*k;
-      s.omega.y+=(Math.random()-0.5)*k;
-      s.omega.z+=(Math.random()-0.5)*k*0.5;
-    }
-  }
   // Ground scrub: frame and props dragging on the floor bleed rotation fast —
   // a tumble SETTLES within ~half a second of ground contact instead of
   // spinning in place forever. 0.97^240 per second ≈ hard decay, contact only.
@@ -2556,6 +2573,26 @@ qp.groundClearance=(s)=>{
     }
   }
   return (_gp.y-top)/WS;
+};
+const _wd=new THREE.Vector3();
+function nearestWallDistSI(s){
+  mod2world(s.position,_wd);
+  let best=8*WS;
+  for(const bb of colliders){
+    const dx=Math.max(bb.min.x-_wd.x,0,_wd.x-bb.max.x);
+    const dz=Math.max(bb.min.z-_wd.z,0,_wd.z-bb.max.z);
+    const d=Math.hypot(dx,dz);
+    if(d<best)best=d;
+  }
+  return best/WS;
+}
+qp.externalDisturbance=(s)=>{
+  const thr=qp.armed?(typeof stick!=='undefined'?stick.t:0):0;
+  const wash=stepPropwash(washState,{pos:s.position,vel:s.velocity,throttle:thr},s.physicsDt||0.002,currentBuild,whoopSettings);
+  washState=wash.wake;
+  const t=(typeof performance!=='undefined'?performance.now():0)/1000;
+  const draft=indoorDraft(s.position,nearestWallDistSI(s),t,currentBuild,whoopSettings);
+  return combineDisturbance(wash,draft);
 };
 
 // Mirror the module state into the three.js-space `state` object every frame so
@@ -2596,6 +2633,7 @@ function placeQuadAt(x,y,z,yaw){
   syncStateFromQp();
   thrustActual=0; // motors spool from zero on re-arm — no thrust jump
   camShake=0;
+  washState=emptyWake();
 }
 function resetQuad(){
   // Crash / flip recovery: R respawns at the last passed JSON-track gate and
@@ -3368,23 +3406,19 @@ function physics(dt){
   qpSetpoint.pitch = SGN_PITCH * wx;
   qpSetpoint.yaw   = SGN_YAW   * wy;
 
-  // ---------- battery drain + sag → thrust coupling ----------
-  // Unchanged model. Load is read from the module's spooled thrust instead of a
-  // local filter; the sag factor now scales maxThrustPerMotor (note 8) rather
-  // than a single thrust scalar.
-  const maxThrustWorld=qp.cfg.maxThrustPerMotor*4*WS;
-  if(CFG.battSimOn){
-    const loadFrac=Math.min(1,thrustActual/Math.max(1e-6,maxThrustWorld));
-    battCharge=Math.max(0,battCharge-dt*(0.25+1.5*loadFrac)/battHoverS); // hover ~pack-scaled, punch-outs eat it faster
-    const vRest=BATT_EMPTY+(BATT_FULL-BATT_EMPTY)*battCharge;
-    const vTarget=vRest-loadFrac*(battSagDrop+0.35*(1-battCharge));
-    battV+=(vTarget-battV)*(dt/0.15);
-  }else{battCharge=1;battV=BATT_FULL;} // master off = infinite fresh pack
-  // Thrust scales ~V^1.5 for brushless (RPM ∝ V, thrust ∝ RPM², prop unload
-  // compensates): fresh pack = full punch, sagged pack = mushy punch-outs and
-  // a hover point that creeps up the stick — toggleable for pure practice.
-  const sag=(CFG.battSimOn&&CFG.sagAffectsThrust)?Math.pow(Math.max(0.5,battV/BATT_FULL),1.5):1;
-  qp.cfg.maxThrustPerMotor=baseThrustPerMotor*sag;
+  // ---------- battery drain + sag → thrust coupling (W2 voltage curve) ----------
+  // Load is the module's spooled thrust. Curve + IR come from sim-whoop.js and
+  // the W1 pack (cells / mAh). HUD + OSD read battV.
+  const maxThrustWorld=baseThrustPerMotor*4*WS;
+  const loadFrac=Math.min(1,thrustActual/Math.max(1e-6,maxThrustWorld));
+  const batt=stepBattery(
+    {charge:battCharge,voltage:battV},
+    dt,loadFrac,
+    {cells:BATT_FULL>5?2:1,mah:currentBuild?currentBuild.mah:300,full:BATT_FULL,empty:BATT_EMPTY,hoverS:battHoverS,sagDrop:battSagDrop,frameMm:currentBuild&&currentBuild.frameMm,kv:currentBuild&&currentBuild.kv,auwG:currentBuild&&currentBuild.auwG},
+    whoopSettings
+  );
+  battCharge=batt.charge;battV=batt.voltage;
+  qp.cfg.maxThrustPerMotor=baseThrustPerMotor*batt.sagFactor;
 
   // Arm is sticky: Space or a mapped aux switch. The connect safety gate
   // still drops arm until sticks are proven safe.
@@ -3905,6 +3939,7 @@ function applyCfgToQp(){
     const f=qp.setFloatiness(parseFloat(s.value));
     v.textContent=Math.round(f*100)+'%';
     saveFloatiness(f);
+    if(typeof applyWhoopToQp==='function')applyWhoopToQp();
   });
 }
 bind('drag','drag',x=>x.toFixed(2));
@@ -3912,13 +3947,79 @@ bind('mass','massG',x=>x+'g',()=>{applyCfgToQp();refreshTwr();}); // mass change
 bind('spool','spoolTau',x=>(x*1000).toFixed(0)+'ms',applyCfgToQp); // motor spool time constant
 bind('grav','gravMult',x=>x.toFixed(2)+'×',refreshTwr); // gravity scale — effective weight changes, so re-derive thrust:weight
 bind('thc','thrCurve',x=>'^'+x.toFixed(1)); // throttle curve exponent — shape of stick→thrust mapping
-document.getElementById('cbSagThrust').onchange=e=>{CFG.sagAffectsThrust=e.target.checked;toast(e.target.checked?'SAG → THRUST ON':'SAG → THRUST OFF');};
+function applyWhoopToQp(){
+  whoopSettings=normalizeWhoop(whoopSettings);
+  whoopSettings.batt=CFG.battSimOn;
+  whoopSettings.sagThrust=CFG.sagAffectsThrust;
+  const k=whoopGroundK(currentBuild,whoopSettings);
+  qp.cfg.groundEffect=k;
+  qp.groundClearance=k>0?function(s){
+    mod2world(s.position,_gp);
+    let top=0.12;
+    for(const bb of colliders){
+      if(_gp.x>=bb.min.x&&_gp.x<=bb.max.x&&_gp.z>=bb.min.z&&_gp.z<=bb.max.z&&bb.max.y<=_gp.y&&bb.max.y>top)top=bb.max.y;
+    }
+    return (_gp.y-top)/WS;
+  }:null;
+  saveWhoop(whoopSettings);
+}
+function persistWhoopFromUI(){
+  const g=id=>document.getElementById(id);
+  const on=id=>!!(g(id)&&g(id).checked);
+  whoopSettings=normalizeWhoop({
+    bounce:on('cbBounce'),
+    bounceStr:parseFloat(g('s_bounce').value),
+    crashSpeed:parseFloat(g('s_crash').value),
+    ground:on('cbGround'),
+    groundStr:parseFloat(g('s_ground').value),
+    wash:on('cbWash'),
+    washStr:parseFloat(g('s_wash').value),
+    batt:on('cbBattSim'),
+    sagThrust:on('cbSagThrust'),
+    sagStr:parseFloat(g('s_sag').value),
+    draft:on('cbDraft'),
+    draftStr:parseFloat(g('s_draft').value),
+  });
+  CFG.battSimOn=whoopSettings.batt;
+  CFG.sagAffectsThrust=whoopSettings.sagThrust;
+  applyWhoopToQp();
+}
+function syncWhoopUI(){
+  const s=normalizeWhoop(whoopSettings);
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.checked=!!v;};
+  const sl=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+  const lab=(id,t)=>{const el=document.getElementById(id);if(el)el.textContent=t;};
+  set('cbBounce',s.bounce);sl('s_bounce',s.bounceStr);lab('v_bounce',Math.round(s.bounceStr*100)+'%');
+  sl('s_crash',s.crashSpeed);lab('v_crash',s.crashSpeed.toFixed(1));
+  set('cbGround',s.ground);sl('s_ground',s.groundStr);lab('v_ground',Math.round(s.groundStr*100)+'%');
+  set('cbWash',s.wash);sl('s_wash',s.washStr);lab('v_wash',Math.round(s.washStr*100)+'%');
+  set('cbDraft',s.draft);sl('s_draft',s.draftStr);lab('v_draft',Math.round(s.draftStr*100)+'%');
+  set('cbBattSim',s.batt);set('cbSagThrust',s.sagThrust);
+  sl('s_sag',s.sagStr);lab('v_sag',Math.round(s.sagStr*100)+'%');
+  const sagEl=document.getElementById('cbSagThrust');
+  if(sagEl)sagEl.disabled=!s.batt;
+  const sagSl=document.getElementById('s_sag');
+  if(sagSl)sagSl.disabled=!s.batt;
+}
+document.getElementById('cbSagThrust').onchange=e=>{
+  CFG.sagAffectsThrust=e.target.checked;
+  persistWhoopFromUI();
+  toast(e.target.checked?'SAG → THRUST ON':'SAG → THRUST OFF');
+};
 document.getElementById('cbBattSim').onchange=e=>{
   CFG.battSimOn=e.target.checked;
-  document.getElementById('cbSagThrust').disabled=!CFG.battSimOn; // sag is a sub-option of the master sim
-  battCharge=1;battV=BATT_FULL; // toggling either way starts from a fresh pack
+  document.getElementById('cbSagThrust').disabled=!CFG.battSimOn;
+  document.getElementById('s_sag').disabled=!CFG.battSimOn;
+  battCharge=1;battV=BATT_FULL;
+  persistWhoopFromUI();
   toast(CFG.battSimOn?'BATTERY SIM ON':'BATTERY SIM OFF — INFINITE PACK');
 };
+['cbBounce','s_bounce','s_crash','cbGround','s_ground','cbWash','s_wash','cbDraft','s_draft','s_sag'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.addEventListener('input',()=>{persistWhoopFromUI();syncWhoopUI();});
+});
+syncWhoopUI();
 // drone-type presets — applied by driving the physics sliders through their
 // bind handlers so CFG, labels and max-rate readout all update in one path.
 // Masses are now REAL AUW (grams) and thrust is absolute (maxThrustN, Newtons),
@@ -4126,6 +4227,7 @@ function applyBuild(raw,opts){
     droneSel.value=droneType;
   }finally{applyingType=false;}
   syncBuildUI();
+  if(typeof applyWhoopToQp==='function')applyWhoopToQp();
   if(o.announce!==false)toast(phys.label.toUpperCase()+' ≈');
   return phys;
 }
@@ -4188,7 +4290,7 @@ function openBuildPicker(){
 {
   const saved=loadBuild();
   if(saved) applyBuild(saved,{save:false,announce:false});
-  else syncBuildUI();
+  else { syncBuildUI(); applyWhoopToQp(); }
   wireBuildUI();
   const gearBtn=document.getElementById('gear');
   if(gearBtn){
@@ -4201,6 +4303,7 @@ function openBuildPicker(){
 }
 
 window._build={encodeBuild,decodeBuild,applyBuild,BUILD_KEY,BUILD_PREFIX};
+window._whoop={PHYSICS_VER,WHOOP_KEY,whoopSettings,whoopScale,resolveDuctHit,stepBattery};
 
 // ---------- Betaflight CLI paste-import ----------
 // Reads rates_type FIRST, because the scaling and the curve both depend on it,
@@ -4326,7 +4429,7 @@ function loadGhost(id){
   try{
     const s=localStorage.getItem(ghostStorageKey(id))
       ||(isLegacyTrackId(id)?localStorage.getItem('quadmath_bestGhost_'+legacyIndex(id)):null);
-    return s?JSON.parse(s):null;
+    return ghostSamples(s?JSON.parse(s):null);
   }catch(e){return null;}
 }
 ghosts[0]=loadGhost(0);ghosts[1]=loadGhost(1);
@@ -4337,7 +4440,9 @@ function persistGhost(id,rec){
   let data=rec;
   for(let a=0;a<5;a++){
     try{
-      localStorage.setItem(ghostStorageKey(id),JSON.stringify(data));
+      const key=ghostStorageKey(id);
+      const tagged=isLegacyTrackId(id)?data:tagGhost({samples:data});
+      localStorage.setItem(key,JSON.stringify(tagged));
       if(isLegacyTrackId(id))localStorage.setItem('quadmath_bestGhost_'+legacyIndex(id),JSON.stringify(data));
       return data;
     }catch(e){data=data.filter((_,i)=>i%2===0);}
@@ -4448,10 +4553,11 @@ function updateGhost(){sampleGhost();playbackGhost();updateGhostHint();}
 
 // ---------- ghost sharing v1 ----------
 // Format (version-tagged for future changes):
-//   {v:1, track:0|1, lapTime:ms, name:string, samples:[[t,x,y,z,qx,qy,qz,qw],...]}
+//   {v:1, phys?:2, track:0|1|id, lapTime:ms, name:string, samples:[[t,x,y,z,qx,qy,qz,qw],...]}
 // Samples are wall-clock poses, not physics-step dumps. The 500/1000 Hz feel
-// pass does not change this, so hosted ghosts and old localStorage ghosts still
-// replay. Do not bump v for a physics-feel change.
+// pass and W2 whoop effects do not change this, so hosted ghosts and old
+// localStorage ghosts still replay. Do not bump v for a physics-feel change —
+// tag new recordings with phys: PHYSICS_VER instead.
 // Export: JSON → gzip (CompressionStream) → base64 → clipboard.
 // Import: base64 → gunzip → validate → rival ghost. Raw uncompressed JSON is
 // also accepted (it's the hosted-default file format).
@@ -4502,8 +4608,8 @@ function ghostPayloadError(p,expectTrack){
 async function exportGhost(){
   const id=activeTrackId,g=ghosts[id];
   if(!g||!g.length){toast('NO GHOST YET — SET A BEST RUN FIRST');return;}
-  const payload={v:1,track:legacyIndex(id)!==null?legacyIndex(id):id,lapTime:bestRunMs[ensureTrackStats(id)]||0,
-    name:(pilotNameEl.value.trim()||'PILOT').slice(0,16),samples:g};
+  const payload=tagGhost({track:legacyIndex(id)!==null?legacyIndex(id):id,lapTime:bestRunMs[ensureTrackStats(id)]||0,
+    name:(pilotNameEl.value.trim()||'PILOT').slice(0,16),samples:g});
   let code;
   try{code=await gzipB64(JSON.stringify(payload));}
   catch(e){toast('EXPORT FAILED');return;}

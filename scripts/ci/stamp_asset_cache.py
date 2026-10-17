@@ -37,6 +37,7 @@ FIRST_PARTY_ASSETS = (
     "quadphysics.js",
     "sim-feel.js",
     "sim-build.js",
+    "sim-whoop.js",
     "style.css",
     "script.js",
     "motion.js",

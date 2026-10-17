@@ -10,7 +10,7 @@
 
 **Tune database** (`tune-database.html`, `tune-database.js`) — real Betaflight CLI dumps from flown builds. Every tune names its hardware and firmware target.
 
-**Flight simulator** (`sim.html`, `quadphysics.js`) — browser-based whoop sim on Three.js. Four-motor quad-X model with airmode desaturation mixing, per-motor spool lag, rate-loop PID+FF at 240Hz, ground effect, and class presets using real flight-controller PID defaults. Gamepad support with per-device calibration (a TX16S in joystick mode works well).
+**Flight simulator** (`sim.html`, `quadphysics.js`, `sim-*.js`) — browser-based whoop sim on Three.js. Four-motor quad-X model with airmode desaturation mixing, per-motor spool lag, rate-loop PID+FF, duct bounce, ground effect, pack sag, and class presets using real flight-controller PID defaults. Gamepad support with per-device calibration (a TX16S in joystick mode works well).
 
 **Guides** (`content/guides/`) — build write-ups backed by the bench data files they cite.
 
@@ -55,6 +55,7 @@ CI enforces the same policy on the receiving end: an `agent-gate` job checks eve
 index.html            calculator + bench table
 sim.html              flight simulator
 quadphysics.js        sim physics module
+sim-whoop.js          W2 whoop feel (bounce, wash, sag, drafts)
 tune-database.*       tune DB page + logic
 data/bench/           measured build data (JSON)
 content/guides/       build guides

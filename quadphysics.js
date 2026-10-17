@@ -154,6 +154,17 @@ export function attitudeOf(q) {
   };
 }
 
+// Quadratic ground-effect cushion. Exported so W2 tests can pin the shape
+// without constructing a full QuadPhysics. kGE is the max bonus at zero
+// clearance; fade is complete at two prop diameters.
+export function groundEffectMult(clearanceM, propDiameterM, kGE) {
+  const k = kGE == null ? 0.12 : kGE;
+  const ceil = 2 * (propDiameterM || 0.031);
+  if (!(clearanceM < ceil) || k <= 0) return 1;
+  const x = 1 - Math.max(0, clearanceM) / ceil;
+  return 1 + k * x * x;
+}
+
 // first-order lowpass
 class LPF {
   constructor(cutoffHz, dt) {
@@ -260,6 +271,9 @@ export class QuadPhysics {
     // below, in meters (SI). When set, thrust picks up a smooth cushion bonus
     // below ~2 prop diameters. Null disables the effect entirely.
     this.groundClearance = null;
+    // hook: W2 disturbances (propwash, indoor drafts). fn(state) ->
+    // {force, torque} in SI (world newtons, body N·m). Applied after drag.
+    this.externalDisturbance = null;
   }
 
   setPreset(preset) {
@@ -448,16 +462,13 @@ export class QuadPhysics {
     // Quadratic fade with height, fully deterministic, no oscillation — this is
     // free lift the pilot can exploit (float landings, floor skims), never a
     // disturbance that fights the sticks. kGE is the max bonus at zero
-    // clearance; presets may override via cfg.groundEffect.
+    // clearance; presets may override via cfg.groundEffect. W2 sliders write
+    // that kGE (0 disables).
     let geMult = 1;
     if (this.groundClearance) {
       const clr = this.groundClearance(this);
-      const ceil = 2 * cfg.propDiameter;
-      if (clr < ceil) {
-        const x = 1 - Math.max(0, clr) / ceil;
-        const kGE = cfg.groundEffect != null ? cfg.groundEffect : 0.12;
-        geMult = 1 + kGE * x * x;
-      }
+      const kGE = cfg.groundEffect != null ? cfg.groundEffect : 0.12;
+      geMult = groundEffectMult(clr, cfg.propDiameter, kGE);
     }
 
     // ---- Forces & torques (body frame) ----
@@ -496,6 +507,15 @@ export class QuadPhysics {
       force.x -= this.velocity.x * sd;
       force.y -= this.velocity.y * sd;
       force.z -= this.velocity.z * sd;
+    }
+    if (this.externalDisturbance) {
+      const dist = this.externalDisturbance(this) || {};
+      if (dist.force) force = vAdd(force, dist.force);
+      if (dist.torque) {
+        this.omega.x += (dist.torque.x / this.inertia.x) * dt;
+        this.omega.y += (dist.torque.y / this.inertia.y) * dt;
+        this.omega.z += (dist.torque.z / this.inertia.z) * dt;
+      }
     }
 
     this.velocity = vAdd(this.velocity, vScale(force, dt / cfg.mass));

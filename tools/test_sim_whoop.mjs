@@ -1,0 +1,233 @@
+// Unit tests for W2 whoop physics (bounce, ground effect, sag).
+// Node stdlib only: `node --test tools/test_sim_whoop.mjs`
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { QuadPhysics, PRESETS, groundEffectMult as qpGround } from '../quadphysics.js';
+import { DEFAULT_BUILD, BUILD_PRESETS, batteryFromBuild, BUILD_KEY } from '../sim-build.js';
+import {
+  WHOOP_KEY, PHYSICS_VER, GHOST_FORMAT_V, DEFAULT_WHOOP,
+  normalizeWhoop, loadWhoop, saveWhoop, whoopScale,
+  groundEffectMult, whoopGroundK, whoopGroundMult,
+  lipoOcv, stepBattery, resolveDuctHit,
+  stepPropwash, indoorDraft, emptyWake,
+  tagGhost, ghostSamples, ghostPhys,
+} from '../sim-whoop.js';
+import { ghostPayloadError, makePaceGhost } from '../sim-tracks.js';
+
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const simSrc = existsSync(join(root, 'sim.html')) ? readFileSync(join(root, 'sim.html'), 'utf8') : '';
+const whoopSrc = readFileSync(join(root, 'sim-whoop.js'), 'utf8');
+
+const softHit = {
+  vel: { x: 8, y: 0, z: 1.2 },
+  omega: { x: 0, y: 0, z: 0 },
+  normal: { x: -1, y: 0, z: 0 },
+  into: 8,
+};
+
+test('new storage key only; never writes old ryfly* keys', () => {
+  assert.equal(WHOOP_KEY, 'quadmathSimWhoop');
+  assert.ok(whoopSrc.includes('setItem(WHOOP_KEY'));
+  assert.equal(whoopSrc.includes('ryflyDroneType'), false);
+  assert.equal(whoopSrc.includes('ryflyRates'), false);
+  assert.ok(whoopSrc.includes('Nothing here is copied from WebFPV')
+    || whoopSrc.includes('copied from WebFPV'));
+  assert.ok(whoopSrc.includes('Do not write old ryfly'));
+});
+
+test('65mm whoop bounces and spins on a soft wall hit; no crash', () => {
+  const r = resolveDuctHit(softHit, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.equal(r.crashed, false);
+  assert.ok(r.vel.x < 0, `should reverse x, got ${r.vel.x}`);
+  assert.ok(Math.abs(r.vel.x) > 1.5, `bounce too dead ${r.vel.x}`);
+  assert.ok(Math.hypot(r.omega.x, r.omega.y, r.omega.z) > 0.02, 'ducts should spin the frame');
+});
+
+test('only impacts above the crash threshold tumble', () => {
+  const hard = resolveDuctHit({
+    ...softHit, vel: { x: 22, y: 0, z: 0 }, into: 22,
+  }, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.equal(hard.crashed, true);
+  const mid = resolveDuctHit({
+    ...softHit, vel: { x: 10, y: 0, z: 0 }, into: 10,
+  }, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.equal(mid.crashed, false);
+  assert.ok(Math.hypot(hard.omega.x, hard.omega.y, hard.omega.z)
+    > Math.hypot(mid.omega.x, mid.omega.y, mid.omega.z));
+});
+
+test('65mm ducts bounce more / crash later than a heavy 85mm', () => {
+  const hit = { ...softHit, vel: { x: 12, y: 0, z: 0 }, into: 12 };
+  const w65 = resolveDuctHit(hit, DEFAULT_BUILD, DEFAULT_WHOOP);
+  const w85 = resolveDuctHit(hit, BUILD_PRESETS.whoop85_2s, DEFAULT_WHOOP);
+  assert.ok(whoopScale(DEFAULT_BUILD).bounce > whoopScale(BUILD_PRESETS.whoop85_2s).bounce);
+  assert.ok(whoopScale(DEFAULT_BUILD).crashAt > whoopScale(BUILD_PRESETS.whoop85_2s).crashAt);
+  assert.ok(Math.abs(w65.vel.x) > Math.abs(w85.vel.x) * 0.92, '65mm should rebound harder');
+});
+
+test('bounce off uses a dead wall and crashes more easily', () => {
+  const off = normalizeWhoop({ ...DEFAULT_WHOOP, bounce: false, crashSpeed: 10 });
+  const r = resolveDuctHit({
+    ...softHit, vel: { x: 12, y: 0, z: 0 }, into: 12,
+  }, DEFAULT_BUILD, off);
+  assert.equal(r.crashed, true);
+  assert.ok(r.rest < 0.2);
+});
+
+function hoverThrottle(qp) {
+  const weight = qp.cfg.mass * 9.81;
+  const maxT = qp.cfg.maxThrustPerMotor * 4;
+  const exp = qp.cfg.thrustExp || 2;
+  const out = Math.pow(weight / maxT, 1 / exp);
+  const idle = qp.cfg.idleThrottle;
+  return Math.max(0, Math.min(1, (out - idle) / (1 - idle)));
+}
+
+test('ground effect is a cushion near the floor and fades by 2 prop diameters', () => {
+  const prop = 0.031;
+  assert.equal(qpGround(0.2, prop, 0.12), 1);
+  assert.ok(qpGround(0, prop, 0.12) > 1.1);
+  const near = qpGround(0.01, prop, 0.12);
+  const mid = qpGround(0.03, prop, 0.12);
+  const far = qpGround(0.08, prop, 0.12);
+  assert.ok(near > mid && mid > far && far >= 1);
+  assert.equal(groundEffectMult(0, prop, 0.12), qpGround(0, prop, 0.12));
+  assert.equal(whoopGroundK(DEFAULT_BUILD, { ...DEFAULT_WHOOP, ground: false }), 0);
+  assert.equal(whoopGroundMult(0, DEFAULT_BUILD, { ...DEFAULT_WHOOP, ground: false }), 1);
+  const on = whoopGroundMult(0, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.ok(on > 1.08, `whoop cushion ${on}`);
+  const light = whoopGroundK({ ...DEFAULT_BUILD, auwG: 20 }, DEFAULT_WHOOP);
+  const heavy = whoopGroundK({ ...DEFAULT_BUILD, auwG: 36 }, DEFAULT_WHOOP);
+  assert.ok(light > heavy, 'lighter whoop should float more in ground effect');
+});
+
+test('QuadPhysics ground-effect hook lifts more than free air at the same throttle', () => {
+  function altAfter(clearance) {
+    const qp = new QuadPhysics(PRESETS.whoop65);
+    qp.setFlightMode('angle');
+    qp.reset({ x: 0, y: 0, z: 0.35 });
+    qp.arm();
+    if (clearance == null) qp.groundClearance = null;
+    else {
+      qp.groundClearance = () => clearance;
+      qp.cfg.groundEffect = 0.16;
+    }
+    const thr = hoverThrottle(qp);
+    const dt = 1 / qp.physicsHz;
+    for (let i = 0; i < 280; i++) qp.step(dt, { roll: 0, pitch: 0, yaw: 0 }, thr, { r: 0, p: 0, y: 0 });
+    return qp.position.z;
+  }
+  const air = altAfter(null);
+  const cushion = altAfter(0.004);
+  assert.ok(cushion > air + 0.015, `cushion ${cushion.toFixed(3)} vs air ${air.toFixed(3)}`);
+});
+
+test('LiPo sag curve: 2S doubles voltage, small packs sag more, not linear', () => {
+  const s1 = batteryFromBuild({ ...DEFAULT_BUILD, cells: 1, mah: 300 });
+  const s2 = batteryFromBuild({ ...DEFAULT_BUILD, cells: 2, mah: 300 });
+  assert.ok(Math.abs(lipoOcv(1, 1) - 4.2) < 1e-9);
+  assert.ok(Math.abs(lipoOcv(1, 2) - 8.4) < 1e-9);
+  const mid = lipoOcv(0.5, 1);
+  assert.ok(mid > 3.70 && mid < 3.90, `plateau should sit ~3.8 V, got ${mid}`);
+  assert.ok(mid > 3.3 + 0.5 * (4.2 - 3.3), 'curve sits above a straight line at mid SOC');
+
+  const fresh = stepBattery({ charge: 1, voltage: 4.2 }, 0.1, 0.2, s1, DEFAULT_WHOOP);
+  const tired = stepBattery({ charge: 0.2, voltage: 3.6 }, 0.1, 0.85, s1, DEFAULT_WHOOP);
+  assert.ok(fresh.voltage > 3.9);
+  assert.ok(tired.voltage < fresh.voltage);
+  assert.ok(tired.sagFactor < fresh.sagFactor);
+
+  const small = stepBattery({ charge: 0.5, voltage: 3.8 }, 0.2, 1, { ...s1, mah: 200, sagDrop: 0.31 }, DEFAULT_WHOOP);
+  const big = stepBattery({ charge: 0.5, voltage: 3.8 }, 0.2, 1, { ...s1, mah: 480, sagDrop: 0.20 }, DEFAULT_WHOOP);
+  assert.ok(small.voltage < big.voltage, `small ${small.voltage} vs big ${big.voltage}`);
+
+  const s2step = stepBattery({ charge: 1, voltage: 8.4 }, 0.05, 0.3, s2, DEFAULT_WHOOP);
+  assert.ok(s2step.voltage > 7.2 && s2step.voltage < 8.5);
+
+  const off = stepBattery({ charge: 0.1, voltage: 3.4 }, 1, 1, s1, { ...DEFAULT_WHOOP, batt: false });
+  assert.equal(off.charge, 1);
+  assert.equal(off.voltage, s1.full);
+  assert.equal(off.sagFactor, 1);
+});
+
+test('propwash wobbles on a dive/chop through own wash; drafts grow near walls', () => {
+  let wake = emptyWake();
+  const hover = { pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0.7 };
+  for (let i = 0; i < 20; i++) {
+    const s = stepPropwash(wake, hover, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+    wake = s.wake;
+  }
+  const chop = stepPropwash(wake, {
+    pos: { x: 0, y: 0, z: 1.7 }, vel: { x: 0, y: 0, z: -2.2 }, throttle: 0.05,
+  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.ok(chop.excite > 0.15, `chop/dive excite ${chop.excite}`);
+  assert.ok(Math.hypot(chop.torque.x, chop.torque.y, chop.torque.z) > 0.01);
+  const off = stepPropwash(wake, {
+    pos: { x: 0, y: 0, z: 1.7 }, vel: { x: 0, y: 0, z: -2.2 }, throttle: 0.05,
+  }, 0.02, DEFAULT_BUILD, { ...DEFAULT_WHOOP, wash: false });
+  assert.equal(off.excite, 0);
+
+  const near = indoorDraft({ x: 0, y: 0, z: 1 }, 0.2, 1.0, DEFAULT_BUILD, DEFAULT_WHOOP);
+  const far = indoorDraft({ x: 0, y: 0, z: 1 }, 4.0, 1.0, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.ok(near.prox > 0.7);
+  assert.equal(far.prox, 0);
+  assert.ok(Math.hypot(near.force.x, near.force.y, near.force.z) > 0);
+  assert.equal(Math.hypot(far.force.x, far.force.y, far.force.z), 0);
+});
+
+test('ghosts stay v:1 kinematic; phys tag is additive and optional', () => {
+  assert.equal(GHOST_FORMAT_V, 1);
+  assert.equal(PHYSICS_VER, 2);
+  const samples = [[0, 0, 1, 0, 0, 0, 0, 1], [100, 1, 1, -1, 0, 0, 0, 1]];
+  const old = { v: 1, track: 0, name: 'OLD', lapTime: 1000, samples };
+  assert.equal(ghostPayloadError(old, 0), null);
+  const tagged = tagGhost({ track: 0, name: 'NEW', lapTime: 1000, samples });
+  assert.equal(tagged.v, 1);
+  assert.equal(tagged.phys, 2);
+  assert.equal(ghostPayloadError(tagged, 0), null);
+  assert.equal(ghostPayloadError({ ...old, phys: 2, feel: 2 }, 0), null);
+  assert.deepEqual(ghostSamples(old), samples);
+  assert.deepEqual(ghostSamples(samples), samples);
+  assert.equal(ghostPhys(old), null);
+  assert.equal(ghostPhys(tagged), 2);
+  const pace = makePaceGhost([{ x: 0, y: 2, z: 0 }, { x: 4, y: 2, z: -6 }], { track: 'living-sofa', speed: 5, hz: 6, laps: 1 });
+  assert.equal(pace.v, 1);
+  assert.equal(pace.phys, 2);
+  assert.equal(ghostPayloadError(pace, 'living-sofa'), null);
+});
+
+test('whoop settings load/save uses only WHOOP_KEY', () => {
+  const mem = new Map();
+  const store = {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, String(v)),
+    removeItem: (k) => mem.delete(k),
+  };
+  saveWhoop({ bounce: false, washStr: 1.2 }, store);
+  assert.equal([...mem.keys()].join(','), WHOOP_KEY);
+  const loaded = loadWhoop(store);
+  assert.equal(loaded.bounce, false);
+  assert.ok(Math.abs(loaded.washStr - 1.2) < 1e-9);
+  assert.equal(loaded.batt, true);
+});
+
+test('sim.html wires W2 sliders, HUD voltage, and keeps old localStorage keys', () => {
+  assert.ok(simSrc.includes('sim-whoop.js'), 'must import sim-whoop.js');
+  assert.ok(simSrc.includes('id="cbBounce"') && simSrc.includes('id="s_bounce"'));
+  assert.ok(simSrc.includes('id="cbGround"') && simSrc.includes('id="s_ground"'));
+  assert.ok(simSrc.includes('id="cbWash"') && simSrc.includes('id="s_wash"'));
+  assert.ok(simSrc.includes('id="cbDraft"') && simSrc.includes('id="s_draft"'));
+  assert.ok(simSrc.includes('id="s_sag"') && simSrc.includes('id="cbBattSim"'));
+  assert.ok(simSrc.includes('hudBatt') && simSrc.includes('battV'));
+  assert.ok(simSrc.includes('PHYSICS_VER') && simSrc.includes('tagGhost'));
+  for (const k of [
+    'ryflyRates', 'ryflyDroneType', 'ryflyCamCustom', 'ryflyMusicVol',
+    'quadmath_bestLap_', 'quadmath_bestGhost_', 'quadmath_pilotName', BUILD_KEY,
+  ]) {
+    assert.ok(simSrc.includes(k), `must keep reading old key ${k}`);
+  }
+  assert.ok(!simSrc.includes('content/guides/'), 'do not edit guide HTML from the sim PR');
+});
