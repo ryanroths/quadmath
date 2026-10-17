@@ -84,6 +84,18 @@ export function applyRatePreset(rates, name) {
   return true;
 }
 
+// Upside-down toast is for an armed crash, not a disarmed whoop sitting on
+// the pad. Indoor spawn can show ~40° camera tilt from cam angle + floor
+// contact; that must not flash FLIPPED at 0 km/h.
+export function shouldToastFlip(info) {
+  if (!info || !info.upsideDown) return false;
+  if (!info.armed) return false;
+  const speed = info.speed == null ? 1 : +info.speed;
+  const height = info.height == null ? 1 : +info.height;
+  if (speed < 0.35 && height < 0.55) return false;
+  return true;
+}
+
 // East of the default spawn, facing +Z (away from the afternoon sun) so the
 // hover column and gates are readable. Independent of racing gate coordinates.
 const TUTORIAL_ORIGIN = { x: 36, y: 0, z: 44 };
@@ -384,8 +396,9 @@ export function createFeel(ctx) {
     return { x: pos.x, y: pos.y, z: pos.z, yaw: (tutorial && tutorial.spawnYaw) || TUTORIAL_YAW };
   }
 
-  function noteFlip(upsideDown) {
-    if (!upsideDown) return;
+  function noteFlip(info) {
+    const payload = typeof info === 'boolean' ? { upsideDown: info, armed: true } : (info || {});
+    if (!shouldToastFlip(payload)) return;
     const now = performance.now();
     if (now - flippedToastAt < 2500) return;
     flippedToastAt = now;

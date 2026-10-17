@@ -5,7 +5,7 @@
 // New localStorage key: quadmathSimWhoop. Do not write old ryfly* keys.
 // Ghosts stay kinematic {v:1,samples}; new recordings add phys: PHYSICS_VER.
 
-import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js';
+import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=6264dd38e42a';
 
 export const WHOOP_KEY = 'quadmathSimWhoop';
 export const PHYSICS_VER = 2;

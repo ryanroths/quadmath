@@ -117,6 +117,10 @@ test('W3 maps are registered with orbits and looks', () => {
     assert.ok(MAP_LOOKS[id], id + ' looks');
   }
   assert.ok(LAYOUT.office.w > 20 && LAYOUT.gym.h > 20 && LAYOUT.trainer.w > 16);
+  assert.ok(MAP_LOOKS.gym.hemi >= 0.5, 'gym court needs fill so spawn is not near-black');
+  assert.ok(MAP_LOOKS.gym.bg >= 0.4);
+  const mapsSrc = readFileSync(join(root, 'sim-maps.js'), 'utf8');
+  assert.ok(mapsSrc.includes('0, 12, 20'), 'gym court-level fill lights');
 });
 
 test('sim.html wires Your room without touching old localStorage keys', () => {
