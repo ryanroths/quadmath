@@ -2,7 +2,9 @@
 // Dual virtual sticks, deadzone/expo, angle-first newcomers, lazy-load hooks.
 // Ideas only — nothing here is copied from WebFPV (GPL) or other simulators.
 // New localStorage keys: quadmathSimTouch, quadmathSimFlightMode.
-// Do not write old ryfly* keys.
+// Per-device radio keys (load/save only, never wipe other ryfly* data):
+//   ryflyAxisMap_<id>, ryflyRadioPreset_<id>, ryflyGamepadId.
+// Do not write old ryfly* keys (the global ryflyAxisMap / ryflyRadioPreset).
 
 export const TOUCH_KEY = 'quadmathSimTouch';
 export const FLIGHT_MODE_KEY = 'quadmathSimFlightMode';
@@ -191,9 +193,20 @@ export function toggleAcro(current) {
 
 export function shouldEnableTouch(info) {
   const i = info || {};
+  // A connected radio/gamepad always wins. Chrome on Windows often returns an
+  // empty GamepadList for a still-plugged TX16S; those empty polls must not
+  // fall through to on-screen sticks and scramble the channel map.
+  if (i.gamepadConnected || i.hasGamepad || i.padLive) return false;
   if (i.inputChoice === 'touch') return true;
   if (i.inputChoice === 'keyboard' || i.inputChoice === 'calibrate') return false;
   return !!i.mobile;
+}
+
+export function resolveInputSource(info) {
+  const i = info || {};
+  if (i.gamepadConnected || i.hasGamepad || i.padLive) return 'gamepad';
+  if (i.touchEnabled) return 'touch';
+  return 'keyboard';
 }
 
 export function shouldShowLandscape(info) {
@@ -393,5 +406,390 @@ export function guardPageGestures(doc, opts) {
   return function () {
     d.removeEventListener('touchmove', block);
     d.removeEventListener('gesturestart', block);
+  };
+}
+
+// ---------- Radio / gamepad (TX16S, EdgeTX HID) ----------
+// Per-device ryflyAxisMap_<id> / ryflyRadioPreset_<id> / ryflyGamepadId.
+// Load and persist those; never wipe other ryfly* keys (rates, drone type, …).
+export const AXIS_MAP_PREFIX = 'ryflyAxisMap_';
+export const RADIO_PRESET_PREFIX = 'ryflyRadioPreset_';
+export const GP_ID_KEY = 'ryflyGamepadId';
+
+export function sanitizeId(id) {
+  return String(id == null ? '' : id).replace(/[^a-z0-9]+/gi, '_').slice(0, 64);
+}
+
+export function isRadio(gp) {
+  const id = gp && gp.id != null ? String(gp.id) : '';
+  return /opentx|edgetx|radiomaster|tx16|frsky|taranis|jumper|betafpv|flysky/i.test(id);
+}
+
+export function radioScore(gp) {
+  if (!gp) return 0;
+  if (/tx16|zorro|edgetx|opentx|joystick|1209|radiomaster|frsky|taranis|jumper|betafpv|flysky/i.test(gp.id || '')) return 2;
+  if (gp.mapping === 'standard') return 0;
+  return 1;
+}
+
+// EdgeTX/OpenTX joystick, AETR: 0=roll 1=pitch 2=throttle 3=yaw
+export const AETR_MAP = Object.freeze({
+  r: Object.freeze({ i: 0, sign: 1 }),
+  p: Object.freeze({ i: 1, sign: -1 }),
+  y: Object.freeze({ i: 3, sign: 1 }),
+  t: Object.freeze({ i: 2, min: -1, max: 1 }),
+});
+// Spring gamepad, mode 2: LX=yaw LY=thr RX=roll RY=pitch
+export const PAD_MAP = Object.freeze({
+  r: Object.freeze({ i: 2, sign: 1 }),
+  p: Object.freeze({ i: 3, sign: -1 }),
+  y: Object.freeze({ i: 0, sign: 1 }),
+  t: Object.freeze({ i: 1, min: 0, max: -1, spring: true }),
+});
+
+export function defaultMapFor(gp) {
+  return isRadio(gp) ? AETR_MAP : PAD_MAP;
+}
+
+export const RADIO_PRESETS = Object.freeze({
+  auto: { label: 'Auto-detect', map: null },
+  radiomaster: { label: 'RadioMaster TX16S / Zorro / Boxer / Pocket (EdgeTX AETR)', map: AETR_MAP },
+  frsky: { label: 'FrSky Taranis X9D / QX7 (OpenTX AETR)', map: AETR_MAP },
+  jumper: { label: 'Jumper T-Lite / T20 (EdgeTX AETR)', map: AETR_MAP },
+  literadio: { label: 'BetaFPV LiteRadio (AETR)', map: AETR_MAP },
+  literadioTaer: {
+    label: 'BetaFPV LiteRadio (TAER)',
+    map: Object.freeze({
+      t: Object.freeze({ i: 0, min: -1, max: 1 }),
+      r: Object.freeze({ i: 1, sign: 1 }),
+      p: Object.freeze({ i: 2, sign: -1 }),
+      y: Object.freeze({ i: 3, sign: 1 }),
+    }),
+  },
+  flysky: { label: 'FlySky (AETR)', map: AETR_MAP },
+  pad: { label: 'Xbox / PlayStation controller', map: PAD_MAP },
+  custom: { label: 'Custom — run calibration', map: null },
+});
+
+export function effectiveAxisMap(axisMap, radioPreset, gp) {
+  if (axisMap) return axisMap;
+  const preset = RADIO_PRESETS[radioPreset];
+  if (preset && preset.map) return preset.map;
+  return defaultMapFor(gp);
+}
+
+function axisAt(axes, i) {
+  const v = axes && axes[i];
+  return Number.isFinite(v) ? v : 0;
+}
+
+export function applyAxisMap(axes, map) {
+  const m = map || AETR_MAP;
+  const dz = (v, d) => (Math.abs(v) < (d == null ? 0.03 : d) ? 0 : v);
+  const r = dz(axisAt(axes, m.r.i) * (m.r.sign || 1));
+  const p = dz(axisAt(axes, m.p.i) * (m.p.sign || 1));
+  const y = dz(axisAt(axes, m.y.i) * (m.y.sign || 1));
+  const traw = axisAt(axes, m.t.i);
+  let t;
+  if (m.t && m.t.spring) {
+    t = clamp(-traw, 0, 1);
+  } else {
+    const min = m.t && Number.isFinite(m.t.min) ? m.t.min : -1;
+    const max = m.t && Number.isFinite(m.t.max) ? m.t.max : 1;
+    const span = max - min;
+    t = Math.abs(span) < 0.1 ? 0 : clamp((traw - min) / span, 0, 1);
+  }
+  return { r, p, y, t };
+}
+
+export function loadRadioProfile(id, storage) {
+  const store = storeOf(storage);
+  const sid = sanitizeId(id);
+  let radioPreset = 'auto';
+  let axisMap = null;
+  if (!store) return { radioPreset, axisMap };
+  try {
+    radioPreset = store.getItem(RADIO_PRESET_PREFIX + sid) || 'auto';
+    if (!RADIO_PRESETS[radioPreset]) radioPreset = 'auto';
+    const raw = store.getItem(AXIS_MAP_PREFIX + sid);
+    axisMap = raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    radioPreset = 'auto';
+    axisMap = null;
+  }
+  return { radioPreset, axisMap };
+}
+
+export function saveAxisMap(id, axisMap, storage) {
+  const store = storeOf(storage);
+  if (!store || !id) return;
+  try { store.setItem(AXIS_MAP_PREFIX + sanitizeId(id), JSON.stringify(axisMap)); }
+  catch (e) { /* ignore quota / private mode */ }
+}
+
+export function saveRadioPreset(id, preset, storage) {
+  const store = storeOf(storage);
+  if (!store || !id) return;
+  try { store.setItem(RADIO_PRESET_PREFIX + sanitizeId(id), preset); }
+  catch (e) { /* ignore */ }
+}
+
+export const CAL_STEPS = Object.freeze([
+  { key: 'center', label: 'CENTER ALL STICKS, THROTTLE LOW', hint: 'hold 1 sec' },
+  { key: 'r', label: 'ROLL — RIGHT STICK FULL RIGHT', hint: 'hold deflection' },
+  { key: 'p', label: 'PITCH — RIGHT STICK FULL UP', hint: 'hold deflection' },
+  { key: 'y', label: 'YAW — LEFT STICK FULL RIGHT', hint: 'hold deflection' },
+  { key: 'thi', label: 'THROTTLE FULL UP', hint: 'hold' },
+  { key: 'tlo', label: 'THROTTLE FULL DOWN', hint: 'hold' },
+  { key: 'arm', label: 'ARM SWITCH — FLIP IT', hint: 'or Skip Aux and use Space' },
+  { key: 'mode', label: 'MODE SWITCH — MOVE IT', hint: '3-pos Angle / Horizon / Acro — or Skip Aux' },
+]);
+
+export function createCalibState() {
+  return { step: 0, timer: 0, center: null, result: {}, used: new Set() };
+}
+
+function bestUnusedAxis(ax, center, used, minAbs) {
+  let best = -1, bestD = 0;
+  for (let i = 0; i < ax.length; i++) {
+    if (used.has(i)) continue;
+    const d = ax[i] - center[i];
+    if (Math.abs(d) > Math.abs(bestD)) { bestD = d; best = i; }
+  }
+  if (best >= 0 && Math.abs(bestD) > minAbs) return { i: best, d: bestD };
+  return null;
+}
+
+export function skipCalibAux(calib) {
+  const st = CAL_STEPS[calib.step];
+  if (st && (st.key === 'arm' || st.key === 'mode')) {
+    calib.step++;
+    calib.timer = 0;
+  }
+  return { state: calib, done: calib.step >= CAL_STEPS.length };
+}
+
+export function stepCalib(calib, gp, dt) {
+  const st = CAL_STEPS[calib.step];
+  if (!st || !gp) {
+    return { state: calib, done: false, skipAux: false, label: '', hint: '' };
+  }
+  const ax = gp.axes;
+  const skipAux = st.key === 'arm' || st.key === 'mode';
+  const ui = { state: calib, done: false, skipAux, label: st.label, hint: st.hint };
+
+  if (st.key === 'center') {
+    calib.timer += dt;
+    if (calib.timer > 1) {
+      calib.center = Array.prototype.slice.call(ax);
+      calib.step++;
+      calib.timer = 0;
+    }
+    ui.done = calib.step >= CAL_STEPS.length;
+    return ui;
+  }
+  if (st.key === 'tlo') {
+    const ti = calib.result.t.i;
+    const d = ax[ti] - calib.result.t.max;
+    if (Math.abs(d) > 0.8) {
+      calib.timer += dt;
+      if (calib.timer > 0.6) {
+        calib.result.t.min = ax[ti];
+        calib.step++;
+        calib.timer = 0;
+        ui.done = calib.step >= CAL_STEPS.length;
+      }
+    } else calib.timer = 0;
+    return ui;
+  }
+  if (st.key === 'arm' || st.key === 'mode') {
+    const moved = bestUnusedAxis(ax, calib.center, calib.used, 0.5);
+    if (moved) {
+      calib.timer += dt;
+      if (calib.timer > 0.45) {
+        calib.result[st.key] = { i: moved.i, sign: Math.sign(moved.d) || 1 };
+        calib.used.add(moved.i);
+        calib.step++;
+        calib.timer = 0;
+        ui.done = calib.step >= CAL_STEPS.length;
+      }
+    } else {
+      let btn = -1;
+      if (gp.buttons) {
+        for (let i = 0; i < gp.buttons.length; i++) {
+          if (gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.6)) { btn = i; break; }
+        }
+      }
+      if (btn >= 0) {
+        calib.timer += dt;
+        if (calib.timer > 0.35) {
+          calib.result[st.key] = { button: btn };
+          calib.step++;
+          calib.timer = 0;
+          ui.done = calib.step >= CAL_STEPS.length;
+        }
+      } else calib.timer = 0;
+    }
+    return ui;
+  }
+  const moved = bestUnusedAxis(ax, calib.center, calib.used, 0.6);
+  if (moved) {
+    calib.timer += dt;
+    if (calib.timer > 0.6) {
+      if (st.key === 'thi') {
+        calib.result.t = { i: moved.i, max: ax[moved.i], min: 0 };
+      } else {
+        calib.result[st.key] = { i: moved.i, sign: Math.sign(moved.d) };
+      }
+      calib.used.add(moved.i);
+      calib.step++;
+      calib.timer = 0;
+    }
+  } else calib.timer = 0;
+  ui.done = calib.step >= CAL_STEPS.length;
+  return ui;
+}
+
+function listFromGetGamepads(getGamepads) {
+  const pads = getGamepads ? getGamepads() : [];
+  const out = [];
+  if (!pads) return out;
+  const n = pads.length;
+  for (let i = 0; i < n; i++) if (pads[i]) out.push(pads[i]);
+  return out;
+}
+
+export function pickPreferredPad(pads, rememberedId) {
+  const live = (pads || []).filter(Boolean);
+  if (!live.length) return null;
+  const match = rememberedId && live.find((p) => p.id === rememberedId);
+  if (match) return match;
+  live.sort((a, b) => radioScore(b) - radioScore(a));
+  return live[0];
+}
+
+// Node-testable radio session: mocked getGamepads + storage. Gamepad connected
+// ⇒ touch off, saved ryflyAxisMap_<id> applied, empty polls keep last sticks.
+export function createRadioRouter(opts) {
+  const o = opts || {};
+  const storage = storeOf(o.storage);
+  const getGamepads = o.getGamepads || function () {
+    try {
+      return (typeof navigator !== 'undefined' && navigator.getGamepads)
+        ? navigator.getGamepads() : [];
+    } catch (e) { return []; }
+  };
+  let gpIndex = -1;
+  let gpConnected = false;
+  let gpName = '';
+  let axisMap = null;
+  let radioPreset = 'auto';
+  let lastStick = { r: 0, p: 0, y: 0, t: 0 };
+  let calib = null;
+
+  function select(gp, remember) {
+    gpIndex = gp.index;
+    gpConnected = true;
+    gpName = gp.id;
+    if (remember && storage) {
+      try { storage.setItem(GP_ID_KEY, gp.id); } catch (e) { /* ignore */ }
+    }
+    const prof = loadRadioProfile(gp.id, storage);
+    radioPreset = prof.radioPreset;
+    axisMap = prof.axisMap;
+  }
+
+  function pick() {
+    const pads = listFromGetGamepads(getGamepads);
+    if (!pads.length) return null;
+    let remembered = null;
+    try { remembered = storage ? storage.getItem(GP_ID_KEY) : null; } catch (e) { /* ignore */ }
+    const chosen = pickPreferredPad(pads, remembered);
+    if (!chosen) return null;
+    select(chosen, !remembered || chosen.id === remembered || pads.length === 1);
+    return chosen;
+  }
+
+  function currentPad() {
+    const pads = getGamepads() || [];
+    if (gpIndex >= 0 && pads[gpIndex]) return pads[gpIndex];
+    if (gpName) {
+      const live = listFromGetGamepads(getGamepads);
+      const same = live.find((p) => p.id === gpName);
+      if (same) { gpIndex = same.index; return same; }
+    }
+    return null;
+  }
+
+  function drop() {
+    gpIndex = -1;
+    gpConnected = false;
+    gpName = '';
+  }
+
+  function readStick() {
+    const gp = currentPad();
+    if (gpConnected) {
+      if (!gp) return { source: 'gamepad', stick: lastStick, touch: false, emptyPoll: true };
+      const map = effectiveAxisMap(axisMap, radioPreset, gp);
+      lastStick = applyAxisMap(gp.axes, map);
+      return { source: 'gamepad', stick: lastStick, touch: false, map, emptyPoll: false };
+    }
+    const touch = shouldEnableTouch({
+      hasGamepad: false,
+      inputChoice: o.inputChoice,
+      mobile: o.mobile,
+    });
+    return { source: touch ? 'touch' : 'keyboard', stick: lastStick, touch, emptyPoll: false };
+  }
+
+  function startCalib() {
+    if (!currentPad()) return false;
+    calib = createCalibState();
+    return true;
+  }
+
+  function tickCalib(dt) {
+    const gp = currentPad();
+    if (!gp || !calib) return { done: false, touch: false };
+    const out = stepCalib(calib, gp, dt);
+    calib = out.state;
+    if (out.done) {
+      axisMap = calib.result;
+      saveAxisMap(gpName, axisMap, storage);
+      calib = null;
+      return { done: true, axisMap, touch: false };
+    }
+    return { done: false, skipAux: out.skipAux, label: out.label, hint: out.hint, touch: false };
+  }
+
+  return {
+    pick,
+    drop,
+    readStick,
+    startCalib,
+    tickCalib,
+    skipCalibAux() {
+      if (!calib) return { done: false };
+      const out = skipCalibAux(calib);
+      calib = out.state;
+      if (out.done) {
+        axisMap = calib.result;
+        saveAxisMap(gpName, axisMap, storage);
+        calib = null;
+        return { done: true, axisMap };
+      }
+      return { done: false };
+    },
+    touchAllowed(info) {
+      return shouldEnableTouch(Object.assign({}, info || o, { hasGamepad: gpConnected, gamepadConnected: gpConnected }));
+    },
+    get gpConnected() { return gpConnected; },
+    get gpName() { return gpName; },
+    get gpIndex() { return gpIndex; },
+    get axisMap() { return axisMap; },
+    get radioPreset() { return radioPreset; },
+    get lastStick() { return lastStick; },
+    get calibrating() { return !!calib; },
   };
 }
