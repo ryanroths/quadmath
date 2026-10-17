@@ -130,4 +130,5 @@ test('sim.html wires the picker and URL params without touching old keys as writ
   assert.ok(boot.indexOf("q.get('track')") < boot.indexOf("q.get('build')"), 'track before build so the share box is not stuck on track=0');
   assert.ok(boot.includes('syncBuildUI()'));
   assert.ok(src.includes('shareTrackParam()'));
+  assert.ok(boot.includes("applyBuild(decoded,{save:false,announce:true})"), '?build= must not overwrite saved build');
 });

@@ -177,6 +177,47 @@ class StampTreeAndCheck(unittest.TestCase):
             stamp.stamp_tree(tmp)
             self.assertEqual(stamp.check_tree(tmp), [])
 
+    def test_js_relative_imports_gain_query_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _write(tmp, "sim-build.js", "export const BUILD_KEY='x';\n")
+            _write(tmp, "sim-whoop.js", "import { BUILD_KEY } from './sim-build.js';\n")
+            _write(tmp, "sim-tracks.js", "export const MAPS=[];\n")
+            _write(tmp, "sim-room.js", "import { MAPS } from './sim-tracks.js';\n")
+            _write(tmp, "sim-maps.js", "import { planRoom } from './sim-room.js';\n")
+            _write(tmp, "index.html", '<script type="module" src="sim-maps.js"></script>\n')
+            changed = stamp.stamp_tree(tmp)
+            self.assertIn("sim-whoop.js", changed)
+            self.assertIn("sim-room.js", changed)
+            self.assertIn("sim-maps.js", changed)
+            self.assertEqual(stamp.check_tree(tmp), [])
+            with open(os.path.join(tmp, "sim-whoop.js"), encoding="utf-8") as handle:
+                whoop = handle.read()
+            with open(os.path.join(tmp, "sim-room.js"), encoding="utf-8") as handle:
+                room = handle.read()
+            with open(os.path.join(tmp, "sim-maps.js"), encoding="utf-8") as handle:
+                maps = handle.read()
+            with open(os.path.join(tmp, "index.html"), encoding="utf-8") as handle:
+                html = handle.read()
+            build_hash = stamp.file_digest(os.path.join(tmp, "sim-build.js"))
+            tracks_hash = stamp.file_digest(os.path.join(tmp, "sim-tracks.js"))
+            self.assertIn("sim-build.js?v=%s" % build_hash, whoop)
+            self.assertIn("sim-tracks.js?v=%s" % tracks_hash, room)
+            room_hash = stamp.file_digest(os.path.join(tmp, "sim-room.js"))
+            self.assertIn("sim-room.js?v=%s" % room_hash, maps)
+            maps_hash = stamp.file_digest(os.path.join(tmp, "sim-maps.js"))
+            self.assertIn("sim-maps.js?v=%s" % maps_hash, html)
+
+    def test_check_reports_unstamped_js_import(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _write(tmp, "sim-build.js", "export const BUILD_KEY='x';\n")
+            _write(tmp, "sim-whoop.js", "import { BUILD_KEY } from './sim-build.js';\n")
+            stale = stamp.check_tree(tmp)
+            self.assertEqual(stale, ["sim-whoop.js"])
+            stamp.stamp_tree(tmp)
+            self.assertEqual(stamp.check_tree(tmp), [])
+            _write(tmp, "sim-build.js", "export const BUILD_KEY='y';\n")
+            self.assertEqual(stamp.check_tree(tmp), ["sim-whoop.js"])
+
 
 class RepoPin(unittest.TestCase):
     """The live pages must already carry hashes that match the files they load."""
@@ -188,6 +229,26 @@ class RepoPin(unittest.TestCase):
             [],
             "HTML asset stamps are stale. Run: python scripts/ci/stamp_asset_cache.py\n"
             "Offending files: %s" % ", ".join(stale),
+        )
+
+    def test_sim_js_module_imports_are_stamped(self):
+        whoop = os.path.join(REPO_ROOT, "sim-whoop.js")
+        maps = os.path.join(REPO_ROOT, "sim-maps.js")
+        room = os.path.join(REPO_ROOT, "sim-room.js")
+        with open(whoop, encoding="utf-8") as handle:
+            whoop_src = handle.read()
+        with open(maps, encoding="utf-8") as handle:
+            maps_src = handle.read()
+        with open(room, encoding="utf-8") as handle:
+            room_src = handle.read()
+        self.assertRegex(
+            whoop_src, r"from '\./sim-build\.js\?v=[0-9a-f]{%d}'" % stamp.HASH_LEN
+        )
+        self.assertRegex(
+            room_src, r"from '\./sim-tracks\.js\?v=[0-9a-f]{%d}'" % stamp.HASH_LEN
+        )
+        self.assertRegex(
+            maps_src, r"from '\./sim-room\.js\?v=[0-9a-f]{%d}'" % stamp.HASH_LEN
         )
 
     def test_live_pages_reference_hashed_first_party_js(self):

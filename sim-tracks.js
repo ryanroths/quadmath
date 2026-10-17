@@ -62,6 +62,81 @@ export function legacyIndex(id) {
   return null;
 }
 
+export function isBlankTrackId(id) {
+  return id == null || id === '' || id === 'null' || id === 'undefined';
+}
+
+export function trackRefId(t) {
+  if (!t) return null;
+  return t.legacyId != null ? t.legacyId : t.id;
+}
+
+export function knownMapId(id) {
+  if (id == null || id === '') return null;
+  return MAPS.some((m) => m.id === id) ? id : null;
+}
+
+export function matchTrack(t, id) {
+  if (!t || isBlankTrackId(id)) return false;
+  const L = legacyIndex(id);
+  if (t.id === id) return true;
+  if (L !== null && t.legacyId === L) return true;
+  // Never String(null)===String(id): indoor tracks have legacyId null and
+  // findTrack(null) used to match Sofa Slalom on ?map= without ?track=.
+  if (t.legacyId != null && String(t.legacyId) === String(id)) return true;
+  return false;
+}
+
+export function findTrackIn(id, tracks) {
+  if (isBlankTrackId(id)) return null;
+  const L = legacyIndex(id);
+  for (const t of tracks || []) {
+    if (matchTrack(t, id)) return t;
+  }
+  if (L !== null) return cityTrackJson(L);
+  return null;
+}
+
+export function firstTrackForMap(mapId, tracks) {
+  if (mapId === 'room') {
+    const hit = (tracks || []).find((t) => t.id === 'room-practice' || t.map === 'room');
+    return hit || { id: 'room-practice', map: 'room', name: 'Practice' };
+  }
+  const list = (tracks || []).filter((t) => t.map === mapId);
+  if (mapId === 'city' && !list.length) return cityTrackJson(0);
+  return list[0] || null;
+}
+
+// Deep-link / reload resolver. Track id wins map when they disagree.
+// Unknown ?map= falls back to city and must not be persisted.
+export function resolveSimBoot(query, saved, tracks) {
+  const q = query || {};
+  const found = findTrackIn(q.track, tracks);
+  if (found) {
+    return { map: found.map, track: trackRefId(found), save: true };
+  }
+  const known = knownMapId(q.map);
+  if (q.map && !known) {
+    return { map: 'city', track: 0, save: false, unknownMap: true };
+  }
+  if (known) {
+    const first = firstTrackForMap(known, tracks);
+    return {
+      map: known,
+      track: first ? trackRefId(first) : 0,
+      save: true,
+    };
+  }
+  if (saved && knownMapId(saved.map)) {
+    const t = findTrackIn(saved.track, tracks);
+    if (t) return { map: t.map, track: trackRefId(t), save: false, restored: true };
+    const first = firstTrackForMap(saved.map, tracks);
+    if (first) return { map: saved.map, track: trackRefId(first), save: false, restored: true };
+    return { map: saved.map, track: saved.track, save: false, restored: true };
+  }
+  return { map: 'city', track: 0, save: false, restored: true };
+}
+
 export function ghostStorageKey(id) {
   const legacy = legacyIndex(id);
   if (legacy !== null) return 'quadmath_bestGhost_' + legacy;
@@ -172,17 +247,27 @@ export function lapLengthMetres(gates) {
   return lapLength(gates) / WS_PER_METRE;
 }
 
+function headingTo(from, to) {
+  return Math.atan2(-(to.x - from.x), -(to.z - from.z));
+}
+
 export function startPad(track) {
-  if (track && track.start) return { ...track.start };
   const g = track && track.gates && track.gates[0];
-  if (!g) return { x: 0, y: 0.15, z: 20 };
+  if (track && track.start) {
+    const s = { ...track.start };
+    if (s.yaw == null && g) s.yaw = headingTo(s, g);
+    return s;
+  }
+  if (!g) return { x: 0, y: 0.15, z: 20, yaw: 0 };
   const indoor = track.map && track.map !== 'city';
   const dist = indoor ? (g.size || 1.8) * 3.2 : (g.size || 7) * 1.8;
-  return {
+  const pad = {
     x: g.x - Math.sin(g.ry || 0) * dist,
     y: indoor ? Math.max(0.9, (g.y || 2) * 0.45) : 0.15,
     z: g.z - Math.cos(g.ry || 0) * dist,
   };
+  pad.yaw = headingTo(pad, g);
+  return pad;
 }
 
 export function dist3(a, b) {
