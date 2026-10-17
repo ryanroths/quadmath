@@ -486,6 +486,7 @@
     <option value="analog">Analog</option>
   </select>
   <div class="row"><label>Motion blur</label><input type="checkbox" id="cbMotionBlur" style="accent-color:var(--orange)"></div>
+  <div class="row"><label>Show canopy</label><input type="checkbox" id="cbCanopy" style="accent-color:var(--orange)"></div>
 
   <h2>Quality</h2>
   <select id="qualityPanel">
@@ -723,9 +724,10 @@ import {
   isDailyTrackId, isWeeklyTrackId, encodeDuel, decodeQm2, duelResult, fmtMs,
   loadDaily, saveDaily, recordDailyFinish, loadBoard, saveBoard, recordLocalBoard,
   boardRows, leaderboardUrl, onlineBoardsEnabled, SKINS, unlockedSkins, isSkinUnlocked, resolveSkin,
-  loadSkinId, saveSkinId, makeCanopyGroup, tintGroup, sanitizePilotName, classId,
+  loadSkinId, saveSkinId, makeCanopyGroup, layoutCanopyGroup, canopyFpvVisible,
+  loadCanopyOn, saveCanopyOn, CANOPY_KEY, tintGroup, sanitizePilotName, classId,
   validateSubmittedRun, CLASS_IDS, issuePilotToken, syncDailyStreak,
-} from "./sim-retention.js?v=482bb85b53c2";
+} from "./sim-retention.js?v=55bda48b17dc";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -829,6 +831,24 @@ const camera=new THREE.PerspectiveCamera(CFG.fov,(canvas.clientWidth||1)/(canvas
 scene.add(camera);
 let canopyGroup=makeCanopyGroup(THREE, SKINS[0]);
 camera.add(canopyGroup);
+let canopyOn=loadCanopyOn();
+function applyCanopyLayout(){
+  if(canopyGroup)layoutCanopyGroup(canopyGroup, camera);
+}
+function applyCanopyVis(flags){
+  const f=flags||{};
+  if(f.fpv)applyCanopyLayout();
+  if(canopyGroup){
+    canopyGroup.visible=canopyFpvVisible({
+      on:canopyOn,
+      menuOpen:!!f.menuOpen,
+      lookSpot:!!f.lookSpot,
+      replay:!!f.replay,
+      builder:!!f.builder,
+    });
+  }
+}
+applyCanopyVis({fpv:false,menuOpen:true});
 // Size from the canvas box, not the window, so the render target always
 // matches the visible area and the aspect ratio cannot skew. The third
 // argument to setSize is updateStyle=false: three.js would otherwise write
@@ -842,6 +862,7 @@ function resize(){
   renderer.setSize(w,h,false);
   camera.aspect=w/h;
   camera.updateProjectionMatrix();
+  applyCanopyLayout();
   sizeComposer();
 }
 // EffectComposer.setSize takes CSS pixels and applies the renderer's pixel
@@ -3552,8 +3573,11 @@ function bounce(){
 const camTilt=new THREE.Quaternion();
 const camJit=new THREE.Quaternion(),camJitEul=new THREE.Euler();
 function updateCamera(){
-  if(builderOn){applyBuilderCam();return;}
-  if(looks&&looks.applyLookSpot())return;
+  if(builderOn){applyBuilderCam();applyCanopyVis({builder:true});return;}
+  if(looks&&looks.applyLookSpot()){
+    applyCanopyVis({menuOpen:!!looks.menuOpen,lookSpot:!looks.menuOpen});
+    return;
+  }
   if(camera.fov!==CFG.fov){camera.fov=CFG.fov;camera.updateProjectionMatrix();}
   camTilt.setFromAxisAngle(new THREE.Vector3(1,0,0),THREE.MathUtils.degToRad(CFG.camDeg));
   camera.quaternion.copy(state.q).multiply(camTilt);
@@ -3566,6 +3590,7 @@ function updateCamera(){
     camShake*=0.93;
   }
   camera.position.copy(state.pos);
+  applyCanopyVis({fpv:true});
 }
 
 // ---------- OSD ----------
@@ -4169,6 +4194,15 @@ function wireLooksUI(){
   if(st)st.onchange=()=>{if(looks){looks.setFpv({style:st.value});syncQualityUI();}};
   const mb=document.getElementById('cbMotionBlur');
   if(mb)mb.onchange=()=>{if(looks){looks.setFpv({motionBlur:mb.checked});syncQualityUI();}};
+  const canopyCb=document.getElementById('cbCanopy');
+  if(canopyCb){
+    canopyCb.checked=!!canopyOn;
+    canopyCb.onchange=()=>{
+      canopyOn=!!canopyCb.checked;
+      saveCanopyOn(canopyOn);
+      updateCamera();
+    };
+  }
   if(looks)looks.setMenuOpen(true);
   syncQualityUI();
 }
@@ -4199,7 +4233,7 @@ document.getElementById('ax_pitch').addEventListener('click',function(){setRateA
 document.getElementById('ax_yaw').addEventListener('click',function(){setRateAxis('yaw');});
 refreshRatesUI();
 bind('cam','camDeg',x=>x+'°');
-bind('fov','fov',x=>x+'°',()=>{camera.fov=CFG.fov;camera.updateProjectionMatrix();});
+bind('fov','fov',x=>x+'°',()=>{camera.fov=CFG.fov;camera.updateProjectionMatrix();applyCanopyLayout();});
 // Push panel values into the physics core. Mass changes must re-derive the
 // inertia tensor (same flat-box formula the module uses) or a 28g quad would
 // keep a 5"-sized rotational inertia; motors are left spooled so dragging a
@@ -4510,6 +4544,7 @@ function applyBuild(raw,opts){
     droneSel.value=droneType;
   }finally{applyingType=false;}
   syncBuildUI();
+  applyCanopyLayout();
   if(typeof applyWhoopToQp==='function')applyWhoopToQp();
   if(o.announce!==false)toast(phys.label.toUpperCase()+' ≈');
   return phys;
@@ -5511,7 +5546,10 @@ fetchBuiltinTracks().then(list=>{
 });
 Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
-  QUALITY_KEY,FLOATINESS_KEY,  setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
+  QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,canopyGroup,
+  canopyEnabled:()=>canopyOn,
+  setCanopyOn(v){canopyOn=!!v;const el=document.getElementById('cbCanopy');if(el)el.checked=canopyOn;saveCanopyOn(canopyOn);updateCamera();},
+  setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins});
