@@ -14,8 +14,20 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
 } from './sim-art-city.js?v=c235d936652f';
+export {
+  LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget,
+  hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
+  decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
+} from './sim-art-living.js?v=15525096d0eb';
+export {
+  GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget,
+  hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
+  decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
+} from './sim-art-garage.js?v=7efc1c273a23';
 
 export const CITY_VIBE_ID = 'city';
+export const LIVING_VIBE_ID = 'living';
+export const GARAGE_VIBE_ID = 'garage';
 
 
 export const VIBES = Object.freeze({
@@ -75,7 +87,7 @@ export const VIBES = Object.freeze({
     id: 'living',
     name: 'Clay Parlor',
     tagline: 'Candy-clay living room, gummy lamp, felt bounce light',
-    implemented: false,
+    implemented: true,
     time: 'overcast day',
     sky: 'none',
     palette: Object.freeze({
@@ -101,7 +113,7 @@ export const VIBES = Object.freeze({
     id: 'garage',
     name: 'Volt Stall',
     tagline: 'Night workshop, sodium spill, cyan work tubes',
-    implemented: false,
+    implemented: true,
     time: 'night',
     sky: 'none',
     palette: Object.freeze({

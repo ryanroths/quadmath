@@ -5,8 +5,9 @@ race line, leaderboard keys, ghosts, and daily/weekly seeds stay frozen.
 Nothing here is copied from a game, and nothing is taken from WebFPV (GPL).
 
 Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
-Other maps keep their current procedural rooms and pick up their vibe in a
-later pass.
+**Clay Parlor** ships on Living Room and **Volt Stall** ships on Garage.
+Remaining maps keep their current procedural rooms and pick up their vibe
+one map per PR.
 
 ## Inventory (today)
 
@@ -101,8 +102,9 @@ The product target stays **60 fps desktop / 45+ mid phone**.
 
 ## Vibe per map
 
-Every row is original. Palette hex is the locked brand for that map. Phase 1
-implements **city** only.
+Every row is original. Palette hex is the locked brand for that map. City
+(**Neon Current**), Living Room (**Clay Parlor**), and Garage (**Volt Stall**)
+are implemented. Remaining maps wait their turn.
 
 ### City — Neon Current (prototype)
 
@@ -117,7 +119,7 @@ implements **city** only.
 - **Post:** Bloom on Med/High (threshold ~0.82 so only emissives catch). Off on Low. FPV barrel stays.
 - **Not:** Vice City, Outrun box art, or any licensed skyline.
 
-### Living Room — Clay Parlor
+### Living Room — Clay Parlor (shipped)
 
 - **Time:** Overcast afternoon through a felt window.
 - **Palette:** `#f4d6c6` plaster, `#7ec8e3` clay sky, `#ff6b9a` cushion, `#ffe08a` lamp, `#6b3f2a` walnut.
@@ -127,7 +129,7 @@ implements **city** only.
 - **Gates:** Soft rounded clay rings, pastel emissive, no metal.
 - **Post:** Almost none. A light toon ramp on Med/High, bloom off.
 
-### Garage — Volt Stall
+### Garage — Volt Stall (shipped)
 
 - **Time:** Night, door cracked on a wet alley.
 - **Palette:** `#14161c` oil, `#ffb347` sodium, `#2de2e6` tube, `#3d4654` steel, `#c45a22` tool chest.
