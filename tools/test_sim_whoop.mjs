@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { QuadPhysics, PRESETS, groundEffectMult as qpGround } from '../quadphysics.js';
 import { DEFAULT_BUILD, BUILD_PRESETS, batteryFromBuild, BUILD_KEY } from '../sim-build.js';
 import {
-  WHOOP_KEY, PHYSICS_VER, GHOST_FORMAT_V, DEFAULT_WHOOP,
+  WHOOP_KEY, PHYSICS_VER, WHOOP_FEEL_VER, GHOST_FORMAT_V, DEFAULT_WHOOP,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale,
   groundEffectMult, whoopGroundK, whoopGroundMult,
   lipoOcv, stepBattery, resolveDuctHit,
@@ -162,31 +162,36 @@ test('LiPo sag curve: 2S doubles voltage, small packs sag more, not linear', () 
   assert.equal(off.sagFactor, 1);
 });
 
-test('propwash wobbles on a dive/chop through own wash; drafts grow near walls', () => {
+const WASH_LOW = { ...DEFAULT_WHOOP, wash: true, washStr: WASH_LEVELS.low };
+const DRAFT_ON = { ...DEFAULT_WHOOP, draft: true };
+
+test('propwash wobbles on a dive/chop through own wash; drafts grow near walls when on', () => {
   let wake = emptyWake();
   const hover = { pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0.7 };
   for (let i = 0; i < 20; i++) {
-    const s = stepPropwash(wake, hover, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+    const s = stepPropwash(wake, hover, 0.02, DEFAULT_BUILD, WASH_LOW);
     wake = s.wake;
   }
   const chop = stepPropwash(wake, {
     pos: { x: 0, y: 0, z: 1.7 }, vel: { x: 0, y: 0, z: -2.2 }, throttle: 0.05,
-  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+  }, 0.02, DEFAULT_BUILD, WASH_LOW);
   assert.ok(chop.excite > 0.0004, `chop/dive excite ${chop.excite}`);
   assert.ok(chop.excite < 0.012, `wash still too strong ${chop.excite}`);
   const tq = Math.hypot(chop.torque.x, chop.torque.y, chop.torque.z);
   assert.ok(tq > 0.00002 && tq < 0.0008, `chop torque ${tq}`);
   const off = stepPropwash(wake, {
     pos: { x: 0, y: 0, z: 1.7 }, vel: { x: 0, y: 0, z: -2.2 }, throttle: 0.05,
-  }, 0.02, DEFAULT_BUILD, { ...DEFAULT_WHOOP, wash: false });
+  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
   assert.equal(off.excite, 0);
 
-  const near = indoorDraft({ x: 0, y: 0, z: 1 }, 0.2, 1.0, DEFAULT_BUILD, DEFAULT_WHOOP);
-  const far = indoorDraft({ x: 0, y: 0, z: 1 }, 4.0, 1.0, DEFAULT_BUILD, DEFAULT_WHOOP);
+  const near = indoorDraft({ x: 0, y: 0, z: 1 }, 0.2, 1.0, DEFAULT_BUILD, DRAFT_ON);
+  const far = indoorDraft({ x: 0, y: 0, z: 1 }, 4.0, 1.0, DEFAULT_BUILD, DRAFT_ON);
   assert.ok(near.prox > 0.7);
   assert.equal(far.prox, 0);
   assert.ok(Math.hypot(near.force.x, near.force.y, near.force.z) > 0);
   assert.equal(Math.hypot(far.force.x, far.force.y, far.force.z), 0);
+  const defNear = indoorDraft({ x: 0, y: 0, z: 1 }, 0.2, 1.0, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.equal(Math.hypot(defNear.force.x, defNear.force.y, defNear.force.z), 0);
 });
 
 test('ghosts stay v:1 kinematic; phys tag is additive and optional', () => {
@@ -214,12 +219,12 @@ test('3D center hover and a straight punch-out give about zero propwash', () => 
   let wake = emptyWake();
   const hover = { pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0.7 };
   for (let i = 0; i < 20; i++) {
-    wake = stepPropwash(wake, hover, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP).wake;
+    wake = stepPropwash(wake, hover, 0.02, DEFAULT_BUILD, WASH_LOW).wake;
   }
   const center = { pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0 };
   let maxHover = 0;
   for (let i = 0; i < 40; i++) {
-    const s = stepPropwash(wake, center, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+    const s = stepPropwash(wake, center, 0.02, DEFAULT_BUILD, WASH_LOW);
     wake = s.wake;
     if (s.excite > maxHover) maxHover = s.excite;
   }
@@ -227,30 +232,34 @@ test('3D center hover and a straight punch-out give about zero propwash', () => 
 
   wake = emptyWake();
   for (let i = 0; i < 20; i++) {
-    wake = stepPropwash(wake, hover, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP).wake;
+    wake = stepPropwash(wake, hover, 0.02, DEFAULT_BUILD, WASH_LOW).wake;
   }
   const punch = stepPropwash(wake, {
     pos: { x: 0, y: 0, z: 2.15 }, vel: { x: 0, y: 0, z: 4 }, throttle: 1,
-  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+  }, 0.02, DEFAULT_BUILD, WASH_LOW);
   assert.equal(punch.excite, 0);
   assert.equal(punch.turb, 0);
 
   const reverse = stepPropwash(emptyWake(), {
     pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: -0.7,
-  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+  }, 0.02, DEFAULT_BUILD, WASH_LOW);
   assert.equal(reverse.wakeHit, 0, 'reverse must not count as a chop-to-zero');
   assert.ok(reverse.wake.s > 0.5, 'reverse still deposits |thrust| wash, not a chop-to-zero');
   assert.ok(reverse.wake.z > 2, `reverse must deposit upwash, z=${reverse.wake.z}`);
   const fwdWash = stepPropwash(emptyWake(), {
     pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0.7,
-  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+  }, 0.02, DEFAULT_BUILD, WASH_LOW);
   assert.ok(fwdWash.wake.z < 2, `forward must deposit downwash, z=${fwdWash.wake.z}`);
 });
 
-test('wash strength levels snap Off/Low/Med/High and default Low', () => {
-  assert.equal(DEFAULT_WHOOP.washStr, WASH_LEVELS.low);
-  assert.ok(Math.abs(WASH_LEVELS.low - 0.25 * 0.05) < 1e-9, 'new Low is old Low × 0.05');
+test('wash strength levels snap Off/Low/Med/High and default Off', () => {
+  assert.equal(DEFAULT_WHOOP.wash, false);
+  assert.equal(DEFAULT_WHOOP.washStr, WASH_LEVELS.off);
+  assert.equal(DEFAULT_WHOOP.draft, false);
+  assert.equal(DEFAULT_WHOOP.feelVer, WHOOP_FEEL_VER);
+  assert.ok(Math.abs(WASH_LEVELS.low - 0.25 * 0.05) < 1e-9, 'Low is old Low × 0.05');
   assert.equal(WASH_LEVELS.high, 0.25);
+  assert.equal(washStrFromLevel('off'), WASH_LEVELS.off);
   assert.equal(washStrFromLevel('low'), WASH_LEVELS.low);
   assert.equal(washStrFromLevel('high'), WASH_LEVELS.high);
   assert.equal(washLevelFromStr(0), 'off');
@@ -261,9 +270,9 @@ test('wash strength levels snap Off/Low/Med/High and default Low', () => {
 });
 
 test('new Low wash is ~5% of old Low; High matches old Low washStr', () => {
-  const oldLow = { ...DEFAULT_WHOOP, washStr: 0.25 };
-  const neuLow = { ...DEFAULT_WHOOP, washStr: WASH_LEVELS.low };
-  const neuHigh = { ...DEFAULT_WHOOP, washStr: WASH_LEVELS.high };
+  const oldLow = { ...DEFAULT_WHOOP, wash: true, washStr: 0.25 };
+  const neuLow = { ...DEFAULT_WHOOP, wash: true, washStr: WASH_LEVELS.low };
+  const neuHigh = { ...DEFAULT_WHOOP, wash: true, washStr: WASH_LEVELS.high };
   let wake = emptyWake();
   const hover = { pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0.7 };
   for (let i = 0; i < 20; i++) wake = stepPropwash(wake, hover, 0.02, DEFAULT_BUILD, oldLow).wake;
@@ -276,37 +285,54 @@ test('new Low wash is ~5% of old Low; High matches old Low washStr', () => {
   assert.ok(Math.abs(highChop.excite - oldChop.excite) < 1e-9, 'High matches old Low wake hit');
 });
 
-test('propwash always-on is a faint mid-stick buzz; punch and 3D center stay quiet', () => {
+test('propwash has no always-on mid-stick buzz; punch and 3D center stay quiet', () => {
   const mid = stepPropwash(emptyWake(), {
     pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0.5,
-  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
-  assert.ok(mid.turb > 0 && mid.turb < 0.0015, `mid-stick turb ${mid.turb}`);
+  }, 0.02, DEFAULT_BUILD, WASH_LOW);
+  assert.equal(mid.turb, 0);
   assert.equal(mid.wakeHit, 0);
   const idle = stepPropwash(emptyWake(), {
     pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0,
-  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+  }, 0.02, DEFAULT_BUILD, WASH_LOW);
   assert.equal(idle.turb, 0);
   assert.equal(idle.excite, 0);
   const punch = stepPropwash(emptyWake(), {
     pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 4 }, throttle: 1,
-  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+  }, 0.02, DEFAULT_BUILD, WASH_LOW);
   assert.equal(punch.turb, 0);
   assert.equal(punch.excite, 0);
 });
 
-test('whoop settings load/save uses only WHOOP_KEY', () => {
+test('whoop settings load/save uses only WHOOP_KEY; old wash migrates Off once', () => {
   const mem = new Map();
   const store = {
     getItem: (k) => (mem.has(k) ? mem.get(k) : null),
     setItem: (k, v) => mem.set(k, String(v)),
     removeItem: (k) => mem.delete(k),
   };
-  saveWhoop({ bounce: false, washStr: 1.2 }, store);
+  saveWhoop({ bounce: false, wash: true, washStr: 1.2, feelVer: WHOOP_FEEL_VER }, store);
   assert.equal([...mem.keys()].join(','), WHOOP_KEY);
   const loaded = loadWhoop(store);
   assert.equal(loaded.bounce, false);
   assert.ok(Math.abs(loaded.washStr - 1.2) < 1e-9);
+  assert.equal(loaded.wash, true);
   assert.equal(loaded.batt, true);
+
+  store.setItem(WHOOP_KEY, JSON.stringify({
+    bounce: true, wash: true, washStr: 0.25, draft: true, draftStr: 0.55,
+  }));
+  const migrated = loadWhoop(store);
+  assert.equal(migrated.wash, false);
+  assert.equal(migrated.washStr, 0);
+  assert.equal(migrated.draft, false);
+  assert.equal(migrated.feelVer, WHOOP_FEEL_VER);
+  const again = JSON.parse(store.getItem(WHOOP_KEY));
+  again.wash = true;
+  again.washStr = WASH_LEVELS.low;
+  store.setItem(WHOOP_KEY, JSON.stringify(again));
+  const kept = loadWhoop(store);
+  assert.equal(kept.wash, true);
+  assert.equal(kept.washStr, WASH_LEVELS.low);
 });
 
 test('sim.html wires W2 sliders, HUD voltage, and keeps old localStorage keys', () => {
@@ -315,7 +341,9 @@ test('sim.html wires W2 sliders, HUD voltage, and keeps old localStorage keys', 
   assert.ok(simSrc.includes('id="cbGround"') && simSrc.includes('id="s_ground"'));
   assert.ok(simSrc.includes('id="cbWash"') && simSrc.includes('id="s_wash"'));
   assert.ok(simSrc.includes('option value="low"') && simSrc.includes('option value="high"'));
-  assert.ok(simSrc.includes('option value="low" selected') || simSrc.includes('value="low" selected'));
+  assert.ok(simSrc.includes('option value="off" selected') || simSrc.includes('value="off" selected'));
+  assert.ok(!/id="cbWash"[^>]*checked/.test(simSrc));
+  assert.ok(!/id="cbDraft"[^>]*checked/.test(simSrc));
   assert.ok(/id="s_crash"[^>]*value="9"/.test(simSrc));
   assert.ok(simSrc.includes('id="cbDraft"') && simSrc.includes('id="s_draft"'));
   assert.ok(simSrc.includes('id="s_sag"') && simSrc.includes('id="cbBattSim"'));

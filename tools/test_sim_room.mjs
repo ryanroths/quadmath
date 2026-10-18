@@ -103,8 +103,9 @@ test('W2 drafts grow near planned room walls', () => {
   const farPos = { x: 0, y: plan.h * 0.45, z: 0 };
   const nearD = roomWallDist(nearPos, plan) / WS_PER_METRE;
   const farD = roomWallDist(farPos, plan) / WS_PER_METRE;
-  const near = indoorDraft(nearPos, nearD, 1.0, DEFAULT_BUILD, DEFAULT_WHOOP);
-  const far = indoorDraft(farPos, farD, 1.0, DEFAULT_BUILD, DEFAULT_WHOOP);
+  const draftOn = { ...DEFAULT_WHOOP, draft: true };
+  const near = indoorDraft(nearPos, nearD, 1.0, DEFAULT_BUILD, draftOn);
+  const far = indoorDraft(farPos, farD, 1.0, DEFAULT_BUILD, draftOn);
   assert.ok(near.prox > 0.5, 'near wall prox ' + near.prox);
   assert.ok(farD > 1.8, 'center should be outside the draft radius, got ' + farD);
   assert.equal(far.prox, 0);
