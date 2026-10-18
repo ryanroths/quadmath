@@ -7,6 +7,7 @@ Nothing here is copied from a game, and nothing is taken from WebFPV (GPL).
 Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
 **Clay Parlor** ships on Living Room, **Volt Stall** ships on Garage, and
 **Ion Nave** ships on Warehouse.
+**Amber Court** ships on Gym.
 Remaining maps keep their current procedural rooms and pick up their vibe
 one map per PR.
 
@@ -105,7 +106,7 @@ The product target stays **60 fps desktop / 45+ mid phone**.
 
 Every row is original. Palette hex is the locked brand for that map. City
 (**Neon Current**), Living Room (**Clay Parlor**), Garage (**Volt Stall**), and
-Warehouse (**Ion Nave**) are implemented. Remaining maps wait their turn.
+Warehouse (**Ion Nave**), and Gym (**Amber Court**) are implemented. Remaining maps wait their turn.
 
 ### City — Neon Current (prototype)
 
@@ -166,7 +167,7 @@ Warehouse (**Ion Nave**) are implemented. Remaining maps wait their turn.
 - **Gates:** Primary-color hoops with a black outline mesh.
 - **Post:** No bloom. Optional toon ramp on High.
 
-### School Gym — Amber Court
+### School Gym — Amber Court (shipped)
 
 - **Time:** Golden hour through high windows.
 - **Palette:** `#f0b14b` sun, `#6a4224` court, `#fff6d8` line, `#c45a22` rim, `#8a8e94` truss.
