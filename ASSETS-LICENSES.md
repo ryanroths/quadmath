@@ -54,8 +54,8 @@ Used only for numeric readouts (OSD values, sliders, CLI/ghost fields).
 
 | Asset | License | Credit |
 |---|---|---|
-| Kenney City Kit GLBs under `assets/Models/` | CC0 (`assets/License.txt`) | Kenney (www.kenney.nl) |
-| `assets/Models/GLB-format/low_poly_city_game-ready.glb` | CC BY 4.0 | **City model by costoWRLD (Sketchfab, CC BY)** — kept in the sim footer |
+| Kenney City Kit GLBs under `assets/Models/` | CC0 (`assets/License.txt`) | Kenney (www.kenney.nl). Still in the tree; **Phase 1 city no longer loads them**. |
+| `assets/Models/GLB-format/low_poly_city_game-ready.glb` | CC BY 4.0 | **costoWRLD (Sketchfab, CC BY)** — not loaded in Phase 1. City playable art is original procedural `Neon Current` (`sim-art.js`). |
 
 ## W3 indoor maps (no new binary textures)
 
