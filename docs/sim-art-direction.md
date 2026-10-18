@@ -10,6 +10,7 @@ Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
 **Amber Court** ships on Gym.
 **Paper Sun** ships on Office.
 **Licorice Grid** ships on Tiny Trainer.
+**Jade Lot** ships on Backyard.
 Remaining maps keep their current procedural rooms and pick up their vibe
 one map per PR.
 
@@ -108,7 +109,7 @@ The product target stays **60 fps desktop / 45+ mid phone**.
 
 Every row is original. Palette hex is the locked brand for that map. City
 (**Neon Current**), Living Room (**Clay Parlor**), Garage (**Volt Stall**), and
-Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), and Tiny Trainer (**Licorice Grid**) are implemented. Remaining maps wait their turn.
+Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Trainer (**Licorice Grid**), and Backyard (**Jade Lot**) are implemented. Remaining maps wait their turn.
 
 ### City — Neon Current (prototype)
 
@@ -151,7 +152,7 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), and Tin
 - **Gates:** Hex frames with teal core.
 - **Post:** Small bloom on runners. Fog `#0b1218` at `0.0018`.
 
-### Backyard — Jade Lot
+### Backyard — Jade Lot (shipped)
 
 - **Time:** Dusk under a torn canopy.
 - **Palette:** `#1b2a18` hedge, `#c9a45b` idol gold, `#5d7a3a` grass, `#8a4a2a` laterite, `#ffe0b0` porch.
