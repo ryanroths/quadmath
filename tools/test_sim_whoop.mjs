@@ -229,6 +229,11 @@ test('3D center hover and a straight punch-out give about zero propwash', () => 
   }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
   assert.equal(reverse.excite, 0);
   assert.ok(reverse.wake.s > 0.5, 'reverse still deposits |thrust| wash, not a chop-to-zero');
+  assert.ok(reverse.wake.z > 2, `reverse must deposit upwash, z=${reverse.wake.z}`);
+  const fwdWash = stepPropwash(emptyWake(), {
+    pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0.7,
+  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.ok(fwdWash.wake.z < 2, `forward must deposit downwash, z=${fwdWash.wake.z}`);
 });
 
 test('wash strength levels snap Off/Low/Med/High and default Low', () => {

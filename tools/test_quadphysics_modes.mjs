@@ -249,6 +249,24 @@ test('3D mixer has no idle at center and reverses below center', () => {
   assert.ok(THREED_DEADBAND > 0 && THREED_DEADBAND < 0.2);
 });
 
+test('3D reverse spool-up uses the fast tau, not spool-down', () => {
+  function punch(thr) {
+    const qp = new QuadPhysics(PRESETS.whoop65);
+    qp.setFlightMode('acro');
+    qp.setThreeD(true);
+    qp.reset({ x: 0, y: 0, z: 2 });
+    qp.arm();
+    qp.step(0.002, { roll: 0, pitch: 0, yaw: 0 }, thr, { r: 0, p: 0, y: 0 });
+    return qp.motorOutputs[0];
+  }
+  const fwd = punch(1);
+  const rev = punch(-1);
+  assert.ok(fwd > 0.05, `forward spool ${fwd}`);
+  assert.ok(rev < -0.05, `reverse spool ${rev}`);
+  assert.ok(Math.abs(Math.abs(fwd) - Math.abs(rev)) < 1e-9,
+    `reverse punch lagged: fwd=${fwd} rev=${rev}`);
+});
+
 test('3D reverse thrust can hold inverted (acro)', () => {
   const qp = new QuadPhysics(PRESETS.whoop65);
   qp.setFlightMode('acro');
