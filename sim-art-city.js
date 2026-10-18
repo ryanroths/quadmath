@@ -1216,6 +1216,7 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     if (trails) {
       trails.userData.cityTrails = true;
       trails.userData.seeds = Array.from({ length: budget.trails }, () => rng());
+      trails.userData.dummy = new THREE.Object3D();
     }
   }
 
@@ -1251,7 +1252,6 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     lights.push(l);
   }
   group.userData.artLights = lights;
-  group.userData.winMat = winMat;
   void carMesh;
   return group;
 }
@@ -1474,6 +1474,13 @@ export function tickCityArt(root, now) {
   if (!root) return;
   const t = now * 0.001;
   root.traverse((o) => {
+    try {
+      tickCityArtObject(o, t);
+    } catch (e) { /* never abort the FPV render loop */ }
+  });
+}
+
+function tickCityArtObject(o, t) {
     if (o.material && o.material.userData && o.material.userData.cityWindow) {
       o.material.emissiveIntensity = 1.15 + 0.35 * (0.5 + 0.5 * Math.sin(t * 3.1));
     }
@@ -1505,7 +1512,8 @@ export function tickCityArt(root, now) {
       o.material.uniforms.uTime.value = t;
     }
     if (o.userData && o.userData.cityTrails) {
-      const dummy = new THREE.Object3D();
+      const dummy = o.userData.dummy;
+      if (!dummy) return;
       const seeds = o.userData.seeds || [];
       for (let i = 0; i < o.count; i++) {
         const s = seeds[i] || 0.3;
@@ -1518,7 +1526,6 @@ export function tickCityArt(root, now) {
       }
       o.instanceMatrix.needsUpdate = true;
     }
-  });
 }
 
 export function restyleMesas(root, vibe) {

@@ -11,9 +11,10 @@ import {
   qualityWantsReflections, qualityWantsParticles,
   propClearOfCourse, planCityProps, planPortalBlocks, SIGN_WORDS, GATE_STYLES,
   signsAreOriginal, BRAND_BLOCKLIST,
-  paintWorldLabel, WORLD_LABEL,
+  paintWorldLabel, WORLD_LABEL, restyleCity, buildNeonCity, artStats, tickCityArt,
 } from '../sim-art.js';
-import { MAPS, FROZEN_CITY, cityTrackJson } from '../sim-tracks.js';
+import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
+import * as THREE from '../vendor/three.module.min.js';
 import { MAP_IDS, MAP_LOOKS } from '../sim-maps.js';
 import { DAILY_MAPS } from '../sim-retention.js';
 
@@ -231,6 +232,109 @@ test('world labels punch out the canvas backdrop', () => {
   assert.match(coach, /makeWorldLabel/);
   const feel = readFileSync(join(root, 'sim-feel.js'), 'utf8');
   assert.match(feel, /makeWorldLabel/);
+});
+
+function installDomStub() {
+  if (globalThis.document && globalThis.document.createElement) return;
+  const grad = () => ({ addColorStop() {} });
+  const ctx = new Proxy({
+    canvas: { width: 64, height: 64 },
+    measureText: () => ({ width: 8 }),
+    createLinearGradient: grad,
+    createRadialGradient: grad,
+    getImageData: () => ({ data: new Uint8ClampedArray(64 * 64 * 4), width: 64, height: 64 }),
+  }, {
+    get(t, key) {
+      if (key in t) return t[key];
+      if (key === 'fillStyle' || key === 'strokeStyle' || key === 'font') return '';
+      return typeof key === 'string' ? () => {} : undefined;
+    },
+    set() { return true; },
+  });
+  globalThis.document = {
+    createElement(tag) {
+      if (tag === 'canvas') {
+        return { width: 64, height: 64, getContext: () => ctx, toDataURL: () => 'data:image/png;base64,' };
+      }
+      return { style: {}, classList: { add() {}, remove() {}, toggle() {} } };
+    },
+  };
+  if (!globalThis.window) globalThis.window = globalThis;
+}
+
+function cityFrameLit(root) {
+  let meshes = 0;
+  let lit = 0;
+  let maxChan = 0;
+  root.traverse((o) => {
+    if (!o.isMesh && !o.isInstancedMesh) return;
+    if (o.visible === false) return;
+    meshes += 1;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (!m) continue;
+      const cols = [];
+      if (m.color && m.color.isColor) cols.push(m.color);
+      if (m.emissive && m.emissive.isColor) cols.push(m.emissive);
+      for (const c of cols) {
+        const hex = c.getHex();
+        if (hex) lit += 1;
+        maxChan = Math.max(maxChan, c.r, c.g, c.b);
+      }
+    }
+  });
+  return { meshes, lit, maxChan };
+}
+
+test('City freestyle builds without throwing and the FPV frame is not all black', () => {
+  installDomStub();
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.equal(/\bwinMat\b/.test(city), false, 'stale winMat identifier must stay gone');
+  const gates = FROZEN_CITY[0].concat(FROZEN_CITY[1]);
+  const free = freestyleTrack('city');
+  assert.equal(free.id, freestyleIdFor('city'));
+  assert.equal(free.gates.length, 0);
+  for (const q of ['low', 'med', 'high', 'auto']) {
+    const parent = new THREE.Group();
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(80, 80),
+      new THREE.MeshStandardMaterial({ color: 0x111111 }),
+    );
+    const sky = new THREE.Mesh(
+      new THREE.SphereGeometry(40, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide }),
+    );
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x000000, 0.001);
+    scene.background = new THREE.Color(0x000000);
+    assert.doesNotThrow(() => buildNeonCity(THREE, parent, vibeFor('city'), q, gates));
+    const built = parent.getObjectByName('cityArtVisuals');
+    assert.ok(built, q + ' cityArtVisuals');
+    parent.remove(built);
+    const out = restyleCity(THREE, {
+      vibe: vibeFor('city'),
+      quality: q,
+      proceduralGroup: parent,
+      ground,
+      skyMesh: sky,
+      scene,
+      gates,
+    });
+    assert.equal(out.error, undefined, q + ' restyleCity ' + out.error);
+    assert.ok(out.visuals, q + ' visuals');
+    const stats = artStats(null, out.visuals);
+    assert.ok(stats.instancedMeshes >= 8, q + ' instanced ' + stats.instancedMeshes);
+    assert.ok(stats.callsEst >= 20, q + ' callsEst ' + stats.callsEst);
+    const frame = cityFrameLit(out.visuals);
+    assert.ok(frame.meshes >= 8, q + ' meshes ' + frame.meshes);
+    assert.ok(frame.lit >= 8, q + ' lit materials ' + frame.lit);
+    assert.ok(frame.maxChan > 0.08, q + ' brightest channel ' + frame.maxChan);
+    assert.doesNotThrow(() => {
+      for (let i = 0; i < 8; i++) tickCityArt(out.visuals, 1000 + i * 16);
+    }, q + ' tickCityArt');
+  }
+  const tickSrc = city.slice(city.indexOf('export function tickCityArt'), city.indexOf('export function restyleMesas'));
+  assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickCityArt must not touch the THREE binding');
 });
 
 test('art direction doc lists every map', () => {

@@ -9,7 +9,7 @@ import {
   findTrackIn, resolveSimBoot, firstTrackForMap, startPad, normalizeTrack,
   BUILTIN_TRACK_FILES, SELECTED_TRACK_KEY, resolveFly, resolveTrackPick,
   persistableSelection, isFreestyleTrackId, isEphemeralTrackId, freestyleIdFor,
-  loadSelected, saveSelected,
+  loadSelected, saveSelected, MAPS, freestyleTrack,
 } from '../sim-tracks.js';
 import {
   shouldToastFlip, isStuckInverted, stepStuckHold, wantsTurtle, bodyUpZ,
@@ -301,6 +301,30 @@ test('boot and Fly are last-map freestyle; room/daily cannot lock routing', () =
   assert.equal(loadSelected(store).track, 'trainer-freestyle');
   assert.equal(loadSelected(store).mode, 'free');
   assert.equal(normalizeTrack({ id: 'city-freestyle', map: 'city', freestyle: true, gates: [] }).gates.length, 0);
+});
+
+test('every catalog map and freestyle row boots without falling back to city', () => {
+  for (const m of MAPS) {
+    const id = freestyleIdFor(m.id);
+    assert.equal(isFreestyleTrackId(id), true, id);
+    const t = freestyleTrack(m.id);
+    assert.equal(t.map, m.id);
+    assert.equal(t.id, id);
+    assert.equal(t.gates.length, 0);
+    assert.ok(t.start && Number.isFinite(t.start.y), id + ' start');
+    const boot = resolveSimBoot({ track: id }, null, files);
+    assert.equal(boot.map, m.id, id + ' boot map');
+    assert.equal(boot.track, id, id + ' boot track');
+    const fly = resolveFly({ map: m.id, track: firstTrackForMap(m.id, files) && firstTrackForMap(m.id, files).id });
+    assert.equal(fly.map, m.id);
+    assert.equal(fly.track, id);
+    const race = files.find((x) => x.map === m.id && !x.freestyle);
+    if (race) {
+      const pick = resolveTrackPick(m.id, race.id, files);
+      assert.equal(pick.map, m.id);
+      assert.equal(pick.mode, 'race');
+    }
+  }
 });
 
 test('sim.html Fly/Freestyle, map switching, and Esc leave a race', () => {
