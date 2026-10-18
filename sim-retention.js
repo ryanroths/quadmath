@@ -21,18 +21,22 @@ export const CLASS_IDS = Object.freeze([65, 75, 85]);
 export const CLASS_MAX_SPEED = Object.freeze({ 65: 48, 75: 58, 85: 72 });
 export const MISS_PENALTY_MS = 2000;
 export const PHYS_VER = 2;
+export const DAILY_GEN = 2;
 export const PILOT_NAME_MAX = 16;
+export const GATE_SIZE_MIN = 0.28 * WS_PER_METRE;
+export const GATE_SIZE_MAX = 0.40 * WS_PER_METRE;
+export const LAP_PACE_MS = 2.6;
 export const WEEK_GRACE_MS = 36 * 60 * 60 * 1000;
 export const DEFAULT_ALLOWED_ORIGIN = 'https://quadmath.com';
 
 // Indoor fly boxes, numbers copied from sim-maps LAYOUT. Tests pin the match.
 export const DAILY_MAPS = Object.freeze([
-  { id: 'living', name: 'Living Room', w: 21, d: 28, h: 9.1 },
-  { id: 'garage', name: 'Garage', w: 21, d: 42, h: 10.5 },
-  { id: 'warehouse', name: 'Warehouse', w: 56, d: 84, h: 21 },
-  { id: 'office', name: 'Office', w: 36, d: 46, h: 9.2 },
-  { id: 'gym', name: 'School Gym', w: 48, d: 74, h: 28 },
-  { id: 'trainer', name: 'Tiny Trainer', w: 28, d: 36, h: 10.5 },
+  { id: 'living', name: 'Living Room', w: 21, d: 28, h: 9.1, wall: 0.38 },
+  { id: 'garage', name: 'Garage', w: 21, d: 42, h: 10.5, wall: 0.4 },
+  { id: 'warehouse', name: 'Warehouse', w: 56, d: 84, h: 21, wall: 0.5 },
+  { id: 'office', name: 'Office', w: 36, d: 46, h: 9.2, wall: 0.36 },
+  { id: 'gym', name: 'School Gym', w: 48, d: 74, h: 28, wall: 0.46 },
+  { id: 'trainer', name: 'Tiny Trainer', w: 28, d: 36, h: 10.5, wall: 0.34 },
 ]);
 
 export const SKINS = Object.freeze([
@@ -148,7 +152,7 @@ export function isDailyTrackId(id) {
 }
 
 export function isWeeklyTrackId(id) {
-  return typeof id === 'string' && /^weekly-\d{4}-W\d{2}$/.test(id);
+  return typeof id === 'string' && /^weekly-\d{4}-W\d{2}(?:-g\d+)?$/.test(id);
 }
 
 export function dailyIdFor(utc) {
@@ -156,7 +160,13 @@ export function dailyIdFor(utc) {
 }
 
 export function weeklyIdFor(week) {
-  return 'weekly-' + week;
+  const w = String(week || '').replace(/-g\d+$/, '');
+  return 'weekly-' + w + '-g' + DAILY_GEN;
+}
+
+export function weekFromTrackId(id) {
+  const m = typeof id === 'string' && id.match(/^weekly-(\d{4}-W\d{2})(?:-g\d+)?$/);
+  return m ? m[1] : '';
 }
 
 function mapById(id) {
@@ -252,6 +262,214 @@ function normalizeTrack(raw, fallbackId) {
   };
 }
 
+function aabb(x, y, z, w, h, d) {
+  return [x - w / 2, y, z - d / 2, x + w / 2, y + h, z + d / 2];
+}
+
+function wallBoxes(map) {
+  const hx = map.w / 2, hz = map.d / 2, t = map.wall || 0.4, H = map.h;
+  return [
+    [-hx - t, 0, -hz - t, hx + t, H, -hz + t * 0.55],
+    [-hx - t, 0, hz - t * 0.55, hx + t, H, hz + t],
+    [-hx - t, 0, -hz - t, -hx + t * 0.55, H, hz + t],
+    [hx - t * 0.55, 0, -hz - t, hx + t, H, hz + t],
+    [-hx, H - 0.28, -hz, hx, H + 0.2, hz],
+  ];
+}
+
+function furnitureBoxes(mapId) {
+  if (mapId === 'living') {
+    return [
+      aabb(0, 0, -10.6, 7.2, 2.35, 2.7),
+      aabb(0, 2.35, -11.5, 7.2, 1.15, 0.7),
+      aabb(-3.4, 1.1, -10.6, 0.55, 1.1, 2.5),
+      aabb(3.4, 1.1, -10.6, 0.55, 1.1, 2.5),
+      aabb(0, 0, -5.9, 3.5, 1.12, 1.9),
+      aabb(8.4, 0, 0.2, 1.5, 1.55, 5.6),
+      aabb(9.55, 2.2, 0.2, 0.12, 2.6, 4.4),
+      aabb(-7.1, 0, -3.8, 2.5, 2.15, 2.5),
+      aabb(-6.2, 0, 8.2, 1.5, 4.8, 1.5),
+      aabb(8.4, 0, -10.6, 1.6, 5.6, 2.4),
+    ];
+  }
+  if (mapId === 'garage') {
+    return [
+      aabb(-8.4, 0, -8.0, 2.4, 2.73, 12.6),
+      aabb(-8.3, 0, 8.2, 2.1, 3.1, 3.2),
+      aabb(4.2, 0.45, -5.5, 5.4, 1.7, 11.5),
+      aabb(4.2, 2.15, -4.2, 5.0, 1.35, 6.2),
+      aabb(8.6, 0, 8.0, 1.7, 5.8, 10.0),
+    ];
+  }
+  if (mapId === 'warehouse') {
+    const out = [];
+    for (const z of [-24, 0, 24]) {
+      for (const x of [-22.5, -7.5, 7.5, 22.5]) out.push(aabb(x, 0, z, 3.4, 12.5, 18));
+    }
+    out.push(aabb(-22, 0, 36, 4.2, 4.2, 4.2));
+    out.push(aabb(22, 0, 36, 4.2, 2.4, 4.2));
+    out.push(aabb(0, 0, 40.5, 16, 1.1, 3.2));
+    return out;
+  }
+  if (mapId === 'office') {
+    const out = [];
+    for (const z of [-12, 0, 12]) {
+      out.push(aabb(-13.25, 0, z, 6.4, 3.55, 7.0));
+      out.push(aabb(-3.75, 0, z, 6.4, 3.55, 7.0));
+    }
+    out.push(aabb(10.15, 0, -21.6, 0.16, 3.7, 2.8));
+    out.push(aabb(10.15, 0, -1.0, 0.16, 3.7, 28.0));
+    out.push(aabb(10.15, 0, 20.8, 0.16, 3.7, 4.4));
+    out.push(aabb(4.6, 0, -16.2, 5.6, 1.12, 2.4));
+    out.push(aabb(4.6, 0.35, -14.4, 1.05, 1.47, 1.2));
+    out.push(aabb(4.6, 0.35, -18.0, 1.05, 1.47, 1.2));
+    out.push(aabb(14.2, 0, 18.4, 3.6, 1.25, 1.5));
+    return out;
+  }
+  if (mapId === 'gym') {
+    const out = [];
+    for (let i = 0; i < 4; i++) {
+      out.push(aabb(-17.4 - i * 1.35, 0, 0, 1.28, 1.05 + i * 1.05, 54));
+      out.push(aabb(17.4 + i * 1.35, 0, 0, 1.28, 1.05 + i * 1.05, 54));
+    }
+    out.push(aabb(0, 0, 25.15, 0.4, 10.6, 0.4));
+    out.push(aabb(0, 9.5, 25.37, 3.6, 2.2, 0.14));
+    out.push(aabb(0, 0, -25.15, 0.4, 10.6, 0.4));
+    out.push(aabb(0, 9.5, -25.37, 3.6, 2.2, 0.14));
+    return out;
+  }
+  if (mapId === 'trainer') {
+    return [
+      aabb(-12.2, 0, 0, 1.6, 1.15, 8.4),
+      aabb(-12.2, 1.15, -2.4, 2.0, 1.7, 2.2),
+      aabb(-12.2, 1.15, 1.2, 2.0, 1.7, 2.2),
+      aabb(12.2, 0, -12.4, 1.4, 2.2, 3.2),
+    ];
+  }
+  return [];
+}
+
+export function mapObstacles(map) {
+  const m = typeof map === 'string' ? mapById(map) : map;
+  return wallBoxes(m).concat(furnitureBoxes(m.id));
+}
+
+export function minGateSpacing(map) {
+  if (map.w >= 45) return 3.2 * WS_PER_METRE;
+  if (map.id === 'office') return 8.2;
+  return 8.5;
+}
+
+export function dailyLapRange(map) {
+  if (map.id === 'living') return { minM: 36, maxM: 90 };
+  if (map.id === 'trainer') return { minM: 55, maxM: 95 };
+  if (map.id === 'garage') return { minM: 36, maxM: 110 };
+  const peri = (map.w + map.d) * 1.45;
+  const minM = clamp(peri * 0.38 / WS_PER_METRE, 18, 48);
+  const maxM = clamp(peri * 1.65 / WS_PER_METRE, 42, 180);
+  return { minM, maxM };
+}
+
+export function estimateLapSeconds(gates, paceMs) {
+  return lapLengthMetres(gates) / (paceMs || LAP_PACE_MS);
+}
+
+function inFloor(p, map, margin) {
+  if (Math.abs(p.x) > map.w / 2 - margin) return false;
+  if (Math.abs(p.z) > map.d / 2 - margin) return false;
+  if (p.y < 0.5 || p.y > map.h - 0.7) return false;
+  return true;
+}
+
+function inBox(p, map, margin) {
+  if (!inFloor(p, map, margin)) return false;
+  if (p.y < 1.35 || p.y > Math.min(map.h * 0.48, map.h - 1.35)) return false;
+  return true;
+}
+
+function sphereHitsAabb(px, py, pz, r, b) {
+  const qx = clamp(px, b[0], b[3]);
+  const qy = clamp(py, b[1], b[4]);
+  const qz = clamp(pz, b[2], b[5]);
+  return Math.hypot(px - qx, py - qy, pz - qz) < r;
+}
+
+function hitsObstacles(px, py, pz, r, boxes) {
+  for (let i = 0; i < boxes.length; i++) {
+    if (sphereHitsAabb(px, py, pz, r, boxes[i])) return true;
+  }
+  return false;
+}
+
+function gateAxis(ry) {
+  const s = Math.sin(ry), c = Math.cos(ry);
+  return { ax: s, az: c, lx: c, lz: -s };
+}
+
+function gateClearanceSamples(g) {
+  const size = g.size || 1.2;
+  const extra = size;
+  const { ax, az, lx, lz } = gateAxis(g.ry || 0);
+  const pts = [];
+  for (const s of [-1, -0.5, 0, 0.5, 1]) {
+    for (const u of [-0.7, 0, 0.7]) {
+      pts.push({
+        x: g.x + lx * s * (size + extra),
+        y: g.y + u * size,
+        z: g.z + lz * s * (size + extra),
+        r: 0.14,
+      });
+    }
+  }
+  for (let i = 1; i <= 3; i++) {
+    const d = i * 0.55;
+    pts.push({
+      x: g.x - ax * d,
+      y: g.y,
+      z: g.z - az * d,
+      r: size * 0.35,
+    });
+  }
+  return pts;
+}
+
+export function gateHasClearance(g, map, boxes, from) {
+  const size = g.size || 1.2;
+  const margin = (map.wall || 0.4) + size + size * 0.7;
+  if (!inBox(g, map, margin)) return false;
+  const obs = boxes || mapObstacles(map);
+  const samples = gateClearanceSamples(g);
+  for (const s of samples) {
+    if (!inBox(s, map, (map.wall || 0.4) + 0.22)) return false;
+    if (hitsObstacles(s.x, s.y, s.z, s.r, obs)) return false;
+  }
+  if (from && !segmentClear(from, g, map, obs, Math.max(0.26, size * 0.26))) return false;
+  return true;
+}
+
+function segmentClear(a, b, map, boxes, radius) {
+  const n = 7;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const x = a.x + (b.x - a.x) * t;
+    const y = a.y + (b.y - a.y) * t;
+    const z = a.z + (b.z - a.z) * t;
+    if (!inFloor({ x, y, z }, map, (map.wall || 0.4) + radius)) return false;
+    if (hitsObstacles(x, y, z, radius, boxes)) return false;
+  }
+  return true;
+}
+
+function padClear(track, map, boxes) {
+  const pad = startPad(track);
+  const g = track.gates[0];
+  const r = Math.max(0.45, (g.size || 1.2) * 0.45);
+  if (Math.abs(pad.x) > map.w / 2 - 0.8 || Math.abs(pad.z) > map.d / 2 - 0.8) return false;
+  if (pad.y < 0.4 || pad.y > map.h * 0.5) return false;
+  if (hitsObstacles(pad.x, pad.y, pad.z, r, boxes)) return false;
+  return segmentClear(pad, g, map, boxes, r);
+}
+
 function ovalPts(map, y, n, inset) {
   const rx = Math.max(2.8, map.w / 2 - inset);
   const rz = Math.max(3.0, map.d / 2 - inset);
@@ -277,134 +495,457 @@ function slalomPts(map, y, n, inset, amp) {
 }
 
 function figure8Pts(map, y, inset) {
-  const sep = Math.min(map.w * 0.22, 6.4);
-  const r = Math.min(map.w * 0.18, map.d * 0.16, 5.5);
-  const zPad = Math.min(inset * 0.4, 1.2);
+  const sep = Math.min(map.w * 0.28, map.w / 2 - inset - 0.4);
+  const r = Math.min(map.w * 0.22, map.d * 0.20, map.d / 2 - inset);
   return [
-    { x: 0, y, z: Math.min(map.d / 2 - inset, r + 2.2) },
-    { x: -sep, y, z: r * 0.2 },
-    { x: -sep, y: y + 0.4, z: -r },
-    { x: 0, y, z: -Math.min(map.d / 2 - inset, r + 1.6) - zPad },
-    { x: sep, y: y + 0.4, z: -r },
-    { x: sep, y, z: r * 0.2 },
-    { x: 0, y, z: r * 0.35 },
+    { x: 0, y, z: Math.min(map.d / 2 - inset, r + 2.8) },
+    { x: -sep, y, z: r * 0.15 },
+    { x: -sep, y: y + 0.35, z: -r },
+    { x: 0, y, z: -Math.min(map.d / 2 - inset, r + 2.2) },
+    { x: sep, y: y + 0.35, z: -r },
+    { x: sep, y, z: r * 0.15 },
+    { x: 0, y, z: r * 0.4 },
   ];
 }
 
-function inBox(p, map, margin) {
-  if (Math.abs(p.x) > map.w / 2 - margin) return false;
-  if (Math.abs(p.z) > map.d / 2 - margin) return false;
-  if (p.y < 1.25 || p.y > map.h * 0.52) return false;
-  return true;
+function livingLoop(map, y, inset) {
+  const ix = map.w / 2 - inset, iz = map.d / 2 - inset;
+  return [
+    { x: ix * 0.72, y, z: iz * 0.92 },
+    { x: ix * 0.88, y: y + 0.1, z: iz * 0.18 },
+    { x: ix * 0.78, y, z: -iz * 0.70 },
+    { x: 0, y: y + 0.45, z: -iz * 0.74 },
+    { x: -ix * 0.62, y, z: -iz * 0.70 },
+    { x: -ix * 0.42, y, z: -0.4 },
+    { x: -ix * 0.88, y: y + 0.15, z: iz * 0.32 },
+    { x: -ix * 0.22, y, z: iz * 0.92 },
+    { x: ix * 0.18, y, z: iz * 0.28 },
+  ];
 }
 
-function buildGates(pts, size) {
-  const gates = [];
+function garageLoop(map, y, inset) {
+  const iz = map.d / 2 - inset;
+  return [
+    { x: -2.8, y, z: iz * 0.88 },
+    { x: -5.6, y, z: iz * 0.28 },
+    { x: -5.4, y: y + 0.12, z: -iz * 0.32 },
+    { x: -2.6, y, z: -iz * 0.88 },
+    { x: -1.4, y, z: -iz * 0.18 },
+    { x: -2.2, y, z: iz * 0.22 },
+    { x: -2.8, y, z: iz * 0.62 },
+  ];
+}
+
+function warehouseWeave(map, y, inset) {
+  const zFar = Math.min(map.d / 2 - inset, 36.2);
+  return [
+    { x: 0, y, z: zFar },
+    { x: -14, y, z: zFar },
+    { x: -14, y, z: 12 },
+    { x: -14, y, z: -12 },
+    { x: -14, y, z: -zFar },
+    { x: 0, y, z: -zFar },
+    { x: 14, y, z: -zFar },
+    { x: 14, y, z: -12 },
+    { x: 14, y, z: 12 },
+    { x: 14, y, z: zFar },
+  ];
+}
+
+function officeLoop(map, y, inset) {
+  return [
+    { x: 13.5, y, z: 16.8 },
+    { x: 13.5, y, z: -2.2 },
+    { x: 13.5, y, z: -18.4 },
+    { x: 4.6, y: y + 0.2, z: -18.4 },
+    { x: 4.6, y, z: 2.2 },
+    { x: 4.6, y, z: 16.4 },
+  ];
+}
+
+function gymLoop(map, y, inset) {
+  const ix = Math.min(map.w / 2 - inset, 12.5);
+  const iz = Math.min(map.d / 2 - inset, 30);
+  return [
+    { x: 6.2, y, z: iz * 0.88 },
+    { x: -ix * 0.78, y, z: iz * 0.42 },
+    { x: -ix * 0.78, y, z: -iz * 0.42 },
+    { x: -6.2, y, z: -iz * 0.88 },
+    { x: ix * 0.78, y, z: -iz * 0.42 },
+    { x: ix * 0.78, y, z: iz * 0.42 },
+    { x: 0, y, z: iz * 0.18 },
+    { x: 0, y: y + 0.4, z: -iz * 0.18 },
+    { x: 6.2, y, z: iz * 0.58 },
+  ];
+}
+
+function trainerLoop(map, y, inset) {
+  const ix = map.w / 2 - inset, iz = map.d / 2 - inset;
+  return [
+    { x: 0, y, z: iz * 0.92 },
+    { x: -ix * 0.80, y, z: iz * 0.36 },
+    { x: -ix * 0.78, y: y + 0.16, z: -iz * 0.36 },
+    { x: 0, y, z: -iz * 0.92 },
+    { x: ix * 0.80, y: y + 0.16, z: -iz * 0.36 },
+    { x: ix * 0.80, y, z: iz * 0.36 },
+    { x: 0, y, z: iz * 0.12 },
+    { x: -ix * 0.40, y, z: -iz * 0.12 },
+  ];
+}
+
+function starWeave(map, y, inset) {
+  const yLo = y;
+  const yHi = Math.min(y + 1.25, map.h * 0.40);
+  if (map.id === 'living') {
+    return [
+      { x: 5.8, y: yLo, z: 10.4 },
+      { x: -4.6, y: yHi, z: -7.3 },
+      { x: 5.8, y: yLo, z: -7.4 },
+      { x: -4.8, y: yHi, z: 10.2 },
+      { x: 0.2, y: yLo, z: -7.5 },
+      { x: -5.8, y: yHi, z: 2.6 },
+      { x: 6.2, y: yLo, z: 2.0 },
+      { x: -3.0, y: yHi, z: 10.4 },
+      { x: 5.4, y: yHi, z: 6.4 },
+      { x: -4.4, y: yLo, z: 6.6 },
+    ];
+  }
+  if (map.id === 'garage') {
+    const iz = map.d / 2 - inset;
+    return [
+      { x: -2.8, y: yLo, z: iz * 0.90 },
+      { x: -5.6, y: yHi, z: -iz * 0.88 },
+      { x: -1.5, y: yLo, z: -iz * 0.88 },
+      { x: -5.6, y: yHi, z: iz * 0.90 },
+      { x: -1.5, y: yLo, z: iz * 0.12 },
+      { x: -5.5, y: yHi, z: -iz * 0.12 },
+      { x: -2.6, y: yLo, z: -iz * 0.55 },
+      { x: -5.4, y: yHi, z: iz * 0.55 },
+      { x: -1.6, y: yLo, z: -iz * 0.55 },
+      { x: -4.8, y: yHi, z: iz * 0.20 },
+      { x: -2.2, y: yLo, z: iz * 0.70 },
+      { x: -5.2, y: yHi, z: -iz * 0.70 },
+    ];
+  }
+  const ix = map.w / 2 - inset;
+  const izF = map.d / 2 - inset;
+  const izB = map.id === 'living' ? Math.min(izF, 8.0) : izF;
+  const bx = map.id === 'living' ? ix * 0.80 : ix * 0.86;
+  return [
+    { x: bx, y: yLo, z: izF * 0.90 },
+    { x: -bx, y: yHi, z: -izB * 0.90 },
+    { x: bx, y: yLo, z: -izB * 0.90 },
+    { x: -bx, y: yHi, z: izF * 0.90 },
+    { x: bx * 0.12, y: yLo, z: -izB * 0.90 },
+    { x: -bx, y: yHi, z: izF * 0.12 },
+    { x: bx, y: yLo, z: izF * 0.12 },
+    { x: -bx * 0.12, y: yHi, z: izF * 0.90 },
+    { x: bx * 0.55, y: yHi, z: -izB * 0.28 },
+    { x: -bx * 0.55, y: yLo, z: izF * 0.38 },
+    { x: bx * 0.72, y: yHi, z: izF * 0.55 },
+    { x: -bx * 0.72, y: yLo, z: -izB * 0.40 },
+  ];
+}
+
+function mapLoop(map, y, inset, kind) {
+  if (kind === 'weave') {
+    if (map.id === 'living' || map.id === 'trainer' || map.id === 'garage') {
+      return starWeave(map, y, inset);
+    }
+    return mapLoop(map, y, inset, 'aisle');
+  }
+  if (kind === 'aisle' || kind === 'safe') {
+    if (map.id === 'living') return livingLoop(map, y, inset);
+    if (map.id === 'garage') return garageLoop(map, y, inset);
+    if (map.id === 'warehouse') return warehouseWeave(map, y, inset);
+    if (map.id === 'office') return officeLoop(map, y, inset);
+    if (map.id === 'gym') return gymLoop(map, y, inset);
+    if (map.id === 'trainer') return trainerLoop(map, y, inset);
+  }
+  return null;
+}
+
+function resampleClosed(pts, n) {
+  if (!pts || pts.length < 2) return pts || [];
+  const seg = [];
+  let total = 0;
   for (let i = 0; i < pts.length; i++) {
-    const p = pts[i], n = pts[(i + 1) % pts.length];
-    gates.push({
-      x: +p.x.toFixed(2),
-      y: +p.y.toFixed(2),
-      z: +p.z.toFixed(2),
-      ry: +headingTo(p, n).toFixed(3),
-      size: +size.toFixed(2),
-      solid: true,
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const d = dist3(a, b);
+    seg.push({ a, b, d, start: total });
+    total += d;
+  }
+  if (total < 1e-3) return pts.slice();
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    let u = (i / n) * total;
+    if (u >= total) u = total - 1e-6;
+    let s = seg[0];
+    for (let k = 0; k < seg.length; k++) if (u >= seg[k].start) s = seg[k];
+    const t = s.d < 1e-6 ? 0 : (u - s.start) / s.d;
+    out.push({
+      x: s.a.x + (s.b.x - s.a.x) * t,
+      y: s.a.y + (s.b.y - s.a.y) * t,
+      z: s.a.z + (s.b.z - s.a.z) * t,
     });
   }
-  return gates;
+  return out;
 }
 
-export function dailyTrackValid(track) {
-  let t;
-  try { t = normalizeTrack(track); }
-  catch (e) { return false; }
-  const map = DAILY_MAPS.find((m) => m.id === t.map);
-  if (!map) return false;
-  if (t.class !== 'whoop') return false;
-  if (t.gates.length < 4 || t.gates.length > 10) return false;
-  const margin = 1.6;
-  for (const g of t.gates) {
-    if (g.size < 1.45 || g.size > 2.2) return false;
-    if (!g.solid) return false;
-    if (!inBox(g, map, margin)) return false;
+function placeClear(p, ry, size, map, boxes) {
+  const inwardX = p.x === 0 ? 0 : -Math.sign(p.x);
+  const inwardZ = p.z === 0 ? 0 : -Math.sign(p.z);
+  const dirs = [
+    [0, 0, 0],
+    [inwardX, 0, 0], [0, 0, inwardZ], [inwardX, 0, inwardZ],
+    [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1],
+    [0.7, 0, 0.7], [-0.7, 0, 0.7], [0.7, 0, -0.7], [-0.7, 0, -0.7],
+    [0, 0.55, 0], [0, -0.35, 0], [0, 0.9, 0],
+  ];
+  const steps = [0, 0.4, 0.85, 1.35, 1.9, 2.6, 3.3];
+  const yLo = 1.55, yHi = Math.min(map.h * 0.42, 4.6);
+  for (let s = 0; s < steps.length; s++) {
+    for (let d = 0; d < dirs.length; d++) {
+      const q = {
+        x: p.x + dirs[d][0] * steps[s],
+        y: clamp(p.y + dirs[d][1] * steps[s], yLo, yHi),
+        z: p.z + dirs[d][2] * steps[s],
+        ry, size, solid: true,
+      };
+      if (gateHasClearance(q, map, boxes)) return q;
+    }
   }
-  const metres = lapLengthMetres(t.gates);
-  if (metres < 8 || metres > 180) return false;
-  const pad = startPad(t);
-  if (Math.abs(pad.x) > map.w / 2 || Math.abs(pad.z) > map.d / 2) return false;
-  for (let i = 0; i < t.gates.length; i++) {
-    const a = t.gates[i], b = t.gates[(i + 1) % t.gates.length];
-    if (dist3(a, b) < 3.2) return false;
+  return null;
+}
+
+function thinSpacing(gates, minD) {
+  if (gates.length < 2) return gates;
+  const out = [gates[0]];
+  for (let i = 1; i < gates.length; i++) {
+    if (dist3(out[out.length - 1], gates[i]) >= minD) out.push(gates[i]);
   }
-  return true;
+  while (out.length > 4 && dist3(out[out.length - 1], out[0]) < minD) out.pop();
+  return out;
+}
+
+function finishGates(placed, size, map, boxes) {
+  const out = [];
+  for (let i = 0; i < placed.length; i++) {
+    const n = placed[(i + 1) % placed.length];
+    const ry = headingTo(placed[i], n);
+    const hit = placeClear(placed[i], ry, size, map, boxes);
+    if (!hit) continue;
+    hit.ry = headingTo(hit, n);
+    hit.size = size;
+    hit.solid = true;
+    out.push(hit);
+  }
+  const spaced = thinSpacing(out, minGateSpacing(map));
+  if (spaced.length < 4) return [];
+  for (let i = 0; i < spaced.length; i++) {
+    const n = spaced[(i + 1) % spaced.length];
+    const ry = headingTo(spaced[i], n);
+    const hit = placeClear(spaced[i], ry, size, map, boxes) || spaced[i];
+    hit.ry = +headingTo(hit, n).toFixed(3);
+    hit.x = +hit.x.toFixed(2);
+    hit.y = +hit.y.toFixed(2);
+    hit.z = +hit.z.toFixed(2);
+    hit.size = +size.toFixed(2);
+    hit.solid = true;
+    spaced[i] = hit;
+  }
+  return spaced;
+}
+
+function buildGatesFromPts(pts, size, map, boxes) {
+  const placed = [];
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], n = pts[(i + 1) % pts.length];
+    const hit = placeClear(p, headingTo(p, n), size, map, boxes);
+    if (hit) placed.push(hit);
+  }
+  return finishGates(thinSpacing(placed, minGateSpacing(map)), size, map, boxes);
+}
+
+function rotateStart(gates, map, boxes) {
+  let best = 0, bestScore = -1e9;
+  for (let i = 0; i < gates.length; i++) {
+    const rot = gates.slice(i).concat(gates.slice(0, i));
+    const t = { gates: rot, map: map.id };
+    if (!padClear(t, map, boxes)) continue;
+    const pad = startPad(t);
+    const score = Math.min(map.w / 2 - Math.abs(pad.x), map.d / 2 - Math.abs(pad.z));
+    if (score > bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  }
+  return best ? gates.slice(best).concat(gates.slice(0, best)) : gates;
+}
+
+function trackFromPts(pts, size, map, id, name, boxes) {
+  const built = buildGatesFromPts(pts, size, map, boxes);
+  if (built.length < 4) return null;
+  const gates = rotateStart(built, map, boxes);
+  const flags = [{
+    x: +((gates[0].x + gates[Math.floor(gates.length / 2)].x) * 0.5).toFixed(2),
+    y: +(gates[0].y + 0.35).toFixed(2),
+    z: +((gates[0].z + gates[Math.floor(gates.length / 2)].z) * 0.5).toFixed(2),
+    ry: 0,
+  }];
+  return normalizeTrack({ id, map: map.id, name, class: 'whoop', gates, flags });
+}
+
+function playableInset(map, size) {
+  return (map.wall || 0.4) + size + size * 0.95 + 0.25;
+}
+
+function shapePts(kind, map, y, inset, size, rand) {
+  const nHi = kind === 'weave' ? 14 : map.w >= 45 ? 12 : map.w >= 30 ? 10 : 8;
+  if (kind === 'slalom') {
+    const n = 6 + Math.floor(rand() * (nHi - 5));
+    const amp = Math.min(map.w / 2 - inset - 0.5, (map.w < 30 ? 5.2 : 8.5) + rand() * 3);
+    return slalomPts(map, y, n, inset, Math.max(2.2, amp));
+  }
+  if (kind === 'figure8' && map.w >= 24 && map.d >= 28) return figure8Pts(map, y, inset);
+  if (kind === 'oval') {
+    const n = 6 + Math.floor(rand() * (nHi - 5));
+    return ovalPts(map, y, n, inset);
+  }
+  const loop = mapLoop(map, y, inset, kind);
+  if (!loop) return ovalPts(map, y, 6, inset);
+  const spacing = minGateSpacing(map);
+  let len = 0;
+  let spaced = true;
+  for (let i = 0; i < loop.length; i++) {
+    const d = dist3(loop[i], loop[(i + 1) % loop.length]);
+    len += d;
+    if (d < spacing) spaced = false;
+  }
+  if (kind === 'weave' && loop.length >= 8 && spaced) return loop;
+  const nLo = kind === 'weave' ? 8 : 5;
+  const n = clamp(Math.floor(len / spacing), nLo, nHi);
+  return resampleClosed(loop, n);
 }
 
 function generateOnMap(seedKey, map, id, name) {
-  const rand = mulberry32(hashStr(seedKey + '|' + map.id));
-  const y = clamp(map.h * 0.24, 1.7, 3.4);
-  const inset = map.w < 24 ? 3.1 : 3.6;
-  const size = clamp(1.55 + rand() * 0.35, 1.55, 1.95);
-  const shapes = ['oval', 'slalom', 'figure8'];
-  const shape = shapes[Math.floor(rand() * shapes.length)];
-  let pts;
-  if (shape === 'slalom') {
-    const n = 5 + Math.floor(rand() * 3);
-    pts = slalomPts(map, y, n, inset, Math.min(map.w / 2 - inset - 0.4, 5.5 + rand() * 2));
-  } else if (shape === 'figure8' && map.w >= 24 && map.d >= 28) {
-    pts = figure8Pts(map, y, inset);
-  } else {
-    const n = 5 + Math.floor(rand() * 3);
-    pts = ovalPts(map, y, n, inset);
+  const rand = mulberry32(hashStr(seedKey + '|g' + DAILY_GEN + '|' + map.id));
+  const size = clamp(GATE_SIZE_MIN + rand() * (GATE_SIZE_MAX - GATE_SIZE_MIN), GATE_SIZE_MIN, GATE_SIZE_MAX);
+  const y = clamp(map.h * 0.22, 1.85, 3.2);
+  const inset = playableInset(map, size);
+  const boxes = mapObstacles(map);
+  const shapes = (map.id === 'warehouse' || map.id === 'office')
+    ? ['aisle', 'safe']
+    : (map.id === 'living' || map.id === 'trainer' || map.id === 'garage')
+      ? ['weave', 'aisle', 'figure8']
+      : ['aisle', 'oval', 'slalom', 'figure8'];
+  const sizes = [
+    size,
+    clamp(size - 0.14, GATE_SIZE_MIN, GATE_SIZE_MAX),
+    clamp((GATE_SIZE_MIN + GATE_SIZE_MAX) * 0.5, GATE_SIZE_MIN, GATE_SIZE_MAX),
+  ];
+  let best = null;
+  for (let si = 0; si < sizes.length; si++) {
+    const sz = sizes[si];
+    const insetSz = playableInset(map, sz);
+    const order = [];
+    order.push(shapes[Math.floor(rand() * shapes.length)]);
+    for (const s of shapes) if (!order.includes(s)) order.push(s);
+    order.push('safe');
+    for (let i = 0; i < order.length; i++) {
+      const kind = order[i];
+      const pts = shapePts(kind, map, y, insetSz, sz, rand);
+      const track = trackFromPts(pts, sz, map, id, name, boxes);
+      if (track && dailyTrackValid(track)) return track;
+      if (track && !best) best = track;
+      const fat = insetSz + 0.55;
+      const retry = trackFromPts(shapePts(kind, map, y, fat, sz, rand), sz, map, id, name, boxes);
+      if (retry && dailyTrackValid(retry)) return retry;
+      if (retry && !best) best = retry;
+    }
   }
-  pts = pts.filter((p) => inBox(p, map, 1.7));
-  if (pts.length < 4) pts = ovalPts(map, y, 6, inset + 0.4).filter((p) => inBox(p, map, 1.7));
-  if (pts.length < 4) pts = ovalPts(map, y, 4, inset + 0.8);
-  const gates = buildGates(pts, size);
-  const flags = [{
-    x: +((pts[0].x + pts[Math.floor(pts.length / 2)].x) * 0.5).toFixed(2),
-    y: +(y + 0.35).toFixed(2),
-    z: +((pts[0].z + pts[Math.floor(pts.length / 2)].z) * 0.5).toFixed(2),
-    ry: 0,
-  }];
+  const fallback = trackFromPts(mapLoop(map, y, inset + 0.4, 'safe') || ovalPts(map, y, 6, inset + 0.6), size, map, id, name, boxes);
+  if (fallback) return fallback;
+  const last = buildGatesFromPts(ovalPts(map, y, 5, Math.max(inset, 4.4)), size, map, boxes);
+  if (last.length >= 4) {
+    return normalizeTrack({ id, map: map.id, name, class: 'whoop', gates: last, flags: [] });
+  }
   return normalizeTrack({
-    id, map: map.id, name, class: 'whoop', gates, flags,
+    id, map: map.id, name, class: 'whoop',
+    gates: finishGates(safeCourse(map, y, size), size, map, boxes),
+    flags: [],
   });
+}
+
+function safeCourse(map, y, size) {
+  const pts = mapLoop(map, y, playableInset(map, size) + 0.8, 'safe') || ovalPts(map, y, 5, 4.8);
+  return pts.map((p, i) => {
+    const n = pts[(i + 1) % pts.length];
+    return { x: p.x, y: p.y, z: p.z, ry: headingTo(p, n), size, solid: true };
+  });
+}
+
+export function dailyTrackInvalidReason(track) {
+  let t;
+  try { t = normalizeTrack(track); }
+  catch (e) { return 'BAD TRACK'; }
+  const map = DAILY_MAPS.find((m) => m.id === t.map);
+  if (!map) return 'MAP';
+  if (t.class !== 'whoop') return 'CLASS';
+  if (t.gates.length < 4 || t.gates.length > 14) return 'COUNT';
+  const boxes = mapObstacles(map);
+  const spacing = minGateSpacing(map);
+  for (let i = 0; i < t.gates.length; i++) {
+    const g = t.gates[i];
+    if (g.size < GATE_SIZE_MIN - 0.04 || g.size > GATE_SIZE_MAX + 0.08) return 'SIZE';
+    if (!g.solid) return 'SOLID';
+    const prev = t.gates[(i + t.gates.length - 1) % t.gates.length];
+    if (!gateHasClearance(g, map, boxes, prev)) return 'CLEAR ' + i;
+    const nxt = t.gates[(i + 1) % t.gates.length];
+    if (dist3(g, nxt) < spacing - 0.05) return 'SPACE ' + i;
+    if (!segmentClear(g, nxt, map, boxes, Math.max(0.26, g.size * 0.26))) return 'PATH ' + i;
+  }
+  const metres = lapLengthMetres(t.gates);
+  const range = dailyLapRange(map);
+  if (metres < range.minM || metres > range.maxM) return 'LAP';
+  if (!padClear(t, map, boxes)) return 'PAD';
+  return '';
+}
+
+export function dailyTrackValid(track) {
+  return dailyTrackInvalidReason(track) === '';
+}
+
+function seedPrefix() {
+  return 'g' + DAILY_GEN + '|';
+}
+
+export function dailyTrackOnMap(seedKey, mapId, id, name) {
+  const map = mapById(mapId);
+  return generateOnMap(seedKey, map, id || ('gen-' + map.id), name || map.name);
 }
 
 export function dailyTrackFor(utc, now) {
   const day = utc || utcDateId(now);
-  const rand = mulberry32(hashStr('daily|' + day));
+  const rand = mulberry32(hashStr(seedPrefix() + 'daily|' + day));
   const map = DAILY_MAPS[Math.floor(rand() * DAILY_MAPS.length)];
   const id = dailyIdFor(day);
   const name = 'Daily ' + day.slice(5);
-  let track = generateOnMap('daily|' + day, map, id, name);
-  if (!dailyTrackValid(track)) {
-    track = generateOnMap('daily|' + day + '|oval', map, id, name);
-  }
-  if (!dailyTrackValid(track)) {
-    const gates = buildGates(ovalPts(map, clamp(map.h * 0.24, 1.7, 3.2), 6, 3.4), 1.8);
-    track = normalizeTrack({ id, map: map.id, name, class: 'whoop', gates, flags: [] });
-  }
-  return track;
+  return generateOnMap(seedPrefix() + 'daily|' + day, map, id, name);
 }
 
 export function weeklyTrackFor(week, now) {
-  const w = week || utcWeekId(now);
-  const rand = mulberry32(hashStr('weekly|' + w));
+  const w = String(week || utcWeekId(now)).replace(/-g\d+$/, '');
+  const rand = mulberry32(hashStr(seedPrefix() + 'weekly|' + w));
   const map = DAILY_MAPS[Math.floor(rand() * DAILY_MAPS.length)];
   const id = weeklyIdFor(w);
   const name = 'Week ' + w.replace('W', '');
-  let track = generateOnMap('weekly|' + w, map, id, name);
-  if (!dailyTrackValid(track)) {
-    const gates = buildGates(ovalPts(map, clamp(map.h * 0.24, 1.7, 3.2), 6, 3.4), 1.8);
-    track = normalizeTrack({ id, map: map.id, name, class: 'whoop', gates, flags: [] });
-  }
-  return track;
+  return generateOnMap(seedPrefix() + 'weekly|' + w, map, id, name);
 }
 
 export function trackFromRetentionId(id, now) {
   if (isDailyTrackId(id)) return dailyTrackFor(id.slice(6), now);
-  if (isWeeklyTrackId(id)) return weeklyTrackFor(id.slice(7), now);
+  if (isWeeklyTrackId(id)) return weeklyTrackFor(weekFromTrackId(id) || id.slice(7), now);
   if (id === 'daily') return dailyTrackFor(utcDateId(now), now);
   if (id === 'weekly') return weeklyTrackFor(utcWeekId(now), now);
   return null;
@@ -1313,7 +1854,7 @@ export function normalizeSubmit(body, now) {
   if (!dailyTrackValid(track)) return { ok: false, reason: 'BAD TRACK' };
   const givenId = submittedTrackId(body.track);
   if (givenId) {
-    const aliases = [track.id, weeklyIdFor(week), 'weekly'];
+    const aliases = [track.id, weeklyIdFor(week), 'weekly-' + week, 'weekly'];
     if (!aliases.includes(givenId)) return { ok: false, reason: 'TRACK MISMATCH' };
   }
   const ghost = body.ghost;

@@ -9,7 +9,12 @@ import {
   findTrackIn, resolveSimBoot, firstTrackForMap, startPad, normalizeTrack,
   BUILTIN_TRACK_FILES, SELECTED_TRACK_KEY,
 } from '../sim-tracks.js';
-import { shouldToastFlip } from '../sim-feel.js';
+import {
+  shouldToastFlip, isStuckInverted, stepStuckHold, wantsTurtle, bodyUpZ,
+  STUCK_HOLD_S,
+} from '../sim-feel.js';
+import { QuadPhysics, PRESETS } from '../quadphysics.js';
+import { mapThrottle3d } from '../sim-3d.js';
 import { MAP_LOOKS } from '../sim-maps.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -52,11 +57,140 @@ test('Mesa Zigzag start pad is at the zigzag, not City Loop origin', () => {
   assert.ok(Number.isFinite(pad.yaw));
 });
 
-test('FLIPPED toast skips disarmed ground spawn', () => {
-  assert.equal(shouldToastFlip({ upsideDown: true, armed: false, speed: 0, height: 0.2 }), false);
-  assert.equal(shouldToastFlip({ upsideDown: true, armed: true, speed: 0, height: 0.2 }), false);
-  assert.equal(shouldToastFlip({ upsideDown: true, armed: true, speed: 8, height: 2 }), true);
-  assert.equal(shouldToastFlip({ upsideDown: false, armed: true, speed: 8, height: 2 }), false);
+function flipSample(qp, extra) {
+  const upZ = bodyUpZ(qp.quaternion);
+  const clearanceM = qp.position.z;
+  return {
+    upZ,
+    clearanceM,
+    contact: clearanceM <= 0.02,
+    speed: Math.hypot(qp.velocity.x, qp.velocity.y, qp.velocity.z),
+    omega: Math.hypot(qp.omega.x, qp.omega.y, qp.omega.z),
+    armed: qp.armed,
+    ...(extra || {}),
+  };
+}
+
+function anyToast(qp, seconds, stepFn) {
+  const dt = 1 / qp.physicsHz;
+  let held = 0;
+  let toasted = false;
+  const n = Math.round(seconds / dt);
+  for (let i = 0; i < n; i++) {
+    if (stepFn) stepFn(qp, dt, i);
+    else qp.step(dt, { roll: 0, pitch: 0, yaw: 0 }, 0, { r: 0, p: 0, y: 0 });
+    const info = flipSample(qp);
+    held = stepStuckHold(held, info, dt);
+    if (shouldToastFlip({ ...info, heldS: held })) toasted = true;
+  }
+  return toasted;
+}
+
+function invertQuat() {
+  // 180° about body X: body +Z → world −Z
+  return { x: 1, y: 0, z: 0, w: 0 };
+}
+
+test('FLIPPED toast is only a stuck-on-the-deck hint', () => {
+  assert.equal(shouldToastFlip({ upsideDown: true, armed: true, speed: 8, height: 2 }), false);
+  assert.equal(shouldToastFlip({
+    upZ: -1, clearanceM: 2, speed: 0, omega: 0, heldS: 2, armed: true,
+  }), false, 'inverted hang in the air');
+  assert.equal(shouldToastFlip({
+    upZ: -1, clearanceM: 0.01, contact: true, speed: 6, omega: 0, heldS: 2, armed: true,
+  }), false, 'inverted dive still moving');
+  assert.equal(shouldToastFlip({
+    upZ: -1, clearanceM: 0.01, contact: true, speed: 0.05, omega: 8, heldS: 2, armed: true,
+  }), false, 'still flipping on the floor');
+  assert.equal(shouldToastFlip({
+    upZ: -1, clearanceM: 0.01, contact: true, speed: 0.05, omega: 0.2, heldS: 0.4, armed: true,
+  }), false, 'not held long enough');
+  assert.equal(shouldToastFlip({
+    upZ: -1, clearanceM: 0.01, contact: true, speed: 0.05, omega: 0.2, heldS: STUCK_HOLD_S, armed: true,
+  }), true, 'stuck inverted on the floor');
+  assert.equal(isStuckInverted({
+    upZ: -0.4, clearanceM: 0.01, contact: true, speed: 0, omega: 0,
+  }), false, 'up vector not inverted enough');
+});
+
+test('full flip, roll, inverted hang, and inverted dive never toast', () => {
+  const flip = new QuadPhysics(PRESETS.whoop65);
+  flip.setFlightMode('acro');
+  flip.setPhysicsHz(500);
+  flip.reset({ x: 0, y: 0, z: 2 });
+  flip.arm();
+  assert.equal(anyToast(flip, 0.55, (qp, dt) => {
+    qp.step(dt, { roll: 13, pitch: 0, yaw: 0 }, 0.4, { r: 1, p: 0, y: 0 });
+  }), false, 'full flip');
+
+  const roll = new QuadPhysics(PRESETS.whoop65);
+  roll.setFlightMode('acro');
+  roll.setPhysicsHz(500);
+  roll.reset({ x: 0, y: 0, z: 2 });
+  roll.arm();
+  assert.equal(anyToast(roll, 0.35, (qp, dt) => {
+    qp.step(dt, { roll: 8, pitch: 0, yaw: 0 }, 0.4, { r: 0.6, p: 0, y: 0 });
+  }), false, 'roll');
+
+  const hang = new QuadPhysics(PRESETS.whoop65);
+  hang.setFlightMode('acro');
+  hang.setThreeD(true);
+  hang.setPhysicsHz(500);
+  hang.reset({ x: 0, y: 0, z: 3 });
+  hang.quaternion = invertQuat();
+  hang.arm();
+  const rev = mapThrottle3d(0.12);
+  assert.equal(anyToast(hang, 2.0, (qp, dt) => {
+    qp.step(dt, { roll: 0, pitch: 0, yaw: 0 }, rev, { r: 0, p: 0, y: 0 });
+  }), false, '2 s inverted hang');
+
+  const dive = new QuadPhysics(PRESETS.whoop65);
+  dive.setFlightMode('acro');
+  dive.setPhysicsHz(500);
+  dive.reset({ x: 0, y: 0, z: 6 });
+  dive.quaternion = invertQuat();
+  dive.velocity.z = -8;
+  dive.arm();
+  assert.equal(anyToast(dive, 0.45, (qp, dt) => {
+    qp.step(dt, { roll: 0, pitch: 0, yaw: 0 }, 0.2, { r: 0, p: 0, y: 0 });
+  }), false, 'inverted dive');
+});
+
+test('upside down resting on the floor for 1.5 s does toast', () => {
+  const qp = new QuadPhysics(PRESETS.whoop65);
+  qp.setFlightMode('acro');
+  qp.setPhysicsHz(500);
+  qp.reset({ x: 0, y: 0, z: 0.01 });
+  qp.quaternion = invertQuat();
+  qp.velocity.x = 0; qp.velocity.y = 0; qp.velocity.z = 0;
+  qp.omega.x = 0; qp.omega.y = 0; qp.omega.z = 0;
+  qp.arm();
+  const dt = 1 / qp.physicsHz;
+  let held = 0;
+  let toasted = false;
+  for (let i = 0; i < Math.round(1.7 / dt); i++) {
+    qp.step(dt, { roll: 0, pitch: 0, yaw: 0 }, 0, { r: 0, p: 0, y: 0 });
+    qp.velocity.x = 0; qp.velocity.y = 0; qp.velocity.z = 0;
+    qp.omega.x = 0; qp.omega.y = 0; qp.omega.z = 0;
+    qp.position.z = Math.min(qp.position.z, 0.012);
+    qp.quaternion = invertQuat();
+    const info = flipSample(qp, { contact: true, clearanceM: 0.01 });
+    held = stepStuckHold(held, info, dt);
+    if (shouldToastFlip({ ...info, heldS: held })) toasted = true;
+  }
+  assert.equal(toasted, true);
+  assert.ok(held >= STUCK_HOLD_S);
+});
+
+test('turtle wants full throttle + extreme roll only when inverted on the deck', () => {
+  const grounded = { upZ: -1, clearanceM: 0.01, contact: true, armed: true, throttle: 0.95, rollStick: 0.9 };
+  assert.equal(wantsTurtle(grounded), true);
+  assert.equal(wantsTurtle({ ...grounded, armed: false }), false);
+  assert.equal(wantsTurtle({ ...grounded, threeD: true }), false);
+  assert.equal(wantsTurtle({ ...grounded, upZ: 0.8 }), false);
+  assert.equal(wantsTurtle({ ...grounded, clearanceM: 2, contact: false }), false);
+  assert.equal(wantsTurtle({ ...grounded, throttle: 0.4 }), false);
+  assert.equal(wantsTurtle({ ...grounded, rollStick: 0.2 }), false);
 });
 
 test('gym court lighting is bright enough to read the floor', () => {
@@ -84,7 +218,9 @@ test('sim.html wires picker rebuild, boot restore, and query-build no-save', () 
   assert.ok(boot.includes('already'), 'do not resetQuad/toast RESET on a no-op city reload');
   assert.ok(boot.includes('parseThreeDQuery') || boot.includes("q.get('3d')"));
   assert.ok(simSrc.includes('feel.noteFlip({'));
-  assert.ok(simSrc.includes('armed:qp.armed'));
+  assert.ok(simSrc.includes('clearanceM') && simSrc.includes('bodyUpZ'));
+  assert.ok(simSrc.includes('wantsTurtle'));
+  assert.ok(!/Math\.abs\(att\.roll\)>2\.0/.test(simSrc), 'old mid-flip |roll|>2 trigger must be gone');
   assert.ok(!simSrc.includes('content/guides/'), 'do not edit guide HTML');
   assert.ok(simSrc.includes(SELECTED_TRACK_KEY) || simSrc.includes('loadSelected'));
 });
