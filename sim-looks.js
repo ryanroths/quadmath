@@ -1,10 +1,12 @@
 // QuadMath sim V1 looks — environment, PBR, AO, FPV lens, quality presets.
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
-// localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv.
+// localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
+// quadmathSimCrosshair.
 import { resolveAutoQuality } from './sim-touch.js?v=2b2c215c8a82';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
+export const CROSSHAIR_KEY = 'quadmathSimCrosshair';
 
 export const LOOK_SPOTS = {
   spawn:  { pos: [0, 3.2, 32], target: [0, 6, -40] },
@@ -105,6 +107,31 @@ function saveChoice(q) {
 }
 function saveFpv(fpv) {
   try { localStorage.setItem(FPV_KEY, JSON.stringify(fpv)); } catch (e) { /* ignore */ }
+}
+
+function lookStore(storage) {
+  if (storage) return storage;
+  try { return typeof localStorage !== 'undefined' ? localStorage : null; }
+  catch (e) { return null; }
+}
+
+// Default off: real FPV goggles have no center crosshair.
+export function loadCrosshairOn(storage) {
+  const store = lookStore(storage);
+  if (!store) return false;
+  try { return store.getItem(CROSSHAIR_KEY) === '1'; }
+  catch (e) { return false; }
+}
+
+export function saveCrosshairOn(on, storage) {
+  const store = lookStore(storage);
+  if (!store) return false;
+  try {
+    store.setItem(CROSSHAIR_KEY, on ? '1' : '0');
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 function gpuHint(renderer) {
@@ -802,7 +829,7 @@ export async function createLooks(ctx) {
     } catch (e) { /* ignore */ }
     // New keys must not collide
     out.newKeys = {
-      quality: QUALITY_KEY, fpv: FPV_KEY,
+      quality: QUALITY_KEY, fpv: FPV_KEY, crosshair: CROSSHAIR_KEY,
       customTracks: 'quadmathSimCustomTracks',
       selectedTrack: 'quadmathSimTrack',
       whoop: 'quadmathSimWhoop',

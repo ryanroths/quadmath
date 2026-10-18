@@ -16,6 +16,7 @@ import {
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
 import { mapThrottle3d } from '../sim-3d.js';
 import { MAP_LOOKS } from '../sim-maps.js';
+import { CROSSHAIR_KEY, loadCrosshairOn, saveCrosshairOn } from '../sim-looks.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const simSrc = existsSync(join(root, 'sim.html')) ? readFileSync(join(root, 'sim.html'), 'utf8') : '';
@@ -236,6 +237,36 @@ test('L5 Esc in a drill opens the Coach picker', () => {
   const esc = simSrc.slice(simSrc.indexOf("if(e.key==='Escape')"), simSrc.indexOf("if(e.key==='Tab')"));
   assert.ok(esc.includes('openCoachPicker()'));
   assert.ok(esc.includes('coach.cancel()'));
+});
+
+function memStore(seed) {
+  const mem = new Map(Object.entries(seed || {}));
+  return {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, String(v)),
+    keys: () => [...mem.keys()],
+  };
+}
+
+test('Show crosshair defaults off and persists quadmathSimCrosshair', () => {
+  assert.equal(CROSSHAIR_KEY, 'quadmathSimCrosshair');
+  assert.equal(loadCrosshairOn(memStore()), false);
+  assert.equal(loadCrosshairOn(null), false);
+  const store = memStore();
+  assert.equal(saveCrosshairOn(true, store), true);
+  assert.equal(store.getItem(CROSSHAIR_KEY), '1');
+  assert.deepEqual(store.keys(), [CROSSHAIR_KEY]);
+  assert.equal(loadCrosshairOn(store), true);
+  saveCrosshairOn(false, store);
+  assert.equal(store.getItem(CROSSHAIR_KEY), '0');
+  assert.equal(loadCrosshairOn(store), false);
+  assert.ok(simSrc.includes('Show crosshair'));
+  assert.ok(simSrc.includes('id="cbCrosshair"'));
+  assert.ok(!/id="cbCrosshair"[^>]*\bchecked\b/.test(simSrc), 'Show crosshair defaults off');
+  assert.ok(simSrc.includes('#crosshair.on'));
+  assert.ok(simSrc.includes('applyCrosshair()'));
+  assert.ok(simSrc.includes('loadCrosshairOn') && simSrc.includes('saveCrosshairOn'));
+  assert.ok(simSrc.includes('CROSSHAIR_KEY') || simSrc.includes('quadmathSimCrosshair'));
 });
 
 test('M2 leaderboard names render via textContent not innerHTML', () => {
