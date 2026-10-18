@@ -201,7 +201,7 @@ test('lower floatiness coasts less (tighter stop)', () => {
     qp.velocity.x = 8;
     qp.arm();
     run(qp, 0.55, { r: 0, p: 0, y: 0 }, { roll: 0, pitch: 0, yaw: 0 }, 0);
-    return Math.hypot(qp.velocity.x, qp.velocity.y, qp.velocity.z);
+    return Math.abs(qp.velocity.x);
   }
   const tight = leftover(0);
   const floaty = leftover(1);

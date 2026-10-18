@@ -10,32 +10,26 @@
 // Derived from real-world averages. Tweak freely; calculator can feed these.
 // ---------------------------------------------------------------------------
 export const PRESETS = {
-  // Whoop thrust set to ~4.1:1 TWR, matching what this sim ran before the
-  // physics swap (3.9 world-N over 28g). The module's original 3:1 was 28% less
-  // thrust and 34% less climb acceleration, which read as rotation being wildly
-  // faster than throttle.
-  //
-  // kQ raised ~50x across the board. At the original values the yaw axis could
-  // not reach its own commanded rate (95 deg/s of a commanded 286) and the loop
-  // sat saturated, so a yaw spin carried for more than a full rotation after the
-  // stick centred. Relative spacing between presets is unchanged.
+  // Whoop TWR is class-typical punch: ~5.2 (65), ~4.5 (75), ~4.2 (85 2S).
+  // kQ is sized with rotational aero (τ = −bω − cω|ω|) so yaw 0→max lands
+  // around 120–160 ms to 90% and a centred stick stops in under 200 ms.
   whoop65: {
     name: '65mm whoop',
     mass: 0.027, wheelbase: 0.065, propDiameter: 0.031,
-    maxThrustPerMotor: 0.27,      // ~1.08N total, ~4.1:1 TWR
+    maxThrustPerMotor: 0.344,      // ~1.376N total, ~5.2:1 TWR
     motorTau: 0.020,               // tiny props spool fast
-    kQ: 0.60,                      // yaw torque per unit thrust (N·m per N, scaled by arm)
+    kQ: 0.72,                      // yaw torque per unit thrust (N·m per N, scaled by arm)
     idleThrottle: 0.055,
   },
   whoop75: {
     name: '75mm whoop',
     mass: 0.032, wheelbase: 0.075, propDiameter: 0.040,
-    maxThrustPerMotor: 0.32, motorTau: 0.024, kQ: 0.65, idleThrottle: 0.055,
+    maxThrustPerMotor: 0.353, motorTau: 0.024, kQ: 0.75, idleThrottle: 0.055,
   },
   whoop85: {
     name: '85mm whoop',
     mass: 0.048, wheelbase: 0.085, propDiameter: 0.051,   // 2" props
-    maxThrustPerMotor: 0.48, motorTau: 0.028, kQ: 0.70, idleThrottle: 0.055,
+    maxThrustPerMotor: 0.494, motorTau: 0.028, kQ: 0.78, idleThrottle: 0.055,
   },
   freestyle25: {
     name: '2.5" freestyle',
@@ -58,8 +52,13 @@ export const DEFAULT_TUNE = {
   yawP: 45, yawI: 80, yawD: 0, yawF: 120,
   gyroLpfHz: 100,   // gyro lowpass cutoff
   dtermLpfHz: 70,   // D-term lowpass cutoff
-  itermLimit: 0.4,  // anti-windup clamp (fraction of motor range)
+  itermLimit: 0.15, // anti-windup clamp (fraction of motor range)
 };
+export const ITERM_LIMIT_DEFAULT = DEFAULT_TUNE.itermLimit;
+// Freeze / leak I when the setpoint is moving fast (stick flick). Threshold
+// is body-rate acceleration; leak is a time-constant, Hz-independent.
+const ITERM_RELAX_DSET = 12;     // rad/s²
+const ITERM_RELAX_LEAK = 14;     // 1/s
 
 // Betaflight-value → physical-gain scaling. One knob set for all crafts;
 // per-craft feel differences then come from inertia/thrust, which is the point.
@@ -75,6 +74,15 @@ const D_SCALE = 0.0000055;
 const F_SCALE = 0.0000225;
 
 const G = 9.81;
+export const AIR_DENSITY = 1.225;          // kg/m³, ISA sea level
+export const FLOOR_CLEARANCE_M = 0.01;     // ~1 cm pad contact in SI
+// Reference CdA (m²) and aero b/c at a 31 mm prop. Prop-plane (body X/Y) is
+// the ducts cutting sideways; thrust-axis (body Z) is through the disks.
+const CDA_XY0 = 0.0054;
+const CDA_Z0 = 0.0034;
+const SKIN_B0 = 0.0015;                    // N·s/m linear skin
+const AERO_B0 = 3.0e-5;                    // N·m·s / rad
+const AERO_C0 = 2.2e-6;                    // N·m·s² / rad²
 // Rate/PID loop. 240 Hz was the v2 default and read floaty next to a 1 kHz
 // FC. 500 Hz is the new floor; 1000 Hz is used when the render loop has
 // headroom. Legacy 240 stays exported so tests can compare, not for playback —
@@ -158,13 +166,58 @@ export function attitudeOf(q) {
 
 // Quadratic ground-effect cushion. Exported so W2 tests can pin the shape
 // without constructing a full QuadPhysics. kGE is the max bonus at zero
-// clearance; fade is complete at two prop diameters.
+// clearance; fade is complete at one prop diameter.
 export function groundEffectMult(clearanceM, propDiameterM, kGE) {
-  const k = kGE == null ? 0.12 : kGE;
-  const ceil = 2 * (propDiameterM || 0.031);
+  const k = kGE == null ? 0.065 : kGE;
+  const ceil = 1 * (propDiameterM || 0.031);
   if (!(clearanceM < ceil) || k <= 0) return 1;
   const x = 1 - Math.max(0, clearanceM) / ceil;
   return 1 + k * x * x;
+}
+
+function qConjugate(q) {
+  return { x: -q.x, y: -q.y, z: -q.z, w: q.w };
+}
+
+// Body-frame ½ρ CdA |v| v plus a small linear skin term. Prop-plane (X/Y)
+// and thrust-axis (Z) use separate CdA. Floatiness scales Cd via cfg.cdMul.
+export function aeroCoeffs(cfg) {
+  const c = cfg || {};
+  const pref = (c.propDiameter || 0.031) / 0.031;
+  const area = pref * pref;
+  const cdMul = (c.cdMul != null ? c.cdMul : 1) * (c.userDragMul != null ? c.userDragMul : 1);
+  const bMul = c.aeroBMul != null ? c.aeroBMul : 1;
+  return {
+    cdAxy: (c.cdAxy != null ? c.cdAxy : CDA_XY0 * area) * cdMul,
+    cdAz: (c.cdAz != null ? c.cdAz : CDA_Z0 * area) * cdMul,
+    skinB: (c.skinB != null ? c.skinB : SKIN_B0 * pref) * cdMul,
+    aeroB: (c.aeroB != null ? c.aeroB : AERO_B0 * area) * bMul,
+    aeroC: (c.aeroC != null ? c.aeroC : AERO_C0 * pref * pref * pref) * bMul,
+  };
+}
+
+export function bodyDragForce(velWorld, quat, cfg) {
+  const a = aeroCoeffs(cfg);
+  const vb = qRotate(qConjugate(quat || { x: 0, y: 0, z: 0, w: 1 }), velWorld || v3());
+  const speed = Math.hypot(vb.x, vb.y, vb.z);
+  const q = 0.5 * AIR_DENSITY * speed;
+  const fb = v3(
+    -(q * a.cdAxy + a.skinB) * vb.x,
+    -(q * a.cdAxy + a.skinB) * vb.y,
+    -(q * a.cdAz + a.skinB) * vb.z,
+  );
+  return qRotate(quat || { x: 0, y: 0, z: 0, w: 1 }, fb);
+}
+
+// τ = −bω − c ω|ω| per axis, b/c scaled by prop size (and floatiness bMul).
+export function aeroTorqueOf(omega, cfg) {
+  const a = aeroCoeffs(cfg);
+  const w = omega || v3();
+  return v3(
+    -a.aeroB * w.x - a.aeroC * w.x * Math.abs(w.x),
+    -a.aeroB * w.y - a.aeroC * w.y * Math.abs(w.y),
+    -a.aeroB * w.z - a.aeroC * w.z * Math.abs(w.z),
+  );
 }
 
 // first-order lowpass
@@ -237,8 +290,16 @@ class RateAxis {
 
     const p = this.kp * error;
 
-    this.iterm += this.ki * error * this.dt;
-    this.iterm = Math.max(-this.itermLimit, Math.min(this.itermLimit, this.iterm));
+    const dSet = (setpoint - this.prevSetpoint) / this.dt;
+    this.prevSetpoint = setpoint;
+    // I-term relax: a fast setpoint change freezes accumulation and leaks I
+    // so a flick does not wind the integrator into the next stick move.
+    if (Math.abs(dSet) > ITERM_RELAX_DSET) {
+      this.iterm *= Math.exp(-ITERM_RELAX_LEAK * this.dt);
+    } else {
+      this.iterm += this.ki * error * this.dt;
+      this.iterm = Math.max(-this.itermLimit, Math.min(this.itermLimit, this.iterm));
+    }
     // 0.99 per 240 Hz step ≈ e^(-2.41 t). Keep the same time-constant at 500/1000 Hz.
     if (!airborne) this.iterm *= Math.exp(-2.41 * this.dt);
 
@@ -247,9 +308,6 @@ class RateAxis {
     const d = -this.kd * this.dtermLpf.filter(dGyro);
     this.prevGyro = gyro;
 
-    // Feedforward from setpoint derivative — responds to stick motion before error grows
-    const dSet = (setpoint - this.prevSetpoint) / this.dt;
-    this.prevSetpoint = setpoint;
     const f = this.kf * dSet;
 
     return p + this.iterm + d + f;
@@ -276,14 +334,14 @@ export class QuadPhysics {
     this.setTune(tune);
     this.setFloatiness(FLOATINESS_DEFAULT);
     this.reset();
-    // hook: existing drag model. fn(velocityWorld, quadState) -> world-frame force N.
-    // Replace with anisotropic body-frame drag in step 4.
+    // hook: extra world-frame force N (gravMult leftover, not the body drag).
+    // Body-frame ½ρCdA lives in the module; this hook must not double it.
     this.externalDrag = null;
     // hook: collision. fn(state) called after each substep; mutate position/velocity there.
     this.onSubstep = null;
     // hook: ground effect. fn(state) -> clearance above the surface directly
     // below, in meters (SI). When set, thrust picks up a smooth cushion bonus
-    // below ~2 prop diameters. Null disables the effect entirely.
+    // below ~1 prop diameter. Null disables the effect entirely.
     this.groundClearance = null;
     // hook: W2 disturbances (propwash, indoor drafts). fn(state) ->
     // {force, torque} in SI (world newtons, body N·m). Applied after drag.
@@ -339,18 +397,20 @@ export class QuadPhysics {
     return h;
   }
 
-  // F=0 snappy (stronger drag, faster spool, crisper thrust). F=1 old float.
+  // F=0 snappy, F=1 floaty. Maps only to Cd/mass (cdMul) and angular b (aeroBMul).
+  // Spool, thrustExp, and ground-effect stay fixed so floatiness is one knob.
   setFloatiness(f) {
     const F = Math.max(0, Math.min(1, Number(f)));
     const x = Number.isFinite(F) ? F : FLOATINESS_DEFAULT;
     this.floatiness = x;
     if (!this.cfg) return x;
-    this.cfg.spoolTauMul = 0.60 + 0.40 * x;
-    this.cfg.spoolDownMul = 1.12 + 0.28 * x;
-    this.cfg.thrustExp = 1.70 + 0.30 * x;
-    this.cfg.dragMul = 1.65 - 0.65 * x;
-    this.cfg.stopDampPerMass = 1.15 * (1 - x);
-    this.cfg.groundEffect = 0.05 + 0.07 * x;
+    this.cfg.spoolTauMul = 0.73;
+    this.cfg.spoolDownMul = 1.21;
+    this.cfg.thrustExp = 2;
+    this.cfg.cdMul = 1.85 - 0.85 * x;
+    this.cfg.aeroBMul = 1.85 - 0.85 * x;
+    this.cfg.dragMul = this.cfg.cdMul;
+    this.cfg.stopDampPerMass = 0;
     return x;
   }
 
@@ -504,7 +564,7 @@ export class QuadPhysics {
     }
 
     // ---- Ground effect ----
-    // Smooth thrust bonus in the cushion zone below ~2 prop diameters.
+    // Smooth thrust bonus in the cushion zone below ~1 prop diameter.
     // Quadratic fade with height, fully deterministic, no oscillation — this is
     // free lift the pilot can exploit (float landings, floor skims), never a
     // disturbance that fights the sticks. kGE is the max bonus at zero
@@ -515,7 +575,7 @@ export class QuadPhysics {
     // the cushion would be the wrong sign. Skip GE while 3D is pulling down.
     if (this.groundClearance && !(threeD && thr < 0)) {
       const clr = this.groundClearance(this);
-      const kGE = cfg.groundEffect != null ? cfg.groundEffect : 0.12;
+      const kGE = cfg.groundEffect != null ? cfg.groundEffect : 0.065;
       geMult = groundEffectMult(clr, cfg.propDiameter, kGE);
     }
 
@@ -530,6 +590,7 @@ export class QuadPhysics {
       // yaw from prop reaction torque — NOT a direct force
       torque.z += mo.yawTorque();
     }
+    torque = vAdd(torque, aeroTorqueOf(this.omega, cfg));
 
     // ---- Rotational dynamics: Euler's equations with gyroscopic cross-coupling ----
     // ω̇ = I⁻¹ (τ − ω × Iω)
@@ -544,17 +605,16 @@ export class QuadPhysics {
     // ---- Translational dynamics ----
     const thrustWorld = qRotate(this.quaternion, v3(0, 0, totalThrust));
     let force = vAdd(thrustWorld, v3(0, 0, -cfg.mass * G));
+    force = vAdd(force, bodyDragForce(this.velocity, this.quaternion, cfg));
     if (this.externalDrag) {
-      let fd = this.externalDrag(this.velocity, this);
-      const mul = cfg.dragMul != null ? cfg.dragMul : 1;
-      if (mul !== 1) fd = vScale(fd, mul);
-      force = vAdd(force, fd);
+      force = vAdd(force, this.externalDrag(this.velocity, this));
     }
-    const sd = (cfg.stopDampPerMass || 0) * cfg.mass;
-    if (sd > 0) {
+    // Linear stopDamp is a ground-contact brake only — never an in-air damper.
+    const nearFloor = this.position.z <= FLOOR_CLEARANCE_M + 0.015;
+    if (nearFloor) {
+      const sd = 0.55 * cfg.mass;
       force.x -= this.velocity.x * sd;
       force.y -= this.velocity.y * sd;
-      force.z -= this.velocity.z * sd;
     }
     if (this.externalDisturbance) {
       const dist = this.externalDisturbance(this) || {};
@@ -569,7 +629,8 @@ export class QuadPhysics {
     this.velocity = vAdd(this.velocity, vScale(force, dt / cfg.mass));
     this.position = vAdd(this.position, vScale(this.velocity, dt));
 
-    this.airborne = this.position.z > 0.05 || Math.abs(totalThrust) > cfg.mass * G * 0.5;
+    this.airborne = this.position.z > FLOOR_CLEARANCE_M + 0.04
+      || Math.abs(totalThrust) > cfg.mass * G * 0.5;
 
     if (this.onSubstep) this.onSubstep(this);
   }
@@ -603,10 +664,9 @@ export class QuadPhysics {
 // 3. THROTTLE. Pass post-throttle-curve 0..1. Delete old vertical-thrust code;
 //    thrust now comes out of the four motors via orientation.
 //
-// 4. DRAG. Keep your current mass-independent drag for now:
-//      qp.externalDrag = (vel) => yourDragForce(vel);
-//    Must return world-frame force in Newtons. Swap for anisotropic body-frame
-//    drag in step 4 of the roadmap.
+// 4. DRAG. Body-frame ½ρCdA lives in the module. externalDrag is extra only
+//    (e.g. gravMult above the 3.5 world-scale baseline). Do not re-apply
+//    the old K1/K2 hook or stopDamp will read as a second linear brake.
 //
 // 5. COLLISION. Your voxel collision runs in qp.onSubstep — check qp.position,
 //    on hit: reflect qp.velocity component, damp, add angular kick:

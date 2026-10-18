@@ -7,6 +7,10 @@ export const THREED_KEY = 'quadmathSim3D';
 export const THREED_DEADBAND = 0.05; // ± of the 0..1 stick around 0.5 (~Betaflight 3d_deadband_throttle 50)
 export const THREED_REVERSE_SCALE = 0.85; // keep in lockstep with quadphysics.REVERSE_THRUST_SCALE
 export const THREED_ARM_BAND = 0.08; // arm when |stick.t - 0.5| is inside this
+// 2D throttle mid / expo. Mid 0.60 + linear exponent puts hover at ~32–38%
+// stick with TWR 4.2–5.2 and idle 5.5%. Expo 0 is piecewise-linear mid.
+export const THROTTLE_MID_DEFAULT = 0.60;
+export const THROTTLE_EXPO_DEFAULT = 0;
 
 function clamp(n, lo, hi) {
   const x = Number(n);
@@ -77,13 +81,33 @@ export function throttleHudText(stick01, threeD) {
   return 'THR ' + (pct > 0 ? '+' : '') + pct + '%';
 }
 
-// Same curve sim.html feeds QuadPhysics. 3D is -1..1; 2D is 0..1 post-exponent.
-export function throttleCollective(stick01, threeD, curve) {
-  if (threeD) return mapThrottle3d(stick01, { curve, deadband: THREED_DEADBAND });
+// Piecewise throttle mid + cubic expo around half-stick. mid=0.5 and expo=0
+// is identity. Clean-room radio-mixer shape — not copied from any FC source.
+export function applyThrottleMidExpo(stick01, mid, expo) {
   const t = clamp(stick01, 0, 1);
+  const mRaw = Number(mid);
+  const eRaw = Number(expo);
+  const m = Number.isFinite(mRaw) ? clamp(mRaw, 0.2, 0.8) : 0.5;
+  const e = Number.isFinite(eRaw) ? clamp(eRaw, 0, 1) : 0;
+  if (Math.abs(m - 0.5) < 1e-12 && e === 0) return t;
+  if (t <= 0.5) {
+    const x = t * 2;
+    const y = x * (1 - e) + x * x * x * e;
+    return y * m;
+  }
+  const x = (t - 0.5) * 2;
+  const y = x * (1 - e) + x * x * x * e;
+  return m + y * (1 - m);
+}
+
+// Same curve sim.html feeds QuadPhysics. 3D is -1..1; 2D is 0..1 post-mid/expo
+// then optional exponent. Omitting mid keeps the old t^curve path (mid=0.5).
+export function throttleCollective(stick01, threeD, curve, mid, expo) {
+  if (threeD) return mapThrottle3d(stick01, { curve, deadband: THREED_DEADBAND });
+  const shaped = applyThrottleMidExpo(stick01, mid == null ? 0.5 : mid, expo);
   const exp = Number(curve);
   const e = Number.isFinite(exp) && exp > 0 ? exp : 1;
-  return Math.pow(t, e);
+  return Math.pow(shaped, e);
 }
 
 export function throttleWantsArm(stick01, threeD) {

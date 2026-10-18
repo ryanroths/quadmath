@@ -86,19 +86,22 @@ function hoverThrottle(qp) {
   return Math.max(0, Math.min(1, (out - idle) / (1 - idle)));
 }
 
-test('ground effect is a cushion near the floor and fades by 2 prop diameters', () => {
+test('ground effect is a cushion near the floor and fades by 1 prop diameter', () => {
   const prop = 0.031;
-  assert.equal(qpGround(0.2, prop, 0.12), 1);
-  assert.ok(qpGround(0, prop, 0.12) > 1.1);
-  const near = qpGround(0.01, prop, 0.12);
-  const mid = qpGround(0.03, prop, 0.12);
-  const far = qpGround(0.08, prop, 0.12);
+  assert.equal(qpGround(0.2, prop, 0.065), 1);
+  assert.equal(qpGround(prop, prop, 0.065), 1);
+  assert.ok(qpGround(0, prop, 0.065) > 1.05);
+  const near = qpGround(0.005, prop, 0.065);
+  const mid = qpGround(0.015, prop, 0.065);
+  const far = qpGround(0.028, prop, 0.065);
   assert.ok(near > mid && mid > far && far >= 1);
-  assert.equal(groundEffectMult(0, prop, 0.12), qpGround(0, prop, 0.12));
+  assert.equal(groundEffectMult(0, prop, 0.065), qpGround(0, prop, 0.065));
   assert.equal(whoopGroundK(DEFAULT_BUILD, { ...DEFAULT_WHOOP, ground: false }), 0);
   assert.equal(whoopGroundMult(0, DEFAULT_BUILD, { ...DEFAULT_WHOOP, ground: false }), 1);
   const on = whoopGroundMult(0, DEFAULT_BUILD, DEFAULT_WHOOP);
-  assert.ok(on > 1.08, `whoop cushion ${on}`);
+  assert.ok(on > 1.04 && on < 1.09, `whoop cushion ${on}`);
+  const k = whoopGroundK(DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.ok(k >= 0.05 && k <= 0.08, `kGE ${k}`);
   const light = whoopGroundK({ ...DEFAULT_BUILD, auwG: 20 }, DEFAULT_WHOOP);
   const heavy = whoopGroundK({ ...DEFAULT_BUILD, auwG: 36 }, DEFAULT_WHOOP);
   assert.ok(light > heavy, 'lighter whoop should float more in ground effect');

@@ -5,7 +5,7 @@
 // New localStorage key: quadmathSimWhoop. Do not write old ryfly* keys.
 // Ghosts stay kinematic {v:1,samples}; new recordings add phys: PHYSICS_VER.
 
-import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=7fc18ae07f3a';
+import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=1cd4c3cc8158';
 
 export const WHOOP_KEY = 'quadmathSimWhoop';
 export const PHYSICS_VER = 2;
@@ -115,8 +115,8 @@ function vNorm(a) {
 // Quadratic cushion. Same shape as quadphysics.js groundEffectMult — kept here
 // so node tests can pin the whoop-scaled bonus without spinning the whole FC.
 export function groundEffectMult(clearanceM, propDiameterM, kGE) {
-  const k = kGE == null ? 0.12 : kGE;
-  const ceil = 2 * (propDiameterM || 0.031);
+  const k = kGE == null ? 0.065 : kGE;
+  const ceil = 1 * (propDiameterM || 0.031);
   if (!(clearanceM < ceil) || k <= 0) return 1;
   const x = 1 - Math.max(0, clearanceM) / ceil;
   return 1 + k * x * x;
@@ -125,7 +125,7 @@ export function groundEffectMult(clearanceM, propDiameterM, kGE) {
 export function whoopGroundK(build, settings) {
   const s = normalizeWhoop(settings);
   if (!s.ground) return 0;
-  return 0.14 * s.groundStr * whoopScale(build).ground;
+  return 0.062 * s.groundStr * whoopScale(build).ground;
 }
 
 export function whoopGroundMult(clearanceM, build, settings) {
@@ -173,13 +173,13 @@ export function stepBattery(prev, dt, loadFrac, packOrBuild, settings) {
   const hoverS = Math.max(20, pack.hoverS || 180);
   const charge = Math.max(0, num(prev && prev.charge, 1) - dt * (0.25 + 1.5 * load) / hoverS);
   const ocv = lipoOcv(charge, pack.cells);
-  const ir = (pack.sagDrop || 0.25) * s.sagStr * sc.sag * (0.50 + 0.50 * (1 - charge));
+  const ir = (pack.sagDrop || 0.55) * s.sagStr * sc.sag * (1.0 + 0.35 * (1 - charge));
   const vInst = ocv - load * ir;
   const prevV = num(prev && prev.voltage, ocv);
   const tau = 0.15;
   const voltage = prevV + (vInst - prevV) * (dt / (tau + dt));
   const sagFactor = s.sagThrust
-    ? Math.pow(Math.max(0.5, voltage / pack.full), 1.5)
+    ? Math.pow(Math.max(0.45, voltage / pack.full), 2)
     : 1;
   return { charge, voltage, sagFactor, ocv, vInst };
 }

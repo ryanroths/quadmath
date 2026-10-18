@@ -24,14 +24,14 @@ test('new storage key only; never writes old ryfly* keys', () => {
   assert.ok(buildSrc.includes('Nothing here is copied from WebFPV'));
 });
 
-test('default 65mm build matches whoop65 preset TWR (~4.1)', () => {
+test('default 65mm build matches whoop65 preset TWR (~5.2)', () => {
   const p = physicsFromBuild(DEFAULT_BUILD);
   const ref = PRESETS.whoop65;
   assert.equal(p.preset.wheelbase, ref.wheelbase);
   assert.equal(p.preset.mass, ref.mass);
   assert.ok(Math.abs(p.preset.maxThrustPerMotor - ref.maxThrustPerMotor) < 0.02,
     `thrust ${p.preset.maxThrustPerMotor} vs preset ${ref.maxThrustPerMotor}`);
-  assert.ok(p.twr > 3.6 && p.twr < 4.6, `TWR ${p.twr}`);
+  assert.ok(p.twr > 4.9 && p.twr < 5.5, `TWR ${p.twr}`);
 });
 
 test('65mm 1S high-KV is punchier than class default; 2S 85mm stays flyable', () => {
