@@ -18,6 +18,8 @@ import {
   restyleGarage, tickGarageArt, garageBudget, garageWantsGlow,
   WAREHOUSE_VIBE_ID, hideStockWarehouseMeshes, buildIonNave,
   restyleWarehouse, tickWarehouseArt, warehouseBudget, warehouseWantsGlow,
+  GYM_VIBE_ID, hideStockGymMeshes, buildAmberCourt,
+  restyleGym, tickGymArt, gymBudget, gymWantsGlow,
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
@@ -43,7 +45,7 @@ test('every catalog map and daily host has a vibe with a full palette', () => {
   }
   for (const m of DAILY_MAPS) {
     assert.ok(VIBES[m.id], 'daily host ' + m.id);
-    if (m.id === 'living' || m.id === 'garage' || m.id === 'warehouse') assert.equal(VIBES[m.id].implemented, true);
+    if (m.id === 'living' || m.id === 'garage' || m.id === 'warehouse' || m.id === 'gym') assert.equal(VIBES[m.id].implemented, true);
     else assert.equal(VIBES[m.id].implemented, false);
   }
 });
@@ -86,7 +88,7 @@ test('hexNum and vibeTable are stable helpers', () => {
   assert.equal(hexNum(0x88a0ff), 0x88a0ff);
   const table = vibeTable();
   assert.equal(table.length, 9);
-  assert.equal(table.filter((r) => r.implemented).length, 4);
+  assert.equal(table.filter((r) => r.implemented).length, 5);
 });
 
 test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {
@@ -97,6 +99,7 @@ test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {
   assert.match(art, /sim-art-living\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-garage\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-warehouse\.js\?v=[0-9a-f]{12}/);
+  assert.match(art, /sim-art-gym\.js\?v=[0-9a-f]{12}/);
   assert.equal(mentionsBannedAssets('assets/Models/GLB-format/tree-large.glb'), true);
   assert.equal(mentionsBannedAssets('buildCityDressing()'), false);
 });
@@ -112,6 +115,8 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.match(sim, /tickGarageArt|decorateGarageGate/);
   assert.match(sim, /applyWarehouseArt|restyleWarehouse/);
   assert.match(sim, /tickWarehouseArt|decorateWarehouseGate/);
+  assert.match(sim, /applyGymArt|restyleGym/);
+  assert.match(sim, /tickGymArt|decorateGymGate/);
   assert.match(sim, /cbRain|quadmathSimRain|loadRain/);
   assert.match(sim, /skipStockCity|procedural neon city|Neon Current/);
   assert.equal(sim.includes('content/guides/'), false);
@@ -596,6 +601,79 @@ test('Warehouse freestyle builds without throwing and the FPV frame is not all b
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickWarehouseArt must not touch the THREE binding');
   assert.match(tickSrc, /warehouseTube|warehouseOrb/);
+});
+
+test('Gym Amber Court is implemented with brass-wood gates', () => {
+  assert.equal(GYM_VIBE_ID, 'gym');
+  const v = VIBES.gym;
+  assert.equal(v.implemented, true);
+  assert.equal(v.name, 'Amber Court');
+  assert.equal(v.sky, 'none');
+  assert.equal(v.time, 'golden hour');
+  assert.equal(v.gates.keepBrand, false);
+  assert.equal(v.gates.style, 'brass-wood');
+  assert.equal(v.post.bloom, true);
+  assert.equal(v.palette.neonA.toLowerCase(), '#f0b14b');
+  assert.equal(v.lighting.fogColor, 0xc9a57a);
+  assert.equal(gymWantsGlow('low'), false);
+  assert.equal(gymWantsGlow('med'), true);
+  assert.equal(gymBudget('low').windows < gymBudget('high').windows, true);
+  assert.equal(gymBudget('low').glow, false);
+  assert.equal(gymBudget('med').glow, true);
+  assert.equal(gymBudget('low').dust, 0);
+});
+
+test('Gym freestyle builds without throwing and the FPV frame is not all black', () => {
+  installDomStub();
+  const gymSrc = readFileSync(join(root, 'sim-art-gym.js'), 'utf8');
+  assert.equal(mentionsBannedAssets(gymSrc), false);
+  assert.match(gymSrc, /never abort the FPV render loop/);
+  assert.match(gymSrc, /CapsuleGeometry|LatheGeometry/);
+  const free = freestyleTrack('gym');
+  assert.equal(free.id, freestyleIdFor('gym'));
+  assert.equal(free.gates.length, 0);
+  for (const q of ['low', 'med', 'high', 'auto']) {
+    const built = buildMap(THREE, 'gym');
+    assert.doesNotThrow(() => hideStockGymMeshes(built.group));
+    const out = restyleGym(THREE, {
+      vibe: vibeFor('gym'),
+      quality: q,
+      group: built.group,
+      floor: built.floor,
+    });
+    assert.equal(out.error, undefined, q + ' restyleGym ' + out.error);
+    assert.ok(out.visuals, q + ' visuals');
+    const hidden = [];
+    built.group.traverse((o) => {
+      if (o.userData && o.userData.artHidden) hidden.push(1);
+    });
+    assert.ok(hidden.length >= 8, q + ' hidden stock ' + hidden.length);
+    const vis = built.group.getObjectByName('gymArtVisuals');
+    assert.ok(vis, q + ' gymArtVisuals');
+    if (q === 'low') {
+      assert.equal(gymBudget('low').glow, false);
+      let dust = 0;
+      vis.traverse((o) => { if (o.userData && o.userData.gymDust) dust += 1; });
+      assert.equal(dust, 0, 'low extras off');
+    }
+    const stats = artStats(null, built.group);
+    assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    const frame = cityFrameLit(vis);
+    assert.ok(frame.meshes >= 8, q + ' meshes ' + frame.meshes);
+    assert.ok(frame.lit >= 8, q + ' lit materials ' + frame.lit);
+    assert.ok(frame.maxChan > 0.08, q + ' brightest channel ' + frame.maxChan);
+    assert.doesNotThrow(() => {
+      for (let i = 0; i < 8; i++) tickGymArt(built.group, 1000 + i * 16);
+    }, q + ' tickGymArt');
+    const parent = new THREE.Group();
+    assert.doesNotThrow(() => buildAmberCourt(THREE, parent, vibeFor('gym'), q, free.gates));
+  }
+  const tickSrc = gymSrc.slice(
+    gymSrc.indexOf('export function tickGymArt'),
+    gymSrc.indexOf('export function restyleGym(THREE'),
+  );
+  assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickGymArt must not touch the THREE binding');
+  assert.match(tickSrc, /gymRim|gymDust/);
 });
 
 test('art direction doc lists every map', () => {

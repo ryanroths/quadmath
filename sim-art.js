@@ -30,10 +30,17 @@ export {
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
 } from './sim-art-warehouse.js?v=197484b198dd';
 
+export {
+  GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
+  hideStockGymMeshes, restyleGymShell, buildAmberCourt,
+  decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
+} from './sim-art-gym.js?v=16a8e15a6b97';
+
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
 export const GARAGE_VIBE_ID = 'garage';
 export const WAREHOUSE_VIBE_ID = 'warehouse';
+export const GYM_VIBE_ID = 'gym';
 
 
 export const VIBES = Object.freeze({
@@ -223,7 +230,7 @@ export const VIBES = Object.freeze({
     id: 'gym',
     name: 'Amber Court',
     tagline: 'Golden-hour gym, honey wood, long sun on the paint',
-    implemented: false,
+    implemented: true,
     time: 'golden hour',
     sky: 'none',
     palette: Object.freeze({
