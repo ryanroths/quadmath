@@ -89,6 +89,11 @@ export function matchTrack(t, id) {
 
 export function findTrackIn(id, tracks) {
   if (isBlankTrackId(id)) return null;
+  if (id === 'freestyle') return freestyleTrack('city');
+  if (isFreestyleTrackId(id)) {
+    const map = String(id).slice(0, -'-freestyle'.length);
+    if (knownMapId(map)) return freestyleTrack(map);
+  }
   const L = legacyIndex(id);
   for (const t of tracks || []) {
     if (matchTrack(t, id)) return t;
@@ -107,34 +112,119 @@ export function firstTrackForMap(mapId, tracks) {
   return list[0] || null;
 }
 
+export function isFreestyleTrackId(id) {
+  if (typeof id !== 'string' || !id.endsWith('-freestyle')) return false;
+  return !!knownMapId(id.slice(0, -'-freestyle'.length));
+}
+
+export function freestyleIdFor(mapId) {
+  const map = knownMapId(mapId) || 'city';
+  return map + '-freestyle';
+}
+
+export function isEphemeralTrackId(id) {
+  const s = id == null ? '' : String(id);
+  if (s === 'room-practice' || s === 'daily' || s === 'weekly') return true;
+  return /^daily-\d{4}-\d{2}-\d{2}$/.test(s)
+    || /^weekly-\d{4}-W\d{2}(?:-g\d+)?$/.test(s);
+}
+
+export function freestyleStart(mapId) {
+  const map = knownMapId(mapId) || 'city';
+  if (map === 'city') return { x: 0, y: 0.15, z: 20, yaw: 0 };
+  return { x: 0, y: 1.2, z: 0, yaw: 0 };
+}
+
+export function freestyleTrack(mapId) {
+  const map = knownMapId(mapId) || 'city';
+  const meta = MAPS.find((m) => m.id === map) || MAPS[0];
+  return {
+    id: freestyleIdFor(map),
+    legacyId: null,
+    map,
+    name: 'Freestyle',
+    class: meta.class || 'whoop',
+    gates: [],
+    flags: [],
+    start: freestyleStart(map),
+    freestyle: true,
+  };
+}
+
+// Last map is the Fly destination. Daily / weekly / Your-room practice must
+// not become the boot or Fly race — those are session courses.
+export function persistableSelection(sel) {
+  const map = knownMapId(sel && sel.map) || 'city';
+  const track = sel && sel.track;
+  if (isFreestyleTrackId(track) || isEphemeralTrackId(track) || sel && sel.mode === 'free') {
+    return { map, track: freestyleIdFor(map), mode: 'free' };
+  }
+  if (isBlankTrackId(track)) {
+    return { map, track: freestyleIdFor(map), mode: 'free' };
+  }
+  return { map, track, mode: 'race' };
+}
+
+export function resolveFly(saved) {
+  const map = knownMapId(saved && saved.map) || 'city';
+  return { map, track: freestyleIdFor(map), mode: 'free' };
+}
+
+export function resolveTrackPick(mapId, trackId, tracks) {
+  const map = knownMapId(mapId) || 'city';
+  if (isBlankTrackId(trackId) || trackId === 'freestyle' || isFreestyleTrackId(trackId)) {
+    return { map, track: freestyleIdFor(map), mode: 'free' };
+  }
+  const found = findTrackIn(trackId, tracks);
+  if (found) {
+    return {
+      map: found.map || map,
+      track: trackRefId(found),
+      mode: found.freestyle ? 'free' : 'race',
+    };
+  }
+  if (isEphemeralTrackId(trackId)) {
+    return { map, track: String(trackId), mode: 'race' };
+  }
+  return { map, track: freestyleIdFor(map), mode: 'free' };
+}
+
 // Deep-link / reload resolver. Track id wins map when they disagree.
-// Unknown ?map= falls back to city and must not be persisted.
+// Map-only query, saved state, and empty boot are free flight on that map.
+// Daily / weekly / room-practice in localStorage must not lock boot to a race.
+// Unknown ?map= falls back to city freestyle and must not be persisted.
 export function resolveSimBoot(query, saved, tracks) {
   const q = query || {};
+  if (isFreestyleTrackId(q.track) || q.track === 'freestyle') {
+    const fromId = isFreestyleTrackId(q.track)
+      ? String(q.track).slice(0, -'-freestyle'.length)
+      : q.map;
+    const map = knownMapId(fromId) || knownMapId(q.map) || 'city';
+    return { map, track: freestyleIdFor(map), save: true, mode: 'free' };
+  }
   const found = findTrackIn(q.track, tracks);
   if (found) {
-    return { map: found.map, track: trackRefId(found), save: true };
+    const mode = found.freestyle ? 'free' : 'race';
+    return { map: found.map, track: trackRefId(found), save: true, mode };
   }
   const known = knownMapId(q.map);
   if (q.map && !known) {
-    return { map: 'city', track: 0, save: false, unknownMap: true };
-  }
-  if (known) {
-    const first = firstTrackForMap(known, tracks);
     return {
-      map: known,
-      track: first ? trackRefId(first) : 0,
-      save: true,
+      map: 'city', track: freestyleIdFor('city'),
+      save: false, unknownMap: true, mode: 'free',
     };
   }
-  if (saved && knownMapId(saved.map)) {
-    const t = findTrackIn(saved.track, tracks);
-    if (t) return { map: t.map, track: trackRefId(t), save: false, restored: true };
-    const first = firstTrackForMap(saved.map, tracks);
-    if (first) return { map: saved.map, track: trackRefId(first), save: false, restored: true };
-    return { map: saved.map, track: saved.track, save: false, restored: true };
+  if (known) {
+    return { map: known, track: freestyleIdFor(known), save: true, mode: 'free' };
   }
-  return { map: 'city', track: 0, save: false, restored: true };
+  if (saved && knownMapId(saved.map)) {
+    const fly = resolveFly(saved);
+    return { map: fly.map, track: fly.track, save: false, restored: true, mode: 'free' };
+  }
+  return {
+    map: 'city', track: freestyleIdFor('city'),
+    save: false, restored: true, mode: 'free',
+  };
 }
 
 export function ghostStorageKey(id) {
@@ -190,20 +280,23 @@ export function normalizeTrack(raw, fallbackId) {
   if (!raw || typeof raw !== 'object') throw new Error('BAD TRACK');
   const gates = Array.isArray(raw.gates) ? raw.gates.map(normalizeGate) : [];
   const flags = Array.isArray(raw.flags) ? raw.flags.map(normalizeFlag) : [];
-  if (gates.length < 2) throw new Error('TRACK NEEDS 2+ GATES');
   const id = raw.id != null ? String(raw.id) : String(fallbackId || 'custom');
+  const freestyle = !!raw.freestyle || isFreestyleTrackId(id);
+  if (gates.length < 2 && !freestyle) throw new Error('TRACK NEEDS 2+ GATES');
   const legacy = raw.legacyId != null ? +raw.legacyId : legacyIndex(id);
+  const map = raw.map || 'city';
   return {
     id,
     legacyId: Number.isInteger(legacy) ? legacy : null,
-    map: raw.map || 'city',
-    name: String(raw.name || 'Custom').slice(0, 32),
+    map,
+    name: String(raw.name || (freestyle ? 'Freestyle' : 'Custom')).slice(0, 32),
     class: raw.class || 'whoop',
     gates,
     flags,
     start: raw.start && typeof raw.start === 'object'
       ? { x: num(raw.start.x, 0), y: num(raw.start.y, 0.15), z: num(raw.start.z, 0) }
-      : null,
+      : (freestyle ? freestyleStart(map) : null),
+    freestyle,
   };
 }
 
@@ -384,21 +477,27 @@ export function saveCustomTracks(list, storage) {
 
 export function loadSelected(storage) {
   const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
-  if (!store) return { map: 'city', track: 0 };
+  if (!store) return persistableSelection(null);
   try {
     const raw = store.getItem(SELECTED_TRACK_KEY);
-    if (!raw) return { map: 'city', track: 0 };
+    if (!raw) return persistableSelection(null);
     const o = JSON.parse(raw);
-    return { map: o.map || 'city', track: o.track == null ? 0 : o.track };
+    return persistableSelection({
+      map: o.map,
+      track: o.track,
+      mode: o.mode,
+    });
   } catch (e) {
-    return { map: 'city', track: 0 };
+    return persistableSelection(null);
   }
 }
 
 export function saveSelected(sel, storage) {
   const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
-  if (!store) return;
-  store.setItem(SELECTED_TRACK_KEY, JSON.stringify({ map: sel.map, track: sel.track }));
+  if (!store) return persistableSelection(sel);
+  const out = persistableSelection(sel);
+  store.setItem(SELECTED_TRACK_KEY, JSON.stringify(out));
+  return out;
 }
 
 function catmull(P, i, t) {
