@@ -1822,7 +1822,7 @@ export function makeCraftGroup(THREE, skin) {
   g.name = 'qmCraft';
   const side = THREE.DoubleSide != null ? THREE.DoubleSide : 2;
   const frameMat = new THREE.MeshStandardMaterial({
-    color: pal.frame, emissive: pal.led, emissiveIntensity: 0.2, roughness: 0.5, metalness: 0.22, side,
+    color: pal.frame, emissive: pal.frame, emissiveIntensity: 0.08, roughness: 0.5, metalness: 0.22, side,
   });
   const bodyMat = new THREE.MeshStandardMaterial({
     color: pal.body, roughness: 0.52, metalness: 0.14,
@@ -1835,7 +1835,7 @@ export function makeCraftGroup(THREE, skin) {
     transparent: true, opacity: 0.3, side, depthWrite: false,
   });
   const canopyMat = new THREE.MeshStandardMaterial({
-    color: pal.canopy, emissive: pal.led, emissiveIntensity: 0.55, roughness: 0.36, metalness: 0.08,
+    color: pal.canopy, emissive: pal.canopy, emissiveIntensity: 0.28, roughness: 0.36, metalness: 0.08,
   });
   const ledMat = new THREE.MeshStandardMaterial({
     color: pal.led, emissive: pal.led, emissiveIntensity: 2.2, roughness: 0.28, metalness: 0.08, side,
@@ -1847,15 +1847,20 @@ export function makeCraftGroup(THREE, skin) {
   hub.userData.skinPart = 'body';
   skipLooks(hub);
   g.add(hub);
-  const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), canopyMat);
-  canopy.scale.set(0.9, 0.7, 1.2);
-  canopy.position.set(0, 0.085, -0.03);
+  const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), canopyMat);
+  canopy.scale.set(0.72, 0.42, 1.45);
+  canopy.position.set(0, 0.062, -0.07);
   canopy.userData.skinPart = 'canopy';
   skipLooks(canopy);
   g.add(canopy);
-  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.028, 0.036, 8), lensMat);
+  const camHouse = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.04, 0.05), bodyMat);
+  camHouse.position.set(0, 0.048, -0.175);
+  camHouse.userData.skinPart = 'body';
+  skipLooks(camHouse);
+  g.add(camHouse);
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 0.03, 8), lensMat);
   lens.rotation.x = Math.PI / 2;
-  lens.position.set(0, 0.075, -0.155);
+  lens.position.set(0, 0.048, -0.205);
   lens.userData.skinPart = 'body';
   skipLooks(lens);
   g.add(lens);
@@ -1978,12 +1983,12 @@ export function tintGroup(group, skin) {
     const mat = o.material;
     if (part === 'canopy' && mat.color) {
       mat.color.setHex(pal.canopy);
-      if (mat.emissive) mat.emissive.setHex(pal.led);
+      if (mat.emissive) mat.emissive.setHex(pal.canopy);
     }
     if (part === 'body' && mat.color) mat.color.setHex(pal.body);
     if ((part === 'frame' || part === 'duct') && mat.color) {
       mat.color.setHex(pal.frame);
-      if (mat.emissive) mat.emissive.setHex(pal.led);
+      if (mat.emissive) mat.emissive.setHex(pal.frame);
     }
     if (part === 'prop' && mat.color) {
       mat.color.setHex(pal.prop);

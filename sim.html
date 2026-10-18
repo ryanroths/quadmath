@@ -791,7 +791,7 @@ import {
   skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
-} from "./sim-retention.js?v=a694cd182f98";
+} from "./sim-retention.js?v=da053990f844";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -3484,7 +3484,7 @@ const camTilt=new THREE.Quaternion();
 const camJit=new THREE.Quaternion(),camJitEul=new THREE.Euler();
 function applyChaseCam(){
   if(!chaseCamOn)return false;
-  _chaseOff.set(0,0.82,2.25).applyQuaternion(state.q);
+  _chaseOff.set(0,0.48,1.55).applyQuaternion(state.q);
   camera.position.copy(state.pos).add(_chaseOff);
   camera.up.set(0,1,0);
   camera.lookAt(state.pos.x,state.pos.y+0.04,state.pos.z);
