@@ -12,9 +12,13 @@ import {
   clearRadioCalibration, isValidAxisMap, shouldEnableTouch,
   createRadioRouter, CAL_STEPS, createCalibState, stepCalib,
   guessRadioPreset, isKnownRadio, radioShortName,
+  AUTOARM_KEY, ARM_SWITCH_PREFIX, loadAutoArm, saveAutoArm,
+  loadArmSwitch, saveArmSwitch, mergeArmSwitch, hasArmSwitch,
+  listArmCandidates, detectArmSwitch, snapshotArmInputs,
+  armSwitchValue, stepArmSwitch,
 } from '../sim-touch.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
-import { throttleCollective, armHintText } from '../sim-3d.js';
+import { throttleCollective, armHintText, stepAutoArm } from '../sim-3d.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const simSrc = existsSync(join(root, 'sim.html')) ? readFileSync(join(root, 'sim.html'), 'utf8') : '';
@@ -462,7 +466,89 @@ test('TX16S ax2 -1..+1 aux -1: full throttle lifts with 3D off and on', () => {
   }
   const padCenter = applyAxisMap([0, 0, 0, 0], PAD_MAP, { threeD: true });
   assert.ok(Math.abs(padCenter.t - 0.5) < 1e-9, 'spring 3D center is 0.5');
-  assert.equal(armHintText(false), 'Throttle down + Space/arm switch to arm');
-  assert.ok(simSrc.includes('Throttle down + Space/arm switch to arm'));
+  assert.equal(armHintText(false), 'Raise throttle to fly (auto-arm)');
+  assert.ok(simSrc.includes('Raise throttle to fly (auto-arm)'));
   assert.ok(simSrc.includes('id="hudArmHint"'));
+});
+
+test('auto-arm from low throttle; never arms if throttle starts high', () => {
+  let st = { seenLow: false };
+  let out = stepAutoArm(st, { t: 1, threeD: false, armed: false, autoArm: true, hasSwitch: false });
+  assert.equal(out.arm, false, 'mid-stick start must not arm');
+  st = out.state;
+  out = stepAutoArm(st, { t: 1, threeD: false, armed: false, autoArm: true, hasSwitch: false });
+  assert.equal(out.arm, false);
+  st = { seenLow: false };
+  out = stepAutoArm(st, { t: 0, threeD: false, armed: false, autoArm: true, hasSwitch: false });
+  assert.equal(out.arm, false);
+  assert.equal(out.state.seenLow, true);
+  out = stepAutoArm(out.state, { t: 0.4, threeD: false, armed: false, autoArm: true, hasSwitch: false });
+  assert.equal(out.arm, true);
+  out = stepAutoArm({ seenLow: true }, { t: 0.4, threeD: false, armed: false, autoArm: true, hasSwitch: true });
+  assert.equal(out.arm, false, 'mapped switch disables auto-arm');
+  st = { seenLow: false };
+  out = stepAutoArm(st, { t: 0.5, threeD: true, armed: false, autoArm: true, hasSwitch: false });
+  assert.equal(out.state.seenLow, true);
+  out = stepAutoArm(out.state, { t: 0.8, threeD: true, armed: false, autoArm: true, hasSwitch: false });
+  assert.equal(out.arm, true);
+});
+
+test('arm switch aux -1 → +1 arms; high throttle blocks', () => {
+  const arm = { i: 4, sign: 1 };
+  assert.equal(hasArmSwitch({ arm }), true);
+  assert.equal(hasArmSwitch(AETR_MAP), false);
+  let sw = { prev: null };
+  const rest = tx16sPad([0, 0, -1, 0, -1, -1, -1, -1]);
+  assert.equal(armSwitchValue(rest, arm), -1);
+  sw = stepArmSwitch(sw, { value: -1, armed: false, hasSwitch: true, throttleSafe: true }).state;
+  const flipped = tx16sPad([0, 0, -1, 0, 1, -1, -1, -1]);
+  assert.equal(armSwitchValue(flipped, arm), 1);
+  const ok = stepArmSwitch(sw, { value: 1, armed: false, hasSwitch: true, throttleSafe: true });
+  assert.equal(ok.arm, true);
+  assert.equal(ok.blocked, false);
+  sw = { prev: -1 };
+  const blocked = stepArmSwitch(sw, { value: 1, armed: false, hasSwitch: true, throttleSafe: false });
+  assert.equal(blocked.arm, false);
+  assert.equal(blocked.blocked, true);
+});
+
+test('TX16S aux rest at -1 is never auto-picked; detect waits for a flip', () => {
+  const rest = tx16sPad([0, 0, -1, 0, -1, -1, -1, -1]);
+  const prev = snapshotArmInputs(rest);
+  assert.equal(detectArmSwitch(prev, rest, AETR_MAP), null);
+  const same = detectArmSwitch(prev, rest, AETR_MAP);
+  assert.equal(same, null);
+  const flipped = tx16sPad([0, 0, -1, 0, 1, -1, -1, -1]);
+  const found = detectArmSwitch(prev, flipped, AETR_MAP);
+  assert.ok(found);
+  assert.equal(found.i, 4);
+  assert.equal(found.sign, 1);
+  const stick = detectArmSwitch(snapshotArmInputs(rest), tx16sPad([0, 0, 1, 0, -1, -1, -1, -1]), AETR_MAP);
+  assert.equal(stick, null, 'throttle axis is not an arm switch');
+  const cands = listArmCandidates(rest, AETR_MAP);
+  assert.deepEqual(cands.axes.map((c) => c.i), [4, 5, 6, 7]);
+});
+
+test('TX16S replay: auto-arm on throttle rise, switch overlay persists', () => {
+  const rest = [0, 0, -1, 0, -1, -1, -1, -1];
+  const full = [0, 0, 1, 0, -1, -1, -1, -1];
+  let st = { seenLow: false };
+  let t = applyAxisMap(rest, AETR_MAP).t;
+  st = stepAutoArm(st, { t, threeD: false, armed: false, autoArm: true, hasSwitch: false }).state;
+  t = applyAxisMap(full, AETR_MAP).t;
+  const up = stepAutoArm(st, { t, threeD: false, armed: false, autoArm: true, hasSwitch: false });
+  assert.equal(up.arm, true);
+  const store = memStore();
+  assert.equal(loadAutoArm(store), true);
+  saveAutoArm(false, store);
+  assert.equal(store.getItem(AUTOARM_KEY), '0');
+  assert.equal(loadAutoArm(store), false);
+  saveArmSwitch(TX16S_ID, { i: 4, sign: 1 }, store);
+  assert.equal(loadArmSwitch(TX16S_ID, store).i, 4);
+  assert.ok(store.getItem(ARM_SWITCH_PREFIX + TX16S_SID));
+  assert.equal(hasArmSwitch(mergeArmSwitch(AETR_MAP, loadArmSwitch(TX16S_ID, store))), true);
+  assert.ok(simSrc.includes('id="cbAutoArm"'));
+  assert.ok(simSrc.includes('id="armSwitch"'));
+  assert.ok(simSrc.includes('id="btnArmDetect"'));
+  assert.ok(simSrc.includes('Flip arm switch') || simSrc.includes('armHintText'));
 });
