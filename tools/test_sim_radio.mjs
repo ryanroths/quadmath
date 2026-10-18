@@ -7,11 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   AXIS_MAP_PREFIX, RADIO_PRESET_PREFIX, GP_ID_KEY,
-  sanitizeId, isRadio, radioScore, AETR_MAP, defaultMapFor,
+  sanitizeId, isRadio, radioScore, AETR_MAP, PAD_MAP, defaultMapFor,
   applyAxisMap, loadRadioProfile, saveAxisMap, saveRadioPreset,
   clearRadioCalibration, isValidAxisMap, shouldEnableTouch,
   createRadioRouter, CAL_STEPS, createCalibState, stepCalib,
+  guessRadioPreset, isKnownRadio, radioShortName,
 } from '../sim-touch.js';
+import { QuadPhysics, PRESETS } from '../quadphysics.js';
+import { throttleCollective, armHintText } from '../sim-3d.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const simSrc = existsSync(join(root, 'sim.html')) ? readFileSync(join(root, 'sim.html'), 'utf8') : '';
@@ -407,4 +410,59 @@ test('garbage saved axis map is ignored on load', () => {
   assert.equal(prof.axisMap, null);
   assert.equal(isValidAxisMap(null), false);
   assert.equal(isValidAxisMap({ r: { i: 0 } }), false);
+});
+
+test('known radios guess Mode 2 AETR and plug-and-fly without a saved map', () => {
+  assert.equal(guessRadioPreset(tx16sPad()), 'radiomaster');
+  assert.equal(guessRadioPreset({ id: 'RM TX16S Joystick (Vendor: 1209 Product: 4f54)' }), 'radiomaster');
+  assert.equal(guessRadioPreset({ id: 'Jumper T20 Joystick' }), 'jumper');
+  assert.equal(isKnownRadio(tx16sPad()), true);
+  assert.equal(radioShortName(tx16sPad()), 'TX16S');
+  const store = memStore();
+  const router = createRadioRouter({ storage: store, getGamepads: () => [tx16sPad()] });
+  router.pick();
+  assert.equal(router.radioPreset, 'radiomaster');
+  assert.equal(router.axisMap, null);
+  const rest = router.readStick();
+  assert.ok(rest.stick.t < 0.02, 'un-calibrated AETR rest -1 is throttle 0');
+  assert.ok(simSrc.includes('detected, Mode 2 loaded'));
+  assert.ok(simSrc.includes('toastRecalib') || simSrc.includes('Recalibrate'));
+  assert.ok(simSrc.includes('skipSafeUntil'), 'do not overwrite the plug-and-fly toast with STICKS SAFE');
+  const feelSrc = readFileSync(join(root, 'sim-feel.js'), 'utf8');
+  assert.ok(feelSrc.includes('id="feelRadio"') || feelSrc.includes('feelRadio'));
+});
+
+test('TX16S ax2 -1..+1 aux -1: full throttle lifts with 3D off and on', () => {
+  const rest = [0, 0, -1, 0, -1, -1, -1, -1];
+  const full = [0, 0, 1, 0, -1, -1, -1, -1];
+  const curve = 0.68;
+  const hoverN = PRESETS.whoop65.mass * 9.81;
+  for (const threeD of [false, true]) {
+    const low = applyAxisMap(rest, AETR_MAP, { threeD });
+    const hi = applyAxisMap(full, AETR_MAP, { threeD });
+    assert.ok(low.t < 0.02, `3D=${threeD} rest t=${low.t}`);
+    assert.ok(hi.t > 0.95, `3D=${threeD} full t=${hi.t} — radio is not spring-mapped`);
+    const coll = throttleCollective(hi.t, threeD, curve);
+    assert.ok(coll > 0.85, `3D=${threeD} collective ${coll}`);
+    const qp = new QuadPhysics(PRESETS.whoop65);
+    qp.reset({ x: 0, y: 0, z: 0.2 });
+    qp.setThreeD(threeD);
+    qp.arm();
+    for (let i = 0; i < 500; i++) {
+      qp.step(0.002, { roll: 0, pitch: 0, yaw: 0 }, coll, { r: 0, p: 0, y: 0 });
+    }
+    assert.ok(qp.totalThrustN > hoverN, `3D=${threeD} thrust ${qp.totalThrustN} vs hover ${hoverN}`);
+    const dead = new QuadPhysics(PRESETS.whoop65);
+    dead.reset({ x: 0, y: 0, z: 0.2 });
+    dead.setThreeD(threeD);
+    for (let i = 0; i < 200; i++) {
+      dead.step(0.002, { roll: 0, pitch: 0, yaw: 0 }, coll, { r: 0, p: 0, y: 0 });
+    }
+    assert.ok(Math.abs(dead.totalThrustN) < hoverN * 0.15, `disarmed 3D=${threeD} still thrusting ${dead.totalThrustN}`);
+  }
+  const padCenter = applyAxisMap([0, 0, 0, 0], PAD_MAP, { threeD: true });
+  assert.ok(Math.abs(padCenter.t - 0.5) < 1e-9, 'spring 3D center is 0.5');
+  assert.equal(armHintText(false), 'Throttle down + Space/arm switch to arm');
+  assert.ok(simSrc.includes('Throttle down + Space/arm switch to arm'));
+  assert.ok(simSrc.includes('id="hudArmHint"'));
 });

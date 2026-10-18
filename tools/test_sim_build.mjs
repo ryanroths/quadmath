@@ -106,6 +106,15 @@ test('deep link carries build, track, mode', () => {
   assert.ok(url.includes('build=QB1.air65'));
   assert.ok(url.includes('track=living-sofa'));
   assert.ok(url.includes('mode=angle'));
+  assert.equal(url.includes('3d='), false, 'existing links must not gain 3d=');
+  const url3 = buildDeepLink({
+    origin: 'https://quadmath.com',
+    build: BUILD_PRESETS.air65,
+    mode: 'acro',
+    threeD: true,
+  });
+  assert.ok(url3.includes('3d=1'));
+  assert.ok(url3.includes('mode=acro'));
 });
 
 test('classDefault maps 65/75/85', () => {

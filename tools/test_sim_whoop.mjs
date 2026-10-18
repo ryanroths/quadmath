@@ -12,7 +12,7 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale,
   groundEffectMult, whoopGroundK, whoopGroundMult,
   lipoOcv, stepBattery, resolveDuctHit,
-  stepPropwash, indoorDraft, emptyWake,
+  stepPropwash, indoorDraft, emptyWake, WASH_LEVELS, washLevelFromStr, washStrFromLevel,
   tagGhost, ghostSamples, ghostPhys,
 } from '../sim-whoop.js';
 import { ghostPayloadError, makePaceGhost } from '../sim-tracks.js';
@@ -163,8 +163,9 @@ test('propwash wobbles on a dive/chop through own wash; drafts grow near walls',
   const chop = stepPropwash(wake, {
     pos: { x: 0, y: 0, z: 1.7 }, vel: { x: 0, y: 0, z: -2.2 }, throttle: 0.05,
   }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
-  assert.ok(chop.excite > 0.15, `chop/dive excite ${chop.excite}`);
-  assert.ok(Math.hypot(chop.torque.x, chop.torque.y, chop.torque.z) > 0.01);
+  assert.ok(chop.excite > 0.01, `chop/dive excite ${chop.excite}`);
+  assert.ok(chop.excite < 0.20, `wash still too strong ${chop.excite}`);
+  assert.ok(Math.hypot(chop.torque.x, chop.torque.y, chop.torque.z) > 0.0004);
   const off = stepPropwash(wake, {
     pos: { x: 0, y: 0, z: 1.7 }, vel: { x: 0, y: 0, z: -2.2 }, throttle: 0.05,
   }, 0.02, DEFAULT_BUILD, { ...DEFAULT_WHOOP, wash: false });
@@ -199,6 +200,46 @@ test('ghosts stay v:1 kinematic; phys tag is additive and optional', () => {
   assert.equal(ghostPayloadError(pace, 'living-sofa'), null);
 });
 
+test('3D center hover and a straight punch-out give about zero propwash', () => {
+  let wake = emptyWake();
+  const hover = { pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0.7 };
+  for (let i = 0; i < 20; i++) {
+    wake = stepPropwash(wake, hover, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP).wake;
+  }
+  const center = { pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0 };
+  let maxHover = 0;
+  for (let i = 0; i < 40; i++) {
+    const s = stepPropwash(wake, center, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+    wake = s.wake;
+    if (s.excite > maxHover) maxHover = s.excite;
+  }
+  assert.ok(maxHover < 0.02, `3D center hover wash ${maxHover}`);
+
+  wake = emptyWake();
+  for (let i = 0; i < 20; i++) {
+    wake = stepPropwash(wake, hover, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP).wake;
+  }
+  const punch = stepPropwash(wake, {
+    pos: { x: 0, y: 0, z: 2.15 }, vel: { x: 0, y: 0, z: 4 }, throttle: 1,
+  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.equal(punch.excite, 0);
+
+  const reverse = stepPropwash(emptyWake(), {
+    pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: -0.7,
+  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.equal(reverse.excite, 0);
+  assert.ok(reverse.wake.s > 0.5, 'reverse still deposits |thrust| wash, not a chop-to-zero');
+});
+
+test('wash strength levels snap Off/Low/Med/High and default Low', () => {
+  assert.equal(DEFAULT_WHOOP.washStr, WASH_LEVELS.low);
+  assert.equal(washStrFromLevel('low'), 0.25);
+  assert.equal(washLevelFromStr(0), 'off');
+  assert.equal(washLevelFromStr(0.25), 'low');
+  assert.equal(washLevelFromStr(0.7), 'high');
+  assert.ok(whoopScale(DEFAULT_BUILD).wash < 0.85, '65mm wash scale is gentler than the old ~1.1');
+});
+
 test('whoop settings load/save uses only WHOOP_KEY', () => {
   const mem = new Map();
   const store = {
@@ -219,6 +260,7 @@ test('sim.html wires W2 sliders, HUD voltage, and keeps old localStorage keys', 
   assert.ok(simSrc.includes('id="cbBounce"') && simSrc.includes('id="s_bounce"'));
   assert.ok(simSrc.includes('id="cbGround"') && simSrc.includes('id="s_ground"'));
   assert.ok(simSrc.includes('id="cbWash"') && simSrc.includes('id="s_wash"'));
+  assert.ok(simSrc.includes('option value="low"') && simSrc.includes('option value="high"'));
   assert.ok(simSrc.includes('id="cbDraft"') && simSrc.includes('id="s_draft"'));
   assert.ok(simSrc.includes('id="s_sag"') && simSrc.includes('id="cbBattSim"'));
   assert.ok(simSrc.includes('hudBatt') && simSrc.includes('battV'));

@@ -20,6 +20,7 @@ Swap `build`, `track`, and `mode`:
 | `build` | Share code. Named presets (`QB1.air65`) or full `QB1.65-23000-31x3-1s300-27`. |
 | `track` | Course id (`living-sofa`, `office-cubicles`, `gym-court`, `trainer-figure8`, `city-loop`, `0` / `1` for legacy city). |
 | `mode` | `angle` (default for newcomers), `horizon`, or `acro`. |
+| `3d` | `1` enables Betaflight-style 3D (reversible motors, acro). Center throttle is zero thrust. 3D runs are not counted on boards. |
 | `drill` | W4 Coach id (`hover-hold`, `yaw-spin`, `straight-line`, `gate-pass`, `doorway-pass`, `split-s`, `power-loop`). Bronze on the previous drill unlocks the next. |
 
 Copy the live code from Tune → Your build → COPY BUILD LINK.
@@ -77,6 +78,7 @@ https://quadmath.com/sim.html?build=QB1.air65&track=gym-court&mode=angle
 https://quadmath.com/sim.html?build=QB1.whoop65&track=trainer-figure8&mode=angle
 https://quadmath.com/sim.html?build=QB1.air65&track=trainer-slalom&mode=acro
 https://quadmath.com/sim.html?map=room&room=16x12x8ft&mode=angle
+https://quadmath.com/sim.html?build=QB1.air65&track=trainer-figure8&mode=acro&3d=1
 ```
 
 W3 indoor maps (same `?track=` / `?map=` / `?mode=` scheme as W1):

@@ -5,7 +5,7 @@
 // New localStorage key: quadmathSimWhoop. Do not write old ryfly* keys.
 // Ghosts stay kinematic {v:1,samples}; new recordings add phys: PHYSICS_VER.
 
-import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=6264dd38e42a';
+import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=7fc18ae07f3a';
 
 export const WHOOP_KEY = 'quadmathSimWhoop';
 export const PHYSICS_VER = 2;
@@ -18,7 +18,7 @@ export const DEFAULT_WHOOP = Object.freeze({
   ground: true,
   groundStr: 1,
   wash: true,
-  washStr: 0.70,
+  washStr: 0.25,
   batt: true,
   sagThrust: true,
   sagStr: 1,
@@ -93,7 +93,9 @@ export function whoopScale(raw) {
     bounce: clamp(Math.sqrt(1 / frame) * Math.sqrt(1 / mass), 0.55, 1.45),
     crashAt: clamp(Math.sqrt(1 / mass) * Math.pow(1 / frame, 0.3), 0.60, 1.35),
     spin: clamp(0.65 + 0.45 * kv / Math.sqrt(mass), 0.45, 1.7),
-    wash: clamp(0.55 + 0.55 * kv * prop / mass, 0.35, 1.85),
+    // 65mm was the noisiest (scale ~1.1). Keep small frames gentler so a
+    // whoop's leftover puff is a nudge, not a roll-off.
+    wash: clamp((0.40 + 0.30 * kv * prop / mass) * (frame <= 1 ? 0.72 : 1), 0.25, 1.25),
     ground: clamp((1.05 / Math.sqrt(mass)) * prop, 0.50, 1.65),
     sag: clamp(Math.sqrt(300 / b.mah) * (b.cells === 2 ? 0.88 : 1), 0.50, 1.8),
     draft: clamp(1.15 / (frame * Math.sqrt(mass)), 0.40, 1.55),
@@ -261,40 +263,68 @@ export function emptyWake() {
   return { x: 0, y: 0, z: 0, s: 0, age: 1 };
 }
 
-// Propwash: leave a puff of downwash under a pulling whoop. Dive or chop
-// throttle through it and the airframe gets a short wobble. Module/SI frame.
+export const WASH_LEVELS = Object.freeze({
+  off: 0,
+  low: 0.25,
+  med: 0.50,
+  high: 0.80,
+});
+
+export function washLevelFromStr(n) {
+  const v = Number(n);
+  if (!(v > 0.02)) return 'off';
+  if (v <= 0.33) return 'low';
+  if (v <= 0.62) return 'med';
+  return 'high';
+}
+
+export function washStrFromLevel(level) {
+  const k = String(level || '').toLowerCase();
+  return Object.prototype.hasOwnProperty.call(WASH_LEVELS, k) ? WASH_LEVELS[k] : WASH_LEVELS.low;
+}
+
+// Propwash: leave a puff of downwash (or 3D upwash) behind a pulling whoop.
+// Only wobble when you fly back into that puff at low |thrust|. |throttle|
+// so 3D reverse is not treated as a chop-to-zero. Module/SI frame.
 export function stepPropwash(wake, sample, dt, build, settings) {
   const s = normalizeWhoop(settings);
   const sc = whoopScale(build);
   const w = wake && typeof wake === 'object' ? wake : emptyWake();
   const pos = (sample && sample.pos) || v3();
   const vel = (sample && sample.vel) || v3();
-  const thr = clamp(sample && sample.throttle, 0, 1);
-  if (!s.wash) {
+  const signed = Number(sample && sample.throttle);
+  const raw = Number.isFinite(signed) ? clamp(signed, -1, 1) : 0;
+  const thr = Math.abs(raw);
+  const blow = raw < 0 ? 1 : -1;
+  if (!s.wash || s.washStr <= 0) {
     return { wake: { ...w, s: 0 }, force: v3(), torque: v3(), excite: 0 };
   }
   const next = { x: w.x, y: w.y, z: w.z, s: w.s, age: w.age };
-  if (thr > 0.32) {
+  if (thr > 0.38) {
     next.s = Math.max(next.s * 0.88, thr);
     next.x = pos.x;
     next.y = pos.y;
-    next.z = pos.z - 0.32;
+    next.z = pos.z + blow * 0.32;
     next.age = 0;
   } else {
     next.age += dt;
     next.s *= Math.exp(-dt * 1.9);
   }
   const d = Math.hypot(pos.x - next.x, pos.y - next.y, pos.z - next.z);
-  const chop = Math.max(0, next.s - thr);
-  const dive = vel.z < -1.15;
-  // Chop/dive can hit leftover wash on the same step it is left behind.
-  const inWash = d < 0.62 && next.s > 0.10 && (chop > 0.12 || next.age > 0.03);
-  const excite = (inWash ? 1 : 0) * (0.60 * chop + (dive ? 0.45 : 0)) * s.washStr * sc.wash;
+  const toX = next.x - pos.x, toY = next.y - pos.y, toZ = next.z - pos.z;
+  const sep = Math.hypot(toX, toY, toZ) || 1;
+  const approach = (vel.x * toX + vel.y * toY + vel.z * toZ) / sep;
+  const intoWash = approach > 0.85;
+  const lowThr = thr < 0.28;
+  const inWash = d < 0.55 && next.s > 0.18 && next.age >= 0.02;
+  const excite = (inWash && intoWash && lowThr)
+    ? (0.22 * next.s + 0.12) * s.washStr * sc.wash
+    : 0;
   const n = hash3(pos.x + next.age, pos.y, pos.z);
   return {
     wake: next,
-    force: v3(n.x * excite * 0.035, n.y * excite * 0.035, -excite * 0.07),
-    torque: v3(n.x * excite * 0.11, n.y * excite * 0.11, n.z * excite * 0.035),
+    force: v3(n.x * excite * 0.022, n.y * excite * 0.022, -excite * 0.04),
+    torque: v3(n.x * excite * 0.06, n.y * excite * 0.06, n.z * excite * 0.02),
     excite,
   };
 }

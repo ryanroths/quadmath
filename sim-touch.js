@@ -198,7 +198,7 @@ export function shouldEnableTouch(info) {
   // fall through to on-screen sticks and scramble the channel map.
   if (i.gamepadConnected || i.hasGamepad || i.padLive) return false;
   if (i.inputChoice === 'touch') return true;
-  if (i.inputChoice === 'keyboard' || i.inputChoice === 'calibrate') return false;
+  if (i.inputChoice === 'keyboard' || i.inputChoice === 'calibrate' || i.inputChoice === 'radio') return false;
   return !!i.mobile;
 }
 
@@ -223,19 +223,31 @@ export function createTouchControls(ctx) {
     root, onArm, onMode, onRespawn, onChange, settings: initial,
   } = ctx || {};
   let settings = normalizeTouch(initial);
+  let threeD = !!(ctx && ctx.threeD);
   const state = {
-    left: { x: 0, y: settings.thrSpring || settings.mode === 1 ? 0 : -1 },
+    left: { x: 0, y: 0 },
     right: { x: 0, y: 0 },
     active: { L: null, R: null },
     enabled: false,
   };
-  if (settings.mode === 1 && !settings.thrSpring) state.right.y = -1;
 
   function holdYFor(side) {
     if (settings.thrSpring) return false;
     if (settings.mode === 2) return side === 'L';
     return side === 'R';
   }
+
+  // 2D throttle rests at the bottom (zero). 3D rests at center (zero thrust).
+  // thrSpring already centers; 3D without spring still HOLDS last Y on release
+  // (a 3D radio has a center detent, not a spring).
+  function restY(side) {
+    if (settings.thrSpring) return 0;
+    if (holdYFor(side)) return threeD ? 0 : -1;
+    return 0;
+  }
+
+  state.left.y = restY('L');
+  state.right.y = restY('R');
 
   function shaped() {
     const dz = settings.deadzone;
@@ -279,6 +291,21 @@ export function createTouchControls(ctx) {
     return settings;
   }
   applySettings(settings);
+
+  function snapIdleThrottle() {
+    for (const side of ['L', 'R']) {
+      if (!holdYFor(side)) continue;
+      if (state.active[side] != null) continue;
+      setStick(side, { y: restY(side) });
+    }
+  }
+
+  function setThreeD(on) {
+    threeD = !!on;
+    snapIdleThrottle();
+    paint();
+    return threeD;
+  }
 
   function setStick(side, next) {
     const cur = side === 'R' ? state.right : state.left;
@@ -379,10 +406,12 @@ export function createTouchControls(ctx) {
   return {
     setEnabled,
     applySettings,
+    setThreeD,
     read,
     shaped,
     get settings() { return settings; },
     get state() { return state; },
+    get threeD() { return threeD; },
     get enabled() { return state.enabled; },
     syncLandscape,
     paint,
@@ -483,16 +512,49 @@ function axisAt(axes, i) {
   return Number.isFinite(v) ? v : 0;
 }
 
-export function applyAxisMap(axes, map) {
+export function guessRadioPreset(gp) {
+  const id = gp && gp.id != null ? String(gp.id) : '';
+  if (/jumper/i.test(id)) return 'jumper';
+  if (/frsky|taranis/i.test(id)) return 'frsky';
+  if (/literadio/i.test(id)) return 'literadio';
+  if (/flysky/i.test(id)) return 'flysky';
+  if (/tx16|radiomaster|edgetx|opentx|zorro|boxer|pocket/i.test(id)) return 'radiomaster';
+  if (isRadio(gp)) return 'radiomaster';
+  return 'pad';
+}
+
+export function radioShortName(gp) {
+  const id = gp && gp.id != null ? String(gp.id) : '';
+  if (/tx16/i.test(id)) return 'TX16S';
+  if (/zorro/i.test(id)) return 'Zorro';
+  if (/jumper/i.test(id)) return 'Jumper';
+  if (/frsky|taranis/i.test(id)) return 'FrSky';
+  if (/literadio/i.test(id)) return 'LiteRadio';
+  if (/flysky/i.test(id)) return 'FlySky';
+  if (isRadio(gp)) return 'Radio';
+  return 'Gamepad';
+}
+
+// Known EdgeTX/OpenTX radios: Mode 2 AETR, throttle on ax2, ±1 until calibrated.
+export function isKnownRadio(gp) {
+  const p = guessRadioPreset(gp);
+  return p !== 'pad';
+}
+
+export function applyAxisMap(axes, map, opts) {
   const m = map || AETR_MAP;
+  const threeD = !!(opts && opts.threeD);
   const dz = (v, d) => (Math.abs(v) < (d == null ? 0.03 : d) ? 0 : v);
   const r = dz(axisAt(axes, m.r.i) * (m.r.sign || 1));
   const p = dz(axisAt(axes, m.p.i) * (m.p.sign || 1));
   const y = dz(axisAt(axes, m.y.i) * (m.y.sign || 1));
   const traw = axisAt(axes, m.t.i);
   let t;
+  // Spring pads only. A ratcheted TX16S throttle is min/max ±1 — never the
+  // bipolar spring map, or full-up (+1) would collapse to stick.t = 0.
   if (m.t && m.t.spring) {
-    t = clamp(-traw, 0, 1);
+    if (threeD) t = clamp((1 - traw) / 2, 0, 1);
+    else t = clamp(-traw, 0, 1);
   } else {
     const min = m.t && Number.isFinite(m.t.min) ? m.t.min : -1;
     const max = m.t && Number.isFinite(m.t.max) ? m.t.max : 1;
@@ -901,6 +963,14 @@ export function createRadioRouter(opts) {
     const prof = loadRadioProfile(gp.id, storage);
     radioPreset = prof.radioPreset;
     axisMap = prof.axisMap;
+    // No saved calib → plug-and-fly the matching AETR preset (±1 throttle).
+    if (!axisMap && isKnownRadio(gp)) {
+      const guessed = guessRadioPreset(gp);
+      if (guessed !== 'pad' && (radioPreset === 'auto' || !RADIO_PRESETS[radioPreset] || !RADIO_PRESETS[radioPreset].map)) {
+        radioPreset = guessed;
+        saveRadioPreset(gp.id, radioPreset, storage);
+      }
+    }
   }
 
   function pick() {
@@ -936,7 +1006,7 @@ export function createRadioRouter(opts) {
     if (gpConnected) {
       if (!gp) return { source: 'gamepad', stick: lastStick, touch: false, emptyPoll: true };
       const map = effectiveAxisMap(axisMap, radioPreset, gp);
-      lastStick = applyAxisMap(gp.axes, map);
+      lastStick = applyAxisMap(gp.axes, map, { threeD: !!o.threeD });
       return { source: 'gamepad', stick: lastStick, touch: false, map, emptyPoll: false };
     }
     const touch = shouldEnableTouch({
