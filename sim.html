@@ -745,12 +745,13 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=34e582665d37";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=1be1aa160b15";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=e4a77725ea01";
 import {
   VIBES, vibeFor, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, loadRain, saveRain, RAIN_KEY,
   makeWorldLabel, worldLabelMaterial, setWorldLabelText,
-} from "./sim-art.js?v=7e2f6e1cbb00";
+  restyleLiving, decorateLivingGate, pulseLivingGate, tickLivingArt,
+} from "./sim-art.js?v=53fa80cf1ec3";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -780,7 +781,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=bf753d2f574f";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=05e181f109bb";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=3ac598c3a78f";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -788,7 +789,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=e5de70320760";
+} from "./sim-coach.js?v=8bbfb48302e8";
 import {
   DAILY_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -1258,6 +1259,7 @@ function addGate(x,y,z,rotationY,size,solidGate,trackId,parent){
   ring.castShadow=ring.receiveShadow=true; // long thin ring shadow on the deck is the main read for gate height
   decorateGate(THREE,ring,size,col);
   if((currentMap||'city')==='city')decorateVibeGate(THREE,ring,size,col,vibeFor('city'),trackIdx);
+  if(currentMap==='living')decorateLivingGate(THREE,ring,size,col,vibeFor('living'));
   (parent||raceGroup).add(ring);
   gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col,trackId:trackId,trackIdx:trackIdx,ry:rotationY||0,size:size,solid:!!solidGate}); // col = dim base color
   if(solidGate){
@@ -1377,6 +1379,7 @@ function updateGateHighlight(){
     const passed=g.trackId===activeTrackId&&runActive&&g.trackIdx<nextGateIndex;
     pulseGate(g,g===target,now,LIGHTING,passed);
     if(currentMap==='city')pulseCityGate(g,g===target,passed,now,vibeFor('city'));
+    if(currentMap==='living')pulseLivingGate(g,g===target,passed,now,vibeFor('living'));
   }
 }
 // begin a 3-lap run on the active track: reset splits, start both the run and
@@ -2149,6 +2152,22 @@ function applyCityArt(quality){
   if(looks&&looks.setSkyMode)looks.setSkyMode('gradient');
   if(looks&&looks.setGrade)looks.setGrade(1);
 }
+function applyLivingArt(quality){
+  const built=indoorBuilt.living||ensureIndoor('living');
+  if(!built)return;
+  restyleLiving(THREE,{
+    vibe:vibeFor('living'),
+    quality:quality||(looks&&looks.applied)||'med',
+    group:built.group,
+    floor:built.floor,
+    scene,sun,sunFill,hemi,renderer,LIGHTING,
+    bloomPass:looks&&looks.bloomPass,
+  });
+  if(looks&&looks.bloomPass)looks.bloomPass.enabled=false;
+  if(looks&&looks.setGrade)looks.setGrade(0);
+  const credit=document.querySelector('.sf-credit');
+  if(credit)credit.textContent='Living Room is original procedural art — Clay Parlor';
+}
 async function finishCityArt(){
   window._skipStockCity=true;
   try{
@@ -2304,12 +2323,13 @@ function applyMapLooks(mapId){
   if(looks&&looks.setOrbit)looks.setOrbit(MAP_ORBIT[mapId]||MAP_ORBIT.city);
   if(looks&&looks.setSkyMode)looks.setSkyMode(vibe&&vibe.sky==='gradient'?'gradient':'hdri');
   if(looks&&looks.setGrade)looks.setGrade(mapId==='city'?1:0);
-  if(mapId==='city'){
+  if(mapId==='city'||mapId==='living'){
     applyVibeLighting({
       LIGHTING,sun,sunFill,hemi,scene,renderer,skyMesh,
       bloomPass:looks&&looks.bloomPass,
     },vibe);
   }
+  if(mapId==='living'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
   if(mapId!=='city'&&skyMesh&&skyMesh.userData&&skyMesh.userData.origSkyMat){
     skyMesh.material=skyMesh.userData.origSkyMat;
     skyMesh.userData.citySky=false;
@@ -2317,6 +2337,11 @@ function applyMapLooks(mapId){
   if(skyMesh)skyMesh.visible=mapId==='city'||mapId==='backyard';
   if(sunSprite)sunSprite.visible=mapId==='backyard';
   setIndoorLights(indoorLights,looks?looks.applied:'med');
+  const credit=document.querySelector('.sf-credit');
+  if(credit){
+    if(mapId==='living')credit.textContent='Living Room is original procedural art — Clay Parlor';
+    else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current';
+  }
 }
 function isFreeFlight(t,trackId){
   if(trackId==='freestyle'||isFreestyleTrackId(trackId))return true;
@@ -2370,6 +2395,7 @@ async function setMap(mapId,trackId,opts){
     }
   }
   applyMapLooks(currentMap);
+  if(currentMap==='living')applyLivingArt(looks&&looks.applied);
   nextGateIndex=0;
   runActive=false;
   lastPassedGate=null;
@@ -3739,6 +3765,7 @@ function toggleStartMenu(force){
 function syncQualityUI(){
   if(!looks)return;
   if(currentMap==='city')applyCityArt(looks.applied);
+  if(currentMap==='living')applyLivingArt(looks.applied);
   setIndoorLights(indoorLights,looks.applied);
   const q=looks.choice;
   document.querySelectorAll('#qualityBtns [data-q]').forEach(b=>b.classList.toggle('on',b.dataset.q===q));
@@ -5364,6 +5391,7 @@ function loop(now){
   let dt=(now-last)/1000;last=now;dt=Math.min(dt,.05);
   if(looks)looks.tick(now);
   if(currentMap==='city')tickCityArt(cityWorld,now);
+  if(currentMap==='living')tickLivingArt(indoorWorld,now);
   if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
     readInput(dt);
     tickArming(padLive?((navigator.getGamepads&&navigator.getGamepads())||[])[gpIndex]:null);
@@ -5669,6 +5697,7 @@ function applyQueryBoot(){
   if(q.get('quality')&&looks){
     looks.setQuality(q.get('quality')).then(function(){
       if(currentMap==='city')applyCityArt(looks.applied);
+      if(currentMap==='living')applyLivingArt(looks.applied);
     });
   }
   if(q.get('builder')==='1'){toggleStartMenu(false);openBuilder();}
@@ -5694,7 +5723,7 @@ fetchBuiltinTracks().then(list=>{
 Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
   placeQuadAt,
-  artStats:()=>artStats(renderer,cityWorld),vibe:()=>vibeFor(currentMap),VIBES,qualityWantsBloom,
+  artStats:()=>artStats(renderer,currentMap==='city'?cityWorld:indoorWorld),vibe:()=>vibeFor(currentMap),VIBES,qualityWantsBloom,
   rain:()=>loadRain(),setRain(v){saveRain(!!v);if(currentMap==='city')applyCityArt(looks&&looks.applied);},RAIN_KEY,
   QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,CROSSHAIR_KEY,canopyGroup,craftGroup,skinTrail,
   canopyEnabled:()=>canopyOn,
