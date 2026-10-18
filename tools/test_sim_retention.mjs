@@ -15,8 +15,10 @@ import {
   DAILY_KEY, BOARD_KEY, SKIN_KEY, CANOPY_KEY, LEADERBOARD_URL_KEY, LEADERBOARD_URL,
   PILOT_TOKEN_KEY, SHARE_PREFIX, DUEL_KIND, DAILY_MAPS, SKINS, CLASS_MAX_SPEED, CLASS_IDS,
   PHYS_VER, WEEK_GRACE_MS, DEFAULT_ALLOWED_ORIGIN,
-  utcDateId, utcWeekId, addUtcDays, dailyTrackFor, weeklyTrackFor,
-  dailyTrackValid, isDailyTrackId, isWeeklyTrackId, trackFromRetentionId,
+  utcDateId, utcWeekId, addUtcDays, dailyTrackFor, weeklyTrackFor, weeklyIdFor,
+  dailyTrackValid, dailyTrackInvalidReason, dailyTrackOnMap, isDailyTrackId, isWeeklyTrackId,
+  trackFromRetentionId, DAILY_GEN, GATE_SIZE_MIN, GATE_SIZE_MAX, WS_PER_METRE,
+  mapObstacles, gateHasClearance, minGateSpacing, dailyLapRange, estimateLapSeconds,
   validateSubmittedRun, countGhostLaps, encodeDuel, decodeDuel, decodeQm2,
   duelResult, emptyDaily, recordDailyFinish, loadDaily, saveDaily,
   loadBoard, saveBoard, recordLocalBoard, boardRows, leaderboardUrl,
@@ -85,6 +87,7 @@ test('daily maps match sim-maps indoor LAYOUT', () => {
     assert.equal(LAYOUT[m.id].w, m.w, m.id + ' w');
     assert.equal(LAYOUT[m.id].d, m.d, m.id + ' d');
     assert.equal(LAYOUT[m.id].h, m.h, m.id + ' h');
+    assert.equal(LAYOUT[m.id].wall, m.wall, m.id + ' wall');
     assert.ok(MAPS.some((x) => x.id === m.id && x.indoor));
   }
   assert.ok(!DAILY_MAPS.some((m) => m.id === 'city' || m.id === 'room' || m.id === 'backyard'));
@@ -102,7 +105,7 @@ test('daily seed is deterministic from UTC date and yields valid gates', () => {
   assert.ok(dailyTrackValid(a));
   assert.ok(dailyTrackValid(c));
   assert.ok(a.gates.length >= 4);
-  assert.ok(a.gates.every((g) => g.solid && g.size <= 2.2));
+  assert.ok(a.gates.every((g) => g.solid && g.size >= GATE_SIZE_MIN - 0.04 && g.size <= GATE_SIZE_MAX + 0.08));
   for (let i = 0; i < 14; i++) {
     const day = addUtcDays('2026-10-01', i);
     const t = dailyTrackFor(day);
@@ -117,11 +120,56 @@ test('weekly track is stable for the ISO week', () => {
   const w = utcWeekId(Date.UTC(2026, 9, 17));
   const t = weeklyTrackFor(w);
   assert.ok(isWeeklyTrackId(t.id));
+  assert.equal(t.id, weeklyIdFor(w));
   assert.equal(t.id, weeklyTrackFor(w).id);
+  assert.ok(t.id.endsWith('-g' + DAILY_GEN));
+  assert.ok(isWeeklyTrackId('weekly-' + w));
   assert.ok(dailyTrackValid(t));
   assert.equal(utcDateId(Date.UTC(2026, 9, 17)), '2026-10-17');
   assert.equal(trackFromRetentionId('daily-2026-10-17').id, 'daily-2026-10-17');
-  assert.equal(trackFromRetentionId('weekly-' + w).id, 'weekly-' + w);
+  assert.equal(trackFromRetentionId('weekly-' + w).id, weeklyIdFor(w));
+  assert.equal(DAILY_GEN, 2);
+});
+
+test('daily generator: 64 seeds on every indoor map stay clear, spaced, and in-bounds', () => {
+  assert.ok(GATE_SIZE_MIN >= 0.28 * WS_PER_METRE - 1e-6);
+  assert.ok(GATE_SIZE_MAX <= 0.40 * WS_PER_METRE + 1e-6);
+  assert.ok(retSrc.includes('DAILY_GEN = 2'));
+  assert.ok(retSrc.includes("seedPrefix() + 'daily|'"));
+  assert.ok(!retSrc.includes("from './sim-maps"));
+  let n = 0;
+  for (const map of DAILY_MAPS) {
+    const boxes = mapObstacles(map);
+    assert.ok(boxes.length >= 5, map.id + ' obstacles');
+    const range = dailyLapRange(map);
+    const spacing = minGateSpacing(map);
+    for (let i = 0; i < 64; i++) {
+      const t = dailyTrackOnMap('qa|' + map.id + '|' + i, map.id, 'qa-' + map.id + '-' + i);
+      const why = dailyTrackInvalidReason(t);
+      assert.equal(why, '', map.id + ' seed ' + i + ' ' + why);
+      assert.ok(dailyTrackValid(t));
+      assert.equal(t.map, map.id);
+      let metres = 0;
+      let minD = Infinity;
+      for (let g = 0; g < t.gates.length; g++) {
+        const a = t.gates[g], b = t.gates[(g + 1) % t.gates.length];
+        const d = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+        metres += d;
+        minD = Math.min(minD, d);
+        assert.ok(gateHasClearance(a, map, boxes, t.gates[(g + t.gates.length - 1) % t.gates.length]), map.id + ' gate ' + g);
+        assert.ok(Math.abs(a.x) < map.w / 2 - 1.0);
+        assert.ok(Math.abs(a.z) < map.d / 2 - 1.0);
+        assert.ok(a.y > 1.3 && a.y < map.h * 0.5);
+        assert.ok(a.size >= GATE_SIZE_MIN - 0.04 && a.size <= GATE_SIZE_MAX + 0.08);
+      }
+      metres /= WS_PER_METRE;
+      assert.ok(minD >= spacing - 0.05, map.id + ' spacing ' + minD + ' < ' + spacing);
+      assert.ok(metres >= range.minM && metres <= range.maxM, map.id + ' lap m ' + metres);
+      assert.ok(estimateLapSeconds(t.gates) > 3);
+      n++;
+    }
+  }
+  assert.ok(n >= 60 * DAILY_MAPS.length, 'seed count ' + n);
 });
 
 test('anti-cheat accepts a 3-lap pace ghost and rejects speed / incomplete / sparse', () => {
