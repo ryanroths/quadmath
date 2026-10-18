@@ -361,8 +361,11 @@ export function minGateSpacing(map) {
 }
 
 export function dailyLapRange(map) {
+  if (map.id === 'living') return { minM: 36, maxM: 90 };
+  if (map.id === 'trainer') return { minM: 55, maxM: 95 };
+  if (map.id === 'garage') return { minM: 36, maxM: 110 };
   const peri = (map.w + map.d) * 1.45;
-  const minM = clamp(peri * 0.38 / WS_PER_METRE, 10, 48);
+  const minM = clamp(peri * 0.38 / WS_PER_METRE, 18, 48);
   const maxM = clamp(peri * 1.65 / WS_PER_METRE, 42, 180);
   return { minM, maxM };
 }
@@ -590,7 +593,67 @@ function trainerLoop(map, y, inset) {
   ];
 }
 
+function starWeave(map, y, inset) {
+  const yLo = y;
+  const yHi = Math.min(y + 1.25, map.h * 0.40);
+  if (map.id === 'living') {
+    return [
+      { x: 5.8, y: yLo, z: 10.4 },
+      { x: -4.6, y: yHi, z: -7.3 },
+      { x: 5.8, y: yLo, z: -7.4 },
+      { x: -4.8, y: yHi, z: 10.2 },
+      { x: 0.2, y: yLo, z: -7.5 },
+      { x: -5.8, y: yHi, z: 2.6 },
+      { x: 6.2, y: yLo, z: 2.0 },
+      { x: -3.0, y: yHi, z: 10.4 },
+      { x: 5.4, y: yHi, z: 6.4 },
+      { x: -4.4, y: yLo, z: 6.6 },
+    ];
+  }
+  if (map.id === 'garage') {
+    const iz = map.d / 2 - inset;
+    return [
+      { x: -2.8, y: yLo, z: iz * 0.90 },
+      { x: -5.6, y: yHi, z: -iz * 0.88 },
+      { x: -1.5, y: yLo, z: -iz * 0.88 },
+      { x: -5.6, y: yHi, z: iz * 0.90 },
+      { x: -1.5, y: yLo, z: iz * 0.12 },
+      { x: -5.5, y: yHi, z: -iz * 0.12 },
+      { x: -2.6, y: yLo, z: -iz * 0.55 },
+      { x: -5.4, y: yHi, z: iz * 0.55 },
+      { x: -1.6, y: yLo, z: -iz * 0.55 },
+      { x: -4.8, y: yHi, z: iz * 0.20 },
+      { x: -2.2, y: yLo, z: iz * 0.70 },
+      { x: -5.2, y: yHi, z: -iz * 0.70 },
+    ];
+  }
+  const ix = map.w / 2 - inset;
+  const izF = map.d / 2 - inset;
+  const izB = map.id === 'living' ? Math.min(izF, 8.0) : izF;
+  const bx = map.id === 'living' ? ix * 0.80 : ix * 0.86;
+  return [
+    { x: bx, y: yLo, z: izF * 0.90 },
+    { x: -bx, y: yHi, z: -izB * 0.90 },
+    { x: bx, y: yLo, z: -izB * 0.90 },
+    { x: -bx, y: yHi, z: izF * 0.90 },
+    { x: bx * 0.12, y: yLo, z: -izB * 0.90 },
+    { x: -bx, y: yHi, z: izF * 0.12 },
+    { x: bx, y: yLo, z: izF * 0.12 },
+    { x: -bx * 0.12, y: yHi, z: izF * 0.90 },
+    { x: bx * 0.55, y: yHi, z: -izB * 0.28 },
+    { x: -bx * 0.55, y: yLo, z: izF * 0.38 },
+    { x: bx * 0.72, y: yHi, z: izF * 0.55 },
+    { x: -bx * 0.72, y: yLo, z: -izB * 0.40 },
+  ];
+}
+
 function mapLoop(map, y, inset, kind) {
+  if (kind === 'weave') {
+    if (map.id === 'living' || map.id === 'trainer' || map.id === 'garage') {
+      return starWeave(map, y, inset);
+    }
+    return mapLoop(map, y, inset, 'aisle');
+  }
   if (kind === 'aisle' || kind === 'safe') {
     if (map.id === 'living') return livingLoop(map, y, inset);
     if (map.id === 'garage') return garageLoop(map, y, inset);
@@ -738,7 +801,7 @@ function playableInset(map, size) {
 }
 
 function shapePts(kind, map, y, inset, size, rand) {
-  const nHi = map.w >= 45 ? 12 : map.w >= 30 ? 10 : 8;
+  const nHi = kind === 'weave' ? 14 : map.w >= 45 ? 12 : map.w >= 30 ? 10 : 8;
   if (kind === 'slalom') {
     const n = 6 + Math.floor(rand() * (nHi - 5));
     const amp = Math.min(map.w / 2 - inset - 0.5, (map.w < 30 ? 5.2 : 8.5) + rand() * 3);
@@ -753,8 +816,15 @@ function shapePts(kind, map, y, inset, size, rand) {
   if (!loop) return ovalPts(map, y, 6, inset);
   const spacing = minGateSpacing(map);
   let len = 0;
-  for (let i = 0; i < loop.length; i++) len += dist3(loop[i], loop[(i + 1) % loop.length]);
-  const n = clamp(Math.floor(len / spacing), 5, nHi);
+  let spaced = true;
+  for (let i = 0; i < loop.length; i++) {
+    const d = dist3(loop[i], loop[(i + 1) % loop.length]);
+    len += d;
+    if (d < spacing) spaced = false;
+  }
+  if (kind === 'weave' && loop.length >= 8 && spaced) return loop;
+  const nLo = kind === 'weave' ? 8 : 5;
+  const n = clamp(Math.floor(len / spacing), nLo, nHi);
   return resampleClosed(loop, n);
 }
 
@@ -766,8 +836,8 @@ function generateOnMap(seedKey, map, id, name) {
   const boxes = mapObstacles(map);
   const shapes = (map.id === 'warehouse' || map.id === 'office')
     ? ['aisle', 'safe']
-    : map.w >= 40
-      ? ['aisle', 'oval', 'slalom', 'figure8']
+    : (map.id === 'living' || map.id === 'trainer' || map.id === 'garage')
+      ? ['weave', 'aisle', 'figure8']
       : ['aisle', 'oval', 'slalom', 'figure8'];
   const sizes = [
     size,
@@ -783,7 +853,7 @@ function generateOnMap(seedKey, map, id, name) {
     for (const s of shapes) if (!order.includes(s)) order.push(s);
     order.push('safe');
     for (let i = 0; i < order.length; i++) {
-      const kind = order[i] === 'weave' ? 'aisle' : order[i];
+      const kind = order[i];
       const pts = shapePts(kind, map, y, insetSz, sz, rand);
       const track = trackFromPts(pts, sz, map, id, name, boxes);
       if (track && dailyTrackValid(track)) return track;

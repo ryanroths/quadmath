@@ -165,11 +165,15 @@ test('daily generator: 64 seeds on every indoor map stay clear, spaced, and in-b
       metres /= WS_PER_METRE;
       assert.ok(minD >= spacing - 0.05, map.id + ' spacing ' + minD + ' < ' + spacing);
       assert.ok(metres >= range.minM && metres <= range.maxM, map.id + ' lap m ' + metres);
-      assert.ok(estimateLapSeconds(t.gates) > 3);
+      const est = estimateLapSeconds(t.gates);
+      assert.ok(est > 3);
+      if (map.id === 'trainer') assert.ok(est >= 22, map.id + ' short lap ' + est);
+      if (map.id === 'living' || map.id === 'garage') assert.ok(est >= 14, map.id + ' short lap ' + est);
       n++;
     }
   }
   assert.ok(n >= 60 * DAILY_MAPS.length, 'seed count ' + n);
+  assert.deepEqual(DAILY_MAPS.map((m) => m.id), ['living', 'garage', 'warehouse', 'office', 'gym', 'trainer']);
 });
 
 test('anti-cheat accepts a 3-lap pace ghost and rejects speed / incomplete / sparse', () => {
@@ -495,6 +499,56 @@ test('H1 server derives week track, rejects pace-bot/phys/class/week, claims nam
   const hashedA = await hashPilotToken(tokenA);
   const hashedB = await hashPilotToken(tokenB);
   assert.notEqual(hashedA, hashedB);
+});
+
+test('worker week/board/submit use weekly-YYYY-Wxx-g2 and do not mix old ids', async () => {
+  const { handleLeaderboard } = await import('../workers/sim-leaderboard/src/index.js');
+  const week = utcWeekId(NOW_W42);
+  const track = weeklyTrackFor(week);
+  assert.equal(week, '2026-W42');
+  assert.equal(track.id, 'weekly-2026-W42-g2');
+  assert.equal(track.id, weeklyIdFor(week));
+
+  const weekRes = await handleLeaderboard(new Request('https://x/api/week?week=' + week), {});
+  const weekBody = await weekRes.json();
+  assert.equal(weekBody.track.id, 'weekly-2026-W42-g2');
+  assert.notEqual(weekBody.track.id, 'weekly-2026-W42');
+
+  const db = fakeD1();
+  const env = { DB: db, ALLOWED_ORIGIN: 'https://quadmath.com' };
+  const ghost = humanRun(track);
+  const token = 'ef'.repeat(16);
+  const posted = await handleLeaderboard(new Request('https://x/api/submit', {
+    method: 'POST',
+    body: JSON.stringify({
+      week, frameMm: 65, name: 'Ry', timeMs: ghost.lapTime, ghost, track,
+      build: { frameMm: 65 }, token,
+    }),
+  }), env);
+  const postedBody = await posted.json();
+  assert.equal(posted.status, 200, postedBody.reason);
+  assert.equal(postedBody.ok, true);
+
+  const oldId = normalizeSubmit({
+    week, frameMm: 65, name: 'Ry', timeMs: ghost.lapTime, ghost,
+    track: 'weekly-2026-W42', build: { frameMm: 65 }, token,
+  }, NOW_W42);
+  assert.equal(oldId.ok, true, oldId.reason);
+  assert.equal(oldId.trackId, 'weekly-2026-W42-g2');
+
+  const board = await handleLeaderboard(new Request('https://x/api/board?week=' + week + '&class=65'), env);
+  const boardBody = await board.json();
+  assert.equal(boardBody.trackId, 'weekly-2026-W42-g2');
+  assert.equal(boardBody.entries.length, 1);
+  assert.equal(boardBody.entries[0].trackId, 'weekly-2026-W42-g2');
+
+  await db.prepare(
+    'INSERT INTO scores (week, class, name, time_ms, track_id, submitted_ms) VALUES (?, ?, ?, ?, ?, ?)',
+  ).bind(week, 65, 'OLD', 1000, 'weekly-2026-W42', Date.now()).run();
+  const mixed = await handleLeaderboard(new Request('https://x/api/board?week=' + week + '&class=65'), env);
+  const mixedBody = await mixed.json();
+  assert.equal(mixedBody.entries.every((row) => row.trackId === 'weekly-2026-W42-g2'), true);
+  assert.ok(!mixedBody.entries.some((row) => row.name === 'OLD'));
 });
 
 test('L4 only today\'s daily counts; missed-day streak resets on load', () => {
