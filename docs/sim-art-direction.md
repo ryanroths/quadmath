@@ -8,6 +8,7 @@ Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
 **Clay Parlor** ships on Living Room, **Volt Stall** ships on Garage, and
 **Ion Nave** ships on Warehouse.
 **Amber Court** ships on Gym.
+**Paper Sun** ships on Office.
 Remaining maps keep their current procedural rooms and pick up their vibe
 one map per PR.
 
@@ -106,7 +107,7 @@ The product target stays **60 fps desktop / 45+ mid phone**.
 
 Every row is original. Palette hex is the locked brand for that map. City
 (**Neon Current**), Living Room (**Clay Parlor**), Garage (**Volt Stall**), and
-Warehouse (**Ion Nave**), and Gym (**Amber Court**) are implemented. Remaining maps wait their turn.
+Warehouse (**Ion Nave**), Gym (**Amber Court**), and Office (**Paper Sun**) are implemented. Remaining maps wait their turn.
 
 ### City — Neon Current (prototype)
 
@@ -158,7 +159,7 @@ Warehouse (**Ion Nave**), and Gym (**Amber Court**) are implemented. Remaining m
 - **Gates:** Stone rings with gold leaf emissive.
 - **Post:** Warm haze, bloom off on Low.
 
-### Office — Paper Sun
+### Office — Paper Sun (shipped)
 
 - **Time:** 10 a.m. cartoon sun through blinds.
 - **Palette:** `#fff4d2` paper, `#ff5c5c` chair, `#3d7dff` screen, `#2ae59b` plant, `#1a1a1a` outline.

@@ -20,6 +20,8 @@ import {
   restyleWarehouse, tickWarehouseArt, warehouseBudget, warehouseWantsGlow,
   GYM_VIBE_ID, hideStockGymMeshes, buildAmberCourt,
   restyleGym, tickGymArt, gymBudget, gymWantsGlow,
+  OFFICE_VIBE_ID, hideStockOfficeMeshes, buildPaperSun,
+  restyleOffice, tickOfficeArt, officeBudget, officeWantsGlow,
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
@@ -45,7 +47,7 @@ test('every catalog map and daily host has a vibe with a full palette', () => {
   }
   for (const m of DAILY_MAPS) {
     assert.ok(VIBES[m.id], 'daily host ' + m.id);
-    if (m.id === 'living' || m.id === 'garage' || m.id === 'warehouse' || m.id === 'gym') assert.equal(VIBES[m.id].implemented, true);
+    if (m.id === 'living' || m.id === 'garage' || m.id === 'warehouse' || m.id === 'gym' || m.id === 'office') assert.equal(VIBES[m.id].implemented, true);
     else assert.equal(VIBES[m.id].implemented, false);
   }
 });
@@ -88,7 +90,7 @@ test('hexNum and vibeTable are stable helpers', () => {
   assert.equal(hexNum(0x88a0ff), 0x88a0ff);
   const table = vibeTable();
   assert.equal(table.length, 9);
-  assert.equal(table.filter((r) => r.implemented).length, 5);
+  assert.equal(table.filter((r) => r.implemented).length, 6);
 });
 
 test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {
@@ -100,6 +102,7 @@ test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {
   assert.match(art, /sim-art-garage\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-warehouse\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-gym\.js\?v=[0-9a-f]{12}/);
+  assert.match(art, /sim-art-office\.js\?v=[0-9a-f]{12}/);
   assert.equal(mentionsBannedAssets('assets/Models/GLB-format/tree-large.glb'), true);
   assert.equal(mentionsBannedAssets('buildCityDressing()'), false);
 });
@@ -117,6 +120,8 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.match(sim, /tickWarehouseArt|decorateWarehouseGate/);
   assert.match(sim, /applyGymArt|restyleGym/);
   assert.match(sim, /tickGymArt|decorateGymGate/);
+  assert.match(sim, /applyOfficeArt|restyleOffice/);
+  assert.match(sim, /tickOfficeArt|decorateOfficeGate/);
   assert.match(sim, /cbRain|quadmathSimRain|loadRain/);
   assert.match(sim, /skipStockCity|procedural neon city|Neon Current/);
   assert.equal(sim.includes('content/guides/'), false);
@@ -674,6 +679,73 @@ test('Gym freestyle builds without throwing and the FPV frame is not all black',
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickGymArt must not touch the THREE binding');
   assert.match(tickSrc, /gymRim|gymDust/);
+});
+
+test('Office Paper Sun is implemented with toon-hoop gates', () => {
+  assert.equal(OFFICE_VIBE_ID, 'office');
+  const v = VIBES.office;
+  assert.equal(v.implemented, true);
+  assert.equal(v.name, 'Paper Sun');
+  assert.equal(v.sky, 'none');
+  assert.equal(v.time, 'morning');
+  assert.equal(v.gates.keepBrand, false);
+  assert.equal(v.gates.style, 'toon-hoop');
+  assert.equal(v.post.bloom, false);
+  assert.equal(v.palette.neonA.toLowerCase(), '#ff5c5c');
+  assert.equal(v.lighting.fogColor, 0xfff4d2);
+  assert.equal(officeWantsGlow('low'), false);
+  assert.equal(officeWantsGlow('med'), true);
+  assert.equal(officeBudget('low').plants < officeBudget('high').plants, true);
+  assert.equal(officeBudget('low').glow, false);
+  assert.equal(officeBudget('med').glow, true);
+});
+
+test('Office freestyle builds without throwing and the FPV frame is not all black', () => {
+  installDomStub();
+  const officeSrc = readFileSync(join(root, 'sim-art-office.js'), 'utf8');
+  assert.equal(mentionsBannedAssets(officeSrc), false);
+  assert.match(officeSrc, /never abort the FPV render loop/);
+  assert.match(officeSrc, /CapsuleGeometry|LatheGeometry|ExtrudeGeometry/);
+  const free = freestyleTrack('office');
+  assert.equal(free.id, freestyleIdFor('office'));
+  assert.equal(free.gates.length, 0);
+  for (const q of ['low', 'med', 'high', 'auto']) {
+    const built = buildMap(THREE, 'office');
+    assert.doesNotThrow(() => hideStockOfficeMeshes(built.group));
+    const out = restyleOffice(THREE, {
+      vibe: vibeFor('office'),
+      quality: q,
+      group: built.group,
+      floor: built.floor,
+    });
+    assert.equal(out.error, undefined, q + ' restyleOffice ' + out.error);
+    assert.ok(out.visuals, q + ' visuals');
+    const hidden = [];
+    built.group.traverse((o) => {
+      if (o.userData && o.userData.artHidden) hidden.push(1);
+    });
+    assert.ok(hidden.length >= 8, q + ' hidden stock ' + hidden.length);
+    const vis = built.group.getObjectByName('officeArtVisuals');
+    assert.ok(vis, q + ' officeArtVisuals');
+    if (q === 'low') assert.equal(officeBudget('low').glow, false);
+    const stats = artStats(null, built.group);
+    assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    const frame = cityFrameLit(vis);
+    assert.ok(frame.meshes >= 8, q + ' meshes ' + frame.meshes);
+    assert.ok(frame.lit >= 8, q + ' lit materials ' + frame.lit);
+    assert.ok(frame.maxChan > 0.08, q + ' brightest channel ' + frame.maxChan);
+    assert.doesNotThrow(() => {
+      for (let i = 0; i < 8; i++) tickOfficeArt(built.group, 1000 + i * 16);
+    }, q + ' tickOfficeArt');
+    const parent = new THREE.Group();
+    assert.doesNotThrow(() => buildPaperSun(THREE, parent, vibeFor('office'), q, free.gates));
+  }
+  const tickSrc = officeSrc.slice(
+    officeSrc.indexOf('export function tickOfficeArt'),
+    officeSrc.indexOf('export function restyleOffice(THREE'),
+  );
+  assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickOfficeArt must not touch the THREE binding');
+  assert.match(tickSrc, /officeScreen|officePlant/);
 });
 
 test('art direction doc lists every map', () => {
