@@ -5,8 +5,9 @@ race line, leaderboard keys, ghosts, and daily/weekly seeds stay frozen.
 Nothing here is copied from a game, and nothing is taken from WebFPV (GPL).
 
 Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
-**Clay Parlor** ships next on Living Room. Remaining maps keep their current
-procedural rooms and pick up their vibe one map per PR.
+**Clay Parlor** ships on Living Room and **Volt Stall** ships on Garage.
+Remaining maps keep their current procedural rooms and pick up their vibe
+one map per PR.
 
 ## Inventory (today)
 
@@ -102,8 +103,8 @@ The product target stays **60 fps desktop / 45+ mid phone**.
 ## Vibe per map
 
 Every row is original. Palette hex is the locked brand for that map. City
-(**Neon Current**) and Living Room (**Clay Parlor**) are implemented. Remaining
-maps wait their turn.
+(**Neon Current**), Living Room (**Clay Parlor**), and Garage (**Volt Stall**)
+are implemented. Remaining maps wait their turn.
 
 ### City — Neon Current (prototype)
 
@@ -128,7 +129,7 @@ maps wait their turn.
 - **Gates:** Soft rounded clay rings, pastel emissive, no metal.
 - **Post:** Almost none. A light toon ramp on Med/High, bloom off.
 
-### Garage — Volt Stall
+### Garage — Volt Stall (shipped)
 
 - **Time:** Night, door cracked on a wet alley.
 - **Palette:** `#14161c` oil, `#ffb347` sodium, `#2de2e6` tube, `#3d4654` steel, `#c45a22` tool chest.

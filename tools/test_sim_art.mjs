@@ -14,6 +14,8 @@ import {
   paintWorldLabel, WORLD_LABEL, restyleCity, buildNeonCity, artStats, tickCityArt,
   restyleDiveTubes, LIVING_VIBE_ID, hideStockLivingMeshes, buildClayParlor,
   restyleLiving, tickLivingArt, livingBudget, livingWantsGlow,
+  GARAGE_VIBE_ID, hideStockGarageMeshes, buildVoltStall,
+  restyleGarage, tickGarageArt, garageBudget, garageWantsGlow,
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
@@ -39,7 +41,7 @@ test('every catalog map and daily host has a vibe with a full palette', () => {
   }
   for (const m of DAILY_MAPS) {
     assert.ok(VIBES[m.id], 'daily host ' + m.id);
-    if (m.id === 'living') assert.equal(VIBES[m.id].implemented, true);
+    if (m.id === 'living' || m.id === 'garage') assert.equal(VIBES[m.id].implemented, true);
     else assert.equal(VIBES[m.id].implemented, false);
   }
 });
@@ -82,7 +84,7 @@ test('hexNum and vibeTable are stable helpers', () => {
   assert.equal(hexNum(0x88a0ff), 0x88a0ff);
   const table = vibeTable();
   assert.equal(table.length, 9);
-  assert.equal(table.filter((r) => r.implemented).length, 2);
+  assert.equal(table.filter((r) => r.implemented).length, 3);
 });
 
 test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {
@@ -91,6 +93,7 @@ test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {
   assert.equal(art.includes('loadAsync'), false);
   assert.equal(art.includes('Sketchfab'), false);
   assert.match(art, /sim-art-living\.js\?v=[0-9a-f]{12}/);
+  assert.match(art, /sim-art-garage\.js\?v=[0-9a-f]{12}/);
   assert.equal(mentionsBannedAssets('assets/Models/GLB-format/tree-large.glb'), true);
   assert.equal(mentionsBannedAssets('buildCityDressing()'), false);
 });
@@ -102,6 +105,8 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.match(sim, /tickCityArt|pulseCityGate/);
   assert.match(sim, /applyLivingArt|restyleLiving/);
   assert.match(sim, /tickLivingArt|decorateLivingGate/);
+  assert.match(sim, /applyGarageArt|restyleGarage/);
+  assert.match(sim, /tickGarageArt|decorateGarageGate/);
   assert.match(sim, /cbRain|quadmathSimRain|loadRain/);
   assert.match(sim, /skipStockCity|procedural neon city|Neon Current/);
   assert.equal(sim.includes('content/guides/'), false);
@@ -446,6 +451,73 @@ test('Living freestyle builds without throwing and the FPV frame is not all blac
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickLivingArt must not touch the THREE binding');
   assert.match(tickSrc, /livingLamp|livingLantern|livingSteam/);
+});
+
+test('Garage Volt Stall is implemented with square neon gates', () => {
+  assert.equal(GARAGE_VIBE_ID, 'garage');
+  const v = VIBES.garage;
+  assert.equal(v.implemented, true);
+  assert.equal(v.name, 'Volt Stall');
+  assert.equal(v.sky, 'none');
+  assert.equal(v.time, 'night');
+  assert.equal(v.gates.keepBrand, false);
+  assert.equal(v.gates.style, 'square-neon');
+  assert.equal(v.post.bloom, true);
+  assert.equal(v.palette.neonA.toLowerCase(), '#ffb347');
+  assert.equal(v.lighting.fogColor, 0x14161c);
+  assert.equal(garageWantsGlow('low'), false);
+  assert.equal(garageWantsGlow('med'), true);
+  assert.equal(garageBudget('low').tubes < garageBudget('high').tubes, true);
+  assert.equal(garageBudget('low').glow, false);
+  assert.equal(garageBudget('med').glow, true);
+});
+
+test('Garage freestyle builds without throwing and the FPV frame is not all black', () => {
+  installDomStub();
+  const garageSrc = readFileSync(join(root, 'sim-art-garage.js'), 'utf8');
+  assert.equal(mentionsBannedAssets(garageSrc), false);
+  assert.match(garageSrc, /never abort the FPV render loop/);
+  assert.match(garageSrc, /CapsuleGeometry|LatheGeometry|ExtrudeGeometry/);
+  const free = freestyleTrack('garage');
+  assert.equal(free.id, freestyleIdFor('garage'));
+  assert.equal(free.gates.length, 0);
+  for (const q of ['low', 'med', 'high', 'auto']) {
+    const built = buildMap(THREE, 'garage');
+    assert.doesNotThrow(() => hideStockGarageMeshes(built.group));
+    const out = restyleGarage(THREE, {
+      vibe: vibeFor('garage'),
+      quality: q,
+      group: built.group,
+      floor: built.floor,
+    });
+    assert.equal(out.error, undefined, q + ' restyleGarage ' + out.error);
+    assert.ok(out.visuals, q + ' visuals');
+    const hidden = [];
+    built.group.traverse((o) => {
+      if (o.userData && o.userData.artHidden) hidden.push(1);
+    });
+    assert.ok(hidden.length >= 8, q + ' hidden stock ' + hidden.length);
+    const vis = built.group.getObjectByName('garageArtVisuals');
+    assert.ok(vis, q + ' garageArtVisuals');
+    if (q === 'low') assert.equal(garageBudget('low').glow, false);
+    const stats = artStats(null, built.group);
+    assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    const frame = cityFrameLit(vis);
+    assert.ok(frame.meshes >= 8, q + ' meshes ' + frame.meshes);
+    assert.ok(frame.lit >= 8, q + ' lit materials ' + frame.lit);
+    assert.ok(frame.maxChan > 0.08, q + ' brightest channel ' + frame.maxChan);
+    assert.doesNotThrow(() => {
+      for (let i = 0; i < 8; i++) tickGarageArt(built.group, 1000 + i * 16);
+    }, q + ' tickGarageArt');
+    const parent = new THREE.Group();
+    assert.doesNotThrow(() => buildVoltStall(THREE, parent, vibeFor('garage'), q, free.gates));
+  }
+  const tickSrc = garageSrc.slice(
+    garageSrc.indexOf('export function tickGarageArt'),
+    garageSrc.indexOf('export function restyleGarage(THREE'),
+  );
+  assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickGarageArt must not touch the THREE binding');
+  assert.match(tickSrc, /garageTube|garageSpark/);
 });
 
 test('art direction doc lists every map', () => {
