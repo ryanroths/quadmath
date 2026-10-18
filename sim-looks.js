@@ -855,6 +855,7 @@ export async function createLooks(ctx) {
       touch: 'quadmathSimTouch',
       flightMode: 'quadmathSimFlightMode',
       threeD: 'quadmathSim3D',
+      secrets: 'quadmathSimSecrets',
     };
     return out;
   }

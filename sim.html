@@ -159,6 +159,7 @@
     color:var(--orange);background:rgba(16,18,24,.85);border:1px solid rgba(255,77,26,.55);border-radius:10px;cursor:pointer}
   #portalFlash{position:fixed;inset:0;background:#B14EFF;opacity:0;pointer-events:none;
     transition:opacity .3s;z-index:15}
+  .menu-sparks{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:var(--dim);margin:8px 0 0}
   /* calibration overlay */
   #calib{position:fixed;inset:0;background:rgba(13,14,18,.92);z-index:20;display:none;
     align-items:center;justify-content:center;flex-direction:column;text-align:center}
@@ -367,6 +368,7 @@
       <button type="button" data-q="med">Med</button>
       <button type="button" data-q="high">High</button>
     </div>
+    <p class="menu-sparks" id="menuSparks"></p>
   </div>
   <div class="menu-layer" id="menuLayer"></div>
 </div>
@@ -745,7 +747,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=34e582665d37";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=2a985e7e1bb3";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=7ee7a2ce57cd";
 import {
   VIBES, vibeFor, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, loadRain, saveRain, RAIN_KEY,
@@ -804,6 +806,12 @@ import {
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
 } from "./sim-retention.js?v=3ad022ce389c";
+import {
+  SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
+  sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
+  catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
+  freestyleSecretsActive, placementsFor, isSecretsMap,
+} from "./sim-secrets.js?v=316970caffe8";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -911,6 +919,14 @@ const craftGroup=makeCraftGroup(THREE, SKINS[0]);
 scene.add(craftGroup);
 const skinTrail=makeSkinTrail(THREE, SKINS[0]);
 scene.add(skinTrail.line);
+const secrets=createSecrets(THREE,{
+  load:loadSecrets,save:saveSecrets,toast,
+  muted(){return !musicOn;},
+  skinProgress,onUnlock(skin){toast('UNLOCKED — '+skin.name.toUpperCase());applyActiveSkin();syncMenuSparks();},
+  onCollect(){syncMenuSparks();},onReveal(){syncMenuSparks();},
+});
+secrets.group.userData.keepInScene=true;
+scene.add(secrets.group);
 let chaseCamOn=false;
 let poseOk=false;
 const _chaseOff=new THREE.Vector3();
@@ -2427,6 +2443,7 @@ async function setMap(mapId,trackId,opts){
   const k=trackStatId(activeTrackId);
   if(ghosts[k]==null)ghosts[k]=loadGhost(k);
   if(defaultRivals[k]==null&&currentTrackObj&&currentTrackObj.gates&&currentTrackObj.gates.length)loadHostedGhost(k);
+  syncSecrets();
 }
 
 // ---------- Quad state ----------
@@ -3624,7 +3641,7 @@ function updateLapOSD(){
   const now=performance.now();
   osdLap.style.color=now<lapFlashUntil?'#3DDC97':''; // green flash on new best
   if(isFreestyleTrackId(activeTrackId)||!trackGates(activeTrackId).length){
-    osdLap.textContent='FREESTYLE';
+    osdLap.textContent=secretsLive()?'FREESTYLE · '+sparksLabel(currentMap, loadSecrets()):'FREESTYLE';
     return;
   }
   const id=ensureTrackStats(activeTrackId);
@@ -3783,7 +3800,7 @@ function toggleStartMenu(force){
   const next=force==null?!cur:!!force;
   if(looks)looks.setMenuOpen(next);
   else{el.classList.toggle('open',next);document.body.classList.toggle('menu-open',next);}
-  if(next)panel.classList.remove('open');
+  if(next){panel.classList.remove('open');syncMenuSparks();}
 }
 function syncQualityUI(){
   if(!looks)return;
@@ -3791,6 +3808,7 @@ function syncQualityUI(){
   if(currentMap==='living')applyLivingArt(looks.applied);
   if(currentMap==='garage')applyGarageArt(looks.applied);
   setIndoorLights(indoorLights,looks.applied);
+  if(secrets)secrets.setQuality(looks.applied);
   const q=looks.choice;
   document.querySelectorAll('#qualityBtns [data-q]').forEach(b=>b.classList.toggle('on',b.dataset.q===q));
   const sel=document.getElementById('qualityPanel');
@@ -3818,8 +3836,27 @@ function hideMenuLayer(){
   if(el)el.classList.remove('show');
 }
 function bestText(id){
+  if(id==='freestyle'||isFreestyleTrackId(id)){
+    const map=isFreestyleTrackId(id)?String(id).slice(0,-11):(pickerMap||currentMap);
+    return sparksLabel(map, loadSecrets());
+  }
   const k=ensureTrackStats(id);
   return bestLapMs[k]?fmtLap(bestLapMs[k]):'—';
+}
+function syncMenuSparks(){
+  const el=document.getElementById('menuSparks');
+  if(el)el.textContent=menuSparksText(loadSecrets());
+}
+function secretsLive(){
+  return freestyleSecretsActive(activeTrackId, currentMap)
+    && !(coach&&coach.isActive()) && !(feel&&feel.isTutorial()) && !builderOn;
+}
+function syncSecrets(){
+  try{
+    secrets.setQuality(looks&&looks.applied||'med');
+    secrets.attach(currentMap, secretsLive());
+    syncMenuSparks();
+  }catch(e){}
 }
 let pickerMap=currentMap;
 function roomFormHtml(){
@@ -3940,30 +3977,31 @@ function openBoardsCard(){
 }
 function openSkinsCard(){
   const prog=skinProgress();
-  const cur=resolveSkin(loadSkinId(), prog);
+  const found=loadSecrets();
+  const cur=resolveCatalogSkin(loadCatalogSkinId(), prog, found);
   const mini=skinMiniMarkup();
-  const rows=SKINS.map(s=>{
-    const on=isSkinUnlocked(s, prog);
+  const rows=allSkins().map(s=>{
+    const on=catalogSkinUnlocked(s, prog, found);
     const sel=s.id===cur.id?'on':'';
     const vibe=escapeHtml(s.vibe||'');
     const name=escapeHtml(s.name);
-    const need=escapeHtml(skinUnlockLabel(s));
+    const need=escapeHtml(catalogSkinLabel(s)||skinUnlockLabel(s));
     const state=on?(s.id===cur.id?'ON':'OPEN'):'LOCK';
     return '<button type="button" class="skin-row '+(on?'':'locked')+' '+sel+'" data-skin="'+s.id+'" style="'+skinCssVars(s)+'">'+
       mini+
       '<span class="skin-copy"><b>'+name+'</b><i>'+vibe+' · '+need+'</i></span>'+
       '<span class="skin-state">'+state+'</span></button>';
   }).join('');
-  showMenuLayer('<h2>Skins</h2><p>Frame, canopy, props, and an LED trail. Unlock more with coach medals, daily streak, and daily times.</p>'+
+  showMenuLayer('<h2>Skins</h2><p>Frame, canopy, props, and an LED trail. Unlock more with coach medals, daily streak, daily times, and hidden sparks.</p>'+
     '<div class="skin-list">'+rows+'</div>'+
     '<button type="button" id="layerClose">Close</button>');
   const layer=document.getElementById('menuLayer');
   if(layer)layer.classList.add('skins');
   document.querySelectorAll('.skin-row[data-skin]').forEach(b=>{
     b.onclick=()=>{
-      const s=SKINS.find(x=>x.id===b.dataset.skin);
-      if(!s||!isSkinUnlocked(s, prog)){toast('LOCKED');return;}
-      saveSkinId(s.id);
+      const s=catalogSkinById(b.dataset.skin);
+      if(!s||!catalogSkinUnlocked(s, prog, found)){toast('LOCKED');return;}
+      saveCatalogSkinId(s.id);
       applyActiveSkin();
       toast(s.name.toUpperCase());
       openSkinsCard();
@@ -5148,7 +5186,7 @@ function applySkinLook(skin){
   }
 }
 function applyActiveSkin(){
-  applySkinLook(resolveSkin(loadSkinId(), skinProgress()));
+  applySkinLook(resolveCatalogSkin(loadCatalogSkinId(), skinProgress(), loadSecrets()));
 }
 function ghostPayloadOf(id, samples, timeMs){
   return tagGhost({
@@ -5417,6 +5455,7 @@ function loop(now){
   if(currentMap==='city')tickCityArt(cityWorld,now);
   if(currentMap==='living')tickLivingArt(indoorWorld,now);
   if(currentMap==='garage')tickGarageArt(indoorWorld,now);
+  try{if(secrets&&secrets.active)secrets.tick(now,state.pos,dt);}catch(e){}
   if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
     readInput(dt);
     tickArming(padLive?((navigator.getGamepads&&navigator.getGamepads())||[])[gpIndex]:null);
@@ -5727,6 +5766,31 @@ function applyQueryBoot(){
     });
   }
   if(q.get('builder')==='1'){toggleStartMenu(false);openBuilder();}
+  const sparkQ=q.get('spark');
+  const secretQ=q.get('secret');
+  if((sparkQ||secretQ)&&secrets){
+    if(feel&&feel.hideFirstRun)feel.hideFirstRun();
+    const raw=String(sparkQ||secretQ);
+    const parts=raw.split(':');
+    const map=knownMapId(parts[0])||currentMap;
+    startFreestyle(map);
+    if(feel&&feel.hideFirstRun)feel.hideFirstRun();
+    toggleStartMenu(false);
+    const pack=placementsFor(map);
+    if(sparkQ){
+      const idx=Math.max(0, parseInt(parts[1],10)||0);
+      const p=pack.sparks[idx]||pack.sparks[0];
+      if(p)placeQuadAt(p.x, p.y+0.08, p.z+2.15, 0);
+    }else{
+      const hit=pack.secrets.find(s=>s.id===parts[1])||pack.secrets[0];
+      if(hit){
+        placeQuadAt(hit.x, hit.y+0.1, hit.z+2.2, 0);
+        secrets.revealIndex(pack.secrets.indexOf(hit));
+        toast('SECRET — '+String(hit.name).toUpperCase(),{ms:12000});
+      }
+    }
+  }
+  syncMenuSparks();
   syncBuildUI();
 }
 function publishTracks(){
@@ -5756,15 +5820,15 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   setCanopyOn(v){canopyOn=!!v;const el=document.getElementById('cbCanopy');if(el)el.checked=canopyOn;saveCanopyOn(canopyOn);updateCamera();},
   chaseCam:()=>chaseCamOn,
   setChaseCam(v){chaseCamOn=!!v;if(looks&&chaseCamOn)looks.setLookSpot(null);updateCamera();},
-  previewSkin(id){applySkinLook(skinById(id));},
-  openSkinsCard,SKINS,skinPalette,
+  previewSkin(id){applySkinLook(catalogSkinById(id));},
+  openSkinsCard,SKINS,SECRET_SKINS,skinPalette,SECRETS_KEY,secrets,placementsFor,isSecretsMap,
   crosshairEnabled:()=>crosshairOn,
   setCrosshairOn(v){crosshairOn=!!v;saveCrosshairOn(crosshairOn);applyCrosshair();},
   setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
   startFreestyle,leaveRace,resolveFly,isFreestyleTrackId,freestyleIdFor,persistableSelection,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
-  encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins});
+  encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets});
 </script>
 <!-- Flattened to single-line spans so the whole thing fits the fixed 14px bar.
      The .container wrappers and the opacity:.6 on the credit are gone: the
