@@ -427,6 +427,7 @@ test('known radios guess Mode 2 AETR and plug-and-fly without a saved map', () =
   assert.ok(rest.stick.t < 0.02, 'un-calibrated AETR rest -1 is throttle 0');
   assert.ok(simSrc.includes('detected, Mode 2 loaded'));
   assert.ok(simSrc.includes('toastRecalib') || simSrc.includes('Recalibrate'));
+  assert.ok(simSrc.includes('skipSafeUntil'), 'do not overwrite the plug-and-fly toast with STICKS SAFE');
   const feelSrc = readFileSync(join(root, 'sim-feel.js'), 'utf8');
   assert.ok(feelSrc.includes('id="feelRadio"') || feelSrc.includes('feelRadio'));
 });

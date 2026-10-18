@@ -155,8 +155,8 @@
     color:var(--orange);text-shadow:0 0 12px rgba(255,77,26,.6);pointer-events:none;opacity:0;
     transition:opacity .3s;text-align:center;max-width:90vw}
   #toast.has-action{pointer-events:auto}
-  #toast a,#toast button{display:inline-block;margin-top:10px;padding:6px 12px;font-size:13px;font-weight:600;
-    color:var(--txt);background:var(--glass);border:1px solid var(--line);border-radius:10px;cursor:pointer}
+  #toast a,#toast button{display:inline-block;width:auto;margin:10px auto 0;padding:6px 14px;font-size:13px;font-weight:600;
+    color:var(--orange);background:rgba(16,18,24,.85);border:1px solid rgba(255,77,26,.55);border-radius:10px;cursor:pointer}
   #portalFlash{position:fixed;inset:0;background:#B14EFF;opacity:0;pointer-events:none;
     transition:opacity .3s;z-index:15}
   /* calibration overlay */
@@ -3250,8 +3250,10 @@ function loadDeviceProfile(id,gp){
   }
   if(presetSel)presetSel.value=radioPreset;
 }
+let skipSafeUntil=0;
 function announcePlugAndFly(gp){
   const name=radioShortName(gp);
+  skipSafeUntil=performance.now()+3600;
   toast(name+' detected, Mode 2 loaded. Arm and fly<br><button type="button" id="toastRecalib">Recalibrate</button>',{html:true,ms:3200});
 }
 function flyWithRadio(){
@@ -3370,7 +3372,8 @@ function readInput(dt){
     if(armGate){
       const thrOk=throttleSafeToArm(stick.t,threeD);
       if(thrOk&&Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15&&Math.abs(stick.y)<0.15){
-        armGate=false;toast('STICKS SAFE — LIVE');
+        armGate=false;
+        if(performance.now()>skipSafeUntil)toast('STICKS SAFE — LIVE');
       }else stick.t=threeD?0.5:0;
     }
     if(map.arm&&feel){
