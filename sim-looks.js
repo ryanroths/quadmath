@@ -33,7 +33,8 @@ export const PRESETS = {
     shadowMapSize: 512,
     shadows: true,
     ao: false,
-    bloomScale: 0.5,
+    bloom: false,
+    bloomScale: 0,
     postSamples: 0,
     hdri: '1k',
     maps: 'albedo',
@@ -44,6 +45,7 @@ export const PRESETS = {
     shadowMapSize: 1024,
     shadows: true,
     ao: true,
+    bloom: true,
     bloomScale: 0.75,
     postSamples: 2,
     hdri: '1k',
@@ -55,6 +57,7 @@ export const PRESETS = {
     shadowMapSize: 2048,
     shadows: true,
     ao: true,
+    bloom: true,
     bloomScale: 1,
     postSamples: 4,
     hdri: '2k',
@@ -228,6 +231,7 @@ export async function createLooks(ctx) {
   let cityLighting = null;
   let skyMesh = null, sunSprite = null, groundMesh = null;
   let composer = null, bloomPass = null, aoPass = null, fpvPass = null, motionPass = null;
+  let skyMode = 'hdri';
   let env1k = null, env2k = null, envLevel = null;
   let texCache = {};
   let maxAniso = 8;
@@ -320,6 +324,8 @@ export async function createLooks(ctx) {
       new THREE.Vector2(1, 1),
       LIGHTING.bloomStrength, LIGHTING.bloomRadius, LIGHTING.bloomThreshold,
     );
+    const bootBloom = presetOf(applied);
+    bloomPass.enabled = bootBloom.bloom !== false && (bootBloom.bloomScale || 0) > 0;
     c.addPass(bloomPass);
     fpvPass = new ShaderPass({
       uniforms: {
@@ -374,9 +380,11 @@ export async function createLooks(ctx) {
     fetch(url).then((r) => mark(+r.headers.get('content-length') || 0)).catch(() => {});
     const tex = await new Loader().loadAsync(url);
     tex.mapping = THREE.EquirectangularReflectionMapping;
-    if (skyMesh) skyMesh.visible = false;
-    if (sunSprite) sunSprite.visible = false;
-    scene.background = tex;
+    if (skyMode !== 'gradient') {
+      if (skyMesh) skyMesh.visible = false;
+      if (sunSprite) sunSprite.visible = false;
+      scene.background = tex;
+    }
     const pmrem = new THREE.PMREMGenerator(renderer);
     const env = pmrem.fromEquirectangular(tex).texture;
     pmrem.dispose();
@@ -384,8 +392,21 @@ export async function createLooks(ctx) {
     return env;
   }
 
+  function applySkyModeNow() {
+    if (skyMode !== 'gradient') return;
+    if (skyMesh) skyMesh.visible = true;
+    if (sunSprite) sunSprite.visible = true;
+    if (scene.fog) scene.background = scene.fog.color;
+    if ('environmentIntensity' in scene) scene.environmentIntensity = 0.18;
+    if ('backgroundIntensity' in scene) scene.backgroundIntensity = 0.14;
+    if ('backgroundBlurriness' in scene) scene.backgroundBlurriness = 0.04;
+  }
   function applyEnv(env) {
     scene.environment = env;
+    if (skyMode === 'gradient') {
+      applySkyModeNow();
+      return;
+    }
     scene.background = env;
     if ('environmentIntensity' in scene) scene.environmentIntensity = 0.72;
     if ('backgroundIntensity' in scene) scene.backgroundIntensity = 0.48;
@@ -396,6 +417,13 @@ export async function createLooks(ctx) {
     if (skyMesh) skyMesh.visible = false;
     if (sunSprite) sunSprite.visible = false;
     scene.fog.color.setHex(LIGHTING.fogColor);
+  }
+  function setSkyMode(mode) {
+    skyMode = mode === 'gradient' ? 'gradient' : 'hdri';
+    if (skyMode === 'gradient') applySkyModeNow();
+    else if (envLevel === '2k' && env2k) applyEnv(env2k);
+    else if (env1k) applyEnv(env1k);
+    return skyMode;
   }
 
   async function ensureHdr(level) {
@@ -499,7 +527,7 @@ export async function createLooks(ctx) {
       loadSet('concrete', maps),
       loadSet('facade', maps),
     ]);
-    if (groundMesh && groundMesh.material) {
+    if (groundMesh && groundMesh.material && !(groundMesh.material.userData && groundMesh.material.userData.artLocked)) {
       const composed = composeGround(grass.diff, asphalt.diff, concrete.diff);
       const mat = groundMesh.material;
       if (mat.map && mat.map !== composed && mat.userData && mat.userData.looksComposed) {
@@ -612,12 +640,14 @@ export async function createLooks(ctx) {
     renderer.setPixelRatio(p.pixelRatio);
     applyLights(p);
     if (aoPass) aoPass.enabled = !!p.ao && !gpuHint(renderer).low;
+    if (bloomPass) bloomPass.enabled = p.bloom !== false && (p.bloomScale || 0) > 0;
     applyFpvUniforms();
     sizeComposer();
     if (ctx.onResize) ctx.onResize();
     try { await ensureHdr(p.hdri); } catch (e) { console.warn('looks HDRI', e); }
     try { await applyWorldMaps(); } catch (e) { console.warn('looks PBR', e); }
     applyMapLooksNow();
+    if (skyMode === 'gradient') applySkyModeNow();
     fps.lowMs = 0;
     return applied;
   }
@@ -809,6 +839,8 @@ export async function createLooks(ctx) {
     setMenuOpen,
     setOrbit,
     setMapLooks,
+    setSkyMode,
+    get skyMode() { return skyMode; },
     tick,
     afterFirstFrame,
     upgradeMaterials,

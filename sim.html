@@ -53,10 +53,9 @@
      forcing the column taller than the viewport. */
   #c{display:block;flex:1 1 auto;width:100%;min-height:0}
 
-  /* The site footer carries the CC BY credit for the city model. In normal flow
-     it sat below a full-height canvas and was unreachable with overflow:hidden,
-     so the licence notice was never actually displayed. Fixed to the bottom
-     edge above the canvas; virtual sticks sit above this 14px band.
+  /* Footer credit for the city. Phase 1 city is original procedural art
+     (Neon Current); the old costoWRLD CC BY line is retired while that GLB
+     is not loaded. Fixed to the bottom edge above the canvas.
      Kept to a 14px band: #legend reserves from 16px up and the bottom OSD
      readouts from 18px up, so this clears both without moving any of them. */
   footer{position:fixed;left:0;right:0;bottom:0;z-index:45;
@@ -516,6 +515,7 @@
     <option value="med">Med</option>
     <option value="high">High</option>
   </select>
+  <p class="build-note">Low turns bloom and AO off for phones.</p>
 
   <h2>Audio</h2>
   <div class="row"><label>Music volume</label><span class="val" id="v_musicVol"></span></div>
@@ -721,7 +721,10 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=34e582665d37";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=627c82048afa";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=e7d7a51fda17";
+import {
+  VIBES, vibeFor, restyleCity, decorateVibeGate, applyVibeLighting, artStats, qualityWantsBloom,
+} from "./sim-art.js?v=2d75de3d4f51";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -743,7 +746,7 @@ import {
   BUILTIN_TRACK_FILES, SHARE_PREFIX, applyMissPenalty, enteredGate,
   findTrackIn, resolveSimBoot, knownMapId, trackRefId,
 } from "./sim-tracks.js?v=1c814dba06e8";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=fa956cb845b3";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=945ee71dd491";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
@@ -1114,6 +1117,7 @@ function voxelColliders(obj,gridRes,snapToGrid){
   const ground=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400),
     new THREE.MeshStandardMaterial({map:gtex,roughness:0.95,metalness:0}));
   ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+  window._cityGround=ground;
   looksReady.then(function(l){if(l)l.attachGround(ground);});
 }
 
@@ -1179,6 +1183,7 @@ function addGate(x,y,z,rotationY,size,solidGate,trackId,parent){
   ring.position.set(x,y,z);ring.rotation.y=rotationY||0;
   ring.castShadow=ring.receiveShadow=true; // long thin ring shadow on the deck is the main read for gate height
   decorateGate(THREE,ring,size,col);
+  if((currentMap||'city')==='city')decorateVibeGate(THREE,ring,size,col,vibeFor('city'));
   (parent||raceGroup).add(ring);
   gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col,trackId:trackId,trackIdx:trackIdx,ry:rotationY||0,size:size,solid:!!solidGate}); // col = dim base color
   if(solidGate){
@@ -1427,447 +1432,8 @@ const proceduralGroup=new THREE.Group(); scene.add(proceduralGroup);
 let usingGltf=false;
 const assetEl=document.getElementById('assetStatus');
 window._tryAssets=async function(){
-  if(!await ensureGltf()){
-    assetEl.textContent='GLTFLoader blocked — procedural city active.';
-    return;
-  }
-  let manifest;
-  try{
-    const r=await fetch('assets/manifest.json');
-    if(!r.ok) throw 0;
-    manifest=await r.json();
-  }catch(e){
-    // manifest unavailable — built-in tile layout using the city-kit GLBs shipped in assets/
-    // (same format as the sample above: tiles scattered on grid blocks, placed = fixed landmarks)
-    manifest={
-      // all 14 building models ×2 = 28 scattered + 3 skyscraper landmarks ≈ 31 total
-      tiles:'abcdefghijklmn'.split('').map((c,i)=>({file:'building-'+c+'.glb',scale:4.5+(i%4)*0.5,count:2})),
-      placed:[
-        {file:'building-skyscraper-a.glb',x:-70,z:70,scale:8},
-        {file:'building-skyscraper-c.glb',x:120,z:-120,scale:8},
-        {file:'building-skyscraper-e.glb',x:-120,z:175,scale:7}
-      ]
-    };
-    assetEl.textContent='manifest.json unavailable — built-in city layout active.';
-  }
-  // The pipeline pulls ~40 GLBs one after another, one of them 46 MB, so a
-  // single static write here leaves the panel reading 'loading…' for tens of
-  // seconds while the procedural city renders behind it — indistinguishable
-  // from a hang. Report models done, plus byte percent for the big downloads.
-  let loadedCount=0;
-  function setLoading(extra){
-    assetEl.textContent='loading GLTF assets… '+loadedCount+' models'+(extra||'');
-  }
-  setLoading();
-  // GLBs reference "Textures/colormap.png" relative to themselves; the paired texture
-  // lives in assets/Models/GLB-format/Textures/, so load GLBs from that folder and
-  // anchor the resource path there so texture refs resolve to the real file.
-  const GLB_DIR='assets/Models/GLB-format/';
-  const loader=new GLTFLoader();
-  loader.setResourcePath(GLB_DIR);
-  const cache={};
-  async function load(file){
-    if(cache[file]) return cache[file];
-    const gltf=await loader.loadAsync(GLB_DIR+file,function(ev){
-      if(ev.lengthComputable&&ev.total>2e6)
-        setLoading(' — '+file+' '+Math.round(ev.loaded/ev.total*100)+'%');
-    });
-    gltf.scene.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}});
-    cache[file]=gltf.scene;
-    loadedCount++;setLoading();
-    return gltf.scene;
-  }
-  const placedRoot=new THREE.Group();
-  // voxelColliders is now declared top-level (near addCollider) so the
-  // tunnel — a synchronous, pre-GLTF structure — can use it too.
-  function place(src,x,z,scale,ry,voxel,gridRes){
-    const m=src.clone(true);
-    m.scale.setScalar(scale);m.position.set(x,0,z);m.rotation.y=ry||0;
-    placedRoot.add(m);
-    // Box3.setFromObject() only refreshes matrixWorld top-down through ITS OWN
-    // recursive call — calling it directly on a deep child (as the per-mesh
-    // branch below does) skips that cascade and reads a stale, pre-transform
-    // matrixWorld. m is freshly repositioned and never rendered yet, so force
-    // one explicit update before measuring anything under it.
-    m.updateMatrixWorld(true);
-    if(voxel){voxelColliders(m,gridRes||4);return;} // irregular structure — decompose, don't seal
-    // building colliders: one box per child mesh when multi-mesh (tighter fit
-    // on irregular shapes), each contracted ~12% (6% per side, capped by the
-    // smallest dimension so thin parts never invert) — quad can fly visually
-    // close before a hit registers. Bounce response elsewhere is unchanged.
-    const meshes=[];m.traverse(o=>{if(o.isMesh)meshes.push(o);});
-    for(const part of (meshes.length>1?meshes:[m])){
-      const bb=new THREE.Box3().setFromObject(part);
-      const sz=bb.getSize(new THREE.Vector3());
-      bb.expandByScalar(-Math.min(sz.x,sz.y,sz.z)*0.06);
-      colliders.push(bb);
-    }
-  }
-  try{
-    // scatter tiles on grid blocks (skip streets + spawn plaza)
-    const spots=[];
-    for(let gx=-4;gx<=4;gx++)for(let gz=-4;gz<=4;gz++){
-      if(gx===0||gz===0)continue;
-      if(Math.abs(gx)===1&&Math.abs(gz)===1)continue;
-      spots.push([gx*60,gz*60]);
-    }
-    let spotIdx=0; seed=4242;
-    // gate exclusion: skip any building landing within 15 units of a race gate center
-    const GATE_CLEAR=35;
-    function nearGate(x,z){
-      return gates.some(g=>{const dx=g.pos.x-x,dz=g.pos.z-z;return dx*dx+dz*dz<GATE_CLEAR*GATE_CLEAR;});
-    }
-    for(const t of (manifest.tiles||[])){
-      const src=await load(t.file);
-      for(let i=0;i<(t.count||10);i++){
-        const [cx,cz]=spots[spotIdx%spots.length];spotIdx++;
-        const x=cx+(rnd()-.5)*26,z=cz+(rnd()-.5)*26,sc=(t.scale||1)*(0.85+rnd()*0.4);
-        if(nearGate(x,z))continue; // keep the race line clear
-        place(src,x,z,sc,rnd()*Math.PI*2,true,5);
-      }
-    }
-    for(const p of (manifest.placed||[])){
-      if(nearGate(p.x,p.z))continue;
-      const src=await load(p.file);
-      place(src,p.x,p.z,p.scale||1,p.ry||0,true,5);
-    }
-    // code-placed extras: elevated overpasses + street-level awning details
-    async function placeAt(file,x,y,z,scale,ry,collide){
-      const m=(await load(file)).clone(true);
-      m.scale.setScalar(scale);m.position.set(x,y,z);m.rotation.y=ry||0;
-      placedRoot.add(m);
-      if(collide==='deck'){
-        // thin slab hugging the deck's TOP surface only — landable on top,
-        // everything below (including directly under the deck) stays flyable
-        const bb=new THREE.Box3().setFromObject(m);
-        bb.min.y=Math.max(bb.min.y,bb.max.y-2);
-        colliders.push(bb);
-      }else if(collide==='voxel'){
-        voxelColliders(m,4); // irregular single-mesh structure — decompose, don't seal
-      }else if(collide)colliders.push(new THREE.Box3().setFromObject(m));
-    }
-    // Kenney pillar asset, y-scaled so its top meets the deck height; x/z
-    // scale clamped independently so the column stays thin (footprint ≤3)
-    // whatever the model's proportions
-    async function placePillar(file,x,z,topY,ry){
-      const src=await load(file);
-      const nat=new THREE.Box3().setFromObject(src);
-      const h=Math.max(nat.max.y-nat.min.y,0.001);
-      const s=topY/h;
-      const natW=Math.max(nat.max.x-nat.min.x,nat.max.z-nat.min.z,0.001);
-      const sxz=(natW*s>4)?3/natW:s; // width check: >4 scaled → clamp to 3
-      const m=src.clone(true);
-      m.scale.set(sxz,s,sxz);m.position.set(x,0,z);m.rotation.y=ry||0;
-      placedRoot.add(m);
-      const bb=new THREE.Box3().setFromObject(m);
-      // contract ~15% of pillar width (7.5% per side) — weave close, no phantom hits
-      const w=Math.max(bb.max.x-bb.min.x,bb.max.z-bb.min.z);
-      bb.expandByScalar(-w*0.075);
-      colliders.push(bb);
-    }
-    // overpasses — road-bridge decks spanning the street corridors, flyable
-    // underneath. Voxel-decomposed (single-mesh GLB) so the deck surface
-    // collides while gaps in railings/trusses and the full underpass stay open.
-    await placeAt('road-bridge.glb',70,11,0,8,0,'voxel');
-    await placeAt('road-bridge.glb',0,15,-90,8,Math.PI/2,'voxel');
-    // support columns at the span ends only — underpass gap stays clear
-    await placePillar('bridge-pillar.glb',      52,   0, 11, 0);
-    await placePillar('bridge-pillar.glb',      88,   0, 11, 0);
-    await placePillar('bridge-pillar-wide.glb',  0,-104, 15, Math.PI/2);
-    await placePillar('bridge-pillar-wide.glb',  0, -76, 15, Math.PI/2);
-    // awning details near building blocks (no colliders, small dressing)
-    await placeAt('detail-awning.glb',      52,0, 38,5, 0);
-    await placeAt('detail-awning-wide.glb', -55,0, 62,5, Math.PI);
-    await placeAt('detail-awning.glb',     -62,0,-48,5, Math.PI/2);
-    await placeAt('detail-awning-wide.glb', 115,0,-65,5,-Math.PI/2);
-    await placeAt('detail-awning.glb',      38,0,115,5, Math.PI);
-    // ground clutter: trees, benches, trucks, dumpsters, scaffolding, stairs —
-    // seeded scatter with the same nearGate race-line exclusion as the tile pass
-    async function scatter(file,count,scale,mode,voxel,gridRes,trunkOnly){
-      const src=await load(file);
-      for(let i=0;i<count;i++){
-        let x,z;
-        if(mode==='road'){
-          // along the two main street corridors, off the exact centerline
-          if(rnd()<0.5){x=(rnd()-.5)*14;z=(rnd()-.5)*420;}
-          else{x=(rnd()-.5)*420;z=(rnd()-.5)*14;}
-        }else{
-          const [cx,cz]=spots[spotIdx%spots.length];spotIdx++;
-          if(mode==='edge'){
-            // building-adjacent: hug the block perimeter (alleys/sidewalks)
-            const a=rnd()*Math.PI*2;
-            x=cx+Math.cos(a)*24+(rnd()-.5)*4;
-            z=cz+Math.sin(a)*24+(rnd()-.5)*4;
-          }else{
-            x=cx+(rnd()-.5)*48;z=cz+(rnd()-.5)*48;
-          }
-        }
-        if(nearGate(x,z))continue; // keep the race line clear
-        const m=src.clone(true);
-        const actualScale=scale*(0.85+rnd()*0.3); // captured — trunk collider must match what's actually rendered, not the base param
-        m.scale.setScalar(actualScale);
-        m.position.set(x,0,z);m.rotation.y=rnd()*Math.PI*2;
-        placedRoot.add(m);
-        if(trunkOnly){
-          // trees: thin trunk-width collider only — canopy stays fully
-          // open/flyable, only the actual trunk registers a hit
-          addCollider(x,0,z,1.2,actualScale*0.65,1.2);
-        }else if(voxel){
-          voxelColliders(m,gridRes||3); // irregular single-mesh structure — decompose, don't seal
-        }else if(mode==='road'){
-          // trucks: thin low collider — minor obstacle, flyable just above
-          const bb=new THREE.Box3().setFromObject(m);
-          bb.max.y=Math.min(bb.max.y,bb.min.y+2);
-          colliders.push(bb);
-        }else if(mode!=='none')colliders.push(new THREE.Box3().setFromObject(m));
-      }
-    }
-    // trees — 18 total scattered across blocks as ground clutter. All use
-    // trunk-only collision now (addCollider, 1.2x(scale*0.65)x1.2 at the
-    // trunk) instead of the previous mixed voxel/whole-object/none
-    // treatment — canopy stays open, only the trunk is a real obstacle.
-    await scatter('tree-large.glb',5,20,undefined,false,undefined,true);
-    await scatter('tree-park-large.glb',5,18,undefined,false,undefined,true);
-    await scatter('tree-pine-large.glb',5,22,undefined,false,undefined,true);
-    await scatter('tree-shrub.glb',3,10,'none',false,undefined,true);
-    // benches near buildings
-    await scatter('detail-bench.glb',9,9,'edge');
-    // trucks on the street corridors
-    await scatter('truck-green.glb',2,12,'road');
-    await scatter('truck-grey.glb',2,12,'road');
-    await scatter('truck-green-cargo.glb',2,12,'road');
-    // dumpsters — alley / building-adjacent (already scattered, left as-is)
-    await scatter('detail-dumpster-closed.glb',3,10,'edge');
-    await scatter('detail-dumpster-open.glb',3,10,'edge');
-    // scaffolding — tall flyable obstacle beside buildings (structure already
-    // scattered at scale 18 from an earlier density pass; poles are new)
-    await scatter('scaffolding-structure.glb',4,18,'edge',true);
-    await scatter('scaffolding-poles.glb',6,12,'edge',true);
-    // stairs — ground-level detail (open bumped to match building density;
-    // center is new)
-    await scatter('stairs-open.glb',4,10,undefined,true,8);
-    await scatter('stairs-center.glb',5,10,undefined,true,8);
-    // pallets — small ground clutter, building-adjacent
-    await scatter('pallet.glb',6,6,'edge');
-    await scatter('pallet-small.glb',6,6,'edge');
-    // second explorable zone: complete single-piece sample structures (not
-    // the fragile wall-by-wall buildRoom approach) — southeast pocket at
-    // ~(380,-220), verified clear of the race gates, the main building
-    // grid's worst-case scatter reach (closest approach ~73u), and the mesa
-    // ring (farthest cluster point ~485u from origin vs the ring's 520u
-    // floor — deterministically safe since mesas never spawn closer than
-    // that). Nudged off the exact (350,-350) diagonal suggestion because
-    // that point sits right where the building grid's outer corner and the
-    // mesa ring's inner edge are both closest simultaneously.
-    const sampleCluster=[
-      ['building-sample-tower-a.glb',380,-220,18,0.3],
-      ['building-sample-house-a.glb',422,-205,16,1.1],
-      ['building-sample-tower-b.glb',388,-173,19,2.4],
-      ['building-sample-house-b.glb',342,-198,15,0.7],
-      ['building-sample-house-c.glb',340,-243,17,3.0],
-      ['building-sample-tower-c.glb',372,-263,20,1.8],
-      ['building-sample-tower-d.glb',416,-250,18,2.9],
-    ];
-    for(const [file,x,z,scale,ry] of sampleCluster){
-      const src=await load(file);
-      place(src,x,z,scale,ry,true); // voxel-decomposed — walls solid, patio openings stay flyable
-    }
-    // ---- low_poly_city_game-ready.glb — costoWRLD (Sketchfab, CC BY 4.0) ----
-    // https://sketchfab.com/3d-models/low-poly-city-game-ready-c7e3a158515c4e9da31ae52c30403cef
-    // One monolithic Sketchfab export: a single "Sketchfab_model" root with
-    // ~970 mesh nodes named generically (Object_0..Object_969, no per-building
-    // names) — confirmed offline by parsing the GLB's JSON chunk directly, and
-    // re-checked below at runtime. Not a modular kit, so it's placed as one
-    // scene rather than picked apart into reusable pieces.
-    {
-      const cityModel=await load('low_poly_city_game-ready.glb');
-      let nativeBox=new THREE.Box3().setFromObject(cityModel);
-      console.log('CITY BBOX min:',nativeBox.min.x.toFixed(1),nativeBox.min.y.toFixed(1),nativeBox.min.z.toFixed(1));
-      console.log('CITY BBOX max:',nativeBox.max.x.toFixed(1),nativeBox.max.y.toFixed(1),nativeBox.max.z.toFixed(1));
-      let nativeSize=nativeBox.getSize(new THREE.Vector3());
-      console.log('CITY BBOX size:',nativeSize.x.toFixed(1),nativeSize.y.toFixed(1),nativeSize.z.toFixed(1));
-      // diagnostic only — log every sub-mesh's name + size to find the
-      // dome/ground/backdrop mesh (likely the largest, or named accordingly)
-      // before deciding what to strip. Nothing removed yet.
-      // matrixWorld isn't guaranteed fresh on a just-loaded, never-rendered
-      // scene when Box3.setFromObject() is called directly on a deep child
-      // (it only self-corrects via its own top-down recursive cascade when
-      // called on the node you pass it, not on children measured one-off) —
-      // force one update first so these sizes are trustworthy.
-      cityModel.updateMatrixWorld(true);
-      console.log('=== CITY sub-mesh inventory ===');
-      cityModel.traverse(child=>{
-        if(child.isMesh){
-          const b=new THREE.Box3().setFromObject(child);
-          console.log(child.name,(b.max.x-b.min.x).toFixed(1),(b.max.y-b.min.y).toFixed(1),(b.max.z-b.min.z).toFixed(1));
-        }
-      });
-      // strip the dome/sky mesh (Object_1723, size matched the full model
-      // bbox exactly) and the base ground plane (Object_1725, flat 488x0x488)
-      // — identified from the inventory above by size, since every mesh in
-      // this export is named generically. Both caused the visible bubble.
-      // Collect first, remove after — mutating .children mid-traverse skips
-      // siblings (these two are adjacent in the hierarchy).
-      const STRIP_NAMES=new Set(['Object_1723','Object_1725']);
-      const toStrip=[];
-      cityModel.traverse(child=>{
-        if(child.isMesh&&STRIP_NAMES.has(child.name))toStrip.push(child);
-      });
-      for(const child of toStrip){
-        if(child.parent)child.parent.remove(child);
-      }
-      console.log('CITY meshes stripped:',toStrip.map(c=>c.name).join(', ')||'(none found)');
-      // recompute AFTER stripping — the pre-strip box's min.y was set by the
-      // now-removed dome mesh (Object_1723), so the ground-offset formula
-      // below would over-lift the model by that mesh's extra depth if it
-      // kept using the stale box (confirmed: this was exactly the source of
-      // the observed float — dome min.y -13.16 vs real geometry min.y -0.62)
-      nativeBox=new THREE.Box3().setFromObject(cityModel);
-      nativeSize=nativeBox.getSize(new THREE.Vector3());
-      console.log('CITY BBOX (post-strip) min.y:',nativeBox.min.y.toFixed(2));
-      // non-uniform scale: XZ 2.9 keeps the footprint reasonable, Y 5.0
-      // boosts height to match Kenney skyscraper scale (~110u tall) without
-      // over-widening the footprint the way a uniform scale would
-      console.log('CITY SCALE applied: xz 2.9 y 5.0');
-      // pure distant backdrop — pushed to ~3111 units from map center, well
-      // beyond any flyable range (mesa ring tops out at 820). Skyline
-      // silhouette only; not meant to be approached or flown through.
-      const cx=-2200,cz=2200;
-      const m=cityModel.clone(true);
-      m.scale.set(2.9,5.0,2.9);
-      // sit the model's own lowest point on the ground plane (y=0) — offset
-      // uses the Y scale specifically now that XZ/Y are no longer uniform
-      m.position.set(cx,-nativeBox.min.y*5.0,cz);
-      placedRoot.add(m);
-      m.updateMatrixWorld(true);
-      // fully non-collidable — pure visual landmark, fly through freely.
-      // Box3 computed only for logging below, never pushed to colliders.
-      const placedBox=new THREE.Box3().setFromObject(m);
-      // diagnostic: is the pure formula actually landing at y=0, or is a
-      // GLTF pivot offset / nested transform introducing the observed float?
-      console.log('CITY PLACED min.y (should be ~0):',placedBox.min.y.toFixed(2));
-      console.log('CITY placed bbox size:',
-        (placedBox.max.x-placedBox.min.x).toFixed(1),
-        (placedBox.max.y-placedBox.min.y).toFixed(1),
-        (placedBox.max.z-placedBox.min.z).toFixed(1));
-    }
-    // ---- Dreamland — small self-contained zone at the portal destination
-    // (1500,1500), distinct dreamlike mood from the main city ----
-    {
-      const DX=1500,DZ=1500;
-      // 1. ground — 300x300 plane, purple-to-blue gradient with a faint
-      // star-speckle, distinct from the main map's dirt/road texture. The
-      // main 1400x1400 ground plane only reaches to ±700, nowhere near
-      // (1500,1500), so without this the destination was bare void.
-      const dreamTex=canvasTex(512,512,(g,s)=>{
-        const grad=g.createLinearGradient(0,0,0,s);
-        grad.addColorStop(0,'#3a2a6b');
-        grad.addColorStop(0.5,'#5b4a9e');
-        grad.addColorStop(1,'#7a6bc4');
-        g.fillStyle=grad;g.fillRect(0,0,s,s);
-        for(let i=0;i<500;i++){
-          const v=rnd();
-          g.fillStyle=`rgba(255,255,255,${(0.15+v*0.35).toFixed(2)})`;
-          g.fillRect(rnd()*s,rnd()*s,1+rnd()*1.5,1+rnd()*1.5);
-        }
-      },1,1);
-      const dreamGround=new THREE.Mesh(new THREE.PlaneGeometry(300,300),
-        new THREE.MeshStandardMaterial({map:dreamTex,roughness:0.9}));
-      dreamGround.rotation.x=-Math.PI/2;
-      dreamGround.position.set(DX,0,DZ);
-      dreamGround.receiveShadow=true;
-      cityWorld.add(dreamGround);
-
-      // 2. compact 5-gate mini-loop, ~80 unit radius, varied height 5-15 —
-      // reuses addGate() for the exact same visual construction, then
-      // immediately strips the entries back out of the shared `gates`
-      // array so the main 10-gate race/lap sequence is completely
-      // unaffected (the visual rings stay in the scene either way, since
-      // scene.add already happened inside addGate before the splice) —
-      // visual-only bonus mini-course, no lap-counter integration
-      const mainGateCount=gates.length;
-      const loopR=80;
-      const loopSpecs=[
-        {ang:0,   h:8,   size:7},
-        {ang:72,  h:12,  size:6},
-        {ang:144, h:6,   size:8},
-        {ang:216, h:15,  size:5.5},
-        {ang:288, h:10,  size:7},
-      ];
-      for(const s of loopSpecs){
-        const rad=s.ang*Math.PI/180;
-        const gx=DX+Math.cos(rad)*loopR,gz=DZ+Math.sin(rad)*loopR;
-        addGate(gx,s.h,gz,rad+Math.PI/2,s.size,false,0,cityWorld);
-      }
-      gates.length=mainGateCount; // strip back out — main race untouched
-
-      // 3. scattered dressing — trees + sample towers around the perimeter
-      // (all well outside the 80-radius gate loop), for scale reference in
-      // otherwise-empty space. Same voxel-decomposed collision treatment
-      // as their main-map counterparts.
-      async function dreamPlace(file,x,z,scale,trunkOnly){
-        const src=await load(file);
-        if(trunkOnly){
-          // trees: same trunk-only treatment as the main map — thin
-          // trunk-width collider only, canopy stays open/flyable
-          const m=src.clone(true);
-          m.scale.setScalar(scale);
-          m.position.set(x,0,z);m.rotation.y=rnd()*Math.PI*2;
-          placedRoot.add(m);
-          addCollider(x,0,z,1.2,scale*0.65,1.2);
-        }else{
-          place(src,x,z,scale,rnd()*Math.PI*2,true);
-        }
-      }
-      await dreamPlace('tree-large.glb',              DX-130, DZ+60,  20, true);
-      await dreamPlace('tree-large.glb',              DX+140, DZ-40,  20, true);
-      await dreamPlace('tree-large.glb',              DX-40,  DZ-140, 20, true);
-      await dreamPlace('tree-pine-large.glb',          DX+60,  DZ+130, 22, true);
-      await dreamPlace('tree-pine-large.glb',          DX-140, DZ-60,  22, true);
-      await dreamPlace('tree-pine-large.glb',          DX+120, DZ+100, 22, true);
-      await dreamPlace('building-sample-tower-a.glb',  DX+100, DZ-120, 18);
-      await dreamPlace('building-sample-tower-b.glb',  DX-120, DZ+90,  19);
-      await dreamPlace('building-sample-tower-c.glb',  DX+20,  DZ+140, 17);
-
-      // 4. bonus dive shaft — same mechanic as the main map's, own location
-      // and slightly different proportions so it doesn't feel like a copy-paste
-      diveShaft(DX-130, DZ+20, 10, 80, 16);
-
-      // 5. localized ambient tweak — a soft, wide-falloff cool-purple point
-      // light centered on the zone, distance-capped so it can't reach back
-      // to the main city (2100+ units away, far outside its 450-unit
-      // falloff). Makes Dreamland read as its own place immediately on
-      // arrival without globally re-tinting the main map's lighting.
-      const dreamLight=new THREE.PointLight(0x8f6bff,0.6*Math.PI,450,2);
-      dreamLight.position.set(DX,120,DZ);
-      cityWorld.add(dreamLight);
-    }
-    // swap: hide procedural, clear its colliders (rebuilt above)
-    cityWorld.add(placedRoot);
-    proceduralGroup.visible=false;
-    // remove procedural colliders (they were added first, before gltf)
-    colliders.splice(0,proceduralColliderCount);
-    usingGltf=true;
-    assetEl.textContent='GLTF city loaded: '+placedRoot.children.length+' objects.';
-    toast('GLTF ASSETS LOADED');
-    if(looks)looks.upgradeMaterials(placedRoot);
-    // Nothing left to report once the swap is done — the toast already said it.
-    // Leaving a permanent status row in the tune panel is just dead chrome.
-    setTimeout(function(){
-      const h=document.getElementById('assetHead');
-      if(h)h.style.display='none';
-      assetEl.style.display='none';
-    },6000);
-  }catch(e){
-    assetEl.textContent='GLTF load failed: '+e.message+' — procedural city active.';
-  }finally{
-    // Belt and braces: any exit path that reaches neither branch above must not
-    // strand the panel mid-sentence. Failure text stays put — it is terminal too.
-    if(/^loading GLTF assets/.test(assetEl.textContent))
-      assetEl.textContent=usingGltf?'GLTF city loaded.':'procedural city active.';
-    wrapCityWorld();
-    snapCityColliders();
-  }
+  // Phase 1: Neon Current. Kenney / costoWRLD GLBs stay on disk but are not loaded.
+  return finishCityArt();
 };
 
 // ---------- Procedural city (fallback / default) ----------
@@ -2489,10 +2055,53 @@ for(let i=0;i<7;i++){
   scene.add(mesa);
 }
 window._heavyAssetsPending=true;
+function applyCityArt(quality){
+  const vibe=vibeFor('city');
+  restyleCity(THREE,{
+    vibe,
+    quality:quality||(looks&&looks.applied)||'med',
+    proceduralGroup,
+    ground:window._cityGround,
+    skyMesh,sunSprite,cityWorld,scene,
+    LIGHTING,sun,sunFill,hemi,renderer,
+    bloomPass:looks&&looks.bloomPass,
+  });
+  if(looks&&looks.setSkyMode)looks.setSkyMode('gradient');
+}
+async function finishCityArt(){
+  window._skipStockCity=true;
+  try{
+    applyCityArt(looks&&looks.applied);
+    if(window._dreamlandBonus)return;
+    window._dreamlandBonus=true;
+    const DX=1500,DZ=1500,loopR=80;
+    const mainGateCount=gates.length;
+    const loopSpecs=[
+      {ang:0,h:8,size:7},{ang:72,h:12,size:6},{ang:144,h:6,size:8},
+      {ang:216,h:15,size:5.5},{ang:288,h:10,size:7},
+    ];
+    for(const s of loopSpecs){
+      const rad=s.ang*Math.PI/180;
+      addGate(DX+Math.cos(rad)*loopR,s.h,DZ+Math.sin(rad)*loopR,rad+Math.PI/2,s.size,false,0,cityWorld);
+    }
+    gates.length=mainGateCount;
+    diveShaft(DX-130,DZ+20,10,80,16);
+    if(assetEl)assetEl.textContent='procedural neon city (Neon Current).';
+  }finally{
+    wrapCityWorld();
+    snapCityColliders();
+    usingGltf=false;
+    setTimeout(function(){
+      const h=document.getElementById('assetHead');
+      if(h)h.style.display='none';
+      if(assetEl)assetEl.style.display='none';
+    },4000);
+  }
+}
 function startHeavyAssets(){
   if(!window._heavyAssetsPending)return;
   window._heavyAssetsPending=false;
-  window._tryAssets();
+  finishCityArt();
 }
 
 function wrapCityWorld(){
@@ -2506,6 +2115,7 @@ function wrapCityWorld(){
   for(const c of move)cityWorld.add(c);
 }
 wrapCityWorld();
+applyCityArt();
 function snapCityColliders(){
   cityColliderSnap=colliders.filter(c=>c._tag!=='gate').slice();
 }
@@ -2603,9 +2213,17 @@ function applyRoomSpec(raw,andFly){
   return t;
 }
 function applyMapLooks(mapId){
-  const spec=MAP_LOOKS[mapId]||MAP_LOOKS.city;
+  const vibe=vibeFor(mapId);
+  const spec=(vibe&&vibe.looks)||MAP_LOOKS[mapId]||MAP_LOOKS.city;
   if(looks&&looks.setMapLooks)looks.setMapLooks(spec);
   if(looks&&looks.setOrbit)looks.setOrbit(MAP_ORBIT[mapId]||MAP_ORBIT.city);
+  if(looks&&looks.setSkyMode)looks.setSkyMode(vibe&&vibe.sky==='gradient'?'gradient':'hdri');
+  if(mapId==='city'){
+    applyVibeLighting({
+      LIGHTING,sun,sunFill,hemi,scene,renderer,
+      bloomPass:looks&&looks.bloomPass,
+    },vibe);
+  }
   if(skyMesh)skyMesh.visible=mapId==='city'||mapId==='backyard';
   if(sunSprite)sunSprite.visible=mapId==='city'||mapId==='backyard';
   setIndoorLights(indoorLights,looks?looks.applied:'med');
@@ -3958,6 +3576,7 @@ function toggleStartMenu(force){
 }
 function syncQualityUI(){
   if(!looks)return;
+  if(currentMap==='city')applyCityArt(looks.applied);
   setIndoorLights(indoorLights,looks.applied);
   const q=looks.choice;
   document.querySelectorAll('#qualityBtns [data-q]').forEach(b=>b.classList.toggle('on',b.dataset.q===q));
@@ -5871,6 +5490,7 @@ fetchBuiltinTracks().then(list=>{
 });
 Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
+  artStats:()=>artStats(renderer,cityWorld),vibe:()=>vibeFor(currentMap),VIBES,qualityWantsBloom,
   QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,canopyGroup,
   canopyEnabled:()=>canopyOn,
   setCanopyOn(v){canopyOn=!!v;const el=document.getElementById('cbCanopy');if(el)el.checked=canopyOn;saveCanopyOn(canopyOn);updateCamera();},
@@ -5887,7 +5507,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
 <footer>
   <a class="sf-logo" href="/" aria-label="Back to QuadMath">← QuadMath<span class="dot">.</span></a>
   <span class="sf-note">Estimates only — always verify with bench testing. Fly safe.</span>
-  <span class="sf-credit">City model by costoWRLD (Sketchfab, CC BY)</span>
+  <span class="sf-credit">City is original procedural art — Neon Current</span>
 </footer>
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
