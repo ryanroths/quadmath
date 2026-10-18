@@ -1,7 +1,7 @@
 // QuadMath sim V1 looks — environment, PBR, AO, FPV lens, quality presets.
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv.
-import { resolveAutoQuality } from './sim-touch.js?v=bf6cd8074ebe';
+import { resolveAutoQuality } from './sim-touch.js?v=9f7b6149d497';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';

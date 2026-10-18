@@ -153,7 +153,10 @@
   .kbd b{color:var(--txt);font-weight:600}
   #toast{position:fixed;top:44%;left:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:700;
     color:var(--orange);text-shadow:0 0 12px rgba(255,77,26,.6);pointer-events:none;opacity:0;
-    transition:opacity .3s;text-align:center}
+    transition:opacity .3s;text-align:center;max-width:90vw}
+  #toast.has-action{pointer-events:auto}
+  #toast a,#toast button{display:inline-block;margin-top:10px;padding:6px 12px;font-size:13px;font-weight:600;
+    color:var(--txt);background:var(--glass);border:1px solid var(--line);border-radius:10px;cursor:pointer}
   #portalFlash{position:fixed;inset:0;background:#B14EFF;opacity:0;pointer-events:none;
     transition:opacity .3s;z-index:15}
   /* calibration overlay */
@@ -266,6 +269,9 @@
     border-radius:12px;background:var(--glass);backdrop-filter:blur(12px);font-size:11px;min-width:108px}
   .feel-meta span{color:var(--txt)}
   #hudArm.on{color:var(--green)}
+  #hudArmHint{display:none;color:var(--orange);font-size:10px;line-height:1.3;max-width:148px;margin-top:2px}
+  #hudArmHint.show{display:block}
+  #s_wash{width:auto;min-width:72px;margin:0;padding:4px 6px}
   #feelTutorial{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:13;display:none;
     width:min(420px,92vw);padding:14px 16px;background:var(--glass);border:1px solid var(--line);
     border-radius:16px;backdrop-filter:blur(16px);text-align:center}
@@ -410,6 +416,7 @@
     <span id="hudBatt">BATT --</span>
     <span id="hudMode">ANGLE</span>
     <span id="hudArm">DISARMED</span>
+    <span id="hudArmHint">Throttle down + Space/arm switch to arm</span>
     <button type="button" id="hudAcro">ACRO</button>
     <button type="button" id="hud3d" aria-pressed="false">3D</button>
   </div>
@@ -581,9 +588,14 @@
   <div class="row"><label>Ground effect</label><input type="checkbox" id="cbGround" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Cushion</label><span class="val" id="v_ground"></span></div>
   <input type="range" id="s_ground" min="0" max="2" step="0.05" value="1" title="Extra lift near the floor. Stronger on light whoops / bigger props.">
-  <div class="row"><label>Propwash wobble</label><input type="checkbox" id="cbWash" checked style="accent-color:var(--orange)"></div>
-  <div class="row"><label style="padding-left:14px">↳ Wash</label><span class="val" id="v_wash"></span></div>
-  <input type="range" id="s_wash" min="0" max="2" step="0.05" value="0.7" title="Wobble when you dive or chop throttle through your own wash.">
+  <div class="row"><label>Propwash wobble</label><input type="checkbox" id="cbWash" checked style="accent-color:var(--orange)">
+    <select id="s_wash" title="Subtle wobble only when you descend into your own wash at low throttle.">
+      <option value="off">Off</option>
+      <option value="low" selected>Low</option>
+      <option value="med">Med</option>
+      <option value="high">High</option>
+    </select>
+  </div>
   <div class="row"><label>Indoor drafts</label><input type="checkbox" id="cbDraft" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Drafts</label><span class="val" id="v_draft"></span></div>
   <input type="range" id="s_draft" min="0" max="2" step="0.05" value="0.55" title="Light turbulence near walls. Stronger on small indoor whoops.">
@@ -687,14 +699,15 @@ import {
   THREED_KEY, THREED_DEADBAND,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
   parseThreeDQuery, runCountsForBoards, throttleHudText,
-} from "./sim-3d.js?v=be7be3c97578";
+  throttleCollective, armHintText,
+} from "./sim-3d.js?v=c554edbc97ce";
 import {
   WHOOP_KEY, PHYSICS_VER,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
-  emptyWake, tagGhost, ghostSamples,
-} from "./sim-whoop.js?v=5d2aeafb4839";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=a977981bbe0c";
+  emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
+} from "./sim-whoop.js?v=11a0da16c7bc";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=f2ba71f3e4ec";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -702,7 +715,8 @@ import {
   sanitizeId, isRadio, radioScore, RADIO_PRESETS,
   effectiveAxisMap, applyAxisMap, loadRadioProfile, saveAxisMap,
   saveRadioPreset, clearRadioCalibration, GP_ID_KEY, createCalibState, stepCalib, skipCalibAux,
-} from "./sim-touch.js?v=bf6cd8074ebe";
+  guessRadioPreset, isKnownRadio, radioShortName,
+} from "./sim-touch.js?v=9f7b6149d497";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -718,7 +732,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=19bee552695d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=b4de21d738bd";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=2dcf2fc286ca";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -3221,20 +3235,47 @@ function listPads(){
   for(const gp of pads)if(gp)out.push(gp);
   return out;
 }
-function loadDeviceProfile(id){
+function loadDeviceProfile(id,gp){
   const prof=loadRadioProfile(id);
   radioPreset=prof.radioPreset;
   axisMap=prof.axisMap;
-  presetSel.value=radioPreset;
+  // No saved calib: known radios (TX16S / EdgeTX / RadioMaster / Jumper / FrSky)
+  // get Mode 2 AETR with full ±1 throttle. Wizard stays optional.
+  if(!axisMap && gp && isKnownRadio(gp)){
+    const guessed=guessRadioPreset(gp);
+    if(guessed!=='pad' && (radioPreset==='auto' || !(RADIO_PRESETS[radioPreset]&&RADIO_PRESETS[radioPreset].map))){
+      radioPreset=guessed;
+      saveRadioPreset(id, radioPreset);
+    }
+  }
+  if(presetSel)presetSel.value=radioPreset;
+}
+function announcePlugAndFly(gp){
+  const name=radioShortName(gp);
+  toast(name+' detected, Mode 2 loaded. Arm and fly<br><button type="button" id="toastRecalib">Recalibrate</button>',{html:true,ms:3200});
+}
+function flyWithRadio(){
+  sessionLive=true;
+  toggleStartMenu(false);
+  enableTouchLayer(false);
+  if(feel){
+    feel.hideFirstRun();
+    feel.saveInputChoice('radio');
+  }
 }
 function selectPad(gp,remember){
   gpIndex=gp.index;gpConnected=true;gpName=gp.id;
   if(remember)try{localStorage.setItem(GP_ID_KEY,gp.id);}catch(e){}
-  loadDeviceProfile(gp.id);   // per-device preset + calibration
+  loadDeviceProfile(gp.id,gp);   // per-device preset + calibration
   armGate=true;               // block throttle until sticks proven safe once
   enableTouchLayer(false);    // radio wins; empty Chrome polls must not mix touch
-  toast(radioScore(gp)===2?'RADIO SELECTED':'GAMEPAD SELECTED');
   updateRadioInfo();
+  if(isKnownRadio(gp)){
+    flyWithRadio();
+    announcePlugAndFly(gp);
+    return;
+  }
+  toast(radioScore(gp)===2?'RADIO SELECTED':'GAMEPAD SELECTED');
   if(feel&&feel.promptOpen)feel.showFirstRun({hasGamepad:true,gpName,mobile:mobileHint});
   else if(feel&&(sessionLive||feel.loadInputChoice()==='keyboard'))feel.onGamepadConnected({gpName});
 }
@@ -3316,19 +3357,12 @@ function readInput(dt){
     if(!gp)return;
     if(calib){runCalib(gp,dt);stick.r=stick.p=stick.y=0;stick.t=0;return;}
     const map=effectiveAxisMap(axisMap,radioPreset,gp);
-    const next=applyAxisMap(gp.axes,map);
+    const next=applyAxisMap(gp.axes,map,{threeD});
     stick.r=next.r;stick.p=next.p;stick.y=next.y;stick.t=next.t;
     // Radio-only pilots make no keyboard or mouse gesture, so a stick deflection
     // is what unlocks audio for them. Roll/pitch/yaw only — a ratcheted TX16S
     // throttle sits wherever it was left and would fire this with no gesture.
     if(!musicStarted&&(Math.abs(stick.r)>0.15||Math.abs(stick.p)>0.15||Math.abs(stick.y)>0.15))startMusic();
-    // Spring pads: applyAxisMap clamps -traw to 0..1 (center = 0). 3D needs the
-    // full bipolar range so center is zero thrust, below center is reverse.
-    // Ratcheted radios keep applyAxisMap's calibrated 0..1 (center detent = 0.5).
-    if(threeD&&map.t&&map.t.spring){
-      const traw=gp.axes[map.t.i];
-      stick.t=THREE.MathUtils.clamp((1-(Number.isFinite(traw)?traw:0))/2,0,1);
-    }
     // safety gate: after connect/device change, throttle stays dead until the
     // sticks have been seen safe once (throttle <5%, r/p/y near center) — a
     // pad plugged in mid-flight or a wrong map can't punch the quad away.
@@ -3628,10 +3662,7 @@ function physics(dt){
   // Throttle curve stays here; the module applies the Betaflight idle floor
   // itself, so the old idlePct blend is gone. Disarmed = no throttle to the FC.
   // 3D: map 0..1 stick through a center deadband onto -1..1 collective.
-  const throttle=qp.armed
-    ?(threeD?mapThrottle3d(stick.t,{curve:CFG.thrCurve,deadband:THREED_DEADBAND})
-      :Math.pow(Math.max(0,Math.min(1,stick.t)),CFG.thrCurve))
-    :0;
+  const throttle=qp.armed?throttleCollective(stick.t,threeD,CFG.thrCurve):0;
 
   qp.step(dt,qpSetpoint,throttle,stick);
   syncStateFromQp();
@@ -3696,8 +3727,17 @@ function updateLapOSD(){
   osdLap.innerHTML=html;
 }
 const toastEl=document.getElementById('toast');let toastTimer;
-function toast(m){toastEl.textContent=m;toastEl.style.opacity=1;
-  clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.style.opacity=0,1500);}
+function toast(m,opts){
+  const o=opts||{};
+  toastEl.classList.toggle('has-action',!!o.html);
+  if(o.html){
+    toastEl.innerHTML=m;
+    const rec=document.getElementById('toastRecalib');
+    if(rec)rec.onclick=function(e){e.preventDefault();startCalib();};
+  }else toastEl.textContent=m;
+  toastEl.style.opacity=1;
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toastEl.style.opacity=0;toastEl.classList.remove('has-action');},o.ms||1500);
+}
 function updateOSD(){
   const spd=(state.vel.length()*3.6).toFixed(0),alt=state.pos.y.toFixed(1);
   const t=((performance.now()-state.t0)/1000)|0;
@@ -4371,7 +4411,7 @@ function persistWhoopFromUI(){
     ground:on('cbGround'),
     groundStr:parseFloat(g('s_ground').value),
     wash:on('cbWash'),
-    washStr:parseFloat(g('s_wash').value),
+    washStr:washStrFromLevel((g('s_wash')||{}).value),
     batt:on('cbBattSim'),
     sagThrust:on('cbSagThrust'),
     sagStr:parseFloat(g('s_sag').value),
@@ -4390,7 +4430,7 @@ function syncWhoopUI(){
   set('cbBounce',s.bounce);sl('s_bounce',s.bounceStr);lab('v_bounce',Math.round(s.bounceStr*100)+'%');
   sl('s_crash',s.crashSpeed);lab('v_crash',s.crashSpeed.toFixed(1));
   set('cbGround',s.ground);sl('s_ground',s.groundStr);lab('v_ground',Math.round(s.groundStr*100)+'%');
-  set('cbWash',s.wash);sl('s_wash',s.washStr);lab('v_wash',Math.round(s.washStr*100)+'%');
+  set('cbWash',s.wash);sl('s_wash',washLevelFromStr(s.washStr));
   set('cbDraft',s.draft);sl('s_draft',s.draftStr);lab('v_draft',Math.round(s.draftStr*100)+'%');
   set('cbBattSim',s.batt);set('cbSagThrust',s.sagThrust);
   sl('s_sag',s.sagStr);lab('v_sag',Math.round(s.sagStr*100)+'%');
@@ -4418,7 +4458,8 @@ document.getElementById('cb3d').onchange=e=>{
 ['cbBounce','s_bounce','s_crash','cbGround','s_ground','cbWash','s_wash','cbDraft','s_draft','s_sag'].forEach(id=>{
   const el=document.getElementById(id);
   if(!el)return;
-  el.addEventListener('input',()=>{persistWhoopFromUI();syncWhoopUI();});
+  const ev=el.tagName==='SELECT'||el.type==='checkbox'?'change':'input';
+  el.addEventListener(ev,()=>{persistWhoopFromUI();syncWhoopUI();});
 });
 syncWhoopUI();
 // drone-type presets — applied by driving the physics sliders through their
@@ -5334,7 +5375,7 @@ function loop(now){
     updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();updateDust(dt);
     if(feel){
       state.stickT=stick.t;
-      feel.updateHud({stick,battV,battOn:CFG.battSimOn,mode:qp.flightMode,armed:qp.armed,threeD,thrText:throttleHudText(stick.t,threeD)});
+      feel.updateHud({stick,battV,battOn:CFG.battSimOn,mode:qp.flightMode,armed:qp.armed,threeD,thrText:throttleHudText(stick.t,threeD),armHint:armHintText(threeD)});
       feel.tickTutorial(state,dt,qp.armed);
       const att=qp.attitude;
       feel.noteFlip({
@@ -5490,6 +5531,7 @@ function bootTouchLayer(){
 feel=createFeel({
   THREE,scene,toast,decorateGate,LIGHTING,
   onCalibrate(){sessionLive=true;toggleStartMenu(false);startCalib();enableTouchLayer(false);},
+  onRadio(){flyWithRadio();if(gpConnected)announcePlugAndFly({id:gpName});else toast('PLUG A RADIO — USB JOYSTICK');},
   onKeyboard(){setFlightMode('angle',false);toast('KEYBOARD — SPACE TO ARM');enableTouchLayer(false);},
   onTouch(){
     if(gpConnected){

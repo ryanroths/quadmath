@@ -9,6 +9,7 @@ import {
   THREED_KEY, THREED_DEADBAND, THREED_REVERSE_SCALE, THREED_ARM_BAND,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
   parseThreeDQuery, runCountsForBoards, throttleHudText,
+  throttleCollective, armHintText,
 } from '../sim-3d.js';
 import { REVERSE_THRUST_SCALE } from '../quadphysics.js';
 import { createTouchControls } from '../sim-touch.js';
@@ -113,6 +114,11 @@ test('sim.html wires 3D toggle, HUD, query, and board skip', () => {
   assert.ok(simSrc.includes('runCountsForBoards'));
   assert.ok(simSrc.includes('3D IS ACRO ONLY') || simSrc.includes('3D ON — ACRO'));
   assert.ok(simSrc.includes('CENTER THROTTLE TO ARM'));
+  assert.ok(simSrc.includes('throttleCollective') || src3d.includes('throttleCollective'));
+  assert.equal(armHintText(false), 'Throttle down + Space/arm switch to arm');
+  assert.ok(throttleCollective(1, false, 0.68) > 0.9);
+  assert.ok(throttleCollective(1, true, 0.68) > 0.9);
+  assert.equal(throttleCollective(0.5, true, 0.68), 0);
   assert.ok(simSrc.includes('3D OFF FOR COACH'));
   assert.ok(simSrc.includes('mapThrottle3d'));
   assert.ok(simSrc.includes('THREED_KEY') || simSrc.includes('quadmathSim3D') || simSrc.includes('loadThreeD'));

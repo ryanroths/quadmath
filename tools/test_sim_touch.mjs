@@ -120,6 +120,7 @@ test('auto quality is low on mobile; touch enable / landscape rules', () => {
   assert.equal(resolveAutoQuality({}), 'med');
   assert.equal(shouldEnableTouch({ inputChoice: 'touch' }), true);
   assert.equal(shouldEnableTouch({ inputChoice: 'keyboard', mobile: true }), false);
+  assert.equal(shouldEnableTouch({ inputChoice: 'radio', mobile: true }), false);
   assert.equal(shouldEnableTouch({ mobile: true }), true);
   assert.equal(shouldEnableTouch({}), false);
   assert.equal(shouldEnableTouch({ inputChoice: 'touch', hasGamepad: true }), false);
@@ -204,6 +205,8 @@ test('first-run prompt keeps keyboard/calibrate and adds Touch', () => {
   assert.ok(feelSrc.includes('feelTouch') || feelSrc.includes('id="feelTouch"'));
   assert.ok(feelSrc.includes('onTouch'));
   assert.ok(feelSrc.includes('Fly with keyboard') || feelSrc.includes('feelKeys'));
+  assert.ok(feelSrc.includes('id="feelRadio"') || feelSrc.includes('feelRadio'));
+  assert.ok(feelSrc.includes("v === 'radio'") || feelSrc.includes("v==='radio'"));
   assert.ok(feelSrc.includes('Touch sticks stay off while a radio is connected'));
 });
 

@@ -76,3 +76,18 @@ export function throttleHudText(stick01, threeD) {
   if (pct === 0) return 'THR 0%';
   return 'THR ' + (pct > 0 ? '+' : '') + pct + '%';
 }
+
+// Same curve sim.html feeds QuadPhysics. 3D is -1..1; 2D is 0..1 post-exponent.
+export function throttleCollective(stick01, threeD, curve) {
+  if (threeD) return mapThrottle3d(stick01, { curve, deadband: THREED_DEADBAND });
+  const t = clamp(stick01, 0, 1);
+  const exp = Number(curve);
+  const e = Number.isFinite(exp) && exp > 0 ? exp : 1;
+  return Math.pow(t, e);
+}
+
+export function armHintText(threeD) {
+  return threeD
+    ? 'Center throttle + Space/arm switch to arm'
+    : 'Throttle down + Space/arm switch to arm';
+}

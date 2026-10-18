@@ -46,7 +46,7 @@ export const RATE_PRESETS = {
 export function loadInputChoice() {
   try {
     const v = localStorage.getItem(INPUT_CHOICE_KEY);
-    if (v === 'keyboard' || v === 'calibrate' || v === 'touch') return v;
+    if (v === 'keyboard' || v === 'calibrate' || v === 'touch' || v === 'radio') return v;
   } catch (e) { /* ignore */ }
   return null;
 }
@@ -118,7 +118,7 @@ function stepCopy(step) {
 export function createFeel(ctx) {
   const {
     THREE, scene, toast, decorateGate, LIGHTING,
-    onCalibrate, onKeyboard, onTouch, onTryLap, onSkipTutorial, onToggleAcro, onToggleThreeD,
+    onCalibrate, onKeyboard, onTouch, onRadio, onTryLap, onSkipTutorial, onToggleAcro, onToggleThreeD,
   } = ctx;
 
   let hudVisible = true;
@@ -182,6 +182,12 @@ export function createFeel(ctx) {
       hudArm.textContent = on ? 'ARMED' : 'DISARMED';
       hudArm.classList.toggle('on', on);
     }
+    const hint = document.getElementById('hudArmHint');
+    if (hint) {
+      const text = s.armed ? '' : (s.armHint || 'Throttle down + Space/arm switch to arm');
+      hint.textContent = text;
+      hint.classList.toggle('show', !s.armed && !!text);
+    }
     const acro = document.getElementById('hudAcro');
     if (acro) {
       const mode = String(s.mode || 'angle').toLowerCase();
@@ -214,12 +220,12 @@ export function createFeel(ctx) {
     const name = (info && info.gpName) ? String(info.gpName).slice(0, 48) : '';
     const title = has ? 'Controller / radio detected' : 'No controller';
     const lead = has
-      ? (name ? name : 'Gamepad connected') + ' — calibrate sticks, or fly with the keyboard. Touch sticks stay off while a radio is connected.'
+      ? (name ? name : 'Gamepad connected') + ' — one click on Radio and you are flying. Mode 2 AETR is already loaded. Calibrate only if a stick is wrong. Touch sticks stay off while a radio is connected.'
       : (mobile
         ? 'Fly with on-screen sticks, or plug in a radio (Joystick mode) and wiggle a stick.'
         : 'Fly with the keyboard, or plug in a radio (Joystick mode) and wiggle a stick.');
     // Hide keyboard only on real phones (detectMobile). Chrome desktop
-    // ontouchstart / maxTouchPoints must not hide Calibrate/Keyboard for a TX16S.
+    // ontouchstart / maxTouchPoints must not hide Radio/Keyboard for a TX16S.
     const kbBtn = touchy && mobile ? '' : '<button type="button" id="feelKeys">Fly with keyboard</button>';
     const touchHtml = has
       ? '<button type="button" id="feelTouch">Touch sticks</button>'
@@ -227,13 +233,14 @@ export function createFeel(ctx) {
         ? '<button type="button" class="primary" id="feelTouch">Touch sticks</button>'
         : '<button type="button" id="feelTouch">Touch sticks</button>');
     const buttons = has
-      ? '<button type="button" class="primary" id="feelCalib">Calibrate</button>' +
+      ? '<button type="button" class="primary" id="feelRadio">Radio</button>' +
+        '<button type="button" id="feelCalib">Calibrate</button>' +
         kbBtn +
         touchHtml
       : (mobile
         ? touchHtml + kbBtn
         : '<button type="button" class="primary" id="feelKeys">Fly with keyboard</button>' + touchHtml) +
-        '<p class="menu-lead" style="margin-top:10px">TX16S: USB Joystick, then wiggle. This prompt comes back if a pad connects.</p>';
+        '<p class="menu-lead" style="margin-top:10px">TX16S: USB Joystick, then wiggle. Radio is plug-and-fly (Mode 2). Calibrate is optional.</p>';
     promptEl.innerHTML =
       '<div class="menu-card feel-card">' +
         '<div class="menu-brand">QuadMath</div>' +
@@ -254,6 +261,12 @@ export function createFeel(ctx) {
       saveInputChoice('touch');
       hideFirstRun();
       if (onTouch) onTouch();
+    };
+    const radioBtn = document.getElementById('feelRadio');
+    if (radioBtn) radioBtn.onclick = function () {
+      saveInputChoice('radio');
+      hideFirstRun();
+      if (onRadio) onRadio();
     };
     const cal = document.getElementById('feelCalib');
     if (cal) cal.onclick = function () {
