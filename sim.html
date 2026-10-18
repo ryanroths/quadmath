@@ -214,7 +214,7 @@
   .menu-layer button{width:auto;margin-top:12px}
   body.menu-open #legend,body.menu-open #audioHint,body.menu-open #gear,body.menu-open #fpsHud,
     body.menu-open .osd,body.menu-open #feelHud,body.menu-open #feelTutorial,body.menu-open #coachHud,
-    body.menu-open #touchLayer{opacity:0;pointer-events:none}
+    body.menu-open #trickHud,body.menu-open #trickScore,body.menu-open #touchLayer{opacity:0;pointer-events:none}
   body:has(#panel.open) #feelHud{opacity:0}
   .seg{display:flex;gap:6px;margin-bottom:10px}
   #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#camTiltPreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
@@ -251,7 +251,7 @@
   #builderList li.on{color:var(--orange)}
   body.builder-on #legend,body.builder-on #audioHint,body.builder-on #gear,body.builder-on #fpsHud,
   body.builder-on .osd,body.builder-on #startMenu,body.builder-on #feelHud,body.builder-on #feelTutorial,body.builder-on #coachHud,
-  body.builder-on #touchLayer{opacity:0;pointer-events:none}
+  body.builder-on #trickHud,body.builder-on #trickScore,body.builder-on #touchLayer{opacity:0;pointer-events:none}
   #calib{z-index:60}
   body.calibrating #touchLayer,body.calibrating #feelPrompt,body.calibrating #startMenu{opacity:0;pointer-events:none}
   #feelPrompt{position:fixed;inset:0;z-index:26;display:none;align-items:center;justify-content:center;
@@ -531,6 +531,7 @@
   <div class="row"><label>Motion blur</label><input type="checkbox" id="cbMotionBlur" style="accent-color:var(--orange)"></div>
   <div class="row"><label>Show canopy</label><input type="checkbox" id="cbCanopy" style="accent-color:var(--orange)"></div>
   <div class="row"><label>Show crosshair</label><input type="checkbox" id="cbCrosshair" style="accent-color:var(--orange)"></div>
+  <div class="row"><label>Trick HUD</label><input type="checkbox" id="cbTricksHud" checked style="accent-color:var(--orange)" title="Freestyle combo meter. Hidden in races."></div>
 
   <h2>Quality</h2>
   <select id="qualityPanel">
@@ -794,6 +795,9 @@ import {
   COACH_KEY, createCoach, drillById, roomDoorway,
 } from "./sim-coach.js?v=d3cc6ce75e05";
 import {
+  TRICKS_KEY, createTricks,
+} from "./sim-tricks.js";
+import {
   DAILY_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
   isDailyTrackId, isWeeklyTrackId, encodeDuel, decodeQm2, duelResult, fmtMs,
@@ -991,6 +995,7 @@ let composer=null,bloomPass=null;   // set once the looks post chain finishes
 let looks=null;
 let feel=null;
 let coach=null;
+let tricks=null;
 function resize(){
   const w=canvas.clientWidth||1,h=canvas.clientHeight||1;
   renderer.setSize(w,h,false);
@@ -2440,6 +2445,7 @@ async function setMap(mapId,trackId,opts){
   lastPassedGate=null;
   updateGateUI();updateGateHighlight();
   if(persist)saveSelected({map:currentMap,track:activeTrackId,mode:isFreeFlight(currentTrackObj,activeTrackId)?'free':'race'});
+  try{if(tricks){tricks.setMap(currentMap);tricks.setActive(isFreeFlight(currentTrackObj,activeTrackId),currentMap);}}catch(e){}
   const k=trackStatId(activeTrackId);
   if(ghosts[k]==null)ghosts[k]=loadGhost(k);
   if(defaultRivals[k]==null&&currentTrackObj&&currentTrackObj.gates&&currentTrackObj.gates.length)loadHostedGhost(k);
@@ -2460,6 +2466,7 @@ let thrustActual=0; // spooled thrust in WORLD newtons — audio + battery load 
 // G*gravMult the hand-rolled physics used.
 const WS=3.5;                    // world units per real metre
 const FLOOR_Y=FLOOR_CLEARANCE_M*WS; // ~1 cm pad in world units
+const trickSample={qx:0,qy:0,qz:0,qw:1,ox:0,oy:0,oz:0,wx:0,wy:0,wz:0,alt:0,speed:0,vz:0,clearance:1,throttle:0,armed:false,colliders:null,ws:WS};
 // Module frame is Z-up / X-forward / Y-left; three.js is Y-up and, for this
 // scene, -Z-forward (the camera looks down its own -Z).
 //
@@ -2525,10 +2532,11 @@ function applyDuctHit(s,normal,into,floorHit){
   },currentBuild,whoopSettings);
   _cv.set(hit.vel.x,hit.vel.y,hit.vel.z);
   s.omega.x=hit.omega.x;s.omega.y=hit.omega.y;s.omega.z=hit.omega.z;
-  if(hit.crashed){
+    if(hit.crashed){
     bounce();
     camShake=Math.max(camShake,Math.min(1.4,into/16));
     if(coach&&coach.isActive())coach.noteCrash();
+    try{if(tricks&&!(coach&&coach.isActive()))tricks.noteCrash();}catch(e){}
   }else{
     camShake=Math.max(camShake,Math.min(0.45,into/28));
   }
@@ -2657,6 +2665,7 @@ function placeQuadAt(x,y,z,yaw){
   armSwState={prev:null};
   armSwitchBlocked=false;
   clearSkinTrail(skinTrail);
+  try{if(tricks)tricks.resetDetector&&tricks.resetDetector();}catch(e){}
 }
 function resetQuad(){
   // Crash / flip recovery: R respawns at the last passed JSON-track gate and
@@ -2664,6 +2673,7 @@ function resetQuad(){
   // Coach drills respawn on their pad and do not start a race ghost.
   // No last gate → map start (city historic pad, indoor startPad).
   const tut=feel&&feel.isTutorial();
+  try{if(tricks&&!tut&&!(coach&&coach.isActive()))tricks.noteReset();}catch(e){}
   if(coach&&coach.isActive()){
     const p=coach.spawn();
     if(p)placeQuadAt(p.x,p.y,p.z,p.yaw);
@@ -3837,8 +3847,13 @@ function hideMenuLayer(){
 }
 function bestText(id){
   if(id==='freestyle'||isFreestyleTrackId(id)){
-    const map=isFreestyleTrackId(id)?String(id).slice(0,-11):(pickerMap||currentMap);
-    return sparksLabel(map, loadSecrets());
+    const map=isFreestyleTrackId(id)?String(id).slice(0,-'-freestyle'.length):(pickerMap||currentMap||'city');
+    const combo=tricks?tricks.bestLine(map):'—';
+    const sparks=sparksLabel(map, loadSecrets());
+    if(combo==='—' && (!sparks || sparks==='—')) return '—';
+    if(combo==='—') return sparks;
+    if(!sparks || sparks==='—') return combo;
+    return combo+' · '+sparks;
   }
   const k=ensureTrackStats(id);
   return bestLapMs[k]?fmtLap(bestLapMs[k]):'—';
@@ -4022,7 +4037,7 @@ function openTrackPicker(startMap){
       return '<button type="button" class="'+on+'" data-tid="'+id+'"><span>'+t.name+'</span><span class="best">'+bestText(id)+'</span></button>';
     }).join('')||'<p>No tracks on this map.</p>';
     const roomBlock=pickerMap==='room'?roomFormHtml():'';
-    showMenuLayer('<h2>Tracks</h2><p>Freestyle is no gates and no timer. Other rows are races. Best lap is local.</p>'+
+    showMenuLayer('<h2>Tracks</h2><p>Freestyle is no gates and no timer. Combo / session are local. Other rows are races. Best lap is local.</p>'+
       '<div class="track-maps">'+maps+'</div>'+
       roomBlock+
       '<div class="track-list">'+rows+'</div>'+
@@ -4347,6 +4362,11 @@ function wireLooksUI(){
       saveCrosshairOn(crosshairOn);
       applyCrosshair();
     };
+  }
+  const tricksCb=document.getElementById('cbTricksHud');
+  if(tricksCb&&tricks){
+    tricksCb.checked=tricks.hudOn();
+    tricksCb.onchange=()=>tricks.setHudOn(!!tricksCb.checked);
   }
   if(looks)looks.setMenuOpen(true);
   syncQualityUI();
@@ -5489,6 +5509,23 @@ function loop(now){
         crashed:false,
       });
     }
+    try{
+      if(tricks&&!(coach&&coach.isActive())){
+        const q=qp.quaternion,om=qp.omega;
+        trickSample.qx=q.x;trickSample.qy=q.y;trickSample.qz=q.z;trickSample.qw=q.w;
+        trickSample.ox=om.x;trickSample.oy=om.y;trickSample.oz=om.z;
+        trickSample.wx=state.pos.x;trickSample.wy=state.pos.y;trickSample.wz=state.pos.z;
+        trickSample.alt=qp.position.z;
+        trickSample.speed=Math.hypot(qp.velocity.x,qp.velocity.y,qp.velocity.z);
+        trickSample.vz=qp.velocity.z;
+        trickSample.clearance=qp.groundClearance?qp.groundClearance(qp):qp.position.z;
+        trickSample.throttle=stick.t;
+        trickSample.armed=qp.armed;
+        trickSample.colliders=colliders;
+        trickSample.ws=WS;
+        tricks.tick(trickSample,dt);
+      }
+    }catch(e){}
   }
   updateCamera();
   if(craftGroup&&craftGroup.visible){
@@ -5661,6 +5698,16 @@ coach=createCoach({
   onCancel(){},
 });
 window._coach=coach;
+tricks=createTricks({
+  document,
+  storage:typeof localStorage!=='undefined'?localStorage:null,
+  muted:()=>!musicOn,
+  now:()=>performance.now()*0.001,
+});
+try{tricks.setActive(isFreeFlight(currentTrackObj,activeTrackId),currentMap);}catch(e){}
+window._tricks=tricks;
+const tricksCbBoot=document.getElementById('cbTricksHud');
+if(tricksCbBoot)tricksCbBoot.checked=tricks.hudOn();
 applyActiveSkin();
 const coachRetry=document.getElementById('coachRetry');
 if(coachRetry)coachRetry.onclick=()=>{
@@ -5821,14 +5868,15 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   chaseCam:()=>chaseCamOn,
   setChaseCam(v){chaseCamOn=!!v;if(looks&&chaseCamOn)looks.setLookSpot(null);updateCamera();},
   previewSkin(id){applySkinLook(catalogSkinById(id));},
-  openSkinsCard,SKINS,SECRET_SKINS,skinPalette,SECRETS_KEY,secrets,placementsFor,isSecretsMap,
+  openSkinsCard,openTrackPicker,SKINS,SECRET_SKINS,skinPalette,SECRETS_KEY,secrets,placementsFor,isSecretsMap,
   crosshairEnabled:()=>crosshairOn,
   setCrosshairOn(v){crosshairOn=!!v;saveCrosshairOn(crosshairOn);applyCrosshair();},
   setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
   startFreestyle,leaveRace,resolveFly,isFreestyleTrackId,freestyleIdFor,persistableSelection,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
-  encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets});
+  encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,
+  TRICKS_KEY,tricks});
 </script>
 <!-- Flattened to single-line spans so the whole thing fits the fixed 14px bar.
      The .container wrappers and the opacity:.6 on the credit are gone: the
