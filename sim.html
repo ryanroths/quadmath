@@ -329,7 +329,10 @@
   .skin-mini{width:104px;height:104px;flex-shrink:0;display:block}
   .skin-mini .sk-prop{fill:var(--sk-prop);opacity:.35}
   .skin-mini .sk-blade{stroke:var(--sk-prop);fill:none;stroke-width:2.2;stroke-linecap:round;opacity:.95}
-  .skin-mini .sk-duct{fill:none;stroke:var(--sk-frame);stroke-width:5}
+  .skin-mini .sk-duct-edge,.skin-mini .sk-frame-edge{fill:none;stroke:var(--sk-stroke);stroke-linecap:round}
+  .skin-mini .sk-duct-edge{stroke-width:7}
+  .skin-mini .sk-frame-edge{stroke-width:6}
+  .skin-mini .sk-duct{fill:none;stroke:var(--sk-frame);stroke-width:4}
   .skin-mini .sk-frame{stroke:var(--sk-frame);fill:none;stroke-width:3.5;stroke-linecap:round}
   .skin-mini .sk-body{fill:var(--sk-body)}
   .skin-mini .sk-canopy{fill:var(--sk-canopy)}
@@ -791,7 +794,7 @@ import {
   skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
-} from "./sim-retention.js?v=da053990f844";
+} from "./sim-retention.js?v=2483c4d92c48";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.

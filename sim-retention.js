@@ -1538,6 +1538,47 @@ export function skinHex(n) {
   return '#' + (Number(n) >>> 0).toString(16).padStart(6, '0');
 }
 
+function hexRgb(n) {
+  const v = Number(n) >>> 0;
+  return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 };
+}
+
+export function colorLum(n) {
+  const { r, g, b } = hexRgb(n);
+  const chan = (c) => {
+    const x = c / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * chan(r) + 0.7152 * chan(g) + 0.0722 * chan(b);
+}
+
+function mixHex(a, b, t) {
+  const A = hexRgb(a);
+  const B = hexRgb(b);
+  const r = Math.round(A.r + (B.r - A.r) * t);
+  const g = Math.round(A.g + (B.g - A.g) * t);
+  const bl = Math.round(A.b + (B.b - A.b) * t);
+  return (r << 16) | (g << 8) | bl;
+}
+
+// Dark frames vanish on the Skins panel (#15171D). Lift them toward paper
+// cream so the swatch still reads as a ducted whoop. 3D craft keeps pal.frame.
+const SWATCH_PAPER = 0xf2f0ea;
+const SWATCH_MIN_LUM = 0.14;
+
+export function skinSwatchStroke(skin) {
+  const pal = skinPalette(skin);
+  const frame = pal.frame;
+  if (colorLum(frame) >= SWATCH_MIN_LUM) return frame;
+  let t = 0.42;
+  let stroke = mixHex(frame, SWATCH_PAPER, t);
+  while (colorLum(stroke) < SWATCH_MIN_LUM && t < 0.85) {
+    t += 0.08;
+    stroke = mixHex(frame, SWATCH_PAPER, t);
+  }
+  return stroke;
+}
+
 export function skinPalette(skin) {
   const s = skin || SKINS[0];
   return {
@@ -1553,6 +1594,7 @@ export function skinPalette(skin) {
 export function skinCssVars(skin) {
   const pal = skinPalette(skin);
   return '--sk-frame:' + skinHex(pal.frame)
+    + ';--sk-stroke:' + skinHex(skinSwatchStroke(skin))
     + ';--sk-canopy:' + skinHex(pal.canopy)
     + ';--sk-prop:' + skinHex(pal.prop)
     + ';--sk-led:' + skinHex(pal.led)
@@ -1573,9 +1615,11 @@ export function skinMiniMarkup() {
         + (cy + Math.sin(a) * 11).toFixed(1);
     }
     svg += '<path class="sk-blade" d="' + blades + '"/>';
+    svg += '<circle class="sk-duct-edge" cx="' + cx + '" cy="' + cy + '" r="16"/>';
     svg += '<circle class="sk-duct" cx="' + cx + '" cy="' + cy + '" r="16"/>';
     svg += '<circle class="sk-led" cx="' + cx + '" cy="' + (cy + 13) + '" r="2.4"/>';
   }
+  svg += '<path class="sk-frame-edge" d="M28 28 L52 52 M52 28 L28 52"/>';
   svg += '<path class="sk-frame" d="M28 28 L52 52 M52 28 L28 52"/>';
   svg += '<ellipse class="sk-body" cx="40" cy="42" rx="9" ry="7"/>';
   svg += '<ellipse class="sk-canopy" cx="40" cy="36" rx="8" ry="7"/>';

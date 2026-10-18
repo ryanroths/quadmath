@@ -27,6 +27,7 @@ import {
   layoutCanopyGroup, layoutCanopyPieces, canopyPieceCoverage, canopyFpvVisible,
   canopyViewBottomY, sanitizePilotName, normalizeSubmit, fmtMs,
   skinUnlockLabel, skinPalette, skinCssVars, skinMiniMarkup, skinHex,
+  skinSwatchStroke, colorLum,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   TRAIL_POINTS, tintGroup,
   mulberry32, weekAllowed, previousUtcWeekId, isPaceBotGhost, issuePilotToken,
@@ -370,15 +371,33 @@ test('skin unlock ids and localStorage keys stay frozen', () => {
     assert.ok(s.vibe);
     assert.match(skinHex(s.canopy), /^#[0-9a-f]{6}$/);
     assert.ok(skinCssVars(s).includes('--sk-led:'));
+    assert.ok(skinCssVars(s).includes('--sk-stroke:'));
   }
   const mini = skinMiniMarkup();
   assert.ok(mini.includes('skin-mini'));
   assert.ok(mini.includes('sk-duct'));
+  assert.ok(mini.includes('sk-duct-edge'));
   assert.ok(mini.includes('sk-blade'));
   assert.ok(mini.includes('sk-lens'));
-  assert.equal((mini.match(/sk-duct/g) || []).length, 4);
+  assert.equal((mini.match(/class="sk-duct"/g) || []).length, 4);
+  assert.equal((mini.match(/class="sk-duct-edge"/g) || []).length, 4);
+  const panel = 0x15171d;
+  function contrast(a, b) {
+    const hi = Math.max(colorLum(a), colorLum(b));
+    const lo = Math.min(colorLum(a), colorLum(b));
+    return (hi + 0.05) / (lo + 0.05);
+  }
+  for (const s of SKINS) {
+    const stroke = skinSwatchStroke(s);
+    assert.ok(contrast(stroke, panel) >= 2.4, s.id + ' swatch ducts too close to panel');
+  }
+  const paper = SKINS.find((s) => s.id === 'silver');
+  assert.ok(colorLum(skinSwatchStroke(paper)) > colorLum(paper.frame) + 0.05);
+  assert.notEqual(skinHex(skinSwatchStroke(paper)), skinHex(paper.frame));
+  assert.equal(paper.frame, 0x1a1a1a);
   assert.ok(simSrc.includes('skin-mini'));
-  assert.ok(simSrc.includes('sk-duct'));
+  assert.ok(simSrc.includes('sk-duct-edge'));
+  assert.ok(simSrc.includes('--sk-stroke'));
   assert.match(simSrc, /skin-mini\{width:104px;height:104px/);
   assert.ok(simSrc.includes('skinUnlockLabel'));
   assert.ok(simSrc.includes('makeCraftGroup'));
