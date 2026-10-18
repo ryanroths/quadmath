@@ -1,10 +1,11 @@
 // QuadMath sim — freestyle trick score + combo.
 // Maneuver classifier: one rotation segment → exactly one label (most specific
-// wins). Ideas only from public FPV usage — nothing here is copied from WebFPV (GPL).
+// wins). Trick definitions and point values based on Tyrantt's Pro Whooper
+// tricktionary (prowhooper.com) — paraphrased, nothing copied. Nothing here is
+// copied from WebFPV (GPL).
 // Style is Neon Current (docs/sim-art-direction.md): magenta / cyan / ember.
 // Definitions + decision boundaries: docs/sim-tricks.md.
 // New localStorage key only: quadmathSimTricks. Do not write old ryfly* keys.
-// Nothing here is copied from WebFPV (GPL).
 // This file has no sim-*.js imports. Do not change flight physics.
 
 export const TRICKS_KEY = 'quadmathSimTricks';
@@ -15,30 +16,40 @@ export const LOCKOUT_S = 0.45;
 export const RATE_START = 2.05;
 export const RATE_END = 1.15;
 export const SETTLE_S = 0.16;
-export const MANEUVER_MAX_S = 2.45;
+export const MANEUVER_MAX_S = 2.8;
 export const DEAD = 1.15;
+export const STREAK_CAP = 2;
+export const SLOPPY_MUL = 0.65;
+export const BUMP_MUL = 0.5;
+
+const INDOOR_IDS = Object.freeze({
+  living: 1, garage: 1, warehouse: 1, office: 1, gym: 1, trainer: 1, room: 1,
+});
 
 export const TRICK_LIST = Object.freeze([
-  Object.freeze({ id: 'flip', name: 'Flip', points: 200 }),
-  Object.freeze({ id: 'roll', name: 'Roll', points: 200 }),
-  Object.freeze({ id: 'yawspin', name: 'Yaw Spin', points: 250 }),
-  Object.freeze({ id: 'powerloop', name: 'Power Loop', points: 450 }),
-  Object.freeze({ id: 'splits', name: 'Split-S', points: 400 }),
-  Object.freeze({ id: 'matty', name: 'Matty Flip', points: 600 }),
-  Object.freeze({ id: 'halfmatty', name: 'Half Matty', points: 350 }),
-  Object.freeze({ id: 'maverick', name: 'Maverick', points: 650 }),
-  Object.freeze({ id: 'trippy', name: 'Trippy Spin', points: 400 }),
-  Object.freeze({ id: 'hang', name: 'Inverted Hang', points: 300 }),
-  Object.freeze({ id: 'dive', name: 'Dive', points: 350 }),
-  Object.freeze({ id: 'gap', name: 'Gap Thread', points: 500 }),
-  Object.freeze({ id: 'prox', name: 'Proximity', points: 280 }),
+  Object.freeze({ id: 'flip', name: 'Flip', tier: 'Beginner', points: 50, pointsIn: 75, type: 'Open Air' }),
+  Object.freeze({ id: 'roll', name: 'Roll', tier: 'Beginner', points: 50, pointsIn: 75, type: 'Open Air' }),
+  Object.freeze({ id: 'yawspin', name: 'Yaw Spin', tier: 'Beginner', points: 50, pointsIn: 75, type: 'Open Air' }),
+  Object.freeze({ id: 'maverick', name: 'Maverick Loop', tier: 'Beginner', points: 100, pointsIn: 100, type: 'Maverick Loops' }),
+  Object.freeze({ id: 'splits', name: 'Split-S', tier: 'Beginner', points: 100, pointsIn: 100, type: "Split S'" }),
+  Object.freeze({ id: 'dive', name: 'Building Dive', tier: 'Beginner', points: 100, pointsIn: 100, type: 'Wall Tricks' }),
+  Object.freeze({ id: 'gap', name: 'Gap', tier: 'Beginner', points: 125, pointsIn: 125, type: 'Gaps' }),
+  Object.freeze({ id: 'cradle', name: 'Cradle', tier: 'Beginner', points: 150, pointsIn: 150, type: 'Pole Dancing' }),
+  Object.freeze({ id: 'prox', name: 'Proximity', tier: 'Beginner', points: 150, pointsIn: 150, type: 'Wall Tricks' }),
+  Object.freeze({ id: 'powerloop', name: 'Powerloop', tier: 'Novice', points: 200, pointsIn: 200, type: 'Powerloops' }),
+  Object.freeze({ id: 'matty', name: 'Matty Flip', tier: 'Novice', points: 200, pointsIn: 200, type: 'Matty Flips' }),
+  Object.freeze({ id: 'juicyflick', name: 'Juicy Flick', tier: 'Novice', points: 200, pointsIn: 225, type: 'Open Air' }),
+  Object.freeze({ id: 'snapback', name: 'Snapback', tier: 'Novice', points: 200, pointsIn: 225, type: 'Open Air' }),
+  Object.freeze({ id: 'rubik', name: "Rubik's Cube", tier: 'Intermediate', points: 325, pointsIn: 450, type: 'Open Air' }),
+  Object.freeze({ id: 'halfmatty', name: 'Half Matty', tier: 'Intermediate', points: 350, pointsIn: 350, type: 'Matty Flips' }),
+  Object.freeze({ id: 'cubik', name: "Cubik's Rube", tier: 'Intermediate', points: 350, pointsIn: 450, type: 'Open Air' }),
+  Object.freeze({ id: 'trippy', name: 'Trippy Spin', tier: 'Intermediate', points: 500, pointsIn: 500, type: 'Pole Dancing' }),
 ]);
 
 const BY_ID = Object.create(null);
 for (let i = 0; i < TRICK_LIST.length; i++) BY_ID[TRICK_LIST[i].id] = TRICK_LIST[i];
 export const TRICK_BY_ID = BY_ID;
 
-const HANG_S = 0.75;
 const DIVE_DROP = 3.4;
 const DIVE_VZ = -6.5;
 const GAP_UP_W = 14;
@@ -49,16 +60,32 @@ const PROX_SPD = 7.5;
 const COMBO_IDS = 16;
 const PI = Math.PI;
 const TAU = PI * 2;
-const HALF = PI * 0.92;
+const HALF = PI * 0.78;
 const FULL = 5.2;
-const CLASS_IDS = ['trippy', 'maverick', 'powerloop', 'matty', 'halfmatty', 'splits', 'flip', 'roll', 'yawspin'];
+const QTR = 1.15;
+const CLASS_IDS = [
+  'rubik', 'cubik', 'trippy', 'juicyflick', 'snapback', 'halfmatty',
+  'powerloop', 'matty', 'maverick', 'splits', 'cradle', 'flip', 'roll', 'yawspin',
+];
 const SPEC = {
-  trippy: 0.10, maverick: 0.11, powerloop: 0.11, matty: 0.11,
-  halfmatty: 0.09, splits: 0.10, flip: 0, roll: 0, yawspin: 0,
+  rubik: 0.12, cubik: 0.12, trippy: 0.11, juicyflick: 0.11, snapback: 0.11,
+  halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
+  cradle: 0.08, flip: 0, roll: 0, yawspin: 0,
 };
+const LOOP_IDS = { powerloop: 1, matty: 1, maverick: 1, splits: 1, halfmatty: 1, trippy: 1 };
 
 function makeDlt() { return { r: 0, p: 0, y: 0 }; }
-function makeClr() { return { up: 50, dn: 50, px: 50, nx: 50, pz: 50, nz: 50, near: 50 }; }
+function makeClr() { return { up: 50, dn: 50, px: 50, nx: 50, pz: 50, nz: 50, near: 50, over: 50 }; }
+
+export function mapIsIndoor(id) {
+  return !!INDOOR_IDS[id];
+}
+
+export function trickPoints(id, indoor) {
+  const def = BY_ID[id];
+  if (!def) return 0;
+  return indoor ? (def.pointsIn || def.points) : def.points;
+}
 
 export function trickById(id) {
   return BY_ID[id] || null;
@@ -91,8 +118,28 @@ export function comboMul(count) {
 
 export function varietyMul(priorSame) {
   if (priorSame <= 0) return 1;
-  if (priorSame === 1) return 0.55;
-  return 0.3;
+  if (priorSame === 1) return 0.75;
+  if (priorSame === 2) return 0.5;
+  return 0;
+}
+
+export function b2bMul(consec) {
+  if (consec <= 0) return 1;
+  let m = 1;
+  for (let i = 0; i < consec; i++) m *= 0.5;
+  return m;
+}
+
+export function execMul(sloppy, bump) {
+  let m = 1;
+  if (sloppy) m *= SLOPPY_MUL;
+  if (bump) m *= BUMP_MUL;
+  return m;
+}
+
+export function nextStreak(streak, basePts) {
+  const s = (streak == null ? 1 : streak) + (basePts || 0) / 10000;
+  return s > STREAK_CAP ? STREAK_CAP : s;
 }
 
 export function uniqueBonus(uniqueN) {
@@ -101,11 +148,20 @@ export function uniqueBonus(uniqueN) {
   return 1;
 }
 
-export function scoreTrick(id, priorSame, chainCount, uniqueN) {
+export function scoreTrick(id, priorSame, chainCount, uniqueN, opts) {
   const def = BY_ID[id];
   if (!def) return 0;
-  const pts = def.points * varietyMul(priorSame) * comboMul(chainCount) * uniqueBonus(uniqueN);
-  return Math.max(1, Math.round(pts));
+  const o = opts || {};
+  const base = trickPoints(id, !!o.indoor);
+  const raw = base
+    * varietyMul(priorSame)
+    * b2bMul(o.b2b || 0)
+    * execMul(!!o.sloppy, !!o.bump)
+    * comboMul(chainCount)
+    * uniqueBonus(uniqueN)
+    * (o.streak == null ? 1 : o.streak);
+  if (raw <= 0) return 0;
+  return Math.max(1, Math.round(raw));
 }
 
 export function upZParts(x, y) {
@@ -169,7 +225,7 @@ export function bodyDelta(q0, q1, out) {
 
 export function scanClearance(wx, wy, wz, colliders, out) {
   const o = out || makeClr();
-  o.up = 50; o.dn = wy; o.px = 50; o.nx = 50; o.pz = 50; o.nz = 50; o.near = 50;
+  o.up = 50; o.dn = wy; o.px = 50; o.nx = 50; o.pz = 50; o.nz = 50; o.near = 50; o.over = 50;
   if (!colliders || !colliders.length) return o;
   const n = colliders.length;
   for (let i = 0; i < n; i++) {
@@ -194,6 +250,9 @@ export function scanClearance(wx, wy, wz, colliders, out) {
     }
     if (ox && oz && min.y > wy) {
       const d = min.y - wy; if (d > 0.12 && d < o.up) o.up = d;
+    }
+    if (ox && oz && max.y < wy) {
+      const d = wy - max.y; if (d >= 0 && d < o.over) o.over = d;
     }
   }
   return o;
@@ -285,7 +344,10 @@ export function makeFeat() {
     upMin: 1, upMax: -1, invT: 0,
     spd0: 0, spd1: 0, spdPeak: 0, spdMin: 99,
     vzMin: 0, vzMax: 0,
-    tRoll180: 99, tPitch180: 99, tYaw180: 99,
+    tRoll180: 99, tPitch180: 99, tYaw180: 99, tRoll360: 99, tPitch360: 99,
+    tRoll90: 99, tPitch90: 99, tYaw90: 99,
+    underN: 0, overN: 0, objNearN: 0, under0: 0, over0: 0,
+    bump: 0, seg: 0, oppRY: 0,
   };
 }
 
@@ -303,7 +365,10 @@ export function resetFeat(f) {
   f.upMin = 1; f.upMax = -1; f.invT = 0;
   f.spd0 = 0; f.spd1 = 0; f.spdPeak = 0; f.spdMin = 99;
   f.vzMin = 0; f.vzMax = 0;
-  f.tRoll180 = 99; f.tPitch180 = 99; f.tYaw180 = 99;
+  f.tRoll180 = 99; f.tPitch180 = 99; f.tYaw180 = 99; f.tRoll360 = 99; f.tPitch360 = 99;
+  f.tRoll90 = 99; f.tPitch90 = 99; f.tYaw90 = 99;
+  f.underN = 0; f.overN = 0; f.objNearN = 0; f.under0 = 0; f.over0 = 0;
+  f.bump = 0; f.seg = 0; f.oppRY = 0;
   return f;
 }
 
@@ -324,6 +389,11 @@ export function copyFeat(src, dst) {
   d.spd0 = src.spd0; d.spd1 = src.spd1; d.spdPeak = src.spdPeak; d.spdMin = src.spdMin;
   d.vzMin = src.vzMin; d.vzMax = src.vzMax;
   d.tRoll180 = src.tRoll180; d.tPitch180 = src.tPitch180; d.tYaw180 = src.tYaw180;
+  d.tRoll360 = src.tRoll360; d.tPitch360 = src.tPitch360;
+  d.tRoll90 = src.tRoll90; d.tPitch90 = src.tPitch90; d.tYaw90 = src.tYaw90;
+  d.underN = src.underN; d.overN = src.overN; d.objNearN = src.objNearN;
+  d.under0 = src.under0; d.over0 = src.over0;
+  d.bump = src.bump; d.seg = src.seg; d.oppRY = src.oppRY;
   return d;
 }
 
@@ -365,11 +435,32 @@ export function featView(f) {
   const invFol = invA ? f.invFollowN / invA : 0;
   const invAg = invA ? f.invAgainstN / invA : 0;
   const pathP = f.pathP || 0, pathR = f.pathR || 0, pathY = f.pathY || 0;
-  return { absP, absR, absY, head, span, drop, follow, against, inv, close, hEnd, meanDot, invFol, invAg, pathP, pathR, pathY };
+  const n = f.n || 1;
+  const under = f.underN / n;
+  const over = f.overN / n;
+  const obj = f.objNearN / n;
+  const opp = (f.n && f.oppRY) ? f.oppRY / f.n : 0;
+  const front = f.pitch > 0 ? 1 : 0;
+  return {
+    absP, absR, absY, head, span, drop, follow, against, inv, close, hEnd, meanDot,
+    invFol, invAg, pathP, pathR, pathY, under, over, obj, opp, front,
+  };
 }
 
 const _cls = { id: null, why: '', best: 0, second: 0, secondId: '' };
 const _sc = Object.create(null);
+
+function whyLine(id, f, v, secondId, second) {
+  const def = BY_ID[id];
+  const deg = (r) => Math.round(r * 180 / PI);
+  return (def ? def.name : id)
+    + (def ? ('  ' + def.tier + '  ' + def.points) : '')
+    + '\n  P' + deg(f.pitch) + ' R' + deg(f.roll) + ' Y' + deg(f.yaw)
+    + '  fol=' + v.follow.toFixed(2) + ' ag=' + v.against.toFixed(2)
+    + '  span=' + v.span.toFixed(1) + ' hd=' + deg(v.head)
+    + '  inv=' + v.inv.toFixed(2) + ' cl=' + v.close.toFixed(2)
+    + (secondId ? '  (' + secondId + ' ' + second.toFixed(2) + ')' : '');
+}
 
 export function classifyFeat(f, out) {
   const o = out || _cls;
@@ -381,72 +472,134 @@ export function classifyFeat(f, out) {
     && v.pathP < 1.6 && v.pathR < 1.6 && v.pathY < 1.6 && v.inv < 0.35;
   if (tiny) return o;
 
+  const tR = f.tRoll90 < 90 ? f.tRoll90 : (f.tRoll180 < 90 ? f.tRoll180 : 99);
+  const tP = f.tPitch90 < 90 ? f.tPitch90 : (f.tPitch180 < 90 ? f.tPitch180 : 99);
+  const rollFirst = (tR < 90 && tP < 90) ? (tP - tR) : (tR < 90 && tP >= 90 ? 0.5 : -0.5);
+  const pitchFirst = -rollFirst;
+  const objU = Math.max(v.under, f.under0 ? 0.35 : 0);
+  const objO = Math.max(v.over, f.over0 ? 0.35 : 0);
+
+  _sc.rubik = mul(
+    atLeast(v.pathP, 5.2, 0.7),
+    atLeast(v.pathR, 5.2, 0.7),
+    atLeast(absP, 4.4, 0.6),
+    atLeast(absR, 4.4, 0.6),
+    atLeast(pitchFirst, 0.0, 0.12),
+    atLeast(v.inv, 0.12, 0.08),
+    atMost(absY, 2.4, 0.7),
+  );
+  _sc.cubik = mul(
+    atLeast(v.pathP, 5.2, 0.7),
+    atLeast(v.pathR, 5.2, 0.7),
+    atLeast(absP, 4.4, 0.6),
+    atLeast(absR, 4.4, 0.6),
+    atLeast(rollFirst, 0.0, 0.12),
+    atLeast(v.inv, 0.12, 0.08),
+    atMost(absY, 2.4, 0.7),
+  );
   _sc.trippy = mul(
-    atLeast(Math.max(absR, v.pathR), 4.0, 0.9),
-    atLeast(Math.max(absY, v.pathY), 1.8, 0.7),
-    atLeast(f.dur, 0.5, 0.15),
-    Math.max(atLeast(v.inv, 0.18, 0.1), atLeast(absR, 5.8, 0.6)),
-    atLeast(f.spdPeak, 1.2, 0.5),
-    atMost(absP, 5.5, 1.2),
+    atLeast(Math.max(absR, v.pathR), 3.6, 0.8),
+    atLeast(Math.max(absY, v.pathY), 2.2, 0.7),
+    atLeast(v.inv, 0.22, 0.1),
+    atLeast(v.opp, 0.35, 0.15),
+    atLeast(f.dur, 0.55, 0.15),
+    atMost(absP, 4.8, 1.0),
+    atLeast(f.spdPeak, 1.0, 0.4),
+    Math.max(atLeast(v.obj, 0.12, 0.1), 0.55),
   );
-  _sc.maverick = mul(
-    atLeast(v.span, 1.6, 0.5),
-    atMost(v.close, 0.92, 0.12),
-    inBand(v.pathP, 1.6, 5.4, 0.55),
-    atMost(absP, 4.3, 0.5),
-    atMost(v.inv, 0.20, 0.1),
-    atLeast(v.follow, 0.28, 0.12),
-    atLeast(f.dur, 0.45, 0.12),
-    atLeast(f.spdPeak, 1.6, 0.5),
-    atMost(absR, 2.6, 0.8),
-  );
-  _sc.powerloop = mul(
-    atLeast(absP, 4.35, 0.7),
-    atLeast(v.span, 1.35, 0.5),
-    atLeast(v.invFol - v.invAg, 0.0, 0.15),
-    atLeast(v.follow, 0.40, 0.15),
-    atMost(v.close, 0.42, 0.15),
-    atLeast(f.travelH, 1.0, 0.4),
-    atMost(absR, 2.7, 0.8),
+  _sc.juicyflick = mul(
+    atLeast(f.pitch, 2.0, 0.5),
+    inBand(absP, 2.2, 4.6, 0.45),
+    inBand(absR, 2.0, 4.6, 0.45),
+    atLeast(pitchFirst, 0.02, 0.10),
     atLeast(v.inv, 0.08, 0.06),
-    atMost(v.head, 1.35, 0.5),
-    atLeast(f.spdPeak, 2.6, 0.6),
+    atMost(absY, 2.2, 0.6),
+    atMost(v.pathP, 6.2, 0.8),
+    atMost(v.pathR, 5.4, 0.6),
   );
-  _sc.matty = mul(
-    atLeast(absP, 4.35, 0.7),
-    atLeast(v.invAg - v.invFol, 0.05, 0.12),
-    atLeast(v.close, 0.50, 0.15),
-    atMost(absR, 2.9, 0.8),
-    atLeast(f.spdPeak, 2.4, 0.5),
-    atLeast(f.travelH, 9.0, 2.2),
+  _sc.snapback = mul(
+    atLeast(-f.pitch, 2.0, 0.5),
+    inBand(absP, 2.2, 4.6, 0.45),
+    inBand(absR, 2.0, 4.6, 0.45),
+    atLeast(pitchFirst, 0.02, 0.10),
+    atLeast(v.inv, 0.08, 0.06),
+    atMost(absY, 2.2, 0.6),
+    atMost(v.pathP, 6.2, 0.8),
+    atMost(v.pathR, 5.4, 0.6),
   );
   _sc.halfmatty = mul(
-    inBand(absP, 2.15, 4.25, 0.45),
-    atLeast(Math.max(v.against, v.invAg) - Math.max(v.follow, v.invFol), 0.0, 0.12),
-    atLeast(v.head, 1.35, 0.4),
-    atMost(absR, 2.15, 0.7),
-    atMost(f.tPitch180 - f.tRoll180, 0.05, 0.2),
+    inBand(absR, 2.0, 4.6, 0.45),
+    inBand(absP, 1.4, 4.4, 0.45),
+    atLeast(f.pitch, 0.6, 0.4),
+    atLeast(rollFirst, 0.02, 0.10),
+    atLeast(v.against - v.follow, 0.0, 0.12),
+    atLeast(v.inv, 0.06, 0.05),
+    atMost(absY, 2.4, 0.7),
+    atMost(v.pathR, 5.4, 0.6),
+  );
+  _sc.powerloop = mul(
+    atLeast(-f.pitch, 4.0, 0.7),
+    atLeast(absP, 4.35, 0.7),
+    atLeast(v.span, 1.2, 0.45),
+    atLeast(v.follow, 0.40, 0.15),
+    atMost(v.close, 0.38, 0.12),
+    atLeast(f.travelH, 5.5, 1.5),
+    atMost(absR, 2.7, 0.8),
+    atLeast(v.inv, 0.08, 0.06),
+    atMost(v.head, 1.5, 0.5),
+    atLeast(f.spdPeak, 3.2, 0.6),
+    Math.max(atLeast(objU, 0.08, 0.08), 0.72),
+  );
+  _sc.matty = mul(
+    atLeast(f.pitch, 2.0, 0.5),
+    inBand(absP, 2.4, 5.6, 0.45),
+    atLeast(v.drop, 0.35, 0.25),
+    atLeast(Math.max(v.against, v.invAg), 0.22, 0.12),
+    atMost(absR, 1.85, 0.5),
+    atLeast(f.travelH, 2.2, 0.8),
+    atMost(v.close, 0.95, 0.12),
     atLeast(f.spdPeak, 1.8, 0.5),
+    Math.max(atLeast(objO, 0.08, 0.08), 0.72),
+  );
+  _sc.maverick = mul(
+    atLeast(v.span, 1.4, 0.45),
+    atMost(v.close, 0.92, 0.12),
+    inBand(v.pathP, 1.5, 5.4, 0.5),
+    atMost(absP, 4.2, 0.5),
+    atMost(v.inv, 0.18, 0.1),
+    atLeast(v.follow - v.against, 0.0, 0.12),
+    atLeast(f.dur, 0.4, 0.12),
+    atLeast(f.spdPeak, 1.4, 0.5),
+    atMost(absR, 2.4, 0.7),
+    atMost(v.head, 1.6, 0.5),
   );
   _sc.splits = mul(
-    inBand(absR, 1.25, 4.15, 0.45),
-    inBand(absP, 1.05, 4.35, 0.45),
-    atLeast(v.head, 1.35, 0.4),
-    atLeast(v.drop, 0.45, 0.3),
+    inBand(absR, 1.8, 4.5, 0.45),
+    inBand(absP, 1.2, 4.5, 0.45),
+    atLeast(-f.pitch, 0.6, 0.4),
+    atLeast(v.drop, 0.35, 0.25),
     atLeast(v.inv, 0.06, 0.05),
-    atLeast(absR / Math.max(absP, 0.4), 0.32, 0.12),
-    atLeast(
-      (f.tRoll180 < 90 && f.tPitch180 < 90) ? (f.tPitch180 - f.tRoll180) : 0.25,
-      0.0,
-      0.12,
-    ),
+    atLeast(rollFirst, 0.02, 0.10),
+    atLeast(v.follow, 0.18, 0.12),
+    atMost(absY, 2.4, 0.7),
+    atMost(v.pathR, 5.4, 0.6),
+  );
+  _sc.cradle = mul(
+    inBand(v.pathP, 1.3, 4.4, 0.45),
+    atMost(absP, 3.6, 0.5),
+    atMost(v.inv, 0.22, 0.1),
+    atLeast(v.against - v.follow, 0.08, 0.12),
+    atMost(absR, 2.2, 0.6),
+    atLeast(f.travelH, 1.6, 0.6),
+    atLeast(f.dur, 0.4, 0.1),
+    Math.max(atLeast(v.obj, 0.08, 0.08), 0.55),
   );
   _sc.flip = mul(
-    atLeast(absP, 4.6, 0.55),
+    atLeast(absP, 4.35, 0.5),
     atMost(absR, 1.7, 0.6),
     atMost(absY, 1.9, 0.6),
-    atMost(f.travelH, 8.5, 3.0),
-    atLeast(v.close, 0.38, 0.15),
+    atMost(f.travelH, 9.5, 2.5),
+    atLeast(v.close, 0.35, 0.15),
   );
   _sc.roll = mul(
     atLeast(absR, 4.55, 0.55),
@@ -475,25 +628,28 @@ export function classifyFeat(f, out) {
   if (best < 0.42 || !bestId) {
     if (v.drop >= 3.2 && f.spdPeak > 8 && f.vzMin < -6.2 && absP < 3.2 && absR < 2.2) {
       o.id = 'dive';
-      o.why = 'Dive  drop=' + v.drop.toFixed(1) + 'm  v=' + f.spdPeak.toFixed(1);
+      o.why = whyLine('dive', f, v, '', 0);
       return o;
     }
     return o;
   }
-  if (bestId === 'flip' && _sc.powerloop > 0.55 && _sc.powerloop >= _sc.matty) { bestId = 'powerloop'; best = _sc.powerloop; }
-  if (bestId === 'flip' && _sc.matty > 0.55 && _sc.matty > _sc.powerloop) { bestId = 'matty'; best = _sc.matty; }
+  if (bestId === 'flip' && _sc.powerloop > 0.55 && f.pitch < 0 && f.travelH > 6 && v.close < 0.4) { bestId = 'powerloop'; best = _sc.powerloop; }
+  if (bestId === 'flip' && _sc.matty > 0.55 && f.pitch > 0) { bestId = 'matty'; best = _sc.matty; }
+  if (bestId === 'powerloop' && f.travelH < 5.5) { bestId = 'flip'; best = _sc.flip; }
   if (bestId === 'yawspin' && _sc.trippy > 0.5) { bestId = 'trippy'; best = _sc.trippy; }
-  if (bestId === 'powerloop' && _sc.matty > _sc.powerloop + 0.04) { bestId = 'matty'; best = _sc.matty; }
-  if (bestId === 'matty' && _sc.powerloop > _sc.matty + 0.04) { bestId = 'powerloop'; best = _sc.powerloop; }
+  if (bestId === 'powerloop' && f.pitch > 0) { bestId = _sc.matty > 0.42 ? 'matty' : bestId; }
+  if (bestId === 'matty' && f.pitch < 0) { bestId = _sc.powerloop > 0.42 ? 'powerloop' : bestId; }
+  if (bestId === 'matty' && absR > 2.1 && pitchFirst > 0.02 && _sc.juicyflick > 0.3) { bestId = 'juicyflick'; best = _sc.juicyflick; }
+  if (bestId === 'juicyflick' && rollFirst > 0.04 && _sc.halfmatty > 0.35) { bestId = 'halfmatty'; best = _sc.halfmatty; }
+  if (bestId === 'snapback' && rollFirst > 0.04 && _sc.splits > 0.35) { bestId = 'splits'; best = _sc.splits; }
+  if (bestId === 'juicyflick' && _sc.rubik > _sc.juicyflick + 0.04) { bestId = 'rubik'; best = _sc.rubik; }
+  if (bestId === 'snapback' && _sc.cubik > _sc.snapback + 0.04) { bestId = 'cubik'; best = _sc.cubik; }
+  if (bestId === 'rubik' && rollFirst > 0.06) { bestId = 'cubik'; best = Math.max(_sc.cubik, best); }
+  if (bestId === 'cubik' && pitchFirst > 0.06) { bestId = 'rubik'; best = Math.max(_sc.rubik, best); }
+  if (bestId === 'maverick' && v.against > v.follow + 0.08 && _sc.cradle > 0.4) { bestId = 'cradle'; best = _sc.cradle; }
   o.id = bestId;
   o.best = best;
-  const deg = (r) => Math.round(r * 180 / PI);
-  o.why = (BY_ID[bestId] ? BY_ID[bestId].name : bestId)
-    + '  P' + deg(f.pitch) + ' R' + deg(f.roll) + ' Y' + deg(f.yaw)
-    + '  fol=' + v.follow.toFixed(2) + ' ag=' + v.against.toFixed(2)
-    + '  span=' + v.span.toFixed(1) + ' hd=' + deg(v.head)
-    + '  inv=' + v.inv.toFixed(2) + ' cl=' + v.close.toFixed(2)
-    + (secondId ? '  (' + secondId + ' ' + second.toFixed(2) + ')' : '');
+  o.why = whyLine(bestId, f, v, secondId, second);
   return o;
 }
 
@@ -506,6 +662,8 @@ export function makeDetector() {
     lastFeat: makeFeat(),
     lastWhy: '',
     lastId: '',
+    lastSloppy: 0,
+    lastBump: 0,
     live: 0,
     quiet: 0,
     haveQ: 0,
@@ -575,15 +733,18 @@ export function resetCombo(c) {
   c.unique = 0;
 }
 
-export function pushCombo(c, id, now) {
-  const prior = (() => {
+export function pushCombo(c, id, now, opts) {
+  const o = opts || {};
+  const priorCombo = (() => {
     let n = 0;
     for (let i = 0; i < c.n; i++) if (c.ids[i] === id) n++;
     return n;
   })();
+  const prior = o.prior != null ? o.prior : priorCombo;
   const nextN = c.n + 1;
-  const uniq = uniqueCount(c.ids, c.n) + (prior === 0 ? 1 : 0);
-  const pts = scoreTrick(id, prior, nextN, uniq);
+  const uniq = uniqueCount(c.ids, c.n) + (priorCombo === 0 ? 1 : 0);
+  const pts = scoreTrick(id, prior, nextN, uniq, o);
+  if (pts <= 0) return 0;
   if (c.n < COMBO_IDS) c.ids[c.n] = id;
   c.n = nextN;
   c.points += pts;
@@ -616,6 +777,8 @@ function beginFeat(d, alt, wx, wz, head, speed, thr) {
   f.head0 = head; f.head1 = head;
   f.spd0 = speed; f.spd1 = speed; f.spdPeak = speed; f.spdMin = speed;
   f.thr0 = thr; f.thr1 = thr; f.thrMin = thr; f.thrMax = thr;
+  f.under0 = d.clr.up < 8 ? 1 : 0;
+  f.over0 = d.clr.over < 8 ? 1 : 0;
   d.live = 1;
   d.quiet = 0;
 }
@@ -640,9 +803,18 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
   f.travel += Math.hypot(dxw, sample.wy != null ? (sample.wy - d.py) : 0, dzw);
   f.h1x = wx; f.h1z = wz;
   f.head1 = head;
+  if (f.tPitch90 > 90 && Math.abs(f.pitch) >= QTR) f.tPitch90 = f.dur;
+  if (f.tRoll90 > 90 && Math.abs(f.roll) >= QTR) f.tRoll90 = f.dur;
+  if (f.tYaw90 > 90 && Math.abs(f.yaw) >= QTR) f.tYaw90 = f.dur;
   if (f.tPitch180 > 90 && Math.abs(f.pitch) >= HALF) f.tPitch180 = f.dur;
   if (f.tRoll180 > 90 && Math.abs(f.roll) >= HALF) f.tRoll180 = f.dur;
   if (f.tYaw180 > 90 && Math.abs(f.yaw) >= HALF) f.tYaw180 = f.dur;
+  if (f.tPitch360 > 90 && Math.abs(f.pitch) >= FULL) f.tPitch360 = f.dur;
+  if (f.tRoll360 > 90 && Math.abs(f.roll) >= FULL) f.tRoll360 = f.dur;
+  if (dr * dy < -1e-6) f.oppRY += 1;
+  if (d.clr.up < 8) f.underN += 1;
+  if (d.clr.over < 8) f.overN += 1;
+  if (d.clr.near < 7) f.objNearN += 1;
   if (upZ < f.upMin) f.upMin = upZ;
   if (upZ > f.upMax) f.upMax = upZ;
   if (upZ < -0.35) f.invT += step;
@@ -679,6 +851,8 @@ function finishManeuver(d) {
   const cls = classifyFeat(d.feat, _cls);
   d.lastWhy = cls.why || '';
   d.lastId = cls.id || '';
+  d.lastSloppy = (d.feat.seg && LOOP_IDS[cls.id]) ? 1 : 0;
+  d.lastBump = d.feat.bump ? 1 : 0;
   resetFeat(d.feat);
   if (cls.id) {
     d.lockout = LOCKOUT_S;
@@ -736,14 +910,21 @@ export function stepDetector(d, sample, dt) {
 
   if (contact) { d.airT = 0; } else { d.airT += step; if (d.airT > 0.25) d.wasAir = 1; }
 
+  scanClearance(wx, wy, wz, sample.colliders, d.clr);
+
   let hit = null;
   const rotating = rate >= RATE_START;
   if (armed && !contact && rotating && !d.live && d.lockout <= 0) {
     beginFeat(d, alt, wx, wz, head, speed, thr);
   }
   if (d.live) {
+    if (contact) d.feat.bump = 1;
     accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, thr, vx, vy, vz);
-    if (rate < RATE_END) d.quiet += step; else d.quiet = 0;
+    if (rate < RATE_END) d.quiet += step;
+    else {
+      if (d.quiet > 0.14 && d.feat.dur > 0.28) d.feat.seg = 1;
+      d.quiet = 0;
+    }
     const timedOut = d.feat.dur >= MANEUVER_MAX_S;
     const settled = d.quiet >= SETTLE_S && d.feat.dur >= 0.22;
     if (settled || timedOut || (contact && d.feat.dur > 0.2)) {
@@ -752,25 +933,6 @@ export function stepDetector(d, sample, dt) {
   }
 
   d.px = wx; d.py = wy; d.pz = wz;
-  scanClearance(wx, wy, wz, sample.colliders, d.clr);
-
-  if (!hit && !d.live && armed && d.hangCd <= 0) {
-    const hanging = upZ < -0.55 && !contact && (sample.clearance == null || sample.clearance > 0.22)
-      && speed < 3.4 && rate < 3.2;
-    if (hanging) {
-      d.hangT += step;
-      if (d.hangT >= HANG_S && !d.hangGot) {
-        d.hangGot = 1;
-        d.hangCd = 3.5;
-        hit = 'hang';
-        d.lastId = 'hang';
-        d.lastWhy = 'Inverted Hang  air inverted ' + d.hangT.toFixed(2) + 's';
-      }
-    } else {
-      d.hangT = 0;
-      if (upZ > -0.2) d.hangGot = 0;
-    }
-  } else if (d.hangCd > 0) d.hangCd -= step;
 
   if (!hit && !d.live && armed && d.diveCd <= 0) {
     if (!d.diveOn && vz < DIVE_VZ && speed > 8 && alt > 4) {
@@ -782,7 +944,9 @@ export function stepDetector(d, sample, dt) {
         d.diveOn = 0; d.diveCd = 3.2;
         hit = 'dive';
         d.lastId = 'dive';
-        d.lastWhy = 'Dive  drop=' + d.diveDrop.toFixed(1) + 'm  v=' + speed.toFixed(1);
+        d.lastWhy = (BY_ID.dive ? BY_ID.dive.name : 'Dive')
+          + '  Beginner  ' + (BY_ID.dive ? BY_ID.dive.points : 100)
+          + '  drop=' + d.diveDrop.toFixed(1) + 'm  v=' + speed.toFixed(1);
       }
       if (vz > -2 || contact) d.diveOn = 0;
     }
@@ -802,7 +966,9 @@ export function stepDetector(d, sample, dt) {
         hit = 'gap';
         d.gapCd = 2.2;
         d.lastId = 'gap';
-        d.lastWhy = 'Gap Thread  travel=' + d.gapTravel.toFixed(1);
+        d.lastWhy = (BY_ID.gap ? BY_ID.gap.name : 'Gap')
+          + '  Beginner  ' + (BY_ID.gap ? BY_ID.gap.points : 125)
+          + '  travel=' + d.gapTravel.toFixed(1);
       }
       d.gapOn = 0; d.gapTravel = 0;
     }
@@ -818,7 +984,9 @@ export function stepDetector(d, sample, dt) {
         d.proxCd = 2.4;
         d.proxT = 0;
         d.lastId = 'prox';
-        d.lastWhy = 'Proximity  ' + nearM.toFixed(2) + 'm @' + speed.toFixed(1);
+        d.lastWhy = (BY_ID.prox ? BY_ID.prox.name : 'Proximity')
+          + '  Beginner  ' + (BY_ID.prox ? BY_ID.prox.points : 150)
+          + '  ' + nearM.toFixed(2) + 'm @' + speed.toFixed(1);
       }
     } else d.proxT = 0;
   } else if (d.proxCd > 0) d.proxCd -= step;
@@ -853,7 +1021,7 @@ const HUD_CSS = '#trickHud{position:fixed;left:50%;top:20%;transform:translateX(
   + '#trickScore.on{display:block}'
   + '#trickDbg{position:fixed;left:8px;top:92px;z-index:16;pointer-events:none;display:none;margin:0;'
   + 'font-family:\'JetBrains Mono\',ui-monospace,monospace;font-size:11px;line-height:1.45;letter-spacing:.02em;'
-  + 'color:#00f0ff;background:rgba(8,6,18,.78);border:1px solid rgba(0,240,255,.28);padding:8px 10px;max-width:360px;'
+  + 'color:#00f0ff;background:rgba(8,6,18,.78);border:1px solid rgba(0,240,255,.28);padding:8px 10px;max-width:420px;'
   + 'white-space:pre;text-shadow:0 1px 6px rgba(0,0,0,.8)}'
   + '#trickDbg.on{display:block}'
   + 'body.menu-open #trickHud,body.menu-open #trickScore,body.builder-on #trickHud,body.builder-on #trickScore,'
@@ -943,7 +1111,12 @@ export function createTricks(opts) {
   let hudEls = null;
   let active = false;
   let mapId = 'city';
+  let indoor = mapIsIndoor(mapId);
   let session = 0;
+  let streak = 1;
+  const sessionCount = Object.create(null);
+  let sessionLast = '';
+  let sessionB2b = 0;
   let popName = '';
   let popUntil = 0;
   let scoreShown = '';
@@ -978,6 +1151,7 @@ export function createTricks(opts) {
       + '\nfol ' + v.follow.toFixed(2) + '  ag ' + v.against.toFixed(2)
       + '  span ' + v.span.toFixed(1) + 'm  hd ' + deg(v.head) + '°'
       + '\ninv ' + v.inv.toFixed(2) + '  close ' + v.close.toFixed(2)
+      + '  u' + v.under.toFixed(2) + ' o' + v.over.toFixed(2)
       + '  n ' + f.n + '  ' + f.dur.toFixed(2) + 's'
       + '\nlast  ' + (det.lastWhy || '—');
     if (line !== det.dbgLine) {
@@ -1031,31 +1205,52 @@ export function createTricks(opts) {
     return pts;
   }
 
+  function clearSessionHits() {
+    streak = 1;
+    sessionLast = '';
+    sessionB2b = 0;
+    for (const k in sessionCount) delete sessionCount[k];
+  }
+
   function award(id) {
     const t = nowFn();
     const remain = comboRemain(combo, t);
     if (combo.live && remain <= 0) bank('timeout');
-    const got = pushCombo(combo, id, t);
+    const prior = sessionCount[id] || 0;
+    const b2b = sessionLast === id ? sessionB2b + 1 : 0;
+    const sloppy = !!det.lastSloppy;
+    const bump = !!det.lastBump;
+    const got = pushCombo(combo, id, t, {
+      prior, b2b, sloppy, bump, indoor, streak,
+    });
+    sessionCount[id] = prior + 1;
+    if (sessionLast === id) sessionB2b += 1;
+    else sessionB2b = 0;
+    sessionLast = id;
+    if (got > 0) streak = nextStreak(streak, trickPoints(id, indoor));
+    if (bump) streak = Math.max(1, streak * 0.5);
     const def = BY_ID[id];
     popName = def ? def.name : id;
     popUntil = t + 1.05;
-    playBlip(audio, muted, 'trick', combo.mul);
+    if (got > 0) playBlip(audio, muted, 'trick', combo.mul);
     recordBest(store, mapId, combo.points, session);
     saveStore(store, storage);
+    if (sloppy || bump || b2b > 0) bank('exec');
     return got;
   }
 
   function setActive(on, map) {
     const next = !!on;
-    if (map) mapId = map;
+    if (map) { mapId = map; indoor = mapIsIndoor(map); }
     if (active && !next) bank('leave');
     if (!active && next) {
       session = 0;
       resetCombo(combo);
       resetDetector(det, null);
+      clearSessionHits();
     }
     active = next;
-    if (map) mapId = map;
+    if (map) { mapId = map; indoor = mapIsIndoor(map); }
     lastHudOn = -1;
   }
 
@@ -1064,9 +1259,14 @@ export function createTricks(opts) {
       if (active) bank('map');
       session = 0;
       mapId = id;
+      indoor = mapIsIndoor(id);
       resetCombo(combo);
       resetDetector(det, null);
-    } else if (id) mapId = id;
+      clearSessionHits();
+    } else if (id) {
+      mapId = id;
+      indoor = mapIsIndoor(id);
+    }
   }
 
   let lastEv = null;
@@ -1091,6 +1291,13 @@ export function createTricks(opts) {
   function noteCrash() {
     try {
       if (!active) return 0;
+      streak = 1;
+      if (det.live) {
+        det.live = 0;
+        resetFeat(det.feat);
+        det.lastId = '';
+        det.lastWhy = 'crash 0';
+      }
       return bank('crash');
     } catch (e) { return 0; }
   }
@@ -1125,7 +1332,13 @@ export function createTricks(opts) {
     combo.lastAt = t + 60;
     session = Math.max(session, 4200);
     det.lastId = 'powerloop';
-    det.lastWhy = (name || 'Power Loop') + '  P-360 R0 Y0  fol=0.86 ag=0.05  span=3.8 hd=8  inv=0.31 cl=0.04  (matty 0.12)';
+    {
+      const pl = BY_ID.powerloop;
+      const nm = name || (pl ? pl.name : 'Powerloop');
+      popName = nm;
+      det.lastWhy = nm + '  ' + (pl ? pl.tier : 'Novice') + '  ' + (pl ? pl.points : 200)
+        + '\n  P-360 R0 Y0  fol=0.86 ag=0.05  span=3.8 hd=8  inv=0.31 cl=0.04  (matty 0.12)';
+    }
     det.dbgT = 0;
     lastHudOn = -1;
     lastDbgOn = -1;
@@ -1155,6 +1368,10 @@ export function createTricks(opts) {
     debugPop,
     lastWhy: function () { return det.lastWhy; },
     lastId: function () { return det.lastId; },
+    lastSloppy: function () { return det.lastSloppy; },
+    lastBump: function () { return det.lastBump; },
+    indoor: function () { return indoor; },
+    streak: function () { return streak; },
     detector: function () { return det; },
     resetDetector: function (s) { resetDetector(det, s); },
   };

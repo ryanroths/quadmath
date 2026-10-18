@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import {
   TRICKS_KEY, TRICK_LIST, TRICK_BY_ID, STORE_VER, COMBO_WINDOW_S,
   formatScore, formatScoreFull, comboMul, varietyMul, uniqueBonus, scoreTrick,
+  b2bMul, execMul, nextStreak, trickPoints, mapIsIndoor,
   upZOf, headingOf, bodyDelta, scanClearance, unwrapDelta, classifyFeat, featView,
   emptyStore, normalizeStore, loadStore, saveStore, recordBest, bestLine, bestForMap,
   makeDetector, resetDetector, stepDetector,
@@ -101,6 +102,12 @@ const GAP_COLS = [
 const WALL_COLS = [
   { min: { x: -4, y: 0, z: 1.05 }, max: { x: 40, y: 14, z: 10 } },
 ];
+const OBJ_BAR = [
+  { min: { x: 8, y: 7, z: -3 }, max: { x: 18, y: 10.5, z: 3 } },
+];
+const OBJ_POLE = [
+  { min: { x: 6, y: 0, z: -0.7 }, max: { x: 7.4, y: 12, z: 0.7 } },
+];
 
 const LIBRARY = [
   { id: 'flip', name: 'flip-front', phases: [{ t: 0.85, pitch: 8.5, thr: 0.45 }, { t: 0.5, pitch: 0, thr: 0.4 }], opts: { z0: 5, vx: 0.4, maxT: 1.8 } },
@@ -112,27 +119,39 @@ const LIBRARY = [
   { id: 'yawspin', name: 'yaw-fast', phases: [{ t: 1.0, yaw: 7.5, thr: 0.45 }, { t: 0.5, yaw: 0, thr: 0.4 }], opts: { z0: 3, vx: 1.2, maxT: 2 } },
   { id: 'yawspin', name: 'yaw-slow', phases: [{ t: 1.35, yaw: 5.6, thr: 0.42 }, { t: 0.45, yaw: 0, thr: 0.4 }], opts: { z0: 3.2, vx: 1.0, maxT: 2.2 } },
   { id: 'yawspin', name: 'yaw-sloppy', phases: [{ t: 1.05, yaw: 7.2, roll: 0.5, thr: 0.45 }, { t: 0.45, yaw: 0, roll: 0, thr: 0.4 }], opts: { z0: 3, vx: 1.3, maxT: 2 } },
-  { id: 'powerloop', name: 'pl-fast', phases: [{ t: 0.25, pitch: 0, thr: 0.8 }, { t: 1.05, pitch: -6.4, thr: 0.88 }, { t: 0.55, pitch: 0, thr: 0.5 }], opts: { z0: 6, vx: 7, maxT: 2.4 } },
-  { id: 'powerloop', name: 'pl-slow', phases: [{ t: 0.3, pitch: 0, thr: 0.75 }, { t: 1.35, pitch: -5.0, thr: 0.82 }, { t: 0.6, pitch: 0, thr: 0.48 }], opts: { z0: 7, vx: 5.5, maxT: 2.8 } },
-  { id: 'powerloop', name: 'pl-high', phases: [{ t: 0.28, pitch: 0, thr: 0.9 }, { t: 1.15, pitch: -6.0, thr: 0.9 }, { t: 0.55, pitch: 0, thr: 0.5 }], opts: { z0: 8, vx: 6.5, maxT: 2.5 } },
-  { id: 'matty', name: 'matty-fast', phases: [{ t: 0.12, pitch: 0, thr: 0.55 }, { t: 0.95, pitch: -8.4, thr: 0.05 }, { t: 0.55, pitch: 0, thr: 0.5 }], opts: { z0: 9, vx: 12, maxT: 2.2 } },
-  { id: 'matty', name: 'matty-high', phases: [{ t: 0.12, pitch: 0, thr: 0.5 }, { t: 1.05, pitch: -7.6, thr: 0.06 }, { t: 0.5, pitch: 0, thr: 0.5 }], opts: { z0: 11, vx: 11, maxT: 2.3 } },
-  { id: 'matty', name: 'matty-sloppy', phases: [{ t: 0.12, pitch: 0, thr: 0.55 }, { t: 0.95, pitch: -8.2, yaw: 0.8, thr: 0.06 }, { t: 0.55, pitch: 0, yaw: 0, thr: 0.5 }], opts: { z0: 9.5, vx: 11.5, maxT: 2.2 } },
-  { id: 'halfmatty', name: 'hm-fast', phases: [{ t: 0.15, pitch: 0, thr: 0.65 }, { t: 0.42, pitch: -7.5, thr: 0.2 }, { t: 0.7, pitch: 0, thr: 0.5 }], opts: { z0: 8, vx: 8, maxT: 2.0 } },
-  { id: 'halfmatty', name: 'hm-slow', phases: [{ t: 0.15, pitch: 0, thr: 0.6 }, { t: 0.55, pitch: -5.8, thr: 0.18 }, { t: 0.7, pitch: 0, thr: 0.5 }], opts: { z0: 8.5, vx: 7.2, maxT: 2.1 } },
-  { id: 'halfmatty', name: 'hm-high', phases: [{ t: 0.12, pitch: 0, thr: 0.62 }, { t: 0.44, pitch: -7.2, thr: 0.16 }, { t: 0.65, pitch: 0, thr: 0.5 }], opts: { z0: 10, vx: 8.5, maxT: 2.0 } },
-  { id: 'splits', name: 'ss-fast', phases: [{ t: 0.28, roll: 11, pitch: 0, thr: 0.55 }, { t: 0.55, roll: 0, pitch: -7.5, thr: 0.35 }, { t: 0.5, roll: 0, pitch: 0, thr: 0.5 }], opts: { z0: 10, vx: 8, maxT: 2.0 } },
-  { id: 'splits', name: 'ss-slow', phases: [{ t: 0.30, roll: 11, pitch: 0, thr: 0.5 }, { t: 0.60, roll: 0, pitch: -7.2, thr: 0.32 }, { t: 0.5, roll: 0, pitch: 0, thr: 0.5 }], opts: { z0: 10.4, vx: 7.6, maxT: 2.15 } },
-  { id: 'splits', name: 'ss-sloppy', phases: [{ t: 0.28, roll: 11, pitch: 0.2, thr: 0.55 }, { t: 0.55, roll: 0, pitch: -7.4, thr: 0.34 }, { t: 0.5, pitch: 0, thr: 0.5 }], opts: { z0: 10.2, vx: 8.2, maxT: 2.1 } },
-  { id: 'maverick', name: 'mav-std', phases: [{ t: 0.50, pitch: -3.6, thr: 0.95 }, { t: 0.50, pitch: 3.4, thr: 0.22 }, { t: 0.45, pitch: 0.2, thr: 0.62 }, { t: 0.4, pitch: 0, thr: 0.5 }], opts: { z0: 3.5, vx: 4.5, maxT: 2.5 } },
-  { id: 'maverick', name: 'mav-slow', phases: [{ t: 0.62, pitch: -3.0, thr: 0.92 }, { t: 0.58, pitch: 2.9, thr: 0.2 }, { t: 0.45, pitch: 0, thr: 0.58 }], opts: { z0: 3.2, vx: 4.0, maxT: 2.6 } },
-  { id: 'maverick', name: 'mav-high', phases: [{ t: 0.52, pitch: -3.4, thr: 0.98 }, { t: 0.52, pitch: 3.2, thr: 0.18 }, { t: 0.45, pitch: 0, thr: 0.6 }], opts: { z0: 4.5, vx: 4.2, maxT: 2.5 } },
-  { id: 'trippy', name: 'trip-std', phases: [{ t: 0.25, roll: 8, thr: 0.55 }, { t: 1.2, roll: 7, pitch: 0.4, yaw: 4.5, thr: 0.6 }, { t: 0.5, roll: 0, yaw: 0, thr: 0.5 }], opts: { z0: 6, vx: 4, maxT: 2.4 } },
-  { id: 'trippy', name: 'trip-fast', phases: [{ t: 0.2, roll: 9, thr: 0.58 }, { t: 1.05, roll: 8.2, yaw: 5.2, thr: 0.62 }, { t: 0.45, roll: 0, yaw: 0, thr: 0.5 }], opts: { z0: 6.5, vx: 4.5, maxT: 2.2 } },
-  { id: 'trippy', name: 'trip-slow', phases: [{ t: 0.3, roll: 6.5, thr: 0.52 }, { t: 1.45, roll: 6.2, yaw: 3.6, pitch: 0.3, thr: 0.55 }, { t: 0.5, roll: 0, yaw: 0, thr: 0.5 }], opts: { z0: 5.5, vx: 3.5, maxT: 2.7 } },
-  { id: 'hang', name: 'hang-std', phases: [{ t: 1.2, thr: 0.25 }], opts: { z0: 3, vx: 0, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 }, maxT: 1.4, clearance: 3 } },
-  { id: 'hang', name: 'hang-high', phases: [{ t: 1.25, thr: 0.25 }], opts: { z0: 5, vx: 0, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 }, maxT: 1.45, clearance: 5 } },
-  { id: 'hang', name: 'hang-slow', phases: [{ t: 1.35, thr: 0.26 }], opts: { z0: 3.5, vx: 0.2, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 }, maxT: 1.5, clearance: 3.2 } },
+  { id: 'powerloop', name: 'pl-fast', phases: [{ t: 0.25, pitch: 0, thr: 0.8 }, { t: 1.05, pitch: -6.4, thr: 0.88 }, { t: 0.55, pitch: 0, thr: 0.5 }], opts: { z0: 6, vx: 7, maxT: 2.4, colliders: OBJ_BAR } },
+  { id: 'powerloop', name: 'pl-slow', phases: [{ t: 0.3, pitch: 0, thr: 0.75 }, { t: 1.35, pitch: -5.0, thr: 0.82 }, { t: 0.6, pitch: 0, thr: 0.48 }], opts: { z0: 7, vx: 5.5, maxT: 2.8, colliders: OBJ_BAR } },
+  { id: 'powerloop', name: 'pl-high', phases: [{ t: 0.28, pitch: 0, thr: 0.9 }, { t: 1.15, pitch: -6.0, thr: 0.9 }, { t: 0.55, pitch: 0, thr: 0.5 }], opts: { z0: 8, vx: 6.5, maxT: 2.5, colliders: OBJ_BAR } },
+  { id: 'matty', name: 'matty-fast', phases: [{ t: 0.10, pitch: 0, thr: 0.35 }, { t: 0.72, pitch: 8.2, thr: 0.08 }, { t: 0.55, pitch: 0, thr: 0.62 }], opts: { z0: 9, vx: 7, maxT: 2.1, colliders: OBJ_BAR } },
+  { id: 'matty', name: 'matty-high', phases: [{ t: 0.10, pitch: 0, thr: 0.32 }, { t: 0.80, pitch: 7.4, thr: 0.06 }, { t: 0.55, pitch: 0, thr: 0.6 }], opts: { z0: 11, vx: 6.5, maxT: 2.2, colliders: OBJ_BAR } },
+  { id: 'matty', name: 'matty-sloppy', phases: [{ t: 0.10, pitch: 0, thr: 0.35 }, { t: 0.75, pitch: 8.0, yaw: 0.5, thr: 0.08 }, { t: 0.55, pitch: 0, yaw: 0, thr: 0.6 }], opts: { z0: 9.5, vx: 6.8, maxT: 2.15, colliders: OBJ_BAR } },
+  { id: 'halfmatty', name: 'hm-fast', phases: [{ t: 0.28, roll: 11, pitch: 0, thr: 0.5 }, { t: 0.48, roll: 0, pitch: 7.4, thr: 0.32 }, { t: 0.55, pitch: 0, thr: 0.5 }], opts: { z0: 9, vx: 7, maxT: 2.0, colliders: OBJ_BAR } },
+  { id: 'halfmatty', name: 'hm-slow', phases: [{ t: 0.32, roll: 10, pitch: 0, thr: 0.48 }, { t: 0.55, roll: 0, pitch: 6.4, thr: 0.3 }, { t: 0.55, pitch: 0, thr: 0.5 }], opts: { z0: 9.4, vx: 6.4, maxT: 2.15, colliders: OBJ_BAR } },
+  { id: 'halfmatty', name: 'hm-high', phases: [{ t: 0.28, roll: 11, pitch: 0, thr: 0.5 }, { t: 0.50, roll: 0, pitch: 7.0, thr: 0.28 }, { t: 0.55, pitch: 0, thr: 0.5 }], opts: { z0: 10.5, vx: 7.2, maxT: 2.05, colliders: OBJ_BAR } },
+  { id: 'splits', name: 'ss-fast', phases: [{ t: 0.28, roll: 11, pitch: 0, thr: 0.55 }, { t: 0.55, roll: 0, pitch: -7.5, thr: 0.35 }, { t: 0.5, roll: 0, pitch: 0, thr: 0.5 }], opts: { z0: 10, vx: 8, maxT: 2.0, colliders: OBJ_BAR } },
+  { id: 'splits', name: 'ss-slow', phases: [{ t: 0.30, roll: 11, pitch: 0, thr: 0.5 }, { t: 0.60, roll: 0, pitch: -7.2, thr: 0.32 }, { t: 0.5, roll: 0, pitch: 0, thr: 0.5 }], opts: { z0: 10.4, vx: 7.6, maxT: 2.15, colliders: OBJ_BAR } },
+  { id: 'splits', name: 'ss-sloppy', phases: [{ t: 0.28, roll: 11, pitch: 0.2, thr: 0.55 }, { t: 0.55, roll: 0, pitch: -7.4, thr: 0.34 }, { t: 0.5, pitch: 0, thr: 0.5 }], opts: { z0: 10.2, vx: 8.2, maxT: 2.1, colliders: OBJ_BAR } },
+  { id: 'maverick', name: 'mav-std', phases: [{ t: 0.50, pitch: -3.6, thr: 0.95 }, { t: 0.50, pitch: 3.4, thr: 0.22 }, { t: 0.45, pitch: 0.2, thr: 0.62 }, { t: 0.4, pitch: 0, thr: 0.5 }], opts: { z0: 3.5, vx: 4.5, maxT: 2.5, colliders: OBJ_BAR } },
+  { id: 'maverick', name: 'mav-slow', phases: [{ t: 0.62, pitch: -3.0, thr: 0.92 }, { t: 0.58, pitch: 2.9, thr: 0.2 }, { t: 0.45, pitch: 0, thr: 0.58 }], opts: { z0: 3.2, vx: 4.0, maxT: 2.6, colliders: OBJ_BAR } },
+  { id: 'maverick', name: 'mav-high', phases: [{ t: 0.52, pitch: -3.4, thr: 0.98 }, { t: 0.52, pitch: 3.2, thr: 0.18 }, { t: 0.45, pitch: 0, thr: 0.6 }], opts: { z0: 4.5, vx: 4.2, maxT: 2.5, colliders: OBJ_BAR } },
+  { id: 'trippy', name: 'trip-std', phases: [{ t: 0.22, roll: 8, thr: 0.5 }, { t: 1.25, roll: 7.2, yaw: -4.6, pitch: 0.2, thr: 0.55 }, { t: 0.45, roll: 0, yaw: 0, thr: 0.5 }], opts: { z0: 6, vx: 3.5, maxT: 2.5, colliders: OBJ_POLE, quat: { x: 1, y: 0, z: 0, w: 0 } } },
+  { id: 'trippy', name: 'trip-fast', phases: [{ t: 0.18, roll: 9, thr: 0.52 }, { t: 1.1, roll: 8.0, yaw: -5.0, thr: 0.58 }, { t: 0.4, roll: 0, yaw: 0, thr: 0.5 }], opts: { z0: 6.5, vx: 4, maxT: 2.3, colliders: OBJ_POLE, quat: { x: 1, y: 0, z: 0, w: 0 } } },
+  { id: 'trippy', name: 'trip-slow', phases: [{ t: 0.25, roll: 6.8, thr: 0.48 }, { t: 1.45, roll: 6.4, yaw: -3.6, pitch: 0.2, thr: 0.52 }, { t: 0.45, roll: 0, yaw: 0, thr: 0.5 }], opts: { z0: 5.8, vx: 3.2, maxT: 2.7, colliders: OBJ_POLE, quat: { x: 1, y: 0, z: 0, w: 0 } } },
+  { id: 'cradle', name: 'crd-std', phases: [{ t: 0.38, pitch: -4.2, thr: 0.42 }, { t: 0.38, pitch: 3.6, thr: 0.4 }, { t: 0.5, pitch: 0, thr: 0.45 }], opts: { z0: 3.6, vx: 5.5, maxT: 1.9, colliders: OBJ_POLE } },
+  { id: 'cradle', name: 'crd-slow', phases: [{ t: 0.48, pitch: -3.4, thr: 0.4 }, { t: 0.45, pitch: 3.0, thr: 0.38 }, { t: 0.5, pitch: 0, thr: 0.44 }], opts: { z0: 3.4, vx: 4.8, maxT: 2.1, colliders: OBJ_POLE } },
+  { id: 'cradle', name: 'crd-fast', phases: [{ t: 0.32, pitch: -4.6, thr: 0.44 }, { t: 0.32, pitch: 4.0, thr: 0.42 }, { t: 0.45, pitch: 0, thr: 0.45 }], opts: { z0: 3.8, vx: 6.0, maxT: 1.75, colliders: OBJ_POLE } },
+  { id: 'juicyflick', name: 'jf-fast', phases: [{ t: 0.42, pitch: 8.4, thr: 0.88 }, { t: 0.28, pitch: 0, roll: 11, thr: 0.5 }, { t: 0.4, roll: 0, thr: 0.5 }], opts: { z0: 5, vx: 6, maxT: 1.7 } },
+  { id: 'juicyflick', name: 'jf-slow', phases: [{ t: 0.52, pitch: 7.0, thr: 0.82 }, { t: 0.32, pitch: 0, roll: 10, thr: 0.48 }, { t: 0.4, roll: 0, thr: 0.48 }], opts: { z0: 5.2, vx: 5.2, maxT: 1.85 } },
+  { id: 'juicyflick', name: 'jf-high', phases: [{ t: 0.44, pitch: 8.0, thr: 0.9 }, { t: 0.28, pitch: 0, roll: 11, thr: 0.5 }, { t: 0.4, roll: 0, thr: 0.5 }], opts: { z0: 6.5, vx: 5.8, maxT: 1.75 } },
+  { id: 'snapback', name: 'sb-fast', phases: [{ t: 0.42, pitch: -8.4, thr: 0.72 }, { t: 0.28, pitch: 0, roll: 11, thr: 0.5 }, { t: 0.4, roll: 0, thr: 0.5 }], opts: { z0: 4.5, vx: 6, maxT: 1.7, colliders: OBJ_BAR } },
+  { id: 'snapback', name: 'sb-slow', phases: [{ t: 0.52, pitch: -7.0, thr: 0.66 }, { t: 0.32, pitch: 0, roll: 10, thr: 0.48 }, { t: 0.4, roll: 0, thr: 0.48 }], opts: { z0: 4.8, vx: 5.2, maxT: 1.85, colliders: OBJ_BAR } },
+  { id: 'snapback', name: 'sb-high', phases: [{ t: 0.44, pitch: -8.0, thr: 0.75 }, { t: 0.28, pitch: 0, roll: 11, thr: 0.5 }, { t: 0.4, roll: 0, thr: 0.5 }], opts: { z0: 5.8, vx: 5.6, maxT: 1.75, colliders: OBJ_BAR } },
+  { id: 'rubik', name: 'rk-std', phases: [{ t: 0.28, pitch: 11, roll: 0, thr: 0.5 }, { t: 0.85, pitch: 0, roll: 8.4, thr: 0.48 }, { t: 0.28, pitch: 11, roll: 0, thr: 0.5 }, { t: 0.4, pitch: 0, roll: 0, thr: 0.45 }], opts: { z0: 6, vx: 2.5, maxT: 2.4 } },
+  { id: 'rubik', name: 'rk-fast', phases: [{ t: 0.24, pitch: 12, roll: 0, thr: 0.52 }, { t: 0.75, pitch: 0, roll: 9.2, thr: 0.5 }, { t: 0.24, pitch: 12, roll: 0, thr: 0.5 }, { t: 0.35, pitch: 0, roll: 0, thr: 0.45 }], opts: { z0: 6.2, vx: 2.8, maxT: 2.2 } },
+  { id: 'rubik', name: 'rk-slow', phases: [{ t: 0.34, pitch: 9.5, roll: 0, thr: 0.48 }, { t: 1.0, pitch: 0, roll: 7.2, thr: 0.46 }, { t: 0.34, pitch: 9.5, roll: 0, thr: 0.48 }, { t: 0.4, pitch: 0, roll: 0, thr: 0.44 }], opts: { z0: 5.8, vx: 2.2, maxT: 2.7 } },
+  { id: 'cubik', name: 'ck-std', phases: [{ t: 0.28, roll: 11, pitch: 0, thr: 0.5 }, { t: 0.85, roll: 0, pitch: 8.4, thr: 0.48 }, { t: 0.28, roll: 11, pitch: 0, thr: 0.5 }, { t: 0.4, pitch: 0, roll: 0, thr: 0.45 }], opts: { z0: 6, vx: 2.5, maxT: 2.4 } },
+  { id: 'cubik', name: 'ck-fast', phases: [{ t: 0.24, roll: 12, pitch: 0, thr: 0.52 }, { t: 0.75, roll: 0, pitch: 9.2, thr: 0.5 }, { t: 0.24, roll: 12, pitch: 0, thr: 0.5 }, { t: 0.35, pitch: 0, roll: 0, thr: 0.45 }], opts: { z0: 6.2, vx: 2.8, maxT: 2.2 } },
+  { id: 'cubik', name: 'ck-slow', phases: [{ t: 0.34, roll: 9.5, pitch: 0, thr: 0.48 }, { t: 1.0, roll: 0, pitch: 7.2, thr: 0.46 }, { t: 0.34, roll: 9.5, pitch: 0, thr: 0.48 }, { t: 0.4, pitch: 0, roll: 0, thr: 0.44 }], opts: { z0: 5.8, vx: 2.2, maxT: 2.7 } },
   { id: 'dive', name: 'dive-std', phases: [{ t: 0.85, pitch: 1.2, thr: 0.05 }], opts: { z0: 16, vx: 9, vz: -12, maxT: 1.2, clearance: 10, allowFloor: true } },
   { id: 'dive', name: 'dive-fast', phases: [{ t: 0.7, pitch: 1.4, thr: 0.04 }], opts: { z0: 18, vx: 8, vz: -13, maxT: 1.1, clearance: 12, allowFloor: true } },
   { id: 'dive', name: 'dive-steep', phases: [{ t: 0.9, pitch: 1.0, thr: 0.06 }], opts: { z0: 17, vx: 10, vz: -11, maxT: 1.25, clearance: 11, allowFloor: true } },
@@ -159,36 +178,50 @@ test('new storage key only; never writes old ryfly* keys', () => {
 
 test('trick list has the requested maneuvers and frozen point values', () => {
   const ids = TRICK_LIST.map((t) => t.id);
-  for (const id of ['flip', 'roll', 'yawspin', 'powerloop', 'splits', 'matty', 'halfmatty', 'maverick', 'trippy', 'hang', 'dive', 'gap', 'prox']) {
+  for (const id of ['flip', 'roll', 'yawspin', 'powerloop', 'splits', 'matty', 'halfmatty', 'maverick', 'trippy', 'dive', 'gap', 'prox', 'cradle', 'juicyflick', 'snapback', 'rubik', 'cubik']) {
     assert.ok(ids.includes(id), 'missing ' + id);
     assert.ok(TRICK_BY_ID[id].points > 0);
     assert.ok(TRICK_BY_ID[id].name);
+    assert.ok(TRICK_BY_ID[id].tier);
   }
-  assert.equal(TRICK_BY_ID.flip.points, 200);
-  assert.equal(TRICK_BY_ID.roll.points, 200);
-  assert.equal(TRICK_BY_ID.yawspin.points, 250);
-  assert.equal(TRICK_BY_ID.powerloop.points, 450);
-  assert.equal(TRICK_BY_ID.splits.points, 400);
-  assert.equal(TRICK_BY_ID.matty.points, 600);
+  assert.equal(ids.includes('hang'), false);
+  assert.equal(TRICK_BY_ID.flip.points, 50);
+  assert.equal(TRICK_BY_ID.roll.points, 50);
+  assert.equal(TRICK_BY_ID.yawspin.points, 50);
+  assert.equal(TRICK_BY_ID.powerloop.points, 200);
+  assert.equal(TRICK_BY_ID.matty.points, 200);
   assert.equal(TRICK_BY_ID.halfmatty.points, 350);
-  assert.equal(TRICK_BY_ID.maverick.points, 650);
-  assert.equal(TRICK_BY_ID.trippy.points, 400);
-  assert.equal(TRICK_BY_ID.hang.points, 300);
-  assert.equal(TRICK_BY_ID.dive.points, 350);
-  assert.equal(TRICK_BY_ID.gap.points, 500);
-  assert.equal(TRICK_BY_ID.prox.points, 280);
+  assert.equal(TRICK_BY_ID.maverick.points, 100);
+  assert.equal(TRICK_BY_ID.trippy.points, 500);
+  assert.equal(TRICK_BY_ID.splits.points, 100);
+  assert.equal(TRICK_BY_ID.dive.points, 100);
+  assert.equal(TRICK_BY_ID.gap.points, 125);
+  assert.equal(TRICK_BY_ID.prox.points, 150);
+  assert.equal(TRICK_BY_ID.cradle.points, 150);
+  assert.equal(TRICK_BY_ID.juicyflick.points, 200);
+  assert.equal(TRICK_BY_ID.snapback.points, 200);
+  assert.equal(TRICK_BY_ID.rubik.points, 325);
+  assert.equal(TRICK_BY_ID.cubik.points, 350);
+  assert.equal(trickPoints('flip', false), 50);
+  assert.equal(trickPoints('flip', true), 75);
+  assert.equal(trickPoints('juicyflick', true), 225);
+  assert.equal(mapIsIndoor('garage'), true);
+  assert.equal(mapIsIndoor('city'), false);
 });
 
 test('docs/sim-tricks.md defines each trick and the confused pairs', () => {
   assert.ok(docs.includes('# QuadMath freestyle trick definitions'));
-  for (const id of ['powerloop', 'matty', 'halfmatty', 'maverick', 'trippy', 'splits']) {
+  assert.ok(docs.includes("Tyrantt's Pro Whooper"));
+  assert.ok(docs.includes('prowhooper.com'));
+  for (const id of ['powerloop', 'matty', 'halfmatty', 'maverick', 'trippy', 'splits', 'juicyflick', 'snapback', 'cradle', 'rubik', 'cubik']) {
     assert.ok(docs.includes('`' + id + '`'), 'doc missing ' + id);
   }
-  assert.ok(docs.includes('Power Loop vs Matty'));
+  assert.ok(docs.includes('Powerloop vs Matty'));
   assert.ok(docs.includes('Matty vs Half Matty'));
   assert.ok(docs.includes('Split-S vs Half Matty'));
-  assert.ok(docs.includes('Maverick vs Power Loop'));
+  assert.ok(docs.includes('Maverick Loop vs Powerloop'));
   assert.ok(docs.includes('Trippy Spin vs Yaw Spin'));
+  assert.ok(docs.includes('100/75/50'));
 });
 
 test('combo multiplier grows and variety cuts repeats', () => {
@@ -197,15 +230,24 @@ test('combo multiplier grows and variety cuts repeats', () => {
   assert.equal(comboMul(5), 3);
   assert.equal(comboMul(20), 6);
   assert.equal(varietyMul(0), 1);
-  assert.equal(varietyMul(1), 0.55);
-  assert.ok(varietyMul(3) < varietyMul(1));
+  assert.equal(varietyMul(1), 0.75);
+  assert.equal(varietyMul(2), 0.5);
+  assert.equal(varietyMul(3), 0);
+  assert.equal(b2bMul(0), 1);
+  assert.equal(b2bMul(1), 0.5);
+  assert.equal(b2bMul(2), 0.25);
+  assert.equal(execMul(true, false), 0.65);
+  assert.equal(execMul(false, true), 0.5);
+  assert.ok(Math.abs(nextStreak(1, 500) - 1.05) < 1e-9);
   assert.equal(uniqueBonus(1), 1);
   assert.equal(uniqueBonus(3), 1.1);
   const a = scoreTrick('flip', 0, 1, 1);
   const b = scoreTrick('flip', 1, 2, 1);
   assert.ok(b < a * 1.5, 'repeat should not outpace a fresh flip even with mul');
+  assert.equal(scoreTrick('flip', 3, 1, 1), 0);
   const c = scoreTrick('matty', 0, 3, 3);
   assert.ok(c > scoreTrick('flip', 0, 3, 3));
+  assert.ok(scoreTrick('flip', 0, 1, 1, { indoor: true }) > scoreTrick('flip', 0, 1, 1));
 });
 
 test('body-frame quat delta integrates a pure roll as roll, not pitch', () => {
@@ -232,12 +274,12 @@ test('hover wobble and cruise carving score nothing', () => {
   assert.deepEqual(labels(cruise), []);
 });
 
-test('turtled inverted deck does not hang', () => {
+test('turtled inverted deck does not score a trick', () => {
   const deck = fly([{ t: 1.2, thr: 0.0 }], {
     z0: 0.02, vx: 0, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 },
     maxT: 1.3, clearance: 0.01, allowFloor: true,
   });
-  assert.equal(deck.hits.includes('hang'), false);
+  assert.deepEqual(labels(deck), []);
 });
 
 test('labeled QuadPhysics library: one label per maneuver, zero doubles', () => {
@@ -304,7 +346,7 @@ test('combo chains, banks on crash/land, and persists bests per map', () => {
   }
   assert.ok(tricks.comboN() >= 1, 'combo ' + tricks.comboN() + ' libHits=' + r.hits.join(','));
   const comboPts = tricks.comboPoints();
-  assert.ok(comboPts >= 200);
+  assert.ok(comboPts >= TRICK_BY_ID.roll.points);
   const banked = tricks.noteCrash();
   assert.equal(banked, comboPts);
   assert.equal(tricks.comboN(), 0);
