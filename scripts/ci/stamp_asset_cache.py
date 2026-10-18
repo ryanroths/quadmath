@@ -44,6 +44,7 @@ FIRST_PARTY_ASSETS = (
     "sim-looks.js",
     "sim-art.js",
     "sim-art-city.js",
+    "sim-secrets.js",
     "sim-maps.js",
     "sim-tracks.js",
     "sim-room.js",
