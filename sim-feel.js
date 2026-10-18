@@ -4,6 +4,8 @@
 //   quadmathSimFov.
 // Nothing here is copied from WebFPV.
 
+import { makeWorldLabel } from './sim-art.js?v=00de6da317eb';
+
 export const INPUT_CHOICE_KEY = 'quadmathSimInputChoice';
 export const FLOATINESS_KEY = 'quadmathSimFloatiness';
 export const FOV_KEY = 'quadmathSimFov';
@@ -450,18 +452,14 @@ export function createFeel(ctx) {
     group.add(pad);
 
     const label = function (text, pos) {
-      const cv = document.createElement('canvas');
-      cv.width = 256; cv.height = 64;
-      const g = cv.getContext('2d');
-      g.font = '700 36px Inter, system-ui, sans-serif';
-      g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillStyle = '#E8E9ED';
-      g.fillText(text, 128, 32);
-      const spr = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false,
-      }));
+      const spr = makeWorldLabel(THREE, text, {
+        font: '700 36px Inter, system-ui, sans-serif',
+        fill: '#E8E9ED',
+        glow: '#E8E9ED',
+        strokeWidth: 6,
+        scale: [8, 2],
+      });
       spr.position.copy(pos); spr.position.y += 4;
-      spr.scale.set(8, 2, 1);
       group.add(spr);
     };
     label('HOVER', hover.position);

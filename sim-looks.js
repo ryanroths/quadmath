@@ -1,14 +1,18 @@
 // QuadMath sim V1 looks — environment, PBR, AO, FPV lens, quality presets.
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
-// localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv.
+// localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
+// quadmathSimCrosshair.
 import { resolveAutoQuality } from './sim-touch.js?v=2b2c215c8a82';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
+export const CROSSHAIR_KEY = 'quadmathSimCrosshair';
 
 export const LOOK_SPOTS = {
   spawn:  { pos: [0, 3.2, 32], target: [0, 6, -40] },
   t0g1:   { pos: [-122, 8.5, -96], target: [-140, 7, -120] },
+  startLabel: { pos: [-118, 17.5, -88], target: [-140, 19, -120] },
+  portalLabel: { pos: [328, 26, -312], target: [350, 32, -350] },
   t1mid:  { pos: [322, 50, -478], target: [350, 46, -515] },
   street: { pos: [6, 2.8, 90], target: [0, 3.5, -30] },
   roof:   { pos: [-40, 48, 95], target: [-20, 12, 10] },
@@ -103,6 +107,31 @@ function saveChoice(q) {
 }
 function saveFpv(fpv) {
   try { localStorage.setItem(FPV_KEY, JSON.stringify(fpv)); } catch (e) { /* ignore */ }
+}
+
+function lookStore(storage) {
+  if (storage) return storage;
+  try { return typeof localStorage !== 'undefined' ? localStorage : null; }
+  catch (e) { return null; }
+}
+
+// Default off: real FPV goggles have no center crosshair.
+export function loadCrosshairOn(storage) {
+  const store = lookStore(storage);
+  if (!store) return false;
+  try { return store.getItem(CROSSHAIR_KEY) === '1'; }
+  catch (e) { return false; }
+}
+
+export function saveCrosshairOn(on, storage) {
+  const store = lookStore(storage);
+  if (!store) return false;
+  try {
+    store.setItem(CROSSHAIR_KEY, on ? '1' : '0');
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 function gpuHint(renderer) {
@@ -800,7 +829,7 @@ export async function createLooks(ctx) {
     } catch (e) { /* ignore */ }
     // New keys must not collide
     out.newKeys = {
-      quality: QUALITY_KEY, fpv: FPV_KEY,
+      quality: QUALITY_KEY, fpv: FPV_KEY, crosshair: CROSSHAIR_KEY,
       customTracks: 'quadmathSimCustomTracks',
       selectedTrack: 'quadmathSimTrack',
       whoop: 'quadmathSimWhoop',

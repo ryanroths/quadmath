@@ -7,6 +7,7 @@
 
 import { detectPassOrMiss, gateRadius } from './sim-tracks.js?v=1c814dba06e8';
 import { DEFAULT_ROOM, planRoom } from './sim-room.js?v=19bee552695d';
+import { makeWorldLabel } from './sim-art.js?v=00de6da317eb';
 
 export const COACH_KEY = 'quadmathSimCoach';
 export const GUIDE_DIR = 'content/guides/';
@@ -1107,18 +1108,14 @@ export function createCoach(ctx) {
   }
 
   function addLabel(text, pos, scale) {
-    const cv = document.createElement('canvas');
-    cv.width = 256; cv.height = 64;
-    const g = cv.getContext('2d');
-    g.font = '700 32px Inter, system-ui, sans-serif';
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillStyle = '#E8E9ED';
-    g.fillText(text, 128, 32);
-    const spr = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false,
-    }));
-    spr.position.set(pos.x, pos.y, pos.z);
-    spr.scale.set(scale || 4.2, (scale || 4.2) * 0.25, 1);
+    const spr = makeWorldLabel(THREE, text, {
+      font: '700 32px Inter, system-ui, sans-serif',
+      fill: '#E8E9ED',
+      glow: '#E8E9ED',
+      strokeWidth: 6,
+      scale: scale || 4.2,
+      position: pos,
+    });
     group.add(spr);
   }
 

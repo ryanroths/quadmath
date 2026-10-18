@@ -11,6 +11,7 @@ import {
   qualityWantsReflections, qualityWantsParticles,
   propClearOfCourse, planCityProps, SIGN_WORDS, GATE_STYLES,
   signsAreOriginal, BRAND_BLOCKLIST,
+  paintWorldLabel, WORLD_LABEL,
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson } from '../sim-tracks.js';
 import { MAP_IDS, MAP_LOOKS } from '../sim-maps.js';
@@ -166,6 +167,36 @@ test('city density module stays original (no GLB / WebFPV)', () => {
   assert.equal(city.includes('Sketchfab'), false);
   assert.equal(city.includes('WebFPV'), false);
   assert.match(city, /window shader|uWinOn|cityArtVisuals/);
+});
+
+test('world labels punch out the canvas backdrop', () => {
+  const calls = [];
+  const ctx = {
+    clearRect: (...a) => calls.push(['clearRect', a]),
+    fillRect: (...a) => calls.push(['fillRect', a]),
+    strokeText: () => calls.push(['strokeText']),
+    fillText: () => calls.push(['fillText']),
+    save: () => {},
+    restore: () => {},
+  };
+  paintWorldLabel(ctx, 'START');
+  assert.ok(calls.some((c) => c[0] === 'clearRect'), 'clears to transparent');
+  assert.equal(calls.some((c) => c[0] === 'fillRect'), false, 'no box fill');
+  assert.ok(calls.some((c) => c[0] === 'strokeText'), 'outline for distance');
+  assert.ok(WORLD_LABEL.alphaTest > 0);
+  const art = readFileSync(join(root, 'sim-art.js'), 'utf8');
+  assert.match(art, /toneMapped:\s*false/);
+  assert.match(art, /depthWrite:\s*false/);
+  assert.match(art, /generateMipmaps\s*=\s*false/);
+  const sim = readFileSync(join(root, 'sim.html'), 'utf8');
+  assert.match(sim, /makeWorldLabel/);
+  assert.equal(sim.includes("strokeText('START'"), false);
+  assert.equal(sim.includes("strokeText('PORTAL'"), false);
+  assert.equal(sim.includes("strokeText('DIVE'"), false);
+  const coach = readFileSync(join(root, 'sim-coach.js'), 'utf8');
+  assert.match(coach, /makeWorldLabel/);
+  const feel = readFileSync(join(root, 'sim-feel.js'), 'utf8');
+  assert.match(feel, /makeWorldLabel/);
 });
 
 test('art direction doc lists every map', () => {
