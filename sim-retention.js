@@ -1776,7 +1776,7 @@ export function makeCanopyGroup(THREE, skin) {
   const lip = new THREE.Mesh(
     new THREE.BoxGeometry(1, 1, 1),
     new THREE.MeshStandardMaterial({
-      color: pal.canopy, emissive: pal.led, emissiveIntensity: 0.55, roughness: 0.42, metalness: 0.12,
+      color: pal.canopy, emissive: pal.led, emissiveIntensity: 1.15, roughness: 0.42, metalness: 0.12,
     }),
   );
   lip.name = 'qmCanopyLip';
@@ -1813,48 +1813,48 @@ export function makeCraftGroup(THREE, skin) {
   const g = new THREE.Group();
   g.name = 'qmCraft';
   const frameMat = new THREE.MeshStandardMaterial({
-    color: pal.frame, roughness: 0.52, metalness: 0.22,
+    color: pal.frame, emissive: pal.led, emissiveIntensity: 0.22, roughness: 0.48, metalness: 0.28,
   });
   const bodyMat = new THREE.MeshStandardMaterial({
     color: pal.body, roughness: 0.5, metalness: 0.16,
   });
   const propMat = new THREE.MeshStandardMaterial({
-    color: pal.prop, roughness: 0.46, metalness: 0.04,
+    color: pal.prop, emissive: pal.prop, emissiveIntensity: 0.28, roughness: 0.42, metalness: 0.04,
   });
   const canopyMat = new THREE.MeshStandardMaterial({
-    color: pal.canopy, emissive: pal.led, emissiveIntensity: 0.4, roughness: 0.38, metalness: 0.08,
+    color: pal.canopy, emissive: pal.led, emissiveIntensity: 0.7, roughness: 0.38, metalness: 0.08,
   });
   const ledMat = new THREE.MeshStandardMaterial({
-    color: pal.led, emissive: pal.led, emissiveIntensity: 1.85, roughness: 0.32, metalness: 0.08,
+    color: pal.led, emissive: pal.led, emissiveIntensity: 2.4, roughness: 0.28, metalness: 0.08,
   });
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.07, 0.42), bodyMat);
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.08, 0.46), bodyMat);
   plate.userData.skinPart = 'body';
   skipLooks(plate);
   g.add(plate);
-  const blister = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.16), canopyMat);
-  blister.position.set(0, 0.08, -0.18);
+  const blister = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.14, 0.2), canopyMat);
+  blister.position.set(0, 0.1, -0.2);
   blister.userData.skinPart = 'canopy';
   skipLooks(blister);
   g.add(blister);
-  const armGeo = new THREE.BoxGeometry(0.07, 0.045, 0.52);
-  const propGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.018, 10);
-  const ledGeo = new THREE.BoxGeometry(0.055, 0.035, 0.055);
+  const armGeo = new THREE.BoxGeometry(0.09, 0.055, 0.58);
+  const propGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.02, 10);
+  const ledGeo = new THREE.BoxGeometry(0.09, 0.05, 0.09);
   const corners = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
   for (const c of corners) {
     const arm = new THREE.Mesh(armGeo, frameMat);
-    arm.position.set(c[0] * 0.26, 0, c[1] * 0.26);
+    arm.position.set(c[0] * 0.28, 0, c[1] * 0.28);
     arm.rotation.y = Math.atan2(c[0], c[1]);
     arm.userData.skinPart = 'frame';
     skipLooks(arm);
     g.add(arm);
     const prop = new THREE.Mesh(propGeo, propMat);
-    prop.position.set(c[0] * 0.46, 0.055, c[1] * 0.46);
+    prop.position.set(c[0] * 0.5, 0.06, c[1] * 0.5);
     prop.userData.skinPart = 'prop';
     prop.userData.spin = true;
     skipLooks(prop);
     g.add(prop);
     const led = new THREE.Mesh(ledGeo, ledMat);
-    led.position.set(c[0] * 0.46, -0.04, c[1] * 0.46);
+    led.position.set(c[0] * 0.5, 0.1, c[1] * 0.5);
     led.userData.skinPart = 'led';
     skipLooks(led);
     g.add(led);
@@ -1927,8 +1927,14 @@ export function tintGroup(group, skin) {
       if (mat.emissive) mat.emissive.setHex(pal.led);
     }
     if (part === 'body' && mat.color) mat.color.setHex(pal.body);
-    if (part === 'frame' && mat.color) mat.color.setHex(pal.frame);
-    if (part === 'prop' && mat.color) mat.color.setHex(pal.prop);
+    if (part === 'frame' && mat.color) {
+      mat.color.setHex(pal.frame);
+      if (mat.emissive) mat.emissive.setHex(pal.led);
+    }
+    if (part === 'prop' && mat.color) {
+      mat.color.setHex(pal.prop);
+      if (mat.emissive) mat.emissive.setHex(pal.prop);
+    }
     if (part === 'led' && mat.color) {
       mat.color.setHex(pal.led);
       if (mat.emissive) mat.emissive.setHex(pal.led);
