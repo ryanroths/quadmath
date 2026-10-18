@@ -1561,19 +1561,27 @@ export function skinCssVars(skin) {
 }
 
 export function skinMiniMarkup() {
-  return '<svg class="skin-mini" viewBox="0 0 72 40" aria-hidden="true">'
-    + '<circle class="sk-prop" cx="14" cy="10" r="8"/>'
-    + '<circle class="sk-prop" cx="58" cy="10" r="8"/>'
-    + '<circle class="sk-prop" cx="14" cy="30" r="8"/>'
-    + '<circle class="sk-prop" cx="58" cy="30" r="8"/>'
-    + '<path class="sk-frame" d="M18 14 L54 26 M54 14 L18 26"/>'
-    + '<rect class="sk-body" x="28" y="15" width="16" height="10" rx="2"/>'
-    + '<rect class="sk-canopy" x="31" y="8" width="10" height="8" rx="3"/>'
-    + '<circle class="sk-led" cx="14" cy="10" r="2.2"/>'
-    + '<circle class="sk-led" cx="58" cy="10" r="2.2"/>'
-    + '<circle class="sk-led" cx="14" cy="30" r="2.2"/>'
-    + '<circle class="sk-led" cx="58" cy="30" r="2.2"/>'
-    + '</svg>';
+  const ducts = [[20, 20], [60, 20], [20, 60], [60, 60]];
+  let svg = '<svg class="skin-mini" viewBox="0 0 80 80" aria-hidden="true">';
+  for (const [cx, cy] of ducts) {
+    svg += '<circle class="sk-prop" cx="' + cx + '" cy="' + cy + '" r="11"/>';
+    let blades = '';
+    for (let i = 0; i < 3; i++) {
+      const a = i * Math.PI * 2 / 3;
+      blades += 'M' + cx + ' ' + cy + 'L'
+        + (cx + Math.cos(a) * 11).toFixed(1) + ' '
+        + (cy + Math.sin(a) * 11).toFixed(1);
+    }
+    svg += '<path class="sk-blade" d="' + blades + '"/>';
+    svg += '<circle class="sk-duct" cx="' + cx + '" cy="' + cy + '" r="16"/>';
+    svg += '<circle class="sk-led" cx="' + cx + '" cy="' + (cy + 13) + '" r="2.4"/>';
+  }
+  svg += '<path class="sk-frame" d="M28 28 L52 52 M52 28 L28 52"/>';
+  svg += '<ellipse class="sk-body" cx="40" cy="42" rx="9" ry="7"/>';
+  svg += '<ellipse class="sk-canopy" cx="40" cy="36" rx="8" ry="7"/>';
+  svg += '<circle class="sk-lens" cx="40" cy="30" r="2.2"/>';
+  svg += '</svg>';
+  return svg;
 }
 
 export function unlockedSkins(progress) {
@@ -1812,52 +1820,98 @@ export function makeCraftGroup(THREE, skin) {
   const pal = skinPalette(skin || SKINS[0]);
   const g = new THREE.Group();
   g.name = 'qmCraft';
+  const side = THREE.DoubleSide != null ? THREE.DoubleSide : 2;
   const frameMat = new THREE.MeshStandardMaterial({
-    color: pal.frame, emissive: pal.led, emissiveIntensity: 0.22, roughness: 0.48, metalness: 0.28,
+    color: pal.frame, emissive: pal.led, emissiveIntensity: 0.2, roughness: 0.5, metalness: 0.22, side,
   });
   const bodyMat = new THREE.MeshStandardMaterial({
-    color: pal.body, roughness: 0.5, metalness: 0.16,
+    color: pal.body, roughness: 0.52, metalness: 0.14,
   });
   const propMat = new THREE.MeshStandardMaterial({
-    color: pal.prop, emissive: pal.prop, emissiveIntensity: 0.28, roughness: 0.42, metalness: 0.04,
+    color: pal.prop, emissive: pal.prop, emissiveIntensity: 0.16, roughness: 0.46, metalness: 0.04,
+  });
+  const blurMat = new THREE.MeshStandardMaterial({
+    color: pal.prop, emissive: pal.prop, emissiveIntensity: 0.1, roughness: 0.9, metalness: 0,
+    transparent: true, opacity: 0.3, side, depthWrite: false,
   });
   const canopyMat = new THREE.MeshStandardMaterial({
-    color: pal.canopy, emissive: pal.led, emissiveIntensity: 0.7, roughness: 0.38, metalness: 0.08,
+    color: pal.canopy, emissive: pal.led, emissiveIntensity: 0.55, roughness: 0.36, metalness: 0.08,
   });
   const ledMat = new THREE.MeshStandardMaterial({
-    color: pal.led, emissive: pal.led, emissiveIntensity: 2.4, roughness: 0.28, metalness: 0.08,
+    color: pal.led, emissive: pal.led, emissiveIntensity: 2.2, roughness: 0.28, metalness: 0.08, side,
   });
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.08, 0.46), bodyMat);
-  plate.userData.skinPart = 'body';
-  skipLooks(plate);
-  g.add(plate);
-  const blister = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.14, 0.2), canopyMat);
-  blister.position.set(0, 0.1, -0.2);
-  blister.userData.skinPart = 'canopy';
-  skipLooks(blister);
-  g.add(blister);
-  const armGeo = new THREE.BoxGeometry(0.09, 0.055, 0.58);
-  const propGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.02, 10);
-  const ledGeo = new THREE.BoxGeometry(0.09, 0.05, 0.09);
+  const lensMat = new THREE.MeshStandardMaterial({
+    color: 0x14161c, emissive: 0x1a2430, emissiveIntensity: 0.28, roughness: 0.22, metalness: 0.35,
+  });
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.05, 8), bodyMat);
+  hub.userData.skinPart = 'body';
+  skipLooks(hub);
+  g.add(hub);
+  const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), canopyMat);
+  canopy.scale.set(0.9, 0.7, 1.2);
+  canopy.position.set(0, 0.085, -0.03);
+  canopy.userData.skinPart = 'canopy';
+  skipLooks(canopy);
+  g.add(canopy);
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.028, 0.036, 8), lensMat);
+  lens.rotation.x = Math.PI / 2;
+  lens.position.set(0, 0.075, -0.155);
+  lens.userData.skinPart = 'body';
+  skipLooks(lens);
+  g.add(lens);
+  const armGeo = new THREE.BoxGeometry(0.055, 0.034, 0.34);
+  const ductGeo = new THREE.CylinderGeometry(0.275, 0.255, 0.085, 12, 1, true);
+  const bladeGeo = new THREE.BoxGeometry(0.18, 0.008, 0.032);
+  const capGeo = new THREE.CylinderGeometry(0.024, 0.024, 0.016, 8);
+  const ledGeo = new THREE.CylinderGeometry(0.262, 0.248, 0.014, 12, 1, true);
+  const blurGeo = new THREE.CylinderGeometry(0.17, 0.17, 0.006, 12);
+  const spread = 0.3;
   const corners = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
   for (const c of corners) {
+    const x = c[0] * spread;
+    const z = c[1] * spread;
     const arm = new THREE.Mesh(armGeo, frameMat);
-    arm.position.set(c[0] * 0.28, 0, c[1] * 0.28);
+    arm.position.set(x * 0.5, 0, z * 0.5);
     arm.rotation.y = Math.atan2(c[0], c[1]);
     arm.userData.skinPart = 'frame';
     skipLooks(arm);
     g.add(arm);
-    const prop = new THREE.Mesh(propGeo, propMat);
-    prop.position.set(c[0] * 0.5, 0.06, c[1] * 0.5);
-    prop.userData.skinPart = 'prop';
-    prop.userData.spin = true;
-    skipLooks(prop);
-    g.add(prop);
+    const duct = new THREE.Mesh(ductGeo, frameMat);
+    duct.position.set(x, 0.015, z);
+    duct.userData.skinPart = 'frame';
+    duct.userData.craftRole = 'duct';
+    skipLooks(duct);
+    g.add(duct);
     const led = new THREE.Mesh(ledGeo, ledMat);
-    led.position.set(c[0] * 0.5, 0.1, c[1] * 0.5);
+    led.position.set(x, -0.036, z);
     led.userData.skinPart = 'led';
     skipLooks(led);
     g.add(led);
+    const prop = new THREE.Group();
+    prop.position.set(x, 0.02, z);
+    prop.userData.spin = true;
+    skipLooks(prop);
+    const cap = new THREE.Mesh(capGeo, propMat);
+    cap.userData.skinPart = 'prop';
+    skipLooks(cap);
+    prop.add(cap);
+    for (let i = 0; i < 3; i++) {
+      const ang = i * Math.PI * 2 / 3;
+      const blade = new THREE.Mesh(bladeGeo, propMat);
+      blade.rotation.y = ang;
+      blade.position.set(Math.cos(ang) * 0.09, 0, -Math.sin(ang) * 0.09);
+      blade.userData.skinPart = 'prop';
+      blade.userData.craftRole = 'blade';
+      skipLooks(blade);
+      prop.add(blade);
+    }
+    const blur = new THREE.Mesh(blurGeo, blurMat);
+    blur.userData.skinPart = 'prop';
+    blur.userData.propBlur = true;
+    blur.visible = false;
+    skipLooks(blur);
+    prop.add(blur);
+    g.add(prop);
   }
   g.visible = false;
   g.userData.keepInScene = true;
@@ -1927,7 +1981,7 @@ export function tintGroup(group, skin) {
       if (mat.emissive) mat.emissive.setHex(pal.led);
     }
     if (part === 'body' && mat.color) mat.color.setHex(pal.body);
-    if (part === 'frame' && mat.color) {
+    if ((part === 'frame' || part === 'duct') && mat.color) {
       mat.color.setHex(pal.frame);
       if (mat.emissive) mat.emissive.setHex(pal.led);
     }

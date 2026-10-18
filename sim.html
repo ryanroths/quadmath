@@ -315,22 +315,25 @@
   .board-list{display:flex;flex-direction:column;gap:6px;margin:10px 0;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px}
   .board-row{display:flex;justify-content:space-between;gap:10px;color:var(--txt)}
   .board-row span{color:var(--dim)}
-  .skin-list{display:flex;flex-direction:column;gap:5px;margin:10px 0;max-height:min(70vh,580px);overflow-y:auto}
-  .menu-layer.skins{width:min(400px,92vw)}
-  .skin-row{width:100%;text-align:left;display:flex;justify-content:space-between;gap:8px;align-items:center;
-    padding:6px 8px;color:var(--txt);border-color:var(--line)}
+  .skin-list{display:flex;flex-direction:column;gap:6px;margin:10px 0;max-height:min(70vh,640px);overflow-y:auto}
+  .menu-layer.skins{width:min(460px,94vw)}
+  .skin-row{width:100%;text-align:left;display:flex;justify-content:space-between;gap:10px;align-items:center;
+    padding:8px 10px;color:var(--txt);border-color:var(--line)}
   .skin-row:hover{background:rgba(255,77,26,.1);color:var(--txt)}
   .skin-row.on{border-color:var(--orange);background:rgba(255,77,26,.12)}
   .skin-row.locked{opacity:.45;cursor:not-allowed}
   .skin-copy{flex:1;min-width:0}
-  .skin-copy b{display:block;font-size:12px;color:var(--txt)}
-  .skin-copy i{display:block;font-style:normal;font-size:10px;color:var(--dim);margin-top:1px}
+  .skin-copy b{display:block;font-size:13px;color:var(--txt)}
+  .skin-copy i{display:block;font-style:normal;font-size:11px;color:var(--dim);margin-top:2px}
   .skin-state{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:var(--dim);white-space:nowrap}
-  .skin-mini{width:56px;height:32px;flex-shrink:0;display:block}
-  .skin-mini .sk-prop{fill:var(--sk-prop);opacity:.88}
-  .skin-mini .sk-frame{stroke:var(--sk-frame);fill:none;stroke-width:4;stroke-linecap:round}
+  .skin-mini{width:104px;height:104px;flex-shrink:0;display:block}
+  .skin-mini .sk-prop{fill:var(--sk-prop);opacity:.35}
+  .skin-mini .sk-blade{stroke:var(--sk-prop);fill:none;stroke-width:2.2;stroke-linecap:round;opacity:.95}
+  .skin-mini .sk-duct{fill:none;stroke:var(--sk-frame);stroke-width:5}
+  .skin-mini .sk-frame{stroke:var(--sk-frame);fill:none;stroke-width:3.5;stroke-linecap:round}
   .skin-mini .sk-body{fill:var(--sk-body)}
   .skin-mini .sk-canopy{fill:var(--sk-canopy)}
+  .skin-mini .sk-lens{fill:#14161c}
   .skin-mini .sk-led{fill:var(--sk-led)}
   .daily-meta{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:var(--dim);margin:8px 0}
 </style>
@@ -788,7 +791,7 @@ import {
   skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
-} from "./sim-retention.js?v=1ce46035ae5b";
+} from "./sim-retention.js?v=a694cd182f98";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -910,11 +913,13 @@ function poseCraft(){
 function spinCraftProps(dt){
   if(!craftGroup||!craftGroup.visible)return;
   const thr=typeof stick==='undefined'?0:(stick.t||0);
-  const spin=(6+thr*36)*dt;
-  const kids=craftGroup.children||[];
-  for(let i=0;i<kids.length;i++){
-    if(kids[i].userData&&kids[i].userData.spin)kids[i].rotation.y+=spin;
-  }
+  const armed=typeof qp!=='undefined'&&qp&&qp.armed;
+  const spin=(armed?20+thr*52:1.2)*dt;
+  craftGroup.traverse(function(o){
+    if(!o.userData)return;
+    if(o.userData.spin)o.rotation.y+=spin;
+    if(o.userData.propBlur)o.visible=!!armed;
+  });
 }
 function applyCanopyVis(flags){
   const f=flags||{};

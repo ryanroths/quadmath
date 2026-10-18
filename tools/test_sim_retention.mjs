@@ -371,8 +371,15 @@ test('skin unlock ids and localStorage keys stay frozen', () => {
     assert.match(skinHex(s.canopy), /^#[0-9a-f]{6}$/);
     assert.ok(skinCssVars(s).includes('--sk-led:'));
   }
-  assert.ok(skinMiniMarkup().includes('skin-mini'));
+  const mini = skinMiniMarkup();
+  assert.ok(mini.includes('skin-mini'));
+  assert.ok(mini.includes('sk-duct'));
+  assert.ok(mini.includes('sk-blade'));
+  assert.ok(mini.includes('sk-lens'));
+  assert.equal((mini.match(/sk-duct/g) || []).length, 4);
   assert.ok(simSrc.includes('skin-mini'));
+  assert.ok(simSrc.includes('sk-duct'));
+  assert.match(simSrc, /skin-mini\{width:104px;height:104px/);
   assert.ok(simSrc.includes('skinUnlockLabel'));
   assert.ok(simSrc.includes('makeCraftGroup'));
   assert.ok(!simSrc.includes('Canopy colors only'));
@@ -692,7 +699,13 @@ function mockTHREE() {
     Group: class extends Obj {},
     Mesh,
     BoxGeometry: class { constructor(w, h, d) { this.w = w; this.h = h; this.d = d; } },
-    CylinderGeometry: class { constructor(a, b, h) { this.rTop = a; this.rBot = b; this.h = h; } },
+    SphereGeometry: class { constructor(r) { this.r = r; } },
+    CylinderGeometry: class {
+      constructor(a, b, h, seg, hseg, open) {
+        this.rTop = a; this.rBot = b; this.h = h; this.openEnded = !!open;
+      }
+    },
+    DoubleSide: 2,
     MeshStandardMaterial: class {
       constructor(o) {
         Object.assign(this, o);
@@ -774,15 +787,39 @@ test('no canopy piece covers >10% of view at FOV 110', () => {
   assert.equal(lip.userData.skinPart, 'canopy');
   const craft = makeCraftGroup(THREE, SKINS[0]);
   assert.equal(craft.visible, false);
-  const parts = new Set(craft.children.map((c) => c.userData.skinPart));
+  const nodes = [];
+  craft.traverse((o) => { if (o !== craft) nodes.push(o); });
+  const parts = new Set(nodes.map((c) => c.userData.skinPart).filter(Boolean));
   for (const need of ['body', 'canopy', 'frame', 'prop', 'led']) {
     assert.ok(parts.has(need), need);
   }
+  const ducts = nodes.filter((c) => c.userData.craftRole === 'duct');
+  const blades = nodes.filter((c) => c.userData.craftRole === 'blade');
+  const blurs = nodes.filter((c) => c.userData.propBlur);
+  const leds = nodes.filter((c) => c.userData.skinPart === 'led');
+  assert.equal(ducts.length, 4);
+  assert.equal(blades.length, 12);
+  assert.equal(blurs.length, 4);
+  assert.equal(leds.length, 4);
+  assert.ok(blurs.every((b) => b.visible === false));
+  assert.ok(ducts.every((d) => d.geometry && d.geometry.openEnded));
+  assert.ok(nodes.some((c) => c.geometry && c.geometry.r && c.userData.skinPart === 'canopy'));
+  for (const led of leds) {
+    const duct = ducts.find((d) => d.position.x === led.position.x && d.position.z === led.position.z);
+    assert.ok(duct, 'LED sits under a duct');
+    assert.ok(led.position.y < duct.position.y, 'LED is under the duct, not on the prop');
+  }
   assert.ok(craft.children.some((c) => c.userData.spin));
+  assert.ok(simSrc.includes('propBlur') && simSrc.includes('craftGroup.traverse'));
   tintGroup(craft, SKINS.find((s) => s.id === 'daily-fast'));
   const pal = skinPalette(SKINS.find((s) => s.id === 'daily-fast'));
-  const prop = craft.children.find((c) => c.userData.skinPart === 'prop');
+  const prop = nodes.find((c) => c.userData.skinPart === 'prop' && c.material);
   assert.equal(prop.material.color._hex, pal.prop);
+  const frameDuct = ducts[0];
+  assert.equal(frameDuct.material.color._hex, pal.frame);
+  const led = leds[0];
+  assert.equal(led.material.color._hex, pal.led);
+  assert.equal(led.material.emissive._e, pal.led);
   const trail = makeSkinTrail(THREE, SKINS[0]);
   assert.equal(TRAIL_POINTS, 24);
   pushSkinTrail(trail, 1, 2, 3);
