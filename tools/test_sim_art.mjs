@@ -16,6 +16,8 @@ import {
   restyleLiving, tickLivingArt, livingBudget, livingWantsGlow,
   GARAGE_VIBE_ID, hideStockGarageMeshes, buildVoltStall,
   restyleGarage, tickGarageArt, garageBudget, garageWantsGlow,
+  WAREHOUSE_VIBE_ID, hideStockWarehouseMeshes, buildIonNave,
+  restyleWarehouse, tickWarehouseArt, warehouseBudget, warehouseWantsGlow,
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
@@ -41,7 +43,7 @@ test('every catalog map and daily host has a vibe with a full palette', () => {
   }
   for (const m of DAILY_MAPS) {
     assert.ok(VIBES[m.id], 'daily host ' + m.id);
-    if (m.id === 'living' || m.id === 'garage') assert.equal(VIBES[m.id].implemented, true);
+    if (m.id === 'living' || m.id === 'garage' || m.id === 'warehouse') assert.equal(VIBES[m.id].implemented, true);
     else assert.equal(VIBES[m.id].implemented, false);
   }
 });
@@ -84,7 +86,7 @@ test('hexNum and vibeTable are stable helpers', () => {
   assert.equal(hexNum(0x88a0ff), 0x88a0ff);
   const table = vibeTable();
   assert.equal(table.length, 9);
-  assert.equal(table.filter((r) => r.implemented).length, 3);
+  assert.equal(table.filter((r) => r.implemented).length, 4);
 });
 
 test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {
@@ -94,6 +96,7 @@ test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {
   assert.equal(art.includes('Sketchfab'), false);
   assert.match(art, /sim-art-living\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-garage\.js\?v=[0-9a-f]{12}/);
+  assert.match(art, /sim-art-warehouse\.js\?v=[0-9a-f]{12}/);
   assert.equal(mentionsBannedAssets('assets/Models/GLB-format/tree-large.glb'), true);
   assert.equal(mentionsBannedAssets('buildCityDressing()'), false);
 });
@@ -107,6 +110,8 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.match(sim, /tickLivingArt|decorateLivingGate/);
   assert.match(sim, /applyGarageArt|restyleGarage/);
   assert.match(sim, /tickGarageArt|decorateGarageGate/);
+  assert.match(sim, /applyWarehouseArt|restyleWarehouse/);
+  assert.match(sim, /tickWarehouseArt|decorateWarehouseGate/);
   assert.match(sim, /cbRain|quadmathSimRain|loadRain/);
   assert.match(sim, /skipStockCity|procedural neon city|Neon Current/);
   assert.equal(sim.includes('content/guides/'), false);
@@ -518,6 +523,79 @@ test('Garage freestyle builds without throwing and the FPV frame is not all blac
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickGarageArt must not touch the THREE binding');
   assert.match(tickSrc, /garageTube|garageSpark/);
+});
+
+test('Warehouse Ion Nave is implemented with hex-frame gates', () => {
+  assert.equal(WAREHOUSE_VIBE_ID, 'warehouse');
+  const v = VIBES.warehouse;
+  assert.equal(v.implemented, true);
+  assert.equal(v.name, 'Ion Nave');
+  assert.equal(v.sky, 'none');
+  assert.equal(v.time, 'windowless');
+  assert.equal(v.gates.keepBrand, false);
+  assert.equal(v.gates.style, 'hex-frame');
+  assert.equal(v.post.bloom, true);
+  assert.equal(v.palette.neonA.toLowerCase(), '#39ffb0');
+  assert.equal(v.lighting.fogColor, 0x0b1218);
+  assert.equal(warehouseWantsGlow('low'), false);
+  assert.equal(warehouseWantsGlow('med'), true);
+  assert.equal(warehouseBudget('low').cans < warehouseBudget('high').cans, true);
+  assert.equal(warehouseBudget('low').glow, false);
+  assert.equal(warehouseBudget('med').glow, true);
+  assert.equal(warehouseBudget('low').orbs, 0);
+});
+
+test('Warehouse freestyle builds without throwing and the FPV frame is not all black', () => {
+  installDomStub();
+  const warehouseSrc = readFileSync(join(root, 'sim-art-warehouse.js'), 'utf8');
+  assert.equal(mentionsBannedAssets(warehouseSrc), false);
+  assert.match(warehouseSrc, /never abort the FPV render loop/);
+  assert.match(warehouseSrc, /CapsuleGeometry|LatheGeometry/);
+  const free = freestyleTrack('warehouse');
+  assert.equal(free.id, freestyleIdFor('warehouse'));
+  assert.equal(free.gates.length, 0);
+  for (const q of ['low', 'med', 'high', 'auto']) {
+    const built = buildMap(THREE, 'warehouse');
+    assert.doesNotThrow(() => hideStockWarehouseMeshes(built.group));
+    const out = restyleWarehouse(THREE, {
+      vibe: vibeFor('warehouse'),
+      quality: q,
+      group: built.group,
+      floor: built.floor,
+    });
+    assert.equal(out.error, undefined, q + ' restyleWarehouse ' + out.error);
+    assert.ok(out.visuals, q + ' visuals');
+    const hidden = [];
+    built.group.traverse((o) => {
+      if (o.userData && o.userData.artHidden) hidden.push(1);
+    });
+    assert.ok(hidden.length >= 8, q + ' hidden stock ' + hidden.length);
+    const vis = built.group.getObjectByName('warehouseArtVisuals');
+    assert.ok(vis, q + ' warehouseArtVisuals');
+    if (q === 'low') {
+      assert.equal(warehouseBudget('low').glow, false);
+      let orbs = 0;
+      vis.traverse((o) => { if (o.userData && o.userData.warehouseOrb) orbs += 1; });
+      assert.equal(orbs, 0, 'low extras off');
+    }
+    const stats = artStats(null, built.group);
+    assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    const frame = cityFrameLit(vis);
+    assert.ok(frame.meshes >= 8, q + ' meshes ' + frame.meshes);
+    assert.ok(frame.lit >= 8, q + ' lit materials ' + frame.lit);
+    assert.ok(frame.maxChan > 0.08, q + ' brightest channel ' + frame.maxChan);
+    assert.doesNotThrow(() => {
+      for (let i = 0; i < 8; i++) tickWarehouseArt(built.group, 1000 + i * 16);
+    }, q + ' tickWarehouseArt');
+    const parent = new THREE.Group();
+    assert.doesNotThrow(() => buildIonNave(THREE, parent, vibeFor('warehouse'), q, free.gates));
+  }
+  const tickSrc = warehouseSrc.slice(
+    warehouseSrc.indexOf('export function tickWarehouseArt'),
+    warehouseSrc.indexOf('export function restyleWarehouse(THREE'),
+  );
+  assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickWarehouseArt must not touch the THREE binding');
+  assert.match(tickSrc, /warehouseTube|warehouseOrb/);
 });
 
 test('art direction doc lists every map', () => {
