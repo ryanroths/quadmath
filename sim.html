@@ -315,10 +315,23 @@
   .board-list{display:flex;flex-direction:column;gap:6px;margin:10px 0;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px}
   .board-row{display:flex;justify-content:space-between;gap:10px;color:var(--txt)}
   .board-row span{color:var(--dim)}
-  .skin-list{display:flex;flex-direction:column;gap:6px;margin:10px 0}
-  .skin-row{width:100%;text-align:left;display:flex;justify-content:space-between;gap:10px;align-items:center}
+  .skin-list{display:flex;flex-direction:column;gap:6px;margin:10px 0;max-height:min(62vh,520px);overflow-y:auto}
+  .menu-layer.skins{width:min(400px,92vw)}
+  .skin-row{width:100%;text-align:left;display:flex;justify-content:space-between;gap:10px;align-items:center;
+    padding:8px 10px;color:var(--txt);border-color:var(--line)}
+  .skin-row:hover{background:rgba(255,77,26,.1);color:var(--txt)}
+  .skin-row.on{border-color:var(--orange);background:rgba(255,77,26,.12)}
   .skin-row.locked{opacity:.45;cursor:not-allowed}
-  .skin-swatch{width:14px;height:14px;border-radius:4px;display:inline-block;margin-right:8px;vertical-align:middle;border:1px solid var(--line)}
+  .skin-copy{flex:1;min-width:0}
+  .skin-copy b{display:block;font-size:13px;color:var(--txt)}
+  .skin-copy i{display:block;font-style:normal;font-size:11px;color:var(--dim);margin-top:2px}
+  .skin-state{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:var(--dim);white-space:nowrap}
+  .skin-mini{width:72px;height:40px;flex-shrink:0;display:block}
+  .skin-mini .sk-prop{fill:var(--sk-prop);opacity:.88}
+  .skin-mini .sk-frame{stroke:var(--sk-frame);fill:none;stroke-width:4;stroke-linecap:round}
+  .skin-mini .sk-body{fill:var(--sk-body)}
+  .skin-mini .sk-canopy{fill:var(--sk-canopy)}
+  .skin-mini .sk-led{fill:var(--sk-led)}
   .daily-meta{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:var(--dim);margin:8px 0}
 </style>
 </head>
@@ -772,7 +785,10 @@ import {
   loadSkinId, saveSkinId, makeCanopyGroup, layoutCanopyGroup, canopyFpvVisible,
   loadCanopyOn, saveCanopyOn, CANOPY_KEY, tintGroup, sanitizePilotName, classId,
   validateSubmittedRun, CLASS_IDS, issuePilotToken, syncDailyStreak,
-} from "./sim-retention.js?v=d7a0b0294150";
+  skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette,
+  makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
+  escapeHtml,
+} from "./sim-retention.js?v=b55754698aa3";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -876,12 +892,35 @@ scene.add(camera);
 let canopyGroup=makeCanopyGroup(THREE, SKINS[0]);
 camera.add(canopyGroup);
 let canopyOn=loadCanopyOn();
+const craftGroup=makeCraftGroup(THREE, SKINS[0]);
+scene.add(craftGroup);
+const skinTrail=makeSkinTrail(THREE, SKINS[0]);
+scene.add(skinTrail.line);
+let chaseCamOn=false;
+let poseOk=false;
+const _chaseOff=new THREE.Vector3();
 function applyCanopyLayout(){
   if(canopyGroup)layoutCanopyGroup(canopyGroup, camera);
+}
+function poseCraft(){
+  if(!craftGroup||!poseOk||!state||!state.pos)return;
+  craftGroup.position.copy(state.pos);
+  craftGroup.quaternion.copy(state.q);
+}
+function spinCraftProps(dt){
+  if(!craftGroup||!craftGroup.visible)return;
+  const thr=typeof stick==='undefined'?0:(stick.t||0);
+  const spin=(6+thr*36)*dt;
+  const kids=craftGroup.children||[];
+  for(let i=0;i<kids.length;i++){
+    if(kids[i].userData&&kids[i].userData.spin)kids[i].rotation.y+=spin;
+  }
 }
 function applyCanopyVis(flags){
   const f=flags||{};
   if(f.fpv)applyCanopyLayout();
+  poseCraft();
+  const chase=!!f.chase||chaseCamOn;
   if(canopyGroup){
     canopyGroup.visible=canopyFpvVisible({
       on:canopyOn,
@@ -889,8 +928,18 @@ function applyCanopyVis(flags){
       lookSpot:!!f.lookSpot,
       replay:!!f.replay,
       builder:!!f.builder,
+      chase,
     });
   }
+  const craftOn=craftChaseVisible({
+    chase,
+    menuOpen:!!f.menuOpen,
+    lookSpot:!!f.lookSpot,
+    replay:!!f.replay,
+    builder:!!f.builder,
+  });
+  if(craftGroup)craftGroup.visible=craftOn;
+  if(skinTrail&&skinTrail.line)skinTrail.line.visible=craftOn;
 }
 applyCanopyVis({fpv:false,menuOpen:true});
 // Size from the canvas box, not the window, so the render target always
@@ -2281,6 +2330,7 @@ async function setMap(mapId,trackId,opts){
 // ---------- Quad state ----------
 const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
   q:new THREE.Quaternion(),bounces:0,t0:performance.now()};
+poseOk=true;poseCraft();
 let thrustActual=0; // spooled thrust in WORLD newtons — audio + battery load read this
 
 // ---------- Physics core (quadphysics.js) ----------
@@ -2487,6 +2537,7 @@ function placeQuadAt(x,y,z,yaw){
   autoArmState={seenLow:false};
   armSwState={prev:null};
   armSwitchBlocked=false;
+  clearSkinTrail(skinTrail);
 }
 function resetQuad(){
   // Crash / flip recovery: R respawns at the last passed JSON-track gate and
@@ -3426,8 +3477,18 @@ function bounce(){
 // ---------- Camera ----------
 const camTilt=new THREE.Quaternion();
 const camJit=new THREE.Quaternion(),camJitEul=new THREE.Euler();
+function applyChaseCam(){
+  if(!chaseCamOn)return false;
+  _chaseOff.set(0,0.95,2.8).applyQuaternion(state.q);
+  camera.position.copy(state.pos).add(_chaseOff);
+  camera.up.set(0,1,0);
+  camera.lookAt(state.pos.x,state.pos.y+0.04,state.pos.z);
+  if(camera.fov!==70){camera.fov=70;camera.updateProjectionMatrix();}
+  return true;
+}
 function updateCamera(){
   if(builderOn){applyBuilderCam();applyCanopyVis({builder:true});return;}
+  if(applyChaseCam()){applyCanopyVis({chase:true});return;}
   if(looks&&looks.applyLookSpot()){
     applyCanopyVis({menuOpen:!!looks.menuOpen,lookSpot:!looks.menuOpen});
     return;
@@ -3603,6 +3664,7 @@ function showMenuLayer(html){
   const el=document.getElementById('menuLayer');
   if(!el)return;
   el.classList.remove('wide');
+  el.classList.remove('skins');
   el.innerHTML=html;
   el.classList.add('show');
 }
@@ -3733,17 +3795,24 @@ function openBoardsCard(){
 function openSkinsCard(){
   const prog=skinProgress();
   const cur=resolveSkin(loadSkinId(), prog);
+  const mini=skinMiniMarkup();
   const rows=SKINS.map(s=>{
     const on=isSkinUnlocked(s, prog);
     const sel=s.id===cur.id?'on':'';
-    const hex='#'+s.canopy.toString(16).padStart(6,'0');
-    return '<button type="button" class="skin-row '+(on?'':'locked')+' '+sel+'" data-skin="'+s.id+'">'+
-      '<span><i class="skin-swatch" style="background:'+hex+'"></i>'+s.name+'</span>'+
-      '<span>'+(on?(s.id===cur.id?'ON':'OPEN'):'LOCK')+'</span></button>';
+    const vibe=escapeHtml(s.vibe||'');
+    const name=escapeHtml(s.name);
+    const need=escapeHtml(skinUnlockLabel(s));
+    const state=on?(s.id===cur.id?'ON':'OPEN'):'LOCK';
+    return '<button type="button" class="skin-row '+(on?'':'locked')+' '+sel+'" data-skin="'+s.id+'" style="'+skinCssVars(s)+'">'+
+      mini+
+      '<span class="skin-copy"><b>'+name+'</b><i>'+vibe+' · '+need+'</i></span>'+
+      '<span class="skin-state">'+state+'</span></button>';
   }).join('');
-  showMenuLayer('<h2>Skins</h2><p>Canopy colors only. Unlocks from coach medals, daily streak, and daily times.</p>'+
+  showMenuLayer('<h2>Skins</h2><p>Frame, canopy, props, and LED trail. Unlocks from coach medals, daily streak, and daily times. Stored ids stay the same.</p>'+
     '<div class="skin-list">'+rows+'</div>'+
     '<button type="button" id="layerClose">Close</button>');
+  const layer=document.getElementById('menuLayer');
+  if(layer)layer.classList.add('skins');
   document.querySelectorAll('.skin-row[data-skin]').forEach(b=>{
     b.onclick=()=>{
       const s=SKINS.find(x=>x.id===b.dataset.skin);
@@ -4049,7 +4118,7 @@ function wireLooksUI(){
       '<li>Fly the lit gate. A 3-lap run starts at gate 1. Splits per gate; missed gates add +2.0s.</li>'+
       '<li>Coach: short scored drills (hover, line, gates, doorway, split-S, loop). Bronze unlocks the next.</li>'+
       '<li>Daily: a seeded indoor whoop each UTC day. Streak + best time stay in this browser. Boards: local 65/75/85 week, optional online.</li>'+
-      '<li>Duel: Tune → Copy duel code. Friend loads it and races the ghost. Skins are canopy colors only.</li>'+
+      '<li>Duel: Tune → Copy duel code. Friend loads it and races the ghost. Skins paint the frame, canopy, props, and LED trail.</li>'+
       '<li>Tab opens Tune — paste a Betaflight CLI dump. Rate presets do not overwrite a saved tune until you pick one.</li>'+
       '</ol>'+
       '<button type="button" class="primary" id="feelStartTut">Start tutorial</button>'+
@@ -4916,9 +4985,11 @@ function skinProgress(){
   const medals=(coach&&coach.progress())?coach.progress().medals:{};
   return { medals, daily: loadDaily() };
 }
-function applyActiveSkin(){
-  const skin=resolveSkin(loadSkinId(), skinProgress());
+function applySkinLook(skin){
+  if(!skin)return;
   tintGroup(canopyGroup, skin);
+  tintGroup(craftGroup, skin);
+  if(skinTrail&&skinTrail.line)tintGroup(skinTrail.line, skin);
   if(ghostMesh){
     ghostMesh.traverse(o=>{
       if(!o.material||!o.material.color)return;
@@ -4926,6 +4997,9 @@ function applyActiveSkin(){
       if(o.material.emissive)o.material.emissive.setHex(skin.canopy);
     });
   }
+}
+function applyActiveSkin(){
+  applySkinLook(resolveSkin(loadSkinId(), skinProgress()));
 }
 function ghostPayloadOf(id, samples, timeMs){
   return tagGhost({
@@ -5227,6 +5301,10 @@ function loop(now){
     }
   }
   updateCamera();
+  if(craftGroup&&craftGroup.visible){
+    spinCraftProps(dt);
+    if(state.vel.length()>0.45)pushSkinTrail(skinTrail,state.pos.x,state.pos.y,state.pos.z);
+  }
   // composer is null until the post chain resolves, and stays null if the
   // addons CDN is unreachable - either way the sim keeps rendering.
   const c=looks&&looks.composer?looks.composer:composer;
@@ -5519,9 +5597,13 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
   artStats:()=>artStats(renderer,cityWorld),vibe:()=>vibeFor(currentMap),VIBES,qualityWantsBloom,
   rain:()=>loadRain(),setRain(v){saveRain(!!v);if(currentMap==='city')applyCityArt(looks&&looks.applied);},RAIN_KEY,
-  QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,canopyGroup,
+  QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,canopyGroup,craftGroup,skinTrail,
   canopyEnabled:()=>canopyOn,
   setCanopyOn(v){canopyOn=!!v;const el=document.getElementById('cbCanopy');if(el)el.checked=canopyOn;saveCanopyOn(canopyOn);updateCamera();},
+  chaseCam:()=>chaseCamOn,
+  setChaseCam(v){chaseCamOn=!!v;if(looks&&chaseCamOn)looks.setLookSpot(null);updateCamera();},
+  previewSkin(id){applySkinLook(skinById(id));},
+  openSkinsCard,SKINS,skinPalette,
   setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
