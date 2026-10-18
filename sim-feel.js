@@ -184,7 +184,7 @@ export function createFeel(ctx) {
     }
     const hint = document.getElementById('hudArmHint');
     if (hint) {
-      const text = s.armed ? '' : (s.armHint || 'Throttle down + Space/arm switch to arm');
+      const text = s.armed ? '' : (s.armHint || 'Raise throttle to fly (auto-arm)');
       hint.textContent = text;
       hint.classList.toggle('show', !s.armed && !!text);
     }

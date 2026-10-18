@@ -1,13 +1,16 @@
 // QuadMath sim W6 — touch sticks, mobile boot, default flight mode.
 // Dual virtual sticks, deadzone/expo, angle-first newcomers, lazy-load hooks.
 // Ideas only — nothing here is copied from WebFPV (GPL) or other simulators.
-// New localStorage keys: quadmathSimTouch, quadmathSimFlightMode.
+// New localStorage keys: quadmathSimTouch, quadmathSimFlightMode,
+//   quadmathSimAutoArm, quadmathSimArm_<id>.
 // Per-device radio keys (load/save only, never wipe other ryfly* data):
 //   ryflyAxisMap_<id>, ryflyRadioPreset_<id>, ryflyGamepadId.
 // Do not write old ryfly* keys (the global ryflyAxisMap / ryflyRadioPreset).
 
 export const TOUCH_KEY = 'quadmathSimTouch';
 export const FLIGHT_MODE_KEY = 'quadmathSimFlightMode';
+export const AUTOARM_KEY = 'quadmathSimAutoArm';
+export const ARM_SWITCH_PREFIX = 'quadmathSimArm_';
 
 export const DEFAULT_TOUCH = Object.freeze({
   mode: 2,
@@ -568,6 +571,147 @@ export function isValidAxisMap(m) {
   if (!m || typeof m !== 'object') return false;
   const ch = (c) => !!(c && Number.isFinite(c.i) && c.i >= 0);
   return ch(m.r) && ch(m.p) && ch(m.y) && ch(m.t);
+}
+
+export function loadAutoArm(storage) {
+  const store = storeOf(storage);
+  if (!store) return true;
+  try {
+    const v = store.getItem(AUTOARM_KEY);
+    if (v == null || v === '') return true;
+    return v === '1' || v === 'true' || v === 'on';
+  } catch (e) { return true; }
+}
+
+export function saveAutoArm(on, storage) {
+  const store = storeOf(storage);
+  if (!store) return;
+  try { store.setItem(AUTOARM_KEY, on ? '1' : '0'); }
+  catch (e) { /* ignore */ }
+}
+
+function parseArmSwitch(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const sign = raw.sign === -1 ? -1 : 1;
+  if (Number.isFinite(raw.button) && raw.button >= 0) return { button: raw.button | 0, sign };
+  if (Number.isFinite(raw.i) && raw.i >= 0) return { i: raw.i | 0, sign };
+  return null;
+}
+
+export function hasArmSwitch(map) {
+  return !!parseArmSwitch(map && map.arm);
+}
+
+export function loadArmSwitch(id, storage) {
+  const store = storeOf(storage);
+  if (!store || !id) return null;
+  try {
+    const raw = store.getItem(ARM_SWITCH_PREFIX + sanitizeId(id));
+    return raw ? parseArmSwitch(JSON.parse(raw)) : null;
+  } catch (e) { return null; }
+}
+
+export function saveArmSwitch(id, arm, storage) {
+  const store = storeOf(storage);
+  if (!store || !id) return;
+  const sid = ARM_SWITCH_PREFIX + sanitizeId(id);
+  try {
+    const parsed = parseArmSwitch(arm);
+    if (!parsed) store.removeItem(sid);
+    else store.setItem(sid, JSON.stringify(parsed));
+  } catch (e) { /* ignore */ }
+}
+
+export function mergeArmSwitch(map, arm) {
+  const parsed = parseArmSwitch(arm);
+  if (!parsed) return map;
+  return Object.assign({}, map || {}, { arm: parsed });
+}
+
+export function occupiedStickAxes(map) {
+  const m = map || {};
+  const out = new Set();
+  for (const k of ['r', 'p', 'y', 't']) {
+    if (m[k] && Number.isFinite(m[k].i)) out.add(m[k].i | 0);
+  }
+  return out;
+}
+
+export function snapshotArmInputs(gp) {
+  const axes = gp && gp.axes ? Array.from(gp.axes) : [];
+  const buttons = (gp && gp.buttons ? Array.from(gp.buttons) : []).map((b) =>
+    !!(b && (b.pressed || b.value > 0.5)));
+  return { axes, buttons };
+}
+
+export function listArmCandidates(gp, map) {
+  const used = occupiedStickAxes(map);
+  const axes = [];
+  const raw = (gp && gp.axes) || [];
+  for (let i = 0; i < raw.length; i++) {
+    if (i < 4 || used.has(i)) continue;
+    const v = Number(raw[i]);
+    axes.push({ kind: 'axis', i, value: Number.isFinite(v) ? v : 0 });
+  }
+  const buttons = [];
+  const btns = (gp && gp.buttons) || [];
+  for (let i = 0; i < btns.length; i++) {
+    const b = btns[i];
+    buttons.push({ kind: 'button', i, value: (b && (b.pressed || b.value > 0.5)) ? 1 : -1 });
+  }
+  return { axes, buttons };
+}
+
+export function detectArmSwitch(prev, gp, map) {
+  if (!prev || !gp) return null;
+  const used = occupiedStickAxes(map);
+  const axes = gp.axes || [];
+  for (let i = 0; i < axes.length; i++) {
+    if (i < 4 || used.has(i)) continue;
+    const now = Number(axes[i]);
+    const was = Number(prev.axes && prev.axes[i]);
+    if (!Number.isFinite(now) || !Number.isFinite(was)) continue;
+    if (Math.abs(now - was) < 0.85) continue;
+    return { i, sign: now >= 0 ? 1 : -1 };
+  }
+  const btns = gp.buttons || [];
+  for (let i = 0; i < btns.length; i++) {
+    const now = !!(btns[i] && (btns[i].pressed || btns[i].value > 0.5));
+    const was = !!(prev.buttons && prev.buttons[i]);
+    if (now && !was) return { button: i, sign: 1 };
+  }
+  return null;
+}
+
+export function armSwitchValue(gp, arm) {
+  const a = parseArmSwitch(arm);
+  if (!gp || !a) return null;
+  if (a.button != null) {
+    const b = gp.buttons && gp.buttons[a.button];
+    const raw = (b && (b.pressed || b.value > 0.5)) ? 1 : -1;
+    return raw * a.sign;
+  }
+  const v = gp.axes && gp.axes[a.i];
+  return Number.isFinite(v) ? v * a.sign : 0;
+}
+
+export function stepArmSwitch(state, sample) {
+  const s = sample || {};
+  const v = s.value;
+  const prev = state && Number.isFinite(state.prev) ? state.prev : null;
+  const next = { prev: Number.isFinite(v) ? v : prev };
+  if (!s.hasSwitch || v == null || !Number.isFinite(v)) {
+    return { state: next, arm: false, disarm: false, blocked: false };
+  }
+  const on = v > 0.5;
+  const off = v < -0.5;
+  const rose = prev != null && prev <= 0.5 && on;
+  if (rose && !s.armed) {
+    if (s.throttleSafe) return { state: next, arm: true, disarm: false, blocked: false };
+    return { state: next, arm: false, disarm: false, blocked: true };
+  }
+  if (off && s.armed) return { state: next, arm: false, disarm: true, blocked: false };
+  return { state: next, arm: false, disarm: false, blocked: false };
 }
 
 export function loadRadioProfile(id, storage) {
