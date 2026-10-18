@@ -11,7 +11,11 @@ import {
   REVERSE_THRUST_SCALE,
 } from '../quadphysics.js';
 import { mapThrottle3d, THREED_DEADBAND } from '../sim-3d.js';
-import { RATE_PRESETS, applyRatePreset, INPUT_CHOICE_KEY, FLOATINESS_KEY } from '../sim-feel.js';
+import {
+  RATE_PRESETS, applyRatePreset, INPUT_CHOICE_KEY, FLOATINESS_KEY,
+  FOV_KEY, VFOV_DEFAULT, VFOV_OLD_DEFAULT, CAM_TILT_PRESETS,
+  migrateSavedFov, loadFov, saveFov,
+} from '../sim-feel.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const simSrc = readFileSync(join(root, 'sim.html'), 'utf8');
@@ -51,8 +55,8 @@ function run(qp, seconds, stick, acro, throttle) {
 
 test('flight mode constants', () => {
   assert.deepEqual([...FLIGHT_MODES], ['angle', 'horizon', 'acro']);
-  assert.equal(ANGLE_MAX_DEG, 55);
-  assert.ok(ANGLE_P > 0);
+  assert.equal(ANGLE_MAX_DEG, 60);
+  assert.ok(ANGLE_P > 0 && ANGLE_P < 7.5, `ANGLE_P ${ANGLE_P} should sit under the old 7.5 to limit ring`);
 });
 
 test('attitudeOf is zero at identity and +roll about body X', () => {
@@ -86,8 +90,8 @@ test('Angle caps lean near ANGLE_MAX_DEG', () => {
   const qp = makeQuad('angle');
   run(qp, 1.2, { r: 1, p: 0, y: 0 }, { roll: 8, pitch: 0, yaw: 0 });
   const rollDeg = qp.attitude.roll * 180 / Math.PI;
-  assert.ok(rollDeg > 40, `only reached ${rollDeg.toFixed(1)} deg`);
-  assert.ok(rollDeg < 62, `overshot to ${rollDeg.toFixed(1)} deg (cap is 55)`);
+  assert.ok(rollDeg > 48, `only reached ${rollDeg.toFixed(1)} deg`);
+  assert.ok(rollDeg < ANGLE_MAX_DEG + 8, `overshot to ${rollDeg.toFixed(1)} deg (cap is ${ANGLE_MAX_DEG})`);
 });
 
 test('Horizon at full stick does not self-level (allows a flip)', () => {
@@ -320,5 +324,38 @@ test('hosted v1 ghosts are kinematic pose tracks (physics Hz does not gate them)
   const f = (t - g[0][0]) / span;
   const x = g[0][1] + (g[1][1] - g[0][1]) * f;
   assert.ok(Number.isFinite(x));
+});
+
+test('FOV default is 90 vertical; only a bare 110 migrates', () => {
+  assert.equal(VFOV_DEFAULT, 90);
+  assert.equal(VFOV_OLD_DEFAULT, 110);
+  assert.equal(FOV_KEY, 'quadmathSimFov');
+  assert.equal(migrateSavedFov(null), 90);
+  assert.equal(migrateSavedFov(''), 90);
+  assert.equal(migrateSavedFov('110'), 90);
+  assert.equal(migrateSavedFov(110), 90);
+  assert.equal(migrateSavedFov('125'), 125);
+  assert.equal(migrateSavedFov('{"v":1,"fov":110}'), 110);
+  assert.equal(migrateSavedFov('{"v":1,"fov":88}'), 88);
+  const mem = new Map();
+  const store = {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, String(v)),
+  };
+  assert.equal(loadFov(store), 90);
+  store.setItem(FOV_KEY, '110');
+  assert.equal(loadFov(store), 90);
+  saveFov(110, store);
+  assert.equal(loadFov(store), 110, 'explicit 110 after versioned save must stick');
+  saveFov(92, store);
+  assert.equal(loadFov(store), 92);
+  assert.equal(CAM_TILT_PRESETS.indoorWhoop.deg, 15);
+  assert.equal(CAM_TILT_PRESETS.raceWhoop.deg, 25);
+  assert.ok(simSrc.includes('id="camTiltPreset"'));
+  assert.ok(simSrc.includes('Race whoop 25'));
+  assert.ok(simSrc.includes('FOV (vertical)'));
+  assert.ok(/id="s_fov"[^>]*value="90"/.test(simSrc));
+  assert.ok(simSrc.includes('fov:VFOV_DEFAULT') || simSrc.includes('fov:90'));
+  assert.equal(simSrc.includes('fov:110'), false);
 });
 

@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import {
   AXIS_MAP_PREFIX, RADIO_PRESET_PREFIX, GP_ID_KEY,
   sanitizeId, isRadio, radioScore, AETR_MAP, PAD_MAP, defaultMapFor,
-  applyAxisMap, loadRadioProfile, saveAxisMap, saveRadioPreset,
+  applyAxisMap, applyDeadzone, RADIO_DZ, loadRadioProfile, saveAxisMap, saveRadioPreset,
   clearRadioCalibration, isValidAxisMap, shouldEnableTouch,
   createRadioRouter, CAL_STEPS, createCalibState, stepCalib,
   guessRadioPreset, isKnownRadio, radioShortName,
@@ -72,10 +72,26 @@ test('AETR 8-axis TX16S maps roll/pitch/yaw/throttle without shifting aux pots',
   assert.equal(rest.y, 0);
   assert.ok(Math.abs(rest.t) < 1e-9, 'throttle low → 0');
   const defl = applyAxisMap([0.8, 0.5, 1, -0.6, 0.4, -0.2, 0.9, 0], AETR_MAP);
-  assert.equal(defl.r, 0.8);
-  assert.equal(defl.p, -0.5);
-  assert.equal(defl.y, -0.6);
+  assert.ok(Math.abs(defl.r - applyDeadzone(0.8, RADIO_DZ)) < 1e-12);
+  assert.ok(Math.abs(defl.p - applyDeadzone(-0.5, RADIO_DZ)) < 1e-12);
+  assert.ok(Math.abs(defl.y - applyDeadzone(-0.6, RADIO_DZ)) < 1e-12);
   assert.ok(Math.abs(defl.t - 1) < 1e-9);
+});
+
+test('radio deadzone rescales like touch, no step, default 0.02', () => {
+  assert.equal(RADIO_DZ, 0.02);
+  assert.equal(applyDeadzone(0.019, RADIO_DZ), 0);
+  const hole = applyAxisMap([0.019, 0, -1, 0], AETR_MAP);
+  assert.equal(hole.r, 0);
+  const justOut = applyAxisMap([0.031, 0, -1, 0], AETR_MAP);
+  const expected = (0.031 - RADIO_DZ) / (1 - RADIO_DZ);
+  assert.ok(Math.abs(justOut.r - expected) < 1e-12, `rescale ${justOut.r} vs ${expected}`);
+  assert.ok(justOut.r < 0.031, 'must not leave a step at the edge of the hole');
+  const full = applyAxisMap([1, -1, -1, 1], AETR_MAP);
+  assert.equal(full.r, 1);
+  assert.equal(full.p, 1);
+  assert.equal(full.y, 1);
+  assert.ok(touchSrc.includes('(a - d) / (1 - d)') || touchSrc.includes('(a-d)/(1-d)'));
 });
 
 test('saved ryflyAxisMap_* loads, persists, and does not wipe other ryfly* keys', () => {
@@ -139,7 +155,8 @@ test('mocked navigator.getGamepads TX16S: mapping + calib persist + touch off', 
 
   axes = [0.7, 0, -1, 0, 0, 0, 0, 0];
   const rolled = router.readStick();
-  assert.ok(Math.abs(rolled.stick.r - 0.7) < 1e-9, 'roll on axis 0');
+  const roll07 = applyDeadzone(0.7, RADIO_DZ);
+  assert.ok(Math.abs(rolled.stick.r - roll07) < 1e-9, 'roll on axis 0');
   assert.equal(rolled.stick.p, 0);
   assert.equal(rolled.stick.y, 0);
 
@@ -149,7 +166,7 @@ test('mocked navigator.getGamepads TX16S: mapping + calib persist + touch off', 
   assert.equal(empty.source, 'gamepad');
   assert.equal(empty.touch, false);
   assert.equal(empty.emptyPoll, true);
-  assert.ok(Math.abs(empty.stick.r - 0.7) < 1e-9, 'hold last radio sticks');
+  assert.ok(Math.abs(empty.stick.r - roll07) < 1e-9, 'hold last radio sticks');
   present = true;
 
   // Calibration wizard on 8 axes, skip aux, persist.
@@ -193,7 +210,7 @@ test('mocked navigator.getGamepads TX16S: mapping + calib persist + touch off', 
   assert.equal(again.touchAllowed({ inputChoice: 'touch', mobile: true }), false);
   axes = [0, 0.4, 0, 0, 0, 0, 0, 0];
   const pitched = again.readStick();
-  assert.ok(Math.abs(pitched.stick.p + 0.4) < 1e-9, 'saved pitch sign still inverted');
+  assert.ok(Math.abs(pitched.stick.p - applyDeadzone(-0.4, RADIO_DZ)) < 1e-9, 'saved pitch sign still inverted');
   assert.equal(pitched.source, 'gamepad');
 });
 

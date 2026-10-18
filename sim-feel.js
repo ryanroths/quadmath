@@ -1,10 +1,21 @@
 // QuadMath sim M1 feel — first-run, tutorial, HUD, rate presets, aux helpers.
 // Keep physics in quadphysics.js. Do not touch racing track layouts or ghosts.
-// New localStorage keys: quadmathSimInputChoice, quadmathSimFloatiness.
+// New localStorage keys: quadmathSimInputChoice, quadmathSimFloatiness,
+//   quadmathSimFov.
 // Nothing here is copied from WebFPV.
 
 export const INPUT_CHOICE_KEY = 'quadmathSimInputChoice';
 export const FLOATINESS_KEY = 'quadmathSimFloatiness';
+export const FOV_KEY = 'quadmathSimFov';
+// three.js PerspectiveCamera.fov is vertical. 90° V @ 16:9 ≈ 121° H, closer
+// to an HD whoop than the old 110° V fish-eye (≈ 137° H).
+export const VFOV_DEFAULT = 90;
+export const VFOV_OLD_DEFAULT = 110;
+export const CAM_TILT_PRESETS = Object.freeze({
+  indoorWhoop: { id: 'indoorWhoop', label: 'Indoor whoop', deg: 15 },
+  raceWhoop: { id: 'raceWhoop', label: 'Race whoop', deg: 25 },
+  freestyle: { id: 'freestyle', label: 'Freestyle', deg: 30 },
+});
 
 export function loadFloatiness(fallback) {
   const fb = fallback != null ? fallback : 0.32;
@@ -17,6 +28,48 @@ export function loadFloatiness(fallback) {
 
 export function saveFloatiness(v) {
   try { localStorage.setItem(FLOATINESS_KEY, String(v)); } catch (e) { /* ignore */ }
+}
+
+function fovStore(storage) {
+  if (storage) return storage;
+  try { return typeof localStorage !== 'undefined' ? localStorage : null; }
+  catch (e) { return null; }
+}
+
+function clampFov(n) {
+  const x = Math.round(Number(n));
+  if (!Number.isFinite(x)) return VFOV_DEFAULT;
+  return Math.max(80, Math.min(160, x));
+}
+
+// Bare "110" (or missing) is the old vertical default → 90. Versioned
+// {v:1,fov:N} is an explicit choice and is kept, even if N is 110.
+export function migrateSavedFov(raw) {
+  if (raw == null || raw === '') return VFOV_DEFAULT;
+  try {
+    const o = JSON.parse(raw);
+    if (o && typeof o === 'object' && Number.isFinite(+o.fov) && +o.v >= 1) {
+      return clampFov(+o.fov);
+    }
+  } catch (e) { /* plain number from an early write */ }
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return VFOV_DEFAULT;
+  if (Math.abs(n - VFOV_OLD_DEFAULT) < 0.5) return VFOV_DEFAULT;
+  return clampFov(n);
+}
+
+export function loadFov(storage) {
+  const store = fovStore(storage);
+  if (!store || typeof store.getItem !== 'function') return VFOV_DEFAULT;
+  try { return migrateSavedFov(store.getItem(FOV_KEY)); }
+  catch (e) { return VFOV_DEFAULT; }
+}
+
+export function saveFov(v, storage) {
+  const store = fovStore(storage);
+  if (!store || typeof store.setItem !== 'function') return;
+  try { store.setItem(FOV_KEY, JSON.stringify({ v: 1, fov: clampFov(v) })); }
+  catch (e) { /* ignore quota / private mode */ }
 }
 
 export const RATE_PRESETS = {
