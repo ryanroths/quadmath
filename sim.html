@@ -722,11 +722,12 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=34e582665d37";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=66f951762d3c";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=804271266544";
 import {
   VIBES, vibeFor, restyleCity, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, loadRain, saveRain, RAIN_KEY,
-} from "./sim-art.js?v=c84f4f68092e";
+  makeWorldLabel, worldLabelMaterial, setWorldLabelText,
+} from "./sim-art.js?v=00de6da317eb";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -754,7 +755,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=19bee552695d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=4ba727eb3fed";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=ab4a1d4cf15c";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -762,7 +763,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=d7ee445bc859";
+} from "./sim-coach.js?v=272dbdc806d1";
 import {
   DAILY_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -1234,13 +1235,8 @@ addDiveRing(-180, 15,  40, -0.35,     4.0, 3);
 // "START" label floating above a gate — canvas-text sprite, always faces the
 // camera and always visible, so a pilot can find either track's start gate.
 function addStartMarker(pos){
-  const cv=document.createElement('canvas');cv.width=256;cv.height=64;
-  const g=cv.getContext('2d');
-  g.font='bold 48px monospace';g.textAlign='center';g.textBaseline='middle';
-  g.lineWidth=8;g.strokeStyle='#000';g.strokeText('START',128,32);
-  g.fillStyle='#fff';g.fillText('START',128,32);
-  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));
   const indoor=currentMap!=='city';
+  const spr=makeWorldLabel(THREE,'START',{fill:'#fff',glow:'#ffffff'});
   spr.position.copy(pos);spr.position.y+=indoor?1.5:12;
   spr.scale.set(indoor?1.5:16,indoor?0.38:4,1);
   raceGroup.add(spr);
@@ -1743,12 +1739,7 @@ function diveShaft(x,z,radius,height,segments){
   marker.position.set(x,height+1.5,z);
   marker.rotation.x=Math.PI/2; // lay flat — horizontal ring over the top opening
   scene.add(marker);
-  const cv=document.createElement('canvas');cv.width=256;cv.height=64;
-  const g=cv.getContext('2d');
-  g.font='bold 48px monospace';g.textAlign='center';g.textBaseline='middle';
-  g.lineWidth=8;g.strokeStyle='#000';g.strokeText('DIVE',128,32);
-  g.fillStyle='#FF6A00';g.fillText('DIVE',128,32);
-  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));
+  const spr=makeWorldLabel(THREE,'DIVE',{fill:'#FF6A00',glow:'#FF6A00'});
   spr.position.set(x,height+8,z);
   spr.scale.set(16,4,1);
   scene.add(spr);
@@ -1937,13 +1928,8 @@ function addPortal(x,z,destX,destZ,label,radius){
   const ring=new THREE.Mesh(new THREE.TorusGeometry(radius,radius*0.09,12,40),mat);
   ring.position.set(x,y,z);
   scene.add(ring);
-  // floating label — same canvas-text-sprite technique as the gate-0 START marker
-  const cv=document.createElement('canvas');cv.width=256;cv.height=64;
-  const g=cv.getContext('2d');
-  g.font='bold 44px monospace';g.textAlign='center';g.textBaseline='middle';
-  g.lineWidth=8;g.strokeStyle='#000';g.strokeText(label,128,32);
-  g.fillStyle='#C77DFF';g.fillText(label,128,32);
-  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));
+  // floating label — shared helper so START / PORTAL / DIVE stay box-free
+  const spr=makeWorldLabel(THREE,label,{font:'bold 44px monospace',fill:'#C77DFF',glow:'#C77DFF'});
   spr.position.set(x,y+radius*0.85,z);
   spr.scale.set(20,5,1);
   scene.add(spr);
@@ -4740,17 +4726,10 @@ function makeGhostMesh(color){
 const ghostMesh=makeGhostMesh();            // own best-run ghost (cyan)
 const rivalMesh=makeGhostMesh(0xFF4D1A);    // imported / hosted rival (orange)
 // floating name label above the rival — camera-facing canvas sprite
-const rivalLabel=new THREE.Sprite(new THREE.SpriteMaterial({transparent:true,depthTest:false}));
+const rivalLabel=new THREE.Sprite(worldLabelMaterial(THREE));
 rivalLabel.scale.set(10,2.5,1);rivalLabel.visible=false;rivalLabel.userData.keepInScene=true;scene.add(rivalLabel);
 function setRivalLabel(name){
-  const cv=document.createElement('canvas');cv.width=256;cv.height=64;
-  const g=cv.getContext('2d');
-  g.font='bold 34px monospace';g.textAlign='center';g.textBaseline='middle';
-  g.lineWidth=6;g.strokeStyle='#000';g.strokeText(name,128,32);
-  g.fillStyle='#FF4D1A';g.fillText(name,128,32);
-  if(rivalLabel.material.map)rivalLabel.material.map.dispose();
-  rivalLabel.material.map=new THREE.CanvasTexture(cv);
-  rivalLabel.material.needsUpdate=true;
+  setWorldLabelText(THREE,rivalLabel,name,{font:'bold 34px monospace',strokeWidth:6,fill:'#FF4D1A',glow:'#FF4D1A'});
 }
 // rival ghost state: an explicitly imported code wins; otherwise the hosted
 // default for the active track (fetched at load) fills in
@@ -5517,6 +5496,7 @@ fetchBuiltinTracks().then(list=>{
 });
 Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
+  placeQuadAt,
   artStats:()=>artStats(renderer,cityWorld),vibe:()=>vibeFor(currentMap),VIBES,qualityWantsBloom,
   rain:()=>loadRain(),setRain(v){saveRain(!!v);if(currentMap==='city')applyCityArt(looks&&looks.applied);},RAIN_KEY,
   QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,canopyGroup,
