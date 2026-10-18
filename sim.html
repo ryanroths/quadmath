@@ -745,12 +745,12 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=34e582665d37";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=ae5456573346";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=656ff1880b25";
 import {
-  VIBES, vibeFor, restyleCity, decorateVibeGate, pulseCityGate, tickCityArt,
+  VIBES, vibeFor, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, loadRain, saveRain, RAIN_KEY,
   makeWorldLabel, worldLabelMaterial, setWorldLabelText,
-} from "./sim-art.js?v=00de6da317eb";
+} from "./sim-art.js?v=27f0c1406b82";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -780,7 +780,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=bf753d2f574f";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=ab4a1d4cf15c";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=5f9b0021bf11";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -788,7 +788,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=9c57907e72d3";
+} from "./sim-coach.js?v=d55362fb9e98";
 import {
   DAILY_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -801,7 +801,7 @@ import {
   skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
-} from "./sim-retention.js?v=2483c4d92c48";
+} from "./sim-retention.js?v=3ad022ce389c";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1588,19 +1588,21 @@ for(let i=0;i<40;i++){
 }
 // arches + tower
 function arch(x,z,ry){
-  const mat=new THREE.MeshStandardMaterial({color:0xFF4D1A,roughness:.5,metalness:.2});
+  const mat=new THREE.MeshStandardMaterial({
+    color:0xff2bd6,emissive:0xff2bd6,emissiveIntensity:2.6,roughness:.32,metalness:.38});
   const grp=new THREE.Group();
   const g1=new THREE.Mesh(new THREE.BoxGeometry(1.2,14,1.2),mat);
   const g2=g1.clone(),top=new THREE.Mesh(new THREE.BoxGeometry(10,1.2,1.2),mat);
   g1.position.set(-4.4,7,0);g2.position.set(4.4,7,0);top.position.set(0,14,0);
   grp.add(g1,g2,top);grp.position.set(x,0,z);grp.rotation.y=ry;
-  grp.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  grp.userData.cityArch=true;
+  grp.traverse(o=>{if(o.isMesh){o.castShadow=true;o.userData.cityArch=true;}});
   proceduralGroup.add(grp);
 }
 arch(0,-40,0);arch(30,60,Math.PI/4);
 {
   const tw=new THREE.Mesh(new THREE.CylinderGeometry(.8,1.6,55,8),
-    new THREE.MeshStandardMaterial({color:0x788089,roughness:.6,metalness:.5}));
+    new THREE.MeshStandardMaterial({color:0x1a1428,emissive:0x00f0ff,emissiveIntensity:0.16,roughness:.45,metalness:.4}));
   tw.position.set(-70,27.5,70);tw.castShadow=true;proceduralGroup.add(tw);
   addCollider(-70,0,70,3.2,55,3.2);
 }
@@ -1612,7 +1614,7 @@ const proceduralColliderCount=colliders.length; // for gltf swap
 // gltf swap and exists in both procedural and gltf modes.
 function addTripleStack(x,z){
   const W=14,D=10;
-  const steel=new THREE.MeshStandardMaterial({color:0x8a8f96,roughness:.5,metalness:.55});
+  const steel=new THREE.MeshStandardMaterial({color:0x1a1428,emissive:0x00f0ff,emissiveIntensity:0.14,roughness:.45,metalness:.4});
   const plank=new THREE.MeshStandardMaterial({color:0x9a7b4f,roughness:.9});
   const grp=new THREE.Group();grp.position.set(x,0,z);scene.add(grp);
   function slab(cy,h,mat){ // full-footprint deck, center height cy
@@ -1646,7 +1648,7 @@ addTripleStack(0,300);
 // pattern as addTripleStack / the power tower above.
 function addWindmill(x,z){
   const POLE_H=63,POLE_R=1.05,ARM_Y=42,ARM_LEN=21,ARM_R=0.7; // 3.5× the original 18/0.3/12/6/0.2
-  const steel=new THREE.MeshStandardMaterial({color:0x8a8f96,roughness:.5,metalness:.55});
+  const steel=new THREE.MeshStandardMaterial({color:0x1a1428,emissive:0x00f0ff,emissiveIntensity:0.14,roughness:.45,metalness:.4});
   const grp=new THREE.Group();grp.position.set(x,0,z);scene.add(grp);
   // central pole (full height, solid)
   const pole=new THREE.Mesh(new THREE.CylinderGeometry(POLE_R,POLE_R,POLE_H,10),steel);
@@ -1734,8 +1736,20 @@ function diveShaft(x,z,radius,height,segments){
   // its own mesh (addArcBand makes one per solid arc), so picking a material
   // per band costs no extra geometry, puts a hard edge exactly on the line,
   // and avoids hanging a colour attribute off every band.
-  const wallMat=new THREE.MeshStandardMaterial({color:0xC9B458,roughness:0.9,metalness:0,side:THREE.DoubleSide});
-  const skirtMat=new THREE.MeshStandardMaterial({color:0x8A7A3A,roughness:0.9,metalness:0,side:THREE.DoubleSide});
+  const towerMap=canvasTex(256,512,(g)=>{
+    g.fillStyle='#100814';g.fillRect(0,0,256,512);
+    const cols=5,rows=18,wx=256/cols,wy=512/rows;
+    for(let r=1;r<rows-1;r++)for(let c=0;c<cols;c++){
+      const on=rnd()<0.62;
+      g.fillStyle=on?(rnd()<0.55?'#ffd36a':'#00e6ff'):'#1a1020';
+      g.fillRect(c*wx+wx*.18,r*wy+wy*.2,wx*.64,wy*.52);
+      if(on){g.fillStyle='rgba(255,43,214,0.55)';g.fillRect(c*wx+wx*.18,r*wy+wy*.2,wx*.64,3);}
+    }
+    g.fillStyle='#00f0ff';g.fillRect(0,0,256,6);g.fillRect(0,506,256,6);
+    g.fillStyle='#ff2bd6';g.fillRect(0,0,4,512);g.fillRect(252,0,4,512);
+  });
+  const wallMat=new THREE.MeshStandardMaterial({map:towerMap,color:0x2a1830,emissive:0xff2bd6,emissiveIntensity:0.38,roughness:0.55,metalness:0.1,side:THREE.DoubleSide});
+  const skirtMat=new THREE.MeshStandardMaterial({map:towerMap,color:0x221028,emissive:0xff2bd6,emissiveIntensity:0.42,roughness:0.52,metalness:0.1,side:THREE.DoubleSide});
   const skirtTop=height*0.1;
   // branch junction params — defined BEFORE the walls so both the visual
   // bands and the wall colliders can cut matching holes where the horizontal
@@ -1810,11 +1824,11 @@ function diveShaft(x,z,radius,height,segments){
   // landmark type against the orange/green gates and green dive rings
   const marker=new THREE.Mesh(
     new THREE.TorusGeometry(radius*0.85,radius*0.06,10,32),
-    new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:LIGHTING.gateEmissive,roughness:0.4}));
+    new THREE.MeshStandardMaterial({color:0x00f0ff,emissive:0x00f0ff,emissiveIntensity:LIGHTING.gateEmissive,roughness:0.4}));
   marker.position.set(x,height+1.5,z);
   marker.rotation.x=Math.PI/2; // lay flat — horizontal ring over the top opening
   scene.add(marker);
-  const spr=makeWorldLabel(THREE,'DIVE',{fill:'#FF6A00',glow:'#FF6A00'});
+  const spr=makeWorldLabel(THREE,'DIVE',{fill:'#00f0ff',glow:'#00f0ff'});
   spr.position.set(x,height+8,z);
   spr.scale.set(16,4,1);
   scene.add(spr);
@@ -1824,7 +1838,7 @@ function diveShaft(x,z,radius,height,segments){
   // center line stays clean. PointLight every 3rd ring for real wall glow;
   // short falloff + capped count keeps light cost bounded on tall shafts.
   const ledGeo=new THREE.TorusGeometry(radius*0.92,radius*0.025,6,32);
-  const ledMat=new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:LIGHTING.gateEmissive,roughness:0.4});
+  const ledMat=new THREE.MeshStandardMaterial({color:0x00f0ff,emissive:0x00f0ff,emissiveIntensity:LIGHTING.gateEmissive,roughness:0.4});
   let ledIdx=0;
   for(let yy=15;yy<height-2;yy+=15){
     if(branches.some(b=>Math.abs(yy-b.by)<holeHalf+1)){ledIdx++;continue;} // don't cross a junction hole
@@ -1833,7 +1847,7 @@ function diveShaft(x,z,radius,height,segments){
     led.rotation.x=Math.PI/2;
     scene.add(led);
     if(ledIdx%3===1){
-      const pl=new THREE.PointLight(0xFF8A40,150,radius*5,2);
+      const pl=new THREE.PointLight(0x40e0ff,150,radius*5,2);
       pl.position.set(x,yy,z);
       scene.add(pl);
     }
@@ -1851,11 +1865,9 @@ function diveShaft(x,z,radius,height,segments){
     // sits at r≈7.5–9, well off the center dive line
     const bx=x+Math.cos(dirA)*(radius+len/2-1.5),bz=z+Math.sin(dirA)*(radius+len/2-1.5);
     const t=new THREE.Mesh(
-      new THREE.CylinderGeometry(br,br,len,16,1,true),
-      new THREE.MeshStandardMaterial({color:0x17181d,roughness:0.95,side:THREE.DoubleSide}));
-    // bake axis Y→X into geometry, then yaw the mesh onto dirA — rotation.y
-    // of -dirA maps +X to (cos dirA, 0, sin dirA)
-    t.geometry.rotateZ(Math.PI/2);
+      new THREE.BoxGeometry(len,br*1.7,br*1.7),
+      new THREE.MeshStandardMaterial({map:towerMap,color:0x243040,emissive:0x00f0ff,emissiveIntensity:0.48,roughness:0.48,metalness:0.12}));
+    // box length is +X; yaw maps +X onto dirA — colliders stay on the old tube
     t.rotation.y=-dirA;
     t.position.set(bx,by,bz);
     scene.add(t);
@@ -1887,7 +1899,7 @@ function diveShaft(x,z,radius,height,segments){
     // mouth marker: glowing ring at the OUTER open end only — inner end now
     // lives inside the shaft junction, a ring there would float in the bore
     const mGeo=new THREE.TorusGeometry(br*1.05,br*0.08,8,24);
-    const mMat=new THREE.MeshStandardMaterial({color:0xFF6A00,emissive:0xFF6A00,emissiveIntensity:LIGHTING.gateEmissive,roughness:0.4});
+    const mMat=new THREE.MeshStandardMaterial({color:0xff2bd6,emissive:0xff2bd6,emissiveIntensity:LIGHTING.gateEmissive,roughness:0.4});
     {
       const mm=new THREE.Mesh(mGeo,mMat);
       const ax=new THREE.Vector3(Math.cos(dirA),0,Math.sin(dirA));
@@ -1914,7 +1926,7 @@ function addWallRide(x,z,width,height,thickness,leanDeg,ry){
   grp.rotation.y=ry;
   grp.rotation.z=THREE.MathUtils.degToRad(leanDeg); // leanDeg=0 default: flat vertical wall
   scene.add(grp);
-  const mat=new THREE.MeshStandardMaterial({color:0xc9a97a,roughness:0.95}); // sandstone — reads as its own landmark, not tunnel concrete
+  const mat=new THREE.MeshStandardMaterial({color:0x221028,emissive:0xff2bd6,emissiveIntensity:0.16,roughness:0.72,metalness:0.18});
   // base stripe color: cyan, not already claimed by gates (red/blue), dive
   // rings (green), or the dive shaft (orange) — reads as its own landmark type
   const stripeMat=new THREE.MeshStandardMaterial({color:0x00E5FF,emissive:0x00E5FF,emissiveIntensity:1.0,roughness:0.4});
@@ -2117,6 +2129,8 @@ for(let i=0;i<7;i++){
   const mesa=new THREE.Mesh(new THREE.CylinderGeometry(r*.72,r,h,12,3),
     new THREE.MeshStandardMaterial({map:mesaTex,roughness:1,flatShading:true}));
   mesa.position.set(mx,h/2-4,mz);
+  mesa.userData.stockMesa=true;
+  mesa.visible=false;
   scene.add(mesa);
 }
 window._heavyAssetsPending=true;
@@ -2153,6 +2167,7 @@ async function finishCityArt(){
     }
     gates.length=mainGateCount;
     diveShaft(DX-130,DZ+20,10,80,16);
+    restyleLandmarks(scene,vibeFor('city'));
     if(assetEl)assetEl.textContent='procedural neon city (Neon Current).';
   }finally{
     wrapCityWorld();
@@ -2291,12 +2306,16 @@ function applyMapLooks(mapId){
   if(looks&&looks.setGrade)looks.setGrade(mapId==='city'?1:0);
   if(mapId==='city'){
     applyVibeLighting({
-      LIGHTING,sun,sunFill,hemi,scene,renderer,
+      LIGHTING,sun,sunFill,hemi,scene,renderer,skyMesh,
       bloomPass:looks&&looks.bloomPass,
     },vibe);
   }
+  if(mapId!=='city'&&skyMesh&&skyMesh.userData&&skyMesh.userData.origSkyMat){
+    skyMesh.material=skyMesh.userData.origSkyMat;
+    skyMesh.userData.citySky=false;
+  }
   if(skyMesh)skyMesh.visible=mapId==='city'||mapId==='backyard';
-  if(sunSprite)sunSprite.visible=mapId==='city'||mapId==='backyard';
+  if(sunSprite)sunSprite.visible=mapId==='backyard';
   setIndoorLights(indoorLights,looks?looks.applied:'med');
 }
 function isFreeFlight(t,trackId){
@@ -3531,7 +3550,7 @@ function updateCamera(){
   if(builderOn){applyBuilderCam();applyCanopyVis({builder:true});return;}
   if(applyChaseCam()){applyCanopyVis({chase:true});return;}
   if(looks&&looks.applyLookSpot()){
-    applyCanopyVis({menuOpen:!!looks.menuOpen,lookSpot:!looks.menuOpen});
+    applyCanopyVis({menuOpen:false,lookSpot:true});
     return;
   }
   if(camera.fov!==CFG.fov){camera.fov=CFG.fov;camera.updateProjectionMatrix();}

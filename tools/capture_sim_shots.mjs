@@ -94,6 +94,7 @@ try {
         ids.forEach(function(id){var el=document.getElementById(id);if(!el)return;
           el.classList.remove('open','show');el.style.display='none';});
         document.body.classList.remove('menu-open');
+        if(window._sim&&window._sim.looks) window._sim.looks.menuOpen=false;
         if(window._sim&&window._sim.setLookSpot){
           var look=new URLSearchParams(location.search).get('look');
           if(look)window._sim.setLookSpot(look);

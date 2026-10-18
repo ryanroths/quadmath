@@ -88,12 +88,13 @@ Rules for every vibe implementation:
 
 City visuals are **instanced cores + merged trim + instanced props**. Stock
 building/palm meshes stay as collider authors but are hidden. Measure with
-`window._sim.artStats()` (skips `visible:false`). This pass measured
-`callsEst` **186 High** / **181 Low** (SwiftShader). High has 1691
-instances on 33 `InstancedMesh` plus rain/steam/stars; Low drops to 785
-instances and turns bloom, the wet reflector, and particles off. Landmark
-meshes (mesas, windmill, stack, tunnel, gates) still dominate the unique
-mesh count. Target remains **120–200** on High.
+`window._sim.artStats()` (skips `visible:false`). Phase 1 density measured
+`callsEst` **186 High** / **181 Low** (SwiftShader). The City finish pass
+measures **193 High** / **193 Med** / **185 Low**. High has 1913 instances
+on 42 `InstancedMesh` plus rain/steam/stars; Low drops to 840 instances,
+turns bloom, the wet overlay, and particles off, and stays within a few
+instanced batches of the earlier Low. Landmark meshes still dominate the
+unique mesh count. Target remains **120–200** on High.
 
 Headless SwiftShader fps is a software-renderer floor, not a device number.
 The product target stays **60 fps desktop / 45+ mid phone**.
@@ -213,8 +214,9 @@ City map only:
    merged window-shader core, setbacks/trim, and instanced rooftop/street
    props. New dressing **does not add colliders** and is keep-out tested
    against `FROZEN_CITY` race lines and gate openings.
-3. Neon gradient sky, layered fog, moon, optional rain, wet-road reflector
-   (off on Low). Dawn HDRI stays for other maps.
+3. World-Y neon sky shader (no UV seam) plus moon glow. Orange horizon
+   slabs and the dawn sun sprite are gone on City. Cheap fake wet-road
+   shader on Med/High (off on Low). Dawn HDRI stays for other maps.
 4. Each City Loop gate gets a unique neon frame. Next gate pulses white;
    passed gates shift to violet. Positions unchanged.
 5. Quality Low disables bloom, AO, reflections, and particles. Rain is a
@@ -225,6 +227,13 @@ City map only:
 
 Landmarks that must still be there and still collide: triple stack, windmill,
 tunnel, dive shaft, wall ride, portals, mesas (visual), zigzag gates.
+
+Leftovers restyled in the City finish pass (visual only, colliders stay):
+
+- Dive shaft sand walls + orange LED rings → night walls and cyan/magenta rings.
+- Plain orange box arches → magenta neon posts plus a cyan hoop.
+- Sandstone wall-ride slab → night facade wash.
+- 900×180 magenta fog planes removed.
 
 ## What Phase 1 must not do
 
