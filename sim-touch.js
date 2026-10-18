@@ -11,6 +11,10 @@ export const TOUCH_KEY = 'quadmathSimTouch';
 export const FLIGHT_MODE_KEY = 'quadmathSimFlightMode';
 export const AUTOARM_KEY = 'quadmathSimAutoArm';
 export const ARM_SWITCH_PREFIX = 'quadmathSimArm_';
+// Radio stick deadzone. EdgeTX already has its own deadband; this is a tiny
+// extra hole that must rescale like touch ((abs-d)/(1-d)) or center reads
+// as a notch. 0.02 is enough for HID noise without eating micro-corrections.
+export const RADIO_DZ = 0.02;
 
 export const DEFAULT_TOUCH = Object.freeze({
   mode: 2,
@@ -547,7 +551,8 @@ export function isKnownRadio(gp) {
 export function applyAxisMap(axes, map, opts) {
   const m = map || AETR_MAP;
   const threeD = !!(opts && opts.threeD);
-  const dz = (v, d) => (Math.abs(v) < (d == null ? 0.03 : d) ? 0 : v);
+  const deadzone = (opts && Number.isFinite(opts.deadzone)) ? opts.deadzone : RADIO_DZ;
+  const dz = (v) => applyDeadzone(v, deadzone);
   const r = dz(axisAt(axes, m.r.i) * (m.r.sign || 1));
   const p = dz(axisAt(axes, m.p.i) * (m.p.sign || 1));
   const y = dz(axisAt(axes, m.y.i) * (m.y.sign || 1));

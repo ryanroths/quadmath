@@ -216,7 +216,7 @@
     body.menu-open #touchLayer{opacity:0;pointer-events:none}
   body:has(#panel.open) #feelHud{opacity:0}
   .seg{display:flex;gap:6px;margin-bottom:10px}
-  #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
+  #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#camTiltPreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
     color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
   .menu-layer.wide{width:min(420px,92vw)}
   .track-maps{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
@@ -492,8 +492,14 @@
   <h2>Camera</h2>
   <div class="row"><label>Cam angle</label><span class="val" id="v_cam"></span></div>
   <input type="range" id="s_cam" min="0" max="60" step="1" value="15">
-  <div class="row"><label>FOV</label><span class="val" id="v_fov"></span></div>
-  <input type="range" id="s_fov" min="80" max="160" step="1" value="110">
+  <div class="row"><label>Tilt preset</label></div>
+  <select id="camTiltPreset" title="Indoor whoop 15°. Race whoop 25°. Freestyle 30° is the 5-inch number — not the 65mm default.">
+    <option value="15" selected>Indoor whoop 15°</option>
+    <option value="25">Race whoop 25°</option>
+    <option value="30">Freestyle 30°</option>
+  </select>
+  <div class="row"><label>FOV (vertical)</label><span class="val" id="v_fov"></span></div>
+  <input type="range" id="s_fov" min="80" max="160" step="1" value="90" title="three.js FOV is vertical. 90° V ≈ 121° H at 16:9. Analog whoop cams are ~96° V.">
   <div class="row"><label>FPV look</label><input type="checkbox" id="cbFpvLook" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label>Look style</label></div>
   <select id="fpvStyle">
@@ -592,15 +598,15 @@
   <div class="row"><label style="padding-left:14px">↳ Bounce</label><span class="val" id="v_bounce"></span></div>
   <input type="range" id="s_bounce" min="0" max="1.5" step="0.05" value="0.75" title="Foam-duct rebound. Crash only above the impact slider.">
   <div class="row"><label style="padding-left:14px">↳ Crash speed</label><span class="val" id="v_crash"></span></div>
-  <input type="range" id="s_crash" min="6" max="28" step="0.5" value="14" title="Impact speed (world units) before a hit becomes a crash tumble.">
+  <input type="range" id="s_crash" min="6" max="28" step="0.5" value="9" title="Impact speed (m/s) before a hit becomes a crash tumble. ~9 m/s on a 65mm.">
   <div class="row"><label>Ground effect</label><input type="checkbox" id="cbGround" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Cushion</label><span class="val" id="v_ground"></span></div>
   <input type="range" id="s_ground" min="0" max="2" step="0.05" value="1" title="Extra lift near the floor. Stronger on light whoops / bigger props.">
   <div class="row"><label>Propwash wobble</label><input type="checkbox" id="cbWash" checked style="accent-color:var(--orange)">
-    <select id="s_wash" title="Subtle wobble only when you descend into your own wash at low throttle.">
+    <select id="s_wash" title="Med is the default. Always-on nudge at mid throttle, stronger when you descend into your own wash.">
       <option value="off">Off</option>
-      <option value="low" selected>Low</option>
-      <option value="med">Med</option>
+      <option value="low">Low</option>
+      <option value="med" selected>Med</option>
       <option value="high">High</option>
     </select>
   </div>
@@ -715,7 +721,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=a0b2df235d8f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=6502018ab9c0";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=627c82048afa";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -727,7 +733,7 @@ import {
   loadAutoArm, saveAutoArm, loadArmSwitch, saveArmSwitch, mergeArmSwitch,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
-} from "./sim-touch.js?v=f3dfcb13b78e";
+} from "./sim-touch.js?v=2b2c215c8a82";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -743,7 +749,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=19bee552695d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=4eaa06e0721f";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS} from "./sim-feel.js?v=9fdf1a669c17";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -776,7 +782,8 @@ function ensureGltf(){
   return gltfReady;
 }
 const CFG={
-  camDeg:15,fov:110,maxThrustN:3.9,thrCurve:1.0,thrMid:THROTTLE_MID_DEFAULT,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
+  camDeg:15,fov:VFOV_DEFAULT,maxThrustN:3.9,thrCurve:1.0,thrMid:THROTTLE_MID_DEFAULT,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
+CFG.fov=loadFov();
 let whoopSettings=loadWhoop();
 CFG.battSimOn=whoopSettings.batt;
 CFG.sagAffectsThrust=whoopSettings.sagThrust;
@@ -4472,7 +4479,31 @@ document.getElementById('ax_pitch').addEventListener('click',function(){setRateA
 document.getElementById('ax_yaw').addEventListener('click',function(){setRateAxis('yaw');});
 refreshRatesUI();
 bind('cam','camDeg',x=>x+'°');
-bind('fov','fov',x=>x+'°',()=>{camera.fov=CFG.fov;camera.updateProjectionMatrix();applyCanopyLayout();});
+(function(){
+  const el=document.getElementById('s_fov');
+  if(el)el.value=CFG.fov;
+})();
+bind('fov','fov',x=>x+'°',()=>{
+  camera.fov=CFG.fov;camera.updateProjectionMatrix();applyCanopyLayout();
+});
+document.getElementById('s_fov').addEventListener('input',()=>saveFov(CFG.fov));
+function syncCamTiltPreset(){
+  const sel=document.getElementById('camTiltPreset');
+  if(!sel)return;
+  const v=String(Math.round(CFG.camDeg));
+  if([...sel.options].some(o=>o.value===v))sel.value=v;
+}
+document.getElementById('s_cam').addEventListener('input',syncCamTiltPreset);
+const camTiltSel=document.getElementById('camTiltPreset');
+if(camTiltSel){
+  camTiltSel.onchange=()=>{
+    const deg=parseFloat(camTiltSel.value);
+    if(!Number.isFinite(deg))return;
+    setSlider('cam',deg);
+    toast((CAM_TILT_PRESETS.raceWhoop && deg===25)?'RACE WHOOP 25°':('CAM '+deg+'°'));
+  };
+}
+syncCamTiltPreset();
 // Push panel values into the physics core. Mass changes must re-derive the
 // inertia tensor (same flat-box formula the module uses) or a 28g quad would
 // keep a 5"-sized rotational inertia; motors are left spooled so dragging a
@@ -4648,11 +4679,11 @@ function rateProfileForClass(d){
   return RATE_FALLBACK;
 }
 const DRONE_TYPES={
-  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:15,fov:110},
-  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:15,fov:110},
-  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:15,fov:110},
-  freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30,fov:110},
-  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:30,fov:110}
+  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:15,fov:VFOV_DEFAULT},
+  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:15,fov:VFOV_DEFAULT},
+  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:15,fov:VFOV_DEFAULT},
+  freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30,fov:VFOV_DEFAULT},
+  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:30,fov:VFOV_DEFAULT}
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}

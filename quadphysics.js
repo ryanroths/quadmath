@@ -96,14 +96,13 @@ export const FLOATINESS_DEFAULT = 0.32;
 
 // Flight modes (M1). Angle self-levels to a max tilt; Horizon blends Angle at
 // stick center into Acro at full deflection; Acro is raw rate setpoints.
-// ANGLE_MAX_DEG is the lean limit in Angle (~55° is a typical whoop self-level
-// cap — enough to translate, not enough to flip). ANGLE_P is the attitude P
-// gain in (rad/s) per rad of error; sized so a 40° error returns to level in
-// under a second on the 65mm preset with hover throttle, without saturating
-// the rate loop into a wobble.
+// ANGLE_MAX_DEG is the lean limit in Angle (Betaflight's angle_limit is 60° —
+// enough to translate, not enough to flip). ANGLE_P is the attitude P gain
+// in (rad/s) per rad of error; a touch under the old 7.5 so a 60° cap does
+// not ring, while a 40° error still returns to level in under a second.
 export const FLIGHT_MODES = Object.freeze(['angle', 'horizon', 'acro']);
-export const ANGLE_MAX_DEG = 55;
-export const ANGLE_P = 7.5;
+export const ANGLE_MAX_DEG = 60;
+export const ANGLE_P = 6.8;
 const ANGLE_MAX_RAD = ANGLE_MAX_DEG * Math.PI / 180;
 const ANGLE_RATE_LIM = 10; // rad/s, attitude-loop ceiling
 // Reverse thrust is a bit less efficient than forward (same curve, scaled).
