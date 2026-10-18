@@ -748,14 +748,15 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=34e582665d37";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=7ee7a2ce57cd";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=ae5983dca44d";
 import {
   VIBES, vibeFor, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, loadRain, saveRain, RAIN_KEY,
   makeWorldLabel, worldLabelMaterial, setWorldLabelText,
   restyleLiving, decorateLivingGate, pulseLivingGate, tickLivingArt,
   restyleGarage, decorateGarageGate, pulseGarageGate, tickGarageArt,
-} from "./sim-art.js?v=f4886d133093";
+  restyleWarehouse, decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt,
+} from "./sim-art.js?v=efb7451657db";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -785,7 +786,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=bf753d2f574f";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=eaf1c6e55a50";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=535a5896066b";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -793,7 +794,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=d3cc6ce75e05";
+} from "./sim-coach.js?v=cd3a98577c06";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js";
@@ -1283,6 +1284,7 @@ function addGate(x,y,z,rotationY,size,solidGate,trackId,parent){
   if((currentMap||'city')==='city')decorateVibeGate(THREE,ring,size,col,vibeFor('city'),trackIdx);
   if(currentMap==='living')decorateLivingGate(THREE,ring,size,col,vibeFor('living'));
   if(currentMap==='garage')decorateGarageGate(THREE,ring,size,col,vibeFor('garage'));
+  if(currentMap==='warehouse')decorateWarehouseGate(THREE,ring,size,col,vibeFor('warehouse'));
   (parent||raceGroup).add(ring);
   gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col,trackId:trackId,trackIdx:trackIdx,ry:rotationY||0,size:size,solid:!!solidGate}); // col = dim base color
   if(solidGate){
@@ -1404,6 +1406,7 @@ function updateGateHighlight(){
     if(currentMap==='city')pulseCityGate(g,g===target,passed,now,vibeFor('city'));
     if(currentMap==='living')pulseLivingGate(g,g===target,passed,now,vibeFor('living'));
     if(currentMap==='garage')pulseGarageGate(g,g===target,passed,now,vibeFor('garage'));
+    if(currentMap==='warehouse')pulseWarehouseGate(g,g===target,passed,now,vibeFor('warehouse'));
   }
 }
 // begin a 3-lap run on the active track: reset splits, start both the run and
@@ -2209,6 +2212,23 @@ function applyGarageArt(quality){
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Garage is original procedural art — Volt Stall';
 }
+function applyWarehouseArt(quality){
+  const built=indoorBuilt.warehouse||ensureIndoor('warehouse');
+  if(!built)return;
+  const q=quality||(looks&&looks.applied)||'med';
+  restyleWarehouse(THREE,{
+    vibe:vibeFor('warehouse'),
+    quality:q,
+    group:built.group,
+    floor:built.floor,
+    scene,sun,sunFill,hemi,renderer,LIGHTING,
+    bloomPass:looks&&looks.bloomPass,
+  });
+  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
+  if(looks&&looks.setGrade)looks.setGrade(0);
+  const credit=document.querySelector('.sf-credit');
+  if(credit)credit.textContent='Warehouse is original procedural art — Ion Nave';
+}
 async function finishCityArt(){
   window._skipStockCity=true;
   try{
@@ -2364,7 +2384,7 @@ function applyMapLooks(mapId){
   if(looks&&looks.setOrbit)looks.setOrbit(MAP_ORBIT[mapId]||MAP_ORBIT.city);
   if(looks&&looks.setSkyMode)looks.setSkyMode(vibe&&vibe.sky==='gradient'?'gradient':'hdri');
   if(looks&&looks.setGrade)looks.setGrade(mapId==='city'?1:0);
-  if(mapId==='city'||mapId==='living'||mapId==='garage'){
+  if(mapId==='city'||mapId==='living'||mapId==='garage'||mapId==='warehouse'){
     applyVibeLighting({
       LIGHTING,sun,sunFill,hemi,scene,renderer,skyMesh,
       bloomPass:looks&&looks.bloomPass,
@@ -2372,6 +2392,7 @@ function applyMapLooks(mapId){
   }
   if(mapId==='living'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
   if(mapId==='garage'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
+  if(mapId==='warehouse'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
   if(mapId!=='city'&&skyMesh&&skyMesh.userData&&skyMesh.userData.origSkyMat){
     skyMesh.material=skyMesh.userData.origSkyMat;
     skyMesh.userData.citySky=false;
@@ -2383,6 +2404,7 @@ function applyMapLooks(mapId){
   if(credit){
     if(mapId==='living')credit.textContent='Living Room is original procedural art — Clay Parlor';
     else if(mapId==='garage')credit.textContent='Garage is original procedural art — Volt Stall';
+    else if(mapId==='warehouse')credit.textContent='Warehouse is original procedural art — Ion Nave';
     else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current';
   }
 }
@@ -2440,6 +2462,7 @@ async function setMap(mapId,trackId,opts){
   applyMapLooks(currentMap);
   if(currentMap==='living')applyLivingArt(looks&&looks.applied);
   if(currentMap==='garage')applyGarageArt(looks&&looks.applied);
+  if(currentMap==='warehouse')applyWarehouseArt(looks&&looks.applied);
   nextGateIndex=0;
   runActive=false;
   lastPassedGate=null;
@@ -3817,6 +3840,7 @@ function syncQualityUI(){
   if(currentMap==='city')applyCityArt(looks.applied);
   if(currentMap==='living')applyLivingArt(looks.applied);
   if(currentMap==='garage')applyGarageArt(looks.applied);
+  if(currentMap==='warehouse')applyWarehouseArt(looks.applied);
   setIndoorLights(indoorLights,looks.applied);
   if(secrets)secrets.setQuality(looks.applied);
   const q=looks.choice;
@@ -5475,6 +5499,7 @@ function loop(now){
   if(currentMap==='city')tickCityArt(cityWorld,now);
   if(currentMap==='living')tickLivingArt(indoorWorld,now);
   if(currentMap==='garage')tickGarageArt(indoorWorld,now);
+  if(currentMap==='warehouse')tickWarehouseArt(indoorWorld,now);
   try{if(secrets&&secrets.active)secrets.tick(now,state.pos,dt);}catch(e){}
   if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
     readInput(dt);
@@ -5810,6 +5835,7 @@ function applyQueryBoot(){
       if(currentMap==='city')applyCityArt(looks.applied);
       if(currentMap==='living')applyLivingArt(looks.applied);
       if(currentMap==='garage')applyGarageArt(looks.applied);
+      if(currentMap==='warehouse')applyWarehouseArt(looks.applied);
     });
   }
   if(q.get('builder')==='1'){toggleStartMenu(false);openBuilder();}
