@@ -5,7 +5,7 @@
 // New localStorage key: quadmathSimWhoop. Do not write old ryfly* keys.
 // Ghosts stay kinematic {v:1,samples}; new recordings add phys: PHYSICS_VER.
 
-import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=7fc18ae07f3a';
+import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=1cd4c3cc8158';
 
 export const WHOOP_KEY = 'quadmathSimWhoop';
 export const PHYSICS_VER = 2;
@@ -14,11 +14,11 @@ export const GHOST_FORMAT_V = 1;
 export const DEFAULT_WHOOP = Object.freeze({
   bounce: true,
   bounceStr: 0.75,
-  crashSpeed: 14,
+  crashSpeed: 9,
   ground: true,
   groundStr: 1,
   wash: true,
-  washStr: 0.25,
+  washStr: 0.0125,
   batt: true,
   sagThrust: true,
   sagStr: 1,
@@ -115,8 +115,8 @@ function vNorm(a) {
 // Quadratic cushion. Same shape as quadphysics.js groundEffectMult — kept here
 // so node tests can pin the whoop-scaled bonus without spinning the whole FC.
 export function groundEffectMult(clearanceM, propDiameterM, kGE) {
-  const k = kGE == null ? 0.12 : kGE;
-  const ceil = 2 * (propDiameterM || 0.031);
+  const k = kGE == null ? 0.065 : kGE;
+  const ceil = 1 * (propDiameterM || 0.031);
   if (!(clearanceM < ceil) || k <= 0) return 1;
   const x = 1 - Math.max(0, clearanceM) / ceil;
   return 1 + k * x * x;
@@ -125,7 +125,7 @@ export function groundEffectMult(clearanceM, propDiameterM, kGE) {
 export function whoopGroundK(build, settings) {
   const s = normalizeWhoop(settings);
   if (!s.ground) return 0;
-  return 0.14 * s.groundStr * whoopScale(build).ground;
+  return 0.062 * s.groundStr * whoopScale(build).ground;
 }
 
 export function whoopGroundMult(clearanceM, build, settings) {
@@ -173,13 +173,13 @@ export function stepBattery(prev, dt, loadFrac, packOrBuild, settings) {
   const hoverS = Math.max(20, pack.hoverS || 180);
   const charge = Math.max(0, num(prev && prev.charge, 1) - dt * (0.25 + 1.5 * load) / hoverS);
   const ocv = lipoOcv(charge, pack.cells);
-  const ir = (pack.sagDrop || 0.25) * s.sagStr * sc.sag * (0.50 + 0.50 * (1 - charge));
+  const ir = (pack.sagDrop || 0.55) * s.sagStr * sc.sag * (1.0 + 0.35 * (1 - charge));
   const vInst = ocv - load * ir;
   const prevV = num(prev && prev.voltage, ocv);
   const tau = 0.15;
   const voltage = prevV + (vInst - prevV) * (dt / (tau + dt));
   const sagFactor = s.sagThrust
-    ? Math.pow(Math.max(0.5, voltage / pack.full), 1.5)
+    ? Math.pow(Math.max(0.45, voltage / pack.full), 2)
     : 1;
   return { charge, voltage, sagFactor, ocv, vInst };
 }
@@ -206,7 +206,9 @@ export function resolveDuctHit(hit, build, settings) {
   let rest;
   if (!s.bounce) rest = crashed ? 0.08 : 0.12;
   else if (crashed) rest = 0.10;
-  else rest = 0.28 + 0.34 * s.bounceStr * sc.bounce;
+  // TPU ducts are ~0.20–0.35, not a superball. Default 65mm at bounceStr
+  // 0.75 lands ~0.32; the slider can still push it if someone wants more.
+  else rest = 0.24 + 0.11 * s.bounceStr * sc.bounce;
   if (hit && hit.floor && !crashed) rest *= 0.55;
 
   const leave = vn < 0 ? vn : -into;
@@ -265,16 +267,16 @@ export function emptyWake() {
 
 export const WASH_LEVELS = Object.freeze({
   off: 0,
-  low: 0.25,
-  med: 0.50,
-  high: 0.80,
+  low: 0.0125, // old Low × 0.05
+  med: 0.06,
+  high: 0.25,  // about today's old Low
 });
 
 export function washLevelFromStr(n) {
   const v = Number(n);
-  if (!(v > 0.02)) return 'off';
-  if (v <= 0.33) return 'low';
-  if (v <= 0.62) return 'med';
+  if (!(v > 0.002)) return 'off';
+  if (v <= 0.03) return 'low';
+  if (v <= 0.12) return 'med';
   return 'high';
 }
 
@@ -284,8 +286,10 @@ export function washStrFromLevel(level) {
 }
 
 // Propwash: leave a puff of downwash (or 3D upwash) behind a pulling whoop.
-// Only wobble when you fly back into that puff at low |thrust|. |throttle|
-// so 3D reverse is not treated as a chop-to-zero. Module/SI frame.
+// Always-on turbulence is throttle × (1 − |collective|) — zero at 3D center
+// and at a straight punch-out, a nudge at mid stick. A stronger term fires
+// when you descend / chop back into that puff. |throttle| so 3D reverse is
+// not treated as a chop-to-zero. Module/SI frame.
 export function stepPropwash(wake, sample, dt, build, settings) {
   const s = normalizeWhoop(settings);
   const sc = whoopScale(build);
@@ -297,7 +301,7 @@ export function stepPropwash(wake, sample, dt, build, settings) {
   const thr = Math.abs(raw);
   const blow = raw < 0 ? 1 : -1;
   if (!s.wash || s.washStr <= 0) {
-    return { wake: { ...w, s: 0 }, force: v3(), torque: v3(), excite: 0 };
+    return { wake: { ...w, s: 0 }, force: v3(), torque: v3(), excite: 0, turb: 0, wakeHit: 0 };
   }
   const next = { x: w.x, y: w.y, z: w.z, s: w.s, age: w.age };
   if (thr > 0.38) {
@@ -317,15 +321,24 @@ export function stepPropwash(wake, sample, dt, build, settings) {
   const intoWash = approach > 0.85;
   const lowThr = thr < 0.28;
   const inWash = d < 0.55 && next.s > 0.18 && next.age >= 0.02;
-  const excite = (inWash && intoWash && lowThr)
-    ? (0.22 * next.s + 0.12) * s.washStr * sc.wash
+  const k = s.washStr * sc.wash;
+  // Always-on term is a faint buzz only (old 0.55 → 0.05). Wake hit stays
+  // the descent/chop term; Low is ~5% of the old Low strength via washStr.
+  const turb = thr * (1 - thr) * 0.05 * k;
+  const chopHit = (inWash && intoWash && lowThr) ? (0.22 * next.s + 0.12) * k : 0;
+  const descent = (inWash && vel.z < -0.35)
+    ? (0.16 * next.s + 0.06) * k * Math.min(1, -vel.z / 3)
     : 0;
+  const wakeHit = chopHit + descent;
+  const excite = turb + wakeHit;
   const n = hash3(pos.x + next.age, pos.y, pos.z);
   return {
     wake: next,
     force: v3(n.x * excite * 0.022, n.y * excite * 0.022, -excite * 0.04),
     torque: v3(n.x * excite * 0.06, n.y * excite * 0.06, n.z * excite * 0.02),
     excite,
+    turb,
+    wakeHit,
   };
 }
 

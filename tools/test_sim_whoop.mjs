@@ -43,24 +43,30 @@ test('65mm whoop bounces and spins on a soft wall hit; no crash', () => {
   assert.equal(r.crashed, false);
   assert.ok(r.vel.x < 0, `should reverse x, got ${r.vel.x}`);
   assert.ok(Math.abs(r.vel.x) > 1.5, `bounce too dead ${r.vel.x}`);
+  assert.ok(r.rest >= 0.28 && r.rest <= 0.35, `soft rest ${r.rest} should be TPU-like, not a superball`);
   assert.ok(Math.hypot(r.omega.x, r.omega.y, r.omega.z) > 0.02, 'ducts should spin the frame');
 });
 
 test('only impacts above the crash threshold tumble', () => {
+  assert.equal(DEFAULT_WHOOP.crashSpeed, 9);
   const hard = resolveDuctHit({
     ...softHit, vel: { x: 22, y: 0, z: 0 }, into: 22,
   }, DEFAULT_BUILD, DEFAULT_WHOOP);
   assert.equal(hard.crashed, true);
-  const mid = resolveDuctHit({
+  const eight = resolveDuctHit({
+    ...softHit, vel: { x: 8, y: 0, z: 0 }, into: 8,
+  }, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.equal(eight.crashed, false);
+  const ten = resolveDuctHit({
     ...softHit, vel: { x: 10, y: 0, z: 0 }, into: 10,
   }, DEFAULT_BUILD, DEFAULT_WHOOP);
-  assert.equal(mid.crashed, false);
+  assert.equal(ten.crashed, true, '10 m/s on a 65mm is a crash after the 9 m/s line');
   assert.ok(Math.hypot(hard.omega.x, hard.omega.y, hard.omega.z)
-    > Math.hypot(mid.omega.x, mid.omega.y, mid.omega.z));
+    > Math.hypot(eight.omega.x, eight.omega.y, eight.omega.z));
 });
 
 test('65mm ducts bounce more / crash later than a heavy 85mm', () => {
-  const hit = { ...softHit, vel: { x: 12, y: 0, z: 0 }, into: 12 };
+  const hit = { ...softHit, vel: { x: 8, y: 0, z: 0 }, into: 8 };
   const w65 = resolveDuctHit(hit, DEFAULT_BUILD, DEFAULT_WHOOP);
   const w85 = resolveDuctHit(hit, BUILD_PRESETS.whoop85_2s, DEFAULT_WHOOP);
   assert.ok(whoopScale(DEFAULT_BUILD).bounce > whoopScale(BUILD_PRESETS.whoop85_2s).bounce);
@@ -86,19 +92,22 @@ function hoverThrottle(qp) {
   return Math.max(0, Math.min(1, (out - idle) / (1 - idle)));
 }
 
-test('ground effect is a cushion near the floor and fades by 2 prop diameters', () => {
+test('ground effect is a cushion near the floor and fades by 1 prop diameter', () => {
   const prop = 0.031;
-  assert.equal(qpGround(0.2, prop, 0.12), 1);
-  assert.ok(qpGround(0, prop, 0.12) > 1.1);
-  const near = qpGround(0.01, prop, 0.12);
-  const mid = qpGround(0.03, prop, 0.12);
-  const far = qpGround(0.08, prop, 0.12);
+  assert.equal(qpGround(0.2, prop, 0.065), 1);
+  assert.equal(qpGround(prop, prop, 0.065), 1);
+  assert.ok(qpGround(0, prop, 0.065) > 1.05);
+  const near = qpGround(0.005, prop, 0.065);
+  const mid = qpGround(0.015, prop, 0.065);
+  const far = qpGround(0.028, prop, 0.065);
   assert.ok(near > mid && mid > far && far >= 1);
-  assert.equal(groundEffectMult(0, prop, 0.12), qpGround(0, prop, 0.12));
+  assert.equal(groundEffectMult(0, prop, 0.065), qpGround(0, prop, 0.065));
   assert.equal(whoopGroundK(DEFAULT_BUILD, { ...DEFAULT_WHOOP, ground: false }), 0);
   assert.equal(whoopGroundMult(0, DEFAULT_BUILD, { ...DEFAULT_WHOOP, ground: false }), 1);
   const on = whoopGroundMult(0, DEFAULT_BUILD, DEFAULT_WHOOP);
-  assert.ok(on > 1.08, `whoop cushion ${on}`);
+  assert.ok(on > 1.04 && on < 1.09, `whoop cushion ${on}`);
+  const k = whoopGroundK(DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.ok(k >= 0.05 && k <= 0.08, `kGE ${k}`);
   const light = whoopGroundK({ ...DEFAULT_BUILD, auwG: 20 }, DEFAULT_WHOOP);
   const heavy = whoopGroundK({ ...DEFAULT_BUILD, auwG: 36 }, DEFAULT_WHOOP);
   assert.ok(light > heavy, 'lighter whoop should float more in ground effect');
@@ -163,9 +172,10 @@ test('propwash wobbles on a dive/chop through own wash; drafts grow near walls',
   const chop = stepPropwash(wake, {
     pos: { x: 0, y: 0, z: 1.7 }, vel: { x: 0, y: 0, z: -2.2 }, throttle: 0.05,
   }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
-  assert.ok(chop.excite > 0.01, `chop/dive excite ${chop.excite}`);
-  assert.ok(chop.excite < 0.20, `wash still too strong ${chop.excite}`);
-  assert.ok(Math.hypot(chop.torque.x, chop.torque.y, chop.torque.z) > 0.0004);
+  assert.ok(chop.excite > 0.0004, `chop/dive excite ${chop.excite}`);
+  assert.ok(chop.excite < 0.012, `wash still too strong ${chop.excite}`);
+  const tq = Math.hypot(chop.torque.x, chop.torque.y, chop.torque.z);
+  assert.ok(tq > 0.00002 && tq < 0.0008, `chop torque ${tq}`);
   const off = stepPropwash(wake, {
     pos: { x: 0, y: 0, z: 1.7 }, vel: { x: 0, y: 0, z: -2.2 }, throttle: 0.05,
   }, 0.02, DEFAULT_BUILD, { ...DEFAULT_WHOOP, wash: false });
@@ -223,11 +233,12 @@ test('3D center hover and a straight punch-out give about zero propwash', () => 
     pos: { x: 0, y: 0, z: 2.15 }, vel: { x: 0, y: 0, z: 4 }, throttle: 1,
   }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
   assert.equal(punch.excite, 0);
+  assert.equal(punch.turb, 0);
 
   const reverse = stepPropwash(emptyWake(), {
     pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: -0.7,
   }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
-  assert.equal(reverse.excite, 0);
+  assert.equal(reverse.wakeHit, 0, 'reverse must not count as a chop-to-zero');
   assert.ok(reverse.wake.s > 0.5, 'reverse still deposits |thrust| wash, not a chop-to-zero');
   assert.ok(reverse.wake.z > 2, `reverse must deposit upwash, z=${reverse.wake.z}`);
   const fwdWash = stepPropwash(emptyWake(), {
@@ -238,11 +249,49 @@ test('3D center hover and a straight punch-out give about zero propwash', () => 
 
 test('wash strength levels snap Off/Low/Med/High and default Low', () => {
   assert.equal(DEFAULT_WHOOP.washStr, WASH_LEVELS.low);
-  assert.equal(washStrFromLevel('low'), 0.25);
+  assert.ok(Math.abs(WASH_LEVELS.low - 0.25 * 0.05) < 1e-9, 'new Low is old Low × 0.05');
+  assert.equal(WASH_LEVELS.high, 0.25);
+  assert.equal(washStrFromLevel('low'), WASH_LEVELS.low);
+  assert.equal(washStrFromLevel('high'), WASH_LEVELS.high);
   assert.equal(washLevelFromStr(0), 'off');
-  assert.equal(washLevelFromStr(0.25), 'low');
-  assert.equal(washLevelFromStr(0.7), 'high');
+  assert.equal(washLevelFromStr(WASH_LEVELS.low), 'low');
+  assert.equal(washLevelFromStr(WASH_LEVELS.med), 'med');
+  assert.equal(washLevelFromStr(WASH_LEVELS.high), 'high');
   assert.ok(whoopScale(DEFAULT_BUILD).wash < 0.85, '65mm wash scale is gentler than the old ~1.1');
+});
+
+test('new Low wash is ~5% of old Low; High matches old Low washStr', () => {
+  const oldLow = { ...DEFAULT_WHOOP, washStr: 0.25 };
+  const neuLow = { ...DEFAULT_WHOOP, washStr: WASH_LEVELS.low };
+  const neuHigh = { ...DEFAULT_WHOOP, washStr: WASH_LEVELS.high };
+  let wake = emptyWake();
+  const hover = { pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0.7 };
+  for (let i = 0; i < 20; i++) wake = stepPropwash(wake, hover, 0.02, DEFAULT_BUILD, oldLow).wake;
+  const sample = { pos: { x: 0, y: 0, z: 1.7 }, vel: { x: 0, y: 0, z: -2.2 }, throttle: 0.05 };
+  const oldChop = stepPropwash(wake, sample, 0.02, DEFAULT_BUILD, oldLow);
+  const newChop = stepPropwash(wake, sample, 0.02, DEFAULT_BUILD, neuLow);
+  const highChop = stepPropwash(wake, sample, 0.02, DEFAULT_BUILD, neuHigh);
+  const ratio = newChop.excite / (oldChop.excite || 1e-9);
+  assert.ok(ratio > 0.03 && ratio < 0.08, `new/old Low excite ${ratio.toFixed(3)}`);
+  assert.ok(Math.abs(highChop.excite - oldChop.excite) < 1e-9, 'High matches old Low wake hit');
+});
+
+test('propwash always-on is a faint mid-stick buzz; punch and 3D center stay quiet', () => {
+  const mid = stepPropwash(emptyWake(), {
+    pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0.5,
+  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.ok(mid.turb > 0 && mid.turb < 0.0015, `mid-stick turb ${mid.turb}`);
+  assert.equal(mid.wakeHit, 0);
+  const idle = stepPropwash(emptyWake(), {
+    pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0,
+  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.equal(idle.turb, 0);
+  assert.equal(idle.excite, 0);
+  const punch = stepPropwash(emptyWake(), {
+    pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 4 }, throttle: 1,
+  }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
+  assert.equal(punch.turb, 0);
+  assert.equal(punch.excite, 0);
 });
 
 test('whoop settings load/save uses only WHOOP_KEY', () => {
@@ -266,6 +315,8 @@ test('sim.html wires W2 sliders, HUD voltage, and keeps old localStorage keys', 
   assert.ok(simSrc.includes('id="cbGround"') && simSrc.includes('id="s_ground"'));
   assert.ok(simSrc.includes('id="cbWash"') && simSrc.includes('id="s_wash"'));
   assert.ok(simSrc.includes('option value="low"') && simSrc.includes('option value="high"'));
+  assert.ok(simSrc.includes('option value="low" selected') || simSrc.includes('value="low" selected'));
+  assert.ok(/id="s_crash"[^>]*value="9"/.test(simSrc));
   assert.ok(simSrc.includes('id="cbDraft"') && simSrc.includes('id="s_draft"'));
   assert.ok(simSrc.includes('id="s_sag"') && simSrc.includes('id="cbBattSim"'));
   assert.ok(simSrc.includes('hudBatt') && simSrc.includes('battV'));

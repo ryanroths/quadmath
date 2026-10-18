@@ -216,7 +216,7 @@
     body.menu-open #touchLayer{opacity:0;pointer-events:none}
   body:has(#panel.open) #feelHud{opacity:0}
   .seg{display:flex;gap:6px;margin-bottom:10px}
-  #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
+  #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#camTiltPreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
     color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
   .menu-layer.wide{width:min(420px,92vw)}
   .track-maps{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
@@ -492,8 +492,14 @@
   <h2>Camera</h2>
   <div class="row"><label>Cam angle</label><span class="val" id="v_cam"></span></div>
   <input type="range" id="s_cam" min="0" max="60" step="1" value="15">
-  <div class="row"><label>FOV</label><span class="val" id="v_fov"></span></div>
-  <input type="range" id="s_fov" min="80" max="160" step="1" value="110">
+  <div class="row"><label>Tilt preset</label></div>
+  <select id="camTiltPreset" title="Indoor whoop 15°. Race whoop 25°. Freestyle 30° is the 5-inch number — not the 65mm default.">
+    <option value="15" selected>Indoor whoop 15°</option>
+    <option value="25">Race whoop 25°</option>
+    <option value="30">Freestyle 30°</option>
+  </select>
+  <div class="row"><label>FOV (vertical)</label><span class="val" id="v_fov"></span></div>
+  <input type="range" id="s_fov" min="80" max="160" step="1" value="90" title="three.js FOV is vertical. 90° V ≈ 121° H at 16:9. Analog whoop cams are ~96° V.">
   <div class="row"><label>FPV look</label><input type="checkbox" id="cbFpvLook" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label>Look style</label></div>
   <select id="fpvStyle">
@@ -579,7 +585,7 @@
   <div class="row"><label>Gravity Scale</label><span class="val" id="v_grav"></span></div>
   <input type="range" id="s_grav" min="1.0" max="5.0" step="0.05" value="3.5">
   <div class="row"><label>Throttle Curve</label><span class="val" id="v_thc"></span></div>
-  <input type="range" id="s_thc" min="0.4" max="2.6" step="0.05" value="0.7">
+  <input type="range" id="s_thc" min="0.4" max="2.6" step="0.05" value="1.0">
   <div class="row"><label>3D mode</label><input type="checkbox" id="cb3d" style="accent-color:var(--orange)" title="Reversible motors. Center stick = zero thrust. Acro only."></div>
   <div class="row"><label>Auto-arm</label><input type="checkbox" id="cbAutoArm" checked style="accent-color:var(--orange)" title="Arm the first time throttle rises from low. Off when an arm switch is mapped. Space still toggles."></div>
   <p class="build-note">Betaflight 3D: throttle center is zero, below center reverses the props. Flown in Acro. 3D runs are not counted on boards or as ghosts.</p>
@@ -592,12 +598,12 @@
   <div class="row"><label style="padding-left:14px">↳ Bounce</label><span class="val" id="v_bounce"></span></div>
   <input type="range" id="s_bounce" min="0" max="1.5" step="0.05" value="0.75" title="Foam-duct rebound. Crash only above the impact slider.">
   <div class="row"><label style="padding-left:14px">↳ Crash speed</label><span class="val" id="v_crash"></span></div>
-  <input type="range" id="s_crash" min="6" max="28" step="0.5" value="14" title="Impact speed (world units) before a hit becomes a crash tumble.">
+  <input type="range" id="s_crash" min="6" max="28" step="0.5" value="9" title="Impact speed (m/s) before a hit becomes a crash tumble. ~9 m/s on a 65mm.">
   <div class="row"><label>Ground effect</label><input type="checkbox" id="cbGround" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Cushion</label><span class="val" id="v_ground"></span></div>
   <input type="range" id="s_ground" min="0" max="2" step="0.05" value="1" title="Extra lift near the floor. Stronger on light whoops / bigger props.">
   <div class="row"><label>Propwash wobble</label><input type="checkbox" id="cbWash" checked style="accent-color:var(--orange)">
-    <select id="s_wash" title="Subtle wobble only when you descend into your own wash at low throttle.">
+    <select id="s_wash" title="Low is the default (about 5% of the old Low). High is about the old Low. Faint mid-stick buzz; a bit more when you descend into your own wash.">
       <option value="off">Off</option>
       <option value="low" selected>Low</option>
       <option value="med">Med</option>
@@ -702,20 +708,20 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT} from "./quadphysics.js?v=8a479d8ddc87";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=f835c7702fe4";
 import {
-  THREED_KEY, THREED_DEADBAND,
+  THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
   parseThreeDQuery, runCountsForBoards, throttleHudText,
   throttleCollective, armHintText, stepAutoArm,
-} from "./sim-3d.js?v=97e8b2aba971";
+} from "./sim-3d.js?v=2ecd5767df1a";
 import {
   WHOOP_KEY, PHYSICS_VER,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=11a0da16c7bc";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=6502018ab9c0";
+} from "./sim-whoop.js?v=db61d2d2e26b";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=627c82048afa";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -727,7 +733,7 @@ import {
   loadAutoArm, saveAutoArm, loadArmSwitch, saveArmSwitch, mergeArmSwitch,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
-} from "./sim-touch.js?v=f3dfcb13b78e";
+} from "./sim-touch.js?v=2b2c215c8a82";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -743,12 +749,12 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=19bee552695d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=4eaa06e0721f";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS} from "./sim-feel.js?v=9fdf1a669c17";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
   loadBuild, saveBuild, buildDeepLink, matchPresetId, classDefault,
-} from "./sim-build.js?v=7fc18ae07f3a";
+} from "./sim-build.js?v=1cd4c3cc8158";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
 } from "./sim-coach.js?v=d7ee445bc859";
@@ -776,16 +782,15 @@ function ensureGltf(){
   return gltfReady;
 }
 const CFG={
-  camDeg:15,fov:110,maxThrustN:3.9,thrCurve:0.68,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
+  camDeg:15,fov:VFOV_DEFAULT,maxThrustN:3.9,thrCurve:1.0,thrMid:THROTTLE_MID_DEFAULT,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
+CFG.fov=loadFov();
 let whoopSettings=loadWhoop();
 CFG.battSimOn=whoopSettings.batt;
 CFG.sagAffectsThrust=whoopSettings.sagThrust;
 let washState=emptyWake();
-// thrCurve recalibrated for the new physics core: motor thrust is now
-// proportional to output SQUARED, so at TWR 3 the motors must sit at 1/sqrt(3)
-// = 0.58 of full output to hover. The old linear-thrust model needed an
-// exponent above 1 to reach the same place; a quadratic one needs 0.55, which
-// puts the hover point back at ~1/3 stick where it has always been.
+// thrCurve 1.0 + throttle mid 0.60: thrust is output², TWR ~5.2, idle 5.5%.
+// Mid lifts the bottom half of the stick so hover lands at ~32–38% without
+// a fake exponent. Slider still changes the exponent if a pilot wants it.
 // base gravity — the world geometry is ~3.5x visual scale, so real 9.81 reads
 // as slow-motion against oversized reference. Gravity now lives inside
 // quadphysics.js at a true 9.81 m/s²; the 3.5 shows up as the world-unit scale
@@ -2660,6 +2665,7 @@ let thrustActual=0; // spooled thrust in WORLD newtons — audio + battery load 
 // way out reproduces the old feel exactly: 9.81 × 3.5 = 34.3 u/s², which is the
 // G*gravMult the hand-rolled physics used.
 const WS=3.5;                    // world units per real metre
+const FLOOR_Y=FLOOR_CLEARANCE_M*WS; // ~1 cm pad in world units
 // Module frame is Z-up / X-forward / Y-left; three.js is Y-up and, for this
 // scene, -Z-forward (the camera looks down its own -Z).
 //
@@ -2704,29 +2710,12 @@ qp.setTune(STOCK_TUNES.whoop65);
 // Base thrust before voltage sag scales it each frame.
 let baseThrustPerMotor=qp.cfg.maxThrustPerMotor;
 
-// Drag hook: the existing anisotropic body-frame model, unchanged in shape.
-// The old constants were tuned against world-unit speeds and produced a force
-// in kg·u/s², so speed is scaled up on the way in and force scaled down on the
-// way out to hand the module real newtons.
-const _dv=new THREE.Vector3(),_dq=new THREE.Quaternion(),_db=new THREE.Vector3();
-qp.externalDrag=(vel)=>{
-  const spW=Math.hypot(vel.x,vel.y,vel.z)*WS;   // world units/s
-  if(spW<1e-6)return {x:0,y:0,z:0};
-  const K2=0.001,K1=0.007,LAT=1.75;
-  const perU=CFG.drag*(K2*spW*spW+K1*spW)/spW;  // world N per unit world velocity
-  // into three.js world frame, then body frame, so LAT still lands on the prop plane
-  mod2world(vel,_dv);                 // already world units/s — do NOT scale again
-  _dq.copy(state.q).invert();
-  _db.copy(_dv).applyQuaternion(_dq); // into body frame so LAT lands on the prop plane
-  _db.set(-_db.x*perU*LAT,-_db.y*perU,-_db.z*perU*LAT).applyQuaternion(state.q);
-  // world newtons (kg·u/s²) → SI newtons, three.js axes → module axes.
-  // world2mod does both: the same axis permutation and the ÷WS.
-  const f=world2mod(_db,{x:0,y:0,z:0});
-  // gravMult above the 3.5 baseline is an extra downward force, so the slider
-  // keeps working without the module leaving SI.
+// Drag hook: body-frame ½ρCdA lives in quadphysics.js. This hook only applies
+// gravMult above the 3.5 world-scale baseline as extra downward force.
+qp.externalDrag=()=>{
   const extraG=(CFG.gravMult/WS)-1;
-  if(extraG!==0)f.z-=extraG*qp.cfg.mass*9.81;
-  return f;
+  if(extraG===0)return {x:0,y:0,z:0};
+  return {x:0,y:0,z:-extraG*qp.cfg.mass*9.81};
 };
 
 // Collision hook: world-unit AABBs, then W2 duct bounce (bounce+spin; crash
@@ -2755,8 +2744,8 @@ qp.onSubstep=(s)=>{
   mod2world(s.position,_cp);
   mod2world(s.velocity,_cv);
   let floorHit=false;
-  if(_cp.y<0.12){
-    const impact=-_cv.y;_cp.y=0.12;floorHit=true;
+  if(_cp.y<FLOOR_Y){
+    const impact=-_cv.y;_cp.y=FLOOR_Y;floorHit=true;
     if(impact>4.5)applyDuctHit(s,{x:0,y:1,z:0},impact,true);
     else{_cv.y=Math.max(_cv.y,0);_cv.x*=.85;_cv.z*=.85;}
   }
@@ -2793,12 +2782,12 @@ qp.onSubstep=(s)=>{
   }
 };
 // Ground-effect clearance: height above whatever is directly underneath — open
-// ground (world y=0.12 hover floor) or a rooftop the drone is over. Scans the
+// ground (world y=FLOOR_Y ≈ 1 cm) or a rooftop the drone is over. Scans the
 // same AABB collider set as the crash check; returns SI meters for the module.
 const _gp=new THREE.Vector3();
 qp.groundClearance=(s)=>{
   mod2world(s.position,_gp);
-  let top=0.12;
+  let top=FLOOR_Y;
   for(const bb of colliders){
     if(_gp.x>=bb.min.x&&_gp.x<=bb.max.x&&_gp.z>=bb.min.z&&_gp.z<=bb.max.z&&bb.max.y<=_gp.y&&bb.max.y>top){
       top=bb.max.y;
@@ -3684,7 +3673,9 @@ function tryArm(opts){
     toast(threeD?'CENTER THROTTLE TO ARM':'Lower throttle to arm');
     return false;
   }
-  qp.arm();toast('ARMED');return true;
+  qp.arm();
+  qp.setPhysicsHz(PHYSICS_HZ_FAST);
+  toast('ARMED');return true;
 }
 function tickArming(gp){
   if(calib)return;
@@ -3796,7 +3787,7 @@ function physics(dt){
   // Throttle curve stays here; the module applies the Betaflight idle floor
   // itself, so the old idlePct blend is gone. Disarmed = no throttle to the FC.
   // 3D: map 0..1 stick through a center deadband onto -1..1 collective.
-  const throttle=qp.armed?throttleCollective(stick.t,threeD,CFG.thrCurve):0;
+  const throttle=qp.armed?throttleCollective(stick.t,threeD,CFG.thrCurve,CFG.thrMid):0;
 
   qp.step(dt,qpSetpoint,throttle,stick);
   syncStateFromQp();
@@ -4488,7 +4479,31 @@ document.getElementById('ax_pitch').addEventListener('click',function(){setRateA
 document.getElementById('ax_yaw').addEventListener('click',function(){setRateAxis('yaw');});
 refreshRatesUI();
 bind('cam','camDeg',x=>x+'°');
-bind('fov','fov',x=>x+'°',()=>{camera.fov=CFG.fov;camera.updateProjectionMatrix();applyCanopyLayout();});
+(function(){
+  const el=document.getElementById('s_fov');
+  if(el)el.value=CFG.fov;
+})();
+bind('fov','fov',x=>x+'°',()=>{
+  camera.fov=CFG.fov;camera.updateProjectionMatrix();applyCanopyLayout();
+});
+document.getElementById('s_fov').addEventListener('input',()=>saveFov(CFG.fov));
+function syncCamTiltPreset(){
+  const sel=document.getElementById('camTiltPreset');
+  if(!sel)return;
+  const v=String(Math.round(CFG.camDeg));
+  if([...sel.options].some(o=>o.value===v))sel.value=v;
+}
+document.getElementById('s_cam').addEventListener('input',syncCamTiltPreset);
+const camTiltSel=document.getElementById('camTiltPreset');
+if(camTiltSel){
+  camTiltSel.onchange=()=>{
+    const deg=parseFloat(camTiltSel.value);
+    if(!Number.isFinite(deg))return;
+    setSlider('cam',deg);
+    toast((CAM_TILT_PRESETS.raceWhoop && deg===25)?'RACE WHOOP 25°':('CAM '+deg+'°'));
+  };
+}
+syncCamTiltPreset();
 // Push panel values into the physics core. Mass changes must re-derive the
 // inertia tensor (same flat-box formula the module uses) or a 28g quad would
 // keep a 5"-sized rotational inertia; motors are left spooled so dragging a
@@ -4496,6 +4511,7 @@ bind('fov','fov',x=>x+'°',()=>{camera.fov=CFG.fov;camera.updateProjectionMatrix
 function applyCfgToQp(){
   qp.cfg.mass=CFG.massG/1000;
   qp.cfg.motorTau=CFG.spoolTau;
+  qp.cfg.userDragMul=(CFG.drag||0.55)/0.55;
   const m=qp.cfg.mass,w=qp.cfg.wheelbase,h=w*0.35;
   qp.inertia.x=(m/12)*(w*w+h*h);
   qp.inertia.y=qp.inertia.x;
@@ -4514,7 +4530,7 @@ function applyCfgToQp(){
     if(typeof applyWhoopToQp==='function')applyWhoopToQp();
   });
 }
-bind('drag','drag',x=>x.toFixed(2));
+bind('drag','drag',x=>x.toFixed(2),applyCfgToQp);
 bind('mass','massG',x=>x+'g',()=>{applyCfgToQp();refreshTwr();}); // mass change → inertia + thrust:weight readout
 bind('spool','spoolTau',x=>(x*1000).toFixed(0)+'ms',applyCfgToQp); // motor spool time constant
 bind('grav','gravMult',x=>x.toFixed(2)+'×',refreshTwr); // gravity scale — effective weight changes, so re-derive thrust:weight
@@ -4527,7 +4543,7 @@ function applyWhoopToQp(){
   qp.cfg.groundEffect=k;
   qp.groundClearance=k>0?function(s){
     mod2world(s.position,_gp);
-    let top=0.12;
+    let top=FLOOR_Y;
     for(const bb of colliders){
       if(_gp.x>=bb.min.x&&_gp.x<=bb.max.x&&_gp.z>=bb.min.z&&_gp.z<=bb.max.z&&bb.max.y<=_gp.y&&bb.max.y>top)top=bb.max.y;
     }
@@ -4663,11 +4679,11 @@ function rateProfileForClass(d){
   return RATE_FALLBACK;
 }
 const DRONE_TYPES={
-  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:15,fov:110},
-  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:15,fov:110},
-  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:15,fov:110},
-  freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30,fov:110},
-  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:30,fov:110}
+  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:15,fov:VFOV_DEFAULT},
+  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:15,fov:VFOV_DEFAULT},
+  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:15,fov:VFOV_DEFAULT},
+  freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30,fov:VFOV_DEFAULT},
+  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:30,fov:VFOV_DEFAULT}
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
@@ -5515,14 +5531,20 @@ function updateDust(dt){
 // ---------- Loop ----------
 let last=performance.now(),hzAdaptAt=0;
 function adaptPhysicsHz(now){
-  if(!looks||!looks.fps||!looks.fps.ready)return;
+  if(!looks||!looks.fps||!looks.fps.ready){
+    if(qp.armed&&qp.physicsHz!==PHYSICS_HZ_FAST)qp.setPhysicsHz(PHYSICS_HZ_FAST);
+    return;
+  }
   if(now-hzAdaptAt<1500)return;
   hzAdaptAt=now;
   const avg=looks.fps.avg;
   const cur=qp.physicsHz;
   let hz=cur;
-  if(avg>=58&&cur===PHYSICS_HZ_DEFAULT)hz=PHYSICS_HZ_FAST;
-  else if(avg<48&&cur===PHYSICS_HZ_FAST)hz=PHYSICS_HZ_DEFAULT;
+  if(qp.armed){
+    hz=avg<48?PHYSICS_HZ_DEFAULT:PHYSICS_HZ_FAST;
+  }else if(avg<48&&cur===PHYSICS_HZ_FAST){
+    hz=PHYSICS_HZ_DEFAULT;
+  }
   if(hz!==cur)qp.setPhysicsHz(hz);
 }
 function loop(now){

@@ -13,15 +13,15 @@ export const BUILD_PREFIX = 'QB1.';
 export const CLASS_REF = {
   65: {
     frameMm: 65, kv: 23000, propMm: 31, blades: 3, cells: 1, mah: 300, auwG: 27,
-    thrustN: 0.27, tau: 0.020, kQ: 0.60, drag: 0.55, idleThrottle: 0.055,
+    thrustN: 0.344, tau: 0.020, kQ: 0.72, drag: 0.55, idleThrottle: 0.055,
   },
   75: {
     frameMm: 75, kv: 22000, propMm: 40, blades: 3, cells: 1, mah: 450, auwG: 32,
-    thrustN: 0.32, tau: 0.024, kQ: 0.65, drag: 0.60, idleThrottle: 0.055,
+    thrustN: 0.353, tau: 0.024, kQ: 0.75, drag: 0.60, idleThrottle: 0.055,
   },
   85: {
     frameMm: 85, kv: 11000, propMm: 51, blades: 3, cells: 2, mah: 450, auwG: 48,
-    thrustN: 0.48, tau: 0.028, kQ: 0.70, drag: 0.62, idleThrottle: 0.055,
+    thrustN: 0.494, tau: 0.028, kQ: 0.78, drag: 0.62, idleThrottle: 0.055,
   },
 };
 
@@ -222,7 +222,7 @@ export function batteryFromBuild(raw) {
     // 300 mAh 1S ≈ 180 s hover in the existing sim. Scale by capacity; 2S
     // lasts a bit longer at the same mAh (more energy, not 2× current).
     hoverS: 180 * (b.mah / 300) * (b.cells === 2 ? 1.15 : 1),
-    sagDrop: 0.25 * b.cells * Math.sqrt(300 / b.mah),
+    sagDrop: 0.55 * b.cells * Math.sqrt(300 / b.mah),
   };
 }
 
