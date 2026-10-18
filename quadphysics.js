@@ -78,11 +78,15 @@ export const AIR_DENSITY = 1.225;          // kg/m³, ISA sea level
 export const FLOOR_CLEARANCE_M = 0.01;     // ~1 cm pad contact in SI
 // Reference CdA (m²) and aero b/c at a 31 mm prop. Prop-plane (body X/Y) is
 // the ducts cutting sideways; thrust-axis (body Z) is through the disks.
-const CDA_XY0 = 0.0102;
-const CDA_Z0 = 0.0118;
+// Cruise values keep a 65mm 90° punch in the 50–70 km/h band. Extra quadratic
+// Cd from windmilling discs is applied on chop only — not a linear brake.
+const CDA_XY0 = 0.0054;
+const CDA_Z0 = 0.0060;
 const SKIN_B0 = 0.0015;                    // N·s/m linear skin; not an in-air brake
 const AERO_B0 = 3.0e-5;                    // N·m·s / rad
 const AERO_C0 = 2.2e-6;                    // N·m·s² / rad²
+const DISC_CD_K = 1.35;                    // extra quadratic Cd at zero thrust
+const DISC_THR_END = 0.22;                 // extra is gone by this |motor| output
 // Rate/PID loop. 240 Hz was the v2 default and read floaty next to a 1 kHz
 // FC. 500 Hz is the new floor; 1000 Hz is used when the render loop has
 // headroom. Legacy 240 stays exported so tests can compare, not for playback —
@@ -195,15 +199,27 @@ export function aeroCoeffs(cfg) {
   };
 }
 
-export function bodyDragForce(velWorld, quat, cfg) {
+// Windmilling / chopped discs add quadratic Cd. Full punch stays at cruise
+// CdA so top speed stays whoop-realistic. Omitted thrustFrac is treated as
+// chopped (the leftover / coast case).
+export function discDragMul(thrustFrac, cfg) {
+  const t = thrustFrac == null ? 0 : Math.max(0, Math.min(1, Number(thrustFrac) || 0));
+  const end = cfg && cfg.discThrEnd != null ? cfg.discThrEnd : DISC_THR_END;
+  const k = cfg && cfg.discCdK != null ? cfg.discCdK : DISC_CD_K;
+  const chop = end > 0 ? Math.max(0, 1 - t / end) : 0;
+  return 1 + k * chop * chop;
+}
+
+export function bodyDragForce(velWorld, quat, cfg, thrustFrac) {
   const a = aeroCoeffs(cfg);
+  const disc = discDragMul(thrustFrac, cfg);
   const vb = qRotate(qConjugate(quat || { x: 0, y: 0, z: 0, w: 1 }), velWorld || v3());
   const speed = Math.hypot(vb.x, vb.y, vb.z);
   const q = 0.5 * AIR_DENSITY * speed;
   const fb = v3(
-    -(q * a.cdAxy + a.skinB) * vb.x,
-    -(q * a.cdAxy + a.skinB) * vb.y,
-    -(q * a.cdAz + a.skinB) * vb.z,
+    -(q * a.cdAxy * disc + a.skinB) * vb.x,
+    -(q * a.cdAxy * disc + a.skinB) * vb.y,
+    -(q * a.cdAz * disc + a.skinB) * vb.z,
   );
   return qRotate(quat || { x: 0, y: 0, z: 0, w: 1 }, fb);
 }
@@ -604,7 +620,10 @@ export class QuadPhysics {
     // ---- Translational dynamics ----
     const thrustWorld = qRotate(this.quaternion, v3(0, 0, totalThrust));
     let force = vAdd(thrustWorld, v3(0, 0, -cfg.mass * G));
-    force = vAdd(force, bodyDragForce(this.velocity, this.quaternion, cfg));
+    let meanOut = 0;
+    for (const mo of this.motors) meanOut += Math.abs(mo.output);
+    meanOut /= this.motors.length || 1;
+    force = vAdd(force, bodyDragForce(this.velocity, this.quaternion, cfg, meanOut));
     if (this.externalDrag) {
       force = vAdd(force, this.externalDrag(this.velocity, this));
     }
