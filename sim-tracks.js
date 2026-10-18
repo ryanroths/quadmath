@@ -202,6 +202,12 @@ export function resolveSimBoot(query, saved, tracks) {
     const map = knownMapId(fromId) || knownMapId(q.map) || 'city';
     return { map, track: freestyleIdFor(map), save: true, mode: 'free' };
   }
+  // Query ?track=room-practice is a session race on Your Room. Saved
+  // room-practice still remaps to room-freestyle via persistableSelection
+  // so a reload without the query does not lock Fly to the generated cell.
+  if (q.track === 'room-practice') {
+    return { map: 'room', track: 'room-practice', save: false, mode: 'race' };
+  }
   const found = findTrackIn(q.track, tracks);
   if (found) {
     const mode = found.freestyle ? 'free' : 'race';

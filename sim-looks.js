@@ -52,6 +52,9 @@ export const LOOK_SPOTS = {
   trainerMid: { pos: [8, 6.2, 14], target: [0, 1.6, -4] },
   trainerOverview: { pos: [0.4, 8.8, 16.4], target: [0, 1.2, -2] },
   room: { pos: [3.4, 4.2, 6.2], target: [-1, 1.2, -2] },
+  roomWhoop: { pos: [1.55, 1.14, 4.6], target: [-0.2, 1.15, -3.4] },
+  roomMid: { pos: [3.6, 3.8, 5.4], target: [-1.2, 1.15, -2.4] },
+  roomOverview: { pos: [0.6, 6.4, 6.4], target: [0, 1.05, -1.2] },
   builder: { pos: [0, 14, 0.1], target: [0, 0, 0] },
 };
 

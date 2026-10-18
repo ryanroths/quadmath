@@ -54,6 +54,12 @@ export {
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
 } from './sim-art-backyard.js?v=20ea971f04a7';
 
+export {
+  ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
+  hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
+  decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
+} from './sim-art-room.js?v=7cf54b843bb5';
+
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
 export const GARAGE_VIBE_ID = 'garage';
@@ -62,6 +68,7 @@ export const GYM_VIBE_ID = 'gym';
 export const OFFICE_VIBE_ID = 'office';
 export const TRAINER_VIBE_ID = 'trainer';
 export const BACKYARD_VIBE_ID = 'backyard';
+export const ROOM_VIBE_ID = 'room';
 
 
 export const VIBES = Object.freeze({
@@ -303,7 +310,7 @@ export const VIBES = Object.freeze({
     id: 'room',
     name: 'Pocket Stage',
     tagline: 'Clay diorama bedroom, desk-lamp key, felt rings',
-    implemented: false,
+    implemented: true,
     time: 'desk lamp',
     sky: 'none',
     palette: Object.freeze({
@@ -314,9 +321,9 @@ export const VIBES = Object.freeze({
       gateA: '#ffb3c7', gateB: '#7ec8e3',
     }),
     lighting: Object.freeze({
-      sunColor: 0xffe6c4, sunIntensity: 0.28, fillColor: 0xffb3c7, fillIntensity: 0.12,
-      hemiSky: 0xeee8de, hemiGround: 0x7a5130, hemiIntensity: 0.42,
-      exposure: 0.6, fogColor: 0xeee8de, fogDensity: 0.0045,
+      sunColor: 0xffe6c4, sunIntensity: 0.36, fillColor: 0xffb3c7, fillIntensity: 0.2,
+      hemiSky: 0xeee8de, hemiGround: 0x7a5130, hemiIntensity: 0.48,
+      exposure: 0.64, fogColor: 0xeee8de, fogDensity: 0.0036,
       bloomStrength: 0.15, bloomRadius: 0.2, bloomThreshold: 1.2,
       gateEmissive: 2.2, gateEmissiveActive: 3.2,
     }),
