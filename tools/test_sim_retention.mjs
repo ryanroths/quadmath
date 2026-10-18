@@ -26,6 +26,10 @@ import {
   loadSkinId, saveSkinId, loadCanopyOn, saveCanopyOn, makeCanopyGroup,
   layoutCanopyGroup, layoutCanopyPieces, canopyPieceCoverage, canopyFpvVisible,
   canopyViewBottomY, sanitizePilotName, normalizeSubmit, fmtMs,
+  skinUnlockLabel, skinPalette, skinCssVars, skinMiniMarkup, skinHex,
+  skinSwatchStroke, colorLum,
+  makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
+  TRAIL_POINTS, tintGroup,
   mulberry32, weekAllowed, previousUtcWeekId, isPaceBotGhost, issuePilotToken,
   hashPilotToken, pickCorsOrigin, isLocalHost, escapeHtml, classFromBuild,
   syncDailyStreak, applyMissedDayReset,
@@ -329,6 +333,77 @@ test('skins unlock from coach medals, streak, and daily times; stock is free', (
   assert.equal(loadSkinId(store), 'bronze');
 });
 
+test('skin unlock ids and localStorage keys stay frozen', () => {
+  assert.equal(SKIN_KEY, 'quadmathSimSkin');
+  assert.equal(CANOPY_KEY, 'quadmathSimCanopy');
+  assert.deepEqual(SKINS.map((s) => s.id), [
+    'stock', 'bronze', 'silver', 'gold', 'streak3', 'streak7', 'daily-fast', 'coach-all',
+  ]);
+  const frozen = [
+    ['stock', { type: 'always' }],
+    ['bronze', { type: 'medals', medal: 'bronze', count: 1 }],
+    ['silver', { type: 'medals', medal: 'silver', count: 3 }],
+    ['gold', { type: 'medals', medal: 'gold', count: 3 }],
+    ['streak3', { type: 'streak', days: 3 }],
+    ['streak7', { type: 'streak', days: 7 }],
+    ['daily-fast', { type: 'dailyMs', ms: 90000 }],
+    ['coach-all', { type: 'medals', medal: 'gold', count: 7 }],
+  ];
+  for (const [id, unlock] of frozen) {
+    const s = SKINS.find((x) => x.id === id);
+    assert.ok(s, id);
+    assert.deepEqual({ ...s.unlock }, unlock);
+  }
+  assert.equal(skinUnlockLabel(SKINS[0]), 'Free');
+  assert.equal(skinUnlockLabel(SKINS.find((s) => s.id === 'bronze')), '1 bronze medal');
+  assert.equal(skinUnlockLabel(SKINS.find((s) => s.id === 'streak3')), '3-day streak');
+  assert.equal(skinUnlockLabel(SKINS.find((s) => s.id === 'daily-fast')), 'Daily under 01:30.00');
+  const store = memStore();
+  saveSkinId('coach-all', store);
+  assert.equal(store.getItem(SKIN_KEY), 'coach-all');
+  assert.deepEqual(store.keys(), [SKIN_KEY]);
+  const palettes = SKINS.map((s) => skinPalette(s).canopy + ':' + skinPalette(s).frame + ':' + skinPalette(s).prop);
+  assert.equal(new Set(palettes).size, SKINS.length);
+  const banned = ['webfpv', 'web fpv', 'carbon stealth', 'phantom', 'default skin'];
+  for (const s of SKINS) {
+    const blob = (s.name + ' ' + (s.vibe || '')).toLowerCase();
+    for (const b of banned) assert.equal(blob.includes(b), false, s.id + ' ' + b);
+    assert.ok(s.vibe);
+    assert.match(skinHex(s.canopy), /^#[0-9a-f]{6}$/);
+    assert.ok(skinCssVars(s).includes('--sk-led:'));
+    assert.ok(skinCssVars(s).includes('--sk-stroke:'));
+  }
+  const mini = skinMiniMarkup();
+  assert.ok(mini.includes('skin-mini'));
+  assert.ok(mini.includes('sk-duct'));
+  assert.ok(mini.includes('sk-duct-edge'));
+  assert.ok(mini.includes('sk-blade'));
+  assert.ok(mini.includes('sk-lens'));
+  assert.equal((mini.match(/class="sk-duct"/g) || []).length, 4);
+  assert.equal((mini.match(/class="sk-duct-edge"/g) || []).length, 4);
+  const panel = 0x15171d;
+  function contrast(a, b) {
+    const hi = Math.max(colorLum(a), colorLum(b));
+    const lo = Math.min(colorLum(a), colorLum(b));
+    return (hi + 0.05) / (lo + 0.05);
+  }
+  for (const s of SKINS) {
+    const stroke = skinSwatchStroke(s);
+    assert.ok(contrast(stroke, panel) >= 2.4, s.id + ' swatch ducts too close to panel');
+  }
+  const paper = SKINS.find((s) => s.id === 'silver');
+  assert.ok(colorLum(skinSwatchStroke(paper)) > colorLum(paper.frame) + 0.05);
+  assert.notEqual(skinHex(skinSwatchStroke(paper)), skinHex(paper.frame));
+  assert.equal(paper.frame, 0x1a1a1a);
+  assert.ok(simSrc.includes('skin-mini'));
+  assert.ok(simSrc.includes('sk-duct-edge'));
+  assert.ok(simSrc.includes('--sk-stroke'));
+  assert.match(simSrc, /skin-mini\{width:104px;height:104px/);
+  assert.ok(simSrc.includes('skinUnlockLabel'));
+  assert.ok(simSrc.includes('makeCraftGroup'));
+  assert.ok(!simSrc.includes('Canopy colors only'));
+});
+
 function fakeD1() {
   const scores = new Map();
   const pilots = new Map();
@@ -592,8 +667,10 @@ test('sim.html wires Daily / Boards / skins and keeps ghost paste', () => {
   assert.ok(simSrc.includes('encodeDuel'));
   assert.ok(simSrc.includes('btnGhostDuel') || simSrc.includes('DUEL'));
   assert.ok(simSrc.includes('makeCanopyGroup'));
+  assert.ok(simSrc.includes('makeCraftGroup'));
   assert.ok(simSrc.includes('layoutCanopyGroup'));
   assert.ok(simSrc.includes('canopyFpvVisible'));
+  assert.ok(simSrc.includes('craftChaseVisible'));
   assert.ok(simSrc.includes('Show canopy'));
   assert.ok(simSrc.includes('id="cbCanopy"'));
   assert.ok(!/id="cbCanopy"[^>]*\bchecked\b/.test(simSrc), 'Show canopy defaults off');
@@ -641,7 +718,13 @@ function mockTHREE() {
     Group: class extends Obj {},
     Mesh,
     BoxGeometry: class { constructor(w, h, d) { this.w = w; this.h = h; this.d = d; } },
-    CylinderGeometry: class { constructor(a, b, h) { this.rTop = a; this.rBot = b; this.h = h; } },
+    SphereGeometry: class { constructor(r) { this.r = r; } },
+    CylinderGeometry: class {
+      constructor(a, b, h, seg, hseg, open) {
+        this.rTop = a; this.rBot = b; this.h = h; this.openEnded = !!open;
+      }
+    },
+    DoubleSide: 2,
     MeshStandardMaterial: class {
       constructor(o) {
         Object.assign(this, o);
@@ -649,6 +732,21 @@ function mockTHREE() {
         this.emissive = { setHex(v) { this._e = v; } };
       }
     },
+    LineBasicMaterial: class {
+      constructor(o) {
+        Object.assign(this, o);
+        this.color = { setHex(v) { this._hex = v; } };
+      }
+    },
+    BufferAttribute: class {
+      constructor(arr, n) { this.array = arr; this.itemSize = n; this.needsUpdate = false; }
+    },
+    BufferGeometry: class {
+      constructor() { this.attributes = {}; this.drawCount = 0; }
+      setAttribute(name, attr) { this.attributes[name] = attr; }
+      setDrawRange(start, count) { this.drawCount = count; }
+    },
+    Line: class extends Mesh {},
   };
 }
 
@@ -670,6 +768,11 @@ test('Show canopy defaults off and persists quadmathSimCanopy', () => {
   assert.equal(canopyFpvVisible({ on: true, lookSpot: true }), false);
   assert.equal(canopyFpvVisible({ on: true, replay: true }), false);
   assert.equal(canopyFpvVisible({ on: true, builder: true }), false);
+  assert.equal(canopyFpvVisible({ on: true, chase: true }), false);
+  assert.equal(craftChaseVisible({ fpv: true }), false);
+  assert.equal(craftChaseVisible({ chase: true }), true);
+  assert.equal(craftChaseVisible({ menuOpen: true }), true);
+  assert.equal(craftChaseVisible({ builder: true, chase: true }), false);
 });
 
 test('no canopy piece covers >10% of view at FOV 110', () => {
@@ -701,4 +804,47 @@ test('no canopy piece covers >10% of view at FOV 110', () => {
   const lip = g.children.find((c) => c.userData.canopyRole === 'lip');
   assert.equal(lip.position.y, tall.lip.y);
   assert.equal(lip.userData.skinPart, 'canopy');
+  const craft = makeCraftGroup(THREE, SKINS[0]);
+  assert.equal(craft.visible, false);
+  const nodes = [];
+  craft.traverse((o) => { if (o !== craft) nodes.push(o); });
+  const parts = new Set(nodes.map((c) => c.userData.skinPart).filter(Boolean));
+  for (const need of ['body', 'canopy', 'frame', 'prop', 'led']) {
+    assert.ok(parts.has(need), need);
+  }
+  const ducts = nodes.filter((c) => c.userData.craftRole === 'duct');
+  const blades = nodes.filter((c) => c.userData.craftRole === 'blade');
+  const blurs = nodes.filter((c) => c.userData.propBlur);
+  const leds = nodes.filter((c) => c.userData.skinPart === 'led');
+  assert.equal(ducts.length, 4);
+  assert.equal(blades.length, 12);
+  assert.equal(blurs.length, 4);
+  assert.equal(leds.length, 4);
+  assert.ok(blurs.every((b) => b.visible === false));
+  assert.ok(ducts.every((d) => d.geometry && d.geometry.openEnded));
+  assert.ok(nodes.some((c) => c.geometry && c.geometry.r && c.userData.skinPart === 'canopy'));
+  for (const led of leds) {
+    const duct = ducts.find((d) => d.position.x === led.position.x && d.position.z === led.position.z);
+    assert.ok(duct, 'LED sits under a duct');
+    assert.ok(led.position.y < duct.position.y, 'LED is under the duct, not on the prop');
+  }
+  assert.ok(craft.children.some((c) => c.userData.spin));
+  assert.ok(simSrc.includes('propBlur') && simSrc.includes('craftGroup.traverse'));
+  tintGroup(craft, SKINS.find((s) => s.id === 'daily-fast'));
+  const pal = skinPalette(SKINS.find((s) => s.id === 'daily-fast'));
+  const prop = nodes.find((c) => c.userData.skinPart === 'prop' && c.material);
+  assert.equal(prop.material.color._hex, pal.prop);
+  const frameDuct = ducts[0];
+  assert.equal(frameDuct.material.color._hex, pal.frame);
+  const led = leds[0];
+  assert.equal(led.material.color._hex, pal.led);
+  assert.equal(led.material.emissive._e, pal.led);
+  const trail = makeSkinTrail(THREE, SKINS[0]);
+  assert.equal(TRAIL_POINTS, 24);
+  pushSkinTrail(trail, 1, 2, 3);
+  pushSkinTrail(trail, 4, 5, 6);
+  assert.equal(trail.len, 2);
+  assert.equal(trail.geo.drawCount, 2);
+  clearSkinTrail(trail);
+  assert.equal(trail.len, 0);
 });

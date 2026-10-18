@@ -39,37 +39,56 @@ export const DAILY_MAPS = Object.freeze([
   { id: 'trainer', name: 'Tiny Trainer', w: 28, d: 36, h: 10.5, wall: 0.34 },
 ]);
 
+// Stored `id` values and unlock rules are frozen. Display names, palettes, and
+// vibe labels are visual only. Palettes follow docs/sim-art-direction.md map
+// vibes. Original QuadMath looks — not WebFPV.
 export const SKINS = Object.freeze([
   {
-    id: 'stock', name: 'Stock orange', canopy: 0xFF4D1A, body: 0x16181e,
+    id: 'stock', name: 'Pocket Felt', vibe: 'Pocket Stage',
+    canopy: 0xffb3c7, body: 0x3a2a20, frame: 0x7a5130, prop: 0x7ec8e3,
+    led: 0xffe0b0, trail: 0xffb3c7,
     unlock: { type: 'always' },
   },
   {
-    id: 'bronze', name: 'Bronze ducts', canopy: 0xC47A3A, body: 0x2a1c12,
+    id: 'bronze', name: 'Clay Cushion', vibe: 'Clay Parlor',
+    canopy: 0xff6b9a, body: 0x6b3f2a, frame: 0xc48a6a, prop: 0xffe08a,
+    led: 0x7ec8e3, trail: 0xff6b9a,
     unlock: { type: 'medals', medal: 'bronze', count: 1 },
   },
   {
-    id: 'silver', name: 'Silver canopy', canopy: 0xC8CCD4, body: 0x1c1e24,
+    id: 'silver', name: 'Paper Blinds', vibe: 'Paper Sun',
+    canopy: 0xfff4d2, body: 0x1a1a1a, frame: 0x1a1a1a, prop: 0xff5c5c,
+    led: 0x2ae59b, trail: 0x3d7dff,
     unlock: { type: 'medals', medal: 'silver', count: 3 },
   },
   {
-    id: 'gold', name: 'Gold canopy', canopy: 0xF0C14B, body: 0x2a2410,
+    id: 'gold', name: 'Amber Line', vibe: 'Amber Court',
+    canopy: 0xf0b14b, body: 0x6a4224, frame: 0xc45a22, prop: 0xfff6d8,
+    led: 0xf0b14b, trail: 0xf0b14b,
     unlock: { type: 'medals', medal: 'gold', count: 3 },
   },
   {
-    id: 'streak3', name: 'Streak lime', canopy: 0x3DDC97, body: 0x0e2218,
+    id: 'streak3', name: 'Licorice Tape', vibe: 'Licorice Grid',
+    canopy: 0xff4d8d, body: 0x1a1020, frame: 0xf2f0ea, prop: 0x00e5ff,
+    led: 0xffe08a, trail: 0xff4d8d,
     unlock: { type: 'streak', days: 3 },
   },
   {
-    id: 'streak7', name: 'Week fire', canopy: 0xFF6B35, body: 0x2a1008,
+    id: 'streak7', name: 'Volt Tube', vibe: 'Volt Stall',
+    canopy: 0xffb347, body: 0x14161c, frame: 0x3d4654, prop: 0x2de2e6,
+    led: 0xffb347, trail: 0x2de2e6,
     unlock: { type: 'streak', days: 7 },
   },
   {
-    id: 'daily-fast', name: 'Daily cyan', canopy: 0x00E5FF, body: 0x082028,
+    id: 'daily-fast', name: 'Neon Current', vibe: 'Neon Current',
+    canopy: 0x00f0ff, body: 0x120816, frame: 0x1a0533, prop: 0xff2bd6,
+    led: 0xff7a18, trail: 0xff3cac,
     unlock: { type: 'dailyMs', ms: 90000 },
   },
   {
-    id: 'coach-all', name: 'Coach night', canopy: 0x9B30FF, body: 0x140824,
+    id: 'coach-all', name: 'Ion Spore', vibe: 'Ion Nave',
+    canopy: 0x39ffb0, body: 0x0b1218, frame: 0x1b3a4a, prop: 0x7a5cff,
+    led: 0x39ffb0, trail: 0x7a5cff,
     unlock: { type: 'medals', medal: 'gold', count: 7 },
   },
 ]);
@@ -1502,6 +1521,113 @@ export function isSkinUnlocked(skin, { medals, daily } = {}) {
   return false;
 }
 
+export function skinUnlockLabel(skin) {
+  const rule = (skin && skin.unlock) || { type: 'always' };
+  if (rule.type === 'always') return 'Free';
+  if (rule.type === 'streak') return rule.days + '-day streak';
+  if (rule.type === 'dailyMs') return 'Daily under ' + fmtMs(rule.ms);
+  if (rule.type === 'medals') {
+    const n = rule.count;
+    const word = n === 1 ? 'medal' : 'medals';
+    return n + ' ' + rule.medal + ' ' + word;
+  }
+  return 'Locked';
+}
+
+export function skinHex(n) {
+  return '#' + (Number(n) >>> 0).toString(16).padStart(6, '0');
+}
+
+function hexRgb(n) {
+  const v = Number(n) >>> 0;
+  return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 };
+}
+
+export function colorLum(n) {
+  const { r, g, b } = hexRgb(n);
+  const chan = (c) => {
+    const x = c / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * chan(r) + 0.7152 * chan(g) + 0.0722 * chan(b);
+}
+
+function mixHex(a, b, t) {
+  const A = hexRgb(a);
+  const B = hexRgb(b);
+  const r = Math.round(A.r + (B.r - A.r) * t);
+  const g = Math.round(A.g + (B.g - A.g) * t);
+  const bl = Math.round(A.b + (B.b - A.b) * t);
+  return (r << 16) | (g << 8) | bl;
+}
+
+// Dark frames vanish on the Skins panel (#15171D). Lift them toward paper
+// cream so the swatch still reads as a ducted whoop. 3D craft keeps pal.frame.
+const SWATCH_PAPER = 0xf2f0ea;
+const SWATCH_MIN_LUM = 0.14;
+
+export function skinSwatchStroke(skin) {
+  const pal = skinPalette(skin);
+  const frame = pal.frame;
+  if (colorLum(frame) >= SWATCH_MIN_LUM) return frame;
+  let t = 0.42;
+  let stroke = mixHex(frame, SWATCH_PAPER, t);
+  while (colorLum(stroke) < SWATCH_MIN_LUM && t < 0.85) {
+    t += 0.08;
+    stroke = mixHex(frame, SWATCH_PAPER, t);
+  }
+  return stroke;
+}
+
+export function skinPalette(skin) {
+  const s = skin || SKINS[0];
+  return {
+    canopy: s.canopy,
+    body: s.body,
+    frame: s.frame != null ? s.frame : s.body,
+    prop: s.prop != null ? s.prop : s.canopy,
+    led: s.led != null ? s.led : s.canopy,
+    trail: s.trail != null ? s.trail : s.canopy,
+  };
+}
+
+export function skinCssVars(skin) {
+  const pal = skinPalette(skin);
+  return '--sk-frame:' + skinHex(pal.frame)
+    + ';--sk-stroke:' + skinHex(skinSwatchStroke(skin))
+    + ';--sk-canopy:' + skinHex(pal.canopy)
+    + ';--sk-prop:' + skinHex(pal.prop)
+    + ';--sk-led:' + skinHex(pal.led)
+    + ';--sk-body:' + skinHex(pal.body)
+    + ';--sk-trail:' + skinHex(pal.trail);
+}
+
+export function skinMiniMarkup() {
+  const ducts = [[20, 20], [60, 20], [20, 60], [60, 60]];
+  let svg = '<svg class="skin-mini" viewBox="0 0 80 80" aria-hidden="true">';
+  for (const [cx, cy] of ducts) {
+    svg += '<circle class="sk-prop" cx="' + cx + '" cy="' + cy + '" r="11"/>';
+    let blades = '';
+    for (let i = 0; i < 3; i++) {
+      const a = i * Math.PI * 2 / 3;
+      blades += 'M' + cx + ' ' + cy + 'L'
+        + (cx + Math.cos(a) * 11).toFixed(1) + ' '
+        + (cy + Math.sin(a) * 11).toFixed(1);
+    }
+    svg += '<path class="sk-blade" d="' + blades + '"/>';
+    svg += '<circle class="sk-duct-edge" cx="' + cx + '" cy="' + cy + '" r="16"/>';
+    svg += '<circle class="sk-duct" cx="' + cx + '" cy="' + cy + '" r="16"/>';
+    svg += '<circle class="sk-led" cx="' + cx + '" cy="' + (cy + 13) + '" r="2.4"/>';
+  }
+  svg += '<path class="sk-frame-edge" d="M28 28 L52 52 M52 28 L28 52"/>';
+  svg += '<path class="sk-frame" d="M28 28 L52 52 M52 28 L28 52"/>';
+  svg += '<ellipse class="sk-body" cx="40" cy="42" rx="9" ry="7"/>';
+  svg += '<ellipse class="sk-canopy" cx="40" cy="36" rx="8" ry="7"/>';
+  svg += '<circle class="sk-lens" cx="40" cy="30" r="2.2"/>';
+  svg += '</svg>';
+  return svg;
+}
+
 export function unlockedSkins(progress) {
   return SKINS.filter((s) => isSkinUnlocked(s, progress));
 }
@@ -1578,7 +1704,13 @@ export function canopyViewBottomY(fovDeg, dist) {
 
 export function canopyFpvVisible(state) {
   const s = state || {};
-  return !!s.on && !s.menuOpen && !s.lookSpot && !s.replay && !s.builder;
+  return !!s.on && !s.menuOpen && !s.lookSpot && !s.replay && !s.builder && !s.chase;
+}
+
+export function craftChaseVisible(state) {
+  const s = state || {};
+  if (s.builder) return false;
+  return !!s.chase || !!s.menuOpen || !!s.lookSpot || !!s.replay;
 }
 
 function canopyCam(opts) {
@@ -1690,13 +1822,13 @@ export function layoutCanopyGroup(group, camera) {
 }
 
 export function makeCanopyGroup(THREE, skin) {
-  const s = skin || SKINS[0];
+  const pal = skinPalette(skin || SKINS[0]);
   const g = new THREE.Group();
   g.name = 'qmCanopy';
   const lip = new THREE.Mesh(
     new THREE.BoxGeometry(1, 1, 1),
     new THREE.MeshStandardMaterial({
-      color: s.canopy, emissive: s.canopy, emissiveIntensity: 0.45, roughness: 0.42, metalness: 0.12,
+      color: pal.canopy, emissive: pal.led, emissiveIntensity: 1.15, roughness: 0.42, metalness: 0.12,
     }),
   );
   lip.name = 'qmCanopyLip';
@@ -1707,7 +1839,7 @@ export function makeCanopyGroup(THREE, skin) {
   for (const side of [-1, 1]) {
     const duct = new THREE.Mesh(
       new THREE.CylinderGeometry(1, 1, 1, 8),
-      new THREE.MeshStandardMaterial({ color: s.body, roughness: 0.5, metalness: 0.18 }),
+      new THREE.MeshStandardMaterial({ color: pal.body, roughness: 0.5, metalness: 0.18 }),
     );
     duct.name = side < 0 ? 'qmCanopyDuctL' : 'qmCanopyDuctR';
     duct.rotation.z = Math.PI / 2;
@@ -1722,17 +1854,195 @@ export function makeCanopyGroup(THREE, skin) {
   return g;
 }
 
+function skipLooks(o) {
+  o.userData.looksSkip = true;
+  o.castShadow = false;
+  o.receiveShadow = false;
+}
+
+export function makeCraftGroup(THREE, skin) {
+  const pal = skinPalette(skin || SKINS[0]);
+  const g = new THREE.Group();
+  g.name = 'qmCraft';
+  const side = THREE.DoubleSide != null ? THREE.DoubleSide : 2;
+  const frameMat = new THREE.MeshStandardMaterial({
+    color: pal.frame, emissive: pal.frame, emissiveIntensity: 0.08, roughness: 0.5, metalness: 0.22, side,
+  });
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: pal.body, roughness: 0.52, metalness: 0.14,
+  });
+  const propMat = new THREE.MeshStandardMaterial({
+    color: pal.prop, emissive: pal.prop, emissiveIntensity: 0.16, roughness: 0.46, metalness: 0.04,
+  });
+  const blurMat = new THREE.MeshStandardMaterial({
+    color: pal.prop, emissive: pal.prop, emissiveIntensity: 0.1, roughness: 0.9, metalness: 0,
+    transparent: true, opacity: 0.3, side, depthWrite: false,
+  });
+  const canopyMat = new THREE.MeshStandardMaterial({
+    color: pal.canopy, emissive: pal.canopy, emissiveIntensity: 0.28, roughness: 0.36, metalness: 0.08,
+  });
+  const ledMat = new THREE.MeshStandardMaterial({
+    color: pal.led, emissive: pal.led, emissiveIntensity: 2.2, roughness: 0.28, metalness: 0.08, side,
+  });
+  const lensMat = new THREE.MeshStandardMaterial({
+    color: 0x14161c, emissive: 0x1a2430, emissiveIntensity: 0.28, roughness: 0.22, metalness: 0.35,
+  });
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.05, 8), bodyMat);
+  hub.userData.skinPart = 'body';
+  skipLooks(hub);
+  g.add(hub);
+  const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), canopyMat);
+  canopy.scale.set(0.72, 0.42, 1.45);
+  canopy.position.set(0, 0.062, -0.07);
+  canopy.userData.skinPart = 'canopy';
+  skipLooks(canopy);
+  g.add(canopy);
+  const camHouse = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.04, 0.05), bodyMat);
+  camHouse.position.set(0, 0.048, -0.175);
+  camHouse.userData.skinPart = 'body';
+  skipLooks(camHouse);
+  g.add(camHouse);
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 0.03, 8), lensMat);
+  lens.rotation.x = Math.PI / 2;
+  lens.position.set(0, 0.048, -0.205);
+  lens.userData.skinPart = 'body';
+  skipLooks(lens);
+  g.add(lens);
+  const armGeo = new THREE.BoxGeometry(0.055, 0.034, 0.34);
+  const ductGeo = new THREE.CylinderGeometry(0.275, 0.255, 0.085, 12, 1, true);
+  const bladeGeo = new THREE.BoxGeometry(0.18, 0.008, 0.032);
+  const capGeo = new THREE.CylinderGeometry(0.024, 0.024, 0.016, 8);
+  const ledGeo = new THREE.CylinderGeometry(0.262, 0.248, 0.014, 12, 1, true);
+  const blurGeo = new THREE.CylinderGeometry(0.17, 0.17, 0.006, 12);
+  const spread = 0.3;
+  const corners = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+  for (const c of corners) {
+    const x = c[0] * spread;
+    const z = c[1] * spread;
+    const arm = new THREE.Mesh(armGeo, frameMat);
+    arm.position.set(x * 0.5, 0, z * 0.5);
+    arm.rotation.y = Math.atan2(c[0], c[1]);
+    arm.userData.skinPart = 'frame';
+    skipLooks(arm);
+    g.add(arm);
+    const duct = new THREE.Mesh(ductGeo, frameMat);
+    duct.position.set(x, 0.015, z);
+    duct.userData.skinPart = 'frame';
+    duct.userData.craftRole = 'duct';
+    skipLooks(duct);
+    g.add(duct);
+    const led = new THREE.Mesh(ledGeo, ledMat);
+    led.position.set(x, -0.036, z);
+    led.userData.skinPart = 'led';
+    skipLooks(led);
+    g.add(led);
+    const prop = new THREE.Group();
+    prop.position.set(x, 0.02, z);
+    prop.userData.spin = true;
+    skipLooks(prop);
+    const cap = new THREE.Mesh(capGeo, propMat);
+    cap.userData.skinPart = 'prop';
+    skipLooks(cap);
+    prop.add(cap);
+    for (let i = 0; i < 3; i++) {
+      const ang = i * Math.PI * 2 / 3;
+      const blade = new THREE.Mesh(bladeGeo, propMat);
+      blade.rotation.y = ang;
+      blade.position.set(Math.cos(ang) * 0.09, 0, -Math.sin(ang) * 0.09);
+      blade.userData.skinPart = 'prop';
+      blade.userData.craftRole = 'blade';
+      skipLooks(blade);
+      prop.add(blade);
+    }
+    const blur = new THREE.Mesh(blurGeo, blurMat);
+    blur.userData.skinPart = 'prop';
+    blur.userData.propBlur = true;
+    blur.visible = false;
+    skipLooks(blur);
+    prop.add(blur);
+    g.add(prop);
+  }
+  g.visible = false;
+  g.userData.keepInScene = true;
+  g.userData.looksSkip = true;
+  return g;
+}
+
+export const TRAIL_POINTS = 24;
+
+export function makeSkinTrail(THREE, skin) {
+  const pal = skinPalette(skin || SKINS[0]);
+  const n = TRAIL_POINTS;
+  const pos = new Float32Array(n * 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  if (geo.setDrawRange) geo.setDrawRange(0, 0);
+  const mat = new THREE.LineBasicMaterial({
+    color: pal.trail, transparent: true, opacity: 0.72, depthWrite: false,
+  });
+  const line = new THREE.Line(geo, mat);
+  line.name = 'qmSkinTrail';
+  line.frustumCulled = false;
+  line.visible = false;
+  line.userData.skinPart = 'trail';
+  line.userData.looksSkip = true;
+  line.userData.keepInScene = true;
+  return { line, pos, n, len: 0, geo };
+}
+
+export function pushSkinTrail(trail, x, y, z) {
+  if (!trail || !trail.pos) return;
+  const n = trail.n;
+  if (trail.len < n) {
+    const i = trail.len * 3;
+    trail.pos[i] = x;
+    trail.pos[i + 1] = y;
+    trail.pos[i + 2] = z;
+    trail.len += 1;
+  } else {
+    trail.pos.copyWithin(0, 3);
+    const i = (n - 1) * 3;
+    trail.pos[i] = x;
+    trail.pos[i + 1] = y;
+    trail.pos[i + 2] = z;
+  }
+  if (trail.geo && trail.geo.attributes && trail.geo.attributes.position) {
+    trail.geo.attributes.position.needsUpdate = true;
+  }
+  if (trail.geo && trail.geo.setDrawRange) trail.geo.setDrawRange(0, trail.len);
+}
+
+export function clearSkinTrail(trail) {
+  if (!trail) return;
+  trail.len = 0;
+  if (trail.geo && trail.geo.setDrawRange) trail.geo.setDrawRange(0, 0);
+}
+
 export function tintGroup(group, skin) {
   if (!group || !skin) return;
+  const pal = skinPalette(skin);
   group.traverse((o) => {
     if (!o.material) return;
-    if (o.userData.skinPart === 'canopy' && o.material.color) {
-      o.material.color.setHex(skin.canopy);
-      if (o.material.emissive) o.material.emissive.setHex(skin.canopy);
+    const part = o.userData && o.userData.skinPart;
+    const mat = o.material;
+    if (part === 'canopy' && mat.color) {
+      mat.color.setHex(pal.canopy);
+      if (mat.emissive) mat.emissive.setHex(pal.canopy);
     }
-    if (o.userData.skinPart === 'body' && o.material.color) {
-      o.material.color.setHex(skin.body);
+    if (part === 'body' && mat.color) mat.color.setHex(pal.body);
+    if ((part === 'frame' || part === 'duct') && mat.color) {
+      mat.color.setHex(pal.frame);
+      if (mat.emissive) mat.emissive.setHex(pal.frame);
     }
+    if (part === 'prop' && mat.color) {
+      mat.color.setHex(pal.prop);
+      if (mat.emissive) mat.emissive.setHex(pal.prop);
+    }
+    if (part === 'led' && mat.color) {
+      mat.color.setHex(pal.led);
+      if (mat.emissive) mat.emissive.setHex(pal.led);
+    }
+    if (part === 'trail' && mat.color) mat.color.setHex(pal.trail);
   });
 }
 
