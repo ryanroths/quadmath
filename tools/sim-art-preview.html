@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuadMath sim art mood preview</title>
+<style>
+  html,body{margin:0;height:100%;background:#070014;color:#eee;font:14px/1.4 sans-serif}
+  #c{display:block;width:100%;height:100%}
+  #hud{position:fixed;left:12px;top:12px;z-index:2;text-shadow:0 1px 4px #000}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"></div>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three.module.min.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { VIBES, buildMoodScene, MAP_VIBE_IDS } from '../sim-art.js';
+
+const q = new URLSearchParams(location.search);
+const id = q.get('vibe') && VIBES[q.get('vibe')] ? q.get('vibe') : 'city';
+const vibe = VIBES[id];
+document.getElementById('hud').textContent = vibe.name + ' · ' + vibe.tagline;
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = vibe.lighting.exposure;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(vibe.lighting.fogColor);
+scene.fog = new THREE.FogExp2(vibe.lighting.fogColor, 0.012);
+const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 200);
+camera.position.set(8, 5.2, 16);
+camera.lookAt(0, 2.4, 0);
+scene.add(buildMoodScene(THREE, id));
+function resize(){
+  const w = canvas.clientWidth || innerWidth;
+  const h = canvas.clientHeight || innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize();
+window._mood = { renderer, scene, camera, vibe, id, ready: true };
+function tick(now){
+  camera.position.x = 8 + Math.sin(now * 0.00025) * 1.4;
+  camera.lookAt(0, 2.4, 0);
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

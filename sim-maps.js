@@ -34,7 +34,7 @@ export const MAP_LOOKS = {
   garage: { fog: 0.003, sun: 0.7, env: 0.58, bg: 0.34, hemi: 0.32 },
   warehouse: { fog: 0.0018, sun: 0.55, env: 0.5, bg: 0.28, hemi: 0.28 },
   backyard: { fog: 0.0025, sun: 1.5, env: 0.72, bg: 0.48, hemi: 0.16 },
-  city: { fog: 0.00035, sun: 1.7, env: 0.72, bg: 0.48, hemi: 0.16 },
+  city: { fog: 0.00105, sun: 0.30, env: 0.18, bg: 0.16, hemi: 0.44 },
   office: { fog: 0.0032, sun: 0.48, env: 0.58, bg: 0.34, hemi: 0.36 },
   gym: { fog: 0.0010, sun: 0.95, env: 0.70, bg: 0.44, hemi: 0.55 },
   trainer: { fog: 0.0028, sun: 0.58, env: 0.56, bg: 0.33, hemi: 0.34 },

@@ -12,6 +12,8 @@ export const LOOK_SPOTS = {
   t1mid:  { pos: [322, 50, -478], target: [350, 46, -515] },
   street: { pos: [6, 2.8, 90], target: [0, 3.5, -30] },
   roof:   { pos: [-40, 48, 95], target: [-20, 12, 10] },
+  overview: { pos: [70, 165, 210], target: [0, 10, 0] },
+  lowpass: { pos: [12, 1.55, 48], target: [0, 1.8, -24] },
   living: { pos: [0, 4.6, 8], target: [0, 1.8, -6] },
   garage: { pos: [0, 5.2, 12], target: [2, 2.2, -6] },
   warehouse: { pos: [0, 7.5, 36], target: [0, 3.2, -8] },
@@ -33,7 +35,8 @@ export const PRESETS = {
     shadowMapSize: 512,
     shadows: true,
     ao: false,
-    bloomScale: 0.5,
+    bloom: false,
+    bloomScale: 0,
     postSamples: 0,
     hdri: '1k',
     maps: 'albedo',
@@ -44,6 +47,7 @@ export const PRESETS = {
     shadowMapSize: 1024,
     shadows: true,
     ao: true,
+    bloom: true,
     bloomScale: 0.75,
     postSamples: 2,
     hdri: '1k',
@@ -55,6 +59,7 @@ export const PRESETS = {
     shadowMapSize: 2048,
     shadows: true,
     ao: true,
+    bloom: true,
     bloomScale: 1,
     postSamples: 4,
     hdri: '2k',
@@ -122,6 +127,7 @@ uniform float vignette;
 uniform float ca;
 uniform float analog;
 uniform float time;
+uniform float grade;
 varying vec2 vUv;
 vec2 distort(vec2 uv, float k){
   vec2 c = uv - 0.5;
@@ -138,6 +144,7 @@ void main(){
   vec3 col = vec3(r,g,b);
   float d = distance(vUv, vec2(0.5));
   col *= 1.0 - smoothstep(0.32, 0.98, d) * vignette;
+  col *= mix(vec3(1.0), vec3(1.04, 0.93, 1.10), grade);
   if(analog > 0.5){
     float n = fract(sin(dot(vUv * vec2(1240.0, 780.0) + time, vec2(12.9898, 78.233))) * 43758.5453);
     col += (n - 0.5) * 0.055;
@@ -171,7 +178,7 @@ export function decorateGate(THREE, ring, size, col) {
   return led;
 }
 
-export function pulseGate(g, isNext, now, lighting) {
+export function pulseGate(g, isNext, now, lighting, passed) {
   const led = g.mesh.userData && g.mesh.userData.led;
   const m = g.mesh.material;
   if (isNext) {
@@ -188,14 +195,16 @@ export function pulseGate(g, isNext, now, lighting) {
     }
     g.mesh.scale.setScalar(1 + Math.sin(now * 0.004) * 0.06);
   } else {
+    const col = passed ? 0x9a3cff : g.col;
+    const emit = passed ? lighting.gateEmissive * 0.7 : lighting.gateEmissive;
     if (led) {
-      led.material.color.setHex(g.col);
-      led.material.emissive.setHex(g.col);
-      led.material.emissiveIntensity = lighting.gateEmissive;
+      led.material.color.setHex(col);
+      led.material.emissive.setHex(col);
+      led.material.emissiveIntensity = emit;
     } else {
-      m.color.setHex(g.col);
-      m.emissive.setHex(g.col);
-      m.emissiveIntensity = lighting.gateEmissive;
+      m.color.setHex(col);
+      m.emissive.setHex(col);
+      m.emissiveIntensity = emit;
     }
     g.mesh.scale.setScalar(1);
   }
@@ -228,6 +237,7 @@ export async function createLooks(ctx) {
   let cityLighting = null;
   let skyMesh = null, sunSprite = null, groundMesh = null;
   let composer = null, bloomPass = null, aoPass = null, fpvPass = null, motionPass = null;
+  let skyMode = 'hdri';
   let env1k = null, env2k = null, envLevel = null;
   let texCache = {};
   let maxAniso = 8;
@@ -254,12 +264,13 @@ export async function createLooks(ctx) {
 
   function applyFpvUniforms() {
     if (!fpvPass || !fpvPass.uniforms) return;
-    const on = fpv.enabled && !lookSpot;
+    const forceFpv = typeof location !== 'undefined' && /(?:^|[?&])fpv=1(?:&|$)/.test(location.search || '');
+    const on = fpv.enabled && (!lookSpot || forceFpv);
     fpvPass.enabled = on;
     const analog = fpv.style === 'analog';
     fpvPass.uniforms.barrel.value = analog ? 0.18 : 0.12;
-    fpvPass.uniforms.vignette.value = analog ? 0.58 : 0.36;
-    fpvPass.uniforms.ca.value = analog ? 0.006 : 0.0022;
+    fpvPass.uniforms.vignette.value = analog ? 0.58 : (fpvPass.uniforms.grade && fpvPass.uniforms.grade.value > 0.5 ? 0.44 : 0.36);
+    fpvPass.uniforms.ca.value = analog ? 0.006 : (fpvPass.uniforms.grade && fpvPass.uniforms.grade.value > 0.5 ? 0.0034 : 0.0022);
     fpvPass.uniforms.analog.value = analog ? 1 : 0;
     if (motionPass) motionPass.enabled = on && !!fpv.motionBlur;
   }
@@ -320,6 +331,8 @@ export async function createLooks(ctx) {
       new THREE.Vector2(1, 1),
       LIGHTING.bloomStrength, LIGHTING.bloomRadius, LIGHTING.bloomThreshold,
     );
+    const bootBloom = presetOf(applied);
+    bloomPass.enabled = bootBloom.bloom !== false && (bootBloom.bloomScale || 0) > 0;
     c.addPass(bloomPass);
     fpvPass = new ShaderPass({
       uniforms: {
@@ -329,6 +342,7 @@ export async function createLooks(ctx) {
         ca: { value: 0.0022 },
         analog: { value: 0 },
         time: { value: 0 },
+        grade: { value: 0 },
       },
       vertexShader: FPV_VERT,
       fragmentShader: FPV_FRAG,
@@ -374,9 +388,11 @@ export async function createLooks(ctx) {
     fetch(url).then((r) => mark(+r.headers.get('content-length') || 0)).catch(() => {});
     const tex = await new Loader().loadAsync(url);
     tex.mapping = THREE.EquirectangularReflectionMapping;
-    if (skyMesh) skyMesh.visible = false;
-    if (sunSprite) sunSprite.visible = false;
-    scene.background = tex;
+    if (skyMode !== 'gradient') {
+      if (skyMesh) skyMesh.visible = false;
+      if (sunSprite) sunSprite.visible = false;
+      scene.background = tex;
+    }
     const pmrem = new THREE.PMREMGenerator(renderer);
     const env = pmrem.fromEquirectangular(tex).texture;
     pmrem.dispose();
@@ -384,8 +400,21 @@ export async function createLooks(ctx) {
     return env;
   }
 
+  function applySkyModeNow() {
+    if (skyMode !== 'gradient') return;
+    if (skyMesh) skyMesh.visible = true;
+    if (sunSprite) sunSprite.visible = true;
+    if (scene.fog) scene.background = scene.fog.color;
+    if ('environmentIntensity' in scene) scene.environmentIntensity = 0.18;
+    if ('backgroundIntensity' in scene) scene.backgroundIntensity = 0.14;
+    if ('backgroundBlurriness' in scene) scene.backgroundBlurriness = 0.04;
+  }
   function applyEnv(env) {
     scene.environment = env;
+    if (skyMode === 'gradient') {
+      applySkyModeNow();
+      return;
+    }
     scene.background = env;
     if ('environmentIntensity' in scene) scene.environmentIntensity = 0.72;
     if ('backgroundIntensity' in scene) scene.backgroundIntensity = 0.48;
@@ -396,6 +425,13 @@ export async function createLooks(ctx) {
     if (skyMesh) skyMesh.visible = false;
     if (sunSprite) sunSprite.visible = false;
     scene.fog.color.setHex(LIGHTING.fogColor);
+  }
+  function setSkyMode(mode) {
+    skyMode = mode === 'gradient' ? 'gradient' : 'hdri';
+    if (skyMode === 'gradient') applySkyModeNow();
+    else if (envLevel === '2k' && env2k) applyEnv(env2k);
+    else if (env1k) applyEnv(env1k);
+    return skyMode;
   }
 
   async function ensureHdr(level) {
@@ -499,7 +535,7 @@ export async function createLooks(ctx) {
       loadSet('concrete', maps),
       loadSet('facade', maps),
     ]);
-    if (groundMesh && groundMesh.material) {
+    if (groundMesh && groundMesh.material && !(groundMesh.material.userData && groundMesh.material.userData.artLocked)) {
       const composed = composeGround(grass.diff, asphalt.diff, concrete.diff);
       const mat = groundMesh.material;
       if (mat.map && mat.map !== composed && mat.userData && mat.userData.looksComposed) {
@@ -612,12 +648,14 @@ export async function createLooks(ctx) {
     renderer.setPixelRatio(p.pixelRatio);
     applyLights(p);
     if (aoPass) aoPass.enabled = !!p.ao && !gpuHint(renderer).low;
+    if (bloomPass) bloomPass.enabled = p.bloom !== false && (p.bloomScale || 0) > 0;
     applyFpvUniforms();
     sizeComposer();
     if (ctx.onResize) ctx.onResize();
     try { await ensureHdr(p.hdri); } catch (e) { console.warn('looks HDRI', e); }
     try { await applyWorldMaps(); } catch (e) { console.warn('looks PBR', e); }
     applyMapLooksNow();
+    if (skyMode === 'gradient') applySkyModeNow();
     fps.lowMs = 0;
     return applied;
   }
@@ -809,6 +847,14 @@ export async function createLooks(ctx) {
     setMenuOpen,
     setOrbit,
     setMapLooks,
+    setSkyMode,
+    setGrade(v) {
+      if (fpvPass && fpvPass.uniforms && fpvPass.uniforms.grade) {
+        fpvPass.uniforms.grade.value = v ? 1 : 0;
+        applyFpvUniforms();
+      }
+    },
+    get skyMode() { return skyMode; },
     tick,
     afterFirstFrame,
     upgradeMaterials,

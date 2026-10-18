@@ -281,6 +281,15 @@ class RepoPin(unittest.TestCase):
         self.assertRegex(
             sim_src, r'from "\./sim-3d\.js\?v=[0-9a-f]{%d}"' % stamp.HASH_LEN
         )
+        self.assertRegex(
+            sim_src, r'from "\./sim-art\.js\?v=[0-9a-f]{%d}"' % stamp.HASH_LEN
+        )
+        art = os.path.join(REPO_ROOT, "sim-art.js")
+        with open(art, encoding="utf-8") as handle:
+            art_src = handle.read()
+        self.assertRegex(
+            art_src, r"from '\./sim-art-city\.js\?v=[0-9a-f]{%d}'" % stamp.HASH_LEN
+        )
 
     def test_live_pages_reference_hashed_first_party_js(self):
         # The two files that already burned users when the CDN served last week's JS.
