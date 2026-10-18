@@ -702,7 +702,7 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT} from "./quadphysics.js?v=4e972edd6a84";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT} from "./quadphysics.js?v=8a479d8ddc87";
 import {
   THREED_KEY, THREED_DEADBAND,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
@@ -2820,7 +2820,7 @@ function nearestWallDistSI(s){
 }
 qp.externalDisturbance=(s)=>{
   const thr=qp.armed?(typeof stick!=='undefined'
-    ?(threeD?Math.abs(mapThrottle3d(stick.t,{deadband:THREED_DEADBAND})):stick.t)
+    ?(threeD?mapThrottle3d(stick.t,{deadband:THREED_DEADBAND}):stick.t)
     :0):0;
   const wash=stepPropwash(washState,{pos:s.position,vel:s.velocity,throttle:thr},s.physicsDt||0.002,currentBuild,whoopSettings);
   washState=wash.wake;
@@ -3436,7 +3436,14 @@ function readInput(dt){
     // Connected radio/gamepad owns the sticks even on Chrome's empty polls.
     // Falling through to touch was the W6 regression (channel map "off").
     if(!gp)return;
-    if(calib){runCalib(gp,dt);stick.r=stick.p=stick.y=0;stick.t=0;return;}
+    if(calib){
+      runCalib(gp,dt);
+      stick.r=stick.p=stick.y=0;
+      // 3D: t=0 is full reverse. Match the arm-gate idle (center = zero thrust).
+      stick.t=threeD?0.5:0;
+      if(qp.armed)qp.disarm();
+      return;
+    }
     const map=liveAxisMap(gp);
     liveMap=map;
     const next=applyAxisMap(gp.axes,map,{threeD});
@@ -3652,13 +3659,22 @@ function setThreeD(on,persist){
   if(touchCtl&&touchCtl.setThreeD)touchCtl.setThreeD(want);
   if(!padLive)kbThrottle=want?0.5:0;
   if(!padLive)stick.t=kbThrottle;
+  // Radio keeps its physical stick. Enabling 3D at 2D idle (t=0) is full
+  // reverse; disabling 3D at center is 50% 2D throttle. Disarm if unsafe.
+  const unsafe=qp.armed&&!throttleSafeToArm(stick.t,want);
+  if(unsafe){
+    qp.disarm();
+    autoArmState={seenLow:false};
+  }
+  let forcedAcro=false;
   if(want && qp.flightMode!=='acro'){
     flightMode=qp.setFlightMode('acro');
     if(persist!==false)saveFlightMode(flightMode);
-    toast('3D ON — ACRO');
-  }else{
-    toast(want?'3D ON':'3D OFF');
+    forcedAcro=true;
   }
+  if(unsafe)toast(want?'3D ON — DISARMED':'3D OFF — DISARMED');
+  else if(forcedAcro)toast('3D ON — ACRO');
+  else toast(want?'3D ON':'3D OFF');
   syncTouchModeBtn();
   return threeD;
 }
@@ -5786,7 +5802,7 @@ function applyQueryBoot(){
     if(decoded) applyBuild(decoded,{save:false,announce:true});
   }
   const threeDRaw=parseThreeDQuery(q.get('3d'));
-  if(threeDRaw!=null)setThreeD(threeDRaw);
+  if(threeDRaw!=null)setThreeD(threeDRaw,false);
   const modeRaw=(q.get('mode')||'').toLowerCase();
   if(modeRaw==='angle'||modeRaw==='horizon'||modeRaw==='acro'){
     // Saved/query 3D stays acro. Do not let ?mode=angle overwrite that.
