@@ -4,7 +4,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=19bee552695d';
+import { planRoom } from './sim-room.js?v=bf753d2f574f';
 
 export const LAYOUT = {
   living: { w: 21, d: 28, h: 9.1, wall: 0.38 },
