@@ -773,6 +773,7 @@ test('Show canopy defaults off and persists quadmathSimCanopy', () => {
   assert.equal(craftChaseVisible({ chase: true }), true);
   assert.equal(craftChaseVisible({ menuOpen: true }), true);
   assert.equal(craftChaseVisible({ builder: true, chase: true }), false);
+  assert.equal(craftChaseVisible({ lookSpot: true }), false);
 });
 
 test('no canopy piece covers >10% of view at FOV 110', () => {

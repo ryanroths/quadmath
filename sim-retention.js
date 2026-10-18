@@ -1709,8 +1709,8 @@ export function canopyFpvVisible(state) {
 
 export function craftChaseVisible(state) {
   const s = state || {};
-  if (s.builder) return false;
-  return !!s.chase || !!s.menuOpen || !!s.lookSpot || !!s.replay;
+  if (s.builder || s.lookSpot) return false;
+  return !!s.chase || !!s.menuOpen || !!s.replay;
 }
 
 function canopyCam(opts) {

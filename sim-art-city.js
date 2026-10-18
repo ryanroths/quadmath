@@ -51,14 +51,14 @@ export function qualityBudget(applied) {
   if (applied === 'high') {
     return {
       skyline: 88, lamps: 96, strips: 96, stars: 140, lights: 5,
-      cars: 56, signs: 88, roof: 96, street: 100, rain: 1200, shafts: 18, trails: 6,
+      cars: 56, signs: 88, roof: 96, street: 100, rain: 1200, shafts: 0, trails: 6,
       benches: 22, bins: 24, kiosks: 14, awnings: 18, vents: 18, lowSigns: 36,
       reflect: true, particles: true,
     };
   }
   return {
     skyline: 64, lamps: 72, strips: 72, stars: 90, lights: 3,
-    cars: 40, signs: 56, roof: 64, street: 70, rain: 700, shafts: 12, trails: 4,
+    cars: 40, signs: 56, roof: 64, street: 70, rain: 700, shafts: 0, trails: 4,
     benches: 16, bins: 18, kiosks: 10, awnings: 14, vents: 12, lowSigns: 24,
     reflect: true, particles: true,
   };
@@ -187,20 +187,78 @@ export function planCityProps(gates, quality) {
     vents: pickFrom(curb, budget.vents || 0, 0.12, 3.6, 8.5),
     lowSigns: pickFrom(curb, budget.lowSigns || 0, 1.45, 4.2, 7.5),
   };
-  pushIfClear(planned.cars, gates, 9.2, 14, 0.55, -Math.PI / 2, 5.0);
-  pushIfClear(planned.cars, gates, 9.2, 4, 0.55, -Math.PI / 2, 5.0);
-  pushIfClear(planned.cars, gates, -9.2, 18, 0.55, Math.PI / 2, 5.0);
+  pushIfClear(planned.cars, gates, 14.8, 48, 0.55, -Math.PI / 2, 5.0);
+  pushIfClear(planned.cars, gates, -14.8, 48, 0.55, Math.PI / 2, 5.0);
   pushIfClear(planned.cars, gates, -112, -100, 0.55, -0.8, 5.0);
   pushIfClear(planned.cars, gates, 318, -330, 0.55, 0.7, 5.0);
   pushIfClear(planned.benches, gates, 9.0, 20, 0.42, -Math.PI / 2, 3.8);
   pushIfClear(planned.benches, gates, -9.0, 8, 0.42, Math.PI / 2, 3.8);
-  pushIfClear(planned.lowSigns, gates, 9.3, 10, 1.45, -Math.PI / 2, 4.2);
-  pushIfClear(planned.lowSigns, gates, -9.3, 16, 1.45, Math.PI / 2, 4.2);
   pushIfClear(planned.lowSigns, gates, -128, -105, 1.45, 0.7, 4.2);
   pushIfClear(planned.lowSigns, gates, 320, -318, 1.45, 0.8, 4.2);
-  pushIfClear(planned.kiosks, gates, 15.2, 18, 0.95, 0, 4.4);
+  pushIfClear(planned.kiosks, gates, 18.4, 36, 0.95, 0, 4.4);
   pushIfClear(planned.bins, gates, 8.8, 22, 0.45, -Math.PI / 2, 3.4);
+  pushIfClear(planned.kiosks, gates, 336, -332, 0.95, 0.55, 5.0);
+  pushIfClear(planned.vending, gates, 362, -332, 1.1, -0.5, 5.0);
+  pushIfClear(planned.lowSigns, gates, 340, -324, 1.45, 0.45, 5.0);
+  pushIfClear(planned.benches, gates, 344, -330, 0.42, 0.4, 4.2);
+  pushIfClear(planned.bins, gates, 338, -326, 0.45, 0.4, 4.0);
+  const ring = [
+    [332, -328, 0.9], [368, -328, -0.6], [332, -372, 2.2], [368, -372, 0.4],
+    [318, -350, 1.57], [382, -350, -1.57], [350, -318, 3.14],
+  ];
+  for (const [x, z, ry] of ring) {
+    pushIfClear(planned.cars, gates, x, z, 0.55, ry, 6.0);
+    pushIfClear(planned.lowSigns, gates, x + Math.cos(ry) * 3.2, z + Math.sin(ry) * 3.2, 1.45, ry, 5.0);
+    pushIfClear(planned.benches, gates, x - Math.cos(ry) * 4.2, z - Math.sin(ry) * 4.2, 0.42, ry, 4.2);
+    pushIfClear(planned.bollards, gates, x + Math.sin(ry) * 2.4, z - Math.cos(ry) * 2.4, 0.45, ry, 4.0);
+  }
+  // Whoop-street FPV looks down the origin axes; thin signs and parked cars
+  // there read as shards / pancakes. Keep that shot as road + puddles + skyline.
+  const offStreetShot = (p) => Math.abs(p.x) > 16 || p.z < -12 || p.z > 44;
+  planned.lowSigns = planned.lowSigns.filter(offStreetShot);
+  planned.cars = planned.cars.filter(offStreetShot);
+  planned.kiosks = (planned.kiosks || []).filter(offStreetShot);
+  planned.benches = (planned.benches || []).filter(offStreetShot);
+  planned.bins = (planned.bins || []).filter(offStreetShot);
   return planned;
+}
+
+const PORTAL_XZ = Object.freeze({ x: 350, z: -350 });
+
+export function planPortalBlocks(gates, quality) {
+  const n = quality === 'low' ? 10 : (quality === 'high' ? 20 : 14);
+  const rng = mulberry32(7721);
+  const out = [];
+  const pushBlock = (x, z, h, w, d) => {
+    if (out.length >= n) return;
+    if (Math.hypot(x - PORTAL_XZ.x, z - PORTAL_XZ.z) < 34) return;
+    if (!propClearOfCourse(x, z, h / 2, gates || [], { gatePad: 8, corridor: 6.0, yRange: 14 })) return;
+    if (out.some((b) => Math.hypot(b.x - x, b.z - z) < 16)) return;
+    out.push({ x, y: h / 2, z, w, h, d, top: h });
+  };
+  // Forced flank / behind blocks so the whoopPortal shot is a plaza, not a plain.
+  const forced = [
+    [308, -378, 26, 14, 12], [296, -346, 20, 13, 14], [314, -404, 32, 16, 13],
+    [394, -366, 28, 14, 14], [404, -338, 22, 13, 12], [382, -404, 34, 15, 14],
+    [350, -422, 24, 18, 14], [328, -414, 18, 12, 12], [370, -322, 20, 12, 11],
+    [388, -390, 16, 11, 12], [300, -390, 22, 12, 12], [410, -372, 18, 12, 11],
+  ];
+  for (const [x, z, h, w, d] of forced) pushBlock(x, z, h, w, d);
+  const approach = Math.atan2(42, -22);
+  for (let i = 0; i < 40 && out.length < n; i++) {
+    const a = (i / 40) * Math.PI * 2;
+    let da = Math.abs(Math.atan2(Math.sin(a - approach), Math.cos(a - approach)));
+    if (da < 0.32) continue;
+    const r = 48 + (i % 3) * 14 + rng() * 4;
+    pushBlock(
+      PORTAL_XZ.x + Math.cos(a) * r,
+      PORTAL_XZ.z + Math.sin(a) * r,
+      16 + rng() * 26,
+      11 + rng() * 8,
+      11 + rng() * 8,
+    );
+  }
+  return out;
 }
 
 function pushIfClear(list, gates, x, z, y, ry, extraPad) {
@@ -318,9 +376,17 @@ export function hideStockCityMeshes(root) {
     }
     const t = o.geometry.type;
     const p = o.geometry.parameters || {};
+    const col = o.material && o.material.color ? o.material.color.getHex() : 0;
+    // Palms (green fronds / tan trunks) and leftover AC boxes read as broken
+    // roof shards from whoop height. Hide by color so a missed side/width
+    // check cannot leave floating triangles on the skyline.
+    if (col === 0x3f7a34 || col === 0x8a6a45 || col === 0x9aa0a8) {
+      o.visible = false; o.userData.artHidden = true; n++;
+      return;
+    }
     if (t === 'CylinderGeometry' && p.radiusTop < 0.4 && p.height < 14) {
       o.visible = false; o.userData.artHidden = true; n++;
-    } else if (t === 'PlaneGeometry' && o.material && o.material.side === 2 && p.width < 5) {
+    } else if (t === 'PlaneGeometry' && o.material && (o.material.side === 2 || p.width < 6)) {
       o.visible = false; o.userData.artHidden = true; n++;
     } else if (t === 'BoxGeometry' && p.height <= 1.85 && p.width < 8 && o.position.y > 10) {
       o.visible = false; o.userData.artHidden = true; n++;
@@ -485,10 +551,12 @@ function wetGround(THREE, vibe) {
 
 function makeCarGeo(THREE) {
   return mergeGeos(THREE, [
-    boxAt(THREE, 4.2, 0.85, 1.9, 0, 0.52, 0, 0),
-    boxAt(THREE, 2.5, 0.65, 1.7, -0.2, 1.18, 0, 0),
-    boxAt(THREE, 0.22, 0.2, 1.75, -1.95, 0.48, 0, 0),
-    boxAt(THREE, 0.16, 0.16, 1.75, 1.95, 0.46, 0, 0),
+    boxAt(THREE, 4.0, 0.88, 1.85, 0, 0.74, 0, 0),
+    boxAt(THREE, 2.05, 0.95, 1.62, -0.35, 1.58, 0, 0),
+    boxAt(THREE, 0.55, 0.48, 0.22, 1.2, 0.30, 0.92, 0),
+    boxAt(THREE, 0.55, 0.48, 0.22, 1.2, 0.30, -0.92, 0),
+    boxAt(THREE, 0.55, 0.48, 0.22, -1.2, 0.30, 0.92, 0),
+    boxAt(THREE, 0.55, 0.48, 0.22, -1.2, 0.30, -0.92, 0),
   ]);
 }
 
@@ -528,16 +596,6 @@ function makeVendingGeo(THREE) {
     boxAt(THREE, 1.1, 2.2, 0.7, 0, 1.1, 0, 0),
     boxAt(THREE, 0.85, 0.7, 0.12, 0, 1.45, 0.36, 0),
   ]);
-}
-
-function makeFireEscapeGeo(THREE) {
-  const parts = [];
-  for (let i = 0; i < 5; i++) {
-    parts.push(boxAt(THREE, 1.6, 0.08, 0.7, 0, i * 1.15, 0, 0));
-    parts.push(boxAt(THREE, 0.08, 1.15, 0.08, -0.76, i * 1.15 + 0.55, 0.3, 0));
-    parts.push(boxAt(THREE, 0.08, 1.15, 0.08, 0.76, i * 1.15 + 0.55, 0.3, 0));
-  }
-  return mergeGeos(THREE, parts);
 }
 
 function vec3FromHex(THREE, hex) {
@@ -663,6 +721,7 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
   const budget = qualityBudget(quality);
   const rng = mulberry32(4242);
   const footprints = collectBuildingFootprints(parent);
+  for (const b of planPortalBlocks(gates || [], quality)) footprints.push(b);
   hideStockCityMeshes(parent);
   const planned = planCityProps(gates || [], quality);
   group.userData.planned = planned;
@@ -718,7 +777,6 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
   const billMat = dullMat(THREE, 0x141018);
   const awnMat = neonMat(THREE, hexNum(vibe.palette.neonC), 1.1, { roughness: 0.55 });
   const balcMat = dullMat(THREE, 0x2a2030, { metalness: 0.3 });
-  const escMat = dullMat(THREE, 0x3a2a28, { metalness: 0.45 });
 
   const roofN = Math.min(budget.roof, Math.max(1, footprints.length));
   addInstanced(THREE, group, new THREE.CylinderGeometry(0.9, 0.9, 1.6, 8), tankMat, roofN, (d, i) => {
@@ -733,16 +791,16 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     d.position.set(b.x + (rng() - 0.5) * b.w * 0.4, b.top + 0.55, b.z + (rng() - 0.5) * b.d * 0.4);
     d.scale.set(1, 1, 1); d.rotation.set(0, rng() * 1.2, 0);
   });
-  addInstanced(THREE, group, new THREE.CylinderGeometry(0.05, 0.08, 4.2, 5), antMat, roofN, (d, i) => {
+  addInstanced(THREE, group, new THREE.BoxGeometry(0.1, 2.6, 0.1), antMat, roofN, (d, i) => {
     const b = footprints[(i * 5 + 1) % footprints.length];
     if (!b) return false;
-    d.position.set(b.x + b.w * 0.28, b.top + 2.4, b.z - b.d * 0.22);
+    d.position.set(b.x + b.w * 0.28, b.top + 1.5, b.z - b.d * 0.22);
     d.scale.set(1, 1, 1); d.rotation.set(0, 0, 0);
   });
   addInstanced(THREE, group, new THREE.SphereGeometry(0.12, 6, 6), blinkMat, roofN, (d, i) => {
     const b = footprints[(i * 5 + 1) % footprints.length];
     if (!b) return false;
-    d.position.set(b.x + b.w * 0.28, b.top + 4.55, b.z - b.d * 0.22);
+    d.position.set(b.x + b.w * 0.28, b.top + 2.95, b.z - b.d * 0.22);
     d.scale.set(1, 1, 1); d.rotation.set(0, 0, 0);
   });
   addInstanced(THREE, group, new THREE.BoxGeometry(3.6, 2.1, 0.12), billMat, Math.min(roofN, 40), (d, i) => {
@@ -766,18 +824,11 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
       }
     }
   }
-  addInstanced(THREE, group, makeFireEscapeGeo(THREE), escMat, Math.min(budget.roof, faceSpots.length), (d, i) => {
-    const f = faceSpots[i];
-    if (!f) return false;
-    d.position.set(f.x, 1.2, f.z);
-    d.rotation.set(0, f.ry, 0);
-    d.scale.set(1, Math.min(1.15, f.h / 18), 1);
-  });
   addInstanced(THREE, group, new THREE.BoxGeometry(2.6, 0.12, 1.1), awnMat, Math.min(budget.signs, faceSpots.length), (d, i) => {
     const f = faceSpots[(i * 3) % faceSpots.length];
     if (!f) return false;
     d.position.set(f.x, 3.05, f.z);
-    d.rotation.set(0.15, f.ry, 0);
+    d.rotation.set(0, f.ry, 0);
     d.scale.set(1, 1, 1);
   });
   addInstanced(THREE, group, new THREE.BoxGeometry(1.8, 0.7, 0.7), balcMat, Math.min(budget.roof, faceSpots.length), (d, i) => {
@@ -799,24 +850,24 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
   }));
   holoMat.userData.cityHolo = true;
   const bladeN = Math.min(budget.signs, faceSpots.length);
-  addInstanced(THREE, group, new THREE.PlaneGeometry(0.7, 3.4), signMat, bladeN, (d, i) => {
+  addInstanced(THREE, group, new THREE.BoxGeometry(0.7, 3.4, 0.1), signMat, bladeN, (d, i) => {
     const f = faceSpots[i];
     if (!f) return false;
     d.position.set(f.x, 5.6, f.z);
     d.rotation.set(0, f.ry, 0);
     d.scale.set(1, 1, 1);
   });
-  addInstanced(THREE, group, new THREE.PlaneGeometry(2.8, 0.7), signMat, bladeN, (d, i) => {
+  addInstanced(THREE, group, new THREE.BoxGeometry(2.8, 0.7, 0.1), signMat, bladeN, (d, i) => {
     const f = faceSpots[(i + 4) % faceSpots.length];
     if (!f) return false;
     d.position.set(f.x, 4.15, f.z);
     d.rotation.set(0, f.ry, 0);
     d.scale.set(1, 1, 1);
   });
-  addInstanced(THREE, group, new THREE.PlaneGeometry(2.2, 3.0), holoMat, Math.min(18, bladeN), (d, i) => {
+  addInstanced(THREE, group, new THREE.BoxGeometry(2.2, 3.0, 0.08), holoMat, Math.min(18, bladeN), (d, i) => {
     const f = faceSpots[(i * 7) % faceSpots.length];
     if (!f) return false;
-    d.position.set(f.x, Math.min(f.top - 2, 14), f.z + 0.2);
+    d.position.set(f.x, Math.min(f.top - 2, 14), f.z);
     d.rotation.set(0, f.ry, 0);
     d.scale.set(1, 1, 1);
   });
@@ -850,7 +901,7 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     d.position.set(p[0], 6.5, p[1]); d.scale.set(1, 1, 1); d.rotation.set(0, 0, 0);
   });
 
-  const carMat = dullMat(THREE, 0x3a2460, { metalness: 0.72, roughness: 0.28, emissive: 0x1a1030, emissiveIntensity: 0.35 });
+  const carMat = skipMat(new THREE.MeshBasicMaterial({ color: 0x16101c }));
   const carMesh = addInstanced(THREE, group, makeCarGeo(THREE), carMat, planned.cars.length, (d, i) => {
     const p = planned.cars[i];
     if (!p) return false;
@@ -907,7 +958,7 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     addInstanced(THREE, group, new THREE.BoxGeometry(2.8, 0.1, 1.45), neonMat(THREE, hexNum(vibe.palette.neonC), 1.4, { roughness: 0.5 }), planned.awnings.length, (d, i) => {
       const p = planned.awnings[i];
       if (!p) return false;
-      d.position.set(p.x, 2.05, p.z); d.rotation.set(0.18, p.ry, 0); d.scale.set(1, 1, 1);
+      d.position.set(p.x, 2.05, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1);
     });
   }
   if (planned.vents && planned.vents.length) {
@@ -918,10 +969,10 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     });
   }
   if (planned.lowSigns && planned.lowSigns.length) {
-    addInstanced(THREE, group, new THREE.PlaneGeometry(5.4, 1.7), signMat, planned.lowSigns.length, (d, i) => {
+    addInstanced(THREE, group, new THREE.BoxGeometry(2.2, 0.95, 0.12), signMat, planned.lowSigns.length, (d, i) => {
       const p = planned.lowSigns[i];
       if (!p) return false;
-      d.position.set(p.x, 1.35, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1);
+      d.position.set(p.x, 1.55, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1);
     });
   }
 
@@ -931,10 +982,10 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     if (!p) return false;
     d.position.set(p.x, 0, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1);
   });
-  addInstanced(THREE, group, new THREE.CylinderGeometry(0.12, 0.14, 0.9, 6), dullMat(THREE, 0x2a2c34), planned.bollards.length, (d, i) => {
+  addInstanced(THREE, group, new THREE.CylinderGeometry(0.16, 0.18, 1.25, 8), skipMat(new THREE.MeshBasicMaterial({ color: hexNum(vibe.palette.neonB) })), planned.bollards.length, (d, i) => {
     const p = planned.bollards[i];
     if (!p) return false;
-    d.position.set(p.x, 0.45, p.z); d.scale.set(1, 1, 1); d.rotation.set(0, 0, 0);
+    d.position.set(p.x, 0.62, p.z); d.scale.set(1, 1, 1); d.rotation.set(0, 0, 0);
   });
   const headMat = neonMat(THREE, 0xffcc44, 3.6);
   addInstanced(THREE, group, new THREE.BoxGeometry(0.35, 1.6, 0.35), dullMat(THREE, 0x1a1c20), planned.traffic.length, (d, i) => {
@@ -963,12 +1014,6 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     if (!p) return false;
     d.position.set(p.x, 5.1, p.z); d.scale.set(1, 1, 1); d.rotation.set(0, 0, 0);
   });
-  addInstanced(THREE, group, new THREE.BoxGeometry(0.06, 2.4, 1.8), dullMat(THREE, 0x2a3040, { metalness: 0.5, wireframe: false }), planned.chain.length, (d, i) => {
-    const p = planned.chain[i];
-    if (!p) return false;
-    d.position.set(p.x, 1.2, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1);
-  });
-
   const skyMat = dullMat(THREE, hexNum(vibe.palette.facade), { emissive: hexNum(vibe.palette.windowOn), emissiveIntensity: 0.35 });
   addInstanced(THREE, group, new THREE.BoxGeometry(1, 1, 1), skyMat, budget.skyline, (d, i) => {
     const a = (i / budget.skyline) * Math.PI * 2 + rng() * 0.06;
@@ -1046,28 +1091,60 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     group.add(stars);
   }
 
-  const puddleMat = skipMat(new THREE.MeshStandardMaterial({
-    color: 0x0a0812,
-    emissive: hexNum(vibe.palette.neonB),
-    emissiveIntensity: quality === 'low' ? 0.05 : 0.62,
-    roughness: quality === 'low' ? 0.58 : 0.04,
-    metalness: quality === 'low' ? 0.18 : 0.96,
-    envMapIntensity: quality === 'low' ? 0.15 : 1.6,
-    transparent: true,
-    opacity: quality === 'low' ? 0.22 : 0.7,
-  }));
-  const puddles = [];
-  const rng2 = mulberry32(3331);
-  const puddleN = quality === 'low' ? 8 : 40;
-  for (let i = 0; i < puddleN; i++) {
-    const along = (rng2() - 0.5) * 360;
-    const side = (rng2() - 0.5) * 7.5;
-    const x = i % 2 ? along : side;
-    const z = i % 2 ? side : along;
-    if (!propClearOfCourse(x, z, 0.05, gates || [], { gatePad: 5, corridor: 2.6 })) continue;
-    puddles.push(boxAt(THREE, 6 + rng2() * 10, 0.018, 2.8 + rng2() * 5, x, 0.035, z, rng2() * 0.35));
+  if (quality !== 'low') {
+    const puddleMap = canvasTex(THREE, 256, 256, (g, s) => {
+      const rad = g.createRadialGradient(s / 2, s / 2, 6, s / 2, s / 2, s * 0.5);
+      rad.addColorStop(0, '#03060a');
+      rad.addColorStop(0.28, '#05040a');
+      rad.addColorStop(0.62, '#020208');
+      rad.addColorStop(1, 'rgba(2,1,6,0)');
+      g.fillStyle = rad;
+      g.fillRect(0, 0, s, s);
+      g.globalCompositeOperation = 'lighter';
+      g.strokeStyle = 'rgba(0,240,255,0.95)';
+      g.lineWidth = 5;
+      g.beginPath(); g.moveTo(18, 30); g.lineTo(230, 196); g.stroke();
+      g.strokeStyle = 'rgba(255,43,214,0.8)';
+      g.lineWidth = 4;
+      g.beginPath(); g.moveTo(40, 232); g.lineTo(220, 50); g.stroke();
+      g.fillStyle = 'rgba(0,240,255,0.45)';
+      g.fillRect(50, 88, 140, 4);
+      g.fillStyle = 'rgba(255,43,214,0.35)';
+      g.fillRect(70, 148, 90, 3);
+      g.globalCompositeOperation = 'source-over';
+    }, 1, 1);
+    const puddleMat = skipMat(new THREE.MeshBasicMaterial({
+      map: puddleMap, transparent: true, opacity: 0.92, depthWrite: false,
+    }));
+    const rng2 = mulberry32(3331);
+    const spots = [];
+    const addPuddle = (x, z, w, d, ry) => {
+      if (!propClearOfCourse(x, z, 0.02, gates || [], { gatePad: 5, corridor: 2.6 })) return;
+      if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < 8)) return;
+      spots.push({ x, z, w, d, ry });
+    };
+    for (const [fx, fz] of [[-5.5, 15.5], [3.4, 10.5], [340, -338]]) {
+      addPuddle(fx, fz, 5.4, 3.6, 0.15);
+    }
+    for (let i = 0; i < 22; i++) {
+      const along = (rng2() - 0.5) * 360;
+      const side = (rng2() - 0.5) * 7.5;
+      const x = i % 2 ? along : side;
+      const z = i % 2 ? side : along;
+      addPuddle(x, z, 3.4 + rng2() * 2.4, 2.4 + rng2() * 1.8, rng2() * Math.PI);
+    }
+    const puddleMesh = addInstanced(THREE, group, new THREE.PlaneGeometry(1, 1), puddleMat, spots.length, (d, i) => {
+      const s = spots[i];
+      if (!s) return false;
+      d.position.set(s.x, 0.036, s.z);
+      d.rotation.set(-Math.PI / 2, 0, s.ry);
+      d.scale.set(s.w, s.d, 1);
+    });
+    if (puddleMesh) {
+      puddleMesh.name = 'cityPuddles';
+      puddleMesh.renderOrder = 2;
+    }
   }
-  if (puddles.length) group.add(new THREE.Mesh(mergeGeos(THREE, puddles), puddleMat));
 
   addInstanced(THREE, group, new THREE.TorusGeometry(4.15, 0.09, 8, 24), neonMat(THREE, hexNum(vibe.palette.neonB), 4.4), 2, (d, i) => {
     const spots = [{ x: 0, z: -40, ry: 0 }, { x: 30, z: 60, ry: Math.PI / 4 }];
@@ -1103,20 +1180,6 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     rain.name = 'cityRain';
     rain.userData.cityRain = true;
     group.add(rain);
-  }
-
-  if (budget.shafts > 0) {
-    const shaftMat = skipMat(new THREE.MeshBasicMaterial({
-      color: hexNum(vibe.palette.neonB), transparent: true, opacity: 0.07,
-      depthWrite: false, side: THREE.DoubleSide,
-    }));
-    addInstanced(THREE, group, new THREE.PlaneGeometry(4.5, 28), shaftMat, budget.shafts, (d, i) => {
-      const a = rng() * Math.PI * 2;
-      const r = 30 + rng() * 160;
-      d.position.set(Math.cos(a) * r, 16, Math.sin(a) * r);
-      d.rotation.set(0.15, a, 0);
-      d.scale.set(1, 1 + rng(), 1);
-    });
   }
 
   if (budget.trails > 0) {
@@ -1242,6 +1305,14 @@ export function restyleLandmarks(root, vibe) {
       } else if (col === 0xFF6A00 || em === 0xFF6A00) {
         m.color.setHex(neonB);
         if (m.emissive) m.emissive.setHex(neonB);
+        m.userData.artLocked = true;
+        n++;
+      } else if (col === 0x17181d || col === 0x788089 || col === 0x8a8f96) {
+        m.color.setHex(0x1a1428);
+        if (m.emissive) m.emissive.setHex(neonB);
+        m.emissiveIntensity = 0.12;
+        m.roughness = 0.48;
+        m.metalness = 0.38;
         m.userData.artLocked = true;
         n++;
       } else if (col === 0xc9a97a) {

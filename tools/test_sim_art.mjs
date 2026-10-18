@@ -9,7 +9,7 @@ import {
   VIBES, MAP_VIBE_IDS, vibeFor, qualityWantsBloom, qualityBudget,
   hexNum, vibeTable, mentionsBannedAssets, CITY_VIBE_ID,
   qualityWantsReflections, qualityWantsParticles,
-  propClearOfCourse, planCityProps, SIGN_WORDS, GATE_STYLES,
+  propClearOfCourse, planCityProps, planPortalBlocks, SIGN_WORDS, GATE_STYLES,
   signsAreOriginal, BRAND_BLOCKLIST,
   paintWorldLabel, WORLD_LABEL,
 } from '../sim-art.js';
@@ -157,6 +157,16 @@ test('planned street props stay off City Loop and Zigzag race lines', () => {
       }
     }
     assert.ok(n > 8, q + ' planned props');
+    const portal = planPortalBlocks(gates, q);
+    assert.ok(portal.length >= 6, q + ' portal blocks');
+    for (const b of portal) {
+      assert.ok(Math.hypot(b.x - 350, b.z + 350) > 32, 'portal keep-out');
+      assert.equal(
+        propClearOfCourse(b.x, b.z, b.y, gates, { gatePad: 8, corridor: 6.0, yRange: 14 }),
+        true,
+        'portal ' + b.x + ',' + b.z,
+      );
+    }
   }
 });
 
@@ -179,8 +189,13 @@ test('city finish pass uses a world-Y sky, neon leftovers, and fake wet road', (
   assert.match(city, /makeWetRoadMaterial/);
   assert.match(city, /restyleLandmarks/);
   assert.match(city, /makeBenchGeo|benches/);
+  assert.match(city, /planPortalBlocks/);
+  assert.equal(city.includes('PlaneGeometry(4.5, 28)'), false);
+  assert.match(city, /cityPuddles|puddleMap/);
+  assert.match(city, /0x3f7a34/);
   const sim = readFileSync(join(root, 'sim.html'), 'utf8');
-  assert.match(sim, /0x1a1028/);
+  assert.match(sim, /0x120816|0x1a1428|towerMap/);
+  assert.match(sim, /BoxGeometry\(len,br/);
   assert.match(sim, /restyleLandmarks/);
   const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
   assert.match(looks, /whoopStreet/);

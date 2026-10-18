@@ -748,7 +748,7 @@ import {
   VIBES, vibeFor, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, loadRain, saveRain, RAIN_KEY,
   makeWorldLabel, worldLabelMaterial, setWorldLabelText,
-} from "./sim-art.js?v=a81c6a309073";
+} from "./sim-art.js?v=94619cddc7dc";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -776,7 +776,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=19bee552695d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=b463437eb36a";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=1a2e02f7dd4f";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -784,7 +784,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=0b4ae9d1076b";
+} from "./sim-coach.js?v=06a0021453a7";
 import {
   DAILY_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -797,7 +797,7 @@ import {
   skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
-} from "./sim-retention.js?v=2483c4d92c48";
+} from "./sim-retention.js?v=3ad022ce389c";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1594,7 +1594,7 @@ function arch(x,z,ry){
 arch(0,-40,0);arch(30,60,Math.PI/4);
 {
   const tw=new THREE.Mesh(new THREE.CylinderGeometry(.8,1.6,55,8),
-    new THREE.MeshStandardMaterial({color:0x788089,roughness:.6,metalness:.5}));
+    new THREE.MeshStandardMaterial({color:0x1a1428,emissive:0x00f0ff,emissiveIntensity:0.16,roughness:.45,metalness:.4}));
   tw.position.set(-70,27.5,70);tw.castShadow=true;proceduralGroup.add(tw);
   addCollider(-70,0,70,3.2,55,3.2);
 }
@@ -1606,7 +1606,7 @@ const proceduralColliderCount=colliders.length; // for gltf swap
 // gltf swap and exists in both procedural and gltf modes.
 function addTripleStack(x,z){
   const W=14,D=10;
-  const steel=new THREE.MeshStandardMaterial({color:0x8a8f96,roughness:.5,metalness:.55});
+  const steel=new THREE.MeshStandardMaterial({color:0x1a1428,emissive:0x00f0ff,emissiveIntensity:0.14,roughness:.45,metalness:.4});
   const plank=new THREE.MeshStandardMaterial({color:0x9a7b4f,roughness:.9});
   const grp=new THREE.Group();grp.position.set(x,0,z);scene.add(grp);
   function slab(cy,h,mat){ // full-footprint deck, center height cy
@@ -1640,7 +1640,7 @@ addTripleStack(0,300);
 // pattern as addTripleStack / the power tower above.
 function addWindmill(x,z){
   const POLE_H=63,POLE_R=1.05,ARM_Y=42,ARM_LEN=21,ARM_R=0.7; // 3.5× the original 18/0.3/12/6/0.2
-  const steel=new THREE.MeshStandardMaterial({color:0x8a8f96,roughness:.5,metalness:.55});
+  const steel=new THREE.MeshStandardMaterial({color:0x1a1428,emissive:0x00f0ff,emissiveIntensity:0.14,roughness:.45,metalness:.4});
   const grp=new THREE.Group();grp.position.set(x,0,z);scene.add(grp);
   // central pole (full height, solid)
   const pole=new THREE.Mesh(new THREE.CylinderGeometry(POLE_R,POLE_R,POLE_H,10),steel);
@@ -1728,8 +1728,19 @@ function diveShaft(x,z,radius,height,segments){
   // its own mesh (addArcBand makes one per solid arc), so picking a material
   // per band costs no extra geometry, puts a hard edge exactly on the line,
   // and avoids hanging a colour attribute off every band.
-  const wallMat=new THREE.MeshStandardMaterial({color:0x1a1028,emissive:0x00f0ff,emissiveIntensity:0.14,roughness:0.55,metalness:0.22,side:THREE.DoubleSide});
-  const skirtMat=new THREE.MeshStandardMaterial({color:0x120816,emissive:0xff2bd6,emissiveIntensity:0.22,roughness:0.5,metalness:0.2,side:THREE.DoubleSide});
+  const towerMap=canvasTex(256,512,(g)=>{
+    g.fillStyle='#100814';g.fillRect(0,0,256,512);
+    const cols=5,rows=18,wx=256/cols,wy=512/rows;
+    for(let r=1;r<rows-1;r++)for(let c=0;c<cols;c++){
+      const on=rnd()<0.42;
+      g.fillStyle=on?(rnd()<0.55?'#ffd36a':'#00e6ff'):'#08060c';
+      g.fillRect(c*wx+wx*.22,r*wy+wy*.24,wx*.56,wy*.48);
+      if(on){g.fillStyle='rgba(255,43,214,0.35)';g.fillRect(c*wx+wx*.22,r*wy+wy*.24,wx*.56,2);}
+    }
+    g.fillStyle='#00f0ff';g.fillRect(0,0,256,5);g.fillRect(0,507,256,5);
+  });
+  const wallMat=new THREE.MeshStandardMaterial({map:towerMap,color:0x1a1220,emissive:0xff2bd6,emissiveIntensity:0.12,roughness:0.62,metalness:0.12,side:THREE.DoubleSide});
+  const skirtMat=new THREE.MeshStandardMaterial({map:towerMap,color:0x140c18,emissive:0xff2bd6,emissiveIntensity:0.16,roughness:0.58,metalness:0.12,side:THREE.DoubleSide});
   const skirtTop=height*0.1;
   // branch junction params — defined BEFORE the walls so both the visual
   // bands and the wall colliders can cut matching holes where the horizontal
@@ -1845,11 +1856,9 @@ function diveShaft(x,z,radius,height,segments){
     // sits at r≈7.5–9, well off the center dive line
     const bx=x+Math.cos(dirA)*(radius+len/2-1.5),bz=z+Math.sin(dirA)*(radius+len/2-1.5);
     const t=new THREE.Mesh(
-      new THREE.CylinderGeometry(br,br,len,16,1,true),
-      new THREE.MeshStandardMaterial({color:0x17181d,roughness:0.95,side:THREE.DoubleSide}));
-    // bake axis Y→X into geometry, then yaw the mesh onto dirA — rotation.y
-    // of -dirA maps +X to (cos dirA, 0, sin dirA)
-    t.geometry.rotateZ(Math.PI/2);
+      new THREE.BoxGeometry(len,br*1.7,br*1.7),
+      new THREE.MeshStandardMaterial({map:towerMap,color:0x16101c,emissive:0x00f0ff,emissiveIntensity:0.22,roughness:0.55,metalness:0.14}));
+    // box length is +X; yaw maps +X onto dirA — colliders stay on the old tube
     t.rotation.y=-dirA;
     t.position.set(bx,by,bz);
     scene.add(t);
@@ -3501,7 +3510,7 @@ function updateCamera(){
   if(builderOn){applyBuilderCam();applyCanopyVis({builder:true});return;}
   if(applyChaseCam()){applyCanopyVis({chase:true});return;}
   if(looks&&looks.applyLookSpot()){
-    applyCanopyVis({menuOpen:!!looks.menuOpen,lookSpot:!looks.menuOpen});
+    applyCanopyVis({menuOpen:false,lookSpot:true});
     return;
   }
   if(camera.fov!==CFG.fov){camera.fov=CFG.fov;camera.updateProjectionMatrix();}
