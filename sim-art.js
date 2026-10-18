@@ -24,10 +24,16 @@ export {
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
 } from './sim-art-garage.js?v=7efc1c273a23';
+export {
+  WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget,
+  hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
+  decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
+} from './sim-art-warehouse.js?v=197484b198dd';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
 export const GARAGE_VIBE_ID = 'garage';
+export const WAREHOUSE_VIBE_ID = 'warehouse';
 
 
 export const VIBES = Object.freeze({
@@ -139,7 +145,7 @@ export const VIBES = Object.freeze({
     id: 'warehouse',
     name: 'Ion Nave',
     tagline: 'Bioluminescent rack cathedral, teal aisle runners',
-    implemented: false,
+    implemented: true,
     time: 'windowless',
     sky: 'none',
     palette: Object.freeze({
@@ -150,13 +156,13 @@ export const VIBES = Object.freeze({
       gateA: '#39ffb0', gateB: '#7a5cff',
     }),
     lighting: Object.freeze({
-      sunColor: 0x7a5cff, sunIntensity: 0.18, fillColor: 0x39ffb0, fillIntensity: 0.2,
-      hemiSky: 0x102028, hemiGround: 0x0b1218, hemiIntensity: 0.3,
-      exposure: 0.52, fogColor: 0x0b1218, fogDensity: 0.0018,
+      sunColor: 0x7a5cff, sunIntensity: 0.26, fillColor: 0x39ffb0, fillIntensity: 0.14,
+      hemiSky: 0x1a3040, hemiGround: 0x0b1218, hemiIntensity: 0.4,
+      exposure: 0.6, fogColor: 0x0b1218, fogDensity: 0.0014,
       bloomStrength: 0.65, bloomRadius: 0.4, bloomThreshold: 0.88,
       gateEmissive: 5.5, gateEmissiveActive: 7.2,
     }),
-    looks: Object.freeze({ fog: 0.0018, sun: 0.18, env: 0.42, bg: 0.26, hemi: 0.3 }),
+    looks: Object.freeze({ fog: 0.0014, sun: 0.26, env: 0.32, bg: 0.18, hemi: 0.4 }),
     gates: Object.freeze({ style: 'hex-frame', keepBrand: false }),
     props: Object.freeze(['aisle arrows', 'rack edges', 'spore cans']),
     post: Object.freeze({ bloom: true, analog: false }),
