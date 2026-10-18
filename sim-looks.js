@@ -19,6 +19,7 @@ export const LOOK_SPOTS = {
   overview: { pos: [70, 165, 210], target: [0, 10, 0] },
   lowpass: { pos: [12, 1.55, 48], target: [0, 1.8, -24] },
   whoopStreet: { pos: [3.2, 1.12, 26], target: [11.5, 1.05, -6] },
+  whoopMid: { pos: [7.5, 18.4, 14], target: [28, 12, -22] },
   whoopStart: { pos: [-118, 1.18, -92], target: [-136, 1.7, -118] },
   whoopPortal: { pos: [328, 1.2, -308], target: [348, 8, -346] },
   chase: { pos: [-18, 2.5, 16], target: [10, 1.15, -14] },
