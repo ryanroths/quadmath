@@ -9,6 +9,8 @@ export const FPV_KEY = 'quadmathSimFpv';
 export const LOOK_SPOTS = {
   spawn:  { pos: [0, 3.2, 32], target: [0, 6, -40] },
   t0g1:   { pos: [-122, 8.5, -96], target: [-140, 7, -120] },
+  startLabel: { pos: [-118, 17.5, -88], target: [-140, 19, -120] },
+  portalLabel: { pos: [328, 26, -312], target: [350, 32, -350] },
   t1mid:  { pos: [322, 50, -478], target: [350, 46, -515] },
   street: { pos: [6, 2.8, 90], target: [0, 3.5, -30] },
   roof:   { pos: [-40, 48, 95], target: [-20, 12, 10] },

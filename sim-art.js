@@ -287,6 +287,103 @@ export function vibeFor(mapId) {
   return VIBES[mapId] || VIBES.city;
 }
 
+// In-world floating text (START / PORTAL / DIVE / coach / rival). Canvas
+// sprites used to show a solid black rectangle: leftover RGB=0 texels plus
+// ACES tone-map, default mipmaps, and depthWrite. Punch the backdrop out
+// here so every caller stays box-free. Outline / glow stay for distance.
+export const WORLD_LABEL = Object.freeze({
+  width: 256,
+  height: 64,
+  alphaTest: 0.08,
+});
+
+export function paintWorldLabel(ctx, text, opts) {
+  const o = opts || {};
+  const w = o.width || WORLD_LABEL.width;
+  const h = o.height || WORLD_LABEL.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.font = o.font || 'bold 48px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.miterLimit = 2;
+  const strokeW = o.strokeWidth != null ? o.strokeWidth : 8;
+  if (strokeW > 0) {
+    ctx.lineWidth = strokeW;
+    ctx.strokeStyle = o.stroke || 'rgba(0,0,0,0.92)';
+    ctx.strokeText(String(text), w / 2, h / 2);
+  }
+  const fill = o.fill || '#ffffff';
+  const glow = o.glow || fill;
+  if (glow) {
+    ctx.save();
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = o.glowBlur != null ? o.glowBlur : 12;
+    ctx.fillStyle = fill;
+    ctx.fillText(String(text), w / 2, h / 2);
+    ctx.restore();
+  }
+  ctx.fillStyle = fill;
+  ctx.fillText(String(text), w / 2, h / 2);
+}
+
+export function makeWorldLabelTexture(THREE, text, opts) {
+  const o = opts || {};
+  const w = o.width || WORLD_LABEL.width;
+  const h = o.height || WORLD_LABEL.height;
+  const cv = document.createElement('canvas');
+  cv.width = w;
+  cv.height = h;
+  paintWorldLabel(cv.getContext('2d', { alpha: true }), text, Object.assign({ width: w, height: h }, o));
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+export function worldLabelMaterial(THREE, map, extra) {
+  return new THREE.SpriteMaterial(Object.assign({
+    map: map || null,
+    transparent: true,
+    depthWrite: false,
+    depthTest: false,
+    alphaTest: WORLD_LABEL.alphaTest,
+    toneMapped: false,
+    fog: false,
+  }, extra || {}));
+}
+
+export function makeWorldLabel(THREE, text, opts) {
+  const o = opts || {};
+  const spr = new THREE.Sprite(worldLabelMaterial(THREE, makeWorldLabelTexture(THREE, text, o)));
+  if (o.scale != null) {
+    if (typeof o.scale === 'number') spr.scale.set(o.scale, o.scale * 0.25, 1);
+    else if (Array.isArray(o.scale)) spr.scale.set(o.scale[0], o.scale[1], 1);
+    else spr.scale.set(o.scale.x, o.scale.y, 1);
+  }
+  if (o.position) {
+    if (o.position.isVector3) spr.position.copy(o.position);
+    else spr.position.set(o.position.x || 0, o.position.y || 0, o.position.z || 0);
+  }
+  return spr;
+}
+
+export function setWorldLabelText(THREE, sprite, text, opts) {
+  if (!sprite || !sprite.material) return sprite;
+  if (sprite.material.map) sprite.material.map.dispose();
+  sprite.material.map = makeWorldLabelTexture(THREE, text, opts);
+  sprite.material.transparent = true;
+  sprite.material.depthWrite = false;
+  sprite.material.depthTest = false;
+  sprite.material.alphaTest = WORLD_LABEL.alphaTest;
+  sprite.material.toneMapped = false;
+  sprite.material.needsUpdate = true;
+  return sprite;
+}
+
 export function buildMoodScene(THREE, vibeId) {
   const vibe = vibeFor(vibeId);
   const g = new THREE.Group();
