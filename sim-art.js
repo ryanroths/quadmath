@@ -2,7 +2,19 @@
 // Neon Current. No third-party meshes. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
+import { hexNum } from './sim-art-city.js?v=23cedba2f670';
+export {
+  hexNum, qualityWantsBloom, qualityWantsReflections, qualityWantsParticles,
+  qualityBudget, propClearOfCourse, planCityProps, collectBuildingFootprints,
+  hideStockCityMeshes, decorateVibeGate, pulseCityGate, tickCityArt,
+  applySkyTexture, applyVibeLighting, restyleCity, buildCityDressing,
+  buildDreamlandArt, restyleMesas, attachWetReflector, buildNeonCity,
+  SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
+  loadRain, saveRain, distToSeg, pointHitsGate,
+} from './sim-art-city.js?v=23cedba2f670';
+
 export const CITY_VIBE_ID = 'city';
+
 
 export const VIBES = Object.freeze({
   city: Object.freeze({
@@ -40,19 +52,22 @@ export const VIBES = Object.freeze({
       hemiSky: 0x3a1870,
       hemiGround: 0x1a0820,
       hemiIntensity: 0.44,
-      exposure: 0.62,
+      exposure: 0.58,
       fogColor: 0x1a0830,
-      fogDensity: 0.00105,
-      bloomStrength: 0.88,
-      bloomRadius: 0.52,
-      bloomThreshold: 0.82,
-      gateEmissive: 6.2,
-      gateEmissiveActive: 8.0,
+      fogDensity: 0.00112,
+      bloomStrength: 0.42,
+      bloomRadius: 0.36,
+      bloomThreshold: 0.90,
+      gateEmissive: 5.4,
+      gateEmissiveActive: 7.2,
     }),
-    looks: Object.freeze({ fog: 0.00105, sun: 0.30, env: 0.18, bg: 0.16, hemi: 0.44 }),
-    gates: Object.freeze({ style: 'neon-halo', keepBrand: true }),
-    props: Object.freeze(['instanced towers', 'roof neon', 'street lamps', 'skyline ring']),
-    post: Object.freeze({ bloom: true, analog: false }),
+    looks: Object.freeze({ fog: 0.00112, sun: 0.30, env: 0.18, bg: 0.16, hemi: 0.44 }),
+    gates: Object.freeze({ style: 'unique-neon', keepBrand: true }),
+    props: Object.freeze([
+      'setback towers', 'window shader', 'blade signs', 'wet street',
+      'parked cars', 'wires', 'rain', 'moon',
+    ]),
+    post: Object.freeze({ bloom: true, analog: false, grade: true }),
   }),
   living: Object.freeze({
     id: 'living',
@@ -268,593 +283,8 @@ export const MAP_VIBE_IDS = Object.freeze([
   'city', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room',
 ]);
 
-const HEX = /^#[0-9a-fA-F]{6}$/;
-
-export function hexNum(h) {
-  if (typeof h === 'number' && Number.isFinite(h)) return h >>> 0;
-  const s = String(h || '').trim();
-  if (!HEX.test(s)) return 0x000000;
-  return parseInt(s.slice(1), 16);
-}
-
 export function vibeFor(mapId) {
   return VIBES[mapId] || VIBES.city;
-}
-
-export function qualityWantsBloom(applied) {
-  return applied === 'med' || applied === 'high';
-}
-
-export function qualityBudget(applied) {
-  if (applied === 'low') return { skyline: 48, lamps: 80, strips: 80, stars: 0, lights: 0 };
-  if (applied === 'high') return { skyline: 140, lamps: 220, strips: 220, stars: 220, lights: 6 };
-  return { skyline: 96, lamps: 160, strips: 160, stars: 120, lights: 4 };
-}
-
-function mulberry32(a) {
-  let t = a >>> 0;
-  return function () {
-    t += 0x6D2B79F5;
-    let r = Math.imul(t ^ (t >>> 15), 1 | t);
-    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function canvasTex(THREE, w, h, draw, rx, ry) {
-  const cv = document.createElement('canvas');
-  cv.width = w;
-  cv.height = h;
-  draw(cv.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(cv);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(rx == null ? 1 : rx, ry == null ? 1 : ry);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
-  t.userData.looksComposed = true;
-  t.userData.artLocked = true;
-  t.needsUpdate = true;
-  return t;
-}
-
-function makeNeonFacades(THREE, vibe, n) {
-  const out = [];
-  const rng = mulberry32(4242);
-  for (let i = 0; i < n; i++) {
-    const tex = canvasTex(THREE, 256, 512, (g) => {
-      g.fillStyle = i % 2 ? vibe.palette.facadeAlt : vibe.palette.facade;
-      g.fillRect(0, 0, 256, 512);
-      g.fillStyle = 'rgba(0,0,0,0.35)';
-      g.fillRect(0, 490, 256, 22);
-      const cols = 6, rows = 14, wx = 256 / cols, wy = 512 / rows;
-      for (let r = 1; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const on = rng() < 0.42;
-          const alt = rng() < 0.45;
-          g.fillStyle = on
-            ? (alt ? vibe.palette.windowAlt : vibe.palette.windowOn)
-            : 'rgb(18,12,28)';
-          g.globalAlpha = on ? 0.92 : 0.55;
-          g.fillRect(c * wx + wx * 0.2, r * wy + wy * 0.22, wx * 0.6, wy * 0.5);
-          g.globalAlpha = 1;
-          g.fillStyle = 'rgba(255,43,214,0.18)';
-          g.fillRect(c * wx + wx * 0.2, r * wy + wy * 0.22, wx * 0.6, 2);
-        }
-      }
-    }, 1, 1);
-    const mat = new THREE.MeshStandardMaterial({
-      map: tex, color: 0xffffff, roughness: 0.82, metalness: 0.08,
-      emissive: hexNum(vibe.palette.neonB), emissiveIntensity: 0.22,
-    });
-    mat.userData.looksFacade = true;
-    mat.userData.artLocked = true;
-    mat.userData.looksSkip = true;
-    out.push(mat);
-  }
-  return out;
-}
-
-function nightGround(THREE, vibe) {
-  return canvasTex(THREE, 1024, 1024, (g, s) => {
-    g.fillStyle = vibe.palette.street;
-    g.fillRect(0, 0, s, s);
-    for (let i = 0; i < 2400; i++) {
-      g.fillStyle = `rgba(80,60,110,${0.04 + Math.random() * 0.08})`;
-      g.fillRect(Math.random() * s, Math.random() * s, 2, 2);
-    }
-    const rw = s * 0.16, sw = s * 0.035;
-    g.fillStyle = vibe.palette.sidewalk;
-    g.fillRect(0, 0, s, rw + sw);
-    g.fillRect(0, 0, rw + sw, s);
-    g.fillStyle = vibe.palette.street;
-    g.fillRect(0, 0, s, rw);
-    g.fillRect(0, 0, rw, s);
-    g.strokeStyle = vibe.palette.lane;
-    g.setLineDash([16, 14]);
-    g.lineWidth = 3;
-    g.beginPath();
-    g.moveTo(0, rw / 2); g.lineTo(s, rw / 2);
-    g.stroke();
-    g.strokeStyle = vibe.palette.laneAlt;
-    g.beginPath();
-    g.moveTo(rw / 2, 0); g.lineTo(rw / 2, s);
-    g.stroke();
-  }, 10, 10);
-}
-
-export function paintSkyCanvas(skyMesh, vibe) {
-  if (!skyMesh || !skyMesh.material) return null;
-  const cv = document.createElement('canvas');
-  cv.width = 16;
-  cv.height = 512;
-  const g = cv.getContext('2d');
-  const gr = g.createLinearGradient(0, 0, 0, 512);
-  gr.addColorStop(0, vibe.palette.void);
-  gr.addColorStop(0.38, vibe.palette.zenith);
-  gr.addColorStop(0.7, '#4a0a5c');
-  gr.addColorStop(0.86, vibe.palette.horizon);
-  gr.addColorStop(1, vibe.palette.dusk);
-  g.fillStyle = gr;
-  g.fillRect(0, 0, 16, 512);
-  const THREE = skyMesh.material.map && skyMesh.material.map.isTexture
-    ? null
-    : null;
-  const tex = skyMesh.material.map && skyMesh.material.map.clone
-    ? skyMesh.material.map
-    : null;
-  if (tex && tex.image && tex.image.getContext) {
-    const ig = tex.image.getContext('2d');
-    ig.clearRect(0, 0, tex.image.width, tex.image.height);
-    const copy = ig.createLinearGradient(0, 0, 0, tex.image.height);
-    copy.addColorStop(0, vibe.palette.void);
-    copy.addColorStop(0.38, vibe.palette.zenith);
-    copy.addColorStop(0.7, '#4a0a5c');
-    copy.addColorStop(0.86, vibe.palette.horizon);
-    copy.addColorStop(1, vibe.palette.dusk);
-    ig.fillStyle = copy;
-    ig.fillRect(0, 0, tex.image.width, tex.image.height);
-    tex.needsUpdate = true;
-    return tex;
-  }
-  // Fresh canvas if the original map is not a writable canvas.
-  const fresh = document.createElement('canvas');
-  fresh.width = 16;
-  fresh.height = 512;
-  const fg = fresh.getContext('2d');
-  fg.drawImage(cv, 0, 0);
-  if (skyMesh.material.map) {
-    skyMesh.material.map.dispose();
-  }
-  void THREE;
-  return fresh;
-}
-
-export function applySkyTexture(THREE, skyMesh, vibe) {
-  if (!skyMesh || !skyMesh.material) return;
-  const tex = canvasTex(THREE, 16, 512, (g, w, h) => {
-    const gr = g.createLinearGradient(0, 0, 0, h);
-    gr.addColorStop(0, vibe.palette.void);
-    gr.addColorStop(0.38, vibe.palette.zenith);
-    gr.addColorStop(0.7, '#4a0a5c');
-    gr.addColorStop(0.86, vibe.palette.horizon);
-    gr.addColorStop(1, vibe.palette.dusk);
-    g.fillStyle = gr;
-    g.fillRect(0, 0, w, h);
-  }, 1, 1);
-  tex.wrapS = THREE.ClampToEdgeWrapping;
-  tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.repeat.set(1, 1);
-  if (skyMesh.material.map && skyMesh.material.map !== tex) {
-    try { skyMesh.material.map.dispose(); } catch (e) { /* ignore */ }
-  }
-  skyMesh.material.map = tex;
-  skyMesh.material.needsUpdate = true;
-  skyMesh.material.fog = false;
-}
-
-export function applyVibeLighting(ctx, vibe) {
-  const L = vibe.lighting;
-  const { LIGHTING, sun, sunFill, hemi, scene, bloomPass, renderer } = ctx || {};
-  if (LIGHTING) {
-    LIGHTING.sunColor = L.sunColor;
-    LIGHTING.sunIntensity = L.sunIntensity;
-    LIGHTING.fillIntensity = L.fillIntensity;
-    LIGHTING.hemiSky = L.hemiSky;
-    LIGHTING.hemiGround = L.hemiGround;
-    LIGHTING.hemiIntensity = L.hemiIntensity;
-    LIGHTING.exposure = L.exposure;
-    LIGHTING.fogColor = L.fogColor;
-    LIGHTING.fogDensity = L.fogDensity;
-    LIGHTING.bloomStrength = L.bloomStrength;
-    LIGHTING.bloomRadius = L.bloomRadius;
-    LIGHTING.bloomThreshold = L.bloomThreshold;
-    LIGHTING.gateEmissive = L.gateEmissive;
-    LIGHTING.gateEmissiveActive = L.gateEmissiveActive;
-  }
-  if (sun) {
-    sun.color.setHex(L.sunColor);
-    sun.intensity = L.sunIntensity;
-  }
-  if (sunFill) {
-    sunFill.color.setHex(L.fillColor);
-    sunFill.intensity = L.fillIntensity;
-  }
-  if (hemi) {
-    hemi.color.setHex(L.hemiSky);
-    hemi.groundColor.setHex(L.hemiGround);
-    hemi.intensity = L.hemiIntensity;
-  }
-  if (scene && scene.fog) {
-    scene.fog.color.setHex(L.fogColor);
-    scene.fog.density = L.fogDensity;
-    if (scene.background && scene.background.isColor) {
-      scene.background.setHex(L.fogColor);
-    }
-  }
-  if (renderer) renderer.toneMappingExposure = L.exposure;
-  if (bloomPass) {
-    bloomPass.strength = L.bloomStrength;
-    bloomPass.radius = L.bloomRadius;
-    bloomPass.threshold = L.bloomThreshold;
-  }
-}
-
-function restyleExisting(THREE, root, vibe, facades) {
-  let fi = 0;
-  const roof = new THREE.MeshStandardMaterial({
-    color: hexNum(vibe.palette.facadeAlt),
-    roughness: 0.78,
-    metalness: 0.18,
-    emissive: hexNum(vibe.palette.neonA),
-    emissiveIntensity: 0.18,
-  });
-  roof.userData.looksRoof = true;
-  roof.userData.looksSkip = true;
-  roof.userData.artLocked = true;
-  const trunk = new THREE.MeshStandardMaterial({
-    color: 0x1a1020, roughness: 0.9, metalness: 0.05,
-  });
-  trunk.userData.looksSkip = true;
-  const frondA = new THREE.MeshStandardMaterial({
-    color: hexNum(vibe.palette.neonA), emissive: hexNum(vibe.palette.neonA),
-    emissiveIntensity: 1.6, roughness: 0.45, side: THREE.DoubleSide,
-  });
-  frondA.userData.looksSkip = true;
-  const frondB = new THREE.MeshStandardMaterial({
-    color: hexNum(vibe.palette.neonB), emissive: hexNum(vibe.palette.neonB),
-    emissiveIntensity: 1.4, roughness: 0.45, side: THREE.DoubleSide,
-  });
-  frondB.userData.looksSkip = true;
-  root.traverse((o) => {
-    if (!o.isMesh || !o.material) return;
-    const mats = Array.isArray(o.material) ? o.material : [o.material];
-    const facade = mats.some((m) => m && m.userData && m.userData.looksFacade);
-    const isRoof = mats.some((m) => m && m.userData && m.userData.looksRoof);
-    if (facade) {
-      const wall = facades[fi % facades.length];
-      fi++;
-      if (Array.isArray(o.material)) {
-        o.material = o.material.map((m) => (m && m.userData && m.userData.looksRoof ? roof : wall));
-      } else {
-        o.material = wall;
-      }
-      return;
-    }
-    if (isRoof) {
-      o.material = roof;
-      return;
-    }
-    const geo = o.geometry && o.geometry.type;
-    if (geo === 'CylinderGeometry' && o.material.color) {
-      const c = o.material.color.getHex();
-      if (c === 0x8a6a45 || (c > 0x6a4a20 && c < 0x9a7a50)) {
-        o.material = trunk;
-        return;
-      }
-    }
-    if (geo === 'PlaneGeometry' && o.material.side === THREE.DoubleSide) {
-      o.material = (fi++ % 2) ? frondA : frondB;
-    }
-  });
-  return { roof, trunk, frondA, frondB, facadeCount: fi };
-}
-
-function addInstanced(THREE, parent, geo, mat, count, place) {
-  if (count <= 0) return null;
-  const mesh = new THREE.InstancedMesh(geo, mat, count);
-  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  mesh.castShadow = false;
-  mesh.receiveShadow = false;
-  mesh.frustumCulled = true;
-  mesh.userData.artInstanced = true;
-  const dummy = new THREE.Object3D();
-  let written = 0;
-  for (let i = 0; i < count; i++) {
-    if (place(dummy, i) === false) continue;
-    dummy.updateMatrix();
-    mesh.setMatrixAt(written, dummy.matrix);
-    written++;
-  }
-  mesh.count = written;
-  mesh.instanceMatrix.needsUpdate = true;
-  parent.add(mesh);
-  return mesh;
-}
-
-function collectBuildingTops(root) {
-  const tops = [];
-  root.traverse((o) => {
-    if (!o.isMesh || !o.geometry || o.geometry.type !== 'BoxGeometry') return;
-    const mats = Array.isArray(o.material) ? o.material : [o.material];
-    if (!mats.some((m) => m && m.userData && (m.userData.looksFacade || m.userData.artLocked))) return;
-    const p = o.geometry.parameters;
-    if (!p || p.height < 6) return;
-    tops.push({
-      x: o.position.x, y: o.position.y + p.height / 2, z: o.position.z,
-      w: p.width, d: p.depth,
-    });
-  });
-  return tops;
-}
-
-export function buildCityDressing(THREE, parent, vibe, quality) {
-  const group = new THREE.Group();
-  group.name = 'cityArtDressing';
-  parent.add(group);
-  const budget = qualityBudget(quality);
-  const rng = mulberry32(7771);
-
-  const facadeMat = new THREE.MeshStandardMaterial({
-    color: hexNum(vibe.palette.facade),
-    emissive: hexNum(vibe.palette.neonA),
-    emissiveIntensity: 0.28,
-    roughness: 0.8,
-    metalness: 0.12,
-  });
-  facadeMat.userData.looksSkip = true;
-  const stripMat = new THREE.MeshStandardMaterial({
-    color: hexNum(vibe.palette.neonB),
-    emissive: hexNum(vibe.palette.neonB),
-    emissiveIntensity: 4.8,
-    roughness: 0.25,
-    metalness: 0.05,
-  });
-  stripMat.userData.looksSkip = true;
-  const lampMat = new THREE.MeshStandardMaterial({
-    color: 0x1a1420, roughness: 0.55, metalness: 0.4,
-  });
-  lampMat.userData.looksSkip = true;
-  const bulbMat = new THREE.MeshStandardMaterial({
-    color: hexNum(vibe.palette.neonC),
-    emissive: hexNum(vibe.palette.neonC),
-    emissiveIntensity: 5.5,
-    roughness: 0.3,
-  });
-  bulbMat.userData.looksSkip = true;
-
-  addInstanced(THREE, group, new THREE.BoxGeometry(1, 1, 1), facadeMat, budget.skyline, (d, i) => {
-    const a = (i / budget.skyline) * Math.PI * 2 + rng() * 0.08;
-    const dist = 1550 + rng() * 520;
-    const h = 28 + Math.pow(rng(), 1.25) * 110;
-    const w = 10 + rng() * 22;
-    d.position.set(Math.cos(a) * dist, h / 2, Math.sin(a) * dist);
-    d.scale.set(w, h, w * (0.7 + rng() * 0.5));
-    d.rotation.set(0, a * 0.15, 0);
-  });
-
-  const tops = collectBuildingTops(parent);
-  const stripN = Math.min(budget.strips, Math.max(1, tops.length));
-  addInstanced(THREE, group, new THREE.BoxGeometry(1, 1, 1), stripMat, stripN, (d, i) => {
-    const t = tops[i % tops.length];
-    if (!t) return false;
-    d.position.set(t.x, t.y + 0.35, t.z);
-    d.scale.set(Math.max(2, t.w * 0.92), 0.28, Math.max(2, t.d * 0.92));
-    d.rotation.set(0, 0, 0);
-  });
-
-  const lampPos = [];
-  for (let s = -360; s <= 360; s += 48) {
-    if (Math.abs(s) < 18) continue;
-    lampPos.push([14, s], [-14, s], [s, 14], [s, -14]);
-  }
-  const lampN = Math.min(budget.lamps, lampPos.length);
-  addInstanced(THREE, group, new THREE.CylinderGeometry(0.12, 0.16, 7.2, 6), lampMat, lampN, (d, i) => {
-    const p = lampPos[i];
-    d.position.set(p[0], 3.6, p[1]);
-    d.scale.set(1, 1, 1);
-    d.rotation.set(0, 0, 0);
-  });
-  addInstanced(THREE, group, new THREE.SphereGeometry(0.38, 8, 8), bulbMat, lampN, (d, i) => {
-    const p = lampPos[i];
-    d.position.set(p[0], 7.15, p[1]);
-    d.scale.set(1, 1, 1);
-    d.rotation.set(0, 0, 0);
-  });
-
-  if (budget.stars > 0) {
-    const pos = new Float32Array(budget.stars * 3);
-    for (let i = 0; i < budget.stars; i++) {
-      const a = rng() * Math.PI * 2;
-      const e = 0.18 + rng() * 1.15;
-      const r = 1680;
-      pos[i * 3] = Math.cos(a) * Math.cos(e) * r;
-      pos[i * 3 + 1] = Math.sin(e) * r;
-      pos[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r;
-    }
-    const sg = new THREE.BufferGeometry();
-    sg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const stars = new THREE.Points(sg, new THREE.PointsMaterial({
-      color: 0xffd6ff, size: 2, sizeAttenuation: false, fog: false, depthWrite: false,
-    }));
-    stars.name = 'cityStars';
-    stars.userData.keepInScene = true;
-    group.add(stars);
-  }
-
-  const lights = [];
-  const lightCols = [hexNum(vibe.palette.neonA), hexNum(vibe.palette.neonB), hexNum(vibe.palette.neonC)];
-  const lightSpots = [[40, 18, 40], [-50, 16, -30], [0, 22, 120], [80, 14, -20], [-90, 20, 60], [20, 18, -80]];
-  for (let i = 0; i < budget.lights; i++) {
-    const p = lightSpots[i];
-    const l = new THREE.PointLight(lightCols[i % 3], 40, 70, 2);
-    l.position.set(p[0], p[1], p[2]);
-    l.castShadow = false;
-    group.add(l);
-    lights.push(l);
-  }
-  group.userData.artLights = lights;
-  return group;
-}
-
-export function buildDreamlandArt(THREE, parent, vibe) {
-  const DX = 1500, DZ = 1500;
-  const group = new THREE.Group();
-  group.name = 'dreamlandArt';
-  group.position.set(DX, 0, DZ);
-  const floorTex = canvasTex(THREE, 256, 256, (g, s) => {
-    const gr = g.createLinearGradient(0, 0, 0, s);
-    gr.addColorStop(0, '#140820');
-    gr.addColorStop(0.5, '#2a1050');
-    gr.addColorStop(1, '#3a1870');
-    g.fillStyle = gr;
-    g.fillRect(0, 0, s, s);
-    g.strokeStyle = vibe.palette.neonB;
-    g.globalAlpha = 0.35;
-    for (let i = 0; i < 8; i++) {
-      g.beginPath();
-      g.arc(s / 2, s / 2, 18 + i * 14, 0, Math.PI * 2);
-      g.stroke();
-    }
-    g.globalAlpha = 1;
-  }, 1, 1);
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(300, 300),
-    new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.88, metalness: 0.08 }),
-  );
-  floor.rotation.x = -Math.PI / 2;
-  floor.receiveShadow = true;
-  group.add(floor);
-
-  const pillarMat = new THREE.MeshStandardMaterial({
-    color: 0x221036,
-    emissive: hexNum(vibe.palette.neonA),
-    emissiveIntensity: 0.55,
-    roughness: 0.55,
-  });
-  pillarMat.userData.looksSkip = true;
-  const capMat = new THREE.MeshStandardMaterial({
-    color: hexNum(vibe.palette.neonB),
-    emissive: hexNum(vibe.palette.neonB),
-    emissiveIntensity: 3.4,
-    roughness: 0.3,
-  });
-  capMat.userData.looksSkip = true;
-  const spots = [
-    [-130, 60, 18], [140, -40, 16], [-40, -140, 14],
-    [60, 130, 20], [-140, -60, 17], [120, 100, 15],
-    [100, -120, 22], [-120, 90, 19], [20, 140, 16],
-  ];
-  for (const [x, z, h] of spots) {
-    const p = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.6, h, 8), pillarMat);
-    p.position.set(x, h / 2, z);
-    p.castShadow = true;
-    group.add(p);
-    const cap = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.18, 6, 16), capMat);
-    cap.rotation.x = Math.PI / 2;
-    cap.position.set(x, h + 0.4, z);
-    group.add(cap);
-  }
-  const pl = new THREE.PointLight(0x8f6bff, 1.8, 420, 2);
-  pl.position.set(0, 80, 0);
-  group.add(pl);
-  parent.add(group);
-  return group;
-}
-
-export function restyleMesas(root, vibe) {
-  if (!root) return 0;
-  let n = 0;
-  root.traverse((o) => {
-    if (!o.isMesh || o.geometry.type !== 'CylinderGeometry') return;
-    const p = o.geometry.parameters;
-    if (!p || p.height < 30 || p.radiusBottom < 40) return;
-    if (!o.material || !o.material.color) return;
-    o.material.color.setHex(hexNum(vibe.palette.mesa));
-    o.material.emissive = o.material.emissive || o.material.color.clone();
-    o.material.emissive.setHex(hexNum(vibe.palette.neonA));
-    o.material.emissiveIntensity = 0.18;
-    o.material.roughness = 0.95;
-    o.material.userData.artLocked = true;
-    n++;
-  });
-  return n;
-}
-
-export function decorateVibeGate(THREE, ring, size, col, vibe) {
-  if (!ring || ring.userData.artHalo) return null;
-  const halo = new THREE.Mesh(
-    new THREE.TorusGeometry(size + size * 0.12, size * 0.012, 6, 32),
-    new THREE.MeshStandardMaterial({
-      color: col,
-      emissive: col,
-      emissiveIntensity: (vibe && vibe.lighting && vibe.lighting.gateEmissive) || 6,
-      roughness: 0.18,
-      metalness: 0.05,
-    }),
-  );
-  halo.name = 'gateHalo';
-  halo.castShadow = false;
-  halo.receiveShadow = false;
-  halo.material.userData.looksSkip = true;
-  ring.add(halo);
-  ring.userData.artHalo = halo;
-  return halo;
-}
-
-export function restyleCity(THREE, ctx) {
-  const vibe = ctx.vibe || VIBES.city;
-  const quality = ctx.quality || 'med';
-  const root = ctx.proceduralGroup;
-  const facades = makeNeonFacades(THREE, vibe, 6);
-  if (root) restyleExisting(THREE, root, vibe, facades);
-  if (ctx.ground && ctx.ground.material) {
-    const gtex = nightGround(THREE, vibe);
-    const mat = ctx.ground.material;
-    if (mat.map && mat.map !== gtex && mat.userData && mat.userData.looksComposed) {
-      try { mat.map.dispose(); } catch (e) { /* ignore */ }
-    }
-    mat.map = gtex;
-    mat.color.setHex(0xffffff);
-    mat.roughness = 0.92;
-    mat.metalness = 0.04;
-    mat.emissive.setHex(hexNum(vibe.palette.neonA));
-    mat.emissiveIntensity = 0.08;
-    mat.userData.looksComposed = true;
-    mat.userData.artLocked = true;
-    mat.userData.looksSkip = true;
-    mat.normalMap = null;
-    mat.roughnessMap = null;
-    mat.needsUpdate = true;
-  }
-  if (ctx.skyMesh) applySkyTexture(THREE, ctx.skyMesh, vibe);
-  if (ctx.sunSprite && ctx.sunSprite.material) {
-    ctx.sunSprite.material.color.setHex(0xb0c4ff);
-  }
-  let dressing = null;
-  if (root) {
-    const oldDress = root.getObjectByName('cityArtDressing');
-    if (oldDress && oldDress.parent) oldDress.parent.remove(oldDress);
-    dressing = buildCityDressing(THREE, root, vibe, quality);
-  }
-  const host = ctx.cityWorld || root;
-  if (host) {
-    const oldDream = host.getObjectByName('dreamlandArt');
-    if (oldDream && oldDream.parent) oldDream.parent.remove(oldDream);
-  }
-  const dream = host ? buildDreamlandArt(THREE, host, vibe) : null;
-  if (ctx.scene) restyleMesas(ctx.scene, vibe);
-  applyVibeLighting(ctx, vibe);
-  return { facades, dressing, dream, vibe, quality };
 }
 
 export function buildMoodScene(THREE, vibeId) {
@@ -936,24 +366,27 @@ export function artStats(renderer, root) {
   const info = renderer && renderer.info && renderer.info.render
     ? renderer.info.render
     : { calls: 0, triangles: 0 };
-  let instanced = 0, instancedMeshes = 0, meshes = 0, points = 0;
+  let instanced = 0, instancedMeshes = 0, meshes = 0, points = 0, lines = 0;
   if (root) {
     root.traverse((o) => {
+      if (o.visible === false) return;
       if (o.isInstancedMesh) {
         instancedMeshes += 1;
         instanced += o.count || 0;
       } else if (o.isMesh) meshes += 1;
       else if (o.isPoints) points += 1;
+      else if (o.isLine || o.isLineSegments) lines += 1;
     });
   }
   return {
     calls: info.calls || 0,
-    callsEst: meshes + instancedMeshes + points,
+    callsEst: meshes + instancedMeshes + points + lines,
     triangles: info.triangles || 0,
     instanced,
     instancedMeshes,
     meshes,
     points,
+    lines,
   };
 }
 

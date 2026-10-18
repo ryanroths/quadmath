@@ -86,16 +86,17 @@ Rules for every vibe implementation:
 - Do not touch `FROZEN_CITY`, track JSON, `DAILY_MAPS` sizes, or storage keys.
 - Auto quality already drops Med → Low when the rolling fps sits under 55.
 
-Phase 1 keeps the existing unique building/palm meshes and **shares materials**
-plus instanced dressing. Measured in this PR (headless SwiftShader, not a
-phone): `callsEst` ≈ **679** (`675` meshes + `4` `InstancedMesh` covering
-`256` instances). That is still cheaper than the old Kenney kit + 46 MB
-costoWRLD skyline. Phase 2 should merge building boxes and palm fronds to
-push the race view toward **~120 calls**. Measure with `window._sim.artStats()`.
+City visuals are **instanced cores + merged trim + instanced props**. Stock
+building/palm meshes stay as collider authors but are hidden. Measure with
+`window._sim.artStats()` (skips `visible:false`). This pass measured
+`callsEst` **186 High** / **181 Low** (SwiftShader). High has 1691
+instances on 33 `InstancedMesh` plus rain/steam/stars; Low drops to 785
+instances and turns bloom, the wet reflector, and particles off. Landmark
+meshes (mesas, windmill, stack, tunnel, gates) still dominate the unique
+mesh count. Target remains **120–200** on High.
 
-Headless SwiftShader fps in this environment was ~8–12 on High (bloom on)
-and ~17–19 on Low (bloom off). Treat that as a software-renderer floor, not
-a device number. The product target stays **60 fps desktop / 45+ mid phone**.
+Headless SwiftShader fps is a software-renderer floor, not a device number.
+The product target stays **60 fps desktop / 45+ mid phone**.
 
 ## Vibe per map
 
@@ -208,14 +209,19 @@ them onto an existing room.
 City map only:
 
 1. Skip Kenney / costoWRLD GLTF load (`_tryAssets` is dressing + snap).
-2. Restyle the existing procedural buildings / palms / ground / sky in place.
-   Collider boxes stay the ones `makeBuilding` / palms / landmarks already
-   pushed. New neon is instanced and **does not add colliders**.
-3. Neon gradient sky, night fog, moonlight. Dawn HDRI stays for other maps.
-4. Gates keep orange/green and their positions; extra halo only.
-5. Quality Low disables bloom (and AO, already).
-6. Canopy default stays off. HUD / OSD / footer chrome stay.
-7. Dreamland gets original procedural pillars instead of Kenney trees.
+2. Hide stock building/palm meshes. Collider boxes stay. Visuals are a
+   merged window-shader core, setbacks/trim, and instanced rooftop/street
+   props. New dressing **does not add colliders** and is keep-out tested
+   against `FROZEN_CITY` race lines and gate openings.
+3. Neon gradient sky, layered fog, moon, optional rain, wet-road reflector
+   (off on Low). Dawn HDRI stays for other maps.
+4. Each City Loop gate gets a unique neon frame. Next gate pulses white;
+   passed gates shift to violet. Positions unchanged.
+5. Quality Low disables bloom, AO, reflections, and particles. Rain is a
+   separate toggle (`quadmathSimRain`).
+6. Canopy default stays off. HUD / OSD / footer chrome stay. Color grade +
+   slight vignette/CA ride the existing FPV pass so bloom does not wash OSD.
+7. Dreamland gets original instanced pillars instead of Kenney trees.
 
 Landmarks that must still be there and still collide: triple stack, windmill,
 tunnel, dive shaft, wall ride, portals, mesas (visual), zigzag gates.

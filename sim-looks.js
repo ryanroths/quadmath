@@ -12,6 +12,8 @@ export const LOOK_SPOTS = {
   t1mid:  { pos: [322, 50, -478], target: [350, 46, -515] },
   street: { pos: [6, 2.8, 90], target: [0, 3.5, -30] },
   roof:   { pos: [-40, 48, 95], target: [-20, 12, 10] },
+  overview: { pos: [70, 165, 210], target: [0, 10, 0] },
+  lowpass: { pos: [12, 1.55, 48], target: [0, 1.8, -24] },
   living: { pos: [0, 4.6, 8], target: [0, 1.8, -6] },
   garage: { pos: [0, 5.2, 12], target: [2, 2.2, -6] },
   warehouse: { pos: [0, 7.5, 36], target: [0, 3.2, -8] },
@@ -125,6 +127,7 @@ uniform float vignette;
 uniform float ca;
 uniform float analog;
 uniform float time;
+uniform float grade;
 varying vec2 vUv;
 vec2 distort(vec2 uv, float k){
   vec2 c = uv - 0.5;
@@ -141,6 +144,7 @@ void main(){
   vec3 col = vec3(r,g,b);
   float d = distance(vUv, vec2(0.5));
   col *= 1.0 - smoothstep(0.32, 0.98, d) * vignette;
+  col *= mix(vec3(1.0), vec3(1.04, 0.93, 1.10), grade);
   if(analog > 0.5){
     float n = fract(sin(dot(vUv * vec2(1240.0, 780.0) + time, vec2(12.9898, 78.233))) * 43758.5453);
     col += (n - 0.5) * 0.055;
@@ -174,7 +178,7 @@ export function decorateGate(THREE, ring, size, col) {
   return led;
 }
 
-export function pulseGate(g, isNext, now, lighting) {
+export function pulseGate(g, isNext, now, lighting, passed) {
   const led = g.mesh.userData && g.mesh.userData.led;
   const m = g.mesh.material;
   if (isNext) {
@@ -191,14 +195,16 @@ export function pulseGate(g, isNext, now, lighting) {
     }
     g.mesh.scale.setScalar(1 + Math.sin(now * 0.004) * 0.06);
   } else {
+    const col = passed ? 0x9a3cff : g.col;
+    const emit = passed ? lighting.gateEmissive * 0.7 : lighting.gateEmissive;
     if (led) {
-      led.material.color.setHex(g.col);
-      led.material.emissive.setHex(g.col);
-      led.material.emissiveIntensity = lighting.gateEmissive;
+      led.material.color.setHex(col);
+      led.material.emissive.setHex(col);
+      led.material.emissiveIntensity = emit;
     } else {
-      m.color.setHex(g.col);
-      m.emissive.setHex(g.col);
-      m.emissiveIntensity = lighting.gateEmissive;
+      m.color.setHex(col);
+      m.emissive.setHex(col);
+      m.emissiveIntensity = emit;
     }
     g.mesh.scale.setScalar(1);
   }
@@ -258,12 +264,13 @@ export async function createLooks(ctx) {
 
   function applyFpvUniforms() {
     if (!fpvPass || !fpvPass.uniforms) return;
-    const on = fpv.enabled && !lookSpot;
+    const forceFpv = typeof location !== 'undefined' && /(?:^|[?&])fpv=1(?:&|$)/.test(location.search || '');
+    const on = fpv.enabled && (!lookSpot || forceFpv);
     fpvPass.enabled = on;
     const analog = fpv.style === 'analog';
     fpvPass.uniforms.barrel.value = analog ? 0.18 : 0.12;
-    fpvPass.uniforms.vignette.value = analog ? 0.58 : 0.36;
-    fpvPass.uniforms.ca.value = analog ? 0.006 : 0.0022;
+    fpvPass.uniforms.vignette.value = analog ? 0.58 : (fpvPass.uniforms.grade && fpvPass.uniforms.grade.value > 0.5 ? 0.44 : 0.36);
+    fpvPass.uniforms.ca.value = analog ? 0.006 : (fpvPass.uniforms.grade && fpvPass.uniforms.grade.value > 0.5 ? 0.0034 : 0.0022);
     fpvPass.uniforms.analog.value = analog ? 1 : 0;
     if (motionPass) motionPass.enabled = on && !!fpv.motionBlur;
   }
@@ -335,6 +342,7 @@ export async function createLooks(ctx) {
         ca: { value: 0.0022 },
         analog: { value: 0 },
         time: { value: 0 },
+        grade: { value: 0 },
       },
       vertexShader: FPV_VERT,
       fragmentShader: FPV_FRAG,
@@ -840,6 +848,12 @@ export async function createLooks(ctx) {
     setOrbit,
     setMapLooks,
     setSkyMode,
+    setGrade(v) {
+      if (fpvPass && fpvPass.uniforms && fpvPass.uniforms.grade) {
+        fpvPass.uniforms.grade.value = v ? 1 : 0;
+        applyFpvUniforms();
+      }
+    },
     get skyMode() { return skyMode; },
     tick,
     afterFirstFrame,

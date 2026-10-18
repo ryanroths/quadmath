@@ -515,7 +515,8 @@
     <option value="med">Med</option>
     <option value="high">High</option>
   </select>
-  <p class="build-note">Low turns bloom and AO off for phones.</p>
+  <p class="build-note">Low turns bloom, reflections, rain and AO off for phones.</p>
+  <div class="row"><label>Rain</label><input type="checkbox" id="cbRain" checked style="accent-color:var(--orange)"></div>
 
   <h2>Audio</h2>
   <div class="row"><label>Music volume</label><span class="val" id="v_musicVol"></span></div>
@@ -721,10 +722,11 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=34e582665d37";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=e7d7a51fda17";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=66f951762d3c";
 import {
-  VIBES, vibeFor, restyleCity, decorateVibeGate, applyVibeLighting, artStats, qualityWantsBloom,
-} from "./sim-art.js?v=2d75de3d4f51";
+  VIBES, vibeFor, restyleCity, decorateVibeGate, pulseCityGate, tickCityArt,
+  applyVibeLighting, artStats, qualityWantsBloom, loadRain, saveRain, RAIN_KEY,
+} from "./sim-art.js?v=c84f4f68092e";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -1183,7 +1185,7 @@ function addGate(x,y,z,rotationY,size,solidGate,trackId,parent){
   ring.position.set(x,y,z);ring.rotation.y=rotationY||0;
   ring.castShadow=ring.receiveShadow=true; // long thin ring shadow on the deck is the main read for gate height
   decorateGate(THREE,ring,size,col);
-  if((currentMap||'city')==='city')decorateVibeGate(THREE,ring,size,col,vibeFor('city'));
+  if((currentMap||'city')==='city')decorateVibeGate(THREE,ring,size,col,vibeFor('city'),trackIdx);
   (parent||raceGroup).add(ring);
   gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col,trackId:trackId,trackIdx:trackIdx,ry:rotationY||0,size:size,solid:!!solidGate}); // col = dim base color
   if(solidGate){
@@ -1301,7 +1303,9 @@ function updateGateHighlight(){
   beacon.visible=!!target;
   const now=performance.now();
   for(const g of gates){
-    pulseGate(g,g===target,now,LIGHTING);
+    const passed=g.trackId===activeTrackId&&runActive&&g.trackIdx<nextGateIndex;
+    pulseGate(g,g===target,now,LIGHTING,passed);
+    if(currentMap==='city')pulseCityGate(g,g===target,passed,now,vibeFor('city'));
   }
 }
 // begin a 3-lap run on the active track: reset splits, start both the run and
@@ -2065,8 +2069,10 @@ function applyCityArt(quality){
     skyMesh,sunSprite,cityWorld,scene,
     LIGHTING,sun,sunFill,hemi,renderer,
     bloomPass:looks&&looks.bloomPass,
+    gates:FROZEN_CITY[0].concat(FROZEN_CITY[1]),
   });
   if(looks&&looks.setSkyMode)looks.setSkyMode('gradient');
+  if(looks&&looks.setGrade)looks.setGrade(1);
 }
 async function finishCityArt(){
   window._skipStockCity=true;
@@ -2218,6 +2224,7 @@ function applyMapLooks(mapId){
   if(looks&&looks.setMapLooks)looks.setMapLooks(spec);
   if(looks&&looks.setOrbit)looks.setOrbit(MAP_ORBIT[mapId]||MAP_ORBIT.city);
   if(looks&&looks.setSkyMode)looks.setSkyMode(vibe&&vibe.sky==='gradient'?'gradient':'hdri');
+  if(looks&&looks.setGrade)looks.setGrade(mapId==='city'?1:0);
   if(mapId==='city'){
     applyVibeLighting({
       LIGHTING,sun,sunFill,hemi,scene,renderer,
@@ -3589,6 +3596,8 @@ function syncQualityUI(){
   if(st)st.value=fpv.style;
   const mb=document.getElementById('cbMotionBlur');
   if(mb)mb.checked=fpv.motionBlur;
+  const rain=document.getElementById('cbRain');
+  if(rain)rain.checked=loadRain();
 }
 function showMenuLayer(html){
   const el=document.getElementById('menuLayer');
@@ -4059,6 +4068,14 @@ function wireLooksUI(){
   if(st)st.onchange=()=>{if(looks){looks.setFpv({style:st.value});syncQualityUI();}};
   const mb=document.getElementById('cbMotionBlur');
   if(mb)mb.onchange=()=>{if(looks){looks.setFpv({motionBlur:mb.checked});syncQualityUI();}};
+  const rainCb=document.getElementById('cbRain');
+  if(rainCb){
+    rainCb.checked=loadRain();
+    rainCb.onchange=()=>{
+      saveRain(!!rainCb.checked);
+      if(currentMap==='city')applyCityArt(looks&&looks.applied);
+    };
+  }
   const canopyCb=document.getElementById('cbCanopy');
   if(canopyCb){
     canopyCb.checked=!!canopyOn;
@@ -5174,6 +5191,7 @@ function loop(now){
   }
   let dt=(now-last)/1000;last=now;dt=Math.min(dt,.05);
   if(looks)looks.tick(now);
+  if(currentMap==='city')tickCityArt(cityWorld,now);
   if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
     readInput(dt);
     tickArming(padLive?((navigator.getGamepads&&navigator.getGamepads())||[])[gpIndex]:null);
@@ -5467,7 +5485,11 @@ function applyQueryBoot(){
   }
   if((map||trackRaw||buildRaw||modeRaw||drillRaw||q.get('3d')||q.get('daily')||q.get('weekly'))&&q.get('menu')!=='1')toggleStartMenu(false);
   if(q.get('look')&&looks)looks.setLookSpot(q.get('look'));
-  if(q.get('quality')&&looks)looks.setQuality(q.get('quality'));
+  if(q.get('quality')&&looks){
+    looks.setQuality(q.get('quality')).then(function(){
+      if(currentMap==='city')applyCityArt(looks.applied);
+    });
+  }
   if(q.get('builder')==='1'){toggleStartMenu(false);openBuilder();}
   syncBuildUI();
 }
@@ -5491,6 +5513,7 @@ fetchBuiltinTracks().then(list=>{
 Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
   artStats:()=>artStats(renderer,cityWorld),vibe:()=>vibeFor(currentMap),VIBES,qualityWantsBloom,
+  rain:()=>loadRain(),setRain(v){saveRain(!!v);if(currentMap==='city')applyCityArt(looks&&looks.applied);},RAIN_KEY,
   QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,canopyGroup,
   canopyEnabled:()=>canopyOn,
   setCanopyOn(v){canopyOn=!!v;const el=document.getElementById('cbCanopy');if(el)el.checked=canopyOn;saveCanopyOn(canopyOn);updateCamera();},

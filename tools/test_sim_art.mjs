@@ -8,6 +8,9 @@ import { dirname, join } from 'node:path';
 import {
   VIBES, MAP_VIBE_IDS, vibeFor, qualityWantsBloom, qualityBudget,
   hexNum, vibeTable, mentionsBannedAssets, CITY_VIBE_ID,
+  qualityWantsReflections, qualityWantsParticles,
+  propClearOfCourse, planCityProps, SIGN_WORDS, GATE_STYLES,
+  signsAreOriginal, BRAND_BLOCKLIST,
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson } from '../sim-tracks.js';
 import { MAP_IDS, MAP_LOOKS } from '../sim-maps.js';
@@ -55,11 +58,18 @@ test('quality Low kills bloom; Med/High keep it', () => {
   assert.equal(qualityWantsBloom('med'), true);
   assert.equal(qualityWantsBloom('high'), true);
   assert.equal(qualityWantsBloom('auto'), false);
+  assert.equal(qualityWantsReflections('low'), false);
+  assert.equal(qualityWantsParticles('low'), false);
+  assert.equal(qualityWantsReflections('high'), true);
   const lo = qualityBudget('low');
   const hi = qualityBudget('high');
   assert.ok(lo.skyline < hi.skyline);
   assert.equal(lo.lights, 0);
   assert.ok(hi.lights <= 6);
+  assert.equal(lo.reflect, false);
+  assert.equal(hi.reflect, true);
+  assert.equal(lo.rain, 0);
+  assert.ok(hi.rain > 0);
 });
 
 test('hexNum and vibeTable are stable helpers', () => {
@@ -83,6 +93,8 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   const sim = readFileSync(join(root, 'sim.html'), 'utf8');
   assert.match(sim, /from "\.\/sim-art\.js\?v=[0-9a-f]{12}"/);
   assert.match(sim, /restyleCity|buildCityDressing/);
+  assert.match(sim, /tickCityArt|pulseCityGate/);
+  assert.match(sim, /cbRain|quadmathSimRain|loadRain/);
   assert.match(sim, /skipStockCity|procedural neon city|Neon Current/);
   assert.equal(sim.includes('content/guides/'), false);
   assert.match(sim, /City is original procedural art|Neon Current/);
@@ -93,6 +105,7 @@ test('looks Low preset disables bloom', () => {
   assert.match(looks, /bloom:\s*false/);
   assert.match(looks, /bloomPass\.enabled/);
   assert.match(looks, /artLocked|setSkyMode/);
+  assert.match(looks, /grade|setGrade/);
 });
 
 test('frozen City Loop gates are untouched', () => {
@@ -106,6 +119,53 @@ test('frozen City Loop gates are untouched', () => {
   const file = JSON.parse(readFileSync(join(root, 'tracks/city-loop.json'), 'utf8'));
   assert.equal(file.gates[3].x, -70);
   assert.equal(file.gates[3].y, 24);
+});
+
+test('invented shop signs are not real brands', () => {
+  assert.equal(SIGN_WORDS.length, 16);
+  assert.equal(signsAreOriginal(SIGN_WORDS), true);
+  assert.equal(signsAreOriginal(['NIKE']), false);
+  for (const w of SIGN_WORDS) {
+    assert.equal(BRAND_BLOCKLIST.some((b) => w.toLowerCase().includes(b)), false);
+  }
+});
+
+test('each city gate has a unique neon frame style', () => {
+  assert.equal(GATE_STYLES.length, 10);
+  assert.equal(new Set(GATE_STYLES).size, 10);
+});
+
+test('planned street props stay off City Loop and Zigzag race lines', () => {
+  const gates = FROZEN_CITY[0].concat(FROZEN_CITY[1]);
+  assert.equal(propClearOfCourse(-140, -120, 7, FROZEN_CITY[0]), false);
+  assert.equal(propClearOfCourse(0, -90, 6, FROZEN_CITY[0]), false);
+  assert.ok(propClearOfCourse(16, -200, 0.5, FROZEN_CITY[0]));
+  for (const q of ['low', 'med', 'high']) {
+    const plan = planCityProps(gates, q);
+    const groups = ['cars', 'vending', 'bollards', 'traffic', 'crates', 'trash', 'lanterns', 'chain'];
+    let n = 0;
+    for (const key of groups) {
+      assert.ok(Array.isArray(plan[key]), key);
+      for (const p of plan[key]) {
+        n++;
+        assert.equal(
+          propClearOfCourse(p.x, p.z, p.y, gates, { gatePad: 3.4, corridor: 4.6 }),
+          true,
+          key + ' ' + p.x + ',' + p.z,
+        );
+      }
+    }
+    assert.ok(n > 8, q + ' planned props');
+  }
+});
+
+test('city density module stays original (no GLB / WebFPV)', () => {
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.equal(city.includes('GLB-format'), false);
+  assert.equal(city.includes('loadAsync'), false);
+  assert.equal(city.includes('Sketchfab'), false);
+  assert.equal(city.includes('WebFPV'), false);
+  assert.match(city, /window shader|uWinOn|cityArtVisuals/);
 });
 
 test('art direction doc lists every map', () => {
