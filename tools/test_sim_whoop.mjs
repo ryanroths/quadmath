@@ -172,9 +172,10 @@ test('propwash wobbles on a dive/chop through own wash; drafts grow near walls',
   const chop = stepPropwash(wake, {
     pos: { x: 0, y: 0, z: 1.7 }, vel: { x: 0, y: 0, z: -2.2 }, throttle: 0.05,
   }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
-  assert.ok(chop.excite > 0.01, `chop/dive excite ${chop.excite}`);
-  assert.ok(chop.excite < 0.20, `wash still too strong ${chop.excite}`);
-  assert.ok(Math.hypot(chop.torque.x, chop.torque.y, chop.torque.z) > 0.0004);
+  assert.ok(chop.excite > 0.0004, `chop/dive excite ${chop.excite}`);
+  assert.ok(chop.excite < 0.012, `wash still too strong ${chop.excite}`);
+  const tq = Math.hypot(chop.torque.x, chop.torque.y, chop.torque.z);
+  assert.ok(tq > 0.00002 && tq < 0.0008, `chop torque ${tq}`);
   const off = stepPropwash(wake, {
     pos: { x: 0, y: 0, z: 1.7 }, vel: { x: 0, y: 0, z: -2.2 }, throttle: 0.05,
   }, 0.02, DEFAULT_BUILD, { ...DEFAULT_WHOOP, wash: false });
@@ -246,22 +247,40 @@ test('3D center hover and a straight punch-out give about zero propwash', () => 
   assert.ok(fwdWash.wake.z < 2, `forward must deposit downwash, z=${fwdWash.wake.z}`);
 });
 
-test('wash strength levels snap Off/Low/Med/High and default Med', () => {
-  assert.equal(DEFAULT_WHOOP.washStr, WASH_LEVELS.med);
-  assert.equal(washStrFromLevel('med'), 0.50);
-  assert.equal(washStrFromLevel('low'), 0.25);
+test('wash strength levels snap Off/Low/Med/High and default Low', () => {
+  assert.equal(DEFAULT_WHOOP.washStr, WASH_LEVELS.low);
+  assert.ok(Math.abs(WASH_LEVELS.low - 0.25 * 0.05) < 1e-9, 'new Low is old Low × 0.05');
+  assert.equal(WASH_LEVELS.high, 0.25);
+  assert.equal(washStrFromLevel('low'), WASH_LEVELS.low);
+  assert.equal(washStrFromLevel('high'), WASH_LEVELS.high);
   assert.equal(washLevelFromStr(0), 'off');
-  assert.equal(washLevelFromStr(0.25), 'low');
-  assert.equal(washLevelFromStr(0.5), 'med');
-  assert.equal(washLevelFromStr(0.7), 'high');
+  assert.equal(washLevelFromStr(WASH_LEVELS.low), 'low');
+  assert.equal(washLevelFromStr(WASH_LEVELS.med), 'med');
+  assert.equal(washLevelFromStr(WASH_LEVELS.high), 'high');
   assert.ok(whoopScale(DEFAULT_BUILD).wash < 0.85, '65mm wash scale is gentler than the old ~1.1');
 });
 
-test('propwash always-on is mid-stick only; punch and 3D center stay quiet', () => {
+test('new Low wash is ~5% of old Low; High matches old Low washStr', () => {
+  const oldLow = { ...DEFAULT_WHOOP, washStr: 0.25 };
+  const neuLow = { ...DEFAULT_WHOOP, washStr: WASH_LEVELS.low };
+  const neuHigh = { ...DEFAULT_WHOOP, washStr: WASH_LEVELS.high };
+  let wake = emptyWake();
+  const hover = { pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0.7 };
+  for (let i = 0; i < 20; i++) wake = stepPropwash(wake, hover, 0.02, DEFAULT_BUILD, oldLow).wake;
+  const sample = { pos: { x: 0, y: 0, z: 1.7 }, vel: { x: 0, y: 0, z: -2.2 }, throttle: 0.05 };
+  const oldChop = stepPropwash(wake, sample, 0.02, DEFAULT_BUILD, oldLow);
+  const newChop = stepPropwash(wake, sample, 0.02, DEFAULT_BUILD, neuLow);
+  const highChop = stepPropwash(wake, sample, 0.02, DEFAULT_BUILD, neuHigh);
+  const ratio = newChop.excite / (oldChop.excite || 1e-9);
+  assert.ok(ratio > 0.03 && ratio < 0.08, `new/old Low excite ${ratio.toFixed(3)}`);
+  assert.ok(Math.abs(highChop.excite - oldChop.excite) < 1e-9, 'High matches old Low wake hit');
+});
+
+test('propwash always-on is a faint mid-stick buzz; punch and 3D center stay quiet', () => {
   const mid = stepPropwash(emptyWake(), {
     pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0.5,
   }, 0.02, DEFAULT_BUILD, DEFAULT_WHOOP);
-  assert.ok(mid.turb > 0.01, `mid-stick turb ${mid.turb}`);
+  assert.ok(mid.turb > 0 && mid.turb < 0.0015, `mid-stick turb ${mid.turb}`);
   assert.equal(mid.wakeHit, 0);
   const idle = stepPropwash(emptyWake(), {
     pos: { x: 0, y: 0, z: 2 }, vel: { x: 0, y: 0, z: 0 }, throttle: 0,
@@ -296,7 +315,7 @@ test('sim.html wires W2 sliders, HUD voltage, and keeps old localStorage keys', 
   assert.ok(simSrc.includes('id="cbGround"') && simSrc.includes('id="s_ground"'));
   assert.ok(simSrc.includes('id="cbWash"') && simSrc.includes('id="s_wash"'));
   assert.ok(simSrc.includes('option value="low"') && simSrc.includes('option value="high"'));
-  assert.ok(simSrc.includes('option value="med" selected') || simSrc.includes('value="med" selected'));
+  assert.ok(simSrc.includes('option value="low" selected') || simSrc.includes('value="low" selected'));
   assert.ok(/id="s_crash"[^>]*value="9"/.test(simSrc));
   assert.ok(simSrc.includes('id="cbDraft"') && simSrc.includes('id="s_draft"'));
   assert.ok(simSrc.includes('id="s_sag"') && simSrc.includes('id="cbBattSim"'));

@@ -603,10 +603,10 @@
   <div class="row"><label style="padding-left:14px">↳ Cushion</label><span class="val" id="v_ground"></span></div>
   <input type="range" id="s_ground" min="0" max="2" step="0.05" value="1" title="Extra lift near the floor. Stronger on light whoops / bigger props.">
   <div class="row"><label>Propwash wobble</label><input type="checkbox" id="cbWash" checked style="accent-color:var(--orange)">
-    <select id="s_wash" title="Med is the default. Always-on nudge at mid throttle, stronger when you descend into your own wash.">
+    <select id="s_wash" title="Low is the default (about 5% of the old Low). High is about the old Low. Faint mid-stick buzz; a bit more when you descend into your own wash.">
       <option value="off">Off</option>
-      <option value="low">Low</option>
-      <option value="med" selected>Med</option>
+      <option value="low" selected>Low</option>
+      <option value="med">Med</option>
       <option value="high">High</option>
     </select>
   </div>
@@ -708,7 +708,7 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=134973e3a6ad";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=b6490aac471b";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
@@ -720,7 +720,7 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=a0b2df235d8f";
+} from "./sim-whoop.js?v=db61d2d2e26b";
 import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=627c82048afa";
 import {
   loadTouch, saveTouch,

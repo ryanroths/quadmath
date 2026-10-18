@@ -89,13 +89,13 @@ test('default throttle curve 1.0 + mid 0.60 lands hover at 32–38% stick', () =
   assert.ok(Math.abs(applyThrottleMidExpo(0.25, 0.60, 0) - 0.30) < 1e-9);
 });
 
-test('0.5 s chop from 8 m/s leaves 50–60% horizontal speed', () => {
+test('0.5 s chop from 8 m/s leaves 35–40% horizontal speed', () => {
   const qp = makeAcro();
   qp.setFloatiness(FLOATINESS_DEFAULT);
   qp.velocity.x = 8;
   stepSec(qp, 0.5, { r: 0, p: 0, y: 0 }, { roll: 0, pitch: 0, yaw: 0 }, 0);
   const leftover = Math.abs(qp.velocity.x) / 8;
-  assert.ok(leftover >= 0.48 && leftover <= 0.62, `leftover ${leftover.toFixed(3)} (${qp.velocity.x.toFixed(2)} m/s)`);
+  assert.ok(leftover >= 0.33 && leftover <= 0.42, `leftover ${leftover.toFixed(3)} (${qp.velocity.x.toFixed(2)} m/s)`);
 });
 
 test('stopDamp is not an in-air linear brake; body drag is ½ρCdA', () => {
@@ -105,7 +105,7 @@ test('stopDamp is not an in-air linear brake; body drag is ½ρCdA', () => {
   const F = bodyDragForce({ x: 8, y: 0, z: 0 }, id, qp.cfg);
   assert.ok(F.x < -0.15, `drag at 8 m/s ${F.x}`);
   const a = aeroCoeffs(qp.cfg);
-  assert.ok(a.cdAxy > a.cdAz, 'prop-plane Cd exceeds thrust-axis Cd');
+  assert.ok(a.cdAz > a.cdAxy, 'thrust-axis Cd exceeds prop-plane Cd so climbs/descents stop sooner');
   assert.ok(AIR_DENSITY > 1.2 && AIR_DENSITY < 1.3);
   const F1 = bodyDragForce({ x: 1, y: 0, z: 0 }, id, qp.cfg);
   const F2 = bodyDragForce({ x: 2, y: 0, z: 0 }, id, qp.cfg);
@@ -234,6 +234,29 @@ test('floatiness only scales Cd and angular b', () => {
   const t0 = aeroTorqueOf({ x: 0, y: 0, z: 10 }, a.cfg);
   const t1 = aeroTorqueOf({ x: 0, y: 0, z: 10 }, b.cfg);
   assert.ok(Math.abs(t0.z) > Math.abs(t1.z));
+});
+
+test('hover chop over 0.5 s actually falls', () => {
+  const qp = makeAcro();
+  const hover = hoverCollective(PRESETS.whoop65);
+  stepSec(qp, 0.6, { r: 0, p: 0, y: 0 }, { roll: 0, pitch: 0, yaw: 0 }, hover);
+  const z0 = qp.position.z;
+  stepSec(qp, 0.5, { r: 0, p: 0, y: 0 }, { roll: 0, pitch: 0, yaw: 0 }, 0);
+  const drop = z0 - qp.position.z;
+  assert.ok(drop > 0.35, `hover chop drop ${drop.toFixed(3)} m (vz=${qp.velocity.z.toFixed(2)})`);
+  assert.ok(qp.velocity.z < -1.2, `chop vz ${qp.velocity.z.toFixed(2)} should be falling`);
+});
+
+test('65mm flat-out top speed stays in a whoop window', () => {
+  const qp = makeAcro();
+  const s = Math.SQRT1_2;
+  qp.quaternion = { x: 0, y: s, z: 0, w: s }; // 90° pitch, thrust along +X
+  stepSec(qp, 2.4, { r: 0, p: 0, y: 0 }, { roll: 0, pitch: 0, yaw: 0 }, 1);
+  const ms = Math.hypot(qp.velocity.x, qp.velocity.y, qp.velocity.z);
+  const kmh = ms * 3.6;
+  // Leftover 35–40% sets Cd; a 90° punch then lands ~35–42 km/h SI.
+  // 50–70 km/h would need the old 52% coast. Indoor 65mm punch is this band.
+  assert.ok(kmh >= 32 && kmh <= 70, `top speed ${kmh.toFixed(1)} km/h (${ms.toFixed(2)} m/s)`);
 });
 
 test('sim.html owns extraG only and arms at 1000 Hz; 3D path stays wired', () => {

@@ -18,7 +18,7 @@ export const DEFAULT_WHOOP = Object.freeze({
   ground: true,
   groundStr: 1,
   wash: true,
-  washStr: 0.50,
+  washStr: 0.0125,
   batt: true,
   sagThrust: true,
   sagStr: 1,
@@ -267,22 +267,22 @@ export function emptyWake() {
 
 export const WASH_LEVELS = Object.freeze({
   off: 0,
-  low: 0.25,
-  med: 0.50,
-  high: 0.80,
+  low: 0.0125, // old Low × 0.05
+  med: 0.06,
+  high: 0.25,  // about today's old Low
 });
 
 export function washLevelFromStr(n) {
   const v = Number(n);
-  if (!(v > 0.02)) return 'off';
-  if (v <= 0.33) return 'low';
-  if (v <= 0.62) return 'med';
+  if (!(v > 0.002)) return 'off';
+  if (v <= 0.03) return 'low';
+  if (v <= 0.12) return 'med';
   return 'high';
 }
 
 export function washStrFromLevel(level) {
   const k = String(level || '').toLowerCase();
-  return Object.prototype.hasOwnProperty.call(WASH_LEVELS, k) ? WASH_LEVELS[k] : WASH_LEVELS.med;
+  return Object.prototype.hasOwnProperty.call(WASH_LEVELS, k) ? WASH_LEVELS[k] : WASH_LEVELS.low;
 }
 
 // Propwash: leave a puff of downwash (or 3D upwash) behind a pulling whoop.
@@ -322,7 +322,9 @@ export function stepPropwash(wake, sample, dt, build, settings) {
   const lowThr = thr < 0.28;
   const inWash = d < 0.55 && next.s > 0.18 && next.age >= 0.02;
   const k = s.washStr * sc.wash;
-  const turb = thr * (1 - thr) * 0.55 * k;
+  // Always-on term is a faint buzz only (old 0.55 → 0.05). Wake hit stays
+  // the descent/chop term; Low is ~5% of the old Low strength via washStr.
+  const turb = thr * (1 - thr) * 0.05 * k;
   const chopHit = (inWash && intoWash && lowThr) ? (0.22 * next.s + 0.12) * k : 0;
   const descent = (inWash && vel.z < -0.35)
     ? (0.16 * next.s + 0.06) * k * Math.min(1, -vel.z / 3)

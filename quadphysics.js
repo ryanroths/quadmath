@@ -78,9 +78,9 @@ export const AIR_DENSITY = 1.225;          // kg/m³, ISA sea level
 export const FLOOR_CLEARANCE_M = 0.01;     // ~1 cm pad contact in SI
 // Reference CdA (m²) and aero b/c at a 31 mm prop. Prop-plane (body X/Y) is
 // the ducts cutting sideways; thrust-axis (body Z) is through the disks.
-const CDA_XY0 = 0.0054;
-const CDA_Z0 = 0.0034;
-const SKIN_B0 = 0.0015;                    // N·s/m linear skin
+const CDA_XY0 = 0.0102;
+const CDA_Z0 = 0.0118;
+const SKIN_B0 = 0.0015;                    // N·s/m linear skin; not an in-air brake
 const AERO_B0 = 3.0e-5;                    // N·m·s / rad
 const AERO_C0 = 2.2e-6;                    // N·m·s² / rad²
 // Rate/PID loop. 240 Hz was the v2 default and read floaty next to a 1 kHz
@@ -404,7 +404,7 @@ export class QuadPhysics {
     this.floatiness = x;
     if (!this.cfg) return x;
     this.cfg.spoolTauMul = 0.73;
-    this.cfg.spoolDownMul = 1.21;
+    this.cfg.spoolDownMul = 1.40;
     this.cfg.thrustExp = 2;
     this.cfg.cdMul = 1.85 - 0.85 * x;
     this.cfg.aeroBMul = 1.85 - 0.85 * x;
