@@ -10,26 +10,26 @@
 // Derived from real-world averages. Tweak freely; calculator can feed these.
 // ---------------------------------------------------------------------------
 export const PRESETS = {
-  // Whoop TWR is class-typical punch: ~5.2 (65), ~4.5 (75), ~4.2 (85 2S).
+  // Whoop TWR: ~6.0 (65 / Air65-class), ~5.0 (75), ~4.6 (85 2S).
   // kQ is sized with rotational aero (τ = −bω − cω|ω|) so yaw 0→max lands
   // around 120–160 ms to 90% and a centred stick stops in under 200 ms.
   whoop65: {
     name: '65mm whoop',
     mass: 0.027, wheelbase: 0.065, propDiameter: 0.031,
-    maxThrustPerMotor: 0.344,      // ~1.376N total, ~5.2:1 TWR
-    motorTau: 0.020,               // tiny props spool fast
+    maxThrustPerMotor: 0.397,      // ~1.588N total, ~6.0:1 TWR
+    motorTau: 0.013,               // ~22 ms to 90% with spoolTauMul 0.73
     kQ: 0.72,                      // yaw torque per unit thrust (N·m per N, scaled by arm)
     idleThrottle: 0.055,
   },
   whoop75: {
     name: '75mm whoop',
     mass: 0.032, wheelbase: 0.075, propDiameter: 0.040,
-    maxThrustPerMotor: 0.353, motorTau: 0.024, kQ: 0.75, idleThrottle: 0.055,
+    maxThrustPerMotor: 0.392, motorTau: 0.014, kQ: 0.75, idleThrottle: 0.055,
   },
   whoop85: {
     name: '85mm whoop',
     mass: 0.048, wheelbase: 0.085, propDiameter: 0.051,   // 2" props
-    maxThrustPerMotor: 0.494, motorTau: 0.028, kQ: 0.78, idleThrottle: 0.055,
+    maxThrustPerMotor: 0.542, motorTau: 0.015, kQ: 0.78, idleThrottle: 0.055,
   },
   freestyle25: {
     name: '2.5" freestyle',
@@ -408,7 +408,8 @@ export class QuadPhysics {
     this.physicsHz = h;
     this.physicsDt = 1 / h;
     this.accumulator = 0;
-    if (this.tune) this.resetControllers();
+    // Don't dump I-term mid-flight if the render loop hops 500↔1000 Hz.
+    if (this.tune && !this.armed) this.resetControllers();
     return h;
   }
 

@@ -7,9 +7,9 @@ export const THREED_KEY = 'quadmathSim3D';
 export const THREED_DEADBAND = 0.05; // ± of the 0..1 stick around 0.5 (~Betaflight 3d_deadband_throttle 50)
 export const THREED_REVERSE_SCALE = 0.85; // keep in lockstep with quadphysics.REVERSE_THRUST_SCALE
 export const THREED_ARM_BAND = 0.08; // arm when |stick.t - 0.5| is inside this
-// 2D throttle mid / expo. Mid 0.60 + linear exponent puts hover at ~32–38%
-// stick with TWR 4.2–5.2 and idle 5.5%. Expo 0 is piecewise-linear mid.
-export const THROTTLE_MID_DEFAULT = 0.60;
+// 2D throttle mid / expo. Mid 0.62 + linear exponent puts hover at ~30–35%
+// stick with TWR 6.0 / 5.0 / 4.6 and idle 5.5%. Expo 0 is piecewise-linear mid.
+export const THROTTLE_MID_DEFAULT = 0.62;
 export const THROTTLE_EXPO_DEFAULT = 0;
 
 function clamp(n, lo, hi) {

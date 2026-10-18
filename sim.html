@@ -581,7 +581,7 @@
   <div class="row"><label>Mass (g)</label><span class="val" id="v_mass"></span></div>
   <input type="range" id="s_mass" min="15" max="700" step="1" value="27">
   <div class="row"><label>Motor Response</label><span class="val" id="v_spool"></span></div>
-  <input type="range" id="s_spool" min="0.02" max="0.15" step="0.005" value="0.04">
+  <input type="range" id="s_spool" min="0.008" max="0.15" step="0.001" value="0.013">
   <div class="row"><label>Gravity Scale</label><span class="val" id="v_grav"></span></div>
   <input type="range" id="s_grav" min="1.0" max="5.0" step="0.05" value="3.5">
   <div class="row"><label>Throttle Curve</label><span class="val" id="v_thc"></span></div>
@@ -602,15 +602,15 @@
   <div class="row"><label>Ground effect</label><input type="checkbox" id="cbGround" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Cushion</label><span class="val" id="v_ground"></span></div>
   <input type="range" id="s_ground" min="0" max="2" step="0.05" value="1" title="Extra lift near the floor. Stronger on light whoops / bigger props.">
-  <div class="row"><label>Propwash wobble</label><input type="checkbox" id="cbWash" checked style="accent-color:var(--orange)">
-    <select id="s_wash" title="Low is the default (about 5% of the old Low). High is about the old Low. Faint mid-stick buzz; a bit more when you descend into your own wash.">
-      <option value="off">Off</option>
-      <option value="low" selected>Low</option>
+  <div class="row"><label>Propwash wobble</label><input type="checkbox" id="cbWash" style="accent-color:var(--orange)">
+    <select id="s_wash" title="Off by default. Low is about 5% of the old Low. High is about the old Low. Only fires when you descend or chop into your own wake — no mid-stick buzz.">
+      <option value="off" selected>Off</option>
+      <option value="low">Low</option>
       <option value="med">Med</option>
       <option value="high">High</option>
     </select>
   </div>
-  <div class="row"><label>Indoor drafts</label><input type="checkbox" id="cbDraft" checked style="accent-color:var(--orange)"></div>
+  <div class="row"><label>Indoor drafts</label><input type="checkbox" id="cbDraft" style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Drafts</label><span class="val" id="v_draft"></span></div>
   <input type="range" id="s_draft" min="0" max="2" step="0.05" value="0.55" title="Light turbulence near walls. Stronger on small indoor whoops.">
 
@@ -708,19 +708,19 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=f835c7702fe4";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=c3e8595e359e";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
   parseThreeDQuery, runCountsForBoards, throttleHudText,
   throttleCollective, armHintText, stepAutoArm,
-} from "./sim-3d.js?v=2ecd5767df1a";
+} from "./sim-3d.js?v=ac82e9368acc";
 import {
   WHOOP_KEY, PHYSICS_VER,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=db61d2d2e26b";
+} from "./sim-whoop.js?v=34e582665d37";
 import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=627c82048afa";
 import {
   loadTouch, saveTouch,
@@ -754,7 +754,7 @@ import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
   loadBuild, saveBuild, buildDeepLink, matchPresetId, classDefault,
-} from "./sim-build.js?v=1cd4c3cc8158";
+} from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
 } from "./sim-coach.js?v=d7ee445bc859";
@@ -788,8 +788,8 @@ let whoopSettings=loadWhoop();
 CFG.battSimOn=whoopSettings.batt;
 CFG.sagAffectsThrust=whoopSettings.sagThrust;
 let washState=emptyWake();
-// thrCurve 1.0 + throttle mid 0.60: thrust is output², TWR ~5.2, idle 5.5%.
-// Mid lifts the bottom half of the stick so hover lands at ~32–38% without
+// thrCurve 1.0 + throttle mid 0.62: thrust is output², TWR ~6.0, idle 5.5%.
+// Mid lifts the bottom half of the stick so hover lands at ~30–35% without
 // a fake exponent. Slider still changes the exponent if a pilot wants it.
 // base gravity — the world geometry is ~3.5x visual scale, so real 9.81 reads
 // as slow-motion against oversized reference. Gravity now lives inside
@@ -4679,9 +4679,9 @@ function rateProfileForClass(d){
   return RATE_FALLBACK;
 }
 const DRONE_TYPES={
-  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.020,cam:15,fov:VFOV_DEFAULT},
-  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.024,cam:15,fov:VFOV_DEFAULT},
-  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.028,cam:15,fov:VFOV_DEFAULT},
+  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.013,cam:15,fov:VFOV_DEFAULT},
+  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.014,cam:15,fov:VFOV_DEFAULT},
+  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.015,cam:15,fov:VFOV_DEFAULT},
   freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30,fov:VFOV_DEFAULT},
   freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:30,fov:VFOV_DEFAULT}
 };

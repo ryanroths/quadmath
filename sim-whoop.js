@@ -5,10 +5,11 @@
 // New localStorage key: quadmathSimWhoop. Do not write old ryfly* keys.
 // Ghosts stay kinematic {v:1,samples}; new recordings add phys: PHYSICS_VER.
 
-import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=1cd4c3cc8158';
+import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=fa0942d7ccfb';
 
 export const WHOOP_KEY = 'quadmathSimWhoop';
 export const PHYSICS_VER = 2;
+export const WHOOP_FEEL_VER = 3; // bump: wash + drafts default Off; migrate once
 export const GHOST_FORMAT_V = 1;
 
 export const DEFAULT_WHOOP = Object.freeze({
@@ -17,13 +18,14 @@ export const DEFAULT_WHOOP = Object.freeze({
   crashSpeed: 9,
   ground: true,
   groundStr: 1,
-  wash: true,
-  washStr: 0.0125,
+  wash: false,
+  washStr: 0,
   batt: true,
   sagThrust: true,
   sagStr: 1,
-  draft: true,
+  draft: false,
   draftStr: 0.55,
+  feelVer: WHOOP_FEEL_VER,
 });
 
 function clamp(n, lo, hi) {
@@ -50,14 +52,29 @@ export function normalizeWhoop(raw) {
     crashSpeed: clamp(src.crashSpeed, 6, 28),
     ground: bool(src.ground, true),
     groundStr: clamp(src.groundStr, 0, 2),
-    wash: bool(src.wash, true),
+    wash: bool(src.wash, false),
     washStr: clamp(src.washStr, 0, 2),
     batt: bool(src.batt, true),
     sagThrust: bool(src.sagThrust, true),
     sagStr: clamp(src.sagStr, 0, 2),
-    draft: bool(src.draft, true),
+    draft: bool(src.draft, false),
     draftStr: clamp(src.draftStr, 0, 2),
+    feelVer: Number(src.feelVer) >= WHOOP_FEEL_VER ? WHOOP_FEEL_VER : (Number(src.feelVer) || 0),
   };
+}
+
+function migrateFeel(parsed) {
+  const src = parsed && typeof parsed === 'object' ? { ...parsed } : {};
+  const ver = Number(src.feelVer) || 0;
+  if (ver < WHOOP_FEEL_VER) {
+    src.wash = false;
+    src.washStr = 0;
+    src.draft = false;
+    src.feelVer = WHOOP_FEEL_VER;
+  }
+  const out = normalizeWhoop(src);
+  out.feelVer = WHOOP_FEEL_VER;
+  return { migrated: ver < WHOOP_FEEL_VER, settings: out };
 }
 
 export function loadWhoop(storage) {
@@ -66,15 +83,20 @@ export function loadWhoop(storage) {
   try {
     const raw = store.getItem(WHOOP_KEY);
     if (!raw) return normalizeWhoop(DEFAULT_WHOOP);
-    return normalizeWhoop(JSON.parse(raw));
+    const { migrated, settings } = migrateFeel(JSON.parse(raw));
+    if (migrated) saveWhoop(settings, store);
+    return settings;
   } catch (e) { return normalizeWhoop(DEFAULT_WHOOP); }
 }
 
 export function saveWhoop(settings, storage) {
   const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
   if (!store) return;
-  try { store.setItem(WHOOP_KEY, JSON.stringify(normalizeWhoop(settings))); }
-  catch (e) { /* ignore quota / private mode */ }
+  try {
+    const n = normalizeWhoop(settings);
+    n.feelVer = WHOOP_FEEL_VER;
+    store.setItem(WHOOP_KEY, JSON.stringify(n));
+  } catch (e) { /* ignore quota / private mode */ }
 }
 
 // Build-tied multipliers. 65mm / 27 g / 23000 KV is 1.0 on each axis.
@@ -173,7 +195,7 @@ export function stepBattery(prev, dt, loadFrac, packOrBuild, settings) {
   const hoverS = Math.max(20, pack.hoverS || 180);
   const charge = Math.max(0, num(prev && prev.charge, 1) - dt * (0.25 + 1.5 * load) / hoverS);
   const ocv = lipoOcv(charge, pack.cells);
-  const ir = (pack.sagDrop || 0.55) * s.sagStr * sc.sag * (1.0 + 0.35 * (1 - charge));
+  const ir = (pack.sagDrop || 0.33) * s.sagStr * sc.sag * (1.0 + 0.35 * (1 - charge));
   const vInst = ocv - load * ir;
   const prevV = num(prev && prev.voltage, ocv);
   const tau = 0.15;
@@ -322,9 +344,9 @@ export function stepPropwash(wake, sample, dt, build, settings) {
   const lowThr = thr < 0.28;
   const inWash = d < 0.55 && next.s > 0.18 && next.age >= 0.02;
   const k = s.washStr * sc.wash;
-  // Always-on term is a faint buzz only (old 0.55 → 0.05). Wake hit stays
-  // the descent/chop term; Low is ~5% of the old Low strength via washStr.
-  const turb = thr * (1 - thr) * 0.05 * k;
+  // No always-on buzz. That term fired at mid stick with no wake nearby and
+  // read as random kicks. Wash, when enabled, is descent / chop into the puff.
+  const turb = 0;
   const chopHit = (inWash && intoWash && lowThr) ? (0.22 * next.s + 0.12) * k : 0;
   const descent = (inWash && vel.z < -0.35)
     ? (0.16 * next.s + 0.06) * k * Math.min(1, -vel.z / 3)

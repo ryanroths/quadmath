@@ -54,11 +54,11 @@ function stepSec(qp, seconds, stick, acro, thr) {
   for (let i = 0; i < n; i++) qp.step(dt, a, thr, s);
 }
 
-test('TWR targets: 5.2 / 4.5 / 4.2 and thrustExp 2', () => {
+test('TWR targets: 6.0 / 5.0 / 4.6 and thrustExp 2', () => {
   const twr = (p) => (p.maxThrustPerMotor * 4) / (p.mass * 9.81);
-  assert.ok(Math.abs(twr(PRESETS.whoop65) - 5.2) < 0.08, `65 TWR ${twr(PRESETS.whoop65)}`);
-  assert.ok(Math.abs(twr(PRESETS.whoop75) - 4.5) < 0.08, `75 TWR ${twr(PRESETS.whoop75)}`);
-  assert.ok(Math.abs(twr(PRESETS.whoop85) - 4.2) < 0.08, `85 TWR ${twr(PRESETS.whoop85)}`);
+  assert.ok(Math.abs(twr(PRESETS.whoop65) - 6.0) < 0.08, `65 TWR ${twr(PRESETS.whoop65)}`);
+  assert.ok(Math.abs(twr(PRESETS.whoop75) - 5.0) < 0.08, `75 TWR ${twr(PRESETS.whoop75)}`);
+  assert.ok(Math.abs(twr(PRESETS.whoop85) - 4.6) < 0.08, `85 TWR ${twr(PRESETS.whoop85)}`);
   const qp = new QuadPhysics(PRESETS.whoop65);
   assert.equal(qp.cfg.thrustExp, 2);
   qp.setFloatiness(0);
@@ -67,11 +67,11 @@ test('TWR targets: 5.2 / 4.5 / 4.2 and thrustExp 2', () => {
   assert.equal(qp.cfg.thrustExp, 2);
   assert.equal(CLASS_REF[65].thrustN, PRESETS.whoop65.maxThrustPerMotor);
   const built = physicsFromBuild(DEFAULT_BUILD);
-  assert.ok(Math.abs(built.twr - 5.2) < 0.08, `build TWR ${built.twr}`);
+  assert.ok(Math.abs(built.twr - 6.0) < 0.08, `build TWR ${built.twr}`);
 });
 
-test('default throttle curve 1.0 + mid 0.60 lands hover at 32–38% stick', () => {
-  assert.equal(THROTTLE_MID_DEFAULT, 0.60);
+test('default throttle curve 1.0 + mid 0.62 lands hover at 30–35% stick', () => {
+  assert.equal(THROTTLE_MID_DEFAULT, 0.62);
   assert.ok(simSrc.includes('thrCurve:1.0') || simSrc.includes('thrCurve:1') || /s_thc[^>]+value="1\.0"/.test(simSrc));
   assert.ok(simSrc.includes('THROTTLE_MID_DEFAULT') || simSrc.includes('thrMid'));
   for (const key of ['whoop65', 'whoop75', 'whoop85']) {
@@ -82,11 +82,11 @@ test('default throttle curve 1.0 + mid 0.60 lands hover at 32–38% stick', () =
     const twr = (p.maxThrustPerMotor * 4) / (p.mass * 9.81);
     const thrust = 4 * p.maxThrustPerMotor * out * out;
     const ratio = thrust / (p.mass * 9.81);
-    assert.ok(stick >= 0.32 && stick <= 0.385, `${key} hover stick ${stick.toFixed(3)}`);
+    assert.ok(stick >= 0.30 && stick <= 0.355, `${key} hover stick ${stick.toFixed(3)}`);
     assert.ok(Math.abs(ratio - 1) < 0.03, `${key} hover TWR ${ratio.toFixed(3)} (class ${twr.toFixed(2)})`);
   }
-  assert.ok(Math.abs(applyThrottleMidExpo(0.5, 0.60, 0) - 0.60) < 1e-9);
-  assert.ok(Math.abs(applyThrottleMidExpo(0.25, 0.60, 0) - 0.30) < 1e-9);
+  assert.ok(Math.abs(applyThrottleMidExpo(0.5, 0.62, 0) - 0.62) < 1e-9);
+  assert.ok(Math.abs(applyThrottleMidExpo(0.25, 0.62, 0) - 0.31) < 1e-9);
 });
 
 test('0.5 s chop from 8 m/s leaves 35–40% horizontal speed', () => {
@@ -166,19 +166,19 @@ test('yaw 0→8 rad/s reaches 90% in under 160 ms and stops under 200 ms', () =>
   assert.ok(tStop != null && tStop < 0.20, `stop ${tStop == null ? 'never' : tStop.toFixed(3) + ' s'}`);
 });
 
-test('full-charge punch sagFactor 0.70–0.80; IR 0.45–0.60 V/cell', () => {
+test('full-charge punch sagFactor ~0.85; IR 0.28–0.40 V/cell', () => {
   const pack = batteryFromBuild(DEFAULT_BUILD);
-  assert.ok(pack.sagDrop >= 0.45 && pack.sagDrop <= 0.60, `sagDrop ${pack.sagDrop}`);
+  assert.ok(pack.sagDrop >= 0.28 && pack.sagDrop <= 0.40, `sagDrop ${pack.sagDrop}`);
   let batt = { charge: 1, voltage: pack.full };
   for (let i = 0; i < 40; i++) {
     batt = stepBattery(batt, 0.02, 1, pack, DEFAULT_WHOOP);
   }
-  assert.ok(batt.sagFactor >= 0.70 && batt.sagFactor <= 0.80, `punch sagFactor ${batt.sagFactor.toFixed(3)}`);
+  assert.ok(batt.sagFactor >= 0.82 && batt.sagFactor <= 0.90, `punch sagFactor ${batt.sagFactor.toFixed(3)}`);
   const ir = pack.sagDrop * 1 * 1 * 1.0;
-  assert.ok(ir >= 0.45 && ir <= 0.60, `full-SoC IR ${ir}`);
+  assert.ok(ir >= 0.28 && ir <= 0.40, `full-SoC IR ${ir}`);
 });
 
-test('empty-pack hover stick rises toward 45–50%', () => {
+test('empty-pack hover stick still rises vs a full pack', () => {
   const p = PRESETS.whoop65;
   const pack = batteryFromBuild(DEFAULT_BUILD);
   const hoverLoad = 1 / ((p.maxThrustPerMotor * 4) / (p.mass * 9.81));
@@ -192,7 +192,7 @@ test('empty-pack hover stick rises toward 45–50%', () => {
   const stick = hoverStick({ ...p, maxThrustPerMotor: p.maxThrustPerMotor * batt.sagFactor });
   const full = hoverStick(p);
   assert.ok(stick > full + 0.06, `empty ${stick.toFixed(3)} should rise vs full ${full.toFixed(3)}`);
-  assert.ok(stick >= 0.42 && stick <= 0.55, `empty hover stick ${stick.toFixed(3)} (coll ${coll.toFixed(3)}, sag ${batt.sagFactor.toFixed(3)})`);
+  assert.ok(stick >= 0.36 && stick <= 0.50, `empty hover stick ${stick.toFixed(3)} (coll ${coll.toFixed(3)}, sag ${batt.sagFactor.toFixed(3)})`);
 });
 
 test('ground effect kGE 0.05–0.08 fades at 1× prop diameter; floor is 1 cm', () => {
@@ -257,7 +257,28 @@ test('65mm flat-out top speed stays in a whoop window', () => {
   stepSec(qp, 2.4, { r: 0, p: 0, y: 0 }, { roll: 0, pitch: 0, yaw: 0 }, 1);
   const ms = Math.hypot(qp.velocity.x, qp.velocity.y, qp.velocity.z);
   const kmh = ms * 3.6;
-  assert.ok(kmh >= 50 && kmh <= 70, `top speed ${kmh.toFixed(1)} km/h (${ms.toFixed(2)} m/s)`);
+  assert.ok(kmh >= 55 && kmh <= 70, `top speed ${kmh.toFixed(1)} km/h (${ms.toFixed(2)} m/s)`);
+});
+
+test('spool-up reaches 90% in 20–25 ms; hover punch hits 10 m/s in 0.35–0.45 s', () => {
+  const qp = makeAcro();
+  qp.setFloatiness(FLOATINESS_DEFAULT);
+  const tau = qp.cfg.motorTau * (qp.cfg.spoolTauMul != null ? qp.cfg.spoolTauMul : 1);
+  const t90 = -Math.log(0.1) * tau;
+  assert.ok(t90 >= 0.020 && t90 <= 0.025, `spool t90 ${t90.toFixed(4)} s (tau ${tau.toFixed(4)})`);
+
+  const hover = hoverCollective(PRESETS.whoop65);
+  stepSec(qp, 0.7, { r: 0, p: 0, y: 0 }, { roll: 0, pitch: 0, yaw: 0 }, hover);
+  qp.velocity.z = 0;
+  const dt = 1 / qp.physicsHz;
+  let tHit = null;
+  for (let i = 0; i < Math.round(0.8 / dt); i++) {
+    qp.cfg.maxThrustPerMotor = PRESETS.whoop65.maxThrustPerMotor * 0.85;
+    qp.step(dt, { roll: 0, pitch: 0, yaw: 0 }, 1, { r: 0, p: 0, y: 0 });
+    if (tHit == null && qp.velocity.z >= 10) tHit = i * dt;
+  }
+  assert.ok(tHit != null, `never reached 10 m/s, vz=${qp.velocity.z.toFixed(2)}`);
+  assert.ok(tHit >= 0.32 && tHit <= 0.46, `0→10 m/s ${tHit.toFixed(3)} s`);
 });
 
 test('sim.html owns extraG only and arms at 1000 Hz; 3D path stays wired', () => {
