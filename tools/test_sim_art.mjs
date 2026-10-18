@@ -24,6 +24,8 @@ import {
   restyleOffice, tickOfficeArt, officeBudget, officeWantsGlow,
   TRAINER_VIBE_ID, hideStockTrainerMeshes, buildLicoriceGrid,
   restyleTrainer, tickTrainerArt, trainerBudget, trainerWantsGlow,
+  BACKYARD_VIBE_ID, hideStockBackyardMeshes, buildJadeLot,
+  restyleBackyard, tickBackyardArt, backyardBudget, backyardWantsGlow,
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
@@ -92,7 +94,7 @@ test('hexNum and vibeTable are stable helpers', () => {
   assert.equal(hexNum(0x88a0ff), 0x88a0ff);
   const table = vibeTable();
   assert.equal(table.length, 9);
-  assert.equal(table.filter((r) => r.implemented).length, 7);
+  assert.equal(table.filter((r) => r.implemented).length, 8);
 });
 
 test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {
@@ -106,6 +108,7 @@ test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {
   assert.match(art, /sim-art-gym\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-office\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-trainer\.js\?v=[0-9a-f]{12}/);
+  assert.match(art, /sim-art-backyard\.js\?v=[0-9a-f]{12}/);
   assert.equal(mentionsBannedAssets('assets/Models/GLB-format/tree-large.glb'), true);
   assert.equal(mentionsBannedAssets('buildCityDressing()'), false);
 });
@@ -127,6 +130,8 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.match(sim, /tickOfficeArt|decorateOfficeGate/);
   assert.match(sim, /applyTrainerArt|restyleTrainer/);
   assert.match(sim, /tickTrainerArt|decorateTrainerGate/);
+  assert.match(sim, /applyBackyardArt|restyleBackyard/);
+  assert.match(sim, /tickBackyardArt|decorateBackyardGate/);
   assert.match(sim, /cbRain|quadmathSimRain|loadRain/);
   assert.match(sim, /skipStockCity|procedural neon city|Neon Current/);
   assert.equal(sim.includes('content/guides/'), false);
@@ -818,6 +823,73 @@ test('Trainer freestyle builds without throwing and the FPV frame is not all bla
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickTrainerArt must not touch the THREE binding');
   assert.match(tickSrc, /trainerBulb|trainerSpark|trainerFrame/);
+});
+
+test('Backyard Jade Lot is implemented with stone-gold gates', () => {
+  assert.equal(BACKYARD_VIBE_ID, 'backyard');
+  const v = VIBES.backyard;
+  assert.equal(v.implemented, true);
+  assert.equal(v.name, 'Jade Lot');
+  assert.equal(v.sky, 'gradient');
+  assert.equal(v.time, 'dusk');
+  assert.equal(v.gates.keepBrand, false);
+  assert.equal(v.gates.style, 'stone-gold');
+  assert.equal(v.post.bloom, false);
+  assert.equal(v.palette.neonA.toLowerCase(), '#c9a45b');
+  assert.equal(v.lighting.fogColor, 0x2a2014);
+  assert.equal(backyardWantsGlow('low'), false);
+  assert.equal(backyardWantsGlow('med'), true);
+  assert.equal(backyardBudget('low').posts < backyardBudget('high').posts, true);
+  assert.equal(backyardBudget('low').glow, false);
+  assert.equal(backyardBudget('med').glow, true);
+});
+
+test('Backyard freestyle builds without throwing and the FPV frame is not all black', () => {
+  installDomStub();
+  const yardSrc = readFileSync(join(root, 'sim-art-backyard.js'), 'utf8');
+  assert.equal(mentionsBannedAssets(yardSrc), false);
+  assert.match(yardSrc, /never abort the FPV render loop/);
+  assert.match(yardSrc, /CapsuleGeometry|LatheGeometry|ExtrudeGeometry/);
+  const free = freestyleTrack('backyard');
+  assert.equal(free.id, freestyleIdFor('backyard'));
+  assert.equal(free.gates.length, 0);
+  for (const q of ['low', 'med', 'high', 'auto']) {
+    const built = buildMap(THREE, 'backyard');
+    assert.doesNotThrow(() => hideStockBackyardMeshes(built.group));
+    const out = restyleBackyard(THREE, {
+      vibe: vibeFor('backyard'),
+      quality: q,
+      group: built.group,
+      floor: built.floor,
+    });
+    assert.equal(out.error, undefined, q + ' restyleBackyard ' + out.error);
+    assert.ok(out.visuals, q + ' visuals');
+    const hidden = [];
+    built.group.traverse((o) => {
+      if (o.userData && o.userData.artHidden) hidden.push(1);
+    });
+    assert.ok(hidden.length >= 6, q + ' hidden stock ' + hidden.length);
+    const vis = built.group.getObjectByName('backyardArtVisuals');
+    assert.ok(vis, q + ' backyardArtVisuals');
+    if (q === 'low') assert.equal(backyardBudget('low').glow, false);
+    const stats = artStats(null, built.group);
+    assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    const frame = cityFrameLit(vis);
+    assert.ok(frame.meshes >= 6, q + ' meshes ' + frame.meshes);
+    assert.ok(frame.lit >= 6, q + ' lit materials ' + frame.lit);
+    assert.ok(frame.maxChan > 0.08, q + ' brightest channel ' + frame.maxChan);
+    assert.doesNotThrow(() => {
+      for (let i = 0; i < 8; i++) tickBackyardArt(built.group, 1000 + i * 16);
+    }, q + ' tickBackyardArt');
+    const parent = new THREE.Group();
+    assert.doesNotThrow(() => buildJadeLot(THREE, parent, vibeFor('backyard'), q, free.gates));
+  }
+  const tickSrc = yardSrc.slice(
+    yardSrc.indexOf('export function tickBackyardArt'),
+    yardSrc.indexOf('export function restyleBackyard(THREE'),
+  );
+  assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickBackyardArt must not touch the THREE binding');
+  assert.match(tickSrc, /backyardIdol|backyardMoss/);
 });
 
 test('art direction doc lists every map', () => {

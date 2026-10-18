@@ -48,6 +48,12 @@ export {
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
 } from './sim-art-trainer.js?v=b4f1b62d3078';
 
+export {
+  BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
+  hideStockBackyardMeshes, restyleBackyardShell, buildJadeLot,
+  decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
+} from './sim-art-backyard.js?v=20ea971f04a7';
+
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
 export const GARAGE_VIBE_ID = 'garage';
@@ -55,6 +61,7 @@ export const WAREHOUSE_VIBE_ID = 'warehouse';
 export const GYM_VIBE_ID = 'gym';
 export const OFFICE_VIBE_ID = 'office';
 export const TRAINER_VIBE_ID = 'trainer';
+export const BACKYARD_VIBE_ID = 'backyard';
 
 
 export const VIBES = Object.freeze({
@@ -192,7 +199,7 @@ export const VIBES = Object.freeze({
     id: 'backyard',
     name: 'Jade Lot',
     tagline: 'Dusk jungle-temple backyard, gold leaf, moss posts',
-    implemented: false,
+    implemented: true,
     time: 'dusk',
     sky: 'gradient',
     palette: Object.freeze({
