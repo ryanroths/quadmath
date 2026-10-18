@@ -348,8 +348,9 @@
   <div class="menu-card">
     <div class="menu-brand">QuadMath</div>
     <h1>Sim</h1>
-    <p class="menu-lead">Browser FPV whoop sim. Paste your Betaflight rates. No install.</p>
+    <p class="menu-lead">Browser FPV whoop sim. Fly is free flight — no gates, no timer. Tracks for races. Paste your Betaflight rates. No install.</p>
     <button class="primary" id="menuFly">Fly</button>
+    <button id="menuFreestyle">Freestyle</button>
     <button id="menuDaily">Daily</button>
     <button id="menuBoards">Boards</button>
     <button id="menuTracks">Tracks</button>
@@ -674,6 +675,7 @@
     3D (Tune panel): center throttle = zero, below = reverse. Acro only. Not counted on boards.<br>
     <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach
   </div>
+  <button type="button" id="btnFreestyle">FREESTYLE THIS MAP</button>
   <button id="btnReset">RESET QUAD [R]</button>
 </div>
 
@@ -769,13 +771,15 @@ import {
   hostedGhostUrl, fetchBuiltinTracks, makePaceGhost,
   BUILTIN_TRACK_FILES, SHARE_PREFIX, applyMissPenalty, enteredGate,
   findTrackIn, resolveSimBoot, knownMapId, trackRefId,
-} from "./sim-tracks.js?v=1c814dba06e8";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=945ee71dd491";
+  isFreestyleTrackId, freestyleTrack, freestyleIdFor,
+  resolveFly, persistableSelection,
+} from "./sim-tracks.js?v=749ba01f2163";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=40926e827e21";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=19bee552695d";
+} from "./sim-room.js?v=bf753d2f574f";
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=5f9b0021bf11";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
@@ -784,7 +788,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=bd5e45fbf615";
+} from "./sim-coach.js?v=d55362fb9e98";
 import {
   DAILY_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -1339,6 +1343,10 @@ function trackLabel(id){
 }
 function updateGateUI(){
   const list=trackGates(activeTrackId); // position shown within the active track only
+  if(isFreestyleTrackId(activeTrackId)||!list.length){
+    gateUI.textContent='FREESTYLE';
+    return;
+  }
   const miss=missTotal?(' · MISS +'+(missTotal*MISS_PENALTY_MS/1000).toFixed(1)+'s'):'';
   const split=lastGateSplit?(' · SPLIT '+fmtLap(lastGateSplit)):'';
   gateUI.textContent=trackLabel(activeTrackId)+' GATE '+nextGateIndex+'/'+list.length+(runActive?' · LAP '+runLap+'/'+RUN_LAPS:'')+split+miss;
@@ -2219,20 +2227,23 @@ function generatedWhoops(){
 }
 function findTrack(id){
   if(id==null||id==='')return null;
+  if(id==='freestyle')return freestyleTrack(currentMap||'city');
+  if(isFreestyleTrackId(id))return freestyleTrack(String(id).slice(0,-'-freestyle'.length));
   if(id===ROOM_TRACK_ID||id==='room-practice')return roomTrackNow();
   const gen=trackFromRetentionId(id);
   if(gen)return gen;
   return findTrackIn(id, builtinTracks.concat(customTracks).concat(generatedWhoops()));
 }
 function tracksForMap(mapId){
+  const free=freestyleTrack(mapId);
   const extra=generatedWhoops().filter(t=>t.map===mapId);
   const list=builtinTracks.concat(customTracks).filter(t=>t.map===mapId);
   const merged=extra.concat(list.filter(t=>!extra.some(e=>e.id===t.id)));
   if(mapId==='room'){
     const rt=roomTrackNow();
-    return [rt].concat(merged.filter(t=>t.id!==rt.id));
+    return [free,rt].concat(merged.filter(t=>t.id!==rt.id&&t.id!==free.id));
   }
-  return merged;
+  return [free].concat(merged.filter(t=>t.id!==free.id));
 }
 function spawnCityRaces(){
   clearRace();
@@ -2307,19 +2318,31 @@ function applyMapLooks(mapId){
   if(sunSprite)sunSprite.visible=mapId==='backyard';
   setIndoorLights(indoorLights,looks?looks.applied:'med');
 }
+function isFreeFlight(t,trackId){
+  if(trackId==='freestyle'||isFreestyleTrackId(trackId))return true;
+  return !!(t&&(t.freestyle||!(t.gates&&t.gates.length)));
+}
 async function setMap(mapId,trackId,opts){
   if(!cityColliderSnap)snapCityColliders();
   const persist=!(opts&&opts.save===false);
   currentMap=knownMapId(mapId)||'city';
+  const hint=findTrack(trackId);
+  const wantFree=isFreeFlight(hint,trackId);
   if(currentMap==='city'){
     cityWorld.visible=true;
     indoorWorld.visible=false;
     restoreColliders(cityColliderSnap);
-    spawnCityRaces();
-    const t=findTrack(trackId!=null?trackId:0)||cityTrackJson(0);
-    currentTrackObj=t;
-    activeTrackId=t.legacyId!=null?t.legacyId:t.id;
-    if(t&&t.legacyId==null)spawnTrackData(t,t.id);
+    if(wantFree){
+      clearRace();
+      currentTrackObj=freestyleTrack('city');
+      activeTrackId=currentTrackObj.id;
+    }else{
+      spawnCityRaces();
+      const t=hint||findTrack(trackId!=null?trackId:0)||cityTrackJson(0);
+      currentTrackObj=t;
+      activeTrackId=t.legacyId!=null?t.legacyId:t.id;
+      if(t&&t.legacyId==null&&!isFreeFlight(t,t.id))spawnTrackData(t,t.id);
+    }
   }else{
     cityWorld.visible=false;
     indoorWorld.visible=true;
@@ -2328,14 +2351,21 @@ async function setMap(mapId,trackId,opts){
     indoorLights=built.lights||[];
     restoreColliders(built.colliders);
     clearRace();
-    const list=tracksForMap(currentMap);
-    const t=findTrack(trackId!=null?trackId:null)||list[0]||null;
-    if(t){
-      currentTrackObj=t;
-      activeTrackId=t.legacyId!=null?t.legacyId:t.id;
-      spawnTrackData(t,activeTrackId);
-      if((currentMap==='room'||isDailyTrackId(t.id)||isWeeklyTrackId(t.id))&&defaultRivals[t.id]==null){
-        defaultRivals[t.id]=makePaceGhost(t.gates,{track:t.id,name:'PACE BOT',speed:6,hz:8,laps:3});
+    if(wantFree){
+      currentTrackObj=freestyleTrack(currentMap);
+      activeTrackId=currentTrackObj.id;
+    }else{
+      const list=tracksForMap(currentMap);
+      const t=hint||findTrack(trackId!=null?trackId:null)||list.find(x=>!x.freestyle)||list[0]||null;
+      if(t){
+        currentTrackObj=t;
+        activeTrackId=t.legacyId!=null?t.legacyId:t.id;
+        if(!isFreeFlight(t,activeTrackId)&&t.gates&&t.gates.length){
+          spawnTrackData(t,activeTrackId);
+          if((currentMap==='room'||isDailyTrackId(t.id)||isWeeklyTrackId(t.id))&&defaultRivals[t.id]==null){
+            defaultRivals[t.id]=makePaceGhost(t.gates,{track:t.id,name:'PACE BOT',speed:6,hz:8,laps:3});
+          }
+        }
       }
     }
   }
@@ -2344,10 +2374,10 @@ async function setMap(mapId,trackId,opts){
   runActive=false;
   lastPassedGate=null;
   updateGateUI();updateGateHighlight();
-  if(persist)saveSelected({map:currentMap,track:activeTrackId});
+  if(persist)saveSelected({map:currentMap,track:activeTrackId,mode:isFreeFlight(currentTrackObj,activeTrackId)?'free':'race'});
   const k=trackStatId(activeTrackId);
   if(ghosts[k]==null)ghosts[k]=loadGhost(k);
-  if(defaultRivals[k]==null)loadHostedGhost(k);
+  if(defaultRivals[k]==null&&currentTrackObj&&currentTrackObj.gates&&currentTrackObj.gates.length)loadHostedGhost(k);
 }
 
 // ---------- Quad state ----------
@@ -2902,6 +2932,13 @@ addEventListener('keydown',e=>{
     if(coach&&coach.isActive()){
       coach.cancel();
       openCoachPicker();
+      return;
+    }
+    leaveRace();
+    const layer=document.getElementById('menuLayer');
+    if(layer&&layer.classList.contains('show')){
+      hideMenuLayer();
+      toggleStartMenu(true);
       return;
     }
     toggleStartMenu();
@@ -3537,6 +3574,10 @@ const osdLap=document.getElementById('osdLap');
 function updateLapOSD(){
   const now=performance.now();
   osdLap.style.color=now<lapFlashUntil?'#3DDC97':''; // green flash on new best
+  if(isFreestyleTrackId(activeTrackId)||!trackGates(activeTrackId).length){
+    osdLap.textContent='FREESTYLE';
+    return;
+  }
   const id=ensureTrackStats(activeTrackId);
   let html=trackLabel(activeTrackId);
   if(runActive){ // live: current lap clock + running total + splits banked so far
@@ -3650,12 +3691,42 @@ function setActiveTrack(id){
   lastPassedGate=null;
   runActive=false;
   ensureTrackStats(activeTrackId);
-  saveSelected({map:currentMap,track:activeTrackId});
+  saveSelected({map:currentMap,track:activeTrackId,mode:isFreeFlight(t,activeTrackId)?'free':'race'});
   const k=trackStatId(activeTrackId);
   if(ghosts[k]==null)ghosts[k]=loadGhost(k);
-  if(defaultRivals[k]==null)loadHostedGhost(k);
+  if(defaultRivals[k]==null&&t.gates&&t.gates.length)loadHostedGhost(k);
   updateGateUI();updateGateHighlight();
   resetQuad();
+}
+function leaveRace(){
+  runActive=false;
+  runLap=0;
+  runSplits=[];
+  runGateSplits=[];
+  lapStartTime=0;
+  runStartTime=0;
+  missesThisLap=0;
+  missTotal=0;
+  lastGateSplit=0;
+  lastPassedGate=null;
+  nextGateIndex=0;
+  if(typeof clearGhostRec==='function')clearGhostRec();
+  updateGateUI();
+  if(typeof updateGateHighlight==='function')updateGateHighlight();
+}
+function startFreestyle(mapHint){
+  const saved=loadSelected();
+  const fly=resolveFly({map:knownMapId(mapHint)||(saved&&saved.map)||currentMap||'city'});
+  hideMenuLayer();
+  leaveRace();
+  if(coach&&coach.isActive())coach.cancel();
+  setMap(fly.map,fly.track);
+  resetQuad();
+  sessionLive=true;
+  toggleStartMenu(false);
+  panel.classList.remove('open');
+  toast('FREESTYLE — NO GATES');
+  return fly;
 }
 function toggleStartMenu(force){
   const el=document.getElementById('startMenu');
@@ -3738,6 +3809,7 @@ function bindRoomForm(){
 function flyGeneratedTrack(t){
   if(!t)return;
   hideMenuLayer();
+  leaveRace();
   toggleStartMenu(false);
   sessionLive=true;
   setMap(t.map, t.id);
@@ -3861,7 +3933,7 @@ function openTrackPicker(startMap){
       return '<button type="button" class="'+on+'" data-tid="'+id+'"><span>'+t.name+'</span><span class="best">'+bestText(id)+'</span></button>';
     }).join('')||'<p>No tracks on this map.</p>';
     const roomBlock=pickerMap==='room'?roomFormHtml():'';
-    showMenuLayer('<h2>Tracks</h2><p>Map + course. Best lap is local.</p>'+
+    showMenuLayer('<h2>Tracks</h2><p>Freestyle is no gates and no timer. Other rows are races. Best lap is local.</p>'+
       '<div class="track-maps">'+maps+'</div>'+
       roomBlock+
       '<div class="track-list">'+rows+'</div>'+
@@ -3871,19 +3943,16 @@ function openTrackPicker(startMap){
     document.querySelectorAll('.track-maps [data-map]').forEach(b=>{
       b.onclick=()=>{
         pickerMap=b.dataset.map;
-        const first=tracksForMap(pickerMap)[0];
-        if(first&&pickerMap!==currentMap){
-          setMap(pickerMap,first.legacyId!=null?first.legacyId:first.id);
-          resetQuad();
-        }
         render();
       };
     });
     document.querySelectorAll('.track-list [data-tid]').forEach(b=>{
       b.onclick=()=>{
-        const id=isLegacyTrackId(b.dataset.tid)?+b.dataset.tid:b.dataset.tid;
-        if(pickerMap!==currentMap){setMap(pickerMap,id);resetQuad();}
-        else setActiveTrack(id);
+        const raw=b.dataset.tid;
+        const id=raw==='freestyle'||isFreestyleTrackId(raw)?raw:(isLegacyTrackId(raw)?+raw:raw);
+        leaveRace();
+        setMap(pickerMap,id);
+        resetQuad();
         toast(trackLabel(activeTrackId));
         render();
       };
@@ -4108,7 +4177,11 @@ function wireBuilderUI(){
 
 function wireLooksUI(){
   const fly=document.getElementById('menuFly');
-  if(fly)fly.onclick=()=>{hideMenuLayer();toggleStartMenu(false);sessionLive=true;toast('Space to arm. 1/2/3 = mode.');};
+  if(fly)fly.onclick=()=>startFreestyle();
+  const menuFree=document.getElementById('menuFreestyle');
+  if(menuFree)menuFree.onclick=()=>startFreestyle();
+  const panelFree=document.getElementById('btnFreestyle');
+  if(panelFree)panelFree.onclick=()=>startFreestyle(currentMap);
   document.getElementById('menuTune').onclick=()=>{hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');syncBuildUI();};
   document.getElementById('menuTracks').onclick=()=>openTrackPicker();
   const btnDaily=document.getElementById('menuDaily');
@@ -5633,6 +5706,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   crosshairEnabled:()=>crosshairOn,
   setCrosshairOn(v){crosshairOn=!!v;saveCrosshairOn(crosshairOn);applyCrosshair();},
   setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
+  startFreestyle,leaveRace,resolveFly,isFreestyleTrackId,freestyleIdFor,persistableSelection,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins});

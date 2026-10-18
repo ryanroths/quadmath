@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   findTrackIn, resolveSimBoot, firstTrackForMap, startPad, normalizeTrack,
-  BUILTIN_TRACK_FILES, SELECTED_TRACK_KEY,
+  BUILTIN_TRACK_FILES, SELECTED_TRACK_KEY, resolveFly, resolveTrackPick,
+  persistableSelection, isFreestyleTrackId, isEphemeralTrackId, freestyleIdFor,
+  loadSelected, saveSelected,
 } from '../sim-tracks.js';
 import {
   shouldToastFlip, isStuckInverted, stepStuckHold, wantsTurtle, bodyUpZ,
@@ -27,9 +29,9 @@ const files = BUILTIN_TRACK_FILES.map((m) =>
 test('findTrack(null) does not match Sofa Slalom via String(null)', () => {
   assert.equal(findTrackIn(null, files), null);
   assert.equal(findTrackIn('null', files), null);
-  assert.equal(resolveSimBoot({ map: 'living' }, null, files).track, 'living-sofa');
-  assert.equal(resolveSimBoot({ map: 'office' }, null, files).track, 'office-cubicles');
-  assert.equal(resolveSimBoot({ map: 'room' }, null, files).track, 'room-practice');
+  assert.equal(resolveSimBoot({ map: 'living' }, null, files).track, 'living-freestyle');
+  assert.equal(resolveSimBoot({ map: 'office' }, null, files).track, 'office-freestyle');
+  assert.equal(resolveSimBoot({ map: 'room' }, null, files).track, 'room-freestyle');
   assert.equal(firstTrackForMap('gym', files).id, 'gym-court');
 });
 
@@ -41,13 +43,14 @@ test('?map=&track= mismatch uses the track map; unknown map is not saved', () =>
   assert.equal(unk.unknownMap, true);
   assert.equal(unk.save, false);
   assert.equal(unk.map, 'city');
+  assert.equal(unk.track, 'city-freestyle');
   const rest = resolveSimBoot({}, { map: 'garage', track: 'garage-bench' }, files);
   assert.equal(rest.map, 'garage');
-  assert.equal(rest.track, 'garage-bench');
+  assert.equal(rest.track, 'garage-freestyle');
   assert.equal(rest.restored, true);
   const early = resolveSimBoot({}, { map: 'garage', track: 'garage-bench' }, []);
   assert.equal(early.map, 'garage');
-  assert.equal(early.track, 'garage-bench');
+  assert.equal(early.track, 'garage-freestyle');
 });
 
 test('Mesa Zigzag start pad is at the zigzag, not City Loop origin', () => {
@@ -273,4 +276,51 @@ test('M2 leaderboard names render via textContent not innerHTML', () => {
   assert.ok(simSrc.includes('function renderBoardBody'));
   assert.ok(simSrc.includes("b.textContent=(i+1)+' '+sanitizePilotName(r.name)") || simSrc.includes('b.textContent=(i+1)+\' \'+sanitizePilotName(r.name)'));
   assert.equal(simSrc.includes('boardHtml('), false);
+});
+
+test('boot and Fly are last-map freestyle; room/daily cannot lock routing', () => {
+  assert.equal(isFreestyleTrackId('city-freestyle'), true);
+  assert.equal(isEphemeralTrackId('room-practice'), true);
+  assert.equal(freestyleIdFor('city'), 'city-freestyle');
+  assert.deepEqual(resolveFly(null), { map: 'city', track: 'city-freestyle', mode: 'free' });
+  assert.equal(resolveFly({ map: 'trainer', track: 'trainer-slalom' }).track, 'trainer-freestyle');
+  assert.equal(resolveSimBoot({}, null, files).track, 'city-freestyle');
+  assert.equal(resolveSimBoot({}, { map: 'room', track: 'room-practice' }, files).track, 'room-freestyle');
+  assert.equal(resolveSimBoot({}, { map: 'gym', track: 'daily-2026-10-18' }, files).map, 'gym');
+  assert.equal(resolveSimBoot({}, { map: 'gym', track: 'daily-2026-10-18' }, files).track, 'gym-freestyle');
+  assert.equal(resolveSimBoot({ track: 'living-sofa' }, { map: 'room', track: 'room-practice' }, files).track, 'living-sofa');
+  assert.equal(resolveSimBoot({ map: 'office', track: 'office-hallway' }, null, files).track, 'office-hallway');
+  const pick = resolveTrackPick('warehouse', 'warehouse-catwalk', files);
+  assert.equal(pick.map, 'warehouse');
+  assert.equal(pick.track, 'warehouse-catwalk');
+  assert.equal(pick.mode, 'race');
+  assert.equal(resolveTrackPick('backyard', 'freestyle', files).track, 'backyard-freestyle');
+  assert.equal(persistableSelection({ map: 'room', track: 'room-practice' }).track, 'room-freestyle');
+  const store = memStore();
+  saveSelected({ map: 'trainer', track: 'daily-2026-10-18' }, store);
+  assert.equal(loadSelected(store).track, 'trainer-freestyle');
+  assert.equal(loadSelected(store).mode, 'free');
+  assert.equal(normalizeTrack({ id: 'city-freestyle', map: 'city', freestyle: true, gates: [] }).gates.length, 0);
+});
+
+test('sim.html Fly/Freestyle, map switching, and Esc leave a race', () => {
+  assert.ok(simSrc.includes('function startFreestyle'));
+  assert.ok(simSrc.includes('function leaveRace'));
+  assert.ok(simSrc.includes('id="menuFreestyle"'));
+  assert.ok(simSrc.includes('id="btnFreestyle"'));
+  assert.ok(simSrc.includes('FREESTYLE THIS MAP'));
+  assert.ok(simSrc.includes('startFreestyle()'));
+  assert.ok(simSrc.includes('startFreestyle(currentMap)'));
+  const fly = simSrc.slice(simSrc.indexOf('function wireLooksUI'), simSrc.indexOf('document.getElementById(\'menuTracks\')'));
+  assert.ok(fly.includes('startFreestyle'));
+  assert.equal(fly.includes("toast('Space to arm"), false, 'Fly must not only hide the menu');
+  const picker = simSrc.slice(simSrc.indexOf('function openTrackPicker'), simSrc.indexOf('const builder='));
+  const mapClick = picker.slice(picker.indexOf('track-maps'), picker.indexOf('track-list [data-tid]'));
+  assert.equal(mapClick.includes('setMap('), false, 'browsing map tabs must not load/save a track');
+  assert.ok(picker.includes('setMap(pickerMap,id)'), 'picking a row loads that map+track');
+  assert.ok(picker.includes('leaveRace()'));
+  const esc = simSrc.slice(simSrc.indexOf("if(e.key==='Escape')"), simSrc.indexOf("if(e.key==='Tab')"));
+  assert.ok(esc.includes('leaveRace()'));
+  assert.ok(simSrc.includes('wantFree') || simSrc.includes('isFreeFlight'));
+  assert.ok(simSrc.includes("gateUI.textContent='FREESTYLE'") || simSrc.includes('FREESTYLE'));
 });

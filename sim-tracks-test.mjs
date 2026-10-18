@@ -9,6 +9,8 @@ import {
   saveCustomTracks, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY, loadSelected,
   saveSelected, BUILTIN_TRACK_FILES, SHARE_PREFIX, startPad, gateRadius, MAPS,
   findTrackIn, resolveSimBoot, firstTrackForMap, knownMapId, isBlankTrackId,
+  isFreestyleTrackId, isEphemeralTrackId, freestyleTrack, freestyleIdFor,
+  resolveFly, resolveTrackPick, persistableSelection,
 } from './sim-tracks.js';
 
 function readTrack(file) {
@@ -175,24 +177,67 @@ assert.equal(firstTrackForMap('office', files).id, 'office-cubicles');
 assert.equal(firstTrackForMap('room', files).id, 'room-practice');
 
 const sofa = files.find((t) => t.id === 'living-sofa');
-assert.equal(resolveSimBoot({ map: 'living' }, null, files).track, 'living-sofa');
-assert.equal(resolveSimBoot({ map: 'office' }, null, files).track, 'office-cubicles');
-assert.equal(resolveSimBoot({ map: 'room' }, null, files).track, 'room-practice');
-assert.equal(resolveSimBoot({ map: 'gym' }, null, files).track, 'gym-court');
+assert.equal(resolveSimBoot({ map: 'living' }, null, files).track, 'living-freestyle');
+assert.equal(resolveSimBoot({ map: 'office' }, null, files).track, 'office-freestyle');
+assert.equal(resolveSimBoot({ map: 'room' }, null, files).track, 'room-freestyle');
+assert.equal(resolveSimBoot({ map: 'gym' }, null, files).track, 'gym-freestyle');
+assert.equal(resolveSimBoot({ map: 'living' }, null, files).mode, 'free');
 const mismatch = resolveSimBoot({ map: 'city', track: 'living-sofa' }, null, files);
 assert.equal(mismatch.map, 'living');
 assert.equal(mismatch.track, 'living-sofa');
+assert.equal(mismatch.mode, 'race');
 const unknown = resolveSimBoot({ map: 'narnia' }, { map: 'garage', track: 'garage-bench' }, files);
 assert.equal(unknown.map, 'city');
+assert.equal(unknown.track, 'city-freestyle');
 assert.equal(unknown.save, false);
 assert.equal(unknown.unknownMap, true);
 const restored = resolveSimBoot({}, { map: 'garage', track: 'garage-bench' }, files);
 assert.equal(restored.map, 'garage');
-assert.equal(restored.track, 'garage-bench');
+assert.equal(restored.track, 'garage-freestyle');
+assert.equal(restored.mode, 'free');
 assert.equal(restored.save, false);
 assert.equal(restored.restored, true);
 const zigBoot = resolveSimBoot({ map: 'city', track: 'city-zigzag' }, null, files);
 assert.equal(zigBoot.track, 1);
 assert.ok(sofa && String(sofa.legacyId) === String(null), 'legacyId null still stringifies; matcher must not use that');
+
+assert.equal(isFreestyleTrackId('city-freestyle'), true);
+assert.equal(isFreestyleTrackId('living-freestyle'), true);
+assert.equal(isFreestyleTrackId('narnia-freestyle'), false);
+assert.equal(isEphemeralTrackId('room-practice'), true);
+assert.equal(isEphemeralTrackId('daily-2026-10-18'), true);
+assert.equal(isEphemeralTrackId('weekly-2026-W42-g2'), true);
+assert.equal(isEphemeralTrackId('living-sofa'), false);
+assert.equal(freestyleTrack('trainer').gates.length, 0);
+assert.equal(freestyleIdFor('gym'), 'gym-freestyle');
+
+const emptyBoot = resolveSimBoot({}, null, files);
+assert.equal(emptyBoot.map, 'city');
+assert.equal(emptyBoot.track, 'city-freestyle');
+assert.equal(emptyBoot.mode, 'free');
+const roomSaved = resolveSimBoot({}, { map: 'room', track: 'room-practice' }, files);
+assert.equal(roomSaved.map, 'room');
+assert.equal(roomSaved.track, 'room-freestyle');
+const dailySaved = resolveSimBoot({}, { map: 'trainer', track: 'daily-2026-10-18' }, files);
+assert.equal(dailySaved.map, 'trainer');
+assert.equal(dailySaved.track, 'trainer-freestyle');
+assert.equal(resolveFly({ map: 'living', track: 'living-sofa' }).track, 'living-freestyle');
+assert.equal(resolveFly(null).track, 'city-freestyle');
+assert.equal(resolveTrackPick('office', 'office-hallway', files).track, 'office-hallway');
+assert.equal(resolveTrackPick('office', 'office-hallway', files).map, 'office');
+assert.equal(resolveTrackPick('office', 'freestyle', files).track, 'office-freestyle');
+assert.equal(resolveTrackPick('living', 'garage-bench', files).map, 'garage');
+assert.equal(persistableSelection({ map: 'room', track: 'room-practice' }).track, 'room-freestyle');
+assert.equal(persistableSelection({ map: 'gym', track: 'daily-2026-10-18' }).map, 'gym');
+assert.equal(persistableSelection({ map: 'gym', track: 'daily-2026-10-18' }).track, 'gym-freestyle');
+assert.equal(persistableSelection({ map: 'warehouse', track: 'warehouse-aisle' }).track, 'warehouse-aisle');
+assert.equal(persistableSelection({ map: 'warehouse', track: 'warehouse-aisle' }).mode, 'race');
+saveSelected({ map: 'room', track: 'room-practice' }, store);
+assert.equal(loadSelected(store).track, 'room-freestyle');
+assert.equal(loadSelected(store).mode, 'free');
+const freeNorm = normalizeTrack(freestyleTrack('city'));
+assert.equal(freeNorm.freestyle, true);
+assert.equal(freeNorm.gates.length, 0);
+assert.equal(startPad(freeNorm).z, 20);
 
 console.log('ok', files.length, 'tracks; city layouts frozen; share round-trip; miss 100%; old keys untouched');
