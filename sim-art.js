@@ -2,16 +2,17 @@
 // Neon Current. No third-party meshes. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=23cedba2f670';
+import { hexNum } from './sim-art-city.js?v=f9b685371abd';
 export {
   hexNum, qualityWantsBloom, qualityWantsReflections, qualityWantsParticles,
   qualityBudget, propClearOfCourse, planCityProps, collectBuildingFootprints,
   hideStockCityMeshes, decorateVibeGate, pulseCityGate, tickCityArt,
   applySkyTexture, applyVibeLighting, restyleCity, buildCityDressing,
-  buildDreamlandArt, restyleMesas, attachWetReflector, buildNeonCity,
+  buildDreamlandArt, restyleMesas, restyleLandmarks, attachWetReflector,
+  makeWetRoadMaterial, buildNeonCity,
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
-} from './sim-art-city.js?v=23cedba2f670';
+} from './sim-art-city.js?v=f9b685371abd';
 
 export const CITY_VIBE_ID = 'city';
 
@@ -65,7 +66,7 @@ export const VIBES = Object.freeze({
     gates: Object.freeze({ style: 'unique-neon', keepBrand: true }),
     props: Object.freeze([
       'setback towers', 'window shader', 'blade signs', 'wet street',
-      'parked cars', 'wires', 'rain', 'moon',
+      'parked cars', 'benches', 'kiosks', 'steam vents', 'rain', 'moon',
     ]),
     post: Object.freeze({ bloom: true, analog: false, grade: true }),
   }),

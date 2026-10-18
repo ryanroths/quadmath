@@ -143,7 +143,7 @@ test('planned street props stay off City Loop and Zigzag race lines', () => {
   assert.ok(propClearOfCourse(16, -200, 0.5, FROZEN_CITY[0]));
   for (const q of ['low', 'med', 'high']) {
     const plan = planCityProps(gates, q);
-    const groups = ['cars', 'vending', 'bollards', 'traffic', 'crates', 'trash', 'lanterns', 'chain'];
+    const groups = ['cars', 'vending', 'bollards', 'traffic', 'crates', 'trash', 'lanterns', 'chain', 'benches', 'bins', 'kiosks', 'awnings', 'vents', 'lowSigns'];
     let n = 0;
     for (const key of groups) {
       assert.ok(Array.isArray(plan[key]), key);
@@ -167,6 +167,25 @@ test('city density module stays original (no GLB / WebFPV)', () => {
   assert.equal(city.includes('Sketchfab'), false);
   assert.equal(city.includes('WebFPV'), false);
   assert.match(city, /window shader|uWinOn|cityArtVisuals/);
+});
+
+test('city finish pass uses a world-Y sky, neon leftovers, and fake wet road', () => {
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.match(city, /cityWorldSky/);
+  assert.match(city, /uMoonDir/);
+  assert.match(city, /vWorld/);
+  assert.equal(city.includes('PlaneGeometry(900, 180)'), false);
+  assert.equal(city.includes("Reflector.js"), false);
+  assert.match(city, /makeWetRoadMaterial/);
+  assert.match(city, /restyleLandmarks/);
+  assert.match(city, /makeBenchGeo|benches/);
+  const sim = readFileSync(join(root, 'sim.html'), 'utf8');
+  assert.match(sim, /0x1a1028/);
+  assert.match(sim, /restyleLandmarks/);
+  const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
+  assert.match(looks, /whoopStreet/);
+  assert.match(looks, /whoopPortal/);
+  assert.match(looks, /citySky/);
 });
 
 test('world labels punch out the canvas backdrop', () => {

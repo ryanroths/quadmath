@@ -18,6 +18,10 @@ export const LOOK_SPOTS = {
   roof:   { pos: [-40, 48, 95], target: [-20, 12, 10] },
   overview: { pos: [70, 165, 210], target: [0, 10, 0] },
   lowpass: { pos: [12, 1.55, 48], target: [0, 1.8, -24] },
+  whoopStreet: { pos: [3.2, 1.12, 26], target: [11.5, 1.05, -6] },
+  whoopStart: { pos: [-118, 1.18, -92], target: [-136, 1.7, -118] },
+  whoopPortal: { pos: [328, 1.2, -308], target: [348, 8, -346] },
+  chase: { pos: [-18, 2.5, 16], target: [10, 1.15, -14] },
   living: { pos: [0, 4.6, 8], target: [0, 1.8, -6] },
   garage: { pos: [0, 5.2, 12], target: [2, 2.2, -6] },
   warehouse: { pos: [0, 7.5, 36], target: [0, 3.2, -8] },
@@ -431,11 +435,19 @@ export async function createLooks(ctx) {
 
   function applySkyModeNow() {
     if (skyMode !== 'gradient') return;
+    const citySky = !!(skyMesh && skyMesh.userData && skyMesh.userData.citySky);
     if (skyMesh) skyMesh.visible = true;
-    if (sunSprite) sunSprite.visible = true;
-    if (scene.fog) scene.background = scene.fog.color;
-    if ('environmentIntensity' in scene) scene.environmentIntensity = 0.18;
-    if ('backgroundIntensity' in scene) scene.backgroundIntensity = 0.14;
+    if (sunSprite) sunSprite.visible = !citySky;
+    if (scene.fog) {
+      if (citySky) {
+        if (scene.background && scene.background.isColor) scene.background.setHex(0x070014);
+        else scene.background = new THREE.Color(0x070014);
+      } else {
+        scene.background = scene.fog.color;
+      }
+    }
+    if ('environmentIntensity' in scene) scene.environmentIntensity = citySky ? 0.42 : 0.18;
+    if ('backgroundIntensity' in scene) scene.backgroundIntensity = citySky ? 0.08 : 0.14;
     if ('backgroundBlurriness' in scene) scene.backgroundBlurriness = 0.04;
   }
   function applyEnv(env) {
