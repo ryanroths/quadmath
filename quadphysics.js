@@ -192,7 +192,12 @@ class Motor {
   step(dt) {
     const base = this.cfg.motorTau * (this.cfg.spoolTauMul != null ? this.cfg.spoolTauMul : 1);
     const down = this.cfg.spoolDownMul != null ? this.cfg.spoolDownMul : 1.4;
-    const tau = this.command > this.output ? base : base * down;
+    // 3D commands are signed. Spool-up is increasing |output|; crossing
+    // through zero to reverse is a spool-down then a spool-up.
+    const sameSign = this.command === 0 || this.output === 0
+      || (this.command < 0) === (this.output < 0);
+    const speedingUp = sameSign && Math.abs(this.command) > Math.abs(this.output);
+    const tau = speedingUp ? base : base * down;
     this.output += (this.command - this.output) * (dt / (tau + dt));
   }
   thrust() {

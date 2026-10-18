@@ -86,8 +86,50 @@ export function throttleCollective(stick01, threeD, curve) {
   return Math.pow(t, e);
 }
 
-export function armHintText(threeD) {
-  return threeD
+export function throttleWantsArm(stick01, threeD) {
+  const t = clamp(stick01, 0, 1);
+  if (threeD) return Math.abs(t - 0.5) > THREED_ARM_BAND + 0.04;
+  return t >= 0.12;
+}
+
+// Auto-arm: only after throttle has been seen safe (low / 3D center), then
+// it leaves that band. Starting mid-stick never arms. Switch mapping wins.
+export function stepAutoArm(state, sample) {
+  const s = sample || {};
+  const next = { seenLow: !!(state && state.seenLow) };
+  if (s.hasSwitch || s.autoArm === false) {
+    next.seenLow = false;
+    return { state: next, arm: false };
+  }
+  if (s.armed) {
+    next.seenLow = false;
+    return { state: next, arm: false };
+  }
+  if (s.resetLatch) next.seenLow = false;
+  const t = s.t;
+  if (throttleSafeToArm(t, s.threeD)) {
+    next.seenLow = true;
+    return { state: next, arm: false };
+  }
+  if (next.seenLow && throttleWantsArm(t, s.threeD)) {
+    next.seenLow = false;
+    return { state: next, arm: true };
+  }
+  return { state: next, arm: false };
+}
+
+export function armHintText(threeDOrOpts, extra) {
+  const o = (threeDOrOpts && typeof threeDOrOpts === 'object')
+    ? threeDOrOpts
+    : Object.assign({ threeD: !!threeDOrOpts }, extra || {});
+  if (o.hasSwitch) {
+    if (o.blocked) return o.threeD ? 'Center throttle to arm' : 'Lower throttle to arm';
+    return 'Flip arm switch';
+  }
+  if (o.autoArm !== false) {
+    return o.threeD ? 'Leave center to fly (auto-arm)' : 'Raise throttle to fly (auto-arm)';
+  }
+  return o.threeD
     ? 'Center throttle + Space/arm switch to arm'
     : 'Throttle down + Space/arm switch to arm';
 }

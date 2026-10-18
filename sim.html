@@ -216,7 +216,7 @@
     body.menu-open #touchLayer{opacity:0;pointer-events:none}
   body:has(#panel.open) #feelHud{opacity:0}
   .seg{display:flex;gap:6px;margin-bottom:10px}
-  #radioPreset,#droneType,#ratesType,#ratePreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
+  #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
     color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
   .menu-layer.wide{width:min(420px,92vw)}
   .track-maps{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
@@ -416,7 +416,7 @@
     <span id="hudBatt">BATT --</span>
     <span id="hudMode">ANGLE</span>
     <span id="hudArm">DISARMED</span>
-    <span id="hudArmHint">Throttle down + Space/arm switch to arm</span>
+    <span id="hudArmHint">Raise throttle to fly (auto-arm)</span>
     <button type="button" id="hudAcro">ACRO</button>
     <button type="button" id="hud3d" aria-pressed="false">3D</button>
   </div>
@@ -459,6 +459,13 @@
   <div class="row"><label>Preset</label></div>
   <select id="radioPreset"></select>
   <button id="btnCalib">CALIBRATE RADIO / STICKS</button>
+  <div class="row"><label>Arm switch</label></div>
+  <select id="armSwitch" title="Aux axes rest at -1 on a TX16S. Pick a channel or flip a switch. None = auto-arm.">
+    <option value="">None (auto-arm)</option>
+  </select>
+  <button type="button" id="btnArmDetect">FLIP A SWITCH TO PICK</button>
+  <div class="row"><label>Invert arm</label><input type="checkbox" id="cbArmInvert" style="accent-color:var(--orange)" title="Flip which end of the switch is armed."></div>
+  <div class="kbd" id="armSwitchLive">no arm switch — auto-arm when throttle rises from low</div>
 
   <h2>Rates (Betaflight)</h2>
   <div class="frame-select" style="margin-bottom:6px">
@@ -574,6 +581,7 @@
   <div class="row"><label>Throttle Curve</label><span class="val" id="v_thc"></span></div>
   <input type="range" id="s_thc" min="0.4" max="2.6" step="0.05" value="0.7">
   <div class="row"><label>3D mode</label><input type="checkbox" id="cb3d" style="accent-color:var(--orange)" title="Reversible motors. Center stick = zero thrust. Acro only."></div>
+  <div class="row"><label>Auto-arm</label><input type="checkbox" id="cbAutoArm" checked style="accent-color:var(--orange)" title="Arm the first time throttle rises from low. Off when an arm switch is mapped. Space still toggles."></div>
   <p class="build-note">Betaflight 3D: throttle center is zero, below center reverses the props. Flown in Acro. 3D runs are not counted on boards or as ghosts.</p>
   <div class="row"><label>Battery Simulation</label><input type="checkbox" id="cbBattSim" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Sag affects thrust</label><input type="checkbox" id="cbSagThrust" checked style="accent-color:var(--orange)"></div>
@@ -694,20 +702,20 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT} from "./quadphysics.js?v=4e972edd6a84";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT} from "./quadphysics.js?v=8a479d8ddc87";
 import {
   THREED_KEY, THREED_DEADBAND,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
   parseThreeDQuery, runCountsForBoards, throttleHudText,
-  throttleCollective, armHintText,
-} from "./sim-3d.js?v=c554edbc97ce";
+  throttleCollective, armHintText, stepAutoArm,
+} from "./sim-3d.js?v=97e8b2aba971";
 import {
   WHOOP_KEY, PHYSICS_VER,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=11a0da16c7bc";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=f2ba71f3e4ec";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=6502018ab9c0";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -716,7 +724,10 @@ import {
   effectiveAxisMap, applyAxisMap, loadRadioProfile, saveAxisMap,
   saveRadioPreset, clearRadioCalibration, GP_ID_KEY, createCalibState, stepCalib, skipCalibAux,
   guessRadioPreset, isKnownRadio, radioShortName,
-} from "./sim-touch.js?v=9f7b6149d497";
+  loadAutoArm, saveAutoArm, loadArmSwitch, saveArmSwitch, mergeArmSwitch,
+  hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
+  armSwitchValue, stepArmSwitch,
+} from "./sim-touch.js?v=f3dfcb13b78e";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -732,7 +743,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=19bee552695d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=2dcf2fc286ca";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY} from "./sim-feel.js?v=4eaa06e0721f";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -2809,7 +2820,7 @@ function nearestWallDistSI(s){
 }
 qp.externalDisturbance=(s)=>{
   const thr=qp.armed?(typeof stick!=='undefined'
-    ?(threeD?Math.abs(mapThrottle3d(stick.t,{deadband:THREED_DEADBAND})):stick.t)
+    ?(threeD?mapThrottle3d(stick.t,{deadband:THREED_DEADBAND}):stick.t)
     :0):0;
   const wash=stepPropwash(washState,{pos:s.position,vel:s.velocity,throttle:thr},s.physicsDt||0.002,currentBuild,whoopSettings);
   washState=wash.wake;
@@ -2859,6 +2870,9 @@ function placeQuadAt(x,y,z,yaw){
   thrustActual=0; // motors spool from zero on re-arm — no thrust jump
   camShake=0;
   washState=emptyWake();
+  autoArmState={seenLow:false};
+  armSwState={prev:null};
+  armSwitchBlocked=false;
 }
 function resetQuad(){
   // Crash / flip recovery: R respawns at the last passed JSON-track gate and
@@ -2902,10 +2916,23 @@ function resetQuad(){
 // stomp each other's profiles. Legacy global keys are deleted on load.
 // Maps / load-save live in sim-touch.js so a TX16S mock can unit-test them.
 let axisMap=null;
+let armOverlay=null;
+let autoArmOn=loadAutoArm();
+let autoArmState={seenLow:false};
+let armSwState={prev:null};
+let armSwitchBlocked=false;
+let armDetecting=false;
+let armDetectPrev=null;
+let liveMap=null;
 try{localStorage.removeItem('ryflyAxisMap');localStorage.removeItem('ryflyRadioPreset');}catch(e){}
 function saveMap(){saveAxisMap(gpName,axisMap);}
 let radioPreset='auto'; // per-device — loaded by loadDeviceProfile() when a controller is selected
 function presetMap(){return RADIO_PRESETS[radioPreset].map;}
+function liveAxisMap(gp){
+  const base=effectiveAxisMap(axisMap,radioPreset,gp);
+  if(hasArmSwitch(base))return base;
+  return mergeArmSwitch(base,armOverlay);
+}
 
 // Calibration wizard
 const calibEl=document.getElementById('calib');
@@ -3239,6 +3266,7 @@ function loadDeviceProfile(id,gp){
   const prof=loadRadioProfile(id);
   radioPreset=prof.radioPreset;
   axisMap=prof.axisMap;
+  armOverlay=loadArmSwitch(id);
   // No saved calib: known radios (TX16S / EdgeTX / RadioMaster / Jumper / FrSky)
   // get Mode 2 AETR with full ±1 throttle. Wizard stays optional.
   if(!axisMap && gp && isKnownRadio(gp)){
@@ -3303,6 +3331,7 @@ function showGpPicker(pads){
 function dropPad(){
   gpIndex=-1;gpConnected=false;gpName='';
   armGate=false; // keyboard must not stay FC-disarmed after the pad is gone
+  liveMap=null;armDetecting=false;
   if(gpPickerEl){gpPickerEl.remove();gpPickerEl=null;}
   updateRadioInfo();
   bootTouchLayer();
@@ -3326,13 +3355,63 @@ addEventListener('gamepaddisconnected',()=>{
   dropPad();
   pickGamepad();
 });
+function armSwitchKey(arm){
+  if(!arm)return '';
+  if(Number.isFinite(arm.button))return 'b'+arm.button;
+  if(Number.isFinite(arm.i))return 'a'+arm.i;
+  return '';
+}
+function setArmFromUI(arm){
+  armOverlay=arm||null;
+  saveArmSwitch(gpName,armOverlay);
+  if(axisMap){
+    if(armOverlay)axisMap.arm=armOverlay;
+    else delete axisMap.arm;
+    saveAxisMap(gpName,axisMap);
+  }
+  armSwState={prev:null};
+  fillArmSwitchUI(null,liveMap);
+}
+function fillArmSwitchUI(gp,map){
+  const sel=document.getElementById('armSwitch');
+  const live=document.getElementById('armSwitchLive');
+  const inv=document.getElementById('cbArmInvert');
+  const auto=document.getElementById('cbAutoArm');
+  const merged=map||(gp?liveAxisMap(gp):mergeArmSwitch(null,armOverlay));
+  const arm=merged&&merged.arm;
+  const has=hasArmSwitch(merged);
+  if(auto){auto.checked=!!autoArmOn;auto.disabled=has;}
+  const cands=gp?listArmCandidates(gp,merged):{axes:[],buttons:[]};
+  const sig='n,'+cands.axes.map(c=>'a'+c.i).join(',')+','+cands.buttons.map(c=>'b'+c.i).join(',');
+  if(sel&&gp&&sel.dataset.sig!==sig){
+    let html='<option value="">None (auto-arm)</option>';
+    for(const c of cands.axes)html+='<option value="a'+c.i+'">ax'+c.i+'</option>';
+    for(const c of cands.buttons)html+='<option value="b'+c.i+'">btn'+c.i+'</option>';
+    sel.innerHTML=html;
+    sel.dataset.sig=sig;
+  }
+  if(sel)sel.value=armSwitchKey(arm);
+  if(inv){inv.checked=!!(arm&&arm.sign===-1);inv.disabled=!has;}
+  if(live){
+    if(!gpConnected)live.textContent='plug a radio to map an arm switch';
+    else if(armDetecting)live.textContent='listening — flip a switch (aux, not a stick)';
+    else if(!has)live.textContent=autoArmOn?'no arm switch — raise throttle to fly':'no arm switch — Space to arm';
+    else{
+      const v=gp?armSwitchValue(gp,arm):null;
+      live.textContent='arm '+(arm.button!=null?'btn'+arm.button:'ax'+arm.i)+
+        (arm.sign===-1?' inverted':'')+
+        (v==null?'':'  '+Number(v).toFixed(2));
+    }
+  }
+}
 function updateRadioInfo(){
   const el=document.getElementById('radioInfo');
-  if(!gpConnected){el.textContent='no gamepad detected. TX16S: plug USB, pick Joystick on radio popup, wiggle a stick.';return;}
+  if(!gpConnected){el.textContent='no gamepad detected. TX16S: plug USB, pick Joystick on radio popup, wiggle a stick.';fillArmSwitchUI(null,null);return;}
   el.innerHTML='<b>'+gpName.slice(0,40)+'</b><br>'+
     (axisMap?'custom calibration active':
      presetMap()?'preset: '+RADIO_PRESETS[radioPreset].label:
      'default map ('+(isRadio({id:gpName})?'EdgeTX AETR':'spring pad')+')');
+  fillArmSwitchUI(null,liveMap);
 }
 let padLive=false; // this frame actually read a gamepad (not an empty Chrome poll)
 function readInput(dt){
@@ -3357,8 +3436,16 @@ function readInput(dt){
     // Connected radio/gamepad owns the sticks even on Chrome's empty polls.
     // Falling through to touch was the W6 regression (channel map "off").
     if(!gp)return;
-    if(calib){runCalib(gp,dt);stick.r=stick.p=stick.y=0;stick.t=0;return;}
-    const map=effectiveAxisMap(axisMap,radioPreset,gp);
+    if(calib){
+      runCalib(gp,dt);
+      stick.r=stick.p=stick.y=0;
+      // 3D: t=0 is full reverse. Match the arm-gate idle (center = zero thrust).
+      stick.t=threeD?0.5:0;
+      if(qp.armed)qp.disarm();
+      return;
+    }
+    const map=liveAxisMap(gp);
+    liveMap=map;
     const next=applyAxisMap(gp.axes,map,{threeD});
     stick.r=next.r;stick.p=next.p;stick.y=next.y;stick.t=next.t;
     // Radio-only pilots make no keyboard or mouse gesture, so a stick deflection
@@ -3375,13 +3462,6 @@ function readInput(dt){
         armGate=false;
         if(performance.now()>skipSafeUntil)toast('STICKS SAFE — LIVE');
       }else stick.t=threeD?0.5:0;
-    }
-    if(map.arm&&feel){
-      const v=feel.auxValue(gp,map.arm);
-      if(v!=null){
-        if(v>0.25&&!qp.armed)tryArm();
-        else if(v<-0.25&&qp.armed){qp.disarm();toast('DISARMED');}
-      }
     }
     if(map.mode&&feel){
       const m=feel.modeFromAux(feel.auxValue(gp,map.mode));
@@ -3579,23 +3659,74 @@ function setThreeD(on,persist){
   if(touchCtl&&touchCtl.setThreeD)touchCtl.setThreeD(want);
   if(!padLive)kbThrottle=want?0.5:0;
   if(!padLive)stick.t=kbThrottle;
+  // Radio keeps its physical stick. Enabling 3D at 2D idle (t=0) is full
+  // reverse; disabling 3D at center is 50% 2D throttle. Disarm if unsafe.
+  const unsafe=qp.armed&&!throttleSafeToArm(stick.t,want);
+  if(unsafe){
+    qp.disarm();
+    autoArmState={seenLow:false};
+  }
+  let forcedAcro=false;
   if(want && qp.flightMode!=='acro'){
     flightMode=qp.setFlightMode('acro');
     if(persist!==false)saveFlightMode(flightMode);
-    toast('3D ON — ACRO');
-  }else{
-    toast(want?'3D ON':'3D OFF');
+    forcedAcro=true;
   }
+  if(unsafe)toast(want?'3D ON — DISARMED':'3D OFF — DISARMED');
+  else if(forcedAcro)toast('3D ON — ACRO');
+  else toast(want?'3D ON':'3D OFF');
   syncTouchModeBtn();
   return threeD;
 }
-function tryArm(){
+function tryArm(opts){
   if(armGate&&padLive){toast('STICKS NOT SAFE');return false;}
-  if(!throttleSafeToArm(stick.t,threeD)){
-    toast(threeD?'CENTER THROTTLE TO ARM':'THROTTLE HIGH — CANNOT ARM');
+  if(!(opts&&opts.fromAuto)&&!throttleSafeToArm(stick.t,threeD)){
+    toast(threeD?'CENTER THROTTLE TO ARM':'Lower throttle to arm');
     return false;
   }
   qp.arm();toast('ARMED');return true;
+}
+function tickArming(gp){
+  if(calib)return;
+  const map=liveMap||(gp?liveAxisMap(gp):null);
+  const hasSw=hasArmSwitch(map);
+  if(armDetecting&&gp){
+    const found=detectArmSwitch(armDetectPrev,gp,map);
+    armDetectPrev=snapshotArmInputs(gp);
+    if(found){
+      armOverlay=found;
+      saveArmSwitch(gpName,found);
+      liveMap=mergeArmSwitch(map,found);
+      armDetecting=false;
+      toast('ARM SWITCH SET');
+      fillArmSwitchUI(gp,liveMap);
+    }
+  }
+  if(hasSw){
+    if(!gp)return;
+    const v=armSwitchValue(gp,map.arm);
+    const out=stepArmSwitch(armSwState,{
+      value:v,armed:qp.armed,hasSwitch:true,
+      throttleSafe:throttleSafeToArm(stick.t,threeD),
+    });
+    armSwState=out.state;
+    armSwitchBlocked=!!out.blocked;
+    if(out.blocked)toast('Lower throttle to arm');
+    else if(out.arm)tryArm();
+    else if(out.disarm&&qp.armed){qp.disarm();toast('DISARMED');}
+    autoArmState={seenLow:false};
+  }else{
+    armSwitchBlocked=false;
+    const out=stepAutoArm(autoArmState,{
+      t:stick.t,threeD,armed:qp.armed,
+      autoArm:autoArmOn,hasSwitch:false,
+    });
+    autoArmState=out.state;
+    if(out.arm)tryArm({fromAuto:true});
+  }
+  if(document.getElementById('panel')&&document.getElementById('panel').classList.contains('open')){
+    fillArmSwitchUI(gp,map);
+  }
 }
 function toggleArm(){
   if(qp.armed){qp.disarm();toast('DISARMED');}
@@ -4457,6 +4588,38 @@ document.getElementById('cbBattSim').onchange=e=>{
 };
 document.getElementById('cb3d').onchange=e=>{
   setThreeD(!!e.target.checked);
+};
+document.getElementById('cbAutoArm').onchange=e=>{
+  autoArmOn=!!e.target.checked;
+  saveAutoArm(autoArmOn);
+  autoArmState={seenLow:false};
+  toast(autoArmOn?'AUTO-ARM ON':'AUTO-ARM OFF');
+};
+(function(){const el=document.getElementById('cbAutoArm');if(el)el.checked=!!autoArmOn;})();
+document.getElementById('armSwitch').onchange=e=>{
+  const v=e.target.value;
+  if(!v){setArmFromUI(null);toast('ARM SWITCH OFF — AUTO-ARM');return;}
+  const inv=document.getElementById('cbArmInvert');
+  const sign=(inv&&inv.checked)?-1:1;
+  if(v.charAt(0)==='b')setArmFromUI({button:+v.slice(1),sign});
+  else setArmFromUI({i:+v.slice(1),sign});
+  toast('ARM SWITCH SET');
+};
+document.getElementById('cbArmInvert').onchange=e=>{
+  if(!armOverlay&&!(liveMap&&liveMap.arm))return;
+  const cur=(liveMap&&liveMap.arm)||armOverlay;
+  if(!cur)return;
+  setArmFromUI(Object.assign({},cur,{sign:e.target.checked?-1:1}));
+};
+document.getElementById('btnArmDetect').onclick=()=>{
+  if(!gpConnected){toast('PLUG A RADIO');return;}
+  armDetecting=true;
+  armDetectPrev=null;
+  toast('FLIP A SWITCH');
+  fillArmSwitchUI(null,liveMap);
+  setTimeout(()=>{
+    if(armDetecting){armDetecting=false;toast('NO SWITCH — STILL AUTO-ARM');fillArmSwitchUI(null,liveMap);}
+  },8000);
 };
 ['cbBounce','s_bounce','s_crash','cbGround','s_ground','cbWash','s_wash','cbDraft','s_draft','s_sag'].forEach(id=>{
   const el=document.getElementById(id);
@@ -5372,13 +5535,14 @@ function loop(now){
   if(looks)looks.tick(now);
   if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
     readInput(dt);
+    tickArming(padLive?((navigator.getGamepads&&navigator.getGamepads())||[])[gpIndex]:null);
     physics(dt);
     adaptPhysicsHz(now);
     updateMotorSound();
     updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();updateDust(dt);
     if(feel){
       state.stickT=stick.t;
-      feel.updateHud({stick,battV,battOn:CFG.battSimOn,mode:qp.flightMode,armed:qp.armed,threeD,thrText:throttleHudText(stick.t,threeD),armHint:armHintText(threeD)});
+      feel.updateHud({stick,battV,battOn:CFG.battSimOn,mode:qp.flightMode,armed:qp.armed,threeD,thrText:throttleHudText(stick.t,threeD),armHint:armHintText({threeD,autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked})});
       feel.tickTutorial(state,dt,qp.armed);
       const att=qp.attitude;
       feel.noteFlip({
@@ -5638,7 +5802,7 @@ function applyQueryBoot(){
     if(decoded) applyBuild(decoded,{save:false,announce:true});
   }
   const threeDRaw=parseThreeDQuery(q.get('3d'));
-  if(threeDRaw!=null)setThreeD(threeDRaw);
+  if(threeDRaw!=null)setThreeD(threeDRaw,false);
   const modeRaw=(q.get('mode')||'').toLowerCase();
   if(modeRaw==='angle'||modeRaw==='horizon'||modeRaw==='acro'){
     // Saved/query 3D stays acro. Do not let ?mode=angle overwrite that.

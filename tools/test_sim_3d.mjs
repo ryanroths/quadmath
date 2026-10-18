@@ -9,7 +9,7 @@ import {
   THREED_KEY, THREED_DEADBAND, THREED_REVERSE_SCALE, THREED_ARM_BAND,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
   parseThreeDQuery, runCountsForBoards, throttleHudText,
-  throttleCollective, armHintText,
+  throttleCollective, armHintText, stepAutoArm,
 } from '../sim-3d.js';
 import { REVERSE_THRUST_SCALE } from '../quadphysics.js';
 import { createTouchControls } from '../sim-touch.js';
@@ -115,7 +115,8 @@ test('sim.html wires 3D toggle, HUD, query, and board skip', () => {
   assert.ok(simSrc.includes('3D IS ACRO ONLY') || simSrc.includes('3D ON — ACRO'));
   assert.ok(simSrc.includes('CENTER THROTTLE TO ARM'));
   assert.ok(simSrc.includes('throttleCollective') || src3d.includes('throttleCollective'));
-  assert.equal(armHintText(false), 'Throttle down + Space/arm switch to arm');
+  assert.equal(armHintText(false), 'Raise throttle to fly (auto-arm)');
+  assert.equal(armHintText({ threeD: false, autoArm: false }), 'Throttle down + Space/arm switch to arm');
   assert.ok(throttleCollective(1, false, 0.68) > 0.9);
   assert.ok(throttleCollective(1, true, 0.68) > 0.9);
   assert.equal(throttleCollective(0.5, true, 0.68), 0);
@@ -129,4 +130,16 @@ test('sim.html wires 3D toggle, HUD, query, and board skip', () => {
   );
   assert.ok(boot.includes('parseThreeDQuery'));
   assert.ok(boot.includes("q.get('3d')") || boot.includes('q.get("3d")'));
+  assert.ok(/setThreeD\(\s*threeDRaw\s*,\s*false\s*\)/.test(boot),
+    '?3d= must be session-only like ?mode= / ?build=');
+  assert.ok(simSrc.includes('stick.t=threeD?0.5:0'),
+    'calib must park 3D throttle at center, not full reverse');
+  const calib = simSrc.slice(simSrc.indexOf('if(calib){'), simSrc.indexOf('const map=liveAxisMap'));
+  assert.ok(calib.includes('qp.disarm()'), 'calib disarms so reverse cannot slam');
+  assert.ok(simSrc.includes('3D ON — DISARMED'));
+  assert.ok(/function setThreeD[\s\S]{0,900}throttleSafeToArm\(stick\.t,want\)/.test(simSrc),
+    '3D toggle disarms when the new mapping is unsafe');
+  assert.ok(!/externalDisturbance[\s\S]{0,350}Math\.abs\(mapThrottle3d/.test(simSrc),
+    'live propwash hook must pass signed 3D throttle');
+  assert.ok(/threeD\?mapThrottle3d\(stick\.t/.test(simSrc));
 });
