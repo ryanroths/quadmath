@@ -42,12 +42,19 @@ export {
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
 } from './sim-art-office.js?v=0cffbbcd11b3';
 
+export {
+  TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
+  hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
+  decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
+} from './sim-art-trainer.js?v=b4f1b62d3078';
+
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
 export const GARAGE_VIBE_ID = 'garage';
 export const WAREHOUSE_VIBE_ID = 'warehouse';
 export const GYM_VIBE_ID = 'gym';
 export const OFFICE_VIBE_ID = 'office';
+export const TRAINER_VIBE_ID = 'trainer';
 
 
 export const VIBES = Object.freeze({
@@ -263,7 +270,7 @@ export const VIBES = Object.freeze({
     id: 'trainer',
     name: 'Licorice Grid',
     tagline: 'Candy tape on a night meet floor, clay PVC frames',
-    implemented: false,
+    implemented: true,
     time: 'indoor night',
     sky: 'none',
     palette: Object.freeze({

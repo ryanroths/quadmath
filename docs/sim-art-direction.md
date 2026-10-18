@@ -9,6 +9,7 @@ Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
 **Ion Nave** ships on Warehouse.
 **Amber Court** ships on Gym.
 **Paper Sun** ships on Office.
+**Licorice Grid** ships on Tiny Trainer.
 Remaining maps keep their current procedural rooms and pick up their vibe
 one map per PR.
 
@@ -107,7 +108,7 @@ The product target stays **60 fps desktop / 45+ mid phone**.
 
 Every row is original. Palette hex is the locked brand for that map. City
 (**Neon Current**), Living Room (**Clay Parlor**), Garage (**Volt Stall**), and
-Warehouse (**Ion Nave**), Gym (**Amber Court**), and Office (**Paper Sun**) are implemented. Remaining maps wait their turn.
+Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), and Tiny Trainer (**Licorice Grid**) are implemented. Remaining maps wait their turn.
 
 ### City — Neon Current (prototype)
 
@@ -177,7 +178,7 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), and Office (**Paper Sun**) are 
 - **Gates:** Wood-and-brass rings.
 - **Post:** Gentle bloom on rims only.
 
-### Tiny Trainer — Licorice Grid
+### Tiny Trainer — Licorice Grid (shipped)
 
 - **Time:** Indoor night meet, tape still sticky.
 - **Palette:** `#1a1020` floor, `#ff4d8d` tape, `#f2f0ea` PVC, `#ffe08a` bulb, `#00e5ff` next-gate.
