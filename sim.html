@@ -748,7 +748,7 @@ import {
   VIBES, vibeFor, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, loadRain, saveRain, RAIN_KEY,
   makeWorldLabel, worldLabelMaterial, setWorldLabelText,
-} from "./sim-art.js?v=94619cddc7dc";
+} from "./sim-art.js?v=27f0c1406b82";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -776,7 +776,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=19bee552695d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=1a2e02f7dd4f";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=5f9b0021bf11";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -784,7 +784,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=06a0021453a7";
+} from "./sim-coach.js?v=bd5e45fbf615";
 import {
   DAILY_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -1732,15 +1732,16 @@ function diveShaft(x,z,radius,height,segments){
     g.fillStyle='#100814';g.fillRect(0,0,256,512);
     const cols=5,rows=18,wx=256/cols,wy=512/rows;
     for(let r=1;r<rows-1;r++)for(let c=0;c<cols;c++){
-      const on=rnd()<0.42;
-      g.fillStyle=on?(rnd()<0.55?'#ffd36a':'#00e6ff'):'#08060c';
-      g.fillRect(c*wx+wx*.22,r*wy+wy*.24,wx*.56,wy*.48);
-      if(on){g.fillStyle='rgba(255,43,214,0.35)';g.fillRect(c*wx+wx*.22,r*wy+wy*.24,wx*.56,2);}
+      const on=rnd()<0.62;
+      g.fillStyle=on?(rnd()<0.55?'#ffd36a':'#00e6ff'):'#1a1020';
+      g.fillRect(c*wx+wx*.18,r*wy+wy*.2,wx*.64,wy*.52);
+      if(on){g.fillStyle='rgba(255,43,214,0.55)';g.fillRect(c*wx+wx*.18,r*wy+wy*.2,wx*.64,3);}
     }
-    g.fillStyle='#00f0ff';g.fillRect(0,0,256,5);g.fillRect(0,507,256,5);
+    g.fillStyle='#00f0ff';g.fillRect(0,0,256,6);g.fillRect(0,506,256,6);
+    g.fillStyle='#ff2bd6';g.fillRect(0,0,4,512);g.fillRect(252,0,4,512);
   });
-  const wallMat=new THREE.MeshStandardMaterial({map:towerMap,color:0x1a1220,emissive:0xff2bd6,emissiveIntensity:0.12,roughness:0.62,metalness:0.12,side:THREE.DoubleSide});
-  const skirtMat=new THREE.MeshStandardMaterial({map:towerMap,color:0x140c18,emissive:0xff2bd6,emissiveIntensity:0.16,roughness:0.58,metalness:0.12,side:THREE.DoubleSide});
+  const wallMat=new THREE.MeshStandardMaterial({map:towerMap,color:0x2a1830,emissive:0xff2bd6,emissiveIntensity:0.38,roughness:0.55,metalness:0.1,side:THREE.DoubleSide});
+  const skirtMat=new THREE.MeshStandardMaterial({map:towerMap,color:0x221028,emissive:0xff2bd6,emissiveIntensity:0.42,roughness:0.52,metalness:0.1,side:THREE.DoubleSide});
   const skirtTop=height*0.1;
   // branch junction params — defined BEFORE the walls so both the visual
   // bands and the wall colliders can cut matching holes where the horizontal
@@ -1857,7 +1858,7 @@ function diveShaft(x,z,radius,height,segments){
     const bx=x+Math.cos(dirA)*(radius+len/2-1.5),bz=z+Math.sin(dirA)*(radius+len/2-1.5);
     const t=new THREE.Mesh(
       new THREE.BoxGeometry(len,br*1.7,br*1.7),
-      new THREE.MeshStandardMaterial({map:towerMap,color:0x16101c,emissive:0x00f0ff,emissiveIntensity:0.22,roughness:0.55,metalness:0.14}));
+      new THREE.MeshStandardMaterial({map:towerMap,color:0x243040,emissive:0x00f0ff,emissiveIntensity:0.48,roughness:0.48,metalness:0.12}));
     // box length is +X; yaw maps +X onto dirA — colliders stay on the old tube
     t.rotation.y=-dirA;
     t.position.set(bx,by,bz);
@@ -2120,6 +2121,8 @@ for(let i=0;i<7;i++){
   const mesa=new THREE.Mesh(new THREE.CylinderGeometry(r*.72,r,h,12,3),
     new THREE.MeshStandardMaterial({map:mesaTex,roughness:1,flatShading:true}));
   mesa.position.set(mx,h/2-4,mz);
+  mesa.userData.stockMesa=true;
+  mesa.visible=false;
   scene.add(mesa);
 }
 window._heavyAssetsPending=true;
