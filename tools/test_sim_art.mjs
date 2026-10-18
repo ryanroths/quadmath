@@ -12,6 +12,7 @@ import {
   propClearOfCourse, planCityProps, planPortalBlocks, SIGN_WORDS, GATE_STYLES,
   signsAreOriginal, BRAND_BLOCKLIST,
   paintWorldLabel, WORLD_LABEL, restyleCity, buildNeonCity, artStats, tickCityArt,
+  restyleDiveTubes,
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
@@ -200,6 +201,7 @@ test('city finish pass uses a world-Y sky, neon leftovers, and fake wet road', (
   assert.match(sim, /restyleLandmarks/);
   const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
   assert.match(looks, /whoopStreet/);
+  assert.match(looks, /whoopMid/);
   assert.match(looks, /whoopPortal/);
   assert.match(looks, /citySky/);
 });
@@ -335,6 +337,39 @@ test('City freestyle builds without throwing and the FPV frame is not all black'
   }
   const tickSrc = city.slice(city.indexOf('export function tickCityArt'), city.indexOf('export function restyleMesas'));
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickCityArt must not touch the THREE binding');
+  assert.match(tickSrc, /cityCruise|cityDrone/);
+  assert.match(tickSrc, /never abort the FPV render loop/);
+});
+
+test('City polish keeps Low draw calls near 174 and clears leftover shards', () => {
+  installDomStub();
+  const gates = FROZEN_CITY[0].concat(FROZEN_CITY[1]);
+  const lo = artStats(null, buildNeonCity(THREE, new THREE.Group(), vibeFor('city'), 'low', gates));
+  const med = artStats(null, buildNeonCity(THREE, new THREE.Group(), vibeFor('city'), 'med', gates));
+  const hi = artStats(null, buildNeonCity(THREE, new THREE.Group(), vibeFor('city'), 'high', gates));
+  assert.ok(lo.callsEst <= 48, 'Low city-art callsEst ' + lo.callsEst);
+  assert.ok(lo.instancedMeshes <= 40, 'Low IM ' + lo.instancedMeshes);
+  assert.ok(med.callsEst >= lo.callsEst, 'Med adds extras');
+  assert.ok(hi.instanced >= med.instanced, 'High at least as dense');
+  const plan = planCityProps(gates, 'high');
+  for (const p of plan.crates || []) {
+    assert.ok(Math.hypot(p.x - 350, p.z + 350) > 46, 'crate near portal ' + p.x + ',' + p.z);
+    assert.ok(Math.abs(p.x) > 28 || p.z < -20 || p.z > 40, 'crate on whoop street');
+  }
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.match(city, /makePlusSignGeo|makeLowSignGeo/);
+  assert.match(city, /addStreetDressing|addDiveHoops/);
+  assert.match(city, /restyleDiveTubes/);
+  assert.match(city, /makeFireEscapeGeo|makeBlimpGeo/);
+  assert.match(city, /cityDive/);
+  const scene = new THREE.Scene();
+  const tube = new THREE.Mesh(
+    new THREE.BoxGeometry(50, 8.4, 8.4),
+    new THREE.MeshStandardMaterial({ color: 0x243040, emissive: 0x00f0ff }),
+  );
+  scene.add(tube);
+  assert.equal(restyleDiveTubes(scene, vibeFor('city'), THREE) >= 1, true);
+  assert.equal(!!tube.userData.cityDive, true);
 });
 
 test('art direction doc lists every map', () => {

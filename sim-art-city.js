@@ -153,6 +153,8 @@ function curbCandidates(step) {
   return out;
 }
 
+const PORTAL_XZ = Object.freeze({ x: 350, z: -350 });
+
 export function planCityProps(gates, quality) {
   const budget = qualityBudget(quality);
   const rng = mulberry32(9011);
@@ -206,12 +208,11 @@ export function planCityProps(gates, quality) {
   pushIfClear(planned.benches, gates, -9.0, 8, 0.42, Math.PI / 2, 3.8);
   pushIfClear(planned.benches, gates, 9.0, -4, 0.42, -Math.PI / 2, 3.8);
   pushIfClear(planned.benches, gates, -9.0, 4, 0.42, Math.PI / 2, 3.8);
-  // Yaw ~35° toward oncoming traffic so whoop-street FPV sees the face,
-  // not a paper-thin edge.
-  pushIfClear(planned.lowSigns, gates, 9.3, 10, 1.45, -Math.PI / 2 + 0.6, 4.2);
-  pushIfClear(planned.lowSigns, gates, -9.3, 8, 1.45, Math.PI / 2 - 0.6, 4.2);
-  pushIfClear(planned.lowSigns, gates, 9.3, -6, 1.45, -Math.PI / 2 + 0.6, 4.2);
-  pushIfClear(planned.lowSigns, gates, -9.3, -2, 1.45, Math.PI / 2 - 0.6, 4.2);
+  // Face the whoopStreet camera (3.2, 26) → (11.5, -6), never end-on.
+  pushIfClear(planned.lowSigns, gates, 9.3, 10, 1.45, Math.atan2(3.2 - 9.3, 26 - 10), 4.2);
+  pushIfClear(planned.lowSigns, gates, -9.3, 8, 1.45, Math.atan2(3.2 + 9.3, 26 - 8), 4.2);
+  pushIfClear(planned.lowSigns, gates, 9.3, -6, 1.45, Math.atan2(3.2 - 9.3, 26 + 6), 4.2);
+  pushIfClear(planned.lowSigns, gates, -9.3, -2, 1.45, Math.atan2(3.2 + 9.3, 26 + 2), 4.2);
   pushIfClear(planned.lowSigns, gates, -128, -105, 1.45, 0.7, 4.2);
   pushIfClear(planned.lowSigns, gates, 320, -318, 1.45, 0.8, 4.2);
   pushIfClear(planned.kiosks, gates, 16.2, 6, 0.95, -Math.PI / 2, 4.4);
@@ -240,10 +241,12 @@ export function planCityProps(gates, quality) {
   planned.trash = (planned.trash || []).filter(offWhoopStreet);
   planned.awnings = (planned.awnings || []).filter(offWhoopStreet);
   planned.vents = (planned.vents || []).filter(offWhoopStreet);
+  // Portal FPV (328,-308) looking at the plaza: drop leftover crate shards.
+  const offPortal = (p) => Math.hypot(p.x - PORTAL_XZ.x, p.z - PORTAL_XZ.z) > 46;
+  planned.crates = planned.crates.filter(offPortal);
+  planned.trash = planned.trash.filter(offPortal);
   return planned;
 }
-
-const PORTAL_XZ = Object.freeze({ x: 350, z: -350 });
 
 export function planPortalBlocks(gates, quality) {
   const n = quality === 'low' ? 10 : (quality === 'high' ? 20 : 14);
@@ -523,6 +526,15 @@ function wetGround(THREE, vibe) {
     g.fillStyle = vibe.palette.sidewalk;
     g.fillRect(0, 0, s, rw + sw);
     g.fillRect(0, 0, rw + sw, s);
+    g.fillStyle = '#1c1624';
+    for (let u = 0; u < s; u += 28) {
+      for (let v = 0; v < rw + sw; v += 28) {
+        g.fillRect(u + 1, v + 1, 26, 26);
+      }
+      for (let v = 0; v < rw + sw; v += 28) {
+        g.fillRect(v + 1, u + 1, 26, 26);
+      }
+    }
     g.fillStyle = vibe.palette.street;
     g.fillRect(0, 0, s, rw);
     g.fillRect(0, 0, rw, s);
@@ -573,6 +585,39 @@ function makeRoofHutGeo(THREE) {
   return mergeGeos(THREE, [
     boxAt(THREE, 1.35, 0.82, 1.15, 0, 0.42, 0, 0),
     boxAt(THREE, 0.55, 0.32, 0.55, 0.28, 0.98, 0.12, 0),
+    boxAt(THREE, 0.72, 0.62, 0.72, -0.22, 1.12, -0.18, 0),
+  ]);
+}
+
+function makePlusSignGeo(THREE, w, h, t) {
+  return mergeGeos(THREE, [
+    boxAt(THREE, w, h, t, 0, 0, 0, 0),
+    boxAt(THREE, t, h, w, 0, 0, 0, 0),
+  ]);
+}
+
+function makeLowSignGeo(THREE) {
+  return mergeGeos(THREE, [
+    boxAt(THREE, 2.2, 0.95, 0.22, 0, 0.48, 0, 0),
+    boxAt(THREE, 0.22, 0.95, 2.2, 0, 0.48, 0, 0),
+    boxAt(THREE, 0.16, 1.15, 0.16, 0, -0.22, 0, 0),
+  ]);
+}
+
+function makeFireEscapeGeo(THREE) {
+  return mergeGeos(THREE, [
+    boxAt(THREE, 1.35, 0.08, 0.62, 0, 0, 0, 0),
+    boxAt(THREE, 0.08, 1.05, 0.62, -0.64, 0.52, 0, 0),
+    boxAt(THREE, 0.08, 1.05, 0.62, 0.64, 0.52, 0, 0),
+    boxAt(THREE, 1.35, 0.08, 0.62, 0, 1.04, 0, 0),
+  ]);
+}
+
+function makeBlimpGeo(THREE) {
+  return mergeGeos(THREE, [
+    boxAt(THREE, 7.2, 1.8, 1.8, 0, 0, 0, 0),
+    boxAt(THREE, 1.4, 0.7, 0.18, -3.2, 0.15, 0, 0),
+    boxAt(THREE, 0.18, 1.1, 1.4, 3.2, 0.2, 0, 0),
   ]);
 }
 
@@ -623,6 +668,160 @@ function makeVendingGeo(THREE) {
     boxAt(THREE, 1.1, 2.2, 0.7, 0, 1.1, 0, 0),
     boxAt(THREE, 0.85, 0.7, 0.12, 0, 1.45, 0.36, 0),
   ]);
+}
+
+function addStreetDressing(THREE, group, vibe, quality, gates) {
+  const marks = [];
+  const curbs = [];
+  const pushMark = (x, z, w, d, ry) => {
+    if (!propClearOfCourse(x, z, 0.03, gates || [], { gatePad: 4.4, corridor: 2.2 })) return;
+    marks.push({ x, z, w, d, ry });
+  };
+  const pushCurb = (x, z, w, d, ry) => {
+    if (!propClearOfCourse(x, z, 0.12, gates || [], { gatePad: 3.6, corridor: 3.4 })) return;
+    curbs.push({ x, z, w, d, ry });
+  };
+  for (let a = -340; a <= 340; a += 10) {
+    if (Math.abs(a) < 12) continue;
+    pushMark(1.9, a, 0.32, 4.2, 0);
+    pushMark(-1.9, a, 0.32, 4.2, 0);
+    pushMark(a, 1.9, 4.2, 0.32, 0);
+    pushMark(a, -1.9, 4.2, 0.32, 0);
+    pushCurb(8.15, a, 0.55, 9.2, 0);
+    pushCurb(-8.15, a, 0.55, 9.2, 0);
+    pushCurb(a, 8.15, 9.2, 0.55, 0);
+    pushCurb(a, -8.15, 9.2, 0.55, 0);
+  }
+  const crosses = [[0, 0], [0, 72], [0, -72], [72, 0], [-72, 0], [0, 144], [144, 0]];
+  for (const [cx, cz] of crosses) {
+    for (let i = -4; i <= 4; i++) {
+      pushMark(cx + i * 0.85, cz, 0.42, 6.4, 0);
+      pushMark(cx, cz + i * 0.85, 6.4, 0.42, 0);
+    }
+  }
+  const markMat = skipMat(new THREE.MeshBasicMaterial({
+    color: hexNum(vibe.palette.lane),
+  }));
+  addInstanced(THREE, group, new THREE.BoxGeometry(1, 1, 1), markMat, marks.length, (d, i) => {
+    const m = marks[i];
+    if (!m) return false;
+    d.position.set(m.x, 0.022, m.z);
+    d.scale.set(m.w, 0.03, m.d);
+    d.rotation.set(0, m.ry, 0);
+  });
+  const curbMat = skipMat(new THREE.MeshBasicMaterial({ color: hexNum(vibe.palette.sidewalk) }));
+  addInstanced(THREE, group, new THREE.BoxGeometry(1, 1, 1), curbMat, curbs.length, (d, i) => {
+    const c = curbs[i];
+    if (!c) return false;
+    d.position.set(c.x, 0.11, c.z);
+    d.scale.set(c.w, 0.22, c.d);
+    d.rotation.set(0, c.ry, 0);
+  });
+  if (quality !== 'low') {
+    const poolMat = skipMat(new THREE.MeshBasicMaterial({
+      color: hexNum(vibe.palette.neonC),
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }));
+    const pools = [];
+    for (let s = -360; s <= 360; s += 36) {
+      if (Math.abs(s) < 16) continue;
+      for (const p of [[14, s], [-14, s], [s, 14], [s, -14]]) {
+        if (propClearOfCourse(p[0], p[1], 0.04, gates || [], { gatePad: 3.5, corridor: 4.2 })) {
+          pools.push(p);
+        }
+      }
+    }
+    const n = Math.min(quality === 'high' ? 96 : 64, pools.length);
+    addInstanced(THREE, group, new THREE.CircleGeometry(3.4, 12), poolMat, n, (d, i) => {
+      const p = pools[i];
+      if (!p) return false;
+      d.position.set(p[0], 0.03, p[1]);
+      d.rotation.set(-Math.PI / 2, 0, 0);
+      d.scale.set(1, 1, 1);
+    });
+  }
+}
+
+function addDiveHoops(THREE, group, vibe) {
+  const hoopMat = neonMat(THREE, hexNum(vibe.palette.neonA), 4.8);
+  const arms = [
+    { x0: 150, y: 63, z0: -150, dx: -1, dz: 0, len: 50 },
+    { x0: 150, y: 135, z0: -150, dx: 0, dz: 1, len: 50 },
+  ];
+  const spots = [];
+  for (const a of arms) {
+    for (let k = 0; k < 5; k++) {
+      const t = 0.18 + k * 0.16;
+      spots.push({
+        x: a.x0 + a.dx * (9 + a.len * t),
+        y: a.y,
+        z: a.z0 + a.dz * (9 + a.len * t),
+        ry: a.dx ? Math.PI / 2 : 0,
+      });
+    }
+  }
+  addInstanced(THREE, group, new THREE.TorusGeometry(3.1, 0.11, 8, 18), hoopMat, spots.length, (d, i) => {
+    const s = spots[i];
+    d.position.set(s.x, s.y, s.z);
+    d.rotation.set(0, s.ry, 0);
+    d.scale.set(1, 1, 1);
+  });
+}
+
+export function restyleDiveTubes(root, vibe, THREE) {
+  if (!root) return 0;
+  let n = 0;
+  let map = null;
+  if (THREE) {
+    map = canvasTex(THREE, 256, 128, (g, w, h) => {
+      g.fillStyle = '#140814';
+      g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 7; i++) {
+        g.fillStyle = i % 2 ? vibe.palette.neonA : vibe.palette.neonC;
+        const x = 8 + i * 34;
+        g.beginPath();
+        g.moveTo(x, 18);
+        g.lineTo(x + 20, 64);
+        g.lineTo(x, 110);
+        g.lineTo(x + 10, 110);
+        g.lineTo(x + 30, 64);
+        g.lineTo(x + 10, 18);
+        g.closePath();
+        g.fill();
+      }
+      g.fillStyle = vibe.palette.neonB;
+      g.fillRect(0, 0, w, 8);
+      g.fillRect(0, h - 8, w, 8);
+    }, 3, 1);
+  }
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material || !o.material.color || !o.geometry) return;
+    const p = o.geometry.parameters || {};
+    const isTube = o.geometry.type === 'BoxGeometry'
+      && p.width >= 40 && p.height < 12 && p.depth < 12
+      && Math.abs(p.height - p.depth) < 0.2;
+    if (!isTube) return;
+    const col = o.material.color.getHex();
+    const em = o.material.emissive ? o.material.emissive.getHex() : 0;
+    if (col !== 0x243040 && em !== 0x00f0ff) return;
+    o.material.color.setHex(0x221028);
+    if (o.material.emissive) o.material.emissive.setHex(hexNum(vibe.palette.neonA));
+    o.material.emissiveIntensity = 0.78;
+    if (map) {
+      o.material.map = map;
+      o.material.emissiveMap = map;
+    }
+    o.material.roughness = 0.4;
+    o.material.metalness = 0.16;
+    o.material.needsUpdate = true;
+    o.userData.artLocked = true;
+    o.userData.cityDive = true;
+    n++;
+  });
+  return n;
 }
 
 function vec3FromHex(THREE, hex) {
@@ -853,6 +1052,23 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     d.rotation.set(0, f.ry, 0);
     d.scale.set(1, 1, 1);
   });
+  const shopMat = neonMat(THREE, hexNum(vibe.palette.windowOn), 2.8, { color: 0x1a1420, roughness: 0.35 });
+  addInstanced(THREE, group, new THREE.BoxGeometry(3.4, 1.55, 0.1), shopMat, Math.min(quality === 'low' ? 22 : 40, faceSpots.length), (d, i) => {
+    const f = faceSpots[(i * 2) % faceSpots.length];
+    if (!f) return false;
+    d.position.set(f.x, 1.55, f.z);
+    d.rotation.set(0, f.ry, 0);
+    d.scale.set(1, 1, 1);
+  });
+  if (quality !== 'low') {
+    addInstanced(THREE, group, makeFireEscapeGeo(THREE), dullMat(THREE, 0x2a2030, { metalness: 0.4, emissive: hexNum(vibe.palette.neonB), emissiveIntensity: 0.16 }), Math.min(budget.roof, faceSpots.length), (d, i) => {
+      const f = faceSpots[(i * 4 + 2) % faceSpots.length];
+      if (!f || f.h < 18) return false;
+      d.position.set(f.x, 6.4 + (i % 2) * 5.2, f.z);
+      d.rotation.set(0, f.ry, 0);
+      d.scale.set(1, 1, 1);
+    });
+  }
 
   const atlas = signAtlas(THREE, vibe);
   const signMat = skipMat(new THREE.MeshBasicMaterial({
@@ -865,14 +1081,14 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
   }));
   holoMat.userData.cityHolo = true;
   const bladeN = Math.min(budget.signs, faceSpots.length);
-  addInstanced(THREE, group, new THREE.BoxGeometry(0.7, 3.4, 0.1), signMat, bladeN, (d, i) => {
+  addInstanced(THREE, group, makePlusSignGeo(THREE, 0.85, 3.4, 0.12), signMat, bladeN, (d, i) => {
     const f = faceSpots[i];
     if (!f) return false;
     d.position.set(f.x, 5.6, f.z);
     d.rotation.set(0, f.ry, 0);
     d.scale.set(1, 1, 1);
   });
-  addInstanced(THREE, group, new THREE.BoxGeometry(2.8, 0.7, 0.1), signMat, bladeN, (d, i) => {
+  addInstanced(THREE, group, makePlusSignGeo(THREE, 2.8, 0.7, 0.12), signMat, bladeN, (d, i) => {
     const f = faceSpots[(i + 4) % faceSpots.length];
     if (!f) return false;
     d.position.set(f.x, 4.15, f.z);
@@ -929,6 +1145,11 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     const heading = carHeading(p);
     d.position.set(p.x, 0, p.z); d.rotation.set(0, heading, 0); d.scale.set(1.15, 1.15, 1.15);
   });
+  if (carMesh && quality !== 'low') {
+    carMesh.userData.cityCruise = true;
+    carMesh.userData.dummy = new THREE.Object3D();
+    carMesh.userData.homes = planned.cars.map((p) => ({ x: p.x, z: p.z, heading: carHeading(p) }));
+  }
   const tailMat = neonMat(THREE, 0xff2a33, 6.2);
   addInstanced(THREE, group, new THREE.BoxGeometry(0.14, 0.14, 1.55), tailMat, planned.cars.length, (d, i) => {
     const p = planned.cars[i];
@@ -998,10 +1219,10 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     });
   }
   if (planned.lowSigns && planned.lowSigns.length) {
-    addInstanced(THREE, group, new THREE.BoxGeometry(2.2, 0.95, 0.28), signMat, planned.lowSigns.length, (d, i) => {
+    addInstanced(THREE, group, makeLowSignGeo(THREE), signMat, planned.lowSigns.length, (d, i) => {
       const p = planned.lowSigns[i];
       if (!p) return false;
-      d.position.set(p.x, 1.55, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1);
+      d.position.set(p.x, 1.1, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1);
     });
   }
 
@@ -1052,6 +1273,19 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     d.scale.set(w, h, w * (0.65 + rng() * 0.5));
     d.rotation.set(0, a * 0.2, 0);
   });
+  if (quality !== 'low') {
+    const farN = quality === 'high' ? 48 : 32;
+    const farMat = dullMat(THREE, 0x0a0614, { emissive: hexNum(vibe.palette.zenith), emissiveIntensity: 0.18 });
+    addInstanced(THREE, group, new THREE.BoxGeometry(1, 1, 1), farMat, farN, (d, i) => {
+      const a = (i / farN) * Math.PI * 2 + 0.2;
+      const dist = 1180 + rng() * 180;
+      const h = 40 + rng() * 90;
+      const w = 18 + rng() * 28;
+      d.position.set(Math.cos(a) * dist, h / 2, Math.sin(a) * dist);
+      d.scale.set(w, h, w * 0.7);
+      d.rotation.set(0, a, 0);
+    });
+  }
 
   const wirePos = [];
   const wireCol = [];
@@ -1188,6 +1422,8 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     const p = manholes[i];
     d.position.copy(p); d.scale.set(1, 1, 1); d.rotation.set(0, 0, 0);
   });
+  addStreetDressing(THREE, group, vibe, quality, gates);
+  addDiveHoops(THREE, group, vibe);
 
   if (budget.particles && budget.rain > 0 && loadRain()) {
     const rp = new Float32Array(budget.rain * 3);
@@ -1218,6 +1454,33 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
       trails.userData.seeds = Array.from({ length: budget.trails }, () => rng());
       trails.userData.dummy = new THREE.Object3D();
     }
+  }
+  if (quality !== 'low') {
+    const droneN = quality === 'high' ? 2 : 1;
+    const droneMat = neonMat(THREE, hexNum(vibe.palette.neonB), 2.4, { color: 0x2a2038, roughness: 0.4 });
+    const drones = addInstanced(THREE, group, makeBlimpGeo(THREE), droneMat, droneN, (d, i) => {
+      d.position.set(80 + i * 40, 42 + i * 8, -60 - i * 30);
+      d.rotation.set(0, i, 0);
+      d.scale.set(1, 1, 1);
+    });
+    if (drones) {
+      drones.userData.cityDrone = true;
+      drones.userData.dummy = new THREE.Object3D();
+      drones.userData.seeds = Array.from({ length: droneN }, () => rng());
+    }
+    const hangN = quality === 'high' ? 28 : 16;
+    const hangMat = neonMat(THREE, hexNum(vibe.palette.neonA), 3.8);
+    addInstanced(THREE, group, new THREE.BoxGeometry(8.5, 0.08, 0.08), hangMat, hangN, (d, i) => {
+      const a = footprints[(i * 3) % footprints.length];
+      const b = footprints[(i * 3 + 1) % footprints.length];
+      if (!a || !b) return false;
+      const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+      if (Math.hypot(a.x - b.x, a.z - b.z) > 48) return false;
+      if (!propClearOfCourse(mx, mz, 5, gates || [], { gatePad: 4, corridor: 3.6 })) return false;
+      d.position.set(mx, 6.4 + (i % 3) * 0.8, mz);
+      d.rotation.set(0, Math.atan2(b.x - a.x, b.z - a.z), 0);
+      d.scale.set(Math.min(1.2, Math.hypot(a.x - b.x, a.z - b.z) / 8.5), 1, 1);
+    });
   }
 
   if (budget.particles) {
@@ -1526,6 +1789,45 @@ function tickCityArtObject(o, t) {
       }
       o.instanceMatrix.needsUpdate = true;
     }
+    if (o.userData && o.userData.cityCruise) {
+      const dummy = o.userData.dummy;
+      const homes = o.userData.homes || [];
+      if (!dummy || !homes.length) return;
+      for (let i = 0; i < o.count; i++) {
+        const h = homes[i] || homes[0];
+        const alongZ = Math.abs(h.x) < 18;
+        const speed = 4.2 + (i % 5) * 0.6;
+        let x = h.x, z = h.z, yaw = h.heading;
+        if (alongZ) {
+          z = ((h.z + t * speed * ((i % 2) ? 1 : -1) + 360) % 720) - 360;
+          yaw = (i % 2) ? 0 : Math.PI;
+        } else {
+          x = ((h.x + t * speed * ((i % 2) ? 1 : -1) + 360) % 720) - 360;
+          yaw = (i % 2) ? Math.PI / 2 : -Math.PI / 2;
+        }
+        dummy.position.set(x, 0, z);
+        dummy.rotation.set(0, yaw, 0);
+        dummy.scale.set(1.15, 1.15, 1.15);
+        dummy.updateMatrix();
+        o.setMatrixAt(i, dummy.matrix);
+      }
+      o.instanceMatrix.needsUpdate = true;
+    }
+    if (o.userData && o.userData.cityDrone) {
+      const dummy = o.userData.dummy;
+      if (!dummy) return;
+      const seeds = o.userData.seeds || [];
+      for (let i = 0; i < o.count; i++) {
+        const s = seeds[i] || 0.4;
+        const a = t * (0.07 + s * 0.04) + i * 1.7;
+        dummy.position.set(Math.cos(a) * (90 + s * 40), 38 + Math.sin(a * 0.6) * 6, Math.sin(a) * (90 + s * 40));
+        dummy.rotation.set(0, a + Math.PI / 2, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        o.setMatrixAt(i, dummy.matrix);
+      }
+      o.instanceMatrix.needsUpdate = true;
+    }
 }
 
 export function restyleMesas(root, vibe) {
@@ -1633,11 +1935,11 @@ function restyleCityInner(THREE, ctx) {
     }
     mat.map = gtex;
     mat.color.setHex(0xffffff);
-    mat.roughness = quality === 'low' ? 0.62 : 0.08;
-    mat.metalness = quality === 'low' ? 0.12 : 0.78;
-    if ('envMapIntensity' in mat) mat.envMapIntensity = quality === 'low' ? 0.18 : 1.45;
+    mat.roughness = quality === 'low' ? 0.74 : 0.42;
+    mat.metalness = quality === 'low' ? 0.08 : 0.22;
+    if ('envMapIntensity' in mat) mat.envMapIntensity = quality === 'low' ? 0.12 : 0.38;
     mat.emissive.setHex(hexNum(vibe.palette.neonA));
-    mat.emissiveIntensity = quality === 'low' ? 0.02 : 0.09;
+    mat.emissiveIntensity = quality === 'low' ? 0.03 : 0.06;
     mat.userData.looksComposed = true;
     mat.userData.artLocked = true;
     mat.userData.looksSkip = true;
@@ -1665,6 +1967,7 @@ function restyleCityInner(THREE, ctx) {
   if (ctx.scene) {
     restyleMesas(ctx.scene, vibe);
     restyleLandmarks(ctx.scene, vibe);
+    restyleDiveTubes(ctx.scene, vibe, THREE);
   }
   applyVibeLighting(ctx, vibe);
   if (root) root.userData.cityArtQuality = quality;

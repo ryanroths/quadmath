@@ -2,18 +2,18 @@
 // Neon Current. No third-party meshes. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=c7163480ae18';
+import { hexNum } from './sim-art-city.js?v=c235d936652f';
 export {
   hexNum, qualityWantsBloom, qualityWantsReflections, qualityWantsParticles,
   qualityBudget, propClearOfCourse, planCityProps, planPortalBlocks,
   collectBuildingFootprints,
   hideStockCityMeshes, decorateVibeGate, pulseCityGate, tickCityArt,
   applySkyTexture, applyVibeLighting, restyleCity, buildCityDressing,
-  buildDreamlandArt, restyleMesas, restyleLandmarks, attachWetReflector,
+  buildDreamlandArt, restyleMesas, restyleLandmarks, restyleDiveTubes, attachWetReflector,
   makeWetRoadMaterial, buildNeonCity,
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
-} from './sim-art-city.js?v=c7163480ae18';
+} from './sim-art-city.js?v=c235d936652f';
 
 export const CITY_VIBE_ID = 'city';
 
