@@ -48,6 +48,15 @@ shipping:
 ```bash
 cd workers/sim-leaderboard
 npx wrangler deploy
+```
+
+No D1 migration for the weekly id bump (`weekly-YYYY-Wxx-g2`). The Worker
+imports `weeklyTrackFor` from `sim-retention.js`; after deploy it writes and
+filters that new `track_id`. Old `weekly-YYYY-Wxx` rows stay in D1 but drop
+off the board (empty week until new submits). The anticheat migrate is already
+applied and is optional/idempotent:
+
+```bash
 npx wrangler d1 execute quadmath-sim-leaderboard --file=./src/migrate-anticheat.sql --remote
 ```
 

@@ -754,7 +754,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=19bee552695d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS} from "./sim-feel.js?v=9fdf1a669c17";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=4ba727eb3fed";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -772,7 +772,7 @@ import {
   loadSkinId, saveSkinId, makeCanopyGroup, layoutCanopyGroup, canopyFpvVisible,
   loadCanopyOn, saveCanopyOn, CANOPY_KEY, tintGroup, sanitizePilotName, classId,
   validateSubmittedRun, CLASS_IDS, issuePilotToken, syncDailyStreak,
-} from "./sim-retention.js?v=979956a5134e";
+} from "./sim-retention.js?v=d7a0b0294150";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -5195,6 +5195,12 @@ function loop(now){
   if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
     readInput(dt);
     tickArming(padLive?((navigator.getGamepads&&navigator.getGamepads())||[])[gpIndex]:null);
+    {
+      const clr=qp.groundClearance?qp.groundClearance(qp):qp.position.z;
+      if(wantsTurtle({upZ:bodyUpZ(qp.quaternion),clearanceM:clr,contact:clr<=0.04,armed:qp.armed,threeD,throttle:stick.t,rollStick:stick.r})){
+        qp.omega.x+=(stick.r<0?-1:1)*22*dt;
+      }
+    }
     physics(dt);
     adaptPhysicsHz(now);
     updateMotorSound();
@@ -5203,13 +5209,12 @@ function loop(now){
       state.stickT=stick.t;
       feel.updateHud({stick,battV,battOn:CFG.battSimOn,mode:qp.flightMode,armed:qp.armed,threeD,thrText:throttleHudText(stick.t,threeD),armHint:armHintText({threeD,autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked})});
       feel.tickTutorial(state,dt,qp.armed);
-      const att=qp.attitude;
-      feel.noteFlip({
-        upsideDown:Math.abs(att.roll)>2.0||Math.abs(att.pitch)>2.0,
-        armed:qp.armed,
-        speed:Math.hypot(state.vel.x,state.vel.y,state.vel.z),
-        height:state.pos.y,
-      });
+      const upZ=bodyUpZ(qp.quaternion);
+      const clearanceM=qp.groundClearance?qp.groundClearance(qp):qp.position.z;
+      const speed=Math.hypot(qp.velocity.x,qp.velocity.y,qp.velocity.z);
+      const omega=Math.hypot(qp.omega.x,qp.omega.y,qp.omega.z);
+      const contact=clearanceM<=0.02;
+      feel.noteFlip({upZ,clearanceM,contact,speed,omega,dt,armed:qp.armed});
     }
     if(coach&&coach.isActive()){
       coach.tick(state,dt,{

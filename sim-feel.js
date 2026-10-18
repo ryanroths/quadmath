@@ -137,15 +137,60 @@ export function applyRatePreset(rates, name) {
   return true;
 }
 
-// Upside-down toast is for an armed crash, not a disarmed whoop sitting on
-// the pad. Indoor spawn can show ~40° camera tilt from cam angle + floor
-// contact; that must not flash FLIPPED at 0 km/h.
+// Quiet "stuck inverted" hint. Old trigger was the opposite of what we
+// want: armed + |roll| or |pitch| > 2 rad, unless sitting still near the
+// floor — so mid-flip, inverted hang, and inverted dive all flashed
+// FLIPPED. Now it only fires when the craft is actually turtled.
+export const STUCK_UP_Z = -0.5;          // body-up world Z (cos 120°)
+export const STUCK_CLEARANCE_M = 0.02;   // ~2 cm
+export const STUCK_SPEED_MS = 0.3;
+export const STUCK_OMEGA = 1.5;          // rad/s
+export const STUCK_HOLD_S = 1.5;
+
+export function bodyUpZ(q) {
+  if (!q) return 1;
+  const x = q.x || 0, y = q.y || 0;
+  return 1 - 2 * (x * x + y * y);
+}
+
+export function isStuckInverted(info) {
+  if (!info) return false;
+  const upZ = info.upZ == null
+    ? (info.upsideDown ? -1 : 1)
+    : +info.upZ;
+  if (!(upZ < STUCK_UP_Z)) return false;
+  const clearance = info.clearanceM == null ? info.height : info.clearanceM;
+  const contact = !!info.contact || (clearance != null && +clearance <= STUCK_CLEARANCE_M);
+  if (!contact) return false;
+  const speed = info.speed == null ? 99 : +info.speed;
+  const omega = info.omega == null ? 0 : +info.omega;
+  if (!(speed < STUCK_SPEED_MS)) return false;
+  if (!(omega < STUCK_OMEGA)) return false;
+  return true;
+}
+
+export function stepStuckHold(prev, info, dt) {
+  if (!isStuckInverted(info)) return 0;
+  const step = Number(dt);
+  return (prev || 0) + (Number.isFinite(step) ? Math.max(0, step) : 0);
+}
+
 export function shouldToastFlip(info) {
-  if (!info || !info.upsideDown) return false;
-  if (!info.armed) return false;
-  const speed = info.speed == null ? 1 : +info.speed;
-  const height = info.height == null ? 1 : +info.height;
-  if (speed < 0.35 && height < 0.55) return false;
+  if (!isStuckInverted(info)) return false;
+  const held = info.heldS == null ? 0 : +info.heldS;
+  return held >= STUCK_HOLD_S - 1e-9;
+}
+
+// Turtle / flip-over: armed, inverted on the deck, full throttle + extreme roll.
+export function wantsTurtle(info) {
+  if (!info || !info.armed || info.threeD) return false;
+  const upZ = info.upZ == null ? 1 : +info.upZ;
+  if (!(upZ < -0.35)) return false;
+  const clearance = info.clearanceM == null ? info.height : info.clearanceM;
+  const contact = !!info.contact || (clearance != null && +clearance <= 0.04);
+  if (!contact) return false;
+  if (!(info.throttle >= 0.9)) return false;
+  if (!(Math.abs(info.rollStick || 0) >= 0.82)) return false;
   return true;
 }
 
@@ -178,6 +223,7 @@ export function createFeel(ctx) {
   let promptOpen = false;
   let tutorial = null; // { group, gates, pad, hover, step, tHover, tLand, startedAt }
   let flippedToastAt = 0;
+  let stuckHoldS = 0;
 
   const hudEl = document.getElementById('feelHud');
   const promptEl = document.getElementById('feelPrompt');
@@ -531,9 +577,11 @@ export function createFeel(ctx) {
   }
 
   function noteFlip(info) {
-    const payload = typeof info === 'boolean' ? { upsideDown: info, armed: true } : (info || {});
-    if (!shouldToastFlip(payload)) return;
-    const now = performance.now();
+    const payload = typeof info === 'boolean' ? { upsideDown: info } : (info || {});
+    const dt = payload.dt == null ? 0 : +payload.dt;
+    stuckHoldS = stepStuckHold(stuckHoldS, payload, dt);
+    if (!shouldToastFlip({ ...payload, heldS: stuckHoldS })) return;
+    const now = typeof performance !== 'undefined' && performance.now ? performance.now() : 0;
     if (now - flippedToastAt < 2500) return;
     flippedToastAt = now;
     if (toast) toast('FLIPPED — R TO RESPAWN');
