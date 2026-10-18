@@ -120,7 +120,8 @@
   body.touch-on #legend,body.touch-on #audioHint{opacity:0;pointer-events:none}
   body.touch-on #feelHud{right:12px;bottom:auto;top:88px;flex-direction:column;align-items:flex-end}
   body.touch-on #feelHud .stick-pad{display:none}
-  #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7}
+  #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7;display:none}
+  #crosshair.on{display:block}
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
   #crosshair::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
   #crosshair::after{top:50%;left:0;height:1px;width:100%;transform:translateY(-50%)}
@@ -507,6 +508,7 @@
   </select>
   <div class="row"><label>Motion blur</label><input type="checkbox" id="cbMotionBlur" style="accent-color:var(--orange)"></div>
   <div class="row"><label>Show canopy</label><input type="checkbox" id="cbCanopy" style="accent-color:var(--orange)"></div>
+  <div class="row"><label>Show crosshair</label><input type="checkbox" id="cbCrosshair" style="accent-color:var(--orange)"></div>
 
   <h2>Quality</h2>
   <select id="qualityPanel">
@@ -722,7 +724,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=34e582665d37";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY} from "./sim-looks.js?v=804271266544";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=ae5456573346";
 import {
   VIBES, vibeFor, restyleCity, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, loadRain, saveRain, RAIN_KEY,
@@ -877,6 +879,14 @@ scene.add(camera);
 let canopyGroup=makeCanopyGroup(THREE, SKINS[0]);
 camera.add(canopyGroup);
 let canopyOn=loadCanopyOn();
+let crosshairOn=loadCrosshairOn();
+function applyCrosshair(){
+  const el=document.getElementById('crosshair');
+  if(el)el.classList.toggle('on',!!crosshairOn);
+  const cb=document.getElementById('cbCrosshair');
+  if(cb)cb.checked=!!crosshairOn;
+}
+applyCrosshair();
 function applyCanopyLayout(){
   if(canopyGroup)layoutCanopyGroup(canopyGroup, camera);
 }
@@ -4071,6 +4081,15 @@ function wireLooksUI(){
       updateCamera();
     };
   }
+  const xhCb=document.getElementById('cbCrosshair');
+  if(xhCb){
+    xhCb.checked=!!crosshairOn;
+    xhCb.onchange=()=>{
+      crosshairOn=!!xhCb.checked;
+      saveCrosshairOn(crosshairOn);
+      applyCrosshair();
+    };
+  }
   if(looks)looks.setMenuOpen(true);
   syncQualityUI();
 }
@@ -5499,9 +5518,11 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   placeQuadAt,
   artStats:()=>artStats(renderer,cityWorld),vibe:()=>vibeFor(currentMap),VIBES,qualityWantsBloom,
   rain:()=>loadRain(),setRain(v){saveRain(!!v);if(currentMap==='city')applyCityArt(looks&&looks.applied);},RAIN_KEY,
-  QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,canopyGroup,
+  QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,CROSSHAIR_KEY,canopyGroup,
   canopyEnabled:()=>canopyOn,
   setCanopyOn(v){canopyOn=!!v;const el=document.getElementById('cbCanopy');if(el)el.checked=canopyOn;saveCanopyOn(canopyOn);updateCamera();},
+  crosshairEnabled:()=>crosshairOn,
+  setCrosshairOn(v){crosshairOn=!!v;saveCrosshairOn(crosshairOn);applyCrosshair();},
   setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
