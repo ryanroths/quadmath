@@ -5,8 +5,8 @@ race line, leaderboard keys, ghosts, and daily/weekly seeds stay frozen.
 Nothing here is copied from a game, and nothing is taken from WebFPV (GPL).
 
 Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
-Other maps keep their current procedural rooms and pick up their vibe in a
-later pass.
+**Clay Parlor** ships next on Living Room. Remaining maps keep their current
+procedural rooms and pick up their vibe one map per PR.
 
 ## Inventory (today)
 
@@ -101,8 +101,9 @@ The product target stays **60 fps desktop / 45+ mid phone**.
 
 ## Vibe per map
 
-Every row is original. Palette hex is the locked brand for that map. Phase 1
-implements **city** only.
+Every row is original. Palette hex is the locked brand for that map. City
+(**Neon Current**) and Living Room (**Clay Parlor**) are implemented. Remaining
+maps wait their turn.
 
 ### City — Neon Current (prototype)
 
@@ -117,7 +118,7 @@ implements **city** only.
 - **Post:** Bloom on Med/High (threshold ~0.82 so only emissives catch). Off on Low. FPV barrel stays.
 - **Not:** Vice City, Outrun box art, or any licensed skyline.
 
-### Living Room — Clay Parlor
+### Living Room — Clay Parlor (shipped)
 
 - **Time:** Overcast afternoon through a felt window.
 - **Palette:** `#f4d6c6` plaster, `#7ec8e3` clay sky, `#ff6b9a` cushion, `#ffe08a` lamp, `#6b3f2a` walnut.
