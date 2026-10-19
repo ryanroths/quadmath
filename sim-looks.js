@@ -36,6 +36,9 @@ export const LOOK_SPOTS = {
   warehouseMid: { pos: [10.5, 9.2, 26], target: [-4, 3.2, -6] },
   warehouseOverview: { pos: [0.5, 15.5, 34], target: [0, 2.5, -8] },
   backyard: { pos: [0, 8, 22], target: [0, 2, -8] },
+  backyardWhoop: { pos: [0.2, 1.16, 18.4], target: [2, 1.4, -8] },
+  backyardMid: { pos: [0, 8, 22], target: [0, 2, -8] },
+  backyardOverview: { pos: [2, 16, 28], target: [2, 2, -6] },
   office: { pos: [12.2, 4.6, 16.4], target: [-6, 1.4, -6] },
   officeWhoop: { pos: [12.4, 1.18, 16.8], target: [-6.2, 1.4, -4] },
   officeMid: { pos: [12.2, 4.6, 16.4], target: [-6, 1.4, -6] },
@@ -45,7 +48,13 @@ export const LOOK_SPOTS = {
   gymMid: { pos: [14, 9.5, 26], target: [-2, 2.8, -8] },
   gymOverview: { pos: [0.4, 20, 34], target: [0, 2, -6] },
   trainer: { pos: [8, 6.2, 14], target: [0, 1.6, -4] },
+  trainerWhoop: { pos: [0.2, 1.16, 14.2], target: [0, 1.4, -6] },
+  trainerMid: { pos: [8, 6.2, 14], target: [0, 1.6, -4] },
+  trainerOverview: { pos: [0.4, 8.8, 16.4], target: [0, 1.2, -2] },
   room: { pos: [3.4, 4.2, 6.2], target: [-1, 1.2, -2] },
+  roomWhoop: { pos: [1.55, 1.14, 4.6], target: [-0.2, 1.15, -3.4] },
+  roomMid: { pos: [3.6, 3.8, 5.4], target: [-1.2, 1.15, -2.4] },
+  roomOverview: { pos: [0.6, 6.4, 6.4], target: [0, 1.05, -1.2] },
   builder: { pos: [0, 14, 0.1], target: [0, 0, 0] },
 };
 

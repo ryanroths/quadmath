@@ -9,6 +9,9 @@ Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
 **Ion Nave** ships on Warehouse.
 **Amber Court** ships on Gym.
 **Paper Sun** ships on Office.
+**Licorice Grid** ships on Tiny Trainer.
+**Jade Lot** ships on Backyard.
+**Pocket Stage** ships on Your Room.
 Remaining maps keep their current procedural rooms and pick up their vibe
 one map per PR.
 
@@ -107,7 +110,7 @@ The product target stays **60 fps desktop / 45+ mid phone**.
 
 Every row is original. Palette hex is the locked brand for that map. City
 (**Neon Current**), Living Room (**Clay Parlor**), Garage (**Volt Stall**), and
-Warehouse (**Ion Nave**), Gym (**Amber Court**), and Office (**Paper Sun**) are implemented. Remaining maps wait their turn.
+Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Trainer (**Licorice Grid**), Backyard (**Jade Lot**), and Your Room (**Pocket Stage**) are implemented. Remaining maps wait their turn.
 
 ### City — Neon Current (prototype)
 
@@ -150,7 +153,7 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), and Office (**Paper Sun**) are 
 - **Gates:** Hex frames with teal core.
 - **Post:** Small bloom on runners. Fog `#0b1218` at `0.0018`.
 
-### Backyard — Jade Lot
+### Backyard — Jade Lot (shipped)
 
 - **Time:** Dusk under a torn canopy.
 - **Palette:** `#1b2a18` hedge, `#c9a45b` idol gold, `#5d7a3a` grass, `#8a4a2a` laterite, `#ffe0b0` porch.
@@ -177,7 +180,7 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), and Office (**Paper Sun**) are 
 - **Gates:** Wood-and-brass rings.
 - **Post:** Gentle bloom on rims only.
 
-### Tiny Trainer — Licorice Grid
+### Tiny Trainer — Licorice Grid (shipped)
 
 - **Time:** Indoor night meet, tape still sticky.
 - **Palette:** `#1a1020` floor, `#ff4d8d` tape, `#f2f0ea` PVC, `#ffe08a` bulb, `#00e5ff` next-gate.
@@ -185,7 +188,7 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), and Office (**Paper Sun**) are 
 - **Gates:** Frosted candy toruses.
 - **Post:** Tiny bloom on tape. Low = saturated albedo only.
 
-### Your Room — Pocket Stage
+### Your Room — Pocket Stage (shipped)
 
 - **Time:** Desk lamp + hallway spill.
 - **Palette:** `#eee8de` wall, `#7a5130` furniture, `#ffb3c7` felt, `#7ec8e3` night-window.
