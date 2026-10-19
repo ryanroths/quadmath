@@ -767,6 +767,10 @@ import {
   restyleGarage, decorateGarageGate, pulseGarageGate, tickGarageArt,
   restyleWarehouse, decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt,
   restyleGym, decorateGymGate, pulseGymGate, tickGymArt,
+  restyleOffice, decorateOfficeGate, pulseOfficeGate, tickOfficeArt,
+  restyleTrainer, decorateTrainerGate, pulseTrainerGate, tickTrainerArt,
+  restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
+  restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
 } from "./sim-art.js?v=14223ed1ca98";
 import {
   loadTouch, saveTouch,
@@ -1299,15 +1303,17 @@ function addGate(x,y,z,rotationY,size,solidGate,trackId,parent){
   ring.position.set(x,y,z);ring.rotation.y=rotationY||0;
   ring.castShadow=ring.receiveShadow=true; // long thin ring shadow on the deck is the main read for gate height
   decorateGate(THREE,ring,size,col);
-  if((currentMap||'city')==='city')decorateVibeGate(THREE,ring,size,col,vibeFor('city'),trackIdx);
-  if(currentMap==='living')decorateLivingGate(THREE,ring,size,col,vibeFor('living'));
-  if(currentMap==='garage')decorateGarageGate(THREE,ring,size,col,vibeFor('garage'));
-  if(currentMap==='warehouse')decorateWarehouseGate(THREE,ring,size,col,vibeFor('warehouse'));
-  if(currentMap==='room')decorateRoomGate(THREE,ring,size,col,vibeFor('room'));
-  if(currentMap==='backyard')decorateBackyardGate(THREE,ring,size,col,vibeFor('backyard'));
-  if(currentMap==='trainer')decorateTrainerGate(THREE,ring,size,col,vibeFor('trainer'));
-  if(currentMap==='office')decorateOfficeGate(THREE,ring,size,col,vibeFor('office'));
-  if(currentMap==='gym')decorateGymGate(THREE,ring,size,col,vibeFor('gym'));
+  try{
+    if((currentMap||'city')==='city')decorateVibeGate(THREE,ring,size,col,vibeFor('city'),trackIdx);
+    if(currentMap==='living')decorateLivingGate(THREE,ring,size,col,vibeFor('living'));
+    if(currentMap==='garage')decorateGarageGate(THREE,ring,size,col,vibeFor('garage'));
+    if(currentMap==='warehouse')decorateWarehouseGate(THREE,ring,size,col,vibeFor('warehouse'));
+    if(currentMap==='room')decorateRoomGate(THREE,ring,size,col,vibeFor('room'));
+    if(currentMap==='backyard')decorateBackyardGate(THREE,ring,size,col,vibeFor('backyard'));
+    if(currentMap==='trainer')decorateTrainerGate(THREE,ring,size,col,vibeFor('trainer'));
+    if(currentMap==='office')decorateOfficeGate(THREE,ring,size,col,vibeFor('office'));
+    if(currentMap==='gym')decorateGymGate(THREE,ring,size,col,vibeFor('gym'));
+  }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
   (parent||raceGroup).add(ring);
   gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col,trackId:trackId,trackIdx:trackIdx,ry:rotationY||0,size:size,solid:!!solidGate}); // col = dim base color
   if(solidGate){
@@ -2585,14 +2591,16 @@ async function setMap(mapId,trackId,opts){
     }
   }
   applyMapLooks(currentMap);
-  if(currentMap==='living')applyLivingArt(looks&&looks.applied);
-  if(currentMap==='garage')applyGarageArt(looks&&looks.applied);
-  if(currentMap==='warehouse')applyWarehouseArt(looks&&looks.applied);
-  if(currentMap==='room')applyRoomArt(looks&&looks.applied);
-  if(currentMap==='backyard')applyBackyardArt(looks&&looks.applied);
-  if(currentMap==='trainer')applyTrainerArt(looks&&looks.applied);
-  if(currentMap==='office')applyOfficeArt(looks&&looks.applied);
-  if(currentMap==='gym')applyGymArt(looks&&looks.applied);
+  try{
+    if(currentMap==='living')applyLivingArt(looks&&looks.applied);
+    if(currentMap==='garage')applyGarageArt(looks&&looks.applied);
+    if(currentMap==='warehouse')applyWarehouseArt(looks&&looks.applied);
+    if(currentMap==='room')applyRoomArt(looks&&looks.applied);
+    if(currentMap==='backyard')applyBackyardArt(looks&&looks.applied);
+    if(currentMap==='trainer')applyTrainerArt(looks&&looks.applied);
+    if(currentMap==='office')applyOfficeArt(looks&&looks.applied);
+    if(currentMap==='gym')applyGymArt(looks&&looks.applied);
+  }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
   nextGateIndex=0;
   runActive=false;
   lastPassedGate=null;
@@ -3921,15 +3929,17 @@ function toggleStartMenu(force){
 }
 function syncQualityUI(){
   if(!looks)return;
-  if(currentMap==='city')applyCityArt(looks.applied);
-  if(currentMap==='living')applyLivingArt(looks.applied);
-  if(currentMap==='garage')applyGarageArt(looks.applied);
-  if(currentMap==='warehouse')applyWarehouseArt(looks.applied);
-  if(currentMap==='room')applyRoomArt(looks.applied);
-  if(currentMap==='backyard')applyBackyardArt(looks.applied);
-  if(currentMap==='trainer')applyTrainerArt(looks.applied);
-  if(currentMap==='office')applyOfficeArt(looks.applied);
-  if(currentMap==='gym')applyGymArt(looks.applied);
+  try{
+    if(currentMap==='city')applyCityArt(looks.applied);
+    if(currentMap==='living')applyLivingArt(looks.applied);
+    if(currentMap==='garage')applyGarageArt(looks.applied);
+    if(currentMap==='warehouse')applyWarehouseArt(looks.applied);
+    if(currentMap==='room')applyRoomArt(looks.applied);
+    if(currentMap==='backyard')applyBackyardArt(looks.applied);
+    if(currentMap==='trainer')applyTrainerArt(looks.applied);
+    if(currentMap==='office')applyOfficeArt(looks.applied);
+    if(currentMap==='gym')applyGymArt(looks.applied);
+  }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
   setIndoorLights(indoorLights,looks.applied);
   if(secrets)secrets.setQuality(looks.applied);
   const q=looks.choice;
@@ -5561,15 +5571,17 @@ function loop(now){
   }
   let dt=(now-last)/1000;last=now;dt=Math.min(dt,.05);
   if(looks)looks.tick(now);
-  if(currentMap==='city')tickCityArt(cityWorld,now);
-  if(currentMap==='living')tickLivingArt(indoorWorld,now);
-  if(currentMap==='garage')tickGarageArt(indoorWorld,now);
-  if(currentMap==='warehouse')tickWarehouseArt(indoorWorld,now);
-  if(currentMap==='room')tickRoomArt(indoorWorld,now);
-  if(currentMap==='backyard')tickBackyardArt(indoorWorld,now);
-  if(currentMap==='trainer')tickTrainerArt(indoorWorld,now);
-  if(currentMap==='office')tickOfficeArt(indoorWorld,now);
-  if(currentMap==='gym')tickGymArt(indoorWorld,now);
+  try{
+    if(currentMap==='city')tickCityArt(cityWorld,now);
+    if(currentMap==='living')tickLivingArt(indoorWorld,now);
+    if(currentMap==='garage')tickGarageArt(indoorWorld,now);
+    if(currentMap==='warehouse')tickWarehouseArt(indoorWorld,now);
+    if(currentMap==='room')tickRoomArt(indoorWorld,now);
+    if(currentMap==='backyard')tickBackyardArt(indoorWorld,now);
+    if(currentMap==='trainer')tickTrainerArt(indoorWorld,now);
+    if(currentMap==='office')tickOfficeArt(indoorWorld,now);
+    if(currentMap==='gym')tickGymArt(indoorWorld,now);
+  }catch(e){/* never abort the FPV render loop */}
   try{if(secrets&&secrets.active)secrets.tick(now,state.pos,dt);}catch(e){}
   if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
     readInput(dt);
@@ -5869,8 +5881,10 @@ function applyQueryBoot(){
   if(!boot.unknownMap){
     const already=currentMap===boot.map&&String(activeTrackId)===String(boot.track);
     if(map||trackRaw||!already){
-      setMap(boot.map,boot.track,{save:boot.save!==false});
-      resetQuad();
+      try{
+        setMap(boot.map,boot.track,{save:boot.save!==false});
+        resetQuad();
+      }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
     }
   }
   const buildRaw=q.get('build');
@@ -5905,15 +5919,17 @@ function applyQueryBoot(){
   if(q.get('look')&&looks)looks.setLookSpot(q.get('look'));
   if(q.get('quality')&&looks){
     looks.setQuality(q.get('quality')).then(function(){
-      if(currentMap==='city')applyCityArt(looks.applied);
-      if(currentMap==='living')applyLivingArt(looks.applied);
-      if(currentMap==='garage')applyGarageArt(looks.applied);
-      if(currentMap==='warehouse')applyWarehouseArt(looks.applied);
-      if(currentMap==='room')applyRoomArt(looks.applied);
-      if(currentMap==='backyard')applyBackyardArt(looks.applied);
-      if(currentMap==='trainer')applyTrainerArt(looks.applied);
-      if(currentMap==='office')applyOfficeArt(looks.applied);
-      if(currentMap==='gym')applyGymArt(looks.applied);
+      try{
+        if(currentMap==='city')applyCityArt(looks.applied);
+        if(currentMap==='living')applyLivingArt(looks.applied);
+        if(currentMap==='garage')applyGarageArt(looks.applied);
+        if(currentMap==='warehouse')applyWarehouseArt(looks.applied);
+        if(currentMap==='room')applyRoomArt(looks.applied);
+        if(currentMap==='backyard')applyBackyardArt(looks.applied);
+        if(currentMap==='trainer')applyTrainerArt(looks.applied);
+        if(currentMap==='office')applyOfficeArt(looks.applied);
+        if(currentMap==='gym')applyGymArt(looks.applied);
+      }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
     });
   }
   if(q.get('builder')==='1'){toggleStartMenu(false);openBuilder();}
@@ -5968,7 +5984,7 @@ fetchBuiltinTracks().then(list=>{
 });
 Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
-  placeQuadAt,
+  placeQuadAt, map:()=>currentMap, track:()=>activeTrackId, artError:()=>window._artError||null,
   artStats:()=>artStats(renderer,currentMap==='city'?cityWorld:indoorWorld),vibe:()=>vibeFor(currentMap),VIBES,qualityWantsBloom,
   rain:()=>loadRain(),setRain(v){saveRain(!!v);if(currentMap==='city')applyCityArt(looks&&looks.applied);},RAIN_KEY,
   QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,CROSSHAIR_KEY,canopyGroup,craftGroup,skinTrail,

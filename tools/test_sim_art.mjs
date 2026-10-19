@@ -144,6 +144,23 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.match(sim, /City is original procedural art|Neon Current/);
 });
 
+test('sim.html imports every map restyle/tick/decorate it calls', () => {
+  const sim = readFileSync(join(root, 'sim.html'), 'utf8');
+  const m = sim.match(/import \{([\s\S]*?)\} from "\.\/sim-art\.js\?v=[0-9a-f]{12}"/);
+  assert.ok(m, 'sim-art import');
+  const imported = new Set(m[1].split(',').map((s) => s.trim()).filter(Boolean));
+  const maps = ['Living', 'Garage', 'Warehouse', 'Gym', 'Office', 'Trainer', 'Backyard', 'Room'];
+  for (const name of maps) {
+    for (const fn of ['restyle' + name, 'decorate' + name + 'Gate', 'pulse' + name + 'Gate', 'tick' + name + 'Art']) {
+      assert.ok(imported.has(fn), 'import ' + fn);
+      assert.match(sim, new RegExp(fn + '\\('), 'call ' + fn);
+    }
+  }
+  for (const fn of ['restyleCity', 'tickCityArt', 'decorateVibeGate', 'applyVibeLighting']) {
+    assert.ok(imported.has(fn), 'import ' + fn);
+  }
+});
+
 test('looks Low preset disables bloom', () => {
   const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
   assert.match(looks, /bloom:\s*false/);
