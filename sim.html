@@ -546,7 +546,7 @@
   <div class="row"><label>Show canopy</label><input type="checkbox" id="cbCanopy" style="accent-color:var(--orange)"></div>
   <div class="row"><label>Show crosshair</label><input type="checkbox" id="cbCrosshair" style="accent-color:var(--orange)"></div>
   <div class="row"><label>Trick HUD</label><input type="checkbox" id="cbTricksHud" checked style="accent-color:var(--orange)" title="Freestyle combo meter. Hidden in races."></div>
-  <div class="row"><label>Trick debug</label><input type="checkbox" id="cbTrickDebug" style="accent-color:var(--orange)" title="Hidden classifier overlay. Also ?trickdebug=1"></div>
+  <div class="row"><label>Trick debug</label><input type="checkbox" id="cbTrickDebug" style="accent-color:var(--orange)" title="Classifier overlay. Records last maneuver JSON — Copy last trace. Also ?trickdebug=1"></div>
 
   <h2>Quality</h2>
   <select id="qualityPanel">
@@ -5615,6 +5615,7 @@ function loop(now){
         trickSample.vx=qp.velocity.x;trickSample.vy=qp.velocity.y;trickSample.vz=qp.velocity.z;
         trickSample.clearance=qp.groundClearance?qp.groundClearance(qp):qp.position.z;
         trickSample.throttle=stick.t;
+        trickSample.sr=stick.r;trickSample.sp=stick.p;trickSample.sy=stick.y;
         trickSample.armed=qp.armed;
         trickSample.colliders=colliders;
         trickSample.ws=WS;

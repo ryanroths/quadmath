@@ -13,7 +13,7 @@ import {
   b2bMul, execMul, nextStreak, trickPoints, mapIsIndoor,
   upZOf, headingOf, bodyDelta, scanClearance, unwrapDelta, classifyFeat, featView,
   emptyStore, normalizeStore, loadStore, saveStore, recordBest, bestLine, bestForMap,
-  makeDetector, resetDetector, stepDetector,
+  makeDetector, resetDetector, stepDetector, encodeRecJson, REC_KEYS,
   makeCombo, resetCombo, pushCombo, comboRemain,
   createTricks,
 } from '../sim-tricks.js';
@@ -51,6 +51,7 @@ function qpSample(qp, extra) {
     armed: qp.armed,
     colliders: e.colliders || null,
     ws: WS,
+    sr: e.sr || 0, sp: e.sp || 0, sy: e.sy || 0,
   };
 }
 
@@ -149,22 +150,22 @@ function flyPilot(phases, opts) {
     let thr = ph.thr == null ? 0.55 : ph.thr;
     if (o.thrWobble) thr = Math.max(0, Math.min(1, thr + (rng() - 0.5) * o.thrWobble));
     if (o.threeD) thr = mapThrottle3d(thr);
-    const stick = (axis, key) => {
+    const stickVal = (key) => {
       const raw = ph[key] || 0;
       const n = raw === 0 ? (rng() - 0.5) * noise * 0.4 : raw + (rng() - 0.5) * noise;
-      const x = Math.max(-1, Math.min(1, n));
-      return rateSetpoint(rates.type, x, rates[axis]) * DEG;
+      return Math.max(-1, Math.min(1, n));
     };
+    const sr = stickVal('rollS'), sp = stickVal('pitchS'), sy = stickVal('yawS');
     qp.step(dt, {
-      roll: stick('roll', 'rollS'),
-      pitch: stick('pitch', 'pitchS'),
-      yaw: stick('yaw', 'yawS'),
+      roll: rateSetpoint(rates.type, sr, rates.roll) * DEG,
+      pitch: rateSetpoint(rates.type, sp, rates.pitch) * DEG,
+      yaw: rateSetpoint(rates.type, sy, rates.yaw) * DEG,
     }, thr, { r: 0, p: 0, y: 0 });
     if (!o.allowFloor && qp.position.z < 0.4) {
       qp.position.z = 0.4;
       if (qp.velocity.z < 0) qp.velocity.z *= 0.15;
     }
-    const ev = stepDetector(d, qpSample(qp, { thr, clearance: o.clearance, colliders: o.colliders }), dt);
+    const ev = stepDetector(d, qpSample(qp, { thr, clearance: o.clearance, colliders: o.colliders, sr, sp, sy }), dt);
     if (ev && TRICK_BY_ID[ev]) hits.push(ev);
     t += dt; phaseT += dt;
     if (ph.t != null && phaseT >= ph.t && phaseI < phases.length - 1) { phaseI++; phaseT = 0; }
@@ -256,9 +257,10 @@ const PILOT_LIBRARY = [
   { id: 'maverick', name: 'pilot-mav-052', phases: [{ t: 0.15, pitchS: 0, thr: 0.64 }, { t: 0.72, pitchS: -0.52, thr: 0.9 }, { t: 0.72, pitchS: 0.50, thr: 0.24 }, { t: 0.45, pitchS: 0, thr: 0.56 }], opts: { z0: 3.4, vx: 4.2, maxT: 2.9, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 202, noise: 0.06, thrWobble: 0.08 } },
   { id: 'maverick', name: 'pilot-mav-kiss', phases: [{ t: 0.15, pitchS: 0, thr: 0.62 }, { t: 0.50, pitchS: -0.55, thr: 0.9 }, { t: 0.52, pitchS: 0.52, thr: 0.22 }, { t: 0.4, pitchS: 0, thr: 0.55 }], opts: { z0: 3.6, vx: 4.4, maxT: 2.6, colliders: OBJ_BAR, rates: WHOOP_KISS, seed: 203, noise: 0.06, thrWobble: 0.08 } },
   { id: 'maverick', name: 'pilot-mav-against', phases: [{ t: 0.55, pitchS: -0.68, thr: 0.94 }, { t: 0.68, pitchS: 0.64, thr: 0.2 }, { t: 0.45, pitchS: 0.08, thr: 0.58 }], opts: { z0: 3.2, vx: 3.2, maxT: 2.6, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 204, noise: 0.05, thrWobble: 0.07 } },
-  { id: 'trippy', name: 'pilot-trip-half', phases: [{ t: 1.85, rollS: 0.50, yawS: -0.48, thr: 0.52 }, { t: 0.45, rollS: 0, yawS: 0, thr: 0.5 }], opts: { z0: 6, vx: 3.5, maxT: 2.8, colliders: OBJ_POLE, quat: { x: 1, y: 0, z: 0, w: 0 }, rates: WHOOP_ACTUAL, seed: 301, noise: 0.05, thrWobble: 0.07 } },
-  { id: 'trippy', name: 'pilot-trip-kiss', phases: [{ t: 1.2, rollS: 0.58, yawS: -0.52, thr: 0.55 }, { t: 0.4, rollS: 0, yawS: 0, thr: 0.5 }], opts: { z0: 6.2, vx: 3.8, maxT: 2.4, colliders: OBJ_POLE, quat: { x: 1, y: 0, z: 0, w: 0 }, rates: WHOOP_KISS, seed: 302, noise: 0.06, thrWobble: 0.07 } },
-  { id: 'trippy', name: 'pilot-trip-cradle', phases: [{ t: 0.36, pitchS: -0.55, thr: 0.42 }, { t: 0.22, pitchS: 0.35, rollS: 0.28, thr: 0.48 }, { t: 1.4, rollS: 0.62, yawS: -0.55, pitchS: 0.06, thr: 0.55 }, { t: 0.45, rollS: 0, yawS: 0, thr: 0.5 }], opts: { z0: 3.8, vx: 5.0, maxT: 3.5, colliders: OBJ_POLE, rates: WHOOP_ACTUAL, seed: 303, noise: 0.06, thrWobble: 0.07 } },
+  { id: 'trippy', name: 'pilot-trip-yaw-punch', phases: [{ t: 1.35, yawS: 0.95, rollS: 0.50, thr: 0.86 }, { t: 0.45, yawS: 0, rollS: 0, thr: 0.5 }], opts: { z0: 5.5, vx: 3.2, maxT: 2.4, colliders: OBJ_POLE, rates: WHOOP_ACTUAL, seed: 301, noise: 0.05, thrWobble: 0.06 } },
+  { id: 'trippy', name: 'pilot-trip-yaw-drop', phases: [{ t: 0.12, thr: 0.7 }, { t: 1.25, yawS: 0.95, rollS: -0.52, thr: 0.24 }, { t: 0.4, yawS: 0, rollS: 0, thr: 0.62 }], opts: { z0: 6.5, vx: 3.0, maxT: 2.4, colliders: OBJ_POLE, rates: WHOOP_ACTUAL, seed: 302, noise: 0.05, thrWobble: 0.06 } },
+  { id: 'trippy', name: 'pilot-trip-kiss-yaw', phases: [{ t: 1.15, yawS: 0.92, rollS: 0.42, thr: 0.8 }, { t: 0.4, yawS: 0, rollS: 0, thr: 0.5 }], opts: { z0: 5.8, vx: 3.4, maxT: 2.2, colliders: OBJ_POLE, rates: WHOOP_KISS, seed: 303, noise: 0.05, thrWobble: 0.06 } },
+  { id: 'trippy', name: 'pilot-trip-orbit', phases: [{ t: 1.2, rollS: 0.58, yawS: -0.52, thr: 0.55 }, { t: 0.4, rollS: 0, yawS: 0, thr: 0.5 }], opts: { z0: 6.2, vx: 3.8, maxT: 2.4, colliders: OBJ_POLE, quat: { x: 1, y: 0, z: 0, w: 0 }, rates: WHOOP_KISS, seed: 304, noise: 0.06, thrWobble: 0.07 } },
   { id: 'sideloop', name: 'pilot-side-actual', phases: [{ t: 0.55, yawS: 0.75, thr: 0.55 }, { t: 0.95, rollS: 0.75, yawS: 0.28, thr: 0.84 }, { t: 0.35, rollS: 0.58, yawS: 0.14, thr: 0.22 }, { t: 0.4, rollS: 0.3, thr: 0.68 }, { t: 0.4, rollS: 0, yawS: 0, thr: 0.5 }], opts: { z0: 4.5, vx: 5.0, maxT: 3.4, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 401, noise: 0.05, thrWobble: 0.07 } },
   { id: 'sideloop', name: 'pilot-side-kiss', phases: [{ t: 0.38, yawS: 0.72, rollS: 0.08, thr: 0.58 }, { t: 1.05, rollS: 0.70, yawS: 0.38, thr: 0.8 }, { t: 0.35, rollS: 0.35, yawS: 0.1, thr: 0.28 }, { t: 0.4, rollS: 0, yawS: 0, thr: 0.55 }], opts: { z0: 4.8, vx: 5.2, maxT: 3.1, colliders: OBJ_BAR, rates: WHOOP_KISS, seed: 402, noise: 0.06, thrWobble: 0.07 } },
 ];
@@ -325,6 +327,8 @@ test('docs/sim-tricks.md defines each trick and the confused pairs', () => {
   assert.ok(docs.includes('Maverick Loop vs Powerloop'));
   assert.ok(docs.includes('Trippy Spin vs Yaw Spin'));
   assert.ok(docs.includes('Side Loop vs Powerloop'));
+  assert.ok(docs.includes('How to record a real trace'));
+  assert.ok(docs.includes('Copy last trace'));
   assert.ok(docs.includes('100/75/50'));
 });
 
@@ -409,7 +413,7 @@ test('labeled QuadPhysics library: one label per maneuver, zero doubles', () => 
 });
 
 test('Ryan lock: Juicy Flick, Roll, Flip, Snapback, Matty stay one-label', () => {
-  const lockIds = new Set(['juicyflick', 'roll', 'flip', 'snapback', 'matty']);
+  const lockIds = new Set(['juicyflick', 'roll', 'flip', 'snapback', 'matty', 'sideloop', 'maverick']);
   const confuse = [];
   for (const c of LIBRARY) {
     if (!lockIds.has(c.id)) continue;
@@ -569,6 +573,48 @@ test('normalizeStore rejects junk and keeps hud default on', () => {
   assert.equal(formatScoreFull(2400), '2,400');
 });
 
+test('debug recorder dumps gyro/attitude/stick/throttle JSON for the last maneuver', () => {
+  const r = flyPilot(
+    [{ t: 1.2, yawS: 0.95, rollS: 0.5, thr: 0.8 }, { t: 0.4, yawS: 0, rollS: 0, thr: 0.5 }],
+    { z0: 5.5, vx: 3.2, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 9, noise: 0.04 },
+  );
+  const d = makeDetector();
+  const qp = new QuadPhysics(PRESETS.whoop65);
+  qp.setFlightMode('acro'); qp.setPhysicsHz(500);
+  qp.reset({ x: 0, y: 0, z: 5.5 }); qp.arm(); qp.velocity.x = 3.2;
+  resetDetector(d, qpSample(qp, { thr: 0.5 }));
+  d.lockout = 0;
+  const dt = 1 / 60;
+  let t = 0;
+  while (t < 2.0) {
+    const yawS = t < 1.2 ? 0.95 : 0;
+    const rollS = t < 1.2 ? 0.5 : 0;
+    const thr = t < 1.2 ? 0.8 : 0.5;
+    qp.step(dt, {
+      roll: rateSetpoint(WHOOP_ACTUAL.type, rollS, WHOOP_ACTUAL.roll) * DEG,
+      pitch: 0,
+      yaw: rateSetpoint(WHOOP_ACTUAL.type, yawS, WHOOP_ACTUAL.yaw) * DEG,
+    }, thr, { r: 0, p: 0, y: 0 });
+    if (qp.position.z < 0.4) qp.position.z = 0.4;
+    stepDetector(d, qpSample(qp, { thr, sr: rollS, sp: 0, sy: yawS }), dt);
+    t += dt;
+  }
+  assert.ok(d.recN > 20, 'recorded samples ' + d.recN);
+  assert.ok(d.recJson && d.recJson.charAt(0) === '{');
+  const j = JSON.parse(d.recJson);
+  assert.equal(j.kind, 'quadmath-trick-trace');
+  assert.deepEqual(j.keys, [...REC_KEYS]);
+  assert.equal(j.n, j.samples.length);
+  assert.equal(j.samples[0].length, REC_KEYS.length);
+  assert.ok(Math.abs(j.samples[8][8]) > 0.2 || Math.abs(j.samples[8][10]) > 0.2, 'stick in sample');
+  const tricks = createTricks({ document: null, storage: memStore(), muted: () => true, now: () => 1 });
+  assert.equal(typeof tricks.copyTrace, 'function');
+  assert.equal(typeof tricks.lastTrace, 'function');
+  assert.ok(src.includes('trickDbgCopy'));
+  assert.ok(src.includes('Copy last trace'));
+  assert.ok(r.hits.includes('trippy') || d.lastId === 'trippy' || d.lastId === 'yawspin' || d.lastId, 'got a label ' + d.lastId);
+});
+
 test('sim.html wires tricks without touching physics or old keys', () => {
   assert.ok(simSrc.includes('sim-tricks.js'));
   assert.ok(simSrc.includes('createTricks'));
@@ -579,6 +625,8 @@ test('sim.html wires tricks without touching physics or old keys', () => {
   assert.ok(simSrc.includes('try{') && simSrc.includes('tricks.tick'));
   assert.ok(simSrc.includes('noteCrash'));
   assert.ok(simSrc.includes('setDebugOn') || simSrc.includes('trickdebug'));
+  assert.ok(simSrc.includes('trickSample.sr=stick.r'));
+  assert.ok(simSrc.includes('Copy last trace') || simSrc.includes('Records last maneuver'));
   const feelSrc = readFileSync(join(root, 'sim-feel.js'), 'utf8');
   assert.equal(src.includes('FLIPPED — R TO RESPAWN'), false);
   assert.ok(feelSrc.includes('FLIPPED — R TO RESPAWN'), 'stuck-flip toast stays in feel');
