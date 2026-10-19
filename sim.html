@@ -532,6 +532,7 @@
   <div class="row"><label>Show canopy</label><input type="checkbox" id="cbCanopy" style="accent-color:var(--orange)"></div>
   <div class="row"><label>Show crosshair</label><input type="checkbox" id="cbCrosshair" style="accent-color:var(--orange)"></div>
   <div class="row"><label>Trick HUD</label><input type="checkbox" id="cbTricksHud" checked style="accent-color:var(--orange)" title="Freestyle combo meter. Hidden in races."></div>
+  <div class="row"><label>Trick debug</label><input type="checkbox" id="cbTrickDebug" style="accent-color:var(--orange)" title="Hidden classifier overlay. Also ?trickdebug=1"></div>
 
   <h2>Quality</h2>
   <select id="qualityPanel">
@@ -2602,7 +2603,7 @@ let thrustActual=0; // spooled thrust in WORLD newtons — audio + battery load 
 // G*gravMult the hand-rolled physics used.
 const WS=3.5;                    // world units per real metre
 const FLOOR_Y=FLOOR_CLEARANCE_M*WS; // ~1 cm pad in world units
-const trickSample={qx:0,qy:0,qz:0,qw:1,ox:0,oy:0,oz:0,wx:0,wy:0,wz:0,alt:0,speed:0,vz:0,clearance:1,throttle:0,armed:false,colliders:null,ws:WS};
+const trickSample={qx:0,qy:0,qz:0,qw:1,ox:0,oy:0,oz:0,wx:0,wy:0,wz:0,alt:0,speed:0,vx:0,vy:0,vz:0,clearance:1,throttle:0,armed:false,colliders:null,ws:WS};
 // Module frame is Z-up / X-forward / Y-left; three.js is Y-up and, for this
 // scene, -Z-forward (the camera looks down its own -Z).
 //
@@ -4510,6 +4511,11 @@ function wireLooksUI(){
     tricksCb.checked=tricks.hudOn();
     tricksCb.onchange=()=>tricks.setHudOn(!!tricksCb.checked);
   }
+  const trickDbgCb=document.getElementById('cbTrickDebug');
+  if(trickDbgCb&&tricks){
+    trickDbgCb.checked=tricks.debugOn();
+    trickDbgCb.onchange=()=>tricks.setDebugOn(!!trickDbgCb.checked);
+  }
   if(looks)looks.setMenuOpen(true);
   syncQualityUI();
 }
@@ -5665,7 +5671,7 @@ function loop(now){
         trickSample.wx=state.pos.x;trickSample.wy=state.pos.y;trickSample.wz=state.pos.z;
         trickSample.alt=qp.position.z;
         trickSample.speed=Math.hypot(qp.velocity.x,qp.velocity.y,qp.velocity.z);
-        trickSample.vz=qp.velocity.z;
+        trickSample.vx=qp.velocity.x;trickSample.vy=qp.velocity.y;trickSample.vz=qp.velocity.z;
         trickSample.clearance=qp.groundClearance?qp.groundClearance(qp):qp.position.z;
         trickSample.throttle=stick.t;
         trickSample.armed=qp.armed;
@@ -5851,11 +5857,14 @@ tricks=createTricks({
   storage:typeof localStorage!=='undefined'?localStorage:null,
   muted:()=>!musicOn,
   now:()=>performance.now()*0.001,
+  debug:(()=>{try{return new URLSearchParams(location.search).get('trickdebug')==='1';}catch(e){return false;}})(),
 });
 try{tricks.setActive(isFreeFlight(currentTrackObj,activeTrackId),currentMap);}catch(e){}
 window._tricks=tricks;
 const tricksCbBoot=document.getElementById('cbTricksHud');
 if(tricksCbBoot)tricksCbBoot.checked=tricks.hudOn();
+const trickDbgBoot=document.getElementById('cbTrickDebug');
+if(trickDbgBoot)trickDbgBoot.checked=tricks.debugOn();
 applyActiveSkin();
 const coachRetry=document.getElementById('coachRetry');
 if(coachRetry)coachRetry.onclick=()=>{
@@ -5967,6 +5976,11 @@ function applyQueryBoot(){
     });
   }
   if(q.get('builder')==='1'){toggleStartMenu(false);openBuilder();}
+  if(q.get('trickdebug')==='1'&&tricks){
+    tricks.setDebugOn(true);
+    const dbgEl=document.getElementById('cbTrickDebug');
+    if(dbgEl)dbgEl.checked=true;
+  }
   const sparkQ=q.get('spark');
   const secretQ=q.get('secret');
   if((sparkQ||secretQ)&&secrets){
