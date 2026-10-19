@@ -18,6 +18,11 @@ export const RATE_END = 0.55;
 export const SETTLE_S = 0.16;
 export const SETTLE_INV_S = 0.42;
 export const MANEUVER_MAX_S = 3.6;
+export const REC_CAP = 240;
+export const REC_STRIDE = 12;
+export const REC_KEYS = Object.freeze([
+  't', 'ox', 'oy', 'oz', 'qx', 'qy', 'qz', 'qw', 'sr', 'sp', 'sy', 'thr',
+]);
 export const DEAD = 1.15;
 export const STREAK_CAP = 2;
 export const SLOPPY_MUL = 0.65;
@@ -501,16 +506,29 @@ export function classifyFeat(f, out) {
     atLeast(v.inv, 0.12, 0.08),
     atMost(absY, 2.4, 0.7),
   );
-  _sc.trippy = mul(
-    atLeast(Math.max(absR, v.pathR), 2.4, 0.7),
-    atLeast(Math.max(absY, v.pathY), 1.5, 0.5),
-    atLeast(v.inv, 0.12, 0.08),
-    atLeast(v.opp, 0.22, 0.12),
-    atLeast(f.dur, 0.40, 0.12),
-    atMost(absP, 5.5, 1.0),
-    atLeast(f.spdPeak, 0.8, 0.35),
-    Math.max(atLeast(v.obj, 0.08, 0.08), 0.55),
-  );
+  {
+    const tumble = v.pathR + v.pathP;
+    const yawDom = v.pathY - Math.max(v.pathR, v.pathP);
+    const yawTumble = mul(
+      atLeast(Math.max(absY, v.pathY), 3.0, 0.8),
+      atLeast(tumble, 0.90, 0.35),
+      atLeast(yawDom, 0.25, 0.45),
+      atMost(absP, 5.2, 0.8),
+      atLeast(f.dur, 0.38, 0.12),
+      atLeast(f.spdPeak, 0.6, 0.3),
+    );
+    const invOrbit = mul(
+      atLeast(Math.max(absR, v.pathR), 2.2, 0.7),
+      atLeast(Math.max(absY, v.pathY), 1.5, 0.5),
+      atLeast(v.inv, 0.12, 0.08),
+      atLeast(v.opp, 0.18, 0.12),
+      atLeast(f.dur, 0.40, 0.12),
+      atMost(absP, 5.5, 1.0),
+      atLeast(f.spdPeak, 0.8, 0.35),
+      Math.max(atLeast(v.obj, 0.08, 0.08), 0.55),
+    );
+    _sc.trippy = yawTumble > invOrbit ? yawTumble : invOrbit;
+  }
   _sc.sideloop = mul(
     atLeast(Math.max(absR, v.pathR), 3.2, 0.7),
     atLeast(Math.max(absY, v.pathY), 1.15, 0.4),
@@ -626,9 +644,11 @@ export function classifyFeat(f, out) {
   );
   _sc.yawspin = mul(
     atLeast(absY, 4.55, 0.55),
-    atMost(absP, 1.55, 0.55),
-    atMost(absR, 1.55, 0.55),
-    atLeast(f.upMin, 0.12, 0.12),
+    atMost(absP, 1.05, 0.40),
+    atMost(absR, 1.05, 0.40),
+    atMost(v.pathR, 1.25, 0.40),
+    atMost(v.pathP, 1.25, 0.40),
+    atLeast(f.upMin, 0.25, 0.15),
   );
 
   let best = 0, bestId = '', second = 0, secondId = '';
@@ -644,7 +664,7 @@ export function classifyFeat(f, out) {
   }
   o.best = best; o.second = second; o.secondId = secondId;
   if (best < 0.42 || !bestId) {
-    if (v.drop >= 3.2 && f.spdPeak > 8 && f.vzMin < -6.2 && absP < 3.2 && absR < 2.2) {
+    if (v.drop >= 3.2 && f.spdPeak > 8 && f.vzMin < -6.2 && absP < 3.2 && absR < 2.2 && v.pathY < 2.0) {
       o.id = 'dive';
       o.why = whyLine('dive', f, v, '', 0);
       return o;
@@ -654,7 +674,7 @@ export function classifyFeat(f, out) {
   if (bestId === 'flip' && _sc.powerloop > 0.55 && f.pitch < 0 && f.travelH > 6 && v.close < 0.4) { bestId = 'powerloop'; best = _sc.powerloop; }
   if (bestId === 'flip' && _sc.matty > 0.55 && f.pitch > 0) { bestId = 'matty'; best = _sc.matty; }
   if (bestId === 'powerloop' && f.travelH < 5.5) { bestId = 'flip'; best = _sc.flip; }
-  if (bestId === 'yawspin' && _sc.trippy > 0.5) { bestId = 'trippy'; best = _sc.trippy; }
+  if (bestId === 'yawspin' && _sc.trippy > 0.35) { bestId = 'trippy'; best = _sc.trippy; }
   if (bestId === 'roll' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
   if (bestId === 'yawspin' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
   if (bestId === 'sideloop' && v.opp > 0.4 && _sc.trippy > 0.4) { bestId = 'trippy'; best = _sc.trippy; }
@@ -700,7 +720,55 @@ export function makeDetector() {
     airT: 0, landT: 0, armedPrev: 0, wasAir: 0,
     dbgT: 0,
     dbgLine: '',
+    rec: new Float32Array(REC_CAP * REC_STRIDE),
+    recN: 0,
+    recJson: '',
   };
+}
+
+function recPush(d, t, ox, oy, oz, qx, qy, qz, qw, sr, sp, sy, thr) {
+  if (!d || !d.rec) return;
+  const n = d.recN;
+  const b = d.rec;
+  let i = n * REC_STRIDE;
+  b[i] = t; b[i + 1] = ox; b[i + 2] = oy; b[i + 3] = oz;
+  b[i + 4] = qx; b[i + 5] = qy; b[i + 6] = qz; b[i + 7] = qw;
+  b[i + 8] = sr; b[i + 9] = sp; b[i + 10] = sy; b[i + 11] = thr;
+  d.recN = n + 1;
+}
+
+function round3(x) {
+  return Math.round(x * 1000) / 1000;
+}
+
+export function encodeRecJson(d) {
+  const n = d && d.recN ? d.recN : 0;
+  const b = d && d.rec;
+  const samples = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const o = i * REC_STRIDE;
+    samples[i] = [
+      round3(b[o]), round3(b[o + 1]), round3(b[o + 2]), round3(b[o + 3]),
+      round3(b[o + 4]), round3(b[o + 5]), round3(b[o + 6]), round3(b[o + 7]),
+      round3(b[o + 8]), round3(b[o + 9]), round3(b[o + 10]), round3(b[o + 11]),
+    ];
+  }
+  const f = d && d.lastFeat ? d.lastFeat : makeFeat();
+  const v = featView(f);
+  return JSON.stringify({
+    v: 1,
+    kind: 'quadmath-trick-trace',
+    id: (d && d.lastId) || '',
+    why: (d && d.lastWhy) || '',
+    n,
+    keys: REC_KEYS,
+    feat: {
+      dur: round3(f.dur), pitch: round3(f.pitch), roll: round3(f.roll), yaw: round3(f.yaw),
+      pathP: round3(v.pathP), pathR: round3(v.pathR), pathY: round3(v.pathY),
+      inv: round3(v.inv), opp: round3(v.opp),
+    },
+    samples,
+  });
 }
 
 export function resetDetector(d, sample) {
@@ -716,6 +784,8 @@ export function resetDetector(d, sample) {
   d.landT = 0;
   d.airT = 0;
   d.wasAir = 0;
+  d.recN = 0;
+  d.recJson = '';
   if (sample) {
     d.qx = sample.qx || 0; d.qy = sample.qy || 0; d.qz = sample.qz || 0; d.qw = sample.qw == null ? 1 : sample.qw;
     d.haveQ = 1;
@@ -794,6 +864,7 @@ function inGap(clr) {
 }
 
 function beginFeat(d, alt, wx, wz, head, speed, thr) {
+  d.recN = 0;
   const f = resetFeat(d.feat);
   f.alt0 = alt; f.alt1 = alt; f.altMin = alt; f.altMax = alt;
   f.h0x = wx; f.h0z = wz; f.h1x = wx; f.h1z = wz;
@@ -876,6 +947,7 @@ function finishManeuver(d) {
   d.lastId = cls.id || '';
   d.lastSloppy = (d.feat.seg && LOOP_IDS[cls.id]) ? 1 : 0;
   d.lastBump = d.feat.bump ? 1 : 0;
+  try { d.recJson = encodeRecJson(d); } catch (e) { d.recJson = ''; }
   resetFeat(d.feat);
   if (cls.id) {
     d.lockout = LOCKOUT_S;
@@ -944,6 +1016,10 @@ export function stepDetector(d, sample, dt) {
   if (d.live) {
     if (contact) d.feat.bump = 1;
     accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, thr, vx, vy, vz);
+    recPush(
+      d, d.feat.dur, ox, oy, oz, sx, sy, sz, sw,
+      sample.sr || 0, sample.sp || 0, sample.sy || 0, thr,
+    );
     if (rate < RATE_END) d.quiet += step;
     else {
       if (d.quiet > 0.14 && d.feat.dur > 0.28) d.feat.seg = 1;
@@ -1047,8 +1123,13 @@ const HUD_CSS = '#trickHud{position:fixed;left:50%;top:20%;transform:translateX(
   + '#trickDbg{position:fixed;left:8px;top:92px;z-index:16;pointer-events:none;display:none;margin:0;'
   + 'font-family:\'JetBrains Mono\',ui-monospace,monospace;font-size:11px;line-height:1.45;letter-spacing:.02em;'
   + 'color:#00f0ff;background:rgba(8,6,18,.78);border:1px solid rgba(0,240,255,.28);padding:8px 10px;max-width:420px;'
-  + 'white-space:pre;text-shadow:0 1px 6px rgba(0,0,0,.8)}'
+  + 'text-shadow:0 1px 6px rgba(0,0,0,.8)}'
   + '#trickDbg.on{display:block}'
+  + '#trickDbgText{margin:0;white-space:pre}'
+  + '#trickDbgCopy{pointer-events:auto;margin-top:8px;display:none;font-family:inherit;font-size:11px;'
+  + 'letter-spacing:.08em;text-transform:uppercase;color:#080612;background:#00f0ff;border:0;padding:5px 10px;cursor:pointer}'
+  + '#trickDbgCopy.on{display:inline-block}'
+  + '#trickDbgCopy.flash{background:#ff2bd6;color:#fff}'
   + 'body.menu-open #trickHud,body.menu-open #trickScore,body.builder-on #trickHud,body.builder-on #trickScore,'
   + 'body:has(#panel.open) #trickHud,body:has(#panel.open) #trickScore{opacity:0}'
   + 'body.menu-open #trickDbg,body.builder-on #trickDbg,body:has(#panel.open) #trickDbg{opacity:.35}';
@@ -1078,9 +1159,14 @@ function ensureHud(doc) {
     doc.body.appendChild(score);
   }
   let dbg = doc.getElementById('trickDbg');
+  if (dbg && dbg.tagName === 'PRE') {
+    dbg.parentNode.removeChild(dbg);
+    dbg = null;
+  }
   if (!dbg) {
-    dbg = doc.createElement('pre');
+    dbg = doc.createElement('div');
     dbg.id = 'trickDbg';
+    dbg.innerHTML = '<pre id="trickDbgText"></pre><button type="button" id="trickDbgCopy">Copy last trace</button>';
     doc.body.appendChild(dbg);
   }
   return {
@@ -1091,6 +1177,8 @@ function ensureHud(doc) {
     fill: hud.querySelector('#trickBar>i'),
     score,
     dbg,
+    dbgText: doc.getElementById('trickDbgText') || dbg,
+    dbgCopy: doc.getElementById('trickDbgCopy'),
   };
 }
 
@@ -1134,6 +1222,7 @@ export function createTricks(opts) {
   const combo = makeCombo();
   const audio = { ctx: null };
   let hudEls = null;
+  let copyBound = 0;
   let active = false;
   let mapId = 'city';
   let indoor = mapIsIndoor(mapId);
@@ -1153,6 +1242,55 @@ export function createTricks(opts) {
     return !!(store.hud && active);
   }
 
+  function fallbackCopy(text) {
+    try {
+      if (!doc) return false;
+      const ta = doc.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      doc.body.appendChild(ta);
+      ta.select();
+      const ok = doc.execCommand && doc.execCommand('copy');
+      doc.body.removeChild(ta);
+      return !!ok;
+    } catch (e) { return false; }
+  }
+
+  function copyLastTrace() {
+    const text = det.recJson || '';
+    if (!text) return false;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(function () { fallbackCopy(text); });
+        return true;
+      }
+    } catch (e) { /* fall through */ }
+    return fallbackCopy(text);
+  }
+
+  function bindCopy() {
+    if (copyBound || !hudEls || !hudEls.dbgCopy) return;
+    copyBound = 1;
+    hudEls.dbgCopy.onclick = function (ev) {
+      try {
+        if (ev && ev.preventDefault) ev.preventDefault();
+        const ok = copyLastTrace();
+        if (ok && hudEls.dbgCopy) {
+          hudEls.dbgCopy.className = 'on flash';
+          hudEls.dbgCopy.textContent = 'Copied';
+          setTimeout(function () {
+            if (hudEls && hudEls.dbgCopy) {
+              hudEls.dbgCopy.className = det.recJson ? 'on' : '';
+              hudEls.dbgCopy.textContent = 'Copy last trace';
+            }
+          }, 900);
+        }
+      } catch (e) { /* ignore */ }
+    };
+  }
+
   function paintDebug(t) {
     if (!doc || !store.debug) {
       if (hudEls && hudEls.dbg && lastDbgOn !== 0) {
@@ -1163,6 +1301,7 @@ export function createTricks(opts) {
     }
     if (!hudEls) hudEls = ensureHud(doc);
     if (!hudEls || !hudEls.dbg) return;
+    bindCopy();
     if (lastDbgOn !== 1) {
       hudEls.dbg.className = 'on';
       lastDbgOn = 1;
@@ -1171,6 +1310,8 @@ export function createTricks(opts) {
     det.dbgT = t;
     const f = det.live ? det.feat : det.lastFeat;
     const v = featView(f);
+    const recN = det.recN || 0;
+    const hasJson = !!(det.recJson);
     const line = (det.live ? 'LIVE' : 'IDLE')
       + '  P' + deg(f.pitch) + ' R' + deg(f.roll) + ' Y' + deg(f.yaw)
       + '\nfol ' + v.follow.toFixed(2) + '  ag ' + v.against.toFixed(2)
@@ -1178,10 +1319,15 @@ export function createTricks(opts) {
       + '\ninv ' + v.inv.toFixed(2) + '  close ' + v.close.toFixed(2)
       + '  u' + v.under.toFixed(2) + ' o' + v.over.toFixed(2)
       + '  n ' + f.n + '  ' + f.dur.toFixed(2) + 's'
+      + '\nrec ' + recN + (hasJson ? '  JSON ready' : '')
       + '\nlast  ' + (det.lastWhy || '—');
     if (line !== det.dbgLine) {
       det.dbgLine = line;
-      hudEls.dbg.textContent = line;
+      if (hudEls.dbgText) hudEls.dbgText.textContent = line;
+      else hudEls.dbg.textContent = line;
+    }
+    if (hudEls.dbgCopy) {
+      hudEls.dbgCopy.className = hasJson ? 'on' : '';
     }
   }
 
@@ -1369,8 +1515,10 @@ export function createTricks(opts) {
     det.lastId = id;
     const nm = (def && def.name) || name || 'Side Loop';
     popName = nm;
-    det.lastWhy = nm + '  ' + (def ? def.tier : 'Novice') + '  ' + (def ? def.points : 200)
-      + '\n  P0 R360 Y90  fol=0.16 ag=0.08  span=4.2 hd=70  inv=0.28 cl=0.72  (roll 0.12)';
+    const dummy = id === 'trippy'
+      ? '\n  P20 R80 Y420  fol=0.18 ag=0.12  span=3.1 hd=70  inv=0.14 cl=0.82  (yawspin 0.22)'
+      : '\n  P0 R360 Y90  fol=0.16 ag=0.08  span=4.2 hd=70  inv=0.28 cl=0.72  (roll 0.12)';
+    det.lastWhy = nm + '  ' + (def ? def.tier : 'Novice') + '  ' + (def ? def.points : 200) + dummy;
     det.dbgT = 0;
     lastHudOn = -1;
     lastDbgOn = -1;
@@ -1398,6 +1546,8 @@ export function createTricks(opts) {
     bestFor: function (id) { return bestForMap(store, id || mapId); },
     store: function () { return store; },
     debugPop,
+    copyTrace: copyLastTrace,
+    lastTrace: function () { return det.recJson || ''; },
     lastWhy: function () { return det.lastWhy; },
     lastId: function () { return det.lastId; },
     lastSloppy: function () { return det.lastSloppy; },

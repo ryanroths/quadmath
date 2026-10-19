@@ -47,7 +47,7 @@ site lists both 150 and 50).
 | `halfmatty` | Half Matty | Intermediate | 350 | 350 | **180° roll first**, then the second half of a Matty, ending **backward under**. Optional stall after the roll. |
 | `cubik` | Cubik's Rube | Intermediate | 350 | 450 | 180° roll → 360° flip → 180° roll, same roll direction. Open air. |
 | `rubik` | Rubik's Cube | Intermediate | 325 | 450 | 180° flip → 360° roll → 180° flip, same pitch direction. Open air. |
-| `trippy` | Trippy Spin | Intermediate | 500 | 500 | From a Cradle: inverted, object top-of-screen, **opposite** roll + yaw orbit. Object-relative inverted orbit, not an open-air corkscrew. |
+| `trippy` | Trippy Spin | Intermediate | 500 | 500 | **Yaw-dominant tumble**: continuous yaw while a partial roll or pitch takes the view through inverted (full yaw + partial roll, punch or drop). Also still matches the TPW Cradle continuation (inverted opposite roll+yaw orbit). Not a clean upright Yaw Spin. |
 
 ## Decision boundaries
 
@@ -92,13 +92,22 @@ Same under → over → under path.
 
 ### Trippy Spin vs Yaw Spin
 
-- Yaw Spin: ~360° yaw, little roll/pitch, **upright**, no object required.
-- Trippy Spin: **from a Cradle** — inverted orbit, roll and yaw in
-  **opposite** directions, object kept top-center. A partial orbit still
-  counts. Open-air corkscrew (same-sign roll+yaw, no invert) is **not** a
-  Trippy. Segmentation keeps the window open a bit longer while inverted
-  so the Cradle → orbit is one maneuver (or a second window after Cradle
-  banks).
+- Yaw Spin: ~360° yaw, **little** roll/pitch, **upright**.
+- Trippy Spin is a **spinning yaw-dominant tumble**. Hold mostly yaw and
+  mix in partial roll (or pitch) so the camera view orbits / goes
+  inverted — punch throttle or drop. Typical Actual whoop: stick yaw
+  near full, roll ~0.45–0.65, not a clean yaw. A clean upright yaw with
+  only a leak of roll stays a Yaw Spin.
+- The TPW Cradle continuation (inverted, opposite roll+yaw around an
+  object) still matches as the other Trippy signature.
+
+### How to record a real trace
+
+1. Freestyle, Tune panel → **Trick debug** (or `?trickdebug=1`).
+2. Fly the maneuver. The overlay shows `rec N` while the window is live.
+3. When it settles, click **Copy last trace**. That JSON is gyro
+   (`ox,oy,oz`), attitude (`qx…qw`), stick (`sr,sp,sy`), and throttle.
+4. Paste it to Ryan / an issue. Replay is `kind: quadmath-trick-trace`.
 
 ### Side Loop vs Powerloop / Roll / Trippy
 
@@ -108,8 +117,8 @@ Same under → over → under path.
   over the top. Novice Jump Rope, same outdoor points as Powerloop.
 - Roll: ~360° roll, little yaw, little altitude span. A Side Loop has
   both yaw and a loop-sized altitude span, so it is not a Roll.
-- Trippy: inverted **opposite** roll+yaw orbit (not yaw-then-roll, not a
-  completed vertical loop that levels).
+- Trippy: **yaw-dominant** tumble (or inverted opposite-roll+yaw orbit),
+  not yaw-then-roll, not a completed vertical loop that levels.
 
 ### Juicy Flick vs Snapback vs Split-S vs Immelmann (skipped)
 
