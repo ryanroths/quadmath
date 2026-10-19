@@ -40,6 +40,7 @@ site lists both 150 and 50).
 | `gap` | Gap | Beginner | 125 | 125 | Through a narrow opening at speed. 125 = TPW medium (12 in) gap. |
 | `prox` | Proximity | Beginner | 150 | 150 | Wall near-miss at speed. Sim-only spatial; TPW Wall Ride/Tap need a knife-edge roll or tap we do not require. |
 | `powerloop` | Powerloop | Novice | 200 | 200 | Start **under**, **pitch back** + throttle over until inverted, cut still pitching back, reapply, level **under**. Nose follows. Heading in ≈ out. |
+| `sideloop` | Side Loop | Novice | 200 | 225 | 90° **yaw** under the object, then a **roll-driven** vertical loop (roll + some yaw) over inverted, cut, reapply, level under. Carves a loop **sideways**, not a pitch Powerloop. Indoor 225 = TPW Under/Over. |
 | `matty` | Matty Flip | Novice | 200 | 200 | Start **over**, **partial front flip** (pitch forward) keeping the object in view on the way down, throttle, level **flying backward under**. |
 | `juicyflick` | Juicy Flick | Novice | 200 | 225 | Open-air: pitch **forward** with throttle to inverted, then a prompt **180° roll**. Travel stays forward. |
 | `snapback` | Snapback | Novice | 200 | 225 | Pitch **back** to inverted (half-loop style), then a prompt **180° roll**. Not a completed Powerloop. |
@@ -82,16 +83,33 @@ Pitch sign after the roll + exit follow vs against.
 
 Same under → over → under path.
 
-- Powerloop: goes **inverted**, ~360° back pitch, nose follows.
-- Maverick: **never inverts**. Camera stays forward-looking the whole time.
-  Pitch is an S-curve (back then forward), not a full flip.
+- Powerloop: goes **inverted**, ~360° back pitch, nose follows. Net pitch ≈
+  path pitch.
+- Maverick: camera stays **forward-looking**; brief invert is allowed but
+  it is not a full flip. Pitch is an **S-curve** (path pitch ≫ net pitch).
+  Often flies **backward** over the object while still looking forward, so
+  follow vs against is **not** the split. Heading in ≈ out.
 
 ### Trippy Spin vs Yaw Spin
 
 - Yaw Spin: ~360° yaw, little roll/pitch, **upright**, no object required.
-- Trippy Spin: **inverted** orbit, roll and yaw in **opposite** directions,
-  object kept top-center. Open-air corkscrew (same-sign roll+yaw, no object)
-  is **not** a Trippy.
+- Trippy Spin: **from a Cradle** — inverted orbit, roll and yaw in
+  **opposite** directions, object kept top-center. A partial orbit still
+  counts. Open-air corkscrew (same-sign roll+yaw, no invert) is **not** a
+  Trippy. Segmentation keeps the window open a bit longer while inverted
+  so the Cradle → orbit is one maneuver (or a second window after Cradle
+  banks).
+
+### Side Loop vs Powerloop / Roll / Trippy
+
+- Powerloop: **pitch-back** loop in the travel plane. Little roll/yaw.
+- Side Loop: **yaw first** (~90°), then a **roll** loop (roll + some yaw)
+  that carves a **vertical loop sideways**. Pitch stays small. Goes inverted
+  over the top. Novice Jump Rope, same outdoor points as Powerloop.
+- Roll: ~360° roll, little yaw, little altitude span. A Side Loop has
+  both yaw and a loop-sized altitude span, so it is not a Roll.
+- Trippy: inverted **opposite** roll+yaw orbit (not yaw-then-roll, not a
+  completed vertical loop that levels).
 
 ### Juicy Flick vs Snapback vs Split-S vs Immelmann (skipped)
 
@@ -142,18 +160,24 @@ implemented (event rules, not a sim HUD).
 
 ## Segmentation
 
-Start: body rate above a deadband (inverted hover alone does not start a
-window).
+Start: body rate above a deadband tuned so **Actual/KISS half-stick**
+(typical whoop Actual ~20°/s center, ~740°/s max) still opens a window.
+Inverted hover alone does not start one. A throttle-cut building dive
+(fast downward, modest rate) does not steal the dive spatial detector.
 
-End: rates quiet for a short settle, or a max window (~2.8 s).
+End: rates quiet for a short settle, or a max window (~3.6 s). While
+**inverted**, settle is longer so a Cradle → Trippy orbit does not split
+on a brief rate dip.
 
 Cruise / carving / hover wobble must classify as **none**.
 
 ## Added vs skipped
 
 **Added** (besides the original set, retuned to TPW): Cradle, Juicy Flick,
-Snapback, Rubik's Cube, Cubik's Rube. Each has a distinct axis-order or
-pitch-sign signature and a clean synthetic matrix.
+Snapback, Rubik's Cube, Cubik's Rube, **Side Loop**. Each has a distinct
+axis-order or pitch-sign signature. The matrix covers both the synthetic
+rad/s library and **pilot traces** (imperfect stick, varying throttle,
+Actual/KISS curves from `sim-rates.js`).
 
 **Skipped** (and why):
 

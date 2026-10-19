@@ -13,10 +13,11 @@ export const STORE_VER = 1;
 export const COMBO_WINDOW_S = 2.8;
 export const MUL_CAP = 6;
 export const LOCKOUT_S = 0.45;
-export const RATE_START = 2.05;
-export const RATE_END = 1.15;
+export const RATE_START = 0.95;
+export const RATE_END = 0.55;
 export const SETTLE_S = 0.16;
-export const MANEUVER_MAX_S = 2.8;
+export const SETTLE_INV_S = 0.42;
+export const MANEUVER_MAX_S = 3.6;
 export const DEAD = 1.15;
 export const STREAK_CAP = 2;
 export const SLOPPY_MUL = 0.65;
@@ -37,6 +38,7 @@ export const TRICK_LIST = Object.freeze([
   Object.freeze({ id: 'cradle', name: 'Cradle', tier: 'Beginner', points: 150, pointsIn: 150, type: 'Pole Dancing' }),
   Object.freeze({ id: 'prox', name: 'Proximity', tier: 'Beginner', points: 150, pointsIn: 150, type: 'Wall Tricks' }),
   Object.freeze({ id: 'powerloop', name: 'Powerloop', tier: 'Novice', points: 200, pointsIn: 200, type: 'Powerloops' }),
+  Object.freeze({ id: 'sideloop', name: 'Side Loop', tier: 'Novice', points: 200, pointsIn: 225, type: 'Jump Ropes' }),
   Object.freeze({ id: 'matty', name: 'Matty Flip', tier: 'Novice', points: 200, pointsIn: 200, type: 'Matty Flips' }),
   Object.freeze({ id: 'juicyflick', name: 'Juicy Flick', tier: 'Novice', points: 200, pointsIn: 225, type: 'Open Air' }),
   Object.freeze({ id: 'snapback', name: 'Snapback', tier: 'Novice', points: 200, pointsIn: 225, type: 'Open Air' }),
@@ -64,15 +66,15 @@ const HALF = PI * 0.78;
 const FULL = 5.2;
 const QTR = 1.15;
 const CLASS_IDS = [
-  'rubik', 'cubik', 'trippy', 'juicyflick', 'snapback', 'halfmatty',
+  'rubik', 'cubik', 'trippy', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
   'powerloop', 'matty', 'maverick', 'splits', 'cradle', 'flip', 'roll', 'yawspin',
 ];
 const SPEC = {
-  rubik: 0.12, cubik: 0.12, trippy: 0.11, juicyflick: 0.11, snapback: 0.11,
+  rubik: 0.12, cubik: 0.12, trippy: 0.11, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
   halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
   cradle: 0.08, flip: 0, roll: 0, yawspin: 0,
 };
-const LOOP_IDS = { powerloop: 1, matty: 1, maverick: 1, splits: 1, halfmatty: 1, trippy: 1 };
+const LOOP_IDS = { powerloop: 1, matty: 1, maverick: 1, splits: 1, halfmatty: 1, trippy: 1, sideloop: 1 };
 
 function makeDlt() { return { r: 0, p: 0, y: 0 }; }
 function makeClr() { return { up: 50, dn: 50, px: 50, nx: 50, pz: 50, nz: 50, near: 50, over: 50 }; }
@@ -474,8 +476,10 @@ export function classifyFeat(f, out) {
 
   const tR = f.tRoll90 < 90 ? f.tRoll90 : (f.tRoll180 < 90 ? f.tRoll180 : 99);
   const tP = f.tPitch90 < 90 ? f.tPitch90 : (f.tPitch180 < 90 ? f.tPitch180 : 99);
+  const tY = f.tYaw90 < 90 ? f.tYaw90 : (f.tYaw180 < 90 ? f.tYaw180 : 99);
   const rollFirst = (tR < 90 && tP < 90) ? (tP - tR) : (tR < 90 && tP >= 90 ? 0.5 : -0.5);
   const pitchFirst = -rollFirst;
+  const yawFirst = (tY < 90 && tR < 90) ? (tR - tY) : (tY < 90 && tR >= 90 ? 0.5 : -0.4);
   const objU = Math.max(v.under, f.under0 ? 0.35 : 0);
   const objO = Math.max(v.over, f.over0 ? 0.35 : 0);
 
@@ -498,14 +502,27 @@ export function classifyFeat(f, out) {
     atMost(absY, 2.4, 0.7),
   );
   _sc.trippy = mul(
-    atLeast(Math.max(absR, v.pathR), 3.6, 0.8),
-    atLeast(Math.max(absY, v.pathY), 2.2, 0.7),
-    atLeast(v.inv, 0.22, 0.1),
-    atLeast(v.opp, 0.35, 0.15),
-    atLeast(f.dur, 0.55, 0.15),
-    atMost(absP, 4.8, 1.0),
-    atLeast(f.spdPeak, 1.0, 0.4),
-    Math.max(atLeast(v.obj, 0.12, 0.1), 0.55),
+    atLeast(Math.max(absR, v.pathR), 2.4, 0.7),
+    atLeast(Math.max(absY, v.pathY), 1.5, 0.5),
+    atLeast(v.inv, 0.12, 0.08),
+    atLeast(v.opp, 0.22, 0.12),
+    atLeast(f.dur, 0.40, 0.12),
+    atMost(absP, 5.5, 1.0),
+    atLeast(f.spdPeak, 0.8, 0.35),
+    Math.max(atLeast(v.obj, 0.08, 0.08), 0.55),
+  );
+  _sc.sideloop = mul(
+    atLeast(Math.max(absR, v.pathR), 3.2, 0.7),
+    atLeast(Math.max(absY, v.pathY), 1.15, 0.4),
+    atLeast(v.span, 1.5, 0.5),
+    atLeast(v.inv, 0.10, 0.08),
+    atMost(absP, 2.4, 0.6),
+    atMost(v.opp, 0.45, 0.15),
+    atLeast(yawFirst, 0.0, 0.14),
+    atLeast(f.dur, 0.45, 0.12),
+    atLeast(f.spdPeak, 1.2, 0.4),
+    atMost(v.close, 1.15, 0.15),
+    Math.max(atLeast(objU, 0.08, 0.08), 0.58),
   );
   _sc.juicyflick = mul(
     atLeast(f.pitch, 2.0, 0.5),
@@ -562,16 +579,17 @@ export function classifyFeat(f, out) {
     Math.max(atLeast(objO, 0.08, 0.08), 0.72),
   );
   _sc.maverick = mul(
-    atLeast(v.span, 1.4, 0.45),
-    atMost(v.close, 0.92, 0.12),
-    inBand(v.pathP, 1.5, 5.4, 0.5),
+    atLeast(v.span, 1.0, 0.4),
+    atMost(v.close, 1.08, 0.14),
+    inBand(v.pathP, 1.1, 6.2, 0.5),
     atMost(absP, 4.2, 0.5),
-    atMost(v.inv, 0.18, 0.1),
-    atLeast(v.follow - v.against, 0.0, 0.12),
-    atLeast(f.dur, 0.4, 0.12),
-    atLeast(f.spdPeak, 1.4, 0.5),
-    atMost(absR, 2.4, 0.7),
-    atMost(v.head, 1.6, 0.5),
+    atLeast(v.pathP - absP, 0.55, 0.35),
+    atMost(v.inv, 0.32, 0.12),
+    atLeast(f.dur, 0.35, 0.12),
+    atLeast(f.spdPeak, 1.1, 0.4),
+    atMost(absR, 2.8, 0.7),
+    atMost(v.head, 2.0, 0.5),
+    atMost(absY, 2.4, 0.7),
   );
   _sc.splits = mul(
     inBand(absR, 1.8, 4.5, 0.45),
@@ -637,6 +655,11 @@ export function classifyFeat(f, out) {
   if (bestId === 'flip' && _sc.matty > 0.55 && f.pitch > 0) { bestId = 'matty'; best = _sc.matty; }
   if (bestId === 'powerloop' && f.travelH < 5.5) { bestId = 'flip'; best = _sc.flip; }
   if (bestId === 'yawspin' && _sc.trippy > 0.5) { bestId = 'trippy'; best = _sc.trippy; }
+  if (bestId === 'roll' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
+  if (bestId === 'yawspin' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
+  if (bestId === 'sideloop' && v.opp > 0.4 && _sc.trippy > 0.4) { bestId = 'trippy'; best = _sc.trippy; }
+  if (bestId === 'trippy' && v.opp < 0.22 && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
+  if (bestId === 'maverick' && absP > 4.3 && f.pitch < 0 && _sc.powerloop > 0.5) { bestId = 'powerloop'; best = _sc.powerloop; }
   if (bestId === 'powerloop' && f.pitch > 0) { bestId = _sc.matty > 0.42 ? 'matty' : bestId; }
   if (bestId === 'matty' && f.pitch < 0) { bestId = _sc.powerloop > 0.42 ? 'powerloop' : bestId; }
   if (bestId === 'matty' && absR > 2.1 && pitchFirst > 0.02 && _sc.juicyflick > 0.3) { bestId = 'juicyflick'; best = _sc.juicyflick; }
@@ -914,7 +937,8 @@ export function stepDetector(d, sample, dt) {
 
   let hit = null;
   const rotating = rate >= RATE_START;
-  if (armed && !contact && rotating && !d.live && d.lockout <= 0) {
+  const diving = thr < 0.18 && rate < 1.55 && vz < -3.8;
+  if (armed && !contact && rotating && !d.live && d.lockout <= 0 && !diving) {
     beginFeat(d, alt, wx, wz, head, speed, thr);
   }
   if (d.live) {
@@ -925,8 +949,9 @@ export function stepDetector(d, sample, dt) {
       if (d.quiet > 0.14 && d.feat.dur > 0.28) d.feat.seg = 1;
       d.quiet = 0;
     }
+    const quietNeed = upZ < -0.22 ? SETTLE_INV_S : SETTLE_S;
     const timedOut = d.feat.dur >= MANEUVER_MAX_S;
-    const settled = d.quiet >= SETTLE_S && d.feat.dur >= 0.22;
+    const settled = d.quiet >= quietNeed && d.feat.dur >= 0.22;
     if (settled || timedOut || (contact && d.feat.dur > 0.2)) {
       hit = finishManeuver(d);
     }
@@ -1322,7 +1347,6 @@ export function createTricks(opts) {
   }
 
   function debugPop(name, mul, pts) {
-    popName = name || 'Flip';
     const t = nowFn();
     popUntil = t + 8;
     combo.live = 1;
@@ -1331,14 +1355,22 @@ export function createTricks(opts) {
     combo.points = pts == null ? 1250 : pts;
     combo.lastAt = t + 60;
     session = Math.max(session, 4200);
-    det.lastId = 'powerloop';
-    {
-      const pl = BY_ID.powerloop;
-      const nm = name || (pl ? pl.name : 'Powerloop');
-      popName = nm;
-      det.lastWhy = nm + '  ' + (pl ? pl.tier : 'Novice') + '  ' + (pl ? pl.points : 200)
-        + '\n  P-360 R0 Y0  fol=0.86 ag=0.05  span=3.8 hd=8  inv=0.31 cl=0.04  (matty 0.12)';
+    let def = BY_ID.sideloop || BY_ID.powerloop;
+    let id = 'sideloop';
+    if (name) {
+      for (let i = 0; i < TRICK_LIST.length; i++) {
+        if (TRICK_LIST[i].name === name || TRICK_LIST[i].id === name) {
+          def = TRICK_LIST[i];
+          id = def.id;
+          break;
+        }
+      }
     }
+    det.lastId = id;
+    const nm = (def && def.name) || name || 'Side Loop';
+    popName = nm;
+    det.lastWhy = nm + '  ' + (def ? def.tier : 'Novice') + '  ' + (def ? def.points : 200)
+      + '\n  P0 R360 Y90  fol=0.16 ag=0.08  span=4.2 hd=70  inv=0.28 cl=0.72  (roll 0.12)';
     det.dbgT = 0;
     lastHudOn = -1;
     lastDbgOn = -1;
