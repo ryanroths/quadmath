@@ -314,19 +314,24 @@ function skipMat(m) {
 }
 
 function mergeGeos(THREE, list) {
-  const pos = [], nor = [], uv = [];
+  const pos = [], nor = [], uv = [], col = [];
+  let anyColor = false;
   for (const g of list) {
     if (!g) continue;
     const p = g.getAttribute('position');
     const n = g.getAttribute('normal');
     const u = g.getAttribute('uv');
+    const c = g.getAttribute('color');
     if (!p) continue;
+    if (c) anyColor = true;
     for (let i = 0; i < p.count; i++) {
       pos.push(p.getX(i), p.getY(i), p.getZ(i));
       if (n) nor.push(n.getX(i), n.getY(i), n.getZ(i));
       else nor.push(0, 1, 0);
       if (u) uv.push(u.getX(i), u.getY(i));
       else uv.push(0, 0);
+      if (c) col.push(c.getX(i), c.getY(i), c.getZ(i));
+      else col.push(1, 1, 1);
     }
     g.dispose();
   }
@@ -334,13 +339,40 @@ function mergeGeos(THREE, list) {
   out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   out.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  if (anyColor) out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   return out;
 }
 
-function boxAt(THREE, w, h, d, x, y, z, ry) {
+function paintGeo(THREE, g, color) {
+  if (!g || color == null) return g;
+  const n = ((color >>> 0) & 0xffffff);
+  const r = ((n >> 16) & 255) / 255;
+  const gv = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const p = g.getAttribute('position');
+  if (!p) return g;
+  const arr = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    arr[i * 3] = r; arr[i * 3 + 1] = gv; arr[i * 3 + 2] = b;
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(arr, 3));
+  return g;
+}
+
+function boxAt(THREE, w, h, d, x, y, z, ry, color) {
   const g = new THREE.BoxGeometry(w, h, d);
   if (ry) g.rotateY(ry);
   g.translate(x, y, z);
+  if (color != null) paintGeo(THREE, g, color);
+  return g;
+}
+
+function cylAt(THREE, rTop, rBot, h, x, y, z, rx, rz, color, segs) {
+  const g = new THREE.CylinderGeometry(rTop, rBot, h, segs || 8);
+  if (rx) g.rotateX(rx);
+  if (rz) g.rotateZ(rz);
+  g.translate(x, y, z);
+  if (color != null) paintGeo(THREE, g, color);
   return g;
 }
 
@@ -621,15 +653,112 @@ function makeBlimpGeo(THREE) {
   ]);
 }
 
-function makeCarGeo(THREE) {
-  return mergeGeos(THREE, [
-    boxAt(THREE, 4.0, 0.88, 1.85, 0, 0.74, 0, 0),
-    boxAt(THREE, 2.05, 0.95, 1.62, -0.35, 1.58, 0, 0),
-    boxAt(THREE, 0.55, 0.48, 0.22, 1.2, 0.30, 0.92, 0),
-    boxAt(THREE, 0.55, 0.48, 0.22, 1.2, 0.30, -0.92, 0),
-    boxAt(THREE, 0.55, 0.48, 0.22, -1.2, 0.30, 0.92, 0),
-    boxAt(THREE, 0.55, 0.48, 0.22, -1.2, 0.30, -0.92, 0),
-  ]);
+export const CAR_TYPES = Object.freeze(['sedan', 'hatch', 'van', 'taxi']);
+
+export function carTypeForSeed(seed) {
+  const s = Math.abs(Number(seed));
+  const n = Number.isFinite(s) ? s : 0;
+  return CAR_TYPES[(Math.floor(n * 997) + Math.floor(n * 13)) % CAR_TYPES.length];
+}
+
+// Local +X is forward. Yaw around Y maps that to world (cos yaw, 0, -sin yaw).
+export function carYawFromDir(dx, dz) {
+  const len = Math.hypot(dx, dz) || 1;
+  return Math.atan2(-(dz / len), dx / len) || 0;
+}
+
+export function carHeading(p) {
+  if (!p) return 0;
+  const curb = (v) => Math.abs(v) >= 8 && Math.abs(v) <= 18;
+  if (curb(p.x) && !curb(p.z)) return p.x >= 0 ? carYawFromDir(0, -1) : carYawFromDir(0, 1);
+  if (curb(p.z) && !curb(p.x)) return p.z >= 0 ? carYawFromDir(-1, 0) : carYawFromDir(1, 0);
+  return (p.ry || 0) + Math.PI / 2;
+}
+
+function carPalette(type, vibe) {
+  const win = vibe && vibe.windowAlt ? hexNum(vibe.windowAlt) : 0x4ad4e8;
+  const glass = win;
+  if (type === 'taxi') {
+    return { body: 0xffc43a, accent: 0x161018, cabin: 0x2a2010, glass, tire: 0x121014, rim: 0x3a3a42, head: 0xfff4c8, tail: 0xff2a33 };
+  }
+  if (type === 'van') {
+    return { body: 0x1a2438, accent: 0x00c8e0, cabin: 0x152030, glass, tire: 0x121014, rim: 0x4a5560, head: 0xfff1c2, tail: 0xff3355 };
+  }
+  if (type === 'hatch') {
+    return { body: 0x3a1030, accent: 0xff2bd6, cabin: 0x241028, glass, tire: 0x121014, rim: 0x3a3a42, head: 0xffe6aa, tail: 0xff2a55 };
+  }
+  return { body: 0x24142e, accent: 0x7a4dff, cabin: 0x1a1024, glass, tire: 0x121014, rim: 0x3a3a42, head: 0xffe6aa, tail: 0xff2a33 };
+}
+
+function carWheels(THREE, wb, track, r, w, pal) {
+  const parts = [];
+  const axles = [wb, -wb];
+  const sides = [track, -track];
+  for (const x of axles) {
+    for (const z of sides) {
+      parts.push(cylAt(THREE, r, r, w, x, r, z, Math.PI / 2, 0, pal.tire, 8));
+      parts.push(cylAt(THREE, r * 0.55, r * 0.55, w + 0.04, x, r, z, Math.PI / 2, 0, pal.rim, 8));
+    }
+  }
+  return parts;
+}
+
+// Merged, vertex-colored car. +X forward, wheels sit on y=0. One draw per type.
+export function makeCarGeo(THREE, type, vibe) {
+  const kind = CAR_TYPES.indexOf(type) >= 0 ? type : 'sedan';
+  const pal = carPalette(kind, vibe && vibe.palette);
+  const parts = [];
+  const wheel = (wb, track, r, w) => { parts.push.apply(parts, carWheels(THREE, wb, track, r, w, pal)); };
+
+  if (kind === 'van') {
+    wheel(1.35, 0.84, 0.34, 0.24);
+    parts.push(boxAt(THREE, 1.15, 0.55, 1.72, 1.55, 0.72, 0, 0, pal.body)); // hood
+    parts.push(boxAt(THREE, 3.15, 1.55, 1.78, -0.35, 1.22, 0, 0, pal.body)); // cabin box
+    parts.push(boxAt(THREE, 0.08, 0.62, 1.55, 1.18, 1.55, 0, 0, pal.glass)); // windshield
+    parts.push(boxAt(THREE, 1.9, 0.55, 0.06, -0.2, 1.55, 0.91, 0, pal.glass));
+    parts.push(boxAt(THREE, 1.9, 0.55, 0.06, -0.2, 1.55, -0.91, 0, pal.glass));
+    parts.push(boxAt(THREE, 0.06, 0.7, 1.5, -1.9, 1.58, 0, 0, pal.glass)); // rear window
+    parts.push(boxAt(THREE, 0.16, 0.14, 0.32, 2.12, 0.72, 0.62, 0, pal.head));
+    parts.push(boxAt(THREE, 0.16, 0.14, 0.32, 2.12, 0.72, -0.62, 0, pal.head));
+    parts.push(boxAt(THREE, 0.12, 0.18, 0.38, -1.92, 0.78, 0.68, 0, pal.tail));
+    parts.push(boxAt(THREE, 0.12, 0.18, 0.38, -1.92, 0.78, -0.68, 0, pal.tail));
+    parts.push(boxAt(THREE, 0.35, 0.08, 1.7, 2.08, 0.48, 0, 0, pal.accent)); // bumper
+  } else if (kind === 'hatch') {
+    wheel(1.28, 0.80, 0.32, 0.22);
+    parts.push(boxAt(THREE, 3.55, 0.58, 1.68, 0.05, 0.68, 0, 0, pal.body)); // lower
+    parts.push(boxAt(THREE, 1.15, 0.22, 1.55, 1.35, 1.02, 0, 0, pal.body)); // hood
+    parts.push(boxAt(THREE, 2.05, 0.78, 1.58, -0.35, 1.38, 0, 0, pal.cabin)); // cabin into hatch
+    parts.push(boxAt(THREE, 0.7, 0.42, 1.52, -1.55, 1.22, 0, 0, pal.body)); // hatch tail
+    parts.push(boxAt(THREE, 0.08, 0.52, 1.42, 0.68, 1.42, 0, 0, pal.glass)); // windshield
+    parts.push(boxAt(THREE, 1.15, 0.42, 0.05, -0.15, 1.42, 0.80, 0, pal.glass));
+    parts.push(boxAt(THREE, 1.15, 0.42, 0.05, -0.15, 1.42, -0.80, 0, pal.glass));
+    parts.push(boxAt(THREE, 0.06, 0.48, 1.38, -1.85, 1.28, 0, 0, pal.glass));
+    parts.push(boxAt(THREE, 0.16, 0.12, 0.30, 1.82, 0.70, 0.58, 0, pal.head));
+    parts.push(boxAt(THREE, 0.16, 0.12, 0.30, 1.82, 0.70, -0.58, 0, pal.head));
+    parts.push(boxAt(THREE, 0.12, 0.14, 0.36, -1.78, 0.72, 0.62, 0, pal.tail));
+    parts.push(boxAt(THREE, 0.12, 0.14, 0.36, -1.78, 0.72, -0.62, 0, pal.tail));
+  } else {
+    // sedan + taxi share the three-box silhouette (hood / cabin / trunk)
+    wheel(1.32, 0.82, 0.32, 0.22);
+    parts.push(boxAt(THREE, 3.85, 0.58, 1.70, 0.0, 0.68, 0, 0, pal.body));
+    parts.push(boxAt(THREE, 1.20, 0.22, 1.55, 1.38, 1.04, 0, 0, pal.body)); // hood
+    parts.push(boxAt(THREE, 1.55, 0.72, 1.55, -0.12, 1.38, 0, 0, pal.cabin)); // cabin
+    parts.push(boxAt(THREE, 0.95, 0.28, 1.52, -1.58, 1.02, 0, 0, pal.body)); // trunk
+    parts.push(boxAt(THREE, 0.08, 0.52, 1.40, 0.64, 1.42, 0, 0, pal.glass)); // windshield
+    parts.push(boxAt(THREE, 0.95, 0.40, 0.05, -0.12, 1.42, 0.79, 0, pal.glass));
+    parts.push(boxAt(THREE, 0.95, 0.40, 0.05, -0.12, 1.42, -0.79, 0, pal.glass));
+    parts.push(boxAt(THREE, 0.06, 0.40, 1.35, -0.88, 1.40, 0, 0, pal.glass)); // rear window
+    parts.push(boxAt(THREE, 0.16, 0.12, 0.30, 1.95, 0.70, 0.58, 0, pal.head));
+    parts.push(boxAt(THREE, 0.16, 0.12, 0.30, 1.95, 0.70, -0.58, 0, pal.head));
+    parts.push(boxAt(THREE, 0.12, 0.14, 0.36, -1.95, 0.72, 0.62, 0, pal.tail));
+    parts.push(boxAt(THREE, 0.12, 0.14, 0.36, -1.95, 0.72, -0.62, 0, pal.tail));
+    if (kind === 'taxi') {
+      parts.push(boxAt(THREE, 0.55, 0.16, 1.55, 1.35, 1.12, 0, 0, pal.accent)); // black hood band
+      parts.push(boxAt(THREE, 0.42, 0.18, 0.22, -0.05, 1.84, 0, 0, pal.body)); // roof lamp
+      parts.push(boxAt(THREE, 0.28, 0.10, 0.16, -0.05, 1.96, 0, 0, 0xfff3a0));
+    }
+  }
+  return mergeGeos(THREE, parts);
 }
 
 function makeBenchGeo(THREE) {
@@ -1132,49 +1261,34 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     d.position.set(p[0], 6.5, p[1]); d.scale.set(1, 1, 1); d.rotation.set(0, 0, 0);
   });
 
-  const carHeading = (p) => {
-    const curb = (v) => Math.abs(v) >= 8 && Math.abs(v) <= 18;
-    if (curb(p.x) && !curb(p.z)) return p.x >= 0 ? Math.PI / 2 : -Math.PI / 2;
-    if (curb(p.z) && !curb(p.x)) return p.z >= 0 ? Math.PI : 0;
-    return p.ry + Math.PI / 2;
-  };
-  const carMat = skipMat(new THREE.MeshBasicMaterial({ color: 0x5a4a70 }));
-  const carMesh = addInstanced(THREE, group, makeCarGeo(THREE), carMat, planned.cars.length, (d, i) => {
-    const p = planned.cars[i];
-    if (!p) return false;
-    const heading = carHeading(p);
-    d.position.set(p.x, 0, p.z); d.rotation.set(0, heading, 0); d.scale.set(1.15, 1.15, 1.15);
+  const byType = { sedan: [], hatch: [], van: [], taxi: [] };
+  planned.cars.forEach((p, i) => {
+    if (!p) return;
+    const type = p.type || carTypeForSeed((p.seed || 0) + i * 0.17);
+    p.type = type;
+    byType[type].push(p);
   });
-  if (carMesh && quality !== 'low') {
-    carMesh.userData.cityCruise = true;
-    carMesh.userData.dummy = new THREE.Object3D();
-    carMesh.userData.homes = planned.cars.map((p) => ({ x: p.x, z: p.z, heading: carHeading(p) }));
-  }
-  const tailMat = neonMat(THREE, 0xff2a33, 6.2);
-  addInstanced(THREE, group, new THREE.BoxGeometry(0.14, 0.14, 1.55), tailMat, planned.cars.length, (d, i) => {
-    const p = planned.cars[i];
-    if (!p) return false;
-    const heading = carHeading(p);
-    d.position.set(p.x - Math.cos(heading) * 2.2, 0.55, p.z + Math.sin(heading) * 2.2);
-    d.rotation.set(0, heading, 0); d.scale.set(1.15, 1.15, 1.15);
-  });
-  const cabinMat = neonMat(THREE, 0x66e0ff, 2.4, { color: 0x243848, roughness: 0.28 });
-  addInstanced(THREE, group, new THREE.BoxGeometry(1.55, 0.42, 1.48), cabinMat, planned.cars.length, (d, i) => {
-    const p = planned.cars[i];
-    if (!p) return false;
-    const heading = carHeading(p);
-    d.position.set(p.x - Math.cos(heading) * 0.4, 1.72, p.z + Math.sin(heading) * 0.4);
-    d.rotation.set(0, heading, 0); d.scale.set(1.15, 1.15, 1.15);
-  });
-  if (quality !== 'low') {
-    const headMatCar = neonMat(THREE, 0xffe6aa, 5.4);
-    addInstanced(THREE, group, new THREE.BoxGeometry(0.12, 0.12, 1.4), headMatCar, planned.cars.length, (d, i) => {
-      const p = planned.cars[i];
+  let carMesh = null;
+  for (let t = 0; t < CAR_TYPES.length; t++) {
+    const type = CAR_TYPES[t];
+    const list = byType[type];
+    if (!list.length) continue;
+    const carMat = skipMat(new THREE.MeshBasicMaterial({ vertexColors: true }));
+    const mesh = addInstanced(THREE, group, makeCarGeo(THREE, type, vibe), carMat, list.length, (d, i) => {
+      const p = list[i];
       if (!p) return false;
-      const heading = carHeading(p);
-      d.position.set(p.x + Math.cos(heading) * 2.2, 0.52, p.z - Math.sin(heading) * 2.2);
-      d.rotation.set(0, heading, 0); d.scale.set(1.15, 1.15, 1.15);
+      d.position.set(p.x, 0, p.z);
+      d.rotation.set(0, carHeading(p), 0);
+      d.scale.set(1, 1, 1);
     });
+    if (mesh) {
+      carMesh = mesh;
+      if (quality !== 'low') {
+        mesh.userData.cityCruise = true;
+        mesh.userData.dummy = new THREE.Object3D();
+        mesh.userData.homes = list.map((p) => ({ x: p.x, z: p.z, heading: carHeading(p) }));
+      }
+    }
   }
 
   if (planned.benches && planned.benches.length) {
@@ -1797,17 +1911,18 @@ function tickCityArtObject(o, t) {
         const h = homes[i] || homes[0];
         const alongZ = Math.abs(h.x) < 18;
         const speed = 4.2 + (i % 5) * 0.6;
+        const dir = (i % 2) ? 1 : -1;
         let x = h.x, z = h.z, yaw = h.heading;
         if (alongZ) {
-          z = ((h.z + t * speed * ((i % 2) ? 1 : -1) + 360) % 720) - 360;
-          yaw = (i % 2) ? 0 : Math.PI;
+          z = ((h.z + t * speed * dir + 360) % 720) - 360;
+          yaw = carYawFromDir(0, dir);
         } else {
-          x = ((h.x + t * speed * ((i % 2) ? 1 : -1) + 360) % 720) - 360;
-          yaw = (i % 2) ? Math.PI / 2 : -Math.PI / 2;
+          x = ((h.x + t * speed * dir + 360) % 720) - 360;
+          yaw = carYawFromDir(dir, 0);
         }
         dummy.position.set(x, 0, z);
         dummy.rotation.set(0, yaw, 0);
-        dummy.scale.set(1.15, 1.15, 1.15);
+        dummy.scale.set(1, 1, 1);
         dummy.updateMatrix();
         o.setMatrixAt(i, dummy.matrix);
       }

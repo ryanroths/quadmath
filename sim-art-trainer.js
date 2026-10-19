@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Night meet floor, candy tape, gummy PVC frames, candy-torus gates.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=c235d936652f';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=99aa44385b45';
 
 export const TRAINER_STOCK = Object.freeze({
   wall: 0xc8c4ba,

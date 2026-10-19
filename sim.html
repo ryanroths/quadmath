@@ -143,6 +143,10 @@
   #cliPaste,#ghostCode,#pilotName{width:100%;background:rgba(8,9,12,.55);border:1px solid var(--line);color:var(--txt);
     font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;padding:8px;resize:vertical;border-radius:10px}
   #cliPaste:focus,#ghostCode:focus,#pilotName:focus{outline:none;border-color:var(--orange)}
+  #rateCurve{width:100%;height:72px;margin:6px 0 10px;background:rgba(8,9,12,.55);border:1px solid var(--line);border-radius:4px;display:block}
+  #cliImportStatus{display:block;font-size:11px;color:var(--dim);margin:6px 0 10px;white-space:pre-wrap;line-height:1.45;min-height:1.2em}
+  #cliImportStatus.err{color:#ff6b6b}
+  #cliImportStatus.ok{color:var(--green)}
   #pilotName{margin-bottom:4px}
   button:hover{background:var(--orange);color:var(--bg)}
   #gear{position:fixed;top:12px;right:12px;z-index:21;width:auto;padding:8px 12px;
@@ -489,7 +493,15 @@
   <div class="row"><label>Invert arm</label><input type="checkbox" id="cbArmInvert" style="accent-color:var(--orange)" title="Flip which end of the switch is armed."></div>
   <div class="kbd" id="armSwitchLive">no arm switch — auto-arm when throttle rises from low</div>
 
-  <h2>Rates (Betaflight)</h2>
+  <h2>Rates</h2>
+  <div class="row"><label>Rate type</label></div>
+  <select id="ratesType" title="Betaflight rates_type. CLI import sets this from the dump.">
+    <option value="BETAFLIGHT">Betaflight</option>
+    <option value="ACTUAL">Actual</option>
+    <option value="KISS">KISS</option>
+    <option value="QUICK">Quick</option>
+    <option value="RACEFLIGHT">RaceFlight</option>
+  </select>
   <div class="frame-select" style="margin-bottom:6px">
     <button class="frame-btn active" id="ax_roll" data-axis="roll">Roll</button>
     <button class="frame-btn" id="ax_pitch" data-axis="pitch">Pitch</button>
@@ -499,17 +511,19 @@
        slider can be mistaken for belonging to it. -->
   <div class="row"><label>Max rate</label><span class="val" id="v_max"></span></div>
   <div class="row" style="opacity:.65;font-size:.8em"><span id="v_maxAll"></span></div>
-  <div class="row"><label>RC Rate</label><span class="val" id="v_rc"></span></div>
+  <div class="row"><label id="lbl_rc">RC Rate</label><span class="val" id="v_rc"></span></div>
   <input type="range" id="s_rc" data-field="rcRate" min="0.5" max="2.5" step="0.01" value="1.10">
-  <div class="row"><label>Super Rate</label><span class="val" id="v_sr"></span></div>
+  <div class="row"><label id="lbl_sr">Super Rate</label><span class="val" id="v_sr"></span></div>
   <input type="range" id="s_sr" data-field="srate" min="0" max="0.95" step="0.01" value="0.72">
-  <div class="row"><label>Expo</label><span class="val" id="v_ex"></span></div>
+  <div class="row"><label id="lbl_ex">Expo</label><span class="val" id="v_ex"></span></div>
   <input type="range" id="s_ex" data-field="expo" min="0" max="1" step="0.01" value="0.25">
+  <canvas id="rateCurve" width="280" height="88" aria-label="Rate curve preview"></canvas>
 
   <h2>Paste Betaflight CLI dump</h2>
-  <textarea id="cliPaste" rows="4" placeholder="set roll_rc_rate = 110&#10;set roll_srate = 72&#10;set roll_expo = 25&#10;…or a full diff / dump rates"></textarea>
-  <button id="btnCliImport">IMPORT CLI</button>
+  <textarea id="cliPaste" rows="4" placeholder="set roll_rc_rate = 110&#10;set roll_srate = 72&#10;set roll_expo = 25&#10;…or a full dump / diff all"></textarea>
+  <button type="button" id="btnCliImport">IMPORT CLI</button>
   <span class="val" id="ratesTypeBadge" style="margin-left:8px">BETAFLIGHT</span>
+  <div id="cliImportStatus"></div>
 
   <h2>Camera</h2>
   <div class="row"><label>Cam angle</label><span class="val" id="v_cam"></span></div>
@@ -592,11 +606,6 @@
   <h2>Physics</h2>
   <div class="row"><label>Drone type</label></div>
   <select id="droneType"></select>
-  <div class="row"><label>Rate type</label></div>
-  <select id="ratesType">
-    <option value="ACTUAL">Actual</option>
-    <option value="BETAFLIGHT">Betaflight</option>
-  </select>
   <div class="row"><label>Rate preset</label></div>
   <select id="ratePreset"></select>
   <div class="row"><label>Thrust:weight</label><span class="val" id="v_twr"></span></div>
@@ -758,7 +767,7 @@ import {
   restyleGarage, decorateGarageGate, pulseGarageGate, tickGarageArt,
   restyleWarehouse, decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt,
   restyleGym, decorateGymGate, pulseGymGate, tickGymArt,
-} from "./sim-art.js?v=85a5f8184a3e";
+} from "./sim-art.js?v=1799c96c75bc";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -788,7 +797,14 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=5b05276e1d0b";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=155694fdbd50";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=813b983a63db";
+import {
+  RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
+  parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
+  convertAxisFamily as convertAxisRate, formatAxisReadout, formatCliSummary,
+  drawRateCurve, normalizeRateType, isRateType, bfCurve as bfCurveOf,
+  actualRate as actualRateOf,
+} from "./sim-rates.js?v=2dc161c06e1c";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -796,7 +812,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=ad207356e65d";
+} from "./sim-coach.js?v=abac8e9b7c15";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js";
@@ -3423,43 +3439,10 @@ function readInput(dt){
   }
 }
 
-// ---------- Betaflight rates ----------
-// ---------- Betaflight rate curves ----------
-// Ported from Betaflight rc.c. Two curve families, and they are NOT
-// interchangeable: BETAFLIGHT stores rcRate/srate as integers x100 (100 = 1.00),
-// ACTUAL stores them as deg/s over 10 (rc_rate 7 = 70 deg/s centre sensitivity,
-// srate 67 = 670 deg/s max). Expo is /100 in both. Scaling is applied at parse
-// time, so everything below works in real units.
-//
-// Per axis, always. The sim stores roll/pitch/yaw separately even though the
-// sliders drive one shared set — a CLI dump routinely carries a different yaw.
-function bfCurve(x,rcRate,srate,expo){
-  const absX=Math.abs(x);                      // pre-expo, as Betaflight does it
-  if(expo)x=x*Math.pow(absX,3)*expo+x*(1-expo);
-  let rr=rcRate;
-  if(rr>2.0)rr+=14.54*(rr-2.0);                // RC_RATE_INCREMENTAL
-  let rate=200*rr*x;
-  if(srate>0)rate*=1/THREE.MathUtils.clamp(1-absX*srate,0.01,1);
-  return rate;
-}
-// Betaflight Actual Rates (applyActualRates in rc.c). x is stick -1..1,
-// center is the deg/s the stick asks for per unit of travel around centre,
-// maxRate is the deg/s at full stick, expo 0..1 bends travel toward the
-// ends. Returns deg/s; physics() converts to rad/s at the module boundary.
-//   actualRate(1,75,650,0.5)   = 650      (full stick always lands on max)
-//   actualRate(0.1,75,650,0.5) = 10.375   (7.5 centre term + 2.875 expo)
-function actualRate(x,center,maxRate,expo){
-  const absX=Math.abs(x);
-  const blend=absX*(Math.pow(x,5)*expo+x*(1-expo));
-  const stickMovement=Math.max(0,maxRate-center);
-  return x*center+stickMovement*blend;
-}
-// ---------------------------------------------------------------------------
-// RATES — single source of truth. Sliders, readouts, OSD and the setpoint math
-// all read this object. Nothing caches a copy; the sliders own no state.
-//   BETAFLIGHT: rcRate 1.00 = CLI 100,  srate 0.73 = CLI 73,  expo 0.25
-//   ACTUAL:     rcRate 7 = 70 deg/s centre, srate 67 = 670 deg/s max
-// ---------------------------------------------------------------------------
+// ---------- Rates (Betaflight / Actual / KISS / Quick / RaceFlight) ----------
+// Curves and CLI parsing live in sim-rates.js (Betaflight rc.c math, from scratch).
+function bfCurve(x,rcRate,srate,expo){return bfCurveOf(x,rcRate,srate,expo);}
+function actualRate(x,center,maxRate,expo){return actualRateOf(x,center,maxRate,expo);}
 const rates={
   type:'BETAFLIGHT',
   roll: {rcRate:1.10,srate:0.72,expo:0.25},
@@ -3469,57 +3452,42 @@ const rates={
 let rateAxis='roll';
 const RATE_AXES=['roll','pitch','yaw'];
 
-// Rates the pilot has set (slider or CLI import) outlive a reload and outrank
-// the drone-type preset, which would otherwise stamp its super-rate over them
-// on every load.
 let ratesAreCustom=false;
 try{const saved=JSON.parse(localStorage.getItem('ryflyRates')||'null');
-  if(saved&&saved.type&&saved.roll){rates.type=saved.type;ratesAreCustom=true;
-    for(const ax of RATE_AXES)if(saved[ax])Object.assign(rates[ax],saved[ax]);}
-}catch(e){}
-function saveRates(){ratesAreCustom=true;try{localStorage.setItem('ryflyRates',JSON.stringify(rates));}catch(e){}}
-
-// Convert one axis between rate families. Extracted from importCli so the
-// rate-type selector and a CLI dump that switches family do the same thing:
-// a switch CONVERTS the tune rather than defaulting it.
-function convertAxisFamily(cur,toType){
-  if(toType==='ACTUAL'){
-    let rc=cur.rcRate; if(rc>2)rc+=14.54*(rc-2);
-    return {rcRate:20*rc,                                   // centre/10
-            srate:(200*rc/Math.max(0.01,1-cur.srate))/10,   // max/10
-            expo:cur.expo};
+  if(saved&&saved.type&&saved.roll){
+    const t=normalizeRateType(saved.type);
+    if(t)rates.type=t;
+    ratesAreCustom=true;
+    for(const ax of RATE_AXES)if(saved[ax])Object.assign(rates[ax],saved[ax]);
   }
-  const centre=cur.rcRate*10,max=Math.max(centre,cur.srate*10);
-  return {rcRate:THREE.MathUtils.clamp(centre/200,0.01,5),
-          srate:THREE.MathUtils.clamp(1-centre/max,0,0.95),
-          expo:cur.expo};
+}catch(e){}
+function saveRates(){
+  ratesAreCustom=true;
+  try{
+    localStorage.setItem('ryflyRates',JSON.stringify(rates));
+    localStorage.setItem('ryflyRatesType',rates.type);
+  }catch(e){}
+}
+function convertAxisFamily(cur,toType){
+  return convertAxisRate(cur,rates.type,toType);
 }
 function axisRate(axis,x){
-  const a=rates[axis];
-  if(rates.type==='ACTUAL')return actualRate(x,a.rcRate*10,a.srate*10,a.expo);
-  return bfCurve(x,a.rcRate,a.srate,a.expo);
+  return rateSetpoint(rates.type,x,rates[axis]);
 }
 function maxRateDps(axis){
-  const a=rates[axis||rateAxis];
-  if(rates.type==='ACTUAL')return a.srate*10;
-  let rc=a.rcRate; if(rc>2)rc+=14.54*(rc-2);
-  return 200*rc/Math.max(0.01,1-a.srate);
+  return maxRateDpsOf(rates.type,rates[axis||rateAxis]);
 }
 
-// Slider bindings: one explicit handler per element, each reading its own
-// data-field. No loop closure, no index arithmetic — the previous version's
-// crossed wiring is impossible to reproduce here.
 function onRateSlider(inputEl){
-  const field=inputEl.dataset.field;              // 'rcRate' | 'srate' | 'expo'
+  const field=inputEl.dataset.field;
   rates[rateAxis][field]=parseFloat(inputEl.value);
   refreshRatesUI();
   saveRates();
 }
 function applyRateSliderRanges(actual){
-  // ACTUAL stores centre/max as deg/s over 10 (rcRate 7 = 70 °/s, srate 67 =
-  // 670 °/s). The markup ranges are Betaflight (0.5–2.5 / 0–0.95); leaving
-  // them in place clamps the thumbs and any drag writes BF-scale into ACTUAL.
-  const rc=document.getElementById('s_rc'), sr=document.getElementById('s_sr');
+  // Keep the Actual-vs-else branch so tools/test_actual_rates.mjs can still
+  // extract the markup-matching BF ranges. Other families overlay after.
+  const rc=document.getElementById('s_rc'), sr=document.getElementById('s_sr'), ex=document.getElementById('s_ex');
   if(actual){
     rc.min='1'; rc.max='25'; rc.step='0.1';
     sr.min='5'; sr.max='200'; sr.step='0.5';
@@ -3527,31 +3495,35 @@ function applyRateSliderRanges(actual){
     rc.min='0.5'; rc.max='2.5'; rc.step='0.01';
     sr.min='0'; sr.max='0.95'; sr.step='0.01';
   }
+  const spec=RATE_SLIDER_RANGES[rates.type]||RATE_SLIDER_RANGES.BETAFLIGHT;
+  const apply=(el,s)=>{if(!el||!s)return;el.min=String(s.min);el.max=String(s.max);el.step=String(s.step);};
+  apply(rc,spec.rcRate); apply(sr,spec.srate); apply(ex,spec.expo);
 }
 function refreshRatesUI(){
   const a=rates[rateAxis],actual=rates.type==='ACTUAL';
   const S=id=>document.getElementById(id);
   applyRateSliderRanges(actual);
-  // slider positions are SET, never dispatched — dispatching would re-enter
-  // onRateSlider and clobber freshly parsed values with slider-clamped ones
   S('s_rc').value=a.rcRate; S('s_sr').value=a.srate; S('s_ex').value=a.expo;
-  S('v_rc').textContent=actual?(a.rcRate*10).toFixed(0)+' °/s':a.rcRate.toFixed(2);
-  S('v_sr').textContent=actual?(a.srate*10).toFixed(0)+' °/s':a.srate.toFixed(2);
-  S('v_ex').textContent=a.expo.toFixed(2);
+  S('v_rc').textContent=formatAxisReadout(rates.type,a,'rcRate');
+  S('v_sr').textContent=formatAxisReadout(rates.type,a,'srate');
+  S('v_ex').textContent=formatAxisReadout(rates.type,a,'expo');
   S('v_max').textContent=maxRateDps(rateAxis).toFixed(0)+' °/s';
   S('v_maxAll').textContent='max R '+maxRateDps('roll').toFixed(0)+
     ' / P '+maxRateDps('pitch').toFixed(0)+' / Y '+maxRateDps('yaw').toFixed(0)+' °/s';
   RATE_AXES.forEach(ax=>S('ax_'+ax).classList.toggle('active',ax===rateAxis));
-  const typeSel=S('ratesType'); if(typeSel)typeSel.value=rates.type; // a CLI dump can switch family too
+  const typeSel=S('ratesType'); if(typeSel)typeSel.value=rates.type;
+  const fields=RATE_FIELDS[rates.type]||RATE_FIELDS.BETAFLIGHT;
+  const setLbl=(id,field)=>{const el=S(id); if(el)el.textContent=fields[field].label;};
+  setLbl('lbl_rc','rcRate'); setLbl('lbl_sr','srate'); setLbl('lbl_ex','expo');
   const badge=S('ratesTypeBadge');
   if(badge){
     const perAxis=['pitch','yaw'].some(ax=>JSON.stringify(rates[ax])!==JSON.stringify(rates.roll));
-    badge.textContent=rates.type+(perAxis?' · per-axis':'');
+    badge.textContent=(RATE_TYPE_LABELS[rates.type]||rates.type).toUpperCase()+(perAxis?' · per-axis':'');
     badge.style.color=actual?'var(--green)':'';
   }
+  drawRateCurve(S('rateCurve'),rates.type,a);
 }
 function setRateAxis(ax){rateAxis=ax;refreshRatesUI();}
-// Kept for callers that only know the old name.
 function refreshMax(){refreshRatesUI();}
 
 // ---------- Flight mode (angle / horizon / acro live in quadphysics.js) ----------
@@ -3846,9 +3818,7 @@ function updateOSD(){
   osdTL.innerHTML=`SPD ${spd} km/h<br>ALT ${alt} m${battLine}`;
   osdTR.innerHTML=`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):(touchCtl&&touchCtl.enabled?'TOUCH':'KEYBOARD')}${axisMap&&gpConnected?' (CAL)':''}<br>`+
     // Rates are per axis; name the one being shown so it cannot read as global.
-    `RATES ${rateAxis.toUpperCase()} ${rates.type==='ACTUAL'
-      ? maxRateDps(rateAxis).toFixed(0)+'°/s ACTUAL'
-      : rates[rateAxis].rcRate.toFixed(2)+'/'+rates[rateAxis].srate.toFixed(2)+'/'+rates[rateAxis].expo.toFixed(2)}<br>`+
+    `RATES ${rateAxis.toUpperCase()} ${maxRateDps(rateAxis).toFixed(0)}°/s ${rates.type}<br>`+
     `CAM ${CFG.camDeg}° FOV ${CFG.fov}${usingGltf?'<br>GLTF MAP':''}`;
   // Per-motor outputs straight off the mixer — a yaw input shows the CW pair
   // rising while the CCW pair drops, which is the tell that the mixer is real.
@@ -4789,12 +4759,12 @@ function applyClassRates(d){
       rates[ax].expo=prof[ax].expo;
     }
   }else{
-    // Seed rcRate and expo too, not just the super-rate. Before the family
-    // could be switched they were always still at the initialiser values so
-    // srate alone was enough; coming back from ACTUAL they hold a centre/10
-    // figure (rcRate 7) that reads as an unflyable ~57000 deg/s here.
     for(const ax of RATE_AXES)
       Object.assign(rates[ax],{rcRate:BF_CLASS_DEFAULT.rcRate,srate:d.sr,expo:BF_CLASS_DEFAULT.expo});
+    if(rates.type!=='BETAFLIGHT'){
+      for(const ax of RATE_AXES)
+        Object.assign(rates[ax],convertAxisRate(rates[ax],'BETAFLIGHT',rates.type));
+    }
   }
 }
 function applyDroneType(){
@@ -4835,26 +4805,27 @@ droneSel.onchange=()=>{
 // The chosen family lives under its own key. Folding it into ryflyRates
 // would trip ratesAreCustom on the next load, and a pilot who only ever
 // touched this dropdown would then never get class rates again.
-try{const t=localStorage.getItem('ryflyRatesType');
-  if(t==='ACTUAL'||t==='BETAFLIGHT')rates.type=t;}catch(e){}
+try{
+  const t=normalizeRateType(localStorage.getItem('ryflyRatesType'));
+  if(t&&!ratesAreCustom)rates.type=t;
+}catch(e){}
 const rateTypeSel=document.getElementById('ratesType');
 if(rateTypeSel){
   rateTypeSel.value=rates.type;
   rateTypeSel.onchange=()=>{
-    const to=rateTypeSel.value;
-    if(to===rates.type)return;
+    const to=normalizeRateType(rateTypeSel.value);
+    if(!to||to===rates.type)return;
     if(ratesAreCustom){
-      // a tune the pilot actually set: convert it, do not throw it away
-      for(const ax of RATE_AXES)Object.assign(rates[ax],convertAxisFamily(rates[ax],to));
+      for(const ax of RATE_AXES)Object.assign(rates[ax],convertAxisRate(rates[ax],rates.type,to));
       rates.type=to;
       saveRates();
     }else{
       rates.type=to;
-      applyClassRates(DRONE_TYPES[droneType]);   // untouched: re-seed from the class
+      applyClassRates(DRONE_TYPES[droneType]);
     }
     try{localStorage.setItem('ryflyRatesType',to);}catch(e){}
     refreshRatesUI();
-    toast(to+' RATES');
+    toast((RATE_TYPE_LABELS[to]||to).toUpperCase()+' RATES');
   };
 }
 applyDroneType(); // restore persisted type on load
@@ -4998,73 +4969,44 @@ window._build={encodeBuild,decodeBuild,applyBuild,BUILD_KEY,BUILD_PREFIX};
 window._whoop={PHYSICS_VER,WHOOP_KEY,whoopSettings,whoopScale,resolveDuctHit,stepBattery};
 window._threeD=()=>({key:THREED_KEY,on:threeD,deadband:THREED_DEADBAND,mapped:mapThrottle3d(stick.t)});
 
-// ---------- Betaflight CLI paste-import ----------
-// Reads rates_type FIRST, because the scaling and the curve both depend on it,
-// then parses every axis separately. The previous version averaged roll+pitch
-// into one shared value and squeezed ACTUAL dumps into Betaflight parameters,
-// which clamped rcRate to the slider floor and produced garbage (an ACTUAL dump
-// read as RC 0.50 / SR 0.74 / 385 deg/s).
-// Returns the parsed dump without touching any state, so it is testable.
-// Tolerates CRLF, arbitrary whitespace, `#`/`//` comments, quoted values and
-// partial dumps — anything absent is simply left out of the result.
-// currentType is used when the dump carries no `set rates_type` line: the
-// scaling depends entirely on the family, so assuming BETAFLIGHT would silently
-// mis-scale a partial ACTUAL dump.
 function parseCli(text,currentType){
-  const AXES=['roll','pitch','yaw'];
-  const out={ratesType:null,rates:{roll:{},pitch:{},yaw:{}},pids:{},idle:null,found:0};
-  const TYPE_BY_NUM={'0':'BETAFLIGHT','1':'RACEFLIGHT','2':'KISS','3':'ACTUAL','4':'QUICK'};
-  for(let line of String(text).split(/\r?\n/)){
-    line=line.replace(/(^|\s)(#|\/\/).*$/,'');            // strip trailing comments
-    const m=line.match(/^\s*set\s+([A-Za-z0-9_]+)\s*=\s*"?\s*([-\w.]+)\s*"?\s*$/i);
-    if(!m)continue;
-    const key=m[1].toLowerCase(),raw=m[2];
-    if(key==='rates_type'){
-      const v=raw.toUpperCase();
-      out.ratesType=TYPE_BY_NUM[v]||v;
-      out.found++;continue;
-    }
-    const num=parseFloat(raw);
-    if(!isFinite(num))continue;
-    let mm;
-    if((mm=key.match(/^(roll|pitch|yaw)_(rc_rate|srate|expo)$/))){
-      out.rates[mm[1]][mm[2]]=num;out.found++;continue;
-    }
-    // PIDs: both `p_roll` and `roll_p` orderings appear in the wild
-    if((mm=key.match(/^([pidf])_(roll|pitch|yaw)$/))||(mm=key.match(/^(roll|pitch|yaw)_([pidf])$/))){
-      const term=mm[1].length===1?mm[1]:mm[2], axis=mm[1].length===1?mm[2]:mm[1];
-      out.pids[axis+term.toUpperCase()]=num;out.found++;continue;
-    }
-    if(key==='idle_min_rpm'||key==='dshot_idle_value'||key==='motor_idle'){
-      // dshot_idle_value is in 0.01% units (550 = 5.5%); the others are direct
-      out.idle=key==='dshot_idle_value'?num/10000:num/100;out.found++;continue;
-    }
-  }
-  // Scale per rate family. BETAFLIGHT stores rcRate/srate as integers x100;
-  // ACTUAL stores them as deg/s over 10 and is kept raw here, with the x10
-  // applied in axisRate/maxRateDps. Expo is /100 in both. Field names are the
-  // same in both families so the state object never carries stray keys.
-  const actual=(out.ratesType||currentType||'BETAFLIGHT')==='ACTUAL';
-  for(const ax of AXES){
-    const r=out.rates[ax];
-    if(r.expo!==undefined)r.expo=r.expo/100;
-    if(r.rc_rate!==undefined){r.rcRate=actual?r.rc_rate:r.rc_rate/100;delete r.rc_rate;}
-    if(r.srate!==undefined&&!actual)r.srate=r.srate/100;
-  }
-  return out;
+  return parseCliDump(text,currentType);
 }
-
+function setCliStatus(text,kind){
+  const el=document.getElementById('cliImportStatus');
+  if(!el)return;
+  el.textContent=text||'';
+  el.classList.toggle('err',kind==='err');
+  el.classList.toggle('ok',kind==='ok');
+}
 function importCli(text){
-  const p=parseCli(text,rates.type);
-  if(!p.found){toast('No recognised CLI commands found');return p;}
-  if(p.ratesType&&!['BETAFLIGHT','ACTUAL'].includes(p.ratesType)){
-    toast(p.ratesType+' rates not supported yet — import skipped');
+  let p;
+  try{
+    p=parseCli(text,rates.type);
+  }catch(err){
+    const msg='CLI import failed: '+(err&&err.message?err.message:'parse error');
+    toast(msg);
+    setCliStatus(msg,'err');
+    return {error:msg,found:0,rates:{roll:{},pitch:{},yaw:{}},pids:{}};
+  }
+  if(p.error){
+    toast(p.error);
+    setCliStatus(p.error,'err');
     return p;
   }
-  const type=p.ratesType||rates.type;      // no rates_type line = keep current
+  if(!p.found){
+    toast('No recognised CLI commands found');
+    setCliStatus('No recognised CLI commands found','err');
+    return p;
+  }
+  const type=normalizeRateType(p.ratesType)||rates.type;
+  if(p.ratesType&&!isRateType(type)){
+    const msg=p.ratesType+' rates not supported — import skipped';
+    toast(msg);
+    setCliStatus(msg,'err');
+    return p;
+  }
   const anyRates=RATE_AXES.some(ax=>Object.keys(p.rates[ax]).length);
-  // Axes the dump never mentions keep what they had, and are never filled in
-  // from another axis. The pilot is told which ones went untouched.
   const missing=RATE_AXES.filter(ax=>!Object.keys(p.rates[ax]).length);
   let notice='';
 
@@ -5072,10 +5014,8 @@ function importCli(text){
     const familyChanged=type!==rates.type;
     for(const ax of RATE_AXES){
       const cur=rates[ax];
-      // On a family switch, CONVERT an axis rather than defaulting it —
-      // otherwise an axis absent from the dump silently loses its tune.
       let base={rcRate:cur.rcRate,srate:cur.srate,expo:cur.expo};
-      if(familyChanged)base=convertAxisFamily(cur,type);
+      if(familyChanged)base=convertAxisRate(cur,rates.type,type);
       Object.assign(rates[ax],base,p.rates[ax]);
     }
     rates.type=type;
@@ -5090,21 +5030,22 @@ function importCli(text){
   if(p.idle!==null){qp.cfg.idleThrottle=THREE.MathUtils.clamp(p.idle,0,0.2);
     notice+=' · idle '+(p.idle*100).toFixed(1)+'%';}
 
-  // State is written; ONE refresh reads it back into the UI. Slider values are
-  // assigned, never dispatched, so nothing re-enters the input handler.
   rateAxis='roll';
   refreshRatesUI();
   saveRates();
+  const summary=formatCliSummary(p,rates)+(notice?('\n'+notice.trim()):'');
+  setCliStatus(summary,'ok');
   console.log('[CLI import] rates =',JSON.parse(JSON.stringify(rates)),
               ' pids =',p.pids,' idle =',p.idle);
   const perAxis=['pitch','yaw'].some(ax=>JSON.stringify(rates[ax])!==JSON.stringify(rates.roll));
-  toast('CLI '+rates.type+': max '+maxRateDps('roll').toFixed(0)+'°/s'+
+  toast('CLI '+(RATE_TYPE_LABELS[rates.type]||rates.type)+': max '+maxRateDps('roll').toFixed(0)+'°/s'+
         (perAxis?' · per-axis':'')+notice);
   return p;
 }
 document.getElementById('btnCliImport').onclick=()=>importCli(document.getElementById('cliPaste').value);
-window._parseCli=parseCli; // debug handle, same convention as _qp/_axis
+window._parseCli=parseCli;
 window._rates=()=>({state:JSON.parse(JSON.stringify(rates)),axis:rateAxis,
+  types:RATE_TYPES.slice(),
   maxDps:{roll:+maxRateDps('roll').toFixed(0),pitch:+maxRateDps('pitch').toFixed(0),yaw:+maxRateDps('yaw').toFixed(0)}});
 
 // ---------- Ghost replay (built on the lap timer) ----------

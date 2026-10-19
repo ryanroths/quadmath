@@ -12,6 +12,7 @@ import {
   propClearOfCourse, planCityProps, planPortalBlocks, SIGN_WORDS, GATE_STYLES,
   signsAreOriginal, BRAND_BLOCKLIST,
   paintWorldLabel, WORLD_LABEL, restyleCity, buildNeonCity, artStats, tickCityArt,
+  CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
   restyleDiveTubes, LIVING_VIBE_ID, hideStockLivingMeshes, buildClayParlor,
   restyleLiving, tickLivingArt, livingBudget, livingWantsGlow,
   GARAGE_VIBE_ID, hideStockGarageMeshes, buildVoltStall,
@@ -380,6 +381,36 @@ test('City freestyle builds without throwing and the FPV frame is not all black'
   assert.match(tickSrc, /cityCruise|cityDrone/);
   assert.match(tickSrc, /never abort the FPV render loop/);
 });
+
+test('city cars are typed, sit on the road, and face travel', () => {
+  assert.deepEqual(CAR_TYPES, ['sedan', 'hatch', 'van', 'taxi']);
+  nearPi(carYawFromDir(1, 0), 0);
+  nearPi(carYawFromDir(0, 1), -Math.PI / 2);
+  nearPi(carYawFromDir(-1, 0), Math.PI);
+  nearPi(carYawFromDir(0, -1), Math.PI / 2);
+  nearPi(carHeading({ x: 14.6, z: 8, ry: 0 }), Math.PI / 2);
+  const types = new Set();
+  for (const kind of CAR_TYPES) {
+    types.add(kind);
+    const geo = makeCarGeo(THREE, kind, vibeFor('city'));
+    geo.computeBoundingBox();
+    const bb = geo.boundingBox;
+    assert.ok(Math.abs(bb.min.y) < 0.04, kind + ' wheel min y ' + bb.min.y);
+    assert.ok(bb.max.x - bb.min.x > bb.max.z - bb.min.z, kind + ' longer in X (forward)');
+    assert.ok(bb.max.y > 1.1, kind + ' has a cabin');
+    assert.ok(geo.getAttribute('color'), kind + ' vertex colors');
+  }
+  assert.equal(types.size, 4);
+  assert.ok(CAR_TYPES.includes(carTypeForSeed(0.11)));
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.match(city, /carYawFromDir/);
+  assert.match(city, /vertexColors/);
+});
+
+function nearPi(a, b) {
+  const d = Math.atan2(Math.sin(a - b), Math.cos(a - b));
+  assert.ok(Math.abs(d) < 1e-9, 'yaw ' + a + ' vs ' + b);
+}
 
 test('City polish keeps Low draw calls near 174 and clears leftover shards', () => {
   installDomStub();

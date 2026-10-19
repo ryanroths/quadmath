@@ -1,7 +1,7 @@
 // Clay Parlor — original living-room vibe. Visual only.
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=c235d936652f';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=99aa44385b45';
 
 export const LIVING_STOCK = Object.freeze({
   sofa: 0x4a5a6a,
