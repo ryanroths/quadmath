@@ -296,6 +296,20 @@ test('labeled QuadPhysics library: one label per maneuver, zero doubles', () => 
   assert.equal(confuse.length, 0, 'confusion:\n' + confuse.join('\n') + '\n' + rows.map((x) => x.name + '→' + x.got).join('\n'));
 });
 
+test('Ryan lock: Juicy Flick, Roll, Flip, Snapback, Matty stay one-label', () => {
+  const lockIds = new Set(['juicyflick', 'roll', 'flip', 'snapback', 'matty']);
+  const confuse = [];
+  for (const c of LIBRARY) {
+    if (!lockIds.has(c.id)) continue;
+    const r = fly(c.phases, c.opts);
+    const got = labels(r);
+    if (got.length !== 1 || got[0] !== c.id) {
+      confuse.push(c.name + ' want=' + c.id + ' got=[' + got.join(',') + '] why=' + (r.why || ''));
+    }
+  }
+  assert.equal(confuse.length, 0, 'locked tricks regressed:\n' + confuse.join('\n'));
+});
+
 test('Ryan bug: a power loop is only Power Loop, never also Matty', () => {
   const r = fly(
     [{ t: 0.25, pitch: 0, thr: 0.8 }, { t: 1.05, pitch: -6.4, thr: 0.88 }, { t: 0.55, pitch: 0, thr: 0.5 }],
