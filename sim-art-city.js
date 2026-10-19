@@ -196,12 +196,19 @@ export function planCityProps(gates, quality) {
   planned.bins = planned.bins.filter((p) => !inWhoopStreet(p) || p.z < 14);
   // Whoop-street FPV is at (3.2, 26) looking -Z / +X. Park cars PARALLEL to
   // the Z-street (heading = ry + π/2, so ry = 0 or π) on both curbs.
-  pushIfClear(planned.cars, gates, 14.6, 8, 0.55, 0, 5.0);
-  pushIfClear(planned.cars, gates, -9.2, 10, 0.55, Math.PI, 5.0);
-  pushIfClear(planned.cars, gates, 14.6, -2, 0.55, Math.PI, 5.0);
-  pushIfClear(planned.cars, gates, -9.2, 2, 0.55, 0, 5.0);
-  pushIfClear(planned.cars, gates, 14.6, -12, 0.55, 0, 5.0);
-  pushIfClear(planned.cars, gates, -8.6, -8, 0.55, Math.PI, 5.0);
+  const whoopCars = [
+    [14.6, 18, 0, 'taxi'],
+    [-9.2, 16, Math.PI, 'sedan'],
+    [14.6, 8, 0, 'van'],
+    [-9.2, 10, Math.PI, 'hatch'],
+    [14.6, -2, Math.PI, 'sedan'],
+    [-9.2, 2, 0, 'taxi'],
+    [14.6, -12, 0, 'hatch'],
+    [-8.6, -8, Math.PI, 'van'],
+  ];
+  for (const [x, z, ry, type] of whoopCars) {
+    pushIfClear(planned.cars, gates, x, z, 0.55, ry, 5.0, { type });
+  }
   pushIfClear(planned.cars, gates, -112, -100, 0.55, -0.8, 5.0);
   pushIfClear(planned.cars, gates, 318, -330, 0.55, 0.7, 5.0);
   pushIfClear(planned.benches, gates, 9.0, 6, 0.42, -Math.PI / 2, 3.8);
@@ -284,10 +291,13 @@ export function planPortalBlocks(gates, quality) {
   return out;
 }
 
-function pushIfClear(list, gates, x, z, y, ry, extraPad) {
+function pushIfClear(list, gates, x, z, y, ry, extraPad, extra) {
   if (!propClearOfCourse(x, z, y, gates, { gatePad: extraPad || 3.6, corridor: 4.8 })) return;
   if (list.some((p) => Math.hypot(p.x - x, p.z - z) < 4)) return;
-  list.push({ x, z, y, ry, seed: 0.5 });
+  list.push(Object.assign({
+    x, z, y, ry,
+    seed: Math.abs(x * 0.17 + z * 0.31) % 1,
+  }, extra || {}));
 }
 
 function canvasTex(THREE, w, h, draw, rx, ry) {
@@ -318,11 +328,16 @@ function mergeGeos(THREE, list) {
   let anyColor = false;
   for (const g of list) {
     if (!g) continue;
-    const p = g.getAttribute('position');
-    const n = g.getAttribute('normal');
-    const u = g.getAttribute('uv');
-    const c = g.getAttribute('color');
-    if (!p) continue;
+    const src = g.index ? g.toNonIndexed() : g;
+    const p = src.getAttribute('position');
+    const n = src.getAttribute('normal');
+    const u = src.getAttribute('uv');
+    const c = src.getAttribute('color');
+    if (!p) {
+      if (src !== g) src.dispose();
+      g.dispose();
+      continue;
+    }
     if (c) anyColor = true;
     for (let i = 0; i < p.count; i++) {
       pos.push(p.getX(i), p.getY(i), p.getZ(i));
@@ -333,6 +348,7 @@ function mergeGeos(THREE, list) {
       if (c) col.push(c.getX(i), c.getY(i), c.getZ(i));
       else col.push(1, 1, 1);
     }
+    if (src !== g) src.dispose();
     g.dispose();
   }
   const out = new THREE.BufferGeometry();
@@ -1286,7 +1302,11 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
       if (quality !== 'low') {
         mesh.userData.cityCruise = true;
         mesh.userData.dummy = new THREE.Object3D();
-        mesh.userData.homes = list.map((p) => ({ x: p.x, z: p.z, heading: carHeading(p) }));
+        mesh.userData.homes = list.map((p) => ({
+          x: p.x, z: p.z, heading: carHeading(p),
+          // Keep whoop-street curb cars parked so FPV at spawn still reads them.
+          parked: Math.abs(p.x) < 22 && Math.abs(p.z) < 40,
+        }));
       }
     }
   }
@@ -1913,12 +1933,14 @@ function tickCityArtObject(o, t) {
         const speed = 4.2 + (i % 5) * 0.6;
         const dir = (i % 2) ? 1 : -1;
         let x = h.x, z = h.z, yaw = h.heading;
-        if (alongZ) {
-          z = ((h.z + t * speed * dir + 360) % 720) - 360;
-          yaw = carYawFromDir(0, dir);
-        } else {
-          x = ((h.x + t * speed * dir + 360) % 720) - 360;
-          yaw = carYawFromDir(dir, 0);
+        if (!h.parked) {
+          if (alongZ) {
+            z = ((h.z + t * speed * dir + 360) % 720) - 360;
+            yaw = carYawFromDir(0, dir);
+          } else {
+            x = ((h.x + t * speed * dir + 360) % 720) - 360;
+            yaw = carYawFromDir(dir, 0);
+          }
         }
         dummy.position.set(x, 0, z);
         dummy.rotation.set(0, yaw, 0);

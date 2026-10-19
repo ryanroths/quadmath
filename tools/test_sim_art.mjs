@@ -399,12 +399,20 @@ test('city cars are typed, sit on the road, and face travel', () => {
     assert.ok(bb.max.x - bb.min.x > bb.max.z - bb.min.z, kind + ' longer in X (forward)');
     assert.ok(bb.max.y > 1.1, kind + ' has a cabin');
     assert.ok(geo.getAttribute('color'), kind + ' vertex colors');
+    const pc = geo.getAttribute('position').count;
+    assert.equal(pc % 3, 0, kind + ' non-indexed tris');
+    assert.ok(pc >= 36 * 3, kind + ' enough faces ' + pc);
   }
   assert.equal(types.size, 4);
   assert.ok(CAR_TYPES.includes(carTypeForSeed(0.11)));
   const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
   assert.match(city, /carYawFromDir/);
   assert.match(city, /vertexColors/);
+  const whoopTypes = new Set(planCityProps(FROZEN_CITY[0].concat(FROZEN_CITY[1]), 'high').cars
+    .filter((p) => Math.abs(p.x) < 22 && Math.abs(p.z) < 40)
+    .map((p) => p.type)
+    .filter(Boolean));
+  assert.equal(whoopTypes.size, 4, 'whoop-street parked cars cover sedan/hatch/van/taxi');
 });
 
 function nearPi(a, b) {
