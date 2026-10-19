@@ -36,11 +36,18 @@ export {
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
 } from './sim-art-gym.js?v=16a8e15a6b97';
 
+export {
+  OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget,
+  hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
+  decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
+} from './sim-art-office.js?v=0cffbbcd11b3';
+
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
 export const GARAGE_VIBE_ID = 'garage';
 export const WAREHOUSE_VIBE_ID = 'warehouse';
 export const GYM_VIBE_ID = 'gym';
+export const OFFICE_VIBE_ID = 'office';
 
 
 export const VIBES = Object.freeze({
@@ -204,7 +211,7 @@ export const VIBES = Object.freeze({
     id: 'office',
     name: 'Paper Sun',
     tagline: 'Toon-shaded morning office, hard shadows, primary hoops',
-    implemented: false,
+    implemented: true,
     time: 'morning',
     sky: 'none',
     palette: Object.freeze({

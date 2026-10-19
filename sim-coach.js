@@ -7,7 +7,7 @@
 
 import { detectPassOrMiss, gateRadius } from './sim-tracks.js?v=749ba01f2163';
 import { DEFAULT_ROOM, planRoom } from './sim-room.js?v=bf753d2f574f';
-import { makeWorldLabel } from './sim-art.js?v=83768ed176cd';
+import { makeWorldLabel } from './sim-art.js?v=1877eff3f44f';
 
 export const COACH_KEY = 'quadmathSimCoach';
 export const GUIDE_DIR = 'content/guides/';
