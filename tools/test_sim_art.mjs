@@ -704,7 +704,7 @@ test('Gym freestyle builds without throwing and the FPV frame is not all black',
   const gymSrc = readFileSync(join(root, 'sim-art-gym.js'), 'utf8');
   assert.equal(mentionsBannedAssets(gymSrc), false);
   assert.match(gymSrc, /never abort the FPV render loop/);
-  assert.match(gymSrc, /CapsuleGeometry|LatheGeometry/);
+  assert.match(gymSrc, /CapsuleGeometry|LatheGeometry|ExtrudeGeometry/);
   const free = freestyleTrack('gym');
   assert.equal(free.id, freestyleIdFor('gym'));
   assert.equal(free.gates.length, 0);
@@ -734,6 +734,7 @@ test('Gym freestyle builds without throwing and the FPV frame is not all black',
     }
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    if (q === 'low') assert.ok(stats.callsEst < 200, 'Low gym callsEst ' + stats.callsEst);
     const frame = cityFrameLit(vis);
     assert.ok(frame.meshes >= 8, q + ' meshes ' + frame.meshes);
     assert.ok(frame.lit >= 8, q + ' lit materials ' + frame.lit);

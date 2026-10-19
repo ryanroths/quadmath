@@ -35,7 +35,7 @@ export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
-} from './sim-art-gym.js?v=50d3eddfabf9';
+} from './sim-art-gym.js?v=ee48a03a7606';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget,
@@ -278,7 +278,7 @@ export const VIBES = Object.freeze({
     }),
     looks: Object.freeze({ fog: 0.001, sun: 1.05, env: 0.7, bg: 0.44, hemi: 0.58 }),
     gates: Object.freeze({ style: 'brass-wood', keepBrand: false }),
-    props: Object.freeze(['honey bleachers', 'glow rims', 'dust motes']),
+    props: Object.freeze(['honey bleachers', 'glow rims', 'dust motes', 'scoreboard', 'sideline clutter']),
     post: Object.freeze({ bloom: true, analog: false }),
   }),
   trainer: Object.freeze({

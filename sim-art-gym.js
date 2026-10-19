@@ -33,18 +33,24 @@ export function gymBudget(applied) {
   if (applied === 'low') {
     return {
       windows: 4, dust: 0, glow: false, rows: 3, seats: 24,
-      truss: 6, pads: 8, banners: 2, balls: 6, bottles: 8, cones: 4,
+      truss: 6, pads: 8, banners: 4, balls: 8, bottles: 10, cones: 6,
+      towels: 10, bags: 8, racks: 4, lockers: 6, cans: 8, murals: 2,
+      shafts: 0, hashes: 16,
     };
   }
   if (applied === 'high') {
     return {
       windows: 10, dust: 96, glow: true, rows: 4, seats: 40,
-      truss: 12, pads: 14, banners: 6, balls: 14, bottles: 18, cones: 8,
+      truss: 12, pads: 14, banners: 8, balls: 16, bottles: 18, cones: 10,
+      towels: 18, bags: 14, racks: 6, lockers: 10, cans: 16, murals: 4,
+      shafts: 4, hashes: 28,
     };
   }
   return {
     windows: 8, dust: 0, glow: true, rows: 4, seats: 32,
-    truss: 10, pads: 12, banners: 4, balls: 10, bottles: 14, cones: 6,
+    truss: 10, pads: 12, banners: 6, balls: 12, bottles: 14, cones: 8,
+    towels: 14, bags: 10, racks: 5, lockers: 8, cans: 12, murals: 3,
+    shafts: 2, hashes: 22,
   };
 }
 
@@ -92,30 +98,63 @@ function canvasTex(THREE, w, h, paint, rx, ry) {
 
 function courtFloorTex(THREE) {
   return canvasTex(THREE, 256, 256, (g, w, h) => {
-    fillGrad(g, 0, 0, w, 0, [[0, '#d8b07a'], [0.5, '#c9a57a'], [1, '#b88858']]);
+    fillGrad(g, 0, 0, w, 0, [[0, '#d8b07a'], [0.45, '#c9a57a'], [1, '#a87848']]);
     g.fillRect(0, 0, w, h);
-    for (let y = 0; y < h; y += 18) {
-      g.fillStyle = y % 36 === 0 ? '#a87848' : '#c09460';
-      g.fillRect(0, y, w, 16);
-      g.fillStyle = '#8a5a30';
-      g.fillRect(0, y + 16, w, 2);
+    for (let y = 0; y < h; y += 14) {
+      g.fillStyle = y % 28 === 0 ? '#b88858' : '#c09460';
+      g.fillRect(0, y, w, 12);
+      g.fillStyle = 'rgba(90,50,24,0.28)';
+      g.fillRect(0, y + 12, w, 2);
+      g.fillStyle = 'rgba(255,246,216,0.08)';
+      g.fillRect(4 + (y % 18), y + 3, w - 10, 1);
     }
     g.fillStyle = '#fff6d8';
-    g.globalAlpha = 0.35;
-    g.fillRect(0, h * 0.48, w, 3);
+    g.globalAlpha = 0.22;
+    g.fillRect(0, h * 0.48, w, 4);
     g.globalAlpha = 1;
   }, 8, 12);
 }
 
 function plasterTex(THREE) {
   return canvasTex(THREE, 128, 128, (g, w, h) => {
-    g.fillStyle = '#d8c8b0';
+    fillGrad(g, 0, 0, 0, h, [[0, '#c8b49a'], [0.55, '#d8c8b0'], [1, '#efe4d2']]);
     g.fillRect(0, 0, w, h);
-    g.fillStyle = 'rgba(240,177,75,0.10)';
-    for (let y = 10; y < h; y += 22) g.fillRect(0, y, w, 3);
-    g.fillStyle = 'rgba(106,66,36,0.08)';
-    for (let x = 8; x < w; x += 28) g.fillRect(x, 0, 1, h);
+    g.fillStyle = 'rgba(80,48,20,0.16)';
+    g.fillRect(0, 0, w, 18);
+    g.fillStyle = 'rgba(240,177,75,0.12)';
+    for (let y = 16; y < h; y += 20) g.fillRect(0, y, w, 3);
+    g.fillStyle = 'rgba(106,66,36,0.10)';
+    for (let x = 8; x < w; x += 26) g.fillRect(x, 0, 1, h);
+    g.fillStyle = 'rgba(255,246,216,0.08)';
+    for (let i = 0; i < 40; i++) g.fillRect((i * 17) % w, (i * 11) % h, 3, 2);
   }, 10, 6);
+}
+
+function woodPanelTex(THREE) {
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    fillGrad(g, 0, 0, w, 0, [[0, '#6a4224'], [0.5, '#8a5a30'], [1, '#5a3218']]);
+    g.fillRect(0, 0, w, h);
+    for (let x = 0; x < w; x += 32) {
+      g.fillStyle = x % 64 === 0 ? '#7a4a28' : '#9a6a38';
+      g.fillRect(x, 0, 28, h);
+      g.fillStyle = 'rgba(40,20,8,0.35)';
+      g.fillRect(x + 28, 0, 4, h);
+    }
+    g.fillStyle = 'rgba(255,210,120,0.08)';
+    for (let y = 6; y < h; y += 11) g.fillRect(0, y, w, 1);
+  }, 6, 2);
+}
+
+function ceilingTex(THREE) {
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    fillGrad(g, 0, 0, w, h, [[0, '#3a2a1c'], [0.6, '#5a4030'], [1, '#2a1a10']]);
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(240,177,75,0.22)';
+    g.lineWidth = 3;
+    g.strokeRect(8, 8, w - 16, h - 16);
+    g.fillStyle = 'rgba(255,210,122,0.10)';
+    g.fillRect(18, 18, w - 36, h - 36);
+  }, 8, 6);
 }
 
 function bannerTex(THREE, a, b) {
@@ -123,11 +162,57 @@ function bannerTex(THREE, a, b) {
     fillGrad(g, 0, 0, 0, h, [[0, a], [1, b]]);
     g.fillRect(0, 0, w, h);
     g.fillStyle = '#fff6d8';
-    g.globalAlpha = 0.45;
-    g.fillRect(8, 18, w - 16, 10);
+    g.globalAlpha = 0.5;
+    g.fillRect(8, 14, w - 16, 12);
+    g.fillRect(8, h * 0.42, w - 16, 8);
     g.fillRect(8, h - 28, w - 16, 10);
     g.globalAlpha = 1;
   }, 1, 1);
+}
+
+function jerseyTex(THREE) {
+  return canvasTex(THREE, 64, 64, (g, w, h) => {
+    fillGrad(g, 0, 0, w, h, [[0, '#c45a22'], [1, '#8a3010']]);
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#fff6d8';
+    g.fillRect(22, 8, 20, 8);
+    g.fillRect(18, 28, 28, 22);
+    g.fillStyle = '#f0b14b';
+    g.fillRect(0, 0, w, 4);
+    g.fillRect(0, h - 4, w, 4);
+  }, 1, 1);
+}
+
+function scoreboardTex(THREE) {
+  return canvasTex(THREE, 256, 128, (g, w, h) => {
+    fillGrad(g, 0, 0, 0, h, [[0, '#2a1a0c'], [0.5, '#4a2a14'], [1, '#1a1008']]);
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#f0b14b';
+    g.fillRect(8, 8, w - 16, 6);
+    g.fillRect(8, h - 14, w - 16, 6);
+    g.fillStyle = '#fff6d8';
+    g.font = 'bold 36px sans-serif';
+    g.textAlign = 'center';
+    g.fillText('AMBER', w * 0.5, 52);
+    g.fillStyle = '#c45a22';
+    g.fillRect(28, 68, 70, 36);
+    g.fillRect(w - 98, 68, 70, 36);
+    g.fillStyle = '#fff6d8';
+    g.font = 'bold 28px sans-serif';
+    g.fillText('12', 63, 96);
+    g.fillText('09', w - 63, 96);
+    g.fillStyle = '#f0b14b';
+    g.fillRect(w * 0.5 - 10, 74, 20, 24);
+  }, 1, 1);
+}
+
+function matTex(THREE) {
+  return canvasTex(THREE, 64, 64, (g, w, h) => {
+    fillGrad(g, 0, 0, w, 0, [[0, '#8a3010'], [0.5, '#c45a22'], [1, '#6a220c']]);
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = 'rgba(255,246,216,0.18)';
+    for (let y = 6; y < h; y += 10) g.fillRect(0, y, w, 2);
+  }, 4, 1);
 }
 
 function honeyMat(THREE, hex, extras) {
@@ -148,6 +233,29 @@ function glowMat(THREE, hex, opacity) {
     color: hex, transparent: true, opacity: opacity == null ? 0.28 : opacity,
     depthWrite: false, toneMapped: false,
   }));
+}
+
+function urnGeo(THREE) {
+  const pts = [
+    new THREE.Vector2(0.0, 0),
+    new THREE.Vector2(0.16, 0),
+    new THREE.Vector2(0.18, 0.08),
+    new THREE.Vector2(0.08, 0.22),
+    new THREE.Vector2(0.14, 0.34),
+    new THREE.Vector2(0.0, 0.4),
+  ];
+  return new THREE.LatheGeometry(pts, 8);
+}
+
+function woodFrameGeo(THREE, size) {
+  const s = new THREE.Shape();
+  const o = size * 1.18;
+  const i = size * 0.88;
+  s.moveTo(-o, -o); s.lineTo(o, -o); s.lineTo(o, o); s.lineTo(-o, o); s.lineTo(-o, -o);
+  const hole = new THREE.Path();
+  hole.moveTo(-i, -i); hole.lineTo(-i, i); hole.lineTo(i, i); hole.lineTo(i, -i); hole.lineTo(-i, -i);
+  s.holes.push(hole);
+  return new THREE.ExtrudeGeometry(s, { depth: size * 0.08, bevelEnabled: false, curveSegments: 1 });
 }
 
 function addInstanced(THREE, parent, geo, mat, count, place) {
@@ -200,6 +308,7 @@ export function restyleGymShell(THREE, group, vibe, floor) {
   let n = 0;
   const wallTex = plasterTex(THREE);
   const floorTex = courtFloorTex(THREE);
+  const ceilTex = ceilingTex(THREE);
   group.traverse((o) => {
     if (!o.isMesh || !o.material || o.userData.artHidden) return;
     if (o.userData.gymArt || (o.parent && o.parent.name === 'gymArtVisuals')) return;
@@ -207,17 +316,18 @@ export function restyleGymShell(THREE, group, vibe, floor) {
     const col = m.color ? m.color.getHex() : 0;
     const t = o.geometry && o.geometry.type;
     if (col === GYM_STOCK.wall) {
-      m.color.setHex(0xd8c8b0);
+      m.color.setHex(0xe4c8a4);
       m.map = wallTex;
-      m.emissive.setHex(0x000000);
-      m.emissiveIntensity = 0;
-      m.roughness = 0.86;
-      m.envMapIntensity = 0.16;
+      m.emissive.setHex(0xf0b14b);
+      m.emissiveIntensity = 0.03;
+      m.roughness = 0.9;
+      m.envMapIntensity = 0.14;
       skipMat(m); n++;
     } else if (col === GYM_STOCK.ceil) {
-      m.color.setHex(0x5a4a38);
+      m.color.setHex(0xc4a078);
+      m.map = ceilTex;
       m.emissive.setHex(0xf0b14b);
-      m.emissiveIntensity = 0.06;
+      m.emissiveIntensity = 0.1;
       m.envMapIntensity = 0.1;
       skipMat(m); n++;
     } else if (t === 'PlaneGeometry' && (o === floor || col === GYM_STOCK.floor)) {
@@ -225,17 +335,17 @@ export function restyleGymShell(THREE, group, vibe, floor) {
         try { m.map.dispose(); } catch (e) { /* ignore */ }
       }
       m.map = floorTex;
-      m.color.setHex(0xffffff);
-      m.roughness = 0.68;
+      m.color.setHex(0xf2d8b0);
+      m.roughness = 0.72;
       m.metalness = 0.02;
-      m.emissive.setHex(0x000000);
-      m.emissiveIntensity = 0;
-      m.envMapIntensity = 0.18;
+      m.emissive.setHex(0xf0b14b);
+      m.emissiveIntensity = 0.02;
+      m.envMapIntensity = 0.16;
       skipMat(m); n++;
     } else if (col === GYM_STOCK.line) {
       m.color.setHex(0xfff6d8);
       m.emissive.setHex(0xfff0c8);
-      m.emissiveIntensity = 0.7;
+      m.emissiveIntensity = 0.9;
       skipMat(m); n++;
     }
   });
@@ -243,11 +353,12 @@ export function restyleGymShell(THREE, group, vibe, floor) {
 }
 
 function makeGymMats(THREE, vibe) {
+  const woodMap = woodPanelTex(THREE);
   return {
-    honey: honeyMat(THREE, 0x8a5a30, {
-      emissive: 0xf0b14b, emissiveIntensity: 0.1, roughness: 0.7,
+    honey: honeyMat(THREE, 0x6e4524, {
+      map: woodMap, emissive: 0xf0b14b, emissiveIntensity: 0.08, roughness: 0.74,
     }),
-    seat: honeyMat(THREE, 0xa86c38, { roughness: 0.62 }),
+    seat: honeyMat(THREE, 0x8a5028, { roughness: 0.64 }),
     brass: emitMat(THREE, hexNum(vibe.palette.neonA), 1.5),
     rim: emitMat(THREE, hexNum(vibe.palette.neonC), 2.4),
     glass: honeyMat(THREE, 0xfff6d8, { roughness: 0.35, metalness: 0.08 }),
@@ -261,7 +372,18 @@ function makeGymMats(THREE, vibe) {
     cone: honeyMat(THREE, 0xf0b14b, {
       emissive: 0xf0b14b, emissiveIntensity: 0.22,
     }),
-    paint: glowMat(THREE, 0xfff6d8, 0.42),
+    paint: skipMat(new THREE.MeshBasicMaterial({
+      color: 0xfff6d8, transparent: true, opacity: 0.72, depthWrite: false, toneMapped: false,
+    })),
+    key: skipMat(new THREE.MeshBasicMaterial({
+      color: 0xc45a22, transparent: true, opacity: 0.28, depthWrite: false, toneMapped: false,
+    })),
+    towel: honeyMat(THREE, 0xfff6d8, { roughness: 0.9 }),
+    bag: honeyMat(THREE, 0x6a4224, { roughness: 0.8 }),
+    locker: honeyMat(THREE, 0x8a5a30, {
+      map: woodMap, emissive: 0xf0b14b, emissiveIntensity: 0.08,
+    }),
+    can: emitMat(THREE, 0xffd27a, 1.8),
     bannerA: skipMat(new THREE.MeshStandardMaterial({
       color: 0xffffff, map: bannerTex(THREE, '#c45a22', '#8a5a30'),
       roughness: 0.7, metalness: 0, envMapIntensity: 0.1,
@@ -270,10 +392,22 @@ function makeGymMats(THREE, vibe) {
       color: 0xffffff, map: bannerTex(THREE, '#f0b14b', '#6a4224'),
       roughness: 0.7, metalness: 0, envMapIntensity: 0.1,
     })),
+    jersey: skipMat(new THREE.MeshStandardMaterial({
+      color: 0xffffff, map: jerseyTex(THREE), roughness: 0.72, metalness: 0,
+    })),
+    score: skipMat(new THREE.MeshStandardMaterial({
+      color: 0xffffff, map: scoreboardTex(THREE), roughness: 0.45, metalness: 0.08,
+      emissive: 0xf0b14b, emissiveIntensity: 0.35,
+    })),
+    matRoll: skipMat(new THREE.MeshStandardMaterial({
+      color: 0xffffff, map: matTex(THREE), roughness: 0.82, metalness: 0,
+    })),
     dust: skipMat(new THREE.PointsMaterial({
       color: 0xfff6d8, size: 0.08, transparent: true, opacity: 0.45,
       depthWrite: false, sizeAttenuation: true,
     })),
+    shaft: glowMat(THREE, 0xffd27a, 0.07),
+    urn: emitMat(THREE, 0xf0b14b, 1.1),
   };
 }
 
@@ -369,6 +503,40 @@ function addTrusses(THREE, parent, mats, budget) {
     d.position.set(-16.5 + i * 11, 25.6, 0);
     return true;
   });
+  const coffer = new THREE.BoxGeometry(10.4, 0.16, 8.4);
+  addInstanced(THREE, parent, coffer, mats.locker, 8, (d, i) => {
+    const col = i % 4;
+    const row = (i / 4) | 0;
+    d.position.set(-16.5 + col * 11, 26.2, -16 + row * 32);
+    return true;
+  });
+}
+
+function addCeilingCans(THREE, parent, mats, budget) {
+  const can = new THREE.CylinderGeometry(0.22, 0.28, 0.18, 8);
+  addInstanced(THREE, parent, can, mats.can, budget.cans, (d, i) => {
+    const col = i % 4;
+    const row = (i / 4) | 0;
+    d.position.set(-16.5 + col * 11, 25.35, -28 + row * 9.2);
+    d.userData = d.userData || {};
+    return true;
+  });
+  if (budget.cans) {
+    const pulse = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.16, 8), mats.can);
+    pulse.position.set(0, 25.35, 0);
+    pulse.userData.gymCan = true;
+    pulse.userData.gymArt = true;
+    parent.add(pulse);
+  }
+  if (budget.shafts > 0) {
+    const shaft = new THREE.PlaneGeometry(3.2, 18);
+    addInstanced(THREE, parent, shaft, mats.shaft, budget.shafts, (d, i) => {
+      const side = i % 2 ? 1 : -1;
+      d.position.set(side * 18.4, 16.2, -12 + ((i / 2) | 0) * 16);
+      d.rotation.z = side * 0.42;
+      return true;
+    });
+  }
 }
 
 function addWindowsPadsBanners(THREE, parent, mats, budget) {
@@ -401,9 +569,18 @@ function addWindowsPadsBanners(THREE, parent, mats, budget) {
   const ban = new THREE.BoxGeometry(0.08, 3.6, 1.6);
   addInstanced(THREE, extras, ban, mats.bannerA, budget.banners, (d, i) => {
     const side = i % 2 ? 1 : -1;
-    d.position.set(side * 23.4, 12.4, -18 + ((i / 2) | 0) * 12);
+    d.position.set(side * 23.4, 12.4, -18 + ((i / 2) | 0) * 10);
     return true;
   });
+  const hang = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.8, 1.4), mats.bannerB);
+  hang.position.set(-23.35, 10.8, 6);
+  hang.userData.gymBanner = true;
+  hang.userData.gymArt = true;
+  extras.add(hang);
+  const hang2 = hang.clone();
+  hang2.position.set(23.35, 10.8, -8);
+  hang2.userData.gymBanner = true;
+  extras.add(hang2);
   if (budget.glow) {
     for (const z of [-16, 0, 16]) {
       const pool = new THREE.Mesh(new THREE.CircleGeometry(2.8, 16), glowMat(THREE, 0xf0b14b, 0.08));
@@ -430,15 +607,138 @@ function addWindowsPadsBanners(THREE, parent, mats, budget) {
   parent.add(extras);
 }
 
+function addCourtPaint(THREE, parent, mats, budget) {
+  const extras = new THREE.Group();
+  extras.name = 'gymArtPaint';
+  extras.userData.gymArt = true;
+  for (const z of [20, -20]) {
+    const key = new THREE.Mesh(new THREE.PlaneGeometry(12.2, 6.2), mats.key);
+    key.rotation.x = -Math.PI / 2;
+    key.position.set(0, 0.022, z + Math.sign(z) * 3.1);
+    key.userData.gymArt = true;
+    extras.add(key);
+  }
+  const center = new THREE.Mesh(new THREE.CircleGeometry(3.6, 20), mats.paint);
+  center.rotation.x = -Math.PI / 2;
+  center.position.set(0, 0.021, 0);
+  center.userData.gymArt = true;
+  extras.add(center);
+  const hash = new THREE.BoxGeometry(0.55, 0.03, 0.08);
+  addInstanced(THREE, extras, hash, mats.paint, budget.hashes, (d, i) => {
+    const side = i % 2 ? 1 : -1;
+    const k = (i / 2) | 0;
+    d.position.set(side * (6.4 + (k % 3) * 0.7), 0.04, -18 + ((k / 3) | 0) * 4.6);
+    return true;
+  });
+  for (const face of [1, -1]) {
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(7.4, 0.16, 6, 28, Math.PI), mats.paint);
+    arc.rotation.x = -Math.PI / 2;
+    arc.rotation.z = face > 0 ? Math.PI : 0;
+    arc.position.set(0, 0.045, face * 16.2);
+    arc.userData.gymArt = true;
+    extras.add(arc);
+  }
+  const sideline = new THREE.BoxGeometry(0.14, 0.04, 48);
+  addInstanced(THREE, extras, sideline, mats.paint, 2, (d, i) => {
+    d.position.set(i ? 12.4 : -12.4, 0.04, 0);
+    return true;
+  });
+  parent.add(extras);
+}
+
+function addWainscotMurals(THREE, parent, mats, budget) {
+  const board = new THREE.BoxGeometry(0.12, 2.4, 8.4);
+  addInstanced(THREE, parent, board, mats.honey, 12, (d, i) => {
+    const side = i < 6 ? -1 : 1;
+    const k = i % 6;
+    d.position.set(side * 23.68, 1.22, -28 + k * 11.2);
+    return true;
+  });
+  const stripe = new THREE.BoxGeometry(0.08, 0.22, 72);
+  const band = new THREE.Mesh(stripe, mats.rim);
+  band.position.set(-23.7, 3.55, 0);
+  band.userData.gymArt = true;
+  parent.add(band);
+  const band2 = band.clone();
+  band2.position.x = 23.7;
+  parent.add(band2);
+  const mural = new THREE.PlaneGeometry(5.4, 3.2);
+  addInstanced(THREE, parent, mural, mats.jersey, budget.murals, (d, i) => {
+    const side = i % 2 ? 1 : -1;
+    d.position.set(side * 23.62, 7.4, -10 + ((i / 2) | 0) * 14);
+    d.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+    return true;
+  });
+}
+
+function addHeroScoreboard(THREE, parent, mats) {
+  const hero = new THREE.Group();
+  hero.name = 'gymArtHero';
+  hero.userData.gymArt = true;
+  const hang = new THREE.Mesh(new THREE.BoxGeometry(0.18, 10.8, 0.18), mats.brass);
+  hang.position.set(0, 19.6, 0);
+  hero.add(hang);
+  const cube = new THREE.Mesh(new THREE.BoxGeometry(5.6, 2.8, 5.6), mats.locker);
+  cube.position.set(0, 13.2, 0);
+  hero.add(cube);
+  for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    const face = new THREE.Mesh(new THREE.BoxGeometry(5.15, 2.4, 0.1), mats.score);
+    face.position.set(Math.sin(yaw) * 2.84, 13.2, Math.cos(yaw) * 2.84);
+    face.rotation.y = yaw;
+    face.userData.gymCan = true;
+    hero.add(face);
+  }
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(2.45, 0.1, 8, 24), mats.urn);
+  ring.position.set(0, 11.55, 0);
+  ring.rotation.x = Math.PI / 2;
+  hero.add(ring);
+  for (const z of [35.4, -35.4]) {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(9.6, 3.6, 0.55), mats.locker);
+    body.position.set(0, 14.8, z);
+    hero.add(body);
+    const face = new THREE.Mesh(new THREE.BoxGeometry(8.8, 2.9, 0.1), mats.score);
+    face.position.set(0, 14.8, z + (z > 0 ? -0.32 : 0.32));
+    face.userData.gymCan = true;
+    hero.add(face);
+    const urn = new THREE.Mesh(urnGeo(THREE), mats.urn);
+    urn.position.set(-3.6, 12.75, z + (z > 0 ? -0.2 : 0.2));
+    urn.scale.set(2.4, 2.4, 2.4);
+    hero.add(urn);
+    const urn2 = urn.clone();
+    urn2.position.x = 3.6;
+    hero.add(urn2);
+  }
+  hero.traverse((o) => { o.userData.gymArt = true; });
+  parent.add(hero);
+}
+
+function addSecretDressing(THREE, parent, mats, budget) {
+  const locker = new THREE.BoxGeometry(0.85, 2.15, 0.55);
+  addInstanced(THREE, parent, locker, mats.locker, budget.lockers, (d, i) => {
+    d.position.set(-21.2 + (i % 5) * 0.92, 1.08, -24.6 - ((i / 5) | 0) * 0.7);
+    return true;
+  });
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.6, 2.2), glowMat(THREE, 0xf0b14b, 0.35));
+  glow.position.set(-21.45, 4.55, -24.5);
+  glow.userData.gymArt = true;
+  parent.add(glow);
+  const well = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.05, 6, 16), mats.urn);
+  well.rotation.x = Math.PI / 2;
+  well.position.set(0, 10.5, 26.35);
+  well.userData.gymRim = true;
+  well.userData.gymArt = true;
+  parent.add(well);
+}
+
 function addWhoopLife(THREE, parent, mats, budget, gates) {
   const extras = new THREE.Group();
   extras.name = 'gymArtWhoop';
   extras.userData.gymArt = true;
   const ballSpots = [
-    [-15.6, 32.2], [15.8, 31.6], [-15.4, -32.4], [15.6, -31.8],
-    [-16.0, 8.8], [16.1, -9.2], [-15.8, -18.4], [15.9, 18.8],
-    [-16.2, 26.4], [16.0, -26.2], [-15.5, 2.2], [15.7, 4.4],
-    [-16.1, -6.8], [15.4, 12.6],
+    [-13.2, 32.2], [13.4, 31.6], [-13.0, -32.4], [13.2, -31.8],
+    [-13.6, 8.8], [13.8, -9.2], [-13.4, -18.4], [13.6, 18.8],
+    [-14.0, 26.4], [13.8, -26.2], [-13.1, 2.2], [13.3, 4.4],
+    [-13.8, -6.8], [13.0, 12.6], [-12.8, 22.2], [12.6, -14.4],
   ];
   addInstanced(THREE, extras, new THREE.SphereGeometry(0.22, 10, 8), mats.ball, budget.balls, (d, i) => {
     const s = ballSpots[i % ballSpots.length];
@@ -461,6 +761,7 @@ function addWhoopLife(THREE, parent, mats, budget, gates) {
   const coneSpots = [
     [-14.8, 34.6], [14.8, 34.4], [-14.6, -34.6], [14.6, -34.4],
     [-16.4, 20.8], [16.4, -20.6], [-16.2, -2.4], [16.2, 3.6],
+    [-15.2, 12.2], [15.1, -8.8],
   ];
   addInstanced(THREE, extras, new THREE.ConeGeometry(0.18, 0.42, 8), mats.cone, budget.cones, (d, i) => {
     const s = coneSpots[i % coneSpots.length];
@@ -468,13 +769,61 @@ function addWhoopLife(THREE, parent, mats, budget, gates) {
     d.position.set(s[0], 0.21, s[1]);
     return true;
   });
-  const board = new THREE.Mesh(new THREE.BoxGeometry(4.8, 1.6, 0.12), mats.bannerB);
-  board.position.set(0, 16.4, -36.4);
-  board.userData.gymArt = true;
-  extras.add(board);
-  const board2 = board.clone();
-  board2.position.set(0, 16.4, 36.4);
-  extras.add(board2);
+  const towelSpots = [
+    [-13.4, 10.4], [13.6, -11.2], [-13.8, 18.8], [14.0, 6.2],
+    [-13.2, -14.6], [13.0, 24.2], [-13.6, 30.2], [13.8, -26.4],
+    [-12.9, 1.4], [13.2, -3.2], [-14.0, -22.8], [13.9, 14.6],
+    [-12.8, 8.0], [13.1, 20.0], [-13.7, -6.4], [13.4, -18.2],
+    [-13.0, 26.8], [12.8, -30.6],
+  ];
+  addInstanced(THREE, extras, new THREE.BoxGeometry(0.42, 0.12, 0.28), mats.towel, budget.towels, (d, i) => {
+    const s = towelSpots[i % towelSpots.length];
+    d.position.set(s[0], 0.08 + (i % 2) * 0.12, s[1]);
+    d.rotation.y = (i % 5) * 0.4;
+    return true;
+  });
+  const bagSpots = [
+    [-13.2, 16.2], [13.4, -16.8], [-12.9, -10.4], [13.1, 11.6],
+    [-13.8, 4.8], [14.0, -5.2], [-13.0, 28.8], [13.2, -28.4],
+    [-13.6, 22.4], [13.7, 2.2], [-13.4, -20.2], [13.3, 18.6],
+    [-13.5, 12.8], [13.6, -24.6],
+  ];
+  addInstanced(THREE, extras, new THREE.CapsuleGeometry(0.16, 0.42, 3, 6), mats.bag, budget.bags, (d, i) => {
+    const s = bagSpots[i % bagSpots.length];
+    if (!propClearOfCourse(s[0], s[1], 0.3, gates, { gatePad: 1.5, corridor: 1.3, yRange: 2 })) return false;
+    d.position.set(s[0], 0.22, s[1]);
+    d.rotation.z = Math.PI / 2;
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.BoxGeometry(0.7, 1.15, 0.55), mats.honey, budget.racks, (d, i) => {
+    const side = i % 2 ? 1 : -1;
+    d.position.set(side * 13.6, 0.58, 31.2 - ((i / 2) | 0) * 9.6);
+    return true;
+  });
+  const bench = new THREE.BoxGeometry(0.55, 0.42, 3.4);
+  addInstanced(THREE, extras, bench, mats.seat, 6, (d, i) => {
+    const side = i % 2 ? 1 : -1;
+    d.position.set(side * 13.05, 0.22, -18 + ((i / 2) | 0) * 14);
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.CylinderGeometry(0.32, 0.36, 0.95, 8), mats.bottle, 4, (d, i) => {
+    const side = i % 2 ? 1 : -1;
+    d.position.set(side * 13.2, 0.48, 8.6 - ((i / 2) | 0) * 22);
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.CylinderGeometry(0.42, 0.42, 2.4, 10), mats.matRoll, 4, (d, i) => {
+    const side = i % 2 ? 1 : -1;
+    d.position.set(side * 14.2, 0.42, -28 + ((i / 2) | 0) * 18);
+    d.rotation.z = Math.PI / 2;
+    return true;
+  });
+  const pennant = new THREE.BoxGeometry(0.06, 0.55, 0.42);
+  addInstanced(THREE, extras, pennant, mats.bannerA, 16, (d, i) => {
+    const side = i % 2 ? 1 : -1;
+    d.position.set(side * 14.8, 6.4, -24 + ((i / 2) | 0) * 6.4);
+    d.rotation.z = side * 0.18;
+    return true;
+  });
   parent.add(extras);
 }
 
@@ -488,7 +837,12 @@ export function buildAmberCourt(THREE, parent, vibe, quality, gates) {
   addBleachers(THREE, group, mats, budget);
   addHoops(THREE, group, mats, budget);
   addTrusses(THREE, group, mats, budget);
+  addCeilingCans(THREE, group, mats, budget);
   addWindowsPadsBanners(THREE, group, mats, budget);
+  addCourtPaint(THREE, group, mats, budget);
+  addWainscotMurals(THREE, group, mats, budget);
+  addHeroScoreboard(THREE, group, mats);
+  addSecretDressing(THREE, group, mats, budget);
   addWhoopLife(THREE, group, mats, budget, keep);
   parent.add(group);
   return group;
@@ -507,6 +861,9 @@ export function decorateGymGate(THREE, ring, size, col, vibe) {
   const wood = honeyMat(THREE, 0x8a5a30, { emissive: col, emissiveIntensity: emit * 0.5 });
   const hoop = new THREE.Mesh(new THREE.TorusGeometry(size * 1.02, size * 0.08, 8, 22), wood);
   extras.push(hoop);
+  const frame = new THREE.Mesh(woodFrameGeo(THREE, size), wood);
+  frame.position.z = -size * 0.04;
+  extras.push(frame);
   for (let i = 0; i < 4; i++) {
     const pip = new THREE.Mesh(new THREE.SphereGeometry(size * 0.08, 8, 6), emitMat(THREE, hexNum(vibe.palette.neonA), emit));
     const a = i * Math.PI / 2;
@@ -566,6 +923,12 @@ function tickGymArtObject(o, t) {
   }
   if (o.userData && o.userData.gymDust) {
     o.rotation.y = t * 0.04;
+  }
+  if (o.userData && o.userData.gymBanner) {
+    o.rotation.z = Math.sin(t * 0.7) * 0.06;
+  }
+  if (o.userData && o.userData.gymCan && o.material) {
+    o.material.emissiveIntensity = 1.6 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.8));
   }
 }
 
