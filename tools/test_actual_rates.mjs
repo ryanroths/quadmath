@@ -13,6 +13,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+import { actualRate } from '../sim-rates.js';
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const src = readFileSync(join(root, 'sim.html'), 'utf8');
 
@@ -28,8 +30,6 @@ function extract(name) {
   assert.notEqual(end, -1, `${name}() has unbalanced braces`);
   return src.slice(start, end);
 }
-
-const actualRate = new Function(`${extract('actualRate')}; return actualRate;`)();
 
 const near = (a, b, eps = 1e-9) =>
   assert.ok(Math.abs(a - b) <= eps, `expected ${b}, got ${a}`);
