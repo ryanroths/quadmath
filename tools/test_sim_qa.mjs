@@ -285,6 +285,12 @@ test('boot and Fly are last-map freestyle; room/daily cannot lock routing', () =
   assert.deepEqual(resolveFly(null), { map: 'city', track: 'city-freestyle', mode: 'free' });
   assert.equal(resolveFly({ map: 'trainer', track: 'trainer-slalom' }).track, 'trainer-freestyle');
   assert.equal(resolveSimBoot({}, null, files).track, 'city-freestyle');
+  const roomQuery = resolveSimBoot({ track: 'room-practice' }, { map: 'city', track: 'city-loop' }, files);
+  assert.equal(roomQuery.map, 'room', 'track=room-practice must not boot City');
+  assert.equal(roomQuery.track, 'room-practice');
+  assert.equal(roomQuery.save, false);
+  assert.equal(roomQuery.mode, 'race');
+  assert.equal(resolveSimBoot({ map: 'room', track: 'room-practice' }, null, files).track, 'room-practice');
   assert.equal(resolveSimBoot({}, { map: 'room', track: 'room-practice' }, files).track, 'room-freestyle');
   assert.equal(resolveSimBoot({}, { map: 'gym', track: 'daily-2026-10-18' }, files).map, 'gym');
   assert.equal(resolveSimBoot({}, { map: 'gym', track: 'daily-2026-10-18' }, files).track, 'gym-freestyle');

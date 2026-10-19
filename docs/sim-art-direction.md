@@ -5,7 +5,13 @@ race line, leaderboard keys, ghosts, and daily/weekly seeds stay frozen.
 Nothing here is copied from a game, and nothing is taken from WebFPV (GPL).
 
 Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
-**Clay Parlor** ships on Living Room and **Volt Stall** ships on Garage.
+**Clay Parlor** ships on Living Room, **Volt Stall** ships on Garage, and
+**Ion Nave** ships on Warehouse.
+**Amber Court** ships on Gym.
+**Paper Sun** ships on Office.
+**Licorice Grid** ships on Tiny Trainer.
+**Jade Lot** ships on Backyard.
+**Pocket Stage** ships on Your Room.
 Remaining maps keep their current procedural rooms and pick up their vibe
 one map per PR.
 
@@ -103,8 +109,8 @@ The product target stays **60 fps desktop / 45+ mid phone**.
 ## Vibe per map
 
 Every row is original. Palette hex is the locked brand for that map. City
-(**Neon Current**), Living Room (**Clay Parlor**), and Garage (**Volt Stall**)
-are implemented. Remaining maps wait their turn.
+(**Neon Current**), Living Room (**Clay Parlor**), Garage (**Volt Stall**), and
+Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Trainer (**Licorice Grid**), Backyard (**Jade Lot**), and Your Room (**Pocket Stage**) are implemented. Remaining maps wait their turn.
 
 ### City — Neon Current (prototype)
 
@@ -138,7 +144,7 @@ are implemented. Remaining maps wait their turn.
 - **Gates:** Square neon frames, sodium / cyan alternate.
 - **Post:** Thin bloom on tubes only. Low = tubes as emissive meshes, no bloom.
 
-### Warehouse — Ion Nave
+### Warehouse — Ion Nave (shipped)
 
 - **Time:** Windowless, bioluminescent.
 - **Palette:** `#0b1218` dark, `#1b3a4a` rack, `#39ffb0` spore, `#7a5cff` aisle, `#c45a22` pallet.
@@ -147,7 +153,7 @@ are implemented. Remaining maps wait their turn.
 - **Gates:** Hex frames with teal core.
 - **Post:** Small bloom on runners. Fog `#0b1218` at `0.0018`.
 
-### Backyard — Jade Lot
+### Backyard — Jade Lot (shipped)
 
 - **Time:** Dusk under a torn canopy.
 - **Palette:** `#1b2a18` hedge, `#c9a45b` idol gold, `#5d7a3a` grass, `#8a4a2a` laterite, `#ffe0b0` porch.
@@ -156,7 +162,7 @@ are implemented. Remaining maps wait their turn.
 - **Gates:** Stone rings with gold leaf emissive.
 - **Post:** Warm haze, bloom off on Low.
 
-### Office — Paper Sun
+### Office — Paper Sun (shipped)
 
 - **Time:** 10 a.m. cartoon sun through blinds.
 - **Palette:** `#fff4d2` paper, `#ff5c5c` chair, `#3d7dff` screen, `#2ae59b` plant, `#1a1a1a` outline.
@@ -165,7 +171,7 @@ are implemented. Remaining maps wait their turn.
 - **Gates:** Primary-color hoops with a black outline mesh.
 - **Post:** No bloom. Optional toon ramp on High.
 
-### School Gym — Amber Court
+### School Gym — Amber Court (shipped)
 
 - **Time:** Golden hour through high windows.
 - **Palette:** `#f0b14b` sun, `#6a4224` court, `#fff6d8` line, `#c45a22` rim, `#8a8e94` truss.
@@ -174,7 +180,7 @@ are implemented. Remaining maps wait their turn.
 - **Gates:** Wood-and-brass rings.
 - **Post:** Gentle bloom on rims only.
 
-### Tiny Trainer — Licorice Grid
+### Tiny Trainer — Licorice Grid (shipped)
 
 - **Time:** Indoor night meet, tape still sticky.
 - **Palette:** `#1a1020` floor, `#ff4d8d` tape, `#f2f0ea` PVC, `#ffe08a` bulb, `#00e5ff` next-gate.
@@ -182,7 +188,7 @@ are implemented. Remaining maps wait their turn.
 - **Gates:** Frosted candy toruses.
 - **Post:** Tiny bloom on tape. Low = saturated albedo only.
 
-### Your Room — Pocket Stage
+### Your Room — Pocket Stage (shipped)
 
 - **Time:** Desk lamp + hallway spill.
 - **Palette:** `#eee8de` wall, `#7a5130` furniture, `#ffb3c7` felt, `#7ec8e3` night-window.

@@ -24,10 +24,51 @@ export {
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
 } from './sim-art-garage.js?v=7efc1c273a23';
+export {
+  WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget,
+  hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
+  decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
+} from './sim-art-warehouse.js?v=197484b198dd';
+
+export {
+  GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
+  hideStockGymMeshes, restyleGymShell, buildAmberCourt,
+  decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
+} from './sim-art-gym.js?v=16a8e15a6b97';
+
+export {
+  OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget,
+  hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
+  decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
+} from './sim-art-office.js?v=0cffbbcd11b3';
+
+export {
+  TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
+  hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
+  decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
+} from './sim-art-trainer.js?v=b4f1b62d3078';
+
+export {
+  BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
+  hideStockBackyardMeshes, restyleBackyardShell, buildJadeLot,
+  decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
+} from './sim-art-backyard.js?v=20ea971f04a7';
+
+export {
+  ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
+  hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
+  decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
+} from './sim-art-room.js?v=7cf54b843bb5';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
 export const GARAGE_VIBE_ID = 'garage';
+export const WAREHOUSE_VIBE_ID = 'warehouse';
+export const GYM_VIBE_ID = 'gym';
+export const OFFICE_VIBE_ID = 'office';
+export const TRAINER_VIBE_ID = 'trainer';
+export const BACKYARD_VIBE_ID = 'backyard';
+export const ROOM_VIBE_ID = 'room';
 
 
 export const VIBES = Object.freeze({
@@ -139,7 +180,7 @@ export const VIBES = Object.freeze({
     id: 'warehouse',
     name: 'Ion Nave',
     tagline: 'Bioluminescent rack cathedral, teal aisle runners',
-    implemented: false,
+    implemented: true,
     time: 'windowless',
     sky: 'none',
     palette: Object.freeze({
@@ -150,13 +191,13 @@ export const VIBES = Object.freeze({
       gateA: '#39ffb0', gateB: '#7a5cff',
     }),
     lighting: Object.freeze({
-      sunColor: 0x7a5cff, sunIntensity: 0.18, fillColor: 0x39ffb0, fillIntensity: 0.2,
-      hemiSky: 0x102028, hemiGround: 0x0b1218, hemiIntensity: 0.3,
-      exposure: 0.52, fogColor: 0x0b1218, fogDensity: 0.0018,
+      sunColor: 0x7a5cff, sunIntensity: 0.26, fillColor: 0x39ffb0, fillIntensity: 0.14,
+      hemiSky: 0x1a3040, hemiGround: 0x0b1218, hemiIntensity: 0.4,
+      exposure: 0.6, fogColor: 0x0b1218, fogDensity: 0.0014,
       bloomStrength: 0.65, bloomRadius: 0.4, bloomThreshold: 0.88,
       gateEmissive: 5.5, gateEmissiveActive: 7.2,
     }),
-    looks: Object.freeze({ fog: 0.0018, sun: 0.18, env: 0.42, bg: 0.26, hemi: 0.3 }),
+    looks: Object.freeze({ fog: 0.0014, sun: 0.26, env: 0.32, bg: 0.18, hemi: 0.4 }),
     gates: Object.freeze({ style: 'hex-frame', keepBrand: false }),
     props: Object.freeze(['aisle arrows', 'rack edges', 'spore cans']),
     post: Object.freeze({ bloom: true, analog: false }),
@@ -165,7 +206,7 @@ export const VIBES = Object.freeze({
     id: 'backyard',
     name: 'Jade Lot',
     tagline: 'Dusk jungle-temple backyard, gold leaf, moss posts',
-    implemented: false,
+    implemented: true,
     time: 'dusk',
     sky: 'gradient',
     palette: Object.freeze({
@@ -191,7 +232,7 @@ export const VIBES = Object.freeze({
     id: 'office',
     name: 'Paper Sun',
     tagline: 'Toon-shaded morning office, hard shadows, primary hoops',
-    implemented: false,
+    implemented: true,
     time: 'morning',
     sky: 'none',
     palette: Object.freeze({
@@ -217,7 +258,7 @@ export const VIBES = Object.freeze({
     id: 'gym',
     name: 'Amber Court',
     tagline: 'Golden-hour gym, honey wood, long sun on the paint',
-    implemented: false,
+    implemented: true,
     time: 'golden hour',
     sky: 'none',
     palette: Object.freeze({
@@ -243,7 +284,7 @@ export const VIBES = Object.freeze({
     id: 'trainer',
     name: 'Licorice Grid',
     tagline: 'Candy tape on a night meet floor, clay PVC frames',
-    implemented: false,
+    implemented: true,
     time: 'indoor night',
     sky: 'none',
     palette: Object.freeze({
@@ -269,7 +310,7 @@ export const VIBES = Object.freeze({
     id: 'room',
     name: 'Pocket Stage',
     tagline: 'Clay diorama bedroom, desk-lamp key, felt rings',
-    implemented: false,
+    implemented: true,
     time: 'desk lamp',
     sky: 'none',
     palette: Object.freeze({
@@ -280,9 +321,9 @@ export const VIBES = Object.freeze({
       gateA: '#ffb3c7', gateB: '#7ec8e3',
     }),
     lighting: Object.freeze({
-      sunColor: 0xffe6c4, sunIntensity: 0.28, fillColor: 0xffb3c7, fillIntensity: 0.12,
-      hemiSky: 0xeee8de, hemiGround: 0x7a5130, hemiIntensity: 0.42,
-      exposure: 0.6, fogColor: 0xeee8de, fogDensity: 0.0045,
+      sunColor: 0xffe6c4, sunIntensity: 0.36, fillColor: 0xffb3c7, fillIntensity: 0.2,
+      hemiSky: 0xeee8de, hemiGround: 0x7a5130, hemiIntensity: 0.48,
+      exposure: 0.64, fogColor: 0xeee8de, fogDensity: 0.0036,
       bloomStrength: 0.15, bloomRadius: 0.2, bloomThreshold: 1.2,
       gateEmissive: 2.2, gateEmissiveActive: 3.2,
     }),

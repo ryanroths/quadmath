@@ -749,14 +749,16 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=34e582665d37";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=7ee7a2ce57cd";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=df5e5f70591d";
 import {
   VIBES, vibeFor, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, loadRain, saveRain, RAIN_KEY,
   makeWorldLabel, worldLabelMaterial, setWorldLabelText,
   restyleLiving, decorateLivingGate, pulseLivingGate, tickLivingArt,
   restyleGarage, decorateGarageGate, pulseGarageGate, tickGarageArt,
-} from "./sim-art.js?v=f4886d133093";
+  restyleWarehouse, decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt,
+  restyleGym, decorateGymGate, pulseGymGate, tickGymArt,
+} from "./sim-art.js?v=85a5f8184a3e";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -779,14 +781,14 @@ import {
   findTrackIn, resolveSimBoot, knownMapId, trackRefId,
   isFreestyleTrackId, freestyleTrack, freestyleIdFor,
   resolveFly, persistableSelection,
-} from "./sim-tracks.js?v=749ba01f2163";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=40926e827e21";
+} from "./sim-tracks.js?v=7ca83407298d";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=beaa1b943d6e";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=bf753d2f574f";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=eaf1c6e55a50";
+} from "./sim-room.js?v=5b05276e1d0b";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=155694fdbd50";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -794,7 +796,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=d3cc6ce75e05";
+} from "./sim-coach.js?v=ad207356e65d";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js";
@@ -816,7 +818,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=316970caffe8";
+} from "./sim-secrets.js?v=253aa392ee8b";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1284,6 +1286,12 @@ function addGate(x,y,z,rotationY,size,solidGate,trackId,parent){
   if((currentMap||'city')==='city')decorateVibeGate(THREE,ring,size,col,vibeFor('city'),trackIdx);
   if(currentMap==='living')decorateLivingGate(THREE,ring,size,col,vibeFor('living'));
   if(currentMap==='garage')decorateGarageGate(THREE,ring,size,col,vibeFor('garage'));
+  if(currentMap==='warehouse')decorateWarehouseGate(THREE,ring,size,col,vibeFor('warehouse'));
+  if(currentMap==='room')decorateRoomGate(THREE,ring,size,col,vibeFor('room'));
+  if(currentMap==='backyard')decorateBackyardGate(THREE,ring,size,col,vibeFor('backyard'));
+  if(currentMap==='trainer')decorateTrainerGate(THREE,ring,size,col,vibeFor('trainer'));
+  if(currentMap==='office')decorateOfficeGate(THREE,ring,size,col,vibeFor('office'));
+  if(currentMap==='gym')decorateGymGate(THREE,ring,size,col,vibeFor('gym'));
   (parent||raceGroup).add(ring);
   gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col,trackId:trackId,trackIdx:trackIdx,ry:rotationY||0,size:size,solid:!!solidGate}); // col = dim base color
   if(solidGate){
@@ -1405,6 +1413,12 @@ function updateGateHighlight(){
     if(currentMap==='city')pulseCityGate(g,g===target,passed,now,vibeFor('city'));
     if(currentMap==='living')pulseLivingGate(g,g===target,passed,now,vibeFor('living'));
     if(currentMap==='garage')pulseGarageGate(g,g===target,passed,now,vibeFor('garage'));
+    if(currentMap==='warehouse')pulseWarehouseGate(g,g===target,passed,now,vibeFor('warehouse'));
+    if(currentMap==='room')pulseRoomGate(g,g===target,passed,now,vibeFor('room'));
+    if(currentMap==='backyard')pulseBackyardGate(g,g===target,passed,now,vibeFor('backyard'));
+    if(currentMap==='trainer')pulseTrainerGate(g,g===target,passed,now,vibeFor('trainer'));
+    if(currentMap==='office')pulseOfficeGate(g,g===target,passed,now,vibeFor('office'));
+    if(currentMap==='gym')pulseGymGate(g,g===target,passed,now,vibeFor('gym'));
   }
 }
 // begin a 3-lap run on the active track: reset splits, start both the run and
@@ -2210,6 +2224,110 @@ function applyGarageArt(quality){
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Garage is original procedural art — Volt Stall';
 }
+function applyWarehouseArt(quality){
+  const built=indoorBuilt.warehouse||ensureIndoor('warehouse');
+  if(!built)return;
+  const q=quality||(looks&&looks.applied)||'med';
+  restyleWarehouse(THREE,{
+    vibe:vibeFor('warehouse'),
+    quality:q,
+    group:built.group,
+    floor:built.floor,
+    scene,sun,sunFill,hemi,renderer,LIGHTING,
+    bloomPass:looks&&looks.bloomPass,
+  });
+  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
+  if(looks&&looks.setGrade)looks.setGrade(0);
+  const credit=document.querySelector('.sf-credit');
+  if(credit)credit.textContent='Warehouse is original procedural art — Ion Nave';
+}
+function applyGymArt(quality){
+  const built=indoorBuilt.gym||ensureIndoor('gym');
+  if(!built)return;
+  const q=quality||(looks&&looks.applied)||'med';
+  restyleGym(THREE,{
+    vibe:vibeFor('gym'),
+    quality:q,
+    group:built.group,
+    floor:built.floor,
+    scene,sun,sunFill,hemi,renderer,LIGHTING,
+    bloomPass:looks&&looks.bloomPass,
+  });
+  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
+  if(looks&&looks.setGrade)looks.setGrade(0);
+  const credit=document.querySelector('.sf-credit');
+  if(credit)credit.textContent='Gym is original procedural art — Amber Court';
+}
+function applyOfficeArt(quality){
+  const built=indoorBuilt.office||ensureIndoor('office');
+  if(!built)return;
+  const q=quality||(looks&&looks.applied)||'med';
+  restyleOffice(THREE,{
+    vibe:vibeFor('office'),
+    quality:q,
+    group:built.group,
+    floor:built.floor,
+    scene,sun,sunFill,hemi,renderer,LIGHTING,
+    bloomPass:looks&&looks.bloomPass,
+  });
+  if(looks&&looks.bloomPass)looks.bloomPass.enabled=false;
+  if(looks&&looks.setGrade)looks.setGrade(0);
+  const credit=document.querySelector('.sf-credit');
+  if(credit)credit.textContent='Office is original procedural art — Paper Sun';
+}
+function applyTrainerArt(quality){
+  const built=indoorBuilt.trainer||ensureIndoor('trainer');
+  if(!built)return;
+  const q=quality||(looks&&looks.applied)||'med';
+  restyleTrainer(THREE,{
+    vibe:vibeFor('trainer'),
+    quality:q,
+    group:built.group,
+    floor:built.floor,
+    scene,sun,sunFill,hemi,renderer,LIGHTING,
+    bloomPass:looks&&looks.bloomPass,
+  });
+  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
+  if(looks&&looks.setGrade)looks.setGrade(0);
+  const credit=document.querySelector('.sf-credit');
+  if(credit)credit.textContent='Trainer is original procedural art — Licorice Grid';
+}
+function applyBackyardArt(quality){
+  const built=indoorBuilt.backyard||ensureIndoor('backyard');
+  if(!built)return;
+  const q=quality||(looks&&looks.applied)||'med';
+  restyleBackyard(THREE,{
+    vibe:vibeFor('backyard'),
+    quality:q,
+    group:built.group,
+    floor:built.floor,
+    scene,sun,sunFill,hemi,renderer,LIGHTING,
+    bloomPass:looks&&looks.bloomPass,
+  });
+  if(looks&&looks.bloomPass)looks.bloomPass.enabled=false;
+  if(looks&&looks.setGrade)looks.setGrade(0);
+  const credit=document.querySelector('.sf-credit');
+  if(credit)credit.textContent='Backyard is original procedural art — Jade Lot';
+}
+function applyRoomArt(quality){
+  const built=indoorBuilt.room||ensureIndoor('room');
+  if(!built)return;
+  const q=quality||(looks&&looks.applied)||'med';
+  restyleRoom(THREE,{
+    vibe:vibeFor('room'),
+    quality:q,
+    group:built.group,
+    floor:built.floor,
+    plan:built.plan,
+    gates:built.plan&&built.plan.track&&built.plan.track.gates,
+    scene,sun,sunFill,hemi,renderer,LIGHTING,
+    bloomPass:looks&&looks.bloomPass,
+  });
+  if(looks&&looks.bloomPass)looks.bloomPass.enabled=false;
+  if(looks&&looks.setGrade)looks.setGrade(0);
+  const credit=document.querySelector('.sf-credit');
+  if(credit)credit.textContent='Your Room is original procedural art — Pocket Stage';
+}
 async function finishCityArt(){
   window._skipStockCity=true;
   try{
@@ -2365,7 +2483,7 @@ function applyMapLooks(mapId){
   if(looks&&looks.setOrbit)looks.setOrbit(MAP_ORBIT[mapId]||MAP_ORBIT.city);
   if(looks&&looks.setSkyMode)looks.setSkyMode(vibe&&vibe.sky==='gradient'?'gradient':'hdri');
   if(looks&&looks.setGrade)looks.setGrade(mapId==='city'?1:0);
-  if(mapId==='city'||mapId==='living'||mapId==='garage'){
+  if(mapId==='city'||mapId==='living'||mapId==='garage'||mapId==='warehouse'||mapId==='gym'||mapId==='office'||mapId==='trainer'||mapId==='backyard'||mapId==='room'){
     applyVibeLighting({
       LIGHTING,sun,sunFill,hemi,scene,renderer,skyMesh,
       bloomPass:looks&&looks.bloomPass,
@@ -2373,6 +2491,12 @@ function applyMapLooks(mapId){
   }
   if(mapId==='living'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
   if(mapId==='garage'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
+  if(mapId==='warehouse'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
+  if(mapId==='room'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
+  if(mapId==='backyard'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
+  if(mapId==='trainer'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
+  if(mapId==='office'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
+  if(mapId==='gym'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
   if(mapId!=='city'&&skyMesh&&skyMesh.userData&&skyMesh.userData.origSkyMat){
     skyMesh.material=skyMesh.userData.origSkyMat;
     skyMesh.userData.citySky=false;
@@ -2384,6 +2508,12 @@ function applyMapLooks(mapId){
   if(credit){
     if(mapId==='living')credit.textContent='Living Room is original procedural art — Clay Parlor';
     else if(mapId==='garage')credit.textContent='Garage is original procedural art — Volt Stall';
+    else if(mapId==='warehouse')credit.textContent='Warehouse is original procedural art — Ion Nave';
+    else if(mapId==='room')credit.textContent='Your Room is original procedural art — Pocket Stage';
+    else if(mapId==='backyard')credit.textContent='Backyard is original procedural art — Jade Lot';
+    else if(mapId==='trainer')credit.textContent='Trainer is original procedural art — Licorice Grid';
+    else if(mapId==='office')credit.textContent='Office is original procedural art — Paper Sun';
+    else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court';
     else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current';
   }
 }
@@ -2441,6 +2571,12 @@ async function setMap(mapId,trackId,opts){
   applyMapLooks(currentMap);
   if(currentMap==='living')applyLivingArt(looks&&looks.applied);
   if(currentMap==='garage')applyGarageArt(looks&&looks.applied);
+  if(currentMap==='warehouse')applyWarehouseArt(looks&&looks.applied);
+  if(currentMap==='room')applyRoomArt(looks&&looks.applied);
+  if(currentMap==='backyard')applyBackyardArt(looks&&looks.applied);
+  if(currentMap==='trainer')applyTrainerArt(looks&&looks.applied);
+  if(currentMap==='office')applyOfficeArt(looks&&looks.applied);
+  if(currentMap==='gym')applyGymArt(looks&&looks.applied);
   nextGateIndex=0;
   runActive=false;
   lastPassedGate=null;
@@ -3818,6 +3954,12 @@ function syncQualityUI(){
   if(currentMap==='city')applyCityArt(looks.applied);
   if(currentMap==='living')applyLivingArt(looks.applied);
   if(currentMap==='garage')applyGarageArt(looks.applied);
+  if(currentMap==='warehouse')applyWarehouseArt(looks.applied);
+  if(currentMap==='room')applyRoomArt(looks.applied);
+  if(currentMap==='backyard')applyBackyardArt(looks.applied);
+  if(currentMap==='trainer')applyTrainerArt(looks.applied);
+  if(currentMap==='office')applyOfficeArt(looks.applied);
+  if(currentMap==='gym')applyGymArt(looks.applied);
   setIndoorLights(indoorLights,looks.applied);
   if(secrets)secrets.setQuality(looks.applied);
   const q=looks.choice;
@@ -5481,6 +5623,12 @@ function loop(now){
   if(currentMap==='city')tickCityArt(cityWorld,now);
   if(currentMap==='living')tickLivingArt(indoorWorld,now);
   if(currentMap==='garage')tickGarageArt(indoorWorld,now);
+  if(currentMap==='warehouse')tickWarehouseArt(indoorWorld,now);
+  if(currentMap==='room')tickRoomArt(indoorWorld,now);
+  if(currentMap==='backyard')tickBackyardArt(indoorWorld,now);
+  if(currentMap==='trainer')tickTrainerArt(indoorWorld,now);
+  if(currentMap==='office')tickOfficeArt(indoorWorld,now);
+  if(currentMap==='gym')tickGymArt(indoorWorld,now);
   try{if(secrets&&secrets.active)secrets.tick(now,state.pos,dt);}catch(e){}
   if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
     readInput(dt);
@@ -5819,6 +5967,12 @@ function applyQueryBoot(){
       if(currentMap==='city')applyCityArt(looks.applied);
       if(currentMap==='living')applyLivingArt(looks.applied);
       if(currentMap==='garage')applyGarageArt(looks.applied);
+      if(currentMap==='warehouse')applyWarehouseArt(looks.applied);
+      if(currentMap==='room')applyRoomArt(looks.applied);
+      if(currentMap==='backyard')applyBackyardArt(looks.applied);
+      if(currentMap==='trainer')applyTrainerArt(looks.applied);
+      if(currentMap==='office')applyOfficeArt(looks.applied);
+      if(currentMap==='gym')applyGymArt(looks.applied);
     });
   }
   if(q.get('builder')==='1'){toggleStartMenu(false);openBuilder();}
