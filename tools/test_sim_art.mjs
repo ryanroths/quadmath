@@ -870,6 +870,7 @@ test('Trainer freestyle builds without throwing and the FPV frame is not all bla
     if (q === 'low') assert.equal(trainerBudget('low').glow, false);
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    if (q === 'low') assert.ok(stats.callsEst < 200, 'Low trainer callsEst ' + stats.callsEst);
     const frame = cityFrameLit(vis);
     assert.ok(frame.meshes >= 6, q + ' meshes ' + frame.meshes);
     assert.ok(frame.lit >= 6, q + ' lit materials ' + frame.lit);

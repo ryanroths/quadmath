@@ -47,7 +47,7 @@ export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=65c9547b3a06';
+} from './sim-art-trainer.js?v=c8af1c58700a';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
@@ -304,7 +304,7 @@ export const VIBES = Object.freeze({
     }),
     looks: Object.freeze({ fog: 0.0028, sun: 0.35, env: 0.48, bg: 0.3, hemi: 0.36 }),
     gates: Object.freeze({ style: 'candy-torus', keepBrand: false }),
-    props: Object.freeze(['candy tape', 'clay cones', 'gummy frames']),
+    props: Object.freeze(['candy tape', 'clay cones', 'gummy frames', 'meet sign', 'tape rolls']),
     post: Object.freeze({ bloom: true, analog: false }),
   }),
   room: Object.freeze({
