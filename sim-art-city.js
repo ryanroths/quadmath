@@ -916,6 +916,76 @@ function addDiveHoops(THREE, group, vibe) {
   });
 }
 
+function neonSignTex(THREE) {
+  return canvasTex(THREE, 256, 96, (g, w, h) => {
+    g.fillStyle = '#00f0ff';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#ff2bd6';
+    g.fillRect(0, 0, w, 10);
+    g.fillRect(0, h - 10, w, 10);
+    g.fillRect(0, 0, 10, h);
+    g.fillRect(w - 10, 0, 10, h);
+    g.fillStyle = '#070014';
+    g.font = 'bold 48px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('NEON', w * 0.5, h * 0.54);
+    g.fillStyle = '#ff7a18';
+    g.fillRect(18, h * 0.5 - 16, 8, 32);
+    g.fillRect(w - 26, h * 0.5 - 16, 8, 32);
+  }, 1, 1);
+}
+
+function addHeroNeonSign(THREE, parent) {
+  const hero = new THREE.Group();
+  hero.name = 'cityArtHero';
+  const x = 7.4, y = 4.8, z = 10.2;
+  const cableMat = skipMat(new THREE.MeshBasicMaterial({ color: 0x2a2038 }));
+  hero.add(new THREE.Mesh(mergeGeos(THREE, [
+    boxAt(THREE, 0.06, 4.6, 0.06, x - 1.55, y + 2.4, z, 0),
+    boxAt(THREE, 0.06, 4.6, 0.06, x + 1.55, y + 2.4, z, 0),
+    boxAt(THREE, 5.4, 0.16, 0.16, x, y + 0.78, z, 0),
+  ]), cableMat));
+  const face = new THREE.Mesh(
+    new THREE.BoxGeometry(5.1, 1.28, 0.08),
+    skipMat(new THREE.MeshBasicMaterial({
+      color: 0xffffff, map: neonSignTex(THREE), toneMapped: false, side: THREE.DoubleSide,
+    })),
+  );
+  face.position.set(x, y, z);
+  hero.add(face);
+  const disc = new THREE.Mesh(
+    new THREE.CircleGeometry(0.58, 16),
+    skipMat(new THREE.MeshBasicMaterial({
+      color: 0x00f0ff, toneMapped: false, transparent: true, opacity: 0.9,
+    })),
+  );
+  disc.position.set(x, y - 0.88, z);
+  disc.userData.cityCurrent = true;
+  hero.add(disc);
+  parent.add(hero);
+}
+
+function addSecretDressing(THREE, parent, vibe) {
+  const mat = neonMat(THREE, hexNum(vibe.palette.neonA), 2.6, { color: 0x2a1428, roughness: 0.5 });
+  const spots = [
+    // Stack Roof {0, 13.55, 300} — triple cap.
+    { x: 0, y: 13.2, z: 300, s: 2.2 },
+    { x: -0.8, y: 13.62, z: 300, s: 0.7 },
+    { x: 0.7, y: 13.62, z: 299.4, s: 0.55 },
+    // Current Well {150, 168, -150} — dive crown.
+    { x: 150, y: 167.55, z: -150, s: 2.6 },
+    { x: 150, y: 168.15, z: -150, s: 0.85 },
+    { x: 149.2, y: 168.0, z: -149.3, s: 0.5 },
+  ];
+  addInstanced(THREE, parent, new THREE.BoxGeometry(1, 0.22, 1), mat, spots.length, (d, i) => {
+    const s = spots[i];
+    d.position.set(s.x, s.y, s.z);
+    d.scale.set(s.s, 1, s.s);
+    d.rotation.set(0, i * 0.3, 0);
+  });
+}
+
 export function restyleDiveTubes(root, vibe, THREE) {
   if (!root) return 0;
   let n = 0;
@@ -1650,6 +1720,8 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
   }
   group.userData.artLights = lights;
   void carMesh;
+  addHeroNeonSign(THREE, group);
+  addSecretDressing(THREE, group, vibe);
   return group;
 }
 
@@ -1949,6 +2021,13 @@ function tickCityArtObject(o, t) {
         o.setMatrixAt(i, dummy.matrix);
       }
       o.instanceMatrix.needsUpdate = true;
+    }
+    if (o.userData && o.userData.cityCurrent) {
+      const s = 1 + 0.08 * Math.sin(t * 2.4);
+      o.scale.setScalar(s);
+      if (o.material && o.material.opacity != null) {
+        o.material.opacity = 0.75 + 0.2 * (0.5 + 0.5 * Math.sin(t * 2.4));
+      }
     }
     if (o.userData && o.userData.cityDrone) {
       const dummy = o.userData.dummy;

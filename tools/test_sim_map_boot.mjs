@@ -80,29 +80,40 @@ async function cdp(ws, method, params) {
   });
 }
 
+let bootSeq = 0;
+
 async function bootPage(base, spec) {
+  // sim.html defaults currentMap to 'city' until fetchBuiltinTracks + applyQueryBoot.
+  // A fixed sleep plus a reused CDP port / user-data-dir can read that default
+  // (or a dying sibling Chrome) as "gym booted as city" when the full suite
+  // saturates the machine. Isolate each boot and wait for the queried map.
   const trackQ = spec.track ? `&track=${spec.track}` : '';
   const url = `${base}/sim.html?map=${spec.map}${trackQ}&look=${spec.look}&quality=${spec.q}&menu=1&fpv=1`;
-  const port = 9400 + Math.floor(Math.random() * 500);
+  bootSeq += 1;
+  const port = 9700 + bootSeq;
+  const userData = `/tmp/qm-boot-${process.pid}-${bootSeq}-${Date.now()}`;
   const child = spawn(chrome, [
     '--headless=new', '--no-sandbox', '--disable-gpu-sandbox',
     '--use-angle=swiftshader', '--enable-webgl', '--hide-scrollbars',
     '--window-size=1400,800', `--remote-debugging-port=${port}`,
-    `--user-data-dir=/tmp/qm-boot-${process.pid}-${port}`, url,
+    `--user-data-dir=${userData}`, url,
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = '';
   child.stderr.on('data', (d) => { stderr += d.toString(); });
+  const mapQ = 'map=' + spec.map;
   let wsUrl = null;
   for (let i = 0; i < 50 && !wsUrl; i++) {
     await sleep(120);
     try {
       const pages = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json();
-      const page = pages.find((p) => p.type === 'page' && p.webSocketDebuggerUrl);
+      const page = pages.find((p) => (
+        p.type === 'page' && p.webSocketDebuggerUrl && String(p.url || '').includes(mapQ)
+      ));
       if (page) wsUrl = page.webSocketDebuggerUrl;
     } catch (e) { /* wait */ }
   }
   if (!wsUrl) {
-    child.kill();
+    try { child.kill('SIGKILL'); } catch (e) { /* ignore */ }
     throw new Error('no CDP for ' + spec.map + '\n' + stderr.slice(-400));
   }
   const ws = new WebSocket(wsUrl);
@@ -123,7 +134,21 @@ async function bootPage(base, spec) {
   try {
     await cdp(ws, 'Runtime.enable');
     await cdp(ws, 'Page.enable');
-    await sleep(3800);
+    let parsed = {};
+    for (let i = 0; i < 48; i++) {
+      const probe = await cdp(ws, 'Runtime.evaluate', {
+        expression: `JSON.stringify((function(){
+          var s=window._sim||{};
+          var map = s.map ? s.map() : null;
+          var vibe = s.vibe ? s.vibe() : null;
+          return { map: map, vibeId: vibe && vibe.id, ready: !!(s.map && s.vibe) };
+        })())`,
+        returnByValue: true,
+      });
+      const got = probe && probe.result && probe.result.value ? JSON.parse(probe.result.value) : {};
+      if (got.map === spec.map && got.vibeId === spec.map) { parsed = got; break; }
+      await sleep(250);
+    }
     await cdp(ws, 'Runtime.evaluate', {
       expression: `(function(){
         ['startMenu','feelPrompt','menuLayer','legend','audioHint','toast','panel'].forEach(function(id){
@@ -166,7 +191,7 @@ async function bootPage(base, spec) {
       })())`,
       returnByValue: true,
     });
-    const parsed = info && info.result && info.result.value ? JSON.parse(info.result.value) : {};
+    parsed = info && info.result && info.result.value ? JSON.parse(info.result.value) : parsed;
     try {
       const shot = await cdp(ws, 'Page.captureScreenshot', { format: 'png', fromSurface: true });
       const dir = mkdtempSync(join(tmpdir(), 'qm-boot-'));
@@ -184,7 +209,11 @@ async function bootPage(base, spec) {
     return parsed;
   } finally {
     try { ws.close(); } catch (e) { /* ignore */ }
-    child.kill();
+    try { child.kill('SIGKILL'); } catch (e) { /* ignore */ }
+    await Promise.race([
+      new Promise((res) => child.once('exit', res)),
+      sleep(2000),
+    ]);
   }
 }
 
@@ -230,4 +259,4 @@ test('headless Chrome boots every map without errors or a blank FPV', async (t) 
   } finally {
     await new Promise((res) => server.close(res));
   }
-}, { timeout: 180000 });
+}, { timeout: 240000 });
