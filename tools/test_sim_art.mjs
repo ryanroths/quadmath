@@ -34,7 +34,7 @@ import {
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
-import { MAP_IDS, MAP_LOOKS, buildMap } from '../sim-maps.js';
+import { MAP_IDS, MAP_LOOKS, buildMap, GARAGE_PLAY } from '../sim-maps.js';
 import { DAILY_MAPS } from '../sim-retention.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -293,6 +293,7 @@ test('Kenney CC0 garage kit is meshopt-compressed and stays off the banned path'
   assert.ok(planned.chest.every((p) => p.x < -6.6));
   assert.ok(planned.toolboxes.every((p) => Math.abs(p.x) >= 7.4));
   assert.ok(planned.car.every((p) => p.x > 1.1 && p.x < 7.2 && p.z > -11.4 && p.z < 0.6));
+  assert.ok(planned.car.every((p) => p.y >= 1.2), 'kit sedan sits on jack stands');
   const clutter = []
     .concat(planned.crates, planned.cardboard, planned.toolboxes, planned.tires)
     .concat(planned.barrels, planned.barriers);
@@ -753,6 +754,37 @@ test('Garage freestyle builds without throwing and the FPV frame is not all blac
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickGarageArt must not touch the THREE binding');
   assert.match(tickSrc, /garageTube|garageSpark/);
+});
+
+test('Garage playground keeps whoop-sized gaps that match the visuals', () => {
+  const built = buildMap(THREE, 'garage');
+  const hit = (x, y, z) => {
+    const p = new THREE.Vector3(x, y, z);
+    return built.colliders.some((bb) => bb.containsPoint(p));
+  };
+  const P = GARAGE_PLAY;
+  assert.equal(hit(P.bench.x, 1.20, P.bench.z), true, 'kit bench cabinet solid');
+  assert.equal(hit(P.bench.x, P.bench.h + 0.20, P.bench.z), false, 'fly over kit bench');
+  assert.equal(hit(P.bench.x, 1.20, -10.1), false, 'fly between kit benches');
+  assert.equal(hit(P.car.x, 0.65, P.car.z), false, 'fly under car');
+  assert.equal(hit(P.car.x, P.car.jackH + 0.18, P.car.z), true, 'car chassis solid');
+  assert.equal(hit(P.car.x, P.car.jackH + P.car.bodyH + 0.25, P.car.z), false, 'fly over car');
+  const aisleZ = (P.rackA.z + P.rackB.z) / 2;
+  assert.equal(hit(P.rackA.x, 1.68, aisleZ), false, 'fly between racks');
+  assert.equal(hit(P.rackA.x, P.shelfYs[0] + 0.04, P.rackA.z), true, 'shelf slab solid');
+  assert.equal(hit(P.rackA.x, P.shelfYs[0] + 0.62, P.rackA.z), false, 'fly between shelf levels');
+  assert.equal(hit(0, 1.15, P.door.z), false, 'fly under open door');
+  assert.equal(hit(0, P.door.openH + 1.2, P.door.z), true, 'door panel solid');
+  assert.equal(hit(P.volt.x, P.volt.y, P.volt.z), false, 'volt hoop open');
+  assert.equal(hit(P.volt.x, P.volt.y + P.volt.innerH / 2 + P.volt.bar / 2, P.volt.z), true, 'volt frame solid');
+  assert.equal(hit(P.tireWell.x, 0.85, P.tireWell.z), false, 'dive tire well');
+  assert.ok(P.whoopClear >= 0.85, 'whoop clearance');
+  assert.ok(P.car.jackH >= 1.2, 'car crawl taller than 85mm whoop');
+  assert.equal(P.bench.units.length, 3, 'one collider per Kenney workbench');
+  assert.ok(P.car.bodyH >= 3.5, 'sedan collider matches kit height');
+  const garageSrc = readFileSync(join(root, 'sim-art-garage.js'), 'utf8');
+  assert.match(garageSrc, /GARAGE_PLAY/);
+  assert.match(garageSrc, /addTireWell|addLadder|addHangLights/);
 });
 
 test('Warehouse Ion Nave is implemented with hex-frame gates', () => {

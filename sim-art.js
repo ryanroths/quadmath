@@ -26,7 +26,7 @@ export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=2458723320a1';
+} from './sim-art-garage.js?v=23dea97a1c0e';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
@@ -194,7 +194,7 @@ export const VIBES = Object.freeze({
     }),
     looks: Object.freeze({ fog: 0.003, sun: 0.2, env: 0.4, bg: 0.28, hemi: 0.32 }),
     gates: Object.freeze({ style: 'square-neon', keepBrand: false }),
-    props: Object.freeze(['tube lights', 'wedge car', 'wet stripes', 'volt sign', 'tire stacks']),
+    props: Object.freeze(['jacked car', 'open bench', 'shelf aisles', 'volt hoop', 'tire well']),
     post: Object.freeze({
       bloom: true, analog: false,
       lift: Object.freeze([0.03, 0.01, 0.0]),
