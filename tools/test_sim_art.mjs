@@ -14,7 +14,7 @@ import {
   paintWorldLabel, WORLD_LABEL, restyleCity, buildNeonCity, artStats, tickCityArt,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
   kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
-  garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, planGarageKit,
+  garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP, planGarageKit,
   restyleDiveTubes, LIVING_VIBE_ID, hideStockLivingMeshes, buildClayParlor,
   restyleLiving, tickLivingArt, livingBudget, livingWantsGlow,
   GARAGE_VIBE_ID, hideStockGarageMeshes, buildVoltStall,
@@ -283,13 +283,13 @@ test('Kenney CC0 garage kit is meshopt-compressed and stays off the banned path'
   assert.equal(garageSrc.includes('WebFPV'), false);
   assert.match(kitSrc, /tryDressGarageKit/);
   assert.match(kitSrc, /Meshopt-compressed/);
-  assert.equal(garageKitBytesForQuality('low'), 17384);
-  assert.equal(garageKitBytesForQuality('med'), 51128);
-  assert.equal(garageKitBytesForQuality('high'), 51128);
+  assert.equal(garageKitBytesForQuality('low'), 12160);
+  assert.equal(garageKitBytesForQuality('med'), 45904);
+  assert.equal(garageKitBytesForQuality('high'), 45904);
   const planned = planGarageKit();
-  assert.ok(planned.bench.length >= 3 && planned.chest.length && planned.car.length);
+  assert.equal(planned.bench.length, 0, 'Kenney cabinet bench is not instanced');
+  assert.ok(planned.chest.length && planned.car.length);
   assert.ok(planned.toolboxes.length >= 2);
-  assert.ok(planned.bench.every((p) => p.x < -6.6));
   assert.ok(planned.chest.every((p) => p.x < -6.6));
   assert.ok(planned.toolboxes.every((p) => Math.abs(p.x) >= 7.4));
   assert.ok(planned.car.every((p) => p.x > 1.1 && p.x < 7.2 && p.z > -11.4 && p.z < 0.6));
@@ -308,7 +308,8 @@ test('Kenney CC0 garage kit is meshopt-compressed and stays off the banned path'
   }
   let glbBytes = 0;
   const names = [];
-  for (const spec of Object.values(GARAGE_KIT_CORE).concat(Object.values(GARAGE_KIT_EXTRA))) {
+  const kitSpecs = Object.values(GARAGE_KIT_CORE).concat(Object.values(GARAGE_KIT_EXTRA), Object.values(GARAGE_KIT_SKIP));
+  for (const spec of kitSpecs) {
     const p = join(kitDir, spec.file);
     assert.equal(existsSync(p), true, spec.file);
     const n = statSync(p).size;
@@ -763,9 +764,10 @@ test('Garage playground keeps whoop-sized gaps that match the visuals', () => {
     return built.colliders.some((bb) => bb.containsPoint(p));
   };
   const P = GARAGE_PLAY;
-  assert.equal(hit(P.bench.x, 1.20, P.bench.z), true, 'kit bench cabinet solid');
-  assert.equal(hit(P.bench.x, P.bench.h + 0.20, P.bench.z), false, 'fly over kit bench');
-  assert.equal(hit(P.bench.x, 1.20, -10.1), false, 'fly between kit benches');
+  assert.equal(hit(P.bench.x, 1.20, P.bench.z), false, 'fly under open bench');
+  assert.equal(hit(P.bench.x, P.bench.topY + 0.06, P.bench.z), true, 'bench top solid');
+  assert.equal(hit(P.bench.x, P.bench.topY + P.bench.topH + 0.25, P.bench.z), false, 'fly over bench');
+  assert.equal(hit(P.bench.x + P.bench.legs[0][0], 1.10, P.bench.z + P.bench.legs[0][1]), true, 'bench leg solid');
   assert.equal(hit(P.car.x, 0.65, P.car.z), false, 'fly under car');
   assert.equal(hit(P.car.x, P.car.jackH + 0.18, P.car.z), true, 'car chassis solid');
   assert.equal(hit(P.car.x, P.car.jackH + P.car.bodyH + 0.25, P.car.z), false, 'fly over car');
@@ -780,7 +782,8 @@ test('Garage playground keeps whoop-sized gaps that match the visuals', () => {
   assert.equal(hit(P.tireWell.x, 0.85, P.tireWell.z), false, 'dive tire well');
   assert.ok(P.whoopClear >= 0.85, 'whoop clearance');
   assert.ok(P.car.jackH >= 1.2, 'car crawl taller than 85mm whoop');
-  assert.equal(P.bench.units.length, 3, 'one collider per Kenney workbench');
+  assert.ok(P.bench.legs.length >= 4, 'open bench has legs');
+  assert.ok(P.bench.topH <= 0.2, 'bench top is a slab');
   assert.ok(P.car.bodyH >= 3.5, 'sedan collider matches kit height');
   const garageSrc = readFileSync(join(root, 'sim-art-garage.js'), 'utf8');
   assert.match(garageSrc, /GARAGE_PLAY/);
