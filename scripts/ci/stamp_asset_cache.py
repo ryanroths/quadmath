@@ -18,7 +18,15 @@ static.cloudflareinsights.com) are left alone. Cloudflare TTL is not touched
 
 Usage:
   python scripts/ci/stamp_asset_cache.py           # rewrite HTML/JS in place
-  python scripts/ci/stamp_asset_cache.py --check   # exit 1 if any stamp is stale
+  python scripts/ci/stamp_asset_cache.py --check   # stale stamps fail on main;
+                                                   # on a branch they print and exit 0
+  python scripts/ci/stamp_asset_cache.py --check --strict  # always fail if stale
+
+Feature branches should not restamp shared import hashes (sim.html, sim-coach.js,
+sim-feel.js, and the ?v= cascade). Those lines conflict on every parallel PR.
+.github/workflows/stamp-asset-cache.yml restamps on push to main instead.
+A .gitattributes merge driver cannot help: GitHub's MERGEABLE check does not
+run custom merge drivers.
 """
 
 from __future__ import annotations
@@ -27,6 +35,7 @@ import argparse
 import hashlib
 import os
 import re
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -252,6 +261,32 @@ def check_tree(root: str) -> list[str]:
     return sorted(rel for rel, text in original.items() if stamped.get(rel) != text)
 
 
+def stamps_must_be_current(root: str) -> bool:
+    """True on main (or when STAMP_STRICT=1 / --strict). Branches may be stale.
+
+    GitHub's mergeability check conflicts on the shared ?v= lines in sim.html /
+    sim-coach.js / sim-feel.js whenever two PRs restamp. Those hashes are
+    applied on main after merge instead. STAMP_STRICT=0 forces the branch
+    behavior even on main (tests).
+    """
+    flag = os.environ.get("STAMP_STRICT")
+    if flag == "1":
+        return True
+    if flag == "0":
+        return False
+    if os.environ.get("GITHUB_REF") == "refs/heads/main":
+        return True
+    try:
+        name = subprocess.check_output(
+            ["git", "-C", root, "rev-parse", "--abbrev-ref", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return False
+    return name == "main"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
@@ -262,22 +297,37 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="exit 1 if any HTML or JS stamp is missing or stale; write nothing",
+        help="write nothing; fail if stamps are stale on main (see --strict)",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="with --check, fail on stale stamps even on a feature branch",
     )
     args = parser.parse_args(argv)
     root = os.path.abspath(os.path.expanduser(args.root))
 
     if args.check:
+        if args.strict:
+            os.environ["STAMP_STRICT"] = "1"
         stale = check_tree(root)
-        if stale:
+        if not stale:
+            print("asset cache stamps are current")
+            return 0
+        if not stamps_must_be_current(root):
             sys.stderr.write(
-                "stale first-party asset stamps in HTML/JS (run scripts/ci/stamp_asset_cache.py):\n"
+                "stale first-party asset stamps (ok on a branch; "
+                "main restamps after merge):\n"
             )
             for path in stale:
                 sys.stderr.write("  %s\n" % path)
-            return 1
-        print("asset cache stamps are current")
-        return 0
+            return 0
+        sys.stderr.write(
+            "stale first-party asset stamps in HTML/JS (run scripts/ci/stamp_asset_cache.py):\n"
+        )
+        for path in stale:
+            sys.stderr.write("  %s\n" % path)
+        return 1
 
     changed = stamp_tree(root)
     if not changed:

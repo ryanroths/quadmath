@@ -5,8 +5,9 @@
 
 Two jobs: the rewriter itself (quoted first-party URLs gain a content hash;
 third-party URLs do not) and a pin on the checked-in HTML so a script.js
-change that forgets to restamp fails CI the same way the 4-hour CDN cache
-already failed users.
+change that forgets to restamp fails on main the same way the 4-hour CDN
+cache already failed users. Feature-branch --check is lenient; main restamps
+after merge so parallel PRs do not fight over shared ?v= lines.
 """
 
 from __future__ import annotations
@@ -223,10 +224,40 @@ class StampTreeAndCheck(unittest.TestCase):
             self.assertEqual(stamp.check_tree(tmp), ["sim-whoop.js"])
 
 
+class Strictness(unittest.TestCase):
+    def tearDown(self):
+        os.environ.pop("STAMP_STRICT", None)
+        os.environ.pop("GITHUB_REF", None)
+
+    def test_strict_env_requires_current_stamps(self):
+        os.environ["STAMP_STRICT"] = "1"
+        self.assertTrue(stamp.stamps_must_be_current(REPO_ROOT))
+
+    def test_strict_off_allows_stale_on_any_ref(self):
+        os.environ["STAMP_STRICT"] = "0"
+        os.environ["GITHUB_REF"] = "refs/heads/main"
+        self.assertFalse(stamp.stamps_must_be_current(REPO_ROOT))
+
+    def test_github_main_ref_requires_current_stamps(self):
+        os.environ.pop("STAMP_STRICT", None)
+        os.environ["GITHUB_REF"] = "refs/heads/main"
+        self.assertTrue(stamp.stamps_must_be_current(REPO_ROOT))
+
+    def test_check_on_branch_exits_zero_when_stale(self):
+        os.environ["STAMP_STRICT"] = "0"
+        with tempfile.TemporaryDirectory() as tmp:
+            _write(tmp, "style.css", "body{}\n")
+            _write(tmp, "index.html", PAGE)
+            self.assertEqual(stamp.main(["--root", tmp, "--check"]), 0)
+            self.assertEqual(stamp.main(["--root", tmp, "--check", "--strict"]), 1)
+
+
 class RepoPin(unittest.TestCase):
     """The live pages must already carry hashes that match the files they load."""
 
     def test_checked_in_html_stamps_match_asset_bytes(self):
+        if not stamp.stamps_must_be_current(REPO_ROOT):
+            self.skipTest("stamps are applied on main after merge")
         stale = stamp.check_tree(REPO_ROOT)
         self.assertEqual(
             stale,

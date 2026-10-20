@@ -1,0 +1,54 @@
+name: Stamp asset cache
+
+# After a squash-merge, shared ?v= lines in sim.html / sim-coach.js / sim-feel.js
+# are the only reason parallel map PRs conflict. Feature branches should leave
+# those hashes alone. This job restamps on push to main so Pages gets current
+# hashes without every PR touching the same three lines.
+#
+# A .gitattributes merge driver cannot fix GitHub MERGEABLE: GitHub does not
+# run custom merge drivers when computing mergeability.
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: stamp-asset-cache-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  stamp:
+    name: Restamp first-party assets
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Stamp first-party asset URLs
+        run: python3 scripts/ci/stamp_asset_cache.py
+
+      - name: Verify stamps
+        run: python3 scripts/ci/stamp_asset_cache.py --check --strict
+
+      - name: Commit stamp-only updates
+        run: |
+          set -euo pipefail
+          git add -u
+          if git diff --cached --quiet; then
+            echo "stamps already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: restamp first-party asset cache"
+          git push
