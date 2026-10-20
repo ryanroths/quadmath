@@ -268,6 +268,39 @@ test('Kenney CC0 city kit is meshopt-compressed and stays off the banned path', 
   assert.ok(!files.some((f) => f.includes('GLB-format')));
 });
 
+test('city window and blink pulses stay smooth so bloom does not strobe', () => {
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  const tickSrc = city.slice(
+    city.indexOf('function tickCityArtObject'),
+    city.indexOf('export function restyleMesas'),
+  );
+  assert.match(tickSrc, /cityWindowPhase/);
+  assert.equal(tickSrc.includes('> 0.35'), false, 'hard rooftop strobe');
+  assert.equal(/\b5\.5\b/.test(tickSrc), false, 'blink must not jump by 5.5');
+  const kit = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  assert.equal(kit.includes('emissiveIntensity: 3.4'), false);
+  assert.equal(/neonC\), 3\.8/.test(kit), false);
+  const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
+  const ao = looks.slice(looks.indexOf('const CONTACT_AO_FRAG'), looks.indexOf('export function decorateGate'));
+  assert.match(ao, /smoothstep\(0\.0004, 0\.0022/);
+  assert.equal(ao.includes('step(texture2D'), false, 'hard depth step flickers');
+  assert.equal(ao.includes('d0 - 0.0007'), false);
+
+  const win = { material: { userData: { cityWindow: true, cityWindowPhase: 0 }, emissiveIntensity: 1 } };
+  const blink = { material: { userData: { cityBlink: true }, emissiveIntensity: 1 } };
+  const sceneRoot = { traverse: (fn) => { fn(win); fn(blink); } };
+  const w = [], b = [];
+  for (let ms = 0; ms <= 4000; ms += 40) {
+    tickCityArt(sceneRoot, ms);
+    w.push(win.material.emissiveIntensity);
+    b.push(blink.material.emissiveIntensity);
+  }
+  const span = (arr) => Math.max(...arr) - Math.min(...arr);
+  assert.ok(span(w) < 0.14, 'window throb ' + span(w));
+  assert.ok(Math.max(...b) < 2.3, 'blink peak ' + Math.max(...b));
+  assert.ok(span(b) < 0.55, 'blink span ' + span(b));
+});
+
 test('city density module stays original (no GLB / WebFPV)', () => {
   const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
   assert.equal(city.includes('GLB-format'), false);

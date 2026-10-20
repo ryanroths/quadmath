@@ -237,7 +237,7 @@ test('sim.html gamepad path does not fall through to touch', () => {
 test('existing localStorage keys stay in sim.html', () => {
   const keys = [
     'ryflyRates', 'ryflyRatesType', 'ryflyDroneType', 'ryflyCamCustom',
-    'ryflyAxisMap_', 'ryflyRadioPreset_', 'ryflyGamepadId', 'ryflyMusicVol',
+    'ryflyAxisMap_', 'ryflyRadioPreset_', 'ryflyGamepadId', 'ryflyMusicVol', 'ryflyMusicOn',
     'quadmath_bestLap_', 'quadmath_bestRun_', 'quadmath_bestGhost_',
     'quadmath_pilotName',
   ];

@@ -539,6 +539,7 @@ function windowMaterial(THREE, vibe, seed) {
   });
   skipMat(mat);
   mat.userData.cityWindow = true;
+  mat.userData.cityWindowPhase = ((seed || 0) % 997) * 0.31;
   return mat;
 }
 
@@ -1216,7 +1217,7 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
   const hutMat = dullMat(THREE, 0x2a2438, { metalness: 0.18, roughness: 0.62, emissive: hexNum(vibe.palette.neonB), emissiveIntensity: 0.12 });
   const acMat = dullMat(THREE, 0x3a3648, { metalness: 0.22, roughness: 0.55, emissive: hexNum(vibe.palette.neonA), emissiveIntensity: 0.08 });
   const antMat = dullMat(THREE, 0x2a2030, { metalness: 0.35 });
-  const blinkMat = neonMat(THREE, 0xff2a2a, 5.5);
+  const blinkMat = neonMat(THREE, 0xff2a2a, 1.7);
   blinkMat.userData.cityBlink = true;
   const awnMat = neonMat(THREE, hexNum(vibe.palette.neonC), 1.1, { roughness: 0.55 });
   const balcMat = dullMat(THREE, 0x2a2030, { metalness: 0.3 });
@@ -1971,10 +1972,11 @@ export function tickCityArt(root, now) {
 
 function tickCityArtObject(o, t) {
     if (o.material && o.material.userData && o.material.userData.cityWindow) {
-      o.material.emissiveIntensity = 1.15 + 0.35 * (0.5 + 0.5 * Math.sin(t * 3.1));
+      const phase = o.material.userData.cityWindowPhase || 0;
+      o.material.emissiveIntensity = 1.30 + 0.06 * Math.sin(t * 1.05 + phase);
     }
     if (o.material && o.material.userData && o.material.userData.cityBlink) {
-      o.material.emissiveIntensity = 2.2 + 5.5 * (Math.sin(t * 7.0) > 0.35 ? 1 : 0.15);
+      o.material.emissiveIntensity = 1.55 + 0.45 * (0.5 + 0.5 * Math.sin(t * 2.2));
     }
     if (o.material && o.material.userData && o.material.userData.cityHolo && o.material.map) {
       o.material.map.offset.x = (t * 0.12) % 1;
