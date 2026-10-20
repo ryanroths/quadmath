@@ -663,6 +663,8 @@ test('Warehouse freestyle builds without throwing and the FPV frame is not all b
     }
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    if (q === 'low') assert.ok(stats.callsEst < 200, 'Low warehouse callsEst ' + stats.callsEst);
+    assert.ok(built.group.getObjectByName('warehouseArtHero'), q + ' warehouseArtHero');
     const frame = cityFrameLit(vis);
     assert.ok(frame.meshes >= 8, q + ' meshes ' + frame.meshes);
     assert.ok(frame.lit >= 8, q + ' lit materials ' + frame.lit);
@@ -678,7 +680,7 @@ test('Warehouse freestyle builds without throwing and the FPV frame is not all b
     warehouseSrc.indexOf('export function restyleWarehouse(THREE'),
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickWarehouseArt must not touch the THREE binding');
-  assert.match(tickSrc, /warehouseTube|warehouseOrb/);
+  assert.match(tickSrc, /warehouseIon|warehouseTube|warehouseOrb/);
 });
 
 test('Gym Amber Court is implemented with brass-wood gates', () => {
