@@ -2,9 +2,10 @@
 // Neon Current. No third-party meshes. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=fa12e537ef8a';
+import { hexNum } from './sim-art-city.js?v=09c7114680d6';
 export {
-  hexNum, qualityWantsBloom, qualityWantsReflections, qualityWantsParticles,
+  hexNum, qualityWantsBloom, qualityWantsAo, qualityWantsGrade,
+  qualityWantsReflections, qualityWantsParticles,
   qualityBudget, propClearOfCourse, planCityProps, planPortalBlocks,
   collectBuildingFootprints,
   hideStockCityMeshes, decorateVibeGate, pulseCityGate, tickCityArt,
@@ -14,52 +15,52 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=fa12e537ef8a';
+} from './sim-art-city.js?v=09c7114680d6';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=d1c7b009d21c';
+} from './sim-art-living.js?v=7e0383e1603f';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=d2344fc6c7af';
+} from './sim-art-garage.js?v=da05772a20fc';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=e77d5b1fe3a4';
+} from './sim-art-warehouse.js?v=d048016ca8c3';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
-} from './sim-art-gym.js?v=a2e3e3ec9595';
+} from './sim-art-gym.js?v=fa4ebeb018c1';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=e2e2444e533f';
+} from './sim-art-office.js?v=1e518fa18b72';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=cd31691f65f4';
+} from './sim-art-trainer.js?v=e755e2460dd0';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
-} from './sim-art-backyard.js?v=5d5577afe663';
+} from './sim-art-backyard.js?v=8d73a8f3043d';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=d162b4630c3f';
+} from './sim-art-room.js?v=0101a0cecc8f';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
@@ -123,7 +124,14 @@ export const VIBES = Object.freeze({
       'setback towers', 'window shader', 'blade signs', 'wet street',
       'parked cars', 'benches', 'kiosks', 'steam vents', 'rain', 'moon',
     ]),
-    post: Object.freeze({ bloom: true, analog: false, grade: true }),
+    post: Object.freeze({
+      bloom: true, analog: false, grade: true,
+      lift: Object.freeze([0.018, 0.0, 0.046]),
+      gamma: 0.90,
+      gain: Object.freeze([1.08, 0.94, 1.14]),
+      vignette: 0.46,
+      ao: 0.48,
+    }),
   }),
   living: Object.freeze({
     id: 'living',
@@ -143,13 +151,20 @@ export const VIBES = Object.freeze({
       sunColor: 0xffe0c0, sunIntensity: 0.45, fillColor: 0xffe08a, fillIntensity: 0.2,
       hemiSky: 0x7ec8e3, hemiGround: 0xf4d6c6, hemiIntensity: 0.5,
       exposure: 0.7, fogColor: 0xf0e4d4, fogDensity: 0.004,
-      bloomStrength: 0.2, bloomRadius: 0.3, bloomThreshold: 1.1,
+      bloomStrength: 0.28, bloomRadius: 0.32, bloomThreshold: 0.84,
       gateEmissive: 2.4, gateEmissiveActive: 3.4,
     }),
     looks: Object.freeze({ fog: 0.004, sun: 0.45, env: 0.55, bg: 0.38, hemi: 0.5 }),
     gates: Object.freeze({ style: 'clay-ring', keepBrand: false }),
     props: Object.freeze(['clay sofa', 'gummy lamp', 'block bookshelf', 'clay banner', 'felt nook']),
-    post: Object.freeze({ bloom: false, analog: false }),
+    post: Object.freeze({
+      bloom: false, analog: false,
+      lift: Object.freeze([0.04, 0.018, 0.008]),
+      gamma: 1.02,
+      gain: Object.freeze([1.08, 0.98, 0.92]),
+      vignette: 0.28,
+      ao: 0.36,
+    }),
   }),
   garage: Object.freeze({
     id: 'garage',
@@ -175,7 +190,14 @@ export const VIBES = Object.freeze({
     looks: Object.freeze({ fog: 0.003, sun: 0.2, env: 0.4, bg: 0.28, hemi: 0.32 }),
     gates: Object.freeze({ style: 'square-neon', keepBrand: false }),
     props: Object.freeze(['tube lights', 'wedge car', 'wet stripes', 'volt sign', 'tire stacks']),
-    post: Object.freeze({ bloom: true, analog: false }),
+    post: Object.freeze({
+      bloom: true, analog: false,
+      lift: Object.freeze([0.03, 0.01, 0.0]),
+      gamma: 0.94,
+      gain: Object.freeze([1.12, 0.96, 0.88]),
+      vignette: 0.40,
+      ao: 0.50,
+    }),
   }),
   warehouse: Object.freeze({
     id: 'warehouse',
@@ -201,7 +223,14 @@ export const VIBES = Object.freeze({
     looks: Object.freeze({ fog: 0.0014, sun: 0.26, env: 0.32, bg: 0.18, hemi: 0.4 }),
     gates: Object.freeze({ style: 'hex-frame', keepBrand: false }),
     props: Object.freeze(['aisle arrows', 'rack edges', 'spore cans', 'ion sign', 'loft spores']),
-    post: Object.freeze({ bloom: true, analog: false }),
+    post: Object.freeze({
+      bloom: true, analog: false,
+      lift: Object.freeze([0.0, 0.028, 0.04]),
+      gamma: 0.90,
+      gain: Object.freeze([0.92, 1.06, 1.12]),
+      vignette: 0.38,
+      ao: 0.48,
+    }),
   }),
   backyard: Object.freeze({
     id: 'backyard',
@@ -221,13 +250,20 @@ export const VIBES = Object.freeze({
       sunColor: 0xffc878, sunIntensity: 0.7, fillColor: 0x5d7a3a, fillIntensity: 0.12,
       hemiSky: 0x1b2a18, hemiGround: 0x3a2a18, hemiIntensity: 0.28,
       exposure: 0.58, fogColor: 0x2a2014, fogDensity: 0.0028,
-      bloomStrength: 0.35, bloomRadius: 0.35, bloomThreshold: 1.0,
+      bloomStrength: 0.38, bloomRadius: 0.34, bloomThreshold: 0.82,
       gateEmissive: 3.2, gateEmissiveActive: 4.5,
     }),
     looks: Object.freeze({ fog: 0.0028, sun: 0.7, env: 0.5, bg: 0.32, hemi: 0.28 }),
     gates: Object.freeze({ style: 'stone-gold', keepBrand: false }),
     props: Object.freeze(['ziggurat shed', 'stone planters', 'moss posts', 'dusk dome', 'idol peak']),
-    post: Object.freeze({ bloom: false, analog: false }),
+    post: Object.freeze({
+      bloom: false, analog: false,
+      lift: Object.freeze([0.03, 0.02, 0.0]),
+      gamma: 0.96,
+      gain: Object.freeze([1.10, 1.02, 0.86]),
+      vignette: 0.36,
+      ao: 0.40,
+    }),
   }),
   office: Object.freeze({
     id: 'office',
@@ -247,13 +283,20 @@ export const VIBES = Object.freeze({
       sunColor: 0xfff0c8, sunIntensity: 1.1, fillColor: 0x9ad4ff, fillIntensity: 0.18,
       hemiSky: 0x9ad4ff, hemiGround: 0xfff4d2, hemiIntensity: 0.55,
       exposure: 0.72, fogColor: 0xfff4d2, fogDensity: 0.0012,
-      bloomStrength: 0.15, bloomRadius: 0.2, bloomThreshold: 1.2,
+      bloomStrength: 0.22, bloomRadius: 0.24, bloomThreshold: 0.86,
       gateEmissive: 2.8, gateEmissiveActive: 3.8,
     }),
     looks: Object.freeze({ fog: 0.0012, sun: 1.1, env: 0.6, bg: 0.5, hemi: 0.55 }),
     gates: Object.freeze({ style: 'toon-hoop', keepBrand: false }),
     props: Object.freeze(['flat cubicles', 'bold decals', 'paper plants', 'sun lantern', 'paper loft']),
-    post: Object.freeze({ bloom: false, analog: false }),
+    post: Object.freeze({
+      bloom: false, analog: false,
+      lift: Object.freeze([0.02, 0.018, 0.0]),
+      gamma: 1.04,
+      gain: Object.freeze([1.06, 1.02, 0.96]),
+      vignette: 0.22,
+      ao: 0.32,
+    }),
   }),
   gym: Object.freeze({
     id: 'gym',
@@ -279,7 +322,14 @@ export const VIBES = Object.freeze({
     looks: Object.freeze({ fog: 0.001, sun: 1.05, env: 0.7, bg: 0.44, hemi: 0.58 }),
     gates: Object.freeze({ style: 'brass-wood', keepBrand: false }),
     props: Object.freeze(['honey bleachers', 'glow rims', 'dust motes', 'scoreboard', 'sideline clutter']),
-    post: Object.freeze({ bloom: true, analog: false }),
+    post: Object.freeze({
+      bloom: true, analog: false,
+      lift: Object.freeze([0.04, 0.018, 0.0]),
+      gamma: 0.95,
+      gain: Object.freeze([1.12, 1.04, 0.86]),
+      vignette: 0.34,
+      ao: 0.38,
+    }),
   }),
   trainer: Object.freeze({
     id: 'trainer',
@@ -305,7 +355,14 @@ export const VIBES = Object.freeze({
     looks: Object.freeze({ fog: 0.0028, sun: 0.35, env: 0.48, bg: 0.3, hemi: 0.36 }),
     gates: Object.freeze({ style: 'candy-torus', keepBrand: false }),
     props: Object.freeze(['candy tape', 'clay cones', 'gummy frames', 'meet sign', 'tape rolls']),
-    post: Object.freeze({ bloom: true, analog: false }),
+    post: Object.freeze({
+      bloom: true, analog: false,
+      lift: Object.freeze([0.03, 0.0, 0.04]),
+      gamma: 0.93,
+      gain: Object.freeze([1.10, 0.94, 1.08]),
+      vignette: 0.40,
+      ao: 0.44,
+    }),
   }),
   room: Object.freeze({
     id: 'room',
@@ -325,13 +382,20 @@ export const VIBES = Object.freeze({
       sunColor: 0xffe6c4, sunIntensity: 0.36, fillColor: 0xffb3c7, fillIntensity: 0.2,
       hemiSky: 0xeee8de, hemiGround: 0x7a5130, hemiIntensity: 0.48,
       exposure: 0.64, fogColor: 0xeee8de, fogDensity: 0.0036,
-      bloomStrength: 0.15, bloomRadius: 0.2, bloomThreshold: 1.2,
+      bloomStrength: 0.24, bloomRadius: 0.26, bloomThreshold: 0.84,
       gateEmissive: 2.2, gateEmissiveActive: 3.2,
     }),
     looks: Object.freeze({ fog: 0.0045, sun: 0.28, env: 0.5, bg: 0.32, hemi: 0.42 }),
     gates: Object.freeze({ style: 'felt-ring', keepBrand: false }),
     props: Object.freeze(['felt furniture', 'night window', 'desk lamp', 'stage banner', 'under-bed nook']),
-    post: Object.freeze({ bloom: false, analog: false }),
+    post: Object.freeze({
+      bloom: false, analog: false,
+      lift: Object.freeze([0.03, 0.02, 0.01]),
+      gamma: 1.00,
+      gain: Object.freeze([1.08, 0.98, 0.90]),
+      vignette: 0.30,
+      ao: 0.36,
+    }),
   }),
 });
 
@@ -341,6 +405,18 @@ export const MAP_VIBE_IDS = Object.freeze([
 
 export function vibeFor(mapId) {
   return VIBES[mapId] || VIBES.city;
+}
+
+export function vibePost(vibe) {
+  const p = (vibe && vibe.post) || {};
+  return {
+    lift: p.lift || [0, 0, 0],
+    gamma: p.gamma == null ? 1 : p.gamma,
+    gain: p.gain || [1, 1, 1],
+    vignette: p.vignette == null ? 0.34 : p.vignette,
+    ao: p.ao == null ? 0.4 : p.ao,
+    gradeAmt: p.grade === false ? 0 : 1,
+  };
 }
 
 // In-world floating text (START / PORTAL / DIVE / coach / rival). Canvas

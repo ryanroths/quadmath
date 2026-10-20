@@ -555,7 +555,7 @@
     <option value="med">Med</option>
     <option value="high">High</option>
   </select>
-  <p class="build-note">Low turns bloom, reflections, rain and AO off for phones.</p>
+  <p class="build-note">Low (phones) skips bloom, color grade, vignette and contact AO. Med/High get the full post pass.</p>
   <div class="row"><label>Rain</label><input type="checkbox" id="cbRain" checked style="accent-color:var(--orange)"></div>
 
   <h2>Audio</h2>
@@ -758,10 +758,10 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=34e582665d37";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=df5e5f70591d";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=3269bec76380";
 import {
   VIBES, vibeFor, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
-  applyVibeLighting, artStats, qualityWantsBloom, loadRain, saveRain, RAIN_KEY,
+  applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
   makeWorldLabel, worldLabelMaterial, setWorldLabelText,
   restyleLiving, decorateLivingGate, pulseLivingGate, tickLivingArt,
   restyleGarage, decorateGarageGate, pulseGarageGate, tickGarageArt,
@@ -771,7 +771,7 @@ import {
   restyleTrainer, decorateTrainerGate, pulseTrainerGate, tickTrainerArt,
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
-} from "./sim-art.js?v=0655a7ad9f18";
+} from "./sim-art.js?v=8b8e30c0437f";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -801,7 +801,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=5b05276e1d0b";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=c062a2129230";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=12239a3e40ba";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -816,7 +816,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=355fe523b6c1";
+} from "./sim-coach.js?v=410ef861036d";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js";
@@ -2198,6 +2198,12 @@ for(let i=0;i<7;i++){
   scene.add(mesa);
 }
 window._heavyAssetsPending=true;
+function applyLooksPost(mapId, quality){
+  const q=quality||(looks&&looks.applied)||'med';
+  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
+  if(looks&&looks.setMapPost)looks.setMapPost(vibePost(vibeFor(mapId)));
+  else if(looks&&looks.setGrade)looks.setGrade(qualityWantsBloom(q)?1:0);
+}
 function applyCityArt(quality){
   const vibe=vibeFor('city');
   restyleCity(THREE,{
@@ -2211,7 +2217,7 @@ function applyCityArt(quality){
     gates:FROZEN_CITY[0].concat(FROZEN_CITY[1]),
   });
   if(looks&&looks.setSkyMode)looks.setSkyMode('gradient');
-  if(looks&&looks.setGrade)looks.setGrade(1);
+  applyLooksPost('city', quality);
 }
 function applyLivingArt(quality){
   const built=indoorBuilt.living||ensureIndoor('living');
@@ -2224,8 +2230,7 @@ function applyLivingArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('living', quality);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Living Room is original procedural art — Clay Parlor';
 }
@@ -2241,8 +2246,7 @@ function applyGarageArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('garage', q);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Garage is original procedural art — Volt Stall';
 }
@@ -2258,8 +2262,7 @@ function applyWarehouseArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('warehouse', q);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Warehouse is original procedural art — Ion Nave';
 }
@@ -2275,8 +2278,7 @@ function applyGymArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('gym', q);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Gym is original procedural art — Amber Court';
 }
@@ -2292,8 +2294,7 @@ function applyOfficeArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('office', q);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Office is original procedural art — Paper Sun';
 }
@@ -2309,8 +2310,7 @@ function applyTrainerArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('trainer', q);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Trainer is original procedural art — Licorice Grid';
 }
@@ -2326,8 +2326,7 @@ function applyBackyardArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('backyard', q);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Backyard is original procedural art — Jade Lot';
 }
@@ -2345,8 +2344,7 @@ function applyRoomArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('room', q);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Your Room is original procedural art — Pocket Stage';
 }
@@ -2504,21 +2502,13 @@ function applyMapLooks(mapId){
   if(looks&&looks.setMapLooks)looks.setMapLooks(spec);
   if(looks&&looks.setOrbit)looks.setOrbit(MAP_ORBIT[mapId]||MAP_ORBIT.city);
   if(looks&&looks.setSkyMode)looks.setSkyMode(vibe&&vibe.sky==='gradient'?'gradient':'hdri');
-  if(looks&&looks.setGrade)looks.setGrade(mapId==='city'?1:0);
   if(mapId==='city'||mapId==='living'||mapId==='garage'||mapId==='warehouse'||mapId==='gym'||mapId==='office'||mapId==='trainer'||mapId==='backyard'||mapId==='room'){
     applyVibeLighting({
       LIGHTING,sun,sunFill,hemi,scene,renderer,skyMesh,
       bloomPass:looks&&looks.bloomPass,
     },vibe);
   }
-  if(mapId==='living'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(mapId==='garage'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
-  if(mapId==='warehouse'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
-  if(mapId==='room'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(mapId==='backyard'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(mapId==='trainer'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
-  if(mapId==='office'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(mapId==='gym'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
+  applyLooksPost(mapId, looks&&looks.applied);
   if(mapId!=='city'&&skyMesh&&skyMesh.userData&&skyMesh.userData.origSkyMat){
     skyMesh.material=skyMesh.userData.origSkyMat;
     skyMesh.userData.citySky=false;

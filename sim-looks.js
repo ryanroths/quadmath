@@ -1,4 +1,5 @@
-// QuadMath sim V1 looks — environment, PBR, AO, FPV lens, quality presets.
+// QuadMath sim V1 looks — environment, PBR, cheap contact AO, FPV lens,
+// per-map grade/vignette, quality presets. Not WebFPV.
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
@@ -70,6 +71,7 @@ export const PRESETS = {
     ao: false,
     bloom: false,
     bloomScale: 0,
+    grade: false,
     postSamples: 0,
     hdri: '1k',
     maps: 'albedo',
@@ -82,6 +84,7 @@ export const PRESETS = {
     ao: true,
     bloom: true,
     bloomScale: 0.75,
+    grade: true,
     postSamples: 2,
     hdri: '1k',
     maps: 'pbr',
@@ -94,6 +97,7 @@ export const PRESETS = {
     ao: true,
     bloom: true,
     bloomScale: 1,
+    grade: true,
     postSamples: 4,
     hdri: '2k',
     maps: 'pbr',
@@ -186,6 +190,10 @@ uniform float ca;
 uniform float analog;
 uniform float time;
 uniform float grade;
+uniform vec3 lift;
+uniform float gamma;
+uniform vec3 gain;
+uniform float mapVignette;
 varying vec2 vUv;
 vec2 distort(vec2 uv, float k){
   vec2 c = uv - 0.5;
@@ -200,9 +208,12 @@ void main(){
   float g = texture2D(tDiffuse, uvG).g;
   float b = texture2D(tDiffuse, uvB).b;
   vec3 col = vec3(r,g,b);
+  if(grade > 0.001){
+    vec3 graded = pow(max(col + lift, 0.0), vec3(max(gamma, 0.04))) * gain;
+    col = mix(col, graded, clamp(grade, 0.0, 1.0));
+  }
   float d = distance(vUv, vec2(0.5));
-  col *= 1.0 - smoothstep(0.32, 0.98, d) * vignette;
-  col *= mix(vec3(1.0), vec3(1.04, 0.93, 1.10), grade);
+  col *= 1.0 - smoothstep(0.32, 0.98, d) * max(vignette, mapVignette);
   if(analog > 0.5){
     float n = fract(sin(dot(vUv * vec2(1240.0, 780.0) + time, vec2(12.9898, 78.233))) * 43758.5453);
     col += (n - 0.5) * 0.055;
@@ -211,6 +222,35 @@ void main(){
   }
   if(uvG.x < 0.0 || uvG.x > 1.0 || uvG.y < 0.0 || uvG.y > 1.0) col = vec3(0.0);
   gl_FragColor = vec4(col, 1.0);
+}`;
+
+const CONTACT_AO_FRAG = `
+uniform sampler2D tDiffuse;
+uniform sampler2D tDepth;
+uniform float amount;
+uniform vec2 resolution;
+varying vec2 vUv;
+void main(){
+  vec4 texel = texture2D(tDiffuse, vUv);
+  if(amount < 0.001){
+    gl_FragColor = texel;
+    return;
+  }
+  float d0 = texture2D(tDepth, vUv).x;
+  vec2 px = vec2(1.6 / max(resolution.x, 1.0), 1.6 / max(resolution.y, 1.0));
+  float occ = 0.0;
+  occ += step(texture2D(tDepth, vUv + vec2(-px.x, 0.0)).x, d0 - 0.0007);
+  occ += step(texture2D(tDepth, vUv + vec2( px.x, 0.0)).x, d0 - 0.0007);
+  occ += step(texture2D(tDepth, vUv + vec2(0.0, -px.y)).x, d0 - 0.0007);
+  occ += step(texture2D(tDepth, vUv + vec2(0.0,  px.y)).x, d0 - 0.0007);
+  occ += step(texture2D(tDepth, vUv + vec2(-px.x, -px.y)).x, d0 - 0.0007);
+  occ += step(texture2D(tDepth, vUv + vec2( px.x, -px.y)).x, d0 - 0.0007);
+  occ += step(texture2D(tDepth, vUv + vec2(-px.x,  px.y)).x, d0 - 0.0007);
+  occ += step(texture2D(tDepth, vUv + vec2( px.x,  px.y)).x, d0 - 0.0007);
+  occ *= 0.125;
+  float alive = smoothstep(0.02, 0.97, d0);
+  vec3 col = texel.rgb * (1.0 - occ * amount * alive);
+  gl_FragColor = vec4(col, texel.a);
 }`;
 
 export function decorateGate(THREE, ring, size, col) {
@@ -313,23 +353,31 @@ export async function createLooks(ctx) {
       pixelRatio: Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, cap),
     });
     if (gpuHint(renderer).low) {
-      // Software WebGL (SwiftShader etc.) blows up MSAA HalfFloat targets and GTAO.
+      // Software WebGL (SwiftShader etc.) blows up MSAA HalfFloat targets.
+      // Cheap 8-tap contact AO stays; it is a depth sample, not GTAO.
       out.postSamples = 0;
-      out.ao = false;
     }
     return out;
+  }
+
+  function qualityWantsPost() {
+    return applied === 'med' || applied === 'high';
   }
 
   function applyFpvUniforms() {
     if (!fpvPass || !fpvPass.uniforms) return;
     const forceFpv = typeof location !== 'undefined' && /(?:^|[?&])fpv=1(?:&|$)/.test(location.search || '');
     const on = fpv.enabled && (!lookSpot || forceFpv);
-    fpvPass.enabled = on;
-    const analog = fpv.style === 'analog';
-    fpvPass.uniforms.barrel.value = analog ? 0.18 : 0.12;
-    fpvPass.uniforms.vignette.value = analog ? 0.58 : (fpvPass.uniforms.grade && fpvPass.uniforms.grade.value > 0.5 ? 0.44 : 0.36);
-    fpvPass.uniforms.ca.value = analog ? 0.006 : (fpvPass.uniforms.grade && fpvPass.uniforms.grade.value > 0.5 ? 0.0034 : 0.0022);
+    const gradeOn = qualityWantsPost();
+    fpvPass.enabled = on || gradeOn;
+    const analog = on && fpv.style === 'analog';
+    fpvPass.uniforms.barrel.value = on ? (analog ? 0.18 : 0.12) : 0;
+    const mapV = (fpvPass.uniforms.mapVignette && fpvPass.uniforms.mapVignette.value) || 0;
+    fpvPass.uniforms.vignette.value = analog ? 0.58 : (on ? (mapV > 0.01 ? mapV : 0.36) : 0);
+    fpvPass.uniforms.ca.value = on ? (analog ? 0.006 : 0.0022) : 0;
     fpvPass.uniforms.analog.value = analog ? 1 : 0;
+    if (fpvPass.uniforms.grade && !gradeOn) fpvPass.uniforms.grade.value = 0;
+    if (fpvPass.uniforms.mapVignette && !gradeOn) fpvPass.uniforms.mapVignette.value = 0;
     if (motionPass) motionPass.enabled = on && !!fpv.motionBlur;
   }
 
@@ -350,6 +398,14 @@ export async function createLooks(ctx) {
     });
   }
 
+  function attachDepthTexture(rt) {
+    if (!rt || rt.depthTexture) return;
+    const dt = new THREE.DepthTexture();
+    dt.format = THREE.DepthFormat;
+    dt.type = THREE.UnsignedIntType;
+    rt.depthTexture = dt;
+  }
+
   async function buildComposer() {
     const mods = await Promise.all([
       import('three/addons/postprocessing/EffectComposer.js'),
@@ -358,7 +414,6 @@ export async function createLooks(ctx) {
       import('three/addons/postprocessing/OutputPass.js'),
       import('three/addons/postprocessing/ShaderPass.js'),
       import('three/addons/postprocessing/AfterimagePass.js').catch(() => null),
-      import('three/addons/postprocessing/GTAOPass.js').catch(() => null),
     ]);
     const EffectComposer = mods[0].EffectComposer;
     const RenderPass = mods[1].RenderPass;
@@ -366,31 +421,41 @@ export async function createLooks(ctx) {
     const OutputPass = mods[3].OutputPass;
     const ShaderPass = mods[4].ShaderPass;
     const AfterimagePass = mods[5] && mods[5].AfterimagePass;
-    const GTAOPass = mods[6] && mods[6].GTAOPass;
 
     const c = new EffectComposer(renderer);
+    attachDepthTexture(c.renderTarget1);
+    attachDepthTexture(c.renderTarget2);
     c.addPass(new RenderPass(scene, camera));
-    if (GTAOPass && !gpuHint(renderer).low) {
-      try {
-        const w = Math.max(1, renderer.domElement.width || 512);
-        const h = Math.max(1, renderer.domElement.height || 512);
-        aoPass = new GTAOPass(scene, camera, w, h);
-        aoPass.output = GTAOPass.OUTPUT.Default;
-        aoPass.blendIntensity = 0.85;
-        if (aoPass.updateGtaoMaterial) {
-          aoPass.updateGtaoMaterial({ radius: 0.35, samples: 12, thickness: 1, scale: 1.0 });
-        }
-        c.addPass(aoPass);
-      } catch (e) {
-        aoPass = null;
+    const boot = presetOf(applied);
+    aoPass = new ShaderPass({
+      uniforms: {
+        tDiffuse: { value: null },
+        tDepth: { value: null },
+        amount: { value: 0 },
+        resolution: { value: new THREE.Vector2(1, 1) },
+      },
+      vertexShader: FPV_VERT,
+      fragmentShader: CONTACT_AO_FRAG,
+    });
+    aoPass.enabled = !!boot.ao;
+    const aoRender = aoPass.render.bind(aoPass);
+    aoPass.render = function (gl, writeBuffer, readBuffer, deltaTime, maskActive) {
+      if (this.uniforms.tDepth) {
+        this.uniforms.tDepth.value = (readBuffer && readBuffer.depthTexture) || null;
       }
-    }
+      if (this.uniforms.resolution) {
+        const w = (readBuffer && readBuffer.width) || gl.domElement.width || 1;
+        const h = (readBuffer && readBuffer.height) || gl.domElement.height || 1;
+        this.uniforms.resolution.value.set(w, h);
+      }
+      aoRender(gl, writeBuffer, readBuffer, deltaTime, maskActive);
+    };
+    c.addPass(aoPass);
     bloomPass = new UnrealBloomPass(
       new THREE.Vector2(1, 1),
       LIGHTING.bloomStrength, LIGHTING.bloomRadius, LIGHTING.bloomThreshold,
     );
-    const bootBloom = presetOf(applied);
-    bloomPass.enabled = bootBloom.bloom !== false && (bootBloom.bloomScale || 0) > 0;
+    bloomPass.enabled = boot.bloom !== false && (boot.bloomScale || 0) > 0;
     c.addPass(bloomPass);
     fpvPass = new ShaderPass({
       uniforms: {
@@ -401,6 +466,10 @@ export async function createLooks(ctx) {
         analog: { value: 0 },
         time: { value: 0 },
         grade: { value: 0 },
+        lift: { value: new THREE.Vector3(0, 0, 0) },
+        gamma: { value: 1 },
+        gain: { value: new THREE.Vector3(1, 1, 1) },
+        mapVignette: { value: 0 },
       },
       vertexShader: FPV_VERT,
       fragmentShader: FPV_FRAG,
@@ -413,6 +482,7 @@ export async function createLooks(ctx) {
     }
     c.addPass(new OutputPass());
     composer = c;
+    applyMapPostNow();
     applyFpvUniforms();
     return c;
   }
@@ -427,6 +497,8 @@ export async function createLooks(ctx) {
       composer.renderTarget2.samples = p.postSamples;
     } catch (e) { /* ignore */ }
     composer.setSize(w, h);
+    attachDepthTexture(composer.renderTarget1);
+    attachDepthTexture(composer.renderTarget2);
     if (aoPass && aoPass.setSize) {
       const pr = renderer.getPixelRatio();
       aoPass.setSize(Math.max(1, Math.round(w * pr)), Math.max(1, Math.round(h * pr)));
@@ -713,8 +785,9 @@ export async function createLooks(ctx) {
     const p = presetOf(next);
     renderer.setPixelRatio(p.pixelRatio);
     applyLights(p);
-    if (aoPass) aoPass.enabled = !!p.ao && !gpuHint(renderer).low;
+    if (aoPass) aoPass.enabled = !!p.ao;
     if (bloomPass) bloomPass.enabled = p.bloom !== false && (p.bloomScale || 0) > 0;
+    applyMapPostNow();
     applyFpvUniforms();
     sizeComposer();
     if (ctx.onResize) ctx.onResize();
@@ -774,6 +847,7 @@ export async function createLooks(ctx) {
   }
 
   let mapLooksSpec = null;
+  let mapPostSpec = null;
   function applyMapLooksNow() {
     const spec = mapLooksSpec;
     if (!spec) return;
@@ -794,6 +868,46 @@ export async function createLooks(ctx) {
     }
     mapLooksSpec = spec;
     applyMapLooksNow();
+  }
+
+  function applyMapPostNow() {
+    const p = presetOf(applied);
+    const wantsBloom = p.bloom !== false && (p.bloomScale || 0) > 0;
+    const wantsAo = !!p.ao;
+    const wantsGrade = p.grade !== false && qualityWantsPost();
+    if (bloomPass) bloomPass.enabled = wantsBloom;
+    if (aoPass) aoPass.enabled = wantsAo;
+    const spec = mapPostSpec || {};
+    const aoAmt = spec.ao == null ? 0.4 : spec.ao;
+    if (aoPass && aoPass.uniforms && aoPass.uniforms.amount) {
+      aoPass.uniforms.amount.value = wantsAo ? (applied === 'high' ? aoAmt : aoAmt * 0.75) : 0;
+    }
+    if (!fpvPass || !fpvPass.uniforms) return;
+    const u = fpvPass.uniforms;
+    const lift = spec.lift || [0, 0, 0];
+    const gain = spec.gain || [1, 1, 1];
+    if (u.lift && u.lift.value && u.lift.value.set) u.lift.value.set(lift[0], lift[1], lift[2]);
+    if (u.gain && u.gain.value && u.gain.value.set) u.gain.value.set(gain[0], gain[1], gain[2]);
+    if (u.gamma) u.gamma.value = spec.gamma == null ? 1 : spec.gamma;
+    if (u.grade) u.grade.value = wantsGrade ? (spec.gradeAmt == null ? 1 : spec.gradeAmt) : 0;
+    if (u.mapVignette) u.mapVignette.value = wantsGrade ? (spec.vignette == null ? 0.34 : spec.vignette) : 0;
+  }
+  function setMapPost(spec) {
+    if (spec && spec.post) {
+      const post = spec.post;
+      mapPostSpec = {
+        lift: post.lift || [0, 0, 0],
+        gamma: post.gamma == null ? 1 : post.gamma,
+        gain: post.gain || [1, 1, 1],
+        vignette: post.vignette == null ? 0.34 : post.vignette,
+        ao: post.ao == null ? 0.4 : post.ao,
+        gradeAmt: post.grade === false ? 0 : 1,
+      };
+    } else {
+      mapPostSpec = spec || null;
+    }
+    applyMapPostNow();
+    applyFpvUniforms();
   }
 
   function tick(now) {
@@ -914,8 +1028,13 @@ export async function createLooks(ctx) {
     setMenuOpen,
     setOrbit,
     setMapLooks,
+    setMapPost,
     setSkyMode,
     setGrade(v) {
+      if (v && typeof v === 'object') {
+        setMapPost(v);
+        return;
+      }
       if (fpvPass && fpvPass.uniforms && fpvPass.uniforms.grade) {
         fpvPass.uniforms.grade.value = v ? 1 : 0;
         applyFpvUniforms();
