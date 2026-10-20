@@ -351,9 +351,15 @@ test('sim.html wires W2 sliders, HUD voltage, and keeps old localStorage keys', 
   assert.ok(simSrc.includes('PHYSICS_VER') && simSrc.includes('tagGhost'));
   for (const k of [
     'ryflyRates', 'ryflyDroneType', 'ryflyCamCustom', 'ryflyMusicVol',
+    'ryflyMusicOn',
     'quadmath_bestLap_', 'quadmath_bestGhost_', 'quadmath_pilotName', BUILD_KEY,
   ]) {
     assert.ok(simSrc.includes(k), `must keep reading old key ${k}`);
   }
+  assert.match(simSrc, /function loadMusicPref/);
+  assert.match(simSrc, /function saveMusicPref/);
+  assert.match(simSrc, /return false; \/\/ new player \/ empty localStorage starts muted/);
+  assert.match(simSrc, /if\(!musicWanted\)/);
+  assert.match(simSrc, /saveMusicPref\(musicOn\)/);
   assert.ok(!simSrc.includes('content/guides/'), 'do not edit guide HTML from the sim PR');
 });

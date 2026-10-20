@@ -758,7 +758,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=34e582665d37";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=3269bec76380";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=9c5dca0c6003";
 import {
   VIBES, vibeFor, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -772,7 +772,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit,
-} from "./sim-art.js?v=34694dd3c8a3";
+} from "./sim-art.js?v=bcfafb4e7470";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -802,7 +802,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=5b05276e1d0b";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=49bed633ee13";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=c2de49599f92";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -817,7 +817,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=fa6d9bd9cc30";
+} from "./sim-coach.js?v=d8305c80d2dc";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js";
@@ -3009,10 +3009,23 @@ const keys={};
 // ---------- background music playlist (audio/track*.mp3) — M to toggle, paused by default ----------
 const TRACKS=['audio/track1.mp3','audio/track2.mp3','audio/track3.mp3'];
 const MUSIC_VOL_KEY='ryflyMusicVol';
+const MUSIC_ON_KEY='ryflyMusicOn';
 let musicOn=false,musicOrder=[],musicIdx=0;
 let musicStarted=false;    // first-gesture unlock latch (see startMusic)
 let musicUnlockTries=0;    // bounded retries so a blocked/missing track can't hammer the network
 let trackFailStreak=0;     // consecutive load failures — stops the skip chain when every file is missing
+function loadMusicPref(){
+  try{
+    const v=localStorage.getItem(MUSIC_ON_KEY);
+    if(v==='1')return true;
+    if(v==='0')return false;
+  }catch(e){}
+  return false; // new player / empty localStorage starts muted
+}
+function saveMusicPref(on){
+  try{localStorage.setItem(MUSIC_ON_KEY,on?'1':'0');}catch(e){}
+}
+let musicWanted=loadMusicPref();
 const musicEl=new Audio();
 const musicVolEl=document.getElementById('musicVol');
 const musicBtnEl=document.getElementById('musicBtn');
@@ -3073,6 +3086,8 @@ setTimeout(dismissAudioHint,6000); // fades on its own even if M is never presse
 function toggleMusic(){
   dismissAudioHint(); // first M press dismisses it immediately, pre-empting the 6s timer
   musicOn=!musicOn;
+  musicWanted=musicOn;
+  saveMusicPref(musicOn);
   if(musicOn){
     trackFailStreak=0;
     if(!musicOrder.length)shuffleOrder();
@@ -3096,9 +3111,17 @@ function toggleMusic(){
 // Chrome does not count gamepad input as user activation, so play() can still
 // be blocked — on rejection the latch is released so M (or the next deflection)
 // still works, capped at a few attempts so a missing file can't hammer.
+// Music itself stays off unless the saved ryflyMusicOn choice is on.
 function startMusic(){
   if(musicStarted||musicOn||musicUnlockTries>=3){
     console.log('[music] startMusic skipped — started:'+musicStarted+' on:'+musicOn+' tries:'+musicUnlockTries);
+    return;
+  }
+  if(!musicWanted){
+    musicStarted=true;
+    initMotorAudio();
+    motorAudioCtx.resume().catch(()=>{});
+    console.log('[music] startMusic — muted pref, motors only');
     return;
   }
   musicStarted=true;musicUnlockTries++;
