@@ -23,10 +23,10 @@ export {
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
 } from './sim-art-living.js?v=e0af8bbd77c2';
 export {
-  GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget,
+  GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=a63c795a5e9e';
+} from './sim-art-garage.js?v=2458723320a1';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
@@ -64,7 +64,8 @@ export {
 } from './sim-art-room.js?v=fbf0603a352a';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
-} from './sim-art-kit.js?v=1afb1ffb6be3';
+  tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA,
+} from './sim-art-kit.js?v=76d3d762ebad';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';

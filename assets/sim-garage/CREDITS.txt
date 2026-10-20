@@ -1,0 +1,30 @@
+Kenney CC0 1.0 low-poly kit ( Volt Stall )
+
+All packs are Creative Commons Zero (CC0 1.0):
+  http://creativecommons.org/publicdomain/zero/1.0/
+
+Packs (License-*.txt in this folder, copied from the zip):
+  Furniture Kit 2.0     https://kenney.nl/assets/furniture-kit
+  Survival Kit 2.0      https://kenney.nl/assets/survival-kit
+  Car Kit 3.1           https://kenney.nl/assets/car-kit
+  Racing Kit 2.0        https://kenney.nl/assets/racing-kit
+
+Support Kenney: https://kenney.nl/donate  (credit is not required)
+
+Shipped files are a small meshopt-compressed geometry subset (no colormap
+textures — the sim paints Volt Stall materials for bloom). Total GLB
+payload is 51 128 bytes (49.9 KB). Low quality fetches only the bench,
+chest, and crate (17 384 bytes). Med/High fetch the rest.
+
+  workbench.glb   Survival Kit workbench
+  chest.glb       Survival Kit chest
+  crate.glb       Survival Kit box
+  toolbox.glb     Furniture Kit kitchenCabinetDrawer
+  cardboard.glb   Furniture Kit cardboardBoxClosed
+  tire.glb        Car Kit wheel-dark
+  sedan.glb       Car Kit sedan
+  barrel.glb      Survival Kit barrel
+  barrier.glb     Racing Kit barrierRed
+
+Nothing here is from the GPL whoop sim. Procedural Volt Stall stays the
+fallback if a GLB fails to load.

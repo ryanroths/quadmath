@@ -14,6 +14,7 @@ import {
   paintWorldLabel, WORLD_LABEL, restyleCity, buildNeonCity, artStats, tickCityArt,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
   kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
+  garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, planGarageKit,
   restyleDiveTubes, LIVING_VIBE_ID, hideStockLivingMeshes, buildClayParlor,
   restyleLiving, tickLivingArt, livingBudget, livingWantsGlow,
   GARAGE_VIBE_ID, hideStockGarageMeshes, buildVoltStall,
@@ -145,8 +146,10 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.equal(sim.includes('content/guides/'), false);
   assert.match(sim, /City is original procedural art|Neon Current/);
   assert.match(sim, /tryDressCityKit/);
+  assert.match(sim, /tryDressGarageKit/);
   assert.match(sim, /MeshoptDecoder/);
   assert.match(sim, /Kenney CC0/);
+  assert.match(sim, /Kenney CC0 shop kit/);
 });
 
 test('sim.html imports every map restyle/tick/decorate it calls', () => {
@@ -266,6 +269,60 @@ test('Kenney CC0 city kit is meshopt-compressed and stays off the banned path', 
   assert.equal(glbBytes, 80532);
   assert.equal(new Set(names).size, names.length);
   assert.ok(!files.some((f) => f.includes('GLB-format')));
+});
+
+test('Kenney CC0 garage kit is meshopt-compressed and stays off the banned path', () => {
+  const kitDir = join(root, 'assets/sim-garage');
+  const kitSrc = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  const garageSrc = readFileSync(join(root, 'sim-art-garage.js'), 'utf8');
+  assert.equal(kitSrc.includes('GLB-format'), false);
+  assert.equal(kitSrc.includes('loadAsync'), false);
+  assert.equal(kitSrc.includes('WebFPV'), false);
+  assert.equal(kitSrc.includes('Sketchfab'), false);
+  assert.equal(garageSrc.includes('GLB-format'), false);
+  assert.equal(garageSrc.includes('WebFPV'), false);
+  assert.match(kitSrc, /tryDressGarageKit/);
+  assert.match(kitSrc, /Meshopt-compressed/);
+  assert.equal(garageKitBytesForQuality('low'), 17384);
+  assert.equal(garageKitBytesForQuality('med'), 51128);
+  assert.equal(garageKitBytesForQuality('high'), 51128);
+  const planned = planGarageKit();
+  assert.ok(planned.bench.length >= 3 && planned.chest.length && planned.car.length);
+  assert.ok(planned.toolboxes.length >= 2);
+  assert.ok(planned.bench.every((p) => p.x < -6.6));
+  assert.ok(planned.chest.every((p) => p.x < -6.6));
+  assert.ok(planned.toolboxes.every((p) => Math.abs(p.x) >= 7.4));
+  assert.ok(planned.car.every((p) => p.x > 1.1 && p.x < 7.2 && p.z > -11.4 && p.z < 0.6));
+  const clutter = []
+    .concat(planned.crates, planned.cardboard, planned.toolboxes, planned.tires)
+    .concat(planned.barrels, planned.barriers);
+  for (const p of clutter) {
+    assert.ok(Math.abs(p.x) >= 4.6, 'kit clutter too close to whoop line ' + p.x + ',' + p.z);
+  }
+  for (const name of ['License-furniture-kit.txt', 'License-survival-kit.txt', 'License-car-kit.txt', 'License-racing-kit.txt', 'CREDITS.txt']) {
+    assert.ok(existsSync(join(kitDir, name)), name);
+    if (name.startsWith('License-')) {
+      assert.match(readFileSync(join(kitDir, name), 'utf8'), /Creative Commons Zero, CC0/);
+    }
+  }
+  let glbBytes = 0;
+  const names = [];
+  for (const spec of Object.values(GARAGE_KIT_CORE).concat(Object.values(GARAGE_KIT_EXTRA))) {
+    const p = join(kitDir, spec.file);
+    assert.equal(existsSync(p), true, spec.file);
+    const n = statSync(p).size;
+    assert.equal(n, spec.bytes, spec.file + ' size');
+    glbBytes += n;
+    names.push(spec.file);
+  }
+  assert.equal(glbBytes, 51128);
+  assert.equal(new Set(names).size, names.length);
+  assert.ok(!readdirSync(kitDir).some((f) => f.includes('GLB-format')));
+  const emit = kitSrc.slice(kitSrc.indexOf('function garageMat'), kitSrc.indexOf('let garageDressGen'));
+  assert.equal(/emissiveIntensity: [2-9]/.test(emit), false, 'garage kit glow must stay dim under bloom');
+  assert.match(kitSrc, /function garageMat/);
+  assert.equal(/garageMat[\s\S]{0,900}MeshStandardMaterial/.test(kitSrc), false, 'garage kit must not use MeshStandard after IBL');
+  assert.match(emit, /MeshBasicMaterial/);
 });
 
 test('city window and blink stay frozen so bloom does not strobe', () => {

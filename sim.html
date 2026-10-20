@@ -771,8 +771,8 @@ import {
   restyleTrainer, decorateTrainerGate, pulseTrainerGate, tickTrainerArt,
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
-  tryDressCityKit,
-} from "./sim-art.js?v=46fa5a3405ef";
+  tryDressCityKit, tryDressGarageKit,
+} from "./sim-art.js?v=394f9b5616d1";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -802,7 +802,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=5b05276e1d0b";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=a20ef579c978";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=283380a6b43d";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -817,7 +817,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=0e1026c2e1a8";
+} from "./sim-coach.js?v=98f926e9708a";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js";
@@ -2289,7 +2289,42 @@ function applyGarageArt(quality){
   });
   applyLooksPost('garage', q);
   const credit=document.querySelector('.sf-credit');
-  if(credit)credit.textContent='Garage is original procedural art — Volt Stall';
+  if(credit)credit.textContent='Garage is original procedural art — Volt Stall. Kenney CC0 shop kit.';
+  queueGarageKit(q, vibeFor('garage'));
+}
+let garageKitWanted=null;
+let garageKitGen=0;
+function queueGarageKit(quality, vibe){
+  garageKitWanted={quality:quality||'med', vibe:vibe||vibeFor('garage')};
+  if(window._heavyAssetsPending)return;
+  dressGarageKit();
+}
+async function dressGarageKit(){
+  const wanted=garageKitWanted;
+  if(!wanted)return;
+  const gen=++garageKitGen;
+  try{
+    const ok=await ensureGltf();
+    if(!ok || !GLTFLoader || gen!==garageKitGen)return;
+    const built=indoorBuilt.garage;
+    const group=built&&built.group&&built.group.getObjectByName('garageArtVisuals');
+    if(!group)return;
+    const loader=new GLTFLoader();
+    if(MeshoptDecoder){
+      if(MeshoptDecoder.ready)await MeshoptDecoder.ready;
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    }
+    const dressed=await tryDressGarageKit(THREE,{
+      group, loader, vibe:wanted.vibe, quality:wanted.quality,
+    });
+    if(gen!==garageKitGen)return;
+    window._garageKit=dressed;
+    if(assetEl && dressed && dressed.used){
+      assetEl.textContent='Kenney CC0 garage kit ('+Math.round((dressed.bytes||0)/1024)+' KB).';
+    }
+  }catch(e){
+    window._garageKit={used:false, error:String(e&&e.message||e)};
+  }
 }
 function applyWarehouseArt(quality){
   const built=indoorBuilt.warehouse||ensureIndoor('warehouse');
@@ -2424,6 +2459,7 @@ function startHeavyAssets(){
   if(!window._heavyAssetsPending)return;
   window._heavyAssetsPending=false;
   finishCityArt();
+  dressGarageKit();
 }
 
 function wrapCityWorld(){
@@ -2560,7 +2596,7 @@ function applyMapLooks(mapId){
   const credit=document.querySelector('.sf-credit');
   if(credit){
     if(mapId==='living')credit.textContent='Living Room is original procedural art — Clay Parlor';
-    else if(mapId==='garage')credit.textContent='Garage is original procedural art — Volt Stall';
+    else if(mapId==='garage')credit.textContent='Garage is original procedural art — Volt Stall. Kenney CC0 shop kit.';
     else if(mapId==='warehouse')credit.textContent='Warehouse is original procedural art — Ion Nave';
     else if(mapId==='room')credit.textContent='Your Room is original procedural art — Pocket Stage';
     else if(mapId==='backyard')credit.textContent='Backyard is original procedural art — Jade Lot';

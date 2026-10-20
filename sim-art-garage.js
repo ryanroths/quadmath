@@ -1,6 +1,7 @@
 // Volt Stall — original garage vibe. Visual only.
-// No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
-// Sculpted with capsules, lathes, and rounded extrudes — not stacked slabs.
+// Kenney CC0 shop kit (sim-art-kit.js) swaps hero props after first paint.
+// Procedural meshes stay if a GLB fails. Nothing from the GPL whoop sim.
+// No new colliders. Sculpted with capsules, lathes, and rounded extrudes.
 
 import { hexNum, propClearOfCourse } from './sim-art-city.js?v=552a7cb9d623';
 
@@ -35,6 +36,49 @@ const ROOM = Object.freeze({ w: 21, d: 42, h: 10.5 });
 
 export function garageWantsGlow(applied) {
   return applied === 'med' || applied === 'high';
+}
+
+export function planGarageKit() {
+  return {
+    // Survival workbench is a short table — instance three along the left wall
+    // so the kit covers the procedural 11 m bench without a giant cube.
+    bench: [
+      { x: -8.4, z: -12.2, ry: 0 },
+      { x: -8.4, z: -8.0, ry: 0 },
+      { x: -8.4, z: -3.8, ry: 0 },
+    ],
+    chest: [{ x: -8.3, z: 8.2, ry: Math.PI / 2 }],
+    // Kenney sedan long-axis is Z; autoForward + this yaw faces it down-stall.
+    car: [{ x: 4.2, z: -5.5, ry: Math.PI / 2 }],
+    crates: [
+      { x: -5.4, z: 13.6 }, { x: 5.6, z: 12.8 }, { x: -5.2, z: -15.8 },
+      { x: 5.4, z: -14.6 }, { x: -5.0, z: 2.4 }, { x: 5.1, z: -2.8 },
+      { x: -5.6, z: 17.2 }, { x: 5.3, z: 5.4 }, { x: -4.9, z: -9.2 },
+      { x: 5.2, z: 15.6 }, { x: -5.3, z: 8.8 }, { x: 5.5, z: -7.4 },
+    ],
+    cardboard: [
+      { x: -5.1, z: -17.6 }, { x: 4.8, z: -18.4 }, { x: -5.4, z: 16.0 },
+      { x: 5.4, z: 17.4 }, { x: -4.8, z: 0.6 }, { x: 4.9, z: 8.2 },
+    ],
+    toolboxes: [
+      { x: -8.0, z: -0.6, ry: 0.15 },
+      { x: -8.0, z: 5.4, ry: -0.2 },
+      { x: 8.5, z: 1.6, ry: 1.15 },
+    ],
+    tires: [
+      { x: -5.6, z: 18.4 }, { x: 5.4, z: 18.8 }, { x: -5.5, z: -18.6 },
+      { x: 5.3, z: -18.2 }, { x: -5.8, z: 12.2 }, { x: 5.6, z: -12.6 },
+      { x: -5.4, z: 4.8 }, { x: 5.2, z: 14.2 }, { x: -5.7, z: -7.2 },
+      { x: 5.5, z: 2.6 }, { x: -5.3, z: -14.4 }, { x: 5.8, z: -3.8 },
+    ],
+    barrels: [
+      { x: -8.0, z: -15.4 }, { x: 8.4, z: 15.8 }, { x: -8.0, z: 12.6 }, { x: 8.2, z: -17.2 },
+    ],
+    barriers: [
+      { x: -7.2, z: 18.6, ry: 0.2 }, { x: 7.4, z: 18.8, ry: -0.15 },
+      { x: -7.0, z: -18.8, ry: 0.1 }, { x: 7.2, z: -18.4, ry: -0.2 },
+    ],
+  };
 }
 
 export function garageBudget(applied) {
@@ -427,7 +471,8 @@ function addWedgeCar(THREE, parent, mats) {
     hub.position.set(x, 0.42, z);
     g.add(wheel, hub);
   }
-  g.traverse((o) => { o.userData.garageArt = true; o.castShadow = true; });
+  g.userData.garageProcCar = true;
+  g.traverse((o) => { o.userData.garageArt = true; o.userData.garageProcCar = true; o.castShadow = true; });
   parent.add(g);
   return g;
 }
@@ -455,7 +500,8 @@ function addWorkbench(THREE, parent, mats) {
   matRoll.rotation.z = Math.PI / 2;
   matRoll.position.set(0, 2.78, 2.4);
   g.add(matRoll);
-  g.traverse((o) => { o.userData.garageArt = true; });
+  g.userData.garageProcBench = true;
+  g.traverse((o) => { o.userData.garageArt = true; o.userData.garageProcBench = true; });
   parent.add(g);
   return g;
 }
@@ -476,7 +522,8 @@ function addToolChest(THREE, parent, mats) {
     handle.position.set(0.85, y, 0);
     g.add(handle);
   }
-  g.traverse((o) => { o.userData.garageArt = true; });
+  g.userData.garageProcChest = true;
+  g.traverse((o) => { o.userData.garageArt = true; o.userData.garageProcChest = true; });
   parent.add(g);
   return g;
 }
@@ -502,7 +549,8 @@ function addRack(THREE, parent, mats, budget) {
     d.rotation.y = i * 0.2;
     return true;
   });
-  g.traverse((o) => { o.userData.garageArt = true; });
+  g.userData.garageProcRack = true;
+  g.traverse((o) => { o.userData.garageArt = true; o.userData.garageProcRack = true; });
   parent.add(g);
   return g;
 }
@@ -629,7 +677,7 @@ function addWhoopLife(THREE, parent, mats, budget, gates) {
     d.position.set(0, 10.15, -18 + i * (36 / Math.max(1, budget.joists - 1)));
     return true;
   });
-  addInstanced(THREE, extras, new THREE.TorusGeometry(0.32, 0.12, 6, 12), mats.tire, budget.tires, (d, i) => {
+  const tireMesh = addInstanced(THREE, extras, new THREE.TorusGeometry(0.32, 0.12, 6, 12), mats.tire, budget.tires, (d, i) => {
     const spots = [
       [-5.6, 18.4], [5.4, 18.8], [-5.5, -18.6], [5.3, -18.2],
       [-5.8, 12.2], [5.6, -12.6], [-5.4, 4.8], [5.2, 14.2],
@@ -643,6 +691,7 @@ function addWhoopLife(THREE, parent, mats, budget, gates) {
     d.rotation.x = Math.PI / 2;
     return true;
   });
+  if (tireMesh) tireMesh.userData.garageProcTire = true;
   addInstanced(THREE, extras, canGeo(THREE), mats.can, budget.bottles, (d, i) => {
     const spots = [
       [-5.4, 13.6], [5.6, 12.8], [-5.2, -15.8], [5.4, -14.6],
@@ -796,6 +845,7 @@ export function buildVoltStall(THREE, parent, vibe, quality, gates) {
   group.userData.garageArt = true;
   const budget = garageBudget(quality);
   const mats = makeGarageMats(THREE, vibe);
+  group.userData.planned = planGarageKit();
   addDoorAndTrim(THREE, group, mats);
   addWedgeCar(THREE, group, mats);
   addWorkbench(THREE, group, mats);
