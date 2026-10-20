@@ -578,16 +578,19 @@ test('H1 server derives week track, rejects pace-bot/phys/class/week, claims nam
 
 test('worker week/board/submit use weekly-YYYY-Wxx-g2 and do not mix old ids', async () => {
   const { handleLeaderboard } = await import('../workers/sim-leaderboard/src/index.js');
-  const week = utcWeekId(NOW_W42);
+  const week = utcWeekId();
   const track = weeklyTrackFor(week);
-  assert.equal(week, '2026-W42');
-  assert.equal(track.id, 'weekly-2026-W42-g2');
-  assert.equal(track.id, weeklyIdFor(week));
+  const wantId = weeklyIdFor(week);
+  const oldAlias = 'weekly-' + week;
+  assert.match(week, /^\d{4}-W\d{2}$/);
+  assert.equal(track.id, wantId);
+  assert.match(track.id, /^weekly-\d{4}-W\d{2}-g2$/);
+  assert.notEqual(track.id, oldAlias);
 
   const weekRes = await handleLeaderboard(new Request('https://x/api/week?week=' + week), {});
   const weekBody = await weekRes.json();
-  assert.equal(weekBody.track.id, 'weekly-2026-W42-g2');
-  assert.notEqual(weekBody.track.id, 'weekly-2026-W42');
+  assert.equal(weekBody.track.id, wantId);
+  assert.notEqual(weekBody.track.id, oldAlias);
 
   const db = fakeD1();
   const env = { DB: db, ALLOWED_ORIGIN: 'https://quadmath.com' };
@@ -606,23 +609,23 @@ test('worker week/board/submit use weekly-YYYY-Wxx-g2 and do not mix old ids', a
 
   const oldId = normalizeSubmit({
     week, frameMm: 65, name: 'Ry', timeMs: ghost.lapTime, ghost,
-    track: 'weekly-2026-W42', build: { frameMm: 65 }, token,
-  }, NOW_W42);
+    track: oldAlias, build: { frameMm: 65 }, token,
+  });
   assert.equal(oldId.ok, true, oldId.reason);
-  assert.equal(oldId.trackId, 'weekly-2026-W42-g2');
+  assert.equal(oldId.trackId, wantId);
 
   const board = await handleLeaderboard(new Request('https://x/api/board?week=' + week + '&class=65'), env);
   const boardBody = await board.json();
-  assert.equal(boardBody.trackId, 'weekly-2026-W42-g2');
+  assert.equal(boardBody.trackId, wantId);
   assert.equal(boardBody.entries.length, 1);
-  assert.equal(boardBody.entries[0].trackId, 'weekly-2026-W42-g2');
+  assert.equal(boardBody.entries[0].trackId, wantId);
 
   await db.prepare(
     'INSERT INTO scores (week, class, name, time_ms, track_id, submitted_ms) VALUES (?, ?, ?, ?, ?, ?)',
-  ).bind(week, 65, 'OLD', 1000, 'weekly-2026-W42', Date.now()).run();
+  ).bind(week, 65, 'OLD', 1000, oldAlias, Date.now()).run();
   const mixed = await handleLeaderboard(new Request('https://x/api/board?week=' + week + '&class=65'), env);
   const mixedBody = await mixed.json();
-  assert.equal(mixedBody.entries.every((row) => row.trackId === 'weekly-2026-W42-g2'), true);
+  assert.equal(mixedBody.entries.every((row) => row.trackId === wantId), true);
   assert.ok(!mixedBody.entries.some((row) => row.name === 'OLD'));
 });
 

@@ -53,9 +53,9 @@
      forcing the column taller than the viewport. */
   #c{display:block;flex:1 1 auto;width:100%;min-height:0}
 
-  /* Footer credit for the city. Phase 1 city is original procedural art
-     (Neon Current); the old costoWRLD CC BY line is retired while that GLB
-     is not loaded. Fixed to the bottom edge above the canvas.
+  /* Footer credit for the city. Neon Current is original procedural art
+     plus Kenney CC0 cars/street kit. The old costoWRLD CC BY line stays
+     retired. Fixed to the bottom edge above the canvas.
      Kept to a 14px band: #legend reserves from 16px up and the bottom OSD
      readouts from 18px up, so this clears both without moving any of them. */
   footer{position:fixed;left:0;right:0;bottom:0;z-index:45;
@@ -771,7 +771,8 @@ import {
   restyleTrainer, decorateTrainerGate, pulseTrainerGate, tickTrainerArt,
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
-} from "./sim-art.js?v=8b8e30c0437f";
+  tryDressCityKit,
+} from "./sim-art.js?v=34694dd3c8a3";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -801,7 +802,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=5b05276e1d0b";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=12239a3e40ba";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=49bed633ee13";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -816,7 +817,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=410ef861036d";
+} from "./sim-coach.js?v=fa6d9bd9cc30";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js";
@@ -843,11 +844,14 @@ window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
 let GLTFLoader=null;
+let MeshoptDecoder=null;
 let gltfReady=null;
 function ensureGltf(){
   if(!gltfReady){
-    gltfReady=import("three/addons/loaders/GLTFLoader.js")
-      .then(function(m){GLTFLoader=m.GLTFLoader;window._gltfReady=true;return true;})
+    gltfReady=Promise.all([
+      import("three/addons/loaders/GLTFLoader.js").then(function(m){GLTFLoader=m.GLTFLoader;}),
+      import("three/addons/libs/meshopt_decoder.module.js").then(function(m){MeshoptDecoder=m.MeshoptDecoder;}).catch(function(){MeshoptDecoder=null;}),
+    ]).then(function(){window._gltfReady=!!GLTFLoader;return !!GLTFLoader;})
       .catch(function(){window._gltfReady=false;return false;});
   }
   return gltfReady;
@@ -1571,7 +1575,7 @@ const proceduralGroup=new THREE.Group(); scene.add(proceduralGroup);
 let usingGltf=false;
 const assetEl=document.getElementById('assetStatus');
 window._tryAssets=async function(){
-  // Phase 1: Neon Current. Kenney / costoWRLD GLBs stay on disk but are not loaded.
+  // Neon Current procedural city plus Kenney CC0 kit after first paint.
   return finishCityArt();
 };
 
@@ -2206,9 +2210,10 @@ function applyLooksPost(mapId, quality){
 }
 function applyCityArt(quality){
   const vibe=vibeFor('city');
+  const q=quality||(looks&&looks.applied)||'med';
   restyleCity(THREE,{
     vibe,
-    quality:quality||(looks&&looks.applied)||'med',
+    quality:q,
     proceduralGroup,
     ground:window._cityGround,
     skyMesh,sunSprite,cityWorld,scene,
@@ -2217,7 +2222,43 @@ function applyCityArt(quality){
     gates:FROZEN_CITY[0].concat(FROZEN_CITY[1]),
   });
   if(looks&&looks.setSkyMode)looks.setSkyMode('gradient');
-  applyLooksPost('city', quality);
+  applyLooksPost('city', q);
+  const credit=document.querySelector('.sf-credit');
+  if(credit)credit.textContent='City is original procedural art — Neon Current. Kenney CC0 cars and street kit.';
+  queueCityKit(q, vibe);
+}
+let cityKitWanted=null;
+let cityKitGen=0;
+function queueCityKit(quality, vibe){
+  cityKitWanted={quality:quality||'med', vibe:vibe||vibeFor('city')};
+  if(window._heavyAssetsPending)return;
+  dressCityKit();
+}
+async function dressCityKit(){
+  const wanted=cityKitWanted;
+  if(!wanted)return;
+  const gen=++cityKitGen;
+  try{
+    const ok=await ensureGltf();
+    if(!ok || !GLTFLoader || gen!==cityKitGen)return;
+    const group=proceduralGroup.getObjectByName('cityArtVisuals');
+    if(!group)return;
+    const loader=new GLTFLoader();
+    if(MeshoptDecoder){
+      if(MeshoptDecoder.ready)await MeshoptDecoder.ready;
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    }
+    const dressed=await tryDressCityKit(THREE,{
+      group, loader, vibe:wanted.vibe, quality:wanted.quality,
+    });
+    if(gen!==cityKitGen)return;
+    window._cityKit=dressed;
+    if(assetEl && dressed && dressed.used){
+      assetEl.textContent='Kenney CC0 city kit ('+Math.round((dressed.bytes||0)/1024)+' KB).';
+    }
+  }catch(e){
+    window._cityKit={used:false, error:String(e&&e.message||e)};
+  }
 }
 function applyLivingArt(quality){
   const built=indoorBuilt.living||ensureIndoor('living');
@@ -2367,7 +2408,7 @@ async function finishCityArt(){
     gates.length=mainGateCount;
     diveShaft(DX-130,DZ+20,10,80,16);
     restyleLandmarks(scene,vibeFor('city'));
-    if(assetEl)assetEl.textContent='procedural neon city (Neon Current).';
+    if(assetEl)assetEl.textContent='procedural neon city (Neon Current). Kenney CC0 kit loading.';
   }finally{
     wrapCityWorld();
     snapCityColliders();
@@ -2526,7 +2567,7 @@ function applyMapLooks(mapId){
     else if(mapId==='trainer')credit.textContent='Trainer is original procedural art — Licorice Grid';
     else if(mapId==='office')credit.textContent='Office is original procedural art — Paper Sun';
     else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court';
-    else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current';
+    else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current. Kenney CC0 cars and street kit.';
   }
 }
 function isFreeFlight(t,trackId){
@@ -6002,7 +6043,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
 <footer>
   <a class="sf-logo" href="/" aria-label="Back to QuadMath">← QuadMath<span class="dot">.</span></a>
   <span class="sf-note">Estimates only — always verify with bench testing. Fly safe.</span>
-  <span class="sf-credit">City is original procedural art — Neon Current</span>
+  <span class="sf-credit">City is original procedural art — Neon Current. Kenney CC0 cars and street kit.</span>
 </footer>
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
 </body>

@@ -2,7 +2,7 @@
 // node --test tools/test_sim_art.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
@@ -13,6 +13,7 @@ import {
   signsAreOriginal, BRAND_BLOCKLIST,
   paintWorldLabel, WORLD_LABEL, restyleCity, buildNeonCity, artStats, tickCityArt,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
+  kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   restyleDiveTubes, LIVING_VIBE_ID, hideStockLivingMeshes, buildClayParlor,
   restyleLiving, tickLivingArt, livingBudget, livingWantsGlow,
   GARAGE_VIBE_ID, hideStockGarageMeshes, buildVoltStall,
@@ -113,6 +114,7 @@ test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {
   assert.match(art, /sim-art-trainer\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-backyard\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-room\.js\?v=[0-9a-f]{12}/);
+  assert.match(art, /sim-art-kit\.js\?v=[0-9a-f]{12}/);
   assert.equal(mentionsBannedAssets('assets/Models/GLB-format/tree-large.glb'), true);
   assert.equal(mentionsBannedAssets('buildCityDressing()'), false);
 });
@@ -142,6 +144,9 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.match(sim, /skipStockCity|procedural neon city|Neon Current/);
   assert.equal(sim.includes('content/guides/'), false);
   assert.match(sim, /City is original procedural art|Neon Current/);
+  assert.match(sim, /tryDressCityKit/);
+  assert.match(sim, /MeshoptDecoder/);
+  assert.match(sim, /Kenney CC0/);
 });
 
 test('sim.html imports every map restyle/tick/decorate it calls', () => {
@@ -228,6 +233,39 @@ test('planned street props stay off City Loop and Zigzag race lines', () => {
       );
     }
   }
+});
+
+test('Kenney CC0 city kit is meshopt-compressed and stays off the banned path', () => {
+  const kitDir = join(root, 'assets/sim-city');
+  const kitSrc = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  assert.equal(kitSrc.includes('GLB-format'), false);
+  assert.equal(kitSrc.includes('loadAsync'), false);
+  assert.equal(kitSrc.includes('WebFPV'), false);
+  assert.equal(kitSrc.includes('Sketchfab'), false);
+  assert.match(kitSrc, /loader\.load\(/);
+  assert.match(kitSrc, /Meshopt-compressed/);
+  assert.equal(kitBytesForQuality('low'), 54304);
+  assert.equal(kitBytesForQuality('med'), 80532);
+  assert.equal(kitBytesForQuality('high'), 80532);
+  const files = readdirSync(kitDir);
+  for (const name of ['License-car-kit.txt', 'License-city-kit-commercial.txt', 'License-city-kit-roads.txt', 'CREDITS.txt']) {
+    assert.ok(files.includes(name), name);
+    const txt = readFileSync(join(kitDir, name), 'utf8');
+    if (name.startsWith('License-')) assert.match(txt, /Creative Commons Zero, CC0/);
+  }
+  let glbBytes = 0;
+  const names = [];
+  for (const spec of Object.values(CITY_KIT_CARS).concat(Object.values(CITY_KIT_PROPS))) {
+    const p = join(kitDir, spec.file);
+    assert.equal(existsSync(p), true, spec.file);
+    const n = statSync(p).size;
+    assert.equal(n, spec.bytes, spec.file + ' size');
+    glbBytes += n;
+    names.push(spec.file);
+  }
+  assert.equal(glbBytes, 80532);
+  assert.equal(new Set(names).size, names.length);
+  assert.ok(!files.some((f) => f.includes('GLB-format')));
 });
 
 test('city density module stays original (no GLB / WebFPV)', () => {

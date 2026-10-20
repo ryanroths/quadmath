@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Sculpted with capsules, lathes, and rounded extrudes — not stacked slabs.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=09c7114680d6';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=ce1099a78131';
 
 export const GARAGE_STOCK = Object.freeze({
   wall: 0xb7b3a8,
