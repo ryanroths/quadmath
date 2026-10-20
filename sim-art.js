@@ -41,7 +41,7 @@ export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=ffe2e791914a';
+} from './sim-art-office.js?v=9d2c0c4d3045';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
@@ -252,7 +252,7 @@ export const VIBES = Object.freeze({
     }),
     looks: Object.freeze({ fog: 0.0012, sun: 1.1, env: 0.6, bg: 0.5, hemi: 0.55 }),
     gates: Object.freeze({ style: 'toon-hoop', keepBrand: false }),
-    props: Object.freeze(['flat cubicles', 'bold decals', 'paper plants']),
+    props: Object.freeze(['flat cubicles', 'bold decals', 'paper plants', 'sun lantern', 'paper loft']),
     post: Object.freeze({ bloom: false, analog: false }),
   }),
   gym: Object.freeze({

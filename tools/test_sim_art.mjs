@@ -803,6 +803,7 @@ test('Office freestyle builds without throwing and the FPV frame is not all blac
     if (q === 'low') assert.equal(officeBudget('low').glow, false);
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    if (q === 'low') assert.ok(stats.callsEst < 200, 'Low office callsEst ' + stats.callsEst);
     const frame = cityFrameLit(vis);
     assert.ok(frame.meshes >= 8, q + ' meshes ' + frame.meshes);
     assert.ok(frame.lit >= 8, q + ' lit materials ' + frame.lit);
@@ -818,7 +819,7 @@ test('Office freestyle builds without throwing and the FPV frame is not all blac
     officeSrc.indexOf('export function restyleOffice(THREE'),
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickOfficeArt must not touch the THREE binding');
-  assert.match(tickSrc, /officeScreen|officePlant/);
+  assert.match(tickSrc, /officeSun|officePlane/);
 });
 
 test('Trainer Licorice Grid is implemented with candy-torus gates', () => {
