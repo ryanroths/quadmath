@@ -59,7 +59,7 @@ export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=61dfc302cd6c';
+} from './sim-art-room.js?v=41e5914ef065';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
@@ -330,7 +330,7 @@ export const VIBES = Object.freeze({
     }),
     looks: Object.freeze({ fog: 0.0045, sun: 0.28, env: 0.5, bg: 0.32, hemi: 0.42 }),
     gates: Object.freeze({ style: 'felt-ring', keepBrand: false }),
-    props: Object.freeze(['felt furniture', 'night window', 'desk lamp']),
+    props: Object.freeze(['felt furniture', 'night window', 'desk lamp', 'stage banner', 'under-bed nook']),
     post: Object.freeze({ bloom: false, analog: false }),
   }),
 });

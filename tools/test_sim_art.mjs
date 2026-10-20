@@ -1008,6 +1008,7 @@ test('Room freestyle builds without throwing and the FPV frame is not all black'
     if (q === 'low') assert.equal(roomBudget('low').glow, false);
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    if (q === 'low') assert.ok(stats.callsEst < 200, 'Low room callsEst ' + stats.callsEst);
     const frame = cityFrameLit(vis);
     assert.ok(frame.meshes >= 6, q + ' meshes ' + frame.meshes);
     assert.ok(frame.lit >= 6, q + ' lit materials ' + frame.lit);
@@ -1023,7 +1024,7 @@ test('Room freestyle builds without throwing and the FPV frame is not all black'
     roomSrc.indexOf('export function restyleRoom(THREE'),
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickRoomArt must not touch the THREE binding');
-  assert.match(tickSrc, /roomLamp/);
+  assert.match(tickSrc, /roomStage|roomMobile/);
 });
 
 test('art direction doc lists every map', () => {
