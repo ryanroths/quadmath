@@ -521,6 +521,7 @@ test('Living freestyle builds without throwing and the FPV frame is not all blac
     }
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    if (q === 'low') assert.ok(stats.callsEst < 200, 'Low living callsEst ' + stats.callsEst);
     const frame = cityFrameLit(vis);
     assert.ok(frame.meshes >= 8, q + ' meshes ' + frame.meshes);
     assert.ok(frame.lit >= 8, q + ' lit materials ' + frame.lit);
@@ -536,7 +537,7 @@ test('Living freestyle builds without throwing and the FPV frame is not all blac
     livingSrc.indexOf('export function restyleLiving(THREE'),
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickLivingArt must not touch the THREE binding');
-  assert.match(tickSrc, /livingLamp|livingLantern|livingSteam/);
+  assert.match(tickSrc, /livingClay|livingLamp/);
 });
 
 test('Garage Volt Stall is implemented with square neon gates', () => {
