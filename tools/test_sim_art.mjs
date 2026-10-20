@@ -588,6 +588,7 @@ test('Garage freestyle builds without throwing and the FPV frame is not all blac
     if (q === 'low') assert.equal(garageBudget('low').glow, false);
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    if (q === 'low') assert.ok(stats.callsEst < 200, 'Low garage callsEst ' + stats.callsEst);
     const frame = cityFrameLit(vis);
     assert.ok(frame.meshes >= 8, q + ' meshes ' + frame.meshes);
     assert.ok(frame.lit >= 8, q + ' lit materials ' + frame.lit);

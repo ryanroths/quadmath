@@ -42,17 +42,20 @@ export function garageBudget(applied) {
     return {
       tubes: 6, cones: 4, cans: 10, tools: 8, stripes: 8, puddles: 0,
       glow: false, sparks: false, extraCans: 0,
+      joists: 6, tires: 8, bottles: 8, posters: 2, windows: 2, pegs: 10,
     };
   }
   if (applied === 'high') {
     return {
       tubes: 16, cones: 10, cans: 24, tools: 18, stripes: 14, puddles: 10,
       glow: true, sparks: true, extraCans: 8,
+      joists: 10, tires: 14, bottles: 14, posters: 4, windows: 4, pegs: 16,
     };
   }
   return {
     tubes: 12, cones: 8, cans: 18, tools: 14, stripes: 12, puddles: 6,
     glow: true, sparks: true, extraCans: 4,
+    joists: 8, tires: 12, bottles: 12, posters: 3, windows: 3, pegs: 14,
   };
 }
 
@@ -100,25 +103,33 @@ function canvasTex(THREE, w, h, paint, rx, ry) {
 
 function oilFloorTex(THREE) {
   return canvasTex(THREE, 256, 256, (g, w, h) => {
-    g.fillStyle = '#1a1c20';
+    fillGrad(g, 0, 0, w, 0, [[0, '#12141a'], [0.5, '#1c2026'], [1, '#0e1014']]);
     g.fillRect(0, 0, w, h);
-    for (let y = 0; y < h; y += 28) {
-      g.fillStyle = y % 56 === 0 ? '#22262c' : '#16181c';
-      g.fillRect(0, y, w, 26);
+    for (let y = 0; y < h; y += 22) {
+      g.fillStyle = y % 44 === 0 ? '#262a32' : '#181b20';
+      g.fillRect(0, y, w, 18);
+      g.fillStyle = 'rgba(0,0,0,0.28)';
+      g.fillRect(0, y + 18, w, 3);
     }
     g.fillStyle = '#ffb347';
-    g.globalAlpha = 0.55;
-    g.fillRect(w * 0.46, 0, 6, h);
-    g.fillRect(w * 0.52, 0, 6, h);
+    g.globalAlpha = 0.7;
+    g.fillRect(w * 0.45, 0, 5, h);
+    g.fillRect(w * 0.53, 0, 5, h);
     g.globalAlpha = 1;
     g.fillStyle = '#2de2e6';
-    g.globalAlpha = 0.28;
-    for (let y = 12; y < h; y += 36) g.fillRect(w * 0.47, y, 18, 8);
+    g.globalAlpha = 0.32;
+    for (let y = 10; y < h; y += 32) g.fillRect(w * 0.46, y, 20, 7);
     g.globalAlpha = 1;
-    for (let i = 0; i < 18; i++) {
-      g.fillStyle = `rgba(8,8,10,${0.18 + (i % 4) * 0.06})`;
+    for (let i = 0; i < 28; i++) {
+      g.fillStyle = `rgba(8,8,10,${0.22 + (i % 4) * 0.08})`;
       g.beginPath();
-      g.arc((i * 47) % w, (i * 71) % h, 10 + (i % 6), 0, 6.3);
+      g.arc((i * 47) % w, (i * 71) % h, 12 + (i % 7), 0, 6.3);
+      g.fill();
+    }
+    g.fillStyle = 'rgba(196,90,34,0.16)';
+    for (let i = 0; i < 8; i++) {
+      g.beginPath();
+      g.arc((i * 31) % w, (i * 53) % h, 18, 0, 6.3);
       g.fill();
     }
   }, 4, 8);
@@ -126,15 +137,70 @@ function oilFloorTex(THREE) {
 
 function steelWallTex(THREE) {
   return canvasTex(THREE, 128, 128, (g, w, h) => {
-    g.fillStyle = '#3d4654';
+    fillGrad(g, 0, 0, 0, h, [[0, '#1a1e24'], [0.35, '#3d4654'], [1, '#4a5462']]);
     g.fillRect(0, 0, w, h);
     g.fillStyle = '#2a3038';
-    for (let y = 0; y < h; y += 16) g.fillRect(0, y, w, 1);
+    for (let y = 0; y < h; y += 14) g.fillRect(0, y, w, 2);
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.fillRect(0, 0, w, 22);
+    g.fillStyle = 'rgba(45,226,230,0.10)';
+    g.fillRect(0, 48, w, 3);
+    g.fillStyle = 'rgba(255,179,71,0.12)';
+    g.fillRect(0, 96, w, 3);
+    g.fillStyle = 'rgba(255,255,255,0.04)';
+    for (let x = 6; x < w; x += 18) g.fillRect(x, 0, 1, h);
+  }, 8, 4);
+}
+
+function ceilJoistTex(THREE) {
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    fillGrad(g, 0, 0, 0, h, [[0, '#0a0c10'], [0.6, '#1a1e24'], [1, '#12161c']]);
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#2a3038';
+    for (let x = 0; x < w; x += 32) g.fillRect(x, 0, 6, h);
     g.fillStyle = 'rgba(45,226,230,0.08)';
-    g.fillRect(0, 40, w, 3);
-    g.fillStyle = 'rgba(255,179,71,0.08)';
-    g.fillRect(0, 90, w, 2);
-  }, 6, 4);
+    g.fillRect(0, h * 0.4, w, 2);
+  }, 10, 4);
+}
+
+function pegTex(THREE) {
+  return canvasTex(THREE, 64, 64, (g, w, h) => {
+    fillGrad(g, 0, 0, w, 0, [[0, '#2a1c14'], [1, '#3a2818']]);
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#1a120c';
+    for (let y = 8; y < h; y += 12) {
+      for (let x = 8; x < w; x += 12) g.fillRect(x, y, 2, 2);
+    }
+  }, 4, 6);
+}
+
+function voltSignTex(THREE) {
+  return canvasTex(THREE, 256, 96, (g, w, h) => {
+    fillGrad(g, 0, 0, 0, h, [[0, '#0a0c10'], [1, '#14161c']]);
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#2de2e6';
+    g.lineWidth = 6;
+    g.strokeRect(8, 8, w - 16, h - 16);
+    g.fillStyle = '#ffb347';
+    g.font = 'bold 48px sans-serif';
+    g.textAlign = 'center';
+    g.fillText('VOLT', w * 0.5, 64);
+    g.fillStyle = '#2de2e6';
+    g.fillRect(28, h - 18, w - 56, 4);
+  }, 1, 1);
+}
+
+function posterTex(THREE, warm) {
+  return canvasTex(THREE, 64, 96, (g, w, h) => {
+    fillGrad(g, 0, 0, 0, h, warm
+      ? [[0, '#c45a22'], [1, '#ffb347']]
+      : [[0, '#1a2430'], [1, '#2de2e6']]);
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#14161c';
+    g.fillRect(8, 10, w - 16, 16);
+    g.fillStyle = warm ? '#fff4d2' : '#e8ffff';
+    g.fillRect(10, 36, w - 20, 44);
+  }, 1, 1);
 }
 
 function alleyTex(THREE) {
@@ -236,6 +302,9 @@ function addInstanced(THREE, parent, geo, mat, count, place) {
   const dummy = new THREE.Object3D();
   let written = 0;
   for (let i = 0; i < count; i++) {
+    dummy.position.set(0, 0, 0);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(1, 1, 1);
     if (place(dummy, i) === false) continue;
     dummy.updateMatrix();
     mesh.setMatrixAt(written, dummy.matrix);
@@ -285,6 +354,7 @@ export function restyleGarageShell(THREE, group, vibe, floor) {
   let n = 0;
   const wallTex = steelWallTex(THREE);
   const floorTex = oilFloorTex(THREE);
+  const ceilTex = ceilJoistTex(THREE);
   const wallHex = hexNum(vibe.palette.facade);
   const ceilHex = hexNum(vibe.palette.facadeAlt);
   group.traverse((o) => {
@@ -304,9 +374,10 @@ export function restyleGarageShell(THREE, group, vibe, floor) {
       skipMat(m); n++;
     } else if (col === GARAGE_STOCK.ceil) {
       m.color.setHex(ceilHex);
+      m.map = ceilTex;
       m.emissive.setHex(hexNum(vibe.palette.neonA));
-      m.emissiveIntensity = 0.08;
-      m.roughness = 0.82;
+      m.emissiveIntensity = 0.06;
+      m.roughness = 0.86;
       skipMat(m); n++;
     } else if (t === 'PlaneGeometry' && (o === floor || col === GARAGE_STOCK.floor)) {
       if (m.map && m.map !== floorTex && m.userData && m.userData.looksComposed) {
@@ -553,8 +624,128 @@ function addWhoopLife(THREE, parent, mats, budget, gates) {
   backTube.userData.garageArt = true;
   extras.add(backTube);
 
+  const joist = new THREE.BoxGeometry(20.4, 0.22, 0.28);
+  addInstanced(THREE, extras, joist, mats.steel, budget.joists, (d, i) => {
+    d.position.set(0, 10.15, -18 + i * (36 / Math.max(1, budget.joists - 1)));
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.TorusGeometry(0.32, 0.12, 6, 12), mats.tire, budget.tires, (d, i) => {
+    const spots = [
+      [-5.6, 18.4], [5.4, 18.8], [-5.5, -18.6], [5.3, -18.2],
+      [-5.8, 12.2], [5.6, -12.6], [-5.4, 4.8], [5.2, 14.2],
+      [-5.7, -7.2], [5.5, 2.6], [-5.3, -14.4], [5.8, -3.8],
+      [-5.2, 16.6], [5.1, -16.8],
+    ];
+    const s = spots[i % spots.length];
+    if (furnitureHit(s[0], s[1])) return false;
+    if (!propClearOfCourse(s[0], s[1], 0.36, gates, { gatePad: 1.5, corridor: 1.3, yRange: 2 })) return false;
+    d.position.set(s[0], 0.32 + (i % 3) * 0.28, s[1]);
+    d.rotation.x = Math.PI / 2;
+    return true;
+  });
+  addInstanced(THREE, extras, canGeo(THREE), mats.can, budget.bottles, (d, i) => {
+    const spots = [
+      [-5.4, 13.6], [5.6, 12.8], [-5.2, -15.8], [5.4, -14.6],
+      [-5.0, 2.4], [5.1, -2.8], [-5.6, 17.2], [5.3, 5.4],
+      [-4.9, -9.2], [5.2, 15.6], [-5.3, 8.8], [5.5, -7.4],
+      [-5.1, -17.6], [4.8, -18.4],
+    ];
+    const s = spots[i % spots.length];
+    if (furnitureHit(s[0], s[1])) return false;
+    if (!propClearOfCourse(s[0], s[1], 0.22, gates, { gatePad: 1.4, corridor: 1.2, yRange: 2 })) return false;
+    d.position.set(s[0], 0, s[1]);
+    return true;
+  });
+  const peg = new THREE.BoxGeometry(0.08, 3.6, 6.4);
+  addInstanced(THREE, extras, peg, mats.peg, 2, (d, i) => {
+    d.position.set(i ? 10.28 : -10.28, 3.4, i ? 4.2 : -8.0);
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.CapsuleGeometry(0.03, 0.7, 3, 6), mats.tool, budget.pegs, (d, i) => {
+    const side = i % 2 ? 1 : -1;
+    d.position.set(side * 10.18, 2.2 + (i % 5) * 0.55, (side > 0 ? 1.4 : -10.6) + ((i / 2) | 0) * 0.7);
+    d.rotation.z = side * 0.35;
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.PlaneGeometry(1.6, 2.2), mats.posterA, budget.posters, (d, i) => {
+    const side = i % 2 ? 1 : -1;
+    d.position.set(side * 10.32, 4.8, -14 + ((i / 2) | 0) * 10);
+    d.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.BoxGeometry(0.08, 2.6, 3.4), mats.window, budget.windows, (d, i) => {
+    const side = i % 2 ? 1 : -1;
+    d.position.set(side * 10.42, 7.2, -10 + ((i / 2) | 0) * 8);
+    return true;
+  });
+
   parent.add(extras);
   return extras;
+}
+
+function addHeroVoltSign(THREE, parent, mats) {
+  const hero = new THREE.Group();
+  hero.name = 'garageArtHero';
+  hero.userData.garageArt = true;
+  const cable = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 3.6, 3, 6), mats.steel);
+  cable.position.set(-2.1, 7.9, 6.4);
+  hero.add(cable);
+  const cable2 = cable.clone();
+  cable2.position.x = 2.1;
+  hero.add(cable2);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(5.6, 1.85, 0.2), mats.steel);
+  body.position.set(0, 5.75, 6.4);
+  hero.add(body);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(5.25, 1.55, 0.07), mats.sign);
+  face.position.set(0, 5.75, 6.26);
+  face.userData.garageSign = true;
+  hero.add(face);
+  const faceBack = face.clone();
+  faceBack.position.z = 6.54;
+  faceBack.rotation.y = Math.PI;
+  hero.add(faceBack);
+  const rim = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.1, 0.24), mats.tube);
+  rim.position.set(0, 4.78, 6.4);
+  rim.userData.garageTube = true;
+  hero.add(rim);
+  const fan = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.28), mats.sodium);
+  fan.position.set(8.4, 8.6, -2.4);
+  fan.userData.garageFan = true;
+  hero.add(fan);
+  hero.traverse((o) => { o.userData.garageArt = true; });
+  parent.add(hero);
+}
+
+function addSecretDressing(THREE, parent, mats) {
+  const pan = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.58, 0.08, 12), mats.drip);
+  pan.position.set(4.2, 0.05, -1.4);
+  pan.userData.garageArt = true;
+  parent.add(pan);
+  for (const [dx, dz] of [[-0.35, 0.2], [0.32, -0.15], [0.08, 0.38]]) {
+    const bottle = new THREE.Mesh(canGeo(THREE), mats.chest);
+    bottle.position.set(4.2 + dx, 0, -1.4 + dz);
+    bottle.userData.garageArt = true;
+    parent.add(bottle);
+  }
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), mats.drip);
+  glow.position.set(4.2, 0.22, -1.4);
+  glow.userData.garageSpark = true;
+  glow.userData.garageArt = true;
+  parent.add(glow);
+  const nest = new THREE.Mesh(roundedSlabGeo(THREE, 1.15, 0.28, 0.85, 0.1), mats.nest);
+  nest.position.set(0, 9.42, -18.2);
+  nest.userData.garageArt = true;
+  parent.add(nest);
+  const rag = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.55, 4, 6), mats.chest);
+  rag.rotation.z = 0.6;
+  rag.position.set(0.15, 9.62, -18.05);
+  rag.userData.garageArt = true;
+  parent.add(rag);
+  const nestGlow = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 0.6), glowMat(THREE, 0x2de2e6, 0.28));
+  nestGlow.position.set(0, 9.7, -18.2);
+  nestGlow.userData.garageTube = true;
+  nestGlow.userData.garageArt = true;
+  parent.add(nestGlow);
 }
 
 function makeGarageMats(THREE, vibe) {
@@ -583,6 +774,19 @@ function makeGarageMats(THREE, vibe) {
     alley: skipMat(new THREE.MeshBasicMaterial({
       map: alleyTex(THREE), toneMapped: false, fog: true,
     })),
+    peg: steelMat(THREE, 0xffffff, { map: pegTex(THREE), roughness: 0.8, metalness: 0.08 }),
+    sign: skipMat(new THREE.MeshBasicMaterial({
+      color: 0xffffff, map: voltSignTex(THREE), toneMapped: false,
+    })),
+    posterA: skipMat(new THREE.MeshBasicMaterial({
+      color: 0xffffff, map: posterTex(THREE, true), toneMapped: false,
+    })),
+    posterB: skipMat(new THREE.MeshBasicMaterial({
+      color: 0xffffff, map: posterTex(THREE, false), toneMapped: false,
+    })),
+    window: glowMat(THREE, 0xffb347, 0.82),
+    drip: glowMat(THREE, 0xc45a22, 0.35),
+    nest: steelMat(THREE, hexNum('#4a3224'), { roughness: 0.88, metalness: 0.04 }),
   };
 }
 
@@ -598,6 +802,8 @@ export function buildVoltStall(THREE, parent, vibe, quality, gates) {
   addToolChest(THREE, group, mats);
   addRack(THREE, group, mats, budget);
   addWhoopLife(THREE, group, mats, budget, gates || GARAGE_KEEP_GATES);
+  addHeroVoltSign(THREE, group, mats);
+  addSecretDressing(THREE, group, mats);
   parent.add(group);
   return group;
 }
@@ -680,6 +886,12 @@ function tickGarageArtObject(o, t) {
   if (o.userData && o.userData.garageSpark && o.material) {
     o.material.emissiveIntensity = Math.sin(t * 18.0) > 0.35 ? 5.5 : 0.4;
     o.scale.setScalar(0.7 + 0.6 * Math.max(0, Math.sin(t * 18.0)));
+  }
+  if (o.userData && o.userData.garageSign) {
+    o.rotation.z = Math.sin(t * 0.55) * 0.04;
+  }
+  if (o.userData && o.userData.garageFan) {
+    o.rotation.y = t * 3.2;
   }
 }
 
