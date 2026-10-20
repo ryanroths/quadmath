@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Dusk lot, ziggurat shed, moss posts, stone-gold gates.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=65230a2146c0';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=fa12e537ef8a';
 
 export const BACKYARD_STOCK = Object.freeze({
   grass: 0x5d7a3a,
@@ -29,12 +29,36 @@ export function backyardWantsGlow(applied) {
 
 export function backyardBudget(applied) {
   if (applied === 'low') {
-    return { posts: 10, moss: 6, lanterns: 0, glow: false, steps: 3 };
+    return {
+      posts: 10, moss: 6, lanterns: 4, glow: false, steps: 3,
+      pots: 6, stones: 8, chairs: 4, rails: 8,
+    };
   }
   if (applied === 'high') {
-    return { posts: 18, moss: 14, lanterns: 6, glow: true, steps: 4 };
+    return {
+      posts: 18, moss: 14, lanterns: 8, glow: true, steps: 4,
+      pots: 12, stones: 14, chairs: 6, rails: 12,
+    };
   }
-  return { posts: 14, moss: 10, lanterns: 4, glow: true, steps: 3 };
+  return {
+    posts: 14, moss: 10, lanterns: 6, glow: true, steps: 3,
+    pots: 10, stones: 12, chairs: 5, rails: 10,
+  };
+}
+
+function fillGrad(g, x0, y0, x1, y1, stops) {
+  const last = stops[stops.length - 1][1];
+  if (!g || typeof g.createLinearGradient !== 'function') {
+    g.fillStyle = last;
+    return;
+  }
+  const gr = g.createLinearGradient(x0, y0, x1, y1);
+  if (!gr || typeof gr.addColorStop !== 'function') {
+    g.fillStyle = last;
+    return;
+  }
+  for (let i = 0; i < stops.length; i++) gr.addColorStop(stops[i][0], stops[i][1]);
+  g.fillStyle = gr;
 }
 
 function skipMat(m) {
@@ -66,27 +90,77 @@ function canvasTex(THREE, w, h, paint, rx, ry) {
 
 function jadeGrassTex(THREE) {
   return canvasTex(THREE, 256, 256, (g, w, h) => {
-    g.fillStyle = '#3a4a28';
+    fillGrad(g, 0, 0, w, h, [[0, '#1b2a18'], [0.45, '#3a4a28'], [1, '#2a3818']]);
     g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 40; i++) {
-      g.fillStyle = i % 2 ? '#4a6230' : '#2a3818';
-      g.fillRect((i * 37) % w, (i * 53) % h, 18, 10);
+    for (let i = 0; i < 64; i++) {
+      g.fillStyle = i % 2 ? '#4a6230' : '#243018';
+      g.fillRect((i * 37) % w, (i * 53) % h, 16, 8);
     }
     g.fillStyle = '#c9a45b';
-    g.globalAlpha = 0.12;
+    g.globalAlpha = 0.16;
     g.fillRect(0, h * 0.46, w, 6);
     g.globalAlpha = 1;
+    g.fillStyle = 'rgba(0,0,0,0.22)';
+    for (let i = 0; i < 12; i++) {
+      g.beginPath();
+      g.arc((i * 47) % w, (i * 71) % h, 14, 0, 6.3);
+      g.fill();
+    }
   }, 5, 6);
 }
 
 function patioTex(THREE) {
   return canvasTex(THREE, 128, 128, (g, w, h) => {
-    g.fillStyle = '#8a6a44';
+    fillGrad(g, 0, 0, w, 0, [[0, '#6a4a2a'], [0.5, '#8a6a44'], [1, '#5a3a22']]);
     g.fillRect(0, 0, w, h);
-    g.fillStyle = '#6a4a2a';
-    for (let y = 0; y < h; y += 16) g.fillRect(0, y, w, 1);
-    for (let x = 0; x < w; x += 16) g.fillRect(x, 0, 1, h);
+    g.fillStyle = '#4a3220';
+    for (let y = 0; y < h; y += 16) g.fillRect(0, y, w, 2);
+    for (let x = 0; x < w; x += 16) g.fillRect(x, 0, 2, h);
+    g.fillStyle = 'rgba(201,164,91,0.12)';
+    g.fillRect(0, 0, w, 8);
   }, 4, 3);
+}
+
+function duskSkyTex(THREE) {
+  return canvasTex(THREE, 256, 256, (g, w, h) => {
+    fillGrad(g, 0, h, 0, 0, [
+      [0, '#8a4a2a'], [0.22, '#c9a45b'], [0.48, '#3a4a28'], [1, '#0c1410'],
+    ]);
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#ffe0b0';
+    g.globalAlpha = 0.55;
+    g.beginPath();
+    g.arc(w * 0.72, h * 0.38, 14, 0, 6.3);
+    g.fill();
+    g.globalAlpha = 0.18;
+    g.beginPath();
+    g.arc(w * 0.72, h * 0.38, 36, 0, 6.3);
+    g.fill();
+    g.globalAlpha = 1;
+  }, 1, 1);
+}
+
+function idolTex(THREE) {
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    fillGrad(g, 0, 0, 0, h, [[0, '#c9a45b'], [1, '#8a4a2a']]);
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#1b2a18';
+    g.fillRect(28, 18, 72, 16);
+    g.fillRect(48, 48, 32, 52);
+    g.fillStyle = '#ffe0b0';
+    g.fillRect(20, h - 14, w - 40, 6);
+  }, 1, 1);
+}
+
+function stoneRingGeo(THREE, size) {
+  const s = new THREE.Shape();
+  const o = size * 1.16;
+  const i = size * 0.9;
+  s.absarc(0, 0, o, 0, Math.PI * 2, false);
+  const hole = new THREE.Path();
+  hole.absarc(0, 0, i, 0, Math.PI * 2, true);
+  s.holes.push(hole);
+  return new THREE.ExtrudeGeometry(s, { depth: size * 0.1, bevelEnabled: false, curveSegments: 12 });
 }
 
 function stoneMat(THREE, hex, extras) {
@@ -202,6 +276,13 @@ function makeYardMats(THREE, vibe) {
     }),
     grill: stoneMat(THREE, 0x2a2c30, { metalness: 0.4, roughness: 0.4 }),
     porch: glowMat(THREE, 0xffe0b0, 0.16),
+    sky: skipMat(new THREE.MeshBasicMaterial({
+      map: duskSkyTex(THREE), side: THREE.BackSide, fog: false, depthWrite: false, toneMapped: false,
+    })),
+    idol: skipMat(new THREE.MeshBasicMaterial({
+      map: idolTex(THREE), toneMapped: false,
+    })),
+    pot: stoneMat(THREE, 0x8a4a2a, { roughness: 0.8 }),
   };
 }
 
@@ -218,6 +299,10 @@ function addZiggurat(THREE, parent, mats, budget) {
   cap.userData.backyardIdol = true;
   cap.userData.backyardArt = true;
   parent.add(cap);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.4, 0.08), mats.idol);
+  face.position.set(14.5, budget.steps * 1.55 - 0.4, -18 + (2.4 - budget.steps * 0.2));
+  face.userData.backyardArt = true;
+  parent.add(face);
 }
 
 function addPatioSet(THREE, parent, mats) {
@@ -291,7 +376,61 @@ function addWhoopLife(THREE, parent, mats, budget, gates) {
     pool.userData.backyardArt = true;
     extras.add(pool);
   }
+  addInstanced(THREE, extras, mossGeo(THREE), mats.pot, budget.pots, (d, i) => {
+    const spots = [[-8.4, 14.2], [8.6, 13.8], [-6.2, -4.4], [6.4, -6.2], [-10.2, 2.4], [10.4, 4.2], [-5.2, 18.6], [5.4, 17.8], [-9.2, -20.4], [9.6, -14.6], [-3.4, 8.2], [3.8, 10.4]];
+    const s = spots[i % spots.length];
+    if (!propClearOfCourse(s[0], s[1], 0.28, gates, { gatePad: 1.5, corridor: 1.3, yRange: 2 })) return false;
+    d.position.set(s[0], 0, s[1]);
+    d.scale.set(1.4, 1.1, 1.4);
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.BoxGeometry(0.55, 0.28, 0.7), mats.stone, budget.stones, (d, i) => {
+    const spots = [[-7.2, 6.4], [7.4, 5.8], [-5.6, -14.2], [6.2, -16.4], [-11.2, -8.4], [11.4, -10.2], [-4.2, 20.2], [4.6, 19.4]];
+    const s = spots[i % spots.length];
+    if (!propClearOfCourse(s[0], s[1], 0.3, gates, { gatePad: 1.5, corridor: 1.3, yRange: 2 })) return false;
+    d.position.set(s[0], 0.14, s[1]);
+    d.rotation.y = i * 0.5;
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.BoxGeometry(0.45, 0.7, 0.45), mats.laterite, budget.chairs, (d, i) => {
+    const side = i % 2 ? 1 : -1;
+    d.position.set(3.2 + side * 1.15, 0.35, -8.4 - ((i / 2) | 0) * 0.85);
+    return true;
+  });
+  const rail = new THREE.BoxGeometry(0.12, 0.18, 5.4);
+  addInstanced(THREE, extras, rail, mats.gold, budget.rails, (d, i) => {
+    const edge = i % 2 ? 1 : -1;
+    d.position.set(edge * 21, 5.7, -18 + ((i / 2) | 0) * 8);
+    return true;
+  });
   parent.add(extras);
+}
+
+function addDuskDome(THREE, parent, mats) {
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(88, 24, 16), mats.sky);
+  dome.position.y = 8;
+  dome.userData.backyardArt = true;
+  parent.add(dome);
+}
+
+function addSecretDressing(THREE, parent, mats) {
+  const peak = new THREE.Mesh(mossGeo(THREE), mats.gold);
+  peak.position.set(14.5, 8.35, -15.2);
+  peak.scale.set(2.6, 2.2, 2.6);
+  peak.userData.backyardIdol = true;
+  peak.userData.backyardArt = true;
+  parent.add(peak);
+  const hollow = new THREE.Mesh(mossGeo(THREE), mats.moss);
+  hollow.position.set(19.4, 0.85, -26.2);
+  hollow.scale.set(2.4, 1.6, 2.4);
+  hollow.userData.backyardMoss = true;
+  hollow.userData.backyardArt = true;
+  parent.add(hollow);
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), mats.gold);
+  glow.position.set(19.4, 1.15, -26.2);
+  glow.userData.backyardIdol = true;
+  glow.userData.backyardArt = true;
+  parent.add(glow);
 }
 
 export function buildJadeLot(THREE, parent, vibe, quality, gates) {
@@ -300,9 +439,11 @@ export function buildJadeLot(THREE, parent, vibe, quality, gates) {
   group.userData.backyardArt = true;
   const budget = backyardBudget(quality);
   const mats = makeYardMats(THREE, vibe);
+  addDuskDome(THREE, group, mats);
   addZiggurat(THREE, group, mats, budget);
   addPatioSet(THREE, group, mats);
   addWhoopLife(THREE, group, mats, budget, gates || BACKYARD_KEEP_GATES);
+  addSecretDressing(THREE, group, mats);
   parent.add(group);
   return group;
 }
@@ -316,9 +457,10 @@ export function decorateBackyardGate(THREE, ring, size, col, vibe) {
     ring.material.emissiveIntensity = emit * 0.4;
     skipMat(ring.material);
   }
-  const stone = new THREE.Mesh(new THREE.TorusGeometry(size * 1.04, size * 0.1, 8, 20), stoneMat(THREE, 0x6a5340, {
+  const stone = new THREE.Mesh(stoneRingGeo(THREE, size), stoneMat(THREE, 0x6a5340, {
     emissive: col, emissiveIntensity: emit * 0.5,
   }));
+  stone.position.z = -size * 0.05;
   const gold = new THREE.Mesh(new THREE.TorusGeometry(size * 1.14, size * 0.03, 6, 18), emitMat(THREE, hexNum(vibe.palette.neonA), emit));
   ring.add(stone);
   ring.add(gold);

@@ -395,7 +395,7 @@ test('City freestyle builds without throwing and the FPV frame is not all black'
   }
   const tickSrc = city.slice(city.indexOf('export function tickCityArt'), city.indexOf('export function restyleMesas'));
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickCityArt must not touch the THREE binding');
-  assert.match(tickSrc, /cityCruise|cityDrone/);
+  assert.match(tickSrc, /cityCurrent|cityCruise|cityDrone/);
   assert.match(tickSrc, /never abort the FPV render loop/);
 });
 
@@ -443,8 +443,9 @@ test('City polish keeps Low draw calls near 174 and clears leftover shards', () 
   const lo = artStats(null, buildNeonCity(THREE, new THREE.Group(), vibeFor('city'), 'low', gates));
   const med = artStats(null, buildNeonCity(THREE, new THREE.Group(), vibeFor('city'), 'med', gates));
   const hi = artStats(null, buildNeonCity(THREE, new THREE.Group(), vibeFor('city'), 'high', gates));
-  assert.ok(lo.callsEst <= 48, 'Low city-art callsEst ' + lo.callsEst);
-  assert.ok(lo.instancedMeshes <= 40, 'Low IM ' + lo.instancedMeshes);
+    assert.ok(lo.callsEst <= 48, 'Low city-art callsEst ' + lo.callsEst);
+    assert.ok(lo.instancedMeshes <= 40, 'Low IM ' + lo.instancedMeshes);
+    assert.ok(buildNeonCity(THREE, new THREE.Group(), vibeFor('city'), 'low', gates).getObjectByName('cityArtHero'), 'cityArtHero');
   assert.ok(med.callsEst >= lo.callsEst, 'Med adds extras');
   assert.ok(hi.instanced >= med.instanced, 'High at least as dense');
   const plan = planCityProps(gates, 'high');
@@ -521,6 +522,7 @@ test('Living freestyle builds without throwing and the FPV frame is not all blac
     }
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    if (q === 'low') assert.ok(stats.callsEst < 200, 'Low living callsEst ' + stats.callsEst);
     const frame = cityFrameLit(vis);
     assert.ok(frame.meshes >= 8, q + ' meshes ' + frame.meshes);
     assert.ok(frame.lit >= 8, q + ' lit materials ' + frame.lit);
@@ -536,7 +538,7 @@ test('Living freestyle builds without throwing and the FPV frame is not all blac
     livingSrc.indexOf('export function restyleLiving(THREE'),
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickLivingArt must not touch the THREE binding');
-  assert.match(tickSrc, /livingLamp|livingLantern|livingSteam/);
+  assert.match(tickSrc, /livingClay|livingLamp/);
 });
 
 test('Garage Volt Stall is implemented with square neon gates', () => {
@@ -662,6 +664,8 @@ test('Warehouse freestyle builds without throwing and the FPV frame is not all b
     }
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    if (q === 'low') assert.ok(stats.callsEst < 200, 'Low warehouse callsEst ' + stats.callsEst);
+    assert.ok(built.group.getObjectByName('warehouseArtHero'), q + ' warehouseArtHero');
     const frame = cityFrameLit(vis);
     assert.ok(frame.meshes >= 8, q + ' meshes ' + frame.meshes);
     assert.ok(frame.lit >= 8, q + ' lit materials ' + frame.lit);
@@ -677,7 +681,7 @@ test('Warehouse freestyle builds without throwing and the FPV frame is not all b
     warehouseSrc.indexOf('export function restyleWarehouse(THREE'),
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickWarehouseArt must not touch the THREE binding');
-  assert.match(tickSrc, /warehouseTube|warehouseOrb/);
+  assert.match(tickSrc, /warehouseIon|warehouseTube|warehouseOrb/);
 });
 
 test('Gym Amber Court is implemented with brass-wood gates', () => {
@@ -803,6 +807,7 @@ test('Office freestyle builds without throwing and the FPV frame is not all blac
     if (q === 'low') assert.equal(officeBudget('low').glow, false);
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    if (q === 'low') assert.ok(stats.callsEst < 200, 'Low office callsEst ' + stats.callsEst);
     const frame = cityFrameLit(vis);
     assert.ok(frame.meshes >= 8, q + ' meshes ' + frame.meshes);
     assert.ok(frame.lit >= 8, q + ' lit materials ' + frame.lit);
@@ -818,7 +823,7 @@ test('Office freestyle builds without throwing and the FPV frame is not all blac
     officeSrc.indexOf('export function restyleOffice(THREE'),
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickOfficeArt must not touch the THREE binding');
-  assert.match(tickSrc, /officeScreen|officePlant/);
+  assert.match(tickSrc, /officeSun|officePlane/);
 });
 
 test('Trainer Licorice Grid is implemented with candy-torus gates', () => {
@@ -870,6 +875,7 @@ test('Trainer freestyle builds without throwing and the FPV frame is not all bla
     if (q === 'low') assert.equal(trainerBudget('low').glow, false);
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    if (q === 'low') assert.ok(stats.callsEst < 200, 'Low trainer callsEst ' + stats.callsEst);
     const frame = cityFrameLit(vis);
     assert.ok(frame.meshes >= 6, q + ' meshes ' + frame.meshes);
     assert.ok(frame.lit >= 6, q + ' lit materials ' + frame.lit);
@@ -937,6 +943,7 @@ test('Backyard freestyle builds without throwing and the FPV frame is not all bl
     if (q === 'low') assert.equal(backyardBudget('low').glow, false);
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    if (q === 'low') assert.ok(stats.callsEst < 200, 'Low backyard callsEst ' + stats.callsEst);
     const frame = cityFrameLit(vis);
     assert.ok(frame.meshes >= 6, q + ' meshes ' + frame.meshes);
     assert.ok(frame.lit >= 6, q + ' lit materials ' + frame.lit);
@@ -1005,6 +1012,7 @@ test('Room freestyle builds without throwing and the FPV frame is not all black'
     if (q === 'low') assert.equal(roomBudget('low').glow, false);
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
+    if (q === 'low') assert.ok(stats.callsEst < 200, 'Low room callsEst ' + stats.callsEst);
     const frame = cityFrameLit(vis);
     assert.ok(frame.meshes >= 6, q + ' meshes ' + frame.meshes);
     assert.ok(frame.lit >= 6, q + ' lit materials ' + frame.lit);
@@ -1020,7 +1028,7 @@ test('Room freestyle builds without throwing and the FPV frame is not all black'
     roomSrc.indexOf('export function restyleRoom(THREE'),
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickRoomArt must not touch the THREE binding');
-  assert.match(tickSrc, /roomLamp/);
+  assert.match(tickSrc, /roomStage|roomMobile/);
 });
 
 test('art direction doc lists every map', () => {

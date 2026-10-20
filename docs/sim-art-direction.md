@@ -120,7 +120,7 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Tr
 - **Sky:** Procedural gradient sphere + sparse stars. HDRI hidden on this map.
 - **Fog:** `#1a0830` exp2, density `0.00105`.
 - **Lighting:** Dim cool key (`#88a0ff`, ~0.3), magenta fill, purple hemi. Exposure ~0.62.
-- **Signature props:** Instanced night towers, roof neon strips, street lamps, distant skyline ring. Palms restyled as neon fronds. Mesas get a night-rock wash so Zigzag still reads as the same world.
+- **Signature props:** Instanced night towers, roof neon strips, street lamps, distant skyline ring, hanging NEON banner, Stack Roof / Current Well dressing. Palms restyled as neon fronds. Mesas get a night-rock wash so Zigzag still reads as the same world. #212 cars stay.
 - **Gates:** Brand orange / green kept (leaderboard / HUD language) with a second emissive halo and hotter bloom. Pulse unchanged.
 - **Post:** Bloom on Med/High (threshold ~0.82 so only emissives catch). Off on Low. FPV barrel stays.
 - **Not:** Vice City, Outrun box art, or any licensed skyline.
@@ -149,7 +149,7 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Tr
 - **Time:** Windowless, bioluminescent.
 - **Palette:** `#0b1218` dark, `#1b3a4a` rack, `#39ffb0` spore, `#7a5cff` aisle, `#c45a22` pallet.
 - **Lighting:** Cool overhead cans + teal aisle runners.
-- **Props:** Emissive aisle arrows, glowing rack edges, spore cans.
+- **Props:** Emissive aisle arrows, glowing rack edges, spore cans, hanging ION banner, Spore Loft / Dock Crypt dressing.
 - **Gates:** Hex frames with teal core.
 - **Post:** Small bloom on runners. Fog `#0b1218` at `0.0018`.
 

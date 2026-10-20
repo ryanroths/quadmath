@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Clay/felt furniture on the same AABBs. Felt-ring gates. Bloom off.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=65230a2146c0';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=fa12e537ef8a';
 import { planRoom } from './sim-room.js?v=5b05276e1d0b';
 
 export const ROOM_STOCK = Object.freeze({
@@ -31,17 +31,20 @@ export function roomBudget(applied) {
     return {
       toys: 6, beads: 0, frames: 2, books: 6, plants: 1,
       glow: false, lamp: true, window: true,
+      stars: 10, socks: 4, boxes: 2, posters: 3, shirts: 3,
     };
   }
   if (applied === 'high') {
     return {
       toys: 12, beads: 18, frames: 6, books: 16, plants: 3,
       glow: true, lamp: true, window: true,
+      stars: 22, socks: 8, boxes: 4, posters: 5, shirts: 5,
     };
   }
   return {
     toys: 10, beads: 12, frames: 4, books: 12, plants: 2,
     glow: true, lamp: true, window: true,
+    stars: 16, socks: 6, boxes: 3, posters: 4, shirts: 4,
   };
 }
 
@@ -77,24 +80,43 @@ function canvasTex(THREE, w, h, paint, rx, ry) {
   return t;
 }
 
+function fillGrad(g, x0, y0, x1, y1, stops) {
+  const last = stops[stops.length - 1][1];
+  if (!g || typeof g.createLinearGradient !== 'function') {
+    g.fillStyle = last;
+    return;
+  }
+  const gr = g.createLinearGradient(x0, y0, x1, y1);
+  if (!gr || typeof gr.addColorStop !== 'function') {
+    g.fillStyle = last;
+    return;
+  }
+  for (let i = 0; i < stops.length; i++) gr.addColorStop(stops[i][0], stops[i][1]);
+  g.fillStyle = gr;
+}
+
 function feltFloorTex(THREE) {
   return canvasTex(THREE, 256, 256, (g, w, h) => {
-    g.fillStyle = '#7a5130';
+    fillGrad(g, 0, 0, w, h, [[0, '#8a5e3a'], [0.5, '#7a5130'], [1, '#5a381c']]);
     g.fillRect(0, 0, w, h);
     for (let y = 0; y < h; y += 16) {
       g.fillStyle = y % 32 === 0 ? '#8a5e3a' : '#6e4628';
       g.fillRect(0, y, w, 10);
     }
-    g.globalAlpha = 0.18;
+    g.globalAlpha = 0.2;
     g.fillStyle = '#ffb3c7';
     for (let x = 12; x < w; x += 36) g.fillRect(x, 0, 2, h);
+    g.globalAlpha = 0.16;
+    g.fillStyle = '#1a1210';
+    g.fillRect(0, 0, w, 14);
+    g.fillRect(0, h - 14, w, 14);
     g.globalAlpha = 1;
   }, 4, 5);
 }
 
 function plasterTex(THREE) {
   return canvasTex(THREE, 128, 128, (g, w, h) => {
-    g.fillStyle = '#eee8de';
+    fillGrad(g, 0, 0, 0, h, [[0, '#f6f0e6'], [0.7, '#eee8de'], [1, '#d8d2c6']]);
     g.fillRect(0, 0, w, h);
     for (let i = 0; i < 70; i++) {
       g.fillStyle = `rgba(255,179,199,${0.04 + (i % 4) * 0.02})`;
@@ -105,6 +127,53 @@ function plasterTex(THREE) {
     g.fillStyle = 'rgba(126,200,227,0.10)';
     for (let y = 10; y < h; y += 20) g.fillRect(0, y, w, 3);
   }, 6, 4);
+}
+
+function ceilTex(THREE) {
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    fillGrad(g, 0, 0, 0, h, [[0, '#d8d2c6'], [1, '#c8c0b4']]);
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(122,81,48,0.12)';
+    g.lineWidth = 2;
+    g.strokeRect(6, 6, w - 12, h - 12);
+    g.fillStyle = 'rgba(255,230,138,0.12)';
+    g.fillRect(20, 20, w - 40, h - 40);
+  }, 8, 6);
+}
+
+function stageSignTex(THREE) {
+  return canvasTex(THREE, 256, 96, (g, w, h) => {
+    fillGrad(g, 0, 0, 0, h, [[0, '#ffb3c7'], [0.55, '#ffe08a'], [1, '#7ec8e3']]);
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#7a5130';
+    g.fillRect(0, 0, w, 7);
+    g.fillRect(0, h - 7, w, 7);
+    g.fillRect(0, 0, 7, h);
+    g.fillRect(w - 7, 0, 7, h);
+    g.fillStyle = '#7a5130';
+    g.font = 'bold 42px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('STAGE', w * 0.5, h * 0.55);
+  }, 1, 1);
+}
+
+function nightPaneTex(THREE) {
+  return canvasTex(THREE, 64, 96, (g, w, h) => {
+    fillGrad(g, 0, 0, 0, h, [[0, '#1a2840'], [0.6, '#2a4060'], [1, '#7ec8e3']]);
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#ffe08a';
+    for (let i = 0; i < 18; i++) {
+      g.globalAlpha = 0.45 + (i % 3) * 0.15;
+      g.fillRect((i * 13) % (w - 6) + 2, 8 + (i * 17) % (h - 28), 2, 2);
+    }
+    g.globalAlpha = 0.55;
+    g.fillStyle = '#ffb3c7';
+    g.fillRect(8, h - 22, 10, 16);
+    g.fillRect(22, h - 30, 8, 24);
+    g.fillRect(34, h - 18, 12, 12);
+    g.globalAlpha = 1;
+  }, 1, 1);
 }
 
 function walnutTex(THREE) {
@@ -223,9 +292,10 @@ export function restyleRoomShell(THREE, group, vibe, floor) {
       m.emissiveIntensity = 0;
       skipMat(m); n++;
     } else if (col === ROOM_STOCK.ceil) {
-      m.color.setHex(0xeee8de);
+      m.color.setHex(0xffffff);
+      m.map = ceilTex(THREE);
       m.emissive.setHex(0xffe6c4);
-      m.emissiveIntensity = 0.1;
+      m.emissiveIntensity = 0.14;
       skipMat(m); n++;
     } else if (t === 'PlaneGeometry' && (o === floor || col === ROOM_STOCK.wood)) {
       if (m.map && m.map !== floorTex && m.userData && m.userData.looksComposed) {
@@ -263,6 +333,18 @@ function makeRoomMats(THREE, vibe) {
     rug: clayMat(THREE, hexNum(vibe.palette.neonA), { map: feltRugTex(THREE), roughness: 0.95 }),
     pool: glowMat(THREE, 0xffe6c4, 0.16),
     curtain: clayMat(THREE, hexNum(vibe.palette.neonA), { roughness: 0.9 }),
+    sign: skipMat(new THREE.MeshBasicMaterial({
+      color: 0xffffff, map: stageSignTex(THREE), toneMapped: false,
+    })),
+    star: skipMat(new THREE.MeshBasicMaterial({
+      color: 0xffe08a, toneMapped: false,
+    })),
+    night: skipMat(new THREE.MeshBasicMaterial({
+      color: 0xffffff, map: nightPaneTex(THREE), toneMapped: false,
+    })),
+    sock: clayMat(THREE, hexNum('#7ec8e3')),
+    shirt: clayMat(THREE, hexNum('#ffb3c7')),
+    box: clayMat(THREE, hexNum('#ffe08a')),
   };
 }
 
@@ -294,6 +376,15 @@ function addFeltBed(THREE, parent, mats, item) {
   roll.rotation.z = Math.PI / 2;
   roll.position.set(0, h * 0.78, d * 0.28);
   addMesh(g, roll);
+  const stuff = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), mats.toy);
+  stuff.position.set(w * 0.22, h * 0.86, d * 0.08);
+  addMesh(g, stuff);
+  const ear = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), mats.felt);
+  ear.position.set(w * 0.16, h * 1.02, d * 0.08);
+  addMesh(g, ear);
+  const ear2 = ear.clone();
+  ear2.position.x = w * 0.28;
+  addMesh(g, ear2);
   parent.add(g);
 }
 
@@ -382,6 +473,13 @@ function addFeltDesk(THREE, parent, mats, item, budget) {
   const stack = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.08, 0.22), mats.book);
   stack.position.set(-w * 0.26, h + 0.06, d * 0.08);
   addMesh(g, stack);
+  const keys = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.04, 0.2), mats.walnut);
+  keys.position.set(0, h + 0.04, d * 0.12);
+  addMesh(g, keys);
+  const mon = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.42, 0.05), mats.night);
+  mon.position.set(0, h + 0.36, -d * 0.38);
+  mon.userData.roomLamp = true;
+  addMesh(g, mon);
   parent.add(g);
 }
 
@@ -433,9 +531,12 @@ function addWhoopLife(THREE, parent, mats, budget, plan, gates) {
   const hz = d / 2 - 0.22;
 
   if (budget.window) {
-    const pane = new THREE.Mesh(new THREE.BoxGeometry(0.06, Math.min(2.2, h * 0.38), Math.min(2.4, d * 0.24)), mats.sky);
+    const pane = new THREE.Mesh(new THREE.BoxGeometry(0.06, Math.min(2.2, h * 0.38), Math.min(2.4, d * 0.24)), mats.night);
     pane.position.set(w / 2 - 0.18, h * 0.58, -d * 0.08);
     addMesh(extras, pane);
+    const glow = new THREE.Mesh(new THREE.BoxGeometry(0.04, Math.min(2.0, h * 0.34), Math.min(2.2, d * 0.22)), glowMat(THREE, 0x7ec8e3, 0.22));
+    glow.position.set(w / 2 - 0.22, h * 0.58, -d * 0.08);
+    addMesh(extras, glow);
     localBox(THREE, extras, mats, w / 2 - 0.22, h * 0.58, -d * 0.08, 0.08, Math.min(2.4, h * 0.42), 0.08, mats.walnut);
     localBox(THREE, extras, mats, w / 2 - 0.22, h * 0.58, -d * 0.08 + Math.min(1.15, d * 0.12), 0.08, Math.min(2.4, h * 0.42), 0.08, mats.walnut);
     localBox(THREE, extras, mats, w / 2 - 0.22, h * 0.58, -d * 0.08 - Math.min(1.15, d * 0.12), 0.08, Math.min(2.4, h * 0.42), 0.08, mats.walnut);
@@ -545,7 +646,85 @@ function addWhoopLife(THREE, parent, mats, budget, plan, gates) {
     pool.position.set(w * 0.22, 0.025, -d * 0.06);
     addMesh(extras, pool);
   }
+
+  addInstanced(THREE, extras, new THREE.SphereGeometry(0.05, 6, 5), mats.star, budget.stars, (dmy, i) => {
+    dmy.position.set(-w * 0.32 + (i % 5) * (w * 0.16), h - 0.35, -d * 0.32 + ((i / 5) | 0) * (d * 0.18));
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.BoxGeometry(0.22, 0.08, 0.12), mats.sock, budget.socks, (dmy, i) => {
+    const x = -w * 0.12 + (i % 4) * 0.38;
+    const z = d * 0.08 + ((i / 4) | 0) * 0.3;
+    if (!propClearOfCourse(x, z, 0.14, gates, { gatePad: 1.15, corridor: 1.0, yRange: 2 })) return false;
+    dmy.position.set(x, 0.06, z);
+    dmy.rotation.y = i * 0.4;
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.BoxGeometry(1.15, 1.35, 0.04), mats.art, budget.posters, (dmy, i) => {
+    dmy.position.set(-w * 0.34 + i * 1.45, 2.55, -d / 2 + 0.2);
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.BoxGeometry(0.42, 0.55, 0.08), mats.shirt, budget.shirts, (dmy, i) => {
+    dmy.position.set(-w / 2 + 0.85, 1.85, -d * 0.02 + i * 0.42);
+    dmy.rotation.y = Math.PI / 2;
+    return true;
+  });
+
   parent.add(extras);
+}
+
+function addHeroStageSign(THREE, parent, mats, plan) {
+  const w = (plan && plan.w) || DEFAULT_PLAN.w;
+  const d = (plan && plan.d) || DEFAULT_PLAN.d;
+  const h = (plan && plan.h) || DEFAULT_PLAN.h;
+  const hero = new THREE.Group();
+  hero.name = 'roomArtHero';
+  hero.userData.roomArt = true;
+  const cable = new THREE.Mesh(new THREE.CapsuleGeometry(0.02, h * 0.42, 3, 6), mats.walnut);
+  cable.position.set(-0.85, h * 0.72, -d * 0.18);
+  addMesh(hero, cable);
+  const cable2 = cable.clone();
+  cable2.position.x = 0.85;
+  addMesh(hero, cable2);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(Math.min(3.2, w * 0.42), 0.95, 0.1), mats.walnut);
+  body.position.set(0, h * 0.46, -d * 0.18);
+  addMesh(hero, body);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(Math.min(2.95, w * 0.38), 0.78, 0.05), mats.sign);
+  face.position.set(0, h * 0.46, -d * 0.18 - 0.08);
+  addMesh(hero, face);
+  const faceBack = face.clone();
+  faceBack.position.z = -d * 0.18 + 0.08;
+  faceBack.rotation.y = Math.PI;
+  addMesh(hero, faceBack);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(0.38, 16), mats.star);
+  disc.position.set(0, h * 0.32, -d * 0.18);
+  disc.userData.roomStage = true;
+  addMesh(hero, disc);
+  const pip = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), mats.bead);
+  pip.position.set(-1.15, h * 0.46, -d * 0.18 - 0.08);
+  pip.userData.roomMobile = true;
+  addMesh(hero, pip);
+  const pip2 = pip.clone();
+  pip2.position.x = 1.15;
+  addMesh(hero, pip2);
+  hero.traverse((o) => { o.userData.roomArt = true; });
+  parent.add(hero);
+}
+
+function addSecretDressing(THREE, parent, mats, plan) {
+  const d = (plan && plan.d) || DEFAULT_PLAN.d;
+  // Under-bed nook — whoop crawl at the foot of the default bed.
+  for (let i = 0; i < 3; i++) {
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.22, 0.42), i % 2 ? mats.box : mats.felt);
+    box.position.set(-0.55 + i * 0.55, 0.14, -d * 0.26);
+    addMesh(parent, box);
+  }
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 0.7), glowMat(THREE, 0xffe08a, 0.28));
+  glow.position.set(0, 0.04, -d * 0.26);
+  addMesh(parent, glow);
+  const stuffed = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), mats.toyAlt);
+  stuffed.position.set(0.15, 0.32, -d * 0.26);
+  stuffed.userData.roomMobile = true;
+  addMesh(parent, stuffed);
 }
 
 export function buildPocketStage(THREE, parent, vibe, quality, gates, plan) {
@@ -558,6 +737,8 @@ export function buildPocketStage(THREE, parent, vibe, quality, gates, plan) {
   const keep = gates || (used.track && used.track.gates) || ROOM_KEEP_GATES;
   addFeltFurniture(THREE, group, mats, used, budget);
   addWhoopLife(THREE, group, mats, budget, used, keep);
+  addHeroStageSign(THREE, group, mats, used);
+  addSecretDressing(THREE, group, mats, used);
   parent.add(group);
   return group;
 }
@@ -628,6 +809,14 @@ export function tickRoomArt(root, now) {
 function tickRoomArtObject(o, t) {
   if (o.userData && o.userData.roomLamp && o.material) {
     o.material.emissiveIntensity = 1.8 + 0.4 * (0.5 + 0.5 * Math.sin(t * 2.2));
+  }
+  if (o.userData && o.userData.roomStage) {
+    o.rotation.z = t * 0.2;
+  }
+  if (o.userData && o.userData.roomMobile) {
+    if (o.userData.roomBaseY == null) o.userData.roomBaseY = o.position.y;
+    o.rotation.y = t * 0.55;
+    o.position.y = o.userData.roomBaseY + Math.sin(t * 1.6) * 0.05;
   }
 }
 

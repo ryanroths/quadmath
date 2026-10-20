@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Sculpted with capsules and lathes. Aisle runners stay MeshBasic so they read.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=65230a2146c0';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=fa12e537ef8a';
 
 export const WAREHOUSE_STOCK = Object.freeze({
   wall: 0x8d9096,
@@ -45,17 +45,20 @@ export function warehouseBudget(applied) {
     return {
       cans: 8, arrows: 12, spores: 36, orbs: 0, edges: 12,
       glow: false, runners: true,
+      plates: 8, crates: 16, chevrons: 6, bays: 6,
     };
   }
   if (applied === 'high') {
     return {
       cans: 20, arrows: 24, spores: 72, orbs: 12, edges: 24,
       glow: true, runners: true,
+      plates: 16, crates: 28, chevrons: 12, bays: 12,
     };
   }
   return {
     cans: 16, arrows: 18, spores: 54, orbs: 8, edges: 18,
     glow: true, runners: true,
+    plates: 12, crates: 22, chevrons: 9, bays: 9,
   };
 }
 
@@ -103,19 +106,67 @@ function canvasTex(THREE, w, h, paint, rx, ry) {
 
 function naveFloorTex(THREE) {
   return canvasTex(THREE, 256, 256, (g, w, h) => {
-    g.fillStyle = '#0e141a';
+    g.fillStyle = '#1a2430';
     g.fillRect(0, 0, w, h);
-    g.fillStyle = '#161e26';
+    g.fillStyle = '#243446';
     for (let y = 0; y < h; y += 32) {
-      for (let x = 0; x < w; x += 32) g.fillRect(x + 1, y + 1, 30, 30);
+      for (let x = 0; x < w; x += 32) g.fillRect(x + 2, y + 2, 28, 28);
     }
-    g.fillStyle = '#0a1016';
-    for (let y = 0; y < h; y += 32) g.fillRect(0, y, w, 2);
+    g.fillStyle = '#0e181f';
+    for (let y = 0; y < h; y += 32) g.fillRect(0, y, w, 3);
     g.fillStyle = '#39ffb0';
-    g.globalAlpha = 0.22;
-    g.fillRect(w * 0.48, 0, 3, h);
+    g.globalAlpha = 0.38;
+    g.fillRect(w * 0.47, 0, 5, h);
     g.globalAlpha = 1;
+    g.fillStyle = 'rgba(122,92,255,0.16)';
+    for (let x = 16; x < w; x += 32) g.fillRect(x, 0, 1, h);
   }, 4, 8);
+}
+
+function ceilBayTex(THREE) {
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    fillGrad(g, 0, 0, 0, h, [[0, '#0a1016'], [1, '#142028']]);
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(57,255,176,0.12)';
+    g.lineWidth = 2;
+    for (let y = 0; y < h; y += 32) g.strokeRect(4, y + 4, w - 8, 24);
+    g.fillStyle = 'rgba(122,92,255,0.1)';
+    g.fillRect(0, 0, w, 3);
+  }, 10, 6);
+}
+
+function ionSignTex(THREE) {
+  return canvasTex(THREE, 256, 96, (g, w, h) => {
+    fillGrad(g, 0, 0, w, 0, [[0, '#39ffb0'], [0.5, '#d8fff4'], [1, '#7a5cff']]);
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#0b1218';
+    g.fillRect(0, 0, w, 8);
+    g.fillRect(0, h - 8, w, 8);
+    g.fillRect(0, 0, 8, h);
+    g.fillRect(w - 8, 0, 8, h);
+    g.font = 'bold 48px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('ION', w * 0.5, h * 0.54);
+    g.fillStyle = '#39ffb0';
+    g.fillRect(22, h * 0.5 - 16, 8, 32);
+    g.fillRect(w - 30, h * 0.5 - 16, 8, 32);
+  }, 1, 1);
+}
+
+function bayPlateTex(THREE) {
+  return canvasTex(THREE, 128, 48, (g, w, h) => {
+    g.fillStyle = '#102028';
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#39ffb0';
+    g.lineWidth = 4;
+    g.strokeRect(3, 3, w - 6, h - 6);
+    g.fillStyle = '#39ffb0';
+    g.font = 'bold 22px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('BAY', w * 0.5, h * 0.55);
+  }, 1, 1);
 }
 
 function rackWallTex(THREE) {
@@ -232,6 +283,7 @@ export function restyleWarehouseShell(THREE, group, vibe, floor) {
   let n = 0;
   const wallTex = rackWallTex(THREE);
   const floorTex = naveFloorTex(THREE);
+  const ceilTex = ceilBayTex(THREE);
   group.traverse((o) => {
     if (!o.isMesh || !o.material || o.userData.artHidden) return;
     if (o.userData.warehouseArt || (o.parent && o.parent.name === 'warehouseArtVisuals')) return;
@@ -247,9 +299,10 @@ export function restyleWarehouseShell(THREE, group, vibe, floor) {
       m.metalness = 0.08;
       skipMat(m); n++;
     } else if (col === WAREHOUSE_STOCK.ceil) {
-      m.color.setHex(0x0c1218);
+      m.color.setHex(0x8aa0b0);
+      m.map = ceilTex;
       m.emissive.setHex(0x102028);
-      m.emissiveIntensity = 0.06;
+      m.emissiveIntensity = 0.08;
       m.roughness = 0.9;
       m.metalness = 0.04;
       skipMat(m); n++;
@@ -464,6 +517,134 @@ function addCatwalkAndOrbs(THREE, parent, mats, budget) {
   if (extras.children.length) parent.add(extras);
 }
 
+function addHeroIonSign(THREE, parent, mats) {
+  const hero = new THREE.Group();
+  hero.name = 'warehouseArtHero';
+  hero.userData.warehouseArt = true;
+  const cable = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 6.4, 3, 6), mats.rack);
+  cable.position.set(-1.35, 8.35, 12);
+  hero.add(cable);
+  const cable2 = cable.clone();
+  cable2.position.x = 1.35;
+  hero.add(cable2);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(4.8, 1.4, 0.16), mats.dock);
+  body.position.set(0, 4.55, 12);
+  hero.add(body);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(4.5, 1.18, 0.06), mats.sign);
+  face.position.set(0, 4.55, 12.12);
+  hero.add(face);
+  const faceBack = face.clone();
+  faceBack.position.z = 11.88;
+  faceBack.rotation.y = Math.PI;
+  hero.add(faceBack);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(0.62, 16), mats.disc);
+  disc.position.set(0, 3.62, 12);
+  disc.userData.warehouseIon = true;
+  hero.add(disc);
+  const stencil = new THREE.Mesh(new THREE.CircleGeometry(1.35, 18), mats.stencil);
+  stencil.rotation.x = -Math.PI / 2;
+  stencil.position.set(0, 0.034, 12);
+  hero.add(stencil);
+  hero.traverse((o) => { o.userData.warehouseArt = true; });
+  parent.add(hero);
+}
+
+function addSecretDressing(THREE, parent, mats) {
+  // Spore Loft {22.5, 13.2, 24} — far rack top.
+  const loft = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.16, 4.4), mats.shelf);
+  loft.position.set(22.5, 12.55, 24);
+  loft.userData.warehouseArt = true;
+  parent.add(loft);
+  const loftGlow = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 2.8), glowMat(THREE, 0x39ffb0, 0.32));
+  loftGlow.position.set(22.5, 12.66, 24);
+  loftGlow.userData.warehouseArt = true;
+  parent.add(loftGlow);
+  for (let i = 0; i < 3; i++) {
+    const can = new THREE.Mesh(sporeGeo(THREE), mats.can);
+    can.position.set(22.5 + (i - 1) * 0.85, 12.68, 24 + (i % 2 ? 0.55 : -0.55));
+    can.scale.setScalar(1.05);
+    can.userData.warehouseArt = true;
+    parent.add(can);
+  }
+  const loftBead = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), mats.disc);
+  loftBead.position.set(22.5, 13.2, 24);
+  loftBead.userData.warehouseIon = true;
+  loftBead.userData.warehouseArt = true;
+  parent.add(loftBead);
+  const loftCrate = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.42, 0.55), mats.crate);
+  loftCrate.position.set(21.7, 12.86, 22.6);
+  loftCrate.userData.warehouseArt = true;
+  parent.add(loftCrate);
+
+  // Dock Crypt {-24.4, 1.15, 39.4} — pallet shadow.
+  const cryptPal = new THREE.Mesh(palletGeo(THREE), mats.pallet);
+  cryptPal.scale.set(1.7, 1.2, 1.7);
+  cryptPal.position.set(-24.4, 0, 39.4);
+  cryptPal.userData.warehouseArt = true;
+  parent.add(cryptPal);
+  const cryptCrate = new THREE.Mesh(new THREE.CapsuleGeometry(0.55, 0.42, 5, 8), mats.crate);
+  cryptCrate.scale.set(1.15, 0.9, 1.15);
+  cryptCrate.position.set(-24.4, 0.85, 39.4);
+  cryptCrate.userData.warehouseArt = true;
+  parent.add(cryptCrate);
+  const cryptGlow = new THREE.Mesh(new THREE.CircleGeometry(1.05, 16), glowMat(THREE, 0x7a5cff, 0.28));
+  cryptGlow.rotation.x = -Math.PI / 2;
+  cryptGlow.position.set(-24.4, 0.03, 39.4);
+  cryptGlow.userData.warehouseArt = true;
+  parent.add(cryptGlow);
+  const cryptBead = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), mats.violet);
+  cryptBead.position.set(-24.4, 1.15, 39.4);
+  cryptBead.userData.warehouseIon = true;
+  cryptBead.userData.warehouseArt = true;
+  parent.add(cryptBead);
+}
+
+function addWhoopLife(THREE, parent, mats, budget, gates) {
+  const crateGeo = new THREE.BoxGeometry(1.15, 0.72, 0.88);
+  addInstanced(THREE, parent, crateGeo, mats.crate, budget.crates, (d, i) => {
+    const inner = i % 2 ? 7.5 : -7.5;
+    const row = ((i / 2) | 0) % 2;
+    const slot = (i / 4) | 0;
+    const x = inner + (inner > 0 ? -0.55 : 0.55);
+    const z = 20 - slot * 4.2;
+    if (!propClearOfCourse(x, z, 1.7 + row * 3.15, gates, { gatePad: 1.6, corridor: 1.2, yRange: 2 })) return false;
+    d.position.set(x, 1.68 + row * 3.15, z);
+    d.rotation.y = (i % 3) * 0.12;
+    return true;
+  });
+  const plateGeo = new THREE.BoxGeometry(1.05, 0.42, 0.05);
+  addInstanced(THREE, parent, plateGeo, mats.plate, budget.plates, (d, i) => {
+    const inner = i % 2 ? 7.5 : -7.5;
+    const bay = ((i / 2) | 0) % 3;
+    const z = RACK_Z[bay] + 8.42;
+    if (!propClearOfCourse(inner, z, 2.2, gates, { gatePad: 1.5, corridor: 1.1, yRange: 2 })) return false;
+    d.position.set(inner, 2.2, z);
+    return true;
+  });
+  const chevGeo = new THREE.BoxGeometry(0.85, 0.04, 0.28);
+  addInstanced(THREE, parent, chevGeo, mats.arrow, budget.chevrons, (d, i) => {
+    const aisle = AISLES[i % 3];
+    const z = 22 - ((i / 3) | 0) * 5;
+    if (rackHit(aisle, z)) return false;
+    if (!propClearOfCourse(aisle, z, 0.16, gates, { gatePad: 1.6, corridor: 1.2, yRange: 2 })) return false;
+    d.position.set(aisle + 0.78, 0.045, z);
+    d.rotation.y = Math.PI / 4;
+    return true;
+  });
+  const lipGeo = new THREE.BoxGeometry(0.12, 0.08, 15.6);
+  addInstanced(THREE, parent, lipGeo, mats.spore, 8, (d, i) => {
+    const inner = i % 2 ? 7.5 : -7.5;
+    const row = ((i / 2) | 0) % 2;
+    d.position.set(inner + (inner > 0 ? -1.62 : 1.62), 1.34 + row * 3.15, 8 - ((i / 4) | 0) * 24);
+    return true;
+  });
+  const bayGeo = new THREE.BoxGeometry(0.18, 0.12, 7.2);
+  addInstanced(THREE, parent, bayGeo, mats.overhead, budget.bays, (d, i) => {
+    d.position.set(AISLES[i % 3], 17.15, -30 + ((i / 3) | 0) * 12);
+    return true;
+  });
+}
+
 function makeWarehouseMats(THREE, vibe) {
   return {
     rack: steelMat(THREE, 0x1a3342, {
@@ -487,6 +668,19 @@ function makeWarehouseMats(THREE, vibe) {
       emissive: hexNum(vibe.palette.neonC), emissiveIntensity: 0.45,
     }),
     orb: emitMat(THREE, hexNum(vibe.palette.neonA), 3.4),
+    sign: skipMat(new THREE.MeshBasicMaterial({
+      color: 0xffffff, map: ionSignTex(THREE), toneMapped: false,
+    })),
+    disc: skipMat(new THREE.MeshBasicMaterial({
+      color: 0x39ffb0, toneMapped: false, transparent: true, opacity: 0.92,
+    })),
+    stencil: skipMat(new THREE.MeshBasicMaterial({
+      color: 0x39ffb0, toneMapped: false, transparent: true, opacity: 0.42,
+      depthWrite: false,
+    })),
+    plate: skipMat(new THREE.MeshBasicMaterial({
+      color: 0xffffff, map: bayPlateTex(THREE), toneMapped: false,
+    })),
   };
 }
 
@@ -501,6 +695,9 @@ export function buildIonNave(THREE, parent, vibe, quality, gates) {
   addAisles(THREE, group, mats, budget, gates || WAREHOUSE_KEEP_GATES);
   addCansAndDock(THREE, group, mats, budget);
   addCatwalkAndOrbs(THREE, group, mats, budget);
+  addWhoopLife(THREE, group, mats, budget, gates || WAREHOUSE_KEEP_GATES);
+  addHeroIonSign(THREE, group, mats);
+  addSecretDressing(THREE, group, mats);
   parent.add(group);
   return group;
 }
@@ -585,6 +782,13 @@ function tickWarehouseArtObject(o, t) {
     const phase = o.userData.phase || 0;
     o.position.y = 6.4 + Math.sin(t * 0.9 + phase) * 0.18;
     if (o.material) o.material.emissiveIntensity = 2.8 + 0.8 * Math.sin(t * 2.4 + phase);
+  }
+  if (o.userData && o.userData.warehouseIon) {
+    const s = 1 + 0.08 * Math.sin(t * 2.2);
+    o.scale.setScalar(s);
+    if (o.material && o.material.opacity != null) {
+      o.material.opacity = 0.78 + 0.18 * (0.5 + 0.5 * Math.sin(t * 2.2));
+    }
   }
 }
 
