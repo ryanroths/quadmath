@@ -53,7 +53,7 @@ export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
-} from './sim-art-backyard.js?v=58d2022c2896';
+} from './sim-art-backyard.js?v=358fe1f78f94';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
@@ -226,7 +226,7 @@ export const VIBES = Object.freeze({
     }),
     looks: Object.freeze({ fog: 0.0028, sun: 0.7, env: 0.5, bg: 0.32, hemi: 0.28 }),
     gates: Object.freeze({ style: 'stone-gold', keepBrand: false }),
-    props: Object.freeze(['ziggurat shed', 'stone planters', 'moss posts']),
+    props: Object.freeze(['ziggurat shed', 'stone planters', 'moss posts', 'dusk dome', 'idol peak']),
     post: Object.freeze({ bloom: false, analog: false }),
   }),
   office: Object.freeze({
