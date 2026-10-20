@@ -1,8 +1,9 @@
-// Kenney CC0 city kit for Neon Current. Visual only.
-// Meshopt-compressed GLBs under assets/sim-city/. If a load fails, the
-// procedural meshes already in the scene stay visible. Nothing from the GPL whoop sim.
+// Kenney CC0 city + garage kits. Visual only.
+// Meshopt-compressed GLBs under assets/sim-city/ and assets/sim-garage/.
+// If a load fails, the procedural meshes already in the scene stay visible.
+// Nothing from the GPL whoop sim.
 
-import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=55600f01c643';
+import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=552a7cb9d623';
 
 const KIT_ROOT = 'assets/sim-city/';
 
@@ -42,8 +43,19 @@ function skipMat(m) {
 function neonMat(THREE, color, emit, extra) {
   return skipMat(new THREE.MeshStandardMaterial(Object.assign({
     color, emissive: color, emissiveIntensity: emit == null ? 2.4 : emit,
-    roughness: 0.42, metalness: 0.18,
+    roughness: 0.42, metalness: 0.08,
+    envMapIntensity: 0,
   }, extra || {})));
+}
+
+function carMat(THREE, pal) {
+  // Same unlit paint as the procedural cars. MeshStandard + dawn IBL is what
+  // turned Kenney instances into translucent blue glass after first paint.
+  return skipMat(new THREE.MeshBasicMaterial({
+    color: pal.body,
+    transparent: false,
+    opacity: 1,
+  }));
 }
 
 function carPalette(type, vibe) {
@@ -183,8 +195,8 @@ function findProcCar(root, type) {
 let dressGen = 0;
 const geoCache = new Map();
 
-async function geoFor(THREE, loader, entry) {
-  const url = KIT_ROOT + entry.file;
+async function geoFor(THREE, loader, entry, root) {
+  const url = (root || KIT_ROOT) + entry.file;
   if (geoCache.has(url)) return geoCache.get(url);
   const gltf = await loadGltf(loader, url);
   const merged = mergeScene(THREE, gltf.scene);
@@ -193,9 +205,9 @@ async function geoFor(THREE, loader, entry) {
   return fitted;
 }
 
-async function instanceProp(THREE, kitGroup, loader, spec, list, mat, place) {
+async function instanceProp(THREE, kitGroup, loader, spec, list, mat, place, root) {
   if (!list || !list.length || !spec) return 0;
-  const geo = await geoFor(THREE, loader, spec);
+  const geo = await geoFor(THREE, loader, spec, root);
   if (!geo) return 0;
   const mesh = addInstanced(THREE, kitGroup, geo, mat, list.length, place);
   return mesh ? spec.bytes : 0;
@@ -233,8 +245,7 @@ export async function tryDressCityKit(THREE, ctx) {
       if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
       if (!geo) continue;
       const pal = carPalette(type, vibe);
-      const glow = quality === 'low' ? pal.glow * 0.85 : pal.glow * 0.2;
-      const mat = neonMat(THREE, pal.body, glow, { emissive: pal.emit, roughness: 0.36, metalness: 0.28 });
+      const mat = carMat(THREE, pal);
       const mesh = addInstanced(THREE, kitGroup, geo, mat, list.length, (d, i) => {
         const p = list[i];
         if (!p) return false;
@@ -299,7 +310,7 @@ export async function tryDressCityKit(THREE, ctx) {
       try {
         if (planned.bins && planned.bins.length) {
           const n = await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.dumpster, planned.bins,
-            neonMat(THREE, 0x2a3440, 0.8, { emissive: hexNum(vibe.palette.neonC), emissiveIntensity: 0.7 }),
+            neonMat(THREE, 0x2a3440, 0.32, { emissive: hexNum(vibe.palette.neonC), emissiveIntensity: 0.28 }),
             placeAt(planned.bins));
           if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
           if (n) { bytes += n; hideKeys.push('cityProcBin'); }
@@ -314,11 +325,11 @@ export async function tryDressCityKit(THREE, ctx) {
           let n = 0;
           if (street.length) {
             n += await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.streetSign, street,
-              neonMat(THREE, hexNum(vibe.palette.neonA), 0.7), placeAt(street));
+              neonMat(THREE, hexNum(vibe.palette.neonA), 0.32), placeAt(street));
           }
           if (stop.length) {
             n += await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.stopSign, stop,
-              neonMat(THREE, 0xff3344, 0.75, { color: 0x1a1014, emissive: 0xff3344 }), placeAt(stop));
+              neonMat(THREE, 0xff3344, 0.34, { color: 0x1a1014, emissive: 0xff3344 }), placeAt(stop));
           }
           if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
           if (n) { bytes += n; hideKeys.push('cityProcLowSign'); }
@@ -328,7 +339,7 @@ export async function tryDressCityKit(THREE, ctx) {
       try {
         if (planned.traffic && planned.traffic.length) {
           const n = await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.traffic, planned.traffic,
-            neonMat(THREE, 0x1a1c20, 0.9, { emissive: 0xffcc44, emissiveIntensity: 0.9, color: 0x1a1c20 }),
+            neonMat(THREE, 0x1a1c20, 0.38, { emissive: 0xffcc44, emissiveIntensity: 0.38, color: 0x1a1c20 }),
             placeAt(planned.traffic));
           if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
           if (n) { bytes += n; hideKeys.push('cityProcTraffic'); }
@@ -339,7 +350,7 @@ export async function tryDressCityKit(THREE, ctx) {
         const lamps = (planned.lamps || []).slice(0, quality === 'high' ? 96 : 48);
         if (lamps.length) {
           const n = await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.lamp, lamps,
-            neonMat(THREE, hexNum(vibe.palette.neonC), 0.95, { color: 0x1a1420, emissive: hexNum(vibe.palette.neonC) }),
+            neonMat(THREE, hexNum(vibe.palette.neonC), 0.38, { color: 0x1a1420, emissive: hexNum(vibe.palette.neonC) }),
             placeAt(lamps));
           if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
           if (n) { bytes += n; hideKeys.push('cityProcLamp'); }
@@ -353,6 +364,148 @@ export async function tryDressCityKit(THREE, ctx) {
       if (typeof key === 'string') hideTagged(group, key);
       else if (key) key.visible = false;
     }
+    group.add(kitGroup);
+    return { used: true, bytes, quality };
+  } catch (err) {
+    try { if (kitGroup.parent) kitGroup.parent.remove(kitGroup); } catch (e) { /* ignore */ }
+    return { used: false, bytes: 0, error: String(err && err.message || err) };
+  }
+}
+
+const GARAGE_ROOT = 'assets/sim-garage/';
+
+export const GARAGE_KIT_CORE = Object.freeze({
+  bench: { file: 'workbench.glb', bytes: 5224, height: 2.15 },
+  chest: { file: 'chest.glb', bytes: 8452, height: 2.85 },
+  crate: { file: 'crate.glb', bytes: 3708, height: 0.88 },
+});
+
+export const GARAGE_KIT_EXTRA = Object.freeze({
+  toolbox: { file: 'toolbox.glb', bytes: 4460, height: 1.05 },
+  cardboard: { file: 'cardboard.glb', bytes: 2792, height: 0.62 },
+  tire: { file: 'tire.glb', bytes: 5080, height: 0.68 },
+  sedan: { file: 'sedan.glb', bytes: 14224, length: 7.4, autoForward: true },
+  barrel: { file: 'barrel.glb', bytes: 5116, height: 0.98 },
+  barrier: { file: 'barrier.glb', bytes: 2072, height: 0.82 },
+});
+
+const GARAGE_CORE_BYTES = Object.values(GARAGE_KIT_CORE).reduce((n, e) => n + e.bytes, 0);
+const GARAGE_EXTRA_BYTES = Object.values(GARAGE_KIT_EXTRA).reduce((n, e) => n + e.bytes, 0);
+
+export function garageKitBytesForQuality(quality) {
+  return quality === 'low' ? GARAGE_CORE_BYTES : GARAGE_CORE_BYTES + GARAGE_EXTRA_BYTES;
+}
+
+function placeAt(list) {
+  return (d, i) => {
+    const p = list[i];
+    if (!p) return false;
+    d.position.set(p.x, p.y || 0, p.z);
+    d.rotation.set(0, p.ry || 0, 0);
+    d.scale.set(1, 1, 1);
+  };
+}
+
+function garageMat(THREE, vibe, kind) {
+  // Same #230 lesson as city cars: MeshStandard + dawn IBL turns Kenney
+  // instances blue/glassy once scene.environment lands. Indoor maps keep IBL.
+  const pal = vibe && vibe.palette ? vibe.palette : {};
+  let color = hexNum(pal.neonA || '#ffb347');
+  if (kind === 'bench') color = hexNum('#3d4654');
+  else if (kind === 'chest') color = hexNum(pal.neonC || '#c45a22');
+  else if (kind === 'crate') color = hexNum('#4a3224');
+  else if (kind === 'shelf') color = hexNum(pal.facadeAlt || '#2a3038');
+  else if (kind === 'toolbox') color = hexNum(pal.neonA || '#ffb347');
+  else if (kind === 'cardboard') color = hexNum('#6a5340');
+  else if (kind === 'tire') color = 0x141414;
+  else if (kind === 'sedan') color = hexNum('#1a2430');
+  else if (kind === 'barrel') color = hexNum(pal.neonC || '#c45a22');
+  return skipMat(new THREE.MeshBasicMaterial({
+    color,
+    transparent: false,
+    opacity: 1,
+  }));
+}
+
+let garageDressGen = 0;
+
+export async function tryDressGarageKit(THREE, ctx) {
+  const group = ctx && ctx.group;
+  const loader = ctx && ctx.loader;
+  const vibe = ctx && ctx.vibe;
+  const quality = (ctx && ctx.quality) || 'med';
+  if (!THREE || !group || !loader || !vibe) return { used: false, bytes: 0 };
+  const gen = ++garageDressGen;
+  const old = group.getObjectByName('garageArtKit');
+  if (old && old.parent) old.parent.remove(old);
+  const kitGroup = new THREE.Group();
+  kitGroup.name = 'garageArtKit';
+  const planned = (group.userData && group.userData.planned) || {};
+  const wantExtra = quality === 'med' || quality === 'high';
+  const hideKeys = [];
+  let bytes = 0;
+  const root = GARAGE_ROOT;
+  try {
+    const one = async (spec, list, kind, hide) => {
+      if (!list || !list.length || !spec) return 0;
+      const n = await instanceProp(THREE, kitGroup, loader, spec, list, garageMat(THREE, vibe, kind), placeAt(list), root);
+      if (n && hide) hideKeys.push(hide);
+      return n;
+    };
+    try {
+      const n = await one(GARAGE_KIT_CORE.bench, planned.bench, 'bench', 'garageProcBench');
+      if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+      bytes += n;
+    } catch (e) { /* keep proc bench */ }
+    try {
+      const n = await one(GARAGE_KIT_CORE.chest, planned.chest, 'chest', 'garageProcChest');
+      if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+      bytes += n;
+    } catch (e) { /* keep proc chest */ }
+    try {
+      const crates = (planned.crates || []).slice(0, quality === 'low' ? 6 : 12);
+      const n = await one(GARAGE_KIT_CORE.crate, crates, 'crate', null);
+      if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+      bytes += n;
+    } catch (e) { /* skip crates */ }
+
+    if (wantExtra) {
+      try {
+        const n = await one(GARAGE_KIT_EXTRA.toolbox, planned.toolboxes, 'toolbox', null);
+        if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+      try {
+        const n = await one(GARAGE_KIT_EXTRA.cardboard, planned.cardboard, 'cardboard', null);
+        if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+      try {
+        const tires = (planned.tires || []).slice(0, quality === 'high' ? 12 : 8);
+        const n = await one(GARAGE_KIT_EXTRA.tire, tires, 'tire', 'garageProcTire');
+        if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* keep proc tires */ }
+      try {
+        const n = await one(GARAGE_KIT_EXTRA.sedan, planned.car, 'sedan', 'garageProcCar');
+        if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* keep wedge car */ }
+      try {
+        const n = await one(GARAGE_KIT_EXTRA.barrel, planned.barrels, 'barrel', null);
+        if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+      try {
+        const n = await one(GARAGE_KIT_EXTRA.barrier, planned.barriers, 'barrier', null);
+        if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+    }
+
+    if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+    if (!kitGroup.children.length) return { used: false, bytes: 0 };
+    for (const key of hideKeys) hideTagged(group, key);
     group.add(kitGroup);
     return { used: true, bytes, quality };
   } catch (err) {

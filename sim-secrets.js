@@ -3,8 +3,8 @@
 // New localStorage key only: quadmathSimSecrets.
 // Stock skin ids / unlocks in sim-retention.js stay frozen.
 
-import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=5dd530617afe';
-import { LAYOUT } from './sim-maps.js?v=267949843a01';
+import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=2e548f7b4d72';
+import { LAYOUT } from './sim-maps.js?v=19003b420f87';
 import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=7ca83407298d';
 
 export const SECRETS_KEY = 'quadmathSimSecrets';
@@ -283,7 +283,7 @@ const PLACEMENTS = Object.freeze({
       P('g02', -6.7, 0.7, -14.2, 'bench end'),
       P('g03', -8.3, 3.45, 8.2, 'chest top'),
       P('g04', 4.2, 0.62, -5.6, 'under car'),
-      P('g05', 4.2, 3.20, -4.65, 'cabin top'),
+      P('g05', 4.2, 5.45, -4.65, 'cabin top'),
       P('g06', -0.4, 1.15, -8.2, 'bay gap'),
       P('g07', 0, 8.15, 0, 'rafter line'),
       P('g08', 0, 8.15, -16.2, 'rafter south'),

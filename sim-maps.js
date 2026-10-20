@@ -11,16 +11,20 @@ import { planRoom } from './sim-room.js?v=5b05276e1d0b';
 export const GARAGE_PLAY = Object.freeze({
   whoopClear: 0.85,
   bench: Object.freeze({
-    x: -8.4, z: -8.0, w: 2.35, d: 12.0, topY: 2.48, topH: 0.16, leg: 0.22,
-    legs: Object.freeze([
-      [-0.85, -5.3], [0.85, -5.3], [-0.85, 0], [0.85, 0], [-0.85, 5.3], [0.85, 5.3],
+    // Kenney workbench is a solid cabinet (2.44 x 2.15 x 2.22). Three
+    // instances leave ~2 wu gaps for the whoop; fly-over is above 2.15.
+    x: -8.4, z: -8.0, w: 2.44, d: 2.22, h: 2.15,
+    units: Object.freeze([
+      Object.freeze({ x: -8.4, z: -12.2 }),
+      Object.freeze({ x: -8.4, z: -8.0 }),
+      Object.freeze({ x: -8.4, z: -3.8 }),
     ]),
   }),
-  chest: Object.freeze({ x: -8.3, z: 8.2, w: 2.1, h: 3.1, d: 3.2 }),
+  chest: Object.freeze({ x: -8.3, z: 8.2, w: 3.01, h: 2.85, d: 2.89 }),
   car: Object.freeze({
+    // Kenney sedan at jackH: 4.35 x 3.77 x 7.40, min.y = 1.32.
     x: 4.2, z: -5.5, jackH: 1.32,
-    bodyW: 4.9, bodyH: 0.36, bodyD: 9.8,
-    cabinW: 4.5, cabinH: 1.12, cabinD: 5.4, cabinZ: 0.85,
+    bodyW: 4.35, bodyH: 3.77, bodyD: 7.40,
     wheels: Object.freeze([[-1.85, -3.5], [1.85, -3.5], [-1.85, 3.1], [1.85, 3.1]]),
     wheelR: 0.42, wheelH: 0.28,
   }),
@@ -286,17 +290,14 @@ function buildGarage(THREE, parent, colliders, lights) {
     front: { x: 0, w: 8.5, h: 8.4 },
   });
   const b = P.bench;
-  box(THREE, parent, colliders, b.x, b.topY, b.z, b.w + 0.12, b.topH, b.d, mats.metal);
-  for (const [dx, dz] of b.legs) {
-    box(THREE, parent, colliders, b.x + dx, 0, b.z + dz, b.leg, b.topY, b.leg, mats.wood);
+  for (const u of b.units) {
+    box(THREE, parent, colliders, u.x, 0, u.z, b.w, b.h, b.d, mats.metal);
   }
   const ch = P.chest;
   box(THREE, parent, colliders, ch.x, 0, ch.z, ch.w, ch.h, ch.d, mats.metal);
   const c = P.car;
   box(THREE, parent, colliders, c.x, c.jackH, c.z, c.bodyW, c.bodyH, c.bodyD, mats.car);
-  box(THREE, parent, colliders, c.x, c.jackH + c.bodyH, c.z + c.cabinZ, c.cabinW, c.cabinH, c.cabinD, mats.car);
   for (const [dx, dz] of c.wheels) {
-    cyl(THREE, parent, colliders, c.x + dx, 0.12, c.z + dz, c.wheelR, c.wheelR, c.wheelH, mats.tire);
     box(THREE, parent, colliders, c.x + dx, 0, c.z + dz, 0.22, c.jackH, 0.22, mats.metal);
   }
   for (let i = -3; i <= 3; i++) {

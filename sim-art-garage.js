@@ -1,9 +1,10 @@
-// Volt Stall — original garage vibe. Playable whoop playground.
-// Colliders live in sim-maps.js GARAGE_PLAY and must match these meshes.
-// No third-party meshes. Nothing from the GPL whoop sim.
+// Volt Stall — playable whoop playground + Kenney CC0 shop kit.
+// Colliders live in sim-maps.js GARAGE_PLAY and must match kit/proc meshes.
+// Kenney kit (sim-art-kit.js) swaps hero props after first paint.
+// Procedural meshes stay if a GLB fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=55600f01c643';
-import { GARAGE_PLAY } from './sim-maps.js?v=267949843a01';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=552a7cb9d623';
+import { GARAGE_PLAY } from './sim-maps.js?v=19003b420f87';
 
 export const GARAGE_STOCK = Object.freeze({
   wall: 0xb7b3a8,
@@ -21,7 +22,7 @@ export const GARAGE_KEEP_GATES = Object.freeze([
   { x: 0.0, y: 2.55, z: 3.4, size: 1.9 },
   { x: 4.2, y: 0.68, z: -5.5, size: 1.5 },
   { x: 0.0, y: 1.55, z: -12.2, size: 1.4 },
-  { x: -8.4, y: 1.20, z: -8.0, size: 1.5 },
+  { x: -8.4, y: 1.20, z: -10.1, size: 1.5 },
   { x: 8.6, y: 1.68, z: 7.9, size: 1.5 },
   { x: -8.6, y: 2.40, z: 14.8, size: 1.6 },
   { x: 2.2, y: 3.90, z: 6.4, size: 1.6 },
@@ -36,6 +37,50 @@ const ROOM = Object.freeze({ w: 21, d: 42, h: 10.5 });
 
 export function garageWantsGlow(applied) {
   return applied === 'med' || applied === 'high';
+}
+
+export function planGarageKit() {
+  return {
+    // Survival workbench is a short table — instance three along the left wall
+    // so the kit covers the procedural 11 m bench without a giant cube.
+    bench: [
+      { x: -8.4, z: -12.2, ry: 0 },
+      { x: -8.4, z: -8.0, ry: 0 },
+      { x: -8.4, z: -3.8, ry: 0 },
+    ],
+    chest: [{ x: -8.3, z: 8.2, ry: Math.PI / 2 }],
+    // Kenney sedan long-axis is Z; autoForward + this yaw faces it down-stall.
+    // y = jackH so the kit car sits on the stands, not the floor.
+    car: [{ x: 4.2, z: -5.5, y: GARAGE_PLAY.car.jackH, ry: Math.PI / 2 }],
+    crates: [
+      { x: -5.4, z: 13.6 }, { x: 5.6, z: 12.8 }, { x: -5.2, z: -15.8 },
+      { x: 5.4, z: -14.6 }, { x: -5.0, z: 2.4 }, { x: 5.1, z: -2.8 },
+      { x: -5.6, z: 17.2 }, { x: 5.3, z: 5.4 }, { x: -4.9, z: -9.2 },
+      { x: 5.2, z: 15.6 }, { x: -5.3, z: 8.8 }, { x: 5.5, z: -7.4 },
+    ],
+    cardboard: [
+      { x: -5.1, z: -17.6 }, { x: 4.8, z: -18.4 }, { x: -5.4, z: 16.0 },
+      { x: 5.4, z: 17.4 }, { x: -4.8, z: 0.6 }, { x: 4.9, z: 8.2 },
+    ],
+    toolboxes: [
+      { x: -8.0, z: -0.6, ry: 0.15 },
+      { x: -8.0, z: 5.4, ry: -0.2 },
+      { x: 8.5, z: 1.6, ry: 1.15 },
+    ],
+    tires: [
+      { x: -5.6, z: 18.4 }, { x: 5.4, z: 18.8 }, { x: -5.5, z: -18.6 },
+      { x: 5.3, z: -18.2 }, { x: -5.8, z: 12.2 }, { x: 5.6, z: -12.6 },
+      { x: -5.4, z: 4.8 }, { x: 5.2, z: 14.2 }, { x: -5.7, z: -7.2 },
+      { x: 5.5, z: 2.6 }, { x: -5.3, z: -14.4 }, { x: 5.8, z: -3.8 },
+    ],
+    barrels: [
+      { x: -8.0, z: -15.4 }, { x: 8.4, z: 15.8 }, { x: -8.0, z: 12.6 }, { x: 8.2, z: -17.2 },
+    ],
+    barriers: [
+      { x: -7.2, z: 18.6, ry: 0.2 }, { x: 7.4, z: 18.8, ry: -0.15 },
+      { x: -7.0, z: -18.8, ry: 0.1 }, { x: 7.2, z: -18.4, ry: -0.2 },
+    ],
+  };
 }
 
 export function garageBudget(applied) {
@@ -424,12 +469,14 @@ function addWedgeCar(THREE, parent, mats) {
   canopy.scale.set(1.4, 0.55, 1.8);
   canopy.position.set(0, lift + 2.15, 0.2);
   g.add(hull, nose, cabin, canopy);
+  const stands = new THREE.Group();
+  stands.position.copy(g.position);
   for (const [x, z] of c.wheels) {
     const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, c.jackH, 8), mats.steel);
     stand.position.set(x, c.jackH / 2, z);
     const pad = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.08, 0.34), mats.chest);
     pad.position.set(x, c.jackH, z);
-    g.add(stand, pad);
+    stands.add(stand, pad);
     const wheel = new THREE.Mesh(new THREE.TorusGeometry(c.wheelR, 0.16, 8, 14), mats.tire);
     wheel.rotation.y = Math.PI / 2;
     wheel.position.set(x, 0.42, z);
@@ -438,36 +485,27 @@ function addWedgeCar(THREE, parent, mats) {
     hub.position.set(x, 0.42, z);
     g.add(wheel, hub);
   }
-  g.traverse((o) => { o.userData.garageArt = true; o.castShadow = true; });
-  parent.add(g);
+  g.userData.garageProcCar = true;
+  g.traverse((o) => { o.userData.garageArt = true; o.userData.garageProcCar = true; o.castShadow = true; });
+  stands.userData.garageProcJack = true;
+  stands.traverse((o) => { o.userData.garageArt = true; o.userData.garageProcJack = true; o.castShadow = true; });
+  parent.add(g, stands);
   return g;
 }
 
 function addWorkbench(THREE, parent, mats) {
   const b = GARAGE_PLAY.bench;
   const g = new THREE.Group();
-  g.position.set(b.x, 0, b.z);
-  const top = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 11.4, 5, 10), mats.steel);
-  top.rotation.x = Math.PI / 2;
-  top.scale.set(2.8, 1, 1);
-  top.position.y = b.topY + b.topH * 0.5;
-  const apron = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 11.2, 4, 8), mats.wood);
-  apron.rotation.x = Math.PI / 2;
-  apron.position.set(0, b.topY - 0.16, 0);
-  g.add(top, apron);
-  for (const [x, z] of b.legs) {
-    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, b.topY - 0.2, 4, 8), mats.sodium);
-    leg.position.set(x, b.topY * 0.5, z);
-    g.add(leg);
+  for (const u of b.units) {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), mats.steel);
+    body.position.set(u.x, b.h * 0.5, u.z);
+    g.add(body);
   }
   const vise = new THREE.Mesh(viseGeo(THREE), mats.chest);
-  vise.position.set(0.55, 2.72, -4.2);
+  vise.position.set(b.x + 0.55, b.h + 0.12, b.units[0].z);
   g.add(vise);
-  const matRoll = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 1.4, 4, 8), mats.tube);
-  matRoll.rotation.z = Math.PI / 2;
-  matRoll.position.set(0, 2.78, 2.4);
-  g.add(matRoll);
-  g.traverse((o) => { o.userData.garageArt = true; });
+  g.userData.garageProcBench = true;
+  g.traverse((o) => { o.userData.garageArt = true; o.userData.garageProcBench = true; });
   parent.add(g);
   return g;
 }
@@ -488,7 +526,8 @@ function addToolChest(THREE, parent, mats) {
     handle.position.set(0.85, y, 0);
     g.add(handle);
   }
-  g.traverse((o) => { o.userData.garageArt = true; });
+  g.userData.garageProcChest = true;
+  g.traverse((o) => { o.userData.garageArt = true; o.userData.garageProcChest = true; });
   parent.add(g);
   return g;
 }
@@ -514,7 +553,8 @@ function addOneRack(THREE, parent, mats, spec, budget, canOffset) {
     d.rotation.y = i * 0.2 + canOffset;
     return true;
   });
-  g.traverse((o) => { o.userData.garageArt = true; });
+  g.userData.garageProcRack = true;
+  g.traverse((o) => { o.userData.garageArt = true; o.userData.garageProcRack = true; });
   parent.add(g);
   return g;
 }
@@ -644,7 +684,7 @@ function addWhoopLife(THREE, parent, mats, budget, gates) {
     d.position.set(0, 10.15, -18 + i * (36 / Math.max(1, budget.joists - 1)));
     return true;
   });
-  addInstanced(THREE, extras, new THREE.TorusGeometry(0.32, 0.12, 6, 12), mats.tire, budget.tires, (d, i) => {
+  const tireMesh = addInstanced(THREE, extras, new THREE.TorusGeometry(0.32, 0.12, 6, 12), mats.tire, budget.tires, (d, i) => {
     const spots = [
       [-5.6, 18.4], [5.4, 18.8], [-5.5, -18.6], [5.3, -18.2],
       [-5.8, 12.2], [5.6, -12.6], [-5.4, 4.8], [5.2, 14.2],
@@ -658,6 +698,7 @@ function addWhoopLife(THREE, parent, mats, budget, gates) {
     d.rotation.x = Math.PI / 2;
     return true;
   });
+  if (tireMesh) tireMesh.userData.garageProcTire = true;
   addInstanced(THREE, extras, canGeo(THREE), mats.can, budget.bottles, (d, i) => {
     const spots = [
       [-5.4, 13.6], [5.6, 12.8], [-5.2, -15.8], [5.4, -14.6],
@@ -862,6 +903,7 @@ export function buildVoltStall(THREE, parent, vibe, quality, gates) {
   group.userData.garageArt = true;
   const budget = garageBudget(quality);
   const mats = makeGarageMats(THREE, vibe);
+  group.userData.planned = planGarageKit();
   addDoorAndTrim(THREE, group, mats);
   addWedgeCar(THREE, group, mats);
   addWorkbench(THREE, group, mats);

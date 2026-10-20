@@ -14,6 +14,7 @@ import {
   paintWorldLabel, WORLD_LABEL, restyleCity, buildNeonCity, artStats, tickCityArt,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
   kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
+  garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, planGarageKit,
   restyleDiveTubes, LIVING_VIBE_ID, hideStockLivingMeshes, buildClayParlor,
   restyleLiving, tickLivingArt, livingBudget, livingWantsGlow,
   GARAGE_VIBE_ID, hideStockGarageMeshes, buildVoltStall,
@@ -145,8 +146,10 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.equal(sim.includes('content/guides/'), false);
   assert.match(sim, /City is original procedural art|Neon Current/);
   assert.match(sim, /tryDressCityKit/);
+  assert.match(sim, /tryDressGarageKit/);
   assert.match(sim, /MeshoptDecoder/);
   assert.match(sim, /Kenney CC0/);
+  assert.match(sim, /Kenney CC0 shop kit/);
 });
 
 test('sim.html imports every map restyle/tick/decorate it calls', () => {
@@ -268,15 +271,72 @@ test('Kenney CC0 city kit is meshopt-compressed and stays off the banned path', 
   assert.ok(!files.some((f) => f.includes('GLB-format')));
 });
 
-test('city window and blink pulses stay smooth so bloom does not strobe', () => {
+test('Kenney CC0 garage kit is meshopt-compressed and stays off the banned path', () => {
+  const kitDir = join(root, 'assets/sim-garage');
+  const kitSrc = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  const garageSrc = readFileSync(join(root, 'sim-art-garage.js'), 'utf8');
+  assert.equal(kitSrc.includes('GLB-format'), false);
+  assert.equal(kitSrc.includes('loadAsync'), false);
+  assert.equal(kitSrc.includes('WebFPV'), false);
+  assert.equal(kitSrc.includes('Sketchfab'), false);
+  assert.equal(garageSrc.includes('GLB-format'), false);
+  assert.equal(garageSrc.includes('WebFPV'), false);
+  assert.match(kitSrc, /tryDressGarageKit/);
+  assert.match(kitSrc, /Meshopt-compressed/);
+  assert.equal(garageKitBytesForQuality('low'), 17384);
+  assert.equal(garageKitBytesForQuality('med'), 51128);
+  assert.equal(garageKitBytesForQuality('high'), 51128);
+  const planned = planGarageKit();
+  assert.ok(planned.bench.length >= 3 && planned.chest.length && planned.car.length);
+  assert.ok(planned.toolboxes.length >= 2);
+  assert.ok(planned.bench.every((p) => p.x < -6.6));
+  assert.ok(planned.chest.every((p) => p.x < -6.6));
+  assert.ok(planned.toolboxes.every((p) => Math.abs(p.x) >= 7.4));
+  assert.ok(planned.car.every((p) => p.x > 1.1 && p.x < 7.2 && p.z > -11.4 && p.z < 0.6));
+  assert.ok(planned.car.every((p) => p.y >= 1.2), 'kit sedan sits on jack stands');
+  const clutter = []
+    .concat(planned.crates, planned.cardboard, planned.toolboxes, planned.tires)
+    .concat(planned.barrels, planned.barriers);
+  for (const p of clutter) {
+    assert.ok(Math.abs(p.x) >= 4.6, 'kit clutter too close to whoop line ' + p.x + ',' + p.z);
+  }
+  for (const name of ['License-furniture-kit.txt', 'License-survival-kit.txt', 'License-car-kit.txt', 'License-racing-kit.txt', 'CREDITS.txt']) {
+    assert.ok(existsSync(join(kitDir, name)), name);
+    if (name.startsWith('License-')) {
+      assert.match(readFileSync(join(kitDir, name), 'utf8'), /Creative Commons Zero, CC0/);
+    }
+  }
+  let glbBytes = 0;
+  const names = [];
+  for (const spec of Object.values(GARAGE_KIT_CORE).concat(Object.values(GARAGE_KIT_EXTRA))) {
+    const p = join(kitDir, spec.file);
+    assert.equal(existsSync(p), true, spec.file);
+    const n = statSync(p).size;
+    assert.equal(n, spec.bytes, spec.file + ' size');
+    glbBytes += n;
+    names.push(spec.file);
+  }
+  assert.equal(glbBytes, 51128);
+  assert.equal(new Set(names).size, names.length);
+  assert.ok(!readdirSync(kitDir).some((f) => f.includes('GLB-format')));
+  const emit = kitSrc.slice(kitSrc.indexOf('function garageMat'), kitSrc.indexOf('let garageDressGen'));
+  assert.equal(/emissiveIntensity: [2-9]/.test(emit), false, 'garage kit glow must stay dim under bloom');
+  assert.match(kitSrc, /function garageMat/);
+  assert.equal(/garageMat[\s\S]{0,900}MeshStandardMaterial/.test(kitSrc), false, 'garage kit must not use MeshStandard after IBL');
+  assert.match(emit, /MeshBasicMaterial/);
+});
+
+test('city window and blink stay frozen so bloom does not strobe', () => {
   const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
   const tickSrc = city.slice(
     city.indexOf('function tickCityArtObject'),
     city.indexOf('export function restyleMesas'),
   );
-  assert.match(tickSrc, /cityWindowPhase/);
+  assert.match(tickSrc, /cityWindow/);
   assert.equal(tickSrc.includes('> 0.35'), false, 'hard rooftop strobe');
   assert.equal(/\b5\.5\b/.test(tickSrc), false, 'blink must not jump by 5.5');
+  assert.equal(/cityWindow[\s\S]{0,180}Math\.sin/.test(tickSrc), false, 'window must not pulse');
+  assert.equal(/cityBlink[\s\S]{0,180}Math\.sin/.test(tickSrc), false, 'blink must not pulse');
   const kit = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
   assert.equal(kit.includes('emissiveIntensity: 3.4'), false);
   assert.equal(/neonC\), 3\.8/.test(kit), false);
@@ -296,9 +356,25 @@ test('city window and blink pulses stay smooth so bloom does not strobe', () => 
     b.push(blink.material.emissiveIntensity);
   }
   const span = (arr) => Math.max(...arr) - Math.min(...arr);
-  assert.ok(span(w) < 0.14, 'window throb ' + span(w));
-  assert.ok(Math.max(...b) < 2.3, 'blink peak ' + Math.max(...b));
-  assert.ok(span(b) < 0.55, 'blink span ' + span(b));
+  assert.ok(span(w) < 0.001, 'window must stay frozen ' + span(w));
+  assert.ok(span(b) < 0.001, 'blink must stay frozen ' + span(b));
+  assert.equal(win.material.emissiveIntensity, 1.30);
+  assert.equal(blink.material.emissiveIntensity, 1.55);
+});
+
+test('city kit cars stay MeshBasic and city sky never keeps dawn IBL', () => {
+  const kit = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  assert.match(kit, /function carMat/);
+  assert.match(kit, /MeshBasicMaterial/);
+  assert.match(kit, /translucent blue glass/);
+  assert.match(kit, /envMapIntensity:\s*0/);
+  assert.equal(/carMat[\s\S]{0,240}MeshStandardMaterial/.test(kit), false);
+  const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
+  assert.match(looks, /function cityKeepsOwnSky/);
+  assert.match(looks, /scene\.environment = null/);
+  assert.match(looks, /washed Kenney cars into translucent blue/);
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.match(city, /envMapIntensity:\s*0/);
 });
 
 test('city density module stays original (no GLB / WebFPV)', () => {
@@ -687,11 +763,12 @@ test('Garage playground keeps whoop-sized gaps that match the visuals', () => {
     return built.colliders.some((bb) => bb.containsPoint(p));
   };
   const P = GARAGE_PLAY;
-  assert.equal(hit(P.bench.x, 1.20, P.bench.z), false, 'fly under bench');
-  assert.equal(hit(P.bench.x, P.bench.topY + 0.08, P.bench.z), true, 'bench top solid');
+  assert.equal(hit(P.bench.x, 1.20, P.bench.z), true, 'kit bench cabinet solid');
+  assert.equal(hit(P.bench.x, P.bench.h + 0.20, P.bench.z), false, 'fly over kit bench');
+  assert.equal(hit(P.bench.x, 1.20, -10.1), false, 'fly between kit benches');
   assert.equal(hit(P.car.x, 0.65, P.car.z), false, 'fly under car');
   assert.equal(hit(P.car.x, P.car.jackH + 0.18, P.car.z), true, 'car chassis solid');
-  assert.equal(hit(P.car.x, P.car.jackH + P.car.bodyH + 2.2, P.car.z), false, 'fly over car');
+  assert.equal(hit(P.car.x, P.car.jackH + P.car.bodyH + 0.25, P.car.z), false, 'fly over car');
   const aisleZ = (P.rackA.z + P.rackB.z) / 2;
   assert.equal(hit(P.rackA.x, 1.68, aisleZ), false, 'fly between racks');
   assert.equal(hit(P.rackA.x, P.shelfYs[0] + 0.04, P.rackA.z), true, 'shelf slab solid');
@@ -703,6 +780,8 @@ test('Garage playground keeps whoop-sized gaps that match the visuals', () => {
   assert.equal(hit(P.tireWell.x, 0.85, P.tireWell.z), false, 'dive tire well');
   assert.ok(P.whoopClear >= 0.85, 'whoop clearance');
   assert.ok(P.car.jackH >= 1.2, 'car crawl taller than 85mm whoop');
+  assert.equal(P.bench.units.length, 3, 'one collider per Kenney workbench');
+  assert.ok(P.car.bodyH >= 3.5, 'sedan collider matches kit height');
   const garageSrc = readFileSync(join(root, 'sim-art-garage.js'), 'utf8');
   assert.match(garageSrc, /GARAGE_PLAY/);
   assert.match(garageSrc, /addTireWell|addLadder|addHangLights/);

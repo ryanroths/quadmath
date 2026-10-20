@@ -1155,12 +1155,14 @@ function neonMat(THREE, color, emit, extra) {
   return skipMat(new THREE.MeshStandardMaterial(Object.assign({
     color, emissive: color, emissiveIntensity: emit == null ? 3.4 : emit,
     roughness: 0.35, metalness: 0.12,
+    envMapIntensity: 0,
   }, extra || {})));
 }
 
 function dullMat(THREE, color, extra) {
   return skipMat(new THREE.MeshStandardMaterial(Object.assign({
     color, roughness: 0.78, metalness: 0.22,
+    envMapIntensity: 0,
   }, extra || {})));
 }
 
@@ -1327,7 +1329,7 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     d.scale.set(1, 1, 1);
   });
 
-  const stripMat = neonMat(THREE, hexNum(vibe.palette.neonA), 4.6);
+  const stripMat = neonMat(THREE, hexNum(vibe.palette.neonA), 1.8);
   addInstanced(THREE, group, new THREE.BoxGeometry(1, 0.08, 1), stripMat, Math.min(budget.strips, footprints.length), (d, i) => {
     const b = footprints[i];
     if (!b) return false;
@@ -1337,7 +1339,7 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
   });
 
   const lampMat = dullMat(THREE, 0x1a1420, { metalness: 0.45 });
-  const bulbMat = neonMat(THREE, hexNum(vibe.palette.neonC), 5.2);
+  const bulbMat = neonMat(THREE, hexNum(vibe.palette.neonC), 1.9);
   const lampPos = [];
   for (let s = -360; s <= 360; s += 36) {
     if (Math.abs(s) < 16) continue;
@@ -1972,11 +1974,10 @@ export function tickCityArt(root, now) {
 
 function tickCityArtObject(o, t) {
     if (o.material && o.material.userData && o.material.userData.cityWindow) {
-      const phase = o.material.userData.cityWindowPhase || 0;
-      o.material.emissiveIntensity = 1.30 + 0.06 * Math.sin(t * 1.05 + phase);
+      o.material.emissiveIntensity = 1.30;
     }
     if (o.material && o.material.userData && o.material.userData.cityBlink) {
-      o.material.emissiveIntensity = 1.55 + 0.45 * (0.5 + 0.5 * Math.sin(t * 2.2));
+      o.material.emissiveIntensity = 1.55;
     }
     if (o.material && o.material.userData && o.material.userData.cityHolo && o.material.map) {
       o.material.map.offset.x = (t * 0.12) % 1;
@@ -2175,7 +2176,7 @@ function restyleCityInner(THREE, ctx) {
     mat.color.setHex(0xffffff);
     mat.roughness = quality === 'low' ? 0.74 : 0.42;
     mat.metalness = quality === 'low' ? 0.08 : 0.22;
-    if ('envMapIntensity' in mat) mat.envMapIntensity = quality === 'low' ? 0.12 : 0.38;
+    if ('envMapIntensity' in mat) mat.envMapIntensity = 0;
     mat.emissive.setHex(hexNum(vibe.palette.neonA));
     mat.emissiveIntensity = quality === 'low' ? 0.03 : 0.06;
     mat.userData.looksComposed = true;
