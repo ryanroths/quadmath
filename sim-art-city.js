@@ -31,6 +31,14 @@ export function qualityWantsBloom(applied) {
   return applied === 'med' || applied === 'high';
 }
 
+export function qualityWantsAo(applied) {
+  return applied === 'med' || applied === 'high';
+}
+
+export function qualityWantsGrade(applied) {
+  return applied === 'med' || applied === 'high';
+}
+
 export function qualityWantsReflections(applied) {
   return applied === 'med' || applied === 'high';
 }
