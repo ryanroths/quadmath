@@ -3,7 +3,7 @@
 // If a load fails, the procedural meshes already in the scene stay visible.
 // Nothing from the GPL whoop sim.
 
-import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=55600f01c643';
+import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=552a7cb9d623';
 
 const KIT_ROOT = 'assets/sim-city/';
 
@@ -43,8 +43,19 @@ function skipMat(m) {
 function neonMat(THREE, color, emit, extra) {
   return skipMat(new THREE.MeshStandardMaterial(Object.assign({
     color, emissive: color, emissiveIntensity: emit == null ? 2.4 : emit,
-    roughness: 0.42, metalness: 0.18,
+    roughness: 0.42, metalness: 0.08,
+    envMapIntensity: 0,
   }, extra || {})));
+}
+
+function carMat(THREE, pal) {
+  // Same unlit paint as the procedural cars. MeshStandard + dawn IBL is what
+  // turned Kenney instances into translucent blue glass after first paint.
+  return skipMat(new THREE.MeshBasicMaterial({
+    color: pal.body,
+    transparent: false,
+    opacity: 1,
+  }));
 }
 
 function carPalette(type, vibe) {
@@ -234,8 +245,7 @@ export async function tryDressCityKit(THREE, ctx) {
       if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
       if (!geo) continue;
       const pal = carPalette(type, vibe);
-      const glow = quality === 'low' ? pal.glow * 0.85 : pal.glow * 0.2;
-      const mat = neonMat(THREE, pal.body, glow, { emissive: pal.emit, roughness: 0.36, metalness: 0.28 });
+      const mat = carMat(THREE, pal);
       const mesh = addInstanced(THREE, kitGroup, geo, mat, list.length, (d, i) => {
         const p = list[i];
         if (!p) return false;
@@ -300,7 +310,7 @@ export async function tryDressCityKit(THREE, ctx) {
       try {
         if (planned.bins && planned.bins.length) {
           const n = await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.dumpster, planned.bins,
-            neonMat(THREE, 0x2a3440, 0.8, { emissive: hexNum(vibe.palette.neonC), emissiveIntensity: 0.7 }),
+            neonMat(THREE, 0x2a3440, 0.32, { emissive: hexNum(vibe.palette.neonC), emissiveIntensity: 0.28 }),
             placeAt(planned.bins));
           if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
           if (n) { bytes += n; hideKeys.push('cityProcBin'); }
@@ -315,11 +325,11 @@ export async function tryDressCityKit(THREE, ctx) {
           let n = 0;
           if (street.length) {
             n += await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.streetSign, street,
-              neonMat(THREE, hexNum(vibe.palette.neonA), 0.7), placeAt(street));
+              neonMat(THREE, hexNum(vibe.palette.neonA), 0.32), placeAt(street));
           }
           if (stop.length) {
             n += await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.stopSign, stop,
-              neonMat(THREE, 0xff3344, 0.75, { color: 0x1a1014, emissive: 0xff3344 }), placeAt(stop));
+              neonMat(THREE, 0xff3344, 0.34, { color: 0x1a1014, emissive: 0xff3344 }), placeAt(stop));
           }
           if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
           if (n) { bytes += n; hideKeys.push('cityProcLowSign'); }
@@ -329,7 +339,7 @@ export async function tryDressCityKit(THREE, ctx) {
       try {
         if (planned.traffic && planned.traffic.length) {
           const n = await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.traffic, planned.traffic,
-            neonMat(THREE, 0x1a1c20, 0.9, { emissive: 0xffcc44, emissiveIntensity: 0.9, color: 0x1a1c20 }),
+            neonMat(THREE, 0x1a1c20, 0.38, { emissive: 0xffcc44, emissiveIntensity: 0.38, color: 0x1a1c20 }),
             placeAt(planned.traffic));
           if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
           if (n) { bytes += n; hideKeys.push('cityProcTraffic'); }
@@ -340,7 +350,7 @@ export async function tryDressCityKit(THREE, ctx) {
         const lamps = (planned.lamps || []).slice(0, quality === 'high' ? 96 : 48);
         if (lamps.length) {
           const n = await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.lamp, lamps,
-            neonMat(THREE, hexNum(vibe.palette.neonC), 0.95, { color: 0x1a1420, emissive: hexNum(vibe.palette.neonC) }),
+            neonMat(THREE, hexNum(vibe.palette.neonC), 0.38, { color: 0x1a1420, emissive: hexNum(vibe.palette.neonC) }),
             placeAt(lamps));
           if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
           if (n) { bytes += n; hideKeys.push('cityProcLamp'); }
@@ -397,35 +407,24 @@ function placeAt(list) {
 }
 
 function garageMat(THREE, vibe, kind) {
+  // Same #230 lesson as city cars: MeshStandard + dawn IBL turns Kenney
+  // instances blue/glassy once scene.environment lands. Indoor maps keep IBL.
   const pal = vibe && vibe.palette ? vibe.palette : {};
-  if (kind === 'bench') {
-    return neonMat(THREE, hexNum('#3d4654'), 0.12, { emissive: hexNum(pal.neonB || '#2de2e6'), roughness: 0.55, metalness: 0.22 });
-  }
-  if (kind === 'chest') {
-    return neonMat(THREE, hexNum(pal.neonC || '#c45a22'), 0.16, { emissive: hexNum(pal.neonC || '#c45a22'), roughness: 0.5 });
-  }
-  if (kind === 'crate') {
-    return neonMat(THREE, hexNum('#4a3224'), 0.06, { emissive: hexNum('#2a2018'), roughness: 0.78, metalness: 0.08 });
-  }
-  if (kind === 'shelf') {
-    return neonMat(THREE, hexNum(pal.facade || '#3d4654'), 0.1, { color: hexNum(pal.facadeAlt || '#2a3038'), roughness: 0.52 });
-  }
-  if (kind === 'toolbox') {
-    return neonMat(THREE, hexNum(pal.neonA || '#ffb347'), 0.14, { emissive: hexNum(pal.neonA || '#ffb347'), roughness: 0.48 });
-  }
-  if (kind === 'cardboard') {
-    return neonMat(THREE, hexNum('#6a5340'), 0.05, { emissive: hexNum('#3a2a1c'), roughness: 0.86, metalness: 0.04 });
-  }
-  if (kind === 'tire') {
-    return neonMat(THREE, 0x141414, 0.02, { emissive: 0x080808, roughness: 0.92, metalness: 0.04 });
-  }
-  if (kind === 'sedan') {
-    return neonMat(THREE, hexNum('#1a2430'), 0.12, { emissive: hexNum(pal.neonB || '#2de2e6'), roughness: 0.38, metalness: 0.24 });
-  }
-  if (kind === 'barrel') {
-    return neonMat(THREE, hexNum(pal.neonC || '#c45a22'), 0.1, { emissive: hexNum(pal.neonA || '#ffb347'), roughness: 0.55, metalness: 0.2 });
-  }
-  return neonMat(THREE, hexNum(pal.neonA || '#ffb347'), 0.12, { color: 0x1a1410, emissive: hexNum(pal.neonA || '#ffb347') });
+  let color = hexNum(pal.neonA || '#ffb347');
+  if (kind === 'bench') color = hexNum('#3d4654');
+  else if (kind === 'chest') color = hexNum(pal.neonC || '#c45a22');
+  else if (kind === 'crate') color = hexNum('#4a3224');
+  else if (kind === 'shelf') color = hexNum(pal.facadeAlt || '#2a3038');
+  else if (kind === 'toolbox') color = hexNum(pal.neonA || '#ffb347');
+  else if (kind === 'cardboard') color = hexNum('#6a5340');
+  else if (kind === 'tire') color = 0x141414;
+  else if (kind === 'sedan') color = hexNum('#1a2430');
+  else if (kind === 'barrel') color = hexNum(pal.neonC || '#c45a22');
+  return skipMat(new THREE.MeshBasicMaterial({
+    color,
+    transparent: false,
+    opacity: 1,
+  }));
 }
 
 let garageDressGen = 0;

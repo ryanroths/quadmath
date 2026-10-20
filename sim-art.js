@@ -3,7 +3,7 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=55600f01c643';
+import { hexNum } from './sim-art-city.js?v=552a7cb9d623';
 export {
   hexNum, qualityWantsBloom, qualityWantsAo, qualityWantsGrade,
   qualityWantsReflections, qualityWantsParticles,
@@ -16,56 +16,56 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=55600f01c643';
+} from './sim-art-city.js?v=552a7cb9d623';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=02e850fa9885';
+} from './sim-art-living.js?v=e0af8bbd77c2';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=fd1eb559cfd0';
+} from './sim-art-garage.js?v=2458723320a1';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=27e93c56a290';
+} from './sim-art-warehouse.js?v=babccab33a59';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
-} from './sim-art-gym.js?v=c9db429de8f5';
+} from './sim-art-gym.js?v=929985dc0169';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=09cda065efbf';
+} from './sim-art-office.js?v=b5d05001af2f';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=2a7dc5ac098f';
+} from './sim-art-trainer.js?v=176e5f90789d';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
-} from './sim-art-backyard.js?v=6f964d6e322d';
+} from './sim-art-backyard.js?v=0ae90778d926';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=b4d8d8e12553';
+} from './sim-art-room.js?v=fbf0603a352a';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA,
-} from './sim-art-kit.js?v=72ac2b782284';
+} from './sim-art-kit.js?v=76d3d762ebad';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';

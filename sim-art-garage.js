@@ -3,7 +3,7 @@
 // Procedural meshes stay if a GLB fails. Nothing from the GPL whoop sim.
 // No new colliders. Sculpted with capsules, lathes, and rounded extrudes.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=55600f01c643';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=552a7cb9d623';
 
 export const GARAGE_STOCK = Object.freeze({
   wall: 0xb7b3a8,
