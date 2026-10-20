@@ -395,7 +395,7 @@ test('City freestyle builds without throwing and the FPV frame is not all black'
   }
   const tickSrc = city.slice(city.indexOf('export function tickCityArt'), city.indexOf('export function restyleMesas'));
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickCityArt must not touch the THREE binding');
-  assert.match(tickSrc, /cityCruise|cityDrone/);
+  assert.match(tickSrc, /cityCurrent|cityCruise|cityDrone/);
   assert.match(tickSrc, /never abort the FPV render loop/);
 });
 
@@ -443,8 +443,9 @@ test('City polish keeps Low draw calls near 174 and clears leftover shards', () 
   const lo = artStats(null, buildNeonCity(THREE, new THREE.Group(), vibeFor('city'), 'low', gates));
   const med = artStats(null, buildNeonCity(THREE, new THREE.Group(), vibeFor('city'), 'med', gates));
   const hi = artStats(null, buildNeonCity(THREE, new THREE.Group(), vibeFor('city'), 'high', gates));
-  assert.ok(lo.callsEst <= 48, 'Low city-art callsEst ' + lo.callsEst);
-  assert.ok(lo.instancedMeshes <= 40, 'Low IM ' + lo.instancedMeshes);
+    assert.ok(lo.callsEst <= 48, 'Low city-art callsEst ' + lo.callsEst);
+    assert.ok(lo.instancedMeshes <= 40, 'Low IM ' + lo.instancedMeshes);
+    assert.ok(buildNeonCity(THREE, new THREE.Group(), vibeFor('city'), 'low', gates).getObjectByName('cityArtHero'), 'cityArtHero');
   assert.ok(med.callsEst >= lo.callsEst, 'Med adds extras');
   assert.ok(hi.instanced >= med.instanced, 'High at least as dense');
   const plan = planCityProps(gates, 'high');
