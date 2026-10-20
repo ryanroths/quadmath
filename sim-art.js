@@ -29,7 +29,7 @@ export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=71486388e490';
+} from './sim-art-warehouse.js?v=c9cfb81d615b';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
@@ -200,7 +200,7 @@ export const VIBES = Object.freeze({
     }),
     looks: Object.freeze({ fog: 0.0014, sun: 0.26, env: 0.32, bg: 0.18, hemi: 0.4 }),
     gates: Object.freeze({ style: 'hex-frame', keepBrand: false }),
-    props: Object.freeze(['aisle arrows', 'rack edges', 'spore cans']),
+    props: Object.freeze(['aisle arrows', 'rack edges', 'spore cans', 'ion sign', 'loft spores']),
     post: Object.freeze({ bloom: true, analog: false }),
   }),
   backyard: Object.freeze({

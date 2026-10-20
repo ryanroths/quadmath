@@ -149,7 +149,7 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Tr
 - **Time:** Windowless, bioluminescent.
 - **Palette:** `#0b1218` dark, `#1b3a4a` rack, `#39ffb0` spore, `#7a5cff` aisle, `#c45a22` pallet.
 - **Lighting:** Cool overhead cans + teal aisle runners.
-- **Props:** Emissive aisle arrows, glowing rack edges, spore cans.
+- **Props:** Emissive aisle arrows, glowing rack edges, spore cans, hanging ION banner, Spore Loft / Dock Crypt dressing.
 - **Gates:** Hex frames with teal core.
 - **Post:** Small bloom on runners. Fog `#0b1218` at `0.0018`.
 
