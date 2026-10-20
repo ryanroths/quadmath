@@ -1,0 +1,33 @@
+Kenney CC0 1.0 low-poly kit ( Neon Current )
+
+All three packs are Creative Commons Zero (CC0 1.0):
+  http://creativecommons.org/publicdomain/zero/1.0/
+
+Packs (License-*.txt in this folder, copied from the zip):
+  Car Kit 3.1                 https://kenney.nl/assets/car-kit
+  City Kit Commercial 2.1     https://kenney.nl/assets/city-kit-commercial
+  City Kit Roads 2.2          https://kenney.nl/assets/city-kit-roads
+
+Support Kenney: https://kenney.nl/donate  (credit is not required)
+
+Shipped files are a small meshopt-compressed geometry subset (no colormap
+textures — the sim paints neon emissive materials for bloom). Total GLB
+payload is 80 532 bytes (78.6 KB). Low quality fetches only the four cars
+(54 304 bytes). Med/High fetch the rest.
+
+  sedan.glb           Car Kit sedan
+  hatch.glb           Car Kit hatchback-sports
+  van.glb             Car Kit van
+  taxi.glb            Car Kit taxi
+  building-a.glb      City Kit Commercial low-detail-building-a
+  building-c.glb      City Kit Commercial low-detail-building-c
+  building-wide.glb   City Kit Commercial low-detail-building-wide-a
+  awning.glb          City Kit Commercial detail-awning-wide
+  dumpster.glb        City Kit Roads dumpster
+  traffic-light.glb   City Kit Roads traffic-light
+  street-sign.glb     City Kit Roads road-sign-street
+  stop-sign.glb       City Kit Roads road-sign-stop
+  street-lamp.glb     City Kit Roads light-curved
+
+Nothing here is from WebFPV. Procedural Neon Current stays the fallback
+if a GLB fails to load.
