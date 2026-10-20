@@ -2,7 +2,7 @@
 // Meshopt-compressed GLBs under assets/sim-city/. If a load fails, the
 // procedural meshes already in the scene stay visible. Nothing from the GPL whoop sim.
 
-import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=55600f01c643';
+import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=552a7cb9d623';
 
 const KIT_ROOT = 'assets/sim-city/';
 
@@ -42,8 +42,19 @@ function skipMat(m) {
 function neonMat(THREE, color, emit, extra) {
   return skipMat(new THREE.MeshStandardMaterial(Object.assign({
     color, emissive: color, emissiveIntensity: emit == null ? 2.4 : emit,
-    roughness: 0.42, metalness: 0.18,
+    roughness: 0.42, metalness: 0.08,
+    envMapIntensity: 0,
   }, extra || {})));
+}
+
+function carMat(THREE, pal) {
+  // Same unlit paint as the procedural cars. MeshStandard + dawn IBL is what
+  // turned Kenney instances into translucent blue glass after first paint.
+  return skipMat(new THREE.MeshBasicMaterial({
+    color: pal.body,
+    transparent: false,
+    opacity: 1,
+  }));
 }
 
 function carPalette(type, vibe) {
@@ -233,8 +244,7 @@ export async function tryDressCityKit(THREE, ctx) {
       if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
       if (!geo) continue;
       const pal = carPalette(type, vibe);
-      const glow = quality === 'low' ? pal.glow * 0.85 : pal.glow * 0.2;
-      const mat = neonMat(THREE, pal.body, glow, { emissive: pal.emit, roughness: 0.36, metalness: 0.28 });
+      const mat = carMat(THREE, pal);
       const mesh = addInstanced(THREE, kitGroup, geo, mat, list.length, (d, i) => {
         const p = list[i];
         if (!p) return false;
@@ -299,7 +309,7 @@ export async function tryDressCityKit(THREE, ctx) {
       try {
         if (planned.bins && planned.bins.length) {
           const n = await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.dumpster, planned.bins,
-            neonMat(THREE, 0x2a3440, 0.8, { emissive: hexNum(vibe.palette.neonC), emissiveIntensity: 0.7 }),
+            neonMat(THREE, 0x2a3440, 0.32, { emissive: hexNum(vibe.palette.neonC), emissiveIntensity: 0.28 }),
             placeAt(planned.bins));
           if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
           if (n) { bytes += n; hideKeys.push('cityProcBin'); }
@@ -314,11 +324,11 @@ export async function tryDressCityKit(THREE, ctx) {
           let n = 0;
           if (street.length) {
             n += await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.streetSign, street,
-              neonMat(THREE, hexNum(vibe.palette.neonA), 0.7), placeAt(street));
+              neonMat(THREE, hexNum(vibe.palette.neonA), 0.32), placeAt(street));
           }
           if (stop.length) {
             n += await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.stopSign, stop,
-              neonMat(THREE, 0xff3344, 0.75, { color: 0x1a1014, emissive: 0xff3344 }), placeAt(stop));
+              neonMat(THREE, 0xff3344, 0.34, { color: 0x1a1014, emissive: 0xff3344 }), placeAt(stop));
           }
           if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
           if (n) { bytes += n; hideKeys.push('cityProcLowSign'); }
@@ -328,7 +338,7 @@ export async function tryDressCityKit(THREE, ctx) {
       try {
         if (planned.traffic && planned.traffic.length) {
           const n = await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.traffic, planned.traffic,
-            neonMat(THREE, 0x1a1c20, 0.9, { emissive: 0xffcc44, emissiveIntensity: 0.9, color: 0x1a1c20 }),
+            neonMat(THREE, 0x1a1c20, 0.38, { emissive: 0xffcc44, emissiveIntensity: 0.38, color: 0x1a1c20 }),
             placeAt(planned.traffic));
           if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
           if (n) { bytes += n; hideKeys.push('cityProcTraffic'); }
@@ -339,7 +349,7 @@ export async function tryDressCityKit(THREE, ctx) {
         const lamps = (planned.lamps || []).slice(0, quality === 'high' ? 96 : 48);
         if (lamps.length) {
           const n = await instanceProp(THREE, kitGroup, loader, CITY_KIT_PROPS.lamp, lamps,
-            neonMat(THREE, hexNum(vibe.palette.neonC), 0.95, { color: 0x1a1420, emissive: hexNum(vibe.palette.neonC) }),
+            neonMat(THREE, hexNum(vibe.palette.neonC), 0.38, { color: 0x1a1420, emissive: hexNum(vibe.palette.neonC) }),
             placeAt(lamps));
           if (gen !== dressGen) return { used: false, stale: true, bytes: 0 };
           if (n) { bytes += n; hideKeys.push('cityProcLamp'); }

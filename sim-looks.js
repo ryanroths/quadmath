@@ -526,8 +526,14 @@ export async function createLooks(ctx) {
     const pmrem = new THREE.PMREMGenerator(renderer);
     const env = pmrem.fromEquirectangular(tex).texture;
     pmrem.dispose();
-    scene.environment = env;
+    // City paints its own night sky. Assigning the dawn HDRI here is what
+    // washed Kenney cars into translucent blue several seconds after load.
+    if (!cityKeepsOwnSky()) scene.environment = env;
     return env;
+  }
+
+  function cityKeepsOwnSky() {
+    return skyMode === 'gradient' && !!(skyMesh && skyMesh.userData && skyMesh.userData.citySky);
   }
 
   function applySkyModeNow() {
@@ -543,16 +549,22 @@ export async function createLooks(ctx) {
         scene.background = scene.fog.color;
       }
     }
-    if ('environmentIntensity' in scene) scene.environmentIntensity = citySky ? 0.42 : 0.18;
+    if (citySky) {
+      scene.environment = null;
+      if ('environmentIntensity' in scene) scene.environmentIntensity = 0;
+    } else if ('environmentIntensity' in scene) {
+      scene.environmentIntensity = 0.18;
+    }
     if ('backgroundIntensity' in scene) scene.backgroundIntensity = citySky ? 0.08 : 0.14;
     if ('backgroundBlurriness' in scene) scene.backgroundBlurriness = 0.04;
   }
   function applyEnv(env) {
-    scene.environment = env;
     if (skyMode === 'gradient') {
+      if (!cityKeepsOwnSky()) scene.environment = env;
       applySkyModeNow();
       return;
     }
+    scene.environment = env;
     scene.background = env;
     if ('environmentIntensity' in scene) scene.environmentIntensity = 0.72;
     if ('backgroundIntensity' in scene) scene.backgroundIntensity = 0.48;
@@ -854,7 +866,9 @@ export async function createLooks(ctx) {
     if (scene.fog && spec.fog != null) scene.fog.density = spec.fog;
     if (spec.sun != null) sun.intensity = spec.sun;
     if (hemi && spec.hemi != null) hemi.intensity = spec.hemi;
-    if ('environmentIntensity' in scene && spec.env != null) scene.environmentIntensity = spec.env;
+    if ('environmentIntensity' in scene && spec.env != null && !cityKeepsOwnSky()) {
+      scene.environmentIntensity = spec.env;
+    }
     if ('backgroundIntensity' in scene && spec.bg != null) scene.backgroundIntensity = spec.bg;
   }
   function setMapLooks(spec) {
@@ -950,6 +964,7 @@ export async function createLooks(ctx) {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       for (const m of mats) {
         if (m && m.isMeshStandardMaterial) {
+          if (m.userData && m.userData.looksSkip) continue;
           m.envMapIntensity = 1.05;
           if (m.roughness == null) m.roughness = 0.7;
         }

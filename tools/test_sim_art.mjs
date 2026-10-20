@@ -268,15 +268,17 @@ test('Kenney CC0 city kit is meshopt-compressed and stays off the banned path', 
   assert.ok(!files.some((f) => f.includes('GLB-format')));
 });
 
-test('city window and blink pulses stay smooth so bloom does not strobe', () => {
+test('city window and blink stay frozen so bloom does not strobe', () => {
   const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
   const tickSrc = city.slice(
     city.indexOf('function tickCityArtObject'),
     city.indexOf('export function restyleMesas'),
   );
-  assert.match(tickSrc, /cityWindowPhase/);
+  assert.match(tickSrc, /cityWindow/);
   assert.equal(tickSrc.includes('> 0.35'), false, 'hard rooftop strobe');
   assert.equal(/\b5\.5\b/.test(tickSrc), false, 'blink must not jump by 5.5');
+  assert.equal(/cityWindow[\s\S]{0,180}Math\.sin/.test(tickSrc), false, 'window must not pulse');
+  assert.equal(/cityBlink[\s\S]{0,180}Math\.sin/.test(tickSrc), false, 'blink must not pulse');
   const kit = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
   assert.equal(kit.includes('emissiveIntensity: 3.4'), false);
   assert.equal(/neonC\), 3\.8/.test(kit), false);
@@ -296,9 +298,25 @@ test('city window and blink pulses stay smooth so bloom does not strobe', () => 
     b.push(blink.material.emissiveIntensity);
   }
   const span = (arr) => Math.max(...arr) - Math.min(...arr);
-  assert.ok(span(w) < 0.14, 'window throb ' + span(w));
-  assert.ok(Math.max(...b) < 2.3, 'blink peak ' + Math.max(...b));
-  assert.ok(span(b) < 0.55, 'blink span ' + span(b));
+  assert.ok(span(w) < 0.001, 'window must stay frozen ' + span(w));
+  assert.ok(span(b) < 0.001, 'blink must stay frozen ' + span(b));
+  assert.equal(win.material.emissiveIntensity, 1.30);
+  assert.equal(blink.material.emissiveIntensity, 1.55);
+});
+
+test('city kit cars stay MeshBasic and city sky never keeps dawn IBL', () => {
+  const kit = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  assert.match(kit, /function carMat/);
+  assert.match(kit, /MeshBasicMaterial/);
+  assert.match(kit, /translucent blue glass/);
+  assert.match(kit, /envMapIntensity:\s*0/);
+  assert.equal(/carMat[\s\S]{0,240}MeshStandardMaterial/.test(kit), false);
+  const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
+  assert.match(looks, /function cityKeepsOwnSky/);
+  assert.match(looks, /scene\.environment = null/);
+  assert.match(looks, /washed Kenney cars into translucent blue/);
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.match(city, /envMapIntensity:\s*0/);
 });
 
 test('city density module stays original (no GLB / WebFPV)', () => {
