@@ -1,6 +1,7 @@
-// Kenney CC0 city kit for Neon Current. Visual only.
-// Meshopt-compressed GLBs under assets/sim-city/. If a load fails, the
-// procedural meshes already in the scene stay visible. Nothing from the GPL whoop sim.
+// Kenney CC0 city + garage kits. Visual only.
+// Meshopt-compressed GLBs under assets/sim-city/ and assets/sim-garage/.
+// If a load fails, the procedural meshes already in the scene stay visible.
+// Nothing from the GPL whoop sim.
 
 import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=55600f01c643';
 
@@ -183,8 +184,8 @@ function findProcCar(root, type) {
 let dressGen = 0;
 const geoCache = new Map();
 
-async function geoFor(THREE, loader, entry) {
-  const url = KIT_ROOT + entry.file;
+async function geoFor(THREE, loader, entry, root) {
+  const url = (root || KIT_ROOT) + entry.file;
   if (geoCache.has(url)) return geoCache.get(url);
   const gltf = await loadGltf(loader, url);
   const merged = mergeScene(THREE, gltf.scene);
@@ -193,9 +194,9 @@ async function geoFor(THREE, loader, entry) {
   return fitted;
 }
 
-async function instanceProp(THREE, kitGroup, loader, spec, list, mat, place) {
+async function instanceProp(THREE, kitGroup, loader, spec, list, mat, place, root) {
   if (!list || !list.length || !spec) return 0;
-  const geo = await geoFor(THREE, loader, spec);
+  const geo = await geoFor(THREE, loader, spec, root);
   if (!geo) return 0;
   const mesh = addInstanced(THREE, kitGroup, geo, mat, list.length, place);
   return mesh ? spec.bytes : 0;
@@ -353,6 +354,159 @@ export async function tryDressCityKit(THREE, ctx) {
       if (typeof key === 'string') hideTagged(group, key);
       else if (key) key.visible = false;
     }
+    group.add(kitGroup);
+    return { used: true, bytes, quality };
+  } catch (err) {
+    try { if (kitGroup.parent) kitGroup.parent.remove(kitGroup); } catch (e) { /* ignore */ }
+    return { used: false, bytes: 0, error: String(err && err.message || err) };
+  }
+}
+
+const GARAGE_ROOT = 'assets/sim-garage/';
+
+export const GARAGE_KIT_CORE = Object.freeze({
+  bench: { file: 'workbench.glb', bytes: 5224, height: 2.15 },
+  chest: { file: 'chest.glb', bytes: 8452, height: 2.85 },
+  crate: { file: 'crate.glb', bytes: 3708, height: 0.88 },
+});
+
+export const GARAGE_KIT_EXTRA = Object.freeze({
+  toolbox: { file: 'toolbox.glb', bytes: 4460, height: 1.05 },
+  cardboard: { file: 'cardboard.glb', bytes: 2792, height: 0.62 },
+  tire: { file: 'tire.glb', bytes: 5080, height: 0.68 },
+  sedan: { file: 'sedan.glb', bytes: 14224, length: 7.4, autoForward: true },
+  barrel: { file: 'barrel.glb', bytes: 5116, height: 0.98 },
+  barrier: { file: 'barrier.glb', bytes: 2072, height: 0.82 },
+});
+
+const GARAGE_CORE_BYTES = Object.values(GARAGE_KIT_CORE).reduce((n, e) => n + e.bytes, 0);
+const GARAGE_EXTRA_BYTES = Object.values(GARAGE_KIT_EXTRA).reduce((n, e) => n + e.bytes, 0);
+
+export function garageKitBytesForQuality(quality) {
+  return quality === 'low' ? GARAGE_CORE_BYTES : GARAGE_CORE_BYTES + GARAGE_EXTRA_BYTES;
+}
+
+function placeAt(list) {
+  return (d, i) => {
+    const p = list[i];
+    if (!p) return false;
+    d.position.set(p.x, p.y || 0, p.z);
+    d.rotation.set(0, p.ry || 0, 0);
+    d.scale.set(1, 1, 1);
+  };
+}
+
+function garageMat(THREE, vibe, kind) {
+  const pal = vibe && vibe.palette ? vibe.palette : {};
+  if (kind === 'bench') {
+    return neonMat(THREE, hexNum('#3d4654'), 0.12, { emissive: hexNum(pal.neonB || '#2de2e6'), roughness: 0.55, metalness: 0.22 });
+  }
+  if (kind === 'chest') {
+    return neonMat(THREE, hexNum(pal.neonC || '#c45a22'), 0.16, { emissive: hexNum(pal.neonC || '#c45a22'), roughness: 0.5 });
+  }
+  if (kind === 'crate') {
+    return neonMat(THREE, hexNum('#4a3224'), 0.06, { emissive: hexNum('#2a2018'), roughness: 0.78, metalness: 0.08 });
+  }
+  if (kind === 'shelf') {
+    return neonMat(THREE, hexNum(pal.facade || '#3d4654'), 0.1, { color: hexNum(pal.facadeAlt || '#2a3038'), roughness: 0.52 });
+  }
+  if (kind === 'toolbox') {
+    return neonMat(THREE, hexNum(pal.neonA || '#ffb347'), 0.14, { emissive: hexNum(pal.neonA || '#ffb347'), roughness: 0.48 });
+  }
+  if (kind === 'cardboard') {
+    return neonMat(THREE, hexNum('#6a5340'), 0.05, { emissive: hexNum('#3a2a1c'), roughness: 0.86, metalness: 0.04 });
+  }
+  if (kind === 'tire') {
+    return neonMat(THREE, 0x141414, 0.02, { emissive: 0x080808, roughness: 0.92, metalness: 0.04 });
+  }
+  if (kind === 'sedan') {
+    return neonMat(THREE, hexNum('#1a2430'), 0.12, { emissive: hexNum(pal.neonB || '#2de2e6'), roughness: 0.38, metalness: 0.24 });
+  }
+  if (kind === 'barrel') {
+    return neonMat(THREE, hexNum(pal.neonC || '#c45a22'), 0.1, { emissive: hexNum(pal.neonA || '#ffb347'), roughness: 0.55, metalness: 0.2 });
+  }
+  return neonMat(THREE, hexNum(pal.neonA || '#ffb347'), 0.12, { color: 0x1a1410, emissive: hexNum(pal.neonA || '#ffb347') });
+}
+
+let garageDressGen = 0;
+
+export async function tryDressGarageKit(THREE, ctx) {
+  const group = ctx && ctx.group;
+  const loader = ctx && ctx.loader;
+  const vibe = ctx && ctx.vibe;
+  const quality = (ctx && ctx.quality) || 'med';
+  if (!THREE || !group || !loader || !vibe) return { used: false, bytes: 0 };
+  const gen = ++garageDressGen;
+  const old = group.getObjectByName('garageArtKit');
+  if (old && old.parent) old.parent.remove(old);
+  const kitGroup = new THREE.Group();
+  kitGroup.name = 'garageArtKit';
+  const planned = (group.userData && group.userData.planned) || {};
+  const wantExtra = quality === 'med' || quality === 'high';
+  const hideKeys = [];
+  let bytes = 0;
+  const root = GARAGE_ROOT;
+  try {
+    const one = async (spec, list, kind, hide) => {
+      if (!list || !list.length || !spec) return 0;
+      const n = await instanceProp(THREE, kitGroup, loader, spec, list, garageMat(THREE, vibe, kind), placeAt(list), root);
+      if (n && hide) hideKeys.push(hide);
+      return n;
+    };
+    try {
+      const n = await one(GARAGE_KIT_CORE.bench, planned.bench, 'bench', 'garageProcBench');
+      if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+      bytes += n;
+    } catch (e) { /* keep proc bench */ }
+    try {
+      const n = await one(GARAGE_KIT_CORE.chest, planned.chest, 'chest', 'garageProcChest');
+      if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+      bytes += n;
+    } catch (e) { /* keep proc chest */ }
+    try {
+      const crates = (planned.crates || []).slice(0, quality === 'low' ? 6 : 12);
+      const n = await one(GARAGE_KIT_CORE.crate, crates, 'crate', null);
+      if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+      bytes += n;
+    } catch (e) { /* skip crates */ }
+
+    if (wantExtra) {
+      try {
+        const n = await one(GARAGE_KIT_EXTRA.toolbox, planned.toolboxes, 'toolbox', null);
+        if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+      try {
+        const n = await one(GARAGE_KIT_EXTRA.cardboard, planned.cardboard, 'cardboard', null);
+        if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+      try {
+        const tires = (planned.tires || []).slice(0, quality === 'high' ? 12 : 8);
+        const n = await one(GARAGE_KIT_EXTRA.tire, tires, 'tire', 'garageProcTire');
+        if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* keep proc tires */ }
+      try {
+        const n = await one(GARAGE_KIT_EXTRA.sedan, planned.car, 'sedan', 'garageProcCar');
+        if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* keep wedge car */ }
+      try {
+        const n = await one(GARAGE_KIT_EXTRA.barrel, planned.barrels, 'barrel', null);
+        if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+      try {
+        const n = await one(GARAGE_KIT_EXTRA.barrier, planned.barriers, 'barrier', null);
+        if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+    }
+
+    if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
+    if (!kitGroup.children.length) return { used: false, bytes: 0 };
+    for (const key of hideKeys) hideTagged(group, key);
     group.add(kitGroup);
     return { used: true, bytes, quality };
   } catch (err) {
