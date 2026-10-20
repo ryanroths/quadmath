@@ -19,7 +19,7 @@ export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=52817795f250';
+} from './sim-art-living.js?v=cd313adf9dd3';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
@@ -148,7 +148,7 @@ export const VIBES = Object.freeze({
     }),
     looks: Object.freeze({ fog: 0.004, sun: 0.45, env: 0.55, bg: 0.38, hemi: 0.5 }),
     gates: Object.freeze({ style: 'clay-ring', keepBrand: false }),
-    props: Object.freeze(['clay sofa', 'gummy lamp', 'block bookshelf']),
+    props: Object.freeze(['clay sofa', 'gummy lamp', 'block bookshelf', 'clay banner', 'felt nook']),
     post: Object.freeze({ bloom: false, analog: false }),
   }),
   garage: Object.freeze({

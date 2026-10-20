@@ -42,17 +42,20 @@ export function livingBudget(applied) {
     return {
       books: 18, frames: 4, lanterns: 0, beads: 0, toys: 4,
       steam: false, glow: false, screen: false, plants: 2,
+      posters: 3, mags: 4, candles: 2,
     };
   }
   if (applied === 'high') {
     return {
       books: 48, frames: 10, lanterns: 8, beads: 22, toys: 10,
       steam: true, glow: true, screen: true, plants: 4,
+      posters: 5, mags: 8, candles: 4,
     };
   }
   return {
     books: 36, frames: 8, lanterns: 6, beads: 16, toys: 8,
     steam: true, glow: true, screen: true, plants: 3,
+    posters: 4, mags: 6, candles: 3,
   };
 }
 
@@ -98,9 +101,37 @@ function canvasTex(THREE, w, h, paint, rx, ry) {
   return t;
 }
 
+function ceilTex(THREE) {
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    fillGrad(g, 0, 0, 0, h, [[0, '#efe0d0'], [1, '#e0d2c2']]);
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(107,63,42,0.1)';
+    g.lineWidth = 2;
+    g.strokeRect(6, 6, w - 12, h - 12);
+    g.fillStyle = 'rgba(255,224,138,0.1)';
+    g.fillRect(18, 18, w - 36, h - 36);
+  }, 8, 6);
+}
+
+function parlorSignTex(THREE) {
+  return canvasTex(THREE, 256, 96, (g, w, h) => {
+    fillGrad(g, 0, 0, 0, h, [[0, '#ff6b9a'], [0.5, '#ffe08a'], [1, '#7ec8e3']]);
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#6b3f2a';
+    g.fillRect(0, 0, w, 7);
+    g.fillRect(0, h - 7, w, 7);
+    g.fillRect(0, 0, 7, h);
+    g.fillRect(w - 7, 0, 7, h);
+    g.font = 'bold 44px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('CLAY', w * 0.5, h * 0.55);
+  }, 1, 1);
+}
+
 function plasterTex(THREE) {
   return canvasTex(THREE, 128, 128, (g, w, h) => {
-    g.fillStyle = '#f4d6c6';
+    fillGrad(g, 0, 0, 0, h, [[0, '#f8e0d2'], [0.7, '#f4d6c6'], [1, '#e8c4b0']]);
     g.fillRect(0, 0, w, h);
     for (let i = 0; i < 80; i++) {
       g.fillStyle = `rgba(236,196,176,${0.08 + (i % 5) * 0.03})`;
@@ -292,9 +323,10 @@ export function restyleLivingShell(THREE, group, vibe, floor) {
       skipMat(m);
       n++;
     } else if (col === LIVING_STOCK.ceil) {
-      m.color.setHex(ceilHex);
+      m.color.setHex(0xffffff);
+      m.map = ceilTex(THREE);
       m.emissive.setHex(hexNum(vibe.palette.windowOn));
-      m.emissiveIntensity = 0.12;
+      m.emissiveIntensity = 0.14;
       m.roughness = 0.92;
       skipMat(m);
       n++;
@@ -630,8 +662,73 @@ function addWhoopLife(THREE, parent, mats, budget, gates) {
       return true;
     });
   }
+  addInstanced(THREE, extras, new THREE.BoxGeometry(1.35, 1.55, 0.05), mats.sky, budget.posters, (d, i) => {
+    d.position.set(-3.2 + i * 2.2, 3.15, -13.72);
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.BoxGeometry(0.42, 0.05, 0.32), mats.mag, budget.mags, (d, i) => {
+    const x = -1.4 + (i % 4) * 0.7;
+    const z = -6.8 + ((i / 4) | 0) * 0.55;
+    if (!propClearOfCourse(x, z, 0.18, gates, { gatePad: 1.5, corridor: 1.2, yRange: 2 })) return false;
+    d.position.set(x, 0.05, z);
+    d.rotation.y = i * 0.35;
+    return true;
+  });
+  addInstanced(THREE, extras, new THREE.CylinderGeometry(0.07, 0.08, 0.16, 8), mats.lamp, budget.candles, (d, i) => {
+    d.position.set(-0.85 + i * 0.42, 1.22, -5.55);
+    return true;
+  });
   parent.add(extras);
   return extras;
+}
+
+function addHeroClaySign(THREE, parent, mats) {
+  const hero = new THREE.Group();
+  hero.name = 'livingArtHero';
+  hero.userData.livingArt = true;
+  const cable = new THREE.Mesh(new THREE.CapsuleGeometry(0.025, 3.2, 3, 6), mats.walnut);
+  cable.position.set(-0.95, 6.35, -7.15);
+  hero.add(cable);
+  const cable2 = cable.clone();
+  cable2.position.x = 0.95;
+  hero.add(cable2);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.05, 0.12), mats.walnut);
+  body.position.set(0, 4.45, -7.15);
+  hero.add(body);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(3.15, 0.85, 0.05), mats.sign);
+  face.position.set(0, 4.45, -7.24);
+  hero.add(face);
+  const faceBack = face.clone();
+  faceBack.position.z = -7.06;
+  faceBack.rotation.y = Math.PI;
+  hero.add(faceBack);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(0.42, 16), mats.disc);
+  disc.position.set(0, 3.72, -7.15);
+  disc.userData.livingClay = true;
+  hero.add(disc);
+  hero.traverse((o) => { o.userData.livingArt = true; });
+  parent.add(hero);
+}
+
+function addSecretDressing(THREE, parent, mats) {
+  // Felt Nook {9.62, 1.7, -12.55} — behind the block shelf.
+  const pouf = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.52, 0.38, 10), mats.cushion);
+  pouf.position.set(9.62, 0.2, -12.55);
+  pouf.userData.livingArt = true;
+  parent.add(pouf);
+  const stack = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.42, 0.38), mats.gummy);
+  stack.position.set(9.62, 0.62, -12.55);
+  stack.userData.livingArt = true;
+  parent.add(stack);
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.08, 0.9), glowMat(THREE, 0xff6b9a));
+  glow.position.set(9.62, 0.04, -12.55);
+  glow.userData.livingArt = true;
+  parent.add(glow);
+  const bead = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), mats.bead);
+  bead.position.set(9.62, 1.7, -12.55);
+  bead.userData.livingClay = true;
+  bead.userData.livingArt = true;
+  parent.add(bead);
 }
 
 function makeLivingMats(THREE, vibe) {
@@ -677,6 +774,13 @@ function makeLivingMats(THREE, vibe) {
       metalness: 0,
     })),
     bead: gummyMat(THREE, hexNum(vibe.palette.neonA), 0.8),
+    sign: skipMat(new THREE.MeshBasicMaterial({
+      color: 0xffffff, map: parlorSignTex(THREE), toneMapped: false,
+    })),
+    disc: skipMat(new THREE.MeshBasicMaterial({
+      color: 0xffe08a, toneMapped: false,
+    })),
+    mag: clayMat(THREE, hexNum('#7ec8e3')),
   };
 }
 
@@ -695,6 +799,8 @@ export function buildClayParlor(THREE, parent, vibe, quality, gates) {
   addBlockShelf(THREE, group, mats, budget);
   addClayScreen(THREE, group, mats, budget);
   addWhoopLife(THREE, group, mats, budget, gates || LIVING_KEEP_GATES);
+  addHeroClaySign(THREE, group, mats);
+  addSecretDressing(THREE, group, mats);
   parent.add(group);
   return group;
 }
@@ -808,6 +914,9 @@ function tickLivingArtObject(o, t) {
   }
   if (o.userData && o.userData.livingScreen && o.material && o.material.map) {
     o.material.map.offset.x = (t * 0.04) % 1;
+  }
+  if (o.userData && o.userData.livingClay) {
+    o.rotation.z = t * 0.18;
   }
 }
 
