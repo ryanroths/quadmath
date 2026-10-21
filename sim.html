@@ -843,7 +843,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=c5a4d163f20f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=47f589dae15b";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=e0f595886c89";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -869,7 +869,7 @@ import {
   loadAutoArm, saveAutoArm, loadArmSwitch, saveArmSwitch, mergeArmSwitch,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
-} from "./sim-touch.js?v=4013a23bed14";
+} from "./sim-touch.js?v=7eff6ead2f5f";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -4083,8 +4083,9 @@ window._axis=()=>({
   threeD,
 });
 // Sign bridge between three.js body rates (wx pitch / wy yaw / wz roll) and the
-// module's X-forward, Y-left, Z-up axes. Verified empirically — see the axis
-// check in the commit; flip one of these if a stick ever drives the wrong way.
+// module's X-forward, Y-left, Z-up axes. SGN_PITCH=+1: stick.p>0 → +pitch →
+// fly +X. Radio HID polarity lives in AETR_MAP (channel +1 = stick forward),
+// not here — #233 flipping both layers double-inverted real EdgeTX radios.
 const SGN_ROLL=-1,SGN_PITCH=1,SGN_YAW=1;
 function physics(dt){
   const yr=THREE.MathUtils.degToRad(axisRate('yaw',stick.y));
