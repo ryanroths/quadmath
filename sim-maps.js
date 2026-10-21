@@ -108,80 +108,80 @@ export const WAREHOUSE_PLAY = Object.freeze({
   dock: Object.freeze({ x: 0, z: 40.5, w: 16, h: 1.1, d: 3.2 }),
 });
 
-// Ryan's Phoenix backyard. ~14 m × 12 m at WS=3.5. Whoop gaps ≥ 0.85 wu.
-// House at +Z, yard toward −Z, pool −X, turf / ficus +X.
+// Ryan's Phoenix backyard. ~17.5 m × 15 m at WS=3.5 (25% larger). Whoop gaps ≥ 0.85 wu.
+// House at +Z, yard toward −Z, pool −X, turf / ficus +X. PVC sits on the turf center.
 export const BACKYARD_PLAY = Object.freeze({
-  whoopClear: 0.85,
-  wallH: 6.3,
+  whoopClear: 1.06,
+  wallH: 7.88,
   house: Object.freeze({
-    x: 1.5, z: 14.1, w: 35.0, d: 13.8, wallH: 19.25, thick: 0.42,
+    x: 1.88, z: 17.62, w: 43.75, d: 17.25, wallH: 24.06, thick: 0.53,
   }),
-  ridge: Object.freeze({ x: 1.5, y: 24.2, z: 14.1, w: 36.2, h: 0.42, d: 0.55 }),
-  eaveS: Object.freeze({ x: 1.5, y: 19.05, z: 5.55, w: 36.6, h: 0.28, d: 2.8 }),
-  eaveN: Object.freeze({ x: 1.5, y: 19.05, z: 22.65, w: 36.6, h: 0.28, d: 2.8 }),
-  roofS: Object.freeze({ x: 1.5, y: 21.4, z: 9.7, w: 35.6, h: 0.36, d: 7.4 }),
-  roofN: Object.freeze({ x: 1.5, y: 21.4, z: 18.5, w: 35.6, h: 0.36, d: 7.4 }),
+  ridge: Object.freeze({ x: 1.88, y: 30.25, z: 17.62, w: 45.25, h: 0.53, d: 0.69 }),
+  eaveS: Object.freeze({ x: 1.88, y: 23.81, z: 6.94, w: 45.75, h: 0.35, d: 3.5 }),
+  eaveN: Object.freeze({ x: 1.88, y: 23.81, z: 28.31, w: 45.75, h: 0.35, d: 3.5 }),
+  roofS: Object.freeze({ x: 1.88, y: 26.75, z: 12.12, w: 44.5, h: 0.45, d: 9.25 }),
+  roofN: Object.freeze({ x: 1.88, y: 26.75, z: 23.12, w: 44.5, h: 0.45, d: 9.25 }),
   patio: Object.freeze({
-    x: 4.0, z: 1.95, w: 14.0, d: 10.5, ceilY: 9.45, ceilH: 0.22, col: 0.48,
+    x: 5.0, z: 2.44, w: 17.5, d: 13.12, ceilY: 11.81, ceilH: 0.28, col: 0.6,
   }),
-  shade: Object.freeze({ x: 4.0, y: 9.12, z: -3.18, w: 13.6, h: 0.16, d: 0.22 }),
-  turf: Object.freeze({ x: 11.0, z: -6.8, w: 26.0, d: 27.0 }),
+  shade: Object.freeze({ x: 5.0, y: 11.4, z: -3.98, w: 17.0, h: 0.2, d: 0.28 }),
+  turf: Object.freeze({ x: 13.75, z: -8.5, w: 32.5, d: 33.75 }),
   pvc: Object.freeze({
-    x: 11.0, z: -6.8, innerW: 3.18, innerD: 3.18, h: 7.0, bar: 0.16, midY: 3.5,
+    x: 13.75, z: -8.5, innerW: 3.98, innerD: 3.98, h: 8.75, bar: 0.2, midY: 4.38,
   }),
-  ficus: Object.freeze({ x: 17.2, z: -15.4, r: 0.45, h: 14.0 }),
-  planter: Object.freeze({ x: 17.2, z: -15.4, rOut: 2.65, rIn: 1.72, h: 1.4 }),
-  fire: Object.freeze({ x: 12.4, z: -17.2, w: 3.2, d: 3.2, bowlR: 0.62, bowlH: 0.42 }),
-  shed: Object.freeze({ x: 22.6, z: -11.5, w: 4.2, h: 6.3, d: 3.5 }),
-  pool: Object.freeze({ x: -8.5, z: -5.5, w: 12.0, d: 24.0 }),
-  deckT: 1.55,
+  ficus: Object.freeze({ x: 21.5, z: -19.25, r: 0.56, h: 17.5 }),
+  planter: Object.freeze({ x: 21.5, z: -19.25, rOut: 3.31, rIn: 2.15, h: 1.75 }),
+  fire: Object.freeze({ x: 15.5, z: -21.5, w: 4.0, d: 4.0, bowlR: 0.78, bowlH: 0.53 }),
+  shed: Object.freeze({ x: 28.25, z: -14.38, w: 5.25, h: 7.88, d: 4.38 }),
+  pool: Object.freeze({ x: -10.62, z: -6.88, w: 15.0, d: 30.0 }),
+  deckT: 1.94,
   fence: Object.freeze({
-    x: -2.15, z0: -20.2, z1: 6.05, h: 4.2, post: 0.12, spacing: 5.25,
-    meshT: 0.06, meshY: 0.28, meshH: 3.72,
+    x: -2.69, z0: -25.25, z1: 7.56, h: 5.25, post: 0.15, spacing: 6.56,
+    meshT: 0.07, meshY: 0.35, meshH: 4.65,
   }),
   pots: Object.freeze([
-    Object.freeze({ x: -3.20, z: -17.55, r: 0.28, h: 0.72 }),
-    Object.freeze({ x: -3.20, z: -7.08, r: 0.26, h: 0.64 }),
-    Object.freeze({ x: -3.18, z: 3.42, r: 0.30, h: 0.78 }),
-    Object.freeze({ x: -1.10, z: -17.55, r: 0.24, h: 0.58 }),
+    Object.freeze({ x: -4.0, z: -21.94, r: 0.35, h: 0.9 }),
+    Object.freeze({ x: -4.0, z: -8.85, r: 0.33, h: 0.8 }),
+    Object.freeze({ x: -3.98, z: 4.28, r: 0.38, h: 0.98 }),
+    Object.freeze({ x: -1.38, z: -21.94, r: 0.3, h: 0.72 }),
   ]),
   patioPlanters: Object.freeze([
-    Object.freeze({ x: 0.60, z: -2.55, r: 0.34, h: 0.72 }),
-    Object.freeze({ x: 10.15, z: -2.55, r: 0.34, h: 0.72 }),
-    Object.freeze({ x: 0.60, z: 6.15, r: 0.30, h: 0.62 }),
-    Object.freeze({ x: 10.15, z: 6.15, r: 0.30, h: 0.62 }),
+    Object.freeze({ x: 0.75, z: -3.19, r: 0.43, h: 0.9 }),
+    Object.freeze({ x: 12.69, z: -3.19, r: 0.43, h: 0.9 }),
+    Object.freeze({ x: 0.75, z: 7.69, r: 0.38, h: 0.78 }),
+    Object.freeze({ x: 12.69, z: 7.69, r: 0.38, h: 0.78 }),
   ]),
-  pad: Object.freeze({ x: -18.5, z: -15.5, w: 6.4, d: 5.6, h: 0.28 }),
+  pad: Object.freeze({ x: -23.12, z: -19.38, w: 8.0, d: 7.0, h: 0.35 }),
   sofa: Object.freeze({
-    x: -18.5, z: -16.55, w: 3.4, seatH: 0.62, d: 1.35, backH: 1.15, backD: 0.22,
+    x: -23.12, z: -20.69, w: 4.25, seatH: 0.78, d: 1.69, backH: 1.44, backD: 0.28,
   }),
   palms: Object.freeze([
-    Object.freeze({ x: -20.6, z: -13.4, r: 0.16, h: 11.2 }),
-    Object.freeze({ x: -16.4, z: -13.1, r: 0.15, h: 10.4 }),
-    Object.freeze({ x: -19.2, z: -17.85, r: 0.28, h: 7.6 }),
+    Object.freeze({ x: -25.75, z: -16.75, r: 0.2, h: 14.0 }),
+    Object.freeze({ x: -20.5, z: -16.38, r: 0.19, h: 13.0 }),
+    Object.freeze({ x: -24.0, z: -22.31, r: 0.35, h: 9.5 }),
   ]),
   umbrella: Object.freeze({
-    x: -15.05, z: -14.6, r: 2.35, bar: 0.12, segs: 5,
+    x: -18.81, z: -18.25, r: 2.94, bar: 0.15, segs: 5,
   }),
   canopy: Object.freeze({
-    x: -17.6, y: 1.55, z: -12.55, innerW: 2.35, innerH: 2.20, bar: 0.12, depth: 2.35,
+    x: -22.0, y: 1.94, z: -15.69, innerW: 2.94, innerH: 2.75, bar: 0.15, depth: 2.94,
   }),
   wing: Object.freeze({
-    x: -17.55, z: 10.4, w: 2.90, d: 12.2, wallH: 10.4,
+    x: -21.94, z: 13.0, w: 3.62, d: 15.25, wallH: 13.0,
   }),
-  wingEave: Object.freeze({ x: -17.55, y: 12.15, z: 10.4, w: 4.2, h: 0.28, d: 13.4 }),
-  alley: Object.freeze({ x: -21.75, z0: 7.2, z1: 21.0, w: 5.5 }),
-  woodGate: Object.freeze({ x: -21.75, z: 20.55, w: 4.85, h: 5.55, d: 0.18 }),
-  ac: Object.freeze({ x: -21.5, z: 6.55, w: 1.55, h: 2.15, d: 1.30 }),
-  alleyEave: Object.freeze({ x: -21.75, y: 19.05, z: 14.1, w: 5.6, h: 0.28, d: 14.0 }),
-  streetWall: Object.freeze({ x: 8.4, w: 32.2 }),
+  wingEave: Object.freeze({ x: -21.94, y: 15.19, z: 13.0, w: 5.25, h: 0.35, d: 16.75 }),
+  alley: Object.freeze({ x: -27.19, z0: 9.0, z1: 26.25, w: 6.88 }),
+  woodGate: Object.freeze({ x: -27.19, z: 25.69, w: 6.06, h: 6.94, d: 0.22 }),
+  ac: Object.freeze({ x: -26.88, z: 8.19, w: 1.94, h: 2.69, d: 1.62 }),
+  alleyEave: Object.freeze({ x: -27.19, y: 23.81, z: 17.62, w: 7.0, h: 0.35, d: 17.5 }),
+  streetWall: Object.freeze({ x: 10.5, w: 40.25 }),
 });
 
 export const LAYOUT = {
   living: { w: 21, d: 28, h: 9.1, wall: 0.38 },
   garage: { w: 21, d: 42, h: 10.5, wall: 0.4 },
   warehouse: { w: 56, d: 84, h: 21, wall: 0.5 },
-  backyard: { w: 49, d: 42, h: 0, wall: 0.36 },
+  backyard: { w: 61.25, d: 52.5, h: 0, wall: 0.45 },
   office: { w: 36, d: 46, h: 9.2, wall: 0.36 },
   gym: { w: 48, d: 74, h: 28, wall: 0.46 },
   trainer: { w: 28, d: 36, h: 10.5, wall: 0.34 },
@@ -193,7 +193,7 @@ export const MAP_ORBIT = {
   living: { cx: 0, cy: 1.7, cz: -1.5, r: 6.4, h: 5.5, fov: 62 },
   garage: { cx: 0, cy: 2.0, cz: 1.5, r: 7.2, h: 6.4, fov: 60 },
   warehouse: { cx: 0, cy: 2.4, cz: 0, r: 2.2, h: 17.2, fov: 72 },
-  backyard: { cx: 2, cy: 3.4, cz: -2, r: 28, h: 15, fov: 58 },
+  backyard: { cx: 2.5, cy: 4.25, cz: -2.5, r: 35, h: 18.75, fov: 58 },
   office: { cx: 4, cy: 1.8, cz: 2, r: 6.8, h: 6.0, fov: 62 },
   gym: { cx: 0, cy: 3.4, cz: 2, r: 5.5, h: 16.5, fov: 68 },
   trainer: { cx: 0, cy: 1.9, cz: 0, r: 8.2, h: 6.6, fov: 60 },
@@ -204,7 +204,7 @@ export const MAP_LOOKS = {
   living: { fog: 0.004, sun: 0.55, env: 0.62, bg: 0.38, hemi: 0.38 },
   garage: { fog: 0.003, sun: 0.7, env: 0.26, bg: 0.34, hemi: 0.60 },
   warehouse: { fog: 0.0018, sun: 0.55, env: 0.5, bg: 0.28, hemi: 0.28 },
-  backyard: { fog: 0.0007, sun: 1.02, env: 0.55, bg: 0.82, hemi: 0.42 },
+  backyard: { fog: 0.0014, sun: 1.02, env: 0.55, bg: 0.82, hemi: 0.42 },
   city: { fog: 0.00105, sun: 0.30, env: 0.18, bg: 0.16, hemi: 0.56 },
   office: { fog: 0.0032, sun: 0.48, env: 0.58, bg: 0.34, hemi: 0.36 },
   gym: { fog: 0.0010, sun: 0.95, env: 0.70, bg: 0.44, hemi: 0.55 },
@@ -718,11 +718,11 @@ function buildBackyard(THREE, parent, colliders, lights) {
   box(THREE, parent, colliders, wg.x, 0, wg.z, wg.w, wg.wallH, wg.d, mats.stucco);
   box(THREE, parent, colliders, P.woodGate.x, 0, P.woodGate.z, P.woodGate.w, P.woodGate.h, P.woodGate.d, mats.wood);
   box(THREE, parent, colliders, P.ac.x, 0, P.ac.z, P.ac.w, P.ac.h, P.ac.d, mats.metal);
-  addLight(THREE, parent, lights, 4, 10.2, 2, 0xffe0b8, 2.2, 32);
-  addLight(THREE, parent, lights, -8, 8.4, -6, 0xfff0d0, 1.8, 26);
-  addLight(THREE, parent, lights, -21.5, 7.4, 14, 0xffe8c4, 1.5, 18);
-  addLight(THREE, parent, lights, 14, 7.6, -6, 0xe8f4d0, 1.4, 20);
-  addLight(THREE, parent, lights, 2.2, 11.5, -2, 0xfff4e0, 1.7, 34);
+  addLight(THREE, parent, lights, 5, 12.75, 2.5, 0xffe0b8, 2.2, 40);
+  addLight(THREE, parent, lights, -10, 10.5, -7.5, 0xfff0d0, 1.8, 32);
+  addLight(THREE, parent, lights, -26.88, 9.25, 17.5, 0xffe8c4, 1.5, 22);
+  addLight(THREE, parent, lights, 17.5, 9.5, -7.5, 0xe8f4d0, 1.4, 25);
+  addLight(THREE, parent, lights, 2.75, 14.38, -2.5, 0xfff4e0, 1.7, 42);
   return { floor, orbit: MAP_ORBIT.backyard };
 }
 
