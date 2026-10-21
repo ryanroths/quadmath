@@ -1,0 +1,34 @@
+name: Sim tests
+
+# Runs the Node sim unit suite (tools/test_sim_*.mjs). Those tests were
+# local-only; CI did not execute them. Independent of #220 (stamp-on-main).
+# Ryan: review before adding this as a required check.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  sim-tests:
+    name: Test sim modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Run sim tests
+        run: node --test tools/test_sim_*.mjs
