@@ -125,30 +125,30 @@ export const BACKYARD_PLAY = Object.freeze({
     x: 4.0, z: 1.95, w: 14.0, d: 10.5, ceilY: 9.45, ceilH: 0.22, col: 0.48,
   }),
   shade: Object.freeze({ x: 4.0, y: 9.12, z: -3.18, w: 13.6, h: 0.16, d: 0.22 }),
-  turf: Object.freeze({ x: 14.0, z: -5.75, w: 21.0, d: 17.5 }),
+  turf: Object.freeze({ x: 11.0, z: -6.8, w: 26.0, d: 27.0 }),
   pvc: Object.freeze({
-    x: 13.5, z: -3.5, innerW: 3.18, innerD: 3.18, h: 7.0, bar: 0.16, midY: 3.5,
+    x: 11.0, z: -6.8, innerW: 3.18, innerD: 3.18, h: 7.0, bar: 0.16, midY: 3.5,
   }),
   ficus: Object.freeze({ x: 17.2, z: -15.4, r: 0.45, h: 14.0 }),
   planter: Object.freeze({ x: 17.2, z: -15.4, rOut: 2.65, rIn: 1.72, h: 1.4 }),
   fire: Object.freeze({ x: 12.4, z: -17.2, w: 3.2, d: 3.2, bowlR: 0.62, bowlH: 0.42 }),
   shed: Object.freeze({ x: 22.6, z: -11.5, w: 4.2, h: 6.3, d: 3.5 }),
-  pool: Object.freeze({ x: -8.5, z: -5.5, w: 24.0, d: 12.0 }),
+  pool: Object.freeze({ x: -8.5, z: -5.5, w: 12.0, d: 24.0 }),
   deckT: 1.55,
   fence: Object.freeze({
-    x: 2.15, z0: -20.2, z1: 6.05, h: 4.2, post: 0.12, spacing: 5.25,
+    x: -2.15, z0: -20.2, z1: 6.05, h: 4.2, post: 0.12, spacing: 5.25,
     meshT: 0.06, meshY: 0.28, meshH: 3.72,
   }),
   pots: Object.freeze([
-    Object.freeze({ x: 1.10, z: -17.55, r: 0.28, h: 0.72 }),
-    Object.freeze({ x: 1.10, z: -7.08, r: 0.26, h: 0.64 }),
-    Object.freeze({ x: 1.12, z: 3.42, r: 0.30, h: 0.78 }),
-    Object.freeze({ x: 3.20, z: -17.55, r: 0.24, h: 0.58 }),
+    Object.freeze({ x: -3.20, z: -17.55, r: 0.28, h: 0.72 }),
+    Object.freeze({ x: -3.20, z: -7.08, r: 0.26, h: 0.64 }),
+    Object.freeze({ x: -3.18, z: 3.42, r: 0.30, h: 0.78 }),
+    Object.freeze({ x: -1.10, z: -17.55, r: 0.24, h: 0.58 }),
   ]),
   patioPlanters: Object.freeze([
-    Object.freeze({ x: -2.15, z: -2.55, r: 0.34, h: 0.72 }),
+    Object.freeze({ x: 0.60, z: -2.55, r: 0.34, h: 0.72 }),
     Object.freeze({ x: 10.15, z: -2.55, r: 0.34, h: 0.72 }),
-    Object.freeze({ x: -2.15, z: 6.15, r: 0.30, h: 0.62 }),
+    Object.freeze({ x: 0.60, z: 6.15, r: 0.30, h: 0.62 }),
     Object.freeze({ x: 10.15, z: 6.15, r: 0.30, h: 0.62 }),
   ]),
   pad: Object.freeze({ x: -18.5, z: -15.5, w: 6.4, d: 5.6, h: 0.28 }),
@@ -662,10 +662,6 @@ function buildBackyard(THREE, parent, colliders, lights) {
   const hs = P.house;
   box(THREE, parent, colliders, hs.x, 0, hs.z, hs.w, hs.wallH, hs.d, mats.stucco);
   box(THREE, parent, colliders, P.ridge.x, P.ridge.y, P.ridge.z, P.ridge.w, P.ridge.h, P.ridge.d, mats.tile);
-  box(THREE, parent, colliders, P.roofS.x, P.roofS.y, P.roofS.z, P.roofS.w, P.roofS.h, P.roofS.d, mats.tile);
-  box(THREE, parent, colliders, P.roofN.x, P.roofN.y, P.roofN.z, P.roofN.w, P.roofN.h, P.roofN.d, mats.tile);
-  box(THREE, parent, colliders, P.eaveS.x, P.eaveS.y, P.eaveS.z, P.eaveS.w, P.eaveS.h, P.eaveS.d, mats.tile);
-  box(THREE, parent, colliders, P.eaveN.x, P.eaveN.y, P.eaveN.z, P.eaveN.w, P.eaveN.h, P.eaveN.d, mats.tile);
   const pt = P.patio;
   const col = pt.col;
   for (const dx of [-pt.w / 2 + col, pt.w / 2 - col]) {
@@ -717,20 +713,11 @@ function buildBackyard(THREE, parent, colliders, lights) {
   for (const palm of P.palms) {
     cyl(THREE, parent, colliders, palm.x, 0, palm.z, palm.r, palm.r * 0.85, palm.h, mats.wood);
   }
-  const um = P.umbrella;
-  for (let i = 0; i < um.segs; i++) {
-    const a = (i / (um.segs - 1)) * Math.PI * 0.92;
-    const px = um.x + Math.sin(a) * um.r;
-    const py = (1 - Math.cos(a)) * um.r;
-    box(THREE, parent, colliders, px, py, um.z, um.bar, um.bar + 0.18, um.bar, mats.metal);
-  }
   hoopFrame(THREE, parent, colliders, P.canopy.x, P.canopy.y, P.canopy.z, P.canopy.innerW, P.canopy.innerH, P.canopy.bar, P.canopy.depth, mats.tile);
   const wg = P.wing;
   box(THREE, parent, colliders, wg.x, 0, wg.z, wg.w, wg.wallH, wg.d, mats.stucco);
-  box(THREE, parent, colliders, P.wingEave.x, P.wingEave.y, P.wingEave.z, P.wingEave.w, P.wingEave.h, P.wingEave.d, mats.tile);
   box(THREE, parent, colliders, P.woodGate.x, 0, P.woodGate.z, P.woodGate.w, P.woodGate.h, P.woodGate.d, mats.wood);
   box(THREE, parent, colliders, P.ac.x, 0, P.ac.z, P.ac.w, P.ac.h, P.ac.d, mats.metal);
-  box(THREE, parent, colliders, P.alleyEave.x, P.alleyEave.y, P.alleyEave.z, P.alleyEave.w, P.alleyEave.h, P.alleyEave.d, mats.tile);
   addLight(THREE, parent, lights, 4, 10.2, 2, 0xffe0b8, 2.2, 32);
   addLight(THREE, parent, lights, -8, 8.4, -6, 0xfff0d0, 1.8, 26);
   addLight(THREE, parent, lights, -21.5, 7.4, 14, 0xffe8c4, 1.5, 18);
