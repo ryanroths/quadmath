@@ -15,7 +15,7 @@ Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
 **Amber Court** ships on Gym.
 **Paper Sun** ships on Office.
 **Licorice Grid** ships on Tiny Trainer.
-**Jade Lot** ships on Backyard.
+**Ryan's Yard** ships on Backyard.
 **Pocket Stage** ships on Your Room.
 Remaining maps keep their current procedural rooms and pick up their vibe
 one map per PR.
@@ -30,7 +30,7 @@ one map per PR.
 | `living` | Living Room | Indoor whoop | `sim-maps.js` `buildLiving` | `living-sofa`, `living-circuit` |
 | `garage` | Garage | Indoor whoop | `buildGarage` | `garage-bench`, `garage-rafters`, `garage-shelf`, `garage-orbit`, `garage-door` |
 | `warehouse` | Warehouse | Indoor whoop | `buildWarehouse` | `warehouse-aisle`, `warehouse-catwalk` |
-| `backyard` | Backyard | Outdoor whoop | `buildBackyard` | `backyard-fence`, `backyard-patio` |
+| `backyard` | Backyard (Ryan's) | Outdoor whoop | `buildBackyard` | `backyard-gate`, `backyard-pool`, `backyard-alley`, `backyard-spin` |
 | `office` | Office | Indoor whoop (W3) | `buildOffice` | `office-cubicles`, `office-hallway`, `office-desks` |
 | `gym` | School Gym | Indoor whoop (W3) | `buildGym` | `gym-court`, `gym-bleachers`, `gym-hoops` |
 | `trainer` | Tiny Trainer | Indoor whoop (W3) | `buildTrainer` | `trainer-figure8`, `trainer-slalom`, `trainer-hairpin` |
@@ -115,7 +115,7 @@ The product target stays **60 fps desktop / 45+ mid phone**.
 
 Every row is original. Palette hex is the locked brand for that map. City
 (**Neon Current**), Living Room (**Clay Parlor**), Garage (**Volt Stall**), and
-Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Trainer (**Licorice Grid**), Backyard (**Jade Lot**), and Your Room (**Pocket Stage**) are implemented. Remaining maps wait their turn.
+Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Trainer (**Licorice Grid**), Backyard (**Ryan's Yard**), and Your Room (**Pocket Stage**) are implemented. Remaining maps wait their turn.
 
 ### City — Neon Current (prototype)
 
@@ -158,14 +158,14 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Tr
 - **Gates:** Hex frames with teal core.
 - **Post:** Small bloom on runners. Fog `#0b1218` at `0.0018`.
 
-### Backyard — Jade Lot (shipped)
+### Backyard — Ryan's Yard (shipped)
 
-- **Time:** Dusk under a torn canopy.
-- **Palette:** `#1b2a18` hedge, `#c9a45b` idol gold, `#5d7a3a` grass, `#8a4a2a` laterite, `#ffe0b0` porch.
-- **Sky:** Deep green-dusk gradient, no HDRI.
-- **Props:** Ziggurat shed, stone planters, moss posts. Not a named temple.
-- **Gates:** Stone rings with gold leaf emissive.
-- **Post:** Warm haze, bloom off on Low.
+- **Time:** Overcast Phoenix afternoon.
+- **Palette:** `#c4a882` stucco, `#c45a32` terracotta, `#2ec4b6` pool, `#3f8a4a` turf, `#c2b39a` pebble.
+- **Sky:** Warm overcast gradient, no hard sun sprite.
+- **Props:** PVC practice gate, kidney pool, ficus planter, umbrella arch, yellow canopy, side alley. No clutter, faces, or dog.
+- **Gates:** Stucco hoops with terracotta caps.
+- **Post:** Warm grade, bloom off.
 
 ### Office — Paper Sun (shipped)
 

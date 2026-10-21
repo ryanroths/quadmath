@@ -38,11 +38,12 @@ Helpers live in `sim-art-felt.js`: `FELT_SCALE`, `applyFeltMaterial`,
 | 1 | Living Room (reference) + this bible + studio helpers | shipped |
 | 2 | Garage | Volt Stall night hour stays; density + named lines |
 | 3 | City | Neon Current night hour stays; explore district |
-| 4 | Your Room | Pocket Stage, same lock |
-| 5 | Trainer | Licorice Grid |
-| 6 | Office | Paper Sun; hard key allowed |
-| 7 | Gym | Amber Court; hard key allowed |
-| 8 | Warehouse | Ion Nave night hour stays |
+| 4 | Backyard | Ryan's Yard overcast afternoon; real Phoenix backyard |
+| 5 | Your Room | Pocket Stage, same lock |
+| 6 | Trainer | Licorice Grid |
+| 7 | Office | Paper Sun; hard key allowed |
+| 8 | Gym | Amber Court; hard key allowed |
+| 9 | Warehouse | Ion Nave night hour stays |
 
 Each PR is fresh off latest `main`, never stacked.
 
@@ -79,6 +80,19 @@ Each PR is fresh off latest `main`, never stacked.
   tire-stack dive, door / rafter gap, two toy-scale clutter clusters.
 - Named lines: `garage-shelf`, `garage-orbit`, `garage-door`.
 - Low: no glow pools, sparks, or puddles. Cardboard / clay boxes only.
+
+## Backyard — Ryan's Yard (PR 4)
+
+- Time: overcast afternoon. No hard sun. Bloom off.
+- Palette: `#c4a882` stucco, `#c45a32` terracotta, `#2ec4b6` pool,
+  `#3f8a4a` turf. Warm desert tan, not Jade Lot dusk.
+- Materials: MeshBasic felt on house, turf, pool, PVC, palms. env ≤ 0.28.
+- Play: patio → PVC practice gate → ficus trunk, pool skim through the
+  umbrella arch and yellow canopy, side-alley dive over the wood gate,
+  roof-ridge powerloop. No hoses, toys, chairs, or people.
+- Named lines: `backyard-gate`, `backyard-pool`, `backyard-alley`,
+  `backyard-spin` (Daily Line pool). Picker name: Backyard (Ryan's).
+- Low: merged house / roof / deck / fence. No water shimmer.
 
 ## Photo → map (later)
 

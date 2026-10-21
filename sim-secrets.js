@@ -3,9 +3,9 @@
 // New localStorage key only: quadmathSimSecrets.
 // Stock skin ids / unlocks in sim-retention.js stay frozen.
 
-import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=44f25eb4d256';
-import { LAYOUT } from './sim-maps.js?v=841bda430e6a';
-import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=8cfb879dbe36';
+import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=c43bf3a247a6';
+import { LAYOUT } from './sim-maps.js?v=a81c48a1b734';
+import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=8f9513fb3468';
 
 export const SECRETS_KEY = 'quadmathSimSecrets';
 export const SPARK_NAME = 'Spark';
@@ -129,7 +129,7 @@ export function markSecret(progress, mapId, secretId) {
 
 export function mapBounds(mapId) {
   if (mapId === 'city') return { w: 1400, d: 1400, h: 220, wall: 0 };
-  if (mapId === 'backyard') return { w: LAYOUT.backyard.w, d: LAYOUT.backyard.d, h: 22, wall: LAYOUT.backyard.wall };
+  if (mapId === 'backyard') return { w: LAYOUT.backyard.w, d: LAYOUT.backyard.d, h: 36, wall: LAYOUT.backyard.wall };
   const L = LAYOUT[mapId];
   if (!L) return { w: 24, d: 24, h: 10, wall: 0.4 };
   return { w: L.w, d: L.d, h: L.h, wall: L.wall };
@@ -149,17 +149,17 @@ function extraBoxes(mapId) {
   }
   if (mapId === 'backyard') {
     return [
-      aabb(14.5, 0, -18, 7.2, 6.8, 8.0),
-      aabb(14.5, 6.8, -18, 7.6, 1.1, 8.4),
-      aabb(-4.2, 0, -10.5, 1.6, 2.4, 1.2),
-      aabb(3.2, 0, -9.5, 3.6, 1.15, 1.8),
-      aabb(-14.5, 0, 8, 3.2, 1.4, 3.2),
-      aabb(14.5, 0, 8, 3.2, 1.4, 3.2),
-      aabb(0, 0, -28, 42, 6.2, 0.24),
-      aabb(-21, 0, 0, 0.24, 6.2, 56),
-      aabb(21, 0, 0, 0.24, 6.2, 56),
-      aabb(-14.25, 0, 28, 13.5, 6.2, 0.24),
-      aabb(14.25, 0, 28, 13.5, 6.2, 0.24),
+      aabb(1.5, 0, 14.1, 35.0, 19.25, 13.8),
+      aabb(1.5, 24.2, 14.1, 36.2, 0.42, 0.55),
+      aabb(22.6, 0, -11.5, 4.2, 6.3, 3.5),
+      aabb(17.2, 0, -15.4, 0.90, 14.0, 0.90),
+      aabb(21.75, 0, 20.55, 4.85, 5.55, 0.18),
+      aabb(21.5, 0, 6.55, 1.55, 2.15, 1.30),
+      aabb(-20.8, 0, 8.75, 6.8, 10.4, 15.5),
+      aabb(0, 0, -21, 49, 6.3, 0.36),
+      aabb(-24.5, 0, 0, 0.36, 6.3, 42),
+      aabb(24.5, 0, 0, 0.36, 6.3, 42),
+      aabb(-8.4, 0, 21, 32.2, 6.3, 0.36),
     ];
   }
   return [];
@@ -320,22 +320,22 @@ const PLACEMENTS = Object.freeze({
   }),
   backyard: Object.freeze({
     sparks: Object.freeze([
-      P('b01', 3.2, 1.45, -9.5, 'patio table'),
-      P('b02', -4.2, 2.7, -10.5, 'grill lid'),
-      P('b03', 14.5, 8.25, -18, 'shed roof'),
-      P('b04', 14.5, 1.3, -23.6, 'shed lee'),
-      P('b05', 9.9, 1.15, -18, 'shed side'),
-      P('b06', -14.5, 1.7, 8, 'west planter'),
-      P('b07', 14.5, 1.7, 8, 'east planter'),
-      P('b08', -19.4, 5.7, -26.4, 'fence post'),
-      P('b09', 0, 2.0, 27.4, 'gate fly'),
-      P('b10', 0, 3.4, 4, 'yard hover'),
-      P('b11', -7.2, 0.7, -10.2, 'patio edge'),
-      P('b12', 14.5, 12.2, -18, 'shed sky'),
+      P('b01', 4.0, 2.20, 2.4, 'patio fly'),
+      P('b02', 13.5, 1.75, -3.5, 'PVC gate'),
+      P('b03', 17.2, 2.40, -13.5, 'ficus hover'),
+      P('b04', 22.6, 6.85, -11.5, 'shed roof'),
+      P('b05', -8.5, 1.15, -5.5, 'pool skim'),
+      P('b06', -15.05, 2.10, -14.6, 'umbrella arch'),
+      P('b07', -17.6, 1.55, -12.55, 'canopy frame'),
+      P('b08', 21.75, 1.18, 14.0, 'side alley'),
+      P('b09', 21.75, 6.20, 19.55, 'wood gate'),
+      P('b10', 1.5, 25.4, 12.4, 'roof ridge'),
+      P('b11', -18.5, 1.20, -16.4, 'lounge pad'),
+      P('b12', 21.5, 2.55, 6.55, 'AC box'),
     ]),
     secrets: Object.freeze([
-      S('peak', 'Idol Peak', 14.5, 8.35, -15.2, 1.4, 'shed ridge'),
-      S('moss', 'Moss Hollow', 19.4, 0.85, -26.2, 1.2, 'fence pocket'),
+      S('ridge', 'Roof Ridge', 1.5, 25.6, 12.2, 1.4, '2-story ridge'),
+      S('planter', 'Planter Ring', 18.8, 1.55, -15.4, 1.15, 'ficus well'),
     ]),
   }),
   office: Object.freeze({
@@ -524,15 +524,15 @@ export const SECRET_SKINS = Object.freeze([
     unlock: { type: 'secret', map: 'warehouse' },
   },
   {
-    id: 'spark-backyard', name: 'Idol Leaf', vibe: 'Jade Lot',
-    canopy: 0xc9a45b, body: 0x1b2a18, frame: 0x5d7a3a, prop: 0xffe0b0,
-    led: 0xc9a45b, trail: 0xc9a45b,
+    id: 'spark-backyard', name: 'Turf Gate', vibe: "Ryan's Yard",
+    canopy: 0xc45a32, body: 0x1a2430, frame: 0x2ec4b6, prop: 0x3f8a4a,
+    led: 0xc45a32, trail: 0xc45a32,
     unlock: { type: 'sparks', map: 'backyard' },
   },
   {
-    id: 'secret-backyard', name: 'Moss Hollow', vibe: 'Jade Lot',
-    canopy: 0x5d7a3a, body: 0x12180e, frame: 0x8a4a2a, prop: 0xc9a45b,
-    led: 0xffe0b0, trail: 0x5d7a3a,
+    id: 'secret-backyard', name: 'Pool Shade', vibe: "Ryan's Yard",
+    canopy: 0x2ec4b6, body: 0x1a2430, frame: 0xc45a32, prop: 0xc4a882,
+    led: 0x2ec4b6, trail: 0x2ec4b6,
     unlock: { type: 'secret', map: 'backyard' },
   },
   {
@@ -666,7 +666,7 @@ const VIBE_HEX = Object.freeze({
   living: { a: 0xff6b9a, b: 0xffe08a },
   garage: { a: 0xffb347, b: 0x2de2e6 },
   warehouse: { a: 0x39ffb0, b: 0x7a5cff },
-  backyard: { a: 0xc9a45b, b: 0x5d7a3a },
+  backyard: { a: 0xc45a32, b: 0x2ec4b6 },
   office: { a: 0xff5c5c, b: 0x3d7dff },
   gym: { a: 0xf0b14b, b: 0xfff6d8 },
   trainer: { a: 0xff4d8d, b: 0x00e5ff },

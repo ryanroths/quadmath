@@ -1,0 +1,19 @@
+{
+  "id": "backyard-gate",
+  "map": "backyard",
+  "name": "PVC Gate Loop",
+  "class": "whoop",
+  "gates": [
+    { "x": 4.0, "y": 2.20, "z": 4.2, "ry": 0.00, "size": 1.8, "solid": true },
+    { "x": 8.4, "y": 1.75, "z": -3.5, "ry": 1.57, "size": 1.6, "solid": true },
+    { "x": 13.5, "y": 1.75, "z": -3.5, "ry": 1.57, "size": 1.6, "solid": true },
+    { "x": 17.2, "y": 2.20, "z": -12.4, "ry": 0.00, "size": 1.6, "solid": true },
+    { "x": 20.4, "y": 2.30, "z": -15.4, "ry": 1.57, "size": 1.5, "solid": true },
+    { "x": 17.2, "y": 2.20, "z": -18.4, "ry": 3.14, "size": 1.5, "solid": true },
+    { "x": 8.6, "y": 2.20, "z": -1.4, "ry": -1.10, "size": 1.7, "solid": true },
+    { "x": 4.0, "y": 2.20, "z": 2.4, "ry": 3.14, "size": 1.8, "solid": true }
+  ],
+  "flags": [
+    { "x": 13.5, "y": 2.0, "z": -3.5, "ry": 1.57 }
+  ]
+}
