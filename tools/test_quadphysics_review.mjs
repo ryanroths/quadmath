@@ -9,7 +9,7 @@ import {
   QuadPhysics, PRESETS, DEFAULT_TUNE, PHYSICS_HZ_DEFAULT, PHYSICS_HZ_FAST,
   STICK_SMOOTH_TAU,
 } from '../quadphysics.js';
-import { rateSetpoint, parseCli, SETPOINT_LIMIT } from '../sim-rates.js';
+import { rateSetpoint, parseCli, SETPOINT_LIMIT, actualRate } from '../sim-rates.js';
 import { applyAxisMap, AETR_MAP, mapStickAxes } from '../sim-touch.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -121,31 +121,26 @@ function riseTimeAtFps(fps, frac = 0.9) {
   return tHit;
 }
 
-test('full-stick rise time is fps-independent within ~10% (30/60/144/240)', () => {
-  assert.ok(STICK_SMOOTH_TAU > 0 && STICK_SMOOTH_TAU < 0.04);
-  const times = [30, 60, 144, 240].map((fps) => {
-    const t = riseTimeAtFps(fps, 0.9);
-    assert.ok(t != null, `${fps} fps never reached 90%`);
-    return t;
-  });
-  const mid = times.slice().sort((a, b) => a - b)[1];
-  for (let i = 0; i < times.length; i++) {
-    const fps = [30, 60, 144, 240][i];
-    const err = Math.abs(times[i] - mid) / mid;
-    assert.ok(err <= 0.10, `${fps} fps rise ${times[i].toFixed(3)} vs mid ${mid.toFixed(3)} (${(err * 100).toFixed(1)}%)`);
-  }
+test('full-stick rise time is whoop-fast at 60 and 144 fps', () => {
+  // Interpolate-only: no extra tau. Both fps must reach 90% inside the whoop window.
+  assert.equal(STICK_SMOOTH_TAU, 0);
+  const t60 = riseTimeAtFps(60, 0.9);
+  const t144 = riseTimeAtFps(144, 0.9);
+  assert.ok(t60 != null && t144 != null, `rise 60=${t60} 144=${t144}`);
+  assert.ok(t60 >= 0.008 && t60 <= 0.080, `60 fps t90 ${t60.toFixed(3)} s`);
+  assert.ok(t144 >= 0.008 && t144 <= 0.080, `144 fps t90 ${t144.toFixed(3)} s`);
 });
 
-test('full stick reaches >= 95% of commanded rate', () => {
+test('full stick reaches >= 98% of commanded rate', () => {
   assert.ok(FULL_DPS > 750 && FULL_DPS < 820, `full dps ${FULL_DPS}`);
   const qp = makeAcro(500);
   const hover = hoverCollective();
   const stick = { r: 0, p: 1, y: 0 };
   const sp = pageSetpoint(stick);
   const dt = 1 / qp.physicsHz;
-  for (let i = 0; i < Math.round(0.50 / dt); i++) qp.step(dt, sp, hover, stick);
+  for (let i = 0; i < Math.round(0.35 / dt); i++) qp.step(dt, sp, hover, stick);
   const ratio = Math.abs(qp.omega.y / sp.pitch);
-  assert.ok(ratio >= 0.94, `reached ${(ratio * 100).toFixed(1)}% of ${Math.abs(sp.pitch * DEG).toFixed(0)} °/s`);
+  assert.ok(ratio >= 0.98, `reached ${(ratio * 100).toFixed(1)}% of ${Math.abs(sp.pitch * DEG).toFixed(0)} °/s`);
 });
 
 test('isolated yaw is not 10× too strong — tracks like pitch', () => {
@@ -174,4 +169,65 @@ test('1998 deg/s cap applies to every rates_type', () => {
   assert.ok(Math.abs(rateSetpoint('BETAFLIGHT', 1, crazy)) <= 1998);
   assert.ok(Math.abs(rateSetpoint('ACTUAL', 1, { rcRate: 25, srate: 250, expo: 0 })) <= 1998);
   assert.ok(Math.abs(rateSetpoint('RACEFLIGHT', 1, { rcRate: 255, srate: 0.99, expo: 0 })) <= 1998);
+});
+
+// Ryan's hand-flown Actual: center 40, max R/P 740 Y 700, expo 0.56.
+// Stored units are CLI (center/10, max/10) — same as Betaflight applyActualRates.
+const RYAN_ROLL = { rcRate: 4, srate: 74, expo: 0.56 };
+const RYAN_YAW = { rcRate: 4, srate: 70, expo: 0.56 };
+const STOCK65 = {
+  rollP: 36, rollI: 61, rollD: 27, pitchP: 37, pitchI: 64, pitchD: 29,
+  yawP: 36, yawI: 61, yawD: 0, rollF: 120, pitchF: 128, yawF: 160,
+};
+
+test('Actual formula matches Betaflight applyActualRates for Ryan\'s numbers', () => {
+  // BF: center = rcRates*10, max = rates*10, expo CLI/100.
+  // angleRate = x*center + max(0,max-center)*abs(x)*(x^5*expo + x*(1-expo))
+  assert.equal(actualRate(1, 40, 740, 0.56), 740);
+  assert.equal(actualRate(-1, 40, 740, 0.56), -740);
+  assert.equal(actualRate(1, 40, 700, 0.56), 700);
+  assert.equal(rateSetpoint('ACTUAL', 1, RYAN_ROLL), 740);
+  assert.equal(rateSetpoint('ACTUAL', 1, RYAN_YAW), 700);
+  assert.equal(actualRate(0, 40, 740, 0.56), 0);
+  const mid = actualRate(0.5, 40, 740, 0.56);
+  const bfMid = 0.5 * 40 + 700 * 0.5 * (Math.pow(0.5, 5) * 0.56 + 0.5 * 0.44);
+  assert.ok(Math.abs(mid - bfMid) < 1e-9, `mid ${mid} vs BF ${bfMid}`);
+  assert.ok(mid > 90 && mid < 130, `mid-stick ${mid} (expo 0.56 soft centre)`);
+  const q = 0.25;
+  const bfQ = q * 40 + 700 * q * (Math.pow(q, 5) * 0.56 + q * 0.44);
+  assert.ok(Math.abs(actualRate(q, 40, 740, 0.56) - bfQ) < 1e-9);
+});
+
+function ryanFullStickRoll(fps) {
+  const qp = new QuadPhysics(PRESETS.whoop65, STOCK65);
+  qp.setFlightMode('acro');
+  qp.setPhysicsHz(500);
+  qp.reset({ x: 0, y: 0, z: 4 });
+  qp.arm();
+  const hover = hoverCollective();
+  const tgt = rateSetpoint('ACTUAL', 1, RYAN_ROLL) * Math.PI / 180;
+  const fd = 1 / fps;
+  let t725 = null, peak = 0, phys = 0;
+  const inner = qp.substep.bind(qp);
+  qp.substep = function () { phys += qp.physicsDt; return inner(); };
+  for (let i = 0; i < 40; i++) qp.step(1 / qp.physicsHz, { roll: 0, pitch: 0, yaw: 0 }, hover, { r: 0, p: 0, y: 0 });
+  let wall = 0;
+  while (wall < 0.20) {
+    qp.step(fd, { roll: tgt, pitch: 0, yaw: 0 }, hover, { r: 1, p: 0, y: 0 });
+    wall += fd;
+    const dps = Math.abs(qp.omega.x) * DEG;
+    if (dps > peak) peak = dps;
+    if (t725 == null && dps >= 725) t725 = phys;
+  }
+  return { t725, peak, held: Math.abs(qp.omega.x) * DEG };
+}
+
+test('Ryan Actual full-stick roll >= 725 deg/s within 150 ms', () => {
+  for (const fps of [60, 144]) {
+    const r = ryanFullStickRoll(fps);
+    assert.ok(r.t725 != null && r.t725 <= 0.150,
+      `${fps} fps: 725 °/s at ${r.t725 == null ? 'never' : (r.t725 * 1000).toFixed(0) + ' ms'} (peak ${r.peak.toFixed(0)})`);
+    assert.ok(r.held >= 725, `${fps} fps: held ${r.held.toFixed(1)} °/s at 200 ms`);
+    assert.ok(r.held / 740 >= 0.98, `${fps} fps: held ${(r.held / 740 * 100).toFixed(1)}% of 740`);
+  }
 });
