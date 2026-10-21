@@ -1,0 +1,22 @@
+Kenney CC0 1.0 low-poly kit ( Ion Nave )
+
+All packs are Creative Commons Zero (CC0 1.0):
+  http://creativecommons.org/publicdomain/zero/1.0/
+
+Packs (License-*.txt in this folder, copied from the zip):
+  Survival Kit 2.0      https://kenney.nl/assets/survival-kit
+  Furniture Kit 2.0     https://kenney.nl/assets/furniture-kit
+
+Support Kenney: https://kenney.nl/donate  (credit is not required)
+
+Shipped files are a small meshopt-compressed geometry subset (no colormap
+textures — the sim paints Ion Nave materials for bloom). Total payload is
+11 616 bytes (11.3 KB). Low quality fetches only the crate (3 708 bytes).
+Med/High fetch barrel and cardboard too.
+
+  crate.glb       Survival Kit box
+  barrel.glb      Survival Kit barrel
+  cardboard.glb   Furniture Kit cardboardBoxClosed
+
+Nothing here is from the GPL whoop sim. Procedural Ion Nave stays the
+fallback if a mesh fails to load.

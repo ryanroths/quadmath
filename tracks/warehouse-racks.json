@@ -1,0 +1,19 @@
+{
+  "id": "warehouse-racks",
+  "map": "warehouse",
+  "name": "Rack Weave",
+  "class": "whoop",
+  "gates": [
+    { "x": 0.0, "y": 2.6, "z": 34.0, "ry": 0.00, "size": 2.1, "solid": true },
+    { "x": 0.0, "y": 2.80, "z": 12.0, "ry": 0.00, "size": 1.9, "solid": true },
+    { "x": -7.5, "y": 0.65, "z": 0.0, "ry": 1.57, "size": 1.5, "solid": true },
+    { "x": -22.0, "y": 1.10, "z": 36.0, "ry": 0.00, "size": 1.5, "solid": true },
+    { "x": 7.5, "y": 2.85, "z": 24.0, "ry": 1.57, "size": 1.5, "solid": true },
+    { "x": 22.5, "y": 11.10, "z": 0.0, "ry": 1.57, "size": 1.6, "solid": true },
+    { "x": 0.0, "y": 1.55, "z": -38.4, "ry": 0.00, "size": 1.5, "solid": true },
+    { "x": 0.0, "y": 2.6, "z": 20.0, "ry": 3.14, "size": 2.0, "solid": true }
+  ],
+  "flags": [
+    { "x": 0.0, "y": 3.2, "z": 12.0, "ry": 0 }
+  ]
+}

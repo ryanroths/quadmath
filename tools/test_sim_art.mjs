@@ -16,6 +16,7 @@ import {
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
   kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP, planGarageKit,
+  warehouseKitBytesForQuality, WAREHOUSE_KIT_CORE, WAREHOUSE_KIT_EXTRA, planWarehouseKit,
   restyleDiveTubes, LIVING_VIBE_ID, hideStockLivingMeshes, buildClayParlor,
   restyleLiving, tickLivingArt, livingBudget, livingWantsGlow,
   GARAGE_VIBE_ID, hideStockGarageMeshes, buildVoltStall,
@@ -35,7 +36,7 @@ import {
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
-import { MAP_IDS, MAP_LOOKS, buildMap, GARAGE_PLAY } from '../sim-maps.js';
+import { MAP_IDS, MAP_LOOKS, buildMap, GARAGE_PLAY, WAREHOUSE_PLAY } from '../sim-maps.js';
 import { DAILY_MAPS } from '../sim-retention.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -148,6 +149,7 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.match(sim, /City is original procedural art|Neon Current/);
   assert.match(sim, /tryDressCityKit/);
   assert.match(sim, /tryDressGarageKit/);
+  assert.match(sim, /tryDressWarehouseKit/);
   assert.match(sim, /MeshoptDecoder/);
   assert.match(sim, /Kenney CC0/);
   assert.match(sim, /Kenney CC0 shop kit/);
@@ -325,6 +327,56 @@ test('Kenney CC0 garage kit is meshopt-compressed and stays off the banned path'
   assert.equal(/emissiveIntensity: [2-9]/.test(emit), false, 'garage kit glow must stay dim under bloom');
   assert.match(kitSrc, /function garageMat/);
   assert.equal(/garageMat[\s\S]{0,900}MeshStandardMaterial/.test(kitSrc), false, 'garage kit must not use MeshStandard after IBL');
+  assert.match(emit, /MeshBasicMaterial/);
+});
+
+test('Kenney CC0 warehouse kit is meshopt-compressed and stays off the banned path', () => {
+  const kitDir = join(root, 'assets/sim-warehouse');
+  const kitSrc = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  const warehouseSrc = readFileSync(join(root, 'sim-art-warehouse.js'), 'utf8');
+  assert.equal(kitSrc.includes('GLB-format'), false);
+  assert.equal(kitSrc.includes('loadAsync'), false);
+  assert.equal(kitSrc.includes('WebFPV'), false);
+  assert.equal(warehouseSrc.includes('GLB-format'), false);
+  assert.equal(warehouseSrc.includes('WebFPV'), false);
+  assert.equal(mentionsBannedAssets(warehouseSrc), false);
+  assert.match(kitSrc, /tryDressWarehouseKit/);
+  assert.match(kitSrc, /function warehouseMat/);
+  assert.equal(warehouseKitBytesForQuality('low'), 3708);
+  assert.equal(warehouseKitBytesForQuality('med'), 11616);
+  assert.equal(warehouseKitBytesForQuality('high'), 11616);
+  const planned = planWarehouseKit();
+  assert.ok(planned.crates.length >= 8);
+  assert.ok(planned.barrels.length >= 4);
+  assert.ok(planned.cardboard.length >= 4);
+  const clutter = [].concat(planned.crates, planned.barrels, planned.cardboard);
+  for (const p of clutter) {
+    const onShelf = p.y >= 1.2;
+    assert.ok(Math.abs(p.x) >= 7.2 || onShelf, 'kit clutter too close to aisle ' + p.x + ',' + p.z);
+  }
+  for (const name of ['License-survival-kit.txt', 'License-furniture-kit.txt', 'CREDITS.txt']) {
+    assert.ok(existsSync(join(kitDir, name)), name);
+    if (name.startsWith('License-')) {
+      assert.match(readFileSync(join(kitDir, name), 'utf8'), /Creative Commons Zero, CC0/);
+    }
+  }
+  let glbBytes = 0;
+  const names = [];
+  const kitSpecs = Object.values(WAREHOUSE_KIT_CORE).concat(Object.values(WAREHOUSE_KIT_EXTRA));
+  for (const spec of kitSpecs) {
+    const p = join(kitDir, spec.file);
+    assert.equal(existsSync(p), true, spec.file);
+    const n = statSync(p).size;
+    assert.equal(n, spec.bytes, spec.file + ' size');
+    glbBytes += n;
+    names.push(spec.file);
+  }
+  assert.equal(glbBytes, 11616);
+  assert.equal(new Set(names).size, names.length);
+  assert.ok(!readdirSync(kitDir).some((f) => f.includes('GLB-format')));
+  const emit = kitSrc.slice(kitSrc.indexOf('function warehouseMat'), kitSrc.indexOf('let warehouseDressGen'));
+  assert.equal(/emissiveIntensity: [2-9]/.test(emit), false, 'warehouse kit glow must stay dim under bloom');
+  assert.equal(/warehouseMat[\s\S]{0,900}MeshStandardMaterial/.test(kitSrc), false, 'warehouse kit must not use MeshStandard after IBL');
   assert.match(emit, /MeshBasicMaterial/);
 });
 
@@ -921,6 +973,35 @@ test('Warehouse freestyle builds without throwing and the FPV frame is not all b
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickWarehouseArt must not touch the THREE binding');
   assert.match(tickSrc, /warehouseIon|warehouseTube|warehouseOrb/);
+});
+
+test('Warehouse playground keeps whoop-sized gaps that match the visuals', () => {
+  const built = buildMap(THREE, 'warehouse');
+  const hit = (x, y, z) => {
+    const p = new THREE.Vector3(x, y, z);
+    return built.colliders.some((bb) => bb.containsPoint(p));
+  };
+  const P = WAREHOUSE_PLAY;
+  const rx = P.rackXs[1], rz = P.rackZs[1];
+  assert.equal(hit(rx, 0.62, rz), false, 'fly under first shelf');
+  assert.equal(hit(rx, P.shelfYs[0], rz), true, 'shelf slab solid');
+  assert.equal(hit(rx, P.shelfYs[0] + 1.55, rz), false, 'fly between shelf levels');
+  assert.equal(hit(rx, P.shelfYs[3] + 0.55, rz), false, 'fly over top shelf');
+  assert.equal(hit(rx + P.postOffX, 2.0, rz + P.postOffZ), true, 'rack post solid');
+  assert.equal(hit(-22.0, 1.10, 36.0), false, 'fly between pallet columns');
+  assert.equal(hit(-24.05, 1.10, 36.0), true, 'west pallet column solid');
+  assert.equal(hit(0, 1.55, -38.4), false, 'fly the crate gap');
+  assert.equal(hit(P.gap.left.x, 1.55, P.gap.left.z), true, 'gap stack solid');
+  assert.equal(hit(P.ion.x, P.ion.y, P.ion.z), false, 'ion hoop open');
+  assert.equal(hit(P.ion.x, P.ion.y + P.ion.innerH / 2 + P.ion.bar / 2, P.ion.z), true, 'ion frame solid');
+  assert.equal(hit(0, 16.25, 12.0), false, 'fly under rafter joist');
+  assert.equal(hit(0, P.rafterY + 0.08, 12.0), true, 'rafter joist solid');
+  assert.ok(P.whoopClear >= 0.85, 'whoop clearance');
+  assert.ok(P.shelfYs[0] >= 0.85, 'under-shelf taller than 85mm whoop');
+  assert.ok(P.shelfH <= 0.28, 'shelf is a slab');
+  const warehouseSrc = readFileSync(join(root, 'sim-art-warehouse.js'), 'utf8');
+  assert.match(warehouseSrc, /WAREHOUSE_PLAY/);
+  assert.match(warehouseSrc, /planWarehouseKit|addPlayLines/);
 });
 
 test('Gym Amber Court is implemented with brass-wood gates', () => {
