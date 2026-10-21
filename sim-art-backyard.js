@@ -2,9 +2,9 @@
 // Visual only. Colliders live in sim-maps.js BACKYARD_PLAY.
 // Generated / CC0 tiling textures. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=9aeb5e8c616e';
+import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=ef5849d4859b';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=67c976696da2';
+import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=d9af70a64707';
 
 export const BACKYARD_STOCK = Object.freeze({
   turf: 0x3f8a4a,
@@ -126,22 +126,15 @@ function turfTex(THREE) {
   return canvasTex(THREE, 256, 256, (g, w, h) => {
     g.fillStyle = '#2f7a38';
     g.fillRect(0, 0, w, h);
-    for (let y = 0; y < h; y++) {
-      const stripe = ((y / 18) | 0) % 2;
-      const tone = stripe ? 0.10 : -0.07;
-      g.fillStyle = `rgba(${stripe ? 210 : 10},${stripe ? 230 : 40},${stripe ? 90 : 20},${0.10 + Math.abs(tone) * 0.35})`;
-      g.fillRect(0, y, w, 1);
-    }
-    for (let i = 0; i < 900; i++) {
+    for (let i = 0; i < 1400; i++) {
       const u = hash(i), v = hash(i + 19);
-      const warm = hash(i + 41) > 0.62;
+      const warm = hash(i + 41) > 0.55;
       g.fillStyle = warm
-        ? `rgba(196,214,72,${0.10 + hash(i + 7) * 0.16})`
-        : `rgba(18,78,28,${0.12 + hash(i + 3) * 0.22})`;
-      const x = u * w, y = v * h;
-      g.fillRect(x, y, 1.4, 3.2 + hash(i + 11) * 4);
+        ? `rgba(150,180,48,${0.07 + hash(i + 7) * 0.12})`
+        : `rgba(18,72,26,${0.08 + hash(i + 3) * 0.16})`;
+      g.fillRect(u * w, v * h, 1.6, 2.4 + hash(i + 11) * 3);
     }
-  }, 10, 10);
+  }, 18, 18);
 }
 
 function pebbleTex(THREE) {
@@ -578,7 +571,7 @@ function makeYardMats(THREE, vibe, quality, budget) {
     paver: heroMat(THREE, 0xffffff, {
       map: paverTex(THREE), roughness: 0.82, metalness: 0.04,
     }),
-    stucco: heroMat(THREE, 0xffffff, {
+    stucco: heroMat(THREE, 0xe8d2b0, {
       map: stucco, roughness: 0.86, metalness: 0.01, envMapIntensity: 0.32,
     }),
     tile: heroMat(THREE, 0xffffff, {
@@ -629,8 +622,8 @@ function makeYardMats(THREE, vibe, quality, budget) {
       map: poolTileTex(THREE), roughness: 0.35, metalness: 0.12, envMapIntensity: 0.7,
     }),
     dark: heroMat(THREE, hexNum('#2a241c'), { roughness: 0.70, metalness: 0.08 }),
-    window: heroMat(THREE, hexNum(pal.windowOn), {
-      roughness: 0.08, metalness: 0.42, envMapIntensity: 0.95,
+    window: heroMat(THREE, hexNum('#8eb4c8'), {
+      roughness: 0.22, metalness: 0.08, envMapIntensity: 0.4,
     }),
     pvc: heroMat(THREE, 0xf4f1ea, { roughness: 0.48, metalness: 0.04, envMapIntensity: 0.38 }),
     yellow: heroMat(THREE, hexNum('#e8c04a'), { roughness: 0.62, metalness: 0.04 }),
@@ -721,6 +714,7 @@ function addSky(THREE, parent, mats) {
   const dome = new THREE.Mesh(new THREE.SphereGeometry(110, 24, 16), mats.sky);
   dome.position.y = 8;
   mark(dome, false);
+  dome.userData.backyardProcSky = true;
   parent.add(dome);
 }
 
@@ -733,7 +727,7 @@ function addYardWalls(THREE, parent, mats) {
     placedBevelBox(THREE, t, wh, L.d, -hx, 0, 0, 0.04),
     placedBevelBox(THREE, t, wh, L.d, hx, 0, 0, 0.04),
     placedBevelBox(THREE, P.streetWall.w, wh, t, P.streetWall.x, 0, hz, 0.04),
-  ], mats.cmu);
+  ], mats.stucco);
 }
 
 function addHouse(THREE, parent, mats) {
@@ -752,18 +746,19 @@ function addHouse(THREE, parent, mats) {
   addMerged(THREE, parent, [
     placedBevelBox(THREE, P.ridge.w, P.ridge.h, P.ridge.d, P.ridge.x, P.ridge.y, P.ridge.z, 0.04),
   ], mats.tile);
-  addMerged(THREE, parent, [
-    placedBox(THREE, 6.4, 4.8, 0.08, -4.2, 3.2, hs.z - hs.d / 2 - 0.05),
-    placedBox(THREE, 6.4, 4.8, 0.08, 8.2, 3.2, hs.z - hs.d / 2 - 0.05),
-    placedBox(THREE, 5.2, 3.6, 0.08, -4.2, 12.4, hs.z - hs.d / 2 - 0.05),
-    placedBox(THREE, 5.2, 3.6, 0.08, 8.2, 12.4, hs.z - hs.d / 2 - 0.05),
-  ], mats.window, false);
-  addMerged(THREE, parent, [
-    placedBox(THREE, 6.7, 0.12, 0.10, -4.2, 3.14, hs.z - hs.d / 2 - 0.10),
-    placedBox(THREE, 6.7, 0.12, 0.10, -4.2, 7.94, hs.z - hs.d / 2 - 0.10),
-    placedBox(THREE, 6.7, 0.12, 0.10, 8.2, 3.14, hs.z - hs.d / 2 - 0.10),
-    placedBox(THREE, 6.7, 0.12, 0.10, 8.2, 7.94, hs.z - hs.d / 2 - 0.10),
-  ], mats.wood);
+  const wins = [];
+  const frames = [];
+  for (const [cx, cy] of [[-4.2, 4.4], [8.2, 4.4], [-4.2, 13.2], [8.2, 13.2]]) {
+    for (const dx of [-1.15, 1.15]) {
+      for (const dy of [-0.95, 0.95]) {
+        wins.push(placedBox(THREE, 1.7, 1.4, 0.06, cx + dx, cy + dy, hs.z - hs.d / 2 - 0.05));
+        frames.push(placedBox(THREE, 1.86, 0.08, 0.10, cx + dx, cy + dy - 0.72, hs.z - hs.d / 2 - 0.10));
+        frames.push(placedBox(THREE, 1.86, 0.08, 0.10, cx + dx, cy + dy + 0.72, hs.z - hs.d / 2 - 0.10));
+      }
+    }
+  }
+  addMerged(THREE, parent, wins, mats.window, false);
+  addMerged(THREE, parent, frames, mats.wood);
   const shade = new THREE.Mesh(placedBox(THREE, P.shade.w, P.shade.h, P.shade.d, P.shade.x, P.shade.y, P.shade.z), mats.metal);
   mark(shade);
   parent.add(shade);
@@ -829,12 +824,14 @@ function addTree(THREE, parent, mats, budget) {
   const t = BACKYARD_PLAY.ficus;
   const trunk = new THREE.Mesh(new THREE.CapsuleGeometry(t.r, t.h - t.r * 2, 4, 8), mats.wood);
   trunk.position.set(t.x, t.h / 2, t.z);
+  trunk.userData.backyardProcTree = true;
   mark(trunk);
   parent.add(trunk);
   const canopy = new THREE.Mesh(canopyLathe(THREE), mats.darkLeaf);
   canopy.position.set(t.x, t.h * 0.46, t.z);
   canopy.scale.set(0.88, 0.78, 0.88);
   canopy.userData.backyardPalm = true;
+  canopy.userData.backyardProcTree = true;
   mark(canopy);
   parent.add(canopy);
   const puffs = Math.min(10, Math.max(6, (budget.leaves / 22) | 0));
@@ -844,6 +841,7 @@ function addTree(THREE, parent, mats, budget) {
     puff.position.set(t.x + Math.cos(a) * 2.15, t.h * 0.60 + (i % 3) * 0.65, t.z + Math.sin(a) * 2.15);
     puff.scale.set(1.2, 0.82, 1.2);
     puff.userData.backyardPalm = true;
+    puff.userData.backyardProcTree = true;
     mark(puff);
     parent.add(puff);
   }
@@ -858,6 +856,7 @@ function addTree(THREE, parent, mats, budget) {
   ringGeo.rotateX(-Math.PI / 2);
   const planter = new THREE.Mesh(ringGeo, mats.cmu);
   planter.position.set(ring.x, 0, ring.z);
+  planter.userData.backyardProcPlanter = true;
   mark(planter);
   parent.add(planter);
   const dapple = new THREE.Mesh(new THREE.PlaneGeometry(9.2, 9.2), mats.dapple);
@@ -897,7 +896,8 @@ function addPool(THREE, parent, mats, budget) {
     placedBevelBox(THREE, P.pad.w, P.pad.h, P.pad.d, P.pad.x, 0, P.pad.z, 0.03),
     placedBevelBox(THREE, P.fire.w, 0.12, P.fire.d, P.fire.x, 0, P.fire.z, 0.02),
   ];
-  addMerged(THREE, parent, deck, mats.pebble);
+  const coping = addMerged(THREE, parent, deck, mats.pebble);
+  if (coping) coping.userData.backyardProcCoping = true;
 }
 
 function addFenceAndPots(THREE, parent, mats, budget, gates) {
@@ -921,8 +921,10 @@ function addFenceAndPots(THREE, parent, mats, budget, gates) {
       }
     }
   }
-  addMerged(THREE, parent, posts, mats.metal);
-  addMerged(THREE, parent, panels, mats.mesh);
+  const postMesh = addMerged(THREE, parent, posts, mats.metal);
+  const panelMesh = addMerged(THREE, parent, panels, mats.mesh);
+  if (postMesh) postMesh.userData.backyardProcFence = true;
+  if (panelMesh) panelMesh.userData.backyardProcFence = true;
   const potSpots = P.pots.map((pot, idx) => [pot.x, pot.z, idx % 2 ? mats.red : mats.cactus, pot.r, pot.h]);
   const extras = [
     [-6.4, 2.6, mats.red, 0.26, 0.62], [6.8, 2.2, mats.cactus, 0.24, 0.58],
@@ -935,10 +937,13 @@ function addFenceAndPots(THREE, parent, mats, budget, gates) {
     if (!propClearOfCourse(s[0], s[1], 0.28, gates, { gatePad: 1.4, corridor: 1.2, yRange: 2 })) continue;
     const pot = new THREE.Mesh(placedCyl(THREE, s[3], s[3] * 0.85, s[4], 0, 0, 0, 8), mats.tile);
     pot.position.set(s[0], 0, s[1]);
+    pot.userData.backyardProcPot = true;
     mark(pot);
     parent.add(pot);
     const plant = new THREE.Mesh(new THREE.CapsuleGeometry(s[3] * 0.45, s[4] * 0.55, 3, 6), s[2]);
     plant.position.set(s[0], s[4] + 0.22, s[1]);
+    plant.userData.backyardProcPot = true;
+    plant.userData.backyardProcShrub = true;
     mark(plant);
     parent.add(plant);
   }
@@ -950,10 +955,12 @@ function addPatioDress(THREE, parent, mats, budget, gates) {
     if (!propClearOfCourse(pot.x, pot.z, pot.r, gates, { gatePad: 1.2, corridor: 1.0, yRange: 2 })) continue;
     const body = new THREE.Mesh(placedCyl(THREE, pot.r, pot.r * 0.85, pot.h, 0, 0, 0, 8), mats.tile);
     body.position.set(pot.x, 0, pot.z);
+    body.userData.backyardProcPot = true;
     mark(body);
     parent.add(body);
     const plant = new THREE.Mesh(new THREE.CapsuleGeometry(pot.r * 0.42, pot.h * 0.55, 3, 6), mats.cactus);
     plant.position.set(pot.x, pot.h + 0.22, pot.z);
+    plant.userData.backyardProcPot = true;
     mark(plant);
     parent.add(plant);
     addLeafCards(THREE, parent, mats, pot.x, pot.h + 0.28, pot.z, Math.max(7, (budget.leaves / 12) | 0), 0.42, 0.38, false, 0.55, 0.68);
@@ -999,9 +1006,11 @@ function addGrass(THREE, parent, mats, budget, gates) {
 function addLounge(THREE, parent, mats, budget) {
   const P = BACKYARD_PLAY;
   const sofa = new THREE.Mesh(placedBevelBox(THREE, P.sofa.w, P.sofa.seatH, P.sofa.d, P.sofa.x, 0, P.sofa.z, 0.04), mats.wicker);
+  sofa.userData.backyardProcPatio = true;
   mark(sofa);
   parent.add(sofa);
   const back = new THREE.Mesh(placedBevelBox(THREE, P.sofa.w, P.sofa.backH - P.sofa.seatH, P.sofa.backD, P.sofa.x, P.sofa.seatH, P.sofa.z - P.sofa.d / 2 + P.sofa.backD / 2, 0.03), mats.wicker);
+  back.userData.backyardProcPatio = true;
   mark(back);
   parent.add(back);
   const canopy = [];
@@ -1011,16 +1020,19 @@ function addLounge(THREE, parent, mats, budget) {
   canopy.push(placedBox(THREE, c.innerW + t * 2, t, t, c.x, c.y - c.innerH / 2 - t, c.z));
   canopy.push(placedBox(THREE, t, c.innerH, t, c.x - c.innerW / 2 - t / 2, c.y - c.innerH / 2, c.z));
   canopy.push(placedBox(THREE, t, c.innerH, t, c.x + c.innerW / 2 + t / 2, c.y - c.innerH / 2, c.z));
-  addMerged(THREE, parent, canopy, mats.dark);
+  const canopyMesh = addMerged(THREE, parent, canopy, mats.dark);
+  if (canopyMesh) canopyMesh.userData.backyardProcCanopy = true;
   const n = Math.min(budget.palms, P.palms.length);
   for (let i = 0; i < n; i++) {
     const p = P.palms[i];
     const trunk = new THREE.Mesh(new THREE.CapsuleGeometry(p.r, p.h - 0.4, 3, 6), mats.wood);
     trunk.position.set(p.x, p.h / 2, p.z);
     trunk.userData.backyardPalm = true;
+    trunk.userData.backyardProcPalm = true;
     mark(trunk);
     parent.add(trunk);
-    addPalmFronds(THREE, parent, mats, p.x, p.h - 0.35, p.z, Math.max(14, (budget.fronds / n) | 0), i === 2 ? 1.55 : 1.25, budget.shadowCasters);
+    const fronds = addPalmFronds(THREE, parent, mats, p.x, p.h - 0.35, p.z, Math.max(14, (budget.fronds / n) | 0), i === 2 ? 1.55 : 1.25, budget.shadowCasters);
+    if (fronds) fronds.userData.backyardProcPalm = true;
     const dapple = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 3.6), mats.dapple);
     dapple.rotation.x = -Math.PI / 2;
     dapple.position.set(p.x + 0.4, 0.025, p.z + 0.35);
@@ -1038,7 +1050,8 @@ function addYardExtras(THREE, parent, mats) {
   for (let i = 0; i < 5; i++) {
     acBits.push(placedBox(THREE, P.ac.w - 0.18, 0.06, 0.04, P.ac.x, 0.28 + i * 0.34, P.ac.z + P.ac.d / 2 + 0.03));
   }
-  addMerged(THREE, parent, acBits, mats.metal);
+  const acMesh = addMerged(THREE, parent, acBits, mats.metal);
+  if (acMesh) acMesh.userData.backyardProcAc = true;
   const planks = [];
   const gw = P.woodGate.w, gh = P.woodGate.h, gd = P.woodGate.d;
   const n = 7, pw = gw / n;
@@ -1047,7 +1060,8 @@ function addYardExtras(THREE, parent, mats) {
   }
   planks.push(placedBox(THREE, gw, 0.14, gd + 0.04, P.woodGate.x, 0.55, P.woodGate.z));
   planks.push(placedBox(THREE, gw, 0.14, gd + 0.04, P.woodGate.x, gh - 0.7, P.woodGate.z));
-  addMerged(THREE, parent, planks, mats.wood);
+  const gateMesh = addMerged(THREE, parent, planks, mats.wood);
+  if (gateMesh) gateMesh.userData.backyardProcGate = true;
   const bowl = new THREE.Mesh(placedCyl(THREE, P.fire.bowlR, P.fire.bowlR * 0.8, P.fire.bowlH, P.fire.x, 0.12, P.fire.z, 10), mats.metal);
   mark(bowl);
   parent.add(bowl);
@@ -1073,9 +1087,11 @@ function addNeighbors(THREE, parent, mats, budget) {
   for (let i = 0; i < Math.min(budget.neighbors, palms.length); i++) {
     const trunk = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 10, 3, 6), mats.wood);
     trunk.position.set(palms[i][0], 5.2, palms[i][1]);
+    trunk.userData.backyardProcPalm = true;
     mark(trunk);
     parent.add(trunk);
-    addPalmFronds(THREE, parent, mats, palms[i][0], 10.2, palms[i][1], 12, 1.2, false);
+    const nf = addPalmFronds(THREE, parent, mats, palms[i][0], 10.2, palms[i][1], 12, 1.2, false);
+    if (nf) nf.userData.backyardProcPalm = true;
   }
 }
 
@@ -1090,24 +1106,41 @@ function addRimTrees(THREE, parent, mats, budget) {
     const trunk = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 7.4, 3, 6), mats.wood);
     trunk.position.set(s[0], 4.0, s[1]);
     trunk.userData.backyardPalm = true;
+    trunk.userData.backyardProcTree = true;
     mark(trunk);
     parent.add(trunk);
     addLeafCards(THREE, parent, mats, s[0], 6.4, s[1], Math.max(28, (budget.leaves / 6) | 0), 2.6, 2.4, false, 1.05, 1.2);
   }
 }
 
-function applyCc0Maps(THREE, mats) {
+function applyCc0Maps(THREE, mats, quality) {
   if (typeof window === 'undefined' || !THREE.TextureLoader) return;
   let loader;
   try { loader = new THREE.TextureLoader(); } catch (e) { return; }
+  const low = quality === 'low';
+  const plaster = low
+    ? 'assets/sim-backyard/tex/plaster_diff_512.webp'
+    : 'assets/sim-backyard/tex/plaster_diff_1k.webp';
+  const roof = low
+    ? 'assets/sim-backyard/tex/roof_diff_512.webp'
+    : 'assets/sim-backyard/tex/roof_diff_1k.webp';
   const jobs = [
-    ['assets/sim-looks/tex/grass_diff_1k.webp', mats.turf, 'map', THREE.SRGBColorSpace, 14, 14],
-    ['assets/sim-looks/tex/grass_nor_1k.webp', mats.turf, 'normalMap', THREE.LinearSRGBColorSpace, 14, 14],
-    ['assets/sim-looks/tex/grass_rough_1k.webp', mats.turf, 'roughnessMap', THREE.LinearSRGBColorSpace, 14, 14],
-    ['assets/sim-looks/tex/facade_diff_1k.webp', mats.stucco, 'map', THREE.SRGBColorSpace, 4, 4],
-    ['assets/sim-looks/tex/concrete_diff_1k.webp', mats.cmu, 'map', THREE.SRGBColorSpace, 3, 3],
-    ['assets/sim-looks/tex/concrete_diff_1k.webp', mats.pebble, 'map', THREE.SRGBColorSpace, 6, 6],
+    ['assets/sim-looks/tex/grass_diff_1k.webp', mats.turf, 'map', THREE.SRGBColorSpace, 22, 22],
+    ['assets/sim-looks/tex/grass_nor_1k.webp', mats.turf, 'normalMap', THREE.LinearSRGBColorSpace, 22, 22],
+    ['assets/sim-looks/tex/grass_rough_1k.webp', mats.turf, 'roughnessMap', THREE.LinearSRGBColorSpace, 22, 22],
+    [plaster, mats.stucco, 'map', THREE.SRGBColorSpace, 5, 5],
+    [roof, mats.tile, 'map', THREE.SRGBColorSpace, 8, 6],
+    ['assets/sim-looks/tex/concrete_diff_1k.webp', mats.cmu, 'map', THREE.SRGBColorSpace, 4, 4],
+    ['assets/sim-looks/tex/concrete_diff_1k.webp', mats.pebble, 'map', THREE.SRGBColorSpace, 8, 8],
   ];
+  if (!low) {
+    jobs.push(
+      ['assets/sim-backyard/tex/plaster_nor_1k.webp', mats.stucco, 'normalMap', THREE.LinearSRGBColorSpace, 5, 5],
+      ['assets/sim-backyard/tex/plaster_rough_1k.webp', mats.stucco, 'roughnessMap', THREE.LinearSRGBColorSpace, 5, 5],
+      ['assets/sim-backyard/tex/roof_nor_1k.webp', mats.tile, 'normalMap', THREE.LinearSRGBColorSpace, 8, 6],
+      ['assets/sim-backyard/tex/roof_rough_1k.webp', mats.tile, 'roughnessMap', THREE.LinearSRGBColorSpace, 8, 6],
+    );
+  }
   for (const [url, mat, key, space, rx, ry] of jobs) {
     if (!mat) continue;
     try {
@@ -1172,9 +1205,41 @@ export function buildRyanYard(THREE, parent, vibe, quality, gates) {
   addNeighbors(THREE, group, mats, budget);
   addRimTrees(THREE, group, mats, budget);
   addPlayLines(THREE, group, mats, keep);
-  applyCc0Maps(THREE, mats);
+  applyCc0Maps(THREE, mats, quality);
+  try {
+    group.userData.planned = planBackyardKit();
+  } catch (e) { /* kit plan is optional */ }
   parent.add(group);
   return group;
+}
+
+export function planBackyardKit() {
+  const P = BACKYARD_PLAY;
+  const rim = [
+    [-22.4, -18.2, 8.6], [22.6, -17.8, 8.4], [-20.8, 18.6, 8.2], [20.4, 17.4, 8.0],
+    [-6.4, -19.6, 7.6], [8.2, -19.8, 7.4], [22.8, -4.2, 8.0], [-22.6, -3.6, 7.8],
+  ];
+  const fence = [];
+  const fn = P.fence;
+  for (let z = fn.z0; z <= fn.z1 + 0.05; z += fn.spacing) {
+    fence.push({ x: fn.x, z, ry: Math.PI / 2, s: fn.h });
+  }
+  return {
+    trees: [{ x: P.ficus.x, z: P.ficus.z, s: P.ficus.h }].concat(
+      rim.map((r) => ({ x: r[0], z: r[1], s: r[2] })),
+    ),
+    palms: P.palms.map((p) => ({ x: p.x, z: p.z, s: p.h })),
+    fence,
+    pots: P.pots.concat(P.patioPlanters).map((p) => ({ x: p.x, z: p.z, s: p.h })),
+    woodGate: [{ x: P.woodGate.x, z: P.woodGate.z, s: P.woodGate.h }],
+    ac: [{ x: P.ac.x, z: P.ac.z, s: P.ac.h }],
+    sofa: [{ x: P.sofa.x, z: P.sofa.z, s: P.sofa.backH, ry: Math.PI }],
+    bushes: [
+      { x: -12.2, z: -12.8, s: 1.4 }, { x: 10.4, z: -14.6, s: 1.2 },
+      { x: 6.8, z: 2.2, s: 1.1 }, { x: -6.4, z: 2.6, s: 1.15 },
+    ],
+    cactus: P.pots.slice(0, 2).map((p) => ({ x: p.x, z: p.z, s: p.h + 0.55 })),
+  };
 }
 
 export const buildJadeLot = buildRyanYard;
@@ -1190,7 +1255,7 @@ export function decorateBackyardGate(THREE, ring, size, col, vibe) {
   }
   const hoop = new THREE.Mesh(
     new THREE.TorusGeometry(size * 1.08, size * 0.045, 6, 18),
-    feltEmissive(THREE, hexNum((vibe && vibe.palette && vibe.palette.neonA) || '#c45a32')),
+    feltBasic(THREE, hexNum('#c4a882')),
   );
   const tile = new THREE.Mesh(
     new THREE.BoxGeometry(size * 0.22, size * 0.08, size * 0.08),
@@ -1215,7 +1280,7 @@ export function pulseBackyardGate(g, isNext, passed, now, vibe) {
   let col = g.col;
   let emit = (vibe && vibe.lighting && vibe.lighting.gateEmissive) || 1.6;
   if (isNext) {
-    col = 0x2ec4b6;
+    col = 0xc45a32;
     emit = ((vibe && vibe.lighting && vibe.lighting.gateEmissiveActive) || 2.4) + pulse;
     if (g.mesh) g.mesh.scale.setScalar(1 + Math.sin(now * 0.005) * 0.03);
   } else if (passed) {

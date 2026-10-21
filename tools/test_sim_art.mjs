@@ -20,6 +20,7 @@ import {
   livingKitBytesForQuality, LIVING_KIT_CORE, LIVING_KIT_EXTRA, planLivingKit,
   gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA, planGymKit,
   officeKitBytesForQuality, OFFICE_KIT_CORE, OFFICE_KIT_EXTRA, planOfficeKit,
+  backyardKitBytesForQuality, BACKYARD_KIT_CORE, BACKYARD_KIT_EXTRA, planBackyardKit,
   restyleDiveTubes, LIVING_VIBE_ID, hideStockLivingMeshes, buildClayParlor,
   restyleLiving, tickLivingArt, livingBudget, livingWantsGlow,
   FELT_SCALE, applyFeltMaterial, feltBasic, studioPhoneBudget, vibePost,
@@ -177,6 +178,7 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.match(sim, /tryDressLivingKit/);
   assert.match(sim, /tryDressGymKit/);
   assert.match(sim, /tryDressOfficeKit/);
+  assert.match(sim, /tryDressBackyardKit/);
   assert.match(sim, /MeshoptDecoder/);
   assert.match(sim, /Kenney CC0/);
   assert.match(sim, /Kenney CC0 shop kit/);
@@ -552,6 +554,58 @@ test('Kenney CC0 living kit is meshopt-compressed and stays off the banned path'
   assert.equal(/emissiveIntensity: [2-9]/.test(emit), false, 'living kit glow must stay dim under bloom');
   assert.equal(/livingMat[\s\S]{0,900}MeshStandardMaterial/.test(kitSrc), false, 'living kit must not use MeshStandard after IBL');
   assert.match(emit, /MeshBasicMaterial/);
+});
+
+test('Kenney CC0 backyard kit is meshopt-compressed and stays off the banned path', () => {
+  const kitDir = join(root, 'assets/sim-backyard');
+  const kitSrc = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  const yardSrc = readFileSync(join(root, 'sim-art-backyard.js'), 'utf8');
+  assert.equal(kitSrc.includes('GLB-format'), false);
+  assert.equal(kitSrc.includes('loadAsync'), false);
+  assert.equal(kitSrc.includes('WebFPV'), false);
+  assert.equal(kitSrc.includes('Sketchfab'), false);
+  assert.equal(yardSrc.includes('GLB-format'), false);
+  assert.equal(yardSrc.includes('WebFPV'), false);
+  assert.equal(mentionsBannedAssets(yardSrc), false);
+  assert.match(kitSrc, /tryDressBackyardKit/);
+  assert.match(kitSrc, /Meshopt-compressed/);
+  assert.equal(backyardKitBytesForQuality('low'), 19612);
+  assert.equal(backyardKitBytesForQuality('med'), 81708);
+  assert.equal(backyardKitBytesForQuality('high'), 81708);
+  const planned = planBackyardKit();
+  assert.ok(planned.trees.length && planned.palms.length && planned.fence.length);
+  assert.ok(planned.trees.some((p) => p.x === BACKYARD_PLAY.ficus.x && p.z === BACKYARD_PLAY.ficus.z));
+  assert.ok(planned.woodGate.every((p) => p.x === BACKYARD_PLAY.woodGate.x));
+  assert.ok(planned.ac.every((p) => p.x === BACKYARD_PLAY.ac.x));
+  for (const name of [
+    'License-nature-kit.txt', 'License-furniture-kit.txt', 'License-pirate-kit.txt',
+    'License-polyhaven.txt', 'CREDITS.txt',
+  ]) {
+    assert.ok(existsSync(join(kitDir, name)), name);
+    if (name.startsWith('License-')) {
+      const txt = readFileSync(join(kitDir, name), 'utf8');
+      assert.match(txt, /Creative Commons Zero|CC0/);
+    }
+  }
+  assert.ok(existsSync(join(kitDir, 'hdri', 'kloofendal_48d_partly_cloudy_1k.hdr')));
+  assert.ok(existsSync(join(kitDir, 'tex', 'plaster_diff_1k.webp')));
+  assert.ok(existsSync(join(kitDir, 'tex', 'roof_diff_1k.webp')));
+  let glbBytes = 0;
+  const names = [];
+  const kitSpecs = Object.values(BACKYARD_KIT_CORE).concat(Object.values(BACKYARD_KIT_EXTRA));
+  for (const spec of kitSpecs) {
+    const p = join(kitDir, spec.file);
+    assert.equal(existsSync(p), true, spec.file);
+    const n = statSync(p).size;
+    assert.equal(n, spec.bytes, spec.file + ' size');
+    glbBytes += n;
+    names.push(spec.file);
+  }
+  assert.equal(glbBytes, 81708);
+  assert.equal(new Set(names).size, names.length);
+  assert.ok(!readdirSync(kitDir).some((f) => f.includes('GLB-format')));
+  assert.match(kitSrc, /mergeByMaterial|leafsGreen|woodBark/);
+  assert.match(yardSrc, /planBackyardKit/);
 });
 
 test('city window and blink stay frozen so bloom does not strobe', () => {
@@ -1621,7 +1675,7 @@ test("Backyard Ryan's Yard is implemented with stucco-tile gates", () => {
   const v = VIBES.backyard;
   assert.equal(v.implemented, true);
   assert.equal(v.name, "Ryan's Yard");
-  assert.equal(v.sky, 'gradient');
+  assert.equal(v.sky, 'hdri');
   assert.equal(v.time, 'afternoon');
   assert.equal(v.gates.keepBrand, false);
   assert.equal(v.gates.style, 'stucco-tile');

@@ -853,7 +853,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=c5a4d163f20f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=f08e1a63c403";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=0d326c9f5624";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -866,8 +866,8 @@ import {
   restyleTrainer, decorateTrainerGate, pulseTrainerGate, tickTrainerArt,
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
-  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, mergeStaticArt,
-} from "./sim-art.js?v=25ffd48f9b06";
+  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
+} from "./sim-art.js?v=5852523d8896";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -893,13 +893,13 @@ import {
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
 } from "./sim-tracks.js?v=8f9513fb3468";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=67c976696da2";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=d9af70a64707";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=9017daf8a7b6";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=ce53cc4620b6";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=9f029559c917";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -914,7 +914,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=8746b4f85fd1";
+} from "./sim-coach.js?v=815c963a65f1";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=aa19f07b0513";
@@ -943,7 +943,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=04a0f7db3e89";
+} from "./sim-secrets.js?v=1795e2740678";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -2710,7 +2710,42 @@ function applyBackyardArt(quality){
   });
   applyLooksPost('backyard', q);
   const credit=document.querySelector('.sf-credit');
-  if(credit)credit.textContent="Backyard is original procedural art — Ryan's Yard";
+  if(credit)credit.textContent="Backyard is original procedural art — Ryan's Yard. Kenney CC0 nature kit · Poly Haven HDRI.";
+  queueBackyardKit(q, vibeFor('backyard'));
+}
+let backyardKitWanted=null;
+let backyardKitGen=0;
+function queueBackyardKit(quality, vibe){
+  backyardKitWanted={quality:quality||'med', vibe:vibe||vibeFor('backyard')};
+  if(window._heavyAssetsPending)return;
+  dressBackyardKit();
+}
+async function dressBackyardKit(){
+  const wanted=backyardKitWanted;
+  if(!wanted)return;
+  const gen=++backyardKitGen;
+  try{
+    const ok=await ensureGltf();
+    if(!ok || !GLTFLoader || gen!==backyardKitGen)return;
+    const built=indoorBuilt.backyard;
+    const group=built&&built.group&&built.group.getObjectByName('backyardArtVisuals');
+    if(!group)return;
+    const loader=new GLTFLoader();
+    if(MeshoptDecoder){
+      if(MeshoptDecoder.ready)await MeshoptDecoder.ready;
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    }
+    const dressed=await tryDressBackyardKit(THREE,{
+      group, loader, vibe:wanted.vibe, quality:wanted.quality,
+    });
+    if(gen!==backyardKitGen)return;
+    window._backyardKit=dressed;
+    if(assetEl && dressed && dressed.used){
+      assetEl.textContent='Kenney CC0 backyard kit ('+Math.round((dressed.bytes||0)/1024)+' KB).';
+    }
+  }catch(e){
+    window._backyardKit={used:false, error:String(e&&e.message||e)};
+  }
 }
 function applyRoomArt(quality){
   const built=indoorBuilt.room||ensureIndoor('room');
@@ -2918,7 +2953,7 @@ function applyMapLooks(mapId){
     else if(mapId==='garage')credit.textContent='Garage is original procedural art — Volt Stall · Felt Scale. Kenney CC0 shop kit.';
     else if(mapId==='warehouse')credit.textContent='Warehouse is original procedural art — Ion Nave';
     else if(mapId==='room')credit.textContent='Your Room is original procedural art — Pocket Stage';
-    else if(mapId==='backyard')credit.textContent="Backyard is original procedural art — Ryan's Yard";
+    else if(mapId==='backyard')credit.textContent="Backyard is original procedural art — Ryan's Yard. Kenney CC0 nature kit · Poly Haven HDRI.";
     else if(mapId==='trainer')credit.textContent='Trainer is original procedural art — Licorice Grid';
     else if(mapId==='office')credit.textContent='Office is original procedural art — Paper Sun';
     else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court. Kenney CC0 sideline kit.';
