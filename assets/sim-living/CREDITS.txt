@@ -1,0 +1,20 @@
+Kenney CC0 1.0 low-poly kit ( Clay Parlor )
+
+All packs are Creative Commons Zero (CC0 1.0):
+  http://creativecommons.org/publicdomain/zero/1.0/
+
+Packs (License-*.txt in this folder, copied from the zip):
+  Furniture Kit 2.0     https://kenney.nl/assets/furniture-kit
+  Survival Kit 2.0      https://kenney.nl/assets/survival-kit
+
+Support Kenney: https://kenney.nl/donate  (credit is not required)
+
+Shipped files are a small meshopt-compressed geometry subset. Total
+payload is 10 960 bytes. Low quality fetches only cardboard (2 792 bytes).
+
+  cardboard.glb   Furniture Kit cardboardBoxClosed
+  crate.glb       Survival Kit box
+  toolbox.glb     Furniture Kit kitchenCabinetDrawer
+
+Nothing here is from the GPL whoop sim. Procedural Clay Parlor stays the
+fallback if a mesh fails to load.
