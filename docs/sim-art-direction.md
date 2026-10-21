@@ -28,7 +28,7 @@ one map per PR.
 |---|---|---|---|---|
 | `city` | City | Outdoor, open class | `sim.html` procedural grid + optional Kenney / costoWRLD GLBs | `city-loop` (legacy 0), `city-zigzag` (legacy 1) |
 | `living` | Living Room | Indoor whoop | `sim-maps.js` `buildLiving` | `living-sofa`, `living-circuit` |
-| `garage` | Garage | Indoor whoop | `buildGarage` | `garage-bench`, `garage-rafters` |
+| `garage` | Garage | Indoor whoop | `buildGarage` | `garage-bench`, `garage-rafters`, `garage-shelf`, `garage-orbit`, `garage-door` |
 | `warehouse` | Warehouse | Indoor whoop | `buildWarehouse` | `warehouse-aisle`, `warehouse-catwalk` |
 | `backyard` | Backyard | Outdoor whoop | `buildBackyard` | `backyard-fence`, `backyard-patio` |
 | `office` | Office | Indoor whoop (W3) | `buildOffice` | `office-cubicles`, `office-hallway`, `office-desks` |

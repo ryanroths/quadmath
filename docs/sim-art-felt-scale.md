@@ -35,16 +35,28 @@ Helpers live in `sim-art-felt.js`: `FELT_SCALE`, `applyFeltMaterial`,
 
 | PR | Map | Notes |
 |---|---|---|
-| 1 | Living Room (reference) + this bible + studio helpers | this PR |
-| 2 | Your Room | Pocket Stage, same lock |
-| 3 | Trainer | Licorice Grid |
-| 4 | Office | Paper Sun; hard key allowed |
-| 5 | Gym | Amber Court; hard key allowed |
-| 6 | Garage | Volt Stall night hour stays |
-| 7 | Warehouse | Ion Nave night hour stays |
-| 8 | City | Neon Current night hour stays |
+| 1 | Living Room (reference) + this bible + studio helpers | shipped |
+| 2 | Garage | Volt Stall night hour stays; density + named lines |
+| 3 | City | Neon Current night hour stays; explore district |
+| 4 | Your Room | Pocket Stage, same lock |
+| 5 | Trainer | Licorice Grid |
+| 6 | Office | Paper Sun; hard key allowed |
+| 7 | Gym | Amber Court; hard key allowed |
+| 8 | Warehouse | Ion Nave night hour stays |
 
 Each PR is fresh off latest `main`, never stacked.
+
+## City — Neon Current (explore)
+
+- Time: night. Palette, bloom, and brand gates stay frozen.
+- Materials: Felt lock on neon / facade / explore shells. MeshBasic felt
+  for dull and emissive trim. `envIntensity` stays 0.
+- Play: hollow lofts + walk-up on the whoop corridor (`CITY_PLAY`).
+  Open doors and windows, interior rooms, stairwells, roof holes,
+  a 4 wu alley, and a spin grove (poles / lamps / trees).
+- Lines: `city-inside` (Interior Run) and `city-spins` (Spin Grove) join
+  the Daily Line pool. `city-loop` / `city-zigzag` stay 3-lap.
+- Low: city-art `callsEst` ≤ 48. No rain / bloom / AO on Low.
 
 ## Living Room — Clay Parlor (reference)
 
@@ -56,6 +68,17 @@ Each PR is fresh off latest `main`, never stacked.
 - Lighting: soft hemi bounce, env ≤ 0.28, bloom off.
 - Gates: clay rings, pastel, no metal.
 - Low: no lanterns, steam, or glow. Same furniture AABBs as `buildLiving`.
+
+## Garage — Volt Stall (PR 2)
+
+- Time: night. Sodium + cyan tubes stay. Bloom on Med/High, never Low.
+- Palette: `#ffb347` sodium, `#2de2e6` work tubes, `#3d4654` steel. Unchanged.
+- Materials: MeshBasic felt / clay on the stall furniture. No PBR sheen.
+- Lighting: felt bounce, env ≤ 0.28, hemi up. Night hour stays.
+- Play: under-bench crawl, shelf-gap threads, hanging bike rim, car orbit,
+  tire-stack dive, door / rafter gap, two toy-scale clutter clusters.
+- Named lines: `garage-shelf`, `garage-orbit`, `garage-door`.
+- Low: no glow pools, sparks, or puddles. Cardboard / clay boxes only.
 
 ## Photo → map (later)
 

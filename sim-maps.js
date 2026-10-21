@@ -4,7 +4,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=52627101d2c3';
+import { planRoom } from './sim-room.js?v=5a36ca56c8f9';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -28,19 +28,50 @@ export const GARAGE_PLAY = Object.freeze({
   }),
   rackA: Object.freeze({ x: 8.6, z: 3.6, w: 1.55, d: 5.0 }),
   rackB: Object.freeze({ x: 8.6, z: 12.2, w: 1.55, d: 5.0 }),
+  // Split each shelf into two slabs so mid-z is a threadable gap.
+  rackGapD: 1.15,
   shelfYs: Object.freeze([1.05, 2.30, 3.55, 4.80]),
   shelfH: 0.10,
+  benchBins: Object.freeze([
+    Object.freeze({ x: -8.4, z: -12.8, w: 1.70, h: 0.68, d: 1.20 }),
+    Object.freeze({ x: -8.4, z: -3.2, w: 1.70, h: 0.68, d: 1.20 }),
+  ]),
   door: Object.freeze({ z: 20.92, w: 8.2, openH: 2.35, panelH: 6.05, thick: 0.16 }),
+  doorGap: Object.freeze({
+    left: Object.freeze({ x: -2.95, z: 20.92, w: 2.30, h: 2.20, d: 0.55 }),
+    right: Object.freeze({ x: 2.95, z: 20.92, w: 2.30, h: 2.20, d: 0.55 }),
+  }),
+  doorSoffit: Object.freeze({ x: 0, y: 6.90, z: 18.8, w: 8.4, h: 0.26, d: 1.60 }),
   volt: Object.freeze({ x: 0, y: 2.55, z: 3.4, innerW: 2.05, innerH: 1.75, bar: 0.14, depth: 0.22 }),
+  bike: Object.freeze({ x: 0, y: 3.40, z: 14.0, innerW: 1.90, innerH: 1.90, bar: 0.12, depth: 0.18 }),
   tireWell: Object.freeze({ x: 0, z: -12.2, inner: 1.15, outer: 1.85, rings: 4, ringH: 0.42 }),
+  tireStack: Object.freeze({ x: 5.6, z: -16.4, inner: 1.10, outer: 1.80, rings: 6, ringH: 0.42 }),
   ladder: Object.freeze({ x: -9.55, z: 14.8, w: 0.85, d: 0.22, h: 6.4, rungs: 9 }),
   cords: Object.freeze([
     Object.freeze({ x: -2.4, z: 9.2, y0: 4.15, y1: 8.7 }),
     Object.freeze({ x: 2.2, z: 6.4, y0: 3.85, y1: 8.7 }),
     Object.freeze({ x: -1.6, z: -2.2, y0: 4.35, y1: 8.7 }),
   ]),
+  toys: Object.freeze([
+    Object.freeze({ x: -6.8, z: 17.4, w: 0.52, h: 0.40, d: 0.52 }),
+    Object.freeze({ x: -6.2, z: 17.9, w: 0.44, h: 0.58, d: 0.44 }),
+    Object.freeze({ x: -7.3, z: 16.9, w: 0.38, h: 0.32, d: 0.38 }),
+    Object.freeze({ x: 6.8, z: -15.2, w: 0.52, h: 0.40, d: 0.52 }),
+    Object.freeze({ x: 6.2, z: -15.8, w: 0.44, h: 0.56, d: 0.44 }),
+    Object.freeze({ x: 7.3, z: -14.6, w: 0.38, h: 0.32, d: 0.38 }),
+  ]),
   rafterY: 8.55,
 });
+
+export function garageRackSlabs(spec) {
+  const gap = GARAGE_PLAY.rackGapD;
+  const slabD = (spec.d - gap) / 2;
+  const off = (slabD + gap) / 2;
+  return [
+    { x: spec.x, z: spec.z - off, w: spec.w, d: slabD },
+    { x: spec.x, z: spec.z + off, w: spec.w, d: slabD },
+  ];
+}
 
 // Warehouse playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu. Open racks match Ion Nave posts + shelf slabs.
@@ -102,10 +133,10 @@ export const MAP_ORBIT = {
 
 export const MAP_LOOKS = {
   living: { fog: 0.004, sun: 0.55, env: 0.62, bg: 0.38, hemi: 0.38 },
-  garage: { fog: 0.003, sun: 0.7, env: 0.58, bg: 0.34, hemi: 0.32 },
+  garage: { fog: 0.003, sun: 0.7, env: 0.26, bg: 0.34, hemi: 0.60 },
   warehouse: { fog: 0.0018, sun: 0.55, env: 0.5, bg: 0.28, hemi: 0.28 },
   backyard: { fog: 0.0025, sun: 1.5, env: 0.72, bg: 0.48, hemi: 0.16 },
-  city: { fog: 0.00105, sun: 0.30, env: 0.18, bg: 0.16, hemi: 0.44 },
+  city: { fog: 0.00105, sun: 0.30, env: 0.18, bg: 0.16, hemi: 0.56 },
   office: { fog: 0.0032, sun: 0.48, env: 0.58, bg: 0.34, hemi: 0.36 },
   gym: { fog: 0.0010, sun: 0.95, env: 0.70, bg: 0.44, hemi: 0.55 },
   trainer: { fog: 0.0028, sun: 0.58, env: 0.56, bg: 0.33, hemi: 0.34 },
@@ -360,8 +391,10 @@ function buildGarageRack(THREE, parent, colliders, spec, mats) {
   for (const [dx, dz] of [[-hx, -hz], [hx, -hz], [-hx, hz], [hx, hz]]) {
     box(THREE, parent, colliders, spec.x + dx, 0, spec.z + dz, post, 5.05, post, mats.metal);
   }
-  for (const y of GARAGE_PLAY.shelfYs) {
-    box(THREE, parent, colliders, spec.x, y, spec.z, spec.w, GARAGE_PLAY.shelfH, spec.d, mats.metal);
+  for (const slab of garageRackSlabs(spec)) {
+    for (const y of GARAGE_PLAY.shelfYs) {
+      box(THREE, parent, colliders, slab.x, y, slab.z, slab.w, GARAGE_PLAY.shelfH, slab.d, mats.metal);
+    }
   }
 }
 
@@ -387,6 +420,9 @@ function buildGarage(THREE, parent, colliders, lights) {
   for (const [dx, dz] of b.legs) {
     box(THREE, parent, colliders, b.x + dx, 0, b.z + dz, b.leg, b.topY, b.leg, mats.wood);
   }
+  for (const bin of P.benchBins) {
+    box(THREE, parent, colliders, bin.x, 0, bin.z, bin.w, bin.h, bin.d, mats.wood);
+  }
   const ch = P.chest;
   box(THREE, parent, colliders, ch.x, 0, ch.z, ch.w, ch.h, ch.d, mats.metal);
   const c = P.car;
@@ -403,9 +439,20 @@ function buildGarage(THREE, parent, colliders, lights) {
   buildGarageRack(THREE, parent, colliders, P.rackB, mats);
   const d = P.door;
   box(THREE, parent, colliders, 0, d.openH, d.z, d.w, d.panelH, d.thick, mats.metal);
+  const gL = P.doorGap.left, gR = P.doorGap.right;
+  box(THREE, parent, colliders, gL.x, 0, gL.z, gL.w, gL.h, gL.d, mats.metal);
+  box(THREE, parent, colliders, gR.x, 0, gR.z, gR.w, gR.h, gR.d, mats.metal);
+  const sof = P.doorSoffit;
+  box(THREE, parent, colliders, sof.x, sof.y, sof.z, sof.w, sof.h, sof.d, mats.wood);
   const v = P.volt;
   hoopFrame(THREE, parent, colliders, v.x, v.y, v.z, v.innerW, v.innerH, v.bar, v.depth, mats.metal);
+  const bk = P.bike;
+  hoopFrame(THREE, parent, colliders, bk.x, bk.y, bk.z, bk.innerW, bk.innerH, bk.bar, bk.depth, mats.metal);
   tireWell(THREE, parent, colliders, P.tireWell, mats.tire);
+  tireWell(THREE, parent, colliders, P.tireStack, mats.tire);
+  for (const toy of P.toys) {
+    box(THREE, parent, colliders, toy.x, 0, toy.z, toy.w, toy.h, toy.d, mats.wood);
+  }
   const lad = P.ladder;
   box(THREE, parent, colliders, lad.x - lad.w / 2, 0, lad.z, 0.12, lad.h, lad.d, mats.wood);
   box(THREE, parent, colliders, lad.x + lad.w / 2, 0, lad.z, 0.12, lad.h, lad.d, mats.wood);
@@ -887,4 +934,133 @@ export function makeFlagMesh(THREE, col) {
   g.add(pole); g.add(flag);
   g.userData.flagMesh = flag;
   return g;
+}
+
+// City explore district. Hollow lofts + spin grove near whoop street.
+// Stock city blocks stay solid; these sit on the clear axis corridor.
+export const CITY_PLAY = Object.freeze({
+  whoopClear: 0.85,
+  loftA: Object.freeze({
+    x: 22, z: 4, w: 10.0, d: 11.0, h: 8.6, wall: 0.28,
+    floors: Object.freeze([3.15]),
+    door: Object.freeze({ side: 'west', w: 2.10, h: 2.35 }),
+    window: Object.freeze({ side: 'east', w: 1.90, h: 1.60, sill: 1.10 }),
+    roofHole: Object.freeze({ w: 2.20, d: 2.20 }),
+    stair: Object.freeze({ x: 3.15, z: -3.40, w: 1.55, d: 2.80, treads: 7 }),
+  }),
+  loftB: Object.freeze({
+    x: 36, z: 4, w: 10.0, d: 11.0, h: 8.6, wall: 0.28,
+    floors: Object.freeze([3.15]),
+    door: Object.freeze({ side: 'west', w: 2.10, h: 2.35 }),
+    window: Object.freeze({ side: 'east', w: 1.90, h: 1.60, sill: 1.10 }),
+    roofHole: Object.freeze({ w: 2.20, d: 2.20 }),
+    stair: Object.freeze({ x: 3.15, z: -3.40, w: 1.55, d: 2.80, treads: 7 }),
+  }),
+  walkup: Object.freeze({
+    x: 29, z: -10, w: 11.0, d: 9.0, h: 11.2, wall: 0.28,
+    floors: Object.freeze([3.20, 6.40]),
+    door: Object.freeze({ side: 'north', w: 2.10, h: 2.35 }),
+    window: Object.freeze({ side: 'south', w: 1.90, h: 1.60, sill: 1.10 }),
+    roofHole: Object.freeze({ w: 2.10, d: 2.10 }),
+    stair: Object.freeze({ x: -3.40, z: 0.10, w: 1.55, d: 3.20, treads: 9 }),
+  }),
+  spins: Object.freeze([
+    Object.freeze({ x: 6.2, z: -8.0, h: 5.8, r: 0.16, kind: 'pole' }),
+    Object.freeze({ x: 8.6, z: -6.2, h: 6.4, r: 0.14, kind: 'lamp' }),
+    Object.freeze({ x: 4.0, z: -6.4, h: 5.6, r: 0.18, kind: 'tree' }),
+    Object.freeze({ x: 8.4, z: -9.8, h: 6.2, r: 0.14, kind: 'pole' }),
+    Object.freeze({ x: 3.8, z: -9.6, h: 5.4, r: 0.16, kind: 'lamp' }),
+    Object.freeze({ x: 6.0, z: -11.2, h: 6.0, r: 0.15, kind: 'tree' }),
+  ]),
+});
+
+function playBox(THREE, colliders, x, y, z, w, h, d) {
+  const bb = new THREE.Box3(
+    new THREE.Vector3(x - w / 2, y, z - d / 2),
+    new THREE.Vector3(x + w / 2, y + h, z + d / 2),
+  );
+  bb._tag = 'map';
+  bb._play = 'city-explore';
+  colliders.push(bb);
+}
+
+function playWallHole(THREE, colliders, ax, alongZ, center, half, height, thick, holeX, holeW, holeH, sill) {
+  if (holeW < 0.05 || holeH < 0.05) {
+    if (alongZ) playBox(THREE, colliders, ax, 0, center, thick, height, half * 2);
+    else playBox(THREE, colliders, center, 0, ax, half * 2, height, thick);
+    return;
+  }
+  const leftW = holeX - holeW / 2 - (center - half);
+  const rightW = (center + half) - (holeX + holeW / 2);
+  const sillH = sill || 0;
+  const lintelH = height - (sillH + holeH);
+  if (alongZ) {
+    if (leftW > 0.05) playBox(THREE, colliders, ax, 0, center - half + leftW / 2, thick, height, leftW);
+    if (rightW > 0.05) playBox(THREE, colliders, ax, 0, center + half - rightW / 2, thick, height, rightW);
+    if (sillH > 0.05) playBox(THREE, colliders, ax, 0, holeX, thick, sillH, holeW);
+    if (lintelH > 0.05) playBox(THREE, colliders, ax, sillH + holeH, holeX, thick, lintelH, holeW);
+  } else {
+    if (leftW > 0.05) playBox(THREE, colliders, center - half + leftW / 2, 0, ax, leftW, height, thick);
+    if (rightW > 0.05) playBox(THREE, colliders, center + half - rightW / 2, 0, ax, rightW, height, thick);
+    if (sillH > 0.05) playBox(THREE, colliders, holeX, 0, ax, holeW, sillH, thick);
+    if (lintelH > 0.05) playBox(THREE, colliders, holeX, sillH + holeH, ax, holeW, lintelH, thick);
+  }
+}
+
+function playSlabHole(THREE, colliders, sx, y, sz, sw, sd, h, hx, hz, holeW, holeD) {
+  const slabMinX = sx - sw / 2, slabMaxX = sx + sw / 2;
+  const slabMinZ = sz - sd / 2, slabMaxZ = sz + sd / 2;
+  const holeMinX = hx - holeW / 2, holeMaxX = hx + holeW / 2;
+  const holeMinZ = hz - holeD / 2, holeMaxZ = hz + holeD / 2;
+  const leftW = holeMinX - slabMinX;
+  const rightW = slabMaxX - holeMaxX;
+  if (leftW > 0.08) playBox(THREE, colliders, slabMinX + leftW / 2, y, sz, leftW, h, sd);
+  if (rightW > 0.08) playBox(THREE, colliders, slabMaxX - rightW / 2, y, sz, rightW, h, sd);
+  const south = holeMinZ - slabMinZ;
+  const north = slabMaxZ - holeMaxZ;
+  if (south > 0.08) playBox(THREE, colliders, hx, y, slabMinZ + south / 2, holeW, h, south);
+  if (north > 0.08) playBox(THREE, colliders, hx, y, slabMaxZ - north / 2, holeW, h, north);
+}
+
+function installExploreBuilding(THREE, colliders, b) {
+  const t = b.wall, hx = b.w / 2, hz = b.d / 2;
+  const westHole = b.door.side === 'west' ? b.door : (b.window.side === 'west' ? b.window : null);
+  const eastHole = b.door.side === 'east' ? b.door : (b.window.side === 'east' ? b.window : null);
+  const northHole = b.door.side === 'north' ? b.door : (b.window.side === 'north' ? b.window : null);
+  const southHole = b.door.side === 'south' ? b.door : (b.window.side === 'south' ? b.window : null);
+  playWallHole(THREE, colliders, b.x - hx, true, b.z, hz, b.h, t,
+    b.z, westHole ? westHole.w : 0, westHole ? westHole.h : 0, westHole && westHole.sill);
+  playWallHole(THREE, colliders, b.x + hx, true, b.z, hz, b.h, t,
+    b.z, eastHole ? eastHole.w : 0, eastHole ? eastHole.h : 0, eastHole && eastHole.sill);
+  playWallHole(THREE, colliders, b.z + hz, false, b.x, hx, b.h, t,
+    b.x, northHole ? northHole.w : 0, northHole ? northHole.h : 0, northHole && northHole.sill);
+  playWallHole(THREE, colliders, b.z - hz, false, b.x, hx, b.h, t,
+    b.x, southHole ? southHole.w : 0, southHole ? southHole.h : 0, southHole && southHole.sill);
+  const st = b.stair;
+  for (const fy of b.floors) {
+    playSlabHole(THREE, colliders, b.x, fy, b.z, b.w - t, b.d - t, 0.14,
+      b.x + st.x, b.z + st.z, st.w + 0.15, st.d + 0.15);
+  }
+  playSlabHole(THREE, colliders, b.x, b.h - 0.16, b.z, b.w + 0.2, b.d + 0.2, 0.16,
+    b.x, b.z, b.roofHole.w, b.roofHole.d);
+  const topY = b.floors[b.floors.length - 1] || 3.15;
+  const rise = topY / st.treads;
+  const stepD = st.d / st.treads;
+  for (let i = 0; i < st.treads; i++) {
+    playBox(THREE, colliders, b.x + st.x, i * rise, b.z + st.z - st.d / 2 + stepD * (i + 0.5), st.w, rise, stepD + 0.04);
+  }
+  playBox(THREE, colliders, b.x, 0, b.z + 0.35, b.w * 0.42, 2.20, t);
+}
+
+export function installCityExploreColliders(THREE, colliders) {
+  if (!THREE || !colliders) return 0;
+  if (colliders.some((c) => c && c._play === 'city-explore')) return 0;
+  const P = CITY_PLAY;
+  installExploreBuilding(THREE, colliders, P.loftA);
+  installExploreBuilding(THREE, colliders, P.loftB);
+  installExploreBuilding(THREE, colliders, P.walkup);
+  for (const s of P.spins) {
+    playBox(THREE, colliders, s.x, 0, s.z, s.r * 2, s.h, s.r * 2);
+  }
+  return colliders.filter((c) => c && c._play === 'city-explore').length;
 }

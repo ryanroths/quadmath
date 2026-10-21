@@ -40,7 +40,7 @@ import {
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
-import { MAP_IDS, MAP_LOOKS, buildMap, GARAGE_PLAY, WAREHOUSE_PLAY, LIVING_PLAY, GYM_PLAY, OFFICE_PLAY } from '../sim-maps.js';
+import { MAP_IDS, MAP_LOOKS, buildMap, GARAGE_PLAY, WAREHOUSE_PLAY, LIVING_PLAY, GYM_PLAY, OFFICE_PLAY, CITY_PLAY, installCityExploreColliders } from '../sim-maps.js';
 import { DAILY_MAPS } from '../sim-retention.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -694,6 +694,7 @@ test('city finish pass uses a world-Y sky, neon leftovers, and fake wet road', (
   assert.match(looks, /whoopStreet/);
   assert.match(looks, /whoopMid/);
   assert.match(looks, /whoopPortal/);
+  assert.match(looks, /cityInside|cityAlley|citySpins|cityRoofHole/);
   assert.match(looks, /citySky/);
 });
 
@@ -900,6 +901,73 @@ test('City polish keeps Low draw calls near 174 and clears leftover shards', () 
   scene.add(tube);
   assert.equal(restyleDiveTubes(scene, vibeFor('city'), THREE) >= 1, true);
   assert.equal(!!tube.userData.cityDive, true);
+  const citySrc = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.match(citySrc, /CITY_PLAY|addCityExplore/);
+  assert.match(citySrc, /applyFeltMaterial|feltBasic|feltEmissive/);
+});
+
+test('City explore district keeps doors, rooms, stairs, roof holes, and spins flyable', () => {
+  const colliders = [];
+  const n = installCityExploreColliders(THREE, colliders);
+  assert.ok(n >= 20, 'city-explore colliders ' + n);
+  assert.equal(installCityExploreColliders(THREE, colliders), 0, 'idempotent');
+  const hit = (x, y, z) => {
+    const p = new THREE.Vector3(x, y, z);
+    return colliders.some((bb) => bb.containsPoint(p));
+  };
+  const P = CITY_PLAY;
+  const a = P.loftA;
+  assert.equal(hit(a.x - a.w / 2, 1.18, a.z), false, 'fly loftA west door');
+  assert.equal(hit(a.x - a.w / 2, 1.18, a.z + 4.0), true, 'loftA west wall solid');
+  assert.equal(hit(a.x + a.w / 2, 1.90, a.z), false, 'fly loftA east window');
+  assert.equal(hit(a.x + a.w / 2, 0.50, a.z), true, 'loftA window sill solid');
+  assert.equal(hit(a.x, 1.50, a.z + 2.4), false, 'loftA interior room open');
+  assert.equal(hit(a.x, 1.10, a.z + 0.35), true, 'loftA partition solid');
+  assert.equal(hit(a.x, a.floors[0] + 0.04, a.z + 2.6), true, 'loftA floor solid');
+  assert.equal(hit(a.x + a.stair.x, a.floors[0] + 0.04, a.z + a.stair.z), false, 'loftA stair well open');
+  assert.equal(hit(a.x, a.h - 0.08, a.z), false, 'dive loftA roof hole');
+  assert.equal(hit(a.x, a.h - 0.08, a.z + 3.6), true, 'loftA roof solid');
+  assert.equal(hit(29.0, 1.20, 4.0), false, 'fly the alley gap');
+  const w = P.walkup;
+  assert.equal(hit(w.x, 1.18, w.z + w.d / 2), false, 'fly walkup north door');
+  assert.equal(hit(w.x, 1.90, w.z - w.d / 2), false, 'fly walkup south window');
+  assert.equal(hit(w.x, w.h - 0.08, w.z), false, 'dive walkup roof hole');
+  assert.equal(hit(w.x + w.stair.x, w.floors[w.floors.length - 1] + 0.45, w.z + w.stair.z), false, 'walkup stair well open');
+  const pole = P.spins[0];
+  assert.equal(hit(pole.x, 1.10, pole.z), true, 'spin pole solid');
+  assert.equal(hit(pole.x + 0.95, 1.20, pole.z), false, 'spin around the pole');
+  assert.ok(P.whoopClear >= 0.85, 'whoop clearance');
+  const citySrc = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.match(citySrc, /addCityExplore|cityExploreShell/);
+  const sim = readFileSync(join(root, 'sim.html'), 'utf8');
+  assert.match(sim, /installCityExploreColliders/);
+});
+
+test('City Felt Scale lock paints explore shells and keeps Low under budget', () => {
+  installDomStub();
+  const gates = FROZEN_CITY[0].concat(FROZEN_CITY[1]);
+  for (const q of ['low', 'med', 'high']) {
+    const vis = buildNeonCity(THREE, new THREE.Group(), vibeFor('city'), q, gates);
+    assert.ok(vis.getObjectByName('cityExploreShell'), q + ' cityExploreShell');
+    assert.ok(vis.getObjectByName('cityExploreGlow'), q + ' cityExploreGlow');
+    let feltMats = 0;
+    vis.traverse((o) => {
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      for (const m of mats) {
+        if (m && m.userData && m.userData.feltLocked) feltMats += 1;
+      }
+    });
+    assert.ok(feltMats >= 8, q + ' feltLocked mats ' + feltMats);
+    const stats = artStats(null, vis);
+    if (q === 'low') {
+      assert.ok(stats.callsEst <= 48, 'Low city-art callsEst ' + stats.callsEst);
+      assert.ok(stats.instancedMeshes <= 40, 'Low IM ' + stats.instancedMeshes);
+    }
+  }
+  assert.equal(vibeFor('city').time, 'night');
+  assert.ok(vibeFor('city').lighting.hemiIntensity >= 0.56);
+  assert.ok(vibeFor('city').props.includes('open interiors'));
+  assert.ok(vibeFor('city').props.includes('spin grove'));
 });
 
 test('Felt Scale studio lock caps metalness and kills Low bloom/AO', () => {
@@ -1075,6 +1143,8 @@ test('Garage freestyle builds without throwing and the FPV frame is not all blac
   installDomStub();
   const garageSrc = readFileSync(join(root, 'sim-art-garage.js'), 'utf8');
   assert.equal(mentionsBannedAssets(garageSrc), false);
+  assert.match(garageSrc, /sim-art-felt\.js\?v=[0-9a-f]{12}/);
+  assert.match(garageSrc, /feltBasic|feltEmissive/);
   assert.match(garageSrc, /never abort the FPV render loop/);
   assert.match(garageSrc, /CapsuleGeometry|LatheGeometry|ExtrudeGeometry/);
   const free = freestyleTrack('garage');
@@ -1098,6 +1168,16 @@ test('Garage freestyle builds without throwing and the FPV frame is not all blac
     assert.ok(hidden.length >= 8, q + ' hidden stock ' + hidden.length);
     const vis = built.group.getObjectByName('garageArtVisuals');
     assert.ok(vis, q + ' garageArtVisuals');
+    let feltMats = 0;
+    vis.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (m && m.userData && m.userData.feltLocked) feltMats += 1;
+        if (m && m.metalness != null) assert.ok(m.metalness <= 0.05, q + ' metalness');
+      }
+    });
+    assert.ok(feltMats >= 8, q + ' feltLocked mats ' + feltMats);
     if (q === 'low') assert.equal(garageBudget('low').glow, false);
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
@@ -1136,13 +1216,24 @@ test('Garage playground keeps whoop-sized gaps that match the visuals', () => {
   assert.equal(hit(P.car.x, P.car.jackH + P.car.bodyH + 0.25, P.car.z), false, 'fly over car');
   const aisleZ = (P.rackA.z + P.rackB.z) / 2;
   assert.equal(hit(P.rackA.x, 1.68, aisleZ), false, 'fly between racks');
-  assert.equal(hit(P.rackA.x, P.shelfYs[0] + 0.04, P.rackA.z), true, 'shelf slab solid');
+  assert.equal(hit(P.rackA.x, P.shelfYs[0] + 0.04, P.rackA.z), false, 'shelf gap thread');
+  const slabOff = ((P.rackA.d - P.rackGapD) / 2 + P.rackGapD) / 2;
+  assert.equal(hit(P.rackA.x, P.shelfYs[0] + 0.04, P.rackA.z - slabOff), true, 'shelf slab solid');
   assert.equal(hit(P.rackA.x, P.shelfYs[0] + 0.62, P.rackA.z), false, 'fly between shelf levels');
   assert.equal(hit(0, 1.15, P.door.z), false, 'fly under open door');
   assert.equal(hit(0, P.door.openH + 1.2, P.door.z), true, 'door panel solid');
+  assert.equal(hit(P.doorGap.left.x, 1.10, P.doorGap.left.z), true, 'door stack solid');
+  assert.equal(hit(P.bike.x, P.bike.y, P.bike.z), false, 'bike hoop open');
+  assert.equal(hit(P.bike.x, P.bike.y + P.bike.innerH / 2 + P.bike.bar / 2, P.bike.z), true, 'bike frame solid');
   assert.equal(hit(P.volt.x, P.volt.y, P.volt.z), false, 'volt hoop open');
   assert.equal(hit(P.volt.x, P.volt.y + P.volt.innerH / 2 + P.volt.bar / 2, P.volt.z), true, 'volt frame solid');
   assert.equal(hit(P.tireWell.x, 0.85, P.tireWell.z), false, 'dive tire well');
+  assert.equal(hit(P.tireStack.x, 1.10, P.tireStack.z), false, 'dive tire stack');
+  assert.equal(hit(P.bench.x, 1.20, P.bench.z), false, 'bench center crawl stays open');
+  assert.equal(hit(P.benchBins[0].x, 0.34, P.benchBins[0].z), true, 'bench bin solid');
+  assert.equal(hit(P.toys[0].x, P.toys[0].h * 0.5, P.toys[0].z), true, 'toy clutter solid');
+  assert.equal(hit(0, 6.40, P.doorSoffit.z), false, 'fly the rafter/door gap');
+  assert.equal(hit(P.doorSoffit.x, P.doorSoffit.y + 0.08, P.doorSoffit.z), true, 'door soffit solid');
   assert.ok(P.whoopClear >= 0.85, 'whoop clearance');
   assert.ok(P.car.jackH >= 1.2, 'car crawl taller than 85mm whoop');
   assert.ok(P.bench.legs.length >= 4, 'open bench has legs');
@@ -1150,7 +1241,7 @@ test('Garage playground keeps whoop-sized gaps that match the visuals', () => {
   assert.ok(P.car.bodyH >= 3.5, 'sedan collider matches kit height');
   const garageSrc = readFileSync(join(root, 'sim-art-garage.js'), 'utf8');
   assert.match(garageSrc, /GARAGE_PLAY/);
-  assert.match(garageSrc, /addTireWell|addLadder|addHangLights/);
+  assert.match(garageSrc, /addTireWell|addLadder|addHangLights|addPlayLines/);
 });
 
 test('Warehouse Ion Nave is implemented with hex-frame gates', () => {
