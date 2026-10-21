@@ -150,6 +150,129 @@ function cliFromState(type, field, stored) {
   return Math.round(stored * 100);
 }
 
+const TOKEN_FIELDS = Object.freeze(['rcRate', 'srate', 'expo']);
+
+function inSliderRange(type, field, stored) {
+  const spec = RATE_SLIDER_RANGES[type] && RATE_SLIDER_RANGES[type][field];
+  return !!(spec && Number.isFinite(stored) && stored >= spec.min && stored <= spec.max);
+}
+
+function storedFromCliAxis(type, rc, sr, ex) {
+  const axis = {
+    rcRate: scaleCliField(type, 'rcRate', rc),
+    srate: scaleCliField(type, 'srate', sr),
+    expo: scaleCliField(type, 'expo', ex),
+  };
+  if (!TOKEN_FIELDS.every((f) => inSliderRange(type, f, axis[f]))) return null;
+  return axis;
+}
+
+function decodedFromCliAxes(type, roll, pitch, yaw) {
+  const t = normalizeRateType(type);
+  if (!isRateType(t)) return { error: 'unknown rates type' };
+  const r = storedFromCliAxis(t, roll[0], roll[1], roll[2]);
+  const p = storedFromCliAxis(t, pitch[0], pitch[1], pitch[2]);
+  const y = storedFromCliAxis(t, yaw[0], yaw[1], yaw[2]);
+  if (!r || !p || !y) return { error: 'rates token out of range' };
+  return { type: t, roll: r, pitch: p, yaw: y };
+}
+
+// Slim published-card aliases for ?rates=card.<id>. CLI integers only. No catalog import.
+export const RATE_CARDS = Object.freeze({
+  '65-betafpv-stock': Object.freeze({
+    type: 'ACTUAL',
+    roll: Object.freeze([7, 58, 0]),
+    pitch: Object.freeze([7, 58, 0]),
+    yaw: Object.freeze([7, 50, 0]),
+  }),
+  '65-betafpv-ryfly-1219s': Object.freeze({
+    type: 'ACTUAL',
+    roll: Object.freeze([4, 74, 56]),
+    pitch: Object.freeze([4, 74, 56]),
+    yaw: Object.freeze([4, 70, 56]),
+  }),
+  '75-betafpv-ryfly-o4-gf1811': Object.freeze({
+    type: 'ACTUAL',
+    roll: Object.freeze([2, 73, 56]),
+    pitch: Object.freeze([2, 73, 56]),
+    yaw: Object.freeze([2, 70, 56]),
+  }),
+  '75-happymodel-aio-stock': Object.freeze({
+    type: 'BETAFLIGHT',
+    roll: Object.freeze([100, 70, 0]),
+    pitch: Object.freeze([100, 70, 0]),
+    yaw: Object.freeze([100, 70, 0]),
+  }),
+});
+
+function decodeRateCard(raw) {
+  const m = String(raw).trim().match(/^card\.(.+)$/i);
+  if (!m) return null;
+  const spec = RATE_CARDS[m[1]];
+  if (!spec) return { error: 'unknown rates card' };
+  const roll = spec.roll;
+  const pitch = spec.pitch || roll;
+  const yaw = spec.yaw || roll;
+  return decodedFromCliAxes(spec.type, roll, pitch, yaw);
+}
+
+// Compact share token: TYPE.rollRc.rollSr.rollEx.pitchRc.pitchSr.pitchEx.yawRc.yawSr.yawEx
+// Fields are CLI integers (expo always 0–100). Decode scales back to stored units.
+// card.<id> aliases resolve through RATE_CARDS; encode always emits the TYPE token.
+export function encodeRates(state) {
+  if (!state) return null;
+  const type = normalizeRateType(state.type);
+  if (!isRateType(type)) return null;
+  const parts = [type];
+  for (const ax of RATE_AXES) {
+    const a = state[ax];
+    if (!a) return null;
+    for (const field of TOKEN_FIELDS) {
+      const cli = cliFromState(type, field, a[field]);
+      if (!Number.isFinite(cli)) return null;
+      parts.push(String(Math.round(cli)));
+    }
+  }
+  return parts.join('.');
+}
+
+export function decodeRates(token) {
+  if (token == null) return { error: 'missing rates token' };
+  const raw = String(token).trim();
+  if (!raw) return { error: 'missing rates token' };
+  const card = decodeRateCard(raw);
+  if (card) return card;
+  const parts = raw.split('.');
+  if (parts.length !== 10) return { error: 'rates token must be TYPE + 9 numbers' };
+  const type = normalizeRateType(parts[0]);
+  if (!isRateType(type)) return { error: 'unknown rates type' };
+  const out = { type, roll: {}, pitch: {}, yaw: {} };
+  let i = 1;
+  for (const ax of RATE_AXES) {
+    for (const field of TOKEN_FIELDS) {
+      const cli = Number(parts[i++]);
+      if (!Number.isFinite(cli)) return { error: 'rates token has a non-number' };
+      const stored = scaleCliField(type, field, cli);
+      if (!inSliderRange(type, field, stored)) return { error: 'rates token out of range' };
+      out[ax][field] = stored;
+    }
+  }
+  return out;
+}
+
+export function ratesDeepLink({ origin, map, track, mode, build, rates, threeD } = {}) {
+  const base = origin || 'https://quadmath.com';
+  const u = new URL('/sim.html', base.endsWith('/') ? base : base + '/');
+  if (map) u.searchParams.set('map', String(map));
+  if (track != null && track !== '') u.searchParams.set('track', String(track));
+  if (mode) u.searchParams.set('mode', String(mode).toLowerCase());
+  if (build) u.searchParams.set('build', String(build));
+  if (threeD) u.searchParams.set('3d', '1');
+  const token = typeof rates === 'string' ? rates : encodeRates(rates);
+  if (token) u.searchParams.set('rates', token);
+  return u.toString();
+}
+
 function applyScaledAxis(type, raw) {
   const out = {};
   if (raw.rc_rate !== undefined) out.rcRate = scaleCliField(type, 'rcRate', raw.rc_rate);
@@ -188,6 +311,24 @@ export function parseCli(text, currentType) {
   if (!raw.trim()) {
     out.error = 'Paste a Betaflight dump or diff all';
     return out;
+  }
+
+  function extractBareTriples(text) {
+    const cleaned = String(text).replace(/(^|\s)(#|\/\/).*$/gm, '').trim();
+    if (!cleaned) return null;
+    const typeMatch = cleaned.match(/^(ACTUAL|BETAFLIGHT|BF|KISS|QUICK|QUICKRATES|RACEFLIGHT|RF)\b/i);
+    const rest = typeMatch ? cleaned.slice(typeMatch[0].length) : cleaned;
+    if (/[A-Za-z]/.test(rest)) return null;
+    const nums = rest.split(/[^0-9.+-]+/).filter(Boolean).map(Number);
+    if (!nums.length || nums.some((n) => !Number.isFinite(n))) return null;
+    if (nums.length === 3) return { triples: [nums, nums.slice(), nums.slice()], typeHint: typeMatch && typeMatch[1] };
+    if (nums.length === 9) {
+      return {
+        triples: [nums.slice(0, 3), nums.slice(3, 6), nums.slice(6, 9)],
+        typeHint: typeMatch && typeMatch[1],
+      };
+    }
+    return null;
   }
 
   const rateProfiles = {};
@@ -323,8 +464,24 @@ export function parseCli(text, currentType) {
   }
 
   if (!out.found && !sawSet) {
-    out.error = 'No recognised CLI commands found';
-    return out;
+    const bare = extractBareTriples(raw);
+    if (!bare) {
+      out.error = 'No recognised CLI commands found';
+      return out;
+    }
+    const hinted = normalizeRateType(bare.typeHint);
+    if (bare.typeHint && !hinted) {
+      out.error = 'Unknown rates_type ' + bare.typeHint;
+      return out;
+    }
+    if (hinted) out.ratesType = hinted;
+    RATE_AXES.forEach((ax, i) => {
+      const t = bare.triples[i];
+      setAxisRaw(out.rates, ax, 'rc_rate', t[0]);
+      setAxisRaw(out.rates, ax, 'srate', t[1]);
+      setAxisRaw(out.rates, ax, 'expo', t[2]);
+    });
+    out.found = 9;
   }
 
   const rateKeys = Object.keys(rateProfiles);

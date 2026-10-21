@@ -130,6 +130,7 @@ test('sim.html wires the picker and URL params without touching old keys as writ
   assert.ok(src.includes('Your build'), 'Tune/start copy');
   assert.ok(src.includes('q.get(\'build\')') || src.includes('q.get("build")') || src.includes("q.get('build')"));
   assert.ok(src.includes('cliPaste') && src.includes('btnCliImport'), 'CLI paste still present');
+  assert.ok(src.includes('btnRatesShare') && src.includes('COPY RATES LINK'), 'Tune rates share');
   for (const k of ['ryflyRates', 'ryflyDroneType', 'quadmath_bestLap_', 'quadmath_bestGhost_']) {
     assert.ok(src.includes(k), `must keep reading old key ${k}`);
   }

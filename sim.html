@@ -155,6 +155,7 @@
     font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;padding:8px;resize:vertical;border-radius:10px}
   #cliPaste:focus,#ghostCode:focus,#pilotName:focus{outline:none;border-color:var(--orange)}
   #rateCurve{width:100%;height:72px;margin:6px 0 10px;background:rgba(8,9,12,.55);border:1px solid var(--line);border-radius:4px;display:block}
+  #ratesShareRow button{width:auto;flex:1;margin-top:6px}
   #cliImportStatus{display:block;font-size:11px;color:var(--dim);margin:6px 0 10px;white-space:pre-wrap;line-height:1.45;min-height:1.2em}
   #cliImportStatus.err{color:#ff6b6b}
   #cliImportStatus.ok{color:var(--green)}
@@ -602,8 +603,11 @@
 
   <h2>Paste Betaflight CLI dump</h2>
   <textarea id="cliPaste" rows="4" placeholder="set roll_rc_rate = 110&#10;set roll_srate = 72&#10;set roll_expo = 25&#10;…or a full dump / diff all"></textarea>
-  <button type="button" id="btnCliImport">IMPORT CLI</button>
-  <span class="val" id="ratesTypeBadge" style="margin-left:8px">BETAFLIGHT</span>
+  <div class="seg" id="ratesShareRow">
+    <button type="button" id="btnCliImport">IMPORT CLI</button>
+    <button type="button" id="btnRatesShare">COPY RATES LINK</button>
+  </div>
+  <span class="val" id="ratesTypeBadge">BETAFLIGHT</span>
   <div id="cliImportStatus"></div>
 
   <h2>Camera</h2>
@@ -885,14 +889,14 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=52627101d2c3";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=1b8896845130";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=7d7dbbcff9cb";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
   convertAxisFamily as convertAxisRate, formatAxisReadout, formatCliSummary,
   drawRateCurve, normalizeRateType, isRateType, bfCurve as bfCurveOf,
-  actualRate as actualRateOf,
-} from "./sim-rates.js?v=09b9850ed3bb";
+  actualRate as actualRateOf, encodeRates, decodeRates, ratesDeepLink, RATE_CARDS,
+} from "./sim-rates.js?v=647e366ab1c9";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -5509,9 +5513,33 @@ function importCli(text){
   return p;
 }
 document.getElementById('btnCliImport').onclick=()=>importCli(document.getElementById('cliPaste').value);
+{
+  const shareRates=document.getElementById('btnRatesShare');
+  if(shareRates)shareRates.onclick=async()=>{
+    const token=encodeRates(rates);
+    if(!token){toast('RATES LINK FAILED');return;}
+    const url=ratesDeepLink({
+      origin:location.origin,
+      map:currentMap,
+      track:shareTrackParam(),
+      mode:qp.flightMode||'angle',
+      build:encodeBuild(currentBuild),
+      rates:token,
+      threeD,
+    });
+    try{
+      await navigator.clipboard.writeText(url);
+      toast('RATES LINK COPIED · max '+maxRateDps('roll').toFixed(0)+'/'+maxRateDps('pitch').toFixed(0)+'/'+maxRateDps('yaw').toFixed(0)+' °/s');
+    }catch(e){
+      toast('COPY FAILED');
+    }
+  };
+}
 window._parseCli=parseCli;
 window._rates=()=>({state:JSON.parse(JSON.stringify(rates)),axis:rateAxis,
   types:RATE_TYPES.slice(),
+  token:encodeRates(rates),
+  cards:Object.keys(RATE_CARDS),
   maxDps:{roll:+maxRateDps('roll').toFixed(0),pitch:+maxRateDps('pitch').toFixed(0),yaw:+maxRateDps('yaw').toFixed(0)}});
 
 // ---------- Ghost replay (built on the lap timer) ----------
@@ -6672,6 +6700,24 @@ function applyQueryBoot(){
       setFlightMode(modeRaw,false);flightMode=modeRaw;
     }
   }
+  const presetRaw=q.get('preset');
+  const ratesRaw=q.get('rates');
+  // Query rates are session-only: rates= > preset= > saved ryflyRates. Do not persist.
+  if(presetRaw&&applyRatePreset(rates,presetRaw)){
+    const sel=document.getElementById('ratePreset');
+    if(sel)sel.value=presetRaw;
+    refreshRatesUI();
+  }
+  if(ratesRaw){
+    const decoded=decodeRates(ratesRaw);
+    if(decoded&&!decoded.error){
+      rates.type=decoded.type;
+      for(const ax of RATE_AXES)Object.assign(rates[ax],decoded[ax]);
+      refreshRatesUI();
+    }else{
+      toast('RATES LINK INVALID');
+    }
+  }
   const drillRaw=q.get('drill');
   if(drillRaw&&drillById(drillRaw)){
     launchCoachDrill(drillRaw);
@@ -6686,7 +6732,7 @@ function applyQueryBoot(){
     setMap(t.map, t.id, {save:false});
     resetQuad();
   }
-  if((map||trackRaw||buildRaw||modeRaw||drillRaw||q.get('3d')||q.get('daily')||q.get('weekly'))&&q.get('menu')!=='1')toggleStartMenu(false);
+  if((map||trackRaw||buildRaw||modeRaw||presetRaw||ratesRaw||drillRaw||q.get('3d')||q.get('daily')||q.get('weekly'))&&q.get('menu')!=='1')toggleStartMenu(false);
   if(q.get('look')&&looks)looks.setLookSpot(q.get('look'));
   if(q.get('quality')&&looks){
     looks.setQuality(q.get('quality')).then(function(){

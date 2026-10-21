@@ -2,11 +2,13 @@
 // node --test tools/test_sim_rates.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   RATE_TYPES, parseCli, bfCurve, actualRate, kissRate, raceFlightRate, quickRate,
   rateSetpoint, maxRateDps, convertAxisFamily, normalizeRateType, formatCliSummary,
-  SETPOINT_LIMIT,
+  SETPOINT_LIMIT, encodeRates, decodeRates, ratesDeepLink, RATE_CARDS,
 } from '../sim-rates.js';
+import { RATE_PRESETS, applyRatePreset } from '../sim-feel.js';
 
 const near = (a, b, eps = 1e-6) =>
   assert.ok(Math.abs(a - b) <= eps, `expected ${b}, got ${a}`);
@@ -289,6 +291,146 @@ test('every type is monotonic and zero at centre', () => {
     }
     assert.ok(maxRateDps(type, a) > 100, type + ' max');
   }
+});
+
+test('encode/decode Ryan Actual token is 740/740/700', () => {
+  const state = {
+    type: 'ACTUAL',
+    roll: { rcRate: 4, srate: 74, expo: 0.56 },
+    pitch: { rcRate: 4, srate: 74, expo: 0.56 },
+    yaw: { rcRate: 4, srate: 70, expo: 0.56 },
+  };
+  assert.equal(encodeRates(state), 'ACTUAL.4.74.56.4.74.56.4.70.56');
+  const d = decodeRates('ACTUAL.4.74.56.4.74.56.4.70.56');
+  assert.equal(d.error, undefined);
+  assert.equal(d.type, 'ACTUAL');
+  near(d.roll.rcRate, 4);
+  near(d.roll.srate, 74);
+  near(d.roll.expo, 0.56);
+  near(d.yaw.srate, 70);
+  near(maxRateDps('ACTUAL', d.roll), 740);
+  near(maxRateDps('ACTUAL', d.pitch), 740);
+  near(maxRateDps('ACTUAL', d.yaw), 700);
+  assert.equal(d.pids, undefined);
+});
+
+test('encode/decode Betaflight integer token', () => {
+  const state = {
+    type: 'BETAFLIGHT',
+    roll: { rcRate: 1.10, srate: 0.72, expo: 0.25 },
+    pitch: { rcRate: 1.10, srate: 0.72, expo: 0.25 },
+    yaw: { rcRate: 1.00, srate: 0.70, expo: 0.20 },
+  };
+  assert.equal(encodeRates(state), 'BETAFLIGHT.110.72.25.110.72.25.100.70.20');
+  const d = decodeRates('BETAFLIGHT.110.72.25.110.72.25.100.70.20');
+  assert.equal(d.error, undefined);
+  near(d.roll.rcRate, 1.10);
+  near(d.roll.srate, 0.72);
+  near(d.roll.expo, 0.25);
+  near(maxRateDps('BETAFLIGHT', d.roll), 220 / 0.28);
+});
+
+test('RATE_CARDS aliases decode without importing tune-database', () => {
+  const src = readFileSync(new URL('../sim-rates.js', import.meta.url), 'utf8');
+  assert.equal(/tune-database\.js/.test(src), false);
+  const stock = decodeRates('card.65-betafpv-stock');
+  assert.equal(stock.error, undefined);
+  assert.equal(stock.type, 'ACTUAL');
+  near(stock.roll.rcRate, 7);
+  near(stock.roll.srate, 58);
+  near(stock.roll.expo, 0);
+  near(stock.yaw.srate, 50);
+  near(maxRateDps('ACTUAL', stock.roll), 580);
+  near(maxRateDps('ACTUAL', stock.yaw), 500);
+  const ry = decodeRates('card.65-betafpv-ryfly-1219s');
+  assert.equal(encodeRates(ry), 'ACTUAL.4.74.56.4.74.56.4.70.56');
+  near(maxRateDps('ACTUAL', ry.roll), 740);
+  near(maxRateDps('ACTUAL', ry.yaw), 700);
+  const o4 = decodeRates('card.75-betafpv-ryfly-o4-gf1811');
+  assert.equal(o4.type, 'ACTUAL');
+  near(o4.roll.rcRate, 2);
+  near(o4.roll.srate, 73);
+  near(o4.yaw.srate, 70);
+  near(maxRateDps('ACTUAL', o4.roll), 730);
+  const hm = decodeRates('card.75-happymodel-aio-stock');
+  assert.equal(hm.type, 'BETAFLIGHT');
+  near(hm.roll.rcRate, 1.00);
+  near(hm.roll.srate, 0.70);
+  near(hm.roll.expo, 0);
+  assert.ok(decodeRates('card.nope').error);
+  assert.equal(Object.keys(RATE_CARDS).length, 4);
+});
+
+test('Tune accepts a loose paste of bare rate triples', () => {
+  const actual = parseCli('7, 58, 0\n7, 58, 0\n7, 50, 0');
+  assert.equal(actual.error, null);
+  assert.equal(actual.ratesType, 'ACTUAL');
+  near(actual.rates.roll.rcRate, 7);
+  near(actual.rates.yaw.srate, 50);
+  const slash = parseCli('ACTUAL 4 74 56 / 4 74 56 / 4 70 56');
+  assert.equal(slash.ratesType, 'ACTUAL');
+  near(slash.rates.roll.srate, 74);
+  near(slash.rates.roll.expo, 0.56);
+  const one = parseCli('100, 70, 0', 'BETAFLIGHT');
+  assert.equal(one.ratesType, 'BETAFLIGHT');
+  near(one.rates.roll.rcRate, 1.00);
+  near(one.rates.yaw.srate, 0.70);
+  assert.equal(parseCli('hello this is not a dump').error, 'No recognised CLI commands found');
+});
+
+test('decodeRates rejects junk and out-of-range fields', () => {
+  assert.ok(decodeRates('nope').error);
+  assert.ok(decodeRates('ACTUAL.1.2.3').error);
+  assert.ok(decodeRates('ACTUAL.4.74.56.4.74.56.4.70.56.extra').error);
+  assert.ok(decodeRates('NOPE.4.74.56.4.74.56.4.70.56').error);
+  assert.ok(decodeRates('ACTUAL.4.74.56.4.74.56.4.999.56').error);
+  assert.ok(decodeRates('').error);
+  assert.ok(decodeRates(null).error);
+  assert.equal(encodeRates(null), null);
+  assert.equal(encodeRates({ type: 'NOPE', roll: {}, pitch: {}, yaw: {} }), null);
+});
+
+test('ratesDeepLink encodes map/track/mode/build/rates and no CLI dump', () => {
+  const url = ratesDeepLink({
+    origin: 'https://quadmath.com',
+    map: 'living',
+    track: 'living-circuit',
+    mode: 'acro',
+    build: 'QB1.air65',
+    rates: 'ACTUAL.4.74.56.4.74.56.4.70.56',
+  });
+  assert.ok(url.includes('/sim.html?'));
+  assert.ok(url.includes('map=living'));
+  assert.ok(url.includes('track=living-circuit'));
+  assert.ok(url.includes('mode=acro'));
+  assert.ok(url.includes('build=QB1.air65'));
+  assert.ok(url.includes('rates=ACTUAL.4.74.56.4.74.56.4.70.56'));
+  assert.equal(url.includes('set '), false);
+  assert.equal(url.includes('rateprofile'), false);
+});
+
+test('ryanActual preset is Actual 40/740/700 expo 0.56', () => {
+  const p = RATE_PRESETS.ryanActual;
+  assert.ok(p);
+  assert.equal(p.type, 'ACTUAL');
+  assert.equal(p.roll.rcRate, 4);
+  assert.equal(p.pitch.rcRate, 4);
+  assert.equal(p.yaw.rcRate, 4);
+  assert.equal(p.roll.srate, 74);
+  assert.equal(p.pitch.srate, 74);
+  assert.equal(p.yaw.srate, 70);
+  assert.equal(p.roll.expo, 0.56);
+  near(maxRateDps('ACTUAL', p.roll), 740);
+  near(maxRateDps('ACTUAL', p.pitch), 740);
+  near(maxRateDps('ACTUAL', p.yaw), 700);
+  const rates = {
+    type: 'BETAFLIGHT',
+    roll: { rcRate: 1, srate: 0.5, expo: 0 },
+    pitch: { rcRate: 1, srate: 0.5, expo: 0 },
+    yaw: { rcRate: 1, srate: 0.5, expo: 0 },
+  };
+  assert.equal(applyRatePreset(rates, 'ryanActual'), true);
+  assert.equal(encodeRates(rates), 'ACTUAL.4.74.56.4.74.56.4.70.56');
 });
 
 test('convertAxisFamily keeps full-stick max across families', () => {
