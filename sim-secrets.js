@@ -4,7 +4,7 @@
 // Stock skin ids / unlocks in sim-retention.js stay frozen.
 
 import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=c43bf3a247a6';
-import { LAYOUT } from './sim-maps.js?v=a81c48a1b734';
+import { LAYOUT } from './sim-maps.js?v=a92751d3a12f';
 import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=8f9513fb3468';
 
 export const SECRETS_KEY = 'quadmathSimSecrets';
@@ -153,13 +153,13 @@ function extraBoxes(mapId) {
       aabb(1.5, 24.2, 14.1, 36.2, 0.42, 0.55),
       aabb(22.6, 0, -11.5, 4.2, 6.3, 3.5),
       aabb(17.2, 0, -15.4, 0.90, 14.0, 0.90),
-      aabb(21.75, 0, 20.55, 4.85, 5.55, 0.18),
-      aabb(21.5, 0, 6.55, 1.55, 2.15, 1.30),
-      aabb(-20.8, 0, 8.75, 6.8, 10.4, 15.5),
+      aabb(-21.75, 0, 20.55, 4.85, 5.55, 0.18),
+      aabb(-21.5, 0, 6.55, 1.55, 2.15, 1.30),
+      aabb(-17.55, 0, 10.4, 2.90, 10.4, 12.2),
       aabb(0, 0, -21, 49, 6.3, 0.36),
       aabb(-24.5, 0, 0, 0.36, 6.3, 42),
       aabb(24.5, 0, 0, 0.36, 6.3, 42),
-      aabb(-8.4, 0, 21, 32.2, 6.3, 0.36),
+      aabb(8.4, 0, 21, 32.2, 6.3, 0.36),
     ];
   }
   return [];
@@ -327,11 +327,11 @@ const PLACEMENTS = Object.freeze({
       P('b05', -8.5, 1.15, -5.5, 'pool skim'),
       P('b06', -15.05, 2.10, -14.6, 'umbrella arch'),
       P('b07', -17.6, 1.55, -12.55, 'canopy frame'),
-      P('b08', 21.75, 1.18, 14.0, 'side alley'),
-      P('b09', 21.75, 6.20, 19.55, 'wood gate'),
+      P('b08', -21.75, 1.18, 14.0, 'side alley'),
+      P('b09', -21.75, 6.20, 19.55, 'wood gate'),
       P('b10', 1.5, 25.4, 12.4, 'roof ridge'),
       P('b11', -18.5, 1.20, -16.4, 'lounge pad'),
-      P('b12', 21.5, 2.55, 6.55, 'AC box'),
+      P('b12', -21.5, 2.55, 6.55, 'AC box'),
     ]),
     secrets: Object.freeze([
       S('ridge', 'Roof Ridge', 1.5, 25.6, 12.2, 1.4, '2-story ridge'),

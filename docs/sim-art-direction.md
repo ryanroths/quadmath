@@ -163,7 +163,7 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Tr
 - **Time:** Overcast Phoenix afternoon.
 - **Palette:** `#c4a882` stucco, `#c45a32` terracotta, `#2ec4b6` pool, `#3f8a4a` turf, `#c2b39a` pebble.
 - **Sky:** Warm overcast gradient, no hard sun sprite.
-- **Props:** PVC practice gate, kidney pool, ficus planter, umbrella arch, yellow canopy, side alley. No clutter, faces, or dog.
+- **Props:** PVC practice gate, kidney pool, full-yard mesh fence, ficus planter, umbrella arch, yellow canopy, west side alley + wood gate + AC. Patio planters and pavers, no furniture. No clutter, faces, or dog.
 - **Gates:** Stucco hoops with terracotta caps.
 - **Post:** Warm grade, bloom off.
 
