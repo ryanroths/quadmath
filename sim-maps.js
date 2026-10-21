@@ -136,13 +136,20 @@ export const BACKYARD_PLAY = Object.freeze({
   pool: Object.freeze({ x: -8.5, z: -5.5, w: 24.0, d: 12.0 }),
   deckT: 1.55,
   fence: Object.freeze({
-    x: 2.15, z0: -12.2, z1: 3.6, h: 4.2, post: 0.12, spacing: 5.25,
+    x: 2.15, z0: -20.2, z1: 6.05, h: 4.2, post: 0.12, spacing: 5.25,
+    meshT: 0.06, meshY: 0.28, meshH: 3.72,
   }),
   pots: Object.freeze([
-    Object.freeze({ x: 1.15, z: -10.4, r: 0.28, h: 0.72 }),
-    Object.freeze({ x: 1.15, z: -5.2, r: 0.26, h: 0.64 }),
-    Object.freeze({ x: 1.20, z: 0.2, r: 0.30, h: 0.78 }),
-    Object.freeze({ x: 1.10, z: 2.8, r: 0.24, h: 0.58 }),
+    Object.freeze({ x: 1.10, z: -17.55, r: 0.28, h: 0.72 }),
+    Object.freeze({ x: 1.10, z: -7.08, r: 0.26, h: 0.64 }),
+    Object.freeze({ x: 1.12, z: 3.42, r: 0.30, h: 0.78 }),
+    Object.freeze({ x: 3.20, z: -17.55, r: 0.24, h: 0.58 }),
+  ]),
+  patioPlanters: Object.freeze([
+    Object.freeze({ x: -2.15, z: -2.55, r: 0.34, h: 0.72 }),
+    Object.freeze({ x: 10.15, z: -2.55, r: 0.34, h: 0.72 }),
+    Object.freeze({ x: -2.15, z: 6.15, r: 0.30, h: 0.62 }),
+    Object.freeze({ x: 10.15, z: 6.15, r: 0.30, h: 0.62 }),
   ]),
   pad: Object.freeze({ x: -18.5, z: -15.5, w: 6.4, d: 5.6, h: 0.28 }),
   sofa: Object.freeze({
@@ -160,13 +167,14 @@ export const BACKYARD_PLAY = Object.freeze({
     x: -17.6, y: 1.55, z: -12.55, innerW: 2.35, innerH: 2.20, bar: 0.12, depth: 2.35,
   }),
   wing: Object.freeze({
-    x: -20.8, z: 8.75, w: 6.8, d: 15.5, wallH: 10.4,
+    x: -17.55, z: 10.4, w: 2.90, d: 12.2, wallH: 10.4,
   }),
-  wingEave: Object.freeze({ x: -20.8, y: 12.15, z: 8.75, w: 8.2, h: 0.28, d: 16.6 }),
-  alley: Object.freeze({ x: 21.75, z0: 7.2, z1: 21.0, w: 5.5 }),
-  woodGate: Object.freeze({ x: 21.75, z: 20.55, w: 4.85, h: 5.55, d: 0.18 }),
-  ac: Object.freeze({ x: 21.5, z: 6.55, w: 1.55, h: 2.15, d: 1.30 }),
-  alleyEave: Object.freeze({ x: 21.75, y: 19.05, z: 14.1, w: 5.6, h: 0.28, d: 14.0 }),
+  wingEave: Object.freeze({ x: -17.55, y: 12.15, z: 10.4, w: 4.2, h: 0.28, d: 13.4 }),
+  alley: Object.freeze({ x: -21.75, z0: 7.2, z1: 21.0, w: 5.5 }),
+  woodGate: Object.freeze({ x: -21.75, z: 20.55, w: 4.85, h: 5.55, d: 0.18 }),
+  ac: Object.freeze({ x: -21.5, z: 6.55, w: 1.55, h: 2.15, d: 1.30 }),
+  alleyEave: Object.freeze({ x: -21.75, y: 19.05, z: 14.1, w: 5.6, h: 0.28, d: 14.0 }),
+  streetWall: Object.freeze({ x: 8.4, w: 32.2 }),
 });
 
 export const LAYOUT = {
@@ -196,7 +204,7 @@ export const MAP_LOOKS = {
   living: { fog: 0.004, sun: 0.55, env: 0.62, bg: 0.38, hemi: 0.38 },
   garage: { fog: 0.003, sun: 0.7, env: 0.26, bg: 0.34, hemi: 0.60 },
   warehouse: { fog: 0.0018, sun: 0.55, env: 0.5, bg: 0.28, hemi: 0.28 },
-  backyard: { fog: 0.0018, sun: 0.40, env: 0.22, bg: 0.42, hemi: 0.62 },
+  backyard: { fog: 0.0014, sun: 0.48, env: 0.24, bg: 0.52, hemi: 0.72 },
   city: { fog: 0.00105, sun: 0.30, env: 0.18, bg: 0.16, hemi: 0.56 },
   office: { fog: 0.0032, sun: 0.48, env: 0.58, bg: 0.34, hemi: 0.36 },
   gym: { fog: 0.0010, sun: 0.95, env: 0.70, bg: 0.44, hemi: 0.55 },
@@ -650,7 +658,7 @@ function buildBackyard(THREE, parent, colliders, lights) {
   box(THREE, parent, colliders, 0, 0, -hz, L.w, wh, t, mats.cmu);
   box(THREE, parent, colliders, -hx, 0, 0, t, wh, L.d, mats.cmu);
   box(THREE, parent, colliders, hx, 0, 0, t, wh, L.d, mats.cmu);
-  box(THREE, parent, colliders, -8.4, 0, hz, 32.2, wh, t, mats.cmu);
+  box(THREE, parent, colliders, P.streetWall.x, 0, hz, P.streetWall.w, wh, t, mats.cmu);
   const hs = P.house;
   box(THREE, parent, colliders, hs.x, 0, hs.z, hs.w, hs.wallH, hs.d, mats.stucco);
   box(THREE, parent, colliders, P.ridge.x, P.ridge.y, P.ridge.z, P.ridge.w, P.ridge.h, P.ridge.d, mats.tile);
@@ -689,10 +697,17 @@ function buildBackyard(THREE, parent, colliders, lights) {
   for (let z = fn.z0; z <= fn.z1 + 0.05; z += fn.spacing, fi++) {
     box(THREE, parent, colliders, fn.x, 0, z, fn.post, fn.h, fn.post, mats.metal);
     if (fi % 2 === 0 && z + fn.spacing <= fn.z1 + 0.05) {
-      box(THREE, parent, colliders, fn.x, fn.h * 0.42, z + fn.spacing / 2, 0.06, 0.08, fn.spacing, mats.metal);
+      box(
+        THREE, parent, colliders,
+        fn.x, fn.meshY, z + fn.spacing / 2,
+        fn.meshT, fn.meshH, fn.spacing - fn.post, mats.metal,
+      );
     }
   }
   for (const pot of P.pots) {
+    cyl(THREE, parent, colliders, pot.x, 0, pot.z, pot.r, pot.r * 0.85, pot.h, mats.tile);
+  }
+  for (const pot of P.patioPlanters) {
     cyl(THREE, parent, colliders, pot.x, 0, pot.z, pot.r, pot.r * 0.85, pot.h, mats.tile);
   }
   box(THREE, parent, colliders, P.pad.x, 0, P.pad.z, P.pad.w, P.pad.h, P.pad.d, mats.pebble);
@@ -716,8 +731,11 @@ function buildBackyard(THREE, parent, colliders, lights) {
   box(THREE, parent, colliders, P.woodGate.x, 0, P.woodGate.z, P.woodGate.w, P.woodGate.h, P.woodGate.d, mats.wood);
   box(THREE, parent, colliders, P.ac.x, 0, P.ac.z, P.ac.w, P.ac.h, P.ac.d, mats.metal);
   box(THREE, parent, colliders, P.alleyEave.x, P.alleyEave.y, P.alleyEave.z, P.alleyEave.w, P.alleyEave.h, P.alleyEave.d, mats.tile);
-  addLight(THREE, parent, lights, 4, 10.2, 2, 0xffe0b8, 1.6, 28);
-  addLight(THREE, parent, lights, -8, 8.4, -6, 0xfff0d0, 1.2, 24);
+  addLight(THREE, parent, lights, 4, 10.2, 2, 0xffe0b8, 2.2, 32);
+  addLight(THREE, parent, lights, -8, 8.4, -6, 0xfff0d0, 1.8, 26);
+  addLight(THREE, parent, lights, -21.5, 7.4, 14, 0xffe8c4, 1.5, 18);
+  addLight(THREE, parent, lights, 14, 7.6, -6, 0xe8f4d0, 1.4, 20);
+  addLight(THREE, parent, lights, 2.2, 11.5, -2, 0xfff4e0, 1.7, 34);
   return { floor, orbit: MAP_ORBIT.backyard };
 }
 

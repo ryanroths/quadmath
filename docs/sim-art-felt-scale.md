@@ -87,9 +87,10 @@ Each PR is fresh off latest `main`, never stacked.
 - Palette: `#c4a882` stucco, `#c45a32` terracotta, `#2ec4b6` pool,
   `#3f8a4a` turf. Warm desert tan, not Jade Lot dusk.
 - Materials: MeshBasic felt on house, turf, pool, PVC, palms. env ≤ 0.28.
-- Play: patio → PVC practice gate → ficus trunk, pool skim through the
-  umbrella arch and yellow canopy, side-alley dive over the wood gate,
-  roof-ridge powerloop. No hoses, toys, chairs, or people.
+- Play: patio → PVC practice gate → ficus trunk, pool skim along the
+  full-length mesh fence, west side-alley dive over the wood gate,
+  roof-ridge powerloop. Patio is furniture-free (planters + pavers only).
+  No hoses, toys, chairs, or people.
 - Named lines: `backyard-gate`, `backyard-pool`, `backyard-alley`,
   `backyard-spin` (Daily Line pool). Picker name: Backyard (Ryan's).
 - Low: merged house / roof / deck / fence. No water shimmer.
