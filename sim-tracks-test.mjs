@@ -60,8 +60,9 @@ assert.equal(byMap.living, 4);
 assert.equal(byMap.office, 5);
 assert.equal(byMap.gym, 5);
 assert.equal(byMap.trainer, 3);
+assert.ok((byMap.city || 0) >= 4, 'city needs loop + zigzag + 2 named lines');
 
-for (const t of files.filter((x) => ['living', 'office', 'gym', 'trainer'].includes(x.map))) {
+for (const t of files.filter((x) => ['living', 'office', 'gym', 'trainer'].includes(x.map) || ['city-inside', 'city-spins'].includes(x.id))) {
   for (const g of t.gates) {
     assert.ok(g.size <= 2.2, t.id + ' whoop gate too large: ' + g.size);
     assert.ok(g.solid, t.id + ' whoop gates should be solid');
@@ -281,6 +282,8 @@ assert.equal(isLineTrackId(0), false);
 assert.equal(isLineTrackId(1), false);
 assert.equal(isLineTrackId('city-loop'), false);
 assert.equal(isLineTrackId('city-freestyle'), false);
+assert.equal(isLineTrackId('city-inside'), true);
+assert.equal(isLineTrackId('city-spins'), true);
 assert.equal(lineFinishIndex(8), 7);
 assert.deepEqual(afterLinePass(0, 8, false), { start: true, finish: false, nextIndex: 1 });
 assert.deepEqual(afterLinePass(3, 8, true), { start: false, finish: false, nextIndex: 4 });

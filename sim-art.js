@@ -3,7 +3,7 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=d290c9ab2bdb';
+import { hexNum } from './sim-art-city.js?v=d054ab081c29';
 export {
   FELT_SCALE, applyFeltMaterial, feltBasic, feltClay, feltEmissive,
   studioPhoneBudget, qualityWantsStudioBloom,
@@ -21,53 +21,53 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=d290c9ab2bdb';
+} from './sim-art-city.js?v=d054ab081c29';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget, planLivingKit,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=f50f9c095909';
+} from './sim-art-living.js?v=7d9cfd679a06';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=90bf375aa58c';
+} from './sim-art-garage.js?v=e986bfba00e2';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=59cd7591d8f7';
+} from './sim-art-warehouse.js?v=ddfffa856e2f';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
   planGymKit,
-} from './sim-art-gym.js?v=6647eadab4cb';
+} from './sim-art-gym.js?v=78f159985ee8';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget, planOfficeKit,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=d7019857c67f';
+} from './sim-art-office.js?v=f2130dcaeb0a';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=16581c20f7db';
+} from './sim-art-trainer.js?v=f8c7c377dfcb';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
-} from './sim-art-backyard.js?v=106ab9cac695';
+} from './sim-art-backyard.js?v=fe78e848d32c';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=a8ec995a0ae5';
+} from './sim-art-room.js?v=bdc9aace5c52';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
@@ -75,7 +75,7 @@ export {
   tryDressOfficeKit, officeKitBytesForQuality, OFFICE_KIT_CORE, OFFICE_KIT_EXTRA,
   tryDressGymKit, gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA,
   tryDressLivingKit, livingKitBytesForQuality, LIVING_KIT_CORE, LIVING_KIT_EXTRA,
-} from './sim-art-kit.js?v=541a8a20e21b';
+} from './sim-art-kit.js?v=67b129386313';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
@@ -123,7 +123,7 @@ export const VIBES = Object.freeze({
       fillIntensity: 0.16,
       hemiSky: 0x3a1870,
       hemiGround: 0x1a0820,
-      hemiIntensity: 0.44,
+      hemiIntensity: 0.56,
       exposure: 0.58,
       fogColor: 0x1a0830,
       fogDensity: 0.00112,
@@ -133,11 +133,12 @@ export const VIBES = Object.freeze({
       gateEmissive: 5.4,
       gateEmissiveActive: 7.2,
     }),
-    looks: Object.freeze({ fog: 0.00112, sun: 0.30, env: 0.18, bg: 0.16, hemi: 0.44 }),
+    looks: Object.freeze({ fog: 0.00112, sun: 0.30, env: 0.18, bg: 0.16, hemi: 0.56 }),
     gates: Object.freeze({ style: 'unique-neon', keepBrand: true }),
     props: Object.freeze([
       'setback towers', 'window shader', 'blade signs', 'wet street',
       'parked cars', 'benches', 'kiosks', 'steam vents', 'rain', 'moon',
+      'open interiors', 'spin grove', 'roof holes', 'alley gaps',
     ]),
     post: Object.freeze({
       bloom: true, analog: false, grade: true,

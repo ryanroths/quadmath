@@ -374,6 +374,7 @@ test('named tracks are lines; city stays 3-lap; HUD and ghost stay wired', () =>
     'living-sofa', 'living-under', 'living-rafters', 'living-circuit',
     'office-under', 'office-rafters', 'office-cubicles', 'office-hallway', 'office-desks',
     'gym-under', 'gym-rafters', 'gym-court', 'gym-bleachers', 'gym-hoops',
+    'city-inside', 'city-spins',
   ]) {
     assert.equal(isLineTrackId(id), true, id);
   }

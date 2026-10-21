@@ -1,0 +1,18 @@
+{
+  "id": "city-spins",
+  "map": "city",
+  "name": "Spin Grove",
+  "class": "whoop",
+  "gates": [
+    { "x": 6.2, "y": 1.22, "z": -2.2, "ry": 3.14, "size": 1.8, "solid": true },
+    { "x": 7.4, "y": 1.35, "z": -7.1, "ry": 0.60, "size": 1.5, "solid": true },
+    { "x": 4.8, "y": 1.30, "z": -5.4, "ry": -1.20, "size": 1.5, "solid": true },
+    { "x": 7.2, "y": 1.35, "z": -10.5, "ry": 1.00, "size": 1.5, "solid": true },
+    { "x": 3.0, "y": 1.30, "z": -8.6, "ry": -2.00, "size": 1.5, "solid": true },
+    { "x": 10.4, "y": 1.40, "z": -8.0, "ry": 1.57, "size": 1.6, "solid": true },
+    { "x": 12.0, "y": 1.25, "z": 2.0, "ry": 0.00, "size": 1.8, "solid": true }
+  ],
+  "flags": [
+    { "x": 6.2, "y": 2.8, "z": -8.0, "ry": 0 }
+  ]
+}

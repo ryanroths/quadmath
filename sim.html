@@ -802,7 +802,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=c5a4d163f20f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=9565b4a4b4bb";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=6c787eefe42a";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -816,7 +816,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, mergeStaticArt,
-} from "./sim-art.js?v=714ed42b0979";
+} from "./sim-art.js?v=bdcab277466f";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -841,14 +841,14 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=12030f172343";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=fcdf1d7a7da3";
+} from "./sim-tracks.js?v=8cfb879dbe36";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=841bda430e6a";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=0314f2c75e7d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=1b4c34b02371";
+} from "./sim-room.js?v=5a36ca56c8f9";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=1a78d385ca76";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -863,7 +863,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=af60c93d9283";
+} from "./sim-coach.js?v=80eb906dd740";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js?v=49546f834df8";
@@ -885,7 +885,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=d1269e110269";
+} from "./sim-secrets.js?v=e7172d7a352b";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -2314,7 +2314,7 @@ function applyCityArt(quality){
   if(looks&&looks.setSkyMode)looks.setSkyMode('gradient');
   applyLooksPost('city', q);
   const credit=document.querySelector('.sf-credit');
-  if(credit)credit.textContent='City is original procedural art — Neon Current. Kenney CC0 cars and street kit.';
+  if(credit)credit.textContent='City is original procedural art — Neon Current · Felt Scale. Kenney CC0 cars and street kit.';
   queueCityKit(q, vibe);
 }
 let cityKitWanted=null;
@@ -2675,8 +2675,9 @@ async function finishCityArt(){
     gates.length=mainGateCount;
     diveShaft(DX-130,DZ+20,10,80,16);
     restyleLandmarks(scene,vibeFor('city'));
-    if(assetEl)assetEl.textContent='procedural neon city (Neon Current). Kenney CC0 kit loading.';
+    if(assetEl)assetEl.textContent='procedural neon city (Neon Current · Felt Scale). Kenney CC0 kit loading.';
   }finally{
+    installCityExploreColliders(THREE, colliders);
     wrapCityWorld();
     snapCityColliders();
     usingGltf=false;
@@ -2845,7 +2846,7 @@ function applyMapLooks(mapId){
     else if(mapId==='trainer')credit.textContent='Trainer is original procedural art — Licorice Grid';
     else if(mapId==='office')credit.textContent='Office is original procedural art — Paper Sun';
     else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court. Kenney CC0 sideline kit.';
-    else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current. Kenney CC0 cars and street kit.';
+    else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current · Felt Scale. Kenney CC0 cars and street kit.';
   }
 }
 function isFreeFlight(t,trackId){
@@ -6475,7 +6476,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
 <footer>
   <a class="sf-logo" href="/" aria-label="Back to QuadMath">← QuadMath<span class="dot">.</span></a>
   <span class="sf-note">Estimates only — always verify with bench testing. Fly safe.</span>
-  <span class="sf-credit">City is original procedural art — Neon Current. Kenney CC0 cars and street kit.</span>
+  <span class="sf-credit">City is original procedural art — Neon Current · Felt Scale. Kenney CC0 cars and street kit.</span>
 </footer>
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
