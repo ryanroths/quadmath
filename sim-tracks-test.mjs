@@ -46,7 +46,7 @@ const byMap = {};
 for (const t of files) {
   byMap[t.map] = (byMap[t.map] || 0) + 1;
 }
-assert.ok((byMap.living || 0) >= 2);
+assert.ok((byMap.living || 0) >= 4);
 assert.ok((byMap.garage || 0) >= 2);
 assert.ok((byMap.warehouse || 0) >= 2);
 assert.ok((byMap.backyard || 0) >= 2);

@@ -298,18 +298,28 @@ function wallBoxes(map) {
 
 function furnitureBoxes(mapId) {
   if (mapId === 'living') {
-    return [
-      aabb(0, 0, -10.6, 7.2, 2.35, 2.7),
-      aabb(0, 2.35, -11.5, 7.2, 1.15, 0.7),
-      aabb(-3.4, 1.1, -10.6, 0.55, 1.1, 2.5),
-      aabb(3.4, 1.1, -10.6, 0.55, 1.1, 2.5),
-      aabb(0, 0, -5.9, 3.5, 1.12, 1.9),
-      aabb(8.4, 0, 0.2, 1.5, 1.55, 5.6),
+    const out = [
+      aabb(0, 1.20, -10.6, 7.2, 0.22, 2.7),
+      aabb(0, 1.42, -11.5, 7.2, 2.08, 0.70),
+      aabb(-3.4, 1.20, -10.6, 0.55, 1.15, 2.7),
+      aabb(3.4, 1.20, -10.6, 0.55, 1.15, 2.7),
+      aabb(0, 1.20, -5.9, 3.5, 0.12, 1.9),
+      aabb(8.4, 1.20, 0.2, 1.5, 0.16, 5.6),
       aabb(9.55, 2.2, 0.2, 0.12, 2.6, 4.4),
-      aabb(-7.1, 0, -3.8, 2.5, 2.15, 2.5),
-      aabb(-6.2, 0, 8.2, 1.5, 4.8, 1.5),
-      aabb(8.4, 0, -10.6, 1.6, 5.6, 2.4),
+      aabb(-7.1, 1.20, -3.8, 2.5, 0.22, 2.5),
+      aabb(-7.1, 1.42, -4.72, 2.5, 0.95, 0.42),
+      aabb(-6.2, 0, 8.2, 0.44, 4.4, 0.44),
+      aabb(-6.2, 4.4, 8.2, 1.4, 0.35, 1.4),
     ];
+    const hx = 0.73, hz = 1.13;
+    for (const [dx, dz] of [[-hx, -hz], [hx, -hz], [-hx, hz], [hx, hz]]) {
+      out.push(aabb(8.4 + dx, 0, -10.6 + dz, 0.14, 5.20, 0.14));
+    }
+    for (const y of [1.20, 2.48, 3.76, 5.04]) out.push(aabb(8.4, y, -10.6, 1.6, 0.12, 2.4));
+    // Clay hoop + ottoman gap stay in sim-maps flight colliders. The 21×28
+    // room cannot host them on the daily oval without collapsing to a 12 m lap.
+    for (const z of [-10, 0, 10]) out.push(aabb(0, 7.72, z, 19.4, 0.20, 0.32));
+    return out;
   }
   if (mapId === 'garage') {
     const out = [

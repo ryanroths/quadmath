@@ -620,6 +620,8 @@ export const BUILTIN_TRACK_FILES = [
   { id: 'city-zigzag', file: 'tracks/city-zigzag.json', legacyId: 1, map: 'city', name: 'Mesa Zigzag' },
   { id: 'living-sofa', file: 'tracks/living-sofa.json', map: 'living', name: 'Sofa Slalom' },
   { id: 'living-circuit', file: 'tracks/living-circuit.json', map: 'living', name: 'Living Circuit' },
+  { id: 'living-under', file: 'tracks/living-under.json', map: 'living', name: 'Table Dive' },
+  { id: 'living-rafters', file: 'tracks/living-rafters.json', map: 'living', name: 'Ceiling Run' },
   { id: 'garage-bench', file: 'tracks/garage-bench.json', map: 'garage', name: 'Workbench' },
   { id: 'garage-rafters', file: 'tracks/garage-rafters.json', map: 'garage', name: 'Rafters' },
   { id: 'warehouse-aisle', file: 'tracks/warehouse-aisle.json', map: 'warehouse', name: 'Aisle Run' },

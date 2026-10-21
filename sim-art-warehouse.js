@@ -4,7 +4,7 @@
 // Procedural meshes stay if a mesh fails. Nothing from the GPL whoop sim.
 
 import { hexNum, propClearOfCourse } from './sim-art-city.js?v=10aecc280e13';
-import { WAREHOUSE_PLAY } from './sim-maps.js?v=63c2df632ca8';
+import { WAREHOUSE_PLAY } from './sim-maps.js?v=d9f1e373f40d';
 
 export const WAREHOUSE_STOCK = Object.freeze({
   wall: 0x8d9096,
