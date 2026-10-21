@@ -56,11 +56,12 @@ assert.ok((byMap.backyard || 0) >= 2);
 assert.ok((byMap.office || 0) >= 2, 'office needs 2+ tracks');
 assert.ok((byMap.gym || 0) >= 2, 'gym needs 2+ tracks');
 assert.ok((byMap.trainer || 0) >= 2, 'trainer needs 2+ tracks');
+assert.equal(byMap.living, 4);
 assert.equal(byMap.office, 5);
 assert.equal(byMap.gym, 5);
 assert.equal(byMap.trainer, 3);
 
-for (const t of files.filter((x) => ['office', 'gym', 'trainer'].includes(x.map))) {
+for (const t of files.filter((x) => ['living', 'office', 'gym', 'trainer'].includes(x.map))) {
   for (const g of t.gates) {
     assert.ok(g.size <= 2.2, t.id + ' whoop gate too large: ' + g.size);
     assert.ok(g.solid, t.id + ' whoop gates should be solid');
@@ -257,6 +258,10 @@ assert.equal(isLineTrackId('garage-rafters'), true);
 assert.equal(isLineTrackId('warehouse-racks'), true);
 assert.equal(isLineTrackId('warehouse-rafters'), true);
 assert.equal(isLineTrackId('living-sofa'), true);
+assert.equal(isLineTrackId('living-under'), true);
+assert.equal(isLineTrackId('living-rafters'), true);
+assert.equal(isLineTrackId('living-circuit'), true);
+assert.equal(isLineTrackId('living-freestyle'), false);
 assert.equal(isLineTrackId('office-under'), true);
 assert.equal(isLineTrackId('office-rafters'), true);
 assert.equal(isLineTrackId('office-cubicles'), true);
@@ -300,6 +305,25 @@ assert.deepEqual(visibleSplits([1, 2, 3, 4, 5], 3), [3, 4, 5]);
 const lineGhost = makePaceGhost(living.gates, { track: 'living-sofa', speed: 6, hz: LINE_GHOST_HZ, laps: 1 });
 assert.equal(ghostPayloadError(lineGhost, 'living-sofa'), null);
 assert.ok(lineGhost.samples.length > 4 && lineGhost.samples.length < 400);
+const tableDive = files.find((t) => t.id === 'living-under');
+assert.ok(tableDive && tableDive.gates.length >= 4);
+assert.deepEqual(afterLinePass(0, tableDive.gates.length, false), { start: true, finish: false, nextIndex: 1 });
+assert.deepEqual(
+  afterLinePass(tableDive.gates.length - 1, tableDive.gates.length, true),
+  { start: false, finish: true, nextIndex: 0 },
+);
+const livingLineGhost = makePaceGhost(tableDive.gates, { track: 'living-under', speed: 6, hz: LINE_GHOST_HZ, laps: 1 });
+assert.equal(ghostPayloadError(livingLineGhost, 'living-under'), null);
+assert.ok(livingLineGhost.samples.length > 4 && livingLineGhost.samples.length <= LINE_GHOST_MAX);
+const ceilingRun = files.find((t) => t.id === 'living-rafters');
+assert.ok(ceilingRun && ceilingRun.gates.length >= 4);
+assert.deepEqual(
+  afterLinePass(ceilingRun.gates.length - 1, ceilingRun.gates.length, true),
+  { start: false, finish: true, nextIndex: 0 },
+);
+const livingRafterGhost = makePaceGhost(ceilingRun.gates, { track: 'living-rafters', speed: 6, hz: LINE_GHOST_HZ, laps: 1 });
+assert.equal(ghostPayloadError(livingRafterGhost, 'living-rafters'), null);
+assert.ok(livingRafterGhost.samples.length > 4 && livingRafterGhost.samples.length <= LINE_GHOST_MAX);
 const deskDive = files.find((t) => t.id === 'office-under');
 assert.ok(deskDive && deskDive.gates.length >= 4);
 assert.deepEqual(afterLinePass(0, deskDive.gates.length, false), { start: true, finish: false, nextIndex: 1 });

@@ -17,6 +17,7 @@ import {
   kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP, planGarageKit,
   warehouseKitBytesForQuality, WAREHOUSE_KIT_CORE, WAREHOUSE_KIT_EXTRA, planWarehouseKit,
+  livingKitBytesForQuality, LIVING_KIT_CORE, LIVING_KIT_EXTRA, planLivingKit,
   gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA, planGymKit,
   officeKitBytesForQuality, OFFICE_KIT_CORE, OFFICE_KIT_EXTRA, planOfficeKit,
   restyleDiveTubes, LIVING_VIBE_ID, hideStockLivingMeshes, buildClayParlor,
@@ -38,7 +39,7 @@ import {
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
-import { MAP_IDS, MAP_LOOKS, buildMap, GARAGE_PLAY, WAREHOUSE_PLAY, GYM_PLAY, OFFICE_PLAY } from '../sim-maps.js';
+import { MAP_IDS, MAP_LOOKS, buildMap, GARAGE_PLAY, WAREHOUSE_PLAY, LIVING_PLAY, GYM_PLAY, OFFICE_PLAY } from '../sim-maps.js';
 import { DAILY_MAPS } from '../sim-retention.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -169,6 +170,7 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.match(sim, /tryDressCityKit/);
   assert.match(sim, /tryDressGarageKit/);
   assert.match(sim, /tryDressWarehouseKit/);
+  assert.match(sim, /tryDressLivingKit/);
   assert.match(sim, /tryDressGymKit/);
   assert.match(sim, /tryDressOfficeKit/);
   assert.match(sim, /MeshoptDecoder/);
@@ -496,6 +498,55 @@ test('Kenney CC0 office kit is meshopt-compressed and stays off the banned path'
   const emit = kitSrc.slice(kitSrc.indexOf('function officeMat'), kitSrc.indexOf('let officeDressGen'));
   assert.equal(/emissiveIntensity: [2-9]/.test(emit), false, 'office kit glow must stay dim under bloom');
   assert.equal(/officeMat[\s\S]{0,900}MeshStandardMaterial/.test(kitSrc), false, 'office kit must not use MeshStandard after IBL');
+  assert.match(emit, /MeshBasicMaterial/);
+});
+
+test('Kenney CC0 living kit is meshopt-compressed and stays off the banned path', () => {
+  const kitDir = join(root, 'assets/sim-living');
+  const kitSrc = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  const livingSrc = readFileSync(join(root, 'sim-art-living.js'), 'utf8');
+  assert.equal(kitSrc.includes('GLB-format'), false);
+  assert.equal(kitSrc.includes('loadAsync'), false);
+  assert.equal(kitSrc.includes('WebFPV'), false);
+  assert.equal(livingSrc.includes('GLB-format'), false);
+  assert.equal(livingSrc.includes('WebFPV'), false);
+  assert.equal(mentionsBannedAssets(livingSrc), false);
+  assert.match(kitSrc, /tryDressLivingKit/);
+  assert.match(kitSrc, /function livingMat/);
+  assert.equal(livingKitBytesForQuality('low'), 2792);
+  assert.equal(livingKitBytesForQuality('med'), 10960);
+  assert.equal(livingKitBytesForQuality('high'), 10960);
+  const planned = planLivingKit();
+  assert.ok(planned.cardboard.length >= 4);
+  assert.ok(planned.crates.length >= 4);
+  assert.ok(planned.toolboxes.length >= 2);
+  const clutter = [].concat(planned.cardboard, planned.crates, planned.toolboxes);
+  for (const p of clutter) {
+    assert.ok(Math.abs(p.x) >= 9.1, 'kit clutter too close to parlor ' + p.x + ',' + p.z);
+  }
+  for (const name of ['License-survival-kit.txt', 'License-furniture-kit.txt', 'CREDITS.txt']) {
+    assert.ok(existsSync(join(kitDir, name)), name);
+    if (name.startsWith('License-')) {
+      assert.match(readFileSync(join(kitDir, name), 'utf8'), /Creative Commons Zero, CC0/);
+    }
+  }
+  let glbBytes = 0;
+  const names = [];
+  const kitSpecs = Object.values(LIVING_KIT_CORE).concat(Object.values(LIVING_KIT_EXTRA));
+  for (const spec of kitSpecs) {
+    const p = join(kitDir, spec.file);
+    assert.equal(existsSync(p), true, spec.file);
+    const n = statSync(p).size;
+    assert.equal(n, spec.bytes, spec.file + ' size');
+    glbBytes += n;
+    names.push(spec.file);
+  }
+  assert.equal(glbBytes, 10960);
+  assert.equal(new Set(names).size, names.length);
+  assert.ok(!readdirSync(kitDir).some((f) => f.includes('GLB-format')));
+  const emit = kitSrc.slice(kitSrc.indexOf('function livingMat'), kitSrc.indexOf('let livingDressGen'));
+  assert.equal(/emissiveIntensity: [2-9]/.test(emit), false, 'living kit glow must stay dim under bloom');
+  assert.equal(/livingMat[\s\S]{0,900}MeshStandardMaterial/.test(kitSrc), false, 'living kit must not use MeshStandard after IBL');
   assert.match(emit, /MeshBasicMaterial/);
 });
 
@@ -917,6 +968,36 @@ test('Living freestyle builds without throwing and the FPV frame is not all blac
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickLivingArt must not touch the THREE binding');
   assert.match(tickSrc, /livingClay|livingLamp/);
+});
+
+test('Living playground keeps whoop-sized gaps that match the visuals', () => {
+  installDomStub();
+  const built = buildMap(THREE, 'living');
+  const hit = (x, y, z) => {
+    const p = new THREE.Vector3(x, y, z);
+    return built.colliders.some((bb) => bb.containsPoint(p));
+  };
+  const P = LIVING_PLAY;
+  assert.equal(hit(P.sofa.x, 0.62, P.sofa.z), false, 'fly under sofa');
+  assert.equal(hit(P.sofa.x, P.sofa.seatY + 0.08, P.sofa.z), true, 'sofa seat solid');
+  assert.equal(hit(P.table.x, 0.62, P.table.z), false, 'fly under coffee table');
+  assert.equal(hit(P.table.x, P.table.topY + 0.06, P.table.z), true, 'table top solid');
+  assert.equal(hit(P.chair.x, 0.62, P.chair.z), false, 'fly under armchair');
+  assert.equal(hit(P.tv.x, 0.62, P.tv.z), false, 'fly under TV console');
+  assert.equal(hit(P.shelf.x, P.shelf.shelfYs[0] + 0.65, P.shelf.z), false, 'fly between shelves');
+  assert.equal(hit(P.shelf.x, P.shelf.shelfYs[0] + 0.04, P.shelf.z), true, 'shelf slab solid');
+  assert.equal(hit(P.clay.x, P.clay.y, P.clay.z), false, 'clay hoop open');
+  assert.equal(hit(P.clay.x, P.clay.y + P.clay.innerH / 2 + P.clay.bar / 2, P.clay.z), true, 'clay frame solid');
+  assert.equal(hit(7.3, 1.42, 9.8), false, 'fly the ottoman gap');
+  assert.equal(hit(P.gap.left.x, 1.42, P.gap.left.z), true, 'gap stack solid');
+  assert.equal(hit(0, 7.40, 0), false, 'fly under rafter joist');
+  assert.equal(hit(0, P.rafterY + 0.08, 0), true, 'rafter joist solid');
+  assert.ok(P.whoopClear >= 0.85, 'whoop clearance');
+  assert.ok(P.table.topY >= 1.2, 'table crawl taller than 85mm whoop');
+  assert.ok(P.table.topH <= 0.2, 'table top is a slab');
+  const livingSrc = readFileSync(join(root, 'sim-art-living.js'), 'utf8');
+  assert.match(livingSrc, /LIVING_PLAY/);
+  assert.match(livingSrc, /planLivingKit|addPlayLines/);
 });
 
 test('Garage Volt Stall is implemented with square neon gates', () => {

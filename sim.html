@@ -798,7 +798,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=c5a4d163f20f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=6de821a97cef";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=ae2ebe9d455d";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -811,8 +811,8 @@ import {
   restyleTrainer, decorateTrainerGate, pulseTrainerGate, tickTrainerArt,
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
-  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, mergeStaticArt,
-} from "./sim-art.js?v=9cf663749b33";
+  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, mergeStaticArt,
+} from "./sim-art.js?v=18667d33eef1";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -837,14 +837,14 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=c2fbe9fa4acc";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=51e08b66e675";
+} from "./sim-tracks.js?v=3d92869ea501";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=9b5e706b9457";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=ca7dc12a272b";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=aa1c6520c876";
+} from "./sim-room.js?v=52627101d2c3";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=58d678edc99f";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -859,7 +859,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=ee7e5b4716ef";
+} from "./sim-coach.js?v=630ade068519";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js?v=49546f834df8";
@@ -875,13 +875,13 @@ import {
   skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
-} from "./sim-retention.js?v=50930f4a7003";
+} from "./sim-retention.js?v=5b03d1b8d780";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=152e3df13960";
+} from "./sim-secrets.js?v=db942458500c";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -2357,7 +2357,42 @@ function applyLivingArt(quality){
   });
   applyLooksPost('living', quality);
   const credit=document.querySelector('.sf-credit');
-  if(credit)credit.textContent='Living Room is original procedural art — Clay Parlor';
+  if(credit)credit.textContent='Living Room is original procedural art — Clay Parlor. Kenney CC0 parlor kit.';
+  queueLivingKit(quality||(looks&&looks.applied)||'med', vibeFor('living'));
+}
+let livingKitWanted=null;
+let livingKitGen=0;
+function queueLivingKit(quality, vibe){
+  livingKitWanted={quality:quality||'med', vibe:vibe||vibeFor('living')};
+  if(window._heavyAssetsPending)return;
+  dressLivingKit();
+}
+async function dressLivingKit(){
+  const wanted=livingKitWanted;
+  if(!wanted)return;
+  const gen=++livingKitGen;
+  try{
+    const ok=await ensureGltf();
+    if(!ok || !GLTFLoader || gen!==livingKitGen)return;
+    const built=indoorBuilt.living;
+    const group=built&&built.group&&built.group.getObjectByName('livingArtVisuals');
+    if(!group)return;
+    const loader=new GLTFLoader();
+    if(MeshoptDecoder){
+      if(MeshoptDecoder.ready)await MeshoptDecoder.ready;
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    }
+    const dressed=await tryDressLivingKit(THREE,{
+      group, loader, vibe:wanted.vibe, quality:wanted.quality,
+    });
+    if(gen!==livingKitGen)return;
+    window._livingKit=dressed;
+    if(assetEl && dressed && dressed.used){
+      assetEl.textContent='Kenney CC0 living kit ('+Math.round((dressed.bytes||0)/1024)+' KB).';
+    }
+  }catch(e){
+    window._livingKit={used:false, error:String(e&&e.message||e)};
+  }
 }
 function applyGarageArt(quality){
   const built=indoorBuilt.garage||ensureIndoor('garage');
@@ -2660,6 +2695,7 @@ function startHeavyAssets(){
   if(map==='city')finishCityArt();
   if(map==='garage')dressGarageKit();
   if(map==='warehouse')dressWarehouseKit();
+  if(map==='living')dressLivingKit();
   if(map==='office')dressOfficeKit();
   if(map==='gym')dressGymKit();
 }
@@ -2795,7 +2831,7 @@ function applyMapLooks(mapId){
   setIndoorLights(indoorLights,looks?looks.applied:'med');
   const credit=document.querySelector('.sf-credit');
   if(credit){
-    if(mapId==='living')credit.textContent='Living Room is original procedural art — Clay Parlor';
+    if(mapId==='living')credit.textContent='Living Room is original procedural art — Clay Parlor. Kenney CC0 parlor kit.';
     else if(mapId==='garage')credit.textContent='Garage is original procedural art — Volt Stall. Kenney CC0 shop kit.';
     else if(mapId==='warehouse')credit.textContent='Warehouse is original procedural art — Ion Nave';
     else if(mapId==='room')credit.textContent='Your Room is original procedural art — Pocket Stage';
