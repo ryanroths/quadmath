@@ -1,12 +1,13 @@
 // QuadMath sim W5 — Retention: daily whoop, weekly boards, ghost duels, skins.
 // Nothing here is copied from WebFPV (GPL).
 // New localStorage keys: quadmathSimDaily, quadmathSimBoard, quadmathSimSkin,
-// quadmathSimPilotToken, quadmathSimCanopy. Optional: quadmathSimLeaderboardUrl
-// (online boards).
+// quadmathSimPilotToken, quadmathSimCanopy, quadmathSimDailyLine. Optional:
+// quadmathSimLeaderboardUrl (online boards).
 // Do not write old ryfly* keys.
 // This file has no sim-*.js imports so the Cloudflare Worker can bundle it.
 
 export const DAILY_KEY = 'quadmathSimDaily';
+export const DAILY_LINE_KEY = 'quadmathSimDailyLine';
 export const BOARD_KEY = 'quadmathSimBoard';
 export const SKIN_KEY = 'quadmathSimSkin';
 export const CANOPY_KEY = 'quadmathSimCanopy';
@@ -28,6 +29,42 @@ export const GATE_SIZE_MAX = 0.40 * WS_PER_METRE;
 export const LAP_PACE_MS = 2.6;
 export const WEEK_GRACE_MS = 36 * 60 * 60 * 1000;
 export const DEFAULT_ALLOWED_ORIGIN = 'https://quadmath.com';
+export const DAILY_LINE_MIN_MS = 2500;
+export const DAILY_LINE_MAX_MS = 180000;
+export const DAILY_LINE_GHOST_MAX = 480;
+export const DAILY_LINE_STRICT_MISS_MS = 3000;
+
+// Named #242 line tracks (no city 3-lap). Gate counts pinned to tracks/*.json.
+export const DAILY_LINE_TRACKS = Object.freeze([
+  { id: 'living-sofa', map: 'living', name: 'Sofa Slalom', gates: 8 },
+  { id: 'living-circuit', map: 'living', name: 'Living Circuit', gates: 7 },
+  { id: 'garage-bench', map: 'garage', name: 'Workbench', gates: 8 },
+  { id: 'garage-rafters', map: 'garage', name: 'Rafters', gates: 7 },
+  { id: 'warehouse-aisle', map: 'warehouse', name: 'Aisle Run', gates: 9 },
+  { id: 'warehouse-catwalk', map: 'warehouse', name: 'Catwalk', gates: 7 },
+  { id: 'warehouse-racks', map: 'warehouse', name: 'Rack Weave', gates: 8 },
+  { id: 'warehouse-rafters', map: 'warehouse', name: 'Truss Run', gates: 7 },
+  { id: 'backyard-fence', map: 'backyard', name: 'Fence Loop', gates: 7 },
+  { id: 'backyard-patio', map: 'backyard', name: 'Patio Dive', gates: 7 },
+  { id: 'office-cubicles', map: 'office', name: 'Cubicle Weave', gates: 8 },
+  { id: 'office-hallway', map: 'office', name: 'Hallway Run', gates: 7 },
+  { id: 'office-desks', map: 'office', name: 'Desk Hop', gates: 7 },
+  { id: 'office-rafters', map: 'office', name: 'Ceiling Run', gates: 6 },
+  { id: 'office-under', map: 'office', name: 'Desk Dive', gates: 6 },
+  { id: 'gym-court', map: 'gym', name: 'Court Loop', gates: 7 },
+  { id: 'gym-bleachers', map: 'gym', name: 'Bleacher Climb', gates: 8 },
+  { id: 'gym-hoops', map: 'gym', name: 'Hoop Dive', gates: 9 },
+  { id: 'trainer-figure8', map: 'trainer', name: 'Figure 8', gates: 7 },
+  { id: 'trainer-slalom', map: 'trainer', name: 'Slalom', gates: 7 },
+  { id: 'trainer-hairpin', map: 'trainer', name: 'Hairpin', gates: 7 },
+]);
+
+export const DAILY_LINE_MODS = Object.freeze([
+  { id: 'none', name: 'Clean' },
+  { id: 'dark', name: 'Lights out' },
+  { id: 'ghost', name: 'Pace chase' },
+  { id: 'strict', name: 'Strict miss' },
+]);
 
 // Indoor fly boxes, numbers copied from sim-maps LAYOUT. Tests pin the match.
 export const DAILY_MAPS = Object.freeze([
@@ -1364,6 +1401,213 @@ export function recordDailyFinish(progress, { utc, timeMs, trackId } = {}, now) 
   }
   if (p.streak > p.bestStreak) p.bestStreak = p.streak;
   return { progress: p, improved, streak: p.streak, bestMs: p.bestByDay[day], counted: true };
+}
+
+export function dailyLineBoardKey(day) {
+  return 'D' + String(day || '');
+}
+
+export function isDailyLineBoardKey(week) {
+  return typeof week === 'string' && /^D\d{4}-\d{2}-\d{2}$/.test(week);
+}
+
+export function dailyLineFor(utc, now) {
+  const day = utc || utcDateId(now);
+  const rand = mulberry32(hashStr('daily-line|v1|' + day));
+  const tracks = DAILY_LINE_TRACKS;
+  const t = tracks[Math.floor(rand() * tracks.length)];
+  const mods = DAILY_LINE_MODS;
+  const useMod = rand() < 0.42;
+  const mod = useMod ? mods[1 + Math.floor(rand() * (mods.length - 1))] : mods[0];
+  return {
+    date: day,
+    id: 'daily-line-' + day,
+    trackId: t.id,
+    map: t.map,
+    name: t.name,
+    gates: t.gates,
+    modifier: mod.id,
+    modifierName: mod.name,
+  };
+}
+
+export function dailyLineMeta(id) {
+  for (let i = 0; i < DAILY_LINE_TRACKS.length; i++) {
+    if (DAILY_LINE_TRACKS[i].id === id) return DAILY_LINE_TRACKS[i];
+  }
+  return null;
+}
+
+export function emptyDailyLine() {
+  return { v: 1, days: {} };
+}
+
+export function normalizeDailyLine(raw) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  const out = emptyDailyLine();
+  const days = src.days && typeof src.days === 'object' ? src.days : {};
+  for (const [day, row] of Object.entries(days)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !row || typeof row !== 'object') continue;
+    const timeMs = +row.timeMs;
+    if (!Number.isFinite(timeMs) || timeMs <= 0) continue;
+    const splits = Array.isArray(row.splits)
+      ? row.splits.map((n) => +n).filter((n) => Number.isFinite(n) && n > 0)
+      : [];
+    out.days[day] = {
+      timeMs: timeMs | 0,
+      trackId: String(row.trackId || ''),
+      splits,
+    };
+  }
+  return out;
+}
+
+export function loadDailyLine(storage) {
+  const store = storageOf(storage);
+  if (!store) return emptyDailyLine();
+  try {
+    const raw = store.getItem(DAILY_LINE_KEY);
+    if (!raw) return emptyDailyLine();
+    return normalizeDailyLine(JSON.parse(raw));
+  } catch (e) {
+    return emptyDailyLine();
+  }
+}
+
+export function saveDailyLine(progress, storage) {
+  const store = storageOf(storage);
+  if (!store) return false;
+  try {
+    store.setItem(DAILY_LINE_KEY, JSON.stringify(normalizeDailyLine(progress)));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+export function recordDailyLineFinish(progress, { utc, timeMs, trackId, splits } = {}, now) {
+  const p = normalizeDailyLine(progress);
+  const today = utcDateId(now);
+  const day = utc || today;
+  const t = +timeMs;
+  const challenge = dailyLineFor(day, now);
+  if (!Number.isFinite(t) || t <= 0) return { progress: p, improved: false, counted: false };
+  if (day !== today) return { progress: p, improved: false, counted: false };
+  if (trackId && trackId !== challenge.trackId) return { progress: p, improved: false, counted: false };
+  let improved = false;
+  const prev = p.days[day];
+  if (!prev || t < prev.timeMs) {
+    p.days[day] = {
+      timeMs: t | 0,
+      trackId: challenge.trackId,
+      splits: Array.isArray(splits) ? splits.map((n) => +n | 0) : (prev && prev.splits) || [],
+    };
+    improved = true;
+  }
+  return { progress: p, improved, counted: true, bestMs: p.days[day].timeMs };
+}
+
+export function dailyLineRank(entries, name, timeMs) {
+  const rows = (entries || []).slice().sort((a, b) => a.timeMs - b.timeMs);
+  const who = sanitizePilotName(name);
+  const time = +timeMs;
+  let rank = 1;
+  for (const r of rows) {
+    if (r.name === who && +r.timeMs === time) return { rank, of: rows.length, listed: true };
+    rank += 1;
+  }
+  let insert = 1;
+  for (const r of rows) {
+    if (+r.timeMs < time) insert += 1;
+  }
+  return { rank: insert, of: rows.length + (Number.isFinite(time) && time > 0 ? 1 : 0), listed: false };
+}
+
+export function validateDailyLineRun(input) {
+  const src = input || {};
+  const challenge = src.challenge || dailyLineFor(src.date || src.utc, src.now);
+  const timeMs = +src.timeMs;
+  const splits = Array.isArray(src.splits) ? src.splits : [];
+  const ghost = src.ghost;
+  if (!challenge || !challenge.trackId) return { ok: false, reason: 'NO LINE' };
+  if (src.trackId && src.trackId !== challenge.trackId) return { ok: false, reason: 'TRACK MISMATCH' };
+  if (src.threeD || (ghost && (ghost.threeD || ghost.mode3d))) return { ok: false, reason: '3D MODE' };
+  if (!Number.isFinite(timeMs) || timeMs < DAILY_LINE_MIN_MS) return { ok: false, reason: 'TOO FAST' };
+  if (timeMs > DAILY_LINE_MAX_MS) return { ok: false, reason: 'TOO SLOW' };
+  const need = challenge.gates - 1;
+  if (splits.length !== need) return { ok: false, reason: 'SPLIT COUNT' };
+  let sum = 0;
+  for (let i = 0; i < splits.length; i++) {
+    const s = +splits[i];
+    if (!Number.isFinite(s) || s <= 50 || s > timeMs) return { ok: false, reason: 'BAD SPLIT' };
+    if (i && s + sum <= sum) return { ok: false, reason: 'SPLITS NOT MONOTONIC' };
+    sum += s;
+  }
+  if (sum > timeMs + 80) return { ok: false, reason: 'SPLITS OVER TIME' };
+  if (sum < timeMs * 0.35) return { ok: false, reason: 'SPLITS UNDER TIME' };
+  const payloadErr = ghostPayloadError(ghost, challenge.trackId);
+  if (payloadErr) return { ok: false, reason: payloadErr };
+  const samples = ghost.samples;
+  if (samples.length < 8 || samples.length > DAILY_LINE_GHOST_MAX + 8) return { ok: false, reason: 'GHOST COUNT' };
+  const span = samples[samples.length - 1][0] - samples[0][0];
+  if (span < DAILY_LINE_MIN_MS - 200) return { ok: false, reason: 'GHOST SHORT' };
+  if (Math.abs(span - timeMs) > 8000) return { ok: false, reason: 'TIME MISMATCH' };
+  let lastT = samples[0][0];
+  const frameMm = classId(src.frameMm);
+  const maxV = CLASS_MAX_SPEED[frameMm] || CLASS_MAX_SPEED[65];
+  for (let i = 1; i < samples.length; i++) {
+    const dt = (samples[i][0] - lastT) / 1000;
+    if (dt < 0) return { ok: false, reason: 'BAD TIMESTAMPS' };
+    if (dt > 1.2) return { ok: false, reason: 'SPARSE SAMPLES' };
+    if (dt > 0) {
+      const dist = Math.hypot(
+        samples[i][1] - samples[i - 1][1],
+        samples[i][2] - samples[i - 1][2],
+        samples[i][3] - samples[i - 1][3],
+      );
+      if (dist / dt > maxV * 1.15) return { ok: false, reason: 'SPEED LIMIT' };
+    }
+    lastT = samples[i][0];
+  }
+  return { ok: true, timeMs: timeMs | 0, trackId: challenge.trackId, date: challenge.date, frameMm };
+}
+
+export function normalizeDailyLineSubmit(body, now) {
+  if (!body || typeof body !== 'object') return { ok: false, reason: 'BAD JSON' };
+  const today = utcDateId(now);
+  const day = typeof body.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.day) ? body.day : today;
+  if (day !== today) return { ok: false, reason: 'BAD DAY' };
+  const challenge = dailyLineFor(day, now);
+  const frameMm = classId(body.frameMm || body.class);
+  const builtClass = classFromBuild(body.build);
+  if (builtClass != null && builtClass !== frameMm) return { ok: false, reason: 'CLASS MISMATCH' };
+  const name = sanitizePilotName(body.name);
+  const givenId = submittedTrackId(body.track) || String(body.trackId || '');
+  if (givenId && givenId !== challenge.trackId) return { ok: false, reason: 'TRACK MISMATCH' };
+  const ghost = body.ghost;
+  if (ghost && ghost.phys != null && ghost.phys !== PHYS_VER) return { ok: false, reason: 'PHYS MISMATCH' };
+  const checked = validateDailyLineRun({
+    challenge,
+    timeMs: body.timeMs,
+    splits: body.splits,
+    ghost,
+    trackId: givenId || challenge.trackId,
+    frameMm,
+    threeD: body.threeD,
+    now,
+  });
+  if (!checked.ok) return checked;
+  const token = typeof body.token === 'string' ? body.token.trim() : '';
+  return {
+    ok: true,
+    day,
+    week: dailyLineBoardKey(day),
+    frameMm,
+    name,
+    timeMs: checked.timeMs,
+    trackId: challenge.trackId,
+    token,
+  };
 }
 
 export function emptyBoard() {

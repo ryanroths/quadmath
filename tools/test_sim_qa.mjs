@@ -11,6 +11,7 @@ import {
   persistableSelection, isFreestyleTrackId, isEphemeralTrackId, freestyleIdFor,
   loadSelected, saveSelected, MAPS, freestyleTrack, isLineTrackId,
 } from '../sim-tracks.js';
+import { dailyLineFor } from '../sim-retention.js';
 import {
   shouldToastFlip, isStuckInverted, stepStuckHold, wantsTurtle, bodyUpZ,
   STUCK_HOLD_S,
@@ -380,4 +381,10 @@ test('named tracks are lines; city stays 3-lap; HUD and ghost stay wired', () =>
   assert.ok(simSrc.includes('tricks.setActive'));
   assert.ok(simSrc.includes('syncSecrets'));
   assert.ok(!simSrc.includes('ryflyBestLap') && !simSrc.includes('ryflyGhost'));
+  const line = dailyLineFor('2026-10-21');
+  assert.equal(isLineTrackId(line.trackId), true);
+  assert.ok(simSrc.includes('function flyDailyLine'));
+  assert.ok(simSrc.includes('function openDailyLineCard'));
+  assert.ok(simSrc.includes("q.get('dailyline')"));
+  assert.ok(simSrc.includes('DAILY_LINE_KEY') || simSrc.includes('loadDailyLine'));
 });

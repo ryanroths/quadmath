@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY, makePaceGhost, SHARE_PREFIX as TRACK_PREFIX, encodeShare, decodeShare, ghostPayloadError as trackGhostErr, MAPS } from '../sim-tracks.js';
+import { CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY, makePaceGhost, SHARE_PREFIX as TRACK_PREFIX, encodeShare, decodeShare, ghostPayloadError as trackGhostErr, MAPS, BUILTIN_TRACK_FILES } from '../sim-tracks.js';
 import { BUILD_KEY } from '../sim-build.js';
 import { WHOOP_KEY } from '../sim-whoop.js';
 import { ROOM_KEY } from '../sim-room.js';
@@ -33,6 +33,9 @@ import {
   mulberry32, weekAllowed, previousUtcWeekId, isPaceBotGhost, issuePilotToken,
   hashPilotToken, pickCorsOrigin, isLocalHost, escapeHtml, classFromBuild,
   syncDailyStreak, applyMissedDayReset,
+  DAILY_LINE_KEY, DAILY_LINE_TRACKS, DAILY_LINE_MIN_MS, dailyLineFor, dailyLineBoardKey,
+  loadDailyLine, saveDailyLine, recordDailyLineFinish, validateDailyLineRun,
+  normalizeDailyLineSubmit, dailyLineRank, dailyLineMeta,
 } from '../sim-retention.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -665,6 +668,7 @@ test('L6 sanitizePilotName keeps Unicode letters and M2 escapes HTML', () => {
 test('sim.html wires Daily / Boards / skins and keeps ghost paste', () => {
   assert.ok(simSrc.includes('sim-retention.js'));
   assert.ok(simSrc.includes('menuDaily'));
+  assert.ok(simSrc.includes('menuDailyLine'));
   assert.ok(simSrc.includes('menuBoards'));
   assert.ok(simSrc.includes('DAILY_KEY') || simSrc.includes('quadmathSimDaily') || simSrc.includes('loadDaily'));
   assert.ok(simSrc.includes('encodeDuel'));
@@ -851,4 +855,93 @@ test('no canopy piece covers >10% of view at FOV 110', () => {
   assert.equal(trail.geo.drawCount, 2);
   clearSkinTrail(trail);
   assert.equal(trail.len, 0);
+});
+
+function fakeLineGhost(trackId, ms, n) {
+  const count = n || 24;
+  const samples = [];
+  for (let i = 0; i < count; i++) {
+    const t = Math.round(ms * i / (count - 1));
+    samples.push([t, i * 0.25, 1.2, 0, 0, 0, 0, 1]);
+  }
+  return { v: 1, phys: PHYS_VER, track: trackId, name: 'T', lapTime: ms, samples };
+}
+
+test('Daily Line seed is stable, named, and not a city 3-lap', () => {
+  const a = dailyLineFor('2026-10-21');
+  const b = dailyLineFor('2026-10-21');
+  const c = dailyLineFor('2026-10-22');
+  assert.equal(a.trackId, b.trackId);
+  assert.equal(a.modifier, b.modifier);
+  assert.equal(a.map, b.map);
+  assert.ok(a.trackId !== c.trackId || a.modifier !== c.modifier || a.map !== c.map);
+  assert.ok(dailyLineMeta(a.trackId));
+  assert.equal(a.trackId === 'city-loop' || a.trackId === 'city-zigzag', false);
+  assert.equal(dailyLineBoardKey('2026-10-21'), 'D2026-10-21');
+  const named = new Set(DAILY_LINE_TRACKS.map((t) => t.id));
+  for (const meta of BUILTIN_TRACK_FILES) {
+    if (meta.legacyId != null) {
+      assert.equal(named.has(meta.id), false, meta.id);
+      continue;
+    }
+    assert.ok(named.has(meta.id), 'pool missing ' + meta.id);
+  }
+  const store = memStore();
+  const rec = recordDailyLineFinish(loadDailyLine(store), {
+    utc: '2026-10-21', timeMs: 9800, trackId: a.trackId, splits: new Array(a.gates - 1).fill(1200),
+  }, Date.parse('2026-10-21T12:00:00Z'));
+  assert.equal(rec.counted, true);
+  saveDailyLine(rec.progress, store);
+  assert.equal(store.getItem(DAILY_LINE_KEY).includes(a.trackId), true);
+  assert.ok(!store.keys().some((k) => k.startsWith('ryfly')));
+  const skip = recordDailyLineFinish(rec.progress, {
+    utc: '2026-10-21', timeMs: 9000, trackId: 'city-loop',
+  }, Date.parse('2026-10-21T12:00:00Z'));
+  assert.equal(skip.counted, false);
+});
+
+test('Daily Line anti-junk rejects fast / split / ghost errors', () => {
+  const now = Date.parse('2026-10-21T12:00:00Z');
+  const ch = dailyLineFor('2026-10-21', now);
+  const timeMs = 9000;
+  const splits = new Array(ch.gates - 1).fill(Math.round(timeMs / (ch.gates - 1)));
+  const ghost = fakeLineGhost(ch.trackId, timeMs);
+  const ok = validateDailyLineRun({ challenge: ch, timeMs, splits, ghost, frameMm: 65 });
+  assert.equal(ok.ok, true, ok.reason);
+  assert.equal(validateDailyLineRun({ challenge: ch, timeMs: 400, splits, ghost, frameMm: 65 }).reason, 'TOO FAST');
+  assert.equal(validateDailyLineRun({
+    challenge: ch, timeMs, splits: splits.slice(1), ghost, frameMm: 65,
+  }).reason, 'SPLIT COUNT');
+  const fast = JSON.parse(JSON.stringify(ghost));
+  for (let i = 1; i < fast.samples.length; i++) fast.samples[i][1] = ghost.samples[i - 1][1] + 80;
+  assert.equal(validateDailyLineRun({ challenge: ch, timeMs, splits, ghost: fast, frameMm: 65 }).reason, 'SPEED LIMIT');
+  const body = normalizeDailyLineSubmit({
+    day: '2026-10-21', frameMm: 65, name: 'Ry', timeMs, splits, ghost,
+    trackId: ch.trackId, token: 'a'.repeat(32),
+  }, now);
+  assert.equal(body.ok, true, body.reason);
+  assert.equal(body.week, 'D2026-10-21');
+  const wrong = normalizeDailyLineSubmit({
+    day: '2026-10-21', frameMm: 65, name: 'Ry', timeMs, splits, ghost,
+    trackId: 'city-loop', token: 'a'.repeat(32),
+  }, now);
+  assert.equal(wrong.ok, false);
+  const rank = dailyLineRank([{ name: 'A', timeMs: 8000 }, { name: 'Ry', timeMs: 9000 }], 'Ry', 9000);
+  assert.equal(rank.rank, 2);
+  assert.equal(rank.of, 2);
+  assert.ok(DAILY_LINE_MIN_MS >= 2000);
+});
+
+test('worker daily route is offline-safe without D1', async () => {
+  const { handleLeaderboard } = await import('../workers/sim-leaderboard/src/index.js');
+  const meta = await handleLeaderboard(new Request('https://x/api/daily/meta?day=2026-10-21'), {});
+  const mj = await meta.json();
+  assert.equal(mj.challenge.date, '2026-10-21');
+  assert.ok(mj.challenge.trackId);
+  const board = await handleLeaderboard(new Request('https://x/api/daily?day=2026-10-21&class=65'), {});
+  const bj = await board.json();
+  assert.equal(bj.online, false);
+  assert.deepEqual(bj.entries, []);
+  const sub = await handleLeaderboard(new Request('https://x/api/daily/submit', { method: 'POST', body: '{}' }), {});
+  assert.equal(sub.status, 503);
 });
