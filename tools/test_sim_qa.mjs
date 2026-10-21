@@ -9,7 +9,7 @@ import {
   findTrackIn, resolveSimBoot, firstTrackForMap, startPad, normalizeTrack,
   BUILTIN_TRACK_FILES, SELECTED_TRACK_KEY, resolveFly, resolveTrackPick,
   persistableSelection, isFreestyleTrackId, isEphemeralTrackId, freestyleIdFor,
-  loadSelected, saveSelected, MAPS, freestyleTrack,
+  loadSelected, saveSelected, MAPS, freestyleTrack, isLineTrackId,
 } from '../sim-tracks.js';
 import {
   shouldToastFlip, isStuckInverted, stepStuckHold, wantsTurtle, bodyUpZ,
@@ -353,4 +353,27 @@ test('sim.html Fly/Freestyle, map switching, and Esc leave a race', () => {
   assert.ok(esc.includes('leaveRace()'));
   assert.ok(simSrc.includes('wantFree') || simSrc.includes('isFreeFlight'));
   assert.ok(simSrc.includes("gateUI.textContent='FREESTYLE'") || simSrc.includes('FREESTYLE'));
+});
+
+test('named tracks are lines; city stays 3-lap; HUD and ghost stay wired', () => {
+  for (const id of ['garage-bench', 'garage-rafters', 'warehouse-racks', 'warehouse-rafters', 'living-sofa']) {
+    assert.equal(isLineTrackId(id), true, id);
+  }
+  assert.equal(isLineTrackId(0), false);
+  assert.equal(isLineTrackId('city-loop'), false);
+  assert.ok(simSrc.includes('isLineTrackId'));
+  assert.ok(simSrc.includes('afterLinePass'));
+  assert.ok(simSrc.includes('function addFinishMarker'));
+  assert.ok(simSrc.includes("toast('LINE START')"));
+  assert.ok(simSrc.includes("toast('RUN START — LAP 1/'+RUN_LAPS)"));
+  assert.ok(simSrc.includes('function lineHudHtml'));
+  assert.ok(simSrc.includes('fmtSignedDelta'));
+  assert.ok(simSrc.includes('LINE_GHOST_HZ'));
+  assert.ok(simSrc.includes('ghostSampleDue'));
+  assert.ok(simSrc.includes('downsampleGhost'));
+  assert.ok(simSrc.includes('demoLineGhostForShot'));
+  assert.ok(simSrc.includes('quadmathSimGhost_') || simSrc.includes('ghostStorageKey'));
+  assert.ok(simSrc.includes('tricks.setActive'));
+  assert.ok(simSrc.includes('syncSecrets'));
+  assert.ok(!simSrc.includes('ryflyBestLap') && !simSrc.includes('ryflyGhost'));
 });
