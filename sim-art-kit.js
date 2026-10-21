@@ -3,7 +3,7 @@
 // assets/sim-warehouse/, and assets/sim-office/. If a load fails, the
 // procedural meshes already in the scene stay visible. Nothing from the GPL whoop sim.
 
-import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=10aecc280e13';
+import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=d290c9ab2bdb';
 
 const KIT_ROOT = 'assets/sim-city/';
 

@@ -20,6 +20,7 @@ import {
   officeKitBytesForQuality, OFFICE_KIT_CORE, OFFICE_KIT_EXTRA, planOfficeKit,
   restyleDiveTubes, LIVING_VIBE_ID, hideStockLivingMeshes, buildClayParlor,
   restyleLiving, tickLivingArt, livingBudget, livingWantsGlow,
+  FELT_SCALE, applyFeltMaterial, feltBasic, studioPhoneBudget, vibePost,
   GARAGE_VIBE_ID, hideStockGarageMeshes, buildVoltStall,
   restyleGarage, tickGarageArt, garageBudget, garageWantsGlow,
   WAREHOUSE_VIBE_ID, hideStockWarehouseMeshes, buildIonNave,
@@ -83,6 +84,8 @@ test('quality Low kills bloom; Med/High keep it', () => {
   assert.equal(qualityWantsBloom('med'), true);
   assert.equal(qualityWantsBloom('high'), true);
   assert.equal(qualityWantsBloom('auto'), false);
+  assert.equal(qualityWantsBloom('high', VIBES.living), false);
+  assert.equal(qualityWantsBloom('high', VIBES.garage), true);
   assert.equal(qualityWantsReflections('low'), false);
   assert.equal(qualityWantsParticles('low'), false);
   assert.equal(qualityWantsReflections('high'), true);
@@ -127,6 +130,7 @@ test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {
   assert.equal(art.includes('GLB-format'), false);
   assert.equal(art.includes('loadAsync'), false);
   assert.equal(art.includes('Sketchfab'), false);
+  assert.match(art, /sim-art-felt\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-living\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-garage\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-warehouse\.js\?v=[0-9a-f]{12}/);
@@ -796,6 +800,42 @@ test('City polish keeps Low draw calls near 174 and clears leftover shards', () 
   assert.equal(!!tube.userData.cityDive, true);
 });
 
+test('Felt Scale studio lock caps metalness and kills Low bloom/AO', () => {
+  assert.equal(FELT_SCALE.id, 'felt-scale');
+  assert.equal(FELT_SCALE.referenceMap, 'living');
+  assert.equal(FELT_SCALE.metalnessMax, 0.05);
+  assert.equal(FELT_SCALE.roughnessMin, 0.92);
+  assert.equal(FELT_SCALE.bloomOnLow, false);
+  const shiny = new THREE.MeshStandardMaterial({ metalness: 0.8, roughness: 0.2, envMapIntensity: 1 });
+  applyFeltMaterial(shiny);
+  assert.ok(shiny.metalness <= 0.05);
+  assert.ok(shiny.roughness >= 0.92);
+  assert.ok(shiny.envMapIntensity <= 0.28);
+  assert.equal(shiny.userData.feltLocked, true);
+  const basic = feltBasic(THREE, 0xf4d6c6);
+  assert.equal(basic.isMeshBasicMaterial, true);
+  assert.equal(basic.userData.feltLocked, true);
+  const low = studioPhoneBudget('low', VIBES.living);
+  assert.equal(low.bloom, false);
+  assert.equal(low.ao, false);
+  assert.equal(low.extraPasses, false);
+  assert.equal(low.pixelRatioCap, 1);
+  assert.equal(low.shadowMapSize, 512);
+  const livingHigh = studioPhoneBudget('high', VIBES.living);
+  assert.equal(livingHigh.bloom, false);
+  assert.equal(vibePost(VIBES.living).bloom, false);
+  assert.equal(vibePost(VIBES.garage).bloom, true);
+  const garageHigh = studioPhoneBudget('high', VIBES.garage);
+  assert.equal(garageHigh.bloom, true);
+  const feltSrc = readFileSync(join(root, 'sim-art-felt.js'), 'utf8');
+  assert.equal(mentionsBannedAssets(feltSrc), false);
+  const bible = readFileSync(join(root, 'docs/sim-art-felt-scale.md'), 'utf8');
+  assert.match(bible, /Felt Scale/);
+  assert.match(bible, /Living Room/);
+  assert.match(bible, /no bloom/i);
+  assert.equal(bible.includes('WebFPV'), true);
+});
+
 test('Living Room Clay Parlor is implemented and keeps brand-free clay gates', () => {
   assert.equal(LIVING_VIBE_ID, 'living');
   const v = VIBES.living;
@@ -820,6 +860,8 @@ test('Living freestyle builds without throwing and the FPV frame is not all blac
   installDomStub();
   const livingSrc = readFileSync(join(root, 'sim-art-living.js'), 'utf8');
   assert.equal(mentionsBannedAssets(livingSrc), false);
+  assert.match(livingSrc, /sim-art-felt\.js\?v=[0-9a-f]{12}/);
+  assert.match(livingSrc, /feltBasic|feltEmissive/);
   assert.match(livingSrc, /never abort the FPV render loop/);
   const free = freestyleTrack('living');
   assert.equal(free.id, freestyleIdFor('living'));
@@ -842,6 +884,16 @@ test('Living freestyle builds without throwing and the FPV frame is not all blac
     assert.ok(hidden.length >= 8, q + ' hidden stock ' + hidden.length);
     const vis = built.group.getObjectByName('livingArtVisuals');
     assert.ok(vis, q + ' livingArtVisuals');
+    let feltMats = 0;
+    vis.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (m && m.userData && m.userData.feltLocked) feltMats += 1;
+        if (m && m.metalness != null) assert.ok(m.metalness <= 0.05, q + ' metalness');
+      }
+    });
+    assert.ok(feltMats >= 8, q + ' feltLocked mats ' + feltMats);
     const extras = vis.getObjectByName('livingArtExtras');
     if (q === 'low') {
       assert.ok(!extras || extras.children.every((c) => !c.userData || !c.userData.livingLantern));
@@ -1462,4 +1514,5 @@ test('art direction doc lists every map', () => {
   assert.ok(doc.includes('costoWRLD'));
   assert.ok(doc.includes('Kenney'));
   assert.ok(doc.includes('60 fps'));
+  assert.ok(doc.includes('Felt Scale'));
 });

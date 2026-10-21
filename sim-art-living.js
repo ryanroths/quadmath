@@ -1,7 +1,8 @@
-// Clay Parlor — original living-room vibe. Visual only.
+// Clay Parlor — Felt Scale reference living-room vibe. Visual only.
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=10aecc280e13';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d290c9ab2bdb';
+import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
 
 export const LIVING_STOCK = Object.freeze({
   sofa: 0x4a5a6a,
@@ -60,10 +61,7 @@ export function livingBudget(applied) {
 }
 
 function skipMat(m) {
-  if (!m) return m;
-  m.userData.looksSkip = true;
-  m.userData.artLocked = true;
-  return m;
+  return applyFeltMaterial(m);
 }
 
 function fillGrad(g, x0, y0, x1, y1, stops) {
@@ -212,26 +210,41 @@ function feltScreenTex(THREE) {
   }, 1, 1);
 }
 
-function clayMat(THREE, hex, extras) {
-  return skipMat(new THREE.MeshStandardMaterial(Object.assign({
-    color: hex,
-    roughness: 0.94,
-    metalness: 0,
-    envMapIntensity: 0.22,
-  }, extras || {})));
+function feltNapTex(THREE) {
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    g.fillStyle = '#e8c4b0';
+    g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 220; i++) {
+      const x = (i * 19) % w;
+      const y = (i * 37) % h;
+      g.fillStyle = i % 3 === 0 ? 'rgba(255,224,138,0.16)' : 'rgba(107,63,42,0.10)';
+      g.fillRect(x, y, 2, 3);
+    }
+    g.strokeStyle = 'rgba(107,63,42,0.08)';
+    g.lineWidth = 1;
+    for (let y = 4; y < h; y += 8) {
+      g.beginPath();
+      g.moveTo(0, y);
+      g.lineTo(w, y + 1);
+      g.stroke();
+    }
+  }, 3, 2);
 }
 
-function gummyMat(THREE, hex, emit) {
-  return skipMat(new THREE.MeshStandardMaterial({
-    color: hex,
-    roughness: 0.38,
-    metalness: 0,
-    emissive: hex,
-    emissiveIntensity: emit == null ? 0.55 : emit,
+function clayMat(THREE, hex, extras) {
+  const e = extras || {};
+  const opts = {};
+  if (e.map) opts.map = e.map;
+  if (e.transparent != null) opts.transparent = e.transparent;
+  if (e.opacity != null) opts.opacity = e.opacity;
+  return feltBasic(THREE, e.emissive != null ? e.emissive : hex, opts);
+}
+
+function gummyMat(THREE, hex) {
+  return feltBasic(THREE, hex, {
     transparent: true,
     opacity: 0.92,
-    envMapIntensity: 0.18,
-  }));
+  });
 }
 
 function glowMat(THREE, hex) {
@@ -319,6 +332,7 @@ export function restyleLivingShell(THREE, group, vibe, floor) {
       m.map = plaster;
       m.roughness = 0.96;
       m.metalness = 0;
+      m.envMapIntensity = 0;
       m.emissive.setHex(0x000000);
       skipMat(m);
       n++;
@@ -327,7 +341,9 @@ export function restyleLivingShell(THREE, group, vibe, floor) {
       m.map = ceilTex(THREE);
       m.emissive.setHex(hexNum(vibe.palette.windowOn));
       m.emissiveIntensity = 0.14;
-      m.roughness = 0.92;
+      m.roughness = 0.96;
+      m.metalness = 0;
+      m.envMapIntensity = 0;
       skipMat(m);
       n++;
     } else if (t === 'PlaneGeometry' && (col === LIVING_STOCK.wood || o === floor || o.userData.looksSet === 'wood')) {
@@ -336,8 +352,9 @@ export function restyleLivingShell(THREE, group, vibe, floor) {
       }
       m.map = walnut;
       m.color.setHex(0xffffff);
-      m.roughness = 0.88;
+      m.roughness = 0.96;
       m.metalness = 0;
+      m.envMapIntensity = 0;
       m.emissive.setHex(hexNum(vibe.palette.street));
       m.emissiveIntensity = 0.04;
       skipMat(m);
@@ -360,7 +377,8 @@ function addClaySofa(THREE, parent, mats) {
   backCap.position.set(0, 2.92, -1.08);
   const skirt = new THREE.Mesh(new THREE.BoxGeometry(6.9, 0.22, 2.4), mats.walnut);
   skirt.position.y = 0.32;
-  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.72, 1.05, 2.45), mats.body);
+  const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 2.45, 12), mats.body);
+  armL.rotation.x = Math.PI / 2;
   armL.position.set(-3.28, 1.62, 0);
   const armR = armL.clone();
   armR.position.x = 3.28;
@@ -733,46 +751,26 @@ function addSecretDressing(THREE, parent, mats) {
 
 function makeLivingMats(THREE, vibe) {
   const screenMap = feltScreenTex(THREE);
-  const screen = skipMat(new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    map: screenMap,
-    emissive: hexNum(vibe.palette.windowAlt),
-    emissiveIntensity: 0.35,
-    roughness: 0.7,
-    metalness: 0,
-  }));
+  const nap = feltNapTex(THREE);
+  const screen = feltBasic(THREE, 0xffffff, { map: screenMap });
   return {
-    body: clayMat(THREE, hexNum('#d4a078')),
-    seat: clayMat(THREE, hexNum('#e8c4a8')),
-    cushion: gummyMat(THREE, hexNum(vibe.palette.neonA), 0.62),
-    walnut: clayMat(THREE, hexNum('#6b3f2a'), { roughness: 0.78 }),
+    body: clayMat(THREE, hexNum('#d4a078'), { map: nap }),
+    seat: clayMat(THREE, hexNum('#e8c4a8'), { map: nap }),
+    cushion: gummyMat(THREE, hexNum(vibe.palette.neonA)),
+    walnut: clayMat(THREE, hexNum('#6b3f2a')),
     clayAccent: clayMat(THREE, hexNum(vibe.palette.mesa)),
-    sky: clayMat(THREE, hexNum(vibe.palette.neonB), { emissive: hexNum(vibe.palette.neonB), emissiveIntensity: 0.18 }),
-    gummy: gummyMat(THREE, hexNum('#ffb3c7'), 0.7),
-    lamp: skipMat(new THREE.MeshStandardMaterial({
-      color: hexNum(vibe.palette.windowOn),
-      emissive: hexNum(vibe.palette.windowOn),
-      emissiveIntensity: 1.8,
-      roughness: 0.42,
-      metalness: 0,
-    })),
+    sky: clayMat(THREE, hexNum(vibe.palette.neonB)),
+    gummy: gummyMat(THREE, hexNum('#ffb3c7')),
+    lamp: feltEmissive(THREE, hexNum(vibe.palette.windowOn)),
     screen,
-    rug: skipMat(new THREE.MeshStandardMaterial({
-      color: 0xffffff, map: rugTex(THREE), roughness: 0.95, metalness: 0,
-    })),
+    rug: feltBasic(THREE, 0xffffff, { map: rugTex(THREE) }),
     skyPane: skipMat(new THREE.MeshBasicMaterial({
       map: skyTex(THREE), toneMapped: false, fog: true,
     })),
     frame: clayMat(THREE, hexNum('#8a5a3a')),
     toy: clayMat(THREE, hexNum(vibe.palette.neonC)),
-    plant: clayMat(THREE, 0x5aaa6a, { emissive: 0x2a6a38, emissiveIntensity: 0.12 }),
-    lantern: skipMat(new THREE.MeshStandardMaterial({
-      color: hexNum(vibe.palette.windowOn),
-      emissive: hexNum(vibe.palette.windowOn),
-      emissiveIntensity: 1.4,
-      roughness: 0.5,
-      metalness: 0,
-    })),
+    plant: clayMat(THREE, 0x5aaa6a),
+    lantern: feltEmissive(THREE, hexNum(vibe.palette.windowOn)),
     bead: gummyMat(THREE, hexNum(vibe.palette.neonA), 0.8),
     sign: skipMat(new THREE.MeshBasicMaterial({
       color: 0xffffff, map: parlorSignTex(THREE), toneMapped: false,
@@ -807,14 +805,7 @@ export function buildClayParlor(THREE, parent, vibe, quality, gates) {
 
 export function decorateLivingGate(THREE, ring, size, col, vibe) {
   if (!ring || ring.userData.artHalo) return null;
-  const emit = (vibe && vibe.lighting && vibe.lighting.gateEmissive) || 2.4;
-  const clay = skipMat(new THREE.MeshStandardMaterial({
-    color: col,
-    emissive: col,
-    emissiveIntensity: emit,
-    roughness: 0.72,
-    metalness: 0,
-  }));
+  const clay = feltEmissive(THREE, col);
   const halo = new THREE.Mesh(
     new THREE.TorusGeometry(size + size * 0.1, size * 0.06, 8, 22),
     clay,
@@ -827,13 +818,7 @@ export function decorateLivingGate(THREE, ring, size, col, vibe) {
   for (let i = 0; i < 8; i++) {
     const bead = new THREE.Mesh(
       new THREE.SphereGeometry(size * 0.08, 6, 5),
-      skipMat(new THREE.MeshStandardMaterial({
-        color: i % 2 ? hexNum(vibe.palette.gateB) : hexNum(vibe.palette.neonC),
-        emissive: i % 2 ? hexNum(vibe.palette.gateB) : hexNum(vibe.palette.neonC),
-        emissiveIntensity: emit * 0.7,
-        roughness: 0.55,
-        metalness: 0,
-      })),
+      feltEmissive(THREE, i % 2 ? hexNum(vibe.palette.gateB) : hexNum(vibe.palette.neonC)),
     );
     const a = i / 8 * Math.PI * 2;
     bead.position.set(Math.cos(a) * (size + size * 0.16), Math.sin(a) * (size + size * 0.16), 0);
@@ -841,13 +826,7 @@ export function decorateLivingGate(THREE, ring, size, col, vibe) {
   }
   const inner = new THREE.Mesh(
     new THREE.TorusGeometry(size * 0.86, size * 0.02, 6, 18),
-    skipMat(new THREE.MeshStandardMaterial({
-      color: hexNum(vibe.palette.gateB),
-      emissive: hexNum(vibe.palette.gateB),
-      emissiveIntensity: emit * 0.55,
-      roughness: 0.8,
-      metalness: 0,
-    })),
+    feltEmissive(THREE, hexNum(vibe.palette.gateB)),
   );
   extras.push(inner);
   for (const e of extras) {
@@ -903,7 +882,12 @@ export function tickLivingArt(root, now) {
 
 function tickLivingArtObject(o, t) {
   if (o.userData && o.userData.livingLamp && o.material) {
-    o.material.emissiveIntensity = 1.55 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.35));
+    const pulse = 0.88 + 0.12 * (0.5 + 0.5 * Math.sin(t * 1.35));
+    if (o.material.emissiveIntensity != null) {
+      o.material.emissiveIntensity = 1.55 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.35));
+    } else if (o.material.color) {
+      o.material.color.setRGB(pulse, pulse * 0.88, pulse * 0.52);
+    }
   }
   if (o.userData && o.userData.livingLantern) {
     const phase = o.userData.phase || 0;
