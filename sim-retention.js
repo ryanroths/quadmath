@@ -336,9 +336,17 @@ function furnitureBoxes(mapId) {
       aabb(4.2, 1.32, -5.5, 4.35, 3.77, 7.40),
       aabb(0, 2.35, 20.92, 8.2, 6.05, 0.16),
     );
+    const gap = 1.15, slabD = (5.0 - gap) / 2, off = (slabD + gap) / 2;
     for (const z of [3.6, 12.2]) {
-      for (const y of [1.05, 2.30, 3.55, 4.80]) out.push(aabb(8.6, y, z, 1.55, 0.10, 5.0));
+      for (const y of [1.05, 2.30, 3.55, 4.80]) {
+        out.push(aabb(8.6, y, z - off, 1.55, 0.10, slabD));
+        out.push(aabb(8.6, y, z + off, 1.55, 0.10, slabD));
+      }
     }
+    out.push(
+      aabb(-8.4, 0, -12.8, 1.70, 0.68, 1.20),
+      aabb(-8.4, 0, -3.2, 1.70, 0.68, 1.20),
+    );
     return out;
   }
   if (mapId === 'warehouse') {

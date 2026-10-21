@@ -3,8 +3,9 @@
 // Kenney kit (sim-art-kit.js) swaps hero props after first paint.
 // Procedural meshes stay if a GLB fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=964775ddf67a';
-import { GARAGE_PLAY } from './sim-maps.js?v=a4a715f98a0f';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d054ab081c29';
+import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
+import { GARAGE_PLAY, garageRackSlabs } from './sim-maps.js?v=841bda430e6a';
 
 export const GARAGE_STOCK = Object.freeze({
   wall: 0xb7b3a8,
@@ -31,6 +32,14 @@ export const GARAGE_KEEP_GATES = Object.freeze([
   { x: 4.2, y: 3.35, z: -5.5, size: 1.6 },
   { x: 8.6, y: 4.15, z: 7.9, size: 1.5 },
   { x: 0.0, y: 4.40, z: 3.4, size: 1.8 },
+  { x: 0.0, y: 3.40, z: 14.0, size: 1.6 },
+  { x: 8.6, y: 1.68, z: 3.6, size: 1.5 },
+  { x: 8.6, y: 2.93, z: 12.2, size: 1.5 },
+  { x: 0.0, y: 1.15, z: 20.6, size: 1.6 },
+  { x: 0.0, y: 6.40, z: 18.8, size: 1.6 },
+  { x: 5.6, y: 1.35, z: -16.4, size: 1.4 },
+  { x: 7.5, y: 1.40, z: -5.5, size: 1.5 },
+  { x: 0.9, y: 1.40, z: -5.5, size: 1.5 },
 ]);
 
 const ROOM = Object.freeze({ w: 21, d: 42, h: 10.5 });
@@ -101,10 +110,7 @@ export function garageBudget(applied) {
 }
 
 function skipMat(m) {
-  if (!m) return m;
-  m.userData.looksSkip = true;
-  m.userData.artLocked = true;
-  return m;
+  return applyFeltMaterial(m);
 }
 
 function fillGrad(g, x0, y0, x1, y1, stops) {
@@ -258,20 +264,20 @@ function alleyTex(THREE) {
 }
 
 function steelMat(THREE, hex, extras) {
-  return skipMat(new THREE.MeshStandardMaterial(Object.assign({
-    color: hex, roughness: 0.62, metalness: 0.28, envMapIntensity: 0.2,
-  }, extras || {})));
+  const e = extras || {};
+  const opts = {};
+  if (e.map) opts.map = e.map;
+  if (e.transparent != null) opts.transparent = e.transparent;
+  if (e.opacity != null) opts.opacity = e.opacity;
+  return feltBasic(THREE, hex, opts);
 }
 
-function emitMat(THREE, hex, emit) {
-  return skipMat(new THREE.MeshStandardMaterial({
-    color: hex, emissive: hex, emissiveIntensity: emit == null ? 2.4 : emit,
-    roughness: 0.35, metalness: 0.08, envMapIntensity: 0.12,
-  }));
+function emitMat(THREE, hex) {
+  return feltEmissive(THREE, hex);
 }
 
 function glowMat(THREE, hex, opacity) {
-  return skipMat(new THREE.MeshBasicMaterial({
+  return applyFeltMaterial(new THREE.MeshBasicMaterial({
     color: hex, transparent: true, opacity: opacity == null ? 0.2 : opacity,
     depthWrite: false, toneMapped: false,
   }));
@@ -365,6 +371,11 @@ function furnitureHit(x, z) {
   if (x > 7.5 && z > 9.6 && z < 14.8) return true;
   if (Math.abs(x) < 2.1 && z > -14.2 && z < -10.2) return true;
   if (x < -8.8 && z > 13.6 && z < 16.0) return true;
+  if (Math.abs(x) < 1.2 && z > 12.8 && z < 15.2) return true;
+  if (Math.abs(x) > 1.6 && Math.abs(x) < 4.3 && z > 20.2) return true;
+  if (x > 4.4 && x < 6.8 && z > -17.6 && z < -15.2) return true;
+  if (x < -5.8 && z > 16.4 && z < 18.4) return true;
+  if (x > 5.8 && z > -16.2 && z < -14.2) return true;
   return false;
 }
 
@@ -503,6 +514,11 @@ function addWorkbench(THREE, parent, mats) {
   const vise = new THREE.Mesh(viseGeo(THREE), mats.chest);
   vise.position.set(0.55, b.topY + 0.22, -4.4);
   g.add(vise);
+  for (const bin of GARAGE_PLAY.benchBins) {
+    const crate = new THREE.Mesh(new THREE.BoxGeometry(bin.w, bin.h, bin.d), mats.wood);
+    crate.position.set(bin.x - b.x, bin.h * 0.5, bin.z - b.z);
+    g.add(crate);
+  }
   g.userData.garageProcBench = true;
   g.traverse((o) => { o.userData.garageArt = true; o.userData.garageProcBench = true; });
   parent.add(g);
@@ -541,14 +557,18 @@ function addOneRack(THREE, parent, mats, spec, budget, canOffset) {
     p.position.set(x, 2.6, z);
     g.add(p);
   }
-  for (const y of GARAGE_PLAY.shelfYs) {
-    const shelf = new THREE.Mesh(roundedSlabGeo(THREE, spec.w, GARAGE_PLAY.shelfH, spec.d, 0.08), mats.steel);
-    shelf.position.y = y + GARAGE_PLAY.shelfH * 0.5;
-    g.add(shelf);
+  const slabs = garageRackSlabs(spec);
+  for (const slab of slabs) {
+    for (const y of GARAGE_PLAY.shelfYs) {
+      const shelf = new THREE.Mesh(roundedSlabGeo(THREE, slab.w, GARAGE_PLAY.shelfH, slab.d, 0.08), mats.steel);
+      shelf.position.set(slab.x - spec.x, y + GARAGE_PLAY.shelfH * 0.5, slab.z - spec.z);
+      g.add(shelf);
+    }
   }
   addInstanced(THREE, g, canGeo(THREE), mats.can, Math.max(4, (budget.cans / 2) | 0), (d, i) => {
     const row = i % 4;
-    d.position.set(-0.35 + (i % 3) * 0.28, GARAGE_PLAY.shelfYs[row] + 0.12, -spec.d * 0.32 + ((i / 4) | 0) * 0.9);
+    const slab = slabs[i % slabs.length];
+    d.position.set(-0.35 + (i % 3) * 0.28, GARAGE_PLAY.shelfYs[row] + 0.12, slab.z - spec.z);
     d.rotation.y = i * 0.2 + canOffset;
     return true;
   });
@@ -775,8 +795,8 @@ function addHeroVoltSign(THREE, parent, mats) {
   parent.add(hero);
 }
 
-function addTireWell(THREE, parent, mats) {
-  const t = GARAGE_PLAY.tireWell;
+function addTireWell(THREE, parent, mats, spec) {
+  const t = spec || GARAGE_PLAY.tireWell;
   const g = new THREE.Group();
   g.position.set(t.x, 0, t.z);
   for (let i = 0; i < t.rings; i++) {
@@ -787,6 +807,66 @@ function addTireWell(THREE, parent, mats) {
   }
   g.traverse((o) => { o.userData.garageArt = true; });
   parent.add(g);
+}
+
+function addPlayLines(THREE, parent, mats) {
+  const P = GARAGE_PLAY;
+  const lines = new THREE.Group();
+  lines.name = 'garageArtPlayLines';
+  lines.userData.garageArt = true;
+
+  const bike = P.bike;
+  const hoop = new THREE.Group();
+  const ow = bike.innerW + bike.bar * 2;
+  const top = new THREE.Mesh(new THREE.BoxGeometry(ow, bike.bar, bike.depth), mats.tube);
+  top.position.set(bike.x, bike.y + bike.innerH / 2 + bike.bar / 2, bike.z);
+  top.userData.garageTube = true;
+  const bot = top.clone();
+  bot.position.y = bike.y - bike.innerH / 2 - bike.bar / 2;
+  const left = new THREE.Mesh(new THREE.BoxGeometry(bike.bar, bike.innerH, bike.depth), mats.tube);
+  left.position.set(bike.x - bike.innerW / 2 - bike.bar / 2, bike.y, bike.z);
+  left.userData.garageTube = true;
+  const right = left.clone();
+  right.position.x = bike.x + bike.innerW / 2 + bike.bar / 2;
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(bike.innerW * 0.42, 0.05, 8, 18), mats.steel);
+  rim.position.set(bike.x, bike.y, bike.z);
+  const hang = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 8.2 - (bike.y + bike.innerH / 2), 3, 6), mats.steel);
+  hang.position.set(bike.x, (8.2 + bike.y + bike.innerH / 2) / 2, bike.z);
+  hoop.add(top, bot, left, right, rim, hang);
+  lines.add(hoop);
+
+  for (const spec of [P.doorGap.left, P.doorGap.right]) {
+    const stack = new THREE.Mesh(new THREE.BoxGeometry(spec.w, spec.h, spec.d), mats.chest);
+    stack.position.set(spec.x, spec.h * 0.5, spec.z);
+    lines.add(stack);
+  }
+  const sof = P.doorSoffit;
+  const soffit = new THREE.Mesh(new THREE.BoxGeometry(sof.w, sof.h, sof.d), mats.wood);
+  soffit.position.set(sof.x, sof.y + sof.h * 0.5, sof.z);
+  lines.add(soffit);
+
+  for (const toy of P.toys) {
+    const box = new THREE.Mesh(new THREE.BoxGeometry(toy.w, toy.h, toy.d), mats.can);
+    box.position.set(toy.x, toy.h * 0.5, toy.z);
+    lines.add(box);
+  }
+
+  const car = P.car;
+  const orbit = [
+    [car.x + 3.3, 0, car.z],
+    [car.x - 3.3, 0, car.z],
+    [car.x, 0, car.z + 4.1],
+    [car.x, 0, car.z - 4.1],
+  ];
+  for (const [x, y, z] of orbit) {
+    const cone = new THREE.Mesh(coneGeo(THREE), mats.cone);
+    cone.position.set(x, y, z);
+    lines.add(cone);
+  }
+
+  lines.traverse((o) => { o.userData.garageArt = true; });
+  parent.add(lines);
+  return lines;
 }
 
 function addLadder(THREE, parent, mats) {
@@ -857,30 +937,23 @@ function addSecretDressing(THREE, parent, mats) {
 function makeGarageMats(THREE, vibe) {
   return {
     steel: steelMat(THREE, hexNum(vibe.palette.facade)),
-    wood: steelMat(THREE, hexNum('#4a3224'), { metalness: 0.08, roughness: 0.82 }),
-    car: steelMat(THREE, hexNum('#1a2430'), {
-      emissive: hexNum(vibe.palette.neonB), emissiveIntensity: 0.16, roughness: 0.38, metalness: 0.22,
-    }),
-    cabin: steelMat(THREE, hexNum('#243040'), { roughness: 0.42, metalness: 0.18 }),
-    glass: skipMat(new THREE.MeshStandardMaterial({
-      color: hexNum(vibe.palette.neonB), emissive: hexNum(vibe.palette.neonB),
-      emissiveIntensity: 0.35, transparent: true, opacity: 0.45, roughness: 0.2, metalness: 0.1,
-    })),
-    tire: steelMat(THREE, 0x141414, { roughness: 0.9, metalness: 0.02 }),
-    chest: steelMat(THREE, hexNum(vibe.palette.neonC), {
-      emissive: hexNum(vibe.palette.neonC), emissiveIntensity: 0.18, roughness: 0.55,
-    }),
-    tube: emitMat(THREE, hexNum(vibe.palette.neonB), 3.2),
-    sodium: emitMat(THREE, hexNum(vibe.palette.neonA), 3.0),
-    can: steelMat(THREE, hexNum(vibe.palette.neonA), { emissive: hexNum(vibe.palette.neonA), emissiveIntensity: 0.22 }),
-    cone: steelMat(THREE, hexNum(vibe.palette.neonA), { emissive: hexNum(vibe.palette.neonA), emissiveIntensity: 0.35 }),
-    tool: steelMat(THREE, hexNum(vibe.palette.neonB), { metalness: 0.4, roughness: 0.4 }),
+    wood: steelMat(THREE, hexNum('#4a3224')),
+    car: feltBasic(THREE, hexNum('#1a2430')),
+    cabin: feltBasic(THREE, hexNum('#243040')),
+    glass: feltBasic(THREE, hexNum(vibe.palette.neonB), { transparent: true, opacity: 0.45 }),
+    tire: steelMat(THREE, 0x141414),
+    chest: feltBasic(THREE, hexNum(vibe.palette.neonC)),
+    tube: emitMat(THREE, hexNum(vibe.palette.neonB)),
+    sodium: emitMat(THREE, hexNum(vibe.palette.neonA)),
+    can: feltBasic(THREE, hexNum(vibe.palette.neonA)),
+    cone: feltBasic(THREE, hexNum(vibe.palette.neonA)),
+    tool: feltBasic(THREE, hexNum(vibe.palette.neonB)),
     stripe: glowMat(THREE, 0xffb347, 0.55),
     puddle: glowMat(THREE, 0x2de2e6, 0.18),
     alley: skipMat(new THREE.MeshBasicMaterial({
       map: alleyTex(THREE), toneMapped: false, fog: true,
     })),
-    peg: steelMat(THREE, 0xffffff, { map: pegTex(THREE), roughness: 0.8, metalness: 0.08 }),
+    peg: steelMat(THREE, 0xffffff, { map: pegTex(THREE) }),
     sign: skipMat(new THREE.MeshBasicMaterial({
       color: 0xffffff, map: voltSignTex(THREE), toneMapped: false,
     })),
@@ -892,7 +965,7 @@ function makeGarageMats(THREE, vibe) {
     })),
     window: glowMat(THREE, 0xffb347, 0.82),
     drip: glowMat(THREE, 0xc45a22, 0.35),
-    nest: steelMat(THREE, hexNum('#4a3224'), { roughness: 0.88, metalness: 0.04 }),
+    nest: steelMat(THREE, hexNum('#4a3224')),
   };
 }
 
@@ -908,7 +981,9 @@ export function buildVoltStall(THREE, parent, vibe, quality, gates) {
   addWorkbench(THREE, group, mats);
   addToolChest(THREE, group, mats);
   addRack(THREE, group, mats, budget);
-  addTireWell(THREE, group, mats);
+  addTireWell(THREE, group, mats, GARAGE_PLAY.tireWell);
+  addTireWell(THREE, group, mats, GARAGE_PLAY.tireStack);
+  addPlayLines(THREE, group, mats);
   addLadder(THREE, group, mats);
   addHangLights(THREE, group, mats);
   addWhoopLife(THREE, group, mats, budget, gates || GARAGE_KEEP_GATES);
@@ -920,10 +995,7 @@ export function buildVoltStall(THREE, parent, vibe, quality, gates) {
 
 export function decorateGarageGate(THREE, ring, size, col, vibe) {
   if (!ring || ring.userData.artHalo) return null;
-  const emit = (vibe && vibe.lighting && vibe.lighting.gateEmissive) || 5.2;
-  const bar = skipMat(new THREE.MeshStandardMaterial({
-    color: col, emissive: col, emissiveIntensity: emit, roughness: 0.32, metalness: 0.12,
-  }));
+  const bar = feltEmissive(THREE, col);
   const t = size * 0.07, s = size * 1.12;
   const extras = [];
   const top = new THREE.Mesh(new THREE.BoxGeometry(s * 2, t, t), bar);
@@ -997,11 +1069,17 @@ export function tickGarageArt(root, now) {
 
 function tickGarageArtObject(o, t) {
   if (o.userData && o.userData.garageTube && o.material) {
-    const flicker = 2.6 + 0.7 * (0.5 + 0.5 * Math.sin(t * 11.0 + (o.position.z || 0)));
-    o.material.emissiveIntensity = flicker;
+    const flicker = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(t * 11.0 + (o.position.z || 0)));
+    if (o.material.emissiveIntensity != null) {
+      o.material.emissiveIntensity = 2.6 + 0.7 * (0.5 + 0.5 * Math.sin(t * 11.0 + (o.position.z || 0)));
+    } else if (o.material.color) {
+      o.material.color.setRGB(flicker * 0.18, flicker, flicker * 0.90);
+    }
   }
   if (o.userData && o.userData.garageSpark && o.material) {
-    o.material.emissiveIntensity = Math.sin(t * 18.0) > 0.35 ? 5.5 : 0.4;
+    const on = Math.sin(t * 18.0) > 0.35;
+    if (o.material.emissiveIntensity != null) o.material.emissiveIntensity = on ? 5.5 : 0.4;
+    else if (o.material.color) o.material.color.setRGB(on ? 1 : 0.25, on ? 0.88 : 0.22, on ? 0.54 : 0.12);
     o.scale.setScalar(0.7 + 0.6 * Math.max(0, Math.sin(t * 18.0)));
   }
   if (o.userData && o.userData.garageSign) {

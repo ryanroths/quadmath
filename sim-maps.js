@@ -4,7 +4,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=6f95e3f6a0e0';
+import { planRoom } from './sim-room.js?v=5a36ca56c8f9';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -28,19 +28,50 @@ export const GARAGE_PLAY = Object.freeze({
   }),
   rackA: Object.freeze({ x: 8.6, z: 3.6, w: 1.55, d: 5.0 }),
   rackB: Object.freeze({ x: 8.6, z: 12.2, w: 1.55, d: 5.0 }),
+  // Split each shelf into two slabs so mid-z is a threadable gap.
+  rackGapD: 1.15,
   shelfYs: Object.freeze([1.05, 2.30, 3.55, 4.80]),
   shelfH: 0.10,
+  benchBins: Object.freeze([
+    Object.freeze({ x: -8.4, z: -12.8, w: 1.70, h: 0.68, d: 1.20 }),
+    Object.freeze({ x: -8.4, z: -3.2, w: 1.70, h: 0.68, d: 1.20 }),
+  ]),
   door: Object.freeze({ z: 20.92, w: 8.2, openH: 2.35, panelH: 6.05, thick: 0.16 }),
+  doorGap: Object.freeze({
+    left: Object.freeze({ x: -2.95, z: 20.92, w: 2.30, h: 2.20, d: 0.55 }),
+    right: Object.freeze({ x: 2.95, z: 20.92, w: 2.30, h: 2.20, d: 0.55 }),
+  }),
+  doorSoffit: Object.freeze({ x: 0, y: 6.90, z: 18.8, w: 8.4, h: 0.26, d: 1.60 }),
   volt: Object.freeze({ x: 0, y: 2.55, z: 3.4, innerW: 2.05, innerH: 1.75, bar: 0.14, depth: 0.22 }),
+  bike: Object.freeze({ x: 0, y: 3.40, z: 14.0, innerW: 1.90, innerH: 1.90, bar: 0.12, depth: 0.18 }),
   tireWell: Object.freeze({ x: 0, z: -12.2, inner: 1.15, outer: 1.85, rings: 4, ringH: 0.42 }),
+  tireStack: Object.freeze({ x: 5.6, z: -16.4, inner: 1.10, outer: 1.80, rings: 6, ringH: 0.42 }),
   ladder: Object.freeze({ x: -9.55, z: 14.8, w: 0.85, d: 0.22, h: 6.4, rungs: 9 }),
   cords: Object.freeze([
     Object.freeze({ x: -2.4, z: 9.2, y0: 4.15, y1: 8.7 }),
     Object.freeze({ x: 2.2, z: 6.4, y0: 3.85, y1: 8.7 }),
     Object.freeze({ x: -1.6, z: -2.2, y0: 4.35, y1: 8.7 }),
   ]),
+  toys: Object.freeze([
+    Object.freeze({ x: -6.8, z: 17.4, w: 0.52, h: 0.40, d: 0.52 }),
+    Object.freeze({ x: -6.2, z: 17.9, w: 0.44, h: 0.58, d: 0.44 }),
+    Object.freeze({ x: -7.3, z: 16.9, w: 0.38, h: 0.32, d: 0.38 }),
+    Object.freeze({ x: 6.8, z: -15.2, w: 0.52, h: 0.40, d: 0.52 }),
+    Object.freeze({ x: 6.2, z: -15.8, w: 0.44, h: 0.56, d: 0.44 }),
+    Object.freeze({ x: 7.3, z: -14.6, w: 0.38, h: 0.32, d: 0.38 }),
+  ]),
   rafterY: 8.55,
 });
+
+export function garageRackSlabs(spec) {
+  const gap = GARAGE_PLAY.rackGapD;
+  const slabD = (spec.d - gap) / 2;
+  const off = (slabD + gap) / 2;
+  return [
+    { x: spec.x, z: spec.z - off, w: spec.w, d: slabD },
+    { x: spec.x, z: spec.z + off, w: spec.w, d: slabD },
+  ];
+}
 
 // Warehouse playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu. Open racks match Ion Nave posts + shelf slabs.
@@ -102,7 +133,7 @@ export const MAP_ORBIT = {
 
 export const MAP_LOOKS = {
   living: { fog: 0.004, sun: 0.55, env: 0.62, bg: 0.38, hemi: 0.38 },
-  garage: { fog: 0.003, sun: 0.7, env: 0.58, bg: 0.34, hemi: 0.32 },
+  garage: { fog: 0.003, sun: 0.7, env: 0.26, bg: 0.34, hemi: 0.60 },
   warehouse: { fog: 0.0018, sun: 0.55, env: 0.5, bg: 0.28, hemi: 0.28 },
   backyard: { fog: 0.0025, sun: 1.5, env: 0.72, bg: 0.48, hemi: 0.16 },
   city: { fog: 0.00105, sun: 0.30, env: 0.18, bg: 0.16, hemi: 0.56 },
@@ -360,8 +391,10 @@ function buildGarageRack(THREE, parent, colliders, spec, mats) {
   for (const [dx, dz] of [[-hx, -hz], [hx, -hz], [-hx, hz], [hx, hz]]) {
     box(THREE, parent, colliders, spec.x + dx, 0, spec.z + dz, post, 5.05, post, mats.metal);
   }
-  for (const y of GARAGE_PLAY.shelfYs) {
-    box(THREE, parent, colliders, spec.x, y, spec.z, spec.w, GARAGE_PLAY.shelfH, spec.d, mats.metal);
+  for (const slab of garageRackSlabs(spec)) {
+    for (const y of GARAGE_PLAY.shelfYs) {
+      box(THREE, parent, colliders, slab.x, y, slab.z, slab.w, GARAGE_PLAY.shelfH, slab.d, mats.metal);
+    }
   }
 }
 
@@ -387,6 +420,9 @@ function buildGarage(THREE, parent, colliders, lights) {
   for (const [dx, dz] of b.legs) {
     box(THREE, parent, colliders, b.x + dx, 0, b.z + dz, b.leg, b.topY, b.leg, mats.wood);
   }
+  for (const bin of P.benchBins) {
+    box(THREE, parent, colliders, bin.x, 0, bin.z, bin.w, bin.h, bin.d, mats.wood);
+  }
   const ch = P.chest;
   box(THREE, parent, colliders, ch.x, 0, ch.z, ch.w, ch.h, ch.d, mats.metal);
   const c = P.car;
@@ -403,9 +439,20 @@ function buildGarage(THREE, parent, colliders, lights) {
   buildGarageRack(THREE, parent, colliders, P.rackB, mats);
   const d = P.door;
   box(THREE, parent, colliders, 0, d.openH, d.z, d.w, d.panelH, d.thick, mats.metal);
+  const gL = P.doorGap.left, gR = P.doorGap.right;
+  box(THREE, parent, colliders, gL.x, 0, gL.z, gL.w, gL.h, gL.d, mats.metal);
+  box(THREE, parent, colliders, gR.x, 0, gR.z, gR.w, gR.h, gR.d, mats.metal);
+  const sof = P.doorSoffit;
+  box(THREE, parent, colliders, sof.x, sof.y, sof.z, sof.w, sof.h, sof.d, mats.wood);
   const v = P.volt;
   hoopFrame(THREE, parent, colliders, v.x, v.y, v.z, v.innerW, v.innerH, v.bar, v.depth, mats.metal);
+  const bk = P.bike;
+  hoopFrame(THREE, parent, colliders, bk.x, bk.y, bk.z, bk.innerW, bk.innerH, bk.bar, bk.depth, mats.metal);
   tireWell(THREE, parent, colliders, P.tireWell, mats.tire);
+  tireWell(THREE, parent, colliders, P.tireStack, mats.tire);
+  for (const toy of P.toys) {
+    box(THREE, parent, colliders, toy.x, 0, toy.z, toy.w, toy.h, toy.d, mats.wood);
+  }
   const lad = P.ladder;
   box(THREE, parent, colliders, lad.x - lad.w / 2, 0, lad.z, 0.12, lad.h, lad.d, mats.wood);
   box(THREE, parent, colliders, lad.x + lad.w / 2, 0, lad.z, 0.12, lad.h, lad.d, mats.wood);
