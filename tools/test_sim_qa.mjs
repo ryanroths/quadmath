@@ -12,6 +12,7 @@ import {
   loadSelected, saveSelected, MAPS, freestyleTrack, isLineTrackId,
 } from '../sim-tracks.js';
 import { dailyLineFor } from '../sim-retention.js';
+import { trickLineupText, TRICK_BY_ID } from '../sim-tricks.js';
 import {
   shouldToastFlip, isStuckInverted, stepStuckHold, wantsTurtle, bodyUpZ,
   STUCK_HOLD_S,
@@ -405,6 +406,10 @@ test('named tracks are lines; city stays 3-lap; HUD and ghost stay wired', () =>
   assert.ok(simSrc.includes('function openDailyLineCard'));
   assert.ok(simSrc.includes("q.get('dailyline')"));
   assert.ok(simSrc.includes('DAILY_LINE_KEY') || simSrc.includes('loadDailyLine'));
+  assert.ok(simSrc.includes('dailyLineTricks') || simSrc.includes('trickLineupText'));
+  assert.ok(trickLineupText().includes('Ham Spin'));
+  assert.equal(TRICK_BY_ID.ham.name, 'Ham Spin');
+  assert.ok(simSrc.includes('Ham Spin'));
 });
 
 test('whoop garage and replay cam stay on sim files', () => {
