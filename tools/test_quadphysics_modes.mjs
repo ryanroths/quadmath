@@ -147,8 +147,11 @@ test('existing localStorage keys are still referenced (not renamed)', () => {
 });
 
 test('rate presets exist and beginner is slower than race', () => {
-  assert.ok(RATE_PRESETS.whoopBeginner && RATE_PRESETS.whoopRace && RATE_PRESETS.freestyle);
+  assert.ok(RATE_PRESETS.whoopBeginner && RATE_PRESETS.whoopRace && RATE_PRESETS.freestyle && RATE_PRESETS.ryanActual);
   assert.ok(RATE_PRESETS.whoopBeginner.roll.srate < RATE_PRESETS.whoopRace.roll.srate);
+  assert.equal(RATE_PRESETS.ryanActual.type, 'ACTUAL');
+  assert.equal(RATE_PRESETS.ryanActual.roll.rcRate, 4);
+  assert.equal(RATE_PRESETS.ryanActual.yaw.srate, 70);
   const rates = {
     type: 'ACTUAL',
     roll: { rcRate: 9, srate: 9, expo: 9 },

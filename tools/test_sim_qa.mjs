@@ -221,6 +221,18 @@ test('sim.html wires picker rebuild, boot restore, and query-build no-save', () 
   assert.ok(boot.includes('boot.unknownMap'));
   assert.ok(boot.includes('already'), 'do not resetQuad/toast RESET on a no-op city reload');
   assert.ok(boot.includes('parseThreeDQuery') || boot.includes("q.get('3d')"));
+  const modeAt = boot.indexOf("q.get('mode')");
+  const presetAt = boot.indexOf("q.get('preset')");
+  const ratesAt = boot.indexOf("q.get('rates')");
+  const drillAt = boot.indexOf("q.get('drill')");
+  assert.ok(modeAt >= 0 && presetAt >= 0 && ratesAt >= 0 && drillAt >= 0);
+  assert.ok(modeAt < presetAt && presetAt < ratesAt && ratesAt < drillAt, 'mode → preset → rates → drill');
+  assert.ok(boot.includes('applyRatePreset') && boot.includes('decodeRates'));
+  assert.ok(!boot.slice(presetAt, drillAt).includes('setTune'), 'URL rates/preset must not apply PIDs');
+  assert.ok(!boot.slice(presetAt, drillAt).includes('saveRates'), 'query rates/preset are session-only');
+  assert.ok(simSrc.includes('id="btnRatesShare"') && simSrc.includes('COPY RATES LINK'));
+  assert.ok(simSrc.includes('RATE_CARDS'));
+  assert.ok(!/from\s+["'].*tune-database\.js/.test(simSrc), 'do not import tune-database.js for cards');
   assert.ok(simSrc.includes('feel.noteFlip({'));
   assert.ok(simSrc.includes('clearanceM') && simSrc.includes('bodyUpZ'));
   assert.ok(simSrc.includes('wantsTurtle'));
