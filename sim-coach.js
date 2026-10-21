@@ -5,9 +5,9 @@
 // New localStorage key only: quadmathSimCoach. Do not write old ryfly* keys
 // or the M2 / W1 / W2 / W3 keys.
 
-import { detectPassOrMiss, gateRadius } from './sim-tracks.js?v=e0d49f02b6a8';
-import { DEFAULT_ROOM, planRoom } from './sim-room.js?v=48cdde0d2972';
-import { makeWorldLabel } from './sim-art.js?v=4a8091741db5';
+import { detectPassOrMiss, gateRadius } from './sim-tracks.js?v=0d469647394f';
+import { DEFAULT_ROOM, planRoom } from './sim-room.js?v=3e3a37d777f9';
+import { makeWorldLabel } from './sim-art.js?v=80656cccca04';
 
 export const COACH_KEY = 'quadmathSimCoach';
 export const GUIDE_DIR = 'content/guides/';

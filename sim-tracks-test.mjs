@@ -53,7 +53,7 @@ assert.ok((byMap.backyard || 0) >= 2);
 assert.ok((byMap.office || 0) >= 2, 'office needs 2+ tracks');
 assert.ok((byMap.gym || 0) >= 2, 'gym needs 2+ tracks');
 assert.ok((byMap.trainer || 0) >= 2, 'trainer needs 2+ tracks');
-assert.equal(byMap.office, 3);
+assert.equal(byMap.office, 5);
 assert.equal(byMap.gym, 3);
 assert.equal(byMap.trainer, 3);
 

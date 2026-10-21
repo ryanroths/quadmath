@@ -1,0 +1,17 @@
+{
+  "id": "office-rafters",
+  "map": "office",
+  "name": "Ceiling Run",
+  "class": "whoop",
+  "gates": [
+    { "x": 13.5, "y": 2.3, "z": 18.2, "ry": 0.00, "size": 1.9, "solid": true },
+    { "x": -3.75, "y": 4.05, "z": 12.0, "ry": 1.57, "size": 1.6, "solid": true },
+    { "x": 0.0, "y": 7.45, "z": 6.0, "ry": 0.00, "size": 1.6, "solid": true },
+    { "x": 0.0, "y": 7.45, "z": -6.0, "ry": 3.14, "size": 1.6, "solid": true },
+    { "x": -3.75, "y": 4.05, "z": -12.0, "ry": -1.57, "size": 1.6, "solid": true },
+    { "x": 13.5, "y": 2.3, "z": 12.0, "ry": 3.14, "size": 1.9, "solid": true }
+  ],
+  "flags": [
+    { "x": 0.0, "y": 7.9, "z": 0.0, "ry": 0 }
+  ]
+}

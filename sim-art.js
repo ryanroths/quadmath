@@ -27,12 +27,12 @@ export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=20f1b6abfebb';
+} from './sim-art-garage.js?v=81eee36a8b69';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=5d460085ad8e';
+} from './sim-art-warehouse.js?v=5413265c6d79';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
@@ -41,10 +41,10 @@ export {
 } from './sim-art-gym.js?v=fad9f1189eac';
 
 export {
-  OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget,
+  OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget, planOfficeKit,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=3145a1086ff3';
+} from './sim-art-office.js?v=520ea853007e';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
@@ -62,12 +62,13 @@ export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=ff4075a232f5';
+} from './sim-art-room.js?v=9484c5a966fa';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
   tryDressWarehouseKit, warehouseKitBytesForQuality, WAREHOUSE_KIT_CORE, WAREHOUSE_KIT_EXTRA,
-} from './sim-art-kit.js?v=f4e1009432e0';
+  tryDressOfficeKit, officeKitBytesForQuality, OFFICE_KIT_CORE, OFFICE_KIT_EXTRA,
+} from './sim-art-kit.js?v=a41ff7619dc2';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';

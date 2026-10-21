@@ -758,7 +758,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=c5a4d163f20f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=0daa6779fbbd";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=a1bc4afa31eb";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -771,8 +771,8 @@ import {
   restyleTrainer, decorateTrainerGate, pulseTrainerGate, tickTrainerArt,
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
-  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, mergeStaticArt,
-} from "./sim-art.js?v=4a8091741db5";
+  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, mergeStaticArt,
+} from "./sim-art.js?v=80656cccca04";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -795,14 +795,14 @@ import {
   findTrackIn, resolveSimBoot, knownMapId, trackRefId,
   isFreestyleTrackId, freestyleTrack, freestyleIdFor,
   resolveFly, persistableSelection,
-} from "./sim-tracks.js?v=e0d49f02b6a8";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=63c2df632ca8";
+} from "./sim-tracks.js?v=0d469647394f";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=9419f0a07e21";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=48cdde0d2972";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=76d2462346ac";
+} from "./sim-room.js?v=3e3a37d777f9";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=43270d486919";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -817,7 +817,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=452e85b0bbee";
+} from "./sim-coach.js?v=085f89b66de0";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js?v=49546f834df8";
@@ -833,13 +833,13 @@ import {
   skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
-} from "./sim-retention.js?v=9b9933768baa";
+} from "./sim-retention.js?v=195334786451";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=d57a16422996";
+} from "./sim-secrets.js?v=4f0fa41d2451";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -2412,7 +2412,42 @@ function applyOfficeArt(quality){
   });
   applyLooksPost('office', q);
   const credit=document.querySelector('.sf-credit');
-  if(credit)credit.textContent='Office is original procedural art — Paper Sun';
+  if(credit)credit.textContent='Office is original procedural art — Paper Sun. Kenney CC0 shop kit.';
+  queueOfficeKit(q, vibeFor('office'));
+}
+let officeKitWanted=null;
+let officeKitGen=0;
+function queueOfficeKit(quality, vibe){
+  officeKitWanted={quality:quality||'med', vibe:vibe||vibeFor('office')};
+  if(window._heavyAssetsPending)return;
+  dressOfficeKit();
+}
+async function dressOfficeKit(){
+  const wanted=officeKitWanted;
+  if(!wanted)return;
+  const gen=++officeKitGen;
+  try{
+    const ok=await ensureGltf();
+    if(!ok || !GLTFLoader || gen!==officeKitGen)return;
+    const built=indoorBuilt.office;
+    const group=built&&built.group&&built.group.getObjectByName('officeArtVisuals');
+    if(!group)return;
+    const loader=new GLTFLoader();
+    if(MeshoptDecoder){
+      if(MeshoptDecoder.ready)await MeshoptDecoder.ready;
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    }
+    const dressed=await tryDressOfficeKit(THREE,{
+      group, loader, vibe:wanted.vibe, quality:wanted.quality,
+    });
+    if(gen!==officeKitGen)return;
+    window._officeKit=dressed;
+    if(assetEl && dressed && dressed.used){
+      assetEl.textContent='Kenney CC0 office kit ('+Math.round((dressed.bytes||0)/1024)+' KB).';
+    }
+  }catch(e){
+    window._officeKit={used:false, error:String(e&&e.message||e)};
+  }
 }
 function applyTrainerArt(quality){
   const built=indoorBuilt.trainer||ensureIndoor('trainer');
@@ -2511,6 +2546,7 @@ function startHeavyAssets(){
   if(map==='city')finishCityArt();
   if(map==='garage')dressGarageKit();
   if(map==='warehouse')dressWarehouseKit();
+  if(map==='office')dressOfficeKit();
 }
 
 function wrapCityWorld(){

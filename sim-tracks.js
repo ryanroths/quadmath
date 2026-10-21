@@ -631,6 +631,8 @@ export const BUILTIN_TRACK_FILES = [
   { id: 'office-cubicles', file: 'tracks/office-cubicles.json', map: 'office', name: 'Cubicle Weave' },
   { id: 'office-hallway', file: 'tracks/office-hallway.json', map: 'office', name: 'Hallway Run' },
   { id: 'office-desks', file: 'tracks/office-desks.json', map: 'office', name: 'Desk Hop' },
+  { id: 'office-under', file: 'tracks/office-under.json', map: 'office', name: 'Desk Dive' },
+  { id: 'office-rafters', file: 'tracks/office-rafters.json', map: 'office', name: 'Ceiling Run' },
   { id: 'gym-court', file: 'tracks/gym-court.json', map: 'gym', name: 'Court Loop' },
   { id: 'gym-bleachers', file: 'tracks/gym-bleachers.json', map: 'gym', name: 'Bleacher Climb' },
   { id: 'gym-hoops', file: 'tracks/gym-hoops.json', map: 'gym', name: 'Hoop Dive' },
