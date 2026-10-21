@@ -356,8 +356,8 @@ export function stepPropwash(wake, sample, dt, build, settings) {
   const n = hash3(pos.x + next.age, pos.y, pos.z);
   return {
     wake: next,
-    force: v3(n.x * excite * 0.022, n.y * excite * 0.022, -excite * 0.04),
-    torque: v3(n.x * excite * 0.06, n.y * excite * 0.06, n.z * excite * 0.02),
+    force: v3(n.x * excite * 0.040, n.y * excite * 0.040, -excite * 0.07),
+    torque: v3(n.x * excite * 0.11, n.y * excite * 0.11, n.z * excite * 0.035),
     excite,
     turb,
     wakeHit,

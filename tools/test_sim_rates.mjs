@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   RATE_TYPES, parseCli, bfCurve, actualRate, kissRate, raceFlightRate, quickRate,
   rateSetpoint, maxRateDps, convertAxisFamily, normalizeRateType, formatCliSummary,
+  SETPOINT_LIMIT,
 } from '../sim-rates.js';
 
 const near = (a, b, eps = 1e-6) =>
@@ -201,6 +202,29 @@ test('KISS / QUICKRATES / RACEFLIGHT dumps scale to live units', () => {
   near(r.rates.roll.rcRate, 80);
   near(r.rates.roll.srate, 0.70);
   near(r.rates.roll.expo, 0.50);
+});
+
+test('idle_min_rpm = 0 does not zero idle; dshot_idle_value still works', () => {
+  const z = parseCli('set idle_min_rpm = 0\nset dshot_idle_value = 550\n');
+  assert.equal(z.idle, 0.055);
+  const onlyZero = parseCli('set idle_min_rpm = 0\n');
+  assert.equal(onlyZero.idle, null);
+  const dshot = parseCli('set dshot_idle_value = 550\n');
+  near(dshot.idle, 0.055);
+});
+
+test('quick_rates_rc_expo is parsed and changes the mid-stick value', () => {
+  const p = parseCli('set rates_type = QUICKRATES\nset roll_rc_rate = 160\nset roll_srate = 80\nset roll_expo = 40\nset quick_rates_rc_expo = ON\n');
+  assert.equal(p.quickRatesRcExpo, true);
+  near(p.rates.roll.expo, 0.40);
+  const off = rateSetpoint('QUICK', 0.5, p.rates.roll, { quickRatesRcExpo: false });
+  const on = rateSetpoint('QUICK', 0.5, p.rates.roll, { quickRatesRcExpo: true });
+  assert.ok(Math.abs(on - off) > 1, `expo flag did not move mid-stick (${off} vs ${on})`);
+});
+
+test('rateSetpoint never exceeds the 1998 deg/s cap', () => {
+  assert.equal(SETPOINT_LIMIT, 1998);
+  assert.equal(rateSetpoint('BETAFLIGHT', 1, { rcRate: 2.5, srate: 0.99, expo: 0 }), 1998);
 });
 
 test('formatCliSummary names the type and values', () => {
