@@ -10,7 +10,7 @@ import {
   STICK_SMOOTH_TAU,
 } from '../quadphysics.js';
 import { rateSetpoint, parseCli, SETPOINT_LIMIT, actualRate } from '../sim-rates.js';
-import { applyAxisMap, AETR_MAP, mapStickAxes } from '../sim-touch.js';
+import { applyAxisMap, AETR_MAP, PAD_MAP, mapStickAxes } from '../sim-touch.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const simSrc = readFileSync(join(root, 'sim.html'), 'utf8');
@@ -50,12 +50,31 @@ function makeAcro(hz = 500) {
   return qp;
 }
 
-test('pitch stick forward is +stick.p on radio, touch, and keyboard', () => {
-  const radio = applyAxisMap([0, -1, 0, 0], AETR_MAP);
+test('pitch stick forward is +stick.p on radio, gamepad, touch, and keyboard', () => {
+  // EdgeTX Classic: CH2 elevator stick-forward is HID +1, not gamepad Y-up.
+  const radio = applyAxisMap([0, 1, 0, 0], AETR_MAP);
   assert.ok(radio.p > 0.9, `radio pitch-forward stick.p=${radio.p}`);
+  const pad = applyAxisMap([0, 0, 0, -1], PAD_MAP);
+  assert.ok(pad.p > 0.9, `gamepad RY-up stick.p=${pad.p}`);
   const touch = mapStickAxes({ x: 0, y: 0 }, { x: 0, y: 1 }, 2);
   assert.ok(touch.p > 0.9, `touch stick-up stick.p=${touch.p}`);
   assert.ok(/tP=\(keys\['arrowup'\]\?1:0\)-\(keys\['arrowdown'\]\?1:0\)/.test(simSrc));
+});
+
+test('radio HID stick-forward flies +X (locks pitch sign through AETR)', () => {
+  const mapped = applyAxisMap([0, 1, 0.2, 0], AETR_MAP);
+  assert.ok(mapped.p > 0.9, `AETR stick-forward stick.p=${mapped.p}`);
+  const signs = pageSigns();
+  assert.equal(signs.pitch, 1, 'SGN_PITCH stays +1; radio polarity is AETR_MAP');
+  const stick = { r: 0, p: mapped.p, y: 0 };
+  const sp = pageSetpoint(stick, signs);
+  assert.ok(sp.pitch > 0, `setpoint.pitch ${sp.pitch} should be > 0`);
+  const qp = makeAcro(500);
+  const hover = hoverCollective();
+  const dt = 1 / qp.physicsHz;
+  for (let i = 0; i < Math.round(0.22 / dt); i++) qp.step(dt, sp, hover, stick);
+  assert.ok(qp.velocity.x > 0.15, `module +X vel ${qp.velocity.x.toFixed(3)} — radio stick-forward must fly forward`);
+  assert.ok(qp.attitude.pitch > 0.2, `attitude pitch ${qp.attitude.pitch} should tilt thrust +X`);
 });
 
 test('full path: pitch stick forward = fly forward (+X), not inverted', () => {

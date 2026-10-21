@@ -470,14 +470,22 @@ export function radioScore(gp) {
   return 1;
 }
 
-// EdgeTX/OpenTX joystick, AETR: 0=roll 1=pitch 2=throttle 3=yaw
+// Bump when a default HID sign changes so loadRadioProfile can migrate
+// old stock snapshots once. Custom wizard maps are never auto-flipped.
+export const AXIS_MAP_VER = 2;
+
+// EdgeTX/OpenTX joystick, AETR: 0=roll 1=pitch 2=throttle 3=yaw.
+// Pitch is a mixer CHANNEL, not a gamepad Y axis. Mode 2 stick-forward
+// (elevator) is HID +1 on CH2. #233 set SGN_PITCH to +1 (stick.p>0 →
+// fly +X); the old gamepad-style p.sign=-1 then double-inverted radios.
 export const AETR_MAP = Object.freeze({
   r: Object.freeze({ i: 0, sign: 1 }),
-  p: Object.freeze({ i: 1, sign: -1 }),
+  p: Object.freeze({ i: 1, sign: 1 }),
   y: Object.freeze({ i: 3, sign: 1 }),
   t: Object.freeze({ i: 2, min: -1, max: 1 }),
 });
 // Spring gamepad, mode 2: LX=yaw LY=thr RX=roll RY=pitch
+// Gamepad RY is HID Y-up = -1, so invert into +stick.p.
 export const PAD_MAP = Object.freeze({
   r: Object.freeze({ i: 2, sign: 1 }),
   p: Object.freeze({ i: 3, sign: -1 }),
@@ -500,7 +508,7 @@ export const RADIO_PRESETS = Object.freeze({
     map: Object.freeze({
       t: Object.freeze({ i: 0, min: -1, max: 1 }),
       r: Object.freeze({ i: 1, sign: 1 }),
-      p: Object.freeze({ i: 2, sign: -1 }),
+      p: Object.freeze({ i: 2, sign: 1 }),
       y: Object.freeze({ i: 3, sign: 1 }),
     }),
   },
@@ -578,6 +586,51 @@ export function isValidAxisMap(m) {
   if (!m || typeof m !== 'object') return false;
   const ch = (c) => !!(c && Number.isFinite(c.i) && c.i >= 0);
   return ch(m.r) && ch(m.p) && ch(m.y) && ch(m.t);
+}
+
+function cloneAxisArm(src) {
+  if (!src || typeof src !== 'object') return null;
+  const out = {};
+  if (Number.isFinite(src.i)) out.i = src.i | 0;
+  if (Number.isFinite(src.button)) out.button = src.button | 0;
+  if (src.sign === -1 || src.sign === 1) out.sign = src.sign;
+  return Object.keys(out).length ? out : null;
+}
+
+function isOldDefaultRadioPitch(m) {
+  if (!m || !m.p || m.p.sign !== -1) return false;
+  const aetr = m.r && m.r.i === 0 && m.p.i === 1 && m.y && m.y.i === 3 && m.t && m.t.i === 2;
+  const taer = m.t && m.t.i === 0 && m.r && m.r.i === 1 && m.p.i === 2 && m.y && m.y.i === 3;
+  return !!(aetr || taer);
+}
+
+// Stock AETR/TAER snapshots from before AXIS_MAP_VER=2 inverted pitch like a
+// gamepad Y axis. Flip those once. Wizard (`custom`) and pad maps stay put.
+export function migrateAxisMap(map, radioPreset) {
+  if (!isValidAxisMap(map)) return map;
+  if ((map.ver | 0) >= AXIS_MAP_VER) return map;
+  const next = {
+    r: Object.assign({}, map.r),
+    p: Object.assign({}, map.p),
+    y: Object.assign({}, map.y),
+    t: Object.assign({}, map.t),
+    ver: AXIS_MAP_VER,
+  };
+  const arm = cloneAxisArm(map.arm);
+  const mode = cloneAxisArm(map.mode);
+  if (arm) next.arm = arm;
+  if (mode) next.mode = mode;
+  if (radioPreset !== 'custom' && radioPreset !== 'pad' && isOldDefaultRadioPitch(map)) {
+    next.p = Object.assign({}, next.p, { sign: 1 });
+  }
+  return next;
+}
+
+function axisMapNeedsSave(before, after) {
+  if (!after) return false;
+  if (!before) return true;
+  return (before.ver | 0) !== (after.ver | 0)
+    || (before.p && before.p.sign) !== (after.p && after.p.sign);
 }
 
 export function loadAutoArm(storage) {
@@ -733,6 +786,14 @@ export function loadRadioProfile(id, storage) {
     const raw = store.getItem(AXIS_MAP_PREFIX + sid);
     axisMap = raw ? JSON.parse(raw) : null;
     if (!isValidAxisMap(axisMap)) axisMap = null;
+    else {
+      const migrated = migrateAxisMap(axisMap, radioPreset);
+      if (axisMapNeedsSave(axisMap, migrated)) {
+        try { store.setItem(AXIS_MAP_PREFIX + sid, JSON.stringify(migrated)); }
+        catch (e) { /* ignore quota / private mode */ }
+      }
+      axisMap = migrated;
+    }
   } catch (e) {
     radioPreset = 'auto';
     axisMap = null;
@@ -762,8 +823,12 @@ export function clearRadioCalibration(id, storage) {
 export function saveAxisMap(id, axisMap, storage) {
   const store = storeOf(storage);
   if (!store || !id) return;
-  try { store.setItem(AXIS_MAP_PREFIX + sanitizeId(id), JSON.stringify(axisMap)); }
-  catch (e) { /* ignore quota / private mode */ }
+  try {
+    const stamped = axisMap && typeof axisMap === 'object'
+      ? Object.assign({}, axisMap, { ver: Math.max(axisMap.ver | 0, AXIS_MAP_VER) })
+      : axisMap;
+    store.setItem(AXIS_MAP_PREFIX + sanitizeId(id), JSON.stringify(stamped));
+  } catch (e) { /* ignore quota / private mode */ }
 }
 
 export function saveRadioPreset(id, preset, storage) {
