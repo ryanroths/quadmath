@@ -1,9 +1,12 @@
-// Kenney CC0 city + garage + warehouse + office + gym + living kits. Visual only.
-// Meshopt-compressed files live under assets/sim-city/, assets/sim-garage/,
-// assets/sim-warehouse/, assets/sim-office/, assets/sim-gym/, and assets/sim-living/. If a load fails, the
-// procedural meshes already in the scene stay visible. Nothing from the GPL whoop sim.
+// Kenney CC0 city + garage + warehouse + office + gym + living + backyard kits.
+// Visual only. Meshopt-compressed files live under assets/sim-city/,
+// assets/sim-garage/, assets/sim-warehouse/, assets/sim-office/,
+// assets/sim-gym/, assets/sim-living/, and assets/sim-backyard/. If a load
+// fails, the procedural meshes already in the scene stay visible. Nothing
+// from the GPL whoop sim.
 
-import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=9aeb5e8c616e';
+import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=ef5849d4859b';
+import { BACKYARD_PLAY } from './sim-maps.js?v=d9af70a64707';
 
 const KIT_ROOT = 'assets/sim-city/';
 
@@ -81,12 +84,14 @@ function loadGltf(loader, url) {
 function mergeScene(THREE, scene) {
   // Kenney meshopt GLBs store POSITION as quantized uint16. Baking
   // matrixWorld on that typed array truncates Y/Z to 0, so copy to
-  // float first, then apply the node transform.
+  // float first, then apply the node transform. Keep COLOR so nature
+  // kit trees stay trunk-and-leaf instead of a single paint.
   scene.updateMatrixWorld(true);
-  const pos = [], nor = [];
+  const pos = [], nor = [], col = [];
   const v = new THREE.Vector3();
   const nrm = new THREE.Vector3();
   const nrmMat = new THREE.Matrix3();
+  let haveColor = true;
   scene.traverse((o) => {
     if (!o.isMesh || !o.geometry) return;
     const src = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry;
@@ -96,6 +101,8 @@ function mergeScene(THREE, scene) {
       return;
     }
     const n = src.getAttribute('normal');
+    const c = src.getAttribute('color');
+    if (!c) haveColor = false;
     nrmMat.getNormalMatrix(o.matrixWorld);
     for (let i = 0; i < p.count; i++) {
       v.set(p.getX(i), p.getY(i), p.getZ(i)).applyMatrix4(o.matrixWorld);
@@ -104,6 +111,7 @@ function mergeScene(THREE, scene) {
         nrm.set(n.getX(i), n.getY(i), n.getZ(i)).applyMatrix3(nrmMat).normalize();
         nor.push(nrm.x, nrm.y, nrm.z);
       } else nor.push(0, 1, 0);
+      if (c) col.push(c.getX(i), c.getY(i), c.getZ(i));
     }
     if (src !== o.geometry) src.dispose();
   });
@@ -111,6 +119,9 @@ function mergeScene(THREE, scene) {
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  if (haveColor && col.length === pos.length) {
+    out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  }
   return out;
 }
 
@@ -140,7 +151,8 @@ function fitGeo(THREE, geo, opts) {
   );
   geo.computeBoundingBox();
   const ok = geo.boundingBox.getSize(new THREE.Vector3());
-  if (ok.x < 0.35 || ok.y < 0.25 || ok.z < 0.35) return null;
+  const min = opts.minSize == null ? 0.35 : opts.minSize;
+  if (ok.x < min || ok.y < 0.12 || ok.z < min) return null;
   geo.computeVertexNormals();
   geo.computeBoundingSphere();
   return geo;
@@ -203,6 +215,112 @@ async function geoFor(THREE, loader, entry, root) {
   const fitted = fitGeo(THREE, merged, entry);
   geoCache.set(url, fitted);
   return fitted;
+}
+
+function mergeByMaterial(THREE, scene) {
+  scene.updateMatrixWorld(true);
+  const buckets = new Map();
+  const v = new THREE.Vector3();
+  const nrm = new THREE.Vector3();
+  const nrmMat = new THREE.Matrix3();
+  scene.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    const src = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry;
+    const p = src.getAttribute('position');
+    if (!p) {
+      if (src !== o.geometry) src.dispose();
+      return;
+    }
+    const key = (o.material && o.material.name) || 'default';
+    if (!buckets.has(key)) buckets.set(key, { pos: [], nor: [] });
+    const b = buckets.get(key);
+    const n = src.getAttribute('normal');
+    nrmMat.getNormalMatrix(o.matrixWorld);
+    for (let i = 0; i < p.count; i++) {
+      v.set(p.getX(i), p.getY(i), p.getZ(i)).applyMatrix4(o.matrixWorld);
+      b.pos.push(v.x, v.y, v.z);
+      if (n) {
+        nrm.set(n.getX(i), n.getY(i), n.getZ(i)).applyMatrix3(nrmMat).normalize();
+        b.nor.push(nrm.x, nrm.y, nrm.z);
+      } else b.nor.push(0, 1, 0);
+    }
+    if (src !== o.geometry) src.dispose();
+  });
+  const out = [];
+  buckets.forEach((b, name) => {
+    if (!b.pos.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(b.nor, 3));
+    out.push({ name, geo });
+  });
+  return out;
+}
+
+const partsCache = new Map();
+
+function fitParts(THREE, parts, opts) {
+  if (!parts || !parts.length) return [];
+  const box = new THREE.Box3();
+  const size = new THREE.Vector3();
+  for (const p of parts) {
+    if (!p.geo) continue;
+    p.geo.computeBoundingBox();
+    box.union(p.geo.boundingBox);
+  }
+  if (box.isEmpty()) return [];
+  box.getSize(size);
+  if (opts.forward === 'z' || (opts.autoForward && size.z > size.x * 1.08)) {
+    for (const p of parts) if (p.geo) p.geo.rotateY(Math.PI / 2);
+    box.makeEmpty();
+    for (const p of parts) {
+      if (!p.geo) continue;
+      p.geo.computeBoundingBox();
+      box.union(p.geo.boundingBox);
+    }
+    box.getSize(size);
+  }
+  let s = 1;
+  if (opts.length) s = opts.length / Math.max(size.x, 0.05);
+  else if (opts.height) s = opts.height / Math.max(size.y, 0.05);
+  else if (opts.width) s = opts.width / Math.max(size.x, 0.05);
+  const cx = 0.5 * (box.min.x + box.max.x);
+  const cz = 0.5 * (box.min.z + box.max.z);
+  const y0 = box.min.y;
+  const out = [];
+  for (const p of parts) {
+    if (!p.geo) continue;
+    p.geo.scale(s, s, s);
+    p.geo.translate(-cx * s, -y0 * s, -cz * s);
+    p.geo.computeVertexNormals();
+    p.geo.computeBoundingSphere();
+    out.push(p);
+  }
+  return out;
+}
+
+async function partsFor(THREE, loader, entry, root) {
+  const url = (root || BACKYARD_ROOT) + entry.file + '#parts';
+  if (partsCache.has(url)) return partsCache.get(url);
+  const gltf = await loadGltf(loader, (root || BACKYARD_ROOT) + entry.file);
+  const fitted = fitParts(THREE, mergeByMaterial(THREE, gltf.scene), entry);
+  partsCache.set(url, fitted);
+  return fitted;
+}
+
+async function instanceParts(THREE, kitGroup, loader, spec, list, matFor, place, root) {
+  if (!list || !list.length || !spec) return 0;
+  const parts = await partsFor(THREE, loader, spec, root);
+  if (!parts.length) {
+    const fallback = backyardMat(THREE, 'tree');
+    return instanceProp(THREE, kitGroup, loader, spec, list, fallback, place, root);
+  }
+  let any = 0;
+  for (const part of parts) {
+    const mesh = addInstanced(THREE, kitGroup, part.geo, matFor(part.name), list.length, place);
+    if (mesh) any = spec.bytes;
+  }
+  return any;
 }
 
 async function instanceProp(THREE, kitGroup, loader, spec, list, mat, place, root) {
@@ -832,6 +950,184 @@ export async function tryDressLivingKit(THREE, ctx) {
     }
     if (gen !== livingDressGen) return { used: false, stale: true, bytes: 0 };
     if (!kitGroup.children.length) return { used: false, bytes: 0 };
+    group.add(kitGroup);
+    return { used: true, bytes, quality };
+  } catch (err) {
+    try { if (kitGroup.parent) kitGroup.parent.remove(kitGroup); } catch (e) { /* ignore */ }
+    return { used: false, bytes: 0, error: String(err && err.message || err) };
+  }
+}
+
+const BACKYARD_ROOT = 'assets/sim-backyard/';
+
+export const BACKYARD_KIT_CORE = Object.freeze({
+  tree: { file: 'tree.glb', bytes: 5328, height: 1, minSize: 0.12 },
+  palm: { file: 'palm.glb', bytes: 8192, height: 1, minSize: 0.12 },
+  fence: { file: 'fence.glb', bytes: 2396, height: 1, minSize: 0.08 },
+  pot: { file: 'pot.glb', bytes: 3696, height: 1, minSize: 0.08 },
+});
+
+export const BACKYARD_KIT_EXTRA = Object.freeze({
+  treeLeafy: { file: 'tree-leafy.glb', bytes: 9624, height: 1, minSize: 0.12 },
+  palmShort: { file: 'palm-short.glb', bytes: 8216, height: 1, minSize: 0.12 },
+  bush: { file: 'bush.glb', bytes: 3644, height: 1, minSize: 0.08 },
+  shrub: { file: 'shrub.glb', bytes: 2928, height: 1, minSize: 0.08 },
+  gate: { file: 'gate.glb', bytes: 10016, height: 1, minSize: 0.12 },
+  woodGate: { file: 'wood-gate.glb', bytes: 2812, height: 1, minSize: 0.08 },
+  cactus: { file: 'cactus.glb', bytes: 3496, height: 1, minSize: 0.08 },
+  sofa: { file: 'sofa.glb', bytes: 4388, height: 1, minSize: 0.12 },
+  chair: { file: 'chair.glb', bytes: 6104, height: 1, minSize: 0.12 },
+  table: { file: 'table.glb', bytes: 2984, height: 1, minSize: 0.08 },
+  ac: { file: 'ac.glb', bytes: 7884, height: 1, minSize: 0.12 },
+});
+
+const BACKYARD_CORE_BYTES = Object.values(BACKYARD_KIT_CORE).reduce((n, e) => n + e.bytes, 0);
+const BACKYARD_EXTRA_BYTES = Object.values(BACKYARD_KIT_EXTRA).reduce((n, e) => n + e.bytes, 0);
+
+export function backyardKitBytesForQuality(quality) {
+  return quality === 'low' ? BACKYARD_CORE_BYTES : BACKYARD_CORE_BYTES + BACKYARD_EXTRA_BYTES;
+}
+
+function backyardMat(THREE, kind, partName) {
+  const n = String(partName || kind || '').toLowerCase();
+  let color = 0x3f8a3a;
+  if (n.includes('leaf') || n.includes('frond') || n.includes('palm') && n.includes('green')) color = 0x3a8f32;
+  else if (n.includes('wood') || n.includes('bark') || n.includes('trunk')) color = 0x6a4a28;
+  else if (n.includes('fence') || n.includes('metal') || n.includes('ac')) color = 0x3a4248;
+  else if (n.includes('pot') || n.includes('tile') || n.includes('red')) color = 0xc45a32;
+  else if (n.includes('sofa') || n.includes('chair') || n.includes('cushion')) color = 0xc4a06a;
+  else if (n.includes('cactus')) color = 0x3a7a3a;
+  else if (kind === 'fence' || kind === 'ac') color = 0x3a4248;
+  else if (kind === 'pot') color = 0xc45a32;
+  else if (kind === 'sofa' || kind === 'chair') color = 0xc4a06a;
+  else if (kind === 'woodGate' || kind === 'gate') color = 0x6a4a28;
+  else if (kind === 'palm' || kind === 'tree' || kind === 'bush' || kind === 'cactus') color = 0x3a8f32;
+  // MeshBasic: Kenney nature is unlit vertex/material paint. MeshStandard + IBL
+  // is what turned the merged canopy black after first paint.
+  return skipMat(new THREE.MeshBasicMaterial({
+    color,
+    transparent: false,
+    opacity: 1,
+  }));
+}
+
+function placeScaled(list) {
+  return (d, i) => {
+    const p = list[i];
+    if (!p) return false;
+    d.position.set(p.x, p.y || 0, p.z);
+    d.rotation.set(0, p.ry || 0, 0);
+    const s = p.s == null ? 1 : p.s;
+    d.scale.set(p.sx == null ? s : p.sx, p.sy == null ? s : p.sy, p.sz == null ? s : p.sz);
+  };
+}
+
+export function planBackyardKitFromPlay(play) {
+  const P = play || BACKYARD_PLAY;
+  const rim = [
+    [-22.4, -18.2, 8.6], [22.6, -17.8, 8.4], [-20.8, 18.6, 8.2], [20.4, 17.4, 8.0],
+    [-6.4, -19.6, 7.6], [8.2, -19.8, 7.4], [22.8, -4.2, 8.0], [-22.6, -3.6, 7.8],
+  ];
+  const fence = [];
+  const fn = P.fence;
+  for (let z = fn.z0; z <= fn.z1 + 0.05; z += fn.spacing) {
+    fence.push({ x: fn.x, z, ry: Math.PI / 2, s: fn.h });
+  }
+  return {
+    trees: [{ x: P.ficus.x, z: P.ficus.z, s: P.ficus.h }].concat(
+      rim.map((r) => ({ x: r[0], z: r[1], s: r[2] })),
+    ),
+    palms: P.palms.map((p) => ({ x: p.x, z: p.z, s: p.h })),
+    fence,
+    pots: P.pots.concat(P.patioPlanters).map((p) => ({ x: p.x, z: p.z, s: p.h })),
+    woodGate: [{ x: P.woodGate.x, z: P.woodGate.z, s: P.woodGate.h }],
+    ac: [{ x: P.ac.x, z: P.ac.z, s: P.ac.h }],
+    sofa: [{ x: P.sofa.x, z: P.sofa.z, s: P.sofa.backH, ry: Math.PI }],
+    bushes: [
+      { x: -12.2, z: -12.8, s: 1.4 }, { x: 10.4, z: -14.6, s: 1.2 },
+      { x: 6.8, z: 2.2, s: 1.1 }, { x: -6.4, z: 2.6, s: 1.15 },
+    ],
+    cactus: P.pots.slice(0, 2).map((p) => ({ x: p.x, z: p.z, s: p.h + 0.55 })),
+  };
+}
+
+let backyardDressGen = 0;
+
+export async function tryDressBackyardKit(THREE, ctx) {
+  const group = ctx && ctx.group;
+  const loader = ctx && ctx.loader;
+  const vibe = ctx && ctx.vibe;
+  const quality = (ctx && ctx.quality) || 'med';
+  if (!THREE || !group || !loader || !vibe) return { used: false, bytes: 0 };
+  const gen = ++backyardDressGen;
+  const old = group.getObjectByName('backyardArtKit');
+  if (old && old.parent) old.parent.remove(old);
+  const kitGroup = new THREE.Group();
+  kitGroup.name = 'backyardArtKit';
+  const planned = (group.userData && group.userData.planned)
+    || planBackyardKitFromPlay(BACKYARD_PLAY);
+  const wantExtra = quality === 'med' || quality === 'high';
+  const hideKeys = [];
+  let bytes = 0;
+  const root = BACKYARD_ROOT;
+  try {
+    const one = async (spec, list, kind, hide) => {
+      if (!list || !list.length || !spec) return 0;
+      const n = await instanceParts(
+        THREE, kitGroup, loader, spec, list,
+        (partName) => backyardMat(THREE, kind, partName),
+        placeScaled(list), root,
+      );
+      if (n && hide) hideKeys.push(hide);
+      return n;
+    };
+    // Kenney Nature trees/palms read as lollipops in FPV. Keep the
+    // procedural leaf-card ficus and frond palms; kit only dresses hardscape.
+    try {
+      const n = await one(BACKYARD_KIT_CORE.fence, planned.fence, 'fence', 'backyardProcFence');
+      if (gen !== backyardDressGen) return { used: false, stale: true, bytes: 0 };
+      bytes += n;
+    } catch (e) { /* keep proc fence */ }
+    try {
+      const pots = (planned.pots || []).slice(0, quality === 'low' ? 4 : 8);
+      const n = await one(BACKYARD_KIT_CORE.pot, pots, 'pot', 'backyardProcPot');
+      if (gen !== backyardDressGen) return { used: false, stale: true, bytes: 0 };
+      bytes += n;
+    } catch (e) { /* keep proc pots */ }
+
+    if (wantExtra) {
+      try {
+        const n = await one(BACKYARD_KIT_EXTRA.woodGate, planned.woodGate, 'woodGate', 'backyardProcGate');
+        if (gen !== backyardDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* keep */ }
+      try {
+        const n = await one(BACKYARD_KIT_EXTRA.ac, planned.ac, 'ac', 'backyardProcAc');
+        if (gen !== backyardDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* keep */ }
+      try {
+        const n = await one(BACKYARD_KIT_EXTRA.sofa, planned.sofa, 'sofa', 'backyardProcPatio');
+        if (gen !== backyardDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* keep */ }
+      try {
+        const n = await one(BACKYARD_KIT_EXTRA.bush, planned.bushes, 'bush', 'backyardProcShrub');
+        if (gen !== backyardDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+      try {
+        const n = await one(BACKYARD_KIT_EXTRA.cactus, planned.cactus, 'cactus', null);
+        if (gen !== backyardDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+    }
+
+    if (gen !== backyardDressGen) return { used: false, stale: true, bytes: 0 };
+    if (!kitGroup.children.length) return { used: false, bytes: 0 };
+    hideKeys.push('backyardProcSky', 'backyardProcCanopy', 'backyardProcCoping');
+    for (const key of hideKeys) hideTagged(group, key);
+    kitGroup.userData.backyardArt = true;
     group.add(kitGroup);
     return { used: true, bytes, quality };
   } catch (err) {

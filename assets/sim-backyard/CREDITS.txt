@@ -1,0 +1,66 @@
+Ryan's Yard — CC0 glTF / HDRI / PBR kit
+
+Nothing here is from WebFPV. Procedural Ryan's Yard stays the fallback
+if a GLB or HDRI fails to load.
+
+All shipped files are Creative Commons Zero (CC0 1.0):
+  https://creativecommons.org/publicdomain/zero/1.0/
+
+------------------------------------------------------------------------------
+Kenney Nature Kit 2.1  —  https://kenney.nl/assets/nature-kit
+License-nature-kit.txt (copied from the zip)
+  tree.glb          tree_oak
+  tree-leafy.glb    tree_detailed
+  palm.glb          tree_palmDetailedTall
+  palm-short.glb    tree_palmDetailedShort
+  bush.glb          plant_bushDetailed
+  shrub.glb         plant_bushLarge
+  fence.glb         fence_simpleHigh
+  gate.glb          fence_gate
+  wood-gate.glb     fence_planks
+  pot.glb           pot_large
+  cactus.glb        cactus_tall
+
+Kenney Furniture Kit 2.0  —  https://kenney.nl/assets/furniture-kit
+License-furniture-kit.txt (copied from the zip)
+  sofa.glb          loungeSofa
+  chair.glb         loungeChairRelax
+  table.glb         tableCoffee
+  ac.glb            dryer  (appliance stand-in for the yard AC)
+
+Kenney Pirate Kit 2.1  —  https://kenney.nl/assets/pirate-kit
+License-pirate-kit.txt (copied from the zip; pack kept for license completeness;
+palm meshes used above are from Nature Kit)
+
+Support Kenney: https://kenney.nl/donate  (credit is not required)
+
+------------------------------------------------------------------------------
+Poly Haven  —  https://polyhaven.com    CC0 1.0
+  hdri/kloofendal_48d_partly_cloudy_1k.hdr
+      https://polyhaven.com/a/kloofendal_48d_partly_cloudy
+      Sunny afternoon, fluffy clouds. 1k only (Low/Med/High).
+  tex/roof_diff_1k.webp  tex/roof_nor_1k.webp  tex/roof_rough_1k.webp
+  tex/roof_diff_512.webp
+      roof_09  https://polyhaven.com/a/roof_09
+  tex/plaster_diff_1k.webp  tex/plaster_nor_1k.webp  tex/plaster_rough_1k.webp
+  tex/plaster_diff_512.webp
+      plastered_wall  https://polyhaven.com/a/plastered_wall
+
+Existing shared PBR (assets/sim-looks/tex, already in-tree, Poly Haven CC0):
+  grass_*_1k.webp   aerial grass
+  concrete_*_1k.webp
+  facade_*_1k.webp  stucco / plaster stand-in
+
+------------------------------------------------------------------------------
+Optimization
+  GLBs: meshopt + mesh quantization via glTF-Transform 4.x
+  Textures: 1k WebP (High/Med), 512 WebP albedo on Low
+  LODs: Low fetches fence + pot only (Kenney trees/palms stay catalog-only;
+        hero veg is procedural frond palms + leaf-card ficus so they do not
+        read as lollipops)
+  Instancing: fence posts, pots, bushes, sofa, AC
+  Lazy-load: sim.html queues tryDressBackyardKit after first paint
+
+Payload (folder, not counting shared looks textures):
+  High / Med  ~2.5 MB  (HDRI 1.6 + tex 0.77 + GLB 0.08)
+  Low         ~1.7 MB  (HDRI 1.6 + core GLB 0.02 + 512 albedo)

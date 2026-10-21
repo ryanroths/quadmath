@@ -71,6 +71,20 @@ FIRST_PARTY_ASSETS = (
     "nav.js",
 )
 
+# Kit / look folders. Stamps hash JS/HTML only; these dirs must exist so a
+# deploy that drops a new kit (city, backyard, …) fails --check instead of
+# shipping a page that 404s the GLBs.
+REQUIRED_ASSET_FOLDERS = (
+    "assets/sim-city",
+    "assets/sim-garage",
+    "assets/sim-warehouse",
+    "assets/sim-office",
+    "assets/sim-gym",
+    "assets/sim-living",
+    "assets/sim-backyard",
+    "assets/sim-looks",
+)
+
 HASH_LEN = 12
 # .claude holds Claude Code worktrees: full checkouts of other branches whose
 # pages must never be stamped or checked against this tree.
@@ -269,6 +283,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     root = os.path.abspath(os.path.expanduser(args.root))
+
+    missing_folders = [
+        folder for folder in REQUIRED_ASSET_FOLDERS
+        if not os.path.isdir(os.path.join(root, folder.replace("/", os.sep)))
+    ]
+    if missing_folders:
+        sys.stderr.write("missing required asset folders:\n")
+        for folder in missing_folders:
+            sys.stderr.write("  %s\n" % folder)
+        return 1
 
     if args.check:
         stale = check_tree(root)

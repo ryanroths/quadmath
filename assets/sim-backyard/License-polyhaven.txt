@@ -1,0 +1,8 @@
+Poly Haven HDRI and PBR textures shipped in this folder.
+
+License: Creative Commons Zero, CC0 1.0
+https://creativecommons.org/publicdomain/zero/1.0/
+
+https://polyhaven.com/a/kloofendal_48d_partly_cloudy
+https://polyhaven.com/a/roof_09
+https://polyhaven.com/a/plastered_wall

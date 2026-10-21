@@ -113,6 +113,7 @@ export const LOOK_SPOTS = {
 const ASSET = 'assets/sim-looks';
 const HDRI_1K = `${ASSET}/hdri/kiara_1_dawn_1k.hdr`;
 const HDRI_2K = `${ASSET}/hdri/kiara_1_dawn_2k.hdr`;
+const HDRI_YARD_1K = 'assets/sim-backyard/hdri/kloofendal_48d_partly_cloudy_1k.hdr';
 
 export function phoneLookOverrides(mobile, preset, dpr) {
   const p = Object.assign({}, preset || PRESETS.med);
@@ -403,7 +404,7 @@ export async function createLooks(ctx) {
   let skyMesh = null, sunSprite = null, groundMesh = null;
   let composer = null, bloomPass = null, aoPass = null, fpvPass = null, motionPass = null;
   let skyMode = 'hdri';
-  let env1k = null, env2k = null, envLevel = null;
+  let env1k = null, env2k = null, envYard = null, envLevel = null;
   let texCache = {};
   let maxAniso = 8;
   try { maxAniso = renderer.capabilities.getMaxAnisotropy() || 8; } catch (e) { /* ignore */ }
@@ -434,7 +435,8 @@ export async function createLooks(ctx) {
     const gradeOn = qualityWantsPost();
     fpvPass.enabled = on || gradeOn;
     const analog = on && fpv.style === 'analog';
-    fpvPass.uniforms.barrel.value = on ? (analog ? 0.18 : 0.12) : 0;
+    const yard = mapLighting && mapLighting.mapId === 'backyard';
+    fpvPass.uniforms.barrel.value = on ? (yard ? 0 : analog ? 0.18 : 0.12) : 0;
     const mapV = (fpvPass.uniforms.mapVignette && fpvPass.uniforms.mapVignette.value) || 0;
     fpvPass.uniforms.vignette.value = analog ? 0.58 : (on ? (mapV > 0.01 ? mapV : 0.36) : 0);
     fpvPass.uniforms.ca.value = on ? (analog ? 0.006 : 0.0022) : 0;
@@ -643,12 +645,15 @@ export async function createLooks(ctx) {
     }
     scene.environment = env;
     scene.background = env;
-    if ('environmentIntensity' in scene) scene.environmentIntensity = 0.72;
-    if ('backgroundIntensity' in scene) scene.backgroundIntensity = 0.48;
-    if ('backgroundBlurriness' in scene) scene.backgroundBlurriness = 0.08;
+    const yard = mapLighting && mapLighting.mapId === 'backyard';
+    if ('environmentIntensity' in scene) scene.environmentIntensity = yard ? 0.62 : 0.72;
+    if ('backgroundIntensity' in scene) scene.backgroundIntensity = yard ? 0.88 : 0.48;
+    if ('backgroundBlurriness' in scene) scene.backgroundBlurriness = yard ? 0.02 : 0.08;
     // Align Poly Haven kiara_1_dawn sun with the existing key-light vector.
-    if (scene.environmentRotation) scene.environmentRotation.set(0, 3.55, 0);
-    if (scene.backgroundRotation) scene.backgroundRotation.set(0, 3.55, 0);
+    // kloofendal_48d afternoon sun sits near +X; a small yaw keeps the key light honest.
+    const yaw = yard ? 0.85 : 3.55;
+    if (scene.environmentRotation) scene.environmentRotation.set(0, yaw, 0);
+    if (scene.backgroundRotation) scene.backgroundRotation.set(0, yaw, 0);
     if (skyMesh) skyMesh.visible = false;
     if (sunSprite) sunSprite.visible = false;
     scene.fog.color.setHex(LIGHTING.fogColor);
@@ -662,6 +667,17 @@ export async function createLooks(ctx) {
   }
 
   async function ensureHdr(level) {
+    const yard = mapLighting && mapLighting.mapId === 'backyard';
+    if (yard) {
+      if (envLevel === 'yard-1k' && envYard) {
+        applyEnv(envYard);
+        return;
+      }
+      if (!envYard) envYard = await loadHdr(HDRI_YARD_1K);
+      applyEnv(envYard);
+      envLevel = 'yard-1k';
+      return;
+    }
     if (envLevel === level) return;
     if (level === '2k') {
       try {
@@ -970,7 +986,16 @@ export async function createLooks(ctx) {
     skyMode = spec.sky === 'gradient' ? 'gradient' : 'hdri';
     applyMapLooksNow();
     if (skyMode === 'gradient') applySkyModeNow();
-    else if (envLevel === '2k' && env2k) applyEnv(env2k);
+    else if (spec.mapId === 'backyard') {
+      // Do not flash the shared dawn HDRI — that reads as a flat grey sky.
+      if (envYard) applyEnv(envYard);
+      else {
+        ensureHdr('yard-1k').catch((e) => {
+          console.warn('looks yard HDRI', e);
+          if (env1k) applyEnv(env1k);
+        });
+      }
+    } else if (envLevel === '2k' && env2k) applyEnv(env2k);
     else if (env1k) applyEnv(env1k);
     return mapLighting;
   }
