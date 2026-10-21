@@ -1,10 +1,10 @@
-// Ryan's Yard — Felt Scale Phoenix backyard. Visual only.
-// Colliders live in sim-maps.js BACKYARD_PLAY. No faces, no clutter.
-// Nothing from the GPL whoop sim.
+// Ryan's Yard — semi-realistic Phoenix backyard (Liftoff / Uncrashed bar).
+// Visual only. Colliders live in sim-maps.js BACKYARD_PLAY.
+// Generated / CC0 tiling textures. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=9a1038ea2564';
+import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=c9b36c5911c1';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=634e469a7282';
+import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=7a5d35835511';
 
 export const BACKYARD_STOCK = Object.freeze({
   turf: 0x3f8a4a,
@@ -37,19 +37,41 @@ export function backyardBudget(applied) {
   if (applied === 'low') {
     return {
       pots: 4, palms: 3, neighbors: 2, stones: 6, glow: false,
-      leaves: 4, fenceMesh: true, tufts: 10, pavers: 12, seams: true,
+      leaves: 28, fenceMesh: true, tufts: 8, pavers: 8, seams: true,
+      grass: 80, fronds: 18, caustics: false, shadowCasters: false, skyRes: 256,
     };
   }
   if (applied === 'high') {
     return {
       pots: 8, palms: 3, neighbors: 4, stones: 10, glow: true,
-      leaves: 8, fenceMesh: true, tufts: 22, pavers: 20, seams: true,
+      leaves: 80, fenceMesh: true, tufts: 16, pavers: 16, seams: true,
+      grass: 420, fronds: 48, caustics: true, shadowCasters: true, skyRes: 512,
     };
   }
   return {
     pots: 6, palms: 3, neighbors: 3, stones: 8, glow: true,
-    leaves: 6, fenceMesh: true, tufts: 16, pavers: 16, seams: true,
+    leaves: 56, fenceMesh: true, tufts: 12, pavers: 12, seams: true,
+    grass: 180, fronds: 32, caustics: true, shadowCasters: true, skyRes: 384,
   };
+}
+
+function lockArt(m, extra) {
+  if (!m) return m;
+  if (!m.userData) m.userData = {};
+  m.userData.artLocked = true;
+  m.userData.feltLocked = true;
+  if (extra) Object.assign(m.userData, extra);
+  return m;
+}
+
+function heroMat(THREE, hex, extras) {
+  const m = new THREE.MeshStandardMaterial(Object.assign({
+    color: hex,
+    roughness: 0.72,
+    metalness: 0.02,
+    envMapIntensity: 0.45,
+  }, extras || {}));
+  return lockArt(m);
 }
 
 function skipMat(m) {
@@ -71,99 +93,101 @@ function fillGrad(g, x0, y0, x1, y1, stops) {
   g.fillStyle = gr;
 }
 
-function canvasTex(THREE, w, h, paint, rx, ry) {
+function canvasTex(THREE, w, h, paint, rx, ry, opts) {
   const cv = document.createElement('canvas');
   cv.width = w;
   cv.height = h;
   const g = cv.getContext('2d');
   try { paint(g, w, h); } catch (e) {
-    if (g) { g.fillStyle = '#c4a882'; g.fillRect(0, 0, w, h); }
+    if (g) { g.fillStyle = '#3f8a4a'; g.fillRect(0, 0, w, h); }
   }
   const t = new THREE.CanvasTexture(cv);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.wrapS = t.wrapT = (opts && opts.clamp) ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
   t.repeat.set(rx == null ? 1 : rx, ry == null ? 1 : ry);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.generateMipmaps = false;
-  t.minFilter = THREE.LinearFilter;
+  t.generateMipmaps = !(opts && opts.noMip);
+  t.minFilter = t.generateMipmaps ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
+  t.magFilter = THREE.LinearFilter;
   t.userData.looksComposed = true;
   t.userData.artLocked = true;
   t.needsUpdate = true;
   return t;
 }
 
-function stitchGrid(g, w, h, color, step) {
-  g.strokeStyle = color;
-  g.lineWidth = 1;
-  g.setLineDash([3, 5]);
-  for (let x = 0; x < w; x += step) {
-    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke();
-  }
-  for (let y = 0; y < h; y += step) {
-    g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
-  }
-  g.setLineDash([]);
+function hash(i) {
+  const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
 }
 
 function turfTex(THREE) {
-  return canvasTex(THREE, 128, 128, (g, w, h) => {
-    fillGrad(g, 0, 0, w, h, [[0, '#2f6e3a'], [0.5, '#3f8a4a'], [1, '#2a6234']]);
+  return canvasTex(THREE, 256, 256, (g, w, h) => {
+    g.fillStyle = '#2f7a38';
     g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 140; i++) {
-      g.fillStyle = i % 3 ? 'rgba(20,70,28,0.22)' : 'rgba(180,210,90,0.16)';
-      const x = (i * 17) % w, y = (i * 29) % h;
-      g.beginPath();
-      g.moveTo(x, y + 9);
-      g.quadraticCurveTo(x + 1.5, y + 3, x + 0.4, y);
-      g.quadraticCurveTo(x + 3, y + 4, x + 2.4, y + 9);
-      g.fill();
+    for (let y = 0; y < h; y++) {
+      const stripe = ((y / 18) | 0) % 2;
+      const tone = stripe ? 0.10 : -0.07;
+      g.fillStyle = `rgba(${stripe ? 210 : 10},${stripe ? 230 : 40},${stripe ? 90 : 20},${0.10 + Math.abs(tone) * 0.35})`;
+      g.fillRect(0, y, w, 1);
     }
-    stitchGrid(g, w, h, 'rgba(40,90,48,0.18)', 32);
-  }, 8, 8);
+    for (let i = 0; i < 900; i++) {
+      const u = hash(i), v = hash(i + 19);
+      const warm = hash(i + 41) > 0.62;
+      g.fillStyle = warm
+        ? `rgba(196,214,72,${0.10 + hash(i + 7) * 0.16})`
+        : `rgba(18,78,28,${0.12 + hash(i + 3) * 0.22})`;
+      const x = u * w, y = v * h;
+      g.fillRect(x, y, 1.4, 3.2 + hash(i + 11) * 4);
+    }
+  }, 10, 10);
 }
 
 function pebbleTex(THREE) {
-  return canvasTex(THREE, 128, 128, (g, w, h) => {
-    fillGrad(g, 0, 0, w, h, [[0, '#c2b39a'], [1, '#b6a488']]);
+  return canvasTex(THREE, 256, 256, (g, w, h) => {
+    fillGrad(g, 0, 0, w, h, [[0, '#c8b79a'], [1, '#b4a280']]);
     g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 90; i++) {
-      g.fillStyle = `rgba(${160 + (i % 40)},${140 + (i % 30)},${110},0.30)`;
+    for (let i = 0; i < 280; i++) {
+      const u = hash(i), v = hash(i + 23);
+      g.fillStyle = `rgba(${150 + (i % 50)},${132 + (i % 36)},${100 + (i % 20)},0.34)`;
       g.beginPath();
-      g.arc((i * 23) % w, (i * 41) % h, 3 + (i % 4), 0, 6.3);
+      g.ellipse(u * w, v * h, 2 + (i % 5), 1.4 + (i % 4), u * 3, 0, 6.3);
       g.fill();
     }
-    stitchGrid(g, w, h, 'rgba(90,70,50,0.14)', 32);
-  }, 6, 6);
+  }, 7, 7);
 }
 
 function paverTex(THREE) {
-  return canvasTex(THREE, 64, 64, (g, w, h) => {
-    g.fillStyle = '#b8a488';
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    g.fillStyle = '#8e7a62';
     g.fillRect(0, 0, w, h);
-    g.fillStyle = '#c8b49a';
-    g.fillRect(2, 2, 28, 28);
-    g.fillRect(34, 34, 28, 28);
-    g.fillStyle = '#a89878';
-    g.fillRect(34, 2, 28, 28);
-    g.fillRect(2, 34, 28, 28);
-    stitchGrid(g, w, h, 'rgba(80,60,40,0.22)', 32);
-  }, 4, 4);
+    const cells = [[2, 2, '#c8b49a'], [66, 2, '#b4a080'], [2, 66, '#a89878'], [66, 66, '#c0ae90']];
+    for (const c of cells) {
+      g.fillStyle = c[2];
+      g.fillRect(c[0], c[1], 60, 60);
+      g.fillStyle = 'rgba(255,236,210,0.16)';
+      g.fillRect(c[0] + 3, c[1] + 3, 22, 10);
+    }
+  }, 5, 5);
 }
 
 function stuccoTex(THREE) {
-  return canvasTex(THREE, 128, 128, (g, w, h) => {
-    fillGrad(g, 0, 0, 0, h, [[0, '#d8be98'], [0.55, '#c4a882'], [1, '#b89870']]);
+  return canvasTex(THREE, 256, 256, (g, w, h) => {
+    fillGrad(g, 0, 0, 0, h, [[0, '#e8d2aa'], [0.55, '#c8a878'], [1, '#9a7a52']]);
     g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 110; i++) {
-      g.fillStyle = i % 2 ? 'rgba(150,120,80,0.12)' : 'rgba(220,190,150,0.10)';
-      g.fillRect((i * 13) % w, (i * 19) % h, 4, 3);
+    for (let i = 0; i < 620; i++) {
+      g.fillStyle = hash(i) > 0.5 ? 'rgba(110,80,40,0.22)' : 'rgba(250,230,190,0.20)';
+      g.fillRect(hash(i + 2) * w, hash(i + 5) * h, 5 + (i % 6), 3 + (i % 4));
     }
-    stitchGrid(g, w, h, 'rgba(120,90,60,0.16)', 32);
+    g.strokeStyle = 'rgba(90,70,40,0.18)';
+    g.lineWidth = 2;
+    for (let y = 0; y < h; y += 32) {
+      g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
+    }
   }, 4, 4);
 }
 
 function tileTex(THREE) {
-  return canvasTex(THREE, 64, 64, (g, w, h) => {
-    g.fillStyle = '#8a3418';
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    g.fillStyle = '#7a2e14';
     g.fillRect(0, 0, w, h);
     for (let y = 0; y < h; y += 8) {
       const ox = (y % 16) ? 8 : 0;
@@ -172,70 +196,216 @@ function tileTex(THREE) {
         g.beginPath();
         g.ellipse(x + ox + 8, y + 4, 7, 3.4, 0, 0, 6.3);
         g.fill();
-        g.fillStyle = '#d46a40';
+        g.fillStyle = '#e07848';
         g.beginPath();
         g.ellipse(x + ox + 6, y + 3, 3.2, 1.4, 0, 0, 6.3);
         g.fill();
-        g.fillStyle = '#a84624';
-        g.fillRect(x + ox, y + 6, 16, 1);
       }
     }
   }, 12, 8);
 }
 
 function woodTex(THREE) {
-  return canvasTex(THREE, 64, 64, (g, w, h) => {
-    fillGrad(g, 0, 0, w, 0, [[0, '#7a5a38'], [0.5, '#6a4e32'], [1, '#5a3e28']]);
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    fillGrad(g, 0, 0, w, 0, [[0, '#8a6238'], [0.5, '#6a4e32'], [1, '#4e361e']]);
     g.fillRect(0, 0, w, h);
-    g.strokeStyle = 'rgba(40,24,12,0.22)';
+    g.strokeStyle = 'rgba(40,24,12,0.28)';
     g.lineWidth = 1;
     for (let x = 4; x < w; x += 8) {
       g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 2, h); g.stroke();
     }
-    stitchGrid(g, w, h, 'rgba(40,24,12,0.20)', 16);
+    for (let i = 0; i < 40; i++) {
+      g.strokeStyle = `rgba(90,50,20,${0.08 + hash(i) * 0.12})`;
+      g.beginPath();
+      g.moveTo(hash(i) * w, 0);
+      g.bezierCurveTo(hash(i + 1) * w, 40, hash(i + 2) * w, 80, hash(i + 3) * w, h);
+      g.stroke();
+    }
   }, 2, 4);
 }
 
 function meshTex(THREE) {
   return canvasTex(THREE, 64, 64, (g, w, h) => {
-    g.fillStyle = '#3a4048';
+    g.fillStyle = '#2a3036';
     g.fillRect(0, 0, w, h);
-    g.strokeStyle = '#1a1c20';
+    g.strokeStyle = '#121416';
     g.lineWidth = 2;
     for (let y = -8; y < h + 8; y += 10) {
       g.beginPath(); g.moveTo(0, y); g.lineTo(w, y + 18); g.stroke();
       g.beginPath(); g.moveTo(0, y + 18); g.lineTo(w, y); g.stroke();
     }
-    stitchGrid(g, w, h, 'rgba(220,210,190,0.16)', 16);
   }, 4, 8);
 }
 
 function waterTex(THREE) {
-  return canvasTex(THREE, 128, 128, (g, w, h) => {
-    fillGrad(g, 0, 0, w, h, [[0, '#1fa8a0'], [0.5, '#2ec4b6'], [1, '#188f88']]);
+  return canvasTex(THREE, 256, 256, (g, w, h) => {
+    fillGrad(g, 0, 0, w, h, [[0, '#0e6e8a'], [0.45, '#1aa0b8'], [1, '#0a4e68']]);
     g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 40; i++) {
-      g.strokeStyle = `rgba(230,255,250,${0.08 + (i % 4) * 0.04})`;
+    for (let i = 0; i < 70; i++) {
+      g.strokeStyle = `rgba(230,255,250,${0.06 + (i % 5) * 0.04})`;
       g.beginPath();
-      g.arc((i * 19) % w, (i * 31) % h, 6 + (i % 5), 0.2, 2.4);
+      g.arc(hash(i) * w, hash(i + 9) * h, 8 + (i % 10), 0.2, 2.6);
       g.stroke();
     }
+    g.fillStyle = 'rgba(180,230,255,0.10)';
+    g.fillRect(0, 0, w, 40);
   }, 3, 3);
 }
 
-function afternoonSkyTex(THREE) {
+function causticTex(THREE) {
   return canvasTex(THREE, 256, 256, (g, w, h) => {
-    fillGrad(g, 0, 0, 0, h, [
-      [0, '#8eb4c8'], [0.45, '#c8d6c4'], [0.72, '#e8c9a0'], [1, '#d4b48a'],
-    ]);
-    g.fillRect(0, 0, w, h);
-    g.fillStyle = 'rgba(255,255,255,0.18)';
-    for (const [x, y, r] of [[40, 50, 28], [120, 36, 36], [200, 58, 24]]) {
+    g.fillStyle = 'rgba(0,0,0,0)';
+    g.clearRect(0, 0, w, h);
+    for (let i = 0; i < 90; i++) {
+      g.strokeStyle = `rgba(210,255,240,${0.10 + hash(i) * 0.22})`;
+      g.lineWidth = 1.2 + (i % 3);
       g.beginPath();
-      g.arc(x, y, r, 0, 6.3);
+      const x = hash(i) * w, y = hash(i + 13) * h;
+      g.moveTo(x, y);
+      g.quadraticCurveTo(x + 18, y - 10, x + 36, y + 4);
+      g.quadraticCurveTo(x + 52, y + 16, x + 22, y + 20);
+      g.stroke();
+    }
+  }, 2, 2);
+}
+
+function poolTileTex(THREE) {
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    g.fillStyle = '#147a8c';
+    g.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 16) {
+      for (let x = 0; x < w; x += 16) {
+        g.fillStyle = (x + y) % 32 ? '#1a8fa0' : '#0e6a7a';
+        g.fillRect(x + 1, y + 1, 14, 14);
+        g.fillStyle = 'rgba(220,255,255,0.12)';
+        g.fillRect(x + 2, y + 2, 6, 3);
+      }
+    }
+  }, 8, 6);
+}
+
+function leafTex(THREE) {
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = '#1a4a1c';
+    g.beginPath();
+    g.moveTo(w * 0.5, 4);
+    g.bezierCurveTo(w * 0.95, h * 0.28, w * 0.88, h * 0.72, w * 0.5, h - 4);
+    g.bezierCurveTo(w * 0.12, h * 0.72, w * 0.05, h * 0.28, w * 0.5, 4);
+    g.fill();
+    g.fillStyle = '#3d8f32';
+    g.beginPath();
+    g.moveTo(w * 0.5, 10);
+    g.bezierCurveTo(w * 0.82, h * 0.30, w * 0.78, h * 0.66, w * 0.5, h - 10);
+    g.bezierCurveTo(w * 0.22, h * 0.66, w * 0.18, h * 0.30, w * 0.5, 10);
+    g.fill();
+    g.strokeStyle = 'rgba(20,60,18,0.55)';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(w * 0.5, 8);
+    g.lineTo(w * 0.5, h - 8);
+    g.stroke();
+    for (let i = 0; i < 7; i++) {
+      const y = 22 + i * 14;
+      g.beginPath();
+      g.moveTo(w * 0.5, y);
+      g.lineTo(w * 0.22, y + 8);
+      g.moveTo(w * 0.5, y);
+      g.lineTo(w * 0.78, y + 8);
+      g.stroke();
+    }
+  }, 1, 1, { clamp: true });
+}
+
+function frondTex(THREE) {
+  return canvasTex(THREE, 64, 256, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = '#1e5a22';
+    g.beginPath();
+    g.moveTo(w * 0.5, 4);
+    g.bezierCurveTo(w * 0.98, h * 0.22, w * 0.86, h * 0.7, w * 0.5, h - 2);
+    g.bezierCurveTo(w * 0.14, h * 0.7, w * 0.02, h * 0.22, w * 0.5, 4);
+    g.fill();
+    g.fillStyle = '#3f8f36';
+    g.beginPath();
+    g.moveTo(w * 0.5, 14);
+    g.bezierCurveTo(w * 0.82, h * 0.26, w * 0.74, h * 0.66, w * 0.5, h - 10);
+    g.bezierCurveTo(w * 0.26, h * 0.66, w * 0.18, h * 0.26, w * 0.5, 14);
+    g.fill();
+    g.strokeStyle = 'rgba(16,48,16,0.5)';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(w * 0.5, 8);
+    g.lineTo(w * 0.5, h - 6);
+    g.stroke();
+  }, 1, 1, { clamp: true });
+}
+
+function grassCardTex(THREE) {
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    for (let i = 0; i < 22; i++) {
+      const x = 4 + (i * 5.4);
+      g.fillStyle = i % 3 ? '#3d8f3a' : '#246628';
+      g.beginPath();
+      g.moveTo(x, h);
+      g.quadraticCurveTo(x + 4, h * 0.42, x + (i % 2 ? 8 : -6), 4);
+      g.quadraticCurveTo(x + 7, h * 0.5, x + 4, h);
       g.fill();
     }
-  }, 1, 1);
+  }, 1, 1, { clamp: true });
+}
+
+function afternoonSkyTex(THREE, res) {
+  const w = res || 512;
+  const h = Math.max(256, (res || 512) * 0.75);
+  return canvasTex(THREE, w, h, (g, ww, hh) => {
+    fillGrad(g, 0, 0, 0, hh, [
+      [0, '#2f6fb8'], [0.34, '#5aa0dc'], [0.58, '#9ec8ec'], [0.78, '#d6c49a'], [1, '#b8966e'],
+    ]);
+    g.fillRect(0, 0, ww, hh);
+    g.fillStyle = 'rgba(255,228,150,0.75)';
+    g.beginPath();
+    g.arc(ww * 0.78, hh * 0.16, 16, 0, 6.3);
+    g.fill();
+    g.fillStyle = 'rgba(255,240,190,0.28)';
+    g.beginPath();
+    g.arc(ww * 0.78, hh * 0.16, 48, 0, 6.3);
+    g.fill();
+    const puffs = [
+      [0.16, 0.20, 86, 28], [0.28, 0.18, 110, 34], [0.42, 0.22, 80, 22],
+      [0.58, 0.14, 120, 36], [0.72, 0.17, 96, 28], [0.88, 0.24, 72, 20],
+      [0.10, 0.32, 64, 18], [0.48, 0.28, 88, 22], [0.92, 0.30, 60, 16],
+      [0.34, 0.12, 70, 18], [0.66, 0.10, 84, 20],
+    ];
+    for (const [ux, uy, rx, ry] of puffs) {
+      const x = ux * ww, y = uy * hh;
+      const rad = g.createRadialGradient(x, y, 4, x, y, rx);
+      rad.addColorStop(0, 'rgba(255,255,255,0.95)');
+      rad.addColorStop(0.42, 'rgba(230,238,246,0.72)');
+      rad.addColorStop(1, 'rgba(140,160,184,0)');
+      g.fillStyle = rad;
+      g.beginPath();
+      g.ellipse(x, y, rx, ry, 0, 0, 6.3);
+      g.fill();
+      g.fillStyle = 'rgba(120,136,156,0.28)';
+      g.beginPath();
+      g.ellipse(x + 8, y + ry * 0.5, rx * 0.72, ry * 0.48, 0, 0, 6.3);
+      g.fill();
+    }
+  }, 1, 1, { clamp: true, noMip: true });
+}
+
+function dappleTex(THREE) {
+  return canvasTex(THREE, 128, 128, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    for (let i = 0; i < 40; i++) {
+      g.fillStyle = `rgba(20,40,16,${0.10 + hash(i) * 0.16})`;
+      g.beginPath();
+      g.ellipse(hash(i) * w, hash(i + 8) * h, 8 + (i % 10), 6 + (i % 7), hash(i) * 2, 0, 6.3);
+      g.fill();
+    }
+  }, 1, 1, { clamp: true });
 }
 
 function mergeGeos(THREE, list) {
@@ -282,7 +452,7 @@ function placedCyl(THREE, rTop, rBot, h, x, y, z, segs) {
   return g;
 }
 
-function kidneyGeo(THREE) {
+function kidneyGeo(THREE, depth, bevel) {
   const s = new THREE.Shape();
   s.moveTo(-10, -2);
   s.bezierCurveTo(-13, -6, -8, -8, -2, -6);
@@ -290,8 +460,12 @@ function kidneyGeo(THREE) {
   s.bezierCurveTo(12, 3, 6, 6, 0, 5);
   s.bezierCurveTo(-8, 4, -12, 3, -10, -2);
   return new THREE.ExtrudeGeometry(s, {
-    depth: 0.14, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.06,
-    bevelSegments: 1, curveSegments: 8,
+    depth: depth == null ? 0.14 : depth,
+    bevelEnabled: true,
+    bevelThickness: bevel == null ? 0.05 : bevel,
+    bevelSize: bevel == null ? 0.06 : bevel,
+    bevelSegments: 1,
+    curveSegments: 10,
   });
 }
 
@@ -303,7 +477,7 @@ function placedBevelBox(THREE, w, h, d, x, y, z, bevel) {
   s.lineTo(hw, hd);
   s.lineTo(-hw, hd);
   s.closePath();
-  const b = bevel == null ? 0.05 : bevel;
+  const b = bevel == null ? 0.06 : bevel;
   const g = new THREE.ExtrudeGeometry(s, {
     depth: Math.max(0.08, h - b * 2),
     bevelEnabled: true,
@@ -328,48 +502,150 @@ function canopyLathe(THREE) {
   return new THREE.LatheGeometry(pts, 10);
 }
 
-function mark(o) {
+function mark(o, shadow) {
   o.userData.backyardArt = true;
+  if (shadow !== false) {
+    o.castShadow = true;
+    o.receiveShadow = true;
+  }
   return o;
 }
 
-function addMerged(THREE, parent, geos, mat) {
+function addMerged(THREE, parent, geos, mat, shadow) {
   if (!geos.length) return null;
   const mesh = new THREE.Mesh(mergeGeos(THREE, geos), mat);
-  mark(mesh);
+  mark(mesh, shadow);
   parent.add(mesh);
   return mesh;
 }
 
-function makeYardMats(THREE, vibe, quality) {
+function addInstanced(THREE, parent, geo, mat, count, place, shadow) {
+  if (count <= 0) return null;
+  const mesh = new THREE.InstancedMesh(geo, mat, count);
+  mesh.castShadow = !!shadow;
+  mesh.receiveShadow = false;
+  mesh.frustumCulled = true;
+  mesh.userData.artInstanced = true;
+  mesh.userData.backyardArt = true;
+  const dummy = new THREE.Object3D();
+  let written = 0;
+  for (let i = 0; i < count; i++) {
+    dummy.position.set(0, 0, 0);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(1, 1, 1);
+    if (place(dummy, i) === false) continue;
+    dummy.updateMatrix();
+    mesh.setMatrixAt(written, dummy.matrix);
+    written++;
+  }
+  mesh.count = written;
+  mesh.instanceMatrix.needsUpdate = true;
+  parent.add(mesh);
+  return mesh;
+}
+
+function inPool(x, z) {
+  const P = BACKYARD_PLAY.pool;
+  return Math.abs(x - P.x) < P.w * 0.56 && Math.abs(z - P.z) < P.d * 0.56;
+}
+
+function onHardscape(x, z) {
+  const patio = BACKYARD_PLAY.patio;
+  const pad = BACKYARD_PLAY.pad;
+  if (Math.abs(x - patio.x) < patio.w * 0.52 && Math.abs(z - patio.z) < patio.d * 0.52) return true;
+  if (Math.abs(x - pad.x) < pad.w * 0.55 && Math.abs(z - pad.z) < pad.d * 0.55) return true;
+  return false;
+}
+
+function makeYardMats(THREE, vibe, quality, budget) {
   const pal = vibe.palette;
   const glow = backyardWantsGlow(quality);
+  const turf = turfTex(THREE);
+  const pebble = pebbleTex(THREE);
+  const stucco = stuccoTex(THREE);
   return {
-    turf: feltBasic(THREE, 0xffffff, { map: turfTex(THREE) }),
-    pebble: feltBasic(THREE, 0xffffff, { map: pebbleTex(THREE) }),
-    paver: feltBasic(THREE, 0xffffff, { map: paverTex(THREE) }),
-    stucco: feltBasic(THREE, 0xffffff, { map: stuccoTex(THREE) }),
-    tile: feltBasic(THREE, 0xffffff, { map: tileTex(THREE) }),
-    wood: feltBasic(THREE, 0xffffff, { map: woodTex(THREE) }),
-    shed: feltBasic(THREE, hexNum('#7a8680')),
-    cmu: feltBasic(THREE, 0xffffff, { map: stuccoTex(THREE) }),
-    metal: feltBasic(THREE, hexNum('#2a2c30')),
-    mesh: feltBasic(THREE, 0xffffff, { map: meshTex(THREE) }),
-    leaf: feltBasic(THREE, hexNum('#3f8a4a')),
-    darkLeaf: feltBasic(THREE, hexNum('#2a6234')),
-    water: feltBasic(THREE, 0xffffff, {
-      map: waterTex(THREE), transparent: true, opacity: 0.78, depthWrite: false,
+    turf: heroMat(THREE, 0xffffff, {
+      map: turf, roughness: 0.92, metalness: 0.0, envMapIntensity: 0.22,
     }),
-    dark: feltBasic(THREE, hexNum('#2a241c')),
-    window: feltBasic(THREE, hexNum(pal.windowOn)),
-    pvc: feltBasic(THREE, 0xf4f1ea),
-    yellow: feltBasic(THREE, hexNum('#e8c04a')),
-    cactus: feltBasic(THREE, hexNum('#4a8a4a')),
-    red: feltBasic(THREE, hexNum('#c45a40')),
-    wicker: feltBasic(THREE, hexNum('#c4a06a')),
-    sky: skipMat(new THREE.MeshBasicMaterial({
-      map: afternoonSkyTex(THREE), side: THREE.BackSide, fog: false, depthWrite: true, toneMapped: false,
-    })),
+    pebble: heroMat(THREE, 0xffffff, {
+      map: pebble, roughness: 0.88, metalness: 0.02, envMapIntensity: 0.28,
+    }),
+    paver: heroMat(THREE, 0xffffff, {
+      map: paverTex(THREE), roughness: 0.82, metalness: 0.04,
+    }),
+    stucco: heroMat(THREE, 0xffffff, {
+      map: stucco, roughness: 0.86, metalness: 0.01, envMapIntensity: 0.32,
+    }),
+    tile: heroMat(THREE, 0xffffff, {
+      map: tileTex(THREE), roughness: 0.70, metalness: 0.06,
+    }),
+    wood: heroMat(THREE, 0xffffff, {
+      map: woodTex(THREE), roughness: 0.78, metalness: 0.02,
+    }),
+    shed: heroMat(THREE, hexNum('#6a7470'), { roughness: 0.80, metalness: 0.08 }),
+    cmu: heroMat(THREE, 0xffffff, { map: stucco, roughness: 0.90, metalness: 0.02 }),
+    metal: heroMat(THREE, hexNum('#2a2c30'), { roughness: 0.42, metalness: 0.38, envMapIntensity: 0.55 }),
+    mesh: heroMat(THREE, 0xffffff, {
+      map: meshTex(THREE), roughness: 0.55, metalness: 0.22, envMapIntensity: 0.4,
+    }),
+    leaf: heroMat(THREE, hexNum('#2f7a34'), { roughness: 0.82, metalness: 0.0 }),
+    darkLeaf: heroMat(THREE, hexNum('#1e5a24'), { roughness: 0.86, metalness: 0.0 }),
+    leafCard: heroMat(THREE, 0xffffff, {
+      map: leafTex(THREE), transparent: true, alphaTest: 0.28, side: THREE.DoubleSide,
+      roughness: 0.78, metalness: 0.0, depthWrite: true,
+    }),
+    frondCard: heroMat(THREE, 0xffffff, {
+      map: frondTex(THREE), transparent: true, alphaTest: 0.28, side: THREE.DoubleSide,
+      roughness: 0.76, metalness: 0.0, depthWrite: true,
+    }),
+    grassCard: heroMat(THREE, 0xffffff, {
+      map: grassCardTex(THREE), transparent: true, alphaTest: 0.22, side: THREE.DoubleSide,
+      roughness: 0.90, metalness: 0.0, depthWrite: true,
+    }),
+    water: lockArt(new THREE.MeshStandardMaterial({
+      color: 0x2ec4d6,
+      map: waterTex(THREE),
+      transparent: true,
+      opacity: 0.86,
+      roughness: 0.06,
+      metalness: 0.28,
+      envMapIntensity: 1.35,
+      depthWrite: false,
+    }), { heroWet: true, looksSkip: true }),
+    caustic: lockArt(new THREE.MeshBasicMaterial({
+      map: causticTex(THREE),
+      transparent: true,
+      opacity: 0.42,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    }), { looksSkip: true, heroWet: true }),
+    poolTile: heroMat(THREE, 0xffffff, {
+      map: poolTileTex(THREE), roughness: 0.35, metalness: 0.12, envMapIntensity: 0.7,
+    }),
+    dark: heroMat(THREE, hexNum('#2a241c'), { roughness: 0.70, metalness: 0.08 }),
+    window: heroMat(THREE, hexNum(pal.windowOn), {
+      roughness: 0.08, metalness: 0.42, envMapIntensity: 0.95,
+    }),
+    pvc: heroMat(THREE, 0xf4f1ea, { roughness: 0.48, metalness: 0.04, envMapIntensity: 0.38 }),
+    yellow: heroMat(THREE, hexNum('#e8c04a'), { roughness: 0.62, metalness: 0.04 }),
+    cactus: heroMat(THREE, hexNum('#3a7a3a'), { roughness: 0.86, metalness: 0.0 }),
+    red: heroMat(THREE, hexNum('#c45a40'), { roughness: 0.70, metalness: 0.04 }),
+    wicker: heroMat(THREE, hexNum('#c4a06a'), { roughness: 0.80, metalness: 0.02 }),
+    sky: lockArt(new THREE.MeshBasicMaterial({
+      map: afternoonSkyTex(THREE, budget.skyRes),
+      side: THREE.BackSide,
+      fog: false,
+      depthWrite: true,
+      toneMapped: false,
+    }), { looksSkip: true }),
+    dapple: lockArt(new THREE.MeshBasicMaterial({
+      map: dappleTex(THREE),
+      transparent: true,
+      opacity: 0.38,
+      depthWrite: false,
+      toneMapped: false,
+    }), { looksSkip: true }),
     glow: glow ? feltEmissive(THREE, hexNum(pal.laneAlt)) : feltBasic(THREE, hexNum(pal.laneAlt)),
   };
 }
@@ -407,22 +683,29 @@ export function restyleBackyardShell(THREE, group, vibe, floor) {
     if (t === 'PlaneGeometry' && o === floor) {
       m.map = pebble;
       m.color.setHex(0xffffff);
-      skipMat(m);
+      if (m.roughness != null) m.roughness = 0.88;
+      lockArt(m);
+      o.receiveShadow = true;
       n++;
     } else if (t === 'PlaneGeometry' && col === BACKYARD_STOCK.pebble) {
       m.map = paverTex(THREE);
       m.color.setHex(0xffffff);
-      skipMat(m);
+      if (m.roughness != null) m.roughness = 0.82;
+      lockArt(m);
+      o.receiveShadow = true;
       n++;
     } else if (t === 'PlaneGeometry' && col === BACKYARD_STOCK.turf) {
       m.map = turf;
       m.color.setHex(0xffffff);
-      skipMat(m);
+      if (m.roughness != null) m.roughness = 0.92;
+      lockArt(m);
+      o.receiveShadow = true;
       n++;
     } else if (col === BACKYARD_STOCK.cmu) {
       m.map = pebble;
       m.color.setHex(0xffffff);
-      skipMat(m);
+      lockArt(m);
+      o.receiveShadow = true;
       n++;
     }
   });
@@ -430,9 +713,9 @@ export function restyleBackyardShell(THREE, group, vibe, floor) {
 }
 
 function addSky(THREE, parent, mats) {
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(96, 20, 12), mats.sky);
-  dome.position.y = 10;
-  mark(dome);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(110, 24, 16), mats.sky);
+  dome.position.y = 8;
+  mark(dome, false);
   parent.add(dome);
 }
 
@@ -441,10 +724,10 @@ function addYardWalls(THREE, parent, mats) {
   const P = BACKYARD_PLAY;
   const t = L.wall, hx = L.w / 2, hz = L.d / 2, wh = P.wallH;
   addMerged(THREE, parent, [
-    placedBox(THREE, L.w, wh, t, 0, 0, -hz),
-    placedBox(THREE, t, wh, L.d, -hx, 0, 0),
-    placedBox(THREE, t, wh, L.d, hx, 0, 0),
-    placedBox(THREE, P.streetWall.w, wh, t, P.streetWall.x, 0, hz),
+    placedBevelBox(THREE, L.w, wh, t, 0, 0, -hz, 0.04),
+    placedBevelBox(THREE, t, wh, L.d, -hx, 0, 0, 0.04),
+    placedBevelBox(THREE, t, wh, L.d, hx, 0, 0, 0.04),
+    placedBevelBox(THREE, P.streetWall.w, wh, t, P.streetWall.x, 0, hz, 0.04),
   ], mats.cmu);
 }
 
@@ -452,33 +735,30 @@ function addHouse(THREE, parent, mats) {
   const P = BACKYARD_PLAY;
   const hs = P.house;
   const stucco = [
-    placedBox(THREE, hs.w, hs.wallH, hs.d, hs.x, 0, hs.z),
-    placedBox(THREE, P.patio.col, P.patio.ceilY, P.patio.col, P.patio.x - P.patio.w / 2 + P.patio.col, 0, P.patio.z - P.patio.d / 2 + P.patio.col),
-    placedBox(THREE, P.patio.col, P.patio.ceilY, P.patio.col, P.patio.x + P.patio.w / 2 - P.patio.col, 0, P.patio.z - P.patio.d / 2 + P.patio.col),
-    placedBox(THREE, P.patio.col, P.patio.ceilY, P.patio.col, P.patio.x - P.patio.w / 2 + P.patio.col, 0, P.patio.z + P.patio.d / 2 - P.patio.col),
-    placedBox(THREE, P.patio.col, P.patio.ceilY, P.patio.col, P.patio.x + P.patio.w / 2 - P.patio.col, 0, P.patio.z + P.patio.d / 2 - P.patio.col),
-    placedBox(THREE, P.patio.w, P.patio.ceilH, P.patio.d, P.patio.x, P.patio.ceilY, P.patio.z),
-    placedBox(THREE, P.wing.w, P.wing.wallH, P.wing.d, P.wing.x, 0, P.wing.z),
+    placedBevelBox(THREE, hs.w, hs.wallH, hs.d, hs.x, 0, hs.z, 0.08),
+    placedBevelBox(THREE, P.patio.col, P.patio.ceilY, P.patio.col, P.patio.x - P.patio.w / 2 + P.patio.col, 0, P.patio.z - P.patio.d / 2 + P.patio.col, 0.04),
+    placedBevelBox(THREE, P.patio.col, P.patio.ceilY, P.patio.col, P.patio.x + P.patio.w / 2 - P.patio.col, 0, P.patio.z - P.patio.d / 2 + P.patio.col, 0.04),
+    placedBevelBox(THREE, P.patio.col, P.patio.ceilY, P.patio.col, P.patio.x - P.patio.w / 2 + P.patio.col, 0, P.patio.z + P.patio.d / 2 - P.patio.col, 0.04),
+    placedBevelBox(THREE, P.patio.col, P.patio.ceilY, P.patio.col, P.patio.x + P.patio.w / 2 - P.patio.col, 0, P.patio.z + P.patio.d / 2 - P.patio.col, 0.04),
+    placedBevelBox(THREE, P.patio.w, P.patio.ceilH, P.patio.d, P.patio.x, P.patio.ceilY, P.patio.z, 0.04),
+    placedBevelBox(THREE, P.wing.w, P.wing.wallH, P.wing.d, P.wing.x, 0, P.wing.z, 0.06),
   ];
   addMerged(THREE, parent, stucco, mats.stucco);
-  const tile = [
-    placedBox(THREE, P.ridge.w, P.ridge.h, P.ridge.d, P.ridge.x, P.ridge.y, P.ridge.z),
-  ];
-  addMerged(THREE, parent, tile, mats.tile);
-  const win = [
+  addMerged(THREE, parent, [
+    placedBevelBox(THREE, P.ridge.w, P.ridge.h, P.ridge.d, P.ridge.x, P.ridge.y, P.ridge.z, 0.04),
+  ], mats.tile);
+  addMerged(THREE, parent, [
     placedBox(THREE, 6.4, 4.8, 0.08, -4.2, 3.2, hs.z - hs.d / 2 - 0.05),
     placedBox(THREE, 6.4, 4.8, 0.08, 8.2, 3.2, hs.z - hs.d / 2 - 0.05),
     placedBox(THREE, 5.2, 3.6, 0.08, -4.2, 12.4, hs.z - hs.d / 2 - 0.05),
     placedBox(THREE, 5.2, 3.6, 0.08, 8.2, 12.4, hs.z - hs.d / 2 - 0.05),
-  ];
-  addMerged(THREE, parent, win, mats.window);
-  const frames = [
+  ], mats.window, false);
+  addMerged(THREE, parent, [
     placedBox(THREE, 6.7, 0.12, 0.10, -4.2, 3.14, hs.z - hs.d / 2 - 0.10),
     placedBox(THREE, 6.7, 0.12, 0.10, -4.2, 7.94, hs.z - hs.d / 2 - 0.10),
     placedBox(THREE, 6.7, 0.12, 0.10, 8.2, 3.14, hs.z - hs.d / 2 - 0.10),
     placedBox(THREE, 6.7, 0.12, 0.10, 8.2, 7.94, hs.z - hs.d / 2 - 0.10),
-  ];
-  addMerged(THREE, parent, frames, mats.wood);
+  ], mats.wood);
   const shade = new THREE.Mesh(placedBox(THREE, P.shade.w, P.shade.h, P.shade.d, P.shade.x, P.shade.y, P.shade.z), mats.metal);
   mark(shade);
   parent.add(shade);
@@ -500,26 +780,64 @@ function addPvc(THREE, parent, mats) {
   addMerged(THREE, parent, geos, mats.pvc);
 }
 
+function addLeafCards(THREE, parent, mats, cx, cy, cz, count, spread, tall, shadow, cardW, cardH) {
+  const group = new THREE.Group();
+  group.position.set(cx, 0, cz);
+  group.userData.backyardPalm = true;
+  group.userData.backyardArt = true;
+  const geo = new THREE.PlaneGeometry(cardW || 1.85, cardH || 2.15);
+  addInstanced(THREE, group, geo, mats.leafCard, count, (dummy, i) => {
+    const a = (i / count) * Math.PI * 2 + hash(i) * 0.8;
+    const r = spread * (0.22 + hash(i + 3) * 0.82);
+    dummy.position.set(Math.cos(a) * r, cy + hash(i + 5) * tall, Math.sin(a) * r);
+    dummy.rotation.set(-0.55 + hash(i + 7) * 0.7, a + 0.5, hash(i + 9) * 0.6 - 0.3);
+    const s = 0.95 + hash(i + 11) * 0.85;
+    dummy.scale.set(s, s, 1);
+  }, shadow);
+  parent.add(group);
+  return group;
+}
+
+function addPalmFronds(THREE, parent, mats, cx, cy, cz, count, span, shadow) {
+  const group = new THREE.Group();
+  group.position.set(cx, 0, cz);
+  group.userData.backyardPalm = true;
+  group.userData.backyardArt = true;
+  const geo = new THREE.PlaneGeometry(1.15, 4.4);
+  geo.translate(0, 2.15, 0);
+  addInstanced(THREE, group, geo, mats.frondCard, count, (dummy, i) => {
+    const a = (i / count) * Math.PI * 2 + hash(i) * 0.2;
+    dummy.position.set(Math.cos(a) * 0.18, cy, Math.sin(a) * 0.18);
+    dummy.rotation.set(1.15 + hash(i) * 0.35, a, hash(i + 2) * 0.2 - 0.1);
+    dummy.scale.set(1.05 + hash(i + 3) * 0.35, span, 1);
+  }, shadow);
+  parent.add(group);
+  return group;
+}
+
 function addTree(THREE, parent, mats, budget) {
   const t = BACKYARD_PLAY.ficus;
   const trunk = new THREE.Mesh(new THREE.CapsuleGeometry(t.r, t.h - t.r * 2, 4, 8), mats.wood);
   trunk.position.set(t.x, t.h / 2, t.z);
   mark(trunk);
   parent.add(trunk);
-  const canopy = new THREE.Mesh(canopyLathe(THREE), mats.leaf);
-  canopy.position.set(t.x, t.h * 0.42, t.z);
+  const canopy = new THREE.Mesh(canopyLathe(THREE), mats.darkLeaf);
+  canopy.position.set(t.x, t.h * 0.46, t.z);
+  canopy.scale.set(0.82, 0.72, 0.82);
   canopy.userData.backyardPalm = true;
   mark(canopy);
   parent.add(canopy);
-  const n = budget.leaves;
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    const puff = new THREE.Mesh(new THREE.SphereGeometry(1.35, 8, 6), i % 2 ? mats.leaf : mats.darkLeaf);
-    puff.position.set(t.x + Math.cos(a) * 2.4, t.h * 0.62 + (i % 3) * 0.8, t.z + Math.sin(a) * 2.4);
+  const puffs = Math.max(6, (budget.leaves / 8) | 0);
+  for (let i = 0; i < puffs; i++) {
+    const a = (i / puffs) * Math.PI * 2;
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(1.55, 8, 6), i % 2 ? mats.leaf : mats.darkLeaf);
+    puff.position.set(t.x + Math.cos(a) * 2.1, t.h * 0.62 + (i % 3) * 0.7, t.z + Math.sin(a) * 2.1);
+    puff.scale.set(1.25, 0.85, 1.25);
     puff.userData.backyardPalm = true;
     mark(puff);
     parent.add(puff);
   }
+  addLeafCards(THREE, parent, mats, t.x, t.h * 0.52, t.z, budget.leaves, 4.2, 3.6, budget.shadowCasters);
   const ring = BACKYARD_PLAY.planter;
   const ringShape = new THREE.Shape();
   ringShape.absarc(0, 0, ring.rOut, 0, Math.PI * 2, false);
@@ -532,23 +850,42 @@ function addTree(THREE, parent, mats, budget) {
   planter.position.set(ring.x, 0, ring.z);
   mark(planter);
   parent.add(planter);
+  const dapple = new THREE.Mesh(new THREE.PlaneGeometry(9.2, 9.2), mats.dapple);
+  dapple.rotation.x = -Math.PI / 2;
+  dapple.position.set(t.x + 0.8, 0.03, t.z + 0.6);
+  mark(dapple, false);
+  parent.add(dapple);
 }
 
 function addPool(THREE, parent, mats, budget) {
   const P = BACKYARD_PLAY;
-  const water = new THREE.Mesh(kidneyGeo(THREE), mats.water);
-  water.rotation.set(-Math.PI / 2, Math.PI / 2, 0);
-  water.position.set(P.pool.x, 0.08, P.pool.z);
+  const basin = new THREE.Mesh(
+    placedBox(THREE, P.pool.w * 0.94, 0.42, P.pool.d * 0.94, P.pool.x, -0.40, P.pool.z),
+    mats.poolTile,
+  );
+  mark(basin);
+  parent.add(basin);
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(P.pool.w * 0.92, P.pool.d * 0.92), mats.water);
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(P.pool.x, 0.09, P.pool.z);
   water.userData.backyardPool = true;
-  mark(water);
+  mark(water, false);
   parent.add(water);
+  if (budget.caustics) {
+    const caustic = new THREE.Mesh(new THREE.PlaneGeometry(P.pool.w * 0.9, P.pool.d * 0.9), mats.caustic);
+    caustic.rotation.x = -Math.PI / 2;
+    caustic.position.set(P.pool.x, 0.045, P.pool.z);
+    caustic.userData.backyardPool = true;
+    mark(caustic, false);
+    parent.add(caustic);
+  }
   const deck = [
-    placedBox(THREE, P.pool.w + P.deckT * 2, 0.22, P.deckT, P.pool.x, 0, P.pool.z - P.pool.d / 2 - P.deckT / 2),
-    placedBox(THREE, P.pool.w + P.deckT * 2, 0.22, P.deckT, P.pool.x, 0, P.pool.z + P.pool.d / 2 + P.deckT / 2),
-    placedBox(THREE, P.deckT, 0.22, P.pool.d, P.pool.x - P.pool.w / 2 - P.deckT / 2, 0, P.pool.z),
-    placedBox(THREE, P.deckT, 0.22, P.pool.d, P.pool.x + P.pool.w / 2 + P.deckT / 2, 0, P.pool.z),
-    placedBox(THREE, P.pad.w, P.pad.h, P.pad.d, P.pad.x, 0, P.pad.z),
-    placedBox(THREE, P.fire.w, 0.12, P.fire.d, P.fire.x, 0, P.fire.z),
+    placedBevelBox(THREE, P.pool.w + P.deckT * 2, 0.22, P.deckT, P.pool.x, 0, P.pool.z - P.pool.d / 2 - P.deckT / 2, 0.03),
+    placedBevelBox(THREE, P.pool.w + P.deckT * 2, 0.22, P.deckT, P.pool.x, 0, P.pool.z + P.pool.d / 2 + P.deckT / 2, 0.03),
+    placedBevelBox(THREE, P.deckT, 0.22, P.pool.d, P.pool.x - P.pool.w / 2 - P.deckT / 2, 0, P.pool.z, 0.03),
+    placedBevelBox(THREE, P.deckT, 0.22, P.pool.d, P.pool.x + P.pool.w / 2 + P.deckT / 2, 0, P.pool.z, 0.03),
+    placedBevelBox(THREE, P.pad.w, P.pad.h, P.pad.d, P.pad.x, 0, P.pad.z, 0.03),
+    placedBevelBox(THREE, P.fire.w, 0.12, P.fire.d, P.fire.x, 0, P.fire.z, 0.02),
   ];
   addMerged(THREE, parent, deck, mats.pebble);
 }
@@ -609,6 +946,7 @@ function addPatioDress(THREE, parent, mats, budget, gates) {
     plant.position.set(pot.x, pot.h + 0.22, pot.z);
     mark(plant);
     parent.add(plant);
+    addLeafCards(THREE, parent, mats, pot.x, pot.h + 0.28, pot.z, Math.max(7, (budget.leaves / 12) | 0), 0.42, 0.38, false, 0.55, 0.68);
   }
 }
 
@@ -620,18 +958,40 @@ function addSoftAoAndTufts(THREE, parent, mats, budget, gates) {
   for (let i = 0; i < n; i++) {
     const x = P.turf.x + ((i * 17) % 80 - 40) / 40 * hw;
     const z = P.turf.z + ((i * 29) % 70 - 35) / 35 * hd;
+    if (inPool(x, z) || onHardscape(x, z)) continue;
     if (!propClearOfCourse(x, z, 0.18, gates, { gatePad: 1.1, corridor: 1.0, yRange: 2 })) continue;
     tufts.push(placedCyl(THREE, 0.04, 0.08, 0.28 + (i % 3) * 0.05, x, 0.06, z, 5));
   }
   addMerged(THREE, parent, tufts, mats.leaf);
 }
 
+function addGrass(THREE, parent, mats, budget, gates) {
+  const n = budget.grass;
+  if (n <= 0) return;
+  const T = BACKYARD_PLAY.turf;
+  const blade = new THREE.PlaneGeometry(0.42, 0.62);
+  blade.translate(0, 0.31, 0);
+  const cross = blade.clone();
+  cross.rotateY(Math.PI / 2);
+  const geo = mergeGeos(THREE, [blade, cross]);
+  addInstanced(THREE, parent, geo, mats.grassCard, n, (dummy, i) => {
+    const x = T.x + (hash(i) - 0.5) * T.w * 0.88;
+    const z = T.z + (hash(i + 17) - 0.5) * T.d * 0.88;
+    if (inPool(x, z) || onHardscape(x, z)) return false;
+    if (!propClearOfCourse(x, z, 0.16, gates, { gatePad: 1.05, corridor: 0.95, yRange: 2 })) return false;
+    dummy.position.set(x, 0, z);
+    dummy.rotation.set(0, hash(i + 4) * 6.28, 0);
+    const s = 0.95 + hash(i + 8) * 0.7;
+    dummy.scale.set(s, 0.85 + hash(i + 10) * 0.55, 1);
+  }, false);
+}
+
 function addLounge(THREE, parent, mats, budget) {
   const P = BACKYARD_PLAY;
-  const sofa = new THREE.Mesh(placedBox(THREE, P.sofa.w, P.sofa.seatH, P.sofa.d, P.sofa.x, 0, P.sofa.z), mats.wicker);
+  const sofa = new THREE.Mesh(placedBevelBox(THREE, P.sofa.w, P.sofa.seatH, P.sofa.d, P.sofa.x, 0, P.sofa.z, 0.04), mats.wicker);
   mark(sofa);
   parent.add(sofa);
-  const back = new THREE.Mesh(placedBox(THREE, P.sofa.w, P.sofa.backH - P.sofa.seatH, P.sofa.backD, P.sofa.x, P.sofa.seatH, P.sofa.z - P.sofa.d / 2 + P.sofa.backD / 2), mats.wicker);
+  const back = new THREE.Mesh(placedBevelBox(THREE, P.sofa.w, P.sofa.backH - P.sofa.seatH, P.sofa.backD, P.sofa.x, P.sofa.seatH, P.sofa.z - P.sofa.d / 2 + P.sofa.backD / 2, 0.03), mats.wicker);
   mark(back);
   parent.add(back);
   const canopy = [];
@@ -650,22 +1010,21 @@ function addLounge(THREE, parent, mats, budget) {
     trunk.userData.backyardPalm = true;
     mark(trunk);
     parent.add(trunk);
-    const frond = new THREE.Mesh(new THREE.SphereGeometry(i === 2 ? 1.8 : 1.15, 8, 6), mats.leaf);
-    frond.position.set(p.x, p.h + 0.2, p.z);
-    frond.scale.set(1.15, 0.55, 1.15);
-    frond.userData.backyardPalm = true;
-    mark(frond);
-    parent.add(frond);
+    addPalmFronds(THREE, parent, mats, p.x, p.h - 0.35, p.z, Math.max(14, (budget.fronds / n) | 0), i === 2 ? 1.55 : 1.25, budget.shadowCasters);
+    const dapple = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 3.6), mats.dapple);
+    dapple.rotation.x = -Math.PI / 2;
+    dapple.position.set(p.x + 0.4, 0.025, p.z + 0.35);
+    mark(dapple, false);
+    parent.add(dapple);
   }
 }
 
 function addYardExtras(THREE, parent, mats) {
   const P = BACKYARD_PLAY;
-  const shed = new THREE.Mesh(placedBox(THREE, P.shed.w, P.shed.h, P.shed.d, P.shed.x, 0, P.shed.z), mats.shed);
+  const shed = new THREE.Mesh(placedBevelBox(THREE, P.shed.w, P.shed.h, P.shed.d, P.shed.x, 0, P.shed.z, 0.05), mats.shed);
   mark(shed);
   parent.add(shed);
-  const acBody = placedBox(THREE, P.ac.w, P.ac.h, P.ac.d, P.ac.x, 0, P.ac.z);
-  const acBits = [acBody];
+  const acBits = [placedBox(THREE, P.ac.w, P.ac.h, P.ac.d, P.ac.x, 0, P.ac.z)];
   for (let i = 0; i < 5; i++) {
     acBits.push(placedBox(THREE, P.ac.w - 0.18, 0.06, 0.04, P.ac.x, 0.28 + i * 0.34, P.ac.z + P.ac.d / 2 + 0.03));
   }
@@ -686,15 +1045,18 @@ function addYardExtras(THREE, parent, mats) {
 
 function addNeighbors(THREE, parent, mats, budget) {
   const geos = [];
+  const roofs = [];
   const spots = [
     [-38, -8, 18, 16], [38, 6, 16, 14], [-8, -36, 20, 14], [22, -36, 14, 12],
   ];
   const n = Math.min(budget.neighbors, spots.length);
   for (let i = 0; i < n; i++) {
     const s = spots[i];
-    geos.push(placedBox(THREE, s[2], 16.5, s[3], s[0], 0, s[1]));
+    geos.push(placedBevelBox(THREE, s[2], 16.5, s[3], s[0], 0, s[1], 0.08));
+    roofs.push(placedBevelBox(THREE, s[2] + 0.8, 0.45, s[3] + 0.8, s[0], 16.5, s[1], 0.06));
   }
   addMerged(THREE, parent, geos, mats.stucco);
+  addMerged(THREE, parent, roofs, mats.tile);
   const palms = [
     [-32, -18], [34, -16], [-18, -32], [28, 28],
   ];
@@ -703,11 +1065,7 @@ function addNeighbors(THREE, parent, mats, budget) {
     trunk.position.set(palms[i][0], 5.2, palms[i][1]);
     mark(trunk);
     parent.add(trunk);
-    const top = new THREE.Mesh(new THREE.SphereGeometry(1.6, 8, 6), mats.leaf);
-    top.position.set(palms[i][0], 10.6, palms[i][1]);
-    top.scale.set(1.2, 0.5, 1.2);
-    mark(top);
-    parent.add(top);
+    addPalmFronds(THREE, parent, mats, palms[i][0], 10.2, palms[i][1], 12, 1.2, false);
   }
 }
 
@@ -718,12 +1076,28 @@ function addPlayLines(THREE, parent, mats, gates) {
   parent.add(extras);
 }
 
+function addSteppingStones(THREE, parent, mats, budget, gates) {
+  const stones = [];
+  const spots = [
+    [8.2, -2.4], [9.6, -4.2], [12.4, -10.2], [14.8, -12.6], [6.2, -12.8],
+    [4.8, -8.4], [16.2, -8.8], [13.6, -3.2], [7.4, -14.8], [15.4, -16.4],
+  ];
+  const n = Math.min(budget.stones, spots.length);
+  for (let i = 0; i < n; i++) {
+    const s = spots[i];
+    if (inPool(s[0], s[1])) continue;
+    if (!propClearOfCourse(s[0], s[1], 0.28, gates, { gatePad: 1.1, corridor: 1.0, yRange: 2 })) continue;
+    stones.push(placedCyl(THREE, 0.34 + (i % 3) * 0.04, 0.30, 0.07, s[0], 0.01, s[1], 8));
+  }
+  addMerged(THREE, parent, stones, mats.paver);
+}
+
 export function buildRyanYard(THREE, parent, vibe, quality, gates) {
   const group = new THREE.Group();
   group.name = 'backyardArtVisuals';
   group.userData.backyardArt = true;
   const budget = backyardBudget(quality);
-  const mats = makeYardMats(THREE, vibe, quality);
+  const mats = makeYardMats(THREE, vibe, quality, budget);
   const keep = gates || BACKYARD_KEEP_GATES;
   addSky(THREE, group, mats);
   addYardWalls(THREE, group, mats);
@@ -734,6 +1108,8 @@ export function buildRyanYard(THREE, parent, vibe, quality, gates) {
   addFenceAndPots(THREE, group, mats, budget, keep);
   addPatioDress(THREE, group, mats, budget, keep);
   addSoftAoAndTufts(THREE, group, mats, budget, keep);
+  addGrass(THREE, group, mats, budget, keep);
+  addSteppingStones(THREE, group, mats, budget, keep);
   addLounge(THREE, group, mats, budget);
   addYardExtras(THREE, group, mats);
   addNeighbors(THREE, group, mats, budget);
@@ -814,13 +1190,15 @@ export function tickBackyardArt(root, now) {
 
 function tickBackyardArtObject(o, t) {
   if (o.userData && o.userData.backyardPalm) {
-    o.rotation.y = t * 0.06;
+    const phase = (o.position && o.position.x) || 0;
+    o.rotation.y = Math.sin(t * 0.7 + phase) * 0.08;
+    o.rotation.z = Math.sin(t * 1.15 + phase * 0.4) * 0.035;
   }
   if (o.userData && o.userData.backyardPool && o.material && o.material.map) {
     const rep = o.material.map.repeat;
     if (rep) {
-      o.material.map.offset.x = (t * 0.03) % 1;
-      o.material.map.offset.y = (t * 0.02) % 1;
+      o.material.map.offset.x = (t * 0.04) % 1;
+      o.material.map.offset.y = (t * 0.025) % 1;
     }
   }
 }
@@ -841,6 +1219,27 @@ function restyleBackyardInner(THREE, ctx) {
   const root = ctx.group;
   hideStockBackyardMeshes(root);
   restyleBackyardShell(THREE, root, vibe, ctx.floor);
+  applyVibeLighting(Object.assign({ THREE }, ctx), vibe);
+  if (ctx.sun) {
+    ctx.sun.position.set(22, 38, 18);
+    if (ctx.sun.target) {
+      ctx.sun.target.position.set(2, 0, -6);
+      if (ctx.scene && ctx.sun.target.parent !== ctx.scene) ctx.scene.add(ctx.sun.target);
+    }
+    if (ctx.sun.shadow && ctx.sun.shadow.camera) {
+      const cam = ctx.sun.shadow.camera;
+      cam.left = -32;
+      cam.right = 32;
+      cam.top = 32;
+      cam.bottom = -32;
+      cam.near = 0.5;
+      cam.far = 90;
+      cam.updateProjectionMatrix();
+    }
+  }
+  if (ctx.renderer && ctx.renderer.shadowMap) {
+    ctx.renderer.shadowMap.enabled = true;
+  }
   let visuals = null;
   if (root) {
     const old = root.getObjectByName('backyardArtVisuals');
