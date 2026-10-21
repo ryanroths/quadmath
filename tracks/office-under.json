@@ -1,0 +1,17 @@
+{
+  "id": "office-under",
+  "map": "office",
+  "name": "Desk Dive",
+  "class": "whoop",
+  "gates": [
+    { "x": 13.5, "y": 2.3, "z": 18.2, "ry": 0.00, "size": 1.9, "solid": true },
+    { "x": 4.6, "y": 2.70, "z": 6.2, "ry": 0.00, "size": 1.8, "solid": true },
+    { "x": -3.75, "y": 0.62, "z": 0.0, "ry": 1.57, "size": 1.5, "solid": true },
+    { "x": 4.6, "y": 0.62, "z": -16.2, "ry": 1.57, "size": 1.5, "solid": true },
+    { "x": 4.6, "y": 1.55, "z": 12.4, "ry": 0.00, "size": 1.5, "solid": true },
+    { "x": 13.5, "y": 2.3, "z": 12.0, "ry": 3.14, "size": 1.9, "solid": true }
+  ],
+  "flags": [
+    { "x": 4.6, "y": 2.8, "z": 6.2, "ry": 0 }
+  ]
+}

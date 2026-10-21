@@ -11,6 +11,9 @@ import {
   findTrackIn, resolveSimBoot, firstTrackForMap, knownMapId, isBlankTrackId,
   isFreestyleTrackId, isEphemeralTrackId, freestyleTrack, freestyleIdFor,
   resolveFly, resolveTrackPick, persistableSelection,
+  isLineTrackId, lineFinishIndex, afterLinePass, ghostSampleDue, downsampleGhost,
+  interpolateGhostPose, lineDeltaMs, fmtSignedDelta, visibleSplits,
+  LINE_GHOST_HZ, LINE_GHOST_MAX,
 } from './sim-tracks.js';
 
 function readTrack(file) {
@@ -53,7 +56,7 @@ assert.ok((byMap.backyard || 0) >= 2);
 assert.ok((byMap.office || 0) >= 2, 'office needs 2+ tracks');
 assert.ok((byMap.gym || 0) >= 2, 'gym needs 2+ tracks');
 assert.ok((byMap.trainer || 0) >= 2, 'trainer needs 2+ tracks');
-assert.equal(byMap.office, 3);
+assert.equal(byMap.office, 5);
 assert.equal(byMap.gym, 5);
 assert.equal(byMap.trainer, 3);
 
@@ -248,5 +251,74 @@ const freeNorm = normalizeTrack(freestyleTrack('city'));
 assert.equal(freeNorm.freestyle, true);
 assert.equal(freeNorm.gates.length, 0);
 assert.equal(startPad(freeNorm).z, 20);
+
+assert.equal(isLineTrackId('garage-bench'), true);
+assert.equal(isLineTrackId('garage-rafters'), true);
+assert.equal(isLineTrackId('warehouse-racks'), true);
+assert.equal(isLineTrackId('warehouse-rafters'), true);
+assert.equal(isLineTrackId('living-sofa'), true);
+assert.equal(isLineTrackId('office-under'), true);
+assert.equal(isLineTrackId('office-rafters'), true);
+assert.equal(isLineTrackId('office-cubicles'), true);
+assert.equal(isLineTrackId('office-hallway'), true);
+assert.equal(isLineTrackId('office-desks'), true);
+assert.equal(isLineTrackId('office-freestyle'), false);
+assert.equal(isLineTrackId('gym-under'), true);
+assert.equal(isLineTrackId('gym-rafters'), true);
+assert.equal(isLineTrackId('gym-court'), true);
+assert.equal(isLineTrackId('gym-bleachers'), true);
+assert.equal(isLineTrackId('gym-hoops'), true);
+assert.equal(isLineTrackId('gym-freestyle'), false);
+assert.equal(isLineTrackId(0), false);
+assert.equal(isLineTrackId(1), false);
+assert.equal(isLineTrackId('city-loop'), false);
+assert.equal(isLineTrackId('city-freestyle'), false);
+assert.equal(lineFinishIndex(8), 7);
+assert.deepEqual(afterLinePass(0, 8, false), { start: true, finish: false, nextIndex: 1 });
+assert.deepEqual(afterLinePass(3, 8, true), { start: false, finish: false, nextIndex: 4 });
+assert.deepEqual(afterLinePass(7, 8, true), { start: false, finish: true, nextIndex: 0 });
+assert.equal(ghostSampleDue(null, 0, LINE_GHOST_HZ), true);
+assert.equal(ghostSampleDue(0, 60, LINE_GHOST_HZ), false);
+assert.equal(ghostSampleDue(0, 70, LINE_GHOST_HZ), true);
+const fat = [];
+for (let i = 0; i < 1200; i++) fat.push([i, i, 1, 0, 0, 0, 0, 1]);
+const slim = downsampleGhost(fat, LINE_GHOST_MAX);
+assert.ok(slim.length <= LINE_GHOST_MAX + 1);
+assert.equal(slim[0][0], 0);
+assert.equal(slim[slim.length - 1][0], 1199);
+const pose = interpolateGhostPose(
+  [[0, 0, 0, 0, 0, 0, 0, 1], [1000, 10, 0, 0, 0, 0, 0, 1]],
+  250,
+);
+assert.ok(Math.abs(pose[1] - 2.5) < 1e-9);
+assert.equal(lineDeltaMs(10100, 10000), 100);
+assert.equal(lineDeltaMs(9900, 10000), -100);
+assert.equal(lineDeltaMs(10000, 0), null);
+assert.equal(fmtSignedDelta(-320), '-0.32');
+assert.equal(fmtSignedDelta(1250), '+1.25');
+assert.deepEqual(visibleSplits([1, 2, 3, 4, 5], 3), [3, 4, 5]);
+const lineGhost = makePaceGhost(living.gates, { track: 'living-sofa', speed: 6, hz: LINE_GHOST_HZ, laps: 1 });
+assert.equal(ghostPayloadError(lineGhost, 'living-sofa'), null);
+assert.ok(lineGhost.samples.length > 4 && lineGhost.samples.length < 400);
+const deskDive = files.find((t) => t.id === 'office-under');
+assert.ok(deskDive && deskDive.gates.length >= 4);
+assert.deepEqual(afterLinePass(0, deskDive.gates.length, false), { start: true, finish: false, nextIndex: 1 });
+assert.deepEqual(
+  afterLinePass(deskDive.gates.length - 1, deskDive.gates.length, true),
+  { start: false, finish: true, nextIndex: 0 },
+);
+const officeLineGhost = makePaceGhost(deskDive.gates, { track: 'office-under', speed: 6, hz: LINE_GHOST_HZ, laps: 1 });
+assert.equal(ghostPayloadError(officeLineGhost, 'office-under'), null);
+assert.ok(officeLineGhost.samples.length > 4 && officeLineGhost.samples.length < 400);
+const benchDive = files.find((t) => t.id === 'gym-under');
+assert.ok(benchDive && benchDive.gates.length >= 4);
+assert.deepEqual(afterLinePass(0, benchDive.gates.length, false), { start: true, finish: false, nextIndex: 1 });
+assert.deepEqual(
+  afterLinePass(benchDive.gates.length - 1, benchDive.gates.length, true),
+  { start: false, finish: true, nextIndex: 0 },
+);
+const gymLineGhost = makePaceGhost(benchDive.gates, { track: 'gym-under', speed: 6, hz: LINE_GHOST_HZ, laps: 1 });
+assert.equal(ghostPayloadError(gymLineGhost, 'gym-under'), null);
+assert.ok(gymLineGhost.samples.length > 4 && gymLineGhost.samples.length < 400);
 
 console.log('ok', files.length, 'tracks; city layouts frozen; share round-trip; miss 100%; old keys untouched');

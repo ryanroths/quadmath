@@ -360,17 +360,24 @@ function furnitureBoxes(mapId) {
   }
   if (mapId === 'office') {
     const out = [];
-    for (const z of [-12, 0, 12]) {
-      out.push(aabb(-13.25, 0, z, 6.4, 3.55, 7.0));
-      out.push(aabb(-3.75, 0, z, 6.4, 3.55, 7.0));
+    const cubes = [[-13.25, -12], [-3.75, -12], [-13.25, 0], [-3.75, 0], [-13.25, 12], [-3.75, 12]];
+    const w = 6.4, d = 7.0, h = 3.55, t = 0.12;
+    for (const [cx, cz] of cubes) {
+      out.push(aabb(cx - w / 2, 0, cz, t, h, d));
+      out.push(aabb(cx, 0, cz - d / 2, w, h, t));
+      out.push(aabb(cx, 0, cz + d / 2, w, h, t));
+      out.push(aabb(cx - 1.35, 1.20, cz, 3.15, 0.10, 1.55));
     }
     out.push(aabb(10.15, 0, -21.6, 0.16, 3.7, 2.8));
     out.push(aabb(10.15, 0, -1.0, 0.16, 3.7, 28.0));
     out.push(aabb(10.15, 0, 20.8, 0.16, 3.7, 4.4));
-    out.push(aabb(4.6, 0, -16.2, 5.6, 1.12, 2.4));
+    out.push(aabb(4.6, 1.20, -16.2, 5.6, 0.10, 2.4));
     out.push(aabb(4.6, 0.35, -14.4, 1.05, 1.47, 1.2));
     out.push(aabb(4.6, 0.35, -18.0, 1.05, 1.47, 1.2));
-    out.push(aabb(14.2, 0, 18.4, 3.6, 1.25, 1.5));
+    out.push(aabb(14.2, 1.20, 18.4, 3.6, 0.10, 1.5));
+    out.push(aabb(2.35, 0, 12.4, 1.7, 3.2, 1.4));
+    out.push(aabb(6.85, 0, 12.4, 1.7, 3.2, 1.4));
+    for (const z of [-18, -6, 6, 18]) out.push(aabb(0, 7.85, z, 34.8, 0.22, 0.38));
     return out;
   }
   if (mapId === 'gym') {

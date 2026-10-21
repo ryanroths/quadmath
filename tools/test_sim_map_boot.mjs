@@ -7,11 +7,101 @@ import { createServer } from 'node:http';
 import { readFileSync, existsSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
 import { tmpdir } from 'node:os';
+import { inflateSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { resolveSimBoot, freestyleIdFor, MAPS } from '../sim-tracks.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const chrome = process.env.CHROME || 'google-chrome';
+
+function resolveChrome() {
+  const names = [
+    process.env.CHROME,
+    'google-chrome',
+    'google-chrome-stable',
+    'chromium-browser',
+    'chromium',
+    'chrome',
+  ].filter(Boolean);
+  for (const n of names) {
+    if (existsSync(n)) return n;
+    const which = spawnSync('which', [n], { encoding: 'utf8' });
+    if (which.status === 0 && which.stdout.trim()) return which.stdout.trim();
+  }
+  return process.env.CHROME || 'google-chrome';
+}
+
+const chrome = resolveChrome();
+
+// Average RGB of an 8-bit PNG. CI cannot depend on Pillow being on PATH.
+export function pngRgbAverage(buf) {
+  if (!Buffer.isBuffer(buf)) buf = Buffer.from(buf);
+  if (buf.length < 8 || buf[0] !== 0x89 || buf[1] !== 0x50) throw new Error('not png');
+  let off = 8;
+  let width = 0;
+  let height = 0;
+  let depth = 0;
+  let color = 0;
+  const idats = [];
+  while (off + 12 <= buf.length) {
+    const len = buf.readUInt32BE(off);
+    const type = buf.toString('ascii', off + 4, off + 8);
+    const data = buf.subarray(off + 8, off + 8 + len);
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      depth = data[8];
+      color = data[9];
+    } else if (type === 'IDAT') {
+      idats.push(data);
+    } else if (type === 'IEND') {
+      break;
+    }
+    off += 12 + len;
+  }
+  if (!width || !height) throw new Error('png missing IHDR');
+  if (depth !== 8) throw new Error('png depth ' + depth);
+  const bpp = color === 2 ? 3 : color === 6 ? 4 : color === 0 ? 1 : 0;
+  if (!bpp) throw new Error('png color ' + color);
+  const raw = inflateSync(Buffer.concat(idats));
+  const stride = width * bpp;
+  const rowBytes = stride + 1;
+  if (raw.length < height * rowBytes) throw new Error('png short IDAT');
+  const prev = Buffer.alloc(stride);
+  let sum = 0;
+  let n = 0;
+  for (let y = 0; y < height; y++) {
+    const filter = raw[y * rowBytes];
+    const cur = raw.subarray(y * rowBytes + 1, y * rowBytes + 1 + stride);
+    const out = Buffer.alloc(stride);
+    for (let i = 0; i < stride; i++) {
+      const a = i >= bpp ? out[i - bpp] : 0;
+      const b = prev[i];
+      const c = i >= bpp ? prev[i - bpp] : 0;
+      let v = cur[i];
+      if (filter === 1) v = (v + a) & 255;
+      else if (filter === 2) v = (v + b) & 255;
+      else if (filter === 3) v = (v + ((a + b) >> 1)) & 255;
+      else if (filter === 4) {
+        const p = a + b - c;
+        const pa = Math.abs(p - a);
+        const pb = Math.abs(p - b);
+        const pc = Math.abs(p - c);
+        v = (v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 255;
+      } else if (filter !== 0) {
+        throw new Error('png filter ' + filter);
+      }
+      out[i] = v;
+    }
+    out.copy(prev);
+    for (let x = 0; x < width; x++) {
+      const i = x * bpp;
+      if (bpp === 1) sum += out[i] * 3;
+      else sum += out[i] + out[i + 1] + out[i + 2];
+      n += 1;
+    }
+  }
+  return n ? sum / (n * 3) : 0;
+}
 const LOOK = {
   city: 'whoopStreet', living: 'livingWhoop', garage: 'garageWhoop',
   warehouse: 'warehouseWhoop', gym: 'gymWhoop', office: 'officeWhoop',
@@ -94,7 +184,9 @@ async function bootPage(base, spec) {
   const userData = `/tmp/qm-boot-${process.pid}-${bootSeq}-${Date.now()}`;
   const child = spawn(chrome, [
     '--headless=new', '--no-sandbox', '--disable-gpu-sandbox',
-    '--use-angle=swiftshader', '--enable-webgl', '--hide-scrollbars',
+    '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
+    '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+    '--enable-webgl', '--hide-scrollbars',
     '--window-size=1400,800', `--remote-debugging-port=${port}`,
     `--user-data-dir=${userData}`, url,
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -141,12 +233,18 @@ async function bootPage(base, spec) {
           var s=window._sim||{};
           var map = s.map ? s.map() : null;
           var vibe = s.vibe ? s.vibe() : null;
-          return { map: map, vibeId: vibe && vibe.id, ready: !!(s.map && s.vibe) };
+          var fps = s.looks && s.looks.fps;
+          return {
+            map: map,
+            vibeId: vibe && vibe.id,
+            ready: !!(fps && fps.ready),
+            avg: fps && fps.avg
+          };
         })())`,
         returnByValue: true,
       });
       const got = probe && probe.result && probe.result.value ? JSON.parse(probe.result.value) : {};
-      if (got.map === spec.map && got.vibeId === spec.map) { parsed = got; break; }
+      if (got.map === spec.map && got.vibeId === spec.map && got.ready) { parsed = got; break; }
       await sleep(250);
     }
     await cdp(ws, 'Runtime.evaluate', {
@@ -194,13 +292,11 @@ async function bootPage(base, spec) {
     parsed = info && info.result && info.result.value ? JSON.parse(info.result.value) : parsed;
     try {
       const shot = await cdp(ws, 'Page.captureScreenshot', { format: 'png', fromSurface: true });
+      const pngBuf = Buffer.from(shot.data, 'base64');
       const dir = mkdtempSync(join(tmpdir(), 'qm-boot-'));
       const png = join(dir, spec.map + '.png');
-      writeFileSync(png, Buffer.from(shot.data, 'base64'));
-      const py = spawnSync('python3', ['-c',
-        'from PIL import Image; import sys; im=Image.open(sys.argv[1]).convert("RGB"); '
-        + 'px=im.tobytes(); n=len(px)//3; print(sum(px)/(n or 1))', png], { encoding: 'utf8' });
-      parsed.shotAvg = Number(py.stdout);
+      writeFileSync(png, pngBuf);
+      parsed.shotAvg = pngRgbAverage(pngBuf);
     } catch (e) {
       parsed.shotError = e.message;
     }
@@ -216,6 +312,15 @@ async function bootPage(base, spec) {
     ]);
   }
 }
+
+test('pngRgbAverage reads an 8-bit RGB PNG without Pillow', () => {
+  // 1x1 opaque red (#ff0000), filter 0. Generated with Node zlib + CRC32.
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJGQobAAAAAElFTkSuQmCC',
+    'base64',
+  );
+  assert.ok(Math.abs(pngRgbAverage(png) - 85) < 0.5, 'red (255,0,0) avg is 85');
+});
 
 test('resolveSimBoot keeps every catalog map off City unless asked', () => {
   for (const map of MAP_IDS) {

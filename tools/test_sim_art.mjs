@@ -18,6 +18,7 @@ import {
   garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP, planGarageKit,
   warehouseKitBytesForQuality, WAREHOUSE_KIT_CORE, WAREHOUSE_KIT_EXTRA, planWarehouseKit,
   gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA, planGymKit,
+  officeKitBytesForQuality, OFFICE_KIT_CORE, OFFICE_KIT_EXTRA, planOfficeKit,
   restyleDiveTubes, LIVING_VIBE_ID, hideStockLivingMeshes, buildClayParlor,
   restyleLiving, tickLivingArt, livingBudget, livingWantsGlow,
   GARAGE_VIBE_ID, hideStockGarageMeshes, buildVoltStall,
@@ -37,7 +38,7 @@ import {
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
-import { MAP_IDS, MAP_LOOKS, buildMap, GARAGE_PLAY, WAREHOUSE_PLAY, GYM_PLAY } from '../sim-maps.js';
+import { MAP_IDS, MAP_LOOKS, buildMap, GARAGE_PLAY, WAREHOUSE_PLAY, GYM_PLAY, OFFICE_PLAY } from '../sim-maps.js';
 import { DAILY_MAPS } from '../sim-retention.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -169,6 +170,7 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.match(sim, /tryDressGarageKit/);
   assert.match(sim, /tryDressWarehouseKit/);
   assert.match(sim, /tryDressGymKit/);
+  assert.match(sim, /tryDressOfficeKit/);
   assert.match(sim, /MeshoptDecoder/);
   assert.match(sim, /Kenney CC0/);
   assert.match(sim, /Kenney CC0 shop kit/);
@@ -445,6 +447,55 @@ test('Kenney CC0 gym kit is meshopt-compressed and stays off the banned path', (
   const emit = kitSrc.slice(kitSrc.indexOf('function gymMat'), kitSrc.indexOf('let gymDressGen'));
   assert.equal(/emissiveIntensity: [2-9]/.test(emit), false, 'gym kit glow must stay dim under bloom');
   assert.equal(/gymMat[\s\S]{0,900}MeshStandardMaterial/.test(kitSrc), false, 'gym kit must not use MeshStandard after IBL');
+  assert.match(emit, /MeshBasicMaterial/);
+});
+
+test('Kenney CC0 office kit is meshopt-compressed and stays off the banned path', () => {
+  const kitDir = join(root, 'assets/sim-office');
+  const kitSrc = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  const officeSrc = readFileSync(join(root, 'sim-art-office.js'), 'utf8');
+  assert.equal(kitSrc.includes('GLB-format'), false);
+  assert.equal(kitSrc.includes('loadAsync'), false);
+  assert.equal(kitSrc.includes('WebFPV'), false);
+  assert.equal(officeSrc.includes('GLB-format'), false);
+  assert.equal(officeSrc.includes('WebFPV'), false);
+  assert.equal(mentionsBannedAssets(officeSrc), false);
+  assert.match(kitSrc, /tryDressOfficeKit/);
+  assert.match(kitSrc, /function officeMat/);
+  assert.equal(officeKitBytesForQuality('low'), 2792);
+  assert.equal(officeKitBytesForQuality('med'), 10960);
+  assert.equal(officeKitBytesForQuality('high'), 10960);
+  const planned = planOfficeKit();
+  assert.ok(planned.cardboard.length >= 4);
+  assert.ok(planned.crates.length >= 4);
+  assert.ok(planned.toolboxes.length >= 2);
+  const clutter = [].concat(planned.cardboard, planned.crates, planned.toolboxes);
+  for (const p of clutter) {
+    assert.ok(Math.abs(p.x) >= 15.8, 'kit clutter too close to aisle ' + p.x + ',' + p.z);
+  }
+  for (const name of ['License-survival-kit.txt', 'License-furniture-kit.txt', 'CREDITS.txt']) {
+    assert.ok(existsSync(join(kitDir, name)), name);
+    if (name.startsWith('License-')) {
+      assert.match(readFileSync(join(kitDir, name), 'utf8'), /Creative Commons Zero, CC0/);
+    }
+  }
+  let glbBytes = 0;
+  const names = [];
+  const kitSpecs = Object.values(OFFICE_KIT_CORE).concat(Object.values(OFFICE_KIT_EXTRA));
+  for (const spec of kitSpecs) {
+    const p = join(kitDir, spec.file);
+    assert.equal(existsSync(p), true, spec.file);
+    const n = statSync(p).size;
+    assert.equal(n, spec.bytes, spec.file + ' size');
+    glbBytes += n;
+    names.push(spec.file);
+  }
+  assert.equal(glbBytes, 10960);
+  assert.equal(new Set(names).size, names.length);
+  assert.ok(!readdirSync(kitDir).some((f) => f.includes('GLB-format')));
+  const emit = kitSrc.slice(kitSrc.indexOf('function officeMat'), kitSrc.indexOf('let officeDressGen'));
+  assert.equal(/emissiveIntensity: [2-9]/.test(emit), false, 'office kit glow must stay dim under bloom');
+  assert.equal(/officeMat[\s\S]{0,900}MeshStandardMaterial/.test(kitSrc), false, 'office kit must not use MeshStandard after IBL');
   assert.match(emit, /MeshBasicMaterial/);
 });
 
@@ -1240,6 +1291,37 @@ test('Office freestyle builds without throwing and the FPV frame is not all blac
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickOfficeArt must not touch the THREE binding');
   assert.match(tickSrc, /officeSun|officePlane/);
+});
+
+test('Office playground keeps whoop-sized gaps that match the visuals', () => {
+  const built = buildMap(THREE, 'office');
+  const hit = (x, y, z) => {
+    const p = new THREE.Vector3(x, y, z);
+    return built.colliders.some((bb) => bb.containsPoint(p));
+  };
+  const P = OFFICE_PLAY;
+  const deskX = P.cubes[3][0] + P.desk.localX;
+  const deskZ = P.cubes[3][1];
+  assert.equal(hit(deskX, 0.62, deskZ), false, 'fly under open desk');
+  assert.equal(hit(deskX, P.desk.topY + 0.06, deskZ), true, 'desk top solid');
+  assert.equal(hit(deskX, P.desk.topY + P.desk.topH + 0.25, deskZ), false, 'fly over desk');
+  assert.equal(hit(deskX + P.desk.legs[0][0], 0.60, deskZ + P.desk.legs[0][1]), true, 'desk leg solid');
+  assert.equal(hit(P.conf.x, 0.62, P.conf.z), false, 'fly under conference table');
+  assert.equal(hit(P.conf.x, P.conf.topY + 0.06, P.conf.z), true, 'conference top solid');
+  assert.equal(hit(P.reception.x, 0.62, P.reception.z), false, 'fly under reception');
+  assert.equal(hit(P.sun.x, P.sun.y, P.sun.z), false, 'sun hoop open');
+  assert.equal(hit(P.sun.x, P.sun.y + P.sun.innerH / 2 + P.sun.bar / 2, P.sun.z), true, 'sun frame solid');
+  assert.equal(hit(4.6, 1.55, 12.4), false, 'fly the file-cabinet gap');
+  assert.equal(hit(P.gap.left.x, 1.55, P.gap.left.z), true, 'gap stack solid');
+  assert.equal(hit(0, 7.45, 6.0), false, 'fly under rafter joist');
+  assert.equal(hit(0, P.rafterY + 0.08, 6.0), true, 'rafter joist solid');
+  assert.ok(P.whoopClear >= 0.85, 'whoop clearance');
+  assert.ok(P.desk.topY >= 1.2, 'desk crawl taller than 85mm whoop');
+  assert.ok(P.desk.topH <= 0.2, 'desk top is a slab');
+  assert.ok(P.desk.legs.length >= 4, 'open desk has legs');
+  const officeSrc = readFileSync(join(root, 'sim-art-office.js'), 'utf8');
+  assert.match(officeSrc, /OFFICE_PLAY/);
+  assert.match(officeSrc, /planOfficeKit|addPlayLines/);
 });
 
 test('Trainer Licorice Grid is implemented with candy-torus gates', () => {

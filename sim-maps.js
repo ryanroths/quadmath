@@ -4,7 +4,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=0a2cbcdc8c7c';
+import { planRoom } from './sim-room.js?v=ca7dc12a272b';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -475,12 +475,52 @@ function buildBackyard(THREE, parent, colliders, lights) {
   return { floor, orbit: MAP_ORBIT.backyard };
 }
 
+// Office playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
+export const OFFICE_PLAY = Object.freeze({
+  whoopClear: 0.85,
+  cubes: Object.freeze([
+    Object.freeze([-13.25, -12]), Object.freeze([-3.75, -12]),
+    Object.freeze([-13.25, 0]), Object.freeze([-3.75, 0]),
+    Object.freeze([-13.25, 12]), Object.freeze([-3.75, 12]),
+  ]),
+  cube: Object.freeze({ w: 6.4, d: 7.0, h: 3.55, t: 0.12 }),
+  desk: Object.freeze({
+    localX: -1.35, localZ: 0,
+    w: 3.15, d: 1.55, topY: 1.20, topH: 0.10, leg: 0.12,
+    legs: Object.freeze([[-1.40, -0.62], [1.40, -0.62], [-1.40, 0.62], [1.40, 0.62]]),
+  }),
+  chair: Object.freeze({
+    localX: 0.55, localZ: 0, w: 1.05, seatY: 0.35, seatH: 0.42, backH: 1.05, backD: 0.14,
+  }),
+  conf: Object.freeze({
+    x: 4.6, z: -16.2, w: 5.6, d: 2.4, topY: 1.20, topH: 0.10, leg: 0.14,
+    legs: Object.freeze([[-2.50, -0.95], [2.50, -0.95], [-2.50, 0.95], [2.50, 0.95]]),
+  }),
+  reception: Object.freeze({
+    x: 14.2, z: 18.4, w: 3.6, d: 1.5, topY: 1.20, topH: 0.10, leg: 0.12,
+    legs: Object.freeze([[-1.55, -0.55], [1.55, -0.55], [-1.55, 0.55], [1.55, 0.55]]),
+  }),
+  sun: Object.freeze({
+    x: 4.6, y: 2.70, z: 6.2, innerW: 2.20, innerH: 1.85, bar: 0.14, depth: 0.20,
+  }),
+  gap: Object.freeze({
+    left: Object.freeze({ x: 2.35, z: 12.4, w: 1.7, h: 3.2, d: 1.4 }),
+    right: Object.freeze({ x: 6.85, z: 12.4, w: 1.7, h: 3.2, d: 1.4 }),
+  }),
+  rafterY: 7.85,
+  rafterH: 0.22,
+  rafterD: 0.38,
+  rafterZs: Object.freeze([-18, -6, 6, 18]),
+});
+
 function desk(THREE, parent, colliders, x, z, mats, ry) {
-  box(THREE, parent, colliders, x, 0, z, 3.15, 0.82, 1.55, mats.wood, ry);
-  box(THREE, parent, colliders, x, 0.82, z, 3.2, 0.08, 1.6, mats.dark, ry);
-  // Monitor + keyboard — cheap extras so the cubicle reads as a desk, not a box.
-  box(THREE, parent, colliders, x, 0.90, z - 0.42, 1.15, 0.72, 0.08, mats.screen, ry);
-  box(THREE, parent, colliders, x, 0.90, z + 0.18, 1.35, 0.04, 0.55, mats.dark, ry);
+  const d = OFFICE_PLAY.desk;
+  box(THREE, parent, colliders, x, d.topY, z, d.w, d.topH, d.d, mats.dark, ry);
+  for (const [dx, dz] of d.legs) {
+    box(THREE, parent, colliders, x + dx, 0, z + dz, d.leg, d.topY, d.leg, mats.wood, ry);
+  }
+  box(THREE, parent, colliders, x, d.topY + d.topH, z - 0.42, 1.15, 0.72, 0.08, mats.screen, ry);
+  box(THREE, parent, colliders, x, d.topY + d.topH, z + 0.18, 1.35, 0.04, 0.55, mats.dark, ry);
 }
 
 function officeChair(THREE, parent, colliders, x, z, mats, ry) {
@@ -524,12 +564,26 @@ function buildOffice(THREE, parent, colliders, lights) {
   box(THREE, parent, colliders, 10.15, 0, -21.6, 0.16, 3.7, 2.8, mats.cube);
   box(THREE, parent, colliders, 10.15, 0, -1.0, 0.16, 3.7, 28.0, mats.cube);
   box(THREE, parent, colliders, 10.15, 0, 20.8, 0.16, 3.7, 4.4, mats.cube);
-  // Conference table in the open bay.
-  box(THREE, parent, colliders, 4.6, 0, -16.2, 5.6, 1.12, 2.4, mats.wood);
+  const conf = OFFICE_PLAY.conf;
+  box(THREE, parent, colliders, conf.x, conf.topY, conf.z, conf.w, conf.topH, conf.d, mats.wood);
+  for (const [dx, dz] of conf.legs) {
+    box(THREE, parent, colliders, conf.x + dx, 0, conf.z + dz, conf.leg, conf.topY, conf.leg, mats.wood);
+  }
   officeChair(THREE, parent, colliders, 4.6, -14.4, mats, 0);
   officeChair(THREE, parent, colliders, 4.6, -18.0, mats, Math.PI);
-  // Reception desk at the hallway door.
-  box(THREE, parent, colliders, 14.2, 0, 18.4, 3.6, 1.25, 1.5, mats.dark);
+  const rec = OFFICE_PLAY.reception;
+  box(THREE, parent, colliders, rec.x, rec.topY, rec.z, rec.w, rec.topH, rec.d, mats.dark);
+  for (const [dx, dz] of rec.legs) {
+    box(THREE, parent, colliders, rec.x + dx, 0, rec.z + dz, rec.leg, rec.topY, rec.leg, mats.wood);
+  }
+  const sun = OFFICE_PLAY.sun;
+  hoopFrame(THREE, parent, colliders, sun.x, sun.y, sun.z, sun.innerW, sun.innerH, sun.bar, sun.depth, mats.dark);
+  const gL = OFFICE_PLAY.gap.left, gR = OFFICE_PLAY.gap.right;
+  box(THREE, parent, colliders, gL.x, 0, gL.z, gL.w, gL.h, gL.d, mats.cube);
+  box(THREE, parent, colliders, gR.x, 0, gR.z, gR.w, gR.h, gR.d, mats.cube);
+  for (const z of OFFICE_PLAY.rafterZs) {
+    box(THREE, parent, colliders, 0, OFFICE_PLAY.rafterY, z, 34.8, OFFICE_PLAY.rafterH, OFFICE_PLAY.rafterD, mats.wood);
+  }
   addLight(THREE, parent, lights, 0, 8.2, 0, 0xffe6c4, 95, 40);
   addLight(THREE, parent, lights, 13.2, 7.8, 10, 0xffe8c8, 55, 24);
   addLight(THREE, parent, lights, -8, 7.8, -8, 0xffe4c0, 50, 22);
