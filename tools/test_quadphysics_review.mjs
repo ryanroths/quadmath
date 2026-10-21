@@ -211,6 +211,7 @@ function ryanFullStickRoll(fps) {
   const inner = qp.substep.bind(qp);
   qp.substep = function () { phys += qp.physicsDt; return inner(); };
   for (let i = 0; i < 40; i++) qp.step(1 / qp.physicsHz, { roll: 0, pitch: 0, yaw: 0 }, hover, { r: 0, p: 0, y: 0 });
+  phys = 0;
   let wall = 0;
   while (wall < 0.20) {
     qp.step(fd, { roll: tgt, pitch: 0, yaw: 0 }, hover, { r: 1, p: 0, y: 0 });
@@ -230,4 +231,60 @@ test('Ryan Actual full-stick roll >= 725 deg/s within 150 ms', () => {
     assert.ok(r.held >= 725, `${fps} fps: held ${r.held.toFixed(1)} °/s at 200 ms`);
     assert.ok(r.held / 740 >= 0.98, `${fps} fps: held ${(r.held / 740 * 100).toFixed(1)}% of 740`);
   }
+});
+
+function ryanFullStickYaw(fps) {
+  const qp = new QuadPhysics(PRESETS.whoop65, STOCK65);
+  qp.setFlightMode('acro');
+  qp.setPhysicsHz(500);
+  qp.reset({ x: 0, y: 0, z: 4 });
+  qp.arm();
+  const hover = hoverCollective();
+  const tgt = rateSetpoint('ACTUAL', 1, RYAN_YAW) * Math.PI / 180;
+  const fd = 1 / fps;
+  let t686 = null, peak = 0, phys = 0;
+  const inner = qp.substep.bind(qp);
+  qp.substep = function () { phys += qp.physicsDt; return inner(); };
+  for (let i = 0; i < 40; i++) qp.step(1 / qp.physicsHz, { roll: 0, pitch: 0, yaw: 0 }, hover, { r: 0, p: 0, y: 0 });
+  phys = 0;
+  let wall = 0;
+  while (wall < 0.20) {
+    qp.step(fd, { roll: 0, pitch: 0, yaw: tgt }, hover, { r: 0, p: 0, y: 1 });
+    wall += fd;
+    const dps = Math.abs(qp.omega.z) * DEG;
+    if (dps > peak) peak = dps;
+    if (t686 == null && dps >= 686) t686 = phys;
+  }
+  return { t686, peak, held: Math.abs(qp.omega.z) * DEG };
+}
+
+test('Ryan Actual full-stick yaw >= 686 deg/s (98% of 700) within 80 ms', () => {
+  for (const fps of [60, 144]) {
+    const r = ryanFullStickYaw(fps);
+    assert.ok(r.t686 != null && r.t686 >= 0.008 && r.t686 <= 0.080,
+      `${fps} fps: 686 °/s at ${r.t686 == null ? 'never' : (r.t686 * 1000).toFixed(0) + ' ms'} (peak ${r.peak.toFixed(0)})`);
+    assert.ok(r.held >= 686, `${fps} fps: held ${r.held.toFixed(1)} °/s at 200 ms`);
+    assert.ok(r.held / 700 >= 0.98, `${fps} fps: held ${(r.held / 700 * 100).toFixed(1)}% of 700`);
+  }
+});
+
+test('yaw-first mixer steal still yields yaw when roll+yaw saturate', () => {
+  const qp = makeAcro(500);
+  const hover = hoverCollective();
+  const dt = 1 / qp.physicsHz;
+  // Isolated yaw: leftover authority must stay on the yaw pair.
+  for (let i = 0; i < Math.round(0.12 / dt); i++) {
+    qp.step(dt, { roll: 0, pitch: 0, yaw: 8 }, hover, { r: 0, p: 0, y: 1 });
+  }
+  const yawOnly = Math.abs(qp.omega.z);
+  qp.reset({ x: 0, y: 0, z: 4 });
+  qp.arm();
+  // Combined hard roll + yaw: yaw-first steal must not invert isolated-yaw tracking.
+  for (let i = 0; i < Math.round(0.12 / dt); i++) {
+    qp.step(dt, { roll: 12, pitch: 0, yaw: 8 }, hover, { r: 1, p: 0, y: 1 });
+  }
+  assert.ok(Math.abs(qp.omega.z) > 0, 'combined yaw still rotates the same sign');
+  assert.ok(Math.abs(qp.omega.x) > 4, `roll kept authority ωx=${qp.omega.x.toFixed(2)}`);
+  assert.ok(Math.abs(qp.omega.z) < yawOnly * 1.05,
+    `yaw should yield first when saturated (iso ${yawOnly.toFixed(2)} combo ${qp.omega.z.toFixed(2)})`);
 });
