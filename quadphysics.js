@@ -74,12 +74,15 @@ const I_SCALE = 0.000072;
 const I_SCALE_RP = 0.00038;     // roll/pitch I closes SS; yaw keeps the 70–160 ms rise
 const D_SCALE = 0.0000055;
 const D_SCALE_RP = 0.0000085;
-const F_SCALE = 0.0000028125;   // yaw stays on the mild scale (reaction-torque axis)
+const F_SCALE = 0.0000028125;   // yaw delta-FF — kick, not a mixer slam
 const F_SCALE_RP = 0.0000038;   // roll/pitch delta-FF — kick, not a mixer slam
 // Sustain FF matches whoop aero (linear B + quadratic C, incl. default floatiness)
 // so a held stick stays at the rate without relying on a slow I wind.
-const F_HOLD_B = 0.00158;       // motor units per rad/s
-const F_HOLD_C = 0.000116;      // motor units per (rad/s)²
+const F_HOLD_B = 0.00158;       // motor units per rad/s (roll/pitch)
+const F_HOLD_C = 0.000116;      // motor units per (rad/s)² (roll/pitch)
+// Yaw torque is kQ·thrust·arm, not the roll lever. Same aero, slightly different a/ω.
+const F_HOLD_B_YAW = 0.00155;
+const F_HOLD_C_YAW = 0.000114;
 const FF_WINDOW_S = 0.016;      // one 60 Hz RC frame — fps-independent FF duration
 
 const G = 9.81;
@@ -312,8 +315,9 @@ class RateAxis {
     this.ki = I * (rp ? I_SCALE_RP : I_SCALE);
     this.kd = D * (rp ? D_SCALE_RP : D_SCALE);
     this.kf = F * (rp ? F_SCALE_RP : F_SCALE);
-    this.holdB = rp ? F_HOLD_B : 0;
-    this.holdC = rp ? F_HOLD_C : 0;
+    this.holdB = rp ? F_HOLD_B : F_HOLD_B_YAW;
+    this.holdC = rp ? F_HOLD_C : F_HOLD_C_YAW;
+    this.holdBlend = !rp; // yaw: sustain follows gyro so it holds, not launches
     this.iterm = 0;
     this.itermLimit = tune.itermLimit;
     this.prevGyro = 0;
@@ -364,7 +368,10 @@ class RateAxis {
       if (ratio > 0.85) f *= Math.max(0, 1 - (ratio - 0.85) / 0.15);
     }
 
-    const fHold = this.holdB * setpoint + this.holdC * setpoint * Math.abs(setpoint);
+    let fHold = this.holdB * setpoint + this.holdC * setpoint * Math.abs(setpoint);
+    if (this.holdBlend && setpoint !== 0) {
+      fHold *= Math.min(1, Math.abs(gyro / setpoint));
+    }
     return p + this.iterm + d + f + fHold;
   }
   reset() {
@@ -621,17 +628,19 @@ export class QuadPhysics {
     let r = 0, p = 0, y = 0, thr = 0;
     const threeD = !!this.threeD;
     if (this.armed) {
-      // Scheduled 16 ms FF on roll/pitch only — yaw stays on the per-tick
-      // derivative so the 70–160 ms yaw rise target does not collapse.
-      let dRoll, dPitch;
+      // Scheduled 16 ms FF. Yaw uses it only on interpolated frames so a
+      // physics-Hz 0→8 step keeps the 70–160 ms rise pin; 60/144 fps get
+      // the same kick as roll/pitch.
+      let dRoll, dPitch, dYaw;
       if (this._ffLeft > 0) {
         dRoll = this._ffD.roll;
         dPitch = this._ffD.pitch;
+        if (this._interpInputs) dYaw = this._ffD.yaw;
         this._ffLeft -= dt;
       }
       r = this.pid.roll.update(sp.roll, this.omega.x, this.airborne, dt, dRoll);
       p = this.pid.pitch.update(sp.pitch, this.omega.y, this.airborne, dt, dPitch);
-      y = this.pid.yaw.update(sp.yaw, this.omega.z, this.airborne, dt);
+      y = this.pid.yaw.update(sp.yaw, this.omega.z, this.airborne, dt, dYaw);
       if (threeD) {
         // 3D collective is already -1..1. No idle: center stick is true zero.
         thr = Math.max(-1, Math.min(1, inThr || 0));
