@@ -5,8 +5,8 @@
 // fails, the procedural meshes already in the scene stay visible. Nothing
 // from the GPL whoop sim.
 
-import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=ef5849d4859b';
-import { BACKYARD_PLAY } from './sim-maps.js?v=d9af70a64707';
+import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=ac7186a54ba5';
+import { BACKYARD_PLAY } from './sim-maps.js?v=400dd21e79ee';
 
 const KIT_ROOT = 'assets/sim-city/';
 
@@ -1025,8 +1025,8 @@ function placeScaled(list) {
 export function planBackyardKitFromPlay(play) {
   const P = play || BACKYARD_PLAY;
   const rim = [
-    [-22.4, -18.2, 8.6], [22.6, -17.8, 8.4], [-20.8, 18.6, 8.2], [20.4, 17.4, 8.0],
-    [-6.4, -19.6, 7.6], [8.2, -19.8, 7.4], [22.8, -4.2, 8.0], [-22.6, -3.6, 7.8],
+    [-28.0, -22.75, 10.75], [28.25, -22.25, 10.5], [-26.0, 23.25, 10.25], [25.5, 21.75, 10.0],
+    [-8.0, -24.5, 9.5], [10.25, -24.75, 9.25], [28.5, -5.25, 10.0], [-28.25, -4.5, 9.75],
   ];
   const fence = [];
   const fn = P.fence;
@@ -1044,8 +1044,8 @@ export function planBackyardKitFromPlay(play) {
     ac: [{ x: P.ac.x, z: P.ac.z, s: P.ac.h }],
     sofa: [{ x: P.sofa.x, z: P.sofa.z, s: P.sofa.backH, ry: Math.PI }],
     bushes: [
-      { x: -12.2, z: -12.8, s: 1.4 }, { x: 10.4, z: -14.6, s: 1.2 },
-      { x: 6.8, z: 2.2, s: 1.1 }, { x: -6.4, z: 2.6, s: 1.15 },
+      { x: -15.25, z: -16.0, s: 1.75 }, { x: 13.0, z: -18.25, s: 1.5 },
+      { x: 8.5, z: 2.75, s: 1.38 }, { x: -8.0, z: 3.25, s: 1.44 },
     ],
     cactus: P.pots.slice(0, 2).map((p) => ({ x: p.x, z: p.z, s: p.h + 0.55 })),
   };

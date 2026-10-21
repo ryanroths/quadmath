@@ -1776,12 +1776,12 @@ test("Backyard playground keeps whoop-sized gaps that match Ryan's Yard", () => 
   assert.equal(hit(P.pvc.x + P.pvc.innerD / 2, 2.0, P.pvc.z + P.pvc.innerW / 2), true, 'PVC post solid');
   assert.equal(hit(P.pvc.x, P.pvc.midY + 0.05, P.pvc.z - P.pvc.innerW / 2), true, 'PVC rail solid');
   assert.equal(hit(P.ficus.x, 2.2, P.ficus.z), true, 'ficus trunk solid');
-  assert.equal(hit(P.ficus.x + 3.1, 2.25, P.ficus.z), false, 'spin radius open');
+  assert.equal(hit(P.ficus.x + P.planter.rOut + 0.5, 2.25, P.ficus.z), false, 'spin radius open');
   assert.equal(hit(P.pool.x, 1.12, P.pool.z), false, 'skim the pool');
   assert.equal(hit(P.canopy.x, P.canopy.y, P.canopy.z), false, 'canopy hoop open');
   assert.ok(P.alley.x < 0, 'alley mirrored to west side');
   assert.ok(P.fence.z1 - P.fence.z0 >= 24, 'fence runs the full yard');
-  assert.equal(hit(P.alley.x, 1.18, 14.0), false, 'side alley open');
+  assert.equal(hit(P.alley.x, 1.18, (P.alley.z0 + P.alley.z1) * 0.5), false, 'side alley open');
   assert.equal(hit(P.woodGate.x, 2.2, P.woodGate.z), true, 'wood gate solid');
   assert.equal(hit(P.woodGate.x, P.woodGate.h + 0.4, P.woodGate.z), false, 'pop over wood gate');
   assert.equal(hit(P.ridge.x, P.ridge.y + 0.1, P.ridge.z), true, 'ridge solid');
@@ -1789,7 +1789,9 @@ test("Backyard playground keeps whoop-sized gaps that match Ryan's Yard", () => 
   assert.equal(hit(P.fence.x, 2.0, P.fence.z0), true, 'south fence post solid');
   assert.equal(hit(P.fence.x, 2.0, P.fence.z0 + P.fence.spacing * 0.5), true, 'closed mesh panel solid');
   assert.equal(hit(P.fence.x, 1.22, P.fence.z0 + P.fence.spacing * 1.5), false, 'fence gap flyable');
-  assert.equal(hit(P.fence.x, 5.15, P.fence.z0 + P.fence.spacing * 0.5), false, 'pop over closed mesh');
+  assert.equal(hit(P.fence.x, P.fence.h + 0.4, P.fence.z0 + P.fence.spacing * 0.5), false, 'pop over closed mesh');
+  assert.equal(P.pvc.x, P.turf.x, 'PVC sits on turf center x');
+  assert.equal(P.pvc.z, P.turf.z, 'PVC sits on turf center z');
   assert.ok(P.whoopClear >= 0.85, 'whoop clearance');
   const yardSrc = readFileSync(join(root, 'sim-art-backyard.js'), 'utf8');
   assert.match(yardSrc, /BACKYARD_PLAY/);
