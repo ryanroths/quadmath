@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Honey bleachers, brass rims, amber trusses. Court paint stays readable.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=552a7cb9d623';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d2194c8087bb';
 
 export const GYM_STOCK = Object.freeze({
   wall: 0xb8b4aa,
