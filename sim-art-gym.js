@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Honey bleachers, brass rims, amber trusses. Court paint stays readable.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d2194c8087bb';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=10aecc280e13';
 
 export const GYM_STOCK = Object.freeze({
   wall: 0xb8b4aa,
@@ -910,11 +910,18 @@ export function pulseGymGate(g, isNext, passed, now, vibe) {
 export function tickGymArt(root, now) {
   if (!root) return;
   const t = now * 0.001;
-  root.traverse((o) => {
-    try {
-      tickGymArtObject(o, t);
-    } catch (e) { /* never abort the FPV render loop */ }
-  });
+  let list = root.userData && root.userData.artTickers;
+  if (!list) {
+    list = [];
+    root.traverse((o) => {
+      const u = o.userData || {};
+      if (u.gymRim || u.gymDust || u.gymBanner || u.gymCan) list.push(o);
+    });
+    if (root.userData) root.userData.artTickers = list;
+  }
+  for (let i = 0; i < list.length; i++) {
+    try { tickGymArtObject(list[i], t); } catch (e) { /* never abort the FPV render loop */ }
+  }
 }
 
 function tickGymArtObject(o, t) {

@@ -2015,11 +2015,19 @@ export function pulseCityGate(g, isNext, passed, now, vibe) {
 export function tickCityArt(root, now) {
   if (!root) return;
   const t = now * 0.001;
-  root.traverse((o) => {
-    try {
-      tickCityArtObject(o, t);
-    } catch (e) { /* never abort the FPV render loop */ }
-  });
+  let list = root.userData && root.userData.artTickers;
+  if (!list) {
+    list = [];
+    root.traverse((o) => {
+      const u = o.userData || {};
+      const mu = o.material && o.material.userData;
+      if (u.cityRain || u.citySteam || u.cityWet || u.cityTrails || u.cityCruise || u.cityCurrent || u.cityDrone || (mu && (mu.cityHolo || mu.cityWindow || mu.cityBlink))) list.push(o);
+    });
+    if (root.userData) root.userData.artTickers = list;
+  }
+  for (let i = 0; i < list.length; i++) {
+    try { tickCityArtObject(list[i], t); } catch (e) { /* never abort the FPV render loop */ }
+  }
 }
 
 function tickCityArtObject(o, t) {

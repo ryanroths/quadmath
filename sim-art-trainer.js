@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Night meet floor, candy tape, gummy PVC frames, candy-torus gates.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d2194c8087bb';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=10aecc280e13';
 
 export const TRAINER_STOCK = Object.freeze({
   wall: 0xc8c4ba,
@@ -558,11 +558,18 @@ export function pulseTrainerGate(g, isNext, passed, now, vibe) {
 export function tickTrainerArt(root, now) {
   if (!root) return;
   const t = now * 0.001;
-  root.traverse((o) => {
-    try {
-      tickTrainerArtObject(o, t);
-    } catch (e) { /* never abort the FPV render loop */ }
-  });
+  let list = root.userData && root.userData.artTickers;
+  if (!list) {
+    list = [];
+    root.traverse((o) => {
+      const u = o.userData || {};
+      if (u.trainerBulb || u.trainerSpark || u.trainerFrame || u.trainerSign) list.push(o);
+    });
+    if (root.userData) root.userData.artTickers = list;
+  }
+  for (let i = 0; i < list.length; i++) {
+    try { tickTrainerArtObject(list[i], t); } catch (e) { /* never abort the FPV render loop */ }
+  }
 }
 
 function tickTrainerArtObject(o, t) {

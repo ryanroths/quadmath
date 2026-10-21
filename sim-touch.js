@@ -149,7 +149,8 @@ export function detectMobile(win) {
     const touch = ('ontouchstart' in w) && (nav.maxTouchPoints > 0);
     const screen = w.screen || {};
     const small = Math.min(screen.width || 0, screen.height || 0) < 768;
-    return !!(coarse && (touch || small));
+    const uaPhone = /iphone|ipod|android.+mobile/i.test(String(nav.userAgent || ''));
+    return !!((coarse || uaPhone) && (touch || small));
   } catch (e) { return false; }
 }
 

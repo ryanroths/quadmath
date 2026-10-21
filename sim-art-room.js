@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Clay/felt furniture on the same AABBs. Felt-ring gates. Bloom off.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d2194c8087bb';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=10aecc280e13';
 import { planRoom } from './sim-room.js?v=48cdde0d2972';
 
 export const ROOM_STOCK = Object.freeze({
@@ -799,11 +799,18 @@ export function pulseRoomGate(g, isNext, passed, now, vibe) {
 export function tickRoomArt(root, now) {
   if (!root) return;
   const t = now * 0.001;
-  root.traverse((o) => {
-    try {
-      tickRoomArtObject(o, t);
-    } catch (e) { /* never abort the FPV render loop */ }
-  });
+  let list = root.userData && root.userData.artTickers;
+  if (!list) {
+    list = [];
+    root.traverse((o) => {
+      const u = o.userData || {};
+      if (u.roomLamp || u.roomStage || u.roomMobile) list.push(o);
+    });
+    if (root.userData) root.userData.artTickers = list;
+  }
+  for (let i = 0; i < list.length; i++) {
+    try { tickRoomArtObject(list[i], t); } catch (e) { /* never abort the FPV render loop */ }
+  }
 }
 
 function tickRoomArtObject(o, t) {

@@ -758,7 +758,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=c5a4d163f20f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=6f7620ba65b1";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=0daa6779fbbd";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -771,8 +771,8 @@ import {
   restyleTrainer, decorateTrainerGate, pulseTrainerGate, tickTrainerArt,
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
-  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit,
-} from "./sim-art.js?v=83e40822de40";
+  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, mergeStaticArt,
+} from "./sim-art.js?v=4a8091741db5";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -784,7 +784,7 @@ import {
   loadAutoArm, saveAutoArm, loadArmSwitch, saveArmSwitch, mergeArmSwitch,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
-} from "./sim-touch.js?v=7c9e387317c4";
+} from "./sim-touch.js?v=4e5aeeda285e";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -802,7 +802,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=48cdde0d2972";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=c52dfcb0033e";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=76d2462346ac";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -817,7 +817,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=12b3f6de66da";
+} from "./sim-coach.js?v=452e85b0bbee";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js?v=49546f834df8";
@@ -914,10 +914,10 @@ const sunDir=new THREE.Vector3();
 
 // ---------- Renderer ----------
 const canvas=document.getElementById('c');
-const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); // capped lower than before: the post chain now renders at this ratio too
+const renderer=new THREE.WebGLRenderer({canvas,antialias:!detectMobile(window)});
+renderer.setPixelRatio(Math.min(devicePixelRatio,detectMobile(window)?1:1.5));
 renderer.shadowMap.enabled=true;
-renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.shadowMap.type=detectMobile(window)?THREE.PCFShadowMap:THREE.PCFSoftShadowMap;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=LIGHTING.exposure;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -2202,6 +2202,11 @@ for(let i=0;i<7;i++){
   scene.add(mesa);
 }
 window._heavyAssetsPending=true;
+function compactMapArt(){
+  try{
+    mergeStaticArt(THREE, currentMap==='city'?cityWorld:indoorWorld);
+  }catch(e){/* look-only */}
+}
 function applyLooksPost(mapId, quality){
   const q=quality||(looks&&looks.applied)||'med';
   if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
@@ -2460,6 +2465,8 @@ function applyRoomArt(quality){
   if(credit)credit.textContent='Your Room is original procedural art — Pocket Stage';
 }
 async function finishCityArt(){
+  if(window._cityArtReady)return;
+  window._cityArtReady=true;
   window._skipStockCity=true;
   try{
     applyCityArt(looks&&looks.applied);
@@ -2490,12 +2497,20 @@ async function finishCityArt(){
     },4000);
   }
 }
+function bootMapHint(){
+  try{
+    const q=new URLSearchParams(location.search);
+    const boot=resolveSimBoot({map:q.get('map'),track:q.get('track')},null,[]);
+    return (boot&&boot.map)||currentMap;
+  }catch(e){return currentMap;}
+}
 function startHeavyAssets(){
   if(!window._heavyAssetsPending)return;
   window._heavyAssetsPending=false;
-  finishCityArt();
-  dressGarageKit();
-  dressWarehouseKit();
+  const map=bootMapHint();
+  if(map==='city')finishCityArt();
+  if(map==='garage')dressGarageKit();
+  if(map==='warehouse')dressWarehouseKit();
 }
 
 function wrapCityWorld(){
@@ -2690,7 +2705,10 @@ async function setMap(mapId,trackId,opts){
     }
   }
   try{
-    if(currentMap==='city'&&!(skyMesh&&skyMesh.userData&&skyMesh.userData.citySky))applyCityArt(looks&&looks.applied);
+    if(currentMap==='city'){
+      if(!window._cityArtReady)finishCityArt();
+      else if(!(skyMesh&&skyMesh.userData&&skyMesh.userData.citySky))applyCityArt(looks&&looks.applied);
+    }
     if(currentMap==='living')applyLivingArt(looks&&looks.applied);
     if(currentMap==='garage')applyGarageArt(looks&&looks.applied);
     if(currentMap==='warehouse')applyWarehouseArt(looks&&looks.applied);
@@ -2699,6 +2717,7 @@ async function setMap(mapId,trackId,opts){
     if(currentMap==='trainer')applyTrainerArt(looks&&looks.applied);
     if(currentMap==='office')applyOfficeArt(looks&&looks.applied);
     if(currentMap==='gym')applyGymArt(looks&&looks.applied);
+    compactMapArt();
   }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
   applyMapLooks(currentMap);
   nextGateIndex=0;
@@ -4059,6 +4078,7 @@ function syncQualityUI(){
     if(artDirty&&currentMap==='trainer')applyTrainerArt(looks.applied);
     if(artDirty&&currentMap==='office')applyOfficeArt(looks.applied);
     if(artDirty&&currentMap==='gym')applyGymArt(looks.applied);
+    if(artDirty)compactMapArt();
   }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
   setIndoorLights(indoorLights,looks.applied);
   if(secrets)secrets.setQuality(looks.applied);
@@ -6051,6 +6071,7 @@ function applyQueryBoot(){
         if(currentMap==='trainer')applyTrainerArt(looks.applied);
         if(currentMap==='office')applyOfficeArt(looks.applied);
         if(currentMap==='gym')applyGymArt(looks.applied);
+        compactMapArt();
       }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
     });
   }
