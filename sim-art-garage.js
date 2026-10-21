@@ -3,9 +3,9 @@
 // Kenney kit (sim-art-kit.js) swaps hero props after first paint.
 // Procedural meshes stay if a GLB fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=9a1038ea2564';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=9aeb5e8c616e';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { GARAGE_PLAY, garageRackSlabs } from './sim-maps.js?v=634e469a7282';
+import { GARAGE_PLAY, garageRackSlabs } from './sim-maps.js?v=67c976696da2';
 
 export const GARAGE_STOCK = Object.freeze({
   wall: 0xb7b3a8,

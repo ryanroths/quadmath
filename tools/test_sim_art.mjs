@@ -1622,14 +1622,14 @@ test("Backyard Ryan's Yard is implemented with stucco-tile gates", () => {
   assert.equal(v.implemented, true);
   assert.equal(v.name, "Ryan's Yard");
   assert.equal(v.sky, 'gradient');
-  assert.equal(v.time, 'overcast afternoon');
+  assert.equal(v.time, 'afternoon');
   assert.equal(v.gates.keepBrand, false);
   assert.equal(v.gates.style, 'stucco-tile');
-  assert.equal(v.post.bloom, false);
+  assert.equal(v.post.bloom, true);
   assert.equal(v.palette.neonA.toLowerCase(), '#c45a32');
-  assert.equal(v.lighting.fogColor, 0xd4c4a8);
-  assert.ok(v.looks.env <= 0.28);
-  assert.ok(v.looks.sun <= 0.55);
+  assert.equal(v.lighting.fogColor, 0xb8d0e4);
+  assert.ok(v.looks.env >= 0.36);
+  assert.ok(v.looks.sun >= 0.9);
   assert.equal(backyardWantsGlow('low'), false);
   assert.equal(backyardWantsGlow('med'), true);
   assert.equal(backyardBudget('low').pots < backyardBudget('high').pots, true);
@@ -1643,6 +1643,8 @@ test('Backyard freestyle builds without throwing and the FPV frame is not all bl
   assert.equal(mentionsBannedAssets(yardSrc), false);
   assert.match(yardSrc, /sim-art-felt\.js\?v=[0-9a-f]{12}/);
   assert.match(yardSrc, /feltBasic|feltEmissive/);
+  assert.match(yardSrc, /MeshStandardMaterial/);
+  assert.match(yardSrc, /InstancedMesh|leafTex|caustic/);
   assert.match(yardSrc, /never abort the FPV render loop/);
   assert.match(yardSrc, /CapsuleGeometry|LatheGeometry|ExtrudeGeometry/);
   const free = freestyleTrack('backyard');
@@ -1672,7 +1674,10 @@ test('Backyard freestyle builds without throwing and the FPV frame is not all bl
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       for (const m of mats) {
         if (m && m.userData && m.userData.feltLocked) feltMats += 1;
-        if (m && m.metalness != null) assert.ok(m.metalness <= 0.05, q + ' metalness');
+        if (m && m.metalness != null) {
+          const wet = m.userData && m.userData.heroWet;
+          assert.ok(m.metalness <= (wet ? 0.35 : 0.45), q + ' metalness');
+        }
       }
     });
     assert.ok(feltMats >= 8, q + ' feltLocked mats ' + feltMats);
