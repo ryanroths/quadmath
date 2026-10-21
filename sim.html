@@ -916,8 +916,8 @@ import {
   COACH_KEY, createCoach, drillById, roomDoorway,
 } from "./sim-coach.js?v=47ccbb5638ca";
 import {
-  TRICKS_KEY, createTricks,
-} from "./sim-tricks.js?v=b3699c754c27";
+  TRICKS_KEY, createTricks, trickLineupText,
+} from "./sim-tricks.js?v=aa19f07b0513";
 import {
   DAILY_KEY, DAILY_LINE_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -4557,6 +4557,7 @@ function openDailyLineCard(){
     '<p>UTC '+c.date+' · <b style="color:var(--txt)">'+escapeHtml(c.name)+'</b> · '+escapeHtml(c.map)+'</p>'+
     '<p class="daily-meta">Mod '+(c.modifier==='none'?'Clean':escapeHtml(c.modifierName))+
     ' · best '+(best?fmtLap(best.timeMs):'—')+'</p>'+
+    '<p class="daily-meta" id="dailyLineTricks">Tricks '+escapeHtml(trickLineupText())+'</p>'+
     '<div id="dailyLineBoard"></div>'+
     '<p class="daily-meta" id="dailyLineRank">'+(online?'Online top 20.':'Offline — local best only.')+'</p>'+
     '<button type="button" class="primary" id="dailyLineFly">Fly '+escapeHtml(c.name)+'</button>'+
@@ -5002,7 +5003,7 @@ function wireLooksUI(){
       '<li>Fly the lit gate. A 3-lap run starts at gate 1. Splits per gate; missed gates add +2.0s.</li>'+
       '<li>Coach: short scored drills (hover, line, gates, doorway, split-S, loop). Bronze unlocks the next.</li>'+
       '<li>Daily: a seeded indoor whoop each UTC day. Streak + best time stay in this browser. Boards: local 65/75/85 week, optional online.</li>'+
-      '<li>Daily Line: one named start-to-finish line each UTC day, same for everyone. Local PB plus optional online top 20.</li>'+
+      '<li>Daily Line: one named start-to-finish line each UTC day, same for everyone. Local PB plus optional online top 20. Freestyle combo still scores the named trick list, including Ham Spin (inverted yaw).</li>'+
       '<li>Duel: Tune → Copy duel code. Friend loads it and races the ghost. Skins paint the frame, canopy, props, and LED trail. Whoop paints your own canopy shape and colors. After a line, Replay the last run (chase / orbit / FPV).</li>'+
       '<li>Tab opens Tune — paste a Betaflight CLI dump. Rate presets do not overwrite a saved tune until you pick one.</li>'+
       '</ol>'+

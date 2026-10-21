@@ -47,6 +47,7 @@ site lists both 150 and 50).
 | `halfmatty` | Half Matty | Intermediate | 350 | 350 | **180° roll first**, then the second half of a Matty, ending **backward under**. Optional stall after the roll. |
 | `cubik` | Cubik's Rube | Intermediate | 350 | 450 | 180° roll → 360° flip → 180° roll, same roll direction. Open air. |
 | `rubik` | Rubik's Cube | Intermediate | 325 | 450 | 180° flip → 360° roll → 180° flip, same pitch direction. Open air. |
+| `ham` | Ham Spin | Intermediate | 300 | 300 | **Inverted yaw spin**: ≥360° yaw in ≤1.8s, little roll/pitch/drift, **upside-down the whole time** (tilt >135° from level). Also called ham. Flips/rolls that only pass through inverted, and upright yaw, are not Ham. |
 | `trippy` | Trippy Spin | Intermediate | 500 | 500 | **Tight yaw around a nearby pole/tree**: ≥360° yaw in a short window, high yaw rate, mostly level (small roll/pitch), low translation radius. Open-air yaw punches and coordinated turns are not Trippy. |
 
 ## Decision boundaries
@@ -90,9 +91,14 @@ Same under → over → under path.
   Often flies **backward** over the object while still looking forward, so
   follow vs against is **not** the split. Heading in ≈ out.
 
-### Trippy Spin vs Yaw Spin
+### Trippy Spin vs Yaw Spin vs Ham Spin
 
 - Yaw Spin: ~360° yaw, **little** roll/pitch, **upright**, open air OK.
+- Ham Spin (ham): the same short-window ≥360° yaw and little drift, but
+  **inverted the whole time** (tilt more than 135° from level). Open air
+  OK. A flip or roll that only passes through inverted is not Ham — those
+  have large pitch/roll and an upright start or exit. Normal upright yaw
+  is a Yaw Spin, not Ham.
 - Trippy Spin is a **real spin around a nearby pole/tree**. Same upright
   high yaw (≥360° accumulated in a short window, peak yaw rate high),
   but the craft stays **close to an anchor** with a **small translation
@@ -184,7 +190,7 @@ Cruise / carving / hover wobble must classify as **none**.
 ## Added vs skipped
 
 **Added** (besides the original set, retuned to TPW): Cradle, Juicy Flick,
-Snapback, Rubik's Cube, Cubik's Rube, **Side Loop**. Each has a distinct
+Snapback, Rubik's Cube, Cubik's Rube, **Side Loop**, **Ham Spin**. Each has a distinct
 axis-order or pitch-sign signature. The matrix covers both the synthetic
 rad/s library and **pilot traces** (imperfect stick, varying throttle,
 Actual/KISS curves from `sim-rates.js`).
@@ -201,8 +207,9 @@ Actual/KISS curves from `sim-rates.js`).
   would double-count or steal Matty.
 - **Orbits / Jump Rope / Cinnamon / Trippy Switch / Pole Dance** — need
   sustained object tracking and multi-orbit counts; false-positive on carve.
-- **Inverted Yaw Tracking / Inverted Yaw Spin / Uh-uh** — yaw-while-inverted
-  recipes that collide with Trippy and Snapback.
+- **Inverted Yaw Tracking / Uh-uh** — extra inverted-yaw flavors beyond
+  Ham Spin. Ham covers the sustained inverted 360° yaw; tracking / uh-uh
+  variants need camera-on-object features we do not have.
 - **Wall Tap / Wall Ride / Ceiling Tap / Perch / Slide / Face Punch** — need
   a judged tap, land, or the pilot's face.
 - **Double Flip / Double Roll / Segmented Flip** — 720° or a 0.5 s stall
