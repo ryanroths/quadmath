@@ -745,7 +745,7 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=c3e8595e359e";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=f4ecd2a9beba";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
@@ -757,7 +757,7 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=34e582665d37";
+} from "./sim-whoop.js?v=c5a4d163f20f";
 import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=73fcd479d684";
 import {
   VIBES, vibeFor, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
@@ -809,7 +809,7 @@ import {
   convertAxisFamily as convertAxisRate, formatAxisReadout, formatCliSummary,
   drawRateCurve, normalizeRateType, isRateType, bfCurve as bfCurveOf,
   actualRate as actualRateOf,
-} from "./sim-rates.js?v=2dc161c06e1c";
+} from "./sim-rates.js?v=09b9850ed3bb";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -2713,27 +2713,20 @@ const qp=new QuadPhysics(PRESETS.whoop65);
 window._qp=qp; // debug handle, same convention as _simBooted/_gltfReady above
 // Air65 II Champion stock tune from the tune DB (65-betafpv-stock) — raw Betaflight values.
 // Feedforward is set explicitly. These tunes carry only P/I/D, so without an F
-// they inherited DEFAULT_TUNE's 120/125/120 — and on roll/pitch, which have far
-// more authority per unit FF than yaw, that overshot a commanded rate by 152%
-// on an 80ms stick flick. That is the "twitchy" feel. RyFly's own 65mm tunes in
-// the database run FF off; a token 15/16 keeps some crispness at 4.5% overshoot.
-// Yaw keeps the full 120: it is reaction-torque driven, needs the help, and its
-// 18% overshoot is what makes yaw feel right.
+// they inherited DEFAULT_TUNE's 120/125/120. F_SCALE is now the Betaflight
+// scale, so those numbers are the live feel — same physical FF the old 15/16/20
+// tokens produced at the 8× scale. Imported F=120 matches stock.
 const STOCK_TUNES={
   whoop65:{rollP:36,rollI:61,rollD:27,pitchP:37,pitchI:64,pitchD:29,yawP:36,yawI:61,yawD:0,
-           rollF:15,pitchF:16,yawF:20},
+           rollF:120,pitchF:128,yawF:160},
   whoop75:{rollP:33,rollI:60,rollD:25,pitchP:35,pitchI:63,pitchD:28,yawP:33,yawI:60,yawD:0,
-           rollF:15,pitchF:16,yawF:20},
-  // 85mm: real PIDs from the tune DB (85-happymodel-ryfly, CrazyBee F4 DX).
-  // FF kept in the sim's calibrated 15/16/20 family — the build's FF 180/187 is
-  // on the Betaflight scale, not this module's reduced F_SCALE feel.
+           rollF:120,pitchF:128,yawF:160},
   whoop85:{rollP:67,rollI:120,rollD:40,pitchP:70,pitchI:126,pitchD:45,yawP:67,yawI:120,yawD:0,
-           rollF:15,pitchF:16,yawF:20},
-  // Freestyle classes: Betaflight 4.x default-flavored, same FF family.
+           rollF:120,pitchF:128,yawF:160},
   freestyle25:{rollP:48,rollI:85,rollD:35,pitchP:50,pitchI:88,pitchD:38,yawP:48,yawI:85,yawD:0,
-           rollF:15,pitchF:16,yawF:20},
+           rollF:120,pitchF:128,yawF:160},
   freestyle5:{rollP:45,rollI:80,rollD:30,pitchP:47,pitchI:84,pitchD:34,yawP:45,yawI:80,yawD:0,
-           rollF:15,pitchF:16,yawF:20},
+           rollF:120,pitchF:128,yawF:160},
 };
 qp.setTune(STOCK_TUNES.whoop65);
 // Base thrust before voltage sag scales it each frame.
@@ -3543,6 +3536,7 @@ function bfCurve(x,rcRate,srate,expo){return bfCurveOf(x,rcRate,srate,expo);}
 function actualRate(x,center,maxRate,expo){return actualRateOf(x,center,maxRate,expo);}
 const rates={
   type:'BETAFLIGHT',
+  quickRatesRcExpo:false,
   roll: {rcRate:1.10,srate:0.72,expo:0.25},
   pitch:{rcRate:1.10,srate:0.72,expo:0.25},
   yaw:  {rcRate:1.10,srate:0.72,expo:0.25},
@@ -3570,7 +3564,7 @@ function convertAxisFamily(cur,toType){
   return convertAxisRate(cur,rates.type,toType);
 }
 function axisRate(axis,x){
-  return rateSetpoint(rates.type,x,rates[axis]);
+  return rateSetpoint(rates.type,x,rates[axis],{quickRatesRcExpo:!!rates.quickRatesRcExpo});
 }
 function maxRateDps(axis){
   return maxRateDpsOf(rates.type,rates[axis||rateAxis]);
@@ -3772,7 +3766,7 @@ window._axis=()=>({
 // Sign bridge between three.js body rates (wx pitch / wy yaw / wz roll) and the
 // module's X-forward, Y-left, Z-up axes. Verified empirically — see the axis
 // check in the commit; flip one of these if a stick ever drives the wrong way.
-const SGN_ROLL=-1,SGN_PITCH=-1,SGN_YAW=1;
+const SGN_ROLL=-1,SGN_PITCH=1,SGN_YAW=1;
 function physics(dt){
   const yr=THREE.MathUtils.degToRad(axisRate('yaw',stick.y));
   const wx=THREE.MathUtils.degToRad(axisRate('pitch',stick.p));
@@ -5119,6 +5113,7 @@ function importCli(text){
       Object.assign(rates[ax],base,p.rates[ax]);
     }
     rates.type=type;
+    if(p.quickRatesRcExpo!=null)rates.quickRatesRcExpo=p.quickRatesRcExpo;
     if(missing.length)notice+=' · no '+missing.join('/')+' in dump — kept previous';
   }
 
@@ -5127,7 +5122,7 @@ function importCli(text){
     qp.setTune(Object.assign({},qp.tune,p.pids));
     notice+=' · PIDs '+pidKeys.length;
   }
-  if(p.idle!==null){qp.cfg.idleThrottle=THREE.MathUtils.clamp(p.idle,0,0.2);
+  if(p.idle!=null&&p.idle>0){qp.cfg.idleThrottle=THREE.MathUtils.clamp(p.idle,0.03,0.2);
     notice+=' · idle '+(p.idle*100).toFixed(1)+'%';}
 
   rateAxis='roll';
