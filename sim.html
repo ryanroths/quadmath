@@ -99,13 +99,14 @@
   #c{touch-action:none}
   #panel,#startMenu,#menuLayer,#feelPrompt,#calib{touch-action:pan-y;-webkit-user-select:text;user-select:text}
   #touchLayer{position:fixed;inset:0;z-index:18;display:none;pointer-events:none;
-    --stick-size:112px;--stick-opacity:.7}
+    --stick-size:112px;--stick-opacity:.7;--stick-inset-x:18px;--stick-inset-y:28px}
   #touchLayer.on{display:block}
-  #touchLayer .vstick{position:absolute;bottom:28px;width:var(--stick-size);height:var(--stick-size);
+  #touchLayer .vstick{position:absolute;bottom:max(var(--stick-inset-y), env(safe-area-inset-bottom, 0px));
+    width:var(--stick-size);height:var(--stick-size);
     border:1px solid var(--line);border-radius:50%;background:rgba(16,18,24,calc(var(--stick-opacity)*0.55));
     pointer-events:auto;touch-action:none}
-  #touchLayer .vstick.left{left:18px}
-  #touchLayer .vstick.right{right:18px}
+  #touchLayer .vstick.left{left:max(var(--stick-inset-x), env(safe-area-inset-left, 0px))}
+  #touchLayer .vstick.right{right:max(var(--stick-inset-x), env(safe-area-inset-right, 0px))}
   #touchLayer .vstick i{position:absolute;width:34%;height:34%;border-radius:50%;left:50%;top:50%;
     transform:translate(-50%,-50%);background:var(--orange);opacity:var(--stick-opacity);
     box-shadow:0 0 10px rgba(255,77,26,.45);pointer-events:none}
@@ -117,11 +118,19 @@
   #touchLandscape{position:absolute;top:56px;left:50%;transform:translateX(-50%);z-index:19;
     padding:8px 12px;border-radius:12px;background:var(--glass);border:1px solid var(--line);
     font-size:12px;color:var(--txt);pointer-events:none}
-  #hudAcro,#hud3d{pointer-events:auto;width:auto;margin:6px 0 0;padding:5px 10px;font-size:11px}
+  #hudAcro,#hud3d{pointer-events:auto;width:auto;margin:6px 0 0;padding:5px 10px;font-size:11px;
+    position:relative;z-index:21}
   #hudAcro.on,#hud3d.on{border-color:var(--green);color:var(--green)}
   body.touch-on #legend,body.touch-on #audioHint{opacity:0;pointer-events:none}
-  body.touch-on #feelHud{right:12px;bottom:auto;top:88px;flex-direction:column;align-items:flex-end}
+  /* Top-right, above the right stick. z-index 20 beats #touchLayer (18) so
+     ACRO/3D stay tappable when a short landscape viewport would otherwise
+     drop the meta card into the joystick circle. */
+  body.touch-on #feelHud{right:max(12px, env(safe-area-inset-right, 0px));bottom:auto;
+    top:max(52px, calc(env(safe-area-inset-top, 0px) + 44px));
+    z-index:20;flex-direction:column;align-items:flex-end;
+    max-height:calc(100dvh - var(--stick-size, 112px) - 56px - env(safe-area-inset-bottom, 0px))}
   body.touch-on #feelHud .stick-pad{display:none}
+  body.touch-on #osdLap{max-width:46vw;z-index:12}
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7;display:none}
   #crosshair.on{display:block}
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
@@ -191,10 +200,15 @@
   .lgc-bl{bottom:-1px;left:-1px;border-right:none;border-top:none}
   .lgc-br{bottom:-1px;right:-1px;border-left:none;border-top:none}
   #calib{background:rgba(10,12,16,.78);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
-  #startMenu{position:fixed;inset:0;z-index:22;display:none;align-items:center;justify-content:flex-start;
-    padding:48px 40px;pointer-events:none;background:linear-gradient(90deg,rgba(8,10,14,.62) 0%,rgba(8,10,14,.12) 58%,transparent 100%)}
+  #startMenu{position:fixed;inset:0;z-index:22;display:none;align-items:flex-start;justify-content:flex-start;
+    flex-wrap:wrap;align-content:flex-start;gap:12px;overflow:auto;overscroll-behavior:contain;
+    padding:max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+      max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    pointer-events:none;background:linear-gradient(90deg,rgba(8,10,14,.62) 0%,rgba(8,10,14,.12) 58%,transparent 100%)}
   #startMenu.open{display:flex}
   .menu-card{pointer-events:auto;width:min(420px,92vw);padding:28px 26px 22px;
+    max-height:calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
     background:var(--glass);border:1px solid var(--line);border-radius:20px;
     backdrop-filter:blur(20px) saturate(1.25);-webkit-backdrop-filter:blur(20px) saturate(1.25);
     box-shadow:0 24px 60px rgba(0,0,0,.35);isolation:isolate;transform:translateZ(0);
@@ -210,7 +224,9 @@
   .menu-quality button,.qbtn{width:auto;flex:1;min-width:64px;margin-top:0;padding:7px 8px;font-size:11px;
     border-color:var(--line);color:var(--txt)}
   .menu-quality button.on,.qbtn.on{border-color:var(--orange);color:var(--orange);background:rgba(255,77,26,.12)}
-  .menu-layer{pointer-events:auto;margin-left:16px;width:min(360px,90vw);padding:22px 20px;
+  .menu-layer{pointer-events:auto;margin-left:0;width:min(360px,90vw);padding:22px 20px;
+    max-height:calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
     background:var(--glass);border:1px solid var(--line);border-radius:20px;
     backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:none}
   .menu-layer.show{display:block}
@@ -226,6 +242,28 @@
   #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#camTiltPreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
     color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
   .menu-layer.wide{width:min(420px,92vw)}
+  /* Short landscape phones (iPhone SE / 13 mini / 14 class, 360–430px tall):
+     compact the start card and keep ACRO/3D above the right stick. */
+  @media (max-height:430px){
+    #startMenu{padding:max(8px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px))
+      max(8px, env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));gap:8px}
+    .menu-card,.menu-layer{padding:12px 14px 10px;border-radius:14px;
+      max-height:calc(100dvh - 16px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))}
+    .menu-card h1{font-size:22px;margin:2px 0 4px}
+    .menu-lead{font-size:12px;line-height:1.35;margin-bottom:8px}
+    .menu-card button{margin-top:4px;padding:6px 10px}
+    .menu-quality{margin-top:8px}
+    .menu-sparks{margin:6px 0 0}
+    body.touch-on #feelHud{top:max(48px, calc(env(safe-area-inset-top, 0px) + 40px));
+      max-height:calc(100dvh - var(--stick-size, 112px) - 40px - env(safe-area-inset-bottom, 0px))}
+    body.touch-on #feelHud .feel-meta{padding:6px 8px;min-width:0;max-width:168px}
+    body.touch-on #hudArmHint{display:none}
+    body.touch-on #hudAcro{order:-2;margin:0 0 4px}
+    body.touch-on #hud3d{order:-1;margin:0 0 4px}
+    body.touch-on #osdLap{top:max(8px, env(safe-area-inset-top, 0px));max-width:42vw;font-size:11px}
+    #touchLayer .vstick{bottom:max(10px, env(safe-area-inset-bottom, 0px))}
+    #touchBtns{top:max(6px, env(safe-area-inset-top, 0px))}
+  }
   .track-maps{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
   .track-maps button,.track-list button{width:auto;flex:1;min-width:72px;margin-top:0;padding:7px 8px;font-size:11px;
     border-color:var(--line);color:var(--txt)}
@@ -760,7 +798,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=c5a4d163f20f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=a1bc4afa31eb";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=bf860b51314b";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -786,7 +824,7 @@ import {
   loadAutoArm, saveAutoArm, loadArmSwitch, saveArmSwitch, mergeArmSwitch,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
-} from "./sim-touch.js?v=4e5aeeda285e";
+} from "./sim-touch.js?v=4013a23bed14";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
