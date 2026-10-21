@@ -386,6 +386,15 @@
   .skin-mini .sk-lens{fill:#14161c}
   .skin-mini .sk-led{fill:var(--sk-led)}
   .daily-meta{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:var(--dim);margin:8px 0}
+  .menu-layer.daily-line .board-list{max-height:28vh;overflow:auto}
+  .daily-badge{color:var(--orange);font-weight:700;letter-spacing:.08em}
+  @media (max-height:500px) and (orientation:landscape){
+    .menu-layer.daily-line{padding:12px 14px;width:min(340px,86vw)}
+    .menu-layer.daily-line h2{margin-bottom:6px}
+    .menu-layer.daily-line p,.menu-layer.daily-line .daily-meta{margin:4px 0;font-size:12px;line-height:1.35}
+    .menu-layer.daily-line .board-list{max-height:22vh}
+    .menu-layer.daily-line button{margin-top:8px}
+  }
 </style>
 </head>
 <body class="menu-open">
@@ -398,6 +407,7 @@
     <button class="primary" id="menuFly">Fly</button>
     <button id="menuFreestyle">Freestyle</button>
     <button id="menuDaily">Daily</button>
+    <button id="menuDailyLine">Daily Line</button>
     <button id="menuBoards">Boards</button>
     <button id="menuTracks">Tracks</button>
     <button id="menuCoach">Coach</button>
@@ -868,7 +878,7 @@ import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js?v=49546f834df8";
 import {
-  DAILY_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
+  DAILY_KEY, DAILY_LINE_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
   isDailyTrackId, isWeeklyTrackId, encodeDuel, decodeQm2, duelResult, fmtMs,
   loadDaily, saveDaily, recordDailyFinish, loadBoard, saveBoard, recordLocalBoard,
@@ -876,16 +886,18 @@ import {
   loadSkinId, saveSkinId, makeCanopyGroup, layoutCanopyGroup, canopyFpvVisible,
   loadCanopyOn, saveCanopyOn, CANOPY_KEY, tintGroup, sanitizePilotName, classId,
   validateSubmittedRun, CLASS_IDS, issuePilotToken, syncDailyStreak,
+  dailyLineFor, loadDailyLine, saveDailyLine, recordDailyLineFinish, dailyLineRank,
+  validateDailyLineRun, DAILY_LINE_STRICT_MISS_MS,
   skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
-} from "./sim-retention.js?v=3fcc2c1d4810";
+} from "./sim-retention.js?v=b4b361bf5e62";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=e7172d7a352b";
+} from "./sim-secrets.js?v=25922bd21c68";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1304,6 +1316,9 @@ let lastPassedGate=null;             // world xyz of last racing gate flown (R r
 // laps back-to-back, then ends — clock stops (no auto lap 4), splits + total
 // shown, best total stored per track. Passing gate 0 again starts a fresh run.
 const RUN_LAPS=3;
+let dailyLineLive=false;             // today's named-line challenge session
+let dailyLineMod='none';
+function missPenaltyMs(){return (dailyLineLive&&dailyLineMod==='strict')?DAILY_LINE_STRICT_MISS_MS:MISS_PENALTY_MS;}
 let runActive=false;                 // a run (laps 1..RUN_LAPS) is in progress
 let runStartTime=0;                  // performance.now() at run start (gate 0)
 let lapStartTime=0;                  // current lap's start — for the live clock + split
@@ -1464,7 +1479,7 @@ function updateGateUI(){
     gateUI.textContent='FREESTYLE';
     return;
   }
-  const miss=missTotal?(' · MISS +'+(missTotal*MISS_PENALTY_MS/1000).toFixed(1)+'s'):'';
+  const miss=missTotal?(' · MISS +'+(missTotal*missPenaltyMs()/1000).toFixed(1)+'s'):'';
   const split=lastGateSplit?(' · SPLIT '+fmtLap(lastGateSplit)):'';
   const phase=runActive?(isLineTrackId(activeTrackId)?' · LINE':' · LAP '+runLap+'/'+RUN_LAPS):'';
   gateUI.textContent=trackLabel(activeTrackId)+' GATE '+nextGateIndex+'/'+list.length+phase+split+miss;
@@ -1528,7 +1543,7 @@ function finishRun(){
   const line=isLineTrackId(activeTrackId);
   let total;
   if(line){
-    total=applyMissPenalty(performance.now()-runStartTime,missTotal);
+    total=(performance.now()-runStartTime)+missTotal*missPenaltyMs();
     runSplits=[total];
   }else{
     total=runSplits.reduce((a,b)=>a+b,0);
@@ -1597,7 +1612,7 @@ function updateGates(){
   if(hit.type==='miss'){
     missesThisLap++;
     missTotal++;
-    toast('MISSED GATE +'+(MISS_PENALTY_MS/1000).toFixed(1)+'s');
+    toast('MISSED GATE +'+(missPenaltyMs()/1000).toFixed(1)+'s');
     updateGateUI();
     return;
   }
@@ -1629,7 +1644,7 @@ function updateGates(){
       toast('RUN START — LAP 1/'+RUN_LAPS);
     }else if(nextGateIndex===0&&runActive){ // wrapped a full sequence → a run lap completed
       const raw=now-lapStartTime;
-      const split=applyMissPenalty(raw,missesThisLap);
+      const split=raw+missesThisLap*missPenaltyMs();
       missesThisLap=0;
       const id=ensureTrackStats(activeTrackId);
       runSplits.push(split);
@@ -2926,6 +2941,11 @@ async function setMap(mapId,trackId,opts){
   if(ghosts[k]==null)ghosts[k]=loadGhost(k);
   if(defaultRivals[k]==null&&currentTrackObj&&currentTrackObj.gates&&currentTrackObj.gates.length)loadHostedGhost(k);
   if(typeof syncGhostScale==='function')syncGhostScale();
+  if(dailyLineLive){
+    const today=dailyLineFor(utcDateId());
+    if(String(activeTrackId)!==String(today.trackId)){dailyLineLive=false;dailyLineMod='none';}
+    else applyDailyLineMod(dailyLineMod);
+  }
   syncSecrets();
 }
 
@@ -4112,8 +4132,9 @@ function lineHudHtml(id, now){
     const start=gs.length-shown.length;
     html+='<br>'+shown.map((ms,i)=>'G'+(start+i+1)+' '+fmtLap(ms)).join(phone?' ':' · ');
   }
-  if(missTotal)html+='<br>MISS +'+(missTotal*MISS_PENALTY_MS/1000).toFixed(1)+'s';
+  if(missTotal)html+='<br>MISS +'+(missTotal*missPenaltyMs()/1000).toFixed(1)+'s';
   html+='<br>PB '+(pb?fmtLap(pb):'--:--.--');
+  if(dailyLineLive)html='<span class="daily-badge">DAILY</span> '+html;
   return html;
 }
 function updateLapOSD(){
@@ -4241,6 +4262,11 @@ function setActiveTrack(id){
   if(ghosts[k]==null)ghosts[k]=loadGhost(k);
   if(defaultRivals[k]==null&&t.gates&&t.gates.length)loadHostedGhost(k);
   if(typeof syncGhostScale==='function')syncGhostScale();
+  if(dailyLineLive){
+    const today=dailyLineFor(utcDateId());
+    if(String(activeTrackId)!==String(today.trackId)){dailyLineLive=false;dailyLineMod='none';}
+    else applyDailyLineMod(dailyLineMod);
+  }
   updateGateUI();updateGateHighlight();
   resetQuad();
 }
@@ -4300,6 +4326,7 @@ function syncQualityUI(){
     if(artDirty)compactMapArt();
   }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
   setIndoorLights(indoorLights,looks.applied);
+  if(dailyLineLive)applyDailyLineMod(dailyLineMod);
   if(secrets)secrets.setQuality(looks.applied);
   const q=looks.choice;
   document.querySelectorAll('#qualityBtns [data-q]').forEach(b=>b.classList.toggle('on',b.dataset.q===q));
@@ -4390,6 +4417,80 @@ function bindRoomForm(){
     },false);
     openTrackPicker('room');
   };
+}
+function applyDailyLineMod(mod){
+  if(mod==='dark'){
+    const dim=(L,k)=>{
+      if(!L||typeof L.intensity!=='number')return;
+      if(!L.userData)L.userData={};
+      if(L.userData._dlDay!==utcDateId()){L.userData._dlDay=utcDateId();L.userData._dlBase=L.intensity;}
+      L.intensity=L.userData._dlBase*k;
+    };
+    for(const L of indoorLights||[])dim(L,0.45);
+    dim(hemi,0.55);
+  }
+  if(mod==='ghost'){
+    ghostVisible=true;
+    const k=trackStatId(activeTrackId);
+    if(defaultRivals[k]==null&&currentTrackObj&&currentTrackObj.gates){
+      defaultRivals[k]=makePaceGhost(currentTrackObj.gates,{track:activeTrackId,name:'PACE BOT',speed:6,hz:8,laps:1});
+    }
+  }
+}
+function flyDailyLine(ch){
+  const c=ch||dailyLineFor(utcDateId());
+  dailyLineLive=true;
+  dailyLineMod=c.modifier||'none';
+  hideMenuLayer();
+  toggleStartMenu(false);
+  sessionLive=true;
+  setMap(c.map,c.trackId);
+  resetQuad();
+  toast('DAILY LINE — '+String(c.name).toUpperCase()+(c.modifier&&c.modifier!=='none'?' · '+c.modifierName:''));
+}
+function openDailyLineCard(){
+  const c=dailyLineFor(utcDateId());
+  const local=loadDailyLine();
+  const best=local.days[c.date];
+  const url=leaderboardUrl();
+  const online=onlineBoardsEnabled(url);
+  const cls=classId(currentBuild&&currentBuild.frameMm);
+  const name=currentPilotName();
+  showMenuLayer('<h2>Daily Line</h2>'+
+    '<p>UTC '+c.date+' · <b style="color:var(--txt)">'+escapeHtml(c.name)+'</b> · '+escapeHtml(c.map)+'</p>'+
+    '<p class="daily-meta">Mod '+(c.modifier==='none'?'Clean':escapeHtml(c.modifierName))+
+    ' · best '+(best?fmtLap(best.timeMs):'—')+'</p>'+
+    '<div id="dailyLineBoard"></div>'+
+    '<p class="daily-meta" id="dailyLineRank">'+(online?'Online top 20.':'Offline — local best only.')+'</p>'+
+    '<button type="button" class="primary" id="dailyLineFly">Fly '+escapeHtml(c.name)+'</button>'+
+    (online?'<button type="button" id="dailyLineRefresh">Refresh</button>':'')+
+    '<button type="button" id="layerClose">Close</button>');
+  const layer=document.getElementById('menuLayer');
+  if(layer){layer.classList.remove('skins');layer.classList.add('daily-line');}
+  document.getElementById('dailyLineFly').onclick=()=>flyDailyLine(c);
+  document.getElementById('layerClose').onclick=hideMenuLayer;
+  function paint(entries){
+    const rows=entries||(best?[{name:name,timeMs:best.timeMs}]:[]);
+    renderBoardBody(document.getElementById('dailyLineBoard'), utcWeekId(), cls, rows);
+    const rankEl=document.getElementById('dailyLineRank');
+    if(!rankEl)return;
+    if(best){
+      const r=dailyLineRank(rows,name,best.timeMs);
+      rankEl.textContent='You #'+r.rank+' of '+r.of+(online?' online.':' local.');
+    }else rankEl.textContent=online?'Online top 20. Fly to post.':'Offline — local best only.';
+  }
+  paint();
+  const rf=document.getElementById('dailyLineRefresh');
+  async function pull(){
+    if(!online)return;
+    try{
+      const r=await fetch(url+'/api/daily?day='+encodeURIComponent(c.date)+'&class='+cls);
+      const j=await r.json();
+      paint(j.entries||[]);
+    }catch(e){toast('ONLINE UNAVAILABLE');}
+  }
+  if(rf)rf.onclick=pull;
+  pull();
 }
 function flyGeneratedTrack(t){
   if(!t)return;
@@ -4772,6 +4873,8 @@ function wireLooksUI(){
   document.getElementById('menuTracks').onclick=()=>openTrackPicker();
   const btnDaily=document.getElementById('menuDaily');
   if(btnDaily)btnDaily.onclick=()=>openDailyCard();
+  const btnDailyLine=document.getElementById('menuDailyLine');
+  if(btnDailyLine)btnDailyLine.onclick=()=>openDailyLineCard();
   const btnBoards=document.getElementById('menuBoards');
   if(btnBoards)btnBoards.onclick=()=>openBoardsCard();
   const btnCoach=document.getElementById('menuCoach');
@@ -4800,6 +4903,7 @@ function wireLooksUI(){
       '<li>Fly the lit gate. A 3-lap run starts at gate 1. Splits per gate; missed gates add +2.0s.</li>'+
       '<li>Coach: short scored drills (hover, line, gates, doorway, split-S, loop). Bronze unlocks the next.</li>'+
       '<li>Daily: a seeded indoor whoop each UTC day. Streak + best time stay in this browser. Boards: local 65/75/85 week, optional online.</li>'+
+      '<li>Daily Line: one named start-to-finish line each UTC day, same for everyone. Local PB plus optional online top 20.</li>'+
       '<li>Duel: Tune → Copy duel code. Friend loads it and races the ghost. Skins paint the frame, canopy, props, and LED trail.</li>'+
       '<li>Tab opens Tune — paste a Betaflight CLI dump. Rate presets do not overwrite a saved tune until you pick one.</li>'+
       '</ol>'+
@@ -5767,6 +5871,18 @@ function noteRetentionFinish(id, total, rec){
     extra=recd.counted===false?'DAILY SKIPPED':'STREAK '+recd.streak;
     applyActiveSkin();
   }
+  if(dailyLineLive){
+    const today=dailyLineFor(utcDateId());
+    if(String(id)===String(today.trackId)){
+      const recd=recordDailyLineFinish(loadDailyLine(), {
+        utc: today.date, timeMs: total, trackId: today.trackId,
+        splits: lastGateSplits[ensureTrackStats(id)]||runGateSplits,
+      });
+      saveDailyLine(recd.progress);
+      extra=(extra?extra+' · ':'')+(recd.improved?'DAILY PB':'DAILY');
+      maybeSubmitDailyLine(today, total, rec, recd.progress.days[today.date]&&recd.progress.days[today.date].splits);
+    }
+  }
   if(isWeeklyTrackId(id)){
     const board=recordLocalBoard(loadBoard(), {
       week: utcWeekId(), frameMm: currentBuild&&currentBuild.frameMm, name: currentPilotName(),
@@ -5804,6 +5920,29 @@ async function maybeSubmitOnline(id, total, rec){
     if(j&&j.ok)toast(j.improved?'ONLINE BEST':'ONLINE RECORDED');
     else if(j&&j.reason)toast(String(j.reason));
   }catch(e){ /* local boards still hold the time */ }
+}
+async function maybeSubmitDailyLine(challenge, total, rec, splits){
+  const url=leaderboardUrl();
+  if(!onlineBoardsEnabled(url)||!rec||!rec.length||!challenge)return;
+  const ghost=ghostPayloadOf(challenge.trackId, rec, total);
+  const frameMm=classId(currentBuild&&currentBuild.frameMm);
+  const checked=validateDailyLineRun({
+    challenge, timeMs: total, splits, ghost, trackId: challenge.trackId, frameMm,
+  });
+  if(!checked.ok)return;
+  const body={
+    day: challenge.date, frameMm, name: currentPilotName(), timeMs: total,
+    ghost, trackId: challenge.trackId, splits, build: currentBuild, token: issuePilotToken(),
+  };
+  try{
+    const r=await fetch(url+'/api/daily/submit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    const j=await r.json();
+    if(j&&j.ok)toast(j.improved?'DAILY ONLINE BEST':'DAILY ONLINE');
+    else if(j&&j.reason)toast(String(j.reason));
+  }catch(e){ /* offline — local daily PB still saved */ }
 }
 async function exportDuel(){
   const id=activeTrackId;
@@ -6373,6 +6512,9 @@ function applyQueryBoot(){
     setMap(t.map, t.id, {save:false});
     resetQuad();
   }
+  if(q.get('dailyline')==='1'||trackRaw==='daily-line'){
+    flyDailyLine(dailyLineFor(utcDateId()));
+  }
   if(q.get('weekly')==='1'||trackRaw==='weekly'){
     const t=weeklyTrackFor(utcWeekId());
     setMap(t.map, t.id, {save:false});
@@ -6463,6 +6605,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
   startFreestyle,leaveRace,resolveFly,isFreestyleTrackId,freestyleIdFor,persistableSelection,
   isLineTrackId,demoLineGhostForShot,ghostVisible:()=>ghostVisible,ghostMesh,
+  dailyLineFor,flyDailyLine,dailyLineLive:()=>dailyLineLive,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,
