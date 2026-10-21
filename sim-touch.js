@@ -156,6 +156,7 @@ export function detectMobile(win) {
 export function resolveAutoQuality(info) {
   const i = info || {};
   if (i.mobile || i.gpuLow) return 'low';
+  if (i.gpuHigh) return 'high';
   return 'med';
 }
 

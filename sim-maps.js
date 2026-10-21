@@ -11,13 +11,11 @@ import { planRoom } from './sim-room.js?v=5b05276e1d0b';
 export const GARAGE_PLAY = Object.freeze({
   whoopClear: 0.85,
   bench: Object.freeze({
-    // Kenney workbench is a solid cabinet (2.44 x 2.15 x 2.22). Three
-    // instances leave ~2 wu gaps for the whoop; fly-over is above 2.15.
-    x: -8.4, z: -8.0, w: 2.44, d: 2.22, h: 2.15,
-    units: Object.freeze([
-      Object.freeze({ x: -8.4, z: -12.2 }),
-      Object.freeze({ x: -8.4, z: -8.0 }),
-      Object.freeze({ x: -8.4, z: -3.8 }),
+    // Open-legged table. Kenney cabinet bench is skipped, so the flyable
+    // bench is procedural: thin top + legs only.
+    x: -8.4, z: -8.0, w: 2.44, d: 12.0, topY: 2.20, topH: 0.14, leg: 0.16,
+    legs: Object.freeze([
+      [-1.05, -5.4], [1.05, -5.4], [-1.05, 0], [1.05, 0], [-1.05, 5.4], [1.05, 5.4],
     ]),
   }),
   chest: Object.freeze({ x: -8.3, z: 8.2, w: 3.01, h: 2.85, d: 2.89 }),
@@ -290,8 +288,9 @@ function buildGarage(THREE, parent, colliders, lights) {
     front: { x: 0, w: 8.5, h: 8.4 },
   });
   const b = P.bench;
-  for (const u of b.units) {
-    box(THREE, parent, colliders, u.x, 0, u.z, b.w, b.h, b.d, mats.metal);
+  box(THREE, parent, colliders, b.x, b.topY, b.z, b.w, b.topH, b.d, mats.metal);
+  for (const [dx, dz] of b.legs) {
+    box(THREE, parent, colliders, b.x + dx, 0, b.z + dz, b.leg, b.topY, b.leg, mats.wood);
   }
   const ch = P.chest;
   box(THREE, parent, colliders, ch.x, 0, ch.z, ch.w, ch.h, ch.d, mats.metal);

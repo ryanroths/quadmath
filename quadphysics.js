@@ -69,9 +69,18 @@ const ITERM_RELAX_LEAK = 14;     // 1/s
 // P up 5x, I down ~8x, D and F up with P: rate tracking is now 1.0 with ~3%
 // overshoot on roll, and yaw stops in under half a second instead of never.
 const P_SCALE = 0.00040;
+const P_SCALE_RP = 0.00050;     // roll/pitch only — close the ~10% full-stick gap
 const I_SCALE = 0.000072;
+const I_SCALE_RP = 0.00038;     // roll/pitch I closes SS; yaw keeps the 70–160 ms rise
 const D_SCALE = 0.0000055;
-const F_SCALE = 0.0000225;
+const D_SCALE_RP = 0.0000085;
+const F_SCALE = 0.0000028125;   // yaw stays on the mild scale (reaction-torque axis)
+const F_SCALE_RP = 0.0000038;   // roll/pitch delta-FF — kick, not a mixer slam
+// Sustain FF matches whoop aero (linear B + quadratic C, incl. default floatiness)
+// so a held stick stays at the rate without relying on a slow I wind.
+const F_HOLD_B = 0.00158;       // motor units per rad/s
+const F_HOLD_C = 0.000116;      // motor units per (rad/s)²
+const FF_WINDOW_S = 0.016;      // one 60 Hz RC frame — fps-independent FF duration
 
 const G = 9.81;
 export const AIR_DENSITY = 1.225;          // kg/m³, ISA sea level
@@ -97,6 +106,11 @@ export const PHYSICS_HZ_FAST = 1000;
 // Floatiness 0 = snappy stop, 1 = the old 240 Hz coast. Default is tighter
 // than the previous feel. Saved in the page under quadmathSimFloatiness.
 export const FLOATINESS_DEFAULT = 0.32;
+// Frame interpolation only — no extra time-constant lag after the stick arrives.
+// When a render frame covers several PID ticks, setpoint/throttle lerp from the
+// previous frame's value to this frame's across those ticks so FF is a ramp,
+// not a one-substep spike. Tests that step at physicsHz skip interpolation.
+export const STICK_SMOOTH_TAU = 0;
 
 // Flight modes (M1). Angle self-levels to a max tilt; Horizon blends Angle at
 // stick center into Acro at full deflection; Acro is raw rate setpoints.
@@ -158,7 +172,8 @@ function qIntegrate(q, omega, dt) {
 }
 
 // Body attitude from the module quaternion (Z-up, X-forward, Y-left).
-// roll > 0 = right wing down; pitch > 0 = nose up. Independent of three.js.
+// roll > 0 = right wing down. pitch > 0 = thrust tilts +X (stick-forward
+// fly forward). Independent of three.js.
 export function attitudeOf(q) {
   const uz = qRotate(q, v3(0, 0, 1));
   return {
@@ -238,9 +253,14 @@ export function aeroTorqueOf(omega, cfg) {
 // first-order lowpass
 class LPF {
   constructor(cutoffHz, dt) {
-    const rc = 1 / (2 * Math.PI * cutoffHz);
-    this.k = dt / (rc + dt);
+    this.cutoffHz = cutoffHz;
     this.y = 0;
+    this.setDt(dt);
+  }
+  setDt(dt) {
+    const h = dt > 0 ? dt : 1 / 500;
+    const rc = 1 / (2 * Math.PI * this.cutoffHz);
+    this.k = h / (rc + h);
   }
   filter(x) { this.y += this.k * (x - this.y); return this.y; }
   reset(v = 0) { this.y = v; }
@@ -286,11 +306,14 @@ class Motor {
 // Rate-loop PID + FF per axis
 // ---------------------------------------------------------------------------
 class RateAxis {
-  constructor(P, I, D, F, tune, dt) {
-    this.kp = P * P_SCALE;
-    this.ki = I * I_SCALE;
-    this.kd = D * D_SCALE;
-    this.kf = F * F_SCALE;
+  constructor(P, I, D, F, tune, dt, axis) {
+    const rp = axis === 'roll' || axis === 'pitch';
+    this.kp = P * (rp ? P_SCALE_RP : P_SCALE);
+    this.ki = I * (rp ? I_SCALE_RP : I_SCALE);
+    this.kd = D * (rp ? D_SCALE_RP : D_SCALE);
+    this.kf = F * (rp ? F_SCALE_RP : F_SCALE);
+    this.holdB = rp ? F_HOLD_B : 0;
+    this.holdC = rp ? F_HOLD_C : 0;
     this.iterm = 0;
     this.itermLimit = tune.itermLimit;
     this.prevGyro = 0;
@@ -299,33 +322,50 @@ class RateAxis {
     this.dtermLpf = new LPF(tune.dtermLpfHz, dt);
     this.dt = dt;
   }
-  update(setpoint, gyroRaw, airborne) {
+  setDt(dt) {
+    const h = dt > 0 ? dt : this.dt;
+    this.dt = h;
+    this.gyroLpf.setDt(h);
+    this.dtermLpf.setDt(h);
+  }
+  update(setpoint, gyroRaw, airborne, dt, dSetOverride) {
+    if (dt != null && dt !== this.dt) this.setDt(dt);
+    const h = this.dt;
     const gyro = this.gyroLpf.filter(gyroRaw);
     const error = setpoint - gyro;
 
     const p = this.kp * error;
 
-    const dSet = (setpoint - this.prevSetpoint) / this.dt;
+    const rawD = (setpoint - this.prevSetpoint) / h;
+    const dSet = dSetOverride != null ? dSetOverride : rawD;
     this.prevSetpoint = setpoint;
     // I-term relax: a fast setpoint change freezes accumulation and leaks I
     // so a flick does not wind the integrator into the next stick move.
     if (Math.abs(dSet) > ITERM_RELAX_DSET) {
-      this.iterm *= Math.exp(-ITERM_RELAX_LEAK * this.dt);
+      this.iterm *= Math.exp(-ITERM_RELAX_LEAK * h);
     } else {
-      this.iterm += this.ki * error * this.dt;
+      this.iterm += this.ki * error * h;
       this.iterm = Math.max(-this.itermLimit, Math.min(this.itermLimit, this.iterm));
     }
     // 0.99 per 240 Hz step ≈ e^(-2.41 t). Keep the same time-constant at 500/1000 Hz.
-    if (!airborne) this.iterm *= Math.exp(-2.41 * this.dt);
+    if (!airborne) this.iterm *= Math.exp(-2.41 * h);
 
     // D on gyro (measurement), filtered — Betaflight style
-    const dGyro = (gyro - this.prevGyro) / this.dt;
+    const dGyro = (gyro - this.prevGyro) / h;
     const d = -this.kd * this.dtermLpf.filter(dGyro);
     this.prevGyro = gyro;
 
-    const f = this.kf * dSet;
+    // FF is a kick toward the new setpoint, not a push through it. Once gyro
+    // is on the commanded side and near the target, drop FF so a 16 ms window
+    // cannot rail the mixer into a 20% overshoot (and the sag that follows).
+    let f = this.kf * dSet;
+    if (setpoint !== 0 && this.kf > 0) {
+      const ratio = gyro / setpoint;
+      if (ratio > 0.85) f *= Math.max(0, 1 - (ratio - 0.85) / 0.15);
+    }
 
-    return p + this.iterm + d + f;
+    const fHold = this.holdB * setpoint + this.holdC * setpoint * Math.abs(setpoint);
+    return p + this.iterm + d + f + fHold;
   }
   reset() {
     this.iterm = 0; this.prevGyro = 0; this.prevSetpoint = 0;
@@ -344,6 +384,15 @@ export class QuadPhysics {
     this.flightMode = 'angle';
     this.threeD = false;
     this.rc = { r: 0, p: 0, y: 0 };
+    this._fromSp = { roll: 0, pitch: 0, yaw: 0 };
+    this._toSp = { roll: 0, pitch: 0, yaw: 0 };
+    this._fromThr = 0;
+    this._toThr = 0;
+    this._frameLen = 0;
+    this._frameUsed = 0;
+    this._interpInputs = false;
+    this._ffD = { roll: 0, pitch: 0, yaw: 0 };
+    this._ffLeft = 0;
     this.accumulator = 0;
     this.setPreset(preset);
     this.setTune(tune);
@@ -395,9 +444,9 @@ export class QuadPhysics {
     const t = this.tune;
     const dt = this.physicsDt || (1 / PHYSICS_HZ_DEFAULT);
     this.pid = {
-      roll:  new RateAxis(t.rollP,  t.rollI,  t.rollD,  t.rollF,  t, dt),
-      pitch: new RateAxis(t.pitchP, t.pitchI, t.pitchD, t.pitchF, t, dt),
-      yaw:   new RateAxis(t.yawP,   t.yawI,   t.yawD,   t.yawF,   t, dt),
+      roll:  new RateAxis(t.rollP,  t.rollI,  t.rollD,  t.rollF,  t, dt, 'roll'),
+      pitch: new RateAxis(t.pitchP, t.pitchI, t.pitchD, t.pitchF, t, dt, 'pitch'),
+      yaw:   new RateAxis(t.yawP,   t.yawI,   t.yawD,   t.yawF,   t, dt, 'yaw'),
     };
   }
 
@@ -409,8 +458,18 @@ export class QuadPhysics {
     this.physicsDt = 1 / h;
     this.accumulator = 0;
     // Don't dump I-term mid-flight if the render loop hops 500↔1000 Hz.
+    // PID / LPF coefficients must still follow the new loop dt.
     if (this.tune && !this.armed) this.resetControllers();
+    else this.syncPidDt();
     return h;
+  }
+
+  syncPidDt() {
+    if (!this.pid) return;
+    const dt = this.physicsDt;
+    this.pid.roll.setDt(dt);
+    this.pid.pitch.setDt(dt);
+    this.pid.yaw.setDt(dt);
   }
 
   // F=0 snappy, F=1 floaty. Maps only to Cd/mass (cdMul) and angular b (aeroBMul).
@@ -437,6 +496,15 @@ export class QuadPhysics {
     this.omega = v3();                           // body rates rad/s (x roll, y pitch, z yaw)
     this.armed = false;
     this.airborne = false;
+    this._fromSp = { roll: 0, pitch: 0, yaw: 0 };
+    this._toSp = { roll: 0, pitch: 0, yaw: 0 };
+    this._fromThr = 0;
+    this._toThr = 0;
+    this._frameLen = 0;
+    this._frameUsed = 0;
+    this._interpInputs = false;
+    this._ffD = { roll: 0, pitch: 0, yaw: 0 };
+    this._ffLeft = 0;
     for (const mo of this.motors) { mo.output = 0; mo.command = 0; }
     if (this.pid) this.resetControllers();
   }
@@ -462,7 +530,7 @@ export class QuadPhysics {
 
   // Mix Angle / Horizon / Acro into a rate setpoint (rad/s).
   // acroSetpoint is the existing Betaflight-rates output (unchanged).
-  // stick is {r,p,y} in -1..1, mode 2: r right, p up (nose down), y right.
+  // stick is {r,p,y} in -1..1, mode 2: r right, p forward/up (fly +X), y right.
   flightSetpoint(stick, acroSetpoint) {
     const acro = acroSetpoint || { roll: 0, pitch: 0, yaw: 0 };
     const s = stick || this.rc || { r: 0, p: 0, y: 0 };
@@ -471,7 +539,7 @@ export class QuadPhysics {
 
     const att = attitudeOf(this.quaternion);
     const targetRoll = (s.r || 0) * ANGLE_MAX_RAD;
-    const targetPitch = -(s.p || 0) * ANGLE_MAX_RAD; // stick up → nose down
+    const targetPitch = (s.p || 0) * ANGLE_MAX_RAD; // stick forward/up → fly +X
     let roll = (targetRoll - att.roll) * ANGLE_P;
     let pitch = (targetPitch - att.pitch) * ANGLE_P;
     if (roll > ANGLE_RATE_LIM) roll = ANGLE_RATE_LIM; else if (roll < -ANGLE_RATE_LIM) roll = -ANGLE_RATE_LIM;
@@ -501,31 +569,74 @@ export class QuadPhysics {
   // -------------------------------------------------------------------------
   step(frameDt, setpoint, throttle, stick) {
     if (stick) this.rc = { r: stick.r || 0, p: stick.p || 0, y: stick.y || 0 };
+    const next = setpoint || { roll: 0, pitch: 0, yaw: 0 };
+    this._fromSp = { roll: this._toSp.roll, pitch: this._toSp.pitch, yaw: this._toSp.yaw };
+    this._toSp = { roll: next.roll || 0, pitch: next.pitch || 0, yaw: next.yaw || 0 };
+    this._fromThr = this._toThr;
+    this._toThr = throttle || 0;
+    // FF impulse is kf·Δ over a fixed 16 ms window so 144 fps gets the same
+    // stick-step kick as 60. Stick itself still arrives at the end of this
+    // frame — interpolation only, no extra tau.
+    const dR = this._toSp.roll - this._fromSp.roll;
+    const dP = this._toSp.pitch - this._fromSp.pitch;
+    const dY = this._toSp.yaw - this._fromSp.yaw;
+    if (dR || dP || dY) {
+      this._ffD = { roll: dR / FF_WINDOW_S, pitch: dP / FF_WINDOW_S, yaw: dY / FF_WINDOW_S };
+      this._ffLeft = FF_WINDOW_S;
+    }
     const pdt = this.physicsDt;
-    this.accumulator += Math.min(frameDt, 0.1); // clamp huge hitches
+    const frame = Math.min(frameDt, 0.1);
+    // Interpolate only when a render frame covers several PID ticks. No extra
+    // time-constant: the new stick is reached by the end of this frame.
+    this._interpInputs = frame > pdt * 1.5;
+    this._frameLen = frame;
+    this._frameUsed = 0;
+    this.accumulator += frame;
     while (this.accumulator >= pdt) {
-      this.substep(setpoint, throttle);
+      this.substep();
       this.accumulator -= pdt;
     }
   }
 
-  substep(setpoint, throttle) {
+  substep() {
     const dt = this.physicsDt;
     const cfg = this.cfg;
-    const sp = this.flightSetpoint(this.rc, setpoint);
+    this._frameUsed += dt;
+    let inSp = this._toSp || { roll: 0, pitch: 0, yaw: 0 };
+    let inThr = this._toThr || 0;
+    if (this._interpInputs && this._frameLen > 0) {
+      const u = Math.min(1, this._frameUsed / this._frameLen);
+      const a = this._fromSp || { roll: 0, pitch: 0, yaw: 0 };
+      const b = this._toSp || { roll: 0, pitch: 0, yaw: 0 };
+      inSp = {
+        roll: a.roll + (b.roll - a.roll) * u,
+        pitch: a.pitch + (b.pitch - a.pitch) * u,
+        yaw: a.yaw + (b.yaw - a.yaw) * u,
+      };
+      inThr = this._fromThr + (this._toThr - this._fromThr) * u;
+    }
+    const sp = this.flightSetpoint(this.rc, inSp);
 
     // ---- FC: rate loop ----
     let r = 0, p = 0, y = 0, thr = 0;
     const threeD = !!this.threeD;
     if (this.armed) {
-      r = this.pid.roll.update(sp.roll, this.omega.x, this.airborne);
-      p = this.pid.pitch.update(sp.pitch, this.omega.y, this.airborne);
-      y = this.pid.yaw.update(sp.yaw, this.omega.z, this.airborne);
+      // Scheduled 16 ms FF on roll/pitch only — yaw stays on the per-tick
+      // derivative so the 70–160 ms yaw rise target does not collapse.
+      let dRoll, dPitch;
+      if (this._ffLeft > 0) {
+        dRoll = this._ffD.roll;
+        dPitch = this._ffD.pitch;
+        this._ffLeft -= dt;
+      }
+      r = this.pid.roll.update(sp.roll, this.omega.x, this.airborne, dt, dRoll);
+      p = this.pid.pitch.update(sp.pitch, this.omega.y, this.airborne, dt, dPitch);
+      y = this.pid.yaw.update(sp.yaw, this.omega.z, this.airborne, dt);
       if (threeD) {
         // 3D collective is already -1..1. No idle: center stick is true zero.
-        thr = Math.max(-1, Math.min(1, throttle || 0));
+        thr = Math.max(-1, Math.min(1, inThr || 0));
       } else {
-        thr = cfg.idleThrottle + throttle * (1 - cfg.idleThrottle); // Betaflight idle
+        thr = cfg.idleThrottle + inThr * (1 - cfg.idleThrottle); // Betaflight idle
       }
     }
 
@@ -543,6 +654,17 @@ export class QuadPhysics {
       thr + r + p - y,   // M3 rear-left   CCW
       thr + r - p + y,   // M4 front-left  CW
     ];
+    // Yaw yields first when the mixer is over-range (Betaflight yaw authority
+    // stealing). Isolated yaw is untouched; roll/pitch keep the leftover range.
+    {
+      const limit = threeD ? 2 : 1;
+      const spread0 = Math.max(...m) - Math.min(...m);
+      if (spread0 > limit && Math.abs(y) > 1e-8) {
+        const reduce = Math.min(Math.abs(y), (spread0 - limit) / 2);
+        const dy = -Math.sign(y) * reduce;
+        m[0] += dy; m[1] -= dy; m[2] -= dy; m[3] += dy;
+      }
+    }
     // Desaturation: shift the whole set to preserve differential (attitude authority),
     // sacrificing collective (throttle) — this IS airmode.
     // 3D uses the full -1..1 motor range (Betaflight 3D / reversible DShot).

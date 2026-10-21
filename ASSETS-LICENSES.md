@@ -57,6 +57,16 @@ Used only for numeric readouts (OSD values, sliders, CLI/ghost fields).
 | Kenney City Kit GLBs under `assets/Models/` | CC0 (`assets/License.txt`) | Kenney (www.kenney.nl). Still in the tree; **Phase 1 city no longer loads them**. |
 | `assets/Models/GLB-format/low_poly_city_game-ready.glb` | CC BY 4.0 | **costoWRLD (Sketchfab, CC BY)** — not loaded in Phase 1. City playable art is original procedural `Neon Current` (`sim-art.js`). |
 
+### Proposed removal (unused `assets/Models/GLB-format/`, ~53 MB)
+
+Verified unused by sim JS, kit loaders, guides, and site HTML (only mentioned in this file, `docs/sim-art-direction.md`, and the banned-asset test string). City/garage kits load Meshopt files from `assets/sim-city/` and `assets/sim-garage/`. Do not delete Kenney preview/docs at `assets/Overview.html`, `assets/Preview*.png`, or `assets/License.txt`.
+
+| Path | Bytes | Why unused |
+|---|---|---|
+| `assets/Models/GLB-format/low_poly_city_game-ready.glb` | 46,285,516 | costoWRLD skyline; Phase 1 never fetches it |
+| 444 Kenney City Kit `.glb` tiles (buildings, roads, roofs, props) | 7,164,872 | Replaced by `assets/sim-city/` Meshopt kit |
+| **Folder total** | **53,450,388** | Safe to delete the folder in a follow-up if Ryan agrees |
+
 ## W3 indoor maps (no new binary textures)
 
 Office, school gym, Tiny Trainer hall, and Your-room are procedural boxes/cylinders that reuse the same V1 Poly Haven PBR sets (concrete, plaster facade, wood canvas + plaster normal). No new downloads. No WebFPV assets, layouts, or code. Track JSON lives in `tracks/`. Hosted pace ghosts for the new courses are synthetic splines in `ghosts/<track-id>.json`. Your-room dimensions persist in `localStorage` key `quadmathSimRoom` only.
