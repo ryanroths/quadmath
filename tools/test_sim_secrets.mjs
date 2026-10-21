@@ -101,7 +101,8 @@ test('every spark and secret is clear of map collider data', () => {
   }
   assert.equal(inPlayable('living', { x: 0, y: 1, z: 0 }), true);
   assert.equal(inPlayable('living', { x: 20, y: 1, z: 0 }), false);
-  assert.equal(pointClear('living', { x: 0, y: 0.6, z: -10.6 }), false);
+  assert.equal(pointClear('living', { x: 0, y: 0.6, z: -10.6 }), true, 'sofa crawl is open');
+  assert.equal(pointClear('living', { x: 0, y: 1.28, z: -10.6 }), false, 'sofa seat still solid');
 });
 
 test('progress persists on the new key and labels stay original', () => {

@@ -4,6 +4,11 @@ Plan plus one playable prototype. Visual only. Gate numbers, colliders on the
 race line, leaderboard keys, ghosts, and daily/weekly seeds stay frozen.
 Nothing here is copied from a game, and nothing is taken from WebFPV (GPL).
 
+**Studio lock: Felt Scale.** See `docs/sim-art-felt-scale.md`. Materials
+unify (matte, MeshBasic indoors, metalness ≤ 0.05). Per-map palettes stay.
+Night maps keep their hour. Living Room is the reference map. Phone Low has
+no bloom, no AO, and no extra post passes.
+
 Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
 **Clay Parlor** ships on Living Room, **Volt Stall** ships on Garage, and
 **Ion Nave** ships on Warehouse.
@@ -125,15 +130,15 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Tr
 - **Post:** Bloom on Med/High (threshold ~0.82 so only emissives catch). Off on Low. FPV barrel stays.
 - **Not:** Vice City, Outrun box art, or any licensed skyline.
 
-### Living Room — Clay Parlor (shipped)
+### Living Room — Clay Parlor (Felt Scale reference)
 
 - **Time:** Overcast afternoon through a felt window.
 - **Palette:** `#f4d6c6` plaster, `#7ec8e3` clay sky, `#ff6b9a` cushion, `#ffe08a` lamp, `#6b3f2a` walnut.
-- **Sky / fog:** No sky (indoor). Fog `#f0e4d4` at `0.004`.
-- **Lighting:** Soft bounce, no hard sun. Toon-ish ramp on furniture later.
-- **Props:** Oversized clay sofa, gummy lamp, wooden-block bookshelf.
-- **Gates:** Soft rounded clay rings, pastel emissive, no metal.
-- **Post:** Almost none. A light toon ramp on Med/High, bloom off.
+- **Sky / fog:** No sky (indoor). Fog `#f0e4d4` at `0.0052`.
+- **Lighting:** Soft felt bounce, hemi high, env low. Dawn HDRI cannot wash MeshBasic furniture.
+- **Props:** Felt-nap sofa, gummy lamp, wooden-block bookshelf.
+- **Gates:** Soft rounded clay rings, pastel, no metal.
+- **Post:** Warm lift, light vignette, bloom off at every quality. Low: no lanterns / steam / glow.
 
 ### Garage — Volt Stall (shipped)
 

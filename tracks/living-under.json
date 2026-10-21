@@ -1,0 +1,18 @@
+{
+  "id": "living-under",
+  "map": "living",
+  "name": "Table Dive",
+  "class": "whoop",
+  "gates": [
+    { "x": 0.0, "y": 2.3, "z": 11.2, "ry": 0.00, "size": 1.9, "solid": true },
+    { "x": 0.0, "y": 2.70, "z": -8.2, "ry": 0.00, "size": 1.7, "solid": true },
+    { "x": 0.0, "y": 0.62, "z": -5.9, "ry": 1.57, "size": 1.5, "solid": true },
+    { "x": 0.0, "y": 0.62, "z": -10.6, "ry": 1.57, "size": 1.5, "solid": true },
+    { "x": 8.4, "y": 1.82, "z": -10.6, "ry": 0.00, "size": 1.5, "solid": true },
+    { "x": 7.3, "y": 1.42, "z": 9.8, "ry": 0.00, "size": 1.5, "solid": true },
+    { "x": 0.0, "y": 2.3, "z": 7.4, "ry": 3.14, "size": 1.9, "solid": true }
+  ],
+  "flags": [
+    { "x": 0.0, "y": 2.8, "z": -8.2, "ry": 0 }
+  ]
+}

@@ -3,9 +3,9 @@
 // New localStorage key only: quadmathSimSecrets.
 // Stock skin ids / unlocks in sim-retention.js stay frozen.
 
-import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=b1667740493b';
-import { LAYOUT } from './sim-maps.js?v=b861f2341ac9';
-import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=3dfc548117e2';
+import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=e17f99bc2161';
+import { LAYOUT } from './sim-maps.js?v=9b5e706b9457';
+import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=3d92869ea501';
 
 export const SECRETS_KEY = 'quadmathSimSecrets';
 export const SPARK_NAME = 'Spark';
@@ -262,7 +262,7 @@ const PLACEMENTS = Object.freeze({
     sparks: Object.freeze([
       P('l01', 0, 0.85, -13.05, 'sofa crawl'),
       P('l02', 0, 3.75, -10.4, 'sofa back'),
-      P('l03', 0, 1.52, -5.9, 'table top'),
+      P('l03', 0, 1.58, -5.9, 'table top'),
       P('l04', 7.15, 0.75, 0.2, 'tv gap'),
       P('l05', -7.1, 2.45, -3.8, 'chair top'),
       P('l06', -6.2, 5.2, 8.2, 'lamp shade'),
@@ -363,9 +363,9 @@ const PLACEMENTS = Object.freeze({
       P('y01', 0, 10.5, 24.0, 'south rim'),
       P('y02', 0, 10.5, -24.0, 'north rim'),
       P('y03', 0, 1.2, 0, 'center court'),
-      P('y04', -17.4, 1.35, 8, 'low bench'),
+      P('y04', -17.4, 1.62, 8, 'low bench'),
       P('y05', -21.45, 4.55, 0, 'west top'),
-      P('y06', 21.45, 4.55, 12, 'east top'),
+      P('y06', 21.45, 5.24, 12, 'east top'),
       P('y07', -23.15, 1.4, 22, 'bleacher lee'),
       P('y08', 3.1, 2.0, 25.15, 'post circle'),
       P('y09', 0, 22.5, 0, 'truss hover'),
@@ -375,7 +375,7 @@ const PLACEMENTS = Object.freeze({
       P('y13', 0, 6.2, 35.8, 'door'),
     ]),
     secrets: Object.freeze([
-      S('honey', 'Honey Loft', -21.45, 4.55, -24.5, 1.4, 'far bleacher'),
+      S('honey', 'Honey Loft', -21.45, 5.24, -24.5, 1.4, 'far bleacher'),
       S('rim', 'Rim Well', 0, 10.5, 26.35, 1.2, 'behind glass'),
     ]),
   }),

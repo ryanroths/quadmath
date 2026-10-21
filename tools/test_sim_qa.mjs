@@ -357,12 +357,16 @@ test('sim.html Fly/Freestyle, map switching, and Esc leave a race', () => {
 
 test('named tracks are lines; city stays 3-lap; HUD and ghost stay wired', () => {
   for (const id of [
-    'garage-bench', 'garage-rafters', 'warehouse-racks', 'warehouse-rafters', 'living-sofa',
+    'garage-bench', 'garage-rafters', 'warehouse-racks', 'warehouse-rafters',
+    'living-sofa', 'living-under', 'living-rafters', 'living-circuit',
     'office-under', 'office-rafters', 'office-cubicles', 'office-hallway', 'office-desks',
+    'gym-under', 'gym-rafters', 'gym-court', 'gym-bleachers', 'gym-hoops',
   ]) {
     assert.equal(isLineTrackId(id), true, id);
   }
+  assert.equal(isLineTrackId('living-freestyle'), false);
   assert.equal(isLineTrackId('office-freestyle'), false);
+  assert.equal(isLineTrackId('gym-freestyle'), false);
   assert.equal(isLineTrackId(0), false);
   assert.equal(isLineTrackId('city-loop'), false);
   assert.ok(simSrc.includes('isLineTrackId'));

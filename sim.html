@@ -839,7 +839,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=c5a4d163f20f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=bf860b51314b";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=47f589dae15b";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -852,8 +852,8 @@ import {
   restyleTrainer, decorateTrainerGate, pulseTrainerGate, tickTrainerArt,
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
-  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, mergeStaticArt,
-} from "./sim-art.js?v=04bdd26eda39";
+  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, mergeStaticArt,
+} from "./sim-art.js?v=6cd8b294c7ec";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -878,14 +878,14 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=3dfc548117e2";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=b861f2341ac9";
+} from "./sim-tracks.js?v=3d92869ea501";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=9b5e706b9457";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=423358ddd55a";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=7d92d04ec677";
+} from "./sim-room.js?v=52627101d2c3";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=1b8896845130";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -900,7 +900,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=0e297e75d57a";
+} from "./sim-coach.js?v=f0da1c510958";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js?v=49546f834df8";
@@ -921,13 +921,13 @@ import {
   loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   defaultWhoopKit,
-} from "./sim-retention.js?v=b1667740493b";
+} from "./sim-retention.js?v=e17f99bc2161";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=e9de27b786aa";
+} from "./sim-secrets.js?v=4b704f5fb563";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -2349,9 +2349,11 @@ function compactMapArt(){
 }
 function applyLooksPost(mapId, quality){
   const q=quality||(looks&&looks.applied)||'med';
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
-  if(looks&&looks.setMapPost)looks.setMapPost(vibePost(vibeFor(mapId)));
-  else if(looks&&looks.setGrade)looks.setGrade(qualityWantsBloom(q)?1:0);
+  const vibe=vibeFor(mapId);
+  const bloom=qualityWantsBloom(q, vibe);
+  if(looks&&looks.bloomPass)looks.bloomPass.enabled=bloom;
+  if(looks&&looks.setMapPost)looks.setMapPost(vibePost(vibe));
+  else if(looks&&looks.setGrade)looks.setGrade(bloom?1:0);
 }
 function applyCityArt(quality){
   const vibe=vibeFor('city');
@@ -2418,7 +2420,42 @@ function applyLivingArt(quality){
   });
   applyLooksPost('living', quality);
   const credit=document.querySelector('.sf-credit');
-  if(credit)credit.textContent='Living Room is original procedural art — Clay Parlor';
+  if(credit)credit.textContent='Living Room is original procedural art — Clay Parlor · Felt Scale. Kenney CC0 parlor kit.';
+  queueLivingKit(quality||(looks&&looks.applied)||'med', vibeFor('living'));
+}
+let livingKitWanted=null;
+let livingKitGen=0;
+function queueLivingKit(quality, vibe){
+  livingKitWanted={quality:quality||'med', vibe:vibe||vibeFor('living')};
+  if(window._heavyAssetsPending)return;
+  dressLivingKit();
+}
+async function dressLivingKit(){
+  const wanted=livingKitWanted;
+  if(!wanted)return;
+  const gen=++livingKitGen;
+  try{
+    const ok=await ensureGltf();
+    if(!ok || !GLTFLoader || gen!==livingKitGen)return;
+    const built=indoorBuilt.living;
+    const group=built&&built.group&&built.group.getObjectByName('livingArtVisuals');
+    if(!group)return;
+    const loader=new GLTFLoader();
+    if(MeshoptDecoder){
+      if(MeshoptDecoder.ready)await MeshoptDecoder.ready;
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    }
+    const dressed=await tryDressLivingKit(THREE,{
+      group, loader, vibe:wanted.vibe, quality:wanted.quality,
+    });
+    if(gen!==livingKitGen)return;
+    window._livingKit=dressed;
+    if(assetEl && dressed && dressed.used){
+      assetEl.textContent='Kenney CC0 living kit ('+Math.round((dressed.bytes||0)/1024)+' KB).';
+    }
+  }catch(e){
+    window._livingKit={used:false, error:String(e&&e.message||e)};
+  }
 }
 function applyGarageArt(quality){
   const built=indoorBuilt.garage||ensureIndoor('garage');
@@ -2536,7 +2573,42 @@ function applyGymArt(quality){
   });
   applyLooksPost('gym', q);
   const credit=document.querySelector('.sf-credit');
-  if(credit)credit.textContent='Gym is original procedural art — Amber Court';
+  if(credit)credit.textContent='Gym is original procedural art — Amber Court. Kenney CC0 sideline kit.';
+  queueGymKit(q, vibeFor('gym'));
+}
+let gymKitWanted=null;
+let gymKitGen=0;
+function queueGymKit(quality, vibe){
+  gymKitWanted={quality:quality||'med', vibe:vibe||vibeFor('gym')};
+  if(window._heavyAssetsPending)return;
+  dressGymKit();
+}
+async function dressGymKit(){
+  const wanted=gymKitWanted;
+  if(!wanted)return;
+  const gen=++gymKitGen;
+  try{
+    const ok=await ensureGltf();
+    if(!ok || !GLTFLoader || gen!==gymKitGen)return;
+    const built=indoorBuilt.gym;
+    const group=built&&built.group&&built.group.getObjectByName('gymArtVisuals');
+    if(!group)return;
+    const loader=new GLTFLoader();
+    if(MeshoptDecoder){
+      if(MeshoptDecoder.ready)await MeshoptDecoder.ready;
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    }
+    const dressed=await tryDressGymKit(THREE,{
+      group, loader, vibe:wanted.vibe, quality:wanted.quality,
+    });
+    if(gen!==gymKitGen)return;
+    window._gymKit=dressed;
+    if(assetEl && dressed && dressed.used){
+      assetEl.textContent='Kenney CC0 gym kit ('+Math.round((dressed.bytes||0)/1024)+' KB).';
+    }
+  }catch(e){
+    window._gymKit={used:false, error:String(e&&e.message||e)};
+  }
 }
 function applyOfficeArt(quality){
   const built=indoorBuilt.office||ensureIndoor('office');
@@ -2686,7 +2758,9 @@ function startHeavyAssets(){
   if(map==='city')finishCityArt();
   if(map==='garage')dressGarageKit();
   if(map==='warehouse')dressWarehouseKit();
+  if(map==='living')dressLivingKit();
   if(map==='office')dressOfficeKit();
+  if(map==='gym')dressGymKit();
 }
 
 function wrapCityWorld(){
@@ -2820,14 +2894,14 @@ function applyMapLooks(mapId){
   setIndoorLights(indoorLights,looks?looks.applied:'med');
   const credit=document.querySelector('.sf-credit');
   if(credit){
-    if(mapId==='living')credit.textContent='Living Room is original procedural art — Clay Parlor';
+    if(mapId==='living')credit.textContent='Living Room is original procedural art — Clay Parlor · Felt Scale. Kenney CC0 parlor kit.';
     else if(mapId==='garage')credit.textContent='Garage is original procedural art — Volt Stall. Kenney CC0 shop kit.';
     else if(mapId==='warehouse')credit.textContent='Warehouse is original procedural art — Ion Nave';
     else if(mapId==='room')credit.textContent='Your Room is original procedural art — Pocket Stage';
     else if(mapId==='backyard')credit.textContent='Backyard is original procedural art — Jade Lot';
     else if(mapId==='trainer')credit.textContent='Trainer is original procedural art — Licorice Grid';
     else if(mapId==='office')credit.textContent='Office is original procedural art — Paper Sun';
-    else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court';
+    else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court. Kenney CC0 sideline kit.';
     else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current. Kenney CC0 cars and street kit.';
   }
 }
