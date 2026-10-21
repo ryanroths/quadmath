@@ -56,7 +56,7 @@ assert.ok((byMap.backyard || 0) >= 2);
 assert.ok((byMap.office || 0) >= 2, 'office needs 2+ tracks');
 assert.ok((byMap.gym || 0) >= 2, 'gym needs 2+ tracks');
 assert.ok((byMap.trainer || 0) >= 2, 'trainer needs 2+ tracks');
-assert.equal(byMap.office, 3);
+assert.equal(byMap.office, 5);
 assert.equal(byMap.gym, 3);
 assert.equal(byMap.trainer, 3);
 
@@ -257,6 +257,12 @@ assert.equal(isLineTrackId('garage-rafters'), true);
 assert.equal(isLineTrackId('warehouse-racks'), true);
 assert.equal(isLineTrackId('warehouse-rafters'), true);
 assert.equal(isLineTrackId('living-sofa'), true);
+assert.equal(isLineTrackId('office-under'), true);
+assert.equal(isLineTrackId('office-rafters'), true);
+assert.equal(isLineTrackId('office-cubicles'), true);
+assert.equal(isLineTrackId('office-hallway'), true);
+assert.equal(isLineTrackId('office-desks'), true);
+assert.equal(isLineTrackId('office-freestyle'), false);
 assert.equal(isLineTrackId(0), false);
 assert.equal(isLineTrackId(1), false);
 assert.equal(isLineTrackId('city-loop'), false);
@@ -288,5 +294,15 @@ assert.deepEqual(visibleSplits([1, 2, 3, 4, 5], 3), [3, 4, 5]);
 const lineGhost = makePaceGhost(living.gates, { track: 'living-sofa', speed: 6, hz: LINE_GHOST_HZ, laps: 1 });
 assert.equal(ghostPayloadError(lineGhost, 'living-sofa'), null);
 assert.ok(lineGhost.samples.length > 4 && lineGhost.samples.length < 400);
+const deskDive = files.find((t) => t.id === 'office-under');
+assert.ok(deskDive && deskDive.gates.length >= 4);
+assert.deepEqual(afterLinePass(0, deskDive.gates.length, false), { start: true, finish: false, nextIndex: 1 });
+assert.deepEqual(
+  afterLinePass(deskDive.gates.length - 1, deskDive.gates.length, true),
+  { start: false, finish: true, nextIndex: 0 },
+);
+const officeLineGhost = makePaceGhost(deskDive.gates, { track: 'office-under', speed: 6, hz: LINE_GHOST_HZ, laps: 1 });
+assert.equal(ghostPayloadError(officeLineGhost, 'office-under'), null);
+assert.ok(officeLineGhost.samples.length > 4 && officeLineGhost.samples.length < 400);
 
 console.log('ok', files.length, 'tracks; city layouts frozen; share round-trip; miss 100%; old keys untouched');
