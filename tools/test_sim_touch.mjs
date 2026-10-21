@@ -258,6 +258,23 @@ test('sim.html gamepad path does not fall through to touch', () => {
   assert.ok(simSrc.includes('body.calibrating'));
 });
 
+test('landscape phone menu scrolls and ACRO sits above the sticks', () => {
+  assert.match(simSrc, /\.menu-card\{[^}]*overflow-y:\s*auto/);
+  assert.match(simSrc, /\.menu-card\{[^}]*max-height:\s*calc\(100dvh/);
+  assert.match(simSrc, /#startMenu\{[^}]*safe-area-inset-top/);
+  assert.match(simSrc, /#startMenu\{[^}]*overflow:\s*auto/);
+  assert.match(simSrc, /@media \(max-height:430px\)/);
+  assert.match(simSrc, /body\.touch-on #feelHud\{[^}]*z-index:\s*20/);
+  assert.match(simSrc, /body\.touch-on #feelHud\{[^}]*top:\s*max\(52px/);
+  assert.match(simSrc, /#hudAcro,#hud3d\{[^}]*z-index:\s*21/);
+  assert.match(simSrc, /body\.touch-on #hudAcro\{order:-2/);
+  assert.match(simSrc, /#touchLayer \.vstick\.right\{right:max\(/);
+  assert.match(simSrc, /#osdLap\{top:84px;left:16px/);
+  assert.match(simSrc, /body\.touch-on #osdLap\{max-width:46vw/);
+  assert.ok(touchSrc.includes('#feelHud,#osdLap,#gear'));
+  assert.ok(!simSrc.includes('content/guides/'), 'do not edit guide HTML');
+});
+
 test('existing localStorage keys stay in sim.html', () => {
   const keys = [
     'ryflyRates', 'ryflyRatesType', 'ryflyDroneType', 'ryflyCamCustom',

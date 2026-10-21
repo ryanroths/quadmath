@@ -3,9 +3,9 @@
 // New localStorage key only: quadmathSimSecrets.
 // Stock skin ids / unlocks in sim-retention.js stay frozen.
 
-import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=da2f1c622993';
-import { LAYOUT } from './sim-maps.js?v=d9f1e373f40d';
-import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=0d3a9ace19b9';
+import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=5b03d1b8d780';
+import { LAYOUT } from './sim-maps.js?v=9b5e706b9457';
+import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=3d92869ea501';
 
 export const SECRETS_KEY = 'quadmathSimSecrets';
 export const SPARK_NAME = 'Spark';
@@ -345,7 +345,7 @@ const PLACEMENTS = Object.freeze({
       P('o03', -8.35, 5.4, 12, 'high aisle'),
       P('o04', -13.25, 3.85, -12, 'cube lid'),
       P('o05', -3.75, 3.85, 0, 'mid lid'),
-      P('o06', 4.6, 1.52, -16.2, 'conf table'),
+      P('o06', 4.6, 1.58, -16.2, 'conf table'),
       P('o07', 13.4, 1.7, 2.0, 'hall fly'),
       P('o08', 10.15, 1.8, -17.6, 'hall door'),
       P('o09', 14.2, 1.55, 18.4, 'reception'),
@@ -363,9 +363,9 @@ const PLACEMENTS = Object.freeze({
       P('y01', 0, 10.5, 24.0, 'south rim'),
       P('y02', 0, 10.5, -24.0, 'north rim'),
       P('y03', 0, 1.2, 0, 'center court'),
-      P('y04', -17.4, 1.35, 8, 'low bench'),
+      P('y04', -17.4, 1.62, 8, 'low bench'),
       P('y05', -21.45, 4.55, 0, 'west top'),
-      P('y06', 21.45, 4.55, 12, 'east top'),
+      P('y06', 21.45, 5.24, 12, 'east top'),
       P('y07', -23.15, 1.4, 22, 'bleacher lee'),
       P('y08', 3.1, 2.0, 25.15, 'post circle'),
       P('y09', 0, 22.5, 0, 'truss hover'),
@@ -375,7 +375,7 @@ const PLACEMENTS = Object.freeze({
       P('y13', 0, 6.2, 35.8, 'door'),
     ]),
     secrets: Object.freeze([
-      S('honey', 'Honey Loft', -21.45, 4.55, -24.5, 1.4, 'far bleacher'),
+      S('honey', 'Honey Loft', -21.45, 5.24, -24.5, 1.4, 'far bleacher'),
       S('rim', 'Rim Well', 0, 10.5, 26.35, 1.2, 'behind glass'),
     ]),
   }),

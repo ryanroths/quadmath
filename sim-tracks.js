@@ -400,6 +400,106 @@ export function applyMissPenalty(lapMs, missCount) {
   return (lapMs || 0) + (missCount || 0) * MISS_PENALTY_MS;
 }
 
+// Named / indoor tracks are a single start→finish line (split per gate).
+// City 0/1 stay the 3-lap loop. Freestyle has no gates.
+export const LINE_GHOST_HZ = 15;
+export const LINE_GHOST_MAX = 480;
+
+export function isLineTrackId(id) {
+  if (isBlankTrackId(id) || isFreestyleTrackId(id)) return false;
+  return legacyIndex(id) === null;
+}
+
+export function lineFinishIndex(gateCount) {
+  const n = gateCount | 0;
+  return n > 1 ? n - 1 : 0;
+}
+
+// After a pass: start on gate 0, finish on the last gate, else advance.
+export function afterLinePass(passedIndex, gateCount, runActive) {
+  const finish = lineFinishIndex(gateCount);
+  if (!runActive && passedIndex === 0) return { start: true, finish: false, nextIndex: 1 };
+  if (runActive && passedIndex === finish) return { start: false, finish: true, nextIndex: 0 };
+  if (runActive) return { start: false, finish: false, nextIndex: passedIndex + 1 };
+  return { start: false, finish: false, nextIndex: 0 };
+}
+
+export function ghostSampleDue(lastSampleMs, nowMs, hz) {
+  if (lastSampleMs == null) return true;
+  const rate = hz > 0 ? hz : LINE_GHOST_HZ;
+  return (nowMs - lastSampleMs) >= (1000 / rate);
+}
+
+export function downsampleGhost(samples, max) {
+  if (!samples || !samples.length) return [];
+  const cap = max > 0 ? max : LINE_GHOST_MAX;
+  if (samples.length <= cap) return samples.slice();
+  const stride = Math.ceil(samples.length / cap);
+  const out = [];
+  for (let i = 0; i < samples.length; i += stride) out.push(samples[i]);
+  const last = samples[samples.length - 1];
+  if (out[out.length - 1] !== last) out.push(last);
+  return out;
+}
+
+// Writes [t,x,y,z,qx,qy,qz,qw] into `out` (reused; no per-call alloc).
+export function interpolateGhostPose(samples, elapsed, out) {
+  if (!samples || !samples.length) return null;
+  const dest = out || [];
+  let a = samples[0];
+  let b = samples[0];
+  if (elapsed <= samples[0][0]) {
+    a = b = samples[0];
+  } else if (elapsed >= samples[samples.length - 1][0]) {
+    a = b = samples[samples.length - 1];
+  } else {
+    for (let i = 0; i < samples.length - 1; i++) {
+      if (samples[i][0] <= elapsed && samples[i + 1][0] >= elapsed) {
+        a = samples[i];
+        b = samples[i + 1];
+        break;
+      }
+    }
+  }
+  const span = b[0] - a[0];
+  const f = span > 0 ? (elapsed - a[0]) / span : 0;
+  dest[0] = elapsed;
+  dest[1] = a[1] + (b[1] - a[1]) * f;
+  dest[2] = a[2] + (b[2] - a[2]) * f;
+  dest[3] = a[3] + (b[3] - a[3]) * f;
+  dest[4] = a[4] + (b[4] - a[4]) * f;
+  dest[5] = a[5] + (b[5] - a[5]) * f;
+  dest[6] = a[6] + (b[6] - a[6]) * f;
+  dest[7] = a[7] + (b[7] - a[7]) * f;
+  const n = Math.hypot(dest[4], dest[5], dest[6], dest[7]) || 1;
+  dest[4] /= n;
+  dest[5] /= n;
+  dest[6] /= n;
+  dest[7] /= n;
+  return dest;
+}
+
+export function lineDeltaMs(liveMs, pbMs) {
+  if (!pbMs || !Number.isFinite(pbMs) || pbMs <= 0) return null;
+  if (!Number.isFinite(liveMs)) return null;
+  return liveMs - pbMs;
+}
+
+export function fmtSignedDelta(ms) {
+  if (ms == null || !Number.isFinite(ms)) return '--';
+  const sign = ms > 0 ? '+' : (ms < 0 ? '-' : '');
+  const abs = Math.abs(ms);
+  const s = Math.floor(abs / 1000);
+  const h = Math.floor((abs % 1000) / 10);
+  return sign + s + '.' + String(h).padStart(2, '0');
+}
+
+export function visibleSplits(splits, max) {
+  const list = splits || [];
+  if (!(max > 0) || list.length <= max) return list;
+  return list.slice(list.length - max);
+}
+
 export function sharePayload(track) {
   const t = normalizeTrack(track);
   return {
@@ -633,9 +733,13 @@ export const BUILTIN_TRACK_FILES = [
   { id: 'office-cubicles', file: 'tracks/office-cubicles.json', map: 'office', name: 'Cubicle Weave' },
   { id: 'office-hallway', file: 'tracks/office-hallway.json', map: 'office', name: 'Hallway Run' },
   { id: 'office-desks', file: 'tracks/office-desks.json', map: 'office', name: 'Desk Hop' },
+  { id: 'office-under', file: 'tracks/office-under.json', map: 'office', name: 'Desk Dive' },
+  { id: 'office-rafters', file: 'tracks/office-rafters.json', map: 'office', name: 'Ceiling Run' },
   { id: 'gym-court', file: 'tracks/gym-court.json', map: 'gym', name: 'Court Loop' },
   { id: 'gym-bleachers', file: 'tracks/gym-bleachers.json', map: 'gym', name: 'Bleacher Climb' },
   { id: 'gym-hoops', file: 'tracks/gym-hoops.json', map: 'gym', name: 'Hoop Dive' },
+  { id: 'gym-under', file: 'tracks/gym-under.json', map: 'gym', name: 'Bench Dive' },
+  { id: 'gym-rafters', file: 'tracks/gym-rafters.json', map: 'gym', name: 'Truss Run' },
   { id: 'trainer-figure8', file: 'tracks/trainer-figure8.json', map: 'trainer', name: 'Figure 8' },
   { id: 'trainer-slalom', file: 'tracks/trainer-slalom.json', map: 'trainer', name: 'Slalom' },
   { id: 'trainer-hairpin', file: 'tracks/trainer-hairpin.json', map: 'trainer', name: 'Hairpin' },

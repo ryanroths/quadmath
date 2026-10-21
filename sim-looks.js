@@ -3,7 +3,7 @@
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
-import { resolveAutoQuality } from './sim-touch.js?v=4e5aeeda285e';
+import { resolveAutoQuality } from './sim-touch.js?v=4013a23bed14';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
@@ -66,10 +66,22 @@ export const LOOK_SPOTS = {
   officeWhoop: { pos: [12.4, 1.18, 16.8], target: [-6.2, 1.4, -4] },
   officeMid: { pos: [12.2, 4.6, 16.4], target: [-6, 1.4, -6] },
   officeOverview: { pos: [1.2, 8.4, 20.6], target: [-2, 1.2, -4] },
+  officeUnderDesk: { pos: [0.4, 0.62, 0.0], target: [-5.1, 0.66, 0.0] },
+  officeOverCube: { pos: [1.2, 4.15, 6.4], target: [-3.75, 4.05, 12.0] },
+  officeSun: { pos: [4.75, 2.65, 12.4], target: [4.6, 2.70, 6.2] },
+  officeGap: { pos: [4.7, 1.52, 7.2], target: [4.6, 1.55, 12.4] },
+  officeRafters: { pos: [0.25, 7.40, 16.4], target: [0, 7.7, 0] },
+  officeConf: { pos: [4.6, 0.62, -11.4], target: [4.6, 0.66, -16.2] },
   gym: { pos: [9.2, 8.2, 18], target: [0, 2.6, -12] },
   gymWhoop: { pos: [4.2, 1.18, 18], target: [-2.4, 1.5, -10] },
   gymMid: { pos: [14, 9.5, 26], target: [-2, 2.8, -8] },
   gymOverview: { pos: [0.4, 20, 34], target: [0, 2, -6] },
+  gymUnderBench: { pos: [-14.2, 0.62, 15.4], target: [-17.4, 0.66, 15.4] },
+  gymThrough: { pos: [-14.0, 2.40, 0.0], target: [-21.45, 2.40, 0.0] },
+  gymAmber: { pos: [0.2, 2.75, 16.4], target: [0, 2.80, 8.0] },
+  gymGap: { pos: [0.2, 1.70, 26.2], target: [0, 1.70, 32.4] },
+  gymOverBench: { pos: [-14.2, 5.20, 15.4], target: [-21.45, 5.00, 15.4] },
+  gymRafters: { pos: [0.3, 24.80, 28.0], target: [0, 25.40, 0] },
   trainer: { pos: [8, 6.2, 14], target: [0, 1.6, -4] },
   trainerWhoop: { pos: [0.2, 1.16, 14.2], target: [0, 1.4, -6] },
   trainerMid: { pos: [8, 6.2, 14], target: [0, 1.6, -4] },
