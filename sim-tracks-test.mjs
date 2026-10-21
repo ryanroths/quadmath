@@ -319,6 +319,6 @@ assert.deepEqual(
 );
 const gymLineGhost = makePaceGhost(benchDive.gates, { track: 'gym-under', speed: 6, hz: LINE_GHOST_HZ, laps: 1 });
 assert.equal(ghostPayloadError(gymLineGhost, 'gym-under'), null);
-assert.ok(gymLineGhost.samples.length > 4 && gymLineGhost.samples.length < 400);
+assert.ok(gymLineGhost.samples.length > 4 && gymLineGhost.samples.length <= LINE_GHOST_MAX);
 
 console.log('ok', files.length, 'tracks; city layouts frozen; share round-trip; miss 100%; old keys untouched');
