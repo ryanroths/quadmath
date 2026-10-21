@@ -4,7 +4,7 @@
 // New localStorage key only: quadmathSimRoom. Do not write old ryfly* keys
 // or the M2 custom-track / best-lap keys.
 
-import { normalizeTrack, WS_PER_METRE } from './sim-tracks.js?v=0d469647394f';
+import { normalizeTrack, WS_PER_METRE } from './sim-tracks.js?v=3dfc548117e2';
 
 export const ROOM_KEY = 'quadmathSimRoom';
 export const ROOM_TRACK_ID = 'room-practice';

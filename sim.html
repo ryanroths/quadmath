@@ -80,6 +80,8 @@
      that has to stay, so the calculator boilerplate drops out first. */
   @media (max-width:559px){
     footer .sf-note{display:none}
+    #osdLap{top:70px;font-size:11px;max-width:52vw;line-height:1.25}
+    #osdGate{font-size:11px;max-width:70vw;text-align:center}
   }
   .osd{position:fixed;pointer-events:none;font-size:12px;letter-spacing:.2px;font-weight:500;
     text-shadow:0 1px 8px rgba(0,0,0,.75)}
@@ -772,7 +774,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, mergeStaticArt,
-} from "./sim-art.js?v=80656cccca04";
+} from "./sim-art.js?v=04bdd26eda39";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -795,14 +797,16 @@ import {
   findTrackIn, resolveSimBoot, knownMapId, trackRefId,
   isFreestyleTrackId, freestyleTrack, freestyleIdFor,
   resolveFly, persistableSelection,
-} from "./sim-tracks.js?v=0d469647394f";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=9419f0a07e21";
+  isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost,
+  LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
+} from "./sim-tracks.js?v=3dfc548117e2";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=b861f2341ac9";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=3e3a37d777f9";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=43270d486919";
+} from "./sim-room.js?v=423358ddd55a";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=7d92d04ec677";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -817,7 +821,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=085f89b66de0";
+} from "./sim-coach.js?v=0e297e75d57a";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js?v=49546f834df8";
@@ -839,7 +843,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=4f0fa41d2451";
+} from "./sim-secrets.js?v=cb1d784a66a0";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -931,6 +935,7 @@ let customTracks=[];
 let currentTrackObj=null;
 const flagMeshes=[];
 const startMarkers=[];
+const finishMarkers=[];
 let indoorBuilt={};
 let indoorLights=[];
 let currentRoom=loadRoom();
@@ -1374,6 +1379,15 @@ function addStartMarker(pos){
   startMarkers.push(spr);
   return spr;
 }
+function addFinishMarker(pos){
+  const indoor=currentMap!=='city';
+  const spr=makeWorldLabel(THREE,'FINISH',{fill:'#3DDC97',glow:'#3DDC97'});
+  spr.position.copy(pos);spr.position.y+=indoor?1.5:12;
+  spr.scale.set(indoor?1.6:16,indoor?0.38:4,1);
+  raceGroup.add(spr);
+  finishMarkers.push(spr);
+  return spr;
+}
 function addTrackFlag(f,col){
   const mesh=makeFlagMesh(THREE,col||0xFF4D1A);
   mesh.position.set(f.x,0,f.z);
@@ -1393,6 +1407,7 @@ function spawnTrackData(track,trackId,parent){
   for(const f of track.flags||[])addTrackFlag(f,0x3DDC97);
   const list=trackGates(id);
   if(list[0])addStartMarker(list[0].pos);
+  if(isLineTrackId(id)&&list.length>1)addFinishMarker(list[list.length-1].pos);
   ensureTrackStats(id);
   return id;
 }
@@ -1409,7 +1424,8 @@ function updateGateUI(){
   }
   const miss=missTotal?(' · MISS +'+(missTotal*MISS_PENALTY_MS/1000).toFixed(1)+'s'):'';
   const split=lastGateSplit?(' · SPLIT '+fmtLap(lastGateSplit)):'';
-  gateUI.textContent=trackLabel(activeTrackId)+' GATE '+nextGateIndex+'/'+list.length+(runActive?' · LAP '+runLap+'/'+RUN_LAPS:'')+split+miss;
+  const phase=runActive?(isLineTrackId(activeTrackId)?' · LINE':' · LAP '+runLap+'/'+RUN_LAPS):'';
+  gateUI.textContent=trackLabel(activeTrackId)+' GATE '+nextGateIndex+'/'+list.length+phase+split+miss;
 }
 // tall translucent column rising from the active target gate — visible over
 // terrain and from across the map so the pilot always knows where to go next.
@@ -1467,25 +1483,37 @@ function startRun(){
 function finishRun(){
   runActive=false;
   const id=ensureTrackStats(activeTrackId);
-  const total=runSplits.reduce((a,b)=>a+b,0);
+  const line=isLineTrackId(activeTrackId);
+  let total;
+  if(line){
+    total=applyMissPenalty(performance.now()-runStartTime,missTotal);
+    runSplits=[total];
+  }else{
+    total=runSplits.reduce((a,b)=>a+b,0);
+  }
   lastRunTotal[id]=total;
   lastRunSplits[id]=runSplits.slice();
   lastGateSplits[id]=runGateSplits.slice();
-  let rec=ghostRec&&ghostRec.length?ghostRec.slice():null;
-  if(rec&&rec.length>GHOST_MAX){const stride=Math.ceil(rec.length/GHOST_MAX);rec=rec.filter((_,i)=>i%stride===0);}
+  const cap=line?LINE_GHOST_MAX:GHOST_MAX;
+  let rec=ghostRec&&ghostRec.length?downsampleGhost(ghostRec,cap):null;
   lastRunGhostRec=rec;
   let best=false;
   const counted=runCountsForBoards(threeD);
   if(counted && (!bestRunMs[id]||total<bestRunMs[id])){
     bestRunMs[id]=total;
     try{localStorage.setItem(bestRunStorageKey(id),String(total));}catch(e){}
-    commitGhost(id);                 // ghost = the whole 3-lap run
+    if(line){
+      try{localStorage.setItem(bestLapStorageKey(id),String(total));}catch(e){}
+      bestLapMs[id]=total;
+    }
+    commitGhost(id);
     lapFlashUntil=performance.now()+2500;
     best=true;
   }
   const extra=counted?noteRetentionFinish(id,total,rec):(threeD?'3D — NOT COUNTED':'');
-  // total + the three splits (the lap OSD panel keeps them on screen after)
-  toast('RUN '+fmtLap(total)+' ['+runSplits.map(fmtLap).join(' / ')+']'+(best?' — NEW BEST!':'')+(extra?' · '+extra:''));
+  const label=line?'LINE':'RUN';
+  const parts=line?runGateSplits:runSplits;
+  toast(label+' '+fmtLap(total)+(parts.length?' ['+parts.map(fmtLap).join(' / ')+']':'')+(best?' — NEW BEST!':'')+(extra?' · '+extra:''));
 }
 function liveTrackIds(){
   const ids=[];
@@ -1541,25 +1569,38 @@ function updateGates(){
     runGateSplits.push(lastGateSplit);
     gateSplitStart=now;
   }
-  nextGateIndex=(nextGateIndex+1)%list.length; // wraps at THIS track's length
-  if(passed===0&&!runActive){ // gate 0 with no run active → start a fresh run
-    startRun();
-    toast('RUN START — LAP 1/'+RUN_LAPS);
-  }else if(nextGateIndex===0&&runActive){ // wrapped a full sequence → a run lap completed
-    const raw=now-lapStartTime;
-    const split=applyMissPenalty(raw,missesThisLap);
-    missesThisLap=0;
-    const id=ensureTrackStats(activeTrackId);
-    runSplits.push(split);
-    lastLapMs[id]=split;
-    if(!bestLapMs[id]||split<bestLapMs[id]){ // per-lap best still tracked
-      bestLapMs[id]=split;
-      try{localStorage.setItem(bestLapStorageKey(id),String(split));}catch(e){}
+  if(isLineTrackId(activeTrackId)){
+    const act=afterLinePass(passed,list.length,runActive);
+    nextGateIndex=act.nextIndex;
+    if(act.start){
+      startRun();
+      toast('LINE START');
+    }else if(act.finish){
+      finishRun();
+    }else{
+      toast('GATE '+nextGateIndex+' PASSED'+(lastGateSplit?' '+fmtLap(lastGateSplit):''));
     }
-    if(runLap>=RUN_LAPS)finishRun();  // lap 3 done → run ends, no auto lap 4
-    else{toast('LAP '+runLap+' — '+fmtLap(split));runLap++;lapStartTime=now;runGateSplits=[];} // next lap; ghost keeps recording
+  }else{
+    nextGateIndex=(nextGateIndex+1)%list.length; // wraps at THIS track's length
+    if(passed===0&&!runActive){ // gate 0 with no run active → start a fresh run
+      startRun();
+      toast('RUN START — LAP 1/'+RUN_LAPS);
+    }else if(nextGateIndex===0&&runActive){ // wrapped a full sequence → a run lap completed
+      const raw=now-lapStartTime;
+      const split=applyMissPenalty(raw,missesThisLap);
+      missesThisLap=0;
+      const id=ensureTrackStats(activeTrackId);
+      runSplits.push(split);
+      lastLapMs[id]=split;
+      if(!bestLapMs[id]||split<bestLapMs[id]){ // per-lap best still tracked
+        bestLapMs[id]=split;
+        try{localStorage.setItem(bestLapStorageKey(id),String(split));}catch(e){}
+      }
+      if(runLap>=RUN_LAPS)finishRun();  // lap 3 done → run ends, no auto lap 4
+      else{toast('LAP '+runLap+' — '+fmtLap(split));runLap++;lapStartTime=now;runGateSplits=[];} // next lap; ghost keeps recording
+    }
+    else toast('GATE '+nextGateIndex+' PASSED'+(lastGateSplit?' '+fmtLap(lastGateSplit):''));
   }
-  else toast('GATE '+nextGateIndex+' PASSED'+(lastGateSplit?' '+fmtLap(lastGateSplit):''));
   updateGateUI();
   updateGateHighlight();
 }
@@ -2577,6 +2618,8 @@ function clearRace(){
   flagMeshes.length=0;
   for(const s of startMarkers){if(s.parent)s.parent.remove(s);}
   startMarkers.length=0;
+  for(const s of finishMarkers){if(s.parent)s.parent.remove(s);}
+  finishMarkers.length=0;
   for(let i=colliders.length-1;i>=0;i--){
     if(colliders[i]._tag==='gate')colliders.splice(i,1);
   }
@@ -2734,7 +2777,7 @@ async function setMap(mapId,trackId,opts){
         if(!isFreeFlight(t,activeTrackId)&&t.gates&&t.gates.length){
           spawnTrackData(t,activeTrackId);
           if((currentMap==='room'||isDailyTrackId(t.id)||isWeeklyTrackId(t.id))&&defaultRivals[t.id]==null){
-            defaultRivals[t.id]=makePaceGhost(t.gates,{track:t.id,name:'PACE BOT',speed:6,hz:8,laps:3});
+            defaultRivals[t.id]=makePaceGhost(t.gates,{track:t.id,name:'PACE BOT',speed:6,hz:8,laps:isLineTrackId(t.id)?1:3});
           }
         }
       }
@@ -2765,6 +2808,7 @@ async function setMap(mapId,trackId,opts){
   const k=trackStatId(activeTrackId);
   if(ghosts[k]==null)ghosts[k]=loadGhost(k);
   if(defaultRivals[k]==null&&currentTrackObj&&currentTrackObj.gates&&currentTrackObj.gates.length)loadHostedGhost(k);
+  if(typeof syncGhostScale==='function')syncGhostScale();
   syncSecrets();
 }
 
@@ -3936,6 +3980,24 @@ function updateCamera(){
 // ---------- OSD ----------
 const osdTL=document.getElementById('osdTL'),osdTR=document.getElementById('osdTR'),osdBC=document.getElementById('osdBC');
 const osdLap=document.getElementById('osdLap');
+function lineHudHtml(id, now){
+  const live=runActive?(now-runStartTime):(lastRunTotal[id]||0);
+  const pb=bestRunMs[id]||0;
+  const delta=(runActive||lastRunTotal[id])?lineDeltaMs(live,pb):null;
+  const dCol=delta==null?'':(delta<0?'#3DDC97':(delta>0?'#FF4D1A':''));
+  const phone=typeof window!=='undefined'&&window.innerWidth<560;
+  let html=trackLabel(activeTrackId)+(runActive?' LINE ':' RESULT ')+fmtLap(live||0);
+  html+='<br>Δ '+(delta==null?'--':(dCol?'<span style="color:'+dCol+'">':'')+fmtSignedDelta(delta)+(dCol?'</span>':''));
+  const gs=runActive?runGateSplits:(lastGateSplits[id]||[]);
+  const shown=visibleSplits(gs,phone?3:6);
+  if(shown.length){
+    const start=gs.length-shown.length;
+    html+='<br>'+shown.map((ms,i)=>'G'+(start+i+1)+' '+fmtLap(ms)).join(phone?' ':' · ');
+  }
+  if(missTotal)html+='<br>MISS +'+(missTotal*MISS_PENALTY_MS/1000).toFixed(1)+'s';
+  html+='<br>PB '+(pb?fmtLap(pb):'--:--.--');
+  return html;
+}
 function updateLapOSD(){
   const now=performance.now();
   osdLap.style.color=now<lapFlashUntil?'#3DDC97':''; // green flash on new best
@@ -3944,23 +4006,25 @@ function updateLapOSD(){
     return;
   }
   const id=ensureTrackStats(activeTrackId);
-  let html=trackLabel(activeTrackId);
-  if(runActive){ // live: current lap clock + running total + splits banked so far
-    html+=' RUN · LAP '+runLap+'/'+RUN_LAPS+
+  let html;
+  if(isLineTrackId(activeTrackId)){
+    html=lineHudHtml(id,now);
+  }else if(runActive){ // live: current lap clock + running total + splits banked so far
+    html=trackLabel(activeTrackId)+' RUN · LAP '+runLap+'/'+RUN_LAPS+
       '<br>LAP '+fmtLap(now-lapStartTime)+
       '<br>TOTAL '+fmtLap(now-runStartTime);
     for(let i=0;i<runSplits.length;i++)html+='<br> L'+(i+1)+' '+fmtLap(runSplits[i]);
     if(lastGateSplit)html+='<br>GSPLIT '+fmtLap(lastGateSplit);
     if(missTotal)html+='<br>MISS +'+(missTotal*MISS_PENALTY_MS/1000).toFixed(1)+'s';
   }else if(lastRunTotal[id]){ // results: finished run's total + its three splits
-    html+=' RESULT · TOTAL '+fmtLap(lastRunTotal[id]);
+    html=trackLabel(activeTrackId)+' RESULT · TOTAL '+fmtLap(lastRunTotal[id]);
     const sp=lastRunSplits[id]||[];
     for(let i=0;i<sp.length;i++)html+='<br> L'+(i+1)+' '+fmtLap(sp[i]);
     const gs=lastGateSplits[id]||[];
     if(gs.length)html+='<br>GATES '+gs.map(fmtLap).join(' / ');
     html+='<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
   }else{ // idle, no run yet on this track
-    html+=' RUN --:--.--<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
+    html=trackLabel(activeTrackId)+' RUN --:--.--<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
   }
   const rv=activeRival(); // racing a shared/hosted ghost — show who + their time
   if(rv)html+='<br><span style="color:#FF4D1A">VS '+rv.name+(rv.lapTime?' '+fmtLap(rv.lapTime):'')+'</span>';
@@ -4047,7 +4111,7 @@ function setActiveTrack(id){
     clearRace();
     spawnTrackData(t,tid);
       if((currentMap==='room'||isDailyTrackId(t.id)||isWeeklyTrackId(t.id))&&defaultRivals[t.id]==null){
-        defaultRivals[t.id]=makePaceGhost(t.gates,{track:t.id,name:'PACE BOT',speed:6,hz:8,laps:3});
+        defaultRivals[t.id]=makePaceGhost(t.gates,{track:t.id,name:'PACE BOT',speed:6,hz:8,laps:isLineTrackId(t.id)?1:3});
       }
   }
   nextGateIndex=0;
@@ -4058,6 +4122,7 @@ function setActiveTrack(id){
   const k=trackStatId(activeTrackId);
   if(ghosts[k]==null)ghosts[k]=loadGhost(k);
   if(defaultRivals[k]==null&&t.gates&&t.gates.length)loadHostedGhost(k);
+  if(typeof syncGhostScale==='function')syncGhostScale();
   updateGateUI();updateGateHighlight();
   resetQuad();
 }
@@ -5243,6 +5308,7 @@ window._rates=()=>({state:JSON.parse(JSON.stringify(rates)),axis:rateAxis,
 const GHOST_MAX=1500; // sample cap (a full 3-lap run at 30 Hz); downsample rather than fail to store
 let ghosts={0:null,1:null};               // per-track best-RUN recordings (all 3 laps)
 let ghostRec=null,ghostFrame=0;       // in-progress recording + its frame counter
+let ghostLastSampleMs=null;           // line tracks sample at LINE_GHOST_HZ
 let lastRunGhostRec=null;
 let activeDuel=null;                  // {ghost,track,name,lapTime} from a QM2 duel code
 let ghostVisible=true;
@@ -5256,8 +5322,8 @@ function loadGhost(id){
   }catch(e){return null;}
 }
 ghosts[0]=loadGhost(0);ghosts[1]=loadGhost(1);
-function startGhostRec(){ghostRec=[];ghostFrame=0;}   // begin a fresh lap recording
-function clearGhostRec(){ghostRec=null;}              // void the in-progress recording
+function startGhostRec(){ghostRec=[];ghostFrame=0;ghostLastSampleMs=null;}
+function clearGhostRec(){ghostRec=null;ghostLastSampleMs=null;}
 // persist, downsampling further on a quota error rather than failing to store
 function persistGhost(id,rec){
   let data=rec;
@@ -5275,8 +5341,7 @@ function persistGhost(id,rec){
 // save the just-finished recording as track id's ghost (called on a new best)
 function commitGhost(id){
   if(!ghostRec||!ghostRec.length)return;
-  let rec=ghostRec;
-  if(rec.length>GHOST_MAX){const stride=Math.ceil(rec.length/GHOST_MAX);rec=rec.filter((_,i)=>i%stride===0);}
+  const rec=downsampleGhost(ghostRec,isLineTrackId(id)?LINE_GHOST_MAX:GHOST_MAX);
   ghosts[id]=persistGhost(id,rec);
 }
 // translucent cyan quad — no existing quad mesh to reuse (this is an FPV sim,
@@ -5298,6 +5363,13 @@ function makeGhostMesh(color){
 }
 const ghostMesh=makeGhostMesh();            // own best-run ghost (cyan)
 const rivalMesh=makeGhostMesh(0xFF4D1A);    // imported / hosted rival (orange)
+function syncGhostScale(){
+  const indoor=currentMap!=='city';
+  const s=indoor?0.28:1;
+  if(ghostMesh)ghostMesh.scale.setScalar(s);
+  if(rivalMesh)rivalMesh.scale.setScalar(s);
+  if(rivalLabel)rivalLabel.scale.set(indoor?1.6:10,indoor?0.4:2.5,1);
+}
 // floating name label above the rival — camera-facing canvas sprite
 const rivalLabel=new THREE.Sprite(worldLabelMaterial(THREE));
 rivalLabel.scale.set(10,2.5,1);rivalLabel.visible=false;rivalLabel.userData.keepInScene=true;scene.add(rivalLabel);
@@ -5319,10 +5391,18 @@ function activeRival(){
   return defaultRivals[trackStatId(activeTrackId)];
 }
 const _gqa=new THREE.Quaternion(),_gqb=new THREE.Quaternion();
+function ownGhost(){
+  const k=trackStatId(activeTrackId);
+  if(ghosts[k]==null)ghosts[k]=loadGhost(k);
+  return ghosts[k];
+}
 function sampleGhost(){
   if(!ghostRec||!runActive)return; // record across the whole run, stamped from run start
-  if((++ghostFrame)%2!==0)return;  // every 2nd frame
   const t=performance.now()-runStartTime;
+  if(isLineTrackId(activeTrackId)){
+    if(!ghostSampleDue(ghostLastSampleMs,t,LINE_GHOST_HZ))return;
+    ghostLastSampleMs=t;
+  }else if((++ghostFrame)%2!==0)return;  // city: every 2nd frame
   ghostRec.push([Math.round(t),_gr2(state.pos.x),_gr2(state.pos.y),_gr2(state.pos.z),
     _gr3(state.q.x),_gr3(state.q.y),_gr3(state.q.z),_gr3(state.q.w)]);
 }
@@ -5340,7 +5420,7 @@ function poseGhost(g,mesh,elapsed){
 }
 function playbackGhost(){
   const elapsed=performance.now()-runStartTime; // index by run-elapsed time (whole run)
-  const own=ghosts[activeTrackId];
+  const own=ownGhost();
   if(ghostVisible&&runActive&&own&&own.length)poseGhost(own,ghostMesh,elapsed);
   else ghostMesh.visible=false;
   const rv=activeRival();
@@ -5355,7 +5435,7 @@ function playbackGhost(){
 // default, or a pasted rival. Until then the G hints read dimmed and the key
 // explains itself instead of toggling nothing.
 function ghostAvailable(){
-  const own=ghosts[activeTrackId];
+  const own=ownGhost();
   return !!((own&&own.length)||activeRival());
 }
 let _ghostHintOn=null;
@@ -5366,6 +5446,51 @@ function updateGhostHint(){
   for(const id of ['legendGhost','kbdGhost']){const el=document.getElementById(id);if(el)el.classList.toggle('off',!on);}
 }
 function updateGhost(){sampleGhost();playbackGhost();updateGhostHint();}
+// Headless / shot helper: park on the pad, start a line, replay a compact pace ghost.
+function demoLineGhostForShot(){
+  try{
+    const t=findTrack(activeTrackId)||currentTrackObj;
+    const list=trackGates(activeTrackId);
+    if(!t||!list.length)return false;
+    chaseCamOn=false;
+    if(looks){looks.setMenuOpen(false);looks.setLookSpot(null);}
+    CFG.camDeg=10;
+    const pad=startPad(t);
+    const yaw=pad.yaw||0;
+    placeQuadAt(pad.x,pad.y,pad.z,yaw||0.0001);
+    const fx=-Math.sin(yaw),fz=-Math.cos(yaw);
+    const gx=pad.x+fx*2.25,gy=pad.y+0.22,gz=pad.z+fz*2.25;
+    const qy=Math.sin(yaw/2),qw=Math.cos(yaw/2);
+    const k=trackStatId(activeTrackId);
+    ghosts[k]=[
+      [0,_gr2(gx),_gr2(gy),_gr2(gz),0,_gr3(qy),0,_gr3(qw)],
+      [8000,_gr2(gx+fx*0.35),_gr2(gy),_gr2(gz+fz*0.35),0,_gr3(qy),0,_gr3(qw)],
+    ];
+    defaultRivals[k]=null;rivalGhost=null;
+    ghostVisible=true;
+    runActive=true;
+    runStartTime=performance.now()-280;
+    runLap=1;
+    bestRunMs[k]=bestRunMs[k]||12400;
+    lastGateSplit=820;
+    runGateSplits=[820,740];
+    syncGhostScale();
+    if(ghostMesh){
+      ghostMesh.scale.setScalar(currentMap==='city'?1:0.7);
+      ghostMesh.traverse(o=>{
+        if(!o.material||!o.material.color)return;
+        o.material.color.setHex(0x00e5ff);
+        if(o.material.emissive){o.material.emissive.setHex(0x00e5ff);o.material.emissiveIntensity=1;}
+        o.material.transparent=true;o.material.opacity=0.55;o.material.depthWrite=false;
+      });
+    }
+    if(typeof updateCamera==='function')updateCamera();
+    playbackGhost();
+    updateLapOSD();
+    updateGateUI();
+    return !!(ghostMesh&&ghostMesh.visible);
+  }catch(e){return false;}
+}
 
 // ---------- ghost sharing v1 ----------
 // Format (version-tagged for future changes):
@@ -5422,7 +5547,7 @@ function ghostPayloadError(p,expectTrack){
   return null;
 }
 async function exportGhost(){
-  const id=activeTrackId,g=ghosts[id];
+  const id=activeTrackId,g=ownGhost();
   if(!g||!g.length){toast('NO GHOST YET — SET A BEST RUN FIRST');return;}
   const payload=tagGhost({track:legacyIndex(id)!==null?legacyIndex(id):id,lapTime:bestRunMs[ensureTrackStats(id)]||0,
     name:(pilotNameEl.value.trim()||'PILOT').slice(0,16),samples:g});
@@ -6177,6 +6302,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   setCrosshairOn(v){crosshairOn=!!v;saveCrosshairOn(crosshairOn);applyCrosshair();},
   setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
   startFreestyle,leaveRace,resolveFly,isFreestyleTrackId,freestyleIdFor,persistableSelection,
+  isLineTrackId,demoLineGhostForShot,ghostVisible:()=>ghostVisible,ghostMesh,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,
