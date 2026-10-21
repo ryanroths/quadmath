@@ -172,42 +172,58 @@ async function cdp(ws, method, params) {
 
 let bootSeq = 0;
 
-async function bootPage(base, spec) {
+function chromeArgs(port, userData, startUrl) {
+  return [
+    '--headless=new', '--no-sandbox', '--disable-gpu-sandbox',
+    '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
+    '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+    '--enable-webgl', '--hide-scrollbars',
+    '--no-first-run', '--no-default-browser-check',
+    '--disable-extensions', '--disable-component-update',
+    '--disable-background-networking', '--disable-sync',
+    '--window-size=1400,800', `--remote-debugging-port=${port}`,
+    `--user-data-dir=${userData}`, startUrl,
+  ];
+}
+
+async function waitForCdpPage(port, pred, tries) {
+  const n = tries > 0 ? tries : 100;
+  for (let i = 0; i < n; i++) {
+    await sleep(200);
+    try {
+      const pages = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json();
+      const hit = pages.find(pred)
+        || pages.find((p) => p.type === 'page' && p.webSocketDebuggerUrl);
+      if (hit && hit.webSocketDebuggerUrl) return hit;
+    } catch (e) { /* Chrome is still coming up */ }
+  }
+  return null;
+}
+
+async function bootPageOnce(base, spec) {
   // sim.html defaults currentMap to 'city' until fetchBuiltinTracks + applyQueryBoot.
   // A fixed sleep plus a reused CDP port / user-data-dir can read that default
   // (or a dying sibling Chrome) as "gym booted as city" when the full suite
   // saturates the machine. Isolate each boot and wait for the queried map.
+  // First Chrome after apt-install often opens about:blank for several seconds
+  // before the launch URL sticks — accept any page, then navigate.
   const trackQ = spec.track ? `&track=${spec.track}` : '';
   const url = `${base}/sim.html?map=${spec.map}${trackQ}&look=${spec.look}&quality=${spec.q}&menu=1&fpv=1`;
   bootSeq += 1;
   const port = 9700 + bootSeq;
   const userData = `/tmp/qm-boot-${process.pid}-${bootSeq}-${Date.now()}`;
-  const child = spawn(chrome, [
-    '--headless=new', '--no-sandbox', '--disable-gpu-sandbox',
-    '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
-    '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
-    '--enable-webgl', '--hide-scrollbars',
-    '--window-size=1400,800', `--remote-debugging-port=${port}`,
-    `--user-data-dir=${userData}`, url,
-  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(chrome, chromeArgs(port, userData, url), { stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = '';
   child.stderr.on('data', (d) => { stderr += d.toString(); });
   const mapQ = 'map=' + spec.map;
-  let wsUrl = null;
-  for (let i = 0; i < 50 && !wsUrl; i++) {
-    await sleep(120);
-    try {
-      const pages = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json();
-      const page = pages.find((p) => (
-        p.type === 'page' && p.webSocketDebuggerUrl && String(p.url || '').includes(mapQ)
-      ));
-      if (page) wsUrl = page.webSocketDebuggerUrl;
-    } catch (e) { /* wait */ }
-  }
-  if (!wsUrl) {
+  const page = await waitForCdpPage(port, (p) => (
+    p.type === 'page' && p.webSocketDebuggerUrl && String(p.url || '').includes(mapQ)
+  ), 100);
+  if (!page) {
     try { child.kill('SIGKILL'); } catch (e) { /* ignore */ }
     throw new Error('no CDP for ' + spec.map + '\n' + stderr.slice(-400));
   }
+  const wsUrl = page.webSocketDebuggerUrl;
   const ws = new WebSocket(wsUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
   const consoles = [];
@@ -226,6 +242,16 @@ async function bootPage(base, spec) {
   try {
     await cdp(ws, 'Runtime.enable');
     await cdp(ws, 'Page.enable');
+    const here = await cdp(ws, 'Runtime.evaluate', { expression: 'location.href', returnByValue: true });
+    const href = here && here.result && here.result.value;
+    if (!String(href || '').includes(mapQ)) {
+      await cdp(ws, 'Page.navigate', { url });
+      for (let i = 0; i < 40; i++) {
+        await sleep(200);
+        const again = await cdp(ws, 'Runtime.evaluate', { expression: 'location.href', returnByValue: true });
+        if (String((again && again.result && again.result.value) || '').includes(mapQ)) break;
+      }
+    }
     let parsed = {};
     for (let i = 0; i < 48; i++) {
       const probe = await cdp(ws, 'Runtime.evaluate', {
@@ -313,6 +339,21 @@ async function bootPage(base, spec) {
   }
 }
 
+async function bootPage(base, spec) {
+  let last = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await bootPageOnce(base, spec);
+    } catch (e) {
+      last = e;
+      const msg = String(e && e.message || e);
+      if (!/no CDP|ws\b|cdp timeout Page/.test(msg)) throw e;
+      await sleep(500);
+    }
+  }
+  throw last;
+}
+
 test('pngRgbAverage reads an 8-bit RGB PNG without Pillow', () => {
   // 1x1 opaque red (#ff0000), filter 0. Generated with Node zlib + CRC32.
   const png = Buffer.from(
@@ -342,6 +383,15 @@ test('headless Chrome boots every map without errors or a blank FPV', async (t) 
   const { server, port } = await serveRoot();
   const base = 'http://127.0.0.1:' + port;
   try {
+    // First Chrome after apt-install is slow and often lands on about:blank.
+    // Warm the binary so the city case can attach CDP in time.
+    bootSeq += 1;
+    const warmPort = 9700 + bootSeq;
+    const warmDir = `/tmp/qm-boot-warm-${process.pid}-${Date.now()}`;
+    const warm = spawn(chrome, chromeArgs(warmPort, warmDir, 'about:blank'), { stdio: ['ignore', 'pipe', 'pipe'] });
+    await waitForCdpPage(warmPort, (p) => p.type === 'page' && p.webSocketDebuggerUrl, 80);
+    try { warm.kill('SIGKILL'); } catch (e) { /* ignore */ }
+    await Promise.race([new Promise((res) => warm.once('exit', res)), sleep(2000)]);
     const failures = [];
     for (const spec of CASES) {
       const got = await bootPage(base, spec);
