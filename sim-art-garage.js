@@ -4,7 +4,7 @@
 // Procedural meshes stay if a GLB fails. Nothing from the GPL whoop sim.
 
 import { hexNum, propClearOfCourse } from './sim-art-city.js?v=10aecc280e13';
-import { GARAGE_PLAY } from './sim-maps.js?v=63c2df632ca8';
+import { GARAGE_PLAY } from './sim-maps.js?v=4cf8dbea1a30';
 
 export const GARAGE_STOCK = Object.freeze({
   wall: 0xb7b3a8,

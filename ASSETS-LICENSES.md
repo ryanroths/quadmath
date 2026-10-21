@@ -59,7 +59,7 @@ Used only for numeric readouts (OSD values, sliders, CLI/ghost fields).
 
 ### Proposed removal (unused `assets/Models/GLB-format/`, ~53 MB)
 
-Verified unused by sim JS, kit loaders, guides, and site HTML (only mentioned in this file, `docs/sim-art-direction.md`, and the banned-asset test string). City/garage/warehouse kits load Meshopt files from `assets/sim-city/`, `assets/sim-garage/`, and `assets/sim-warehouse/`. Do not delete Kenney preview/docs at `assets/Overview.html`, `assets/Preview*.png`, or `assets/License.txt`.
+Verified unused by sim JS, kit loaders, guides, and site HTML (only mentioned in this file, `docs/sim-art-direction.md`, and the banned-asset test string). City/garage/warehouse/gym kits load Meshopt files from `assets/sim-city/`, `assets/sim-garage/`, `assets/sim-warehouse/`, and `assets/sim-gym/`. Do not delete Kenney preview/docs at `assets/Overview.html`, `assets/Preview*.png`, or `assets/License.txt`.
 
 | Path | Bytes | Why unused |
 |---|---|---|
@@ -69,7 +69,7 @@ Verified unused by sim JS, kit loaders, guides, and site HTML (only mentioned in
 
 ## W3 indoor maps (no new binary textures)
 
-Office, school gym, Tiny Trainer hall, and Your-room are procedural boxes/cylinders that reuse the same V1 Poly Haven PBR sets (concrete, plaster facade, wood canvas + plaster normal). No new downloads. No WebFPV assets, layouts, or code. Track JSON lives in `tracks/`. Hosted pace ghosts for the new courses are synthetic splines in `ghosts/<track-id>.json`. Your-room dimensions persist in `localStorage` key `quadmathSimRoom` only.
+Office, school gym, Tiny Trainer hall, and Your-room are procedural boxes/cylinders that reuse the same V1 Poly Haven PBR sets (concrete, plaster facade, wood canvas + plaster normal). Gym also loads a Kenney CC0 Meshopt sideline kit from `assets/sim-gym/` (cardboard / barrel / barrier). No WebFPV assets, layouts, or code. Track JSON lives in `tracks/`. Hosted pace ghosts for the new courses are synthetic splines in `ghosts/<track-id>.json`. Your-room dimensions persist in `localStorage` key `quadmathSimRoom` only.
 
 ## M2 maps / tracks (no new binary textures)
 

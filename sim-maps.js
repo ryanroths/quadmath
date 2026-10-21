@@ -4,7 +4,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=48cdde0d2972';
+import { planRoom } from './sim-room.js?v=0a2cbcdc8c7c';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -536,11 +536,43 @@ function buildOffice(THREE, parent, colliders, lights) {
   return { floor, orbit: MAP_ORBIT.office };
 }
 
-function bleacherBank(THREE, parent, colliders, x0, dir, mats) {
-  // Four stepped slabs. dir = -1 (west) or +1 (east).
-  for (let i = 0; i < 4; i++) {
-    const x = x0 + dir * (i * 1.35);
-    box(THREE, parent, colliders, x, 0, 0, 1.28, 1.05 + i * 1.05, 54, mats.wood);
+export const GYM_PLAY = Object.freeze({
+  whoopClear: 0.85,
+  x0: 17.4,
+  rowStep: 1.35,
+  rows: 4,
+  plankW: 1.20,
+  seatH: 0.16,
+  seatYs: Object.freeze([1.20, 2.40, 3.60, 4.80]),
+  segD: 22.0,
+  segZs: Object.freeze([-15.4, 15.4]),
+  stringer: 0.14,
+  amber: Object.freeze({
+    x: 0, y: 2.80, z: 8.0, innerW: 2.20, innerH: 1.85, bar: 0.14, depth: 0.20,
+  }),
+  gap: Object.freeze({
+    left: Object.freeze({ x: -2.25, z: 32.4, w: 2.2, h: 3.4, d: 1.6 }),
+    right: Object.freeze({ x: 2.25, z: 32.4, w: 2.2, h: 3.4, d: 1.6 }),
+  }),
+  rafterY: 25.49,
+  rafterH: 0.22,
+  rafterD: 0.32,
+  rafterZs: Object.freeze([-30, -18, -6, 6, 18, 30]),
+});
+
+function bleacherBank(THREE, parent, colliders, side, mats) {
+  const P = GYM_PLAY;
+  for (let row = 0; row < P.rows; row++) {
+    const x = side * (P.x0 + row * P.rowStep);
+    const y = P.seatYs[row];
+    for (const z of P.segZs) {
+      box(THREE, parent, colliders, x, y, z, P.plankW, P.seatH, P.segD, mats.wood);
+      const dx = P.plankW / 2 - P.stringer / 2;
+      const dz = P.segD / 2 - P.stringer / 2;
+      for (const [ox, oz] of [[-dx, -dz], [dx, -dz], [-dx, dz], [dx, dz]]) {
+        box(THREE, parent, colliders, x + ox, 0, z + oz, P.stringer, y, P.stringer, mats.wood);
+      }
+    }
   }
 }
 
@@ -591,10 +623,18 @@ function buildGym(THREE, parent, colliders, lights) {
   circle.rotation.x = Math.PI / 2;
   circle.position.set(0, 0.05, 0);
   parent.add(circle);
-  bleacherBank(THREE, parent, colliders, -17.4, -1, mats);
-  bleacherBank(THREE, parent, colliders, 17.4, 1, mats);
+  bleacherBank(THREE, parent, colliders, -1, mats);
+  bleacherBank(THREE, parent, colliders, 1, mats);
   hoop(THREE, parent, colliders, 24.0, 1, mats);
   hoop(THREE, parent, colliders, -24.0, -1, mats);
+  const amb = GYM_PLAY.amber;
+  hoopFrame(THREE, parent, colliders, amb.x, amb.y, amb.z, amb.innerW, amb.innerH, amb.bar, amb.depth, mats.metal);
+  const gL = GYM_PLAY.gap.left, gR = GYM_PLAY.gap.right;
+  box(THREE, parent, colliders, gL.x, 0, gL.z, gL.w, gL.h, gL.d, mats.wood);
+  box(THREE, parent, colliders, gR.x, 0, gR.z, gR.w, gR.h, gR.d, mats.wood);
+  for (const z of GYM_PLAY.rafterZs) {
+    box(THREE, parent, colliders, 0, GYM_PLAY.rafterY, z, 46.4, GYM_PLAY.rafterH, GYM_PLAY.rafterD, mats.metal);
+  }
   addLight(THREE, parent, lights, 0, 24, 18, 0xe8f0ff, 240, 90);
   addLight(THREE, parent, lights, 0, 24, -18, 0xe8f0ff, 220, 90);
   addLight(THREE, parent, lights, 0, 22, 0, 0xf2f4ff, 160, 80);

@@ -758,7 +758,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=c5a4d163f20f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=0daa6779fbbd";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=5e11d20f5fa2";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -771,8 +771,8 @@ import {
   restyleTrainer, decorateTrainerGate, pulseTrainerGate, tickTrainerArt,
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
-  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, mergeStaticArt,
-} from "./sim-art.js?v=4a8091741db5";
+  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressGymKit, mergeStaticArt,
+} from "./sim-art.js?v=1b98cc97328f";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -795,14 +795,14 @@ import {
   findTrackIn, resolveSimBoot, knownMapId, trackRefId,
   isFreestyleTrackId, freestyleTrack, freestyleIdFor,
   resolveFly, persistableSelection,
-} from "./sim-tracks.js?v=e0d49f02b6a8";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=63c2df632ca8";
+} from "./sim-tracks.js?v=061fe3887624";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=4cf8dbea1a30";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=48cdde0d2972";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=76d2462346ac";
+} from "./sim-room.js?v=0a2cbcdc8c7c";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=1d8156ada7bd";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -817,7 +817,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=452e85b0bbee";
+} from "./sim-coach.js?v=6a8026d9bd62";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js?v=49546f834df8";
@@ -833,13 +833,13 @@ import {
   skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
-} from "./sim-retention.js?v=9b9933768baa";
+} from "./sim-retention.js?v=0a05d5a7fe22";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=d57a16422996";
+} from "./sim-secrets.js?v=2bb0da75a6bd";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -2396,7 +2396,42 @@ function applyGymArt(quality){
   });
   applyLooksPost('gym', q);
   const credit=document.querySelector('.sf-credit');
-  if(credit)credit.textContent='Gym is original procedural art — Amber Court';
+  if(credit)credit.textContent='Gym is original procedural art — Amber Court. Kenney CC0 sideline kit.';
+  queueGymKit(q, vibeFor('gym'));
+}
+let gymKitWanted=null;
+let gymKitGen=0;
+function queueGymKit(quality, vibe){
+  gymKitWanted={quality:quality||'med', vibe:vibe||vibeFor('gym')};
+  if(window._heavyAssetsPending)return;
+  dressGymKit();
+}
+async function dressGymKit(){
+  const wanted=gymKitWanted;
+  if(!wanted)return;
+  const gen=++gymKitGen;
+  try{
+    const ok=await ensureGltf();
+    if(!ok || !GLTFLoader || gen!==gymKitGen)return;
+    const built=indoorBuilt.gym;
+    const group=built&&built.group&&built.group.getObjectByName('gymArtVisuals');
+    if(!group)return;
+    const loader=new GLTFLoader();
+    if(MeshoptDecoder){
+      if(MeshoptDecoder.ready)await MeshoptDecoder.ready;
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    }
+    const dressed=await tryDressGymKit(THREE,{
+      group, loader, vibe:wanted.vibe, quality:wanted.quality,
+    });
+    if(gen!==gymKitGen)return;
+    window._gymKit=dressed;
+    if(assetEl && dressed && dressed.used){
+      assetEl.textContent='Kenney CC0 gym kit ('+Math.round((dressed.bytes||0)/1024)+' KB).';
+    }
+  }catch(e){
+    window._gymKit={used:false, error:String(e&&e.message||e)};
+  }
 }
 function applyOfficeArt(quality){
   const built=indoorBuilt.office||ensureIndoor('office');
@@ -2511,6 +2546,7 @@ function startHeavyAssets(){
   if(map==='city')finishCityArt();
   if(map==='garage')dressGarageKit();
   if(map==='warehouse')dressWarehouseKit();
+  if(map==='gym')dressGymKit();
 }
 
 function wrapCityWorld(){
@@ -2649,7 +2685,7 @@ function applyMapLooks(mapId){
     else if(mapId==='backyard')credit.textContent='Backyard is original procedural art — Jade Lot';
     else if(mapId==='trainer')credit.textContent='Trainer is original procedural art — Licorice Grid';
     else if(mapId==='office')credit.textContent='Office is original procedural art — Paper Sun';
-    else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court';
+    else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court. Kenney CC0 sideline kit.';
     else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current. Kenney CC0 cars and street kit.';
   }
 }
