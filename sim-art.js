@@ -3,7 +3,11 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=10aecc280e13';
+import { hexNum } from './sim-art-city.js?v=d054ab081c29';
+export {
+  FELT_SCALE, applyFeltMaterial, feltBasic, feltClay, feltEmissive,
+  studioPhoneBudget, qualityWantsStudioBloom,
+} from './sim-art-felt.js?v=f76fc4f752df';
 export {
   hexNum, qualityWantsBloom, qualityWantsAo, qualityWantsGrade,
   qualityWantsReflections, qualityWantsParticles,
@@ -17,53 +21,53 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=10aecc280e13';
+} from './sim-art-city.js?v=d054ab081c29';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget, planLivingKit,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=d506aed83c60';
+} from './sim-art-living.js?v=7d9cfd679a06';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=0d11ff1286f4';
+} from './sim-art-garage.js?v=e986bfba00e2';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=43fbab25ce35';
+} from './sim-art-warehouse.js?v=ddfffa856e2f';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
   planGymKit,
-} from './sim-art-gym.js?v=33ad1ad847a2';
+} from './sim-art-gym.js?v=78f159985ee8';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget, planOfficeKit,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=a718de44b3f6';
+} from './sim-art-office.js?v=f2130dcaeb0a';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=14b738c2cef9';
+} from './sim-art-trainer.js?v=f8c7c377dfcb';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
-} from './sim-art-backyard.js?v=a28cde069664';
+} from './sim-art-backyard.js?v=fe78e848d32c';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=38f500adec04';
+} from './sim-art-room.js?v=bdc9aace5c52';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
@@ -71,7 +75,7 @@ export {
   tryDressOfficeKit, officeKitBytesForQuality, OFFICE_KIT_CORE, OFFICE_KIT_EXTRA,
   tryDressGymKit, gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA,
   tryDressLivingKit, livingKitBytesForQuality, LIVING_KIT_CORE, LIVING_KIT_EXTRA,
-} from './sim-art-kit.js?v=ded6ffc21842';
+} from './sim-art-kit.js?v=67b129386313';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
@@ -119,7 +123,7 @@ export const VIBES = Object.freeze({
       fillIntensity: 0.16,
       hemiSky: 0x3a1870,
       hemiGround: 0x1a0820,
-      hemiIntensity: 0.44,
+      hemiIntensity: 0.56,
       exposure: 0.58,
       fogColor: 0x1a0830,
       fogDensity: 0.00112,
@@ -129,11 +133,12 @@ export const VIBES = Object.freeze({
       gateEmissive: 5.4,
       gateEmissiveActive: 7.2,
     }),
-    looks: Object.freeze({ fog: 0.00112, sun: 0.30, env: 0.18, bg: 0.16, hemi: 0.44 }),
+    looks: Object.freeze({ fog: 0.00112, sun: 0.30, env: 0.18, bg: 0.16, hemi: 0.56 }),
     gates: Object.freeze({ style: 'unique-neon', keepBrand: true }),
     props: Object.freeze([
       'setback towers', 'window shader', 'blade signs', 'wet street',
       'parked cars', 'benches', 'kiosks', 'steam vents', 'rain', 'moon',
+      'open interiors', 'spin grove', 'roof holes', 'alley gaps',
     ]),
     post: Object.freeze({
       bloom: true, analog: false, grade: true,
@@ -147,7 +152,7 @@ export const VIBES = Object.freeze({
   living: Object.freeze({
     id: 'living',
     name: 'Clay Parlor',
-    tagline: 'Candy-clay living room, gummy lamp, felt bounce light',
+    tagline: 'Felt Scale reference: candy-clay living room, gummy lamp, felt bounce',
     implemented: true,
     time: 'overcast day',
     sky: 'none',
@@ -159,22 +164,22 @@ export const VIBES = Object.freeze({
       gateA: '#ff6b9a', gateB: '#7ec8e3',
     }),
     lighting: Object.freeze({
-      sunColor: 0xffe0c0, sunIntensity: 0.45, fillColor: 0xffe08a, fillIntensity: 0.2,
-      hemiSky: 0x7ec8e3, hemiGround: 0xf4d6c6, hemiIntensity: 0.5,
-      exposure: 0.7, fogColor: 0xf0e4d4, fogDensity: 0.004,
-      bloomStrength: 0.28, bloomRadius: 0.32, bloomThreshold: 0.84,
+      sunColor: 0xffe0c0, sunIntensity: 0.36, fillColor: 0xffe08a, fillIntensity: 0.22,
+      hemiSky: 0x7ec8e3, hemiGround: 0xf4d6c6, hemiIntensity: 0.68,
+      exposure: 0.74, fogColor: 0xf0e4d4, fogDensity: 0.0052,
+      bloomStrength: 0, bloomRadius: 0.28, bloomThreshold: 0.92,
       gateEmissive: 2.4, gateEmissiveActive: 3.4,
     }),
-    looks: Object.freeze({ fog: 0.004, sun: 0.45, env: 0.55, bg: 0.38, hemi: 0.5 }),
+    looks: Object.freeze({ fog: 0.0052, sun: 0.36, env: 0.18, bg: 0.42, hemi: 0.68 }),
     gates: Object.freeze({ style: 'clay-ring', keepBrand: false }),
-    props: Object.freeze(['clay sofa', 'gummy lamp', 'block bookshelf', 'clay banner', 'felt nook']),
+    props: Object.freeze(['felt sofa', 'gummy lamp', 'block bookshelf', 'clay banner', 'felt nook']),
     post: Object.freeze({
       bloom: false, analog: false,
-      lift: Object.freeze([0.04, 0.018, 0.008]),
-      gamma: 1.02,
-      gain: Object.freeze([1.08, 0.98, 0.92]),
-      vignette: 0.28,
-      ao: 0.36,
+      lift: Object.freeze([0.06, 0.028, 0.010]),
+      gamma: 1.06,
+      gain: Object.freeze([1.14, 1.02, 0.88]),
+      vignette: 0.20,
+      ao: 0.28,
     }),
   }),
   garage: Object.freeze({
@@ -193,14 +198,14 @@ export const VIBES = Object.freeze({
     }),
     lighting: Object.freeze({
       sunColor: 0xffb347, sunIntensity: 0.2, fillColor: 0x2de2e6, fillIntensity: 0.22,
-      hemiSky: 0x1c2430, hemiGround: 0x14161c, hemiIntensity: 0.32,
+      hemiSky: 0x1c2430, hemiGround: 0x14161c, hemiIntensity: 0.60,
       exposure: 0.55, fogColor: 0x14161c, fogDensity: 0.003,
       bloomStrength: 0.7, bloomRadius: 0.4, bloomThreshold: 0.9,
       gateEmissive: 5.2, gateEmissiveActive: 7,
     }),
-    looks: Object.freeze({ fog: 0.003, sun: 0.2, env: 0.4, bg: 0.28, hemi: 0.32 }),
+    looks: Object.freeze({ fog: 0.003, sun: 0.2, env: 0.26, bg: 0.28, hemi: 0.60 }),
     gates: Object.freeze({ style: 'square-neon', keepBrand: false }),
-    props: Object.freeze(['jacked car', 'open bench', 'shelf aisles', 'volt hoop', 'tire well']),
+    props: Object.freeze(['jacked car', 'open bench', 'shelf gaps', 'bike rim', 'tire stack']),
     post: Object.freeze({
       bloom: true, analog: false,
       lift: Object.freeze([0.03, 0.01, 0.0]),
@@ -448,6 +453,7 @@ export function vibePost(vibe) {
     vignette: p.vignette == null ? 0.34 : p.vignette,
     ao: p.ao == null ? 0.4 : p.ao,
     gradeAmt: p.grade === false ? 0 : 1,
+    bloom: p.bloom !== false,
   };
 }
 

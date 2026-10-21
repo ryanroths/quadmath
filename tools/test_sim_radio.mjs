@@ -9,6 +9,7 @@ import {
   AXIS_MAP_PREFIX, RADIO_PRESET_PREFIX, GP_ID_KEY,
   sanitizeId, isRadio, radioScore, AETR_MAP, PAD_MAP, defaultMapFor,
   applyAxisMap, applyDeadzone, RADIO_DZ, loadRadioProfile, saveAxisMap, saveRadioPreset,
+  AXIS_MAP_VER, migrateAxisMap,
   clearRadioCalibration, isValidAxisMap, shouldEnableTouch,
   createRadioRouter, CAL_STEPS, createCalibState, stepCalib,
   guessRadioPreset, isKnownRadio, radioShortName,
@@ -65,7 +66,8 @@ test('TX16S id sanitizes and scores as a radio, AETR default', () => {
 });
 
 test('AETR 8-axis TX16S maps roll/pitch/yaw/throttle without shifting aux pots', () => {
-  // Mode 2 AETR: ax0 roll, ax1 pitch (sim inverts), ax2 throttle -1..1, ax3 yaw, 4-7 aux
+  // Mode 2 AETR: ax0 roll, ax1 pitch (channel +1 = stick forward), ax2 throttle
+  // -1..1, ax3 yaw, 4-7 aux. Do not invert pitch like a gamepad Y axis.
   const rest = applyAxisMap([0, 0, -1, 0, 0.4, -0.2, 0.9, 0], AETR_MAP);
   assert.equal(rest.r, 0);
   assert.equal(rest.p, 0);
@@ -73,7 +75,7 @@ test('AETR 8-axis TX16S maps roll/pitch/yaw/throttle without shifting aux pots',
   assert.ok(Math.abs(rest.t) < 1e-9, 'throttle low → 0');
   const defl = applyAxisMap([0.8, 0.5, 1, -0.6, 0.4, -0.2, 0.9, 0], AETR_MAP);
   assert.ok(Math.abs(defl.r - applyDeadzone(0.8, RADIO_DZ)) < 1e-12);
-  assert.ok(Math.abs(defl.p - applyDeadzone(-0.5, RADIO_DZ)) < 1e-12);
+  assert.ok(Math.abs(defl.p - applyDeadzone(0.5, RADIO_DZ)) < 1e-12);
   assert.ok(Math.abs(defl.y - applyDeadzone(-0.6, RADIO_DZ)) < 1e-12);
   assert.ok(Math.abs(defl.t - 1) < 1e-9);
 });
@@ -87,7 +89,7 @@ test('radio deadzone rescales like touch, no step, default 0.02', () => {
   const expected = (0.031 - RADIO_DZ) / (1 - RADIO_DZ);
   assert.ok(Math.abs(justOut.r - expected) < 1e-12, `rescale ${justOut.r} vs ${expected}`);
   assert.ok(justOut.r < 0.031, 'must not leave a step at the edge of the hole');
-  const full = applyAxisMap([1, -1, -1, 1], AETR_MAP);
+  const full = applyAxisMap([1, 1, -1, 1], AETR_MAP);
   assert.equal(full.r, 1);
   assert.equal(full.p, 1);
   assert.equal(full.y, 1);
@@ -440,12 +442,16 @@ test('known radios guess Mode 2 AETR and plug-and-fly without a saved map', () =
   assert.equal(isKnownRadio(tx16sPad()), true);
   assert.equal(radioShortName(tx16sPad()), 'TX16S');
   const store = memStore();
-  const router = createRadioRouter({ storage: store, getGamepads: () => [tx16sPad()] });
+  let axes = [0, 0, -1, 0, -1, -1, -1, -1];
+  const router = createRadioRouter({ storage: store, getGamepads: () => [tx16sPad(axes)] });
   router.pick();
   assert.equal(router.radioPreset, 'radiomaster');
   assert.equal(router.axisMap, null);
   const rest = router.readStick();
   assert.ok(rest.stick.t < 0.02, 'un-calibrated AETR rest -1 is throttle 0');
+  axes = [0, 1, -1, 0, -1, -1, -1, -1];
+  const fwd = router.readStick();
+  assert.ok(fwd.stick.p > 0.9, `plug-and-fly HID pitch +1 → stick.p ${fwd.stick.p}`);
   assert.ok(simSrc.includes('detected, Mode 2 loaded'));
   assert.ok(simSrc.includes('toastRecalib') || simSrc.includes('Recalibrate'));
   assert.ok(simSrc.includes('skipSafeUntil'), 'do not overwrite the plug-and-fly toast with STICKS SAFE');
@@ -568,4 +574,59 @@ test('TX16S replay: auto-arm on throttle rise, switch overlay persists', () => {
   assert.ok(simSrc.includes('id="armSwitch"'));
   assert.ok(simSrc.includes('id="btnArmDetect"'));
   assert.ok(simSrc.includes('Flip arm switch') || simSrc.includes('armHintText'));
+});
+
+test('old default AETR pitch invert migrates; custom wizard invert is kept', () => {
+  const oldDefault = {
+    r: { i: 0, sign: 1 },
+    p: { i: 1, sign: -1 },
+    y: { i: 3, sign: 1 },
+    t: { i: 2, min: -1, max: 1 },
+    arm: { i: 4, sign: 1 },
+  };
+  assert.equal(AETR_MAP.p.sign, 1, 'in-code radio default is channel polarity');
+  assert.equal(PAD_MAP.p.sign, -1, 'gamepad RY stays Y-up inverted');
+  assert.equal(migrateAxisMap(oldDefault, 'radiomaster').p.sign, 1);
+  assert.equal(migrateAxisMap(oldDefault, 'custom').p.sign, -1,
+    'wizard-measured invert must not be silently flipped');
+
+  const store = memStore({
+    [AXIS_MAP_PREFIX + TX16S_SID]: JSON.stringify(oldDefault),
+    [RADIO_PRESET_PREFIX + TX16S_SID]: 'radiomaster',
+  });
+  const prof = loadRadioProfile(TX16S_ID, store);
+  assert.equal(prof.axisMap.p.sign, 1);
+  assert.equal(prof.axisMap.ver, AXIS_MAP_VER);
+  assert.equal(prof.axisMap.arm.i, 4, 'arm overlay survives migrate');
+  const persisted = JSON.parse(store.getItem(AXIS_MAP_PREFIX + TX16S_SID));
+  assert.equal(persisted.p.sign, 1);
+  const again = loadRadioProfile(TX16S_ID, store);
+  assert.equal(again.axisMap.p.sign, 1, 'migrate is once');
+
+  const wizard = memStore({
+    [AXIS_MAP_PREFIX + TX16S_SID]: JSON.stringify(oldDefault),
+    [RADIO_PRESET_PREFIX + TX16S_SID]: 'custom',
+  });
+  const kept = loadRadioProfile(TX16S_ID, wizard);
+  assert.equal(kept.axisMap.p.sign, -1);
+  assert.equal(kept.axisMap.ver, AXIS_MAP_VER);
+});
+
+test('TX16S Mode 2 stick-forward HID +1 produces forward velocity', () => {
+  const mapped = applyAxisMap([0, 1, 0.2, 0], AETR_MAP);
+  assert.ok(mapped.p > 0.9, `stick.p ${mapped.p}`);
+  const pad = applyAxisMap([0, 0, 0, -1], PAD_MAP);
+  assert.ok(pad.p > 0.9, `gamepad RY-up stick.p ${pad.p}`);
+  const qp = new QuadPhysics(PRESETS.whoop65);
+  qp.setFlightMode('acro');
+  qp.reset({ x: 0, y: 0, z: 4 });
+  qp.arm();
+  const hover = Math.sqrt(PRESETS.whoop65.mass * 9.81 / (PRESETS.whoop65.maxThrustPerMotor * 4));
+  const idle = PRESETS.whoop65.idleThrottle;
+  const coll = Math.max(0, Math.min(1, (hover - idle) / (1 - idle)));
+  const stick = { r: 0, p: mapped.p, y: 0 };
+  const sp = { roll: 0, pitch: mapped.p * 8, yaw: 0 };
+  const dt = 1 / qp.physicsHz;
+  for (let i = 0; i < Math.round(0.25 / dt); i++) qp.step(dt, sp, coll, stick);
+  assert.ok(qp.velocity.x > 0.15, `+X vel ${qp.velocity.x.toFixed(3)} — stick forward must fly forward`);
 });

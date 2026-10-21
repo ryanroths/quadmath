@@ -42,6 +42,9 @@ export const DAILY_LINE_TRACKS = Object.freeze([
   { id: 'living-rafters', map: 'living', name: 'Ceiling Run', gates: 6 },
   { id: 'garage-bench', map: 'garage', name: 'Workbench', gates: 8 },
   { id: 'garage-rafters', map: 'garage', name: 'Rafters', gates: 7 },
+  { id: 'garage-shelf', map: 'garage', name: 'Shelf Thread', gates: 7 },
+  { id: 'garage-orbit', map: 'garage', name: 'Car Orbit', gates: 8 },
+  { id: 'garage-door', map: 'garage', name: 'Door Dive', gates: 8 },
   { id: 'warehouse-aisle', map: 'warehouse', name: 'Aisle Run', gates: 9 },
   { id: 'warehouse-catwalk', map: 'warehouse', name: 'Catwalk', gates: 7 },
   { id: 'warehouse-racks', map: 'warehouse', name: 'Rack Weave', gates: 8 },
@@ -61,6 +64,8 @@ export const DAILY_LINE_TRACKS = Object.freeze([
   { id: 'trainer-figure8', map: 'trainer', name: 'Figure 8', gates: 7 },
   { id: 'trainer-slalom', map: 'trainer', name: 'Slalom', gates: 7 },
   { id: 'trainer-hairpin', map: 'trainer', name: 'Hairpin', gates: 7 },
+  { id: 'city-inside', map: 'city', name: 'Interior Run', gates: 8 },
+  { id: 'city-spins', map: 'city', name: 'Spin Grove', gates: 7 },
 ]);
 
 export const DAILY_LINE_MODS = Object.freeze([
@@ -377,9 +382,17 @@ function furnitureBoxes(mapId) {
       aabb(4.2, 1.32, -5.5, 4.35, 3.77, 7.40),
       aabb(0, 2.35, 20.92, 8.2, 6.05, 0.16),
     );
+    const gap = 1.15, slabD = (5.0 - gap) / 2, off = (slabD + gap) / 2;
     for (const z of [3.6, 12.2]) {
-      for (const y of [1.05, 2.30, 3.55, 4.80]) out.push(aabb(8.6, y, z, 1.55, 0.10, 5.0));
+      for (const y of [1.05, 2.30, 3.55, 4.80]) {
+        out.push(aabb(8.6, y, z - off, 1.55, 0.10, slabD));
+        out.push(aabb(8.6, y, z + off, 1.55, 0.10, slabD));
+      }
     }
+    out.push(
+      aabb(-8.4, 0, -12.8, 1.70, 0.68, 1.20),
+      aabb(-8.4, 0, -3.2, 1.70, 0.68, 1.20),
+    );
     return out;
   }
   if (mapId === 'warehouse') {

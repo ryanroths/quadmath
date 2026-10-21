@@ -4,7 +4,7 @@
 //   quadmathSimFov.
 // Nothing here is copied from WebFPV.
 
-import { makeWorldLabel } from './sim-art.js?v=18667d33eef1';
+import { makeWorldLabel } from './sim-art.js?v=bdcab277466f';
 
 export const INPUT_CHOICE_KEY = 'quadmathSimInputChoice';
 export const FLOATINESS_KEY = 'quadmathSimFloatiness';
@@ -95,6 +95,14 @@ export const RATE_PRESETS = {
     roll:  { rcRate: 1.30, srate: 0.80, expo: 0.30 },
     pitch: { rcRate: 1.30, srate: 0.80, expo: 0.30 },
     yaw:   { rcRate: 1.20, srate: 0.75, expo: 0.35 },
+  },
+  // Ryan / RyFly Actual: center 40, max 740/740/700, expo 0.56 (stored = CLI for ACTUAL).
+  ryanActual: {
+    label: 'Ryan Actual',
+    type: 'ACTUAL',
+    roll:  { rcRate: 4, srate: 74, expo: 0.56 },
+    pitch: { rcRate: 4, srate: 74, expo: 0.56 },
+    yaw:   { rcRate: 4, srate: 70, expo: 0.56 },
   },
 };
 

@@ -3,7 +3,7 @@
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
-import { resolveAutoQuality } from './sim-touch.js?v=4013a23bed14';
+import { resolveAutoQuality } from './sim-touch.js?v=7eff6ead2f5f';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
@@ -20,6 +20,10 @@ export const LOOK_SPOTS = {
   overview: { pos: [70, 165, 210], target: [0, 10, 0] },
   lowpass: { pos: [12, 1.55, 48], target: [0, 1.8, -24] },
   whoopStreet: { pos: [3.2, 1.12, 26], target: [11.5, 1.05, -6] },
+  cityInside: { pos: [16.2, 1.22, 4.0], target: [22.0, 1.40, 4.0] },
+  cityAlley: { pos: [29.0, 1.18, 10.6], target: [29.0, 1.22, 4.0] },
+  citySpins: { pos: [6.2, 1.20, -2.2], target: [6.2, 1.45, -8.6] },
+  cityRoofHole: { pos: [22.0, 12.6, 10.4], target: [22.0, 8.4, 4.0] },
   whoopMid: { pos: [7.5, 18.4, 14], target: [28, 12, -22] },
   whoopStart: { pos: [-118, 1.18, -92], target: [-136, 1.7, -118] },
   whoopPortal: { pos: [328, 1.2, -308], target: [348, 8, -346] },
@@ -47,6 +51,11 @@ export const LOOK_SPOTS = {
   garageLadder: { pos: [-5.2, 2.6, 11.6], target: [-9.4, 2.8, 14.8] },
   garageCords: { pos: [0.3, 2.5, 13.2], target: [-2.2, 3.6, 8.6] },
   garageRafters: { pos: [0.2, 7.55, 12.2], target: [0, 8.2, 0] },
+  garageBike: { pos: [0.15, 3.35, 18.2], target: [0, 3.4, 14.0] },
+  garageDoorGap: { pos: [0.1, 1.18, 16.4], target: [0, 1.2, 20.9] },
+  garageOrbit: { pos: [0.6, 1.55, -1.2], target: [4.2, 1.4, -5.5] },
+  garageShelfGap: { pos: [5.4, 1.72, 3.6], target: [8.6, 1.7, 3.6] },
+  garageTireStack: { pos: [2.4, 2.4, -12.8], target: [5.6, 1.3, -16.4] },
   warehouse: { pos: [0, 7.5, 36], target: [0, 3.2, -8] },
   warehouseWhoop: { pos: [0.15, 1.18, 28], target: [0.3, 1.5, -18] },
   warehouseMid: { pos: [10.5, 9.2, 26], target: [-4, 3.2, -6] },
@@ -963,9 +972,9 @@ export async function createLooks(ctx) {
     const wantsBloom = p.bloom !== false && (p.bloomScale || 0) > 0;
     const wantsAo = !!p.ao;
     const wantsGrade = p.grade !== false && qualityWantsPost();
-    if (bloomPass) bloomPass.enabled = wantsBloom;
-    if (aoPass) aoPass.enabled = wantsAo;
     const spec = mapPostSpec || {};
+    if (bloomPass) bloomPass.enabled = wantsBloom && spec.bloom !== false;
+    if (aoPass) aoPass.enabled = wantsAo;
     const aoAmt = spec.ao == null ? 0.4 : spec.ao;
     if (aoPass && aoPass.uniforms && aoPass.uniforms.amount) {
       aoPass.uniforms.amount.value = wantsAo ? (applied === 'high' ? aoAmt : aoAmt * 0.75) : 0;
@@ -990,6 +999,7 @@ export async function createLooks(ctx) {
         vignette: post.vignette == null ? 0.34 : post.vignette,
         ao: post.ao == null ? 0.4 : post.ao,
         gradeAmt: post.grade === false ? 0 : 1,
+        bloom: post.bloom !== false,
       };
     } else {
       mapPostSpec = spec || null;
