@@ -35,7 +35,7 @@ export const LOOK_SPOTS = {
   garageDoor: { pos: [0.1, 1.22, 15.4], target: [0, 1.4, 21] },
   garageVolt: { pos: [0.15, 2.45, 8.4], target: [0, 2.55, 3.4] },
   garageUnderCar: { pos: [4.2, 0.68, 2.4], target: [4.2, 0.7, -5.5] },
-  garageUnderBench: { pos: [-4.8, 1.18, -10.1], target: [-8.4, 1.2, -10.1] },
+  garageUnderBench: { pos: [-4.6, 1.18, -8.0], target: [-8.4, 1.2, -8.0] },
   garageShelves: { pos: [4.2, 1.72, 7.9], target: [8.6, 1.7, 7.9] },
   garageTires: { pos: [0.1, 2.9, -7.2], target: [0, 1.2, -12.2] },
   garageLadder: { pos: [-5.2, 2.6, 11.6], target: [-9.4, 2.8, 14.8] },

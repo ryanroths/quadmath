@@ -375,9 +375,14 @@ export async function tryDressCityKit(THREE, ctx) {
 const GARAGE_ROOT = 'assets/sim-garage/';
 
 export const GARAGE_KIT_CORE = Object.freeze({
-  bench: { file: 'workbench.glb', bytes: 5224, height: 2.15 },
   chest: { file: 'chest.glb', bytes: 8452, height: 2.85 },
   crate: { file: 'crate.glb', bytes: 3708, height: 0.88 },
+});
+
+// Cabinet mesh. Kept on disk / licensed, not instanced — the flyable bench
+// is an open-legged procedural table (legs + top).
+export const GARAGE_KIT_SKIP = Object.freeze({
+  bench: { file: 'workbench.glb', bytes: 5224, height: 2.15 },
 });
 
 export const GARAGE_KIT_EXTRA = Object.freeze({
@@ -452,11 +457,6 @@ export async function tryDressGarageKit(THREE, ctx) {
       if (n && hide) hideKeys.push(hide);
       return n;
     };
-    try {
-      const n = await one(GARAGE_KIT_CORE.bench, planned.bench, 'bench', 'garageProcBench');
-      if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
-      bytes += n;
-    } catch (e) { /* keep proc bench */ }
     try {
       const n = await one(GARAGE_KIT_CORE.chest, planned.chest, 'chest', 'garageProcChest');
       if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };

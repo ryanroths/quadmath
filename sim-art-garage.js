@@ -4,7 +4,7 @@
 // Procedural meshes stay if a GLB fails. Nothing from the GPL whoop sim.
 
 import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d2194c8087bb';
-import { GARAGE_PLAY } from './sim-maps.js?v=19003b420f87';
+import { GARAGE_PLAY } from './sim-maps.js?v=77862aba3f99';
 
 export const GARAGE_STOCK = Object.freeze({
   wall: 0xb7b3a8,
@@ -22,7 +22,7 @@ export const GARAGE_KEEP_GATES = Object.freeze([
   { x: 0.0, y: 2.55, z: 3.4, size: 1.9 },
   { x: 4.2, y: 0.68, z: -5.5, size: 1.5 },
   { x: 0.0, y: 1.55, z: -12.2, size: 1.4 },
-  { x: -8.4, y: 1.20, z: -10.1, size: 1.5 },
+  { x: -8.4, y: 1.20, z: -8.0, size: 1.5 },
   { x: 8.6, y: 1.68, z: 7.9, size: 1.5 },
   { x: -8.6, y: 2.40, z: 14.8, size: 1.6 },
   { x: 2.2, y: 3.90, z: 6.4, size: 1.6 },
@@ -41,13 +41,8 @@ export function garageWantsGlow(applied) {
 
 export function planGarageKit() {
   return {
-    // Survival workbench is a short table — instance three along the left wall
-    // so the kit covers the procedural 11 m bench without a giant cube.
-    bench: [
-      { x: -8.4, z: -12.2, ry: 0 },
-      { x: -8.4, z: -8.0, ry: 0 },
-      { x: -8.4, z: -3.8, ry: 0 },
-    ],
+    // Kenney cabinet bench is skipped. The flyable bench is procedural.
+    bench: [],
     chest: [{ x: -8.3, z: 8.2, ry: Math.PI / 2 }],
     // Kenney sedan long-axis is Z; autoForward + this yaw faces it down-stall.
     // y = jackH so the kit car sits on the stands, not the floor.
@@ -496,13 +491,17 @@ function addWedgeCar(THREE, parent, mats) {
 function addWorkbench(THREE, parent, mats) {
   const b = GARAGE_PLAY.bench;
   const g = new THREE.Group();
-  for (const u of b.units) {
-    const body = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), mats.steel);
-    body.position.set(u.x, b.h * 0.5, u.z);
-    g.add(body);
+  g.position.set(b.x, 0, b.z);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.topH, b.d), mats.steel);
+  top.position.set(0, b.topY + b.topH * 0.5, 0);
+  g.add(top);
+  for (const [x, z] of b.legs) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(b.leg * 0.45, b.leg * 0.5, b.topY, 8), mats.wood);
+    leg.position.set(x, b.topY * 0.5, z);
+    g.add(leg);
   }
   const vise = new THREE.Mesh(viseGeo(THREE), mats.chest);
-  vise.position.set(b.x + 0.55, b.h + 0.12, b.units[0].z);
+  vise.position.set(0.55, b.topY + 0.22, -4.4);
   g.add(vise);
   g.userData.garageProcBench = true;
   g.traverse((o) => { o.userData.garageArt = true; o.userData.garageProcBench = true; });
