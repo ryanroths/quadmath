@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Dusk lot, ziggurat shed, moss posts, stone-gold gates.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d290c9ab2bdb';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=964775ddf67a';
 
 export const BACKYARD_STOCK = Object.freeze({
   grass: 0x5d7a3a,

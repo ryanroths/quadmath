@@ -1,5 +1,8 @@
 // Neon Current — dense original city dressing. Visual only.
-// No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
+// Play colliders live in sim-maps.js CITY_PLAY. Nothing from the GPL whoop sim.
+
+import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
+import { CITY_PLAY } from './sim-maps.js?v=a4a715f98a0f';
 
 export const RAIN_KEY = 'quadmathSimRain';
 
@@ -327,10 +330,7 @@ function canvasTex(THREE, w, h, draw, rx, ry) {
 }
 
 function skipMat(m) {
-  if (!m) return m;
-  m.userData.looksSkip = true;
-  m.userData.artLocked = true;
-  return m;
+  return applyFeltMaterial(m);
 }
 
 function mergeGeos(THREE, list) {
@@ -538,6 +538,7 @@ function windowMaterial(THREE, vibe, seed) {
     roughness: 0.78,
     metalness: 0.12,
     color: 0xffffff,
+    envMapIntensity: 0,
   });
   skipMat(mat);
   mat.userData.cityWindow = true;
@@ -1204,18 +1205,113 @@ export function applyVibeLighting(ctx, vibe) {
 }
 
 function neonMat(THREE, color, emit, extra) {
-  return skipMat(new THREE.MeshStandardMaterial(Object.assign({
-    color, emissive: color, emissiveIntensity: emit == null ? 3.4 : emit,
-    roughness: 0.35, metalness: 0.12,
-    envMapIntensity: 0,
-  }, extra || {})));
+  const hex = extra && extra.color != null ? extra.color : color;
+  return feltEmissive(THREE, hex, extra);
 }
 
 function dullMat(THREE, color, extra) {
-  return skipMat(new THREE.MeshStandardMaterial(Object.assign({
-    color, roughness: 0.78, metalness: 0.22,
-    envMapIntensity: 0,
-  }, extra || {})));
+  return feltBasic(THREE, color, extra);
+}
+
+function wallHoleGeos(THREE, list, ax, alongZ, center, half, height, thick, holeX, holeW, holeH, sill) {
+  if (holeW < 0.05 || holeH < 0.05) {
+    if (alongZ) list.push(boxAt(THREE, thick, height, half * 2, ax, height / 2, center, 0));
+    else list.push(boxAt(THREE, half * 2, height, thick, center, height / 2, ax, 0));
+    return;
+  }
+  const leftW = holeX - holeW / 2 - (center - half);
+  const rightW = (center + half) - (holeX + holeW / 2);
+  const sillH = sill || 0;
+  const lintelH = height - (sillH + holeH);
+  if (alongZ) {
+    if (leftW > 0.05) list.push(boxAt(THREE, thick, height, leftW, ax, height / 2, center - half + leftW / 2, 0));
+    if (rightW > 0.05) list.push(boxAt(THREE, thick, height, rightW, ax, height / 2, center + half - rightW / 2, 0));
+    if (sillH > 0.05) list.push(boxAt(THREE, thick, sillH, holeW, ax, sillH / 2, holeX, 0));
+    if (lintelH > 0.05) list.push(boxAt(THREE, thick, lintelH, holeW, ax, sillH + holeH + lintelH / 2, holeX, 0));
+  } else {
+    if (leftW > 0.05) list.push(boxAt(THREE, leftW, height, thick, center - half + leftW / 2, height / 2, ax, 0));
+    if (rightW > 0.05) list.push(boxAt(THREE, rightW, height, thick, center + half - rightW / 2, height / 2, ax, 0));
+    if (sillH > 0.05) list.push(boxAt(THREE, holeW, sillH, thick, holeX, sillH / 2, ax, 0));
+    if (lintelH > 0.05) list.push(boxAt(THREE, holeW, lintelH, thick, holeX, sillH + holeH + lintelH / 2, ax, 0));
+  }
+}
+
+function slabHoleGeos(THREE, list, sx, y, sz, sw, sd, h, hx, hz, holeW, holeD) {
+  const slabMinX = sx - sw / 2, slabMaxX = sx + sw / 2;
+  const slabMinZ = sz - sd / 2, slabMaxZ = sz + sd / 2;
+  const holeMinX = hx - holeW / 2, holeMaxX = hx + holeW / 2;
+  const holeMinZ = hz - holeD / 2, holeMaxZ = hz + holeD / 2;
+  const cy = y + h / 2;
+  const leftW = holeMinX - slabMinX;
+  const rightW = slabMaxX - holeMaxX;
+  if (leftW > 0.08) list.push(boxAt(THREE, leftW, h, sd, slabMinX + leftW / 2, cy, sz, 0));
+  if (rightW > 0.08) list.push(boxAt(THREE, rightW, h, sd, slabMaxX - rightW / 2, cy, sz, 0));
+  const south = holeMinZ - slabMinZ;
+  const north = slabMaxZ - holeMaxZ;
+  if (south > 0.08) list.push(boxAt(THREE, holeW, h, south, hx, cy, slabMinZ + south / 2, 0));
+  if (north > 0.08) list.push(boxAt(THREE, holeW, h, north, hx, cy, slabMaxZ - north / 2, 0));
+}
+
+function frameGeos(THREE, list, x, y, z, w, h, d, t) {
+  list.push(boxAt(THREE, w, t, t, x, y + h / 2, z + d / 2, 0));
+  list.push(boxAt(THREE, w, t, t, x, y + h / 2, z - d / 2, 0));
+  list.push(boxAt(THREE, t, h, t, x + w / 2, y + h / 2, z, 0));
+  list.push(boxAt(THREE, t, h, t, x - w / 2, y + h / 2, z, 0));
+}
+
+function exploreBuildingGeos(THREE, shell, glow, b) {
+  const t = b.wall, hx = b.w / 2, hz = b.d / 2;
+  const westHole = b.door.side === 'west' ? b.door : (b.window.side === 'west' ? b.window : null);
+  const eastHole = b.door.side === 'east' ? b.door : (b.window.side === 'east' ? b.window : null);
+  const northHole = b.door.side === 'north' ? b.door : (b.window.side === 'north' ? b.window : null);
+  const southHole = b.door.side === 'south' ? b.door : (b.window.side === 'south' ? b.window : null);
+  wallHoleGeos(THREE, shell, b.x - hx, true, b.z, hz, b.h, t,
+    b.z, westHole ? westHole.w : 0, westHole ? westHole.h : 0, westHole && westHole.sill);
+  wallHoleGeos(THREE, shell, b.x + hx, true, b.z, hz, b.h, t,
+    b.z, eastHole ? eastHole.w : 0, eastHole ? eastHole.h : 0, eastHole && eastHole.sill);
+  wallHoleGeos(THREE, shell, b.z + hz, false, b.x, hx, b.h, t,
+    b.x, northHole ? northHole.w : 0, northHole ? northHole.h : 0, northHole && northHole.sill);
+  wallHoleGeos(THREE, shell, b.z - hz, false, b.x, hx, b.h, t,
+    b.x, southHole ? southHole.w : 0, southHole ? southHole.h : 0, southHole && southHole.sill);
+  const st = b.stair;
+  for (const fy of b.floors) {
+    slabHoleGeos(THREE, shell, b.x, fy, b.z, b.w - t, b.d - t, 0.14,
+      b.x + st.x, b.z + st.z, st.w + 0.15, st.d + 0.15);
+  }
+  slabHoleGeos(THREE, shell, b.x, b.h - 0.16, b.z, b.w + 0.2, b.d + 0.2, 0.16,
+    b.x, b.z, b.roofHole.w, b.roofHole.d);
+  const topY = b.floors[b.floors.length - 1] || 3.15;
+  const rise = topY / st.treads;
+  const stepD = st.d / st.treads;
+  for (let i = 0; i < st.treads; i++) {
+    shell.push(boxAt(THREE, st.w, rise, stepD + 0.04,
+      b.x + st.x, i * rise + rise / 2, b.z + st.z - st.d / 2 + stepD * (i + 0.5), 0));
+  }
+  shell.push(boxAt(THREE, b.w * 0.42, 2.20, t, b.x, 1.10, b.z + 0.35, 0));
+  const holes = [b.door, b.window];
+  for (const hole of holes) {
+    if (!hole) continue;
+    const sill = hole.sill || 0;
+    if (hole.side === 'west') frameGeos(THREE, glow, b.x - hx, sill, b.z, t + 0.08, hole.h, hole.w, 0.08);
+    if (hole.side === 'east') frameGeos(THREE, glow, b.x + hx, sill, b.z, t + 0.08, hole.h, hole.w, 0.08);
+    if (hole.side === 'north') frameGeos(THREE, glow, b.x, sill, b.z + hz, hole.w, hole.h, t + 0.08, 0.08);
+    if (hole.side === 'south') frameGeos(THREE, glow, b.x, sill, b.z - hz, hole.w, hole.h, t + 0.08, 0.08);
+  }
+  frameGeos(THREE, glow, b.x, b.h - 0.22, b.z, b.roofHole.w + 0.24, 0.18, b.roofHole.d + 0.24, 0.08);
+}
+
+function addCityExplore(THREE, shell, glow) {
+  exploreBuildingGeos(THREE, shell, glow, CITY_PLAY.loftA);
+  exploreBuildingGeos(THREE, shell, glow, CITY_PLAY.loftB);
+  exploreBuildingGeos(THREE, shell, glow, CITY_PLAY.walkup);
+  for (const s of CITY_PLAY.spins) {
+    shell.push(cylAt(THREE, s.r, s.r * 1.15, s.h, s.x, s.h / 2, s.z, 0, 0, null, 6));
+    if (s.kind === 'lamp') {
+      glow.push(boxAt(THREE, 0.62, 0.12, 0.62, s.x, s.h + 0.08, s.z, 0));
+    } else if (s.kind === 'tree') {
+      shell.push(cylAt(THREE, 0.05, 1.20, 1.85, s.x, s.h * 0.70, s.z, 0, 0, null, 6));
+    }
+  }
 }
 
 export function buildNeonCity(THREE, parent, vibe, quality, gates) {
@@ -1242,6 +1338,7 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
   const corePools = [[], [], [], []];
   const ledges = [];
   const trim = [];
+  addCityExplore(THREE, trim, ledges);
   for (let bi = 0; bi < footprints.length; bi++) {
     const b = footprints[bi];
     corePools[bi % 4].push(b);
@@ -1264,9 +1361,19 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     });
   }
   const ledgeMat = neonMat(THREE, hexNum(vibe.palette.neonB), 0.55, { roughness: 0.45, color: hexNum('#2a2038') });
-  if (ledges.length) group.add(new THREE.Mesh(mergeGeos(THREE, ledges), ledgeMat));
+  if (ledges.length) {
+    const ledgeMesh = new THREE.Mesh(mergeGeos(THREE, ledges), ledgeMat);
+    ledgeMesh.name = 'cityExploreGlow';
+    ledgeMesh.userData.artKeep = true;
+    group.add(ledgeMesh);
+  }
   const trimMat = dullMat(THREE, hexNum('#2a1820'));
-  if (trim.length) group.add(new THREE.Mesh(mergeGeos(THREE, trim), trimMat));
+  if (trim.length) {
+    const trimMesh = new THREE.Mesh(mergeGeos(THREE, trim), trimMat);
+    trimMesh.name = 'cityExploreShell';
+    trimMesh.userData.artKeep = true;
+    group.add(trimMesh);
+  }
 
   const hutMat = dullMat(THREE, 0x2a2438, { metalness: 0.18, roughness: 0.62, emissive: hexNum(vibe.palette.neonB), emissiveIntensity: 0.12 });
   const acMat = dullMat(THREE, 0x3a3648, { metalness: 0.22, roughness: 0.55, emissive: hexNum(vibe.palette.neonA), emissiveIntensity: 0.08 });
@@ -2239,9 +2346,8 @@ function restyleCityInner(THREE, ctx) {
     if ('envMapIntensity' in mat) mat.envMapIntensity = 0;
     mat.emissive.setHex(hexNum(vibe.palette.neonA));
     mat.emissiveIntensity = quality === 'low' ? 0.03 : 0.06;
+    applyFeltMaterial(mat);
     mat.userData.looksComposed = true;
-    mat.userData.artLocked = true;
-    mat.userData.looksSkip = true;
     mat.normalMap = null;
     mat.roughnessMap = null;
     mat.needsUpdate = true;

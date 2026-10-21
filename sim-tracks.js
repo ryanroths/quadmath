@@ -718,6 +718,8 @@ export function ghostPayloadError(p, expectTrack) {
 export const BUILTIN_TRACK_FILES = [
   { id: 'city-loop', file: 'tracks/city-loop.json', legacyId: 0, map: 'city', name: 'City Loop' },
   { id: 'city-zigzag', file: 'tracks/city-zigzag.json', legacyId: 1, map: 'city', name: 'Mesa Zigzag' },
+  { id: 'city-inside', file: 'tracks/city-inside.json', map: 'city', name: 'Interior Run' },
+  { id: 'city-spins', file: 'tracks/city-spins.json', map: 'city', name: 'Spin Grove' },
   { id: 'living-sofa', file: 'tracks/living-sofa.json', map: 'living', name: 'Sofa Slalom' },
   { id: 'living-circuit', file: 'tracks/living-circuit.json', map: 'living', name: 'Living Circuit' },
   { id: 'living-under', file: 'tracks/living-under.json', map: 'living', name: 'Table Dive' },

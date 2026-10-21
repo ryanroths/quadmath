@@ -4,7 +4,7 @@
 //   quadmathSimFov.
 // Nothing here is copied from WebFPV.
 
-import { makeWorldLabel } from './sim-art.js?v=6cd8b294c7ec';
+import { makeWorldLabel } from './sim-art.js?v=14f9f4254f2b';
 
 export const INPUT_CHOICE_KEY = 'quadmathSimInputChoice';
 export const FLOATINESS_KEY = 'quadmathSimFloatiness';
