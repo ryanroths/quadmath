@@ -3,6 +3,11 @@ name: Sim tests
 # Runs the Node sim unit suite (tools/test_sim_*.mjs). Those tests were
 # local-only; CI did not execute them. Independent of #220 (stamp-on-main).
 # Ryan: review before adding this as a required check.
+#
+# tools/test_sim_map_boot.mjs boots every map in headless Chrome and asserts
+# the FPV screenshot is not blank. GitHub-hosted runners have no GPU and no
+# Pillow: install python3-pil, and give Chrome ANGLE/SwiftShader plus a
+# bigger /dev/shm so WebGL can present a first frame.
 
 on:
   pull_request:
@@ -30,5 +35,21 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install Pillow, Chrome, and software GL
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-pil xvfb
+          if ! command -v google-chrome >/dev/null && ! command -v google-chrome-stable >/dev/null; then
+            wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+            sudo apt-get install -y /tmp/chrome.deb
+          fi
+          CHROME_BIN="$(command -v google-chrome || command -v google-chrome-stable)"
+          "$CHROME_BIN" --version
+          python3 -c "from PIL import Image; print('pillow', Image.__version__)"
+          echo "CHROME=$CHROME_BIN" >> "$GITHUB_ENV"
+
       - name: Run sim tests
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
         run: node --test tools/test_sim_*.mjs
