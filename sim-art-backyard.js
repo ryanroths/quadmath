@@ -2,9 +2,9 @@
 // Colliders live in sim-maps.js BACKYARD_PLAY. No faces, no clutter.
 // Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=6c89c98c09e7';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=9a1038ea2564';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=a92751d3a12f';
+import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=634e469a7282';
 
 export const BACKYARD_STOCK = Object.freeze({
   turf: 0x3f8a4a,
@@ -19,13 +19,13 @@ export const BACKYARD_STOCK = Object.freeze({
 
 export const BACKYARD_KEEP_GATES = Object.freeze([
   { x: 4.0, y: 2.20, z: 4.2, size: 1.8 },
-  { x: 13.5, y: 1.75, z: -3.5, size: 1.6 },
+  { x: 11.0, y: 1.75, z: -6.8, size: 1.6 },
   { x: 17.2, y: 2.25, z: -15.4, size: 1.5 },
   { x: -8.5, y: 1.12, z: -5.5, size: 1.6 },
-  { x: -15.05, y: 2.10, z: -14.6, size: 1.6 },
+  { x: -17.6, y: 1.55, z: -12.55, size: 1.6 },
   { x: -21.75, y: 1.18, z: 14.0, size: 1.5 },
-  { x: 2.15, y: 5.15, z: 3.43, size: 1.6 },
-  { x: 2.15, y: 1.22, z: -1.83, size: 1.6 },
+  { x: -2.15, y: 5.15, z: 3.43, size: 1.6 },
+  { x: -2.15, y: 1.22, z: -1.83, size: 1.6 },
   { x: 1.5, y: 25.2, z: 14.1, size: 1.8 },
 ]);
 
@@ -357,8 +357,10 @@ function makeYardMats(THREE, vibe, quality) {
     mesh: feltBasic(THREE, 0xffffff, { map: meshTex(THREE) }),
     leaf: feltBasic(THREE, hexNum('#3f8a4a')),
     darkLeaf: feltBasic(THREE, hexNum('#2a6234')),
-    water: feltBasic(THREE, 0xffffff, { map: waterTex(THREE), transparent: true, opacity: 0.78 }),
-    ao: feltBasic(THREE, 0x2a2018, { transparent: true, opacity: 0.20 }),
+    water: feltBasic(THREE, 0xffffff, {
+      map: waterTex(THREE), transparent: true, opacity: 0.78, depthWrite: false,
+    }),
+    dark: feltBasic(THREE, hexNum('#2a241c')),
     window: feltBasic(THREE, hexNum(pal.windowOn)),
     pvc: feltBasic(THREE, 0xf4f1ea),
     yellow: feltBasic(THREE, hexNum('#e8c04a')),
@@ -366,7 +368,7 @@ function makeYardMats(THREE, vibe, quality) {
     red: feltBasic(THREE, hexNum('#c45a40')),
     wicker: feltBasic(THREE, hexNum('#c4a06a')),
     sky: skipMat(new THREE.MeshBasicMaterial({
-      map: afternoonSkyTex(THREE), side: THREE.BackSide, fog: false, depthWrite: false, toneMapped: false,
+      map: afternoonSkyTex(THREE), side: THREE.BackSide, fog: false, depthWrite: true, toneMapped: false,
     })),
     glow: glow ? feltEmissive(THREE, hexNum(pal.laneAlt)) : feltBasic(THREE, hexNum(pal.laneAlt)),
   };
@@ -402,8 +404,13 @@ export function restyleBackyardShell(THREE, group, vibe, floor) {
     const m = o.material;
     const col = m.color ? m.color.getHex() : 0;
     const t = o.geometry && o.geometry.type;
-    if (t === 'PlaneGeometry' && (o === floor || col === BACKYARD_STOCK.pebble)) {
+    if (t === 'PlaneGeometry' && o === floor) {
       m.map = pebble;
+      m.color.setHex(0xffffff);
+      skipMat(m);
+      n++;
+    } else if (t === 'PlaneGeometry' && col === BACKYARD_STOCK.pebble) {
+      m.map = paverTex(THREE);
       m.color.setHex(0xffffff);
       skipMat(m);
       n++;
@@ -454,21 +461,8 @@ function addHouse(THREE, parent, mats) {
     placedBox(THREE, P.wing.w, P.wing.wallH, P.wing.d, P.wing.x, 0, P.wing.z),
   ];
   addMerged(THREE, parent, stucco, mats.stucco);
-  const seams = [
-    placedBox(THREE, hs.w + 0.04, 0.06, 0.08, hs.x, 6.4, hs.z - hs.d / 2 - 0.02),
-    placedBox(THREE, hs.w + 0.04, 0.06, 0.08, hs.x, 12.6, hs.z - hs.d / 2 - 0.02),
-    placedBox(THREE, 0.08, hs.wallH, 0.06, hs.x - 4.2, 0, hs.z - hs.d / 2 - 0.02),
-    placedBox(THREE, 0.08, hs.wallH, 0.06, hs.x + 6.4, 0, hs.z - hs.d / 2 - 0.02),
-  ];
-  addMerged(THREE, parent, seams, mats.wood);
   const tile = [
     placedBox(THREE, P.ridge.w, P.ridge.h, P.ridge.d, P.ridge.x, P.ridge.y, P.ridge.z),
-    placedBox(THREE, P.roofS.w, P.roofS.h, P.roofS.d, P.roofS.x, P.roofS.y, P.roofS.z),
-    placedBox(THREE, P.roofN.w, P.roofN.h, P.roofN.d, P.roofN.x, P.roofN.y, P.roofN.z),
-    placedBox(THREE, P.eaveS.w, P.eaveS.h, P.eaveS.d, P.eaveS.x, P.eaveS.y, P.eaveS.z),
-    placedBox(THREE, P.eaveN.w, P.eaveN.h, P.eaveN.d, P.eaveN.x, P.eaveN.y, P.eaveN.z),
-    placedBox(THREE, P.wingEave.w, P.wingEave.h, P.wingEave.d, P.wingEave.x, P.wingEave.y, P.wingEave.z),
-    placedBox(THREE, P.alleyEave.w, P.alleyEave.h, P.alleyEave.d, P.alleyEave.x, P.alleyEave.y, P.alleyEave.z),
   ];
   addMerged(THREE, parent, tile, mats.tile);
   const win = [
@@ -543,8 +537,8 @@ function addTree(THREE, parent, mats, budget) {
 function addPool(THREE, parent, mats, budget) {
   const P = BACKYARD_PLAY;
   const water = new THREE.Mesh(kidneyGeo(THREE), mats.water);
-  water.rotation.x = -Math.PI / 2;
-  water.position.set(P.pool.x, 0.05, P.pool.z);
+  water.rotation.set(-Math.PI / 2, Math.PI / 2, 0);
+  water.position.set(P.pool.x, 0.08, P.pool.z);
   water.userData.backyardPool = true;
   mark(water);
   parent.add(water);
@@ -557,20 +551,6 @@ function addPool(THREE, parent, mats, budget) {
     placedBox(THREE, P.fire.w, 0.12, P.fire.d, P.fire.x, 0, P.fire.z),
   ];
   addMerged(THREE, parent, deck, mats.pebble);
-  if (budget.glow) {
-    const shimmer = new THREE.Mesh(new THREE.CircleGeometry(5.2, 18), mats.glow);
-    shimmer.rotation.x = -Math.PI / 2;
-    shimmer.position.set(P.pool.x - 1.2, 0.08, P.pool.z + 0.6);
-    shimmer.userData.backyardPool = true;
-    mark(shimmer);
-    parent.add(shimmer);
-    const shimmer2 = new THREE.Mesh(new THREE.CircleGeometry(3.4, 14), mats.glow);
-    shimmer2.rotation.x = -Math.PI / 2;
-    shimmer2.position.set(P.pool.x + 2.4, 0.09, P.pool.z - 1.4);
-    shimmer2.userData.backyardPool = true;
-    mark(shimmer2);
-    parent.add(shimmer2);
-  }
 }
 
 function addFenceAndPots(THREE, parent, mats, budget, gates) {
@@ -619,18 +599,6 @@ function addFenceAndPots(THREE, parent, mats, budget, gates) {
 
 function addPatioDress(THREE, parent, mats, budget, gates) {
   const P = BACKYARD_PLAY;
-  const pt = P.patio;
-  const pavers = [];
-  const nx = 4, nz = Math.max(3, Math.round(budget.pavers / 4));
-  const pw = pt.w / nx - 0.18, pd = pt.d / nz - 0.18;
-  for (let ix = 0; ix < nx; ix++) {
-    for (let iz = 0; iz < nz; iz++) {
-      const x = pt.x - pt.w / 2 + (ix + 0.5) * (pt.w / nx);
-      const z = pt.z - pt.d / 2 + (iz + 0.5) * (pt.d / nz);
-      pavers.push(placedBox(THREE, pw, 0.05, pd, x, 0.06, z));
-    }
-  }
-  addMerged(THREE, parent, pavers, mats.paver);
   for (const pot of P.patioPlanters) {
     if (!propClearOfCourse(pot.x, pot.z, pot.r, gates, { gatePad: 1.2, corridor: 1.0, yRange: 2 })) continue;
     const body = new THREE.Mesh(placedCyl(THREE, pot.r, pot.r * 0.85, pot.h, 0, 0, 0, 8), mats.tile);
@@ -646,21 +614,14 @@ function addPatioDress(THREE, parent, mats, budget, gates) {
 
 function addSoftAoAndTufts(THREE, parent, mats, budget, gates) {
   const P = BACKYARD_PLAY;
-  const ao = [
-    placedCyl(THREE, 2.8, 2.8, 0.03, P.ficus.x, 0.045, P.ficus.z, 8),
-    placedCyl(THREE, 1.1, 1.1, 0.03, P.ac.x, 0.03, P.ac.z, 6),
-    placedCyl(THREE, 1.6, 1.6, 0.03, P.shed.x, 0.045, P.shed.z, 6),
-    placedCyl(THREE, 1.4, 1.4, 0.03, P.woodGate.x, 0.03, P.woodGate.z, 6),
-    placedBox(THREE, P.house.w * 0.9, 0.03, 1.6, P.house.x, 0.03, P.house.z - P.house.d / 2 + 0.2),
-  ];
-  addMerged(THREE, parent, ao, mats.ao);
   const tufts = [];
   const n = budget.tufts;
+  const hw = P.turf.w * 0.42, hd = P.turf.d * 0.42;
   for (let i = 0; i < n; i++) {
-    const x = P.turf.x + ((i * 17) % 80 - 40) * 0.22;
-    const z = P.turf.z + ((i * 29) % 70 - 35) * 0.22;
+    const x = P.turf.x + ((i * 17) % 80 - 40) / 40 * hw;
+    const z = P.turf.z + ((i * 29) % 70 - 35) / 35 * hd;
     if (!propClearOfCourse(x, z, 0.18, gates, { gatePad: 1.1, corridor: 1.0, yRange: 2 })) continue;
-    tufts.push(placedCyl(THREE, 0.04, 0.08, 0.22 + (i % 3) * 0.04, x, 0.04, z, 5));
+    tufts.push(placedCyl(THREE, 0.04, 0.08, 0.28 + (i % 3) * 0.05, x, 0.06, z, 5));
   }
   addMerged(THREE, parent, tufts, mats.leaf);
 }
@@ -673,20 +634,14 @@ function addLounge(THREE, parent, mats, budget) {
   const back = new THREE.Mesh(placedBox(THREE, P.sofa.w, P.sofa.backH - P.sofa.seatH, P.sofa.backD, P.sofa.x, P.sofa.seatH, P.sofa.z - P.sofa.d / 2 + P.sofa.backD / 2), mats.wicker);
   mark(back);
   parent.add(back);
-  const um = P.umbrella;
-  const arch = [];
-  for (let i = 0; i < um.segs; i++) {
-    const a = (i / (um.segs - 1)) * Math.PI * 0.92;
-    arch.push(placedBox(THREE, um.bar, um.bar + 0.16, um.bar, um.x + Math.sin(a) * um.r, (1 - Math.cos(a)) * um.r, um.z));
-  }
-  addMerged(THREE, parent, arch, mats.metal);
   const canopy = [];
   const c = P.canopy;
-  canopy.push(placedBox(THREE, c.innerW + c.bar * 2, c.bar, c.depth, c.x, c.y + c.innerH / 2, c.z));
-  canopy.push(placedBox(THREE, c.innerW + c.bar * 2, c.bar, c.depth, c.x, c.y - c.innerH / 2 - c.bar, c.z));
-  canopy.push(placedBox(THREE, c.bar, c.innerH, c.depth, c.x - c.innerW / 2 - c.bar / 2, c.y - c.innerH / 2, c.z));
-  canopy.push(placedBox(THREE, c.bar, c.innerH, c.depth, c.x + c.innerW / 2 + c.bar / 2, c.y - c.innerH / 2, c.z));
-  addMerged(THREE, parent, canopy, mats.yellow);
+  const t = Math.max(c.bar, 0.14);
+  canopy.push(placedBox(THREE, c.innerW + t * 2, t, t, c.x, c.y + c.innerH / 2, c.z));
+  canopy.push(placedBox(THREE, c.innerW + t * 2, t, t, c.x, c.y - c.innerH / 2 - t, c.z));
+  canopy.push(placedBox(THREE, t, c.innerH, t, c.x - c.innerW / 2 - t / 2, c.y - c.innerH / 2, c.z));
+  canopy.push(placedBox(THREE, t, c.innerH, t, c.x + c.innerW / 2 + t / 2, c.y - c.innerH / 2, c.z));
+  addMerged(THREE, parent, canopy, mats.dark);
   const n = Math.min(budget.palms, P.palms.length);
   for (let i = 0; i < n; i++) {
     const p = P.palms[i];
@@ -740,12 +695,6 @@ function addNeighbors(THREE, parent, mats, budget) {
     geos.push(placedBox(THREE, s[2], 16.5, s[3], s[0], 0, s[1]));
   }
   addMerged(THREE, parent, geos, mats.stucco);
-  const roofs = [];
-  for (let i = 0; i < n; i++) {
-    const s = spots[i];
-    roofs.push(placedBox(THREE, s[2] + 1.2, 0.4, s[3] + 1.2, s[0], 16.5, s[1]));
-  }
-  addMerged(THREE, parent, roofs, mats.tile);
   const palms = [
     [-32, -18], [34, -16], [-18, -32], [28, 28],
   ];
@@ -766,19 +715,6 @@ function addPlayLines(THREE, parent, mats, gates) {
   const extras = new THREE.Group();
   extras.name = 'backyardArtExtras';
   extras.userData.backyardArt = true;
-  const marks = [
-    [4.0, 0.04, 2.0], [13.5, 0.04, -3.5], [17.2, 0.04, -12.6],
-    [-8.5, 0.04, -5.5], [2.15, 0.04, -7.08], [-21.75, 0.04, 12.4],
-  ];
-  const geo = new THREE.CircleGeometry(0.22, 10);
-  for (const m of marks) {
-    if (!propClearOfCourse(m[0], m[2], 0.2, gates, { gatePad: 1.1, corridor: 1.0, yRange: 2 })) continue;
-    const disc = new THREE.Mesh(geo, mats.tile);
-    disc.rotation.x = -Math.PI / 2;
-    disc.position.set(m[0], m[1], m[2]);
-    mark(disc);
-    extras.add(disc);
-  }
   parent.add(extras);
 }
 
@@ -880,8 +816,12 @@ function tickBackyardArtObject(o, t) {
   if (o.userData && o.userData.backyardPalm) {
     o.rotation.y = t * 0.06;
   }
-  if (o.userData && o.userData.backyardPool && o.material && o.material.opacity != null) {
-    o.material.opacity = 0.68 + 0.06 * (0.5 + 0.5 * Math.sin(t * 1.4));
+  if (o.userData && o.userData.backyardPool && o.material && o.material.map) {
+    const rep = o.material.map.repeat;
+    if (rep) {
+      o.material.map.offset.x = (t * 0.03) % 1;
+      o.material.map.offset.y = (t * 0.02) % 1;
+    }
   }
 }
 

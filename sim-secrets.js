@@ -4,7 +4,7 @@
 // Stock skin ids / unlocks in sim-retention.js stay frozen.
 
 import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=c43bf3a247a6';
-import { LAYOUT } from './sim-maps.js?v=a92751d3a12f';
+import { LAYOUT } from './sim-maps.js?v=634e469a7282';
 import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=8f9513fb3468';
 
 export const SECRETS_KEY = 'quadmathSimSecrets';
@@ -321,7 +321,7 @@ const PLACEMENTS = Object.freeze({
   backyard: Object.freeze({
     sparks: Object.freeze([
       P('b01', 4.0, 2.20, 2.4, 'patio fly'),
-      P('b02', 13.5, 1.75, -3.5, 'PVC gate'),
+      P('b02', 11.0, 1.75, -6.8, 'PVC gate'),
       P('b03', 17.2, 2.40, -13.5, 'ficus hover'),
       P('b04', 22.6, 6.85, -11.5, 'shed roof'),
       P('b05', -8.5, 1.15, -5.5, 'pool skim'),
@@ -666,7 +666,7 @@ const VIBE_HEX = Object.freeze({
   living: { a: 0xff6b9a, b: 0xffe08a },
   garage: { a: 0xffb347, b: 0x2de2e6 },
   warehouse: { a: 0x39ffb0, b: 0x7a5cff },
-  backyard: { a: 0xc45a32, b: 0x2ec4b6 },
+  backyard: { a: 0x2ec4b6, b: 0xe8c04a },
   office: { a: 0xff5c5c, b: 0x3d7dff },
   gym: { a: 0xf0b14b, b: 0xfff6d8 },
   trainer: { a: 0xff4d8d, b: 0x00e5ff },
