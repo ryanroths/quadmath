@@ -5,7 +5,7 @@
 
 import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d290c9ab2bdb';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { LIVING_PLAY } from './sim-maps.js?v=9b5e706b9457';
+import { LIVING_PLAY } from './sim-maps.js?v=fcdf1d7a7da3';
 
 export const LIVING_STOCK = Object.freeze({
   sofa: 0x4a5a6a,

@@ -50,7 +50,7 @@ for (const t of files) {
   byMap[t.map] = (byMap[t.map] || 0) + 1;
 }
 assert.ok((byMap.living || 0) >= 2);
-assert.ok((byMap.garage || 0) >= 2);
+assert.ok((byMap.garage || 0) >= 5);
 assert.ok((byMap.warehouse || 0) >= 2);
 assert.ok((byMap.backyard || 0) >= 2);
 assert.ok((byMap.office || 0) >= 2, 'office needs 2+ tracks');
@@ -255,6 +255,9 @@ assert.equal(startPad(freeNorm).z, 20);
 
 assert.equal(isLineTrackId('garage-bench'), true);
 assert.equal(isLineTrackId('garage-rafters'), true);
+assert.equal(isLineTrackId('garage-shelf'), true);
+assert.equal(isLineTrackId('garage-orbit'), true);
+assert.equal(isLineTrackId('garage-door'), true);
 assert.equal(isLineTrackId('warehouse-racks'), true);
 assert.equal(isLineTrackId('warehouse-rafters'), true);
 assert.equal(isLineTrackId('living-sofa'), true);

@@ -26,30 +26,30 @@ export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget, planLivingKit,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=89febaa73e27';
+} from './sim-art-living.js?v=f50f9c095909';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=ff2a8ee1d4b9';
+} from './sim-art-garage.js?v=90bf375aa58c';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=317e7654a58a';
+} from './sim-art-warehouse.js?v=59cd7591d8f7';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
   planGymKit,
-} from './sim-art-gym.js?v=d483e9966e8e';
+} from './sim-art-gym.js?v=6647eadab4cb';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget, planOfficeKit,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=c13c6ddb7428';
+} from './sim-art-office.js?v=d7019857c67f';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
@@ -67,7 +67,7 @@ export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=b2b22076308e';
+} from './sim-art-room.js?v=a8ec995a0ae5';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
@@ -197,14 +197,14 @@ export const VIBES = Object.freeze({
     }),
     lighting: Object.freeze({
       sunColor: 0xffb347, sunIntensity: 0.2, fillColor: 0x2de2e6, fillIntensity: 0.22,
-      hemiSky: 0x1c2430, hemiGround: 0x14161c, hemiIntensity: 0.32,
+      hemiSky: 0x1c2430, hemiGround: 0x14161c, hemiIntensity: 0.60,
       exposure: 0.55, fogColor: 0x14161c, fogDensity: 0.003,
       bloomStrength: 0.7, bloomRadius: 0.4, bloomThreshold: 0.9,
       gateEmissive: 5.2, gateEmissiveActive: 7,
     }),
-    looks: Object.freeze({ fog: 0.003, sun: 0.2, env: 0.4, bg: 0.28, hemi: 0.32 }),
+    looks: Object.freeze({ fog: 0.003, sun: 0.2, env: 0.26, bg: 0.28, hemi: 0.60 }),
     gates: Object.freeze({ style: 'square-neon', keepBrand: false }),
-    props: Object.freeze(['jacked car', 'open bench', 'shelf aisles', 'volt hoop', 'tire well']),
+    props: Object.freeze(['jacked car', 'open bench', 'shelf gaps', 'bike rim', 'tire stack']),
     post: Object.freeze({
       bloom: true, analog: false,
       lift: Object.freeze([0.03, 0.01, 0.0]),

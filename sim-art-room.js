@@ -3,7 +3,7 @@
 // Clay/felt furniture on the same AABBs. Felt-ring gates. Bloom off.
 
 import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d290c9ab2bdb';
-import { planRoom } from './sim-room.js?v=52627101d2c3';
+import { planRoom } from './sim-room.js?v=0314f2c75e7d';
 
 export const ROOM_STOCK = Object.freeze({
   wall: 0xd8d2c6,
