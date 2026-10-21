@@ -50,6 +50,7 @@ export const TRICK_LIST = Object.freeze([
   Object.freeze({ id: 'rubik', name: "Rubik's Cube", tier: 'Intermediate', points: 325, pointsIn: 450, type: 'Open Air' }),
   Object.freeze({ id: 'halfmatty', name: 'Half Matty', tier: 'Intermediate', points: 350, pointsIn: 350, type: 'Matty Flips' }),
   Object.freeze({ id: 'cubik', name: "Cubik's Rube", tier: 'Intermediate', points: 350, pointsIn: 450, type: 'Open Air' }),
+  Object.freeze({ id: 'ham', name: 'Ham Spin', tier: 'Intermediate', points: 300, pointsIn: 300, type: 'Open Air' }),
   Object.freeze({ id: 'trippy', name: 'Trippy Spin', tier: 'Intermediate', points: 500, pointsIn: 500, type: 'Pole Dancing' }),
 ]);
 
@@ -71,11 +72,11 @@ const HALF = PI * 0.78;
 const FULL = 5.2;
 const QTR = 1.15;
 const CLASS_IDS = [
-  'rubik', 'cubik', 'trippy', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
+  'rubik', 'cubik', 'ham', 'trippy', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
   'powerloop', 'matty', 'maverick', 'splits', 'cradle', 'flip', 'roll', 'yawspin',
 ];
 const SPEC = {
-  rubik: 0.12, cubik: 0.12, trippy: 0.11, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
+  rubik: 0.12, cubik: 0.12, ham: 0.11, trippy: 0.11, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
   halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
   cradle: 0.08, flip: 0, roll: 0, yawspin: 0,
 };
@@ -96,6 +97,15 @@ export function trickPoints(id, indoor) {
 
 export function trickById(id) {
   return BY_ID[id] || null;
+}
+
+export function trickLineupText() {
+  let s = '';
+  for (let i = 0; i < TRICK_LIST.length; i++) {
+    if (i) s += ' · ';
+    s += TRICK_LIST[i].name;
+  }
+  return s;
 }
 
 export function formatScore(n) {
@@ -529,6 +539,25 @@ export function classifyFeat(f, out) {
       atMost(f.travelH, 14, 6),
       atLeast(f.dur, 0.55, 0.15),
     );
+    // Ham Spin: inverted yaw spin. Same ≥360° yaw in ≤1.8s + little
+    // roll/pitch/drift as the tightened Trippy, but the craft stays
+    // upside-down the whole window (tilt >135° from level, upZ < −0.70).
+    // Flips/rolls that only pass through inverted have large pitch/roll
+    // and an upright upMax, so they do not score Ham.
+    _sc.ham = mul(
+      atLeast(absY, TAU, 0.70),
+      atLeast(v.pathY, TAU, 0.70),
+      atMost(f.tYaw360, 1.80, 0.50),
+      atLeast(f.peakY, 4.0, 1.5),
+      atMost(absR, 1.40, 0.60),
+      atMost(absP, 1.20, 0.50),
+      atMost(v.pathR, 1.60, 0.70),
+      atMost(v.pathP, 1.40, 0.60),
+      atMost(f.upMax, -0.70, 0.15),
+      atLeast(v.inv, 0.85, 0.20),
+      atMost(f.travelH, 14, 6),
+      atLeast(f.dur, 0.55, 0.15),
+    );
   }
   _sc.sideloop = mul(
     atLeast(Math.max(absR, v.pathR), 3.2, 0.7),
@@ -675,6 +704,8 @@ export function classifyFeat(f, out) {
   if (bestId === 'flip' && _sc.powerloop > 0.55 && f.pitch < 0 && f.travelH > 6 && v.close < 0.4) { bestId = 'powerloop'; best = _sc.powerloop; }
   if (bestId === 'flip' && _sc.matty > 0.55 && f.pitch > 0) { bestId = 'matty'; best = _sc.matty; }
   if (bestId === 'powerloop' && f.travelH < 5.5) { bestId = 'flip'; best = _sc.flip; }
+  if (bestId === 'yawspin' && _sc.ham > 0.42) { bestId = 'ham'; best = _sc.ham; }
+  if (bestId === 'trippy' && _sc.ham > 0.42) { bestId = 'ham'; best = _sc.ham; }
   if (bestId === 'yawspin' && _sc.trippy > 0.42) { bestId = 'trippy'; best = _sc.trippy; }
   if (bestId === 'roll' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
   if (bestId === 'yawspin' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
@@ -1517,7 +1548,9 @@ export function createTricks(opts) {
     det.lastId = id;
     const nm = (def && def.name) || name || 'Side Loop';
     popName = nm;
-    const dummy = id === 'trippy'
+    const dummy = id === 'ham'
+      ? '\n  P8 R10 Y420  fol=0.10 ag=0.08  span=0.4 hd=18  inv=0.96 cl=0.90  obj=0.00 rad=2.0  (yawspin 0.00)'
+      : id === 'trippy'
       ? '\n  P5 R12 Y420  fol=0.12 ag=0.08  span=1.1 hd=20  inv=0.00 cl=0.98  obj=0.90 rad=1.1  (yawspin 0.22)'
       : '\n  P0 R360 Y90  fol=0.16 ag=0.08  span=4.2 hd=70  inv=0.28 cl=0.72  (roll 0.12)';
     det.lastWhy = nm + '  ' + (def ? def.tier : 'Novice') + '  ' + (def ? def.points : 200) + dummy;
