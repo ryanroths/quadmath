@@ -2,17 +2,20 @@
 // node --test tools/test_sim_art.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
-  VIBES, MAP_VIBE_IDS, vibeFor, qualityWantsBloom, qualityBudget,
+  VIBES, MAP_VIBE_IDS, vibeFor, resolveMapLighting, disposeArtGroup,
+  qualityWantsBloom, qualityBudget,
   hexNum, vibeTable, mentionsBannedAssets, CITY_VIBE_ID,
   qualityWantsReflections, qualityWantsParticles,
   propClearOfCourse, planCityProps, planPortalBlocks, SIGN_WORDS, GATE_STYLES,
   signsAreOriginal, BRAND_BLOCKLIST,
   paintWorldLabel, WORLD_LABEL, restyleCity, buildNeonCity, artStats, tickCityArt,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
+  kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
+  garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP, planGarageKit,
   restyleDiveTubes, LIVING_VIBE_ID, hideStockLivingMeshes, buildClayParlor,
   restyleLiving, tickLivingArt, livingBudget, livingWantsGlow,
   GARAGE_VIBE_ID, hideStockGarageMeshes, buildVoltStall,
@@ -32,7 +35,7 @@ import {
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
-import { MAP_IDS, MAP_LOOKS, buildMap } from '../sim-maps.js';
+import { MAP_IDS, MAP_LOOKS, buildMap, GARAGE_PLAY } from '../sim-maps.js';
 import { DAILY_MAPS } from '../sim-retention.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -113,6 +116,7 @@ test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {
   assert.match(art, /sim-art-trainer\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-backyard\.js\?v=[0-9a-f]{12}/);
   assert.match(art, /sim-art-room\.js\?v=[0-9a-f]{12}/);
+  assert.match(art, /sim-art-kit\.js\?v=[0-9a-f]{12}/);
   assert.equal(mentionsBannedAssets('assets/Models/GLB-format/tree-large.glb'), true);
   assert.equal(mentionsBannedAssets('buildCityDressing()'), false);
 });
@@ -142,6 +146,11 @@ test('sim.html skips the stock city kit and stamps sim-art', () => {
   assert.match(sim, /skipStockCity|procedural neon city|Neon Current/);
   assert.equal(sim.includes('content/guides/'), false);
   assert.match(sim, /City is original procedural art|Neon Current/);
+  assert.match(sim, /tryDressCityKit/);
+  assert.match(sim, /tryDressGarageKit/);
+  assert.match(sim, /MeshoptDecoder/);
+  assert.match(sim, /Kenney CC0/);
+  assert.match(sim, /Kenney CC0 shop kit/);
 });
 
 test('sim.html imports every map restyle/tick/decorate it calls', () => {
@@ -156,7 +165,7 @@ test('sim.html imports every map restyle/tick/decorate it calls', () => {
       assert.match(sim, new RegExp(fn + '\\('), 'call ' + fn);
     }
   }
-  for (const fn of ['restyleCity', 'tickCityArt', 'decorateVibeGate', 'applyVibeLighting']) {
+  for (const fn of ['restyleCity', 'tickCityArt', 'decorateVibeGate', 'applyVibeLighting', 'resolveMapLighting']) {
     assert.ok(imported.has(fn), 'import ' + fn);
   }
 });
@@ -228,6 +237,203 @@ test('planned street props stay off City Loop and Zigzag race lines', () => {
       );
     }
   }
+});
+
+test('Kenney CC0 city kit is meshopt-compressed and stays off the banned path', () => {
+  const kitDir = join(root, 'assets/sim-city');
+  const kitSrc = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  assert.equal(kitSrc.includes('GLB-format'), false);
+  assert.equal(kitSrc.includes('loadAsync'), false);
+  assert.equal(kitSrc.includes('WebFPV'), false);
+  assert.equal(kitSrc.includes('Sketchfab'), false);
+  assert.match(kitSrc, /loader\.load\(/);
+  assert.match(kitSrc, /Meshopt-compressed/);
+  assert.equal(kitBytesForQuality('low'), 54304);
+  assert.equal(kitBytesForQuality('med'), 80532);
+  assert.equal(kitBytesForQuality('high'), 80532);
+  const files = readdirSync(kitDir);
+  for (const name of ['License-car-kit.txt', 'License-city-kit-commercial.txt', 'License-city-kit-roads.txt', 'CREDITS.txt']) {
+    assert.ok(files.includes(name), name);
+    const txt = readFileSync(join(kitDir, name), 'utf8');
+    if (name.startsWith('License-')) assert.match(txt, /Creative Commons Zero, CC0/);
+  }
+  let glbBytes = 0;
+  const names = [];
+  for (const spec of Object.values(CITY_KIT_CARS).concat(Object.values(CITY_KIT_PROPS))) {
+    const p = join(kitDir, spec.file);
+    assert.equal(existsSync(p), true, spec.file);
+    const n = statSync(p).size;
+    assert.equal(n, spec.bytes, spec.file + ' size');
+    glbBytes += n;
+    names.push(spec.file);
+  }
+  assert.equal(glbBytes, 80532);
+  assert.equal(new Set(names).size, names.length);
+  assert.ok(!files.some((f) => f.includes('GLB-format')));
+});
+
+test('Kenney CC0 garage kit is meshopt-compressed and stays off the banned path', () => {
+  const kitDir = join(root, 'assets/sim-garage');
+  const kitSrc = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  const garageSrc = readFileSync(join(root, 'sim-art-garage.js'), 'utf8');
+  assert.equal(kitSrc.includes('GLB-format'), false);
+  assert.equal(kitSrc.includes('loadAsync'), false);
+  assert.equal(kitSrc.includes('WebFPV'), false);
+  assert.equal(kitSrc.includes('Sketchfab'), false);
+  assert.equal(garageSrc.includes('GLB-format'), false);
+  assert.equal(garageSrc.includes('WebFPV'), false);
+  assert.match(kitSrc, /tryDressGarageKit/);
+  assert.match(kitSrc, /Meshopt-compressed/);
+  assert.equal(garageKitBytesForQuality('low'), 12160);
+  assert.equal(garageKitBytesForQuality('med'), 45904);
+  assert.equal(garageKitBytesForQuality('high'), 45904);
+  const planned = planGarageKit();
+  assert.equal(planned.bench.length, 0, 'Kenney cabinet bench is not instanced');
+  assert.ok(planned.chest.length && planned.car.length);
+  assert.ok(planned.toolboxes.length >= 2);
+  assert.ok(planned.chest.every((p) => p.x < -6.6));
+  assert.ok(planned.toolboxes.every((p) => Math.abs(p.x) >= 7.4));
+  assert.ok(planned.car.every((p) => p.x > 1.1 && p.x < 7.2 && p.z > -11.4 && p.z < 0.6));
+  assert.ok(planned.car.every((p) => p.y >= 1.2), 'kit sedan sits on jack stands');
+  const clutter = []
+    .concat(planned.crates, planned.cardboard, planned.toolboxes, planned.tires)
+    .concat(planned.barrels, planned.barriers);
+  for (const p of clutter) {
+    assert.ok(Math.abs(p.x) >= 4.6, 'kit clutter too close to whoop line ' + p.x + ',' + p.z);
+  }
+  for (const name of ['License-furniture-kit.txt', 'License-survival-kit.txt', 'License-car-kit.txt', 'License-racing-kit.txt', 'CREDITS.txt']) {
+    assert.ok(existsSync(join(kitDir, name)), name);
+    if (name.startsWith('License-')) {
+      assert.match(readFileSync(join(kitDir, name), 'utf8'), /Creative Commons Zero, CC0/);
+    }
+  }
+  let glbBytes = 0;
+  const names = [];
+  const kitSpecs = Object.values(GARAGE_KIT_CORE).concat(Object.values(GARAGE_KIT_EXTRA), Object.values(GARAGE_KIT_SKIP));
+  for (const spec of kitSpecs) {
+    const p = join(kitDir, spec.file);
+    assert.equal(existsSync(p), true, spec.file);
+    const n = statSync(p).size;
+    assert.equal(n, spec.bytes, spec.file + ' size');
+    glbBytes += n;
+    names.push(spec.file);
+  }
+  assert.equal(glbBytes, 51128);
+  assert.equal(new Set(names).size, names.length);
+  assert.ok(!readdirSync(kitDir).some((f) => f.includes('GLB-format')));
+  const emit = kitSrc.slice(kitSrc.indexOf('function garageMat'), kitSrc.indexOf('let garageDressGen'));
+  assert.equal(/emissiveIntensity: [2-9]/.test(emit), false, 'garage kit glow must stay dim under bloom');
+  assert.match(kitSrc, /function garageMat/);
+  assert.equal(/garageMat[\s\S]{0,900}MeshStandardMaterial/.test(kitSrc), false, 'garage kit must not use MeshStandard after IBL');
+  assert.match(emit, /MeshBasicMaterial/);
+});
+
+test('city window and blink stay frozen so bloom does not strobe', () => {
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  const tickSrc = city.slice(
+    city.indexOf('function tickCityArtObject'),
+    city.indexOf('export function restyleMesas'),
+  );
+  assert.match(tickSrc, /cityWindow/);
+  assert.equal(tickSrc.includes('> 0.35'), false, 'hard rooftop strobe');
+  assert.equal(/\b5\.5\b/.test(tickSrc), false, 'blink must not jump by 5.5');
+  assert.equal(/cityWindow[\s\S]{0,180}Math\.sin/.test(tickSrc), false, 'window must not pulse');
+  assert.equal(/cityBlink[\s\S]{0,180}Math\.sin/.test(tickSrc), false, 'blink must not pulse');
+  const kit = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  assert.equal(kit.includes('emissiveIntensity: 3.4'), false);
+  assert.equal(/neonC\), 3\.8/.test(kit), false);
+  const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
+  const ao = looks.slice(looks.indexOf('const CONTACT_AO_FRAG'), looks.indexOf('export function decorateGate'));
+  assert.match(ao, /smoothstep\(0\.0004, 0\.0022/);
+  assert.equal(ao.includes('step(texture2D'), false, 'hard depth step flickers');
+  assert.equal(ao.includes('d0 - 0.0007'), false);
+
+  const win = { material: { userData: { cityWindow: true, cityWindowPhase: 0 }, emissiveIntensity: 1 } };
+  const blink = { material: { userData: { cityBlink: true }, emissiveIntensity: 1 } };
+  const sceneRoot = { traverse: (fn) => { fn(win); fn(blink); } };
+  const w = [], b = [];
+  for (let ms = 0; ms <= 4000; ms += 40) {
+    tickCityArt(sceneRoot, ms);
+    w.push(win.material.emissiveIntensity);
+    b.push(blink.material.emissiveIntensity);
+  }
+  const span = (arr) => Math.max(...arr) - Math.min(...arr);
+  assert.ok(span(w) < 0.001, 'window must stay frozen ' + span(w));
+  assert.ok(span(b) < 0.001, 'blink must stay frozen ' + span(b));
+  assert.equal(win.material.emissiveIntensity, 1.30);
+  assert.equal(blink.material.emissiveIntensity, 1.55);
+});
+
+test('one lighting resolver per map and city never shares fog as background', () => {
+  for (const id of MAP_VIBE_IDS) {
+    const spec = resolveMapLighting(id);
+    assert.equal(spec.mapId, id);
+    assert.ok(spec.lighting);
+    assert.ok(spec.looks);
+    assert.equal(spec.citySky, id === 'city');
+    assert.equal(spec.keepHdrEnv, id !== 'city');
+    assert.equal(typeof spec.bgHex, 'number');
+  }
+  assert.equal(resolveMapLighting('city').bgHex, 0x070014);
+  assert.equal(resolveMapLighting('nope').mapId, 'city');
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.match(city, /function applyResolvedLighting/);
+  assert.match(city, /Never share fog\.color/);
+  assert.match(city, /function disposeArtGroup/);
+  const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
+  assert.match(looks, /function setMapLighting/);
+  assert.match(looks, /new THREE\.Color\(bgHex\)/);
+  assert.match(looks, /scene\.background !== scene\.fog\.color/);
+  assert.equal(looks.includes('scene.background = scene.fog.color'), false);
+  const sim = readFileSync(join(root, 'sim.html'), 'utf8');
+  assert.match(sim, /resolveMapLighting\(/);
+  assert.match(sim, /if\(currentMap==='city'&&!\(skyMesh&&skyMesh\.userData&&skyMesh\.userData\.citySky\)\)applyCityArt/);
+  assert.match(sim, /artDirty&&currentMap==='city'\)applyCityArt/);
+  assert.equal(/ensureIndoor[\s\S]{0,500}setQuality\(looks\.choice\)/.test(sim), false);
+});
+
+test('city restyle disposes old art; HDRI and world maps cache; Low skips composer', () => {
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.match(city, /if \(old\) disposeArtGroup\(old\)/);
+  assert.match(city, /if \(oldDream\) disposeArtGroup\(oldDream\)/);
+  const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
+  assert.match(looks, /const hdrCache = \{\}/);
+  assert.match(looks, /if \(hdrCache\[url\]\) return hdrCache\[url\]/);
+  assert.match(looks, /URL\.createObjectURL\(new Blob\(\[buf\]\)\)/);
+  assert.match(looks, /texCache\[key\] = \(async function/);
+  assert.match(looks, /get composer\(\) \{ return qualityWantsPost\(\) \? composer : null; \}/);
+  assert.match(looks, /gpuHigh: gpuHint\(renderer\)\.high/);
+  assert.match(looks, /const high = !software && \/nvidia\|geforce\|radeon\|amd\|apple m\[1-9\]\/i/);
+  const group = new THREE.Group();
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial());
+  group.add(mesh);
+  disposeArtGroup(group);
+  assert.equal(group.parent, null);
+});
+
+test('unused GLB-format folder is listed for removal, not loaded', () => {
+  const lic = readFileSync(join(root, 'ASSETS-LICENSES.md'), 'utf8');
+  assert.match(lic, /Proposed removal \(unused `assets\/Models\/GLB-format\/`/);
+  assert.match(lic, /low_poly_city_game-ready\.glb/);
+  assert.match(lic, /53,450,388/);
+  assert.equal(mentionsBannedAssets('assets/Models/GLB-format/tree-large.glb'), true);
+  const kit = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  assert.equal(kit.includes('GLB-format'), false);
+});
+
+test('city kit cars stay MeshBasic and city sky never keeps dawn IBL', () => {
+  const kit = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  assert.match(kit, /function carMat/);
+  assert.match(kit, /MeshBasicMaterial/);
+  assert.match(kit, /translucent blue glass/);
+  assert.match(kit, /envMapIntensity:\s*0/);
+  assert.equal(/carMat[\s\S]{0,240}MeshStandardMaterial/.test(kit), false);
+  const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
+  assert.match(looks, /function cityKeepsOwnSky/);
+  assert.match(looks, /scene\.environment = null/);
+  assert.match(looks, /washed Kenney cars into translucent blue/);
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.match(city, /envMapIntensity:\s*0/);
 });
 
 test('city density module stays original (no GLB / WebFPV)', () => {
@@ -607,6 +813,39 @@ test('Garage freestyle builds without throwing and the FPV frame is not all blac
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickGarageArt must not touch the THREE binding');
   assert.match(tickSrc, /garageTube|garageSpark/);
+});
+
+test('Garage playground keeps whoop-sized gaps that match the visuals', () => {
+  const built = buildMap(THREE, 'garage');
+  const hit = (x, y, z) => {
+    const p = new THREE.Vector3(x, y, z);
+    return built.colliders.some((bb) => bb.containsPoint(p));
+  };
+  const P = GARAGE_PLAY;
+  assert.equal(hit(P.bench.x, 1.20, P.bench.z), false, 'fly under open bench');
+  assert.equal(hit(P.bench.x, P.bench.topY + 0.06, P.bench.z), true, 'bench top solid');
+  assert.equal(hit(P.bench.x, P.bench.topY + P.bench.topH + 0.25, P.bench.z), false, 'fly over bench');
+  assert.equal(hit(P.bench.x + P.bench.legs[0][0], 1.10, P.bench.z + P.bench.legs[0][1]), true, 'bench leg solid');
+  assert.equal(hit(P.car.x, 0.65, P.car.z), false, 'fly under car');
+  assert.equal(hit(P.car.x, P.car.jackH + 0.18, P.car.z), true, 'car chassis solid');
+  assert.equal(hit(P.car.x, P.car.jackH + P.car.bodyH + 0.25, P.car.z), false, 'fly over car');
+  const aisleZ = (P.rackA.z + P.rackB.z) / 2;
+  assert.equal(hit(P.rackA.x, 1.68, aisleZ), false, 'fly between racks');
+  assert.equal(hit(P.rackA.x, P.shelfYs[0] + 0.04, P.rackA.z), true, 'shelf slab solid');
+  assert.equal(hit(P.rackA.x, P.shelfYs[0] + 0.62, P.rackA.z), false, 'fly between shelf levels');
+  assert.equal(hit(0, 1.15, P.door.z), false, 'fly under open door');
+  assert.equal(hit(0, P.door.openH + 1.2, P.door.z), true, 'door panel solid');
+  assert.equal(hit(P.volt.x, P.volt.y, P.volt.z), false, 'volt hoop open');
+  assert.equal(hit(P.volt.x, P.volt.y + P.volt.innerH / 2 + P.volt.bar / 2, P.volt.z), true, 'volt frame solid');
+  assert.equal(hit(P.tireWell.x, 0.85, P.tireWell.z), false, 'dive tire well');
+  assert.ok(P.whoopClear >= 0.85, 'whoop clearance');
+  assert.ok(P.car.jackH >= 1.2, 'car crawl taller than 85mm whoop');
+  assert.ok(P.bench.legs.length >= 4, 'open bench has legs');
+  assert.ok(P.bench.topH <= 0.2, 'bench top is a slab');
+  assert.ok(P.car.bodyH >= 3.5, 'sedan collider matches kit height');
+  const garageSrc = readFileSync(join(root, 'sim-art-garage.js'), 'utf8');
+  assert.match(garageSrc, /GARAGE_PLAY/);
+  assert.match(garageSrc, /addTireWell|addLadder|addHangLights/);
 });
 
 test('Warehouse Ion Nave is implemented with hex-frame gates', () => {

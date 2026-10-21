@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Toon morning paper, primary chairs/screens, black-outline hoops.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=fa12e537ef8a';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d2194c8087bb';
 
 export const OFFICE_STOCK = Object.freeze({
   wall: 0xd6d0c6,

@@ -1,8 +1,9 @@
-// QuadMath sim V1 looks — environment, PBR, AO, FPV lens, quality presets.
+// QuadMath sim V1 looks — environment, PBR, cheap contact AO, FPV lens,
+// per-map grade/vignette, quality presets. Not WebFPV.
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
-import { resolveAutoQuality } from './sim-touch.js?v=2b2c215c8a82';
+import { resolveAutoQuality } from './sim-touch.js?v=7c9e387317c4';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
@@ -30,7 +31,16 @@ export const LOOK_SPOTS = {
   garage: { pos: [0, 5.2, 12], target: [2, 2.2, -6] },
   garageWhoop: { pos: [0.15, 1.14, 13.6], target: [2.6, 1.25, -6.4] },
   garageMid: { pos: [-3.8, 5.4, 16.2], target: [3.2, 1.8, -7.5] },
-  garageOverview: { pos: [1.2, 6.4, 16.8], target: [1.5, 1.3, -6] },
+  garageOverview: { pos: [1.2, 8.6, 18.4], target: [0.4, 1.6, -4] },
+  garageDoor: { pos: [0.1, 1.22, 15.4], target: [0, 1.4, 21] },
+  garageVolt: { pos: [0.15, 2.45, 8.4], target: [0, 2.55, 3.4] },
+  garageUnderCar: { pos: [4.2, 0.68, 2.4], target: [4.2, 0.7, -5.5] },
+  garageUnderBench: { pos: [-4.6, 1.18, -8.0], target: [-8.4, 1.2, -8.0] },
+  garageShelves: { pos: [4.2, 1.72, 7.9], target: [8.6, 1.7, 7.9] },
+  garageTires: { pos: [0.1, 2.9, -7.2], target: [0, 1.2, -12.2] },
+  garageLadder: { pos: [-5.2, 2.6, 11.6], target: [-9.4, 2.8, 14.8] },
+  garageCords: { pos: [0.3, 2.5, 13.2], target: [-2.2, 3.6, 8.6] },
+  garageRafters: { pos: [0.2, 7.55, 12.2], target: [0, 8.2, 0] },
   warehouse: { pos: [0, 7.5, 36], target: [0, 3.2, -8] },
   warehouseWhoop: { pos: [0.15, 1.18, 28], target: [0.3, 1.5, -18] },
   warehouseMid: { pos: [10.5, 9.2, 26], target: [-4, 3.2, -6] },
@@ -70,6 +80,7 @@ export const PRESETS = {
     ao: false,
     bloom: false,
     bloomScale: 0,
+    grade: false,
     postSamples: 0,
     hdri: '1k',
     maps: 'albedo',
@@ -82,6 +93,7 @@ export const PRESETS = {
     ao: true,
     bloom: true,
     bloomScale: 0.75,
+    grade: true,
     postSamples: 2,
     hdri: '1k',
     maps: 'pbr',
@@ -94,6 +106,7 @@ export const PRESETS = {
     ao: true,
     bloom: true,
     bloomScale: 1,
+    grade: true,
     postSamples: 4,
     hdri: '2k',
     maps: 'pbr',
@@ -169,9 +182,9 @@ function gpuHint(renderer) {
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
     const info = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '') : '';
     const software = /swiftshader|llvmpipe|software|virtualbox/i.test(info);
-    const low = software || (/intel|mali|adreno|apple gpu|iris|uhd|hd graphics/i.test(info)
-      && !/nvidia|geforce|radeon|amd|apple m[1-9]/i.test(info));
-    return { info, low };
+    const high = !software && /nvidia|geforce|radeon|amd|apple m[1-9]/i.test(info);
+    const low = software || (/intel|mali|adreno|apple gpu|iris|uhd|hd graphics/i.test(info) && !high);
+    return { info, low, high };
   } catch (e) {
     return { info: '', low: false };
   }
@@ -186,6 +199,10 @@ uniform float ca;
 uniform float analog;
 uniform float time;
 uniform float grade;
+uniform vec3 lift;
+uniform float gamma;
+uniform vec3 gain;
+uniform float mapVignette;
 varying vec2 vUv;
 vec2 distort(vec2 uv, float k){
   vec2 c = uv - 0.5;
@@ -200,9 +217,12 @@ void main(){
   float g = texture2D(tDiffuse, uvG).g;
   float b = texture2D(tDiffuse, uvB).b;
   vec3 col = vec3(r,g,b);
+  if(grade > 0.001){
+    vec3 graded = pow(max(col + lift, 0.0), vec3(max(gamma, 0.04))) * gain;
+    col = mix(col, graded, clamp(grade, 0.0, 1.0));
+  }
   float d = distance(vUv, vec2(0.5));
-  col *= 1.0 - smoothstep(0.32, 0.98, d) * vignette;
-  col *= mix(vec3(1.0), vec3(1.04, 0.93, 1.10), grade);
+  col *= 1.0 - smoothstep(0.32, 0.98, d) * max(vignette, mapVignette);
   if(analog > 0.5){
     float n = fract(sin(dot(vUv * vec2(1240.0, 780.0) + time, vec2(12.9898, 78.233))) * 43758.5453);
     col += (n - 0.5) * 0.055;
@@ -211,6 +231,35 @@ void main(){
   }
   if(uvG.x < 0.0 || uvG.x > 1.0 || uvG.y < 0.0 || uvG.y > 1.0) col = vec3(0.0);
   gl_FragColor = vec4(col, 1.0);
+}`;
+
+const CONTACT_AO_FRAG = `
+uniform sampler2D tDiffuse;
+uniform sampler2D tDepth;
+uniform float amount;
+uniform vec2 resolution;
+varying vec2 vUv;
+void main(){
+  vec4 texel = texture2D(tDiffuse, vUv);
+  if(amount < 0.001){
+    gl_FragColor = texel;
+    return;
+  }
+  float d0 = texture2D(tDepth, vUv).x;
+  vec2 px = vec2(1.6 / max(resolution.x, 1.0), 1.6 / max(resolution.y, 1.0));
+  float occ = 0.0;
+  occ += smoothstep(0.0004, 0.0022, d0 - texture2D(tDepth, vUv + vec2(-px.x, 0.0)).x);
+  occ += smoothstep(0.0004, 0.0022, d0 - texture2D(tDepth, vUv + vec2( px.x, 0.0)).x);
+  occ += smoothstep(0.0004, 0.0022, d0 - texture2D(tDepth, vUv + vec2(0.0, -px.y)).x);
+  occ += smoothstep(0.0004, 0.0022, d0 - texture2D(tDepth, vUv + vec2(0.0,  px.y)).x);
+  occ += smoothstep(0.0004, 0.0022, d0 - texture2D(tDepth, vUv + vec2(-px.x, -px.y)).x);
+  occ += smoothstep(0.0004, 0.0022, d0 - texture2D(tDepth, vUv + vec2( px.x, -px.y)).x);
+  occ += smoothstep(0.0004, 0.0022, d0 - texture2D(tDepth, vUv + vec2(-px.x,  px.y)).x);
+  occ += smoothstep(0.0004, 0.0022, d0 - texture2D(tDepth, vUv + vec2( px.x,  px.y)).x);
+  occ *= 0.125;
+  float alive = smoothstep(0.02, 0.97, d0);
+  vec3 col = texel.rgb * (1.0 - occ * amount * alive);
+  gl_FragColor = vec4(col, texel.a);
 }`;
 
 export function decorateGate(THREE, ring, size, col) {
@@ -286,13 +335,14 @@ export async function createLooks(ctx) {
   let choice = loadChoice();
   const mobile = !!(ctx && ctx.isMobile);
   let applied = choice === 'auto'
-    ? resolveAutoQuality({ mobile, gpuLow: gpuHint(renderer).low })
+    ? resolveAutoQuality({ mobile, gpuLow: gpuHint(renderer).low, gpuHigh: gpuHint(renderer).high })
     : choice;
   let fpv = loadFpv();
   let lookSpot = null;
   let menuOpen = true;
   let orbit = { cx: 0, cy: 5, cz: 0, r: 92, h: 22, fov: 62 };
   let cityLighting = null;
+  let mapLighting = null;
   let skyMesh = null, sunSprite = null, groundMesh = null;
   let composer = null, bloomPass = null, aoPass = null, fpvPass = null, motionPass = null;
   let skyMode = 'hdri';
@@ -313,23 +363,31 @@ export async function createLooks(ctx) {
       pixelRatio: Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, cap),
     });
     if (gpuHint(renderer).low) {
-      // Software WebGL (SwiftShader etc.) blows up MSAA HalfFloat targets and GTAO.
+      // Software WebGL (SwiftShader etc.) blows up MSAA HalfFloat targets.
+      // Cheap 8-tap contact AO stays; it is a depth sample, not GTAO.
       out.postSamples = 0;
-      out.ao = false;
     }
     return out;
+  }
+
+  function qualityWantsPost() {
+    return applied === 'med' || applied === 'high';
   }
 
   function applyFpvUniforms() {
     if (!fpvPass || !fpvPass.uniforms) return;
     const forceFpv = typeof location !== 'undefined' && /(?:^|[?&])fpv=1(?:&|$)/.test(location.search || '');
     const on = fpv.enabled && (!lookSpot || forceFpv);
-    fpvPass.enabled = on;
-    const analog = fpv.style === 'analog';
-    fpvPass.uniforms.barrel.value = analog ? 0.18 : 0.12;
-    fpvPass.uniforms.vignette.value = analog ? 0.58 : (fpvPass.uniforms.grade && fpvPass.uniforms.grade.value > 0.5 ? 0.44 : 0.36);
-    fpvPass.uniforms.ca.value = analog ? 0.006 : (fpvPass.uniforms.grade && fpvPass.uniforms.grade.value > 0.5 ? 0.0034 : 0.0022);
+    const gradeOn = qualityWantsPost();
+    fpvPass.enabled = on || gradeOn;
+    const analog = on && fpv.style === 'analog';
+    fpvPass.uniforms.barrel.value = on ? (analog ? 0.18 : 0.12) : 0;
+    const mapV = (fpvPass.uniforms.mapVignette && fpvPass.uniforms.mapVignette.value) || 0;
+    fpvPass.uniforms.vignette.value = analog ? 0.58 : (on ? (mapV > 0.01 ? mapV : 0.36) : 0);
+    fpvPass.uniforms.ca.value = on ? (analog ? 0.006 : 0.0022) : 0;
     fpvPass.uniforms.analog.value = analog ? 1 : 0;
+    if (fpvPass.uniforms.grade && !gradeOn) fpvPass.uniforms.grade.value = 0;
+    if (fpvPass.uniforms.mapVignette && !gradeOn) fpvPass.uniforms.mapVignette.value = 0;
     if (motionPass) motionPass.enabled = on && !!fpv.motionBlur;
   }
 
@@ -350,6 +408,14 @@ export async function createLooks(ctx) {
     });
   }
 
+  function attachDepthTexture(rt) {
+    if (!rt || rt.depthTexture) return;
+    const dt = new THREE.DepthTexture();
+    dt.format = THREE.DepthFormat;
+    dt.type = THREE.UnsignedIntType;
+    rt.depthTexture = dt;
+  }
+
   async function buildComposer() {
     const mods = await Promise.all([
       import('three/addons/postprocessing/EffectComposer.js'),
@@ -358,7 +424,6 @@ export async function createLooks(ctx) {
       import('three/addons/postprocessing/OutputPass.js'),
       import('three/addons/postprocessing/ShaderPass.js'),
       import('three/addons/postprocessing/AfterimagePass.js').catch(() => null),
-      import('three/addons/postprocessing/GTAOPass.js').catch(() => null),
     ]);
     const EffectComposer = mods[0].EffectComposer;
     const RenderPass = mods[1].RenderPass;
@@ -366,31 +431,41 @@ export async function createLooks(ctx) {
     const OutputPass = mods[3].OutputPass;
     const ShaderPass = mods[4].ShaderPass;
     const AfterimagePass = mods[5] && mods[5].AfterimagePass;
-    const GTAOPass = mods[6] && mods[6].GTAOPass;
 
     const c = new EffectComposer(renderer);
+    attachDepthTexture(c.renderTarget1);
+    attachDepthTexture(c.renderTarget2);
     c.addPass(new RenderPass(scene, camera));
-    if (GTAOPass && !gpuHint(renderer).low) {
-      try {
-        const w = Math.max(1, renderer.domElement.width || 512);
-        const h = Math.max(1, renderer.domElement.height || 512);
-        aoPass = new GTAOPass(scene, camera, w, h);
-        aoPass.output = GTAOPass.OUTPUT.Default;
-        aoPass.blendIntensity = 0.85;
-        if (aoPass.updateGtaoMaterial) {
-          aoPass.updateGtaoMaterial({ radius: 0.35, samples: 12, thickness: 1, scale: 1.0 });
-        }
-        c.addPass(aoPass);
-      } catch (e) {
-        aoPass = null;
+    const boot = presetOf(applied);
+    aoPass = new ShaderPass({
+      uniforms: {
+        tDiffuse: { value: null },
+        tDepth: { value: null },
+        amount: { value: 0 },
+        resolution: { value: new THREE.Vector2(1, 1) },
+      },
+      vertexShader: FPV_VERT,
+      fragmentShader: CONTACT_AO_FRAG,
+    });
+    aoPass.enabled = !!boot.ao;
+    const aoRender = aoPass.render.bind(aoPass);
+    aoPass.render = function (gl, writeBuffer, readBuffer, deltaTime, maskActive) {
+      if (this.uniforms.tDepth) {
+        this.uniforms.tDepth.value = (readBuffer && readBuffer.depthTexture) || null;
       }
-    }
+      if (this.uniforms.resolution) {
+        const w = (readBuffer && readBuffer.width) || gl.domElement.width || 1;
+        const h = (readBuffer && readBuffer.height) || gl.domElement.height || 1;
+        this.uniforms.resolution.value.set(w, h);
+      }
+      aoRender(gl, writeBuffer, readBuffer, deltaTime, maskActive);
+    };
+    c.addPass(aoPass);
     bloomPass = new UnrealBloomPass(
       new THREE.Vector2(1, 1),
       LIGHTING.bloomStrength, LIGHTING.bloomRadius, LIGHTING.bloomThreshold,
     );
-    const bootBloom = presetOf(applied);
-    bloomPass.enabled = bootBloom.bloom !== false && (bootBloom.bloomScale || 0) > 0;
+    bloomPass.enabled = boot.bloom !== false && (boot.bloomScale || 0) > 0;
     c.addPass(bloomPass);
     fpvPass = new ShaderPass({
       uniforms: {
@@ -401,6 +476,10 @@ export async function createLooks(ctx) {
         analog: { value: 0 },
         time: { value: 0 },
         grade: { value: 0 },
+        lift: { value: new THREE.Vector3(0, 0, 0) },
+        gamma: { value: 1 },
+        gain: { value: new THREE.Vector3(1, 1, 1) },
+        mapVignette: { value: 0 },
       },
       vertexShader: FPV_VERT,
       fragmentShader: FPV_FRAG,
@@ -413,6 +492,7 @@ export async function createLooks(ctx) {
     }
     c.addPass(new OutputPass());
     composer = c;
+    applyMapPostNow();
     applyFpvUniforms();
     return c;
   }
@@ -427,6 +507,8 @@ export async function createLooks(ctx) {
       composer.renderTarget2.samples = p.postSamples;
     } catch (e) { /* ignore */ }
     composer.setSize(w, h);
+    attachDepthTexture(composer.renderTarget1);
+    attachDepthTexture(composer.renderTarget2);
     if (aoPass && aoPass.setSize) {
       const pr = renderer.getPixelRatio();
       aoPass.setSize(Math.max(1, Math.round(w * pr)), Math.max(1, Math.round(h * pr)));
@@ -440,47 +522,73 @@ export async function createLooks(ctx) {
     }
   }
 
+  const hdrCache = {};
   async function loadHdr(url) {
-    const hdrMod = await import('three/addons/loaders/HDRLoader.js').catch(() => import('three/addons/loaders/RGBELoader.js'));
-    const Loader = hdrMod.HDRLoader || hdrMod.RGBELoader;
-    fetch(url).then((r) => mark(+r.headers.get('content-length') || 0)).catch(() => {});
-    const tex = await new Loader().loadAsync(url);
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    if (skyMode !== 'gradient') {
-      if (skyMesh) skyMesh.visible = false;
-      if (sunSprite) sunSprite.visible = false;
-      scene.background = tex;
+    if (hdrCache[url]) return hdrCache[url];
+    hdrCache[url] = (async function () {
+      const hdrMod = await import('three/addons/loaders/HDRLoader.js').catch(() => import('three/addons/loaders/RGBELoader.js'));
+      const Loader = hdrMod.HDRLoader || hdrMod.RGBELoader;
+      const res = await fetch(url);
+      const buf = await res.arrayBuffer();
+      mark(buf.byteLength);
+      const obj = URL.createObjectURL(new Blob([buf]));
+      let tex;
+      try { tex = await new Loader().loadAsync(obj); }
+      finally { URL.revokeObjectURL(obj); }
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      if (skyMode !== 'gradient') {
+        if (skyMesh) skyMesh.visible = false;
+        if (sunSprite) sunSprite.visible = false;
+        scene.background = tex;
+      }
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      const env = pmrem.fromEquirectangular(tex).texture;
+      pmrem.dispose();
+      // City paints its own night sky. Assigning the dawn HDRI here is what
+      // washed Kenney cars into translucent blue several seconds after load.
+      if (!cityKeepsOwnSky()) scene.environment = env;
+      return env;
+    })();
+    try {
+      return await hdrCache[url];
+    } catch (e) {
+      delete hdrCache[url];
+      throw e;
     }
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    const env = pmrem.fromEquirectangular(tex).texture;
-    pmrem.dispose();
-    scene.environment = env;
-    return env;
+  }
+
+  function cityKeepsOwnSky() {
+    if (mapLighting && mapLighting.citySky) return true;
+    return skyMode === 'gradient' && !!(skyMesh && skyMesh.userData && skyMesh.userData.citySky);
   }
 
   function applySkyModeNow() {
     if (skyMode !== 'gradient') return;
-    const citySky = !!(skyMesh && skyMesh.userData && skyMesh.userData.citySky);
+    const citySky = cityKeepsOwnSky();
     if (skyMesh) skyMesh.visible = true;
     if (sunSprite) sunSprite.visible = !citySky;
-    if (scene.fog) {
-      if (citySky) {
-        if (scene.background && scene.background.isColor) scene.background.setHex(0x070014);
-        else scene.background = new THREE.Color(0x070014);
-      } else {
-        scene.background = scene.fog.color;
-      }
+    const bgHex = citySky ? 0x070014 : (scene.fog ? scene.fog.color.getHex() : 0xc9a57a);
+    if (scene.background && scene.background.isColor && scene.fog && scene.background !== scene.fog.color) {
+      scene.background.setHex(bgHex);
+    } else {
+      scene.background = new THREE.Color(bgHex);
     }
-    if ('environmentIntensity' in scene) scene.environmentIntensity = citySky ? 0.42 : 0.18;
+    if (citySky) {
+      scene.environment = null;
+      if ('environmentIntensity' in scene) scene.environmentIntensity = 0;
+    } else if ('environmentIntensity' in scene) {
+      scene.environmentIntensity = 0.18;
+    }
     if ('backgroundIntensity' in scene) scene.backgroundIntensity = citySky ? 0.08 : 0.14;
     if ('backgroundBlurriness' in scene) scene.backgroundBlurriness = 0.04;
   }
   function applyEnv(env) {
-    scene.environment = env;
     if (skyMode === 'gradient') {
+      if (!cityKeepsOwnSky()) scene.environment = env;
       applySkyModeNow();
       return;
     }
+    scene.environment = env;
     scene.background = env;
     if ('environmentIntensity' in scene) scene.environmentIntensity = 0.72;
     if ('backgroundIntensity' in scene) scene.backgroundIntensity = 0.48;
@@ -533,25 +641,25 @@ export async function createLooks(ctx) {
   async function loadSet(name, maps) {
     const key = name + ':' + maps;
     if (texCache[key]) return texCache[key];
-    const load = texLoader();
-    const out = {};
-    const jobs = [
-      load(`${ASSET}/tex/${name}_diff_1k.webp`, THREE.SRGBColorSpace).then((t) => { out.diff = t; }),
-    ];
-    if (maps === 'pbr') {
-      jobs.push(load(`${ASSET}/tex/${name}_nor_1k.webp`).then((t) => { out.nor = t; }));
-      jobs.push(load(`${ASSET}/tex/${name}_rough_1k.webp`).then((t) => { out.rough = t; }));
+    texCache[key] = (async function () {
+      const load = texLoader();
+      const out = {};
+      const kinds = maps === 'pbr' ? ['diff', 'nor', 'rough'] : ['diff'];
+      const jobs = kinds.map((kind) => {
+        const space = kind === 'diff' ? THREE.SRGBColorSpace : undefined;
+        return load(`${ASSET}/tex/${name}_${kind}_1k.webp`, space).then((t) => {
+          out[kind] = t;
+        });
+      });
+      await Promise.all(jobs);
+      return out;
+    })();
+    try {
+      return await texCache[key];
+    } catch (e) {
+      delete texCache[key];
+      throw e;
     }
-    // Count shipped file sizes once via HEAD-less fetch of the same URLs we display.
-    for (const kind of maps === 'pbr' ? ['diff', 'nor', 'rough'] : ['diff']) {
-      fetch(`${ASSET}/tex/${name}_${kind}_1k.webp`).then((r) => {
-        const n = +r.headers.get('content-length') || 0;
-        mark(n);
-      }).catch(() => {});
-    }
-    await Promise.all(jobs);
-    texCache[key] = out;
-    return out;
   }
 
   function composeGround(grass, asphalt, sidewalk) {
@@ -707,14 +815,18 @@ export async function createLooks(ctx) {
       saveChoice(name);
     }
     const next = name === 'auto'
-      ? resolveAutoQuality({ mobile, gpuLow: gpuHint(renderer).low })
+      ? resolveAutoQuality({ mobile, gpuLow: gpuHint(renderer).low, gpuHigh: gpuHint(renderer).high })
       : name;
     applied = next;
     const p = presetOf(next);
     renderer.setPixelRatio(p.pixelRatio);
     applyLights(p);
-    if (aoPass) aoPass.enabled = !!p.ao && !gpuHint(renderer).low;
-    if (bloomPass) bloomPass.enabled = p.bloom !== false && (p.bloomScale || 0) > 0;
+    if (qualityWantsPost()) {
+      try { await ensureComposer(); } catch (e) { /* renderer-only fallback */ }
+    }
+    if (aoPass) aoPass.enabled = !!p.ao && qualityWantsPost();
+    if (bloomPass) bloomPass.enabled = p.bloom !== false && (p.bloomScale || 0) > 0 && qualityWantsPost();
+    applyMapPostNow();
     applyFpvUniforms();
     sizeComposer();
     if (ctx.onResize) ctx.onResize();
@@ -774,13 +886,16 @@ export async function createLooks(ctx) {
   }
 
   let mapLooksSpec = null;
+  let mapPostSpec = null;
   function applyMapLooksNow() {
     const spec = mapLooksSpec;
     if (!spec) return;
     if (scene.fog && spec.fog != null) scene.fog.density = spec.fog;
     if (spec.sun != null) sun.intensity = spec.sun;
     if (hemi && spec.hemi != null) hemi.intensity = spec.hemi;
-    if ('environmentIntensity' in scene && spec.env != null) scene.environmentIntensity = spec.env;
+    if ('environmentIntensity' in scene && spec.env != null && !cityKeepsOwnSky()) {
+      scene.environmentIntensity = spec.env;
+    }
     if ('backgroundIntensity' in scene && spec.bg != null) scene.backgroundIntensity = spec.bg;
   }
   function setMapLooks(spec) {
@@ -794,6 +909,57 @@ export async function createLooks(ctx) {
     }
     mapLooksSpec = spec;
     applyMapLooksNow();
+  }
+  function setMapLighting(spec) {
+    if (!spec) return;
+    mapLighting = spec;
+    mapLooksSpec = spec.looks || mapLooksSpec;
+    skyMode = spec.sky === 'gradient' ? 'gradient' : 'hdri';
+    applyMapLooksNow();
+    if (skyMode === 'gradient') applySkyModeNow();
+    else if (envLevel === '2k' && env2k) applyEnv(env2k);
+    else if (env1k) applyEnv(env1k);
+    return mapLighting;
+  }
+
+  function applyMapPostNow() {
+    const p = presetOf(applied);
+    const wantsBloom = p.bloom !== false && (p.bloomScale || 0) > 0;
+    const wantsAo = !!p.ao;
+    const wantsGrade = p.grade !== false && qualityWantsPost();
+    if (bloomPass) bloomPass.enabled = wantsBloom;
+    if (aoPass) aoPass.enabled = wantsAo;
+    const spec = mapPostSpec || {};
+    const aoAmt = spec.ao == null ? 0.4 : spec.ao;
+    if (aoPass && aoPass.uniforms && aoPass.uniforms.amount) {
+      aoPass.uniforms.amount.value = wantsAo ? (applied === 'high' ? aoAmt : aoAmt * 0.75) : 0;
+    }
+    if (!fpvPass || !fpvPass.uniforms) return;
+    const u = fpvPass.uniforms;
+    const lift = spec.lift || [0, 0, 0];
+    const gain = spec.gain || [1, 1, 1];
+    if (u.lift && u.lift.value && u.lift.value.set) u.lift.value.set(lift[0], lift[1], lift[2]);
+    if (u.gain && u.gain.value && u.gain.value.set) u.gain.value.set(gain[0], gain[1], gain[2]);
+    if (u.gamma) u.gamma.value = spec.gamma == null ? 1 : spec.gamma;
+    if (u.grade) u.grade.value = wantsGrade ? (spec.gradeAmt == null ? 1 : spec.gradeAmt) : 0;
+    if (u.mapVignette) u.mapVignette.value = wantsGrade ? (spec.vignette == null ? 0.34 : spec.vignette) : 0;
+  }
+  function setMapPost(spec) {
+    if (spec && spec.post) {
+      const post = spec.post;
+      mapPostSpec = {
+        lift: post.lift || [0, 0, 0],
+        gamma: post.gamma == null ? 1 : post.gamma,
+        gain: post.gain || [1, 1, 1],
+        vignette: post.vignette == null ? 0.34 : post.vignette,
+        ao: post.ao == null ? 0.4 : post.ao,
+        gradeAmt: post.grade === false ? 0 : 1,
+      };
+    } else {
+      mapPostSpec = spec || null;
+    }
+    applyMapPostNow();
+    applyFpvUniforms();
   }
 
   function tick(now) {
@@ -823,7 +989,9 @@ export async function createLooks(ctx) {
   async function afterFirstFrame() {
     if (firstFrameDone) return;
     firstFrameDone = true;
-    try { await ensureComposer(); } catch (e) { /* renderer-only fallback */ }
+    if (qualityWantsPost()) {
+      try { await ensureComposer(); } catch (e) { /* renderer-only fallback */ }
+    }
     try { await setQuality(choice); } catch (e) { console.warn('looks quality', e); }
     fps.ready = true;
     readyResolve();
@@ -836,6 +1004,7 @@ export async function createLooks(ctx) {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       for (const m of mats) {
         if (m && m.isMeshStandardMaterial) {
+          if (m.userData && m.userData.looksSkip) continue;
           m.envMapIntensity = 1.05;
           if (m.roughness == null) m.roughness = 0.7;
         }
@@ -895,7 +1064,7 @@ export async function createLooks(ctx) {
   }
 
   return {
-    get composer() { return composer; },
+    get composer() { return qualityWantsPost() ? composer : null; },
     get bloomPass() { return bloomPass; },
     get aoPass() { return aoPass; },
     get choice() { return choice; },
@@ -914,8 +1083,14 @@ export async function createLooks(ctx) {
     setMenuOpen,
     setOrbit,
     setMapLooks,
+    setMapLighting,
+    setMapPost,
     setSkyMode,
     setGrade(v) {
+      if (v && typeof v === 'object') {
+        setMapPost(v);
+        return;
+      }
       if (fpvPass && fpvPass.uniforms && fpvPass.uniforms.grade) {
         fpvPass.uniforms.grade.value = v ? 1 : 0;
         applyFpvUniforms();

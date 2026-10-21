@@ -41,7 +41,7 @@ const TYPE_ALIASES = Object.freeze({
 });
 
 const RC_RATE_INCREMENTAL = 14.54;
-const SETPOINT_LIMIT = 1998;
+export const SETPOINT_LIMIT = 1998;
 
 export const RATE_FIELDS = Object.freeze({
   BETAFLIGHT: Object.freeze({
@@ -303,8 +303,20 @@ export function parseCli(text, currentType) {
       out.found++;
       continue;
     }
-    if (key === 'idle_min_rpm' || key === 'dshot_idle_value' || key === 'motor_idle') {
-      out.idle = key === 'dshot_idle_value' ? num / 10000 : num / 100;
+    if (key === 'dshot_idle_value') {
+      out.idle = num / 10000;
+      out.found++;
+      continue;
+    }
+    if (key === 'motor_idle') {
+      out.idle = num / 100;
+      out.found++;
+      continue;
+    }
+    if (key === 'idle_min_rpm') {
+      // RPM target, not a throttle percent. 0 means "use dshot idle".
+      // Applying num/100 zeroed idle on `set idle_min_rpm = 0`.
+      if (num > 0) out.warnings.push('idle_min_rpm ignored — paste dshot_idle_value');
       out.found++;
       continue;
     }
@@ -441,11 +453,13 @@ export function rateSetpoint(type, x, axis, opts) {
   const a = axis || {};
   const rc = a.rcRate, sr = a.srate, ex = a.expo || 0;
   const t = normalizeRateType(type) || 'BETAFLIGHT';
-  if (t === 'ACTUAL') return actualRate(x, rc * 10, sr * 10, ex);
-  if (t === 'KISS') return kissRate(x, rc, sr, ex);
-  if (t === 'RACEFLIGHT') return raceFlightRate(x, rc, sr, ex);
-  if (t === 'QUICK') return quickRate(x, rc, sr, ex, !!(opts && opts.quickRatesRcExpo));
-  return bfCurve(x, rc, sr, ex);
+  let y;
+  if (t === 'ACTUAL') y = actualRate(x, rc * 10, sr * 10, ex);
+  else if (t === 'KISS') y = kissRate(x, rc, sr, ex);
+  else if (t === 'RACEFLIGHT') y = raceFlightRate(x, rc, sr, ex);
+  else if (t === 'QUICK') y = quickRate(x, rc, sr, ex, !!(opts && opts.quickRatesRcExpo));
+  else y = bfCurve(x, rc, sr, ex);
+  return constrain(y, -SETPOINT_LIMIT, SETPOINT_LIMIT);
 }
 
 export function maxRateDps(type, axis, opts) {

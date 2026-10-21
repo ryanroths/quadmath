@@ -31,6 +31,14 @@ export function qualityWantsBloom(applied) {
   return applied === 'med' || applied === 'high';
 }
 
+export function qualityWantsAo(applied) {
+  return applied === 'med' || applied === 'high';
+}
+
+export function qualityWantsGrade(applied) {
+  return applied === 'med' || applied === 'high';
+}
+
 export function qualityWantsReflections(applied) {
   return applied === 'med' || applied === 'high';
 }
@@ -531,6 +539,7 @@ function windowMaterial(THREE, vibe, seed) {
   });
   skipMat(mat);
   mat.userData.cityWindow = true;
+  mat.userData.cityWindowPhase = ((seed || 0) % 997) * 0.31;
   return mat;
 }
 
@@ -1094,8 +1103,30 @@ export function applySkyTexture(THREE, skyMesh, vibe) {
   skyMesh.material.needsUpdate = true;
 }
 
-export function applyVibeLighting(ctx, vibe) {
-  const L = vibe.lighting;
+export function disposeArtGroup(root) {
+  if (!root) return;
+  if (root.parent) root.parent.remove(root);
+  root.traverse((o) => {
+    const kit = o.userData && (o.userData.cityKit || o.userData.garageKit);
+    if (o.geometry && o.geometry.dispose && !kit) {
+      try { o.geometry.dispose(); } catch (e) { /* ignore */ }
+    }
+    const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+    for (const m of mats) {
+      if (!m) continue;
+      if (m.map && m.map.userData && m.map.userData.looksComposed && m.map.dispose) {
+        try { m.map.dispose(); } catch (e) { /* ignore */ }
+      }
+      if (m.dispose) {
+        try { m.dispose(); } catch (e) { /* ignore */ }
+      }
+    }
+  });
+}
+
+export function applyResolvedLighting(ctx, spec) {
+  if (!spec || !spec.lighting) return spec;
+  const L = spec.lighting;
   const { LIGHTING, sun, sunFill, hemi, scene, bloomPass, renderer } = ctx || {};
   if (LIGHTING) {
     LIGHTING.sunColor = L.sunColor;
@@ -1126,13 +1157,28 @@ export function applyVibeLighting(ctx, vibe) {
     hemi.groundColor.setHex(L.hemiGround);
     hemi.intensity = L.hemiIntensity;
   }
+  const bgHex = spec.bgHex != null ? spec.bgHex : L.fogColor;
+  const Color = (ctx && ctx.THREE && ctx.THREE.Color)
+    || (typeof THREE !== 'undefined' ? THREE.Color : null);
   if (scene && scene.fog) {
     scene.fog.color.setHex(L.fogColor);
     scene.fog.density = L.fogDensity;
-    if (scene.background && scene.background.isColor) {
-      const citySky = ctx && ctx.skyMesh && ctx.skyMesh.userData && ctx.skyMesh.userData.citySky;
-      scene.background.setHex(citySky ? 0x070014 : L.fogColor);
+  }
+  if (scene && (spec.citySky || (scene.background && scene.background.isColor))) {
+    // Never share fog.color as scene.background — later fog writes then
+    // recolor the sky. City keeps a night hex; other maps copy the fog hex
+    // onto a separate Color.
+    if (scene.background && scene.background.isColor && scene.fog && scene.background !== scene.fog.color) {
+      scene.background.setHex(bgHex);
+    } else if (Color) {
+      scene.background = new Color(bgHex);
     }
+  }
+  if (scene && spec.citySky) {
+    scene.environment = null;
+    if ('environmentIntensity' in scene) scene.environmentIntensity = 0;
+  } else if (scene && spec.envIntensity != null && 'environmentIntensity' in scene) {
+    scene.environmentIntensity = spec.envIntensity;
   }
   if (renderer) renderer.toneMappingExposure = L.exposure;
   if (bloomPass) {
@@ -1140,18 +1186,33 @@ export function applyVibeLighting(ctx, vibe) {
     bloomPass.radius = L.bloomRadius;
     bloomPass.threshold = L.bloomThreshold;
   }
+  return spec;
+}
+
+export function applyVibeLighting(ctx, vibe) {
+  if (!vibe || !vibe.lighting) return;
+  applyResolvedLighting(ctx, {
+    mapId: vibe.id,
+    citySky: vibe.id === 'city',
+    lighting: vibe.lighting,
+    looks: vibe.looks,
+    bgHex: vibe.id === 'city' ? 0x070014 : vibe.lighting.fogColor,
+    envIntensity: vibe.id === 'city' ? 0 : (vibe.looks && vibe.looks.env),
+  });
 }
 
 function neonMat(THREE, color, emit, extra) {
   return skipMat(new THREE.MeshStandardMaterial(Object.assign({
     color, emissive: color, emissiveIntensity: emit == null ? 3.4 : emit,
     roughness: 0.35, metalness: 0.12,
+    envMapIntensity: 0,
   }, extra || {})));
 }
 
 function dullMat(THREE, color, extra) {
   return skipMat(new THREE.MeshStandardMaterial(Object.assign({
     color, roughness: 0.78, metalness: 0.22,
+    envMapIntensity: 0,
   }, extra || {})));
 }
 
@@ -1208,7 +1269,7 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
   const hutMat = dullMat(THREE, 0x2a2438, { metalness: 0.18, roughness: 0.62, emissive: hexNum(vibe.palette.neonB), emissiveIntensity: 0.12 });
   const acMat = dullMat(THREE, 0x3a3648, { metalness: 0.22, roughness: 0.55, emissive: hexNum(vibe.palette.neonA), emissiveIntensity: 0.08 });
   const antMat = dullMat(THREE, 0x2a2030, { metalness: 0.35 });
-  const blinkMat = neonMat(THREE, 0xff2a2a, 5.5);
+  const blinkMat = neonMat(THREE, 0xff2a2a, 1.7);
   blinkMat.userData.cityBlink = true;
   const awnMat = neonMat(THREE, hexNum(vibe.palette.neonC), 1.1, { roughness: 0.55 });
   const balcMat = dullMat(THREE, 0x2a2030, { metalness: 0.3 });
@@ -1318,7 +1379,7 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     d.scale.set(1, 1, 1);
   });
 
-  const stripMat = neonMat(THREE, hexNum(vibe.palette.neonA), 4.6);
+  const stripMat = neonMat(THREE, hexNum(vibe.palette.neonA), 1.8);
   addInstanced(THREE, group, new THREE.BoxGeometry(1, 0.08, 1), stripMat, Math.min(budget.strips, footprints.length), (d, i) => {
     const b = footprints[i];
     if (!b) return false;
@@ -1328,7 +1389,7 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
   });
 
   const lampMat = dullMat(THREE, 0x1a1420, { metalness: 0.45 });
-  const bulbMat = neonMat(THREE, hexNum(vibe.palette.neonC), 5.2);
+  const bulbMat = neonMat(THREE, hexNum(vibe.palette.neonC), 1.9);
   const lampPos = [];
   for (let s = -360; s <= 360; s += 36) {
     if (Math.abs(s) < 16) continue;
@@ -1338,14 +1399,17 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     }
   }
   const lampN = Math.min(budget.lamps, lampPos.length);
-  addInstanced(THREE, group, new THREE.CylinderGeometry(0.1, 0.14, 6.4, 6), lampMat, lampN, (d, i) => {
+  planned.lamps = lampPos.slice(0, lampN).map((p) => ({ x: p[0], z: p[1], y: 0, ry: 0, seed: 0 }));
+  const lampPole = addInstanced(THREE, group, new THREE.CylinderGeometry(0.1, 0.14, 6.4, 6), lampMat, lampN, (d, i) => {
     const p = lampPos[i];
     d.position.set(p[0], 3.2, p[1]); d.scale.set(1, 1, 1); d.rotation.set(0, 0, 0);
   });
-  addInstanced(THREE, group, new THREE.SphereGeometry(0.32, 8, 8), bulbMat, lampN, (d, i) => {
+  if (lampPole) lampPole.userData.cityProcLamp = true;
+  const lampBulb = addInstanced(THREE, group, new THREE.SphereGeometry(0.32, 8, 8), bulbMat, lampN, (d, i) => {
     const p = lampPos[i];
     d.position.set(p[0], 6.5, p[1]); d.scale.set(1, 1, 1); d.rotation.set(0, 0, 0);
   });
+  if (lampBulb) lampBulb.userData.cityProcLamp = true;
 
   const byType = { sedan: [], hatch: [], van: [], taxi: [] };
   planned.cars.forEach((p, i) => {
@@ -1369,6 +1433,8 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     });
     if (mesh) {
       carMesh = mesh;
+      mesh.userData.cityProcCar = true;
+      mesh.userData.carType = type;
       if (quality !== 'low') {
         mesh.userData.cityCruise = true;
         mesh.userData.dummy = new THREE.Object3D();
@@ -1389,31 +1455,35 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     });
   }
   if (planned.bins && planned.bins.length) {
-    addInstanced(THREE, group, makeBinGeo(THREE), dullMat(THREE, 0x2a3440, { metalness: 0.35, emissive: hexNum(vibe.palette.neonC), emissiveIntensity: 0.14 }), planned.bins.length, (d, i) => {
+    const binMesh = addInstanced(THREE, group, makeBinGeo(THREE), dullMat(THREE, 0x2a3440, { metalness: 0.35, emissive: hexNum(vibe.palette.neonC), emissiveIntensity: 0.14 }), planned.bins.length, (d, i) => {
       const p = planned.bins[i];
       if (!p) return false;
       d.position.set(p.x, 0, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1);
     });
+    if (binMesh) binMesh.userData.cityProcBin = true;
   }
   if (planned.kiosks && planned.kiosks.length) {
-    addInstanced(THREE, group, makeKioskGeo(THREE), skipMat(new THREE.MeshBasicMaterial({ color: 0x4a3858 })), planned.kiosks.length, (d, i) => {
+    const kioskMesh = addInstanced(THREE, group, makeKioskGeo(THREE), skipMat(new THREE.MeshBasicMaterial({ color: 0x4a3858 })), planned.kiosks.length, (d, i) => {
       const p = planned.kiosks[i];
       if (!p) return false;
       d.position.set(p.x, 0, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1);
     });
-    addInstanced(THREE, group, new THREE.BoxGeometry(1.02, 0.55, 0.08), neonMat(THREE, hexNum(vibe.palette.neonA), 3.6), planned.kiosks.length, (d, i) => {
+    if (kioskMesh) kioskMesh.userData.cityProcKiosk = true;
+    const kioskNeon = addInstanced(THREE, group, new THREE.BoxGeometry(1.02, 0.55, 0.08), neonMat(THREE, hexNum(vibe.palette.neonA), 3.6), planned.kiosks.length, (d, i) => {
       const p = planned.kiosks[i];
       if (!p) return false;
       d.position.set(p.x + Math.sin(p.ry) * 0.48, 1.38, p.z + Math.cos(p.ry) * 0.48);
       d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1);
     });
+    if (kioskNeon) kioskNeon.userData.cityProcKiosk = true;
   }
   if (planned.awnings && planned.awnings.length) {
-    addInstanced(THREE, group, new THREE.BoxGeometry(2.8, 0.1, 1.45), neonMat(THREE, hexNum(vibe.palette.neonC), 1.4, { roughness: 0.5 }), planned.awnings.length, (d, i) => {
+    const awnMesh = addInstanced(THREE, group, new THREE.BoxGeometry(2.8, 0.1, 1.45), neonMat(THREE, hexNum(vibe.palette.neonC), 1.4, { roughness: 0.5 }), planned.awnings.length, (d, i) => {
       const p = planned.awnings[i];
       if (!p) return false;
       d.position.set(p.x, 2.05, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1);
     });
+    if (awnMesh) awnMesh.userData.cityProcAwning = true;
   }
   if (planned.vents && planned.vents.length) {
     addInstanced(THREE, group, makeVentGeo(THREE), dullMat(THREE, 0x2a3038, { metalness: 0.55 }), planned.vents.length, (d, i) => {
@@ -1423,11 +1493,12 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     });
   }
   if (planned.lowSigns && planned.lowSigns.length) {
-    addInstanced(THREE, group, makeLowSignGeo(THREE), signMat, planned.lowSigns.length, (d, i) => {
+    const signMesh = addInstanced(THREE, group, makeLowSignGeo(THREE), signMat, planned.lowSigns.length, (d, i) => {
       const p = planned.lowSigns[i];
       if (!p) return false;
       d.position.set(p.x, 1.1, p.z); d.rotation.set(0, p.ry, 0); d.scale.set(1, 1, 1);
     });
+    if (signMesh) signMesh.userData.cityProcLowSign = true;
   }
 
   const vendMat = neonMat(THREE, hexNum(vibe.palette.neonB), 1.8, { roughness: 0.45, color: 0x1a2030 });
@@ -1442,16 +1513,18 @@ export function buildNeonCity(THREE, parent, vibe, quality, gates) {
     d.position.set(p.x, 0.62, p.z); d.scale.set(1, 1, 1); d.rotation.set(0, 0, 0);
   });
   const headMat = neonMat(THREE, 0xffcc44, 3.6);
-  addInstanced(THREE, group, new THREE.BoxGeometry(0.35, 1.6, 0.35), dullMat(THREE, 0x1a1c20), planned.traffic.length, (d, i) => {
+  const trafficPole = addInstanced(THREE, group, new THREE.BoxGeometry(0.35, 1.6, 0.35), dullMat(THREE, 0x1a1c20), planned.traffic.length, (d, i) => {
     const p = planned.traffic[i];
     if (!p) return false;
     d.position.set(p.x, 2.4, p.z); d.scale.set(1, 1, 1); d.rotation.set(0, p.ry, 0);
   });
-  addInstanced(THREE, group, new THREE.BoxGeometry(0.22, 0.55, 0.18), headMat, planned.traffic.length, (d, i) => {
+  if (trafficPole) trafficPole.userData.cityProcTraffic = true;
+  const trafficHead = addInstanced(THREE, group, new THREE.BoxGeometry(0.22, 0.55, 0.18), headMat, planned.traffic.length, (d, i) => {
     const p = planned.traffic[i];
     if (!p) return false;
     d.position.set(p.x, 3.05, p.z); d.scale.set(1, 1, 1); d.rotation.set(0, p.ry, 0);
   });
+  if (trafficHead) trafficHead.userData.cityProcTraffic = true;
   addInstanced(THREE, group, new THREE.BoxGeometry(0.7, 0.7, 0.7), skipMat(new THREE.MeshBasicMaterial({ color: 0x8a6a9a })), planned.crates.length, (d, i) => {
     const p = planned.crates[i];
     if (!p) return false;
@@ -1951,10 +2024,10 @@ export function tickCityArt(root, now) {
 
 function tickCityArtObject(o, t) {
     if (o.material && o.material.userData && o.material.userData.cityWindow) {
-      o.material.emissiveIntensity = 1.15 + 0.35 * (0.5 + 0.5 * Math.sin(t * 3.1));
+      o.material.emissiveIntensity = 1.30;
     }
     if (o.material && o.material.userData && o.material.userData.cityBlink) {
-      o.material.emissiveIntensity = 2.2 + 5.5 * (Math.sin(t * 7.0) > 0.35 ? 1 : 0.15);
+      o.material.emissiveIntensity = 1.55;
     }
     if (o.material && o.material.userData && o.material.userData.cityHolo && o.material.map) {
       o.material.map.offset.x = (t * 0.12) % 1;
@@ -2134,7 +2207,7 @@ export function restyleCity(THREE, ctx) {
   } catch (err) {
     console.error('restyleCity', err);
     try { window._artError = String(err && err.stack || err); } catch (e) { /* ignore */ }
-    applyVibeLighting(ctx, ctx.vibe);
+    applyVibeLighting(Object.assign({ THREE }, ctx), ctx.vibe);
     return { visuals: null, dream: null, vibe: ctx.vibe, quality: ctx.quality || 'med', error: String(err && err.message || err) };
   }
 }
@@ -2153,7 +2226,7 @@ function restyleCityInner(THREE, ctx) {
     mat.color.setHex(0xffffff);
     mat.roughness = quality === 'low' ? 0.74 : 0.42;
     mat.metalness = quality === 'low' ? 0.08 : 0.22;
-    if ('envMapIntensity' in mat) mat.envMapIntensity = quality === 'low' ? 0.12 : 0.38;
+    if ('envMapIntensity' in mat) mat.envMapIntensity = 0;
     mat.emissive.setHex(hexNum(vibe.palette.neonA));
     mat.emissiveIntensity = quality === 'low' ? 0.03 : 0.06;
     mat.userData.looksComposed = true;
@@ -2168,16 +2241,16 @@ function restyleCityInner(THREE, ctx) {
   let visuals = null;
   if (root) {
     const old = root.getObjectByName('cityArtVisuals');
-    if (old && old.parent) old.parent.remove(old);
+    if (old) disposeArtGroup(old);
     const oldDress = root.getObjectByName('cityArtDressing');
-    if (oldDress && oldDress.parent) oldDress.parent.remove(oldDress);
+    if (oldDress) disposeArtGroup(oldDress);
     visuals = buildNeonCity(THREE, root, vibe, quality, ctx.gates || []);
     attachWetReflector(THREE, visuals, vibe, quality);
   }
   const host = ctx.cityWorld || root;
   if (host) {
     const oldDream = host.getObjectByName('dreamlandArt');
-    if (oldDream && oldDream.parent) oldDream.parent.remove(oldDream);
+    if (oldDream) disposeArtGroup(oldDream);
   }
   const dream = host ? buildDreamlandArt(THREE, host, vibe) : null;
   if (ctx.scene) {
@@ -2185,7 +2258,7 @@ function restyleCityInner(THREE, ctx) {
     restyleLandmarks(ctx.scene, vibe);
     restyleDiveTubes(ctx.scene, vibe, THREE);
   }
-  applyVibeLighting(ctx, vibe);
+  applyVibeLighting(Object.assign({ THREE }, ctx), vibe);
   if (root) root.userData.cityArtQuality = quality;
   return { visuals, dream, vibe, quality };
 }

@@ -3,8 +3,8 @@
 // New localStorage key only: quadmathSimSecrets.
 // Stock skin ids / unlocks in sim-retention.js stay frozen.
 
-import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=3ad022ce389c';
-import { LAYOUT } from './sim-maps.js?v=beaa1b943d6e';
+import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=68de745541ac';
+import { LAYOUT } from './sim-maps.js?v=77862aba3f99';
 import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=7ca83407298d';
 
 export const SECRETS_KEY = 'quadmathSimSecrets';
@@ -282,18 +282,18 @@ const PLACEMENTS = Object.freeze({
       P('g01', -8.4, 3.05, -8.0, 'bench top'),
       P('g02', -6.7, 0.7, -14.2, 'bench end'),
       P('g03', -8.3, 3.45, 8.2, 'chest top'),
-      P('g04', 4.2, 0.18, -5.6, 'under car'),
-      P('g05', 4.2, 3.88, -4.2, 'cabin top'),
+      P('g04', 4.2, 0.62, -5.6, 'under car'),
+      P('g05', 4.2, 5.45, -4.65, 'cabin top'),
       P('g06', -0.4, 1.15, -8.2, 'bay gap'),
       P('g07', 0, 8.15, 0, 'rafter line'),
       P('g08', 0, 8.15, -16.2, 'rafter south'),
-      P('g09', 8.6, 6.15, 8.0, 'shelf top'),
-      P('g10', 0, 8.65, 20.15, 'door header'),
+      P('g09', 8.6, 5.30, 3.6, 'shelf top'),
+      P('g10', 0, 1.15, 19.4, 'door gap'),
       P('g11', 8.4, 1.4, -18.8, 'far corner'),
       P('g12', -8.6, 1.1, 16.4, 'door side'),
     ]),
     secrets: Object.freeze([
-      S('crawl', 'Oil Crawl', 4.2, 0.18, -1.4, 1.15, 'car tail'),
+      S('crawl', 'Oil Crawl', 4.2, 0.18, 0.6, 1.15, 'car tail'),
       S('nest', 'Rafter Nest', 0, 9.55, -18.2, 1.35, 'above joists'),
     ]),
   }),

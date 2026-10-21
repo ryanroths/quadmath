@@ -53,9 +53,9 @@
      forcing the column taller than the viewport. */
   #c{display:block;flex:1 1 auto;width:100%;min-height:0}
 
-  /* Footer credit for the city. Phase 1 city is original procedural art
-     (Neon Current); the old costoWRLD CC BY line is retired while that GLB
-     is not loaded. Fixed to the bottom edge above the canvas.
+  /* Footer credit for the city. Neon Current is original procedural art
+     plus Kenney CC0 cars/street kit. The old costoWRLD CC BY line stays
+     retired. Fixed to the bottom edge above the canvas.
      Kept to a 14px band: #legend reserves from 16px up and the bottom OSD
      readouts from 18px up, so this clears both without moving any of them. */
   footer{position:fixed;left:0;right:0;bottom:0;z-index:45;
@@ -555,7 +555,7 @@
     <option value="med">Med</option>
     <option value="high">High</option>
   </select>
-  <p class="build-note">Low turns bloom, reflections, rain and AO off for phones.</p>
+  <p class="build-note">Low (phones) skips bloom, color grade, vignette and contact AO. Med/High get the full post pass.</p>
   <div class="row"><label>Rain</label><input type="checkbox" id="cbRain" checked style="accent-color:var(--orange)"></div>
 
   <h2>Audio</h2>
@@ -745,7 +745,7 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=c3e8595e359e";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=f4ecd2a9beba";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
@@ -757,11 +757,11 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=34e582665d37";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=df5e5f70591d";
+} from "./sim-whoop.js?v=c5a4d163f20f";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=090ffcbb916f";
 import {
-  VIBES, vibeFor, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
-  applyVibeLighting, artStats, qualityWantsBloom, loadRain, saveRain, RAIN_KEY,
+  VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
+  applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
   makeWorldLabel, worldLabelMaterial, setWorldLabelText,
   restyleLiving, decorateLivingGate, pulseLivingGate, tickLivingArt,
   restyleGarage, decorateGarageGate, pulseGarageGate, tickGarageArt,
@@ -771,7 +771,8 @@ import {
   restyleTrainer, decorateTrainerGate, pulseTrainerGate, tickTrainerArt,
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
-} from "./sim-art.js?v=0655a7ad9f18";
+  tryDressCityKit, tryDressGarageKit,
+} from "./sim-art.js?v=b7c37da77852";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -783,7 +784,7 @@ import {
   loadAutoArm, saveAutoArm, loadArmSwitch, saveArmSwitch, mergeArmSwitch,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
-} from "./sim-touch.js?v=2b2c215c8a82";
+} from "./sim-touch.js?v=7c9e387317c4";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -795,20 +796,20 @@ import {
   isFreestyleTrackId, freestyleTrack, freestyleIdFor,
   resolveFly, persistableSelection,
 } from "./sim-tracks.js?v=7ca83407298d";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=beaa1b943d6e";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=77862aba3f99";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=5b05276e1d0b";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=c062a2129230";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=7fb1f31162be";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
   convertAxisFamily as convertAxisRate, formatAxisReadout, formatCliSummary,
   drawRateCurve, normalizeRateType, isRateType, bfCurve as bfCurveOf,
   actualRate as actualRateOf,
-} from "./sim-rates.js?v=2dc161c06e1c";
+} from "./sim-rates.js?v=09b9850ed3bb";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -816,10 +817,10 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=355fe523b6c1";
+} from "./sim-coach.js?v=58c524c51fa9";
 import {
   TRICKS_KEY, createTricks,
-} from "./sim-tricks.js";
+} from "./sim-tricks.js?v=49546f834df8";
 import {
   DAILY_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -832,22 +833,25 @@ import {
   skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
-} from "./sim-retention.js?v=3ad022ce389c";
+} from "./sim-retention.js?v=68de745541ac";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=253aa392ee8b";
+} from "./sim-secrets.js?v=e8c3e9d0a6ce";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
 let GLTFLoader=null;
+let MeshoptDecoder=null;
 let gltfReady=null;
 function ensureGltf(){
   if(!gltfReady){
-    gltfReady=import("three/addons/loaders/GLTFLoader.js")
-      .then(function(m){GLTFLoader=m.GLTFLoader;window._gltfReady=true;return true;})
+    gltfReady=Promise.all([
+      import("three/addons/loaders/GLTFLoader.js").then(function(m){GLTFLoader=m.GLTFLoader;}),
+      import("three/addons/libs/meshopt_decoder.module.js").then(function(m){MeshoptDecoder=m.MeshoptDecoder;}).catch(function(){MeshoptDecoder=null;}),
+    ]).then(function(){window._gltfReady=!!GLTFLoader;return !!GLTFLoader;})
       .catch(function(){window._gltfReady=false;return false;});
   }
   return gltfReady;
@@ -1571,7 +1575,7 @@ const proceduralGroup=new THREE.Group(); scene.add(proceduralGroup);
 let usingGltf=false;
 const assetEl=document.getElementById('assetStatus');
 window._tryAssets=async function(){
-  // Phase 1: Neon Current. Kenney / costoWRLD GLBs stay on disk but are not loaded.
+  // Neon Current procedural city plus Kenney CC0 kit after first paint.
   return finishCityArt();
 };
 
@@ -2198,20 +2202,63 @@ for(let i=0;i<7;i++){
   scene.add(mesa);
 }
 window._heavyAssetsPending=true;
+function applyLooksPost(mapId, quality){
+  const q=quality||(looks&&looks.applied)||'med';
+  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
+  if(looks&&looks.setMapPost)looks.setMapPost(vibePost(vibeFor(mapId)));
+  else if(looks&&looks.setGrade)looks.setGrade(qualityWantsBloom(q)?1:0);
+}
 function applyCityArt(quality){
   const vibe=vibeFor('city');
+  const q=quality||(looks&&looks.applied)||'med';
   restyleCity(THREE,{
     vibe,
-    quality:quality||(looks&&looks.applied)||'med',
+    quality:q,
     proceduralGroup,
     ground:window._cityGround,
     skyMesh,sunSprite,cityWorld,scene,
-    LIGHTING,sun,sunFill,hemi,renderer,
+    THREE,LIGHTING,sun,sunFill,hemi,renderer,
     bloomPass:looks&&looks.bloomPass,
     gates:FROZEN_CITY[0].concat(FROZEN_CITY[1]),
   });
   if(looks&&looks.setSkyMode)looks.setSkyMode('gradient');
-  if(looks&&looks.setGrade)looks.setGrade(1);
+  applyLooksPost('city', q);
+  const credit=document.querySelector('.sf-credit');
+  if(credit)credit.textContent='City is original procedural art — Neon Current. Kenney CC0 cars and street kit.';
+  queueCityKit(q, vibe);
+}
+let cityKitWanted=null;
+let cityKitGen=0;
+function queueCityKit(quality, vibe){
+  cityKitWanted={quality:quality||'med', vibe:vibe||vibeFor('city')};
+  if(window._heavyAssetsPending)return;
+  dressCityKit();
+}
+async function dressCityKit(){
+  const wanted=cityKitWanted;
+  if(!wanted)return;
+  const gen=++cityKitGen;
+  try{
+    const ok=await ensureGltf();
+    if(!ok || !GLTFLoader || gen!==cityKitGen)return;
+    const group=proceduralGroup.getObjectByName('cityArtVisuals');
+    if(!group)return;
+    const loader=new GLTFLoader();
+    if(MeshoptDecoder){
+      if(MeshoptDecoder.ready)await MeshoptDecoder.ready;
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    }
+    const dressed=await tryDressCityKit(THREE,{
+      group, loader, vibe:wanted.vibe, quality:wanted.quality,
+    });
+    if(gen!==cityKitGen)return;
+    window._cityKit=dressed;
+    if(assetEl && dressed && dressed.used){
+      assetEl.textContent='Kenney CC0 city kit ('+Math.round((dressed.bytes||0)/1024)+' KB).';
+    }
+  }catch(e){
+    window._cityKit={used:false, error:String(e&&e.message||e)};
+  }
 }
 function applyLivingArt(quality){
   const built=indoorBuilt.living||ensureIndoor('living');
@@ -2224,8 +2271,7 @@ function applyLivingArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('living', quality);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Living Room is original procedural art — Clay Parlor';
 }
@@ -2241,10 +2287,44 @@ function applyGarageArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('garage', q);
   const credit=document.querySelector('.sf-credit');
-  if(credit)credit.textContent='Garage is original procedural art — Volt Stall';
+  if(credit)credit.textContent='Garage is original procedural art — Volt Stall. Kenney CC0 shop kit.';
+  queueGarageKit(q, vibeFor('garage'));
+}
+let garageKitWanted=null;
+let garageKitGen=0;
+function queueGarageKit(quality, vibe){
+  garageKitWanted={quality:quality||'med', vibe:vibe||vibeFor('garage')};
+  if(window._heavyAssetsPending)return;
+  dressGarageKit();
+}
+async function dressGarageKit(){
+  const wanted=garageKitWanted;
+  if(!wanted)return;
+  const gen=++garageKitGen;
+  try{
+    const ok=await ensureGltf();
+    if(!ok || !GLTFLoader || gen!==garageKitGen)return;
+    const built=indoorBuilt.garage;
+    const group=built&&built.group&&built.group.getObjectByName('garageArtVisuals');
+    if(!group)return;
+    const loader=new GLTFLoader();
+    if(MeshoptDecoder){
+      if(MeshoptDecoder.ready)await MeshoptDecoder.ready;
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    }
+    const dressed=await tryDressGarageKit(THREE,{
+      group, loader, vibe:wanted.vibe, quality:wanted.quality,
+    });
+    if(gen!==garageKitGen)return;
+    window._garageKit=dressed;
+    if(assetEl && dressed && dressed.used){
+      assetEl.textContent='Kenney CC0 garage kit ('+Math.round((dressed.bytes||0)/1024)+' KB).';
+    }
+  }catch(e){
+    window._garageKit={used:false, error:String(e&&e.message||e)};
+  }
 }
 function applyWarehouseArt(quality){
   const built=indoorBuilt.warehouse||ensureIndoor('warehouse');
@@ -2258,8 +2338,7 @@ function applyWarehouseArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('warehouse', q);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Warehouse is original procedural art — Ion Nave';
 }
@@ -2275,8 +2354,7 @@ function applyGymArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('gym', q);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Gym is original procedural art — Amber Court';
 }
@@ -2292,8 +2370,7 @@ function applyOfficeArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('office', q);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Office is original procedural art — Paper Sun';
 }
@@ -2309,8 +2386,7 @@ function applyTrainerArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('trainer', q);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Trainer is original procedural art — Licorice Grid';
 }
@@ -2326,8 +2402,7 @@ function applyBackyardArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('backyard', q);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Backyard is original procedural art — Jade Lot';
 }
@@ -2345,8 +2420,7 @@ function applyRoomArt(quality){
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
   });
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(looks&&looks.setGrade)looks.setGrade(0);
+  applyLooksPost('room', q);
   const credit=document.querySelector('.sf-credit');
   if(credit)credit.textContent='Your Room is original procedural art — Pocket Stage';
 }
@@ -2369,7 +2443,7 @@ async function finishCityArt(){
     gates.length=mainGateCount;
     diveShaft(DX-130,DZ+20,10,80,16);
     restyleLandmarks(scene,vibeFor('city'));
-    if(assetEl)assetEl.textContent='procedural neon city (Neon Current).';
+    if(assetEl)assetEl.textContent='procedural neon city (Neon Current). Kenney CC0 kit loading.';
   }finally{
     wrapCityWorld();
     snapCityColliders();
@@ -2385,6 +2459,7 @@ function startHeavyAssets(){
   if(!window._heavyAssetsPending)return;
   window._heavyAssetsPending=false;
   finishCityArt();
+  dressGarageKit();
 }
 
 function wrapCityWorld(){
@@ -2472,20 +2547,14 @@ function ensureIndoor(mapId){
     indoorWorld.add(built.group);
     indoorBuilt.room=built;
     roomBuiltSig=sig;
-    if(looks){
-      looks.upgradeMaterials(built.group);
-      if(looks.setQuality)looks.setQuality(looks.choice);
-    }
+    if(looks)looks.upgradeMaterials(built.group);
     return built;
   }
   if(indoorBuilt[mapId])return indoorBuilt[mapId];
   const built=buildMap(THREE,mapId);
   indoorWorld.add(built.group);
   indoorBuilt[mapId]=built;
-  if(looks){
-    looks.upgradeMaterials(built.group);
-    if(looks.setQuality)looks.setQuality(looks.choice);
-  }
+  if(looks)looks.upgradeMaterials(built.group);
   return built;
 }
 function applyRoomSpec(raw,andFly){
@@ -2500,43 +2569,37 @@ function applyRoomSpec(raw,andFly){
 }
 function applyMapLooks(mapId){
   const vibe=vibeFor(mapId);
-  const spec=(vibe&&vibe.looks)||MAP_LOOKS[mapId]||MAP_LOOKS.city;
-  if(looks&&looks.setMapLooks)looks.setMapLooks(spec);
+  const resolved=resolveMapLighting(mapId);
+  const spec=resolved.looks||(vibe&&vibe.looks)||MAP_LOOKS[mapId]||MAP_LOOKS.city;
+  if(looks&&looks.setMapLighting)looks.setMapLighting(resolved);
+  else if(looks&&looks.setMapLooks)looks.setMapLooks(spec);
   if(looks&&looks.setOrbit)looks.setOrbit(MAP_ORBIT[mapId]||MAP_ORBIT.city);
-  if(looks&&looks.setSkyMode)looks.setSkyMode(vibe&&vibe.sky==='gradient'?'gradient':'hdri');
-  if(looks&&looks.setGrade)looks.setGrade(mapId==='city'?1:0);
-  if(mapId==='city'||mapId==='living'||mapId==='garage'||mapId==='warehouse'||mapId==='gym'||mapId==='office'||mapId==='trainer'||mapId==='backyard'||mapId==='room'){
-    applyVibeLighting({
-      LIGHTING,sun,sunFill,hemi,scene,renderer,skyMesh,
-      bloomPass:looks&&looks.bloomPass,
-    },vibe);
+  if(!looks||!looks.setMapLighting){
+    if(looks&&looks.setSkyMode)looks.setSkyMode(resolved.sky==='gradient'?'gradient':'hdri');
   }
-  if(mapId==='living'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(mapId==='garage'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
-  if(mapId==='warehouse'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
-  if(mapId==='room'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(mapId==='backyard'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(mapId==='trainer'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
-  if(mapId==='office'&&looks&&looks.bloomPass)looks.bloomPass.enabled=false;
-  if(mapId==='gym'&&looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(looks.applied);
+  applyVibeLighting({
+    THREE,LIGHTING,sun,sunFill,hemi,scene,renderer,skyMesh,
+    bloomPass:looks&&looks.bloomPass,
+  },vibe);
+  applyLooksPost(mapId, looks&&looks.applied);
   if(mapId!=='city'&&skyMesh&&skyMesh.userData&&skyMesh.userData.origSkyMat){
     skyMesh.material=skyMesh.userData.origSkyMat;
     skyMesh.userData.citySky=false;
   }
-  if(skyMesh)skyMesh.visible=mapId==='city'||mapId==='backyard';
-  if(sunSprite)sunSprite.visible=mapId==='backyard';
+  if(skyMesh)skyMesh.visible=!!resolved.outdoorSky;
+  if(sunSprite)sunSprite.visible=!!resolved.sunSprite;
   setIndoorLights(indoorLights,looks?looks.applied:'med');
   const credit=document.querySelector('.sf-credit');
   if(credit){
     if(mapId==='living')credit.textContent='Living Room is original procedural art — Clay Parlor';
-    else if(mapId==='garage')credit.textContent='Garage is original procedural art — Volt Stall';
+    else if(mapId==='garage')credit.textContent='Garage is original procedural art — Volt Stall. Kenney CC0 shop kit.';
     else if(mapId==='warehouse')credit.textContent='Warehouse is original procedural art — Ion Nave';
     else if(mapId==='room')credit.textContent='Your Room is original procedural art — Pocket Stage';
     else if(mapId==='backyard')credit.textContent='Backyard is original procedural art — Jade Lot';
     else if(mapId==='trainer')credit.textContent='Trainer is original procedural art — Licorice Grid';
     else if(mapId==='office')credit.textContent='Office is original procedural art — Paper Sun';
     else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court';
-    else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current';
+    else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current. Kenney CC0 cars and street kit.';
   }
 }
 function isFreeFlight(t,trackId){
@@ -2590,8 +2653,8 @@ async function setMap(mapId,trackId,opts){
       }
     }
   }
-  applyMapLooks(currentMap);
   try{
+    if(currentMap==='city'&&!(skyMesh&&skyMesh.userData&&skyMesh.userData.citySky))applyCityArt(looks&&looks.applied);
     if(currentMap==='living')applyLivingArt(looks&&looks.applied);
     if(currentMap==='garage')applyGarageArt(looks&&looks.applied);
     if(currentMap==='warehouse')applyWarehouseArt(looks&&looks.applied);
@@ -2601,6 +2664,7 @@ async function setMap(mapId,trackId,opts){
     if(currentMap==='office')applyOfficeArt(looks&&looks.applied);
     if(currentMap==='gym')applyGymArt(looks&&looks.applied);
   }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
+  applyMapLooks(currentMap);
   nextGateIndex=0;
   runActive=false;
   lastPassedGate=null;
@@ -2646,27 +2710,20 @@ const qp=new QuadPhysics(PRESETS.whoop65);
 window._qp=qp; // debug handle, same convention as _simBooted/_gltfReady above
 // Air65 II Champion stock tune from the tune DB (65-betafpv-stock) — raw Betaflight values.
 // Feedforward is set explicitly. These tunes carry only P/I/D, so without an F
-// they inherited DEFAULT_TUNE's 120/125/120 — and on roll/pitch, which have far
-// more authority per unit FF than yaw, that overshot a commanded rate by 152%
-// on an 80ms stick flick. That is the "twitchy" feel. RyFly's own 65mm tunes in
-// the database run FF off; a token 15/16 keeps some crispness at 4.5% overshoot.
-// Yaw keeps the full 120: it is reaction-torque driven, needs the help, and its
-// 18% overshoot is what makes yaw feel right.
+// they inherited DEFAULT_TUNE's 120/125/120. F_SCALE is now the Betaflight
+// scale, so those numbers are the live feel — same physical FF the old 15/16/20
+// tokens produced at the 8× scale. Imported F=120 matches stock.
 const STOCK_TUNES={
   whoop65:{rollP:36,rollI:61,rollD:27,pitchP:37,pitchI:64,pitchD:29,yawP:36,yawI:61,yawD:0,
-           rollF:15,pitchF:16,yawF:20},
+           rollF:120,pitchF:128,yawF:160},
   whoop75:{rollP:33,rollI:60,rollD:25,pitchP:35,pitchI:63,pitchD:28,yawP:33,yawI:60,yawD:0,
-           rollF:15,pitchF:16,yawF:20},
-  // 85mm: real PIDs from the tune DB (85-happymodel-ryfly, CrazyBee F4 DX).
-  // FF kept in the sim's calibrated 15/16/20 family — the build's FF 180/187 is
-  // on the Betaflight scale, not this module's reduced F_SCALE feel.
+           rollF:120,pitchF:128,yawF:160},
   whoop85:{rollP:67,rollI:120,rollD:40,pitchP:70,pitchI:126,pitchD:45,yawP:67,yawI:120,yawD:0,
-           rollF:15,pitchF:16,yawF:20},
-  // Freestyle classes: Betaflight 4.x default-flavored, same FF family.
+           rollF:120,pitchF:128,yawF:160},
   freestyle25:{rollP:48,rollI:85,rollD:35,pitchP:50,pitchI:88,pitchD:38,yawP:48,yawI:85,yawD:0,
-           rollF:15,pitchF:16,yawF:20},
+           rollF:120,pitchF:128,yawF:160},
   freestyle5:{rollP:45,rollI:80,rollD:30,pitchP:47,pitchI:84,pitchD:34,yawP:45,yawI:80,yawD:0,
-           rollF:15,pitchF:16,yawF:20},
+           rollF:120,pitchF:128,yawF:160},
 };
 qp.setTune(STOCK_TUNES.whoop65);
 // Base thrust before voltage sag scales it each frame.
@@ -2978,10 +3035,23 @@ const keys={};
 // ---------- background music playlist (audio/track*.mp3) — M to toggle, paused by default ----------
 const TRACKS=['audio/track1.mp3','audio/track2.mp3','audio/track3.mp3'];
 const MUSIC_VOL_KEY='ryflyMusicVol';
+const MUSIC_ON_KEY='ryflyMusicOn';
 let musicOn=false,musicOrder=[],musicIdx=0;
 let musicStarted=false;    // first-gesture unlock latch (see startMusic)
 let musicUnlockTries=0;    // bounded retries so a blocked/missing track can't hammer the network
 let trackFailStreak=0;     // consecutive load failures — stops the skip chain when every file is missing
+function loadMusicPref(){
+  try{
+    const v=localStorage.getItem(MUSIC_ON_KEY);
+    if(v==='1')return true;
+    if(v==='0')return false;
+  }catch(e){}
+  return false; // new player / empty localStorage starts muted
+}
+function saveMusicPref(on){
+  try{localStorage.setItem(MUSIC_ON_KEY,on?'1':'0');}catch(e){}
+}
+let musicWanted=loadMusicPref();
 const musicEl=new Audio();
 const musicVolEl=document.getElementById('musicVol');
 const musicBtnEl=document.getElementById('musicBtn');
@@ -3042,6 +3112,8 @@ setTimeout(dismissAudioHint,6000); // fades on its own even if M is never presse
 function toggleMusic(){
   dismissAudioHint(); // first M press dismisses it immediately, pre-empting the 6s timer
   musicOn=!musicOn;
+  musicWanted=musicOn;
+  saveMusicPref(musicOn);
   if(musicOn){
     trackFailStreak=0;
     if(!musicOrder.length)shuffleOrder();
@@ -3065,9 +3137,17 @@ function toggleMusic(){
 // Chrome does not count gamepad input as user activation, so play() can still
 // be blocked — on rejection the latch is released so M (or the next deflection)
 // still works, capped at a few attempts so a missing file can't hammer.
+// Music itself stays off unless the saved ryflyMusicOn choice is on.
 function startMusic(){
   if(musicStarted||musicOn||musicUnlockTries>=3){
     console.log('[music] startMusic skipped — started:'+musicStarted+' on:'+musicOn+' tries:'+musicUnlockTries);
+    return;
+  }
+  if(!musicWanted){
+    musicStarted=true;
+    initMotorAudio();
+    motorAudioCtx.resume().catch(()=>{});
+    console.log('[music] startMusic — muted pref, motors only');
     return;
   }
   musicStarted=true;musicUnlockTries++;
@@ -3453,6 +3533,7 @@ function bfCurve(x,rcRate,srate,expo){return bfCurveOf(x,rcRate,srate,expo);}
 function actualRate(x,center,maxRate,expo){return actualRateOf(x,center,maxRate,expo);}
 const rates={
   type:'BETAFLIGHT',
+  quickRatesRcExpo:false,
   roll: {rcRate:1.10,srate:0.72,expo:0.25},
   pitch:{rcRate:1.10,srate:0.72,expo:0.25},
   yaw:  {rcRate:1.10,srate:0.72,expo:0.25},
@@ -3480,7 +3561,7 @@ function convertAxisFamily(cur,toType){
   return convertAxisRate(cur,rates.type,toType);
 }
 function axisRate(axis,x){
-  return rateSetpoint(rates.type,x,rates[axis]);
+  return rateSetpoint(rates.type,x,rates[axis],{quickRatesRcExpo:!!rates.quickRatesRcExpo});
 }
 function maxRateDps(axis){
   return maxRateDpsOf(rates.type,rates[axis||rateAxis]);
@@ -3682,7 +3763,7 @@ window._axis=()=>({
 // Sign bridge between three.js body rates (wx pitch / wy yaw / wz roll) and the
 // module's X-forward, Y-left, Z-up axes. Verified empirically — see the axis
 // check in the commit; flip one of these if a stick ever drives the wrong way.
-const SGN_ROLL=-1,SGN_PITCH=-1,SGN_YAW=1;
+const SGN_ROLL=-1,SGN_PITCH=1,SGN_YAW=1;
 function physics(dt){
   const yr=THREE.MathUtils.degToRad(axisRate('yaw',stick.y));
   const wx=THREE.MathUtils.degToRad(axisRate('pitch',stick.p));
@@ -3927,18 +4008,21 @@ function toggleStartMenu(force){
   else{el.classList.toggle('open',next);document.body.classList.toggle('menu-open',next);}
   if(next){panel.classList.remove('open');syncMenuSparks();}
 }
+let lastArtQuality=null;
 function syncQualityUI(){
   if(!looks)return;
+  const artDirty=looks.applied!==lastArtQuality;
+  lastArtQuality=looks.applied;
   try{
-    if(currentMap==='city')applyCityArt(looks.applied);
-    if(currentMap==='living')applyLivingArt(looks.applied);
-    if(currentMap==='garage')applyGarageArt(looks.applied);
-    if(currentMap==='warehouse')applyWarehouseArt(looks.applied);
-    if(currentMap==='room')applyRoomArt(looks.applied);
-    if(currentMap==='backyard')applyBackyardArt(looks.applied);
-    if(currentMap==='trainer')applyTrainerArt(looks.applied);
-    if(currentMap==='office')applyOfficeArt(looks.applied);
-    if(currentMap==='gym')applyGymArt(looks.applied);
+    if(artDirty&&currentMap==='city')applyCityArt(looks.applied);
+    if(artDirty&&currentMap==='living')applyLivingArt(looks.applied);
+    if(artDirty&&currentMap==='garage')applyGarageArt(looks.applied);
+    if(artDirty&&currentMap==='warehouse')applyWarehouseArt(looks.applied);
+    if(artDirty&&currentMap==='room')applyRoomArt(looks.applied);
+    if(artDirty&&currentMap==='backyard')applyBackyardArt(looks.applied);
+    if(artDirty&&currentMap==='trainer')applyTrainerArt(looks.applied);
+    if(artDirty&&currentMap==='office')applyOfficeArt(looks.applied);
+    if(artDirty&&currentMap==='gym')applyGymArt(looks.applied);
   }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
   setIndoorLights(indoorLights,looks.applied);
   if(secrets)secrets.setQuality(looks.applied);
@@ -5029,6 +5113,7 @@ function importCli(text){
       Object.assign(rates[ax],base,p.rates[ax]);
     }
     rates.type=type;
+    if(p.quickRatesRcExpo!=null)rates.quickRatesRcExpo=p.quickRatesRcExpo;
     if(missing.length)notice+=' · no '+missing.join('/')+' in dump — kept previous';
   }
 
@@ -5037,7 +5122,7 @@ function importCli(text){
     qp.setTune(Object.assign({},qp.tune,p.pids));
     notice+=' · PIDs '+pidKeys.length;
   }
-  if(p.idle!==null){qp.cfg.idleThrottle=THREE.MathUtils.clamp(p.idle,0,0.2);
+  if(p.idle!=null&&p.idle>0){qp.cfg.idleThrottle=THREE.MathUtils.clamp(p.idle,0.03,0.2);
     notice+=' · idle '+(p.idle*100).toFixed(1)+'%';}
 
   rateAxis='roll';
@@ -6012,7 +6097,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
 <footer>
   <a class="sf-logo" href="/" aria-label="Back to QuadMath">← QuadMath<span class="dot">.</span></a>
   <span class="sf-note">Estimates only — always verify with bench testing. Fly safe.</span>
-  <span class="sf-credit">City is original procedural art — Neon Current</span>
+  <span class="sf-credit">City is original procedural art — Neon Current. Kenney CC0 cars and street kit.</span>
 </footer>
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
