@@ -736,6 +736,8 @@ export const BUILTIN_TRACK_FILES = [
   { id: 'gym-court', file: 'tracks/gym-court.json', map: 'gym', name: 'Court Loop' },
   { id: 'gym-bleachers', file: 'tracks/gym-bleachers.json', map: 'gym', name: 'Bleacher Climb' },
   { id: 'gym-hoops', file: 'tracks/gym-hoops.json', map: 'gym', name: 'Hoop Dive' },
+  { id: 'gym-under', file: 'tracks/gym-under.json', map: 'gym', name: 'Bench Dive' },
+  { id: 'gym-rafters', file: 'tracks/gym-rafters.json', map: 'gym', name: 'Truss Run' },
   { id: 'trainer-figure8', file: 'tracks/trainer-figure8.json', map: 'trainer', name: 'Figure 8' },
   { id: 'trainer-slalom', file: 'tracks/trainer-slalom.json', map: 'trainer', name: 'Slalom' },
   { id: 'trainer-hairpin', file: 'tracks/trainer-hairpin.json', map: 'trainer', name: 'Hairpin' },

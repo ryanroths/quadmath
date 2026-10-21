@@ -57,7 +57,7 @@ assert.ok((byMap.office || 0) >= 2, 'office needs 2+ tracks');
 assert.ok((byMap.gym || 0) >= 2, 'gym needs 2+ tracks');
 assert.ok((byMap.trainer || 0) >= 2, 'trainer needs 2+ tracks');
 assert.equal(byMap.office, 5);
-assert.equal(byMap.gym, 3);
+assert.equal(byMap.gym, 5);
 assert.equal(byMap.trainer, 3);
 
 for (const t of files.filter((x) => ['office', 'gym', 'trainer'].includes(x.map))) {
@@ -263,6 +263,12 @@ assert.equal(isLineTrackId('office-cubicles'), true);
 assert.equal(isLineTrackId('office-hallway'), true);
 assert.equal(isLineTrackId('office-desks'), true);
 assert.equal(isLineTrackId('office-freestyle'), false);
+assert.equal(isLineTrackId('gym-under'), true);
+assert.equal(isLineTrackId('gym-rafters'), true);
+assert.equal(isLineTrackId('gym-court'), true);
+assert.equal(isLineTrackId('gym-bleachers'), true);
+assert.equal(isLineTrackId('gym-hoops'), true);
+assert.equal(isLineTrackId('gym-freestyle'), false);
 assert.equal(isLineTrackId(0), false);
 assert.equal(isLineTrackId(1), false);
 assert.equal(isLineTrackId('city-loop'), false);
@@ -304,5 +310,15 @@ assert.deepEqual(
 const officeLineGhost = makePaceGhost(deskDive.gates, { track: 'office-under', speed: 6, hz: LINE_GHOST_HZ, laps: 1 });
 assert.equal(ghostPayloadError(officeLineGhost, 'office-under'), null);
 assert.ok(officeLineGhost.samples.length > 4 && officeLineGhost.samples.length < 400);
+const benchDive = files.find((t) => t.id === 'gym-under');
+assert.ok(benchDive && benchDive.gates.length >= 4);
+assert.deepEqual(afterLinePass(0, benchDive.gates.length, false), { start: true, finish: false, nextIndex: 1 });
+assert.deepEqual(
+  afterLinePass(benchDive.gates.length - 1, benchDive.gates.length, true),
+  { start: false, finish: true, nextIndex: 0 },
+);
+const gymLineGhost = makePaceGhost(benchDive.gates, { track: 'gym-under', speed: 6, hz: LINE_GHOST_HZ, laps: 1 });
+assert.equal(ghostPayloadError(gymLineGhost, 'gym-under'), null);
+assert.ok(gymLineGhost.samples.length > 4 && gymLineGhost.samples.length <= LINE_GHOST_MAX);
 
 console.log('ok', files.length, 'tracks; city layouts frozen; share round-trip; miss 100%; old keys untouched');

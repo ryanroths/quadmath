@@ -1,0 +1,21 @@
+Kenney CC0 1.0 low-poly kit ( Amber Court )
+
+All packs are Creative Commons Zero (CC0 1.0):
+  http://creativecommons.org/publicdomain/zero/1.0/
+
+Packs (License-*.txt in this folder, copied from the zip):
+  Furniture Kit 2.0     https://kenney.nl/assets/furniture-kit
+  Survival Kit 2.0      https://kenney.nl/assets/survival-kit
+  Racing Kit 2.0        https://kenney.nl/assets/racing-kit
+
+Support Kenney: https://kenney.nl/donate  (credit is not required)
+
+Shipped files are a small meshopt-compressed geometry subset. Total
+payload is 9 980 bytes. Low quality fetches only cardboard (2 792 bytes).
+
+  cardboard.glb   Furniture Kit cardboardBoxClosed
+  barrel.glb      Survival Kit barrel
+  barrier.glb     Racing Kit barrierRed
+
+Nothing here is from the GPL whoop sim. Procedural Amber Court stays the
+fallback if a mesh fails to load.
