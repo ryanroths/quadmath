@@ -616,6 +616,7 @@ test('debug recorder dumps gyro/attitude/stick/throttle JSON for the last maneuv
 });
 
 test('sim.html wires tricks without touching physics or old keys', () => {
+  assert.match(simSrc, /from "\.\/sim-tricks\.js\?v=[0-9a-f]{12}"/);
   assert.ok(simSrc.includes('sim-tricks.js'));
   assert.ok(simSrc.includes('createTricks'));
   assert.ok(simSrc.includes('TRICKS_KEY'));

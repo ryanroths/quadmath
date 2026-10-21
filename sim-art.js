@@ -3,25 +3,26 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=552a7cb9d623';
+import { hexNum } from './sim-art-city.js?v=d2194c8087bb';
 export {
   hexNum, qualityWantsBloom, qualityWantsAo, qualityWantsGrade,
   qualityWantsReflections, qualityWantsParticles,
   qualityBudget, propClearOfCourse, planCityProps, planPortalBlocks,
   collectBuildingFootprints,
   hideStockCityMeshes, decorateVibeGate, pulseCityGate, tickCityArt,
-  applySkyTexture, applyVibeLighting, restyleCity, buildCityDressing,
+  applySkyTexture, applyVibeLighting, applyResolvedLighting, disposeArtGroup,
+  restyleCity, buildCityDressing,
   buildDreamlandArt, restyleMesas, restyleLandmarks, restyleDiveTubes, attachWetReflector,
   makeWetRoadMaterial, buildNeonCity,
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=552a7cb9d623';
+} from './sim-art-city.js?v=d2194c8087bb';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=e0af8bbd77c2';
+} from './sim-art-living.js?v=30ec33b5a4ac';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
@@ -31,37 +32,37 @@ export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=babccab33a59';
+} from './sim-art-warehouse.js?v=d66f437e5dd5';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
-} from './sim-art-gym.js?v=929985dc0169';
+} from './sim-art-gym.js?v=2f8876ddceb5';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=b5d05001af2f';
+} from './sim-art-office.js?v=ef3ea0923bd9';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=176e5f90789d';
+} from './sim-art-trainer.js?v=40bc96f21872';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
-} from './sim-art-backyard.js?v=0ae90778d926';
+} from './sim-art-backyard.js?v=9686f1d869ce';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=fbf0603a352a';
+} from './sim-art-room.js?v=a687aadb900d';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
@@ -410,6 +411,27 @@ export const MAP_VIBE_IDS = Object.freeze([
 
 export function vibeFor(mapId) {
   return VIBES[mapId] || VIBES.city;
+}
+
+// One lighting spec per map. Host + looks apply this instead of writing
+// fog / background / IBL from six call sites.
+export function resolveMapLighting(mapId) {
+  const id = VIBES[mapId] ? mapId : 'city';
+  const vibe = VIBES[id];
+  const L = vibe.lighting;
+  return Object.freeze({
+    mapId: id,
+    sky: vibe.sky,
+    citySky: id === 'city',
+    outdoorSky: id === 'city' || id === 'backyard',
+    sunSprite: id === 'backyard',
+    lighting: L,
+    looks: vibe.looks,
+    post: vibe.post,
+    bgHex: id === 'city' ? 0x070014 : L.fogColor,
+    envIntensity: id === 'city' ? 0 : (vibe.looks && vibe.looks.env),
+    keepHdrEnv: id !== 'city',
+  });
 }
 
 export function vibePost(vibe) {
