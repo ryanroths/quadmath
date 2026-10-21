@@ -867,7 +867,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, mergeStaticArt,
-} from "./sim-art.js?v=1dd7e7b32488";
+} from "./sim-art.js?v=25ffd48f9b06";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -893,13 +893,13 @@ import {
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
 } from "./sim-tracks.js?v=8f9513fb3468";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=7a5d35835511";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=67c976696da2";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=9017daf8a7b6";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=bee49edd5d73";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=ce53cc4620b6";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -914,7 +914,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=be03d1ada945";
+} from "./sim-coach.js?v=8746b4f85fd1";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=aa19f07b0513";
@@ -943,7 +943,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=f7c234a5610a";
+} from "./sim-secrets.js?v=04a0f7db3e89";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.

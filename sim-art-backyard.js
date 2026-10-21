@@ -2,9 +2,9 @@
 // Visual only. Colliders live in sim-maps.js BACKYARD_PLAY.
 // Generated / CC0 tiling textures. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=c9b36c5911c1';
+import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=9aeb5e8c616e';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=7a5d35835511';
+import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=67c976696da2';
 
 export const BACKYARD_STOCK = Object.freeze({
   turf: 0x3f8a4a,
@@ -37,21 +37,24 @@ export function backyardBudget(applied) {
   if (applied === 'low') {
     return {
       pots: 4, palms: 3, neighbors: 2, stones: 6, glow: false,
-      leaves: 28, fenceMesh: true, tufts: 8, pavers: 8, seams: true,
-      grass: 80, fronds: 18, caustics: false, shadowCasters: false, skyRes: 256,
+      leaves: 64, fenceMesh: true, tufts: 8, pavers: 8, seams: true,
+      grass: 160, fronds: 24, caustics: false, shadowCasters: false, skyRes: 256,
+      hedge: 12, rimTrees: 4,
     };
   }
   if (applied === 'high') {
     return {
       pots: 8, palms: 3, neighbors: 4, stones: 10, glow: true,
-      leaves: 80, fenceMesh: true, tufts: 16, pavers: 16, seams: true,
-      grass: 420, fronds: 48, caustics: true, shadowCasters: true, skyRes: 512,
+      leaves: 220, fenceMesh: true, tufts: 16, pavers: 16, seams: true,
+      grass: 900, fronds: 64, caustics: true, shadowCasters: true, skyRes: 512,
+      hedge: 22, rimTrees: 8,
     };
   }
   return {
     pots: 6, palms: 3, neighbors: 3, stones: 8, glow: true,
-    leaves: 56, fenceMesh: true, tufts: 12, pavers: 12, seams: true,
-    grass: 180, fronds: 32, caustics: true, shadowCasters: true, skyRes: 384,
+    leaves: 140, fenceMesh: true, tufts: 12, pavers: 12, seams: true,
+    grass: 400, fronds: 40, caustics: true, shadowCasters: true, skyRes: 384,
+    hedge: 16, rimTrees: 6,
   };
 }
 
@@ -361,22 +364,24 @@ function afternoonSkyTex(THREE, res) {
   const h = Math.max(256, (res || 512) * 0.75);
   return canvasTex(THREE, w, h, (g, ww, hh) => {
     fillGrad(g, 0, 0, 0, hh, [
-      [0, '#2f6fb8'], [0.34, '#5aa0dc'], [0.58, '#9ec8ec'], [0.78, '#d6c49a'], [1, '#b8966e'],
+      [0, '#1f5fa8'], [0.28, '#3d8fd4'], [0.52, '#7eb6e8'], [0.72, '#c5d8ee'], [0.88, '#e2c89a'], [1, '#c4a070'],
     ]);
     g.fillRect(0, 0, ww, hh);
-    g.fillStyle = 'rgba(255,228,150,0.75)';
+    g.fillStyle = 'rgba(255,228,150,0.80)';
     g.beginPath();
-    g.arc(ww * 0.78, hh * 0.16, 16, 0, 6.3);
+    g.arc(ww * 0.78, hh * 0.14, 14, 0, 6.3);
     g.fill();
-    g.fillStyle = 'rgba(255,240,190,0.28)';
+    g.fillStyle = 'rgba(255,240,190,0.30)';
     g.beginPath();
-    g.arc(ww * 0.78, hh * 0.16, 48, 0, 6.3);
+    g.arc(ww * 0.78, hh * 0.14, 52, 0, 6.3);
     g.fill();
     const puffs = [
-      [0.16, 0.20, 86, 28], [0.28, 0.18, 110, 34], [0.42, 0.22, 80, 22],
-      [0.58, 0.14, 120, 36], [0.72, 0.17, 96, 28], [0.88, 0.24, 72, 20],
-      [0.10, 0.32, 64, 18], [0.48, 0.28, 88, 22], [0.92, 0.30, 60, 16],
-      [0.34, 0.12, 70, 18], [0.66, 0.10, 84, 20],
+      [0.14, 0.16, 92, 32], [0.26, 0.14, 120, 38], [0.40, 0.18, 88, 26],
+      [0.56, 0.12, 130, 40], [0.70, 0.15, 104, 32], [0.86, 0.20, 80, 24],
+      [0.10, 0.28, 72, 22], [0.48, 0.24, 96, 26], [0.90, 0.26, 68, 18],
+      [0.32, 0.10, 76, 20], [0.64, 0.08, 90, 22],
+      [0.22, 0.38, 70, 18], [0.58, 0.36, 84, 20], [0.78, 0.34, 64, 16],
+      [0.38, 0.44, 60, 14], [0.08, 0.42, 54, 14],
     ];
     for (const [ux, uy, rx, ry] of puffs) {
       const x = ux * ww, y = uy * hh;
@@ -785,13 +790,18 @@ function addLeafCards(THREE, parent, mats, cx, cy, cz, count, spread, tall, shad
   group.position.set(cx, 0, cz);
   group.userData.backyardPalm = true;
   group.userData.backyardArt = true;
-  const geo = new THREE.PlaneGeometry(cardW || 1.85, cardH || 2.15);
+  const geo = new THREE.PlaneGeometry(cardW || 0.92, cardH || 1.08);
   addInstanced(THREE, group, geo, mats.leafCard, count, (dummy, i) => {
-    const a = (i / count) * Math.PI * 2 + hash(i) * 0.8;
-    const r = spread * (0.22 + hash(i + 3) * 0.82);
-    dummy.position.set(Math.cos(a) * r, cy + hash(i + 5) * tall, Math.sin(a) * r);
-    dummy.rotation.set(-0.55 + hash(i + 7) * 0.7, a + 0.5, hash(i + 9) * 0.6 - 0.3);
-    const s = 0.95 + hash(i + 11) * 0.85;
+    const theta = hash(i) * Math.PI * 2;
+    const phi = Math.acos(2 * hash(i + 3) - 1) * 0.62;
+    const r = spread * (0.35 + hash(i + 5) * 0.7);
+    dummy.position.set(
+      Math.sin(phi) * Math.cos(theta) * r,
+      cy + Math.cos(phi) * tall * 0.55,
+      Math.sin(phi) * Math.sin(theta) * r,
+    );
+    dummy.rotation.set(-0.4 + hash(i + 7) * 0.8, theta + 0.4, hash(i + 9) * 0.7 - 0.35);
+    const s = 0.7 + hash(i + 11) * 0.55;
     dummy.scale.set(s, s, 1);
   }, shadow);
   parent.add(group);
@@ -823,21 +833,21 @@ function addTree(THREE, parent, mats, budget) {
   parent.add(trunk);
   const canopy = new THREE.Mesh(canopyLathe(THREE), mats.darkLeaf);
   canopy.position.set(t.x, t.h * 0.46, t.z);
-  canopy.scale.set(0.82, 0.72, 0.82);
+  canopy.scale.set(0.88, 0.78, 0.88);
   canopy.userData.backyardPalm = true;
   mark(canopy);
   parent.add(canopy);
-  const puffs = Math.max(6, (budget.leaves / 8) | 0);
+  const puffs = Math.min(10, Math.max(6, (budget.leaves / 22) | 0));
   for (let i = 0; i < puffs; i++) {
     const a = (i / puffs) * Math.PI * 2;
-    const puff = new THREE.Mesh(new THREE.SphereGeometry(1.55, 8, 6), i % 2 ? mats.leaf : mats.darkLeaf);
-    puff.position.set(t.x + Math.cos(a) * 2.1, t.h * 0.62 + (i % 3) * 0.7, t.z + Math.sin(a) * 2.1);
-    puff.scale.set(1.25, 0.85, 1.25);
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(1.45, 8, 6), i % 2 ? mats.leaf : mats.darkLeaf);
+    puff.position.set(t.x + Math.cos(a) * 2.15, t.h * 0.60 + (i % 3) * 0.65, t.z + Math.sin(a) * 2.15);
+    puff.scale.set(1.2, 0.82, 1.2);
     puff.userData.backyardPalm = true;
     mark(puff);
     parent.add(puff);
   }
-  addLeafCards(THREE, parent, mats, t.x, t.h * 0.52, t.z, budget.leaves, 4.2, 3.6, budget.shadowCasters);
+  addLeafCards(THREE, parent, mats, t.x, t.h * 0.52, t.z, budget.leaves, 4.1, 3.5, budget.shadowCasters, 1.22, 1.42);
   const ring = BACKYARD_PLAY.planter;
   const ringShape = new THREE.Shape();
   ringShape.absarc(0, 0, ring.rOut, 0, Math.PI * 2, false);
@@ -969,8 +979,8 @@ function addGrass(THREE, parent, mats, budget, gates) {
   const n = budget.grass;
   if (n <= 0) return;
   const T = BACKYARD_PLAY.turf;
-  const blade = new THREE.PlaneGeometry(0.42, 0.62);
-  blade.translate(0, 0.31, 0);
+  const blade = new THREE.PlaneGeometry(0.28, 0.40);
+  blade.translate(0, 0.20, 0);
   const cross = blade.clone();
   cross.rotateY(Math.PI / 2);
   const geo = mergeGeos(THREE, [blade, cross]);
@@ -1069,6 +1079,53 @@ function addNeighbors(THREE, parent, mats, budget) {
   }
 }
 
+function addRimTrees(THREE, parent, mats, budget) {
+  const spots = [
+    [-22.4, -18.2], [22.6, -17.8], [-20.8, 18.6], [20.4, 17.4],
+    [-6.4, -19.6], [8.2, -19.8], [22.8, -4.2], [-22.6, -3.6],
+  ];
+  const n = Math.min(budget.rimTrees || 0, spots.length);
+  for (let i = 0; i < n; i++) {
+    const s = spots[i];
+    const trunk = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 7.4, 3, 6), mats.wood);
+    trunk.position.set(s[0], 4.0, s[1]);
+    trunk.userData.backyardPalm = true;
+    mark(trunk);
+    parent.add(trunk);
+    addLeafCards(THREE, parent, mats, s[0], 6.4, s[1], Math.max(28, (budget.leaves / 6) | 0), 2.6, 2.4, false, 1.05, 1.2);
+  }
+}
+
+function applyCc0Maps(THREE, mats) {
+  if (typeof window === 'undefined' || !THREE.TextureLoader) return;
+  let loader;
+  try { loader = new THREE.TextureLoader(); } catch (e) { return; }
+  const jobs = [
+    ['assets/sim-looks/tex/grass_diff_1k.webp', mats.turf, 'map', THREE.SRGBColorSpace, 14, 14],
+    ['assets/sim-looks/tex/grass_nor_1k.webp', mats.turf, 'normalMap', THREE.LinearSRGBColorSpace, 14, 14],
+    ['assets/sim-looks/tex/grass_rough_1k.webp', mats.turf, 'roughnessMap', THREE.LinearSRGBColorSpace, 14, 14],
+    ['assets/sim-looks/tex/facade_diff_1k.webp', mats.stucco, 'map', THREE.SRGBColorSpace, 4, 4],
+    ['assets/sim-looks/tex/concrete_diff_1k.webp', mats.cmu, 'map', THREE.SRGBColorSpace, 3, 3],
+    ['assets/sim-looks/tex/concrete_diff_1k.webp', mats.pebble, 'map', THREE.SRGBColorSpace, 6, 6],
+  ];
+  for (const [url, mat, key, space, rx, ry] of jobs) {
+    if (!mat) continue;
+    try {
+      loader.load(url, (t) => {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(rx, ry);
+        if (space != null) t.colorSpace = space;
+        t.anisotropy = 8;
+        t.userData.looksComposed = true;
+        mat[key] = t;
+        if (key === 'normalMap' && mat.normalScale) mat.normalScale.set(0.85, 0.85);
+        if (key === 'roughnessMap') mat.roughness = 1;
+        mat.needsUpdate = true;
+      });
+    } catch (e) { /* canvas fallback stays */ }
+  }
+}
+
 function addPlayLines(THREE, parent, mats, gates) {
   const extras = new THREE.Group();
   extras.name = 'backyardArtExtras';
@@ -1113,7 +1170,9 @@ export function buildRyanYard(THREE, parent, vibe, quality, gates) {
   addLounge(THREE, group, mats, budget);
   addYardExtras(THREE, group, mats);
   addNeighbors(THREE, group, mats, budget);
+  addRimTrees(THREE, group, mats, budget);
   addPlayLines(THREE, group, mats, keep);
+  applyCc0Maps(THREE, mats);
   parent.add(group);
   return group;
 }

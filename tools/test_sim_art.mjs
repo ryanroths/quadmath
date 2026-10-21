@@ -1627,7 +1627,7 @@ test("Backyard Ryan's Yard is implemented with stucco-tile gates", () => {
   assert.equal(v.gates.style, 'stucco-tile');
   assert.equal(v.post.bloom, true);
   assert.equal(v.palette.neonA.toLowerCase(), '#c45a32');
-  assert.equal(v.lighting.fogColor, 0xc8d8e8);
+  assert.equal(v.lighting.fogColor, 0xb8d0e4);
   assert.ok(v.looks.env >= 0.36);
   assert.ok(v.looks.sun >= 0.9);
   assert.equal(backyardWantsGlow('low'), false);
