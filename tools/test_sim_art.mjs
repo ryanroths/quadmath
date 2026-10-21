@@ -6,7 +6,8 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
-  VIBES, MAP_VIBE_IDS, vibeFor, qualityWantsBloom, qualityBudget,
+  VIBES, MAP_VIBE_IDS, vibeFor, resolveMapLighting, disposeArtGroup,
+  qualityWantsBloom, qualityBudget,
   hexNum, vibeTable, mentionsBannedAssets, CITY_VIBE_ID,
   qualityWantsReflections, qualityWantsParticles,
   propClearOfCourse, planCityProps, planPortalBlocks, SIGN_WORDS, GATE_STYLES,
@@ -164,7 +165,7 @@ test('sim.html imports every map restyle/tick/decorate it calls', () => {
       assert.match(sim, new RegExp(fn + '\\('), 'call ' + fn);
     }
   }
-  for (const fn of ['restyleCity', 'tickCityArt', 'decorateVibeGate', 'applyVibeLighting']) {
+  for (const fn of ['restyleCity', 'tickCityArt', 'decorateVibeGate', 'applyVibeLighting', 'resolveMapLighting']) {
     assert.ok(imported.has(fn), 'import ' + fn);
   }
 });
@@ -360,6 +361,63 @@ test('city window and blink stay frozen so bloom does not strobe', () => {
   assert.ok(span(b) < 0.001, 'blink must stay frozen ' + span(b));
   assert.equal(win.material.emissiveIntensity, 1.30);
   assert.equal(blink.material.emissiveIntensity, 1.55);
+});
+
+test('one lighting resolver per map and city never shares fog as background', () => {
+  for (const id of MAP_VIBE_IDS) {
+    const spec = resolveMapLighting(id);
+    assert.equal(spec.mapId, id);
+    assert.ok(spec.lighting);
+    assert.ok(spec.looks);
+    assert.equal(spec.citySky, id === 'city');
+    assert.equal(spec.keepHdrEnv, id !== 'city');
+    assert.equal(typeof spec.bgHex, 'number');
+  }
+  assert.equal(resolveMapLighting('city').bgHex, 0x070014);
+  assert.equal(resolveMapLighting('nope').mapId, 'city');
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.match(city, /function applyResolvedLighting/);
+  assert.match(city, /Never share fog\.color/);
+  assert.match(city, /function disposeArtGroup/);
+  const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
+  assert.match(looks, /function setMapLighting/);
+  assert.match(looks, /new THREE\.Color\(bgHex\)/);
+  assert.match(looks, /scene\.background !== scene\.fog\.color/);
+  assert.equal(looks.includes('scene.background = scene.fog.color'), false);
+  const sim = readFileSync(join(root, 'sim.html'), 'utf8');
+  assert.match(sim, /resolveMapLighting\(/);
+  assert.match(sim, /if\(currentMap==='city'&&!\(skyMesh&&skyMesh\.userData&&skyMesh\.userData\.citySky\)\)applyCityArt/);
+  assert.match(sim, /artDirty&&currentMap==='city'\)applyCityArt/);
+  assert.equal(/ensureIndoor[\s\S]{0,500}setQuality\(looks\.choice\)/.test(sim), false);
+});
+
+test('city restyle disposes old art; HDRI and world maps cache; Low skips composer', () => {
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.match(city, /if \(old\) disposeArtGroup\(old\)/);
+  assert.match(city, /if \(oldDream\) disposeArtGroup\(oldDream\)/);
+  const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
+  assert.match(looks, /const hdrCache = \{\}/);
+  assert.match(looks, /if \(hdrCache\[url\]\) return hdrCache\[url\]/);
+  assert.match(looks, /URL\.createObjectURL\(new Blob\(\[buf\]\)\)/);
+  assert.match(looks, /texCache\[key\] = \(async function/);
+  assert.match(looks, /get composer\(\) \{ return qualityWantsPost\(\) \? composer : null; \}/);
+  assert.match(looks, /gpuHigh: gpuHint\(renderer\)\.high/);
+  assert.match(looks, /const high = !software && \/nvidia\|geforce\|radeon\|amd\|apple m\[1-9\]\/i/);
+  const group = new THREE.Group();
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial());
+  group.add(mesh);
+  disposeArtGroup(group);
+  assert.equal(group.parent, null);
+});
+
+test('unused GLB-format folder is listed for removal, not loaded', () => {
+  const lic = readFileSync(join(root, 'ASSETS-LICENSES.md'), 'utf8');
+  assert.match(lic, /Proposed removal \(unused `assets\/Models\/GLB-format\/`/);
+  assert.match(lic, /low_poly_city_game-ready\.glb/);
+  assert.match(lic, /53,450,388/);
+  assert.equal(mentionsBannedAssets('assets/Models/GLB-format/tree-large.glb'), true);
+  const kit = readFileSync(join(root, 'sim-art-kit.js'), 'utf8');
+  assert.equal(kit.includes('GLB-format'), false);
 });
 
 test('city kit cars stay MeshBasic and city sky never keeps dawn IBL', () => {

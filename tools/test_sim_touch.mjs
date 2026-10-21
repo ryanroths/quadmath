@@ -117,6 +117,8 @@ test('saved rates without a flight-mode key still default to angle', () => {
 test('auto quality is low on mobile; touch enable / landscape rules', () => {
   assert.equal(resolveAutoQuality({ mobile: true }), 'low');
   assert.equal(resolveAutoQuality({ gpuLow: true }), 'low');
+  assert.equal(resolveAutoQuality({ gpuHigh: true }), 'high');
+  assert.equal(resolveAutoQuality({ mobile: true, gpuHigh: true }), 'low');
   assert.equal(resolveAutoQuality({}), 'med');
   assert.equal(shouldEnableTouch({ inputChoice: 'touch' }), true);
   assert.equal(shouldEnableTouch({ inputChoice: 'keyboard', mobile: true }), false);

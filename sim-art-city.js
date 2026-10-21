@@ -1103,8 +1103,30 @@ export function applySkyTexture(THREE, skyMesh, vibe) {
   skyMesh.material.needsUpdate = true;
 }
 
-export function applyVibeLighting(ctx, vibe) {
-  const L = vibe.lighting;
+export function disposeArtGroup(root) {
+  if (!root) return;
+  if (root.parent) root.parent.remove(root);
+  root.traverse((o) => {
+    const kit = o.userData && (o.userData.cityKit || o.userData.garageKit);
+    if (o.geometry && o.geometry.dispose && !kit) {
+      try { o.geometry.dispose(); } catch (e) { /* ignore */ }
+    }
+    const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+    for (const m of mats) {
+      if (!m) continue;
+      if (m.map && m.map.userData && m.map.userData.looksComposed && m.map.dispose) {
+        try { m.map.dispose(); } catch (e) { /* ignore */ }
+      }
+      if (m.dispose) {
+        try { m.dispose(); } catch (e) { /* ignore */ }
+      }
+    }
+  });
+}
+
+export function applyResolvedLighting(ctx, spec) {
+  if (!spec || !spec.lighting) return spec;
+  const L = spec.lighting;
   const { LIGHTING, sun, sunFill, hemi, scene, bloomPass, renderer } = ctx || {};
   if (LIGHTING) {
     LIGHTING.sunColor = L.sunColor;
@@ -1135,13 +1157,28 @@ export function applyVibeLighting(ctx, vibe) {
     hemi.groundColor.setHex(L.hemiGround);
     hemi.intensity = L.hemiIntensity;
   }
+  const bgHex = spec.bgHex != null ? spec.bgHex : L.fogColor;
+  const Color = (ctx && ctx.THREE && ctx.THREE.Color)
+    || (typeof THREE !== 'undefined' ? THREE.Color : null);
   if (scene && scene.fog) {
     scene.fog.color.setHex(L.fogColor);
     scene.fog.density = L.fogDensity;
-    if (scene.background && scene.background.isColor) {
-      const citySky = ctx && ctx.skyMesh && ctx.skyMesh.userData && ctx.skyMesh.userData.citySky;
-      scene.background.setHex(citySky ? 0x070014 : L.fogColor);
+  }
+  if (scene && (spec.citySky || (scene.background && scene.background.isColor))) {
+    // Never share fog.color as scene.background — later fog writes then
+    // recolor the sky. City keeps a night hex; other maps copy the fog hex
+    // onto a separate Color.
+    if (scene.background && scene.background.isColor && scene.fog && scene.background !== scene.fog.color) {
+      scene.background.setHex(bgHex);
+    } else if (Color) {
+      scene.background = new Color(bgHex);
     }
+  }
+  if (scene && spec.citySky) {
+    scene.environment = null;
+    if ('environmentIntensity' in scene) scene.environmentIntensity = 0;
+  } else if (scene && spec.envIntensity != null && 'environmentIntensity' in scene) {
+    scene.environmentIntensity = spec.envIntensity;
   }
   if (renderer) renderer.toneMappingExposure = L.exposure;
   if (bloomPass) {
@@ -1149,6 +1186,19 @@ export function applyVibeLighting(ctx, vibe) {
     bloomPass.radius = L.bloomRadius;
     bloomPass.threshold = L.bloomThreshold;
   }
+  return spec;
+}
+
+export function applyVibeLighting(ctx, vibe) {
+  if (!vibe || !vibe.lighting) return;
+  applyResolvedLighting(ctx, {
+    mapId: vibe.id,
+    citySky: vibe.id === 'city',
+    lighting: vibe.lighting,
+    looks: vibe.looks,
+    bgHex: vibe.id === 'city' ? 0x070014 : vibe.lighting.fogColor,
+    envIntensity: vibe.id === 'city' ? 0 : (vibe.looks && vibe.looks.env),
+  });
 }
 
 function neonMat(THREE, color, emit, extra) {
@@ -2157,7 +2207,7 @@ export function restyleCity(THREE, ctx) {
   } catch (err) {
     console.error('restyleCity', err);
     try { window._artError = String(err && err.stack || err); } catch (e) { /* ignore */ }
-    applyVibeLighting(ctx, ctx.vibe);
+    applyVibeLighting(Object.assign({ THREE }, ctx), ctx.vibe);
     return { visuals: null, dream: null, vibe: ctx.vibe, quality: ctx.quality || 'med', error: String(err && err.message || err) };
   }
 }
@@ -2191,16 +2241,16 @@ function restyleCityInner(THREE, ctx) {
   let visuals = null;
   if (root) {
     const old = root.getObjectByName('cityArtVisuals');
-    if (old && old.parent) old.parent.remove(old);
+    if (old) disposeArtGroup(old);
     const oldDress = root.getObjectByName('cityArtDressing');
-    if (oldDress && oldDress.parent) oldDress.parent.remove(oldDress);
+    if (oldDress) disposeArtGroup(oldDress);
     visuals = buildNeonCity(THREE, root, vibe, quality, ctx.gates || []);
     attachWetReflector(THREE, visuals, vibe, quality);
   }
   const host = ctx.cityWorld || root;
   if (host) {
     const oldDream = host.getObjectByName('dreamlandArt');
-    if (oldDream && oldDream.parent) oldDream.parent.remove(oldDream);
+    if (oldDream) disposeArtGroup(oldDream);
   }
   const dream = host ? buildDreamlandArt(THREE, host, vibe) : null;
   if (ctx.scene) {
@@ -2208,7 +2258,7 @@ function restyleCityInner(THREE, ctx) {
     restyleLandmarks(ctx.scene, vibe);
     restyleDiveTubes(ctx.scene, vibe, THREE);
   }
-  applyVibeLighting(ctx, vibe);
+  applyVibeLighting(Object.assign({ THREE }, ctx), vibe);
   if (root) root.userData.cityArtQuality = quality;
   return { visuals, dream, vibe, quality };
 }
