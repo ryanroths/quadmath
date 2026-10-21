@@ -1075,6 +1075,8 @@ test('Garage freestyle builds without throwing and the FPV frame is not all blac
   installDomStub();
   const garageSrc = readFileSync(join(root, 'sim-art-garage.js'), 'utf8');
   assert.equal(mentionsBannedAssets(garageSrc), false);
+  assert.match(garageSrc, /sim-art-felt\.js\?v=[0-9a-f]{12}/);
+  assert.match(garageSrc, /feltBasic|feltEmissive/);
   assert.match(garageSrc, /never abort the FPV render loop/);
   assert.match(garageSrc, /CapsuleGeometry|LatheGeometry|ExtrudeGeometry/);
   const free = freestyleTrack('garage');
@@ -1098,6 +1100,16 @@ test('Garage freestyle builds without throwing and the FPV frame is not all blac
     assert.ok(hidden.length >= 8, q + ' hidden stock ' + hidden.length);
     const vis = built.group.getObjectByName('garageArtVisuals');
     assert.ok(vis, q + ' garageArtVisuals');
+    let feltMats = 0;
+    vis.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (m && m.userData && m.userData.feltLocked) feltMats += 1;
+        if (m && m.metalness != null) assert.ok(m.metalness <= 0.05, q + ' metalness');
+      }
+    });
+    assert.ok(feltMats >= 8, q + ' feltLocked mats ' + feltMats);
     if (q === 'low') assert.equal(garageBudget('low').glow, false);
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
@@ -1136,13 +1148,24 @@ test('Garage playground keeps whoop-sized gaps that match the visuals', () => {
   assert.equal(hit(P.car.x, P.car.jackH + P.car.bodyH + 0.25, P.car.z), false, 'fly over car');
   const aisleZ = (P.rackA.z + P.rackB.z) / 2;
   assert.equal(hit(P.rackA.x, 1.68, aisleZ), false, 'fly between racks');
-  assert.equal(hit(P.rackA.x, P.shelfYs[0] + 0.04, P.rackA.z), true, 'shelf slab solid');
+  assert.equal(hit(P.rackA.x, P.shelfYs[0] + 0.04, P.rackA.z), false, 'shelf gap thread');
+  const slabOff = ((P.rackA.d - P.rackGapD) / 2 + P.rackGapD) / 2;
+  assert.equal(hit(P.rackA.x, P.shelfYs[0] + 0.04, P.rackA.z - slabOff), true, 'shelf slab solid');
   assert.equal(hit(P.rackA.x, P.shelfYs[0] + 0.62, P.rackA.z), false, 'fly between shelf levels');
   assert.equal(hit(0, 1.15, P.door.z), false, 'fly under open door');
   assert.equal(hit(0, P.door.openH + 1.2, P.door.z), true, 'door panel solid');
+  assert.equal(hit(P.doorGap.left.x, 1.10, P.doorGap.left.z), true, 'door stack solid');
+  assert.equal(hit(P.bike.x, P.bike.y, P.bike.z), false, 'bike hoop open');
+  assert.equal(hit(P.bike.x, P.bike.y + P.bike.innerH / 2 + P.bike.bar / 2, P.bike.z), true, 'bike frame solid');
   assert.equal(hit(P.volt.x, P.volt.y, P.volt.z), false, 'volt hoop open');
   assert.equal(hit(P.volt.x, P.volt.y + P.volt.innerH / 2 + P.volt.bar / 2, P.volt.z), true, 'volt frame solid');
   assert.equal(hit(P.tireWell.x, 0.85, P.tireWell.z), false, 'dive tire well');
+  assert.equal(hit(P.tireStack.x, 1.10, P.tireStack.z), false, 'dive tire stack');
+  assert.equal(hit(P.bench.x, 1.20, P.bench.z), false, 'bench center crawl stays open');
+  assert.equal(hit(P.benchBins[0].x, 0.34, P.benchBins[0].z), true, 'bench bin solid');
+  assert.equal(hit(P.toys[0].x, P.toys[0].h * 0.5, P.toys[0].z), true, 'toy clutter solid');
+  assert.equal(hit(0, 6.40, P.doorSoffit.z), false, 'fly the rafter/door gap');
+  assert.equal(hit(P.doorSoffit.x, P.doorSoffit.y + 0.08, P.doorSoffit.z), true, 'door soffit solid');
   assert.ok(P.whoopClear >= 0.85, 'whoop clearance');
   assert.ok(P.car.jackH >= 1.2, 'car crawl taller than 85mm whoop');
   assert.ok(P.bench.legs.length >= 4, 'open bench has legs');
@@ -1150,7 +1173,7 @@ test('Garage playground keeps whoop-sized gaps that match the visuals', () => {
   assert.ok(P.car.bodyH >= 3.5, 'sedan collider matches kit height');
   const garageSrc = readFileSync(join(root, 'sim-art-garage.js'), 'utf8');
   assert.match(garageSrc, /GARAGE_PLAY/);
-  assert.match(garageSrc, /addTireWell|addLadder|addHangLights/);
+  assert.match(garageSrc, /addTireWell|addLadder|addHangLights|addPlayLines/);
 });
 
 test('Warehouse Ion Nave is implemented with hex-frame gates', () => {
