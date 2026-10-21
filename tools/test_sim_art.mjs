@@ -33,14 +33,14 @@ import {
   restyleOffice, tickOfficeArt, officeBudget, officeWantsGlow,
   TRAINER_VIBE_ID, hideStockTrainerMeshes, buildLicoriceGrid,
   restyleTrainer, tickTrainerArt, trainerBudget, trainerWantsGlow,
-  BACKYARD_VIBE_ID, hideStockBackyardMeshes, buildJadeLot,
+  BACKYARD_VIBE_ID, hideStockBackyardMeshes, buildRyanYard,
   restyleBackyard, tickBackyardArt, backyardBudget, backyardWantsGlow,
   ROOM_VIBE_ID, hideStockRoomMeshes, buildPocketStage,
   restyleRoom, tickRoomArt, roomBudget, roomWantsGlow,
 } from '../sim-art.js';
 import { MAPS, FROZEN_CITY, cityTrackJson, freestyleTrack, freestyleIdFor } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
-import { MAP_IDS, MAP_LOOKS, buildMap, GARAGE_PLAY, WAREHOUSE_PLAY, LIVING_PLAY, GYM_PLAY, OFFICE_PLAY, CITY_PLAY, installCityExploreColliders } from '../sim-maps.js';
+import { MAP_IDS, MAP_LOOKS, buildMap, GARAGE_PLAY, WAREHOUSE_PLAY, LIVING_PLAY, GYM_PLAY, OFFICE_PLAY, CITY_PLAY, BACKYARD_PLAY, installCityExploreColliders } from '../sim-maps.js';
 import { DAILY_MAPS } from '../sim-retention.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -1616,21 +1616,23 @@ test('Trainer freestyle builds without throwing and the FPV frame is not all bla
   assert.match(tickSrc, /trainerBulb|trainerSpark|trainerFrame/);
 });
 
-test('Backyard Jade Lot is implemented with stone-gold gates', () => {
+test("Backyard Ryan's Yard is implemented with stucco-tile gates", () => {
   assert.equal(BACKYARD_VIBE_ID, 'backyard');
   const v = VIBES.backyard;
   assert.equal(v.implemented, true);
-  assert.equal(v.name, 'Jade Lot');
+  assert.equal(v.name, "Ryan's Yard");
   assert.equal(v.sky, 'gradient');
-  assert.equal(v.time, 'dusk');
+  assert.equal(v.time, 'overcast afternoon');
   assert.equal(v.gates.keepBrand, false);
-  assert.equal(v.gates.style, 'stone-gold');
+  assert.equal(v.gates.style, 'stucco-tile');
   assert.equal(v.post.bloom, false);
-  assert.equal(v.palette.neonA.toLowerCase(), '#c9a45b');
-  assert.equal(v.lighting.fogColor, 0x2a2014);
+  assert.equal(v.palette.neonA.toLowerCase(), '#c45a32');
+  assert.equal(v.lighting.fogColor, 0xd4c4a8);
+  assert.ok(v.looks.env <= 0.28);
+  assert.ok(v.looks.sun <= 0.55);
   assert.equal(backyardWantsGlow('low'), false);
   assert.equal(backyardWantsGlow('med'), true);
-  assert.equal(backyardBudget('low').posts < backyardBudget('high').posts, true);
+  assert.equal(backyardBudget('low').pots < backyardBudget('high').pots, true);
   assert.equal(backyardBudget('low').glow, false);
   assert.equal(backyardBudget('med').glow, true);
 });
@@ -1639,6 +1641,8 @@ test('Backyard freestyle builds without throwing and the FPV frame is not all bl
   installDomStub();
   const yardSrc = readFileSync(join(root, 'sim-art-backyard.js'), 'utf8');
   assert.equal(mentionsBannedAssets(yardSrc), false);
+  assert.match(yardSrc, /sim-art-felt\.js\?v=[0-9a-f]{12}/);
+  assert.match(yardSrc, /feltBasic|feltEmissive/);
   assert.match(yardSrc, /never abort the FPV render loop/);
   assert.match(yardSrc, /CapsuleGeometry|LatheGeometry|ExtrudeGeometry/);
   const free = freestyleTrack('backyard');
@@ -1662,6 +1666,16 @@ test('Backyard freestyle builds without throwing and the FPV frame is not all bl
     assert.ok(hidden.length >= 6, q + ' hidden stock ' + hidden.length);
     const vis = built.group.getObjectByName('backyardArtVisuals');
     assert.ok(vis, q + ' backyardArtVisuals');
+    let feltMats = 0;
+    vis.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (m && m.userData && m.userData.feltLocked) feltMats += 1;
+        if (m && m.metalness != null) assert.ok(m.metalness <= 0.05, q + ' metalness');
+      }
+    });
+    assert.ok(feltMats >= 8, q + ' feltLocked mats ' + feltMats);
     if (q === 'low') assert.equal(backyardBudget('low').glow, false);
     const stats = artStats(null, built.group);
     assert.ok(stats.callsEst >= 12, q + ' callsEst ' + stats.callsEst);
@@ -1674,14 +1688,41 @@ test('Backyard freestyle builds without throwing and the FPV frame is not all bl
       for (let i = 0; i < 8; i++) tickBackyardArt(built.group, 1000 + i * 16);
     }, q + ' tickBackyardArt');
     const parent = new THREE.Group();
-    assert.doesNotThrow(() => buildJadeLot(THREE, parent, vibeFor('backyard'), q, free.gates));
+    assert.doesNotThrow(() => buildRyanYard(THREE, parent, vibeFor('backyard'), q, free.gates));
   }
   const tickSrc = yardSrc.slice(
     yardSrc.indexOf('export function tickBackyardArt'),
     yardSrc.indexOf('export function restyleBackyard(THREE'),
   );
   assert.equal(/\bTHREE\b/.test(tickSrc), false, 'tickBackyardArt must not touch the THREE binding');
-  assert.match(tickSrc, /backyardIdol|backyardMoss/);
+  assert.match(tickSrc, /backyardPalm|backyardPool/);
+});
+
+test("Backyard playground keeps whoop-sized gaps that match Ryan's Yard", () => {
+  const built = buildMap(THREE, 'backyard');
+  const hit = (x, y, z) => {
+    const p = new THREE.Vector3(x, y, z);
+    return built.colliders.some((bb) => bb.containsPoint(p));
+  };
+  const P = BACKYARD_PLAY;
+  assert.equal(hit(P.patio.x, 2.20, P.patio.z), false, 'fly under patio');
+  assert.equal(hit(P.patio.x, P.patio.ceilY + 0.12, P.patio.z), true, 'patio ceiling solid');
+  assert.equal(hit(P.pvc.x, 1.75, P.pvc.z), false, 'fly through PVC');
+  assert.equal(hit(P.pvc.x + P.pvc.innerD / 2, 2.0, P.pvc.z + P.pvc.innerW / 2), true, 'PVC post solid');
+  assert.equal(hit(P.pvc.x, P.pvc.midY + 0.05, P.pvc.z - P.pvc.innerW / 2), true, 'PVC rail solid');
+  assert.equal(hit(P.ficus.x, 2.2, P.ficus.z), true, 'ficus trunk solid');
+  assert.equal(hit(P.ficus.x + 3.1, 2.25, P.ficus.z), false, 'spin radius open');
+  assert.equal(hit(P.pool.x, 1.12, P.pool.z), false, 'skim the pool');
+  assert.equal(hit(P.canopy.x, P.canopy.y, P.canopy.z), false, 'canopy hoop open');
+  assert.equal(hit(P.alley.x, 1.18, 14.0), false, 'side alley open');
+  assert.equal(hit(P.woodGate.x, 2.2, P.woodGate.z), true, 'wood gate solid');
+  assert.equal(hit(P.woodGate.x, P.woodGate.h + 0.4, P.woodGate.z), false, 'pop over wood gate');
+  assert.equal(hit(P.ridge.x, P.ridge.y + 0.1, P.ridge.z), true, 'ridge solid');
+  assert.equal(hit(P.ac.x, 1.0, P.ac.z), true, 'AC obstacle');
+  assert.ok(P.whoopClear >= 0.85, 'whoop clearance');
+  const yardSrc = readFileSync(join(root, 'sim-art-backyard.js'), 'utf8');
+  assert.match(yardSrc, /BACKYARD_PLAY/);
+  assert.match(yardSrc, /addPvc|addTree|addPool|addPlayLines/);
 });
 
 test('Your Room Pocket Stage is implemented with felt-ring gates', () => {

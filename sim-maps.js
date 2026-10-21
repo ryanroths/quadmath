@@ -4,7 +4,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=5a36ca56c8f9';
+import { planRoom } from './sim-room.js?v=9017daf8a7b6';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -108,11 +108,72 @@ export const WAREHOUSE_PLAY = Object.freeze({
   dock: Object.freeze({ x: 0, z: 40.5, w: 16, h: 1.1, d: 3.2 }),
 });
 
+// Ryan's Phoenix backyard. ~14 m × 12 m at WS=3.5. Whoop gaps ≥ 0.85 wu.
+// House at +Z, yard toward −Z, pool −X, turf / ficus +X.
+export const BACKYARD_PLAY = Object.freeze({
+  whoopClear: 0.85,
+  wallH: 6.3,
+  house: Object.freeze({
+    x: 1.5, z: 14.1, w: 35.0, d: 13.8, wallH: 19.25, thick: 0.42,
+  }),
+  ridge: Object.freeze({ x: 1.5, y: 24.2, z: 14.1, w: 36.2, h: 0.42, d: 0.55 }),
+  eaveS: Object.freeze({ x: 1.5, y: 19.05, z: 5.55, w: 36.6, h: 0.28, d: 2.8 }),
+  eaveN: Object.freeze({ x: 1.5, y: 19.05, z: 22.65, w: 36.6, h: 0.28, d: 2.8 }),
+  roofS: Object.freeze({ x: 1.5, y: 21.4, z: 9.7, w: 35.6, h: 0.36, d: 7.4 }),
+  roofN: Object.freeze({ x: 1.5, y: 21.4, z: 18.5, w: 35.6, h: 0.36, d: 7.4 }),
+  patio: Object.freeze({
+    x: 4.0, z: 1.95, w: 14.0, d: 10.5, ceilY: 9.45, ceilH: 0.22, col: 0.48,
+  }),
+  shade: Object.freeze({ x: 4.0, y: 9.12, z: -3.18, w: 13.6, h: 0.16, d: 0.22 }),
+  turf: Object.freeze({ x: 14.0, z: -5.75, w: 21.0, d: 17.5 }),
+  pvc: Object.freeze({
+    x: 13.5, z: -3.5, innerW: 3.18, innerD: 3.18, h: 7.0, bar: 0.16, midY: 3.5,
+  }),
+  ficus: Object.freeze({ x: 17.2, z: -15.4, r: 0.45, h: 14.0 }),
+  planter: Object.freeze({ x: 17.2, z: -15.4, rOut: 2.65, rIn: 1.72, h: 1.4 }),
+  fire: Object.freeze({ x: 12.4, z: -17.2, w: 3.2, d: 3.2, bowlR: 0.62, bowlH: 0.42 }),
+  shed: Object.freeze({ x: 22.6, z: -11.5, w: 4.2, h: 6.3, d: 3.5 }),
+  pool: Object.freeze({ x: -8.5, z: -5.5, w: 24.0, d: 12.0 }),
+  deckT: 1.55,
+  fence: Object.freeze({
+    x: 2.15, z0: -12.2, z1: 3.6, h: 4.2, post: 0.12, spacing: 5.25,
+  }),
+  pots: Object.freeze([
+    Object.freeze({ x: 1.15, z: -10.4, r: 0.28, h: 0.72 }),
+    Object.freeze({ x: 1.15, z: -5.2, r: 0.26, h: 0.64 }),
+    Object.freeze({ x: 1.20, z: 0.2, r: 0.30, h: 0.78 }),
+    Object.freeze({ x: 1.10, z: 2.8, r: 0.24, h: 0.58 }),
+  ]),
+  pad: Object.freeze({ x: -18.5, z: -15.5, w: 6.4, d: 5.6, h: 0.28 }),
+  sofa: Object.freeze({
+    x: -18.5, z: -16.55, w: 3.4, seatH: 0.62, d: 1.35, backH: 1.15, backD: 0.22,
+  }),
+  palms: Object.freeze([
+    Object.freeze({ x: -20.6, z: -13.4, r: 0.16, h: 11.2 }),
+    Object.freeze({ x: -16.4, z: -13.1, r: 0.15, h: 10.4 }),
+    Object.freeze({ x: -19.2, z: -17.85, r: 0.28, h: 7.6 }),
+  ]),
+  umbrella: Object.freeze({
+    x: -15.05, z: -14.6, r: 2.35, bar: 0.12, segs: 5,
+  }),
+  canopy: Object.freeze({
+    x: -17.6, y: 1.55, z: -12.55, innerW: 2.35, innerH: 2.20, bar: 0.12, depth: 2.35,
+  }),
+  wing: Object.freeze({
+    x: -20.8, z: 8.75, w: 6.8, d: 15.5, wallH: 10.4,
+  }),
+  wingEave: Object.freeze({ x: -20.8, y: 12.15, z: 8.75, w: 8.2, h: 0.28, d: 16.6 }),
+  alley: Object.freeze({ x: 21.75, z0: 7.2, z1: 21.0, w: 5.5 }),
+  woodGate: Object.freeze({ x: 21.75, z: 20.55, w: 4.85, h: 5.55, d: 0.18 }),
+  ac: Object.freeze({ x: 21.5, z: 6.55, w: 1.55, h: 2.15, d: 1.30 }),
+  alleyEave: Object.freeze({ x: 21.75, y: 19.05, z: 14.1, w: 5.6, h: 0.28, d: 14.0 }),
+});
+
 export const LAYOUT = {
   living: { w: 21, d: 28, h: 9.1, wall: 0.38 },
   garage: { w: 21, d: 42, h: 10.5, wall: 0.4 },
   warehouse: { w: 56, d: 84, h: 21, wall: 0.5 },
-  backyard: { w: 42, d: 56, h: 0, wall: 0.22 },
+  backyard: { w: 49, d: 42, h: 0, wall: 0.36 },
   office: { w: 36, d: 46, h: 9.2, wall: 0.36 },
   gym: { w: 48, d: 74, h: 28, wall: 0.46 },
   trainer: { w: 28, d: 36, h: 10.5, wall: 0.34 },
@@ -124,7 +185,7 @@ export const MAP_ORBIT = {
   living: { cx: 0, cy: 1.7, cz: -1.5, r: 6.4, h: 5.5, fov: 62 },
   garage: { cx: 0, cy: 2.0, cz: 1.5, r: 7.2, h: 6.4, fov: 60 },
   warehouse: { cx: 0, cy: 2.4, cz: 0, r: 2.2, h: 17.2, fov: 72 },
-  backyard: { cx: 0, cy: 2.2, cz: -6, r: 22, h: 11, fov: 58 },
+  backyard: { cx: 2, cy: 3.4, cz: -2, r: 28, h: 15, fov: 58 },
   office: { cx: 4, cy: 1.8, cz: 2, r: 6.8, h: 6.0, fov: 62 },
   gym: { cx: 0, cy: 3.4, cz: 2, r: 5.5, h: 16.5, fov: 68 },
   trainer: { cx: 0, cy: 1.9, cz: 0, r: 8.2, h: 6.6, fov: 60 },
@@ -135,7 +196,7 @@ export const MAP_LOOKS = {
   living: { fog: 0.004, sun: 0.55, env: 0.62, bg: 0.38, hemi: 0.38 },
   garage: { fog: 0.003, sun: 0.7, env: 0.26, bg: 0.34, hemi: 0.60 },
   warehouse: { fog: 0.0018, sun: 0.55, env: 0.5, bg: 0.28, hemi: 0.28 },
-  backyard: { fog: 0.0025, sun: 1.5, env: 0.72, bg: 0.48, hemi: 0.16 },
+  backyard: { fog: 0.0018, sun: 0.40, env: 0.22, bg: 0.42, hemi: 0.62 },
   city: { fog: 0.00105, sun: 0.30, env: 0.18, bg: 0.16, hemi: 0.56 },
   office: { fog: 0.0032, sun: 0.48, env: 0.58, bg: 0.34, hemi: 0.36 },
   gym: { fog: 0.0010, sun: 0.95, env: 0.70, bg: 0.44, hemi: 0.55 },
@@ -197,6 +258,22 @@ function hoopFrame(THREE, parent, colliders, x, y, z, innerW, innerH, bar, depth
   box(THREE, parent, colliders, x, y - innerH / 2 - bar, z, ow, bar, depth, material);
   box(THREE, parent, colliders, x - innerW / 2 - bar / 2, y - innerH / 2, z, bar, innerH, depth, material);
   box(THREE, parent, colliders, x + innerW / 2 + bar / 2, y - innerH / 2, z, bar, innerH, depth, material);
+}
+
+function boxFrameX(THREE, parent, colliders, spec, material) {
+  const hx = spec.innerD / 2, hz = spec.innerW / 2, b = spec.bar, h = spec.h;
+  for (const dx of [-hx, hx]) {
+    for (const dz of [-hz, hz]) {
+      box(THREE, parent, colliders, spec.x + dx, 0, spec.z + dz, b, h, b, material);
+    }
+  }
+  for (const y of [h - b, spec.midY]) {
+    if (y == null) continue;
+    box(THREE, parent, colliders, spec.x, y, spec.z - hz, spec.innerD + b, b, b, material);
+    box(THREE, parent, colliders, spec.x, y, spec.z + hz, spec.innerD + b, b, b, material);
+    box(THREE, parent, colliders, spec.x - hx, y, spec.z, b, b, spec.innerW + b, material);
+    box(THREE, parent, colliders, spec.x + hx, y, spec.z, b, b, spec.innerW + b, material);
+  }
 }
 
 function tireWell(THREE, parent, colliders, spec, material) {
@@ -553,32 +630,94 @@ function fenceRun(THREE, parent, colliders, x0, z0, x1, z1, h, mats, gateGap) {
 
 function buildBackyard(THREE, parent, colliders, lights) {
   const L = LAYOUT.backyard;
+  const P = BACKYARD_PLAY;
   const mats = {
-    grass: mat(THREE, 0x5d7a3a, 'grass'),
-    patio: mat(THREE, 0xb7b0a4, 'concrete'),
+    turf: mat(THREE, 0x3f8a4a, 'grass'),
+    pebble: mat(THREE, 0xc2b39a, 'concrete'),
+    stucco: mat(THREE, 0xc4a882, 'facade'),
+    tile: mat(THREE, 0xc45a32, 'wood'),
     wood: mat(THREE, 0x6a4e32, 'wood'),
     shed: mat(THREE, 0x7a8680, 'concrete'),
-    grill: mat(THREE, 0x2a2c30, 'concrete', { metalness: 0.6, roughness: 0.35 }),
-    fence: mat(THREE, 0x8a6a44, 'wood'),
+    cmu: mat(THREE, 0xb89a72, 'concrete'),
+    metal: mat(THREE, 0x2a2c30, 'concrete'),
   };
-  const floor = makeFloor(THREE, parent, L.w + 8, L.d + 8, mats.grass);
-  const patio = makeFloor(THREE, parent, 16, 12, mats.patio, 0.04);
-  patio.position.set(0, 0.04, -10);
-  const hx = L.w / 2, hz = L.d / 2, fh = 6.2;
-  fenceRun(THREE, parent, colliders, -hx, -hz, hx, -hz, fh, mats, null);
-  fenceRun(THREE, parent, colliders, -hx, hz, hx, hz, fh, mats, { x: 0, z: hz, w: 6.5 });
-  fenceRun(THREE, parent, colliders, -hx, -hz, -hx, hz, fh, mats, null);
-  fenceRun(THREE, parent, colliders, hx, -hz, hx, hz, fh, mats, null);
-  // shed
-  box(THREE, parent, colliders, 14.5, 0, -18, 7.2, 6.8, 8.0, mats.shed);
-  box(THREE, parent, colliders, 14.5, 6.8, -18, 7.6, 1.1, 8.4, mats.wood);
-  // grill + table on patio
-  box(THREE, parent, colliders, -4.2, 0, -10.5, 1.6, 2.4, 1.2, mats.grill);
-  box(THREE, parent, colliders, 3.2, 0, -9.5, 3.6, 1.15, 1.8, mats.wood);
-  // planter boxes
-  box(THREE, parent, colliders, -14.5, 0, 8, 3.2, 1.4, 3.2, mats.wood);
-  box(THREE, parent, colliders, 14.5, 0, 8, 3.2, 1.4, 3.2, mats.wood);
-  addLight(THREE, parent, lights, 0, 6.5, -10, 0xffe0b0, 2.4, 22);
+  const floor = makeFloor(THREE, parent, L.w + 10, L.d + 10, mats.pebble);
+  const turf = makeFloor(THREE, parent, P.turf.w, P.turf.d, mats.turf, 0.03);
+  turf.position.set(P.turf.x, 0.03, P.turf.z);
+  const patio = makeFloor(THREE, parent, P.patio.w, P.patio.d, mats.pebble, 0.05);
+  patio.position.set(P.patio.x, 0.05, P.patio.z);
+  const hx = L.w / 2, hz = L.d / 2, t = L.wall, wh = P.wallH;
+  box(THREE, parent, colliders, 0, 0, -hz, L.w, wh, t, mats.cmu);
+  box(THREE, parent, colliders, -hx, 0, 0, t, wh, L.d, mats.cmu);
+  box(THREE, parent, colliders, hx, 0, 0, t, wh, L.d, mats.cmu);
+  box(THREE, parent, colliders, -8.4, 0, hz, 32.2, wh, t, mats.cmu);
+  const hs = P.house;
+  box(THREE, parent, colliders, hs.x, 0, hs.z, hs.w, hs.wallH, hs.d, mats.stucco);
+  box(THREE, parent, colliders, P.ridge.x, P.ridge.y, P.ridge.z, P.ridge.w, P.ridge.h, P.ridge.d, mats.tile);
+  box(THREE, parent, colliders, P.roofS.x, P.roofS.y, P.roofS.z, P.roofS.w, P.roofS.h, P.roofS.d, mats.tile);
+  box(THREE, parent, colliders, P.roofN.x, P.roofN.y, P.roofN.z, P.roofN.w, P.roofN.h, P.roofN.d, mats.tile);
+  box(THREE, parent, colliders, P.eaveS.x, P.eaveS.y, P.eaveS.z, P.eaveS.w, P.eaveS.h, P.eaveS.d, mats.tile);
+  box(THREE, parent, colliders, P.eaveN.x, P.eaveN.y, P.eaveN.z, P.eaveN.w, P.eaveN.h, P.eaveN.d, mats.tile);
+  const pt = P.patio;
+  const col = pt.col;
+  for (const dx of [-pt.w / 2 + col, pt.w / 2 - col]) {
+    for (const dz of [-pt.d / 2 + col, pt.d / 2 - col]) {
+      box(THREE, parent, colliders, pt.x + dx, 0, pt.z + dz, col, pt.ceilY, col, mats.stucco);
+    }
+  }
+  box(THREE, parent, colliders, pt.x, pt.ceilY, pt.z, pt.w, pt.ceilH, pt.d, mats.stucco);
+  box(THREE, parent, colliders, P.shade.x, P.shade.y, P.shade.z, P.shade.w, P.shade.h, P.shade.d, mats.metal);
+  boxFrameX(THREE, parent, colliders, P.pvc, mats.wood);
+  cyl(THREE, parent, colliders, P.ficus.x, 0, P.ficus.z, P.ficus.r, P.ficus.r, P.ficus.h, mats.wood);
+  const ring = P.planter;
+  const ringT = ring.rOut - ring.rIn;
+  const ringR = (ring.rOut + ring.rIn) / 2;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    box(THREE, parent, colliders, ring.x + Math.cos(a) * ringR, 0, ring.z + Math.sin(a) * ringR, ringT, ring.h, ringT * 1.15, mats.cmu);
+  }
+  box(THREE, parent, colliders, P.fire.x, 0, P.fire.z, P.fire.w, 0.12, P.fire.d, mats.pebble);
+  cyl(THREE, parent, colliders, P.fire.x, 0.12, P.fire.z, P.fire.bowlR, P.fire.bowlR * 0.82, P.fire.bowlH, mats.metal);
+  box(THREE, parent, colliders, P.shed.x, 0, P.shed.z, P.shed.w, P.shed.h, P.shed.d, mats.shed);
+  const pl = P.pool, dt = P.deckT;
+  box(THREE, parent, colliders, pl.x, 0, pl.z - pl.d / 2 - dt / 2, pl.w + dt * 2, 0.22, dt, mats.pebble);
+  box(THREE, parent, colliders, pl.x, 0, pl.z + pl.d / 2 + dt / 2, pl.w + dt * 2, 0.22, dt, mats.pebble);
+  box(THREE, parent, colliders, pl.x - pl.w / 2 - dt / 2, 0, pl.z, dt, 0.22, pl.d, mats.pebble);
+  box(THREE, parent, colliders, pl.x + pl.w / 2 + dt / 2, 0, pl.z, dt, 0.22, pl.d, mats.pebble);
+  const fn = P.fence;
+  let fi = 0;
+  for (let z = fn.z0; z <= fn.z1 + 0.05; z += fn.spacing, fi++) {
+    box(THREE, parent, colliders, fn.x, 0, z, fn.post, fn.h, fn.post, mats.metal);
+    if (fi % 2 === 0 && z + fn.spacing <= fn.z1 + 0.05) {
+      box(THREE, parent, colliders, fn.x, fn.h * 0.42, z + fn.spacing / 2, 0.06, 0.08, fn.spacing, mats.metal);
+    }
+  }
+  for (const pot of P.pots) {
+    cyl(THREE, parent, colliders, pot.x, 0, pot.z, pot.r, pot.r * 0.85, pot.h, mats.tile);
+  }
+  box(THREE, parent, colliders, P.pad.x, 0, P.pad.z, P.pad.w, P.pad.h, P.pad.d, mats.pebble);
+  const sf = P.sofa;
+  box(THREE, parent, colliders, sf.x, 0, sf.z, sf.w, sf.seatH, sf.d, mats.wood);
+  box(THREE, parent, colliders, sf.x, sf.seatH, sf.z - sf.d / 2 + sf.backD / 2, sf.w, sf.backH - sf.seatH, sf.backD, mats.wood);
+  for (const palm of P.palms) {
+    cyl(THREE, parent, colliders, palm.x, 0, palm.z, palm.r, palm.r * 0.85, palm.h, mats.wood);
+  }
+  const um = P.umbrella;
+  for (let i = 0; i < um.segs; i++) {
+    const a = (i / (um.segs - 1)) * Math.PI * 0.92;
+    const px = um.x + Math.sin(a) * um.r;
+    const py = (1 - Math.cos(a)) * um.r;
+    box(THREE, parent, colliders, px, py, um.z, um.bar, um.bar + 0.18, um.bar, mats.metal);
+  }
+  hoopFrame(THREE, parent, colliders, P.canopy.x, P.canopy.y, P.canopy.z, P.canopy.innerW, P.canopy.innerH, P.canopy.bar, P.canopy.depth, mats.tile);
+  const wg = P.wing;
+  box(THREE, parent, colliders, wg.x, 0, wg.z, wg.w, wg.wallH, wg.d, mats.stucco);
+  box(THREE, parent, colliders, P.wingEave.x, P.wingEave.y, P.wingEave.z, P.wingEave.w, P.wingEave.h, P.wingEave.d, mats.tile);
+  box(THREE, parent, colliders, P.woodGate.x, 0, P.woodGate.z, P.woodGate.w, P.woodGate.h, P.woodGate.d, mats.wood);
+  box(THREE, parent, colliders, P.ac.x, 0, P.ac.z, P.ac.w, P.ac.h, P.ac.d, mats.metal);
+  box(THREE, parent, colliders, P.alleyEave.x, P.alleyEave.y, P.alleyEave.z, P.alleyEave.w, P.alleyEave.h, P.alleyEave.d, mats.tile);
+  addLight(THREE, parent, lights, 4, 10.2, 2, 0xffe0b8, 1.6, 28);
+  addLight(THREE, parent, lights, -8, 8.4, -6, 0xfff0d0, 1.2, 24);
   return { floor, orbit: MAP_ORBIT.backyard };
 }
 

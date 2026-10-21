@@ -52,7 +52,8 @@ for (const t of files) {
 assert.ok((byMap.living || 0) >= 2);
 assert.ok((byMap.garage || 0) >= 5);
 assert.ok((byMap.warehouse || 0) >= 2);
-assert.ok((byMap.backyard || 0) >= 2);
+assert.ok((byMap.backyard || 0) >= 4);
+assert.equal(byMap.backyard, 4);
 assert.ok((byMap.office || 0) >= 2, 'office needs 2+ tracks');
 assert.ok((byMap.gym || 0) >= 2, 'gym needs 2+ tracks');
 assert.ok((byMap.trainer || 0) >= 2, 'trainer needs 2+ tracks');
@@ -62,7 +63,7 @@ assert.equal(byMap.gym, 5);
 assert.equal(byMap.trainer, 3);
 assert.ok((byMap.city || 0) >= 4, 'city needs loop + zigzag + 2 named lines');
 
-for (const t of files.filter((x) => ['living', 'office', 'gym', 'trainer'].includes(x.map) || ['city-inside', 'city-spins'].includes(x.id))) {
+for (const t of files.filter((x) => ['living', 'office', 'gym', 'trainer', 'backyard'].includes(x.map) || ['city-inside', 'city-spins'].includes(x.id))) {
   for (const g of t.gates) {
     assert.ok(g.size <= 2.2, t.id + ' whoop gate too large: ' + g.size);
     assert.ok(g.solid, t.id + ' whoop gates should be solid');

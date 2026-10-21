@@ -3,7 +3,7 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=d054ab081c29';
+import { hexNum } from './sim-art-city.js?v=a6b4469c954b';
 export {
   FELT_SCALE, applyFeltMaterial, feltBasic, feltClay, feltEmissive,
   studioPhoneBudget, qualityWantsStudioBloom,
@@ -21,53 +21,53 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=d054ab081c29';
+} from './sim-art-city.js?v=a6b4469c954b';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget, planLivingKit,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=7d9cfd679a06';
+} from './sim-art-living.js?v=0d8377e9ae06';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=e986bfba00e2';
+} from './sim-art-garage.js?v=dab82a4ea98a';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=ddfffa856e2f';
+} from './sim-art-warehouse.js?v=86abd6bd7ac6';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
   planGymKit,
-} from './sim-art-gym.js?v=78f159985ee8';
+} from './sim-art-gym.js?v=3023746823f0';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget, planOfficeKit,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=f2130dcaeb0a';
+} from './sim-art-office.js?v=9fb8905111ad';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=f8c7c377dfcb';
+} from './sim-art-trainer.js?v=a27e433fcc6b';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
-  hideStockBackyardMeshes, restyleBackyardShell, buildJadeLot,
+  hideStockBackyardMeshes, restyleBackyardShell, buildRyanYard, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
-} from './sim-art-backyard.js?v=fe78e848d32c';
+} from './sim-art-backyard.js?v=f506ce416fab';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=bdc9aace5c52';
+} from './sim-art-room.js?v=e20a2a338a0e';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
@@ -75,7 +75,7 @@ export {
   tryDressOfficeKit, officeKitBytesForQuality, OFFICE_KIT_CORE, OFFICE_KIT_EXTRA,
   tryDressGymKit, gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA,
   tryDressLivingKit, livingKitBytesForQuality, LIVING_KIT_CORE, LIVING_KIT_EXTRA,
-} from './sim-art-kit.js?v=67b129386313';
+} from './sim-art-kit.js?v=d8add914ed4e';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
@@ -250,35 +250,35 @@ export const VIBES = Object.freeze({
   }),
   backyard: Object.freeze({
     id: 'backyard',
-    name: 'Jade Lot',
-    tagline: 'Dusk jungle-temple backyard, gold leaf, moss posts',
+    name: "Ryan's Yard",
+    tagline: 'Warm overcast Phoenix backyard, turf, pool, PVC gate',
     implemented: true,
-    time: 'dusk',
+    time: 'overcast afternoon',
     sky: 'gradient',
     palette: Object.freeze({
-      void: '#0c1410', zenith: '#1b2a18', horizon: '#c9a45b', dusk: '#8a4a2a',
-      street: '#3a4a28', sidewalk: '#5d7a3a', lane: '#c9a45b', laneAlt: '#ffe0b0',
-      facade: '#6a5340', facadeAlt: '#4a3a2a', windowOn: '#ffe0b0', windowAlt: '#c9a45b',
-      neonA: '#c9a45b', neonB: '#5d7a3a', neonC: '#8a4a2a', mesa: '#8a4a2a',
-      gateA: '#c9a45b', gateB: '#5d7a3a',
+      void: '#c8b89a', zenith: '#8eb4c8', horizon: '#e8c9a0', dusk: '#c45a32',
+      street: '#3f8a4a', sidewalk: '#c2b39a', lane: '#2ec4b6', laneAlt: '#e8d4a8',
+      facade: '#c4a882', facadeAlt: '#b89a72', windowOn: '#1a2430', windowAlt: '#2a3540',
+      neonA: '#c45a32', neonB: '#2ec4b6', neonC: '#3f8a4a', mesa: '#e8a04a',
+      gateA: '#c45a32', gateB: '#2ec4b6',
     }),
     lighting: Object.freeze({
-      sunColor: 0xffc878, sunIntensity: 0.7, fillColor: 0x5d7a3a, fillIntensity: 0.12,
-      hemiSky: 0x1b2a18, hemiGround: 0x3a2a18, hemiIntensity: 0.28,
-      exposure: 0.58, fogColor: 0x2a2014, fogDensity: 0.0028,
-      bloomStrength: 0.38, bloomRadius: 0.34, bloomThreshold: 0.82,
-      gateEmissive: 3.2, gateEmissiveActive: 4.5,
+      sunColor: 0xffe0b8, sunIntensity: 0.40, fillColor: 0xc8b89a, fillIntensity: 0.18,
+      hemiSky: 0x8eb4c8, hemiGround: 0xc4a882, hemiIntensity: 0.62,
+      exposure: 0.68, fogColor: 0xd4c4a8, fogDensity: 0.0018,
+      bloomStrength: 0.12, bloomRadius: 0.22, bloomThreshold: 0.88,
+      gateEmissive: 1.6, gateEmissiveActive: 2.4,
     }),
-    looks: Object.freeze({ fog: 0.0028, sun: 0.7, env: 0.5, bg: 0.32, hemi: 0.28 }),
-    gates: Object.freeze({ style: 'stone-gold', keepBrand: false }),
-    props: Object.freeze(['ziggurat shed', 'stone planters', 'moss posts', 'dusk dome', 'idol peak']),
+    looks: Object.freeze({ fog: 0.0018, sun: 0.40, env: 0.22, bg: 0.42, hemi: 0.62 }),
+    gates: Object.freeze({ style: 'stucco-tile', keepBrand: false }),
+    props: Object.freeze(['PVC gate', 'kidney pool', 'ficus planter', 'umbrella arch', 'side alley']),
     post: Object.freeze({
       bloom: false, analog: false,
-      lift: Object.freeze([0.03, 0.02, 0.0]),
-      gamma: 0.96,
-      gain: Object.freeze([1.10, 1.02, 0.86]),
-      vignette: 0.36,
-      ao: 0.40,
+      lift: Object.freeze([0.02, 0.016, 0.0]),
+      gamma: 1.02,
+      gain: Object.freeze([1.08, 1.02, 0.92]),
+      vignette: 0.28,
+      ao: 0.28,
     }),
   }),
   office: Object.freeze({
@@ -434,7 +434,7 @@ export function resolveMapLighting(mapId) {
     sky: vibe.sky,
     citySky: id === 'city',
     outdoorSky: id === 'city' || id === 'backyard',
-    sunSprite: id === 'backyard',
+    sunSprite: false,
     lighting: L,
     looks: vibe.looks,
     post: vibe.post,
@@ -629,7 +629,7 @@ export function buildMoodScene(THREE, vibeId) {
   return g;
 }
 
-const TICK_SKIP = /^(cityRain|citySteam|cityWet|cityTrails|cityCruise|cityCurrent|cityDrone|livingLamp|livingLantern|livingSteam|livingScreen|livingClay|garageTube|garageSpark|garageSign|garageFan|warehouseTube|warehouseOrb|warehouseIon|gymRim|gymDust|gymBanner|gymCan|officeScreen|officePlant|officeSun|officePlane|officeBlind|trainerBulb|trainerSpark|trainerFrame|trainerSign|backyardIdol|backyardMoss|roomLamp|roomStage|roomMobile)$/;
+const TICK_SKIP = /^(cityRain|citySteam|cityWet|cityTrails|cityCruise|cityCurrent|cityDrone|livingLamp|livingLantern|livingSteam|livingScreen|livingClay|garageTube|garageSpark|garageSign|garageFan|warehouseTube|warehouseOrb|warehouseIon|gymRim|gymDust|gymBanner|gymCan|officeScreen|officePlant|officeSun|officePlane|officeBlind|trainerBulb|trainerSpark|trainerFrame|trainerSign|backyardPalm|backyardPool|roomLamp|roomStage|roomMobile)$/;
 
 function artTickUserData(o) {
   const u = o && o.userData;
