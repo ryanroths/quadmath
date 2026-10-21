@@ -1,8 +1,8 @@
 // QuadMath sim W5 — Retention: daily whoop, weekly boards, ghost duels, skins.
 // Nothing here is copied from WebFPV (GPL).
 // New localStorage keys: quadmathSimDaily, quadmathSimBoard, quadmathSimSkin,
-// quadmathSimPilotToken, quadmathSimCanopy. Optional: quadmathSimLeaderboardUrl
-// (online boards).
+// quadmathSimPilotToken, quadmathSimCanopy, quadmathSimWhoopKit. Optional:
+// quadmathSimLeaderboardUrl (online boards).
 // Do not write old ryfly* keys.
 // This file has no sim-*.js imports so the Cloudflare Worker can bundle it.
 
@@ -10,6 +10,8 @@ export const DAILY_KEY = 'quadmathSimDaily';
 export const BOARD_KEY = 'quadmathSimBoard';
 export const SKIN_KEY = 'quadmathSimSkin';
 export const CANOPY_KEY = 'quadmathSimCanopy';
+export const WHOOP_KIT_KEY = 'quadmathSimWhoopKit';
+export const WHOOP_KIT_VER = 1;
 export const LEADERBOARD_URL_KEY = 'quadmathSimLeaderboardUrl';
 export const PILOT_TOKEN_KEY = 'quadmathSimPilotToken';
 export const SHARE_PREFIX = 'QM2.';
@@ -1720,6 +1722,191 @@ export function saveCanopyOn(on, storage) {
   }
 }
 
+// Garage kit: canopy / frame / prop paint + one of four original canopy
+// silhouettes. Stored only under WHOOP_KIT_KEY. Shapes are QuadMath originals
+// (deformed sphere layouts), not imported meshes.
+export const CANOPY_SHAPES = Object.freeze(['dome', 'wedge', 'bullet', 'flat']);
+export const KIT_CANOPY_COLORS = Object.freeze([
+  0xff4d1a, 0x3ddc97, 0x00e5ff, 0xf2f0ea, 0xb14eff, 0xffc857,
+]);
+export const KIT_FRAME_COLORS = Object.freeze([
+  0x1a1d24, 0x3a3f4a, 0xe8e9ed, 0xff4d1a, 0x2a4a3a, 0x7a5130,
+]);
+export const KIT_PROP_COLORS = Object.freeze([
+  0xff4d1a, 0x00e5ff, 0xf2f0ea, 0x3ddc97, 0x1a1d24, 0x7ec8e3,
+]);
+export const REPLAY_GHOST_HZ = 30;
+export const REPLAY_GHOST_MAX = 900;
+export const REPLAY_CLIP_MS = 10000;
+
+export function clampKitColor(n, fallback) {
+  const v = Number(n);
+  const fb = (fallback >>> 0) & 0xffffff;
+  if (!Number.isFinite(v)) return fb;
+  return (v >>> 0) & 0xffffff;
+}
+
+export function defaultWhoopKit() {
+  return {
+    v: WHOOP_KIT_VER,
+    canopy: 0xff4d1a,
+    frame: 0x1a1d24,
+    prop: 0xff4d1a,
+    shape: 'dome',
+  };
+}
+
+export function normalizeWhoopKit(raw) {
+  const d = defaultWhoopKit();
+  if (!raw || typeof raw !== 'object') return d;
+  const shape = CANOPY_SHAPES.includes(raw.shape) ? raw.shape : d.shape;
+  return {
+    v: WHOOP_KIT_VER,
+    canopy: clampKitColor(raw.canopy, d.canopy),
+    frame: clampKitColor(raw.frame, d.frame),
+    prop: clampKitColor(raw.prop, d.prop),
+    shape,
+  };
+}
+
+export function loadWhoopKit(storage) {
+  const store = storageOf(storage);
+  if (!store) return defaultWhoopKit();
+  try {
+    const raw = store.getItem(WHOOP_KIT_KEY);
+    if (!raw) return defaultWhoopKit();
+    return normalizeWhoopKit(JSON.parse(raw));
+  } catch (e) {
+    return defaultWhoopKit();
+  }
+}
+
+export function saveWhoopKit(kit, storage) {
+  const store = storageOf(storage);
+  if (!store) return false;
+  try {
+    store.setItem(WHOOP_KIT_KEY, JSON.stringify(normalizeWhoopKit(kit)));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+export function applyWhoopKitToSkin(skin, kit) {
+  const s = skin || SKINS[0];
+  const k = normalizeWhoopKit(kit);
+  return {
+    id: s.id,
+    name: s.name,
+    vibe: s.vibe,
+    unlock: s.unlock,
+    canopy: k.canopy,
+    body: s.body,
+    frame: k.frame,
+    prop: k.prop,
+    led: k.canopy,
+    trail: k.canopy,
+  };
+}
+
+export function canopyShapeLayout(shape) {
+  const id = CANOPY_SHAPES.includes(shape) ? shape : 'dome';
+  if (id === 'wedge') {
+    return { id, sx: 0.92, sy: 0.22, sz: 1.72, x: 0, y: 0.052, z: -0.10, rx: 0.22 };
+  }
+  if (id === 'bullet') {
+    return { id, sx: 0.52, sy: 0.36, sz: 2.05, x: 0, y: 0.056, z: -0.14, rx: 0 };
+  }
+  if (id === 'flat') {
+    return { id, sx: 1.05, sy: 0.16, sz: 1.18, x: 0, y: 0.046, z: -0.04, rx: 0 };
+  }
+  return { id: 'dome', sx: 0.72, sy: 0.42, sz: 1.45, x: 0, y: 0.062, z: -0.07, rx: 0 };
+}
+
+export function applyCraftCanopyShape(group, shape) {
+  if (!group) return null;
+  const L = canopyShapeLayout(shape);
+  const kids = group.children || [];
+  let mesh = kids.find((o) => o && o.userData && o.userData.craftRole === 'canopyBody');
+  if (!mesh && group.traverse) {
+    group.traverse((o) => {
+      if (!mesh && o && o.userData && o.userData.craftRole === 'canopyBody') mesh = o;
+    });
+  }
+  if (!mesh) return L;
+  if (mesh.scale && mesh.scale.set) mesh.scale.set(L.sx, L.sy, L.sz);
+  if (mesh.position && mesh.position.set) mesh.position.set(L.x, L.y, L.z);
+  if (mesh.rotation) mesh.rotation.x = L.rx;
+  mesh.userData.canopyShape = L.id;
+  return L;
+}
+
+function quatRotateVec(q, x, y, z, out) {
+  const dest = out || { x: 0, y: 0, z: 0 };
+  const qx = q && Number.isFinite(q.x) ? q.x : 0;
+  const qy = q && Number.isFinite(q.y) ? q.y : 0;
+  const qz = q && Number.isFinite(q.z) ? q.z : 0;
+  const qw = q && Number.isFinite(q.w) ? q.w : 1;
+  const ix = qw * x + qy * z - qz * y;
+  const iy = qw * y + qz * x - qx * z;
+  const iz = qw * z + qx * y - qy * x;
+  const iw = -qx * x - qy * y - qz * z;
+  dest.x = ix * qw + iw * -qx + iy * -qz - iz * -qy;
+  dest.y = iy * qw + iw * -qy + iz * -qx - ix * -qz;
+  dest.z = iz * qw + iw * -qz + ix * -qy - iy * -qx;
+  return dest;
+}
+
+export function replayChaseOffset(q, out) {
+  return quatRotateVec(q, 0, 0.48, 1.55, out);
+}
+
+export function replayOrbitOffset(elapsedMs, out) {
+  const dest = out || { x: 0, y: 0, z: 0 };
+  const t = (Number(elapsedMs) || 0) / 1000;
+  const r = 1.85;
+  dest.x = Math.sin(t * 0.55) * r;
+  dest.y = 0.62;
+  dest.z = Math.cos(t * 0.55) * r;
+  return dest;
+}
+
+export function replayDurationMs(samples) {
+  if (!samples || !samples.length) return 0;
+  const a = Number(samples[0][0]) || 0;
+  const b = Number(samples[samples.length - 1][0]) || 0;
+  return Math.max(0, b - a);
+}
+
+export function replayClipSpan(samples, startMs, durMs) {
+  const dur = Number(durMs) > 0 ? Number(durMs) : REPLAY_CLIP_MS;
+  if (!samples || !samples.length) return { start: 0, end: 0, samples: [] };
+  const first = Number(samples[0][0]) || 0;
+  const last = Number(samples[samples.length - 1][0]) || 0;
+  let start = Number(startMs);
+  if (!Number.isFinite(start)) start = first;
+  start = Math.max(first, Math.min(start, last));
+  const end = Math.min(last, start + dur);
+  const slice = [];
+  for (const s of samples) {
+    const t = Number(s[0]) || 0;
+    if (t >= start && t <= end) slice.push(s);
+  }
+  return { start, end, samples: slice };
+}
+
+export function canRecordClip(env) {
+  const g = env || (typeof globalThis !== 'undefined' ? globalThis : {});
+  const Rec = g.MediaRecorder;
+  if (!Rec) return false;
+  if (typeof Rec.isTypeSupported === 'function') {
+    return Rec.isTypeSupported('video/webm;codecs=vp9')
+      || Rec.isTypeSupported('video/webm;codecs=vp8')
+      || Rec.isTypeSupported('video/webm');
+  }
+  return true;
+}
+
 // Thin FPV lip only. No overhead box. Pieces sit on the live frustum so a
 // 110° camera cannot fill the screen the way the old 0.13–0.15 m boxes did.
 export const CANOPY_DIST = 0.12;
@@ -1927,9 +2114,11 @@ export function makeCraftGroup(THREE, skin) {
   skipLooks(hub);
   g.add(hub);
   const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), canopyMat);
-  canopy.scale.set(0.72, 0.42, 1.45);
-  canopy.position.set(0, 0.062, -0.07);
+  const dome = canopyShapeLayout('dome');
+  canopy.scale.set(dome.sx, dome.sy, dome.sz);
+  canopy.position.set(dome.x, dome.y, dome.z);
   canopy.userData.skinPart = 'canopy';
+  canopy.userData.craftRole = 'canopyBody';
   skipLooks(canopy);
   g.add(canopy);
   const camHouse = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.04, 0.05), bodyMat);

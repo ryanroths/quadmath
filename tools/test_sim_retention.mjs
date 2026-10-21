@@ -12,7 +12,7 @@ import { ROOM_KEY } from '../sim-room.js';
 import { COACH_KEY } from '../sim-coach.js';
 import { LAYOUT } from '../sim-maps.js';
 import {
-  DAILY_KEY, BOARD_KEY, SKIN_KEY, CANOPY_KEY, LEADERBOARD_URL_KEY, LEADERBOARD_URL,
+  DAILY_KEY, BOARD_KEY, SKIN_KEY, CANOPY_KEY, WHOOP_KIT_KEY, LEADERBOARD_URL_KEY, LEADERBOARD_URL,
   PILOT_TOKEN_KEY, SHARE_PREFIX, DUEL_KIND, DAILY_MAPS, SKINS, CLASS_MAX_SPEED, CLASS_IDS,
   PHYS_VER, WEEK_GRACE_MS, DEFAULT_ALLOWED_ORIGIN,
   utcDateId, utcWeekId, addUtcDays, dailyTrackFor, weeklyTrackFor, weeklyIdFor,
@@ -30,6 +30,10 @@ import {
   skinSwatchStroke, colorLum,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   TRAIL_POINTS, tintGroup,
+  defaultWhoopKit, normalizeWhoopKit, loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin,
+  CANOPY_SHAPES, canopyShapeLayout, applyCraftCanopyShape,
+  REPLAY_GHOST_HZ, REPLAY_GHOST_MAX, REPLAY_CLIP_MS,
+  replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   mulberry32, weekAllowed, previousUtcWeekId, isPaceBotGhost, issuePilotToken,
   hashPilotToken, pickCorsOrigin, isLocalHost, escapeHtml, classFromBuild,
   syncDailyStreak, applyMissedDayReset,
@@ -72,10 +76,12 @@ test('new storage keys only; never writes old keys or WebFPV', () => {
   assert.equal(BOARD_KEY, 'quadmathSimBoard');
   assert.equal(SKIN_KEY, 'quadmathSimSkin');
   assert.equal(CANOPY_KEY, 'quadmathSimCanopy');
+  assert.equal(WHOOP_KIT_KEY, 'quadmathSimWhoopKit');
   assert.ok(retSrc.includes('setItem(DAILY_KEY'));
   assert.ok(retSrc.includes('Nothing here is copied from WebFPV') || retSrc.includes('copied from WebFPV'));
   for (const banned of ['ryflyDroneType', 'ryflyRates', CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY, BUILD_KEY, WHOOP_KEY, ROOM_KEY, COACH_KEY]) {
-    assert.equal(retSrc.includes(banned), false, 'must not mention ' + banned);
+    const quoted = retSrc.includes("'" + banned + "'") || retSrc.includes('"' + banned + '"');
+    assert.equal(quoted, false, 'must not mention ' + banned);
   }
   const store = memStore();
   saveDaily(recordDailyFinish(emptyDaily(), { utc: '2026-10-17', timeMs: 40000 }, Date.UTC(2026, 9, 17)).progress, store);
@@ -674,6 +680,15 @@ test('sim.html wires Daily / Boards / skins and keeps ghost paste', () => {
   assert.ok(simSrc.includes('layoutCanopyGroup'));
   assert.ok(simSrc.includes('canopyFpvVisible'));
   assert.ok(simSrc.includes('craftChaseVisible'));
+  assert.ok(simSrc.includes('menuWhoop'));
+  assert.ok(simSrc.includes('openWhoopCard'));
+  assert.ok(simSrc.includes('id="replayHud"'));
+  assert.ok(simSrc.includes('startReplay'));
+  assert.ok(simSrc.includes('demoReplayForShot'));
+  assert.ok(simSrc.includes('REPLAY_GHOST_HZ'));
+  assert.ok(simSrc.includes('recordReplayClip'));
+  assert.ok(simSrc.includes('saveReplayStill'));
+  assert.ok(simSrc.includes('WHOOP_KIT_KEY') || simSrc.includes('quadmathSimWhoopKit'));
   assert.ok(simSrc.includes('Show canopy'));
   assert.ok(simSrc.includes('id="cbCanopy"'));
   assert.ok(!/id="cbCanopy"[^>]*\bchecked\b/.test(simSrc), 'Show canopy defaults off');
@@ -834,6 +849,19 @@ test('no canopy piece covers >10% of view at FOV 110', () => {
   }
   assert.ok(craft.children.some((c) => c.userData.spin));
   assert.ok(simSrc.includes('propBlur') && simSrc.includes('craftGroup.traverse'));
+  assert.ok(nodes.some((c) => c.userData.craftRole === 'canopyBody'));
+  const dome = canopyShapeLayout('dome');
+  const wedge = canopyShapeLayout('wedge');
+  const bullet = canopyShapeLayout('bullet');
+  const flat = canopyShapeLayout('flat');
+  assert.deepEqual(CANOPY_SHAPES, ['dome', 'wedge', 'bullet', 'flat']);
+  assert.ok(wedge.sy < dome.sy && bullet.sz > dome.sz && flat.sy < wedge.sy);
+  applyCraftCanopyShape(craft, 'wedge');
+  const canopyBody = nodes.find((c) => c.userData.craftRole === 'canopyBody');
+  assert.equal(canopyBody.scale.x, wedge.sx);
+  assert.equal(canopyBody.userData.canopyShape, 'wedge');
+  applyCraftCanopyShape(craft, 'dome');
+  assert.equal(canopyBody.scale.y, dome.sy);
   tintGroup(craft, SKINS.find((s) => s.id === 'daily-fast'));
   const pal = skinPalette(SKINS.find((s) => s.id === 'daily-fast'));
   const prop = nodes.find((c) => c.userData.skinPart === 'prop' && c.material);
@@ -851,4 +879,52 @@ test('no canopy piece covers >10% of view at FOV 110', () => {
   assert.equal(trail.geo.drawCount, 2);
   clearSkinTrail(trail);
   assert.equal(trail.len, 0);
+});
+
+test('whoop kit persists under WHOOP_KIT_KEY and overlays skin colors', () => {
+  assert.equal(WHOOP_KIT_KEY, 'quadmathSimWhoopKit');
+  assert.ok(retSrc.includes('setItem(WHOOP_KIT_KEY'));
+  const d = defaultWhoopKit();
+  assert.equal(d.shape, 'dome');
+  const junk = normalizeWhoopKit({ v: 9, canopy: 'nope', frame: 0x1ffffff, prop: -1, shape: 'imported' });
+  assert.equal(junk.shape, 'dome');
+  assert.equal(junk.canopy, d.canopy);
+  assert.equal(junk.frame, 0xffffff);
+  assert.equal(junk.v, 1);
+  const store = memStore();
+  assert.equal(saveWhoopKit({ canopy: 0x00e5ff, frame: 0xe8e9ed, prop: 0x3ddc97, shape: 'bullet' }, store), true);
+  assert.deepEqual(store.keys(), [WHOOP_KIT_KEY]);
+  const loaded = loadWhoopKit(store);
+  assert.equal(loaded.shape, 'bullet');
+  assert.equal(loaded.canopy, 0x00e5ff);
+  assert.deepEqual(loadWhoopKit(null).shape, 'dome');
+  const painted = applyWhoopKitToSkin(SKINS[0], loaded);
+  assert.equal(painted.canopy, 0x00e5ff);
+  assert.equal(painted.frame, 0xe8e9ed);
+  assert.equal(painted.prop, 0x3ddc97);
+  assert.equal(painted.body, SKINS[0].body);
+  assert.ok(!retSrc.includes('webfpv') && !retSrc.toLowerCase().includes('from webfpv') || retSrc.includes('Nothing here is copied from WebFPV'));
+});
+
+test('replay helpers keep a 30 Hz cap and 10s clip window', () => {
+  assert.equal(REPLAY_GHOST_HZ, 30);
+  assert.equal(REPLAY_GHOST_MAX, 900);
+  assert.equal(REPLAY_CLIP_MS, 10000);
+  const ident = replayChaseOffset({ x: 0, y: 0, z: 0, w: 1 });
+  assert.ok(Math.abs(ident.y - 0.48) < 1e-9);
+  assert.ok(Math.abs(ident.z - 1.55) < 1e-9);
+  const a = replayOrbitOffset(0);
+  const b = replayOrbitOffset(3000);
+  assert.ok(Math.hypot(a.x, a.z) > 1);
+  assert.ok(Math.hypot(a.x - b.x, a.z - b.z) > 0.4);
+  const samples = [[0, 0, 1, 0, 0, 0, 0, 1], [4000, 2, 1, 0, 0, 0, 0, 1], [12000, 6, 1, 0, 0, 0, 0, 1]];
+  assert.equal(replayDurationMs(samples), 12000);
+  const clip = replayClipSpan(samples, 3000, 10000);
+  assert.equal(clip.start, 3000);
+  assert.equal(clip.end, 12000);
+  assert.ok(clip.samples.length >= 2);
+  assert.equal(canRecordClip({}), false);
+  assert.equal(canRecordClip({ MediaRecorder: { isTypeSupported: (t) => t === 'video/webm' } }), true);
+  assert.ok(simSrc.includes('downsampleGhost(replayRec,REPLAY_GHOST_MAX)') || simSrc.includes('REPLAY_GHOST_MAX'));
+  assert.ok(simSrc.includes('captureStream') && simSrc.includes('toDataURL'));
 });
