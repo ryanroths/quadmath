@@ -1,0 +1,18 @@
+{
+  "id": "garage-shelf",
+  "map": "garage",
+  "name": "Shelf Thread",
+  "class": "whoop",
+  "gates": [
+    { "x": 0.0, "y": 1.25, "z": 18.6, "ry": 0.00, "size": 1.8, "solid": true },
+    { "x": 0.0, "y": 3.40, "z": 14.0, "ry": 0.00, "size": 1.6, "solid": true },
+    { "x": 8.6, "y": 2.93, "z": 12.2, "ry": 1.57, "size": 1.5, "solid": true },
+    { "x": 8.6, "y": 1.68, "z": 7.9, "ry": 1.57, "size": 1.5, "solid": true },
+    { "x": 8.6, "y": 1.68, "z": 3.6, "ry": 1.57, "size": 1.5, "solid": true },
+    { "x": -8.4, "y": 1.20, "z": -8.0, "ry": 1.57, "size": 1.5, "solid": true },
+    { "x": 0.0, "y": 1.25, "z": 16.4, "ry": 3.14, "size": 1.8, "solid": true }
+  ],
+  "flags": [
+    { "x": 8.6, "y": 2.2, "z": 7.9, "ry": 0 }
+  ]
+}

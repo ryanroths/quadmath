@@ -1,0 +1,19 @@
+{
+  "id": "garage-door",
+  "map": "garage",
+  "name": "Door Dive",
+  "class": "whoop",
+  "gates": [
+    { "x": 0.0, "y": 1.25, "z": 14.8, "ry": 0.00, "size": 1.8, "solid": true },
+    { "x": 0.0, "y": 1.15, "z": 20.6, "ry": 0.00, "size": 1.6, "solid": true },
+    { "x": 0.0, "y": 6.40, "z": 18.8, "ry": 3.14, "size": 1.6, "solid": true },
+    { "x": 0.0, "y": 7.85, "z": 5.4, "ry": 3.14, "size": 1.7, "solid": true },
+    { "x": 0.0, "y": 7.85, "z": -5.4, "ry": 3.14, "size": 1.7, "solid": true },
+    { "x": 0.0, "y": 1.55, "z": -12.2, "ry": 0.00, "size": 1.4, "solid": true },
+    { "x": 5.6, "y": 1.35, "z": -16.4, "ry": 0.00, "size": 1.4, "solid": true },
+    { "x": 0.0, "y": 1.25, "z": 12.8, "ry": 3.14, "size": 1.8, "solid": true }
+  ],
+  "flags": [
+    { "x": 0.0, "y": 6.8, "z": 18.8, "ry": 0 }
+  ]
+}
