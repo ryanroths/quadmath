@@ -27,8 +27,10 @@ export function hexNum(h) {
   return parseInt(s.slice(1), 16);
 }
 
-export function qualityWantsBloom(applied) {
-  return applied === 'med' || applied === 'high';
+export function qualityWantsBloom(applied, vibe) {
+  if (applied !== 'med' && applied !== 'high') return false;
+  if (vibe && vibe.post && vibe.post.bloom === false) return false;
+  return true;
 }
 
 export function qualityWantsAo(applied) {

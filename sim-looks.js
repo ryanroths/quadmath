@@ -963,9 +963,9 @@ export async function createLooks(ctx) {
     const wantsBloom = p.bloom !== false && (p.bloomScale || 0) > 0;
     const wantsAo = !!p.ao;
     const wantsGrade = p.grade !== false && qualityWantsPost();
-    if (bloomPass) bloomPass.enabled = wantsBloom;
-    if (aoPass) aoPass.enabled = wantsAo;
     const spec = mapPostSpec || {};
+    if (bloomPass) bloomPass.enabled = wantsBloom && spec.bloom !== false;
+    if (aoPass) aoPass.enabled = wantsAo;
     const aoAmt = spec.ao == null ? 0.4 : spec.ao;
     if (aoPass && aoPass.uniforms && aoPass.uniforms.amount) {
       aoPass.uniforms.amount.value = wantsAo ? (applied === 'high' ? aoAmt : aoAmt * 0.75) : 0;
@@ -990,6 +990,7 @@ export async function createLooks(ctx) {
         vignette: post.vignette == null ? 0.34 : post.vignette,
         ao: post.ao == null ? 0.4 : post.ao,
         gradeAmt: post.grade === false ? 0 : 1,
+        bloom: post.bloom !== false,
       };
     } else {
       mapPostSpec = spec || null;

@@ -798,7 +798,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=c5a4d163f20f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=ae2ebe9d455d";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=47f589dae15b";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -812,7 +812,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, mergeStaticArt,
-} from "./sim-art.js?v=18667d33eef1";
+} from "./sim-art.js?v=6cd8b294c7ec";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -844,7 +844,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=52627101d2c3";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=58d678edc99f";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=1b8896845130";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -859,7 +859,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=630ade068519";
+} from "./sim-coach.js?v=f0da1c510958";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js?v=49546f834df8";
@@ -2288,9 +2288,11 @@ function compactMapArt(){
 }
 function applyLooksPost(mapId, quality){
   const q=quality||(looks&&looks.applied)||'med';
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
-  if(looks&&looks.setMapPost)looks.setMapPost(vibePost(vibeFor(mapId)));
-  else if(looks&&looks.setGrade)looks.setGrade(qualityWantsBloom(q)?1:0);
+  const vibe=vibeFor(mapId);
+  const bloom=qualityWantsBloom(q, vibe);
+  if(looks&&looks.bloomPass)looks.bloomPass.enabled=bloom;
+  if(looks&&looks.setMapPost)looks.setMapPost(vibePost(vibe));
+  else if(looks&&looks.setGrade)looks.setGrade(bloom?1:0);
 }
 function applyCityArt(quality){
   const vibe=vibeFor('city');
@@ -2357,7 +2359,7 @@ function applyLivingArt(quality){
   });
   applyLooksPost('living', quality);
   const credit=document.querySelector('.sf-credit');
-  if(credit)credit.textContent='Living Room is original procedural art — Clay Parlor. Kenney CC0 parlor kit.';
+  if(credit)credit.textContent='Living Room is original procedural art — Clay Parlor · Felt Scale. Kenney CC0 parlor kit.';
   queueLivingKit(quality||(looks&&looks.applied)||'med', vibeFor('living'));
 }
 let livingKitWanted=null;
@@ -2831,7 +2833,7 @@ function applyMapLooks(mapId){
   setIndoorLights(indoorLights,looks?looks.applied:'med');
   const credit=document.querySelector('.sf-credit');
   if(credit){
-    if(mapId==='living')credit.textContent='Living Room is original procedural art — Clay Parlor. Kenney CC0 parlor kit.';
+    if(mapId==='living')credit.textContent='Living Room is original procedural art — Clay Parlor · Felt Scale. Kenney CC0 parlor kit.';
     else if(mapId==='garage')credit.textContent='Garage is original procedural art — Volt Stall. Kenney CC0 shop kit.';
     else if(mapId==='warehouse')credit.textContent='Warehouse is original procedural art — Ion Nave';
     else if(mapId==='room')credit.textContent='Your Room is original procedural art — Pocket Stage';
