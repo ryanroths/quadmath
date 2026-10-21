@@ -15,7 +15,7 @@ import {
   emptyStore, normalizeStore, loadStore, saveStore, recordBest, bestLine, bestForMap,
   makeDetector, resetDetector, stepDetector, encodeRecJson, REC_KEYS,
   makeCombo, resetCombo, pushCombo, comboRemain,
-  createTricks,
+  createTricks, makeFeat, trickLineupText,
 } from '../sim-tricks.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
 import { mapThrottle3d } from '../sim-3d.js';
@@ -222,6 +222,9 @@ const LIBRARY = [
   { id: 'trippy', name: 'trip-pole-fast', phases: [{ t: 0.95, yaw: 8.2, thr: 0.5 }, { t: 0.45, yaw: 0, thr: 0.44 }], opts: { ...NEAR_POLE, z0: 2.2, maxT: 1.9 } },
   { id: 'trippy', name: 'trip-pole-ccw', phases: [{ t: 1.15, yaw: -7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }], opts: { ...NEAR_POLE, maxT: 2.1 } },
   { id: 'trippy', name: 'trip-tree', phases: [{ t: 1.15, yaw: 7.4, thr: 0.5 }, { t: 0.5, yaw: 0, thr: 0.44 }], opts: { ...NEAR_TREE, maxT: 2.1 } },
+  { id: 'ham', name: 'ham-inv', phases: [{ t: 1.15, yaw: 7.2, thr: 0.28 }, { t: 0.55, yaw: 0, thr: 0.28 }], opts: { z0: 6, vx: 0.2, maxT: 2.2, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 } } },
+  { id: 'ham', name: 'ham-inv-fast', phases: [{ t: 0.95, yaw: 8.2, thr: 0.26 }, { t: 0.55, yaw: 0, thr: 0.26 }], opts: { z0: 6.2, vx: 0.15, maxT: 2.0, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 } } },
+  { id: 'ham', name: 'ham-inv-ccw', phases: [{ t: 1.15, yaw: -7.2, thr: 0.28 }, { t: 0.55, yaw: 0, thr: 0.28 }], opts: { z0: 6, vx: 0.2, maxT: 2.2, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 } } },
   { id: 'sideloop', name: 'sl-std', phases: [{ t: 0.38, yaw: 6.2, thr: 0.55 }, { t: 0.95, roll: 7.0, yaw: 2.4, thr: 0.85 }, { t: 0.32, roll: 6.2, yaw: 1.0, thr: 0.22 }, { t: 0.4, roll: 0, yaw: 0, thr: 0.55 }], opts: { z0: 4.5, vx: 5.5, maxT: 2.8, colliders: OBJ_BAR } },
   { id: 'sideloop', name: 'sl-fast', phases: [{ t: 0.32, yaw: 7.0, thr: 0.58 }, { t: 0.82, roll: 8.0, yaw: 2.6, thr: 0.88 }, { t: 0.28, roll: 6.5, yaw: 1.1, thr: 0.2 }, { t: 0.4, roll: 0, yaw: 0, thr: 0.55 }], opts: { z0: 4.8, vx: 6.0, maxT: 2.5, colliders: OBJ_BAR } },
   { id: 'sideloop', name: 'sl-slow', phases: [{ t: 0.48, yaw: 5.4, thr: 0.52 }, { t: 1.1, roll: 6.2, yaw: 2.0, thr: 0.8 }, { t: 0.38, roll: 5.6, yaw: 0.9, thr: 0.24 }, { t: 0.45, roll: 0, yaw: 0, thr: 0.52 }], opts: { z0: 4.2, vx: 5.0, maxT: 3.1, colliders: OBJ_BAR } },
@@ -265,6 +268,7 @@ const PILOT_LIBRARY = [
   { id: 'trippy', name: 'pilot-trip-pole-actual', phases: [{ t: 1.2, yawS: 0.95, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_POLE, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 301, noise: 0.04, thrWobble: 0.05 } },
   { id: 'trippy', name: 'pilot-trip-pole-kiss', phases: [{ t: 1.15, yawS: 0.92, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_POLE, maxT: 2.1, rates: WHOOP_KISS, seed: 303, noise: 0.04, thrWobble: 0.05 } },
   { id: 'trippy', name: 'pilot-trip-tree', phases: [{ t: 1.2, yawS: 0.94, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_TREE, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 304, noise: 0.04, thrWobble: 0.05 } },
+  { id: 'ham', name: 'pilot-ham-actual', phases: [{ t: 1.2, yawS: 0.95, thr: 0.28 }, { t: 0.5, yawS: 0, thr: 0.28 }], opts: { z0: 6, vx: 0.15, maxT: 2.3, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 }, rates: WHOOP_ACTUAL, seed: 351, noise: 0.03, thrWobble: 0.03 } },
   { id: 'sideloop', name: 'pilot-side-actual', phases: [{ t: 0.55, yawS: 0.75, thr: 0.55 }, { t: 0.95, rollS: 0.75, yawS: 0.28, thr: 0.84 }, { t: 0.35, rollS: 0.58, yawS: 0.14, thr: 0.22 }, { t: 0.4, rollS: 0.3, thr: 0.68 }, { t: 0.4, rollS: 0, yawS: 0, thr: 0.5 }], opts: { z0: 4.5, vx: 5.0, maxT: 3.4, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 401, noise: 0.05, thrWobble: 0.07 } },
   { id: 'sideloop', name: 'pilot-side-kiss', phases: [{ t: 0.38, yawS: 0.72, rollS: 0.08, thr: 0.58 }, { t: 1.05, rollS: 0.70, yawS: 0.38, thr: 0.8 }, { t: 0.35, rollS: 0.35, yawS: 0.1, thr: 0.28 }, { t: 0.4, rollS: 0, yawS: 0, thr: 0.55 }], opts: { z0: 4.8, vx: 5.2, maxT: 3.1, colliders: OBJ_BAR, rates: WHOOP_KISS, seed: 402, noise: 0.06, thrWobble: 0.07 } },
 ];
@@ -284,7 +288,7 @@ test('new storage key only; never writes old ryfly* keys', () => {
 
 test('trick list has the requested maneuvers and frozen point values', () => {
   const ids = TRICK_LIST.map((t) => t.id);
-  for (const id of ['flip', 'roll', 'yawspin', 'powerloop', 'sideloop', 'splits', 'matty', 'halfmatty', 'maverick', 'trippy', 'dive', 'gap', 'prox', 'cradle', 'juicyflick', 'snapback', 'rubik', 'cubik']) {
+  for (const id of ['flip', 'roll', 'yawspin', 'powerloop', 'sideloop', 'splits', 'matty', 'halfmatty', 'maverick', 'trippy', 'ham', 'dive', 'gap', 'prox', 'cradle', 'juicyflick', 'snapback', 'rubik', 'cubik']) {
     assert.ok(ids.includes(id), 'missing ' + id);
     assert.ok(TRICK_BY_ID[id].points > 0);
     assert.ok(TRICK_BY_ID[id].name);
@@ -302,6 +306,12 @@ test('trick list has the requested maneuvers and frozen point values', () => {
   assert.equal(TRICK_BY_ID.halfmatty.points, 350);
   assert.equal(TRICK_BY_ID.maverick.points, 100);
   assert.equal(TRICK_BY_ID.trippy.points, 500);
+  assert.equal(TRICK_BY_ID.ham.points, 300);
+  assert.equal(TRICK_BY_ID.ham.pointsIn, 300);
+  assert.equal(TRICK_BY_ID.ham.name, 'Ham Spin');
+  assert.equal(TRICK_BY_ID.ham.tier, 'Intermediate');
+  assert.ok(trickLineupText().includes('Ham Spin'));
+  assert.ok(trickLineupText().includes('Trippy Spin'));
   assert.equal(TRICK_BY_ID.splits.points, 100);
   assert.equal(TRICK_BY_ID.dive.points, 100);
   assert.equal(TRICK_BY_ID.gap.points, 125);
@@ -322,7 +332,7 @@ test('docs/sim-tricks.md defines each trick and the confused pairs', () => {
   assert.ok(docs.includes('# QuadMath freestyle trick definitions'));
   assert.ok(docs.includes("Tyrantt's Pro Whooper"));
   assert.ok(docs.includes('prowhooper.com'));
-  for (const id of ['powerloop', 'matty', 'halfmatty', 'maverick', 'trippy', 'sideloop', 'splits', 'juicyflick', 'snapback', 'cradle', 'rubik', 'cubik']) {
+  for (const id of ['powerloop', 'matty', 'halfmatty', 'maverick', 'trippy', 'ham', 'sideloop', 'splits', 'juicyflick', 'snapback', 'cradle', 'rubik', 'cubik']) {
     assert.ok(docs.includes('`' + id + '`'), 'doc missing ' + id);
   }
   assert.ok(docs.includes('Powerloop vs Matty'));
@@ -330,6 +340,8 @@ test('docs/sim-tricks.md defines each trick and the confused pairs', () => {
   assert.ok(docs.includes('Split-S vs Half Matty'));
   assert.ok(docs.includes('Maverick Loop vs Powerloop'));
   assert.ok(docs.includes('Trippy Spin vs Yaw Spin'));
+  assert.ok(docs.includes('Ham Spin'));
+  assert.ok(docs.includes('inverted the whole time') || docs.includes('upside-down the whole time'));
   assert.ok(docs.includes('nearby pole/tree') || docs.includes('nearby pole'));
   assert.ok(docs.includes('Side Loop vs Powerloop'));
   assert.ok(docs.includes('How to record a real trace'));
@@ -434,6 +446,130 @@ test('Ryan bug: a real trippy spin around a pole or tree scores Trippy', () => {
     { z0: 3, vx: 1.2, maxT: 2 },
   );
   assert.deepEqual(labels(openYaw), ['yawspin']);
+  assert.equal(openYaw.hits.includes('ham'), false, 'upright yaw is not Ham');
+});
+
+const TAU = Math.PI * 2;
+const INV_ROLL = { x: 1, y: 0, z: 0, w: 0 };
+
+function quatMul(a, b) {
+  return {
+    x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+    y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+    z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+    w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+  };
+}
+
+function axisAngle(ax, ay, az, ang) {
+  const h = ang * 0.5;
+  const s = Math.sin(h);
+  return { x: ax * s, y: ay * s, z: az * s, w: Math.cos(h) };
+}
+
+function feedSpin(opts) {
+  const o = opts || {};
+  let q = o.inverted ? { x: INV_ROLL.x, y: INV_ROLL.y, z: INV_ROLL.z, w: INV_ROLL.w } : { x: 0, y: 0, z: 0, w: 1 };
+  const dt = 1 / 60;
+  const yawRate = o.yawRate != null ? o.yawRate : 7.2;
+  const rollRate = o.rollRate || 0;
+  const pitchRate = o.pitchRate || 0;
+  const spinT = o.spinT != null ? o.spinT : 1.15;
+  const settleT = o.settleT != null ? o.settleT : 0.55;
+  const drift = o.drift || 0;
+  const d = makeDetector();
+  const hits = [];
+  const sample0 = {
+    qx: q.x, qy: q.y, qz: q.z, qw: q.w,
+    ox: 0, oy: 0, oz: 0, wx: 0, wy: 7, wz: 0, alt: 2, speed: 0.25,
+    vx: 0.2, vy: 0, vz: 0, clearance: 2, throttle: 0.45, armed: true,
+  };
+  resetDetector(d, sample0);
+  d.lockout = 0;
+  let t = 0;
+  let wx = 0;
+  const maxT = spinT + settleT;
+  while (t < maxT) {
+    const spinning = t < spinT;
+    const ox = spinning ? rollRate : 0;
+    const oy = spinning ? pitchRate : 0;
+    const oz = spinning ? yawRate : 0;
+    if (ox || oy || oz) {
+      q = quatMul(q, axisAngle(1, 0, 0, ox * dt));
+      q = quatMul(q, axisAngle(0, 1, 0, oy * dt));
+      q = quatMul(q, axisAngle(0, 0, 1, oz * dt));
+      const n = Math.hypot(q.x, q.y, q.z, q.w) || 1;
+      q.x /= n; q.y /= n; q.z /= n; q.w /= n;
+    }
+    if (drift) wx += drift * dt;
+    const ev = stepDetector(d, {
+      qx: q.x, qy: q.y, qz: q.z, qw: q.w,
+      ox, oy, oz, wx, wy: 7, wz: 0, alt: 2,
+      speed: Math.max(0.25, Math.abs(drift)),
+      vx: drift || 0.2, vy: 0, vz: 0,
+      clearance: 2, throttle: 0.45, armed: true,
+    }, dt);
+    if (ev && TRICK_BY_ID[ev]) hits.push(ev);
+    t += dt;
+  }
+  return { hits, last: d.lastId, why: d.lastWhy, feat: d.lastFeat, view: featView(d.lastFeat) };
+}
+
+function hamFeat(extra) {
+  const e = extra || {};
+  const f = makeFeat();
+  f.dur = e.dur != null ? e.dur : 1.2;
+  f.n = e.n != null ? e.n : 48;
+  f.yaw = e.yaw != null ? e.yaw : TAU;
+  f.pathY = e.pathY != null ? e.pathY : Math.abs(f.yaw);
+  f.pitch = e.pitch || 0;
+  f.roll = e.roll || 0;
+  f.pathP = e.pathP != null ? e.pathP : Math.abs(f.pitch);
+  f.pathR = e.pathR != null ? e.pathR : Math.abs(f.roll);
+  f.peakY = e.peakY != null ? e.peakY : 6.2;
+  f.tYaw360 = e.tYaw360 != null ? e.tYaw360 : 1.15;
+  f.upMin = e.upMin != null ? e.upMin : -1;
+  f.upMax = e.upMax != null ? e.upMax : -0.85;
+  f.invT = (e.inv != null ? e.inv : 0.96) * f.dur;
+  f.travelH = e.travelH != null ? e.travelH : 2.2;
+  f.radMax = e.radMax != null ? e.radMax : 1.8;
+  f.objNearN = e.objNearN || 0;
+  return f;
+}
+
+test('Ham Spin fires on a sustained inverted 360° yaw', () => {
+  const cls = classifyFeat(hamFeat());
+  assert.equal(cls.id, 'ham', 'feat why=' + (cls.why || ''));
+  const inv = feedSpin({ inverted: true, yawRate: 7.2, spinT: 1.15, settleT: 0.55 });
+  assert.deepEqual(labels(inv), ['ham'], 'feed why=' + (inv.why || '') + ' upMax=' + (inv.feat && inv.feat.upMax));
+  const ccw = feedSpin({ inverted: true, yawRate: -7.4, spinT: 1.15, settleT: 0.55 });
+  assert.deepEqual(labels(ccw), ['ham'], 'ccw why=' + (ccw.why || ''));
+  const fast = feedSpin({ inverted: true, yawRate: 8.4, spinT: 0.95, settleT: 0.55 });
+  assert.deepEqual(labels(fast), ['ham'], 'fast why=' + (fast.why || ''));
+});
+
+test('Ham Spin does not fire on flips, rolls, or normal yaw', () => {
+  const upright = feedSpin({ inverted: false, yawRate: 7.5, spinT: 1.0, settleT: 0.5 });
+  assert.equal(upright.hits.includes('ham'), false, 'upright yaw ham why=' + (upright.why || ''));
+  assert.ok(upright.hits.includes('yawspin') || upright.last === 'yawspin', 'upright yaw should stay Yaw Spin ' + upright.last);
+  const flip = fly(
+    [{ t: 0.85, pitch: 8.5, thr: 0.45 }, { t: 0.5, pitch: 0, thr: 0.4 }],
+    { z0: 5, vx: 0.4, maxT: 1.8 },
+  );
+  assert.equal(flip.hits.includes('ham'), false, 'flip ham why=' + (flip.why || ''));
+  const roll = fly(
+    [{ t: 0.85, roll: 8.5, thr: 0.5 }, { t: 0.5, roll: 0, thr: 0.45 }],
+    { z0: 4, vx: 3, maxT: 1.8 },
+  );
+  assert.equal(roll.hits.includes('ham'), false, 'roll ham why=' + (roll.why || ''));
+  const drift = feedSpin({ inverted: true, yawRate: 1.4, spinT: 0.7, settleT: 0.55 });
+  assert.equal(drift.hits.includes('ham'), false, 'slow inv yaw ham why=' + (drift.why || ''));
+  const pass = classifyFeat(hamFeat({ yaw: 0.4, pathY: 0.4, tYaw360: 99, pitch: 6.3, pathP: 6.3, upMax: 0.95, upMin: -1, inv: 0.35 }));
+  assert.notEqual(pass.id, 'ham', 'flip-through-inverted feat scored ' + pass.id);
+  const rollPass = classifyFeat(hamFeat({ yaw: 0.3, pathY: 0.3, tYaw360: 99, roll: 6.4, pathR: 6.4, upMax: 0.95, upMin: -1, inv: 0.4 }));
+  assert.notEqual(rollPass.id, 'ham', 'roll-through-inverted feat scored ' + rollPass.id);
+  const levelYaw = classifyFeat(hamFeat({ upMin: 0.8, upMax: 0.99, inv: 0 }));
+  assert.notEqual(levelYaw.id, 'ham', 'upright 360 feat scored ' + levelYaw.id);
 });
 
 test('turtled inverted deck does not score a trick', () => {
