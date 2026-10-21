@@ -351,10 +351,10 @@ export function makeFeat() {
     upMin: 1, upMax: -1, invT: 0,
     spd0: 0, spd1: 0, spdPeak: 0, spdMin: 99,
     vzMin: 0, vzMax: 0,
-    tRoll180: 99, tPitch180: 99, tYaw180: 99, tRoll360: 99, tPitch360: 99,
+    tRoll180: 99, tPitch180: 99, tYaw180: 99, tRoll360: 99, tPitch360: 99, tYaw360: 99,
     tRoll90: 99, tPitch90: 99, tYaw90: 99,
     underN: 0, overN: 0, objNearN: 0, under0: 0, over0: 0,
-    bump: 0, seg: 0, oppRY: 0,
+    bump: 0, seg: 0, oppRY: 0, radMax: 0,
   };
 }
 
@@ -372,10 +372,10 @@ export function resetFeat(f) {
   f.upMin = 1; f.upMax = -1; f.invT = 0;
   f.spd0 = 0; f.spd1 = 0; f.spdPeak = 0; f.spdMin = 99;
   f.vzMin = 0; f.vzMax = 0;
-  f.tRoll180 = 99; f.tPitch180 = 99; f.tYaw180 = 99; f.tRoll360 = 99; f.tPitch360 = 99;
+  f.tRoll180 = 99; f.tPitch180 = 99; f.tYaw180 = 99; f.tRoll360 = 99; f.tPitch360 = 99; f.tYaw360 = 99;
   f.tRoll90 = 99; f.tPitch90 = 99; f.tYaw90 = 99;
   f.underN = 0; f.overN = 0; f.objNearN = 0; f.under0 = 0; f.over0 = 0;
-  f.bump = 0; f.seg = 0; f.oppRY = 0;
+  f.bump = 0; f.seg = 0; f.oppRY = 0; f.radMax = 0;
   return f;
 }
 
@@ -396,11 +396,11 @@ export function copyFeat(src, dst) {
   d.spd0 = src.spd0; d.spd1 = src.spd1; d.spdPeak = src.spdPeak; d.spdMin = src.spdMin;
   d.vzMin = src.vzMin; d.vzMax = src.vzMax;
   d.tRoll180 = src.tRoll180; d.tPitch180 = src.tPitch180; d.tYaw180 = src.tYaw180;
-  d.tRoll360 = src.tRoll360; d.tPitch360 = src.tPitch360;
+  d.tRoll360 = src.tRoll360; d.tPitch360 = src.tPitch360; d.tYaw360 = src.tYaw360;
   d.tRoll90 = src.tRoll90; d.tPitch90 = src.tPitch90; d.tYaw90 = src.tYaw90;
   d.underN = src.underN; d.overN = src.overN; d.objNearN = src.objNearN;
   d.under0 = src.under0; d.over0 = src.over0;
-  d.bump = src.bump; d.seg = src.seg; d.oppRY = src.oppRY;
+  d.bump = src.bump; d.seg = src.seg; d.oppRY = src.oppRY; d.radMax = src.radMax;
   return d;
 }
 
@@ -448,9 +448,10 @@ export function featView(f) {
   const obj = f.objNearN / n;
   const opp = (f.n && f.oppRY) ? f.oppRY / f.n : 0;
   const front = f.pitch > 0 ? 1 : 0;
+  const rad = f.radMax || 0;
   return {
     absP, absR, absY, head, span, drop, follow, against, inv, close, hEnd, meanDot,
-    invFol, invAg, pathP, pathR, pathY, under, over, obj, opp, front,
+    invFol, invAg, pathP, pathR, pathY, under, over, obj, opp, front, rad,
   };
 }
 
@@ -466,6 +467,7 @@ function whyLine(id, f, v, secondId, second) {
     + '  fol=' + v.follow.toFixed(2) + ' ag=' + v.against.toFixed(2)
     + '  span=' + v.span.toFixed(1) + ' hd=' + deg(v.head)
     + '  inv=' + v.inv.toFixed(2) + ' cl=' + v.close.toFixed(2)
+    + '  obj=' + v.obj.toFixed(2) + ' rad=' + v.rad.toFixed(1)
     + (secondId ? '  (' + secondId + ' ' + second.toFixed(2) + ')' : '');
 }
 
@@ -507,27 +509,26 @@ export function classifyFeat(f, out) {
     atMost(absY, 2.4, 0.7),
   );
   {
-    const tumble = v.pathR + v.pathP;
-    const yawDom = v.pathY - Math.max(v.pathR, v.pathP);
-    const yawTumble = mul(
-      atLeast(Math.max(absY, v.pathY), 3.0, 0.8),
-      atLeast(tumble, 0.90, 0.35),
-      atLeast(yawDom, 0.25, 0.45),
-      atMost(absP, 5.2, 0.8),
-      atLeast(f.dur, 0.38, 0.12),
-      atLeast(f.spdPeak, 0.6, 0.3),
+    // Real trippy spin: ≥360° yaw in a short window, tight around a nearby
+    // pole/tree, mostly level. Thresholds from probe logs (open-air yaw punch
+    // obj=0 rad≈21 vs pole spin obj≥0.79 rad≈1.1, Y≈460–630° in ≤1.4s).
+    // Coordinated turns / carves stay under 180° yaw with radMax 40+.
+    _sc.trippy = mul(
+      atLeast(absY, TAU, 0.70),
+      atLeast(v.pathY, TAU, 0.70),
+      atMost(f.tYaw360, 1.80, 0.50),
+      atLeast(f.peakY, 4.0, 1.5),
+      atMost(absR, 1.40, 0.60),
+      atMost(absP, 1.20, 0.50),
+      atMost(v.pathR, 1.60, 0.70),
+      atMost(v.pathP, 1.40, 0.60),
+      atLeast(f.upMin, 0.55, 0.25),
+      atMost(v.inv, 0.12, 0.08),
+      atLeast(v.obj, 0.50, 0.30),
+      atMost(v.rad, 7.0, 2.5),
+      atMost(f.travelH, 14, 6),
+      atLeast(f.dur, 0.55, 0.15),
     );
-    const invOrbit = mul(
-      atLeast(Math.max(absR, v.pathR), 2.2, 0.7),
-      atLeast(Math.max(absY, v.pathY), 1.5, 0.5),
-      atLeast(v.inv, 0.12, 0.08),
-      atLeast(v.opp, 0.18, 0.12),
-      atLeast(f.dur, 0.40, 0.12),
-      atMost(absP, 5.5, 1.0),
-      atLeast(f.spdPeak, 0.8, 0.35),
-      Math.max(atLeast(v.obj, 0.08, 0.08), 0.55),
-    );
-    _sc.trippy = yawTumble > invOrbit ? yawTumble : invOrbit;
   }
   _sc.sideloop = mul(
     atLeast(Math.max(absR, v.pathR), 3.2, 0.7),
@@ -674,11 +675,9 @@ export function classifyFeat(f, out) {
   if (bestId === 'flip' && _sc.powerloop > 0.55 && f.pitch < 0 && f.travelH > 6 && v.close < 0.4) { bestId = 'powerloop'; best = _sc.powerloop; }
   if (bestId === 'flip' && _sc.matty > 0.55 && f.pitch > 0) { bestId = 'matty'; best = _sc.matty; }
   if (bestId === 'powerloop' && f.travelH < 5.5) { bestId = 'flip'; best = _sc.flip; }
-  if (bestId === 'yawspin' && _sc.trippy > 0.35) { bestId = 'trippy'; best = _sc.trippy; }
+  if (bestId === 'yawspin' && _sc.trippy > 0.42) { bestId = 'trippy'; best = _sc.trippy; }
   if (bestId === 'roll' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
   if (bestId === 'yawspin' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
-  if (bestId === 'sideloop' && v.opp > 0.4 && _sc.trippy > 0.4) { bestId = 'trippy'; best = _sc.trippy; }
-  if (bestId === 'trippy' && v.opp < 0.22 && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
   if (bestId === 'maverick' && absP > 4.3 && f.pitch < 0 && _sc.powerloop > 0.5) { bestId = 'powerloop'; best = _sc.powerloop; }
   if (bestId === 'powerloop' && f.pitch > 0) { bestId = _sc.matty > 0.42 ? 'matty' : bestId; }
   if (bestId === 'matty' && f.pitch < 0) { bestId = _sc.powerloop > 0.42 ? 'powerloop' : bestId; }
@@ -765,7 +764,7 @@ export function encodeRecJson(d) {
     feat: {
       dur: round3(f.dur), pitch: round3(f.pitch), roll: round3(f.roll), yaw: round3(f.yaw),
       pathP: round3(v.pathP), pathR: round3(v.pathR), pathY: round3(v.pathY),
-      inv: round3(v.inv), opp: round3(v.opp),
+      inv: round3(v.inv), opp: round3(v.opp), obj: round3(v.obj), rad: round3(v.rad),
     },
     samples,
   });
@@ -905,6 +904,9 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
   if (f.tYaw180 > 90 && Math.abs(f.yaw) >= HALF) f.tYaw180 = f.dur;
   if (f.tPitch360 > 90 && Math.abs(f.pitch) >= FULL) f.tPitch360 = f.dur;
   if (f.tRoll360 > 90 && Math.abs(f.roll) >= FULL) f.tRoll360 = f.dur;
+  if (f.tYaw360 > 90 && Math.abs(f.yaw) >= TAU) f.tYaw360 = f.dur;
+  const rad = Math.hypot(wx - f.h0x, wz - f.h0z);
+  if (rad > f.radMax) f.radMax = rad;
   if (dr * dy < -1e-6) f.oppRY += 1;
   if (d.clr.up < 8) f.underN += 1;
   if (d.clr.over < 8) f.overN += 1;
@@ -1516,7 +1518,7 @@ export function createTricks(opts) {
     const nm = (def && def.name) || name || 'Side Loop';
     popName = nm;
     const dummy = id === 'trippy'
-      ? '\n  P20 R80 Y420  fol=0.18 ag=0.12  span=3.1 hd=70  inv=0.14 cl=0.82  (yawspin 0.22)'
+      ? '\n  P5 R12 Y420  fol=0.12 ag=0.08  span=1.1 hd=20  inv=0.00 cl=0.98  obj=0.90 rad=1.1  (yawspin 0.22)'
       : '\n  P0 R360 Y90  fol=0.16 ag=0.08  span=4.2 hd=70  inv=0.28 cl=0.72  (roll 0.12)';
     det.lastWhy = nm + '  ' + (def ? def.tier : 'Novice') + '  ' + (def ? def.points : 200) + dummy;
     det.dbgT = 0;

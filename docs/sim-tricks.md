@@ -47,7 +47,7 @@ site lists both 150 and 50).
 | `halfmatty` | Half Matty | Intermediate | 350 | 350 | **180° roll first**, then the second half of a Matty, ending **backward under**. Optional stall after the roll. |
 | `cubik` | Cubik's Rube | Intermediate | 350 | 450 | 180° roll → 360° flip → 180° roll, same roll direction. Open air. |
 | `rubik` | Rubik's Cube | Intermediate | 325 | 450 | 180° flip → 360° roll → 180° flip, same pitch direction. Open air. |
-| `trippy` | Trippy Spin | Intermediate | 500 | 500 | **Yaw-dominant tumble**: continuous yaw while a partial roll or pitch takes the view through inverted (full yaw + partial roll, punch or drop). Also still matches the TPW Cradle continuation (inverted opposite roll+yaw orbit). Not a clean upright Yaw Spin. |
+| `trippy` | Trippy Spin | Intermediate | 500 | 500 | **Tight yaw around a nearby pole/tree**: ≥360° yaw in a short window, high yaw rate, mostly level (small roll/pitch), low translation radius. Open-air yaw punches and coordinated turns are not Trippy. |
 
 ## Decision boundaries
 
@@ -92,14 +92,15 @@ Same under → over → under path.
 
 ### Trippy Spin vs Yaw Spin
 
-- Yaw Spin: ~360° yaw, **little** roll/pitch, **upright**.
-- Trippy Spin is a **spinning yaw-dominant tumble**. Hold mostly yaw and
-  mix in partial roll (or pitch) so the camera view orbits / goes
-  inverted — punch throttle or drop. Typical Actual whoop: stick yaw
-  near full, roll ~0.45–0.65, not a clean yaw. A clean upright yaw with
-  only a leak of roll stays a Yaw Spin.
-- The TPW Cradle continuation (inverted, opposite roll+yaw around an
-  object) still matches as the other Trippy signature.
+- Yaw Spin: ~360° yaw, **little** roll/pitch, **upright**, open air OK.
+- Trippy Spin is a **real spin around a nearby pole/tree**. Same upright
+  high yaw (≥360° accumulated in a short window, peak yaw rate high),
+  but the craft stays **close to an anchor** with a **small translation
+  radius** and stays **mostly level**. A coordinated turn, carve, or
+  slight yaw drift is not a Trippy — those never reach 360° yaw and they
+  translate a large radius.
+- Open-air yaw punch (no object, flying forward) stays a Yaw Spin, or
+  scores nothing if roll/pitch leak too much. Do not steal those as Trippy.
 
 ### How to record a real trace
 
@@ -117,8 +118,8 @@ Same under → over → under path.
   over the top. Novice Jump Rope, same outdoor points as Powerloop.
 - Roll: ~360° roll, little yaw, little altitude span. A Side Loop has
   both yaw and a loop-sized altitude span, so it is not a Roll.
-- Trippy: **yaw-dominant** tumble (or inverted opposite-roll+yaw orbit),
-  not yaw-then-roll, not a completed vertical loop that levels.
+- Trippy: **level 360° yaw** tight around a nearby object, not
+  yaw-then-roll, not a completed vertical loop, not a coordinated turn.
 
 ### Juicy Flick vs Snapback vs Split-S vs Immelmann (skipped)
 
@@ -175,8 +176,8 @@ Inverted hover alone does not start one. A throttle-cut building dive
 (fast downward, modest rate) does not steal the dive spatial detector.
 
 End: rates quiet for a short settle, or a max window (~3.6 s). While
-**inverted**, settle is longer so a Cradle → Trippy orbit does not split
-on a brief rate dip.
+**inverted**, settle is longer so a Cradle does not split on a brief
+rate dip.
 
 Cruise / carving / hover wobble must classify as **none**.
 

@@ -187,6 +187,11 @@ const OBJ_BAR = [
 const OBJ_POLE = [
   { min: { x: 6, y: 0, z: -0.7 }, max: { x: 7.4, y: 12, z: 0.7 } },
 ];
+const OBJ_TREE = [
+  { min: { x: 8, y: 0, z: -1.0 }, max: { x: 10.2, y: 16, z: 1.0 } },
+];
+const NEAR_POLE = { z0: 2.4, x0: 1.45, vx: 0.25, colliders: OBJ_POLE };
+const NEAR_TREE = { z0: 2.6, x0: 1.9, y0: 0.55, vx: 0.4, vy: 1.4, colliders: OBJ_TREE };
 
 const LIBRARY = [
   { id: 'flip', name: 'flip-front', phases: [{ t: 0.85, pitch: 8.5, thr: 0.45 }, { t: 0.5, pitch: 0, thr: 0.4 }], opts: { z0: 5, vx: 0.4, maxT: 1.8 } },
@@ -213,10 +218,10 @@ const LIBRARY = [
   { id: 'maverick', name: 'mav-std', phases: [{ t: 0.50, pitch: -3.6, thr: 0.95 }, { t: 0.50, pitch: 3.4, thr: 0.22 }, { t: 0.45, pitch: 0.2, thr: 0.62 }, { t: 0.4, pitch: 0, thr: 0.5 }], opts: { z0: 3.5, vx: 4.5, maxT: 2.5, colliders: OBJ_BAR } },
   { id: 'maverick', name: 'mav-slow', phases: [{ t: 0.62, pitch: -3.0, thr: 0.92 }, { t: 0.58, pitch: 2.9, thr: 0.2 }, { t: 0.45, pitch: 0, thr: 0.58 }], opts: { z0: 3.2, vx: 4.0, maxT: 2.6, colliders: OBJ_BAR } },
   { id: 'maverick', name: 'mav-high', phases: [{ t: 0.52, pitch: -3.4, thr: 0.98 }, { t: 0.52, pitch: 3.2, thr: 0.18 }, { t: 0.45, pitch: 0, thr: 0.6 }], opts: { z0: 4.5, vx: 4.2, maxT: 2.5, colliders: OBJ_BAR } },
-  { id: 'trippy', name: 'trip-std', phases: [{ t: 0.22, roll: 8, thr: 0.5 }, { t: 1.25, roll: 7.2, yaw: -4.6, pitch: 0.2, thr: 0.55 }, { t: 0.45, roll: 0, yaw: 0, thr: 0.5 }], opts: { z0: 6, vx: 3.5, maxT: 2.5, colliders: OBJ_POLE, quat: { x: 1, y: 0, z: 0, w: 0 } } },
-  { id: 'trippy', name: 'trip-fast', phases: [{ t: 0.18, roll: 9, thr: 0.52 }, { t: 1.1, roll: 8.0, yaw: -5.0, thr: 0.58 }, { t: 0.4, roll: 0, yaw: 0, thr: 0.5 }], opts: { z0: 6.5, vx: 4, maxT: 2.3, colliders: OBJ_POLE, quat: { x: 1, y: 0, z: 0, w: 0 } } },
-  { id: 'trippy', name: 'trip-slow', phases: [{ t: 0.25, roll: 6.8, thr: 0.48 }, { t: 1.45, roll: 6.4, yaw: -3.6, pitch: 0.2, thr: 0.52 }, { t: 0.45, roll: 0, yaw: 0, thr: 0.5 }], opts: { z0: 5.8, vx: 3.2, maxT: 2.7, colliders: OBJ_POLE, quat: { x: 1, y: 0, z: 0, w: 0 } } },
-  { id: 'trippy', name: 'trip-from-cradle', phases: [{ t: 0.38, pitch: -4.2, thr: 0.42 }, { t: 0.22, pitch: 2.4, roll: 3.2, thr: 0.48 }, { t: 1.2, roll: 7.0, yaw: -4.4, pitch: 0.2, thr: 0.55 }, { t: 0.4, roll: 0, yaw: 0, thr: 0.5 }], opts: { z0: 3.8, vx: 5.0, maxT: 3.0, colliders: OBJ_POLE } },
+  { id: 'trippy', name: 'trip-pole', phases: [{ t: 1.15, yaw: 7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }], opts: { ...NEAR_POLE, maxT: 2.1 } },
+  { id: 'trippy', name: 'trip-pole-fast', phases: [{ t: 0.95, yaw: 8.2, thr: 0.5 }, { t: 0.45, yaw: 0, thr: 0.44 }], opts: { ...NEAR_POLE, z0: 2.2, maxT: 1.9 } },
+  { id: 'trippy', name: 'trip-pole-ccw', phases: [{ t: 1.15, yaw: -7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }], opts: { ...NEAR_POLE, maxT: 2.1 } },
+  { id: 'trippy', name: 'trip-tree', phases: [{ t: 1.15, yaw: 7.4, thr: 0.5 }, { t: 0.5, yaw: 0, thr: 0.44 }], opts: { ...NEAR_TREE, maxT: 2.1 } },
   { id: 'sideloop', name: 'sl-std', phases: [{ t: 0.38, yaw: 6.2, thr: 0.55 }, { t: 0.95, roll: 7.0, yaw: 2.4, thr: 0.85 }, { t: 0.32, roll: 6.2, yaw: 1.0, thr: 0.22 }, { t: 0.4, roll: 0, yaw: 0, thr: 0.55 }], opts: { z0: 4.5, vx: 5.5, maxT: 2.8, colliders: OBJ_BAR } },
   { id: 'sideloop', name: 'sl-fast', phases: [{ t: 0.32, yaw: 7.0, thr: 0.58 }, { t: 0.82, roll: 8.0, yaw: 2.6, thr: 0.88 }, { t: 0.28, roll: 6.5, yaw: 1.1, thr: 0.2 }, { t: 0.4, roll: 0, yaw: 0, thr: 0.55 }], opts: { z0: 4.8, vx: 6.0, maxT: 2.5, colliders: OBJ_BAR } },
   { id: 'sideloop', name: 'sl-slow', phases: [{ t: 0.48, yaw: 5.4, thr: 0.52 }, { t: 1.1, roll: 6.2, yaw: 2.0, thr: 0.8 }, { t: 0.38, roll: 5.6, yaw: 0.9, thr: 0.24 }, { t: 0.45, roll: 0, yaw: 0, thr: 0.52 }], opts: { z0: 4.2, vx: 5.0, maxT: 3.1, colliders: OBJ_BAR } },
@@ -257,10 +262,9 @@ const PILOT_LIBRARY = [
   { id: 'maverick', name: 'pilot-mav-052', phases: [{ t: 0.15, pitchS: 0, thr: 0.64 }, { t: 0.72, pitchS: -0.52, thr: 0.9 }, { t: 0.72, pitchS: 0.50, thr: 0.24 }, { t: 0.45, pitchS: 0, thr: 0.56 }], opts: { z0: 3.4, vx: 4.2, maxT: 2.9, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 202, noise: 0.06, thrWobble: 0.08 } },
   { id: 'maverick', name: 'pilot-mav-kiss', phases: [{ t: 0.15, pitchS: 0, thr: 0.62 }, { t: 0.50, pitchS: -0.55, thr: 0.9 }, { t: 0.52, pitchS: 0.52, thr: 0.22 }, { t: 0.4, pitchS: 0, thr: 0.55 }], opts: { z0: 3.6, vx: 4.4, maxT: 2.6, colliders: OBJ_BAR, rates: WHOOP_KISS, seed: 203, noise: 0.06, thrWobble: 0.08 } },
   { id: 'maverick', name: 'pilot-mav-against', phases: [{ t: 0.55, pitchS: -0.68, thr: 0.94 }, { t: 0.68, pitchS: 0.64, thr: 0.2 }, { t: 0.45, pitchS: 0.08, thr: 0.58 }], opts: { z0: 3.2, vx: 3.2, maxT: 2.6, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 204, noise: 0.05, thrWobble: 0.07 } },
-  { id: 'trippy', name: 'pilot-trip-yaw-punch', phases: [{ t: 1.35, yawS: 0.95, rollS: 0.50, thr: 0.86 }, { t: 0.45, yawS: 0, rollS: 0, thr: 0.5 }], opts: { z0: 5.5, vx: 3.2, maxT: 2.4, colliders: OBJ_POLE, rates: WHOOP_ACTUAL, seed: 301, noise: 0.05, thrWobble: 0.06 } },
-  { id: 'trippy', name: 'pilot-trip-yaw-drop', phases: [{ t: 0.12, thr: 0.7 }, { t: 1.25, yawS: 0.95, rollS: -0.52, thr: 0.24 }, { t: 0.4, yawS: 0, rollS: 0, thr: 0.62 }], opts: { z0: 6.5, vx: 3.0, maxT: 2.4, colliders: OBJ_POLE, rates: WHOOP_ACTUAL, seed: 302, noise: 0.05, thrWobble: 0.06 } },
-  { id: 'trippy', name: 'pilot-trip-kiss-yaw', phases: [{ t: 1.15, yawS: 0.92, rollS: 0.42, thr: 0.8 }, { t: 0.4, yawS: 0, rollS: 0, thr: 0.5 }], opts: { z0: 5.8, vx: 3.4, maxT: 2.2, colliders: OBJ_POLE, rates: WHOOP_KISS, seed: 303, noise: 0.05, thrWobble: 0.06 } },
-  { id: 'trippy', name: 'pilot-trip-orbit', phases: [{ t: 1.2, rollS: 0.58, yawS: -0.52, thr: 0.55 }, { t: 0.4, rollS: 0, yawS: 0, thr: 0.5 }], opts: { z0: 6.2, vx: 3.8, maxT: 2.4, colliders: OBJ_POLE, quat: { x: 1, y: 0, z: 0, w: 0 }, rates: WHOOP_KISS, seed: 304, noise: 0.06, thrWobble: 0.07 } },
+  { id: 'trippy', name: 'pilot-trip-pole-actual', phases: [{ t: 1.2, yawS: 0.95, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_POLE, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 301, noise: 0.04, thrWobble: 0.05 } },
+  { id: 'trippy', name: 'pilot-trip-pole-kiss', phases: [{ t: 1.15, yawS: 0.92, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_POLE, maxT: 2.1, rates: WHOOP_KISS, seed: 303, noise: 0.04, thrWobble: 0.05 } },
+  { id: 'trippy', name: 'pilot-trip-tree', phases: [{ t: 1.2, yawS: 0.94, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_TREE, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 304, noise: 0.04, thrWobble: 0.05 } },
   { id: 'sideloop', name: 'pilot-side-actual', phases: [{ t: 0.55, yawS: 0.75, thr: 0.55 }, { t: 0.95, rollS: 0.75, yawS: 0.28, thr: 0.84 }, { t: 0.35, rollS: 0.58, yawS: 0.14, thr: 0.22 }, { t: 0.4, rollS: 0.3, thr: 0.68 }, { t: 0.4, rollS: 0, yawS: 0, thr: 0.5 }], opts: { z0: 4.5, vx: 5.0, maxT: 3.4, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 401, noise: 0.05, thrWobble: 0.07 } },
   { id: 'sideloop', name: 'pilot-side-kiss', phases: [{ t: 0.38, yawS: 0.72, rollS: 0.08, thr: 0.58 }, { t: 1.05, rollS: 0.70, yawS: 0.38, thr: 0.8 }, { t: 0.35, rollS: 0.35, yawS: 0.1, thr: 0.28 }, { t: 0.4, rollS: 0, yawS: 0, thr: 0.55 }], opts: { z0: 4.8, vx: 5.2, maxT: 3.1, colliders: OBJ_BAR, rates: WHOOP_KISS, seed: 402, noise: 0.06, thrWobble: 0.07 } },
 ];
@@ -326,6 +330,7 @@ test('docs/sim-tricks.md defines each trick and the confused pairs', () => {
   assert.ok(docs.includes('Split-S vs Half Matty'));
   assert.ok(docs.includes('Maverick Loop vs Powerloop'));
   assert.ok(docs.includes('Trippy Spin vs Yaw Spin'));
+  assert.ok(docs.includes('nearby pole/tree') || docs.includes('nearby pole'));
   assert.ok(docs.includes('Side Loop vs Powerloop'));
   assert.ok(docs.includes('How to record a real trace'));
   assert.ok(docs.includes('Copy last trace'));
@@ -388,6 +393,47 @@ test('hover wobble and cruise carving score nothing', () => {
     z0: 4, vx: 6, maxT: 2.4, rates: WHOOP_ACTUAL, seed: 10, noise: 0.03,
   });
   assert.deepEqual(labels(cruiseStick), []);
+});
+
+test('Ryan bug: normal turn, yaw drift, and carve are not a Trippy Spin', () => {
+  const turn = fly(
+    [{ t: 0.85, roll: 2.4, yaw: 2.0, pitch: -0.25, thr: 0.6 }, { t: 0.55, roll: 0, yaw: 0, thr: 0.46 }],
+    { z0: 4, vx: 6.5, maxT: 1.9 },
+  );
+  assert.equal(turn.hits.includes('trippy'), false, 'normal turn trippy why=' + (turn.why || ''));
+  const drift = fly(
+    [{ t: 0.7, yaw: 1.4, thr: 0.5 }, { t: 0.55, yaw: 0, thr: 0.46 }],
+    { z0: 3.5, vx: 2.2, maxT: 1.7 },
+  );
+  assert.deepEqual(labels(drift), []);
+  const carve = fly(
+    [{ t: 1.1, roll: 2.6, yaw: 1.8, pitch: -0.2, thr: 0.64 }, { t: 0.55, roll: 0, yaw: 0, thr: 0.46 }],
+    { z0: 4.5, vx: 7.5, maxT: 2.2 },
+  );
+  assert.equal(carve.hits.includes('trippy'), false, 'carve trippy why=' + (carve.why || ''));
+  const punch = fly(
+    [{ t: 1.1, yaw: 7.2, roll: 1.2, thr: 0.7 }, { t: 0.55, yaw: 0, roll: 0, thr: 0.46 }],
+    { z0: 4, vx: 3.5, maxT: 2.1 },
+  );
+  assert.equal(punch.hits.includes('trippy'), false, 'open-air yaw punch stole trippy why=' + (punch.why || ''));
+});
+
+test('Ryan bug: a real trippy spin around a pole or tree scores Trippy', () => {
+  const pole = fly(
+    [{ t: 1.15, yaw: 7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }],
+    { ...NEAR_POLE, maxT: 2.1 },
+  );
+  assert.deepEqual(labels(pole), ['trippy'], 'pole why=' + (pole.why || ''));
+  const tree = fly(
+    [{ t: 1.15, yaw: 7.4, thr: 0.5 }, { t: 0.5, yaw: 0, thr: 0.44 }],
+    { ...NEAR_TREE, maxT: 2.1 },
+  );
+  assert.deepEqual(labels(tree), ['trippy'], 'tree why=' + (tree.why || ''));
+  const openYaw = fly(
+    [{ t: 1.0, yaw: 7.5, thr: 0.45 }, { t: 0.5, yaw: 0, thr: 0.4 }],
+    { z0: 3, vx: 1.2, maxT: 2 },
+  );
+  assert.deepEqual(labels(openYaw), ['yawspin']);
 });
 
 test('turtled inverted deck does not score a trick', () => {
@@ -575,8 +621,8 @@ test('normalizeStore rejects junk and keeps hud default on', () => {
 
 test('debug recorder dumps gyro/attitude/stick/throttle JSON for the last maneuver', () => {
   const r = flyPilot(
-    [{ t: 1.2, yawS: 0.95, rollS: 0.5, thr: 0.8 }, { t: 0.4, yawS: 0, rollS: 0, thr: 0.5 }],
-    { z0: 5.5, vx: 3.2, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 9, noise: 0.04 },
+    [{ t: 1.2, yawS: 0.95, thr: 0.5 }, { t: 0.4, yawS: 0, thr: 0.45 }],
+    { ...NEAR_POLE, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 9, noise: 0.04 },
   );
   const d = makeDetector();
   const qp = new QuadPhysics(PRESETS.whoop65);
