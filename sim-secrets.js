@@ -3,9 +3,9 @@
 // New localStorage key only: quadmathSimSecrets.
 // Stock skin ids / unlocks in sim-retention.js stay frozen.
 
-import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=9b9933768baa';
-import { LAYOUT } from './sim-maps.js?v=4e3f71c9c1a3';
-import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=366b7edd089a';
+import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=195334786451';
+import { LAYOUT } from './sim-maps.js?v=b861f2341ac9';
+import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=3dfc548117e2';
 
 export const SECRETS_KEY = 'quadmathSimSecrets';
 export const SPARK_NAME = 'Spark';
@@ -345,7 +345,7 @@ const PLACEMENTS = Object.freeze({
       P('o03', -8.35, 5.4, 12, 'high aisle'),
       P('o04', -13.25, 3.85, -12, 'cube lid'),
       P('o05', -3.75, 3.85, 0, 'mid lid'),
-      P('o06', 4.6, 1.52, -16.2, 'conf table'),
+      P('o06', 4.6, 1.58, -16.2, 'conf table'),
       P('o07', 13.4, 1.7, 2.0, 'hall fly'),
       P('o08', 10.15, 1.8, -17.6, 'hall door'),
       P('o09', 14.2, 1.55, 18.4, 'reception'),

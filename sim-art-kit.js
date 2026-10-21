@@ -1,7 +1,7 @@
-// Kenney CC0 city + garage + warehouse kits. Visual only.
+// Kenney CC0 city + garage + warehouse + office kits. Visual only.
 // Meshopt-compressed files live under assets/sim-city/, assets/sim-garage/,
-// and assets/sim-warehouse/. If a load fails, the procedural meshes already
-// in the scene stay visible. Nothing from the GPL whoop sim.
+// assets/sim-warehouse/, and assets/sim-office/. If a load fails, the
+// procedural meshes already in the scene stay visible. Nothing from the GPL whoop sim.
 
 import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=10aecc280e13';
 
@@ -588,6 +588,87 @@ export async function tryDressWarehouseKit(THREE, ctx) {
     }
 
     if (gen !== warehouseDressGen) return { used: false, stale: true, bytes: 0 };
+    if (!kitGroup.children.length) return { used: false, bytes: 0 };
+    group.add(kitGroup);
+    return { used: true, bytes, quality };
+  } catch (err) {
+    try { if (kitGroup.parent) kitGroup.parent.remove(kitGroup); } catch (e) { /* ignore */ }
+    return { used: false, bytes: 0, error: String(err && err.message || err) };
+  }
+}
+
+const OFFICE_ROOT = 'assets/sim-office/';
+
+export const OFFICE_KIT_CORE = Object.freeze({
+  cardboard: { file: 'cardboard.glb', bytes: 2792, height: 0.62 },
+});
+
+export const OFFICE_KIT_EXTRA = Object.freeze({
+  crate: { file: 'crate.glb', bytes: 3708, height: 0.88 },
+  toolbox: { file: 'toolbox.glb', bytes: 4460, height: 1.05 },
+});
+
+const OFFICE_CORE_BYTES = Object.values(OFFICE_KIT_CORE).reduce((n, e) => n + e.bytes, 0);
+const OFFICE_EXTRA_BYTES = Object.values(OFFICE_KIT_EXTRA).reduce((n, e) => n + e.bytes, 0);
+
+export function officeKitBytesForQuality(quality) {
+  return quality === 'low' ? OFFICE_CORE_BYTES : OFFICE_CORE_BYTES + OFFICE_EXTRA_BYTES;
+}
+
+function officeMat(THREE, vibe, kind) {
+  const pal = vibe && vibe.palette ? vibe.palette : {};
+  let color = hexNum(pal.neonA || '#ff5c5c');
+  if (kind === 'cardboard') color = hexNum('#e8d8b0');
+  else if (kind === 'crate') color = hexNum('#2a2a2a');
+  else if (kind === 'toolbox') color = hexNum(pal.neonB || '#3d7dff');
+  return skipMat(new THREE.MeshBasicMaterial({
+    color,
+    transparent: false,
+    opacity: 1,
+  }));
+}
+
+let officeDressGen = 0;
+
+export async function tryDressOfficeKit(THREE, ctx) {
+  const group = ctx && ctx.group;
+  const loader = ctx && ctx.loader;
+  const vibe = ctx && ctx.vibe;
+  const quality = (ctx && ctx.quality) || 'med';
+  if (!THREE || !group || !loader || !vibe) return { used: false, bytes: 0 };
+  const gen = ++officeDressGen;
+  const old = group.getObjectByName('officeArtKit');
+  if (old && old.parent) old.parent.remove(old);
+  const kitGroup = new THREE.Group();
+  kitGroup.name = 'officeArtKit';
+  const planned = (group.userData && group.userData.planned) || {};
+  const wantExtra = quality === 'med' || quality === 'high';
+  let bytes = 0;
+  const root = OFFICE_ROOT;
+  try {
+    const one = async (spec, list, kind) => {
+      if (!list || !list.length || !spec) return 0;
+      return instanceProp(THREE, kitGroup, loader, spec, list, officeMat(THREE, vibe, kind), placeAt(list), root);
+    };
+    try {
+      const boxes = (planned.cardboard || []).slice(0, quality === 'low' ? 4 : 6);
+      const n = await one(OFFICE_KIT_CORE.cardboard, boxes, 'cardboard');
+      if (gen !== officeDressGen) return { used: false, stale: true, bytes: 0 };
+      bytes += n;
+    } catch (e) { /* skip */ }
+    if (wantExtra) {
+      try {
+        const n = await one(OFFICE_KIT_EXTRA.crate, planned.crates, 'crate');
+        if (gen !== officeDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+      try {
+        const n = await one(OFFICE_KIT_EXTRA.toolbox, planned.toolboxes, 'toolbox');
+        if (gen !== officeDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+    }
+    if (gen !== officeDressGen) return { used: false, stale: true, bytes: 0 };
     if (!kitGroup.children.length) return { used: false, bytes: 0 };
     group.add(kitGroup);
     return { used: true, bytes, quality };

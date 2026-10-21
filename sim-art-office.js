@@ -1,8 +1,10 @@
-// Paper Sun — original office vibe. Visual only.
-// No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
-// Toon morning paper, primary chairs/screens, black-outline hoops.
+// Paper Sun — playable whoop playground + Kenney CC0 shop kit.
+// Colliders live in sim-maps.js OFFICE_PLAY and must match kit/proc meshes.
+// Kenney kit (sim-art-kit.js) swaps floor clutter after first paint.
+// Procedural meshes stay if a mesh fails. Nothing from the GPL whoop sim.
 
 import { hexNum, propClearOfCourse } from './sim-art-city.js?v=10aecc280e13';
+import { OFFICE_PLAY } from './sim-maps.js?v=b861f2341ac9';
 
 export const OFFICE_STOCK = Object.freeze({
   wall: 0xd6d0c6,
@@ -24,7 +26,30 @@ export const OFFICE_KEEP_GATES = Object.freeze([
   { x: 4.2, y: 2.2, z: -17.4, size: 1.8 },
   { x: 13.5, y: 2.3, z: -17.4, size: 1.8 },
   { x: 13.5, y: 2.3, z: 12.0, size: 1.9 },
+  { x: 4.6, y: 2.70, z: 6.2, size: 1.8 },
+  { x: -3.75, y: 0.62, z: 0.0, size: 1.5 },
+  { x: 4.6, y: 0.62, z: -16.2, size: 1.5 },
+  { x: 4.6, y: 1.55, z: 12.4, size: 1.5 },
+  { x: -3.75, y: 4.05, z: 12.0, size: 1.6 },
+  { x: 0.0, y: 7.45, z: 6.0, size: 1.6 },
 ]);
+
+export function planOfficeKit() {
+  return {
+    cardboard: [
+      { x: 16.4, z: -20.6 }, { x: 16.2, z: 8.4 }, { x: -16.6, z: -20.2 },
+      { x: -16.4, z: 20.6 }, { x: 16.6, z: -8.2 }, { x: -16.2, z: 6.4 },
+    ],
+    crates: [
+      { x: 16.5, z: 14.2 }, { x: -16.5, z: -6.8 }, { x: 16.3, z: -14.4 },
+      { x: -16.3, z: 18.2 }, { x: 15.8, z: 4.2 }, { x: -16.6, z: 2.2 },
+    ],
+    toolboxes: [
+      { x: 16.4, z: -4.2, ry: 1.57 }, { x: -16.4, z: -14.6, ry: -1.57 },
+      { x: 16.2, z: 20.2, ry: 3.14 },
+    ],
+  };
+}
 
 const CUBES = Object.freeze([
   [-13.25, -12], [-3.75, -12],
@@ -383,16 +408,24 @@ function addCubicles(THREE, parent, mats, budget) {
     d.position.set(c[0], 3.42, c[1] + (i % 2 ? 3.4 : -3.4));
     return true;
   });
-  const desk = new THREE.BoxGeometry(3.1, 0.12, 1.5);
+  const P = OFFICE_PLAY;
+  const desk = new THREE.BoxGeometry(P.desk.w, P.desk.topH, P.desk.d);
   addInstanced(THREE, parent, desk, mats.desk, CUBES.length, (d, i) => {
     const c = CUBES[i];
-    d.position.set(c[0] - 1.35, 0.86, c[1]);
+    d.position.set(c[0] + P.desk.localX, P.desk.topY + P.desk.topH / 2, c[1]);
+    return true;
+  });
+  const legGeo = new THREE.BoxGeometry(P.desk.leg, P.desk.topY, P.desk.leg);
+  addInstanced(THREE, parent, legGeo, mats.wood, CUBES.length * P.desk.legs.length, (d, i) => {
+    const c = CUBES[(i / P.desk.legs.length) | 0];
+    const lg = P.desk.legs[i % P.desk.legs.length];
+    d.position.set(c[0] + P.desk.localX + lg[0], P.desk.topY / 2, c[1] + lg[1]);
     return true;
   });
   const screen = new THREE.BoxGeometry(1.15, 0.72, 0.08);
   addInstanced(THREE, parent, screen, mats.screen, Math.min(budget.screens, CUBES.length), (d, i) => {
     const c = CUBES[i];
-    d.position.set(c[0] - 1.35, 1.28, c[1] - 0.42);
+    d.position.set(c[0] + P.desk.localX, P.desk.topY + P.desk.topH + 0.36, c[1] - 0.42);
     return true;
   });
   const seat = new THREE.CapsuleGeometry(0.42, 0.18, 4, 8);
@@ -410,13 +443,13 @@ function addCubicles(THREE, parent, mats, budget) {
   const key = new THREE.BoxGeometry(0.72, 0.04, 0.28);
   addInstanced(THREE, parent, key, mats.key, Math.min(budget.keys, CUBES.length), (d, i) => {
     const c = CUBES[i];
-    d.position.set(c[0] - 1.35, 0.95, c[1] + 0.28);
+    d.position.set(c[0] - 1.35, OFFICE_PLAY.desk.topY + OFFICE_PLAY.desk.topH + 0.02, c[1] + 0.28);
     return true;
   });
   const mug = new THREE.CylinderGeometry(0.07, 0.06, 0.12, 8);
   addInstanced(THREE, parent, mug, mats.mug, Math.min(budget.mugs, CUBES.length), (d, i) => {
     const c = CUBES[i];
-    d.position.set(c[0] - 0.35, 0.98, c[1] + 0.42);
+    d.position.set(c[0] - 0.35, OFFICE_PLAY.desk.topY + OFFICE_PLAY.desk.topH + 0.06, c[1] + 0.42);
     return true;
   });
   const plate = new THREE.BoxGeometry(0.42, 0.16, 0.03);
@@ -428,7 +461,7 @@ function addCubicles(THREE, parent, mats, budget) {
   const tray = new THREE.BoxGeometry(0.34, 0.06, 0.28);
   addInstanced(THREE, parent, tray, mats.tray, Math.min(budget.trays, CUBES.length), (d, i) => {
     const c = CUBES[i];
-    d.position.set(c[0] - 2.2, 0.96, c[1] + 0.35);
+    d.position.set(c[0] - 2.2, OFFICE_PLAY.desk.topY + OFFICE_PLAY.desk.topH + 0.03, c[1] + 0.35);
     return true;
   });
   const poster = new THREE.BoxGeometry(1.15, 1.45, 0.04);
@@ -457,14 +490,15 @@ function addHallAndConference(THREE, parent, mats) {
   endB.position.set(10.15, 1.78, 20.8);
   endB.userData.officeArt = true;
   parent.add(endB);
-  const table = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.16, 2.3), mats.wood);
-  table.position.set(4.6, 1.14, -16.2);
+  const conf = OFFICE_PLAY.conf;
+  const table = new THREE.Mesh(new THREE.BoxGeometry(conf.w, conf.topH, conf.d), mats.wood);
+  table.position.set(conf.x, conf.topY + conf.topH / 2, conf.z);
   table.userData.officeArt = true;
   parent.add(table);
-  const leg = new THREE.CapsuleGeometry(0.08, 1.0, 3, 6);
-  for (const [x, z] of [[2.4, -15.3], [6.8, -15.3], [2.4, -17.1], [6.8, -17.1]]) {
+  const leg = new THREE.BoxGeometry(conf.leg, conf.topY, conf.leg);
+  for (const [dx, dz] of conf.legs) {
     const p = new THREE.Mesh(leg, mats.ink);
-    p.position.set(x, 0.56, z);
+    p.position.set(conf.x + dx, conf.topY / 2, conf.z + dz);
     p.userData.officeArt = true;
     parent.add(p);
   }
@@ -474,17 +508,24 @@ function addHallAndConference(THREE, parent, mats) {
     seat.userData.officeArt = true;
     parent.add(seat);
   }
-  const desk = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.2, 1.45), mats.desk);
-  desk.position.set(14.2, 0.6, 18.4);
+  const rec = OFFICE_PLAY.reception;
+  const desk = new THREE.Mesh(new THREE.BoxGeometry(rec.w, rec.topH, rec.d), mats.desk);
+  desk.position.set(rec.x, rec.topY + rec.topH / 2, rec.z);
   desk.userData.officeArt = true;
   parent.add(desk);
+  for (const [dx, dz] of rec.legs) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(rec.leg, rec.topY, rec.leg), mats.ink);
+    p.position.set(rec.x + dx, rec.topY / 2, rec.z + dz);
+    p.userData.officeArt = true;
+    parent.add(p);
+  }
   const recMon = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.82, 0.08), mats.screen);
-  recMon.position.set(14.2, 1.58, 17.72);
+  recMon.position.set(14.2, rec.topY + rec.topH + 0.41, 17.72);
   recMon.userData.officeScreen = true;
   recMon.userData.officeArt = true;
   parent.add(recMon);
   const recMug = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.13, 8), mats.mugAlt);
-  recMug.position.set(13.15, 1.28, 18.15);
+  recMug.position.set(13.15, OFFICE_PLAY.reception.topY + OFFICE_PLAY.reception.topH + 0.06, 18.15);
   recMug.userData.officeArt = true;
   parent.add(recMug);
   for (const z of [8.4, 2.2, -6.4, -14.2]) {
@@ -719,14 +760,54 @@ function addSecretDressing(THREE, parent, mats) {
   parent.add(stapler);
 }
 
+function addPlayLines(THREE, parent, mats) {
+  const P = OFFICE_PLAY;
+  const sun = P.sun;
+  const hoop = new THREE.Group();
+  hoop.name = 'officeArtSunHoop';
+  hoop.userData.officeArt = true;
+  const ow = sun.innerW + sun.bar * 2;
+  const top = new THREE.Mesh(new THREE.BoxGeometry(ow, sun.bar, sun.depth), mats.ink);
+  top.position.set(sun.x, sun.y + sun.innerH / 2 + sun.bar / 2, sun.z);
+  top.userData.officeSun = true;
+  const bot = top.clone();
+  bot.position.y = sun.y - sun.innerH / 2 - sun.bar / 2;
+  const left = new THREE.Mesh(new THREE.BoxGeometry(sun.bar, sun.innerH, sun.depth), mats.ink);
+  left.position.set(sun.x - sun.innerW / 2 - sun.bar / 2, sun.y, sun.z);
+  left.userData.officeSun = true;
+  const right = left.clone();
+  right.position.x = sun.x + sun.innerW / 2 + sun.bar / 2;
+  hoop.add(top, bot, left, right);
+  hoop.traverse((o) => { o.userData.officeArt = true; });
+  parent.add(hoop);
+
+  const joistGeo = new THREE.BoxGeometry(34.8, P.rafterH, P.rafterD);
+  addInstanced(THREE, parent, joistGeo, mats.ink, P.rafterZs.length, (d, i) => {
+    d.position.set(0, P.rafterY + P.rafterH / 2, P.rafterZs[i]);
+    return true;
+  });
+  for (const spec of [P.gap.left, P.gap.right]) {
+    const stack = new THREE.Mesh(new THREE.BoxGeometry(spec.w, spec.h, spec.d), mats.desk);
+    stack.position.set(spec.x, spec.h / 2, spec.z);
+    stack.userData.officeArt = true;
+    parent.add(stack);
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(spec.w + 0.08, 0.08, spec.d + 0.08), mats.ink);
+    lip.position.set(spec.x, spec.h + 0.04, spec.z);
+    lip.userData.officeArt = true;
+    parent.add(lip);
+  }
+}
+
 export function buildPaperSun(THREE, parent, vibe, quality, gates) {
   const group = new THREE.Group();
   group.name = 'officeArtVisuals';
   group.userData.officeArt = true;
   const budget = officeBudget(quality);
   const mats = makeOfficeMats(THREE, vibe);
+  group.userData.planned = planOfficeKit();
   addCubicles(THREE, group, mats, budget);
   addHallAndConference(THREE, group, mats);
+  addPlayLines(THREE, group, mats);
   addCeilingLamps(THREE, group, mats, budget);
   addWindows(THREE, group, mats, budget);
   addWhoopLife(THREE, group, mats, budget, gates || OFFICE_KEEP_GATES);
