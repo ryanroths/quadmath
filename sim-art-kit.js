@@ -1,6 +1,6 @@
-// Kenney CC0 city + garage + warehouse + office kits. Visual only.
+// Kenney CC0 city + garage + warehouse + office + gym + living kits. Visual only.
 // Meshopt-compressed files live under assets/sim-city/, assets/sim-garage/,
-// assets/sim-warehouse/, and assets/sim-office/. If a load fails, the
+// assets/sim-warehouse/, assets/sim-office/, assets/sim-gym/, and assets/sim-living/. If a load fails, the
 // procedural meshes already in the scene stay visible. Nothing from the GPL whoop sim.
 
 import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=10aecc280e13';
@@ -669,6 +669,168 @@ export async function tryDressOfficeKit(THREE, ctx) {
       } catch (e) { /* skip */ }
     }
     if (gen !== officeDressGen) return { used: false, stale: true, bytes: 0 };
+    if (!kitGroup.children.length) return { used: false, bytes: 0 };
+    group.add(kitGroup);
+    return { used: true, bytes, quality };
+  } catch (err) {
+    try { if (kitGroup.parent) kitGroup.parent.remove(kitGroup); } catch (e) { /* ignore */ }
+    return { used: false, bytes: 0, error: String(err && err.message || err) };
+  }
+}
+
+const GYM_ROOT = 'assets/sim-gym/';
+
+export const GYM_KIT_CORE = Object.freeze({
+  cardboard: { file: 'cardboard.glb', bytes: 2792, height: 0.62 },
+});
+
+export const GYM_KIT_EXTRA = Object.freeze({
+  barrel: { file: 'barrel.glb', bytes: 5116, height: 0.98 },
+  barrier: { file: 'barrier.glb', bytes: 2072, height: 0.72 },
+});
+
+const GYM_CORE_BYTES = Object.values(GYM_KIT_CORE).reduce((n, e) => n + e.bytes, 0);
+const GYM_EXTRA_BYTES = Object.values(GYM_KIT_EXTRA).reduce((n, e) => n + e.bytes, 0);
+
+export function gymKitBytesForQuality(quality) {
+  return quality === 'low' ? GYM_CORE_BYTES : GYM_CORE_BYTES + GYM_EXTRA_BYTES;
+}
+
+function gymMat(THREE, vibe, kind) {
+  const pal = vibe && vibe.palette ? vibe.palette : {};
+  let color = hexNum(pal.neonA || '#f0b14b');
+  if (kind === 'cardboard') color = hexNum('#8a5a30');
+  else if (kind === 'barrel') color = hexNum(pal.neonC || '#c45a22');
+  else if (kind === 'barrier') color = hexNum(pal.neonB || '#fff6d8');
+  return skipMat(new THREE.MeshBasicMaterial({
+    color,
+    transparent: false,
+    opacity: 1,
+  }));
+}
+
+let gymDressGen = 0;
+
+export async function tryDressGymKit(THREE, ctx) {
+  const group = ctx && ctx.group;
+  const loader = ctx && ctx.loader;
+  const vibe = ctx && ctx.vibe;
+  const quality = (ctx && ctx.quality) || 'med';
+  if (!THREE || !group || !loader || !vibe) return { used: false, bytes: 0 };
+  const gen = ++gymDressGen;
+  const old = group.getObjectByName('gymArtKit');
+  if (old && old.parent) old.parent.remove(old);
+  const kitGroup = new THREE.Group();
+  kitGroup.name = 'gymArtKit';
+  const planned = (group.userData && group.userData.planned) || {};
+  const wantExtra = quality === 'med' || quality === 'high';
+  let bytes = 0;
+  const root = GYM_ROOT;
+  try {
+    const one = async (spec, list, kind) => {
+      if (!list || !list.length || !spec) return 0;
+      return instanceProp(THREE, kitGroup, loader, spec, list, gymMat(THREE, vibe, kind), placeAt(list), root);
+    };
+    try {
+      const boxes = (planned.cardboard || []).slice(0, quality === 'low' ? 4 : 6);
+      const n = await one(GYM_KIT_CORE.cardboard, boxes, 'cardboard');
+      if (gen !== gymDressGen) return { used: false, stale: true, bytes: 0 };
+      bytes += n;
+    } catch (e) { /* skip */ }
+    if (wantExtra) {
+      try {
+        const n = await one(GYM_KIT_EXTRA.barrel, planned.barrels, 'barrel');
+        if (gen !== gymDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+      try {
+        const n = await one(GYM_KIT_EXTRA.barrier, planned.barriers, 'barrier');
+        if (gen !== gymDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+    }
+    if (gen !== gymDressGen) return { used: false, stale: true, bytes: 0 };
+    if (!kitGroup.children.length) return { used: false, bytes: 0 };
+    group.add(kitGroup);
+    return { used: true, bytes, quality };
+  } catch (err) {
+    try { if (kitGroup.parent) kitGroup.parent.remove(kitGroup); } catch (e) { /* ignore */ }
+    return { used: false, bytes: 0, error: String(err && err.message || err) };
+  }
+}
+
+const LIVING_ROOT = 'assets/sim-living/';
+
+export const LIVING_KIT_CORE = Object.freeze({
+  cardboard: { file: 'cardboard.glb', bytes: 2792, height: 0.62 },
+});
+
+export const LIVING_KIT_EXTRA = Object.freeze({
+  crate: { file: 'crate.glb', bytes: 3708, height: 0.88 },
+  toolbox: { file: 'toolbox.glb', bytes: 4460, height: 1.05 },
+});
+
+const LIVING_CORE_BYTES = Object.values(LIVING_KIT_CORE).reduce((n, e) => n + e.bytes, 0);
+const LIVING_EXTRA_BYTES = Object.values(LIVING_KIT_EXTRA).reduce((n, e) => n + e.bytes, 0);
+
+export function livingKitBytesForQuality(quality) {
+  return quality === 'low' ? LIVING_CORE_BYTES : LIVING_CORE_BYTES + LIVING_EXTRA_BYTES;
+}
+
+function livingMat(THREE, vibe, kind) {
+  const pal = vibe && vibe.palette ? vibe.palette : {};
+  let color = hexNum(pal.neonA || '#ff6b9a');
+  if (kind === 'cardboard') color = hexNum('#f4d6c6');
+  else if (kind === 'crate') color = hexNum('#6b3f2a');
+  else if (kind === 'toolbox') color = hexNum(pal.neonB || '#7ec8e3');
+  return skipMat(new THREE.MeshBasicMaterial({
+    color,
+    transparent: false,
+    opacity: 1,
+  }));
+}
+
+let livingDressGen = 0;
+
+export async function tryDressLivingKit(THREE, ctx) {
+  const group = ctx && ctx.group;
+  const loader = ctx && ctx.loader;
+  const vibe = ctx && ctx.vibe;
+  const quality = (ctx && ctx.quality) || 'med';
+  if (!THREE || !group || !loader || !vibe) return { used: false, bytes: 0 };
+  const gen = ++livingDressGen;
+  const old = group.getObjectByName('livingArtKit');
+  if (old && old.parent) old.parent.remove(old);
+  const kitGroup = new THREE.Group();
+  kitGroup.name = 'livingArtKit';
+  const planned = (group.userData && group.userData.planned) || {};
+  const wantExtra = quality === 'med' || quality === 'high';
+  let bytes = 0;
+  const root = LIVING_ROOT;
+  try {
+    const one = async (spec, list, kind) => {
+      if (!list || !list.length || !spec) return 0;
+      return instanceProp(THREE, kitGroup, loader, spec, list, livingMat(THREE, vibe, kind), placeAt(list), root);
+    };
+    try {
+      const boxes = (planned.cardboard || []).slice(0, quality === 'low' ? 4 : 6);
+      const n = await one(LIVING_KIT_CORE.cardboard, boxes, 'cardboard');
+      if (gen !== livingDressGen) return { used: false, stale: true, bytes: 0 };
+      bytes += n;
+    } catch (e) { /* skip */ }
+    if (wantExtra) {
+      try {
+        const n = await one(LIVING_KIT_EXTRA.crate, planned.crates, 'crate');
+        if (gen !== livingDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+      try {
+        const n = await one(LIVING_KIT_EXTRA.toolbox, planned.toolboxes, 'toolbox');
+        if (gen !== livingDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+    }
+    if (gen !== livingDressGen) return { used: false, stale: true, bytes: 0 };
     if (!kitGroup.children.length) return { used: false, bytes: 0 };
     group.add(kitGroup);
     return { used: true, bytes, quality };

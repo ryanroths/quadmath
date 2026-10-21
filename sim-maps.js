@@ -4,7 +4,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=423358ddd55a';
+import { planRoom } from './sim-room.js?v=52627101d2c3';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -254,6 +254,45 @@ function addLight(THREE, parent, lights, x, y, z, color, intensity, dist) {
   parent.add(bulb);
 }
 
+export const LIVING_PLAY = Object.freeze({
+  whoopClear: 0.85,
+  sofa: Object.freeze({
+    x: 0, z: -10.6, w: 7.2, d: 2.7, seatY: 1.20, seatH: 0.22,
+    backY: 1.42, backH: 2.08, backD: 0.70, backZ: -11.5,
+    armW: 0.55, armH: 1.15, armX: 3.4,
+  }),
+  table: Object.freeze({
+    x: 0, z: -5.9, w: 3.5, d: 1.9, topY: 1.20, topH: 0.12, leg: 0.16,
+    legs: Object.freeze([[-1.35, -0.70], [1.35, -0.70], [-1.35, 0.70], [1.35, 0.70]]),
+  }),
+  chair: Object.freeze({
+    x: -7.1, z: -3.8, w: 2.5, d: 2.5, seatY: 1.20, seatH: 0.22,
+    backY: 1.42, backH: 0.95, backD: 0.42, backZ: -4.72,
+  }),
+  tv: Object.freeze({
+    x: 8.4, z: 0.2, w: 1.5, d: 5.6, topY: 1.20, topH: 0.16,
+    legs: Object.freeze([[-0.55, -2.40], [0.55, -2.40], [-0.55, 2.40], [0.55, 2.40]]),
+    leg: 0.14,
+    panelX: 9.55, panelY: 2.2, panelH: 2.6, panelD: 4.4, panelW: 0.12,
+  }),
+  shelf: Object.freeze({
+    x: 8.4, z: -10.6, w: 1.6, d: 2.4, shelfH: 0.12,
+    shelfYs: Object.freeze([1.20, 2.48, 3.76, 5.04]),
+    post: 0.14, postH: 5.20,
+  }),
+  clay: Object.freeze({
+    x: 0, y: 2.70, z: -8.2, innerW: 2.00, innerH: 1.70, bar: 0.14, depth: 0.18,
+  }),
+  gap: Object.freeze({
+    left: Object.freeze({ x: 5.9, z: 9.8, w: 1.5, h: 2.8, d: 1.4 }),
+    right: Object.freeze({ x: 8.7, z: 9.8, w: 1.5, h: 2.8, d: 1.4 }),
+  }),
+  rafterY: 7.72,
+  rafterH: 0.20,
+  rafterD: 0.32,
+  rafterZs: Object.freeze([-10, 0, 10]),
+});
+
 function buildLiving(THREE, parent, colliders, lights) {
   const L = LAYOUT.living;
   const mats = {
@@ -271,23 +310,44 @@ function buildLiving(THREE, parent, colliders, lights) {
     front: { x: 0, w: 3.2, h: 6.4 },
     left: { z: 4, w: 4.2, h: 4.6 },
   });
-  // sofa along -Z
-  box(THREE, parent, colliders, 0, 0, -10.6, 7.2, 2.35, 2.7, mats.sofa);
-  box(THREE, parent, colliders, 0, 2.35, -11.5, 7.2, 1.15, 0.7, mats.sofa);
-  box(THREE, parent, colliders, -3.4, 1.1, -10.6, 0.55, 1.1, 2.5, mats.cushion);
-  box(THREE, parent, colliders, 3.4, 1.1, -10.6, 0.55, 1.1, 2.5, mats.cushion);
-  // coffee table
-  box(THREE, parent, colliders, 0, 0, -5.9, 3.5, 1.12, 1.9, mats.dark);
-  // TV stand + panel
-  box(THREE, parent, colliders, 8.4, 0, 0.2, 1.5, 1.55, 5.6, mats.dark);
-  box(THREE, parent, colliders, 9.55, 2.2, 0.2, 0.12, 2.6, 4.4, mats.dark);
-  // armchair
-  box(THREE, parent, colliders, -7.1, 0, -3.8, 2.5, 2.15, 2.5, mats.sofa);
-  // lamp
+  const P = LIVING_PLAY;
+  const sofa = P.sofa;
+  box(THREE, parent, colliders, sofa.x, sofa.seatY, sofa.z, sofa.w, sofa.seatH, sofa.d, mats.sofa);
+  box(THREE, parent, colliders, sofa.x, sofa.backY, sofa.backZ, sofa.w, sofa.backH, sofa.backD, mats.sofa);
+  box(THREE, parent, colliders, -sofa.armX, sofa.seatY, sofa.z, sofa.armW, sofa.armH, sofa.d, mats.cushion);
+  box(THREE, parent, colliders, sofa.armX, sofa.seatY, sofa.z, sofa.armW, sofa.armH, sofa.d, mats.cushion);
+  const tbl = P.table;
+  box(THREE, parent, colliders, tbl.x, tbl.topY, tbl.z, tbl.w, tbl.topH, tbl.d, mats.dark);
+  for (const [dx, dz] of tbl.legs) {
+    box(THREE, parent, colliders, tbl.x + dx, 0, tbl.z + dz, tbl.leg, tbl.topY, tbl.leg, mats.wood);
+  }
+  const tv = P.tv;
+  box(THREE, parent, colliders, tv.x, tv.topY, tv.z, tv.w, tv.topH, tv.d, mats.dark);
+  for (const [dx, dz] of tv.legs) {
+    box(THREE, parent, colliders, tv.x + dx, 0, tv.z + dz, tv.leg, tv.topY, tv.leg, mats.wood);
+  }
+  box(THREE, parent, colliders, tv.panelX, tv.panelY, tv.z, tv.panelW, tv.panelH, tv.panelD, mats.dark);
+  const ch = P.chair;
+  box(THREE, parent, colliders, ch.x, ch.seatY, ch.z, ch.w, ch.seatH, ch.d, mats.sofa);
+  box(THREE, parent, colliders, ch.x, ch.backY, ch.backZ, ch.w, ch.backH, ch.backD, mats.sofa);
   cyl(THREE, parent, colliders, -6.2, 0, 8.2, 0.18, 0.22, 4.4, mats.dark);
   cyl(THREE, parent, colliders, -6.2, 4.4, 8.2, 0.7, 0.55, 0.35, mats.lamp);
-  // bookshelf +X back corner
-  box(THREE, parent, colliders, 8.4, 0, -10.6, 1.6, 5.6, 2.4, mats.wood);
+  const sh = P.shelf;
+  const hx = sh.w / 2 - sh.post / 2, hz = sh.d / 2 - sh.post / 2;
+  for (const [dx, dz] of [[-hx, -hz], [hx, -hz], [-hx, hz], [hx, hz]]) {
+    box(THREE, parent, colliders, sh.x + dx, 0, sh.z + dz, sh.post, sh.postH, sh.post, mats.wood);
+  }
+  for (const y of sh.shelfYs) {
+    box(THREE, parent, colliders, sh.x, y, sh.z, sh.w, sh.shelfH, sh.d, mats.wood);
+  }
+  const clay = P.clay;
+  hoopFrame(THREE, parent, colliders, clay.x, clay.y, clay.z, clay.innerW, clay.innerH, clay.bar, clay.depth, mats.dark);
+  const gL = P.gap.left, gR = P.gap.right;
+  box(THREE, parent, colliders, gL.x, 0, gL.z, gL.w, gL.h, gL.d, mats.sofa);
+  box(THREE, parent, colliders, gR.x, 0, gR.z, gR.w, gR.h, gR.d, mats.sofa);
+  for (const z of P.rafterZs) {
+    box(THREE, parent, colliders, 0, P.rafterY, z, 19.4, P.rafterH, P.rafterD, mats.wood);
+  }
   addLight(THREE, parent, lights, 0, 8.0, 0, 0xffe6c4, 90, 36);
   addLight(THREE, parent, lights, -6.2, 5.0, 8.2, 0xffd9a0, 40, 18);
   addLight(THREE, parent, lights, 6.4, 6.2, -6, 0xffe8c8, 36, 20);
@@ -590,11 +650,43 @@ function buildOffice(THREE, parent, colliders, lights) {
   return { floor, orbit: MAP_ORBIT.office };
 }
 
-function bleacherBank(THREE, parent, colliders, x0, dir, mats) {
-  // Four stepped slabs. dir = -1 (west) or +1 (east).
-  for (let i = 0; i < 4; i++) {
-    const x = x0 + dir * (i * 1.35);
-    box(THREE, parent, colliders, x, 0, 0, 1.28, 1.05 + i * 1.05, 54, mats.wood);
+export const GYM_PLAY = Object.freeze({
+  whoopClear: 0.85,
+  x0: 17.4,
+  rowStep: 1.35,
+  rows: 4,
+  plankW: 1.20,
+  seatH: 0.16,
+  seatYs: Object.freeze([1.20, 2.40, 3.60, 4.80]),
+  segD: 22.0,
+  segZs: Object.freeze([-15.4, 15.4]),
+  stringer: 0.14,
+  amber: Object.freeze({
+    x: 0, y: 2.80, z: 8.0, innerW: 2.20, innerH: 1.85, bar: 0.14, depth: 0.20,
+  }),
+  gap: Object.freeze({
+    left: Object.freeze({ x: -2.25, z: 32.4, w: 2.2, h: 3.4, d: 1.6 }),
+    right: Object.freeze({ x: 2.25, z: 32.4, w: 2.2, h: 3.4, d: 1.6 }),
+  }),
+  rafterY: 25.49,
+  rafterH: 0.22,
+  rafterD: 0.32,
+  rafterZs: Object.freeze([-30, -18, -6, 6, 18, 30]),
+});
+
+function bleacherBank(THREE, parent, colliders, side, mats) {
+  const P = GYM_PLAY;
+  for (let row = 0; row < P.rows; row++) {
+    const x = side * (P.x0 + row * P.rowStep);
+    const y = P.seatYs[row];
+    for (const z of P.segZs) {
+      box(THREE, parent, colliders, x, y, z, P.plankW, P.seatH, P.segD, mats.wood);
+      const dx = P.plankW / 2 - P.stringer / 2;
+      const dz = P.segD / 2 - P.stringer / 2;
+      for (const [ox, oz] of [[-dx, -dz], [dx, -dz], [-dx, dz], [dx, dz]]) {
+        box(THREE, parent, colliders, x + ox, 0, z + oz, P.stringer, y, P.stringer, mats.wood);
+      }
+    }
   }
 }
 
@@ -645,10 +737,18 @@ function buildGym(THREE, parent, colliders, lights) {
   circle.rotation.x = Math.PI / 2;
   circle.position.set(0, 0.05, 0);
   parent.add(circle);
-  bleacherBank(THREE, parent, colliders, -17.4, -1, mats);
-  bleacherBank(THREE, parent, colliders, 17.4, 1, mats);
+  bleacherBank(THREE, parent, colliders, -1, mats);
+  bleacherBank(THREE, parent, colliders, 1, mats);
   hoop(THREE, parent, colliders, 24.0, 1, mats);
   hoop(THREE, parent, colliders, -24.0, -1, mats);
+  const amb = GYM_PLAY.amber;
+  hoopFrame(THREE, parent, colliders, amb.x, amb.y, amb.z, amb.innerW, amb.innerH, amb.bar, amb.depth, mats.metal);
+  const gL = GYM_PLAY.gap.left, gR = GYM_PLAY.gap.right;
+  box(THREE, parent, colliders, gL.x, 0, gL.z, gL.w, gL.h, gL.d, mats.wood);
+  box(THREE, parent, colliders, gR.x, 0, gR.z, gR.w, gR.h, gR.d, mats.wood);
+  for (const z of GYM_PLAY.rafterZs) {
+    box(THREE, parent, colliders, 0, GYM_PLAY.rafterY, z, 46.4, GYM_PLAY.rafterH, GYM_PLAY.rafterD, mats.metal);
+  }
   addLight(THREE, parent, lights, 0, 24, 18, 0xe8f0ff, 240, 90);
   addLight(THREE, parent, lights, 0, 24, -18, 0xe8f0ff, 220, 90);
   addLight(THREE, parent, lights, 0, 22, 0, 0xf2f4ff, 160, 80);

@@ -38,6 +38,8 @@ export const DAILY_LINE_STRICT_MISS_MS = 3000;
 export const DAILY_LINE_TRACKS = Object.freeze([
   { id: 'living-sofa', map: 'living', name: 'Sofa Slalom', gates: 8 },
   { id: 'living-circuit', map: 'living', name: 'Living Circuit', gates: 7 },
+  { id: 'living-under', map: 'living', name: 'Table Dive', gates: 7 },
+  { id: 'living-rafters', map: 'living', name: 'Ceiling Run', gates: 6 },
   { id: 'garage-bench', map: 'garage', name: 'Workbench', gates: 8 },
   { id: 'garage-rafters', map: 'garage', name: 'Rafters', gates: 7 },
   { id: 'warehouse-aisle', map: 'warehouse', name: 'Aisle Run', gates: 9 },
@@ -54,6 +56,8 @@ export const DAILY_LINE_TRACKS = Object.freeze([
   { id: 'gym-court', map: 'gym', name: 'Court Loop', gates: 7 },
   { id: 'gym-bleachers', map: 'gym', name: 'Bleacher Climb', gates: 8 },
   { id: 'gym-hoops', map: 'gym', name: 'Hoop Dive', gates: 9 },
+  { id: 'gym-under', map: 'gym', name: 'Bench Dive', gates: 7 },
+  { id: 'gym-rafters', map: 'gym', name: 'Truss Run', gates: 6 },
   { id: 'trainer-figure8', map: 'trainer', name: 'Figure 8', gates: 7 },
   { id: 'trainer-slalom', map: 'trainer', name: 'Slalom', gates: 7 },
   { id: 'trainer-hairpin', map: 'trainer', name: 'Hairpin', gates: 7 },
@@ -335,18 +339,28 @@ function wallBoxes(map) {
 
 function furnitureBoxes(mapId) {
   if (mapId === 'living') {
-    return [
-      aabb(0, 0, -10.6, 7.2, 2.35, 2.7),
-      aabb(0, 2.35, -11.5, 7.2, 1.15, 0.7),
-      aabb(-3.4, 1.1, -10.6, 0.55, 1.1, 2.5),
-      aabb(3.4, 1.1, -10.6, 0.55, 1.1, 2.5),
-      aabb(0, 0, -5.9, 3.5, 1.12, 1.9),
-      aabb(8.4, 0, 0.2, 1.5, 1.55, 5.6),
+    const out = [
+      aabb(0, 1.20, -10.6, 7.2, 0.22, 2.7),
+      aabb(0, 1.42, -11.5, 7.2, 2.08, 0.70),
+      aabb(-3.4, 1.20, -10.6, 0.55, 1.15, 2.7),
+      aabb(3.4, 1.20, -10.6, 0.55, 1.15, 2.7),
+      aabb(0, 1.20, -5.9, 3.5, 0.12, 1.9),
+      aabb(8.4, 1.20, 0.2, 1.5, 0.16, 5.6),
       aabb(9.55, 2.2, 0.2, 0.12, 2.6, 4.4),
-      aabb(-7.1, 0, -3.8, 2.5, 2.15, 2.5),
-      aabb(-6.2, 0, 8.2, 1.5, 4.8, 1.5),
-      aabb(8.4, 0, -10.6, 1.6, 5.6, 2.4),
+      aabb(-7.1, 1.20, -3.8, 2.5, 0.22, 2.5),
+      aabb(-7.1, 1.42, -4.72, 2.5, 0.95, 0.42),
+      aabb(-6.2, 0, 8.2, 0.44, 4.4, 0.44),
+      aabb(-6.2, 4.4, 8.2, 1.4, 0.35, 1.4),
     ];
+    const hx = 0.73, hz = 1.13;
+    for (const [dx, dz] of [[-hx, -hz], [hx, -hz], [-hx, hz], [hx, hz]]) {
+      out.push(aabb(8.4 + dx, 0, -10.6 + dz, 0.14, 5.20, 0.14));
+    }
+    for (const y of [1.20, 2.48, 3.76, 5.04]) out.push(aabb(8.4, y, -10.6, 1.6, 0.12, 2.4));
+    // Clay hoop + ottoman gap stay in sim-maps flight colliders. The 21×28
+    // room cannot host them on the daily oval without collapsing to a 12 m lap.
+    for (const z of [-10, 0, 10]) out.push(aabb(0, 7.72, z, 19.4, 0.20, 0.32));
+    return out;
   }
   if (mapId === 'garage') {
     const out = [
@@ -419,14 +433,34 @@ function furnitureBoxes(mapId) {
   }
   if (mapId === 'gym') {
     const out = [];
-    for (let i = 0; i < 4; i++) {
-      out.push(aabb(-17.4 - i * 1.35, 0, 0, 1.28, 1.05 + i * 1.05, 54));
-      out.push(aabb(17.4 + i * 1.35, 0, 0, 1.28, 1.05 + i * 1.05, 54));
+    const x0 = 17.4, step = 1.35, w = 1.20, h = 0.16, str = 0.14;
+    const ys = [1.20, 2.40, 3.60, 4.80];
+    const segD = 22.0, segZs = [-15.4, 15.4];
+    for (const side of [-1, 1]) {
+      for (let row = 0; row < 4; row++) {
+        const x = side * (x0 + row * step);
+        const y = ys[row];
+        for (const z of segZs) {
+          out.push(aabb(x, y, z, w, h, segD));
+          const dx = w / 2 - str / 2;
+          const dz = segD / 2 - str / 2;
+          for (const [ox, oz] of [[-dx, -dz], [dx, -dz], [-dx, dz], [dx, dz]]) {
+            out.push(aabb(x + ox, 0, z + oz, str, y, str));
+          }
+        }
+      }
     }
     out.push(aabb(0, 0, 25.15, 0.4, 10.6, 0.4));
     out.push(aabb(0, 9.5, 25.37, 3.6, 2.2, 0.14));
     out.push(aabb(0, 0, -25.15, 0.4, 10.6, 0.4));
     out.push(aabb(0, 9.5, -25.37, 3.6, 2.2, 0.14));
+    out.push(aabb(0, 3.725, 8.0, 2.48, 0.14, 0.20));
+    out.push(aabb(0, 1.735, 8.0, 2.48, 0.14, 0.20));
+    out.push(aabb(-1.17, 1.875, 8.0, 0.14, 1.85, 0.20));
+    out.push(aabb(1.17, 1.875, 8.0, 0.14, 1.85, 0.20));
+    out.push(aabb(-2.25, 0, 32.4, 2.2, 3.4, 1.6));
+    out.push(aabb(2.25, 0, 32.4, 2.2, 3.4, 1.6));
+    for (const z of [-30, -18, -6, 6, 18, 30]) out.push(aabb(0, 25.49, z, 46.4, 0.22, 0.32));
     return out;
   }
   if (mapId === 'trainer') {

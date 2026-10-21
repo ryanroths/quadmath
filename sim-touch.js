@@ -352,7 +352,7 @@ export function createTouchControls(ctx) {
 
   function onPointerDown(e) {
     if (!state.enabled || !root) return;
-    if (e.target && e.target.closest && e.target.closest('button,a,input,select,textarea')) return;
+    if (e.target && e.target.closest && e.target.closest('button,a,input,select,textarea,#feelHud,#osdLap,#gear')) return;
     const side = assignSide(e.clientX, (root.ownerDocument || document).documentElement.clientWidth);
     if (state.active[side] != null) return;
     state.active[side] = e.pointerId;
