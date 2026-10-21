@@ -1,15 +1,19 @@
 // QuadMath sim W5 — Retention: daily whoop, weekly boards, ghost duels, skins.
 // Nothing here is copied from WebFPV (GPL).
 // New localStorage keys: quadmathSimDaily, quadmathSimBoard, quadmathSimSkin,
-// quadmathSimPilotToken, quadmathSimCanopy. Optional: quadmathSimLeaderboardUrl
-// (online boards).
+// quadmathSimPilotToken, quadmathSimCanopy, quadmathSimWhoopKit,
+// quadmathSimDailyLine. Optional:
+// quadmathSimLeaderboardUrl (online boards).
 // Do not write old ryfly* keys.
 // This file has no sim-*.js imports so the Cloudflare Worker can bundle it.
 
 export const DAILY_KEY = 'quadmathSimDaily';
+export const DAILY_LINE_KEY = 'quadmathSimDailyLine';
 export const BOARD_KEY = 'quadmathSimBoard';
 export const SKIN_KEY = 'quadmathSimSkin';
 export const CANOPY_KEY = 'quadmathSimCanopy';
+export const WHOOP_KIT_KEY = 'quadmathSimWhoopKit';
+export const WHOOP_KIT_VER = 1;
 export const LEADERBOARD_URL_KEY = 'quadmathSimLeaderboardUrl';
 export const PILOT_TOKEN_KEY = 'quadmathSimPilotToken';
 export const SHARE_PREFIX = 'QM2.';
@@ -28,6 +32,51 @@ export const GATE_SIZE_MAX = 0.40 * WS_PER_METRE;
 export const LAP_PACE_MS = 2.6;
 export const WEEK_GRACE_MS = 36 * 60 * 60 * 1000;
 export const DEFAULT_ALLOWED_ORIGIN = 'https://quadmath.com';
+export const DAILY_LINE_MIN_MS = 2500;
+export const DAILY_LINE_MAX_MS = 180000;
+export const DAILY_LINE_GHOST_MAX = 480;
+export const DAILY_LINE_STRICT_MISS_MS = 3000;
+
+// Named #242 line tracks (no city 3-lap). Gate counts pinned to tracks/*.json.
+export const DAILY_LINE_TRACKS = Object.freeze([
+  { id: 'living-sofa', map: 'living', name: 'Sofa Slalom', gates: 8 },
+  { id: 'living-circuit', map: 'living', name: 'Living Circuit', gates: 7 },
+  { id: 'living-under', map: 'living', name: 'Table Dive', gates: 7 },
+  { id: 'living-rafters', map: 'living', name: 'Ceiling Run', gates: 6 },
+  { id: 'garage-bench', map: 'garage', name: 'Workbench', gates: 8 },
+  { id: 'garage-rafters', map: 'garage', name: 'Rafters', gates: 7 },
+  { id: 'garage-shelf', map: 'garage', name: 'Shelf Thread', gates: 7 },
+  { id: 'garage-orbit', map: 'garage', name: 'Car Orbit', gates: 8 },
+  { id: 'garage-door', map: 'garage', name: 'Door Dive', gates: 8 },
+  { id: 'warehouse-aisle', map: 'warehouse', name: 'Aisle Run', gates: 9 },
+  { id: 'warehouse-catwalk', map: 'warehouse', name: 'Catwalk', gates: 7 },
+  { id: 'warehouse-racks', map: 'warehouse', name: 'Rack Weave', gates: 8 },
+  { id: 'warehouse-rafters', map: 'warehouse', name: 'Truss Run', gates: 7 },
+  { id: 'backyard-fence', map: 'backyard', name: 'Fence Loop', gates: 7 },
+  { id: 'backyard-patio', map: 'backyard', name: 'Patio Dive', gates: 7 },
+  { id: 'office-cubicles', map: 'office', name: 'Cubicle Weave', gates: 8 },
+  { id: 'office-hallway', map: 'office', name: 'Hallway Run', gates: 7 },
+  { id: 'office-desks', map: 'office', name: 'Desk Hop', gates: 7 },
+  { id: 'office-rafters', map: 'office', name: 'Ceiling Run', gates: 6 },
+  { id: 'office-under', map: 'office', name: 'Desk Dive', gates: 6 },
+  { id: 'gym-court', map: 'gym', name: 'Court Loop', gates: 7 },
+  { id: 'gym-bleachers', map: 'gym', name: 'Bleacher Climb', gates: 8 },
+  { id: 'gym-hoops', map: 'gym', name: 'Hoop Dive', gates: 9 },
+  { id: 'gym-under', map: 'gym', name: 'Bench Dive', gates: 7 },
+  { id: 'gym-rafters', map: 'gym', name: 'Truss Run', gates: 6 },
+  { id: 'trainer-figure8', map: 'trainer', name: 'Figure 8', gates: 7 },
+  { id: 'trainer-slalom', map: 'trainer', name: 'Slalom', gates: 7 },
+  { id: 'trainer-hairpin', map: 'trainer', name: 'Hairpin', gates: 7 },
+  { id: 'city-inside', map: 'city', name: 'Interior Run', gates: 8 },
+  { id: 'city-spins', map: 'city', name: 'Spin Grove', gates: 7 },
+]);
+
+export const DAILY_LINE_MODS = Object.freeze([
+  { id: 'none', name: 'Clean' },
+  { id: 'dark', name: 'Lights out' },
+  { id: 'ghost', name: 'Pace chase' },
+  { id: 'strict', name: 'Strict miss' },
+]);
 
 // Indoor fly boxes, numbers copied from sim-maps LAYOUT. Tests pin the match.
 export const DAILY_MAPS = Object.freeze([
@@ -1404,6 +1453,213 @@ export function recordDailyFinish(progress, { utc, timeMs, trackId } = {}, now) 
   return { progress: p, improved, streak: p.streak, bestMs: p.bestByDay[day], counted: true };
 }
 
+export function dailyLineBoardKey(day) {
+  return 'D' + String(day || '');
+}
+
+export function isDailyLineBoardKey(week) {
+  return typeof week === 'string' && /^D\d{4}-\d{2}-\d{2}$/.test(week);
+}
+
+export function dailyLineFor(utc, now) {
+  const day = utc || utcDateId(now);
+  const rand = mulberry32(hashStr('daily-line|v1|' + day));
+  const tracks = DAILY_LINE_TRACKS;
+  const t = tracks[Math.floor(rand() * tracks.length)];
+  const mods = DAILY_LINE_MODS;
+  const useMod = rand() < 0.42;
+  const mod = useMod ? mods[1 + Math.floor(rand() * (mods.length - 1))] : mods[0];
+  return {
+    date: day,
+    id: 'daily-line-' + day,
+    trackId: t.id,
+    map: t.map,
+    name: t.name,
+    gates: t.gates,
+    modifier: mod.id,
+    modifierName: mod.name,
+  };
+}
+
+export function dailyLineMeta(id) {
+  for (let i = 0; i < DAILY_LINE_TRACKS.length; i++) {
+    if (DAILY_LINE_TRACKS[i].id === id) return DAILY_LINE_TRACKS[i];
+  }
+  return null;
+}
+
+export function emptyDailyLine() {
+  return { v: 1, days: {} };
+}
+
+export function normalizeDailyLine(raw) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  const out = emptyDailyLine();
+  const days = src.days && typeof src.days === 'object' ? src.days : {};
+  for (const [day, row] of Object.entries(days)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !row || typeof row !== 'object') continue;
+    const timeMs = +row.timeMs;
+    if (!Number.isFinite(timeMs) || timeMs <= 0) continue;
+    const splits = Array.isArray(row.splits)
+      ? row.splits.map((n) => +n).filter((n) => Number.isFinite(n) && n > 0)
+      : [];
+    out.days[day] = {
+      timeMs: timeMs | 0,
+      trackId: String(row.trackId || ''),
+      splits,
+    };
+  }
+  return out;
+}
+
+export function loadDailyLine(storage) {
+  const store = storageOf(storage);
+  if (!store) return emptyDailyLine();
+  try {
+    const raw = store.getItem(DAILY_LINE_KEY);
+    if (!raw) return emptyDailyLine();
+    return normalizeDailyLine(JSON.parse(raw));
+  } catch (e) {
+    return emptyDailyLine();
+  }
+}
+
+export function saveDailyLine(progress, storage) {
+  const store = storageOf(storage);
+  if (!store) return false;
+  try {
+    store.setItem(DAILY_LINE_KEY, JSON.stringify(normalizeDailyLine(progress)));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+export function recordDailyLineFinish(progress, { utc, timeMs, trackId, splits } = {}, now) {
+  const p = normalizeDailyLine(progress);
+  const today = utcDateId(now);
+  const day = utc || today;
+  const t = +timeMs;
+  const challenge = dailyLineFor(day, now);
+  if (!Number.isFinite(t) || t <= 0) return { progress: p, improved: false, counted: false };
+  if (day !== today) return { progress: p, improved: false, counted: false };
+  if (trackId && trackId !== challenge.trackId) return { progress: p, improved: false, counted: false };
+  let improved = false;
+  const prev = p.days[day];
+  if (!prev || t < prev.timeMs) {
+    p.days[day] = {
+      timeMs: t | 0,
+      trackId: challenge.trackId,
+      splits: Array.isArray(splits) ? splits.map((n) => +n | 0) : (prev && prev.splits) || [],
+    };
+    improved = true;
+  }
+  return { progress: p, improved, counted: true, bestMs: p.days[day].timeMs };
+}
+
+export function dailyLineRank(entries, name, timeMs) {
+  const rows = (entries || []).slice().sort((a, b) => a.timeMs - b.timeMs);
+  const who = sanitizePilotName(name);
+  const time = +timeMs;
+  let rank = 1;
+  for (const r of rows) {
+    if (r.name === who && +r.timeMs === time) return { rank, of: rows.length, listed: true };
+    rank += 1;
+  }
+  let insert = 1;
+  for (const r of rows) {
+    if (+r.timeMs < time) insert += 1;
+  }
+  return { rank: insert, of: rows.length + (Number.isFinite(time) && time > 0 ? 1 : 0), listed: false };
+}
+
+export function validateDailyLineRun(input) {
+  const src = input || {};
+  const challenge = src.challenge || dailyLineFor(src.date || src.utc, src.now);
+  const timeMs = +src.timeMs;
+  const splits = Array.isArray(src.splits) ? src.splits : [];
+  const ghost = src.ghost;
+  if (!challenge || !challenge.trackId) return { ok: false, reason: 'NO LINE' };
+  if (src.trackId && src.trackId !== challenge.trackId) return { ok: false, reason: 'TRACK MISMATCH' };
+  if (src.threeD || (ghost && (ghost.threeD || ghost.mode3d))) return { ok: false, reason: '3D MODE' };
+  if (!Number.isFinite(timeMs) || timeMs < DAILY_LINE_MIN_MS) return { ok: false, reason: 'TOO FAST' };
+  if (timeMs > DAILY_LINE_MAX_MS) return { ok: false, reason: 'TOO SLOW' };
+  const need = challenge.gates - 1;
+  if (splits.length !== need) return { ok: false, reason: 'SPLIT COUNT' };
+  let sum = 0;
+  for (let i = 0; i < splits.length; i++) {
+    const s = +splits[i];
+    if (!Number.isFinite(s) || s <= 50 || s > timeMs) return { ok: false, reason: 'BAD SPLIT' };
+    if (i && s + sum <= sum) return { ok: false, reason: 'SPLITS NOT MONOTONIC' };
+    sum += s;
+  }
+  if (sum > timeMs + 80) return { ok: false, reason: 'SPLITS OVER TIME' };
+  if (sum < timeMs * 0.35) return { ok: false, reason: 'SPLITS UNDER TIME' };
+  const payloadErr = ghostPayloadError(ghost, challenge.trackId);
+  if (payloadErr) return { ok: false, reason: payloadErr };
+  const samples = ghost.samples;
+  if (samples.length < 8 || samples.length > DAILY_LINE_GHOST_MAX + 8) return { ok: false, reason: 'GHOST COUNT' };
+  const span = samples[samples.length - 1][0] - samples[0][0];
+  if (span < DAILY_LINE_MIN_MS - 200) return { ok: false, reason: 'GHOST SHORT' };
+  if (Math.abs(span - timeMs) > 8000) return { ok: false, reason: 'TIME MISMATCH' };
+  let lastT = samples[0][0];
+  const frameMm = classId(src.frameMm);
+  const maxV = CLASS_MAX_SPEED[frameMm] || CLASS_MAX_SPEED[65];
+  for (let i = 1; i < samples.length; i++) {
+    const dt = (samples[i][0] - lastT) / 1000;
+    if (dt < 0) return { ok: false, reason: 'BAD TIMESTAMPS' };
+    if (dt > 1.2) return { ok: false, reason: 'SPARSE SAMPLES' };
+    if (dt > 0) {
+      const dist = Math.hypot(
+        samples[i][1] - samples[i - 1][1],
+        samples[i][2] - samples[i - 1][2],
+        samples[i][3] - samples[i - 1][3],
+      );
+      if (dist / dt > maxV * 1.15) return { ok: false, reason: 'SPEED LIMIT' };
+    }
+    lastT = samples[i][0];
+  }
+  return { ok: true, timeMs: timeMs | 0, trackId: challenge.trackId, date: challenge.date, frameMm };
+}
+
+export function normalizeDailyLineSubmit(body, now) {
+  if (!body || typeof body !== 'object') return { ok: false, reason: 'BAD JSON' };
+  const today = utcDateId(now);
+  const day = typeof body.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.day) ? body.day : today;
+  if (day !== today) return { ok: false, reason: 'BAD DAY' };
+  const challenge = dailyLineFor(day, now);
+  const frameMm = classId(body.frameMm || body.class);
+  const builtClass = classFromBuild(body.build);
+  if (builtClass != null && builtClass !== frameMm) return { ok: false, reason: 'CLASS MISMATCH' };
+  const name = sanitizePilotName(body.name);
+  const givenId = submittedTrackId(body.track) || String(body.trackId || '');
+  if (givenId && givenId !== challenge.trackId) return { ok: false, reason: 'TRACK MISMATCH' };
+  const ghost = body.ghost;
+  if (ghost && ghost.phys != null && ghost.phys !== PHYS_VER) return { ok: false, reason: 'PHYS MISMATCH' };
+  const checked = validateDailyLineRun({
+    challenge,
+    timeMs: body.timeMs,
+    splits: body.splits,
+    ghost,
+    trackId: givenId || challenge.trackId,
+    frameMm,
+    threeD: body.threeD,
+    now,
+  });
+  if (!checked.ok) return checked;
+  const token = typeof body.token === 'string' ? body.token.trim() : '';
+  return {
+    ok: true,
+    day,
+    week: dailyLineBoardKey(day),
+    frameMm,
+    name,
+    timeMs: checked.timeMs,
+    trackId: challenge.trackId,
+    token,
+  };
+}
+
 export function emptyBoard() {
   return { v: 1, weeks: {} };
 }
@@ -1758,6 +2014,191 @@ export function saveCanopyOn(on, storage) {
   }
 }
 
+// Garage kit: canopy / frame / prop paint + one of four original canopy
+// silhouettes. Stored only under WHOOP_KIT_KEY. Shapes are QuadMath originals
+// (deformed sphere layouts), not imported meshes.
+export const CANOPY_SHAPES = Object.freeze(['dome', 'wedge', 'bullet', 'flat']);
+export const KIT_CANOPY_COLORS = Object.freeze([
+  0xff4d1a, 0x3ddc97, 0x00e5ff, 0xf2f0ea, 0xb14eff, 0xffc857,
+]);
+export const KIT_FRAME_COLORS = Object.freeze([
+  0x1a1d24, 0x3a3f4a, 0xe8e9ed, 0xff4d1a, 0x2a4a3a, 0x7a5130,
+]);
+export const KIT_PROP_COLORS = Object.freeze([
+  0xff4d1a, 0x00e5ff, 0xf2f0ea, 0x3ddc97, 0x1a1d24, 0x7ec8e3,
+]);
+export const REPLAY_GHOST_HZ = 30;
+export const REPLAY_GHOST_MAX = 900;
+export const REPLAY_CLIP_MS = 10000;
+
+export function clampKitColor(n, fallback) {
+  const v = Number(n);
+  const fb = (fallback >>> 0) & 0xffffff;
+  if (!Number.isFinite(v)) return fb;
+  return (v >>> 0) & 0xffffff;
+}
+
+export function defaultWhoopKit() {
+  return {
+    v: WHOOP_KIT_VER,
+    canopy: 0xff4d1a,
+    frame: 0x1a1d24,
+    prop: 0xff4d1a,
+    shape: 'dome',
+  };
+}
+
+export function normalizeWhoopKit(raw) {
+  const d = defaultWhoopKit();
+  if (!raw || typeof raw !== 'object') return d;
+  const shape = CANOPY_SHAPES.includes(raw.shape) ? raw.shape : d.shape;
+  return {
+    v: WHOOP_KIT_VER,
+    canopy: clampKitColor(raw.canopy, d.canopy),
+    frame: clampKitColor(raw.frame, d.frame),
+    prop: clampKitColor(raw.prop, d.prop),
+    shape,
+  };
+}
+
+export function loadWhoopKit(storage) {
+  const store = storageOf(storage);
+  if (!store) return defaultWhoopKit();
+  try {
+    const raw = store.getItem(WHOOP_KIT_KEY);
+    if (!raw) return defaultWhoopKit();
+    return normalizeWhoopKit(JSON.parse(raw));
+  } catch (e) {
+    return defaultWhoopKit();
+  }
+}
+
+export function saveWhoopKit(kit, storage) {
+  const store = storageOf(storage);
+  if (!store) return false;
+  try {
+    store.setItem(WHOOP_KIT_KEY, JSON.stringify(normalizeWhoopKit(kit)));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+export function applyWhoopKitToSkin(skin, kit) {
+  const s = skin || SKINS[0];
+  const k = normalizeWhoopKit(kit);
+  return {
+    id: s.id,
+    name: s.name,
+    vibe: s.vibe,
+    unlock: s.unlock,
+    canopy: k.canopy,
+    body: s.body,
+    frame: k.frame,
+    prop: k.prop,
+    led: k.canopy,
+    trail: k.canopy,
+  };
+}
+
+export function canopyShapeLayout(shape) {
+  const id = CANOPY_SHAPES.includes(shape) ? shape : 'dome';
+  if (id === 'wedge') {
+    return { id, sx: 0.92, sy: 0.22, sz: 1.72, x: 0, y: 0.052, z: -0.10, rx: 0.22 };
+  }
+  if (id === 'bullet') {
+    return { id, sx: 0.52, sy: 0.36, sz: 2.05, x: 0, y: 0.056, z: -0.14, rx: 0 };
+  }
+  if (id === 'flat') {
+    return { id, sx: 1.05, sy: 0.16, sz: 1.18, x: 0, y: 0.046, z: -0.04, rx: 0 };
+  }
+  return { id: 'dome', sx: 0.72, sy: 0.42, sz: 1.45, x: 0, y: 0.062, z: -0.07, rx: 0 };
+}
+
+export function applyCraftCanopyShape(group, shape) {
+  if (!group) return null;
+  const L = canopyShapeLayout(shape);
+  const kids = group.children || [];
+  let mesh = kids.find((o) => o && o.userData && o.userData.craftRole === 'canopyBody');
+  if (!mesh && group.traverse) {
+    group.traverse((o) => {
+      if (!mesh && o && o.userData && o.userData.craftRole === 'canopyBody') mesh = o;
+    });
+  }
+  if (!mesh) return L;
+  if (mesh.scale && mesh.scale.set) mesh.scale.set(L.sx, L.sy, L.sz);
+  if (mesh.position && mesh.position.set) mesh.position.set(L.x, L.y, L.z);
+  if (mesh.rotation) mesh.rotation.x = L.rx;
+  mesh.userData.canopyShape = L.id;
+  return L;
+}
+
+function quatRotateVec(q, x, y, z, out) {
+  const dest = out || { x: 0, y: 0, z: 0 };
+  const qx = q && Number.isFinite(q.x) ? q.x : 0;
+  const qy = q && Number.isFinite(q.y) ? q.y : 0;
+  const qz = q && Number.isFinite(q.z) ? q.z : 0;
+  const qw = q && Number.isFinite(q.w) ? q.w : 1;
+  const ix = qw * x + qy * z - qz * y;
+  const iy = qw * y + qz * x - qx * z;
+  const iz = qw * z + qx * y - qy * x;
+  const iw = -qx * x - qy * y - qz * z;
+  dest.x = ix * qw + iw * -qx + iy * -qz - iz * -qy;
+  dest.y = iy * qw + iw * -qy + iz * -qx - ix * -qz;
+  dest.z = iz * qw + iw * -qz + ix * -qy - iy * -qx;
+  return dest;
+}
+
+export function replayChaseOffset(q, out) {
+  return quatRotateVec(q, 0, 0.48, 1.55, out);
+}
+
+export function replayOrbitOffset(elapsedMs, out) {
+  const dest = out || { x: 0, y: 0, z: 0 };
+  const t = (Number(elapsedMs) || 0) / 1000;
+  const r = 1.85;
+  dest.x = Math.sin(t * 0.55) * r;
+  dest.y = 0.62;
+  dest.z = Math.cos(t * 0.55) * r;
+  return dest;
+}
+
+export function replayDurationMs(samples) {
+  if (!samples || !samples.length) return 0;
+  const a = Number(samples[0][0]) || 0;
+  const b = Number(samples[samples.length - 1][0]) || 0;
+  return Math.max(0, b - a);
+}
+
+export function replayClipSpan(samples, startMs, durMs) {
+  const dur = Number(durMs) > 0 ? Number(durMs) : REPLAY_CLIP_MS;
+  if (!samples || !samples.length) return { start: 0, end: 0, samples: [] };
+  const first = Number(samples[0][0]) || 0;
+  const last = Number(samples[samples.length - 1][0]) || 0;
+  let start = Number(startMs);
+  if (!Number.isFinite(start)) start = first;
+  start = Math.max(first, Math.min(start, last));
+  const end = Math.min(last, start + dur);
+  const slice = [];
+  for (const s of samples) {
+    const t = Number(s[0]) || 0;
+    if (t >= start && t <= end) slice.push(s);
+  }
+  return { start, end, samples: slice };
+}
+
+export function canRecordClip(env) {
+  const g = env || (typeof globalThis !== 'undefined' ? globalThis : {});
+  const Rec = g.MediaRecorder;
+  if (!Rec) return false;
+  if (typeof Rec.isTypeSupported === 'function') {
+    return Rec.isTypeSupported('video/webm;codecs=vp9')
+      || Rec.isTypeSupported('video/webm;codecs=vp8')
+      || Rec.isTypeSupported('video/webm');
+  }
+  return true;
+}
+
 // Thin FPV lip only. No overhead box. Pieces sit on the live frustum so a
 // 110° camera cannot fill the screen the way the old 0.13–0.15 m boxes did.
 export const CANOPY_DIST = 0.12;
@@ -1965,9 +2406,11 @@ export function makeCraftGroup(THREE, skin) {
   skipLooks(hub);
   g.add(hub);
   const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), canopyMat);
-  canopy.scale.set(0.72, 0.42, 1.45);
-  canopy.position.set(0, 0.062, -0.07);
+  const dome = canopyShapeLayout('dome');
+  canopy.scale.set(dome.sx, dome.sy, dome.sz);
+  canopy.position.set(dome.x, dome.y, dome.z);
   canopy.userData.skinPart = 'canopy';
+  canopy.userData.craftRole = 'canopyBody';
   skipLooks(canopy);
   g.add(canopy);
   const camHouse = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.04, 0.05), bodyMat);

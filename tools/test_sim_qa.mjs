@@ -11,6 +11,7 @@ import {
   persistableSelection, isFreestyleTrackId, isEphemeralTrackId, freestyleIdFor,
   loadSelected, saveSelected, MAPS, freestyleTrack, isLineTrackId,
 } from '../sim-tracks.js';
+import { dailyLineFor } from '../sim-retention.js';
 import {
   shouldToastFlip, isStuckInverted, stepStuckHold, wantsTurtle, bodyUpZ,
   STUCK_HOLD_S,
@@ -398,4 +399,24 @@ test('named tracks are lines; city stays 3-lap; HUD and ghost stay wired', () =>
   assert.ok(simSrc.includes('tricks.setActive'));
   assert.ok(simSrc.includes('syncSecrets'));
   assert.ok(!simSrc.includes('ryflyBestLap') && !simSrc.includes('ryflyGhost'));
+  const line = dailyLineFor('2026-10-21');
+  assert.equal(isLineTrackId(line.trackId), true);
+  assert.ok(simSrc.includes('function flyDailyLine'));
+  assert.ok(simSrc.includes('function openDailyLineCard'));
+  assert.ok(simSrc.includes("q.get('dailyline')"));
+  assert.ok(simSrc.includes('DAILY_LINE_KEY') || simSrc.includes('loadDailyLine'));
+});
+
+test('whoop garage and replay cam stay on sim files', () => {
+  assert.ok(simSrc.includes('id="menuWhoop"'));
+  assert.ok(simSrc.includes('function openWhoopCard'));
+  assert.ok(simSrc.includes('function startReplay'));
+  assert.ok(simSrc.includes('function applyReplayCam'));
+  assert.ok(simSrc.includes('function demoReplayForShot'));
+  assert.ok(simSrc.includes('id="replayHud"'));
+  assert.ok(simSrc.includes('data-replay-cam="chase"'));
+  assert.ok(simSrc.includes('data-replay-cam="orbit"'));
+  assert.ok(simSrc.includes('data-replay-cam="fpv"'));
+  assert.ok(simSrc.includes('id="replayClip"'));
+  assert.ok(!simSrc.toLowerCase().includes('webfpv.com'));
 });

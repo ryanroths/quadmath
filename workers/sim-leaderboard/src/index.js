@@ -4,9 +4,13 @@
 
 import {
   utcWeekId,
+  utcDateId,
   weeklyTrackFor,
   classId,
   normalizeSubmit,
+  normalizeDailyLineSubmit,
+  dailyLineFor,
+  dailyLineBoardKey,
   rateWindowId,
   pickCorsOrigin,
   DEFAULT_ALLOWED_ORIGIN,
@@ -68,13 +72,26 @@ async function checkRate(env, ip, now) {
   return true;
 }
 
-async function listBoard(env, week, frameMm) {
+async function listBoard(env, week, frameMm, trackId) {
   const c = classId(frameMm);
-  const track = weeklyTrackFor(week);
+  const track = trackId || weeklyTrackFor(week).id;
   const { results } = await env.DB.prepare(
     'SELECT name, time_ms AS timeMs, track_id AS trackId, submitted_ms AS at FROM scores WHERE week = ? AND class = ? AND track_id = ? ORDER BY time_ms ASC LIMIT 20',
-  ).bind(week, c, track.id).all();
+  ).bind(week, c, track).all();
   return results || [];
+}
+
+async function upsertScore(env, week, frameMm, name, timeMs, trackId) {
+  const existing = await env.DB.prepare(
+    'SELECT time_ms FROM scores WHERE week = ? AND class = ? AND name = ?',
+  ).bind(week, frameMm, name).first();
+  if (existing && existing.time_ms <= timeMs) {
+    return { improved: false, timeMs: existing.time_ms };
+  }
+  await env.DB.prepare(
+    'INSERT INTO scores (week, class, name, time_ms, track_id, submitted_ms) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(week, class, name) DO UPDATE SET time_ms = excluded.time_ms, track_id = excluded.track_id, submitted_ms = excluded.submitted_ms WHERE excluded.time_ms < scores.time_ms',
+  ).bind(week, frameMm, name, timeMs, trackId, Date.now()).run();
+  return { improved: true, timeMs };
 }
 
 async function claimPilot(env, name, tokenHash) {
@@ -114,8 +131,29 @@ export async function handleLeaderboard(request, env) {
     if (!env || !env.DB) {
       return reply({ week, class: frameMm, trackId: track.id, entries: [], online: false, note: 'no D1' });
     }
-    const entries = await listBoard(env, week, frameMm);
+    const entries = await listBoard(env, week, frameMm, track.id);
     return reply({ week, class: frameMm, trackId: track.id, entries, online: true });
+  }
+
+  if (request.method === 'GET' && (path === '/api/daily' || path === '/api/daily/meta')) {
+    const day = url.searchParams.get('day') || utcDateId();
+    const challenge = dailyLineFor(day);
+    const frameMm = classId(url.searchParams.get('class') || url.searchParams.get('frameMm') || 65);
+    const week = dailyLineBoardKey(challenge.date);
+    if (path === '/api/daily/meta' || url.searchParams.get('meta') === '1') {
+      return reply({ day: challenge.date, challenge, online: !!(env && env.DB) });
+    }
+    if (!env || !env.DB) {
+      return reply({
+        day: challenge.date, class: frameMm, trackId: challenge.trackId,
+        challenge, entries: [], online: false, note: 'no D1',
+      });
+    }
+    const entries = await listBoard(env, week, frameMm, challenge.trackId);
+    return reply({
+      day: challenge.date, class: frameMm, trackId: challenge.trackId,
+      challenge, entries, online: true,
+    });
   }
 
   if (request.method === 'POST' && path === '/api/submit') {
@@ -131,20 +169,30 @@ export async function handleLeaderboard(request, env) {
     const tokenHash = await hashPilotToken(checked.token);
     const claim = await claimPilot(env, checked.name, tokenHash);
     if (!claim.ok) return reply({ ok: false, reason: claim.reason }, 403);
-    const existing = await env.DB.prepare(
-      'SELECT time_ms FROM scores WHERE week = ? AND class = ? AND name = ?',
-    ).bind(checked.week, checked.frameMm, checked.name).first();
-    if (existing && existing.time_ms <= checked.timeMs) {
-      const entries = await listBoard(env, checked.week, checked.frameMm);
-      return reply({ ok: true, improved: false, timeMs: existing.time_ms, entries });
-    }
-    await env.DB.prepare(
-      'INSERT INTO scores (week, class, name, time_ms, track_id, submitted_ms) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(week, class, name) DO UPDATE SET time_ms = excluded.time_ms, track_id = excluded.track_id, submitted_ms = excluded.submitted_ms WHERE excluded.time_ms < scores.time_ms',
-    ).bind(
-      checked.week, checked.frameMm, checked.name, checked.timeMs, checked.trackId, Date.now(),
-    ).run();
-    const entries = await listBoard(env, checked.week, checked.frameMm);
-    return reply({ ok: true, improved: true, timeMs: checked.timeMs, entries });
+    const saved = await upsertScore(env, checked.week, checked.frameMm, checked.name, checked.timeMs, checked.trackId);
+    const entries = await listBoard(env, checked.week, checked.frameMm, checked.trackId);
+    return reply({ ok: true, improved: saved.improved, timeMs: saved.timeMs, entries });
+  }
+
+  if (request.method === 'POST' && path === '/api/daily/submit') {
+    if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);
+    const ip = clientIp(request);
+    const allowed = await checkRate(env, ip, Date.now());
+    if (!allowed) return reply({ ok: false, reason: 'RATE LIMIT' }, 429);
+    const parsed = await readJson(request);
+    if (parsed.error) return reply({ ok: false, reason: parsed.error }, 400);
+    const checked = normalizeDailyLineSubmit(parsed.body);
+    if (!checked.ok) return reply({ ok: false, reason: checked.reason }, 400);
+    if (!TOKEN_RE.test(checked.token || '')) return reply({ ok: false, reason: 'NO TOKEN' }, 400);
+    const tokenHash = await hashPilotToken(checked.token);
+    const claim = await claimPilot(env, checked.name, tokenHash);
+    if (!claim.ok) return reply({ ok: false, reason: claim.reason }, 403);
+    const saved = await upsertScore(env, checked.week, checked.frameMm, checked.name, checked.timeMs, checked.trackId);
+    const entries = await listBoard(env, checked.week, checked.frameMm, checked.trackId);
+    return reply({
+      ok: true, improved: saved.improved, timeMs: saved.timeMs, entries,
+      day: checked.day, trackId: checked.trackId,
+    });
   }
 
   return reply({ ok: false, reason: 'NOT FOUND' }, 404);
