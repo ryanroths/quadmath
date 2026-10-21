@@ -3,7 +3,7 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=d2194c8087bb';
+import { hexNum } from './sim-art-city.js?v=10aecc280e13';
 export {
   hexNum, qualityWantsBloom, qualityWantsAo, qualityWantsGrade,
   qualityWantsReflections, qualityWantsParticles,
@@ -17,57 +17,57 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=d2194c8087bb';
+} from './sim-art-city.js?v=10aecc280e13';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=30ec33b5a4ac';
+} from './sim-art-living.js?v=cdd96eec6f73';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=090d1cf4a36b';
+} from './sim-art-garage.js?v=20f1b6abfebb';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=786c4dc9ad0d';
+} from './sim-art-warehouse.js?v=5d460085ad8e';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
-} from './sim-art-gym.js?v=2f8876ddceb5';
+} from './sim-art-gym.js?v=fad9f1189eac';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=ef3ea0923bd9';
+} from './sim-art-office.js?v=3145a1086ff3';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=40bc96f21872';
+} from './sim-art-trainer.js?v=14b738c2cef9';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
-} from './sim-art-backyard.js?v=9686f1d869ce';
+} from './sim-art-backyard.js?v=a28cde069664';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=ed5e1bd67ca7';
+} from './sim-art-room.js?v=ff4075a232f5';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
   tryDressWarehouseKit, warehouseKitBytesForQuality, WAREHOUSE_KIT_CORE, WAREHOUSE_KIT_EXTRA,
-} from './sim-art-kit.js?v=73c58e54bf08';
+} from './sim-art-kit.js?v=f4e1009432e0';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
@@ -617,6 +617,103 @@ export function buildMoodScene(THREE, vibeId) {
   fill.position.set(-6, 6, 4);
   g.add(fill);
   return g;
+}
+
+const TICK_SKIP = /^(cityRain|citySteam|cityWet|cityTrails|cityCruise|cityCurrent|cityDrone|livingLamp|livingLantern|livingSteam|livingScreen|livingClay|garageTube|garageSpark|garageSign|garageFan|warehouseTube|warehouseOrb|warehouseIon|gymRim|gymDust|gymBanner|gymCan|officeScreen|officePlant|officeSun|officePlane|officeBlind|trainerBulb|trainerSpark|trainerFrame|trainerSign|backyardIdol|backyardMoss|roomLamp|roomStage|roomMobile)$/;
+
+function artTickUserData(o) {
+  const u = o && o.userData;
+  if (!u) return false;
+  for (const k in u) {
+    if (u[k] && TICK_SKIP.test(k)) return true;
+  }
+  const mu = o.material && o.material.userData;
+  return !!(mu && (mu.cityHolo || mu.cityWindow || mu.cityBlink));
+}
+
+export function mergeStaticArt(THREE, root) {
+  if (!THREE || !root) return 0;
+  let visuals = null;
+  root.traverse((o) => {
+    if (!visuals && o.name && /ArtVisuals$/.test(o.name)) visuals = o;
+  });
+  const host = visuals || root;
+  const buckets = new Map();
+  const doomed = [];
+  host.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || o.visible === false) return;
+    if (o.userData && (o.userData.artInstanced || o.userData.artKeep || o.userData.cityKit || o.userData.mergedStatic)) return;
+    if (artTickUserData(o)) return;
+    if (!o.geometry || !o.material || Array.isArray(o.material)) return;
+    const key = o.material.uuid + ':' + (!!o.castShadow) + ':' + (!!o.receiveShadow);
+    let list = buckets.get(key);
+    if (!list) { list = []; buckets.set(key, list); }
+    list.push(o);
+  });
+  let merged = 0;
+  buckets.forEach((list) => {
+    if (list.length < 2) return;
+    const geos = [];
+    for (const o of list) {
+      const g = o.geometry.clone();
+      o.updateWorldMatrix(true, false);
+      g.applyMatrix4(o.matrixWorld);
+      geos.push(g);
+    }
+    const pos = [], nor = [];
+    for (const g of geos) {
+      const src = g.index ? g.toNonIndexed() : g;
+      const p = src.getAttribute('position');
+      const n = src.getAttribute('normal');
+      if (!p) {
+        if (src !== g) src.dispose();
+        g.dispose();
+        continue;
+      }
+      for (let i = 0; i < p.count; i++) {
+        pos.push(p.getX(i), p.getY(i), p.getZ(i));
+        if (n) nor.push(n.getX(i), n.getY(i), n.getZ(i));
+        else nor.push(0, 1, 0);
+      }
+      if (src !== g) src.dispose();
+      g.dispose();
+    }
+    if (!pos.length) return;
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    const mesh = new THREE.Mesh(out, list[0].material);
+    mesh.castShadow = !!list[0].castShadow;
+    mesh.receiveShadow = !!list[0].receiveShadow;
+    mesh.userData.mergedStatic = true;
+    mesh.userData.artKeep = true;
+    host.add(mesh);
+    for (const o of list) doomed.push(o);
+    merged += list.length;
+  });
+  for (const o of doomed) {
+    if (o.parent) o.parent.remove(o);
+    if (o.geometry) o.geometry.dispose();
+  }
+  if (host.userData) host.userData.artTickers = null;
+  if (root.userData) root.userData.artTickers = null;
+  return merged;
+}
+
+export function artTickList(root, now, fn, filter) {
+  if (!root) return;
+  const t = now * 0.001;
+  let list = root.userData && root.userData.artTickers;
+  if (!list) {
+    list = [];
+    root.traverse((o) => {
+      if (filter ? filter(o) : artTickUserData(o)) list.push(o);
+    });
+    if (root.userData) root.userData.artTickers = list;
+  }
+  for (let i = 0; i < list.length; i++) {
+    try { fn(list[i], t); } catch (e) { /* never abort the FPV render loop */ }
+  }
 }
 
 export function artStats(renderer, root) {

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { PRESETS, phoneLookOverrides } from '../sim-looks.js';
 import {
   TOUCH_KEY, FLIGHT_MODE_KEY, DEFAULT_TOUCH,
   normalizeTouch, loadTouch, saveTouch,
@@ -139,6 +140,12 @@ test('auto quality is low on mobile; touch enable / landscape rules', () => {
     navigator: { maxTouchPoints: 5 },
     screen: { width: 412, height: 915 },
   }), true);
+  assert.equal(detectMobile({
+    matchMedia: () => ({ matches: false }),
+    navigator: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)', maxTouchPoints: 5 },
+    ontouchstart: null,
+    screen: { width: 390, height: 844 },
+  }), true);
 });
 
 test('3D touch throttle rests at center without changing 2D rest', () => {
@@ -223,6 +230,21 @@ test('M3 touch-only first visit skips No controller overlay and keyboard', () =>
 test('looks auto quality consults mobile and defers heavy assets', () => {
   assert.ok(looksSrc.includes('resolveAutoQuality') || looksSrc.includes('isMobile') || looksSrc.includes('mobile'));
   assert.ok(looksSrc.includes('afterFirstFrame'));
+});
+
+test('phone Medium caps pixel ratio at 1 and shadows at 512', () => {
+  const phone = phoneLookOverrides(true, PRESETS.med, 3);
+  assert.equal(phone.pixelRatio, 1);
+  assert.equal(phone.pixelRatioCap, 1);
+  assert.equal(phone.shadowMapSize, 512);
+  const desk = phoneLookOverrides(false, PRESETS.med, 2);
+  assert.equal(desk.pixelRatio, 1.25);
+  assert.equal(desk.shadowMapSize, 1024);
+  const highPhone = phoneLookOverrides(true, PRESETS.high, 3);
+  assert.equal(highPhone.pixelRatio, 1);
+  assert.equal(highPhone.shadowMapSize, 512);
+  assert.ok(simSrc.includes('bootMapHint') && simSrc.includes('PCFShadowMap'));
+  assert.ok(simSrc.includes('mergeStaticArt'));
 });
 
 test('sim.html gamepad path does not fall through to touch', () => {

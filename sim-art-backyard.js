@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Dusk lot, ziggurat shed, moss posts, stone-gold gates.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d2194c8087bb';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=10aecc280e13';
 
 export const BACKYARD_STOCK = Object.freeze({
   grass: 0x5d7a3a,
@@ -498,11 +498,18 @@ export function pulseBackyardGate(g, isNext, passed, now, vibe) {
 export function tickBackyardArt(root, now) {
   if (!root) return;
   const t = now * 0.001;
-  root.traverse((o) => {
-    try {
-      tickBackyardArtObject(o, t);
-    } catch (e) { /* never abort the FPV render loop */ }
-  });
+  let list = root.userData && root.userData.artTickers;
+  if (!list) {
+    list = [];
+    root.traverse((o) => {
+      const u = o.userData || {};
+      if (u.backyardIdol || u.backyardMoss) list.push(o);
+    });
+    if (root.userData) root.userData.artTickers = list;
+  }
+  for (let i = 0; i < list.length; i++) {
+    try { tickBackyardArtObject(list[i], t); } catch (e) { /* never abort the FPV render loop */ }
+  }
 }
 
 function tickBackyardArtObject(o, t) {

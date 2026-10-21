@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Toon morning paper, primary chairs/screens, black-outline hoops.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d2194c8087bb';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=10aecc280e13';
 
 export const OFFICE_STOCK = Object.freeze({
   wall: 0xd6d0c6,
@@ -787,11 +787,18 @@ export function pulseOfficeGate(g, isNext, passed, now, vibe) {
 export function tickOfficeArt(root, now) {
   if (!root) return;
   const t = now * 0.001;
-  root.traverse((o) => {
-    try {
-      tickOfficeArtObject(o, t);
-    } catch (e) { /* never abort the FPV render loop */ }
-  });
+  let list = root.userData && root.userData.artTickers;
+  if (!list) {
+    list = [];
+    root.traverse((o) => {
+      const u = o.userData || {};
+      if (u.officeScreen || u.officePlant || u.officeSun || u.officePlane || u.officeBlind) list.push(o);
+    });
+    if (root.userData) root.userData.artTickers = list;
+  }
+  for (let i = 0; i < list.length; i++) {
+    try { tickOfficeArtObject(list[i], t); } catch (e) { /* never abort the FPV render loop */ }
+  }
 }
 
 function tickOfficeArtObject(o, t) {

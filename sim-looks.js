@@ -3,7 +3,7 @@
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
-import { resolveAutoQuality } from './sim-touch.js?v=7c9e387317c4';
+import { resolveAutoQuality } from './sim-touch.js?v=4e5aeeda285e';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
@@ -78,6 +78,21 @@ export const LOOK_SPOTS = {
 const ASSET = 'assets/sim-looks';
 const HDRI_1K = `${ASSET}/hdri/kiara_1_dawn_1k.hdr`;
 const HDRI_2K = `${ASSET}/hdri/kiara_1_dawn_2k.hdr`;
+
+export function phoneLookOverrides(mobile, preset, dpr) {
+  const p = Object.assign({}, preset || PRESETS.med);
+  const rawDpr = dpr == null
+    ? (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1)
+    : dpr;
+  const cap = mobile ? 1 : (p.pixelRatioCap || p.pixelRatio || 1);
+  p.pixelRatio = Math.min(rawDpr, cap);
+  if (mobile) {
+    p.pixelRatioCap = 1;
+    p.shadowMapSize = Math.min(p.shadowMapSize || 512, 512);
+    if (p.anisotropy) p.anisotropy = Math.min(p.anisotropy, 4);
+  }
+  return p;
+}
 
 export const PRESETS = {
   low: {
@@ -358,17 +373,13 @@ export async function createLooks(ctx) {
   let maxAniso = 8;
   try { maxAniso = renderer.capabilities.getMaxAnisotropy() || 8; } catch (e) { /* ignore */ }
 
-  const fps = { inst: 0, avg: 60, lowMs: 0, samples: [], ready: false, t0: 0 };
+  const fps = { inst: 0, avg: 60, lowMs: 0, samples: [], ready: false, t0: 0, sum: 0 };
   let firstFrameDone = false;
   let readyResolve = function () {};
   const ready = new Promise(function (r) { readyResolve = r; });
 
   function presetOf(name) {
-    const p = PRESETS[name] || PRESETS.med;
-    const cap = p.pixelRatioCap || p.pixelRatio || 1;
-    const out = Object.assign({}, p, {
-      pixelRatio: Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, cap),
-    });
+    const out = phoneLookOverrides(mobile, PRESETS[name] || PRESETS.med);
     if (gpuHint(renderer).low) {
       // Software WebGL (SwiftShader etc.) blows up MSAA HalfFloat targets.
       // Cheap 8-tap contact AO stays; it is a depth sample, not GTAO.
@@ -837,7 +848,7 @@ export async function createLooks(ctx) {
     applyFpvUniforms();
     sizeComposer();
     if (ctx.onResize) ctx.onResize();
-    try { await ensureHdr(p.hdri); } catch (e) { console.warn('looks HDRI', e); }
+    try { await ensureHdr(mobile && p.hdri === '2k' ? '1k' : p.hdri); } catch (e) { console.warn('looks HDRI', e); }
     try { await applyWorldMaps(); } catch (e) { console.warn('looks PBR', e); }
     applyMapLooksNow();
     if (skyMode === 'gradient') applySkyModeNow();
@@ -978,8 +989,9 @@ export async function createLooks(ctx) {
     fps._last = now;
     fps.inst = inst;
     fps.samples.push(inst);
-    if (fps.samples.length > 90) fps.samples.shift();
-    fps.avg = fps.samples.reduce((a, b) => a + b, 0) / fps.samples.length;
+    fps.sum += inst;
+    if (fps.samples.length > 90) fps.sum -= fps.samples.shift();
+    fps.avg = fps.sum / fps.samples.length;
     if (choice === 'auto' && now - fps.t0 > 3000) {
       if (fps.avg < 55) fps.lowMs += (fps._dt || 16);
       else fps.lowMs = 0;
@@ -1076,6 +1088,8 @@ export async function createLooks(ctx) {
     get aoPass() { return aoPass; },
     get choice() { return choice; },
     get applied() { return applied; },
+    get mobile() { return mobile; },
+    get shadowMapSize() { return presetOf(applied).shadowMapSize; },
     get fpv() { return fpv; },
     get menuOpen() { return menuOpen; },
     fps,

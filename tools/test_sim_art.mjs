@@ -12,7 +12,7 @@ import {
   qualityWantsReflections, qualityWantsParticles,
   propClearOfCourse, planCityProps, planPortalBlocks, SIGN_WORDS, GATE_STYLES,
   signsAreOriginal, BRAND_BLOCKLIST,
-  paintWorldLabel, WORLD_LABEL, restyleCity, buildNeonCity, artStats, tickCityArt,
+  paintWorldLabel, WORLD_LABEL, restyleCity, buildNeonCity, artStats, tickCityArt, mergeStaticArt,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
   kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP, planGarageKit,
@@ -94,6 +94,23 @@ test('quality Low kills bloom; Med/High keep it', () => {
   assert.equal(hi.reflect, true);
   assert.equal(lo.rain, 0);
   assert.ok(hi.rain > 0);
+});
+
+test('mergeStaticArt collapses same-material static meshes', () => {
+  const root = new THREE.Group();
+  const vis = new THREE.Group();
+  vis.name = 'livingArtVisuals';
+  root.add(vis);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
+  vis.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat));
+  vis.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat));
+  vis.children[0].position.set(-1, 0, 0);
+  vis.children[1].position.set(1, 0, 0);
+  const n = mergeStaticArt(THREE, root);
+  assert.ok(n >= 2, 'merged ' + n);
+  let meshes = 0;
+  vis.traverse((o) => { if (o.isMesh) meshes += 1; });
+  assert.equal(meshes, 1);
 });
 
 test('hexNum and vibeTable are stable helpers', () => {
@@ -439,7 +456,8 @@ test('one lighting resolver per map and city never shares fog as background', ()
   assert.equal(looks.includes('scene.background = scene.fog.color'), false);
   const sim = readFileSync(join(root, 'sim.html'), 'utf8');
   assert.match(sim, /resolveMapLighting\(/);
-  assert.match(sim, /if\(currentMap==='city'&&!\(skyMesh&&skyMesh\.userData&&skyMesh\.userData\.citySky\)\)applyCityArt/);
+  assert.match(sim, /citySky\)\)applyCityArt/);
+  assert.match(sim, /_cityArtReady/);
   assert.match(sim, /artDirty&&currentMap==='city'\)applyCityArt/);
   assert.equal(/ensureIndoor[\s\S]{0,500}setQuality\(looks\.choice\)/.test(sim), false);
 });
