@@ -237,7 +237,7 @@
   .menu-layer button{width:auto;margin-top:12px}
   body.menu-open #legend,body.menu-open #audioHint,body.menu-open #gear,body.menu-open #fpsHud,
     body.menu-open .osd,body.menu-open #feelHud,body.menu-open #feelTutorial,body.menu-open #coachHud,
-    body.menu-open #trickHud,body.menu-open #trickScore,body.menu-open #touchLayer{opacity:0;pointer-events:none}
+    body.menu-open #trickHud,body.menu-open #trickScore,body.menu-open #touchLayer,body.menu-open #replayHud{opacity:0;pointer-events:none}
   body:has(#panel.open) #feelHud{opacity:0}
   .seg{display:flex;gap:6px;margin-bottom:10px}
   #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#camTiltPreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
@@ -386,8 +386,34 @@
   .skin-mini .sk-lens{fill:#14161c}
   .skin-mini .sk-led{fill:var(--sk-led)}
   .daily-meta{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:var(--dim);margin:8px 0}
+  .menu-layer.whoop{width:min(400px,92vw)}
+  .whoop-preview{display:flex;justify-content:center;margin:4px 0 8px}
+  .whoop-preview .skin-mini{width:88px;height:88px}
+  .whoop-label{font-size:11px;color:var(--dim);margin:6px 0 4px;letter-spacing:.04em;text-transform:uppercase}
+  .whoop-swatches{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
+  .whoop-swatches button{width:26px;height:26px;padding:0;margin:0;border-radius:50%;border-color:var(--line)}
+  .whoop-swatches button.on{border-color:var(--orange);box-shadow:0 0 0 2px rgba(255,77,26,.35)}
+  .whoop-shapes{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+  .whoop-shapes button{width:auto;flex:1;min-width:64px;margin:0;padding:6px 8px;font-size:11px;border-color:var(--line);color:var(--txt)}
+  .whoop-shapes button.on{border-color:var(--orange);color:var(--orange);background:rgba(255,77,26,.12)}
+  #replayHud{display:none;position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:20;
+    width:min(520px,94vw);padding:8px 10px;background:var(--glass);border:1px solid var(--line);
+    border-radius:14px;pointer-events:auto;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  #replayHud.show{display:block}
+  #replayHud .replay-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0}
+  #replayHud button{width:auto;margin:0;padding:5px 8px;font-size:11px}
+  #replayHud button.on{border-color:var(--orange);color:var(--orange);background:rgba(255,77,26,.12)}
+  #replayHud input[type=range]{flex:1;min-width:120px;margin:0}
+  #replayTime{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:var(--dim);min-width:88px}
   .menu-layer.daily-line .board-list{max-height:28vh;overflow:auto}
   .daily-badge{color:var(--orange);font-weight:700;letter-spacing:.08em}
+  @media (max-height:430px){
+    .menu-layer.whoop{padding:10px 12px}
+    .whoop-preview .skin-mini{width:56px;height:56px}
+    .whoop-swatches button{width:22px;height:22px}
+    .whoop-label{margin:4px 0 2px}
+    #replayHud{bottom:8px;padding:6px 8px;width:min(560px,96vw)}
+  }
   @media (max-height:500px) and (orientation:landscape){
     .menu-layer.daily-line{padding:12px 14px;width:min(340px,86vw)}
     .menu-layer.daily-line h2{margin-bottom:6px}
@@ -413,6 +439,7 @@
     <button id="menuCoach">Coach</button>
     <button id="menuRoom">Your room</button>
     <button id="menuBuild">Your build</button>
+    <button id="menuWhoop">Whoop</button>
     <button id="menuBuilder">Track builder</button>
     <button id="menuTune">Tune</button>
     <button id="menuControls">Controls</button>
@@ -448,6 +475,20 @@
 </div>
 <div id="crosshair"></div>
 <div id="toast"></div>
+<div id="replayHud" aria-hidden="true">
+  <div class="replay-row">
+    <button type="button" data-replay-cam="chase" class="on">Chase</button>
+    <button type="button" data-replay-cam="orbit">Orbit</button>
+    <button type="button" data-replay-cam="fpv">FPV</button>
+    <span id="replayTime">0:00.00</span>
+  </div>
+  <div class="replay-row">
+    <button type="button" id="replayPlay">Pause</button>
+    <input type="range" id="replayScrub" min="0" max="1000" value="0" step="1">
+    <button type="button" id="replayClip">Clip</button>
+    <button type="button" id="replayClose">Close</button>
+  </div>
+</div>
 <div id="portalFlash"></div>
 <div id="builder">
   <div class="builder-bar">
@@ -849,7 +890,7 @@ import {
   findTrackIn, resolveSimBoot, knownMapId, trackRefId,
   isFreestyleTrackId, freestyleTrack, freestyleIdFor,
   resolveFly, persistableSelection,
-  isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost,
+  isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
 } from "./sim-tracks.js?v=8cfb879dbe36";
 import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=841bda430e6a";
@@ -888,16 +929,21 @@ import {
   validateSubmittedRun, CLASS_IDS, issuePilotToken, syncDailyStreak,
   dailyLineFor, loadDailyLine, saveDailyLine, recordDailyLineFinish, dailyLineRank,
   validateDailyLineRun, DAILY_LINE_STRICT_MISS_MS,
-  skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette,
+  skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette, skinHex,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
-} from "./sim-retention.js?v=b4b361bf5e62";
+  WHOOP_KIT_KEY, CANOPY_SHAPES, KIT_CANOPY_COLORS, KIT_FRAME_COLORS, KIT_PROP_COLORS,
+  REPLAY_GHOST_HZ, REPLAY_GHOST_MAX, REPLAY_CLIP_MS,
+  loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
+  replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
+  defaultWhoopKit,
+} from "./sim-retention.js?v=44f25eb4d256";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=25922bd21c68";
+} from "./sim-secrets.js?v=76ded9d09e1a";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1018,6 +1064,11 @@ const secrets=createSecrets(THREE,{
 secrets.group.userData.keepInScene=true;
 scene.add(secrets.group);
 let chaseCamOn=false;
+let replayOn=false;
+let replayPose=null;
+const replayCamScratch={x:0,y:0,z:0,w:1};
+const replayState={mode:'chase',t:0,playing:false,last:0,end:0,clipUntil:null};
+const _replaySample=[];
 let poseOk=false;
 const _chaseOff=new THREE.Vector3();
 let crosshairOn=loadCrosshairOn();
@@ -1032,7 +1083,13 @@ function applyCanopyLayout(){
   if(canopyGroup)layoutCanopyGroup(canopyGroup, camera);
 }
 function poseCraft(){
-  if(!craftGroup||!poseOk||!state||!state.pos)return;
+  if(!craftGroup)return;
+  if(replayOn&&replayPose){
+    craftGroup.position.set(replayPose.x,replayPose.y,replayPose.z);
+    craftGroup.quaternion.set(replayPose.qx,replayPose.qy,replayPose.qz,replayPose.qw);
+    return;
+  }
+  if(!poseOk||!state||!state.pos)return;
   craftGroup.position.copy(state.pos);
   craftGroup.quaternion.copy(state.q);
 }
@@ -1570,7 +1627,11 @@ function finishRun(){
   const extra=counted?noteRetentionFinish(id,total,rec):(threeD?'3D — NOT COUNTED':'');
   const label=line?'LINE':'RUN';
   const parts=line?runGateSplits:runSplits;
-  toast(label+' '+fmtLap(total)+(parts.length?' ['+parts.map(fmtLap).join(' / ')+']':'')+(best?' — NEW BEST!':'')+(extra?' · '+extra:''));
+  lastRunReplayRec=replayRec&&replayRec.length?downsampleGhost(replayRec,REPLAY_GHOST_MAX):(rec&&rec.length?rec:null);
+  const msg=label+' '+fmtLap(total)+(parts.length?' ['+parts.map(fmtLap).join(' / ')+']':'')+(best?' — NEW BEST!':'')+(extra?' · '+extra:'');
+  if(lastRunReplayRec&&lastRunReplayRec.length>1){
+    toast(msg+'<br><button type="button" id="toastReplay">Replay</button>',{html:true,ms:5200});
+  }else toast(msg);
 }
 function liveTrackIds(){
   const ids=[];
@@ -3509,7 +3570,7 @@ function updateMotorSound(){
   motorGainMaster.gain.setTargetAtTime(vol,t,0.08);
 }
 addEventListener('keydown',e=>{
-  if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&e.target.type==='text')))return; // typing in the CLI/ghost/pilot-name boxes must not trigger R/M/F/G hotkeys
+  if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&(e.target.type==='text'||e.target.type==='range'))))return; // typing in the CLI/ghost/pilot-name boxes must not trigger R/M/F/G hotkeys
   if(builderOn){
     if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();document.getElementById('builderDel').click();return;}
     if(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E'){e.preventDefault();document.getElementById('builderRot').click();return;}
@@ -3517,6 +3578,7 @@ addEventListener('keydown',e=>{
   }
   if(e.key==='Escape'){
     e.preventDefault();
+    if(replayOn){stopReplay();return;}
     if(builderOn){closeBuilder();return;}
     if(coach&&coach.isActive()){
       coach.cancel();
@@ -3534,7 +3596,12 @@ addEventListener('keydown',e=>{
     return;
   }
   if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
-  if(e.code==='Space'){e.preventDefault();toggleArm();return;}
+  if(e.code==='Space'){
+    e.preventDefault();
+    if(replayOn){toggleReplayPlay();return;}
+    toggleArm();
+    return;
+  }
   keys[e.key.toLowerCase()]=true;
   if(e.key==='1')setFlightMode('angle');
   if(e.key==='2')setFlightMode('horizon');
@@ -3548,6 +3615,10 @@ addEventListener('keydown',e=>{
   if(e.key.toLowerCase()==='g'){
     if(!ghostAvailable()){toast('NO GHOST YET — FINISH A RUN');return;}
     ghostVisible=!ghostVisible;toast(ghostVisible?'GHOST ON':'GHOST OFF');
+  }
+  if(e.key.toLowerCase()==='v'){
+    if(replayOn){stopReplay();return;}
+    startReplay();
   }
   if(e.key.toLowerCase()==='c'){
     if(coach&&coach.isActive()){coach.toggleRibbon();return;}
@@ -4093,8 +4164,31 @@ function applyChaseCam(){
   if(camera.fov!==70){camera.fov=70;camera.updateProjectionMatrix();}
   return true;
 }
+function applyReplayCam(){
+  if(!replayOn||!replayPose)return false;
+  const mode=replayState.mode||'chase';
+  if(mode==='fpv'){
+    if(camera.fov!==CFG.fov){camera.fov=CFG.fov;camera.updateProjectionMatrix();}
+    camTilt.setFromAxisAngle(new THREE.Vector3(1,0,0),THREE.MathUtils.degToRad(CFG.camDeg));
+    camera.quaternion.set(replayPose.qx,replayPose.qy,replayPose.qz,replayPose.qw).multiply(camTilt);
+    camera.position.set(replayPose.x,replayPose.y,replayPose.z);
+    applyCanopyVis({fpv:true});
+    return true;
+  }
+  replayCamScratch.x=replayPose.qx;replayCamScratch.y=replayPose.qy;
+  replayCamScratch.z=replayPose.qz;replayCamScratch.w=replayPose.qw;
+  if(mode==='orbit')replayOrbitOffset(replayState.t,_chaseOff);
+  else replayChaseOffset(replayCamScratch,_chaseOff);
+  camera.position.set(replayPose.x+_chaseOff.x,replayPose.y+_chaseOff.y,replayPose.z+_chaseOff.z);
+  camera.up.set(0,1,0);
+  camera.lookAt(replayPose.x,replayPose.y+0.04,replayPose.z);
+  if(camera.fov!==70){camera.fov=70;camera.updateProjectionMatrix();}
+  applyCanopyVis({replay:true,chase:true});
+  return true;
+}
 function updateCamera(){
   if(builderOn){applyBuilderCam();applyCanopyVis({builder:true});return;}
+  if(applyReplayCam())return;
   if(applyChaseCam()){applyCanopyVis({chase:true});return;}
   if(looks&&looks.applyLookSpot()){
     applyCanopyVis({menuOpen:false,lookSpot:true});
@@ -4177,6 +4271,8 @@ function toast(m,opts){
     toastEl.innerHTML=m;
     const rec=document.getElementById('toastRecalib');
     if(rec)rec.onclick=function(e){e.preventDefault();startCalib();};
+    const replayBtn=document.getElementById('toastReplay');
+    if(replayBtn)replayBtn.onclick=function(e){e.preventDefault();startReplay();};
   }else toastEl.textContent=m;
   toastEl.style.opacity=1;
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toastEl.style.opacity=0;toastEl.classList.remove('has-action');},o.ms||1500);
@@ -4347,6 +4443,7 @@ function showMenuLayer(html){
   if(!el)return;
   el.classList.remove('wide');
   el.classList.remove('skins');
+  el.classList.remove('whoop');
   el.innerHTML=html;
   el.classList.add('show');
 }
@@ -4883,6 +4980,8 @@ function wireLooksUI(){
   if(btnRoom)btnRoom.onclick=()=>openTrackPicker('room');
   const btnBuild=document.getElementById('menuBuild');
   if(btnBuild)btnBuild.onclick=()=>openBuildPicker();
+  const btnWhoop=document.getElementById('menuWhoop');
+  if(btnWhoop)btnWhoop.onclick=()=>openWhoopCard();
   const btnBuilder=document.getElementById('menuBuilder');
   if(btnBuilder)btnBuilder.onclick=()=>{hideMenuLayer();toggleStartMenu(false);openBuilder();};
   document.getElementById('menuControls').onclick=()=>{
@@ -4904,7 +5003,7 @@ function wireLooksUI(){
       '<li>Coach: short scored drills (hover, line, gates, doorway, split-S, loop). Bronze unlocks the next.</li>'+
       '<li>Daily: a seeded indoor whoop each UTC day. Streak + best time stay in this browser. Boards: local 65/75/85 week, optional online.</li>'+
       '<li>Daily Line: one named start-to-finish line each UTC day, same for everyone. Local PB plus optional online top 20.</li>'+
-      '<li>Duel: Tune → Copy duel code. Friend loads it and races the ghost. Skins paint the frame, canopy, props, and LED trail.</li>'+
+      '<li>Duel: Tune → Copy duel code. Friend loads it and races the ghost. Skins paint the frame, canopy, props, and LED trail. Whoop paints your own canopy shape and colors. After a line, Replay the last run (chase / orbit / FPV).</li>'+
       '<li>Tab opens Tune — paste a Betaflight CLI dump. Rate presets do not overwrite a saved tune until you pick one.</li>'+
       '</ol>'+
       '<button type="button" class="primary" id="feelStartTut">Start tutorial</button>'+
@@ -5411,14 +5510,17 @@ function openBuildPicker(){
     const on=matchPresetId(currentBuild)===p.id?'on':'';
     return '<button type="button" class="'+on+'" data-bid="'+p.id+'"><span>'+p.label+(p.approx?' ≈':'')+'</span><span class="best">'+p.frameMm+'mm '+p.cells+'S</span></button>';
   }).join('');
-  showMenuLayer('<h2>Your build</h2><p>Approximate whoop physics. Named presets use bench AUW where noted. Customize in Tune.</p>'+
+  showMenuLayer('<h2>Your build</h2><p>Approximate whoop physics. Named presets use bench AUW where noted. Customize in Tune. Paint colors and canopy in Whoop.</p>'+
     '<div class="track-list">'+rows+'</div>'+
+    '<button type="button" id="buildOpenWhoop">Paint whoop</button>'+
     '<button type="button" id="buildOpenTune">Customize in Tune</button>'+
     '<button type="button" id="layerClose">Close</button>');
   if(layer)layer.classList.add('wide');
   document.querySelectorAll('#menuLayer [data-bid]').forEach(b=>{
     b.onclick=()=>{applyBuild(BUILD_PRESETS[b.dataset.bid]);hideMenuLayer();};
   });
+  const paint=document.getElementById('buildOpenWhoop');
+  if(paint)paint.onclick=()=>openWhoopCard();
   const tune=document.getElementById('buildOpenTune');
   if(tune)tune.onclick=()=>{hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');syncBuildUI();};
   document.getElementById('layerClose').onclick=hideMenuLayer;
@@ -5556,6 +5658,9 @@ let ghosts={0:null,1:null};               // per-track best-RUN recordings (all 
 let ghostRec=null,ghostFrame=0;       // in-progress recording + its frame counter
 let ghostLastSampleMs=null;           // line tracks sample at LINE_GHOST_HZ
 let lastRunGhostRec=null;
+let lastRunReplayRec=null;
+let replayRec=null;
+let replayLastSampleMs=null;
 let activeDuel=null;                  // {ghost,track,name,lapTime} from a QM2 duel code
 let ghostVisible=true;
 const _gr2=v=>Math.round(v*100)/100;   // 2-decimal coords (visual ghost — plenty)
@@ -5568,8 +5673,8 @@ function loadGhost(id){
   }catch(e){return null;}
 }
 ghosts[0]=loadGhost(0);ghosts[1]=loadGhost(1);
-function startGhostRec(){ghostRec=[];ghostFrame=0;ghostLastSampleMs=null;}
-function clearGhostRec(){ghostRec=null;ghostLastSampleMs=null;}
+function startGhostRec(){ghostRec=[];ghostFrame=0;ghostLastSampleMs=null;replayRec=[];replayLastSampleMs=null;}
+function clearGhostRec(){ghostRec=null;ghostLastSampleMs=null;replayRec=null;replayLastSampleMs=null;}
 // persist, downsampling further on a quota error rather than failing to store
 function persistGhost(id,rec){
   let data=rec;
@@ -5651,6 +5756,14 @@ function sampleGhost(){
   }else if((++ghostFrame)%2!==0)return;  // city: every 2nd frame
   ghostRec.push([Math.round(t),_gr2(state.pos.x),_gr2(state.pos.y),_gr2(state.pos.z),
     _gr3(state.q.x),_gr3(state.q.y),_gr3(state.q.z),_gr3(state.q.w)]);
+  if(replayRec&&ghostSampleDue(replayLastSampleMs,t,REPLAY_GHOST_HZ)){
+    replayLastSampleMs=t;
+    if(replayRec.length>=REPLAY_GHOST_MAX){
+      replayRec=downsampleGhost(replayRec,Math.floor(REPLAY_GHOST_MAX*0.75));
+    }
+    replayRec.push([Math.round(t),_gr2(state.pos.x),_gr2(state.pos.y),_gr2(state.pos.z),
+      _gr3(state.q.x),_gr3(state.q.y),_gr3(state.q.z),_gr3(state.q.w)]);
+  }
 }
 // pose one ghost mesh from a sample array at the given run-elapsed time
 function poseGhost(g,mesh,elapsed){
@@ -5736,6 +5849,240 @@ function demoLineGhostForShot(){
     updateGateUI();
     return !!(ghostMesh&&ghostMesh.visible);
   }catch(e){return false;}
+}
+
+function applyReplayPose(){
+  const rec=lastRunReplayRec;
+  if(!rec||!rec.length){replayPose=null;return;}
+  interpolateGhostPose(rec, replayState.t, _replaySample);
+  replayPose={
+    x:_replaySample[1],y:_replaySample[2],z:_replaySample[3],
+    qx:_replaySample[4],qy:_replaySample[5],qz:_replaySample[6],qw:_replaySample[7],
+  };
+}
+function syncReplayHud(){
+  const hud=document.getElementById('replayHud');
+  if(!hud)return;
+  hud.classList.toggle('show',!!replayOn);
+  hud.setAttribute('aria-hidden',replayOn?'false':'true');
+  const play=document.getElementById('replayPlay');
+  if(play)play.textContent=replayState.playing?'Pause':'Play';
+  const time=document.getElementById('replayTime');
+  if(time)time.textContent=fmtLap(replayState.t||0);
+  const scrub=document.getElementById('replayScrub');
+  if(scrub){
+    const end=Math.max(1,replayState.end||0);
+    if(Number(scrub.max)!==end)scrub.max=String(end);
+    if(document.activeElement!==scrub)scrub.value=String(Math.round(replayState.t||0));
+  }
+  hud.querySelectorAll('[data-replay-cam]').forEach(b=>{
+    b.classList.toggle('on',b.dataset.replayCam===replayState.mode);
+  });
+}
+function startReplay(mode){
+  const rec=lastRunReplayRec;
+  if(!rec||rec.length<2){toast('NO RUN TO REPLAY');return false;}
+  replayOn=true;
+  replayState.mode=mode||replayState.mode||'chase';
+  replayState.t=rec[0][0]||0;
+  replayState.end=rec[rec.length-1][0]||0;
+  replayState.playing=true;
+  replayState.last=performance.now();
+  replayState.clipUntil=null;
+  if(qp)qp.armed=false;
+  chaseCamOn=false;
+  if(looks){looks.setMenuOpen(false);looks.setLookSpot(null);}
+  hideMenuLayer();
+  applyReplayPose();
+  syncReplayHud();
+  toast('REPLAY — '+(replayState.mode||'chase').toUpperCase());
+  updateCamera();
+  return true;
+}
+function stopReplay(){
+  replayOn=false;
+  replayPose=null;
+  replayState.playing=false;
+  replayState.clipUntil=null;
+  syncReplayHud();
+  applyCanopyVis({fpv:true});
+}
+function toggleReplayPlay(){
+  if(!replayOn)return;
+  replayState.playing=!replayState.playing;
+  replayState.last=performance.now();
+  if(replayState.playing&&replayState.t>=replayState.end)replayState.t=lastRunReplayRec&&lastRunReplayRec[0]?lastRunReplayRec[0][0]:0;
+  syncReplayHud();
+}
+function tickReplay(now){
+  if(!replayOn)return;
+  if(replayState.playing){
+    const dt=Math.min(50, now-(replayState.last||now));
+    replayState.last=now;
+    replayState.t=Math.min(replayState.end, (replayState.t||0)+dt);
+    if(replayState.t>=replayState.end)replayState.playing=false;
+  }
+  applyReplayPose();
+  syncReplayHud();
+}
+function setReplayMode(mode){
+  if(!mode)return;
+  replayState.mode=mode;
+  if(!replayOn)return;
+  applyReplayPose();
+  syncReplayHud();
+  updateCamera();
+}
+function downloadBlob(blob, name){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=name;
+  a.click();
+  setTimeout(()=>{try{URL.revokeObjectURL(a.href);}catch(e){}}, 2500);
+}
+function saveReplayStill(){
+  try{
+    const url=renderer.domElement.toDataURL('image/png');
+    const a=document.createElement('a');
+    a.href=url;a.download='quadmath-replay.png';a.click();
+    toast('SCREENSHOT SAVED');
+    return true;
+  }catch(e){
+    toast('CLIP UNAVAILABLE');
+    return false;
+  }
+}
+async function recordReplayClip(){
+  if(!replayOn||!lastRunReplayRec||lastRunReplayRec.length<2){toast('NO RUN TO CLIP');return;}
+  const canvas=renderer&&renderer.domElement;
+  const span=replayClipSpan(lastRunReplayRec, replayState.t, REPLAY_CLIP_MS);
+  const mime=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
+    .find(t=>window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t))||'';
+  if(!canvas||!canvas.captureStream||!canRecordClip(window)||!mime){
+    saveReplayStill();
+    return;
+  }
+  let rec;
+  try{
+    const stream=canvas.captureStream(30);
+    rec=new MediaRecorder(stream, {mimeType:mime});
+  }catch(e){
+    saveReplayStill();
+    return;
+  }
+  const chunks=[];
+  rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data);};
+  const done=new Promise(res=>{rec.onstop=res;rec.onerror=res;});
+  try{rec.start();}catch(e){saveReplayStill();return;}
+  const fullEnd=replayDurationMs(lastRunReplayRec);
+  replayState.t=span.start;
+  replayState.end=span.end;
+  replayState.playing=true;
+  replayState.last=performance.now();
+  replayState.clipUntil=span.end;
+  toast('RECORDING CLIP');
+  const wait=Math.min(REPLAY_CLIP_MS, Math.max(400, span.end-span.start))+200;
+  await new Promise(r=>setTimeout(r, wait));
+  try{if(rec.state==='recording')rec.stop();}catch(e){}
+  await done;
+  replayState.clipUntil=null;
+  replayState.end=fullEnd;
+  if(!chunks.length){saveReplayStill();return;}
+  downloadBlob(new Blob(chunks,{type:rec.mimeType||'video/webm'}),'quadmath-replay.webm');
+  toast('CLIP SAVED');
+}
+function demoReplayForShot(mode){
+  try{
+    const t=findTrack(activeTrackId)||currentTrackObj;
+    const pad=t?startPad(t):{x:state.pos.x,y:state.pos.y,z:state.pos.z,yaw:0};
+    const yaw=pad.yaw||0;
+    const fx=-Math.sin(yaw),fz=-Math.cos(yaw);
+    const qy=Math.sin(yaw/2),qw=Math.cos(yaw/2);
+    lastRunReplayRec=[
+      [0,_gr2(pad.x),_gr2(pad.y+0.12),_gr2(pad.z),0,_gr3(qy),0,_gr3(qw)],
+      [1200,_gr2(pad.x+fx*0.8),_gr2(pad.y+0.18),_gr2(pad.z+fz*0.8),0,_gr3(qy),0,_gr3(qw)],
+      [2400,_gr2(pad.x+fx*1.7),_gr2(pad.y+0.22),_gr2(pad.z+fz*1.7),0,_gr3(qy),0,_gr3(qw)],
+    ];
+    startReplay(mode||'chase');
+    replayState.playing=false;
+    replayState.t=900;
+    applyReplayPose();
+    updateCamera();
+    return !!(craftGroup&&craftGroup.visible);
+  }catch(e){return false;}
+}
+function kitSwatchRow(part, colors, cur){
+  return colors.map(n=>{
+    const on=((n>>>0)&0xffffff)===(cur>>>0);
+    return '<button type="button" data-kit-part="'+part+'" data-kit-color="'+n+'" class="'+(on?'on':'')+'" style="background:'+skinHex(n)+'" aria-label="'+part+' color"></button>';
+  }).join('');
+}
+function openWhoopCard(){
+  const kit=loadWhoopKit();
+  const skin=applyWhoopKitToSkin(resolveCatalogSkin(loadCatalogSkinId(), skinProgress(), loadSecrets()), kit);
+  const shapes=CANOPY_SHAPES.map(id=>{
+    const label=id[0].toUpperCase()+id.slice(1);
+    return '<button type="button" data-kit-shape="'+id+'" class="'+(kit.shape===id?'on':'')+'">'+label+'</button>';
+  }).join('');
+  showMenuLayer('<h2>Whoop</h2><p>Paint canopy, frame, and props. Four original canopy shapes. Saved in this browser.</p>'+
+    '<div class="whoop-preview" style="'+skinCssVars(skin)+'">'+skinMiniMarkup()+'</div>'+
+    '<div class="whoop-label">Canopy</div><div class="whoop-swatches">'+kitSwatchRow('canopy',KIT_CANOPY_COLORS,kit.canopy)+'</div>'+
+    '<div class="whoop-label">Frame</div><div class="whoop-swatches">'+kitSwatchRow('frame',KIT_FRAME_COLORS,kit.frame)+'</div>'+
+    '<div class="whoop-label">Props</div><div class="whoop-swatches">'+kitSwatchRow('prop',KIT_PROP_COLORS,kit.prop)+'</div>'+
+    '<div class="whoop-label">Canopy shape</div><div class="whoop-shapes">'+shapes+'</div>'+
+    '<button type="button" id="whoopReset">Reset paint</button>'+
+    '<button type="button" id="layerClose">Close</button>');
+  const layer=document.getElementById('menuLayer');
+  if(layer)layer.classList.add('whoop');
+  function paint(next){
+    saveWhoopKit(next);
+    applyActiveSkin();
+    openWhoopCard();
+  }
+  document.querySelectorAll('#menuLayer [data-kit-color]').forEach(b=>{
+    b.onclick=()=>{
+      const next=Object.assign({},loadWhoopKit());
+      next[b.dataset.kitPart]=Number(b.dataset.kitColor);
+      paint(next);
+    };
+  });
+  document.querySelectorAll('#menuLayer [data-kit-shape]').forEach(b=>{
+    b.onclick=()=>{
+      const next=Object.assign({},loadWhoopKit());
+      next.shape=b.dataset.kitShape;
+      paint(next);
+    };
+  });
+  const reset=document.getElementById('whoopReset');
+  if(reset)reset.onclick=()=>paint(defaultWhoopKit());
+  document.getElementById('layerClose').onclick=hideMenuLayer;
+}
+{
+  const hud=document.getElementById('replayHud');
+  if(hud){
+    hud.querySelectorAll('[data-replay-cam]').forEach(b=>{
+      b.onclick=()=>setReplayMode(b.dataset.replayCam);
+    });
+  }
+  const play=document.getElementById('replayPlay');
+  if(play)play.onclick=()=>toggleReplayPlay();
+  const close=document.getElementById('replayClose');
+  if(close)close.onclick=()=>stopReplay();
+  const clip=document.getElementById('replayClip');
+  if(clip)clip.onclick=()=>recordReplayClip();
+  const scrub=document.getElementById('replayScrub');
+  if(scrub){
+    const seek=()=>{
+      if(!replayOn)return;
+      replayState.t=Number(scrub.value)||0;
+      replayState.playing=false;
+      applyReplayPose();
+      syncReplayHud();
+      updateCamera();
+    };
+    scrub.addEventListener('input',seek);
+    scrub.addEventListener('change',seek);
+  }
 }
 
 // ---------- ghost sharing v1 ----------
@@ -5853,7 +6200,10 @@ function applySkinLook(skin){
   }
 }
 function applyActiveSkin(){
-  applySkinLook(resolveCatalogSkin(loadCatalogSkinId(), skinProgress(), loadSecrets()));
+  const skin=resolveCatalogSkin(loadCatalogSkinId(), skinProgress(), loadSecrets());
+  const kit=loadWhoopKit();
+  applySkinLook(applyWhoopKitToSkin(skin, kit));
+  applyCraftCanopyShape(craftGroup, kit.shape);
 }
 function ghostPayloadOf(id, samples, timeMs){
   return tagGhost({
@@ -6166,7 +6516,9 @@ function loop(now){
     if(currentMap==='gym')tickGymArt(indoorWorld,now);
   }catch(e){/* never abort the FPV render loop */}
   try{if(secrets&&secrets.active)secrets.tick(now,state.pos,dt);}catch(e){}
-  if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
+  if(replayOn){
+    tickReplay(now);
+  }else if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
     readInput(dt);
     tickArming(padLive?((navigator.getGamepads&&navigator.getGamepads())||[])[gpIndex]:null);
     {
@@ -6221,7 +6573,11 @@ function loop(now){
   updateCamera();
   if(craftGroup&&craftGroup.visible){
     spinCraftProps(dt);
-    if(state.vel.length()>0.45)pushSkinTrail(skinTrail,state.pos.x,state.pos.y,state.pos.z);
+    if(replayOn&&replayPose){
+      pushSkinTrail(skinTrail,replayPose.x,replayPose.y,replayPose.z);
+    }else if(state.vel.length()>0.45){
+      pushSkinTrail(skinTrail,state.pos.x,state.pos.y,state.pos.z);
+    }
   }
   // composer is null until the post chain resolves, and stays null if the
   // addons CDN is unreachable - either way the sim keeps rendering.
@@ -6593,11 +6949,13 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   placeQuadAt, map:()=>currentMap, track:()=>activeTrackId, artError:()=>window._artError||null,
   artStats:()=>artStats(renderer,currentMap==='city'?cityWorld:indoorWorld),vibe:()=>vibeFor(currentMap),VIBES,qualityWantsBloom,
   rain:()=>loadRain(),setRain(v){saveRain(!!v);if(currentMap==='city')applyCityArt(looks&&looks.applied);},RAIN_KEY,
-  QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,CROSSHAIR_KEY,canopyGroup,craftGroup,skinTrail,
+  QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,WHOOP_KIT_KEY,CROSSHAIR_KEY,canopyGroup,craftGroup,skinTrail,
   canopyEnabled:()=>canopyOn,
   setCanopyOn(v){canopyOn=!!v;const el=document.getElementById('cbCanopy');if(el)el.checked=canopyOn;saveCanopyOn(canopyOn);updateCamera();},
   chaseCam:()=>chaseCamOn,
   setChaseCam(v){chaseCamOn=!!v;if(looks&&chaseCamOn)looks.setLookSpot(null);updateCamera();},
+  replayOn:()=>replayOn,startReplay,stopReplay,demoReplayForShot,lastRunReplay:()=>lastRunReplayRec,
+  loadWhoopKit,saveWhoopKit,applyWhoopKit(kit){saveWhoopKit(kit);applyActiveSkin();},openWhoopCard,
   previewSkin(id){applySkinLook(catalogSkinById(id));},
   openSkinsCard,openTrackPicker,SKINS,SECRET_SKINS,skinPalette,SECRETS_KEY,secrets,placementsFor,isSecretsMap,
   crosshairEnabled:()=>crosshairOn,
