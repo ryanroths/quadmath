@@ -1,8 +1,10 @@
-// Amber Court — original gym vibe. Visual only.
-// No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
-// Honey bleachers, brass rims, amber trusses. Court paint stays readable.
+// Amber Court — playable whoop playground + Kenney CC0 sideline kit.
+// Colliders live in sim-maps.js GYM_PLAY and must match kit/proc meshes.
+// Kenney kit (sim-art-kit.js) swaps wall clutter after first paint.
+// Procedural meshes stay if a mesh fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=10aecc280e13';
+import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d290c9ab2bdb';
+import { GYM_PLAY } from './sim-maps.js?v=9b5e706b9457';
 
 export const GYM_STOCK = Object.freeze({
   wall: 0xb8b4aa,
@@ -23,7 +25,30 @@ export const GYM_KEEP_GATES = Object.freeze([
   { x: 10.0, y: 2.4, z: -16.0, size: 1.9 },
   { x: 10.0, y: 2.4, z: 16.0, size: 1.9 },
   { x: 0.0, y: 2.6, z: 20.0, size: 2.0 },
+  { x: 0.0, y: 2.80, z: 8.0, size: 1.8 },
+  { x: -17.4, y: 0.62, z: 15.4, size: 1.5 },
+  { x: -19.4, y: 2.40, z: 0.0, size: 1.6 },
+  { x: 0.0, y: 1.70, z: 32.4, size: 1.5 },
+  { x: -21.45, y: 5.24, z: 15.4, size: 1.6 },
+  { x: 0.0, y: 24.80, z: 18.0, size: 1.6 },
 ]);
+
+export function planGymKit() {
+  return {
+    cardboard: [
+      { x: 22.6, z: -34.4 }, { x: -22.6, z: 34.2 }, { x: 22.4, z: 34.6 },
+      { x: -22.8, z: -34.8 }, { x: 22.8, z: 8.4 }, { x: -22.4, z: -8.2 },
+    ],
+    barrels: [
+      { x: 22.5, z: 18.2 }, { x: -22.5, z: -18.4 }, { x: 22.3, z: -22.6 },
+      { x: -22.7, z: 22.8 }, { x: 22.6, z: -6.4 }, { x: -22.2, z: 6.2 },
+    ],
+    barriers: [
+      { x: 22.4, z: 28.4, ry: 1.57 }, { x: -22.4, z: -28.6, ry: -1.57 },
+      { x: 22.2, z: -32.2, ry: 3.14 },
+    ],
+  };
+}
 
 export function gymWantsGlow(applied) {
   return applied === 'med' || applied === 'high';
@@ -412,36 +437,52 @@ function makeGymMats(THREE, vibe) {
 }
 
 function addBleachers(THREE, parent, mats, budget) {
-  const plank = new THREE.BoxGeometry(1.28, 0.28, 12.8);
-  const seat = new THREE.BoxGeometry(1.05, 0.16, 1.35);
-  const rail = new THREE.CapsuleGeometry(0.05, 12.4, 3, 6);
-  const rows = budget.rows;
-  addInstanced(THREE, parent, plank, mats.honey, rows * 8, (d, i) => {
-    const side = i < rows * 4 ? -1 : 1;
-    const local = i % (rows * 4);
+  const P = GYM_PLAY;
+  const rows = Math.min(budget.rows, P.rows);
+  const plankN = 2 * rows * P.segZs.length;
+  addInstanced(THREE, parent, new THREE.BoxGeometry(P.plankW, P.seatH, P.segD), mats.honey, plankN, (d, i) => {
+    const side = i < rows * P.segZs.length ? -1 : 1;
+    const local = i % (rows * P.segZs.length);
     const row = local % rows;
     const seg = (local / rows) | 0;
-    const x = side * (17.6 + row * 1.32);
-    const y = 0.62 + row * 1.02;
-    const z = -19.2 + seg * 12.8;
-    d.position.set(x, y, z);
+    d.position.set(side * (P.x0 + row * P.rowStep), P.seatYs[row] + P.seatH / 2, P.segZs[seg]);
     return true;
   });
-  addInstanced(THREE, parent, seat, mats.seat, budget.seats, (d, i) => {
+  addInstanced(THREE, parent, new THREE.BoxGeometry(P.stringer, 1, P.stringer), mats.honey, plankN * 4, (d, i) => {
+    const plank = (i / 4) | 0;
+    const corner = i % 4;
+    const side = plank < rows * P.segZs.length ? -1 : 1;
+    const local = plank % (rows * P.segZs.length);
+    const row = local % rows;
+    const seg = (local / rows) | 0;
+    const x = side * (P.x0 + row * P.rowStep);
+    const y = P.seatYs[row];
+    const z = P.segZs[seg];
+    const dx = P.plankW / 2 - P.stringer / 2;
+    const dz = P.segD / 2 - P.stringer / 2;
+    const ox = corner % 2 ? dx : -dx;
+    const oz = corner < 2 ? -dz : dz;
+    d.position.set(x + ox, y / 2, z + oz);
+    d.scale.set(1, y, 1);
+    return true;
+  });
+  addInstanced(THREE, parent, new THREE.BoxGeometry(1.05, 0.12, 1.35), mats.seat, budget.seats, (d, i) => {
     const side = i % 2 ? 1 : -1;
     const row = (i >> 1) % rows;
     const along = ((i >> 1) / rows) | 0;
-    const x = side * (17.6 + row * 1.32);
-    const y = 0.82 + row * 1.02;
+    const x = side * (P.x0 + row * P.rowStep);
+    const y = P.seatYs[row] + P.seatH + 0.06;
     const z = -24 + (along % 18) * 2.7;
-    if (Math.abs(z + 24.5) < 1.2 && side < 0 && row >= 2) return false;
+    if (Math.abs(z) < 4.4) return false;
     d.position.set(x, y, z);
     return true;
   });
-  addInstanced(THREE, parent, rail, mats.brass, rows * 2, (d, i) => {
-    const side = i < rows ? -1 : 1;
-    const row = i % rows;
-    d.position.set(side * (18.15 + row * 1.32), 1.15 + row * 1.02, 0);
+  addInstanced(THREE, parent, new THREE.CapsuleGeometry(0.05, 10.4, 3, 6), mats.brass, rows * 4, (d, i) => {
+    const side = i < rows * 2 ? -1 : 1;
+    const local = i % (rows * 2);
+    const row = local % rows;
+    const seg = (local / rows) | 0;
+    d.position.set(side * (P.x0 + 0.55 + row * P.rowStep), P.seatYs[row] + 0.28, P.segZs[seg]);
     d.rotation.x = Math.PI / 2;
     return true;
   });
@@ -491,11 +532,10 @@ function addHoops(THREE, parent, mats, budget) {
 }
 
 function addTrusses(THREE, parent, mats, budget) {
-  const beam = new THREE.BoxGeometry(46.4, 0.22, 0.32);
-  addInstanced(THREE, parent, beam, mats.brass, budget.truss, (d, i) => {
-    const z = -30 + i * (60 / Math.max(1, budget.truss - 1));
-    if (Math.abs(z) < 1.2) return false;
-    d.position.set(0, 25.6, z);
+  const P = GYM_PLAY;
+  const beam = new THREE.BoxGeometry(46.4, P.rafterH, P.rafterD);
+  addInstanced(THREE, parent, beam, mats.brass, P.rafterZs.length, (d, i) => {
+    d.position.set(0, P.rafterY + P.rafterH / 2, P.rafterZs[i]);
     return true;
   });
   const rib = new THREE.BoxGeometry(0.22, 0.22, 68);
@@ -827,6 +867,38 @@ function addWhoopLife(THREE, parent, mats, budget, gates) {
   parent.add(extras);
 }
 
+function addPlayLines(THREE, parent, mats) {
+  const P = GYM_PLAY;
+  const amb = P.amber;
+  const hoop = new THREE.Group();
+  hoop.name = 'gymArtAmberHoop';
+  hoop.userData.gymArt = true;
+  const ow = amb.innerW + amb.bar * 2;
+  const top = new THREE.Mesh(new THREE.BoxGeometry(ow, amb.bar, amb.depth), mats.brass);
+  top.position.set(amb.x, amb.y + amb.innerH / 2 + amb.bar / 2, amb.z);
+  top.userData.gymRim = true;
+  const bot = top.clone();
+  bot.position.y = amb.y - amb.innerH / 2 - amb.bar / 2;
+  const left = new THREE.Mesh(new THREE.BoxGeometry(amb.bar, amb.innerH, amb.depth), mats.brass);
+  left.position.set(amb.x - amb.innerW / 2 - amb.bar / 2, amb.y, amb.z);
+  left.userData.gymRim = true;
+  const right = left.clone();
+  right.position.x = amb.x + amb.innerW / 2 + amb.bar / 2;
+  hoop.add(top, bot, left, right);
+  hoop.traverse((o) => { o.userData.gymArt = true; });
+  parent.add(hoop);
+  for (const spec of [P.gap.left, P.gap.right]) {
+    const stack = new THREE.Mesh(new THREE.BoxGeometry(spec.w, spec.h, spec.d), mats.honey);
+    stack.position.set(spec.x, spec.h / 2, spec.z);
+    stack.userData.gymArt = true;
+    parent.add(stack);
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(spec.w + 0.08, 0.08, spec.d + 0.08), mats.brass);
+    lip.position.set(spec.x, spec.h + 0.04, spec.z);
+    lip.userData.gymArt = true;
+    parent.add(lip);
+  }
+}
+
 export function buildAmberCourt(THREE, parent, vibe, quality, gates) {
   const group = new THREE.Group();
   group.name = 'gymArtVisuals';
@@ -834,8 +906,10 @@ export function buildAmberCourt(THREE, parent, vibe, quality, gates) {
   const budget = gymBudget(quality);
   const mats = makeGymMats(THREE, vibe);
   const keep = gates || GYM_KEEP_GATES;
+  group.userData.planned = planGymKit();
   addBleachers(THREE, group, mats, budget);
   addHoops(THREE, group, mats, budget);
+  addPlayLines(THREE, group, mats);
   addTrusses(THREE, group, mats, budget);
   addCeilingCans(THREE, group, mats, budget);
   addWindowsPadsBanners(THREE, group, mats, budget);

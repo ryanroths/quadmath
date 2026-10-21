@@ -3,7 +3,7 @@
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
-import { resolveAutoQuality } from './sim-touch.js?v=4e5aeeda285e';
+import { resolveAutoQuality } from './sim-touch.js?v=4013a23bed14';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
@@ -28,6 +28,12 @@ export const LOOK_SPOTS = {
   livingWhoop: { pos: [-2.1, 1.14, 3.4], target: [1.4, 1.35, -9.2] },
   livingMid: { pos: [5.2, 4.8, 9.0], target: [-2.8, 2.0, -5.5] },
   livingOverview: { pos: [0.8, 7.6, 12.2], target: [0, 1.4, -4] },
+  livingUnderSofa: { pos: [0.2, 0.62, -7.4], target: [0, 0.66, -10.6] },
+  livingUnderTable: { pos: [0.2, 0.62, -3.2], target: [0, 0.66, -5.9] },
+  livingClay: { pos: [0.2, 2.65, -3.4], target: [0, 2.70, -8.2] },
+  livingGap: { pos: [7.3, 1.40, 5.6], target: [7.3, 1.42, 9.8] },
+  livingShelf: { pos: [5.2, 1.82, -10.6], target: [8.4, 1.86, -10.6] },
+  livingRafters: { pos: [0.25, 7.40, 12.2], target: [0, 7.7, 0] },
   garage: { pos: [0, 5.2, 12], target: [2, 2.2, -6] },
   garageWhoop: { pos: [0.15, 1.14, 13.6], target: [2.6, 1.25, -6.4] },
   garageMid: { pos: [-3.8, 5.4, 16.2], target: [3.2, 1.8, -7.5] },
@@ -70,6 +76,12 @@ export const LOOK_SPOTS = {
   gymWhoop: { pos: [4.2, 1.18, 18], target: [-2.4, 1.5, -10] },
   gymMid: { pos: [14, 9.5, 26], target: [-2, 2.8, -8] },
   gymOverview: { pos: [0.4, 20, 34], target: [0, 2, -6] },
+  gymUnderBench: { pos: [-14.2, 0.62, 15.4], target: [-17.4, 0.66, 15.4] },
+  gymThrough: { pos: [-14.0, 2.40, 0.0], target: [-21.45, 2.40, 0.0] },
+  gymAmber: { pos: [0.2, 2.75, 16.4], target: [0, 2.80, 8.0] },
+  gymGap: { pos: [0.2, 1.70, 26.2], target: [0, 1.70, 32.4] },
+  gymOverBench: { pos: [-14.2, 5.20, 15.4], target: [-21.45, 5.00, 15.4] },
+  gymRafters: { pos: [0.3, 24.80, 28.0], target: [0, 25.40, 0] },
   trainer: { pos: [8, 6.2, 14], target: [0, 1.6, -4] },
   trainerWhoop: { pos: [0.2, 1.16, 14.2], target: [0, 1.4, -6] },
   trainerMid: { pos: [8, 6.2, 14], target: [0, 1.6, -4] },
@@ -951,9 +963,9 @@ export async function createLooks(ctx) {
     const wantsBloom = p.bloom !== false && (p.bloomScale || 0) > 0;
     const wantsAo = !!p.ao;
     const wantsGrade = p.grade !== false && qualityWantsPost();
-    if (bloomPass) bloomPass.enabled = wantsBloom;
-    if (aoPass) aoPass.enabled = wantsAo;
     const spec = mapPostSpec || {};
+    if (bloomPass) bloomPass.enabled = wantsBloom && spec.bloom !== false;
+    if (aoPass) aoPass.enabled = wantsAo;
     const aoAmt = spec.ao == null ? 0.4 : spec.ao;
     if (aoPass && aoPass.uniforms && aoPass.uniforms.amount) {
       aoPass.uniforms.amount.value = wantsAo ? (applied === 'high' ? aoAmt : aoAmt * 0.75) : 0;
@@ -978,6 +990,7 @@ export async function createLooks(ctx) {
         vignette: post.vignette == null ? 0.34 : post.vignette,
         ao: post.ao == null ? 0.4 : post.ao,
         gradeAmt: post.grade === false ? 0 : 1,
+        bloom: post.bloom !== false,
       };
     } else {
       mapPostSpec = spec || null;

@@ -99,13 +99,14 @@
   #c{touch-action:none}
   #panel,#startMenu,#menuLayer,#feelPrompt,#calib{touch-action:pan-y;-webkit-user-select:text;user-select:text}
   #touchLayer{position:fixed;inset:0;z-index:18;display:none;pointer-events:none;
-    --stick-size:112px;--stick-opacity:.7}
+    --stick-size:112px;--stick-opacity:.7;--stick-inset-x:18px;--stick-inset-y:28px}
   #touchLayer.on{display:block}
-  #touchLayer .vstick{position:absolute;bottom:28px;width:var(--stick-size);height:var(--stick-size);
+  #touchLayer .vstick{position:absolute;bottom:max(var(--stick-inset-y), env(safe-area-inset-bottom, 0px));
+    width:var(--stick-size);height:var(--stick-size);
     border:1px solid var(--line);border-radius:50%;background:rgba(16,18,24,calc(var(--stick-opacity)*0.55));
     pointer-events:auto;touch-action:none}
-  #touchLayer .vstick.left{left:18px}
-  #touchLayer .vstick.right{right:18px}
+  #touchLayer .vstick.left{left:max(var(--stick-inset-x), env(safe-area-inset-left, 0px))}
+  #touchLayer .vstick.right{right:max(var(--stick-inset-x), env(safe-area-inset-right, 0px))}
   #touchLayer .vstick i{position:absolute;width:34%;height:34%;border-radius:50%;left:50%;top:50%;
     transform:translate(-50%,-50%);background:var(--orange);opacity:var(--stick-opacity);
     box-shadow:0 0 10px rgba(255,77,26,.45);pointer-events:none}
@@ -117,11 +118,19 @@
   #touchLandscape{position:absolute;top:56px;left:50%;transform:translateX(-50%);z-index:19;
     padding:8px 12px;border-radius:12px;background:var(--glass);border:1px solid var(--line);
     font-size:12px;color:var(--txt);pointer-events:none}
-  #hudAcro,#hud3d{pointer-events:auto;width:auto;margin:6px 0 0;padding:5px 10px;font-size:11px}
+  #hudAcro,#hud3d{pointer-events:auto;width:auto;margin:6px 0 0;padding:5px 10px;font-size:11px;
+    position:relative;z-index:21}
   #hudAcro.on,#hud3d.on{border-color:var(--green);color:var(--green)}
   body.touch-on #legend,body.touch-on #audioHint{opacity:0;pointer-events:none}
-  body.touch-on #feelHud{right:12px;bottom:auto;top:88px;flex-direction:column;align-items:flex-end}
+  /* Top-right, above the right stick. z-index 20 beats #touchLayer (18) so
+     ACRO/3D stay tappable when a short landscape viewport would otherwise
+     drop the meta card into the joystick circle. */
+  body.touch-on #feelHud{right:max(12px, env(safe-area-inset-right, 0px));bottom:auto;
+    top:max(52px, calc(env(safe-area-inset-top, 0px) + 44px));
+    z-index:20;flex-direction:column;align-items:flex-end;
+    max-height:calc(100dvh - var(--stick-size, 112px) - 56px - env(safe-area-inset-bottom, 0px))}
   body.touch-on #feelHud .stick-pad{display:none}
+  body.touch-on #osdLap{max-width:46vw;z-index:12}
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7;display:none}
   #crosshair.on{display:block}
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--green)}
@@ -192,10 +201,15 @@
   .lgc-bl{bottom:-1px;left:-1px;border-right:none;border-top:none}
   .lgc-br{bottom:-1px;right:-1px;border-left:none;border-top:none}
   #calib{background:rgba(10,12,16,.78);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
-  #startMenu{position:fixed;inset:0;z-index:22;display:none;align-items:center;justify-content:flex-start;
-    padding:48px 40px;pointer-events:none;background:linear-gradient(90deg,rgba(8,10,14,.62) 0%,rgba(8,10,14,.12) 58%,transparent 100%)}
+  #startMenu{position:fixed;inset:0;z-index:22;display:none;align-items:flex-start;justify-content:flex-start;
+    flex-wrap:wrap;align-content:flex-start;gap:12px;overflow:auto;overscroll-behavior:contain;
+    padding:max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+      max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    pointer-events:none;background:linear-gradient(90deg,rgba(8,10,14,.62) 0%,rgba(8,10,14,.12) 58%,transparent 100%)}
   #startMenu.open{display:flex}
   .menu-card{pointer-events:auto;width:min(420px,92vw);padding:28px 26px 22px;
+    max-height:calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
     background:var(--glass);border:1px solid var(--line);border-radius:20px;
     backdrop-filter:blur(20px) saturate(1.25);-webkit-backdrop-filter:blur(20px) saturate(1.25);
     box-shadow:0 24px 60px rgba(0,0,0,.35);isolation:isolate;transform:translateZ(0);
@@ -211,7 +225,9 @@
   .menu-quality button,.qbtn{width:auto;flex:1;min-width:64px;margin-top:0;padding:7px 8px;font-size:11px;
     border-color:var(--line);color:var(--txt)}
   .menu-quality button.on,.qbtn.on{border-color:var(--orange);color:var(--orange);background:rgba(255,77,26,.12)}
-  .menu-layer{pointer-events:auto;margin-left:16px;width:min(360px,90vw);padding:22px 20px;
+  .menu-layer{pointer-events:auto;margin-left:0;width:min(360px,90vw);padding:22px 20px;
+    max-height:calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
     background:var(--glass);border:1px solid var(--line);border-radius:20px;
     backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:none}
   .menu-layer.show{display:block}
@@ -227,6 +243,28 @@
   #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#camTiltPreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
     color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
   .menu-layer.wide{width:min(420px,92vw)}
+  /* Short landscape phones (iPhone SE / 13 mini / 14 class, 360–430px tall):
+     compact the start card and keep ACRO/3D above the right stick. */
+  @media (max-height:430px){
+    #startMenu{padding:max(8px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px))
+      max(8px, env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));gap:8px}
+    .menu-card,.menu-layer{padding:12px 14px 10px;border-radius:14px;
+      max-height:calc(100dvh - 16px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))}
+    .menu-card h1{font-size:22px;margin:2px 0 4px}
+    .menu-lead{font-size:12px;line-height:1.35;margin-bottom:8px}
+    .menu-card button{margin-top:4px;padding:6px 10px}
+    .menu-quality{margin-top:8px}
+    .menu-sparks{margin:6px 0 0}
+    body.touch-on #feelHud{top:max(48px, calc(env(safe-area-inset-top, 0px) + 40px));
+      max-height:calc(100dvh - var(--stick-size, 112px) - 40px - env(safe-area-inset-bottom, 0px))}
+    body.touch-on #feelHud .feel-meta{padding:6px 8px;min-width:0;max-width:168px}
+    body.touch-on #hudArmHint{display:none}
+    body.touch-on #hudAcro{order:-2;margin:0 0 4px}
+    body.touch-on #hud3d{order:-1;margin:0 0 4px}
+    body.touch-on #osdLap{top:max(8px, env(safe-area-inset-top, 0px));max-width:42vw;font-size:11px}
+    #touchLayer .vstick{bottom:max(10px, env(safe-area-inset-bottom, 0px))}
+    #touchBtns{top:max(6px, env(safe-area-inset-top, 0px))}
+  }
   .track-maps{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
   .track-maps button,.track-list button{width:auto;flex:1;min-width:72px;margin-top:0;padding:7px 8px;font-size:11px;
     border-color:var(--line);color:var(--txt)}
@@ -764,7 +802,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=c5a4d163f20f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=a1bc4afa31eb";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=47f589dae15b";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -777,8 +815,8 @@ import {
   restyleTrainer, decorateTrainerGate, pulseTrainerGate, tickTrainerArt,
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
-  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, mergeStaticArt,
-} from "./sim-art.js?v=04bdd26eda39";
+  tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, mergeStaticArt,
+} from "./sim-art.js?v=6cd8b294c7ec";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -790,7 +828,7 @@ import {
   loadAutoArm, saveAutoArm, loadArmSwitch, saveArmSwitch, mergeArmSwitch,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
-} from "./sim-touch.js?v=4e5aeeda285e";
+} from "./sim-touch.js?v=4013a23bed14";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -803,14 +841,14 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=3dfc548117e2";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=b861f2341ac9";
+} from "./sim-tracks.js?v=3d92869ea501";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights} from "./sim-maps.js?v=9b5e706b9457";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=423358ddd55a";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=86e8bcc6bca8";
+} from "./sim-room.js?v=52627101d2c3";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=7d7dbbcff9cb";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -825,7 +863,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=0e297e75d57a";
+} from "./sim-coach.js?v=f0da1c510958";
 import {
   TRICKS_KEY, createTricks,
 } from "./sim-tricks.js?v=49546f834df8";
@@ -841,13 +879,13 @@ import {
   skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
-} from "./sim-retention.js?v=195334786451";
+} from "./sim-retention.js?v=5b03d1b8d780";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=cb1d784a66a0";
+} from "./sim-secrets.js?v=db942458500c";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -2254,9 +2292,11 @@ function compactMapArt(){
 }
 function applyLooksPost(mapId, quality){
   const q=quality||(looks&&looks.applied)||'med';
-  if(looks&&looks.bloomPass)looks.bloomPass.enabled=qualityWantsBloom(q);
-  if(looks&&looks.setMapPost)looks.setMapPost(vibePost(vibeFor(mapId)));
-  else if(looks&&looks.setGrade)looks.setGrade(qualityWantsBloom(q)?1:0);
+  const vibe=vibeFor(mapId);
+  const bloom=qualityWantsBloom(q, vibe);
+  if(looks&&looks.bloomPass)looks.bloomPass.enabled=bloom;
+  if(looks&&looks.setMapPost)looks.setMapPost(vibePost(vibe));
+  else if(looks&&looks.setGrade)looks.setGrade(bloom?1:0);
 }
 function applyCityArt(quality){
   const vibe=vibeFor('city');
@@ -2323,7 +2363,42 @@ function applyLivingArt(quality){
   });
   applyLooksPost('living', quality);
   const credit=document.querySelector('.sf-credit');
-  if(credit)credit.textContent='Living Room is original procedural art — Clay Parlor';
+  if(credit)credit.textContent='Living Room is original procedural art — Clay Parlor · Felt Scale. Kenney CC0 parlor kit.';
+  queueLivingKit(quality||(looks&&looks.applied)||'med', vibeFor('living'));
+}
+let livingKitWanted=null;
+let livingKitGen=0;
+function queueLivingKit(quality, vibe){
+  livingKitWanted={quality:quality||'med', vibe:vibe||vibeFor('living')};
+  if(window._heavyAssetsPending)return;
+  dressLivingKit();
+}
+async function dressLivingKit(){
+  const wanted=livingKitWanted;
+  if(!wanted)return;
+  const gen=++livingKitGen;
+  try{
+    const ok=await ensureGltf();
+    if(!ok || !GLTFLoader || gen!==livingKitGen)return;
+    const built=indoorBuilt.living;
+    const group=built&&built.group&&built.group.getObjectByName('livingArtVisuals');
+    if(!group)return;
+    const loader=new GLTFLoader();
+    if(MeshoptDecoder){
+      if(MeshoptDecoder.ready)await MeshoptDecoder.ready;
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    }
+    const dressed=await tryDressLivingKit(THREE,{
+      group, loader, vibe:wanted.vibe, quality:wanted.quality,
+    });
+    if(gen!==livingKitGen)return;
+    window._livingKit=dressed;
+    if(assetEl && dressed && dressed.used){
+      assetEl.textContent='Kenney CC0 living kit ('+Math.round((dressed.bytes||0)/1024)+' KB).';
+    }
+  }catch(e){
+    window._livingKit={used:false, error:String(e&&e.message||e)};
+  }
 }
 function applyGarageArt(quality){
   const built=indoorBuilt.garage||ensureIndoor('garage');
@@ -2441,7 +2516,42 @@ function applyGymArt(quality){
   });
   applyLooksPost('gym', q);
   const credit=document.querySelector('.sf-credit');
-  if(credit)credit.textContent='Gym is original procedural art — Amber Court';
+  if(credit)credit.textContent='Gym is original procedural art — Amber Court. Kenney CC0 sideline kit.';
+  queueGymKit(q, vibeFor('gym'));
+}
+let gymKitWanted=null;
+let gymKitGen=0;
+function queueGymKit(quality, vibe){
+  gymKitWanted={quality:quality||'med', vibe:vibe||vibeFor('gym')};
+  if(window._heavyAssetsPending)return;
+  dressGymKit();
+}
+async function dressGymKit(){
+  const wanted=gymKitWanted;
+  if(!wanted)return;
+  const gen=++gymKitGen;
+  try{
+    const ok=await ensureGltf();
+    if(!ok || !GLTFLoader || gen!==gymKitGen)return;
+    const built=indoorBuilt.gym;
+    const group=built&&built.group&&built.group.getObjectByName('gymArtVisuals');
+    if(!group)return;
+    const loader=new GLTFLoader();
+    if(MeshoptDecoder){
+      if(MeshoptDecoder.ready)await MeshoptDecoder.ready;
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    }
+    const dressed=await tryDressGymKit(THREE,{
+      group, loader, vibe:wanted.vibe, quality:wanted.quality,
+    });
+    if(gen!==gymKitGen)return;
+    window._gymKit=dressed;
+    if(assetEl && dressed && dressed.used){
+      assetEl.textContent='Kenney CC0 gym kit ('+Math.round((dressed.bytes||0)/1024)+' KB).';
+    }
+  }catch(e){
+    window._gymKit={used:false, error:String(e&&e.message||e)};
+  }
 }
 function applyOfficeArt(quality){
   const built=indoorBuilt.office||ensureIndoor('office');
@@ -2591,7 +2701,9 @@ function startHeavyAssets(){
   if(map==='city')finishCityArt();
   if(map==='garage')dressGarageKit();
   if(map==='warehouse')dressWarehouseKit();
+  if(map==='living')dressLivingKit();
   if(map==='office')dressOfficeKit();
+  if(map==='gym')dressGymKit();
 }
 
 function wrapCityWorld(){
@@ -2725,14 +2837,14 @@ function applyMapLooks(mapId){
   setIndoorLights(indoorLights,looks?looks.applied:'med');
   const credit=document.querySelector('.sf-credit');
   if(credit){
-    if(mapId==='living')credit.textContent='Living Room is original procedural art — Clay Parlor';
+    if(mapId==='living')credit.textContent='Living Room is original procedural art — Clay Parlor · Felt Scale. Kenney CC0 parlor kit.';
     else if(mapId==='garage')credit.textContent='Garage is original procedural art — Volt Stall. Kenney CC0 shop kit.';
     else if(mapId==='warehouse')credit.textContent='Warehouse is original procedural art — Ion Nave';
     else if(mapId==='room')credit.textContent='Your Room is original procedural art — Pocket Stage';
     else if(mapId==='backyard')credit.textContent='Backyard is original procedural art — Jade Lot';
     else if(mapId==='trainer')credit.textContent='Trainer is original procedural art — Licorice Grid';
     else if(mapId==='office')credit.textContent='Office is original procedural art — Paper Sun';
-    else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court';
+    else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court. Kenney CC0 sideline kit.';
     else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current. Kenney CC0 cars and street kit.';
   }
 }
