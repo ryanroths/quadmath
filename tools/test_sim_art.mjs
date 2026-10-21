@@ -606,6 +606,11 @@ test('Kenney CC0 backyard kit is meshopt-compressed and stays off the banned pat
   assert.ok(!readdirSync(kitDir).some((f) => f.includes('GLB-format')));
   assert.match(kitSrc, /mergeByMaterial|leafsGreen|woodBark/);
   assert.match(yardSrc, /planBackyardKit/);
+  assert.match(yardSrc, /SphereGeometry\(u\.r/);
+  assert.equal(yardSrc.includes('backyardProcCanopy'), false, 'canopy wire hoop must not be built');
+  assert.match(kitSrc, /lollipops/);
+  assert.equal(kitSrc.includes('one(BACKYARD_KIT_CORE.palm'), false, 'Kenney palms stay off the hero veg');
+  assert.equal(/ring\.material\.emissive\.setHex\(col\)/.test(yardSrc), false, 'gate must not keep stock teal/orange emissive');
 });
 
 test('city window and blink stay frozen so bloom does not strobe', () => {
@@ -662,6 +667,7 @@ test('one lighting resolver per map and city never shares fog as background', ()
   assert.match(city, /function disposeArtGroup/);
   const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
   assert.match(looks, /function setMapLighting/);
+  assert.match(looks, /spec\.mapId === 'backyard'/);
   assert.match(looks, /new THREE\.Color\(bgHex\)/);
   assert.match(looks, /scene\.background !== scene\.fog\.color/);
   assert.equal(looks.includes('scene.background = scene.fog.color'), false);

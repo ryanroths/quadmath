@@ -55,8 +55,10 @@ Existing shared PBR (assets/sim-looks/tex, already in-tree, Poly Haven CC0):
 Optimization
   GLBs: meshopt + mesh quantization via glTF-Transform 4.x
   Textures: 1k WebP (High/Med), 512 WebP albedo on Low
-  LODs: Low fetches oak + tall palm + fence + pot only
-  Instancing: repeated trees, palms, bushes, fence posts, pots
+  LODs: Low fetches fence + pot only (Kenney trees/palms stay catalog-only;
+        hero veg is procedural frond palms + leaf-card ficus so they do not
+        read as lollipops)
+  Instancing: fence posts, pots, bushes, sofa, AC
   Lazy-load: sim.html queues tryDressBackyardKit after first paint
 
 Payload (folder, not counting shared looks textures):

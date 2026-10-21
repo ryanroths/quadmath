@@ -360,35 +360,26 @@ function afternoonSkyTex(THREE, res) {
       [0, '#1f5fa8'], [0.28, '#3d8fd4'], [0.52, '#7eb6e8'], [0.72, '#c5d8ee'], [0.88, '#e2c89a'], [1, '#c4a070'],
     ]);
     g.fillRect(0, 0, ww, hh);
-    g.fillStyle = 'rgba(255,228,150,0.80)';
+    g.fillStyle = 'rgba(255,214,140,0.55)';
     g.beginPath();
-    g.arc(ww * 0.78, hh * 0.14, 14, 0, 6.3);
+    g.arc(ww * 0.78, hh * 0.16, 18, 0, 6.3);
     g.fill();
-    g.fillStyle = 'rgba(255,240,190,0.30)';
+    g.fillStyle = 'rgba(255,232,180,0.18)';
     g.beginPath();
-    g.arc(ww * 0.78, hh * 0.14, 52, 0, 6.3);
+    g.arc(ww * 0.78, hh * 0.16, 56, 0, 6.3);
     g.fill();
-    const puffs = [
-      [0.14, 0.16, 92, 32], [0.26, 0.14, 120, 38], [0.40, 0.18, 88, 26],
-      [0.56, 0.12, 130, 40], [0.70, 0.15, 104, 32], [0.86, 0.20, 80, 24],
-      [0.10, 0.28, 72, 22], [0.48, 0.24, 96, 26], [0.90, 0.26, 68, 18],
-      [0.32, 0.10, 76, 20], [0.64, 0.08, 90, 22],
-      [0.22, 0.38, 70, 18], [0.58, 0.36, 84, 20], [0.78, 0.34, 64, 16],
-      [0.38, 0.44, 60, 14], [0.08, 0.42, 54, 14],
+    const banks = [
+      [0.22, 0.18, 160, 28], [0.58, 0.14, 190, 32], [0.84, 0.20, 140, 24],
     ];
-    for (const [ux, uy, rx, ry] of puffs) {
+    for (const [ux, uy, rx, ry] of banks) {
       const x = ux * ww, y = uy * hh;
-      const rad = g.createRadialGradient(x, y, 4, x, y, rx);
-      rad.addColorStop(0, 'rgba(255,255,255,0.95)');
-      rad.addColorStop(0.42, 'rgba(230,238,246,0.72)');
+      const rad = g.createRadialGradient(x, y, 8, x, y, rx);
+      rad.addColorStop(0, 'rgba(236,242,248,0.38)');
+      rad.addColorStop(0.55, 'rgba(200,216,232,0.18)');
       rad.addColorStop(1, 'rgba(140,160,184,0)');
       g.fillStyle = rad;
       g.beginPath();
       g.ellipse(x, y, rx, ry, 0, 0, 6.3);
-      g.fill();
-      g.fillStyle = 'rgba(120,136,156,0.28)';
-      g.beginPath();
-      g.ellipse(x + 8, y + ry * 0.5, rx * 0.72, ry * 0.48, 0, 0, 6.3);
       g.fill();
     }
   }, 1, 1, { clamp: true, noMip: true });
@@ -571,8 +562,8 @@ function makeYardMats(THREE, vibe, quality, budget) {
     paver: heroMat(THREE, 0xffffff, {
       map: paverTex(THREE), roughness: 0.82, metalness: 0.04,
     }),
-    stucco: heroMat(THREE, 0xe8d2b0, {
-      map: stucco, roughness: 0.86, metalness: 0.01, envMapIntensity: 0.32,
+    stucco: heroMat(THREE, 0xf2d4a8, {
+      map: stucco, roughness: 0.86, metalness: 0.01, envMapIntensity: 0.22,
     }),
     tile: heroMat(THREE, 0xffffff, {
       map: tileTex(THREE), roughness: 0.70, metalness: 0.06,
@@ -622,9 +613,11 @@ function makeYardMats(THREE, vibe, quality, budget) {
       map: poolTileTex(THREE), roughness: 0.35, metalness: 0.12, envMapIntensity: 0.7,
     }),
     dark: heroMat(THREE, hexNum('#2a241c'), { roughness: 0.70, metalness: 0.08 }),
-    window: heroMat(THREE, hexNum('#8eb4c8'), {
-      roughness: 0.22, metalness: 0.08, envMapIntensity: 0.4,
-    }),
+    window: lockArt(new THREE.MeshBasicMaterial({
+      color: 0xc8dce8,
+      toneMapped: false,
+    }), { looksSkip: true }),
+    shade: heroMat(THREE, hexNum('#c45a32'), { roughness: 0.78, metalness: 0.02 }),
     pvc: heroMat(THREE, 0xf4f1ea, { roughness: 0.48, metalness: 0.04, envMapIntensity: 0.38 }),
     yellow: heroMat(THREE, hexNum('#e8c04a'), { roughness: 0.62, metalness: 0.04 }),
     cactus: heroMat(THREE, hexNum('#3a7a3a'), { roughness: 0.86, metalness: 0.0 }),
@@ -748,12 +741,15 @@ function addHouse(THREE, parent, mats) {
   ], mats.tile);
   const wins = [];
   const frames = [];
+  const faceZ = hs.z - hs.d / 2 - 0.06;
   for (const [cx, cy] of [[-4.2, 4.4], [8.2, 4.4], [-4.2, 13.2], [8.2, 13.2]]) {
-    for (const dx of [-1.15, 1.15]) {
-      for (const dy of [-0.95, 0.95]) {
-        wins.push(placedBox(THREE, 1.7, 1.4, 0.06, cx + dx, cy + dy, hs.z - hs.d / 2 - 0.05));
-        frames.push(placedBox(THREE, 1.86, 0.08, 0.10, cx + dx, cy + dy - 0.72, hs.z - hs.d / 2 - 0.10));
-        frames.push(placedBox(THREE, 1.86, 0.08, 0.10, cx + dx, cy + dy + 0.72, hs.z - hs.d / 2 - 0.10));
+    for (const dx of [-0.95, 0.95]) {
+      for (const dy of [-0.78, 0.78]) {
+        wins.push(placedBox(THREE, 1.35, 1.12, 0.04, cx + dx, cy + dy, faceZ));
+        frames.push(placedBox(THREE, 1.52, 0.07, 0.10, cx + dx, cy + dy - 0.58, faceZ - 0.04));
+        frames.push(placedBox(THREE, 1.52, 0.07, 0.10, cx + dx, cy + dy + 0.58, faceZ - 0.04));
+        frames.push(placedBox(THREE, 0.07, 1.24, 0.10, cx + dx - 0.70, cy + dy, faceZ - 0.04));
+        frames.push(placedBox(THREE, 0.07, 1.24, 0.10, cx + dx + 0.70, cy + dy, faceZ - 0.04));
       }
     }
   }
@@ -808,13 +804,14 @@ function addPalmFronds(THREE, parent, mats, cx, cy, cz, count, span, shadow) {
   group.position.set(cx, 0, cz);
   group.userData.backyardPalm = true;
   group.userData.backyardArt = true;
-  const geo = new THREE.PlaneGeometry(1.15, 4.4);
-  geo.translate(0, 2.15, 0);
+  const geo = new THREE.PlaneGeometry(0.72, 5.4);
+  geo.translate(0, 2.65, 0);
   addInstanced(THREE, group, geo, mats.frondCard, count, (dummy, i) => {
-    const a = (i / count) * Math.PI * 2 + hash(i) * 0.2;
-    dummy.position.set(Math.cos(a) * 0.18, cy, Math.sin(a) * 0.18);
-    dummy.rotation.set(1.15 + hash(i) * 0.35, a, hash(i + 2) * 0.2 - 0.1);
-    dummy.scale.set(1.05 + hash(i + 3) * 0.35, span, 1);
+    const a = (i / count) * Math.PI * 2 + hash(i) * 0.16;
+    const droop = 0.95 + hash(i) * 0.42;
+    dummy.position.set(Math.cos(a) * 0.10, cy, Math.sin(a) * 0.10);
+    dummy.rotation.set(droop, a, hash(i + 2) * 0.12 - 0.06);
+    dummy.scale.set(0.82 + hash(i + 3) * 0.38, span, 1);
   }, shadow);
   parent.add(group);
   return group;
@@ -827,25 +824,7 @@ function addTree(THREE, parent, mats, budget) {
   trunk.userData.backyardProcTree = true;
   mark(trunk);
   parent.add(trunk);
-  const canopy = new THREE.Mesh(canopyLathe(THREE), mats.darkLeaf);
-  canopy.position.set(t.x, t.h * 0.46, t.z);
-  canopy.scale.set(0.88, 0.78, 0.88);
-  canopy.userData.backyardPalm = true;
-  canopy.userData.backyardProcTree = true;
-  mark(canopy);
-  parent.add(canopy);
-  const puffs = Math.min(10, Math.max(6, (budget.leaves / 22) | 0));
-  for (let i = 0; i < puffs; i++) {
-    const a = (i / puffs) * Math.PI * 2;
-    const puff = new THREE.Mesh(new THREE.SphereGeometry(1.45, 8, 6), i % 2 ? mats.leaf : mats.darkLeaf);
-    puff.position.set(t.x + Math.cos(a) * 2.15, t.h * 0.60 + (i % 3) * 0.65, t.z + Math.sin(a) * 2.15);
-    puff.scale.set(1.2, 0.82, 1.2);
-    puff.userData.backyardPalm = true;
-    puff.userData.backyardProcTree = true;
-    mark(puff);
-    parent.add(puff);
-  }
-  addLeafCards(THREE, parent, mats, t.x, t.h * 0.52, t.z, budget.leaves, 4.1, 3.5, budget.shadowCasters, 1.22, 1.42);
+  addLeafCards(THREE, parent, mats, t.x, t.h * 0.58, t.z, budget.leaves, 4.4, 4.0, budget.shadowCasters, 1.28, 1.55);
   const ring = BACKYARD_PLAY.planter;
   const ringShape = new THREE.Shape();
   ringShape.absarc(0, 0, ring.rOut, 0, Math.PI * 2, false);
@@ -1013,15 +992,17 @@ function addLounge(THREE, parent, mats, budget) {
   back.userData.backyardProcPatio = true;
   mark(back);
   parent.add(back);
-  const canopy = [];
-  const c = P.canopy;
-  const t = Math.max(c.bar, 0.14);
-  canopy.push(placedBox(THREE, c.innerW + t * 2, t, t, c.x, c.y + c.innerH / 2, c.z));
-  canopy.push(placedBox(THREE, c.innerW + t * 2, t, t, c.x, c.y - c.innerH / 2 - t, c.z));
-  canopy.push(placedBox(THREE, t, c.innerH, t, c.x - c.innerW / 2 - t / 2, c.y - c.innerH / 2, c.z));
-  canopy.push(placedBox(THREE, t, c.innerH, t, c.x + c.innerW / 2 + t / 2, c.y - c.innerH / 2, c.z));
-  const canopyMesh = addMerged(THREE, parent, canopy, mats.dark);
-  if (canopyMesh) canopyMesh.userData.backyardProcCanopy = true;
+  const u = P.umbrella;
+  const pole = new THREE.Mesh(placedCyl(THREE, u.bar, u.bar * 0.85, 2.55, u.x, 0, u.z, 6), mats.metal);
+  pole.userData.backyardProcPatio = true;
+  mark(pole);
+  parent.add(pole);
+  const cloth = new THREE.Mesh(new THREE.SphereGeometry(u.r, 12, 7, 0, Math.PI * 2, 0, 1.15), mats.shade);
+  cloth.position.set(u.x, 2.62, u.z);
+  cloth.scale.set(1, 0.38, 1);
+  cloth.userData.backyardProcPatio = true;
+  mark(cloth);
+  parent.add(cloth);
   const n = Math.min(budget.palms, P.palms.length);
   for (let i = 0; i < n; i++) {
     const p = P.palms[i];
@@ -1031,7 +1012,7 @@ function addLounge(THREE, parent, mats, budget) {
     trunk.userData.backyardProcPalm = true;
     mark(trunk);
     parent.add(trunk);
-    const fronds = addPalmFronds(THREE, parent, mats, p.x, p.h - 0.35, p.z, Math.max(14, (budget.fronds / n) | 0), i === 2 ? 1.55 : 1.25, budget.shadowCasters);
+    const fronds = addPalmFronds(THREE, parent, mats, p.x, p.h - 0.28, p.z, Math.max(18, (budget.fronds / n) | 0), i === 2 ? 1.7 : 1.35, budget.shadowCasters);
     if (fronds) fronds.userData.backyardProcPalm = true;
     const dapple = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 3.6), mats.dapple);
     dapple.rotation.x = -Math.PI / 2;
@@ -1151,6 +1132,7 @@ function applyCc0Maps(THREE, mats, quality) {
         t.anisotropy = 8;
         t.userData.looksComposed = true;
         mat[key] = t;
+        if (key === 'map' && mat === mats.stucco) mat.color.setHex(0xf2d4a8);
         if (key === 'normalMap' && mat.normalScale) mat.normalScale.set(0.85, 0.85);
         if (key === 'roughnessMap') mat.roughness = 1;
         mat.needsUpdate = true;
@@ -1246,15 +1228,16 @@ export const buildJadeLot = buildRyanYard;
 
 export function decorateBackyardGate(THREE, ring, size, col, vibe) {
   if (!ring || ring.userData.artHalo) return null;
-  const emit = (vibe && vibe.lighting && vibe.lighting.gateEmissive) || 1.6;
   if (ring.material) {
     ring.material.color.setHex(0xc4a882);
-    if (ring.material.emissive) ring.material.emissive.setHex(col);
-    if (ring.material.emissiveIntensity != null) ring.material.emissiveIntensity = emit * 0.35;
+    if (ring.material.emissive) ring.material.emissive.setHex(0x3a2a18);
+    if (ring.material.emissiveIntensity != null) ring.material.emissiveIntensity = 0.05;
+    ring.material.transparent = false;
+    ring.material.opacity = 1;
     skipMat(ring.material);
   }
   const hoop = new THREE.Mesh(
-    new THREE.TorusGeometry(size * 1.08, size * 0.045, 6, 18),
+    new THREE.TorusGeometry(size * 1.02, size * 0.055, 8, 20),
     feltBasic(THREE, hexNum('#c4a882')),
   );
   const tile = new THREE.Mesh(
@@ -1277,15 +1260,15 @@ export function pulseBackyardGate(g, isNext, passed, now, vibe) {
   if (halo && halo.material) mats.push(halo.material);
   for (const e of extras) if (e.material) mats.push(e.material);
   const pulse = 0.5 + 0.5 * Math.sin(now * 0.005);
-  let col = g.col;
-  let emit = (vibe && vibe.lighting && vibe.lighting.gateEmissive) || 1.6;
+  let col = 0xc4a882;
+  let emit = 0.06;
   if (isNext) {
     col = 0xc45a32;
-    emit = ((vibe && vibe.lighting && vibe.lighting.gateEmissiveActive) || 2.4) + pulse;
+    emit = 0.22 + pulse * 0.18;
     if (g.mesh) g.mesh.scale.setScalar(1 + Math.sin(now * 0.005) * 0.03);
   } else if (passed) {
-    col = 0xc45a32;
-    emit = 1.1;
+    col = 0xc4a882;
+    emit = 0.08;
     if (g.mesh) g.mesh.scale.setScalar(1);
   } else if (g.mesh) g.mesh.scale.setScalar(1);
   for (const m of mats) {

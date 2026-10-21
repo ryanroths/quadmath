@@ -1081,18 +1081,8 @@ export async function tryDressBackyardKit(THREE, ctx) {
       if (n && hide) hideKeys.push(hide);
       return n;
     };
-    try {
-      const trees = (planned.trees || []).slice(0, quality === 'low' ? 5 : 9);
-      const spec = wantExtra ? BACKYARD_KIT_EXTRA.treeLeafy : BACKYARD_KIT_CORE.tree;
-      const n = await one(spec, trees, 'tree', 'backyardProcTree');
-      if (gen !== backyardDressGen) return { used: false, stale: true, bytes: 0 };
-      bytes += n;
-    } catch (e) { /* keep proc trees */ }
-    try {
-      const n = await one(BACKYARD_KIT_CORE.palm, planned.palms, 'palm', 'backyardProcPalm');
-      if (gen !== backyardDressGen) return { used: false, stale: true, bytes: 0 };
-      bytes += n;
-    } catch (e) { /* keep proc palms */ }
+    // Kenney Nature trees/palms read as lollipops in FPV. Keep the
+    // procedural leaf-card ficus and frond palms; kit only dresses hardscape.
     try {
       const n = await one(BACKYARD_KIT_CORE.fence, planned.fence, 'fence', 'backyardProcFence');
       if (gen !== backyardDressGen) return { used: false, stale: true, bytes: 0 };

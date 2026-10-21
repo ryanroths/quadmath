@@ -986,7 +986,16 @@ export async function createLooks(ctx) {
     skyMode = spec.sky === 'gradient' ? 'gradient' : 'hdri';
     applyMapLooksNow();
     if (skyMode === 'gradient') applySkyModeNow();
-    else if (envLevel === '2k' && env2k) applyEnv(env2k);
+    else if (spec.mapId === 'backyard') {
+      // Do not flash the shared dawn HDRI — that reads as a flat grey sky.
+      if (envYard) applyEnv(envYard);
+      else {
+        ensureHdr('yard-1k').catch((e) => {
+          console.warn('looks yard HDRI', e);
+          if (env1k) applyEnv(env1k);
+        });
+      }
+    } else if (envLevel === '2k' && env2k) applyEnv(env2k);
     else if (env1k) applyEnv(env1k);
     return mapLighting;
   }
