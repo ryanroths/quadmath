@@ -4,7 +4,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=5b05276e1d0b';
+import { planRoom } from './sim-room.js?v=48cdde0d2972';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -40,6 +40,41 @@ export const GARAGE_PLAY = Object.freeze({
     Object.freeze({ x: -1.6, z: -2.2, y0: 4.35, y1: 8.7 }),
   ]),
   rafterY: 8.55,
+});
+
+// Warehouse playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
+// Clearance stays ≥ 0.85 wu. Open racks match Ion Nave posts + shelf slabs.
+export const WAREHOUSE_PLAY = Object.freeze({
+  whoopClear: 0.85,
+  rackXs: Object.freeze([-22.5, -7.5, 7.5, 22.5]),
+  rackZs: Object.freeze([-24, 0, 24]),
+  shelfW: 3.2,
+  shelfD: 16.8,
+  shelfH: 0.22,
+  shelfYs: Object.freeze([1.2, 4.35, 7.5, 10.65]),
+  post: 0.36,
+  postOffX: 1.45,
+  postOffZ: 8.3,
+  postH: 17.7,
+  ion: Object.freeze({
+    x: 0, y: 2.80, z: 12, innerW: 2.40, innerH: 2.00, bar: 0.16, depth: 0.24,
+  }),
+  pallets: Object.freeze([
+    Object.freeze({ x: -24.05, z: 36, w: 1.55, h: 2.20, d: 1.55 }),
+    Object.freeze({ x: -19.95, z: 36, w: 1.55, h: 2.20, d: 1.55 }),
+    Object.freeze({ x: 19.95, z: 36, w: 1.55, h: 2.40, d: 1.55 }),
+    Object.freeze({ x: 24.05, z: 36, w: 1.55, h: 2.40, d: 1.55 }),
+  ]),
+  gap: Object.freeze({
+    left: Object.freeze({ x: -2.25, z: -38.4, w: 2.4, h: 3.6, d: 1.6 }),
+    right: Object.freeze({ x: 2.25, z: -38.4, w: 2.4, h: 3.6, d: 1.6 }),
+  }),
+  rafterY: 17.15,
+  rafterH: 0.32,
+  rafterD: 0.45,
+  rafterZs: Object.freeze([-36, -24, -12, 0, 12, 24, 36]),
+  ridgeXs: Object.freeze([-14, 14]),
+  dock: Object.freeze({ x: 0, z: 40.5, w: 16, h: 1.1, d: 3.2 }),
 });
 
 export const LAYOUT = {
@@ -327,16 +362,22 @@ function buildGarage(THREE, parent, colliders, lights) {
   return { floor, orbit: MAP_ORBIT.garage };
 }
 
-function rackBay(THREE, parent, colliders, x, z, mats) {
-  const h = 12.5, d = 18, w = 3.4;
-  box(THREE, parent, colliders, x, 0, z, w, h, d, mats.metal);
-  for (let i = 1; i <= 3; i++) {
-    box(THREE, parent, colliders, x, i * 3.0, z, w + 0.2, 0.16, d + 0.2, mats.wood);
+function buildWarehouseRack(THREE, parent, colliders, x, z, mats) {
+  const P = WAREHOUSE_PLAY;
+  for (const [ox, oz] of [
+    [-P.postOffX, -P.postOffZ], [P.postOffX, -P.postOffZ],
+    [-P.postOffX, P.postOffZ], [P.postOffX, P.postOffZ],
+  ]) {
+    box(THREE, parent, colliders, x + ox, 0, z + oz, P.post, P.postH, P.post, mats.metal);
+  }
+  for (const cy of P.shelfYs) {
+    box(THREE, parent, colliders, x, cy - P.shelfH / 2, z, P.shelfW, P.shelfH, P.shelfD, mats.metal);
   }
 }
 
 function buildWarehouse(THREE, parent, colliders, lights) {
   const L = LAYOUT.warehouse;
+  const P = WAREHOUSE_PLAY;
   const mats = {
     wall: mat(THREE, 0x8d9096, 'concrete'),
     ceil: mat(THREE, 0x6e7278, 'concrete', { emissive: 0xe8f0ff, emissiveIntensity: 0.14 }),
@@ -349,19 +390,25 @@ function buildWarehouse(THREE, parent, colliders, lights) {
   roomShell(THREE, parent, colliders, L, mats, {
     front: { x: 0, w: 12, h: 12 },
   });
-  // three rack rows, aisles at x = -14, 0, 14 are flyable
-  for (const z of [-24, 0, 24]) {
-    rackBay(THREE, parent, colliders, -22.5, z, mats);
-    rackBay(THREE, parent, colliders, -7.5, z, mats);
-    rackBay(THREE, parent, colliders, 7.5, z, mats);
-    rackBay(THREE, parent, colliders, 22.5, z, mats);
+  for (const z of P.rackZs) {
+    for (const x of P.rackXs) buildWarehouseRack(THREE, parent, colliders, x, z, mats);
   }
-  // pallet stacks near dock
-  box(THREE, parent, colliders, -22, 0, 36, 4.2, 2.2, 4.2, mats.wood);
-  box(THREE, parent, colliders, -22, 2.2, 36, 4.0, 2.0, 4.0, mats.orange);
-  box(THREE, parent, colliders, 22, 0, 36, 4.2, 2.4, 4.2, mats.wood);
-  // loading dock step
-  box(THREE, parent, colliders, 0, 0, 40.5, 16, 1.1, 3.2, mats.floor);
+  for (const pal of P.pallets) {
+    box(THREE, parent, colliders, pal.x, 0, pal.z, pal.w, pal.h, pal.d, mats.wood);
+  }
+  const gL = P.gap.left, gR = P.gap.right;
+  box(THREE, parent, colliders, gL.x, 0, gL.z, gL.w, gL.h, gL.d, mats.orange);
+  box(THREE, parent, colliders, gR.x, 0, gR.z, gR.w, gR.h, gR.d, mats.orange);
+  const ion = P.ion;
+  hoopFrame(THREE, parent, colliders, ion.x, ion.y, ion.z, ion.innerW, ion.innerH, ion.bar, ion.depth, mats.metal);
+  for (const z of P.rafterZs) {
+    box(THREE, parent, colliders, 0, P.rafterY, z, 54.4, P.rafterH, P.rafterD, mats.wood);
+  }
+  for (const x of P.ridgeXs) {
+    box(THREE, parent, colliders, x, P.rafterY - 0.08, 0, 0.42, 0.48, 80, mats.wood);
+  }
+  const d = P.dock;
+  box(THREE, parent, colliders, d.x, 0, d.z, d.w, d.h, d.d, mats.floor);
   addLight(THREE, parent, lights, 0, 18, 24, 0xe8f0ff, 220, 90);
   addLight(THREE, parent, lights, 0, 18, 0, 0xe8f0ff, 220, 90);
   addLight(THREE, parent, lights, 0, 18, -24, 0xe8f0ff, 180, 90);

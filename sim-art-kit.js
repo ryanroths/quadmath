@@ -1,7 +1,7 @@
-// Kenney CC0 city + garage kits. Visual only.
-// Meshopt-compressed GLBs under assets/sim-city/ and assets/sim-garage/.
-// If a load fails, the procedural meshes already in the scene stay visible.
-// Nothing from the GPL whoop sim.
+// Kenney CC0 city + garage + warehouse kits. Visual only.
+// Meshopt-compressed files live under assets/sim-city/, assets/sim-garage/,
+// and assets/sim-warehouse/. If a load fails, the procedural meshes already
+// in the scene stay visible. Nothing from the GPL whoop sim.
 
 import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=d2194c8087bb';
 
@@ -506,6 +506,89 @@ export async function tryDressGarageKit(THREE, ctx) {
     if (gen !== garageDressGen) return { used: false, stale: true, bytes: 0 };
     if (!kitGroup.children.length) return { used: false, bytes: 0 };
     for (const key of hideKeys) hideTagged(group, key);
+    group.add(kitGroup);
+    return { used: true, bytes, quality };
+  } catch (err) {
+    try { if (kitGroup.parent) kitGroup.parent.remove(kitGroup); } catch (e) { /* ignore */ }
+    return { used: false, bytes: 0, error: String(err && err.message || err) };
+  }
+}
+
+const WAREHOUSE_ROOT = 'assets/sim-warehouse/';
+
+export const WAREHOUSE_KIT_CORE = Object.freeze({
+  crate: { file: 'crate.glb', bytes: 3708, height: 0.88 },
+});
+
+export const WAREHOUSE_KIT_EXTRA = Object.freeze({
+  barrel: { file: 'barrel.glb', bytes: 5116, height: 0.98 },
+  cardboard: { file: 'cardboard.glb', bytes: 2792, height: 0.62 },
+});
+
+const WAREHOUSE_CORE_BYTES = Object.values(WAREHOUSE_KIT_CORE).reduce((n, e) => n + e.bytes, 0);
+const WAREHOUSE_EXTRA_BYTES = Object.values(WAREHOUSE_KIT_EXTRA).reduce((n, e) => n + e.bytes, 0);
+
+export function warehouseKitBytesForQuality(quality) {
+  return quality === 'low' ? WAREHOUSE_CORE_BYTES : WAREHOUSE_CORE_BYTES + WAREHOUSE_EXTRA_BYTES;
+}
+
+function warehouseMat(THREE, vibe, kind) {
+  const pal = vibe && vibe.palette ? vibe.palette : {};
+  let color = hexNum(pal.neonC || '#c45a22');
+  if (kind === 'crate') color = hexNum('#1a3342');
+  else if (kind === 'barrel') color = hexNum(pal.neonB || '#7a5cff');
+  else if (kind === 'cardboard') color = hexNum('#2a4a5c');
+  return skipMat(new THREE.MeshBasicMaterial({
+    color,
+    transparent: false,
+    opacity: 1,
+  }));
+}
+
+let warehouseDressGen = 0;
+
+export async function tryDressWarehouseKit(THREE, ctx) {
+  const group = ctx && ctx.group;
+  const loader = ctx && ctx.loader;
+  const vibe = ctx && ctx.vibe;
+  const quality = (ctx && ctx.quality) || 'med';
+  if (!THREE || !group || !loader || !vibe) return { used: false, bytes: 0 };
+  const gen = ++warehouseDressGen;
+  const old = group.getObjectByName('warehouseArtKit');
+  if (old && old.parent) old.parent.remove(old);
+  const kitGroup = new THREE.Group();
+  kitGroup.name = 'warehouseArtKit';
+  const planned = (group.userData && group.userData.planned) || {};
+  const wantExtra = quality === 'med' || quality === 'high';
+  let bytes = 0;
+  const root = WAREHOUSE_ROOT;
+  try {
+    const one = async (spec, list, kind) => {
+      if (!list || !list.length || !spec) return 0;
+      return instanceProp(THREE, kitGroup, loader, spec, list, warehouseMat(THREE, vibe, kind), placeAt(list), root);
+    };
+    try {
+      const crates = (planned.crates || []).slice(0, quality === 'low' ? 6 : 12);
+      const n = await one(WAREHOUSE_KIT_CORE.crate, crates, 'crate');
+      if (gen !== warehouseDressGen) return { used: false, stale: true, bytes: 0 };
+      bytes += n;
+    } catch (e) { /* skip crates */ }
+
+    if (wantExtra) {
+      try {
+        const n = await one(WAREHOUSE_KIT_EXTRA.barrel, planned.barrels, 'barrel');
+        if (gen !== warehouseDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+      try {
+        const n = await one(WAREHOUSE_KIT_EXTRA.cardboard, planned.cardboard, 'cardboard');
+        if (gen !== warehouseDressGen) return { used: false, stale: true, bytes: 0 };
+        bytes += n;
+      } catch (e) { /* skip */ }
+    }
+
+    if (gen !== warehouseDressGen) return { used: false, stale: true, bytes: 0 };
+    if (!kitGroup.children.length) return { used: false, bytes: 0 };
     group.add(kitGroup);
     return { used: true, bytes, quality };
   } catch (err) {

@@ -1,8 +1,10 @@
-// Ion Nave — original warehouse vibe. Visual only.
-// No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
-// Sculpted with capsules and lathes. Aisle runners stay MeshBasic so they read.
+// Ion Nave — playable whoop playground + Kenney CC0 shop kit.
+// Colliders live in sim-maps.js WAREHOUSE_PLAY and must match kit/proc meshes.
+// Kenney kit (sim-art-kit.js) swaps floor clutter after first paint.
+// Procedural meshes stay if a mesh fails. Nothing from the GPL whoop sim.
 
 import { hexNum, propClearOfCourse } from './sim-art-city.js?v=d2194c8087bb';
+import { WAREHOUSE_PLAY } from './sim-maps.js?v=63c2df632ca8';
 
 export const WAREHOUSE_STOCK = Object.freeze({
   wall: 0x8d9096,
@@ -30,7 +32,38 @@ export const WAREHOUSE_KEEP_GATES = Object.freeze([
   { x: 14.0, y: 11.2, z: -8.0, size: 1.7 },
   { x: 14.0, y: 6.5, z: 14.0, size: 1.8 },
   { x: 0.0, y: 3.2, z: 20.0, size: 2.0 },
+  { x: 0.0, y: 2.80, z: 12.0, size: 1.9 },
+  { x: -7.5, y: 0.65, z: 0.0, size: 1.5 },
+  { x: -22.0, y: 1.10, z: 36.0, size: 1.5 },
+  { x: 7.5, y: 2.85, z: 24.0, size: 1.5 },
+  { x: 22.5, y: 11.10, z: 0.0, size: 1.6 },
+  { x: 0.0, y: 1.55, z: -38.4, size: 1.5 },
+  { x: 0.0, y: 16.25, z: 12.0, size: 1.6 },
+  { x: 0.0, y: 16.25, z: -12.0, size: 1.6 },
+  { x: 14.0, y: 16.25, z: 0.0, size: 1.6 },
 ]);
+
+export function planWarehouseKit() {
+  return {
+    crates: [
+      { x: -26.4, z: -30.2 }, { x: 26.4, z: -30.2 },
+      { x: -26.4, z: 8.4 }, { x: 26.4, z: 8.4 },
+      { x: -26.4, z: 28.6 }, { x: 26.4, z: 28.6 },
+      { x: -26.2, z: -8.8 }, { x: 26.2, z: -8.8 },
+      { x: -22.5, y: 1.42, z: -16.8 }, { x: 22.5, y: 1.42, z: 16.8 },
+      { x: -7.5, y: 1.42, z: 7.6 }, { x: 7.5, y: 1.42, z: -7.6 },
+    ],
+    barrels: [
+      { x: -26.2, z: -40.4 }, { x: 26.2, z: -40.4 },
+      { x: -26.2, z: 32.6 }, { x: 26.2, z: 32.6 },
+    ],
+    cardboard: [
+      { x: -10.4, z: 40.2 }, { x: 10.4, z: 40.2 },
+      { x: -26.0, z: 16.4 }, { x: 26.0, z: 16.4 },
+      { x: -26.0, z: -18.6 }, { x: 26.0, z: -18.6 },
+    ],
+  };
+}
 
 const RACK_X = Object.freeze([-22.5, -7.5, 7.5, 22.5]);
 const RACK_Z = Object.freeze([-24, 0, 24]);
@@ -323,25 +356,26 @@ export function restyleWarehouseShell(THREE, group, vibe, floor) {
 }
 
 function addRacks(THREE, parent, mats, budget) {
-  const postGeo = new THREE.CapsuleGeometry(0.18, 17.4, 4, 8);
-  const shelfGeo = new THREE.BoxGeometry(3.2, 0.22, 16.8);
-  const edgeGeo = new THREE.CapsuleGeometry(0.055, 16.4, 3, 6);
+  const P = WAREHOUSE_PLAY;
+  const postGeo = new THREE.CapsuleGeometry(P.post / 2, P.postH - P.post, 4, 8);
+  const shelfGeo = new THREE.BoxGeometry(P.shelfW, P.shelfH, P.shelfD);
+  const edgeGeo = new THREE.CapsuleGeometry(0.055, P.shelfD - 0.4, 3, 6);
   const footGeo = new THREE.CapsuleGeometry(0.32, 0.18, 4, 8);
   addInstanced(THREE, parent, postGeo, mats.rack, 48, (d, i) => {
     const bay = (i / 4) | 0;
     const corner = i % 4;
-    const rx = RACK_X[bay % 4], rz = RACK_Z[(bay / 4) | 0];
-    const ox = corner % 2 ? 1.45 : -1.45;
-    const oz = corner < 2 ? 8.3 : -8.3;
-    d.position.set(rx + ox, 8.85, rz + oz);
+    const rx = P.rackXs[bay % 4], rz = P.rackZs[(bay / 4) | 0];
+    const ox = corner % 2 ? P.postOffX : -P.postOffX;
+    const oz = corner < 2 ? P.postOffZ : -P.postOffZ;
+    d.position.set(rx + ox, P.postH * 0.5, rz + oz);
     return true;
   });
   addInstanced(THREE, parent, footGeo, mats.dock, 48, (d, i) => {
     const bay = (i / 4) | 0;
     const corner = i % 4;
-    const rx = RACK_X[bay % 4], rz = RACK_Z[(bay / 4) | 0];
-    const ox = corner % 2 ? 1.45 : -1.45;
-    const oz = corner < 2 ? 8.3 : -8.3;
+    const rx = P.rackXs[bay % 4], rz = P.rackZs[(bay / 4) | 0];
+    const ox = corner % 2 ? P.postOffX : -P.postOffX;
+    const oz = corner < 2 ? P.postOffZ : -P.postOffZ;
     d.position.set(rx + ox, 0.16, rz + oz);
     d.scale.set(1.4, 1, 1.4);
     return true;
@@ -349,15 +383,15 @@ function addRacks(THREE, parent, mats, budget) {
   addInstanced(THREE, parent, shelfGeo, mats.shelf, 48, (d, i) => {
     const bay = (i / 4) | 0;
     const row = i % 4;
-    const rx = RACK_X[bay % 4], rz = RACK_Z[(bay / 4) | 0];
-    d.position.set(rx, 1.2 + row * 3.15, rz);
+    const rx = P.rackXs[bay % 4], rz = P.rackZs[(bay / 4) | 0];
+    d.position.set(rx, P.shelfYs[row], rz);
     return true;
   });
   addInstanced(THREE, parent, edgeGeo, mats.spore, budget.edges > 12 ? 48 : 24, (d, i) => {
     const bay = (i / 4) | 0;
     const row = i % 4;
-    const rx = RACK_X[bay % 4], rz = RACK_Z[(bay / 4) | 0];
-    d.position.set(rx + (rx > 0 ? -1.62 : 1.62), 1.28 + row * 3.15, rz);
+    const rx = P.rackXs[bay % 4], rz = P.rackZs[(bay / 4) | 0];
+    d.position.set(rx + (rx > 0 ? -1.62 : 1.62), P.shelfYs[row] + 0.08, rz);
     d.rotation.x = Math.PI / 2;
     return true;
   });
@@ -421,20 +455,65 @@ function addCansAndDock(THREE, parent, mats, budget) {
   lip.userData.warehouseTube = true;
   lip.userData.warehouseArt = true;
   parent.add(lip);
-  for (const x of [-22, 22]) {
-    const pal = new THREE.Mesh(palletGeo(THREE), mats.pallet);
-    pal.scale.set(2.6, 1.7, 2.6);
-    pal.position.set(x, 0, 36);
-    pal.userData.warehouseArt = true;
-    parent.add(pal);
-    const crate = new THREE.Mesh(new THREE.CapsuleGeometry(1.05, 0.85, 5, 10), mats.crate);
-    crate.scale.set(1.55, 1.1, 1.55);
-    crate.position.set(x, 1.85, 36);
+  for (const pal of WAREHOUSE_PLAY.pallets) {
+    const base = new THREE.Mesh(palletGeo(THREE), mats.pallet);
+    base.scale.set(1.35, 1.15, 1.35);
+    base.position.set(pal.x, 0, pal.z);
+    base.userData.warehouseArt = true;
+    parent.add(base);
+    const crate = new THREE.Mesh(new THREE.BoxGeometry(pal.w * 0.92, pal.h - 0.18, pal.d * 0.92), mats.crate);
+    crate.position.set(pal.x, 0.18 + (pal.h - 0.18) / 2, pal.z);
     crate.userData.warehouseArt = true;
     parent.add(crate);
   }
+  addPlayLines(THREE, parent, mats);
   addForklift(THREE, parent, mats);
   addWallRibs(THREE, parent, mats);
+}
+
+function addPlayLines(THREE, parent, mats) {
+  const P = WAREHOUSE_PLAY;
+  const ion = P.ion;
+  const hoop = new THREE.Group();
+  hoop.name = 'warehouseArtIonHoop';
+  hoop.userData.warehouseArt = true;
+  const ow = ion.innerW + ion.bar * 2;
+  const top = new THREE.Mesh(new THREE.BoxGeometry(ow, ion.bar, ion.depth), mats.spore);
+  top.position.set(ion.x, ion.y + ion.innerH / 2 + ion.bar / 2, ion.z);
+  top.userData.warehouseTube = true;
+  const bot = top.clone();
+  bot.position.y = ion.y - ion.innerH / 2 - ion.bar / 2;
+  const left = new THREE.Mesh(new THREE.BoxGeometry(ion.bar, ion.innerH, ion.depth), mats.spore);
+  left.position.set(ion.x - ion.innerW / 2 - ion.bar / 2, ion.y, ion.z);
+  left.userData.warehouseTube = true;
+  const right = left.clone();
+  right.position.x = ion.x + ion.innerW / 2 + ion.bar / 2;
+  hoop.add(top, bot, left, right);
+  hoop.traverse((o) => { o.userData.warehouseArt = true; });
+  parent.add(hoop);
+
+  const joistGeo = new THREE.BoxGeometry(54.4, P.rafterH, P.rafterD);
+  addInstanced(THREE, parent, joistGeo, mats.rack, P.rafterZs.length, (d, i) => {
+    d.position.set(0, P.rafterY + P.rafterH / 2, P.rafterZs[i]);
+    return true;
+  });
+  const ridgeGeo = new THREE.BoxGeometry(0.42, 0.48, 80);
+  addInstanced(THREE, parent, ridgeGeo, mats.rack, P.ridgeXs.length, (d, i) => {
+    d.position.set(P.ridgeXs[i], P.rafterY + 0.16, 0);
+    return true;
+  });
+
+  for (const spec of [P.gap.left, P.gap.right]) {
+    const stack = new THREE.Mesh(new THREE.BoxGeometry(spec.w, spec.h, spec.d), mats.crate);
+    stack.position.set(spec.x, spec.h / 2, spec.z);
+    stack.userData.warehouseArt = true;
+    parent.add(stack);
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(spec.w + 0.08, 0.1, spec.d + 0.08), mats.spore);
+    lip.position.set(spec.x, spec.h + 0.05, spec.z);
+    lip.userData.warehouseTube = true;
+    lip.userData.warehouseArt = true;
+    parent.add(lip);
+  }
 }
 
 function addForklift(THREE, parent, mats) {
@@ -690,6 +769,7 @@ export function buildIonNave(THREE, parent, vibe, quality, gates) {
   group.userData.warehouseArt = true;
   const budget = warehouseBudget(quality);
   const mats = makeWarehouseMats(THREE, vibe);
+  group.userData.planned = planWarehouseKit();
   addRacks(THREE, group, mats, budget);
   addSpores(THREE, group, mats, budget);
   addAisles(THREE, group, mats, budget, gates || WAREHOUSE_KEEP_GATES);

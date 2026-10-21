@@ -59,7 +59,7 @@ Used only for numeric readouts (OSD values, sliders, CLI/ghost fields).
 
 ### Proposed removal (unused `assets/Models/GLB-format/`, ~53 MB)
 
-Verified unused by sim JS, kit loaders, guides, and site HTML (only mentioned in this file, `docs/sim-art-direction.md`, and the banned-asset test string). City/garage kits load Meshopt files from `assets/sim-city/` and `assets/sim-garage/`. Do not delete Kenney preview/docs at `assets/Overview.html`, `assets/Preview*.png`, or `assets/License.txt`.
+Verified unused by sim JS, kit loaders, guides, and site HTML (only mentioned in this file, `docs/sim-art-direction.md`, and the banned-asset test string). City/garage/warehouse kits load Meshopt files from `assets/sim-city/`, `assets/sim-garage/`, and `assets/sim-warehouse/`. Do not delete Kenney preview/docs at `assets/Overview.html`, `assets/Preview*.png`, or `assets/License.txt`.
 
 | Path | Bytes | Why unused |
 |---|---|---|

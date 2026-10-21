@@ -19,6 +19,8 @@
     { "id": "garage-rafters", "file": "tracks/garage-rafters.json", "map": "garage", "name": "Rafters" },
     { "id": "warehouse-aisle", "file": "tracks/warehouse-aisle.json", "map": "warehouse", "name": "Aisle Run" },
     { "id": "warehouse-catwalk", "file": "tracks/warehouse-catwalk.json", "map": "warehouse", "name": "Catwalk" },
+    { "id": "warehouse-racks", "file": "tracks/warehouse-racks.json", "map": "warehouse", "name": "Rack Weave" },
+    { "id": "warehouse-rafters", "file": "tracks/warehouse-rafters.json", "map": "warehouse", "name": "Truss Run" },
     { "id": "backyard-fence", "file": "tracks/backyard-fence.json", "map": "backyard", "name": "Fence Loop" },
     { "id": "backyard-patio", "file": "tracks/backyard-patio.json", "map": "backyard", "name": "Patio Dive" },
     { "id": "office-cubicles", "file": "tracks/office-cubicles.json", "map": "office", "name": "Cubicle Weave" },

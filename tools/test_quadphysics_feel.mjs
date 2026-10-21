@@ -150,9 +150,9 @@ test('yaw 0→8 rad/s reaches 90% in under 160 ms and stops under 200 ms', () =>
     if (t90 == null && Math.abs(qp.omega.z) >= 7.2) t90 = i * dt;
   }
   assert.ok(t90 != null, `never reached 90% of 8, ω=${qp.omega.z.toFixed(2)}`);
-  // Whoop yaw is fast once kQ can fight rotational aero; 70–160 ms covers
-  // the 120–160 target and the quicker P-driven rise this loop actually makes.
-  assert.ok(t90 >= 0.070 && t90 <= 0.160, `t90 ${t90.toFixed(3)} s`);
+  // Whoop yaw 90% lives in the same 50–80 ms band as the 700 °/s pin.
+  // 50–160 ms keeps the old upper bound and the new whoop-fast floor.
+  assert.ok(t90 >= 0.050 && t90 <= 0.160, `t90 ${t90.toFixed(3)} s`);
 
   const stop = makeAcro();
   for (let i = 0; i < Math.round(0.35 / dt); i++) {

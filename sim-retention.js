@@ -333,12 +333,29 @@ function furnitureBoxes(mapId) {
   }
   if (mapId === 'warehouse') {
     const out = [];
-    for (const z of [-24, 0, 24]) {
-      for (const x of [-22.5, -7.5, 7.5, 22.5]) out.push(aabb(x, 0, z, 3.4, 12.5, 18));
+    const xs = [-22.5, -7.5, 7.5, 22.5];
+    const zs = [-24, 0, 24];
+    const post = 0.36, postH = 17.7, ox = 1.45, oz = 8.3;
+    for (const z of zs) {
+      for (const x of xs) {
+        for (const [dx, dz] of [[-ox, -oz], [ox, -oz], [-ox, oz], [ox, oz]]) {
+          out.push(aabb(x + dx, 0, z + dz, post, postH, post));
+        }
+        for (const cy of [1.2, 4.35, 7.5, 10.65]) {
+          out.push(aabb(x, cy - 0.11, z, 3.2, 0.22, 16.8));
+        }
+      }
     }
-    out.push(aabb(-22, 0, 36, 4.2, 4.2, 4.2));
-    out.push(aabb(22, 0, 36, 4.2, 2.4, 4.2));
+    out.push(aabb(-24.05, 0, 36, 1.55, 2.20, 1.55));
+    out.push(aabb(-19.95, 0, 36, 1.55, 2.20, 1.55));
+    out.push(aabb(19.95, 0, 36, 1.55, 2.40, 1.55));
+    out.push(aabb(24.05, 0, 36, 1.55, 2.40, 1.55));
+    out.push(aabb(-2.25, 0, -38.4, 2.4, 3.6, 1.6));
+    out.push(aabb(2.25, 0, -38.4, 2.4, 3.6, 1.6));
     out.push(aabb(0, 0, 40.5, 16, 1.1, 3.2));
+    for (const z of [-36, -24, -12, 0, 12, 24, 36]) {
+      out.push(aabb(0, 17.15, z, 54.4, 0.32, 0.45));
+    }
     return out;
   }
   if (mapId === 'office') {
