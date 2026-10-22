@@ -11,7 +11,7 @@ import {
   normalizeTouch, loadTouch, saveTouch,
   applyDeadzone, applyExpo, shapeAxis, mapStickAxes, pointerToStick,
   releaseStick, throttleFromStickY,
-  detectMobile, resolveAutoQuality, hasSavedSettings,
+  detectMobile, resolveAutoQuality, gpuTier, autoQualityStep, hasSavedSettings,
   loadFlightMode, saveFlightMode, defaultFlightMode, toggleAcro,
   shouldEnableTouch, shouldShowLandscape, createTouchControls,
   resolveInputSource,
@@ -119,7 +119,7 @@ test('auto quality is low on mobile; touch enable / landscape rules', () => {
   assert.equal(resolveAutoQuality({ mobile: true }), 'low');
   assert.equal(resolveAutoQuality({ gpuLow: true }), 'low');
   assert.equal(resolveAutoQuality({ gpuHigh: true }), 'high');
-  assert.equal(resolveAutoQuality({ mobile: true, gpuHigh: true }), 'low');
+  assert.equal(resolveAutoQuality({ mobile: true, gpuHigh: true }), 'med');
   assert.equal(resolveAutoQuality({}), 'med');
   assert.equal(shouldEnableTouch({ inputChoice: 'touch' }), true);
   assert.equal(shouldEnableTouch({ inputChoice: 'keyboard', mobile: true }), false);
@@ -286,4 +286,73 @@ test('existing localStorage keys stay in sim.html', () => {
   for (const k of keys) {
     assert.ok(src.includes(k), `sim lost key ${k}`);
   }
+});
+
+test('gpuTier classifies renderer strings; auto tier per device', () => {
+  const cases = [
+    ['ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)', 'high', 'med'],
+    ['Apple GPU', 'high', 'med'],
+    ['ANGLE (Intel, Intel(R) UHD Graphics 620 (0x00005917) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'low', 'low'],
+    ['ANGLE (Intel, Intel(R) HD Graphics 4000 Direct3D11 vs_5_0 ps_5_0)', 'low', 'low'],
+    ['Intel Iris Xe', 'med', 'med'],
+    ['ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x00009A49) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'med', 'med'],
+    ['ANGLE (Intel, Intel(R) Arc(TM) A770 Graphics Direct3D11)', 'med', 'med'],
+    ['ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002484) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'high', 'med'],
+    ['ANGLE (AMD, AMD Radeon RX 6800 XT Direct3D11 vs_5_0 ps_5_0, D3D11)', 'high', 'med'],
+    ['ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)', 'low', 'low'],
+    ['llvmpipe (LLVM 15.0.7, 256 bits)', 'low', 'low'],
+    ['Adreno (TM) 650', 'med', 'med'],
+    ['ANGLE (Qualcomm, Adreno (TM) 740, OpenGL ES 3.2)', 'med', 'med'],
+    ['Adreno (TM) 506', 'low', 'low'],
+    ['Mali-G52 MC2', 'low', 'low'],
+    ['Mali-G710 MC10', 'med', 'med'],
+  ];
+  for (const [s, tier, phone] of cases) {
+    assert.equal(gpuTier(s), tier, s);
+    assert.equal(resolveAutoQuality({ gpu: gpuTier(s) }), tier, 'desktop ' + s);
+    assert.equal(resolveAutoQuality({ gpu: gpuTier(s), mobile: true }), phone, 'phone ' + s);
+  }
+  assert.equal(gpuTier(''), null);
+  assert.equal(resolveAutoQuality({ gpu: null }), 'med');
+  assert.equal(resolveAutoQuality({ gpu: null, mobile: true }), 'low');
+});
+
+function runAuto(level, frames, st) {
+  const s = st || {};
+  let out = level;
+  for (const dt of frames) {
+    const d = autoQualityStep(s, dt, out);
+    if (d) out = d;
+  }
+  return out;
+}
+const rep = (pat, n) => Array.from({ length: n }, (_, i) => pat[i % pat.length]);
+
+test('auto downgrade: steady caps keep med, real jank steps down', () => {
+  // Steady 60 fps: never downgrades.
+  assert.equal(runAuto('high', rep([16.7], 1200)), 'high');
+  // 30 fps vsync cap (iOS Low Power): high may drop to med, never to low.
+  assert.equal(runAuto('high', rep([33.3, 33.4, 33.2], 600)), 'med');
+  assert.equal(runAuto('med', rep([33.3, 33.4, 33.2], 1200)), 'med');
+  // 50 Hz panel: med holds.
+  assert.equal(runAuto('med', rep([20], 1500)), 'med');
+  // GPU-bound ~45 fps on 60 Hz: missed vsyncs alternate 16.7/33.3 -> steps down.
+  assert.equal(runAuto('med', rep([16.7, 16.7, 33.3], 600)), 'low');
+  assert.equal(runAuto('high', rep([16.7, 16.7, 33.3], 300)), 'med');
+  // Below 24 fps even when steady: low.
+  assert.equal(runAuto('med', rep([50], 300)), 'low');
+  // Needs ~3 s sustained; brief jank or stalls (>250 ms) are ignored.
+  assert.equal(runAuto('med', rep([16.7, 33.3], 60).concat(rep([16.7], 600))), 'med');
+  assert.equal(runAuto('med', rep([16.7, 400], 400)), 'med');
+  // Low is the floor.
+  assert.equal(runAuto('low', rep([16.7, 33.3], 1000)), 'low');
+});
+
+test('auto keeps its downgraded level across setQuality / map switches', () => {
+  const looksSrc = readFileSync(join(root, 'sim-looks.js'), 'utf8');
+  assert.match(looksSrc, /\? autoCap \|\| resolveAutoQuality\(/);
+  assert.match(looksSrc, /if \(down\) \{ autoCap = down; setQuality\('auto', true\); \}/);
+  assert.doesNotMatch(looksSrc, /fps\._dt/);
+  const simSrc = readFileSync(join(root, 'sim.html'), 'utf8');
+  assert.doesNotMatch(simSrc, /setQuality\(looks\.choice\)/);
 });
