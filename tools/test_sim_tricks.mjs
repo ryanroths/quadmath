@@ -20,6 +20,7 @@ import {
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
 import { mapThrottle3d } from '../sim-3d.js';
 import { rateSetpoint } from '../sim-rates.js';
+import { BACKYARD_PLAY, CITY_PLAY } from '../sim-maps.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const src = readFileSync(join(root, 'sim-tricks.js'), 'utf8');
@@ -97,6 +98,7 @@ function fly(phases, opts) {
 function labels(r) { return r.hits.slice(); }
 
 const DEG = Math.PI / 180;
+const TAU = Math.PI * 2;
 const WHOOP_ACTUAL = {
   type: 'ACTUAL',
   roll: { rcRate: 2.0, srate: 74, expo: 0.56 },
@@ -449,7 +451,177 @@ test('Ryan bug: a real trippy spin around a pole or tree scores Trippy', () => {
   assert.equal(openYaw.hits.includes('ham'), false, 'upright yaw is not Ham');
 });
 
-const TAU = Math.PI * 2;
+function aabbCyl(x, z, r, h) {
+  return { min: { x: x - r, y: 0, z: z - r }, max: { x: x + r, y: h, z: z + r } };
+}
+
+function quatYaw(yaw) {
+  const h = yaw * 0.5;
+  return { x: 0, y: 0, z: Math.sin(h), w: Math.cos(h) };
+}
+
+function flyOrbit(opts) {
+  const o = opts || {};
+  const R = o.R;
+  const cx = o.cx, cz = o.cz;
+  const colliders = o.colliders;
+  const drift = o.drift || 0;
+  const look = o.look || 'in';
+  const frac = o.frac == null ? 1 : o.frac;
+  const rates = o.rates;
+  const yawS = o.yawS;
+  const rng = o.seed != null ? mulberry(o.seed) : null;
+  const noise = o.noise == null ? 0 : o.noise;
+  let omega;
+  let speedM;
+  if (rates && yawS) {
+    omega = rateSetpoint(rates.type, yawS, rates.yaw) * DEG;
+    speedM = Math.abs(omega) * R / WS;
+  } else {
+    speedM = o.speed;
+    omega = (speedM * WS) / R;
+  }
+  const period = TAU / Math.abs(omega);
+  const dt = 1 / 60;
+  const settle = o.settle != null ? o.settle : 0.55;
+  const d = makeDetector();
+  const hits = [];
+  let theta = 0;
+  const wx0 = cx + R, wz0 = cz;
+  // World XZ circle → physics XY (wx=px*WS, wz=-py*WS). Camera-lock yaw
+  // points at the object (meanDot≈0); tangent yaw follows velocity (≈1).
+  const yawAt = (th) => (look === 'tangent' ? (-Math.PI * 0.5 - th) : (Math.PI - th));
+  const q0 = quatYaw(yawAt(0));
+  const vx0 = 0;
+  const vy0 = -speedM;
+  resetDetector(d, {
+    qx: q0.x, qy: q0.y, qz: q0.z, qw: q0.w,
+    ox: 0, oy: 0, oz: 0, wx: wx0, wy: 7, wz: wz0, alt: 2,
+    speed: speedM, vx: vx0, vy: vy0, vz: 0, clearance: 2, throttle: 0.5, armed: true,
+    colliders,
+  });
+  d.lockout = 0;
+  let t = 0;
+  const spinT = period * frac;
+  const maxT = o.maxT || (spinT + settle + 0.12);
+  while (t < maxT) {
+    const spinning = t < spinT + 0.02;
+    const om = spinning ? omega : 0;
+    if (spinning) theta += omega * dt;
+    const rr = R + (drift ? drift * Math.sin(theta * 2) : 0);
+    const wx = cx + rr * Math.cos(theta);
+    const wz = cz + rr * Math.sin(theta);
+    const q = quatYaw(yawAt(theta));
+    const vx = -Math.sin(theta) * speedM;
+    const vy = -Math.cos(theta) * speedM;
+    let ox = 0, oy = 0;
+    if (rng && noise && spinning) {
+      ox = (rng() - 0.5) * noise * 1.2;
+      oy = (rng() - 0.5) * noise * 1.2;
+    }
+    const ev = stepDetector(d, {
+      qx: q.x, qy: q.y, qz: q.z, qw: q.w,
+      ox, oy, oz: om,
+      wx, wy: 7, wz, alt: 2,
+      speed: speedM, vx, vy, vz: 0,
+      clearance: 2, throttle: 0.5, armed: true, colliders, ws: WS,
+    }, dt);
+    if (ev && TRICK_BY_ID[ev]) hits.push(ev);
+    t += dt;
+  }
+  return {
+    hits, last: d.lastId, why: d.lastWhy, feat: d.lastFeat, view: featView(d.lastFeat),
+    period, speed: speedM, omega,
+  };
+}
+
+const YARD_FICUS = BACKYARD_PLAY.ficus;
+const YARD_PALM = BACKYARD_PLAY.palms[0];
+const CITY_TREE = CITY_PLAY.spins.find((s) => s.kind === 'tree');
+const CITY_POLE = CITY_PLAY.spins.find((s) => s.kind === 'pole');
+const FICUS_COL = [aabbCyl(YARD_FICUS.x, YARD_FICUS.z, YARD_FICUS.r, YARD_FICUS.h)];
+const PALM_COL = [aabbCyl(YARD_PALM.x, YARD_PALM.z, YARD_PALM.r, YARD_PALM.h)];
+const CITY_TREE_COL = [aabbCyl(CITY_TREE.x, CITY_TREE.z, CITY_TREE.r, CITY_TREE.h)];
+const CITY_POLE_COL = [aabbCyl(CITY_POLE.x, CITY_POLE.z, CITY_POLE.r, CITY_POLE.h)];
+const GARAGE_LAMP_COL = [aabbCyl(-6.2, 8.2, 0.22, 4.4)];
+
+function assertTrippy(r, name) {
+  assert.deepEqual(labels(r), ['trippy'], name + ' why=' + (r.why || '') + ' last=' + r.last);
+}
+
+test('scripted camera-lock orbits around backyard / city / garage anchors score Trippy', () => {
+  assert.ok(YARD_FICUS.r >= 0.5 && YARD_FICUS.r <= 0.7, 'ficus trunk after 1.25× ' + YARD_FICUS.r);
+  assert.ok(BACKYARD_PLAY.planter.rOut >= 3.2 && BACKYARD_PLAY.planter.rOut <= 3.5, 'planter ' + BACKYARD_PLAY.planter.rOut);
+  const orbits = [
+    { name: 'yard-ficus-R4-v5', R: 4, speed: 5, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
+    { name: 'yard-ficus-R5-v5', R: 5, speed: 5, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
+    { name: 'yard-ficus-R7-v5', R: 7, speed: 5, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
+    { name: 'yard-ficus-R8-v6', R: 8, speed: 6, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
+    { name: 'yard-ficus-R10-v5', R: 10, speed: 5, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
+    { name: 'yard-ficus-R7-v4-drift', R: 7, speed: 4, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL, drift: 0.8 },
+    { name: 'yard-palm-R4-v5', R: 4, speed: 5, cx: YARD_PALM.x, cz: YARD_PALM.z, colliders: PALM_COL },
+    { name: 'city-tree-R4-v5', R: 4, speed: 5, cx: CITY_TREE.x, cz: CITY_TREE.z, colliders: CITY_TREE_COL },
+    { name: 'city-pole-R3.5-v6', R: 3.5, speed: 6, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL },
+    { name: 'garage-lamp-R3-v5', R: 3, speed: 5, cx: -6.2, cz: 8.2, colliders: GARAGE_LAMP_COL },
+    { name: 'old-tight-pole-R2-v6', R: 2, speed: 6, cx: 6.7, cz: 0, colliders: OBJ_POLE },
+  ];
+  for (const spec of orbits) assertTrippy(flyOrbit(spec), spec.name);
+});
+
+test('Ryan Actual-rate camera-lock orbits at several radii score Trippy', () => {
+  const actual = [
+    { name: 'actual-ficus-R5', R: 5, yawS: 0.62, rates: WHOOP_ACTUAL, seed: 401, noise: 0.08, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
+    { name: 'actual-ficus-R7', R: 7, yawS: 0.58, rates: WHOOP_ACTUAL, seed: 402, noise: 0.08, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
+    { name: 'actual-ficus-R8-faster', R: 8, yawS: 0.70, rates: WHOOP_ACTUAL, seed: 403, noise: 0.07, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
+    { name: 'actual-city-tree-R4', R: 4, yawS: 0.60, rates: WHOOP_ACTUAL, seed: 404, noise: 0.08, cx: CITY_TREE.x, cz: CITY_TREE.z, colliders: CITY_TREE_COL },
+    { name: 'actual-city-pole-R3.5', R: 3.5, yawS: 0.68, rates: WHOOP_ACTUAL, seed: 405, noise: 0.08, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL },
+    { name: 'actual-garage-R3', R: 3, yawS: 0.58, rates: WHOOP_ACTUAL, seed: 406, noise: 0.07, cx: -6.2, cz: 8.2, colliders: GARAGE_LAMP_COL },
+    { name: 'kiss-ficus-R6', R: 6, yawS: 0.55, rates: WHOOP_KISS, seed: 407, noise: 0.06, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
+  ];
+  for (const spec of actual) assertTrippy(flyOrbit(spec), spec.name);
+});
+
+test('false triggers: turns, small yaw, tangent circles, half orbits, open air', () => {
+  const turn = fly(
+    [{ t: 0.85, roll: 2.4, yaw: 2.0, pitch: -0.25, thr: 0.6 }, { t: 0.55, roll: 0, yaw: 0, thr: 0.46 }],
+    { z0: 4, vx: 6.5, maxT: 1.9, colliders: FICUS_COL },
+  );
+  assert.equal(turn.hits.includes('trippy'), false, 'turn why=' + (turn.why || ''));
+  const smallYaw = fly(
+    [{ t: 0.7, yaw: 1.4, thr: 0.5 }, { t: 0.55, yaw: 0, thr: 0.46 }],
+    { z0: 3.5, vx: 2.2, maxT: 1.7, colliders: FICUS_COL },
+  );
+  assert.equal(smallYaw.hits.includes('trippy'), false, 'small yaw why=' + (smallYaw.why || ''));
+  const punch = fly(
+    [{ t: 1.1, yaw: 7.2, roll: 1.2, thr: 0.7 }, { t: 0.55, yaw: 0, roll: 0, thr: 0.46 }],
+    { z0: 4, vx: 3.5, maxT: 2.1 },
+  );
+  assert.equal(punch.hits.includes('trippy'), false, 'open-air punch why=' + (punch.why || ''));
+  const nearPunch = fly(
+    [{ t: 1.1, yaw: 7.2, roll: 1.2, thr: 0.7 }, { t: 0.55, yaw: 0, roll: 0, thr: 0.46 }],
+    { z0: 4, vx: 3.5, maxT: 2.1, colliders: FICUS_COL, x0: (YARD_FICUS.x - 6) / WS },
+  );
+  assert.equal(nearPunch.hits.includes('trippy'), false, 'forward punch near tree why=' + (nearPunch.why || ''));
+  const tangent = flyOrbit({
+    name: 'tangent-ficus', R: 6, speed: 5, cx: YARD_FICUS.x, cz: YARD_FICUS.z,
+    colliders: FICUS_COL, look: 'tangent',
+  });
+  assert.equal(tangent.hits.includes('trippy'), false, 'tangent circle why=' + (tangent.why || ''));
+  const half = flyOrbit({
+    name: 'half-ficus', R: 6, speed: 5, cx: YARD_FICUS.x, cz: YARD_FICUS.z,
+    colliders: FICUS_COL, frac: 0.55,
+  });
+  assert.equal(half.hits.includes('trippy'), false, 'half orbit why=' + (half.why || ''));
+  const openCircle = flyOrbit({
+    name: 'open-air-circle', R: 6, speed: 5, cx: 0, cz: 0, colliders: [],
+  });
+  assert.equal(openCircle.hits.includes('trippy'), false, 'open-air circle why=' + (openCircle.why || ''));
+  const huge = flyOrbit({
+    name: 'huge-yard', R: 18, speed: 6, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL,
+  });
+  assert.equal(huge.hits.includes('trippy'), false, 'huge circle why=' + (huge.why || ''));
+});
+
 const INV_ROLL = { x: 1, y: 0, z: 0, w: 0 };
 
 function quatMul(a, b) {
