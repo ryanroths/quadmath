@@ -4,6 +4,7 @@
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
 import { resolveAutoQuality } from './sim-touch.js?v=7eff6ead2f5f';
+import { updateSceneLighting } from './sim-lighting.js?v=1ec12da8a4a8';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
@@ -410,7 +411,7 @@ export async function createLooks(ctx) {
   let skyMesh = null, sunSprite = null, groundMesh = null;
   let composer = null, bloomPass = null, aoPass = null, fpvPass = null, motionPass = null;
   let skyMode = 'hdri';
-  let env1k = null, env2k = null, envYard = null, envLevel = null;
+  let env1k = null, env2k = null, envYard = null, envLevel = null, hdriLevel = null, yardFailed = false;
   let texCache = {};
   let maxAniso = 8;
   try { maxAniso = renderer.capabilities.getMaxAnisotropy() || 8; } catch (e) { /* ignore */ }
@@ -602,17 +603,12 @@ export async function createLooks(ctx) {
       try { tex = await new Loader().loadAsync(obj); }
       finally { URL.revokeObjectURL(obj); }
       tex.mapping = THREE.EquirectangularReflectionMapping;
-      if (skyMode !== 'gradient') {
-        if (skyMesh) skyMesh.visible = false;
-        if (sunSprite) sunSprite.visible = false;
-        scene.background = tex;
-      }
       const pmrem = new THREE.PMREMGenerator(renderer);
       const env = pmrem.fromEquirectangular(tex).texture;
       pmrem.dispose();
-      // City paints its own night sky. Assigning the dawn HDRI here is what
-      // washed Kenney cars into translucent blue several seconds after load.
-      if (!cityKeepsOwnSky()) scene.environment = env;
+      tex.dispose();
+      // No scene writes here: callers mark the env ready and re-apply, and the
+      // resolver keeps City off the dawn IBL (it washed Kenney cars blue).
       return env;
     })();
     try {
@@ -623,86 +619,61 @@ export async function createLooks(ctx) {
     }
   }
 
-  function cityKeepsOwnSky() {
-    if (mapLighting && mapLighting.citySky) return true;
-    return skyMode === 'gradient' && !!(skyMesh && skyMesh.userData && skyMesh.userData.citySky);
-  }
-
-  function applySkyModeNow() {
-    if (skyMode !== 'gradient') return;
-    const citySky = cityKeepsOwnSky();
-    if (skyMesh) skyMesh.visible = true;
-    if (sunSprite) sunSprite.visible = !citySky;
-    const bgHex = citySky ? 0x070014 : (scene.fog ? scene.fog.color.getHex() : 0xc9a57a);
-    if (scene.background && scene.background.isColor && scene.fog && scene.background !== scene.fog.color) {
-      scene.background.setHex(bgHex);
-    } else {
-      scene.background = new THREE.Color(bgHex);
-    }
-    if (citySky) {
-      scene.environment = null;
-      if ('environmentIntensity' in scene) scene.environmentIntensity = 0;
-    } else if ('environmentIntensity' in scene) {
-      scene.environmentIntensity = 0.18;
-    }
-    if ('backgroundIntensity' in scene) scene.backgroundIntensity = citySky ? 0.08 : 0.14;
-    if ('backgroundBlurriness' in scene) scene.backgroundBlurriness = 0.04;
-  }
-  function applyEnv(env) {
+  // Single writer of scene IBL / background / fog colour / exposure. Sky
+  // mode, map, quality and HDRI loads only patch inputs and call this.
+  function applyLighting() {
+    const dawn = (hdriLevel === '2k' && env2k) || env1k || env2k;
+    const patch = {
+      sky: skyMode,
+      skyCity: !!(skyMesh && skyMesh.userData && skyMesh.userData.citySky),
+      fogColor: LIGHTING.fogColor,
+      exposure: LIGHTING.exposure,
+      envs: { dawn, yard: envYard || (yardFailed && dawn) || null },
+    };
+    if (mapLighting) { patch.mapId = mapLighting.mapId; patch.citySky = !!mapLighting.citySky; }
+    if (mapLooksSpec) patch.looks = mapLooksSpec;
+    const r = updateSceneLighting(scene, patch, { renderer, Color: THREE.Color });
     if (skyMode === 'gradient') {
-      if (!cityKeepsOwnSky()) scene.environment = env;
-      applySkyModeNow();
-      return;
+      if (skyMesh) skyMesh.visible = true;
+      if (sunSprite) sunSprite.visible = !r.citySky;
+    } else if (r.environment) {
+      if (skyMesh) skyMesh.visible = false;
+      if (sunSprite) sunSprite.visible = false;
     }
-    scene.environment = env;
-    scene.background = env;
-    const yard = mapLighting && mapLighting.mapId === 'backyard';
-    if ('environmentIntensity' in scene) scene.environmentIntensity = yard ? 1.15 : 0.72;
-    if ('backgroundIntensity' in scene) scene.backgroundIntensity = yard ? 0.30 : 0.48;
-    if ('backgroundBlurriness' in scene) scene.backgroundBlurriness = yard ? 0.05 : 0.08;
-    // Align Poly Haven kiara_1_dawn sun with the existing key-light vector.
-    // kloofendal_48d afternoon sun sits near +X; a small yaw keeps the key light honest.
-    const yaw = yard ? 0.85 : 3.55;
-    if (scene.environmentRotation) scene.environmentRotation.set(0, yaw, 0);
-    if (scene.backgroundRotation) scene.backgroundRotation.set(0, yaw, 0);
-    if (skyMesh) skyMesh.visible = false;
-    if (sunSprite) sunSprite.visible = false;
-    scene.fog.color.setHex(LIGHTING.fogColor);
+    return r;
   }
   function setSkyMode(mode) {
     skyMode = mode === 'gradient' ? 'gradient' : 'hdri';
-    if (skyMode === 'gradient') applySkyModeNow();
-    else if (envLevel === '2k' && env2k) applyEnv(env2k);
-    else if (env1k) applyEnv(env1k);
+    applyLighting();
     return skyMode;
   }
 
+  // Loads only mark an env ready and re-apply; the resolver decides which
+  // HDRI (if any) the current map shows, so a late promise cannot flash it.
   async function ensureHdr(level) {
-    const yard = mapLighting && mapLighting.mapId === 'backyard';
-    if (yard) {
-      if (envLevel === 'yard-1k' && envYard) {
-        applyEnv(envYard);
-        return;
+    if (level) hdriLevel = level;
+    if (mapLighting && mapLighting.mapId === 'backyard') {
+      if (!envYard) {
+        try { envYard = await loadHdr(HDRI_YARD_1K); }
+        catch (e) { yardFailed = true; applyLighting(); throw e; }
       }
-      if (!envYard) envYard = await loadHdr(HDRI_YARD_1K);
-      applyEnv(envYard);
       envLevel = 'yard-1k';
+      applyLighting();
       return;
     }
-    if (envLevel === level) return;
-    if (level === '2k') {
+    if (hdriLevel === '2k') {
       try {
         if (!env2k) env2k = await loadHdr(HDRI_2K);
-        applyEnv(env2k);
         envLevel = '2k';
+        applyLighting();
         return;
       } catch (e) {
         console.warn('looks 2k HDRI failed, using 1k', e);
       }
     }
     if (!env1k) env1k = await loadHdr(HDRI_1K);
-    applyEnv(env1k);
     envLevel = '1k';
+    applyLighting();
   }
 
   function texLoader() {
@@ -876,7 +847,7 @@ export async function createLooks(ctx) {
   }
 
   function applyLights(p) {
-    renderer.toneMappingExposure = LIGHTING.exposure;
+    applyLighting();
     sun.castShadow = !!p.shadows;
     sun.intensity = LIGHTING.sunIntensity;
     if (sunFill) sunFill.intensity = LIGHTING.fillIntensity;
@@ -913,7 +884,7 @@ export async function createLooks(ctx) {
     try { await ensureHdr(mobile && p.hdri === '2k' ? '1k' : p.hdri); } catch (e) { console.warn('looks HDRI', e); }
     try { await applyWorldMaps(); } catch (e) { console.warn('looks PBR', e); }
     applyMapLooksNow();
-    if (skyMode === 'gradient') applySkyModeNow();
+    applyLighting();
     fps.lowMs = 0;
     return applied;
   }
@@ -971,10 +942,6 @@ export async function createLooks(ctx) {
     if (scene.fog && spec.fog != null) scene.fog.density = spec.fog;
     if (spec.sun != null) sun.intensity = spec.sun;
     if (hemi && spec.hemi != null) hemi.intensity = spec.hemi;
-    if ('environmentIntensity' in scene && spec.env != null && !cityKeepsOwnSky()) {
-      scene.environmentIntensity = spec.env;
-    }
-    if ('backgroundIntensity' in scene && spec.bg != null) scene.backgroundIntensity = spec.bg;
   }
   function setMapLooks(spec) {
     if (!spec) return;
@@ -987,6 +954,7 @@ export async function createLooks(ctx) {
     }
     mapLooksSpec = spec;
     applyMapLooksNow();
+    applyLighting();
   }
   function setMapLighting(spec) {
     if (!spec) return;
@@ -994,18 +962,13 @@ export async function createLooks(ctx) {
     mapLooksSpec = spec.looks || mapLooksSpec;
     skyMode = spec.sky === 'gradient' ? 'gradient' : 'hdri';
     applyMapLooksNow();
-    if (skyMode === 'gradient') applySkyModeNow();
-    else if (spec.mapId === 'backyard') {
-      // Do not flash the shared dawn HDRI — that reads as a flat grey sky.
-      if (envYard) applyEnv(envYard);
-      else {
-        ensureHdr('yard-1k').catch((e) => {
-          console.warn('looks yard HDRI', e);
-          if (env1k) applyEnv(env1k);
-        });
-      }
-    } else if (envLevel === '2k' && env2k) applyEnv(env2k);
-    else if (env1k) applyEnv(env1k);
+    // Missing env shows the fog-colour sky (never the shared dawn HDRI on the
+    // yard — that reads flat grey). Load it now for the yard, or once quality
+    // has asked for HDRIs.
+    const r = applyLighting();
+    if (!r.envReady && (r.want === 'yard' || hdriLevel)) {
+      ensureHdr().catch((e) => console.warn('looks HDRI', e));
+    }
     return mapLighting;
   }
 

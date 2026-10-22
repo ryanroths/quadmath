@@ -2,7 +2,7 @@
 // Visual only. Colliders live in sim-maps.js BACKYARD_PLAY.
 // Generated / CC0 tiling textures. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=6c1b166ec4aa';
+import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=40fc50ae6aed';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
 import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=d3bccf5de2eb';
 

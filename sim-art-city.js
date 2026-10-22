@@ -3,6 +3,7 @@
 
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
 import { CITY_PLAY } from './sim-maps.js?v=d3bccf5de2eb';
+import { updateSceneLighting } from './sim-lighting.js?v=1ec12da8a4a8';
 
 export const RAIN_KEY = 'quadmathSimRain';
 
@@ -1175,30 +1176,14 @@ export function applyResolvedLighting(ctx, spec) {
     hemi.groundColor.setHex(L.hemiGround);
     hemi.intensity = L.hemiIntensity;
   }
-  const bgHex = spec.bgHex != null ? spec.bgHex : L.fogColor;
+  if (scene && scene.fog) scene.fog.density = L.fogDensity;
+  // Fog colour, sky background, IBL and exposure go through the one scene
+  // lighting resolver (never share fog.color as background; City drops IBL).
   const Color = (ctx && ctx.THREE && ctx.THREE.Color)
     || (typeof THREE !== 'undefined' ? THREE.Color : null);
-  if (scene && scene.fog) {
-    scene.fog.color.setHex(L.fogColor);
-    scene.fog.density = L.fogDensity;
-  }
-  if (scene && (spec.citySky || (scene.background && scene.background.isColor))) {
-    // Never share fog.color as scene.background — later fog writes then
-    // recolor the sky. City keeps a night hex; other maps copy the fog hex
-    // onto a separate Color.
-    if (scene.background && scene.background.isColor && scene.fog && scene.background !== scene.fog.color) {
-      scene.background.setHex(bgHex);
-    } else if (Color) {
-      scene.background = new Color(bgHex);
-    }
-  }
-  if (scene && spec.citySky) {
-    scene.environment = null;
-    if ('environmentIntensity' in scene) scene.environmentIntensity = 0;
-  } else if (scene && spec.envIntensity != null && 'environmentIntensity' in scene) {
-    scene.environmentIntensity = spec.envIntensity;
-  }
-  if (renderer) renderer.toneMappingExposure = L.exposure;
+  const patch = { mapId: spec.mapId, citySky: !!spec.citySky, fogColor: L.fogColor, exposure: L.exposure };
+  if (spec.looks) patch.looks = spec.looks;
+  updateSceneLighting(scene, patch, { renderer, Color });
   if (bloomPass) {
     bloomPass.strength = L.bloomStrength;
     bloomPass.radius = L.bloomRadius;
