@@ -3,7 +3,7 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=33991c783824';
+import { hexNum } from './sim-art-city.js?v=6c1b166ec4aa';
 export {
   FELT_SCALE, applyFeltMaterial, feltBasic, feltClay, feltEmissive,
   studioPhoneBudget, qualityWantsStudioBloom,
@@ -21,54 +21,54 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=33991c783824';
+} from './sim-art-city.js?v=6c1b166ec4aa';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget, planLivingKit,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=b97277c96b77';
+} from './sim-art-living.js?v=ca4b78c1fa39';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=912b4b1b49b8';
+} from './sim-art-garage.js?v=702121854b9d';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=57d312a9a604';
+} from './sim-art-warehouse.js?v=0f9a0a732b02';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
   planGymKit,
-} from './sim-art-gym.js?v=e9f9ad000f81';
+} from './sim-art-gym.js?v=b2ba69ec6f47';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget, planOfficeKit,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=caab03d37b5e';
+} from './sim-art-office.js?v=e8eb6f6e2518';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=2d8a0c22f7c8';
+} from './sim-art-trainer.js?v=f70e32c83ec0';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildRyanYard, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
   planBackyardKit,
-} from './sim-art-backyard.js?v=897240418586';
+} from './sim-art-backyard.js?v=aa46df06a36b';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=5db0ea435e31';
+} from './sim-art-room.js?v=6400e2d6a661';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
@@ -77,7 +77,7 @@ export {
   tryDressGymKit, gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA,
   tryDressLivingKit, livingKitBytesForQuality, LIVING_KIT_CORE, LIVING_KIT_EXTRA,
   tryDressBackyardKit, backyardKitBytesForQuality, BACKYARD_KIT_CORE, BACKYARD_KIT_EXTRA,
-} from './sim-art-kit.js?v=c08b8d0b48b2';
+} from './sim-art-kit.js?v=93f00c540dd7';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
@@ -265,28 +265,31 @@ export const VIBES = Object.freeze({
       gateA: '#c45a32', gateB: '#c4a882',
     }),
     lighting: Object.freeze({
-      sunColor: 0xffe6b0, sunIntensity: 1.28, fillColor: 0x9ec6e8, fillIntensity: 0.20,
-      hemiSky: 0x8ec4e8, hemiGround: 0x9a8460, hemiIntensity: 0.62,
-      exposure: 0.68, fogColor: 0xb8d0e4, fogDensity: 0.0018,
+      sunColor: 0xffe6b0, sunIntensity: 1.18, fillColor: 0xe8d2a8, fillIntensity: 0.48,
+      hemiSky: 0xb4d4e8, hemiGround: 0xd4c09a, hemiIntensity: 0.90,
+      exposure: 0.74, fogColor: 0xb8d0e4, fogDensity: 0.0018,
       bloomStrength: 0.18, bloomRadius: 0.28, bloomThreshold: 0.88,
       gateEmissive: 1.2, gateEmissiveActive: 1.8,
       // Phoenix afternoon: raise the key so it matches kloofendal, then
       // tight-frustum the 2048 map around the whoop instead of the city arena.
+      // Shade-side CMU is backlit from this azimuth — warm fill + high hemi
+      // keep the block tan instead of chocolate.
       sunElevation: 44, sunAzimuth: 118,
       shadowViewR: 30, shadowHeight: 12,
       shadowBias: -0.00018, shadowNormalBias: 0.04,
+      shadowIntensity: 0.58,
     }),
-    looks: Object.freeze({ fog: 0.0018, sun: 1.18, env: 0.95, bg: 0.30, hemi: 0.62 }),
+    looks: Object.freeze({ fog: 0.0018, sun: 1.05, env: 1.15, bg: 0.30, hemi: 0.90 }),
     gates: Object.freeze({ style: 'stucco-tile', keepBrand: false }),
     props: Object.freeze(['PVC gate', 'kidney pool', 'full-yard mesh fence', 'ficus planter', 'west side alley']),
     post: Object.freeze({
       bloom: true, analog: false,
-      lift: Object.freeze([0.004, 0.008, 0.002]),
-      gamma: 0.93,
-      gain: Object.freeze([1.06, 1.16, 0.96]),
-      vignette: 0.30,
-      ao: 0.34,
-      grain: 0.032,
+      lift: Object.freeze([0.010, 0.012, 0.006]),
+      gamma: 0.96,
+      gain: Object.freeze([1.10, 1.12, 1.02]),
+      vignette: 0.26,
+      ao: 0.28,
+      grain: 0.028,
     }),
   }),
   office: Object.freeze({

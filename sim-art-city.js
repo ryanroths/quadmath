@@ -2,7 +2,7 @@
 // Play colliders live in sim-maps.js CITY_PLAY. Nothing from the GPL whoop sim.
 
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { CITY_PLAY } from './sim-maps.js?v=db18471ef96c';
+import { CITY_PLAY } from './sim-maps.js?v=d3bccf5de2eb';
 
 export const RAIN_KEY = 'quadmathSimRain';
 
@@ -1155,6 +1155,7 @@ export function applyResolvedLighting(ctx, spec) {
     LIGHTING.shadowNormalBias = L.shadowNormalBias != null ? L.shadowNormalBias : 0.02;
     LIGHTING.shadowViewR = L.shadowViewR != null ? L.shadowViewR : null;
     LIGHTING.shadowHeight = L.shadowHeight != null ? L.shadowHeight : null;
+    LIGHTING.shadowIntensity = L.shadowIntensity != null ? L.shadowIntensity : 1;
   }
   if (sun) {
     sun.color.setHex(L.sunColor);
@@ -1162,6 +1163,7 @@ export function applyResolvedLighting(ctx, spec) {
     if (sun.shadow && LIGHTING) {
       sun.shadow.bias = LIGHTING.shadowBias;
       sun.shadow.normalBias = LIGHTING.shadowNormalBias;
+      if ('intensity' in sun.shadow) sun.shadow.intensity = LIGHTING.shadowIntensity;
     }
   }
   if (sunFill) {
