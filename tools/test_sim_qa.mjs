@@ -361,8 +361,15 @@ test('sim.html Fly/Freestyle, map switching, and Esc leave a race', () => {
   const picker = simSrc.slice(simSrc.indexOf('function openTrackPicker'), simSrc.indexOf('const builder='));
   const mapClick = picker.slice(picker.indexOf('track-maps'), picker.indexOf('track-list [data-tid]'));
   assert.equal(mapClick.includes('setMap('), false, 'browsing map tabs must not load/save a track');
-  assert.ok(picker.includes('setMap(pickerMap,id)'), 'picking a row loads that map+track');
-  assert.ok(picker.includes('leaveRace()'));
+  assert.ok(simSrc.includes('function flyPickedTrack'), 'race rows start a session');
+  assert.ok(picker.includes('flyPickedTrack(pickerMap,id)'), 'picking a row flies that map+track');
+  const flyPick = simSrc.slice(simSrc.indexOf('function flyPickedTrack'), simSrc.indexOf('function flyDailyLine'));
+  assert.ok(flyPick.includes('hideMenuLayer()'));
+  assert.ok(flyPick.includes('toggleStartMenu(false)'));
+  assert.ok(flyPick.includes('sessionLive=true'));
+  assert.ok(flyPick.includes('setMap(mapId,id)'));
+  assert.ok(flyPick.includes('leaveRace()'));
+  assert.ok(flyPick.includes('startFreestyle(mapId)'));
   const esc = simSrc.slice(simSrc.indexOf("if(e.key==='Escape')"), simSrc.indexOf("if(e.key==='Tab')"));
   assert.ok(esc.includes('leaveRace()'));
   assert.ok(simSrc.includes('wantFree') || simSrc.includes('isFreeFlight'));
@@ -377,12 +384,14 @@ test('named tracks are lines; city stays 3-lap; HUD and ghost stay wired', () =>
     'office-under', 'office-rafters', 'office-cubicles', 'office-hallway', 'office-desks',
     'gym-under', 'gym-rafters', 'gym-court', 'gym-bleachers', 'gym-hoops',
     'city-inside', 'city-spins',
+    'backyard-gate', 'backyard-pool', 'backyard-alley', 'backyard-spin',
   ]) {
     assert.equal(isLineTrackId(id), true, id);
   }
   assert.equal(isLineTrackId('living-freestyle'), false);
   assert.equal(isLineTrackId('office-freestyle'), false);
   assert.equal(isLineTrackId('gym-freestyle'), false);
+  assert.equal(isLineTrackId('backyard-freestyle'), false);
   assert.equal(isLineTrackId(0), false);
   assert.equal(isLineTrackId('city-loop'), false);
   assert.ok(simSrc.includes('isLineTrackId'));
@@ -410,6 +419,24 @@ test('named tracks are lines; city stays 3-lap; HUD and ghost stay wired', () =>
   assert.ok(trickLineupText().includes('Ham Spin'));
   assert.equal(TRICK_BY_ID.ham.name, 'Ham Spin');
   assert.ok(simSrc.includes('Ham Spin'));
+});
+
+test('backyard lines exist and picker race click starts a session', () => {
+  const yard = files.filter((t) => t.map === 'backyard' && !t.freestyle);
+  assert.deepEqual(yard.map((t) => t.id), [
+    'backyard-gate', 'backyard-pool', 'backyard-alley', 'backyard-spin',
+  ]);
+  for (const t of yard) {
+    assert.equal(isLineTrackId(t.id), true, t.id);
+    assert.ok(t.gates.length >= 2, t.id + ' gates');
+    const pick = resolveTrackPick('backyard', t.id, files);
+    assert.equal(pick.map, 'backyard');
+    assert.equal(pick.track, t.id);
+    assert.equal(pick.mode, 'race');
+  }
+  assert.ok(simSrc.includes('function flyPickedTrack'));
+  assert.ok(simSrc.includes('flyPickedTrack(pickerMap,id)'));
+  assert.ok(simSrc.includes("Tap a race to fly it"));
 });
 
 test('whoop garage and replay cam stay on sim files', () => {
