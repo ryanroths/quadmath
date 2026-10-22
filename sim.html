@@ -4569,6 +4569,20 @@ function applyDailyLineMod(mod){
     }
   }
 }
+function flyPickedTrack(mapId,id){
+  if(id==null||id==='')return null;
+  if(id==='freestyle'||isFreestyleTrackId(id))return startFreestyle(mapId);
+  hideMenuLayer();
+  leaveRace();
+  if(coach&&coach.isActive())coach.cancel();
+  toggleStartMenu(false);
+  sessionLive=true;
+  setMap(mapId,id);
+  resetQuad();
+  if(feel&&feel.hideFirstRun)feel.hideFirstRun();
+  toast(trackLabel(activeTrackId));
+  return {map:mapId,track:activeTrackId};
+}
 function flyDailyLine(ch){
   const c=ch||dailyLineFor(utcDateId());
   dailyLineLive=true;
@@ -4753,7 +4767,7 @@ function openTrackPicker(startMap){
       return '<button type="button" class="'+on+'" data-tid="'+id+'"><span>'+t.name+'</span><span class="best">'+bestText(id)+'</span></button>';
     }).join('')||'<p>No tracks on this map.</p>';
     const roomBlock=pickerMap==='room'?roomFormHtml():'';
-    showMenuLayer('<h2>Tracks</h2><p>Freestyle is no gates and no timer. Combo / session are local. Other rows are races. Best lap is local.</p>'+
+    showMenuLayer('<h2>Tracks</h2><p>Tap a race to fly it. Freestyle is no gates and no timer. Combo / session are local. Best lap is local.</p>'+
       '<div class="track-maps">'+maps+'</div>'+
       roomBlock+
       '<div class="track-list">'+rows+'</div>'+
@@ -4770,11 +4784,7 @@ function openTrackPicker(startMap){
       b.onclick=()=>{
         const raw=b.dataset.tid;
         const id=raw==='freestyle'||isFreestyleTrackId(raw)?raw:(isLegacyTrackId(raw)?+raw:raw);
-        leaveRace();
-        setMap(pickerMap,id);
-        resetQuad();
-        toast(trackLabel(activeTrackId));
-        render();
+        flyPickedTrack(pickerMap,id);
       };
     });
     bindRoomForm();
@@ -6997,7 +7007,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   crosshairEnabled:()=>crosshairOn,
   setCrosshairOn(v){crosshairOn=!!v;saveCrosshairOn(crosshairOn);applyCrosshair();},
   setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
-  startFreestyle,leaveRace,resolveFly,isFreestyleTrackId,freestyleIdFor,persistableSelection,
+  startFreestyle,flyPickedTrack,leaveRace,resolveFly,isFreestyleTrackId,freestyleIdFor,persistableSelection,
   isLineTrackId,demoLineGhostForShot,ghostVisible:()=>ghostVisible,ghostMesh,
   dailyLineFor,flyDailyLine,dailyLineLive:()=>dailyLineLive,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
