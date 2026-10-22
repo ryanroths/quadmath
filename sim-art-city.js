@@ -1039,6 +1039,7 @@ export function restyleDiveTubes(root, vibe, THREE) {
     if (o.material.emissive) o.material.emissive.setHex(hexNum(vibe.palette.neonA));
     o.material.emissiveIntensity = 0.78;
     if (map) {
+      if (o.material.map !== map) disposeOwnedTex(o.material.map);
       o.material.map = map;
       o.material.emissiveMap = map;
     }
@@ -1102,9 +1103,17 @@ export function applySkyTexture(THREE, skyMesh, vibe) {
       '}',
     ].join('\n'),
   });
+  if (skyMesh.userData.citySkyMat) skyMesh.userData.citySkyMat.dispose();
+  skyMesh.userData.citySkyMat = mat;
   skyMesh.material = mat;
   skyMesh.userData.citySky = true;
   skyMesh.material.needsUpdate = true;
+}
+
+function disposeOwnedTex(t) {
+  if (t && t.isTexture && t.userData && t.userData.looksComposed) {
+    try { t.dispose(); } catch (e) { /* ignore */ }
+  }
 }
 
 export function disposeArtGroup(root) {
@@ -1118,9 +1127,9 @@ export function disposeArtGroup(root) {
     const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
     for (const m of mats) {
       if (!m) continue;
-      if (m.map && m.map.userData && m.map.userData.looksComposed && m.map.dispose) {
-        try { m.map.dispose(); } catch (e) { /* ignore */ }
-      }
+      // Every owned canvas slot (map, emissiveMap, ...). Cached PBR/kit/HDRI textures lack looksComposed.
+      for (const k in m) disposeOwnedTex(m[k]);
+      if (m.uniforms) for (const k in m.uniforms) disposeOwnedTex(m.uniforms[k] && m.uniforms[k].value);
       if (m.dispose) {
         try { m.dispose(); } catch (e) { /* ignore */ }
       }
