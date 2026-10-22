@@ -610,6 +610,8 @@ export async function createLooks(ctx) {
       const pmrem = new THREE.PMREMGenerator(renderer);
       const env = pmrem.fromEquirectangular(tex).texture;
       pmrem.dispose();
+      // PMREM holds the lighting now; drop the raw equirect GPU copy (16MB at 2k).
+      tex.dispose();
       // City paints its own night sky. Assigning the dawn HDRI here is what
       // washed Kenney cars into translucent blue several seconds after load.
       if (!cityKeepsOwnSky()) scene.environment = env;
