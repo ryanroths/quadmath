@@ -2,9 +2,9 @@
 // Visual only. Colliders live in sim-maps.js BACKYARD_PLAY.
 // Generated / CC0 tiling textures. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=59adaea07d88';
+import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=33991c783824';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=a3d287837e89';
+import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=db18471ef96c';
 
 export const BACKYARD_STOCK = Object.freeze({
   turf: 0x3f8a4a,
@@ -183,16 +183,16 @@ function stuccoTex(THREE) {
 
 function blockTex(THREE) {
   return canvasTex(THREE, 256, 256, (g, w, h) => {
-    g.fillStyle = '#8a7a62';
+    g.fillStyle = '#c4b496';
     g.fillRect(0, 0, w, h);
     const bw = 64, bh = 32;
     for (let y = 0, row = 0; y < h + bh; y += bh, row++) {
       const ox = (row % 2) ? bw / 2 : 0;
       for (let x = -bw; x < w + bw; x += bw) {
         const n = hash(row * 17 + ((x + 200) | 0));
-        const r = 150 + (n * 36) | 0;
-        const gg = 132 + (hash(row + x) * 28) | 0;
-        const b = 102 + (hash(x * 3 + row) * 22) | 0;
+        const r = 186 + (n * 28) | 0;
+        const gg = 168 + (hash(row + x) * 22) | 0;
+        const b = 132 + (hash(x * 3 + row) * 18) | 0;
         g.fillStyle = `rgb(${r},${gg},${b})`;
         g.fillRect(x + ox + 1, y + 1, bw - 2, bh - 2);
         g.fillStyle = 'rgba(255,236,210,0.14)';
@@ -456,6 +456,22 @@ function mergeGeos(THREE, list) {
   return out;
 }
 
+function agaveGeo(THREE, r, h, cheap) {
+  const n = cheap ? 10 : 16;
+  const blades = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + (i % 2) * 0.07;
+    const splay = 0.48 + (i % 3) * 0.10;
+    const len = h * (0.78 + (i % 3) * 0.12);
+    const blade = new THREE.BoxGeometry(r * 0.34, len, r * 0.07);
+    blade.translate(0, len * 0.46, 0);
+    blade.rotateZ(splay);
+    blade.rotateY(a);
+    blades.push(blade);
+  }
+  return mergeGeos(THREE, blades);
+}
+
 function placedBox(THREE, w, h, d, x, y, z, ry) {
   const g = new THREE.BoxGeometry(w, h, d);
   g.translate(0, h / 2, 0);
@@ -592,7 +608,7 @@ function makeYardMats(THREE, vibe, quality, budget) {
       map: paverTex(THREE), roughness: 0.82, metalness: 0.04,
     }),
     stucco: heroMat(THREE, 0xf2d4a8, {
-      map: stucco, roughness: 0.86, metalness: 0.01, envMapIntensity: 0.22,
+      map: stucco, roughness: 0.86, metalness: 0.01, envMapIntensity: 0.72,
     }),
     tile: heroMat(THREE, 0xffffff, {
       map: tileTex(THREE), roughness: 0.70, metalness: 0.06,
@@ -601,7 +617,9 @@ function makeYardMats(THREE, vibe, quality, budget) {
       map: woodTex(THREE), roughness: 0.78, metalness: 0.02,
     }),
     shed: heroMat(THREE, hexNum('#6a7470'), { roughness: 0.80, metalness: 0.08 }),
-    cmu: heroMat(THREE, 0xffffff, { map: blockTex(THREE), roughness: 0.90, metalness: 0.02 }),
+    cmu: heroMat(THREE, 0xffffff, {
+      map: blockTex(THREE), roughness: 0.88, metalness: 0.02, envMapIntensity: 0.82,
+    }),
     trim: heroMat(THREE, 0xe2c49a, { roughness: 0.72, metalness: 0.03, envMapIntensity: 0.28 }),
     cap: heroMat(THREE, 0xd8c2a0, { map: stucco, roughness: 0.78, metalness: 0.03 }),
     metal: heroMat(THREE, hexNum('#2a2c30'), { roughness: 0.42, metalness: 0.38, envMapIntensity: 0.55 }),
@@ -680,7 +698,8 @@ function makeYardMats(THREE, vibe, quality, budget) {
     shade: heroMat(THREE, hexNum('#c45a32'), { roughness: 0.78, metalness: 0.02 }),
     pvc: heroMat(THREE, 0xf4f1ea, { roughness: 0.48, metalness: 0.04, envMapIntensity: 0.38 }),
     yellow: heroMat(THREE, hexNum('#e8c04a'), { roughness: 0.62, metalness: 0.04 }),
-    cactus: heroMat(THREE, hexNum('#3a7a3a'), { roughness: 0.86, metalness: 0.0 }),
+    cactus: heroMat(THREE, hexNum('#4a8a3e'), { roughness: 0.82, metalness: 0.0 }),
+    agave: heroMat(THREE, hexNum('#6a9a4a'), { roughness: 0.78, metalness: 0.0, envMapIntensity: 0.55 }),
     red: heroMat(THREE, hexNum('#c45a40'), { roughness: 0.70, metalness: 0.04 }),
     wicker: heroMat(THREE, hexNum('#c4a06a'), { roughness: 0.80, metalness: 0.02 }),
     sky: lockArt(new THREE.MeshBasicMaterial({
@@ -1032,10 +1051,9 @@ function addFenceAndPots(THREE, parent, mats, budget, gates) {
     pot.userData.backyardProcPot = true;
     mark(pot);
     parent.add(pot);
-    const plant = new THREE.Mesh(new THREE.CapsuleGeometry(s[3] * 0.45, s[4] * 0.55, 3, 6), s[2]);
-    plant.position.set(s[0], s[4] + 0.22, s[1]);
-    plant.userData.backyardProcPot = true;
-    plant.userData.backyardProcShrub = true;
+    const plant = new THREE.Mesh(agaveGeo(THREE, s[3] * 1.55, s[4] * 1.15, !budget.glow), mats.agave || mats.cactus);
+    plant.position.set(s[0], s[4] * 0.55, s[1]);
+    plant.userData.backyardProcAgave = true;
     mark(plant);
     parent.add(plant);
   }
@@ -1050,12 +1068,11 @@ function addPatioDress(THREE, parent, mats, budget, gates) {
     body.userData.backyardProcPot = true;
     mark(body);
     parent.add(body);
-    const plant = new THREE.Mesh(new THREE.CapsuleGeometry(pot.r * 0.42, pot.h * 0.55, 3, 6), mats.cactus);
-    plant.position.set(pot.x, pot.h + 0.22, pot.z);
-    plant.userData.backyardProcPot = true;
+    const plant = new THREE.Mesh(agaveGeo(THREE, pot.r * 1.65, pot.h * 1.25, !budget.glow), mats.agave || mats.cactus);
+    plant.position.set(pot.x, pot.h * 0.48, pot.z);
+    plant.userData.backyardProcAgave = true;
     mark(plant);
     parent.add(plant);
-    addLeafCards(THREE, parent, mats, pot.x, pot.h + 0.28, pot.z, Math.max(7, (budget.leaves / 12) | 0), 0.42, 0.38, false, 0.55, 0.68);
   }
 }
 
@@ -1350,7 +1367,6 @@ export function planBackyardKit() {
     sofa: [{ x: P.sofa.x, z: P.sofa.z, s: P.sofa.backH, ry: Math.PI }],
     bushes: [
       { x: -15.25, z: -16.0, s: 1.75 }, { x: 13.0, z: -18.25, s: 1.5 },
-      { x: 8.5, z: 2.75, s: 1.38 }, { x: -8.0, z: 3.25, s: 1.44 },
     ],
     cactus: P.pots.slice(0, 2).map((p) => ({ x: p.x, z: p.z, s: p.h + 0.55 })),
   };

@@ -1699,7 +1699,9 @@ test("Backyard Ryan's Yard is implemented with stucco-tile gates", () => {
   assert.ok(v.lighting.exposure >= 0.62 && v.lighting.exposure <= 0.86);
   assert.ok(v.lighting.sunElevation >= 40 && v.lighting.sunElevation <= 50);
   assert.equal(v.lighting.shadowViewR, 30);
-  assert.ok(v.post.ao >= 0.55);
+  assert.ok(v.looks.hemi >= 0.55);
+  assert.ok(v.looks.env >= 0.9);
+  assert.ok(v.post.ao >= 0.28 && v.post.ao <= 0.42);
   assert.ok(v.post.grain > 0 && v.post.grain < 0.08);
   assert.ok(v.post.vignette > 0.15 && v.post.vignette < 0.34);
   assert.equal(backyardWantsGlow('low'), false);
@@ -1715,6 +1717,7 @@ test('backyard lighting polish: HDRI env+bg, High-only AO, grain, tight sun', ()
   assert.match(looks, /else if\(grain > 0\.001\)/);
   assert.match(looks, /!yard \|\| applied === 'high'/);
   assert.match(looks, /backgroundIntensity = yard \? 0\.30/);
+  assert.match(looks, /environmentIntensity = yard \? 0\.95/);
   assert.match(looks, /scene\.background = env/);
   assert.match(looks, /HDRI_YARD_1K/);
   const sim = readFileSync(join(root, 'sim.html'), 'utf8');
@@ -1740,7 +1743,9 @@ test('Backyard freestyle builds without throwing and the FPV frame is not all bl
   assert.match(yardSrc, /MeshStandardMaterial/);
   assert.match(yardSrc, /InstancedMesh|leafTex|caustic/);
   assert.match(yardSrc, /never abort the FPV render loop/);
-  assert.match(yardSrc, /CapsuleGeometry|LatheGeometry|ExtrudeGeometry/);
+  assert.match(yardSrc, /function agaveGeo/);
+  assert.match(yardSrc, /backyardProcAgave/);
+  assert.match(yardSrc, /CapsuleGeometry|LatheGeometry|ExtrudeGeometry|agaveGeo/);
   const free = freestyleTrack('backyard');
   assert.equal(free.id, freestyleIdFor('backyard'));
   assert.equal(free.gates.length, 0);

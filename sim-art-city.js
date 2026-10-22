@@ -2,7 +2,7 @@
 // Play colliders live in sim-maps.js CITY_PLAY. Nothing from the GPL whoop sim.
 
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { CITY_PLAY } from './sim-maps.js?v=a3d287837e89';
+import { CITY_PLAY } from './sim-maps.js?v=db18471ef96c';
 
 export const RAIN_KEY = 'quadmathSimRain';
 

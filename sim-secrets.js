@@ -4,7 +4,7 @@
 // Stock skin ids / unlocks in sim-retention.js stay frozen.
 
 import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=c43bf3a247a6';
-import { LAYOUT } from './sim-maps.js?v=a3d287837e89';
+import { LAYOUT } from './sim-maps.js?v=db18471ef96c';
 import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=8f9513fb3468';
 
 export const SECRETS_KEY = 'quadmathSimSecrets';
@@ -14,6 +14,24 @@ export const WS_PER_METRE = 3.5;
 export const HINT_U = HINT_M * WS_PER_METRE;
 export const COLLECT_U = 0.82;
 export const WHOOP_R = 0.24;
+// World radius of the gem mesh. Screen size is also capped so a spark in
+// your face never fills the FPV frame (whoop cam can sit 2–4u from patio gems).
+export const SPARK_R = 0.13;
+export const SPARK_MAX_SCREEN = 0.038;
+export const SPARK_NEAR_FADE = 1.2;
+export const SPARK_NEAR_HIDE = 0.35;
+
+export function sparkVisualScale(dist, pulse) {
+  const d = Number.isFinite(dist) ? Math.max(0, dist) : 12;
+  const base = 0.88 + (Number(pulse) || 0) * 0.28;
+  const cap = (d * SPARK_MAX_SCREEN) / SPARK_R;
+  let near = 1;
+  if (d < SPARK_NEAR_HIDE) near = 0.08;
+  else if (d < SPARK_NEAR_FADE) {
+    near = 0.08 + 0.92 * (d - SPARK_NEAR_HIDE) / (SPARK_NEAR_FADE - SPARK_NEAR_HIDE);
+  }
+  return Math.min(base, cap) * near;
+}
 export const SECRET_MAP_IDS = Object.freeze([
   'city', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer',
 ]);
@@ -713,8 +731,8 @@ export function createSecrets(THREE, opts) {
   group.visible = false;
   group.userData.keepInScene = true;
   const dummy = new THREE.Object3D();
-  const geo = new THREE.OctahedronGeometry(0.52, 0);
-  const wispGeo = new THREE.OctahedronGeometry(0.7, 0);
+  const geo = new THREE.OctahedronGeometry(SPARK_R, 2);
+  const wispGeo = new THREE.OctahedronGeometry(SPARK_R * 1.15, 1);
   const popGeo = new THREE.SphereGeometry(0.18, 8, 6);
   const mats = Object.create(null);
   const popMat = new THREE.MeshBasicMaterial({
@@ -750,20 +768,32 @@ export function createSecrets(THREE, opts) {
     if (mats[key]) return mats[key];
     const pair = vibePair(id);
     const col = kind === 'wisp' ? pair.b : pair.a;
-    const m = new THREE.MeshBasicMaterial({
-      color: col, transparent: true, opacity: kind === 'wisp' ? 0.38 : 1,
-      depthWrite: false, toneMapped: false,
-    });
+    const cheap = quality === 'low';
+    const m = cheap
+      ? new THREE.MeshBasicMaterial({
+        color: col, transparent: true, opacity: kind === 'wisp' ? 0.38 : 1,
+        depthWrite: false, toneMapped: false,
+      })
+      : new THREE.MeshStandardMaterial({
+        color: col,
+        emissive: col,
+        emissiveIntensity: kind === 'wisp' ? 0.55 : 0.85,
+        roughness: 0.22,
+        metalness: 0.42,
+        transparent: true,
+        opacity: kind === 'wisp' ? 0.42 : 0.96,
+        depthWrite: false,
+      });
     m.userData.looksSkip = true;
     mats[key] = m;
     return m;
   }
 
-  function writeSpark(i, live, pulse) {
+  function writeSpark(i, live, pulse, dist) {
     const p = sparks[i];
     dummy.position.set(p.x, p.y, p.z);
     dummy.rotation.set(0.4, i * 0.7, 0.2);
-    const s = live ? (1.15 + pulse * 1.4) : 0.0001;
+    const s = live ? sparkVisualScale(dist, pulse) : 0.0001;
     dummy.scale.set(s, s, s);
     dummy.updateMatrix();
     sparkMesh.setMatrixAt(i, dummy.matrix);
@@ -775,11 +805,11 @@ export function createSecrets(THREE, opts) {
     rgb[i * 3 + 2] = tmpC.b * k;
   }
 
-  function writeWisp(i, live, pulse) {
+  function writeWisp(i, live, pulse, dist) {
     const s = secrets[i];
     dummy.position.set(s.x, s.y, s.z);
     dummy.rotation.set(0.2, i * 1.1, 0);
-    const sc = live ? (0.55 + pulse) : 0.0001;
+    const sc = live ? sparkVisualScale(dist, pulse) * 0.72 : 0.0001;
     dummy.scale.set(sc, sc, sc);
     dummy.updateMatrix();
     wispMesh.setMatrixAt(i, dummy.matrix);
@@ -805,8 +835,8 @@ export function createSecrets(THREE, opts) {
     wispMesh.count = Math.max(1, nK);
     group.add(sparkMesh);
     group.add(wispMesh);
-    for (let i = 0; i < nS; i++) writeSpark(i, collected[i] === 0, 0);
-    for (let i = 0; i < nK; i++) writeWisp(i, found[i] === 0, 0.08);
+    for (let i = 0; i < nS; i++) writeSpark(i, collected[i] === 0, 0, 8);
+    for (let i = 0; i < nK; i++) writeWisp(i, found[i] === 0, 0.08, 8);
     sparkMesh.instanceMatrix.needsUpdate = true;
     if (sparkMesh.instanceColor) sparkMesh.instanceColor.needsUpdate = true;
     wispMesh.instanceMatrix.needsUpdate = true;
@@ -854,7 +884,7 @@ export function createSecrets(THREE, opts) {
     tmpC.setHex(vibePair(mapId).a);
     popMat.color.copy(tmpC);
     popMat.opacity = 0.95;
-    writeSpark(i, false, 0);
+    writeSpark(i, false, 0, 8);
     if (sparkMesh) sparkMesh.instanceMatrix.needsUpdate = true;
     playChime(o.muted ? o.muted() : false);
     toastSparks();
@@ -879,7 +909,7 @@ export function createSecrets(THREE, opts) {
     tmpC.setHex(vibePair(mapId).b);
     popMat.color.copy(tmpC);
     popMat.opacity = 1;
-    writeWisp(i, false, 0);
+    writeWisp(i, false, 0, 8);
     if (wispMesh) wispMesh.instanceMatrix.needsUpdate = true;
     playChime(o.muted ? o.muted() : false);
     if (o.toast) o.toast('SECRET — ' + String(sec.name).toUpperCase());
@@ -942,16 +972,20 @@ export function createSecrets(THREE, opts) {
       if (sparkMesh) {
         for (let i = 0; i < nS; i++) {
           const live = collected[i] === 0;
-          const extra = (live && i === nearI) ? pulse * 1.6 : (live ? 0.04 * Math.sin(t * 2.3 + i) : 0);
-          writeSpark(i, live, extra);
+          const p = sparks[i];
+          const dist = Math.hypot(px - p.x, py - p.y, pz - p.z);
+          const extra = (live && i === nearI) ? pulse * 0.8 : (live ? 0.04 * Math.sin(t * 2.3 + i) : 0);
+          writeSpark(i, live, extra, dist);
         }
         sparkMesh.instanceMatrix.needsUpdate = true;
       }
       if (wispMesh) {
         for (let i = 0; i < nK; i++) {
           const live = found[i] === 0;
+          const s = secrets[i];
+          const dist = Math.hypot(px - s.x, py - s.y, pz - s.z);
           const close = live && nearI === -2 - i;
-          writeWisp(i, live, close ? (0.18 + pulse) : 0.06);
+          writeWisp(i, live, close ? (0.12 + pulse) : 0.06, dist);
         }
         wispMesh.instanceMatrix.needsUpdate = true;
       }

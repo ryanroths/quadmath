@@ -5,8 +5,8 @@
 // fails, the procedural meshes already in the scene stay visible. Nothing
 // from the GPL whoop sim.
 
-import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=59adaea07d88';
-import { BACKYARD_PLAY } from './sim-maps.js?v=a3d287837e89';
+import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=33991c783824';
+import { BACKYARD_PLAY } from './sim-maps.js?v=db18471ef96c';
 
 const KIT_ROOT = 'assets/sim-city/';
 
@@ -1045,7 +1045,6 @@ export function planBackyardKitFromPlay(play) {
     sofa: [{ x: P.sofa.x, z: P.sofa.z, s: P.sofa.backH, ry: Math.PI }],
     bushes: [
       { x: -15.25, z: -16.0, s: 1.75 }, { x: 13.0, z: -18.25, s: 1.5 },
-      { x: 8.5, z: 2.75, s: 1.38 }, { x: -8.0, z: 3.25, s: 1.44 },
     ],
     cactus: P.pots.slice(0, 2).map((p) => ({ x: p.x, z: p.z, s: p.h + 0.55 })),
   };

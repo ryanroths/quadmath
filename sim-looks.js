@@ -657,7 +657,7 @@ export async function createLooks(ctx) {
     scene.environment = env;
     scene.background = env;
     const yard = mapLighting && mapLighting.mapId === 'backyard';
-    if ('environmentIntensity' in scene) scene.environmentIntensity = yard ? 0.78 : 0.72;
+    if ('environmentIntensity' in scene) scene.environmentIntensity = yard ? 0.95 : 0.72;
     if ('backgroundIntensity' in scene) scene.backgroundIntensity = yard ? 0.30 : 0.48;
     if ('backgroundBlurriness' in scene) scene.backgroundBlurriness = yard ? 0.05 : 0.08;
     // Align Poly Haven kiara_1_dawn sun with the existing key-light vector.
