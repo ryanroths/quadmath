@@ -1083,11 +1083,8 @@ export async function tryDressBackyardKit(THREE, ctx) {
     };
     // Kenney Nature trees/palms read as lollipops in FPV. Keep the
     // procedural leaf-card ficus and frond palms; kit only dresses hardscape.
-    try {
-      const n = await one(BACKYARD_KIT_CORE.fence, planned.fence, 'fence', 'backyardProcFence');
-      if (gen !== backyardDressGen) return { used: false, stale: true, bytes: 0 };
-      bytes += n;
-    } catch (e) { /* keep proc fence */ }
+    // Pool fence stays procedural: thin black posts + alpha mesh. The Kenney
+    // fence panel hid that run and read as a solid wall.
     try {
       const pots = (planned.pots || []).slice(0, quality === 'low' ? 4 : 8);
       const n = await one(BACKYARD_KIT_CORE.pot, pots, 'pot', 'backyardProcPot');

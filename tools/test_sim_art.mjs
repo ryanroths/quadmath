@@ -569,6 +569,11 @@ test('Kenney CC0 backyard kit is meshopt-compressed and stays off the banned pat
   assert.equal(mentionsBannedAssets(yardSrc), false);
   assert.match(kitSrc, /tryDressBackyardKit/);
   assert.match(kitSrc, /Meshopt-compressed/);
+  assert.equal(
+    /one\(BACKYARD_KIT_CORE\.fence/.test(kitSrc),
+    false,
+    'Kenney fence panel must not hide the pool mesh',
+  );
   assert.equal(backyardKitBytesForQuality('low'), 19612);
   assert.equal(backyardKitBytesForQuality('med'), 81708);
   assert.equal(backyardKitBytesForQuality('high'), 81708);
@@ -1796,6 +1801,9 @@ test("Backyard playground keeps whoop-sized gaps that match Ryan's Yard", () => 
   const yardSrc = readFileSync(join(root, 'sim-art-backyard.js'), 'utf8');
   assert.match(yardSrc, /BACKYARD_PLAY/);
   assert.match(yardSrc, /addPvc|addTree|addPool|addPlayLines/);
+  assert.match(yardSrc, /alphaMap/, 'pool fence uses an alpha mesh');
+  assert.match(yardSrc, /cheapFence/, 'phone Low keeps a cheap fence');
+  assert.match(yardSrc, /i % 2 === 0/, 'closed bays stay every other span');
 });
 
 test('Your Room Pocket Stage is implemented with felt-ring gates', () => {
