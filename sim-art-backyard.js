@@ -2,9 +2,9 @@
 // Visual only. Colliders live in sim-maps.js BACKYARD_PLAY.
 // Generated / CC0 tiling textures. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=6c1b166ec4aa';
+import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=1db6af019018';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=d3bccf5de2eb';
+import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=beb7410560c5';
 
 export const BACKYARD_STOCK = Object.freeze({
   turf: 0x3f8a4a,
@@ -167,7 +167,7 @@ function paverTex(THREE) {
 
 function stuccoTex(THREE) {
   return canvasTex(THREE, 256, 256, (g, w, h) => {
-    fillGrad(g, 0, 0, 0, h, [[0, '#f6e6c8'], [0.55, '#e2c89a'], [1, '#c8ae80']]);
+    fillGrad(g, 0, 0, 0, h, [[0, '#ece4d4'], [0.55, '#d4c8b4'], [1, '#b8ae9a']]);
     g.fillRect(0, 0, w, h);
     for (let i = 0; i < 620; i++) {
       g.fillStyle = hash(i) > 0.5 ? 'rgba(150,120,80,0.12)' : 'rgba(255,244,220,0.22)';
@@ -183,16 +183,16 @@ function stuccoTex(THREE) {
 
 function blockTex(THREE) {
   return canvasTex(THREE, 256, 256, (g, w, h) => {
-    g.fillStyle = '#d8d0c0';
+    g.fillStyle = '#cfc8bc';
     g.fillRect(0, 0, w, h);
     const bw = 64, bh = 32;
     for (let y = 0, row = 0; y < h + bh; y += bh, row++) {
       const ox = (row % 2) ? bw / 2 : 0;
       for (let x = -bw; x < w + bw; x += bw) {
         const n = hash(row * 17 + ((x + 200) | 0));
-        const r = 214 + (n * 22) | 0;
-        const gg = 202 + (hash(row + x) * 18) | 0;
-        const b = 178 + (hash(x * 3 + row) * 16) | 0;
+        const r = 222 + (n * 12) | 0;
+        const gg = 216 + (hash(row + x) * 12) | 0;
+        const b = 204 + (hash(x * 3 + row) * 10) | 0;
         g.fillStyle = `rgb(${r},${gg},${b})`;
         g.fillRect(x + ox + 1, y + 1, bw - 2, bh - 2);
         g.fillStyle = 'rgba(255,246,226,0.22)';
@@ -201,7 +201,7 @@ function blockTex(THREE) {
         g.fillRect(x + ox + bw - 16, y + bh - 10, 12, 6);
       }
     }
-    g.strokeStyle = '#8a7e6c';
+    g.strokeStyle = '#6e6a62';
     g.lineWidth = 3;
     for (let y = 0; y <= h; y += bh) {
       g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
@@ -627,8 +627,9 @@ function makeYardMats(THREE, vibe, quality, budget) {
     paver: heroMat(THREE, 0xffffff, {
       map: paverTex(THREE), roughness: 0.82, metalness: 0.04,
     }),
-    stucco: heroMat(THREE, 0xf6e2bc, {
-      map: stucco, roughness: 0.82, metalness: 0.01, envMapIntensity: 1.02,
+    stucco: heroMat(THREE, 0xe8dcc8, {
+      map: stucco, roughness: 0.82, metalness: 0.01, envMapIntensity: 0.78,
+      emissive: 0xa89e88, emissiveIntensity: 0.16,
     }),
     tile: heroMat(THREE, 0xffffff, {
       map: tileTex(THREE), roughness: 0.70, metalness: 0.06,
@@ -638,7 +639,8 @@ function makeYardMats(THREE, vibe, quality, budget) {
     }),
     shed: heroMat(THREE, hexNum('#6a7470'), { roughness: 0.80, metalness: 0.08 }),
     cmu: heroMat(THREE, 0xffffff, {
-      map: blockTex(THREE), roughness: 0.78, metalness: 0.02, envMapIntensity: 1.12,
+      map: blockTex(THREE), roughness: 0.80, metalness: 0.02, envMapIntensity: 0.90,
+      emissive: 0x9a968c, emissiveIntensity: 0.26,
     }),
     trim: heroMat(THREE, 0xe2c49a, { roughness: 0.72, metalness: 0.03, envMapIntensity: 0.28 }),
     cap: heroMat(THREE, 0xd8c2a0, { map: stucco, roughness: 0.78, metalness: 0.03 }),
@@ -807,6 +809,9 @@ function addSky(THREE, parent, mats) {
   dome.position.y = 10;
   mark(dome, false);
   dome.userData.backyardProcSky = true;
+  // HDRI is the sky on this map. Keep the painted dome as a fallback mesh
+  // but never let it cover kloofendal's clouds.
+  dome.visible = false;
   parent.add(dome);
 }
 
@@ -1301,7 +1306,7 @@ function applyCc0Maps(THREE, mats, quality) {
         t.anisotropy = 8;
         t.userData.looksComposed = true;
         mat[key] = t;
-        if (key === 'map' && mat === mats.stucco) mat.color.setHex(0xf6e2bc);
+        if (key === 'map' && mat === mats.stucco) mat.color.setHex(0xe8dcc8);
         if (key === 'normalMap' && mat.normalScale) mat.normalScale.set(0.85, 0.85);
         if (key === 'roughnessMap') mat.roughness = 1;
         mat.needsUpdate = true;
