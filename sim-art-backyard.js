@@ -37,7 +37,7 @@ export function backyardBudget(applied) {
   if (applied === 'low') {
     return {
       pots: 4, palms: 3, neighbors: 2, stones: 6, glow: false,
-      leaves: 64, fenceMesh: true, tufts: 8, pavers: 8, seams: true,
+      leaves: 64, fenceMesh: true, cheapFence: true, tufts: 8, pavers: 8, seams: true,
       grass: 160, fronds: 24, caustics: false, shadowCasters: false, skyRes: 256,
       hedge: 12, rimTrees: 4,
     };
@@ -248,17 +248,18 @@ function woodTex(THREE) {
   }, 2, 4);
 }
 
-function meshTex(THREE) {
-  return canvasTex(THREE, 64, 64, (g, w, h) => {
-    g.fillStyle = '#2a3036';
-    g.fillRect(0, 0, w, h);
-    g.strokeStyle = '#121416';
-    g.lineWidth = 2;
-    for (let y = -8; y < h + 8; y += 10) {
-      g.beginPath(); g.moveTo(0, y); g.lineTo(w, y + 18); g.stroke();
-      g.beginPath(); g.moveTo(0, y + 18); g.lineTo(w, y); g.stroke();
+function meshTex(THREE, cheap) {
+  const size = cheap ? 32 : 128;
+  const step = cheap ? 8 : 12;
+  return canvasTex(THREE, size, size, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = cheap ? 1.35 : 1.15;
+    for (let y = -step * 2; y < h + step * 2; y += step) {
+      g.beginPath(); g.moveTo(0, y); g.lineTo(w, y + step); g.stroke();
+      g.beginPath(); g.moveTo(0, y + step); g.lineTo(w, y); g.stroke();
     }
-  }, 4, 8);
+  }, cheap ? 5 : 8, cheap ? 6 : 10);
 }
 
 function waterTex(THREE) {
@@ -604,9 +605,27 @@ function makeYardMats(THREE, vibe, quality, budget) {
     trim: heroMat(THREE, 0xe2c49a, { roughness: 0.72, metalness: 0.03, envMapIntensity: 0.28 }),
     cap: heroMat(THREE, 0xd8c2a0, { map: stucco, roughness: 0.78, metalness: 0.03 }),
     metal: heroMat(THREE, hexNum('#2a2c30'), { roughness: 0.42, metalness: 0.38, envMapIntensity: 0.55 }),
-    mesh: heroMat(THREE, 0xffffff, {
-      map: meshTex(THREE), roughness: 0.55, metalness: 0.22, envMapIntensity: 0.4,
-    }),
+    post: heroMat(THREE, 0x0c0c0e, { roughness: 0.40, metalness: 0.42, envMapIntensity: 0.5 }),
+    mesh: lockArt(budget.cheapFence
+      ? new THREE.MeshBasicMaterial({
+        color: 0x0a0a0c,
+        alphaMap: meshTex(THREE, true),
+        transparent: true,
+        alphaTest: 0.42,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+      })
+      : new THREE.MeshStandardMaterial({
+        color: 0x0a0a0c,
+        alphaMap: meshTex(THREE, false),
+        transparent: true,
+        alphaTest: 0.28,
+        side: THREE.DoubleSide,
+        roughness: 0.48,
+        metalness: 0.22,
+        envMapIntensity: 0.35,
+        depthWrite: true,
+      }), { looksSkip: true }),
     leaf: heroMat(THREE, hexNum('#2f7a34'), { roughness: 0.82, metalness: 0.0 }),
     darkLeaf: heroMat(THREE, hexNum('#1e5a24'), { roughness: 0.86, metalness: 0.0 }),
     leafCard: heroMat(THREE, 0xffffff, {
@@ -977,23 +996,24 @@ function addFenceAndPots(THREE, parent, mats, budget, gates) {
   const fn = P.fence;
   const posts = [];
   const panels = [];
+  const cheap = !!budget.cheapFence;
+  const postT = cheap ? 0.05 : 0.042;
+  const meshT = cheap ? 0.016 : 0.01;
   let i = 0;
   for (let z = fn.z0; z <= fn.z1 + 0.05; z += fn.spacing, i++) {
-    posts.push(placedBox(THREE, fn.post, fn.h, fn.post, fn.x, 0, z));
-    posts.push(placedBox(THREE, fn.post + 0.06, 0.10, fn.post + 0.06, fn.x, fn.h, z));
+    posts.push(placedBox(THREE, postT, fn.h, postT, fn.x, 0, z));
+    posts.push(placedBox(THREE, postT + 0.018, 0.035, postT + 0.018, fn.x, fn.h, z));
     if (i % 2 === 0 && z + fn.spacing <= fn.z1 + 0.05) {
       const mid = z + fn.spacing / 2;
       const span = fn.spacing - fn.post;
-      panels.push(placedBox(THREE, fn.meshT, fn.meshH, span, fn.x, fn.meshY, mid));
-      for (let r = 0; r < 5; r++) {
-        posts.push(placedBox(THREE, 0.03, 0.05, span, fn.x + 0.04, fn.meshY + 0.35 + r * 0.68, mid));
-      }
-      for (let c = -2; c <= 2; c++) {
-        posts.push(placedBox(THREE, 0.03, fn.meshH, 0.04, fn.x + 0.04, fn.meshY, mid + c * (span / 5)));
+      panels.push(placedBox(THREE, meshT, fn.meshH, span, fn.x, fn.meshY, mid));
+      if (!cheap) {
+        posts.push(placedBox(THREE, 0.028, 0.028, span, fn.x, fn.meshY + fn.meshH - 0.028, mid));
+        posts.push(placedBox(THREE, 0.028, 0.028, span, fn.x, fn.meshY, mid));
       }
     }
   }
-  const postMesh = addMerged(THREE, parent, posts, mats.metal);
+  const postMesh = addMerged(THREE, parent, posts, mats.post || mats.metal);
   const panelMesh = addMerged(THREE, parent, panels, mats.mesh);
   if (postMesh) postMesh.userData.backyardProcFence = true;
   if (panelMesh) panelMesh.userData.backyardProcFence = true;
