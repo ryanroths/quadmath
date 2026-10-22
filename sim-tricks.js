@@ -17,7 +17,7 @@ export const RATE_START = 0.95;
 export const RATE_END = 0.55;
 export const SETTLE_S = 0.16;
 export const SETTLE_INV_S = 0.42;
-export const MANEUVER_MAX_S = 3.6;
+export const MANEUVER_MAX_S = 4.5;
 export const REC_CAP = 240;
 export const REC_STRIDE = 12;
 export const REC_KEYS = Object.freeze([
@@ -363,7 +363,7 @@ export function makeFeat() {
     vzMin: 0, vzMax: 0,
     tRoll180: 99, tPitch180: 99, tYaw180: 99, tRoll360: 99, tPitch360: 99, tYaw360: 99,
     tRoll90: 99, tPitch90: 99, tYaw90: 99,
-    underN: 0, overN: 0, objNearN: 0, under0: 0, over0: 0,
+    underN: 0, overN: 0, objNearN: 0, objOrbitN: 0, under0: 0, over0: 0,
     bump: 0, seg: 0, oppRY: 0, radMax: 0,
   };
 }
@@ -384,7 +384,7 @@ export function resetFeat(f) {
   f.vzMin = 0; f.vzMax = 0;
   f.tRoll180 = 99; f.tPitch180 = 99; f.tYaw180 = 99; f.tRoll360 = 99; f.tPitch360 = 99; f.tYaw360 = 99;
   f.tRoll90 = 99; f.tPitch90 = 99; f.tYaw90 = 99;
-  f.underN = 0; f.overN = 0; f.objNearN = 0; f.under0 = 0; f.over0 = 0;
+  f.underN = 0; f.overN = 0; f.objNearN = 0; f.objOrbitN = 0; f.under0 = 0; f.over0 = 0;
   f.bump = 0; f.seg = 0; f.oppRY = 0; f.radMax = 0;
   return f;
 }
@@ -409,6 +409,7 @@ export function copyFeat(src, dst) {
   d.tRoll360 = src.tRoll360; d.tPitch360 = src.tPitch360; d.tYaw360 = src.tYaw360;
   d.tRoll90 = src.tRoll90; d.tPitch90 = src.tPitch90; d.tYaw90 = src.tYaw90;
   d.underN = src.underN; d.overN = src.overN; d.objNearN = src.objNearN;
+  d.objOrbitN = src.objOrbitN;
   d.under0 = src.under0; d.over0 = src.over0;
   d.bump = src.bump; d.seg = src.seg; d.oppRY = src.oppRY; d.radMax = src.radMax;
   return d;
@@ -456,12 +457,13 @@ export function featView(f) {
   const under = f.underN / n;
   const over = f.overN / n;
   const obj = f.objNearN / n;
+  const objOrbit = (f.objOrbitN || 0) / n;
   const opp = (f.n && f.oppRY) ? f.oppRY / f.n : 0;
   const front = f.pitch > 0 ? 1 : 0;
   const rad = f.radMax || 0;
   return {
     absP, absR, absY, head, span, drop, follow, against, inv, close, hEnd, meanDot,
-    invFol, invAg, pathP, pathR, pathY, under, over, obj, opp, front, rad,
+    invFol, invAg, pathP, pathR, pathY, under, over, obj, objOrbit, opp, front, rad,
   };
 }
 
@@ -477,7 +479,8 @@ function whyLine(id, f, v, secondId, second) {
     + '  fol=' + v.follow.toFixed(2) + ' ag=' + v.against.toFixed(2)
     + '  span=' + v.span.toFixed(1) + ' hd=' + deg(v.head)
     + '  inv=' + v.inv.toFixed(2) + ' cl=' + v.close.toFixed(2)
-    + '  obj=' + v.obj.toFixed(2) + ' rad=' + v.rad.toFixed(1)
+    + '  obj=' + v.obj.toFixed(2) + ' orb=' + (v.objOrbit || 0).toFixed(2)
+    + ' rad=' + v.rad.toFixed(1)
     + (secondId ? '  (' + secondId + ' ' + second.toFixed(2) + ')' : '');
 }
 
@@ -519,31 +522,35 @@ export function classifyFeat(f, out) {
     atMost(absY, 2.4, 0.7),
   );
   {
-    // Real trippy spin: ≥360° yaw in a short window, tight around a nearby
-    // pole/tree, mostly level. Thresholds from probe logs (open-air yaw punch
-    // obj=0 rad≈21 vs pole spin obj≥0.79 rad≈1.1, Y≈460–630° in ≤1.4s).
-    // Coordinated turns / carves stay under 180° yaw with radMax 40+.
+    // Camera-lock orbit around a nearby pole/tree: ≥360° yaw while circling,
+    // craft stays mostly level, camera pointed at the object (sideways to
+    // velocity). After the 1.25× backyard, a real ficus/palm orbit is R≈4–10
+    // wu (radMax≈8–20, travelH≈25–63, period≈1.4–3.6 s, peak yaw ≈ v/R).
+    // In-place pole spins still pass via the tight-rad term. Coordinated
+    // turns keep follow high; open-air punches have no nearby object.
     _sc.trippy = mul(
       atLeast(absY, TAU, 0.70),
       atLeast(v.pathY, TAU, 0.70),
-      atMost(f.tYaw360, 1.80, 0.50),
-      atLeast(f.peakY, 4.0, 1.5),
-      atMost(absR, 1.40, 0.60),
-      atMost(absP, 1.20, 0.50),
-      atMost(v.pathR, 1.60, 0.70),
-      atMost(v.pathP, 1.40, 0.60),
-      atLeast(f.upMin, 0.55, 0.25),
+      atMost(f.tYaw360, 3.20, 0.80),
+      atLeast(f.peakY, 1.60, 0.70),
+      atMost(absR, 1.80, 0.70),
+      atMost(absP, 1.60, 0.60),
+      atMost(v.pathR, 2.20, 0.90),
+      atMost(v.pathP, 2.00, 0.80),
+      atLeast(f.upMin, 0.45, 0.25),
       atMost(v.inv, 0.12, 0.08),
-      atLeast(v.obj, 0.50, 0.30),
-      atMost(v.rad, 7.0, 2.5),
-      atMost(f.travelH, 14, 6),
+      atLeast(v.objOrbit, 0.45, 0.30),
+      atMost(v.rad, 22, 8),
+      atMost(f.travelH, 80, 24),
+      atMost(v.meanDot, 0.42, 0.20),
+      Math.max(atMost(v.rad, 8.0, 3.0), atMost(v.close, 0.55, 0.18)),
       atLeast(f.dur, 0.55, 0.15),
     );
-    // Ham Spin: inverted yaw spin. Same ≥360° yaw in ≤1.8s + little
-    // roll/pitch/drift as the tightened Trippy, but the craft stays
-    // upside-down the whole window (tilt >135° from level, upZ < −0.70).
-    // Flips/rolls that only pass through inverted have large pitch/roll
-    // and an upright upMax, so they do not score Ham.
+    // Ham Spin: inverted yaw spin. Tight in-place ≥360° yaw in ≤1.8s +
+    // little roll/pitch/drift, but the craft stays upside-down the whole
+    // window (tilt >135° from level, upZ < −0.70). Flips/rolls that only
+    // pass through inverted have large pitch/roll and an upright upMax,
+    // so they do not score Ham. Upright orbits are Trippy, not Ham.
     _sc.ham = mul(
       atLeast(absY, TAU, 0.70),
       atLeast(v.pathY, TAU, 0.70),
@@ -942,6 +949,7 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
   if (d.clr.up < 8) f.underN += 1;
   if (d.clr.over < 8) f.overN += 1;
   if (d.clr.near < 7) f.objNearN += 1;
+  if (d.clr.near < 14) f.objOrbitN += 1;
   if (upZ < f.upMin) f.upMin = upZ;
   if (upZ > f.upMax) f.upMax = upZ;
   if (upZ < -0.35) f.invT += step;

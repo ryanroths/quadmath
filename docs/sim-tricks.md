@@ -48,7 +48,7 @@ site lists both 150 and 50).
 | `cubik` | Cubik's Rube | Intermediate | 350 | 450 | 180° roll → 360° flip → 180° roll, same roll direction. Open air. |
 | `rubik` | Rubik's Cube | Intermediate | 325 | 450 | 180° flip → 360° roll → 180° flip, same pitch direction. Open air. |
 | `ham` | Ham Spin | Intermediate | 300 | 300 | **Inverted yaw spin**: ≥360° yaw in ≤1.8s, little roll/pitch/drift, **upside-down the whole time** (tilt >135° from level). Also called ham. Flips/rolls that only pass through inverted, and upright yaw, are not Ham. |
-| `trippy` | Trippy Spin | Intermediate | 500 | 500 | **Tight yaw around a nearby pole/tree**: ≥360° yaw in a short window, high yaw rate, mostly level (small roll/pitch), low translation radius. Open-air yaw punches and coordinated turns are not Trippy. |
+| `trippy` | Trippy Spin | Intermediate | 500 | 500 | **Camera-lock orbit around a nearby pole/tree**: ≈360° yaw while circling within a reasonable radius (after the 1.25× backyard, about 4–10 wu), craft mostly level, camera pointed at the object. Natural drift is OK. Open-air yaw punches, coordinated turns, and small yaw are not Trippy. |
 
 ## Decision boundaries
 
@@ -99,12 +99,15 @@ Same under → over → under path.
   OK. A flip or roll that only passes through inverted is not Ham — those
   have large pitch/roll and an upright start or exit. Normal upright yaw
   is a Yaw Spin, not Ham.
-- Trippy Spin is a **real spin around a nearby pole/tree**. Same upright
-  high yaw (≥360° accumulated in a short window, peak yaw rate high),
-  but the craft stays **close to an anchor** with a **small translation
-  radius** and stays **mostly level**. A coordinated turn, carve, or
-  slight yaw drift is not a Trippy — those never reach 360° yaw and they
-  translate a large radius.
+- Trippy Spin is a **camera-lock orbit around a nearby pole/tree**. Upright
+  ≥360° yaw while circling, craft **mostly level**, camera pointed at the
+  object (flight is sideways to velocity). After Ryan's Yard scaled 1.25×
+  (ficus trunk r=0.56 wu, planter rOut=3.31), a real orbit is about 4–10 wu
+  from the trunk: period can run ~1.4–3.6 s, yaw rate is just v/R, and the
+  path can drift. Tight in-place pole spins still count.
+- A coordinated turn, carve, or slight yaw is not a Trippy — those stay
+  well under 360° yaw, bank to turn (nose follows the path), or never
+  close a circle around an object.
 - Open-air yaw punch (no object, flying forward) stays a Yaw Spin, or
   scores nothing if roll/pitch leak too much. Do not steal those as Trippy.
 
@@ -124,8 +127,9 @@ Same under → over → under path.
   over the top. Novice Jump Rope, same outdoor points as Powerloop.
 - Roll: ~360° roll, little yaw, little altitude span. A Side Loop has
   both yaw and a loop-sized altitude span, so it is not a Roll.
-- Trippy: **level 360° yaw** tight around a nearby object, not
-  yaw-then-roll, not a completed vertical loop, not a coordinated turn.
+- Trippy: **level 360° yaw** while orbiting a nearby pole/tree with the
+  camera on it, not yaw-then-roll, not a completed vertical loop, not a
+  coordinated turn.
 
 ### Juicy Flick vs Snapback vs Split-S vs Immelmann (skipped)
 
@@ -181,7 +185,8 @@ Start: body rate above a deadband tuned so **Actual/KISS half-stick**
 Inverted hover alone does not start one. A throttle-cut building dive
 (fast downward, modest rate) does not steal the dive spatial detector.
 
-End: rates quiet for a short settle, or a max window (~3.6 s). While
+End: rates quiet for a short settle, or a max window (~4.5 s, long enough
+for a slow camera-lock orbit). While
 **inverted**, settle is longer so a Cradle does not split on a brief
 rate dip.
 
