@@ -1695,11 +1695,47 @@ test("Backyard Ryan's Yard is implemented with stucco-tile gates", () => {
   assert.equal(v.lighting.fogColor, 0xb8d0e4);
   assert.ok(v.looks.env >= 0.36);
   assert.ok(v.looks.sun >= 0.9);
+  assert.ok(v.looks.bg < v.looks.env, 'HDRI background must sit under IBL so the sky is not washed');
+  assert.ok(v.lighting.exposure >= 0.62 && v.lighting.exposure <= 0.86);
+  assert.ok(v.lighting.sunElevation >= 40 && v.lighting.sunElevation <= 50);
+  assert.equal(v.lighting.shadowViewR, 30);
+  assert.ok(v.looks.hemi >= 0.80);
+  assert.ok(v.looks.env >= 1.05);
+  assert.ok(v.lighting.fillIntensity >= 0.40);
+  assert.ok(v.lighting.shadowIntensity > 0.4 && v.lighting.shadowIntensity < 0.75);
+  assert.ok(v.post.ao >= 0.22 && v.post.ao <= 0.36);
+  assert.ok(v.post.grain > 0 && v.post.grain < 0.08);
+  assert.ok(v.post.vignette > 0.15 && v.post.vignette < 0.34);
   assert.equal(backyardWantsGlow('low'), false);
   assert.equal(backyardWantsGlow('med'), true);
   assert.equal(backyardBudget('low').pots < backyardBudget('high').pots, true);
   assert.equal(backyardBudget('low').glow, false);
   assert.equal(backyardBudget('med').glow, true);
+});
+
+test('backyard lighting polish: HDRI env+bg, High-only AO, grain, tight sun', () => {
+  const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
+  assert.match(looks, /uniform float grain/);
+  assert.match(looks, /else if\(grain > 0\.001\)/);
+  assert.match(looks, /!yard \|\| applied === 'high'/);
+  assert.match(looks, /backgroundIntensity = yard \? 0\.30/);
+  assert.match(looks, /environmentIntensity = yard \? 1\.15/);
+  assert.match(looks, /scene\.background = env/);
+  assert.match(looks, /HDRI_YARD_1K/);
+  const sim = readFileSync(join(root, 'sim.html'), 'utf8');
+  assert.match(sim, /function applySunFrustum/);
+  assert.match(sim, /sun\.shadow\.intensity/);
+  assert.match(sim, /ACESFilmicToneMapping/);
+  assert.match(sim, /outputColorSpace=THREE\.SRGBColorSpace/);
+  assert.match(sim, /PCFSoftShadowMap/);
+  assert.match(sim, /applySunFrustum/);
+  const city = readFileSync(join(root, 'sim-art-city.js'), 'utf8');
+  assert.match(city, /ctx\.applySunFrustum/);
+  assert.match(city, /LIGHTING\.shadowViewR/);
+  assert.match(city, /LIGHTING\.shadowIntensity/);
+  assert.equal(vibePost(VIBES.backyard).grain, VIBES.backyard.post.grain);
+  assert.equal(MAP_LOOKS.backyard.bg, VIBES.backyard.looks.bg);
+  assert.equal(MAP_LOOKS.backyard.sun, VIBES.backyard.looks.sun);
 });
 
 test('Backyard freestyle builds without throwing and the FPV frame is not all black', () => {
@@ -1711,7 +1747,10 @@ test('Backyard freestyle builds without throwing and the FPV frame is not all bl
   assert.match(yardSrc, /MeshStandardMaterial/);
   assert.match(yardSrc, /InstancedMesh|leafTex|caustic/);
   assert.match(yardSrc, /never abort the FPV render loop/);
-  assert.match(yardSrc, /CapsuleGeometry|LatheGeometry|ExtrudeGeometry/);
+  assert.match(yardSrc, /function agaveGeo/);
+  assert.match(yardSrc, /backyardProcAgave/);
+  assert.match(yardSrc, /LatheGeometry/);
+  assert.match(yardSrc, /#d8d0c0|#ddd|#e[0-9a-f]{5}/);
   const free = freestyleTrack('backyard');
   assert.equal(free.id, freestyleIdFor('backyard'));
   assert.equal(free.gates.length, 0);

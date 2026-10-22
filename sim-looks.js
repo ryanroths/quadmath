@@ -255,6 +255,7 @@ uniform float barrel;
 uniform float vignette;
 uniform float ca;
 uniform float analog;
+uniform float grain;
 uniform float time;
 uniform float grade;
 uniform vec3 lift;
@@ -286,6 +287,9 @@ void main(){
     col += (n - 0.5) * 0.055;
     col -= sin(vUv.y * 820.0 + time * 6.0) * 0.025;
     col *= vec3(1.04, 0.98, 0.90);
+  } else if(grain > 0.001){
+    float n = fract(sin(dot(vUv * vec2(1240.0, 780.0) + time, vec2(12.9898, 78.233))) * 43758.5453);
+    col += (n - 0.5) * grain;
   }
   if(uvG.x < 0.0 || uvG.x > 1.0 || uvG.y < 0.0 || uvG.y > 1.0) col = vec3(0.0);
   gl_FragColor = vec4(col, 1.0);
@@ -401,6 +405,8 @@ export async function createLooks(ctx) {
   let orbit = { cx: 0, cy: 5, cz: 0, r: 92, h: 22, fov: 62 };
   let cityLighting = null;
   let mapLighting = null;
+  let mapLooksSpec = null;
+  let mapPostSpec = null;
   let skyMesh = null, sunSprite = null, groundMesh = null;
   let composer = null, bloomPass = null, aoPass = null, fpvPass = null, motionPass = null;
   let skyMode = 'hdri';
@@ -439,8 +445,12 @@ export async function createLooks(ctx) {
     fpvPass.uniforms.barrel.value = on ? (yard ? 0 : analog ? 0.18 : 0.12) : 0;
     const mapV = (fpvPass.uniforms.mapVignette && fpvPass.uniforms.mapVignette.value) || 0;
     fpvPass.uniforms.vignette.value = analog ? 0.58 : (on ? (mapV > 0.01 ? mapV : 0.36) : 0);
-    fpvPass.uniforms.ca.value = on ? (analog ? 0.006 : 0.0022) : 0;
+    fpvPass.uniforms.ca.value = on ? (analog ? 0.006 : (yard ? 0.0032 : 0.0022)) : 0;
     fpvPass.uniforms.analog.value = analog ? 1 : 0;
+    if (fpvPass.uniforms.grain) {
+      const grainAmt = (mapPostSpec && mapPostSpec.grain) || 0;
+      fpvPass.uniforms.grain.value = (yard && applied === 'high' && gradeOn && !analog) ? grainAmt : 0;
+    }
     if (fpvPass.uniforms.grade && !gradeOn) fpvPass.uniforms.grade.value = 0;
     if (fpvPass.uniforms.mapVignette && !gradeOn) fpvPass.uniforms.mapVignette.value = 0;
     if (motionPass) motionPass.enabled = on && !!fpv.motionBlur;
@@ -529,6 +539,7 @@ export async function createLooks(ctx) {
         vignette: { value: 0.36 },
         ca: { value: 0.0022 },
         analog: { value: 0 },
+        grain: { value: 0 },
         time: { value: 0 },
         grade: { value: 0 },
         lift: { value: new THREE.Vector3(0, 0, 0) },
@@ -646,9 +657,9 @@ export async function createLooks(ctx) {
     scene.environment = env;
     scene.background = env;
     const yard = mapLighting && mapLighting.mapId === 'backyard';
-    if ('environmentIntensity' in scene) scene.environmentIntensity = yard ? 0.62 : 0.72;
-    if ('backgroundIntensity' in scene) scene.backgroundIntensity = yard ? 0.88 : 0.48;
-    if ('backgroundBlurriness' in scene) scene.backgroundBlurriness = yard ? 0.02 : 0.08;
+    if ('environmentIntensity' in scene) scene.environmentIntensity = yard ? 1.15 : 0.72;
+    if ('backgroundIntensity' in scene) scene.backgroundIntensity = yard ? 0.30 : 0.48;
+    if ('backgroundBlurriness' in scene) scene.backgroundBlurriness = yard ? 0.05 : 0.08;
     // Align Poly Haven kiara_1_dawn sun with the existing key-light vector.
     // kloofendal_48d afternoon sun sits near +X; a small yaw keeps the key light honest.
     const yaw = yard ? 0.85 : 3.55;
@@ -954,8 +965,6 @@ export async function createLooks(ctx) {
     return orbit;
   }
 
-  let mapLooksSpec = null;
-  let mapPostSpec = null;
   function applyMapLooksNow() {
     const spec = mapLooksSpec;
     if (!spec) return;
@@ -1003,7 +1012,8 @@ export async function createLooks(ctx) {
   function applyMapPostNow() {
     const p = presetOf(applied);
     const wantsBloom = p.bloom !== false && (p.bloomScale || 0) > 0;
-    const wantsAo = !!p.ao;
+    const yard = mapLighting && mapLighting.mapId === 'backyard';
+    const wantsAo = !!p.ao && (!yard || applied === 'high');
     const wantsGrade = p.grade !== false && qualityWantsPost();
     const spec = mapPostSpec || {};
     if (bloomPass) bloomPass.enabled = wantsBloom && spec.bloom !== false;
@@ -1031,6 +1041,7 @@ export async function createLooks(ctx) {
         gain: post.gain || [1, 1, 1],
         vignette: post.vignette == null ? 0.34 : post.vignette,
         ao: post.ao == null ? 0.4 : post.ao,
+        grain: post.grain == null ? 0 : post.grain,
         gradeAmt: post.grade === false ? 0 : 1,
         bloom: post.bloom !== false,
       };

@@ -39,6 +39,8 @@ Poly Haven  —  https://polyhaven.com    CC0 1.0
   hdri/kloofendal_48d_partly_cloudy_1k.hdr
       https://polyhaven.com/a/kloofendal_48d_partly_cloudy
       Sunny afternoon, fluffy clouds. 1k only (Low/Med/High).
+      Used as both the scene environment map and the background
+      (ACES Filmic, sRGB, backyard-tuned exposure).
   tex/roof_diff_1k.webp  tex/roof_nor_1k.webp  tex/roof_rough_1k.webp
   tex/roof_diff_512.webp
       roof_09  https://polyhaven.com/a/roof_09

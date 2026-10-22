@@ -10,6 +10,7 @@ import { LAYOUT } from '../sim-maps.js';
 import { MAPS, isFreestyleTrackId, freestyleIdFor } from '../sim-tracks.js';
 import {
   SECRETS_KEY, SECRET_MAP_IDS, SPARK_NAME, HINT_M, HINT_U, WHOOP_R, COLLECT_U,
+  SPARK_R, SPARK_MAX_SCREEN, sparkVisualScale,
   emptySecrets, normalizeSecrets, loadSecrets, saveSecrets, markSpark, markSecret,
   placementsFor, sparkCount, secretCount, catalogTotals, mapProgress, sparksLabel,
   totalProgress, menuSparksText, colliderBoxes, pointClear, pointClearReason,
@@ -175,6 +176,36 @@ test('stock skin ids and unlocks stay frozen; secret skins are extra', () => {
     const blob = (s.name + ' ' + s.vibe).toLowerCase();
     for (const b of banned) assert.equal(blob.includes(b), false, s.id);
   }
+});
+
+test('sparks stay small faceted gems and never fill the screen up close', () => {
+  assert.ok(SPARK_R < 0.28);
+  assert.ok(SPARK_MAX_SCREEN <= 0.06);
+  assert.ok(sparkVisualScale(0.3, 2) < 0.22);
+  assert.ok(sparkVisualScale(0.3, 2) < sparkVisualScale(4, 0));
+  assert.ok(sparkVisualScale(3.7, 0.2) * SPARK_R / 3.7 <= SPARK_MAX_SCREEN + 0.002);
+  assert.ok(sparkVisualScale(12, 0) < 1.05);
+  assert.match(src, /OctahedronGeometry\(SPARK_R, 2\)/);
+  assert.match(src, /sparkVisualScale\(/);
+  const api = createSecrets(THREE, {
+    load: () => emptySecrets(),
+    save() {},
+    toast() {},
+    muted: () => true,
+  });
+  api.attach('backyard', true);
+  api.tick(0, { x: 5, y: 1.47, z: 6.5 }, 0.016);
+  let mesh = null;
+  api.group.traverse((o) => { if (o.isInstancedMesh && !mesh) mesh = o; });
+  assert.ok(mesh, 'spark instanced mesh');
+  const m = new THREE.Matrix4();
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  const scl = new THREE.Vector3();
+  mesh.getMatrixAt(0, m);
+  m.decompose(pos, quat, scl);
+  assert.ok(scl.x < 1.15, 'whoop spark scale ' + scl.x);
+  api.detach();
 });
 
 test('runtime uses instanced meshes, no tick allocations, try/catch guard', () => {

@@ -853,7 +853,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=c5a4d163f20f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=6949873a2853";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=1d0e3b34dab1";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -867,7 +867,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=a5136811f8df";
+} from "./sim-art.js?v=f8e56e17d2f2";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -893,13 +893,13 @@ import {
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
 } from "./sim-tracks.js?v=8f9513fb3468";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=400dd21e79ee";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=d3bccf5de2eb";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=9017daf8a7b6";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=8dfdd7a9fd1a";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=ea0c8355dca3";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -914,7 +914,7 @@ import {
 } from "./sim-build.js?v=fa0942d7ccfb";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=7e1c64dc3fcb";
+} from "./sim-coach.js?v=85e7cfbddbcc";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=5a87f682883c";
@@ -943,7 +943,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=38e6242fb66e";
+} from "./sim-secrets.js?v=9d3d7731d13e";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -2307,10 +2307,10 @@ const ARENA_MID_Y=ARENA.getCenter(new THREE.Vector3()).y;
 // cover the union of the receivers around the pilot and that same disc pushed
 // up-sun by the reach. Drops out of the tunables: a lower sun automatically
 // gets a longer, wider box.
-const SUN_VIEW_R=THREE.MathUtils.clamp(Math.hypot(ARENA_SIZE.x,ARENA_SIZE.z)/12,90,180);
-const SUN_REACH=ARENA_SIZE.y/Math.tan(LIGHTING.sunElevation*Math.PI/180);
-const SUN_R=SUN_VIEW_R+SUN_REACH/2;
-const SUN_DIST=ARENA_SIZE.y+SUN_R*2;
+let SUN_VIEW_R=THREE.MathUtils.clamp(Math.hypot(ARENA_SIZE.x,ARENA_SIZE.z)/12,90,180);
+let SUN_REACH=ARENA_SIZE.y/Math.tan(LIGHTING.sunElevation*Math.PI/180);
+let SUN_R=SUN_VIEW_R+SUN_REACH/2;
+let SUN_DIST=ARENA_SIZE.y+SUN_R*2;
 // horizontal offset from the pilot to the centre of that union
 const _sOff=new THREE.Vector3(sunDir.x,0,sunDir.z).normalize().multiplyScalar(SUN_REACH/2);
 sun.shadow.camera.left=-SUN_R;sun.shadow.camera.right=SUN_R;
@@ -2322,9 +2322,37 @@ sun.shadow.camera.updateProjectionMatrix();
 const _sRight=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),sunDir).normalize();
 const _sUp=new THREE.Vector3().crossVectors(sunDir,_sRight).normalize();
 const _sC=new THREE.Vector3();
-const SUN_TEXEL=(2*SUN_R)/LIGHTING.shadowMapSize;
+let SUN_TEXEL=(2*SUN_R)/LIGHTING.shadowMapSize;
+function applySunFrustum(){
+  const e=Math.max(8,LIGHTING.sunElevation)*Math.PI/180;
+  const a=LIGHTING.sunAzimuth*Math.PI/180;
+  sunDir.set(Math.cos(e)*Math.sin(a),Math.sin(e),Math.cos(e)*Math.cos(a)).normalize();
+  const tight=LIGHTING.shadowViewR!=null;
+  SUN_VIEW_R=tight?LIGHTING.shadowViewR:THREE.MathUtils.clamp(Math.hypot(ARENA_SIZE.x,ARENA_SIZE.z)/12,90,180);
+  const height=LIGHTING.shadowHeight!=null?LIGHTING.shadowHeight:ARENA_SIZE.y;
+  SUN_REACH=height/Math.tan(e);
+  SUN_R=SUN_VIEW_R+SUN_REACH/2;
+  SUN_DIST=height+SUN_R*2;
+  SUN_TEXEL=(2*SUN_R)/Math.max(1,sun.shadow.mapSize.x||LIGHTING.shadowMapSize);
+  _sOff.set(sunDir.x,0,sunDir.z);
+  if(_sOff.lengthSq()>1e-8)_sOff.normalize().multiplyScalar(SUN_REACH/2);
+  else _sOff.set(0,0,0);
+  sun.shadow.camera.left=-SUN_R;sun.shadow.camera.right=SUN_R;
+  sun.shadow.camera.top=SUN_R;sun.shadow.camera.bottom=-SUN_R;
+  sun.shadow.camera.near=tight?0.35:0.5;
+  sun.shadow.camera.far=SUN_DIST*2;
+  sun.shadow.camera.updateProjectionMatrix();
+  sun.shadow.bias=LIGHTING.shadowBias;
+  sun.shadow.normalBias=LIGHTING.shadowNormalBias;
+  if('intensity' in sun.shadow)sun.shadow.intensity=LIGHTING.shadowIntensity==null?1:LIGHTING.shadowIntensity;
+  _sRight.crossVectors(new THREE.Vector3(0,1,0),sunDir).normalize();
+  _sUp.crossVectors(sunDir,_sRight).normalize();
+  if(sunFill)sunFill.position.set(-sunDir.x*400,260,-sunDir.z*400);
+  updateSunShadow();
+}
 function updateSunShadow(){
-  _sC.set(camera.position.x+_sOff.x,ARENA_MID_Y,camera.position.z+_sOff.z);
+  const midY=LIGHTING.shadowHeight!=null?LIGHTING.shadowHeight*0.4:ARENA_MID_Y;
+  _sC.set(camera.position.x+_sOff.x,midY,camera.position.z+_sOff.z);
   _sC.addScaledVector(_sRight,Math.round(_sC.dot(_sRight)/SUN_TEXEL)*SUN_TEXEL-_sC.dot(_sRight));
   _sC.addScaledVector(_sUp,Math.round(_sC.dot(_sUp)/SUN_TEXEL)*SUN_TEXEL-_sC.dot(_sUp));
   sun.target.position.copy(_sC);sun.target.updateMatrixWorld();
@@ -2332,7 +2360,7 @@ function updateSunShadow(){
   if(shadowHelper&&shadowHelper.visible)shadowHelper.update();
 }
 updateSunShadow();
-Object.assign(window._sim,{sun,updateSunShadow}); // lets the frame-time bench drive the shadow box from a fixed viewpoint
+Object.assign(window._sim,{sun,updateSunShadow,applySunFrustum}); // lets the frame-time bench drive the shadow box from a fixed viewpoint
 // mesas (always visible, not part of swap)
 const mesaTex=canvasTex(256,256,(g,s)=>{
   g.fillStyle='#a3673f';g.fillRect(0,0,s,s);
@@ -2707,6 +2735,7 @@ function applyBackyardArt(quality){
     floor:built.floor,
     scene,sun,sunFill,hemi,renderer,LIGHTING,
     bloomPass:looks&&looks.bloomPass,
+    applySunFrustum,
   });
   applyLooksPost('backyard', q);
   const credit=document.querySelector('.sf-credit');
@@ -2938,6 +2967,7 @@ function applyMapLooks(mapId){
   applyVibeLighting({
     THREE,LIGHTING,sun,sunFill,hemi,scene,renderer,skyMesh,
     bloomPass:looks&&looks.bloomPass,
+    applySunFrustum,
   },vibe);
   applyLooksPost(mapId, looks&&looks.applied);
   if(mapId!=='city'&&skyMesh&&skyMesh.userData&&skyMesh.userData.origSkyMat){

@@ -3,7 +3,7 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=ac7186a54ba5';
+import { hexNum } from './sim-art-city.js?v=6c1b166ec4aa';
 export {
   FELT_SCALE, applyFeltMaterial, feltBasic, feltClay, feltEmissive,
   studioPhoneBudget, qualityWantsStudioBloom,
@@ -21,54 +21,54 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=ac7186a54ba5';
+} from './sim-art-city.js?v=6c1b166ec4aa';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget, planLivingKit,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=9d52354cc6db';
+} from './sim-art-living.js?v=ca4b78c1fa39';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=6e587dbdf1b0';
+} from './sim-art-garage.js?v=702121854b9d';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=d6637c1e3809';
+} from './sim-art-warehouse.js?v=0f9a0a732b02';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
   planGymKit,
-} from './sim-art-gym.js?v=bd3d5e05e949';
+} from './sim-art-gym.js?v=b2ba69ec6f47';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget, planOfficeKit,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=22658e13a10e';
+} from './sim-art-office.js?v=e8eb6f6e2518';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=f8f01dc9a842';
+} from './sim-art-trainer.js?v=f70e32c83ec0';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildRyanYard, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
   planBackyardKit,
-} from './sim-art-backyard.js?v=115d7b80c3ad';
+} from './sim-art-backyard.js?v=aa46df06a36b';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=ef42e5cf7d1a';
+} from './sim-art-room.js?v=6400e2d6a661';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
@@ -77,7 +77,7 @@ export {
   tryDressGymKit, gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA,
   tryDressLivingKit, livingKitBytesForQuality, LIVING_KIT_CORE, LIVING_KIT_EXTRA,
   tryDressBackyardKit, backyardKitBytesForQuality, BACKYARD_KIT_CORE, BACKYARD_KIT_EXTRA,
-} from './sim-art-kit.js?v=ce5dad244981';
+} from './sim-art-kit.js?v=93f00c540dd7';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
@@ -265,22 +265,31 @@ export const VIBES = Object.freeze({
       gateA: '#c45a32', gateB: '#c4a882',
     }),
     lighting: Object.freeze({
-      sunColor: 0xfff3c8, sunIntensity: 1.08, fillColor: 0x6aa8e0, fillIntensity: 0.14,
-      hemiSky: 0x5aa0dc, hemiGround: 0x4a7a38, hemiIntensity: 0.42,
-      exposure: 0.62, fogColor: 0xb8d0e4, fogDensity: 0.0014,
-      bloomStrength: 0.14, bloomRadius: 0.24, bloomThreshold: 0.86,
+      sunColor: 0xffe6b0, sunIntensity: 1.18, fillColor: 0xe8d2a8, fillIntensity: 0.48,
+      hemiSky: 0xb4d4e8, hemiGround: 0xd4c09a, hemiIntensity: 0.90,
+      exposure: 0.74, fogColor: 0xb8d0e4, fogDensity: 0.0018,
+      bloomStrength: 0.18, bloomRadius: 0.28, bloomThreshold: 0.88,
       gateEmissive: 1.2, gateEmissiveActive: 1.8,
+      // Phoenix afternoon: raise the key so it matches kloofendal, then
+      // tight-frustum the 2048 map around the whoop instead of the city arena.
+      // Shade-side CMU is backlit from this azimuth — warm fill + high hemi
+      // keep the block tan instead of chocolate.
+      sunElevation: 44, sunAzimuth: 118,
+      shadowViewR: 30, shadowHeight: 12,
+      shadowBias: -0.00018, shadowNormalBias: 0.04,
+      shadowIntensity: 0.58,
     }),
-    looks: Object.freeze({ fog: 0.0014, sun: 1.02, env: 0.55, bg: 0.82, hemi: 0.42 }),
+    looks: Object.freeze({ fog: 0.0018, sun: 1.05, env: 1.15, bg: 0.30, hemi: 0.90 }),
     gates: Object.freeze({ style: 'stucco-tile', keepBrand: false }),
     props: Object.freeze(['PVC gate', 'kidney pool', 'full-yard mesh fence', 'ficus planter', 'west side alley']),
     post: Object.freeze({
       bloom: true, analog: false,
-      lift: Object.freeze([0.008, 0.014, 0.03]),
-      gamma: 0.94,
-      gain: Object.freeze([1.14, 1.12, 0.96]),
-      vignette: 0.38,
-      ao: 0.46,
+      lift: Object.freeze([0.010, 0.012, 0.006]),
+      gamma: 0.96,
+      gain: Object.freeze([1.10, 1.12, 1.02]),
+      vignette: 0.26,
+      ao: 0.28,
+      grain: 0.028,
     }),
   }),
   office: Object.freeze({
@@ -454,6 +463,7 @@ export function vibePost(vibe) {
     gain: p.gain || [1, 1, 1],
     vignette: p.vignette == null ? 0.34 : p.vignette,
     ao: p.ao == null ? 0.4 : p.ao,
+    grain: p.grain == null ? 0 : p.grain,
     gradeAmt: p.grade === false ? 0 : 1,
     bloom: p.bloom !== false,
   };
