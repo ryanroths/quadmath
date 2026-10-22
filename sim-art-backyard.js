@@ -2,9 +2,9 @@
 // Visual only. Colliders live in sim-maps.js BACKYARD_PLAY.
 // Generated / CC0 tiling textures. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=ac7186a54ba5';
+import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=59adaea07d88';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=400dd21e79ee';
+import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=a3d287837e89';
 
 export const BACKYARD_STOCK = Object.freeze({
   turf: 0x3f8a4a,
@@ -1460,7 +1460,9 @@ function restyleBackyardInner(THREE, ctx) {
   hideStockBackyardMeshes(root);
   restyleBackyardShell(THREE, root, vibe, ctx.floor);
   applyVibeLighting(Object.assign({ THREE }, ctx), vibe);
-  if (ctx.sun) {
+  if (ctx.applySunFrustum) {
+    ctx.applySunFrustum();
+  } else if (ctx.sun) {
     ctx.sun.position.set(27.5, 47.5, 22.5);
     if (ctx.sun.target) {
       ctx.sun.target.position.set(2.5, 0, -7.5);

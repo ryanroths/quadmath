@@ -2,7 +2,7 @@
 // Play colliders live in sim-maps.js CITY_PLAY. Nothing from the GPL whoop sim.
 
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { CITY_PLAY } from './sim-maps.js?v=400dd21e79ee';
+import { CITY_PLAY } from './sim-maps.js?v=a3d287837e89';
 
 export const RAIN_KEY = 'quadmathSimRain';
 
@@ -1146,10 +1146,23 @@ export function applyResolvedLighting(ctx, spec) {
     LIGHTING.bloomThreshold = L.bloomThreshold;
     LIGHTING.gateEmissive = L.gateEmissive;
     LIGHTING.gateEmissiveActive = L.gateEmissiveActive;
+    // Backyard (and any later map) can pin a tighter sun frustum. Missing
+    // fields restore the city afternoon defaults so indoor maps do not keep
+    // a 30-unit whoop box after you leave Ryan's Yard.
+    LIGHTING.sunElevation = L.sunElevation != null ? L.sunElevation : 18;
+    LIGHTING.sunAzimuth = L.sunAzimuth != null ? L.sunAzimuth : 118;
+    LIGHTING.shadowBias = L.shadowBias != null ? L.shadowBias : -0.0005;
+    LIGHTING.shadowNormalBias = L.shadowNormalBias != null ? L.shadowNormalBias : 0.02;
+    LIGHTING.shadowViewR = L.shadowViewR != null ? L.shadowViewR : null;
+    LIGHTING.shadowHeight = L.shadowHeight != null ? L.shadowHeight : null;
   }
   if (sun) {
     sun.color.setHex(L.sunColor);
     sun.intensity = L.sunIntensity;
+    if (sun.shadow && LIGHTING) {
+      sun.shadow.bias = LIGHTING.shadowBias;
+      sun.shadow.normalBias = LIGHTING.shadowNormalBias;
+    }
   }
   if (sunFill) {
     sunFill.color.setHex(L.fillColor);
@@ -1189,6 +1202,7 @@ export function applyResolvedLighting(ctx, spec) {
     bloomPass.radius = L.bloomRadius;
     bloomPass.threshold = L.bloomThreshold;
   }
+  if (ctx && typeof ctx.applySunFrustum === 'function') ctx.applySunFrustum();
   return spec;
 }
 
