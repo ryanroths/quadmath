@@ -3,7 +3,7 @@
 // Kenney kit (sim-art-kit.js) swaps floor clutter after first paint.
 // Procedural meshes stay if a mesh fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=2e0d81cf1df4';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=0d87f3b639ef';
 import { OFFICE_PLAY } from './sim-maps.js?v=d3bccf5de2eb';
 
 export const OFFICE_STOCK = Object.freeze({
@@ -312,7 +312,7 @@ export function restyleOfficeShell(THREE, group, vibe, floor) {
     const t = o.geometry && o.geometry.type;
     if (col === OFFICE_STOCK.wall) {
       m.color.setHex(0xfff4d2);
-      m.map = wallTex;
+      swapOwnedMap(m, wallTex);
       m.emissive.setHex(0x000000);
       m.emissiveIntensity = 0;
       m.roughness = 0.94;
@@ -320,16 +320,13 @@ export function restyleOfficeShell(THREE, group, vibe, floor) {
       skipMat(m); n++;
     } else if (col === OFFICE_STOCK.ceil) {
       m.color.setHex(0xffffff);
-      m.map = paperCeilTex(THREE);
+      swapOwnedMap(m, paperCeilTex(THREE));
       m.emissive.setHex(0xfff0c8);
       m.emissiveIntensity = 0.16;
       m.flatShading = true;
       skipMat(m); n++;
     } else if (t === 'PlaneGeometry' && (o === floor || col === OFFICE_STOCK.floor)) {
-      if (m.map && m.map !== floorTex && m.userData && m.userData.looksComposed) {
-        try { m.map.dispose(); } catch (e) { /* ignore */ }
-      }
-      m.map = floorTex;
+      swapOwnedMap(m, floorTex);
       m.color.setHex(0xffffff);
       m.roughness = 0.9;
       m.metalness = 0;
@@ -921,7 +918,7 @@ function restyleOfficeInner(THREE, ctx) {
   let visuals = null;
   if (root) {
     const old = root.getObjectByName('officeArtVisuals');
-    if (old && old.parent) old.parent.remove(old);
+    if (old) disposeArtGroup(old);
     visuals = buildPaperSun(THREE, root, vibe, quality, ctx.gates || OFFICE_KEEP_GATES);
   }
   if (root) root.userData.officeArtQuality = quality;

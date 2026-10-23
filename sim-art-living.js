@@ -3,7 +3,7 @@
 // Kenney kit (sim-art-kit.js) swaps wall clutter after first paint.
 // Procedural meshes stay if a mesh fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=2e0d81cf1df4';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=0d87f3b639ef';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
 import { LIVING_PLAY } from './sim-maps.js?v=d3bccf5de2eb';
 
@@ -354,7 +354,7 @@ export function restyleLivingShell(THREE, group, vibe, floor) {
     const t = o.geometry && o.geometry.type;
     if (col === LIVING_STOCK.wall || (t === 'BoxGeometry' && col === 0xd8cfc4)) {
       m.color.setHex(wallHex);
-      m.map = plaster;
+      swapOwnedMap(m, plaster);
       m.roughness = 0.96;
       m.metalness = 0;
       m.envMapIntensity = 0;
@@ -363,7 +363,7 @@ export function restyleLivingShell(THREE, group, vibe, floor) {
       n++;
     } else if (col === LIVING_STOCK.ceil) {
       m.color.setHex(0xffffff);
-      m.map = ceilTex(THREE);
+      swapOwnedMap(m, ceilTex(THREE));
       m.emissive.setHex(hexNum(vibe.palette.windowOn));
       m.emissiveIntensity = 0.14;
       m.roughness = 0.96;
@@ -372,10 +372,7 @@ export function restyleLivingShell(THREE, group, vibe, floor) {
       skipMat(m);
       n++;
     } else if (t === 'PlaneGeometry' && (col === LIVING_STOCK.wood || o === floor || o.userData.looksSet === 'wood')) {
-      if (m.map && m.map !== walnut && m.userData && m.userData.looksComposed) {
-        try { m.map.dispose(); } catch (e) { /* ignore */ }
-      }
-      m.map = walnut;
+      swapOwnedMap(m, walnut);
       m.color.setHex(0xffffff);
       m.roughness = 0.96;
       m.metalness = 0;
@@ -1000,7 +997,7 @@ function restyleLivingInner(THREE, ctx) {
   let visuals = null;
   if (root) {
     const old = root.getObjectByName('livingArtVisuals');
-    if (old && old.parent) old.parent.remove(old);
+    if (old) disposeArtGroup(old);
     visuals = buildClayParlor(THREE, root, vibe, quality, ctx.gates || LIVING_KEEP_GATES);
   }
   if (ctx.applyLighting !== false && typeof ctx.LIGHTING !== 'undefined') {

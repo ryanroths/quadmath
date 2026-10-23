@@ -3,7 +3,7 @@
 // Kenney kit (sim-art-kit.js) swaps floor clutter after first paint.
 // Procedural meshes stay if a mesh fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=2e0d81cf1df4';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=0d87f3b639ef';
 import { WAREHOUSE_PLAY } from './sim-maps.js?v=d3bccf5de2eb';
 
 export const WAREHOUSE_STOCK = Object.freeze({
@@ -325,7 +325,7 @@ export function restyleWarehouseShell(THREE, group, vibe, floor) {
     const t = o.geometry && o.geometry.type;
     if (col === WAREHOUSE_STOCK.wall) {
       m.color.setHex(0x142430);
-      m.map = wallTex;
+      swapOwnedMap(m, wallTex);
       m.emissive.setHex(hexNum(vibe.palette.neonB));
       m.emissiveIntensity = 0.04;
       m.roughness = 0.86;
@@ -333,17 +333,14 @@ export function restyleWarehouseShell(THREE, group, vibe, floor) {
       skipMat(m); n++;
     } else if (col === WAREHOUSE_STOCK.ceil) {
       m.color.setHex(0x8aa0b0);
-      m.map = ceilTex;
+      swapOwnedMap(m, ceilTex);
       m.emissive.setHex(0x102028);
       m.emissiveIntensity = 0.08;
       m.roughness = 0.9;
       m.metalness = 0.04;
       skipMat(m); n++;
     } else if (t === 'PlaneGeometry' && (o === floor || col === WAREHOUSE_STOCK.floor)) {
-      if (m.map && m.map !== floorTex && m.userData && m.userData.looksComposed) {
-        try { m.map.dispose(); } catch (e) { /* ignore */ }
-      }
-      m.map = floorTex;
+      swapOwnedMap(m, floorTex);
       m.color.setHex(0x9aa4ae);
       m.roughness = 0.92;
       m.metalness = 0.04;
@@ -898,7 +895,7 @@ function restyleWarehouseInner(THREE, ctx) {
   let visuals = null;
   if (root) {
     const old = root.getObjectByName('warehouseArtVisuals');
-    if (old && old.parent) old.parent.remove(old);
+    if (old) disposeArtGroup(old);
     visuals = buildIonNave(THREE, root, vibe, quality, ctx.gates || WAREHOUSE_KEEP_GATES);
   }
   if (root) root.userData.warehouseArtQuality = quality;

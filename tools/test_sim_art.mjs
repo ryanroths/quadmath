@@ -740,6 +740,54 @@ test('city restyle frees every owned geometry/material/texture, keeps shared one
   assert.equal(parent.children.filter((c) => c.name === 'cityArtVisuals').length, 1);
 });
 
+test('indoor restyles free every owned geometry/material/texture, keep shared ones', () => {
+  installDomStub();
+  const RESTYLE = {
+    living: restyleLiving, garage: restyleGarage, gym: restyleGym, office: restyleOffice,
+    room: restyleRoom, trainer: restyleTrainer, warehouse: restyleWarehouse, backyard: restyleBackyard,
+  };
+  const reach = (group) => {
+    const out = new Set();
+    group.traverse((o) => {
+      if (o.geometry) out.add(o.geometry);
+      for (const m of [].concat(o.material || [])) {
+        out.add(m);
+        for (const k in m) if (m[k] && m[k].isTexture && m[k].userData.looksComposed) out.add(m[k]);
+      }
+    });
+    return out;
+  };
+  for (const id of Object.keys(RESTYLE)) {
+    const built = buildMap(THREE, id);
+    const ctx = { vibe: vibeFor(id), quality: 'high', group: built.group, floor: built.floor, plan: built.plan };
+    const first = RESTYLE[id](THREE, ctx);
+    assert.equal(first.error, undefined, id + ' ' + first.error);
+    // Shared stand-ins: cached kit/GLTF geometry, texCache PBR map, scene env.
+    const sharedGeo = new THREE.BoxGeometry(1, 1, 1);
+    const sharedTex = new THREE.Texture();
+    const sharedEnv = new THREE.Texture();
+    const kit = new THREE.InstancedMesh(sharedGeo, new THREE.MeshStandardMaterial({ map: sharedTex }), 2);
+    kit.userData.cityKit = true;
+    first.visuals.add(kit);
+    const owned = reach(built.group);
+    for (const m of owned) if (m.isMeshStandardMaterial) m.envMap = sharedEnv;
+    const shared = [sharedGeo, sharedTex, sharedEnv];
+    const freed = new Set();
+    for (const r of [...owned, ...shared]) r.addEventListener('dispose', () => freed.add(r));
+    RESTYLE[id](THREE, ctx);
+    const kept = reach(built.group);
+    assert.ok(kept.size > 0 && owned.size > kept.size / 2, id + ' resources tracked');
+    for (const r of shared) assert.ok(!freed.has(r), id + ' shared ' + (r.isTexture ? 'texture' : r.type) + ' kept');
+    for (const r of owned) {
+      if (shared.includes(r)) continue;
+      const what = id + ' ' + (r.isTexture ? 'texture' : r.type);
+      if (kept.has(r)) assert.ok(!freed.has(r), what + ' still in use');
+      else assert.ok(freed.has(r), what + ' disposed');
+    }
+    assert.equal(built.group.children.filter((c) => c.name === id + 'ArtVisuals').length, 1, id);
+  }
+});
+
 test('unused GLB-format folder is listed for removal, not loaded', () => {
   const lic = readFileSync(join(root, 'ASSETS-LICENSES.md'), 'utf8');
   assert.match(lic, /Proposed removal \(unused `assets\/Models\/GLB-format\/`/);

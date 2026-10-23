@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Clay/felt furniture on the same AABBs. Felt-ring gates. Bloom off.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=2e0d81cf1df4';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=0d87f3b639ef';
 import { planRoom } from './sim-room.js?v=9017daf8a7b6';
 
 export const ROOM_STOCK = Object.freeze({
@@ -287,21 +287,18 @@ export function restyleRoomShell(THREE, group, vibe, floor) {
     const t = o.geometry && o.geometry.type;
     if (col === ROOM_STOCK.wall) {
       m.color.setHex(0xeee8de);
-      m.map = wallTex;
+      swapOwnedMap(m, wallTex);
       m.emissive.setHex(0x000000);
       m.emissiveIntensity = 0;
       skipMat(m); n++;
     } else if (col === ROOM_STOCK.ceil) {
       m.color.setHex(0xffffff);
-      m.map = ceilTex(THREE);
+      swapOwnedMap(m, ceilTex(THREE));
       m.emissive.setHex(0xffe6c4);
       m.emissiveIntensity = 0.14;
       skipMat(m); n++;
     } else if (t === 'PlaneGeometry' && (o === floor || col === ROOM_STOCK.wood)) {
-      if (m.map && m.map !== floorTex && m.userData && m.userData.looksComposed) {
-        try { m.map.dispose(); } catch (e) { /* ignore */ }
-      }
-      m.map = floorTex;
+      swapOwnedMap(m, floorTex);
       m.color.setHex(0xffffff);
       m.roughness = 0.86;
       m.emissive.setHex(0x000000);
@@ -846,7 +843,7 @@ function restyleRoomInner(THREE, ctx) {
   let visuals = null;
   if (root) {
     const old = root.getObjectByName('roomArtVisuals');
-    if (old && old.parent) old.parent.remove(old);
+    if (old) disposeArtGroup(old);
     const used = ctx.plan || DEFAULT_PLAN;
     const keep = ctx.gates || (used.track && used.track.gates) || ROOM_KEEP_GATES;
     visuals = buildPocketStage(THREE, root, vibe, quality, keep, used);

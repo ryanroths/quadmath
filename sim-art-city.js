@@ -1110,10 +1110,16 @@ export function applySkyTexture(THREE, skyMesh, vibe) {
   skyMesh.material.needsUpdate = true;
 }
 
-function disposeOwnedTex(t) {
+export function disposeOwnedTex(t) {
   if (t && t.isTexture && t.userData && t.userData.looksComposed) {
     try { t.dispose(); } catch (e) { /* ignore */ }
   }
+}
+
+// Shell restyles repaint stock meshes; free the owned canvas they replace.
+export function swapOwnedMap(m, t) {
+  if (m.map !== t) disposeOwnedTex(m.map);
+  m.map = t;
 }
 
 export function disposeArtGroup(root) {
