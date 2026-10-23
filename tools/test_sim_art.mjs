@@ -705,6 +705,41 @@ test('city restyle disposes old art; HDRI and world maps cache; Low skips compos
   assert.equal(group.parent, null);
 });
 
+test('city restyle frees every owned geometry/material/texture, keeps shared ones', () => {
+  installDomStub();
+  const parent = new THREE.Group();
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(40, 8, 6), new THREE.MeshBasicMaterial());
+  const ctx = { vibe: vibeFor('city'), quality: 'high', proceduralGroup: parent, skyMesh: sky, gates: FROZEN_CITY[0] };
+  const first = restyleCity(THREE, ctx);
+  assert.equal(first.error, undefined);
+  // Shared stand-ins: cached kit geometry, texCache PBR map, scene env.
+  const sharedGeo = new THREE.BoxGeometry(1, 1, 1);
+  const sharedTex = new THREE.Texture();
+  const kit = new THREE.Mesh(sharedGeo, new THREE.MeshBasicMaterial({ map: sharedTex }));
+  kit.userData.cityKit = true;
+  first.visuals.add(kit);
+  const owned = new Set();
+  for (const g of [first.visuals, first.dream]) g.traverse((o) => {
+    if (o.geometry && o !== kit) owned.add(o.geometry);
+    for (const m of [].concat(o.material || [])) {
+      owned.add(m);
+      for (const k in m) if (m[k] && m[k].isTexture && m[k].userData.looksComposed) owned.add(m[k]);
+    }
+  });
+  owned.add(sky.material);
+  const sharedEnv = new THREE.Texture();
+  for (const m of owned) if (m.isMeshStandardMaterial) m.envMap = sharedEnv;
+  const freed = new Set();
+  for (const r of owned.add(sharedGeo).add(sharedTex).add(sharedEnv)) r.addEventListener('dispose', () => freed.add(r));
+  assert.ok([...owned].some((m) => m.emissiveMap && owned.has(m.emissiveMap)), 'window emissiveMaps tracked');
+  restyleCity(THREE, ctx);
+  for (const r of owned) {
+    if (r === sharedGeo || r === sharedTex || r === sharedEnv) assert.ok(!freed.has(r), 'shared ' + r.type + ' kept');
+    else assert.ok(freed.has(r), 'owned ' + (r.isTexture ? 'texture' : r.type) + ' disposed');
+  }
+  assert.equal(parent.children.filter((c) => c.name === 'cityArtVisuals').length, 1);
+});
+
 test('unused GLB-format folder is listed for removal, not loaded', () => {
   const lic = readFileSync(join(root, 'ASSETS-LICENSES.md'), 'utf8');
   assert.match(lic, /Proposed removal \(unused `assets\/Models\/GLB-format\/`/);
