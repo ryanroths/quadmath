@@ -694,8 +694,8 @@ test('city restyle disposes old art; HDRI and world maps cache; Low skips compos
   assert.match(looks, /URL\.createObjectURL\(new Blob\(\[buf\]\)\)/);
   assert.match(looks, /texCache\[key\] = \(async function/);
   assert.match(looks, /get composer\(\) \{ return qualityWantsPost\(\) \? composer : null; \}/);
-  assert.match(looks, /gpuHigh: gpuHint\(renderer\)\.high/);
-  assert.match(looks, /const high = !software && \/nvidia\|geforce\|radeon\|amd\|apple m\[1-9\]\/i/);
+  assert.match(looks, /gpu: gpuHint\(renderer\)\.tier/);
+  assert.match(looks, /const tier = gpuTier\(info\)/);
   const group = new THREE.Group();
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial());
   group.add(mesh);

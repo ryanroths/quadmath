@@ -3,7 +3,7 @@
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
-import { resolveAutoQuality } from './sim-touch.js?v=7eff6ead2f5f';
+import { resolveAutoQuality, gpuTier, autoQualityStep } from './sim-touch.js?v=9c2ecc147383';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
@@ -239,12 +239,10 @@ function gpuHint(renderer) {
     const gl = renderer.getContext();
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
     const info = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '') : '';
-    const software = /swiftshader|llvmpipe|software|virtualbox/i.test(info);
-    const high = !software && /nvidia|geforce|radeon|amd|apple m[1-9]/i.test(info);
-    const low = software || (/intel|mali|adreno|apple gpu|iris|uhd|hd graphics/i.test(info) && !high);
-    return { info, low, high };
+    const tier = gpuTier(info);
+    return { info, tier, low: tier === 'low', high: tier === 'high' };
   } catch (e) {
-    return { info: '', low: false };
+    return { info: '', tier: null, low: false, high: false };
   }
 }
 
@@ -396,8 +394,9 @@ export async function createLooks(ctx) {
 
   let choice = loadChoice();
   const mobile = !!(ctx && ctx.isMobile);
+  let autoCap = null; // Auto's downgraded level; kept for the session
   let applied = choice === 'auto'
-    ? resolveAutoQuality({ mobile, gpuLow: gpuHint(renderer).low, gpuHigh: gpuHint(renderer).high })
+    ? resolveAutoQuality({ mobile, gpu: gpuHint(renderer).tier })
     : choice;
   let fpv = loadFpv();
   let lookSpot = null;
@@ -415,7 +414,7 @@ export async function createLooks(ctx) {
   let maxAniso = 8;
   try { maxAniso = renderer.capabilities.getMaxAnisotropy() || 8; } catch (e) { /* ignore */ }
 
-  const fps = { inst: 0, avg: 60, lowMs: 0, samples: [], ready: false, t0: 0, sum: 0 };
+  const fps = { inst: 0, avg: 60, auto: {}, samples: [], ready: false, t0: 0, sum: 0 };
   let firstFrameDone = false;
   let readyResolve = function () {};
   const ready = new Promise(function (r) { readyResolve = r; });
@@ -897,7 +896,7 @@ export async function createLooks(ctx) {
       saveChoice(name);
     }
     const next = name === 'auto'
-      ? resolveAutoQuality({ mobile, gpuLow: gpuHint(renderer).low, gpuHigh: gpuHint(renderer).high })
+      ? autoCap || resolveAutoQuality({ mobile, gpu: gpuHint(renderer).tier })
       : name;
     applied = next;
     const p = presetOf(next);
@@ -916,7 +915,7 @@ export async function createLooks(ctx) {
     try { await applyWorldMaps(); } catch (e) { console.warn('looks PBR', e); }
     applyMapLooksNow();
     if (skyMode === 'gradient') applySkyModeNow();
-    fps.lowMs = 0;
+    fps.auto = {};
     return applied;
   }
 
@@ -1059,7 +1058,8 @@ export async function createLooks(ctx) {
       fpvPass.uniforms.time.value = now * 0.001;
     }
     if (!fps.t0) fps.t0 = now;
-    const inst = fps._last ? 1000 / Math.max(1, now - fps._last) : 60;
+    const dt = fps._last ? now - fps._last : 0;
+    const inst = dt ? 1000 / Math.max(1, dt) : 60;
     fps._last = now;
     fps.inst = inst;
     fps.samples.push(inst);
@@ -1067,13 +1067,8 @@ export async function createLooks(ctx) {
     if (fps.samples.length > 90) fps.sum -= fps.samples.shift();
     fps.avg = fps.sum / fps.samples.length;
     if (choice === 'auto' && now - fps.t0 > 3000) {
-      if (fps.avg < 55) fps.lowMs += (fps._dt || 16);
-      else fps.lowMs = 0;
-      if (fps.lowMs > 3000) {
-        fps.lowMs = 0;
-        if (applied === 'high') setQuality('med', true);
-        else if (applied === 'med') setQuality('low', true);
-      }
+      const down = autoQualityStep(fps.auto, dt, applied);
+      if (down) { autoCap = down; setQuality('auto', true); }
     }
     const hud = document.getElementById('fpsHud');
     if (hud) hud.textContent = Math.round(fps.avg) + ' fps · ' + applied.toUpperCase();

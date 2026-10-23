@@ -154,11 +154,54 @@ export function detectMobile(win) {
   } catch (e) { return false; }
 }
 
+// WebGL UNMASKED_RENDERER string -> 'low' | 'med' | 'high' | null (unknown).
+// Safari masks every Apple chip as "Apple GPU"; treat it as M-series (Auto
+// steps down if it is an old Intel Mac).
+export function gpuTier(info) {
+  const s = String(info || '').toLowerCase();
+  if (!s) return null;
+  if (/swiftshader|llvmpipe|softpipe|software|virtualbox|microsoft basic/.test(s)) return 'low';
+  if (/apple m\d|apple gpu/.test(s)) return 'high';
+  if (/nvidia|geforce|quadro|radeon|\bamd\b/.test(s)) return 'high';
+  if (/intel/.test(s)) return /\bxe\b|\barc\b/.test(s) ? 'med' : 'low';
+  const adreno = s.match(/adreno\D*(\d*)/);
+  if (adreno) return /adreno\W*x\d/.test(s) || +adreno[1] >= 600 ? 'med' : 'low';
+  if (/immortalis|mali-g(7[7-9]|[6-9]\d\d)\b/.test(s)) return 'med';
+  if (/mali|powervr|videocore/.test(s)) return 'low';
+  return null;
+}
+
+// Phones cap at med; unknown phone GPUs stay low.
 export function resolveAutoQuality(info) {
   const i = info || {};
-  if (i.mobile || i.gpuLow) return 'low';
-  if (i.gpuHigh) return 'high';
-  return 'med';
+  const t = i.gpu || (i.gpuLow ? 'low' : i.gpuHigh ? 'high' : null);
+  if (t === 'low') return 'low';
+  if (i.mobile) return t ? 'med' : 'low';
+  return t || 'med';
+}
+
+// Auto downgrade monitor. Feed real frame dt (ms) each frame; returns the
+// level to step down to, or null. Frames that are steady (few >1.5x-median
+// hitches) are display-paced (30 fps iOS Low Power, 50 Hz panels): those
+// may drop high->med but never med->low unless below 24 fps. Jittery
+// sub-55 fps means missed vsyncs (GPU-bound) and steps down a level.
+export function autoQualityStep(s, dt, level) {
+  if (!(dt > 0) || dt > 250) return null; // hidden tab / map-build stall
+  const d = s.dts || (s.dts = []);
+  d.push(dt);
+  if (d.length > 90) d.shift();
+  if (d.length < 30) return null;
+  const med = d.slice().sort((a, b) => a - b)[d.length >> 1];
+  let sum = 0, hitch = 0;
+  for (const x of d) { sum += x; if (x > med * 1.5) hitch++; }
+  const fps = 1000 * d.length / sum;
+  const steady = hitch / d.length < 0.1;
+  const bad = fps < 24 || (fps < 55 && (!steady || level === 'high'));
+  s.lowMs = bad ? (s.lowMs || 0) + dt : 0;
+  if (s.lowMs < 3000) return null;
+  s.lowMs = 0;
+  d.length = 0;
+  return level === 'high' ? 'med' : level === 'med' ? 'low' : null;
 }
 
 export function hasSavedSettings(storage) {
