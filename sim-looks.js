@@ -605,6 +605,7 @@ export async function createLooks(ctx) {
       const pmrem = new THREE.PMREMGenerator(renderer);
       const env = pmrem.fromEquirectangular(tex).texture;
       pmrem.dispose();
+      // PMREM holds the lighting now; drop the raw equirect GPU copy (16MB at 2k).
       tex.dispose();
       // No scene writes here: callers mark the env ready and re-apply, and the
       // resolver keeps City off the dawn IBL (it washed Kenney cars blue).
