@@ -1,13 +1,18 @@
 name: Sim tests
 
-# Runs the Node sim unit suite (tools/test_sim_*.mjs). Those tests were
-# local-only; CI did not execute them. Independent of #220 (stamp-on-main).
-# Ryan: review before adding this as a required check.
+# Runs every Node test file (tools/test_*.mjs plus sim-tracks-test.mjs) and
+# the asset cache-stamp check. Independent of #220 (stamp-on-main).
+# Ryan: review before adding any of these as a required check.
 #
-# tools/test_sim_map_boot.mjs boots every map in headless Chrome and asserts
-# the FPV screenshot is not blank. GitHub-hosted runners have no GPU and no
-# Pillow: install python3-pil, and give Chrome ANGLE/SwiftShader plus a
-# bigger /dev/shm so WebGL can present a first frame.
+# Three jobs so they run in parallel and report separately:
+#   sim-tests     every test file, with the Chrome map boot skipped (fast).
+#   sim-map-boot  tools/test_sim_map_boot.mjs boots every map in headless
+#                 Chrome and asserts the FPV screenshot is not blank (~5 min).
+#                 GitHub-hosted runners have no GPU: give Chrome
+#                 ANGLE/SwiftShader (flags live in the test). three/addons
+#                 load from cdn.jsdelivr.net, so this job needs the network.
+#   asset-stamps  scripts/ci/stamp_asset_cache.py --check. The stamper's own
+#                 unit tests already run in agent-signals.yml (gate-tests).
 
 on:
   pull_request:
@@ -24,6 +29,47 @@ jobs:
   sim-tests:
     name: Test sim modules
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      # Globbed so a new tools/test_*.mjs is picked up without editing this
+      # file. Each file runs on its own; all run even if one fails.
+      - name: Run all Node test files
+        env:
+          SKIP_CHROME_BOOT: '1'
+        run: |
+          shopt -s nullglob
+          files=(tools/test_*.mjs sim-tracks-test.mjs)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::no test files found"
+            exit 1
+          fi
+          failed=()
+          for f in "${files[@]}"; do
+            echo "::group::$f"
+            if node "$f"; then
+              echo "PASS $f"
+            else
+              echo "::error file=$f::test file failed"
+              failed+=("$f")
+            fi
+            echo "::endgroup::"
+          done
+          echo "ran ${#files[@]} file(s), ${#failed[@]} failed"
+          for f in "${failed[@]}"; do echo "FAIL $f"; done
+          [ "${#failed[@]}" -eq 0 ]
+
+  sim-map-boot:
+    name: Boot sim maps in headless Chrome
+    runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
@@ -35,21 +81,35 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install Pillow, Chrome, and software GL
+      - name: Locate Chrome
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends python3-pil xvfb
           if ! command -v google-chrome >/dev/null && ! command -v google-chrome-stable >/dev/null; then
             wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+            sudo apt-get update
             sudo apt-get install -y /tmp/chrome.deb
           fi
           CHROME_BIN="$(command -v google-chrome || command -v google-chrome-stable)"
           "$CHROME_BIN" --version
-          python3 -c "from PIL import Image; print('pillow', Image.__version__)"
           echo "CHROME=$CHROME_BIN" >> "$GITHUB_ENV"
 
-      - name: Run sim tests
+      - name: Boot every map
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
-        run: node --test tools/test_sim_*.mjs
+        run: node --test tools/test_sim_map_boot.mjs
+
+  asset-stamps:
+    name: Check asset cache stamps
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Check first-party asset stamps
+        run: python scripts/ci/stamp_asset_cache.py --check
