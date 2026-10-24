@@ -2,7 +2,7 @@
 // Visual only. Colliders live in sim-maps.js BACKYARD_PLAY.
 // Generated / CC0 tiling textures. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, applyVibeLighting } from './sim-art-city.js?v=2e0d81cf1df4';
+import { hexNum, propClearOfCourse, applyVibeLighting, disposeArtGroup, swapOwnedMap, disposeOwnedTex } from './sim-art-city.js?v=0d87f3b639ef';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
 import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=d3bccf5de2eb';
 
@@ -771,28 +771,28 @@ export function restyleBackyardShell(THREE, group, vibe, floor) {
     const col = m.color ? m.color.getHex() : 0;
     const t = o.geometry && o.geometry.type;
     if (t === 'PlaneGeometry' && o === floor) {
-      m.map = pebble;
+      swapOwnedMap(m, pebble);
       m.color.setHex(0xffffff);
       if (m.roughness != null) m.roughness = 0.88;
       lockArt(m);
       o.receiveShadow = true;
       n++;
     } else if (t === 'PlaneGeometry' && col === BACKYARD_STOCK.pebble) {
-      m.map = paverTex(THREE);
+      swapOwnedMap(m, paverTex(THREE));
       m.color.setHex(0xffffff);
       if (m.roughness != null) m.roughness = 0.82;
       lockArt(m);
       o.receiveShadow = true;
       n++;
     } else if (t === 'PlaneGeometry' && col === BACKYARD_STOCK.turf) {
-      m.map = turf;
+      swapOwnedMap(m, turf);
       m.color.setHex(0xffffff);
       if (m.roughness != null) m.roughness = 0.92;
       lockArt(m);
       o.receiveShadow = true;
       n++;
     } else if (col === BACKYARD_STOCK.cmu) {
-      m.map = pebble;
+      swapOwnedMap(m, pebble);
       m.color.setHex(0xffffff);
       lockArt(m);
       o.receiveShadow = true;
@@ -1300,6 +1300,7 @@ function applyCc0Maps(THREE, mats, quality) {
         if (space != null) t.colorSpace = space;
         t.anisotropy = 8;
         t.userData.looksComposed = true;
+        if (mat[key] !== t) disposeOwnedTex(mat[key]);
         mat[key] = t;
         if (key === 'map' && mat === mats.stucco) mat.color.setHex(0xf6e2bc);
         if (key === 'normalMap' && mat.normalScale) mat.normalScale.set(0.85, 0.85);
@@ -1521,7 +1522,7 @@ function restyleBackyardInner(THREE, ctx) {
   let visuals = null;
   if (root) {
     const old = root.getObjectByName('backyardArtVisuals');
-    if (old && old.parent) old.parent.remove(old);
+    if (old) disposeArtGroup(old);
     visuals = buildRyanYard(THREE, root, vibe, quality, ctx.gates || BACKYARD_KEEP_GATES);
   }
   if (root) root.userData.backyardArtQuality = quality;

@@ -3,7 +3,7 @@
 // Kenney kit (sim-art-kit.js) swaps hero props after first paint.
 // Procedural meshes stay if a GLB fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=2e0d81cf1df4';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=0d87f3b639ef';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
 import { GARAGE_PLAY, garageRackSlabs } from './sim-maps.js?v=d3bccf5de2eb';
 
@@ -421,7 +421,7 @@ export function restyleGarageShell(THREE, group, vibe, floor) {
     const p = o.geometry && o.geometry.parameters || {};
     if (col === GARAGE_STOCK.wall) {
       m.color.setHex(wallHex);
-      m.map = wallTex;
+      swapOwnedMap(m, wallTex);
       m.roughness = 0.78;
       m.metalness = 0.18;
       m.emissive.setHex(hexNum(vibe.palette.neonA));
@@ -429,16 +429,13 @@ export function restyleGarageShell(THREE, group, vibe, floor) {
       skipMat(m); n++;
     } else if (col === GARAGE_STOCK.ceil) {
       m.color.setHex(ceilHex);
-      m.map = ceilTex;
+      swapOwnedMap(m, ceilTex);
       m.emissive.setHex(hexNum(vibe.palette.neonA));
       m.emissiveIntensity = 0.06;
       m.roughness = 0.86;
       skipMat(m); n++;
     } else if (t === 'PlaneGeometry' && (o === floor || col === GARAGE_STOCK.floor)) {
-      if (m.map && m.map !== floorTex && m.userData && m.userData.looksComposed) {
-        try { m.map.dispose(); } catch (e) { /* ignore */ }
-      }
-      m.map = floorTex;
+      swapOwnedMap(m, floorTex);
       m.color.setHex(0xffffff);
       m.roughness = 0.55;
       m.metalness = 0.08;
@@ -1109,7 +1106,7 @@ function restyleGarageInner(THREE, ctx) {
   let visuals = null;
   if (root) {
     const old = root.getObjectByName('garageArtVisuals');
-    if (old && old.parent) old.parent.remove(old);
+    if (old) disposeArtGroup(old);
     visuals = buildVoltStall(THREE, root, vibe, quality, ctx.gates || GARAGE_KEEP_GATES);
   }
   if (root) root.userData.garageArtQuality = quality;

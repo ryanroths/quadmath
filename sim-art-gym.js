@@ -3,7 +3,7 @@
 // Kenney kit (sim-art-kit.js) swaps wall clutter after first paint.
 // Procedural meshes stay if a mesh fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=2e0d81cf1df4';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=0d87f3b639ef';
 import { GYM_PLAY } from './sim-maps.js?v=d3bccf5de2eb';
 
 export const GYM_STOCK = Object.freeze({
@@ -342,7 +342,7 @@ export function restyleGymShell(THREE, group, vibe, floor) {
     const t = o.geometry && o.geometry.type;
     if (col === GYM_STOCK.wall) {
       m.color.setHex(0xe4c8a4);
-      m.map = wallTex;
+      swapOwnedMap(m, wallTex);
       m.emissive.setHex(0xf0b14b);
       m.emissiveIntensity = 0.03;
       m.roughness = 0.9;
@@ -350,16 +350,13 @@ export function restyleGymShell(THREE, group, vibe, floor) {
       skipMat(m); n++;
     } else if (col === GYM_STOCK.ceil) {
       m.color.setHex(0xc4a078);
-      m.map = ceilTex;
+      swapOwnedMap(m, ceilTex);
       m.emissive.setHex(0xf0b14b);
       m.emissiveIntensity = 0.1;
       m.envMapIntensity = 0.1;
       skipMat(m); n++;
     } else if (t === 'PlaneGeometry' && (o === floor || col === GYM_STOCK.floor)) {
-      if (m.map && m.map !== floorTex && m.userData && m.userData.looksComposed) {
-        try { m.map.dispose(); } catch (e) { /* ignore */ }
-      }
-      m.map = floorTex;
+      swapOwnedMap(m, floorTex);
       m.color.setHex(0xf2d8b0);
       m.roughness = 0.72;
       m.metalness = 0.02;
@@ -1032,7 +1029,7 @@ function restyleGymInner(THREE, ctx) {
   let visuals = null;
   if (root) {
     const old = root.getObjectByName('gymArtVisuals');
-    if (old && old.parent) old.parent.remove(old);
+    if (old) disposeArtGroup(old);
     visuals = buildAmberCourt(THREE, root, vibe, quality, ctx.gates || GYM_KEEP_GATES);
   }
   if (root) root.userData.gymArtQuality = quality;

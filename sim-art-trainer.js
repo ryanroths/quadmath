@@ -2,7 +2,7 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Night meet floor, candy tape, gummy PVC frames, candy-torus gates.
 
-import { hexNum, propClearOfCourse } from './sim-art-city.js?v=2e0d81cf1df4';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=0d87f3b639ef';
 
 export const TRAINER_STOCK = Object.freeze({
   wall: 0xc8c4ba,
@@ -260,21 +260,18 @@ export function restyleTrainerShell(THREE, group, vibe, floor) {
     const t = o.geometry && o.geometry.type;
     if (col === TRAINER_STOCK.wall) {
       m.color.setHex(0x2a1830);
-      m.map = wallTex;
+      swapOwnedMap(m, wallTex);
       m.emissive.setHex(0xff4d8d);
       m.emissiveIntensity = 0.06;
       skipMat(m); n++;
     } else if (col === TRAINER_STOCK.ceil) {
       m.color.setHex(0xffffff);
-      m.map = ceilTex;
+      swapOwnedMap(m, ceilTex);
       m.emissive.setHex(0xffe08a);
       m.emissiveIntensity = 0.1;
       skipMat(m); n++;
     } else if (t === 'PlaneGeometry' && (o === floor || col === TRAINER_STOCK.floor)) {
-      if (m.map && m.map !== floorTex && m.userData && m.userData.looksComposed) {
-        try { m.map.dispose(); } catch (e) { /* ignore */ }
-      }
-      m.map = floorTex;
+      swapOwnedMap(m, floorTex);
       m.color.setHex(0xffffff);
       m.roughness = 0.72;
       m.emissive.setHex(0x000000);
@@ -606,7 +603,7 @@ function restyleTrainerInner(THREE, ctx) {
   let visuals = null;
   if (root) {
     const old = root.getObjectByName('trainerArtVisuals');
-    if (old && old.parent) old.parent.remove(old);
+    if (old) disposeArtGroup(old);
     visuals = buildLicoriceGrid(THREE, root, vibe, quality, ctx.gates || TRAINER_KEEP_GATES);
   }
   if (root) root.userData.trainerArtQuality = quality;
