@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim M2 — track data, share codes, splits / missed-gate logic.
 // No physics. City layouts 0 and 1 are frozen so existing ghosts stay valid.
 // New localStorage keys only: quadmathSimCustomTracks, quadmathSimTrack,
@@ -233,10 +234,14 @@ export function resolveSimBoot(query, saved, tracks) {
   };
 }
 
+// Ghost keys carry a version prefix: v3 ghosts are stamped on sim time (the
+// sim-core wiring: a 1 kHz physics clock, not the frame clock). Recordings
+// under the unprefixed keys are left in storage and never read.
+export const GHOST_KEY_PREFIX = 'v3.';
 export function ghostStorageKey(id) {
   const legacy = legacyIndex(id);
-  if (legacy !== null) return 'quadmath_bestGhost_' + legacy;
-  return 'quadmathSimGhost_' + id;
+  if (legacy !== null) return GHOST_KEY_PREFIX + 'quadmath_bestGhost_' + legacy;
+  return GHOST_KEY_PREFIX + 'quadmathSimGhost_' + id;
 }
 
 export function bestLapStorageKey(id) {

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // quadphysics.js — QuadMath sim physics core v2
 // Steps 1-3: four-motor model + mixer, simulated FC rate loop (PID+FF), rotational inertia.
 // Self-contained ES module. SI units. Body frame: X forward, Y left, Z up (prop thrust axis).
@@ -583,12 +584,20 @@ export class QuadPhysics {
     this._toThr = throttle || 0;
     // FF impulse is kf·Δ over a fixed 16 ms window so 144 fps gets the same
     // stick-step kick as 60. Stick itself still arrives at the end of this
-    // frame — interpolation only, no extra tau.
+    // frame — interpolation only, no extra tau. A change that arrives while a
+    // window is still running carries the part not yet delivered into the new
+    // window, so the impulse is kf·ΣΔ whether the setpoint moves once a frame
+    // or every 4 ms (the page's input poll, sim-core-adapter.js).
     const dR = this._toSp.roll - this._fromSp.roll;
     const dP = this._toSp.pitch - this._fromSp.pitch;
     const dY = this._toSp.yaw - this._fromSp.yaw;
     if (dR || dP || dY) {
-      this._ffD = { roll: dR / FF_WINDOW_S, pitch: dP / FF_WINDOW_S, yaw: dY / FF_WINDOW_S };
+      const left = Math.max(0, this._ffLeft);
+      this._ffD = {
+        roll: (dR + this._ffD.roll * left) / FF_WINDOW_S,
+        pitch: (dP + this._ffD.pitch * left) / FF_WINDOW_S,
+        yaw: (dY + this._ffD.yaw * left) / FF_WINDOW_S,
+      };
       this._ffLeft = FF_WINDOW_S;
     }
     const pdt = this.physicsDt;
@@ -630,12 +639,14 @@ export class QuadPhysics {
     if (this.armed) {
       // Scheduled 16 ms FF. Yaw uses it only on interpolated frames so a
       // physics-Hz 0→8 step keeps the 70–160 ms rise pin; 60/144 fps get
-      // the same kick as roll/pitch.
+      // the same kick as roll/pitch. windowedYawFF: a caller that steps one
+      // physics tick at a time (sim.html's 1 kHz js core) has no interpolated
+      // frames and asks for the window directly.
       let dRoll, dPitch, dYaw;
       if (this._ffLeft > 0) {
         dRoll = this._ffD.roll;
         dPitch = this._ffD.pitch;
-        if (this._interpInputs) dYaw = this._ffD.yaw;
+        if (this._interpInputs || this.windowedYawFF) dYaw = this._ffD.yaw;
         this._ffLeft -= dt;
       }
       r = this.pid.roll.update(sp.roll, this.omega.x, this.airborne, dt, dRoll);

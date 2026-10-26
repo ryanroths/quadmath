@@ -352,7 +352,7 @@ test('sim.html wires W2 sliders, HUD voltage, and keeps old localStorage keys', 
   for (const k of [
     'ryflyRates', 'ryflyDroneType', 'ryflyCamCustom', 'ryflyMusicVol',
     'ryflyMusicOn',
-    'quadmath_bestLap_', 'quadmath_bestGhost_', 'quadmath_pilotName', BUILD_KEY,
+    'quadmath_bestLap_', 'ghostStorageKey(', 'quadmath_pilotName', BUILD_KEY,
   ]) {
     assert.ok(simSrc.includes(k), `must keep reading old key ${k}`);
   }
