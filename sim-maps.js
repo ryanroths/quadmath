@@ -5,7 +5,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=84e47aee7135';
+import { planRoom } from './sim-room.js?v=7fe465c27a92';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).

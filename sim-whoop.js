@@ -9,7 +9,10 @@
 import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=58e19554acd5';
 
 export const WHOOP_KEY = 'quadmathSimWhoop';
-export const PHYSICS_VER = 2;
+// 3: the fixed 1 kHz cores, the js core and ?core=bf (Betaflight 4.5.1 in
+// sim-core), with sim-time input; 2 ran on frame time. sim-retention.js
+// PHYS_VER (what the leaderboard Worker accepts) is the same number.
+export const PHYSICS_VER = 3;
 export const WHOOP_FEEL_VER = 3; // bump: wash + drafts default Off; migrate once
 export const GHOST_FORMAT_V = 1;
 

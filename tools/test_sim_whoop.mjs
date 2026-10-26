@@ -16,6 +16,7 @@ import {
   tagGhost, ghostSamples, ghostPhys,
 } from '../sim-whoop.js';
 import { ghostPayloadError, makePaceGhost } from '../sim-tracks.js';
+import { PHYS_VER } from '../sim-retention.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const simSrc = existsSync(join(root, 'sim.html')) ? readFileSync(join(root, 'sim.html'), 'utf8') : '';
@@ -196,22 +197,23 @@ test('propwash wobbles on a dive/chop through own wash; drafts grow near walls w
 
 test('ghosts stay v:1 kinematic; phys tag is additive and optional', () => {
   assert.equal(GHOST_FORMAT_V, 1);
-  assert.equal(PHYSICS_VER, 2);
+  assert.equal(PHYSICS_VER, 3);
+  assert.equal(PHYS_VER, PHYSICS_VER, 'the Worker accepts what the page tags');
   const samples = [[0, 0, 1, 0, 0, 0, 0, 1], [100, 1, 1, -1, 0, 0, 0, 1]];
   const old = { v: 1, track: 0, name: 'OLD', lapTime: 1000, samples };
   assert.equal(ghostPayloadError(old, 0), null);
   const tagged = tagGhost({ track: 0, name: 'NEW', lapTime: 1000, samples });
   assert.equal(tagged.v, 1);
-  assert.equal(tagged.phys, 2);
+  assert.equal(tagged.phys, PHYSICS_VER);
   assert.equal(ghostPayloadError(tagged, 0), null);
   assert.equal(ghostPayloadError({ ...old, phys: 2, feel: 2 }, 0), null);
   assert.deepEqual(ghostSamples(old), samples);
   assert.deepEqual(ghostSamples(samples), samples);
   assert.equal(ghostPhys(old), null);
-  assert.equal(ghostPhys(tagged), 2);
+  assert.equal(ghostPhys(tagged), PHYSICS_VER);
   const pace = makePaceGhost([{ x: 0, y: 2, z: 0 }, { x: 4, y: 2, z: -6 }], { track: 'living-sofa', speed: 5, hz: 6, laps: 1 });
   assert.equal(pace.v, 1);
-  assert.equal(pace.phys, 2);
+  assert.equal(pace.phys, PHYSICS_VER);
   assert.equal(ghostPayloadError(pace, 'living-sofa'), null);
 });
 

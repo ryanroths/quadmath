@@ -865,7 +865,7 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=82d84c60ca22";
+} from "./sim-whoop.js?v=bd6b4b885629";
 import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=ed4ee91304b7";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
@@ -880,7 +880,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=def11d21f6f1";
+} from "./sim-art.js?v=5509489bb680";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -905,14 +905,14 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=1998cc923073";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=563256ba427e";
+} from "./sim-tracks.js?v=11ec0604e064";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=1455b3d51c73";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=84e47aee7135";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=c949fb0d4eeb";
+} from "./sim-room.js?v=7fe465c27a92";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=eb7fe94f8fd0";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -927,7 +927,7 @@ import {
 } from "./sim-build.js?v=58e19554acd5";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=39a805aef9c6";
+} from "./sim-coach.js?v=6d6e23275a27";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=1b98ac6fc7bb";
@@ -950,13 +950,13 @@ import {
   loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   defaultWhoopKit,
-} from "./sim-retention.js?v=303af6adaca7";
+} from "./sim-retention.js?v=329eac4d694b";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=3a1037531882";
+} from "./sim-secrets.js?v=969d6aedb1be";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -6312,7 +6312,7 @@ function openWhoopCard(){
 
 // ---------- ghost sharing v1 ----------
 // Format (version-tagged for future changes):
-//   {v:1, phys?:2, track:0|1|id, lapTime:ms, name:string, samples:[[t,x,y,z,qx,qy,qz,qw],...]}
+//   {v:1, phys?:PHYSICS_VER, track:0|1|id, lapTime:ms, name:string, samples:[[t,x,y,z,qx,qy,qz,qw],...]}
 // Samples are wall-clock poses, not physics-step dumps. The 500/1000 Hz feel
 // pass and W2 whoop effects do not change this, so hosted ghosts and old
 // localStorage ghosts still replay. Do not bump v for a physics-feel change —

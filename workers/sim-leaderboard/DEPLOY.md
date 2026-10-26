@@ -103,7 +103,8 @@ Anti-cheat on POST `/api/submit`:
 - `week` must be the current ISO week; the previous week is accepted
   only for 36 hours after Monday 00:00 UTC.
 - Board GET filters by that week's track id.
-- Ghost `phys` must equal current physics version (2).
+- Ghost `phys` must equal current physics version (`PHYS_VER` in
+  `sim-retention.js`, 3 since the fixed 1 kHz cores).
 - Class must match submitted build `frameMm`; speeds use that class cap.
 - Generated pace-bot ghosts are rejected.
 - Pilot names are sanitized (Unicode letters, length cap). First browser
