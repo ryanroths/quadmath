@@ -147,6 +147,7 @@ export function emptyState() {
     armed: false, airborne: false, clearance: 0, flightMode: 'angle',
     attitude: { roll: 0, pitch: 0 }, motorOutputs: [0, 0, 0, 0],
     totalThrustAbsN: 0, twr: 0, battV: null, soc: null, armingDisableFlags: 0,
+    crashFlip: false,
   };
 }
 
@@ -267,21 +268,42 @@ export const armingFlagNames = (flags) => ARMING_FLAGS.filter((_, bit) => flags 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const us = (v) => Math.round(clamp(1500 + 500 * v, 1000, 2000));
 
+// The aux lines the bf core flies with: the owner's Air65 radio layout (the
+// diff of 2026-10-23, quadmath-sim-core configs/air65-ryfly-2026-10-23.txt:
+// ARM on AUX1, ANGLE on AUX2, BEEPER and FLIP OVER AFTER CRASH on AUX3), plus
+// HORIZON on AUX4, a channel that layout leaves free, so the page's three
+// flight modes all reach Betaflight. Each is on at 1700..2100.
+export const BF_AUX_LINES = [
+  'aux 0 0 0 1700 2100 0 0',
+  'aux 1 1 1 1700 2100 0 0',
+  'aux 2 13 2 1700 2100 0 0',
+  'aux 3 35 2 1700 2100 0 0',
+  'aux 4 2 3 1700 2100 0 0',
+];
+
+// Every diff the bf core loads flies on BF_AUX_LINES: the page drives AUX1..AUX4
+// from its own controls, not from the pilot's radio switches, so a diff's own
+// aux lines are dropped (a PREARM or a moved ARM would otherwise never see its
+// channel) and BF_AUX_LINES go on the end.
+export function withPageAux(diff) {
+  const lines = String(diff || '').split(/\r\n|\r|\n/).filter((l) => !/^\s*aux\s/i.test(l));
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  return [...lines, ...BF_AUX_LINES].join('\n') + '\n';
+}
+
 // RC channels for core.input(), function order: roll, pitch, yaw, throttle,
-// AUX1..AUX12. The sticks pass 1:1 (stick forward is pitch above 1500; the
-// throttle 0..1 is 1000..2000). The aux layout is the one sim-core adds to a
-// diff with no ARM box (cli-policy.js): ARM on AUX1, ANGLE on AUX2, HORIZON on
-// AUX3, FLIP OVER AFTER CRASH on AUX4, each on at 1700..2100.
+// AUX1..AUX12, on BF_AUX_LINES. The sticks pass 1:1 (stick forward is pitch
+// above 1500; the throttle 0..1 is 1000..2000).
 export function bfChannels(sample, aux) {
   const ch = new Array(16).fill(1000);
   ch[0] = us(sample.r);
   ch[1] = us(sample.p);
   ch[2] = us(sample.y);
   ch[3] = aux.holdThrottle ? 1000 : Math.round(1000 + 1000 * clamp(sample.t, 0, 1));
-  ch[4] = aux.arm ? 2000 : 1000;
-  ch[5] = aux.mode === 'angle' ? 2000 : 1000;
-  ch[6] = aux.mode === 'horizon' ? 2000 : 1000;
-  ch[7] = aux.turtle ? 2000 : 1000;
+  ch[4] = aux.arm ? 2000 : 1000;                      // AUX1 ARM
+  ch[5] = aux.mode === 'angle' ? 2000 : 1000;         // AUX2 ANGLE
+  ch[6] = aux.turtle ? 2000 : 1000;                   // AUX3 FLIP OVER AFTER CRASH (and BEEPER)
+  ch[7] = aux.mode === 'horizon' ? 2000 : 1000;       // AUX4 HORIZON
   return ch;
 }
 
@@ -290,12 +312,21 @@ export function bfChannels(sample, aux) {
 // world { floorZ, boxes, triggers } in module metres.
 export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
   const sim = await SimCore.load(wasm, { trace: false });
-  let config = { diff, plant: airframe, world };
+  let config = { diff: withPageAux(diff), plant: airframe, world };
   const report = sim.configure(config);
   const clock = new InputClock();
   const link = new RadioLink(sim);
   const aux = { arm: false, mode: 'angle', turtle: false, holdThrottle: false };
   let holdUntilUs = 0;
+  // Turtle: null, or the step it is on (see startTurtle) and when it began.
+  let turtle = null;
+  let turtleAtUs = 0;
+  let uprightAtUs = null;
+  const upZ = () => {
+    const [, x, y] = sim.state.quat;
+    return 1 - 2 * (x * x + y * y);
+  };
+  const toTurtle = (phase) => { turtle = phase; turtleAtUs = sim.simTimeUs; uprightAtUs = null; };
   // A pose sent by respawn() or teleport() lands on the next tick; until a
   // tick has run, getState() reports it rather than the pose it replaces.
   let pendingPose = null;
@@ -311,6 +342,8 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     link.reset(sim);
     aux.arm = false;
     aux.holdThrottle = false;
+    aux.turtle = false;
+    turtle = null;
   };
   const core = {
     kind: 'bf',
@@ -339,13 +372,103 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     // Arm intent drives AUX1; Betaflight decides. holdThrottle sends the
     // throttle low with it until Betaflight has armed or 200 ms have passed,
     // so a throttle-rise auto-arm meets Betaflight's low-throttle check.
+    // A disarm also ends a turtle.
     setArm(on, { holdThrottle = false } = {}) {
       aux.arm = !!on;
       aux.holdThrottle = !!on && holdThrottle;
       holdUntilUs = sim.simTimeUs + 200_000;
+      if (!on && turtle) {
+        aux.turtle = false;
+        turtle = null;
+      }
     },
     setMode(mode) { aux.mode = mode; },
     setTurtle(on) { aux.turtle = !!on; },
+    // Turtle is Betaflight's own crash flip, FLIP OVER AFTER CRASH on AUX3.
+    // Betaflight enters it only when it arms with that switch on, and leaves
+    // it only on a disarm (fc/core.c tryArm, disarm), so the page runs the
+    // switch the way a pilot would:
+    //   'disarm'  armed when it began: AUX1 low, AUX3 high, until disarmed;
+    //   'arm'     AUX1 high, throttle held low, until armed in crash flip;
+    //   'flip'    the roll and pitch sticks drive crash flip, until upright
+    //             for 150 ms (a disarm mid-roll lets it roll on over);
+    //   'rearm'   AUX3 low and AUX1 low (that disarm ends crash flip), until
+    //             the pilot's throttle is low and Betaflight shows no arming
+    //             flag, then AUX1 high: armed to fly. (Its attitude estimate
+    //             can read the quad tilted for a moment after the flip, and
+    //             AUX1 high on any flag latches ARM_SWITCH until AUX1 drops.)
+    get turtlePhase() { return turtle; },
+    startTurtle() {
+      if (turtle) return;
+      aux.turtle = true;
+      aux.holdThrottle = false;
+      if (sim.fc.armed) {
+        aux.arm = false;
+        toTurtle('disarm');
+      } else {
+        aux.arm = true;
+        aux.holdThrottle = true;
+        holdUntilUs = sim.simTimeUs + 200_000;
+        toTurtle('arm');
+      }
+    },
+    // Once per input sample, before input(). throttleLow: the pilot's throttle
+    // is low enough to arm. Returns what changed: 'flip' (in crash flip),
+    // 'upright', 'rearm' (AUX1 back high), 'refused' (Betaflight did not arm
+    // into crash flip; the reason is in armingDisableFlags), 'ended'
+    // (Betaflight disarmed during the flip), or null.
+    stepTurtle(throttleLow) {
+      const fc = sim.fc;
+      const sinceUs = sim.simTimeUs - turtleAtUs;
+      switch (turtle) {
+        case 'disarm':
+          if (!fc.armed) {
+            aux.arm = true;
+            aux.holdThrottle = true;
+            holdUntilUs = sim.simTimeUs + 200_000;
+            toTurtle('arm');
+          }
+          return null;
+        case 'arm':
+          if (fc.armed && fc.crashFlip) {
+            toTurtle('flip');
+            return 'flip';
+          }
+          if (sinceUs > 400_000) {
+            aux.turtle = false;
+            aux.arm = false;
+            aux.holdThrottle = false;
+            turtle = null;
+            return 'refused';
+          }
+          return null;
+        case 'flip':
+          if (!fc.armed) {
+            aux.turtle = false;
+            aux.arm = false;
+            turtle = null;
+            return 'ended';
+          }
+          if (upZ() <= 0.9) uprightAtUs = null;
+          else if (uprightAtUs === null) uprightAtUs = sim.simTimeUs;
+          else if (sim.simTimeUs - uprightAtUs >= 150_000) {
+            aux.turtle = false;
+            aux.arm = false;
+            toTurtle('rearm');
+            return 'upright';
+          }
+          return null;
+        case 'rearm':
+          if (!fc.armed && throttleLow && (fc.armingDisableFlags & ~(1 << 25)) === 0) {
+            aux.arm = true;
+            turtle = null;
+            return 'rearm';
+          }
+          return null;
+        default:
+          return null;
+      }
+    },
     // want: whether the radio link should be up (false while calibrating).
     // onEvent(e), if given, is called for each event as it happens: a tick
     // that enters a trigger ends sim.advance() early, so a portal's teleport
@@ -405,7 +528,7 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     },
     // A new CLI diff on the same world: configure again (Betaflight reboots).
     loadDiff(text) {
-      config = { ...config, diff: text };
+      config = { ...config, diff: withPageAux(text) };
       const r = sim.configure(config);
       pending = [];
       rebooted();
@@ -445,6 +568,7 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
       out.battV = fc.vbat;
       out.soc = s.soc;
       out.armingDisableFlags = fc.armingDisableFlags;
+      out.crashFlip = !!fc.crashFlip;
       return out;
     },
   };

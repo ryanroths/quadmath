@@ -853,7 +853,7 @@ import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAUL
 import {
   WS as CORE_WS, TICK_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, armingFlagNames,
-} from "./sim-core-adapter.js?v=5713ab07df4e";
+} from "./sim-core-adapter.js?v=f9b62d419b73";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
@@ -4161,6 +4161,9 @@ function tryArm(opts){
     return false;
   }
   if(core.kind==='bf'){
+    // Flipped on the floor, an arm is a turtle: AUX3 high with it, so
+    // Betaflight arms into crash flip (bfTurtleTick runs the rest).
+    if(bfFlippedOnFloor()){core.startTurtle();toast('TURTLE');return true;}
     // Betaflight decides: AUX1 goes high (with the throttle held low until it
     // arms, for a throttle-rise auto-arm) and bfArmWatch() reports the outcome.
     core.setArm(true,{holdThrottle:!!(opts&&opts.fromAuto)});
@@ -4172,14 +4175,17 @@ function tryArm(opts){
   toast('ARMED');return true;
 }
 // Arming through whichever core flies: the js core arms itself; on the bf core
-// the intent drives AUX1 and Betaflight's arming checks decide.
-function coreArmed(){return core.kind==='bf'?(cs.armed||core.aux.arm):!!qp.armed;}
+// the intent drives AUX1 and Betaflight's arming checks decide. A turtle on
+// the bf core is armed intent all through, the disarms inside it included.
+function coreArmed(){return core.kind==='bf'?(cs.armed||core.aux.arm||core.turtlePhase!=null):!!qp.armed;}
 function coreDisarm(){if(core.kind==='bf')core.setArm(false);else qp.disarm();}
 let bfArmPendingMs=null;
 let bfWasArmed=false;
 // Once a frame on the bf core: toast what Betaflight did with the arm intent.
+// A turtle's own disarm and arms are not news.
 function bfArmWatch(){
   if(core.kind!=='bf')return;
+  if(core.turtlePhase!=null){bfWasArmed=cs.armed;return;}
   if(cs.armed&&!bfWasArmed){toast('ARMED');bfArmPendingMs=null;}
   else if(!cs.armed&&bfWasArmed)toast('DISARMED');
   else if(bfArmPendingMs!=null&&!cs.armed&&simClockMs-bfArmPendingMs>300){
@@ -4308,7 +4314,8 @@ function jsTick(stick,tUs){
   if(armGate&&padLive&&qp.armed)qp.disarm();
 
   // Turtle: flipped on the ground, full throttle and a hard roll stick rolls
-  // the quad back over (per tick on sim time; the bf core leaves it to R).
+  // the quad back over (per tick on sim time; on the bf core the same gesture
+  // is Betaflight's crash flip, bfTurtleTick).
   if(qp.armed&&!threeD&&bodyUpZ(qp.quaternion)<-0.35){
     const clr=qp.groundClearance?qp.groundClearance(qp):qp.position.z;
     if(wantsTurtle({upZ:bodyUpZ(qp.quaternion),clearanceM:clr,contact:clr<=0.04,armed:qp.armed,threeD,throttle:stick.t,rollStick:stick.r})){
@@ -6724,8 +6731,9 @@ function onCoreEvent(ev){
 }
 // ---------- The bf core (?core=bf): quadmath-sim-core, the Air65 for now ----------
 // Plant: vendor/sim-core/airframes/air65.json. Config: the tune database's
-// RyFly Air65 1219s card through cliFor() (rates, PIDs), with the default aux
-// sim-core adds (ARM AUX1, ANGLE AUX2, HORIZON AUX3, FLIP AUX4). Other classes
+// RyFly Air65 1219s card through cliFor() (rates, PIDs), on the page's aux
+// layout, the owner's Air65 radio (sim-core-adapter.js BF_AUX_LINES: ARM AUX1,
+// ANGLE AUX2, FLIP OVER AFTER CRASH AUX3, HORIZON AUX4). Other classes
 // fly the js core. World: every collider as a module-frame box, plus the city
 // portals as triggers; a changed world is sent on the next spawn, or when the
 // quad is disarmed.
@@ -6782,7 +6790,7 @@ function bfDrop3D(){if(threeD)setThreeD(false,false);}
 // then put the quad back where it stands. Disarmed only.
 function bfLoadDiff(text,label){
   if(core.kind!=='bf')return null;
-  if(cs.armed||core.aux.arm){toast('DISARM TO LOAD A DIFF');return null;}
+  if(coreArmed()){toast('DISARM TO LOAD A DIFF');return null;}
   const r=core.loadDiff(text);
   bfDiffLoaded=text;
   placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
@@ -6804,7 +6812,7 @@ function bfSpawn(pos,q,opts){
 function bfWorldWatch(now){
   if(core.kind!=='bf'||now-bfWorldCheckAt<500)return;
   bfWorldCheckAt=now;
-  if(cs.armed||core.aux.arm)return;
+  if(coreArmed())return;
   const sig=bfWorldSig();
   if(sig===bfWorldSigSent)return;
   bfWorldSigSent=sig;
@@ -6851,7 +6859,7 @@ function selectCore(){
     return createBfCore({SimCore:mod.SimCore,wasm:new URL('vendor/sim-core/sim-core.wasm'+v,location.href),airframe,diff,world:bfWorld()}).then(bf=>{
       const r=bf.report;
       bfDiffLoaded=diff;
-      console.info('sim-core '+SIM_CORE_VERSION+': Air65, '+BF_TUNE_ID+' ('+r.applied+' lines applied, '+r.added.length+' aux added); '+bfWorld().boxes.length+' world boxes; the Build\'s cells and mAh are not used (the plant is the Air65)');
+      console.info('sim-core '+SIM_CORE_VERSION+': Air65, '+BF_TUNE_ID+' ('+r.applied+' lines applied; ARM AUX1, ANGLE AUX2, FLIP AUX3, HORIZON AUX4); '+bfWorld().boxes.length+' world boxes; the Build\'s cells and mAh are not used (the plant is the Air65)');
       bfCore=bf;
       if(!bfWanted())return;
       bfDrop3D();
@@ -6885,7 +6893,36 @@ function pollInput(){
   readInput(dt);
   tickArming(pollGp);
   if(core.kind==='bf'&&armGate&&padLive&&coreArmed())core.setArm(false);
+  if(core.kind==='bf')bfTurtleTick();
   core.input(stick,tUs);
+}
+// ---------- Turtle on the bf core: Betaflight's crash flip on AUX3 ----------
+// The js core's turtle gesture (flipped on the floor, armed, full throttle and
+// a hard roll stick), or an arm while flipped (tryArm), puts FLIP OVER AFTER
+// CRASH on AUX3 high and arms through it; the sticks then drive Betaflight's
+// crash flip. Upright, AUX3 goes low and the disarm that ends crash flip
+// follows; AUX1 goes high again once the throttle is down and Betaflight
+// would arm (sim-core-adapter.js stepTurtle). Every 4 ms, before input().
+function bfFlippedOnFloor(){
+  return bodyUpZ(cs.quaternion)<-0.35&&cs.clearance<=0.04;
+}
+function bfTurtleTick(){
+  if(core.turtlePhase==null){
+    if(wantsTurtle({upZ:bodyUpZ(cs.quaternion),clearanceM:cs.clearance,contact:cs.clearance<=0.04,armed:cs.armed,threeD,throttle:stick.t,rollStick:stick.r})){
+      core.startTurtle();
+      toast('TURTLE');
+    }
+    return;
+  }
+  const low=throttleSafeToArm(stick.t,false);
+  const ev=core.stepTurtle(low);
+  if(ev==='upright')toast(low?'UPRIGHT':'UPRIGHT — THROTTLE DOWN TO ARM');
+  else if(ev==='rearm')bfArmPendingMs=simClockMs;
+  else if(ev==='ended')toast('DISARMED');
+  else if(ev==='refused'){
+    const why=armingFlagNames(cs.armingDisableFlags);
+    toast('NOT ARMED'+(why.length?' — '+why.join(' '):''));
+  }
 }
 setInterval(pollInput,4);
 let lastFrameAt=null;
@@ -7352,7 +7389,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   isLineTrackId,demoLineGhostForShot,ghostVisible:()=>ghostVisible,ghostMesh,
   dailyLineFor,flyDailyLine,dailyLineLive:()=>dailyLineLive,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
-  core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,
+  core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,
   TRICKS_KEY,tricks});

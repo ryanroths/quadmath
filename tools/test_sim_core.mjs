@@ -2,8 +2,8 @@
 // sim-core-adapter.js: the render boundary (module Z-up to scene Y-up), the
 // 4 ms poll's sim-time stamps, the bf core's RC channels, the bf core on the
 // vendored quadmath-sim-core (Air65, the tune database's 1219s card) from
-// stick forward to +X, and the js core's fixed 1 kHz ticks, sample-and-hold
-// input and render interpolation.
+// stick forward to +X, its turtle (Betaflight's crash flip on AUX3), and the
+// js core's fixed 1 kHz ticks, sample-and-hold input and render interpolation.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -11,6 +11,7 @@ import vm from 'node:vm';
 import * as THREE from '../vendor/three.module.min.js';
 import {
   WS, toScene, toModule, boxToModule, InputClock, bfChannels, createBfCore, createJsCore, armingFlagNames,
+  BF_AUX_LINES, withPageAux,
 } from '../sim-core-adapter.js';
 import { SimCore } from '../vendor/sim-core/sim-core.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
@@ -52,11 +53,20 @@ test('InputClock: wall time to sim time from the frame anchor, monotonic, capped
   assert.equal(clock.stamp(sim, 1150), null, 'past the horizon: dropped');
 });
 
-test('bfChannels: sticks 1:1, aux on the slots sim-core adds', () => {
+test('bfChannels: sticks 1:1, aux on BF_AUX_LINES (ARM AUX1, ANGLE AUX2, FLIP AUX3, HORIZON AUX4)', () => {
   const ch = bfChannels({ r: 0.5, p: 0.3, y: -1, t: 0.25 }, { arm: true, mode: 'horizon', turtle: false });
-  assert.deepEqual(ch.slice(0, 8), [1750, 1650, 1000, 1250, 2000, 1000, 2000, 1000]);
+  assert.deepEqual(ch.slice(0, 8), [1750, 1650, 1000, 1250, 2000, 1000, 1000, 2000]);
+  assert.deepEqual(bfChannels({ r: 0, p: 0, y: 0, t: 0 }, { arm: false, mode: 'angle', turtle: true }).slice(4, 8), [1000, 2000, 2000, 1000]);
   assert.equal(bfChannels({ r: 0, p: 0, y: 0, t: 0.9 }, { holdThrottle: true, mode: 'acro' })[3], 1000);
   assert.deepEqual(armingFlagNames((1 << 7) | (1 << 25)), ['THROTTLE', 'ARM_SWITCH']);
+});
+
+test('withPageAux: a diff\'s own aux lines go, BF_AUX_LINES go on the end', () => {
+  const out = withPageAux('set small_angle = 180\r\naux 0 0 1 1700 2100 0 0\r\naux 7 10 5 900 1200 0 0\r\nsave\r\n');
+  assert.deepEqual(out.trim().split('\n'), ['set small_angle = 180', 'save', ...BF_AUX_LINES]);
+  // The owner's Air65 radio: ARM AUX1, ANGLE AUX2, BEEPER and FLIP OVER AFTER
+  // CRASH AUX3 (quadmath-sim-core configs/air65-ryfly-2026-10-23.txt).
+  assert.deepEqual(BF_AUX_LINES.slice(0, 4), ['aux 0 0 0 1700 2100 0 0', 'aux 1 1 1 1700 2100 0 0', 'aux 2 13 2 1700 2100 0 0', 'aux 3 35 2 1700 2100 0 0']);
 });
 
 // The tune database is a classic script; read its cards the way sim.html does.
@@ -184,11 +194,139 @@ test('bf core: a respawn reports its pose at once, keeps the link up, and arms w
   core.setArm(true);
   run(100);
   assert.equal(core.getState().armed, true, `armed 100 ms after a respawn (flags ${armingFlagNames(core.sim.fc.armingDisableFlags)})`);
+  // The page's three modes reach Betaflight: ANGLE on AUX2, HORIZON on AUX4.
+  for (const mode of ['horizon', 'acro', 'angle']) {
+    core.setMode(mode);
+    run(40);
+    assert.equal(core.getState().flightMode, mode);
+  }
   // A teleport with no attitude keeps the latest tick's.
   const q = core.sim.state.quat;
   core.teleport({ x: 3, y: 0, z: 1 });
   const s2 = core.getState();
   assert.ok(near(s2.quaternion.w, q[0], 1e-9) && near(s2.quaternion.z, q[3], 1e-9));
+});
+
+// Turtle on the bf core: Betaflight's crash flip, FLIP OVER AFTER CRASH on
+// AUX3, on a flat floor. The page's 4 ms poll and 60 Hz frames; each poll
+// steps the turtle before input(), as sim.html's pollInput does.
+async function turtleRig() {
+  const db = tunes();
+  const core = await createBfCore({
+    SimCore,
+    wasm: readFileSync('vendor/sim-core/sim-core.wasm'),
+    airframe: JSON.parse(readFileSync('vendor/sim-core/airframes/air65.json', 'utf8')),
+    diff: db.cliFor(db.tunes.find((t) => t.id === '65-betafpv-ryfly-1219s')),
+    world: { floorZ: 0 },
+  });
+  const rig = { core, stick: { r: 0, p: 0, y: 0, t: 0 }, wall: 0, events: [] };
+  rig.upZ = () => {
+    const [, x, y] = core.sim.state.quat;
+    return 1 - 2 * (x * x + y * y);
+  };
+  rig.run = (ms, each) => {
+    for (const end = rig.wall + ms; rig.wall < end; rig.wall += 4) {
+      const t = core.stamp(rig.wall);
+      if (core.turtlePhase) {
+        const ev = core.stepTurtle(rig.stick.t < 0.05);
+        if (ev) rig.events.push(ev);
+      }
+      if (t !== null) core.input(rig.stick, t);
+      if (rig.wall % 16 === 0) { core.advance(16); core.anchor(rig.wall); }
+      if (each) each();
+    }
+  };
+  // Inverted (180 degrees about body X), dropped from 5 cm, at rest.
+  rig.flip = () => {
+    core.teleport({ x: 0, y: 0, z: 0.05 }, { x: 1, y: 0, z: 0, w: 0 });
+    rig.run(1500);
+    assert.ok(rig.upZ() < -0.99, `inverted at rest (up Z ${rig.upZ().toFixed(3)})`);
+  };
+  return rig;
+}
+
+test('bf core turtle: inverted at rest, AUX3 high, full roll: upright by 500 ms; AUX3 low: it rests upright', async () => {
+  const rig = await turtleRig();
+  const { core } = rig;
+  rig.run(400);
+  rig.flip();
+  core.setTurtle(true);
+  rig.run(100);
+  core.setArm(true);
+  rig.run(300);
+  assert.equal(core.getState().armed, true, `armed inverted with AUX3 high (flags ${armingFlagNames(core.sim.fc.armingDisableFlags)})`);
+  assert.equal(core.getState().crashFlip, true, 'in crash flip');
+  rig.stick = { r: 1, p: 0, y: 0, t: 0 };
+  let uprightMs = null;
+  const t0 = rig.wall;
+  rig.run(500, () => { if (uprightMs === null && rig.upZ() > 0.9) uprightMs = rig.wall - t0; });
+  assert.ok(uprightMs !== null, `upright within 500 ms of full roll (up Z ${rig.upZ().toFixed(3)})`);
+  core.setTurtle(false);
+  rig.stick = { r: 0, p: 0, y: 0, t: 0 };
+  let minUp = 1;
+  const t1 = rig.wall;
+  rig.run(1500, () => { if (rig.wall - t1 > 500) minUp = Math.min(minUp, rig.upZ()); });
+  assert.ok(minUp > 0.95, `rests upright over the last second (lowest up Z ${minUp.toFixed(3)})`);
+  assert.ok(Math.hypot(...core.sim.state.omega) < 0.01, 'at rest');
+});
+
+test('bf core turtle, as the page runs it: from the gesture while armed, and from an arm while flipped', async () => {
+  const rig = await turtleRig();
+  const { core } = rig;
+  rig.run(400);
+  // Armed, flipped onto the floor; the gesture: full throttle, full roll.
+  core.setArm(true);
+  rig.run(200);
+  assert.equal(core.getState().armed, true);
+  rig.flip();
+  assert.equal(core.getState().armed, true, 'still armed, upside down');
+  rig.stick = { r: 1, p: 0, y: 0, t: 1 };
+  core.startTurtle();
+  assert.equal(core.turtlePhase, 'disarm');
+  let uprightMs = null;
+  const t0 = rig.wall;
+  rig.run(1000, () => { if (uprightMs === null && rig.upZ() > 0.9) uprightMs = rig.wall - t0; });
+  assert.ok(uprightMs !== null && uprightMs <= 500, `upright ${uprightMs} ms after the gesture`);
+  assert.deepEqual(rig.events, ['flip', 'upright']);
+  assert.equal(core.turtlePhase, 'rearm', 'AUX3 and AUX1 low; waits for the throttle');
+  assert.equal(core.getState().armed, false);
+  assert.equal(core.aux.turtle, false);
+  // Throttle down: armed again, out of crash flip, resting upright.
+  rig.stick = { r: 0, p: 0, y: 0, t: 0 };
+  rig.run(1500);
+  assert.deepEqual(rig.events, ['flip', 'upright', 'rearm']);
+  assert.equal(core.turtlePhase, null);
+  let s = core.getState();
+  assert.equal(s.armed, true, `armed to fly (flags ${armingFlagNames(core.sim.fc.armingDisableFlags)})`);
+  assert.equal(s.crashFlip, false);
+  assert.ok(rig.upZ() > 0.95, `upright (up Z ${rig.upZ().toFixed(3)})`);
+  // Disarmed and flipped: an arm is a turtle (the card's small_angle 25 would
+  // refuse a plain arm with ANGLE).
+  core.setArm(false);
+  rig.run(200);
+  rig.flip();
+  rig.events = [];
+  core.startTurtle();
+  assert.equal(core.turtlePhase, 'arm');
+  rig.run(100);
+  assert.deepEqual(rig.events, ['flip']);
+  rig.stick = { r: -1, p: 0, y: 0, t: 0 };
+  rig.run(1000);
+  rig.stick = { r: 0, p: 0, y: 0, t: 0 };
+  rig.run(1500);
+  assert.deepEqual(rig.events, ['flip', 'upright', 'rearm']);
+  s = core.getState();
+  assert.equal(s.armed, true, `armed to fly (flags ${armingFlagNames(core.sim.fc.armingDisableFlags)})`);
+  assert.ok(rig.upZ() > 0.95, `upright (up Z ${rig.upZ().toFixed(3)})`);
+  // A disarm ends a turtle at any step.
+  core.setArm(false);
+  rig.run(200);
+  rig.flip();
+  core.startTurtle();
+  rig.run(100);
+  core.setArm(false);
+  assert.equal(core.turtlePhase, null);
+  assert.equal(core.aux.turtle, false);
 });
 
 test('quadphysics FF: 4 ms samples at 1 kHz ticks get the same feedforward as 60 fps frames', () => {
