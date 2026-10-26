@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim M1 feel — first-run, tutorial, HUD, rate presets, aux helpers.
 // Keep physics in quadphysics.js. Do not touch racing track layouts or ghosts.
 // New localStorage keys: quadmathSimInputChoice, quadmathSimFloatiness,
 //   quadmathSimFov.
 // Nothing here is copied from WebFPV.
 
-import { makeWorldLabel } from './sim-art.js?v=0c36c6d602cf';
+import { makeWorldLabel } from './sim-art.js?v=def11d21f6f1';
 
 export const INPUT_CHOICE_KEY = 'quadmathSimInputChoice';
 export const FLOATINESS_KEY = 'quadmathSimFloatiness';

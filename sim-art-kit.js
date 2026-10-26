@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // Kenney CC0 city + garage + warehouse + office + gym + living + backyard kits.
 // Visual only. Meshopt-compressed files live under assets/sim-city/,
 // assets/sim-garage/, assets/sim-warehouse/, assets/sim-office/,
@@ -5,8 +6,8 @@
 // fails, the procedural meshes already in the scene stay visible. Nothing
 // from the GPL whoop sim.
 
-import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=0d87f3b639ef';
-import { BACKYARD_PLAY } from './sim-maps.js?v=d3bccf5de2eb';
+import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=3587c0eb8a80';
+import { BACKYARD_PLAY } from './sim-maps.js?v=563256ba427e';
 
 const KIT_ROOT = 'assets/sim-city/';
 

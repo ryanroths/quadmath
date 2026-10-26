@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim rates — Betaflight CLI parse + rates_type curves.
 // Formulas follow Betaflight's public rc.c apply*Rates (written from scratch).
 // Nothing here is copied from WebFPV.

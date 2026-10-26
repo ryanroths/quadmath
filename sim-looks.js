@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim V1 looks — environment, PBR, cheap contact AO, FPV lens,
 // per-map grade/vignette, quality presets. Not WebFPV.
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
-import { resolveAutoQuality, gpuTier, autoQualityStep } from './sim-touch.js?v=9c2ecc147383';
-import { updateSceneLighting } from './sim-lighting.js?v=1ec12da8a4a8';
+import { resolveAutoQuality, gpuTier, autoQualityStep } from './sim-touch.js?v=40068c573e17';
+import { updateSceneLighting } from './sim-lighting.js?v=d03f9b3db1ea';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';

@@ -1,9 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // Pocket Stage — original Your Room vibe. Visual only.
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Clay/felt furniture on the same AABBs. Felt-ring gates. Bloom off.
 
-import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=0d87f3b639ef';
-import { planRoom } from './sim-room.js?v=9017daf8a7b6';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=3587c0eb8a80';
+import { planRoom } from './sim-room.js?v=84e47aee7135';
 
 export const ROOM_STOCK = Object.freeze({
   wall: 0xd8d2c6,

@@ -1,9 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // Neon Current — dense original city dressing. Visual only.
 // Play colliders live in sim-maps.js CITY_PLAY. Nothing from the GPL whoop sim.
 
-import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { CITY_PLAY } from './sim-maps.js?v=d3bccf5de2eb';
-import { updateSceneLighting } from './sim-lighting.js?v=1ec12da8a4a8';
+import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=46192cc1defd';
+import { CITY_PLAY } from './sim-maps.js?v=563256ba427e';
+import { updateSceneLighting } from './sim-lighting.js?v=d03f9b3db1ea';
 
 export const RAIN_KEY = 'quadmathSimRain';
 

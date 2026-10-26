@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim — Betaflight-style 3D (reversible motors).
 // Center stick = zero thrust, above = normal, below = reverse. Acro only.
 // New localStorage key: quadmathSim3D. Do not write old ryfly* keys.

@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // Amber Court — playable whoop playground + Kenney CC0 sideline kit.
 // Colliders live in sim-maps.js GYM_PLAY and must match kit/proc meshes.
 // Kenney kit (sim-art-kit.js) swaps wall clutter after first paint.
 // Procedural meshes stay if a mesh fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=0d87f3b639ef';
-import { GYM_PLAY } from './sim-maps.js?v=d3bccf5de2eb';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=3587c0eb8a80';
+import { GYM_PLAY } from './sim-maps.js?v=563256ba427e';
 
 export const GYM_STOCK = Object.freeze({
   wall: 0xb8b4aa,
