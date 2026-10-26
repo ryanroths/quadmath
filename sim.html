@@ -852,8 +852,8 @@ import * as THREE from "three";
 import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=1592e07fcc0d";
 import {
   WS as CORE_WS, TICK_US, toScene, toModule, boxToModule, emptyState,
-  createJsCore, createBfCore, armingFlagNames,
-} from "./sim-core-adapter.js?v=f9b62d419b73";
+  createJsCore, createBfCore, armingFlagNames, radioAux,
+} from "./sim-core-adapter.js?v=31417a087019";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
@@ -912,7 +912,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=7fe465c27a92";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=eb7fe94f8fd0";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=998d958051bf";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -3487,7 +3487,9 @@ presetSel.onchange=()=>{
 };
 
 // ---------- Input ----------
-const stick={r:0,p:0,y:0,t:0};
+// aux: on the bf core with a radio, its AUX channels as it sends them
+// (radioAux); null when the page drives AUX (keyboard, touch, a gamepad).
+const stick={r:0,p:0,y:0,t:0,aux:null};
 const keys={};
 // ---------- background music playlist (audio/track*.mp3) — M to toggle, paused by default ----------
 const TRACKS=['audio/track1.mp3','audio/track2.mp3','audio/track3.mp3'];
@@ -3950,6 +3952,7 @@ function readInput(dt){
     if(calib){
       runCalib(gp,dt);
       stick.r=stick.p=stick.y=0;
+      stick.aux=null;
       // 3D: t=0 is full reverse. Match the arm-gate idle (center = zero thrust).
       stick.t=threeD?0.5:0;
       if(qp.armed)qp.disarm();
@@ -3961,6 +3964,9 @@ function readInput(dt){
     // The bf core takes the radio's channels 1:1 (Betaflight owns stick shaping).
     const next=applyAxisMap(gp.axes,map,core.kind==='bf'?{threeD,deadzone:0}:{threeD});
     stick.r=next.r;stick.p=next.p;stick.y=next.y;stick.t=next.t;
+    // On bf a radio's AUX channels go to Betaflight unchanged: its own arm,
+    // mode and turtle switches, on the diff's aux lines.
+    stick.aux=core.kind==='bf'&&padIsRadio(gp)?radioAux(gp,map):null;
     // Radio-only pilots make no keyboard or mouse gesture, so a stick deflection
     // is what unlocks audio for them. Roll/pitch/yaw only — a ratcheted TX16S
     // throttle sits wherever it was left and would fire this with no gesture.
@@ -3976,12 +3982,13 @@ function readInput(dt){
         if(performance.now()>skipSafeUntil)toast('STICKS SAFE — LIVE');
       }else stick.t=threeD?0.5:0;
     }
-    if(map.mode&&feel){
+    if(map.mode&&feel&&!stick.aux){
       const m=feel.modeFromAux(feel.auxValue(gp,map.mode));
       if(m&&m!==flightMode)setFlightMode(m);
     }
     return;
   } else if(touchCtl&&touchCtl.enabled){
+    stick.aux=null;
     const ts=touchCtl.read();
     stick.r=ts.r;stick.p=ts.p;stick.y=ts.y;stick.t=ts.t;
     if(!musicStarted&&(Math.abs(stick.r)>0.15||Math.abs(stick.p)>0.15||Math.abs(stick.y)>0.15))startMusic();
@@ -3989,6 +3996,7 @@ function readInput(dt){
     const tR=(keys['arrowright']?1:0)-(keys['arrowleft']?1:0);
     const tP=(keys['arrowup']?1:0)-(keys['arrowdown']?1:0);
     const tY=(keys['d']?1:0)-(keys['a']?1:0);
+    stick.aux=null;
     const sm=dt>0?1-Math.pow(0.0001,dt):0;
     stick.r+=(tR-stick.r)*sm;stick.p+=(tP-stick.p)*sm;stick.y+=(tY-stick.y)*sm;
     if(keys['w'])kbThrottle+=1.4*dt;
@@ -4110,6 +4118,16 @@ function setFlightMode(mode,persist){
     syncTouchModeBtn();
     return qp.flightMode;
   }
+  if(core.kind==='bf'&&bfRadio()){
+    toast('FLIGHT MODE IS ON THE RADIO');
+    syncTouchModeBtn();
+    return flightMode;
+  }
+  if(core.kind==='bf'&&!core.hasMode(String(mode||'').toLowerCase())){
+    toast('NO '+String(mode).toUpperCase()+' SWITCH IN THE DIFF');
+    syncTouchModeBtn();
+    return flightMode;
+  }
   flightMode=qp.setFlightMode(mode);
   if(core.kind==='bf')core.setMode(flightMode);
   if(persist!==false)saveFlightMode(flightMode);
@@ -4119,7 +4137,7 @@ function setFlightMode(mode,persist){
 }
 function toggleFlightMode(){
   if(threeD){setFlightMode('acro');return;}
-  const order=['angle','horizon','acro'];
+  const order=['angle','horizon','acro'].filter(m=>core.kind!=='bf'||core.hasMode(m));
   setFlightMode(order[(order.indexOf(qp.flightMode)+1)%order.length]);
 }
 function setThreeD(on,persist){
@@ -4163,7 +4181,7 @@ function tryArm(opts){
   if(core.kind==='bf'){
     // Flipped on the floor, an arm is a turtle: AUX3 high with it, so
     // Betaflight arms into crash flip (bfTurtleTick runs the rest).
-    if(bfFlippedOnFloor()){core.startTurtle();toast('TURTLE');return true;}
+    if(bfFlippedOnFloor()&&core.startTurtle()){toast('TURTLE');return true;}
     // Betaflight decides: AUX1 goes high (with the throttle held low until it
     // arms, for a throttle-rise auto-arm) and bfArmWatch() reports the outcome.
     core.setArm(true,{holdThrottle:!!(opts&&opts.fromAuto)});
@@ -4175,10 +4193,19 @@ function tryArm(opts){
   toast('ARMED');return true;
 }
 // Arming through whichever core flies: the js core arms itself; on the bf core
-// the intent drives AUX1 and Betaflight's arming checks decide. A turtle on
+// the intent drives the diff's ARM switch and Betaflight's arming checks
+// decide, or, with a radio (bfRadio), the radio's own switch does. A turtle on
 // the bf core is armed intent all through, the disarms inside it included.
 function coreArmed(){return core.kind==='bf'?(cs.armed||core.aux.arm||core.turtlePhase!=null):!!qp.armed;}
 function coreDisarm(){if(core.kind==='bf')core.setArm(false);else qp.disarm();}
+// The bf core with a radio: its AUX channels pass through to Betaflight, and
+// the page's arm, mode and turtle controls stand aside.
+function bfRadio(){return core.kind==='bf'&&Array.isArray(stick.aux);}
+// A radio, as the page knows one: its name says so (isKnownRadio), or the
+// pilot picked a radio preset for it. A gamepad, calibrated or not, is not.
+function padIsRadio(gp){
+  return isKnownRadio(gp)||!!(radioPreset&&!['auto','pad','custom'].includes(radioPreset)&&RADIO_PRESETS[radioPreset]);
+}
 let bfArmPendingMs=null;
 let bfWasArmed=false;
 // Once a frame on the bf core: toast what Betaflight did with the arm intent.
@@ -4197,7 +4224,7 @@ function bfArmWatch(){
   bfWasArmed=cs.armed;
 }
 function tickArming(gp){
-  if(calib)return;
+  if(calib||bfRadio())return;
   const map=liveMap||(gp?liveAxisMap(gp):null);
   const hasSw=hasArmSwitch(map);
   if(armDetecting&&gp){
@@ -4243,6 +4270,7 @@ function tickArming(gp){
 }
 let armUiAt=0;
 function toggleArm(){
+  if(bfRadio()){toast('ARM ON THE RADIO (AUX'+(core.auxOf('arm')||'?')+')');return;}
   if(coreArmed()){coreDisarm();if(core.kind!=='bf')toast('DISARMED');}
   else tryArm();
   syncTouchModeBtn();
@@ -4470,7 +4498,9 @@ function updateOSD(){
   // battery sim off = no voltage readout, no warnings. (Sim is always armed.)
   let battLine='';
   const landEl=document.getElementById('osdLand');
-  if(CFG.battSimOn){
+  // The bf core's pack is the plant's and always drains: its readout and
+  // warnings show whatever the Battery Simulation switch says.
+  if(CFG.battSimOn||cs.kind==='bf'){
     const flash=(Math.floor(performance.now()/250)%2)===0; // ~2Hz blink
     let bCol='inherit';
     if(battV<=BATT_CRIT)bCol=flash?'#ff3b2f':'rgba(255,59,47,.25)';        // critical: red flash
@@ -5408,7 +5438,7 @@ document.getElementById('cbBattSim').onchange=e=>{
   document.getElementById('s_sag').disabled=!CFG.battSimOn;
   battCharge=1;battV=BATT_FULL;
   persistWhoopFromUI();
-  toast(CFG.battSimOn?'BATTERY SIM ON':'BATTERY SIM OFF — INFINITE PACK');
+  toast(CFG.battSimOn?'BATTERY SIM ON':core.kind==='bf'?'BATTERY SIM OFF — NOT ON THE BF CORE (ITS PACK DRAINS)':'BATTERY SIM OFF — INFINITE PACK');
 };
 document.getElementById('cb3d').onchange=e=>{
   setThreeD(!!e.target.checked);
@@ -6730,26 +6760,39 @@ function onCoreEvent(ev){
   else if(ev.kind==='trigger')bfPortal(ev.id);
 }
 // ---------- The bf core (?core=bf): quadmath-sim-core, the Air65 for now ----------
-// Plant: vendor/sim-core/airframes/air65.json. Config: the tune database's
-// RyFly Air65 1219s card through cliFor() (rates, PIDs), on the page's aux
-// layout, the owner's Air65 radio (sim-core-adapter.js BF_AUX_LINES: ARM AUX1,
-// ANGLE AUX2, FLIP OVER AFTER CRASH AUX3, HORIZON AUX4). Other classes
-// fly the js core. World: every collider as a module-frame box, plus the city
+// Plant: vendor/sim-core/airframes/air65.json. Config: the owner's full Air65
+// Betaflight diff, vendor/sim-core/configs/air65-ryfly-2026-10-23.txt, as it
+// is (rates, PIDs, filters, sag compensation, thrust linear, dynamic idle,
+// and its own switches: ARM AUX1, ANGLE AUX2, BEEPER and FLIP OVER AFTER
+// CRASH AUX3). The tune database's 1219s card stays the tune the page names.
+// Other classes fly the js core. World: every collider as a module-frame box, plus the city
 // portals as triggers; a changed world is sent on the next spawn, or when the
 // quad is disarmed.
 const BF_TUNE_ID='65-betafpv-ryfly-1219s';
 const BF_CLASS='whoop65';
 // vendor/sim-core/VERSION; versions the vendored URLs (cache) and the test
 // tools/test_sim_core.mjs holds the two equal.
-const SIM_CORE_VERSION='v0.2.0';
+const SIM_CORE_VERSION='v0.2.0-3-g562d575';
+const BF_DIFF_PATH='vendor/sim-core/configs/air65-ryfly-2026-10-23.txt';
+let bfOwnerDiff=null;                // that diff's text, once fetched
 let bfDiffLoaded=null;               // the CLI text the bf core last configured with
 let bfLoading=null;
 let bfWorldSigSent='';
 let bfWorldCheckAt=0;
-function bfDiff(){
-  const db=window.QuadMathTunes;
-  const card=db&&db.tunes&&db.tunes.find(t=>t.id===BF_TUNE_ID);
-  return card?db.cliFor(card):null;
+function bfDiff(){return bfOwnerDiff;}
+// What Betaflight holds after a configure, for the console: the settings the
+// owner's diff is flown for.
+function bfConfigNote(bf){
+  try{
+    const g=bf.sim.get(['vbat_sag_compensation','thrust_linear','dyn_idle_min_rpm','dshot_bidir'],{profile:0});
+    return 'vbat_sag_compensation '+g.vbat_sag_compensation+', thrust_linear '+g.thrust_linear+', dyn_idle_min_rpm '+g.dyn_idle_min_rpm+', dshot_bidir '+g.dshot_bidir+', RPM filter '+(bf.sim.fc.rpmFilter?'on':'off');
+  }catch(e){return 'readback failed ('+(e&&e.message||e)+')';}
+}
+// Switches the page drives on the diff's aux lines: a mode the diff has no
+// switch for (the owner's has no HORIZON) falls back to one it has.
+function bfSyncMode(){
+  if(core.kind!=='bf'||bfRadio()||core.hasMode(flightMode))return;
+  setFlightMode(core.hasMode('angle')?'angle':'acro',false);
 }
 function bfWorldSig(){
   let a=0;
@@ -6794,7 +6837,8 @@ function bfLoadDiff(text,label){
   const r=core.loadDiff(text);
   bfDiffLoaded=text;
   placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
-  console.info('sim-core: '+label+': '+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target');
+  bfSyncMode();
+  console.info('sim-core: '+label+': '+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target; '+bfConfigNote(core));
   toast('BETAFLIGHT — '+label.toUpperCase());
   return r;
 }
@@ -6805,6 +6849,7 @@ function bfSpawn(pos,q,opts){
   bfWorldSigSent=sig;
   core.respawn(pos,q,{freshPack:!!(opts&&opts.freshPack),world});
   core.setMode(flightMode);
+  bfSyncMode();
   portalInside=null;
 }
 // The world changed while flying (city art lands after first paint): send it
@@ -6837,7 +6882,7 @@ function selectCore(){
     if(core!==bfCore){
       bfDrop3D();
       core=bfCore;
-      // The class preset picks the tune-database card; its diff goes to loadDiff.
+      // Back on the bf core: the owner's diff again, if a CLI import replaced it.
       const diff=bfDiff();
       if(diff&&diff!==bfDiffLoaded)bfLoadDiff(diff,BF_TUNE_ID);
       else placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
@@ -6846,25 +6891,26 @@ function selectCore(){
     return;
   }
   if(bfLoading)return;
-  const diff=bfDiff();
-  if(!diff){console.warn('sim-core: the tune database has no '+BF_TUNE_ID+' card; flying the js core');return;}
   bfDrop3D();
   toast('LOADING BETAFLIGHT CORE…');
   const v='?v='+SIM_CORE_VERSION;
   bfLoading=Promise.all([
     import('./vendor/sim-core/sim-core.js'+v),
     fetch('vendor/sim-core/airframes/air65.json'+v).then(r=>{if(!r.ok)throw new Error('air65.json HTTP '+r.status);return r.json();}),
-  ]).then(([mod,airframe])=>{
+    fetch(BF_DIFF_PATH+v).then(r=>{if(!r.ok)throw new Error('the Air65 diff HTTP '+r.status);return r.text();}),
+  ]).then(([mod,airframe,diff])=>{
+    bfOwnerDiff=diff;
     bfWorldSigSent=bfWorldSig();
     return createBfCore({SimCore:mod.SimCore,wasm:new URL('vendor/sim-core/sim-core.wasm'+v,location.href),airframe,diff,world:bfWorld()}).then(bf=>{
       const r=bf.report;
       bfDiffLoaded=diff;
-      console.info('sim-core '+SIM_CORE_VERSION+': Air65, '+BF_TUNE_ID+' ('+r.applied+' lines applied; ARM AUX1, ANGLE AUX2, FLIP AUX3, HORIZON AUX4); '+bfWorld().boxes.length+' world boxes; the Build\'s cells and mAh are not used (the plant is the Air65)');
+      console.info('sim-core '+SIM_CORE_VERSION+': Air65, '+BF_DIFF_PATH+' ('+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target; '+bfConfigNote(bf)+'); tune shown: '+BF_TUNE_ID+'; '+bfWorld().boxes.length+' world boxes; the Build\'s cells and mAh are not used (the plant is the Air65)');
       bfCore=bf;
       if(!bfWanted())return;
       bfDrop3D();
       core=bf;
       core.setMode(flightMode);
+      bfSyncMode();
       syncPackForCore();
       placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
       toast('BETAFLIGHT CORE — AIR65');
@@ -6892,31 +6938,34 @@ function pollInput(){
   lastPollUs=tUs;
   readInput(dt);
   tickArming(pollGp);
-  if(core.kind==='bf'&&armGate&&padLive&&coreArmed())core.setArm(false);
-  if(core.kind==='bf')bfTurtleTick();
+  if(core.kind==='bf'&&!bfRadio()&&armGate&&padLive&&coreArmed())core.setArm(false);
+  if(core.kind==='bf'&&!bfRadio())bfTurtleTick();
   core.input(stick,tUs);
 }
-// ---------- Turtle on the bf core: Betaflight's crash flip on AUX3 ----------
-// The js core's turtle gesture (flipped on the floor, armed, full throttle and
-// a hard roll stick), or an arm while flipped (tryArm), puts FLIP OVER AFTER
-// CRASH on AUX3 high and arms through it; the sticks then drive Betaflight's
-// crash flip. Upright, AUX3 goes low and the disarm that ends crash flip
-// follows; AUX1 goes high again once the throttle is down and Betaflight
-// would arm (sim-core-adapter.js stepTurtle). Every 4 ms, before input().
+// ---------- Turtle on the bf core: Betaflight's crash flip ----------
+// With a radio, the radio's own switch (FLIP OVER AFTER CRASH, AUX3 on the
+// owner's diff) and arm do it, as on the real quad. Without one (keyboard,
+// touch, a gamepad), the fallback: the js core's turtle gesture (flipped on
+// the floor, armed, full throttle and a hard roll stick), or an arm while
+// flipped (tryArm), puts the diff's FLIP switch on and arms through it; the
+// sticks then drive Betaflight's crash flip. Upright, FLIP goes off and the
+// disarm that ends crash flip follows; ARM goes on again once the throttle is
+// down and Betaflight would arm (sim-core-adapter.js stepTurtle). Every 4 ms,
+// before input().
 function bfFlippedOnFloor(){
   return bodyUpZ(cs.quaternion)<-0.35&&cs.clearance<=0.04;
 }
 function bfTurtleTick(){
   if(core.turtlePhase==null){
     if(wantsTurtle({upZ:bodyUpZ(cs.quaternion),clearanceM:cs.clearance,contact:cs.clearance<=0.04,armed:cs.armed,threeD,throttle:stick.t,rollStick:stick.r})){
-      core.startTurtle();
-      toast('TURTLE');
+      if(core.startTurtle())toast('TURTLE');
     }
     return;
   }
   const low=throttleSafeToArm(stick.t,false);
-  const ev=core.stepTurtle(low);
-  if(ev==='upright')toast(low?'UPRIGHT':'UPRIGHT — THROTTLE DOWN TO ARM');
+  const centred=Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15&&Math.abs(stick.y)<0.15;
+  const ev=core.stepTurtle(low,centred);
+  if(ev==='upright')toast(low&&centred?'UPRIGHT':'UPRIGHT — STICKS DOWN AND CENTRED TO ARM');
   else if(ev==='rearm')bfArmPendingMs=simClockMs;
   else if(ev==='ended')toast('DISARMED');
   else if(ev==='refused'){
@@ -6955,14 +7004,18 @@ function loop(now){
     updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();updateDust(dt);
     if(feel){
       state.stickT=stick.t;
-      feel.updateHud({stick,battV,battOn:CFG.battSimOn,mode:cs.flightMode,armed:cs.armed,threeD,thrText:throttleHudText(stick.t,threeD),armHint:armHintText({threeD,autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked})});
+      feel.updateHud({stick,battV,battOn:CFG.battSimOn||cs.kind==='bf',mode:cs.flightMode,armed:cs.armed,threeD,thrText:throttleHudText(stick.t,threeD),
+        armHint:bfRadio()?'Arm on the radio (AUX'+(core.auxOf('arm')||'?')+')':armHintText({threeD,autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked})});
       feel.tickTutorial(state,dt,cs.armed);
       const upZ=bodyUpZ(cs.quaternion);
       const clearanceM=cs.clearance;
       const speed=Math.hypot(cs.velocity.x,cs.velocity.y,cs.velocity.z);
       const omega=Math.hypot(cs.omega.x,cs.omega.y,cs.omega.z);
       const contact=clearanceM<=0.02;
-      feel.noteFlip({upZ,clearanceM,contact,speed,omega,dt,armed:cs.armed});
+      feel.noteFlip({upZ,clearanceM,contact,speed,omega,dt,armed:cs.armed,
+        core:cs.kind,radio:bfRadio(),threeD,touch:!!(touchCtl&&touchCtl.enabled),
+        flipAux:core.kind==='bf'?core.auxOf('flip'):null,
+        turtling:core.kind==='bf'&&(core.turtlePhase!=null||cs.crashFlip)});
     }
     if(coach&&coach.isActive()){
       coach.tick(state,dt,{
@@ -7262,7 +7315,7 @@ function applyQueryBoot(){
   if(modeRaw==='angle'||modeRaw==='horizon'||modeRaw==='acro'){
     // Saved/query 3D stays acro. Do not let ?mode=angle overwrite that.
     if(!(threeD && modeRaw!=='acro')){
-      setFlightMode(modeRaw,false);flightMode=modeRaw;
+      flightMode=setFlightMode(modeRaw,false);
     }
   }
   const presetRaw=q.get('preset');

@@ -83,7 +83,8 @@ function switchFlags(flags, neutralValid) {
 const PROBE_SETTLE_FRAMES = 50;
 
 // Plant block v1 (src/plant/plant.h): airframe value names in block order.
-// 'ocv' fills seven slots. The model selector comes first.
+// 'ocv' fills seven slots and 'ocvOverDischarge' three. The model selector
+// comes first.
 export const PLANT_FIELDS = Object.freeze([
   'model', 'mass', 'wheelbase', 'boxHeightRatio', 'propDiameter',
   'kv', 'vRefCell', 'loadFraction', 'tmax', 'kqRatio', 'tau', 'tauDownMult', 'reverseScale',
@@ -94,8 +95,10 @@ export const PLANT_FIELDS = Object.freeze([
   'bounceScale', 'crashScale', 'spinScale',
   'ductOuterRadius', 'hullBelow', 'hullAbove',
   'rpmHover', 'currentExponent', 'iQuiescent', 'motorDelay', 'electricalTau',
+  'ocvOverDischarge',
 ]);
-const PLANT_LEN = 48;
+const PLANT_LEN = 51;
+const PLANT_COUNT = { ocv: 7, ocvOverDischarge: 3 };
 const PB_WHEELBASE = 2;
 const PB_DUCT_RADIUS = 40;
 const PB_HULL_BELOW = 41;
@@ -121,7 +124,7 @@ export function plantBlock(airframe) {
     }
     const entry = airframe.values && airframe.values[name];
     if (!entry) throw new Error(`airframe ${airframe.id || ''} has no '${name}'`);
-    const n = name === 'ocv' ? 7 : 1;
+    const n = PLANT_COUNT[name] || 1;
     const values = n === 1 ? [entry.value] : entry.value;
     if (!Array.isArray(values) || values.length !== n) throw new Error(`airframe '${name}' needs ${n === 1 ? 'one number' : `${n} numbers`}`);
     for (const v of values) {

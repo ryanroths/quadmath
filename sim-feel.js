@@ -192,6 +192,27 @@ export function shouldToastFlip(info) {
   return held >= STUCK_HOLD_S - 1e-9;
 }
 
+// What the stuck-inverted toast tells the pilot (info: core 'js' or 'bf',
+// radio, armed, threeD, touch, flipAux). The way out it names is the one that
+// works there:
+// - 3D: none to roll; respawn.
+// - The bf core with a radio: Betaflight's crash flip on the radio, the
+//   diff's FLIP OVER AFTER CRASH switch (flipAux) on before an arm.
+// - Otherwise the turtle gesture, armed: full throttle and a hard roll. On
+//   the bf core an arm while flipped turtles too, so the roll alone does.
+// Then how to respawn: R, or the touch RESPAWN button.
+export function flipHintText(info) {
+  const i = info || {};
+  if (i.threeD) return i.touch ? 'FLIPPED — TAP RESPAWN' : 'FLIPPED — R TO RESPAWN';
+  const respawn = i.touch ? ' · OR RESPAWN' : ' · R RESPAWNS';
+  if (i.core === 'bf' && (i.radio || !i.flipAux)) {
+    if (!i.flipAux) return 'FLIPPED — NO TURTLE SWITCH IN THE DIFF' + respawn;
+    return 'FLIPPED — ' + (i.armed ? 'DISARM, ' : '') + 'AUX' + i.flipAux + ' ON, ARM, ROLL' + respawn;
+  }
+  if (i.armed) return 'FLIPPED — FULL THROTTLE + HARD ROLL' + respawn;
+  return 'FLIPPED — ARM, THEN ' + (i.core === 'bf' ? 'ROLL' : 'FULL THROTTLE + HARD ROLL') + respawn;
+}
+
 // Turtle / flip-over: armed, inverted on the deck, full throttle + extreme roll.
 export function wantsTurtle(info) {
   if (!info || !info.armed || info.threeD) return false;
@@ -583,15 +604,21 @@ export function createFeel(ctx) {
     return { x: pos.x, y: pos.y, z: pos.z, yaw: (tutorial && tutorial.spawnYaw) || TUTORIAL_YAW };
   }
 
+  // payload: the stuck test's fields, flipHintText's, and turtling (a turtle
+  // under way: no hint).
   function noteFlip(info) {
     const payload = typeof info === 'boolean' ? { upsideDown: info } : (info || {});
     const dt = payload.dt == null ? 0 : +payload.dt;
+    if (payload.turtling) {
+      stuckHoldS = 0;
+      return;
+    }
     stuckHoldS = stepStuckHold(stuckHoldS, payload, dt);
     if (!shouldToastFlip({ ...payload, heldS: stuckHoldS })) return;
     const now = typeof performance !== 'undefined' && performance.now ? performance.now() : 0;
     if (now - flippedToastAt < 2500) return;
     flippedToastAt = now;
-    if (toast) toast('FLIPPED — R TO RESPAWN');
+    if (toast) toast(flipHintText(payload));
   }
 
   if (tutEl) {

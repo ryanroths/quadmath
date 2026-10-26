@@ -91,9 +91,11 @@ export class InputClock {
 // Down while the wizard runs. It comes back only once Betaflight has noticed
 // the loss (rxSignal false) and a real sample has reached the ring's RX frame,
 // so Betaflight's own guard sees the arm switch where it really is. A boot
-// (configure, reinit) leaves the link up: unlike the fly harness, this page's
-// AUX1 is the pilot's arm intent, forced low on every boot, so no stale
-// switch can arm a fresh instance and there is nothing to guard.
+// (configure, reinit) leaves the link up while the page drives the aux
+// channels: its arm intent is forced low on every boot, so no stale switch
+// can arm a fresh instance. With a radio's own channels passing through
+// (radioAux), createBfCore drops the link at every boot, as the fly harness
+// does, so a switch already on meets Betaflight's guard.
 export class RadioLink {
   constructor(core) {
     this.reset(core);
@@ -268,42 +270,119 @@ export const armingFlagNames = (flags) => ARMING_FLAGS.filter((_, bit) => flags 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const us = (v) => Math.round(clamp(1500 + 500 * v, 1000, 2000));
 
-// The aux lines the bf core flies with: the owner's Air65 radio layout (the
-// diff of 2026-10-23, quadmath-sim-core configs/air65-ryfly-2026-10-23.txt:
-// ARM on AUX1, ANGLE on AUX2, BEEPER and FLIP OVER AFTER CRASH on AUX3), plus
-// HORIZON on AUX4, a channel that layout leaves free, so the page's three
-// flight modes all reach Betaflight. Each is on at 1700..2100.
-export const BF_AUX_LINES = [
-  'aux 0 0 0 1700 2100 0 0',
-  'aux 1 1 1 1700 2100 0 0',
-  'aux 2 13 2 1700 2100 0 0',
-  'aux 3 35 2 1700 2100 0 0',
-  'aux 4 2 3 1700 2100 0 0',
-];
+// ---- The bf core's aux channels ----
 
-// Every diff the bf core loads flies on BF_AUX_LINES: the page drives AUX1..AUX4
-// from its own controls, not from the pilot's radio switches, so a diff's own
-// aux lines are dropped (a PREARM or a moved ARM would otherwise never see its
-// channel) and BF_AUX_LINES go on the end.
-export function withPageAux(diff) {
-  const lines = String(diff || '').split(/\r\n|\r|\n/).filter((l) => !/^\s*aux\s/i.test(l));
-  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-  return [...lines, ...BF_AUX_LINES].join('\n') + '\n';
+// AUX1..AUX12, after the four sticks: the 16 channels sim-core takes.
+export const AUX_CHANNELS = 12;
+
+// The mode boxes the page drives from its own controls (keyboard, touch, a
+// gamepad with no switches), by Betaflight's permanent box id
+// (msp/msp_box.c). PREARM goes with ARM.
+const PAGE_BOXES = { 0: 'arm', 1: 'angle', 2: 'horizon', 35: 'flip', 36: 'arm' };
+
+// Betaflight's aux slots, as its CLI prints them ("aux index box channel low
+// high logic linkedTo"; SimCore.diff() gives them), as ranges: { box, ch (0
+// is AUX1), lo, hi, and }, on Betaflight's 25 us steps. A range is active for
+// lo <= value < hi, the value clamped to 900..2099 (fc/rc_modes.c
+// isRangeActive); a range with lo >= hi is never active and is left out. and:
+// the box's ranges must all be active (logic AND), not any one (OR). Linked
+// modes (linkedTo) are not followed.
+export function auxRanges(text) {
+  const out = [];
+  const step = (v) => 900 + 25 * Math.floor((clamp(v, 900, 2100) - 900) / 25);
+  for (const line of String(text || '').split(/\r\n|\r|\n/)) {
+    const m = line.trim().match(/^aux\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)(?:\s+(\d+))?/);
+    if (!m) continue;
+    const r = { box: +m[2], ch: +m[3], lo: step(+m[4]), hi: step(+m[5]), and: m[6] === '1' };
+    if (r.lo < r.hi && r.ch < AUX_CHANNELS) out.push(r);
+  }
+  return out;
+}
+
+export const rangeActive = (r, value) => {
+  const v = clamp(value, 900, 2099);
+  return v >= r.lo && v < r.hi;
+};
+
+// sim-core takes channels in 1000..2000 only.
+const CANDIDATES = [1000, 2000, 1500];
+for (let v = 1000; v <= 2000; v += 25) if (!CANDIDATES.includes(v)) CANDIDATES.push(v);
+
+// AUX1..AUX12 values (us) that put the page's boxes where it wants them:
+// want { arm, angle, horizon, flip }. A wanted box's first range (in slot
+// order: the switch the page moves; ARM and PREARM each have one), or every
+// range of an AND box, must be active and an unwanted box's ranges inactive;
+// on each channel the value is the first of 1000, 2000, 1500, then
+// 1000..2000 by 25 that does that, or the one that misses fewest. Other boxes
+// (BEEPER, an OR box's other ranges) land wherever that is, as switches left
+// alone would. A channel with no range sits at 1000.
+export function pageAux(ranges, want) {
+  const first = new Map();
+  for (const r of ranges) {
+    const name = PAGE_BOXES[r.box];
+    if (name && want[name] && !first.has(r.box)) first.set(r.box, r);
+  }
+  const out = new Array(AUX_CHANNELS).fill(1000);
+  for (let ch = 0; ch < AUX_CHANNELS; ch++) {
+    const on = ranges.filter((r) => r.ch === ch);
+    if (!on.length) continue;
+    let best = 1000;
+    let bestMiss = Infinity;
+    for (const v of CANDIDATES) {
+      let miss = 0;
+      for (const r of on) {
+        const name = PAGE_BOXES[r.box];
+        if (!name) continue;
+        if (want[name] ? (r.and || first.get(r.box) === r) && !rangeActive(r, v) : rangeActive(r, v)) miss++;
+      }
+      if (miss < bestMiss) {
+        best = v;
+        bestMiss = miss;
+        if (!miss) break;
+      }
+    }
+    out[ch] = best;
+  }
+  return out;
+}
+
+// A radio's AUX channels as Betaflight should get them, unchanged: every
+// gamepad axis the stick map leaves free, in axis order, as AUX1, AUX2, ...
+// (a TX16S in USB joystick mode: CH5..CH8 on axes 4..7), at 1500 + 500 x the
+// axis, with no sign, deadzone or calibration of the page's. null when the
+// pad is not a radio: its map has a spring throttle (a gamepad), or no axis
+// is left over for a switch.
+export function radioAux(gp, map) {
+  if (!gp || !gp.axes || !map || !map.t || map.t.spring) return null;
+  const sticks = new Set(['r', 'p', 'y', 't'].map((k) => map[k] && map[k].i));
+  const out = [];
+  for (let i = 0; i < gp.axes.length && out.length < AUX_CHANNELS; i++) {
+    if (sticks.has(i)) continue;
+    const v = Number(gp.axes[i]);
+    out.push(us(Number.isFinite(v) ? v : -1));
+  }
+  return out.length ? out : null;
 }
 
 // RC channels for core.input(), function order: roll, pitch, yaw, throttle,
-// AUX1..AUX12, on BF_AUX_LINES. The sticks pass 1:1 (stick forward is pitch
-// above 1500; the throttle 0..1 is 1000..2000).
-export function bfChannels(sample, aux) {
-  const ch = new Array(16).fill(1000);
+// AUX1..AUX12. The sticks pass 1:1 (stick forward is pitch above 1500; the
+// throttle 0..1 is 1000..2000). AUX: sample.aux (a radio's, radioAux) as it
+// is; otherwise the page's arm intent, flight mode and turtle on the loaded
+// config's own switches (ranges, auxRanges).
+export function bfChannels(sample, aux, ranges) {
+  const ch = new Array(4 + AUX_CHANNELS).fill(1000);
+  const radio = Array.isArray(sample.aux);
   ch[0] = us(sample.r);
   ch[1] = us(sample.p);
   ch[2] = us(sample.y);
-  ch[3] = aux.holdThrottle ? 1000 : Math.round(1000 + 1000 * clamp(sample.t, 0, 1));
-  ch[4] = aux.arm ? 2000 : 1000;                      // AUX1 ARM
-  ch[5] = aux.mode === 'angle' ? 2000 : 1000;         // AUX2 ANGLE
-  ch[6] = aux.turtle ? 2000 : 1000;                   // AUX3 FLIP OVER AFTER CRASH (and BEEPER)
-  ch[7] = aux.mode === 'horizon' ? 2000 : 1000;       // AUX4 HORIZON
+  ch[3] = !radio && aux.holdThrottle ? 1000 : Math.round(1000 + 1000 * clamp(sample.t, 0, 1));
+  const values = radio
+    ? sample.aux
+    : pageAux(ranges, { arm: !!aux.arm, angle: aux.mode === 'angle', horizon: aux.mode === 'horizon', flip: !!aux.turtle });
+  for (let k = 0; k < AUX_CHANNELS; k++) {
+    const v = Number(values[k]);
+    if (Number.isFinite(v)) ch[4 + k] = Math.round(clamp(v, 1000, 2000));
+  }
   return ch;
 }
 
@@ -312,8 +391,13 @@ export function bfChannels(sample, aux) {
 // world { floorZ, boxes, triggers } in module metres.
 export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
   const sim = await SimCore.load(wasm, { trace: false });
-  let config = { diff: withPageAux(diff), plant: airframe, world };
+  let config = { diff, plant: airframe, world };
   const report = sim.configure(config);
+  // The loaded config's mode switches, as Betaflight has them.
+  let ranges = auxRanges(sim.diff('all'));
+  // 'page' (the page drives AUX) or 'radio' (a radio's AUX pass through):
+  // whichever the last input() sample was.
+  let auxSource = 'page';
   const clock = new InputClock();
   const link = new RadioLink(sim);
   const aux = { arm: false, mode: 'angle', turtle: false, holdThrottle: false };
@@ -322,11 +406,17 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
   let turtle = null;
   let turtleAtUs = 0;
   let uprightAtUs = null;
+  let quietAtUs = null;
   const upZ = () => {
     const [, x, y] = sim.state.quat;
     return 1 - 2 * (x * x + y * y);
   };
-  const toTurtle = (phase) => { turtle = phase; turtleAtUs = sim.simTimeUs; uprightAtUs = null; };
+  // The quad's tilt from level, and Betaflight's estimate of it (fc.attitude
+  // roll and pitch, degrees), in degrees.
+  const DEG = 180 / Math.PI;
+  const tiltDeg = () => Math.acos(clamp(upZ(), -1, 1)) * DEG;
+  const estimateTiltDeg = (fc) => Math.acos(clamp(Math.cos(fc.attitude[0] / DEG) * Math.cos(fc.attitude[1] / DEG), -1, 1)) * DEG;
+  const toTurtle = (phase) => { turtle = phase; turtleAtUs = sim.simTimeUs; uprightAtUs = null; quietAtUs = null; };
   // A pose sent by respawn() or teleport() lands on the next tick; until a
   // tick has run, getState() reports it rather than the pose it replaces.
   let pendingPose = null;
@@ -340,10 +430,15 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
   const rebooted = () => {
     clock.rebase();
     link.reset(sim);
+    if (auxSource === 'radio') link.drop();
     aux.arm = false;
     aux.holdThrottle = false;
     aux.turtle = false;
     turtle = null;
+  };
+  const configured = (r) => {
+    core.report = r;
+    ranges = auxRanges(sim.diff('all'));
   };
   const core = {
     kind: 'bf',
@@ -361,17 +456,44 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     get inputErrors() { return inputErrors; },
     stamp(wallMs) { return clock.stamp(sim, wallMs); },
     anchor(wallMs) { clock.anchor(sim, wallMs); },
+    // The loaded config's aux ranges (auxRanges), and the page's modes and
+    // AUX numbers on them.
+    get auxRanges() { return ranges; },
+    get auxSource() { return auxSource; },
+    hasMode(mode) {
+      return mode === 'acro' || ranges.some((r) => PAGE_BOXES[r.box] === mode && r.box !== 36);
+    },
+    auxOf(mode) {
+      const r = ranges.find((x) => PAGE_BOXES[x.box] === mode && x.box !== 36);
+      return r ? r.ch + 1 : null;
+    },
+    // sample: { r, p, y, t } and, from a radio, aux (radioAux). A change of
+    // source drops the page's arm intent and any turtle; a radio taking over
+    // also drops the link for a moment.
     input(sample, stampUs) {
+      const source = Array.isArray(sample.aux) ? 'radio' : 'page';
+      if (source !== auxSource) {
+        auxSource = source;
+        aux.arm = false;
+        aux.holdThrottle = false;
+        aux.turtle = false;
+        turtle = null;
+        // A radio taking over: the link drops and comes back with its
+        // switches as they are, so an ARM already on meets Betaflight's
+        // guard (NOT_DISARMED), as at a boot.
+        if (source === 'radio') link.drop();
+      }
       try {
-        sim.input(bfChannels(sample, aux), stampUs);
+        sim.input(bfChannels(sample, aux, ranges), stampUs);
         link.sample(stampUs);
       } catch (err) {
         inputErrors++;
       }
     },
-    // Arm intent drives AUX1; Betaflight decides. holdThrottle sends the
-    // throttle low with it until Betaflight has armed or 200 ms have passed,
-    // so a throttle-rise auto-arm meets Betaflight's low-throttle check.
+    // Arm intent drives the ARM switch; Betaflight decides. holdThrottle
+    // sends the throttle low with it until Betaflight has armed or 200 ms
+    // have passed, so a throttle-rise auto-arm meets Betaflight's
+    // low-throttle check.
     // A disarm also ends a turtle.
     setArm(on, { holdThrottle = false } = {}) {
       aux.arm = !!on;
@@ -384,22 +506,33 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     },
     setMode(mode) { aux.mode = mode; },
     setTurtle(on) { aux.turtle = !!on; },
-    // Turtle is Betaflight's own crash flip, FLIP OVER AFTER CRASH on AUX3.
-    // Betaflight enters it only when it arms with that switch on, and leaves
-    // it only on a disarm (fc/core.c tryArm, disarm), so the page runs the
-    // switch the way a pilot would:
-    //   'disarm'  armed when it began: AUX1 low, AUX3 high, until disarmed;
-    //   'arm'     AUX1 high, throttle held low, until armed in crash flip;
+    // Turtle is Betaflight's own crash flip, on the config's FLIP OVER AFTER
+    // CRASH switch (AUX3 on the owner's Air65). Betaflight enters it only when
+    // it arms with that switch on, and leaves it only on a disarm (fc/core.c
+    // tryArm, disarm), so on page-driven aux the page runs the switch the way
+    // a pilot would:
+    //   'disarm'  armed when it began: ARM off, FLIP on, until disarmed;
+    //   'arm'     ARM on, throttle held low, until armed in crash flip;
     //   'flip'    the roll and pitch sticks drive crash flip, until upright
     //             for 150 ms (a disarm mid-roll lets it roll on over);
-    //   'rearm'   AUX3 low and AUX1 low (that disarm ends crash flip), until
-    //             the pilot's throttle is low and Betaflight shows no arming
-    //             flag, then AUX1 high: armed to fly. (Its attitude estimate
-    //             can read the quad tilted for a moment after the flip, and
-    //             AUX1 high on any flag latches ARM_SWITCH until AUX1 drops.)
+    //   'rearm'   FLIP off and ARM off (that disarm ends crash flip), until
+    //             the pilot's throttle is low and the sticks centred, the
+    //             quad at rest, Betaflight showing no arming flag, its
+    //             filtered gyro quiet (under 0.5 deg/s on every axis) for
+    //             500 ms and its attitude estimate agreeing with the quad's
+    //             tilt to 0.1 degrees, its resolution; then ARM on: armed to fly. (A fast
+    //             flip outruns the gyro's 2000 deg/s: the estimate is left
+    //             degrees off and the filtered gyro rings for a while after,
+    //             and armed in angle mode on the floor that error grows
+    //             until the quad rolls onto its side; disarmed, both settle.
+    //             An arm with the roll stick still over flies it back onto
+    //             its back. ARM on with any flag latches ARM_SWITCH until ARM
+    //             drops.)
     get turtlePhase() { return turtle; },
+    // false when the config has no FLIP OVER AFTER CRASH switch.
     startTurtle() {
-      if (turtle) return;
+      if (turtle) return true;
+      if (!ranges.some((r) => r.box === 35)) return false;
       aux.turtle = true;
       aux.holdThrottle = false;
       if (sim.fc.armed) {
@@ -411,13 +544,15 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
         holdUntilUs = sim.simTimeUs + 200_000;
         toTurtle('arm');
       }
+      return true;
     },
     // Once per input sample, before input(). throttleLow: the pilot's throttle
-    // is low enough to arm. Returns what changed: 'flip' (in crash flip),
-    // 'upright', 'rearm' (AUX1 back high), 'refused' (Betaflight did not arm
+    // is low enough to arm; sticksCentred: roll, pitch and yaw near centre.
+    // Returns what changed: 'flip' (in crash flip),
+    // 'upright', 'rearm' (ARM back on), 'refused' (Betaflight did not arm
     // into crash flip; the reason is in armingDisableFlags), 'ended'
     // (Betaflight disarmed during the flip), or null.
-    stepTurtle(throttleLow) {
+    stepTurtle(throttleLow, sticksCentred = true) {
       const fc = sim.fc;
       const sinceUs = sim.simTimeUs - turtleAtUs;
       switch (turtle) {
@@ -459,7 +594,11 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
           }
           return null;
         case 'rearm':
-          if (!fc.armed && throttleLow && (fc.armingDisableFlags & ~(1 << 25)) === 0) {
+          if (fc.gyroFiltered.some((g) => Math.abs(g) >= 0.5)) quietAtUs = null;
+          else if (quietAtUs === null) quietAtUs = sim.simTimeUs;
+          if (!fc.armed && throttleLow && sticksCentred && (fc.armingDisableFlags & ~(1 << 25)) === 0
+            && quietAtUs !== null && sim.simTimeUs - quietAtUs >= 500_000
+            && Math.hypot(...sim.state.omega) < 0.5 && Math.abs(estimateTiltDeg(fc) - tiltDeg()) < 0.1) {
             aux.arm = true;
             turtle = null;
             return 'rearm';
@@ -518,7 +657,7 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     respawn(pos, q, { freshPack = false, world = null } = {}) {
       if (world) {
         config = { ...config, world };
-        sim.configure(config);
+        configured(sim.configure(config));
       } else {
         sim.reinit({ freshPack });
       }
@@ -528,8 +667,9 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     },
     // A new CLI diff on the same world: configure again (Betaflight reboots).
     loadDiff(text) {
-      config = { ...config, diff: withPageAux(text) };
+      config = { ...config, diff: text };
       const r = sim.configure(config);
+      configured(r);
       pending = [];
       rebooted();
       return r;
