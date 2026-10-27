@@ -123,11 +123,12 @@ const JS_CASES = [...new Set(MAP_IDS)].map((map) => ({
   map, track: null, look: LOOK[map], q: 'med', core: 'js',
 }));
 // The default core on classes sim-core has no plant for: the js core flies
-// them, with JS CORE on the OSD. The class is the one the page restores.
-// (Not gym on the 5": its restyle throws on main too, a separate bug.)
+// them, with JS CORE on the OSD. The class is the one the page restores. The
+// gym case is also the reload that used to catch the gym's kit landing before
+// its boot-time restyle (sim-art-gym.js inGymArt).
 const FALLBACK_CASES = [
   { map: 'living', track: null, look: 'livingWhoop', q: 'med', droneType: 'whoop75' },
-  { map: 'office', track: null, look: 'officeWhoop', q: 'med', droneType: 'freestyle5' },
+  { map: 'gym', track: null, look: 'gymWhoop', q: 'med', droneType: 'freestyle5' },
 ];
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }

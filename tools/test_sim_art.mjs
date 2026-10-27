@@ -1573,6 +1573,36 @@ test('Gym freestyle builds without throwing and the FPV frame is not all black',
   assert.match(tickSrc, /gymRim|gymDust/);
 });
 
+// The gym's kit lands asynchronously (sim-art-kit.js) in an untagged gymArtKit
+// group under gymArtVisuals. A restyle after it landed (the boot-time quality
+// apply, about every other boot) took a kit mesh for stock paint: one with an
+// unlit material in the stock line colour threw on m.emissive.setHex.
+test('Gym restyles again over its landed kit without treating the kit as stock', async () => {
+  installDomStub();
+  const { GYM_STOCK } = await import('../sim-art-gym.js');
+  const built = buildMap(THREE, 'gym');
+  const ctx = { vibe: vibeFor('gym'), quality: 'med', group: built.group, floor: built.floor };
+  assert.equal(restyleGym(THREE, ctx).error, undefined);
+  const vis = built.group.getObjectByName('gymArtVisuals');
+  const kit = new THREE.Group();
+  kit.name = 'gymArtKit';
+  const kitMesh = (color) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshBasicMaterial({ color }));
+    m.userData.artInstanced = true;
+    m.userData.cityKit = true;
+    kit.add(m);
+    return m;
+  };
+  const line = kitMesh(GYM_STOCK.line);
+  const metal = kitMesh(GYM_STOCK.metal);
+  vis.add(kit);
+  const out = restyleGym(THREE, ctx);
+  assert.equal(out.error, undefined, 'restyleGym over the kit: ' + out.error);
+  assert.equal(line.material.color.getHex(), GYM_STOCK.line, 'the kit keeps its own colours');
+  assert.equal(metal.userData.artHidden, undefined, 'the kit is not hidden as stock metal');
+  assert.equal(metal.visible, true);
+});
+
 test('Gym playground keeps whoop-sized gaps that match the visuals', () => {
   installDomStub();
   const built = buildMap(THREE, 'gym');
