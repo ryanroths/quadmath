@@ -576,3 +576,50 @@ test('the bf core is the default; ?core=js is deprecated; the OSD names the js c
   assert.ok(html.includes("cs.kind==='bf'?'BF CORE · AIR65<br>':'JS CORE<br>'"), 'osdTR names the core either way');
   assert.ok(html.includes("const BF_CLASS='whoop65';"), 'only the 65 has a sim-core plant');
 });
+
+test('a js-core run on the 65 stays off the boards (PHYS MISMATCH); Tune hides the rates on bf behind IMPORT CLI', () => {
+  const html = readFileSync('sim.html', 'utf8').replace(/\r\n/g, '\n');
+  // Any js-core time in a run that lands on a 65 board (the build's class), not
+  // the class name; the 75 and 85 boards are js boards.
+  assert.ok(html.includes("function runOffBoards(){return (runSawJs||core.kind==='js')&&classId(currentBuild&&currentBuild.frameMm)===DRONE_TYPES[BF_CLASS].frame;}"));
+  const start = html.slice(html.indexOf('function startRun(){'), html.indexOf('function startRun(){') + 80);
+  assert.ok(start.includes("runSawJs=core.kind==='js';"));
+  assert.ok(html.includes("if(runActive&&core.kind==='js')runSawJs=true;"));
+  const finish = html.slice(html.indexOf('function noteRetentionFinish'), html.indexOf('async function maybeSubmitOnline'));
+  assert.ok(finish.includes('const offBoards=runOffBoards();'));
+  // Weekly: neither the local board nor the online submit.
+  assert.ok(finish.includes("if(isWeeklyTrackId(id)&&offBoards){\n    extra=(extra?extra+' · ':'')+'PHYS MISMATCH';\n  }else if(isWeeklyTrackId(id)){"));
+  assert.ok(finish.indexOf('if(isWeeklyTrackId(id)&&offBoards)') < finish.indexOf('recordLocalBoard('));
+  // Daily Line: not counted at all, neither the local PB nor the online board.
+  assert.ok(finish.includes("if(String(id)===String(today.trackId)&&offBoards){\n      extra=(extra?extra+' · ':'')+'PHYS MISMATCH';\n    }else if(String(id)===String(today.trackId)){"));
+  assert.ok(finish.indexOf('&&offBoards){') < finish.indexOf('recordDailyLineFinish('));
+
+  // IMPORT CLI on bf: to Betaflight on top of the owner's diff, ahead of the js
+  // parse (Betaflight decides), refused while loading or armed, js rates untouched.
+  const imp = html.slice(html.indexOf('function importCli(text){'), html.indexOf('function importCli(text){') + 120);
+  assert.ok(imp.includes('if(bfWanted()&&!bfFailed)return importCliToBf(text);'));
+  assert.ok(imp.indexOf('importCliToBf') < imp.indexOf('parseCli') || imp.indexOf('parseCli') === -1);
+  const toBf = html.slice(html.indexOf('function importCliToBf(text){'), html.indexOf('function importCli(text){'));
+  // Set lines on top of the owner's diff; a full diff (from `defaults`) in its place.
+  assert.ok(html.includes("function bfDiffWith(text){return !text?bfDiff():bfPasteReplaces(text)?text:bfDiff()+'\\n'+text;}"));
+  assert.ok(toBf.includes("r=bfLoadDiff(bfDiffWith(text),'CLI import');"));
+  assert.ok(toBf.includes("if(!bfCore){"));
+  assert.ok(toBf.includes("setCliStatus('DISARM TO LOAD A DIFF — Betaflight did not take it','err');"));
+  // A boot fault restores what flew; the count is the paste's own changing lines.
+  assert.ok(toBf.includes('}catch(e){') && toBf.indexOf('bfLoadDiff(prev,label());') < toBf.indexOf("if(!r){"));
+  assert.ok(toBf.includes('const took=mine.filter(bfLineChanges).length;'));
+  for (const js of ['saveRates', 'rates[ax]', 'qp.setTune']) assert.ok(!toBf.includes(js), 'the bf import leaves the js core alone: ' + js);
+  assert.ok(html.includes("const want=bfWantDiff();\n      if(bfDiff()&&want!==bfDiffLoaded)bfLoadDiff(want,bfCliText?'CLI import':BF_TUNE_ID);"));
+
+  const css = 'body.bf-core .rates-js,body:not(.bf-core) .rates-bf{display:none!important}';
+  assert.ok(html.includes(css));
+  const rates = html.slice(html.indexOf('<div class="rates-js">'), html.indexOf('<h2>Paste Betaflight CLI dump</h2>'));
+  for (const id of ['ratesType', 'ax_roll', 's_rc', 's_sr', 's_ex', 'rateCurve']) assert.ok(rates.includes(`id="${id}"`), id + ' is in the js-only rates');
+  assert.match(html, /<p class="build-note rates-bf">[^<]*IMPORT CLI[^<]*<\/p>/);
+  assert.ok(html.includes('<select id="ratePreset" class="rates-js">'));
+  assert.ok(html.includes('id="btnRatesShare" class="rates-js"'));
+  assert.ok(html.includes("function syncCoreUI(){document.body.classList.toggle('bf-core',core.kind==='bf');}"));
+  // After every core switch in selectCore and the bf load.
+  const select = html.slice(html.indexOf('function selectCore'), html.indexOf('// ---------- Input poll'));
+  assert.equal(select.split('syncCoreUI();').length - 1, 3);
+});

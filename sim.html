@@ -243,6 +243,9 @@
      own list; dev-only needs ?dev=1 (body.dev); menu-hide never shows. */
   #startMenu:not(.in-flight) .menu-flight,#startMenu.in-flight .menu-launch,
     body:not(.dev) .dev-only,.menu-hide{display:none!important}
+  /* Tune's rates drive the js core only: on the bf core (body.bf-core) they
+     hide behind a line pointing to IMPORT CLI. */
+  body.bf-core .rates-js,body:not(.bf-core) .rates-bf{display:none!important}
   .menu-layer{pointer-events:auto;margin-left:0;width:min(360px,90vw);padding:22px 20px;
     max-height:calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
@@ -623,6 +626,10 @@
   <div class="kbd" id="armSwitchLive">no arm switch — auto-arm when throttle rises from low</div>
 
   <h2>Rates</h2>
+  <!-- The rates below drive the js core only (body.bf-core hides them):
+       Betaflight flies the rates in its diff, changed through IMPORT CLI. -->
+  <p class="build-note rates-bf">Betaflight flies the rates in the Air65 diff (TUNE on the OSD). To fly yours, paste set lines (on top of it) or your full diff (in its place) below and press IMPORT CLI, disarmed. It lasts the session.</p>
+  <div class="rates-js">
   <div class="row"><label>Rate type</label></div>
   <select id="ratesType" title="Betaflight rates_type. CLI import sets this from the dump.">
     <option value="BETAFLIGHT">Betaflight</option>
@@ -647,14 +654,15 @@
   <div class="row"><label id="lbl_ex">Expo</label><span class="val" id="v_ex"></span></div>
   <input type="range" id="s_ex" data-field="expo" min="0" max="1" step="0.01" value="0.25">
   <canvas id="rateCurve" width="280" height="88" aria-label="Rate curve preview"></canvas>
+  </div>
 
   <h2>Paste Betaflight CLI dump</h2>
   <textarea id="cliPaste" rows="4" placeholder="set roll_rc_rate = 110&#10;set roll_srate = 72&#10;set roll_expo = 25&#10;…or a full dump / diff all"></textarea>
   <div class="seg" id="ratesShareRow">
     <button type="button" id="btnCliImport">IMPORT CLI</button>
-    <button type="button" id="btnRatesShare">COPY RATES LINK</button>
+    <button type="button" id="btnRatesShare" class="rates-js">COPY RATES LINK</button>
   </div>
-  <span class="val" id="ratesTypeBadge">BETAFLIGHT</span>
+  <span class="val rates-js" id="ratesTypeBadge">BETAFLIGHT</span>
   <div id="cliImportStatus"></div>
 
   <h2>Camera</h2>
@@ -738,8 +746,8 @@
   <h2>Physics</h2>
   <div class="row"><label>Drone type</label></div>
   <select id="droneType"></select>
-  <div class="row"><label>Rate preset</label></div>
-  <select id="ratePreset"></select>
+  <div class="row rates-js"><label>Rate preset</label></div>
+  <select id="ratePreset" class="rates-js"></select>
   <div class="row"><label>Thrust:weight</label><span class="val" id="v_twr"></span></div>
   <input type="range" id="s_twr" min="2" max="14" step="0.1" value="5" disabled title="Derived from thrust ÷ weight — adjust Mass to change it">
   <div class="row"><label>Floatiness</label><span class="val" id="v_float"></span></div>
@@ -1637,7 +1645,11 @@ let simClockMs=0;                    // ticks run by whichever core flew, since 
 function simNowMs(){return simClockMs;}
 // begin a 3-lap run on the active track: reset splits, start both the run and
 // lap-1 clocks, and start the ghost recording (which spans the whole run)
+// Whether the js core flew any part of this run: set at the start and on any
+// tick (stepCore); runOffBoards judges it against the board the run lands on.
+let runSawJs=false;
 function startRun(){
+  runSawJs=core.kind==='js';
   runActive=true;
   runStartTime=simNowMs();
   lapStartTime=runStartTime;
@@ -5856,7 +5868,61 @@ function setCliStatus(text,kind){
   el.classList.toggle('err',kind==='err');
   el.classList.toggle('ok',kind==='ok');
 }
+// IMPORT CLI on the bf core: the paste goes to Betaflight, and Betaflight
+// decides what it takes. Set lines go on top of the owner's diff (a later set
+// wins, so a few rate lines change just those); a full diff, which starts
+// from `defaults`, takes the owner's diff's place. The js core's rates are
+// left alone, and the paste stays on for the session (selectCore loads it
+// again on the way back to the 65).
+let bfCliText='';
+function bfPasteReplaces(text){return /^\s*defaults\b/im.test(text);}
+function bfDiffWith(text){return !text?bfDiff():bfPasteReplaces(text)?text:bfDiff()+'\n'+text;}
+function bfWantDiff(){return bfDiffWith(bfCliText);}
+// A pasted line that changes something: a setting or feature Betaflight took,
+// or a config command with arguments (get, dump, diff, a bare aux, ... only print).
+function bfLineChanges(l){
+  return l.status==='applied'&&!!(l.setting||l.feature||/^\s*(aux|adjrange|serial|map|resource|timer|dma|led|color|mode_color|rxrange|rxfail|vtxtable|beacon|mmix|smix|servo)\s+\S/i.test(l.text||''));
+}
+function importCliToBf(text){
+  if(!bfCore){
+    const msg='BETAFLIGHT IS STILL LOADING — try again in a moment';
+    toast(msg);setCliStatus(msg,'err');
+    return null;
+  }
+  const prev=bfWantDiff();
+  const label=()=>bfCliText?'CLI import':BF_TUNE_ID;
+  let r;
+  try{
+    r=bfLoadDiff(bfDiffWith(text),'CLI import');
+  }catch(e){
+    // Betaflight did not boot with it (sim-core keeps the image that flies);
+    // the adapter's stored diff goes back to that one too.
+    try{bfLoadDiff(prev,label());}catch(e2){console.warn('sim-core: restoring the diff failed ('+(e2&&e2.message||e2)+')');}
+    setCliStatus('Betaflight did not boot with it ('+(e&&e.message||e)+'); it flies what it flew before','err');
+    return null;
+  }
+  if(!r){
+    setCliStatus('DISARM TO LOAD A DIFF — Betaflight did not take it','err');
+    return null;
+  }
+  // Count the paste's own lines (after the owner's diff when it goes on top).
+  const from=bfPasteReplaces(text)?0:bfDiff().split('\n').length;
+  const mine=(r.lines||[]).filter(l=>l.n>from);
+  const took=mine.filter(bfLineChanges).length;
+  const refused=mine.filter(l=>l.status==='rejected').length,missing=mine.filter(l=>l.status==='error').length;
+  const detail=(refused>0?', refused '+refused:'')+(missing>0?', '+missing+' not in the sim target':'');
+  if(took<=0){
+    // Nothing taken: Betaflight goes back to what it flew before this paste.
+    bfLoadDiff(prev,label());
+    setCliStatus('Betaflight took none of it'+detail+'; it flies what it flew before','err');
+    return r;
+  }
+  bfCliText=text;
+  setCliStatus('Betaflight took '+took+' line'+(took===1?'':'s')+(bfPasteReplaces(text)?' (a full diff, in place of '+BF_TUNE_ID+')':' on top of '+BF_TUNE_ID)+detail,'ok');
+  return r;
+}
 function importCli(text){
+  if(bfWanted()&&!bfFailed)return importCliToBf(text);
   let p;
   try{
     p=parseCli(text,rates.type);
@@ -5876,8 +5942,6 @@ function importCli(text){
     setCliStatus('No recognised CLI commands found','err');
     return p;
   }
-  // On the bf core the pasted diff goes to Betaflight itself (loadDiff).
-  if(core.kind==='bf')bfLoadDiff(text,'CLI import');
   const type=normalizeRateType(p.ratesType)||rates.type;
   if(p.ratesType&&!isRateType(type)){
     const msg=p.ratesType+' rates not supported — import skipped';
@@ -6540,6 +6604,7 @@ function ghostPayloadOf(id, samples, timeMs){
 }
 function noteRetentionFinish(id, total, rec){
   let extra='';
+  const offBoards=runOffBoards();
   if(isDailyTrackId(id)){
     const recd=recordDailyFinish(loadDaily(), { utc: utcDateId(), timeMs: total, trackId: id });
     saveDaily(recd.progress);
@@ -6548,7 +6613,12 @@ function noteRetentionFinish(id, total, rec){
   }
   if(dailyLineLive){
     const today=dailyLineFor(utcDateId());
-    if(String(id)===String(today.trackId)){
+    // Off the boards, a Daily Line run is not counted at all: its time would
+    // show as a 65 placing on the Daily Line card and lend its splits to later
+    // submits.
+    if(String(id)===String(today.trackId)&&offBoards){
+      extra=(extra?extra+' · ':'')+'PHYS MISMATCH';
+    }else if(String(id)===String(today.trackId)){
       const recd=recordDailyLineFinish(loadDailyLine(), {
         utc: today.date, timeMs: total, trackId: today.trackId,
         splits: lastGateSplits[ensureTrackStats(id)]||runGateSplits,
@@ -6558,7 +6628,9 @@ function noteRetentionFinish(id, total, rec){
       maybeSubmitDailyLine(today, total, rec, recd.progress.days[today.date]&&recd.progress.days[today.date].splits);
     }
   }
-  if(isWeeklyTrackId(id)){
+  if(isWeeklyTrackId(id)&&offBoards){
+    extra=(extra?extra+' · ':'')+'PHYS MISMATCH';
+  }else if(isWeeklyTrackId(id)){
     const board=recordLocalBoard(loadBoard(), {
       week: utcWeekId(), frameMm: currentBuild&&currentBuild.frameMm, name: currentPilotName(),
       timeMs: total, trackId: String(id),
@@ -6821,6 +6893,7 @@ function stepCore(frameMs,now){
   core.anchor(now);
   for(const ev of core.events())onCoreEvent(ev);
   syncStateFromCore();
+  if(runActive&&core.kind==='js')runSawJs=true;
   bfArmWatch();
   bfWorldWatch(now);
 }
@@ -6936,6 +7009,16 @@ function bfWorldWatch(now){
   core.setMode(flightMode);
 }
 function bfWanted(){return CORE_KIND==='bf'&&droneType===BF_CLASS;}
+// Tune's rates (sliders, rate type and preset, the rates link) drive the js
+// core only: body.bf-core swaps them for a line pointing to IMPORT CLI.
+function syncCoreUI(){document.body.classList.toggle('bf-core',core.kind==='bf');}
+// The 65 boards hold Betaflight runs. A run the js core flew any part of
+// (runSawJs) that lands on a 65 board (the board class comes from the build:
+// the 65 under ?core=js or after a failed bf load, a 2.5"/5" on a 65 build, or
+// a class switch mid-run) is not that physics: it stays off the boards and
+// the Daily Line, local and online, refused as the Worker refuses another
+// physics version. The 75 and 85 boards are js boards: not affected.
+function runOffBoards(){return (runSawJs||core.kind==='js')&&classId(currentBuild&&currentBuild.frameMm)===DRONE_TYPES[BF_CLASS].frame;}
 // Pick the flying core for the class: the bf core for the Air65 (the default),
 // the js core for a class with no sim-core plant, silently (JS CORE on the OSD,
 // one console note per class), and for every class under ?core=js.
@@ -6949,6 +7032,7 @@ function selectCore(){
       placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
     }
     syncPackForCore();
+    syncCoreUI();
     if(!bfFallbackNoted.has(droneType)){
       bfFallbackNoted.add(droneType);
       console.info('sim-core: only the 65 mm whoop (Air65) has a sim-core plant for now; '+(DRONE_TYPES[droneType]||{label:droneType}).label+' flies the js core');
@@ -6960,12 +7044,13 @@ function selectCore(){
       bfDrop3D();
       core=bfCore;
       // Back on the bf core: respawned (disarmed) where the quad stands, then the
-      // owner's diff again if a CLI import replaced it.
+      // owner's diff (with this session's CLI import on top) if it differs.
       placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
-      const diff=bfDiff();
-      if(diff&&diff!==bfDiffLoaded)bfLoadDiff(diff,BF_TUNE_ID);
+      const want=bfWantDiff();
+      if(bfDiff()&&want!==bfDiffLoaded)bfLoadDiff(want,bfCliText?'CLI import':BF_TUNE_ID);
     }
     syncPackForCore();
+    syncCoreUI();
     return;
   }
   if(bfLoading)return;
@@ -6990,6 +7075,7 @@ function selectCore(){
       core.setMode(flightMode);
       bfSyncMode();
       syncPackForCore();
+      syncCoreUI();
       placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
       toast('BETAFLIGHT CORE — AIR65');
     });
@@ -7399,6 +7485,8 @@ function applyQueryBoot(){
   }
   const presetRaw=q.get('preset');
   const ratesRaw=q.get('rates');
+  // Rates links set the js core's rates; Betaflight flies its diff's.
+  if((presetRaw||ratesRaw)&&bfWanted()&&!bfFailed)toast('RATES LINK — JS CORE ONLY; BETAFLIGHT FLIES ITS DIFF (TUNE → IMPORT CLI)');
   // Query rates are session-only: rates= > preset= > saved ryflyRates. Do not persist.
   if(presetRaw&&applyRatePreset(rates,presetRaw)){
     const sel=document.getElementById('ratePreset');

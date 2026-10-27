@@ -361,8 +361,10 @@ async function bootPageOnce(base, spec) {
           }
         } catch (e) { return { evalError: String(e), map: map, vibe: vibe, artError: artError }; }
         var osd = document.getElementById('osdTR');
+        var ratesJs = document.querySelector('#panel .rates-js'), ratesBf = document.querySelector('#panel .rates-bf');
         return { map: map, track: s.track ? s.track() : null, vibeId: vibe && vibe.id, artError: artError, avg: avg, n: n, triangles: triangles,
-          core: s.core ? s.core() : null, osdTR: osd ? osd.innerText : null };
+          core: s.core ? s.core() : null, osdTR: osd ? osd.innerText : null,
+          ratesJs: ratesJs ? getComputedStyle(ratesJs).display : null, ratesBf: ratesBf ? getComputedStyle(ratesBf).display : null };
       })())`,
       returnByValue: true,
     });
@@ -465,6 +467,10 @@ async function bootCases(cases) {
       if (got.core !== got.wantCore) failures.push(name + ' flies the ' + got.core + ' core, want ' + got.wantCore);
       const line = got.wantCore === 'bf' ? 'BF CORE' : 'JS CORE';
       if (!String(got.osdTR || '').includes(line)) failures.push(name + ' OSD has no ' + line + ': ' + JSON.stringify(got.osdTR));
+      // Tune's rates drive the js core only: on bf they give way to the IMPORT CLI line.
+      const ratesShown = got.ratesJs !== 'none' && got.ratesBf === 'none';
+      const cliShown = got.ratesJs === 'none' && got.ratesBf !== 'none';
+      if (got.wantCore === 'bf' ? !cliShown : !ratesShown) failures.push(name + ' Tune rates ' + got.ratesJs + ' / IMPORT CLI line ' + got.ratesBf + ' on the ' + got.wantCore + ' core');
       const failed = warns.find((s) => /did not load/.test(s));
       if (failed) failures.push(name + ' ' + failed);
       const deprecated = warns.some((s) => /\?core=js is deprecated, removed next release/.test(s));
