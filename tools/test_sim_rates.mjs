@@ -343,7 +343,7 @@ test('RATE_CARDS aliases decode without importing tune-database', () => {
   near(maxRateDps('ACTUAL', stock.roll), 580);
   near(maxRateDps('ACTUAL', stock.yaw), 500);
   const ry = decodeRates('card.65-betafpv-ryfly-1219s');
-  assert.equal(encodeRates(ry), 'ACTUAL.4.74.56.4.74.56.4.70.56');
+  assert.equal(encodeRates(ry), 'ACTUAL.2.74.56.2.74.56.2.70.56');
   near(maxRateDps('ACTUAL', ry.roll), 740);
   near(maxRateDps('ACTUAL', ry.yaw), 700);
   const o4 = decodeRates('card.75-betafpv-ryfly-o4-gf1811');

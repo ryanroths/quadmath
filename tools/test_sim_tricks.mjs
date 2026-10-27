@@ -987,7 +987,7 @@ test('sim.html wires tricks without touching physics or old keys', () => {
   assert.ok(feelSrc.includes('FLIPPED — R TO RESPAWN'), 'stuck-flip toast stays in feel');
   assert.ok(feelSrc.includes('shouldToastFlip'));
   assert.ok(!src.includes('qp.step') && !src.includes('maxThrust'));
-  for (const k of ['ryflyRates', 'ryflyDroneType', 'quadmath_bestLap_', 'quadmath_bestGhost_']) {
+  for (const k of ['ryflyRates', 'ryflyDroneType', 'quadmath_bestLap_', 'ghostStorageKey(']) {
     assert.ok(simSrc.includes(k), 'must keep reading old key ' + k);
   }
 });

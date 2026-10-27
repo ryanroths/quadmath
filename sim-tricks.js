@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim — freestyle trick score + combo.
 // Maneuver classifier: one rotation segment → exactly one label (most specific
 // wins). Trick definitions and point values based on Tyrantt's Pro Whooper

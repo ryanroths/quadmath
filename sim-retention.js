@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim W5 — Retention: daily whoop, weekly boards, ghost duels, skins.
 // Nothing here is copied from WebFPV (GPL).
 // New localStorage keys: quadmathSimDaily, quadmathSimBoard, quadmathSimSkin,
@@ -24,7 +25,9 @@ export const LEADERBOARD_URL = 'https://sim-leaderboard.ryan-roths.workers.dev';
 export const CLASS_IDS = Object.freeze([65, 75, 85]);
 export const CLASS_MAX_SPEED = Object.freeze({ 65: 48, 75: 58, 85: 72 });
 export const MISS_PENALTY_MS = 2000;
-export const PHYS_VER = 2;
+// sim-whoop.js PHYSICS_VER, here for the Worker (it bundles this file, not
+// sim-whoop.js). Submitted ghosts must carry it; see that file for history.
+export const PHYS_VER = 3;
 export const DAILY_GEN = 2;
 export const PILOT_NAME_MAX = 16;
 export const GATE_SIZE_MIN = 0.28 * WS_PER_METRE;

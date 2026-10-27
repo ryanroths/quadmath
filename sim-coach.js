@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim W4 — Coach. Skill-ladder drills, scoring from flight samples,
 // bronze/silver/gold progression, optional ghost ribbon + live delta, and
 // post-drill / post-crash tips that only link existing QuadMath guides.
@@ -5,9 +6,9 @@
 // New localStorage key only: quadmathSimCoach. Do not write old ryfly* keys
 // or the M2 / W1 / W2 / W3 keys.
 
-import { detectPassOrMiss, gateRadius } from './sim-tracks.js?v=8f9513fb3468';
-import { DEFAULT_ROOM, planRoom } from './sim-room.js?v=9017daf8a7b6';
-import { makeWorldLabel } from './sim-art.js?v=0c36c6d602cf';
+import { detectPassOrMiss, gateRadius } from './sim-tracks.js?v=11ec0604e064';
+import { DEFAULT_ROOM, planRoom } from './sim-room.js?v=7fe465c27a92';
+import { makeWorldLabel } from './sim-art.js?v=5509489bb680';
 
 export const COACH_KEY = 'quadmathSimCoach';
 export const GUIDE_DIR = 'content/guides/';

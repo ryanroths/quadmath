@@ -54,14 +54,14 @@ Indoor whoop tracks to prefer: `living-sofa`, `living-circuit`, `garage-bench`, 
 | `whoopBeginner` | Betaflight | Soft indoor whoop. |
 | `whoopRace` | Betaflight | Faster whoop race. |
 | `freestyle` | Betaflight | 5-inch-ish freestyle. |
-| `ryanActual` | Actual | Center 40, max 740 / 740 / 700, expo 0.56. Token `ACTUAL.4.74.56.4.74.56.4.70.56` (same as `card.65-betafpv-ryfly-1219s`). |
+| `ryanActual` | Actual | Center 40, max 740 / 740 / 700, expo 0.56. Token `ACTUAL.4.74.56.4.74.56.4.70.56`. |
 
 Published cards (also `?rates=card.<id>`):
 
 | Card | Type | CLI (roll / pitch / yaw) |
 | --- | --- | --- |
 | `card.65-betafpv-stock` | Actual | 7,58,0 / 7,58,0 / 7,50,0 |
-| `card.65-betafpv-ryfly-1219s` | Actual | 4,74,56 / 4,74,56 / 4,70,56 |
+| `card.65-betafpv-ryfly-1219s` | Actual | 2,74,56 / 2,74,56 / 2,70,56 |
 | `card.75-betafpv-ryfly-o4-gf1811` | Actual | 2,73,56 / 2,73,56 / 2,70,56 |
 | `card.75-happymodel-aio-stock` | Betaflight | 100,70,0 (all axes) |
 
@@ -75,7 +75,7 @@ Suggested params for Ryan to apply. No guide file is edited here. Skip chargers 
 | --- | --- | --- | --- | --- | --- | --- |
 | [`first-tiny-whoop-setup.html`](content/guides/first-tiny-whoop-setup.html) | living | `living-sofa` | angle | `QB1.air65` | `whoopBeginner` | `hover-hold` |
 | [`sim-to-first-pack.html`](content/guides/sim-to-first-pack.html) | living | `living-sofa` | angle | `QB1.air65` | `ryanActual` (paste-your-dump is the point) | `hover-hold` then F for acro |
-| [`air65-pid-tune.html`](content/guides/air65-pid-tune.html) | living | `living-circuit` | acro | `QB1.air65` | `rates=ACTUAL.4.74.56.4.74.56.4.70.56` (optional stock Champion `ACTUAL.7.58.0.7.58.0.7.50.0`) | — |
+| [`air65-pid-tune.html`](content/guides/air65-pid-tune.html) | living | `living-circuit` | acro | `QB1.air65` | `rates=ACTUAL.2.74.56.2.74.56.2.70.56` (optional stock Champion `ACTUAL.7.58.0.7.58.0.7.50.0`) | — |
 | [`air65-ii-freestyle-vs-racing-vs-champion.html`](content/guides/air65-ii-freestyle-vs-racing-vs-champion.html) | living | `living-sofa` | angle | `QB1.air65` | `whoopBeginner` | — |
 | [`65mm-happymodel-se0702-gemfan-1219-3-blade.html`](content/guides/65mm-happymodel-se0702-gemfan-1219-3-blade.html) | living | `living-circuit` | acro | `QB1.mobula6` | `whoopRace` | `gate-pass` |
 | [`hdzero-vs-analog-65mm-flight-time.html`](content/guides/hdzero-vs-analog-65mm-flight-time.html) | living | `living-sofa` | angle | analog `QB1.air65` **and** HDZero `QB1.mobula6` | `whoopBeginner` | — |
@@ -93,7 +93,7 @@ Example URLs:
 
 ```
 https://quadmath.com/sim.html?map=living&track=living-sofa&mode=angle&build=QB1.air65&preset=whoopBeginner&drill=hover-hold
-https://quadmath.com/sim.html?map=living&track=living-circuit&mode=acro&build=QB1.air65&rates=ACTUAL.4.74.56.4.74.56.4.70.56
+https://quadmath.com/sim.html?map=living&track=living-circuit&mode=acro&build=QB1.air65&rates=ACTUAL.2.74.56.2.74.56.2.70.56
 https://quadmath.com/sim.html?build=QB1.mobula6&track=living-circuit&mode=acro&preset=whoopRace
 https://quadmath.com/sim.html?build=QB1.meteor75pro&track=garage-bench&mode=angle&preset=whoopBeginner
 https://quadmath.com/sim.html?build=QB1.whoop85_2s&track=warehouse-aisle&mode=horizon

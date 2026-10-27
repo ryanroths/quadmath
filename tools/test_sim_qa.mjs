@@ -14,7 +14,7 @@ import {
 import { dailyLineFor } from '../sim-retention.js';
 import { trickLineupText, TRICK_BY_ID } from '../sim-tricks.js';
 import {
-  shouldToastFlip, isStuckInverted, stepStuckHold, wantsTurtle, bodyUpZ,
+  shouldToastFlip, isStuckInverted, stepStuckHold, wantsTurtle, bodyUpZ, flipHintText,
   STUCK_HOLD_S,
 } from '../sim-feel.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
@@ -117,6 +117,21 @@ test('FLIPPED toast is only a stuck-on-the-deck hint', () => {
   assert.equal(isStuckInverted({
     upZ: -0.4, clearanceM: 0.01, contact: true, speed: 0, omega: 0,
   }), false, 'up vector not inverted enough');
+});
+
+test('FLIPPED toast names the way out that works on this core and input', () => {
+  assert.equal(flipHintText({ core: 'js', armed: true }), 'FLIPPED — FULL THROTTLE + HARD ROLL · R RESPAWNS');
+  assert.equal(flipHintText({ core: 'js', armed: false }), 'FLIPPED — ARM, THEN FULL THROTTLE + HARD ROLL · R RESPAWNS');
+  assert.equal(flipHintText({ core: 'js', armed: true, touch: true }), 'FLIPPED — FULL THROTTLE + HARD ROLL · OR RESPAWN');
+  assert.equal(flipHintText({ core: 'js', threeD: true }), 'FLIPPED — R TO RESPAWN', '3D has no turtle');
+  // bf, page-driven aux (keyboard, touch, a gamepad): the gesture, or an arm.
+  assert.equal(flipHintText({ core: 'bf', flipAux: 3, armed: true }), 'FLIPPED — FULL THROTTLE + HARD ROLL · R RESPAWNS');
+  assert.equal(flipHintText({ core: 'bf', flipAux: 3, armed: false }), 'FLIPPED — ARM, THEN ROLL · R RESPAWNS');
+  // bf with a radio: Betaflight's crash flip on the diff's switch.
+  assert.equal(flipHintText({ core: 'bf', radio: true, flipAux: 3, armed: false }), 'FLIPPED — AUX3 ON, ARM, ROLL · R RESPAWNS');
+  assert.equal(flipHintText({ core: 'bf', radio: true, flipAux: 3, armed: true }), 'FLIPPED — DISARM, AUX3 ON, ARM, ROLL · R RESPAWNS');
+  assert.equal(flipHintText({ core: 'bf', radio: true, flipAux: null }), 'FLIPPED — NO TURTLE SWITCH IN THE DIFF · R RESPAWNS');
+  assert.equal(flipHintText({ core: 'bf', flipAux: null, armed: true }), 'FLIPPED — NO TURTLE SWITCH IN THE DIFF · R RESPAWNS');
 });
 
 test('full flip, roll, inverted hang, and inverted dive never toast', () => {

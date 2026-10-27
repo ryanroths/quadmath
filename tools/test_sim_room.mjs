@@ -131,7 +131,7 @@ test('sim.html wires Your room without touching old localStorage keys', () => {
   assert.ok(simSrc.includes('ROOM_KEY') && simSrc.includes('applyRoomSpec'));
   assert.ok(simSrc.includes('parseRoomQuery'));
   for (const k of [
-    'ryflyRates', 'ryflyDroneType', 'quadmath_bestLap_', 'quadmath_bestGhost_',
+    'ryflyRates', 'ryflyDroneType', 'quadmath_bestLap_', 'ghostStorageKey(',
     'loadCustomTracks', 'CUSTOM_TRACKS_KEY', 'SELECTED_TRACK_KEY',
   ]) {
     assert.ok(simSrc.includes(k), 'must keep reading old key ' + k);

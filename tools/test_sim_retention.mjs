@@ -506,7 +506,7 @@ test('worker health and board routes work without D1; submit needs DB', async ()
 });
 
 test('H1 server derives week track, rejects pace-bot/phys/class/week, claims names', async () => {
-  assert.equal(PHYS_VER, 2);
+  assert.equal(PHYS_VER, 3);
   assert.equal(weekAllowed('2026-W42', NOW_W42), true);
   assert.equal(weekAllowed('2026-W41', NOW_W42), false);
   const mondayW43 = Date.UTC(2026, 9, 19, 10, 0, 0);
@@ -543,6 +543,12 @@ test('H1 server derives week track, rejects pace-bot/phys/class/week, claims nam
   }, NOW_W42);
   assert.equal(phys.ok, false);
   assert.equal(phys.reason, 'PHYS MISMATCH');
+  // A run recorded before the fixed 1 kHz cores (phys 2) is refused too.
+  const phys2 = normalizeSubmit({
+    name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost: { ...ghost, phys: 2 }, track,
+  }, NOW_W42);
+  assert.equal(phys2.ok, false);
+  assert.equal(phys2.reason, 'PHYS MISMATCH');
 
   const cls = normalizeSubmit({
     name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost, track, build: { frameMm: 85 },

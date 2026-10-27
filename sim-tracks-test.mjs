@@ -122,12 +122,13 @@ assert.ok(!enteredGate(inside, inside, g1));
 const lastGate = { x: g1.x, y: g1.y, z: g1.z };
 assert.equal(detectPassOrMiss(lastGate, lastGate, living.gates, 2).type, 'none');
 
-assert.equal(ghostStorageKey(0), 'quadmath_bestGhost_0');
-assert.equal(ghostStorageKey(1), 'quadmath_bestGhost_1');
-assert.equal(ghostStorageKey('city-loop'), 'quadmath_bestGhost_0');
+// Ghost keys carry GHOST_KEY_PREFIX (v3: sim-time ghosts); best laps and runs keep theirs.
+assert.equal(ghostStorageKey(0), 'v3.quadmath_bestGhost_0');
+assert.equal(ghostStorageKey(1), 'v3.quadmath_bestGhost_1');
+assert.equal(ghostStorageKey('city-loop'), 'v3.quadmath_bestGhost_0');
 assert.equal(bestLapStorageKey(0), 'quadmath_bestLap_0');
 assert.equal(bestRunStorageKey(1), 'quadmath_bestRun_1');
-assert.equal(ghostStorageKey('living-sofa'), 'quadmathSimGhost_living-sofa');
+assert.equal(ghostStorageKey('living-sofa'), 'v3.quadmathSimGhost_living-sofa');
 assert.equal(bestLapStorageKey('living-sofa'), 'quadmathSimBestLap_living-sofa');
 
 const mem = {};

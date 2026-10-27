@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // Felt Scale — QuadMath studio material / lighting lock.
 // Visual only. Palettes stay per-map. Night maps keep their hour.
 // Living Room (Clay Parlor) is the reference implementation.

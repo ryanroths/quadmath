@@ -1,11 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim — hidden sparks + secret spots for freestyle.
 // Original look per docs/sim-art-direction.md. No third-party sim code.
 // New localStorage key only: quadmathSimSecrets.
 // Stock skin ids / unlocks in sim-retention.js stay frozen.
 
-import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=c43bf3a247a6';
-import { LAYOUT } from './sim-maps.js?v=d3bccf5de2eb';
-import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=8f9513fb3468';
+import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=329eac4d694b';
+import { LAYOUT } from './sim-maps.js?v=1455b3d51c73';
+import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=11ec0604e064';
 
 export const SECRETS_KEY = 'quadmathSimSecrets';
 export const SPARK_NAME = 'Spark';

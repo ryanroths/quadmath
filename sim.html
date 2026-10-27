@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later. The QuadMath simulator (this page,
+     quadphysics.js, sim-*.js, sim-core-adapter.js) is free software under the
+     GNU GPL v3 or later, and runs quadmath-sim-core (Betaflight, GPL-3.0-or-later);
+     see SIM-NOTICE.txt. -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -67,6 +71,9 @@
   footer .sf-logo{color:var(--txt);text-decoration:none}
   footer .sf-logo:hover{color:var(--orange)}
   footer .sf-logo .dot{color:var(--orange)}
+  footer .sf-license{color:var(--txt);text-decoration:none;white-space:nowrap}
+  footer .sf-license:hover{color:var(--orange)}
+  footer .sf-l-short{display:none}
   #panelHome{display:inline-block;color:var(--dim);font-size:11px;text-decoration:none;margin-bottom:8px}
   #panelHome:hover{color:var(--orange)}
   /* G does nothing until a ghost exists (own best run, or a hosted/pasted
@@ -80,6 +87,8 @@
      that has to stay, so the calculator boilerplate drops out first. */
   @media (max-width:559px){
     footer .sf-note{display:none}
+    footer .sf-l-long{display:none}
+    footer .sf-l-short{display:inline}
     #osdLap{top:70px;font-size:11px;max-width:52vw;line-height:1.25}
     #osdGate{font-size:11px;max-width:70vw;text-align:center}
   }
@@ -828,7 +837,7 @@
      script, so it runs before the module below and the data is there by
      the time applyDroneType() first fires. Its own init() no-ops here:
      it returns early when there is no #tuneGrid on the page. -->
-<script src="tune-database.js?v=6f36677579c7"></script>
+<script src="tune-database.js?v=b5b01f01abbc"></script>
 <script type="importmap">
 {
   "imports": {
@@ -840,20 +849,24 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=e1f465641635";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=1592e07fcc0d";
+import {
+  WS as CORE_WS, TICK_US, toScene, toModule, boxToModule, emptyState,
+  createJsCore, createBfCore, armingFlagNames, radioAux,
+} from "./sim-core-adapter.js?v=31417a087019";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
   parseThreeDQuery, runCountsForBoards, throttleHudText,
   throttleCollective, armHintText, stepAutoArm,
-} from "./sim-3d.js?v=ac82e9368acc";
+} from "./sim-3d.js?v=712268ce8b16";
 import {
   WHOOP_KEY, PHYSICS_VER,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=c5a4d163f20f";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=66f06c0027d5";
+} from "./sim-whoop.js?v=bd6b4b885629";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=ed4ee91304b7";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
@@ -867,7 +880,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=0c36c6d602cf";
+} from "./sim-art.js?v=5509489bb680";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -879,7 +892,7 @@ import {
   loadAutoArm, saveAutoArm, loadArmSwitch, saveArmSwitch, mergeArmSwitch,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
-} from "./sim-touch.js?v=9c2ecc147383";
+} from "./sim-touch.js?v=40068c573e17";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -892,32 +905,32 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=8f9513fb3468";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=d3bccf5de2eb";
+} from "./sim-tracks.js?v=11ec0604e064";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=1455b3d51c73";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=9017daf8a7b6";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=4aaf41d9c7bf";
+} from "./sim-room.js?v=7fe465c27a92";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=998d958051bf";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
   convertAxisFamily as convertAxisRate, formatAxisReadout, formatCliSummary,
   drawRateCurve, normalizeRateType, isRateType, bfCurve as bfCurveOf,
   actualRate as actualRateOf, encodeRates, decodeRates, ratesDeepLink, RATE_CARDS,
-} from "./sim-rates.js?v=647e366ab1c9";
+} from "./sim-rates.js?v=409bffd7db79";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
   loadBuild, saveBuild, buildDeepLink, matchPresetId, classDefault,
-} from "./sim-build.js?v=fa0942d7ccfb";
+} from "./sim-build.js?v=58e19554acd5";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=0a3c71037c39";
+} from "./sim-coach.js?v=6d6e23275a27";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
-} from "./sim-tricks.js?v=5a87f682883c";
+} from "./sim-tricks.js?v=1b98ac6fc7bb";
 import {
   DAILY_KEY, DAILY_LINE_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -937,13 +950,13 @@ import {
   loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   defaultWhoopKit,
-} from "./sim-retention.js?v=c43bf3a247a6";
+} from "./sim-retention.js?v=329eac4d694b";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=9d3d7731d13e";
+} from "./sim-secrets.js?v=969d6aedb1be";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -960,6 +973,9 @@ function ensureGltf(){
   }
   return gltfReady;
 }
+// ?core=bf flies quadmath-sim-core (Betaflight 4.5.1 in WASM, the Air65 for
+// now); the default stays the js core, quadphysics.js. Read once, at boot.
+const CORE_KIND=new URLSearchParams(location.search).get('core')==='bf'?'bf':'js';
 const CFG={
   camDeg:15,fov:VFOV_DEFAULT,maxThrustN:3.9,thrCurve:1.0,thrMid:THROTTLE_MID_DEFAULT,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
 CFG.fov=loadFov();
@@ -1096,7 +1112,7 @@ function poseCraft(){
 function spinCraftProps(dt){
   if(!craftGroup||!craftGroup.visible)return;
   const thr=typeof stick==='undefined'?0:(stick.t||0);
-  const armed=typeof qp!=='undefined'&&qp&&qp.armed;
+  const armed=!!cs.armed;
   const spin=(armed?20+thr*52:1.2)*dt;
   craftGroup.traverse(function(o){
     if(!o.userData)return;
@@ -1377,7 +1393,7 @@ let dailyLineLive=false;             // today's named-line challenge session
 let dailyLineMod='none';
 function missPenaltyMs(){return (dailyLineLive&&dailyLineMod==='strict')?DAILY_LINE_STRICT_MISS_MS:MISS_PENALTY_MS;}
 let runActive=false;                 // a run (laps 1..RUN_LAPS) is in progress
-let runStartTime=0;                  // performance.now() at run start (gate 0)
+let runStartTime=0;                  // sim time (ms, simNowMs) at run start (gate 0)
 let lapStartTime=0;                  // current lap's start — for the live clock + split
 let runLap=0;                        // 1-based lap number within the current run
 let runSplits=[];                    // completed lap durations this run
@@ -1577,11 +1593,17 @@ function updateGateHighlight(){
     if(currentMap==='gym')pulseGymGate(g,g===target,passed,now,vibeFor('gym'));
   }
 }
+// Run, lap, split and ghost clocks read sim time: the 1 ms ticks run since load
+// by whichever core flew (simClockMs, advanced in stepCore), so a slow frame, a
+// menu, a hidden tab, a bf reboot or a core switch cannot stretch or rewind a
+// lap, and the ghost and the run total share one clock.
+let simClockMs=0;                    // ticks run by whichever core flew, since load (stepCore)
+function simNowMs(){return simClockMs;}
 // begin a 3-lap run on the active track: reset splits, start both the run and
 // lap-1 clocks, and start the ghost recording (which spans the whole run)
 function startRun(){
   runActive=true;
-  runStartTime=performance.now();
+  runStartTime=simNowMs();
   lapStartTime=runStartTime;
   gateSplitStart=runStartTime;
   runLap=1;
@@ -1600,7 +1622,7 @@ function finishRun(){
   const line=isLineTrackId(activeTrackId);
   let total;
   if(line){
-    total=(performance.now()-runStartTime)+missTotal*missPenaltyMs();
+    total=(simNowMs()-runStartTime)+missTotal*missPenaltyMs();
     runSplits=[total];
   }else{
     total=runSplits.reduce((a,b)=>a+b,0);
@@ -1620,9 +1642,14 @@ function finishRun(){
       try{localStorage.setItem(bestLapStorageKey(id),String(total));}catch(e){}
       bestLapMs[id]=total;
     }
-    commitGhost(id);
+    commitGhost(id,total);
     lapFlashUntil=performance.now()+2500;
     best=true;
+  }else if(counted){
+    // The best time may predate the versioned ghost slot (an older clock):
+    // keep the fastest sim-time run there.
+    const gt=loadGhostTotal(id);
+    if(!gt||total<gt)commitGhost(id,total);
   }
   const extra=counted?noteRetentionFinish(id,total,rec):(threeD?'3D — NOT COUNTED':'');
   const label=line?'LINE':'RUN';
@@ -1678,7 +1705,7 @@ function updateGates(){
     return;
   }
   if(hit.type!=='pass')return;
-  const now=performance.now();
+  const now=simNowMs();
   const passed=nextGateIndex;
   const passedGate=list[passed];
   if(passedGate) lastPassedGate={x:passedGate.pos.x,y:passedGate.pos.y,z:passedGate.pos.z};
@@ -2225,13 +2252,12 @@ spawnTrackData(cityTrackJson(1),1);
 const portals=[];
 const portalFlashEl=document.getElementById('portalFlash');
 const PORTAL_SPAWN_HEIGHT=15;
-// after any teleport, proximity checks are suppressed until this timestamp —
-// without it, landing at Portal B's exact stated position would sit inside
-// Portal B's OWN trigger radius and immediately warp you right back to
-// Portal A's position (which is itself inside Portal A's trigger radius),
-// an infinite same-frame ping-pong. This keeps the two portals at the exact
-// coordinates given rather than needing an artificial landing offset.
-let portalCooldownUntil=0;
+// Entry is an edge: the quad must be outside a portal and then inside it.
+// Landing inside Portal B's own trigger after a warp is not an entry, so the
+// two portals stay at their exact coordinates with no ping-pong and no
+// wall-clock cooldown. The js core checks once a tick (jsPortals); the bf core
+// has the portals as sim-core triggers and warps on their events (bfPortal).
+let portalInside=null;
 function addPortal(x,z,destX,destZ,label,radius){
   radius=radius||20;
   const y=PORTAL_SPAWN_HEIGHT;
@@ -2255,6 +2281,7 @@ function flashPortal(){
   portalFlashEl.style.opacity=0.55;
   setTimeout(()=>{portalFlashEl.style.opacity=0;},150); // CSS transition (.3s) handles the fade back to 0
 }
+// Decoration only, once a frame: the shimmer.
 function updatePortals(){
   const t=performance.now();
   for(const p of portals){
@@ -2262,22 +2289,38 @@ function updatePortals(){
     // same sine-pulse technique as the active race gate's highlight
     p.mesh.material.emissiveIntensity=1.0+Math.sin(t*0.004)*0.4;
     p.mesh.scale.setScalar(1+Math.sin(t*0.003)*0.06);
-    if(t<portalCooldownUntil)continue; // just teleported — let the pilot clear the trigger zone first
-    if(state.pos.distanceTo(p.pos)<p.r){
-      state.pos.set(p.destX,PORTAL_SPAWN_HEIGHT,p.destZ);
-      state.vel.set(0,0,0); // clean teleport — no carried momentum smashing into destination geometry
-      // The physics module owns position/velocity — syncStateFromQp() mirrors
-      // qp -> state every frame, so writing only `state` was overwritten
-      // before render (toast fired, quad never moved). Push the teleport
-      // into qp too. Attitude, arm state and motor spool are left alone so
-      // the pilot comes out the other side still flying.
-      world2mod(state.pos,qp.position);
-      world2mod(state.vel,qp.velocity);
-      portalCooldownUntil=t+1200;
-      flashPortal();
-      toast('WARP');
-    }
   }
+}
+const _pp=new THREE.Vector3();
+function portalAt(pos){
+  for(const p of portals)if(pos.distanceTo(p.pos)<p.r)return p;
+  return null;
+}
+// The js core, once a tick: warp on entering a portal. Attitude, arm state and
+// motor spool are left alone so the pilot comes out the other side flying.
+function jsPortals(){
+  if(!portals.length)return;
+  const inside=portalAt(toScene(qp.position,_pp));
+  if(inside&&inside!==portalInside){
+    _pp.set(inside.destX,PORTAL_SPAWN_HEIGHT,inside.destZ);
+    toModule(_pp,qp.position);
+    qp.velocity.x=qp.velocity.y=qp.velocity.z=0; // clean teleport — no carried momentum
+    jsCore.resetPose();
+    portalInside=portalAt(_pp);   // arriving inside the other portal is not an entry
+    flashPortal();
+    toast('WARP');
+    return;
+  }
+  portalInside=inside;
+}
+// The bf core: a trigger event (id = portal index + 1) warps it.
+function bfPortal(id){
+  const p=portals[id-1];
+  if(!p||core.kind!=='bf')return;
+  _pp.set(p.destX,PORTAL_SPAWN_HEIGHT,p.destZ);
+  core.teleport(toModule(_pp,{x:0,y:0,z:0})); // attitude: the latest tick's
+  flashPortal();
+  toast('WARP');
 }
 // round trip: Portal A on the main map, clear of the mesa ring (dist from
 // origin ~495, under the ring's 520 floor) and every other landmark
@@ -3087,25 +3130,21 @@ let thrustActual=0; // spooled thrust in WORLD newtons — audio + battery load 
 // crossing the boundary is converted. Running true SI inside and scaling on the
 // way out reproduces the old feel exactly: 9.81 × 3.5 = 34.3 u/s², which is the
 // G*gravMult the hand-rolled physics used.
-const WS=3.5;                    // world units per real metre
+const WS=CORE_WS;                // world units per real metre (3.5, sim-core-adapter.js)
 const FLOOR_Y=FLOOR_CLEARANCE_M*WS; // ~1 cm pad in world units
 const trickSample={qx:0,qy:0,qz:0,qw:1,ox:0,oy:0,oz:0,wx:0,wy:0,wz:0,alt:0,speed:0,vx:0,vy:0,vz:0,clearance:1,throttle:0,armed:false,colliders:null,ws:WS};
 // Module frame is Z-up / X-forward / Y-left; three.js is Y-up and, for this
-// scene, -Z-forward (the camera looks down its own -Z).
-//
-// The note-1 remap in quadphysics.js sends module +X to world +X, which parks
-// the quad's nose on the scene's RIGHT axis. The frame is then yawed 90° from
-// the camera, roll and pitch land on each other's axes, and every control reads
-// backwards. Mapping module-forward onto world -Z instead keeps the body axes
-// and the camera agreed:
+// scene, -Z-forward (the camera looks down its own -Z). The one conversion is
+// toScene() in sim-core-adapter.js (toModule() its inverse):
 //     X_m (forward) -> -Z_w        Y_m (left) -> -X_w        Z_m (up) -> +Y_w
 // Determinant +1, so it is a rotation and the quaternion components permute the
-// same way as the vector components.
-const mod2world=(m,out)=>out.set(-m.y*WS, m.z*WS, -m.x*WS);
-const world2mod=(w,out)=>{out.x=-w.z/WS; out.y=-w.x/WS; out.z=w.y/WS; return out;};
+// same way as the vector components. (quadphysics.js's note-1 remap, module +X
+// to world +X, parks the nose on the scene's right axis; it is not used.)
 
 const qp=new QuadPhysics(PRESETS.whoop65);
 window._qp=qp; // debug handle, same convention as _simBooted/_gltfReady above
+qp.setPhysicsHz(PHYSICS_HZ_FAST); // the js core ticks at a fixed 1 kHz (sim-core-adapter.js)
+qp.windowedYawFF=true;            // ... one tick per step, so yaw takes the 16 ms FF window directly
 // Air65 II Champion stock tune from the tune DB (65-betafpv-stock) — raw Betaflight values.
 // Feedforward is set explicitly. These tunes carry only P/I/D, so without an F
 // they inherited DEFAULT_TUNE's 120/125/120. F_SCALE is now the Betaflight
@@ -3148,7 +3187,13 @@ function applyDuctHit(s,normal,into,floorHit){
   },currentBuild,whoopSettings);
   _cv.set(hit.vel.x,hit.vel.y,hit.vel.z);
   s.omega.x=hit.omega.x;s.omega.y=hit.omega.y;s.omega.z=hit.omega.z;
-    if(hit.crashed){
+  hitEffects(hit.crashed,into);
+  return hit;
+}
+// What an impact does to the page, whichever core reported it: into is the
+// impact speed in world units/s (the bf core's contact events give m/s × WS).
+function hitEffects(crashed,into){
+  if(crashed){
     bounce();
     camShake=Math.max(camShake,Math.min(1.4,into/16));
     if(coach&&coach.isActive())coach.noteCrash();
@@ -3156,11 +3201,10 @@ function applyDuctHit(s,normal,into,floorHit){
   }else{
     camShake=Math.max(camShake,Math.min(0.45,into/28));
   }
-  return hit;
 }
 qp.onSubstep=(s)=>{
-  mod2world(s.position,_cp);
-  mod2world(s.velocity,_cv);
+  toScene(s.position,_cp);
+  toScene(s.velocity,_cv);
   let floorHit=false;
   if(_cp.y<FLOOR_Y){
     const impact=-_cv.y;_cp.y=FLOOR_Y;floorHit=true;
@@ -3188,8 +3232,8 @@ qp.onSubstep=(s)=>{
       break;
     }
   }
-  world2mod(_cp,s.position);
-  world2mod(_cv,s.velocity);
+  toModule(_cp,s.position);
+  toModule(_cv,s.velocity);
   // Ground scrub: frame and props dragging on the floor bleed rotation fast —
   // a tumble SETTLES within ~half a second of ground contact instead of
   // spinning in place forever. 0.97^240 per second ≈ hard decay, contact only.
@@ -3204,7 +3248,7 @@ qp.onSubstep=(s)=>{
 // same AABB collider set as the crash check; returns SI meters for the module.
 const _gp=new THREE.Vector3();
 qp.groundClearance=(s)=>{
-  mod2world(s.position,_gp);
+  toScene(s.position,_gp);
   let top=FLOOR_Y;
   for(const bb of colliders){
     if(_gp.x>=bb.min.x&&_gp.x<=bb.max.x&&_gp.z>=bb.min.z&&_gp.z<=bb.max.z&&bb.max.y<=_gp.y&&bb.max.y>top){
@@ -3215,7 +3259,7 @@ qp.groundClearance=(s)=>{
 };
 const _wd=new THREE.Vector3();
 function nearestWallDistSI(s){
-  mod2world(s.position,_wd);
+  toScene(s.position,_wd);
   let best=8*WS;
   for(const bb of colliders){
     const dx=Math.max(bb.min.x-_wd.x,0,_wd.x-bb.max.x);
@@ -3226,23 +3270,32 @@ function nearestWallDistSI(s){
   return best/WS;
 }
 qp.externalDisturbance=(s)=>{
-  const thr=qp.armed?(typeof stick!=='undefined'
-    ?(threeD?mapThrottle3d(stick.t,{deadband:THREED_DEADBAND}):stick.t)
-    :0):0;
+  const thr=qp.armed?(threeD?mapThrottle3d(tickStick.t,{deadband:THREED_DEADBAND}):tickStick.t):0;
   const wash=stepPropwash(washState,{pos:s.position,vel:s.velocity,throttle:thr},s.physicsDt||0.002,currentBuild,whoopSettings);
   washState=wash.wake;
-  const t=(typeof performance!=='undefined'?performance.now():0)/1000;
+  const t=jsTickS; // sim time: the draft noise no longer reads the wall clock
   const draft=indoorDraft(s.position,nearestWallDistSI(s),t,currentBuild,whoopSettings);
   return combineDisturbance(wash,draft);
 };
 
-// Mirror the module state into the three.js-space `state` object every frame so
-// camera, OSD, gates and ghosts keep reading exactly what they did.
-function syncStateFromQp(){
-  mod2world(qp.position,state.pos);
-  mod2world(qp.velocity,state.vel);
-  const q=qp.quaternion;
-  state.q.set(-q.y,q.z,-q.x,q.w); // same permutation as mod2world
+// The render boundary: the flying core's interpolated module-frame state into
+// the three.js-space `state` once a frame, so camera, OSD, gates and ghosts
+// read the scene and the module-frame readers read `cs`, whichever core flies.
+const TICK_S=TICK_US/1e6;
+const cs=emptyState();               // the core's state this frame (module frame)
+let tickStick={r:0,p:0,y:0,t:0};     // the sample the js core's tick flies on (its hooks read it)
+let jsTickS=0;                       // the js core's sim time, s
+const jsCore=createJsCore({qp,tick:(sample,tUs)=>jsTick(sample,tUs),
+  extras:(o)=>{o.clearance=qp.groundClearance?qp.groundClearance(qp):qp.position.z;}});
+let core=jsCore;                     // the flying core: jsCore, or the bf core once loaded
+let bfCore=null;
+function syncStateFromCore(){
+  core.getState(cs);
+  toScene(cs.position,state.pos);
+  toScene(cs.velocity,state.vel);
+  toScene(cs.quaternion,state.q);
+  thrustActual=cs.totalThrustAbsN*WS;
+  if(cs.kind==='bf'&&cs.battV!=null){battV=cs.battV;battCharge=cs.soc;}
 }
 // camShake is the shared screen-shake channel — impacts feed it, and it decays
 // every rendered frame in updateCamera().
@@ -3264,16 +3317,16 @@ function resetSpawnPos(){
   if(currentMap==='city'&&(legacy===0||t==null))return {x:0,y:.15,z:20};
   return startPad(t||{gates:[]});
 }
-function placeQuadAt(x,y,z,yaw){
+function placeQuadAt(x,y,z,yaw,opts){
   state.pos.set(x,Math.max(0.15,y),z);state.vel.set(0,0,0);state.q.identity();
   prevGatePos.copy(state.pos);
-  qp.reset(world2mod(state.pos,{x:0,y:0,z:0}));
-  if(Number.isFinite(yaw)&&yaw){
-    const h=yaw*0.5;
-    qp.quaternion={x:0,y:0,z:Math.sin(h),w:Math.cos(h)};
-  }
+  qp.reset(toModule(state.pos,{x:0,y:0,z:0}));
+  const h=Number.isFinite(yaw)&&yaw?yaw*0.5:0;
+  if(h)qp.quaternion={x:0,y:0,z:Math.sin(h),w:Math.cos(h)};
   qp.cfg.maxThrustPerMotor=baseThrustPerMotor;
-  syncStateFromQp();
+  if(core.kind==='bf')bfSpawn(toModule(state.pos,{x:0,y:0,z:0}),{x:0,y:0,z:Math.sin(h),w:Math.cos(h)},opts);
+  else jsCore.resetPose();
+  syncStateFromCore();
   thrustActual=0; // motors spool from zero on re-arm — no thrust jump
   camShake=0;
   washState=emptyWake();
@@ -3309,7 +3362,7 @@ function resetQuad(){
     return;
   }
   const pad=resetSpawnPos();
-  placeQuadAt(pad.x,pad.y,pad.z,pad.yaw);
+  placeQuadAt(pad.x,pad.y,pad.z,pad.yaw,{freshPack:true});
   battCharge=1;battV=BATT_FULL; // fresh pack only on a full map-start reset
   nextGateIndex=0;runActive=false;runLap=0;runSplits=[];runGateSplits=[];lapStartTime=0;runStartTime=0;
   missesThisLap=0;missTotal=0;lastGateSplit=0;
@@ -3379,15 +3432,21 @@ document.getElementById('calibSkip').onclick=()=>{
   calib=out.state;
   if(out.done)finishCalib();
 };
+let calibDrawAt=0;
 function runCalib(gp,dt){
   const out=stepCalib(calib,gp,dt);
   calib=out.state;
-  calibStepEl.textContent=out.label;
-  calibHintEl.textContent=out.hint;
-  document.getElementById('calibSkip').style.display=out.skipAux?'':'none';
-  const ax=Array.prototype.slice.call(gp.axes||[]);
-  calibBarsEl.innerHTML=ax.map((a,i)=>
-    `ax${i} ${'▮'.repeat(Math.round((a+1)*5)).padEnd(10,'▯')} ${Number(a).toFixed(2)}`).join('<br>');
+  // Stepped from the 4 ms input poll; the DOM is drawn at most every 60 ms.
+  const nowMs=performance.now();
+  if(out.done||nowMs-calibDrawAt>60){
+    calibDrawAt=nowMs;
+    calibStepEl.textContent=out.label;
+    calibHintEl.textContent=out.hint;
+    document.getElementById('calibSkip').style.display=out.skipAux?'':'none';
+    const ax=Array.prototype.slice.call(gp.axes||[]);
+    calibBarsEl.innerHTML=ax.map((a,i)=>
+      `ax${i} ${'▮'.repeat(Math.round((a+1)*5)).padEnd(10,'▯')} ${Number(a).toFixed(2)}`).join('<br>');
+  }
   if(out.done)finishCalib();
 }
 function finishCalib(){
@@ -3428,7 +3487,9 @@ presetSel.onchange=()=>{
 };
 
 // ---------- Input ----------
-const stick={r:0,p:0,y:0,t:0};
+// aux: on the bf core with a radio, its AUX channels as it sends them
+// (radioAux); null when the page drives AUX (keyboard, touch, a gamepad).
+const stick={r:0,p:0,y:0,t:0,aux:null};
 const keys={};
 // ---------- background music playlist (audio/track*.mp3) — M to toggle, paused by default ----------
 const TRACKS=['audio/track1.mp3','audio/track2.mp3','audio/track3.mp3'];
@@ -3620,7 +3681,8 @@ function updateMotorSound(){
   if(!motorAudioCtx||!motorSoundOn)return;
   const t=motorAudioCtx.currentTime;
   // pitch follows the SPOOLED thrust, so audio lags stick exactly like the motors
-  const frac=Math.max(0,Math.min(1,Math.abs(thrustActual)/CFG.maxThrustN));
+  const maxN=core.kind==='bf'&&core.maxThrustN?core.maxThrustN*WS:CFG.maxThrustN;
+  const frac=Math.max(0,Math.min(1,Math.abs(thrustActual)/maxN));
   // (5) punch-out overshoot: rapid rise kicks pitch ~3% high, then settles
   if(frac-audioPrevFrac>0.04)audioOver=1.03;
   audioOver+=(1-audioOver)*0.06;
@@ -3882,6 +3944,7 @@ function readInput(dt){
     }
   }
   padLive=!!(gp&&gpConnected);
+  pollGp=padLive?gp:null;
   if(gpConnected){
     // Connected radio/gamepad owns the sticks even on Chrome's empty polls.
     // Falling through to touch was the W6 regression (channel map "off").
@@ -3889,15 +3952,21 @@ function readInput(dt){
     if(calib){
       runCalib(gp,dt);
       stick.r=stick.p=stick.y=0;
+      stick.aux=null;
       // 3D: t=0 is full reverse. Match the arm-gate idle (center = zero thrust).
       stick.t=threeD?0.5:0;
       if(qp.armed)qp.disarm();
+      if(core.kind==='bf')core.setArm(false);
       return;
     }
     const map=liveAxisMap(gp);
     liveMap=map;
-    const next=applyAxisMap(gp.axes,map,{threeD});
+    // The bf core takes the radio's channels 1:1 (Betaflight owns stick shaping).
+    const next=applyAxisMap(gp.axes,map,core.kind==='bf'?{threeD,deadzone:0}:{threeD});
     stick.r=next.r;stick.p=next.p;stick.y=next.y;stick.t=next.t;
+    // On bf a radio's AUX channels go to Betaflight unchanged: its own arm,
+    // mode and turtle switches, on the diff's aux lines.
+    stick.aux=core.kind==='bf'&&padIsRadio(gp)?radioAux(gp,map):null;
     // Radio-only pilots make no keyboard or mouse gesture, so a stick deflection
     // is what unlocks audio for them. Roll/pitch/yaw only — a ratcheted TX16S
     // throttle sits wherever it was left and would fire this with no gesture.
@@ -3913,12 +3982,13 @@ function readInput(dt){
         if(performance.now()>skipSafeUntil)toast('STICKS SAFE — LIVE');
       }else stick.t=threeD?0.5:0;
     }
-    if(map.mode&&feel){
+    if(map.mode&&feel&&!stick.aux){
       const m=feel.modeFromAux(feel.auxValue(gp,map.mode));
-      if(m&&m!==qp.flightMode)setFlightMode(m);
+      if(m&&m!==flightMode)setFlightMode(m);
     }
     return;
   } else if(touchCtl&&touchCtl.enabled){
+    stick.aux=null;
     const ts=touchCtl.read();
     stick.r=ts.r;stick.p=ts.p;stick.y=ts.y;stick.t=ts.t;
     if(!musicStarted&&(Math.abs(stick.r)>0.15||Math.abs(stick.p)>0.15||Math.abs(stick.y)>0.15))startMusic();
@@ -3926,7 +3996,8 @@ function readInput(dt){
     const tR=(keys['arrowright']?1:0)-(keys['arrowleft']?1:0);
     const tP=(keys['arrowup']?1:0)-(keys['arrowdown']?1:0);
     const tY=(keys['d']?1:0)-(keys['a']?1:0);
-    const sm=1-Math.pow(0.0001,dt);
+    stick.aux=null;
+    const sm=dt>0?1-Math.pow(0.0001,dt):0;
     stick.r+=(tR-stick.r)*sm;stick.p+=(tP-stick.p)*sm;stick.y+=(tY-stick.y)*sm;
     if(keys['w'])kbThrottle+=1.4*dt;
     if(keys['s'])kbThrottle-=1.4*dt;
@@ -4032,7 +4103,7 @@ function syncTouchModeBtn(){
   const b=document.getElementById('touchMode');
   if(b)b.textContent=(qp.flightMode||flightMode||'angle').toUpperCase();
   const arm=document.getElementById('touchArm');
-  if(arm)arm.classList.toggle('on',!!qp.armed);
+  if(arm)arm.classList.toggle('on',!!coreArmed());
   const cb=document.getElementById('cb3d');
   if(cb)cb.checked=!!threeD;
   const hud3d=document.getElementById('hud3d');
@@ -4047,7 +4118,18 @@ function setFlightMode(mode,persist){
     syncTouchModeBtn();
     return qp.flightMode;
   }
+  if(core.kind==='bf'&&bfRadio()){
+    toast('FLIGHT MODE IS ON THE RADIO');
+    syncTouchModeBtn();
+    return flightMode;
+  }
+  if(core.kind==='bf'&&!core.hasMode(String(mode||'').toLowerCase())){
+    toast('NO '+String(mode).toUpperCase()+' SWITCH IN THE DIFF');
+    syncTouchModeBtn();
+    return flightMode;
+  }
   flightMode=qp.setFlightMode(mode);
+  if(core.kind==='bf')core.setMode(flightMode);
   if(persist!==false)saveFlightMode(flightMode);
   syncTouchModeBtn();
   toast(flightMode.toUpperCase()+' MODE');
@@ -4055,11 +4137,16 @@ function setFlightMode(mode,persist){
 }
 function toggleFlightMode(){
   if(threeD){setFlightMode('acro');return;}
-  const order=['angle','horizon','acro'];
+  const order=['angle','horizon','acro'].filter(m=>core.kind!=='bf'||core.hasMode(m));
   setFlightMode(order[(order.indexOf(qp.flightMode)+1)%order.length]);
 }
 function setThreeD(on,persist){
   const want=!!on;
+  if(want&&(core.kind==='bf'||bfWanted())){
+    console.info('sim-core: 3D is not wired to the bf core yet; staying 2D');
+    toast('3D — NOT ON THE BF CORE YET');
+    return threeD;
+  }
   threeD=want;
   qp.setThreeD(want);
   if(persist!==false)saveThreeD(want);
@@ -4068,9 +4155,9 @@ function setThreeD(on,persist){
   if(!padLive)stick.t=kbThrottle;
   // Radio keeps its physical stick. Enabling 3D at 2D idle (t=0) is full
   // reverse; disabling 3D at center is 50% 2D throttle. Disarm if unsafe.
-  const unsafe=qp.armed&&!throttleSafeToArm(stick.t,want);
+  const unsafe=coreArmed()&&!throttleSafeToArm(stick.t,want);
   if(unsafe){
-    qp.disarm();
+    coreDisarm();
     autoArmState={seenLow:false};
   }
   let forcedAcro=false;
@@ -4091,12 +4178,53 @@ function tryArm(opts){
     toast(threeD?'CENTER THROTTLE TO ARM':'Lower throttle to arm');
     return false;
   }
+  if(core.kind==='bf'){
+    // Flipped on the floor, an arm is a turtle: AUX3 high with it, so
+    // Betaflight arms into crash flip (bfTurtleTick runs the rest).
+    if(bfFlippedOnFloor()&&core.startTurtle()){toast('TURTLE');return true;}
+    // Betaflight decides: AUX1 goes high (with the throttle held low until it
+    // arms, for a throttle-rise auto-arm) and bfArmWatch() reports the outcome.
+    core.setArm(true,{holdThrottle:!!(opts&&opts.fromAuto)});
+    bfArmPendingMs=simClockMs;
+    return true;
+  }
   qp.arm();
   qp.setPhysicsHz(PHYSICS_HZ_FAST);
   toast('ARMED');return true;
 }
+// Arming through whichever core flies: the js core arms itself; on the bf core
+// the intent drives the diff's ARM switch and Betaflight's arming checks
+// decide, or, with a radio (bfRadio), the radio's own switch does. A turtle on
+// the bf core is armed intent all through, the disarms inside it included.
+function coreArmed(){return core.kind==='bf'?(cs.armed||core.aux.arm||core.turtlePhase!=null):!!qp.armed;}
+function coreDisarm(){if(core.kind==='bf')core.setArm(false);else qp.disarm();}
+// The bf core with a radio: its AUX channels pass through to Betaflight, and
+// the page's arm, mode and turtle controls stand aside.
+function bfRadio(){return core.kind==='bf'&&Array.isArray(stick.aux);}
+// A radio, as the page knows one: its name says so (isKnownRadio), or the
+// pilot picked a radio preset for it. A gamepad, calibrated or not, is not.
+function padIsRadio(gp){
+  return isKnownRadio(gp)||!!(radioPreset&&!['auto','pad','custom'].includes(radioPreset)&&RADIO_PRESETS[radioPreset]);
+}
+let bfArmPendingMs=null;
+let bfWasArmed=false;
+// Once a frame on the bf core: toast what Betaflight did with the arm intent.
+// A turtle's own disarm and arms are not news.
+function bfArmWatch(){
+  if(core.kind!=='bf')return;
+  if(core.turtlePhase!=null){bfWasArmed=cs.armed;return;}
+  if(cs.armed&&!bfWasArmed){toast('ARMED');bfArmPendingMs=null;}
+  else if(!cs.armed&&bfWasArmed)toast('DISARMED');
+  else if(bfArmPendingMs!=null&&!cs.armed&&simClockMs-bfArmPendingMs>300){
+    bfArmPendingMs=null;
+    core.setArm(false);
+    const why=armingFlagNames(cs.armingDisableFlags);
+    toast('NOT ARMED'+(why.length?' — '+why.join(' '):''));
+  }
+  bfWasArmed=cs.armed;
+}
 function tickArming(gp){
-  if(calib)return;
+  if(calib||bfRadio())return;
   const map=liveMap||(gp?liveAxisMap(gp):null);
   const hasSw=hasArmSwitch(map);
   if(armDetecting&&gp){
@@ -4115,30 +4243,35 @@ function tickArming(gp){
     if(!gp)return;
     const v=armSwitchValue(gp,map.arm);
     const out=stepArmSwitch(armSwState,{
-      value:v,armed:qp.armed,hasSwitch:true,
+      value:v,armed:coreArmed(),hasSwitch:true,
       throttleSafe:throttleSafeToArm(stick.t,threeD),
     });
     armSwState=out.state;
     armSwitchBlocked=!!out.blocked;
     if(out.blocked)toast('Lower throttle to arm');
     else if(out.arm)tryArm();
-    else if(out.disarm&&qp.armed){qp.disarm();toast('DISARMED');}
+    else if(out.disarm&&coreArmed()){coreDisarm();if(core.kind!=='bf')toast('DISARMED');}
     autoArmState={seenLow:false};
   }else{
     armSwitchBlocked=false;
     const out=stepAutoArm(autoArmState,{
-      t:stick.t,threeD,armed:qp.armed,
+      t:stick.t,threeD,armed:coreArmed(),
       autoArm:autoArmOn,hasSwitch:false,
     });
     autoArmState=out.state;
     if(out.arm)tryArm({fromAuto:true});
   }
-  if(document.getElementById('panel')&&document.getElementById('panel').classList.contains('open')){
+  // The poll runs at 250 Hz; the panel's live readout needs ten.
+  const nowMs=performance.now();
+  if(nowMs-armUiAt>100&&document.getElementById('panel')&&document.getElementById('panel').classList.contains('open')){
+    armUiAt=nowMs;
     fillArmSwitchUI(gp,map);
   }
 }
+let armUiAt=0;
 function toggleArm(){
-  if(qp.armed){qp.disarm();toast('DISARMED');}
+  if(bfRadio()){toast('ARM ON THE RADIO (AUX'+(core.auxOf('arm')||'?')+')');return;}
+  if(coreArmed()){coreDisarm();if(core.kind!=='bf')toast('DISARMED');}
   else tryArm();
   syncTouchModeBtn();
 }
@@ -4173,7 +4306,12 @@ window._axis=()=>({
 // fly +X. Radio HID polarity lives in AETR_MAP (channel +1 = stick forward),
 // not here — #233 flipping both layers double-inverted real EdgeTX radios.
 const SGN_ROLL=-1,SGN_PITCH=1,SGN_YAW=1;
-function physics(dt){
+// One 1 ms tick of the js core (sim-core-adapter.js createJsCore calls it):
+// stick is the sample stamped at or before this tick, tUs its sim time. What
+// physics(dt) used to do once a frame, at frame dt, now runs every tick.
+function jsTick(stick,tUs){
+  tickStick=stick;jsTickS=tUs/1e6;
+  const dt=TICK_S;
   const yr=THREE.MathUtils.degToRad(axisRate('yaw',stick.y));
   const wx=THREE.MathUtils.degToRad(axisRate('pitch',stick.p));
   const wz=-THREE.MathUtils.degToRad(axisRate('roll',stick.r));
@@ -4203,14 +4341,24 @@ function physics(dt){
   // still drops arm until sticks are proven safe.
   if(armGate&&padLive&&qp.armed)qp.disarm();
 
+  // Turtle: flipped on the ground, full throttle and a hard roll stick rolls
+  // the quad back over (per tick on sim time; on the bf core the same gesture
+  // is Betaflight's crash flip, bfTurtleTick).
+  if(qp.armed&&!threeD&&bodyUpZ(qp.quaternion)<-0.35){
+    const clr=qp.groundClearance?qp.groundClearance(qp):qp.position.z;
+    if(wantsTurtle({upZ:bodyUpZ(qp.quaternion),clearanceM:clr,contact:clr<=0.04,armed:qp.armed,threeD,throttle:stick.t,rollStick:stick.r})){
+      qp.omega.x+=(stick.r<0?-1:1)*22*dt;
+    }
+  }
+
   // Throttle curve stays here; the module applies the Betaflight idle floor
   // itself, so the old idlePct blend is gone. Disarmed = no throttle to the FC.
   // 3D: map 0..1 stick through a center deadband onto -1..1 collective.
   const throttle=qp.armed?throttleCollective(stick.t,threeD,CFG.thrCurve,CFG.thrMid):0;
 
   qp.step(dt,qpSetpoint,throttle,stick);
-  syncStateFromQp();
   thrustActual=(qp.totalThrustAbsN||Math.abs(qp.totalThrustN))*WS; // |N|, audio + battery load
+  jsPortals();
 }
 function bounce(){
   state.bounces++;   // counter kept for stats; the BOUNCE #N toast is gone —
@@ -4297,8 +4445,8 @@ function lineHudHtml(id, now){
   return html;
 }
 function updateLapOSD(){
-  const now=performance.now();
-  osdLap.style.color=now<lapFlashUntil?'#3DDC97':''; // green flash on new best
+  osdLap.style.color=performance.now()<lapFlashUntil?'#3DDC97':''; // green flash on new best
+  const now=simNowMs(); // the live clocks run on sim time
   if(isFreestyleTrackId(activeTrackId)||!trackGates(activeTrackId).length){
     osdLap.textContent=secretsLive()?'FREESTYLE · '+sparksLabel(currentMap, loadSecrets()):'FREESTYLE';
     return;
@@ -4344,13 +4492,15 @@ function toast(m,opts){
 }
 function updateOSD(){
   const spd=(state.vel.length()*3.6).toFixed(0),alt=state.pos.y.toFixed(1);
-  const t=((performance.now()-state.t0)/1000)|0;
+  const t=(simClockMs/1000)|0; // flight time on the sim clock
   // Betaflight-style low-battery warnings off the SAGGED voltage: punch-outs
   // flicker the warning early, exactly like a real 1S on the edge. Master
   // battery sim off = no voltage readout, no warnings. (Sim is always armed.)
   let battLine='';
   const landEl=document.getElementById('osdLand');
-  if(CFG.battSimOn){
+  // The bf core's pack is the plant's and always drains: its readout and
+  // warnings show whatever the Battery Simulation switch says.
+  if(CFG.battSimOn||cs.kind==='bf'){
     const flash=(Math.floor(performance.now()/250)%2)===0; // ~2Hz blink
     let bCol='inherit';
     if(battV<=BATT_CRIT)bCol=flash?'#ff3b2f':'rgba(255,59,47,.25)';        // critical: red flash
@@ -4360,16 +4510,17 @@ function updateOSD(){
     if(battV<=BATT_CRIT)landEl.style.opacity=flash?'1':'0.15';
   }else landEl.style.display='none';
   osdTL.innerHTML=`SPD ${spd} km/h<br>ALT ${alt} m${battLine}`;
-  osdTR.innerHTML=`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):(touchCtl&&touchCtl.enabled?'TOUCH':'KEYBOARD')}${axisMap&&gpConnected?' (CAL)':''}<br>`+
+  osdTR.innerHTML=(cs.kind==='bf'?'BF CORE · AIR65<br>':'')+`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):(touchCtl&&touchCtl.enabled?'TOUCH':'KEYBOARD')}${axisMap&&gpConnected?' (CAL)':''}<br>`+
     // Rates are per axis; name the one being shown so it cannot read as global.
-    `RATES ${rateAxis.toUpperCase()} ${maxRateDps(rateAxis).toFixed(0)}°/s ${rates.type}<br>`+
+    (cs.kind==='bf'?`TUNE ${bfDiffLoaded&&bfDiffLoaded===bfDiff()?BF_TUNE_ID:'CLI IMPORT'}<br>`:
+    `RATES ${rateAxis.toUpperCase()} ${maxRateDps(rateAxis).toFixed(0)}°/s ${rates.type}<br>`)+
     `CAM ${CFG.camDeg}° FOV ${CFG.fov}${usingGltf?'<br>GLTF MAP':''}`;
   // Per-motor outputs straight off the mixer — a yaw input shows the CW pair
   // rising while the CCW pair drops, which is the tell that the mixer is real.
   // Spread across the bottom: throttle bottom-left, flight stats center,
   // motors bottom-right in their PHYSICAL quad-X layout (front row on top:
   // M4 front-left, M2 front-right / M3 rear-left, M1 rear-right).
-  const mo=qp.motorOutputs;
+  const mo=cs.motorOutputs;
   const bar=v=>{
     const mag=Math.min(1,Math.abs(v||0));
     const n=Math.round(mag*6);
@@ -4382,7 +4533,9 @@ function updateOSD(){
   const thrBarSrc=threeD?(thrShow+1)/2:stick.t;
   osdBC.innerHTML=`THR ${'█'.repeat(Math.round(Math.max(0,Math.min(1,thrBarSrc))*10)).padEnd(10,'░')} ${thrLabel}%`+
     `<br>FLT ${String(t/60|0).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`+
-    `&nbsp;&nbsp;TWR ${qp.twr.toFixed(1)}`+(threeD?' · 3D':'');
+    `&nbsp;&nbsp;TWR ${(cs.twr||0).toFixed(1)}`+(threeD?' · 3D':'')+
+    // The bf core shows why Betaflight will not arm, as its OSD would.
+    (cs.kind==='bf'&&!cs.armed&&cs.armingDisableFlags?'<br>'+armingFlagNames(cs.armingDisableFlags).join(' '):'');
   osdBR.innerHTML=`<span style="font-size:.85em;opacity:.85">`+
     `M4 ${bar(mo[3])}&nbsp;M2 ${bar(mo[1])}<br>`+
     `M3 ${bar(mo[2])}&nbsp;M1 ${bar(mo[0])}</span>`;
@@ -5227,7 +5380,7 @@ function applyWhoopToQp(){
   const k=whoopGroundK(currentBuild,whoopSettings);
   qp.cfg.groundEffect=k;
   qp.groundClearance=k>0?function(s){
-    mod2world(s.position,_gp);
+    toScene(s.position,_gp);
     let top=FLOOR_Y;
     for(const bb of colliders){
       if(_gp.x>=bb.min.x&&_gp.x<=bb.max.x&&_gp.z>=bb.min.z&&_gp.z<=bb.max.z&&bb.max.y<=_gp.y&&bb.max.y>top)top=bb.max.y;
@@ -5285,7 +5438,7 @@ document.getElementById('cbBattSim').onchange=e=>{
   document.getElementById('s_sag').disabled=!CFG.battSimOn;
   battCharge=1;battV=BATT_FULL;
   persistWhoopFromUI();
-  toast(CFG.battSimOn?'BATTERY SIM ON':'BATTERY SIM OFF — INFINITE PACK');
+  toast(CFG.battSimOn?'BATTERY SIM ON':core.kind==='bf'?'BATTERY SIM OFF — NOT ON THE BF CORE (ITS PACK DRAINS)':'BATTERY SIM OFF — INFINITE PACK');
 };
 document.getElementById('cb3d').onchange=e=>{
   setThreeD(!!e.target.checked);
@@ -5444,6 +5597,7 @@ droneSel.onchange=()=>{
   if(d&&d.frame) applyBuild(classDefault(d.frame),{save:true,announce:false});
   else saveBuild(null);
   toast(DRONE_TYPES[droneType].label.toUpperCase());
+  selectCore();
 };
 // Rate-family selector, sat next to the class preset. Switching CONVERTS the
 // current tune through convertAxisFamily rather than resetting it, so a
@@ -5481,6 +5635,7 @@ updateRadioInfo();
 
 // ---------- W1 Your build (new key quadmathSimBuild only) ----------
 let currentBuild=normalizeBuild(DEFAULT_BUILD);
+let bootCoreSelected=false;
 let syncingBuildUI=false;
 function applyPackFromBuild(b){
   const pack=batteryFromBuild(b);
@@ -5540,6 +5695,7 @@ function applyBuild(raw,opts){
   applyCanopyLayout();
   if(typeof applyWhoopToQp==='function')applyWhoopToQp();
   if(o.announce!==false)toast(phys.label.toUpperCase()+' ≈');
+  if(typeof selectCore==='function'&&bootCoreSelected)selectCore();
   return phys;
 }
 function readBuildForm(){
@@ -5650,6 +5806,8 @@ function importCli(text){
     setCliStatus('No recognised CLI commands found','err');
     return p;
   }
+  // On the bf core the pasted diff goes to Betaflight itself (loadDiff).
+  if(core.kind==='bf')bfLoadDiff(text,'CLI import');
   const type=normalizeRateType(p.ratesType)||rates.type;
   if(p.ratesType&&!isRateType(type)){
     const msg=p.ratesType+' rates not supported — import skipped';
@@ -5730,6 +5888,7 @@ window._rates=()=>({state:JSON.parse(JSON.stringify(rates)),axis:rateAxis,
 // translucent cyan quad plays the ghost back indexed by current elapsed lap
 // time, so it flies in real sync. Per-track, persisted at 2-decimal precision.
 const GHOST_MAX=1500; // sample cap (a full 3-lap run at 30 Hz); downsample rather than fail to store
+const CITY_GHOST_HZ=30; // non-line tracks sample at 30 Hz of sim time (was every 2nd frame)
 let ghosts={0:null,1:null};               // per-track best-RUN recordings (all 3 laps)
 let ghostRec=null,ghostFrame=0;       // in-progress recording + its frame counter
 let ghostLastSampleMs=null;           // line tracks sample at LINE_GHOST_HZ
@@ -5743,33 +5902,46 @@ const _gr2=v=>Math.round(v*100)/100;   // 2-decimal coords (visual ghost — ple
 const _gr3=v=>Math.round(v*1000)/1000; // slightly finer for quaternion smoothness
 function loadGhost(id){
   try{
-    const s=localStorage.getItem(ghostStorageKey(id))
-      ||(isLegacyTrackId(id)?localStorage.getItem('quadmath_bestGhost_'+legacyIndex(id)):null);
+    // Versioned key only (sim-tracks.js GHOST_KEY_PREFIX): frame-time ghosts
+    // under the old keys are not mixed with sim-time runs.
+    const s=localStorage.getItem(ghostStorageKey(id));
     return ghostSamples(s?JSON.parse(s):null);
   }catch(e){return null;}
 }
 ghosts[0]=loadGhost(0);ghosts[1]=loadGhost(1);
 function startGhostRec(){ghostRec=[];ghostFrame=0;ghostLastSampleMs=null;replayRec=[];replayLastSampleMs=null;}
 function clearGhostRec(){ghostRec=null;ghostLastSampleMs=null;replayRec=null;replayLastSampleMs=null;}
-// persist, downsampling further on a quota error rather than failing to store
-function persistGhost(id,rec){
+// persist, downsampling further on a quota error rather than failing to store.
+// Versioned ghosts are always tagged and carry the run total they record.
+function persistGhost(id,rec,totalMs){
   let data=rec;
   for(let a=0;a<5;a++){
     try{
       const key=ghostStorageKey(id);
-      const tagged=isLegacyTrackId(id)?data:tagGhost({samples:data});
+      const tagged=tagGhost({samples:data,totalMs:Number.isFinite(totalMs)?totalMs:undefined});
       localStorage.setItem(key,JSON.stringify(tagged));
-      if(isLegacyTrackId(id))localStorage.setItem('quadmath_bestGhost_'+legacyIndex(id),JSON.stringify(data));
       return data;
     }catch(e){data=data.filter((_,i)=>i%2===0);}
   }
   return data;
 }
-// save the just-finished recording as track id's ghost (called on a new best)
-function commitGhost(id){
+// save the just-finished recording as track id's ghost (a new best, or faster
+// than the ghost stored under the versioned key)
+function commitGhost(id,totalMs){
   if(!ghostRec||!ghostRec.length)return;
   const rec=downsampleGhost(ghostRec,isLineTrackId(id)?LINE_GHOST_MAX:GHOST_MAX);
-  ghosts[id]=persistGhost(id,rec);
+  ghosts[id]=persistGhost(id,rec,totalMs);
+}
+// The run total the stored ghost records (its last sample's time if untagged).
+function loadGhostTotal(id){
+  try{
+    const raw=localStorage.getItem(ghostStorageKey(id));
+    if(!raw)return 0;
+    const g=JSON.parse(raw);
+    if(g&&Number.isFinite(g.totalMs))return g.totalMs;
+    const smp=ghostSamples(g);
+    return smp&&smp.length?smp[smp.length-1][0]:0;
+  }catch(e){return 0;}
 }
 // translucent cyan quad — no existing quad mesh to reuse (this is an FPV sim,
 // the camera IS the quad), so build a small readable body + arms + nose
@@ -5825,21 +5997,27 @@ function ownGhost(){
 }
 function sampleGhost(){
   if(!ghostRec||!runActive)return; // record across the whole run, stamped from run start
-  const t=performance.now()-runStartTime;
-  if(isLineTrackId(activeTrackId)){
-    if(!ghostSampleDue(ghostLastSampleMs,t,LINE_GHOST_HZ))return;
-    ghostLastSampleMs=t;
-  }else if((++ghostFrame)%2!==0)return;  // city: every 2nd frame
+  const t=simNowMs()-runStartTime;
+  // Sampled on sim time: line tracks at LINE_GHOST_HZ, the rest at 30 Hz. The
+  // schedule advances by one period (resynced after a gap), so frames that land
+  // between periods do not stretch it.
+  const hz=isLineTrackId(activeTrackId)?LINE_GHOST_HZ:CITY_GHOST_HZ;
+  if(!ghostSampleDue(ghostLastSampleMs,t,hz))return;
+  ghostLastSampleMs=nextSampleMs(ghostLastSampleMs,t,hz);
   ghostRec.push([Math.round(t),_gr2(state.pos.x),_gr2(state.pos.y),_gr2(state.pos.z),
     _gr3(state.q.x),_gr3(state.q.y),_gr3(state.q.z),_gr3(state.q.w)]);
   if(replayRec&&ghostSampleDue(replayLastSampleMs,t,REPLAY_GHOST_HZ)){
-    replayLastSampleMs=t;
+    replayLastSampleMs=nextSampleMs(replayLastSampleMs,t,REPLAY_GHOST_HZ);
     if(replayRec.length>=REPLAY_GHOST_MAX){
       replayRec=downsampleGhost(replayRec,Math.floor(REPLAY_GHOST_MAX*0.75));
     }
     replayRec.push([Math.round(t),_gr2(state.pos.x),_gr2(state.pos.y),_gr2(state.pos.z),
       _gr3(state.q.x),_gr3(state.q.y),_gr3(state.q.z),_gr3(state.q.w)]);
   }
+}
+function nextSampleMs(last,t,hz){
+  const per=1000/hz;
+  return (last==null||t-last>=2*per)?t:last+per;
 }
 // pose one ghost mesh from a sample array at the given run-elapsed time
 function poseGhost(g,mesh,elapsed){
@@ -5854,7 +6032,7 @@ function poseGhost(g,mesh,elapsed){
   mesh.visible=true;
 }
 function playbackGhost(){
-  const elapsed=performance.now()-runStartTime; // index by run-elapsed time (whole run)
+  const elapsed=simNowMs()-runStartTime; // index by run-elapsed sim time (whole run)
   const own=ownGhost();
   if(ghostVisible&&runActive&&own&&own.length)poseGhost(own,ghostMesh,elapsed);
   else ghostMesh.visible=false;
@@ -5904,7 +6082,7 @@ function demoLineGhostForShot(){
     defaultRivals[k]=null;rivalGhost=null;
     ghostVisible=true;
     runActive=true;
-    runStartTime=performance.now()-280;
+    runStartTime=simNowMs()-280;
     runLap=1;
     bestRunMs[k]=bestRunMs[k]||12400;
     lastGateSplit=820;
@@ -5966,6 +6144,7 @@ function startReplay(mode){
   replayState.last=performance.now();
   replayState.clipUntil=null;
   if(qp)qp.armed=false;
+  if(core.kind==='bf')core.setArm(false);
   chaseCamOn=false;
   if(looks){looks.setMenuOpen(false);looks.setLookSpot(null);}
   hideMenuLayer();
@@ -6163,7 +6342,7 @@ function openWhoopCard(){
 
 // ---------- ghost sharing v1 ----------
 // Format (version-tagged for future changes):
-//   {v:1, phys?:2, track:0|1|id, lapTime:ms, name:string, samples:[[t,x,y,z,qx,qy,qz,qw],...]}
+//   {v:1, phys?:PHYSICS_VER, track:0|1|id, lapTime:ms, name:string, samples:[[t,x,y,z,qx,qy,qz,qw],...]}
 // Samples are wall-clock poses, not physics-step dumps. The 500/1000 Hz feel
 // pass and W2 whoop effects do not change this, so hosted ghosts and old
 // localStorage ghosts still replay. Do not bump v for a physics-feel change —
@@ -6218,7 +6397,7 @@ function ghostPayloadError(p,expectTrack){
 async function exportGhost(){
   const id=activeTrackId,g=ownGhost();
   if(!g||!g.length){toast('NO GHOST YET — SET A BEST RUN FIRST');return;}
-  const payload=tagGhost({track:legacyIndex(id)!==null?legacyIndex(id):id,lapTime:bestRunMs[ensureTrackStats(id)]||0,
+  const payload=tagGhost({track:legacyIndex(id)!==null?legacyIndex(id):id,lapTime:loadGhostTotal(id)||bestRunMs[ensureTrackStats(id)]||0,
     name:(pilotNameEl.value.trim()||'PILOT').slice(0,16),samples:g});
   let code;
   try{code=await gzipB64(JSON.stringify(payload));}
@@ -6554,30 +6733,255 @@ function updateDust(dt){
 }
 
 // ---------- Loop ----------
-let last=performance.now(),hzAdaptAt=0;
-function adaptPhysicsHz(now){
-  if(!looks||!looks.fps||!looks.fps.ready){
-    if(qp.armed&&qp.physicsHz!==PHYSICS_HZ_FAST)qp.setPhysicsHz(PHYSICS_HZ_FAST);
+// Physics no longer runs on frame dt: the flying core advances by the frame's
+// wall time in fixed 1 ms ticks (a frame over 250 ms is a pause) and the page
+// draws its interpolated state. dt below is for decoration only.
+let last=performance.now();
+function simPaused(){return replayOn||(looks&&looks.menuOpen)||builderOn||(feel&&feel.promptOpen);}
+// Advance the flying core by one frame, then read it: events, then state.
+function stepCore(frameMs,now){
+  try{
+    simClockMs+=core.advance(frameMs,!calib,onCoreEvent)*TICK_US/1000;
+  }catch(e){
+    // A plant fault stops a bf instance; start over at the map start.
+    console.warn('sim-core: '+(e&&e.message||e)+' — respawning');
+    resetQuad();
     return;
   }
-  if(now-hzAdaptAt<1500)return;
-  hzAdaptAt=now;
-  const avg=looks.fps.avg;
-  const cur=qp.physicsHz;
-  let hz=cur;
-  if(qp.armed){
-    hz=avg<48?PHYSICS_HZ_DEFAULT:PHYSICS_HZ_FAST;
-  }else if(avg<48&&cur===PHYSICS_HZ_FAST){
-    hz=PHYSICS_HZ_DEFAULT;
-  }
-  if(hz!==cur)qp.setPhysicsHz(hz);
+  core.anchor(now);
+  for(const ev of core.events())onCoreEvent(ev);
+  syncStateFromCore();
+  bfArmWatch();
+  bfWorldWatch(now);
 }
+// ---------- Core events: contacts and portal triggers (the bf core) ----------
+function onCoreEvent(ev){
+  if(ev.kind==='contact')hitEffects(!!ev.crashed,(ev.impactMs||0)*WS);
+  else if(ev.kind==='trigger')bfPortal(ev.id);
+}
+// ---------- The bf core (?core=bf): quadmath-sim-core, the Air65 for now ----------
+// Plant: vendor/sim-core/airframes/air65.json. Config: the owner's full Air65
+// Betaflight diff, vendor/sim-core/configs/air65-ryfly-2026-10-23.txt, as it
+// is (rates, PIDs, filters, sag compensation, thrust linear, dynamic idle,
+// and its own switches: ARM AUX1, ANGLE AUX2, BEEPER and FLIP OVER AFTER
+// CRASH AUX3). The tune database's 1219s card stays the tune the page names.
+// Other classes fly the js core. World: every collider as a module-frame box, plus the city
+// portals as triggers; a changed world is sent on the next spawn, or when the
+// quad is disarmed.
+const BF_TUNE_ID='65-betafpv-ryfly-1219s';
+const BF_CLASS='whoop65';
+// vendor/sim-core/VERSION; versions the vendored URLs (cache) and the test
+// tools/test_sim_core.mjs holds the two equal.
+const SIM_CORE_VERSION='v0.3.0';
+const BF_DIFF_PATH='vendor/sim-core/configs/air65-ryfly-2026-10-23.txt';
+let bfOwnerDiff=null;                // that diff's text, once fetched
+let bfDiffLoaded=null;               // the CLI text the bf core last configured with
+let bfLoading=null;
+let bfWorldSigSent='';
+let bfWorldCheckAt=0;
+function bfDiff(){return bfOwnerDiff;}
+// What Betaflight holds after a configure, for the console: the settings the
+// owner's diff is flown for.
+function bfConfigNote(bf){
+  try{
+    const g=bf.sim.get(['vbat_sag_compensation','thrust_linear','dyn_idle_min_rpm','dshot_bidir'],{profile:0});
+    return 'vbat_sag_compensation '+g.vbat_sag_compensation+', thrust_linear '+g.thrust_linear+', dyn_idle_min_rpm '+g.dyn_idle_min_rpm+', dshot_bidir '+g.dshot_bidir+', RPM filter '+(bf.sim.fc.rpmFilter?'on':'off');
+  }catch(e){return 'readback failed ('+(e&&e.message||e)+')';}
+}
+// Switches the page drives on the diff's aux lines: a mode the diff has no
+// switch for (the owner's has no HORIZON) falls back to one it has.
+function bfSyncMode(){
+  if(core.kind!=='bf'||bfRadio()||core.hasMode(flightMode))return;
+  setFlightMode(core.hasMode('angle')?'angle':'acro',false);
+}
+function bfWorldSig(){
+  let a=0;
+  for(const bb of colliders)a+=bb.min.x*3+bb.min.y*5+bb.min.z*7+bb.max.x*11+bb.max.y*13+bb.max.z*17;
+  return currentMap+':'+colliders.length+':'+a.toFixed(3);
+}
+function bfWorld(){
+  const boxes=[];
+  const ok=v=>Number.isFinite(v)&&Math.abs(v)<=2000;
+  for(const bb of colliders){
+    if(bb.isEmpty())continue;
+    const b=boxToModule(bb);
+    if(b.min.every(ok)&&b.max.every(ok))boxes.push(b);
+  }
+  const triggers=[];
+  if(currentMap==='city'){
+    portals.forEach((p,i)=>{
+      const c=toModule(p.pos,{x:0,y:0,z:0}),h=p.r/WS;
+      triggers.push({min:[c.x-h,c.y-h,c.z-h],max:[c.x+h,c.y+h,c.z+h],id:i+1});
+    });
+  }
+  return {floorZ:0,boxes,triggers};
+}
+// The quad's heading (yaw about scene +Y), so a core handover keeps the pad's.
+function curHeading(){
+  const q=state.q;
+  const fx=-2*(q.x*q.z+q.w*q.y),fz=-(1-2*(q.x*q.x+q.y*q.y));
+  return Math.atan2(-fx,-fz)||0.0001; // placeQuadAt ignores an exact 0
+}
+// The battery the OSD warns on follows the flying core's pack: the Build's on
+// the js core, the airframe's (the Air65's 1S) on the bf core.
+function syncPackForCore(){
+  if(core.kind==='bf')applyPackFromBuild({...currentBuild,cells:core.cells});
+  else applyPackFromBuild(currentBuild);
+}
+function bfDrop3D(){if(threeD)setThreeD(false,false);}
+// Feed a CLI diff to the bf core (configure: Betaflight reboots, disarmed),
+// then put the quad back where it stands. Disarmed only.
+function bfLoadDiff(text,label){
+  if(core.kind!=='bf')return null;
+  if(coreArmed()){toast('DISARM TO LOAD A DIFF');return null;}
+  const r=core.loadDiff(text);
+  bfDiffLoaded=text;
+  placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
+  bfSyncMode();
+  console.info('sim-core: '+label+': '+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target; '+bfConfigNote(core));
+  toast('BETAFLIGHT — '+label.toUpperCase());
+  return r;
+}
+// Respawn the bf core at a module pose, with the world sent again if it changed.
+function bfSpawn(pos,q,opts){
+  const sig=bfWorldSig();
+  const world=sig!==bfWorldSigSent?bfWorld():null;
+  bfWorldSigSent=sig;
+  core.respawn(pos,q,{freshPack:!!(opts&&opts.freshPack),world});
+  core.setMode(flightMode);
+  bfSyncMode();
+  portalInside=null;
+}
+// The world changed while flying (city art lands after first paint): send it
+// at the next disarmed moment, where the quad stands.
+function bfWorldWatch(now){
+  if(core.kind!=='bf'||now-bfWorldCheckAt<500)return;
+  bfWorldCheckAt=now;
+  if(coreArmed())return;
+  const sig=bfWorldSig();
+  if(sig===bfWorldSigSent)return;
+  bfWorldSigSent=sig;
+  core.respawn({...cs.position},{...cs.quaternion},{world:bfWorld()});
+  core.setMode(flightMode);
+}
+function bfWanted(){return CORE_KIND==='bf'&&droneType===BF_CLASS;}
+// Pick the flying core for the class: the bf core for the Air65 when ?core=bf,
+// the js core otherwise (with a console note when ?core=bf asked for more).
+function selectCore(){
+  if(CORE_KIND!=='bf')return;
+  if(!bfWanted()){
+    if(core.kind==='bf'){
+      core=jsCore;
+      placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
+    }
+    syncPackForCore();
+    console.info('sim-core: only the 65 mm whoop (Air65) is wired to the bf core for now; '+(DRONE_TYPES[droneType]||{label:droneType}).label+' flies the js core');
+    return;
+  }
+  if(bfCore){
+    if(core!==bfCore){
+      bfDrop3D();
+      core=bfCore;
+      // Back on the bf core: the owner's diff again, if a CLI import replaced it.
+      const diff=bfDiff();
+      if(diff&&diff!==bfDiffLoaded)bfLoadDiff(diff,BF_TUNE_ID);
+      else placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
+    }
+    syncPackForCore();
+    return;
+  }
+  if(bfLoading)return;
+  bfDrop3D();
+  toast('LOADING BETAFLIGHT CORE…');
+  const v='?v='+SIM_CORE_VERSION;
+  bfLoading=Promise.all([
+    import('./vendor/sim-core/sim-core.js'+v),
+    fetch('vendor/sim-core/airframes/air65.json'+v).then(r=>{if(!r.ok)throw new Error('air65.json HTTP '+r.status);return r.json();}),
+    fetch(BF_DIFF_PATH+v).then(r=>{if(!r.ok)throw new Error('the Air65 diff HTTP '+r.status);return r.text();}),
+  ]).then(([mod,airframe,diff])=>{
+    bfOwnerDiff=diff;
+    bfWorldSigSent=bfWorldSig();
+    return createBfCore({SimCore:mod.SimCore,wasm:new URL('vendor/sim-core/sim-core.wasm'+v,location.href),airframe,diff,world:bfWorld()}).then(bf=>{
+      const r=bf.report;
+      bfDiffLoaded=diff;
+      console.info('sim-core '+SIM_CORE_VERSION+': Air65, '+BF_DIFF_PATH+' ('+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target; '+bfConfigNote(bf)+'); tune shown: '+BF_TUNE_ID+'; '+bfWorld().boxes.length+' world boxes; the Build\'s cells and mAh are not used (the plant is the Air65)');
+      bfCore=bf;
+      if(!bfWanted())return;
+      bfDrop3D();
+      core=bf;
+      core.setMode(flightMode);
+      bfSyncMode();
+      syncPackForCore();
+      placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
+      toast('BETAFLIGHT CORE — AIR65');
+    });
+  }).catch(e=>{
+    console.warn('sim-core: the bf core did not load ('+(e&&e.message||e)+'); flying the js core');
+  });
+}
+// ---------- Input poll: every 4 ms, stamped in sim time ----------
+// Gamepad, touch and keyboard are read here, not in requestAnimationFrame: each
+// sample goes to the core stamped with the sim time of its own wall time
+// (sim-core-adapter.js InputClock), so the 1 ms ticks see a new sample every
+// 4 ms instead of one a frame. Keyboard smoothing runs on that sim-time dt.
+let lastPollUs=null;
+let pollGp=null;
+let pollCore=null;
+function pollInput(){
+  if(simPaused()){lastPollUs=null;return;}
+  const tUs=core.stamp(performance.now());
+  if(tUs===null)return;
+  // A bf reboot restarts that core's clock and a core switch changes clocks:
+  // either is a fresh start, never a negative dt.
+  if(pollCore!==core){pollCore=core;lastPollUs=null;}
+  const dt=(lastPollUs===null||tUs<lastPollUs)?0:Math.min(0.05,(tUs-lastPollUs)/1e6);
+  lastPollUs=tUs;
+  readInput(dt);
+  tickArming(pollGp);
+  if(core.kind==='bf'&&!bfRadio()&&armGate&&padLive&&coreArmed())core.setArm(false);
+  if(core.kind==='bf'&&!bfRadio())bfTurtleTick();
+  core.input(stick,tUs);
+}
+// ---------- Turtle on the bf core: Betaflight's crash flip ----------
+// With a radio, the radio's own switch (FLIP OVER AFTER CRASH, AUX3 on the
+// owner's diff) and arm do it, as on the real quad. Without one (keyboard,
+// touch, a gamepad), the fallback: the js core's turtle gesture (flipped on
+// the floor, armed, full throttle and a hard roll stick), or an arm while
+// flipped (tryArm), puts the diff's FLIP switch on and arms through it; the
+// sticks then drive Betaflight's crash flip. Upright, FLIP goes off and the
+// disarm that ends crash flip follows; ARM goes on again once the throttle is
+// down and Betaflight would arm (sim-core-adapter.js stepTurtle). Every 4 ms,
+// before input().
+function bfFlippedOnFloor(){
+  return bodyUpZ(cs.quaternion)<-0.35&&cs.clearance<=0.04;
+}
+function bfTurtleTick(){
+  if(core.turtlePhase==null){
+    if(wantsTurtle({upZ:bodyUpZ(cs.quaternion),clearanceM:cs.clearance,contact:cs.clearance<=0.04,armed:cs.armed,threeD,throttle:stick.t,rollStick:stick.r})){
+      if(core.startTurtle())toast('TURTLE');
+    }
+    return;
+  }
+  const low=throttleSafeToArm(stick.t,false);
+  const centred=Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15&&Math.abs(stick.y)<0.15;
+  const ev=core.stepTurtle(low,centred);
+  if(ev==='upright')toast(low&&centred?'UPRIGHT':'UPRIGHT — STICKS DOWN AND CENTRED TO ARM');
+  else if(ev==='rearm')bfArmPendingMs=simClockMs;
+  else if(ev==='ended')toast('DISARMED');
+  else if(ev==='refused'){
+    const why=armingFlagNames(cs.armingDisableFlags);
+    toast('NOT ARMED'+(why.length?' — '+why.join(' '):''));
+  }
+}
+setInterval(pollInput,4);
+let lastFrameAt=null;
 function loop(now){
   requestAnimationFrame(loop);
   if(!window._ttff){
     window._ttff=now;
     try{performance.mark('sim-first-frame');}catch(e){}
   }
+  const frameMs=lastFrameAt===null?0:now-lastFrameAt;lastFrameAt=now;
   let dt=(now-last)/1000;last=now;dt=Math.min(dt,.05);
   if(looks)looks.tick(now);
   try{
@@ -6594,52 +6998,47 @@ function loop(now){
   try{if(secrets&&secrets.active)secrets.tick(now,state.pos,dt);}catch(e){}
   if(replayOn){
     tickReplay(now);
-  }else if(!(looks&&looks.menuOpen)&&!builderOn&&!(feel&&feel.promptOpen)){
-    readInput(dt);
-    tickArming(padLive?((navigator.getGamepads&&navigator.getGamepads())||[])[gpIndex]:null);
-    {
-      const clr=qp.groundClearance?qp.groundClearance(qp):qp.position.z;
-      if(wantsTurtle({upZ:bodyUpZ(qp.quaternion),clearanceM:clr,contact:clr<=0.04,armed:qp.armed,threeD,throttle:stick.t,rollStick:stick.r})){
-        qp.omega.x+=(stick.r<0?-1:1)*22*dt;
-      }
-    }
-    physics(dt);
-    adaptPhysicsHz(now);
+  }else if(!simPaused()){
+    stepCore(frameMs,now);
     updateMotorSound();
     updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();updateDust(dt);
     if(feel){
       state.stickT=stick.t;
-      feel.updateHud({stick,battV,battOn:CFG.battSimOn,mode:qp.flightMode,armed:qp.armed,threeD,thrText:throttleHudText(stick.t,threeD),armHint:armHintText({threeD,autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked})});
-      feel.tickTutorial(state,dt,qp.armed);
-      const upZ=bodyUpZ(qp.quaternion);
-      const clearanceM=qp.groundClearance?qp.groundClearance(qp):qp.position.z;
-      const speed=Math.hypot(qp.velocity.x,qp.velocity.y,qp.velocity.z);
-      const omega=Math.hypot(qp.omega.x,qp.omega.y,qp.omega.z);
+      feel.updateHud({stick,battV,battOn:CFG.battSimOn||cs.kind==='bf',mode:cs.flightMode,armed:cs.armed,threeD,thrText:throttleHudText(stick.t,threeD),
+        armHint:bfRadio()?'Arm on the radio (AUX'+(core.auxOf('arm')||'?')+')':armHintText({threeD,autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked})});
+      feel.tickTutorial(state,dt,cs.armed);
+      const upZ=bodyUpZ(cs.quaternion);
+      const clearanceM=cs.clearance;
+      const speed=Math.hypot(cs.velocity.x,cs.velocity.y,cs.velocity.z);
+      const omega=Math.hypot(cs.omega.x,cs.omega.y,cs.omega.z);
       const contact=clearanceM<=0.02;
-      feel.noteFlip({upZ,clearanceM,contact,speed,omega,dt,armed:qp.armed});
+      feel.noteFlip({upZ,clearanceM,contact,speed,omega,dt,armed:cs.armed,
+        core:cs.kind,radio:bfRadio(),threeD,touch:!!(touchCtl&&touchCtl.enabled),
+        flipAux:core.kind==='bf'?core.auxOf('flip'):null,
+        turtling:core.kind==='bf'&&(core.turtlePhase!=null||cs.crashFlip)});
     }
     if(coach&&coach.isActive()){
       coach.tick(state,dt,{
-        armed:qp.armed,
-        mode:qp.flightMode,
-        attitude:qp.attitude,
+        armed:cs.armed,
+        mode:cs.flightMode,
+        attitude:cs.attitude,
         throttle:stick.t,
         crashed:false,
       });
     }
     try{
       if(tricks&&!(coach&&coach.isActive())){
-        const q=qp.quaternion,om=qp.omega;
+        const q=cs.quaternion,om=cs.omega;
         trickSample.qx=q.x;trickSample.qy=q.y;trickSample.qz=q.z;trickSample.qw=q.w;
         trickSample.ox=om.x;trickSample.oy=om.y;trickSample.oz=om.z;
         trickSample.wx=state.pos.x;trickSample.wy=state.pos.y;trickSample.wz=state.pos.z;
-        trickSample.alt=qp.position.z;
-        trickSample.speed=Math.hypot(qp.velocity.x,qp.velocity.y,qp.velocity.z);
-        trickSample.vx=qp.velocity.x;trickSample.vy=qp.velocity.y;trickSample.vz=qp.velocity.z;
-        trickSample.clearance=qp.groundClearance?qp.groundClearance(qp):qp.position.z;
+        trickSample.alt=cs.position.z;
+        trickSample.speed=Math.hypot(cs.velocity.x,cs.velocity.y,cs.velocity.z);
+        trickSample.vx=cs.velocity.x;trickSample.vy=cs.velocity.y;trickSample.vz=cs.velocity.z;
+        trickSample.clearance=cs.clearance;
         trickSample.throttle=stick.t;
         trickSample.sr=stick.r;trickSample.sp=stick.p;trickSample.sy=stick.y;
-        trickSample.armed=qp.armed;
+        trickSample.armed=cs.armed;
         trickSample.colliders=colliders;
         trickSample.ws=WS;
         tricks.tick(trickSample,dt);
@@ -6867,6 +7266,8 @@ bootTouchLayer();
 pickGamepad();
 bootTouchLayer();
 window._feel=feel;
+bootCoreSelected=true;
+selectCore();
 window._touch=touchCtl;
 wireLooksUI();
 wireBuilderUI();
@@ -6914,7 +7315,7 @@ function applyQueryBoot(){
   if(modeRaw==='angle'||modeRaw==='horizon'||modeRaw==='acro'){
     // Saved/query 3D stays acro. Do not let ?mode=angle overwrite that.
     if(!(threeD && modeRaw!=='acro')){
-      setFlightMode(modeRaw,false);flightMode=modeRaw;
+      flightMode=setFlightMode(modeRaw,false);
     }
   }
   const presetRaw=q.get('preset');
@@ -7041,6 +7442,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   isLineTrackId,demoLineGhostForShot,ghostVisible:()=>ghostVisible,ghostMesh,
   dailyLineFor,flyDailyLine,dailyLineLive:()=>dailyLineLive,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
+  core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,
   TRICKS_KEY,tricks});
@@ -7054,6 +7456,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   <a class="sf-logo" href="/" aria-label="Back to QuadMath">← QuadMath<span class="dot">.</span></a>
   <span class="sf-note">Estimates only — always verify with bench testing. Fly safe.</span>
   <span class="sf-credit">City is original procedural art — Neon Current · Felt Scale. Kenney CC0 cars and street kit.</span>
+  <a class="sf-license" href="SIM-NOTICE.txt"><span class="sf-l-long">GPLv3 · notice</span><span class="sf-l-short">GPL</span></a>
 </footer>
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
 </body>

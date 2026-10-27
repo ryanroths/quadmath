@@ -1,11 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // Volt Stall — playable whoop playground + Kenney CC0 shop kit.
 // Colliders live in sim-maps.js GARAGE_PLAY and must match kit/proc meshes.
 // Kenney kit (sim-art-kit.js) swaps hero props after first paint.
 // Procedural meshes stay if a GLB fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=0d87f3b639ef';
-import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { GARAGE_PLAY, garageRackSlabs } from './sim-maps.js?v=d3bccf5de2eb';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=ac63a02875ed';
+import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=46192cc1defd';
+import { GARAGE_PLAY, garageRackSlabs } from './sim-maps.js?v=1455b3d51c73';
 
 export const GARAGE_STOCK = Object.freeze({
   wall: 0xb7b3a8,

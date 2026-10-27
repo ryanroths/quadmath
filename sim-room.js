@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim W3 — Your room planner.
 // Converts L×W×H (ft or m) into a walled practice cell + furniture + a
 // whoop-scale auto track. No THREE.js. Nothing here is copied from WebFPV (GPL).
 // New localStorage key only: quadmathSimRoom. Do not write old ryfly* keys
 // or the M2 custom-track / best-lap keys.
 
-import { normalizeTrack, WS_PER_METRE } from './sim-tracks.js?v=8f9513fb3468';
+import { normalizeTrack, WS_PER_METRE } from './sim-tracks.js?v=11ec0604e064';
 
 export const ROOM_KEY = 'quadmathSimRoom';
 export const ROOM_TRACK_ID = 'room-practice';

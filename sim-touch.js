@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim W6 — touch sticks, mobile boot, default flight mode.
 // Dual virtual sticks, deadzone/expo, angle-first newcomers, lazy-load hooks.
 // Ideas only — nothing here is copied from WebFPV (GPL) or other simulators.

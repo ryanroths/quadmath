@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim W1 — Your build. Maps whoop hardware knobs onto existing
 // quadphysics.js params (thrust, mass, inertia, spool, battery sag).
 // Approximate community / bench-AUW values only — not a thrust stand.

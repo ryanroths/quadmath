@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // Paper Sun — playable whoop playground + Kenney CC0 shop kit.
 // Colliders live in sim-maps.js OFFICE_PLAY and must match kit/proc meshes.
 // Kenney kit (sim-art-kit.js) swaps floor clutter after first paint.
 // Procedural meshes stay if a mesh fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=0d87f3b639ef';
-import { OFFICE_PLAY } from './sim-maps.js?v=d3bccf5de2eb';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=ac63a02875ed';
+import { OFFICE_PLAY } from './sim-maps.js?v=1455b3d51c73';
 
 export const OFFICE_STOCK = Object.freeze({
   wall: 0xd6d0c6,

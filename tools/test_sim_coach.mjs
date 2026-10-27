@@ -412,7 +412,7 @@ test('sim.html wires Coach without touching old keys or guide HTML', () => {
   assert.ok(simSrc.includes('COACH_KEY'));
   assert.ok(simSrc.includes('createCoach'));
   assert.ok(!simSrc.includes('content/guides/'), 'guide hrefs stay in sim-coach.js');
-  for (const k of ['ryflyRates', 'ryflyDroneType', 'quadmath_bestLap_', 'quadmath_bestGhost_', 'ROOM_KEY']) {
+  for (const k of ['ryflyRates', 'ryflyDroneType', 'quadmath_bestLap_', 'ghostStorageKey(', 'ROOM_KEY']) {
     assert.ok(simSrc.includes(k), 'must keep reading old key ' + k);
   }
 });

@@ -133,7 +133,7 @@ test('existing localStorage keys are still referenced (not renamed)', () => {
   const keys = [
     'ryflyRates', 'ryflyRatesType', 'ryflyDroneType', 'ryflyCamCustom',
     'ryflyAxisMap_', 'ryflyRadioPreset_', 'ryflyGamepadId', 'ryflyMusicVol', 'ryflyMusicOn',
-    'quadmath_bestLap_', 'quadmath_bestRun_', 'quadmath_bestGhost_',
+    'quadmath_bestLap_', 'quadmath_bestRun_', 'ghostStorageKey(',
     'quadmath_pilotName',
   ];
   const src = simSrc + '\n' + touchSrc;

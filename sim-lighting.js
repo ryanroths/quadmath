@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // Scene IBL / sky / fog-colour resolver. Visual only.
 // resolveSceneLighting is pure: inputs -> scene.environment, background,
 // intensities, rotation, fog colour, exposure. applySceneLighting is the ONLY

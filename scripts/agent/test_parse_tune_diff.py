@@ -83,19 +83,24 @@ FIXTURES = {
         ],
         "gaps": {},
     },
+    # Re-authored on 2026-10-26 from the pilot's diff of 2026-10-23 (profile 0
+    # '1219S', rateprofile 0), the diff the sim's bf core flies.
     "65-betafpv-ryfly-1219s": {
         "board": "AIR65 RYFLY",
+        "version": "4.5.0",
         "settings": {
             "d_min_roll": "36", "d_min_pitch": "49",
             "tpa_rate": "60",
-            "f_roll": "0", "f_pitch": "0", "f_yaw": "0",
+            "f_roll": "80", "f_pitch": "80", "f_yaw": "80",
+            "thrust_linear": "20",
             "gyro_lpf1_static_hz": "0",
             "dyn_notch_count": "1", "dyn_notch_q": "500",
             "dyn_notch_min_hz": "120", "dyn_notch_max_hz": "500",
             "dshot_bidir": "ON", "motor_pwm_protocol": "DSHOT300",
         },
-        "editorial": ["Crash recovery ON", "Board: AIR65 RYFLY"],
-        "gaps": {},
+        # The parser does not report sag compensation or dynamic idle.
+        "editorial": ["Vbat sag comp 70", "Dyn idle 55 (5500 rpm)", "Board: AIR65 RYFLY"],
+        "gaps": {"BF 4.5.0": "BF 4.5.0 diff, 2026-10-23"},
     },
     "65-betafpv-ryfly-hq31": {
         "board": "AIR65 RYFLY",

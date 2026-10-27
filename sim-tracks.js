@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim M2 — track data, share codes, splits / missed-gate logic.
 // No physics. City layouts 0 and 1 are frozen so existing ghosts stay valid.
 // New localStorage keys only: quadmathSimCustomTracks, quadmathSimTrack,
@@ -233,10 +234,14 @@ export function resolveSimBoot(query, saved, tracks) {
   };
 }
 
+// Ghost keys carry a version prefix: v3 ghosts are stamped on sim time (the
+// sim-core wiring: a 1 kHz physics clock, not the frame clock). Recordings
+// under the unprefixed keys are left in storage and never read.
+export const GHOST_KEY_PREFIX = 'v3.';
 export function ghostStorageKey(id) {
   const legacy = legacyIndex(id);
-  if (legacy !== null) return 'quadmath_bestGhost_' + legacy;
-  return 'quadmathSimGhost_' + id;
+  if (legacy !== null) return GHOST_KEY_PREFIX + 'quadmath_bestGhost_' + legacy;
+  return GHOST_KEY_PREFIX + 'quadmathSimGhost_' + id;
 }
 
 export function bestLapStorageKey(id) {
@@ -686,7 +691,7 @@ export function makePaceGhost(gates, opts) {
   }
   return {
     v: 1,
-    phys: o.phys != null ? o.phys : 2, // W2 tag; playback is still kinematic v:1
+    phys: o.phys != null ? o.phys : 3, // sim-whoop.js PHYSICS_VER (this file has no imports); playback is still kinematic v:1
     track: o.track != null ? o.track : 0,
     name: o.name || 'PACE BOT',
     lapTime: Math.round(T * 1000),
