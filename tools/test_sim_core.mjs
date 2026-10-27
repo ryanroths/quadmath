@@ -566,3 +566,13 @@ test('the page versions the vendored sim-core with its VERSION', () => {
   assert.ok(m, 'SIM_CORE_VERSION in sim.html');
   assert.equal(m[1], readFileSync('vendor/sim-core/VERSION', 'utf8').trim());
 });
+
+// tools/test_sim_map_boot.mjs flies both in headless Chrome; this is the
+// contract in the source, for the job that skips Chrome.
+test('the bf core is the default; ?core=js is deprecated; the OSD names the js core', () => {
+  const html = readFileSync('sim.html', 'utf8');
+  assert.match(html, /const CORE_KIND=new URLSearchParams\(location\.search\)\.get\('core'\)==='js'\?'js':'bf';/);
+  assert.match(html, /if\(CORE_KIND==='js'\)console\.warn\('sim-core: \?core=js is deprecated, removed next release/);
+  assert.ok(html.includes("cs.kind==='bf'?'BF CORE · AIR65<br>':'JS CORE<br>'"), 'osdTR names the core either way');
+  assert.ok(html.includes("const BF_CLASS='whoop65';"), 'only the 65 has a sim-core plant');
+});

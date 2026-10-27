@@ -853,7 +853,7 @@ import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAUL
 import {
   WS as CORE_WS, TICK_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, armingFlagNames, radioAux,
-} from "./sim-core-adapter.js?v=31417a087019";
+} from "./sim-core-adapter.js?v=a1c13631d412";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
@@ -865,7 +865,7 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=bd6b4b885629";
+} from "./sim-whoop.js?v=df5652b3bc91";
 import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=ed4ee91304b7";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
@@ -880,7 +880,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=5509489bb680";
+} from "./sim-art.js?v=eccdce4e271e";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -905,14 +905,14 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=11ec0604e064";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=1455b3d51c73";
+} from "./sim-tracks.js?v=875aac328988";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=3a52a2a03420";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=7fe465c27a92";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=998d958051bf";
+} from "./sim-room.js?v=45ede93e95c3";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=c3f10043ffca";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -927,7 +927,7 @@ import {
 } from "./sim-build.js?v=58e19554acd5";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=6d6e23275a27";
+} from "./sim-coach.js?v=85df9c159415";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=1b98ac6fc7bb";
@@ -950,13 +950,13 @@ import {
   loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   defaultWhoopKit,
-} from "./sim-retention.js?v=329eac4d694b";
+} from "./sim-retention.js?v=c96edcdf1f4c";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=969d6aedb1be";
+} from "./sim-secrets.js?v=c3ed18877821";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -973,9 +973,12 @@ function ensureGltf(){
   }
   return gltfReady;
 }
-// ?core=bf flies quadmath-sim-core (Betaflight 4.5.1 in WASM, the Air65 for
-// now); the default stays the js core, quadphysics.js. Read once, at boot.
-const CORE_KIND=new URLSearchParams(location.search).get('core')==='bf'?'bf':'js';
+// The default core is quadmath-sim-core (Betaflight 4.5.1 in WASM, the Air65
+// for now); classes it has no plant for fly the js core, quadphysics.js, with
+// JS CORE on the OSD. ?core=js keeps the js core for every class, for one
+// release. Read once, at boot.
+const CORE_KIND=new URLSearchParams(location.search).get('core')==='js'?'js':'bf';
+if(CORE_KIND==='js')console.warn('sim-core: ?core=js is deprecated, removed next release; the js core flies every class');
 const CFG={
   camDeg:15,fov:VFOV_DEFAULT,maxThrustN:3.9,thrCurve:1.0,thrMid:THROTTLE_MID_DEFAULT,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
 CFG.fov=loadFov();
@@ -4142,9 +4145,12 @@ function toggleFlightMode(){
 }
 function setThreeD(on,persist){
   const want=!!on;
-  if(want&&(core.kind==='bf'||bfWanted())){
+  // Refused while the bf core flies or is on its way; after a failed load the
+  // js core flies the 65, and 3D with it.
+  if(want&&(core.kind==='bf'||(bfWanted()&&!bfFailed))){
     console.info('sim-core: 3D is not wired to the bf core yet; staying 2D');
     toast('3D — NOT ON THE BF CORE YET');
+    syncTouchModeBtn(); // the 3D checkbox and HUD button back to 2D
     return threeD;
   }
   threeD=want;
@@ -4174,6 +4180,9 @@ function setThreeD(on,persist){
 }
 function tryArm(opts){
   if(armGate&&padLive){toast('STICKS NOT SAFE');return false;}
+  // The 65 waits for Betaflight: armed on the js core meanwhile, the quad would
+  // be respawned and disarmed mid-flight when the bf core takes over.
+  if(core.kind!=='bf'&&bfWanted()&&!bfCore&&!bfFailed){toast('LOADING BETAFLIGHT CORE…');return false;}
   if(!(opts&&opts.fromAuto)&&!throttleSafeToArm(stick.t,threeD)){
     toast(threeD?'CENTER THROTTLE TO ARM':'Lower throttle to arm');
     return false;
@@ -4510,7 +4519,10 @@ function updateOSD(){
     if(battV<=BATT_CRIT)landEl.style.opacity=flash?'1':'0.15';
   }else landEl.style.display='none';
   osdTL.innerHTML=`SPD ${spd} km/h<br>ALT ${alt} m${battLine}`;
-  osdTR.innerHTML=(cs.kind==='bf'?'BF CORE · AIR65<br>':'')+`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):(touchCtl&&touchCtl.enabled?'TOUCH':'KEYBOARD')}${axisMap&&gpConnected?' (CAL)':''}<br>`+
+  // Which core flies, always: JS CORE whenever Betaflight is not flying (a
+  // class with no sim-core plant, ?core=js, or the bf core still loading or
+  // failed), so nobody takes the js core for Betaflight.
+  osdTR.innerHTML=(cs.kind==='bf'?'BF CORE · AIR65<br>':'JS CORE<br>')+`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):(touchCtl&&touchCtl.enabled?'TOUCH':'KEYBOARD')}${axisMap&&gpConnected?' (CAL)':''}<br>`+
     // Rates are per axis; name the one being shown so it cannot read as global.
     (cs.kind==='bf'?`TUNE ${bfDiffLoaded&&bfDiffLoaded===bfDiff()?BF_TUNE_ID:'CLI IMPORT'}<br>`:
     `RATES ${rateAxis.toUpperCase()} ${maxRateDps(rateAxis).toFixed(0)}°/s ${rates.type}<br>`)+
@@ -6759,7 +6771,7 @@ function onCoreEvent(ev){
   if(ev.kind==='contact')hitEffects(!!ev.crashed,(ev.impactMs||0)*WS);
   else if(ev.kind==='trigger')bfPortal(ev.id);
 }
-// ---------- The bf core (?core=bf): quadmath-sim-core, the Air65 for now ----------
+// ---------- The bf core (the default): quadmath-sim-core, the Air65 for now ----------
 // Plant: vendor/sim-core/airframes/air65.json. Config: the owner's full Air65
 // Betaflight diff, vendor/sim-core/configs/air65-ryfly-2026-10-23.txt, as it
 // is (rates, PIDs, filters, sag compensation, thrust linear, dynamic idle,
@@ -6777,6 +6789,7 @@ const BF_DIFF_PATH='vendor/sim-core/configs/air65-ryfly-2026-10-23.txt';
 let bfOwnerDiff=null;                // that diff's text, once fetched
 let bfDiffLoaded=null;               // the CLI text the bf core last configured with
 let bfLoading=null;
+let bfFailed=false;                  // the load failed: the js core flies the 65 for the session
 let bfWorldSigSent='';
 let bfWorldCheckAt=0;
 function bfDiff(){return bfOwnerDiff;}
@@ -6865,27 +6878,34 @@ function bfWorldWatch(now){
   core.setMode(flightMode);
 }
 function bfWanted(){return CORE_KIND==='bf'&&droneType===BF_CLASS;}
-// Pick the flying core for the class: the bf core for the Air65 when ?core=bf,
-// the js core otherwise (with a console note when ?core=bf asked for more).
+// Pick the flying core for the class: the bf core for the Air65 (the default),
+// the js core for a class with no sim-core plant, silently (JS CORE on the OSD,
+// one console note per class), and for every class under ?core=js.
+const bfFallbackNoted=new Set();
 function selectCore(){
   if(CORE_KIND!=='bf')return;
   if(!bfWanted()){
     if(core.kind==='bf'){
+      core.setArm(false); // parked: no arm intent left for the way back
       core=jsCore;
       placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
     }
     syncPackForCore();
-    console.info('sim-core: only the 65 mm whoop (Air65) is wired to the bf core for now; '+(DRONE_TYPES[droneType]||{label:droneType}).label+' flies the js core');
+    if(!bfFallbackNoted.has(droneType)){
+      bfFallbackNoted.add(droneType);
+      console.info('sim-core: only the 65 mm whoop (Air65) has a sim-core plant for now; '+(DRONE_TYPES[droneType]||{label:droneType}).label+' flies the js core');
+    }
     return;
   }
   if(bfCore){
     if(core!==bfCore){
       bfDrop3D();
       core=bfCore;
-      // Back on the bf core: the owner's diff again, if a CLI import replaced it.
+      // Back on the bf core: respawned (disarmed) where the quad stands, then the
+      // owner's diff again if a CLI import replaced it.
+      placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
       const diff=bfDiff();
       if(diff&&diff!==bfDiffLoaded)bfLoadDiff(diff,BF_TUNE_ID);
-      else placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
     }
     syncPackForCore();
     return;
@@ -6916,6 +6936,7 @@ function selectCore(){
       toast('BETAFLIGHT CORE — AIR65');
     });
   }).catch(e=>{
+    bfFailed=true;
     console.warn('sim-core: the bf core did not load ('+(e&&e.message||e)+'); flying the js core');
   });
 }

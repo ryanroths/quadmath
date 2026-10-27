@@ -1,5 +1,7 @@
 // Headless boot of every map: no console exceptions, correct resolveSimBoot,
-// non-blank FPV. Requires Chrome + a local sim.html server (starts one).
+// non-blank FPV, on both flight cores: the default (Betaflight in sim-core,
+// which must actually load) and ?core=js. Requires Chrome + a local sim.html
+// server (starts one).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -116,6 +118,17 @@ const CASES = MAP_IDS.map((map) => ({
   { map: 'gym', track: null, look: 'gymWhoop', q: 'high' },
   { map: 'office', track: null, look: 'officeWhoop', q: 'low' },
 ]);
+// ?core=js, deprecated: every map once.
+const JS_CASES = [...new Set(MAP_IDS)].map((map) => ({
+  map, track: null, look: LOOK[map], q: 'med', core: 'js',
+}));
+// The default core on classes sim-core has no plant for: the js core flies
+// them, with JS CORE on the OSD. The class is the one the page restores.
+// (Not gym on the 5": its restyle throws on main too, a separate bug.)
+const FALLBACK_CASES = [
+  { map: 'living', track: null, look: 'livingWhoop', q: 'med', droneType: 'whoop75' },
+  { map: 'office', track: null, look: 'officeWhoop', q: 'med', droneType: 'freestyle5' },
+];
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -208,7 +221,11 @@ async function bootPageOnce(base, spec) {
   // First Chrome after apt-install often opens about:blank for several seconds
   // before the launch URL sticks — accept any page, then navigate.
   const trackQ = spec.track ? `&track=${spec.track}` : '';
-  const url = `${base}/sim.html?map=${spec.map}${trackQ}&look=${spec.look}&quality=${spec.q}&menu=1&fpv=1`;
+  const coreQ = spec.core ? `&core=${spec.core}` : '';
+  const url = `${base}/sim.html?map=${spec.map}${trackQ}&look=${spec.look}&quality=${spec.q}&menu=1&fpv=1${coreQ}`;
+  // The core the page should fly: bf by default on the 65 (the class a fresh
+  // profile starts on), js for ?core=js and for a class with no sim-core plant.
+  const wantCore = spec.core === 'js' || spec.droneType ? 'js' : 'bf';
   bootSeq += 1;
   const port = 9700 + bootSeq;
   const userData = `/tmp/qm-boot-${process.pid}-${bootSeq}-${Date.now()}`;
@@ -227,11 +244,15 @@ async function bootPageOnce(base, spec) {
   const ws = new WebSocket(wsUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
   const consoles = [];
+  const warnings = [];
   ws.addEventListener('message', (msg) => {
     try {
       const o = JSON.parse(typeof msg.data === 'string' ? msg.data : msg.data.toString());
       if (o.method === 'Runtime.consoleAPICalled' && o.params.type === 'error') {
         consoles.push((o.params.args || []).map((a) => a.value || a.description || '').join(' '));
+      }
+      if (o.method === 'Runtime.consoleAPICalled' && o.params.type === 'warning') {
+        warnings.push((o.params.args || []).map((a) => a.value || a.description || '').join(' '));
       }
       if (o.method === 'Runtime.exceptionThrown') {
         const ex = o.params.exceptionDetails || {};
@@ -252,8 +273,20 @@ async function bootPageOnce(base, spec) {
         if (String((again && again.result && again.result.value) || '').includes(mapQ)) break;
       }
     }
+    if (spec.droneType) {
+      // The class the page restores at boot, then the boot again with it.
+      await cdp(ws, 'Runtime.evaluate', {
+        expression: `localStorage.setItem('ryflyDroneType', ${JSON.stringify(spec.droneType)}); true`,
+      });
+      warnings.length = 0;
+      consoles.length = 0;
+      await cdp(ws, 'Page.reload', { ignoreCache: false });
+      await sleep(600);
+    }
     let parsed = {};
-    for (let i = 0; i < 48; i++) {
+    // The bf core loads after first paint (a dynamic import and two fetches),
+    // so a bf boot also waits for it to fly.
+    for (let i = 0; i < 80; i++) {
       const probe = await cdp(ws, 'Runtime.evaluate', {
         expression: `JSON.stringify((function(){
           var s=window._sim||{};
@@ -264,13 +297,14 @@ async function bootPageOnce(base, spec) {
             map: map,
             vibeId: vibe && vibe.id,
             ready: !!(fps && fps.ready),
-            avg: fps && fps.avg
+            avg: fps && fps.avg,
+            core: s.core ? s.core() : null
           };
         })())`,
         returnByValue: true,
       });
       const got = probe && probe.result && probe.result.value ? JSON.parse(probe.result.value) : {};
-      if (got.map === spec.map && got.vibeId === spec.map && got.ready) { parsed = got; break; }
+      if (got.map === spec.map && got.vibeId === spec.map && got.ready && (wantCore !== 'bf' || got.core === 'bf')) { parsed = got; break; }
       await sleep(250);
     }
     await cdp(ws, 'Runtime.evaluate', {
@@ -280,7 +314,11 @@ async function bootPageOnce(base, spec) {
           el.classList.remove('open','show'); el.style.display='none';
         });
         document.body.classList.remove('menu-open');
-        if(window._sim&&window._sim.looks) window._sim.looks.menuOpen=false;
+        // menuOpen is a getter: setMenuOpen is what unpauses the sim.
+        if(window._sim&&window._sim.looks&&window._sim.looks.setMenuOpen) window._sim.looks.setMenuOpen(false);
+        // A fresh profile opens the first-run input prompt, which pauses the
+        // sim (and the OSD read below) as the menu does.
+        if(window._feel&&window._feel.hideFirstRun) window._feel.hideFirstRun();
         if(window._sim&&window._sim.setLookSpot){
           var look=new URLSearchParams(location.search).get('look');
           if(look)window._sim.setLookSpot(look);
@@ -289,6 +327,16 @@ async function bootPageOnce(base, spec) {
       })()`,
     });
     await sleep(400);
+    // The OSD is written by the first unpaused frame, which a heavy map under
+    // swiftshader can take a while to draw.
+    for (let i = 0; i < 20; i++) {
+      const osd = await cdp(ws, 'Runtime.evaluate', {
+        expression: `(function(){var o=document.getElementById('osdTR');return o?o.innerText:''})()`,
+        returnByValue: true,
+      });
+      if (osd && osd.result && osd.result.value) break;
+      await sleep(150);
+    }
     const info = await cdp(ws, 'Runtime.evaluate', {
       expression: `JSON.stringify((function(){
         var s=window._sim||{};
@@ -311,7 +359,9 @@ async function bootPageOnce(base, spec) {
             avg = n ? sum/(n*3) : 0;
           }
         } catch (e) { return { evalError: String(e), map: map, vibe: vibe, artError: artError }; }
-        return { map: map, track: s.track ? s.track() : null, vibeId: vibe && vibe.id, artError: artError, avg: avg, n: n, triangles: triangles };
+        var osd = document.getElementById('osdTR');
+        return { map: map, track: s.track ? s.track() : null, vibeId: vibe && vibe.id, artError: artError, avg: avg, n: n, triangles: triangles,
+          core: s.core ? s.core() : null, osdTR: osd ? osd.innerText : null };
       })())`,
       returnByValue: true,
     });
@@ -327,6 +377,8 @@ async function bootPageOnce(base, spec) {
       parsed.shotError = e.message;
     }
     parsed.consoles = consoles;
+    parsed.warnings = warnings;
+    parsed.wantCore = wantCore;
     parsed.href = url;
     return parsed;
   } finally {
@@ -375,11 +427,8 @@ test('resolveSimBoot keeps every catalog map off City unless asked', () => {
   assert.equal(room.track, 'room-practice');
 });
 
-test('headless Chrome boots every map without errors or a blank FPV', async (t) => {
-  if (process.env.SKIP_CHROME_BOOT === '1') {
-    t.skip('SKIP_CHROME_BOOT');
-    return;
-  }
+// Boot every case on one server; one line per failure.
+async function bootCases(cases) {
   const { server, port } = await serveRoot();
   const base = 'http://127.0.0.1:' + port;
   try {
@@ -393,25 +442,51 @@ test('headless Chrome boots every map without errors or a blank FPV', async (t) 
     try { warm.kill('SIGKILL'); } catch (e) { /* ignore */ }
     await Promise.race([new Promise((res) => warm.once('exit', res)), sleep(2000)]);
     const failures = [];
-    for (const spec of CASES) {
+    for (const spec of cases) {
       const got = await bootPage(base, spec);
+      const name = spec.map + (spec.core ? ' core=' + spec.core : '') + (spec.droneType ? ' ' + spec.droneType : '');
       const wantTrack = spec.track || freestyleIdFor(spec.map);
       const refs = (got.consoles || []).filter((s) => /ReferenceError|is not defined/i.test(s));
       const fatal = (got.consoles || []).filter((s) => /ReferenceError|TypeError|SyntaxError/i.test(s));
-      if (got.evalError) failures.push(spec.map + ' eval ' + got.evalError);
-      if (got.map !== spec.map) failures.push(spec.map + ' booted as ' + got.map);
-      if (got.vibeId !== spec.map) failures.push(spec.map + ' vibe ' + got.vibeId);
-      if (got.artError) failures.push(spec.map + ' artError ' + got.artError);
-      if (fatal.length) failures.push(spec.map + ' console ' + fatal[0]);
-      if (refs.length) failures.push(spec.map + ' missing import ' + refs[0]);
-      if (!(got.shotAvg > 12)) failures.push(spec.map + ' blank shotAvg=' + got.shotAvg);
-      if (got.shotError) failures.push(spec.map + ' shot ' + got.shotError);
+      if (got.evalError) failures.push(name + ' eval ' + got.evalError);
+      if (got.map !== spec.map) failures.push(name + ' booted as ' + got.map);
+      if (got.vibeId !== spec.map) failures.push(name + ' vibe ' + got.vibeId);
+      if (got.artError) failures.push(name + ' artError ' + got.artError);
+      if (fatal.length) failures.push(name + ' console ' + fatal[0]);
+      if (refs.length) failures.push(name + ' missing import ' + refs[0]);
+      if (!(got.shotAvg > 12)) failures.push(name + ' blank shotAvg=' + got.shotAvg);
+      if (got.shotError) failures.push(name + ' shot ' + got.shotError);
       if (spec.track && String(got.track) !== String(wantTrack) && spec.track === 'room-practice') {
         if (String(got.track) !== 'room-practice') failures.push('room-practice booted ' + got.track);
       }
+      // The core that flies, and the OSD line that says so.
+      const warns = got.warnings || [];
+      if (got.core !== got.wantCore) failures.push(name + ' flies the ' + got.core + ' core, want ' + got.wantCore);
+      const line = got.wantCore === 'bf' ? 'BF CORE' : 'JS CORE';
+      if (!String(got.osdTR || '').includes(line)) failures.push(name + ' OSD has no ' + line + ': ' + JSON.stringify(got.osdTR));
+      const failed = warns.find((s) => /did not load/.test(s));
+      if (failed) failures.push(name + ' ' + failed);
+      const deprecated = warns.some((s) => /\?core=js is deprecated, removed next release/.test(s));
+      if (deprecated !== (spec.core === 'js')) failures.push(name + (deprecated ? ' warns ?core=js deprecated' : ' has no ?core=js deprecation note'));
     }
-    assert.equal(failures.join('\n'), '');
+    return failures;
   } finally {
     await new Promise((res) => server.close(res));
   }
-}, { timeout: 240000 });
+}
+
+test('headless Chrome boots every map on the default core (Betaflight) without errors or a blank FPV; classes with no plant fly JS CORE', async (t) => {
+  if (process.env.SKIP_CHROME_BOOT === '1') {
+    t.skip('SKIP_CHROME_BOOT');
+    return;
+  }
+  assert.equal((await bootCases(CASES.concat(FALLBACK_CASES))).join('\n'), '');
+}, { timeout: 420000 });
+
+test('headless Chrome boots every map on ?core=js (deprecated) without errors or a blank FPV', async (t) => {
+  if (process.env.SKIP_CHROME_BOOT === '1') {
+    t.skip('SKIP_CHROME_BOOT');
+    return;
+  }
+  assert.equal((await bootCases(JS_CASES)).join('\n'), '');
+}, { timeout: 300000 });
