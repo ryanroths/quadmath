@@ -476,6 +476,62 @@ async function bootCases(cases) {
   }
 }
 
+// The labels of the buttons a pilot can see on the launch screen's card, on a
+// fresh profile (no saved choices), once the page has booted.
+async function launchScreenButtons(base, query) {
+  bootSeq += 1;
+  const port = 9700 + bootSeq;
+  const url = `${base}/sim.html${query || ''}`;
+  const child = spawn(chrome, chromeArgs(port, `/tmp/qm-boot-${process.pid}-${bootSeq}-${Date.now()}`, url), { stdio: ['ignore', 'pipe', 'pipe'] });
+  const page = await waitForCdpPage(port, (p) => p.type === 'page' && p.webSocketDebuggerUrl && String(p.url || '').includes('/sim.html'), 100);
+  if (!page) {
+    try { child.kill('SIGKILL'); } catch (e) { /* ignore */ }
+    throw new Error('no CDP for the launch screen');
+  }
+  const ws = new WebSocket(page.webSocketDebuggerUrl);
+  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
+  try {
+    await cdp(ws, 'Runtime.enable');
+    const here = await cdp(ws, 'Runtime.evaluate', { expression: 'location.href', returnByValue: true });
+    if (!String(here && here.result && here.result.value || '').includes('/sim.html')) await cdp(ws, 'Page.navigate', { url });
+    let labels = null;
+    for (let i = 0; i < 80; i++) {
+      const got = await cdp(ws, 'Runtime.evaluate', {
+        expression: `JSON.stringify((function(){
+          var s=window._sim||{};
+          if(!(s.map&&s.map()&&s.looks&&s.looks.fps&&s.looks.fps.ready))return null;
+          return Array.prototype.filter.call(document.querySelectorAll('#startMenu .menu-card button'),function(b){
+            var cs=getComputedStyle(b);
+            return b.getClientRects().length>0&&cs.visibility!=='hidden'&&cs.opacity!=='0';
+          }).map(function(b){return b.textContent.trim();});
+        })())`,
+        returnByValue: true,
+      });
+      labels = got && got.result && got.result.value ? JSON.parse(got.result.value) : null;
+      if (labels) break;
+      await sleep(250);
+    }
+    return labels;
+  } finally {
+    try { ws.close(); } catch (e) { /* ignore */ }
+    try { child.kill('SIGKILL'); } catch (e) { /* ignore */ }
+    await Promise.race([new Promise((res) => child.once('exit', res)), sleep(2000)]);
+  }
+}
+
+test('the launch screen shows exactly five buttons without ?dev: Fly, Daily, Boards, Tune, Controls', async (t) => {
+  if (process.env.SKIP_CHROME_BOOT === '1') {
+    t.skip('SKIP_CHROME_BOOT');
+    return;
+  }
+  const { server, port } = await serveRoot();
+  try {
+    assert.deepEqual(await launchScreenButtons('http://127.0.0.1:' + port, ''), ['Fly', 'Daily', 'Boards', 'Tune', 'Controls']);
+  } finally {
+    await new Promise((res) => server.close(res));
+  }
+}, { timeout: 120000 });
+
 test('headless Chrome boots every map on the default core (Betaflight) without errors or a blank FPV; classes with no plant fly JS CORE', async (t) => {
   if (process.env.SKIP_CHROME_BOOT === '1') {
     t.skip('SKIP_CHROME_BOOT');

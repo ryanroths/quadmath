@@ -94,7 +94,7 @@
   }
   .osd{position:fixed;pointer-events:none;font-size:12px;letter-spacing:.2px;font-weight:500;
     text-shadow:0 1px 8px rgba(0,0,0,.75)}
-  #fpsHud{position:fixed;top:14px;right:92px;z-index:12;pointer-events:none;font-size:11px;
+  #fpsHud{align-self:center;margin-top:6px;white-space:nowrap;pointer-events:none;font-size:11px;
     color:var(--dim);text-shadow:0 1px 6px rgba(0,0,0,.8)}
   #osdTL{top:14px;left:16px} #osdTR{top:48px;right:16px;text-align:right}
   #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
@@ -170,13 +170,18 @@
   #cliImportStatus.ok{color:var(--green)}
   #pilotName{margin-bottom:4px}
   button:hover{background:var(--orange);color:var(--bg)}
-  #gear{position:fixed;top:12px;right:12px;z-index:21;width:auto;padding:8px 12px;
+  /* Top right, one row: the fps readout, MENU (the in-flight menu, as Esc: on
+     every device, touch or radio, keyboard or not) and TUNE. Icons only on
+     narrow screens, where the touch bar shares the top. */
+  #hudBtns{position:fixed;top:12px;right:12px;z-index:21;display:flex;gap:6px;pointer-events:none}
+  #gear,#menuBtn{pointer-events:auto;width:auto;padding:8px 12px;
     background:var(--glass);border:1px solid var(--line);color:var(--txt);font-size:12px;
     backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
-  #gear:hover{border-color:var(--orange);color:var(--orange);background:var(--glass)}
+  #gear:hover,#menuBtn:hover{border-color:var(--orange);color:var(--orange);background:var(--glass)}
+  @media (max-width:720px){#hudBtns .hud-lbl,#fpsHud{display:none}#touchBtns{left:calc(50% - 44px)}}
   .kbd{color:var(--dim);font-size:11px;line-height:1.7}
   .kbd b{color:var(--txt);font-weight:600}
-  #toast{position:fixed;top:44%;left:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:700;
+  #toast{position:fixed;z-index:30;top:44%;left:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:700;
     color:var(--orange);text-shadow:0 0 12px rgba(255,77,26,.6);pointer-events:none;opacity:0;
     transition:opacity .3s;text-align:center;max-width:90vw}
   #toast.has-action{pointer-events:auto}
@@ -234,6 +239,10 @@
   .menu-quality button,.qbtn{width:auto;flex:1;min-width:64px;margin-top:0;padding:7px 8px;font-size:11px;
     border-color:var(--line);color:var(--txt)}
   .menu-quality button.on,.qbtn.on{border-color:var(--orange);color:var(--orange);background:rgba(255,77,26,.12)}
+  /* The launch screen shows five; the in-flight menu (#startMenu.in-flight) its
+     own list; dev-only needs ?dev=1 (body.dev); menu-hide never shows. */
+  #startMenu:not(.in-flight) .menu-flight,#startMenu.in-flight .menu-launch,
+    body:not(.dev) .dev-only,.menu-hide{display:none!important}
   .menu-layer{pointer-events:auto;margin-left:0;width:min(360px,90vw);padding:22px 20px;
     max-height:calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
@@ -244,9 +253,12 @@
   .menu-layer p,.menu-layer li{font-size:13px;line-height:1.55;color:var(--dim)}
   .menu-layer ol{padding-left:18px}
   .menu-layer button{width:auto;margin-top:12px}
-  body.menu-open #legend,body.menu-open #audioHint,body.menu-open #gear,body.menu-open #fpsHud,
+  body.menu-open #legend,body.menu-open #audioHint,body.menu-open #gear,body.menu-open #menuBtn,body.menu-open #fpsHud,
     body.menu-open .osd,body.menu-open #feelHud,body.menu-open #feelTutorial,body.menu-open #coachHud,
     body.menu-open #trickHud,body.menu-open #trickScore,body.menu-open #touchLayer,body.menu-open #replayHud{opacity:0;pointer-events:none}
+  /* #touchBtns sets its own pointer-events: behind the menu the bar is out of
+     reach, not just transparent. */
+  body.menu-open #touchLayer{visibility:hidden}
   body:has(#panel.open) #feelHud{opacity:0}
   .seg{display:flex;gap:6px;margin-bottom:10px}
   #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#camTiltPreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
@@ -303,11 +315,11 @@
     background:var(--glass);border:1px solid var(--line);border-radius:12px;font-size:11px;color:var(--dim)}
   #builderList li{cursor:pointer;padding:2px 0}
   #builderList li.on{color:var(--orange)}
-  body.builder-on #legend,body.builder-on #audioHint,body.builder-on #gear,body.builder-on #fpsHud,
+  body.builder-on #legend,body.builder-on #audioHint,body.builder-on #gear,body.builder-on #menuBtn,body.builder-on #fpsHud,
   body.builder-on .osd,body.builder-on #startMenu,body.builder-on #feelHud,body.builder-on #feelTutorial,body.builder-on #coachHud,
   body.builder-on #trickHud,body.builder-on #trickScore,body.builder-on #touchLayer{opacity:0;pointer-events:none}
   #calib{z-index:60}
-  body.calibrating #touchLayer,body.calibrating #feelPrompt,body.calibrating #startMenu{opacity:0;pointer-events:none}
+  body.calibrating #touchLayer,body.calibrating #feelPrompt,body.calibrating #startMenu,body.calibrating #menuBtn{opacity:0;pointer-events:none}
   #feelPrompt{position:fixed;inset:0;z-index:26;display:none;align-items:center;justify-content:center;
     padding:32px;background:rgba(8,10,14,.45)}
   #feelPrompt.show{display:flex}
@@ -438,22 +450,34 @@
   <div class="menu-card">
     <div class="menu-brand">QuadMath</div>
     <h1>Sim</h1>
-    <p class="menu-lead">Browser FPV whoop sim. Fly is free flight — no gates, no timer. Tracks for races. Paste your Betaflight rates. No install.</p>
-    <button class="primary" id="menuFly">Fly</button>
-    <button id="menuFreestyle">Freestyle</button>
-    <button id="menuDaily">Daily</button>
-    <button id="menuDailyLine">Daily Line</button>
-    <button id="menuBoards">Boards</button>
-    <button id="menuTracks">Tracks</button>
-    <button id="menuCoach">Coach</button>
-    <button id="menuRoom">Your room</button>
-    <button id="menuBuild">Your build</button>
-    <button id="menuWhoop">Whoop</button>
-    <button id="menuBuilder">Track builder</button>
-    <button id="menuTune">Tune</button>
-    <button id="menuControls">Controls</button>
-    <button id="menuHowTo">How to</button>
-    <div class="menu-quality" id="qualityBtns">
+    <!-- One card, two screens: the launch screen (menu-launch: Fly, Daily,
+         Boards, Tune, Controls) until the pilot first leaves it, then the
+         in-flight menu (menu-flight) on Esc or MENU. dev-only shows with
+         ?dev=1; menu-hide never shows. Nothing here is removed, only hidden. -->
+    <p class="menu-lead menu-launch">Browser FPV whoop sim. Fly is free flight — no gates, no timer. In flight, Esc or MENU opens tracks, coach, the track builder and replays. Paste your Betaflight rates. No install.</p>
+    <p class="menu-lead menu-flight">Paused. Opening the menu ends a race run. Resume (or Esc) flies on; Home goes back to the start screen.</p>
+    <button class="primary menu-launch" id="menuFly">Fly</button>
+    <button class="primary menu-flight" id="menuResume">Resume</button>
+    <button class="menu-hide" id="menuFreestyle">Freestyle</button>
+    <button class="menu-launch" id="menuDaily">Daily</button>
+    <button class="menu-launch dev-only" id="menuDailyLine">Daily Line</button>
+    <button class="menu-launch" id="menuBoards">Boards</button>
+    <button class="menu-flight" id="menuTracks">Tracks</button>
+    <button class="menu-flight" id="menuCoach">Coach</button>
+    <button class="menu-flight" id="menuBuilder">Track builder</button>
+    <button class="menu-flight" id="menuRoom">Your room</button>
+    <button class="menu-flight" id="menuBuild">Your build</button>
+    <button class="menu-flight" id="menuReplay">Replay</button>
+    <button class="menu-flight" id="menuGhostCodes">Ghost / Duel codes</button>
+    <button class="menu-flight" id="menuClip">Clip</button>
+    <button class="menu-flight" id="menuFreestyleMap">Freestyle this map</button>
+    <button class="menu-flight" id="menuRecalib">Recalibrate</button>
+    <button class="menu-hide" id="menuWhoop">Whoop</button>
+    <button class="menu-launch" id="menuTune">Tune</button>
+    <button class="menu-launch" id="menuControls">Controls</button>
+    <button class="menu-launch dev-only" id="menuHowTo">How to</button>
+    <button class="menu-flight" id="menuHome">Home</button>
+    <div class="menu-quality menu-launch dev-only" id="qualityBtns">
       <button type="button" data-q="auto">Auto</button>
       <button type="button" data-q="low">Low</button>
       <button type="button" data-q="med">Med</button>
@@ -463,7 +487,6 @@
   </div>
   <div class="menu-layer" id="menuLayer"></div>
 </div>
-<div id="fpsHud"></div>
 <div class="osd" id="osdTL"></div>
 <div class="osd" id="osdTR"></div>
 <div class="osd" id="osdBC"></div>
@@ -486,8 +509,8 @@
 <div id="toast"></div>
 <div id="replayHud" aria-hidden="true">
   <div class="replay-row">
-    <button type="button" data-replay-cam="chase" class="on">Chase</button>
-    <button type="button" data-replay-cam="orbit">Orbit</button>
+    <button type="button" data-replay-cam="chase" class="dev-only">Chase</button>
+    <button type="button" data-replay-cam="orbit" class="dev-only">Orbit</button>
     <button type="button" data-replay-cam="fpv">FPV</button>
     <span id="replayTime">0:00.00</span>
   </div>
@@ -532,6 +555,7 @@
   <b id="legendGhost">G — Ghost Replay</b><br>
   <b>C — Coach / line</b><br>
   <b>R — Respawn last gate</b><br>
+  <b>ESC — Menu</b><br>
   <b>TAB — Tune Panel</b>
 </div>
 <div id="feelPrompt" aria-hidden="true"></div>
@@ -575,7 +599,11 @@
   <button id="calibSkip" style="display:none">SKIP AUX</button>
 </div>
 
-<button id="gear">⚙ TUNE [Tab]</button>
+<div id="hudBtns">
+  <div id="fpsHud"></div>
+  <button type="button" id="menuBtn" title="Menu (Esc)">☰<span class="hud-lbl"> MENU [Esc]</span></button>
+  <button id="gear">⚙<span class="hud-lbl"> TUNE [Tab]</span></button>
+</div>
 <div id="panel">
   <a id="panelHome" href="/">← Back to QuadMath</a>
   <h1>QUADMATH SIM</h1>
@@ -653,13 +681,13 @@
   <div class="row"><label>Trick debug</label><input type="checkbox" id="cbTrickDebug" style="accent-color:var(--orange)" title="Classifier overlay. Records last maneuver JSON — Copy last trace. Also ?trickdebug=1"></div>
 
   <h2>Quality</h2>
-  <select id="qualityPanel">
+  <select id="qualityPanel" class="dev-only">
     <option value="auto">Auto</option>
     <option value="low">Low</option>
     <option value="med">Med</option>
     <option value="high">High</option>
   </select>
-  <p class="build-note">Low (phones) skips bloom, color grade, vignette and contact AO. Med/High get the full post pass.</p>
+  <p class="build-note dev-only">Low (phones) skips bloom, color grade, vignette and contact AO. Med/High get the full post pass.</p>
   <div class="row"><label>Rain</label><input type="checkbox" id="cbRain" checked style="accent-color:var(--orange)"></div>
 
   <h2>Audio</h2>
@@ -754,7 +782,7 @@
   <div class="row"><label style="padding-left:14px">↳ Drafts</label><span class="val" id="v_draft"></span></div>
   <input type="range" id="s_draft" min="0" max="2" step="0.05" value="0.55" title="Light turbulence near walls. Stronger on small indoor whoops.">
 
-  <h2>Ghost Sharing</h2>
+  <h2 id="ghostHead">Ghost Sharing</h2>
   <div class="row"><label>Pilot name</label></div>
   <input type="text" id="pilotName" maxlength="16" placeholder="PILOT" autocomplete="off">
   <button id="btnGhostCopy">COPY GHOST CODE</button>
@@ -979,6 +1007,11 @@ function ensureGltf(){
 // release. Read once, at boot.
 const CORE_KIND=new URLSearchParams(location.search).get('core')==='js'?'js':'bf';
 if(CORE_KIND==='js')console.warn('sim-core: ?core=js is deprecated, removed next release; the js core flies every class');
+// ?dev=1 shows the dev-only controls (class dev-only): Daily Line, How to and
+// its tutorial, Skins, Paint whoop, the quality presets, and the Chase and
+// Orbit replay cameras. Without it quality runs on Auto and replays are FPV.
+const DEV_UI=new URLSearchParams(location.search).get('dev')==='1';
+document.body.classList.toggle('dev',DEV_UI);
 const CFG={
   camDeg:15,fov:VFOV_DEFAULT,maxThrustN:3.9,thrCurve:1.0,thrMid:THROTTLE_MID_DEFAULT,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
 CFG.fov=loadFov();
@@ -1086,7 +1119,7 @@ let chaseCamOn=false;
 let replayOn=false;
 let replayPose=null;
 const replayCamScratch={x:0,y:0,z:0,w:1};
-const replayState={mode:'chase',t:0,playing:false,last:0,end:0,clipUntil:null};
+const replayState={mode:DEV_UI?'chase':'fpv',t:0,playing:false,last:0,end:0,clipUntil:null}; // Chase/Orbit are ?dev=1 only
 const _replaySample=[];
 let poseOk=false;
 const _chaseOff=new THREE.Vector3();
@@ -4626,10 +4659,15 @@ function startFreestyle(mapHint){
   toast('FREESTYLE — NO GATES');
   return fly;
 }
+// The card is the launch screen until the pilot first leaves it; from then on,
+// opening it (Esc, MENU, a picker) shows the in-flight menu. Home goes back.
+let leftLaunch=false;
 function toggleStartMenu(force){
   const el=document.getElementById('startMenu');
   const cur=looks?looks.menuOpen:el.classList.contains('open');
   const next=force==null?!cur:!!force;
+  if(next&&!cur)el.classList.toggle('in-flight',leftLaunch);
+  if(!next)leftLaunch=true;
   if(looks)looks.setMenuOpen(next);
   else{el.classList.toggle('open',next);document.body.classList.toggle('menu-open',next);}
   if(next){panel.classList.remove('open');syncMenuSparks();}
@@ -4854,7 +4892,7 @@ function openDailyCard(){
     '<p class="daily-meta">Streak '+d.streak+' · best today '+(best?fmtLap(best):'—')+
     ' · all-time streak '+d.bestStreak+'</p>'+
     '<button type="button" class="primary" id="dailyFly">Fly '+t.name+'</button>'+
-    '<button type="button" id="dailySkins">Skins</button>'+
+    '<button type="button" id="dailySkins" class="dev-only">Skins</button>'+
     '<button type="button" id="layerClose">Close</button>');
   document.getElementById('dailyFly').onclick=()=>flyGeneratedTrack(t);
   document.getElementById('dailySkins').onclick=()=>openSkinsCard();
@@ -4900,7 +4938,7 @@ function openBoardsCard(){
     '<div id="boardBody"></div>'+
     (online?'<button type="button" id="boardRefresh">Refresh online</button>':'')+
     '<button type="button" class="primary" id="boardFly">Fly this week</button>'+
-    '<button type="button" id="boardSkins">Skins</button>'+
+    '<button type="button" id="boardSkins" class="dev-only">Skins</button>'+
     '<button type="button" id="layerClose">Close</button>');
   document.getElementById('boardFly').onclick=()=>flyGeneratedTrack(t);
   document.getElementById('boardSkins').onclick=()=>openSkinsCard();
@@ -5225,6 +5263,26 @@ function wireLooksUI(){
   if(btnWhoop)btnWhoop.onclick=()=>openWhoopCard();
   const btnBuilder=document.getElementById('menuBuilder');
   if(btnBuilder)btnBuilder.onclick=()=>{hideMenuLayer();toggleStartMenu(false);openBuilder();};
+  // The in-flight menu's own entries: each opens what was elsewhere (the V key
+  // and the replay HUD, the Tune panel's ghost sharing, its Freestyle this map
+  // and Calibrate buttons), and Resume / Home move between the two screens.
+  const on=(id,fn)=>{const b=document.getElementById(id);if(b)b.onclick=fn;};
+  on('menuResume',()=>{hideMenuLayer();toggleStartMenu(false);});
+  on('menuHome',()=>{hideMenuLayer();document.getElementById('startMenu').classList.remove('in-flight');});
+  on('menuReplay',()=>{hideMenuLayer();startReplay();});
+  on('menuClip',()=>{hideMenuLayer();if(startReplay())recordReplayClip();});
+  on('menuGhostCodes',()=>{
+    hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');syncBuildUI();
+    const h=document.getElementById('ghostHead');
+    if(h)h.scrollIntoView({block:'start'});
+  });
+  on('menuFreestyleMap',()=>startFreestyle(currentMap));
+  // Calibration needs a gamepad (startCalib toasts if there is none): the menu
+  // closes only once it starts.
+  on('menuRecalib',()=>{startCalib();if(calib){hideMenuLayer();toggleStartMenu(false);}});
+  // The HUD's MENU is the Esc key, exactly, for pilots with no keyboard (touch,
+  // or a radio on a phone or tablet).
+  on('menuBtn',()=>dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'})));
   document.getElementById('menuControls').onclick=()=>{
     showMenuLayer('<h2>Controls</h2><p>TX16S: EdgeTX USB mode = <b style="color:var(--txt)">Joystick</b>.</p>'+
       '<p><span class="n">W/S</span> throttle · <span class="n">A/D</span> yaw<br>'+
@@ -5754,9 +5812,9 @@ function openBuildPicker(){
     const on=matchPresetId(currentBuild)===p.id?'on':'';
     return '<button type="button" class="'+on+'" data-bid="'+p.id+'"><span>'+p.label+(p.approx?' ≈':'')+'</span><span class="best">'+p.frameMm+'mm '+p.cells+'S</span></button>';
   }).join('');
-  showMenuLayer('<h2>Your build</h2><p>Approximate whoop physics. Named presets use bench AUW where noted. Customize in Tune. Paint colors and canopy in Whoop.</p>'+
+  showMenuLayer('<h2>Your build</h2><p>Approximate whoop physics. Named presets use bench AUW where noted. Customize in Tune.<span class="dev-only"> Paint colors and canopy with Paint whoop.</span></p>'+
     '<div class="track-list">'+rows+'</div>'+
-    '<button type="button" id="buildOpenWhoop">Paint whoop</button>'+
+    '<button type="button" id="buildOpenWhoop" class="dev-only">Paint whoop</button>'+
     '<button type="button" id="buildOpenTune">Customize in Tune</button>'+
     '<button type="button" id="layerClose">Close</button>');
   if(layer)layer.classList.add('wide');
@@ -7376,6 +7434,9 @@ function applyQueryBoot(){
   }
   if((map||trackRaw||buildRaw||modeRaw||presetRaw||ratesRaw||drillRaw||q.get('3d')||q.get('daily')||q.get('weekly'))&&q.get('menu')!=='1')toggleStartMenu(false);
   if(q.get('look')&&looks)looks.setLookSpot(q.get('look'));
+  // The quality presets are ?dev=1 only: without it the page runs on Auto (a
+  // ?quality= link still picks one, as the boot tests do).
+  if(!q.get('quality')&&!DEV_UI&&looks&&looks.choice!=='auto')looks.setQuality('auto').then(syncQualityUI);
   if(q.get('quality')&&looks){
     looks.setQuality(q.get('quality')).then(function(){
       try{
