@@ -26,8 +26,10 @@ export const CLASS_IDS = Object.freeze([65, 75, 85]);
 export const CLASS_MAX_SPEED = Object.freeze({ 65: 48, 75: 58, 85: 72 });
 export const MISS_PENALTY_MS = 2000;
 // sim-whoop.js PHYSICS_VER, here for the Worker (it bundles this file, not
-// sim-whoop.js). Submitted ghosts must carry it; see that file for history.
-export const PHYS_VER = 3;
+// sim-whoop.js). Submitted ghosts must carry it, and every board is kept per
+// version (boardKeyFor online, boardStoreKey local), so a bump starts the
+// boards clean. See that file for history.
+export const PHYS_VER = 4;
 export const DAILY_GEN = 2;
 export const PILOT_NAME_MAX = 16;
 export const GATE_SIZE_MIN = 0.28 * WS_PER_METRE;
@@ -1466,6 +1468,22 @@ export function isDailyLineBoardKey(week) {
   return typeof week === 'string' && /^D\d{4}-\d{2}-\d{2}$/.test(week);
 }
 
+// The D1 key a board is stored and read under: the ISO week, or the Daily
+// Line's 'D' + day, and the physics version. Rows written before a PHYS_VER
+// bump stay in D1 under the old key, unlisted, and a pilot's old faster time
+// no longer blocks a new one: the bump starts every board clean.
+export function boardKeyFor(week) {
+  return String(week || '') + '.p' + PHYS_VER;
+}
+
+// The local board (shown when the online one is empty) is kept per physics
+// version the same way, under its own storage key: the rows under BOARD_KEY
+// (phys 3 and before) are left unread, and an old page still open in a tab
+// can never write into the current version's board.
+export function boardStoreKey() {
+  return BOARD_KEY + '.p' + PHYS_VER;
+}
+
 export function dailyLineFor(utc, now) {
   const day = utc || utcDateId(now);
   const rand = mulberry32(hashStr('daily-line|v1|' + day));
@@ -1699,7 +1717,7 @@ export function loadBoard(storage) {
   const store = storageOf(storage);
   if (!store) return emptyBoard();
   try {
-    const raw = store.getItem(BOARD_KEY);
+    const raw = store.getItem(boardStoreKey());
     if (!raw) return emptyBoard();
     return normalizeBoard(JSON.parse(raw));
   } catch (e) {
@@ -1711,7 +1729,7 @@ export function saveBoard(board, storage) {
   const store = storageOf(storage);
   if (!store) return false;
   try {
-    store.setItem(BOARD_KEY, JSON.stringify(normalizeBoard(board)));
+    store.setItem(boardStoreKey(), JSON.stringify(normalizeBoard(board)));
     return true;
   } catch (e) {
     return false;

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim — the flight core behind one adapter. Two cores fly the same
-// page: quadphysics.js (the "js" core, still the default) and
-// quadmath-sim-core, Betaflight 4.5.1 in WebAssembly (the "bf" core, ?core=bf,
-// the Air65 only for now). Both step at a fixed 1 kHz on an accumulator fed by
+// page: quadmath-sim-core, Betaflight 4.5.1 in WebAssembly (the "bf" core, the
+// default, the Air65 only for now) and quadphysics.js (the "js" core: classes
+// with no sim-core plant, and ?core=js for one release). Both step at a fixed 1 kHz on an accumulator fed by
 // frame time, and the page renders an interpolated state. OSD, ghosts, crashes,
 // audio and portals read getState() and events() whichever core flies.
 //

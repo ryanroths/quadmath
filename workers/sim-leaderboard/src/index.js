@@ -11,6 +11,7 @@ import {
   normalizeDailyLineSubmit,
   dailyLineFor,
   dailyLineBoardKey,
+  boardKeyFor,
   rateWindowId,
   pickCorsOrigin,
   DEFAULT_ALLOWED_ORIGIN,
@@ -72,25 +73,28 @@ async function checkRate(env, ip, now) {
   return true;
 }
 
+// The scores.week column holds boardKeyFor(week): the week (or Daily Line day
+// key) and PHYS_VER, so each physics version has boards of its own.
 async function listBoard(env, week, frameMm, trackId) {
   const c = classId(frameMm);
   const track = trackId || weeklyTrackFor(week).id;
   const { results } = await env.DB.prepare(
     'SELECT name, time_ms AS timeMs, track_id AS trackId, submitted_ms AS at FROM scores WHERE week = ? AND class = ? AND track_id = ? ORDER BY time_ms ASC LIMIT 20',
-  ).bind(week, c, track).all();
+  ).bind(boardKeyFor(week), c, track).all();
   return results || [];
 }
 
 async function upsertScore(env, week, frameMm, name, timeMs, trackId) {
+  const key = boardKeyFor(week);
   const existing = await env.DB.prepare(
     'SELECT time_ms FROM scores WHERE week = ? AND class = ? AND name = ?',
-  ).bind(week, frameMm, name).first();
+  ).bind(key, frameMm, name).first();
   if (existing && existing.time_ms <= timeMs) {
     return { improved: false, timeMs: existing.time_ms };
   }
   await env.DB.prepare(
     'INSERT INTO scores (week, class, name, time_ms, track_id, submitted_ms) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(week, class, name) DO UPDATE SET time_ms = excluded.time_ms, track_id = excluded.track_id, submitted_ms = excluded.submitted_ms WHERE excluded.time_ms < scores.time_ms',
-  ).bind(week, frameMm, name, timeMs, trackId, Date.now()).run();
+  ).bind(key, frameMm, name, timeMs, trackId, Date.now()).run();
   return { improved: true, timeMs };
 }
 

@@ -197,7 +197,7 @@ test('propwash wobbles on a dive/chop through own wash; drafts grow near walls w
 
 test('ghosts stay v:1 kinematic; phys tag is additive and optional', () => {
   assert.equal(GHOST_FORMAT_V, 1);
-  assert.equal(PHYSICS_VER, 3);
+  assert.equal(PHYSICS_VER, 4);
   assert.equal(PHYS_VER, PHYSICS_VER, 'the Worker accepts what the page tags');
   const samples = [[0, 0, 1, 0, 0, 0, 0, 1], [100, 1, 1, -1, 0, 0, 0, 1]];
   const old = { v: 1, track: 0, name: 'OLD', lapTime: 1000, samples };
