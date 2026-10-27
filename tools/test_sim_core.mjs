@@ -162,6 +162,43 @@ test('bf core loads the owner\'s full Air65 diff: vbat_sag_compensation 70, thru
   assert.ok(on > off + 300, `idle ${on.toFixed(0)} rpm with dynamic idle, ${off.toFixed(0)} without`);
 });
 
+test('the 65-betafpv-ryfly-1219s card is the diff the bf core flies, on every field the card carries', async () => {
+  const card = tunes().tunes.find((t) => t.id === '65-betafpv-ryfly-1219s');
+  const core = await ownerCore();
+  const axes = ['roll', 'pitch', 'yaw'];
+  // Read back from Betaflight with the diff applied: profile 0 ('1219S') and
+  // rateprofile 0, so unset values are Betaflight's own defaults (d_yaw).
+  const keys = ['rates_type', 'tpa_rate', 'thrust_linear', 'vbat_sag_compensation', 'dyn_idle_min_rpm', 'd_min_roll', 'd_min_pitch',
+    'dshot_bidir', 'motor_pwm_protocol', 'gyro_lpf1_static_hz', 'gyro_lpf1_dyn_min_hz',
+    'dyn_notch_count', 'dyn_notch_q', 'dyn_notch_min_hz', 'dyn_notch_max_hz', 'craft_name'];
+  for (const a of axes) keys.push(`p_${a}`, `i_${a}`, `d_${a}`, `f_${a}`, `${a}_rc_rate`, `${a}_srate`, `${a}_expo`);
+  const bf = core.sim.get(keys, { profile: 0, rateprofile: 0 });
+  assert.equal(card.rateType, bf.rates_type);
+  for (const a of axes) {
+    assert.deepEqual([...card.pids[a]], [+bf[`p_${a}`], +bf[`i_${a}`], +bf[`d_${a}`]], `${a} P/I/D`);
+    assert.deepEqual([...card.rates[a]], [+bf[`${a}_rc_rate`], +bf[`${a}_srate`], +bf[`${a}_expo`]], `${a} rc_rate/srate/expo`);
+  }
+  // The page's ?rates=card.<id> alias is a copy of the card's rates.
+  const { RATE_CARDS } = await import('../sim-rates.js');
+  const alias = RATE_CARDS['65-betafpv-ryfly-1219s'];
+  assert.equal(alias.type, card.rateType);
+  for (const a of axes) assert.deepEqual([...alias[a]], [...card.rates[a]], `alias ${a}`);
+  // The notes' numbers are the diff's too.
+  const notes = card.notes.join(' | ');
+  assert.ok(notes.includes(`D-min R${bf.d_min_roll}/P${bf.d_min_pitch}`), notes);
+  assert.ok(notes.includes(`TPA ${bf.tpa_rate}`), notes);
+  assert.ok(notes.includes(`FF R${bf.f_roll}/P${bf.f_pitch}/Y${bf.f_yaw}`), notes);
+  assert.ok(notes.includes(`Thrust linear ${bf.thrust_linear}`), notes);
+  assert.ok(notes.includes(`Vbat sag comp ${bf.vbat_sag_compensation}`), notes);
+  assert.ok(notes.includes(`Dyn idle ${bf.dyn_idle_min_rpm}`), notes);
+  assert.equal(bf.dshot_bidir, 'ON');
+  assert.ok(notes.includes(`RPM filter ON, bidir ${bf.motor_pwm_protocol}`), notes);
+  assert.ok(bf.gyro_lpf1_static_hz === '0' && bf.gyro_lpf1_dyn_min_hz === '0' && notes.includes('Gyro LPF1 off'), notes);
+  assert.ok(notes.includes(`Dyn notch ${bf.dyn_notch_count}×Q${bf.dyn_notch_q} ${bf.dyn_notch_min_hz}–${bf.dyn_notch_max_hz}hz`), notes);
+  assert.ok(notes.includes(`Board: ${bf.craft_name}`), notes);
+  assert.ok(!/crash recovery on|ff off/i.test(notes), notes);
+});
+
 test('bf core: TX16S stick forward is pitch above 1500, a nose-down rate, and +X (scene forward)', async () => {
   const core = await ownerCore();
   // The page: a 4 ms poll stamped in sim time, 60 Hz frames.
@@ -427,13 +464,16 @@ test('bf core turtle, as the page runs it, from the gesture while armed: upright
   assert.ok(rig.upZ() > 0.95, `upright (up Z ${rig.upZ().toFixed(3)})`);
 });
 
-test('bf core turtle from the gesture: stays upright for 4 s armed at idle on the floor', {
-  todo: 'known: on the owner\'s diff the angle loop\'s sub-0.1 degree residual at the re-arm makes the motors uneven, the floor contact then feeds the gyro spikes with no net rotation, Betaflight\'s estimate walks and the quad rolls onto its side about 2.5 s later (sim-core plant contact, PROGRESS 2026-10-26)',
-}, async () => {
+// sim-core v0.3.0's gyro reads the rotation the attitude makes, floor contacts
+// included. Before, contact fed it rates the quad never turned at, Betaflight's
+// estimate walked, and the quad rolled onto its side about 2.5 s after this
+// re-arm.
+test('bf core turtle from the gesture: stays upright for 4 s armed at idle on the floor', async () => {
   const rig = await gestureTurtle();
   let minUp = 1;
   rig.run(4000, () => { minUp = Math.min(minUp, rig.upZ()); });
   assert.ok(minUp > 0.95, `lowest up Z over 4 s: ${minUp.toFixed(3)}`);
+  assert.equal(rig.core.getState().armed, true);
 });
 
 test('bf core turtle, as the page runs it, from an arm while flipped: upright, re-armed, stays upright 4 s; a disarm ends it', async () => {

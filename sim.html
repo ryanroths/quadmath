@@ -837,7 +837,7 @@
      script, so it runs before the module below and the data is there by
      the time applyDroneType() first fires. Its own init() no-ops here:
      it returns early when there is no #tuneGrid on the page. -->
-<script src="tune-database.js?v=6f36677579c7"></script>
+<script src="tune-database.js?v=b5b01f01abbc"></script>
 <script type="importmap">
 {
   "imports": {
@@ -919,7 +919,7 @@ import {
   convertAxisFamily as convertAxisRate, formatAxisReadout, formatCliSummary,
   drawRateCurve, normalizeRateType, isRateType, bfCurve as bfCurveOf,
   actualRate as actualRateOf, encodeRates, decodeRates, ratesDeepLink, RATE_CARDS,
-} from "./sim-rates.js?v=5200fe5788e2";
+} from "./sim-rates.js?v=409bffd7db79";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -6772,7 +6772,7 @@ const BF_TUNE_ID='65-betafpv-ryfly-1219s';
 const BF_CLASS='whoop65';
 // vendor/sim-core/VERSION; versions the vendored URLs (cache) and the test
 // tools/test_sim_core.mjs holds the two equal.
-const SIM_CORE_VERSION='v0.2.0-3-g562d575';
+const SIM_CORE_VERSION='v0.3.0';
 const BF_DIFF_PATH='vendor/sim-core/configs/air65-ryfly-2026-10-23.txt';
 let bfOwnerDiff=null;                // that diff's text, once fetched
 let bfDiffLoaded=null;               // the CLI text the bf core last configured with

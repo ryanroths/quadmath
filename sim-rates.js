@@ -188,9 +188,9 @@ export const RATE_CARDS = Object.freeze({
   }),
   '65-betafpv-ryfly-1219s': Object.freeze({
     type: 'ACTUAL',
-    roll: Object.freeze([4, 74, 56]),
-    pitch: Object.freeze([4, 74, 56]),
-    yaw: Object.freeze([4, 70, 56]),
+    roll: Object.freeze([2, 74, 56]),
+    pitch: Object.freeze([2, 74, 56]),
+    yaw: Object.freeze([2, 70, 56]),
   }),
   '75-betafpv-ryfly-o4-gf1811': Object.freeze({
     type: 'ACTUAL',

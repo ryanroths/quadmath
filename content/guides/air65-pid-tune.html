@@ -67,8 +67,8 @@
         <tr>
           <td>RyFly</td>
           <td>VCI Spark 0702 29K · Gemfan 1219S</td>
-          <td>54/77/38 · 62/89/52</td>
-          <td>D floor R36/P49, TPA 60, FF off, RPM filter on bidir DSHOT300.</td>
+          <td>61/66/44 · 71/76/60</td>
+          <td>D floor R36/P49, TPA 60, FF 80, thrust linear 20, sag compensation 70, dynamic idle 55, RPM filter on bidir DSHOT300.</td>
         </tr>
         <tr>
           <td>RyFly</td>
@@ -79,8 +79,9 @@
       </tbody>
     </table>
     <p>
-      Both RyFly cards run the same rates: ACTUAL, rc_rate 4, srate 74/74/70, expo 56. Yaw D is 0
-      on all three, which is correct and not an omission.
+      RyFly rates are ACTUAL, srate 74/74/70, expo 56: rc_rate 2 on the 1219S card, from the pilot's
+      diff, and rc_rate 4 on the HQ 31mm card. Yaw D is 0 on all three, which is correct and not an
+      omission.
     </p>
     <p>
       One naming trap. On Betaflight 4.2–4.5 the D floor is <code>d_min_&lt;axis&gt;</code> and the

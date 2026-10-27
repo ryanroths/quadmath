@@ -68,17 +68,24 @@
       fc: 'BetaFPV G473 (BEFH)',
       combo: 'VCI Spark 0702 29K KV · Gemfan 1219S',
       rateType: 'ACTUAL',
-      pids:  { roll: [54, 77, 38], pitch: [62, 89, 52], yaw: [54, 77, 0] },
-      rates: { roll: [4, 74, 56],  pitch: [4, 74, 56],  yaw: [4, 70, 56] },
+      // From the pilot's diff of 2026-10-23 (profile 0 '1219S', rateprofile
+      // 0), the diff the sim's bf core flies (quadmath-sim-core
+      // configs/air65-ryfly-2026-10-23.txt); tools/test_sim_core.mjs holds
+      // the card to it.
+      pids:  { roll: [61, 66, 44], pitch: [71, 76, 60], yaw: [61, 68, 0] },
+      rates: { roll: [2, 74, 56],  pitch: [2, 74, 56],  yaw: [2, 70, 56] },
       notes: [
         'D-min R36/P49',
         'TPA 60',
-        'Crash recovery ON',
-        'FF off',
+        'FF R80/P80/Y80',
+        'Thrust linear 20',
+        'Vbat sag comp 70',
+        'Dyn idle 55 (5500 rpm)',
+        'RPM filter ON, bidir DSHOT300',
         'Gyro LPF1 off',
         'Dyn notch 1×Q500 120–500hz',
-        'RPM filter ON, bidir DSHOT300',
         'Board: AIR65 RYFLY',
+        'BF 4.5.0 diff, 2026-10-23',
       ],
     },
     {
