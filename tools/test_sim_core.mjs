@@ -199,6 +199,24 @@ test('the 65-betafpv-ryfly-1219s card is the diff the bf core flies, on every fi
   assert.ok(!/crash recovery on|ff off/i.test(notes), notes);
 });
 
+test('the 65-betafpv-ryfly-hq31 card is profile 1 of the same diff, with its one rate profile', async () => {
+  const card = tunes().tunes.find((t) => t.id === '65-betafpv-ryfly-hq31');
+  const core = await ownerCore();
+  const axes = ['roll', 'pitch', 'yaw'];
+  const keys = ['rates_type', 'tpa_rate', 'd_min_roll', 'd_min_pitch'];
+  for (const a of axes) keys.push(`p_${a}`, `i_${a}`, `d_${a}`, `f_${a}`, `${a}_rc_rate`, `${a}_srate`, `${a}_expo`);
+  const bf = core.sim.get(keys, { profile: 1, rateprofile: 0 });
+  assert.equal(card.rateType, bf.rates_type);
+  for (const a of axes) {
+    assert.deepEqual([...card.pids[a]], [+bf[`p_${a}`], +bf[`i_${a}`], +bf[`d_${a}`]], `${a} P/I/D`);
+    assert.deepEqual([...card.rates[a]], [+bf[`${a}_rc_rate`], +bf[`${a}_srate`], +bf[`${a}_expo`]], `${a} rc_rate/srate/expo`);
+  }
+  const notes = card.notes.join(' | ');
+  assert.ok(notes.includes(`D-min R${bf.d_min_roll}/P${bf.d_min_pitch}`), notes);
+  assert.ok(notes.includes(`TPA ${bf.tpa_rate}`), notes);
+  assert.ok(axes.every((a) => bf[`f_${a}`] === '0') && notes.includes('FF off'), notes);
+});
+
 test('bf core: TX16S stick forward is pitch above 1500, a nose-down rate, and +X (scene forward)', async () => {
   const core = await ownerCore();
   // The page: a 4 ms poll stamped in sim time, 60 Hz frames.

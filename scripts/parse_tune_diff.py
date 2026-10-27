@@ -133,6 +133,14 @@ class TuneRefused(Exception):
 
 _SET_RE = re.compile(r"^\s*set\s+([a-zA-Z0-9_]+)\s*=\s*(.+?)\s*$", re.MULTILINE)
 
+# The CLI commands that select a PID profile or a rate profile. A 4.x
+# `diff all` prints one before each profile's block and once more at the end
+# to restore the selection; the `# profile N` comment lines are not commands.
+_SCOPE_RE = re.compile(r"^\s*(profile|rateprofile)\s+(\d+)\s*$", re.IGNORECASE)
+
+# Board identity, which 4.x prints without `set` (`board_name BETAFPVG473`).
+_BARE_RE = re.compile(r"^\s*(board_name|manufacturer_id)\s+(\S.*?)\s*$", re.IGNORECASE)
+
 # `diff all`, `diff`, or the commented echo Configurator adds. Betaflight has
 # printed this line in every 4.x release.
 _DIFF_MARKER = re.compile(r"^\s*#?\s*diff(?:\s+\w+)*\s*$", re.MULTILINE)
@@ -170,15 +178,52 @@ _VERSION_RE = re.compile(
 
 
 def parse_settings(text: str) -> dict[str, str]:
-    """Every `set key = value` in the text, last write wins.
+    """The `set key = value` values the diff leaves in force, as Betaflight
+    replays it.
 
-    Last-wins matters: a `diff all` prints one block per PID profile and per
-    rate profile, so a quad with two profiles emits p_roll twice. Betaflight
-    replays the file top to bottom, so the final value is the one that lands.
+    A 4.x `diff all` prints the master settings, then each PID profile's
+    block after a `profile N` command and each rate profile's after a
+    `rateprofile N` command, then `profile X` and `rateprofile Y` once more to
+    restore the selection. A `set` in a profile's block lands in that profile,
+    so the values in force are the master ones, overlaid by the profile
+    selected at the end, then by the rate profile selected at the end. A
+    second profile's p_roll is that profile's, not the flown one's. Within a
+    block the last write wins. A diff with no profile commands (one block, or
+    trimmed by hand down to the `# profile` comments) is read top to bottom,
+    last write wins.
+
+    `board_name` and `manufacturer_id`, which 4.x prints without `set`, are
+    read too; a `set` line for either wins.
     """
-    found: dict[str, str] = {}
-    for match in _SET_RE.finditer(text):
-        found[match.group(1).lower()] = match.group(2).strip()
+    bare: dict[str, str] = {}
+    master: dict[str, str] = {}
+    profiles: dict[int, dict[str, str]] = {}
+    rateprofiles: dict[int, dict[str, str]] = {}
+    scope = master
+    profile = 0
+    rateprofile = 0
+    for line in text.splitlines():
+        command = _SCOPE_RE.match(line)
+        if command:
+            index = int(command.group(2))
+            if command.group(1).lower() == "profile":
+                profile = index
+                scope = profiles.setdefault(index, {})
+            else:
+                rateprofile = index
+                scope = rateprofiles.setdefault(index, {})
+            continue
+        setting = _SET_RE.match(line)
+        if setting:
+            scope[setting.group(1).lower()] = setting.group(2).strip()
+            continue
+        identity = _BARE_RE.match(line)
+        if identity:
+            bare[identity.group(1).lower()] = identity.group(2).strip()
+    found = dict(bare)
+    found.update(master)
+    found.update(profiles.get(profile, {}))
+    found.update(rateprofiles.get(rateprofile, {}))
     return found
 
 

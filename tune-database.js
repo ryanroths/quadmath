@@ -96,14 +96,20 @@
       fc: 'BetaFPV G473 (BEFH)',
       combo: 'VCI Spark 0702 29K KV · HQ 31mm',
       rateType: 'ACTUAL',
+      // Profile 1 'HQ 31mm' of the pilot's diff of 2026-10-23 (the 1219S card
+      // is its profile 0), with the diff's one rate profile, 0, which both
+      // profiles fly.
       pids:  { roll: [61, 110, 41], pitch: [67, 121, 51], yaw: [61, 110, 0] },
-      rates: { roll: [4, 74, 56],   pitch: [4, 74, 56],   yaw: [4, 70, 56] },
+      rates: { roll: [2, 74, 56],   pitch: [2, 74, 56],   yaw: [2, 70, 56] },
       notes: [
         'D-min R41/P51',
         'TPA 60',
         'FF off',
-        'Same filter config as the 1219S tune',
+        'RPM filter ON, bidir DSHOT300',
+        'Gyro LPF1 off',
+        'Dyn notch 1×Q500 120–500hz',
         'Board: AIR65 RYFLY',
+        'BF 4.5.0 diff, 2026-10-23 (profile 1)',
       ],
     },
     {
