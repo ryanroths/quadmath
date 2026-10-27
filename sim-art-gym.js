@@ -309,13 +309,23 @@ function addInstanced(THREE, parent, geo, mat, count, place) {
   return mesh;
 }
 
+// The gym's own art, at any depth: tagged itself or under a tagged group
+// (gymArtVisuals is). The kit lands asynchronously in gymArtKit (sim-art-kit.js),
+// untagged, a level below gymArtVisuals, so a parent-only check let a restyle
+// after it landed take kit meshes for stock ones.
+function inGymArt(o) {
+  for (let p = o; p; p = p.parent) {
+    if (p.userData && (p.userData.gymArt || p.userData.artKeep || p.userData.artInstanced)) return true;
+  }
+  return false;
+}
+
 export function hideStockGymMeshes(root) {
   if (!root) return 0;
   let n = 0;
   root.traverse((o) => {
     if (!o.isMesh || !o.geometry) return;
-    if (o.userData.artKeep || o.userData.artInstanced || o.userData.gymArt) return;
-    if (o.parent && o.parent.name === 'gymArtVisuals') return;
+    if (inGymArt(o)) return;
     const col = o.material && o.material.color ? o.material.color.getHex() : 0;
     const t = o.geometry.type;
     if (col === GYM_STOCK.wood && t === 'BoxGeometry') {
@@ -337,7 +347,7 @@ export function restyleGymShell(THREE, group, vibe, floor) {
   const ceilTex = ceilingTex(THREE);
   group.traverse((o) => {
     if (!o.isMesh || !o.material || o.userData.artHidden) return;
-    if (o.userData.gymArt || (o.parent && o.parent.name === 'gymArtVisuals')) return;
+    if (inGymArt(o)) return;
     const m = o.material;
     const col = m.color ? m.color.getHex() : 0;
     const t = o.geometry && o.geometry.type;
