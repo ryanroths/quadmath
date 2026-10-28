@@ -105,6 +105,7 @@ export function pngRgbAverage(buf) {
   return n ? sum / (n * 3) : 0;
 }
 const LOOK = {
+  rig: 'rigWhoop',
   city: 'whoopStreet', living: 'livingWhoop', garage: 'garageWhoop',
   warehouse: 'warehouseWhoop', gym: 'gymWhoop', office: 'officeWhoop',
   trainer: 'trainerWhoop', backyard: 'backyardWhoop', room: 'roomWhoop',
@@ -223,7 +224,9 @@ async function bootPageOnce(base, spec) {
   // before the launch URL sticks — accept any page, then navigate.
   const trackQ = spec.track ? `&track=${spec.track}` : '';
   const coreQ = spec.core ? `&core=${spec.core}` : '';
-  const url = `${base}/sim.html?map=${spec.map}${trackQ}&look=${spec.look}&quality=${spec.q}&menu=1&fpv=1${coreQ}`;
+  // Every map but The Rig is open with ?dev=1 only (sim-tracks.js mapOpen).
+  const devQ = spec.map === 'rig' ? '' : '&dev=1';
+  const url = `${base}/sim.html?map=${spec.map}${trackQ}&look=${spec.look}&quality=${spec.q}&menu=1&fpv=1${coreQ}${devQ}`;
   // The core the page should fly: bf by default on the 65 (the class a fresh
   // profile starts on), js for ?core=js and for a class with no sim-core plant.
   const wantCore = spec.core === 'js' || spec.droneType ? 'js' : 'bf';
@@ -482,9 +485,10 @@ async function bootCases(cases) {
   }
 }
 
-// The labels of the buttons a pilot can see on the launch screen's card, on a
-// fresh profile (no saved choices), once the page has booted.
-async function launchScreenButtons(base, query) {
+// What a fresh profile (no saved choices) shows once the page has booted and
+// its boot map is applied: the labels of the launch card's visible buttons,
+// and the map behind them.
+async function launchScreen(base, query) {
   bootSeq += 1;
   const port = 9700 + bootSeq;
   const url = `${base}/sim.html${query || ''}`;
@@ -500,24 +504,37 @@ async function launchScreenButtons(base, query) {
     await cdp(ws, 'Runtime.enable');
     const here = await cdp(ws, 'Runtime.evaluate', { expression: 'location.href', returnByValue: true });
     if (!String(here && here.result && here.result.value || '').includes('/sim.html')) await cdp(ws, 'Page.navigate', { url });
-    let labels = null;
+    let out = null;
+    let first = null;
     for (let i = 0; i < 80; i++) {
       const got = await cdp(ws, 'Runtime.evaluate', {
         expression: `JSON.stringify((function(){
           var s=window._sim||{};
-          if(!(s.map&&s.map()&&s.looks&&s.looks.fps&&s.looks.fps.ready))return null;
-          return Array.prototype.filter.call(document.querySelectorAll('#startMenu .menu-card button'),function(b){
-            var cs=getComputedStyle(b);
-            return b.getClientRects().length>0&&cs.visibility!=='hidden'&&cs.opacity!=='0';
-          }).map(function(b){return b.textContent.trim();});
+          var first=s.map?s.map():null;
+          if(!(s.map&&s.map()&&s.looks&&s.looks.fps&&s.looks.fps.ready))return {first:first};
+          // Wait for the query boot so a ?map= has landed too.
+          if(!window._simQueryBooted)return {first:first};
+          var sparks=document.getElementById('menuSparks');
+          return {
+            first: first,
+            sparks: !!(sparks&&sparks.getClientRects().length),
+            map: s.map(),
+            labels: Array.prototype.filter.call(document.querySelectorAll('#startMenu .menu-card button'),function(b){
+              var cs=getComputedStyle(b);
+              return b.getClientRects().length>0&&cs.visibility!=='hidden'&&cs.opacity!=='0';
+            }).map(function(b){return b.textContent.trim();})
+          };
         })())`,
         returnByValue: true,
       });
-      labels = got && got.result && got.result.value ? JSON.parse(got.result.value) : null;
-      if (labels) break;
+      out = got && got.result && got.result.value ? JSON.parse(got.result.value) : null;
+      if (out && !first) first = out.first;
+      if (out && out.map) break;
+      out = null;
       await sleep(250);
     }
-    return labels;
+    // The first map the page reported, before the tracks loaded.
+    return out && { ...out, first };
   } finally {
     try { ws.close(); } catch (e) { /* ignore */ }
     try { child.kill('SIGKILL'); } catch (e) { /* ignore */ }
@@ -525,18 +542,28 @@ async function launchScreenButtons(base, query) {
   }
 }
 
-test('the launch screen shows exactly five buttons without ?dev: Fly, Daily, Boards, Tune, Controls', async (t) => {
+test('the launch screen shows exactly five buttons without ?dev: Fly, Daily, Boards, Tune, Controls; The Rig behind them from the first frame, and closed, unknown and spark links land there too', async (t) => {
   if (process.env.SKIP_CHROME_BOOT === '1') {
     t.skip('SKIP_CHROME_BOOT');
     return;
   }
   const { server, port } = await serveRoot();
   try {
-    assert.deepEqual(await launchScreenButtons('http://127.0.0.1:' + port, ''), ['Fly', 'Daily', 'Boards', 'Tune', 'Controls']);
+    const plain = await launchScreen('http://127.0.0.1:' + port, '');
+    assert.deepEqual(plain && plain.labels, ['Fly', 'Daily', 'Boards', 'Tune', 'Controls']);
+    assert.equal(plain && plain.map, 'rig', 'a fresh pilot launches into The Rig');
+    assert.equal(plain && plain.first, 'rig', 'no City behind the launch card while the tracks load');
+    assert.equal(plain && plain.sparks, false, 'every spark is on a closed map: no tally without ?dev=1');
+    const closed = await launchScreen('http://127.0.0.1:' + port, '?map=garage&menu=1');
+    assert.equal(closed && closed.map, 'rig', 'garage without ?dev=1 lands on The Rig');
+    const unknown = await launchScreen('http://127.0.0.1:' + port, '?map=narnia');
+    assert.equal(unknown && unknown.map, 'rig', 'an unknown ?map= lands on The Rig');
+    const spark = await launchScreen('http://127.0.0.1:' + port, '?spark=garage:0');
+    assert.equal(spark && spark.map, 'rig', 'a spark link to a closed map stays on The Rig');
   } finally {
     await new Promise((res) => server.close(res));
   }
-}, { timeout: 120000 });
+}, { timeout: 240000 });
 
 test('headless Chrome boots every map on the default core (Betaflight) without errors or a blank FPV; classes with no plant fly JS CORE', async (t) => {
   if (process.env.SKIP_CHROME_BOOT === '1') {

@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  WS, toScene, toModule, boxToModule, InputClock, bfChannels, createBfCore, createJsCore, armingFlagNames,
+  WS, toScene, toModule, boxToModule, InputClock, bfChannels, createBfCore, createJsCore, armingFlagNames, contactPlant,
   auxRanges, pageAux, radioAux, rangeActive, AUX_CHANNELS,
 } from '../sim-core-adapter.js';
 import { SimCore } from '../vendor/sim-core/sim-core.js';
@@ -622,4 +622,41 @@ test('a js-core run on the 65 stays off the boards (PHYS MISMATCH); Tune hides t
   // After every core switch in selectCore and the bf load.
   const select = html.slice(html.indexOf('function selectCore'), html.indexOf('// ---------- Input poll'));
   assert.equal(select.split('syncCoreUI();').length - 1, 3);
+});
+
+// The Rig's bounce walls on the bf core: its plant gets the same contact
+// profile as the js core (sim-whoop.js BOUNCE_MAPS), and Betaflight reboots on it.
+test('contactPlant scales the plant for a bounce map; setPlant reconfigures', async () => {
+  const air65 = JSON.parse(readFileSync('vendor/sim-core/airframes/air65.json', 'utf8'));
+  assert.equal(contactPlant(air65, null), air65);
+  const rig = contactPlant(air65, { crash: 4, bounce: 2 });
+  assert.equal(rig.values.crashScale.value, air65.values.crashScale.value * 4);
+  assert.equal(rig.values.bounceScale.value, air65.values.bounceScale.value * 2);
+  assert.equal(rig.values.spinScale, air65.values.spinScale);
+  assert.equal(rig.values.mass, air65.values.mass);
+  assert.equal(air65.values.crashScale.value, 1.0310150949352062, 'the airframe itself is untouched');
+  const diff = readFileSync('vendor/sim-core/configs/air65-ryfly-2026-10-23.txt', 'utf8');
+  const bf = await createBfCore({ SimCore, wasm: readFileSync('vendor/sim-core/sim-core.wasm'), airframe: air65, diff, world: { floorZ: 0, boxes: [], triggers: [] } });
+  const r = bf.setPlant(rig);
+  assert.ok(r && r.applied > 0, 'Betaflight booted on the bounce plant');
+  assert.equal(bf.getState().armed, false);
+  // Into a wall, nose on: the stock plant crashes at 4 m/s; the Rig's bounces
+  // off at 4 and 8 m/s and still crashes at 12.
+  const wall = { floorZ: 0, boxes: [{ min: [1.0, -2, 0], max: [1.3, 2, 3] }], triggers: [] };
+  const hit = async (plant, v) => {
+    const core = await createBfCore({ SimCore, wasm: readFileSync('vendor/sim-core/sim-core.wasm'), airframe: plant, diff, world: wall });
+    core.teleport({ x: 0.6, y: 0, z: 1.5 }, { x: 0, y: 0, z: 0, w: 1 }, { x: v, y: 0, z: 0 });
+    const ev = [];
+    for (let i = 0; i < 25; i++) core.advance(16, true, (e) => ev.push(e));
+    const contacts = ev.filter((e) => e.kind === 'contact');
+    assert.ok(contacts.length > 0, 'reached the wall at ' + v);
+    return { crashed: contacts.some((e) => e.crashed), vx: core.getState().velocity.x };
+  };
+  assert.equal((await hit(air65, 4)).crashed, true);
+  for (const v of [4, 8]) {
+    const b = await hit(rig, v);
+    assert.equal(b.crashed, false, 'rig crashed at ' + v);
+    assert.ok(b.vx < 0, 'rig bounced back at ' + v);
+  }
+  assert.equal((await hit(rig, 12)).crashed, true);
 });

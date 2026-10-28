@@ -261,7 +261,7 @@ export function decodeRates(token) {
   return out;
 }
 
-export function ratesDeepLink({ origin, map, track, mode, build, rates, threeD } = {}) {
+export function ratesDeepLink({ origin, map, track, mode, build, rates, threeD, dev } = {}) {
   const base = origin || 'https://quadmath.com';
   const u = new URL('/sim.html', base.endsWith('/') ? base : base + '/');
   if (map) u.searchParams.set('map', String(map));
@@ -271,6 +271,8 @@ export function ratesDeepLink({ origin, map, track, mode, build, rates, threeD }
   if (threeD) u.searchParams.set('3d', '1');
   const token = typeof rates === 'string' ? rates : encodeRates(rates);
   if (token) u.searchParams.set('rates', token);
+  // A map other than The Rig opens only with ?dev=1 (sim-tracks.js linkNeedsDev).
+  if (dev) u.searchParams.set('dev', '1');
   return u.toString();
 }
 

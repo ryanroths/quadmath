@@ -115,6 +115,9 @@ test('deep link carries build, track, mode', () => {
   });
   assert.ok(url3.includes('3d=1'));
   assert.ok(url3.includes('mode=acro'));
+  assert.equal(url.includes('dev='), false, 'no dev=1 unless asked');
+  const dev = buildDeepLink({ origin: 'https://quadmath.com', build: BUILD_PRESETS.air65, track: 'living-sofa', dev: true });
+  assert.equal(new URL(dev).searchParams.get('dev'), '1');
 });
 
 test('classDefault maps 65/75/85', () => {

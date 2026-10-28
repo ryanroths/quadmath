@@ -407,6 +407,9 @@ test('ratesDeepLink encodes map/track/mode/build/rates and no CLI dump', () => {
   assert.ok(url.includes('rates=ACTUAL.4.74.56.4.74.56.4.70.56'));
   assert.equal(url.includes('set '), false);
   assert.equal(url.includes('rateprofile'), false);
+  assert.equal(url.includes('dev='), false, 'no dev=1 unless asked');
+  const dev = ratesDeepLink({ origin: 'https://quadmath.com', map: 'living', track: 'living-circuit', rates: 'ACTUAL.4.74.56.4.74.56.4.70.56', dev: true });
+  assert.equal(new URL(dev).searchParams.get('dev'), '1');
 });
 
 test('ryanActual preset is Actual 40/740/700 expo 0.56', () => {
