@@ -558,6 +558,7 @@
   <b id="legendGhost">G — Ghost Replay</b><br>
   <b>C — Coach / line</b><br>
   <b>R — Respawn last gate</b><br>
+  <b>F — Sim flip when upside down</b><br>
   <b>ESC — Menu</b><br>
   <b>TAB — Tune Panel</b>
 </div>
@@ -826,7 +827,8 @@
     <b>R</b> last-gate respawn &nbsp;<b>Tab</b> panel<br>
     🔊 <b>M</b> music &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
     3D (Tune panel): center throttle = zero, below = reverse. Acro only. Not counted on boards.<br>
-    <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach
+    <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach<br>
+    <b>F</b> upside down on bf: sim flip (logged as an assist); else next mode
   </div>
   <button type="button" id="btnFreestyle">FREESTYLE THIS MAP</button>
   <button id="btnReset">RESET QUAD [R]</button>
@@ -889,7 +891,7 @@ import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAUL
 import {
   WS as CORE_WS, TICK_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, radioAux,
-} from "./sim-core-adapter.js?v=3e3a3ab31ee6";
+} from "./sim-core-adapter.js?v=ce1282cd5a39";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
@@ -1653,8 +1655,14 @@ function simNowMs(){return simClockMs;}
 // Whether the js core flew any part of this run: set at the start and on any
 // tick (stepCore); runOffBoards judges it against the board the run lands on.
 let runSawJs=false;
+// F flips (flipKey) this run, a sim assist: kept with the run's result
+// (lastRunSimFlips) and shown with it. No board rule for assists: a run with
+// one counts as any other.
+let runSimFlips=0;
+const lastRunSimFlips={};
 function startRun(){
   runSawJs=core.kind==='js';
+  runSimFlips=0;
   runActive=true;
   runStartTime=simNowMs();
   lapStartTime=runStartTime;
@@ -1683,6 +1691,7 @@ function finishRun(){
   lastRunTotal[id]=total;
   lastRunSplits[id]=runSplits.slice();
   lastGateSplits[id]=runGateSplits.slice();
+  lastRunSimFlips[id]=runSimFlips;
   const cap=line?LINE_GHOST_MAX:GHOST_MAX;
   let rec=ghostRec&&ghostRec.length?downsampleGhost(ghostRec,cap):null;
   lastRunGhostRec=rec;
@@ -1708,7 +1717,7 @@ function finishRun(){
   const label=line?'LINE':'RUN';
   const parts=line?runGateSplits:runSplits;
   lastRunReplayRec=replayRec&&replayRec.length?downsampleGhost(replayRec,REPLAY_GHOST_MAX):(rec&&rec.length?rec:null);
-  const msg=label+' '+fmtLap(total)+(parts.length?' ['+parts.map(fmtLap).join(' / ')+']':'')+(best?' — NEW BEST!':'')+(extra?' · '+extra:'');
+  const msg=label+' '+fmtLap(total)+(parts.length?' ['+parts.map(fmtLap).join(' / ')+']':'')+(best?' — NEW BEST!':'')+(extra?' · '+extra:'')+(runSimFlips?' · SIM FLIP ×'+runSimFlips:'');
   if(lastRunReplayRec&&lastRunReplayRec.length>1){
     toast(msg+'<br><button type="button" id="toastReplay">Replay</button>',{html:true,ms:5200});
   }else toast(msg);
@@ -3796,7 +3805,7 @@ addEventListener('keydown',e=>{
   }
   if(e.key.toLowerCase()==='r')resetQuad();
   if(e.key.toLowerCase()==='m')toggleMusic();
-  if(e.key.toLowerCase()==='f')toggleFlightMode();
+  if(e.key.toLowerCase()==='f')flipKey();
   if(e.key.toLowerCase()==='g'){
     if(!ghostAvailable()){toast('NO GHOST YET — FINISH A RUN');return;}
     ghostVisible=!ghostVisible;toast(ghostVisible?'GHOST ON':'GHOST OFF');
@@ -4526,12 +4535,14 @@ function updateLapOSD(){
     for(let i=0;i<runSplits.length;i++)html+='<br> L'+(i+1)+' '+fmtLap(runSplits[i]);
     if(lastGateSplit)html+='<br>GSPLIT '+fmtLap(lastGateSplit);
     if(missTotal)html+='<br>MISS +'+(missTotal*MISS_PENALTY_MS/1000).toFixed(1)+'s';
+    if(runSimFlips)html+='<br>SIM ASSIST · F FLIP ×'+runSimFlips;
   }else if(lastRunTotal[id]){ // results: finished run's total + its three splits
     html=trackLabel(activeTrackId)+' RESULT · TOTAL '+fmtLap(lastRunTotal[id]);
     const sp=lastRunSplits[id]||[];
     for(let i=0;i<sp.length;i++)html+='<br> L'+(i+1)+' '+fmtLap(sp[i]);
     const gs=lastGateSplits[id]||[];
     if(gs.length)html+='<br>GATES '+gs.map(fmtLap).join(' / ');
+    if(lastRunSimFlips[id])html+='<br>SIM ASSIST · F FLIP ×'+lastRunSimFlips[id];
     html+='<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
   }else{ // idle, no run yet on this track
     html=trackLabel(activeTrackId)+' RUN --:--.--<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
@@ -5319,7 +5330,8 @@ function wireLooksUI(){
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
       '<span class="n">R</span> last-gate respawn · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
       '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
-      '<span class="n">H</span> HUD · <span class="n">M</span> music · <span class="n">G</span> ghost · <span class="n">C</span> coach</p>'+
+      '<span class="n">H</span> HUD · <span class="n">M</span> music · <span class="n">G</span> ghost · <span class="n">C</span> coach<br>'+
+      '<span class="n">F</span> upside down on bf: sim flip (logged as an assist) · else next flight mode</p>'+
       '<button type="button" id="layerClose">Close</button>');
     document.getElementById('layerClose').onclick=hideMenuLayer;
   };
@@ -7171,10 +7183,37 @@ function bfTurtleTick(){
   if(ev==='upright')toast(low&&centred?'UPRIGHT':'UPRIGHT — STICKS DOWN AND CENTRED TO ARM');
   else if(ev==='rearm')bfArmPendingMs=simClockMs;
   else if(ev==='ended')toast('DISARMED');
+  else if(ev==='stuck')toast('SIM FLIP STUCK — R RESPAWNS');
   else if(ev==='refused'){
     const why=armingFlagNames(cs.armingDisableFlags);
     toast('NOT ARMED'+(why.length?' — '+why.join(' '):''));
   }
+}
+// F: upside down on the floor on the bf core, with the page on the switches,
+// the sim flips the quad over for the pilot: FLIP OVER AFTER CRASH on, the
+// arm, the roll, then the turtle's own rearm (sim-core-adapter.js startFlip);
+// F during a turtle the pilot started takes over its roll. A sim assist, not
+// piloting, and logged as one (noteSimFlip). Anywhere else F is what it was:
+// the next flight mode. On the js core, upside down, F only says the flip is
+// the bf core's (the js turtle is the pilot's own gesture).
+function flipKey(){
+  if(core.kind!=='bf'){
+    if(bodyUpZ(cs.quaternion)<-0.35&&cs.clearance<=0.04)toast('SIM FLIP IS ON THE BF CORE ONLY');
+    else toggleFlightMode();
+    return;
+  }
+  const r=core.startFlip();
+  if(r===true)noteSimFlip();
+  else if(r==='not-flipped')toggleFlightMode();
+  else if(r==='radio')toast('FLIP ON THE RADIO — AUX'+(core.auxOf('flip')||'?')+' ON, ARM, ROLL');
+  else if(r==='no-switch')toast('NO TURTLE SWITCH IN THE DIFF');
+}
+// Each F flip, once: a toast naming it a sim assist, the run's count
+// (runSimFlips, kept with its result) and a console line.
+function noteSimFlip(){
+  if(runActive)runSimFlips++;
+  toast('SIM FLIP — SIM ASSIST'+(runActive?', LOGGED ON THIS RUN':''));
+  console.info('sim assist: F flip '+core.simFlips+' since load'+(runActive?', '+runSimFlips+' this run':'')+' (the sim set AUX'+(core.auxOf('flip')||'?')+', armed and rolled)');
 }
 setInterval(pollInput,4);
 let lastFrameAt=null;
