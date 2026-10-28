@@ -17,6 +17,7 @@ Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
 **Licorice Grid** ships on Tiny Trainer.
 **Ryan's Yard** ships on Backyard.
 **Pocket Stage** ships on Your Room.
+**Hard Key** ships on The Rig, the launch map: an exception to Felt Scale (below).
 Remaining maps keep their current procedural rooms and pick up their vibe
 one map per PR.
 
@@ -200,6 +201,15 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Tr
 - **Props:** Same furniture AABBs, clay/felt materials. Track still generated.
 - **Gates:** Soft felt rings sized by the room planner.
 - **Post:** None. Keep the cell readable at whoop scale.
+
+### The Rig — Hard Key (shipped, the launch map)
+
+- **Owner's spec:** whoop-scale, flow-first, 20 x 15 x 6 m industrial interior; high-contrast edges, one key light, ACES, no fog, no decor; bounce walls.
+- **An exception to Felt Scale.** No felt, no hemisphere bounce, no image light: one hard key (the sun, through a ceiling and walls that cast no shadow), its hard shadows, and edge lines drawn on every box of the rig. ACES is the renderer's, as everywhere.
+- **Palette:** `#07080a` void, `#1c1e22` walls, `#2a2c30` floor, `#7a6a52` crates, `#a9aeb5` pipes, `#c9ccd0` tower, `#8a9097` tunnel and loft, `#f2f0ea` edges; gates keep brand `#ff4d1a` / `#3ddc97`.
+- **Props:** None. The six features (scaffold tower, ceiling pipe run, crate stacks, tunnel, loft, straight) are the map.
+- **Gates:** Plain brand rings, not solid, on the Rig Loop (17 gates, 57 m). Every feature is on the loop; `tools/test_sim_rig.mjs` holds the clearances and the radius.
+- **Post:** No grade, no bloom, no vignette, no fog; contact AO only, for the edges.
 
 ### Daily / weekly
 

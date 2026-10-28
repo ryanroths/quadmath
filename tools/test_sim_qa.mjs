@@ -44,8 +44,8 @@ test('?map=&track= mismatch uses the track map; unknown map is not saved', () =>
   const unk = resolveSimBoot({ map: 'nope' }, { map: 'garage', track: 'garage-bench' }, files);
   assert.equal(unk.unknownMap, true);
   assert.equal(unk.save, false);
-  assert.equal(unk.map, 'city');
-  assert.equal(unk.track, 'city-freestyle');
+  assert.equal(unk.map, 'rig');
+  assert.equal(unk.track, 'rig-freestyle');
   const rest = resolveSimBoot({}, { map: 'garage', track: 'garage-bench' }, files);
   assert.equal(rest.map, 'garage');
   assert.equal(rest.track, 'garage-freestyle');
@@ -311,9 +311,9 @@ test('boot and Fly are last-map freestyle; room/daily cannot lock routing', () =
   assert.equal(isFreestyleTrackId('city-freestyle'), true);
   assert.equal(isEphemeralTrackId('room-practice'), true);
   assert.equal(freestyleIdFor('city'), 'city-freestyle');
-  assert.deepEqual(resolveFly(null), { map: 'city', track: 'city-freestyle', mode: 'free' });
+  assert.deepEqual(resolveFly(null), { map: 'rig', track: 'rig-freestyle', mode: 'free' });
   assert.equal(resolveFly({ map: 'trainer', track: 'trainer-slalom' }).track, 'trainer-freestyle');
-  assert.equal(resolveSimBoot({}, null, files).track, 'city-freestyle');
+  assert.equal(resolveSimBoot({}, null, files).track, 'rig-freestyle');
   const roomQuery = resolveSimBoot({ track: 'room-practice' }, { map: 'city', track: 'city-loop' }, files);
   assert.equal(roomQuery.map, 'room', 'track=room-practice must not boot City');
   assert.equal(roomQuery.track, 'room-practice');

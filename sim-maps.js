@@ -5,7 +5,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=45ede93e95c3';
+import { planRoom } from './sim-room.js?v=350af557ae23';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -186,6 +186,8 @@ export const LAYOUT = {
   office: { w: 36, d: 46, h: 9.2, wall: 0.36 },
   gym: { w: 48, d: 74, h: 28, wall: 0.46 },
   trainer: { w: 28, d: 36, h: 10.5, wall: 0.34 },
+  // Inner faces at exactly 20 × 15 × 6 m; walls sit outside (see buildRig).
+  rig: { w: 70, d: 52.5, h: 21, wall: 0.35 },
 };
 
 export const MAP_ORBIT = {
@@ -199,6 +201,7 @@ export const MAP_ORBIT = {
   gym: { cx: 0, cy: 3.4, cz: 2, r: 5.5, h: 16.5, fov: 68 },
   trainer: { cx: 0, cy: 1.9, cz: 0, r: 8.2, h: 6.6, fov: 60 },
   room: { cx: 0, cy: 1.6, cz: 0, r: 3.4, h: 4.8, fov: 64 },
+  rig: { cx: 0, cy: 3.0, cz: 0, r: 16, h: 14, fov: 66 },
 };
 
 export const MAP_LOOKS = {
@@ -211,9 +214,11 @@ export const MAP_LOOKS = {
   gym: { fog: 0.0010, sun: 0.95, env: 0.70, bg: 0.44, hemi: 0.55 },
   trainer: { fog: 0.0028, sun: 0.58, env: 0.56, bg: 0.33, hemi: 0.34 },
   room: { fog: 0.0045, sun: 0.42, env: 0.55, bg: 0.32, hemi: 0.40 },
+  // One key, nothing else: no fog, no image light, no sky, no hemisphere.
+  rig: { fog: 0, sun: 3.2, env: 0, bg: 0, hemi: 0 },
 };
 
-export const MAP_IDS = ['living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room'];
+export const MAP_IDS = ['rig', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room'];
 
 function mat(THREE, hex, set, extras) {
   const m = new THREE.MeshStandardMaterial(Object.assign({
@@ -1020,7 +1025,142 @@ function buildRoom(THREE, parent, colliders, lights, spec) {
   return { floor, orbit: plan.orbit || MAP_ORBIT.room, plan };
 }
 
+// The Rig: a 20 × 15 × 6 m industrial interior at whoop scale, flow-first.
+// Metres here, scene axes (y up); buildRig scales by RIG_WS. Every object is
+// threaded by the loop (tracks/rig-loop.json), clockwise seen from above: the
+// 15 m straight along the -z wall heading +x, the crate slots up the +x wall,
+// the tunnel back along the +z wall, the tower bay, then one dive in the plane
+// x = drop: over the pipes, down a pipe slit, through the loft hole, out under
+// the loft onto the straight. Boxes only, axis-aligned, nothing under 6 cm
+// thick and no slot of 4–10 cm (sim-core issue #5).
+export const RIG_WS = 3.5; // world units per metre, as sim-core-adapter.js WS
+const RIG_DROP = -9.05;
+function rigBoxes() {
+  const out = [];
+  const b = (feature, part, x0, y0, z0, x1, y1, z1) => {
+    const r = (v) => Math.round(v * 1e4) / 1e4;
+    out.push(Object.freeze({ feature, part, min: [r(x0), r(y0), r(z0)], max: [r(x1), r(y1), r(z1)] }));
+  };
+  // Crates: three 2 m walls of 0.5 m crates across x = 9, out to the +x wall.
+  // One slot each on x = 9, narrowing 25 → 21 → 18 cm; flown in a straight line.
+  const walls = [[-1.0, 0.25], [-0.2, 0.21], [0.6, 0.18]];
+  walls.forEach(([z, gap], w) => {
+    const rx = 9 - gap / 2, wx = 9 + gap / 2, mid = 7.7 + (rx - 7.7) / 2;
+    for (let k = 0; k < 4; k++) {
+      const y = 0.5 * k, n = `wall ${w + 1} crate ${k + 1}`;
+      b('crates', n + 'a', 7.7, y, z, mid, y + 0.5, z + 0.4);
+      b('crates', n + 'b', mid, y, z, rx, y + 0.5, z + 0.4);
+      b('crates', n + 'c', wx, y, z, 10, y + 0.5, z + 0.4);
+    }
+  });
+  // Tunnel: 30 cm square bore, 4 m, axis y 1.2 / z 5.6, on three trestles.
+  b('tunnel', 'side -z', 0.05, 0.97, 5.37, 4.05, 1.43, 5.45);
+  b('tunnel', 'side +z', 0.05, 0.97, 5.75, 4.05, 1.43, 5.83);
+  b('tunnel', 'floor', 0.05, 0.97, 5.45, 4.05, 1.05, 5.75);
+  b('tunnel', 'roof', 0.05, 1.35, 5.45, 4.05, 1.43, 5.75);
+  for (const x of [0.35, 2.0, 3.65]) b('support', 'tunnel trestle', x, 0, 5.37, x + 0.1, 0.97, 5.83);
+  // Scaffold tower: 1.3 × 2.2 m, decks at 1.7 / 3.4 / 5.1 m, ±x faces open
+  // (the line crosses bay 2), guard rails on the ±z faces.
+  const tx0 = -7.55, tx1 = -6.25, tz0 = 4.0, tz1 = 6.2, p = 0.08;
+  for (const [x, z] of [[tx1 - p, tz0], [tx1 - p, tz1 - p], [tx0, tz0], [tx0, tz1 - p]]) {
+    b('tower', 'post', x, 0, z, x + p, 5.1, z + p);
+  }
+  for (const y of [1.7, 3.4, 5.1]) b('tower', 'deck', tx0, y - 0.06, tz0, tx1, y, tz1);
+  for (const y of [1.0, 2.7, 4.4]) {
+    b('tower', 'rail', tx0 + p, y - 0.03, tz0, tx1 - p, y + 0.03, tz0 + 0.06);
+    b('tower', 'rail', tx0 + p, y - 0.03, tz1 - 0.06, tx1 - p, y + 0.03, tz1);
+  }
+  // Pipe run: seven 15 cm pipes, 20 cm apart, the first flush to the -x wall
+  // (no slot behind it). Up from the floor at z 3.2, along the ceiling into
+  // the -z wall. The dive takes the slit centred on the drop plane.
+  for (let k = 0; k < 7; k++) {
+    const x = -10 + 0.35 * k;
+    b('pipes', 'pipe', x, 4.8, -7.5, x + 0.15, 4.95, 3.2);
+    b('pipes', 'riser', x, 0, 3.2, x + 0.15, 4.95, 3.35);
+  }
+  b('support', 'pipe hanger', -10, 4.74, -2.65, -7.69, 4.8, -2.55);
+  b('support', 'pipe hanger rod', -7.75, 4.74, -2.63, -7.69, 6, -2.57);
+  // Loft: 10 cm slab at 2.8 m over the -x end, a 1.0 × 1.8 m hole on the
+  // drop plane, three posts on the room edge.
+  const hx0 = RIG_DROP - 0.5, hx1 = RIG_DROP + 0.5, hz0 = -3.75, hz1 = -1.95;
+  b('loft', 'floor', -10, 2.7, -4.6, hx0, 2.8, 0);
+  b('loft', 'floor', hx1, 2.7, -4.6, -7.0, 2.8, 0);
+  b('loft', 'floor', hx0, 2.7, hz1, hx1, 2.8, 0);
+  b('loft', 'floor', hx0, 2.7, -4.6, hx1, 2.8, hz0);
+  for (const z of [-4.6, -2.36, -0.12]) b('support', 'loft post', -7.12, 0, z, -7.0, 2.7, z + 0.12);
+  return out;
+}
+
+export const RIG_PLAY = Object.freeze({
+  room: Object.freeze({ w: 20, d: 15, h: 6 }),
+  drop: RIG_DROP,
+  // Designed gaps the line threads, metres.
+  gaps: Object.freeze({ crates: Object.freeze([0.25, 0.21, 0.18]), pipes: 0.20, tunnel: 0.30, hole: Object.freeze([1.0, 1.8]) }),
+  straight: 15,
+  boxes: Object.freeze(rigBoxes()),
+});
+
+function buildRig(THREE, parent, colliders) {
+  const P = RIG_PLAY, s = RIG_WS, L = LAYOUT.rig;
+  // Flat materials, kept off the PBR packs. Faces sit a hair behind their
+  // edge lines so the lines never z-fight.
+  const flat = (hex, rough, metal) => {
+    const m = new THREE.MeshStandardMaterial({
+      color: hex, roughness: rough, metalness: metal || 0,
+      polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+    });
+    m.userData.looksSkip = true;
+    return m;
+  };
+  const mats = {
+    floor: flat(0x6a6d72, 0.92), wall: flat(0x4a4e55, 0.95), ceil: flat(0x34373c, 0.95),
+    crates: flat(0xb09670, 0.86), tunnel: flat(0x9ea5ad, 0.8), tower: flat(0xe0e2e5, 0.55, 0.2),
+    pipes: flat(0xc8cdd3, 0.5, 0.3), loft: flat(0x9ea5ad, 0.8), support: flat(0x858b93, 0.7, 0.2),
+  };
+  const vis = new THREE.Group();
+  vis.name = 'rigArtVisuals';
+  parent.add(vis);
+  const edges = [];
+  const edge = (a, b) => {
+    const add = (p, q) => edges.push(p[0], p[1], p[2], q[0], q[1], q[2]);
+    for (const y of [a[1], b[1]]) {
+      add([a[0], y, a[2]], [b[0], y, a[2]]); add([a[0], y, b[2]], [b[0], y, b[2]]);
+      add([a[0], y, a[2]], [a[0], y, b[2]]); add([b[0], y, a[2]], [b[0], y, b[2]]);
+    }
+    for (const [x, z] of [[a[0], a[2]], [b[0], a[2]], [a[0], b[2]], [b[0], b[2]]]) add([x, a[1], z], [x, b[1], z]);
+  };
+  for (const r of P.boxes) {
+    const a = r.min.map((v) => v * s), b = r.max.map((v) => v * s);
+    const mesh = box(THREE, vis, colliders, (a[0] + b[0]) / 2, a[1], (a[2] + b[2]) / 2,
+      b[0] - a[0], b[1] - a[1], b[2] - a[2], mats[r.feature]);
+    mesh.name = 'rig_' + r.feature;
+    edge(a, b);
+  }
+  // Shell: inner faces at exactly ±10 × ±7.5 × 6 m. One box per wall (no
+  // split halves, no zero-width lintel); walls and ceiling cast no shadow so
+  // the key comes in from above.
+  const hx = P.room.w * s / 2, hz = P.room.d * s / 2, H = P.room.h * s, t = L.wall;
+  const floor = makeFloor(THREE, vis, P.room.w * s, P.room.d * s, mats.floor);
+  const shell = [
+    box(THREE, vis, colliders, -hx - t / 2, 0, 0, t, H, 2 * hz + 2 * t, mats.wall),
+    box(THREE, vis, colliders, hx + t / 2, 0, 0, t, H, 2 * hz + 2 * t, mats.wall),
+    box(THREE, vis, colliders, 0, 0, -hz - t / 2, 2 * hx, H, t, mats.wall),
+    box(THREE, vis, colliders, 0, 0, hz + t / 2, 2 * hx, H, t, mats.wall),
+    box(THREE, vis, colliders, 0, H, 0, 2 * hx + 2 * t, 0.24, 2 * hz + 2 * t, mats.ceil),
+  ];
+  for (const m of shell) m.castShadow = false;
+  edge([-hx, 0, -hz], [hx, H, hz]);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(edges, 3));
+  const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xf2f0ea, toneMapped: false }));
+  lines.name = 'rigEdges';
+  lines.userData.artKeep = true;
+  vis.add(lines);
+  return { floor, orbit: MAP_ORBIT.rig };
+}
+
 const BUILDERS = {
+  rig: buildRig,
   living: buildLiving,
   garage: buildGarage,
   warehouse: buildWarehouse,

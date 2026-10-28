@@ -219,11 +219,24 @@ function unitOrDefault(n, fb) {
   return v3(n.x / L, n.y / L, n.z / L);
 }
 
+// Maps whose walls bounce: a contact there rebounds instead of stopping dead.
+// crash multiplies the crash threshold, bounce the restitution's bounce term;
+// the bf core gets the same through its plant (sim-core-adapter.js
+// contactPlant). The Rig: up to about 10.6 m/s into a face (a 65) rebounds at
+// about 0.41, where elsewhere 2.7 m/s is a crash at 0.10.
+export const BOUNCE_MAPS = Object.freeze({
+  rig: Object.freeze({ crash: 4, bounce: 2 }),
+});
+
 // Duct bounce. Soft hits rebound + spin. Crash only above a build-scaled
 // impact threshold. Disabled → low restitution, easy crash (old "hard wall").
-export function resolveDuctHit(hit, build, settings) {
+// profile: a map's BOUNCE_MAPS entry, or nothing for the build's own contact.
+export function resolveDuctHit(hit, build, settings, profile) {
   const s = normalizeWhoop(settings);
-  const sc = whoopScale(build);
+  const base = whoopScale(build);
+  const sc = profile
+    ? { ...base, crashAt: base.crashAt * (profile.crash || 1), bounce: base.bounce * (profile.bounce || 1) }
+    : base;
   const n = unitOrDefault(hit && hit.normal, v3(0, 1, 0));
   const vel = v3(hit && hit.vel && hit.vel.x, hit && hit.vel && hit.vel.y, hit && hit.vel && hit.vel.z);
   const omega = v3(hit && hit.omega && hit.omega.x, hit && hit.omega && hit.omega.y, hit && hit.omega && hit.omega.z);

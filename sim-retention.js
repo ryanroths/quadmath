@@ -43,6 +43,8 @@ export const DAILY_LINE_GHOST_MAX = 480;
 export const DAILY_LINE_STRICT_MISS_MS = 3000;
 
 // Named #242 line tracks (no city 3-lap). Gate counts pinned to tracks/*.json.
+// A track with `from` joins the draw on that UTC day; earlier days draw from
+// the pool as it was, so their boards still name the track they were flown on.
 export const DAILY_LINE_TRACKS = Object.freeze([
   { id: 'living-sofa', map: 'living', name: 'Sofa Slalom', gates: 8 },
   { id: 'living-circuit', map: 'living', name: 'Living Circuit', gates: 7 },
@@ -76,7 +78,12 @@ export const DAILY_LINE_TRACKS = Object.freeze([
   { id: 'trainer-hairpin', map: 'trainer', name: 'Hairpin', gates: 7 },
   { id: 'city-inside', map: 'city', name: 'Interior Run', gates: 8 },
   { id: 'city-spins', map: 'city', name: 'Spin Grove', gates: 7 },
+  { id: 'rig-loop', map: 'rig', name: 'Rig Loop', gates: 17, from: '2026-11-01' },
 ]);
+
+export function dailyLinePool(day) {
+  return DAILY_LINE_TRACKS.filter((t) => !t.from || day >= t.from);
+}
 
 export const DAILY_LINE_MODS = Object.freeze([
   { id: 'none', name: 'Clean' },
@@ -1487,7 +1494,7 @@ export function boardStoreKey() {
 export function dailyLineFor(utc, now) {
   const day = utc || utcDateId(now);
   const rand = mulberry32(hashStr('daily-line|v1|' + day));
-  const tracks = DAILY_LINE_TRACKS;
+  const tracks = dailyLinePool(day);
   const t = tracks[Math.floor(rand() * tracks.length)];
   const mods = DAILY_LINE_MODS;
   const useMod = rand() < 0.42;

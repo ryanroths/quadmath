@@ -57,7 +57,9 @@ test('every catalog map and daily host has a vibe with a full palette', () => {
     for (const key of ['void', 'zenith', 'horizon', 'dusk', 'street', 'facade', 'neonA', 'neonB', 'gateA', 'gateB']) {
       assert.match(v.palette[key], HEX, id + ' ' + key);
     }
-    assert.ok(v.lighting.fogDensity > 0);
+    // The Rig has no fog: the owner's spec ("no fog"); every other map has some.
+    if (id === 'rig') assert.equal(v.lighting.fogDensity, 0);
+    else assert.ok(v.lighting.fogDensity > 0);
     assert.ok(Array.isArray(v.props) && v.props.length >= 2);
     assert.ok(v.gates && v.gates.style);
   }
@@ -120,12 +122,39 @@ test('mergeStaticArt collapses same-material static meshes', () => {
   assert.equal(meshes, 1);
 });
 
+test('mergeStaticArt merges the shown map, not the first map visited', () => {
+  // Every visited indoor map keeps its hidden group under indoorWorld; The Rig,
+  // the boot map, is first for everyone.
+  const root = new THREE.Group();
+  const mapGroup = (id, visible) => {
+    const g = new THREE.Group();
+    g.visible = visible;
+    const vis = new THREE.Group();
+    vis.name = id + 'ArtVisuals';
+    const mat = new THREE.MeshBasicMaterial();
+    for (const x of [-1, 1]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
+      m.position.x = x;
+      vis.add(m);
+    }
+    g.add(vis);
+    root.add(g);
+    return vis;
+  };
+  const rig = mapGroup('rig', false);
+  const gym = mapGroup('gym', true);
+  assert.equal(mergeStaticArt(THREE, root), 2);
+  const count = (g) => { let n = 0; g.traverse((o) => { if (o.isMesh) n += 1; }); return n; };
+  assert.equal(count(gym), 1);
+  assert.equal(count(rig), 2);
+});
+
 test('hexNum and vibeTable are stable helpers', () => {
   assert.equal(hexNum('#ff2bd6'), 0xff2bd6);
   assert.equal(hexNum(0x88a0ff), 0x88a0ff);
   const table = vibeTable();
-  assert.equal(table.length, 9);
-  assert.equal(table.filter((r) => r.implemented).length, 9);
+  assert.equal(table.length, 10);
+  assert.equal(table.filter((r) => r.implemented).length, 10);
 });
 
 test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {

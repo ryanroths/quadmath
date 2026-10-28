@@ -109,6 +109,14 @@ export const LOOK_SPOTS = {
   roomWhoop: { pos: [1.55, 1.14, 4.6], target: [-0.2, 1.15, -3.4] },
   roomMid: { pos: [3.6, 3.8, 5.4], target: [-1.2, 1.15, -2.4] },
   roomOverview: { pos: [0.6, 6.4, 6.4], target: [0, 1.05, -1.2] },
+  rig: { pos: [20, 14, -14], target: [-24, 8, 10] },
+  rigWhoop: { pos: [-20.0, 4.2, -19.6], target: [31.5, 3.5, -3.5] },
+  rigMid: { pos: [20, 14, -14], target: [-24, 8, 10] },
+  rigOverview: { pos: [30, 19, -22], target: [-8, 3, 4] },
+  rigCrates: { pos: [31.5, 4.2, -12.5], target: [31.5, 4.2, 6] },
+  rigTunnel: { pos: [19.5, 4.2, 19.6], target: [0, 4.2, 19.6] },
+  rigTower: { pos: [-12, 9, 19.6], target: [-26, 15, 18.5] },
+  rigSlit: { pos: [-31.675, 19.4, 9.5], target: [-31.675, 9.5, -7] },
   builder: { pos: [0, 14, 0.1], target: [0, 0, 0] },
 };
 

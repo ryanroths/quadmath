@@ -386,6 +386,21 @@ export function bfChannels(sample, aux, ranges) {
   return ch;
 }
 
+// The airframe with a map's contact profile (sim-whoop.js BOUNCE_MAPS) on its
+// plant: sim-core v0.3.0 has no per-box restitution, so a bounce map scales
+// the plant's crash threshold (crashScale) and restitution (bounceScale) for
+// every contact there. No profile: the airframe as it is.
+export function contactPlant(airframe, profile) {
+  if (!profile || !airframe || !airframe.values) return airframe;
+  const v = airframe.values;
+  const scaled = (key, k) => {
+    const f = v[key];
+    if (!f || !Number.isFinite(f.value) || !(k > 0)) return f;
+    return { ...f, value: f.value * k, note: (f.note ? f.note + '; ' : '') + 'x' + k + ' for a bounce map' };
+  };
+  return { ...airframe, values: { ...v, crashScale: scaled('crashScale', profile.crash), bounceScale: scaled('bounceScale', profile.bounce) } };
+}
+
 // SimCore is quadmath-sim-core's class (vendor/sim-core/sim-core.js); wasm is
 // its module's URL or bytes; airframe the plant file; diff the CLI text;
 // world { floorZ, boxes, triggers } in module metres.
@@ -669,6 +684,18 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     loadDiff(text) {
       config = { ...config, diff: text };
       const r = sim.configure(config);
+      configured(r);
+      pending = [];
+      rebooted();
+      return r;
+    },
+    // A new plant (a map's contact profile, contactPlant) on the same diff and
+    // world: configure again (Betaflight reboots). The stored config changes
+    // only once the new image boots.
+    setPlant(plant) {
+      const next = { ...config, plant };
+      const r = sim.configure(next);
+      config = next;
       configured(r);
       pending = [];
       rebooted();

@@ -42,6 +42,7 @@ export const FROZEN_CITY = {
 };
 
 export const MAPS = [
+  { id: 'rig', name: 'The Rig', class: 'whoop', indoor: true },
   { id: 'city', name: 'City', class: 'open', indoor: false },
   { id: 'living', name: 'Living Room', class: 'whoop', indoor: true },
   { id: 'garage', name: 'Garage', class: 'whoop', indoor: true },
@@ -77,6 +78,15 @@ export function knownMapId(id) {
   return MAPS.some((m) => m.id === id) ? id : null;
 }
 
+// The map a fresh pilot launches into, and the fallback for an unknown or
+// closed one. The other maps are open with ?dev=1 only (mapOpen); Daily,
+// Boards and Coach still fly theirs (generated or drill tracks).
+export const DEFAULT_MAP = 'rig';
+export const PUBLIC_MAPS = Object.freeze([DEFAULT_MAP]);
+export function mapOpen(mapId, dev) {
+  return !!dev || PUBLIC_MAPS.includes(mapId);
+}
+
 export function matchTrack(t, id) {
   if (!t || isBlankTrackId(id)) return false;
   const L = legacyIndex(id);
@@ -90,7 +100,7 @@ export function matchTrack(t, id) {
 
 export function findTrackIn(id, tracks) {
   if (isBlankTrackId(id)) return null;
-  if (id === 'freestyle') return freestyleTrack('city');
+  if (id === 'freestyle') return freestyleTrack(DEFAULT_MAP);
   if (isFreestyleTrackId(id)) {
     const map = String(id).slice(0, -'-freestyle'.length);
     if (knownMapId(map)) return freestyleTrack(map);
@@ -119,7 +129,7 @@ export function isFreestyleTrackId(id) {
 }
 
 export function freestyleIdFor(mapId) {
-  const map = knownMapId(mapId) || 'city';
+  const map = knownMapId(mapId) || DEFAULT_MAP;
   return map + '-freestyle';
 }
 
@@ -131,13 +141,15 @@ export function isEphemeralTrackId(id) {
 }
 
 export function freestyleStart(mapId) {
-  const map = knownMapId(mapId) || 'city';
+  const map = knownMapId(mapId) || DEFAULT_MAP;
   if (map === 'city') return { x: 0, y: 0.15, z: 20, yaw: 0 };
+  // The Rig: the Rig Loop pad, at the head of the straight, nose down it (+x).
+  if (map === 'rig') return { x: -21.35, y: 1.225, z: -19.6, yaw: -Math.PI / 2 };
   return { x: 0, y: 1.2, z: 0, yaw: 0 };
 }
 
 export function freestyleTrack(mapId) {
-  const map = knownMapId(mapId) || 'city';
+  const map = knownMapId(mapId) || DEFAULT_MAP;
   const meta = MAPS.find((m) => m.id === map) || MAPS[0];
   return {
     id: freestyleIdFor(map),
@@ -155,7 +167,7 @@ export function freestyleTrack(mapId) {
 // Last map is the Fly destination. Daily / weekly / Your-room practice must
 // not become the boot or Fly race — those are session courses.
 export function persistableSelection(sel) {
-  const map = knownMapId(sel && sel.map) || 'city';
+  const map = knownMapId(sel && sel.map) || DEFAULT_MAP;
   const track = sel && sel.track;
   if (isFreestyleTrackId(track) || isEphemeralTrackId(track) || sel && sel.mode === 'free') {
     return { map, track: freestyleIdFor(map), mode: 'free' };
@@ -167,12 +179,12 @@ export function persistableSelection(sel) {
 }
 
 export function resolveFly(saved) {
-  const map = knownMapId(saved && saved.map) || 'city';
+  const map = knownMapId(saved && saved.map) || DEFAULT_MAP;
   return { map, track: freestyleIdFor(map), mode: 'free' };
 }
 
 export function resolveTrackPick(mapId, trackId, tracks) {
-  const map = knownMapId(mapId) || 'city';
+  const map = knownMapId(mapId) || DEFAULT_MAP;
   if (isBlankTrackId(trackId) || trackId === 'freestyle' || isFreestyleTrackId(trackId)) {
     return { map, track: freestyleIdFor(map), mode: 'free' };
   }
@@ -193,14 +205,26 @@ export function resolveTrackPick(mapId, trackId, tracks) {
 // Deep-link / reload resolver. Track id wins map when they disagree.
 // Map-only query, saved state, and empty boot are free flight on that map.
 // Daily / weekly / room-practice in localStorage must not lock boot to a race.
-// Unknown ?map= falls back to city freestyle and must not be persisted.
-export function resolveSimBoot(query, saved, tracks) {
+// Unknown ?map= falls back to DEFAULT_MAP freestyle and must not be persisted.
+// opts.dev === false (no ?dev=1): a closed map (mapOpen) lands on DEFAULT_MAP
+// too, unsaved, except a generated session course (daily, weekly, room
+// practice), which still flies its own map.
+export function resolveSimBoot(query, saved, tracks, opts) {
+  const r = resolveSimBootAnyMap(query, saved, tracks);
+  if (!opts || opts.dev !== false || mapOpen(r.map, false) || isEphemeralTrackId(r.track)) return r;
+  return {
+    map: DEFAULT_MAP, track: freestyleIdFor(DEFAULT_MAP),
+    save: false, closedMap: r.map, restored: !!r.restored, mode: 'free',
+  };
+}
+
+function resolveSimBootAnyMap(query, saved, tracks) {
   const q = query || {};
   if (isFreestyleTrackId(q.track) || q.track === 'freestyle') {
     const fromId = isFreestyleTrackId(q.track)
       ? String(q.track).slice(0, -'-freestyle'.length)
       : q.map;
-    const map = knownMapId(fromId) || knownMapId(q.map) || 'city';
+    const map = knownMapId(fromId) || knownMapId(q.map) || DEFAULT_MAP;
     return { map, track: freestyleIdFor(map), save: true, mode: 'free' };
   }
   // Query ?track=room-practice is a session race on Your Room. Saved
@@ -217,7 +241,7 @@ export function resolveSimBoot(query, saved, tracks) {
   const known = knownMapId(q.map);
   if (q.map && !known) {
     return {
-      map: 'city', track: freestyleIdFor('city'),
+      map: DEFAULT_MAP, track: freestyleIdFor(DEFAULT_MAP),
       save: false, unknownMap: true, mode: 'free',
     };
   }
@@ -229,7 +253,7 @@ export function resolveSimBoot(query, saved, tracks) {
     return { map: fly.map, track: fly.track, save: false, restored: true, mode: 'free' };
   }
   return {
-    map: 'city', track: freestyleIdFor('city'),
+    map: DEFAULT_MAP, track: freestyleIdFor(DEFAULT_MAP),
     save: false, restored: true, mode: 'free',
   };
 }
@@ -721,6 +745,7 @@ export function ghostPayloadError(p, expectTrack) {
 }
 
 export const BUILTIN_TRACK_FILES = [
+  { id: 'rig-loop', file: 'tracks/rig-loop.json', map: 'rig', name: 'Rig Loop' },
   { id: 'city-loop', file: 'tracks/city-loop.json', legacyId: 0, map: 'city', name: 'City Loop' },
   { id: 'city-zigzag', file: 'tracks/city-zigzag.json', legacyId: 1, map: 'city', name: 'Mesa Zigzag' },
   { id: 'city-inside', file: 'tracks/city-inside.json', map: 'city', name: 'Interior Run' },

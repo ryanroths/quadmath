@@ -11,7 +11,7 @@ import {
   WHOOP_KEY, PHYSICS_VER, WHOOP_FEEL_VER, GHOST_FORMAT_V, DEFAULT_WHOOP,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale,
   groundEffectMult, whoopGroundK, whoopGroundMult,
-  lipoOcv, stepBattery, resolveDuctHit,
+  lipoOcv, stepBattery, resolveDuctHit, BOUNCE_MAPS,
   stepPropwash, indoorDraft, emptyWake, WASH_LEVELS, washLevelFromStr, washStrFromLevel,
   tagGhost, ghostSamples, ghostPhys,
 } from '../sim-whoop.js';
@@ -364,4 +364,23 @@ test('sim.html wires W2 sliders, HUD voltage, and keeps old localStorage keys', 
   assert.match(simSrc, /if\(!musicWanted\)/);
   assert.match(simSrc, /saveMusicPref\(musicOn\)/);
   assert.ok(!simSrc.includes('content/guides/'), 'do not edit guide HTML from the sim PR');
+});
+
+test('The Rig bounces: a wall hit that crashes elsewhere rebounds there', () => {
+  const hit = (into, profile) => resolveDuctHit({
+    vel: { x: into, y: 0, z: 0 }, omega: { x: 0, y: 0, z: 0 }, normal: { x: -1, y: 0, z: 0 }, into, floor: false,
+  }, DEFAULT_BUILD, DEFAULT_WHOOP, profile);
+  // 20 wu/s (5.7 m/s) into a wall: a crash on any other map, near-dead stop.
+  const plain = hit(20, undefined);
+  assert.equal(plain.crashed, true);
+  assert.equal(plain.rest, 0.10);
+  const rig = hit(20, BOUNCE_MAPS.rig);
+  assert.equal(rig.crashed, false);
+  assert.ok(rig.rest > 0.38 && rig.rest < 0.45, 'rest ' + rig.rest);
+  assert.ok(rig.vel.x < -0.38 * 20, 'it comes back off the wall: ' + rig.vel.x);
+  // Still a crash far above the threshold (about 37 wu/s on the 65).
+  assert.equal(hit(45, BOUNCE_MAPS.rig).crashed, true);
+  // No profile is the build's own contact, unchanged.
+  assert.deepEqual(hit(6, undefined), hit(6, null));
+  assert.deepEqual(Object.keys(BOUNCE_MAPS), ['rig']);
 });
