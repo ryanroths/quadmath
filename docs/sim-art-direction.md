@@ -204,9 +204,9 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Tr
 
 ### The Rig — Hard Key (shipped, the launch map)
 
-- **Owner's spec:** whoop-scale, flow-first, 20 x 15 x 6 m industrial interior; high-contrast edges, one key light, ACES, no fog, no decor; bounce walls.
-- **An exception to Felt Scale.** No felt, no hemisphere bounce, no image light: one hard key (the sun, through a ceiling and walls that cast no shadow), its hard shadows, and edge lines drawn on every box of the rig. ACES is the renderer's, as everywhere.
-- **Palette:** `#07080a` void, `#1c1e22` walls, `#2a2c30` floor, `#7a6a52` crates, `#a9aeb5` pipes, `#c9ccd0` tower, `#8a9097` tunnel and loft, `#f2f0ea` edges; gates keep brand `#ff4d1a` / `#3ddc97`.
+- **Owner's spec:** whoop-scale, flow-first, 20 x 15 x 6 m industrial interior; high-contrast edges, one key light, ACES, no fog, no decor; bounce walls. After the first flight: ambient at about 15% so nothing is black, PBR surfaces with their own roughness, a floor grid, a hue per zone.
+- **An exception to Felt Scale.** No felt, no hemisphere, no fill light: one hard key (the sun, through a ceiling and walls that cast no shadow), its hard shadows, and edge lines drawn on every box of the rig. The ambient is an image light at 15% of the key (`sim-lighting.js` `rigAmbientEnv`: a soft grey room, no lamp in it, a little warmer underfoot where the lit floor bounces), never the dawn HDRI. ACES is the renderer's, as everywhere.
+- **Surfaces (`sim-maps.js` `RIG_LOOK`):** concrete floor `#9a9da2` (roughness 0.92) with a 1 m grid and a 5 m line; painted block walls `#9a9ea5` (0.85); ceiling `#868b92` (0.9). Zones, each its own hue: tower, painted scaffold, lemon `#f2d10a` (0.45); pipes, steel, blue `#6f9be0` (0.3, metal 0.7); crates, wood, `#d9a066` (0.8) with slats; tunnel, enamelled sheet steel, violet `#9466e0` (0.35); loft, painted plywood, raspberry `#d0306a` (0.65). A support wears the hue of what it holds. Edges `#f2f0ea`. Gates keep brand `#ff4d1a` / `#3ddc97`, and no zone takes those hues.
 - **Props:** None. The six features (scaffold tower, ceiling pipe run, crate stacks, tunnel, loft, straight) are the map.
 - **Gates:** Plain brand rings, not solid, on the Rig Loop (17 gates, 57 m). Every feature is on the loop; `tools/test_sim_rig.mjs` holds the clearances and the radius.
 - **Post:** No grade, no bloom, no vignette, no fog; contact AO only, for the edges.

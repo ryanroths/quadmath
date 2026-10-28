@@ -5,7 +5,7 @@
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
 import { resolveAutoQuality, gpuTier, autoQualityStep } from './sim-touch.js?v=40068c573e17';
-import { updateSceneLighting } from './sim-lighting.js?v=d03f9b3db1ea';
+import { updateSceneLighting } from './sim-lighting.js?v=ffbd15528ade';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';

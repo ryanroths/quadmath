@@ -9,7 +9,7 @@ import {
   findTrackIn, resolveSimBoot, firstTrackForMap, startPad, normalizeTrack,
   BUILTIN_TRACK_FILES, SELECTED_TRACK_KEY, resolveFly, resolveTrackPick,
   persistableSelection, isFreestyleTrackId, isEphemeralTrackId, freestyleIdFor,
-  loadSelected, saveSelected, MAPS, freestyleTrack, isLineTrackId,
+  loadSelected, saveSelected, MAPS, freestyleTrack, isLineTrackId, linkNeedsDev,
 } from '../sim-tracks.js';
 import { dailyLineFor } from '../sim-retention.js';
 import { trickLineupText, TRICK_BY_ID } from '../sim-tricks.js';
@@ -27,6 +27,37 @@ const simSrc = existsSync(join(root, 'sim.html')) ? readFileSync(join(root, 'sim
 const files = BUILTIN_TRACK_FILES.map((m) =>
   normalizeTrack(JSON.parse(readFileSync(join(root, m.file), 'utf8')))
 );
+
+test('every guide link in SIM-LINKS.md lands on its own map (dev maps carry &dev=1)', () => {
+  const doc = readFileSync(join(root, 'SIM-LINKS.md'), 'utf8');
+  const links = [...doc.matchAll(/https:\/\/quadmath\.com\/sim\.html\?[^\s"<>`]+/g)].map((x) => x[0].replace(/&amp;/g, '&'));
+  assert.ok(links.length >= 10, 'snippet and examples found');
+  for (const link of links) {
+    const p = new URL(link).searchParams;
+    const dev = p.get('dev') === '1';
+    const trackMap = p.get('track') && (BUILTIN_TRACK_FILES.find((t) => t.id === p.get('track')) || {}).map;
+    const want = trackMap || p.get('map');
+    assert.ok(want, link + ' names a map or a known track');
+    const r = resolveSimBoot({ map: p.get('map'), track: p.get('track') }, null, files, { dev });
+    assert.equal(r.closedMap, undefined, link + ' needs &dev=1');
+    assert.equal(r.map, want, link);
+  }
+});
+
+test('COPY RATES LINK / COPY BUILD LINK add &dev=1 exactly when the link would otherwise land on The Rig', () => {
+  for (const m of MAPS) {
+    const tracks = [freestyleIdFor(m.id), ...files.filter((t) => t.map === m.id).map((t) => t.id)];
+    for (const track of tracks) {
+      const closed = resolveSimBoot({ map: m.id, track }, null, files, { dev: false }).closedMap !== undefined;
+      assert.equal(linkNeedsDev(m.id, track), closed, m.id + ' / ' + track);
+    }
+  }
+  // Generated session courses open on their own map without the flag.
+  assert.equal(linkNeedsDev('garage', 'daily-2026-11-02'), false);
+  assert.equal(linkNeedsDev('room', 'room-practice'), false);
+  // Both copy buttons pass it.
+  assert.equal((simSrc.match(/dev:linkNeedsDev\(currentMap,shareTrackParam\(\)\)/g) || []).length, 2);
+});
 
 test('findTrack(null) does not match Sofa Slalom via String(null)', () => {
   assert.equal(findTrackIn(null, files), null);

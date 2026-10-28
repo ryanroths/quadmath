@@ -5,9 +5,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { RIG_PLAY, RIG_WS, LAYOUT, MAP_ORBIT, MAP_LOOKS, MAP_IDS } from '../sim-maps.js';
+import * as THREE from '../vendor/three.module.min.js';
+import { RIG_PLAY, RIG_WS, RIG_LOOK, LAYOUT, MAP_ORBIT, MAP_LOOKS, MAP_IDS, buildMap } from '../sim-maps.js';
 import { WS } from '../sim-core-adapter.js';
 import { normalizeTrack, gateRadius, BUILTIN_TRACK_FILES } from '../sim-tracks.js';
+import { vibeFor, mergeStaticArt } from '../sim-art.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const raw = JSON.parse(readFileSync(join(root, 'tracks/rig-loop.json'), 'utf8'));
@@ -76,7 +78,9 @@ test('The Rig is registered and sized 20 × 15 × 6 m', () => {
   assert.equal(LAYOUT.rig.h, 6 * WS);
   assert.ok(MAP_IDS.includes('rig'));
   assert.ok(MAP_ORBIT.rig.r < LAYOUT.rig.d / 2, 'orbit stays inside');
-  assert.deepEqual(MAP_LOOKS.rig, { fog: 0, sun: 3.2, env: 0, bg: 0, hemi: 0 });
+  assert.deepEqual(MAP_LOOKS.rig, vibeFor('rig').looks);
+  assert.equal(MAP_LOOKS.rig.fog, 0);
+  assert.equal(MAP_LOOKS.rig.hemi, 0);
   assert.ok(BUILTIN_TRACK_FILES.some((t) => t.id === 'rig-loop' && t.map === 'rig'));
   assert.equal(track.map, 'rig');
 });
@@ -219,4 +223,130 @@ test('flow: no stop-and-turn anywhere on the loop', () => {
 
 test('the pace ghost (uniform curve) clears the rig too', () => {
   for (const p of loop(0, 0.02)) assert.ok(nearest(p).d >= 0.05, 'ghost clips at ' + p.map((v) => v.toFixed(2)));
+});
+
+// Hue (degrees) and saturation of a 0xRRGGBB colour, as written (sRGB).
+function hueSat(hex) {
+  const r = (hex >> 16 & 255) / 255, g = (hex >> 8 & 255) / 255, b = (hex & 255) / 255;
+  const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
+  let h = 0;
+  if (d) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return { h: (h * 60 + 360) % 360, s: max ? d / max : 0 };
+}
+const hueGap = (a, b) => Math.min(Math.abs(a - b) % 360, 360 - Math.abs(a - b) % 360);
+
+// Just enough canvas for the builder's floor and crate textures. Each canvas
+// records its draw calls (with the fill style at the time) in cv.ops.
+function installDomStub() {
+  if (globalThis.document && globalThis.document.createElement) return;
+  globalThis.document = {
+    createElement: () => {
+      const cv = { width: 0, height: 0, ops: [] };
+      const ctx = new Proxy({}, {
+        get: (t, k) => (k in t ? t[k] : (...a) => cv.ops.push([k, t.fillStyle, ...a])),
+        set: (t, k, v) => { t[k] = v; return true; },
+      });
+      cv.getContext = () => ctx;
+      return cv;
+    },
+  };
+}
+
+test('the look: a hue per zone, a roughness per surface, 15% ambient, a floor grid', () => {
+  const S = RIG_LOOK.surfaces, zones = ['tower', 'pipes', 'crates', 'tunnel', 'loft'];
+  // A hue per zone, 20 degrees apart at least; the room stays grey.
+  for (let i = 0; i < zones.length; i++) {
+    for (let j = i + 1; j < zones.length; j++) {
+      const g = hueGap(hueSat(S[zones[i]].color).h, hueSat(S[zones[j]].color).h);
+      assert.ok(g >= 20, `${zones[i]} / ${zones[j]} hues ${g.toFixed(0)} deg apart`);
+    }
+  }
+  for (const z of zones) assert.ok(hueSat(S[z].color).s >= 0.4, z + ' is a colour');
+  for (const k of ['floor', 'wall', 'ceil']) assert.ok(hueSat(S[k].color).s < 0.1, k + ' stays grey');
+  // No zone takes a gate's brand colour.
+  const v = vibeFor('rig');
+  for (const gate of [v.palette.gateA, v.palette.gateB]) {
+    const gh = hueSat(parseInt(gate.slice(1), 16)).h;
+    for (const z of zones) assert.ok(hueGap(gh, hueSat(S[z].color).h) >= 15, z + ' near gate ' + gate);
+  }
+  // The four named surface types each have their own roughness.
+  const named = [S.pipes, S.crates, S.floor, S.tower];
+  assert.deepEqual(named.map((f) => f.type), ['steel pipe', 'wood crate', 'concrete', 'painted scaffold']);
+  for (let i = 0; i < named.length; i++) {
+    for (let j = i + 1; j < named.length; j++) {
+      assert.ok(Math.abs(named[i].roughness - named[j].roughness) >= 0.1, named[i].type + ' / ' + named[j].type);
+    }
+  }
+  assert.ok(S.pipes.metalness >= 0.5, 'steel is a metal');
+  for (const k of ['crates', 'floor', 'tower']) assert.equal(S[k].metalness, 0, k);
+  // One key light. The ambient is the image light, 15% of a key-lit face.
+  const L = v.lighting;
+  assert.equal(L.fillIntensity, 0);
+  assert.equal(L.hemiIntensity, 0);
+  assert.equal(RIG_LOOK.ambient, 0.15);
+  assert.ok(Math.abs(v.looks.env * Math.PI / L.sunIntensity - RIG_LOOK.ambient) < 1e-9, 'ambient ' + v.looks.env);
+  // After a quality change the key runs at looks.sun (sim-looks.js applyMapLooksNow).
+  assert.equal(v.looks.sun, L.sunIntensity, 'looks.sun is the same key');
+  // Built: every box wears its zone's material (supports too), the floor
+  // carries the grid at 5 m tiles, the edges are still drawn.
+  installDomStub();
+  const built = buildMap(THREE, 'rig');
+  const vis = built.group.getObjectByName('rigArtVisuals');
+  const mats = {};
+  vis.traverse((o) => { if (o.isMesh && o.name.startsWith('rig_')) (mats[o.name] = mats[o.name] || new Set()).add(o.material); });
+  assert.deepEqual(Object.keys(mats).sort(), zones.map((z) => 'rig_' + z).sort());
+  // A support takes the zone of what it holds, from its part, not the builder's own say.
+  const held = { 'tunnel trestle': 'tunnel', 'pipe hanger': 'pipes', 'pipe hanger rod': 'pipes', 'loft post': 'loft' };
+  const rigMeshes = vis.children.filter((o) => o.isMesh && o.name.startsWith('rig_'));
+  assert.equal(rigMeshes.length, BOXES.length);
+  BOXES.forEach((b, i) => {
+    const want = b.feature === 'support' ? held[b.part] : b.feature;
+    assert.ok(want, 'support with no zone: ' + b.part);
+    assert.equal(rigMeshes[i].material.color.getHex(), S[want].color, b.feature + ' / ' + b.part);
+  });
+  for (const z of zones) {
+    assert.equal(mats['rig_' + z].size, 1, z + ' one material');
+    const mat = [...mats['rig_' + z]][0];
+    assert.equal(mat.name, 'rig ' + S[z].type);
+    assert.equal(mat.color.getHex(), S[z].color, z + ' colour');
+    assert.equal(mat.roughness, S[z].roughness, z + ' roughness');
+    assert.equal(mat.metalness, S[z].metalness, z + ' metalness');
+  }
+  const fm = built.floor.material;
+  assert.ok(fm.map && fm.map.wrapS === THREE.RepeatWrapping && fm.map.wrapT === THREE.RepeatWrapping, 'floor grid tiles');
+  assert.deepEqual([fm.map.repeat.x, fm.map.repeat.y], [ROOM.w / RIG_LOOK.grid.major, ROOM.d / RIG_LOOK.grid.major]);
+  assert.equal(RIG_LOOK.grid.minor, 1);
+  assert.equal(fm.roughness, S.floor.roughness);
+  // The tile itself: a full-length line every metre each way, and heavier
+  // ones on the 5 m tile edges.
+  const img = fm.map.image, w = img.width, n = RIG_LOOK.grid.major / RIG_LOOK.grid.minor;
+  const rects = img.ops.filter(([op]) => op === 'fillRect').map(([, style, x, y, rw, rh]) => ({ style, x, y, rw, rh }));
+  for (const [axis, at, len, thick] of [['x', 'x', 'rh', 'rw'], ['y', 'y', 'rw', 'rh']]) {
+    const lines = rects.filter((r) => r[len] >= w && r[thick] < w);
+    for (let k = 0; k <= n; k++) {
+      const c = k * w / n;
+      assert.ok(lines.some((r) => Math.abs(r[at] + r[thick] / 2 - c) <= r[thick] / 2 + 2), `${axis} line at ${k} m`);
+    }
+    const edge = lines.filter((r) => r[at] <= 0 || r[at] + r[thick] >= w);
+    const minor = lines.filter((r) => !edge.includes(r));
+    assert.equal(minor.length, n - 1, axis + ' minor lines');
+    assert.ok(edge.every((e) => minor.every((m) => e[thick] > m[thick] && e.style !== m.style)), axis + ' 5 m line heavier');
+  }
+  assert.ok(vis.getObjectByName('rigEdges').isLineSegments, 'edges drawn');
+});
+
+test('the draw-call merge keeps the Rig textures (crate slats)', () => {
+  installDomStub();
+  const built = buildMap(THREE, 'rig');
+  const root = new THREE.Group();
+  root.add(built.group);
+  assert.ok(mergeStaticArt(THREE, root) > 0, 'something merged');
+  let crates = 0;
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material.map) return;
+    assert.ok(o.geometry.getAttribute('uv'), (o.material.name || o.name) + ' lost its uvs');
+    assert.equal(o.geometry.getAttribute('uv').count, o.geometry.getAttribute('position').count);
+    if (o.material.name === 'rig ' + RIG_LOOK.surfaces.crates.type) crates += o.userData.mergedStatic ? 1 : 0;
+  });
+  assert.equal(crates, 1, 'the crates are one merged mesh');
 });

@@ -86,6 +86,12 @@ export const PUBLIC_MAPS = Object.freeze([DEFAULT_MAP]);
 export function mapOpen(mapId, dev) {
   return !!dev || PUBLIC_MAPS.includes(mapId);
 }
+// A copied link (rates, build) to this map and track carries ?dev=1 when,
+// without it, resolveSimBoot would land it on DEFAULT_MAP instead. A
+// generated session course (daily, weekly, room practice) opens anyway.
+export function linkNeedsDev(mapId, trackId) {
+  return !mapOpen(mapId, false) && !isEphemeralTrackId(trackId);
+}
 
 export function matchTrack(t, id) {
   if (!t || isBlankTrackId(id)) return false;

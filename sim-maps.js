@@ -5,7 +5,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=350af557ae23';
+import { planRoom } from './sim-room.js?v=d77540c57016';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -214,8 +214,9 @@ export const MAP_LOOKS = {
   gym: { fog: 0.0010, sun: 0.95, env: 0.70, bg: 0.44, hemi: 0.55 },
   trainer: { fog: 0.0028, sun: 0.58, env: 0.56, bg: 0.33, hemi: 0.34 },
   room: { fog: 0.0045, sun: 0.42, env: 0.55, bg: 0.32, hemi: 0.40 },
-  // One key, nothing else: no fog, no image light, no sky, no hemisphere.
-  rig: { fog: 0, sun: 3.2, env: 0, bg: 0, hemi: 0 },
+  // One key, plus an ambient image light at 15% of it (RIG_LOOK.ambient); no
+  // fog, no sky, no hemisphere.
+  rig: { fog: 0, sun: 3.2, env: 0.15 * 3.2 / Math.PI, bg: 0, hemi: 0 },
 };
 
 export const MAP_IDS = ['rig', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room'];
@@ -1100,22 +1101,121 @@ export const RIG_PLAY = Object.freeze({
   boxes: Object.freeze(rigBoxes()),
 });
 
+// Hard Key surfaces: PBR, one roughness per surface type, one hue per zone so
+// the zone reads at a glance. The room (floor, walls, ceiling) stays neutral
+// grey, the gates keep brand orange / green / white, and no zone takes those.
+// A support takes the hue of what it holds. Textures only add detail: they are
+// grey, and the hue is the material colour.
+export const RIG_LOOK = Object.freeze({
+  // Ambient image light as a fraction of the key (sim-art.js VIBES.rig env).
+  ambient: 0.15,
+  surfaces: Object.freeze({
+    floor: Object.freeze({ type: 'concrete', color: 0x9a9da2, roughness: 0.92, metalness: 0 }),
+    wall: Object.freeze({ type: 'painted block', color: 0x9a9ea5, roughness: 0.85, metalness: 0 }),
+    ceil: Object.freeze({ type: 'painted deck', color: 0x868b92, roughness: 0.9, metalness: 0 }),
+    tower: Object.freeze({ type: 'painted scaffold', color: 0xf2d10a, roughness: 0.45, metalness: 0 }),
+    pipes: Object.freeze({ type: 'steel pipe', color: 0x6f9be0, roughness: 0.3, metalness: 0.7 }),
+    crates: Object.freeze({ type: 'wood crate', color: 0xd9a066, roughness: 0.8, metalness: 0 }),
+    tunnel: Object.freeze({ type: 'enamelled sheet steel', color: 0x9466e0, roughness: 0.35, metalness: 0 }),
+    loft: Object.freeze({ type: 'painted plywood', color: 0xd0306a, roughness: 0.65, metalness: 0 }),
+  }),
+  // Floor grid, metres: a line every metre, a heavier one every 5 m.
+  grid: Object.freeze({ minor: 1, major: 5 }),
+});
+
+function rigZone(box) {
+  if (box.feature !== 'support') return box.feature;
+  return box.part.startsWith('tunnel') ? 'tunnel' : box.part.startsWith('pipe') ? 'pipes' : 'loft';
+}
+
+// Seeded so every load paints the same speckle.
+function rigNoise(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// One 5 m tile of concrete: speckle, a joint line every metre, a heavier one
+// on the tile edge.
+function rigFloorTex(THREE) {
+  const s = 1024, g5 = RIG_LOOK.grid.major / RIG_LOOK.grid.minor;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#d4d4d4';
+  g.fillRect(0, 0, s, s);
+  const rnd = rigNoise(7);
+  for (let i = 0; i < 9000; i++) {
+    const v = 150 + rnd() * 105 | 0;
+    g.fillStyle = `rgba(${v},${v},${v},0.35)`;
+    g.fillRect(rnd() * s, rnd() * s, 2 + rnd() * 5, 2 + rnd() * 5);
+  }
+  g.fillStyle = 'rgba(40,42,46,0.32)';
+  for (let k = 1; k < g5; k++) {
+    const p = Math.round(k * s / g5);
+    g.fillRect(p - 1, 0, 3, s);
+    g.fillRect(0, p - 1, s, 3);
+  }
+  g.fillStyle = 'rgba(30,32,36,0.6)';
+  g.fillRect(0, 0, 4, s); g.fillRect(s - 4, 0, 4, s);
+  g.fillRect(0, 0, s, 4); g.fillRect(0, s - 4, s, 4);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+// Crate face: four slats per 0.5 m crate, a frame, a little grain.
+function rigCrateTex(THREE) {
+  const s = 256;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#f4f4f4';
+  g.fillRect(0, 0, s, s);
+  const rnd = rigNoise(11);
+  for (let i = 0; i < 220; i++) {
+    g.fillStyle = `rgba(110,110,110,${0.04 + rnd() * 0.07})`;
+    g.fillRect(0, rnd() * s, s, 1 + rnd() * 2);
+  }
+  g.fillStyle = 'rgba(40,40,40,0.5)';
+  for (let k = 1; k < 4; k++) g.fillRect(0, k * s / 4 - 2, s, 4);
+  g.fillStyle = 'rgba(60,60,60,0.35)';
+  g.fillRect(0, 0, s, 10); g.fillRect(0, s - 10, s, 10);
+  g.fillRect(0, 0, 10, s); g.fillRect(s - 10, 0, 10, s);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
 function buildRig(THREE, parent, colliders) {
   const P = RIG_PLAY, s = RIG_WS, L = LAYOUT.rig;
-  // Flat materials, kept off the PBR packs. Faces sit a hair behind their
-  // edge lines so the lines never z-fight.
-  const flat = (hex, rough, metal) => {
+  // Kept off the looks PBR packs. Faces sit a hair behind their edge lines so
+  // the lines never z-fight.
+  const surface = (key, map) => {
+    const f = RIG_LOOK.surfaces[key];
     const m = new THREE.MeshStandardMaterial({
-      color: hex, roughness: rough, metalness: metal || 0,
+      color: f.color, roughness: f.roughness, metalness: f.metalness, map: map || null,
       polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
     });
+    m.name = 'rig ' + f.type;
     m.userData.looksSkip = true;
+    // Textured: the draw-call merge (sim-art.js mergeStaticArt) keeps the uvs.
+    if (map) m.userData.mergeKeepUv = true;
     return m;
   };
+  const floorTex = rigFloorTex(THREE);
+  floorTex.repeat.set(P.room.w / RIG_LOOK.grid.major, P.room.d / RIG_LOOK.grid.major);
   const mats = {
-    floor: flat(0x6a6d72, 0.92), wall: flat(0x4a4e55, 0.95), ceil: flat(0x34373c, 0.95),
-    crates: flat(0xb09670, 0.86), tunnel: flat(0x9ea5ad, 0.8), tower: flat(0xe0e2e5, 0.55, 0.2),
-    pipes: flat(0xc8cdd3, 0.5, 0.3), loft: flat(0x9ea5ad, 0.8), support: flat(0x858b93, 0.7, 0.2),
+    floor: surface('floor', floorTex), wall: surface('wall'), ceil: surface('ceil'),
+    crates: surface('crates', rigCrateTex(THREE)), tunnel: surface('tunnel'), tower: surface('tower'),
+    pipes: surface('pipes'), loft: surface('loft'),
   };
   const vis = new THREE.Group();
   vis.name = 'rigArtVisuals';
@@ -1131,9 +1231,10 @@ function buildRig(THREE, parent, colliders) {
   };
   for (const r of P.boxes) {
     const a = r.min.map((v) => v * s), b = r.max.map((v) => v * s);
+    const zone = rigZone(r);
     const mesh = box(THREE, vis, colliders, (a[0] + b[0]) / 2, a[1], (a[2] + b[2]) / 2,
-      b[0] - a[0], b[1] - a[1], b[2] - a[2], mats[r.feature]);
-    mesh.name = 'rig_' + r.feature;
+      b[0] - a[0], b[1] - a[1], b[2] - a[2], mats[zone]);
+    mesh.name = 'rig_' + zone;
     edge(a, b);
   }
   // Shell: inner faces at exactly ±10 × ±7.5 × 6 m. One box per wall (no

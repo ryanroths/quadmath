@@ -3,8 +3,8 @@
 // Play colliders live in sim-maps.js CITY_PLAY. Nothing from the GPL whoop sim.
 
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=46192cc1defd';
-import { CITY_PLAY } from './sim-maps.js?v=75e3b5cf94c5';
-import { updateSceneLighting } from './sim-lighting.js?v=d03f9b3db1ea';
+import { CITY_PLAY } from './sim-maps.js?v=ef7230e9bee7';
+import { updateSceneLighting, rigAmbientEnv } from './sim-lighting.js?v=ffbd15528ade';
 
 export const RAIN_KEY = 'quadmathSimRain';
 
@@ -1199,6 +1199,11 @@ export function applyResolvedLighting(ctx, spec) {
     || (typeof THREE !== 'undefined' ? THREE.Color : null);
   const patch = { mapId: spec.mapId, citySky: !!spec.citySky, fogColor: L.fogColor, exposure: L.exposure };
   if (spec.looks) patch.looks = spec.looks;
+  // The Rig's ambient is built here, at once, not loaded like an HDRI.
+  if (spec.mapId === 'rig') {
+    const env = rigAmbientEnv(ctx && ctx.THREE, renderer);
+    if (env) patch.envs = { rig: env };
+  }
   updateSceneLighting(scene, patch, { renderer, Color });
   if (bloomPass) {
     bloomPass.strength = L.bloomStrength;
