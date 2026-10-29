@@ -826,8 +826,8 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
       if (!out.rpm) out.rpm = [0, 0, 0, 0];
       for (let i = 0; i < 4; i++) out.rpm[i] = s.rpm[i];
       out.contactFlags = s.contactFlags;
-      // sim-core's FC readouts (v1) have no beeper field: null until they do.
-      out.beeper = 'beeper' in fc ? !!fc.beeper : null;
+      // Betaflight's beeper sounding now (isBeeperOn(), sim-core v0.5.0).
+      out.beeper = fc.beeper;
       const thrust = s.thrustN.reduce((a, b) => a + Math.abs(b), 0);
       out.totalThrustAbsN = thrust;
       out.twr = thrust / weightN;

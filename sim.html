@@ -895,8 +895,8 @@ import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAUL
 import {
   WS as CORE_WS, TICK_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, radioAux,
-} from "./sim-core-adapter.js?v=fef1ae68d295";
-import {createSimAudio,airframeBlades} from "./sim-audio.js?v=363b6bf14426";
+} from "./sim-core-adapter.js?v=23d429986896";
+import {createSimAudio,airframeBlades} from "./sim-audio.js?v=0d58459b546a";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
@@ -7012,7 +7012,7 @@ const BF_TUNE_ID='65-betafpv-ryfly-1219s';
 const BF_CLASS='whoop65';
 // vendor/sim-core/VERSION; versions the vendored URLs (cache) and the test
 // tools/test_sim_core.mjs holds the two equal.
-const SIM_CORE_VERSION='v0.4.0';
+const SIM_CORE_VERSION='v0.5.0';
 const BF_DIFF_PATH='vendor/sim-core/configs/air65-ryfly-2026-10-23.txt';
 let bfOwnerDiff=null;                // that diff's text, once fetched
 let bfDiffLoaded=null;               // the CLI text the bf core last configured with

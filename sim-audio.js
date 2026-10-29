@@ -24,9 +24,10 @@
 //   contact  a thud per CONTACT event (floor and box alike), level from its
 //            impact speed; a scrape loop while a box face is touched
 //            (contactFlags bit 1) and the quad slides along it.
-//   beeper   Betaflight's beeper (state.beeper). sim-core's FC readouts have
-//            no beeper field yet, so state.beeper is null and the voice is
-//            silent: nothing stands in for it.
+//   beeper   Betaflight's beeper (state.beeper: isBeeperOn(), sim-core
+//            v0.5.0), a square tone while it sounds: the arming beep, the
+//            disarming beeps, BEEPER mode (on the owner's AUX3, with the
+//            turtle switch), the boot beeps.
 // One mono bus: master volume, mute, a limiter, the destination. The
 // AudioContext is made only once the browser has seen a user activation
 // (unlock), so the page never trips the autoplay policy.

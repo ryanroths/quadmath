@@ -7,6 +7,8 @@
 //   - no AudioContext before the first key (nothing for the autoplay policy
 //     to refuse), the audio graph after it: two oscillators a motor, the
 //     flight voices through the 3 kHz lowpass;
+//   - the arming beep: Betaflight's beeper (sim-core v0.5.0) sounds on the
+//     arm and the beeper voice plays it, then is quiet in the hover;
 //   - in the hover (above 18 krpm) only the flight voice plays, each motor's
 //     at its shaft rate (rpm / 60), and it rises on every punch;
 //   - the punch frequency falls as vbat sags across the flight;
@@ -197,7 +199,8 @@ function killTree(child) {
 // frame stretches the wall clock, not the flight.
 const FLIGHT = String.raw`(() => {
   const s = window._sim, a = s.audio;
-  const F = window.__flight = { phase: 'arming', samples: [], punches: [], wind: [], wall: null, floor: null, done: false, error: null };
+  const F = window.__flight = { phase: 'arming', samples: [], punches: [], wind: [], wall: null, floor: null, done: false, error: null,
+    beep: { firstOn: null, onTicks: 0, peakGain: 0 } };
   const T_PUNCH = [8000, 28000, 48000, 68000, 88000, 108000];
   const PUNCH_MS = 150, HOVER_Z = 1.5, WALL_AT = 118000;
   let t0 = null, x0 = 0, y0 = 0, tHover = 0.4, punch = null, hoverHz = [], wallStart = null;
@@ -215,6 +218,11 @@ const FLIGHT = String.raw`(() => {
         F.phase = 'hover';
       }
       const t = cs.flightMs - t0;
+      // The arming beep (300 ms on, 50 off, 50 on), from the arm.
+      if (t < 1000) {
+        if (cs.beeper) { F.beep.onTicks++; if (F.beep.firstOn === null) F.beep.firstOn = t; }
+        F.beep.peakGain = Math.max(F.beep.peakGain, d.beeperGain);
+      }
       const q = cs.quaternion;
       const yaw = Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
       const c = Math.cos(yaw), sn = Math.sin(yaw);
@@ -298,7 +306,7 @@ const FLIGHT = String.raw`(() => {
       }
       if (F.phase !== 'drop' && F.phase !== 'arming') s.setTestStick({ r, p, y: 0, t: thr });
       if (F.phase !== 'arming' && F.samples.length < 4000 && (F.samples.length === 0 || t - F.samples[F.samples.length - 1].t >= 100)) {
-        F.samples.push({ t: Math.round(t), z: +cs.position.z.toFixed(2), vbat: cs.battV, hz: +mean(d.motorHz).toFixed(1), rpm: Math.round(mean(cs.rpm)), fg: mean(d.flightGain), tg: mean(d.turtleGain), thr: +thr.toFixed(3), armed: cs.armed, x: +cs.position.x.toFixed(2), y: +cs.position.y.toFixed(2), roll: +(cs.attitude.roll * 57.3).toFixed(1), pitch: +(cs.attitude.pitch * 57.3).toFixed(1), sp: +speed.toFixed(2), cf: cs.contactFlags, phase: F.phase });
+        F.samples.push({ t: Math.round(t), z: +cs.position.z.toFixed(2), vbat: cs.battV, hz: +mean(d.motorHz).toFixed(1), rpm: Math.round(mean(cs.rpm)), fg: mean(d.flightGain), tg: mean(d.turtleGain), bp: d.beeperGain, thr: +thr.toFixed(3), armed: cs.armed, x: +cs.position.x.toFixed(2), y: +cs.position.y.toFixed(2), roll: +(cs.attitude.roll * 57.3).toFixed(1), pitch: +(cs.attitude.pitch * 57.3).toFixed(1), sp: +speed.toFixed(2), cf: cs.contactFlags, phase: F.phase });
       }
       if (speed > 1) F.wind.push({ t, speed, gain: d.windGain, targetGain: d.windTargetGain, targetHz: d.windTargetHz });
       if (F.wind.length > 2000) F.wind.shift();
@@ -450,7 +458,12 @@ test('bf core sound: graph on the first key, motor pitch from rpm rises on a pun
     assert.equal(flight.error, null, 'flight script: ' + flight.error + '\n' + trace());
     assert.ok(flight.done, `the flight finished (phase ${flight.phase}, ${flight.punches.length} punches)\n` + trace());
 
+    // The arming beep: on from the arm, played, then quiet.
+    assert.ok(flight.beep.firstOn !== null && flight.beep.firstOn < 100, `the arming beep starts ${flight.beep.firstOn} ms after the arm`);
+    assert.ok(flight.beep.onTicks > 50, `it sounds for a while (${flight.beep.onTicks} polls of 4 ms)`);
+    assert.ok(flight.beep.peakGain > 0.1, `the beeper voice plays it (${flight.beep.peakGain})`);
     const hover = flight.samples.filter((s) => s.phase === 'hover' && s.t > 4000);
+    assert.ok(hover.every((s) => s.bp < 1e-3), 'the beeper is quiet in the hover');
     assert.ok(hover.length > 300, `hovered (${hover.length} samples)`);
     // Every steady hover sample (at the hold altitude, rpm within 2% of the
     // sample 100 ms before; not the overshoot and spin-down after a punch,

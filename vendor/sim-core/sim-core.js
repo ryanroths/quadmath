@@ -38,10 +38,10 @@ const FC = Object.freeze({
   setpoint: [8, 3], gyroFiltered: [11, 3], pidSum: [14, 3], rcCommand: [17, 4], motor: [21, 4],
   debug: [25, 8], debugMode: [33, 1], motorsEnabled: [34, 1], rcData: [35, 8], rxSignal: [43, 1],
   attitude: [44, 3], airmode: [47, 1], crashFlip: [48, 1], mode3d: [49, 1], rpmFilter: [50, 1], acc: [51, 3],
-  pidSetpoint: [54, 3],
+  pidSetpoint: [54, 3], beeper: [57, 1],
 });
-const FC_LEN = 57;
-const FC_BOOLEANS = new Set(['armed', 'motorsEnabled', 'rxSignal', 'airmode', 'crashFlip', 'mode3d', 'rpmFilter']);
+const FC_LEN = 58;
+const FC_BOOLEANS = new Set(['armed', 'motorsEnabled', 'rxSignal', 'airmode', 'crashFlip', 'mode3d', 'rpmFilter', 'beeper']);
 
 // Betaflight flightModeFlags bits (fc/runtime_config.h).
 const ANGLE_MODE = 1 << 0;

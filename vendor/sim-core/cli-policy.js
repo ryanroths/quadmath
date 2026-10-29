@@ -8,7 +8,7 @@
 //
 // This file is part of quadmath-sim-core, GPL-3.0-or-later. See LICENSE.
 
-const APPLY = new Set(['set', 'get', 'profile', 'rateprofile', 'feature', 'aux', 'map', 'mixer', 'adjrange', 'diff', 'dump']);
+const APPLY = new Set(['set', 'get', 'profile', 'rateprofile', 'feature', 'aux', 'map', 'mixer', 'adjrange', 'diff', 'dump', 'beeper']);
 
 const REJECT_COMMAND = new Map([
   ['resource', 'no pins in the sim'],
@@ -16,7 +16,7 @@ const REJECT_COMMAND = new Map([
   ['dma', 'no DMA in the sim'],
   ['serial', 'no UARTs in the sim'],
   ['serialpassthrough', 'no UARTs in the sim'],
-  ['beacon', 'no beeper hardware'],
+  ['beacon', 'the DShot beacon plays ESC tones, which the plant does not model; off, Betaflight\'s default'],
   ['led', 'no LED strip'],
   ['color', 'no LED strip'],
   ['mode_color', 'no LED strip'],
