@@ -797,8 +797,10 @@ test('a js-core run on the 65 stays off the boards (PHYS MISMATCH); Tune hides t
   assert.equal(select.split('syncCoreUI();').length - 1, 3);
 });
 
-// The Rig's bounce walls on the bf core: its plant gets the same contact
-// profile as the js core (sim-whoop.js BOUNCE_MAPS), and Betaflight reboots on it.
+// The Rig on the bf core: its plant gets the same contact profile as the js
+// core (sim-whoop.js BOUNCE_MAPS), and Betaflight reboots on it. Since
+// sim-core v0.4.0 its walls rebound at the airframe's wallRestitution like any
+// map's; the profile still moves the crash threshold.
 test('contactPlant scales the plant for a bounce map; setPlant reconfigures', async () => {
   const air65 = JSON.parse(readFileSync('vendor/sim-core/airframes/air65.json', 'utf8'));
   assert.equal(contactPlant(air65, null), air65);
@@ -813,8 +815,8 @@ test('contactPlant scales the plant for a bounce map; setPlant reconfigures', as
   const r = bf.setPlant(rig);
   assert.ok(r && r.applied > 0, 'Betaflight booted on the bounce plant');
   assert.equal(bf.getState().armed, false);
-  // Into a wall, nose on: the stock plant crashes at 4 m/s; the Rig's bounces
-  // off at 4 and 8 m/s and still crashes at 12.
+  // Into a wall, nose on: the stock plant crashes at 4 m/s; the Rig's comes
+  // back off the wall uncrashed at 4 and 8 m/s and still crashes at 12.
   const wall = { floorZ: 0, boxes: [{ min: [1.0, -2, 0], max: [1.3, 2, 3] }], triggers: [] };
   const hit = async (plant, v) => {
     const core = await createBfCore({ SimCore, wasm: readFileSync('vendor/sim-core/sim-core.wasm'), airframe: plant, diff, world: wall });

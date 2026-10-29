@@ -96,8 +96,9 @@ export const PLANT_FIELDS = Object.freeze([
   'ductOuterRadius', 'hullBelow', 'hullAbove',
   'rpmHover', 'currentExponent', 'iQuiescent', 'motorDelay', 'electricalTau',
   'ocvOverDischarge',
+  'ductHeight', 'wallFriction', 'wallRestitution',
 ]);
-const PLANT_LEN = 51;
+const PLANT_LEN = 54;
 const PLANT_COUNT = { ocv: 7, ocvOverDischarge: 3 };
 const PB_WHEELBASE = 2;
 const PB_DUCT_RADIUS = 40;

@@ -506,7 +506,7 @@ test('worker health and board routes work without D1; submit needs DB', async ()
 });
 
 test('H1 server derives week track, rejects pace-bot/phys/class/week, claims names', async () => {
-  assert.equal(PHYS_VER, 4);
+  assert.equal(PHYS_VER, 5);
   assert.equal(weekAllowed('2026-W42', NOW_W42), true);
   assert.equal(weekAllowed('2026-W41', NOW_W42), false);
   const mondayW43 = Date.UTC(2026, 9, 19, 10, 0, 0);
@@ -555,6 +555,12 @@ test('H1 server derives week track, rejects pace-bot/phys/class/week, claims nam
   }, NOW_W42);
   assert.equal(phys3.ok, false);
   assert.equal(phys3.reason, 'PHYS MISMATCH');
+  // And one from before sim-core v0.4.0's wall contact (phys 4).
+  const phys4 = normalizeSubmit({
+    name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost: { ...ghost, phys: 4 }, track,
+  }, NOW_W42);
+  assert.equal(phys4.ok, false);
+  assert.equal(phys4.reason, 'PHYS MISMATCH');
 
   const cls = normalizeSubmit({
     name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost, track, build: { frameMm: 85 },
@@ -650,18 +656,19 @@ test('worker week/board/submit use weekly-YYYY-Wxx-g2 and do not mix old ids', a
   assert.ok(!mixedBody.entries.some((row) => row.name === 'OLD'));
 });
 
-test('boards are kept per PHYS_VER: after the bump to 4 a phys 3 row neither lists nor blocks', async () => {
+test('boards are kept per PHYS_VER: after the bump to 5 a phys 4 or phys 3 row neither lists nor blocks', async () => {
   const { handleLeaderboard } = await import('../workers/sim-leaderboard/src/index.js');
-  assert.equal(boardKeyFor('2026-W44'), '2026-W44.p4');
-  assert.equal(boardKeyFor(dailyLineBoardKey('2026-10-27')), 'D2026-10-27.p4');
+  assert.equal(boardKeyFor('2026-W44'), '2026-W44.p5');
+  assert.equal(boardKeyFor(dailyLineBoardKey('2026-10-27')), 'D2026-10-27.p5');
   const week = utcWeekId();
   const track = weeklyTrackFor(week);
   const db = fakeD1();
   const env = { DB: db, ALLOWED_ORIGIN: 'https://quadmath.com' };
   const insert = 'INSERT INTO scores (week, class, name, time_ms, track_id, submitted_ms) VALUES (?, ?, ?, ?, ?, ?)';
-  // What the phys 3 Worker wrote this week: the bare week as the key, and the
-  // same pilot faster than the run below.
+  // What the phys 3 and phys 4 Workers wrote this week: the bare week and
+  // week.p4 as the key, and the same pilot faster than the run below.
   await db.prepare(insert).bind(week, 65, 'Ry', 1000, track.id, Date.now()).run();
+  await db.prepare(insert).bind(week + '.p4', 65, 'Ry', 1100, track.id, Date.now()).run();
   const boardUrl = 'https://x/api/board?week=' + week + '&class=65';
   const before = await (await handleLeaderboard(new Request(boardUrl), env)).json();
   assert.deepEqual(before.entries, []);
@@ -682,10 +689,12 @@ test('boards are kept per PHYS_VER: after the bump to 4 a phys 3 row neither lis
   const after = await (await handleLeaderboard(new Request(boardUrl), env)).json();
   assert.deepEqual(after.entries.map((r) => r.name), ['Ry']);
 
-  // The Daily Line board: today's phys 3 row is gone, a phys 4 row lists.
+  // The Daily Line board: today's phys 3 and phys 4 rows are gone, a phys 5
+  // row lists.
   const day = utcDateId();
   const line = dailyLineFor(day);
   await db.prepare(insert).bind(dailyLineBoardKey(day), 65, 'OLD', 3000, line.trackId, Date.now()).run();
+  await db.prepare(insert).bind(dailyLineBoardKey(day) + '.p4', 65, 'OLD', 3000, line.trackId, Date.now()).run();
   const lineUrl = 'https://x/api/daily?day=' + day + '&class=65';
   assert.deepEqual((await (await handleLeaderboard(new Request(lineUrl), env)).json()).entries, []);
   await db.prepare(insert).bind(boardKeyFor(dailyLineBoardKey(day)), 65, 'NEW', 9000, line.trackId, Date.now()).run();
@@ -693,20 +702,23 @@ test('boards are kept per PHYS_VER: after the bump to 4 a phys 3 row neither lis
 });
 
 test('the local board is kept per PHYS_VER under its own key; older rows are never read or written', () => {
-  assert.equal(boardStoreKey(), 'quadmathSimBoard.p4');
+  assert.equal(boardStoreKey(), 'quadmathSimBoard.p5');
   const store = memStore();
-  // What phys 3 pages left (and an old page still open in a tab keeps writing).
+  // What phys 3 and phys 4 pages left (and an old page still open in a tab
+  // keeps writing).
   const legacy = JSON.stringify({
     v: 1,
     weeks: { '2026-W44': { 65: [{ name: 'OLD', timeMs: 1000, trackId: 'weekly-2026-W44-g2', at: 1 }], 75: [], 85: [] } },
   });
   store.setItem(BOARD_KEY, legacy);
+  store.setItem(BOARD_KEY + '.p4', legacy);
   assert.deepEqual(boardRows(loadBoard(store), '2026-W44', 65), []);
   saveBoard(recordLocalBoard(loadBoard(store), {
     week: '2026-W44', frameMm: 65, name: 'RY', timeMs: 40000, trackId: 'weekly-2026-W44-g2',
   }), store);
   assert.deepEqual(boardRows(loadBoard(store), '2026-W44', 65).map((r) => r.name), ['RY']);
   assert.equal(store.getItem(BOARD_KEY), legacy, 'the old key is left as it was');
+  assert.equal(store.getItem(BOARD_KEY + '.p4'), legacy, 'the phys 4 key is left as it was');
 });
 
 test('L4 only today\'s daily counts; missed-day streak resets on load', () => {

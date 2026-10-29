@@ -395,9 +395,11 @@ export function bfChannels(sample, aux, ranges) {
 }
 
 // The airframe with a map's contact profile (sim-whoop.js BOUNCE_MAPS) on its
-// plant: sim-core v0.3.0 has no per-box restitution, so a bounce map scales
-// the plant's crash threshold (crashScale) and restitution (bounceScale) for
-// every contact there. No profile: the airframe as it is.
+// plant: sim-core has no per-box restitution, so a bounce map scales the
+// plant's crash threshold (crashScale) for every contact there, and its
+// restitution (bounceScale) for every contact but a box's walls, which since
+// sim-core v0.4.0 rebound at the airframe's wallRestitution on every map. No
+// profile: the airframe as it is.
 export function contactPlant(airframe, profile) {
   if (!profile || !airframe || !airframe.values) return airframe;
   const v = airframe.values;

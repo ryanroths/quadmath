@@ -9,12 +9,15 @@
 import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=1dedc1c1fd57';
 
 export const WHOOP_KEY = 'quadmathSimWhoop';
-// 4: the bf core (Betaflight 4.5.1 in sim-core) is the default, so the boards
-// start clean (the Worker keys every board by this number too); 3: the fixed
+// 5: sim-core v0.4.0, wall contact (the ducts' sides, Coulomb friction and
+// restitution on walls) and the Air65's measured duct height, so wall hits
+// glance instead of stopping; 4: the bf core (Betaflight 4.5.1 in sim-core) is
+// the default, so the boards start clean (the Worker keys every board by this
+// number too); 3: the fixed
 // 1 kHz cores, js the default and ?core=bf, with sim-time input; 2 ran on
 // frame time. sim-retention.js PHYS_VER (what the leaderboard Worker accepts)
 // is the same number.
-export const PHYSICS_VER = 4;
+export const PHYSICS_VER = 5;
 export const WHOOP_FEEL_VER = 3; // bump: wash + drafts default Off; migrate once
 export const GHOST_FORMAT_V = 1;
 
@@ -220,10 +223,13 @@ function unitOrDefault(n, fb) {
 }
 
 // Maps whose walls bounce: a contact there rebounds instead of stopping dead.
-// crash multiplies the crash threshold, bounce the restitution's bounce term;
-// the bf core gets the same through its plant (sim-core-adapter.js
-// contactPlant). The Rig: up to about 10.6 m/s into a face (a 65) rebounds at
-// about 0.41, where elsewhere 2.7 m/s is a crash at 0.10.
+// crash multiplies the crash threshold, bounce the restitution's bounce term.
+// The Rig on the js core: up to about 10.6 m/s into a face (a 65) rebounds at
+// about 0.41, where elsewhere 2.7 m/s is a crash at 0.10. The bf core takes
+// both through its plant (sim-core-adapter.js contactPlant), but since
+// sim-core v0.4.0 a box's walls rebound at the airframe's wallRestitution
+// (0.3) on every map: there bounce reaches only floors, box tops, undersides
+// and box edges, and crash still sets the threshold everywhere.
 export const BOUNCE_MAPS = Object.freeze({
   rig: Object.freeze({ crash: 4, bounce: 2 }),
 });
