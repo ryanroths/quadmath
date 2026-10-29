@@ -384,6 +384,8 @@ export function createSimAudio(opts = {}) {
         propGain: g.prop.gain.value,
         windHz: g.windLow.frequency.value,
         windGain: g.wind.gain.value,
+        windTargetHz: t.windHz,
+        windTargetGain: t.windGain,
         scrapeGain: g.scrape.gain.value,
         beeperGain: g.beep.gain.value,
         thuds,

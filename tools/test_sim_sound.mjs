@@ -268,7 +268,7 @@ const FLIGHT = String.raw`(() => {
       if (F.phase !== 'arming' && F.samples.length < 4000 && (F.samples.length === 0 || t - F.samples[F.samples.length - 1].t >= 100)) {
         F.samples.push({ t: Math.round(t), z: +cs.position.z.toFixed(2), vbat: cs.battV, hz: Math.round(mean(d.motorHz)), rpm: Math.round(mean(cs.rpm)), thr: +thr.toFixed(3), armed: cs.armed, x: +cs.position.x.toFixed(2), y: +cs.position.y.toFixed(2), roll: +(cs.attitude.roll * 57.3).toFixed(1), pitch: +(cs.attitude.pitch * 57.3).toFixed(1), sp: +speed.toFixed(2), cf: cs.contactFlags, phase: F.phase });
       }
-      if (speed > 1) F.wind.push({ speed, gain: d.windGain, hz: d.windHz });
+      if (speed > 1) F.wind.push({ t, speed, gain: d.windGain, targetGain: d.windTargetGain, targetHz: d.windTargetHz });
       if (F.wind.length > 2000) F.wind.shift();
     } catch (e) {
       F.error = String(e && e.stack || e);
@@ -445,17 +445,28 @@ test('bf core sound: graph on the first key, motor pitch from rpm rises on a pun
       assert.ok(c.peakHz < a.peakHz * 1.005, `punch ${i + 1} (${c.peakHz.toFixed(0)} Hz) not above punch ${i} (${a.peakHz.toFixed(0)} Hz)`);
     }
 
-    // Wind, over the last seconds flown (the wall run, 1 to 4 m/s): the level
-    // goes as airspeed squared (to 25%: it is smoothed over 80 ms), and the
-    // cutoff rises.
-    const slow = flight.wind.filter((w) => w.speed > 1 && w.speed < 1.6);
-    const fast = flight.wind.filter((w) => w.speed > 2.5);
-    assert.ok(slow.length > 50 && fast.length > 50, `wind samples slow ${slow.length}, fast ${fast.length}`);
-    const avg = (v, k) => v.reduce((x, y) => x + (typeof k === 'function' ? k(y) : y[k]), 0) / v.length;
-    const gainRatio = avg(fast, 'gain') / avg(slow, 'gain');
-    const speed2Ratio = avg(fast, (w) => w.speed * w.speed) / avg(slow, (w) => w.speed * w.speed);
-    assert.ok(Math.abs(gainRatio / speed2Ratio - 1) < 0.25, `wind level ratio ${gainRatio.toFixed(2)} vs airspeed squared ${speed2Ratio.toFixed(2)}`);
-    assert.ok(avg(fast, 'hz') > avg(slow, 'hz'), 'wind cutoff rises with airspeed');
+    // Wind, over the last seconds flown (1 to 4 m/s): on every sample the
+    // voice is set from the airspeed (level 0.3 x (v / 20 m/s)^2, cutoff
+    // 250 + 180 v Hz); where the speed has held within 2% for 240 ms (three
+    // of the level's 80 ms glide; a jump in speed, as the teleport before the
+    // wall slide, lags) the live level is the set one, to 10%.
+    assert.ok(flight.wind.length > 200, `wind samples (${flight.wind.length})`);
+    for (const w of flight.wind) {
+      const want = 0.3 * (w.speed / 20) ** 2;
+      assert.ok(Math.abs(w.targetGain - want) < 0.02 * want, `wind level ${w.targetGain} at ${w.speed.toFixed(2)} m/s, want ${want}`);
+      assert.ok(Math.abs(w.targetHz - (250 + 180 * w.speed)) < 1, `wind cutoff ${w.targetHz} at ${w.speed.toFixed(2)} m/s`);
+    }
+    const steadyWind = flight.wind.filter((w, i) => {
+      const win = flight.wind.filter((x, j) => j <= i && x.t >= w.t - 240).map((x) => x.speed);
+      return win.length >= 40 && w.t - flight.wind[Math.max(0, i - win.length)].t >= 240 && Math.max(...win) - Math.min(...win) < 0.02 * w.speed;
+    });
+    assert.ok(steadyWind.length > 100, `steady-speed wind samples (${steadyWind.length})`);
+    for (const w of steadyWind) {
+      assert.ok(Math.abs(w.gain - w.targetGain) < 0.1 * w.targetGain, `live wind level ${w.gain} vs ${w.targetGain} at ${w.speed.toFixed(2)} m/s`);
+    }
+    const slowest = flight.wind.reduce((a, w) => (w.speed < a.speed ? w : a));
+    const fastest = flight.wind.reduce((a, w) => (w.speed > a.speed ? w : a));
+    assert.ok(fastest.speed > 2 * slowest.speed && fastest.targetGain > 3.9 * slowest.targetGain, 'louder with airspeed');
 
     assert.ok(flight.wall && flight.wall.contacts > 0, 'the wall run touched a wall');
     assert.ok(flight.wall.peakScrape > 0.1 && flight.wall.peakScrapeSpeed > 1.5, `sliding along the wall scrapes (${flight.wall.peakScrape} at ${flight.wall.peakScrapeSpeed} m/s)`);
