@@ -11,7 +11,19 @@ THIRD-PARTY CODE
 Betaflight (https://github.com/betaflight/betaflight), GPL-3.0-or-later.
 sim-core compiles unmodified Betaflight 4.5.1 sources into its WebAssembly
 module. Any change to Betaflight is carried as a patch file in this
-repository, never as an edit to the Betaflight tree.
+repository, never as an edit to the Betaflight tree. scripts/build.sh
+applies them in name order to a copy of the tree:
+
+  patches/0001-keep-dyn-notch-in-simulator-build.patch
+      keeps the dynamic notch filter in the simulator build.
+  patches/0002-pg-sections-for-wasm-ld.patch
+      names the parameter-group sections so wasm-ld can bound them.
+  patches/0003-anti-gravity-fed-during-crash-flip.patch
+      keeps anti-gravity's throttle filter updated during crash flip. It
+      fixes a Betaflight bug (4.4.0 and later: the roll and pitch P and I
+      terms go NaN in crash flip), reported upstream as
+      betaflight/betaflight#15910:
+      https://github.com/betaflight/betaflight/issues/15910
 
 PORTED FROM QUADMATH
 

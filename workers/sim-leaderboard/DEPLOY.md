@@ -104,11 +104,11 @@ Anti-cheat on POST `/api/submit`:
   only for 36 hours after Monday 00:00 UTC.
 - Board GET filters by that week's track id.
 - Ghost `phys` must equal current physics version (`PHYS_VER` in
-  `sim-retention.js`: 4 since the bf core became the default, 3 for the
-  fixed 1 kHz cores before it).
+  `sim-retention.js`: 5 since sim-core v0.4.0's wall contact, 4 since the
+  bf core became the default, 3 for the fixed 1 kHz cores before it).
 - Every board is kept per physics version: `scores.week` holds
   `boardKeyFor(week)`, the week (or Daily Line `D`+day) plus `.p` and
-  `PHYS_VER`, e.g. `2026-W44.p4`. A `PHYS_VER` bump needs no D1 migration:
+  `PHYS_VER`, e.g. `2026-W44.p5`. A `PHYS_VER` bump needs no D1 migration:
   once deployed, the Worker reads and writes the new keys, the boards start
   empty, and the old rows stay in D1 unlisted. Deploy it when the page with
   the same `PHYS_VER` goes live: until then each side refuses the other's
