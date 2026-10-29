@@ -13,7 +13,7 @@ import vm from 'node:vm';
 import * as THREE from '../vendor/three.module.min.js';
 import {
   WS, toScene, toModule, boxToModule, InputClock, bfChannels, createBfCore, createJsCore, armingFlagNames, contactPlant,
-  auxRanges, pageAux, radioAux, rangeActive, AUX_CHANNELS,
+  auxRanges, pageAux, radioAux, rangeActive, AUX_CHANNELS, FLIP_STICK,
 } from '../sim-core-adapter.js';
 import { SimCore } from '../vendor/sim-core/sim-core.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
@@ -527,6 +527,179 @@ test('bf core turtle, as the page runs it, from an arm while flipped: upright, r
   core.setArm(false);
   assert.equal(core.turtlePhase, null);
   assert.equal(core.aux.turtle, false);
+});
+
+// F, the sim's flip (a sim assist): the sim drives AUX3, the arm and the roll.
+// The pilot's sticks stay centred, throttle down, as a keyboard left alone.
+test('bf core F flip, as the page runs it, from inverted at rest disarmed: AUX3, arm, roll; upright within 500 ms of the roll; crash flip ended, re-armed; counted once', async () => {
+  const rig = await turtleRig();
+  const { core } = rig;
+  rig.run(400);
+  rig.flip();
+  assert.equal(core.getState().armed, false);
+  assert.equal(core.startFlip(), true);
+  assert.deepEqual([core.turtlePhase, core.turtleAuto, core.aux.turtle, core.aux.arm], ['arm', true, true, true], 'AUX3 and AUX1 high');
+  let rollAt = null;
+  let uprightMs = null;
+  let rollUs = 0;
+  let again = null;
+  rig.run(1500, () => {
+    if (core.turtlePhase === 'flip') {
+      if (rollAt === null) rollAt = rig.wall;
+      rollUs = Math.max(rollUs, core.sim.fc.rcData[0]);
+      if (again === null) again = core.startFlip();
+    }
+    if (rollAt !== null && uprightMs === null && rig.upZ() > 0.9) uprightMs = rig.wall - rollAt;
+  });
+  assert.ok(rollAt !== null, 'armed into crash flip');
+  assert.equal(rollUs, 1500 + 500 * FLIP_STICK, 'the sim\'s roll reached Betaflight');
+  assert.ok(uprightMs !== null && uprightMs <= 500, `upright ${uprightMs} ms after the roll began`);
+  assert.equal(again, 'busy', 'F again mid-flip starts nothing');
+  assert.deepEqual(rig.events, ['flip', 'upright', 'rearm']);
+  assert.equal(core.turtlePhase, null);
+  assert.equal(core.turtleAuto, false);
+  assert.equal(core.aux.turtle, false, 'AUX3 low');
+  const s = core.getState();
+  assert.equal(s.crashFlip, false, 'crash flip ended');
+  assert.equal(s.armed, true, `armed to fly (flags ${armingFlagNames(core.sim.fc.armingDisableFlags)})`);
+  assert.equal(core.simFlips, 1, 'one F flip, counted once');
+  // The sticks are the pilot's again, and it rests upright armed at idle.
+  rig.stick = { r: -0.3, p: 0, y: 0, t: 0 };
+  rig.run(40);
+  assert.equal(core.sim.fc.rcData[0], 1350);
+  rig.stick = { r: 0, p: 0, y: 0, t: 0 };
+  let minUp = 1;
+  rig.run(2000, () => { minUp = Math.min(minUp, rig.upZ()); });
+  assert.ok(minUp > 0.95, `rests upright armed at idle (lowest up Z ${minUp.toFixed(3)})`);
+  assert.equal(core.getState().armed, true);
+});
+
+// Upright, F does nothing on the core (the page gives F its old job there,
+// the next flight mode); inverted in the air (a flip, a fall) it is not on
+// the floor, so no turtle and no disarm in the air.
+test('bf core F flip: upright and armed, or inverted in the air, F changes nothing', async () => {
+  const rig = await turtleRig();
+  const { core } = rig;
+  rig.run(400);
+  core.setArm(true);
+  rig.run(300);
+  assert.equal(core.getState().armed, true);
+  assert.equal(core.startFlip(), 'not-flipped');
+  assert.deepEqual([core.turtlePhase, core.turtleAuto, core.aux.turtle, core.aux.arm, core.simFlips], [null, false, false, true, 0]);
+  rig.run(500);
+  const s = core.getState();
+  assert.equal(s.armed, true, 'still armed');
+  assert.equal(s.crashFlip, false);
+  assert.ok(rig.upZ() > 0.99, `still level (up Z ${rig.upZ().toFixed(3)})`);
+  core.teleport({ x: 0, y: 0, z: 1.5 }, { x: 1, y: 0, z: 0, w: 0 });
+  rig.run(16);
+  assert.ok(rig.upZ() < -0.9 && core.sim.state.groundClearance > 1, 'inverted, 1.5 m up');
+  assert.equal(core.startFlip(), 'not-flipped');
+  assert.equal(core.turtlePhase, null);
+  rig.run(16);
+  assert.equal(core.getState().armed, true, 'no disarm in the air');
+  assert.equal(core.simFlips, 0);
+});
+
+test('bf core F flip: a disarm (Space) or a respawn (R) ends it, the sticks back to the pilot; F takes over the roll of a turtle the pilot started', async () => {
+  const rig = await turtleRig();
+  const { core } = rig;
+  const toRoll = () => { for (let n = 0; n < 200 && core.turtlePhase !== 'flip'; n++) rig.run(4); rig.run(40); };
+  rig.run(400);
+  // Space mid-roll: the page's toggleArm (coreArmed through a turtle) disarms.
+  rig.flip();
+  assert.equal(core.startFlip(), true);
+  toRoll();
+  assert.equal(core.turtlePhase, 'flip');
+  core.setArm(false);
+  assert.deepEqual([core.turtlePhase, core.turtleAuto, core.aux.turtle, core.aux.arm], [null, false, false, false]);
+  rig.stick = { r: -0.3, p: 0, y: 0, t: 0 };
+  rig.run(300);
+  assert.equal(core.sim.fc.rcData[0], 1350, 'the pilot\'s roll, not the sim\'s');
+  assert.equal(core.getState().armed, false);
+  assert.equal(core.getState().crashFlip, false);
+  rig.stick = { r: 0, p: 0, y: 0, t: 0 };
+  // R mid-roll: the page's resetQuad respawns the core.
+  rig.flip();
+  assert.equal(core.startFlip(), true);
+  toRoll();
+  core.respawn({ x: 0, y: 0, z: 0.05 }, { x: 0, y: 0, z: 0, w: 1 });
+  assert.deepEqual([core.turtlePhase, core.turtleAuto, core.aux.turtle, core.aux.arm], [null, false, false, false]);
+  rig.run(300);
+  assert.equal(core.getState().armed, false);
+  assert.equal(core.getState().crashFlip, false);
+  // Space while flipped starts the pilot's turtle (tryArm); F then rolls it.
+  rig.events.length = 0;
+  rig.flip();
+  assert.equal(core.startTurtle(), true);
+  toRoll();
+  assert.equal(core.turtleAuto, false);
+  assert.ok(rig.upZ() < -0.9, 'waits on its back for the pilot\'s roll');
+  assert.equal(core.startFlip(), true);
+  rig.run(1500);
+  assert.deepEqual(rig.events, ['flip', 'upright', 'rearm']);
+  assert.equal(core.getState().armed, true);
+  assert.equal(core.simFlips, 3, 'each F that started counted once');
+});
+
+test('bf core F flip: one that cannot come up (a ceiling over it) gives up after 3 s, FLIP and ARM off', async () => {
+  const core = await createBfCore({
+    SimCore,
+    wasm: readFileSync('vendor/sim-core/sim-core.wasm'),
+    airframe: JSON.parse(readFileSync('vendor/sim-core/airframes/air65.json', 'utf8')),
+    diff: OWNER_DIFF,
+    world: { floorZ: 0, boxes: [{ min: [-1, -1, 0.05], max: [1, 1, 0.5] }] },
+  });
+  let wall = 0;
+  const events = [];
+  const run = (ms) => {
+    for (const end = wall + ms; wall < end; wall += 4) {
+      const t = core.stamp(wall);
+      if (core.turtlePhase) { const ev = core.stepTurtle(true, true); if (ev) events.push(ev); }
+      if (t !== null) core.input({ r: 0, p: 0, y: 0, t: 0 }, t);
+      if (wall % 16 === 0) { core.advance(16); core.anchor(wall); }
+    }
+  };
+  run(400);
+  core.teleport({ x: 0, y: 0, z: 0.02 }, { x: 1, y: 0, z: 0, w: 0 });
+  run(1500);
+  assert.equal(core.startFlip(), true);
+  run(2900);
+  assert.deepEqual(events, ['flip'], 'still trying at 2.9 s');
+  run(400);
+  assert.deepEqual(events, ['flip', 'stuck']);
+  assert.deepEqual([core.turtlePhase, core.turtleAuto, core.aux.turtle, core.aux.arm], [null, false, false, false]);
+  assert.equal(core.getState().armed, false);
+  assert.equal(core.getState().crashFlip, false);
+});
+
+// The page's side, in the source (tools/test_sim_map_boot.mjs boots it).
+test('the page: F is flipKey: a bf flip logged once as a sim assist, else the next flight mode; no board rule', () => {
+  const html = readFileSync('sim.html', 'utf8').replace(/\r\n/g, '\n');
+  assert.ok(html.includes("if(e.key.toLowerCase()==='f')flipKey();"));
+  assert.equal(html.split("==='f')").length - 1, 1, 'nothing else on F');
+  const fk = html.slice(html.indexOf('function flipKey(){'), html.indexOf('function noteSimFlip(){'));
+  assert.ok(fk.includes('const r=core.startFlip();\n  if(r===true)noteSimFlip();'));
+  assert.equal(fk.split('noteSimFlip()').length - 1, 1, 'logged only for an F that started a flip');
+  assert.ok(fk.includes("else if(r==='not-flipped')toggleFlightMode();"));
+  assert.ok(fk.includes("toast('SIM FLIP IS ON THE BF CORE ONLY')"), 'the js core: a toast, no flip');
+  const note = html.slice(html.indexOf('function noteSimFlip(){'), html.indexOf('setInterval(pollInput,4);'));
+  assert.ok(note.includes('if(runActive)runSimFlips++;'));
+  assert.ok(note.includes("toast('SIM FLIP — SIM ASSIST'"));
+  assert.ok(note.includes("console.info('sim assist: F flip '"));
+  assert.equal(html.split('noteSimFlip();').length - 1, 1, 'one caller');
+  // Kept with the run: reset at its start, stored and shown with its result.
+  const start = html.slice(html.indexOf('function startRun(){'), html.indexOf('function finishRun(){'));
+  assert.ok(start.includes('runSimFlips=0;'));
+  const finish = html.slice(html.indexOf('function finishRun(){'), html.indexOf('function liveTrackIds(){'));
+  assert.ok(finish.includes('lastRunSimFlips[id]=runSimFlips;'));
+  assert.ok(finish.includes("(runSimFlips?' · SIM FLIP ×'+runSimFlips:'')"));
+  assert.ok(html.includes("if(lastRunSimFlips[id])html+='<br>SIM ASSIST · F FLIP ×'+lastRunSimFlips[id];"));
+  assert.ok(html.includes("else if(ev==='stuck')toast('SIM FLIP STUCK — R RESPAWNS');"));
+  // No board rule for assists yet: what decides the boards does not read it.
+  const boards = html.slice(html.indexOf('function noteRetentionFinish'), html.indexOf('async function maybeSubmitOnline'));
+  assert.ok(!/SimFlip/.test(boards) && !/SimFlip/.test(html.slice(html.indexOf('function runOffBoards'), html.indexOf('function runOffBoards') + 200)));
+  assert.ok(html.includes('const counted=runCountsForBoards(threeD);'));
 });
 
 test('quadphysics FF: 4 ms samples at 1 kHz ticks get the same feedforward as 60 fps frames', () => {
