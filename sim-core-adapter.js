@@ -826,8 +826,10 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
       if (!out.rpm) out.rpm = [0, 0, 0, 0];
       for (let i = 0; i < 4; i++) out.rpm[i] = s.rpm[i];
       out.contactFlags = s.contactFlags;
-      // Betaflight's beeper sounding now (isBeeperOn(), sim-core v0.5.0).
-      out.beeper = fc.beeper;
+      // Betaflight's beeper sounding now (isBeeperOn(), sim-core v0.5.0),
+      // muted while AUX3 is high (rcData[6]: the owner's BEEPER, which shares
+      // the turtle switch); arm and disarm beeps play.
+      out.beeper = fc.beeper && !(fc.rcData[6] >= 1700);
       const thrust = s.thrustN.reduce((a, b) => a + Math.abs(b), 0);
       out.totalThrustAbsN = thrust;
       out.twr = thrust / weightN;
