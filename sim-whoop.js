@@ -9,8 +9,8 @@
 import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=1dedc1c1fd57';
 
 export const WHOOP_KEY = 'quadmathSimWhoop';
-// 5: sim-core v0.4.0, wall contact (the ducts' sides, Coulomb friction and
-// restitution on walls) and the Air65's measured duct height, so wall hits
+// 5: sim-core v0.4.0, wall contact (the ducts' sides, 14.5 mm from BetaFPV's
+// frame table, with Coulomb friction and restitution on walls), so wall hits
 // glance instead of stopping; 4: the bf core (Betaflight 4.5.1 in sim-core) is
 // the default, so the boards start clean (the Worker keys every board by this
 // number too); 3: the fixed
