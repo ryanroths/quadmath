@@ -57,7 +57,9 @@ test('every catalog map and daily host has a vibe with a full palette', () => {
     for (const key of ['void', 'zenith', 'horizon', 'dusk', 'street', 'facade', 'neonA', 'neonB', 'gateA', 'gateB']) {
       assert.match(v.palette[key], HEX, id + ' ' + key);
     }
-    assert.ok(v.lighting.fogDensity > 0);
+    // The Rig has no fog: the owner's spec ("no fog"); every other map has some.
+    if (id === 'rig') assert.equal(v.lighting.fogDensity, 0);
+    else assert.ok(v.lighting.fogDensity > 0);
     assert.ok(Array.isArray(v.props) && v.props.length >= 2);
     assert.ok(v.gates && v.gates.style);
   }
@@ -120,12 +122,116 @@ test('mergeStaticArt collapses same-material static meshes', () => {
   assert.equal(meshes, 1);
 });
 
+test('mergeStaticArt merges the shown map, not the first map visited', () => {
+  // Every visited indoor map keeps its hidden group under indoorWorld; The Rig,
+  // the boot map, is first for everyone.
+  const root = new THREE.Group();
+  const mapGroup = (id, visible) => {
+    const g = new THREE.Group();
+    g.visible = visible;
+    const vis = new THREE.Group();
+    vis.name = id + 'ArtVisuals';
+    const mat = new THREE.MeshBasicMaterial();
+    for (const x of [-1, 1]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
+      m.position.x = x;
+      vis.add(m);
+    }
+    g.add(vis);
+    root.add(g);
+    return vis;
+  };
+  const rig = mapGroup('rig', false);
+  const gym = mapGroup('gym', true);
+  assert.equal(mergeStaticArt(THREE, root), 2);
+  const count = (g) => { let n = 0; g.traverse((o) => { if (o.isMesh) n += 1; }); return n; };
+  assert.equal(count(gym), 1);
+  assert.equal(count(rig), 2);
+});
+
+test('mergeStaticArt carries uvs for a textured bucket; a uv-less mesh keeps it unmerged', () => {
+  const tex = new THREE.Texture();
+  const rootOf = (meshes) => {
+    const root = new THREE.Group();
+    const vis = new THREE.Group();
+    vis.name = 'gymArtVisuals';
+    root.add(vis);
+    meshes.forEach((m, i) => { m.position.x = i * 2; vis.add(m); });
+    return { root, vis };
+  };
+  const mat = new THREE.MeshBasicMaterial({ map: tex });
+  const boxes = [new THREE.BoxGeometry(1, 1, 1), new THREE.BoxGeometry(1, 2, 1)];
+  const want = boxes.flatMap((g) => Array.from(g.toNonIndexed().getAttribute('uv').array));
+  const a = rootOf(boxes.map((g) => new THREE.Mesh(g, mat)));
+  assert.equal(mergeStaticArt(THREE, a.root), 2);
+  assert.equal(a.vis.children.length, 1);
+  const uv = a.vis.children[0].geometry.getAttribute('uv');
+  assert.ok(uv, 'merged textured mesh has uvs');
+  assert.deepEqual(Array.from(uv.array), want, 'uvs in vertex order');
+  // An alpha-only texture reads uvs too.
+  const cut = new THREE.MeshBasicMaterial({ alphaMap: tex });
+  const alpha = rootOf([0, 1].map(() => new THREE.Mesh(new THREE.PlaneGeometry(1, 1), cut)));
+  mergeStaticArt(THREE, alpha.root);
+  assert.ok(alpha.vis.children[0].geometry.getAttribute('uv'), 'alphaMap bucket keeps uvs');
+  // One mesh without uvs: the bucket stays as it was rather than lose the texture.
+  const bare = new THREE.BoxGeometry(1, 1, 1);
+  bare.deleteAttribute('uv');
+  const b = rootOf([new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat), new THREE.Mesh(bare, mat)]);
+  assert.equal(mergeStaticArt(THREE, b.root), 0);
+  assert.equal(b.vis.children.length, 2);
+  // Untextured buckets still merge, without uvs.
+  const plain = new THREE.MeshBasicMaterial();
+  const c = rootOf([new THREE.Mesh(bare.clone(), plain), new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), plain)]);
+  assert.equal(mergeStaticArt(THREE, c.root), 2);
+  assert.equal(c.vis.children[0].geometry.getAttribute('uv'), undefined);
+});
+
+test('after the draw-call merge no textured mesh on any map lacks uvs', () => {
+  // A merged mesh with a texture but no uvs samples one texel: the CLAY, STAGE,
+  // ION and SUN signs showed their border colour, felt, wood and stucco went flat.
+  installDomStub();
+  const RESTYLE = {
+    living: restyleLiving, garage: restyleGarage, gym: restyleGym, office: restyleOffice,
+    room: restyleRoom, trainer: restyleTrainer, warehouse: restyleWarehouse, backyard: restyleBackyard,
+  };
+  // Every texture slot but the scene's environment is read through uvs.
+  const textured = (m) => Object.keys(m).some((k) => k !== 'envMap' && m[k] && m[k].isTexture);
+  const hasTexturedMerge = ['rig', 'living', 'gym', 'office', 'room', 'warehouse', 'backyard'];
+  for (const id of MAP_IDS.concat(['city'])) {
+    for (const quality of ['low', 'high']) {
+      const root = new THREE.Group();
+      if (id === 'city') {
+        const sky = new THREE.Mesh(new THREE.SphereGeometry(40, 8, 6), new THREE.MeshBasicMaterial());
+        restyleCity(THREE, { vibe: vibeFor('city'), quality, proceduralGroup: root, skyMesh: sky, gates: FROZEN_CITY[0] });
+      } else {
+        const built = buildMap(THREE, id);
+        if (RESTYLE[id]) RESTYLE[id](THREE, { vibe: vibeFor(id), quality, group: built.group, floor: built.floor, plan: built.plan });
+        root.add(built.group);
+      }
+      mergeStaticArt(THREE, root);
+      let merged = 0;
+      root.traverse((o) => {
+        if (!o.isMesh) return;
+        for (const m of [].concat(o.material || [])) {
+          if (!textured(m)) continue;
+          const where = `${id} ${quality} ${m.type} ${m.name || '#' + (m.color ? m.color.getHexString() : '')}`;
+          const uv = o.geometry.getAttribute('uv');
+          assert.ok(uv, where + ' has a texture but no uvs');
+          assert.equal(uv.count, o.geometry.getAttribute('position').count, where + ' uv count');
+          if (o.userData.mergedStatic) merged += 1;
+        }
+      });
+      if (hasTexturedMerge.includes(id)) assert.ok(merged > 0, `${id} ${quality}: a textured bucket merged`);
+    }
+  }
+});
+
 test('hexNum and vibeTable are stable helpers', () => {
   assert.equal(hexNum('#ff2bd6'), 0xff2bd6);
   assert.equal(hexNum(0x88a0ff), 0x88a0ff);
   const table = vibeTable();
-  assert.equal(table.length, 9);
-  assert.equal(table.filter((r) => r.implemented).length, 9);
+  assert.equal(table.length, 10);
+  assert.equal(table.filter((r) => r.implemented).length, 10);
 });
 
 test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {

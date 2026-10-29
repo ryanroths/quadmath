@@ -10,25 +10,25 @@ Boot apply order: map/track → build → mode → **preset → rates** → dril
 
 ```html
 <p>
-  <a href="https://quadmath.com/sim.html?map=living&amp;track=living-sofa&amp;mode=angle&amp;build=QB1.air65&amp;preset=whoopBeginner&amp;drill=hover-hold">Try it in the sim</a>
+  <a href="https://quadmath.com/sim.html?map=living&amp;track=living-sofa&amp;mode=angle&amp;build=QB1.air65&amp;preset=whoopBeginner&amp;drill=hover-hold&amp;dev=1">Try it in the sim</a>
   — approximate whoop physics, not a thrust-stand log. Paste your Betaflight dump in Tune (Tab) if these rates are not yours.
 </p>
 ```
 
-Swap from the pairing table. Two-link pages (analog vs HDZero, Air vs Meteor, 65 vs 75 pack) get two anchors, same sentence.
+Swap from the pairing table. Two-link pages (analog vs HDZero, Air vs Meteor, 65 vs 75 pack) get two anchors, same sentence. Every guide link ends in `&dev=1`: the guides pair with the dev maps, and without it a link lands on The Rig.
 
 | Param | What |
 | --- | --- |
-| `map` | `city` `living` `garage` `warehouse` `office` `gym` `trainer` `room` `backyard` |
+| `map` | `rig` (The Rig, the launch map). `city` `living` `garage` `warehouse` `office` `gym` `trainer` `room` `backyard` open only with `dev=1`; without it the link lands on The Rig (free flight). |
 | `build` | Share code. Named presets (`QB1.air65`) or full `QB1.65-23000-31x3-1s300-27`. Physics only. |
-| `track` | Course id (`living-sofa`, `office-cubicles`, `gym-court`, `trainer-figure8`, `city-loop`, `0` / `1` for legacy city). |
+| `track` | Course id (`rig-loop`; with `dev=1`: `living-sofa`, `office-cubicles`, `gym-court`, `trainer-figure8`, `city-loop`, `0` / `1` for legacy city). |
 | `mode` | `angle` (default for newcomers), `horizon`, or `acro`. |
 | `preset` | Rate preset id: `whoopBeginner` `whoopRace` `freestyle` `ryanActual`. |
 | `rates` | Compact token `TYPE.rollRc.rollSr.rollEx.pitchRc.pitchSr.pitchEx.yawRc.yawSr.yawEx` (CLI integers; expo 0–100). Wins over `preset`. Example: `ACTUAL.4.74.56.4.74.56.4.70.56`. Card aliases: `card.65-betafpv-stock`, `card.65-betafpv-ryfly-1219s`, `card.75-betafpv-ryfly-o4-gf1811`, `card.75-happymodel-aio-stock`. |
 | `3d` | `1` enables Betaflight-style 3D (reversible motors, acro). Center throttle is zero thrust. 3D runs are not counted on boards. |
 | `drill` | W4 Coach id (`hover-hold`, `yaw-spin`, `straight-line`, `gate-pass`, `doorway-pass`, `split-s`, `power-loop`). Bronze on the previous drill unlocks the next. |
 
-Copy a live rates URL from Tune → COPY RATES LINK (next to IMPORT CLI). Copy a build-only URL from Tune → Your build → COPY BUILD LINK.
+Copy a live rates URL from Tune → COPY RATES LINK (next to IMPORT CLI). Copy a build-only URL from Tune → Your build → COPY BUILD LINK. Both add `&dev=1` themselves when the map you are flying needs it (any map but The Rig, except a Daily, weekly or room-practice course).
 
 ## Preset codes
 
@@ -45,7 +45,7 @@ Copy a live rates URL from Tune → COPY RATES LINK (next to IMPORT CLI). Copy a
 | `QB1.meteor75pro` | 85mm-class 1S 19000KV, 40×4, 480 mAh, 41.5 g | Guide 80mm / 41.5 g O4 Wide; nearest picker class is 85mm. |
 | `QB1.whoop85_2s` | 85mm 2S 11000KV, 51×3, 450 mAh, 48 g | Class ballpark. |
 
-Indoor whoop tracks to prefer: `living-sofa`, `living-circuit`, `garage-bench`, `warehouse-aisle`, `office-cubicles`, `gym-court`, `trainer-figure8`. City loop remains `city-loop` (legacy `0`).
+Indoor whoop tracks to prefer: `rig-loop` (no `dev=1` needed); with `dev=1`: `living-sofa`, `living-circuit`, `garage-bench`, `warehouse-aisle`, `office-cubicles`, `gym-court`, `trainer-figure8`. City loop remains `city-loop` (legacy `0`).
 
 ## Rate presets
 
@@ -65,7 +65,9 @@ Published cards (also `?rates=card.<id>`):
 | `card.75-betafpv-ryfly-o4-gf1811` | Actual | 2,73,56 / 2,73,56 / 2,70,56 |
 | `card.75-happymodel-aio-stock` | Betaflight | 100,70,0 (all axes) |
 
-Your room (W3) is generated in the sim from L×W×H. Deep-link the last saved cell with `?map=room` or `?track=room-practice`, or pass `?room=16x12x8ft` / `?room=5x4x2.6m`.
+The Rig is the launch map and the only map open without `dev=1`: `?map=rig` (free flight) or `?track=rig-loop` (the 17-gate loop). Links to any other map carry `&dev=1`; the snippet and every example here do. A link without it opens The Rig.
+
+Your room (W3) is generated in the sim from L×W×H. Deep-link the last saved cell with `?map=room&dev=1` or `?track=room-practice` (a generated course, open without `dev=1`), or pass `?room=16x12x8ft` / `?room=5x4x2.6m`.
 
 ## Existing guides (scan of `content/guides/`)
 
@@ -92,17 +94,17 @@ Suggested params for Ryan to apply. No guide file is edited here. Skip chargers 
 Example URLs:
 
 ```
-https://quadmath.com/sim.html?map=living&track=living-sofa&mode=angle&build=QB1.air65&preset=whoopBeginner&drill=hover-hold
-https://quadmath.com/sim.html?map=living&track=living-circuit&mode=acro&build=QB1.air65&rates=ACTUAL.2.74.56.2.74.56.2.70.56
-https://quadmath.com/sim.html?build=QB1.mobula6&track=living-circuit&mode=acro&preset=whoopRace
-https://quadmath.com/sim.html?build=QB1.meteor75pro&track=garage-bench&mode=angle&preset=whoopBeginner
-https://quadmath.com/sim.html?build=QB1.whoop85_2s&track=warehouse-aisle&mode=horizon
-https://quadmath.com/sim.html?build=QB1.air65&track=office-cubicles&mode=angle
-https://quadmath.com/sim.html?build=QB1.air65&track=gym-court&mode=angle
-https://quadmath.com/sim.html?build=QB1.whoop65&track=trainer-figure8&mode=angle&preset=whoopBeginner
-https://quadmath.com/sim.html?build=QB1.air65&track=trainer-slalom&mode=acro
-https://quadmath.com/sim.html?map=room&room=16x12x8ft&mode=angle
-https://quadmath.com/sim.html?build=QB1.air65&track=trainer-figure8&mode=acro&3d=1
+https://quadmath.com/sim.html?map=living&track=living-sofa&mode=angle&build=QB1.air65&preset=whoopBeginner&drill=hover-hold&dev=1
+https://quadmath.com/sim.html?map=living&track=living-circuit&mode=acro&build=QB1.air65&rates=ACTUAL.2.74.56.2.74.56.2.70.56&dev=1
+https://quadmath.com/sim.html?build=QB1.mobula6&track=living-circuit&mode=acro&preset=whoopRace&dev=1
+https://quadmath.com/sim.html?build=QB1.meteor75pro&track=garage-bench&mode=angle&preset=whoopBeginner&dev=1
+https://quadmath.com/sim.html?build=QB1.whoop85_2s&track=warehouse-aisle&mode=horizon&dev=1
+https://quadmath.com/sim.html?build=QB1.air65&track=office-cubicles&mode=angle&dev=1
+https://quadmath.com/sim.html?build=QB1.air65&track=gym-court&mode=angle&dev=1
+https://quadmath.com/sim.html?build=QB1.whoop65&track=trainer-figure8&mode=angle&preset=whoopBeginner&dev=1
+https://quadmath.com/sim.html?build=QB1.air65&track=trainer-slalom&mode=acro&dev=1
+https://quadmath.com/sim.html?map=room&room=16x12x8ft&mode=angle&dev=1
+https://quadmath.com/sim.html?build=QB1.air65&track=trainer-figure8&mode=acro&3d=1&dev=1
 ```
 
 W3 indoor maps (same `?track=` / `?map=` / `?mode=` scheme as W1):

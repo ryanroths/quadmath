@@ -37,7 +37,7 @@ import {
   mulberry32, weekAllowed, previousUtcWeekId, isPaceBotGhost, issuePilotToken,
   hashPilotToken, pickCorsOrigin, isLocalHost, escapeHtml, classFromBuild,
   syncDailyStreak, applyMissedDayReset,
-  DAILY_LINE_KEY, DAILY_LINE_TRACKS, DAILY_LINE_MIN_MS, dailyLineFor, dailyLineBoardKey, boardKeyFor, boardStoreKey,
+  DAILY_LINE_KEY, DAILY_LINE_TRACKS, DAILY_LINE_MIN_MS, dailyLineFor, dailyLinePool, dailyLineBoardKey, boardKeyFor, boardStoreKey,
   loadDailyLine, saveDailyLine, recordDailyLineFinish, validateDailyLineRun,
   normalizeDailyLineSubmit, dailyLineRank, dailyLineMeta,
 } from '../sim-retention.js';
@@ -1033,6 +1033,17 @@ test('Daily Line seed is stable, named, and not a city 3-lap', () => {
     }
     assert.ok(named.has(meta.id), 'pool missing ' + meta.id);
   }
+  // Gate counts match the files, and a track joins the draw only from its
+  // `from` day: every earlier day keeps the pool, so its board keeps its track.
+  for (const t of DAILY_LINE_TRACKS) {
+    const file = BUILTIN_TRACK_FILES.find((meta) => meta.id === t.id);
+    assert.equal(JSON.parse(readFileSync(join(root, file.file), 'utf8')).gates.length, t.gates, t.id + ' gate count');
+  }
+  const rig = DAILY_LINE_TRACKS.find((t) => t.id === 'rig-loop');
+  assert.ok(rig && rig.from);
+  assert.equal(dailyLinePool('2026-10-21').some((t) => t.id === 'rig-loop'), false);
+  assert.equal(dailyLinePool('2026-10-21').length, DAILY_LINE_TRACKS.length - 1);
+  assert.equal(dailyLinePool(rig.from).some((t) => t.id === 'rig-loop'), true);
   const store = memStore();
   const rec = recordDailyLineFinish(loadDailyLine(store), {
     utc: '2026-10-21', timeMs: 9800, trackId: a.trackId, splits: new Array(a.gates - 1).fill(1200),

@@ -270,6 +270,14 @@ export const armingFlagNames = (flags) => ARMING_FLAGS.filter((_, bit) => flags 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const us = (v) => Math.round(clamp(1500 + 500 * v, 1000, 2000));
 
+// The stick an F flip (createBfCore startFlip) holds in crash flip, of full,
+// until the quad is upright. On the Air65 on its back on a flat floor: 0.5
+// does not lift it, 0.55 takes 544 ms (and none from resting 38 degrees on its
+// side), 0.7 is up in 208 ms and stays up (up Z over 0.9), 0.9 rocks it back
+// to up Z 0.22, and full stick carries it on over onto its back again (held,
+// it tumbles about 800 ms before it settles).
+export const FLIP_STICK = 0.7;
+
 // ---- The bf core's aux channels ----
 
 // AUX1..AUX12, after the four sticks: the 16 channels sim-core takes.
@@ -386,6 +394,21 @@ export function bfChannels(sample, aux, ranges) {
   return ch;
 }
 
+// The airframe with a map's contact profile (sim-whoop.js BOUNCE_MAPS) on its
+// plant: sim-core v0.3.0 has no per-box restitution, so a bounce map scales
+// the plant's crash threshold (crashScale) and restitution (bounceScale) for
+// every contact there. No profile: the airframe as it is.
+export function contactPlant(airframe, profile) {
+  if (!profile || !airframe || !airframe.values) return airframe;
+  const v = airframe.values;
+  const scaled = (key, k) => {
+    const f = v[key];
+    if (!f || !Number.isFinite(f.value) || !(k > 0)) return f;
+    return { ...f, value: f.value * k, note: (f.note ? f.note + '; ' : '') + 'x' + k + ' for a bounce map' };
+  };
+  return { ...airframe, values: { ...v, crashScale: scaled('crashScale', profile.crash), bounceScale: scaled('bounceScale', profile.bounce) } };
+}
+
 // SimCore is quadmath-sim-core's class (vendor/sim-core/sim-core.js); wasm is
 // its module's URL or bytes; airframe the plant file; diff the CLI text;
 // world { floorZ, boxes, triggers } in module metres.
@@ -407,9 +430,32 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
   let turtleAtUs = 0;
   let uprightAtUs = null;
   let quietAtUs = null;
+  // F, the sim's flip (startFlip): null, or the way it rolls (r, p: -1, 0 or
+  // 1, times FLIP_STICK) and when the roll began (atUs: null until Betaflight
+  // is in crash flip).
+  let auto = null;
+  let simFlips = 0;
+  const newAuto = () => ({ r: 0, p: 0, atUs: null });
+  const endTurtle = () => { turtle = null; auto = null; };
   const upZ = () => {
     const [, x, y] = sim.state.quat;
     return 1 - 2 * (x * x + y * y);
+  };
+  // The short way over: toward the lower side, so the high side lifts over the
+  // low edge; pitch when the nose or tail is lower than either side; flat to
+  // 0.1 (about 6 degrees), a right roll (either way is the same there). The
+  // Air65 resting 38 degrees down on one side is up in 208 ms rolling that
+  // way, 272 ms the other; resting tail-down, 208 ms on pitch, 240 on roll.
+  const aimFlip = () => {
+    const [w, x, y, z] = sim.state.quat;
+    const left = 2 * (y * z + w * x);   // world Z of the body's left (+Y)
+    const nose = 2 * (x * z - w * y);   // world Z of the nose (+X)
+    auto.atUs = sim.simTimeUs;
+    auto.r = 0;
+    auto.p = 0;
+    if (Math.max(Math.abs(left), Math.abs(nose)) < 0.1) auto.r = 1;
+    else if (Math.abs(left) >= Math.abs(nose)) auto.r = left > 0 ? -1 : 1;
+    else auto.p = nose > 0 ? 1 : -1;
   };
   // The quad's tilt from level, and Betaflight's estimate of it (fc.attitude
   // roll and pitch, degrees), in degrees.
@@ -434,7 +480,7 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     aux.arm = false;
     aux.holdThrottle = false;
     aux.turtle = false;
-    turtle = null;
+    endTurtle();
   };
   const configured = (r) => {
     core.report = r;
@@ -477,11 +523,17 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
         aux.arm = false;
         aux.holdThrottle = false;
         aux.turtle = false;
-        turtle = null;
+        endTurtle();
         // A radio taking over: the link drops and comes back with its
         // switches as they are, so an ARM already on meets Betaflight's
         // guard (NOT_DISARMED), as at a boot.
         if (source === 'radio') link.drop();
+      }
+      // An F flip flies its own sticks until the quad is upright: centred with
+      // the throttle low, and in the 'flip' step its roll.
+      if (auto && turtle !== 'rearm') {
+        const k = turtle === 'flip' && auto.atUs !== null ? FLIP_STICK : 0;
+        sample = { r: k * auto.r, p: k * auto.p, y: 0, t: 0 };
       }
       try {
         sim.input(bfChannels(sample, aux, ranges), stampUs);
@@ -501,7 +553,7 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
       holdUntilUs = sim.simTimeUs + 200_000;
       if (!on && turtle) {
         aux.turtle = false;
-        turtle = null;
+        endTurtle();
       }
     },
     setMode(mode) { aux.mode = mode; },
@@ -546,12 +598,45 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
       }
       return true;
     },
+    // F, the sim's flip: a sim assist, not piloting (the page logs each one).
+    // The turtle above with the sim on the sticks (input()): FLIP on, ARM on
+    // with the throttle low, then FLIP_STICK the short way over (aimFlip),
+    // held to the turtle's 'upright' and let go there; from 'upright' on, the
+    // turtle's own steps: crash flip ends on the disarm, and ARM comes back
+    // once the pilot's throttle is low. Not upright 3 s into the roll: 'stuck',
+    // FLIP and ARM off (on its back beside a wall the Air65 stands on its edge
+    // against it and walks up in about 1.7 s). Only upside down on the floor
+    // (up Z under -0.35 within 4 cm of it, as the page's bfFlippedOnFloor),
+    // or to take over a turtle the pilot started that is not upright yet. true
+    // when it starts; otherwise why not, nothing changed: 'busy' (an F flip
+    // under way, or a turtle past upright), 'not-flipped', 'radio' (the radio's
+    // switches fly) or 'no-switch' (no FLIP OVER AFTER CRASH in the diff).
+    startFlip() {
+      if (turtle) {
+        if (auto || turtle === 'rearm') return 'busy';
+        auto = newAuto();
+        if (turtle === 'flip') aimFlip();
+        simFlips++;
+        return true;
+      }
+      if (!(upZ() < -0.35 && sim.state.groundClearance <= 0.04)) return 'not-flipped';
+      if (auxSource === 'radio') return 'radio';
+      if (!core.startTurtle()) return 'no-switch';
+      auto = newAuto();
+      simFlips++;
+      return true;
+    },
+    // Whether the turtle under way is an F flip, and how many F flips this
+    // core has started.
+    get turtleAuto() { return !!auto; },
+    get simFlips() { return simFlips; },
     // Once per input sample, before input(). throttleLow: the pilot's throttle
     // is low enough to arm; sticksCentred: roll, pitch and yaw near centre.
     // Returns what changed: 'flip' (in crash flip),
     // 'upright', 'rearm' (ARM back on), 'refused' (Betaflight did not arm
     // into crash flip; the reason is in armingDisableFlags), 'ended'
-    // (Betaflight disarmed during the flip), or null.
+    // (Betaflight disarmed during the flip), 'stuck' (an F flip that did not
+    // come up: FLIP and ARM off), or null.
     stepTurtle(throttleLow, sticksCentred = true) {
       const fc = sim.fc;
       const sinceUs = sim.simTimeUs - turtleAtUs;
@@ -567,13 +652,14 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
         case 'arm':
           if (fc.armed && fc.crashFlip) {
             toTurtle('flip');
+            if (auto) aimFlip();
             return 'flip';
           }
           if (sinceUs > 400_000) {
             aux.turtle = false;
             aux.arm = false;
             aux.holdThrottle = false;
-            turtle = null;
+            endTurtle();
             return 'refused';
           }
           return null;
@@ -581,7 +667,7 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
           if (!fc.armed) {
             aux.turtle = false;
             aux.arm = false;
-            turtle = null;
+            endTurtle();
             return 'ended';
           }
           if (upZ() <= 0.9) uprightAtUs = null;
@@ -592,6 +678,12 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
             toTurtle('rearm');
             return 'upright';
           }
+          if (auto && uprightAtUs === null && sim.simTimeUs - auto.atUs >= 3_000_000) {
+            aux.turtle = false;
+            aux.arm = false;
+            endTurtle();
+            return 'stuck';
+          }
           return null;
         case 'rearm':
           if (fc.gyroFiltered.some((g) => Math.abs(g) >= 0.5)) quietAtUs = null;
@@ -600,7 +692,7 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
             && quietAtUs !== null && sim.simTimeUs - quietAtUs >= 500_000
             && Math.hypot(...sim.state.omega) < 0.5 && Math.abs(estimateTiltDeg(fc) - tiltDeg()) < 0.1) {
             aux.arm = true;
-            turtle = null;
+            endTurtle();
             return 'rearm';
           }
           return null;
@@ -669,6 +761,18 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     loadDiff(text) {
       config = { ...config, diff: text };
       const r = sim.configure(config);
+      configured(r);
+      pending = [];
+      rebooted();
+      return r;
+    },
+    // A new plant (a map's contact profile, contactPlant) on the same diff and
+    // world: configure again (Betaflight reboots). The stored config changes
+    // only once the new image boots.
+    setPlant(plant) {
+      const next = { ...config, plant };
+      const r = sim.configure(next);
+      config = next;
       configured(r);
       pending = [];
       rebooted();

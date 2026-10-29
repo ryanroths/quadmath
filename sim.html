@@ -468,7 +468,7 @@
     <button class="menu-flight" id="menuTracks">Tracks</button>
     <button class="menu-flight" id="menuCoach">Coach</button>
     <button class="menu-flight" id="menuBuilder">Track builder</button>
-    <button class="menu-flight" id="menuRoom">Your room</button>
+    <button class="menu-flight dev-only" id="menuRoom">Your room</button>
     <button class="menu-flight" id="menuBuild">Your build</button>
     <button class="menu-flight" id="menuReplay">Replay</button>
     <button class="menu-flight" id="menuGhostCodes">Ghost / Duel codes</button>
@@ -486,7 +486,7 @@
       <button type="button" data-q="med">Med</button>
       <button type="button" data-q="high">High</button>
     </div>
-    <p class="menu-sparks" id="menuSparks"></p>
+    <p class="menu-sparks dev-only" id="menuSparks"></p>
   </div>
   <div class="menu-layer" id="menuLayer"></div>
 </div>
@@ -558,6 +558,7 @@
   <b id="legendGhost">G — Ghost Replay</b><br>
   <b>C — Coach / line</b><br>
   <b>R — Respawn last gate</b><br>
+  <b>F — Sim flip when upside down</b><br>
   <b>ESC — Menu</b><br>
   <b>TAB — Tune Panel</b>
 </div>
@@ -826,7 +827,8 @@
     <b>R</b> last-gate respawn &nbsp;<b>Tab</b> panel<br>
     🔊 <b>M</b> music &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
     3D (Tune panel): center throttle = zero, below = reverse. Acro only. Not counted on boards.<br>
-    <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach
+    <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach<br>
+    <b>F</b> upside down on bf: sim flip (logged as an assist); else next mode
   </div>
   <button type="button" id="btnFreestyle">FREESTYLE THIS MAP</button>
   <button id="btnReset">RESET QUAD [R]</button>
@@ -888,8 +890,8 @@ import * as THREE from "three";
 import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=1592e07fcc0d";
 import {
   WS as CORE_WS, TICK_US, toScene, toModule, boxToModule, emptyState,
-  createJsCore, createBfCore, armingFlagNames, radioAux,
-} from "./sim-core-adapter.js?v=a1c13631d412";
+  createJsCore, createBfCore, contactPlant, armingFlagNames, radioAux,
+} from "./sim-core-adapter.js?v=ce1282cd5a39";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
@@ -897,14 +899,15 @@ import {
   throttleCollective, armHintText, stepAutoArm,
 } from "./sim-3d.js?v=712268ce8b16";
 import {
-  WHOOP_KEY, PHYSICS_VER,
+  WHOOP_KEY, PHYSICS_VER, BOUNCE_MAPS,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=df5652b3bc91";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=ed4ee91304b7";
+} from "./sim-whoop.js?v=495a3ce1ab83";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=bf164b66fe45";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
+  decorateRigGate, pulseRigGate,
   applyVibeLighting, artStats, qualityWantsBloom, vibePost, loadRain, saveRain, RAIN_KEY,
   makeWorldLabel, worldLabelMaterial, setWorldLabelText,
   restyleLiving, decorateLivingGate, pulseLivingGate, tickLivingArt,
@@ -916,7 +919,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=62263cdb28a4";
+} from "./sim-art.js?v=da82aee1f80d";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -936,37 +939,37 @@ import {
   ghostStorageKey, bestLapStorageKey, bestRunStorageKey, isLegacyTrackId, legacyIndex,
   hostedGhostUrl, fetchBuiltinTracks, makePaceGhost,
   BUILTIN_TRACK_FILES, SHARE_PREFIX, applyMissPenalty, enteredGate,
-  findTrackIn, resolveSimBoot, knownMapId, trackRefId,
+  findTrackIn, resolveSimBoot, knownMapId, trackRefId, DEFAULT_MAP, mapOpen, linkNeedsDev,
   isFreestyleTrackId, freestyleTrack, freestyleIdFor,
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=875aac328988";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=3a52a2a03420";
+} from "./sim-tracks.js?v=ec5590c0c460";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=992aefab189b";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=45ede93e95c3";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=fa7c7c1cf4b1";
+} from "./sim-room.js?v=d77540c57016";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=5bc45343b4fb";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
   convertAxisFamily as convertAxisRate, formatAxisReadout, formatCliSummary,
   drawRateCurve, normalizeRateType, isRateType, bfCurve as bfCurveOf,
   actualRate as actualRateOf, encodeRates, decodeRates, ratesDeepLink, RATE_CARDS,
-} from "./sim-rates.js?v=409bffd7db79";
+} from "./sim-rates.js?v=47b77a33ae0c";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
   loadBuild, saveBuild, buildDeepLink, matchPresetId, classDefault,
-} from "./sim-build.js?v=58e19554acd5";
+} from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=4e239cd2ef5a";
+} from "./sim-coach.js?v=ce880b84aeab";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
-} from "./sim-tricks.js?v=1b98ac6fc7bb";
+} from "./sim-tricks.js?v=3f9a33d3082a";
 import {
   DAILY_KEY, DAILY_LINE_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -986,13 +989,13 @@ import {
   loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   defaultWhoopKit,
-} from "./sim-retention.js?v=c96edcdf1f4c";
+} from "./sim-retention.js?v=f2aef3f5e4ac";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=c3ed18877821";
+} from "./sim-secrets.js?v=ff1393b1007f";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1296,6 +1299,8 @@ looksReady=createLooks({
 }).then(function(l){
   looks=l;composer=l.composer;bloomPass=l.bloomPass;
   l.attachSky(skyMesh,sunSprite);
+  // The boot map may have landed before the looks did (the early switch to it).
+  if(currentMap!=='city')applyMapLooks(currentMap);
   sizeComposer();
   Object.assign(window._sim,{composer,bloomPass,looks});
   window._bloomReady=!!l.composer;
@@ -1496,6 +1501,7 @@ function addGate(x,y,z,rotationY,size,solidGate,trackId,parent){
     if(currentMap==='trainer')decorateTrainerGate(THREE,ring,size,col,vibeFor('trainer'));
     if(currentMap==='office')decorateOfficeGate(THREE,ring,size,col,vibeFor('office'));
     if(currentMap==='gym')decorateGymGate(THREE,ring,size,col,vibeFor('gym'));
+    if(currentMap==='rig')decorateRigGate(ring,col,vibeFor('rig'));
   }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
   (parent||raceGroup).add(ring);
   gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col,trackId:trackId,trackIdx:trackIdx,ry:rotationY||0,size:size,solid:!!solidGate}); // col = dim base color
@@ -1635,6 +1641,7 @@ function updateGateHighlight(){
     if(currentMap==='trainer')pulseTrainerGate(g,g===target,passed,now,vibeFor('trainer'));
     if(currentMap==='office')pulseOfficeGate(g,g===target,passed,now,vibeFor('office'));
     if(currentMap==='gym')pulseGymGate(g,g===target,passed,now,vibeFor('gym'));
+    if(currentMap==='rig')pulseRigGate(g,g===target,passed,now,vibeFor('rig'));
   }
 }
 // Run, lap, split and ghost clocks read sim time: the 1 ms ticks run since load
@@ -1648,8 +1655,14 @@ function simNowMs(){return simClockMs;}
 // Whether the js core flew any part of this run: set at the start and on any
 // tick (stepCore); runOffBoards judges it against the board the run lands on.
 let runSawJs=false;
+// F flips (flipKey) this run, a sim assist: kept with the run's result
+// (lastRunSimFlips) and shown with it. No board rule for assists: a run with
+// one counts as any other.
+let runSimFlips=0;
+const lastRunSimFlips={};
 function startRun(){
   runSawJs=core.kind==='js';
+  runSimFlips=0;
   runActive=true;
   runStartTime=simNowMs();
   lapStartTime=runStartTime;
@@ -1678,6 +1691,7 @@ function finishRun(){
   lastRunTotal[id]=total;
   lastRunSplits[id]=runSplits.slice();
   lastGateSplits[id]=runGateSplits.slice();
+  lastRunSimFlips[id]=runSimFlips;
   const cap=line?LINE_GHOST_MAX:GHOST_MAX;
   let rec=ghostRec&&ghostRec.length?downsampleGhost(ghostRec,cap):null;
   lastRunGhostRec=rec;
@@ -1703,7 +1717,7 @@ function finishRun(){
   const label=line?'LINE':'RUN';
   const parts=line?runGateSplits:runSplits;
   lastRunReplayRec=replayRec&&replayRec.length?downsampleGhost(replayRec,REPLAY_GHOST_MAX):(rec&&rec.length?rec:null);
-  const msg=label+' '+fmtLap(total)+(parts.length?' ['+parts.map(fmtLap).join(' / ')+']':'')+(best?' — NEW BEST!':'')+(extra?' · '+extra:'');
+  const msg=label+' '+fmtLap(total)+(parts.length?' ['+parts.map(fmtLap).join(' / ')+']':'')+(best?' — NEW BEST!':'')+(extra?' · '+extra:'')+(runSimFlips?' · SIM FLIP ×'+runSimFlips:'');
   if(lastRunReplayRec&&lastRunReplayRec.length>1){
     toast(msg+'<br><button type="button" id="toastReplay">Replay</button>',{html:true,ms:5200});
   }else toast(msg);
@@ -2922,7 +2936,9 @@ async function finishCityArt(){
 function bootMapHint(){
   try{
     const q=new URLSearchParams(location.search);
-    const boot=resolveSimBoot({map:q.get('map'),track:q.get('track')},null,[]);
+    // The map the page will boot into, saved selection and ?dev=1 included,
+    // so only that map's heavy art starts.
+    const boot=resolveSimBoot({map:q.get('map'),track:q.get('track')},loadSelected(),[],{dev:DEV_UI});
     return (boot&&boot.map)||currentMap;
   }catch(e){return currentMap;}
 }
@@ -3079,6 +3095,7 @@ function applyMapLooks(mapId){
     else if(mapId==='office')credit.textContent='Office is original procedural art — Paper Sun';
     else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court. Kenney CC0 sideline kit.';
     else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current · Felt Scale. Kenney CC0 cars and street kit.';
+    else if(mapId==='rig')credit.textContent='The Rig is original procedural geometry — Hard Key';
   }
 }
 function isFreeFlight(t,trackId){
@@ -3088,13 +3105,14 @@ function isFreeFlight(t,trackId){
 async function setMap(mapId,trackId,opts){
   if(!cityColliderSnap)snapCityColliders();
   const persist=!(opts&&opts.save===false);
-  currentMap=knownMapId(mapId)||'city';
+  currentMap=knownMapId(mapId)||DEFAULT_MAP;
   const hint=findTrack(trackId);
   const wantFree=isFreeFlight(hint,trackId);
   if(currentMap==='city'){
     cityWorld.visible=true;
     indoorWorld.visible=false;
     restoreColliders(cityColliderSnap);
+    bfSyncPlant();
     if(wantFree){
       clearRace();
       currentTrackObj=freestyleTrack('city');
@@ -3113,6 +3131,7 @@ async function setMap(mapId,trackId,opts){
     const built=ensureIndoor(currentMap);
     indoorLights=built.lights||[];
     restoreColliders(built.colliders);
+    bfSyncPlant();
     clearRace();
     if(wantFree){
       currentTrackObj=freestyleTrack(currentMap);
@@ -3232,7 +3251,7 @@ function applyDuctHit(s,normal,into,floorHit){
     normal:normal,
     into:into,
     floor:!!floorHit,
-  },currentBuild,whoopSettings);
+  },currentBuild,whoopSettings,BOUNCE_MAPS[currentMap]);
   _cv.set(hit.vel.x,hit.vel.y,hit.vel.z);
   s.omega.x=hit.omega.x;s.omega.y=hit.omega.y;s.omega.z=hit.omega.z;
   hitEffects(hit.crashed,into);
@@ -3786,7 +3805,7 @@ addEventListener('keydown',e=>{
   }
   if(e.key.toLowerCase()==='r')resetQuad();
   if(e.key.toLowerCase()==='m')toggleMusic();
-  if(e.key.toLowerCase()==='f')toggleFlightMode();
+  if(e.key.toLowerCase()==='f')flipKey();
   if(e.key.toLowerCase()==='g'){
     if(!ghostAvailable()){toast('NO GHOST YET — FINISH A RUN');return;}
     ghostVisible=!ghostVisible;toast(ghostVisible?'GHOST ON':'GHOST OFF');
@@ -4516,12 +4535,14 @@ function updateLapOSD(){
     for(let i=0;i<runSplits.length;i++)html+='<br> L'+(i+1)+' '+fmtLap(runSplits[i]);
     if(lastGateSplit)html+='<br>GSPLIT '+fmtLap(lastGateSplit);
     if(missTotal)html+='<br>MISS +'+(missTotal*MISS_PENALTY_MS/1000).toFixed(1)+'s';
+    if(runSimFlips)html+='<br>SIM ASSIST · F FLIP ×'+runSimFlips;
   }else if(lastRunTotal[id]){ // results: finished run's total + its three splits
     html=trackLabel(activeTrackId)+' RESULT · TOTAL '+fmtLap(lastRunTotal[id]);
     const sp=lastRunSplits[id]||[];
     for(let i=0;i<sp.length;i++)html+='<br> L'+(i+1)+' '+fmtLap(sp[i]);
     const gs=lastGateSplits[id]||[];
     if(gs.length)html+='<br>GATES '+gs.map(fmtLap).join(' / ');
+    if(lastRunSimFlips[id])html+='<br>SIM ASSIST · F FLIP ×'+lastRunSimFlips[id];
     html+='<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
   }else{ // idle, no run yet on this track
     html=trackLabel(activeTrackId)+' RUN --:--.--<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
@@ -4659,7 +4680,11 @@ function leaveRace(){
 }
 function startFreestyle(mapHint){
   const saved=loadSelected();
-  const fly=resolveFly({map:knownMapId(mapHint)||(saved&&saved.map)||currentMap||'city'});
+  // Fly: the last map, if it is open (mapOpen: The Rig, or any map with
+  // ?dev=1), else DEFAULT_MAP. A hint (Freestyle this map, the picker) is
+  // already a map the pilot is on or could pick.
+  const last=saved&&mapOpen(saved.map,DEV_UI)?saved.map:null;
+  const fly=resolveFly({map:knownMapId(mapHint)||last||DEFAULT_MAP});
   hideMenuLayer();
   leaveRace();
   if(coach&&coach.isActive())coach.cancel();
@@ -4805,6 +4830,8 @@ function applyDailyLineMod(mod){
     };
     for(const L of indoorLights||[])dim(L,0.45);
     dim(hemi,0.55);
+    // The Rig has no lamps and no hemisphere: its one key is the light to dim.
+    if(currentMap==='rig')dim(sun,0.45);
   }
   if(mod==='ghost'){
     ghostVisible=true;
@@ -5001,10 +5028,12 @@ function openSkinsCard(){
 }
 function openTrackPicker(startMap){
   pickerMap=startMap||currentMap;
+  // Only open maps get a tab (mapOpen: The Rig, or every map with ?dev=1).
+  if(!mapOpen(pickerMap,DEV_UI))pickerMap=DEFAULT_MAP;
   const layer=document.getElementById('menuLayer');
   if(layer)layer.classList.add('wide');
   function render(){
-    const maps=MAPS.map(m=>'<button type="button" data-map="'+m.id+'" class="'+(m.id===pickerMap?'on':'')+'">'+m.name+'</button>').join('');
+    const maps=MAPS.filter(m=>mapOpen(m.id,DEV_UI)).map(m=>'<button type="button" data-map="'+m.id+'" class="'+(m.id===pickerMap?'on':'')+'">'+m.name+'</button>').join('');
     const list=tracksForMap(pickerMap);
     const rows=list.map(t=>{
       const id=t.legacyId!=null?t.legacyId:t.id;
@@ -5301,7 +5330,8 @@ function wireLooksUI(){
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
       '<span class="n">R</span> last-gate respawn · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
       '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
-      '<span class="n">H</span> HUD · <span class="n">M</span> music · <span class="n">G</span> ghost · <span class="n">C</span> coach</p>'+
+      '<span class="n">H</span> HUD · <span class="n">M</span> music · <span class="n">G</span> ghost · <span class="n">C</span> coach<br>'+
+      '<span class="n">F</span> upside down on bf: sim flip (logged as an assist) · else next flight mode</p>'+
       '<button type="button" id="layerClose">Close</button>');
     document.getElementById('layerClose').onclick=hideMenuLayer;
   };
@@ -5751,7 +5781,7 @@ function syncBuildUI(){
     const p=BUILD_PRESETS[matchPresetId(b)];
     if(hint)hint.textContent=p?('Approximate. '+(p.note||'')):'Approximate custom whoop. Not a thrust-stand log.';
     const code=document.getElementById('buildCode');
-    if(code)code.value=buildDeepLink({origin:location.origin,build:b,track:shareTrackParam(),mode:qp.flightMode||'angle',threeD});
+    if(code)code.value=buildDeepLink({origin:location.origin,build:b,track:shareTrackParam(),mode:qp.flightMode||'angle',threeD,dev:linkNeedsDev(currentMap,shareTrackParam())});
   }finally{syncingBuildUI=false;}
 }
 function applyBuild(raw,opts){
@@ -6000,6 +6030,7 @@ document.getElementById('btnCliImport').onclick=()=>importCli(document.getElemen
       build:encodeBuild(currentBuild),
       rates:token,
       threeD,
+      dev:linkNeedsDev(currentMap,shareTrackParam()),
     });
     try{
       await navigator.clipboard.writeText(url);
@@ -6919,6 +6950,19 @@ const SIM_CORE_VERSION='v0.3.0';
 const BF_DIFF_PATH='vendor/sim-core/configs/air65-ryfly-2026-10-23.txt';
 let bfOwnerDiff=null;                // that diff's text, once fetched
 let bfDiffLoaded=null;               // the CLI text the bf core last configured with
+let bfAirframe=null;                 // air65.json as fetched
+let bfPlantMap=null;                 // the map whose contact profile the plant carries ('' = none)
+// The bf plant carries the current map's contact profile (BOUNCE_MAPS: the
+// Rig's bounce walls), set when the map changes; Betaflight reboots on it.
+function bfSyncPlant(){
+  if(!bfCore||!bfAirframe)return;
+  const want=BOUNCE_MAPS[currentMap]?currentMap:'';
+  if(want===bfPlantMap)return;
+  try{
+    bfCore.setPlant(contactPlant(bfAirframe,BOUNCE_MAPS[currentMap]));
+    bfPlantMap=want;
+  }catch(e){console.warn('sim-core: the '+(want||'base')+' contact plant did not load ('+(e&&e.message||e)+')');}
+}
 let bfLoading=null;
 let bfFailed=false;                  // the load failed: the js core flies the 65 for the session
 let bfWorldSigSent='';
@@ -7063,12 +7107,18 @@ function selectCore(){
     fetch(BF_DIFF_PATH+v).then(r=>{if(!r.ok)throw new Error('the Air65 diff HTTP '+r.status);return r.text();}),
   ]).then(([mod,airframe,diff])=>{
     bfOwnerDiff=diff;
+    bfAirframe=airframe;
     bfWorldSigSent=bfWorldSig();
-    return createBfCore({SimCore:mod.SimCore,wasm:new URL('vendor/sim-core/sim-core.wasm'+v,location.href),airframe,diff,world:bfWorld()}).then(bf=>{
+    const plantMap=BOUNCE_MAPS[currentMap]?currentMap:'';
+    return createBfCore({SimCore:mod.SimCore,wasm:new URL('vendor/sim-core/sim-core.wasm'+v,location.href),airframe:contactPlant(airframe,BOUNCE_MAPS[currentMap]),diff,world:bfWorld()}).then(bf=>{
       const r=bf.report;
       bfDiffLoaded=diff;
+      bfPlantMap=plantMap;
       console.info('sim-core '+SIM_CORE_VERSION+': Air65, '+BF_DIFF_PATH+' ('+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target; '+bfConfigNote(bf)+'); tune shown: '+BF_TUNE_ID+'; '+bfWorld().boxes.length+' world boxes; the Build\'s cells and mAh are not used (the plant is the Air65)');
       bfCore=bf;
+      // The map can change while the wasm loads (the boot map landing): its
+      // bounce profile is checked again now that there is a core to give it to.
+      bfSyncPlant();
       if(!bfWanted())return;
       bfDrop3D();
       core=bf;
@@ -7133,10 +7183,37 @@ function bfTurtleTick(){
   if(ev==='upright')toast(low&&centred?'UPRIGHT':'UPRIGHT — STICKS DOWN AND CENTRED TO ARM');
   else if(ev==='rearm')bfArmPendingMs=simClockMs;
   else if(ev==='ended')toast('DISARMED');
+  else if(ev==='stuck')toast('SIM FLIP STUCK — R RESPAWNS');
   else if(ev==='refused'){
     const why=armingFlagNames(cs.armingDisableFlags);
     toast('NOT ARMED'+(why.length?' — '+why.join(' '):''));
   }
+}
+// F: upside down on the floor on the bf core, with the page on the switches,
+// the sim flips the quad over for the pilot: FLIP OVER AFTER CRASH on, the
+// arm, the roll, then the turtle's own rearm (sim-core-adapter.js startFlip);
+// F during a turtle the pilot started takes over its roll. A sim assist, not
+// piloting, and logged as one (noteSimFlip). Anywhere else F is what it was:
+// the next flight mode. On the js core, upside down, F only says the flip is
+// the bf core's (the js turtle is the pilot's own gesture).
+function flipKey(){
+  if(core.kind!=='bf'){
+    if(bodyUpZ(cs.quaternion)<-0.35&&cs.clearance<=0.04)toast('SIM FLIP IS ON THE BF CORE ONLY');
+    else toggleFlightMode();
+    return;
+  }
+  const r=core.startFlip();
+  if(r===true)noteSimFlip();
+  else if(r==='not-flipped')toggleFlightMode();
+  else if(r==='radio')toast('FLIP ON THE RADIO — AUX'+(core.auxOf('flip')||'?')+' ON, ARM, ROLL');
+  else if(r==='no-switch')toast('NO TURTLE SWITCH IN THE DIFF');
+}
+// Each F flip, once: a toast naming it a sim assist, the run's count
+// (runSimFlips, kept with its result) and a console line.
+function noteSimFlip(){
+  if(runActive)runSimFlips++;
+  toast('SIM FLIP — SIM ASSIST'+(runActive?', LOGGED ON THIS RUN':''));
+  console.info('sim assist: F flip '+core.simFlips+' since load'+(runActive?', '+runSimFlips+' this run':'')+' (the sim set AUX'+(core.auxOf('flip')||'?')+', armed and rolled)');
 }
 setInterval(pollInput,4);
 let lastFrameAt=null;
@@ -7447,6 +7524,7 @@ let tracksReady=false;
 function applyQueryBoot(){
   if(queryBooted||!tracksReady)return;
   queryBooted=true;
+  window._simQueryBooted=true; // test hook: the boot map is set once this returns (it runs synchronously)
   const q=new URLSearchParams(location.search);
   const roomRaw=q.get('room');
   if(roomRaw){
@@ -7459,15 +7537,15 @@ function applyQueryBoot(){
   const extraGenerated=generatedWhoops();
   const fromId=trackFromRetentionId(track);
   if(fromId&&!extraGenerated.some(t=>t.id===fromId.id))extraGenerated.push(fromId);
-  const boot=resolveSimBoot({map,track},loadSelected(),builtinTracks.concat(customTracks).concat(extraGenerated));
-  if(!boot.unknownMap){
-    const already=currentMap===boot.map&&String(activeTrackId)===String(boot.track);
-    if(map||trackRaw||!already){
-      try{
-        setMap(boot.map,boot.track,{save:boot.save!==false});
-        resetQuad();
-      }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
-    }
+  const boot=resolveSimBoot({map,track},loadSelected(),builtinTracks.concat(customTracks).concat(extraGenerated),{dev:DEV_UI});
+  // An unknown ?map= still lands on the boot map (the page is built on City),
+  // unsaved.
+  const already=currentMap===boot.map&&String(activeTrackId)===String(boot.track);
+  if(map||trackRaw||!already){
+    try{
+      setMap(boot.map,boot.track,{save:!boot.unknownMap&&boot.save!==false});
+      resetQuad();
+    }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
   }
   const buildRaw=q.get('build');
   if(buildRaw){
@@ -7549,11 +7627,13 @@ function applyQueryBoot(){
   }
   const sparkQ=q.get('spark');
   const secretQ=q.get('secret');
-  if((sparkQ||secretQ)&&secrets){
+  const sparkParts=String(sparkQ||secretQ||'').split(':');
+  const sparkMap=knownMapId(sparkParts[0])||currentMap;
+  // Spot links fly their map: a closed one needs ?dev=1, as ?map= does.
+  if((sparkQ||secretQ)&&secrets&&mapOpen(sparkMap,DEV_UI)){
     if(feel&&feel.hideFirstRun)feel.hideFirstRun();
-    const raw=String(sparkQ||secretQ);
-    const parts=raw.split(':');
-    const map=knownMapId(parts[0])||currentMap;
+    const parts=sparkParts;
+    const map=sparkMap;
     startFreestyle(map);
     if(feel&&feel.hideFirstRun)feel.hideFirstRun();
     toggleStartMenu(false);
@@ -7577,6 +7657,17 @@ function applyQueryBoot(){
 function publishTracks(){
   Object.assign(window._sim,{tracks:()=>builtinTracks.concat(customTracks)});
 }
+// The page is built on City. Land on the boot map now, not when the tracks
+// fetch below lets applyQueryBoot run, so the launch screen never shows a
+// closed map first; applyQueryBoot then adds only what the boot needs.
+(function(){
+  const m=bootMapHint();
+  if(m===currentMap)return;
+  setMap(m,freestyleIdFor(m),{save:false}).then(function(){
+    const pad=resetSpawnPos();
+    placeQuadAt(pad.x,pad.y,pad.z,pad.yaw);
+  }).catch(function(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}});
+})();
 fetchBuiltinTracks().then(list=>{
   builtinTracks=list;
   for(const t of list){

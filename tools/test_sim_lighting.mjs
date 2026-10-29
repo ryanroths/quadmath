@@ -8,17 +8,20 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  resolveSceneLighting, applySceneLighting, updateSceneLighting, CITY_SKY_HEX,
+  resolveSceneLighting, applySceneLighting, updateSceneLighting, CITY_SKY_HEX, rigAmbientEnv,
 } from '../sim-lighting.js';
-import { MAP_VIBE_IDS, resolveMapLighting } from '../sim-art.js';
+import { MAP_VIBE_IDS, resolveMapLighting, applyVibeLighting, vibeFor } from '../sim-art.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const DAWN = { name: 'dawn' };
 const DAWN_2K = { name: 'dawn' };
 const YARD = { name: 'yard' };
+const RIG = { name: 'rig' };
 const QUALITY_HDRI = { low: '1k', med: '1k', high: '2k' };
 
-// Inputs exactly as sim-looks applyLighting + applyVibeLighting build them.
+// Inputs as the resolver sees them once sim-looks applyLighting (the dawn and
+// yard HDRIs) and applyVibeLighting (map, looks, and the Rig's grey room,
+// built at once) have both patched. envReady false = nothing built or loaded.
 function inputsFor(mapId, quality, envReady) {
   const m = resolveMapLighting(mapId);
   // Quality only picks the dawn HDRI resolution (looks: 2k on High, else 1k).
@@ -31,7 +34,7 @@ function inputsFor(mapId, quality, envReady) {
     fogColor: m.lighting.fogColor,
     exposure: m.lighting.exposure,
     looks: m.looks,
-    envs: { dawn, yard: envReady ? YARD : null },
+    envs: { dawn, yard: envReady ? YARD : null, rig: envReady ? RIG : null },
   };
 }
 
@@ -51,6 +54,17 @@ test('resolver covers every map x quality x envReady', () => {
           assert.equal(r.bgHex, CITY_SKY_HEX, tag);
           assert.equal(r.environmentIntensity, 0, tag);
           assert.equal(r.envReady, true, tag);
+          continue;
+        }
+        if (mapId === 'rig') {
+          // The Rig's ambient is its own grey room, never an HDRI; the
+          // background stays a colour.
+          assert.equal(r.want, 'rig', tag);
+          assert.equal(r.envReady, ready, tag);
+          assert.equal(r.environment, ready ? RIG : null, tag);
+          assert.equal(r.environmentIntensity, m.looks.env, tag + ' envI');
+          assert.equal(r.background, null, tag);
+          assert.equal(r.bgHex, m.lighting.fogColor, tag);
           continue;
         }
         const want = mapId === 'backyard' ? YARD : DAWN;
@@ -82,6 +96,73 @@ test('backyard never shows the dawn HDRI; indoor never shows the yard HDRI', () 
   assert.equal(r.bgHex, resolveMapLighting('backyard').lighting.fogColor);
   const garageYardOnly = Object.assign(inputsFor('garage', 'med', false), { envs: { dawn: null, yard: YARD } });
   assert.equal(resolveSceneLighting(garageYardOnly).environment, null);
+});
+
+// node has no WebGL: only the PMREM step is stubbed; it records the room it got.
+const ROOM = { name: 'rig-room' };
+let roomScene = null, roomBuilds = 0;
+const T = Object.assign({}, THREE, {
+  PMREMGenerator: class { fromScene(s) { roomScene = s; roomBuilds++; return { texture: ROOM }; } dispose() {} },
+});
+
+test('rigAmbientEnv: a grey room with no black in it, built once per renderer, no lamp', () => {
+  const renderer = {};
+  assert.equal(rigAmbientEnv(T, renderer), ROOM);
+  assert.equal(rigAmbientEnv(T, renderer), ROOM);
+  assert.equal(roomBuilds, 1, 'cached per renderer');
+  const mesh = roomScene.children[0];
+  assert.equal(roomScene.children.length, 1, 'one sphere, nothing else');
+  assert.ok(mesh.material.isMeshBasicMaterial && mesh.material.vertexColors && mesh.material.side === THREE.BackSide);
+  const col = mesh.geometry.getAttribute('color').array;
+  assert.ok(Math.min(...col) >= 0.85 && Math.max(...col) <= 1.25, 'radiance ~1 everywhere: ' + Math.min(...col) + '..' + Math.max(...col));
+  assert.equal(rigAmbientEnv(null, renderer), null);
+  assert.equal(rigAmbientEnv(T, null), null);
+});
+
+test('applyVibeLighting gives the Rig its ambient at 15% of the key, in either order, across map switches', async () => {
+  const v = vibeFor('rig');
+  const want = 0.15 * v.lighting.sunIntensity / Math.PI;
+  // Looks and the vibe must share one sim-lighting instance (one lighting
+  // state per scene): the same ?v= stamp, as the page loads them.
+  const stampOf = (f) => (readFileSync(join(root, f), 'utf8').match(/\.\/sim-lighting\.js\?v=([0-9a-f]+)/) || [])[1];
+  assert.ok(stampOf('sim-art-city.js'));
+  assert.equal(stampOf('sim-looks.js'), stampOf('sim-art-city.js'));
+  const { updateSceneLighting } = await import('../sim-lighting.js?v=' + stampOf('sim-art-city.js'));
+  // Production's looks patch: HDRIs only (sim-looks.js applyLighting).
+  const looksPatch = (mapId) => ({ mapId, sky: 'hdri', envs: { dawn: DAWN, yard: null } });
+  const mk = () => { const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0, 0); return scene; };
+  const renderer = { toneMappingExposure: 1 };
+  for (const order of ['looks-first', 'vibe-first']) {
+    const scene = mk();
+    const vibe = () => applyVibeLighting({ THREE: T, scene, renderer }, v);
+    const looks = () => updateSceneLighting(scene, looksPatch('rig'), { renderer, Color: THREE.Color });
+    if (order === 'looks-first') { looks(); vibe(); } else { vibe(); looks(); }
+    assert.equal(scene.environment, ROOM, order);
+    assert.ok(Math.abs(scene.environmentIntensity - want) < 1e-9, order + ' ' + scene.environmentIntensity);
+  }
+  // Rig -> garage -> Rig: the garage gets the dawn HDRI, the Rig its room again.
+  const scene = mk();
+  applyVibeLighting({ THREE: T, scene, renderer }, v);
+  updateSceneLighting(scene, looksPatch('rig'), { renderer, Color: THREE.Color });
+  applyVibeLighting({ THREE: T, scene, renderer }, vibeFor('garage'));
+  assert.equal(scene.environment, DAWN);
+  applyVibeLighting({ THREE: T, scene, renderer }, v);
+  assert.equal(scene.environment, ROOM);
+});
+
+test('the Rig never takes an HDRI, and no other map takes its grey room', () => {
+  const rigDawnOnly = Object.assign(inputsFor('rig', 'high', false), { envs: { dawn: DAWN, yard: YARD, rig: null } });
+  const r = resolveSceneLighting(rigDawnOnly);
+  assert.equal(r.environment, null);
+  assert.equal(r.envReady, false);
+  // A gradient sky mode does not swap it either.
+  const g = resolveSceneLighting(Object.assign(inputsFor('rig', 'med', true), { sky: 'gradient' }));
+  assert.equal(g.environment, RIG);
+  assert.equal(g.environmentIntensity, resolveMapLighting('rig').looks.env);
+  for (const mapId of MAP_VIBE_IDS) {
+    if (mapId === 'rig') continue;
+    assert.notEqual(resolveSceneLighting(inputsFor(mapId, 'med', true)).environment, RIG, mapId);
+  }
 });
 
 test('city sky wins regardless of input order (sky dome flag or map flag)', () => {
@@ -152,7 +233,9 @@ test('update: late HDRI or late vibe lands on the same final state', () => {
   };
   for (const mapId of MAP_VIBE_IDS) {
     const full = inputsFor(mapId, 'high', true);
-    const { envs, sky, skyCity, ...vibe } = full;
+    // As in production: looks sends the HDRIs, the vibe sends the Rig's room.
+    const { envs: { rig, ...envs }, sky, skyCity, ...rest } = full;
+    const vibe = mapId === 'rig' ? { ...rest, envs: { rig } } : rest;
     const looksPart = { sky, skyCity, envs };
     const a = finalFor([vibe, looksPart]);
     const b = finalFor([looksPart, vibe]);
