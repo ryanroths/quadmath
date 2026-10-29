@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tiny Whoop Blackbox Logging in Betaflight | QuadMath</title>
+  <meta name="description" content="Enable Betaflight blackbox on a 65–75mm whoop, fit a useful log on small onboard flash, fly the right moves, then read it free in your browser.">
+  <meta property="og:title" content="Tiny Whoop Blackbox Logging in Betaflight">
+  <meta property="og:description" content="Enable Betaflight blackbox on a 65–75mm whoop, fit a useful log on small onboard flash, fly the right moves, then read it free in your browser.">
+  <meta property="og:url" content="https://quadmath.com/content/guides/whoop-blackbox-logging.html">
+  <link rel="canonical" href="https://quadmath.com/content/guides/whoop-blackbox-logging.html">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=optional" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css?v=2f595d174b9d">
+</head>
+<body>
+  <header>
+  <div class="container header-inner">
+    <a href="/" class="logo" aria-label="QuadMath home">QuadMath<span class="dot">.</span></a>
+    <button class="nav-toggle" id="navToggle" type="button"
+            aria-expanded="false" aria-controls="site-nav" aria-label="Menu">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </button>
+    <nav id="site-nav">
+      <a href="/#calculator">Calculator</a>
+      <a href="/sim.html">Sim</a>
+      <a href="/tune-database.html">Tunes</a>
+      <a href="/blackbox.html">Blackbox</a>
+      <a href="/bench.html">Bench</a>
+      <a href="/gear.html">Gear</a>
+      <a href="/guides.html" class="active" aria-current="page">Guides</a>
+      <a href="/hire.html">Hire</a>
+    </nav>
+  </div>
+</header>
+
+  <div class="container">
+<main class="section guide">
+    <h1>Whoop Blackbox Logging: Record a Short Betaflight Log, Read It in Your Browser</h1>
+
+    <p>
+      Short version: tick BLACKBOX, log to onboard flash at 1/4 rate (about 2 kHz on an
+      8 kHz loop; 1.6 kHz on a BMI270 gyro), drop fields you don't need, erase the
+      flash, fly one short pack of clean rolls, flips and throttle punches, then pull
+      the .bbl over Mass Storage mode and drop it on the
+      <a href="/blackbox.html">QuadMath Blackbox Analyzer</a>. Nothing uploads.
+    </p>
+    <p>
+      For 65–75mm whoops after an
+      <a href="/content/guides/air65-pid-tune.html">Air65 PID tune</a> left you with
+      wobble, oscillation or propwash and you want data, not guesses. SD-card loggers,
+      deep filter tuning and 5" quads are out of scope.
+    </p>
+
+    <p><strong><a href="/blackbox.html">Open the Blackbox Analyzer →</a></strong></p>
+
+    <h2>Your whoop already has a logger, it's just small</h2>
+    <p>
+      Most whoop AIOs log to onboard flash. Read free space in the Configurator's
+      Blackbox tab. Betaflight says the default 1/4 rate is typically enough for a
+      few minutes of flight, and once the flash is full, logging simply stops. Oscar
+      Liang puts a 16MB chip at roughly 5–10 minutes. My whoops show 16MB in that
+      tab; other AIOs can be smaller, so read your own number. Erase before every
+      session.
+    </p>
+
+    <h2>Settings: 1/4 rate, trim fields, debug for noise</h2>
+    <p>
+      Keep the 1/4 default. Betaflight's fractions run from 1/1 to 1/16; 1/8 (about
+      1 kHz) is fine for PID work, and 1/16 only shows gross problems. On a BMI270
+      gyro, Oscar notes 1.6 kHz is the ceiling, so don't chase 2 kHz.
+    </p>
+    <p>
+      Oscar says untick fields you won't read: accelerometer, attitude, RSSI,
+      battery, GPS. Set <code>debug_mode = GYRO_SCALED</code> if you want the
+      analyzer's unfiltered-gyro noise chart; leave it at NONE if flash is tight.
+      If you only want part of a flight, add a Blackbox switch in the Modes tab
+      (<a href="/content/guides/expresslrs-binding-radio-setup.html">radio and AUX setup</a>).
+      Configurator basics:
+      <a href="/content/guides/first-tiny-whoop-setup.html">first tiny whoop setup</a>.
+    </p>
+
+    <h2>Fly one short, boring, deliberate pack</h2>
+    <p>
+      Use Oscar's move list, cut for indoors: hover a few seconds, two or three
+      smooth throttle ramps, isolated rolls, flips and yaw spins in both directions,
+      a few throttle pumps, then a couple of split-S or 180s to provoke propwash.
+      Land; the flash fills fast.
+    </p>
+
+    <h2>Get the file off the quad</h2>
+    <p>
+      In the Blackbox tab, click Activate Mass Storage Device Mode, then copy the
+      .bbl from the drive that appears. It's faster than "Save flash to file"
+      (Oscar). You get one file per power cycle, and each arm inside it is a
+      sub-log. Erase the flash when you're done.
+    </p>
+
+    <h2>Read it on QuadMath Blackbox</h2>
+    <p>
+      Drop the .bbl, .bfl or .txt on <a href="/blackbox.html">/blackbox.html</a>.
+      Multi-log flash dumps are fine; pick the flight after. It decodes in your
+      browser and the log is never uploaded.
+    </p>
+    <p>
+      You get findings ranked worst first, each saying what was measured, what it
+      usually means and one thing to try. Charts cover gyro vs setpoint per axis
+      with throttle and a filtered gyro noise spectrum with peaks marked (in-flight
+      only), plus the unfiltered spectrum when you logged GYRO_SCALED. You also get
+      suggested CLI to paste one change at a time and a metrics JSON. The optional
+      Tune Advisor sends only those findings plus firmware, board, craft name and
+      debug mode from the header, never the log, with ten reads an hour per person.
+    </p>
+    <p>
+      For a deeper dig,
+      <a href="https://blackbox.betaflight.com/">Betaflight Blackbox Explorer</a>
+      and PIDtoolbox are the standard tools.
+    </p>
+
+    <h2>Change one thing, log again</h2>
+    <p>
+      As the analyzer puts it: a log gives direction, not magnitude. Change one
+      thing, fly, log again. Compare your numbers against published cards in the
+      <a href="/tune-database.html">Tune Database</a> and the
+      <a href="/content/guides/air65-pid-tune.html">Air65 PID tune</a>.
+    </p>
+
+    <p><strong><a href="/blackbox.html">Open the Blackbox Analyzer →</a></strong></p>
+  </main>
+</div>
+
+<footer>
+  <div class="container header-inner" style="width: 100%;">
+    <div class="footer-logo">QuadMath<span class="dot">.</span></div>
+    <div>Measured where it says measured. Fly safe.</div>
+  </div>
+</footer>
+
+<script src="/nav.js?v=0a5aa631939b" defer></script>
+
+<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be6e968cd24841ff879306637e3656bc"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
