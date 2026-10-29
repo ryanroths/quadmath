@@ -16,6 +16,7 @@ import {
   auxRanges, pageAux, radioAux, rangeActive, AUX_CHANNELS, FLIP_STICK,
 } from '../sim-core-adapter.js';
 import { SimCore } from '../vendor/sim-core/sim-core.js';
+import { BOUNCE_MAPS } from '../sim-whoop.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
 import { applyAxisMap, AETR_MAP, PAD_MAP, RADIO_PRESETS } from '../sim-touch.js';
 
@@ -799,14 +800,20 @@ test('a js-core run on the 65 stays off the boards (PHYS MISMATCH); Tune hides t
 
 // The Rig on the bf core: its plant gets the same contact profile as the js
 // core (sim-whoop.js BOUNCE_MAPS), and Betaflight reboots on it. Since
-// sim-core v0.4.0 its walls rebound at the airframe's wallRestitution like any
-// map's; the profile still moves the crash threshold.
+// sim-core v0.4.0 a box's walls rebound at the plant's wallRestitution, which
+// the profile scales to the Rig's 0.41 (owner, 2026-10-29).
 test('contactPlant scales the plant for a bounce map; setPlant reconfigures', async () => {
   const air65 = JSON.parse(readFileSync('vendor/sim-core/airframes/air65.json', 'utf8'));
   assert.equal(contactPlant(air65, null), air65);
-  const rig = contactPlant(air65, { crash: 4, bounce: 2 });
+  assert.deepEqual(BOUNCE_MAPS.rig, { crash: 4, bounce: 2, wall: 1.37 });
+  const rig = contactPlant(air65, BOUNCE_MAPS.rig);
   assert.equal(rig.values.crashScale.value, air65.values.crashScale.value * 4);
   assert.equal(rig.values.bounceScale.value, air65.values.bounceScale.value * 2);
+  assert.equal(rig.values.wallRestitution.value, air65.values.wallRestitution.value * 1.37);
+  assert.ok(Math.abs(rig.values.wallRestitution.value - 0.41) < 0.005, 'the Rig walls rebound at about 0.41');
+  const capped = contactPlant(air65, { wall: 5 }).values.wallRestitution;
+  assert.equal(capped.value, 1, 'at most 1, which sim-core accepts');
+  assert.match(capped.note, /x5, capped at 1 for a bounce map$/);
   assert.equal(rig.values.spinScale, air65.values.spinScale);
   assert.equal(rig.values.mass, air65.values.mass);
   assert.equal(air65.values.crashScale.value, 1.0310150949352062, 'the airframe itself is untouched');
@@ -816,7 +823,8 @@ test('contactPlant scales the plant for a bounce map; setPlant reconfigures', as
   assert.ok(r && r.applied > 0, 'Betaflight booted on the bounce plant');
   assert.equal(bf.getState().armed, false);
   // Into a wall, nose on: the stock plant crashes at 4 m/s; the Rig's comes
-  // back off the wall uncrashed at 4 and 8 m/s and still crashes at 12.
+  // back off the wall uncrashed at 4 and 8 m/s, faster than the stock plant by
+  // its wall factor, and still crashes at 12.
   const wall = { floorZ: 0, boxes: [{ min: [1.0, -2, 0], max: [1.3, 2, 3] }], triggers: [] };
   const hit = async (plant, v) => {
     const core = await createBfCore({ SimCore, wasm: readFileSync('vendor/sim-core/sim-core.wasm'), airframe: plant, diff, world: wall });
@@ -830,8 +838,13 @@ test('contactPlant scales the plant for a bounce map; setPlant reconfigures', as
   assert.equal((await hit(air65, 4)).crashed, true);
   for (const v of [4, 8]) {
     const b = await hit(rig, v);
+    const stock = await hit(air65, v);
     assert.equal(b.crashed, false, 'rig crashed at ' + v);
-    assert.ok(b.vx < 0, 'rig bounced back at ' + v);
+    assert.ok(b.vx < 0 && stock.vx < 0, 'both bounced back at ' + v);
+    // The rebound leaves the wall 1.37 times as fast; air drag over the
+    // 400 ms after it brings the ratio down to about 1.32-1.34 by then.
+    const k = b.vx / stock.vx;
+    assert.ok(k > 1.25 && k < 1.45, `the Rig came back ${k.toFixed(3)} times as fast as stock at ${v} m/s (its wall factor 1.37)`);
   }
   assert.equal((await hit(rig, 12)).crashed, true);
 });

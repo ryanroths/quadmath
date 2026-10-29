@@ -223,15 +223,19 @@ function unitOrDefault(n, fb) {
 }
 
 // Maps whose walls bounce: a contact there rebounds instead of stopping dead.
-// crash multiplies the crash threshold, bounce the restitution's bounce term.
-// The Rig on the js core: up to about 10.6 m/s into a face (a 65) rebounds at
-// about 0.41, where elsewhere 2.7 m/s is a crash at 0.10. The bf core takes
-// both through its plant (sim-core-adapter.js contactPlant), but since
-// sim-core v0.4.0 a box's walls rebound at the airframe's wallRestitution
-// (0.3) on every map: there bounce reaches only floors, box tops, undersides
-// and box edges, and crash still sets the threshold everywhere.
+// crash multiplies the crash threshold, bounce the restitution's bounce term,
+// wall the bf core's wall restitution. The Rig on the js core: up to about
+// 10.6 m/s into a face (a 65) rebounds at about 0.41, where elsewhere 2.7 m/s
+// is a crash at 0.10. The bf core takes all three through its plant
+// (sim-core-adapter.js contactPlant): since sim-core v0.4.0 a box's walls
+// rebound at the airframe's wallRestitution and not by bounce, so wall scales
+// the Air65's 0.3 to 0.41, the Rig's walls below its crash speed as on the js
+// core and on bf before v0.4.0 (owner, 2026-10-29). A crash into a wall comes
+// back at 0.41 too, where those gave 0.10: sim-core's walls take one
+// restitution, crash or not. bounce still reaches floors, box tops,
+// undersides and box edges there. The js core does not read wall.
 export const BOUNCE_MAPS = Object.freeze({
-  rig: Object.freeze({ crash: 4, bounce: 2 }),
+  rig: Object.freeze({ crash: 4, bounce: 2, wall: 1.37 }),
 });
 
 // Duct bounce. Soft hits rebound + spin. Crash only above a build-scaled
