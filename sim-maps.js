@@ -1206,8 +1206,6 @@ function buildRig(THREE, parent, colliders) {
     });
     m.name = 'rig ' + f.type;
     m.userData.looksSkip = true;
-    // Textured: the draw-call merge (sim-art.js mergeStaticArt) keeps the uvs.
-    if (map) m.userData.mergeKeepUv = true;
     return m;
   };
   const floorTex = rigFloorTex(THREE);

@@ -4,7 +4,7 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=60afda68c1d2';
+import { hexNum } from './sim-art-city.js?v=584705ba27b2';
 export {
   FELT_SCALE, applyFeltMaterial, feltBasic, feltClay, feltEmissive,
   studioPhoneBudget, qualityWantsStudioBloom,
@@ -22,54 +22,54 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=60afda68c1d2';
+} from './sim-art-city.js?v=584705ba27b2';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget, planLivingKit,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=693f809a375b';
+} from './sim-art-living.js?v=ae688a2105d2';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=a18c62831495';
+} from './sim-art-garage.js?v=70bbb97f0052';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=839cc5192ba8';
+} from './sim-art-warehouse.js?v=527b815e3fd6';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
   planGymKit,
-} from './sim-art-gym.js?v=2d780844bbce';
+} from './sim-art-gym.js?v=4700352cdaae';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget, planOfficeKit,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=453b35151bcb';
+} from './sim-art-office.js?v=70d96e0688c9';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=3f2abdf84d63';
+} from './sim-art-trainer.js?v=c3c228c01301';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildRyanYard, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
   planBackyardKit,
-} from './sim-art-backyard.js?v=0e528e997802';
+} from './sim-art-backyard.js?v=2a9cc1728c92';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=8d586ca51e3a';
+} from './sim-art-room.js?v=14825d85f120';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
@@ -78,7 +78,7 @@ export {
   tryDressGymKit, gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA,
   tryDressLivingKit, livingKitBytesForQuality, LIVING_KIT_CORE, LIVING_KIT_EXTRA,
   tryDressBackyardKit, backyardKitBytesForQuality, BACKYARD_KIT_CORE, BACKYARD_KIT_EXTRA,
-} from './sim-art-kit.js?v=cc1bfe9147db';
+} from './sim-art-kit.js?v=4e622f465eb6';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
@@ -734,6 +734,14 @@ function artTickUserData(o) {
   return !!(mu && (mu.cityHolo || mu.cityWindow || mu.cityBlink));
 }
 
+// Texture slots a material reads through the mesh's uvs.
+const UV_MAPS = ['map', 'alphaMap', 'aoMap', 'bumpMap', 'normalMap', 'roughnessMap', 'metalnessMap',
+  'emissiveMap', 'lightMap', 'displacementMap', 'specularMap'];
+
+function materialWantsUv(m) {
+  return !!m && UV_MAPS.some((k) => m[k] && m[k].isTexture);
+}
+
 export function mergeStaticArt(THREE, root) {
   if (!THREE || !root) return 0;
   // The shown map's art: every visited indoor map keeps its (hidden) group
@@ -759,10 +767,10 @@ export function mergeStaticArt(THREE, root) {
   let merged = 0;
   buckets.forEach((list) => {
     if (list.length < 2) return;
-    // A material that asks for it (The Rig's textured surfaces) keeps its uvs
-    // through the merge; a bucket where any mesh has none stays unmerged.
-    // Other maps merge position + normal only, as before.
-    const keepUv = !!(list[0].material.userData && list[0].material.userData.mergeKeepUv);
+    // A textured material keeps its uvs through the merge, or it samples one
+    // texel (signs went blank, felt and wood went flat). A bucket where any
+    // mesh has none stays unmerged. Untextured buckets merge position + normal.
+    const keepUv = materialWantsUv(list[0].material);
     if (keepUv && list.some((o) => !o.geometry.getAttribute('uv'))) return;
     const geos = [];
     for (const o of list) {
