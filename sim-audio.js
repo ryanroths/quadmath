@@ -2,14 +2,23 @@
 // QuadMath sim — the bf core's sound. All Web Audio synthesis: no audio files,
 // so nothing to license. Every voice reads the flying core's state
 // (sim-core-adapter.js getState()) or its CONTACT events, never the sticks:
-//   motors   four oscillators, one per motor, at the blade-pass frequency
-//            (rpm / 60 x blades) with its second harmonic in the same wave;
-//            level from rpm squared. rpm is sim-core's motor model, which
+//   motors   two voices per motor on its rpm, crossfaded by that rpm from
+//            TURTLE_RPM to FLIGHT_RPM (15 to 18 krpm):
+//            - turtle: below 15 krpm (turtle, idle, spool-up) the voice as it
+//              first shipped, unchanged: blade-pass at 3 blades (rpm / 20)
+//              with its second harmonic;
+//            - flight: the shaft rate (rpm / 60) loudest, the prop's
+//              blade-pass (rpm / 60 x blades; rpm / 30 on the Air65's
+//              2-blade 1219S) 6 dB under it, that harmonic's second 12 dB
+//              under, all in one wave; 6 dB under the turtle voice overall,
+//              through a 3 kHz lowpass.
+//            Level from rpm squared. rpm is sim-core's motor model, which
 //            follows vbat, so sag lowers the pitch by itself. A few cents of
 //            fixed detune per motor make the four beat like a real whoop.
-//   props    band-passed noise centred on the mean rpm's blade-pass
-//            harmonic, level from total thrust over the airframe's maximum:
-//            the whine on a punch.
+//   props    band-passed noise centred on twice the mean rpm's blade-pass,
+//            level from total thrust over the airframe's maximum; across the
+//            same crossfade (on the mean rpm) the band widens and comes up
+//            3 dB, from the turtle voice's band to the flight voice's.
 //   wind     low-passed noise, level from airspeed squared, cutoff rising
 //            with speed.
 //   contact  a thud per CONTACT event (floor and box alike), level from its
@@ -27,18 +36,28 @@ export const SOUND_MUTED_KEY = 'quadmathSimSoundMuted';
 export const SOUND_VOL_DEFAULT = 0.6;
 
 const MOTOR_DETUNE_CENTS = [-6, 4, -2, 7];
-const MOTOR_HARMONIC = 0.45;    // second harmonic, of the blade-pass fundamental
-const MOTOR_GAIN = 0.035;       // per motor at hover rpm
-const MOTOR_GAIN_MAX = 0.25;    // per motor
-const PROP_GAIN = 0.22;         // at full thrust
-const WIND_GAIN = 0.3;          // at WIND_REF_MS and above
+export const TURTLE_RPM = 15000;      // below: the turtle voice alone
+export const FLIGHT_RPM = 18000;      // above: the flight voice alone
+const TURTLE_BLADES = 3;              // the turtle voice's blade-pass, as it shipped
+const TURTLE_HARMONIC = 0.45;         // its second harmonic
+const MOTOR_GAIN = 0.035;             // turtle voice, per motor at hover rpm
+const MOTOR_GAIN_MAX = 0.25;          // per motor
+const FLIGHT_GAIN = 0.5;              // flight voice: 6 dB under the turtle voice
+const FLIGHT_BLADE_PASS = 0.5;        // the prop's blade-pass, 6 dB under the shaft rate
+const FLIGHT_HARMONIC = 0.25;         // its second harmonic, 12 dB under
+export const FLIGHT_LOWPASS_HZ = 3000;
+const PROP_GAIN = 0.22;               // at full thrust, the turtle band
+const PROP_Q = 1.1;
+const FLIGHT_PROP_GAIN = Math.SQRT2;  // the flight band: 3 dB up
+const FLIGHT_PROP_Q = 0.5;            // and wider
+const WIND_GAIN = 0.3;                // at WIND_REF_MS and above
 const WIND_REF_MS = 20;
-const SCRAPE_GAIN = 0.28;       // sliding at SCRAPE_REF_MS and above
+const SCRAPE_GAIN = 0.28;             // sliding at SCRAPE_REF_MS and above
 const SCRAPE_REF_MS = 3;
-const SCRAPE_HOLD_S = 0.12;     // contactFlags is the latest tick's: bridge the gaps
+const SCRAPE_HOLD_S = 0.12;           // contactFlags is the latest tick's: bridge the gaps
 const BEEPER_HZ = 1600;
 const BEEPER_GAIN = 0.12;
-const THUD_MIN_MS = 0.3;        // impact speed below this is a touch, not a thud
+const THUD_MIN_MS = 0.3;              // impact speed below this is a touch, not a thud
 const THUD_REF_MS = 5;
 const THUD_GAP_S = 0.03;
 
@@ -46,18 +65,50 @@ function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, n));
 }
 
+export function shaftHz(rpm) {
+  return Math.abs(rpm) / 60;
+}
+
 export function bladePassHz(rpm, blades) {
-  return Math.abs(rpm) / 60 * blades;
+  return shaftHz(rpm) * blades;
 }
 
-// Per motor, amplitude from rpm squared, hover rpm the reference.
-export function motorLevel(rpm, rpmHover) {
+// How much of the flight voice: 0 up to TURTLE_RPM, 1 from FLIGHT_RPM, a
+// smoothstep between.
+export function flightMix(rpm) {
+  const x = clamp((Math.abs(rpm) - TURTLE_RPM) / (FLIGHT_RPM - TURTLE_RPM), 0, 1);
+  return x * x * (3 - 2 * x);
+}
+
+// Per motor, each voice's amplitude: rpm squared, hover rpm the reference.
+export function motorLevels(rpm, rpmHover) {
   const r = Math.abs(rpm) / rpmHover;
-  return clamp(MOTOR_GAIN * r * r, 0, MOTOR_GAIN_MAX);
+  const level = clamp(MOTOR_GAIN * r * r, 0, MOTOR_GAIN_MAX);
+  const w = flightMix(rpm);
+  return { turtle: level * (1 - w), flight: FLIGHT_GAIN * level * w };
 }
 
-export function propCentreHz(meanRpm, blades) {
-  return clamp(2 * bladePassHz(meanRpm, blades), 300, 12000);
+// The flight voice's wave over the shaft rate: harmonic 1, the prop's
+// blade-pass at harmonic `blades`, and its second at 2 x blades.
+export function flightWave(blades) {
+  const imag = new Float32Array(2 * blades + 1);
+  imag[1] += 1;
+  imag[blades] += FLIGHT_BLADE_PASS;
+  imag[2 * blades] += FLIGHT_HARMONIC;
+  return imag;
+}
+
+// The prop noise band on the mean rpm: centre, Q and amplitude, the turtle
+// band's below TURTLE_RPM and the flight band's from FLIGHT_RPM.
+export function propBand(meanRpm, blades, thrustFrac) {
+  const w = flightMix(meanRpm);
+  const turtleHz = 2 * bladePassHz(meanRpm, TURTLE_BLADES);
+  const flightHz = 2 * bladePassHz(meanRpm, blades);
+  return {
+    hz: clamp(turtleHz + (flightHz - turtleHz) * w, 300, 12000),
+    q: PROP_Q + (FLIGHT_PROP_Q - PROP_Q) * w,
+    gain: PROP_GAIN * clamp(thrustFrac, 0, 1) * (1 + (FLIGHT_PROP_GAIN - 1) * w),
+  };
 }
 
 export function windLevel(speedMs) {
@@ -74,12 +125,14 @@ export function thudLevel(impactMs, crashed) {
   return clamp(impactMs / THUD_REF_MS, 0, 1) * (crashed ? 1 : 0.6);
 }
 
-// The prop's blade count: the airframe's own field if it has one, else what
-// its prop record says ("Gemfan 1219, 3 blades"), else the fallback (the
-// page's build).
+// The prop's blade count: the airframe's own field if it has one (bladeCount,
+// or blades), else what its prop record says ("Gemfan 1219, 3 blades"), else
+// the fallback (the page's build).
 export function airframeBlades(airframe, fallback = 2) {
   const v = airframe && airframe.values;
-  if (v && v.blades && Number.isInteger(v.blades.value)) return v.blades.value;
+  for (const k of ['bladeCount', 'blades']) {
+    if (v && v[k] && Number.isInteger(v[k].value) && v[k].value > 0) return v[k].value;
+  }
   const text = [airframe && airframe.name, v && v.propDiameter && v.propDiameter.source].join(' ');
   const m = /(\d)[- ]blades?\b/i.exec(text);
   return m ? +m[1] : fallback;
@@ -159,9 +212,11 @@ export function createSimAudio(opts = {}) {
   let wallAt = -1;              // ctx time a box face was last touched
   let lastThudAt = -1;
   let thuds = 0;
-  const motorHz = [0, 0, 0, 0];
-  const motorGain = [0, 0, 0, 0];
-  const t = { propHz: 0, propGain: 0, windHz: 0, windGain: 0, scrapeGain: 0, scrapeRate: 1, beeper: 0 };
+  const motorHz = [0, 0, 0, 0];      // the flight voice: shaft rate
+  const flightGain = [0, 0, 0, 0];
+  const turtleHz = [0, 0, 0, 0];     // the turtle voice: blade-pass at 3 blades
+  const turtleGain = [0, 0, 0, 0];
+  const t = { propHz: 0, propQ: PROP_Q, propGain: 0, windHz: 0, windGain: 0, scrapeGain: 0, scrapeRate: 1, beeper: 0 };
 
   const masterLevel = () => (muted ? 0 : vol);
 
@@ -183,18 +238,30 @@ export function createSimAudio(opts = {}) {
       v.connect(master);
       return v;
     };
-    // Motors: the harmonic rides in the wave, so one oscillator a motor.
-    const wave = c.createPeriodicWave(new Float32Array([0, 0, 0]), new Float32Array([0, 1, MOTOR_HARMONIC]));
-    const motors = MOTOR_DETUNE_CENTS.map((cents) => {
+    // Motors: each voice's harmonics ride in its wave, so one oscillator a
+    // voice, two a motor. The flight voices share the 3 kHz lowpass.
+    const turtleWave = c.createPeriodicWave(new Float32Array([0, 0, 0]), new Float32Array([0, 1, TURTLE_HARMONIC]));
+    const flightLow = c.createBiquadFilter();
+    flightLow.type = 'lowpass';
+    flightLow.frequency.value = FLIGHT_LOWPASS_HZ;
+    flightLow.Q.value = Math.SQRT1_2;
+    flightLow.connect(master);
+    const oscillator = (wave, cents, out) => {
       const osc = c.createOscillator();
       osc.setPeriodicWave(wave);
       osc.frequency.value = 0;
       osc.detune.value = cents;
-      const gain = voice();
+      const gain = c.createGain();
+      gain.gain.value = 0;
       osc.connect(gain);
+      gain.connect(out);
       osc.start();
       return { osc, gain };
-    });
+    };
+    const motors = MOTOR_DETUNE_CENTS.map((cents) => ({
+      turtle: oscillator(turtleWave, cents, master),
+      flight: oscillator(flightPeriodicWave(c), cents, flightLow),
+    }));
     const noise = noiseBuffer(c, 2);
     const loop = (buffer, offset) => {
       const src = c.createBufferSource();
@@ -234,15 +301,22 @@ export function createSimAudio(opts = {}) {
     beepOsc.connect(beep);
     beepOsc.start();
     return {
-      master, limiter, motors, noise, propSrc, propBand, prop, windSrc, windLow, wind,
+      master, limiter, motors, flightLow, noise, propSrc, propBand, prop, windSrc, windLow, wind,
       scrapeSrc, scrape, beepOsc, beep, voice,
     };
   }
 
   const ramp = (param, v, tc) => param.setTargetAtTime(v, ctx.currentTime, tc);
+  const flightPeriodicWave = (c) => {
+    const imag = flightWave(blades);
+    return c.createPeriodicWave(new Float32Array(imag.length), imag);
+  };
 
   function quiet() {
-    for (let i = 0; i < 4; i++) motorGain[i] = 0;
+    for (let i = 0; i < 4; i++) {
+      flightGain[i] = 0;
+      turtleGain[i] = 0;
+    }
     t.propGain = 0;
     t.windGain = 0;
     t.scrapeGain = 0;
@@ -252,10 +326,13 @@ export function createSimAudio(opts = {}) {
   function apply() {
     for (let i = 0; i < 4; i++) {
       const m = g.motors[i];
-      ramp(m.osc.frequency, motorHz[i], 0.015);
-      ramp(m.gain.gain, motorGain[i], 0.02);
+      ramp(m.flight.osc.frequency, motorHz[i], 0.015);
+      ramp(m.flight.gain.gain, flightGain[i], 0.02);
+      ramp(m.turtle.osc.frequency, turtleHz[i], 0.015);
+      ramp(m.turtle.gain.gain, turtleGain[i], 0.02);
     }
     ramp(g.propBand.frequency, t.propHz || 300, 0.03);
+    ramp(g.propBand.Q, t.propQ, 0.03);
     ramp(g.prop.gain, t.propGain, 0.03);
     ramp(g.windLow.frequency, t.windHz || 250, 0.08);
     ramp(g.wind.gain, t.windGain, 0.08);
@@ -296,7 +373,10 @@ export function createSimAudio(opts = {}) {
     },
     // The plant the bf core flies: blade count, hover rpm, maximum total thrust (N).
     setAirframe(a) {
-      if (a.blades > 0) blades = a.blades;
+      if (a.blades > 0 && a.blades !== blades) {
+        blades = a.blades;
+        if (g) for (const m of g.motors) m.flight.osc.setPeriodicWave(flightPeriodicWave(ctx));
+      }
       if (a.rpmHover > 0) rpmHover = a.rpmHover;
       if (a.maxThrustN > 0) maxThrustN = a.maxThrustN;
     },
@@ -313,11 +393,16 @@ export function createSimAudio(opts = {}) {
       for (let i = 0; i < 4; i++) {
         const rpm = s.rpm[i];
         sum += Math.abs(rpm);
-        motorHz[i] = bladePassHz(rpm, blades);
-        motorGain[i] = motorLevel(rpm, rpmHover);
+        const level = motorLevels(rpm, rpmHover);
+        motorHz[i] = shaftHz(rpm);
+        flightGain[i] = level.flight;
+        turtleHz[i] = bladePassHz(rpm, TURTLE_BLADES);
+        turtleGain[i] = level.turtle;
       }
-      t.propHz = propCentreHz(sum / 4, blades);
-      t.propGain = PROP_GAIN * clamp(s.totalThrustAbsN / maxThrustN, 0, 1);
+      const band = propBand(sum / 4, blades, s.totalThrustAbsN / maxThrustN);
+      t.propHz = band.hz;
+      t.propQ = band.q;
+      t.propGain = band.gain;
       const v = s.velocity;
       const speed = Math.hypot(v.x, v.y, v.z);
       t.windHz = windCutoffHz(speed);
@@ -376,11 +461,16 @@ export function createSimAudio(opts = {}) {
         time: ctx.currentTime,
         master: g.master.gain.value,
         motors: g.motors.length,
-        motorHz: g.motors.map((m) => m.osc.frequency.value),
+        oscillators: 2 * g.motors.length,
+        motorHz: g.motors.map((m) => m.flight.osc.frequency.value),
         motorTargetHz: motorHz.slice(),
-        motorGain: g.motors.map((m) => m.gain.gain.value),
-        detune: g.motors.map((m) => m.osc.detune.value),
+        flightGain: g.motors.map((m) => m.flight.gain.gain.value),
+        turtleHz: g.motors.map((m) => m.turtle.osc.frequency.value),
+        turtleGain: g.motors.map((m) => m.turtle.gain.gain.value),
+        detune: g.motors.map((m) => m.flight.osc.detune.value),
+        flightLowpassHz: g.flightLow.frequency.value,
         propHz: g.propBand.frequency.value,
+        propQ: g.propBand.Q.value,
         propGain: g.prop.gain.value,
         windHz: g.windLow.frequency.value,
         windGain: g.wind.gain.value,

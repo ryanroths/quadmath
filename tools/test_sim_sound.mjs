@@ -5,9 +5,10 @@
 // 150 ms full-throttle punch every 20 s, a run at a wall to scrape along it,
 // and a disarm in the air onto the floor. Asserts:
 //   - no AudioContext before the first key (nothing for the autoplay policy
-//     to refuse), the audio graph after it: four motor oscillators running;
-//   - each motor oscillator sits at its motor's blade-pass frequency
-//     (rpm / 60 x 3 blades) and rises on every punch;
+//     to refuse), the audio graph after it: two oscillators a motor, the
+//     flight voices through the 3 kHz lowpass;
+//   - in the hover (above 18 krpm) only the flight voice plays, each motor's
+//     at its shaft rate (rpm / 60), and it rises on every punch;
 //   - the punch frequency falls as vbat sags across the flight;
 //   - wind follows airspeed, a wall slide scrapes, the floor impact thuds;
 //   - M mutes and unmutes; the Controls card's master volume reads 60% and
@@ -26,7 +27,8 @@ import { dirname, join, extname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
-  bladePassHz, motorLevel, propCentreHz, windLevel, windCutoffHz, thudLevel,
+  shaftHz, bladePassHz, flightMix, motorLevels, flightWave, propBand, windLevel, windCutoffHz, thudLevel,
+  TURTLE_RPM, FLIGHT_RPM, FLIGHT_LOWPASS_HZ,
   airframeBlades, loadSoundPrefs, saveSoundPrefs, createSimAudio, SOUND_VOL_DEFAULT,
 } from '../sim-audio.js';
 
@@ -37,13 +39,14 @@ function memoryStore() {
   return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) };
 }
 
-test('sim-audio mappings: blade-pass pitch from rpm, level from rpm squared, wind from airspeed squared, thud from impact speed', () => {
-  assert.equal(bladePassHz(32360, 3), 1618, 'Air65 hover: 32360 rpm / 60 x 3 blades');
+test('sim-audio mappings: pitch from rpm, level from rpm squared, wind from airspeed squared, thud from impact speed', () => {
+  assert.ok(Math.abs(shaftHz(32360) - 539.33) < 0.01, 'Air65 hover: shaft rate 32360 rpm / 60');
+  assert.ok(Math.abs(bladePassHz(32360, 2) - 1078.67) < 0.01, 'its 2-blade fundamental, rpm / 30');
   assert.equal(bladePassHz(-6000, 2), 200, 'reversed motors (turtle) sound by speed');
-  const hover = motorLevel(32360, 32360);
-  assert.ok(Math.abs(motorLevel(32360 * 1.5, 32360) / hover - 2.25) < 1e-9, 'rpm x1.5 is level x2.25');
-  assert.equal(motorLevel(0, 32360), 0, 'a stopped motor is silent');
-  assert.ok(propCentreHz(40000, 3) > propCentreHz(30000, 3), 'prop band follows mean rpm');
+  const hover = motorLevels(32360, 32360).flight;
+  assert.ok(Math.abs(motorLevels(32360 * 1.5, 32360).flight / hover - 2.25) < 1e-9, 'rpm x1.5 is level x2.25');
+  assert.deepEqual(motorLevels(0, 32360), { turtle: 0, flight: 0 }, 'a stopped motor is silent');
+  assert.ok(propBand(40000, 2, 0.5).hz > propBand(30000, 2, 0.5).hz, 'prop band follows mean rpm');
   assert.ok(Math.abs(windLevel(10) / windLevel(5) - 4) < 1e-9, 'wind level from airspeed squared');
   assert.ok(windCutoffHz(10) > windCutoffHz(2), 'wind cutoff rises with speed');
   assert.equal(thudLevel(0.1, false), 0, 'a touch is not a thud');
@@ -51,10 +54,39 @@ test('sim-audio mappings: blade-pass pitch from rpm, level from rpm squared, win
   assert.ok(thudLevel(3, true) > thudLevel(3, false), 'a crash is louder');
 });
 
-test('sim-audio: the blade count is the airframe\'s, and the Air65 has 3', () => {
+test('sim-audio motor voices: below 15 krpm the turtle voice as first shipped; above 18 krpm shaft rate loudest, blade-pass -6 dB, its harmonic -12 dB, 6 dB under', () => {
+  assert.equal(TURTLE_RPM, 15000);
+  assert.equal(FLIGHT_RPM, 18000);
+  assert.equal(FLIGHT_LOWPASS_HZ, 3000);
+  assert.equal(flightMix(TURTLE_RPM), 0);
+  assert.equal(flightMix(FLIGHT_RPM), 1);
+  assert.equal(flightMix(16500), 0.5);
+  // Below 15 krpm: the motor level and the prop band are the first voice's
+  // (0.035 x (rpm / hover)^2; band at 2 x rpm / 60 x 3, Q 1.1, 0.22 x thrust).
+  for (const rpm of [3000, 9000, 14999]) {
+    const r = rpm / 32360;
+    assert.deepEqual(motorLevels(rpm, 32360), { turtle: 0.035 * r * r, flight: 0 }, `${rpm} rpm: the turtle voice alone`);
+    assert.deepEqual(propBand(rpm, 2, 0.4), { hz: Math.max(300, 2 * (rpm / 60 * 3)), q: 1.1, gain: 0.22 * 0.4 }, `${rpm} rpm: the turtle band`);
+  }
+  // From 18 krpm: the flight voice alone, 6 dB under; band wider and 3 dB up.
+  const r = 40000 / 32360;
+  const lv = motorLevels(40000, 32360);
+  assert.equal(lv.turtle, 0);
+  assert.ok(Math.abs(20 * Math.log10(lv.flight / (0.035 * r * r)) + 6.02) < 0.01, 'flight voice 6 dB under the turtle voice');
+  const w = flightWave(2);
+  assert.deepEqual([...w], [0, 1, 0.5, 0, 0.25], 'shaft rate, blade-pass (rpm / 30), its harmonic (rpm / 15)');
+  assert.ok(Math.abs(20 * Math.log10(w[2] / w[1]) + 6.02) < 0.01, 'blade-pass 6 dB under the shaft rate');
+  assert.ok(Math.abs(20 * Math.log10(w[4] / w[1]) + 12.04) < 0.01, 'its harmonic 12 dB under');
+  const band = propBand(40000, 2, 0.4);
+  assert.ok(Math.abs(band.hz - 2 * 40000 / 30) < 1e-9 && band.q < 1.1, 'prop band on the 2-blade fundamental, wider');
+  assert.ok(Math.abs(20 * Math.log10(band.gain / (0.22 * 0.4)) - 3.01) < 0.01, 'prop band 3 dB up');
+});
+
+test('sim-audio: the blade count is the airframe\'s, and the Air65 has 2', () => {
   const air65 = JSON.parse(readFileSync(join(root, 'vendor/sim-core/airframes/air65.json'), 'utf8'));
-  assert.equal(airframeBlades(air65, 2), 3, 'air65.json: Gemfan 1219, 3 blades');
+  assert.equal(airframeBlades(air65, 3), 2, 'air65.json bladeCount: Gemfan 1219S, 2 blades');
   assert.equal(airframeBlades({ values: { blades: { value: 4 } } }, 2), 4, 'a numeric field wins');
+  assert.equal(airframeBlades({ name: 'a 3-blade prop', values: {} }, 2), 3, 'else the prop record');
   assert.equal(airframeBlades({ name: 'unnamed', values: {} }, 2), 2, 'otherwise the fallback');
 });
 
@@ -266,7 +298,7 @@ const FLIGHT = String.raw`(() => {
       }
       if (F.phase !== 'drop' && F.phase !== 'arming') s.setTestStick({ r, p, y: 0, t: thr });
       if (F.phase !== 'arming' && F.samples.length < 4000 && (F.samples.length === 0 || t - F.samples[F.samples.length - 1].t >= 100)) {
-        F.samples.push({ t: Math.round(t), z: +cs.position.z.toFixed(2), vbat: cs.battV, hz: Math.round(mean(d.motorHz)), rpm: Math.round(mean(cs.rpm)), thr: +thr.toFixed(3), armed: cs.armed, x: +cs.position.x.toFixed(2), y: +cs.position.y.toFixed(2), roll: +(cs.attitude.roll * 57.3).toFixed(1), pitch: +(cs.attitude.pitch * 57.3).toFixed(1), sp: +speed.toFixed(2), cf: cs.contactFlags, phase: F.phase });
+        F.samples.push({ t: Math.round(t), z: +cs.position.z.toFixed(2), vbat: cs.battV, hz: +mean(d.motorHz).toFixed(1), rpm: Math.round(mean(cs.rpm)), fg: mean(d.flightGain), tg: mean(d.turtleGain), thr: +thr.toFixed(3), armed: cs.armed, x: +cs.position.x.toFixed(2), y: +cs.position.y.toFixed(2), roll: +(cs.attitude.roll * 57.3).toFixed(1), pitch: +(cs.attitude.pitch * 57.3).toFixed(1), sp: +speed.toFixed(2), cf: cs.contactFlags, phase: F.phase });
       }
       if (speed > 1) F.wind.push({ t, speed, gain: d.windGain, targetGain: d.windTargetGain, targetHz: d.windTargetHz });
       if (F.wind.length > 2000) F.wind.shift();
@@ -370,11 +402,13 @@ test('bf core sound: graph on the first key, motor pitch from rpm rises on a pun
     const g = JSON.parse(await evaluate(ws, `JSON.stringify(window._sim.audio.debug())`));
     assert.equal(g.graph, true, 'the first key builds the audio graph');
     assert.equal(g.state, 'running', 'the AudioContext runs after the key');
-    assert.equal(g.motors, 4, 'one oscillator a motor');
-    assert.equal(g.blades, 3, 'the Air65 airframe: Gemfan 1219, 3 blades');
+    assert.equal(g.motors, 4, 'four motors');
+    assert.equal(g.oscillators, 8, 'two voices a motor');
+    assert.equal(g.flightLowpassHz, 3000, 'the flight voices through the 3 kHz lowpass');
+    assert.equal(g.blades, 2, 'the Air65 airframe: Gemfan 1219S, 2 blades');
     assert.equal(new Set(g.detune).size, 4, 'each motor detuned differently');
     assert.ok(Math.abs(g.master - 0.6) < 1e-3, `master volume 60% by default (${g.master})`);
-    assert.ok(g.motorGain.every((x) => x < 1e-3), 'disarmed: the motors are silent');
+    assert.ok(g.flightGain.concat(g.turtleGain).every((x) => x < 1e-3), 'disarmed: the motors are silent');
 
     await evaluate(ws, FLIGHT);
     await evaluate(ws, `window._sim.setTestStick({ r: 0, p: 0, y: 0, t: 0 }), true`);
@@ -420,19 +454,20 @@ test('bf core sound: graph on the first key, motor pitch from rpm rises on a pun
     assert.ok(hover.length > 300, `hovered (${hover.length} samples)`);
     // Every steady hover sample (at the hold altitude, rpm within 2% of the
     // sample 100 ms before; not the overshoot and spin-down after a punch,
-    // which the oscillators glide through in a frame or two): the oscillators
-    // at the blade-pass frequency of the rpm, to 1%.
+    // which the oscillators glide through in a frame or two): the flight
+    // voice alone, its oscillators at the shaft rate of the rpm, to 1%.
     const steady = hover.filter((s, i) => i > 0 && hover[i - 1].t >= s.t - 150
       && Math.abs(s.rpm - hover[i - 1].rpm) < 0.02 * s.rpm && Math.abs(s.z - 1.5) < 0.3);
     assert.ok(steady.length > 0.7 * hover.length, `mostly steady (${steady.length} of ${hover.length})`);
     for (const s of steady) {
-      assert.ok(Math.abs(s.hz - s.rpm / 60 * 3) < 0.01 * s.rpm / 60 * 3, `motor Hz ${s.hz} vs rpm ${s.rpm} at ${s.t} ms`);
+      assert.ok(Math.abs(s.hz - s.rpm / 60) < 0.01 * s.rpm / 60, `motor Hz ${s.hz} vs rpm ${s.rpm} at ${s.t} ms`);
+      assert.ok(s.fg > 0.01 && s.tg < 1e-4, `hover: the flight voice alone (flight ${s.fg}, turtle ${s.tg}) at ${s.t} ms`);
     }
 
     assert.equal(flight.punches.length, 6, 'six punches in 2 min');
     for (const p of flight.punches) {
       assert.ok(p.peakHz > 1.3 * p.hoverHz, `punch at ${p.at} ms: ${p.peakHz.toFixed(0)} Hz over hover ${p.hoverHz.toFixed(0)} Hz`);
-      assert.ok(Math.abs(p.peakTargetHz - p.peakRpm / 60 * 3) < 0.01 * p.peakTargetHz, 'punch pitch is the rpm\'s');
+      assert.ok(Math.abs(p.peakTargetHz - p.peakRpm / 60) < 0.01 * p.peakTargetHz, 'punch pitch is the rpm\'s');
       assert.ok(p.peakProp > 0.1, `prop noise rises with thrust on a punch (${p.peakProp})`);
     }
     const first = flight.punches[0];
