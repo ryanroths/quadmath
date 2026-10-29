@@ -545,7 +545,7 @@
     <ol id="builderList"></ol>
   </div>
 </div>
-<div id="audioHint">🔊 Press M to enable audio (music + motor sound)</div>
+<div id="audioHint">🔊 Sound starts on your first key, click or stick move · M mutes</div>
 <div id="legend">
   <div class="lgc lgc-tl"></div>
   <div class="lgc lgc-tr"></div>
@@ -700,12 +700,16 @@
   <div class="row"><label>Rain</label><input type="checkbox" id="cbRain" checked style="accent-color:var(--orange)"></div>
 
   <h2>Audio</h2>
+  <div class="row"><label>Master volume</label><span class="val" id="v_soundVol"></span></div>
+  <input type="range" class="sound-vol" id="soundVol" min="0" max="1" step="0.05" value="0.6">
+  <button type="button" class="sound-btn" id="soundBtn">🔊 SOUND [M]</button>
   <div class="row"><label>Music volume</label><span class="val" id="v_musicVol"></span></div>
   <input type="range" id="musicVol" min="0" max="1" step="0.05" value="0.35">
-  <!-- 🔇 matches the real initial state: music is paused until M. syncMusicUI()
-       corrects this on boot anyway, so the only time this markup is what you
-       see is when the module never ran — and then it must not claim sound. -->
-  <button id="musicBtn">🔇 MUSIC [M]</button>
+  <!-- 🔇 matches the real initial state: music is paused until asked for.
+       syncMusicUI() corrects this on boot anyway, so the only time this markup
+       is what you see is when the module never ran — and then it must not
+       claim sound. -->
+  <button id="musicBtn">🔇 MUSIC</button>
 
   <h2>Your build</h2>
   <p class="build-note">Approximate whoop physics — not a thrust-stand log. Feeds mass, inertia, thrust, spool, and battery sag. Betaflight CLI paste still sets rates/filters only.</p>
@@ -825,7 +829,7 @@
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
     <b>R</b> last-gate respawn &nbsp;<b>Tab</b> panel<br>
-    🔊 <b>M</b> music &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
+    🔊 <b>M</b> mute &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
     3D (Tune panel): center throttle = zero, below = reverse. Acro only. Not counted on boards.<br>
     <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach<br>
     <b>F</b> upside down on bf: sim flip (logged as an assist); else next mode
@@ -849,8 +853,8 @@
     // #assetStatus alone is not enough: it lives inside the Tab-hidden tune
     // panel, so it is invisible exactly when it matters and a dead sim reads as
     // an unexplained frozen canvas. #audioHint is already on screen, and if left
-    // alone it sits there advising "Press M to enable audio" on a page that can
-    // no longer hear M — so the failure notice replaces it rather than adding
+    // alone it sits there promising sound on a page that can no longer make
+    // any — so the failure notice replaces it rather than adding
     // another element. Classic script, no module dependency, no CSS class needed.
     var hint=document.getElementById('audioHint');
     if(hint){
@@ -891,7 +895,8 @@ import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAUL
 import {
   WS as CORE_WS, TICK_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, radioAux,
-} from "./sim-core-adapter.js?v=ce1282cd5a39";
+} from "./sim-core-adapter.js?v=d2b7d0096db7";
+import {createSimAudio,airframeBlades} from "./sim-audio.js?v=5ed487aaa5f3";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
@@ -3558,7 +3563,57 @@ presetSel.onchange=()=>{
 // (radioAux); null when the page drives AUX (keyboard, touch, a gamepad).
 const stick={r:0,p:0,y:0,t:0,aux:null};
 const keys={};
-// ---------- background music playlist (audio/track*.mp3) — M to toggle, paused by default ----------
+// ---------- sound: the bf core's synth (sim-audio.js), master volume, M mutes ----------
+// One AudioContext for the page, made on the first gesture the browser counts
+// as user activation (unlockAudio); the master volume scales the synth and
+// the music, and M mutes both.
+const simAudio=createSimAudio();
+let audioUnlocked=false;
+function syncSoundUI(){
+  const v=simAudio.volume;
+  document.querySelectorAll('.sound-vol').forEach(el=>{if(parseFloat(el.value)!==v)el.value=v;});
+  document.querySelectorAll('#v_soundVol,.sound-vol-val').forEach(el=>{el.textContent=Math.round(v*100)+'%';});
+  document.querySelectorAll('.sound-btn').forEach(el=>{el.textContent=(simAudio.muted?'🔇':'🔊')+' SOUND [M]';});
+}
+function setSoundVol(v){
+  simAudio.setVolume(v);
+  applyMusicVol();
+  syncSoundUI();
+}
+function toggleMute(){
+  dismissAudioHint();
+  const muted=simAudio.setMuted(!simAudio.muted);
+  applyMusicVol();
+  toast(muted?'SOUND MUTED':'SOUND ON');
+  syncSoundUI();
+}
+// Master volume sliders and mute buttons: the Tune panel's, and the Controls
+// card's each time it opens. Wired here: module scope hides these from
+// inline handlers.
+function wireSoundControls(root){
+  root.querySelectorAll('.sound-vol').forEach(el=>{
+    el.value=simAudio.volume;
+    el.addEventListener('input',e=>setSoundVol(e.target.value));
+  });
+  root.querySelectorAll('.sound-btn').forEach(el=>el.addEventListener('click',()=>toggleMute()));
+  syncSoundUI();
+}
+// A gesture: a key, click or tap, and (unlockAudio from readInput) a stick
+// move. Chrome does not count a gamepad as user activation, so a stick move
+// before any key or click leaves the context unmade (simAudio.unlock false)
+// rather than tripping the autoplay policy; the next gesture tries again.
+// Music starts here too if the saved choice is on.
+function unlockAudio(){
+  if(!simAudio.unlock())return;
+  if(!audioUnlocked){
+    audioUnlocked=true;
+    initMotorAudio();
+    console.log('[audio] unlocked — sound '+(simAudio.muted?'muted':Math.round(simAudio.volume*100)+'%'));
+  }
+  if(!musicStarted&&musicUnlockTries<3)startMusic();
+}
+for(const type of ['keydown','pointerdown','pointerup','touchend'])addEventListener(type,unlockAudio,{capture:true,passive:true});
+// ---------- background music playlist (audio/track*.mp3) — the MUSIC button, paused by default ----------
 const TRACKS=['audio/track1.mp3','audio/track2.mp3','audio/track3.mp3'];
 const MUSIC_VOL_KEY='ryflyMusicVol';
 const MUSIC_ON_KEY='ryflyMusicOn';
@@ -3587,19 +3642,25 @@ function loadMusicVol(){
   try{v=parseFloat(localStorage.getItem(MUSIC_VOL_KEY));}catch(e){}
   return Number.isFinite(v)?THREE.MathUtils.clamp(v,0,1):0.35;
 }
+let musicVol=loadMusicVol();
+// The element plays at the music volume times the master, muted with M.
+function applyMusicVol(){
+  musicEl.volume=musicVol*simAudio.volume;
+  musicEl.muted=simAudio.muted;
+}
 function setMusicVol(v){
-  v=THREE.MathUtils.clamp(Number(v)||0,0,1);
-  musicEl.volume=v;
-  try{localStorage.setItem(MUSIC_VOL_KEY,String(v));}catch(e){}
+  musicVol=THREE.MathUtils.clamp(Number(v)||0,0,1);
+  applyMusicVol();
+  try{localStorage.setItem(MUSIC_VOL_KEY,String(musicVol));}catch(e){}
   syncMusicUI();
-  return v;
+  return musicVol;
 }
 function syncMusicUI(){
-  if(musicBtnEl)musicBtnEl.textContent=(musicOn?'🔊':'🔇')+' MUSIC [M]';
-  if(musicVolEl&&parseFloat(musicVolEl.value)!==musicEl.volume)musicVolEl.value=musicEl.volume;
-  if(musicVolLabel)musicVolLabel.textContent=Math.round(musicEl.volume*100)+'%';
+  if(musicBtnEl)musicBtnEl.textContent=(musicOn?'🔊':'🔇')+' MUSIC';
+  if(musicVolEl&&parseFloat(musicVolEl.value)!==musicVol)musicVolEl.value=musicVol;
+  if(musicVolLabel)musicVolLabel.textContent=Math.round(musicVol*100)+'%';
 }
-musicEl.volume=loadMusicVol();
+applyMusicVol();
 function shuffleOrder(){
   musicOrder=TRACKS.map((_,i)=>i);
   for(let i=musicOrder.length-1;i>0;i--){
@@ -3635,8 +3696,9 @@ function dismissAudioHint(){
   setTimeout(()=>audioHintEl.remove(),1000); // remove after the fade transition finishes
 }
 setTimeout(dismissAudioHint,6000); // fades on its own even if M is never pressed
+// The MUSIC button. A click is a gesture, so unlockAudio has already run.
 function toggleMusic(){
-  dismissAudioHint(); // first M press dismisses it immediately, pre-empting the 6s timer
+  dismissAudioHint();
   musicOn=!musicOn;
   musicWanted=musicOn;
   saveMusicPref(musicOn);
@@ -3648,22 +3710,16 @@ function toggleMusic(){
     // leave the button claiming 🔊 over silence. Reload it instead of un-pausing.
     if(musicEl.src&&!musicEl.error)musicEl.play().catch(()=>{});else playCurrentTrack();
   }else musicEl.pause();
-  // 'm' is the only user-gesture available, so it's still what unlocks the
-  // motor AudioContext — but this runs on every press regardless of which
-  // way musicOn flips, and motor volume itself no longer depends on musicOn
-  initMotorAudio();
-  motorAudioCtx.resume().catch(()=>{});
   toast(musicOn?'♪ MUSIC ON':'MUSIC OFF');
-  musicStarted=true;   // M is itself the unlock; don't let a later stick move re-trigger
+  musicStarted=true;   // the button is itself the start; don't let a later gesture re-trigger
   syncMusicUI();
-  return !musicOn;     // muted state
+  return !musicOn;
 }
-// First-gesture unlock for radio-only pilots. A TX16S pilot never touches the
-// keyboard or mouse, so the gamepad poll calls this on first stick deflection.
-// Chrome does not count gamepad input as user activation, so play() can still
-// be blocked — on rejection the latch is released so M (or the next deflection)
-// still works, capped at a few attempts so a missing file can't hammer.
-// Music itself stays off unless the saved ryflyMusicOn choice is on.
+// First-gesture music start (unlockAudio), for the saved ryflyMusicOn choice.
+// A radio-only pilot's first gesture is a stick move once the browser allows
+// audio. play() can still be blocked — on rejection the latch is released so
+// the next gesture tries again, capped at a few attempts so a missing file
+// can't hammer. Music itself stays off unless the saved choice is on.
 function startMusic(){
   if(musicStarted||musicOn||musicUnlockTries>=3){
     console.log('[music] startMusic skipped — started:'+musicStarted+' on:'+musicOn+' tries:'+musicUnlockTries);
@@ -3671,8 +3727,6 @@ function startMusic(){
   }
   if(!musicWanted){
     musicStarted=true;
-    initMotorAudio();
-    motorAudioCtx.resume().catch(()=>{});
     console.log('[music] startMusic — muted pref, motors only');
     return;
   }
@@ -3683,23 +3737,25 @@ function startMusic(){
   musicEl.play().then(()=>{
     musicOn=true;trackFailStreak=0;
     dismissAudioHint();
-    initMotorAudio();
-    motorAudioCtx.resume().catch(()=>{});
     toast('♪ MUSIC ON');
     syncMusicUI();
     console.log('[music] startMusic ok — playing');
-  }).catch(()=>{musicStarted=false;console.log('[music] startMusic blocked — latch released, M still works');});
+  }).catch(()=>{musicStarted=false;console.log('[music] startMusic blocked — latch released, the next gesture tries again');});
 }
 // Wired here, not inline onclick: module scope means an inline handler cannot
 // see these functions.
 if(musicVolEl){
-  musicVolEl.value=musicEl.volume;   // initialise from the stored volume, not the markup default
+  musicVolEl.value=musicVol;   // initialise from the stored volume, not the markup default
   musicVolEl.addEventListener('input',e=>setMusicVol(e.target.value));
 }
 if(musicBtnEl)musicBtnEl.addEventListener('click',()=>toggleMusic());
 syncMusicUI();
+wireSoundControls(document.getElementById('panel'));
 
-// ---------- motor audio: layered whoop synth — independent of the music toggle; 'm' just unlocks its AudioContext ----------
+// ---------- motor audio on the js core: layered whoop synth from thrust ----------
+// The bf core's sound is sim-audio.js, from sim-core's per-motor rpm; the js
+// core has no rpm, so it keeps this synth (silent while the bf core flies),
+// on the same AudioContext and master bus.
 // Layers per the real 0702-class sound signature:
 //  (1) fundamental sawtooth tracking motor RPM — driven by thrustActual (the
 //      spool-lagged value, not raw stick), so pitch lags throttle exactly like
@@ -3715,11 +3771,11 @@ let motorFund=null,motorHarm=null,motorNoiseGain=null;
 let motorSoundOn=true;
 let audioPrevFrac=0,audioOver=1; // punch-out overshoot state
 function initMotorAudio(){
-  if(motorAudioCtx)return;
-  motorAudioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(motorAudioCtx||!simAudio.context)return;
+  motorAudioCtx=simAudio.context;
   motorGainMaster=motorAudioCtx.createGain();
   motorGainMaster.gain.value=0;
-  motorGainMaster.connect(motorAudioCtx.destination);
+  motorGainMaster.connect(simAudio.input);
   // (1) fundamental saw
   motorFund=motorAudioCtx.createOscillator();
   motorFund.type='sawtooth';motorFund.frequency.value=180;
@@ -3744,12 +3800,14 @@ function initMotorAudio(){
   noiseSrc.connect(bp);bp.connect(motorNoiseGain);motorNoiseGain.connect(motorGainMaster);
   noiseSrc.start();
 }
-function updateMotorSound(){
+// Once a frame: live false while the sim is paused (menu, replay), which
+// silences it like the bf sound.
+function updateMotorSound(live){
   if(!motorAudioCtx||!motorSoundOn)return;
   const t=motorAudioCtx.currentTime;
+  if(!live||cs.kind!=='js'){motorGainMaster.gain.setTargetAtTime(0,t,0.05);return;}
   // pitch follows the SPOOLED thrust, so audio lags stick exactly like the motors
-  const maxN=core.kind==='bf'&&core.maxThrustN?core.maxThrustN*WS:CFG.maxThrustN;
-  const frac=Math.max(0,Math.min(1,Math.abs(thrustActual)/maxN));
+  const frac=Math.max(0,Math.min(1,Math.abs(thrustActual)/CFG.maxThrustN));
   // (5) punch-out overshoot: rapid rise kicks pitch ~3% high, then settles
   if(frac-audioPrevFrac>0.04)audioOver=1.03;
   audioOver+=(1-audioOver)*0.06;
@@ -3804,7 +3862,7 @@ addEventListener('keydown',e=>{
     if(feel)toast(feel.toggleHud()?'HUD ON':'HUD OFF');
   }
   if(e.key.toLowerCase()==='r')resetQuad();
-  if(e.key.toLowerCase()==='m')toggleMusic();
+  if(e.key.toLowerCase()==='m')toggleMute();
   if(e.key.toLowerCase()==='f')flipKey();
   if(e.key.toLowerCase()==='g'){
     if(!ghostAvailable()){toast('NO GHOST YET — FINISH A RUN');return;}
@@ -4035,9 +4093,10 @@ function readInput(dt){
     // mode and turtle switches, on the diff's aux lines.
     stick.aux=core.kind==='bf'&&padIsRadio(gp)?radioAux(gp,map):null;
     // Radio-only pilots make no keyboard or mouse gesture, so a stick deflection
-    // is what unlocks audio for them. Roll/pitch/yaw only — a ratcheted TX16S
-    // throttle sits wherever it was left and would fire this with no gesture.
-    if(!musicStarted&&(Math.abs(stick.r)>0.15||Math.abs(stick.p)>0.15||Math.abs(stick.y)>0.15))startMusic();
+    // is what unlocks audio for them, once the browser allows it (unlockAudio).
+    // Roll/pitch/yaw only — a ratcheted TX16S throttle sits wherever it was
+    // left and would fire this with no gesture.
+    if(!audioUnlocked&&(Math.abs(stick.r)>0.15||Math.abs(stick.p)>0.15||Math.abs(stick.y)>0.15))unlockAudio();
     // safety gate: after connect/device change, throttle stays dead until the
     // sticks have been seen safe once (throttle <5%, r/p/y near center) — a
     // pad plugged in mid-flight or a wrong map can't punch the quad away.
@@ -4058,7 +4117,7 @@ function readInput(dt){
     stick.aux=null;
     const ts=touchCtl.read();
     stick.r=ts.r;stick.p=ts.p;stick.y=ts.y;stick.t=ts.t;
-    if(!musicStarted&&(Math.abs(stick.r)>0.15||Math.abs(stick.p)>0.15||Math.abs(stick.y)>0.15))startMusic();
+    if(!audioUnlocked&&(Math.abs(stick.r)>0.15||Math.abs(stick.p)>0.15||Math.abs(stick.y)>0.15))unlockAudio();
   } else {
     const tR=(keys['arrowright']?1:0)-(keys['arrowleft']?1:0);
     const tP=(keys['arrowup']?1:0)-(keys['arrowdown']?1:0);
@@ -5330,9 +5389,13 @@ function wireLooksUI(){
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
       '<span class="n">R</span> last-gate respawn · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
       '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
-      '<span class="n">H</span> HUD · <span class="n">M</span> music · <span class="n">G</span> ghost · <span class="n">C</span> coach<br>'+
+      '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">G</span> ghost · <span class="n">C</span> coach<br>'+
       '<span class="n">F</span> upside down on bf: sim flip (logged as an assist) · else next flight mode</p>'+
+      '<div class="row"><label>Master volume</label><span class="val sound-vol-val"></span></div>'+
+      '<input type="range" class="sound-vol" min="0" max="1" step="0.05">'+
+      '<button type="button" class="sound-btn"></button>'+
       '<button type="button" id="layerClose">Close</button>');
+    wireSoundControls(document.getElementById('menuLayer'));
     document.getElementById('layerClose').onclick=hideMenuLayer;
   };
   document.getElementById('menuHowTo').onclick=()=>{
@@ -6930,7 +6993,10 @@ function stepCore(frameMs,now){
 }
 // ---------- Core events: contacts and portal triggers (the bf core) ----------
 function onCoreEvent(ev){
-  if(ev.kind==='contact')hitEffects(!!ev.crashed,(ev.impactMs||0)*WS);
+  if(ev.kind==='contact'){
+    hitEffects(!!ev.crashed,(ev.impactMs||0)*WS);
+    simAudio.contact(ev.impactMs||0,!!ev.crashed);
+  }
   else if(ev.kind==='trigger')bfPortal(ev.id);
 }
 // ---------- The bf core (the default): quadmath-sim-core, the Air65 for now ----------
@@ -7116,6 +7182,7 @@ function selectCore(){
       bfPlantMap=plantMap;
       console.info('sim-core '+SIM_CORE_VERSION+': Air65, '+BF_DIFF_PATH+' ('+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target; '+bfConfigNote(bf)+'); tune shown: '+BF_TUNE_ID+'; '+bfWorld().boxes.length+' world boxes; the Build\'s cells and mAh are not used (the plant is the Air65)');
       bfCore=bf;
+      simAudio.setAirframe({blades:airframeBlades(airframe,currentBuild.blades),rpmHover:airframe.values.rpmHover.value,maxThrustN:bf.maxThrustN});
       // The map can change while the wasm loads (the boot map landing): its
       // bounce profile is checked again now that there is a core to give it to.
       bfSyncPlant();
@@ -7142,6 +7209,9 @@ function selectCore(){
 let lastPollUs=null;
 let pollGp=null;
 let pollCore=null;
+// Test hook (_sim.setTestStick): sticks a headless test flies on, over the
+// keyboard's. null in normal use.
+let testStick=null;
 function pollInput(){
   if(simPaused()){lastPollUs=null;return;}
   const tUs=core.stamp(performance.now());
@@ -7152,6 +7222,7 @@ function pollInput(){
   const dt=(lastPollUs===null||tUs<lastPollUs)?0:Math.min(0.05,(tUs-lastPollUs)/1e6);
   lastPollUs=tUs;
   readInput(dt);
+  if(testStick){stick.r=testStick.r;stick.p=testStick.p;stick.y=testStick.y;stick.t=testStick.t;stick.aux=null;}
   tickArming(pollGp);
   if(core.kind==='bf'&&!bfRadio()&&armGate&&padLive&&coreArmed())core.setArm(false);
   if(core.kind==='bf'&&!bfRadio())bfTurtleTick();
@@ -7242,7 +7313,6 @@ function loop(now){
     tickReplay(now);
   }else if(!simPaused()){
     stepCore(frameMs,now);
-    updateMotorSound();
     updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();updateDust(dt);
     if(feel){
       state.stickT=stick.t;
@@ -7287,6 +7357,9 @@ function loop(now){
       }
     }catch(e){}
   }
+  const live=!replayOn&&!simPaused();
+  updateMotorSound(live);
+  simAudio.update(live?cs:null);
   updateCamera();
   if(craftGroup&&craftGroup.visible){
     spinCraftProps(dt);
@@ -7704,6 +7777,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   dailyLineFor,flyDailyLine,dailyLineLive:()=>dailyLineLive,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
   core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
+  audio:simAudio,setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,
   TRICKS_KEY,tricks});

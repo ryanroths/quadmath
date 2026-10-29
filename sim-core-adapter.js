@@ -141,7 +141,9 @@ const quat = () => ({ x: 0, y: 0, z: 0, w: 1 });
 // What getState() returns, module frame. position, velocity and quaternion
 // are interpolated for render; everything else is the latest tick. The field
 // names are quadphysics.js's, so module-frame readers (tricks, flip, coach)
-// read either core unchanged.
+// read either core unchanged. rpm (each motor's, sim-core's motor model),
+// contactFlags (sim-core's: bit 0 the floor, bit 1 a box) and beeper are the
+// bf core's; the js core leaves them null, as it does battV and soc.
 export function emptyState() {
   return {
     kind: '', flightMs: 0,
@@ -149,7 +151,7 @@ export function emptyState() {
     armed: false, airborne: false, clearance: 0, flightMode: 'angle',
     attitude: { roll: 0, pitch: 0 }, motorOutputs: [0, 0, 0, 0],
     totalThrustAbsN: 0, twr: 0, battV: null, soc: null, armingDisableFlags: 0,
-    crashFlip: false,
+    crashFlip: false, rpm: null, contactFlags: null, beeper: null,
   };
 }
 
@@ -250,6 +252,9 @@ export function createJsCore({ qp, tick, extras }) {
       out.totalThrustAbsN = qp.totalThrustAbsN || Math.abs(qp.totalThrustN);
       out.twr = qp.twr;
       out.armingDisableFlags = 0;
+      out.rpm = null;
+      out.contactFlags = null;
+      out.beeper = null;
       if (extras) extras(out);
       return out;
     },
@@ -806,6 +811,11 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
       out.attitude.roll = Math.atan2(-uy, uz);
       out.attitude.pitch = Math.atan2(ux, uz);
       for (let i = 0; i < 4; i++) out.motorOutputs[i] = s.motorOut[i];
+      if (!out.rpm) out.rpm = [0, 0, 0, 0];
+      for (let i = 0; i < 4; i++) out.rpm[i] = s.rpm[i];
+      out.contactFlags = s.contactFlags;
+      // sim-core's FC readouts (v1) have no beeper field: null until they do.
+      out.beeper = 'beeper' in fc ? !!fc.beeper : null;
       const thrust = s.thrustN.reduce((a, b) => a + Math.abs(b), 0);
       out.totalThrustAbsN = thrust;
       out.twr = thrust / weightN;
