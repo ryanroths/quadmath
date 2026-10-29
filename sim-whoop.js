@@ -9,12 +9,15 @@
 import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=1dedc1c1fd57';
 
 export const WHOOP_KEY = 'quadmathSimWhoop';
-// 4: the bf core (Betaflight 4.5.1 in sim-core) is the default, so the boards
-// start clean (the Worker keys every board by this number too); 3: the fixed
+// 5: sim-core v0.4.0, wall contact (the ducts' sides, 14.5 mm from BetaFPV's
+// frame table, with Coulomb friction and restitution on walls), so wall hits
+// glance instead of stopping; 4: the bf core (Betaflight 4.5.1 in sim-core) is
+// the default, so the boards start clean (the Worker keys every board by this
+// number too); 3: the fixed
 // 1 kHz cores, js the default and ?core=bf, with sim-time input; 2 ran on
 // frame time. sim-retention.js PHYS_VER (what the leaderboard Worker accepts)
 // is the same number.
-export const PHYSICS_VER = 4;
+export const PHYSICS_VER = 5;
 export const WHOOP_FEEL_VER = 3; // bump: wash + drafts default Off; migrate once
 export const GHOST_FORMAT_V = 1;
 
@@ -220,12 +223,19 @@ function unitOrDefault(n, fb) {
 }
 
 // Maps whose walls bounce: a contact there rebounds instead of stopping dead.
-// crash multiplies the crash threshold, bounce the restitution's bounce term;
-// the bf core gets the same through its plant (sim-core-adapter.js
-// contactPlant). The Rig: up to about 10.6 m/s into a face (a 65) rebounds at
-// about 0.41, where elsewhere 2.7 m/s is a crash at 0.10.
+// crash multiplies the crash threshold, bounce the restitution's bounce term,
+// wall the bf core's wall restitution. The Rig on the js core: up to about
+// 10.6 m/s into a face (a 65) rebounds at about 0.41, where elsewhere 2.7 m/s
+// is a crash at 0.10. The bf core takes all three through its plant
+// (sim-core-adapter.js contactPlant): since sim-core v0.4.0 a box's walls
+// rebound at the airframe's wallRestitution and not by bounce, so wall scales
+// the Air65's 0.3 to 0.41, the Rig's walls below its crash speed as on the js
+// core and on bf before v0.4.0 (owner, 2026-10-29). A crash into a wall comes
+// back at 0.41 too, where those gave 0.10: sim-core's walls take one
+// restitution, crash or not. bounce still reaches floors, box tops,
+// undersides and box edges there. The js core does not read wall.
 export const BOUNCE_MAPS = Object.freeze({
-  rig: Object.freeze({ crash: 4, bounce: 2 }),
+  rig: Object.freeze({ crash: 4, bounce: 2, wall: 1.37 }),
 });
 
 // Duct bounce. Soft hits rebound + spin. Crash only above a build-scaled

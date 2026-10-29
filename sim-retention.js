@@ -29,7 +29,7 @@ export const MISS_PENALTY_MS = 2000;
 // sim-whoop.js). Submitted ghosts must carry it, and every board is kept per
 // version (boardKeyFor online, boardStoreKey local), so a bump starts the
 // boards clean. See that file for history.
-export const PHYS_VER = 4;
+export const PHYS_VER = 5;
 export const DAILY_GEN = 2;
 export const PILOT_NAME_MAX = 16;
 export const GATE_SIZE_MIN = 0.28 * WS_PER_METRE;

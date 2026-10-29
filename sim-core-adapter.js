@@ -400,18 +400,30 @@ export function bfChannels(sample, aux, ranges) {
 }
 
 // The airframe with a map's contact profile (sim-whoop.js BOUNCE_MAPS) on its
-// plant: sim-core v0.3.0 has no per-box restitution, so a bounce map scales
-// the plant's crash threshold (crashScale) and restitution (bounceScale) for
-// every contact there. No profile: the airframe as it is.
+// plant: sim-core has no per-box restitution, so a bounce map scales the
+// plant's crash threshold (crashScale) for every contact there, its wall
+// restitution (wallRestitution, a box's vertical faces since sim-core v0.4.0;
+// at most 1, which sim-core accepts) and its restitution for every other
+// contact (bounceScale). No profile: the airframe as it is.
 export function contactPlant(airframe, profile) {
   if (!profile || !airframe || !airframe.values) return airframe;
   const v = airframe.values;
-  const scaled = (key, k) => {
+  const scaled = (key, k, max = Infinity) => {
     const f = v[key];
     if (!f || !Number.isFinite(f.value) || !(k > 0)) return f;
-    return { ...f, value: f.value * k, note: (f.note ? f.note + '; ' : '') + 'x' + k + ' for a bounce map' };
+    const value = Math.min(max, f.value * k);
+    const how = 'x' + k + (value < f.value * k ? ', capped at ' + max : '');
+    return { ...f, value, note: (f.note ? f.note + '; ' : '') + how + ' for a bounce map' };
   };
-  return { ...airframe, values: { ...v, crashScale: scaled('crashScale', profile.crash), bounceScale: scaled('bounceScale', profile.bounce) } };
+  return {
+    ...airframe,
+    values: {
+      ...v,
+      crashScale: scaled('crashScale', profile.crash),
+      bounceScale: scaled('bounceScale', profile.bounce),
+      wallRestitution: scaled('wallRestitution', profile.wall, 1),
+    },
+  };
 }
 
 // SimCore is quadmath-sim-core's class (vendor/sim-core/sim-core.js); wasm is
