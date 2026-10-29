@@ -11,11 +11,12 @@ import {
   WHOOP_KEY, PHYSICS_VER, WHOOP_FEEL_VER, GHOST_FORMAT_V, DEFAULT_WHOOP,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale,
   groundEffectMult, whoopGroundK, whoopGroundMult,
-  lipoOcv, stepBattery, resolveDuctHit,
+  lipoOcv, stepBattery, resolveDuctHit, BOUNCE_MAPS,
   stepPropwash, indoorDraft, emptyWake, WASH_LEVELS, washLevelFromStr, washStrFromLevel,
   tagGhost, ghostSamples, ghostPhys,
 } from '../sim-whoop.js';
 import { ghostPayloadError, makePaceGhost } from '../sim-tracks.js';
+import { PHYS_VER } from '../sim-retention.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const simSrc = existsSync(join(root, 'sim.html')) ? readFileSync(join(root, 'sim.html'), 'utf8') : '';
@@ -196,22 +197,23 @@ test('propwash wobbles on a dive/chop through own wash; drafts grow near walls w
 
 test('ghosts stay v:1 kinematic; phys tag is additive and optional', () => {
   assert.equal(GHOST_FORMAT_V, 1);
-  assert.equal(PHYSICS_VER, 2);
+  assert.equal(PHYSICS_VER, 4);
+  assert.equal(PHYS_VER, PHYSICS_VER, 'the Worker accepts what the page tags');
   const samples = [[0, 0, 1, 0, 0, 0, 0, 1], [100, 1, 1, -1, 0, 0, 0, 1]];
   const old = { v: 1, track: 0, name: 'OLD', lapTime: 1000, samples };
   assert.equal(ghostPayloadError(old, 0), null);
   const tagged = tagGhost({ track: 0, name: 'NEW', lapTime: 1000, samples });
   assert.equal(tagged.v, 1);
-  assert.equal(tagged.phys, 2);
+  assert.equal(tagged.phys, PHYSICS_VER);
   assert.equal(ghostPayloadError(tagged, 0), null);
   assert.equal(ghostPayloadError({ ...old, phys: 2, feel: 2 }, 0), null);
   assert.deepEqual(ghostSamples(old), samples);
   assert.deepEqual(ghostSamples(samples), samples);
   assert.equal(ghostPhys(old), null);
-  assert.equal(ghostPhys(tagged), 2);
+  assert.equal(ghostPhys(tagged), PHYSICS_VER);
   const pace = makePaceGhost([{ x: 0, y: 2, z: 0 }, { x: 4, y: 2, z: -6 }], { track: 'living-sofa', speed: 5, hz: 6, laps: 1 });
   assert.equal(pace.v, 1);
-  assert.equal(pace.phys, 2);
+  assert.equal(pace.phys, PHYSICS_VER);
   assert.equal(ghostPayloadError(pace, 'living-sofa'), null);
 });
 
@@ -352,7 +354,7 @@ test('sim.html wires W2 sliders, HUD voltage, and keeps old localStorage keys', 
   for (const k of [
     'ryflyRates', 'ryflyDroneType', 'ryflyCamCustom', 'ryflyMusicVol',
     'ryflyMusicOn',
-    'quadmath_bestLap_', 'quadmath_bestGhost_', 'quadmath_pilotName', BUILD_KEY,
+    'quadmath_bestLap_', 'ghostStorageKey(', 'quadmath_pilotName', BUILD_KEY,
   ]) {
     assert.ok(simSrc.includes(k), `must keep reading old key ${k}`);
   }
@@ -362,4 +364,23 @@ test('sim.html wires W2 sliders, HUD voltage, and keeps old localStorage keys', 
   assert.match(simSrc, /if\(!musicWanted\)/);
   assert.match(simSrc, /saveMusicPref\(musicOn\)/);
   assert.ok(!simSrc.includes('content/guides/'), 'do not edit guide HTML from the sim PR');
+});
+
+test('The Rig bounces: a wall hit that crashes elsewhere rebounds there', () => {
+  const hit = (into, profile) => resolveDuctHit({
+    vel: { x: into, y: 0, z: 0 }, omega: { x: 0, y: 0, z: 0 }, normal: { x: -1, y: 0, z: 0 }, into, floor: false,
+  }, DEFAULT_BUILD, DEFAULT_WHOOP, profile);
+  // 20 wu/s (5.7 m/s) into a wall: a crash on any other map, near-dead stop.
+  const plain = hit(20, undefined);
+  assert.equal(plain.crashed, true);
+  assert.equal(plain.rest, 0.10);
+  const rig = hit(20, BOUNCE_MAPS.rig);
+  assert.equal(rig.crashed, false);
+  assert.ok(rig.rest > 0.38 && rig.rest < 0.45, 'rest ' + rig.rest);
+  assert.ok(rig.vel.x < -0.38 * 20, 'it comes back off the wall: ' + rig.vel.x);
+  // Still a crash far above the threshold (about 37 wu/s on the 65).
+  assert.equal(hit(45, BOUNCE_MAPS.rig).crashed, true);
+  // No profile is the build's own contact, unchanged.
+  assert.deepEqual(hit(6, undefined), hit(6, null));
+  assert.deepEqual(Object.keys(BOUNCE_MAPS), ['rig']);
 });

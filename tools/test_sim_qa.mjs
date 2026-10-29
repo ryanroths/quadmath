@@ -9,12 +9,12 @@ import {
   findTrackIn, resolveSimBoot, firstTrackForMap, startPad, normalizeTrack,
   BUILTIN_TRACK_FILES, SELECTED_TRACK_KEY, resolveFly, resolveTrackPick,
   persistableSelection, isFreestyleTrackId, isEphemeralTrackId, freestyleIdFor,
-  loadSelected, saveSelected, MAPS, freestyleTrack, isLineTrackId,
+  loadSelected, saveSelected, MAPS, freestyleTrack, isLineTrackId, linkNeedsDev,
 } from '../sim-tracks.js';
 import { dailyLineFor } from '../sim-retention.js';
 import { trickLineupText, TRICK_BY_ID } from '../sim-tricks.js';
 import {
-  shouldToastFlip, isStuckInverted, stepStuckHold, wantsTurtle, bodyUpZ,
+  shouldToastFlip, isStuckInverted, stepStuckHold, wantsTurtle, bodyUpZ, flipHintText,
   STUCK_HOLD_S,
 } from '../sim-feel.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
@@ -27,6 +27,37 @@ const simSrc = existsSync(join(root, 'sim.html')) ? readFileSync(join(root, 'sim
 const files = BUILTIN_TRACK_FILES.map((m) =>
   normalizeTrack(JSON.parse(readFileSync(join(root, m.file), 'utf8')))
 );
+
+test('every guide link in SIM-LINKS.md lands on its own map (dev maps carry &dev=1)', () => {
+  const doc = readFileSync(join(root, 'SIM-LINKS.md'), 'utf8');
+  const links = [...doc.matchAll(/https:\/\/quadmath\.com\/sim\.html\?[^\s"<>`]+/g)].map((x) => x[0].replace(/&amp;/g, '&'));
+  assert.ok(links.length >= 10, 'snippet and examples found');
+  for (const link of links) {
+    const p = new URL(link).searchParams;
+    const dev = p.get('dev') === '1';
+    const trackMap = p.get('track') && (BUILTIN_TRACK_FILES.find((t) => t.id === p.get('track')) || {}).map;
+    const want = trackMap || p.get('map');
+    assert.ok(want, link + ' names a map or a known track');
+    const r = resolveSimBoot({ map: p.get('map'), track: p.get('track') }, null, files, { dev });
+    assert.equal(r.closedMap, undefined, link + ' needs &dev=1');
+    assert.equal(r.map, want, link);
+  }
+});
+
+test('COPY RATES LINK / COPY BUILD LINK add &dev=1 exactly when the link would otherwise land on The Rig', () => {
+  for (const m of MAPS) {
+    const tracks = [freestyleIdFor(m.id), ...files.filter((t) => t.map === m.id).map((t) => t.id)];
+    for (const track of tracks) {
+      const closed = resolveSimBoot({ map: m.id, track }, null, files, { dev: false }).closedMap !== undefined;
+      assert.equal(linkNeedsDev(m.id, track), closed, m.id + ' / ' + track);
+    }
+  }
+  // Generated session courses open on their own map without the flag.
+  assert.equal(linkNeedsDev('garage', 'daily-2026-11-02'), false);
+  assert.equal(linkNeedsDev('room', 'room-practice'), false);
+  // Both copy buttons pass it.
+  assert.equal((simSrc.match(/dev:linkNeedsDev\(currentMap,shareTrackParam\(\)\)/g) || []).length, 2);
+});
 
 test('findTrack(null) does not match Sofa Slalom via String(null)', () => {
   assert.equal(findTrackIn(null, files), null);
@@ -44,8 +75,8 @@ test('?map=&track= mismatch uses the track map; unknown map is not saved', () =>
   const unk = resolveSimBoot({ map: 'nope' }, { map: 'garage', track: 'garage-bench' }, files);
   assert.equal(unk.unknownMap, true);
   assert.equal(unk.save, false);
-  assert.equal(unk.map, 'city');
-  assert.equal(unk.track, 'city-freestyle');
+  assert.equal(unk.map, 'rig');
+  assert.equal(unk.track, 'rig-freestyle');
   const rest = resolveSimBoot({}, { map: 'garage', track: 'garage-bench' }, files);
   assert.equal(rest.map, 'garage');
   assert.equal(rest.track, 'garage-freestyle');
@@ -117,6 +148,21 @@ test('FLIPPED toast is only a stuck-on-the-deck hint', () => {
   assert.equal(isStuckInverted({
     upZ: -0.4, clearanceM: 0.01, contact: true, speed: 0, omega: 0,
   }), false, 'up vector not inverted enough');
+});
+
+test('FLIPPED toast names the way out that works on this core and input', () => {
+  assert.equal(flipHintText({ core: 'js', armed: true }), 'FLIPPED — FULL THROTTLE + HARD ROLL · R RESPAWNS');
+  assert.equal(flipHintText({ core: 'js', armed: false }), 'FLIPPED — ARM, THEN FULL THROTTLE + HARD ROLL · R RESPAWNS');
+  assert.equal(flipHintText({ core: 'js', armed: true, touch: true }), 'FLIPPED — FULL THROTTLE + HARD ROLL · OR RESPAWN');
+  assert.equal(flipHintText({ core: 'js', threeD: true }), 'FLIPPED — R TO RESPAWN', '3D has no turtle');
+  // bf, page-driven aux (keyboard, touch, a gamepad): the gesture, or an arm.
+  assert.equal(flipHintText({ core: 'bf', flipAux: 3, armed: true }), 'FLIPPED — FULL THROTTLE + HARD ROLL · R RESPAWNS');
+  assert.equal(flipHintText({ core: 'bf', flipAux: 3, armed: false }), 'FLIPPED — ARM, THEN ROLL · R RESPAWNS');
+  // bf with a radio: Betaflight's crash flip on the diff's switch.
+  assert.equal(flipHintText({ core: 'bf', radio: true, flipAux: 3, armed: false }), 'FLIPPED — AUX3 ON, ARM, ROLL · R RESPAWNS');
+  assert.equal(flipHintText({ core: 'bf', radio: true, flipAux: 3, armed: true }), 'FLIPPED — DISARM, AUX3 ON, ARM, ROLL · R RESPAWNS');
+  assert.equal(flipHintText({ core: 'bf', radio: true, flipAux: null }), 'FLIPPED — NO TURTLE SWITCH IN THE DIFF · R RESPAWNS');
+  assert.equal(flipHintText({ core: 'bf', flipAux: null, armed: true }), 'FLIPPED — NO TURTLE SWITCH IN THE DIFF · R RESPAWNS');
 });
 
 test('full flip, roll, inverted hang, and inverted dive never toast', () => {
@@ -296,9 +342,9 @@ test('boot and Fly are last-map freestyle; room/daily cannot lock routing', () =
   assert.equal(isFreestyleTrackId('city-freestyle'), true);
   assert.equal(isEphemeralTrackId('room-practice'), true);
   assert.equal(freestyleIdFor('city'), 'city-freestyle');
-  assert.deepEqual(resolveFly(null), { map: 'city', track: 'city-freestyle', mode: 'free' });
+  assert.deepEqual(resolveFly(null), { map: 'rig', track: 'rig-freestyle', mode: 'free' });
   assert.equal(resolveFly({ map: 'trainer', track: 'trainer-slalom' }).track, 'trainer-freestyle');
-  assert.equal(resolveSimBoot({}, null, files).track, 'city-freestyle');
+  assert.equal(resolveSimBoot({}, null, files).track, 'rig-freestyle');
   const roomQuery = resolveSimBoot({ track: 'room-practice' }, { map: 'city', track: 'city-loop' }, files);
   assert.equal(roomQuery.map, 'room', 'track=room-practice must not boot City');
   assert.equal(roomQuery.track, 'room-practice');

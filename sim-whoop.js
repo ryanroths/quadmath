@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim W2 — real whoop physics helpers.
 // Duct bounce, propwash, ground-effect scale, LiPo voltage curve, indoor drafts.
 // Strength follows the W1 build (frame, KV, AUW). Ideas only — nothing here is
@@ -5,10 +6,15 @@
 // New localStorage key: quadmathSimWhoop. Do not write old ryfly* keys.
 // Ghosts stay kinematic {v:1,samples}; new recordings add phys: PHYSICS_VER.
 
-import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=fa0942d7ccfb';
+import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=1dedc1c1fd57';
 
 export const WHOOP_KEY = 'quadmathSimWhoop';
-export const PHYSICS_VER = 2;
+// 4: the bf core (Betaflight 4.5.1 in sim-core) is the default, so the boards
+// start clean (the Worker keys every board by this number too); 3: the fixed
+// 1 kHz cores, js the default and ?core=bf, with sim-time input; 2 ran on
+// frame time. sim-retention.js PHYS_VER (what the leaderboard Worker accepts)
+// is the same number.
+export const PHYSICS_VER = 4;
 export const WHOOP_FEEL_VER = 3; // bump: wash + drafts default Off; migrate once
 export const GHOST_FORMAT_V = 1;
 
@@ -213,11 +219,24 @@ function unitOrDefault(n, fb) {
   return v3(n.x / L, n.y / L, n.z / L);
 }
 
+// Maps whose walls bounce: a contact there rebounds instead of stopping dead.
+// crash multiplies the crash threshold, bounce the restitution's bounce term;
+// the bf core gets the same through its plant (sim-core-adapter.js
+// contactPlant). The Rig: up to about 10.6 m/s into a face (a 65) rebounds at
+// about 0.41, where elsewhere 2.7 m/s is a crash at 0.10.
+export const BOUNCE_MAPS = Object.freeze({
+  rig: Object.freeze({ crash: 4, bounce: 2 }),
+});
+
 // Duct bounce. Soft hits rebound + spin. Crash only above a build-scaled
 // impact threshold. Disabled → low restitution, easy crash (old "hard wall").
-export function resolveDuctHit(hit, build, settings) {
+// profile: a map's BOUNCE_MAPS entry, or nothing for the build's own contact.
+export function resolveDuctHit(hit, build, settings, profile) {
   const s = normalizeWhoop(settings);
-  const sc = whoopScale(build);
+  const base = whoopScale(build);
+  const sc = profile
+    ? { ...base, crashAt: base.crashAt * (profile.crash || 1), bounce: base.bounce * (profile.bounce || 1) }
+    : base;
   const n = unitOrDefault(hit && hit.normal, v3(0, 1, 0));
   const vel = v3(hit && hit.vel && hit.vel.x, hit && hit.vel && hit.vel.y, hit && hit.vel && hit.vel.z);
   const omega = v3(hit && hit.omega && hit.omega.x, hit && hit.omega && hit.omega.y, hit && hit.omega && hit.omega.z);

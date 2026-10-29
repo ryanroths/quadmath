@@ -10,7 +10,7 @@ import {
   saveSelected, BUILTIN_TRACK_FILES, SHARE_PREFIX, startPad, gateRadius, MAPS,
   findTrackIn, resolveSimBoot, firstTrackForMap, knownMapId, isBlankTrackId,
   isFreestyleTrackId, isEphemeralTrackId, freestyleTrack, freestyleIdFor,
-  resolveFly, resolveTrackPick, persistableSelection,
+  resolveFly, resolveTrackPick, persistableSelection, DEFAULT_MAP, mapOpen,
   isLineTrackId, lineFinishIndex, afterLinePass, ghostSampleDue, downsampleGhost,
   interpolateGhostPose, lineDeltaMs, fmtSignedDelta, visibleSplits,
   LINE_GHOST_HZ, LINE_GHOST_MAX,
@@ -122,12 +122,13 @@ assert.ok(!enteredGate(inside, inside, g1));
 const lastGate = { x: g1.x, y: g1.y, z: g1.z };
 assert.equal(detectPassOrMiss(lastGate, lastGate, living.gates, 2).type, 'none');
 
-assert.equal(ghostStorageKey(0), 'quadmath_bestGhost_0');
-assert.equal(ghostStorageKey(1), 'quadmath_bestGhost_1');
-assert.equal(ghostStorageKey('city-loop'), 'quadmath_bestGhost_0');
+// Ghost keys carry GHOST_KEY_PREFIX (v3: sim-time ghosts); best laps and runs keep theirs.
+assert.equal(ghostStorageKey(0), 'v3.quadmath_bestGhost_0');
+assert.equal(ghostStorageKey(1), 'v3.quadmath_bestGhost_1');
+assert.equal(ghostStorageKey('city-loop'), 'v3.quadmath_bestGhost_0');
 assert.equal(bestLapStorageKey(0), 'quadmath_bestLap_0');
 assert.equal(bestRunStorageKey(1), 'quadmath_bestRun_1');
-assert.equal(ghostStorageKey('living-sofa'), 'quadmathSimGhost_living-sofa');
+assert.equal(ghostStorageKey('living-sofa'), 'v3.quadmathSimGhost_living-sofa');
 assert.equal(bestLapStorageKey('living-sofa'), 'quadmathSimBestLap_living-sofa');
 
 const mem = {};
@@ -193,8 +194,8 @@ assert.equal(mismatch.map, 'living');
 assert.equal(mismatch.track, 'living-sofa');
 assert.equal(mismatch.mode, 'race');
 const unknown = resolveSimBoot({ map: 'narnia' }, { map: 'garage', track: 'garage-bench' }, files);
-assert.equal(unknown.map, 'city');
-assert.equal(unknown.track, 'city-freestyle');
+assert.equal(unknown.map, 'rig');
+assert.equal(unknown.track, 'rig-freestyle');
 assert.equal(unknown.save, false);
 assert.equal(unknown.unknownMap, true);
 const restored = resolveSimBoot({}, { map: 'garage', track: 'garage-bench' }, files);
@@ -218,8 +219,8 @@ assert.equal(freestyleTrack('trainer').gates.length, 0);
 assert.equal(freestyleIdFor('gym'), 'gym-freestyle');
 
 const emptyBoot = resolveSimBoot({}, null, files);
-assert.equal(emptyBoot.map, 'city');
-assert.equal(emptyBoot.track, 'city-freestyle');
+assert.equal(emptyBoot.map, 'rig');
+assert.equal(emptyBoot.track, 'rig-freestyle');
 assert.equal(emptyBoot.mode, 'free');
 const roomQuery = resolveSimBoot({ track: 'room-practice' }, { map: 'city', track: 'city-loop' }, files);
 assert.equal(roomQuery.map, 'room');
@@ -237,7 +238,24 @@ const dailySaved = resolveSimBoot({}, { map: 'trainer', track: 'daily-2026-10-18
 assert.equal(dailySaved.map, 'trainer');
 assert.equal(dailySaved.track, 'trainer-freestyle');
 assert.equal(resolveFly({ map: 'living', track: 'living-sofa' }).track, 'living-freestyle');
-assert.equal(resolveFly(null).track, 'city-freestyle');
+assert.equal(resolveFly(null).track, 'rig-freestyle');
+
+// Without ?dev=1 only The Rig is open: a saved or linked closed map boots The
+// Rig, unsaved; generated session courses (daily, weekly, room practice) still
+// fly their own map; with ?dev=1 (or no opts, the old callers) every map is open.
+assert.equal(DEFAULT_MAP, 'rig');
+assert.equal(mapOpen('rig', false), true);
+assert.equal(mapOpen('garage', false), false);
+assert.equal(mapOpen('garage', true), true);
+const closedSaved = resolveSimBoot({}, { map: 'garage', track: 'garage-bench' }, files, { dev: false });
+assert.deepEqual([closedSaved.map, closedSaved.track, closedSaved.save, closedSaved.closedMap], ['rig', 'rig-freestyle', false, 'garage']);
+const closedLink = resolveSimBoot({ map: 'living', track: 'living-sofa' }, null, files, { dev: false });
+assert.deepEqual([closedLink.map, closedLink.track], ['rig', 'rig-freestyle']);
+const devLink = resolveSimBoot({ map: 'living', track: 'living-sofa' }, null, files, { dev: true });
+assert.deepEqual([devLink.map, devLink.track], ['living', 'living-sofa']);
+const dailyClosed = resolveSimBoot({ track: 'room-practice' }, null, files, { dev: false });
+assert.equal(dailyClosed.map, 'room', 'a session course still flies its map');
+assert.equal(resolveSimBoot({}, null, files, { dev: false }).map, 'rig');
 assert.equal(resolveTrackPick('office', 'office-hallway', files).track, 'office-hallway');
 assert.equal(resolveTrackPick('office', 'office-hallway', files).map, 'office');
 assert.equal(resolveTrackPick('office', 'freestyle', files).track, 'office-freestyle');

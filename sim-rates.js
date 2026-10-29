@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim rates — Betaflight CLI parse + rates_type curves.
 // Formulas follow Betaflight's public rc.c apply*Rates (written from scratch).
 // Nothing here is copied from WebFPV.
@@ -187,9 +188,9 @@ export const RATE_CARDS = Object.freeze({
   }),
   '65-betafpv-ryfly-1219s': Object.freeze({
     type: 'ACTUAL',
-    roll: Object.freeze([4, 74, 56]),
-    pitch: Object.freeze([4, 74, 56]),
-    yaw: Object.freeze([4, 70, 56]),
+    roll: Object.freeze([2, 74, 56]),
+    pitch: Object.freeze([2, 74, 56]),
+    yaw: Object.freeze([2, 70, 56]),
   }),
   '75-betafpv-ryfly-o4-gf1811': Object.freeze({
     type: 'ACTUAL',
@@ -260,7 +261,7 @@ export function decodeRates(token) {
   return out;
 }
 
-export function ratesDeepLink({ origin, map, track, mode, build, rates, threeD } = {}) {
+export function ratesDeepLink({ origin, map, track, mode, build, rates, threeD, dev } = {}) {
   const base = origin || 'https://quadmath.com';
   const u = new URL('/sim.html', base.endsWith('/') ? base : base + '/');
   if (map) u.searchParams.set('map', String(map));
@@ -270,6 +271,8 @@ export function ratesDeepLink({ origin, map, track, mode, build, rates, threeD }
   if (threeD) u.searchParams.set('3d', '1');
   const token = typeof rates === 'string' ? rates : encodeRates(rates);
   if (token) u.searchParams.set('rates', token);
+  // A map other than The Rig opens only with ?dev=1 (sim-tracks.js linkNeedsDev).
+  if (dev) u.searchParams.set('dev', '1');
   return u.toString();
 }
 

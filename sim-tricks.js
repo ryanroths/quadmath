@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim — freestyle trick score + combo.
 // Maneuver classifier: one rotation segment → exactly one label (most specific
 // wins). Trick definitions and point values based on Tyrantt's Pro Whooper
@@ -29,7 +30,7 @@ export const SLOPPY_MUL = 0.65;
 export const BUMP_MUL = 0.5;
 
 const INDOOR_IDS = Object.freeze({
-  living: 1, garage: 1, warehouse: 1, office: 1, gym: 1, trainer: 1, room: 1,
+  living: 1, garage: 1, warehouse: 1, office: 1, gym: 1, trainer: 1, room: 1, rig: 1,
 });
 
 export const TRICK_LIST = Object.freeze([

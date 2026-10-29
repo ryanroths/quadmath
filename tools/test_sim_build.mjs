@@ -115,6 +115,9 @@ test('deep link carries build, track, mode', () => {
   });
   assert.ok(url3.includes('3d=1'));
   assert.ok(url3.includes('mode=acro'));
+  assert.equal(url.includes('dev='), false, 'no dev=1 unless asked');
+  const dev = buildDeepLink({ origin: 'https://quadmath.com', build: BUILD_PRESETS.air65, track: 'living-sofa', dev: true });
+  assert.equal(new URL(dev).searchParams.get('dev'), '1');
 });
 
 test('classDefault maps 65/75/85', () => {
@@ -131,7 +134,7 @@ test('sim.html wires the picker and URL params without touching old keys as writ
   assert.ok(src.includes('q.get(\'build\')') || src.includes('q.get("build")') || src.includes("q.get('build')"));
   assert.ok(src.includes('cliPaste') && src.includes('btnCliImport'), 'CLI paste still present');
   assert.ok(src.includes('btnRatesShare') && src.includes('COPY RATES LINK'), 'Tune rates share');
-  for (const k of ['ryflyRates', 'ryflyDroneType', 'quadmath_bestLap_', 'quadmath_bestGhost_']) {
+  for (const k of ['ryflyRates', 'ryflyDroneType', 'quadmath_bestLap_', 'ghostStorageKey(']) {
     assert.ok(src.includes(k), `must keep reading old key ${k}`);
   }
   assert.ok(src.includes(BUILD_KEY) || src.includes('BUILD_KEY'));

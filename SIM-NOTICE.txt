@@ -1,0 +1,26 @@
+QuadMath simulator (quadmath.com/sim.html)
+
+The simulator is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. It is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+details: vendor/sim-core/LICENSE, or https://www.gnu.org/licenses/gpl-3.0.html.
+
+What this notice covers: sim.html, quadphysics.js, sim-core-adapter.js and
+the sim-*.js modules in this repository (each carries an SPDX
+GPL-3.0-or-later line). The rest of the quadmath.com site is not covered.
+
+Source: https://github.com/ryanroths/quadmath (this page and its modules).
+
+THIRD-PARTY CODE
+
+quadmath-sim-core, vendored in vendor/sim-core/ (GPL-3.0-or-later):
+https://github.com/ryanroths/quadmath-sim-core, the version named in
+vendor/sim-core/VERSION. It compiles Betaflight
+(https://github.com/betaflight/betaflight, GPL-3.0-or-later) to WebAssembly.
+Its own notice is vendor/sim-core/NOTICE.
+
+three.js (MIT), vendored in vendor/. Asset licences (Kenney CC0 kits, fonts)
+are listed in ASSETS-LICENSES.md.

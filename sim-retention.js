@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim W5 — Retention: daily whoop, weekly boards, ghost duels, skins.
 // Nothing here is copied from WebFPV (GPL).
 // New localStorage keys: quadmathSimDaily, quadmathSimBoard, quadmathSimSkin,
@@ -24,7 +25,11 @@ export const LEADERBOARD_URL = 'https://sim-leaderboard.ryan-roths.workers.dev';
 export const CLASS_IDS = Object.freeze([65, 75, 85]);
 export const CLASS_MAX_SPEED = Object.freeze({ 65: 48, 75: 58, 85: 72 });
 export const MISS_PENALTY_MS = 2000;
-export const PHYS_VER = 2;
+// sim-whoop.js PHYSICS_VER, here for the Worker (it bundles this file, not
+// sim-whoop.js). Submitted ghosts must carry it, and every board is kept per
+// version (boardKeyFor online, boardStoreKey local), so a bump starts the
+// boards clean. See that file for history.
+export const PHYS_VER = 4;
 export const DAILY_GEN = 2;
 export const PILOT_NAME_MAX = 16;
 export const GATE_SIZE_MIN = 0.28 * WS_PER_METRE;
@@ -38,6 +43,8 @@ export const DAILY_LINE_GHOST_MAX = 480;
 export const DAILY_LINE_STRICT_MISS_MS = 3000;
 
 // Named #242 line tracks (no city 3-lap). Gate counts pinned to tracks/*.json.
+// A track with `from` joins the draw on that UTC day; earlier days draw from
+// the pool as it was, so their boards still name the track they were flown on.
 export const DAILY_LINE_TRACKS = Object.freeze([
   { id: 'living-sofa', map: 'living', name: 'Sofa Slalom', gates: 8 },
   { id: 'living-circuit', map: 'living', name: 'Living Circuit', gates: 7 },
@@ -71,7 +78,12 @@ export const DAILY_LINE_TRACKS = Object.freeze([
   { id: 'trainer-hairpin', map: 'trainer', name: 'Hairpin', gates: 7 },
   { id: 'city-inside', map: 'city', name: 'Interior Run', gates: 8 },
   { id: 'city-spins', map: 'city', name: 'Spin Grove', gates: 7 },
+  { id: 'rig-loop', map: 'rig', name: 'Rig Loop', gates: 17, from: '2026-11-01' },
 ]);
+
+export function dailyLinePool(day) {
+  return DAILY_LINE_TRACKS.filter((t) => !t.from || day >= t.from);
+}
 
 export const DAILY_LINE_MODS = Object.freeze([
   { id: 'none', name: 'Clean' },
@@ -1463,10 +1475,26 @@ export function isDailyLineBoardKey(week) {
   return typeof week === 'string' && /^D\d{4}-\d{2}-\d{2}$/.test(week);
 }
 
+// The D1 key a board is stored and read under: the ISO week, or the Daily
+// Line's 'D' + day, and the physics version. Rows written before a PHYS_VER
+// bump stay in D1 under the old key, unlisted, and a pilot's old faster time
+// no longer blocks a new one: the bump starts every board clean.
+export function boardKeyFor(week) {
+  return String(week || '') + '.p' + PHYS_VER;
+}
+
+// The local board (shown when the online one is empty) is kept per physics
+// version the same way, under its own storage key: the rows under BOARD_KEY
+// (phys 3 and before) are left unread, and an old page still open in a tab
+// can never write into the current version's board.
+export function boardStoreKey() {
+  return BOARD_KEY + '.p' + PHYS_VER;
+}
+
 export function dailyLineFor(utc, now) {
   const day = utc || utcDateId(now);
   const rand = mulberry32(hashStr('daily-line|v1|' + day));
-  const tracks = DAILY_LINE_TRACKS;
+  const tracks = dailyLinePool(day);
   const t = tracks[Math.floor(rand() * tracks.length)];
   const mods = DAILY_LINE_MODS;
   const useMod = rand() < 0.42;
@@ -1696,7 +1724,7 @@ export function loadBoard(storage) {
   const store = storageOf(storage);
   if (!store) return emptyBoard();
   try {
-    const raw = store.getItem(BOARD_KEY);
+    const raw = store.getItem(boardStoreKey());
     if (!raw) return emptyBoard();
     return normalizeBoard(JSON.parse(raw));
   } catch (e) {
@@ -1708,7 +1736,7 @@ export function saveBoard(board, storage) {
   const store = storageOf(storage);
   if (!store) return false;
   try {
-    store.setItem(BOARD_KEY, JSON.stringify(normalizeBoard(board)));
+    store.setItem(boardStoreKey(), JSON.stringify(normalizeBoard(board)));
     return true;
   } catch (e) {
     return false;

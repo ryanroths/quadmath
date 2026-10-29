@@ -1,11 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // Clay Parlor — Felt Scale reference + whoop playground + Kenney CC0 parlor kit.
 // Colliders live in sim-maps.js LIVING_PLAY and must match kit/proc meshes.
 // Kenney kit (sim-art-kit.js) swaps wall clutter after first paint.
 // Procedural meshes stay if a mesh fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=0d87f3b639ef';
-import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { LIVING_PLAY } from './sim-maps.js?v=d3bccf5de2eb';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=584705ba27b2';
+import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=46192cc1defd';
+import { LIVING_PLAY } from './sim-maps.js?v=992aefab189b';
 
 export const LIVING_STOCK = Object.freeze({
   sofa: 0x4a5a6a,

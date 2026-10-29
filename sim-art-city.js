@@ -1,9 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // Neon Current — dense original city dressing. Visual only.
 // Play colliders live in sim-maps.js CITY_PLAY. Nothing from the GPL whoop sim.
 
-import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=f76fc4f752df';
-import { CITY_PLAY } from './sim-maps.js?v=d3bccf5de2eb';
-import { updateSceneLighting } from './sim-lighting.js?v=1ec12da8a4a8';
+import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=46192cc1defd';
+import { CITY_PLAY } from './sim-maps.js?v=992aefab189b';
+import { updateSceneLighting, rigAmbientEnv } from './sim-lighting.js?v=ffbd15528ade';
 
 export const RAIN_KEY = 'quadmathSimRain';
 
@@ -1198,6 +1199,11 @@ export function applyResolvedLighting(ctx, spec) {
     || (typeof THREE !== 'undefined' ? THREE.Color : null);
   const patch = { mapId: spec.mapId, citySky: !!spec.citySky, fogColor: L.fogColor, exposure: L.exposure };
   if (spec.looks) patch.looks = spec.looks;
+  // The Rig's ambient is built here, at once, not loaded like an HDRI.
+  if (spec.mapId === 'rig') {
+    const env = rigAmbientEnv(ctx && ctx.THREE, renderer);
+    if (env) patch.envs = { rig: env };
+  }
   updateSceneLighting(scene, patch, { renderer, Color });
   if (bloomPass) {
     bloomPass.strength = L.bloomStrength;

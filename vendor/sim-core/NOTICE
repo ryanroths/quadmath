@@ -1,0 +1,37 @@
+quadmath-sim-core
+Copyright (C) 2026 the quadmath-sim-core authors
+
+quadmath-sim-core is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. See LICENSE.
+
+THIRD-PARTY CODE
+
+Betaflight (https://github.com/betaflight/betaflight), GPL-3.0-or-later.
+sim-core compiles unmodified Betaflight 4.5.1 sources into its WebAssembly
+module. Any change to Betaflight is carried as a patch file in this
+repository, never as an edit to the Betaflight tree.
+
+PORTED FROM QUADMATH
+
+The fly harness's radio code (tests/browser/fly-radio.mjs: radio presets,
+the axis map and the stick calibration wizard) is ported from quadmath's
+sim (sim-touch.js, repository ryanroths/quadmath) by its owner's decision of
+2026-10-24, and is GPL-3.0-or-later here like the rest of this repository.
+
+REFERENCE, NOT SOURCE
+
+WebFPVSimulator (https://github.com/Mathew-Harvey/WebFPVSimulator), GPLv3, is
+used as a reference. Its code may be read; none of it is copied into this
+repository. Its published WebAssembly module is used only as a black-box
+comparison in tests, run from a separate local clone.
+
+OPEN LICENSING QUESTION (deferred to a lawyer; nothing here blocks on it)
+
+The quadmath site's sim.html (repository ryanroths/quadmath) is not part of
+this repository. It will load the sim-core WebAssembly module and its JS
+wrapper at runtime. Whether that makes sim.html, or other quadmath site code,
+subject to the GPL is an open question for legal advice. Until it is
+answered, sim-core stays a separate GPLv3 repository with public source, and
+this notice records the question.

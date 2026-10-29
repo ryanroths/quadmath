@@ -83,10 +83,33 @@ FIXTURES = {
         ],
         "gaps": {},
     },
+    # Re-authored on 2026-10-26 from the pilot's diff of 2026-10-23 (profile 0
+    # '1219S', rateprofile 0), the diff the sim's bf core flies.
     "65-betafpv-ryfly-1219s": {
         "board": "AIR65 RYFLY",
+        "version": "4.5.0",
         "settings": {
             "d_min_roll": "36", "d_min_pitch": "49",
+            "tpa_rate": "60",
+            "f_roll": "80", "f_pitch": "80", "f_yaw": "80",
+            "thrust_linear": "20",
+            "gyro_lpf1_static_hz": "0",
+            "dyn_notch_count": "1", "dyn_notch_q": "500",
+            "dyn_notch_min_hz": "120", "dyn_notch_max_hz": "500",
+            "dshot_bidir": "ON", "motor_pwm_protocol": "DSHOT300",
+        },
+        # The parser does not report sag compensation or dynamic idle.
+        "editorial": ["Vbat sag comp 70", "Dyn idle 55 (5500 rpm)", "Board: AIR65 RYFLY"],
+        "gaps": {"BF 4.5.0": "BF 4.5.0 diff, 2026-10-23"},
+    },
+    # Profile 1 'HQ 31mm' of the same diff, re-authored on 2026-10-27 with its
+    # real rate profile (rateprofile 0, which both profiles fly) and the
+    # diff's master filter and motor lines.
+    "65-betafpv-ryfly-hq31": {
+        "board": "AIR65 RYFLY",
+        "version": "4.5.0",
+        "settings": {
+            "d_min_roll": "41", "d_min_pitch": "51",
             "tpa_rate": "60",
             "f_roll": "0", "f_pitch": "0", "f_yaw": "0",
             "gyro_lpf1_static_hz": "0",
@@ -94,18 +117,8 @@ FIXTURES = {
             "dyn_notch_min_hz": "120", "dyn_notch_max_hz": "500",
             "dshot_bidir": "ON", "motor_pwm_protocol": "DSHOT300",
         },
-        "editorial": ["Crash recovery ON", "Board: AIR65 RYFLY"],
-        "gaps": {},
-    },
-    "65-betafpv-ryfly-hq31": {
-        "board": "AIR65 RYFLY",
-        "settings": {
-            "d_min_roll": "41", "d_min_pitch": "51",
-            "tpa_rate": "60",
-            "f_roll": "0", "f_pitch": "0", "f_yaw": "0",
-        },
-        "editorial": ["Same filter config as the 1219S tune", "Board: AIR65 RYFLY"],
-        "gaps": {},
+        "editorial": ["Board: AIR65 RYFLY"],
+        "gaps": {"BF 4.5.0": "BF 4.5.0 diff, 2026-10-23 (profile 1)"},
     },
     "65-happymodel-stock": {
         "board": "Happymodel CrazyBee F4 SX",
@@ -826,13 +839,75 @@ class BetaflightNaming(unittest.TestCase):
         self.assertEqual(parsed["target"], "STM32G473")
         self.assertEqual(parsed["manufacturer_id"], "SG47")
 
-    def test_last_profile_block_wins(self):
-        # `diff all` prints every PID profile; Betaflight replays the file top
-        # to bottom, so the last block is the one that lands.
-        two_profiles = GOOD_DIFF.replace("save\n", "") + (
-            "# profile 1\nset p_roll = 99\nsave\n")
+    def test_trimmed_diff_without_profile_commands_reads_top_to_bottom(self):
+        # No `profile N` command, only the comment: one block, last write wins.
+        trimmed = GOOD_DIFF.replace("save\n", "") + "# profile 1\nset p_roll = 99\nsave\n"
         self.assertEqual(parser.parse_tune_diff(
-            two_profiles, frame=65, brand="BetaFPV")["pids"]["roll"][0], 99)
+            trimmed, frame=65, brand="BetaFPV")["pids"]["roll"][0], 99)
+
+    def test_the_profile_selected_at_the_end_is_the_one_read(self):
+        # A 4.x `diff all`: each profile's block after its `profile N`
+        # command, then the selection restored. A value set only in the other
+        # profile does not leak into the flown one.
+        def two_profiles(selected):
+            return (
+                "# diff all\n# version\n"
+                "# Betaflight / STM32G473 (SG47) 4.5.1 Feb 14 2025 / 09:12:44 (abc1234)\n"
+                "board_name AIR65\n# master\nset dshot_bidir = ON\n"
+                "profile 0\n# profile 0\n"
+                "set p_roll = 61\nset i_roll = 66\nset d_roll = 44\n"
+                "set p_pitch = 71\nset i_pitch = 76\nset d_pitch = 60\n"
+                "set p_yaw = 61\nset i_yaw = 68\nset thrust_linear = 20\n"
+                "profile 1\n# profile 1\n"
+                "set p_roll = 99\nset i_roll = 98\nset d_roll = 97\n"
+                "set p_pitch = 96\nset i_pitch = 95\nset d_pitch = 94\n"
+                "set p_yaw = 93\nset i_yaw = 92\n"
+                "# restore original profile selection\nprofile %d\n"
+                "rateprofile 0\n# rateprofile 0\n"
+                "set roll_rc_rate = 2\nset roll_srate = 74\nset roll_expo = 56\n"
+                "set pitch_rc_rate = 2\nset pitch_srate = 74\nset pitch_expo = 56\n"
+                "set yaw_rc_rate = 2\nset yaw_srate = 70\nset yaw_expo = 56\n"
+                "rateprofile 1\n# rateprofile 1\nset roll_rc_rate = 9\n"
+                "# restore original rateprofile selection\nrateprofile 0\n"
+                "save\n" % selected
+            )
+        first = parser.parse_tune_diff(two_profiles(0), frame=65, brand="BetaFPV")
+        self.assertEqual(first["pids"]["roll"], [61, 66, 44])
+        self.assertIn("Thrust linear 20", first["notes"])
+        self.assertEqual(first["rates"]["roll"], [2, 74, 56], "rateprofile 1 does not leak")
+        self.assertEqual(first["fc"], "AIR65", "board_name printed without set")
+        second = parser.parse_tune_diff(two_profiles(1), frame=65, brand="BetaFPV")
+        self.assertEqual(second["pids"]["roll"], [99, 98, 97])
+        self.assertNotIn("Thrust linear 20", second["notes"], "profile 0's value does not leak")
+
+    def test_the_air65_ryfly_diff_reads_as_each_profile(self):
+        # The pilot's real `diff all` of 2026-10-23 (the sim's bf core flies
+        # it): profile 0 '1219S' is selected; profile 1 'HQ 31mm' is the
+        # other card. One rate profile serves both.
+        path = os.path.join(REPO_ROOT, "vendor", "sim-core", "configs", "air65-ryfly-2026-10-23.txt")
+        with io.open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        entry = parser.parse_tune_diff(text, frame=65, brand="BetaFPV")
+        self.assertEqual(entry["fc"], "BETAFPVG473")
+        self.assertEqual(entry["pids"], {"roll": [61, 66, 44], "pitch": [71, 76, 60], "yaw": [61, 68, 0]})
+        self.assertEqual(entry["rates"], {"roll": [2, 74, 56], "pitch": [2, 74, 56], "yaw": [2, 70, 56]})
+        for note in ("D-min R36/P49", "FF R80/P80/Y80", "Thrust linear 20"):
+            self.assertIn(note, entry["notes"])
+        restore = "# restore original profile selection\nprofile 0\n"
+        self.assertEqual(text.replace("\r\n", "\n").count(restore), 1)
+        hq31 = parser.parse_tune_diff(
+            text.replace("\r\n", "\n").replace(restore, "# restore original profile selection\nprofile 1\n"),
+            frame=65, brand="BetaFPV")
+        self.assertEqual(hq31["pids"], {"roll": [61, 110, 41], "pitch": [67, 121, 51], "yaw": [61, 110, 0]})
+        self.assertEqual(hq31["rates"], entry["rates"])
+        self.assertIn("FF off", hq31["notes"])
+        self.assertIn("D-min R41/P51", hq31["notes"])
+        self.assertNotIn("Thrust linear 20", hq31["notes"])
+        # Each card in tune-database.js is its profile of this diff.
+        cards = load_entries()
+        for card, read in (("65-betafpv-ryfly-1219s", entry), ("65-betafpv-ryfly-hq31", hq31)):
+            self.assertEqual(cards[card]["pids"], read["pids"], card)
+            self.assertEqual(cards[card]["rates"], read["rates"], card)
 
 
 # --------------------------------------------------------------------------

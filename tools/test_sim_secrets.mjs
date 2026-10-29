@@ -33,8 +33,9 @@ function memStore() {
   };
 }
 
-test('secret maps match the freestyle catalog minus Your Room', () => {
-  const ids = MAPS.map((m) => m.id).filter((id) => id !== 'room');
+test('secret maps match the freestyle catalog minus Your Room and The Rig', () => {
+  // The Rig has no decor, sparks or secrets: the owner's spec ("no decor").
+  const ids = MAPS.map((m) => m.id).filter((id) => id !== 'room' && id !== 'rig');
   assert.deepEqual([...SECRET_MAP_IDS].sort(), ids.slice().sort());
   assert.equal(SPARK_NAME, 'Spark');
   assert.equal(SECRETS_KEY, 'quadmathSimSecrets');

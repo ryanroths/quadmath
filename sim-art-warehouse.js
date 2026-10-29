@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // Ion Nave — playable whoop playground + Kenney CC0 shop kit.
 // Colliders live in sim-maps.js WAREHOUSE_PLAY and must match kit/proc meshes.
 // Kenney kit (sim-art-kit.js) swaps floor clutter after first paint.
 // Procedural meshes stay if a mesh fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=0d87f3b639ef';
-import { WAREHOUSE_PLAY } from './sim-maps.js?v=d3bccf5de2eb';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=584705ba27b2';
+import { WAREHOUSE_PLAY } from './sim-maps.js?v=992aefab189b';
 
 export const WAREHOUSE_STOCK = Object.freeze({
   wall: 0x8d9096,
