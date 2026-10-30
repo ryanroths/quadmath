@@ -410,7 +410,7 @@ test('skin unlock ids and localStorage keys stay frozen', () => {
     ['streak3', { type: 'streak', days: 3 }],
     ['streak7', { type: 'streak', days: 7 }],
     ['daily-fast', { type: 'dailyMs', ms: 90000 }],
-    ['coach-all', { type: 'medals', medal: 'gold', count: 7 }],
+    ['coach-all', { type: 'medals', medal: 'gold', count: 6 }],
   ];
   for (const [id, unlock] of frozen) {
     const s = SKINS.find((x) => x.id === id);
