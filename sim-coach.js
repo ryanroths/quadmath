@@ -9,6 +9,7 @@
 import { detectPassOrMiss, gateRadius } from './sim-tracks.js?v=2190cb73b052';
 import { DEFAULT_ROOM, planRoom } from './sim-room.js?v=bd51baa7fe22';
 import { makeWorldLabel } from './sim-art.js?v=4b5694623e03';
+import { RIG_LINES } from './sim-coach-lines.js?v=69d59fb9af8f';
 
 export const COACH_KEY = 'quadmathSimCoach';
 export const GUIDE_DIR = 'content/guides/';
@@ -43,7 +44,166 @@ export const TRAINER_SLALOM_GATES = Object.freeze([
 export const MEDAL_RANK = Object.freeze({ none: 0, bronze: 1, silver: 2, gold: 3 });
 export const MEDAL_ORDER = Object.freeze(['none', 'bronze', 'silver', 'gold']);
 
+// Coach on the Rig (sim-maps.js RIG_PLAY): six drills, one feature of the
+// Rig Loop each. A drill is a start pad and a gate chain, flown in order;
+// the clock runs from lift-off (0.1 m off the pad) to the last gate. Gold is
+// the time of a flown line (sim-coach-lines.js, flown on the bf core by
+// tools/fly_coach_rig.mjs), silver 1.3x it, bronze 1.7x.
+// Gates, metres in scene axes (y up), at RIG_WS world units a metre:
+//   rect  the plane axis = c crossed inside |u| <= hw, |v| <= hh, where
+//         (u, v) is (z, y) on an x plane, (x, y) on z, (x, z) on y;
+//   ring  the same plane crossed within r of the centre;
+//   pad   a landing: within r of the centre, on it (6 cm), settled
+//         (under 0.5 m/s) and upright.
+export const RIG_WS = 3.5;
+export const MEDAL_FACTORS = Object.freeze({ gold: 1, silver: 1.3, bronze: 1.7 });
+const rw = (v) => Math.round(v * RIG_WS * 1e4) / 1e4;
+// draw: where its frame is drawn, metres along the axis from the plane (a
+// slot's on its wall's face, the slit's on the pipe tops).
+function rigRect(name, axis, x, y, z, hw, hh, draw) {
+  return Object.freeze({ name, shape: 'rect', axis, x: rw(x), y: rw(y), z: rw(z), hw: rw(hw), hh: rw(hh), draw: rw(draw || 0) });
+}
+function rigRing(name, axis, x, y, z, r) {
+  return Object.freeze({ name, shape: 'ring', axis, x: rw(x), y: rw(y), z: rw(z), r: rw(r) });
+}
+function rigPad(name, x, y, z, r) {
+  return Object.freeze({ name, shape: 'pad', axis: 'y', x: rw(x), y: rw(y), z: rw(z), r: rw(r) });
+}
+// Scaffold tower bays (decks at 1.7 / 3.4 / 5.1 m, 6 cm thick, posts 8 cm)
+// on its mid-plane x = -6.9: the line weaves up through them and back down.
+const BAY = [0, 1.7, 3.4].map((y0, i) => rigRect('bay ' + (i + 1), 'x', -6.9, y0 + 0.82, 5.1, 1.02, 0.82));
+const TOP = rigRect('over deck 3', 'x', -6.9, 5.55, 5.1, 1.1, 0.45);
+const STRAIGHT_OUT = rigRing('straight', 'x', -4.35, 1.2, -5.6, 0.44);
+export const RIG_COURSES = Object.freeze({
+  // Up: bay 1 going -x, bay 2 +x, bay 3 -x, over the top +x; down: bay 3,
+  // bay 2, bay 1. A racetrack spiral round the tower, both straights through it.
+  'tower-climb': Object.freeze({
+    pad: Object.freeze({ x: rw(-4.4), y: 0.2, z: rw(4.6) }),
+    gates: Object.freeze([BAY[0], BAY[1], BAY[2], TOP, BAY[2], BAY[1], BAY[0]]),
+  }),
+  // Up behind the risers, along the top of the pipe run (-z), down through
+  // the 20 cm slit on the drop plane (x = -9.05), out under the pipes.
+  'pipe-slit': Object.freeze({
+    pad: Object.freeze({ x: rw(-9.05), y: 0.2, z: rw(6.6) }),
+    gates: Object.freeze([
+      rigRing('over the pipes', 'z', -9.05, 5.45, 3.0, 0.3),
+      rigRect('pipe slit', 'y', -9.05, 4.875, 0.4, 0.1, 1.4, 0.085),
+      rigRing('under the pipes', 'z', -9.05, 3.6, -1.6, 0.32),
+    ]),
+  }),
+  // The three crate walls on x = 9: slots of 25, 21 and 18 cm, flown +z.
+  'crate-slalom': Object.freeze({
+    pad: Object.freeze({ x: rw(9), y: 0.2, z: rw(-3.4) }),
+    gates: Object.freeze([
+      rigRect('wall 1 · 25 cm', 'z', 9, 1.0, -0.8, 0.125, 1.0, -0.21),
+      rigRect('wall 2 · 21 cm', 'z', 9, 1.0, 0, 0.105, 1.0, -0.21),
+      rigRect('wall 3 · 18 cm', 'z', 9, 1.0, 0.8, 0.09, 1.0, -0.21),
+    ]),
+  }),
+  // The 30 cm bore, 4 m: in at its +x mouth, out at its -x one.
+  'tunnel': Object.freeze({
+    pad: Object.freeze({ x: rw(6.8), y: 0.2, z: rw(5.6) }),
+    gates: Object.freeze([
+      rigRect('tunnel in', 'x', 4.05, 1.2, 5.6, 0.15, 0.15, 0.01),
+      rigRect('tunnel out', 'x', 0.05, 1.2, 5.6, 0.15, 0.15, -0.01),
+    ]),
+  }),
+  // Off the loft (its slab top at 2.8 m), down through the 1.0 x 1.8 m hole,
+  // a landing on the floor under the loft's far edge.
+  'loft-dive': Object.freeze({
+    pad: Object.freeze({ x: rw(-9.05), y: rw(2.8) + 0.2, z: rw(-0.85) }),
+    gates: Object.freeze([
+      rigRect('loft hole', 'y', -9.05, 2.75, -2.85, 0.5, 0.9, 0.06),
+      rigPad('land under the loft', -9.05, 0, -4.15, 0.35),
+    ]),
+  }),
+  // Down the 15 m straight, round the far ring and back through the first.
+  'straight': Object.freeze({
+    pad: Object.freeze({ x: rw(-6.1), y: 0.2, z: rw(-5.6) }),
+    gates: Object.freeze([STRAIGHT_OUT, rigRing('far end', 'x', 6.0, 1.2, -5.6, 0.44), STRAIGHT_OUT]),
+    limit: 8,
+  }),
+});
+
+// Medal times (seconds) from the flown line's: gold 1x, silver 1.3x, bronze
+// 1.7x, each capped by the drill's own limit (the straight: under 8 s).
+export function medalTimes(id) {
+  const line = RIG_LINES[id];
+  if (!line || !(line.ms > 0)) return null;
+  const c = RIG_COURSES[id];
+  const cap = c && c.limit ? c.limit * 1000 : Infinity;
+  const at = (k) => Math.min(cap, Math.round(line.ms * MEDAL_FACTORS[k])) / 1000;
+  return { gold: at('gold'), silver: at('silver'), bronze: at('bronze') };
+}
+
 export const DRILLS = Object.freeze([
+  {
+    id: 'tower-climb',
+    name: 'Tower climb',
+    blurb: 'Weave up the scaffold tower, three decks, over the top and back down.',
+    map: 'rig',
+    track: 'rig-freestyle',
+    preferMode: 'angle',
+    unlockAfter: null,
+    whoop: true,
+    chain: true,
+  },
+  {
+    id: 'pipe-slit',
+    name: 'Pipe slit',
+    blurb: 'Over the pipe run, then down through the 20 cm gap.',
+    map: 'rig',
+    track: 'rig-freestyle',
+    preferMode: 'angle',
+    unlockAfter: 'tower-climb',
+    whoop: true,
+    chain: true,
+  },
+  {
+    id: 'crate-slalom',
+    name: 'Crate slalom',
+    blurb: 'Three crate walls: 25, 21, then 18 cm slots.',
+    map: 'rig',
+    track: 'rig-freestyle',
+    preferMode: 'angle',
+    unlockAfter: 'pipe-slit',
+    whoop: true,
+    chain: true,
+  },
+  {
+    id: 'tunnel',
+    name: 'Tunnel',
+    blurb: 'Into the 30 cm bore and out the far end.',
+    map: 'rig',
+    track: 'rig-freestyle',
+    preferMode: 'angle',
+    unlockAfter: 'crate-slalom',
+    whoop: true,
+    chain: true,
+  },
+  {
+    id: 'loft-dive',
+    name: 'Loft dive',
+    blurb: 'Off the loft, through the hole, land on the pad under it.',
+    map: 'rig',
+    track: 'rig-freestyle',
+    preferMode: 'angle',
+    unlockAfter: 'tunnel',
+    whoop: true,
+    chain: true,
+  },
+  {
+    id: 'straight',
+    name: 'The straight',
+    blurb: 'Down the straight and back, under 8 s.',
+    map: 'rig',
+    track: 'rig-freestyle',
+    preferMode: 'angle',
+    unlockAfter: 'loft-dive',
+    whoop: true,
+    chain: true,
+  },
+  // The first ladder, on the old maps: open with ?dev=1 only (drillOpen).
   {
     id: 'hover-hold',
     name: 'Hover hold',
@@ -54,6 +214,7 @@ export const DRILLS = Object.freeze([
     unlockAfter: null,
     whoop: false,
     timeout: 12,
+    dev: true,
   },
   {
     id: 'yaw-spin',
@@ -65,6 +226,7 @@ export const DRILLS = Object.freeze([
     unlockAfter: 'hover-hold',
     whoop: true,
     timeout: 12,
+    dev: true,
   },
   {
     id: 'straight-line',
@@ -76,6 +238,7 @@ export const DRILLS = Object.freeze([
     unlockAfter: 'yaw-spin',
     whoop: false,
     timeout: 16,
+    dev: true,
   },
   {
     id: 'gate-pass',
@@ -87,6 +250,7 @@ export const DRILLS = Object.freeze([
     unlockAfter: 'straight-line',
     whoop: false,
     timeout: 28,
+    dev: true,
   },
   {
     id: 'doorway-pass',
@@ -98,6 +262,7 @@ export const DRILLS = Object.freeze([
     unlockAfter: 'gate-pass',
     whoop: true,
     timeout: 16,
+    dev: true,
   },
   {
     id: 'split-s',
@@ -109,6 +274,7 @@ export const DRILLS = Object.freeze([
     unlockAfter: 'doorway-pass',
     whoop: false,
     timeout: 16,
+    dev: true,
   },
   {
     id: 'power-loop',
@@ -120,6 +286,7 @@ export const DRILLS = Object.freeze([
     unlockAfter: 'split-s',
     whoop: false,
     timeout: 18,
+    dev: true,
   },
 ]);
 
@@ -129,6 +296,28 @@ export function drillById(id) {
 
 export function drillIndex(id) {
   return DRILLS.findIndex((d) => d.id === id);
+}
+
+// The old-map drills (dev: true) are open with ?dev=1 only, as their maps
+// are (sim-tracks.js mapOpen). Their saved medals stay in storage either way.
+export function drillOpen(id, dev) {
+  const d = drillById(id);
+  return !!d && (!d.dev || !!dev);
+}
+
+// The drill after id on its own ladder (the Rig's, or with ?dev=1 the old
+// maps'), whether or not it is unlocked; null at the end of the ladder.
+export function nextDrillId(id, dev) {
+  const d = drillById(id);
+  if (!d) return null;
+  const next = DRILLS.find((x) => x.unlockAfter === id);
+  return next && drillOpen(next.id, dev) && !!next.dev === !!d.dev ? next.id : null;
+}
+
+// A chain drill's attempt ends at 3x the flown line plus 5 s from the arm.
+function chainTimeout(id) {
+  const line = RIG_LINES[id];
+  return line && line.ms > 0 ? Math.ceil(line.ms * 3 / 1000) + 5 : 60;
 }
 
 function num(v, fb) {
@@ -268,6 +457,17 @@ export function defaultSpec(id, extras) {
     mode: extra.mode || (d && d.preferMode) || 'angle',
     timeout: extra.timeout != null ? extra.timeout : (d ? d.timeout : 12),
   };
+  if (d && d.chain) {
+    const c = RIG_COURSES[id];
+    return {
+      ...base,
+      chain: true,
+      timeout: extra.timeout != null ? extra.timeout : chainTimeout(id),
+      pad: c.pad,
+      gates: c.gates,
+      times: medalTimes(id),
+    };
+  }
   if (id === 'hover-hold') {
     return { ...base, target: extra.target || trainerHover, radius: extra.radius || 1.15, altTol: extra.altTol || 0.85 };
   }
@@ -298,6 +498,7 @@ export function headingTo(from, to) {
 
 export function drillBox(id, spec) {
   const s = spec || defaultSpec(id);
+  if (s.chain) return { w: rw(20), d: rw(15), h: rw(6) };
   if (id === 'yaw-spin' || id === 'doorway-pass') {
     const room = s.room || planRoom(DEFAULT_ROOM);
     return { w: room.w, d: room.d, h: room.h };
@@ -333,7 +534,10 @@ export function drillSpawn(id, spec) {
   const s = spec || defaultSpec(id);
   const box = drillBox(id, s);
   let pad;
-  if (id === 'hover-hold') {
+  if (s.chain) {
+    pad = { x: s.pad.x, y: s.pad.y, z: s.pad.z, yaw: 0 };
+    pad.yaw = headingTo(pad, s.gates[0]);
+  } else if (id === 'hover-hold') {
     const t = s.target;
     pad = { x: t.x, y: 0.2, z: t.z, yaw: 0 };
   } else if (id === 'yaw-spin') {
@@ -705,7 +909,131 @@ export function scorePowerLoop(samples, spec) {
   return out;
 }
 
+// ---- Chain drills (the Rig) ----
+
+const PLANE_AXES = Object.freeze({ x: ['z', 'y'], y: ['x', 'z'], z: ['x', 'y'] });
+const LIFT_OFF = rw(0.1);   // off the pad: the clock starts
+const PAD_HEIGHT = rw(0.06);
+const PAD_SPEED = rw(0.5);
+const PAD_TILT = 0.6;
+
+// How far (0..1) along prev -> p the step crosses g's plane inside its
+// aperture, or -1. A sample on the plane counts as on its + side, so a
+// crossing counts once whichever step it falls in.
+export function gateCrossing(prev, p, g) {
+  const k = g.axis;
+  const a = prev[k] - g[k], b = p[k] - g[k];
+  if ((a >= 0) === (b >= 0)) return -1;
+  const f = a / (a - b);
+  const [u, v] = PLANE_AXES[k];
+  const du = prev[u] + (p[u] - prev[u]) * f - g[u];
+  const dv = prev[v] + (p[v] - prev[v]) * f - g[v];
+  if (g.shape === 'ring') return Math.hypot(du, dv) <= g.r ? f : -1;
+  return Math.abs(du) <= g.hw && Math.abs(dv) <= g.hh ? f : -1;
+}
+
+// Landed on pad g: on it, settled and upright.
+export function onPad(p, g) {
+  return Math.hypot(p.x - g.x, p.z - g.z) <= g.r
+    && p.y - g.y <= PAD_HEIGHT
+    && Math.hypot(p.vx || 0, p.vy || 0, p.vz || 0) <= PAD_SPEED
+    && Math.abs(p.roll || 0) <= PAD_TILT && Math.abs(p.pitch || 0) <= PAD_TILT;
+}
+
+// A chain attempt, sample by sample (chainStep), so the page scores it as it
+// flies. origin: the first armed sample; lift: when the quad is LIFT_OFF from
+// it; splits: each gate's time from the lift.
+export function chainStart() {
+  return { next: 0, splits: [], origin: null, lift: null, done: null, crashes: 0, prev: null };
+}
+
+export function chainStep(st, spec, p) {
+  if (p.crashed) st.crashes++;
+  const prev = st.prev;
+  st.prev = p;
+  if (st.done != null) return st;
+  if (!st.origin) {
+    if (p.armed === false) return st;
+    st.origin = { x: p.x, y: p.y, z: p.z };
+  }
+  const away = (q) => Math.hypot(q.x - st.origin.x, q.y - st.origin.y, q.z - st.origin.z);
+  if (st.lift == null) {
+    const d = away(p);
+    if (d < LIFT_OFF) return st;
+    const d0 = prev ? away(prev) : 0;
+    st.lift = prev && d > d0 ? prev.t + (p.t - prev.t) * clamp((LIFT_OFF - d0) / (d - d0), 0, 1) : p.t;
+  }
+  if (!prev) return st;
+  const g = spec.gates[st.next];
+  let at = null;
+  if (g.shape === 'pad') {
+    if (onPad(p, g)) at = p.t;
+  } else {
+    const f = gateCrossing(prev, p, g);
+    if (f >= 0) at = prev.t + (p.t - prev.t) * f;
+  }
+  if (at != null) {
+    st.splits.push(at - st.lift);
+    st.next++;
+    if (st.next >= spec.gates.length) st.done = at;
+  }
+  return st;
+}
+
+// Score: gold's time is 90, each 10% slower 5 less (silver 75, bronze 55),
+// 0.8x gold 100, so a faster run is a better one (and its ghost kept) past
+// gold too; short of the last gate, up to 40 for the gates passed.
+export function chainResult(st, spec) {
+  const n = spec.gates.length;
+  const done = st.done != null;
+  const time = done ? st.done - st.lift : null;
+  const T = spec.times;
+  let score = done ? (T ? 90 - 50 * (time / T.gold - 1) : 60) : 40 * st.next / n;
+  if (st.crashes) score *= 0.5;
+  const pass = done && st.crashes === 0;
+  let medal = 'none';
+  if (pass && T && time <= T.bronze) medal = 'bronze';
+  if (pass && T && time <= T.silver) medal = 'silver';
+  if (pass && T && time <= T.gold) medal = 'gold';
+  const out = finishScore(score, medal, pass);
+  out.id = spec.id;
+  out.passes = st.next;
+  out.gates = n;
+  out.done = done;
+  out.time = time;
+  out.lift = st.lift;
+  out.splits = st.splits.slice();
+  out.crashes = st.crashes;
+  out.times = T;
+  return out;
+}
+
+export function scoreChain(samples, spec) {
+  const st = chainStart();
+  for (const p of samples) chainStep(st, spec, p);
+  return chainResult(st, spec);
+}
+
+// The HUD lines for a chain attempt at t s from the arm.
+export function chainReadout(st, spec, t) {
+  const n = spec.gates.length;
+  const g = spec.gates[st.next];
+  const line = st.done != null ? 'DONE'
+    : g && g.shape === 'pad' ? 'LAND ON THE PAD'
+      : (st.next + '/' + n + (g ? ' · ' + g.name.toUpperCase() : ''));
+  const gold = spec.times ? ' · gold ' + spec.times.gold.toFixed(2) : '';
+  if (st.lift == null) return { line, detail: 'LIFT OFF TO START' + gold };
+  const el = st.done != null ? st.done - st.lift : Math.max(0, t - st.lift);
+  return { line, detail: el.toFixed(2) + ' s' + gold };
+}
+
 const SCORERS = {
+  'tower-climb': scoreChain,
+  'pipe-slit': scoreChain,
+  'crate-slalom': scoreChain,
+  'tunnel': scoreChain,
+  'loft-dive': scoreChain,
+  'straight': scoreChain,
   'hover-hold': scoreHoverHold,
   'yaw-spin': scoreYawSpin,
   'straight-line': scoreStraightLine,
@@ -723,12 +1051,17 @@ export function scoreDrill(id, samples, spec) {
   return out;
 }
 
+// At most 200 points, 45 ms apart or, on a run longer than 199 of those,
+// spread over the whole run.
 export function samplesToGhost(samples) {
   const out = [];
+  if (!samples.length) return out;
+  const span = Math.round(((samples[samples.length - 1].t || 0) - (samples[0].t || 0)) * 1000);
+  const step = Math.max(45, Math.ceil(span / 199));
   let last = -999;
   for (const p of samples) {
     const t = Math.round((p.t || 0) * 1000);
-    if (t - last < 45 && out.length) continue;
+    if (t - last < step && out.length) continue;
     out.push([t, Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100, Math.round(p.z * 100) / 100]);
     last = t;
     if (out.length >= 200) break;
@@ -784,6 +1117,14 @@ function pushLine(samples, a, b, n, t0, dur) {
 export function referenceSamples(id, spec) {
   const s = spec || defaultSpec(id);
   const out = [];
+  if (s.chain) {
+    // The flown line (sim-coach-lines.js), t from its lift-off.
+    const line = RIG_LINES[id];
+    for (const [ms, x, y, z] of (line ? line.line : [])) {
+      out.push({ t: ms / 1000, x, y, z, vx: 0, vy: 0, vz: 0, roll: 0, pitch: 0, yaw: 0, armed: true });
+    }
+    return attachDt(out);
+  }
   if (id === 'hover-hold') {
     const t = s.target;
     for (let i = 0; i <= 80; i++) {
@@ -897,6 +1238,7 @@ export function liveDelta(samples, tNow, pos) {
 export function pickGhostLine(progress, id, spec) {
   const p = normalizeProgress(progress);
   if (p.ghosts[id] && p.ghosts[id].length >= 2) return { kind: 'best', samples: p.ghosts[id] };
+  if (RIG_LINES[id]) return { kind: 'ref', samples: RIG_LINES[id].line };
   return { kind: 'ref', samples: samplesToGhost(referenceSamples(id, spec || defaultSpec(id))) };
 }
 
@@ -942,6 +1284,19 @@ export function tipsFor(kind, ctx) {
     out.push(tip('sim-to-first-pack.html', 'Acro (3) for invert work. Angle will cap the medal on these two.'));
     out.push(tip('air65-pid-tune.html', 'A published 65mm PID card keeps the loop from oscillating mid-pull.'));
   }
+  if (id === 'tower-climb') {
+    out.push(tip('sim-to-first-pack.html', 'Tower: throttle climbs on the turn outside, level through the bay. Small sticks.'));
+  }
+  if (id === 'pipe-slit' || id === 'crate-slalom' || id === 'tunnel') {
+    out.push(tip('sim-to-first-pack.html', 'Tight gaps: slow in, square up, look through the gap and let it come to you.'));
+    out.push(tip('air65-pid-tune.html', 'A twitchy line through a slot is often rates: the Air65 cards are the start.'));
+  }
+  if (id === 'loft-dive') {
+    out.push(tip('first-tiny-whoop-setup.html', 'Landing: settle over the pad low and slow, then the throttle down.'));
+  }
+  if (id === 'straight') {
+    out.push(tip('sim-to-first-pack.html', 'The straight: full stick down it, brake early for the far ring, carry speed home.'));
+  }
   if (kind === 'gold') {
     out.push(tip('sim-to-first-pack.html', 'Gold here. Next step on the real pack is the same rates, same radio.'));
   }
@@ -957,9 +1312,10 @@ export function tipsFor(kind, ctx) {
   }).slice(0, 3);
 }
 
-export function ladderRows(progress) {
+// The ladder: the Rig's drills, and with ?dev=1 the old maps' after them.
+export function ladderRows(progress, dev) {
   const p = normalizeProgress(progress);
-  return DRILLS.map((d) => ({
+  return DRILLS.filter((d) => drillOpen(d.id, dev)).map((d) => ({
     id: d.id,
     name: d.name,
     blurb: d.blurb,
@@ -967,9 +1323,11 @@ export function ladderRows(progress) {
     track: d.track,
     preferMode: d.preferMode,
     whoop: d.whoop,
+    dev: !!d.dev,
     unlocked: isUnlocked(p, d.id),
     medal: p.medals[d.id] || 'none',
     best: p.best[d.id] || null,
+    times: d.chain ? medalTimes(d.id) : null,
   }));
 }
 
@@ -977,6 +1335,11 @@ export function liveReadout(id, samples, spec) {
   const s = spec || defaultSpec(id);
   if (!samples.length) return { line: 'ARM TO START', detail: '' };
   const last = samples[samples.length - 1];
+  if (s.chain) {
+    const st = chainStart();
+    for (const p of samples) chainStep(st, s, p);
+    return chainReadout(st, s, last.t);
+  }
   if (id === 'hover-hold') {
     const r = scoreHoverHold(samples, s);
     return { line: r.holdTime.toFixed(1) + 's in glow', detail: 'rms ' + r.rmsHoriz.toFixed(2) + ' u' };
@@ -1013,6 +1376,7 @@ export function attemptFinished(id, samples, spec, crashed) {
   const lastT = samples.length ? samples[samples.length - 1].t : 0;
   if (crashed) return true;
   if (lastT >= (s.timeout || 12)) return true;
+  if (s.chain) return scoreChain(samples, s).done;
   if (id === 'hover-hold') return scoreHoverHold(samples, s).holdTime >= 8.2;
   if (id === 'yaw-spin') return scoreYawSpin(samples, s).yawRad >= Math.PI * 2;
   if (id === 'straight-line') return scoreStraightLine(samples, s).reached;
@@ -1027,21 +1391,28 @@ function medalClass(m) {
   return m === 'gold' || m === 'silver' || m === 'bronze' ? m : 'none';
 }
 
-export function ladderHtml(progress, ribbonOn) {
-  const rows = ladderRows(progress);
-  const items = rows.map((r) => {
+export function medalTimesText(t) {
+  return t ? 'Gold ' + t.gold.toFixed(2) + ' · silver ' + t.silver.toFixed(2) + ' · bronze ' + t.bronze.toFixed(2) + ' s' : '';
+}
+
+export function ladderHtml(progress, ribbonOn, dev) {
+  const rows = ladderRows(progress, dev);
+  const row = (r) => {
     const lock = r.unlocked ? '' : ' locked';
     const medal = r.medal === 'none' ? (r.unlocked ? '—' : 'LOCK') : r.medal.toUpperCase();
     const score = r.best ? r.best.score.toFixed(0) : '';
     return '<button type="button" class="coach-row' + lock + '" data-drill="' + r.id + '"' +
       (r.unlocked ? '' : ' disabled') + '>' +
-      '<span><b>' + r.name + '</b><i>' + r.blurb + '</i></span>' +
+      '<span><b>' + r.name + '</b><i>' + r.blurb + '</i>' + (r.times ? '<i>' + medalTimesText(r.times) + '</i>' : '') + '</span>' +
       '<span class="coach-medal ' + medalClass(r.medal) + '">' + medal + (score ? ' ' + score : '') + '</span>' +
       '</button>';
-  }).join('');
+  };
+  const rig = rows.filter((r) => !r.dev).map(row).join('');
+  const old = rows.filter((r) => r.dev).map(row).join('');
   const on = ribbonOn !== false;
-  return '<h2>Coach</h2><p>Short scored drills. Bronze unlocks the next. Ghost line is a better run or a bundled reference.</p>' +
-    '<div class="coach-list">' + items + '</div>' +
+  return '<h2>Coach</h2><p>Six drills on the Rig, one feature of the loop each. Gold is a flown line\'s time, silver 1.3×, bronze 1.7×. Bronze unlocks the next. The ghost line is your best run or the flown line.</p>' +
+    '<div class="coach-list">' + rig + '</div>' +
+    (old ? '<p><b>Old maps · dev</b> — the first ladder, its own unlocks.</p><div class="coach-list">' + old + '</div>' : '') +
     '<label class="coach-toggle"><input type="checkbox" id="coachRibbon"' + (on ? ' checked' : '') + '> Ghost line + live delta</label>' +
     '<button type="button" id="layerClose">Close</button>';
 }
@@ -1082,6 +1453,7 @@ export function createCoach(ctx) {
   const {
     THREE, scene, toast, decorateGate, LIGHTING,
     onPrepare, onFinished, onCancel,
+    rigGate, dev,
   } = ctx;
 
   let progress = loadCoach();
@@ -1133,16 +1505,69 @@ export function createCoach(ctx) {
     return mesh;
   }
 
-  function pad(x, z, color) {
+  function pad(x, z, color, y, r) {
     const mesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.15, 1.15, 0.1, 22),
+      new THREE.CylinderGeometry(r || 1.15, r || 1.15, 0.1, 22),
       new THREE.MeshStandardMaterial({
         color, emissive: color, emissiveIntensity: 1.5, roughness: 0.5,
       }),
     );
-    mesh.position.set(x, 0.06, z);
+    mesh.position.set(x, (y || 0) + 0.06, z);
     group.add(mesh);
     return mesh;
+  }
+
+  // A chain gate's marker, in its plane (a torus or a frame lies in local
+  // xy, as a track gate's ring does): a ring, the aperture's frame (bars
+  // inside its edge, so a slot's frame shows in the slot), or a landing pad.
+  function chainMark(g, color) {
+    if (g.shape === 'pad') {
+      const m = pad(g.x, g.z, color, g.y, g.r);
+      addLabel('LAND', { x: g.x, y: g.y + 1.4, z: g.z }, 3);
+      return m;
+    }
+    const mat = new THREE.MeshStandardMaterial({
+      color, emissive: color, emissiveIntensity: 2.2, roughness: 0.5, side: THREE.DoubleSide,
+    });
+    let geom;
+    if (g.shape === 'ring') {
+      geom = new THREE.TorusGeometry(g.r, Math.max(0.05, g.r * 0.07), 8, 32);
+    } else {
+      const b = Math.min(0.07, g.hw * 0.3, g.hh * 0.3);
+      const outer = new THREE.Shape();
+      outer.moveTo(-g.hw, -g.hh); outer.lineTo(g.hw, -g.hh); outer.lineTo(g.hw, g.hh); outer.lineTo(-g.hw, g.hh); outer.lineTo(-g.hw, -g.hh);
+      const hole = new THREE.Path();
+      hole.moveTo(-g.hw + b, -g.hh + b); hole.lineTo(-g.hw + b, g.hh - b); hole.lineTo(g.hw - b, g.hh - b); hole.lineTo(g.hw - b, -g.hh + b); hole.lineTo(-g.hw + b, -g.hh + b);
+      outer.holes.push(hole);
+      geom = new THREE.ShapeGeometry(outer);
+    }
+    const mesh = new THREE.Mesh(geom, mat);
+    const d = g.draw || 0;
+    mesh.position.set(g.x + (g.axis === 'x' ? d : 0), g.y + (g.axis === 'y' ? d : 0), g.z + (g.axis === 'z' ? d : 0));
+    if (g.axis === 'x') mesh.rotation.y = Math.PI / 2;
+    if (g.axis === 'y') mesh.rotation.x = Math.PI / 2;
+    if (rigGate) rigGate(mesh, color);
+    group.add(mesh);
+    return mesh;
+  }
+
+  // The next gate white and pulsing, the ones to come in their colour, the
+  // passed ones grey; of gates in one place (the tower's bays, flown twice)
+  // only the first still to come shows, or once all are passed the last.
+  let marks = [];
+  function refreshMarks(next, now) {
+    marks.forEach((m, i) => {
+      const pending = marks.some((o, j) => j >= next && j < i && o.key === m.key);
+      const later = marks.some((o, j) => j > i && o.key === m.key);
+      m.mesh.visible = i >= next ? !pending : !later;
+      const mat = m.mesh.material;
+      let col = m.color, emit = 2.2;
+      if (i === next) { col = 0xffffff; emit = 4.5 + 1.5 * Math.sin(now * 0.004); }
+      else if (i < next) { col = 0x3a3d42; emit = 0.4; }
+      mat.color.setHex(col);
+      mat.emissive.setHex(col);
+      mat.emissiveIntensity = emit;
+    });
   }
 
   function makeGateRing(g, color) {
@@ -1180,6 +1605,7 @@ export function createCoach(ctx) {
 
   function buildMarkers(id, spec) {
     clearScene();
+    marks = [];
     group = new THREE.Group();
     group.name = 'w4Coach';
     if (id === 'hover-hold') {
@@ -1211,6 +1637,15 @@ export function createCoach(ctx) {
     } else if (id === 'split-s') {
       glowCyl(0, 8, 0, 3.2, 8, 0xFF4D1A);
       addLabel('SPLIT-S', { x: 0, y: 12, z: 0 }, 6);
+    } else if (spec.chain) {
+      pad(spec.pad.x, spec.pad.z, 0x3DDC97, spec.pad.y - 0.2);
+      addLabel('START', { x: spec.pad.x, y: spec.pad.y + 1.6, z: spec.pad.z }, 3);
+      marks = spec.gates.map((g, i) => ({
+        mesh: chainMark(g, i % 2 ? 0x3DDC97 : 0xFF4D1A),
+        color: i % 2 ? 0x3DDC97 : 0xFF4D1A,
+        key: g.shape + ':' + g.x + ':' + g.y + ':' + g.z,
+      }));
+      refreshMarks(0, 0);
     } else if (id === 'power-loop') {
       const torus = new THREE.Mesh(
         new THREE.TorusGeometry(4.2, 0.08, 8, 40),
@@ -1243,7 +1678,7 @@ export function createCoach(ctx) {
     const d = drillById(id);
     setText(titleEl, d ? d.name : 'Coach');
     setText(msgEl, d ? d.blurb : '');
-    setText(metaEl, 'Space to arm');
+    setText(metaEl, 'Space to arm' + (d && d.chain ? ' · ' + medalTimesText(medalTimes(id)) : ''));
     setText(deltaEl, '');
     renderTips([]);
     if (actionsEl) {
@@ -1257,10 +1692,17 @@ export function createCoach(ctx) {
     const d = drillById(result.id);
     const medal = (result.medal || 'none').toUpperCase();
     setText(titleEl, (d ? d.name : 'Drill') + ' — ' + medal);
-    setText(msgEl, result.pass
-      ? ('Score ' + result.score.toFixed(0) + (result.medal === 'gold' ? ' · gold' : ''))
-      : ('No medal · ' + result.score.toFixed(0)));
-    setText(metaEl, result.pass ? 'Retry or unlock the next one.' : 'Retry. Criteria are on the ladder.');
+    if (d && d.chain) {
+      setText(msgEl, result.done
+        ? ('Time ' + result.time.toFixed(2) + ' s · score ' + result.score.toFixed(0) + (result.crashes ? ' · crashed' : ''))
+        : ((result.crashed ? 'Crash' : 'No medal') + ' · ' + result.passes + '/' + result.gates + ' gates'));
+      setText(metaEl, medalTimesText(result.times) || 'Retry.');
+    } else {
+      setText(msgEl, result.pass
+        ? ('Score ' + result.score.toFixed(0) + (result.medal === 'gold' ? ' · gold' : ''))
+        : ('No medal · ' + result.score.toFixed(0)));
+      setText(metaEl, result.pass ? 'Retry or unlock the next one.' : 'Retry. Criteria are on the ladder.');
+    }
     renderTips(tips);
     if (actionsEl) {
       actionsEl.style.display = 'block';
@@ -1271,8 +1713,19 @@ export function createCoach(ctx) {
 
   function finish(crashed) {
     if (!session || session.phase === 'result') return session && session.result;
-    const samples = attachDt(session.samples);
-    const result = scoreDrill(session.id, samples, session.spec);
+    let samples = attachDt(session.samples);
+    let result;
+    if (session.chain) {
+      // A crash ends a chain attempt without a medal. The best run's ghost
+      // keeps its time from the lift-off, as the flown line's does.
+      const st = session.chain;
+      if (crashed) st.crashes++;
+      result = chainResult(st, session.spec);
+      const end = st.done != null ? st.done + 0.05 : Infinity;
+      samples = st.lift == null ? [] : samples.filter((p) => p.t >= st.lift && p.t <= end).map((p) => ({ ...p, t: p.t - st.lift }));
+    } else {
+      result = scoreDrill(session.id, samples, session.spec);
+    }
     result.crashed = !!crashed;
     result.mode = session.spec.mode;
     const applied = applyAttempt(progress, result, samples);
@@ -1301,6 +1754,10 @@ export function createCoach(ctx) {
   function startDrill(id, opts) {
     const d = drillById(id);
     if (!d) return null;
+    if (!drillOpen(id, dev)) {
+      if (toast) toast('OLD-MAP DRILL — ?dev=1 ONLY');
+      return null;
+    }
     if (!isUnlocked(progress, id)) {
       if (toast) toast('LOCKED — BRONZE THE PREVIOUS DRILL');
       return null;
@@ -1319,6 +1776,8 @@ export function createCoach(ctx) {
       samples: [],
       input: o.input || 'keyboard',
       startedAt: 0,
+      startSimMs: null,
+      chain: spec.chain ? chainStart() : null,
       result: null,
     };
     buildMarkers(id, spec);
@@ -1361,14 +1820,41 @@ export function createCoach(ctx) {
       if (ex.armed) {
         session.phase = 'fly';
         session.startedAt = performance.now();
+        session.startSimMs = Number.isFinite(ex.simMs) ? ex.simMs : null;
         session.spec.mode = ex.mode || session.spec.mode;
         if (toast) toast('DRILL LIVE');
       }
-      setText(metaEl, 'Space / aux to arm');
+      setText(metaEl, 'Space / aux to arm' + (session.spec.times ? ' · ' + medalTimesText(session.spec.times) : ''));
       return;
     }
-    const t = (performance.now() - session.startedAt) / 1000;
+    // Sim time from the arm (the core's flight clock) where the page gives
+    // it, so a slow frame stretches neither a time nor a medal.
+    const t = session.startSimMs != null && Number.isFinite(ex.simMs)
+      ? (ex.simMs - session.startSimMs) / 1000
+      : (performance.now() - session.startedAt) / 1000;
     const samp = sampleFromState(state, { t, dt, armed: ex.armed, attitude: ex.attitude, throttle: ex.throttle, crashed: ex.crashed });
+    if (session.chain) {
+      // Scored as it flies, every frame; kept 15 ms apart for the ghost.
+      const st = session.chain;
+      chainStep(st, session.spec, samp);
+      const last = session.samples[session.samples.length - 1];
+      if (!last || t - last.t >= 0.015 || st.done != null) session.samples.push(samp);
+      if (session.samples.length > 2400) session.samples.shift();
+      refreshMarks(st.next, performance.now());
+      const read = chainReadout(st, session.spec, t);
+      setText(msgEl, read.line);
+      setText(metaEl, read.detail);
+      if (progress.ribbon && ghostPts.length >= 2 && deltaEl && st.lift != null) {
+        const live = liveDelta(ghostPts, t - st.lift, state.pos);
+        if (live) {
+          deltaEl.textContent = formatDelta(live.delta);
+          deltaEl.classList.toggle('ahead', live.delta <= 0);
+          deltaEl.classList.toggle('behind', live.delta > 0);
+        }
+      }
+      if (ex.crashed || st.done != null || t >= (session.spec.timeout || 60)) finish(!!ex.crashed);
+      return;
+    }
     session.samples.push(samp);
     if (session.samples.length > 2400) session.samples.shift();
     const read = liveReadout(session.id, attachDt(session.samples), session.spec);
@@ -1409,12 +1895,8 @@ export function createCoach(ctx) {
   }
 
   function nextDrill() {
-    const cur = session && session.id;
-    const idx = drillIndex(cur);
-    for (let i = idx + 1; i < DRILLS.length; i++) {
-      if (isUnlocked(progress, DRILLS[i].id)) return startDrill(DRILLS[i].id, { input: session && session.input });
-    }
-    return null;
+    const next = nextDrillId(session && session.id, dev);
+    return next && isUnlocked(progress, next) ? startDrill(next, { input: session && session.input }) : null;
   }
 
   return {
@@ -1433,7 +1915,9 @@ export function createCoach(ctx) {
     retry,
     nextDrill,
     finish,
-    ladderHtml: () => ladderHtml(progress, progress.ribbon),
+    ladderHtml: () => ladderHtml(progress, progress.ribbon, dev),
+    nextId: (id) => nextDrillId(id, dev),
+    isOpen: (id) => drillOpen(id, dev),
     setRibbon(v) { return toggleRibbon(!!v); },
     reload() { progress = loadCoach(); return progress; },
   };

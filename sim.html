@@ -972,7 +972,7 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=98f2dfac226c";
+} from "./sim-coach.js?v=3853bb222c15";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=3f9a33d3082a";
@@ -5489,7 +5489,7 @@ function wireLooksUI(){
       '<li>How to → Start tutorial: hover, three gates, land (about two minutes, skippable).</li>'+
       '<li>R respawns at the last gate you passed. H toggles the stick HUD.</li>'+
       '<li>Fly the lit gate. A 3-lap run starts at gate 1. Splits per gate; missed gates add +2.0s.</li>'+
-      '<li>Coach: short scored drills (hover, line, gates, doorway, split-S, loop). Bronze unlocks the next.</li>'+
+      '<li>Coach: six drills on the Rig (tower, pipe slit, crates, tunnel, loft dive, the straight), timed against a flown line. Bronze unlocks the next.</li>'+
       '<li>Daily: a seeded indoor whoop each UTC day. Streak + best time stay in this browser. Boards: local 65/75/85 week, optional online.</li>'+
       '<li>Daily Line: one named start-to-finish line each UTC day, same for everyone. Local PB plus optional online top 20. Freestyle combo still scores the named trick list, including Ham Spin (inverted yaw).</li>'+
       '<li>Duel: Tune → Copy duel code. Friend loads it and races the ghost. Skins paint the frame, canopy, props, and LED trail. Whoop paints your own canopy shape and colors. After a line, Replay the last run (chase / orbit / FPV).</li>'+
@@ -7422,6 +7422,7 @@ function loop(now){
         attitude:cs.attitude,
         throttle:stick.t,
         crashed:false,
+        simMs:cs.flightMs,
       });
     }
     try{
@@ -7490,9 +7491,11 @@ function launchCoachDrill(id){
   if(feel&&feel.isTutorial&&feel.isTutorial()){
     if(feel.skipTutorial)feel.skipTutorial();
   }
-  if(threeD){setThreeD(false);toast('3D OFF FOR COACH');}
   const d=drillById(id);
   if(!d)return;
+  // The old maps' drills, as their maps, are open with ?dev=1 only.
+  if(!coach.isOpen(id)){toast('OLD-MAP DRILL — ?dev=1 ONLY');openCoachPicker();return;}
+  if(threeD){setThreeD(false);toast('3D OFF FOR COACH');}
   hideMenuLayer();
   toggleStartMenu(false);
   sessionLive=true;
@@ -7618,6 +7621,8 @@ feel=createFeel({
 });
 coach=createCoach({
   THREE,scene,toast,decorateGate,LIGHTING,
+  rigGate(mesh,col){decorateRigGate(mesh,col,vibeFor('rig'));},
+  dev:DEV_UI,
   onPrepare(){runActive=false;clearGhostRec();},
   onFinished(){applyActiveSkin();},
   onCancel(){},
@@ -7644,9 +7649,7 @@ if(coachRetry)coachRetry.onclick=()=>{
 };
 const coachNext=document.getElementById('coachNext');
 if(coachNext)coachNext.onclick=()=>{
-  const id=coach.currentId();
-  const order=['hover-hold','yaw-spin','straight-line','gate-pass','doorway-pass','split-s','power-loop'];
-  const next=order[order.indexOf(id)+1];
+  const next=coach.nextId(coach.currentId());
   if(next)launchCoachDrill(next);
   else{coach.cancel();openCoachPicker();}
 };
