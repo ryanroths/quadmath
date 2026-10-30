@@ -13,6 +13,7 @@ import {
 } from '../sim-look.js';
 import { RIG_PLAY } from '../sim-maps.js';
 import { vibeFor } from '../sim-art.js';
+import { fovChosen, saveFov, FOV_KEY } from '../sim-feel.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const licenses = readFileSync(join(root, 'ASSETS-LICENSES.md'), 'utf8');
@@ -30,14 +31,15 @@ function webpSize(buf) {
   return [buf.readUInt16LE(26) & 0x3fff, buf.readUInt16LE(28) & 0x3fff];
 }
 
-test('one HDRI, Poly Haven, 1k, shipped and licensed', () => {
+test('one HDRI, Poly Haven, 512 for the fill, shipped and licensed', () => {
   const f = join(root, LOOK.lighting.hdri);
   assert.ok(existsSync(f), LOOK.lighting.hdri);
   const head = readFileSync(f).subarray(0, 200).toString('latin1');
   assert.match(head, /^#\?RADIANCE/);
-  assert.match(head, /-Y 512 \+X 1024/, '1k equirect');
+  assert.match(head, /-Y 256 \+X 512/, '512 equirect');
+  assert.equal(LOOK.lighting.hdriWidth, 512);
   assert.ok(licenses.includes('`' + LOOK.lighting.hdri + '`'), 'licensed');
-  assert.match(licenses, /autoshop_01_1k\.hdr` \| https:\/\/polyhaven\.com\/a\/autoshop_01/);
+  assert.match(licenses, /autoshop_01_512\.hdr` \| https:\/\/polyhaven\.com\/a\/autoshop_01/);
   // The one key, ACES, exposure set once; the fill is the HDRI.
   assert.equal(LOOK.lighting.toneMapping, 'ACESFilmic');
   assert.ok(LOOK.lighting.env > 0 && LOOK.lighting.env < 1);
@@ -48,31 +50,51 @@ test('one HDRI, Poly Haven, 1k, shipped and licensed', () => {
 
 test('every texture is a Poly Haven set, shipped at its size and licensed, under the 24 MB budget', () => {
   const files = Object.keys(LOOK_TEXTURES);
-  assert.ok(files.length >= 10);
+  assert.equal(files.length, Object.values(LOOK.sets).reduce((n, s) => n + (s.packed ? 1 : 2), 0), 'two files a set, one if packed');
   for (const [file, px] of Object.entries(LOOK_TEXTURES)) {
     assert.ok(existsSync(join(root, file)), file);
     assert.deepEqual(webpSize(readFileSync(join(root, file))), [px, px], file);
     assert.ok(licenses.includes('`' + file + '`'), file + ' licensed');
   }
-  // The floor is the 1k set the owner asked for: albedo, normal, roughness.
-  assert.equal(LOOK.surfaces.concrete.res, '1k');
+  // The floor is 1k (albedo, normal, roughness); the zone sets are 512.
+  for (const [name, set] of Object.entries(LOOK.sets)) assert.equal(set.res, name === 'concrete_floor' ? '1k' : '512', name);
+  // A set with no normal ships packed: the albedo with its roughness in alpha.
+  for (const s of Object.values(LOOK.surfaces)) if (LOOK.sets[s.set].packed) assert.equal(s.normal, 0, s.set);
   const b = lookTextureBytes();
-  assert.equal(b.env, 768 * 1024 * 8, 'PMREM of a 1k HDRI, HalfFloat');
+  assert.equal(b.env, 384 * 512 * 8, 'PMREM of a 512 HDRI, HalfFloat');
   assert.ok(b.total < 24e6, 'textures ' + (b.total / 1e6).toFixed(2) + ' MB');
 });
 
 test('the camera: the Air65 lens, a diagonal FOV, rendered at its aspect', () => {
   const C = LOOK.camera;
   assert.equal(C.lensMm, 2.1);
-  assert.ok(C.diagonalFov >= 130 && C.diagonalFov <= 150, 'a 2.1 mm whoop lens, 130-150 deg diagonal');
+  assert.equal(C.diagonalFov, 125, 'the goggles crop the sensor: 125 deg diagonal (owner)');
   for (const aspect of [16 / 9, 4 / 3, 21 / 9, 1]) {
     const v = vfovForDiagonal(C.diagonalFov, aspect) * Math.PI / 360;
     const d = Math.atan(Math.tan(v) * Math.sqrt(1 + aspect * aspect)) * 360 / Math.PI;
     assert.ok(Math.abs(d - C.diagonalFov) < 1e-9, 'diagonal kept at ' + aspect);
   }
-  assert.ok(Math.abs(lookVfov(16 / 9) - 122.7) < 0.05, 'vertical at 16:9 ' + lookVfov(16 / 9));
+  assert.ok(Math.abs(lookVfov(16 / 9) - 86.56) < 0.05, 'vertical at 16:9 ' + lookVfov(16 / 9));
   assert.ok(C.barrel > 0 && C.barrel <= 0.3, 'a touch of barrel');
   assert.ok(C.near < 0.05 && C.far > 200, 'a lens a centimetre off the floor');
+});
+
+test('a FOV saved from the slider beats the lens, old saves too; the old bare default does not', () => {
+  const mem = new Map();
+  const store = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)) };
+  assert.equal(fovChosen(store), false, 'nothing saved');
+  store.setItem(FOV_KEY, '110');
+  assert.equal(fovChosen(store), false, 'the old bare default');
+  store.setItem(FOV_KEY, '100');
+  assert.equal(fovChosen(store), true, 'an early bare save');
+  store.setItem(FOV_KEY, '{"v":1,"fov":90}');
+  assert.equal(fovChosen(store), true, 'an old versioned save, even at the default');
+  saveFov(118, store);
+  assert.equal(fovChosen(store), true);
+  store.setItem(FOV_KEY, 'junk');
+  assert.equal(fovChosen(store), false);
+  const sim = readFileSync(join(root, 'sim.html'), 'utf8');
+  assert.match(sim, /fovSlider=fovChosen\(\);/);
 });
 
 test('motion blur on fast yaw only, and mild', () => {

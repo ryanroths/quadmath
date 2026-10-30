@@ -13,11 +13,13 @@ const TEX = 'assets/sim-looks/tex';
 export const LOOK = Object.freeze({
   name: 'Soft Industrial',
   lighting: Object.freeze({
-    // One HDRI, 1k, prefiltered (PMREM) once per renderer: the fill. The rooms
-    // are closed, so it lights and reflects but is never the background.
-    hdri: 'assets/sim-looks/hdri/autoshop_01_1k.hdr',
+    // One HDRI, prefiltered (PMREM) once per renderer: the fill. The rooms are
+    // closed, so it is never the background, and a fill needs no detail: 512
+    // (Poly Haven's 1k, box-filtered by tools/build_sim_look_textures.py).
+    hdri: 'assets/sim-looks/hdri/autoshop_01_512.hdr',
+    hdriWidth: 512,
     // Environment intensity. autoshop_01 gives an up-facing face an irradiance
-    // of 3.08 per unit (cosine-weighted over the upper hemisphere), so 0.5
+    // of 3.07 per unit (cosine-weighted over the upper hemisphere), so 0.5
     // fills a floor at about half the key's 2.83 (3.2 at 62 deg): a soft
     // interior, the key still the one that casts.
     env: 0.5,
@@ -30,20 +32,32 @@ export const LOOK = Object.freeze({
     exposure: 1.0,
     background: 0x0b0c0e,
   }),
-  // Surface types. Each is a Poly Haven set (albedo + normal + roughness, see
-  // tools/build_sim_look_textures.py) at a physical tile size, metres. The
-  // roughness is the surface's mean; the map adds the set's own variation
-  // around it (roughVar 1 = as measured). A zone hue is the material colour,
-  // a paint tint over the grey albedo of a tinted set.
+  // Texture sets: Poly Haven albedo + normal + roughness, built by
+  // tools/build_sim_look_textures.py. The floor is 1k, the zone sets 512. A
+  // set ships an albedo (_diff_) and a normal map with the roughness's
+  // deviation from its mean in alpha (_nr_); a set with no normal (packed)
+  // ships one file, the albedo with that roughness in its alpha (_dr_).
+  // mirror: a crop that does not tile, mirrored instead.
+  sets: Object.freeze({
+    concrete_floor: Object.freeze({ res: '1k' }),
+    painted_steel: Object.freeze({ res: '512', mirror: true }),
+    galvanised: Object.freeze({ res: '512', packed: true }),
+    plywood: Object.freeze({ res: '512' }),
+    rubber_mat: Object.freeze({ res: '512' }),
+  }),
+  // Surface types: a set at a physical tile size, metres. The roughness is the
+  // surface's mean; the map adds the set's own variation around it (roughVar
+  // 1 = as measured). A zone hue is the material colour, a paint tint over
+  // the grey albedo of a tinted set.
   surfaces: Object.freeze({
-    concrete: Object.freeze({ set: 'concrete_floor', res: '1k', tile: 3, roughness: 0.66, roughVar: 1, normal: 1, metalness: 0 }),
-    paintedBlock: Object.freeze({ set: 'concrete_floor', res: '1k', tile: 3, roughness: 0.86, roughVar: 0.5, normal: 0.45, metalness: 0 }),
-    paintedSteel: Object.freeze({ set: 'painted_steel', res: '256', tile: 1, mirror: true, roughness: 0.48, roughVar: 1, normal: 1, metalness: 0 }),
-    enamel: Object.freeze({ set: 'painted_steel', res: '256', tile: 1, mirror: true, roughness: 0.3, roughVar: 0.6, normal: 0.6, metalness: 0 }),
-    deck: Object.freeze({ set: 'painted_steel', res: '256', tile: 4, mirror: true, roughness: 0.82, roughVar: 0.6, normal: 0.6, metalness: 0 }),
-    galvanised: Object.freeze({ set: 'galvanised', res: '256', tile: 1.2, roughness: 0.36, roughVar: 1, normal: 0, metalness: 0.55 }),
-    plywood: Object.freeze({ set: 'plywood', res: '256', tile: 0.5, roughness: 0.78, roughVar: 1, normal: 0.8, metalness: 0 }),
-    rubber: Object.freeze({ set: 'rubber_mat', res: '512', tile: 2, roughness: 0.88, roughVar: 0.6, normal: 1, metalness: 0 }),
+    concrete: Object.freeze({ set: 'concrete_floor', tile: 3, roughness: 0.66, roughVar: 1, normal: 1, metalness: 0 }),
+    paintedBlock: Object.freeze({ set: 'concrete_floor', tile: 3, roughness: 0.86, roughVar: 0.5, normal: 0.45, metalness: 0 }),
+    paintedSteel: Object.freeze({ set: 'painted_steel', tile: 1, roughness: 0.48, roughVar: 1, normal: 1, metalness: 0 }),
+    enamel: Object.freeze({ set: 'painted_steel', tile: 1, roughness: 0.3, roughVar: 0.6, normal: 0.6, metalness: 0 }),
+    deck: Object.freeze({ set: 'painted_steel', tile: 4, roughness: 0.82, roughVar: 0.6, normal: 0.6, metalness: 0 }),
+    galvanised: Object.freeze({ set: 'galvanised', tile: 1.2, roughness: 0.36, roughVar: 1, normal: 0, metalness: 0.55 }),
+    plywood: Object.freeze({ set: 'plywood', tile: 0.5, roughness: 0.78, roughVar: 1, normal: 0.8, metalness: 0 }),
+    rubber: Object.freeze({ set: 'rubber_mat', tile: 2, roughness: 0.88, roughVar: 0.6, normal: 1, metalness: 0 }),
   }),
   // Grounding: the key's PCF soft shadows, soft AO under every object (baked
   // into the floor from the map's own boxes, floorAo), and the screen-space
@@ -65,13 +79,13 @@ export const LOOK = Object.freeze({
   }),
   // White edge lines at 60%: highlights, not outlines.
   lines: Object.freeze({ color: 0xf2f0ea, level: 0.6 }),
-  // The Air65's camera: BETAFPV C03, 2.1 mm (M7) lens on a 1/3" sensor. Its
-  // spec sheet says 160 deg; a 2.1 mm whoop lens measures 130-150 deg
-  // diagonal; the look takes 150, the top of that band. Rendered as a wide
-  // rectilinear view with a touch of barrel that keeps the corners in frame.
+  // The Air65's camera: BETAFPV C03, 2.1 mm (M7) lens on a 1/3" sensor. The
+  // goggles crop the sensor, so the pilot sees 125 deg diagonal (owner); wider
+  // fisheyes the gaps. Rendered rectilinear with a touch of barrel that keeps
+  // the corners in frame.
   camera: Object.freeze({
     lensMm: 2.1,
-    diagonalFov: 150,
+    diagonalFov: 125,
     barrel: 0.24,
     ca: 0.0016,
     // The lens sits about a centimetre off the floor on the pad: a nearer
@@ -83,24 +97,27 @@ export const LOOK = Object.freeze({
   }),
 });
 
+const setKinds = (set) => (set.packed ? ['dr'] : ['diff', 'nr']);
+
 // Every texture the look loads, with its pixel size: for the budget.
 export const LOOK_TEXTURES = Object.freeze((() => {
   const out = {};
-  for (const s of Object.values(LOOK.surfaces)) {
-    const px = s.res === '1k' ? 1024 : +s.res;
-    for (const kind of ['diff', 'nr']) {
-      out[`${TEX}/look_${s.set}_${kind}_${s.res}.webp`] = px;
-    }
+  for (const [name, set] of Object.entries(LOOK.sets)) {
+    const px = set.res === '1k' ? 1024 : +set.res;
+    for (const kind of setKinds(set)) out[`${TEX}/look_${name}_${kind}_${set.res}.webp`] = px;
   }
   return out;
 })());
 
 // GPU bytes of the look's textures: RGBA8 sets with mipmaps, plus the HDRI's
-// PMREM (HalfFloat RGBA, 3 x 4 cube faces of 256 from a 1k equirect).
+// PMREM (HalfFloat RGBA, three's cube-UV layout: cube faces of width / 4,
+// 3 x max(face, 112) wide, 4 x face high).
 export function lookTextureBytes() {
   let b = 0;
   for (const px of Object.values(LOOK_TEXTURES)) b += Math.round(px * px * 4 * 4 / 3);
-  return { sets: b, env: 768 * 1024 * 8, total: b + 768 * 1024 * 8 };
+  const face = LOOK.lighting.hdriWidth / 4;
+  const env = 3 * Math.max(face, 112) * 4 * face * 8;
+  return { sets: b, env, total: b + env };
 }
 
 // Vertical FOV, degrees, of a rectilinear view with this diagonal FOV.
@@ -240,17 +257,19 @@ function placeholder(rgba) {
   return cv;
 }
 
-// One shared pair of textures per set: albedo (sRGB) and normal + roughness
-// (linear; the roughness deviation in alpha). They start as a neutral texel
-// and take the decoded image when it lands, so a material has its maps (and
-// its uvs through the draw-call merge) from the first frame.
-export function lookTextureSet(THREE, set, res, mirror) {
-  const key = set + ':' + res;
-  if (SETS.has(key)) return SETS.get(key);
-  const wrap = mirror ? THREE.MirroredRepeatWrapping : THREE.RepeatWrapping;
+// One shared set of textures per set: albedo (sRGB) and normal + roughness
+// (linear; the roughness deviation in alpha), or for a packed set the albedo
+// alone with the roughness in its alpha. They start as a neutral texel and
+// take the decoded image when it lands, so a material has its maps (and its
+// uvs through the draw-call merge) from the first frame.
+export function lookTextureSet(THREE, name) {
+  if (SETS.has(name)) return SETS.get(name);
+  const set = LOOK.sets[name];
+  const res = set.res;
+  const wrap = set.mirror ? THREE.MirroredRepeatWrapping : THREE.RepeatWrapping;
   const make = (kind, rgba, srgb) => {
     const t = new THREE.Texture(placeholder(rgba));
-    t.name = `look_${set}_${kind}_${res}`;
+    t.name = `look_${name}_${kind}_${res}`;
     t.wrapS = t.wrapT = wrap;
     t.flipY = false;
     t.anisotropy = 8;
@@ -259,7 +278,7 @@ export function lookTextureSet(THREE, set, res, mirror) {
     if (canFetch()) {
       // ImageBitmap with no premultiply and no colour conversion: the alpha
       // is data (roughness), so it must reach the GPU as stored.
-      fetch(`${TEX}/look_${set}_${kind}_${res}.webp`)
+      fetch(`${TEX}/look_${name}_${kind}_${res}.webp`)
         .then((r) => { if (!r.ok) throw new Error(r.status + ' ' + t.name); return r.blob(); })
         .then((b) => createImageBitmap(b, { imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' }))
         .then((bmp) => { t.source = new THREE.Source(bmp); t.needsUpdate = true; })
@@ -267,9 +286,11 @@ export function lookTextureSet(THREE, set, res, mirror) {
     }
     return t;
   };
-  const pair = { map: make('diff', [204, 204, 204, 255], true), nr: make('nr', [128, 128, 255, 128], false) };
-  SETS.set(key, pair);
-  return pair;
+  const out = set.packed
+    ? { map: make('dr', [204, 204, 204, 128], true), nr: null }
+    : { map: make('diff', [204, 204, 204, 255], true), nr: make('nr', [128, 128, 255, 128], false) };
+  SETS.set(name, out);
+  return out;
 }
 
 const ROUGH_CHUNK = `float roughnessFactor = roughness;
@@ -302,15 +323,15 @@ export function lookMaterial(THREE, kind, color, opts) {
   const s = LOOK.surfaces[kind];
   if (!s) throw new Error('no look surface ' + kind);
   const o = opts || {};
-  const tex = lookTextureSet(THREE, s.set, s.res, s.mirror);
+  const tex = lookTextureSet(THREE, s.set);
   const m = new THREE.MeshStandardMaterial(Object.assign({
     color: color == null ? 0xffffff : color,
     roughness: s.roughness,
     metalness: s.metalness,
     map: tex.map,
-    roughnessMap: tex.nr,
+    roughnessMap: tex.nr || tex.map,
   }, o.extras || {}));
-  if (s.normal > 0) {
+  if (s.normal > 0 && tex.nr) {
     m.normalMap = tex.nr;
     m.normalScale.set(s.normal, s.normal);
   }

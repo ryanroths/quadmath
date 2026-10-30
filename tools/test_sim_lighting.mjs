@@ -107,7 +107,7 @@ test('the look loads one HDRI, its own, and the Rig is on the look', () => {
   const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
   assert.match(looks, /const HDRI_LOOK = LOOK\.lighting\.hdri;/);
   assert.match(looks, /envLook = await loadHdr\(HDRI_LOOK\)/);
-  assert.match(LOOK.lighting.hdri, /^assets\/sim-looks\/hdri\/[a-z0-9_]+_1k\.hdr$/);
+  assert.match(LOOK.lighting.hdri, /^assets\/sim-looks\/hdri\/[a-z0-9_]+_512\.hdr$/);
 });
 
 test('applyVibeLighting gives the Rig the look HDRI at its fill, in either order, across map switches', async () => {

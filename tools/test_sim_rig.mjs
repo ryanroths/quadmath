@@ -333,8 +333,8 @@ test('the look: a hue per zone painted on a real surface, a roughness per surfac
     assert.equal(mat.color.getHex(), S[z].color, z + ' colour (the paint tint)');
     assert.equal(mat.roughness, S[z].roughness, z + ' roughness');
     assert.equal(mat.metalness, S[z].metalness, z + ' metalness');
-    assert.match(mat.map.name, new RegExp('^look_' + set + '_diff_'), z + ' albedo');
-    assert.match(mat.roughnessMap.name, new RegExp('^look_' + set + '_nr_'), z + ' roughness map');
+    assert.match(mat.map.name, new RegExp('^look_' + set + '_(diff|dr)_'), z + ' albedo');
+    assert.match(mat.roughnessMap.name, new RegExp('^look_' + set + '_(nr|dr)_'), z + ' roughness map');
     if (LOOK.surfaces[S[z].look].normal > 0) assert.equal(mat.normalMap, mat.roughnessMap, z + ' normal map');
     assert.match(compiled(mat).fragmentShader, /lookRoughVar/, z + ' roughness varies about its mean');
   }
