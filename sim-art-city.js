@@ -3,8 +3,8 @@
 // Play colliders live in sim-maps.js CITY_PLAY. Nothing from the GPL whoop sim.
 
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=46192cc1defd';
-import { CITY_PLAY } from './sim-maps.js?v=528334865099';
-import { updateSceneLighting, rigAmbientEnv } from './sim-lighting.js?v=ffbd15528ade';
+import { CITY_PLAY } from './sim-maps.js?v=cf662d378ef4';
+import { updateSceneLighting } from './sim-lighting.js?v=87ade1287271';
 
 export const RAIN_KEY = 'quadmathSimRain';
 
@@ -1197,13 +1197,9 @@ export function applyResolvedLighting(ctx, spec) {
   // lighting resolver (never share fog.color as background; City drops IBL).
   const Color = (ctx && ctx.THREE && ctx.THREE.Color)
     || (typeof THREE !== 'undefined' ? THREE.Color : null);
-  const patch = { mapId: spec.mapId, citySky: !!spec.citySky, fogColor: L.fogColor, exposure: L.exposure };
+  // A map on the look takes the look's HDRI; sim-looks.js loads it.
+  const patch = { mapId: spec.mapId, look: !!spec.look, citySky: !!spec.citySky, fogColor: L.fogColor, exposure: L.exposure };
   if (spec.looks) patch.looks = spec.looks;
-  // The Rig's ambient is built here, at once, not loaded like an HDRI.
-  if (spec.mapId === 'rig') {
-    const env = rigAmbientEnv(ctx && ctx.THREE, renderer);
-    if (env) patch.envs = { rig: env };
-  }
   updateSceneLighting(scene, patch, { renderer, Color });
   if (bloomPass) {
     bloomPass.strength = L.bloomStrength;
@@ -1218,6 +1214,7 @@ export function applyVibeLighting(ctx, vibe) {
   if (!vibe || !vibe.lighting) return;
   applyResolvedLighting(ctx, {
     mapId: vibe.id,
+    look: !!vibe.look,
     citySky: vibe.id === 'city',
     lighting: vibe.lighting,
     looks: vibe.looks,

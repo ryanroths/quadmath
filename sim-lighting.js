@@ -11,59 +11,24 @@ export const CITY_SKY_HEX = 0x070014;
 export function sceneLightingInputs(over) {
   return Object.assign({
     mapId: null,      // resolved map id ('city', 'backyard', indoor ids)
+    look: false,      // the map is on the sim look (sim-look.js): its HDRI, fill only
     citySky: false,   // map paints its own night sky (no IBL)
     skyCity: false,   // sky dome currently wears the city texture
     sky: null,        // looks sky mode: 'gradient' | 'hdri' (null = looks not ready)
     fogColor: null,   // hex; LIGHTING.fogColor of the active vibe
     exposure: null,
     looks: null,      // vibe looks { env, bg }
-    envs: null,       // { dawn, yard, rig } PMREM textures once loaded / built, else null
+    envs: null,       // { dawn, yard, look } PMREM textures once loaded, else null
   }, over || {});
-}
-
-// The Rig's ambient image light: a soft grey room, radiance 1 at the horizon,
-// a little dimmer overhead and warmer underfoot, where the key-lit floor
-// bounces (so the ceiling is never black). No sun, no lamp in it: the key
-// stays the one light. Built once per renderer; the vibe's looks.env scales
-// it (sim-art.js VIBES.rig: 15% of the key).
-const RIG_ENV = new WeakMap();
-export function rigAmbientEnv(THREE, renderer) {
-  if (!THREE || !THREE.PMREMGenerator || !renderer) return null;
-  let env = RIG_ENV.get(renderer);
-  if (env) return env;
-  try {
-    const geo = new THREE.SphereGeometry(1, 48, 24);
-    const pos = geo.attributes.position;
-    const col = new Float32Array(pos.count * 3);
-    for (let i = 0; i < pos.count; i++) {
-      const up = Math.max(0, pos.getY(i)), down = Math.max(0, -pos.getY(i));
-      col[i * 3] = 1 - 0.1 * up + 0.2 * down;
-      col[i * 3 + 1] = 1 - 0.1 * up + 0.12 * down;
-      col[i * 3 + 2] = 1 - 0.08 * up + 0.02 * down;
-    }
-    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide });
-    const room = new THREE.Scene();
-    room.add(new THREE.Mesh(geo, mat));
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    env = pmrem.fromScene(room, 0.04).texture;
-    pmrem.dispose();
-    geo.dispose();
-    mat.dispose();
-  } catch (e) {
-    return null;
-  }
-  RIG_ENV.set(renderer, env);
-  return env;
 }
 
 export function resolveSceneLighting(input) {
   const s = sceneLightingInputs(input);
   const citySky = !!s.citySky || (s.sky === 'gradient' && !!s.skyCity);
   const yard = s.mapId === 'backyard';
-  // The Rig takes its own grey room (rigAmbientEnv), never an HDRI.
-  const rig = s.mapId === 'rig';
-  const want = citySky ? null : (yard ? 'yard' : rig ? 'rig' : 'dawn');
+  // A map on the look takes the look's HDRI (sim-look.js), never another.
+  const look = !!s.look && !citySky;
+  const want = citySky ? null : (look ? 'look' : yard ? 'yard' : 'dawn');
   const env = (want && s.envs && s.envs[want]) || null;
   const looks = s.looks || {};
   const out = {
@@ -81,9 +46,9 @@ export function resolveSceneLighting(input) {
     fogColor: s.fogColor == null ? null : s.fogColor,
     exposure: s.exposure == null ? null : s.exposure,
   };
-  if (rig) {
-    // Ambient only: the room is closed, so the background is a plain colour,
-    // never the grey room as a sky.
+  if (look) {
+    // Fill only: the rooms on the look are closed, so the background is a
+    // plain colour, never the HDRI as a sky.
     out.environment = env;
     out.environmentIntensity = looks.env != null ? looks.env : 0;
     out.bgHex = out.fogColor;

@@ -26,6 +26,28 @@ Source: https://polyhaven.com
 
 CC0 — no attribution required. Listed here so the sim can name every new file.
 
+### The sim look (`sim-look.js`), first on The Rig
+
+Downloaded from Poly Haven at 1k (PNG, OpenGL normals; MD5s checked against
+`api.polyhaven.com/files`). Rebuild the textures with
+`python tools/build_sim_look_textures.py <dir of the 1k PNGs>`. Each set is an
+albedo (`_diff_`) and a normal map with the roughness map's deviation from its
+mean in alpha (`_nr_`).
+
+| File | Source | Notes |
+|---|---|---|
+| `assets/sim-looks/hdri/autoshop_01_1k.hdr` | https://polyhaven.com/a/autoshop_01 | HDRI, 1K, unmodified; the look's only environment light (fill) |
+| `assets/sim-looks/tex/look_concrete_floor_diff_1k.webp` | https://polyhaven.com/a/concrete_floor_worn_001 | albedo, calibrated to a mean linear 0.24 |
+| `assets/sim-looks/tex/look_concrete_floor_nr_1k.webp` | https://polyhaven.com/a/concrete_floor_worn_001 | normal + roughness |
+| `assets/sim-looks/tex/look_painted_steel_diff_256.webp` | https://polyhaven.com/a/blue_metal_plate | albedo, greyed for a paint tint; cropped between the two panel seams |
+| `assets/sim-looks/tex/look_painted_steel_nr_256.webp` | https://polyhaven.com/a/blue_metal_plate | normal + roughness, same crop |
+| `assets/sim-looks/tex/look_galvanised_diff_256.webp` | https://polyhaven.com/a/corrugated_iron_02 | albedo, corrugation profile divided out, greyed |
+| `assets/sim-looks/tex/look_galvanised_nr_256.webp` | https://polyhaven.com/a/corrugated_iron_02 | flat normal + roughness (corrugation divided out) |
+| `assets/sim-looks/tex/look_plywood_diff_256.webp` | https://polyhaven.com/a/plywood | albedo, greyed for a paint tint |
+| `assets/sim-looks/tex/look_plywood_nr_256.webp` | https://polyhaven.com/a/plywood | normal + roughness |
+| `assets/sim-looks/tex/look_rubber_mat_diff_512.webp` | https://polyhaven.com/a/rubber_tiles | albedo, greyed for a paint tint |
+| `assets/sim-looks/tex/look_rubber_mat_nr_512.webp` | https://polyhaven.com/a/rubber_tiles | normal + roughness |
+
 ## Inter — SIL Open Font License 1.1
 
 Source: https://github.com/rsms/inter/releases/tag/v4.1

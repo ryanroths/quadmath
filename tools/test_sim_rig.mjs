@@ -10,6 +10,7 @@ import { RIG_PLAY, RIG_WS, RIG_LOOK, LAYOUT, MAP_ORBIT, MAP_LOOKS, MAP_IDS, buil
 import { WS } from '../sim-core-adapter.js';
 import { normalizeTrack, gateRadius, BUILTIN_TRACK_FILES } from '../sim-tracks.js';
 import { vibeFor, mergeStaticArt } from '../sim-art.js';
+import { LOOK } from '../sim-look.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const raw = JSON.parse(readFileSync(join(root, 'tracks/rig-loop.json'), 'utf8'));
@@ -235,8 +236,8 @@ function hueSat(hex) {
 }
 const hueGap = (a, b) => Math.min(Math.abs(a - b) % 360, 360 - Math.abs(a - b) % 360);
 
-// Just enough canvas for the builder's floor and crate textures. Each canvas
-// records its draw calls (with the fill style at the time) in cv.ops.
+// Just enough canvas for the look's placeholder texels. Each canvas records
+// its draw calls (with the fill style at the time) in cv.ops.
 function installDomStub() {
   if (globalThis.document && globalThis.document.createElement) return;
   globalThis.document = {
@@ -252,7 +253,18 @@ function installDomStub() {
   };
 }
 
-test('the look: a hue per zone, a roughness per surface, 15% ambient, a floor grid', () => {
+// A material's shader as onBeforeCompile leaves it (the chunks it patches).
+function compiled(mat) {
+  const shader = {
+    uniforms: {},
+    vertexShader: '#include <common>\n#include <project_vertex>',
+    fragmentShader: '#include <common>\n#include <map_fragment>\n#include <roughnessmap_fragment>\n#include <opaque_fragment>',
+  };
+  mat.onBeforeCompile(shader, null);
+  return shader;
+}
+
+test('the look: a hue per zone painted on a real surface, a roughness per surface, the HDRI fill, the floor joints', () => {
   const S = RIG_LOOK.surfaces, zones = ['tower', 'pipes', 'crates', 'tunnel', 'loft'];
   // A hue per zone, 20 degrees apart at least; the room stays grey.
   for (let i = 0; i < zones.length; i++) {
@@ -269,26 +281,35 @@ test('the look: a hue per zone, a roughness per surface, 15% ambient, a floor gr
     const gh = hueSat(parseInt(gate.slice(1), 16)).h;
     for (const z of zones) assert.ok(hueGap(gh, hueSat(S[z].color).h) >= 15, z + ' near gate ' + gate);
   }
-  // The four named surface types each have their own roughness.
+  // The owner's surfaces: concrete floor, painted steel scaffold, galvanised
+  // pipe, plywood crates, rubber matting on the loft. Each its own roughness.
   const named = [S.pipes, S.crates, S.floor, S.tower];
-  assert.deepEqual(named.map((f) => f.type), ['steel pipe', 'wood crate', 'concrete', 'painted scaffold']);
+  assert.deepEqual(named.map((f) => f.type), ['galvanised pipe', 'plywood crate', 'concrete', 'painted steel scaffold']);
+  assert.deepEqual([S.floor, S.tower, S.pipes, S.crates, S.loft].map((f) => f.look), ['concrete', 'paintedSteel', 'galvanised', 'plywood', 'rubber']);
   for (let i = 0; i < named.length; i++) {
     for (let j = i + 1; j < named.length; j++) {
       assert.ok(Math.abs(named[i].roughness - named[j].roughness) >= 0.1, named[i].type + ' / ' + named[j].type);
     }
   }
-  assert.ok(S.pipes.metalness >= 0.5, 'steel is a metal');
+  assert.ok(S.pipes.metalness >= 0.5, 'galvanised steel is a metal');
   for (const k of ['crates', 'floor', 'tower']) assert.equal(S[k].metalness, 0, k);
-  // One key light. The ambient is the image light, 15% of a key-lit face.
+  for (const [k, f] of Object.entries(S)) {
+    assert.equal(f.roughness, LOOK.surfaces[f.look].roughness, k + ' roughness from the look');
+    assert.equal(f.metalness, LOOK.surfaces[f.look].metalness, k + ' metalness from the look');
+  }
+  // One key light; the fill is the look's HDRI at the look's intensity.
   const L = v.lighting;
+  assert.equal(v.look, true);
   assert.equal(L.fillIntensity, 0);
   assert.equal(L.hemiIntensity, 0);
-  assert.equal(RIG_LOOK.ambient, 0.15);
-  assert.ok(Math.abs(v.looks.env * Math.PI / L.sunIntensity - RIG_LOOK.ambient) < 1e-9, 'ambient ' + v.looks.env);
+  assert.equal(L.sunIntensity, LOOK.lighting.key.intensity);
+  assert.equal(L.exposure, LOOK.lighting.exposure);
+  assert.equal(v.looks.env, LOOK.lighting.env);
   // After a quality change the key runs at looks.sun (sim-looks.js applyMapLooksNow).
   assert.equal(v.looks.sun, L.sunIntensity, 'looks.sun is the same key');
-  // Built: every box wears its zone's material (supports too), the floor
-  // carries the grid at 5 m tiles, the edges are still drawn.
+  // Built: every box wears its zone's material (supports too), each a PBR set
+  // with the zone hue as its colour; the floor carries the joints and the AO;
+  // the edges are drawn at 60% and bloom.
   installDomStub();
   const built = buildMap(THREE, 'rig');
   const vis = built.group.getObjectByName('rigArtVisuals');
@@ -307,35 +328,56 @@ test('the look: a hue per zone, a roughness per surface, 15% ambient, a floor gr
   for (const z of zones) {
     assert.equal(mats['rig_' + z].size, 1, z + ' one material');
     const mat = [...mats['rig_' + z]][0];
+    const set = LOOK.surfaces[S[z].look].set;
     assert.equal(mat.name, 'rig ' + S[z].type);
-    assert.equal(mat.color.getHex(), S[z].color, z + ' colour');
+    assert.equal(mat.color.getHex(), S[z].color, z + ' colour (the paint tint)');
     assert.equal(mat.roughness, S[z].roughness, z + ' roughness');
     assert.equal(mat.metalness, S[z].metalness, z + ' metalness');
+    assert.match(mat.map.name, new RegExp('^look_' + set + '_diff_'), z + ' albedo');
+    assert.match(mat.roughnessMap.name, new RegExp('^look_' + set + '_nr_'), z + ' roughness map');
+    if (LOOK.surfaces[S[z].look].normal > 0) assert.equal(mat.normalMap, mat.roughnessMap, z + ' normal map');
+    assert.match(compiled(mat).fragmentShader, /lookRoughVar/, z + ' roughness varies about its mean');
   }
+  // Box uvs are in tiles of the surface's physical size: a 10.7 m pipe runs
+  // 10.7 / tile tiles, not one stretched texture.
+  const pipe = rigMeshes[BOXES.findIndex((b) => b.part === 'pipe')];
+  const uv = pipe.geometry.getAttribute('uv'), nrm = pipe.geometry.getAttribute('normal');
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < uv.count; i++) {
+    if (Math.abs(nrm.getX(i)) < 0.5) continue; // a side face: u runs along the pipe (z)
+    lo = Math.min(lo, uv.getX(i)); hi = Math.max(hi, uv.getX(i));
+  }
+  assert.ok(Math.abs((hi - lo) - (3.2 + 7.5) / LOOK.surfaces.galvanised.tile) < 1e-3, 'pipe tiles ' + (hi - lo));
+  // The floor: concrete with its joints, a cut every metre and a wider one
+  // every 5 m from the room corner, and the AO map on uv1.
   const fm = built.floor.material;
-  assert.ok(fm.map && fm.map.wrapS === THREE.RepeatWrapping && fm.map.wrapT === THREE.RepeatWrapping, 'floor grid tiles');
-  assert.deepEqual([fm.map.repeat.x, fm.map.repeat.y], [ROOM.w / RIG_LOOK.grid.major, ROOM.d / RIG_LOOK.grid.major]);
   assert.equal(RIG_LOOK.grid.minor, 1);
+  assert.equal(RIG_LOOK.grid.major, 5);
+  assert.match(fm.map.name, /^look_concrete_floor_diff_1k$/);
+  assert.ok(fm.map.wrapS === THREE.RepeatWrapping && fm.map.wrapT === THREE.RepeatWrapping, 'floor tiles');
   assert.equal(fm.roughness, S.floor.roughness);
-  // The tile itself: a full-length line every metre each way, and heavier
-  // ones on the 5 m tile edges.
-  const img = fm.map.image, w = img.width, n = RIG_LOOK.grid.major / RIG_LOOK.grid.minor;
-  const rects = img.ops.filter(([op]) => op === 'fillRect').map(([, style, x, y, rw, rh]) => ({ style, x, y, rw, rh }));
-  for (const [axis, at, len, thick] of [['x', 'x', 'rh', 'rw'], ['y', 'y', 'rw', 'rh']]) {
-    const lines = rects.filter((r) => r[len] >= w && r[thick] < w);
-    for (let k = 0; k <= n; k++) {
-      const c = k * w / n;
-      assert.ok(lines.some((r) => Math.abs(r[at] + r[thick] / 2 - c) <= r[thick] / 2 + 2), `${axis} line at ${k} m`);
-    }
-    const edge = lines.filter((r) => r[at] <= 0 || r[at] + r[thick] >= w);
-    const minor = lines.filter((r) => !edge.includes(r));
-    assert.equal(minor.length, n - 1, axis + ' minor lines');
-    assert.ok(edge.every((e) => minor.every((m) => e[thick] > m[thick] && e.style !== m.style)), axis + ' 5 m line heavier');
-  }
-  assert.ok(vis.getObjectByName('rigEdges').isLineSegments, 'edges drawn');
+  const sh = compiled(fm);
+  const g = sh.uniforms.lookGrid.value;
+  assert.deepEqual([g.x, g.y], [-ROOM.w * RIG_WS / 2, -ROOM.d * RIG_WS / 2], 'grid from the room corner');
+  assert.equal(g.z, RIG_LOOK.grid.minor * RIG_WS, 'a joint every metre');
+  assert.equal(g.w, RIG_LOOK.grid.major / RIG_LOOK.grid.minor, 'a wider one every 5 m');
+  const jw = sh.uniforms.lookJoint.value;
+  assert.ok(jw.y * RIG_LOOK.grid.major > jw.x * RIG_LOOK.grid.minor, 'the 5 m joint is wider');
+  assert.match(sh.fragmentShader, /LOOK_JOINTS/);
+  assert.ok(fm.aoMap && fm.aoMap.channel === 1 && built.floor.geometry.getAttribute('uv1'), 'floor AO on uv1');
+  assert.deepEqual([fm.aoMap.image.width, fm.aoMap.image.height],
+    [Math.round(ROOM.w / LOOK.grounding.floorAo.texel), Math.round(ROOM.d / LOOK.grounding.floorAo.texel)]);
+  // The edges: one LineSegments at the look's 60%, marked to bloom.
+  const edges = vis.getObjectByName('rigEdges');
+  assert.ok(edges.isLineSegments, 'edges drawn');
+  const want = new THREE.Color(LOOK.lines.color).multiplyScalar(0.6);
+  assert.ok(Math.abs(edges.material.color.r - want.r) < 1e-6 && Math.abs(edges.material.color.g - want.g) < 1e-6, 'edges at 60%');
+  assert.equal(LOOK.lines.level, 0.6);
+  assert.equal(edges.material.userData.lookBloom, true);
+  assert.match(compiled(edges.material).fragmentShader, /gl_FragColor\.a = 0\.0;/);
 });
 
-test('the draw-call merge keeps the Rig textures (crate slats)', () => {
+test('the draw-call merge keeps the Rig textures (plywood crates)', () => {
   installDomStub();
   const built = buildMap(THREE, 'rig');
   const root = new THREE.Group();

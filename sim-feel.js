@@ -5,7 +5,7 @@
 //   quadmathSimFov.
 // Nothing here is copied from WebFPV.
 
-import { makeWorldLabel } from './sim-art.js?v=96ff6c3f66b8';
+import { makeWorldLabel } from './sim-art.js?v=ca2a2ac38a3a';
 
 export const INPUT_CHOICE_KEY = 'quadmathSimInputChoice';
 export const FLOATINESS_KEY = 'quadmathSimFloatiness';
@@ -68,11 +68,25 @@ export function loadFov(storage) {
   catch (e) { return VFOV_DEFAULT; }
 }
 
+// v 2: set since the sim look (sim-look.js) took the FPV camera. A map on the
+// look flies the Air65's lens unless the pilot has moved the slider since.
+export const FOV_LOOK_VERSION = 2;
+
 export function saveFov(v, storage) {
   const store = fovStore(storage);
   if (!store || typeof store.setItem !== 'function') return;
-  try { store.setItem(FOV_KEY, JSON.stringify({ v: 1, fov: clampFov(v) })); }
+  try { store.setItem(FOV_KEY, JSON.stringify({ v: FOV_LOOK_VERSION, fov: clampFov(v) })); }
   catch (e) { /* ignore quota / private mode */ }
+}
+
+// True when the pilot chose a FOV after the look shipped (it beats the lens).
+export function fovChosenForLook(storage) {
+  const store = fovStore(storage);
+  if (!store || typeof store.getItem !== 'function') return false;
+  try {
+    const o = JSON.parse(store.getItem(FOV_KEY));
+    return !!(o && typeof o === 'object' && +o.v >= FOV_LOOK_VERSION && Number.isFinite(+o.fov));
+  } catch (e) { return false; }
 }
 
 export const RATE_PRESETS = {
