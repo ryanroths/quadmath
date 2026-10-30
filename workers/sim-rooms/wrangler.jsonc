@@ -20,6 +20,7 @@
   },
   // SQLite-backed, so the Workers Free plan can run it.
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["Room", "CreateLimit"] }
+    { "tag": "v1", "new_sqlite_classes": ["Room"] },
+    { "tag": "v2", "new_sqlite_classes": ["CreateLimit"] }
   ]
 }
