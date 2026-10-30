@@ -5,7 +5,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=a3ce2f48eb3f';
+import { planRoom } from './sim-room.js?v=bd51baa7fe22';
 import { LOOK, lookMaterial, lookBoxUv, lookFloor, lookLines, lookLooks, floorAo } from './sim-look.js?v=e9ead0f3bb33';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
