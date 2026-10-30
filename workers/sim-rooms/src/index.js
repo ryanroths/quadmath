@@ -4,7 +4,8 @@
 // the two share nothing but CORS.
 // Do not deploy from the agent — Ryan deploys (see DEPLOY.md).
 //
-//   POST /rooms                {map}  -> {ok, code, map, track}
+//   POST /rooms                {map}  -> {ok, code, map, track}; 10 a minute
+//                                        an IP (limit.js), then 429 TOO MANY ROOMS
 //   GET  /rooms/CODE                  -> {ok, code, map, track, pilots, max}
 //   GET  /rooms/CODE/ws?name=  (WebSocket) the room
 //   GET  /health
@@ -15,6 +16,7 @@ import {
 import { allowedOriginList, pickCorsOrigin, DEFAULT_ALLOWED_ORIGIN } from '../../../sim-retention.js';
 
 export { Room } from './room.js';
+export { CreateLimit } from './limit.js';
 
 const CREATE_TRIES = 12;
 const BODY_LIMIT = 1024;
@@ -56,6 +58,20 @@ function roomStub(env, code) {
   return env.ROOMS.get(env.ROOMS.idFromName(code));
 }
 
+// Cloudflare sets CF-Connecting-IP on every request (a client cannot).
+function clientIp(request) {
+  return request.headers.get('CF-Connecting-IP') || 'unknown';
+}
+
+// One create against the IP's limit: null, or the 429 reply's {status, body, retryAfterS}.
+async function createLimited(request, env) {
+  const stub = env.CREATE_LIMIT.get(env.CREATE_LIMIT.idFromName(clientIp(request)));
+  const res = await stub.fetch('https://limit/take', { method: 'POST' });
+  if (res.status !== 429) return null;
+  const r = await res.json();
+  return { status: 429, body: { ok: false, reason: 'TOO MANY ROOMS' }, retryAfterS: r.retryAfterS };
+}
+
 async function createRoom(request, env) {
   const text = await request.text();
   if (text.length > BODY_LIMIT) return { status: 413, body: { ok: false, reason: 'PAYLOAD TOO LARGE' } };
@@ -85,6 +101,12 @@ export async function handleRooms(request, env) {
     return reply({ ok: true, service: 'quadmath-sim-rooms' });
   }
   if (request.method === 'POST' && path === '/rooms') {
+    const limited = await createLimited(request, env);
+    if (limited) {
+      const res = reply(limited.body, limited.status);
+      res.headers.set('Retry-After', String(limited.retryAfterS));
+      return res;
+    }
     const made = await createRoom(request, env);
     return reply(made.body, made.status);
   }

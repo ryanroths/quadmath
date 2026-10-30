@@ -3,7 +3,8 @@
 Ghost rooms: up to 4 pilots fly one map together (Esc → **Room** in
 `sim.html`). Freestyle only, no timing, no boards, no collision between
 quads: the others are ghost quads with name tags and their own motor sound.
-One Durable Object (`Room`, `src/room.js`) per 4-letter room code.
+One Durable Object (`Room`, `src/room.js`) per 4-letter room code, and
+one (`CreateLimit`, `src/limit.js`) per client IP for the create limit.
 
 The sim works without this Worker. Until it is deployed, Create and Join
 toast `ROOMS OFFLINE`.
@@ -34,10 +35,12 @@ The rooms are not in `workers/sim-leaderboard`:
    npx wrangler login
    ```
 
-3. Nothing to create by hand. `wrangler.jsonc` declares the `ROOMS`
-   binding to the `Room` class and its migration `v1`
-   (`new_sqlite_classes: ["Room"]`). The first deploy creates the Durable
-   Object namespace. SQLite-backed, so it runs on the Workers Free plan.
+3. Nothing to create by hand. `wrangler.jsonc` declares two bindings,
+   `ROOMS` to the `Room` class and `CREATE_LIMIT` to the `CreateLimit`
+   class, and their migration `v1`
+   (`new_sqlite_classes: ["Room", "CreateLimit"]`). The first deploy creates
+   both Durable Object namespaces. SQLite-backed, so it runs on the Workers
+   Free plan.
 4. Deploy:
 
    ```bash
@@ -59,7 +62,13 @@ curl -sS https://sim-rooms.ryan-roths.workers.dev/rooms/ABCD
 
 The POST returns `{"ok":true,"code":"ABCD","map":"rig","track":"rig-freestyle"}`;
 the GET (with that code) returns the room with `"pilots":0`. A code nobody
-made is a 404.
+made is a 404. An 11th POST inside a minute from one IP is a 429:
+
+```bash
+# Within a minute of the POST above (the first of the 10):
+for i in $(seq 1 10); do curl -s -o /dev/null -w '%{http_code} ' -X POST -d '{"map":"rig"}' https://sim-rooms.ryan-roths.workers.dev/rooms; done; echo
+# 201 201 201 201 201 201 201 201 201 429
+```
 
 In the browser: two tabs on `https://quadmath.com/sim.html`, Fly, Esc →
 Room → Create in one, Join with its code in the other. Each tab shows the
@@ -78,14 +87,21 @@ map) are in Durable Object storage and are kept. A room whose sockets went
 this way (no close reached the object) is found empty by its next alarm
 and expires one TTL after that, so at most 20 min instead of 10.
 
-Do not rename the `Room` class or drop the `v1` migration. A class rename
-needs a `renamed_classes` migration; see the Durable Objects migrations docs.
+Do not rename the `Room` or `CreateLimit` class or drop the `v1`
+migration. A class rename needs a `renamed_classes` migration, and a new
+class a new tag (`v2`); see the Durable Objects migrations docs.
 
 ## What it does
 
 - `POST /rooms {map}`: a random free code (24 letters, no I or O) on that
   map's freestyle track. The page sends its own map, so joiners fly the
   host's map.
+- Rate limit: 10 creates a minute per IP (`CF-Connecting-IP`), a sliding
+  window. The 11th is `429 {"ok":false,"reason":"TOO MANY ROOMS"}` with
+  `Retry-After` (seconds); the page toasts `TOO MANY ROOMS`. Every POST
+  counts, a bad one too; a refused one does not. Joining and room info are
+  not limited. The limit's object keeps only the times of the last creates
+  (not the IP: it is the object's name), deleted a minute after the last.
 - `GET /rooms/CODE`: the room's map, track and pilot count, or 404.
 - `GET /rooms/CODE/ws?name=` (WebSocket): the room. At most 4 pilots; the
   fifth is closed with 4409 (`ROOM FULL`), a code that is not live with

@@ -13,11 +13,13 @@
   },
   "durable_objects": {
     "bindings": [
-      { "name": "ROOMS", "class_name": "Room" }
+      { "name": "ROOMS", "class_name": "Room" },
+      // 10 room creates a minute an IP (src/limit.js).
+      { "name": "CREATE_LIMIT", "class_name": "CreateLimit" }
     ]
   },
   // SQLite-backed, so the Workers Free plan can run it.
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["Room"] }
+    { "tag": "v1", "new_sqlite_classes": ["Room", "CreateLimit"] }
   ]
 }

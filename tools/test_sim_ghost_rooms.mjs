@@ -1,6 +1,7 @@
 // Ghost rooms in Node, no network: sim-ghost-rooms.js (codes, the 18-byte
 // pose, interpolation), the Room Durable Object's logic and the Worker's
-// routes (workers/sim-rooms) on fake runtimes, the remote motor voice's
+// routes and the create rate limit (workers/sim-rooms) on fake runtimes,
+// the remote motor voice's
 // level (sim-audio.js), and that remote poses stay render-only. The same
 // room against a real `wrangler dev`, four pilots: test_sim_rooms_wrangler.mjs.
 import test from 'node:test';
@@ -11,12 +12,13 @@ import { fileURLToPath } from 'node:url';
 import {
   ROOM_MAX, POSE_HZ, ROOM_TTL_MS, ROOM_CODE_LETTERS, POSE_BYTES, RELAY_BYTES, RPM_UNIT,
   INTERP_DELAY_MS, STALE_MS, CLOSE_FULL, CLOSE_NO_ROOM,
-  normalizeRoomCode, randomRoomCode, validMapId, roomTrackFor, posUnitsPerWu, roomPilotName,
+  normalizeRoomCode, randomRoomCode, validMapId, roomTrackFor, posUnitsPerWu, roomPilotName, createRoom,
   encodePose, decodePose, createPoseTrack, pushPose, samplePoseTrack, roomsUrl, roomSocketUrl,
   closeReason,
 } from '../sim-ghost-rooms.js';
 import { RoomLogic, Room, roomTtl } from '../workers/sim-rooms/src/room.js';
 import { handleRooms } from '../workers/sim-rooms/src/index.js';
+import { CreateLimitLogic, CreateLimit, CREATE_LIMIT, CREATE_WINDOW_MS } from '../workers/sim-rooms/src/limit.js';
 import { remoteLevel, REMOTE_REF_M, REMOTE_MAX_M } from '../sim-audio.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -305,20 +307,22 @@ test('Room: expires ROOM_TTL_MS after the last pilot leaves; a rejoin restarts t
 });
 
 // ---------- The Worker's routes, with the DO namespace faked ----------
-function fakeEnv(opts = {}) {
+function fakeNamespace(make, opts = {}) {
   const objects = new Map();
   return {
-    ALLOWED_ORIGIN: 'https://quadmath.com,http://localhost:4173',
-    ROOMS: {
-      idFromName: (name) => name,
-      get: (id) => {
-        if (!objects.has(id)) objects.set(id, new Room(fakeCtx(), {}));
-        const o = objects.get(id);
-        return { fetch: (url, init) => (opts.busy ? Promise.resolve(new Response('{}', { status: 409 })) : o.fetch(new Request(url, init))) };
-      },
-    },
     objects,
+    idFromName: (name) => name,
+    get: (id) => {
+      if (!objects.has(id)) objects.set(id, make());
+      const o = objects.get(id);
+      return { fetch: (url, init) => (opts.busy ? Promise.resolve(new Response('{}', { status: 409 })) : o.fetch(new Request(url, init))) };
+    },
   };
+}
+function fakeEnv(opts = {}) {
+  const ROOMS = fakeNamespace(() => new Room(fakeCtx(), {}), opts);
+  const CREATE_LIMIT = fakeNamespace(() => new CreateLimit(fakeCtx()));
+  return { ALLOWED_ORIGIN: 'https://quadmath.com,http://localhost:4173', ROOMS, CREATE_LIMIT, objects: ROOMS.objects };
 }
 
 test('Worker: create, info, bad input, origins', async () => {
@@ -346,6 +350,54 @@ test('Worker: create, info, bad input, origins', async () => {
   res = await handleRooms(new Request('https://rooms.test/rooms', { method: 'POST', body: '{"map":"rig"}' }), fakeEnv({ busy: true }));
   assert.equal(res.status, 503);
   assert.equal((await res.json()).reason, 'NO FREE CODE');
+});
+
+test('create rate limit: 10 a minute an IP, sliding; a refusal is not counted', async () => {
+  assert.equal(CREATE_LIMIT, 10);
+  assert.equal(CREATE_WINDOW_MS, 60000);
+  const ctx = fakeCtx();
+  const lim = new CreateLimitLogic(ctx.storage);
+  for (let i = 0; i < 10; i++) assert.deepEqual(await lim.take(1000 + i * 1000), { ok: true });
+  assert.equal(ctx.alarm, 10000 + CREATE_WINDOW_MS, 'the alarm follows the last create');
+  // The 11th inside the minute: refused until the first leaves the window.
+  assert.deepEqual(await lim.take(30000), { ok: false, retryAfterS: 31 });
+  assert.deepEqual(await lim.take(60999), { ok: false, retryAfterS: 1 });
+  assert.equal(ctx.store.get('hits').length, 10, 'refusals are not counted');
+  assert.deepEqual(await lim.take(61000), { ok: true }, 'sliding: the first create (t=1000) is out');
+  assert.equal((await lim.take(61500)).ok, false, 'and only that one');
+  // The alarm deletes what has left the window, all of it once idle.
+  await lim.alarm(65000);
+  assert.ok(ctx.store.get('hits'));
+  await lim.alarm(61000 + CREATE_WINDOW_MS);
+  assert.equal(ctx.store.size, 0, 'nothing kept once the window is past');
+  assert.deepEqual(await lim.take(200000), { ok: true });
+});
+
+test('Worker: the 11th create a minute from one IP is 429 TOO MANY ROOMS', async () => {
+  const env = fakeEnv();
+  const post = (ip, body = '{"map":"rig"}') => handleRooms(new Request('https://rooms.test/rooms', {
+    method: 'POST', body, headers: { 'CF-Connecting-IP': ip, Origin: 'https://quadmath.com' },
+  }), env);
+  const ok = [];
+  for (let i = 0; i < 10; i++) ok.push((await post('198.51.100.1', i === 3 ? '{"map":"../x"}' : undefined)).status);
+  assert.deepEqual(ok, [201, 201, 201, 400, 201, 201, 201, 201, 201, 201], 'every create attempt counts, a bad one too');
+  const res = await post('198.51.100.1');
+  assert.equal(res.status, 429);
+  assert.deepEqual(await res.json(), { ok: false, reason: 'TOO MANY ROOMS' });
+  const retry = Number(res.headers.get('Retry-After'));
+  assert.ok(retry >= 59 && retry <= 60, 'Retry-After ' + retry);
+  assert.equal(res.headers.get('Access-Control-Allow-Origin'), 'https://quadmath.com', 'the page can read it');
+  assert.equal(env.objects.size, 9, 'no room made past the limit');
+  assert.equal((await post('198.51.100.2')).status, 201, 'another IP has its own limit');
+  // The page's client shows the reason (sim.html toasts it).
+  const viaClient = (url, init) => handleRooms(new Request(url, { ...init, headers: { ...init.headers, 'CF-Connecting-IP': '198.51.100.1' } }), env);
+  await assert.rejects(createRoom('https://rooms.test', 'rig', viaClient), /^Error: TOO MANY ROOMS$/);
+  // Joining and room info are not limited.
+  const made = await (await post('198.51.100.3')).json();
+  for (let i = 0; i < 15; i++) {
+    const info = await handleRooms(new Request('https://rooms.test/rooms/' + made.code, { headers: { 'CF-Connecting-IP': '198.51.100.1' } }), env);
+    assert.equal(info.status, 200);
+  }
 });
 
 test('client: where the rooms Worker is', () => {

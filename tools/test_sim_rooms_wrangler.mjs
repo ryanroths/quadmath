@@ -15,6 +15,10 @@
 //     clock, and ROOM_TTL_MS after the last pilot leaves it is gone (GET 404,
 //     joins refused). wrangler dev runs with ROOM_TTL_MS 6000 for that; the
 //     shipped 10 min is checked in tools/test_sim_ghost_rooms.mjs.
+//   - rate limit: from one IP, 10 creates a minute, then 429 TOO MANY ROOMS
+//     with Retry-After (the client throws that reason); another IP is not
+//     held up. wrangler dev passes a client's CF-Connecting-IP through, so
+//     the test picks its IPs; on Cloudflare the edge sets it.
 // Needs wrangler (tools/sim_rooms_dev.mjs): `npm install` in workers/sim-rooms,
 // or WRANGLER=<path to wrangler's bin/wrangler.js>. Without one it skips: CI
 // installs none. The room's logic also runs in-process, always, in
@@ -257,6 +261,22 @@ test('ghost rooms: 4 scripted pilots against wrangler dev', { timeout: 240000 },
     await sleep(TTL_MS * 0.25 + 1500 - (Date.now() - leftAt - TTL_MS * 0.75));
     assert.equal((await fetch(base + '/rooms/' + made.code)).status, 404, 'expired');
     await assert.rejects(openRoom({ base, code: made.code, name: 'late', WebSocket }), /NO SUCH ROOM/);
+
+    // ---- rate limit: 10 creates a minute an IP
+    log('rate limit');
+    const from = (ip) => (url, init) => fetch(url, { ...init, headers: { ...(init && init.headers), 'CF-Connecting-IP': ip } });
+    const codes = new Set();
+    for (let i = 0; i < 10; i++) codes.add((await createRoom(base, 'rig', from('203.0.113.10'))).code);
+    assert.equal(codes.size, 10, '10 rooms from one IP inside a minute');
+    const over = await from('203.0.113.10')(base + '/rooms', { method: 'POST', body: '{"map":"rig"}' });
+    assert.equal(over.status, 429);
+    assert.deepEqual(await over.json(), { ok: false, reason: 'TOO MANY ROOMS' });
+    const retry = Number(over.headers.get('Retry-After'));
+    assert.ok(retry >= 1 && retry <= 60, 'Retry-After ' + retry);
+    await assert.rejects(createRoom(base, 'gym', from('203.0.113.10')), /^Error: TOO MANY ROOMS$/);
+    assert.equal((await createRoom(base, 'rig', from('203.0.113.11'))).map, 'rig', 'another IP still creates');
+    const first = [...codes][0];
+    assert.equal((await roomInfo(base, first)).ok, true, 'the limit holds back creates, not the rooms');
   } finally {
     for (const p of pilots) { try { await p.leave(); } catch (e) { /* ignore */ } }
     await w.stop();
