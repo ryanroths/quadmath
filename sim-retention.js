@@ -184,7 +184,7 @@ export const SKINS = Object.freeze([
     id: 'coach-all', name: 'Ion Spore', vibe: 'Ion Nave',
     canopy: 0x39ffb0, body: 0x0b1218, frame: 0x1b3a4a, prop: 0x7a5cff,
     led: 0x39ffb0, trail: 0x7a5cff,
-    unlock: { type: 'medals', medal: 'gold', count: 7 },
+    unlock: { type: 'medals', medal: 'gold', count: 6 },
   },
 ]);
 

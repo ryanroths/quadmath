@@ -61,6 +61,7 @@ FIRST_PARTY_ASSETS = (
     "sim-maps.js",
     "sim-tracks.js",
     "sim-room.js",
+    "sim-coach-lines.js",
     "sim-coach.js",
     "sim-tricks.js",
     "sim-retention.js",
