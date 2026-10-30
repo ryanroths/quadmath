@@ -40,6 +40,7 @@ import {
   DAILY_LINE_KEY, DAILY_LINE_TRACKS, DAILY_LINE_MIN_MS, dailyLineFor, dailyLinePool, dailyLineBoardKey, boardKeyFor, boardStoreKey,
   loadDailyLine, saveDailyLine, recordDailyLineFinish, validateDailyLineRun,
   normalizeDailyLineSubmit, dailyLineRank, dailyLineMeta,
+  RIG_DAILY_FROM, RIG_WEEKLY_FROM, RIG_LINE_GATES, weekMonday,
 } from '../sim-retention.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -127,6 +128,59 @@ test('daily seed is deterministic from UTC date and yields valid gates', () => {
   }
   const sameRng = mulberry32(1);
   assert.equal(sameRng(), mulberry32(1)());
+});
+
+test('Daily from 2026-10-30 and Boards from 2026-W45 fly the Rig\'s named tracks; earlier days and weeks keep their generated courses', () => {
+  assert.equal(RIG_DAILY_FROM, '2026-10-30');
+  assert.equal(RIG_WEEKLY_FROM, '2026-W45');
+  assert.equal(weekMonday('2026-W45'), '2026-11-02', 'the Monday after the Daily cutover');
+  assert.equal(weekMonday('2026-W44'), '2026-10-26');
+  assert.equal(weekMonday('2026-W01'), '2025-12-29');
+  // The copy the Worker flies is the track file.
+  const file = JSON.parse(readFileSync(join(root, 'tracks/rig-loop.json'), 'utf8'));
+  assert.deepEqual(RIG_LINE_GATES['rig-loop'].gates, file.gates);
+  assert.deepEqual(RIG_LINE_GATES['rig-loop'].start, file.start);
+  for (const t of DAILY_LINE_TRACKS.filter((x) => x.map === 'rig')) assert.ok(RIG_LINE_GATES[t.id], t.id + ' has its gates here');
+  assert.equal(DAILY_LINE_TRACKS.find((t) => t.id === 'rig-loop').from, '2026-10-30');
+
+  const before = dailyTrackFor('2026-10-29');
+  assert.ok(DAILY_MAPS.some((m) => m.id === before.map), 'the day before keeps its generated course');
+  for (const day of ['2026-10-30', '2026-10-31', '2027-03-14']) {
+    const t = dailyTrackFor(day);
+    assert.equal(t.id, 'daily-' + day, 'the board stays per day');
+    assert.equal(t.map, 'rig', day);
+    assert.equal(t.line, 'rig-loop');
+    assert.deepEqual(t.gates, file.gates);
+    assert.deepEqual(t.start, file.start);
+    assert.ok(dailyTrackValid(t), day);
+  }
+  const w44 = weeklyTrackFor('2026-W44');
+  assert.ok(DAILY_MAPS.some((m) => m.id === w44.map), 'this week keeps its course until Monday');
+  for (const w of ['2026-W45', '2027-W02']) {
+    const t = weeklyTrackFor(w);
+    assert.equal(t.id, weeklyIdFor(w), 'the board stays per week');
+    assert.equal(t.map, 'rig', w);
+    assert.deepEqual(t.gates, file.gates);
+    assert.ok(dailyTrackValid(t), w);
+  }
+  const moved = dailyTrackFor('2026-10-30');
+  assert.equal(dailyTrackValid({ ...moved, gates: moved.gates.map((g, i) => (i === 3 ? { ...g, x: g.x + 1 } : g)) }), false, 'a moved gate is not the Rig track');
+});
+
+test('the Worker takes a W45 run on the Rig track and rejects its pace bot', () => {
+  const now = Date.UTC(2026, 10, 3, 18, 0, 0);
+  const week = utcWeekId(now);
+  assert.equal(week, '2026-W45');
+  const track = weeklyTrackFor(week);
+  assert.equal(track.map, 'rig');
+  const ghost = humanRun(track);
+  const ok = normalizeSubmit({ name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost, track: track.id, build: { frameMm: 65 } }, now);
+  assert.equal(ok.ok, true, ok.reason);
+  assert.equal(ok.trackId, track.id);
+  const bot = pace(track, { name: 'PACE BOT' });
+  assert.equal(isPaceBotGhost(bot, track), true);
+  const rejected = normalizeSubmit({ name: 'Ry', week, frameMm: 65, timeMs: bot.lapTime, ghost: bot, track: track.id, build: { frameMm: 65 } }, now);
+  assert.equal(rejected.ok, false);
 });
 
 test('weekly track is stable for the ISO week', () => {

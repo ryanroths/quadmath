@@ -924,7 +924,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=267382fab3e3";
+} from "./sim-art.js?v=4b5694623e03";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -949,14 +949,14 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=7a0b56595daf";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=ee6fcf643d9e";
+} from "./sim-tracks.js?v=2190cb73b052";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=96433f9fd784";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=a3ce2f48eb3f";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=ab56b3cf9764";
+} from "./sim-room.js?v=bd51baa7fe22";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=7e38e09e0ef2";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=e9ead0f3bb33";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -972,7 +972,7 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=00a2a71b849c";
+} from "./sim-coach.js?v=98f2dfac226c";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=3f9a33d3082a";
@@ -995,13 +995,13 @@ import {
   loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   defaultWhoopKit,
-} from "./sim-retention.js?v=9e80bedca837";
+} from "./sim-retention.js?v=7d24bd3682e0";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=17a362d6e623";
+} from "./sim-secrets.js?v=6c3980b2d81f";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1028,6 +1028,9 @@ if(CORE_KIND==='js')console.warn('sim-core: ?core=js is deprecated, removed next
 // its tutorial, Skins, Paint whoop, the quality presets, and the Chase and
 // Orbit replay cameras. Without it quality runs on Auto and replays are FPV.
 const DEV_UI=new URLSearchParams(location.search).get('dev')==='1';
+// A closed map asked for without ?dev=1 (Freestyle this map, a share or duel
+// code): the Rig instead, with this toast (archivedToRig).
+const ARCHIVE_TOAST='THAT MAP IS IN THE ARCHIVE (?dev=1)';
 document.body.classList.toggle('dev',DEV_UI);
 const CFG={
   camDeg:15,fov:VFOV_DEFAULT,maxThrustN:3.9,thrCurve:1.0,thrMid:THROTTLE_MID_DEFAULT,drag:0.55,massG:28,spoolTau:0.04,gravMult:3.5,battSimOn:true,sagAffectsThrust:true};
@@ -4813,10 +4816,13 @@ function leaveRace(){
 function startFreestyle(mapHint){
   const saved=loadSelected();
   // Fly: the last map, if it is open (mapOpen: The Rig, or any map with
-  // ?dev=1), else DEFAULT_MAP. A hint (Freestyle this map, the picker) is
-  // already a map the pilot is on or could pick.
+  // ?dev=1), else DEFAULT_MAP. A hint (Freestyle this map, the picker) flies
+  // its map if open; a closed one (the pilot is on it from an archive link)
+  // goes to the Rig, with ARCHIVE_TOAST.
   const last=saved&&mapOpen(saved.map,DEV_UI)?saved.map:null;
-  const fly=resolveFly({map:knownMapId(mapHint)||last||DEFAULT_MAP});
+  const hint=knownMapId(mapHint);
+  const archived=!!hint&&!mapOpen(hint,DEV_UI);
+  const fly=resolveFly({map:(archived?DEFAULT_MAP:hint)||last||DEFAULT_MAP});
   hideMenuLayer();
   leaveRace();
   if(coach&&coach.isActive())coach.cancel();
@@ -4825,8 +4831,13 @@ function startFreestyle(mapHint){
   sessionLive=true;
   toggleStartMenu(false);
   panel.classList.remove('open');
-  toast('FREESTYLE — NO GATES');
+  toast(archived?ARCHIVE_TOAST:'FREESTYLE — NO GATES');
   return fly;
+}
+function archivedToRig(){
+  if(builderOn)closeBuilder();
+  startFreestyle(DEFAULT_MAP);
+  toast(ARCHIVE_TOAST);
 }
 // The card is the launch screen until the pilot first leaves it; from then on,
 // opening it (Esc, MENU, a picker) shows the in-flight menu. Home goes back.
@@ -5389,6 +5400,7 @@ function wireBuilderUI(){
     try{
       const t=decodeShare(document.getElementById('builderCode').value);
       t.map=t.map||currentMap;
+      if(!mapOpen(t.map,DEV_UI)){archivedToRig();return;}
       builder.draft=t;
       if(t.map!==currentMap)setMap(t.map,t.id);
       syncBuilderRace();renderBuilderList();
@@ -6878,24 +6890,24 @@ async function exportDuel(){
     toast('CLIPBOARD BLOCKED — CODE IS IN THE BOX, COPY IT');
   }
 }
+// A duel's track on a closed map goes to the Rig without the rival
+// (archivedToRig); on another open map, the toast names the map it moved to.
 function applyDuel(parsed){
   const ghost=parsed.ghost;
-  if(parsed.track){
-    const t=parsed.track;
-    if(t.map&&t.map!==currentMap)setMap(t.map, t.id, {save:false});
-    else setActiveTrack(t.id);
-  }else if(ghost.track!=null){
-    const t=findTrack(ghost.track);
-    if(t){
-      if(t.map!==currentMap)setMap(t.map, t.id, {save:false});
-      else setActiveTrack(t.id);
-    }
+  const t=parsed.track||(ghost.track!=null?findTrack(ghost.track):null);
+  if(t&&t.map&&!mapOpen(t.map,DEV_UI)){archivedToRig();return;}
+  let moved='';
+  if(t){
+    if(t.map&&t.map!==currentMap){
+      setMap(t.map, t.id, {save:false});
+      moved=' · '+((MAPS.find(m=>m.id===t.map)||{name:t.map}).name).toUpperCase();
+    }else setActiveTrack(t.id);
   }
   rivalGhost={track:ghost.track,name:ghost.name,lapTime:+ghost.lapTime||0,samples:ghost.samples};
   activeDuel={name:ghost.name,lapTime:ghost.lapTime,track:ghost.track};
   setRivalLabel(rivalGhost.name);
   ghostVisible=true;
-  toast('DUEL: '+rivalGhost.name+(rivalGhost.lapTime?' — '+fmtLap(rivalGhost.lapTime):''));
+  toast('DUEL: '+rivalGhost.name+(rivalGhost.lapTime?' — '+fmtLap(rivalGhost.lapTime):'')+moved);
 }
 document.getElementById('btnGhostCopy').onclick=exportGhost;
 document.getElementById('btnGhostDuel').onclick=exportDuel;
