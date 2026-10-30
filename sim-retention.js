@@ -78,8 +78,40 @@ export const DAILY_LINE_TRACKS = Object.freeze([
   { id: 'trainer-hairpin', map: 'trainer', name: 'Hairpin', gates: 7 },
   { id: 'city-inside', map: 'city', name: 'Interior Run', gates: 8 },
   { id: 'city-spins', map: 'city', name: 'Spin Grove', gates: 7 },
-  { id: 'rig-loop', map: 'rig', name: 'Rig Loop', gates: 17, from: '2026-11-01' },
+  { id: 'rig-loop', map: 'rig', name: 'Rig Loop', gates: 17, from: '2026-10-30' },
 ]);
+
+// Daily from RIG_DAILY_FROM and Boards from RIG_WEEKLY_FROM (the Monday after
+// it) fly the Rig's named tracks: the line pool's Rig tracks, drawn by their
+// `from` day, with their gates copied here so the Worker, which bundles this
+// file, holds the same course (tests pin them to tracks/*.json). Earlier days
+// and weeks keep their generated courses, so their boards keep their track.
+export const RIG_DAILY_FROM = '2026-10-30';
+export const RIG_WEEKLY_FROM = '2026-W45';
+export const RIG_LINE_GATES = Object.freeze({
+  'rig-loop': Object.freeze({
+    start: { x: -21.35, y: 1.225, z: -19.6 },
+    gates: [
+      { x: -15.225, y: 4.2, z: -19.6, ry: 1.5708, size: 1.925, solid: false },
+      { x: 15.225, y: 4.2, z: -19.6, ry: 1.5708, size: 1.925, solid: false },
+      { x: 26.25, y: 4.2, z: -19.6, ry: 1.1473, size: 1.75, solid: false },
+      { x: 31.5, y: 4.2, z: -13.65, ry: 0.3611, size: 1.575, solid: false },
+      { x: 31.5, y: 4.2, z: -4.9, ry: 0, size: 1.4, solid: false },
+      { x: 31.5, y: 4.2, z: 4.9, ry: 0, size: 1.4, solid: false },
+      { x: 31.5, y: 4.2, z: 13.65, ry: -0.3772, size: 1.575, solid: false },
+      { x: 25.9, y: 4.2, z: 19.6, ry: -1.1634, size: 1.575, solid: false },
+      { x: 15.4, y: 4.2, z: 19.6, ry: -1.5708, size: 1.05, solid: false },
+      { x: -1.05, y: 4.2, z: 19.6, ry: -1.5708, size: 1.05, solid: false },
+      { x: -6.475, y: 4.2, z: 19.6, ry: -1.5967, size: 1.575, solid: false },
+      { x: -24.85, y: 15.05, z: 18.55, ry: -2.0625, size: 1.575, solid: false },
+      { x: -31.675, y: 18.9, z: 10.15, ry: -2.811, size: 1.19, solid: false },
+      { x: -31.675, y: 18.725, z: 3.5, ry: 3.1416, size: 1.12, solid: false },
+      { x: -31.675, y: 12.6, z: -5.6, ry: -3.1416, size: 1.4, solid: false },
+      { x: -31.675, y: 6.3, z: -14, ry: 2.7194, size: 1.575, solid: false },
+      { x: -26.25, y: 4.2, z: -19.6, ry: 1.9637, size: 1.75, solid: false },
+    ],
+  }),
+});
 
 export function dailyLinePool(day) {
   return DAILY_LINE_TRACKS.filter((t) => !t.from || day >= t.from);
@@ -1044,6 +1076,13 @@ export function dailyTrackInvalidReason(track) {
   let t;
   try { t = normalizeTrack(track); }
   catch (e) { return 'BAD TRACK'; }
+  // A named Rig track (rigTrackOn) is drawn, not generated: valid when its
+  // gates are one of RIG_LINE_GATES's.
+  if (t.map === 'rig') {
+    const gates = JSON.stringify(t.gates);
+    const named = Object.values(RIG_LINE_GATES).some((src) => JSON.stringify(normalizeTrack(src).gates) === gates);
+    return named && t.class === 'whoop' ? '' : 'GATES';
+  }
   const map = DAILY_MAPS.find((m) => m.id === t.map);
   if (!map) return 'MAP';
   if (t.class !== 'whoop') return 'CLASS';
@@ -1080,21 +1119,44 @@ export function dailyTrackOnMap(seedKey, mapId, id, name) {
   return generateOnMap(seedKey, map, id || ('gen-' + map.id), name || map.name);
 }
 
+// The Monday of an ISO week, as a UTC date.
+export function weekMonday(week) {
+  const m = /^(\d{4})-W(\d{2})$/.exec(String(week));
+  if (!m) throw new Error('BAD WEEK');
+  const jan4 = new Date(Date.UTC(+m[1], 0, 4));
+  const monday1 = Date.UTC(+m[1], 0, 4 - ((jan4.getUTCDay() || 7) - 1));
+  return new Date(monday1 + (+m[2] - 1) * 7 * 86400000).toISOString().slice(0, 10);
+}
+
+// A named Rig track as a daily or weekly course: drawn from the Rig tracks in
+// the line pool on `day`, under the course's own id and name.
+function rigTrackOn(day, seedKey, id, name) {
+  const pool = dailyLinePool(day).filter((t) => t.map === 'rig' && RIG_LINE_GATES[t.id]);
+  const line = pool[Math.floor(mulberry32(hashStr(seedKey))() * pool.length)];
+  const src = RIG_LINE_GATES[line.id];
+  return {
+    id, map: 'rig', name: name + ' · ' + line.name, class: 'whoop', line: line.id,
+    start: { ...src.start }, gates: src.gates.map((g) => ({ ...g })), flags: [],
+  };
+}
+
 export function dailyTrackFor(utc, now) {
   const day = utc || utcDateId(now);
-  const rand = mulberry32(hashStr(seedPrefix() + 'daily|' + day));
-  const map = DAILY_MAPS[Math.floor(rand() * DAILY_MAPS.length)];
   const id = dailyIdFor(day);
   const name = 'Daily ' + day.slice(5);
+  if (day >= RIG_DAILY_FROM) return rigTrackOn(day, seedPrefix() + 'daily|' + day, id, name);
+  const rand = mulberry32(hashStr(seedPrefix() + 'daily|' + day));
+  const map = DAILY_MAPS[Math.floor(rand() * DAILY_MAPS.length)];
   return generateOnMap(seedPrefix() + 'daily|' + day, map, id, name);
 }
 
 export function weeklyTrackFor(week, now) {
   const w = String(week || utcWeekId(now)).replace(/-g\d+$/, '');
-  const rand = mulberry32(hashStr(seedPrefix() + 'weekly|' + w));
-  const map = DAILY_MAPS[Math.floor(rand() * DAILY_MAPS.length)];
   const id = weeklyIdFor(w);
   const name = 'Week ' + w.replace('W', '');
+  if (w >= RIG_WEEKLY_FROM) return rigTrackOn(weekMonday(w), seedPrefix() + 'weekly|' + w, id, name);
+  const rand = mulberry32(hashStr(seedPrefix() + 'weekly|' + w));
+  const map = DAILY_MAPS[Math.floor(rand() * DAILY_MAPS.length)];
   return generateOnMap(seedPrefix() + 'weekly|' + w, map, id, name);
 }
 

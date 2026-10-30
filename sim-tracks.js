@@ -79,8 +79,7 @@ export function knownMapId(id) {
 }
 
 // The map a fresh pilot launches into, and the fallback for an unknown or
-// closed one. The other maps are open with ?dev=1 only (mapOpen); Daily,
-// Boards and Coach still fly theirs (generated or drill tracks).
+// closed one. The other maps are open with ?dev=1 only (mapOpen).
 export const DEFAULT_MAP = 'rig';
 export const PUBLIC_MAPS = Object.freeze([DEFAULT_MAP]);
 export function mapOpen(mapId, dev) {
