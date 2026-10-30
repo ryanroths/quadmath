@@ -28,6 +28,10 @@
 //            v0.5.0), a square tone while it sounds: the arming beep, the
 //            disarming beeps, BEEPER mode (on the owner's AUX3, with the
 //            turtle switch), the boot beeps.
+//   remotes  the other pilots in a ghost room (sim-ghost-rooms.js): each
+//            quad its own motor voice, the same two voices a motor on its
+//            rpm, at remoteLevel(distance), on the same mono bus. Their rpm
+//            is the room's, interpolated; nothing else of theirs sounds.
 // One mono bus: master volume, mute, a limiter, the destination. The
 // AudioContext is made only once the browser has seen a user activation
 // (unlock), so the page never trips the autoplay policy.
@@ -61,6 +65,8 @@ const BEEPER_GAIN = 0.12;
 const THUD_MIN_MS = 0.3;              // impact speed below this is a touch, not a thud
 const THUD_REF_MS = 5;
 const THUD_GAP_S = 0.03;
+export const REMOTE_REF_M = 1;        // a remote quad within this is at full level
+export const REMOTE_MAX_M = 60;       // and silent beyond this
 
 function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, n));
@@ -119,6 +125,13 @@ export function windLevel(speedMs) {
 
 export function windCutoffHz(speedMs) {
   return clamp(250 + 180 * speedMs, 250, 8000);
+}
+
+// A remote quad's level at distanceM: inverse distance (6 dB a doubling)
+// from REMOTE_REF_M, nothing past REMOTE_MAX_M.
+export function remoteLevel(distanceM) {
+  if (!(distanceM >= 0) || distanceM >= REMOTE_MAX_M) return 0;
+  return REMOTE_REF_M / Math.max(REMOTE_REF_M, distanceM);
 }
 
 export function thudLevel(impactMs, crashed) {
@@ -218,6 +231,7 @@ export function createSimAudio(opts = {}) {
   const turtleHz = [0, 0, 0, 0];     // the turtle voice: blade-pass at 3 blades
   const turtleGain = [0, 0, 0, 0];
   const t = { propHz: 0, propQ: PROP_Q, propGain: 0, windHz: 0, windGain: 0, scrapeGain: 0, scrapeRate: 1, beeper: 0 };
+  const remotes = new Map();         // id -> a remote quad's voice
 
   const masterLevel = () => (muted ? 0 : vol);
 
@@ -303,11 +317,27 @@ export function createSimAudio(opts = {}) {
     beepOsc.start();
     return {
       master, limiter, motors, flightLow, noise, propSrc, propBand, prop, windSrc, windLow, wind,
-      scrapeSrc, scrape, beepOsc, beep, voice,
+      scrapeSrc, scrape, beepOsc, beep, voice, oscillator, turtleWave,
     };
   }
 
   const ramp = (param, v, tc) => param.setTargetAtTime(v, ctx.currentTime, tc);
+
+  // A remote quad: four motors of two voices, as the own quad's, behind one
+  // distance gain (two nodes: the flight voices go through the shared lowpass).
+  function remoteVoice() {
+    const level = ctx.createGain();
+    level.gain.value = 0;
+    level.connect(g.master);
+    const levelFlight = ctx.createGain();
+    levelFlight.gain.value = 0;
+    levelFlight.connect(g.flightLow);
+    const motors = MOTOR_DETUNE_CENTS.map((cents) => ({
+      turtle: g.oscillator(g.turtleWave, cents, level),
+      flight: g.oscillator(flightPeriodicWave(ctx), cents, levelFlight),
+    }));
+    return { level, levelFlight, motors, distance: Infinity, target: 0 };
+  }
   const flightPeriodicWave = (c) => {
     const imag = flightWave(blades);
     return c.createPeriodicWave(new Float32Array(imag.length), imag);
@@ -377,6 +407,7 @@ export function createSimAudio(opts = {}) {
       if (a.blades > 0 && a.blades !== blades) {
         blades = a.blades;
         if (g) for (const m of g.motors) m.flight.osc.setPeriodicWave(flightPeriodicWave(ctx));
+        for (const r of remotes.values()) for (const m of r.motors) m.flight.osc.setPeriodicWave(flightPeriodicWave(ctx));
       }
       if (a.rpmHover > 0) rpmHover = a.rpmHover;
       if (a.maxThrustN > 0) maxThrustN = a.maxThrustN;
@@ -415,6 +446,42 @@ export function createSimAudio(opts = {}) {
       t.scrapeRate = clamp(0.6 + 0.25 * speed, 0.6, 2);
       t.beeper = s.beeper === true ? BEEPER_GAIN : 0;
       apply();
+    },
+    // A remote quad (ghost rooms), once a frame: its rpm[4] and its distance
+    // from the own quad in metres; rpm null silences it (the sim paused).
+    updateRemote(id, rpm, distanceM) {
+      if (!g) return;
+      let r = remotes.get(id);
+      if (!r) { r = remoteVoice(); remotes.set(id, r); }
+      const lv = rpm ? remoteLevel(distanceM) : 0;
+      r.distance = distanceM;
+      r.target = lv;
+      for (let i = 0; i < 4; i++) {
+        const m = r.motors[i];
+        const rr = rpm ? rpm[i] : 0;
+        const level = motorLevels(rr, rpmHover);
+        ramp(m.flight.osc.frequency, shaftHz(rr), 0.015);
+        ramp(m.flight.gain.gain, level.flight, 0.02);
+        ramp(m.turtle.osc.frequency, bladePassHz(rr, TURTLE_BLADES), 0.015);
+        ramp(m.turtle.gain.gain, level.turtle, 0.02);
+      }
+      ramp(r.level.gain, lv, 0.05);
+      ramp(r.levelFlight.gain, lv, 0.05);
+    },
+    // That pilot left: stop its voice.
+    dropRemote(id) {
+      const r = remotes.get(id);
+      if (!r) return;
+      remotes.delete(id);
+      for (const m of r.motors) {
+        for (const v of [m.turtle, m.flight]) {
+          try { v.osc.stop(); } catch (e) { /* stopped */ }
+          v.osc.disconnect();
+          v.gain.disconnect();
+        }
+      }
+      r.level.disconnect();
+      r.levelFlight.disconnect();
     },
     // A CONTACT event: impact speed (m/s) and whether it was a crash.
     contact(impactMs, crashed) {
@@ -481,6 +548,16 @@ export function createSimAudio(opts = {}) {
         beeperGain: g.beep.gain.value,
         thuds,
         blades,
+        remotes: [...remotes].map(([id, r]) => ({
+          id,
+          distance: r.distance,
+          level: r.level.gain.value,
+          target: r.target,
+          oscillators: 2 * r.motors.length,
+          motorHz: r.motors.map((m) => m.flight.osc.frequency.value),
+          flightGain: r.motors.map((m) => m.flight.gain.gain.value),
+          turtleGain: r.motors.map((m) => m.turtle.gain.gain.value),
+        })),
       };
     },
   };

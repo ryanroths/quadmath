@@ -267,6 +267,16 @@
   #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#camTiltPreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
     color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
   .menu-layer.wide{width:min(420px,92vw)}
+  /* Ghost room card */
+  .room-card input{width:100%;background:rgba(8,9,12,.55);border:1px solid var(--line);color:var(--txt);
+    font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;padding:8px;border-radius:10px;margin:2px 0 4px}
+  .room-card input:focus{outline:none;border-color:var(--orange)}
+  .room-card input.room-code-in{text-transform:uppercase;letter-spacing:.3em;font-size:18px;text-align:center}
+  .room-card .room-code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:30px;letter-spacing:.25em;color:var(--orange);margin:2px 0 6px}
+  .room-card .room-pilots{display:flex;flex-direction:column;gap:4px;margin:8px 0 2px;font-size:13px}
+  .room-card .room-pilots span{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:middle}
+  .room-card .row2{display:flex;gap:8px}
+  .room-card .row2 button{flex:1}
   /* Short landscape phones (iPhone SE / 13 mini / 14 class, 360–430px tall):
      compact the start card and keep ACRO/3D above the right stick. */
   @media (max-height:430px){
@@ -474,6 +484,7 @@
     <button class="menu-flight" id="menuGhostCodes">Ghost / Duel codes</button>
     <button class="menu-flight" id="menuClip">Clip</button>
     <button class="menu-flight" id="menuFreestyleMap">Freestyle this map</button>
+    <button class="menu-flight" id="menuGhostRoom">Room</button>
     <button class="menu-flight" id="menuRecalib">Recalibrate</button>
     <button class="menu-hide" id="menuWhoop">Whoop</button>
     <button class="menu-launch" id="menuTune">Tune</button>
@@ -896,7 +907,8 @@ import {
   WS as CORE_WS, TICK_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, radioAux,
 } from "./sim-core-adapter.js?v=e5bd8e7ac18c";
-import {createSimAudio,airframeBlades} from "./sim-audio.js?v=0d58459b546a";
+import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
+import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
@@ -3192,6 +3204,7 @@ async function setMap(mapId,trackId,opts){
     else applyDailyLineMod(dailyLineMod);
   }
   syncSecrets();
+  if(typeof roomCheckPlace==='function')roomCheckPlace();
 }
 
 // ---------- Quad state ----------
@@ -4750,7 +4763,8 @@ function updateOSD(){
     // Rates are per axis; name the one being shown so it cannot read as global.
     (cs.kind==='bf'?`TUNE ${bfDiffLoaded&&bfDiffLoaded===bfDiff()?BF_TUNE_ID:'CLI IMPORT'}<br>`:
     `RATES ${rateAxis.toUpperCase()} ${maxRateDps(rateAxis).toFixed(0)}°/s ${rates.type}<br>`)+
-    `CAM ${CFG.camDeg}° FOV ${Math.round(fpvFov())}${usingGltf?'<br>GLTF MAP':''}`;
+    `CAM ${CFG.camDeg}° FOV ${Math.round(fpvFov())}${usingGltf?'<br>GLTF MAP':''}`+
+    (ghostRoom?`<br>ROOM ${ghostRoom.code} · ${ghostRoom.pilots.size+1}/${ghostRoom.max}`:'');
   // Per-motor outputs straight off the mixer — a yaw input shows the CW pair
   // rising while the CCW pair drops, which is the tell that the mixer is real.
   // Spread across the bottom: throttle bottom-left, flight stats center,
@@ -4819,6 +4833,7 @@ function setActiveTrack(id){
   }
   updateGateUI();updateGateHighlight();
   resetQuad();
+  roomCheckPlace();
 }
 function leaveRace(){
   runActive=false;
@@ -5486,6 +5501,7 @@ function wireLooksUI(){
     if(h)h.scrollIntoView({block:'start'});
   });
   on('menuFreestyleMap',()=>startFreestyle(currentMap));
+  on('menuGhostRoom',()=>openRoomCard());
   // Calibration needs a gamepad (startCalib toasts if there is none): the menu
   // closes only once it starts.
   on('menuRecalib',()=>{startCalib();if(calib){hideMenuLayer();toggleStartMenu(false);}});
@@ -5518,6 +5534,7 @@ function wireLooksUI(){
       '<li>Daily Line: one named start-to-finish line each UTC day, same for everyone. Local PB plus optional online top 20. Freestyle combo still scores the named trick list, including Ham Spin (inverted yaw).</li>'+
       '<li>Duel: Tune → Copy duel code. Friend loads it and races the ghost. Skins paint the frame, canopy, props, and LED trail. Whoop paints your own canopy shape and colors. After a line, Replay the last run (chase / orbit / FPV).</li>'+
       '<li>Tab opens Tune — paste a Betaflight CLI dump. Rate presets do not overwrite a saved tune until you pick one.</li>'+
+      '<li>Room (Esc → Room): fly one map with up to three friends, by a 4-letter code. Freestyle only: no gates, timer or boards. The others are ghosts with name tags and their own motor sound; nobody collides.</li>'+
       '</ol>'+
       '<button type="button" class="primary" id="feelStartTut">Start tutorial</button>'+
       '<button type="button" id="layerClose">Close</button>');
@@ -6300,12 +6317,14 @@ function makeGhostMesh(color){
 }
 const ghostMesh=makeGhostMesh();            // own best-run ghost (cyan)
 const rivalMesh=makeGhostMesh(0xFF4D1A);    // imported / hosted rival (orange)
+const roomGhosts=new Map();                 // ghost room pilots: slot -> {mesh,label,name}
 function syncGhostScale(){
   const indoor=currentMap!=='city';
   const s=indoor?0.28:1;
   if(ghostMesh)ghostMesh.scale.setScalar(s);
   if(rivalMesh)rivalMesh.scale.setScalar(s);
   if(rivalLabel)rivalLabel.scale.set(indoor?1.6:10,indoor?0.4:2.5,1);
+  for(const g of roomGhosts.values()){g.mesh.scale.setScalar(s);g.label.scale.set(indoor?1.6:10,indoor?0.4:2.5,1);}
 }
 // floating name label above the rival — camera-facing canvas sprite
 const rivalLabel=new THREE.Sprite(worldLabelMaterial(THREE));
@@ -6397,6 +6416,193 @@ function updateGhostHint(){
   for(const id of ['legendGhost','kbdGhost']){const el=document.getElementById(id);if(el)el.classList.toggle('off',!on);}
 }
 function updateGhost(){sampleGhost();playbackGhost();updateGhostHint();}
+
+// ---------- Ghost rooms (sim-ghost-rooms.js, workers/sim-rooms) ----------
+// Up to three other pilots on this map and its freestyle track, each a ghost
+// quad (makeGhostMesh, a color per slot) with a name tag, drawn between their
+// 20 Hz poses. Render-only: a remote pose moves its mesh and its motor voice
+// (simAudio.updateRemote) and never reaches sim-core; the meshes are not
+// colliders. Leaving the room's map or track (a race, the Daily, a drill,
+// the tutorial) leaves the room.
+const ROOM_COLORS=[0xFF3DF2,0x9DFF3D,0xFFD23D,0x8A7DFF];
+let ghostRoom=null;            // the open room (openRoom), or null
+let roomBusy=false;            // creating or joining
+let roomTimer=null,roomDue=0;
+const _roomPose={t:0,pos:[0,0,0],quat:[0,0,0,1],rpm:[0,0,0,0]};
+const _roomSample={pos:[0,0,0],quat:[0,0,0,1],rpm:[0,0,0,0],stale:false};
+function roomColorCss(slot){return '#'+ROOM_COLORS[slot%ROOM_COLORS.length].toString(16).padStart(6,'0');}
+function roomMapName(id){return ((MAPS.find(m=>m.id===id)||{name:id}).name);}
+function roomGhost(slot,name){
+  let g=roomGhosts.get(slot);
+  if(g&&g.name===name)return g;
+  if(!g){
+    const mesh=makeGhostMesh(ROOM_COLORS[slot%ROOM_COLORS.length]);
+    const label=new THREE.Sprite(worldLabelMaterial(THREE));
+    label.visible=false;label.userData.keepInScene=true;scene.add(label);
+    g={mesh,label,name:null};
+    roomGhosts.set(slot,g);
+    syncGhostScale();
+  }
+  setWorldLabelText(THREE,g.label,name,{font:'bold 34px monospace',strokeWidth:6,fill:roomColorCss(slot),glow:roomColorCss(slot)});
+  g.name=name;
+  return g;
+}
+function dropRoomGhost(slot){
+  const g=roomGhosts.get(slot);
+  simAudio.dropRemote(slot);
+  if(!g)return;
+  roomGhosts.delete(slot);
+  scene.remove(g.mesh);scene.remove(g.label);
+  g.mesh.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});
+  if(g.label.material.map)g.label.material.map.dispose();
+  g.label.material.dispose();
+}
+// Once a frame: each remote pilot's interpolated pose onto its ghost, its rpm
+// and distance into its voice (silent while the sim is paused).
+function updateRoomGhosts(live){
+  if(!ghostRoom)return;
+  const now=performance.now();
+  const above=currentMap==='city'?2.2:0.6;
+  for(const p of ghostRoom.pilots.values()){
+    const g=roomGhost(p.slot,p.name);
+    const s=ghostRoom.sample(p.slot,now,_roomSample);
+    if(!s||s.stale){
+      g.mesh.visible=false;g.label.visible=false;
+      simAudio.updateRemote(p.slot,null,Infinity);
+      continue;
+    }
+    g.mesh.position.set(s.pos[0],s.pos[1],s.pos[2]);
+    g.mesh.quaternion.set(s.quat[0],s.quat[1],s.quat[2],s.quat[3]);
+    g.mesh.visible=true;
+    g.label.position.copy(g.mesh.position);g.label.position.y+=above;
+    g.label.visible=true;
+    simAudio.updateRemote(p.slot,live?s.rpm:null,g.mesh.position.distanceTo(state.pos)/WS);
+  }
+}
+// The own pose at POSE_HZ on a due-time schedule (a coarse timer would
+// stretch setInterval's period). Paused: rpm 0, so the ghost hangs silent.
+function roomSendTick(){
+  if(!ghostRoom||!ghostRoom.open)return;
+  const now=performance.now();
+  if(now-roomDue>2000/POSE_HZ)roomDue=now;
+  if(now<roomDue)return;
+  roomDue+=1000/POSE_HZ;
+  _roomPose.t=Math.round(now);
+  _roomPose.pos[0]=state.pos.x;_roomPose.pos[1]=state.pos.y;_roomPose.pos[2]=state.pos.z;
+  _roomPose.quat[0]=state.q.x;_roomPose.quat[1]=state.q.y;_roomPose.quat[2]=state.q.z;_roomPose.quat[3]=state.q.w;
+  const rpm=!simPaused()&&cs&&cs.rpm;
+  for(let i=0;i<4;i++)_roomPose.rpm[i]=rpm?rpm[i]:0;
+  ghostRoom.sendPose(_roomPose);
+}
+function roomPilotNameNow(){
+  let v='';
+  try{v=localStorage.getItem('quadmath_pilotName')||'';}catch(e){}
+  return roomPilotName(v,'');
+}
+function roomError(e){
+  const m=String(e&&e.message||e||'');
+  return /fetch|network|offline|load failed/i.test(m)?'ROOMS OFFLINE':m.toUpperCase();
+}
+function onRoomEvent(ev){
+  if(ev.type==='join')toast(ev.name+' JOINED THE ROOM');
+  else if(ev.type==='leave'){dropRoomGhost(ev.slot);toast(ev.name+' LEFT THE ROOM');}
+  else if(ev.type==='closed'&&ghostRoom){const code=ghostRoom.code;endGhostRoom();toast('ROOM '+code+' — '+ev.reason,{ms:2500});}
+  if(document.querySelector('#menuLayer.show .room-card'))openRoomCard();
+}
+function endGhostRoom(){
+  const room=ghostRoom;
+  ghostRoom=null;
+  clearInterval(roomTimer);roomTimer=null;
+  for(const slot of [...roomGhosts.keys()])dropRoomGhost(slot);
+  if(room)room.close();
+}
+// Leave on purpose (the card) or because the pilot left the room's map or
+// track; the toast waits for the one the caller shows.
+function leaveGhostRoom(why){
+  if(!ghostRoom)return;
+  const code=ghostRoom.code;
+  endGhostRoom();
+  const msg='LEFT ROOM '+code+(why?' — '+why:'');
+  if(why)setTimeout(()=>toast(msg,{ms:2500}),1600);else toast(msg);
+}
+function roomCheckPlace(){
+  if(!ghostRoom)return;
+  if(currentMap===ghostRoom.map&&String(activeTrackId)===freestyleIdFor(ghostRoom.map))return;
+  leaveGhostRoom('ROOMS ARE FREESTYLE ON '+roomMapName(ghostRoom.map).toUpperCase());
+}
+// Same map required: joining flies the room's map, on its freestyle track.
+async function roomJoin(code){
+  const room=await openRoom({base:roomsUrl(),code,name:roomPilotNameNow(),onEvent:onRoomEvent});
+  if(!knownMapId(room.map)||!mapOpen(room.map,DEV_UI)){room.close();throw new Error('THAT ROOM IS ON A CLOSED MAP');}
+  if(ghostRoom)endGhostRoom();
+  hideMenuLayer();
+  leaveRace();
+  if(coach&&coach.isActive())coach.cancel();
+  await setMap(room.map,freestyleIdFor(room.map));
+  resetQuad();
+  sessionLive=true;
+  ghostRoom=room;
+  roomDue=performance.now();
+  roomTimer=setInterval(roomSendTick,10);
+  toggleStartMenu(false);
+  toast('ROOM '+room.code+' · '+roomMapName(room.map).toUpperCase()+' · '+(room.pilots.size+1)+'/'+room.max,{ms:2500});
+  return room;
+}
+async function roomCreate(){
+  if(roomBusy)return null;
+  roomBusy=true;
+  try{
+    const made=await createRoom(roomsUrl(),currentMap);
+    return await roomJoin(made.code);
+  }catch(e){toast(roomError(e),{ms:2500});return null;}
+  finally{roomBusy=false;}
+}
+async function roomJoinCode(raw){
+  const code=normalizeRoomCode(raw);
+  if(!code){toast('A ROOM CODE IS 4 LETTERS');return null;}
+  if(roomBusy)return null;
+  roomBusy=true;
+  try{return await roomJoin(code);}
+  catch(e){toast(roomError(e),{ms:2500});return null;}
+  finally{roomBusy=false;}
+}
+function openRoomCard(){
+  const esc=escapeHtml;
+  if(ghostRoom){
+    const rows=['<div><span style="background:'+roomColorCss(ghostRoom.slot)+'"></span>'+esc(ghostRoom.name)+' (you)</div>']
+      .concat([...ghostRoom.pilots.values()].map(p=>'<div><span style="background:'+roomColorCss(p.slot)+'"></span>'+esc(p.name)+'</div>'));
+    showMenuLayer('<div class="room-card"><h2>Room</h2><div class="room-code">'+esc(ghostRoom.code)+'</div>'+
+      '<p>'+esc(roomMapName(ghostRoom.map))+' freestyle · '+(ghostRoom.pilots.size+1)+'/'+ghostRoom.max+' pilots. Friends join with this code: Esc → Room → Join. No gates, no timer, no boards; the others are ghosts, nobody collides.</p>'+
+      '<div class="room-pilots">'+rows.join('')+'</div>'+
+      '<div class="row2"><button type="button" id="roomCopy">Copy code</button><button type="button" id="roomLeave">Leave room</button></div>'+
+      '<button type="button" id="layerClose">Close</button></div>');
+    document.getElementById('roomCopy').onclick=async()=>{
+      try{await navigator.clipboard.writeText(ghostRoom.code);toast('ROOM CODE COPIED');}catch(e){toast('ROOM '+ghostRoom.code);}
+    };
+    document.getElementById('roomLeave').onclick=()=>{leaveGhostRoom();openRoomCard();};
+  }else{
+    const open=mapOpen(currentMap,DEV_UI);
+    showMenuLayer('<div class="room-card"><h2>Room</h2>'+
+      '<p>Fly one map with up to '+(ROOM_MAX-1)+' friends. Freestyle: no gates, no timer, no boards. The others fly as ghosts with name tags; nobody collides.</p>'+
+      '<label for="roomName">Your name</label><input type="text" id="roomName" maxlength="16" placeholder="PILOT" autocomplete="off">'+
+      '<button type="button" class="primary" id="roomCreate"'+(open?'':' disabled')+'>Create a room on '+esc(roomMapName(currentMap))+'</button>'+
+      '<label for="roomCode">Room code</label><input type="text" class="room-code-in" id="roomCode" maxlength="4" placeholder="ABCD" autocomplete="off" autocapitalize="characters" spellcheck="false">'+
+      '<button type="button" id="roomJoinBtn">Join</button>'+
+      '<button type="button" id="layerClose">Close</button></div>');
+    const nameEl=document.getElementById('roomName');
+    try{nameEl.value=localStorage.getItem('quadmath_pilotName')||'';}catch(e){}
+    nameEl.addEventListener('input',()=>{
+      try{localStorage.setItem('quadmath_pilotName',nameEl.value);}catch(e){}
+      if(pilotNameEl)pilotNameEl.value=nameEl.value;
+    });
+    const codeEl=document.getElementById('roomCode');
+    const join=()=>roomJoinCode(codeEl.value);
+    document.getElementById('roomJoinBtn').onclick=join;
+    codeEl.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();join();}});
+    document.getElementById('roomCreate').onclick=()=>roomCreate();
+  }
+  document.getElementById('layerClose').onclick=hideMenuLayer;
+}
 // Headless / shot helper: park on the pad, start a line, replay a compact pace ghost.
 function demoLineGhostForShot(){
   try{
@@ -7471,6 +7677,7 @@ function loop(now){
   const live=!replayOn&&!simPaused();
   updateMotorSound(live);
   simAudio.update(live?cs:null);
+  updateRoomGhosts(live);
   updateCamera();
   feedYawBlur(dt);
   syncShadowProxy();
@@ -7496,6 +7703,7 @@ looksReady.then(function(l){
 }).catch(function(){startHeavyAssets();});
 function launchTutorial(){
   if(!feel)return;
+  leaveGhostRoom('THE TUTORIAL IS SOLO');
   if(coach&&coach.isActive())coach.cancel();
   if(threeD)setThreeD(false);
   hideMenuLayer();
@@ -7519,6 +7727,7 @@ function launchCoachDrill(id){
   if(!d)return;
   // The old maps' drills, as their maps, are open with ?dev=1 only.
   if(!coach.isOpen(id)){toast('OLD-MAP DRILL — ?dev=1 ONLY');openCoachPicker();return;}
+  leaveGhostRoom('COACH IS TIMED');
   if(threeD){setThreeD(false);toast('3D OFF FOR COACH');}
   hideMenuLayer();
   toggleStartMenu(false);
@@ -7896,7 +8105,8 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   audio:simAudio,setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,
-  TRICKS_KEY,tricks});
+  TRICKS_KEY,tricks,
+  ghostRoom:()=>ghostRoom,roomGhosts,roomCreate,roomJoinCode,leaveGhostRoom,openRoomCard});
 </script>
 <!-- Flattened to single-line spans so the whole thing fits the fixed 14px bar.
      The .container wrappers and the opacity:.6 on the credit are gone: the

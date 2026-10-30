@@ -69,6 +69,7 @@ FIRST_PARTY_ASSETS = (
     "sim-lighting.js",
     "sim-3d.js",
     "sim-audio.js",
+    "sim-ghost-rooms.js",
     "style.css",
     "script.js",
     "motion.js",

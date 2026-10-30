@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sim-rooms",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-17",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "ALLOWED_ORIGIN": "https://quadmath.com",
+    // A room is deleted this long after its last pilot leaves (10 min).
+    "ROOM_TTL_MS": "600000"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "Room" },
+      // 10 room creates a minute an IP (src/limit.js).
+      { "name": "CREATE_LIMIT", "class_name": "CreateLimit" }
+    ]
+  },
+  // SQLite-backed, so the Workers Free plan can run it.
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Room", "CreateLimit"] }
+  ]
+}
