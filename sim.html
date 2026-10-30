@@ -828,7 +828,7 @@
     Phones/tablets: dual on-screen sticks. TX16S: EdgeTX USB = <b>Joystick</b>.<br>
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
-    <b>R</b> last-gate respawn &nbsp;<b>Tab</b> panel<br>
+    <b>R</b> last-gate respawn &nbsp;<b>P</b> new pack (bf) &nbsp;<b>Tab</b> panel<br>
     🔊 <b>M</b> mute &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
     3D (Tune panel): center throttle = zero, below = reverse. Acro only. Not counted on boards.<br>
     <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach<br>
@@ -3409,20 +3409,29 @@ function placeQuadAt(x,y,z,yaw,opts){
   clearSkinTrail(skinTrail);
   try{if(tricks)tricks.resetDetector&&tricks.resetDetector();}catch(e){}
 }
+// The pack. Each attempt starts on a full one: a Coach drill (its start,
+// Retry, Next and R), and a Daily or Boards run (Fly, R). On the bf core
+// placeQuadAt(..., FRESH) reinits sim-core with a full SoC; the js core's
+// battery refills. Freestyle keeps its draining pack on the bf core: R there
+// respawns on the same pack, and P (newPack) swaps it.
+const FRESH={freshPack:true};
+function attemptTrack(){return isDailyTrackId(activeTrackId)||isWeeklyTrackId(activeTrackId);}
+function freestyleOnBf(){return core.kind==='bf'&&(isFreestyleTrackId(activeTrackId)||activeTrackId==='freestyle');}
 function resetQuad(){
   // Crash / flip recovery: R respawns at the last passed JSON-track gate and
   // keeps gate-progress (nextGateIndex / run / splits). Tutorial has its own pad.
-  // Coach drills respawn on their pad and do not start a race ghost.
-  // No last gate → map start (city historic pad, indoor startPad).
+  // Coach drills respawn on their pad, on a fresh pack, and do not start a
+  // race ghost. Daily and Boards: R is a new attempt, the pad on a fresh
+  // pack. No last gate → map start (city historic pad, indoor startPad).
   const tut=feel&&feel.isTutorial();
   try{if(tricks&&!tut&&!(coach&&coach.isActive()))tricks.noteReset();}catch(e){}
   if(coach&&coach.isActive()){
     const p=coach.spawn();
-    if(p)placeQuadAt(p.x,p.y,p.z,p.yaw);
+    if(p){placeQuadAt(p.x,p.y,p.z,p.yaw,FRESH);battCharge=1;battV=BATT_FULL;}
     toast('DRILL RESET');
     return;
   }
-  const hasGate=!!lastPassedGate&&!tut;
+  const hasGate=!!lastPassedGate&&!tut&&!attemptTrack();
   if(tut){
     const p=feel.spawnForTutorial();
     placeQuadAt(p.x,p.y,p.z,p.yaw);
@@ -3435,14 +3444,27 @@ function resetQuad(){
     return;
   }
   const pad=resetSpawnPos();
-  placeQuadAt(pad.x,pad.y,pad.z,pad.yaw,{freshPack:true});
-  battCharge=1;battV=BATT_FULL; // fresh pack only on a full map-start reset
+  if(freestyleOnBf())placeQuadAt(pad.x,pad.y,pad.z,pad.yaw);
+  else{
+    placeQuadAt(pad.x,pad.y,pad.z,pad.yaw,FRESH);
+    battCharge=1;battV=BATT_FULL; // fresh pack on a full map-start reset, but in bf Freestyle
+  }
   nextGateIndex=0;runActive=false;runLap=0;runSplits=[];runGateSplits=[];lapStartTime=0;runStartTime=0;
   missesThisLap=0;missTotal=0;lastGateSplit=0;
   lastPassedGate=null;
   clearGhostRec(); // drop the in-progress recording — this run is void
   updateGateUI();updateGateHighlight();
-  toast('RESET');
+  toast(attemptTrack()?'NEW ATTEMPT — NEW PACK':'RESET');
+}
+// P, on the bf core: a new pack. In Coach, Daily or Boards that is a new
+// attempt (R does it); elsewhere the pack swaps where the quad sits, once it
+// has landed (the respawn reboots Betaflight, disarmed).
+function newPack(){
+  if(core.kind!=='bf'||replayOn)return;
+  if((coach&&coach.isActive())||attemptTrack()){resetQuad();toast('NEW PACK');return;}
+  if(cs.airborne){toast('LAND FOR A NEW PACK');return;}
+  placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading(),FRESH);
+  toast('NEW PACK');
 }
 
 // ---------- Radio: axis map + calibration ----------
@@ -3863,6 +3885,7 @@ addEventListener('keydown',e=>{
     if(feel)toast(feel.toggleHud()?'HUD ON':'HUD OFF');
   }
   if(e.key.toLowerCase()==='r')resetQuad();
+  if(e.key.toLowerCase()==='p')newPack();
   if(e.key.toLowerCase()==='m')toggleMute();
   if(e.key.toLowerCase()==='f')flipKey();
   if(e.key.toLowerCase()==='g'){
@@ -5047,6 +5070,7 @@ function flyGeneratedTrack(t){
   if(!t)return;
   hideMenuLayer();
   leaveRace();
+  if(coach&&coach.isActive())coach.cancel();
   toggleStartMenu(false);
   sessionLive=true;
   setMap(t.map, t.id);
@@ -5460,7 +5484,7 @@ function wireLooksUI(){
     showMenuLayer('<h2>Controls</h2><p>TX16S: EdgeTX USB mode = <b style="color:var(--txt)">Joystick</b>.</p>'+
       '<p><span class="n">W/S</span> throttle · <span class="n">A/D</span> yaw<br>'+
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
-      '<span class="n">R</span> last-gate respawn · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
+      '<span class="n">R</span> last-gate respawn · <span class="n">P</span> new pack (bf) · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
       '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
       '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">G</span> ghost · <span class="n">C</span> coach<br>'+
       '<span class="n">F</span> upside down on bf: sim flip (logged as an assist) · else next flight mode</p>'+
@@ -7501,7 +7525,8 @@ function launchCoachDrill(id){
   },d.map==='room'?coachRoomOpts():{});
   const p=coach.startDrill(id,opts);
   if(!p){openCoachPicker();return;}
-  placeQuadAt(p.x,p.y,p.z,p.yaw);
+  placeQuadAt(p.x,p.y,p.z,p.yaw,FRESH);
+  battCharge=1;battV=BATT_FULL;
 }
 function openCoachPicker(){
   if(!coach)return;
