@@ -5,7 +5,7 @@
 //   quadmathSimFov.
 // Nothing here is copied from WebFPV.
 
-import { makeWorldLabel } from './sim-art.js?v=96ff6c3f66b8';
+import { makeWorldLabel } from './sim-art.js?v=267382fab3e3';
 
 export const INPUT_CHOICE_KEY = 'quadmathSimInputChoice';
 export const FLOATINESS_KEY = 'quadmathSimFloatiness';
@@ -73,6 +73,22 @@ export function saveFov(v, storage) {
   if (!store || typeof store.setItem !== 'function') return;
   try { store.setItem(FOV_KEY, JSON.stringify({ v: 1, fov: clampFov(v) })); }
   catch (e) { /* ignore quota / private mode */ }
+}
+
+// True when a FOV the pilot set on the slider is saved, old or new: it beats
+// the look's lens (sim-look.js). A bare 110 is the old default, not a choice.
+export function fovChosen(storage) {
+  const store = fovStore(storage);
+  if (!store || typeof store.getItem !== 'function') return false;
+  try {
+    const raw = store.getItem(FOV_KEY);
+    if (raw == null || raw === '') return false;
+    let o = null;
+    try { o = JSON.parse(raw); } catch (e) { /* plain number from an early write */ }
+    if (o && typeof o === 'object') return +o.v >= 1 && Number.isFinite(+o.fov);
+    const n = Number(raw);
+    return Number.isFinite(n) && Math.abs(n - VFOV_OLD_DEFAULT) >= 0.5;
+  } catch (e) { return false; }
 }
 
 export const RATE_PRESETS = {

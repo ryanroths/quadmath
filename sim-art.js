@@ -4,7 +4,8 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=a2d2483020c6';
+import { hexNum } from './sim-art-city.js?v=b35dc591efbc';
+import { lookVibe, markBloom } from './sim-look.js?v=e9ead0f3bb33';
 export {
   FELT_SCALE, applyFeltMaterial, feltBasic, feltClay, feltEmissive,
   studioPhoneBudget, qualityWantsStudioBloom,
@@ -22,54 +23,54 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=a2d2483020c6';
+} from './sim-art-city.js?v=b35dc591efbc';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget, planLivingKit,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=c51f6e911f7d';
+} from './sim-art-living.js?v=ee2ddcf64ecc';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=b9341a7b6198';
+} from './sim-art-garage.js?v=f2225c17cdbf';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=5652c89fbfa3';
+} from './sim-art-warehouse.js?v=ab0a4a0c37eb';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
   planGymKit,
-} from './sim-art-gym.js?v=bde6135643e9';
+} from './sim-art-gym.js?v=472a149a5715';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget, planOfficeKit,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=d72f27197c84';
+} from './sim-art-office.js?v=38f79282841e';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=e2b58eb50611';
+} from './sim-art-trainer.js?v=8fcb23b88c06';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildRyanYard, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
   planBackyardKit,
-} from './sim-art-backyard.js?v=c02b2158ae89';
+} from './sim-art-backyard.js?v=69df5f43ed5b';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=52b937312c7f';
+} from './sim-art-room.js?v=44e3789d8a61';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
@@ -78,7 +79,7 @@ export {
   tryDressGymKit, gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA,
   tryDressLivingKit, livingKitBytesForQuality, LIVING_KIT_CORE, LIVING_KIT_EXTRA,
   tryDressBackyardKit, backyardKitBytesForQuality, BACKYARD_KIT_CORE, BACKYARD_KIT_EXTRA,
-} from './sim-art-kit.js?v=60dc936048e0';
+} from './sim-art-kit.js?v=3519853da789';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
@@ -425,19 +426,15 @@ export const VIBES = Object.freeze({
       ao: 0.36,
     }),
   }),
-  // The Rig: one hard key (the sun, through a ceiling and walls that cast no
-  // shadow) and an ambient image light at 15% of it (sim-lighting.js
-  // rigAmbientEnv: a soft grey room, so no face goes black and gloss reads on
-  // the steel). No fill light, no hemisphere, no fog, no grade. ACES is the
-  // renderer's, as on every map. Zone hues, PBR surfaces and the floor grid
-  // are the builder's (sim-maps.js RIG_LOOK), as are the edge lines.
-  rig: Object.freeze({
+  // The Rig is on the sim look (sim-look.js): its lighting, looks and post
+  // come from LOOK, as will every map's that joins it. What is the Rig's own
+  // is here: its name, palette, gates, props and the key's shadow box. Zone
+  // hues on real surfaces and the edge lines are the builder's (sim-maps.js
+  // RIG_LOOK).
+  rig: lookVibe({
     id: 'rig',
-    name: 'Hard Key',
-    tagline: 'Industrial rig, one key light, a hue per zone, edges drawn',
-    implemented: true,
-    time: 'indoor key',
-    sky: 'none',
+    name: 'Soft Industrial',
+    tagline: 'Industrial rig, one key light over an HDRI fill, painted zones on real surfaces',
     palette: Object.freeze({
       void: '#07080a', zenith: '#101216', horizon: '#f2f0ea', dusk: '#ff4d1a',
       street: '#2a2c30', sidewalk: '#1c1e22', lane: '#f2f0ea', laneAlt: '#ff4d1a',
@@ -445,31 +442,12 @@ export const VIBES = Object.freeze({
       neonA: '#f2f0ea', neonB: '#ff4d1a', neonC: '#3ddc97', mesa: '#101216',
       gateA: '#ff4d1a', gateB: '#3ddc97',
     }),
-    lighting: Object.freeze({
-      sunColor: 0xfff4e6, sunIntensity: 3.2, fillColor: 0x000000, fillIntensity: 0,
-      hemiSky: 0x000000, hemiGround: 0x000000, hemiIntensity: 0,
-      exposure: 0.95, fogColor: 0x07080a, fogDensity: 0,
-      bloomStrength: 0, bloomRadius: 0, bloomThreshold: 1,
-      gateEmissive: 4.4, gateEmissiveActive: 6,
-      sunElevation: 62, sunAzimuth: 128,
-      shadowViewR: 46, shadowHeight: 26, shadowBias: -0.0004, shadowNormalBias: 0.02, shadowIntensity: 1,
-    }),
-    // env: the ambient, 15% of a key-lit face (the key lights a face by
-    // sunIntensity / pi; the image light's radiance is ~1).
-    looks: Object.freeze({ fog: 0, sun: 3.2, env: 0.15 * 3.2 / Math.PI, bg: 0, hemi: 0 }),
-    // Plain brand rings: orange and green read hardest on the dark rig.
+    // Plain brand rings: orange and green read hardest in the rig.
     gates: Object.freeze({ style: 'hard-ring', keepBrand: true }),
     // The rig itself: its six features are structure, not dressing.
     props: Object.freeze(['scaffold tower', 'ceiling pipe run', 'crate stacks', 'tunnel', 'loft', 'straight']),
-    post: Object.freeze({
-      bloom: false, analog: false, grade: false,
-      lift: Object.freeze([0, 0, 0]),
-      gamma: 1.00,
-      gain: Object.freeze([1, 1, 1]),
-      vignette: 0,
-      ao: 0.55,
-      grain: 0,
-    }),
+    // The key's shadow box, world units, fitted to the 20 x 15 x 6 m room.
+    shadow: Object.freeze({ viewR: 46, height: 26 }),
   }),
 });
 
@@ -481,9 +459,10 @@ export function vibeFor(mapId) {
   return VIBES[mapId] || VIBES.city;
 }
 
-// The Rig (Hard Key) gates: the ring itself glows brand orange / green and the
+// The Rig's gates: the ring itself glows brand orange / green and the
 // hairline LED is off (sub-pixel at whoop gate sizes). The next gate pulses
-// white; passed gates go dim.
+// white; passed gates go dim. On the look the ring is one of the two things
+// that bloom (sim-look.js markBloom).
 export function decorateRigGate(ring, col, vibe) {
   if (!ring || !ring.material) return;
   const emit = (vibe && vibe.lighting && vibe.lighting.gateEmissive) || 4.4;
@@ -493,6 +472,7 @@ export function decorateRigGate(ring, col, vibe) {
   ring.material.metalness = 0;
   ring.material.roughness = 0.5;
   if (ring.userData.led) ring.userData.led.visible = false;
+  if (vibe && vibe.look) markBloom(ring.material);
   ring.userData.artStyle = 'hard-ring';
 }
 
@@ -523,6 +503,7 @@ export function resolveMapLighting(mapId) {
   const L = vibe.lighting;
   return Object.freeze({
     mapId: id,
+    look: !!vibe.look,
     sky: vibe.sky,
     citySky: id === 'city',
     outdoorSky: id === 'city',
@@ -547,6 +528,7 @@ export function vibePost(vibe) {
     grain: p.grain == null ? 0 : p.grain,
     gradeAmt: p.grade === false ? 0 : 1,
     bloom: p.bloom !== false,
+    bloomMask: !!p.bloomMask,
   };
 }
 

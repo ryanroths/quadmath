@@ -17,7 +17,7 @@ Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
 **Licorice Grid** ships on Tiny Trainer.
 **Ryan's Yard** ships on Backyard.
 **Pocket Stage** ships on Your Room.
-**Hard Key** ships on The Rig, the launch map: an exception to Felt Scale (below).
+**Soft Industrial** ships on The Rig, the launch map: the sim look (`sim-look.js`), an exception to Felt Scale (below).
 Remaining maps keep their current procedural rooms and pick up their vibe
 one map per PR.
 
@@ -202,14 +202,17 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Tr
 - **Gates:** Soft felt rings sized by the room planner.
 - **Post:** None. Keep the cell readable at whoop scale.
 
-### The Rig — Hard Key (shipped, the launch map)
+### The Rig — Soft Industrial (shipped, the launch map)
 
-- **Owner's spec:** whoop-scale, flow-first, 20 x 15 x 6 m industrial interior; high-contrast edges, one key light, ACES, no fog, no decor; bounce walls. After the first flight: ambient at about 15% so nothing is black, PBR surfaces with their own roughness, a floor grid, a hue per zone.
-- **An exception to Felt Scale.** No felt, no hemisphere, no fill light: one hard key (the sun, through a ceiling and walls that cast no shadow), its hard shadows, and edge lines drawn on every box of the rig. The ambient is an image light at 15% of the key (`sim-lighting.js` `rigAmbientEnv`: a soft grey room, no lamp in it, a little warmer underfoot where the lit floor bounces), never the dawn HDRI. ACES is the renderer's, as everywhere.
-- **Surfaces (`sim-maps.js` `RIG_LOOK`):** concrete floor `#9a9da2` (roughness 0.92) with a 1 m grid and a 5 m line; painted block walls `#9a9ea5` (0.85); ceiling `#868b92` (0.9). Zones, each its own hue: tower, painted scaffold, lemon `#f2d10a` (0.45); pipes, steel, blue `#6f9be0` (0.3, metal 0.7); crates, wood, `#d9a066` (0.8) with slats; tunnel, enamelled sheet steel, violet `#9466e0` (0.35); loft, painted plywood, raspberry `#d0306a` (0.65). A support wears the hue of what it holds. Edges `#f2f0ea`. Gates keep brand `#ff4d1a` / `#3ddc97`, and no zone takes those hues.
+- **Owner's spec (the art direction pass):** one look, defined once, every future map inherits it. One HDRI for fill and one hard key for shadows, ACES, exposure set once; PBR throughout; contact shadows and PCF soft shadows; bloom on gates and edge lines only, a subtle vignette, slight film grain, edge lines at 60%; the Air65's lens with a touch of barrel and mild yaw blur; 60 fps at 1080p on an RX 9060 XT, under 60 draw calls and 24 MB of textures. The Rig's geometry, gaps and loop are unchanged.
+- **The look is `sim-look.js` (`LOOK`).** It sits beside `sim-looks.js`: that module stays the quality, HDRI-loading and post-chain engine every map uses; `sim-look.js` is the art direction a map opts into. A map is on the look when its vibe is `lookVibe({...})` (`sim-art.js`) and its builder makes its surfaces with `lookMaterial` (`sim-maps.js`). No lighting numbers live in the map: the vibe's lighting, looks and post all come from `LOOK`.
+- **Lighting:** Poly Haven `autoshop_01` HDRI (CC0, the 1k box-filtered to 512: a fill needs no detail), prefiltered once, environment intensity 0.5 as the fill; never the background (the room is closed). One key (3.2, elevation 62°, azimuth 128°), the only shadow caster, PCF soft shadows. ACES, exposure 1.0. No fill light, no hemisphere, no fog.
+- **Surfaces (`LOOK.surfaces` over `LOOK.sets`, Poly Haven CC0 sets built by `tools/build_sim_look_textures.py`; the floor 1k, the zone sets 512):** concrete floor (`concrete_floor_worn_001`, 1k albedo + normal + roughness) with saw-cut joints every metre and wider ones every 5 m; painted block walls (the same concrete, light grey paint); painted deck ceiling; painted steel scaffold, lemon `#f2d10a` (`blue_metal_plate`, greyed); galvanised pipe, blue `#6f9be0` (`corrugated_iron_02`, corrugation removed); plywood crates, `#d9a066` (`plywood`); enamelled sheet steel tunnel, violet `#9466e0`; rubber matting on the loft, raspberry `#d0306a` (`rubber_tiles`). Each zone hue is a paint tint over a grey albedo; the roughness map varies each surface about its own mean roughness. A support wears the hue of what it holds. Gates keep brand `#ff4d1a` / `#3ddc97`, and no zone takes those hues.
+- **Grounding:** soft AO under every box, baked into the floor from the Rig's own boxes at load (`floorAo`); the screen-space contact AO in the creases; the key's PCF soft shadows from every box and gate, cast through one merged shadow proxy.
+- **Post:** bloom on the gates and the edge lines only (they mark themselves in the frame's alpha; the bright pass takes nothing else), vignette 0.22, film grain ±3%. Edge lines `#f2f0ea` at 60%.
+- **Camera:** the Air65's C03, 2.1 mm lens, 125° diagonal (the goggles crop the sensor; wider fisheyes the gaps), 86.6° vertical at 16:9, rendered rectilinear with a touch of barrel that keeps the corners in frame. Any FOV saved from the slider, old or new, wins. Horizontal blur on yaw above 240°/s, full (14 px at 1080p) at 900°/s.
 - **Props:** None. The six features (scaffold tower, ceiling pipe run, crate stacks, tunnel, loft, straight) are the map.
 - **Gates:** Plain brand rings, not solid, on the Rig Loop (17 gates, 57 m). Every feature is on the loop; `tools/test_sim_rig.mjs` holds the clearances and the radius.
-- **Post:** No grade, no bloom, no vignette, no fog; contact AO only, for the edges.
 
 ### Daily / weekly
 

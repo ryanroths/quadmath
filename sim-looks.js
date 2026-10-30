@@ -5,7 +5,8 @@
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
 import { resolveAutoQuality, gpuTier, autoQualityStep } from './sim-touch.js?v=40068c573e17';
-import { updateSceneLighting } from './sim-lighting.js?v=ffbd15528ade';
+import { updateSceneLighting } from './sim-lighting.js?v=87ade1287271';
+import { LOOK } from './sim-look.js?v=e9ead0f3bb33';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
@@ -124,6 +125,7 @@ const ASSET = 'assets/sim-looks';
 const HDRI_1K = `${ASSET}/hdri/kiara_1_dawn_1k.hdr`;
 const HDRI_2K = `${ASSET}/hdri/kiara_1_dawn_2k.hdr`;
 const HDRI_YARD_1K = 'assets/sim-backyard/hdri/kloofendal_48d_partly_cloudy_1k.hdr';
+const HDRI_LOOK = LOOK.lighting.hdri;
 
 export function phoneLookOverrides(mobile, preset, dpr) {
   const p = Object.assign({}, preset || PRESETS.med);
@@ -270,20 +272,43 @@ uniform vec3 lift;
 uniform float gamma;
 uniform vec3 gain;
 uniform float mapVignette;
+uniform float lens;
+uniform float aspect;
+uniform vec2 blur;
+uniform float filmGrain;
 varying vec2 vUv;
 vec2 distort(vec2 uv, float k){
   vec2 c = uv - 0.5;
   float r2 = dot(c,c);
   return 0.5 + c * (1.0 + k * r2);
 }
+// The look's lens (sim-look.js LOOK.camera): barrel on the true radius, 1 at
+// the frame corner, scaled so the corners stay in frame.
+vec2 lensUv(vec2 uv, float k){
+  vec2 c = uv - 0.5;
+  vec2 p = c * vec2(aspect, 1.0);
+  float r2 = dot(p, p) / (0.25 * (aspect * aspect + 1.0));
+  return 0.5 + c * (1.0 + k * r2) / (1.0 + barrel);
+}
+vec3 frame(vec2 uv, out vec2 uvG){
+  vec2 uvR, uvB;
+  if(lens > 0.5){
+    uvR = lensUv(uv, barrel + ca); uvG = lensUv(uv, barrel); uvB = lensUv(uv, barrel - ca);
+  } else {
+    uvR = distort(uv, barrel + ca); uvG = distort(uv, barrel); uvB = distort(uv, barrel - ca);
+  }
+  return vec3(texture2D(tDiffuse, uvR).r, texture2D(tDiffuse, uvG).g, texture2D(tDiffuse, uvB).b);
+}
 void main(){
-  vec2 uvR = distort(vUv, barrel + ca);
-  vec2 uvG = distort(vUv, barrel);
-  vec2 uvB = distort(vUv, barrel - ca);
-  float r = texture2D(tDiffuse, uvR).r;
-  float g = texture2D(tDiffuse, uvG).g;
-  float b = texture2D(tDiffuse, uvB).b;
-  vec3 col = vec3(r,g,b);
+  vec2 uvG;
+  vec3 col = frame(vUv, uvG);
+  // Yaw blur: a short horizontal smear, only while blur is set (fast yaw).
+  if(dot(blur, blur) > 1e-10){
+    vec3 acc = vec3(0.0);
+    vec2 u;
+    for(int i = 0; i < 8; i++) acc += frame(vUv + blur * (float(i) / 7.0 - 0.5), u);
+    col = acc / 8.0;
+  }
   if(grade > 0.001){
     vec3 graded = pow(max(col + lift, 0.0), vec3(max(gamma, 0.04))) * gain;
     col = mix(col, graded, clamp(grade, 0.0, 1.0));
@@ -299,8 +324,35 @@ void main(){
     float n = fract(sin(dot(vUv * vec2(1240.0, 780.0) + time, vec2(12.9898, 78.233))) * 43758.5453);
     col += (n - 0.5) * grain;
   }
+  if(filmGrain > 0.001){
+    float n = fract(sin(dot(vUv * vec2(1240.0, 780.0) + time, vec2(12.9898, 78.233))) * 43758.5453);
+    col *= 1.0 + (n - 0.5) * filmGrain;
+  }
   if(uvG.x < 0.0 || uvG.x > 1.0 || uvG.y < 0.0 || uvG.y > 1.0) col = vec3(0.0);
   gl_FragColor = vec4(col, 1.0);
+}`;
+
+// UnrealBloomPass's bright pass (LuminosityHighPassShader, three r180) plus
+// the look's mask: on a look map only the pixels that marked themselves
+// (alpha 0: the gates and the edge lines, sim-look.js markBloom) bloom.
+const HIGH_PASS_FRAG = `
+uniform sampler2D tDiffuse;
+uniform vec3 defaultColor;
+uniform float defaultOpacity;
+uniform float luminosityThreshold;
+uniform float smoothWidth;
+uniform float lookMask;
+varying vec2 vUv;
+void main() {
+  vec4 texel = texture2D( tDiffuse, vUv );
+  if ( lookMask > 0.5 ) {
+    gl_FragColor = vec4( texel.rgb * clamp( 1.0 - texel.a, 0.0, 1.0 ), 1.0 );
+    return;
+  }
+  float v = luminance( texel.xyz );
+  vec4 outputColor = vec4( defaultColor.rgb, defaultOpacity );
+  float alpha = smoothstep( luminosityThreshold, luminosityThreshold + smoothWidth, v );
+  gl_FragColor = mix( outputColor, texel, alpha );
 }`;
 
 const CONTACT_AO_FRAG = `
@@ -419,7 +471,7 @@ export async function createLooks(ctx) {
   let skyMesh = null, sunSprite = null, groundMesh = null;
   let composer = null, bloomPass = null, aoPass = null, fpvPass = null, motionPass = null;
   let skyMode = 'hdri';
-  let env1k = null, env2k = null, envYard = null, envLevel = null, hdriLevel = null, yardFailed = false;
+  let env1k = null, env2k = null, envYard = null, envLook = null, envLevel = null, hdriLevel = null, yardFailed = false;
   let texCache = {};
   let maxAniso = 8;
   try { maxAniso = renderer.capabilities.getMaxAnisotropy() || 8; } catch (e) { /* ignore */ }
@@ -443,6 +495,10 @@ export async function createLooks(ctx) {
     return applied === 'med' || applied === 'high';
   }
 
+  function lookOn() {
+    return !!(mapLighting && mapLighting.look);
+  }
+
   function applyFpvUniforms() {
     if (!fpvPass || !fpvPass.uniforms) return;
     const forceFpv = typeof location !== 'undefined' && /(?:^|[?&])fpv=1(?:&|$)/.test(location.search || '');
@@ -451,14 +507,21 @@ export async function createLooks(ctx) {
     fpvPass.enabled = on || gradeOn;
     const analog = on && fpv.style === 'analog';
     const yard = mapLighting && mapLighting.mapId === 'backyard';
-    fpvPass.uniforms.barrel.value = on ? (yard ? 0 : analog ? 0.18 : 0.12) : 0;
+    const look = lookOn();
+    // The look's lens on an HD feed; the analog style keeps its own.
+    const lensOn = on && look && !analog;
+    fpvPass.uniforms.barrel.value = on ? (lensOn ? LOOK.camera.barrel : yard ? 0 : analog ? 0.18 : 0.12) : 0;
     const mapV = (fpvPass.uniforms.mapVignette && fpvPass.uniforms.mapVignette.value) || 0;
     fpvPass.uniforms.vignette.value = analog ? 0.58 : (on ? (mapV > 0.01 ? mapV : 0.36) : 0);
-    fpvPass.uniforms.ca.value = on ? (analog ? 0.006 : (yard ? 0.0032 : 0.0022)) : 0;
+    fpvPass.uniforms.ca.value = on ? (analog ? 0.006 : lensOn ? LOOK.camera.ca : (yard ? 0.0032 : 0.0022)) : 0;
     fpvPass.uniforms.analog.value = analog ? 1 : 0;
+    if (fpvPass.uniforms.lens) fpvPass.uniforms.lens.value = lensOn ? 1 : 0;
+    if (fpvPass.uniforms.blur && !lensOn) fpvPass.uniforms.blur.value.set(0, 0);
     if (fpvPass.uniforms.grain) {
       const grainAmt = (mapPostSpec && mapPostSpec.grain) || 0;
       fpvPass.uniforms.grain.value = (yard && applied === 'high' && gradeOn && !analog) ? grainAmt : 0;
+      // The look's grain scales with the pixel (film), on Med and High.
+      if (fpvPass.uniforms.filmGrain) fpvPass.uniforms.filmGrain.value = (look && gradeOn && !analog) ? grainAmt : 0;
     }
     if (fpvPass.uniforms.grade && !gradeOn) fpvPass.uniforms.grade.value = 0;
     if (fpvPass.uniforms.mapVignette && !gradeOn) fpvPass.uniforms.mapVignette.value = 0;
@@ -540,6 +603,13 @@ export async function createLooks(ctx) {
       LIGHTING.bloomStrength, LIGHTING.bloomRadius, LIGHTING.bloomThreshold,
     );
     bloomPass.enabled = boot.bloom !== false && (boot.bloomScale || 0) > 0;
+    bloomPass.highPassUniforms.lookMask = { value: 0 };
+    bloomPass.materialHighPassFilter.dispose();
+    bloomPass.materialHighPassFilter = new THREE.ShaderMaterial({
+      uniforms: bloomPass.highPassUniforms,
+      vertexShader: FPV_VERT,
+      fragmentShader: HIGH_PASS_FRAG,
+    });
     c.addPass(bloomPass);
     fpvPass = new ShaderPass({
       uniforms: {
@@ -555,6 +625,10 @@ export async function createLooks(ctx) {
         gamma: { value: 1 },
         gain: { value: new THREE.Vector3(1, 1, 1) },
         mapVignette: { value: 0 },
+        lens: { value: 0 },
+        filmGrain: { value: 0 },
+        aspect: { value: 16 / 9 },
+        blur: { value: new THREE.Vector2(0, 0) },
       },
       vertexShader: FPV_VERT,
       fragmentShader: FPV_FRAG,
@@ -582,6 +656,7 @@ export async function createLooks(ctx) {
       composer.renderTarget2.samples = p.postSamples;
     } catch (e) { /* ignore */ }
     composer.setSize(w, h);
+    if (fpvPass && fpvPass.uniforms.aspect) fpvPass.uniforms.aspect.value = w / h;
     attachDepthTexture(composer.renderTarget1);
     attachDepthTexture(composer.renderTarget2);
     if (aoPass && aoPass.setSize) {
@@ -637,9 +712,13 @@ export async function createLooks(ctx) {
       skyCity: !!(skyMesh && skyMesh.userData && skyMesh.userData.citySky),
       fogColor: LIGHTING.fogColor,
       exposure: LIGHTING.exposure,
-      envs: { dawn, yard: envYard || (yardFailed && dawn) || null },
+      envs: { dawn, yard: envYard || (yardFailed && dawn) || null, look: envLook },
     };
-    if (mapLighting) { patch.mapId = mapLighting.mapId; patch.citySky = !!mapLighting.citySky; }
+    if (mapLighting) {
+      patch.mapId = mapLighting.mapId;
+      patch.look = !!mapLighting.look;
+      patch.citySky = !!mapLighting.citySky;
+    }
     if (mapLooksSpec) patch.looks = mapLooksSpec;
     const r = updateSceneLighting(scene, patch, { renderer, Color: THREE.Color });
     if (skyMode === 'gradient') {
@@ -661,6 +740,13 @@ export async function createLooks(ctx) {
   // HDRI (if any) the current map shows, so a late promise cannot flash it.
   async function ensureHdr(level) {
     if (level) hdriLevel = level;
+    // A map on the look takes the look's one HDRI, 1k, whatever the quality.
+    if (lookOn()) {
+      if (!envLook) envLook = await loadHdr(HDRI_LOOK);
+      envLevel = 'look-1k';
+      applyLighting();
+      return;
+    }
     if (mapLighting && mapLighting.mapId === 'backyard') {
       if (!envYard) {
         try { envYard = await loadHdr(HDRI_YARD_1K); }
@@ -975,7 +1061,7 @@ export async function createLooks(ctx) {
     // yard — that reads flat grey). Load it now for the yard, or once quality
     // has asked for HDRIs.
     const r = applyLighting();
-    if (!r.envReady && (r.want === 'yard' || hdriLevel)) {
+    if (!r.envReady && (r.want === 'yard' || r.want === 'look' || hdriLevel)) {
       ensureHdr().catch((e) => console.warn('looks HDRI', e));
     }
     return mapLighting;
@@ -1003,6 +1089,7 @@ export async function createLooks(ctx) {
     if (u.gamma) u.gamma.value = spec.gamma == null ? 1 : spec.gamma;
     if (u.grade) u.grade.value = wantsGrade ? (spec.gradeAmt == null ? 1 : spec.gradeAmt) : 0;
     if (u.mapVignette) u.mapVignette.value = wantsGrade ? (spec.vignette == null ? 0.34 : spec.vignette) : 0;
+    if (bloomPass && bloomPass.highPassUniforms.lookMask) bloomPass.highPassUniforms.lookMask.value = spec.bloomMask ? 1 : 0;
   }
   function setMapPost(spec) {
     if (spec && spec.post) {
@@ -1016,6 +1103,7 @@ export async function createLooks(ctx) {
         grain: post.grain == null ? 0 : post.grain,
         gradeAmt: post.grade === false ? 0 : 1,
         bloom: post.bloom !== false,
+        bloomMask: !!post.bloomMask,
       };
     } else {
       mapPostSpec = spec || null;
@@ -1147,6 +1235,12 @@ export async function createLooks(ctx) {
     setMapLighting,
     setMapPost,
     setSkyMode,
+    // Yaw blur, pixels at 1080p (sim-look.js yawBlurPx); the look's lens only.
+    setYawBlur(px) {
+      if (!fpvPass || !fpvPass.uniforms.blur) return;
+      const on = fpvPass.uniforms.lens && fpvPass.uniforms.lens.value > 0.5;
+      fpvPass.uniforms.blur.value.set(on && px > 0.05 ? px / 1920 : 0, 0);
+    },
     setGrade(v) {
       if (v && typeof v === 'object') {
         setMapPost(v);

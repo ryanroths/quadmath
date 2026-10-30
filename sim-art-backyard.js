@@ -3,9 +3,9 @@
 // Visual only. Colliders live in sim-maps.js BACKYARD_PLAY.
 // Generated / CC0 tiling textures. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, applyVibeLighting, disposeArtGroup, swapOwnedMap, disposeOwnedTex } from './sim-art-city.js?v=a2d2483020c6';
+import { hexNum, propClearOfCourse, applyVibeLighting, disposeArtGroup, swapOwnedMap, disposeOwnedTex } from './sim-art-city.js?v=b35dc591efbc';
 import { applyFeltMaterial, feltBasic, feltEmissive } from './sim-art-felt.js?v=46192cc1defd';
-import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=528334865099';
+import { BACKYARD_PLAY, LAYOUT } from './sim-maps.js?v=ee6fcf643d9e';
 
 export const BACKYARD_STOCK = Object.freeze({
   turf: 0x3f8a4a,

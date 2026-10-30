@@ -909,7 +909,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=a2585924423c";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=bf164b66fe45";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=68b8d814a853";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -924,7 +924,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=96ff6c3f66b8";
+} from "./sim-art.js?v=267382fab3e3";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -950,13 +950,14 @@ import {
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
 } from "./sim-tracks.js?v=7a0b56595daf";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=528334865099";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=ee6fcf643d9e";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=a3ce2f48eb3f";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=d249e80b5f49";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=ab56b3cf9764";
+import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=e9ead0f3bb33";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -971,7 +972,7 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=4deb3c1ef747";
+} from "./sim-coach.js?v=00a2a71b849c";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=3f9a33d3082a";
@@ -1000,7 +1001,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=c2edcab93c3d";
+} from "./sim-secrets.js?v=17a362d6e623";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -3100,7 +3101,7 @@ function applyMapLooks(mapId){
     else if(mapId==='office')credit.textContent='Office is original procedural art — Paper Sun';
     else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court. Kenney CC0 sideline kit.';
     else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current · Felt Scale. Kenney CC0 cars and street kit.';
-    else if(mapId==='rig')credit.textContent='The Rig is original procedural geometry — Hard Key';
+    else if(mapId==='rig')credit.textContent='The Rig is original procedural geometry — Soft Industrial. Poly Haven CC0 HDRI and textures.';
   }
 }
 function isFreeFlight(t,trackId){
@@ -4513,7 +4514,7 @@ function applyReplayCam(){
   if(!replayOn||!replayPose)return false;
   const mode=replayState.mode||'chase';
   if(mode==='fpv'){
-    if(camera.fov!==CFG.fov){camera.fov=CFG.fov;camera.updateProjectionMatrix();}
+    setFpvFov();
     camTilt.setFromAxisAngle(new THREE.Vector3(1,0,0),THREE.MathUtils.degToRad(CFG.camDeg));
     camera.quaternion.set(replayPose.qx,replayPose.qy,replayPose.qz,replayPose.qw).multiply(camTilt);
     camera.position.set(replayPose.x,replayPose.y,replayPose.z);
@@ -4531,7 +4532,34 @@ function applyReplayCam(){
   applyCanopyVis({replay:true,chase:true});
   return true;
 }
+// FPV vertical FOV: on a map on the look, the Air65's lens (sim-look.js
+// LOOK.camera, a diagonal FOV, so it follows the aspect) unless the pilot has
+// a FOV saved from the slider; elsewhere the slider.
+let fovSlider=false;
+function fpvFov(){
+  if(!fovSlider&&vibeFor(currentMap).look)return Math.round(lookVfov(camera.aspect)*10)/10;
+  return CFG.fov;
+}
+function setFpvFov(){
+  const f=fpvFov();
+  if(camera.fov!==f){camera.fov=f;camera.updateProjectionMatrix();applyCanopyLayout();syncFovUI();}
+}
+// The FOV slider shows the FOV flown, the look's lens included.
+function syncFovUI(){
+  const s=document.getElementById('s_fov'),v=document.getElementById('v_fov');
+  const f=Math.round(fpvFov());
+  if(s&&+s.value!==f)s.value=f;
+  if(v)v.textContent=f+'°';
+}
+// Depth range: the look's (a lens a centimetre off the floor), else the
+// sim's.
+function setCameraRange(){
+  const look=!!vibeFor(currentMap).look;
+  const near=look?LOOK.camera.near:0.05,far=look?LOOK.camera.far:3000;
+  if(camera.near!==near||camera.far!==far){camera.near=near;camera.far=far;camera.updateProjectionMatrix();}
+}
 function updateCamera(){
+  setCameraRange();
   if(builderOn){applyBuilderCam();applyCanopyVis({builder:true});return;}
   if(applyReplayCam())return;
   if(applyChaseCam()){applyCanopyVis({chase:true});return;}
@@ -4539,7 +4567,7 @@ function updateCamera(){
     applyCanopyVis({menuOpen:false,lookSpot:true});
     return;
   }
-  if(camera.fov!==CFG.fov){camera.fov=CFG.fov;camera.updateProjectionMatrix();}
+  setFpvFov();
   camTilt.setFromAxisAngle(new THREE.Vector3(1,0,0),THREE.MathUtils.degToRad(CFG.camDeg));
   camera.quaternion.copy(state.q).multiply(camTilt);
   // camera shake — fed by impacts (and available to future effects): small
@@ -4552,6 +4580,51 @@ function updateCamera(){
   }
   camera.position.copy(state.pos);
   applyCanopyVis({fpv:true});
+}
+
+// A map on the look casts its static shadows (its boxes, its gates) from one
+// merged proxy (sim-look.js lookShadowProxy), rebuilt when the gates change.
+let shadowProxy=null,shadowProxySig=0;
+function syncShadowProxy(){
+  const built=vibeFor(currentMap).look&&indoorBuilt[currentMap];
+  let sig=0;
+  if(built){
+    sig=built.group.id*1e6+gates.length*1e3;
+    for(const g of gates)sig+=g.mesh.id;
+  }
+  if(sig===shadowProxySig)return;
+  shadowProxySig=sig;
+  if(shadowProxy){scene.remove(shadowProxy);shadowProxy.geometry.dispose();shadowProxy.material.dispose();shadowProxy=null;}
+  if(!built)return;
+  const casters=[];
+  const take=(o)=>{
+    if(!o.isMesh||!(o.castShadow||o.userData.lookProxied))return;
+    o.castShadow=false;o.userData.lookProxied=true;casters.push(o);
+  };
+  built.group.traverseVisible(take);
+  for(const g of gates)take(g.mesh);
+  if(!casters.length)return;
+  shadowProxy=lookShadowProxy(THREE,casters);
+  scene.add(shadowProxy);
+}
+
+// Mild motion blur on fast yaw only (sim-look.js LOOK.camera.yawBlur): the
+// FPV camera's rotation rate about its own up axis, frame to frame.
+const _yawPrevQ=new THREE.Quaternion(),_yawDq=new THREE.Quaternion();
+let _yawPrevOk=false;
+function feedYawBlur(dt){
+  if(!looks||!looks.setYawBlur)return;
+  const fpv=!builderOn&&!chaseCamOn&&!(looks.menuOpen)&&!(replayOn&&replayState.mode!=='fpv');
+  let px=0;
+  if(fpv&&_yawPrevOk&&dt>1e-4){
+    _yawDq.copy(_yawPrevQ).invert().multiply(camera.quaternion);
+    const w=Math.max(-1,Math.min(1,_yawDq.w)),s=Math.sqrt(Math.max(0,1-w*w));
+    const ang=2*Math.acos(Math.abs(w));
+    const yaw=s>1e-6?ang*Math.abs(_yawDq.y)/s:0;
+    px=yawBlurPx(yaw/dt*180/Math.PI);
+  }
+  _yawPrevQ.copy(camera.quaternion);_yawPrevOk=fpv;
+  looks.setYawBlur(px);
 }
 
 // ---------- OSD ----------
@@ -4651,7 +4724,7 @@ function updateOSD(){
     // Rates are per axis; name the one being shown so it cannot read as global.
     (cs.kind==='bf'?`TUNE ${bfDiffLoaded&&bfDiffLoaded===bfDiff()?BF_TUNE_ID:'CLI IMPORT'}<br>`:
     `RATES ${rateAxis.toUpperCase()} ${maxRateDps(rateAxis).toFixed(0)}°/s ${rates.type}<br>`)+
-    `CAM ${CFG.camDeg}° FOV ${CFG.fov}${usingGltf?'<br>GLTF MAP':''}`;
+    `CAM ${CFG.camDeg}° FOV ${Math.round(fpvFov())}${usingGltf?'<br>GLTF MAP':''}`;
   // Per-motor outputs straight off the mixer — a yaw input shows the CW pair
   // rising while the CCW pair drops, which is the tell that the mixer is real.
   // Spread across the bottom: throttle bottom-left, flight stats center,
@@ -5496,10 +5569,11 @@ bind('cam','camDeg',x=>x+'°');
   const el=document.getElementById('s_fov');
   if(el)el.value=CFG.fov;
 })();
+fovSlider=fovChosen();
 bind('fov','fov',x=>x+'°',()=>{
   camera.fov=CFG.fov;camera.updateProjectionMatrix();applyCanopyLayout();
 });
-document.getElementById('s_fov').addEventListener('input',()=>saveFov(CFG.fov));
+document.getElementById('s_fov').addEventListener('input',()=>{fovSlider=true;saveFov(CFG.fov);});
 function syncCamTiltPreset(){
   const sel=document.getElementById('camTiltPreset');
   if(!sel)return;
@@ -7361,6 +7435,8 @@ function loop(now){
   updateMotorSound(live);
   simAudio.update(live?cs:null);
   updateCamera();
+  feedYawBlur(dt);
+  syncShadowProxy();
   if(craftGroup&&craftGroup.visible){
     spinCraftProps(dt);
     if(replayOn&&replayPose){
