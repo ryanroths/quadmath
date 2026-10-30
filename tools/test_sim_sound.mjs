@@ -200,7 +200,7 @@ function killTree(child) {
 const FLIGHT = String.raw`(() => {
   const s = window._sim, a = s.audio;
   const F = window.__flight = { phase: 'arming', samples: [], punches: [], wind: [], wall: null, floor: null, done: false, error: null,
-    beep: { firstOn: null, onTicks: 0, peakGain: 0 } };
+    beep: { firstOn: null, lastOn: null, onTicks: 0, peakGain: 0 } };
   const T_PUNCH = [8000, 28000, 48000, 68000, 88000, 108000];
   const PUNCH_MS = 150, HOVER_Z = 1.5, WALL_AT = 118000;
   let t0 = null, x0 = 0, y0 = 0, tHover = 0.4, punch = null, hoverHz = [], wallStart = null;
@@ -220,7 +220,7 @@ const FLIGHT = String.raw`(() => {
       const t = cs.flightMs - t0;
       // The arming beep (300 ms on, 50 off, 50 on), from the arm.
       if (t < 1000) {
-        if (cs.beeper) { F.beep.onTicks++; if (F.beep.firstOn === null) F.beep.firstOn = t; }
+        if (cs.beeper) { F.beep.onTicks++; F.beep.lastOn = t; if (F.beep.firstOn === null) F.beep.firstOn = t; }
         F.beep.peakGain = Math.max(F.beep.peakGain, d.beeperGain);
       }
       const q = cs.quaternion;
@@ -460,7 +460,8 @@ test('bf core sound: graph on the first key, motor pitch from rpm rises on a pun
 
     // The arming beep: on from the arm, played, then quiet.
     assert.ok(flight.beep.firstOn !== null && flight.beep.firstOn < 100, `the arming beep starts ${flight.beep.firstOn} ms after the arm`);
-    assert.ok(flight.beep.onTicks > 50, `it sounds for a while (${flight.beep.onTicks} polls of 4 ms)`);
+    // In sim time: the poll is setInterval(4 ms), which a heavy frame slows.
+    assert.ok(flight.beep.lastOn - flight.beep.firstOn >= 200, `it sounds for a while (${flight.beep.lastOn - flight.beep.firstOn} ms, ${flight.beep.onTicks} polls)`);
     assert.ok(flight.beep.peakGain > 0.1, `the beeper voice plays it (${flight.beep.peakGain})`);
     const hover = flight.samples.filter((s) => s.phase === 'hover' && s.t > 4000);
     assert.ok(hover.every((s) => s.bp < 1e-3), 'the beeper is quiet in the hover');
@@ -504,9 +505,16 @@ test('bf core sound: graph on the first key, motor pitch from rpm rises on a pun
       assert.ok(Math.abs(w.targetGain - want) < 0.02 * want, `wind level ${w.targetGain} at ${w.speed.toFixed(2)} m/s, want ${want}`);
       assert.ok(Math.abs(w.targetHz - (250 + 180 * w.speed)) < 1, `wind cutoff ${w.targetHz} at ${w.speed.toFixed(2)} m/s`);
     }
-    const steadyWind = flight.wind.filter((w, i) => {
-      const win = flight.wind.filter((x, j) => j <= i && x.t >= w.t - 240).map((x) => x.speed);
-      return win.length >= 40 && w.t - flight.wind[Math.max(0, i - win.length)].t >= 240 && Math.max(...win) - Math.min(...win) < 0.02 * w.speed;
+    // One sample a frame (sim time moves once a frame; the 4 ms polls between
+    // repeat it), the window continuous (no frame gap over 50 ms) and 240 ms long.
+    const frames = flight.wind.filter((x, i, a) => i === 0 || x.t !== a[i - 1].t);
+    const steadyWind = frames.filter((w, i) => {
+      const win = frames.filter((x, j) => j <= i && x.t >= w.t - 240);
+      const before = frames[i - win.length];
+      if (!before || w.t - before.t < 240 || win[0].t - before.t > 50) return false;
+      if (!win.every((x, k) => k === 0 || x.t - win[k - 1].t <= 50)) return false;
+      const speeds = win.map((x) => x.speed);
+      return Math.max(...speeds) - Math.min(...speeds) < 0.02 * w.speed;
     });
     assert.ok(steadyWind.length > 100, `steady-speed wind samples (${steadyWind.length})`);
     for (const w of steadyWind) {
