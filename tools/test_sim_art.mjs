@@ -57,8 +57,9 @@ test('every catalog map and daily host has a vibe with a full palette', () => {
     for (const key of ['void', 'zenith', 'horizon', 'dusk', 'street', 'facade', 'neonA', 'neonB', 'gateA', 'gateB']) {
       assert.match(v.palette[key], HEX, id + ' ' + key);
     }
-    // The Rig has no fog: the owner's spec ("no fog"); every other map has some.
-    if (id === 'rig') assert.equal(v.lighting.fogDensity, 0);
+    // A map on the look (the Rig, the House) has no fog: the owner's spec ("no
+    // fog"); every other map has some.
+    if (v.look) assert.equal(v.lighting.fogDensity, 0);
     else assert.ok(v.lighting.fogDensity > 0);
     assert.ok(Array.isArray(v.props) && v.props.length >= 2);
     assert.ok(v.gates && v.gates.style);
@@ -230,8 +231,8 @@ test('hexNum and vibeTable are stable helpers', () => {
   assert.equal(hexNum('#ff2bd6'), 0xff2bd6);
   assert.equal(hexNum(0x88a0ff), 0x88a0ff);
   const table = vibeTable();
-  assert.equal(table.length, 10);
-  assert.equal(table.filter((r) => r.implemented).length, 10);
+  assert.equal(table.length, 11);
+  assert.equal(table.filter((r) => r.implemented).length, 11);
 });
 
 test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {

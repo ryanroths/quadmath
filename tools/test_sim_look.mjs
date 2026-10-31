@@ -56,8 +56,9 @@ test('every texture is a Poly Haven set, shipped at its size and licensed, under
     assert.deepEqual(webpSize(readFileSync(join(root, file))), [px, px], file);
     assert.ok(licenses.includes('`' + file + '`'), file + ' licensed');
   }
-  // The floor is 1k (albedo, normal, roughness); the zone sets are 512.
-  for (const [name, set] of Object.entries(LOOK.sets)) assert.equal(set.res, name === 'concrete_floor' ? '1k' : '512', name);
+  // The floor is 1k (albedo, normal, roughness); the zone sets are 512; the
+  // fabric (a fine weave on a 27 cm tile) 256.
+  for (const [name, set] of Object.entries(LOOK.sets)) assert.equal(set.res, name === 'concrete_floor' ? '1k' : name === 'fabric' ? '256' : '512', name);
   // A set with no normal ships packed: the albedo with its roughness in alpha.
   for (const s of Object.values(LOOK.surfaces)) if (LOOK.sets[s.set].packed) assert.equal(s.normal, 0, s.set);
   const b = lookTextureBytes();

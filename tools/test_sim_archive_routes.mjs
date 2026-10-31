@@ -1,6 +1,7 @@
 // Headless Chrome, no ?dev=1: every menu path that loads a map ends on The
-// Rig, or says why not. Only the Rig is open without ?dev=1 (sim-tracks.js
-// mapOpen); the other maps are the archive.
+// Rig, or says why not. The Rig and The House are open without ?dev=1
+// (sim-tracks.js mapOpen: Fly and Tracks); the other maps are the archive.
+// Daily, Boards and Coach stay Rig-only: from the House they fly the Rig.
 //   - Daily flies a Rig track (from 2026-10-30, sim-retention.js RIG_DAILY_FROM).
 //   - Boards flies the week's course: a Rig track from 2026-W45; until that
 //     Monday, this week's generated course, as the owner chose.
@@ -186,6 +187,24 @@ test('without ?dev=1 Daily, Boards, Freestyle this map, builder Import and duel 
     r = JSON.parse(await evaluate(ws, after(duel(`window._sim.findTrack('rig-loop')`, 'rig-loop'))));
     assert.equal(r.map, 'rig', 'a duel on the Rig Loop moves to the Rig');
     assert.match(r.toast, /^DUEL: RIVAL .* · THE RIG$/, `and names the map it moved to (${r.toast})`);
+
+    // The House: Fly lists it beside the Rig, and Freestyle this map stays on
+    // it; Daily, Boards and Coach from the House fly the Rig.
+    assert.equal(await evaluate(ws, `[...document.querySelectorAll('#flyMaps [data-map]')].map((b) => b.dataset.map).join(',')`), 'rig,house');
+    await evaluate(ws, `window._sim.setMap('house'), true`);
+    r = JSON.parse(await evaluate(ws, after(click('menuFreestyleMap'))));
+    assert.equal(r.map, 'house', 'Freestyle this map on the House stays');
+    assert.equal(r.toast, 'FREESTYLE — NO GATES');
+    r = JSON.parse(await evaluate(ws, after(click('menuDaily') + click('dailyFly'))));
+    assert.equal(r.map, 'rig', `Daily from the House flies the Rig (${r.map})`);
+    if (weekId >= '2026-W45') {
+      await evaluate(ws, `window._sim.setMap('house'), true`);
+      r = JSON.parse(await evaluate(ws, after(click('menuBoards') + click('boardFly'))));
+      assert.equal(r.map, 'rig', `Boards from the House flies the Rig (${r.map})`);
+    }
+    await evaluate(ws, `window._sim.setMap('house'), true`);
+    r = JSON.parse(await evaluate(ws, after(click('menuCoach') + `document.querySelector('.coach-row[data-drill="tower-climb"]').click();`)));
+    assert.equal(r.map, 'rig', `Coach from the House flies its drill on the Rig (${r.map})`);
   } finally {
     try { if (ws) ws.close(); } catch (e) { /* ignore */ }
     killTree(child);

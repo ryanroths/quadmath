@@ -5,8 +5,9 @@
 // look when its vibe comes from lookVibe() (sim-art.js) and its builder makes
 // its surfaces with lookMaterial() (sim-maps.js); sim-looks.js (post chain,
 // HDRI), sim-lighting.js (scene IBL) and the host (camera) read the rest from
-// LOOK. No map carries lighting code of its own. The Rig is the first map on
-// it. Assets are Poly Haven CC0 (ASSETS-LICENSES.md). Not WebFPV.
+// LOOK. No map carries lighting code of its own; a map places the one key
+// (lookVibe). The Rig is the first map on it, The House the second. Assets
+// are Poly Haven CC0 (ASSETS-LICENSES.md). Not WebFPV.
 
 const TEX = 'assets/sim-looks/tex';
 
@@ -33,22 +34,26 @@ export const LOOK = Object.freeze({
     background: 0x0b0c0e,
   }),
   // Texture sets: Poly Haven albedo + normal + roughness, built by
-  // tools/build_sim_look_textures.py. The floor is 1k, the zone sets 512. A
-  // set ships an albedo (_diff_) and a normal map with the roughness's
-  // deviation from its mean in alpha (_nr_); a set with no normal (packed)
-  // ships one file, the albedo with that roughness in its alpha (_dr_).
-  // mirror: a crop that does not tile, mirrored instead.
+  // tools/build_sim_look_textures.py. The floor is 1k, the zone sets 512, the
+  // fabric 256 (a fine weave on a 27 cm tile). A set ships an albedo (_diff_)
+  // and a normal map with the roughness's deviation from its mean in alpha
+  // (_nr_); a set with no normal (packed) ships one file, the albedo with that
+  // roughness in its alpha (_dr_). mirror: a crop that does not tile,
+  // mirrored instead.
   sets: Object.freeze({
     concrete_floor: Object.freeze({ res: '1k' }),
     painted_steel: Object.freeze({ res: '512', mirror: true }),
     galvanised: Object.freeze({ res: '512', packed: true }),
     plywood: Object.freeze({ res: '512' }),
     rubber_mat: Object.freeze({ res: '512' }),
+    fabric: Object.freeze({ res: '256' }),
   }),
   // Surface types: a set at a physical tile size, metres. The roughness is the
   // surface's mean; the map adds the set's own variation around it (roughVar
   // 1 = as measured). A zone hue is the material colour, a paint tint over
-  // the grey albedo of a tinted set.
+  // the grey albedo of a tinted set. albedoVar (default 1) scales the albedo's
+  // own variation about the tinted sets' mean, for a paint that hides its
+  // substrate.
   surfaces: Object.freeze({
     concrete: Object.freeze({ set: 'concrete_floor', tile: 3, roughness: 0.66, roughVar: 1, normal: 1, metalness: 0 }),
     paintedBlock: Object.freeze({ set: 'concrete_floor', tile: 3, roughness: 0.86, roughVar: 0.5, normal: 0.45, metalness: 0 }),
@@ -58,7 +63,14 @@ export const LOOK = Object.freeze({
     galvanised: Object.freeze({ set: 'galvanised', tile: 1.2, roughness: 0.36, roughVar: 1, normal: 0, metalness: 0.55 }),
     plywood: Object.freeze({ set: 'plywood', tile: 0.5, roughness: 0.78, roughVar: 1, normal: 0.8, metalness: 0 }),
     rubber: Object.freeze({ set: 'rubber_mat', tile: 2, roughness: 0.88, roughVar: 0.6, normal: 1, metalness: 0 }),
+    fabric: Object.freeze({ set: 'fabric', tile: 0.27, roughness: 0.9, roughVar: 1, normal: 0.8, metalness: 0 }),
+    // Matte emulsion on plaster (a house's walls and ceilings): the painted
+    // steel set, its plate marks all but painted out.
+    plaster: Object.freeze({ set: 'painted_steel', tile: 3, roughness: 0.9, roughVar: 0.4, normal: 0.15, metalness: 0, albedoVar: 0.25 }),
   }),
+  // Glass: no texture, a faint tint, nearly smooth; it reflects the fill and
+  // lets the key through (it casts no shadow).
+  glass: Object.freeze({ color: 0xdde7ec, roughness: 0.06, opacity: 0.16 }),
   // Grounding: the key's PCF soft shadows, soft AO under every object (baked
   // into the floor from the map's own boxes, floorAo), and the screen-space
   // contact AO in every crease (sim-looks.js).
@@ -69,6 +81,9 @@ export const LOOK = Object.freeze({
   // Saw-cut joints in a concrete floor: a cut every metre, a wider one every
   // 5 m. Metres; darkening of the albedo in the cut.
   joints: Object.freeze({ minor: 1, major: 5, minorWidth: 0.012, majorWidth: 0.024, minorDark: 0.5, majorDark: 0.62 }),
+  // Floorboards (lookMaterial opts.boards): the seam's width, metres, and its
+  // darkening; each board's shade varies by up to +-shade / 2.
+  boards: Object.freeze({ seam: 0.003, dark: 0.5, shade: 0.18 }),
   post: Object.freeze({
     // Bloom on the gates and the edge lines only: they mark themselves
     // (markBloom), and the bright pass takes nothing else.
@@ -111,10 +126,14 @@ export const LOOK_TEXTURES = Object.freeze((() => {
 
 // GPU bytes of the look's textures: RGBA8 sets with mipmaps, plus the HDRI's
 // PMREM (HalfFloat RGBA, three's cube-UV layout: cube faces of width / 4,
-// 3 x max(face, 112) wide, 4 x face high).
-export function lookTextureBytes() {
+// 3 x max(face, 112) wide, 4 x face high). sets: the set names a map uses;
+// every set when omitted.
+export function lookTextureBytes(sets) {
   let b = 0;
-  for (const px of Object.values(LOOK_TEXTURES)) b += Math.round(px * px * 4 * 4 / 3);
+  for (const [file, px] of Object.entries(LOOK_TEXTURES)) {
+    if (sets && !sets.some((n) => file.includes(`/look_${n}_`))) continue;
+    b += Math.round(px * px * 4 * 4 / 3);
+  }
   const face = LOOK.lighting.hdriWidth / 4;
   const env = 3 * Math.max(face, 112) * 4 * face * 8;
   return { sets: b, env, total: b + env };
@@ -316,9 +335,52 @@ const JOINT_FRAG = `
 }
 #endif`;
 
+// Floorboards along x: a seam round each board, the rows staggered, each board
+// its own cut of the texture and its own shade. lookBoard: origin xz, board
+// width and length (world units); lookBoardSeam: half seams as a share of the
+// width and the length, the seam's darkening, the shade spread.
+const BOARD_FRAG = `
+	vec2 lookP = vLookWorld.xz - lookBoard.xy;
+	float lookRow = floor( lookP.y / lookBoard.z );
+	float lookAlong = lookP.x / lookBoard.w + fract( lookRow * 0.618 );
+	float lookId = floor( lookAlong ) + lookRow * 31.0;
+	vec2 lookShift = fract( sin( vec2( lookId * 12.9898, lookId * 78.233 ) ) * 43758.5453 );
+#ifdef USE_MAP
+	diffuseColor *= texture2D( map, vMapUv + lookShift * 7.0 );
+#endif
+	{
+		vec2 q = vec2( lookAlong, lookP.y / lookBoard.z );
+		vec2 d = abs( fract( q + 0.5 ) - 0.5 );
+		vec2 s = 1.0 - smoothstep( lookBoardSeam.yx, lookBoardSeam.yx + fwidth( q ), d );
+		diffuseColor.rgb *= ( 1.0 - lookBoardSeam.z * max( s.x, s.y ) ) * ( 1.0 + lookBoardSeam.w * ( lookShift.y - 0.5 ) );
+	}`;
+
+// The albedo with its variation scaled (albedoVar) about the tinted sets'
+// mean, linear 0.8 (tools/build_sim_look_textures.py TINT_MEAN_LIN): after
+// map_fragment, diffuse = colour * mix( 0.8, texel, albedoVar ).
+const ALBEDO_FRAG = `
+#ifdef USE_MAP
+	diffuseColor.rgb *= mix( vec3( 0.8 ) / max( sampledDiffuseColor.rgb, vec3( 1e-3 ) ), vec3( 1.0 ), lookAlbedoVar );
+#endif`;
+
+// The fill's balance on a map's surfaces: the HDRI's light (diffuse and
+// reflected) times lookFill, a colour and a level.
+const FILL_FRAG = `
+#if defined( RE_IndirectDiffuse )
+	iblIrradiance *= lookFill;
+#endif
+#if defined( RE_IndirectSpecular )
+	radiance *= lookFill;
+#endif`;
+
 // A look surface: MeshStandardMaterial over a Poly Haven set, the zone hue as
 // its colour. opts.joints: { origin: [x, z], unit } in world units (unit = one
-// metre) draws the saw-cut joint grid.
+// metre) draws the saw-cut joint grid; joints.spec overrides LOOK.joints' sizes
+// (a tile grid). opts.boards: { origin: [x, z], unit, width, length } lays
+// floorboards along x, metres. opts.fill: [r, g, b], the map's balance of the
+// look's one HDRI fill (a room the key barely reaches is lit by it).
+// opts.albedoVar overrides the surface's (a paint that hides more of its
+// substrate).
 export function lookMaterial(THREE, kind, color, opts) {
   const s = LOOK.surfaces[kind];
   if (!s) throw new Error('no look surface ' + kind);
@@ -339,13 +401,29 @@ export function lookMaterial(THREE, kind, color, opts) {
   m.userData.lookTile = s.tile;
   m.userData.lookUv = true;
   m.userData.looksSkip = true;
-  const J = LOOK.joints;
   const joints = o.joints || null;
+  const J = Object.assign({}, LOOK.joints, joints && joints.spec);
+  const boards = joints ? null : o.boards || null;
+  const albedoVar = o.albedoVar != null ? o.albedoVar : s.albedoVar;
+  const albedo = !boards && albedoVar != null && albedoVar !== 1;
+  const fill = o.fill || null;
   m.onBeforeCompile = (shader) => {
     shader.uniforms.lookRoughVar = { value: s.roughVar };
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float lookRoughVar;')
       .replace('#include <roughnessmap_fragment>', ROUGH_CHUNK);
+    if (albedo) {
+      shader.uniforms.lookAlbedoVar = { value: albedoVar };
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform float lookAlbedoVar;')
+        .replace('#include <map_fragment>', '#include <map_fragment>' + ALBEDO_FRAG);
+    }
+    if (fill) {
+      shader.uniforms.lookFill = { value: new THREE.Vector3(fill[0], fill[1], fill[2]) };
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 lookFill;')
+        .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>' + FILL_FRAG);
+    }
     if (joints) {
       const u = joints.unit;
       shader.uniforms.lookGrid = { value: new THREE.Vector4(joints.origin[0], joints.origin[1], J.minor * u, J.major / J.minor) };
@@ -358,8 +436,19 @@ export function lookMaterial(THREE, kind, color, opts) {
         .replace('#include <common>', '#include <common>\nvarying vec3 vLookWorld;\nuniform vec4 lookGrid;\nuniform vec2 lookJoint;\nuniform vec2 lookJointDark;')
         .replace('#include <map_fragment>', '#include <map_fragment>' + JOINT_FRAG);
     }
+    if (boards) {
+      const u = boards.unit, B = LOOK.boards;
+      shader.uniforms.lookBoard = { value: new THREE.Vector4(boards.origin[0], boards.origin[1], boards.width * u, boards.length * u) };
+      shader.uniforms.lookBoardSeam = { value: new THREE.Vector4(B.seam / 2 / boards.width, B.seam / 2 / boards.length, B.dark, B.shade) };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vLookWorld;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vLookWorld;\nuniform vec4 lookBoard;\nuniform vec4 lookBoardSeam;')
+        .replace('#include <map_fragment>', BOARD_FRAG);
+    }
   };
-  const ck = 'look:' + (joints ? 'joints' : 'surface');
+  const ck = 'look:' + (joints ? 'joints' : boards ? 'boards' : 'surface') + (albedo ? '+albedo' : '') + (fill ? '+fill' : '');
   m.customProgramCacheKey = () => ck;
   return m;
 }
@@ -384,6 +473,18 @@ export function lookBoxUv(mesh, tileWorld) {
   return mesh;
 }
 
+// A room's floor AO (floorAo) as the texture its floor reads on uv1.
+export function lookAoTexture(THREE, ao) {
+  const t = new THREE.DataTexture(ao.data, ao.width, ao.height, THREE.RedFormat, THREE.UnsignedByteType);
+  t.name = 'look_floor_ao';
+  t.channel = 1;
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.needsUpdate = true;
+  return t;
+}
+
 // The floor plane on the look: its uvs in tile units for the surface, the
 // 0..1 uvs kept as uv1 for the AO map (floorAo, same room).
 export function lookFloor(THREE, mesh, room, unit, ao) {
@@ -393,17 +494,49 @@ export function lookFloor(THREE, mesh, room, unit, ao) {
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * room.w * unit / tile, uv.getY(i) * room.d * unit / tile);
   uv.needsUpdate = true;
   if (ao) {
-    const t = new THREE.DataTexture(ao.data, ao.width, ao.height, THREE.RedFormat, THREE.UnsignedByteType);
-    t.name = 'look_floor_ao';
-    t.channel = 1;
-    t.magFilter = THREE.LinearFilter;
-    t.minFilter = THREE.LinearMipmapLinearFilter;
-    t.generateMipmaps = true;
-    t.needsUpdate = true;
-    mesh.material.aoMap = t;
+    mesh.material.aoMap = lookAoTexture(THREE, ao);
     mesh.material.aoMapIntensity = LOOK.grounding.floorAo.intensity;
   }
   return mesh;
+}
+
+// Part of a floor on the look, where a room's floor changes surface: a plane
+// over rect { x0, x1, z0, z1 } (metres, the room centred on the origin). Its
+// uvs are in tile units from the room corner, as lookFloor's, so a surface
+// runs on from patch to patch; its uv1 is the room's 0..1, so every patch
+// reads the room's one AO map (lookAoTexture).
+export function lookFloorPatch(THREE, material, room, unit, rect, aoMap) {
+  const w = rect.x1 - rect.x0, d = rect.z1 - rect.z0;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w * unit, d * unit), material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set((rect.x0 + rect.x1) / 2 * unit, 0, (rect.z0 + rect.z1) / 2 * unit);
+  mesh.receiveShadow = true;
+  const g = mesh.geometry, uv = g.getAttribute('uv'), uv1 = uv.clone();
+  const tile = material.userData.lookTile || 1;
+  for (let i = 0; i < uv.count; i++) {
+    // Laid flat, a plane's v = 1 edge is its -z edge.
+    const x = rect.x0 + uv.getX(i) * w, z = rect.z1 - uv.getY(i) * d;
+    uv.setXY(i, (x + room.w / 2) / tile, (room.d / 2 - z) / tile);
+    uv1.setXY(i, (x + room.w / 2) / room.w, (room.d / 2 - z) / room.d);
+  }
+  g.setAttribute('uv1', uv1);
+  if (aoMap) {
+    material.aoMap = aoMap;
+    material.aoMapIntensity = LOOK.grounding.floorAo.intensity;
+  }
+  return mesh;
+}
+
+// Glass on the look (LOOK.glass): a transparent pane, no texture. The caller
+// keeps it out of the key's shadow (castShadow false).
+export function lookGlass(THREE) {
+  const G = LOOK.glass;
+  const m = new THREE.MeshStandardMaterial({
+    color: G.color, roughness: G.roughness, metalness: 0, transparent: true, opacity: G.opacity, depthWrite: false,
+  });
+  m.userData.lookKind = 'glass';
+  m.userData.looksSkip = true;
+  return m;
 }
 
 // Bloom marks: the gates and the edge lines write alpha 0 into the HDR frame;
@@ -460,25 +593,28 @@ export function lookLines(THREE, positions) {
 
 // A map's vibe on the look (sim-art.js VIBES): the lighting, looks and post
 // fields every map module already reads, all from LOOK. base carries what is
-// the map's own: id, name, tagline, palette, gates, props, and the key's
-// shadow box (shadow: { viewR, height }, fitted to the room).
+// the map's own: id, name, tagline, palette, gates, props, the key's shadow
+// box (shadow: { viewR, height }, fitted to the room), and where the one key
+// comes from and how strong it is (key: { elevation, azimuth, color,
+// intensity }; the look's for any left out).
 export function lookVibe(base) {
   const L = LOOK.lighting, P = LOOK.post, sh = base.shadow || {};
+  const K = Object.assign({}, L.key, base.key);
   const out = Object.assign({}, base, {
     look: true,
     implemented: true,
     time: 'indoor key',
     sky: 'none',
     lighting: Object.freeze({
-      sunColor: L.key.color, sunIntensity: L.key.intensity, fillColor: 0x000000, fillIntensity: 0,
+      sunColor: K.color, sunIntensity: K.intensity, fillColor: 0x000000, fillIntensity: 0,
       hemiSky: 0x000000, hemiGround: 0x000000, hemiIntensity: 0,
       exposure: L.exposure, fogColor: L.background, fogDensity: 0,
       bloomStrength: P.bloom.strength, bloomRadius: P.bloom.radius, bloomThreshold: 0,
       gateEmissive: 4.4, gateEmissiveActive: 6,
-      sunElevation: L.key.elevation, sunAzimuth: L.key.azimuth,
+      sunElevation: K.elevation, sunAzimuth: K.azimuth,
       shadowViewR: sh.viewR, shadowHeight: sh.height, shadowBias: -0.0004, shadowNormalBias: 0.02, shadowIntensity: 1,
     }),
-    looks: lookLooks(),
+    looks: lookLooks({ sun: K.intensity }),
     post: Object.freeze({
       bloom: true, bloomMask: true, analog: false, grade: false,
       lift: Object.freeze([0, 0, 0]),
@@ -490,10 +626,13 @@ export function lookVibe(base) {
     }),
   });
   delete out.shadow;
+  delete out.key;
   return Object.freeze(out);
 }
 
-// The looks spec (sim-maps.js MAP_LOOKS, sim-looks.js setMapLooks).
-export function lookLooks() {
-  return Object.freeze({ fog: 0, sun: LOOK.lighting.key.intensity, env: LOOK.lighting.env, bg: 0, hemi: 0 });
+// The looks spec (sim-maps.js MAP_LOOKS, sim-looks.js setMapLooks); over.sun:
+// a map's own key intensity.
+export function lookLooks(over) {
+  const sun = over && over.sun != null ? over.sun : LOOK.lighting.key.intensity;
+  return Object.freeze({ fog: 0, sun, env: LOOK.lighting.env, bg: 0, hemi: 0 });
 }

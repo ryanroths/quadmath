@@ -240,11 +240,17 @@ assert.equal(dailySaved.track, 'trainer-freestyle');
 assert.equal(resolveFly({ map: 'living', track: 'living-sofa' }).track, 'living-freestyle');
 assert.equal(resolveFly(null).track, 'rig-freestyle');
 
-// Without ?dev=1 only The Rig is open: a saved or linked closed map boots The
-// Rig, unsaved; generated session courses (daily, weekly, room practice) still
-// fly their own map; with ?dev=1 (or no opts, the old callers) every map is open.
+// Without ?dev=1 The Rig and The House are open: a saved or linked closed map
+// boots The Rig, unsaved; generated session courses (daily, weekly, room
+// practice) still fly their own map; with ?dev=1 (or no opts, the old callers)
+// every map is open.
 assert.equal(DEFAULT_MAP, 'rig');
 assert.equal(mapOpen('rig', false), true);
+assert.equal(mapOpen('house', false), true);
+const houseLink = resolveSimBoot({ map: 'house', track: 'house-loop' }, null, files, { dev: false });
+assert.deepEqual([houseLink.map, houseLink.track, houseLink.closedMap], ['house', 'house-loop', undefined]);
+const houseSaved = resolveSimBoot({}, { map: 'house', track: 'house-loop' }, files, { dev: false });
+assert.deepEqual([houseSaved.map, houseSaved.track], ['house', 'house-freestyle']);
 assert.equal(mapOpen('garage', false), false);
 assert.equal(mapOpen('garage', true), true);
 const closedSaved = resolveSimBoot({}, { map: 'garage', track: 'garage-bench' }, files, { dev: false });

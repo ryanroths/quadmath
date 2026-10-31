@@ -1093,7 +1093,9 @@ test('Daily Line seed is stable, named, and not a city 3-lap', () => {
   assert.equal(dailyLineBoardKey('2026-10-21'), 'D2026-10-21');
   const named = new Set(DAILY_LINE_TRACKS.map((t) => t.id));
   for (const meta of BUILTIN_TRACK_FILES) {
-    if (meta.legacyId != null) {
+    // Daily stays on the Rig until the generator lands (owner): the House's
+    // loop is not in its pool.
+    if (meta.legacyId != null || meta.map === 'house') {
       assert.equal(named.has(meta.id), false, meta.id);
       continue;
     }

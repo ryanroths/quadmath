@@ -18,6 +18,7 @@ Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
 **Ryan's Yard** ships on Backyard.
 **Pocket Stage** ships on Your Room.
 **Soft Industrial** ships on The Rig, the launch map: the sim look (`sim-look.js`), an exception to Felt Scale (below).
+**Afternoon House** ships on The House, the second map on the look.
 Remaining maps keep their current procedural rooms and pick up their vibe
 one map per PR.
 
@@ -36,6 +37,8 @@ one map per PR.
 | `gym` | School Gym | Indoor whoop (W3) | `buildGym` | `gym-court`, `gym-bleachers`, `gym-hoops` |
 | `trainer` | Tiny Trainer | Indoor whoop (W3) | `buildTrainer` | `trainer-figure8`, `trainer-slalom`, `trainer-hairpin` |
 | `room` | Your Room | Indoor whoop (W3) | `sim-room.js` + `buildRoom` | `room-practice` (generated from L×W×H) |
+| `rig` | The Rig | Indoor whoop, on the look | `buildRig` | `rig-loop` |
+| `house` | The House | Indoor whoop, on the look | `buildHouse` | `house-loop` (`tools/build_house_loop.mjs`, from `houseLine`) |
 
 Orbit and lighting knobs live in `MAP_ORBIT` / `MAP_LOOKS` (`sim-maps.js`).
 City fallback lighting is the `LIGHTING` block in `sim.html`. Quality, HDRI,
@@ -213,6 +216,15 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Tr
 - **Camera:** the Air65's C03, 2.1 mm lens, 125° diagonal (the goggles crop the sensor; wider fisheyes the gaps), 86.6° vertical at 16:9, rendered rectilinear with a touch of barrel that keeps the corners in frame. Any FOV saved from the slider, old or new, wins. Horizontal blur on yaw above 240°/s, full (14 px at 1080p) at 900°/s.
 - **Props:** None. The six features (scaffold tower, ceiling pipe run, crate stacks, tunnel, loft, straight) are the map.
 - **Gates:** Plain brand rings, not solid, on the Rig Loop (17 gates, 57 m). Every feature is on the loop; `tools/test_sim_rig.mjs` holds the clearances and the radius.
+
+### The House — Afternoon House (shipped, beside the Rig)
+
+- **Owner's spec:** a one-storey home, about 18 × 12 × 2.7 m, whoop scale, every object a flight line; `sim-look.js` inherited, no new materials unless a surface type is genuinely new. Entry hall, living room, kitchen, a hallway with three doorways, bedroom, bathroom, and out through a sliding door to a covered patio. Real sizes: doors 0.8 × 2.0, table 0.75, chair backs 0.9, counters 0.9, sofa seat 0.45, bed 0.55. One key through the patio sliding door (afternoon sun), the HDRI for fill, a warm interior. Same bounce walls and crash threshold as the Rig; the Rig's budget.
+- **Plan (`sim-maps.js` `HOUSE_PLAY`, metres):** the rooms ring a core. Street side: the entry hall, the living room (a free-standing bookshelf divider with an open bay, the sofa facing the TV, the ceiling fan over its back, a coffee table, an armchair), the kitchen (an island with a steel top and three stools, open shelves either side of the range hood, the fridge). The hallway's three doors lead north to the bedroom (the bed's head on the back wall, nightstands, a dresser), a walk-through closet, the bathroom (a free-standing tub mid-room, vanity, WC) and the back hall with the sliding door. The patio is the west strip under the roof's edge, glass over a 0.9 m garden wall, its table and two chairs; the garden door leads back into the entry hall. Boxes only, the Rig's rules (6 cm and thicker, no 4–10 cm slot).
+- **The look, inherited:** the same HDRI fill, ACES, exposure, post, lens, edge lines, floor AO and contact AO, the brand gates. The map's own: where the one key comes from and how strong (`HOUSE_KEY`: a low sun, 25° from the west-north-west, warm `#ffd9a8`, 9, so its patches on the floor read about three times the fill round them as the Rig's key does); the fill's balance on its surfaces (`opts.fill`, warmer and up, the rooms the low sun only reaches in patches; the ceilings a floor bounce up again). Walls, roof and ceiling cast; the glass does not, so the sun lands through the sliding door and the garden door only.
+- **Surfaces:** warm white plaster walls and ceilings (`plaster`, the painted steel set with its plate marks painted out); oak floorboards (plywood, boards 18 cm × 1.2 m, staggered); glazed tile in the kitchen and hallway (60 cm) and the bathroom (30 cm, aqua); terracotta tile on the patio (40 cm); white lacquer, brushed steel, oiled oak, blue paint, terracotta paint, black gloss. New to the look: the fabric set (Poly Haven `rough_linen`, 256: linen upholstery and blue bedding), and glass (no texture). Zone hues as tints: living warm neutral, kitchen white and steel, bedroom blue, bathroom aqua tile, patio terracotta.
+- **Loop:** the House Loop is a designed line (`houseLine`, straights and arcs with height pins) and its 20 gates mark it: 65 m flown, 60 m gate to gate, tightest radius 1.58 m. Through the arch, through the bookshelf gap and round its end, over the sofa back under the fan, over the island and down over the stools, a climb through the hallway's three doors, over the bed, through the closet, once round the tub climbing, out the sliding door, past a chair, under the table, past the other chair, in at the garden door. `tools/test_sim_house.mjs` holds it.
+- **Menus:** Fly and Tracks offer it beside the Rig without `?dev=1`; Daily, Boards and Coach stay on the Rig.
 
 ### Daily / weekly
 

@@ -382,5 +382,7 @@ test('The Rig bounces: a wall hit that crashes elsewhere rebounds there', () => 
   assert.equal(hit(45, BOUNCE_MAPS.rig).crashed, true);
   // No profile is the build's own contact, unchanged.
   assert.deepEqual(hit(6, undefined), hit(6, null));
-  assert.deepEqual(Object.keys(BOUNCE_MAPS), ['rig']);
+  // The House bounces as the Rig, same crash threshold (owner).
+  assert.deepEqual(Object.keys(BOUNCE_MAPS), ['rig', 'house']);
+  assert.deepEqual(BOUNCE_MAPS.house, BOUNCE_MAPS.rig);
 });

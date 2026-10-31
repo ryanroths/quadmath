@@ -1,6 +1,7 @@
 {
   "maps": [
     { "id": "rig", "name": "The Rig", "class": "whoop", "indoor": true },
+    { "id": "house", "name": "The House", "class": "whoop", "indoor": true },
     { "id": "city", "name": "City", "class": "open", "indoor": false },
     { "id": "living", "name": "Living Room", "class": "whoop", "indoor": true },
     { "id": "garage", "name": "Garage", "class": "whoop", "indoor": true },
@@ -13,6 +14,7 @@
   ],
   "tracks": [
     { "id": "rig-loop", "file": "tracks/rig-loop.json", "map": "rig", "name": "Rig Loop" },
+    { "id": "house-loop", "file": "tracks/house-loop.json", "map": "house", "name": "House Loop" },
     { "id": "city-loop", "file": "tracks/city-loop.json", "legacyId": 0, "map": "city", "name": "City Loop" },
     { "id": "city-zigzag", "file": "tracks/city-zigzag.json", "legacyId": 1, "map": "city", "name": "Mesa Zigzag" },
     { "id": "city-inside", "file": "tracks/city-inside.json", "map": "city", "name": "Interior Run" },
