@@ -19,16 +19,16 @@ Swap from the pairing table. Two-link pages (analog vs HDZero, Air vs Meteor, 65
 
 | Param | What |
 | --- | --- |
-| `map` | `rig` (The Rig, the launch map). `city` `living` `garage` `warehouse` `office` `gym` `trainer` `room` `backyard` open only with `dev=1`; without it the link lands on The Rig (free flight). |
+| `map` | `rig` (The Rig, the launch map), `house` (The House). `city` `living` `garage` `warehouse` `office` `gym` `trainer` `room` `backyard` open only with `dev=1`; without it the link lands on The Rig (free flight). |
 | `build` | Share code. Named presets (`QB1.air65`) or full `QB1.65-23000-31x3-1s300-27`. Physics only. |
-| `track` | Course id (`rig-loop`; with `dev=1`: `living-sofa`, `office-cubicles`, `gym-court`, `trainer-figure8`, `city-loop`, `0` / `1` for legacy city). |
+| `track` | Course id (`rig-loop`, `house-loop`; with `dev=1`: `living-sofa`, `office-cubicles`, `gym-court`, `trainer-figure8`, `city-loop`, `0` / `1` for legacy city). |
 | `mode` | `angle` (default for newcomers), `horizon`, or `acro`. |
 | `preset` | Rate preset id: `whoopBeginner` `whoopRace` `freestyle` `ryanActual`. |
 | `rates` | Compact token `TYPE.rollRc.rollSr.rollEx.pitchRc.pitchSr.pitchEx.yawRc.yawSr.yawEx` (CLI integers; expo 0–100). Wins over `preset`. Example: `ACTUAL.4.74.56.4.74.56.4.70.56`. Card aliases: `card.65-betafpv-stock`, `card.65-betafpv-ryfly-1219s`, `card.75-betafpv-ryfly-o4-gf1811`, `card.75-happymodel-aio-stock`. |
 | `3d` | `1` enables Betaflight-style 3D (reversible motors, acro). Center throttle is zero thrust. 3D runs are not counted on boards. |
 | `drill` | W4 Coach id (`hover-hold`, `yaw-spin`, `straight-line`, `gate-pass`, `doorway-pass`, `split-s`, `power-loop`). Bronze on the previous drill unlocks the next. |
 
-Copy a live rates URL from Tune → COPY RATES LINK (next to IMPORT CLI). Copy a build-only URL from Tune → Your build → COPY BUILD LINK. Both add `&dev=1` themselves when the map you are flying needs it (any map but The Rig, except a Daily, weekly or room-practice course).
+Copy a live rates URL from Tune → COPY RATES LINK (next to IMPORT CLI). Copy a build-only URL from Tune → Your build → COPY BUILD LINK. Both add `&dev=1` themselves when the map you are flying needs it (any map but The Rig and The House, except a Daily, weekly or room-practice course).
 
 ## Preset codes
 
@@ -65,7 +65,7 @@ Published cards (also `?rates=card.<id>`):
 | `card.75-betafpv-ryfly-o4-gf1811` | Actual | 2,73,56 / 2,73,56 / 2,70,56 |
 | `card.75-happymodel-aio-stock` | Betaflight | 100,70,0 (all axes) |
 
-The Rig is the launch map and the only map open without `dev=1`: `?map=rig` (free flight) or `?track=rig-loop` (the 17-gate loop). Links to any other map carry `&dev=1`; the snippet and every example here do. A link without it opens The Rig.
+The Rig is the launch map; it and The House are the maps open without `dev=1`: `?map=rig` (free flight) or `?track=rig-loop` (the 17-gate loop), `?map=house` or `?track=house-loop` (the 20-gate loop). Links to any other map carry `&dev=1`; the snippet and every example here do. A link without it opens The Rig.
 
 Your room (W3) is generated in the sim from L×W×H. Deep-link the last saved cell with `?map=room&dev=1` or `?track=room-practice` (a generated course, open without `dev=1`), or pass `?room=16x12x8ft` / `?room=5x4x2.6m`.
 

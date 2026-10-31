@@ -47,6 +47,8 @@ that roughness in alpha (`_dr_`).
 | `assets/sim-looks/tex/look_plywood_nr_512.webp` | https://polyhaven.com/a/plywood | normal + roughness |
 | `assets/sim-looks/tex/look_rubber_mat_diff_512.webp` | https://polyhaven.com/a/rubber_tiles | albedo, greyed for a paint tint |
 | `assets/sim-looks/tex/look_rubber_mat_nr_512.webp` | https://polyhaven.com/a/rubber_tiles | normal + roughness |
+| `assets/sim-looks/tex/look_fabric_diff_256.webp` | https://polyhaven.com/a/rough_linen | albedo, greyed for a dye tint; the square top of the 1024 x 1026 download; The House's upholstery and bedding |
+| `assets/sim-looks/tex/look_fabric_nr_256.webp` | https://polyhaven.com/a/rough_linen | normal + roughness, same crop |
 
 ## Inter — SIL Open Font License 1.1
 

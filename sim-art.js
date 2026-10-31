@@ -4,8 +4,9 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=e2863668bca2';
-import { lookVibe, markBloom } from './sim-look.js?v=e9ead0f3bb33';
+import { hexNum } from './sim-art-city.js?v=7889acde01ce';
+import { lookVibe, markBloom } from './sim-look.js?v=ad1c5d113420';
+import { HOUSE_KEY } from './sim-maps.js?v=308b2b5f3dc9';
 export {
   FELT_SCALE, applyFeltMaterial, feltBasic, feltClay, feltEmissive,
   studioPhoneBudget, qualityWantsStudioBloom,
@@ -23,54 +24,54 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=e2863668bca2';
+} from './sim-art-city.js?v=7889acde01ce';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget, planLivingKit,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=46b5de10a7e9';
+} from './sim-art-living.js?v=9a4d5773b7e6';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=f2b46b03a6a5';
+} from './sim-art-garage.js?v=8249a90d6c66';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=31839e9eb2b5';
+} from './sim-art-warehouse.js?v=ea3a73f6be69';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
   planGymKit,
-} from './sim-art-gym.js?v=4e1e31b62edc';
+} from './sim-art-gym.js?v=8e1fbef5e97a';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget, planOfficeKit,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=7eac2a9972b4';
+} from './sim-art-office.js?v=f2aff9cdc8b5';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=8e881573cd29';
+} from './sim-art-trainer.js?v=d5bf4d096f38';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildRyanYard, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
   planBackyardKit,
-} from './sim-art-backyard.js?v=68356db6516c';
+} from './sim-art-backyard.js?v=5c7a9bfa9dd4';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=de11f18afe21';
+} from './sim-art-room.js?v=c58f4c583793';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
@@ -79,7 +80,7 @@ export {
   tryDressGymKit, gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA,
   tryDressLivingKit, livingKitBytesForQuality, LIVING_KIT_CORE, LIVING_KIT_EXTRA,
   tryDressBackyardKit, backyardKitBytesForQuality, BACKYARD_KIT_CORE, BACKYARD_KIT_EXTRA,
-} from './sim-art-kit.js?v=c5f0a1ca2a98';
+} from './sim-art-kit.js?v=8246fee5c7d9';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
@@ -449,10 +450,33 @@ export const VIBES = Object.freeze({
     // The key's shadow box, world units, fitted to the 20 x 15 x 6 m room.
     shadow: Object.freeze({ viewR: 46, height: 26 }),
   }),
+  // The House, the second map on the look. Its own: the one key is a low
+  // afternoon sun from the west-north-west, warm, in off the patio through
+  // the sliding door and the garden door (sim-maps.js HOUSE_KEY); the zone
+  // hues and the room are the builder's (HOUSE_LOOK).
+  house: lookVibe({
+    id: 'house',
+    name: 'Afternoon House',
+    tagline: 'A one-storey home, the afternoon sun in off the patio over an HDRI fill, real surfaces in every room',
+    palette: Object.freeze({
+      void: '#0d0b09', zenith: '#8fb4d8', horizon: '#f2e6d4', dusk: '#ff4d1a',
+      street: '#c56a43', sidewalk: '#efe6d8', lane: '#f2f0ea', laneAlt: '#ff4d1a',
+      facade: '#efe6d8', facadeAlt: '#c8b59c', windowOn: '#ffd9a8', windowAlt: '#4a6dab',
+      neonA: '#f2f0ea', neonB: '#ff4d1a', neonC: '#3ddc97', mesa: '#a77a4f',
+      gateA: '#ff4d1a', gateB: '#3ddc97',
+    }),
+    // The Rig's brand rings: they read against every room's hue.
+    gates: Object.freeze({ style: 'hard-ring', keepBrand: true }),
+    props: Object.freeze(['bookshelf', 'sofa', 'ceiling fan', 'kitchen island', 'bar stools', 'hallway doors', 'bed', 'walk-through closet', 'tub', 'sliding door', 'patio table and chairs']),
+    key: HOUSE_KEY,
+    // The key's shadow box, world units, fitted to the 18 x 12 x 2.7 m house
+    // and its roof.
+    shadow: Object.freeze({ viewR: 39, height: 11 }),
+  }),
 });
 
 export const MAP_VIBE_IDS = Object.freeze([
-  'city', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room', 'rig',
+  'city', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room', 'rig', 'house',
 ]);
 
 export function vibeFor(mapId) {
@@ -754,6 +778,8 @@ export function mergeStaticArt(THREE, root) {
     // mesh has none stays unmerged. Untextured buckets merge position + normal.
     const keepUv = materialWantsUv(list[0].material);
     if (keepUv && list.some((o) => !o.geometry.getAttribute('uv'))) return;
+    // An AO map reads uv1 (a floor on the look): kept when every mesh has it.
+    const keepUv1 = keepUv && list.every((o) => o.geometry.getAttribute('uv1'));
     const geos = [];
     for (const o of list) {
       const g = o.geometry.clone();
@@ -761,12 +787,13 @@ export function mergeStaticArt(THREE, root) {
       g.applyMatrix4(o.matrixWorld);
       geos.push(g);
     }
-    const pos = [], nor = [], uvs = [];
+    const pos = [], nor = [], uvs = [], uv1s = [];
     for (const g of geos) {
       const src = g.index ? g.toNonIndexed() : g;
       const p = src.getAttribute('position');
       const n = src.getAttribute('normal');
       const t = keepUv ? src.getAttribute('uv') : null;
+      const t1 = keepUv1 ? src.getAttribute('uv1') : null;
       if (!p) {
         if (src !== g) src.dispose();
         g.dispose();
@@ -777,6 +804,7 @@ export function mergeStaticArt(THREE, root) {
         if (n) nor.push(n.getX(i), n.getY(i), n.getZ(i));
         else nor.push(0, 1, 0);
         if (t) uvs.push(t.getX(i), t.getY(i));
+        if (t1) uv1s.push(t1.getX(i), t1.getY(i));
       }
       if (src !== g) src.dispose();
       g.dispose();
@@ -786,6 +814,7 @@ export function mergeStaticArt(THREE, root) {
     out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
     if (keepUv) out.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    if (keepUv1) out.setAttribute('uv1', new THREE.Float32BufferAttribute(uv1s, 2));
     const mesh = new THREE.Mesh(out, list[0].material);
     mesh.castShadow = !!list[0].castShadow;
     mesh.receiveShadow = !!list[0].receiveShadow;

@@ -239,6 +239,15 @@
   .menu-quality button,.qbtn{width:auto;flex:1;min-width:64px;margin-top:0;padding:7px 8px;font-size:11px;
     border-color:var(--line);color:var(--txt)}
   .menu-quality button.on,.qbtn.on{border-color:var(--orange);color:var(--orange);background:rgba(255,77,26,.12)}
+  /* Fly's map chooser (openFlyPicker): a card a map, its thumbnail, the last
+     map flown marked. */
+  .fly-maps{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 2px}
+  .menu-layer .fly-map{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin-top:0;padding:6px 6px 8px;
+    text-align:left;border-color:var(--line);color:var(--txt)}
+  .fly-map img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:8px;background:#111}
+  .fly-map span{font-size:13px;font-weight:600;padding:0 2px}
+  .fly-map small{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--orange);padding:0 2px}
+  .menu-layer .fly-map.on{border-color:var(--orange);background:rgba(255,77,26,.12)}
   /* The launch screen shows five; the in-flight menu (#startMenu.in-flight) its
      own list; dev-only needs ?dev=1 (body.dev); menu-hide never shows. */
   #startMenu:not(.in-flight) .menu-flight,#startMenu.in-flight .menu-launch,
@@ -920,8 +929,8 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=a2585924423c";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=68b8d814a853";
+} from "./sim-whoop.js?v=8f4237f25211";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=e9c1ea66e1e6";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -936,7 +945,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=4b5694623e03";
+} from "./sim-art.js?v=1063819a3517";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -961,15 +970,15 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=2190cb73b052";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=96433f9fd784";
+} from "./sim-tracks.js?v=0e8166b9e39b";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=308b2b5f3dc9";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=bd51baa7fe22";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=7e38e09e0ef2";
-import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=e9ead0f3bb33";
+} from "./sim-room.js?v=c26e0c6bfbfc";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=147dd849f197";
+import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=ad1c5d113420";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -984,7 +993,7 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=3853bb222c15";
+} from "./sim-coach.js?v=202a7b9d68cb";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=3f9a33d3082a";
@@ -1013,7 +1022,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=446172f3bead";
+} from "./sim-secrets.js?v=fa4de7479db9";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1522,7 +1531,7 @@ function addGate(x,y,z,rotationY,size,solidGate,trackId,parent){
     if(currentMap==='trainer')decorateTrainerGate(THREE,ring,size,col,vibeFor('trainer'));
     if(currentMap==='office')decorateOfficeGate(THREE,ring,size,col,vibeFor('office'));
     if(currentMap==='gym')decorateGymGate(THREE,ring,size,col,vibeFor('gym'));
-    if(currentMap==='rig')decorateRigGate(ring,col,vibeFor('rig'));
+    if(vibeFor(currentMap).look)decorateRigGate(ring,col,vibeFor(currentMap));
   }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
   (parent||raceGroup).add(ring);
   gates.push({pos:new THREE.Vector3(x,y,z),r:size*0.8,mesh:ring,col:col,trackId:trackId,trackIdx:trackIdx,ry:rotationY||0,size:size,solid:!!solidGate}); // col = dim base color
@@ -1662,7 +1671,7 @@ function updateGateHighlight(){
     if(currentMap==='trainer')pulseTrainerGate(g,g===target,passed,now,vibeFor('trainer'));
     if(currentMap==='office')pulseOfficeGate(g,g===target,passed,now,vibeFor('office'));
     if(currentMap==='gym')pulseGymGate(g,g===target,passed,now,vibeFor('gym'));
-    if(currentMap==='rig')pulseRigGate(g,g===target,passed,now,vibeFor('rig'));
+    if(vibeFor(currentMap).look)pulseRigGate(g,g===target,passed,now,vibeFor(currentMap));
   }
 }
 // Run, lap, split and ghost clocks read sim time: the 1 ms ticks run since load
@@ -3117,6 +3126,7 @@ function applyMapLooks(mapId){
     else if(mapId==='gym')credit.textContent='Gym is original procedural art — Amber Court. Kenney CC0 sideline kit.';
     else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current · Felt Scale. Kenney CC0 cars and street kit.';
     else if(mapId==='rig')credit.textContent='The Rig is original procedural geometry — Soft Industrial. Poly Haven CC0 HDRI and textures.';
+    else if(mapId==='house')credit.textContent='The House is original procedural geometry — Afternoon House. Poly Haven CC0 HDRI and textures.';
   }
 }
 function isFreeFlight(t,trackId){
@@ -4890,6 +4900,31 @@ function toggleStartMenu(force){
   else{el.classList.toggle('open',next);document.body.classList.toggle('menu-open',next);}
   if(next){panel.classList.remove('open');syncMenuSparks();}
 }
+// Fly: a map chooser. The open maps (mapOpen without ?dev=1: The Rig, The
+// House), each with its thumbnail; with ?dev=1 an archived map flown last is
+// offered too. The last map flown (the saved selection) is marked and has the
+// focus, so Fly then Enter flies it again. A tap flies that map.
+const FLY_THUMBS={rig:'assets/sim-thumbs/rig.jpg',house:'assets/sim-thumbs/house.jpg'};
+function flyMapChoices(){
+  const maps=MAPS.filter(m=>mapOpen(m.id,false));
+  const saved=loadSelected();
+  const own=saved&&MAPS.find(m=>m.id===saved.map);
+  if(own&&mapOpen(own.id,DEV_UI)&&!maps.includes(own))maps.push(own);
+  return {maps,last:own&&maps.includes(own)?own.id:DEFAULT_MAP};
+}
+function openFlyPicker(){
+  const {maps,last}=flyMapChoices();
+  showMenuLayer('<h2>Fly</h2><p>Free flight: no gates, no timer. Pick a map.</p><div class="fly-maps">'+
+    maps.map(m=>'<button type="button" class="fly-map'+(m.id===last?' on':'')+'" data-fly-map="'+m.id+'">'+
+      (FLY_THUMBS[m.id]?'<img src="'+FLY_THUMBS[m.id]+'" alt="" width="480" height="270">':'')+
+      '<span>'+m.name+'</span>'+(m.id===last?'<small>Last flown</small>':'')+'</button>').join('')+
+    '</div><button type="button" id="layerClose">Close</button>');
+  document.getElementById('menuLayer').classList.add('wide');
+  document.querySelectorAll('#menuLayer [data-fly-map]').forEach(b=>{b.onclick=()=>startFreestyle(b.dataset.flyMap);});
+  document.getElementById('layerClose').onclick=hideMenuLayer;
+  const on=document.querySelector('#menuLayer .fly-map.on');
+  if(on)on.focus({preventScroll:true});
+}
 let lastArtQuality=null;
 function syncQualityUI(){
   if(!looks)return;
@@ -5011,8 +5046,9 @@ function applyDailyLineMod(mod){
     };
     for(const L of indoorLights||[])dim(L,0.45);
     dim(hemi,0.55);
-    // The Rig has no lamps and no hemisphere: its one key is the light to dim.
-    if(currentMap==='rig')dim(sun,0.45);
+    // A map on the look has no lamps and no hemisphere: its one key is the
+    // light to dim.
+    if(vibeFor(currentMap).look)dim(sun,0.45);
   }
   if(mod==='ghost'){
     ghostVisible=true;
@@ -5464,7 +5500,7 @@ function wireBuilderUI(){
 
 function wireLooksUI(){
   const fly=document.getElementById('menuFly');
-  if(fly)fly.onclick=()=>startFreestyle();
+  if(fly)fly.onclick=()=>openFlyPicker();
   const menuFree=document.getElementById('menuFreestyle');
   if(menuFree)menuFree.onclick=()=>startFreestyle();
   const panelFree=document.getElementById('btnFreestyle');

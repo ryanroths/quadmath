@@ -89,6 +89,7 @@ REQUIRED_ASSET_FOLDERS = (
     "assets/sim-living",
     "assets/sim-backyard",
     "assets/sim-looks",
+    "assets/sim-thumbs",
 )
 
 HASH_LEN = 12

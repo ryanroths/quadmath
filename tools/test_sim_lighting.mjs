@@ -100,10 +100,13 @@ test('backyard never shows the dawn HDRI; indoor never shows the yard HDRI', () 
   assert.equal(resolveSceneLighting(garageYardOnly).environment, null);
 });
 
-test('the look loads one HDRI, its own, and the Rig is on the look', () => {
-  assert.equal(vibeFor('rig').look, true);
-  assert.equal(resolveMapLighting('rig').look, true);
-  for (const mapId of MAP_VIBE_IDS) if (mapId !== 'rig') assert.ok(!resolveMapLighting(mapId).look, mapId);
+test('the look loads one HDRI, its own, and the Rig and the House are on the look', () => {
+  const onLook = ['rig', 'house'];
+  for (const mapId of onLook) {
+    assert.equal(vibeFor(mapId).look, true, mapId);
+    assert.equal(resolveMapLighting(mapId).look, true, mapId);
+  }
+  for (const mapId of MAP_VIBE_IDS) if (!onLook.includes(mapId)) assert.ok(!resolveMapLighting(mapId).look, mapId);
   const looks = readFileSync(join(root, 'sim-looks.js'), 'utf8');
   assert.match(looks, /const HDRI_LOOK = LOOK\.lighting\.hdri;/);
   assert.match(looks, /envLook = await loadHdr\(HDRI_LOOK\)/);

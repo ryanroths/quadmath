@@ -5,11 +5,12 @@ Not run by CI. Reproduces assets/sim-looks/tex/look_* and the look's 512 HDRI
 from the Poly Haven downloads, so every shipped texel can be traced back to
 its source:
 
-  python tools/build_sim_look_textures.py <dir of Poly Haven 1k files>
+  python tools/build_sim_look_textures.py <dir of Poly Haven 1k files> [set ...]
 
 The directory holds <asset>_{diff,nor_gl,rough}_1k.png and the HDRI's
 <hdri>_1k.hdr as downloaded from https://polyhaven.com (see
-ASSETS-LICENSES.md). Pillow only (no numpy).
+ASSETS-LICENSES.md). Pillow only (no numpy). Named sets build only those
+sets (no HDRI); with none, every set and the HDRI.
 
 Each set ships two files:
   look_<set>_diff_<res>.webp  albedo, sRGB. Zone sets are grey: the zone hue
@@ -43,6 +44,10 @@ SETS = {
     'galvanised': ('corrugated_iron_02', 512, None, 'destripe', 1.6),
     'plywood': ('plywood', 512, None, 'tint', 1.3),
     'rubber_mat': ('rubber_tiles', 512, None, 'tint', 1.8),
+    # The House's upholstery and bedding, 256: a fine weave on a 27 cm tile,
+    # and it keeps every look set under the budget. The 1k download is
+    # 1024 x 1026: the square top.
+    'fabric': ('rough_linen', 256, (0, 0, 1024, 1024), 'tint', 1.4),
 }
 HDRI = 'autoshop_01'
 
@@ -111,8 +116,9 @@ def build(src_dir: str, out_dir: str, key: str) -> None:
     res = '1k' if size == 1024 else str(size)
     diff = Image.open(os.path.join(src_dir, f'{asset}_diff_1k.png')).convert('RGB')
     nor = Image.open(os.path.join(src_dir, f'{asset}_nor_gl_1k.png')).convert('RGB')
-    rough = Image.new('F', (1024, 1024))
-    rough.putdata(load_grey16(os.path.join(src_dir, f'{asset}_rough_1k.png')))
+    rough_path = os.path.join(src_dir, f'{asset}_rough_1k.png')
+    rough = Image.new('F', Image.open(rough_path).size)
+    rough.putdata(load_grey16(rough_path))
     if mode == 'destripe':
         g = destripe(grey_lin(diff), 1024, 1024)
         rough.putdata(destripe(px(rough), 1024, 1024))
@@ -222,14 +228,15 @@ def build_hdri(src_dir: str, out_dir: str) -> None:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
+    if len(sys.argv) < 2 or any(k not in SETS for k in sys.argv[2:]):
         print(__doc__)
         return 2
     here = os.path.dirname(os.path.abspath(__file__))
     out = os.path.join(os.path.dirname(here), 'assets', 'sim-looks', 'tex')
-    for key in SETS:
+    for key in sys.argv[2:] or SETS:
         build(sys.argv[1], out, key)
-    build_hdri(sys.argv[1], os.path.join(os.path.dirname(here), 'assets', 'sim-looks', 'hdri'))
+    if len(sys.argv) == 2:
+        build_hdri(sys.argv[1], os.path.join(os.path.dirname(here), 'assets', 'sim-looks', 'hdri'))
     return 0
 
 

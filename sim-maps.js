@@ -5,8 +5,10 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=bd51baa7fe22';
-import { LOOK, lookMaterial, lookBoxUv, lookFloor, lookLines, lookLooks, floorAo } from './sim-look.js?v=e9ead0f3bb33';
+import { planRoom } from './sim-room.js?v=c26e0c6bfbfc';
+import {
+  LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, floorAo,
+} from './sim-look.js?v=ad1c5d113420';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -189,7 +191,15 @@ export const LAYOUT = {
   trainer: { w: 28, d: 36, h: 10.5, wall: 0.34 },
   // Inner faces at exactly 20 × 15 × 6 m; walls sit outside (see buildRig).
   rig: { w: 70, d: 52.5, h: 21, wall: 0.35 },
+  // Inner faces at exactly 18 × 12 × 2.7 m, as the Rig (see buildHouse).
+  house: { w: 63, d: 42, h: 9.45, wall: 0.35 },
 };
+
+// The House's one key: a low afternoon sun from the west-north-west, warm.
+// Low, it lights a floor at sin 25 deg of its strength, so it is stronger than
+// the look's key overhead: its patches on the floor read about three times
+// the fill round them, as the Rig's key does.
+export const HOUSE_KEY = Object.freeze({ elevation: 25, azimuth: 250, color: 0xffd9a8, intensity: 9 });
 
 export const MAP_ORBIT = {
   city: { cx: 0, cy: 5, cz: 0, r: 92, h: 22, fov: 62 },
@@ -203,6 +213,8 @@ export const MAP_ORBIT = {
   trainer: { cx: 0, cy: 1.9, cz: 0, r: 8.2, h: 6.6, fov: 60 },
   room: { cx: 0, cy: 1.6, cz: 0, r: 3.4, h: 4.8, fov: 64 },
   rig: { cx: 0, cy: 3.0, cz: 0, r: 16, h: 14, fov: 66 },
+  // Round the open living room and kitchen, under the fan's blades.
+  house: { cx: 8.75, cy: 3.5, cz: 12.25, r: 5.25, h: 7, fov: 70 },
 };
 
 export const MAP_LOOKS = {
@@ -218,9 +230,10 @@ export const MAP_LOOKS = {
   // On the look (sim-look.js): one key, the HDRI's fill; no fog, no sky, no
   // hemisphere.
   rig: lookLooks(),
+  house: lookLooks({ sun: HOUSE_KEY.intensity }),
 };
 
-export const MAP_IDS = ['rig', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room'];
+export const MAP_IDS = ['rig', 'house', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room'];
 
 function mat(THREE, hex, set, extras) {
   const m = new THREE.MeshStandardMaterial(Object.assign({
@@ -1196,8 +1209,440 @@ function buildRig(THREE, parent, colliders) {
   return { floor, orbit: MAP_ORBIT.rig };
 }
 
+// The House: a one-storey home at whoop scale, 18 × 12 × 2.7 m, the second map
+// on the look. Metres here, scene axes (y up, +z the street side); buildHouse
+// scales by HOUSE_WS. The rooms ring a core and the House Loop
+// (tracks/house-loop.json) rings them anticlockwise seen from above: the entry
+// hall; the living room (through the bookshelf gap, round its end, over the
+// sofa back under the fan); the kitchen (over the island, a dive over the
+// stools); a climb through the hallway's three doors; the bedroom (over the
+// bed); the walk-through closet; the bathroom (once round the tub, climbing);
+// the back hall's sliding door; the patio (a chair, under the table, the other
+// chair); the garden door back into the hall. Real sizes: doors 0.8 × 2.0,
+// counters 0.9, table 0.75, chair backs 0.9, sofa seat 0.45, bed 0.55. Boxes
+// only, axis-aligned, nothing under 6 cm thick and no slot of 4–10 cm
+// (sim-core issue #5), as the Rig.
+export const HOUSE_WS = 3.5; // world units per metre, as sim-core-adapter.js WS
+const HOUSE_H = 2.7;
+function houseBoxes() {
+  const out = [];
+  const r = (v) => Math.round(v * 1e4) / 1e4;
+  const b = (room, mat, feature, part, x0, y0, z0, x1, y1, z1) => {
+    out.push(Object.freeze({ room, mat, feature, part, min: [r(x0), r(y0), r(z0)], max: [r(x1), r(y1), r(z1)] }));
+  };
+  // A wall t thick about c, from a0 to a1 along z (alongZ) or x, with door
+  // openings { at, w, h }: the solid runs either side, a lintel over each.
+  const wall = (room, alongZ, c, t, a0, a1, holes) => {
+    const put = (p0, p1, y0, part) => {
+      if (p1 - p0 < 1e-6) return;
+      if (alongZ) b(room, 'wall', 'walls', part, c - t / 2, y0, p0, c + t / 2, HOUSE_H, p1);
+      else b(room, 'wall', 'walls', part, p0, y0, c - t / 2, p1, HOUSE_H, c + t / 2);
+    };
+    let at = a0;
+    for (const h of holes || []) {
+      put(at, h.at - h.w / 2, 0, 'wall');
+      put(h.at - h.w / 2, h.at + h.w / 2, h.h, 'lintel');
+      at = h.at + h.w / 2;
+    }
+    put(at, a1, 0, 'wall');
+  };
+  const door = { w: 0.8, h: 2.0 };
+  const at = (c, o) => Object.assign({ at: c }, door, o);
+  // Walls. The house's west wall stands between the back hall / entry and the
+  // patio: the sliding door (its open half, then the fixed pane) and the
+  // garden door. The rest of the outer walls are the shell (buildHouse).
+  wall('hall', true, -5.6, 0.2, -6, 6, [at(-4.6, { w: 2.0, h: 2.05 }), at(4.3)]);
+  wall('core', false, -1.4, 0.1, -2.75, 9, [at(8.2)]);
+  wall('entry', true, -2.5, 0.1, -1.35, 6, [at(4.3, { w: 1.2, h: 2.1 })]);
+  wall('entry', false, 1.05, 0.1, -5.5, -2.55);
+  wall('bathroom', true, -2.7, 0.1, -6, -1.45, [at(-5.1)]);
+  wall('closet', true, 1.5, 0.1, -6, -1.45, [at(-5.1)]);
+  wall('closet', true, 3.4, 0.1, -6, -1.45, [at(-5.1)]);
+  wall('closet', false, -4.1, 0.1, 1.55, 3.35);
+  wall('hallway', true, 7.4, 0.1, -1.35, 1.7);
+  wall('hallway', false, 1.65, 0.1, 7.45, 9, [at(8.2)]);
+  wall('hallway', false, 0.1, 0.1, 7.45, 9, [at(8.2)]);
+  // Doors, open 90 degrees, beside their openings; the front door shut.
+  b('hallway', 'white', 'doors', 'door 1', 8.6, 0, 0.8, 8.66, 2.0, 1.6);
+  b('hallway', 'white', 'doors', 'door 2', 7.74, 0, -0.75, 7.8, 2.0, 0.05);
+  b('bedroom', 'white', 'doors', 'door 3', 8.6, 0, -2.25, 8.66, 2.0, -1.45);
+  b('hall', 'white', 'doors', 'bathroom door', -3.55, 0, -5.56, -2.75, 2.0, -5.5);
+  b('patio', 'white', 'doors', 'garden door', -6.5, 0, 4.7, -5.7, 2.0, 4.76);
+  b('entry', 'blue', 'doors', 'front door', -4.5, 0, 5.94, -3.5, 2.1, 6);
+  // The sliding door: the moving pane parked over the fixed one.
+  b('hall', 'glass', 'sliding door', 'fixed pane', -5.63, 0, -4.6, -5.57, 2.05, -3.6);
+  b('hall', 'glass', 'sliding door', 'sliding pane', -5.69, 0, -4.6, -5.63, 2.05, -3.6);
+  b('hall', 'steel', 'sliding door', 'mullion', -5.7, 0, -4.66, -5.5, 2.05, -4.6);
+  // Entry hall: a sideboard and its mirror, a bench by the front door.
+  b('entry', 'wood', 'entry', 'sideboard', -5.1, 0, 1.1, -3.7, 0.8, 1.5);
+  b('entry', 'steel', 'entry', 'mirror', -4.9, 1.2, 1.1, -3.9, 1.9, 1.16);
+  b('entry', 'wood', 'entry', 'bench', -5.5, 0, 5.6, -4.8, 0.45, 6);
+  // Living room. The bookshelf: a free-standing open divider, three bays; the
+  // middle bay has no shelf from 0.9 to 1.68 m: the gap the line threads.
+  const sz0 = 1.45, sz1 = 1.8;
+  const ups = [-1.92, -1.26, -0.6, 0.06];
+  for (const x of ups) b('living', 'wood', 'bookshelf', 'upright', x, 0, sz0, x + 0.06, 1.94, sz1);
+  // Boards the whole width (through the uprights): the 15 cm plinth, the
+  // shelves at 0.42, 0.84 (the gap's sill) and 1.68 (its head), the top; the
+  // outer bays a shelf at 1.26 too.
+  for (const [y0, y1] of [[0, 0.15], [0.42, 0.48], [0.84, 0.9], [1.68, 1.74], [1.94, 2.0]]) {
+    b('living', 'wood', 'bookshelf', y0 ? (y0 === 0.84 ? 'gap sill' : 'shelf') : 'plinth', ups[0], y0, sz0, ups[3] + 0.06, y1, sz1);
+  }
+  for (const i of [0, 2]) b('living', 'wood', 'bookshelf', 'shelf', ups[i] + 0.06, 1.26, sz0, ups[i + 1], 1.32, sz1);
+  // Books: blocks 24 cm tall on a shelf (12 cm under the next), 16 on the
+  // plinth, flush to an upright and never flush to both sides of one.
+  const books = [
+    [0.15, 0.16, -1.86, -1.56, 'blue'], [0.48, 0.24, -1.86, -1.62, 'white'], [0.9, 0.24, -1.5, -1.26, 'terracotta'],
+    [1.32, 0.24, -1.86, -1.6, 'blue'], [0.15, 0.16, -1.2, -0.92, 'white'], [0.48, 0.24, -0.84, -0.6, 'terracotta'],
+    [0.15, 0.16, -0.54, -0.3, 'terracotta'], [0.48, 0.24, -0.18, 0.06, 'blue'], [0.9, 0.24, -0.54, -0.3, 'white'],
+    [1.32, 0.24, -0.24, 0.06, 'blue'],
+  ];
+  for (const [y, h, x0, x1, mat] of books) b('living', mat, 'bookshelf', 'books', x0, y, 1.5, x1, y + h, 1.75);
+  // The sofa faces the TV on the street wall; the fan hangs over its back.
+  b('living', 'sofa', 'sofa', 'seat', 1.2, 0, 2.1, 3.4, 0.45, 3.05);
+  b('living', 'sofa', 'sofa', 'back', 1.2, 0.45, 2.1, 3.4, 0.85, 2.3);
+  b('living', 'sofa', 'sofa', 'arm', 1.2, 0.45, 2.3, 1.4, 0.62, 3.05);
+  b('living', 'sofa', 'sofa', 'arm', 3.2, 0.45, 2.3, 3.4, 0.62, 3.05);
+  b('living', 'wood', 'coffee table', 'top', 1.3, 0.36, 3.6, 2.3, 0.42, 4.2);
+  for (const [x, z] of [[1.3, 3.6], [2.24, 3.6], [1.3, 4.14], [2.24, 4.14]]) b('living', 'wood', 'coffee table', 'leg', x, 0, z, x + 0.06, 0.36, z + 0.06);
+  b('living', 'wood', 'tv unit', 'unit', 1.3, 0, 5.55, 3.3, 0.5, 6);
+  b('living', 'black', 'tv unit', 'tv', 1.7, 0.5, 5.7, 2.9, 1.22, 5.78);
+  b('living', 'steel', 'fan', 'blade', 1.65, 2.29, 2.135, 2.95, 2.35, 2.265);
+  b('living', 'steel', 'fan', 'blade', 2.235, 2.29, 1.55, 2.365, 2.35, 2.85);
+  b('living', 'steel', 'fan', 'motor', 2.2, 2.35, 2.1, 2.4, 2.5, 2.3);
+  b('living', 'steel', 'fan', 'downrod', 2.27, 2.5, 2.17, 2.33, 2.7, 2.23);
+  b('living', 'sofa', 'armchair', 'seat', -2.25, 0, -1.2, -1.45, 0.42, -0.4);
+  b('living', 'sofa', 'armchair', 'back', -2.25, 0.42, -1.2, -1.45, 0.8, -1.0);
+  // Kitchen: the island (white, a steel top, its overhang over the stools),
+  // three stools, the street-side run with the range and its hood between
+  // open shelves, and on the core side the fridge and a second run.
+  b('kitchen', 'white', 'island', 'base', 3.5, 0, 2.9, 4.4, 0.84, 4.7);
+  b('kitchen', 'steel', 'island', 'top', 3.45, 0.84, 2.85, 4.6, 0.9, 4.75);
+  for (const z of [3.2, 3.8, 4.4]) {
+    b('kitchen', 'wood', 'stools', 'seat', 4.75, 0.62, z - 0.18, 5.11, 0.68, z + 0.18);
+    for (const [x, dz] of [[4.75, -0.18], [5.05, -0.18], [4.75, 0.12], [5.05, 0.12]]) {
+      b('kitchen', 'steel', 'stools', 'leg', x, 0, z + dz, x + 0.06, 0.62, z + dz + 0.06);
+    }
+  }
+  b('kitchen', 'white', 'cabinets', 'base', 3.6, 0, 5.4, 9, 0.84, 6);
+  b('kitchen', 'steel', 'cabinets', 'counter', 3.6, 0.84, 5.35, 9, 0.9, 6);
+  b('kitchen', 'black', 'cabinets', 'oven', 5.95, 0.15, 5.34, 6.75, 0.84, 5.4);
+  b('kitchen', 'steel', 'range hood', 'canopy', 5.9, 1.55, 5.45, 6.8, 1.75, 6);
+  b('kitchen', 'steel', 'range hood', 'chimney', 6.15, 1.75, 5.7, 6.55, 2.7, 6);
+  // Open shelves: three boards the run's length, the sides through them.
+  const openShelves = (x0, x1, z0, z1) => {
+    for (const y of [1.45, 1.85, 2.25]) b('kitchen', 'white', 'cabinets', 'open shelf', x0, y, z0, x1, y + 0.06, z1);
+    for (const x of [x0, x1 - 0.06]) b('kitchen', 'white', 'cabinets', 'open shelf side', x, 1.45, z0, x + 0.06, 2.31, z1);
+  };
+  openShelves(3.6, 5.75, 5.65, 6);
+  openShelves(6.95, 9, 5.65, 6);
+  b('kitchen', 'steel', 'cabinets', 'fridge', 6.6, 0, -1.35, 7.35, 2.0, -0.65);
+  b('kitchen', 'white', 'cabinets', 'base', 3.6, 0, -1.35, 6.45, 0.84, -0.75);
+  b('kitchen', 'steel', 'cabinets', 'counter', 3.6, 0.84, -1.35, 6.45, 0.9, -0.7);
+  openShelves(3.6, 6.45, -1.35, -1.0);
+  // Bedroom: the bed's head on the back wall, a nightstand and lamp each side,
+  // a dresser on the closet wall.
+  b('bedroom', 'blue', 'bed', 'headboard', 4.45, 0, -6, 6.15, 1.1, -5.85);
+  b('bedroom', 'blue', 'bed', 'base', 4.45, 0, -6, 6.15, 0.3, -3.9);
+  b('bedroom', 'bedding', 'bed', 'duvet', 4.45, 0.3, -6, 6.15, 0.55, -3.9);
+  b('bedroom', 'sofa', 'bed', 'pillow', 4.65, 0.55, -5.85, 5.22, 0.67, -5.45);
+  b('bedroom', 'sofa', 'bed', 'pillow', 5.38, 0.55, -5.85, 5.95, 0.67, -5.45);
+  for (const x of [4.0, 6.15]) {
+    b('bedroom', 'blue', 'nightstands', 'nightstand', x, 0, -6, x + 0.45, 0.55, -5.55);
+    b('bedroom', 'steel', 'nightstands', 'lamp', x + 0.195, 0.55, -5.81, x + 0.255, 0.85, -5.75);
+    b('bedroom', 'sofa', 'nightstands', 'lamp shade', x + 0.115, 0.85, -5.89, x + 0.335, 1.05, -5.67);
+  }
+  b('bedroom', 'blue', 'bedroom', 'dresser', 3.45, 0, -3.6, 3.95, 0.8, -2.2);
+  // Walk-through closet: hanging on the back wall, open shelves on the other.
+  b('closet', 'steel', 'closet', 'rail', 1.55, 1.7, -5.8, 3.35, 1.76, -5.74);
+  b('closet', 'sofa', 'closet', 'clothes', 1.55, 0.95, -6, 2.35, 1.7, -5.55);
+  b('closet', 'bedding', 'closet', 'clothes', 2.5, 0.95, -6, 3.35, 1.7, -5.55);
+  b('closet', 'blue', 'closet', 'shelf', 1.55, 1.9, -6, 3.35, 1.96, -5.6);
+  for (const x of [1.55, 3.29]) b('closet', 'blue', 'closet', 'shelf side', x, 0, -4.55, x + 0.06, 1.94, -4.15);
+  for (const y of [0, 0.5, 1.0, 1.5, 1.94]) b('closet', 'blue', 'closet', y ? 'shelf' : 'plinth', 1.55, y, -4.55, 3.35, y ? y + 0.06 : 0.15, -4.15);
+  b('closet', 'sofa', 'closet', 'folded', 1.75, 0.15, -4.5, 2.2, 0.35, -4.15);
+  b('closet', 'bedding', 'closet', 'folded', 2.5, 0.56, -4.5, 3.1, 0.76, -4.15);
+  b('closet', 'sofa', 'closet', 'folded', 1.8, 1.06, -4.5, 2.6, 1.26, -4.15);
+  // Bathroom: the tub free-standing in the middle (the line goes round it),
+  // a vanity and mirror, the WC.
+  b('bathroom', 'white', 'tub', 'bottom', -1.45, 0, -3.9, 0.25, 0.2, -3.1);
+  b('bathroom', 'white', 'tub', 'side', -1.45, 0.2, -3.9, 0.25, 0.6, -3.82);
+  b('bathroom', 'white', 'tub', 'side', -1.45, 0.2, -3.18, 0.25, 0.6, -3.1);
+  b('bathroom', 'white', 'tub', 'end', -1.45, 0.2, -3.82, -1.37, 0.6, -3.18);
+  b('bathroom', 'white', 'tub', 'end', 0.17, 0.2, -3.82, 0.25, 0.6, -3.18);
+  b('bathroom', 'white', 'bathroom', 'vanity', -2.2, 0, -6, -0.9, 0.85, -5.45);
+  b('bathroom', 'steel', 'bathroom', 'mirror', -2.1, 1.1, -6, -1.0, 1.9, -5.94);
+  b('bathroom', 'white', 'bathroom', 'wc cistern', 1.25, 0, -2.3, 1.45, 0.8, -1.75);
+  b('bathroom', 'white', 'bathroom', 'wc bowl', 0.8, 0, -2.2, 1.25, 0.42, -1.85);
+  // Back hall: a sideboard and a pot by the sliding door's light.
+  b('hall', 'wood', 'hall', 'sideboard', -3.0, 0, -1.2, -2.55, 0.8, 0.8);
+  b('hall', 'terracotta', 'hall', 'pot', -5.35, 0, 0.45, -4.95, 0.45, 0.85);
+  // Patio: posts holding the roof's edge, glass over the garden wall (the
+  // shell's), the table, a chair either side of the line, two pots.
+  for (const z of [-6, -0.06, 5.88]) b('patio', 'wood', 'patio', 'post', -9, 0, z, -8.88, HOUSE_H, z + 0.12);
+  b('patio', 'glass', 'patio', 'screen', -9, 0.9, -6, -8.94, HOUSE_H, 6);
+  b('patio', 'glass', 'patio', 'screen', -9, 0.9, -6, -5.7, HOUSE_H, -5.94);
+  b('patio', 'glass', 'patio', 'screen', -9, 0.9, 5.94, -5.7, HOUSE_H, 6);
+  b('patio', 'wood', 'patio table', 'top', -8.05, 0.69, -0.85, -7.15, 0.75, 0.05);
+  for (const [x, z] of [[-8.05, -0.85], [-7.21, -0.85], [-8.05, -0.01], [-7.21, -0.01]]) b('patio', 'wood', 'patio table', 'leg', x, 0, z, x + 0.06, 0.69, z + 0.06);
+  // A chair: the back legs run up as its back's posts.
+  const chair = (x0, z0, backZ) => {
+    b('patio', 'terracotta', 'patio chairs', 'seat', x0, 0.39, z0, x0 + 0.45, 0.45, z0 + 0.45);
+    for (const [dx, dz] of [[0, 0], [0.39, 0], [0, 0.39], [0.39, 0.39]]) {
+      const post = Math.abs(z0 + dz - backZ) < 1e-9;
+      b('patio', 'terracotta', 'patio chairs', post ? 'post' : 'leg', x0 + dx, 0, z0 + dz, x0 + dx + 0.06, post ? 0.9 : 0.39, z0 + dz + 0.06);
+    }
+    b('patio', 'terracotta', 'patio chairs', 'back', x0, 0.45, backZ, x0 + 0.45, 0.9, backZ + 0.06);
+  };
+  chair(-8.2, -3.125, -3.125);
+  chair(-7.45, 1.775, 2.165);
+  b('patio', 'terracotta', 'patio', 'pot', -8.7, 0, -5.8, -8.25, 0.5, -5.35);
+  b('patio', 'terracotta', 'patio', 'pot', -8.7, 0, 5.35, -8.25, 0.5, 5.8);
+  return out;
+}
+
+// Floors: a surface per room, metres, tiling the 18 × 12 m with no overlap.
+const HOUSE_FLOORS = Object.freeze([
+  Object.freeze({ mat: 'floorWood', x0: -5.7, x1: 3.45, z0: -1.4, z1: 6 }),
+  Object.freeze({ mat: 'floorWood', x0: -5.7, x1: -2.65, z0: -6, z1: -1.4 }),
+  Object.freeze({ mat: 'floorWood', x0: 1.45, x1: 9, z0: -6, z1: -1.4 }),
+  Object.freeze({ mat: 'floorTile', x0: 3.45, x1: 9, z0: -1.4, z1: 6 }),
+  Object.freeze({ mat: 'floorBath', x0: -2.65, x1: 1.45, z0: -6, z1: -1.4 }),
+  Object.freeze({ mat: 'floorPatio', x0: -9, x1: -5.7, z0: -6, z1: 6 }),
+]);
+
+// The House Loop's line, metres: a turtle from the start pad heading +x,
+// through every room and back. ['L', d] runs straight; ['A', r, deg] arcs at
+// radius r, turning left for a positive angle (+x toward -z); ['H', h] pins
+// the height here (a monotone cubic between pins); ['G', size, name] puts a
+// gate here, its ring radius size. tracks/house-loop.json is its gates
+// (tools/build_house_loop.mjs).
+const HOUSE_LINE = Object.freeze([
+  ['H', 1.1], ['L', 1.7], ['G', 0.45, 'entry arch'], ['H', 1.15],
+  ['A', 1.6, 90], ['L', 1.08], ['G', 0.3, 'bookshelf gap'], ['H', 1.29], ['L', 0.92],
+  ['A', 1.6, -90], ['G', 0.4, 'round the bookshelf'], ['H', 1.45], ['A', 1.6, -90], ['L', 1.5], ['G', 0.4, 'sofa back, under the fan'], ['H', 1.2],
+  ['A', 1.6, 90], ['L', 0.05], ['G', 0.4, 'kitchen island'], ['H', 1.25], ['L', 0.65], ['H', 1.21], ['L', 2.0],
+  ['A', 1.6, 45], ['G', 0.4, 'into the hallway'], ['A', 1.6, 45], ['L', 0.55], ['G', 0.33, 'hallway door 1'], ['H', 0.75],
+  ['L', 1.55], ['H', 1.05], ['L', 1.5], ['G', 0.33, 'hallway door 3'], ['H', 1.3], ['L', 2.1],
+  ['A', 1.6, 45], ['G', 0.4, 'into the bedroom'], ['A', 1.6, 45], ['L', 1.3], ['G', 0.45, 'over the bed'], ['H', 1.0],
+  ['L', 2.85], ['G', 0.33, 'closet'], ['H', 0.75], ['L', 3.05], ['H', 0.7],
+  ['A', 1.65, 90], ['G', 0.4, 'round the tub'], ['A', 1.65, 90], ['G', 0.4, 'round the tub'], ['A', 1.65, 90], ['G', 0.4, 'round the tub'],
+  ['A', 1.65, 90], ['G', 0.4, 'over the way in'], ['H', 1.45], ['L', 5.0], ['G', 0.4, 'sliding door'], ['H', 1.3], ['L', 0.15],
+  ['A', 1.6, 90], ['L', 0.6], ['G', 0.4, 'patio chair'], ['H', 0.75], ['L', 1.3],
+  ['A', 3, -15], ['H', 0.35], ['A', 3, -8.556], ['G', 0.3, 'under the table'], ['A', 3, 8.556], ['H', 0.35], ['A', 3, 15],
+  ['L', 1.2], ['G', 0.4, 'patio chair'], ['L', 0.702],
+  ['A', 1.6, 90], ['L', 0.65], ['G', 0.33, 'garden door'], ['H', 1.1], ['L', 1.4],
+]);
+
+// The line sampled every ds metres: points [x, y, z], the arc length s, the
+// plan heading, and the gates { at (index), size, name, ry }.
+export function houseLine(ds) {
+  const step = ds || 0.01;
+  let x = -4.2, z = 4.3, hx = 1, hz = 0, s = 0;
+  const plan = [[x, z, s, hx, hz]], pins = [], gates = [];
+  const go = (d) => { const n = Math.max(1, Math.ceil(d / step)); for (let i = 1; i <= n; i++) { x += hx * d / n; z += hz * d / n; s += d / n; plan.push([x, z, s, hx, hz]); } };
+  const arc = (rad, deg) => {
+    const a = Math.abs(deg) * Math.PI / 180, sgn = Math.sign(deg), n = Math.max(1, Math.ceil(rad * a / step));
+    for (let i = 1; i <= n; i++) {
+      const p = sgn * a / n, c = Math.cos(p), sn = Math.sin(p);
+      // The chord of this step, then the turn: a left turn takes +x to -z.
+      const mx = hx * Math.cos(p / 2) + hz * Math.sin(p / 2), mz = -hx * Math.sin(p / 2) + hz * Math.cos(p / 2);
+      const chord = 2 * rad * Math.sin(a / n / 2);
+      x += mx * chord; z += mz * chord; s += rad * a / n;
+      [hx, hz] = [hx * c + hz * sn, -hx * sn + hz * c];
+      plan.push([x, z, s, hx, hz]);
+    }
+  };
+  for (const op of HOUSE_LINE) {
+    if (op[0] === 'L') go(op[1]);
+    else if (op[0] === 'A') arc(op[1], op[2]);
+    else if (op[0] === 'H') pins.push([s, op[1]]);
+    else if (op[0] === 'G') gates.push({ s, size: op[1], name: op[2], ry: Math.atan2(hx, hz) });
+  }
+  // Heights: a monotone cubic through the pins (Fritsch-Carlson), so a dive
+  // never undershoots its pin; closed, so the end meets the start.
+  const L = s, k = pins.concat([[L + pins[0][0], pins[0][1]]]);
+  const m = k.map((p, i) => {
+    if (i === 0 || i === k.length - 1) {
+      const a = i ? k[i - 1] : [k[k.length - 2][0] - L, k[k.length - 2][1]], b = i ? [k[1][0] + L, k[1][1]] : k[1];
+      const d0 = (p[1] - a[1]) / (p[0] - a[0]), d1 = (b[1] - p[1]) / (b[0] - p[0]);
+      return d0 * d1 <= 0 ? 0 : 2 / (1 / d0 + 1 / d1);
+    }
+    const d0 = (p[1] - k[i - 1][1]) / (p[0] - k[i - 1][0]), d1 = (k[i + 1][1] - p[1]) / (k[i + 1][0] - p[0]);
+    return d0 * d1 <= 0 ? 0 : 2 / (1 / d0 + 1 / d1);
+  });
+  const height = (t) => {
+    let u = t < k[0][0] ? t + L : t;
+    let i = 0;
+    while (i < k.length - 2 && k[i + 1][0] < u) i++;
+    const [s0, h0] = k[i], [s1, h1] = k[i + 1], d = s1 - s0, q = (u - s0) / d;
+    const q2 = q * q, q3 = q2 * q;
+    return (2 * q3 - 3 * q2 + 1) * h0 + (q3 - 2 * q2 + q) * d * m[i] + (-2 * q3 + 3 * q2) * h1 + (q3 - q2) * d * m[i + 1];
+  };
+  const points = plan.map(([px, pz, ps]) => [px, height(ps), pz]);
+  const at = (t) => plan.findIndex((p) => p[2] >= t - 1e-9);
+  return {
+    length: L,
+    closes: Math.hypot(x + 4.2, z - 4.3) + Math.hypot(hx - 1, hz),
+    points,
+    s: plan.map((p) => p[2]),
+    gates: gates.map((g) => Object.assign(g, { at: at(g.s) })),
+  };
+}
+
+export const HOUSE_PLAY = Object.freeze({
+  room: Object.freeze({ w: 18, d: 12, h: HOUSE_H }),
+  // The start pad, on the floor of the entry hall, nose down the line (+x).
+  start: Object.freeze([-4.2, 0.35, 4.3]),
+  // The patio strip, open air under the roof's edge: glass over a 0.9 m
+  // garden wall on its three outer sides.
+  patio: Object.freeze({ x0: -9, x1: -5.7, z0: -6, z1: 6, gardenWall: 0.9 }),
+  // The owner's real dimensions, metres.
+  sizes: Object.freeze({ door: Object.freeze([0.8, 2.0]), table: 0.75, chairBack: 0.9, counter: 0.9, sofaSeat: 0.45, bed: 0.55 }),
+  floors: HOUSE_FLOORS,
+  boxes: Object.freeze(houseBoxes()),
+});
+
+// The House on the look: every surface a look surface, the zone hues as paint
+// and dye tints (living warm neutral, kitchen white and steel, bedroom blue,
+// bathroom tile, patio terracotta). Walls and ceilings are warm white plaster.
+// Floors: oak boards, glazed tile (kitchen and hallway, bathroom), terracotta
+// on the patio. New to the look: the fabric set, and two surfaces with no new
+// texture, plaster and glass.
+// albedoVar: how much of its set's own albedo a paint lets show (sim-look.js).
+function houseSurface(type, look, color, albedoVar) {
+  const s = LOOK.surfaces[look];
+  return Object.freeze({ type, look, color, roughness: s.roughness, metalness: s.metalness, albedoVar });
+}
+export const HOUSE_LOOK = Object.freeze({
+  surfaces: Object.freeze({
+    wall: houseSurface('painted plaster', 'plaster', 0xf2e6d6),
+    ceiling: houseSurface('ceiling plaster', 'plaster', 0xf6f3ee),
+    floorWood: houseSurface('oak floorboards', 'plywood', 0xc0915f),
+    floorTile: houseSurface('glazed floor tile', 'enamel', 0xdcdcd8, 0.5),
+    floorBath: houseSurface('bathroom tile', 'enamel', 0x86c6be, 0.5),
+    floorPatio: houseSurface('terracotta tile', 'deck', 0xc56a43, 0.7),
+    white: houseSurface('white lacquer', 'enamel', 0xf1efea, 0.35),
+    steel: houseSurface('brushed steel', 'galvanised', 0xc9cdd2, 0.6),
+    wood: houseSurface('oiled oak', 'plywood', 0xa77a4f),
+    sofa: houseSurface('linen upholstery', 'fabric', 0xc8b59c),
+    bedding: houseSurface('blue linen', 'fabric', 0x4a6dab),
+    blue: houseSurface('blue paint', 'enamel', 0x45669b, 0.5),
+    terracotta: houseSurface('terracotta paint', 'paintedSteel', 0xb85b37, 0.6),
+    black: houseSurface('black gloss', 'enamel', 0x1c1d20, 0.5),
+  }),
+  // The HDRI fill's balance on every surface here (sim-look.js opts.fill):
+  // warmer, and up to light rooms the low key reaches only in patches.
+  fill: Object.freeze([1.55, 1.35, 1.12]),
+  // The ceilings see the HDRI's dim lower half: their fill is up again, the
+  // floors' bounce, and less warm.
+  ceilingFill: Object.freeze([2.4, 2.2, 2.0]),
+  // Each room's hue: the surface that carries it.
+  zones: Object.freeze({ living: 'sofa', kitchen: 'white', bedroom: 'blue', bathroom: 'floorBath', patio: 'floorPatio' }),
+  // Floor patterns, metres: boards 18 cm × 1.2 m; tiles 60 cm (kitchen and
+  // hallway), 30 cm (bathroom), 40 cm (patio).
+  boards: Object.freeze({ width: 0.18, length: 1.2 }),
+  tiles: Object.freeze({ floorTile: 0.6, floorBath: 0.3, floorPatio: 0.4 }),
+  // The sky past the patio glass: zenith, horizon, ground (linear RGB).
+  sky: Object.freeze({ zenith: [0.42, 0.62, 0.95], horizon: [1.25, 1.12, 0.95], ground: [0.22, 0.26, 0.17] }),
+});
+
+function buildHouse(THREE, parent, colliders) {
+  const P = HOUSE_PLAY, s = HOUSE_WS, R = P.room, L = LAYOUT.house;
+  const hx = R.w * s / 2, hz = R.d * s / 2, H = R.h * s, t = L.wall;
+  const S = HOUSE_LOOK.surfaces;
+  const tileSpec = (m) => ({ minor: m, major: m, minorWidth: 0.004, majorWidth: 0.004, minorDark: 0.4, majorDark: 0.4 });
+  // Faces sit a hair behind their edge lines so the lines never z-fight.
+  const mats = {};
+  for (const [key, f] of Object.entries(S)) {
+    const o = { extras: { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }, fill: key === 'ceiling' ? HOUSE_LOOK.ceilingFill : HOUSE_LOOK.fill, albedoVar: f.albedoVar };
+    if (key === 'floorWood') o.boards = Object.assign({ origin: [-hx, -hz], unit: s }, HOUSE_LOOK.boards);
+    if (HOUSE_LOOK.tiles[key]) o.joints = { origin: [-hx, -hz], unit: s, spec: tileSpec(HOUSE_LOOK.tiles[key]) };
+    mats[key] = lookMaterial(THREE, f.look, f.color, o);
+    mats[key].name = 'house ' + f.type;
+  }
+  mats.glass = lookGlass(THREE);
+  mats.glass.name = 'house glass';
+  const tiled = (mesh) => lookBoxUv(mesh, mesh.material.userData.lookTile * s);
+  const vis = new THREE.Group();
+  vis.name = 'houseArtVisuals';
+  parent.add(vis);
+  const edges = [];
+  const edge = (a, b) => {
+    const add = (p, q) => edges.push(p[0], p[1], p[2], q[0], q[1], q[2]);
+    for (const y of [a[1], b[1]]) {
+      add([a[0], y, a[2]], [b[0], y, a[2]]); add([a[0], y, b[2]], [b[0], y, b[2]]);
+      add([a[0], y, a[2]], [a[0], y, b[2]]); add([b[0], y, a[2]], [b[0], y, b[2]]);
+    }
+    for (const [x, z] of [[a[0], a[2]], [b[0], a[2]], [a[0], b[2]], [b[0], b[2]]]) add([x, a[1], z], [x, b[1], z]);
+  };
+  for (const r of P.boxes) {
+    const a = r.min.map((v) => v * s), b = r.max.map((v) => v * s);
+    const mesh = box(THREE, vis, colliders, (a[0] + b[0]) / 2, a[1], (a[2] + b[2]) / 2,
+      b[0] - a[0], b[1] - a[1], b[2] - a[2], mats[r.mat]);
+    mesh.name = 'house_' + r.mat;
+    if (r.mat === 'glass') {
+      // The key comes in through the glass.
+      mesh.castShadow = false;
+      continue;
+    }
+    tiled(mesh);
+    edge(a, b);
+  }
+  // The floors share one AO map (floorAo) over the 18 × 12 m.
+  const ao = lookAoTexture(THREE, floorAo(P.boxes, R));
+  let floor = null;
+  for (const f of P.floors) {
+    const mesh = lookFloorPatch(THREE, mats[f.mat], R, s, f, ao);
+    mesh.name = 'house floor ' + f.mat;
+    vis.add(mesh);
+    if (!floor) floor = mesh;
+  }
+  // Shell: inner faces at exactly ±9 × ±6 × 2.7 m. The house's outer walls,
+  // the 0.9 m garden wall round the patio (glass above it is the patio's), the
+  // ceiling and the patio roof as one slab. Everything casts: the key is a
+  // low afternoon sun from the west, and it comes in off the patio only.
+  const px = P.patio.x1 * s, gw = P.patio.gardenWall * s;
+  const shell = [
+    box(THREE, vis, colliders, hx + t / 2, 0, 0, t, H, 2 * hz + 2 * t, mats.wall),
+    box(THREE, vis, colliders, (px + hx + t) / 2, 0, -hz - t / 2, hx + t - px, H, t, mats.wall),
+    box(THREE, vis, colliders, (px + hx + t) / 2, 0, hz + t / 2, hx + t - px, H, t, mats.wall),
+    box(THREE, vis, colliders, (-hx - t + px) / 2, 0, -hz - t / 2, px + hx + t, gw, t, mats.wall),
+    box(THREE, vis, colliders, (-hx - t + px) / 2, 0, hz + t / 2, px + hx + t, gw, t, mats.wall),
+    box(THREE, vis, colliders, -hx - t / 2, 0, 0, t, gw, 2 * hz, mats.wall),
+    box(THREE, vis, colliders, 0, H, 0, 2 * hx + 2 * t, 0.24, 2 * hz + 2 * t, mats.ceiling),
+  ];
+  for (const m of shell) tiled(m);
+  edge([-hx, 0, -hz], [hx, H, hz]);
+  // The sky past the glass: a gradient box, unlit, behind everything.
+  const sky = new THREE.BoxGeometry(hx * 6, H * 12, hz * 8, 1, 12, 1);
+  const pos = sky.getAttribute('position'), col = [];
+  const K = HOUSE_LOOK.sky;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i) + H * 4;
+    const u = Math.pow(Math.min(1, Math.max(0, y / (H * 6))), 0.6);
+    const c = y < 0 ? K.ground : K.horizon.map((v, k) => v + (K.zenith[k] - v) * u);
+    col.push(c[0], c[1], c[2]);
+  }
+  sky.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const skyMesh = new THREE.Mesh(sky, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+  skyMesh.position.y = H * 4;
+  skyMesh.name = 'houseSky';
+  skyMesh.renderOrder = -1;
+  skyMesh.userData.artKeep = true;
+  skyMesh.material.userData.looksSkip = true;
+  vis.add(skyMesh);
+  // The edge lines at the look's 60%, bloomed (sim-look.js lookLines).
+  const lines = lookLines(THREE, edges);
+  lines.name = 'houseEdges';
+  lines.userData.artKeep = true;
+  vis.add(lines);
+  return { floor, orbit: MAP_ORBIT.house };
+}
+
 const BUILDERS = {
   rig: buildRig,
+  house: buildHouse,
   living: buildLiving,
   garage: buildGarage,
   warehouse: buildWarehouse,

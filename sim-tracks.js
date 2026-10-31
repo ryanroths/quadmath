@@ -43,6 +43,7 @@ export const FROZEN_CITY = {
 
 export const MAPS = [
   { id: 'rig', name: 'The Rig', class: 'whoop', indoor: true },
+  { id: 'house', name: 'The House', class: 'whoop', indoor: true },
   { id: 'city', name: 'City', class: 'open', indoor: false },
   { id: 'living', name: 'Living Room', class: 'whoop', indoor: true },
   { id: 'garage', name: 'Garage', class: 'whoop', indoor: true },
@@ -79,9 +80,10 @@ export function knownMapId(id) {
 }
 
 // The map a fresh pilot launches into, and the fallback for an unknown or
-// closed one. The other maps are open with ?dev=1 only (mapOpen).
+// closed one. The House is open beside it (Fly and Tracks); the other maps
+// are open with ?dev=1 only (mapOpen).
 export const DEFAULT_MAP = 'rig';
-export const PUBLIC_MAPS = Object.freeze([DEFAULT_MAP]);
+export const PUBLIC_MAPS = Object.freeze([DEFAULT_MAP, 'house']);
 export function mapOpen(mapId, dev) {
   return !!dev || PUBLIC_MAPS.includes(mapId);
 }
@@ -150,6 +152,8 @@ export function freestyleStart(mapId) {
   if (map === 'city') return { x: 0, y: 0.15, z: 20, yaw: 0 };
   // The Rig: the Rig Loop pad, at the head of the straight, nose down it (+x).
   if (map === 'rig') return { x: -21.35, y: 1.225, z: -19.6, yaw: -Math.PI / 2 };
+  // The House: the House Loop pad, in the entry hall, nose to the arch (+x).
+  if (map === 'house') return { x: -14.7, y: 1.225, z: 15.05, yaw: -Math.PI / 2 };
   return { x: 0, y: 1.2, z: 0, yaw: 0 };
 }
 
@@ -751,6 +755,7 @@ export function ghostPayloadError(p, expectTrack) {
 
 export const BUILTIN_TRACK_FILES = [
   { id: 'rig-loop', file: 'tracks/rig-loop.json', map: 'rig', name: 'Rig Loop' },
+  { id: 'house-loop', file: 'tracks/house-loop.json', map: 'house', name: 'House Loop' },
   { id: 'city-loop', file: 'tracks/city-loop.json', legacyId: 0, map: 'city', name: 'City Loop' },
   { id: 'city-zigzag', file: 'tracks/city-zigzag.json', legacyId: 1, map: 'city', name: 'Mesa Zigzag' },
   { id: 'city-inside', file: 'tracks/city-inside.json', map: 'city', name: 'Interior Run' },

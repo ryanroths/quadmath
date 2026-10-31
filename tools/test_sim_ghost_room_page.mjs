@@ -172,8 +172,9 @@ test('ghost room in the page: same map, late join, ghost and voice, no collision
     })()`);
     await cdp(ws, 'Page.bringToFront');
     {
-      // Fly (leaves the launch screen), then Trainer freestyle; a key unlocks audio.
-      await evaluate(ws, `document.getElementById('menuFly').click(), true`);
+      // Fly, the Rig from its map chooser (leaves the launch screen), then
+      // Trainer freestyle; a key unlocks audio.
+      await evaluate(ws, `document.getElementById('menuFly').click(), document.querySelector('#menuLayer [data-fly-map="rig"]').click(), true`);
       await press(ws, '1', 'Digit1', 49);
       const r = await page(ws, `await s.setMap('trainer','trainer-freestyle'); s.placeQuadAt(0, 0.15, 0, 0);
         await new Promise((r) => setTimeout(r, 800));
