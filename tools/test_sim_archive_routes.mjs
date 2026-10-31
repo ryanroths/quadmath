@@ -1,7 +1,8 @@
 // Headless Chrome, no ?dev=1: every menu path that loads a map ends on The
 // Rig, or says why not. The Rig and The House are open without ?dev=1
-// (sim-tracks.js mapOpen: Fly and Tracks); the other maps are the archive.
-// Daily, Boards and Coach stay Rig-only: from the House they fly the Rig.
+// (sim-tracks.js mapOpen: Fly's map chooser and Tracks); the other maps are
+// the archive. Daily, Boards and Coach stay Rig-only: from the House they fly
+// the Rig.
 //   - Daily flies a Rig track (from 2026-10-30, sim-retention.js RIG_DAILY_FROM).
 //   - Boards flies the week's course: a Rig track from 2026-W45; until that
 //     Monday, this week's generated course, as the owner chose.
@@ -188,9 +189,34 @@ test('without ?dev=1 Daily, Boards, Freestyle this map, builder Import and duel 
     assert.equal(r.map, 'rig', 'a duel on the Rig Loop moves to the Rig');
     assert.match(r.toast, /^DUEL: RIVAL .* · THE RIG$/, `and names the map it moved to (${r.toast})`);
 
-    // The House: Fly lists it beside the Rig, and Freestyle this map stays on
-    // it; Daily, Boards and Coach from the House fly the Rig.
-    assert.equal(await evaluate(ws, `[...document.querySelectorAll('#flyMaps [data-map]')].map((b) => b.dataset.map).join(',')`), 'rig,house');
+    // The House: Fly opens a map chooser, the Rig and the House with their
+    // thumbnails, the last map flown marked; a card flies its map, and the
+    // chooser remembers it. Freestyle this map stays on the House; Daily,
+    // Boards and Coach from the House fly the Rig.
+    // As a pilot: MENU, Home (the launch screen), Fly.
+    const chooser = `(async () => {
+      if (!document.getElementById('startMenu').classList.contains('open')) document.getElementById('menuBtn').click();
+      document.getElementById('menuHome').click();
+      document.getElementById('menuFly').click();
+      const imgs = [...document.querySelectorAll('#menuLayer [data-fly-map] img')];
+      for (let i = 0; i < 40 && !imgs.every((im) => im.complete); i++) await new Promise((r) => setTimeout(r, 100));
+      return JSON.stringify({
+        maps: [...document.querySelectorAll('#menuLayer [data-fly-map]')].map((b) => b.dataset.flyMap),
+        thumbs: imgs.map((im) => im.naturalWidth),
+        on: [...document.querySelectorAll('#menuLayer .fly-map.on')].map((b) => b.dataset.flyMap),
+        focus: document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.flyMap : null,
+      });
+    })()`;
+    let fly = JSON.parse(await evaluate(ws, chooser));
+    assert.deepEqual(fly.maps, ['rig', 'house'], 'Fly offers the Rig and the House');
+    assert.deepEqual(fly.thumbs, [480, 480], 'each with its thumbnail');
+    assert.deepEqual(fly.on, ['rig'], 'the last map flown is marked');
+    assert.equal(fly.focus, 'rig', 'and has the focus');
+    r = JSON.parse(await evaluate(ws, after(`document.querySelector('#menuLayer [data-fly-map="house"]').click();`)));
+    assert.equal(r.map, 'house', 'the House card flies the House');
+    fly = JSON.parse(await evaluate(ws, chooser));
+    assert.deepEqual(fly.on, ['house'], 'Fly remembers the House');
+    await evaluate(ws, `document.getElementById('layerClose').click(), true`);
     await evaluate(ws, `window._sim.setMap('house'), true`);
     r = JSON.parse(await evaluate(ws, after(click('menuFreestyleMap'))));
     assert.equal(r.map, 'house', 'Freestyle this map on the House stays');

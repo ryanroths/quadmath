@@ -239,7 +239,15 @@
   .menu-quality button,.qbtn{width:auto;flex:1;min-width:64px;margin-top:0;padding:7px 8px;font-size:11px;
     border-color:var(--line);color:var(--txt)}
   .menu-quality button.on,.qbtn.on{border-color:var(--orange);color:var(--orange);background:rgba(255,77,26,.12)}
-  .fly-maps{margin-top:6px}
+  /* Fly's map chooser (openFlyPicker): a card a map, its thumbnail, the last
+     map flown marked. */
+  .fly-maps{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 2px}
+  .menu-layer .fly-map{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin-top:0;padding:6px 6px 8px;
+    text-align:left;border-color:var(--line);color:var(--txt)}
+  .fly-map img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:8px;background:#111}
+  .fly-map span{font-size:13px;font-weight:600;padding:0 2px}
+  .fly-map small{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--orange);padding:0 2px}
+  .menu-layer .fly-map.on{border-color:var(--orange);background:rgba(255,77,26,.12)}
   /* The launch screen shows five; the in-flight menu (#startMenu.in-flight) its
      own list; dev-only needs ?dev=1 (body.dev); menu-hide never shows. */
   #startMenu:not(.in-flight) .menu-flight,#startMenu.in-flight .menu-launch,
@@ -471,7 +479,6 @@
     <p class="menu-lead menu-launch">Browser FPV whoop sim. Fly is free flight — no gates, no timer. In flight, Esc or MENU opens tracks, coach, the track builder and replays. Paste your Betaflight rates. No install.</p>
     <p class="menu-lead menu-flight">Paused. Opening the menu ends a race run. Resume (or Esc) flies on; Home goes back to the start screen.</p>
     <button class="primary menu-launch" id="menuFly">Fly</button>
-    <div class="menu-quality menu-launch fly-maps" id="flyMaps"></div>
     <button class="primary menu-flight" id="menuResume">Resume</button>
     <button class="menu-hide" id="menuFreestyle">Freestyle</button>
     <button class="menu-launch" id="menuDaily">Daily</button>
@@ -4891,17 +4898,32 @@ function toggleStartMenu(force){
   if(!next)leftLaunch=true;
   if(looks)looks.setMenuOpen(next);
   else{el.classList.toggle('open',next);document.body.classList.toggle('menu-open',next);}
-  if(next){panel.classList.remove('open');syncMenuSparks();syncFlyMaps();}
+  if(next){panel.classList.remove('open');syncMenuSparks();}
 }
-// Fly's maps: the open maps (mapOpen without ?dev=1: The Rig, The House) in a
-// row under Fly. A tap flies that map; Fly flies the one marked, the last.
-function syncFlyMaps(){
-  const el=document.getElementById('flyMaps');
-  if(!el)return;
+// Fly: a map chooser. The open maps (mapOpen without ?dev=1: The Rig, The
+// House), each with its thumbnail; with ?dev=1 an archived map flown last is
+// offered too. The last map flown (the saved selection) is marked and has the
+// focus, so Fly then Enter flies it again. A tap flies that map.
+const FLY_THUMBS={rig:'assets/sim-thumbs/rig.jpg',house:'assets/sim-thumbs/house.jpg'};
+function flyMapChoices(){
+  const maps=MAPS.filter(m=>mapOpen(m.id,false));
   const saved=loadSelected();
-  const last=saved&&mapOpen(saved.map,false)?saved.map:DEFAULT_MAP;
-  el.innerHTML=MAPS.filter(m=>mapOpen(m.id,false)).map(m=>'<button type="button" data-map="'+m.id+'" class="'+(m.id===last?'on':'')+'">'+m.name+'</button>').join('');
-  el.querySelectorAll('[data-map]').forEach(b=>{b.onclick=()=>startFreestyle(b.dataset.map);});
+  const own=saved&&MAPS.find(m=>m.id===saved.map);
+  if(own&&mapOpen(own.id,DEV_UI)&&!maps.includes(own))maps.push(own);
+  return {maps,last:own&&maps.includes(own)?own.id:DEFAULT_MAP};
+}
+function openFlyPicker(){
+  const {maps,last}=flyMapChoices();
+  showMenuLayer('<h2>Fly</h2><p>Free flight: no gates, no timer. Pick a map.</p><div class="fly-maps">'+
+    maps.map(m=>'<button type="button" class="fly-map'+(m.id===last?' on':'')+'" data-fly-map="'+m.id+'">'+
+      (FLY_THUMBS[m.id]?'<img src="'+FLY_THUMBS[m.id]+'" alt="" width="480" height="270">':'')+
+      '<span>'+m.name+'</span>'+(m.id===last?'<small>Last flown</small>':'')+'</button>').join('')+
+    '</div><button type="button" id="layerClose">Close</button>');
+  document.getElementById('menuLayer').classList.add('wide');
+  document.querySelectorAll('#menuLayer [data-fly-map]').forEach(b=>{b.onclick=()=>startFreestyle(b.dataset.flyMap);});
+  document.getElementById('layerClose').onclick=hideMenuLayer;
+  const on=document.querySelector('#menuLayer .fly-map.on');
+  if(on)on.focus({preventScroll:true});
 }
 let lastArtQuality=null;
 function syncQualityUI(){
@@ -5478,8 +5500,7 @@ function wireBuilderUI(){
 
 function wireLooksUI(){
   const fly=document.getElementById('menuFly');
-  if(fly)fly.onclick=()=>startFreestyle();
-  syncFlyMaps();
+  if(fly)fly.onclick=()=>openFlyPicker();
   const menuFree=document.getElementById('menuFreestyle');
   if(menuFree)menuFree.onclick=()=>startFreestyle();
   const panelFree=document.getElementById('btnFreestyle');

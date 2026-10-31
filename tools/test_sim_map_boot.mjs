@@ -521,11 +521,7 @@ async function launchScreen(base, query) {
             map: s.map(),
             labels: Array.prototype.filter.call(document.querySelectorAll('#startMenu .menu-card button'),function(b){
               var cs=getComputedStyle(b);
-              return !b.closest('#flyMaps')&&b.getClientRects().length>0&&cs.visibility!=='hidden'&&cs.opacity!=='0';
-            }).map(function(b){return b.textContent.trim();}),
-            // Fly's own row: the maps it flies.
-            flyMaps: Array.prototype.filter.call(document.querySelectorAll('#flyMaps button'),function(b){
-              return b.getClientRects().length>0;
+              return b.getClientRects().length>0&&cs.visibility!=='hidden'&&cs.opacity!=='0';
             }).map(function(b){return b.textContent.trim();})
           };
         })())`,
@@ -546,7 +542,7 @@ async function launchScreen(base, query) {
   }
 }
 
-test('the launch screen shows exactly five buttons without ?dev: Fly (its row: The Rig, The House), Daily, Boards, Tune, Controls; The Rig behind them from the first frame, and closed, unknown and spark links land there too', async (t) => {
+test('the launch screen shows exactly five buttons without ?dev: Fly, Daily, Boards, Tune, Controls; The Rig behind them from the first frame, and closed, unknown and spark links land there too', async (t) => {
   if (process.env.SKIP_CHROME_BOOT === '1') {
     t.skip('SKIP_CHROME_BOOT');
     return;
@@ -555,7 +551,6 @@ test('the launch screen shows exactly five buttons without ?dev: Fly (its row: T
   try {
     const plain = await launchScreen('http://127.0.0.1:' + port, '');
     assert.deepEqual(plain && plain.labels, ['Fly', 'Daily', 'Boards', 'Tune', 'Controls']);
-    assert.deepEqual(plain && plain.flyMaps, ['The Rig', 'The House'], 'Fly offers the House beside the Rig');
     assert.equal(plain && plain.map, 'rig', 'a fresh pilot launches into The Rig');
     assert.equal(plain && plain.first, 'rig', 'no City behind the launch card while the tracks load');
     assert.equal(plain && plain.sparks, false, 'every spark is on a closed map: no tally without ?dev=1');
