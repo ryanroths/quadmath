@@ -552,7 +552,7 @@ test('Rig drills: each gate is the feature\'s own gap, open, and tight to the ge
   const slots = c['crate-slalom'].gates;
   assert.deepEqual(slots.map((g) => +(2 * M(g.hw)).toFixed(4)), [...G.crates]);
   for (const g of slots) {
-    assert.equal(M(g.x), 9);
+    assert.equal(M(g.x), RIG_PLAY.crateX);
     const wall = RIG_PLAY.boxes.find((b) => b.feature === 'crates' && Math.abs((b.min[2] + b.max[2]) / 2 - M(g.z)) < 1e-6);
     assert.ok(wall, g.name + ' on a wall\'s mid-plane');
     assert.ok(M(g.y) - M(g.hh) >= 0 && M(g.y) + M(g.hh) <= 2 + 1e-9, g.name + ' within the 2 m wall');
