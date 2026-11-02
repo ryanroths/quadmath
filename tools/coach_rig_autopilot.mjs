@@ -200,11 +200,12 @@ const REST = 0.01;
 
 // The tower: -x through a bay at z 4.5, +x at z 5.7, the U-turns outside
 // the tower climbing (or sinking) half a level each side.
-function towerPlan() {
-  const zW = 4.5, zE = 5.7, xW = -7.85, xE = -5.95, apW = -8.45, apE = -5.35, mid = 5.1;
+// Round the tower's centre (sim-maps.js RIG_PLAY.tower), offsets in metres.
+function towerPlan(cx = -2.9, cz = 1.0) {
+  const zW = cz - 0.6, zE = cz + 0.6, xW = cx - 0.95, xE = cx + 0.95, apW = cx - 1.55, apE = cx + 1.55, mid = cz;
   const lv = [0.82, 2.52, 4.22, 5.55];
   const v = 3.2;
-  const w = [wp(-4.4, REST, 4.6, 1), wp(-4.6, 0.55, 4.55, 1.5), wp(xE, lv[0], zW, v)];
+  const w = [wp(cx + 2.5, REST, cz - 0.5, 1), wp(cx + 2.3, 0.55, cz - 0.55, 1.5), wp(xE, lv[0], zW, v)];
   // W is -x, E +x: up through bays 1-3 and over the top, back down.
   const legs = [[lv[0], 'W'], [lv[1], 'E'], [lv[2], 'W'], [lv[3], 'E'], [lv[2], 'W'], [lv[1], 'E'], [lv[0], 'W']];
   legs.forEach(([y, dir], k) => {
@@ -216,7 +217,7 @@ function towerPlan() {
     if (dir === 'W') { w.push(wp(apW, ym, mid, v)); w.push(wp(xW, next[0], zE, v)); }
     else { w.push(wp(apE, ym, mid, v)); w.push(wp(xE, next[0], zW, v)); }
   });
-  w.push(wp(-8.9, lv[0], zW, 2));
+  w.push(wp(cx - 2.0, lv[0], zW, 2));
   return { wps: w, yaw0: Math.PI / 2, limits: LIMITS, vEnd: 1.5 };
 }
 

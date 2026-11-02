@@ -116,7 +116,7 @@ export const LOOK_SPOTS = {
   rigOverview: { pos: [30, 19, -22], target: [-8, 3, 4] },
   rigCrates: { pos: [31.5, 4.2, -12.5], target: [31.5, 4.2, 6] },
   rigTunnel: { pos: [19.5, 4.2, 19.6], target: [0, 4.2, 19.6] },
-  rigTower: { pos: [-12, 9, 19.6], target: [-26, 15, 18.5] },
+  rigTower: { pos: [2, 9, 5.25], target: [-12, 15, 4.15] },
   rigSlit: { pos: [-31.675, 19.4, 9.5], target: [-31.675, 9.5, -7] },
   builder: { pos: [0, 14, 0.1], target: [0, 0, 0] },
 };

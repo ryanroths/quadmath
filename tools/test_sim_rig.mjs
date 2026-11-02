@@ -65,8 +65,6 @@ const ZONES = {
   crates: [[8.8, 0, -1.0], [9.2, 2, 1.0]],
   tunnel: [[0.05, 1.05, 5.45], [4.05, 1.35, 5.75]],
   slit: [[X - 0.1, pipeLo, -7.5], [X + 0.1, pipeLo + 0.15, 3.2]],
-  // Tower bay 2: between deck 2 and deck 3, inside the posts.
-  tower: [[-7.47, 3.4, 4.08], [-6.33, 5.04, 6.12]],
   hole: [[X - 0.5, 2.7, -3.75], [X + 0.5, 2.8, -1.95]],
 };
 const near = (p, z) => inside(p, z[0].map((v) => v - 0.3), z[1].map((v) => v + 0.3));
@@ -150,13 +148,13 @@ test('the six features have the asked-for gaps', () => {
   assert.equal(+(s[3][0] - s[0][0]).toFixed(3), RIG_PLAY.straight);
 });
 
-test('the loop threads every feature and keeps 30 cm everywhere else', () => {
+test('the loop threads every feature but the tower and the pole (off the loop) and keeps 30 cm everywhere else', () => {
   const path = [];
   const g0 = GATES[0].p;
   const n0 = Math.ceil(len(sub(g0, START)) / 0.01);
   for (let i = 0; i < n0; i++) path.push(lerp(START, g0, 0, n0, i));
   path.push(...loop(0.5, 0.01));
-  const hit = { crates: 1e9, tunnel: 1e9, slit: 1e9, hole: 1e9, tower: 1e9 };
+  const hit = { crates: 1e9, tunnel: 1e9, slit: 1e9, hole: 1e9 };
   let outside = 1e9;
   for (const p of path) {
     const c = nearest(p).d;
@@ -166,13 +164,30 @@ test('the loop threads every feature and keeps 30 cm everywhere else', () => {
     let zoned = false;
     for (const [k, z] of Object.entries(ZONES)) {
       if (inside(p, z[0], z[1])) hit[k] = Math.min(hit[k], c);
-      if (k !== 'tower' && near(p, z)) zoned = true; // the bay is not a designed gap
+      if (near(p, z)) zoned = true;
     }
     if (!zoned) outside = Math.min(outside, c);
   }
   for (const [k, v] of Object.entries(hit)) assert.ok(v < 1e9, k + ' is not on the loop');
   assert.ok(Math.abs(hit.slit - 0.1) < 0.005, 'slit flown on its centre line ' + hit.slit);
   assert.ok(outside >= 0.3, 'clearance outside the designed gaps ' + outside);
+});
+
+test('the spin pole: 10 cm, floor to ceiling, alone with 1.5 m clear all round, and the loop keeps 1.5 m off it', () => {
+  const P = RIG_PLAY.pole;
+  const pole = BOXES.filter((b) => b.feature === 'pole');
+  assert.equal(pole.length, 1);
+  const [b] = pole;
+  assert.equal(+(b.max[0] - b.min[0]).toFixed(4), 0.1);
+  assert.equal(+(b.max[2] - b.min[2]).toFixed(4), 0.1);
+  assert.deepEqual([b.min[1], b.max[1]], [0, ROOM.h], 'floor to ceiling');
+  // Horizontal clearance from the pole's surface to every other box and the walls.
+  const flat = (q) => Math.hypot(Math.max(q.min[0] - b.max[0], 0, b.min[0] - q.max[0]), Math.max(q.min[2] - b.max[2], 0, b.min[2] - q.max[2]));
+  for (const q of BOXES) if (q !== b) assert.ok(flat(q) >= 1.5, `${q.feature}:${q.part} ${flat(q).toFixed(2)} m from the pole`);
+  for (const w of [b.min[0] + ROOM.w / 2, ROOM.w / 2 - b.max[0], b.min[2] + ROOM.d / 2, ROOM.d / 2 - b.max[2]]) assert.ok(w >= 1.5, 'a wall within 1.5 m');
+  let near = Infinity;
+  for (const p of loop(0.5, 0.02)) near = Math.min(near, Math.hypot(p[0] - P.x, p[2] - P.z));
+  assert.ok(near >= 1.5, 'the loop passes ' + near.toFixed(2) + ' m from the pole');
 });
 
 test('gates are entered in order, once each, from the start pad', () => {
@@ -265,7 +280,7 @@ function compiled(mat) {
 }
 
 test('the look: a hue per zone painted on a real surface, a roughness per surface, the HDRI fill, the floor joints', () => {
-  const S = RIG_LOOK.surfaces, zones = ['tower', 'pipes', 'crates', 'tunnel', 'loft'];
+  const S = RIG_LOOK.surfaces, zones = ['tower', 'pipes', 'crates', 'tunnel', 'loft', 'pole'];
   // A hue per zone, 20 degrees apart at least; the room stays grey.
   for (let i = 0; i < zones.length; i++) {
     for (let j = i + 1; j < zones.length; j++) {
