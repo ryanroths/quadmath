@@ -31,6 +31,12 @@ function webpSize(buf) {
   return [buf.readUInt16LE(26) & 0x3fff, buf.readUInt16LE(28) & 0x3fff];
 }
 
+test('a look texture takes its image in a GL texture of its own (disposed before the source swap)', () => {
+  const src = readFileSync(join(root, 'sim-look.js'), 'utf8');
+  assert.match(src, /t\.dispose\(\);\s*t\.source = new THREE\.Source\(bmp\)/,
+    'dispose, then the new source: else the 1x1 placeholder keeps its immutable storage');
+});
+
 test('one HDRI, Poly Haven, 512 for the fill, shipped and licensed', () => {
   const f = join(root, LOOK.lighting.hdri);
   assert.ok(existsSync(f), LOOK.lighting.hdri);

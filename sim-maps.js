@@ -8,7 +8,7 @@
 import { planRoom } from './sim-room.js?v=c26e0c6bfbfc';
 import {
   LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, floorAo,
-} from './sim-look.js?v=ad1c5d113420';
+} from './sim-look.js?v=25231f0dd6c9';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).

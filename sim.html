@@ -930,7 +930,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=8f4237f25211";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=e9c1ea66e1e6";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=bc65417026d0";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -945,19 +945,19 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=1063819a3517";
+} from "./sim-art.js?v=44be05187b1f";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
   shouldEnableTouch, createTouchControls, guardPageGestures,
-  sanitizeId, isRadio, radioScore, RADIO_PRESETS,
+  sanitizeId, isRadio, radioScore, pickPreferredPad, RADIO_PRESETS,
   effectiveAxisMap, applyAxisMap, loadRadioProfile, saveAxisMap,
   saveRadioPreset, clearRadioCalibration, GP_ID_KEY, createCalibState, stepCalib, skipCalibAux,
   guessRadioPreset, isKnownRadio, radioShortName,
   loadAutoArm, saveAutoArm, loadArmSwitch, saveArmSwitch, mergeArmSwitch,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
-} from "./sim-touch.js?v=40068c573e17";
+} from "./sim-touch.js?v=72029e559bf5";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -971,14 +971,14 @@ import {
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
 } from "./sim-tracks.js?v=0e8166b9e39b";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=308b2b5f3dc9";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=3295a13e9601";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=c26e0c6bfbfc";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=f39f62d5deb4";
-import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=ad1c5d113420";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=8dcc1e51965c";
+import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=25231f0dd6c9";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -993,7 +993,7 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=202a7b9d68cb";
+} from "./sim-coach.js?v=15813ac598e5";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=3f9a33d3082a";
@@ -1022,7 +1022,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=fa4de7479db9";
+} from "./sim-secrets.js?v=a20180d09031";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -4030,11 +4030,14 @@ function pickGamepad(){
   // not an unplug — only gamepaddisconnected should drop the radio.
   if(!pads.length)return;
   let remembered=null;try{remembered=localStorage.getItem(GP_ID_KEY);}catch(e){}
-  const match=remembered&&pads.find(p=>p.id===remembered);
-  if(match){selectPad(match,false);return;}
+  // The remembered pad unless a radio outranks it (pickPreferredPad): an Xbox
+  // pad seen alone first is remembered unasked and must not keep the TX16S
+  // beside it off the sticks.
+  const best=pickPreferredPad(pads,remembered);
+  if(best.id===remembered){selectPad(best,false);return;}
   pads.sort((a,b)=>radioScore(b)-radioScore(a)); // radios first, standard pads last
-  if(pads.length===1){selectPad(pads[0],true);return;}
-  selectPad(pads[0],false);  // best candidate goes live immediately...
+  if(pads.length===1){selectPad(best,true);return;}
+  selectPad(best,false);     // best candidate goes live immediately...
   showGpPicker(pads);        // ...while the picker lets the pilot override + remember
 }
 addEventListener('gamepadconnected',()=>pickGamepad());

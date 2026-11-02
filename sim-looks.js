@@ -4,9 +4,9 @@
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
-import { resolveAutoQuality, gpuTier, autoQualityStep } from './sim-touch.js?v=40068c573e17';
+import { resolveAutoQuality, gpuTier, autoQualityStep } from './sim-touch.js?v=72029e559bf5';
 import { updateSceneLighting } from './sim-lighting.js?v=87ade1287271';
-import { LOOK } from './sim-look.js?v=ad1c5d113420';
+import { LOOK } from './sim-look.js?v=25231f0dd6c9';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';

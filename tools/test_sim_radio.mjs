@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   AXIS_MAP_PREFIX, RADIO_PRESET_PREFIX, GP_ID_KEY,
-  sanitizeId, isRadio, radioScore, AETR_MAP, PAD_MAP, defaultMapFor,
+  sanitizeId, isRadio, radioScore, pickPreferredPad, AETR_MAP, PAD_MAP, defaultMapFor,
   applyAxisMap, applyDeadzone, RADIO_DZ, loadRadioProfile, saveAxisMap, saveRadioPreset,
   AXIS_MAP_VER, migrateAxisMap,
   clearRadioCalibration, isValidAxisMap, shouldEnableTouch,
@@ -230,6 +230,29 @@ test('Xbox-style pad is not preferred over TX16S when both are present', () => {
   const picked = router.pick();
   assert.equal(picked.id, TX16S_ID);
   assert.equal(router.gpIndex, 1);
+});
+
+test('a remembered Xbox pad does not beat a TX16S plugged in beside it; a remembered radio still wins among radios', () => {
+  const xbox = { id: 'Xbox One Game Controller (STANDARD GAMEPAD)', index: 0, mapping: 'standard', axes: [0, 0, 0, 0], buttons: [] };
+  const radio = tx16sPad([0, 0, -1, 0, -1, -1, -1, -1], { id: 'RM TX16S Joystick (Vendor: 1209 Product: 4f54)', index: 1 });
+  const zorro = { id: 'RadioMaster Zorro Joystick', index: 2, mapping: '', axes: [0, 0, -1, 0], buttons: [] };
+  // The Xbox pad was seen alone first, so it was remembered unasked.
+  assert.equal(pickPreferredPad([xbox], null).id, xbox.id);
+  assert.equal(pickPreferredPad([xbox, radio], xbox.id).id, radio.id, 'the radio outranks a remembered gamepad');
+  assert.equal(pickPreferredPad([xbox], xbox.id).id, xbox.id, 'alone, the remembered gamepad flies');
+  assert.equal(pickPreferredPad([radio, zorro], zorro.id).id, zorro.id, 'among radios the remembered one wins');
+  assert.equal(pickPreferredPad([xbox, radio], radio.id).id, radio.id);
+  // The router: the Xbox pad alone, then the TX16S plugged in too.
+  const store = memStore();
+  let pads = [xbox];
+  const router = createRadioRouter({ storage: store, getGamepads: () => pads });
+  assert.equal(router.pick().id, xbox.id);
+  assert.equal(store.getItem(GP_ID_KEY), xbox.id, 'a lone pad is remembered');
+  pads = [xbox, radio];
+  assert.equal(router.pick().id, radio.id, 'the TX16S flies once it is plugged in');
+  assert.equal(router.gpIndex, 1);
+  // The page picks with the same rule.
+  assert.ok(simSrc.includes('const best=pickPreferredPad(pads,remembered);'), 'sim.html pickGamepad uses pickPreferredPad');
 });
 
 test('sim.html still owns the Radio panel and per-device keys', () => {
