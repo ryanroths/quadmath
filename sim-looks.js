@@ -118,6 +118,11 @@ export const LOOK_SPOTS = {
   rigTunnel: { pos: [19.5, 4.2, 19.6], target: [0, 4.2, 19.6] },
   rigTower: { pos: [2, 9, 5.25], target: [-12, 15, 4.15] },
   rigSlit: { pos: [-31.675, 19.4, 9.5], target: [-31.675, 9.5, -7] },
+  // The Fly chooser's Rig thumbnail (assets/sim-thumbs/rig.jpg): under the
+  // pipes at the loft end, the tower and spin pole mid-room, the crates and
+  // tunnel beyond. sim.html?map=rig&quality=high&look=rigThumb, UI hidden,
+  // 960x540 scaled to 480x270.
+  rigThumb: { pos: [-32.2, 15.05, -23.1], target: [15.75, 2.8, 5.25] },
   builder: { pos: [0, 14, 0.1], target: [0, 0, 0] },
 };
 
