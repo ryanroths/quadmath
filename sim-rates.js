@@ -217,6 +217,31 @@ function decodeRateCard(raw) {
   return decodedFromCliAxes(spec.type, roll, pitch, yaw);
 }
 
+// The pilot's rates while they have saved none: the owner's Air65 diff's
+// rateprofile 0 (vendor/sim-core/configs/air65-ryfly-2026-10-23.txt, the
+// 65-betafpv-ryfly-1219s card), which the bf core flies. One profile for
+// every class: rates are the pilot's, not the quad's. A fresh copy each call.
+export const PILOT_RATES_CARD = '65-betafpv-ryfly-1219s';
+export function pilotRatesDefault() {
+  return decodeRateCard('card.' + PILOT_RATES_CARD);
+}
+
+// The Tune panel's line naming where the flying rates come from. core 'bf':
+// the bf config's rates (the Air65 diff's for every class), with a session's
+// IMPORT CLI paste on top (cli 'top') or in its place (cli 'replace'). core
+// 'js': the page's one profile, the pilot's ('saved'), a rates link's for the
+// session ('link'), or the Air65 diff's until they change it ('default').
+export function ratesSourceText({ core, cli, js } = {}) {
+  if (core === 'bf') {
+    if (cli === 'replace') return 'Rates: your pasted diff (bf, this session)';
+    if (cli === 'top') return 'Rates: your Air65 diff, your CLI lines on top (bf, this session)';
+    return 'Rates: your Air65 diff (bf)';
+  }
+  if (js === 'saved') return 'Rates: your saved profile (js, every class)';
+  if (js === 'link') return 'Rates: the rates link (js, this session)';
+  return 'Rates: your Air65 diff\'s (js default, every class)';
+}
+
 // Compact share token: TYPE.rollRc.rollSr.rollEx.pitchRc.pitchSr.pitchEx.yawRc.yawSr.yawEx
 // Fields are CLI integers (expo always 0–100). Decode scales back to stored units.
 // card.<id> aliases resolve through RATE_CARDS; encode always emits the TYPE token.

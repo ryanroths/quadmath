@@ -5,7 +5,7 @@
 //   quadmathSimFov.
 // Nothing here is copied from WebFPV.
 
-import { makeWorldLabel } from './sim-art.js?v=44be05187b1f';
+import { makeWorldLabel } from './sim-art.js?v=98898b60f1d3';
 
 export const INPUT_CHOICE_KEY = 'quadmathSimInputChoice';
 export const FLOATINESS_KEY = 'quadmathSimFloatiness';
@@ -96,6 +96,17 @@ export function saveCamDeg(v, storage) {
   if (!store || typeof store.setItem !== 'function' || !Number.isFinite(n)) return;
   try { store.setItem(CAM_KEY, String(Math.max(0, Math.min(60, n)))); }
   catch (e) { /* ignore quota / private mode */ }
+}
+
+// The arrow-key nudge (sim.html): the Cam angle 5 degrees up or down a press,
+// within 0..45. An angle the slider set above 45 is not raised; down brings
+// it back into range.
+export const CAM_NUDGE_DEG = 5;
+export const CAM_NUDGE_MAX = 45;
+export function nudgeCamDeg(cur, dir) {
+  const c = Number.isFinite(Number(cur)) ? Number(cur) : 0;
+  if (dir > 0 && c >= CAM_NUDGE_MAX) return c;
+  return Math.max(0, Math.min(CAM_NUDGE_MAX, c + (dir > 0 ? CAM_NUDGE_DEG : -CAM_NUDGE_DEG)));
 }
 
 // True when a FOV the pilot set on the slider is saved, old or new: it beats

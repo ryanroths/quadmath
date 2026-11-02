@@ -426,6 +426,30 @@ export function contactPlant(airframe, profile) {
   };
 }
 
+// The tune-database.js card each class's bf config takes its P, I and D from:
+// the owner's own quads. Only the 65 has a sim-core plant for now.
+export const BF_CLASS_TUNES = Object.freeze({
+  whoop65: '65-betafpv-ryfly-1219s',
+  whoop75: '75-betafpv-ryfly-hamo-45mm',
+  whoop85: '85-happymodel-ryfly',
+});
+
+// A class's bf config: the owner's Air65 diff as it is (rates, filters,
+// switches), with the class tune's P, I and D set on top in the diff's
+// selected profile (a later set wins). Its rateprofile is never touched:
+// rates are the pilot's, so every class flies the diff's. pids is a tune
+// card's { roll: [P, I, D], pitch, yaw }; none: the diff as it is.
+export function bfClassDiff(diff, pids) {
+  if (!diff || !pids) return diff;
+  const sel = [...String(diff).matchAll(/^[ \t]*profile[ \t]+(\d+)[ \t]*\r?$/gm)].pop();
+  const lines = ['', '# the class tune\'s P, I and D', 'profile ' + (sel ? sel[1] : 0)];
+  for (const a of ['roll', 'pitch', 'yaw']) {
+    const [p, i, d] = pids[a];
+    lines.push(`set p_${a} = ${p}`, `set i_${a} = ${i}`, `set d_${a} = ${d}`);
+  }
+  return String(diff).replace(/\s+$/, '') + lines.join('\n') + '\n';
+}
+
 // SimCore is quadmath-sim-core's class (vendor/sim-core/sim-core.js); wasm is
 // its module's URL or bytes; airframe the plant file; diff the CLI text;
 // world { floorZ, boxes, triggers } in module metres.

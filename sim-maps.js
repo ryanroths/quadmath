@@ -1041,31 +1041,37 @@ function buildRoom(THREE, parent, colliders, lights, spec) {
 }
 
 // The Rig: a 20 × 15 × 6 m industrial interior at whoop scale, flow-first.
-// Metres here, scene axes (y up); buildRig scales by RIG_WS. Every object is
-// threaded by the loop (tracks/rig-loop.json), clockwise seen from above: the
-// 15 m straight along the -z wall heading +x, the crate slots up the +x wall,
-// the tunnel back along the +z wall, the tower bay, then one dive in the plane
-// x = drop: over the pipes, down a pipe slit, through the loft hole, out under
-// the loft onto the straight. Boxes only, axis-aligned, nothing under 6 cm
-// thick and no slot of 4–10 cm (sim-core issue #5).
+// Metres here, scene axes (y up); buildRig scales by RIG_WS. Every object but
+// the crate stack is threaded by the loop (tracks/rig-loop.json), clockwise
+// seen from above: the 15 m straight along the -z wall heading +x, up the +x
+// wall, the tunnel back along the +z wall, the tower bay, then one dive in the
+// plane x = drop: over the pipes, down a pipe slit, through the loft hole, out
+// under the loft onto the straight. The crate stack stands off the loop, in
+// the room at x = 5.5: the Coach's crate slalom (a loop leg there would turn
+// tighter than its 1.4 m flow radius). Boxes only, axis-aligned, nothing under
+// 6 cm thick and no slot of 4–10 cm (sim-core issue #5).
 export const RIG_WS = 3.5; // world units per metre, as sim-core-adapter.js WS
 const RIG_DROP = -9.05;
+// The crate stack's slot line: its three slots sit on x = RIG_CRATE_X.
+const RIG_CRATE_X = 5.5;
 function rigBoxes() {
   const out = [];
   const b = (feature, part, x0, y0, z0, x1, y1, z1) => {
     const r = (v) => Math.round(v * 1e4) / 1e4;
     out.push(Object.freeze({ feature, part, min: [r(x0), r(y0), r(z0)], max: [r(x1), r(y1), r(z1)] }));
   };
-  // Crates: three 2 m walls of 0.5 m crates across x = 9, out to the +x wall.
-  // One slot each on x = 9, narrowing 25 → 21 → 18 cm; flown in a straight line.
+  // Crates: three 2 m walls of 0.5 m crates, 2.3 m long, standing across
+  // x = RIG_CRATE_X near the middle of the room. One slot each on that line,
+  // narrowing 25 → 21 → 18 cm; flown in a straight line.
+  const cx = RIG_CRATE_X, x0 = cx - 1.3, x1 = cx + 1.0;
   const walls = [[-1.0, 0.25], [-0.2, 0.21], [0.6, 0.18]];
   walls.forEach(([z, gap], w) => {
-    const rx = 9 - gap / 2, wx = 9 + gap / 2, mid = 7.7 + (rx - 7.7) / 2;
+    const rx = cx - gap / 2, wx = cx + gap / 2, mid = x0 + (rx - x0) / 2;
     for (let k = 0; k < 4; k++) {
       const y = 0.5 * k, n = `wall ${w + 1} crate ${k + 1}`;
-      b('crates', n + 'a', 7.7, y, z, mid, y + 0.5, z + 0.4);
+      b('crates', n + 'a', x0, y, z, mid, y + 0.5, z + 0.4);
       b('crates', n + 'b', mid, y, z, rx, y + 0.5, z + 0.4);
-      b('crates', n + 'c', wx, y, z, 10, y + 0.5, z + 0.4);
+      b('crates', n + 'c', wx, y, z, x1, y + 0.5, z + 0.4);
     }
   });
   // Tunnel: 30 cm square bore, 4 m, axis y 1.2 / z 5.6, on three trestles.
@@ -1109,6 +1115,7 @@ function rigBoxes() {
 export const RIG_PLAY = Object.freeze({
   room: Object.freeze({ w: 20, d: 15, h: 6 }),
   drop: RIG_DROP,
+  crateX: RIG_CRATE_X,
   // Designed gaps the line threads, metres.
   gaps: Object.freeze({ crates: Object.freeze([0.25, 0.21, 0.18]), pipes: 0.20, tunnel: 0.30, hole: Object.freeze([1.0, 1.8]) }),
   straight: 15,
