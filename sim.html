@@ -690,7 +690,7 @@
   <div class="row"><label>Cam angle</label><span class="val" id="v_cam"></span></div>
   <input type="range" id="s_cam" min="0" max="60" step="1" value="15">
   <div class="row"><label>Tilt preset</label></div>
-  <select id="camTiltPreset" title="Indoor whoop 15°. Race whoop 25°. Freestyle 30° is the 5-inch number — not the 65mm default.">
+  <select id="camTiltPreset" title="Indoor whoop 15°. Race whoop 25°. 30°: the 65mm default (the owner's Air65) and the 5-inch number.">
     <option value="15" selected>Indoor whoop 15°</option>
     <option value="25">Race whoop 25°</option>
     <option value="30">Freestyle 30°</option>
@@ -977,7 +977,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=c26e0c6bfbfc";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=147dd849f197";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=f39f62d5deb4";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=ad1c5d113420";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -5855,7 +5855,7 @@ function rateProfileForClass(d){
   return RATE_FALLBACK;
 }
 const DRONE_TYPES={
-  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.013,cam:15,fov:VFOV_DEFAULT},
+  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.013,cam:30,fov:VFOV_DEFAULT},
   whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.014,cam:15,fov:VFOV_DEFAULT},
   whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.015,cam:15,fov:VFOV_DEFAULT},
   freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30,fov:VFOV_DEFAULT},
@@ -5874,17 +5874,20 @@ function setSlider(id,val){
   const s=document.getElementById('s_'+id);
   s.value=val;s.dispatchEvent(new Event('input'));
 }
-// Camera tilt follows the class default - every class now defaults to the
-// same 30 degrees, the field is kept per class so one can be re-tuned
-// without reinstating the whole ladder -
-// until the pilot moves the slider themselves — then their choice sticks,
-// mirroring the ratesAreCustom pattern. setSlider() dispatches synthetic
-// 'input' events, so a suppress flag separates user drags from class switches.
-let camIsCustom=false;
-try{camIsCustom=localStorage.getItem('ryflyCamCustom')==='1';}catch(e){}
+// Camera tilt follows the class default (DRONE_TYPES[...].cam: the 65 at 30°,
+// the owner's Air65; the 75 and 85 at 15°; freestyle 30°) until the pilot
+// moves the Cam angle slider: then their angle is saved (quadmathSimCamDeg)
+// and beats every class default. setSlider() dispatches synthetic 'input'
+// events, so a suppress flag separates user drags from class switches. The
+// old flag, ryflyCamCustom, saved no angle (a reload flew the markup's 15°),
+// so it decides nothing now and goes once an angle is saved.
+let camSaved=loadCamDeg();
 let applyingType=false;
 document.getElementById('s_cam').addEventListener('input',()=>{
-  if(!applyingType){camIsCustom=true;try{localStorage.setItem('ryflyCamCustom','1');}catch(e){}}
+  if(applyingType)return;
+  camSaved=CFG.camDeg;
+  saveCamDeg(camSaved);
+  try{localStorage.removeItem('ryflyCamCustom');}catch(e){}
 });
 // Seed the rate sliders for a class. ACTUAL takes the card profile straight
 // (state stores centre/max over 10, which is the tune DB's own scale);
@@ -5922,7 +5925,7 @@ function applyDroneType(){
     }
     refreshRatesUI();
     setSlider('spool',d.spool);                        // per-drone motor spool time constant
-    if(!camIsCustom&&d.cam!=null)setSlider('cam',d.cam); // whoop default 15°, freestyle 30 — skip if ryflyCamCustom
+    if(d.cam!=null)setSlider('cam',camSaved!=null?camSaved:d.cam); // a saved angle beats the class default
     applyCfgToQp();                                    // slider values win over the preset's mass/tau
     refreshTwr();                                      // update the derived thrust:weight readout
   }finally{applyingType=false;}

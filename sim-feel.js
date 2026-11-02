@@ -10,6 +10,7 @@ import { makeWorldLabel } from './sim-art.js?v=1063819a3517';
 export const INPUT_CHOICE_KEY = 'quadmathSimInputChoice';
 export const FLOATINESS_KEY = 'quadmathSimFloatiness';
 export const FOV_KEY = 'quadmathSimFov';
+export const CAM_KEY = 'quadmathSimCamDeg';
 // three.js PerspectiveCamera.fov is vertical. 90° V @ 16:9 ≈ 121° H, closer
 // to an HD whoop than the old 110° V fish-eye (≈ 137° H).
 export const VFOV_DEFAULT = 90;
@@ -72,6 +73,28 @@ export function saveFov(v, storage) {
   const store = fovStore(storage);
   if (!store || typeof store.setItem !== 'function') return;
   try { store.setItem(FOV_KEY, JSON.stringify({ v: 1, fov: clampFov(v) })); }
+  catch (e) { /* ignore quota / private mode */ }
+}
+
+// The FPV camera tilt the pilot set on the Cam angle slider (degrees, the
+// slider's 0..60), or null when they never have: a saved angle beats the
+// class default (sim.html DRONE_TYPES[...].cam).
+export function loadCamDeg(storage) {
+  const store = fovStore(storage);
+  if (!store || typeof store.getItem !== 'function') return null;
+  try {
+    const raw = store.getItem(CAM_KEY);
+    if (raw == null || raw === '') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.max(0, Math.min(60, n)) : null;
+  } catch (e) { return null; }
+}
+
+export function saveCamDeg(v, storage) {
+  const store = fovStore(storage);
+  const n = Number(v);
+  if (!store || typeof store.setItem !== 'function' || !Number.isFinite(n)) return;
+  try { store.setItem(CAM_KEY, String(Math.max(0, Math.min(60, n)))); }
   catch (e) { /* ignore quota / private mode */ }
 }
 

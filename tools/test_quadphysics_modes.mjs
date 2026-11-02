@@ -14,7 +14,7 @@ import { mapThrottle3d, THREED_DEADBAND } from '../sim-3d.js';
 import {
   RATE_PRESETS, applyRatePreset, INPUT_CHOICE_KEY, FLOATINESS_KEY,
   FOV_KEY, VFOV_DEFAULT, VFOV_OLD_DEFAULT, CAM_TILT_PRESETS,
-  migrateSavedFov, loadFov, saveFov,
+  migrateSavedFov, loadFov, saveFov, CAM_KEY, loadCamDeg, saveCamDeg,
 } from '../sim-feel.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -352,6 +352,19 @@ test('FOV default is 90 vertical; only a bare 110 migrates', () => {
   assert.equal(loadFov(store), 110, 'explicit 110 after versioned save must stick');
   saveFov(92, store);
   assert.equal(loadFov(store), 92);
+  // The camera tilt: the 65 class defaults to 30 degrees (the owner's Air65);
+  // a saved Cam angle beats every class default.
+  assert.equal(CAM_KEY, 'quadmathSimCamDeg');
+  assert.equal(loadCamDeg(store), null, 'no saved angle: the class default flies');
+  saveCamDeg(22, store);
+  assert.equal(loadCamDeg(store), 22);
+  saveCamDeg(75, store);
+  assert.equal(loadCamDeg(store), 60, 'clamped to the slider');
+  store.setItem(CAM_KEY, 'junk');
+  assert.equal(loadCamDeg(store), null);
+  assert.ok(/whoop65:\{[^}]*cam:30[,}]/.test(simSrc), 'the 65 class defaults to 30 degrees');
+  assert.ok(/whoop75:\{[^}]*cam:15[,}]/.test(simSrc) && /whoop85:\{[^}]*cam:15[,}]/.test(simSrc), 'the 75 and 85 keep 15');
+  assert.ok(simSrc.includes('camSaved!=null?camSaved:d.cam'), 'a saved angle beats the class default');
   assert.equal(CAM_TILT_PRESETS.indoorWhoop.deg, 15);
   assert.equal(CAM_TILT_PRESETS.raceWhoop.deg, 25);
   assert.ok(simSrc.includes('id="camTiltPreset"'));
