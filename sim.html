@@ -648,6 +648,10 @@
   <div class="kbd" id="armSwitchLive">no arm switch — auto-arm when throttle rises from low</div>
 
   <h2>Rates</h2>
+  <!-- Where the flying rates come from, a line per core (syncRatesSource;
+       sim-rates.js ratesSourceText): one profile for every class. -->
+  <p class="build-note rates-bf" id="ratesSourceBf">Rates: your Air65 diff (bf)</p>
+  <p class="build-note rates-js" id="ratesSourceJs"></p>
   <!-- The rates below drive the js core only (body.bf-core hides them):
        Betaflight flies the rates in its diff, changed through IMPORT CLI. -->
   <p class="build-note rates-bf">Betaflight flies the rates in the Air65 diff (TUNE on the OSD). To fly yours, paste set lines (on top of it) or your full diff (in its place) below and press IMPORT CLI, disarmed. It lasts the session.</p>
@@ -916,7 +920,8 @@ import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAUL
 import {
   WS as CORE_WS, TICK_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, radioAux,
-} from "./sim-core-adapter.js?v=e5bd8e7ac18c";
+  BF_CLASS_TUNES, bfClassDiff,
+} from "./sim-core-adapter.js?v=273cda7f47a8";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
 import {
@@ -986,7 +991,8 @@ import {
   convertAxisFamily as convertAxisRate, formatAxisReadout, formatCliSummary,
   drawRateCurve, normalizeRateType, isRateType, bfCurve as bfCurveOf,
   actualRate as actualRateOf, encodeRates, decodeRates, ratesDeepLink, RATE_CARDS,
-} from "./sim-rates.js?v=47b77a33ae0c";
+  pilotRatesDefault, ratesSourceText,
+} from "./sim-rates.js?v=5024bc889685";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -4205,17 +4211,16 @@ function readInput(dt){
 // Curves and CLI parsing live in sim-rates.js (Betaflight rc.c math, from scratch).
 function bfCurve(x,rcRate,srate,expo){return bfCurveOf(x,rcRate,srate,expo);}
 function actualRate(x,center,maxRate,expo){return actualRateOf(x,center,maxRate,expo);}
-const rates={
-  type:'BETAFLIGHT',
-  quickRatesRcExpo:false,
-  roll: {rcRate:1.10,srate:0.72,expo:0.25},
-  pitch:{rcRate:1.10,srate:0.72,expo:0.25},
-  yaw:  {rcRate:1.10,srate:0.72,expo:0.25},
-};
+// One rates profile, the pilot's, for every class: a class switch never
+// touches it. Saved under ryflyRates once the pilot changes anything; until
+// then the Air65 diff's rates (sim-rates.js pilotRatesDefault), the rates
+// the bf core flies.
+const rates=Object.assign({quickRatesRcExpo:false},pilotRatesDefault());
 let rateAxis='roll';
 const RATE_AXES=['roll','pitch','yaw'];
 
 let ratesAreCustom=false;
+let ratesFromLink=false;             // a rates link's, for this session (applyQueryBoot)
 try{const saved=JSON.parse(localStorage.getItem('ryflyRates')||'null');
   if(saved&&saved.type&&saved.roll){
     const t=normalizeRateType(saved.type);
@@ -4224,8 +4229,19 @@ try{const saved=JSON.parse(localStorage.getItem('ryflyRates')||'null');
     for(const ax of RATE_AXES)if(saved[ax])Object.assign(rates[ax],saved[ax]);
   }
 }catch(e){}
+// A family picked before rates were one profile (ryflyRatesType alone):
+// the default, converted to it.
+try{
+  const t=normalizeRateType(localStorage.getItem('ryflyRatesType'));
+  if(t&&!ratesAreCustom&&t!==rates.type){
+    for(const ax of RATE_AXES)Object.assign(rates[ax],convertAxisRate(rates[ax],rates.type,t));
+    rates.type=t;
+  }
+}catch(e){}
 function saveRates(){
   ratesAreCustom=true;
+  ratesFromLink=false;
+  syncRatesSource();
   try{
     localStorage.setItem('ryflyRates',JSON.stringify(rates));
     localStorage.setItem('ryflyRatesType',rates.type);
@@ -4285,6 +4301,17 @@ function refreshRatesUI(){
     badge.style.color=actual?'var(--green)':'';
   }
   drawRateCurve(S('rateCurve'),rates.type,a);
+  syncRatesSource();
+}
+// Tune names where the flying rates come from, a line per core (body.bf-core
+// shows the bf one): the bf config's (the Air65 diff's, for every class) or
+// the js core's one profile. The bf line changes only with an IMPORT CLI
+// paste, which needs the bf core loaded.
+function syncRatesSource(){
+  const js=document.getElementById('ratesSourceJs');
+  if(js)js.textContent=ratesSourceText({core:'js',js:ratesFromLink?'link':ratesAreCustom?'saved':'default'});
+  const bf=document.getElementById('ratesSourceBf');
+  if(bf&&bfCore)bf.textContent=ratesSourceText({core:'bf',cli:!bfCliText?'':bfPasteReplaces(bfCliText)?'replace':'top'});
 }
 function setRateAxis(ax){rateAxis=ax;refreshRatesUI();}
 function refreshMax(){refreshRatesUI();}
@@ -5844,41 +5871,13 @@ syncWhoopUI();
 // Masses are now REAL AUW (grams) and thrust is absolute (maxThrustN, Newtons),
 // so a lighter drone genuinely accelerates harder. drag matches the authentic
 // less-floaty tuning (0.55+), not the old floaty 0.28.
-// Actual-rate profile per class, in real units: center/max are deg/s, expo
-// 0..1. The tune cards are the source of truth for what these quads really
-// fly, and tune-database.js publishes them on window.QuadMathTunes for
-// exactly this; the card scale is rc_rate/srate over 10 and expo over 100,
-// converted on the way in. Classes with no card (the two freestyle sizes)
-// and a missing/failed tune DB both land on the whoop fallback.
-// Betaflight-family class defaults, mirroring the rates{} initialiser above.
-const BF_CLASS_DEFAULT={rcRate:1.10,expo:0.25};
-const RATE_FALLBACK={
-  type:'ACTUAL',
-  roll: {center:75,max:650,expo:0.5},
-  pitch:{center:75,max:650,expo:0.5},
-  yaw:  {center:80,max:550,expo:0.4}
-};
-function rateProfileForClass(d){
-  const db=window.QuadMathTunes&&window.QuadMathTunes.tunes;
-  if(db&&d.frame){
-    // prefer the factory entry: a class preset should feel like the quad
-    // out of the box, not like somebody's race tune
-    const forFrame=db.filter(t=>t.frame===d.frame&&t.rateType==='ACTUAL'&&t.rates);
-    const t=forFrame.find(e=>e.source==='Stock')||forFrame[0];
-    if(t){
-      const ax=r=>({center:r[0]*10,max:r[1]*10,expo:r[2]/100});
-      return {type:'ACTUAL',src:t.id,
-              roll:ax(t.rates.roll),pitch:ax(t.rates.pitch),yaw:ax(t.rates.yaw)};
-    }
-  }
-  return RATE_FALLBACK;
-}
+// No rates here: rates are the pilot's, one profile for every class.
 const DRONE_TYPES={
-  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,sr:0.72,spool:0.013,cam:30,fov:VFOV_DEFAULT},
-  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,sr:0.68,spool:0.014,cam:15,fov:VFOV_DEFAULT},
-  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,sr:0.66,spool:0.015,cam:15,fov:VFOV_DEFAULT},
-  freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,sr:0.64,spool:0.040,cam:30,fov:VFOV_DEFAULT},
-  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,sr:0.62,spool:0.060,cam:30,fov:VFOV_DEFAULT}
+  whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,spool:0.013,cam:30,fov:VFOV_DEFAULT},
+  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,spool:0.014,cam:15,fov:VFOV_DEFAULT},
+  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,spool:0.015,cam:15,fov:VFOV_DEFAULT},
+  freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,spool:0.040,cam:30,fov:VFOV_DEFAULT},
+  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,spool:0.060,cam:30,fov:VFOV_DEFAULT}
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
@@ -5908,26 +5907,7 @@ document.getElementById('s_cam').addEventListener('input',()=>{
   saveCamDeg(camSaved);
   try{localStorage.removeItem('ryflyCamCustom');}catch(e){}
 });
-// Seed the rate sliders for a class. ACTUAL takes the card profile straight
-// (state stores centre/max over 10, which is the tune DB's own scale);
-// BETAFLIGHT keeps the old per-class super-rate and nothing else moves.
-function applyClassRates(d){
-  if(rates.type==='ACTUAL'){
-    const prof=rateProfileForClass(d);
-    for(const ax of RATE_AXES){
-      rates[ax].rcRate=prof[ax].center/10;
-      rates[ax].srate=prof[ax].max/10;
-      rates[ax].expo=prof[ax].expo;
-    }
-  }else{
-    for(const ax of RATE_AXES)
-      Object.assign(rates[ax],{rcRate:BF_CLASS_DEFAULT.rcRate,srate:d.sr,expo:BF_CLASS_DEFAULT.expo});
-    if(rates.type!=='BETAFLIGHT'){
-      for(const ax of RATE_AXES)
-        Object.assign(rates[ax],convertAxisRate(rates[ax],'BETAFLIGHT',rates.type));
-    }
-  }
-}
+// A class switch sets the class's physics, spool and camera; never the rates.
 function applyDroneType(){
   const d=DRONE_TYPES[droneType];
   applyingType=true;
@@ -5939,10 +5919,6 @@ function applyDroneType(){
     baseThrustPerMotor=qp.cfg.maxThrustPerMotor;
     CFG.maxThrustN=baseThrustPerMotor*4*WS;            // world-newton mirror, for audio + readouts
     setSlider('drag',d.drag);setSlider('mass',d.mass);
-    if(!ratesAreCustom){                              // per-drone feel, defaults only
-      applyClassRates(d);
-    }
-    refreshRatesUI();
     setSlider('spool',d.spool);                        // per-drone motor spool time constant
     if(d.cam!=null)setSlider('cam',camSaved!=null?camSaved:d.cam); // a saved angle beats the class default
     applyCfgToQp();                                    // slider values win over the preset's mass/tau
@@ -5959,33 +5935,19 @@ droneSel.onchange=()=>{
   toast(DRONE_TYPES[droneType].label.toUpperCase());
   selectCore();
 };
-// Rate-family selector, sat next to the class preset. Switching CONVERTS the
-// current tune through convertAxisFamily rather than resetting it, so a
-// pilot who pasted a CLI dump does not lose it by touching this dropdown.
-// An untouched (non-custom) tune is re-seeded from the class instead, which
-// is what makes switching to Actual pick up the card rates.
-// The chosen family lives under its own key. Folding it into ryflyRates
-// would trip ratesAreCustom on the next load, and a pilot who only ever
-// touched this dropdown would then never get class rates again.
-try{
-  const t=normalizeRateType(localStorage.getItem('ryflyRatesType'));
-  if(t&&!ratesAreCustom)rates.type=t;
-}catch(e){}
+// Rate-family selector. Switching CONVERTS the pilot's rates through
+// convertAxisFamily rather than resetting them, so a pilot who pasted a CLI
+// dump does not lose it by touching this dropdown; the converted rates are
+// theirs (saved).
 const rateTypeSel=document.getElementById('ratesType');
 if(rateTypeSel){
   rateTypeSel.value=rates.type;
   rateTypeSel.onchange=()=>{
     const to=normalizeRateType(rateTypeSel.value);
     if(!to||to===rates.type)return;
-    if(ratesAreCustom){
-      for(const ax of RATE_AXES)Object.assign(rates[ax],convertAxisRate(rates[ax],rates.type,to));
-      rates.type=to;
-      saveRates();
-    }else{
-      rates.type=to;
-      applyClassRates(DRONE_TYPES[droneType]);
-    }
-    try{localStorage.setItem('ryflyRatesType',to);}catch(e){}
+    for(const ax of RATE_AXES)Object.assign(rates[ax],convertAxisRate(rates[ax],rates.type,to));
+    rates.type=to;
+    saveRates();
     refreshRatesUI();
     toast((RATE_TYPE_LABELS[to]||to).toUpperCase()+' RATES');
   };
@@ -6196,6 +6158,7 @@ function importCliToBf(text){
     return r;
   }
   bfCliText=text;
+  syncRatesSource();
   setCliStatus('Betaflight took '+took+' line'+(took===1?'':'s')+(bfPasteReplaces(text)?' (a full diff, in place of '+BF_TUNE_ID+')':' on top of '+BF_TUNE_ID)+detail,'ok');
   return r;
 }
@@ -7379,11 +7342,15 @@ function onCoreEvent(ev){
 // is (rates, PIDs, filters, sag compensation, thrust linear, dynamic idle,
 // and its own switches: ARM AUX1, ANGLE AUX2, BEEPER and FLIP OVER AFTER
 // CRASH AUX3). The tune database's 1219s card stays the tune the page names.
-// Other classes fly the js core. World: every collider as a module-frame box, plus the city
+// Rates are the pilot's: a class's config is that diff with only the class
+// tune's P, I and D set on top (sim-core-adapter.js bfClassDiff,
+// BF_CLASS_TUNES), so every class flies the diff's rates; the 65's tune is
+// the diff's own profile. Other classes fly the js core until sim-core has
+// their plants. World: every collider as a module-frame box, plus the city
 // portals as triggers; a changed world is sent on the next spawn, or when the
 // quad is disarmed.
-const BF_TUNE_ID='65-betafpv-ryfly-1219s';
 const BF_CLASS='whoop65';
+const BF_TUNE_ID=BF_CLASS_TUNES[BF_CLASS];
 // vendor/sim-core/VERSION; versions the vendored URLs (cache) and the test
 // tools/test_sim_core.mjs holds the two equal.
 const SIM_CORE_VERSION='v0.5.0';
@@ -7407,7 +7374,17 @@ let bfLoading=null;
 let bfFailed=false;                  // the load failed: the js core flies the 65 for the session
 let bfWorldSigSent='';
 let bfWorldCheckAt=0;
-function bfDiff(){return bfOwnerDiff;}
+// The flying class's config, built once per class (the OSD compares it each frame).
+let bfClassMemo=null;
+function bfDiff(){
+  if(!bfOwnerDiff)return null;
+  if(!bfClassMemo||bfClassMemo.type!==droneType||bfClassMemo.from!==bfOwnerDiff){
+    const db=window.QuadMathTunes&&window.QuadMathTunes.tunes;
+    const tune=db&&db.find(t=>t.id===BF_CLASS_TUNES[droneType]);
+    bfClassMemo={type:droneType,from:bfOwnerDiff,text:bfClassDiff(bfOwnerDiff,tune&&tune.pids)};
+  }
+  return bfClassMemo.text;
+}
 // What Betaflight holds after a configure, for the console: the settings the
 // owner's diff is flown for.
 function bfConfigNote(bf){
@@ -7550,9 +7527,9 @@ function selectCore(){
     bfAirframe=airframe;
     bfWorldSigSent=bfWorldSig();
     const plantMap=BOUNCE_MAPS[currentMap]?currentMap:'';
-    return createBfCore({SimCore:mod.SimCore,wasm:new URL('vendor/sim-core/sim-core.wasm'+v,location.href),airframe:contactPlant(airframe,BOUNCE_MAPS[currentMap]),diff,world:bfWorld()}).then(bf=>{
+    return createBfCore({SimCore:mod.SimCore,wasm:new URL('vendor/sim-core/sim-core.wasm'+v,location.href),airframe:contactPlant(airframe,BOUNCE_MAPS[currentMap]),diff:bfDiff(),world:bfWorld()}).then(bf=>{
       const r=bf.report;
-      bfDiffLoaded=diff;
+      bfDiffLoaded=bfDiff();
       bfPlantMap=plantMap;
       console.info('sim-core '+SIM_CORE_VERSION+': Air65, '+BF_DIFF_PATH+' ('+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target; '+bfConfigNote(bf)+'); tune shown: '+BF_TUNE_ID+'; '+bfWorld().boxes.length+' world boxes; the Build\'s cells and mAh are not used (the plant is the Air65)');
       bfCore=bf;
@@ -8025,6 +8002,7 @@ function applyQueryBoot(){
   if(presetRaw&&applyRatePreset(rates,presetRaw)){
     const sel=document.getElementById('ratePreset');
     if(sel)sel.value=presetRaw;
+    ratesFromLink=true;
     refreshRatesUI();
   }
   if(ratesRaw){
@@ -8032,6 +8010,7 @@ function applyQueryBoot(){
     if(decoded&&!decoded.error){
       rates.type=decoded.type;
       for(const ax of RATE_AXES)Object.assign(rates[ax],decoded[ax]);
+      ratesFromLink=true;
       refreshRatesUI();
     }else{
       toast('RATES LINK INVALID');
@@ -8160,6 +8139,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   dailyLineFor,flyDailyLine,dailyLineLive:()=>dailyLineLive,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
   core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
+  rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
   audio:simAudio,setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,

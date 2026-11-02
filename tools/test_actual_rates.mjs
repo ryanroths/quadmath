@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { actualRate } from '../sim-rates.js';
+import { actualRate, pilotRatesDefault } from '../sim-rates.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const src = readFileSync(join(root, 'sim.html'), 'utf8');
@@ -89,23 +89,21 @@ test('maxRate below center clamps stick movement to zero', () => {
   assert.ok(actualRate(0.5, 650, 75, 0.5) > 0);
 });
 
-test('whoop fallback profile in sim.html matches the documented defaults', () => {
-  // Regex LITERALS only, and no newline splitting: a RegExp built from a
-  // string needs doubled backslashes, which is a good way to ship a test that
-  // silently matches nothing. Each axis entry ends at its own closing brace.
-  const from = src.indexOf('const RATE_FALLBACK=');
-  assert.notEqual(from, -1, 'RATE_FALLBACK not found in sim.html');
-  const block = src.slice(from, src.indexOf(';', src.indexOf('yaw', from)));
-  const grab = (axis) => {
-    const at = block.indexOf(axis + ':');
-    assert.notEqual(at, -1, `RATE_FALLBACK.${axis} not found`);
-    const entry = block.slice(at, block.indexOf('}', at) + 1);
-    const n = entry.replace(/[^0-9.]+/g, ' ').trim().split(/ +/).map(Number);
-    return { center: n[0], max: n[1], expo: n[2] };
-  };
-  assert.deepEqual(grab('roll'), { center: 75, max: 650, expo: 0.5 });
-  assert.deepEqual(grab('pitch'), { center: 75, max: 650, expo: 0.5 });
-  assert.deepEqual(grab('yaw'), { center: 80, max: 550, expo: 0.4 });
+test('the default Actual profile in sim.html is the Air65 diff\'s, with no per-class fallback', () => {
+  // Rates are the pilot's: one profile for every class, so the old per-class
+  // seeding (and its whoop fallback) is gone; the default is the owner's
+  // Air65 diff's rateprofile 0 (tools/test_sim_pilot_rates.mjs holds it to
+  // the diff and to Betaflight).
+  assert.equal(src.indexOf('const RATE_FALLBACK='), -1, 'no per-class fallback profile');
+  assert.ok(src.includes('const rates=Object.assign({quickRatesRcExpo:false},pilotRatesDefault());'));
+  const p = pilotRatesDefault();
+  assert.equal(p.type, 'ACTUAL');
+  // state stores centre/10 and max/10: centre 20 deg/s, max 740/740/700.
+  assert.deepEqual(p.roll, { rcRate: 2, srate: 74, expo: 0.56 });
+  assert.deepEqual(p.pitch, { rcRate: 2, srate: 74, expo: 0.56 });
+  assert.deepEqual(p.yaw, { rcRate: 2, srate: 70, expo: 0.56 });
+  assert.equal(actualRate(1, p.roll.rcRate * 10, p.roll.srate * 10, p.roll.expo), 740);
+  assert.equal(actualRate(1, p.yaw.rcRate * 10, p.yaw.srate * 10, p.yaw.expo), 700);
 });
 
 // Regression guard for the Actual slider ranges. The markup ranges are
