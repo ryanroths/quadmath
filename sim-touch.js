@@ -1185,13 +1185,16 @@ function listFromGetGamepads(getGamepads) {
   return out;
 }
 
+// The remembered pad, unless a radio outranks it: a lone pad is remembered
+// unasked (the first one Chrome shows), so an Xbox pad seen before the TX16S
+// beside it must not keep the radio off the sticks. Among equals the
+// remembered one wins.
 export function pickPreferredPad(pads, rememberedId) {
   const live = (pads || []).filter(Boolean);
   if (!live.length) return null;
+  const best = live.slice().sort((a, b) => radioScore(b) - radioScore(a))[0];
   const match = rememberedId && live.find((p) => p.id === rememberedId);
-  if (match) return match;
-  live.sort((a, b) => radioScore(b) - radioScore(a));
-  return live[0];
+  return match && radioScore(match) >= radioScore(best) ? match : best;
 }
 
 // Node-testable radio session: mocked getGamepads + storage. Gamepad connected

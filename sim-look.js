@@ -300,7 +300,11 @@ export function lookTextureSet(THREE, name) {
       fetch(`${TEX}/look_${name}_${kind}_${res}.webp`)
         .then((r) => { if (!r.ok) throw new Error(r.status + ' ' + t.name); return r.blob(); })
         .then((b) => createImageBitmap(b, { imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' }))
-        .then((bmp) => { t.source = new THREE.Source(bmp); t.needsUpdate = true; })
+        // A texture drawn before its image lands holds the placeholder in
+        // immutable 1x1 storage, and three.js keeps that GL texture for a new
+        // source: dispose first, so the image gets a texture of its own size
+        // (else GL_INVALID_OPERATION texStorage2D and the 1x1 stays).
+        .then((bmp) => { t.dispose(); t.source = new THREE.Source(bmp); t.needsUpdate = true; })
         .catch((e) => { if (typeof console !== 'undefined') console.warn('look texture', e); });
     }
     return t;
