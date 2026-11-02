@@ -137,7 +137,8 @@ test('soft AO under every object: the floor darkens at each foot and under the l
     const j = Math.min(ao.height - 1, Math.floor((room.d / 2 - z) / room.d * ao.height));
     return ao.data[j * ao.width + i];
   };
-  assert.ok(at(0, 0) >= 250, 'mid-room, open floor ' + at(0, 0));
+  // Open floor: between the spin pole and the crates (the tower stands near mid-room).
+  assert.ok(at(5, -3) >= 250, 'open floor ' + at(5, -3));
   // Every box on the floor has a darker rim at its foot.
   for (const b of RIG_PLAY.boxes.filter((q) => q.min[1] === 0)) {
     const cx = (b.min[0] + b.max[0]) / 2;

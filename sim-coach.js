@@ -8,8 +8,8 @@
 
 import { detectPassOrMiss, gateRadius } from './sim-tracks.js?v=0e8166b9e39b';
 import { DEFAULT_ROOM, planRoom } from './sim-room.js?v=c26e0c6bfbfc';
-import { makeWorldLabel } from './sim-art.js?v=98898b60f1d3';
-import { RIG_LINES } from './sim-coach-lines.js?v=f5be0d2ce657';
+import { makeWorldLabel } from './sim-art.js?v=6e4a3b2135a5';
+import { RIG_LINES } from './sim-coach-lines.js?v=ca46798ff12e';
 
 export const COACH_KEY = 'quadmathSimCoach';
 export const GUIDE_DIR = 'content/guides/';
@@ -70,15 +70,16 @@ function rigPad(name, x, y, z, r) {
   return Object.freeze({ name, shape: 'pad', axis: 'y', x: rw(x), y: rw(y), z: rw(z), r: rw(r) });
 }
 // Scaffold tower bays (decks at 1.7 / 3.4 / 5.1 m, 6 cm thick, posts 8 cm)
-// on its mid-plane x = -6.9: the line weaves up through them and back down.
-const BAY = [0, 1.7, 3.4].map((y0, i) => rigRect('bay ' + (i + 1), 'x', -6.9, y0 + 0.82, 5.1, 1.02, 0.82));
-const TOP = rigRect('over deck 3', 'x', -6.9, 5.55, 5.1, 1.1, 0.45);
+// on its mid-plane x = -2.9 (the tower near the middle of the room,
+// sim-maps.js RIG_PLAY.tower): the line weaves up through them and back down.
+const BAY = [0, 1.7, 3.4].map((y0, i) => rigRect('bay ' + (i + 1), 'x', -2.9, y0 + 0.82, 1.0, 1.02, 0.82));
+const TOP = rigRect('over deck 3', 'x', -2.9, 5.55, 1.0, 1.1, 0.45);
 const STRAIGHT_OUT = rigRing('straight', 'x', -4.35, 1.2, -5.6, 0.44);
 export const RIG_COURSES = Object.freeze({
   // Up: bay 1 going -x, bay 2 +x, bay 3 -x, over the top +x; down: bay 3,
   // bay 2, bay 1. A racetrack spiral round the tower, both straights through it.
   'tower-climb': Object.freeze({
-    pad: Object.freeze({ x: rw(-4.4), y: 0.2, z: rw(4.6) }),
+    pad: Object.freeze({ x: rw(-0.4), y: 0.2, z: rw(0.5) }),
     gates: Object.freeze([BAY[0], BAY[1], BAY[2], TOP, BAY[2], BAY[1], BAY[0]]),
   }),
   // Up behind the risers, along the top of the pipe run (-z), down through
@@ -91,14 +92,13 @@ export const RIG_COURSES = Object.freeze({
       rigRing('under the pipes', 'z', -9.05, 3.6, -1.6, 0.32),
     ]),
   }),
-  // The three crate walls, slots on x = 5.5 (sim-maps.js RIG_PLAY.crateX): 25,
-  // 21 and 18 cm, flown +z.
+  // The three crate walls on x = 9: slots of 25, 21 and 18 cm, flown +z.
   'crate-slalom': Object.freeze({
-    pad: Object.freeze({ x: rw(5.5), y: 0.2, z: rw(-3.4) }),
+    pad: Object.freeze({ x: rw(9), y: 0.2, z: rw(-3.4) }),
     gates: Object.freeze([
-      rigRect('wall 1 · 25 cm', 'z', 5.5, 1.0, -0.8, 0.125, 1.0, -0.21),
-      rigRect('wall 2 · 21 cm', 'z', 5.5, 1.0, 0, 0.105, 1.0, -0.21),
-      rigRect('wall 3 · 18 cm', 'z', 5.5, 1.0, 0.8, 0.09, 1.0, -0.21),
+      rigRect('wall 1 · 25 cm', 'z', 9, 1.0, -0.8, 0.125, 1.0, -0.21),
+      rigRect('wall 2 · 21 cm', 'z', 9, 1.0, 0, 0.105, 1.0, -0.21),
+      rigRect('wall 3 · 18 cm', 'z', 9, 1.0, 0.8, 0.09, 1.0, -0.21),
     ]),
   }),
   // The 30 cm bore, 4 m: in at its +x mouth, out at its -x one.

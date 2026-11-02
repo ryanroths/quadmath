@@ -1041,37 +1041,40 @@ function buildRoom(THREE, parent, colliders, lights, spec) {
 }
 
 // The Rig: a 20 × 15 × 6 m industrial interior at whoop scale, flow-first.
-// Metres here, scene axes (y up); buildRig scales by RIG_WS. Every object but
-// the crate stack is threaded by the loop (tracks/rig-loop.json), clockwise
-// seen from above: the 15 m straight along the -z wall heading +x, up the +x
-// wall, the tunnel back along the +z wall, the tower bay, then one dive in the
-// plane x = drop: over the pipes, down a pipe slit, through the loft hole, out
-// under the loft onto the straight. The crate stack stands off the loop, in
-// the room at x = 5.5: the Coach's crate slalom (a loop leg there would turn
-// tighter than its 1.4 m flow radius). Boxes only, axis-aligned, nothing under
-// 6 cm thick and no slot of 4–10 cm (sim-core issue #5).
+// Metres here, scene axes (y up); buildRig scales by RIG_WS. The loop
+// (tracks/rig-loop.json) threads the crates, tunnel, pipes and loft,
+// clockwise seen from above: the 15 m straight along the -z wall heading +x,
+// the crate slots up the +x wall, the tunnel back along the +z wall, a ring in
+// open air where the tower stood, then one dive in the plane x = drop: over
+// the pipes, down a pipe slit, through the loft hole, out under the loft onto
+// the straight. Off the loop, in the room:
+// the scaffold tower near the middle (the Coach's tower climb; a loop leg
+// through it there would turn tighter than its 1.4 m flow radius) and the
+// spin pole, standing alone with 1.5 m clear all round to orbit it. Boxes
+// only, axis-aligned, nothing under 6 cm thick and no slot of 4–10 cm
+// (sim-core issue #5).
 export const RIG_WS = 3.5; // world units per metre, as sim-core-adapter.js WS
 const RIG_DROP = -9.05;
-// The crate stack's slot line: its three slots sit on x = RIG_CRATE_X.
-const RIG_CRATE_X = 5.5;
+// The scaffold tower's centre (it is 1.3 m along x, 2.2 m along z, open on
+// its ±x faces) and the spin pole: a 10 cm steel pole, floor to ceiling.
+const RIG_TOWER = Object.freeze({ x: -2.9, z: 1.0 });
+const RIG_POLE = Object.freeze({ x: 3.0, z: -1.5, d: 0.1 });
 function rigBoxes() {
   const out = [];
   const b = (feature, part, x0, y0, z0, x1, y1, z1) => {
     const r = (v) => Math.round(v * 1e4) / 1e4;
     out.push(Object.freeze({ feature, part, min: [r(x0), r(y0), r(z0)], max: [r(x1), r(y1), r(z1)] }));
   };
-  // Crates: three 2 m walls of 0.5 m crates, 2.3 m long, standing across
-  // x = RIG_CRATE_X near the middle of the room. One slot each on that line,
-  // narrowing 25 → 21 → 18 cm; flown in a straight line.
-  const cx = RIG_CRATE_X, x0 = cx - 1.3, x1 = cx + 1.0;
+  // Crates: three 2 m walls of 0.5 m crates across x = 9, out to the +x wall.
+  // One slot each on x = 9, narrowing 25 → 21 → 18 cm; flown in a straight line.
   const walls = [[-1.0, 0.25], [-0.2, 0.21], [0.6, 0.18]];
   walls.forEach(([z, gap], w) => {
-    const rx = cx - gap / 2, wx = cx + gap / 2, mid = x0 + (rx - x0) / 2;
+    const rx = 9 - gap / 2, wx = 9 + gap / 2, mid = 7.7 + (rx - 7.7) / 2;
     for (let k = 0; k < 4; k++) {
       const y = 0.5 * k, n = `wall ${w + 1} crate ${k + 1}`;
-      b('crates', n + 'a', x0, y, z, mid, y + 0.5, z + 0.4);
+      b('crates', n + 'a', 7.7, y, z, mid, y + 0.5, z + 0.4);
       b('crates', n + 'b', mid, y, z, rx, y + 0.5, z + 0.4);
-      b('crates', n + 'c', wx, y, z, x1, y + 0.5, z + 0.4);
+      b('crates', n + 'c', wx, y, z, 10, y + 0.5, z + 0.4);
     }
   });
   // Tunnel: 30 cm square bore, 4 m, axis y 1.2 / z 5.6, on three trestles.
@@ -1080,9 +1083,10 @@ function rigBoxes() {
   b('tunnel', 'floor', 0.05, 0.97, 5.45, 4.05, 1.05, 5.75);
   b('tunnel', 'roof', 0.05, 1.35, 5.45, 4.05, 1.43, 5.75);
   for (const x of [0.35, 2.0, 3.65]) b('support', 'tunnel trestle', x, 0, 5.37, x + 0.1, 0.97, 5.83);
-  // Scaffold tower: 1.3 × 2.2 m, decks at 1.7 / 3.4 / 5.1 m, ±x faces open
-  // (the line crosses bay 2), guard rails on the ±z faces.
-  const tx0 = -7.55, tx1 = -6.25, tz0 = 4.0, tz1 = 6.2, p = 0.08;
+  // Scaffold tower near the middle of the room, off the loop (the Coach's
+  // tower climb): 1.3 × 2.2 m, decks at 1.7 / 3.4 / 5.1 m, ±x faces open,
+  // guard rails on the ±z faces.
+  const tx0 = RIG_TOWER.x - 0.65, tx1 = RIG_TOWER.x + 0.65, tz0 = RIG_TOWER.z - 1.1, tz1 = RIG_TOWER.z + 1.1, p = 0.08;
   for (const [x, z] of [[tx1 - p, tz0], [tx1 - p, tz1 - p], [tx0, tz0], [tx0, tz1 - p]]) {
     b('tower', 'post', x, 0, z, x + p, 5.1, z + p);
   }
@@ -1109,13 +1113,17 @@ function rigBoxes() {
   b('loft', 'floor', hx0, 2.7, hz1, hx1, 2.8, 0);
   b('loft', 'floor', hx0, 2.7, -4.6, hx1, 2.8, hz0);
   for (const z of [-4.6, -2.36, -0.12]) b('support', 'loft post', -7.12, 0, z, -7.0, 2.7, z + 0.12);
+  // Spin pole: its collider a 10 cm square post, floor to ceiling; drawn round.
+  const pr = RIG_POLE.d / 2;
+  b('pole', 'pole', RIG_POLE.x - pr, 0, RIG_POLE.z - pr, RIG_POLE.x + pr, 6, RIG_POLE.z + pr);
   return out;
 }
 
 export const RIG_PLAY = Object.freeze({
   room: Object.freeze({ w: 20, d: 15, h: 6 }),
   drop: RIG_DROP,
-  crateX: RIG_CRATE_X,
+  tower: RIG_TOWER,
+  pole: RIG_POLE,
   // Designed gaps the line threads, metres.
   gaps: Object.freeze({ crates: Object.freeze([0.25, 0.21, 0.18]), pipes: 0.20, tunnel: 0.30, hole: Object.freeze([1.0, 1.8]) }),
   straight: 15,
@@ -1140,6 +1148,7 @@ export const RIG_LOOK = Object.freeze({
     crates: rigSurface('plywood crate', 'plywood', 0xd9a066),
     tunnel: rigSurface('enamelled sheet steel', 'enamel', 0x9466e0),
     loft: rigSurface('rubber matting', 'rubber', 0xd0306a),
+    pole: rigSurface('painted steel pole', 'paintedSteel', 0x22b8cf),
   }),
   // Floor grid, metres: the concrete's saw-cut joints, a cut every metre, a
   // wider one every 5 m.
@@ -1166,7 +1175,7 @@ function buildRig(THREE, parent, colliders) {
   const mats = {
     floor: surface('floor', { joints: { origin: [-hx, -hz], unit: s } }), wall: surface('wall'), ceil: surface('ceil'),
     crates: surface('crates'), tunnel: surface('tunnel'), tower: surface('tower'),
-    pipes: surface('pipes'), loft: surface('loft'),
+    pipes: surface('pipes'), loft: surface('loft'), pole: surface('pole'),
   };
   const tiled = (mesh) => lookBoxUv(mesh, mesh.material.userData.lookTile * s);
   const vis = new THREE.Group();
@@ -1187,6 +1196,12 @@ function buildRig(THREE, parent, colliders) {
     const mesh = box(THREE, vis, colliders, (a[0] + b[0]) / 2, a[1], (a[2] + b[2]) / 2,
       b[0] - a[0], b[1] - a[1], b[2] - a[2], mats[zone]);
     mesh.name = 'rig_' + zone;
+    if (zone === 'pole') {
+      // Round to look at; the collider box() took stays the square post.
+      mesh.geometry.dispose();
+      mesh.geometry = new THREE.CylinderGeometry((b[0] - a[0]) / 2, (b[0] - a[0]) / 2, b[1] - a[1], 24);
+      continue;
+    }
     tiled(mesh);
     edge(a, b);
   }

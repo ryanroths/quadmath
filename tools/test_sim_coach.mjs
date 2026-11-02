@@ -552,7 +552,7 @@ test('Rig drills: each gate is the feature\'s own gap, open, and tight to the ge
   const slots = c['crate-slalom'].gates;
   assert.deepEqual(slots.map((g) => +(2 * M(g.hw)).toFixed(4)), [...G.crates]);
   for (const g of slots) {
-    assert.equal(M(g.x), RIG_PLAY.crateX);
+    assert.equal(M(g.x), 9);
     const wall = RIG_PLAY.boxes.find((b) => b.feature === 'crates' && Math.abs((b.min[2] + b.max[2]) / 2 - M(g.z)) < 1e-6);
     assert.ok(wall, g.name + ' on a wall\'s mid-plane');
     assert.ok(M(g.y) - M(g.hh) >= 0 && M(g.y) + M(g.hh) <= 2 + 1e-9, g.name + ' within the 2 m wall');
@@ -583,7 +583,8 @@ test('Rig drills: each gate is the feature\'s own gap, open, and tight to the ge
   assert.deepEqual(tower.map((g) => g.name), ['bay 1', 'bay 2', 'bay 3', 'over deck 3', 'bay 3', 'bay 2', 'bay 1']);
   const decks = RIG_PLAY.boxes.filter((b) => b.part === 'deck').sort((a, b) => a.min[1] - b.min[1]);
   const posts = RIG_PLAY.boxes.filter((b) => b.part === 'post');
-  const z0 = Math.max(...posts.map((b) => b.max[2]).filter((z) => z < 5.1)), z1 = Math.min(...posts.map((b) => b.min[2]).filter((z) => z > 5.1));
+  const tz = RIG_PLAY.tower.z;
+  const z0 = Math.max(...posts.map((b) => b.max[2]).filter((z) => z < tz)), z1 = Math.min(...posts.map((b) => b.min[2]).filter((z) => z > tz));
   tower.slice(0, 3).forEach((g, i) => {
     assert.ok(M(g.y) - M(g.hh) >= (i ? decks[i - 1].max[1] : 0) - 1e-9 && M(g.y) + M(g.hh) <= decks[i].min[1] + 1e-9, g.name + ' between decks');
     assert.ok(M(g.z) - M(g.hw) >= z0 - 1e-9 && M(g.z) + M(g.hw) <= z1 + 1e-9, g.name + ' inside the posts');
