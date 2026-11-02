@@ -127,6 +127,11 @@ export const LOOK_SPOTS = {
   // the arch into the living room; from the kitchen over the island.
   houseEntry: { pos: [-12.25, 5.075, 15.575], target: [3.5, 3.5, 9.8] },
   houseKitchen: { pos: [30.1, 6.125, 17.5], target: [7.7, 3.15, 9.1] },
+  // The Fly chooser's House thumbnail (assets/sim-thumbs/house.jpg): from the
+  // island's corner across the living room, the fig, lamp and rug, the
+  // bookshelf and the back hall's door beyond. sim.html?map=house&quality=high
+  // &look=houseThumb, UI hidden, 960x540 scaled to 480x270.
+  houseThumb: { pos: [15.4, 6.3, 18.2], target: [-3.5, 3.5, 10.5] },
   builder: { pos: [0, 14, 0.1], target: [0, 0, 0] },
 };
 
