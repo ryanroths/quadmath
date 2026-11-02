@@ -8,8 +8,8 @@
 
 import { detectPassOrMiss, gateRadius } from './sim-tracks.js?v=0e8166b9e39b';
 import { DEFAULT_ROOM, planRoom } from './sim-room.js?v=c26e0c6bfbfc';
-import { makeWorldLabel } from './sim-art.js?v=98898b60f1d3';
-import { RIG_LINES } from './sim-coach-lines.js?v=f5be0d2ce657';
+import { makeWorldLabel } from './sim-art.js?v=44be05187b1f';
+import { RIG_LINES } from './sim-coach-lines.js?v=69d59fb9af8f';
 
 export const COACH_KEY = 'quadmathSimCoach';
 export const GUIDE_DIR = 'content/guides/';
@@ -91,14 +91,13 @@ export const RIG_COURSES = Object.freeze({
       rigRing('under the pipes', 'z', -9.05, 3.6, -1.6, 0.32),
     ]),
   }),
-  // The three crate walls, slots on x = 5.5 (sim-maps.js RIG_PLAY.crateX): 25,
-  // 21 and 18 cm, flown +z.
+  // The three crate walls on x = 9: slots of 25, 21 and 18 cm, flown +z.
   'crate-slalom': Object.freeze({
-    pad: Object.freeze({ x: rw(5.5), y: 0.2, z: rw(-3.4) }),
+    pad: Object.freeze({ x: rw(9), y: 0.2, z: rw(-3.4) }),
     gates: Object.freeze([
-      rigRect('wall 1 · 25 cm', 'z', 5.5, 1.0, -0.8, 0.125, 1.0, -0.21),
-      rigRect('wall 2 · 21 cm', 'z', 5.5, 1.0, 0, 0.105, 1.0, -0.21),
-      rigRect('wall 3 · 18 cm', 'z', 5.5, 1.0, 0.8, 0.09, 1.0, -0.21),
+      rigRect('wall 1 · 25 cm', 'z', 9, 1.0, -0.8, 0.125, 1.0, -0.21),
+      rigRect('wall 2 · 21 cm', 'z', 9, 1.0, 0, 0.105, 1.0, -0.21),
+      rigRect('wall 3 · 18 cm', 'z', 9, 1.0, 0.8, 0.09, 1.0, -0.21),
     ]),
   }),
   // The 30 cm bore, 4 m: in at its +x mouth, out at its -x one.
@@ -1411,7 +1410,7 @@ export function ladderHtml(progress, ribbonOn, dev) {
   const rig = rows.filter((r) => !r.dev).map(row).join('');
   const old = rows.filter((r) => r.dev).map(row).join('');
   const on = ribbonOn !== false;
-  return '<h2>Coach</h2><p>Six drills on the Rig, one feature each. Gold is a flown line\'s time, silver 1.3×, bronze 1.7×. Bronze unlocks the next. The ghost line is your best run or the flown line.</p>' +
+  return '<h2>Coach</h2><p>Six drills on the Rig, one feature of the loop each. Gold is a flown line\'s time, silver 1.3×, bronze 1.7×. Bronze unlocks the next. The ghost line is your best run or the flown line.</p>' +
     '<div class="coach-list">' + rig + '</div>' +
     (old ? '<p><b>Old maps · dev</b> — the first ladder, its own unlocks.</p><div class="coach-list">' + old + '</div>' : '') +
     '<label class="coach-toggle"><input type="checkbox" id="coachRibbon"' + (on ? ' checked' : '') + '> Ghost line + live delta</label>' +

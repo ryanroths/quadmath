@@ -62,6 +62,7 @@ const inside = (p, lo, hi) => [0, 1, 2].every((k) => p[k] >= lo[k] && p[k] <= hi
 // The designed gaps the line threads; everywhere else it keeps 30 cm.
 const pipeLo = BOXES.filter((b) => b.part === 'pipe').map((b) => b.min[1])[0];
 const ZONES = {
+  crates: [[8.8, 0, -1.0], [9.2, 2, 1.0]],
   tunnel: [[0.05, 1.05, 5.45], [4.05, 1.35, 5.75]],
   slit: [[X - 0.1, pipeLo, -7.5], [X + 0.1, pipeLo + 0.15, 3.2]],
   // Tower bay 2: between deck 2 and deck 3, inside the posts.
@@ -107,9 +108,7 @@ test('every box is buildable: thick enough, inside, grounded, no 4–10 cm slot'
 });
 
 test('the six features have the asked-for gaps', () => {
-  // Crates: one slot per wall, 18–25 cm, all on x = 5.5 (crateX), the stack
-  // standing in the room clear of the +x wall.
-  assert.equal(RIG_PLAY.crateX, 5.5);
+  // Crates: one slot per wall, 18–25 cm, all on x = 9.
   const walls = new Map();
   for (const b of BOXES.filter((q) => q.feature === 'crates')) {
     const k = b.min[2] + ':' + b.min[1];
@@ -120,7 +119,7 @@ test('the six features have the asked-for gaps', () => {
     row.sort((p, q) => p.min[0] - q.min[0]);
     for (let i = 1; i < row.length; i++) {
       const g = +(row[i].min[0] - row[i - 1].max[0]).toFixed(4);
-      if (g > 0) { widths.add(g); assert.ok(Math.abs((row[i].min[0] + row[i - 1].max[0]) / 2 - RIG_PLAY.crateX) < 1e-6); }
+      if (g > 0) { widths.add(g); assert.ok(Math.abs((row[i].min[0] + row[i - 1].max[0]) / 2 - 9) < 1e-6); }
     }
   }
   assert.deepEqual([...widths].sort(), [0.18, 0.21, 0.25]);
@@ -151,18 +150,16 @@ test('the six features have the asked-for gaps', () => {
   assert.equal(+(s[3][0] - s[0][0]).toFixed(3), RIG_PLAY.straight);
 });
 
-test('the loop threads every feature but the crate stack (a Coach feature, off the loop) and keeps 30 cm everywhere else', () => {
+test('the loop threads every feature and keeps 30 cm everywhere else', () => {
   const path = [];
   const g0 = GATES[0].p;
   const n0 = Math.ceil(len(sub(g0, START)) / 0.01);
   for (let i = 0; i < n0; i++) path.push(lerp(START, g0, 0, n0, i));
   path.push(...loop(0.5, 0.01));
-  const hit = { tunnel: 1e9, slit: 1e9, hole: 1e9, tower: 1e9 };
-  const crates = BOXES.filter((b) => b.feature === 'crates');
-  let outside = 1e9, crateGap = 1e9;
+  const hit = { crates: 1e9, tunnel: 1e9, slit: 1e9, hole: 1e9, tower: 1e9 };
+  let outside = 1e9;
   for (const p of path) {
     const c = nearest(p).d;
-    for (const b of crates) crateGap = Math.min(crateGap, boxDist(p, b));
     assert.ok(c >= 0.085, 'line hits geometry at ' + p.map((v) => v.toFixed(2)));
     const r = Math.min(p[0] + 10, 10 - p[0], p[1], 6 - p[1], p[2] + 7.5, 7.5 - p[2]);
     assert.ok(r >= 0.3, 'line near the room shell at ' + p);
@@ -176,7 +173,6 @@ test('the loop threads every feature but the crate stack (a Coach feature, off t
   for (const [k, v] of Object.entries(hit)) assert.ok(v < 1e9, k + ' is not on the loop');
   assert.ok(Math.abs(hit.slit - 0.1) < 0.005, 'slit flown on its centre line ' + hit.slit);
   assert.ok(outside >= 0.3, 'clearance outside the designed gaps ' + outside);
-  assert.ok(crateGap >= 0.3, 'the loop keeps 30 cm from the crate stack ' + crateGap);
 });
 
 test('gates are entered in order, once each, from the start pad', () => {
