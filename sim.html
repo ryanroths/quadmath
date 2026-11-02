@@ -308,6 +308,26 @@
     #touchLayer .vstick{bottom:max(10px, env(safe-area-inset-bottom, 0px))}
     #touchBtns{top:max(6px, env(safe-area-inset-top, 0px))}
   }
+  /* Phones: every menu button is a thumb's 44 px target, and on a small
+     screen a menu layer (Fly's map chooser, Daily, Boards) takes the card's
+     place instead of opening below it, off screen in landscape
+     (tools/test_sim_mobile_launch.mjs, 390x844 and 844x390). */
+  @media (pointer:coarse){
+    .menu-card button,.menu-layer button{min-height:44px}
+  }
+  @media (max-width:559px),(max-height:500px){
+    #startMenu:has(#menuLayer.show) .menu-card{display:none}
+  }
+  /* Short screens: the menu stops above the fixed footer (two 14 px lines on
+     a landscape phone) instead of running under it. */
+  @media (max-height:500px){
+    #startMenu{padding-bottom:calc(32px + env(safe-area-inset-bottom, 0px))}
+    .menu-card,.menu-layer{max-height:calc(100dvh - 40px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))}
+  }
+  /* A landscape phone: the five 44 px launch buttons need the blurb's room. */
+  @media (max-height:430px) and (pointer:coarse){
+    .menu-lead{display:none}
+  }
   .track-maps{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
   .track-maps button,.track-list button{width:auto;flex:1;min-width:72px;margin-top:0;padding:7px 8px;font-size:11px;
     border-color:var(--line);color:var(--txt)}
