@@ -98,6 +98,17 @@ export function saveCamDeg(v, storage) {
   catch (e) { /* ignore quota / private mode */ }
 }
 
+// The arrow-key nudge (sim.html): the Cam angle 5 degrees up or down a press,
+// within 0..45. An angle the slider set above 45 is not raised; down brings
+// it back into range.
+export const CAM_NUDGE_DEG = 5;
+export const CAM_NUDGE_MAX = 45;
+export function nudgeCamDeg(cur, dir) {
+  const c = Number.isFinite(Number(cur)) ? Number(cur) : 0;
+  if (dir > 0 && c >= CAM_NUDGE_MAX) return c;
+  return Math.max(0, Math.min(CAM_NUDGE_MAX, c + (dir > 0 ? CAM_NUDGE_DEG : -CAM_NUDGE_DEG)));
+}
+
 // True when a FOV the pilot set on the slider is saved, old or new: it beats
 // the look's lens (sim-look.js). A bare 110 is the old default, not a choice.
 export function fovChosen(storage) {

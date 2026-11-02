@@ -15,6 +15,7 @@ import {
   RATE_PRESETS, applyRatePreset, INPUT_CHOICE_KEY, FLOATINESS_KEY,
   FOV_KEY, VFOV_DEFAULT, VFOV_OLD_DEFAULT, CAM_TILT_PRESETS,
   migrateSavedFov, loadFov, saveFov, CAM_KEY, loadCamDeg, saveCamDeg,
+  nudgeCamDeg, CAM_NUDGE_DEG, CAM_NUDGE_MAX,
 } from '../sim-feel.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -365,6 +366,21 @@ test('FOV default is 90 vertical; only a bare 110 migrates', () => {
   assert.ok(/whoop65:\{[^}]*cam:30[,}]/.test(simSrc), 'the 65 class defaults to 30 degrees');
   assert.ok(/whoop75:\{[^}]*cam:15[,}]/.test(simSrc) && /whoop85:\{[^}]*cam:15[,}]/.test(simSrc), 'the 75 and 85 keep 15');
   assert.ok(simSrc.includes('camSaved!=null?camSaved:d.cam'), 'a saved angle beats the class default');
+  // Up/down arrows: 5 degrees a press within 0..45, saved through the slider.
+  assert.equal(CAM_NUDGE_DEG, 5);
+  assert.equal(CAM_NUDGE_MAX, 45);
+  assert.equal(nudgeCamDeg(30, 1), 35);
+  assert.equal(nudgeCamDeg(30, -1), 25);
+  assert.equal(nudgeCamDeg(43, 1), 45, 'up stops at 45');
+  assert.equal(nudgeCamDeg(45, 1), 45);
+  assert.equal(nudgeCamDeg(3, -1), 0, 'down stops at 0');
+  assert.equal(nudgeCamDeg(0, -1), 0);
+  assert.equal(nudgeCamDeg(55, 1), 55, 'a slider angle above 45 is not raised');
+  assert.equal(nudgeCamDeg(55, -1), 45, 'down brings it into range');
+  assert.ok(/function nudgeCam\(dir\)\{\s*const v=nudgeCamDeg\(CFG\.camDeg,dir\);\s*setSlider\('cam',v\);\s*toast\('CAM '\+v\+'°',\{ms:1000\}\);/.test(simSrc),
+    'the nudge goes through the slider (so it is saved) and the OSD shows it for 1 s');
+  assert.ok(simSrc.includes("(e.key==='ArrowUp'||e.key==='ArrowDown')&&(gpConnected||(touchCtl&&touchCtl.enabled))"),
+    'arrows nudge the angle when the keyboard is not flying the sticks');
   assert.equal(CAM_TILT_PRESETS.indoorWhoop.deg, 15);
   assert.equal(CAM_TILT_PRESETS.raceWhoop.deg, 25);
   assert.ok(simSrc.includes('id="camTiltPreset"'));
