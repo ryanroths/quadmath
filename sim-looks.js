@@ -123,6 +123,10 @@ export const LOOK_SPOTS = {
   // tunnel beyond. sim.html?map=rig&quality=high&look=rigThumb, UI hidden,
   // 960x540 scaled to 480x270.
   rigThumb: { pos: [-32.2, 15.05, -23.1], target: [15.75, 2.8, 5.25] },
+  // The House's detail pass, before and after: from the entry hall through
+  // the arch into the living room; from the kitchen over the island.
+  houseEntry: { pos: [-12.25, 5.075, 15.575], target: [3.5, 3.5, 9.8] },
+  houseKitchen: { pos: [30.1, 6.125, 17.5], target: [7.7, 3.15, 9.1] },
   builder: { pos: [0, 14, 0.1], target: [0, 0, 0] },
 };
 
