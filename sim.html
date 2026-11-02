@@ -579,6 +579,7 @@
   <b>C — Coach / line</b><br>
   <b>R — Respawn last gate</b><br>
   <b>F — Sim flip when upside down</b><br>
+  <b>↑/↓ — Cam angle ±5° (radio or pad)</b><br>
   <b>ESC — Menu</b><br>
   <b>TAB — Tune Panel</b>
 </div>
@@ -982,7 +983,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=c26e0c6bfbfc";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=8dcc1e51965c";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=3d59649cf022";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=25231f0dd6c9";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -3909,6 +3910,13 @@ addEventListener('keydown',e=>{
     toggleArm();
     return;
   }
+  // Up/down nudge the Cam angle while a radio, a gamepad or touch flies the
+  // sticks; on the keyboard they stay pitch.
+  if((e.key==='ArrowUp'||e.key==='ArrowDown')&&(gpConnected||(touchCtl&&touchCtl.enabled))){
+    e.preventDefault();
+    if(!e.repeat)nudgeCam(e.key==='ArrowUp'?1:-1);
+    return;
+  }
   keys[e.key.toLowerCase()]=true;
   if(e.key==='1')setFlightMode('angle');
   if(e.key==='2')setFlightMode('horizon');
@@ -3941,6 +3949,14 @@ addEventListener('keydown',e=>{
   if(e.key.startsWith('Arrow'))e.preventDefault();
 });
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+// 5 degrees a press, 0..45 (nudgeCamDeg). Through the slider's own input
+// event, so the angle is saved (quadmathSimCamDeg) as a slider move is; the
+// OSD shows it for a second.
+function nudgeCam(dir){
+  const v=nudgeCamDeg(CFG.camDeg,dir);
+  setSlider('cam',v);
+  toast('CAM '+v+'°',{ms:1000});
+}
 let kbThrottle=0,gpConnected=false,gpName='';
 let threeD=false;
 // ---------- gamepad selection ----------
