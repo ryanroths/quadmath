@@ -277,6 +277,53 @@ test('the hosted pace ghost flies the line, from the first gate, clear of the Ho
   for (const s of g.samples) assert.ok(nearest(s.slice(1, 4).map(m)).d >= 0.085, 'ghost clips at ' + s.slice(1, 4));
 });
 
+test('the clutter: every piece a collider, where the owner put it, both powerloops clear', () => {
+  const room = (r, f) => BOXES.filter((b) => b.feature === f).every((b) => b.room === r);
+  // Living room: books with gaps, a lamp, a plant, a rug, pictures.
+  const books = part('bookshelf', 'books');
+  assert.ok(books.length >= 20, books.length + ' books');
+  const shelfBooks = new Map();
+  for (const b of books) shelfBooks.set(b.min[1], (shelfBooks.get(b.min[1]) || []).concat([b]));
+  for (const [y, row] of shelfBooks) {
+    row.sort((p, q) => p.min[0] - q.min[0]);
+    for (let i = 1; i < row.length; i++) assert.ok(row[i].min[0] - row[i - 1].max[0] > 0.10, 'books on ' + y + ' with gaps');
+  }
+  for (const f of ['lamp', 'plant', 'rug', 'pictures']) assert.ok(part(f).length && room('living', f), f + ' in the living room');
+  assert.equal(part('pictures', 'frame').length, 3);
+  // Kitchen: mugs and a fruit bowl on the island.
+  const isl = part('island', 'top')[0];
+  const onIsland = (b) => b.min[0] >= isl.min[0] && b.max[0] <= isl.max[0] && b.min[2] >= isl.min[2] && b.max[2] <= isl.max[2] && b.max[1] > isl.max[1];
+  assert.ok(part('island things', 'mug').length >= 2 && part('island things', 'fruit bowl').length === 1);
+  assert.ok(part('island things').every(onIsland), 'on the island');
+  // Hall: a laundry basket, open, and shoes.
+  assert.ok(room('hall', 'laundry basket') && room('hall', 'shoes') && part('shoes').length >= 4);
+  // Bathroom: towels over the tub.
+  for (const t of part('towels')) assert.ok(part('tub').some((s) => s.part !== 'bottom' && [0, 1, 2].every((k) => t.min[k] < s.max[k] && s.min[k] < t.max[k])), 'a towel over the tub');
+  // Patio: a bike, its bars on the house wall.
+  assert.ok(room('patio', 'bike') && part('bike', 'bars').every((b) => b.max[0] === HOUSE_PLAY.patio.x1), 'the bike against the wall');
+  // Curtains either side of the sliding door, on the hall side.
+  const curtains = part('curtains', 'curtain'), slide = ZONES.sliding;
+  assert.equal(curtains.length, 2);
+  assert.ok(curtains.some((c) => c.max[2] <= slide[0][2] + 0.1) && curtains.some((c) => c.min[2] >= slide[1][2]), 'either side of the door');
+  // Every box a collider, the built one its box at world scale.
+  installDomStub();
+  const cols = buildMap(THREE, 'house').colliders;
+  BOXES.forEach((b, i) => {
+    assert.deepEqual(cols[i].min.toArray().map((v) => +m(v).toFixed(4) + 0), b.min, b.feature + ' / ' + b.part + ' collider');
+    assert.deepEqual(cols[i].max.toArray().map((v) => +m(v).toFixed(4) + 0), b.max, b.feature + ' / ' + b.part + ' collider');
+  });
+  // The powerloops: the loop flies through each; nothing stands in either but
+  // the bookshelf and the table.
+  const P = HOUSE_PLAY.powerloops;
+  for (const [k, gate] of [['bookshelf', 'bookshelf gap'], ['table', 'under the table']]) {
+    const v = P[k], g = LINE.gates.find((q) => q.name === gate);
+    assert.ok(inside(PTS[g.at], v.min, v.max), gate + ' in the ' + k + ' powerloop');
+    assert.ok(v.max[1] === ROOM.h && v.min[1] === 0, 'floor to ceiling');
+    const inLoop = BOXES.filter((b) => b.feature !== v.feature && [0, 1, 2].every((n) => b.min[n] < v.max[n] && v.min[n] < b.max[n]));
+    assert.deepEqual(inLoop.map((b) => b.feature + ':' + b.part), [], k + ' powerloop clear');
+  }
+});
+
 // Hue (degrees) and saturation of a 0xRRGGBB colour, as written (sRGB).
 function hueSat(hex) {
   const r = (hex >> 16 & 255) / 255, g = (hex >> 8 & 255) / 255, b = (hex & 255) / 255;

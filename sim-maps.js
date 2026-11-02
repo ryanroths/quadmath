@@ -1241,9 +1241,11 @@ function buildRig(THREE, parent, colliders) {
 // bed); the walk-through closet; the bathroom (once round the tub, climbing);
 // the back hall's sliding door; the patio (a chair, under the table, the other
 // chair); the garden door back into the hall. Real sizes: doors 0.8 × 2.0,
-// counters 0.9, table 0.75, chair backs 0.9, sofa seat 0.45, bed 0.55. Boxes
-// only, axis-aligned, nothing under 6 cm thick and no slot of 4–10 cm
-// (sim-core issue #5), as the Rig.
+// counters 0.9, table 0.75, chair backs 0.9, sofa seat 0.45, bed 0.55. The
+// clutter (books, a lamp, a fig, a rug, pictures, mugs and fruit, a laundry
+// basket, shoes, curtains, towels, a bike) is each a line of its own, off the
+// loop and out of the two powerloops. Boxes only, axis-aligned, nothing under
+// 6 cm thick and no slot of 4–10 cm (sim-core issue #5), as the Rig.
 export const HOUSE_WS = 3.5; // world units per metre, as sim-core-adapter.js WS
 const HOUSE_H = 2.7;
 function houseBoxes() {
@@ -1319,6 +1321,17 @@ function houseBoxes() {
     [0.15, 0.16, -0.54, -0.3, 'terracotta'], [0.48, 0.24, -0.18, 0.06, 'blue'], [0.9, 0.24, -0.54, -0.3, 'white'],
     [1.32, 0.24, -0.24, 0.06, 'blue'],
   ];
+  // Each shelf a second block, 11–16 cm clear of the first: flush to the
+  // bay's other upright, or where the next bay's books are flush to that
+  // upright's far side, standing 11 cm off it. Lying stacks 8 cm tall under
+  // the top board. The gap (the middle bay, 0.9 to 1.68 m) stays empty.
+  books.push(
+    [0.15, 0.16, -1.45, -1.37, 'terracotta'], [0.15, 0.16, -0.81, -0.71, 'blue'], [0.15, 0.16, -0.16, 0.06, 'white'],
+    [0.48, 0.24, -1.46, -1.26, 'black'], [0.48, 0.24, -1.09, -0.95, 'blue'], [0.48, 0.24, -0.43, -0.29, 'terracotta'],
+    [0.9, 0.24, -1.86, -1.64, 'blue'], [0.9, 0.24, -0.16, 0.06, 'black'],
+    [1.32, 0.24, -1.44, -1.26, 'white'], [1.32, 0.24, -0.54, -0.38, 'terracotta'],
+    [1.74, 0.08, -1.86, -1.6, 'blue'], [1.74, 0.08, -1.2, -0.96, 'white'], [1.74, 0.08, -0.2, 0.06, 'terracotta'],
+  );
   for (const [y, h, x0, x1, mat] of books) b('living', mat, 'bookshelf', 'books', x0, y, 1.5, x1, y + h, 1.75);
   // The sofa faces the TV on the street wall; the fan hangs over its back.
   b('living', 'sofa', 'sofa', 'seat', 1.2, 0, 2.1, 3.4, 0.45, 3.05);
@@ -1420,6 +1433,75 @@ function houseBoxes() {
   chair(-7.45, 1.775, 2.165);
   b('patio', 'terracotta', 'patio', 'pot', -8.7, 0, -5.8, -8.25, 0.5, -5.35);
   b('patio', 'terracotta', 'patio', 'pot', -8.7, 0, 5.35, -8.25, 0.5, 5.8);
+  // Clutter, every piece a collider and each a line of its own, clear of the
+  // loop and of both powerloops (HOUSE_PLAY.powerloops).
+  // Living room. An arc lamp over the coffee table: under its arm, round its
+  // pole. Its arm at 1.8 m, under the menu camera's 2 m orbit.
+  b('living', 'steel', 'lamp', 'base', 0.45, 0, 3.75, 0.75, 0.06, 4.05);
+  b('living', 'steel', 'lamp', 'pole', 0.57, 0, 3.87, 0.63, 1.8, 3.93);
+  b('living', 'steel', 'lamp', 'arm', 0.57, 1.74, 3.87, 1.9, 1.8, 3.93);
+  b('living', 'sofa', 'lamp', 'shade', 1.62, 1.42, 3.72, 1.98, 1.74, 4.08);
+  // A wool rug under the coffee table, 6 cm deep pile; a landing pad.
+  b('living', 'rug', 'rug', 'rug', 0.95, 0, 3.3, 2.95, 0.06, 5.25);
+  // A fig by the TV wall: round its trunk, under the leaves (65 cm over the pot).
+  b('living', 'terracotta', 'plant', 'pot', -0.3, 0, 5.4, 0.1, 0.4, 5.8);
+  b('living', 'wood', 'plant', 'trunk', -0.13, 0.4, 5.57, -0.07, 1.05, 5.63);
+  b('living', 'leaf', 'plant', 'leaves', -0.45, 1.05, 5.25, 0.25, 1.45, 5.88);
+  b('living', 'leaf', 'plant', 'leaves', -0.33, 1.45, 5.36, 0.13, 1.85, 5.84);
+  // Pictures, 6 cm canvases in black frames, the canvas standing 1 cm proud:
+  // over the armchair, on the street wall, on the entry wall.
+  const picture = (axis, face, dir, a0, a1, y0, y1, mat) => {
+    const put = (inset, depth, m, part) => {
+      const p0 = a0 + inset, p1 = a1 - inset, f1 = face + dir * depth;
+      const [lo, hi] = [Math.min(face, f1), Math.max(face, f1)];
+      if (axis === 'z') b('living', m, 'pictures', part, p0, y0 + inset, lo, p1, y1 - inset, hi);
+      else b('living', m, 'pictures', part, lo, y0 + inset, p0, hi, y1 - inset, p1);
+    };
+    put(0, 0.06, 'black', 'frame');
+    put(0.07, 0.07, mat, 'canvas');
+  };
+  picture('z', -1.35, 1, -2.2, -1.5, 1.3, 1.8, 'blue');
+  picture('z', 6, -1, -2.15, -1.05, 1.15, 1.85, 'terracotta');
+  picture('x', -2.45, 1, 0.1, 0.9, 1.2, 1.75, 'bedding');
+  // Kitchen: a fruit bowl and three mugs on the island, either side of the
+  // line over it; skim between them. Each set into the 6 cm top down to the
+  // base, so no 6 cm slot between them and it.
+  b('kitchen', 'white', 'island things', 'fruit bowl', 3.75, 0.84, 2.98, 4.05, 1.0, 3.28);
+  b('kitchen', 'terracotta', 'island things', 'oranges', 3.8, 0.84, 3.05, 3.96, 1.05, 3.2);
+  b('kitchen', 'leaf', 'island things', 'apple', 3.88, 0.84, 3.12, 3.98, 1.07, 3.22);
+  b('kitchen', 'white', 'island things', 'mug', 3.6, 0.84, 4.35, 3.68, 1.0, 4.43);
+  b('kitchen', 'blue', 'island things', 'mug', 3.82, 0.84, 4.45, 3.9, 1.0, 4.53);
+  b('kitchen', 'black', 'island things', 'mug', 4.2, 0.84, 4.3, 4.28, 1.0, 4.38);
+  // Back hall. A laundry basket on the bathroom wall, open: 20 cm deep over
+  // the washing, 43 × 28 cm inside; dunk it. Its pieces run to the wall.
+  b('hall', 'wood', 'laundry basket', 'side', -3.3, 0, -3.75, -3.24, 0.5, -3.35);
+  b('hall', 'wood', 'laundry basket', 'side', -2.81, 0, -3.75, -2.75, 0.5, -3.35);
+  b('hall', 'wood', 'laundry basket', 'side', -3.24, 0, -3.75, -2.75, 0.5, -3.69);
+  b('hall', 'wood', 'laundry basket', 'side', -3.24, 0, -3.41, -2.75, 0.5, -3.35);
+  b('hall', 'wood', 'laundry basket', 'bottom', -3.24, 0, -3.69, -2.75, 0.15, -3.41);
+  b('hall', 'bedding', 'laundry basket', 'washing', -3.24, 0.15, -3.69, -2.75, 0.3, -3.41);
+  // Shoes by the sliding door, toes out from the wall, a pair each: skim them.
+  for (const [z, h, mat] of [[-2.85, 0.1, 'black'], [-2.5, 0.1, 'white'], [-2.15, 0.25, 'terracotta']]) {
+    for (const dz of [0, 0.1]) b('hall', mat, 'shoes', 'shoe', -5.5, 0, z + dz, -5.22, h, z + dz + 0.1);
+  }
+  // Linen curtains drawn back either side of the sliding door, on a rod; the
+  // open half 90 cm between them and the parked pane.
+  b('hall', 'steel', 'curtains', 'rod', -5.5, 2.2, -6, -5.44, 2.26, -2.98);
+  b('hall', 'sofa', 'curtains', 'curtain', -5.5, 0, -6, -5.38, 2.2, -5.5);
+  b('hall', 'sofa', 'curtains', 'curtain', -5.5, 0, -3.48, -5.38, 2.2, -2.98);
+  // Bathroom: towels over the tub's side and its end.
+  b('bathroom', 'sofa', 'towels', 'towel', -1.0, 0.36, -3.97, -0.6, 0.66, -3.76);
+  b('bathroom', 'bedding', 'towels', 'towel', 0.12, 0.36, -3.65, 0.32, 0.66, -3.3);
+  // Patio: a bike against the house wall, its bars on the wall. Behind it,
+  // a 32 cm slot under the bars; through its frame, 63 × 42 cm.
+  b('patio', 'black', 'bike', 'wheel', -6.08, 0, -2.6, -6.02, 0.66, -1.94);
+  b('patio', 'black', 'bike', 'wheel', -6.08, 0, -1.56, -6.02, 0.66, -0.9);
+  b('patio', 'blue', 'bike', 'top tube', -6.08, 0.78, -2.1, -6.02, 0.84, -1.35);
+  b('patio', 'blue', 'bike', 'down tube', -6.08, 0.3, -2.1, -6.02, 0.36, -1.35);
+  b('patio', 'blue', 'bike', 'seat tube', -6.08, 0.3, -2.1, -6.02, 0.95, -2.04);
+  b('patio', 'blue', 'bike', 'head tube', -6.08, 0.3, -1.41, -6.02, 1.0, -1.35);
+  b('patio', 'black', 'bike', 'saddle', -6.12, 0.95, -2.22, -5.98, 1.01, -1.98);
+  b('patio', 'steel', 'bike', 'bars', -6.35, 1.0, -1.41, -5.7, 1.06, -1.35);
   return out;
 }
 
@@ -1521,6 +1603,14 @@ export const HOUSE_PLAY = Object.freeze({
   patio: Object.freeze({ x0: -9, x1: -5.7, z0: -6, z1: 6, gardenWall: 0.9 }),
   // The owner's real dimensions, metres.
   sizes: Object.freeze({ door: Object.freeze([0.8, 2.0]), table: 0.75, chairBack: 0.9, counter: 0.9, sofaSeat: 0.45, bed: 0.55 }),
+  // The two powerloops, floor to ceiling, in the plane the loop flies them:
+  // through the bookshelf gap and over the shelf's top, under the patio table
+  // and over it. Each the gap's width and 30 cm either side, 1.5 m out from
+  // each face. Nothing stands in them but the bookshelf and the table.
+  powerloops: Object.freeze({
+    bookshelf: Object.freeze({ feature: 'bookshelf', min: Object.freeze([-1.5, 0, -0.05]), max: Object.freeze([-0.3, HOUSE_H, 3.3]) }),
+    table: Object.freeze({ feature: 'patio table', min: Object.freeze([-8.35, 0, -2.35]), max: Object.freeze([-6.85, HOUSE_H, 1.55]) }),
+  }),
   floors: HOUSE_FLOORS,
   boxes: Object.freeze(houseBoxes()),
 });
@@ -1552,6 +1642,8 @@ export const HOUSE_LOOK = Object.freeze({
     blue: houseSurface('blue paint', 'enamel', 0x45669b, 0.5),
     terracotta: houseSurface('terracotta paint', 'paintedSteel', 0xb85b37, 0.6),
     black: houseSurface('black gloss', 'enamel', 0x1c1d20, 0.5),
+    leaf: houseSurface('fig leaves', 'paintedSteel', 0x4f7d3a, 0.6),
+    rug: houseSurface('wool rug', 'fabric', 0x9a4434),
   }),
   // The HDRI fill's balance on every surface here (sim-look.js opts.fill):
   // warmer, and up to light rooms the low key reaches only in patches.
