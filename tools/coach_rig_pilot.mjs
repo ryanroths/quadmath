@@ -42,11 +42,15 @@ function installDomStub() {
 }
 
 // The Rig as the page's bfWorld() sends it: every collider of buildMap, as
-// module-frame boxes.
-export async function rigWorld() {
+// module-frame boxes. mapWorld does the same for any map (The Warehouse's
+// loop, tools/build_depot_loop.mjs).
+export function rigWorld() {
+  return mapWorld('rig');
+}
+export async function mapWorld(mapId) {
   installDomStub();
   const { buildMap } = await import('../sim-maps.js');
-  const built = buildMap(THREE, 'rig');
+  const built = buildMap(THREE, mapId);
   const ok = (v) => Number.isFinite(v) && Math.abs(v) <= 2000;
   const boxes = [];
   for (const bb of built.colliders) {
@@ -57,16 +61,20 @@ export async function rigWorld() {
   return { floorZ: 0, boxes, triggers: [] };
 }
 
-// The bf core as the page loads it on the Rig.
-export async function rigCore() {
+// The bf core as the page loads it on the Rig (or on another map: its
+// colliders and its contact plant).
+export function rigCore() {
+  return mapCore('rig');
+}
+export async function mapCore(mapId) {
   const airframe = JSON.parse(readFileSync(join(root, 'vendor/sim-core/airframes/air65.json'), 'utf8'));
   const diff = readFileSync(join(root, 'vendor/sim-core/configs/air65-ryfly-2026-10-23.txt'), 'utf8');
   return createBfCore({
     SimCore,
     wasm: readFileSync(join(root, 'vendor/sim-core/sim-core.wasm')),
-    airframe: contactPlant(airframe, BOUNCE_MAPS.rig),
+    airframe: contactPlant(airframe, BOUNCE_MAPS[mapId]),
     diff,
-    world: await rigWorld(),
+    world: await mapWorld(mapId),
   });
 }
 

@@ -248,6 +248,19 @@
   .fly-map span{font-size:13px;font-weight:600;padding:0 2px}
   .fly-map small{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--orange);padding:0 2px}
   .menu-layer .fly-map.on{border-color:var(--orange);background:rgba(255,77,26,.12)}
+  /* Three maps or more (.many): a row of three in a wider layer, so the cards
+     fit a landscape phone's height and each thumbnail stays well over 120 px
+     wide (tools/test_sim_mobile_launch.mjs, 844x390). 572 px makes them 160 x
+     90 there, whole pixels: a fractional height leaves the cards' and Close's
+     rounded corners a pixel off where a tap lands. A narrow screen keeps two
+     columns, the odd last card centred under them. Two maps keep the two-card
+     look. */
+  .fly-maps.many{grid-template-columns:repeat(3,1fr)}
+  .menu-layer.wide:has(.fly-maps.many){width:min(572px,92vw)}
+  @media (max-width:559px){
+    .fly-maps.many{grid-template-columns:1fr 1fr}
+    .fly-maps.many>.fly-map:last-child:nth-child(odd){grid-column:1/-1;justify-self:center;width:calc(50% - 5px)}
+  }
   /* The launch screen shows five; the in-flight menu (#startMenu.in-flight) its
      own list; dev-only needs ?dev=1 (body.dev); menu-hide never shows. */
   #startMenu:not(.in-flight) .menu-flight,#startMenu.in-flight .menu-launch,
@@ -955,8 +968,8 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=8f4237f25211";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=8508cdaa5643";
+} from "./sim-whoop.js?v=a24a99da1943";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=df803052f0fe";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -971,7 +984,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=7db19353078a";
+} from "./sim-art.js?v=e3367a5f77c5";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -992,19 +1005,20 @@ import {
   hostedGhostUrl, fetchBuiltinTracks, makePaceGhost,
   BUILTIN_TRACK_FILES, SHARE_PREFIX, applyMissPenalty, enteredGate,
   findTrackIn, resolveSimBoot, knownMapId, trackRefId, DEFAULT_MAP, mapOpen, linkNeedsDev,
+  classDefaultMap, hasSelected,
   isFreestyleTrackId, freestyleTrack, freestyleIdFor,
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=0e8166b9e39b";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=0b2c7bf6e82f";
+} from "./sim-tracks.js?v=f8e3e6793ea8";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=c1e0f018aeed";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=c26e0c6bfbfc";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=f283b4482a12";
-import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=25231f0dd6c9";
+} from "./sim-room.js?v=74928ed0772f";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=a11d12abd9a7";
+import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=d55c6a2d63e0";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -1020,10 +1034,10 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=5974a80415f6";
+} from "./sim-coach.js?v=417b24f892a4";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
-} from "./sim-tricks.js?v=3f9a33d3082a";
+} from "./sim-tricks.js?v=d0aa4b7ce820";
 import {
   DAILY_KEY, DAILY_LINE_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -1049,7 +1063,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=467407c79fba";
+} from "./sim-secrets.js?v=af14d74583db";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -2994,8 +3008,9 @@ function bootMapHint(){
   try{
     const q=new URLSearchParams(location.search);
     // The map the page will boot into, saved selection and ?dev=1 included,
-    // so only that map's heavy art starts.
-    const boot=resolveSimBoot({map:q.get('map'),track:q.get('track')},loadSelected(),[],{dev:DEV_UI});
+    // so only that map's heavy art starts. Nothing asked and nothing saved:
+    // the class's map (classMap), as applyQueryBoot resolves it.
+    const boot=resolveSimBoot({map:q.get('map'),track:q.get('track')},savedSelection(),[],{dev:DEV_UI,defaultMap:classMap()});
     return (boot&&boot.map)||currentMap;
   }catch(e){return currentMap;}
 }
@@ -3154,6 +3169,7 @@ function applyMapLooks(mapId){
     else if(mapId==='city')credit.textContent='City is original procedural art — Neon Current · Felt Scale. Kenney CC0 cars and street kit.';
     else if(mapId==='rig')credit.textContent='The Rig is original procedural geometry — Soft Industrial. Poly Haven CC0 HDRI and textures.';
     else if(mapId==='house')credit.textContent='The House is original procedural geometry — Afternoon House. Poly Haven CC0 HDRI and textures.';
+    else if(mapId==='depot')credit.textContent='The Warehouse is original procedural geometry — Morning Warehouse. Poly Haven CC0 HDRI and textures.';
   }
 }
 function isFreeFlight(t,trackId){
@@ -4928,15 +4944,16 @@ function leaveRace(){
   if(typeof updateGateHighlight==='function')updateGateHighlight();
 }
 function startFreestyle(mapHint){
-  const saved=loadSelected();
-  // Fly: the last map, if it is open (mapOpen: The Rig, or any map with
-  // ?dev=1), else DEFAULT_MAP. A hint (Freestyle this map, the picker) flies
-  // its map if open; a closed one (the pilot is on it from an archive link)
-  // goes to the Rig, with ARCHIVE_TOAST.
+  const saved=savedSelection();
+  // Fly: the last map, if it is open (mapOpen: The Rig, The House, The
+  // Warehouse, or any map with ?dev=1), else the class's map (classMap: the
+  // 65 the Rig, the 75 and 85 The Warehouse). A hint (Freestyle this map, the
+  // picker) flies its map if open; a closed one (the pilot is on it from an
+  // archive link) goes to the Rig, with ARCHIVE_TOAST.
   const last=saved&&mapOpen(saved.map,DEV_UI)?saved.map:null;
   const hint=knownMapId(mapHint);
   const archived=!!hint&&!mapOpen(hint,DEV_UI);
-  const fly=resolveFly({map:(archived?DEFAULT_MAP:hint)||last||DEFAULT_MAP});
+  const fly=resolveFly({map:(archived?DEFAULT_MAP:hint)||last||classMap()});
   hideMenuLayer();
   leaveRace();
   if(coach&&coach.isActive())coach.cancel();
@@ -4967,20 +4984,21 @@ function toggleStartMenu(force){
   if(next){panel.classList.remove('open');syncMenuSparks();}
 }
 // Fly: a map chooser. The open maps (mapOpen without ?dev=1: The Rig, The
-// House), each with its thumbnail; with ?dev=1 an archived map flown last is
-// offered too. The last map flown (the saved selection) is marked and has the
-// focus, so Fly then Enter flies it again. A tap flies that map.
-const FLY_THUMBS={rig:'assets/sim-thumbs/rig.jpg',house:'assets/sim-thumbs/house.jpg'};
+// House, The Warehouse), each with its thumbnail; with ?dev=1 an archived map
+// flown last is offered too. The last map flown (the saved selection) is
+// marked and has the focus, so Fly then Enter flies it again; with none saved,
+// the class's map (classMap). A tap flies that map.
+const FLY_THUMBS={rig:'assets/sim-thumbs/rig.jpg',house:'assets/sim-thumbs/house.jpg',depot:'assets/sim-thumbs/depot.jpg'};
 function flyMapChoices(){
   const maps=MAPS.filter(m=>mapOpen(m.id,false));
-  const saved=loadSelected();
+  const saved=savedSelection();
   const own=saved&&MAPS.find(m=>m.id===saved.map);
   if(own&&mapOpen(own.id,DEV_UI)&&!maps.includes(own))maps.push(own);
-  return {maps,last:own&&maps.includes(own)?own.id:DEFAULT_MAP};
+  return {maps,last:own&&maps.includes(own)?own.id:classMap()};
 }
 function openFlyPicker(){
   const {maps,last}=flyMapChoices();
-  showMenuLayer('<h2>Fly</h2><p>Free flight: no gates, no timer. Pick a map.</p><div class="fly-maps">'+
+  showMenuLayer('<h2>Fly</h2><p>Free flight: no gates, no timer. Pick a map.</p><div class="fly-maps'+(maps.length>2?' many':'')+'">'+
     maps.map(m=>'<button type="button" class="fly-map'+(m.id===last?' on':'')+'" data-fly-map="'+m.id+'">'+
       (FLY_THUMBS[m.id]?'<img src="'+FLY_THUMBS[m.id]+'" alt="" width="480" height="270">':'')+
       '<span>'+m.name+'</span>'+(m.id===last?'<small>Last flown</small>':'')+'</button>').join('')+
@@ -5314,7 +5332,8 @@ function openSkinsCard(){
 }
 function openTrackPicker(startMap){
   pickerMap=startMap||currentMap;
-  // Only open maps get a tab (mapOpen: The Rig, or every map with ?dev=1).
+  // Only open maps get a tab (mapOpen: The Rig, The House, The Warehouse, or
+  // every map with ?dev=1).
   if(!mapOpen(pickerMap,DEV_UI))pickerMap=DEFAULT_MAP;
   const layer=document.getElementById('menuLayer');
   if(layer)layer.classList.add('wide');
@@ -5904,6 +5923,35 @@ const DRONE_TYPES={
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
 if(!DRONE_TYPES[droneType])droneType='whoop65';
+// The class's own map (sim-tracks.js classDefaultMap): the 65 the Rig, the 75
+// and 85 The Warehouse, a freestyle class the Rig. A pilot with nothing saved
+// (savedSelection null) boots there and Fly marks it; an explicit ?map= or
+// ?track= and a saved map win, and every archive or unknown-map fallback is
+// still the Rig (DEFAULT_MAP). A saved build sets droneType before the boot.
+function classMap(){
+  try{const d=DRONE_TYPES[droneType];return classDefaultMap(d&&d.frame);}catch(e){return DEFAULT_MAP;}
+}
+// The saved selection, or null when the pilot has none (loadSelected() alone
+// answers the Rig then).
+function savedSelection(){return hasSelected()?loadSelected():null;}
+// The map behind the menu when the boot chose it by class (nothing asked,
+// nothing saved), until the pilot flies: a session (sessionLive), an arm (the
+// frame loop clears it) or any other map or track (followClassMap).
+let classBackdrop=null;
+// A class switch before the first flight (Tune's Drone type, or Your build's
+// preset or frame) moves that backdrop to the new class's map, unsaved, the
+// quad on its pad. A pilot who chose a map, or is flying, stays put.
+function followClassMap(){
+  if(!classBackdrop||sessionLive||coreArmed())return;
+  if(currentMap!==classBackdrop||String(activeTrackId)!==freestyleIdFor(currentMap))return;
+  const m=classMap();
+  if(m===currentMap||hasSelected())return;
+  classBackdrop=m;
+  setMap(m,freestyleIdFor(m),{save:false}).then(function(){
+    const pad=resetSpawnPos();
+    placeQuadAt(pad.x,pad.y,pad.z,pad.yaw);
+  }).catch(function(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}});
+}
 const droneSel=document.getElementById('droneType');
 for(const[k,d]of Object.entries(DRONE_TYPES)){
   const o=document.createElement('option');o.value=k;o.textContent=d.label;
@@ -5956,6 +6004,7 @@ droneSel.onchange=()=>{
   else saveBuild(null);
   toast(DRONE_TYPES[droneType].label.toUpperCase());
   selectCore();
+  followClassMap();
 };
 // Rate-family selector. Switching CONVERTS the pilot's rates through
 // convertAxisFamily rather than resetting them, so a pilot who pasted a CLI
@@ -6063,13 +6112,14 @@ function wireBuildUI(){
       sel.appendChild(o);
     }
   }
-  if(sel)sel.onchange=()=>{if(!sel.value)return;applyBuild(BUILD_PRESETS[sel.value]);};
+  if(sel)sel.onchange=()=>{if(!sel.value)return;applyBuild(BUILD_PRESETS[sel.value]);followClassMap();};
   ['buildFrame','buildProp','buildBlades','buildCells','s_buildKv','s_buildMah','s_buildAuw'].forEach(id=>{
     const el=document.getElementById(id);
     if(!el)return;
     el.addEventListener('input',()=>{
       if(syncingBuildUI)return;
       applyBuild(readBuildForm());
+      followClassMap();
     });
   });
   const share=document.getElementById('btnBuildShare');
@@ -6093,7 +6143,7 @@ function openBuildPicker(){
     '<button type="button" id="layerClose">Close</button>');
   if(layer)layer.classList.add('wide');
   document.querySelectorAll('#menuLayer [data-bid]').forEach(b=>{
-    b.onclick=()=>{applyBuild(BUILD_PRESETS[b.dataset.bid]);hideMenuLayer();};
+    b.onclick=()=>{applyBuild(BUILD_PRESETS[b.dataset.bid]);hideMenuLayer();followClassMap();};
   });
   const paint=document.getElementById('buildOpenWhoop');
   if(paint)paint.onclick=()=>openWhoopCard();
@@ -7669,6 +7719,7 @@ function loop(now){
   }
   const frameMs=lastFrameAt===null?0:now-lastFrameAt;lastFrameAt=now;
   let dt=(now-last)/1000;last=now;dt=Math.min(dt,.05);
+  if(classBackdrop&&coreArmed())classBackdrop=null; // armed: this map is the pilot's now (followClassMap)
   if(looks)looks.tick(now);
   try{
     if(currentMap==='city')tickCityArt(cityWorld,now);
@@ -7992,7 +8043,12 @@ function applyQueryBoot(){
   const extraGenerated=generatedWhoops();
   const fromId=trackFromRetentionId(track);
   if(fromId&&!extraGenerated.some(t=>t.id===fromId.id))extraGenerated.push(fromId);
-  const boot=resolveSimBoot({map,track},loadSelected(),builtinTracks.concat(customTracks).concat(extraGenerated),{dev:DEV_UI});
+  // Nothing asked and nothing saved: the class's map (classMap), as
+  // bootMapHint lands it; a class switch before the first flight moves it
+  // (followClassMap).
+  const saved=savedSelection();
+  const boot=resolveSimBoot({map,track},saved,builtinTracks.concat(customTracks).concat(extraGenerated),{dev:DEV_UI,defaultMap:classMap()});
+  classBackdrop=!map&&!trackRaw&&!saved?boot.map:null;
   // An unknown ?map= still lands on the boot map (the page is built on City),
   // unsaved.
   const already=currentMap===boot.map&&String(activeTrackId)===String(boot.track);

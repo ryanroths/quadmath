@@ -11,6 +11,7 @@ import {
   findTrackIn, resolveSimBoot, firstTrackForMap, knownMapId, isBlankTrackId,
   isFreestyleTrackId, isEphemeralTrackId, freestyleTrack, freestyleIdFor,
   resolveFly, resolveTrackPick, persistableSelection, DEFAULT_MAP, mapOpen,
+  PUBLIC_MAPS, CLASS_MAPS, classDefaultMap, hasSelected, freestyleStart,
   isLineTrackId, lineFinishIndex, afterLinePass, ghostSampleDue, downsampleGhost,
   interpolateGhostPose, lineDeltaMs, fmtSignedDelta, visibleSplits,
   LINE_GHOST_HZ, LINE_GHOST_MAX,
@@ -240,10 +241,10 @@ assert.equal(dailySaved.track, 'trainer-freestyle');
 assert.equal(resolveFly({ map: 'living', track: 'living-sofa' }).track, 'living-freestyle');
 assert.equal(resolveFly(null).track, 'rig-freestyle');
 
-// Without ?dev=1 The Rig and The House are open: a saved or linked closed map
-// boots The Rig, unsaved; generated session courses (daily, weekly, room
-// practice) still fly their own map; with ?dev=1 (or no opts, the old callers)
-// every map is open.
+// Without ?dev=1 The Rig, The House and The Warehouse are open: a saved or
+// linked closed map boots The Rig, unsaved; generated session courses (daily,
+// weekly, room practice) still fly their own map; with ?dev=1 (or no opts,
+// the old callers) every map is open.
 assert.equal(DEFAULT_MAP, 'rig');
 assert.equal(mapOpen('rig', false), true);
 assert.equal(mapOpen('house', false), true);
@@ -251,6 +252,66 @@ const houseLink = resolveSimBoot({ map: 'house', track: 'house-loop' }, null, fi
 assert.deepEqual([houseLink.map, houseLink.track, houseLink.closedMap], ['house', 'house-loop', undefined]);
 const houseSaved = resolveSimBoot({}, { map: 'house', track: 'house-loop' }, files, { dev: false });
 assert.deepEqual([houseSaved.map, houseSaved.track], ['house', 'house-freestyle']);
+// The Warehouse (map id depot; the archived map owns 'warehouse'), as the House.
+assert.deepEqual([...PUBLIC_MAPS], ['rig', 'house', 'depot']);
+assert.equal(mapOpen('depot', false), true);
+assert.ok(MAPS.some((m) => m.id === 'depot' && m.name === 'The Warehouse' && m.class === 'whoop' && m.indoor));
+assert.equal(MAPS[MAPS.findIndex((m) => m.id === 'house') + 1].id, 'depot', 'right after the House');
+assert.ok(BUILTIN_TRACK_FILES.some((t) => t.id === 'depot-loop' && t.map === 'depot' && t.name === 'Warehouse Loop'));
+assert.equal(files.find((t) => t.id === 'depot-loop').map, 'depot');
+const depotLink = resolveSimBoot({ map: 'depot', track: 'depot-loop' }, null, files, { dev: false });
+assert.deepEqual([depotLink.map, depotLink.track, depotLink.closedMap], ['depot', 'depot-loop', undefined]);
+const depotSaved = resolveSimBoot({}, { map: 'depot', track: 'depot-loop' }, files, { dev: false });
+assert.deepEqual([depotSaved.map, depotSaved.track], ['depot', 'depot-freestyle']);
+const depotStart = freestyleStart('depot');
+assert.deepEqual([depotStart.x, depotStart.y, depotStart.z], [-43.225, 1.225, 5.775], 'freestyle starts on the loop pad');
+assert.ok(Math.abs(depotStart.yaw + Math.PI / 2) < 1e-12, 'nose +x, down the centre run');
+// Each whoop class's own map (CLASS_MAPS): the 65 the Rig, the 75 and 85 The
+// Warehouse; no frame (a freestyle class) the Rig. It is the boot map only
+// when nothing is asked and nothing is saved; a closed or unknown map, and
+// every archive fallback, still land on the Rig.
+assert.deepEqual({ ...CLASS_MAPS }, { 65: 'rig', 75: 'depot', 85: 'depot' });
+assert.equal(classDefaultMap(65), 'rig');
+assert.equal(classDefaultMap(75), 'depot');
+assert.equal(classDefaultMap(85), 'depot');
+assert.equal(classDefaultMap('75'), 'depot');
+assert.equal(classDefaultMap(undefined), 'rig');
+assert.equal(classDefaultMap(null), 'rig');
+assert.equal(classDefaultMap(110), 'rig');
+const classOpts = { dev: false, defaultMap: 'depot' };
+const classBoot = resolveSimBoot({}, null, files, classOpts);
+assert.deepEqual([classBoot.map, classBoot.track, classBoot.save, classBoot.mode], ['depot', 'depot-freestyle', false, 'free']);
+assert.equal(resolveSimBoot({}, null, files, { dev: true, defaultMap: 'depot' }).map, 'depot');
+assert.equal(resolveSimBoot({}, null, files, { dev: false, defaultMap: 'rig' }).map, 'rig');
+assert.equal(resolveSimBoot({}, null, files, { dev: false, defaultMap: 'narnia' }).map, 'rig', 'an unknown default is the Rig');
+const classClosed = resolveSimBoot({ map: 'garage' }, null, files, classOpts);
+assert.deepEqual([classClosed.map, classClosed.track, classClosed.closedMap], ['rig', 'rig-freestyle', 'garage'], 'a closed map is still the Rig');
+const classUnknown = resolveSimBoot({ map: 'narnia' }, null, files, classOpts);
+assert.deepEqual([classUnknown.map, classUnknown.unknownMap], ['rig', true], 'an unknown map is still the Rig');
+const classClosedSaved = resolveSimBoot({}, { map: 'gym', track: 'gym-court' }, files, classOpts);
+assert.deepEqual([classClosedSaved.map, classClosedSaved.closedMap], ['rig', 'gym'], 'a saved closed map is still the Rig');
+const classSaved = resolveSimBoot({}, { map: 'house', track: 'house-freestyle' }, files, classOpts);
+assert.deepEqual([classSaved.map, classSaved.restored], ['house', true], 'a saved map beats the class default');
+assert.equal(resolveSimBoot({}, { map: 'rig', track: 'rig-freestyle' }, files, classOpts).map, 'rig', 'a saved Rig too');
+assert.equal(resolveSimBoot({ map: 'rig' }, null, files, classOpts).map, 'rig', 'an explicit ?map= wins');
+assert.equal(resolveSimBoot({ track: 'rig-loop' }, null, files, classOpts).map, 'rig', 'an explicit ?track= wins');
+assert.equal(resolveSimBoot({ track: 'rig-loop' }, null, [], classOpts).map, 'rig', 'a ?track= not loaded yet keeps the Rig');
+// hasSelected: a saved selection on a known map, where loadSelected always
+// answers one.
+{
+  const mem = new Map();
+  const s = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)) };
+  assert.equal(hasSelected(s), false);
+  assert.equal(loadSelected(s).map, 'rig');
+  saveSelected({ map: 'depot', track: 'depot-freestyle' }, s);
+  assert.equal(hasSelected(s), true);
+  mem.set(SELECTED_TRACK_KEY, '{bad json');
+  assert.equal(hasSelected(s), false);
+  mem.set(SELECTED_TRACK_KEY, JSON.stringify({ map: 'narnia', track: 'x' }));
+  assert.equal(hasSelected(s), false);
+  mem.set(SELECTED_TRACK_KEY, '');
+  assert.equal(hasSelected(s), false);
+}
 assert.equal(mapOpen('garage', false), false);
 assert.equal(mapOpen('garage', true), true);
 const closedSaved = resolveSimBoot({}, { map: 'garage', track: 'garage-bench' }, files, { dev: false });

@@ -44,6 +44,8 @@ export const FROZEN_CITY = {
 export const MAPS = [
   { id: 'rig', name: 'The Rig', class: 'whoop', indoor: true },
   { id: 'house', name: 'The House', class: 'whoop', indoor: true },
+  // The Warehouse: id depot, since the archived map below owns 'warehouse'.
+  { id: 'depot', name: 'The Warehouse', class: 'whoop', indoor: true },
   { id: 'city', name: 'City', class: 'open', indoor: false },
   { id: 'living', name: 'Living Room', class: 'whoop', indoor: true },
   { id: 'garage', name: 'Garage', class: 'whoop', indoor: true },
@@ -79,13 +81,23 @@ export function knownMapId(id) {
   return MAPS.some((m) => m.id === id) ? id : null;
 }
 
-// The map a fresh pilot launches into, and the fallback for an unknown or
-// closed one. The House is open beside it (Fly and Tracks); the other maps
-// are open with ?dev=1 only (mapOpen).
+// The fallback for an unknown or closed map, and the map a fresh pilot
+// launches into when the class names none (CLASS_MAPS). The House and The
+// Warehouse are open beside it (Fly and Tracks); the other maps are open with
+// ?dev=1 only (mapOpen).
 export const DEFAULT_MAP = 'rig';
-export const PUBLIC_MAPS = Object.freeze([DEFAULT_MAP, 'house']);
+export const PUBLIC_MAPS = Object.freeze([DEFAULT_MAP, 'house', 'depot']);
 export function mapOpen(mapId, dev) {
   return !!dev || PUBLIC_MAPS.includes(mapId);
+}
+// Each whoop class's own map, by frame (mm): where a pilot with nothing asked
+// and nothing saved launches (resolveSimBoot's opts.defaultMap). The 65 the
+// Rig; the 75 and 85 The Warehouse, built at their scale. Anything else (a
+// freestyle class, no frame) is DEFAULT_MAP. The archive and unknown-map
+// fallbacks stay DEFAULT_MAP whatever the class.
+export const CLASS_MAPS = Object.freeze({ 65: 'rig', 75: 'depot', 85: 'depot' });
+export function classDefaultMap(frameMm) {
+  return knownMapId(CLASS_MAPS[+frameMm]) || DEFAULT_MAP;
 }
 // A copied link (rates, build) to this map and track carries ?dev=1 when,
 // without it, resolveSimBoot would land it on DEFAULT_MAP instead. A
@@ -154,6 +166,8 @@ export function freestyleStart(mapId) {
   if (map === 'rig') return { x: -21.35, y: 1.225, z: -19.6, yaw: -Math.PI / 2 };
   // The House: the House Loop pad, in the entry hall, nose to the arch (+x).
   if (map === 'house') return { x: -14.7, y: 1.225, z: 15.05, yaw: -Math.PI / 2 };
+  // The Warehouse: the Warehouse Loop pad, nose down the centre run (+x).
+  if (map === 'depot') return { x: -43.225, y: 1.225, z: 5.775, yaw: -Math.PI / 2 };
   return { x: 0, y: 1.2, z: 0, yaw: 0 };
 }
 
@@ -218,8 +232,11 @@ export function resolveTrackPick(mapId, trackId, tracks) {
 // opts.dev === false (no ?dev=1): a closed map (mapOpen) lands on DEFAULT_MAP
 // too, unsaved, except a generated session course (daily, weekly, room
 // practice), which still flies its own map.
+// opts.defaultMap (the page passes classDefaultMap of the pilot's class): the
+// map for nothing asked and nothing saved (saved null), and only for that; a
+// closed or unknown map still lands on DEFAULT_MAP.
 export function resolveSimBoot(query, saved, tracks, opts) {
-  const r = resolveSimBootAnyMap(query, saved, tracks);
+  const r = resolveSimBootAnyMap(query, saved, tracks, opts);
   if (!opts || opts.dev !== false || mapOpen(r.map, false) || isEphemeralTrackId(r.track)) return r;
   return {
     map: DEFAULT_MAP, track: freestyleIdFor(DEFAULT_MAP),
@@ -227,7 +244,7 @@ export function resolveSimBoot(query, saved, tracks, opts) {
   };
 }
 
-function resolveSimBootAnyMap(query, saved, tracks) {
+function resolveSimBootAnyMap(query, saved, tracks, opts) {
   const q = query || {};
   if (isFreestyleTrackId(q.track) || q.track === 'freestyle') {
     const fromId = isFreestyleTrackId(q.track)
@@ -261,8 +278,12 @@ function resolveSimBootAnyMap(query, saved, tracks) {
     const fly = resolveFly(saved);
     return { map: fly.map, track: fly.track, save: false, restored: true, mode: 'free' };
   }
+  // Nothing asked, nothing saved: the class's map (opts.defaultMap,
+  // classDefaultMap), else DEFAULT_MAP. A ?track= the list does not hold
+  // (yet: bootMapHint has no tracks) keeps DEFAULT_MAP, as before.
+  const map = (isBlankTrackId(q.track) && knownMapId(opts && opts.defaultMap)) || DEFAULT_MAP;
   return {
-    map: DEFAULT_MAP, track: freestyleIdFor(DEFAULT_MAP),
+    map, track: freestyleIdFor(map),
     save: false, restored: true, mode: 'free',
   };
 }
@@ -619,6 +640,22 @@ export function saveCustomTracks(list, storage) {
   return true;
 }
 
+// Whether the pilot has a saved selection on a known map (saveSelected).
+// loadSelected answers the Rig when there is none, so the class default
+// (classDefaultMap) asks this first: no saved map, the class's map.
+export function hasSelected(storage) {
+  const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+  if (!store) return false;
+  try {
+    const raw = store.getItem(SELECTED_TRACK_KEY);
+    if (!raw) return false;
+    const o = JSON.parse(raw);
+    return !!(o && knownMapId(o.map));
+  } catch (e) {
+    return false;
+  }
+}
+
 export function loadSelected(storage) {
   const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
   if (!store) return persistableSelection(null);
@@ -756,6 +793,7 @@ export function ghostPayloadError(p, expectTrack) {
 export const BUILTIN_TRACK_FILES = [
   { id: 'rig-loop', file: 'tracks/rig-loop.json', map: 'rig', name: 'Rig Loop' },
   { id: 'house-loop', file: 'tracks/house-loop.json', map: 'house', name: 'House Loop' },
+  { id: 'depot-loop', file: 'tracks/depot-loop.json', map: 'depot', name: 'Warehouse Loop' },
   { id: 'city-loop', file: 'tracks/city-loop.json', legacyId: 0, map: 'city', name: 'City Loop' },
   { id: 'city-zigzag', file: 'tracks/city-zigzag.json', legacyId: 1, map: 'city', name: 'Mesa Zigzag' },
   { id: 'city-inside', file: 'tracks/city-inside.json', map: 'city', name: 'Interior Run' },

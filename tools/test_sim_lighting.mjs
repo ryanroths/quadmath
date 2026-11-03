@@ -100,8 +100,8 @@ test('backyard never shows the dawn HDRI; indoor never shows the yard HDRI', () 
   assert.equal(resolveSceneLighting(garageYardOnly).environment, null);
 });
 
-test('the look loads one HDRI, its own, and the Rig and the House are on the look', () => {
-  const onLook = ['rig', 'house'];
+test('the look loads one HDRI, its own, and the Rig, the House and The Warehouse are on the look', () => {
+  const onLook = ['rig', 'house', 'depot'];
   for (const mapId of onLook) {
     assert.equal(vibeFor(mapId).look, true, mapId);
     assert.equal(resolveMapLighting(mapId).look, true, mapId);

@@ -6,8 +6,9 @@
 // its surfaces with lookMaterial() (sim-maps.js); sim-looks.js (post chain,
 // HDRI), sim-lighting.js (scene IBL) and the host (camera) read the rest from
 // LOOK. No map carries lighting code of its own; a map places the one key
-// (lookVibe). The Rig is the first map on it, The House the second. Assets
-// are Poly Haven CC0 (ASSETS-LICENSES.md). Not WebFPV.
+// (lookVibe). The Rig is the first map on it, The House the second, The
+// Warehouse the third. Assets are Poly Haven CC0 (ASSETS-LICENSES.md). Not
+// WebFPV.
 
 const TEX = 'assets/sim-looks/tex';
 
@@ -84,6 +85,22 @@ export const LOOK = Object.freeze({
   // Floorboards (lookMaterial opts.boards): the seam's width, metres, and its
   // darkening; each board's shade varies by up to +-shade / 2.
   boards: Object.freeze({ seam: 0.003, dark: 0.5, shade: 0.18 }),
+  // Corrugated sheet (lookMaterial opts.ribs), drawn on a flat face: the
+  // profile's period, metres; how far its slope tilts the normal (1 = 45 deg;
+  // corrugated iron's 76 mm pitch, 18 mm deep, is 0.74); how much the troughs
+  // darken the albedo; the axis the profile runs along ('h': the face's
+  // horizontal, vertical ribs; 'v': world y, horizontal slats).
+  ribs: Object.freeze({ pitch: 0.076, depth: 0.74, dark: 0.2, axis: 'h' }),
+  // Pallets (lookMaterial opts.pallet): one solid box a pallet, module m tall,
+  // its slats drawn. Deck boards board m wide along x, gap m apart; deck m
+  // thick at the top and the foot of each module; the blocks and fork openings
+  // between at band of the wood's albedo, a gap between deck boards at slot;
+  // each board's shade varies by up to +-shade / 2.
+  pallet: Object.freeze({ module: 0.15, board: 0.1, gap: 0.035, deck: 0.022, band: 0.3, slot: 0.2, shade: 0.24 }),
+  // Sun shafts (lookShafts): dusty light in the air, not a solid beam. Added
+  // to the frame, the colour at strength a face at the window, down to tail of
+  // that where it lands, faded toward the silhouette by |n.v|^edge.
+  shafts: Object.freeze({ color: 0xffdcb0, strength: 0.095, tail: 0.25, edge: 1.5 }),
   post: Object.freeze({
     // Bloom on the gates and the edge lines only: they mark themselves
     // (markBloom), and the bright pass takes nothing else.
@@ -377,14 +394,77 @@ const FILL_FRAG = `
 	radiance *= lookFill;
 #endif`;
 
+// Corrugated sheet on a flat face, after the normal map: a sine profile, its
+// slope tilting the normal (depth) and its troughs darkening the albedo
+// (dark). Axis 'h' (lookRibs.w 0) runs it along world x on a +-z face and
+// world z on a +-x face (vertical ribs, cladding); 'v' (1) along world y on any
+// wall (horizontal slats, a roll-up door); a level face stays flat. As a
+// period nears a pixel both fade to their mean, so a long run shows no moire.
+// lookRibs: pitch (world units), depth, dark, axis.
+const RIBS_FRAG = `
+	{
+		vec3 fw = fwidth( vLookWorld ) / lookRibs.x;
+		vec3 n = abs( inverseTransformDirection( nonPerturbedNormal, viewMatrix ) );
+		vec3 t = lookRibs.w > 0.5 ? vec3( 0.0, 1.0, 0.0 ) : n.z >= n.x ? vec3( 1.0, 0.0, 0.0 ) : vec3( 0.0, 0.0, 1.0 );
+		float on = 1.0 - step( 0.5, n.y );
+		float k = on * ( 1.0 - smoothstep( 0.15, 0.5, dot( fw, t ) ) );
+		float a = 6.2831853 * dot( vLookWorld, t ) / lookRibs.x;
+		normal = normalize( normal + lookRibs.y * k * sin( a ) * normalize( ( viewMatrix * vec4( t, 0.0 ) ).xyz ) );
+		diffuseColor.rgb *= 1.0 - on * lookRibs.z * mix( 0.5, 0.5 - 0.5 * cos( a ), k );
+	}`;
+
+// The box filter of a stripe pattern: the share of [x - w/2, x + w/2] that
+// lies in the stripes [n, n + s). Sharp up close, the mean s far off.
+const STRIPE_GLSL = `
+float lookStripe( float x, float s, float w ) {
+	vec2 e = vec2( x - 0.5 * w, x + 0.5 * w );
+	vec2 f = floor( e ) * s + min( fract( e ), s );
+	return ( f.y - f.x ) / w;
+}`;
+
+// Pallets, in place of map_fragment: one solid box a pallet, its slats drawn
+// from world height (every pallet's base sits on a multiple of the module).
+// On top, deck boards along x with dark gaps, each board its own cut of the
+// texture and its own shade; on a side, the deck boards' edges at the top and
+// the foot of the module and the dark band of blocks and fork openings
+// between; on a +-x side the top boards' ends and gaps show too. Box-filtered,
+// so a stack across the room averages instead of shimmering. lookPallet:
+// module and board pitch (world units), the board's share of the pitch, the
+// deck's share of the module; lookPalletShade: band, slot, shade.
+const PALLET_FRAG = `
+	vec3 lookN = normalize( cross( dFdx( vLookWorld ), dFdy( vLookWorld ) ) );
+	vec3 lookFw = max( fwidth( vLookWorld ), vec3( 1e-6 ) );
+	float lookY = vLookWorld.y / lookPallet.x;
+	float lookZ = vLookWorld.z / lookPallet.y;
+	float lookLayer = lookN.y > 0.5 ? floor( lookY + 0.5 ) - 1.0 : floor( lookY );
+	float lookId = floor( lookZ ) + lookLayer * 37.0;
+	vec2 lookShift = fract( sin( vec2( lookId * 12.9898, lookId * 78.233 ) ) * 43758.5453 );
+#ifdef USE_MAP
+	vec4 sampledDiffuseColor = textureGrad( map, vMapUv + lookShift * 7.0, dFdx( vMapUv ), dFdy( vMapUv ) );
+	diffuseColor *= sampledDiffuseColor;
+#endif
+	{
+		float fy = lookFw.y / lookPallet.x, fz = lookFw.z / lookPallet.y;
+		float boards = mix( lookPalletShade.y, 1.0, lookStripe( lookZ, lookPallet.z, fz ) );
+		float top = lookStripe( lookY + lookPallet.w, lookPallet.w, fy );
+		float foot = lookStripe( lookY, lookPallet.w, fy );
+		float side = lookPalletShade.x * ( 1.0 - top - foot ) + foot + top * ( abs( lookN.x ) > 0.5 ? boards : 1.0 );
+		float f = lookN.y > 0.5 ? boards : lookN.y < -0.5 ? 1.0 : side;
+		float shade = lookPalletShade.z * ( 1.0 - smoothstep( 0.25, 0.5, fz ) );
+		diffuseColor.rgb *= f * ( 1.0 + shade * ( lookShift.y - 0.5 ) );
+	}`;
+
 // A look surface: MeshStandardMaterial over a Poly Haven set, the zone hue as
 // its colour. opts.joints: { origin: [x, z], unit } in world units (unit = one
 // metre) draws the saw-cut joint grid; joints.spec overrides LOOK.joints' sizes
 // (a tile grid). opts.boards: { origin: [x, z], unit, width, length } lays
-// floorboards along x, metres. opts.fill: [r, g, b], the map's balance of the
-// look's one HDRI fill (a room the key barely reaches is lit by it).
-// opts.albedoVar overrides the surface's (a paint that hides more of its
-// substrate).
+// floorboards along x, metres. opts.pallet: { unit, module?, board?, gap? }
+// draws a solid box as stacked pallets (LOOK.pallet for any left out).
+// opts.ribs: { unit, pitch?, depth?, dark?, axis? } corrugates its walls
+// (LOOK.ribs). One pattern a material: joints, boards, pallet, ribs, the first
+// given wins. opts.fill: [r, g, b], the map's balance of the look's one HDRI
+// fill (a room the key barely reaches is lit by it). opts.albedoVar overrides
+// the surface's (a paint that hides more of its substrate); not with boards.
 export function lookMaterial(THREE, kind, color, opts) {
   const s = LOOK.surfaces[kind];
   if (!s) throw new Error('no look surface ' + kind);
@@ -408,6 +488,8 @@ export function lookMaterial(THREE, kind, color, opts) {
   const joints = o.joints || null;
   const J = Object.assign({}, LOOK.joints, joints && joints.spec);
   const boards = joints ? null : o.boards || null;
+  const pallet = joints || boards ? null : o.pallet || null;
+  const ribs = joints || boards || pallet ? null : o.ribs || null;
   const albedoVar = o.albedoVar != null ? o.albedoVar : s.albedoVar;
   const albedo = !boards && albedoVar != null && albedoVar !== 1;
   const fill = o.fill || null;
@@ -451,8 +533,30 @@ export function lookMaterial(THREE, kind, color, opts) {
         .replace('#include <common>', '#include <common>\nvarying vec3 vLookWorld;\nuniform vec4 lookBoard;\nuniform vec4 lookBoardSeam;')
         .replace('#include <map_fragment>', BOARD_FRAG);
     }
+    if (pallet) {
+      const u = pallet.unit, P = Object.assign({}, LOOK.pallet, pallet);
+      shader.uniforms.lookPallet = { value: new THREE.Vector4(P.module * u, (P.board + P.gap) * u, P.board / (P.board + P.gap), P.deck / P.module) };
+      shader.uniforms.lookPalletShade = { value: new THREE.Vector3(P.band, P.slot, P.shade) };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vLookWorld;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vLookWorld;\nuniform vec4 lookPallet;\nuniform vec3 lookPalletShade;' + STRIPE_GLSL)
+        .replace('#include <map_fragment>', PALLET_FRAG);
+    }
+    if (ribs) {
+      const R = Object.assign({}, LOOK.ribs, ribs);
+      shader.uniforms.lookRibs = { value: new THREE.Vector4(R.pitch * ribs.unit, R.depth, R.dark, R.axis === 'v' ? 1 : 0) };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vLookWorld;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vLookWorld;\nuniform vec4 lookRibs;')
+        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>' + RIBS_FRAG);
+    }
   };
-  const ck = 'look:' + (joints ? 'joints' : boards ? 'boards' : 'surface') + (albedo ? '+albedo' : '') + (fill ? '+fill' : '');
+  const pattern = joints ? 'joints' : boards ? 'boards' : pallet ? 'pallet' : ribs ? 'ribs' : 'surface';
+  const ck = 'look:' + pattern + (albedo ? '+albedo' : '') + (fill ? '+fill' : '');
   m.customProgramCacheKey = () => ck;
   return m;
 }
@@ -541,6 +645,108 @@ export function lookGlass(THREE) {
   m.userData.lookKind = 'glass';
   m.userData.looksSkip = true;
   return m;
+}
+
+const SHAFT_VERT = `
+attribute vec3 lookShaft;
+varying vec3 vLookShaft;
+varying vec3 vLookWorld;
+#include <common>
+#include <logdepthbuf_pars_vertex>
+void main() {
+	vLookShaft = lookShaft;
+	vec4 w = modelMatrix * vec4( position, 1.0 );
+	vLookWorld = w.xyz;
+	gl_Position = projectionMatrix * viewMatrix * w;
+	#include <logdepthbuf_vertex>
+}`;
+
+// A shaft's light: the colour at strength, down to tail along it, faded
+// toward the long edges of each face (lookShaft: across the window, 0..1 both
+// ways, then along the shaft) and by how edge-on the face is seen, so the
+// prism reads as light in the air, not a box. Where the composer draws
+// (linear, no tone map) it adds as it is; straight to the screen (Low) it adds
+// the step it makes on a frame of linear 0.1 once tone-mapped and encoded, as
+// it would before the tone map, not the far larger toe of a tone map of its
+// own.
+const SHAFT_FRAG = `
+uniform vec3 lookShaftColor;
+uniform vec2 lookShaftFade;
+varying vec3 vLookShaft;
+varying vec3 vLookWorld;
+#include <common>
+#include <logdepthbuf_pars_fragment>
+void main() {
+	#include <logdepthbuf_fragment>
+	vec3 n = normalize( cross( dFdx( vLookWorld ), dFdy( vLookWorld ) ) );
+	vec3 v = normalize( cameraPosition - vLookWorld );
+	vec2 q = vLookShaft.xy * ( 1.0 - vLookShaft.xy );
+	float across = smoothstep( 0.0, 1.0, 4.0 * ( q.x + q.y ) );
+	vec3 c = lookShaftColor * mix( 1.0, lookShaftFade.x, vLookShaft.z ) * across * pow( abs( dot( v, n ) ), lookShaftFade.y );
+	vec4 lit = vec4( vec3( 0.1 ) + c, 1.0 ), base = vec4( vec3( 0.1 ), 1.0 );
+#if defined( TONE_MAPPING )
+	lit.rgb = toneMapping( lit.rgb );
+	base.rgb = toneMapping( base.rgb );
+#endif
+	gl_FragColor = vec4( max( linearToOutputTexel( lit ).rgb - linearToOutputTexel( base ).rgb, 0.0 ), 1.0 );
+}`;
+
+// Sun shafts on the look (LOOK.shafts): the light seen in the air under a
+// window. Each shaft is the window's quad swept along the light to where it
+// lands, a closed prism; all of them one mesh, drawn after the opaque frame,
+// added to it with its alpha (the bloom mask) untouched, no depth written, no
+// shadow. shafts: [{ quad: [[x, y, z] x 4] round the window, dir: [x, y, z]
+// (unit, the way the light travels), length }], world units; a length that
+// takes the window's top edge to the floor buries the far end, so the floor
+// cuts it where the light lands. opts: { name, color, strength } (LOOK.shafts
+// for any left out).
+export function lookShafts(THREE, shafts, opts) {
+  const o = opts || {}, S = LOOK.shafts;
+  const pos = [], at = [], idx = [];
+  for (const s of shafts) {
+    const b = pos.length / 3, d = s.dir, l = s.length;
+    for (const t of [0, 1]) {
+      s.quad.forEach((q, i) => {
+        pos.push(q[0] + d[0] * l * t, q[1] + d[1] * l * t, q[2] + d[2] * l * t);
+        at.push(i === 1 || i === 2 ? 1 : 0, i >= 2 ? 1 : 0, t);
+      });
+    }
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4;
+      idx.push(b + i, b + j, b + 4 + j, b + i, b + 4 + j, b + 4 + i);
+    }
+    idx.push(b, b + 2, b + 1, b, b + 3, b + 2, b + 4, b + 5, b + 6, b + 4, b + 6, b + 7);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('lookShaft', new THREE.Float32BufferAttribute(at, 3));
+  geo.setIndex(idx);
+  geo.computeBoundingSphere();
+  const c = new THREE.Color(o.color != null ? o.color : S.color).multiplyScalar(o.strength != null ? o.strength : S.strength);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { lookShaftColor: { value: c }, lookShaftFade: { value: new THREE.Vector2(S.tail, S.edge) } },
+    vertexShader: SHAFT_VERT,
+    fragmentShader: SHAFT_FRAG,
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    side: THREE.DoubleSide,
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.AddEquation,
+    blendSrc: THREE.SrcAlphaFactor,
+    blendDst: THREE.OneFactor,
+    blendSrcAlpha: THREE.ZeroFactor,
+    blendDstAlpha: THREE.OneFactor,
+  });
+  mat.userData.lookKind = 'shafts';
+  mat.userData.looksSkip = true;
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = o.name || 'lookShafts';
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  mesh.renderOrder = 1;
+  mesh.userData.artKeep = true;
+  return mesh;
 }
 
 // Bloom marks: the gates and the edge lines write alpha 0 into the HDR frame;

@@ -6,7 +6,7 @@
 // quadmathSimCrosshair.
 import { resolveAutoQuality, gpuTier, autoQualityStep } from './sim-touch.js?v=72029e559bf5';
 import { updateSceneLighting } from './sim-lighting.js?v=87ade1287271';
-import { LOOK } from './sim-look.js?v=25231f0dd6c9';
+import { LOOK } from './sim-look.js?v=d55c6a2d63e0';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
@@ -132,6 +132,18 @@ export const LOOK_SPOTS = {
   // bookshelf and the back hall's door beyond. sim.html?map=house&quality=high
   // &look=houseThumb, UI hidden, 960x540 scaled to 480x270.
   houseThumb: { pos: [15.4, 6.3, 18.2], target: [-3.5, 3.5, 10.5] },
+  // The Warehouse (map id depot; the warehouse* spots above are the archived
+  // map's): from the loop's pad down the centre run, the racking on the left,
+  // the dock's roll-up doors ahead, a sun shaft and the mezzanine on the right;
+  // from the mezzanine's deck by the hatch over its rail, across the hall to
+  // the racking, the forklift and the dock. World units (m x 3.5).
+  depotStart: { pos: [-49, 5.25, 1.75], target: [7, 7.7, 17.5] },
+  depotMezzanine: { pos: [-32.9, 19.6, 44.1], target: [17.5, 4.2, -3.5] },
+  // The Fly chooser's Warehouse thumbnail (assets/sim-thumbs/depot.jpg): high
+  // by the window wall at the dock end, across the sunlit floor to the
+  // mezzanine, the racking and the forklift. sim.html?map=depot&quality=high
+  // &look=depotThumb, UI hidden, 960x540 scaled to 480x270.
+  depotThumb: { pos: [44.1, 22.4, 47.6], target: [-21, 4.2, -14] },
   builder: { pos: [0, 14, 0.1], target: [0, 0, 0] },
 };
 

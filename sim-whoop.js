@@ -234,10 +234,12 @@ function unitOrDefault(n, fb) {
 // back at 0.41 too, where those gave 0.10: sim-core's walls take one
 // restitution, crash or not. bounce still reaches floors, box tops,
 // undersides and box edges there. The js core does not read wall. The House
-// bounces as the Rig, at the same crash threshold (owner's spec).
+// and The Warehouse (depot) bounce as the Rig, at the same crash threshold
+// (owner's spec).
 export const BOUNCE_MAPS = Object.freeze({
   rig: Object.freeze({ crash: 4, bounce: 2, wall: 1.37 }),
   house: Object.freeze({ crash: 4, bounce: 2, wall: 1.37 }),
+  depot: Object.freeze({ crash: 4, bounce: 2, wall: 1.37 }),
 });
 
 // Duct bounce. Soft hits rebound + spin. Crash only above a build-scaled

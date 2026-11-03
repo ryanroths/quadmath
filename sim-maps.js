@@ -5,10 +5,10 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=c26e0c6bfbfc';
+import { planRoom } from './sim-room.js?v=74928ed0772f';
 import {
-  LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, floorAo,
-} from './sim-look.js?v=25231f0dd6c9';
+  LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, lookShafts, floorAo,
+} from './sim-look.js?v=d55c6a2d63e0';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -193,6 +193,8 @@ export const LAYOUT = {
   rig: { w: 70, d: 52.5, h: 21, wall: 0.35 },
   // Inner faces at exactly 18 × 12 × 2.7 m, as the Rig (see buildHouse).
   house: { w: 63, d: 42, h: 9.45, wall: 0.35 },
+  // Inner faces at exactly 45 × 30 × 9 m (see buildDepot).
+  depot: { w: 157.5, d: 105, h: 31.5, wall: 0.35 },
 };
 
 // The House's one key: a low afternoon sun from the west-north-west, warm.
@@ -200,6 +202,14 @@ export const LAYOUT = {
 // the look's key overhead: its patches on the floor read about three times
 // the fill round them, as the Rig's key does.
 export const HOUSE_KEY = Object.freeze({ elevation: 25, azimuth: 250, color: 0xffd9a8, intensity: 9 });
+
+// The Warehouse's one key: a low morning sun on the window wall's side (+z),
+// a little from -x, warm. It comes in through the clerestories only, and its
+// shafts land across the centre run. Its shadow box (world units) is the
+// hall's half diagonal and more, and reaches over the roof: three lights any
+// floor outside the box as if it had no roof (checked corner to corner).
+export const DEPOT_KEY = Object.freeze({ elevation: 26, azimuth: 345, color: 0xffe0b0, intensity: 8.5 });
+export const DEPOT_SHADOW = Object.freeze({ viewR: 160, height: 34 });
 
 export const MAP_ORBIT = {
   city: { cx: 0, cy: 5, cz: 0, r: 92, h: 22, fov: 62 },
@@ -215,6 +225,8 @@ export const MAP_ORBIT = {
   rig: { cx: 0, cy: 3.0, cz: 0, r: 16, h: 14, fov: 66 },
   // Round the open living room and kitchen, under the fan's blades.
   house: { cx: 8.75, cy: 3.5, cz: 12.25, r: 5.25, h: 7, fov: 70 },
+  // Round the middle of the hall at 5 m, over the centre run, under the trusses.
+  depot: { cx: 0, cy: 7, cz: 10.5, r: 21, h: 17.5, fov: 68 },
 };
 
 export const MAP_LOOKS = {
@@ -231,9 +243,10 @@ export const MAP_LOOKS = {
   // hemisphere.
   rig: lookLooks(),
   house: lookLooks({ sun: HOUSE_KEY.intensity }),
+  depot: lookLooks({ sun: DEPOT_KEY.intensity }),
 };
 
-export const MAP_IDS = ['rig', 'house', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room'];
+export const MAP_IDS = ['rig', 'house', 'depot', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room'];
 
 function mat(THREE, hex, set, extras) {
   const m = new THREE.MeshStandardMaterial(Object.assign({
@@ -1541,8 +1554,14 @@ const HOUSE_LINE = Object.freeze([
 // The line sampled every ds metres: points [x, y, z], the arc length s, the
 // plan heading, and the gates { at (index), size, name, ry }.
 export function houseLine(ds) {
+  return turtleLine(HOUSE_LINE, -4.2, 4.3, ds);
+}
+
+// A designed line (HOUSE_LINE, DEPOT_LINE) from its start (x0, z0), heading
+// +x, sampled every ds metres.
+function turtleLine(ops, x0, z0, ds) {
   const step = ds || 0.01;
-  let x = -4.2, z = 4.3, hx = 1, hz = 0, s = 0;
+  let x = x0, z = z0, hx = 1, hz = 0, s = 0;
   const plan = [[x, z, s, hx, hz]], pins = [], gates = [];
   const go = (d) => { const n = Math.max(1, Math.ceil(d / step)); for (let i = 1; i <= n; i++) { x += hx * d / n; z += hz * d / n; s += d / n; plan.push([x, z, s, hx, hz]); } };
   const arc = (rad, deg) => {
@@ -1557,7 +1576,7 @@ export function houseLine(ds) {
       plan.push([x, z, s, hx, hz]);
     }
   };
-  for (const op of HOUSE_LINE) {
+  for (const op of ops) {
     if (op[0] === 'L') go(op[1]);
     else if (op[0] === 'A') arc(op[1], op[2]);
     else if (op[0] === 'H') pins.push([s, op[1]]);
@@ -1587,7 +1606,7 @@ export function houseLine(ds) {
   const at = (t) => plan.findIndex((p) => p[2] >= t - 1e-9);
   return {
     length: L,
-    closes: Math.hypot(x + 4.2, z - 4.3) + Math.hypot(hx - 1, hz),
+    closes: Math.hypot(x - x0, z - z0) + Math.hypot(hx - 1, hz),
     points,
     s: plan.map((p) => p[2]),
     gates: gates.map((g) => Object.assign(g, { at: at(g.s) })),
@@ -1754,9 +1773,452 @@ function buildHouse(THREE, parent, colliders) {
   return { floor, orbit: MAP_ORBIT.house };
 }
 
+// The Warehouse: a 45 × 30 × 9 m warehouse at micro-class scale, sized for
+// the 75 and 85 mm whoops (the 65 flies it too), the third map on the look.
+// Its id is depot: the archived map keeps warehouse. Metres here, scene axes
+// (y up, +z the window wall, +x the dock); buildDepot scales by DEPOT_WS.
+// The Warehouse Loop (tracks/depot-loop.json) runs: the 25 m clear centre run
+// east; under the first half-open roll-up door into the dock, round through
+// the parted chain curtain, back under the second; under the forklift's
+// raised load; through a 60 cm gap in the double rack and west down the aisle
+// behind it; between the stacked pallets; up the mezzanine's stair and over
+// its deck, climbing; east along the trusses through two of their 60 cm
+// gaps; down round the spin pole; back over the mezzanine's edge and down
+// through its drop-through hatch; round under the mezzanine onto the centre
+// run. Boxes only, axis-aligned, nothing under 6 cm thick, no slot of 4–10 cm
+// (sim-core issue #5), every box on the floor or at least 15 cm over it, as
+// the Rig and the House.
+export const DEPOT_WS = 3.5; // world units per metre, as sim-core-adapter.js WS
+const DEPOT_H = 9;
+// The dock partition (its west face at x, t thick, h tall) and its two
+// roll-up doors, half open: openings doorW × doorH, centred on z, the curtain
+// rolled down to `open` over the floor.
+const DEPOT_DOCK = Object.freeze({ x: 13.5, t: 0.25, h: 6, doors: Object.freeze([1.65, -3.85]), doorW: 3.6, doorH: 4.2, open: 2.1 });
+// The chain curtain across the dock at z, hung from a header at y; strands
+// every pitch, parted for gap metres round x.
+const DEPOT_CURTAIN = Object.freeze({ z: -1.1, y: 3.4, pitch: 0.3, x: 17.5, gap: 1.44 });
+// Racking: ten 2.7 m bays from x0. Frames are 1.1 m deep: run A along the
+// rack wall, run B two frames back to back over a 30 cm flue. Beam tops at
+// 1.8 and 3.6 m and a top tie at 5.27 m. The line goes through bay 7 of run
+// B, over its floor loads.
+const DEPOT_RACK = Object.freeze({
+  x0: -17.04, bays: 10, bay: 2.7, post: 0.08, levels: Object.freeze([1.8, 3.6]), tie: 5.27,
+  frames: Object.freeze([Object.freeze([-14.8, -13.7]), Object.freeze([-9.4, -8.3]), Object.freeze([-8.0, -6.9])]),
+  gapBay: 7,
+});
+// The mezzanine: its deck over x0..x1, z0..z1, its top at y, 25 cm thick on
+// 30 cm edge beams; the drop-through hatch; the stair up its south edge.
+const DEPOT_MEZZ = Object.freeze({
+  x0: -22.5, x1: -7.5, z0: 4, z1: 15, y: 3.6,
+  hatch: Object.freeze({ x0: -11.0, x1: -8.6, z0: 6.45, z1: 7.85 }),
+  stair: Object.freeze({ x0: -19, x1: -18, z0: -2.5, z1: 4, risers: 16 }),
+});
+// Roof trusses across the hall at each x, chords 12 cm, the open web's posts
+// every 66 cm: 60 cm gaps, one centred on z = gapZ (the line's).
+const DEPOT_TRUSS = Object.freeze({ xs: Object.freeze([-20, -12.5, -5, 2.5, 10, 17.5]), y0: 7.3, y1: 8.5, chord: 0.12, pitch: 0.66, post: 0.06, gapZ: 12.65 });
+// The spin pole: a 10 cm steel pole, floor to roof, the line round it.
+const DEPOT_POLE = Object.freeze({ x: -1.75, z: 9.9, d: 0.1 });
+// Clerestory windows in the window wall, between its columns: x0..x1, y0..y1.
+// A shaft is drawn over the part of a window (shaft: true, or x0..x1) whose
+// light falls clear to the floor; where it would pass through the mezzanine,
+// the dock partition or the dock's wall, the light lands as a patch only.
+const DEPOT_WINDOWS = Object.freeze([[-19.25, -13.25], [-11.75, -5.75, [-8.15, -5.75]], [-4.25, 1.75, true], [3.25, 9.25, true], [10.75, 16.75, [13.8, 16.75]], [18.25, 21.75]]
+  .map(([x0, x1, shaft]) => Object.freeze({ x0, x1, y0: 6.0, y1: 7.2, shaft: shaft || false })));
+// Every pallet sits on a multiple of this: the pallet shader draws its boards
+// from the height alone.
+const PALLET = 0.15;
+
+function depotBoxes() {
+  const out = [];
+  const r = (v) => Math.round(v * 1e4) / 1e4;
+  const b = (zone, mat, feature, part, x0, y0, z0, x1, y1, z1) => {
+    out.push(Object.freeze({ zone, mat, feature, part, min: [r(x0), r(y0), r(z0)], max: [r(x1), r(y1), r(z1)] }));
+  };
+  // A pallet and its carton load, one footprint; a stack of empty pallets.
+  const load = (zone, x0, z0, x1, z1, y, top) => {
+    b(zone, 'pallet', 'pallets', 'pallet', x0, y, z0, x1, y + PALLET, z1);
+    if (top > y + PALLET) b(zone, 'carton', 'cartons', 'carton', x0, y + PALLET, z0, x1, top, z1);
+  };
+  const stack = (zone, feature, x0, z0, x1, z1, n) => {
+    for (let i = 0; i < n; i++) b(zone, 'pallet', feature, 'pallet', x0, i * PALLET, z0, x1, (i + 1) * PALLET, z1);
+  };
+  // The dock partition: block to 2.4 m, cladding over; the doors' openings,
+  // the curtains rolled down to half, the drums over them, the guides.
+  const D = DEPOT_DOCK, dx0 = D.x, dx1 = D.x + D.t, hw = D.doorW / 2;
+  const pier = (z0, z1, y0) => {
+    if (y0 < 2.4) b('dock', 'block', 'partition', 'wall', dx0, y0, z0, dx1, 2.4, z1);
+    b('dock', 'cladding', 'partition', y0 < 2.4 ? 'cladding' : 'lintel', dx0, Math.max(y0, 2.4), z0, dx1, D.h, z1);
+  };
+  const doors = D.doors.slice().sort((p, q) => p - q);
+  let at = -15;
+  for (const z of doors) {
+    pier(at, z - hw, 0);
+    pier(z - hw, z + hw, D.doorH);
+    b('dock', 'door', 'roll-up doors', 'curtain', dx0, D.open, z - hw, dx0 + 0.06, D.doorH, z + hw);
+    b('dock', 'steel', 'roll-up doors', 'drum', dx0 - 0.4, D.doorH, z - hw - 0.12, dx0, D.doorH + 0.45, z + hw + 0.12);
+    for (const g of [z - hw - 0.12, z + hw]) b('dock', 'steel', 'roll-up doors', 'guide', dx0 - 0.12, 0, g, dx0, D.doorH, g + 0.12);
+    at = z + hw;
+  }
+  pier(at, 15, 0);
+  // The chain curtain: a header the dock's width, strands down to 20 cm over
+  // the floor, parted where the line goes through.
+  const C = DEPOT_CURTAIN;
+  b('dock', 'steel', 'chain curtain', 'header', dx1, C.y, C.z - 0.06, 22.5, C.y + 0.15, C.z + 0.06);
+  for (let x = dx1 + 0.2; x < 22.5 - 0.15; x += C.pitch) {
+    if (Math.abs(x - C.x) < C.gap / 2 + 0.03) continue;
+    b('dock', 'steel', 'chain curtain', 'chain', x - 0.03, 0.2, C.z - 0.03, x + 0.03, C.y, C.z + 0.03);
+  }
+  // Two docks on the outside wall, either side of the curtain: the dock door
+  // shut, its seal, the leveller plate in front.
+  for (const z of [-7.0, 5.0]) {
+    b('dock', 'door', 'docks', 'dock door', 22.44, 0, z - 1.5, 22.5, 3.2, z + 1.5);
+    b('dock', 'dark', 'docks', 'seal', 22.3, 3.2, z - 1.7, 22.5, 3.5, z + 1.7);
+    for (const s of [z - 1.7, z + 1.5]) b('dock', 'dark', 'docks', 'seal', 22.3, 0, s, 22.5, 3.2, s + 0.2);
+    b('dock', 'steel', 'docks', 'leveller', 20.3, 0, z - 1.0, 22.5, 0.06, z + 1.0);
+    b('dock', 'amber', 'docks', 'leveller lip', 20.2, 0, z - 1.0, 20.3, 0.06, z + 1.0);
+  }
+  // Staged loads waiting at the docks, clear of the line.
+  for (const [x, z, n] of [[19.0, 8.5, 1], [19.0, 10.2, 1], [16.6, 8.5, 1], [19.0, -10.5, 1], [16.6, -10.5, 1], [19.0, -12.2, 1]]) {
+    load('dock', x - 0.5, z - 0.55, x + 0.5, z + 0.55, 0, 1.2 + 0.08 * n);
+  }
+  stack('dock', 'pallet stacks', 15.4, 12.6, 16.6, 13.6, 7);
+  // Racking. Each frame: two posts at each upright, braces between them; on
+  // each bay its beams at both faces; two pallet places a level, filled from
+  // a fixed pattern, cartons leaving 40–60 cm under the beam over them.
+  const K = DEPOT_RACK, xs = Array.from({ length: K.bays + 1 }, (_, k) => K.x0 + K.bay * k);
+  const tops = [[1.2, 1.12], [2.95, 2.88], [4.75, 4.68]];
+  K.frames.forEach(([z0, z1], f) => {
+    for (const x of xs) {
+      for (const z of [z0, z1 - K.post]) b('racking', 'upright', 'racking', 'upright', x, 0, z, x + K.post, K.tie, z + K.post);
+      for (const y of [0.3, 4.9]) b('racking', 'upright', 'racking', 'brace', x, y, z0 + K.post, x + K.post, y + 0.06, z1 - K.post);
+    }
+    for (let k = 0; k < K.bays; k++) {
+      // Beams run onto both uprights, so a run's beams meet end to end.
+      const bx0 = xs[k] + K.post, bx1 = xs[k + 1];
+      for (const top of [...K.levels, K.tie]) {
+        for (const z of [z0, z1 - 0.06]) b('racking', 'amber', 'racking', top === K.tie ? 'tie' : 'beam', xs[k], top - 0.12, z, bx1 + K.post, top, z + 0.06);
+      }
+      const gap = f > 0 && k === K.gapBay;
+      [0, ...K.levels].forEach((y, l) => {
+        for (const [p, px] of [[0, bx0 + 0.2], [1, bx0 + 1.42]]) {
+          const n = (f * 7 + k * 5 + l * 3 + p * 11) % 9;
+          if (!gap && n === 0) continue;
+          const top = gap && l === 0 ? 1.08 : tops[l][(k + p + f) % 2];
+          load('racking', px, z0, px + 1.0, z1, y, top);
+        }
+      });
+    }
+  });
+  // Run B's flue: spacers tying its two frames at each upright.
+  for (const x of xs) for (const y of [1.2, 3.0]) b('racking', 'upright', 'racking', 'spacer', x, y, -8.3, x + K.post, y + 0.06, -8.0);
+  // The forklift, in the aisle in front of run B, facing it, its load raised
+  // over the line: under the forks.
+  const fx = 9.0;
+  b('forklift', 'green', 'forklift', 'body', fx - 0.5, 0.15, -3.0, fx + 0.5, 1.0, -0.95);
+  b('forklift', 'green', 'forklift', 'counterweight', fx - 0.5, 1.0, -1.3, fx + 0.5, 1.2, -0.95);
+  for (const z of [-3.05, -1.6]) for (const x of [fx - 0.55, fx + 0.3]) b('forklift', 'dark', 'forklift', 'wheel', x, 0, z, x + 0.25, 0.45, z + 0.45);
+  b('forklift', 'dark', 'forklift', 'seat', fx - 0.25, 1.0, -1.9, fx + 0.25, 1.15, -1.45);
+  b('forklift', 'dark', 'forklift', 'seat back', fx - 0.25, 1.15, -1.5, fx + 0.25, 1.55, -1.42);
+  for (const x of [fx - 0.5, fx + 0.44]) for (const z of [-2.7, -1.36]) b('forklift', 'dark', 'forklift', 'guard post', x, 1.0, z, x + 0.06, 2.1, z + 0.06);
+  b('forklift', 'dark', 'forklift', 'guard', fx - 0.5, 2.1, -2.7, fx + 0.5, 2.16, -1.3);
+  for (const x of [fx - 0.45, fx + 0.33]) {
+    b('forklift', 'dark', 'forklift', 'mast', x, 0, -3.38, x + 0.12, 2.25, -3.2);
+    b('forklift', 'dark', 'forklift', 'mast', x + 0.02, 2.25, -3.38, x + 0.1, 3.3, -3.2);
+  }
+  b('forklift', 'dark', 'forklift', 'mast tie', fx - 0.45, 3.3, -3.38, fx + 0.45, 3.38, -3.2);
+  b('forklift', 'dark', 'forklift', 'mast mount', fx - 0.45, 0.15, -3.2, fx + 0.45, 1.0, -3.0);
+  b('forklift', 'dark', 'forklift', 'carriage', fx - 0.45, 2.04, -3.38, fx + 0.45, 2.6, -3.2);
+  for (const x of [fx - 0.35, fx + 0.23]) b('forklift', 'dark', 'forklift', 'fork', x, 2.04, -4.5, x + 0.12, 2.1, -3.38);
+  load('forklift', fx - 0.6, -4.38, fx + 0.6, -3.38, 2.1, 3.05);
+  // Stacked pallets either side of the line north of the racking's end.
+  stack('racking', 'pallet stacks', -20.3, -6.0, -19.1, -5.0, 12);
+  stack('racking', 'pallet stacks', -17.9, -6.0, -16.7, -5.0, 10);
+  stack('racking', 'pallet stacks', -21.5, -2.6, -20.3, -1.6, 4);
+  // The mezzanine: its deck round the hatch, edge beams, columns, guard rails
+  // with openings at the stair head and where the line comes in, rails either
+  // side of the hatch.
+  const M = DEPOT_MEZZ, H = M.hatch, dy = M.y - 0.25;
+  b('mezzanine', 'steel', 'mezzanine', 'deck', M.x0, dy, M.z0, H.x0, M.y, M.z1);
+  b('mezzanine', 'steel', 'mezzanine', 'deck', H.x1, dy, M.z0, M.x1, M.y, M.z1);
+  b('mezzanine', 'steel', 'mezzanine', 'deck', H.x0, dy, M.z0, H.x1, M.y, H.z0);
+  b('mezzanine', 'steel', 'mezzanine', 'deck', H.x0, dy, H.z1, H.x1, M.y, M.z1);
+  b('mezzanine', 'dark', 'mezzanine', 'edge beam', M.x0, dy - 0.3, M.z0, M.x1, dy, M.z0 + 0.2);
+  b('mezzanine', 'dark', 'mezzanine', 'edge beam', M.x1 - 0.2, dy - 0.3, M.z0 + 0.2, M.x1, dy, M.z1);
+  for (const z of [H.z0 - 0.2, H.z1]) b('mezzanine', 'dark', 'mezzanine', 'hatch trimmer', H.x0, dy - 0.3, z, H.x1, dy, z + 0.2);
+  for (const [x, z] of [[-22.5, M.z0], [-16.6, M.z0], [-10.6, M.z0], [M.x1 - 0.2, M.z0], [M.x1 - 0.2, 9.5], [M.x1 - 0.2, M.z1 - 0.2]]) {
+    b('mezzanine', 'dark', 'mezzanine', 'column', x, 0, z, x + 0.2, dy - 0.3, z + 0.2);
+  }
+  const rail = (axis, c, a0, a1) => {
+    const n = Math.max(1, Math.round((a1 - a0) / 1.5));
+    const put = (p0, p1, y0, y1, part) => (axis === 'x'
+      ? b('mezzanine', 'amber', 'guard rails', part, p0, y0, c, p1, y1, c + 0.06)
+      : b('mezzanine', 'amber', 'guard rails', part, c, y0, p0, c + 0.06, y1, p1));
+    for (let i = 0; i <= n; i++) {
+      const p = a0 + (a1 - a0 - 0.06) * i / n;
+      put(p, p + 0.06, M.y + 0.15, M.y + 1.04, 'post');
+    }
+    put(a0, a1, M.y + 1.04, M.y + 1.1, 'top rail');
+    put(a0, a1, M.y + 0.52, M.y + 0.58, 'mid rail');
+    put(a0, a1, M.y, M.y + 0.15, 'toe board');
+  };
+  const S = M.stair;
+  rail('x', M.z0, M.x0, S.x0 - 0.2);
+  rail('x', M.z0, S.x1 + 0.2, M.x1 - 0.06);
+  rail('z', M.x1 - 0.06, M.z0 + 0.06, 6.15);
+  rail('z', M.x1 - 0.06, 8.15, M.z1);
+  rail('x', H.z0 - 0.06, H.x0, H.x1);
+  rail('x', H.z1, H.x0, H.x1);
+  // On the deck: the shift office in the far corner, cartons on pallets.
+  b('mezzanine', 'block', 'mezzanine', 'office', M.x0, M.y, 10.5, -20.0, 6.1, M.z1);
+  for (const [x, z] of [[-14.6, 13.4], [-13.2, 13.4], [-21.5, 5.4]]) load('mezzanine', x - 0.5, z - 0.55, x + 0.5, z + 0.55, M.y, M.y + 1.1);
+  // The stair: steel treads between stepped stringers, the top one at the
+  // deck. The line flies up it.
+  const go = (S.z1 - S.z0) / S.risers, rise = M.y / S.risers;
+  for (let k = 1; k <= S.risers; k++) {
+    const z0 = S.z0 + go * (k - 1), z1 = z0 + go, y = rise * k;
+    b('mezzanine', 'dark', 'stair', 'tread', S.x0 + 0.06, y - 0.06, z0, S.x1 - 0.06, y, z1);
+    for (const x of [S.x0, S.x1 - 0.06]) b('mezzanine', 'amber', 'stair', 'stringer', x, y - 0.35 < 0.15 ? 0 : y - 0.35, z0, x + 0.06, y, z1);
+  }
+  // Roof trusses: two chords, posts every 66 cm; purlins on them; columns
+  // carrying them on the window wall.
+  const T = DEPOT_TRUSS;
+  for (const x of T.xs) {
+    for (const [y0, y1, part] of [[T.y0, T.y0 + T.chord, 'bottom chord'], [T.y1 - T.chord, T.y1, 'top chord']]) {
+      b('trusses', 'steel', 'trusses', part, x - 0.06, y0, -15, x + 0.06, y1, 15);
+    }
+    const first = T.gapZ - T.pitch / 2 - T.pitch * Math.floor((T.gapZ + 15 - 0.2) / T.pitch);
+    for (let z = first; z + T.post / 2 < 15 - 0.2; z += T.pitch) {
+      b('trusses', 'steel', 'trusses', 'post', x - 0.06, T.y0 + T.chord, z - T.post / 2, x + 0.06, T.y1 - T.chord, z + T.post / 2);
+    }
+    b('trusses', 'dark', 'columns', 'column', x - 0.15, 0, 14.7, x + 0.15, T.y0, 15);
+  }
+  // Over the spin pole the purlin stops on the trusses either side of it, so
+  // the pole stands 1.5 m clear all the way to the roof.
+  const tw = Math.max(...T.xs.filter((x) => x < DEPOT_POLE.x)), te = Math.min(...T.xs.filter((x) => x > DEPOT_POLE.x));
+  for (let z = -13.5; z < 14; z += 3) {
+    const runs = Math.abs(z - DEPOT_POLE.z) < 1.7 ? [[-22.5, tw + 0.06], [te - 0.06, 22.5]] : [[-22.5, 22.5]];
+    for (const [x0, x1] of runs) b('trusses', 'steel', 'purlins', 'purlin', x0, T.y1, z - 0.06, x1, T.y1 + 0.2, z + 0.06);
+  }
+  // The spin pole: its collider a 10 cm square post, floor to roof; drawn round.
+  const pr = DEPOT_POLE.d / 2;
+  b('pole', 'pole', 'pole', 'pole', DEPOT_POLE.x - pr, 0, DEPOT_POLE.z - pr, DEPOT_POLE.x + pr, DEPOT_H, DEPOT_POLE.z + pr);
+  return out;
+}
+
+// The Warehouse Loop's line, metres, as HOUSE_LINE: from the start pad on the
+// centre run heading +x. tracks/depot-loop.json is its gates
+// (tools/build_depot_loop.mjs).
+const DEPOT_LINE = Object.freeze([
+  ['H', 1.3], ['L', 2.5], ['G', 0.5, 'centre run'], ['L', 9.85], ['G', 0.5, 'centre run'], ['L', 6.5], ['G', 0.5, 'centre run'],
+  ['H', 1.3], ['L', 7.125], ['G', 0.6, 'roll-up door'], ['H', 1.1], ['L', 1.125],
+  ['A', 2.75, 90], ['G', 0.45, 'chain curtain'], ['H', 1.3], ['A', 2.75, 90],
+  ['L', 1.125], ['G', 0.6, 'roll-up door'], ['H', 1.1], ['L', 4.625], ['G', 0.35, 'under the forks'], ['H', 1.25], ['L', 3.0],
+  ['A', 2.75, -90], ['L', 1.55], ['G', 0.28, 'rack gap'], ['H', 1.38], ['L', 1.55],
+  ['A', 2.75, 90], ['H', 1.3], ['L', 2.5], ['G', 0.45, 'down the aisle'], ['L', 13.75],
+  ['A', 2.75, 90], ['G', 0.45, 'end of the aisle'], ['L', 4.2], ['G', 0.5, 'pallet stacks'], ['H', 1.3], ['L', 1.5], ['H', 1.4],
+  ['L', 3.5], ['G', 0.45, 'up the stair'], ['L', 4.75], ['G', 0.45, 'over the mezzanine'], ['H', 5.0], ['L', 5.65], ['H', 7.4],
+  ['A', 2.75, 90], ['H', 7.9], ['L', 3.25], ['G', 0.28, 'truss'], ['L', 7.5], ['G', 0.28, 'truss'], ['L', 3.25], ['H', 7.9],
+  ['A', 2.75, 90], ['G', 0.45, 'round the pole'], ['A', 2.75, 90], ['H', 5.6],
+  ['L', 5.75], ['G', 0.45, 'over the rail'], ['H', 4.5], ['L', 3.1], ['G', 0.4, 'the hatch'], ['H', 3.05], ['L', 1.75],
+  ['A', 2.75, -90], ['G', 0.45, 'under the mezzanine'], ['H', 1.9], ['A', 2.75, -90],
+]);
+
+export function depotLine(ds) {
+  return turtleLine(DEPOT_LINE, -12.35, 1.65, ds);
+}
+
+export const DEPOT_PLAY = Object.freeze({
+  room: Object.freeze({ w: 45, d: 30, h: DEPOT_H }),
+  // The start pad, on the floor at the head of the centre run, nose down it (+x).
+  start: Object.freeze([-12.35, 0.35, 1.65]),
+  dock: DEPOT_DOCK,
+  curtain: DEPOT_CURTAIN,
+  rack: DEPOT_RACK,
+  mezzanine: DEPOT_MEZZ,
+  trusses: DEPOT_TRUSS,
+  pole: DEPOT_POLE,
+  windows: DEPOT_WINDOWS,
+  pallet: PALLET,
+  // The centre run: x0 to x1 (the first roll-up door's drum) along z, clear
+  // w either side from the floor to the trusses.
+  run: Object.freeze({ x0: -12.35, x1: 13, z: 1.65, w: 2 }),
+  boxes: Object.freeze(depotBoxes()),
+});
+
+// The Warehouse on the look: every surface a look surface. The hall itself is
+// neutral: sealed concrete, painted block to 2.4 m with corrugated steel over
+// it, the roof deck, galvanised trusses and decking. The zone hues are
+// paint: racking blue, its beams and the mezzanine's rails and stair safety
+// amber, the forklift green, the dock's doors blue-violet, the spin pole the
+// Rig's teal. Sixteen draws in all, so a frame with every gate in view stays
+// under 60.
+// New to the look, and no new texture: corrugated steel (the galvanised set,
+// its ribs drawn by the shader) and pallet wood (the plywood set, its boards
+// drawn by the shader).
+function depotSurface(type, look, color, albedoVar) {
+  const s = LOOK.surfaces[look];
+  return Object.freeze({ type, look, color, roughness: s.roughness, metalness: s.metalness, albedoVar });
+}
+export const DEPOT_LOOK = Object.freeze({
+  surfaces: Object.freeze({
+    floor: depotSurface('sealed concrete', 'concrete', 0xe6e3dd),
+    block: depotSurface('painted block', 'paintedBlock', 0xd9dcdf),
+    cladding: depotSurface('corrugated steel', 'galvanised', 0xc8cdd3),
+    roof: depotSurface('roof deck', 'deck', 0x9ca1a8),
+    steel: depotSurface('galvanised steel', 'galvanised', 0xb9bfc6, 0.6),
+    dark: depotSurface('painted steel', 'paintedSteel', 0x3c4148, 0.6),
+    upright: depotSurface('blue rack upright', 'paintedSteel', 0x2f6fc4, 0.5),
+    amber: depotSurface('safety amber', 'enamel', 0xf2a91c, 0.5),
+    pallet: depotSurface('pallet wood', 'plywood', 0xd9bb8c),
+    carton: depotSurface('kraft carton', 'plywood', 0xb48654, 0.45),
+    green: depotSurface('forklift green', 'enamel', 0x5a9a2a, 0.5),
+    door: depotSurface('painted roll-up door', 'paintedSteel', 0x4a4fb0, 0.5),
+    pole: depotSurface('painted steel pole', 'paintedSteel', 0x22b8cf),
+  }),
+  // The HDRI fill's balance on every surface here (sim-look.js opts.fill):
+  // the big hall a little cooler than the sun; the roof sees the HDRI's dim
+  // lower half, so its fill is up, the floor's bounce.
+  fill: Object.freeze([1.35, 1.38, 1.45]),
+  roofFill: Object.freeze([2.1, 2.1, 2.2]),
+  // Each zone's hue: the surface that carries it.
+  zones: Object.freeze({ racking: 'upright', mezzanine: 'amber', forklift: 'green', dock: 'door', pole: 'pole' }),
+  // The new surfaces' patterns (sim-look.js LOOK.ribs, LOOK.pallet): the
+  // cladding's ribs the look's, the roll-up doors' slats every 10 cm.
+  ribs: Object.freeze({
+    cladding: Object.freeze({ axis: 'h' }),
+    door: Object.freeze({ axis: 'v', pitch: 0.1, depth: 0.5, dark: 0.3 }),
+  }),
+  // The slab's saw cuts: a light one every 3 m, a wider one every 6 m.
+  joints: Object.freeze({ minor: 3, major: 6, minorWidth: 0.008, majorWidth: 0.016, minorDark: 0.55, majorDark: 0.62 }),
+  // The clerestories' glazing: frosted polycarbonate, the morning's light
+  // through it (linear RGB, unlit).
+  glazing: Object.freeze([1.5, 1.42, 1.3]),
+});
+
+// The key's way in, toward the sun (azimuth clockwise from +z), and the floor
+// AO's casters: everything low enough to shade the floor (the roof's trusses
+// and purlins are too high to).
+const toSun = (k) => {
+  const e = k.elevation * Math.PI / 180, a = k.azimuth * Math.PI / 180;
+  return [Math.cos(e) * Math.sin(a), Math.sin(e), Math.cos(e) * Math.cos(a)];
+};
+const depotAoBoxes = () => DEPOT_PLAY.boxes.filter((b) => b.max[1] <= 6.2);
+
+// The sun shafts, metres (sim-look.js lookShafts): from each clerestory that
+// has one, 1.5 cm inside the wall, long enough that its top edge reaches the
+// floor and the floor cuts it where the light lands. Where the spin pole
+// stands in a shaft, the slice of light it stops ends at the pole, as the
+// shadow map cuts it from the patch.
+export function depotShafts() {
+  const d = toSun(DEPOT_KEY).map((v) => -v), z = DEPOT_PLAY.room.d / 2 - 0.015;
+  const P = DEPOT_POLE, near = (P.z + P.d / 2 - z) / d[2];
+  const px = P.x - d[0] * (P.z - z) / d[2], half = P.d / 2 + Math.abs(d[0] / d[2]) * P.d / 2;
+  const out = [];
+  const put = (x0, x1, y0, y1, length) => out.push({ quad: [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]], dir: d, length });
+  for (const w of DEPOT_WINDOWS.filter((q) => q.shaft)) {
+    const [a, b] = w.shaft === true ? [w.x0, w.x1] : w.shaft, full = w.y1 / -d[1] + 0.3;
+    if (px + half > a && px - half < b) {
+      put(a, px - half, w.y0, w.y1, full);
+      put(px - half, px + half, w.y0, w.y1, near);
+      put(px + half, b, w.y0, w.y1, full);
+    } else put(a, b, w.y0, w.y1, full);
+  }
+  return out;
+}
+
+function buildDepot(THREE, parent, colliders) {
+  const P = DEPOT_PLAY, s = DEPOT_WS, R = P.room, L = LAYOUT.depot;
+  const hx = R.w * s / 2, hz = R.d * s / 2, H = R.h * s, t = L.wall;
+  const S = DEPOT_LOOK.surfaces;
+  // Faces sit a hair behind their edge lines so the lines never z-fight.
+  const mats = {};
+  for (const [key, f] of Object.entries(S)) {
+    const o = { extras: { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }, fill: key === 'roof' ? DEPOT_LOOK.roofFill : DEPOT_LOOK.fill, albedoVar: f.albedoVar };
+    if (key === 'floor') o.joints = { origin: [-hx, -hz], unit: s, spec: DEPOT_LOOK.joints };
+    if (DEPOT_LOOK.ribs[key]) o.ribs = Object.assign({ unit: s }, DEPOT_LOOK.ribs[key]);
+    if (key === 'pallet') o.pallet = { unit: s, module: P.pallet };
+    mats[key] = lookMaterial(THREE, f.look, f.color, o);
+    mats[key].name = 'depot ' + f.type;
+  }
+  const G = DEPOT_LOOK.glazing;
+  mats.glazing = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(G[0], G[1], G[2]) });
+  mats.glazing.name = 'depot glazing';
+  mats.glazing.userData.looksSkip = true;
+  const tiled = (mesh) => lookBoxUv(mesh, mesh.material.userData.lookTile * s);
+  const vis = new THREE.Group();
+  vis.name = 'depotArtVisuals';
+  parent.add(vis);
+  const edges = [];
+  const edge = (a, b) => {
+    const add = (p, q) => edges.push(p[0], p[1], p[2], q[0], q[1], q[2]);
+    for (const y of [a[1], b[1]]) {
+      add([a[0], y, a[2]], [b[0], y, a[2]]); add([a[0], y, b[2]], [b[0], y, b[2]]);
+      add([a[0], y, a[2]], [a[0], y, b[2]]); add([b[0], y, a[2]], [b[0], y, b[2]]);
+    }
+    for (const [x, z] of [[a[0], a[2]], [b[0], a[2]], [a[0], b[2]], [b[0], b[2]]]) add([x, a[1], z], [x, b[1], z]);
+  };
+  for (const r of P.boxes) {
+    const a = r.min.map((v) => v * s), b = r.max.map((v) => v * s);
+    const mesh = box(THREE, vis, colliders, (a[0] + b[0]) / 2, a[1], (a[2] + b[2]) / 2,
+      b[0] - a[0], b[1] - a[1], b[2] - a[2], mats[r.mat]);
+    mesh.name = 'depot_' + r.mat;
+    if (r.mat === 'pole') {
+      // Round to look at; the collider box() took stays the square post.
+      mesh.geometry.dispose();
+      mesh.geometry = new THREE.CylinderGeometry((b[0] - a[0]) / 2, (b[0] - a[0]) / 2, b[1] - a[1], 24);
+      continue;
+    }
+    tiled(mesh);
+    edge(a, b);
+  }
+  // The floor carries the soft AO under everything low (floorAo).
+  const floor = makeFloor(THREE, vis, R.w * s, R.d * s, mats.floor);
+  lookFloor(THREE, floor, R, s, floorAo(depotAoBoxes(), R));
+  // Shell: inner faces at exactly ±22.5 × ±15 × 9 m. Painted block to 2.4 m,
+  // corrugated cladding over it; in the window wall the clerestories, their
+  // glazing letting the key through. Everything else casts: the morning sun
+  // comes in through the clerestories only.
+  const bk = 2.4 * s, wall = (x0, x1, z0, z1, y0, y1, m) => {
+    const mesh = box(THREE, vis, colliders, (x0 + x1) / 2, y0, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0, m);
+    tiled(mesh);
+    return mesh;
+  };
+  for (const [x0, x1, z0, z1] of [[-hx - t, -hx, -hz - t, hz + t], [hx, hx + t, -hz - t, hz + t], [-hx, hx, -hz - t, -hz]]) {
+    wall(x0, x1, z0, z1, 0, bk, mats.block);
+    wall(x0, x1, z0, z1, bk, H, mats.cladding);
+  }
+  const wy0 = DEPOT_WINDOWS[0].y0 * s, wy1 = DEPOT_WINDOWS[0].y1 * s;
+  wall(-hx, hx, hz, hz + t, 0, bk, mats.block);
+  wall(-hx, hx, hz, hz + t, bk, wy0, mats.cladding);
+  wall(-hx, hx, hz, hz + t, wy1, H, mats.cladding);
+  let px = -hx;
+  for (const w of DEPOT_WINDOWS) {
+    wall(px, w.x0 * s, hz, hz + t, wy0, wy1, mats.cladding);
+    const pane = box(THREE, vis, colliders, (w.x0 + w.x1) * s / 2, wy0, hz + t / 2, (w.x1 - w.x0) * s, wy1 - wy0, 0.06 * s, mats.glazing);
+    pane.name = 'depot_glazing';
+    // The key comes in through the glazing.
+    pane.castShadow = false;
+    pane.receiveShadow = false;
+    px = w.x1 * s;
+  }
+  wall(px, hx, hz, hz + t, wy0, wy1, mats.cladding);
+  wall(-hx - t, hx + t, -hz - t, hz + t, H, H + 0.24, mats.roof);
+  edge([-hx, 0, -hz], [hx, H, hz]);
+  // The sun shafts, one soft beam a clerestory, in the air over the floor.
+  const shafts = lookShafts(THREE, depotShafts().map((q) => ({ quad: q.quad.map((p) => p.map((v) => v * s)), dir: q.dir, length: q.length * s })), { name: 'depotShafts' });
+  vis.add(shafts);
+  // The edge lines at the look's 60%, bloomed (sim-look.js lookLines).
+  const lines = lookLines(THREE, edges);
+  lines.name = 'depotEdges';
+  lines.userData.artKeep = true;
+  vis.add(lines);
+  return { floor, orbit: MAP_ORBIT.depot };
+}
+
 const BUILDERS = {
   rig: buildRig,
   house: buildHouse,
+  depot: buildDepot,
   living: buildLiving,
   garage: buildGarage,
   warehouse: buildWarehouse,
