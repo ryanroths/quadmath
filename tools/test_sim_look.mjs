@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import * as THREE from '../vendor/three.module.min.js';
 import {
   LOOK, LOOK_TEXTURES, lookTextureBytes, vfovForDiagonal, lookVfov, yawBlurPx, floorAo,
-  lookVibe, lookLooks, markBloom, lookShadowProxy, lookBoxUv,
+  lookVibe, lookLooks, markBloom, lookShadowProxy, lookBoxUv, lookMaterial, lookShafts, lookTextureSet,
 } from '../sim-look.js';
 import { RIG_PLAY } from '../sim-maps.js';
 import { vibeFor } from '../sim-art.js';
@@ -239,6 +239,122 @@ test('box uvs in physical tiles, projected per face', () => {
     const want = Math.abs(n.getX(i)) > 0.5 ? [z, y] : Math.abs(n.getY(i)) > 0.5 ? [x, z] : [x, y];
     assert.ok(Math.abs(uv.getX(i) - want[0] / 1.5) < 1e-6 && Math.abs(uv.getY(i) - want[1] / 1.5) < 1e-6, 'vertex ' + i);
   }
+});
+
+// Run a look material's shader hook on three's own standard shader.
+function compiled(m) {
+  const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+  m.onBeforeCompile(sh, null);
+  return sh;
+}
+
+test('corrugated sheet and pallets: drawn in the shader on existing sets, each its own program', () => {
+  const W = 3.5;
+  const keys = {
+    surface: lookMaterial(THREE, 'galvanised', 0xc9cdd2),
+    ribs: lookMaterial(THREE, 'galvanised', 0xc9cdd2, { ribs: { unit: W, pitch: 0.076, axis: 'h' } }),
+    door: lookMaterial(THREE, 'paintedSteel', 0x3a6ea5, { ribs: { unit: W, pitch: 0.1, depth: 0.5, dark: 0.3, axis: 'v' } }),
+    ribsFill: lookMaterial(THREE, 'galvanised', 0xc9cdd2, { ribs: { unit: W }, fill: [1.2, 1.1, 1] }),
+    ribsAlbedo: lookMaterial(THREE, 'galvanised', 0xc9cdd2, { ribs: { unit: W }, albedoVar: 0.5 }),
+    pallet: lookMaterial(THREE, 'plywood', 0xd2b48c, { pallet: { unit: W, module: 0.15, board: 0.1, gap: 0.035 } }),
+    palletFill: lookMaterial(THREE, 'plywood', 0xd2b48c, { pallet: { unit: W }, fill: [1.2, 1.1, 1] }),
+    boards: lookMaterial(THREE, 'plywood', 0xc0915f, { boards: { origin: [0, 0], unit: W, width: 0.18, length: 1.2 } }),
+  };
+  const ck = Object.fromEntries(Object.entries(keys).map(([k, m]) => [k, m.customProgramCacheKey()]));
+  assert.equal(ck.surface, 'look:surface');
+  assert.equal(ck.ribs, 'look:ribs');
+  assert.equal(ck.door, 'look:ribs', 'the axis and sizes are uniforms: one program');
+  assert.equal(ck.ribsFill, 'look:ribs+fill');
+  assert.equal(ck.ribsAlbedo, 'look:ribs+albedo');
+  assert.equal(ck.pallet, 'look:pallet');
+  assert.equal(ck.palletFill, 'look:pallet+fill');
+  assert.equal(ck.boards, 'look:boards');
+  assert.equal(new Set([ck.surface, ck.ribs, ck.ribsFill, ck.ribsAlbedo, ck.pallet, ck.palletFill, ck.boards]).size, 7, 'distinct programs');
+  // One pattern a material: joints, boards, pallet, ribs, the first given wins.
+  const both = { joints: { origin: [0, 0], unit: W }, ribs: { unit: W }, pallet: { unit: W } };
+  assert.equal(lookMaterial(THREE, 'concrete', 0xffffff, both).customProgramCacheKey(), 'look:joints');
+  assert.equal(lookMaterial(THREE, 'plywood', 0xffffff, { pallet: { unit: W }, ribs: { unit: W } }).customProgramCacheKey(), 'look:pallet');
+  for (const [k, m] of Object.entries(keys)) {
+    assert.equal(m.userData.looksSkip, true, k);
+    assert.equal(m.userData.lookTile, LOOK.surfaces[m.userData.lookKind].tile, k);
+    assert.equal(m.map, lookTextureSet(THREE, LOOK.surfaces[m.userData.lookKind].set).map, k + ': an existing set');
+  }
+  // Ribs: a world-position varying, the normal tilted after the normal map,
+  // sizes in world units; with fill and albedoVar both still applied.
+  const r = compiled(keys.ribsAlbedo);
+  assert.match(r.vertexShader, /vLookWorld = \( modelMatrix \* vec4\( transformed, 1\.0 \) \)\.xyz;/);
+  assert.match(r.fragmentShader, /#include <normal_fragment_maps>\s*\{[\s\S]*nonPerturbedNormal[\s\S]*normal = normalize\( normal \+ lookRibs\.y/);
+  assert.match(r.fragmentShader, /fwidth\( vLookWorld \)/, 'faded by its footprint');
+  assert.match(r.fragmentShader, /lookAlbedoVar/);
+  const R = compiled(keys.door).uniforms.lookRibs.value;
+  assert.ok(Math.abs(R.x - 0.1 * W) < 1e-9 && R.y === 0.5 && R.z === 0.3 && R.w === 1, 'door: pitch, depth, dark, axis v');
+  const Rh = compiled(keys.ribs).uniforms.lookRibs.value;
+  assert.ok(Math.abs(Rh.x - 0.076 * W) < 1e-9 && Rh.y === LOOK.ribs.depth && Rh.z === LOOK.ribs.dark && Rh.w === 0, 'cladding: LOOK.ribs defaults, axis h');
+  assert.match(compiled(keys.ribsFill).fragmentShader, /iblIrradiance \*= lookFill;/);
+  // Pallets: the map sampled per board, the slats from world height.
+  const p = compiled(keys.pallet);
+  assert.doesNotMatch(p.fragmentShader, /#include <map_fragment>/);
+  assert.match(p.fragmentShader, /float lookStripe\( float x, float s, float w \)/);
+  const P = p.uniforms.lookPallet.value;
+  assert.ok(Math.abs(P.x - 0.15 * W) < 1e-9 && Math.abs(P.y - 0.135 * W) < 1e-9, 'module and board pitch in world units');
+  assert.ok(Math.abs(P.z - 0.1 / 0.135) < 1e-9 && Math.abs(P.w - LOOK.pallet.deck / 0.15) < 1e-9);
+  assert.deepEqual(p.uniforms.lookPalletShade.value.toArray(), [LOOK.pallet.band, LOOK.pallet.slot, LOOK.pallet.shade]);
+  // No new texture bytes: the 24 MB budget is spent.
+  assert.equal(lookTextureBytes().total, 23243431, 'the look\'s textures, unchanged');
+  for (const d of [LOOK.ribs, LOOK.pallet]) assert.ok(Object.isFrozen(d));
+  assert.ok(LOOK.ribs.dark <= 0.4 && LOOK.ribs.depth > 0 && LOOK.ribs.depth <= 1);
+});
+
+test('sun shafts: one additive mesh, the alpha (bloom mask) untouched, no depth, no shadow, kept out of the merge', () => {
+  const S = LOOK.shafts;
+  assert.ok(Object.isFrozen(S));
+  assert.ok(S.strength > 0 && S.strength < 0.1, 'dusty light, not a beam: ' + S.strength);
+  assert.ok(S.tail > 0 && S.tail < 1 && S.edge > 0);
+  const c = new THREE.Color(S.color);
+  assert.ok(c.r >= c.g && c.g > c.b, 'warm');
+  const quad = (x) => [[x, 20, 0], [x + 4, 20, 0], [x + 4, 17, 0], [x, 17, 0]];
+  const dir = [0, -Math.SQRT1_2, Math.SQRT1_2];
+  const m = lookShafts(THREE, [{ quad: quad(0), dir, length: 24 }, { quad: quad(10), dir, length: 20 }], { name: 'depotShafts' });
+  assert.ok(m.isMesh);
+  assert.equal(m.name, 'depotShafts');
+  const g = m.geometry, pos = g.getAttribute('position'), at = g.getAttribute('lookShaft');
+  assert.equal(pos.count, 16, 'a prism is 8 corners a shaft');
+  assert.equal(g.index.count, 72, '12 triangles a shaft: four sides and both ends, closed');
+  for (let i = 0; i < 4; i++) {
+    // Across the window (0..1 both ways, for the soft edges), then along it.
+    assert.deepEqual([at.getX(i), at.getY(i)], [[0, 0], [1, 0], [1, 1], [0, 1]][i]);
+    assert.deepEqual([at.getX(i + 4), at.getY(i + 4)], [at.getX(i), at.getY(i)]);
+    assert.equal(at.getZ(i), 0, 'full at the window');
+    assert.equal(at.getZ(i + 4), 1, 'tail where it lands');
+    assert.ok(Math.abs(pos.getY(i + 4) - (pos.getY(i) - 24 * Math.SQRT1_2)) < 1e-4 && Math.abs(pos.getZ(i + 4) - 24 * Math.SQRT1_2) < 1e-4, 'swept along dir by length');
+  }
+  assert.equal(m.castShadow, false);
+  assert.equal(m.receiveShadow, false);
+  assert.equal(m.userData.artKeep, true, 'mergeStaticArt leaves it alone');
+  assert.ok(m.renderOrder > 0, 'after the opaque frame');
+  const mat = m.material;
+  assert.equal(mat.userData.looksSkip, true);
+  assert.equal(mat.transparent, true);
+  assert.equal(mat.depthWrite, false);
+  assert.equal(mat.depthTest, true);
+  assert.equal(mat.side, THREE.DoubleSide);
+  assert.equal(mat.toneMapped, true, 'through three\'s tone map and colour space, as every look surface');
+  assert.equal(mat.blending, THREE.CustomBlending);
+  assert.equal(mat.blendEquation, THREE.AddEquation);
+  assert.equal(mat.blendSrc, THREE.SrcAlphaFactor);
+  assert.equal(mat.blendDst, THREE.OneFactor);
+  assert.equal(mat.blendSrcAlpha, THREE.ZeroFactor, 'the alpha, the bloom mask, is kept');
+  assert.equal(mat.blendDstAlpha, THREE.OneFactor);
+  assert.match(mat.fragmentShader, /pow\( abs\( dot\( v, n \) \), lookShaftFade\.y \)/, 'soft silhouette');
+  assert.match(mat.fragmentShader, /toneMapping\(/);
+  assert.match(mat.fragmentShader, /linearToOutputTexel\(/);
+  const want = new THREE.Color(S.color).multiplyScalar(S.strength);
+  assert.ok(mat.uniforms.lookShaftColor.value.equals(want));
+  assert.deepEqual(mat.uniforms.lookShaftFade.value.toArray(), [S.tail, S.edge]);
+  const o = lookShafts(THREE, [{ quad: quad(0), dir, length: 5 }], { color: 0xffffff, strength: 0.02 });
+  assert.ok(o.material.uniforms.lookShaftColor.value.equals(new THREE.Color(0xffffff).multiplyScalar(0.02)), 'opts colour and strength');
+  assert.equal(o.name, 'lookShafts');
+  assert.equal(lookShafts(THREE, []).geometry.getAttribute('position').count, 0);
 });
 
 test('sim-look.js is first-party and stamped', () => {

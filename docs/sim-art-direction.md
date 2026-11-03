@@ -19,6 +19,7 @@ Phase 1 ships **Neon Current** on the City map (City Loop / Mesa Zigzag).
 **Pocket Stage** ships on Your Room.
 **Soft Industrial** ships on The Rig, the launch map: the sim look (`sim-look.js`), an exception to Felt Scale (below).
 **Afternoon House** ships on The House, the second map on the look.
+**Morning Warehouse** ships on The Warehouse (map id `depot`), the third map on the look.
 Remaining maps keep their current procedural rooms and pick up their vibe
 one map per PR.
 
@@ -39,6 +40,7 @@ one map per PR.
 | `room` | Your Room | Indoor whoop (W3) | `sim-room.js` + `buildRoom` | `room-practice` (generated from L×W×H) |
 | `rig` | The Rig | Indoor whoop, on the look | `buildRig` | `rig-loop` |
 | `house` | The House | Indoor whoop, on the look | `buildHouse` | `house-loop` (`tools/build_house_loop.mjs`, from `houseLine`) |
+| `depot` | The Warehouse | Indoor whoop, on the look | `buildDepot` | `depot-loop` (`tools/build_depot_loop.mjs`) |
 
 Orbit and lighting knobs live in `MAP_ORBIT` / `MAP_LOOKS` (`sim-maps.js`).
 City fallback lighting is the `LIGHTING` block in `sim.html`. Quality, HDRI,
@@ -225,6 +227,15 @@ Warehouse (**Ion Nave**), Gym (**Amber Court**), Office (**Paper Sun**), Tiny Tr
 - **Surfaces:** warm white plaster walls and ceilings (`plaster`, the painted steel set with its plate marks painted out); oak floorboards (plywood, boards 18 cm × 1.2 m, staggered); glazed tile in the kitchen and hallway (60 cm) and the bathroom (30 cm, aqua); terracotta tile on the patio (40 cm); white lacquer, brushed steel, oiled oak, blue paint, terracotta paint, black gloss. New to the look: the fabric set (Poly Haven `rough_linen`, 256: linen upholstery and blue bedding), and glass (no texture). Zone hues as tints: living warm neutral, kitchen white and steel, bedroom blue, bathroom aqua tile, patio terracotta.
 - **Loop:** the House Loop is a designed line (`houseLine`, straights and arcs with height pins) and its 20 gates mark it: 65 m flown, 60 m gate to gate, tightest radius 1.58 m. Through the arch, through the bookshelf gap and round its end, over the sofa back under the fan, over the island and down over the stools, a climb through the hallway's three doors, over the bed, through the closet, once round the tub climbing, out the sliding door, past a chair, under the table, past the other chair, in at the garden door. `tools/test_sim_house.mjs` holds it.
 - **Menus:** the launch screen keeps its five buttons. Fly opens a map chooser, The Rig and The House with their thumbnails (`assets/sim-thumbs/`), the last map flown marked; Tracks has a House tab. Both without `?dev=1`. Daily, Boards and Coach stay on the Rig.
+
+### The Warehouse — Morning Warehouse (shipped, beside the Rig and the House)
+
+- **Owner's spec:** a warehouse interior, 45 × 30 × 9 m, at micro-class scale: built for the 75 and 85 whoops, and fine for a 65. Pallet racking, a mezzanine with a stair and a drop-through hatch, a forklift and stacked pallets, chain curtains at a loading dock, two half-open roll-up doors, a 25 m centre run, overhead trusses with 60 cm gaps, and a spin pole. Morning sun shafts through high clerestory windows, the HDRI for fill. `sim-look.js` inherited; the two new surfaces come from sets the look already ships. Same bounce walls and crash threshold as the Rig. The map id is `depot`: `warehouse` is the archived map (Ion Nave, above), and no `warehouse*` name or key is reused.
+- **Plan (`sim-maps.js` `buildDepot`, metres):** the centre run, the racking, the mezzanine with its stair and hatch, the dock with its chain curtains and the two roll-up doors, the trusses overhead. Boxes only, the Rig's rules (6 cm and thicker, no 4–10 cm slot); the chain curtains, the racking and the trusses are boxes too, and the spin pole collides as a square post and is drawn round, as the Rig's.
+- **The look, inherited:** the same HDRI fill, ACES, exposure, post, lens, edge lines, floor AO and contact AO, the brand gates. The map's own: where the one key comes from and how strong (`DEPOT_KEY`: a low morning sun, warm, in through the clerestories only, so it lands in shafts across the floor and the racking) and its shadow box, fitted to the hall (`DEPOT_SHADOW`). The clerestory glass does not cast, as the House's glass does not.
+- **Surfaces:** new to the look, corrugated steel and pallet wood, both made in the shader from the sets the look already ships: no new texture bytes, so the 24 MB texture budget is unchanged. The rest are surfaces the Rig and the House already use. Gates keep brand `#ff4d1a` / `#3ddc97`.
+- **Loop:** the Warehouse Loop (`depot-loop`) is a designed line, as the House's, and its gates mark it; it starts on its pad on the centre run, nose down it, where freestyle starts too. `tools/test_sim_depot.mjs` holds it. It is not in the Daily's pool.
+- **Menus:** Fly's map chooser holds three cards, The Rig, The House and The Warehouse, in a row (two columns on a narrow phone); Tracks has a Warehouse tab. Both without `?dev=1`. A pilot with no saved map launches into the class's own map: the 65 The Rig, the 75 and 85 The Warehouse (`sim-tracks.js` `CLASS_MAPS`); a class switch before the first flight moves the map behind the menu with it. A saved map and an explicit `?map=` or `?track=` win, and every archive or unknown-map fallback is still The Rig. Daily, Boards and Coach stay on their own maps.
 
 ### Daily / weekly
 

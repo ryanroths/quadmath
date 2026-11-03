@@ -105,7 +105,7 @@ export function pngRgbAverage(buf) {
   return n ? sum / (n * 3) : 0;
 }
 const LOOK = {
-  rig: 'rigWhoop',
+  rig: 'rigWhoop', depot: 'depotStart',
   city: 'whoopStreet', living: 'livingWhoop', garage: 'garageWhoop',
   warehouse: 'warehouseWhoop', gym: 'gymWhoop', office: 'officeWhoop',
   trainer: 'trainerWhoop', backyard: 'backyardWhoop', room: 'roomWhoop',
@@ -487,21 +487,39 @@ async function bootCases(cases) {
 
 // What a fresh profile (no saved choices) shows once the page has booted and
 // its boot map is applied: the labels of the launch card's visible buttons,
-// and the map behind them.
-async function launchScreen(base, query) {
+// and the map behind them. opts.droneType: the class the profile restores
+// (ryflyDroneType), set on the sim's origin before the sim's first load.
+async function launchScreen(base, query, opts) {
   bootSeq += 1;
   const port = 9700 + bootSeq;
   const url = `${base}/sim.html${query || ''}`;
-  const child = spawn(chrome, chromeArgs(port, `/tmp/qm-boot-${process.pid}-${bootSeq}-${Date.now()}`, url), { stdio: ['ignore', 'pipe', 'pipe'] });
-  const page = await waitForCdpPage(port, (p) => p.type === 'page' && p.webSocketDebuggerUrl && String(p.url || '').includes('/sim.html'), 100);
+  const droneType = opts && opts.droneType;
+  const start = droneType ? `${base}/tracks/catalog.json` : url;
+  const child = spawn(chrome, chromeArgs(port, `/tmp/qm-boot-${process.pid}-${bootSeq}-${Date.now()}`, start), { stdio: ['ignore', 'pipe', 'pipe'] });
+  const page = await waitForCdpPage(port, (p) => p.type === 'page' && p.webSocketDebuggerUrl && String(p.url || '').includes(droneType ? '/tracks/catalog.json' : '/sim.html'), 100);
   if (!page) {
     try { child.kill('SIGKILL'); } catch (e) { /* ignore */ }
     throw new Error('no CDP for the launch screen');
   }
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
+  const href = async () => {
+    try {
+      const h = await cdp(ws, 'Runtime.evaluate', { expression: 'location.href', returnByValue: true });
+      return String(h && h.result && h.result.value || '');
+    } catch (e) { return ''; }
+  };
   try {
     await cdp(ws, 'Runtime.enable');
+    if (droneType) {
+      // A plain page on the sim's origin first (Chrome may still be on
+      // about:blank), the class there, then the sim.
+      if (!(await href()).startsWith(base)) await cdp(ws, 'Page.navigate', { url: start });
+      for (let i = 0; i < 40 && !(await href()).startsWith(base); i++) await sleep(200);
+      await cdp(ws, 'Runtime.evaluate', { expression: `localStorage.setItem('ryflyDroneType', ${JSON.stringify(droneType)}); true` });
+      await cdp(ws, 'Page.navigate', { url });
+      for (let i = 0; i < 40 && !(await href()).includes('/sim.html'); i++) await sleep(200);
+    }
     const here = await cdp(ws, 'Runtime.evaluate', { expression: 'location.href', returnByValue: true });
     if (!String(here && here.result && here.result.value || '').includes('/sim.html')) await cdp(ws, 'Page.navigate', { url });
     let out = null;
@@ -560,6 +578,25 @@ test('the launch screen shows exactly five buttons without ?dev: Fly, Daily, Boa
     assert.equal(unknown && unknown.map, 'rig', 'an unknown ?map= lands on The Rig');
     const spark = await launchScreen('http://127.0.0.1:' + port, '?spark=garage:0');
     assert.equal(spark && spark.map, 'rig', 'a spark link to a closed map stays on The Rig');
+  } finally {
+    await new Promise((res) => server.close(res));
+  }
+}, { timeout: 240000 });
+
+test('with nothing saved the launch screen is the class\'s map: a 75 launches into The Warehouse from the first frame, a 65 still into The Rig', async (t) => {
+  if (process.env.SKIP_CHROME_BOOT === '1') {
+    t.skip('SKIP_CHROME_BOOT');
+    return;
+  }
+  const { server, port } = await serveRoot();
+  try {
+    const w75 = await launchScreen('http://127.0.0.1:' + port, '', { droneType: 'whoop75' });
+    assert.deepEqual(w75 && w75.labels, ['Fly', 'Daily', 'Boards', 'Tune', 'Controls']);
+    assert.equal(w75 && w75.map, 'depot', 'a fresh 75 launches into The Warehouse');
+    assert.equal(w75 && w75.first, 'depot', 'no other map behind the launch card while the tracks load');
+    const w65 = await launchScreen('http://127.0.0.1:' + port, '', { droneType: 'whoop65' });
+    assert.equal(w65 && w65.map, 'rig', 'a fresh 65 still launches into The Rig');
+    assert.equal(w65 && w65.first, 'rig');
   } finally {
     await new Promise((res) => server.close(res));
   }

@@ -3,8 +3,8 @@
 // No third-party meshes. Nothing from the GPL whoop sim. No new colliders.
 // Clay/felt furniture on the same AABBs. Felt-ring gates. Bloom off.
 
-import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=15bd7134f000';
-import { planRoom } from './sim-room.js?v=c26e0c6bfbfc';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=aad33e981d59';
+import { planRoom } from './sim-room.js?v=74928ed0772f';
 
 export const ROOM_STOCK = Object.freeze({
   wall: 0xd8d2c6,

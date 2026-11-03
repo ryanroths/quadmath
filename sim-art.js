@@ -4,9 +4,9 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=15bd7134f000';
-import { lookVibe, markBloom } from './sim-look.js?v=25231f0dd6c9';
-import { HOUSE_KEY } from './sim-maps.js?v=0b2c7bf6e82f';
+import { hexNum } from './sim-art-city.js?v=aad33e981d59';
+import { lookVibe, markBloom } from './sim-look.js?v=d55c6a2d63e0';
+import { HOUSE_KEY, DEPOT_KEY, DEPOT_SHADOW } from './sim-maps.js?v=c1e0f018aeed';
 export {
   FELT_SCALE, applyFeltMaterial, feltBasic, feltClay, feltEmissive,
   studioPhoneBudget, qualityWantsStudioBloom,
@@ -24,54 +24,54 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=15bd7134f000';
+} from './sim-art-city.js?v=aad33e981d59';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget, planLivingKit,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=dbdf2114d569';
+} from './sim-art-living.js?v=4f3e7e436eab';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=9f0d48851b09';
+} from './sim-art-garage.js?v=4d69cb669116';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=ffd922f63e77';
+} from './sim-art-warehouse.js?v=cc54ba18a115';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
   planGymKit,
-} from './sim-art-gym.js?v=37d6eac46a70';
+} from './sim-art-gym.js?v=e1d13fb688c1';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget, planOfficeKit,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=69c246991c32';
+} from './sim-art-office.js?v=e3614c652f72';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=78793388cfe5';
+} from './sim-art-trainer.js?v=6306918b28ed';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildRyanYard, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
   planBackyardKit,
-} from './sim-art-backyard.js?v=2b6b276bb37e';
+} from './sim-art-backyard.js?v=fe056b2e46b7';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=640578ab6341';
+} from './sim-art-room.js?v=2621f4830d36';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
@@ -80,7 +80,7 @@ export {
   tryDressGymKit, gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA,
   tryDressLivingKit, livingKitBytesForQuality, LIVING_KIT_CORE, LIVING_KIT_EXTRA,
   tryDressBackyardKit, backyardKitBytesForQuality, BACKYARD_KIT_CORE, BACKYARD_KIT_EXTRA,
-} from './sim-art-kit.js?v=529d9ed3dab0';
+} from './sim-art-kit.js?v=8d0b056788f9';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
@@ -473,10 +473,35 @@ export const VIBES = Object.freeze({
     // and its roof.
     shadow: Object.freeze({ viewR: 39, height: 11 }),
   }),
+  // The Warehouse (map id depot: the archived map owns 'warehouse'), the third
+  // map on the look. Its own: the one key is a low morning sun, warm, down
+  // through the high clerestory windows in shafts across the floor and the
+  // racking (sim-maps.js DEPOT_KEY); the HDRI fills the rest. Corrugated steel
+  // and pallet wood are the look's own sets, shaded, not new textures; the
+  // zone hues and the room are the builder's.
+  depot: lookVibe({
+    id: 'depot',
+    name: 'Morning Warehouse',
+    tagline: 'A whoop-scale warehouse, the morning sun in shafts through the clerestory over an HDRI fill, steel and pallet wood under the trusses',
+    palette: Object.freeze({
+      void: '#0a0b0d', zenith: '#9fc2e0', horizon: '#f4e3c8', dusk: '#ff4d1a',
+      street: '#6f7378', sidewalk: '#c9ccd0', lane: '#f2c230', laneAlt: '#ff4d1a',
+      facade: '#8e98a3', facadeAlt: '#2f5d8c', windowOn: '#ffd59e', windowAlt: '#5f86b8',
+      neonA: '#f2f0ea', neonB: '#ff4d1a', neonC: '#3ddc97', mesa: '#b98a55',
+      gateA: '#ff4d1a', gateB: '#3ddc97',
+    }),
+    // The Rig's brand rings: they read against cool steel and warm wood.
+    gates: Object.freeze({ style: 'hard-ring', keepBrand: true }),
+    props: Object.freeze(['pallet racking', 'mezzanine', 'stair', 'drop-through hatch', 'forklift', 'stacked pallets', 'chain curtains', 'loading dock', 'roll-up doors', 'centre run', 'roof trusses', 'spin pole']),
+    key: DEPOT_KEY,
+    // The key's shadow box, world units, fitted to the 45 x 30 x 9 m
+    // warehouse (sim-maps.js DEPOT_SHADOW).
+    shadow: DEPOT_SHADOW,
+  }),
 });
 
 export const MAP_VIBE_IDS = Object.freeze([
-  'city', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room', 'rig', 'house',
+  'city', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room', 'rig', 'house', 'depot',
 ]);
 
 export function vibeFor(mapId) {
