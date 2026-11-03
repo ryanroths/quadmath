@@ -195,7 +195,9 @@ test('without ?dev=1 Daily, Boards, Freestyle this map, builder Import and duel 
     // The House: Fly opens a map chooser, the Rig, the House and The
     // Warehouse (depot) with their thumbnails, the last map flown marked; a
     // card flies its map, and the chooser remembers it. Freestyle this map
-    // stays on the House; Daily, Boards and Coach from the House fly the Rig.
+    // stays on the House; Daily from the House flies the day's map (the Rig
+    // or, every second day from RIG_GEN_DAILY_FROM, the House itself); Boards
+    // and Coach from the House fly the Rig.
     // As a pilot: MENU, Home (the launch screen), Fly.
     const chooser = `(async () => {
       if (!document.getElementById('startMenu').classList.contains('open')) document.getElementById('menuBtn').click();
@@ -224,8 +226,9 @@ test('without ?dev=1 Daily, Boards, Freestyle this map, builder Import and duel 
     r = JSON.parse(await evaluate(ws, after(click('menuFreestyleMap'))));
     assert.equal(r.map, 'house', 'Freestyle this map on the House stays');
     assert.equal(r.toast, 'FREESTYLE — NO GATES');
+    const dailyNow = await evaluate(ws, `window._sim.dailyTrackFor().map`);
     r = JSON.parse(await evaluate(ws, after(click('menuDaily') + click('dailyFly'))));
-    assert.equal(r.map, 'rig', `Daily from the House flies the Rig (${r.map})`);
+    assert.equal(r.map, dailyNow, `Daily from the House flies the day's map (${dailyNow}, ${r.map})`);
     if (weekId >= '2026-W45') {
       await evaluate(ws, `window._sim.setMap('house'), true`);
       r = JSON.parse(await evaluate(ws, after(click('menuBoards') + click('boardFly'))));
