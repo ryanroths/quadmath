@@ -62,19 +62,24 @@ export async function mapWorld(mapId) {
 }
 
 // The bf core as the page loads it on the Rig (or on another map: its
-// colliders and its contact plant).
+// colliders and its contact plant). A fresh core each call; the module is
+// compiled, and each map's colliders built, once a process.
 export function rigCore() {
   return mapCore('rig');
 }
+let wasmModule = null;
+const worlds = new Map();
 export async function mapCore(mapId) {
   const airframe = JSON.parse(readFileSync(join(root, 'vendor/sim-core/airframes/air65.json'), 'utf8'));
   const diff = readFileSync(join(root, 'vendor/sim-core/configs/air65-ryfly-2026-10-23.txt'), 'utf8');
+  if (!wasmModule) wasmModule = WebAssembly.compile(readFileSync(join(root, 'vendor/sim-core/sim-core.wasm')));
+  if (!worlds.has(mapId)) worlds.set(mapId, mapWorld(mapId));
   return createBfCore({
     SimCore,
-    wasm: readFileSync(join(root, 'vendor/sim-core/sim-core.wasm')),
+    wasm: await wasmModule,
     airframe: contactPlant(airframe, BOUNCE_MAPS[mapId]),
     diff,
-    world: await mapWorld(mapId),
+    world: await worlds.get(mapId),
   });
 }
 

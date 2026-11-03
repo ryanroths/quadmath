@@ -20,7 +20,7 @@ import {
 } from '../sim-retention.js';
 import { RIG_COURSES } from '../sim-coach.js';
 import {
-  SEGMENT_IDS, loadLinks, measure, retentionBlock, BLOCK_OPEN, BLOCK_CLOSE, flyCourse, chainGates, segmentPad, allLoops,
+  SEGMENT_IDS, loadLinks, measure, retentionBlock, BLOCK_OPEN, BLOCK_CLOSE, flyCourses, chainGates, segmentPad, allLoops,
 } from './rig_daily.mjs';
 import { WS } from '../sim-core-adapter.js';
 
@@ -87,10 +87,11 @@ test('every loop the generator can draw, flown again: two laps, clean, its lap t
   // A link for every ordered pair; every loop of 3 to 5 segments.
   assert.equal(Object.keys(LINKS).length, 30);
   assert.equal(allLoops().length, 40 + 90 + 144);
-  // Every loop flown, two laps, a fresh core each (tools/rig_daily.mjs
-  // measure): the clean ones, their laps and the first lap's extra are the
-  // data's to the millisecond (the bf core is deterministic). A loop that is
-  // not clean is not in RIG_LOOP_MS, so it is never drawn.
+  // Every loop flown, two laps, a fresh core each, on threads
+  // (tools/rig_daily.mjs measure): the clean ones, their laps and the first
+  // lap's extra are the data's to the millisecond (the bf core is
+  // deterministic). A loop that is not clean is not in RIG_LOOP_MS, so it is
+  // never drawn.
   const times = await measure(LINKS);
   assert.deepEqual(Object.keys(times.loops), Object.keys(RIG_LOOP_MS));
   assert.equal(times.startMs, RIG_START_MS);
@@ -154,15 +155,19 @@ test('Boards: the Rig only, five segments, seeded by the week', () => {
   }
 });
 
-// Flown: from the first segment's pad, `laps` laps. Every lap a clean one.
-async function flown(ids, laps) {
-  const f = await flyCourse(ids, LINKS, { laps });
-  const name = ids.join('>');
-  assert.equal(f.contacts.length, 0, name + ' touched the Rig');
-  assert.ok(!f.stalled, name + ' stalled');
-  assert.deepEqual(f.misses, [], name + ' missed a gate');
-  assert.equal(f.laps.length, laps, name + ' laps');
-  return f;
+// Flown: each course from its first segment's pad, `laps` laps, all at once
+// (flyCourses). Every lap a clean one.
+async function flown(courses, laps) {
+  const out = [];
+  await flyCourses(courses.map((ids) => ({ ids, laps })), LINKS, (k, f) => { out[k] = f; });
+  return out.map((f, k) => {
+    const name = courses[k].join('>');
+    assert.equal(f.contacts.length, 0, name + ' touched the Rig');
+    assert.ok(!f.stalled, name + ' stalled');
+    assert.deepEqual(f.misses, [], name + ' missed a gate');
+    assert.equal(f.laps.length, laps, name + ' laps');
+    return f;
+  });
 }
 // The flight as a ghost the page would record (20 Hz, ms from the run's start
 // on gate 0 to the end of its third lap), and its time.
@@ -179,23 +184,24 @@ function ghostOf(f) {
 }
 
 test('the autopilot flies every Daily of the 14 days, three laps each, every lap 20 to 40 s', { timeout: 10 * 60 * 1000 }, async () => {
-  for (const d of days(RIG_GEN_DAILY_FROM, 14).filter((x) => dailyMapFor(x) === 'rig')) {
-    const t = dailyTrackFor(d), ids = t.course.split('>');
-    const f = await flown(ids, 3);
+  const rig = days(RIG_GEN_DAILY_FROM, 14).filter((x) => dailyMapFor(x) === 'rig');
+  const flights = await flown(rig.map((d) => dailyTrackFor(d).course.split('>')), 3);
+  rig.forEach((d, k) => {
+    const t = dailyTrackFor(d), f = flights[k];
     // Flown on the track's own gates.
     assert.deepEqual(f.gates.map(({ x, y, z, ry, size }) => ({ x, y, z, ry, size, solid: false })), t.gates);
     for (const lap of f.laps) assert.ok(lap * 1000 >= RIG_DAILY_LAP_MS[0] && lap * 1000 <= RIG_DAILY_LAP_MS[1], d + ' lap ' + lap.toFixed(2));
     const g = ghostOf(f);
     assert.ok(countGhostLaps(g.samples, t) >= 3, d + ': the page counts three laps');
-  }
+  });
 });
 
 test('the autopilot flies Boards for the weeks the 14 days reach, and the Worker\'s check takes the runs', { timeout: 10 * 60 * 1000 }, async () => {
   const weeks = [...new Set(days(RIG_GEN_DAILY_FROM, 14).map((d) => utcWeekId(Date.parse(d))))].filter((w) => w >= RIG_GEN_WEEKLY_FROM);
   assert.ok(weeks.length >= 1);
-  for (const w of weeks) {
-    const t = weeklyTrackFor(w);
-    const f = await flown(t.course.split('>'), 3);
+  const flights = await flown(weeks.map((w) => weeklyTrackFor(w).course.split('>')), 3);
+  weeks.forEach((w, k) => {
+    const t = weeklyTrackFor(w), f = flights[k];
     for (const lap of f.laps) assert.ok(lap * 1000 <= RIG_WEEKLY_LAP_MS, w + ' lap ' + lap.toFixed(2));
     const g = ghostOf(f);
     // normalizeSubmit is what the Worker runs on a submit (it bundles this file).
@@ -203,5 +209,5 @@ test('the autopilot flies Boards for the weeks the 14 days reach, and the Worker
     const r = normalizeSubmit({ name: 'AUTOPILOT', week: w, frameMm: 65, timeMs: g.timeMs, track: t.id, ghost: { v: 1, track: t.id, phys: PHYS_VER, name: 'AUTOPILOT', samples: g.samples } }, now);
     assert.ok(r.ok, w + ': ' + r.reason);
     assert.equal(r.trackId, t.id);
-  }
+  });
 });

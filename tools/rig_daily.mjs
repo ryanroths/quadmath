@@ -28,8 +28,10 @@
 // segments is then flown, and its lap written down: the generator draws from
 // those.
 import { readFileSync, writeFileSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainThread, Worker } from 'node:worker_threads';
 import { RIG_PLAY } from '../sim-maps.js';
 import { rigCore } from './coach_rig_pilot.mjs';
 import { buildPath, sceneState, track as steer, trackerMemory } from './coach_rig_autopilot.mjs';
@@ -109,14 +111,15 @@ function geomBlocked(p) {
   if (p[1] < FLOOR || p[1] > H - WALL) return true;
   return RIG_PLAY.boxes.some((b) => boxDist(p, b) < BOX_GROW);
 }
+// Whether grid cell n ((i * NY + j) * NZ + k) is blocked, its centre tested
+// the first time it is asked (the whole grid takes a quarter of a minute; a
+// flight asks for a few hundred cells). Outside the grid: undefined.
 let GEOM = null;
-function geomGrid() {
-  if (GEOM) return GEOM;
-  GEOM = new Uint8Array(NX * NY * NZ);
-  for (let i = 0; i < NX; i++) for (let j = 0; j < NY; j++) for (let k = 0; k < NZ; k++) {
-    GEOM[(i * NY + j) * NZ + k] = geomBlocked(cellP(i, j, k)) ? 1 : 0;
-  }
-  return GEOM;
+function geomAt(n) {
+  if (!GEOM) GEOM = new Uint8Array(NX * NY * NZ);
+  if (!(n >= 0 && n < GEOM.length)) return undefined;
+  if (!GEOM[n]) GEOM[n] = geomBlocked(cellP(Math.floor(n / (NY * NZ)), Math.floor(n / NZ) % NY, n % NZ)) ? 2 : 1;
+  return GEOM[n] === 2;
 }
 const cellP = (i, j, k) => [-HX + (i + 0.5) * CELL, (j + 0.5) * CELL, -HZ + (k + 0.5) * CELL];
 const cellOf = (p) => [Math.floor((p[0] + HX) / CELL), Math.floor(p[1] / CELL), Math.floor((p[2] + HZ) / CELL)];
@@ -130,11 +133,11 @@ function spheres(keep) {
   return out;
 }
 function makeBlocked(keep) {
-  const G = geomGrid(), S = spheres(keep);
+  const S = spheres(keep);
   return (p) => {
     const c = cellOf(p);
     if (c[0] < 0 || c[1] < 0 || c[2] < 0 || c[0] >= NX || c[1] >= NY || c[2] >= NZ) return true;
-    if (G[(c[0] * NY + c[1]) * NZ + c[2]]) return true;
+    if (geomAt((c[0] * NY + c[1]) * NZ + c[2])) return true;
     return S.some((s) => Math.hypot(p[0] - s.p[0], p[1] - s.p[1], p[2] - s.p[2]) < s.r);
   };
 }
@@ -333,7 +336,7 @@ export function segmentPad(id) {
   const S = SEGMENTS[id], d = segDir(S, false), g = S.wps[0].p;
   const h = unit([d[0], 0, d[2]]);
   const lead = sub(g, mulv(d, LEAD_IN));
-  const geom = (p) => geomGrid()[(cellOf(p)[0] * NY + cellOf(p)[1]) * NZ + cellOf(p)[2]] === 1 && p[1] >= FLOOR;
+  const geom = (p) => geomAt((cellOf(p)[0] * NY + cellOf(p)[1]) * NZ + cellOf(p)[2]) === true && p[1] >= FLOOR;
   const near = LEAD_IN + Math.max(0.8, (lead[1] - 0.55) / Math.tan(MAX_SLOPE));
   for (let back = near; back <= near + 2; back += 0.2) {
     const p = [g[0] - h[0] * back, 0, g[2] - h[2] * back];
@@ -450,6 +453,41 @@ export async function flyCourse(ids, links, opts) {
   return { samples, gates, contacts, stalled, ...race(samples, gates) };
 }
 
+// Threads for flyCourses: one a CPU, or RIG_DAILY_THREADS.
+const THREADS = Math.max(1, Math.floor(Number(process.env.RIG_DAILY_THREADS)) || availableParallelism());
+
+// Flies chains as flyCourse does, each on a fresh core, on worker threads
+// (tools/rig_daily_worker.mjs): the bf core is deterministic, so a flight is
+// the same on any thread. jobs: [{ ids, laps }]. each(k, flight) sees the
+// flights in the jobs' order, each once it and every one before it are in.
+export async function flyCourses(jobs, links, each) {
+  const workers = Array.from({ length: Math.min(jobs.length, THREADS) },
+    () => new Worker(new URL('./rig_daily_worker.mjs', import.meta.url), { workerData: { links } }));
+  const ready = new Map();
+  let sent = 0, next = 0;
+  try {
+    await new Promise((resolve, reject) => {
+      const send = (w) => { if (sent < jobs.length) w.postMessage({ k: sent, ...jobs[sent++] }); };
+      for (const w of workers) {
+        w.on('message', ({ k, f }) => {
+          ready.set(k, f);
+          send(w);
+          try {
+            for (; ready.has(next); next++) { each(next, ready.get(next)); ready.delete(next); }
+          } catch (err) { reject(err); }
+          if (next === jobs.length) resolve();
+        });
+        w.on('error', reject);
+        w.on('exit', (code) => { if (next < jobs.length) reject(new Error('a flight thread stopped, code ' + code)); });
+        send(w);
+      }
+      if (!jobs.length) resolve();
+    });
+  } finally {
+    await Promise.all(workers.map((w) => w.terminate()));
+  }
+}
+
 // ---- Everything, planned and flown ----
 
 const LINKS_FILE = join(root, 'tools/rig_daily_links.json');
@@ -485,26 +523,28 @@ export function allLoops() {
   return out;
 }
 
-// Every loop flown, two laps from a pad (a fresh core each; the n-th loop
-// starting on its (n mod length)-th segment, so every pad is flown): its lap
-// at pace (the second), and how much longer the first, from the pad, ran. A
-// loop that does not fly clean (a touch, a miss, a stall) is left out, so the
-// generator never draws it.
+// Every loop flown, two laps from a pad (a fresh core each, flyCourses; the
+// n-th loop starting on its (n mod length)-th segment, so every pad is
+// flown): its lap at pace (the second), and how much longer the first, from
+// the pad, ran. A loop that does not fly clean (a touch, a miss, a stall) is
+// left out, so the generator never draws it.
 export async function measure(links, log) {
   const say = log || (() => {});
   const loops = {}, unclean = [];
   let start = 0;
   const all = allLoops();
-  for (let n = 0; n < all.length; n++) {
-    const ids = all[n].split('>'), turn = n % ids.length;
-    const run = ids.slice(turn).concat(ids.slice(0, turn));
-    const f = await flyCourse(run, links, { laps: 2 });
+  const runs = all.map((key, n) => {
+    const ids = key.split('>'), turn = n % ids.length;
+    return ids.slice(turn).concat(ids.slice(0, turn));
+  });
+  await flyCourses(runs.map((ids) => ({ ids, laps: 2 })), links, (n, f) => {
+    const run = runs[n];
     const why = f.contacts.length ? 'touched the Rig' : f.stalled ? 'stalled' : f.misses.length ? 'missed gate ' + f.misses[0].expected : f.laps.length < 2 ? f.laps.length + ' laps' : '';
-    if (why) { unclean.push(run.join('>') + ': ' + why); say('UNCLEAN ' + run.join('>') + ': ' + why); continue; }
+    if (why) { unclean.push(run.join('>') + ': ' + why); say('UNCLEAN ' + run.join('>') + ': ' + why); return; }
     loops[all[n]] = Math.round(f.laps[1] * 1000);
     start = Math.max(start, f.laps[0] - f.laps[1]);
     say(run.join('>') + ' ' + f.laps.map((l) => l.toFixed(3)).join(' '));
-  }
+  });
   // The first lap's extra, to the next 100 ms.
   return { loops, startMs: Math.ceil(start * 10) * 100, unclean };
 }
@@ -554,7 +594,7 @@ export function writeBlock(text) {
   writeFileSync(p, src.slice(0, a) + text.replace(/\n/g, nl) + src.slice(b + BLOCK_CLOSE.length));
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMainThread && process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const t = Date.now();
   let links;
   if (process.argv.includes('--plan')) {
