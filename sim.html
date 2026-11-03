@@ -1192,7 +1192,9 @@ const skinTrail=makeSkinTrail(THREE, SKINS[0]);
 scene.add(skinTrail.line);
 const secrets=createSecrets(THREE,{
   load:loadSecrets,save:saveSecrets,toast,
-  muted(){return !musicOn;},
+  // The chime has its own AudioContext, off the master bus: M (simAudio's
+  // mute) silences it as well as the music switch.
+  muted(){return simAudio.muted||!musicOn;},
   skinProgress,onUnlock(skin){toast('UNLOCKED — '+skin.name.toUpperCase());applyActiveSkin();syncMenuSparks();},
   onCollect(){syncMenuSparks();},onReveal(){syncMenuSparks();},
 });
@@ -3768,8 +3770,13 @@ function playCurrentTrack(){
   musicEl.play().catch(()=>{});
 }
 function nextTrack(){
+  const was=musicOrder[musicIdx];
   musicIdx++;
-  if(musicIdx>=musicOrder.length)shuffleOrder(); // reshuffle each full loop
+  if(musicIdx>=musicOrder.length){
+    shuffleOrder(); // reshuffle each full loop
+    // never straight back to the track that just played (N would restart it)
+    if(musicOrder.length>1&&musicOrder[0]===was)[musicOrder[0],musicOrder[1]]=[musicOrder[1],musicOrder[0]];
+  }
   playCurrentTrack();
 }
 musicEl.addEventListener('playing',()=>{trackFailStreak=0;});
@@ -3934,11 +3941,12 @@ function updateMotorSound(live){
 // type-ahead too: Your build's Preset keeps focus after a pick, and M there
 // jumped it between Mobula6 HDZero (65) and Meteor75 Pro II (85), switching
 // the class as it muted. On a select these keys do only their own job; any
-// other letter still picks an option.
+// other letter still picks an option. With Ctrl, Cmd or Alt held there is
+// no type-ahead, so the browser's shortcuts (Ctrl+R, Ctrl+F, ...) go through.
 const SIM_KEYS=new Set(['w','a','s','d','1','2','3','h','r','p','m','n','f','g','v','c','l']);
 addEventListener('keydown',e=>{
   if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&(e.target.type==='text'||e.target.type==='range'))))return; // typing in the CLI/ghost/pilot-name boxes must not trigger R/M/F/G hotkeys
-  if(e.target&&e.target.tagName==='SELECT'&&SIM_KEYS.has(e.key.toLowerCase()))e.preventDefault();
+  if(e.target&&e.target.tagName==='SELECT'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&SIM_KEYS.has(e.key.toLowerCase()))e.preventDefault();
   if(builderOn){
     if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();document.getElementById('builderDel').click();return;}
     if(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E'){e.preventDefault();document.getElementById('builderRot').click();return;}
@@ -7998,7 +8006,7 @@ window._coach=coach;
 tricks=createTricks({
   document,
   storage:typeof localStorage!=='undefined'?localStorage:null,
-  muted:()=>!musicOn,
+  muted:()=>simAudio.muted||!musicOn, // its blips are off the master bus too: M silences them
   now:()=>performance.now()*0.001,
   debug:(()=>{try{return new URLSearchParams(location.search).get('trickdebug')==='1';}catch(e){return false;}})(),
 });

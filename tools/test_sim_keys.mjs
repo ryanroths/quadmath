@@ -1,13 +1,16 @@
 // The sim's keys: M mutes all sound and N skips to the next music track.
 //   - In the source: one action per key in the keydown handler, M is
 //     toggleMute, N is skipTrack, every letter or number key the sim reads is
-//     in SIM_KEYS, and the on-screen help says M mutes and N skips.
+//     in SIM_KEYS, the select guard lets Ctrl/Cmd/Alt shortcuts through, the
+//     secret chime and the trick blips (their own AudioContexts) follow the
+//     mute, a reshuffle never restarts the track that just played, and the
+//     on-screen help says M mutes and N skips.
 //   - In headless Chrome, with real key presses: M toggles the mute with the
 //     page focused and with every <select> focused, and changes no select and
 //     no class (Your build's Preset used to take M as type-ahead and jump
-//     between the Mobula6, a 65, and the Meteor75 Pro, an 85); a letter the
-//     sim does not use still picks an option. N plays the next track, and
-//     again the one after.
+//     between the Mobula6, a 65, and the Meteor75 Pro, an 85); Ctrl+M on a
+//     select is not cancelled; a letter the sim does not use still picks an
+//     option. N plays a different track on every press, across a reshuffle.
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -44,7 +47,13 @@ test('keys in the source: M is toggleMute, N is skipTrack, one action per key, S
   for (const k of [...Object.keys(bound), ...read].filter((k) => k.length === 1)) {
     assert.ok(sim.has(k), `${k} is in SIM_KEYS`);
   }
-  assert.match(src, /tagName==='SELECT'&&SIM_KEYS\.has\(e\.key\.toLowerCase\(\)\)\)e\.preventDefault\(\)/, 'no type-ahead on a select for the sim keys');
+  assert.match(src, /tagName==='SELECT'&&!e\.ctrlKey&&!e\.metaKey&&!e\.altKey&&SIM_KEYS\.has\(e\.key\.toLowerCase\(\)\)\)e\.preventDefault\(\)/, 'no type-ahead on a select for the sim keys; browser shortcuts pass');
+  // Everything that makes a sound answers to M: the chime and the blips have
+  // their own AudioContexts, so their muted() hooks read simAudio's mute.
+  const hooks = [...html.matchAll(/muted(?:\(\)\{return |:\(\)=>)([^;},\r\n]+)/g)].map((m) => m[1]);
+  assert.equal(hooks.length, 2, 'the secret chime and the trick blip hooks: ' + hooks.join(' | '));
+  for (const h of hooks) assert.match(h, /^simAudio\.muted\|\|!musicOn$/, 'muted by M: ' + h);
+  assert.match(html, /shuffleOrder\(\);[^\n]*\r?\n[^\n]*\r?\n\s*if\(musicOrder\.length>1&&musicOrder\[0\]===was\)/, 'a reshuffle never starts on the track that just played');
   assert.match(html, /<b>M — Sound On\/Off<\/b>/, 'the legend: M is sound');
   assert.match(html, /<b>N — Next Music Track<\/b>/, 'the legend: N');
   assert.match(html, /<b>M<\/b> mute &nbsp;<b>N<\/b> next track/, 'Tune\'s Controls');
@@ -114,10 +123,12 @@ async function evaluate(ws, expression) {
 }
 
 // A real key through CDP: trusted, so a focused select takes it as type-ahead.
-async function press(ws, key, vk) {
+// modifiers: CDP's bit field (2 is Ctrl); a held modifier types no text.
+async function press(ws, key, vk, modifiers) {
   const code = 'Key' + key.toUpperCase();
-  await cdp(ws, 'Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: vk, text: key });
-  await cdp(ws, 'Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: vk });
+  const mods = modifiers ? { modifiers } : { text: key };
+  await cdp(ws, 'Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: vk, ...mods });
+  await cdp(ws, 'Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: vk, ...(modifiers ? { modifiers } : {}) });
   await sleep(150);
 }
 
@@ -207,21 +218,33 @@ test('keys in Chrome: M mutes from the page and from every select, never the cla
     }
     assert.ok(focused >= 3, `M pressed on ${focused} focused selects`);
 
-    // N: the music starts on the next track; N again, the one after.
+    // On a select, M's default (type-ahead) is cancelled; Ctrl+M's is not, so
+    // a browser shortcut (Ctrl+R, Ctrl+F, ...) still works there. A listener
+    // added now runs after the sim's own.
+    await evaluate(ws, `(() => { window.__prevented = []; addEventListener('keydown', (e) => window.__prevented.push(e.defaultPrevented)); document.getElementById('buildPreset').focus(); return true; })()`);
+    const pre = await state();
+    await press(ws, 'm', 77);
+    await press(ws, 'm', 77, 2);
+    const prevented = await evaluate(ws, `JSON.stringify(window.__prevented)`);
+    assert.equal(prevented, '[true,false]', 'M cancelled on the select, Ctrl+M not');
+    assert.deepEqual((await state()).selects, pre.selects, 'neither changes a select');
+
+    // N: the music starts on the next track; every N after it plays a
+    // different track, across the reshuffle after the third.
     await evaluate(ws, `document.activeElement && document.activeElement.blur(), true`);
     const quiet = await state();
-    await press(ws, 'n', 78);
-    const one = await state();
-    assert.equal(one.music.on, true, 'N plays music');
-    assert.match(one.toast, /^♪ TRACK \d\/\d$/, `N says the track (${one.toast})`);
-    assert.match(one.music.src, /audio\/track\d\.mp3$/, 'a track is loaded');
-    assert.notEqual(one.music.src, quiet.music.src, 'N changes the track');
-    assert.equal(one.muted, quiet.muted, 'N leaves the mute alone');
-    await press(ws, 'n', 78);
-    const two = await state();
-    assert.equal(two.music.on, true);
-    assert.notEqual(two.music.src, one.music.src, 'N again skips to another track');
-    assert.deepEqual(two.selects, quiet.selects, 'N changes no select');
+    let last = quiet;
+    for (let i = 0; i < 5; i++) {
+      await press(ws, 'n', 78);
+      const now = await state();
+      assert.equal(now.music.on, true, 'N plays music');
+      assert.match(now.toast, /^♪ TRACK \d\/\d$/, `N says the track (${now.toast})`);
+      assert.match(now.music.src, /audio\/track\d\.mp3$/, 'a track is loaded');
+      assert.notEqual(now.music.src, last.music.src, `N ${i + 1} plays another track`);
+      assert.equal(now.muted, quiet.muted, 'N leaves the mute alone');
+      assert.deepEqual(now.selects, quiet.selects, 'N changes no select');
+      last = now;
+    }
 
     // A letter the sim does not use still picks on a select: T, the TreeTopper 75.
     await evaluate(ws, `document.getElementById('buildPreset').focus(), true`);
