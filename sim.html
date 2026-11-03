@@ -604,7 +604,8 @@
   <div class="lgc lgc-tr"></div>
   <div class="lgc lgc-bl"></div>
   <div class="lgc lgc-br"></div>
-  <b>M — Music On/Off</b><br>
+  <b>M — Sound On/Off</b><br>
+  <b>N — Next Music Track</b><br>
   <b>1/2/3 — Angle / Horizon / Acro</b><br>
   <b>Space — Arm / Disarm</b><br>
   <b>H — Stick HUD</b><br>
@@ -887,7 +888,7 @@
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
     <b>R</b> last-gate respawn &nbsp;<b>P</b> new pack (bf) &nbsp;<b>Tab</b> panel<br>
-    🔊 <b>M</b> mute &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
+    🔊 <b>M</b> mute &nbsp;<b>N</b> next track &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
     3D (Tune panel): center throttle = zero, below = reverse. Acro only. Not counted on boards.<br>
     <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach<br>
     <b>F</b> upside down on bf: sim flip (logged as an assist); else next mode
@@ -969,7 +970,7 @@ import {
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=a24a99da1943";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=df803052f0fe";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=fa186d29adc1";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -984,7 +985,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=e3367a5f77c5";
+} from "./sim-art.js?v=5df5f9d6c515";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -1011,13 +1012,13 @@ import {
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
 } from "./sim-tracks.js?v=f8e3e6793ea8";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=c1e0f018aeed";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=d339e9b99172";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=74928ed0772f";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=a11d12abd9a7";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=58557f14fe09";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=d55c6a2d63e0";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -1034,7 +1035,7 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=417b24f892a4";
+} from "./sim-coach.js?v=2f014ded0cc9";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=d0aa4b7ce820";
@@ -1063,7 +1064,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=af14d74583db";
+} from "./sim-secrets.js?v=d9697036ff3e";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1191,7 +1192,9 @@ const skinTrail=makeSkinTrail(THREE, SKINS[0]);
 scene.add(skinTrail.line);
 const secrets=createSecrets(THREE,{
   load:loadSecrets,save:saveSecrets,toast,
-  muted(){return !musicOn;},
+  // The chime has its own AudioContext, off the master bus: M (simAudio's
+  // mute) silences it as well as the music switch.
+  muted(){return simAudio.muted||!musicOn;},
   skinProgress,onUnlock(skin){toast('UNLOCKED — '+skin.name.toUpperCase());applyActiveSkin();syncMenuSparks();},
   onCollect(){syncMenuSparks();},onReveal(){syncMenuSparks();},
 });
@@ -3767,8 +3770,13 @@ function playCurrentTrack(){
   musicEl.play().catch(()=>{});
 }
 function nextTrack(){
+  const was=musicOrder[musicIdx];
   musicIdx++;
-  if(musicIdx>=musicOrder.length)shuffleOrder(); // reshuffle each full loop
+  if(musicIdx>=musicOrder.length){
+    shuffleOrder(); // reshuffle each full loop
+    // never straight back to the track that just played (N would restart it)
+    if(musicOrder.length>1&&musicOrder[0]===was)[musicOrder[0],musicOrder[1]]=[musicOrder[1],musicOrder[0]];
+  }
   playCurrentTrack();
 }
 musicEl.addEventListener('playing',()=>{trackFailStreak=0;});
@@ -3806,6 +3814,22 @@ function toggleMusic(){
   musicStarted=true;   // the button is itself the start; don't let a later gesture re-trigger
   syncMusicUI();
   return !musicOn;
+}
+// N: the next track in the shuffle. With the music off it starts the music
+// there, as the MUSIC button would, and saves that choice.
+function skipTrack(){
+  dismissAudioHint();
+  if(!musicOn){
+    musicOn=true;
+    musicWanted=true;
+    saveMusicPref(true);
+    musicStarted=true;
+  }
+  trackFailStreak=0;
+  if(!musicOrder.length)shuffleOrder();
+  nextTrack();
+  toast('♪ TRACK '+(musicIdx+1)+'/'+musicOrder.length);
+  syncMusicUI();
 }
 // First-gesture music start (unlockAudio), for the saved ryflyMusicOn choice.
 // A radio-only pilot's first gesture is a stick move once the browser allows
@@ -3913,8 +3937,16 @@ function updateMotorSound(live){
   const vol=0.015+Math.pow(frac,1.2)*0.16;     // same master mix level under the music as before
   motorGainMaster.gain.setTargetAtTime(vol,t,0.08);
 }
+// The sim's own letter and number keys. A focused <select> takes a letter as
+// type-ahead too: Your build's Preset keeps focus after a pick, and M there
+// jumped it between Mobula6 HDZero (65) and Meteor75 Pro II (85), switching
+// the class as it muted. On a select these keys do only their own job; any
+// other letter still picks an option. With Ctrl, Cmd or Alt held there is
+// no type-ahead, so the browser's shortcuts (Ctrl+R, Ctrl+F, ...) go through.
+const SIM_KEYS=new Set(['w','a','s','d','1','2','3','h','r','p','m','n','f','g','v','c','l']);
 addEventListener('keydown',e=>{
   if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&(e.target.type==='text'||e.target.type==='range'))))return; // typing in the CLI/ghost/pilot-name boxes must not trigger R/M/F/G hotkeys
+  if(e.target&&e.target.tagName==='SELECT'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&SIM_KEYS.has(e.key.toLowerCase()))e.preventDefault();
   if(builderOn){
     if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();document.getElementById('builderDel').click();return;}
     if(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E'){e.preventDefault();document.getElementById('builderRot').click();return;}
@@ -3963,6 +3995,7 @@ addEventListener('keydown',e=>{
   if(e.key.toLowerCase()==='r')resetQuad();
   if(e.key.toLowerCase()==='p')newPack();
   if(e.key.toLowerCase()==='m')toggleMute();
+  if(e.key.toLowerCase()==='n')skipTrack();
   if(e.key.toLowerCase()==='f')flipKey();
   if(e.key.toLowerCase()==='g'){
     if(!ghostAvailable()){toast('NO GHOST YET — FINISH A RUN');return;}
@@ -5637,7 +5670,7 @@ function wireLooksUI(){
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
       '<span class="n">R</span> last-gate respawn · <span class="n">P</span> new pack (bf) · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
       '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
-      '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">G</span> ghost · <span class="n">C</span> coach<br>'+
+      '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">N</span> next track · <span class="n">G</span> ghost · <span class="n">C</span> coach<br>'+
       '<span class="n">F</span> upside down on bf: sim flip (logged as an assist) · else next flight mode</p>'+
       '<div class="row"><label>Master volume</label><span class="val sound-vol-val"></span></div>'+
       '<input type="range" class="sound-vol" min="0" max="1" step="0.05">'+
@@ -7973,7 +8006,7 @@ window._coach=coach;
 tricks=createTricks({
   document,
   storage:typeof localStorage!=='undefined'?localStorage:null,
-  muted:()=>!musicOn,
+  muted:()=>simAudio.muted||!musicOn, // its blips are off the master bus too: M silences them
   now:()=>performance.now()*0.001,
   debug:(()=>{try{return new URLSearchParams(location.search).get('trickdebug')==='1';}catch(e){return false;}})(),
 });
@@ -8218,7 +8251,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
   core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
-  audio:simAudio,setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
+  audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,
   TRICKS_KEY,tricks,
