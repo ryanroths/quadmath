@@ -1,9 +1,10 @@
 // Headless Chrome, no ?dev=1: every menu path that loads a map ends on The
 // Rig, or says why not. The Rig and The House are open without ?dev=1
 // (sim-tracks.js mapOpen: Fly's map chooser and Tracks); the other maps are
-// the archive. Daily, Boards and Coach stay Rig-only: from the House they fly
-// the Rig.
-//   - Daily flies a Rig track (from 2026-10-30, sim-retention.js RIG_DAILY_FROM).
+// the archive. Boards and Coach stay Rig-only: from the House they fly the
+// Rig. The Daily flies the day's map, the Rig or the House.
+//   - Daily flies a Rig track (from 2026-10-30, sim-retention.js RIG_DAILY_FROM);
+//     from RIG_GEN_DAILY_FROM every second day the House Loop.
 //   - Boards flies the week's course: a Rig track from 2026-W45; until that
 //     Monday, this week's generated course, as the owner chose.
 //   - Freestyle this map on an archived map: the Rig, and the archive toast.
@@ -142,9 +143,11 @@ test('without ?dev=1 Daily, Boards, Freestyle this map, builder Import and duel 
     assert.ok(ready, 'the page booted on the Rig');
     assert.equal(await evaluate(ws, `document.body.classList.contains('dev')`), false, 'no ?dev=1');
 
-    // Daily.
+    // Daily: the day's map, the Rig or the House.
+    const daily = await evaluate(ws, `window._sim.dailyTrackFor().map`);
+    assert.ok(daily === 'rig' || daily === 'house', 'the Daily is on an open map: ' + daily);
     let r = JSON.parse(await evaluate(ws, after(click('menuDaily') + click('dailyFly'))));
-    assert.equal(r.map, 'rig', `Daily flies the Rig (${r.map})`);
+    assert.equal(r.map, daily, `Daily flies the day's map (${daily}, ${r.map})`);
 
     // Boards: this week's course; the Rig from 2026-W45.
     const week = JSON.parse(await evaluate(ws, `JSON.stringify((() => { const w = window._sim.weeklyTrackFor(); return { map: w.map, id: w.id }; })())`));

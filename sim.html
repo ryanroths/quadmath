@@ -1043,13 +1043,13 @@ import {
   loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   defaultWhoopKit,
-} from "./sim-retention.js?v=1272bb1fe0af";
+} from "./sim-retention.js?v=0f2e17ba3503";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=f611ba2d4b10";
+} from "./sim-secrets.js?v=3e36b37a55bb";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -5211,6 +5211,8 @@ function openDailyCard(){
   const best=d.bestByDay[utcDateId()];
   showMenuLayer('<h2>Daily whoop</h2>'+
     '<p>Seeded from UTC '+utcDateId()+'. Same gates for everyone today. Indoor map: <b style="color:var(--txt)">'+t.map+'</b>.</p>'+
+    // A generated Rig course: its drills, in the order flown.
+    (t.parts?'<p class="daily-meta">Course: '+t.parts.map(escapeHtml).join(' › ')+'</p>':'')+
     '<p class="daily-meta">Resets 5 PM Phoenix (UTC midnight).</p>'+
     '<p class="daily-meta">Streak '+d.streak+' · best today '+(best?fmtLap(best):'—')+
     ' · all-time streak '+d.bestStreak+'</p>'+
@@ -5257,7 +5259,7 @@ function openBoardsCard(){
   showMenuLayer('<h2>Weekly boards</h2>'+
     '<p>'+week+' · class <b style="color:var(--txt)">'+cls+'mm</b> from Your build. Local always. '+
     (online?'Online: on.':'Online: off until a leaderboard URL is set.')+'</p>'+
-    '<p class="daily-meta">Course: '+t.name+' · '+t.map+'</p>'+
+    '<p class="daily-meta">Course: '+t.name+' · '+t.map+(t.parts?' · '+t.parts.map(escapeHtml).join(' › '):'')+'</p>'+
     '<div id="boardBody"></div>'+
     (online?'<button type="button" id="boardRefresh">Refresh online</button>':'')+
     '<button type="button" class="primary" id="boardFly">Fly this week</button>'+
