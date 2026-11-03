@@ -46,11 +46,11 @@ test('past days and weeks keep their tracks', () => {
   // Fingerprints of every Daily, Daily Line and week of 2026 before the cut-over,
   // taken on main before the generator.
   const h = (o) => createHash('sha256').update(JSON.stringify(o)).digest('hex');
-  const past = days('2026-01-01', 306);
-  assert.equal(past[past.length - 1], '2026-11-02');
+  const past = days('2026-01-01', 307);
+  assert.equal(past[past.length - 1], '2026-11-03');
   assert.ok(past[past.length - 1] < RIG_GEN_DAILY_FROM);
-  assert.equal(h(past.map((d) => dailyTrackFor(d))), 'f075db239669f20048d9d18505e8f90bd999af63915ebb786d38c15beebe3006');
-  assert.equal(h(past.map((d) => dailyLineFor(d))), '0471e190f845e0fce86f1b70c465797c8a4a453e1a573d6c09262b221766fb8a');
+  assert.equal(h(past.map((d) => dailyTrackFor(d))), '8a9f86c64661cd8b25a09c2aa63a8b942a6e91a756d479c6921f64a51e8e3c6e');
+  assert.equal(h(past.map((d) => dailyLineFor(d))), '1e09ba68e7e66658265a5be7362e0518393d336a0d8d6784484556e313450609');
   const weeks = Array.from({ length: 45 }, (_, i) => '2026-W' + String(i + 1).padStart(2, '0'));
   assert.ok(weeks[weeks.length - 1] < RIG_GEN_WEEKLY_FROM);
   assert.equal(h(weeks.map((w) => weeklyTrackFor(w))), '09f14fbbdc127f8a7db582f5d0d72c86781ed355013d5c95881861c3e01b598a');

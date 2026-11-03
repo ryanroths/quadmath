@@ -76,13 +76,14 @@ the Worker bundles it as before, so it generates the same ones:
 - From `RIG_GEN_WEEKLY_FROM` (2026-W46) Boards fly a five-drill Rig course
   seeded by the week (`weeklyTrackFor`); `/api/week`, `/api/board` and
   `/api/submit` use it.
-- From `RIG_GEN_DAILY_FROM` (2026-11-03) the House Loop joins the Daily pool,
+- From `RIG_GEN_DAILY_FROM` (2026-11-04) the House Loop joins the Daily pool,
   so `/api/daily` (`dailyLineFor`) can draw it.
 
 Deploy before the next UTC midnight after the merge, and before
-`RIG_GEN_DAILY_FROM`. If the merge lands on or after that day, move both
-constants on to the next UTC day and the next ISO week first (earlier days and
-weeks keep their courses), restamp and deploy. No D1 migration: the track ids
+`RIG_GEN_DAILY_FROM`. If the merge lands on or after that day, move it on to
+the next UTC day first (and `RIG_GEN_WEEKLY_FROM` on to the next ISO week if
+that week has begun; earlier days and weeks keep their courses), restamp and
+deploy. No D1 migration: the track ids
 are unchanged (`weekly-YYYY-Wxx-g2`, `daily-line-YYYY-MM-DD`).
 
 ## Point the sim at it

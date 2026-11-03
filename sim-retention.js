@@ -48,7 +48,7 @@ export const DAILY_LINE_STRICT_MISS_MS = 3000;
 // a generated Rig course of five drills, seeded by the week. Earlier days and
 // weeks keep their courses. Bump both to the next UTC day and week if this
 // ships after them: the Worker must be deployed before the first.
-export const RIG_GEN_DAILY_FROM = '2026-11-03';
+export const RIG_GEN_DAILY_FROM = '2026-11-04';
 export const RIG_GEN_WEEKLY_FROM = '2026-W46';
 
 // Named #242 line tracks (no city 3-lap). Gate counts pinned to tracks/*.json.
