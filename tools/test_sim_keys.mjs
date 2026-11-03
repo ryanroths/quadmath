@@ -3,8 +3,9 @@
 //     toggleMute, N is skipTrack, every letter or number key the sim reads is
 //     in SIM_KEYS, the select guard lets Ctrl/Cmd/Alt shortcuts through, the
 //     secret chime and the trick blips (their own AudioContexts) follow the
-//     mute, a reshuffle never restarts the track that just played, and the
-//     on-screen help says M mutes and N skips.
+//     mute, and the on-screen help says M mutes and N skips.
+//   - sim.html's own shuffleOrder and nextTrack, run in node through every
+//     reshuffle: N never restarts the track that just played.
 //   - In headless Chrome, with real key presses: M toggles the mute with the
 //     page focused and with every <select> focused, and changes no select and
 //     no class (Your build's Preset used to take M as type-ahead and jump
@@ -53,11 +54,41 @@ test('keys in the source: M is toggleMute, N is skipTrack, one action per key, S
   const hooks = [...html.matchAll(/muted(?:\(\)\{return |:\(\)=>)([^;},\r\n]+)/g)].map((m) => m[1]);
   assert.equal(hooks.length, 2, 'the secret chime and the trick blip hooks: ' + hooks.join(' | '));
   for (const h of hooks) assert.match(h, /^simAudio\.muted\|\|!musicOn$/, 'muted by M: ' + h);
-  assert.match(html, /shuffleOrder\(\);[^\n]*\r?\n[^\n]*\r?\n\s*if\(musicOrder\.length>1&&musicOrder\[0\]===was\)/, 'a reshuffle never starts on the track that just played');
   assert.match(html, /<b>M — Sound On\/Off<\/b>/, 'the legend: M is sound');
   assert.match(html, /<b>N — Next Music Track<\/b>/, 'the legend: N');
   assert.match(html, /<b>M<\/b> mute &nbsp;<b>N<\/b> next track/, 'Tune\'s Controls');
   assert.match(html, /<span class="n">M<\/span> mute · <span class="n">N<\/span> next track/, 'the menu\'s Controls card');
+});
+
+// N never restarts the track that just played: sim.html's own shuffleOrder
+// and nextTrack, run here with Math.random forced through every shuffle of
+// three tracks, from the last track of every order.
+test('N never restarts the track that just played, across every reshuffle', () => {
+  const pick = (name) => {
+    const i = html.indexOf('function ' + name + '(');
+    assert.ok(i > 0, name + ' in sim.html');
+    return html.slice(i, html.indexOf('\n}', i) + 2);
+  };
+  const code = pick('shuffleOrder') + '\n' + pick('nextTrack');
+  const orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+  let shuffles = 0;
+  for (const order of orders) {
+    for (const r of [0, 0.2, 0.4, 0.6, 0.7, 0.9, 0.999]) {
+      const run = new Function('start', 'r', `
+        const TRACKS = ['a', 'b', 'c'], Math = { random: () => r, floor: globalThis.Math.floor };
+        let musicOrder = start.slice(), musicIdx = start.length - 1, played = null;
+        const playCurrentTrack = () => { played = musicOrder[musicIdx]; };
+        ${code}
+        nextTrack();
+        return { played, idx: musicIdx, order: musicOrder };`);
+      const out = run(order, r);
+      assert.equal(out.idx, 0, 'after the last track, a new order from its start');
+      assert.deepEqual(out.order.slice().sort(), [0, 1, 2], 'the new order holds every track');
+      assert.notEqual(out.played, order[2], `from ${order} with random ${r}: not ${order[2]} again`);
+      shuffles++;
+    }
+  }
+  assert.equal(shuffles, 42);
 });
 
 function resolveChrome() {
