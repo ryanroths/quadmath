@@ -140,10 +140,12 @@ export const LOOK_SPOTS = {
   depotStart: { pos: [-49, 5.25, 1.75], target: [7, 7.7, 17.5] },
   depotMezzanine: { pos: [-32.9, 19.6, 44.1], target: [17.5, 4.2, -3.5] },
   // The Fly chooser's Warehouse thumbnail (assets/sim-thumbs/depot.jpg): high
-  // by the window wall at the dock end, across the sunlit floor to the
-  // mezzanine, the racking and the forklift. sim.html?map=depot&quality=high
-  // &look=depotThumb, UI hidden, 960x540 scaled to 480x270.
-  depotThumb: { pos: [44.1, 22.4, 47.6], target: [-21, 4.2, -14] },
+  // by the dock partition, over the pier between its two roll-up doors,
+  // across the sunlit floor to the container and the scissor lift, the
+  // mezzanine, and the second aisle's racking.
+  // sim.html?map=depot&quality=high&look=depotThumb, UI hidden, 960x540
+  // scaled to 480x270.
+  depotThumb: { pos: [45.5, 23.1, -4.2], target: [-28, 5.25, 28] },
   builder: { pos: [0, 14, 0.1], target: [0, 0, 0] },
 };
 

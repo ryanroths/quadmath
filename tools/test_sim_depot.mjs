@@ -45,6 +45,23 @@ const nearest = (p) => BOXES.reduce((best, b) => {
   return d < best.d ? { d, b } : best;
 }, { d: Infinity, b: null });
 const inside = (p, lo, hi) => [0, 1, 2].every((k) => p[k] >= lo[k] && p[k] <= hi[k]);
+// Whether the ray p + d t, t0 <= t <= t1, passes through box b: the slab
+// test, exact, where a march in steps can step over a thin box. A ray that
+// only grazes a face or an edge passes by.
+function meets(p, d, b, t0, t1) {
+  let lo = t0, hi = t1;
+  for (let k = 0; k < 3; k++) {
+    if (Math.abs(d[k]) < 1e-12) {
+      if (p[k] <= b.min[k] || p[k] >= b.max[k]) return false;
+      continue;
+    }
+    const a = (b.min[k] - p[k]) / d[k], c = (b.max[k] - p[k]) / d[k];
+    lo = Math.max(lo, Math.min(a, c));
+    hi = Math.min(hi, Math.max(a, c));
+    if (hi - lo < 1e-9) return false;
+  }
+  return true;
+}
 const part = (feature, name) => BOXES.filter((b) => b.feature === feature && (!name || b.part === name));
 const overlaps = (b, lo, hi) => [0, 1, 2].every((k) => b.min[k] < hi[k] && lo[k] < b.max[k]);
 const gate = (name) => LINE.gates.filter((g) => g.name === name).map((g) => PTS[g.at]);
@@ -154,6 +171,7 @@ test("the owner's warehouse: racking, mezzanine, forklift, pallets, dock, doors,
   assert.deepEqual([...gaps].sort(), levelTops, 'loads on all three levels');
   const [a, b1, b2] = K.frames;
   assert.ok(b1[0] - a[1] >= 4 - 1e-9 && b2[1] < 0, 'the aisle between the runs');
+  assert.ok(K.runC[0] - b2[1] >= 4 - 1e-9, 'the second aisle, between runs B and C');
   // The mezzanine: its deck at 3.6 m, a stair from the floor up to it, the
   // hatch open through it.
   const deck = part('mezzanine', 'deck');
@@ -202,16 +220,107 @@ test("the owner's warehouse: racking, mezzanine, forklift, pallets, dock, doors,
     for (let i = 1; i < posts.length; i++) assert.ok(Math.abs(posts[i].min[2] - posts[i - 1].max[2] - 0.6) < 1e-6, 'a 60 cm gap');
   }
   assert.equal(gate('truss').length, 2);
-  // The spin pole: 10 cm, floor to roof, 1.5 m clear all round (as the Rig's).
-  const pole = part('pole');
-  assert.equal(pole.length, 1);
-  const P = pole[0];
-  assert.deepEqual([+(P.max[0] - P.min[0]).toFixed(4), +(P.max[2] - P.min[2]).toFixed(4), P.min[1], P.max[1]], [0.1, 0.1, 0, ROOM.h]);
-  const pc = [(P.min[0] + P.max[0]) / 2, (P.min[2] + P.max[2]) / 2];
-  for (const b of BOXES) {
-    if (b === P) continue;
-    const d = Math.hypot(Math.max(b.min[0] - pc[0], 0, pc[0] - b.max[0]), Math.max(b.min[2] - pc[1], 0, pc[1] - b.max[2]));
-    assert.ok(d >= 1.5, 'pole clear of ' + b.feature + ' ' + d.toFixed(2));
+  // The spin poles, the Loop's and two more: 10 cm, floor to roof, each 1.5 m
+  // clear all round (as the Rig's).
+  const poles = part('pole');
+  assert.equal(poles.length, 3);
+  assert.deepEqual(DEPOT_PLAY.poles[0], DEPOT_PLAY.pole, 'the first is the Loop\'s');
+  for (const P of poles) {
+    assert.deepEqual([+(P.max[0] - P.min[0]).toFixed(4), +(P.max[2] - P.min[2]).toFixed(4), P.min[1], P.max[1]], [0.1, 0.1, 0, ROOM.h]);
+    const pc = [(P.min[0] + P.max[0]) / 2, (P.min[2] + P.max[2]) / 2];
+    assert.ok(DEPOT_PLAY.poles.some((q) => Math.abs(q.x - pc[0]) < 1e-6 && Math.abs(q.z - pc[1]) < 1e-6), 'a pole where DEPOT_PLAY.poles has it');
+    for (const b of BOXES) {
+      if (b === P) continue;
+      const d = Math.hypot(Math.max(b.min[0] - pc[0], 0, pc[0] - b.max[0]), Math.max(b.min[2] - pc[1], 0, pc[1] - b.max[2]));
+      assert.ok(d >= 1.5, 'pole at ' + pc + ' clear of ' + b.feature + ' ' + d.toFixed(2));
+    }
+  }
+});
+
+test('the new obstacles, at 85 scale: the second aisle and its crossing gap, cable trays, the container, the scissor lift, the cargo net, the tyres, two more poles', () => {
+  // Every new feature is built, and each has its own line, flown clear by an
+  // 85 mm whoop (15 cm from every box: half its 13 cm span and margin).
+  const lines = Object.fromEntries(DEPOT_PLAY.lines.map((l) => [l.name, l]));
+  for (const f of ['cable trays', 'container', 'scissor lift', 'cargo net', 'tyres']) assert.ok(part(f).length, f + ' built');
+  assert.deepEqual([...new Set(DEPOT_PLAY.lines.map((l) => l.feature))].sort(), ['cable trays', 'cargo net', 'container', 'pole', 'racking', 'scissor lift', 'tyres']);
+  const walk = (l, fn) => {
+    for (let i = 1; i < l.pts.length; i++) {
+      const a = l.pts[i - 1], c = l.pts[i], n = Math.ceil(len(sub(c, a)) / 0.02);
+      for (let j = 0; j <= n; j++) fn(lerp(a, c, j / n));
+    }
+  };
+  for (const l of DEPOT_PLAY.lines) {
+    let c = Infinity;
+    walk(l, (p) => {
+      c = Math.min(c, nearest(p).d);
+      assert.ok(Math.min(p[0] + ROOM.w / 2, ROOM.w / 2 - p[0], p[1], ROOM.h - p[1], p[2] + ROOM.d / 2, ROOM.d / 2 - p[2]) >= 0.3, l.name + ' near the shell');
+    });
+    assert.ok(c >= 0.15, l.name + ' clear by ' + c.toFixed(3) + ' m');
+  }
+  // Clear of the Loop: nothing new within a metre of its line.
+  const fresh = BOXES.filter((b) => ['cable trays', 'container', 'scissor lift', 'cargo net', 'tyres'].includes(b.feature)
+    || (b.feature === 'pole' && Math.abs(b.min[0] + 0.05 - DEPOT_PLAY.pole.x) > 1e-6)
+    || (b.zone === 'racking' && b.min[2] >= K.runC[0] - 1e-9));
+  for (let i = 0; i < PTS.length; i += 10) for (const b of fresh) assert.ok(boxDist(PTS[i], b) >= 1, 'the Loop near ' + b.feature + ' ' + b.part);
+  // The second aisle: run C, three levels as the first; the crossing gap the
+  // same 60 cm over the floor loads in the same bay of runs C and B, in line.
+  const runC = BOXES.filter((b) => b.zone === 'racking' && b.min[2] >= K.runC[0] - 1e-9 && b.max[2] <= K.runC[1] + 1e-9);
+  assert.deepEqual([...new Set(runC.filter((b) => b.part === 'beam').map((b) => b.max[1]))].sort(), [1.8, 3.6]);
+  const cx0 = K.x0 + K.bay * K.crossBay + K.post, cx1 = cx0 + K.bay - K.post;
+  for (const [z0, z1] of [K.runC, K.frames[1], K.frames[2]]) {
+    const inBay = BOXES.filter((b) => b.min[0] < cx1 && cx0 < b.max[0] && b.min[2] < z1 && z0 < b.max[2] && b.max[1] > 0.3 && b.min[1] < 1.8);
+    const floor = inBay.filter((b) => b.part === 'carton'), over = inBay.filter((b) => b.part === 'beam');
+    assert.ok(floor.length === 2 && floor.every((b) => b.max[1] === 1.08), 'two floor loads under the gap at z ' + z0);
+    assert.ok(over.length && over.every((b) => b.min[1] === 1.68), 'the beam over the gap');
+  }
+  const cross = lines['crossing gap'];
+  assert.ok(cross.pts[0][2] > DEPOT_PLAY.run.z - DEPOT_PLAY.run.w - 1e-9 && cross.pts[1][2] < K.frames[1][0], 'from the centre run across both aisles');
+  assert.ok(cross.pts.every((p) => p[0] > cx0 && p[0] < cx1 && p[1] > 1.08 && p[1] < 1.68), 'through the gaps');
+  // Cable trays: three, 40 cm apart, 40 cm under the trusses' bottom chords;
+  // one line dives between two, one passes over one under a chord.
+  const trays = part('cable trays', 'tray').sort((p, q) => p.min[2] - q.min[2]);
+  assert.equal(trays.length, 3);
+  for (let i = 1; i < 3; i++) assert.ok(Math.abs(trays[i].min[2] - trays[i - 1].max[2] - 0.4) < 1e-6, 'a 40 cm gap between trays');
+  for (const t of trays) assert.ok(Math.abs(T.y0 - t.max[1] - 0.4) < 1e-6, '40 cm under the chords');
+  const dive = lines['between the trays'];
+  assert.ok(dive.pts[0][1] > trays[0].max[1] && dive.pts[1][1] < trays[0].min[1], 'down past the trays');
+  assert.ok(trays.some((t, i) => i && dive.pts[0][2] > trays[i - 1].max[2] && dive.pts[0][2] < t.min[2]), 'between two');
+  const under = lines['under the truss'];
+  assert.ok(under.pts[0][0] < -5 && under.pts[1][0] > -5 && under.pts[0][1] > trays[1].max[1] && under.pts[0][1] < T.y0, 'under the chord at x -5, over a tray');
+  // The container: 20 ft, both ends open, four doors swung out; through it.
+  const CT = DEPOT_PLAY.container;
+  assert.deepEqual([+(CT.x1 - CT.x0).toFixed(2), +(CT.z1 - CT.z0).toFixed(2), CT.h], [6.06, 2.44, 2.59]);
+  const doors = part('container', 'door');
+  assert.equal(doors.length, 4);
+  assert.ok(doors.every((d) => d.max[0] <= CT.x0 + 1e-9 || d.min[0] >= CT.x1 - 1e-9), 'swung open, out past the ends');
+  const thru = lines['through the container'];
+  assert.ok(thru.pts[0][0] < CT.x0 && thru.pts[1][0] > CT.x1 && thru.pts[0][1] < CT.header && thru.pts[0][2] > CT.z0 && thru.pts[0][2] < CT.z1, 'end to end');
+  // The scissor lift: half raised, its deck at about half the 5 m a lift like
+  // it reaches; through the diamond between its stages.
+  const F = DEPOT_PLAY.lift, deck = part('scissor lift', 'deck')[0];
+  assert.ok(deck.min[1] > 2 && deck.min[1] < 3, 'half raised ' + deck.min[1]);
+  assert.equal(part('scissor lift', 'arm').length, 4 * F.stages * F.steps);
+  const sc = lines['through the scissors'];
+  assert.ok(sc.pts[0][0] < F.x0 && sc.pts[1][0] > F.x1 && sc.pts[0][1] > F.base && sc.pts[0][1] < deck.min[1], 'across, under the deck');
+  // The cargo net: hung flat under the roof, a 50 cm mesh, a hole; the dive
+  // goes down through the hole.
+  const N = DEPOT_PLAY.net, ropes = part('cargo net', 'rope');
+  assert.ok(ropes.length > 15 && ropes.every((r) => r.min[1] === N.y), 'flat at ' + N.y);
+  assert.ok(!ropes.some((r) => overlaps(r, [N.hole.x0 + 0.03, 0, N.hole.z0 + 0.03], [N.hole.x1 - 0.03, 9, N.hole.z1 - 0.03])), 'the hole is open');
+  const net = lines['dive the net'];
+  assert.ok(net.pts[0][1] > N.y + 1 && net.pts[1][1] < N.y - 1, 'a dive');
+  const at = lerp(net.pts[0], net.pts[1], (net.pts[0][1] - N.y) / (net.pts[0][1] - net.pts[1][1]));
+  assert.ok(at[0] > N.hole.x0 && at[0] < N.hole.x1 && at[2] > N.hole.z0 && at[2] < N.hole.z1, 'through the hole');
+  // The tyres: six on their treads, three, two, one; the line through a bore.
+  const W = DEPOT_PLAY.tyres, tyres = part('tyres', 'tyre');
+  assert.equal(tyres.length, 6 * 4);
+  const ty = lines['thread the tyres'];
+  assert.ok(ty.pts[0][2] > W.z1 && ty.pts[1][2] < W.z0, 'through, end to end');
+  const bore = tyres.filter((b) => b.min[0] <= ty.pts[0][0] && b.max[0] >= ty.pts[0][0]);
+  assert.ok(bore.some((b) => b.max[1] < ty.pts[0][1]) && bore.some((b) => b.min[1] > ty.pts[0][1]), 'a tyre under and over the line: its bore');
+  // The two new poles: each a line round it.
+  for (const [name, p] of [['round the second pole', DEPOT_PLAY.poles[1]], ['round the third pole', DEPOT_PLAY.poles[2]]]) {
+    assert.ok(lines[name].pts.every((q) => Math.abs(Math.hypot(q[0] - p.x, q[2] - p.z) - 1.2) < 1e-6), name);
   }
 });
 
@@ -351,13 +460,16 @@ test('the look, inherited: one key through the clerestories, the HDRI fill, look
   const cols = buildMap(THREE, 'depot').colliders
     .map((c) => ({ min: c.min.toArray().map(m), max: c.max.toArray().map(m) }))
     .filter((c) => !(c.min[2] >= ROOM.d / 2 && c.min[1] >= 5.9 && c.max[1] <= 7.3 && DEPOT_PLAY.windows.some((w) => c.min[0] >= w.x0 - 1e-6 && c.max[0] <= w.x1 + 1e-6)));
+  // Lit: the ray toward the sun leaves the hall (half a metre past its shell)
+  // without meeting a caster.
   const lit = (p) => {
-    for (let t = 0.02; t < 40; t += 0.02) {
-      const q = p.map((u, k) => u + toSun[k] * t);
-      if (q[1] > ROOM.h + 0.5 || Math.abs(q[0]) > ROOM.w / 2 + 0.5 || Math.abs(q[2]) > ROOM.d / 2 + 0.5) return true;
-      if (cols.some((b) => inside(q, b.min, b.max))) return false;
-    }
-    return true;
+    const out = [0, 1, 2].map((k) => {
+      const lim = [ROOM.w / 2 + 0.5, ROOM.h + 0.5, ROOM.d / 2 + 0.5][k];
+      if (Math.abs(toSun[k]) < 1e-12) return Infinity;
+      return k === 1 ? (lim - p[1]) / toSun[1] : ((toSun[k] > 0 ? lim : -lim) - p[k]) / toSun[k];
+    });
+    const end = Math.min(40, ...out);
+    return !cols.some((b) => meets(p, toSun, b, 0.02, end));
   };
   // The shafts fall clear to the floor, across the centre run, and the floor
   // is sunlit where they land; one stops at the spin pole.
@@ -371,10 +483,8 @@ test('the look, inherited: one key through the clerestories, the HDRI fill, look
       for (let w = 0; w <= 1 + 1e-9; w += 0.1) {
         const p0 = [q0[0] + (q2[0] - q0[0]) * u, q0[1] + (q2[1] - q0[1]) * w, q0[2]];
         const t0 = p0[1] / -sh.dir[1], end = Math.min(t0, sh.length);
-        for (let t = 0.05; t < end; t += 0.05) {
-          const q = p0.map((c, k) => c + sh.dir[k] * t);
-          assert.ok(!BOXES.some((b) => inside(q, b.min, b.max)), 'a shaft through ' + q.map((c) => c.toFixed(2)));
-        }
+        const hit = BOXES.find((b) => meets(p0, sh.dir, b, 0.05, end - 1e-6));
+        assert.ok(!hit, 'a shaft through ' + (hit && hit.feature + ':' + hit.part) + ' from ' + p0.map((c) => c.toFixed(2)));
         if (sh.length < t0) continue;
         const land = p0.map((c, k) => c + sh.dir[k] * t0);
         // Inside the window's edges, its light on the floor.
