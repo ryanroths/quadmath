@@ -604,7 +604,8 @@
   <div class="lgc lgc-tr"></div>
   <div class="lgc lgc-bl"></div>
   <div class="lgc lgc-br"></div>
-  <b>M — Music On/Off</b><br>
+  <b>M — Sound On/Off</b><br>
+  <b>N — Next Music Track</b><br>
   <b>1/2/3 — Angle / Horizon / Acro</b><br>
   <b>Space — Arm / Disarm</b><br>
   <b>H — Stick HUD</b><br>
@@ -887,7 +888,7 @@
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
     <b>R</b> last-gate respawn &nbsp;<b>P</b> new pack (bf) &nbsp;<b>Tab</b> panel<br>
-    🔊 <b>M</b> mute &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
+    🔊 <b>M</b> mute &nbsp;<b>N</b> next track &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
     3D (Tune panel): center throttle = zero, below = reverse. Acro only. Not counted on boards.<br>
     <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach<br>
     <b>F</b> upside down on bf: sim flip (logged as an assist); else next mode
@@ -3807,6 +3808,22 @@ function toggleMusic(){
   syncMusicUI();
   return !musicOn;
 }
+// N: the next track in the shuffle. With the music off it starts the music
+// there, as the MUSIC button would, and saves that choice.
+function skipTrack(){
+  dismissAudioHint();
+  if(!musicOn){
+    musicOn=true;
+    musicWanted=true;
+    saveMusicPref(true);
+    musicStarted=true;
+  }
+  trackFailStreak=0;
+  if(!musicOrder.length)shuffleOrder();
+  nextTrack();
+  toast('♪ TRACK '+(musicIdx+1)+'/'+musicOrder.length);
+  syncMusicUI();
+}
 // First-gesture music start (unlockAudio), for the saved ryflyMusicOn choice.
 // A radio-only pilot's first gesture is a stick move once the browser allows
 // audio. play() can still be blocked — on rejection the latch is released so
@@ -3913,8 +3930,15 @@ function updateMotorSound(live){
   const vol=0.015+Math.pow(frac,1.2)*0.16;     // same master mix level under the music as before
   motorGainMaster.gain.setTargetAtTime(vol,t,0.08);
 }
+// The sim's own letter and number keys. A focused <select> takes a letter as
+// type-ahead too: Your build's Preset keeps focus after a pick, and M there
+// jumped it between Mobula6 HDZero (65) and Meteor75 Pro II (85), switching
+// the class as it muted. On a select these keys do only their own job; any
+// other letter still picks an option.
+const SIM_KEYS=new Set(['w','a','s','d','1','2','3','h','r','p','m','n','f','g','v','c','l']);
 addEventListener('keydown',e=>{
   if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&(e.target.type==='text'||e.target.type==='range'))))return; // typing in the CLI/ghost/pilot-name boxes must not trigger R/M/F/G hotkeys
+  if(e.target&&e.target.tagName==='SELECT'&&SIM_KEYS.has(e.key.toLowerCase()))e.preventDefault();
   if(builderOn){
     if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();document.getElementById('builderDel').click();return;}
     if(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E'){e.preventDefault();document.getElementById('builderRot').click();return;}
@@ -3963,6 +3987,7 @@ addEventListener('keydown',e=>{
   if(e.key.toLowerCase()==='r')resetQuad();
   if(e.key.toLowerCase()==='p')newPack();
   if(e.key.toLowerCase()==='m')toggleMute();
+  if(e.key.toLowerCase()==='n')skipTrack();
   if(e.key.toLowerCase()==='f')flipKey();
   if(e.key.toLowerCase()==='g'){
     if(!ghostAvailable()){toast('NO GHOST YET — FINISH A RUN');return;}
@@ -5637,7 +5662,7 @@ function wireLooksUI(){
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
       '<span class="n">R</span> last-gate respawn · <span class="n">P</span> new pack (bf) · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
       '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
-      '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">G</span> ghost · <span class="n">C</span> coach<br>'+
+      '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">N</span> next track · <span class="n">G</span> ghost · <span class="n">C</span> coach<br>'+
       '<span class="n">F</span> upside down on bf: sim flip (logged as an assist) · else next flight mode</p>'+
       '<div class="row"><label>Master volume</label><span class="val sound-vol-val"></span></div>'+
       '<input type="range" class="sound-vol" min="0" max="1" step="0.05">'+
@@ -8218,7 +8243,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
   core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
-  audio:simAudio,setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
+  audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,
   TRICKS_KEY,tricks,
