@@ -163,7 +163,12 @@ export function track(path, s, mem, opts) {
   const ePerp = sub(e, mul(q.T, dot(e, q.T)));
   const vRef = q.v;
   const vDes = add(mul(q.T, vRef), mul(ePerp, GAIN.kp));
-  let a = add(mul(q.K, vRef * vRef), mul(q.T, q.dvds * vRef));
+  // The curve and the speed profile fed forward at the path's speed; with
+  // o.actualFF at the speed the quad is making along it (so a quad left
+  // behind in a braking zone is not braked against its own push: the Daily's
+  // courses, tools/rig_daily.mjs).
+  const vFF = o.actualFF ? clamp(dot(s.v, q.T), 0, vRef) : vRef;
+  let a = add(mul(q.K, vFF * vFF), mul(q.T, q.dvds * vFF));
   a = add(a, mul(sub(vDes, s.v), GAIN.kv));
   // Drag, fed forward.
   a = add(a, mul(s.v, GAIN.drag * len(s.v)));

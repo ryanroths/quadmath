@@ -40,7 +40,7 @@ import {
   DAILY_LINE_KEY, DAILY_LINE_TRACKS, DAILY_LINE_MIN_MS, dailyLineFor, dailyLinePool, dailyLineBoardKey, boardKeyFor, boardStoreKey,
   loadDailyLine, saveDailyLine, recordDailyLineFinish, validateDailyLineRun,
   normalizeDailyLineSubmit, dailyLineRank, dailyLineMeta,
-  RIG_DAILY_FROM, RIG_WEEKLY_FROM, RIG_LINE_GATES, weekMonday,
+  RIG_DAILY_FROM, RIG_WEEKLY_FROM, RIG_LINE_GATES, weekMonday, RIG_GEN_DAILY_FROM, RIG_GEN_WEEKLY_FROM,
 } from '../sim-retention.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -130,7 +130,7 @@ test('daily seed is deterministic from UTC date and yields valid gates', () => {
   assert.equal(sameRng(), mulberry32(1)());
 });
 
-test('Daily from 2026-10-30 and Boards from 2026-W45 fly the Rig\'s named tracks; earlier days and weeks keep their generated courses', () => {
+test('Daily from 2026-10-30 and Boards from 2026-W45 fly the Rig\'s named tracks until the generator; earlier days and weeks keep their generated courses', () => {
   assert.equal(RIG_DAILY_FROM, '2026-10-30');
   assert.equal(RIG_WEEKLY_FROM, '2026-W45');
   assert.equal(weekMonday('2026-W45'), '2026-11-02', 'the Monday after the Daily cutover');
@@ -145,7 +145,9 @@ test('Daily from 2026-10-30 and Boards from 2026-W45 fly the Rig\'s named tracks
 
   const before = dailyTrackFor('2026-10-29');
   assert.ok(DAILY_MAPS.some((m) => m.id === before.map), 'the day before keeps its generated course');
-  for (const day of ['2026-10-30', '2026-10-31', '2027-03-14']) {
+  // Up to the generator's cut-over (RIG_GEN_DAILY_FROM, RIG_GEN_WEEKLY_FROM;
+  // tools/test_sim_rig_daily.mjs from there on).
+  for (const day of ['2026-10-30', '2026-10-31', addUtcDays(RIG_GEN_DAILY_FROM, -1)]) {
     const t = dailyTrackFor(day);
     assert.equal(t.id, 'daily-' + day, 'the board stays per day');
     assert.equal(t.map, 'rig', day);
@@ -156,7 +158,8 @@ test('Daily from 2026-10-30 and Boards from 2026-W45 fly the Rig\'s named tracks
   }
   const w44 = weeklyTrackFor('2026-W44');
   assert.ok(DAILY_MAPS.some((m) => m.id === w44.map), 'this week keeps its course until Monday');
-  for (const w of ['2026-W45', '2027-W02']) {
+  for (const w of ['2026-W45']) {
+    assert.ok(w < RIG_GEN_WEEKLY_FROM);
     const t = weeklyTrackFor(w);
     assert.equal(t.id, weeklyIdFor(w), 'the board stays per week');
     assert.equal(t.map, 'rig', w);
@@ -1093,9 +1096,8 @@ test('Daily Line seed is stable, named, and not a city 3-lap', () => {
   assert.equal(dailyLineBoardKey('2026-10-21'), 'D2026-10-21');
   const named = new Set(DAILY_LINE_TRACKS.map((t) => t.id));
   for (const meta of BUILTIN_TRACK_FILES) {
-    // Daily stays on the Rig until the generator lands (owner): the House's
-    // loop is not in its pool.
-    if (meta.legacyId != null || meta.map === 'house') {
+    // The House's loop joins the pool with the generator (RIG_GEN_DAILY_FROM).
+    if (meta.legacyId != null) {
       assert.equal(named.has(meta.id), false, meta.id);
       continue;
     }
@@ -1110,8 +1112,11 @@ test('Daily Line seed is stable, named, and not a city 3-lap', () => {
   const rig = DAILY_LINE_TRACKS.find((t) => t.id === 'rig-loop');
   assert.ok(rig && rig.from);
   assert.equal(dailyLinePool('2026-10-21').some((t) => t.id === 'rig-loop'), false);
-  assert.equal(dailyLinePool('2026-10-21').length, DAILY_LINE_TRACKS.length - 1);
+  assert.equal(dailyLinePool('2026-10-21').length, DAILY_LINE_TRACKS.filter((t) => !t.from).length);
   assert.equal(dailyLinePool(rig.from).some((t) => t.id === 'rig-loop'), true);
+  const house = DAILY_LINE_TRACKS.find((t) => t.id === 'house-loop');
+  assert.equal(dailyLinePool(rig.from).some((t) => t.id === 'house-loop'), false);
+  assert.equal(dailyLinePool(house.from).length, DAILY_LINE_TRACKS.length);
   const store = memStore();
   const rec = recordDailyLineFinish(loadDailyLine(store), {
     utc: '2026-10-21', timeMs: 9800, trackId: a.trackId, splits: new Array(a.gates - 1).fill(1200),

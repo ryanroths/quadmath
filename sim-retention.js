@@ -41,6 +41,15 @@ export const DAILY_LINE_MIN_MS = 2500;
 export const DAILY_LINE_MAX_MS = 180000;
 export const DAILY_LINE_GHOST_MAX = 480;
 export const DAILY_LINE_STRICT_MISS_MS = 3000;
+// From RIG_GEN_DAILY_FROM the Daily alternates by UTC day: on the cut-over
+// day and every second day after it a Rig course generated from the six Coach
+// drills (rigCourseFor), between them the House Loop (the line pool's House
+// track, which joins the pool that day). From RIG_GEN_WEEKLY_FROM Boards fly
+// a generated Rig course of five drills, seeded by the week. Earlier days and
+// weeks keep their courses. Bump both to the next UTC day and week if this
+// ships after them: the Worker must be deployed before the first.
+export const RIG_GEN_DAILY_FROM = '2026-11-04';
+export const RIG_GEN_WEEKLY_FROM = '2026-W46';
 
 // Named #242 line tracks (no city 3-lap). Gate counts pinned to tracks/*.json.
 // A track with `from` joins the draw on that UTC day; earlier days draw from
@@ -79,6 +88,7 @@ export const DAILY_LINE_TRACKS = Object.freeze([
   { id: 'city-inside', map: 'city', name: 'Interior Run', gates: 8 },
   { id: 'city-spins', map: 'city', name: 'Spin Grove', gates: 7 },
   { id: 'rig-loop', map: 'rig', name: 'Rig Loop', gates: 17, from: '2026-10-30' },
+  { id: 'house-loop', map: 'house', name: 'House Loop', gates: 20, from: RIG_GEN_DAILY_FROM },
 ]);
 
 // Daily from RIG_DAILY_FROM and Boards from RIG_WEEKLY_FROM (the Monday after
@@ -112,6 +122,354 @@ export const RIG_LINE_GATES = Object.freeze({
     ],
   }),
 });
+
+// The House's named tracks, their gates copied from tracks/*.json as the
+// Rig's above (tests pin them).
+export const HOUSE_LINE_GATES = Object.freeze({
+  'house-loop': Object.freeze({
+    start: { x: -14.7, y: 1.225, z: 15.05 },
+    gates: [
+      { x: -8.75, y: 4.025, z: 15.05, ry: 1.5708, size: 1.575, solid: false },
+      { x: -3.15, y: 4.515, z: 5.67, ry: 3.1416, size: 1.05, solid: false },
+      { x: 2.45, y: 5.075, z: -3.15, ry: 1.5708, size: 1.4, solid: false },
+      { x: 8.05, y: 4.2, z: 7.7, ry: 0, size: 1.4, solid: false },
+      { x: 13.825, y: 4.375, z: 13.3, ry: 1.5708, size: 1.4, solid: false },
+      { x: 27.0598, y: 2.9872, z: 11.6598, ry: 2.3562, size: 1.4, solid: false },
+      { x: 28.7, y: 2.625, z: 5.775, ry: -3.1416, size: 1.155, solid: false },
+      { x: 28.7, y: 4.55, z: -4.9, ry: -3.1416, size: 1.155, solid: false },
+      { x: 27.0598, y: 4.1045, z: -16.2098, ry: -2.3562, size: 1.4, solid: false },
+      { x: 18.55, y: 3.5, z: -17.85, ry: -1.5708, size: 1.575, solid: false },
+      { x: 8.575, y: 2.625, z: -17.85, ry: -1.5708, size: 1.155, solid: false },
+      { x: -7.875, y: 2.8602, z: -12.075, ry: 0, size: 1.4, solid: false },
+      { x: -2.1, y: 3.7625, z: -6.3, ry: 1.5708, size: 1.4, solid: false },
+      { x: 3.675, y: 4.6648, z: -12.075, ry: 3.1416, size: 1.4, solid: false },
+      { x: -2.1, y: 5.075, z: -17.85, ry: -1.5708, size: 1.4, solid: false },
+      { x: -19.6, y: 4.55, z: -17.85, ry: -1.5708, size: 1.4, solid: false },
+      { x: -25.725, y: 2.625, z: -10.15, ry: 0, size: 1.4, solid: false },
+      { x: -26.6, y: 1.225, z: -1.4037, ry: -0.4111, size: 1.05, solid: false },
+      { x: -27.4749, y: 1.9267, z: 6.9925, ry: 0, size: 1.4, solid: false },
+      { x: -19.5999, y: 3.85, z: 15.0495, ry: 1.5708, size: 1.155, solid: false },
+    ],
+  }),
+});
+const LINE_GATES = Object.freeze({ rig: RIG_LINE_GATES, house: HOUSE_LINE_GATES });
+
+// <rig-daily: node tools/rig_daily.mjs --write; do not edit by hand>
+// The six Coach drills as race segments (tools/rig_daily.mjs SEGMENTS), world
+// units: each one's start pad (a course starts on its first segment's) and its
+// gates (the first its link gate). Every loop of 3 to 5 of them, flown two laps
+// by the Coach autopilot on the bf core (sim-core v0.5.0, the Air65 on the
+// owner's diff): RIG_LOOP_MS its lap at pace, ms (a loop is its segments in
+// order, turned to start on the first in RIG_SEGMENTS; the same lap whichever
+// it starts on); RIG_START_MS the most the first lap, from the pad, ran
+// longer. A loop that did not fly clean is not here. The Worker bundles this
+// file, so it generates the same courses.
+export const RIG_SEGMENTS = Object.freeze({
+  straight: Object.freeze({
+    name: 'Straight',
+    start: Object.freeze({ x: -29.4, y: 1.225, z: -19.6 }),
+    gates: Object.freeze([
+      Object.freeze({ x: -19.6, y: 4.2, z: -19.6, ry: 1.5708, size: 1.75 }),
+      Object.freeze({ x: -15.225, y: 4.2, z: -19.6, ry: 1.5708, size: 1.925 }),
+      Object.freeze({ x: 21, y: 4.2, z: -19.6, ry: 1.3184, size: 1.925 }),
+      Object.freeze({ x: -7, y: 4.2, z: -14, ry: -1.5708, size: 1.925 }),
+    ]),
+  }),
+  crates: Object.freeze({
+    name: 'Crates',
+    start: Object.freeze({ x: 31.5, y: 1.225, z: -18.55 }),
+    gates: Object.freeze([
+      Object.freeze({ x: 31.5, y: 3.5, z: -8.75, ry: 0, size: 1.75 }),
+      Object.freeze({ x: 31.5, y: 3.5, z: -2.8, ry: 0, size: 1.4 }),
+      Object.freeze({ x: 31.5, y: 3.5, z: 0, ry: 0, size: 1.4 }),
+      Object.freeze({ x: 31.5, y: 3.5, z: 2.8, ry: 0, size: 1.4 }),
+    ]),
+  }),
+  tunnel: Object.freeze({
+    name: 'Tunnel',
+    start: Object.freeze({ x: 31.85, y: 1.225, z: 19.6 }),
+    gates: Object.freeze([
+      Object.freeze({ x: 22.05, y: 4.2, z: 19.6, ry: -1.5708, size: 1.75 }),
+      Object.freeze({ x: 14.175, y: 4.2, z: 19.6, ry: -1.5708, size: 1.05 }),
+      Object.freeze({ x: 0.175, y: 4.2, z: 19.6, ry: -1.5708, size: 1.05 }),
+    ]),
+  }),
+  tower: Object.freeze({
+    name: 'Tower',
+    start: Object.freeze({ x: 6.65, y: 1.225, z: 1.4 }),
+    gates: Object.freeze([
+      Object.freeze({ x: -3.15, y: 2.87, z: 1.4, ry: -1.5708, size: 1.75 }),
+      Object.freeze({ x: -10.15, y: 2.87, z: 1.4, ry: -1.3353, size: 1.75 }),
+      Object.freeze({ x: -10.15, y: 8.82, z: 5.6, ry: 1.3353, size: 1.75 }),
+      Object.freeze({ x: -10.15, y: 14.77, z: 1.4, ry: -1.3353, size: 1.75 }),
+      Object.freeze({ x: -10.15, y: 19.425, z: 5.6, ry: 1.3353, size: 1.75 }),
+    ]),
+  }),
+  pipes: Object.freeze({
+    name: 'Pipes',
+    start: Object.freeze({ x: -16.4482, y: 1.225, z: 22.75 }),
+    gates: Object.freeze([
+      Object.freeze({ x: -26.6, y: 7.7, z: 22.75, ry: -1.5708, size: 1.75 }),
+      Object.freeze({ x: -31.675, y: 19.075, z: 10.5, ry: 3.1416, size: 1.3125 }),
+      Object.freeze({ x: -31.675, y: 17.0625, z: 1.4, ry: 3.1416, size: 1.12 }),
+      Object.freeze({ x: -31.675, y: 12.6, z: -5.6, ry: 2.8966, size: 1.4 }),
+    ]),
+  }),
+  loft: Object.freeze({
+    name: 'Loft',
+    start: Object.freeze({ x: -6.9667, y: 1.225, z: -9.975 }),
+    gates: Object.freeze([
+      Object.freeze({ x: -25.9, y: 11.55, z: -9.975, ry: -1.5708, size: 1.75 }),
+      Object.freeze({ x: -31.675, y: 9.625, z: -9.975, ry: -2.1451, size: 1.75 }),
+      Object.freeze({ x: -31.675, y: 3.85, z: -15.05, ry: 2.9866, size: 1.75 }),
+    ]),
+  }),
+});
+export const RIG_START_MS = 200;
+export const RIG_LOOP_MS = Object.freeze({
+  'straight>crates>tunnel': 20068, 'straight>crates>tower': 26108,
+  'straight>crates>pipes': 24700, 'straight>crates>loft': 21012,
+  'straight>tunnel>crates': 26252, 'straight>tunnel>tower': 27276,
+  'straight>tunnel>pipes': 22360, 'straight>tunnel>loft': 19964,
+  'straight>tower>crates': 27112, 'straight>tower>tunnel': 24884,
+  'straight>tower>pipes': 26920, 'straight>tower>loft': 22012,
+  'straight>pipes>crates': 27156, 'straight>pipes>tunnel': 25772,
+  'straight>pipes>tower': 29156, 'straight>pipes>loft': 20812,
+  'straight>loft>crates': 22768, 'straight>loft>tunnel': 22580,
+  'straight>loft>tower': 25376, 'straight>loft>pipes': 22820,
+  'crates>tunnel>tower': 20804, 'crates>tunnel>pipes': 18944,
+  'crates>tunnel>loft': 18096, 'crates>tower>tunnel': 23608,
+  'crates>tower>pipes': 26288, 'crates>tower>loft': 22896,
+  'crates>pipes>tunnel': 26320, 'crates>pipes>tower': 27168,
+  'crates>pipes>loft': 23520, 'crates>loft>tunnel': 25284,
+  'crates>loft>tower': 25556, 'crates>loft>pipes': 26224,
+  'tunnel>tower>pipes': 27716, 'tunnel>tower>loft': 25556,
+  'tunnel>pipes>tower': 24052, 'tunnel>pipes>loft': 22532,
+  'tunnel>loft>tower': 23724, 'tunnel>loft>pipes': 25328,
+  'tower>pipes>loft': 26436, 'tower>loft>pipes': 27356,
+  'straight>crates>tunnel>tower': 31076, 'straight>crates>tunnel>pipes': 26092,
+  'straight>crates>tunnel>loft': 23672, 'straight>crates>tower>tunnel': 31496,
+  'straight>crates>tower>pipes': 33484, 'straight>crates>tower>loft': 28504,
+  'straight>crates>pipes>tunnel': 34184, 'straight>crates>pipes>tower': 37292,
+  'straight>crates>pipes>loft': 29192, 'straight>crates>loft>tunnel': 33216,
+  'straight>crates>loft>tower': 35776, 'straight>crates>loft>pipes': 33380,
+  'straight>tunnel>crates>tower': 34588, 'straight>tunnel>crates>pipes': 33308,
+  'straight>tunnel>crates>loft': 29488, 'straight>tunnel>tower>crates': 34936,
+  'straight>tunnel>tower>pipes': 34692, 'straight>tunnel>tower>loft': 29760,
+  'straight>tunnel>pipes>crates': 33120, 'straight>tunnel>pipes>tower': 35024,
+  'straight>tunnel>pipes>loft': 26736, 'straight>tunnel>loft>crates': 32280,
+  'straight>tunnel>loft>tower': 34740, 'straight>tunnel>loft>pipes': 32352,
+  'straight>tower>crates>tunnel': 29344, 'straight>tower>crates>pipes': 34140,
+  'straight>tower>crates>loft': 30400, 'straight>tower>tunnel>crates': 34876,
+  'straight>tower>tunnel>pipes': 31040, 'straight>tower>tunnel>loft': 28580,
+  'straight>tower>pipes>crates': 37604, 'straight>tower>pipes>tunnel': 36292,
+  'straight>tower>pipes>loft': 31308, 'straight>tower>loft>crates': 34236,
+  'straight>tower>loft>tunnel': 34132, 'straight>tower>loft>pipes': 34408,
+  'straight>pipes>crates>tunnel': 29372, 'straight>pipes>crates>tower': 35484,
+  'straight>pipes>crates>loft': 30304, 'straight>pipes>tunnel>crates': 35808,
+  'straight>pipes>tunnel>tower': 36856, 'straight>pipes>tunnel>loft': 29400,
+  'straight>pipes>tower>crates': 36628, 'straight>pipes>tower>tunnel': 34360,
+  'straight>pipes>tower>loft': 31544, 'straight>pipes>loft>crates': 33056,
+  'straight>pipes>loft>tunnel': 32924, 'straight>pipes>loft>tower': 35652,
+  'straight>loft>crates>tunnel': 24988, 'straight>loft>crates>tower': 31112,
+  'straight>loft>crates>pipes': 29652, 'straight>loft>tunnel>crates': 32584,
+  'straight>loft>tunnel>tower': 33752, 'straight>loft>tunnel>pipes': 28660,
+  'straight>loft>tower>crates': 32976, 'straight>loft>tower>tunnel': 30608,
+  'straight>loft>tower>pipes': 32592, 'straight>loft>pipes>crates': 33656,
+  'straight>loft>pipes>tunnel': 32212, 'straight>loft>pipes>tower': 35684,
+  'crates>tunnel>tower>pipes': 31232, 'crates>tunnel>tower>loft': 27816,
+  'crates>tunnel>pipes>tower': 28484, 'crates>tunnel>pipes>loft': 24848,
+  'crates>tunnel>loft>tower': 28224, 'crates>tunnel>loft>pipes': 28944,
+  'crates>tower>tunnel>pipes': 30428, 'crates>tower>tunnel>loft': 29500,
+  'crates>tower>pipes>tunnel': 34960, 'crates>tower>pipes>loft': 32144,
+  'crates>tower>loft>tunnel': 32832, 'crates>tower>loft>pipes': 33756,
+  'crates>pipes>tunnel>tower': 34972, 'crates>pipes>tunnel>loft': 32180,
+  'crates>pipes>tower>tunnel': 34844, 'crates>pipes>tower>loft': 34180,
+  'crates>pipes>loft>tunnel': 33452, 'crates>pipes>loft>tower': 33676,
+  'crates>loft>tunnel>tower': 33908, 'crates>loft>tunnel>pipes': 32040,
+  'crates>loft>tower>tunnel': 33280, 'crates>loft>tower>pipes': 35956,
+  'crates>loft>pipes>tunnel': 34876, 'crates>loft>pipes>tower': 35780,
+  'tunnel>tower>pipes>loft': 34796, 'tunnel>tower>loft>pipes': 35208,
+  'tunnel>pipes>tower>loft': 33184, 'tunnel>pipes>loft>tower': 30560,
+  'tunnel>loft>tower>pipes': 34980, 'tunnel>loft>pipes>tower': 33940,
+  'straight>crates>tunnel>tower>pipes': 38372, 'straight>crates>tunnel>tower>loft': 33556,
+  'straight>crates>tunnel>pipes>tower': 38720, 'straight>crates>tunnel>pipes>loft': 30516,
+  'straight>crates>tunnel>loft>tower': 38440, 'straight>crates>tunnel>loft>pipes': 36052,
+  'straight>crates>tower>tunnel>pipes': 37524, 'straight>crates>tower>tunnel>loft': 35080,
+  'straight>crates>tower>pipes>tunnel': 42776, 'straight>crates>tower>pipes>loft': 37816,
+  'straight>crates>tower>loft>tunnel': 40720, 'straight>crates>tower>loft>pipes': 40752,
+  'straight>crates>pipes>tunnel>tower': 45164, 'straight>crates>pipes>tunnel>loft': 37772,
+  'straight>crates>pipes>tower>tunnel': 42740, 'straight>crates>pipes>tower>loft': 39784,
+  'straight>crates>pipes>loft>tunnel': 41296, 'straight>crates>pipes>loft>tower': 43924,
+  'straight>crates>loft>tunnel>tower': 44140, 'straight>crates>loft>tunnel>pipes': 39116,
+  'straight>crates>loft>tower>tunnel': 41188, 'straight>crates>loft>tower>pipes': 43028,
+  'straight>crates>loft>pipes>tunnel': 42736, 'straight>crates>loft>pipes>tower': 45992,
+  'straight>tunnel>crates>tower>pipes': 41876, 'straight>tunnel>crates>tower>loft': 37080,
+  'straight>tunnel>crates>pipes>tower': 45904, 'straight>tunnel>crates>pipes>loft': 37712,
+  'straight>tunnel>crates>loft>tower': 44344, 'straight>tunnel>crates>loft>pipes': 41804,
+  'straight>tunnel>tower>crates>pipes': 41880, 'straight>tunnel>tower>crates>loft': 38080,
+  'straight>tunnel>tower>pipes>crates': 45364, 'straight>tunnel>tower>pipes>loft': 39040,
+  'straight>tunnel>tower>loft>crates': 41996, 'straight>tunnel>tower>loft>pipes': 42108,
+  'straight>tunnel>pipes>crates>tower': 41484, 'straight>tunnel>pipes>crates>loft': 36356,
+  'straight>tunnel>pipes>tower>crates': 42568, 'straight>tunnel>pipes>tower>loft': 37444,
+  'straight>tunnel>pipes>loft>crates': 38988, 'straight>tunnel>pipes>loft>tower': 41588,
+  'straight>tunnel>loft>crates>tower': 40540, 'straight>tunnel>loft>crates>pipes': 39148,
+  'straight>tunnel>loft>tower>crates': 42332, 'straight>tunnel>loft>tower>pipes': 42048,
+  'straight>tunnel>loft>pipes>crates': 43036, 'straight>tunnel>loft>pipes>tower': 44988,
+  'straight>tower>crates>tunnel>pipes': 35444, 'straight>tower>crates>tunnel>loft': 33128,
+  'straight>tower>crates>pipes>tunnel': 43500, 'straight>tower>crates>pipes>loft': 38528,
+  'straight>tower>crates>loft>tunnel': 42528, 'straight>tower>crates>loft>pipes': 42548,
+  'straight>tower>tunnel>crates>pipes': 41804, 'straight>tower>tunnel>crates>loft': 38096,
+  'straight>tower>tunnel>pipes>crates': 41692, 'straight>tower>tunnel>pipes>loft': 35380,
+  'straight>tower>tunnel>loft>crates': 40772, 'straight>tower>tunnel>loft>pipes': 40960,
+  'straight>tower>pipes>crates>tunnel': 39848, 'straight>tower>pipes>crates>loft': 40876,
+  'straight>tower>pipes>tunnel>crates': 46252, 'straight>tower>pipes>tunnel>loft': 39960,
+  'straight>tower>pipes>loft>crates': 43552, 'straight>tower>pipes>loft>tunnel': 43456,
+  'straight>tower>loft>crates>tunnel': 36452, 'straight>tower>loft>crates>pipes': 41232,
+  'straight>tower>loft>tunnel>crates': 44168, 'straight>tower>loft>tunnel>pipes': 40160,
+  'straight>tower>loft>pipes>crates': 45056, 'straight>tower>loft>pipes>tunnel': 43768,
+  'straight>pipes>crates>tunnel>tower': 40416, 'straight>pipes>crates>tunnel>loft': 32968,
+  'straight>pipes>crates>tower>tunnel': 40776, 'straight>pipes>crates>tower>loft': 37820,
+  'straight>pipes>crates>loft>tunnel': 42412, 'straight>pipes>crates>loft>tower': 45112,
+  'straight>pipes>tunnel>crates>tower': 44112, 'straight>pipes>tunnel>crates>loft': 38980,
+  'straight>pipes>tunnel>tower>crates': 44388, 'straight>pipes>tunnel>tower>loft': 39236,
+  'straight>pipes>tunnel>loft>crates': 41684, 'straight>pipes>tunnel>loft>tower': 44252,
+  'straight>pipes>tower>crates>tunnel': 38796, 'straight>pipes>tower>crates>loft': 39844,
+  'straight>pipes>tower>tunnel>crates': 44296, 'straight>pipes>tower>tunnel>loft': 38020,
+  'straight>pipes>tower>loft>crates': 43652, 'straight>pipes>tower>loft>tunnel': 43620,
+  'straight>pipes>loft>crates>tunnel': 35180, 'straight>pipes>loft>crates>tower': 41364,
+  'straight>pipes>loft>tunnel>crates': 42964, 'straight>pipes>loft>tunnel>tower': 44032,
+  'straight>pipes>loft>tower>crates': 43200, 'straight>pipes>loft>tower>tunnel': 40936,
+  'straight>loft>crates>tunnel>tower': 36104, 'straight>loft>crates>tunnel>pipes': 30972,
+  'straight>loft>crates>tower>tunnel': 36280, 'straight>loft>crates>tower>pipes': 38400,
+  'straight>loft>crates>pipes>tunnel': 39036, 'straight>loft>crates>pipes>tower': 42448,
+  'straight>loft>tunnel>crates>tower': 41036, 'straight>loft>tunnel>crates>pipes': 39560,
+  'straight>loft>tunnel>tower>crates': 41200, 'straight>loft>tunnel>tower>pipes': 40964,
+  'straight>loft>tunnel>pipes>crates': 39392, 'straight>loft>tunnel>pipes>tower': 41428,
+  'straight>loft>tower>crates>tunnel': 35136, 'straight>loft>tower>crates>pipes': 39796,
+  'straight>loft>tower>tunnel>crates': 40680, 'straight>loft>tower>tunnel>pipes': 36644,
+  'straight>loft>tower>pipes>crates': 43328, 'straight>loft>tower>pipes>tunnel': 41888,
+  'straight>loft>pipes>crates>tunnel': 35756, 'straight>loft>pipes>crates>tower': 41992,
+  'straight>loft>pipes>tunnel>crates': 42276, 'straight>loft>pipes>tunnel>tower': 43428,
+  'straight>loft>pipes>tower>crates': 43028, 'straight>loft>pipes>tower>tunnel': 40824,
+  'crates>tunnel>tower>pipes>loft': 37116, 'crates>tunnel>tower>loft>pipes': 38740,
+  'crates>tunnel>pipes>tower>loft': 35564, 'crates>tunnel>pipes>loft>tower': 35020,
+  'crates>tunnel>loft>tower>pipes': 38628, 'crates>tunnel>loft>pipes>tower': 38456,
+  'crates>tower>tunnel>pipes>loft': 36328, 'crates>tower>tunnel>loft>pipes': 40336,
+  'crates>tower>pipes>tunnel>loft': 40824, 'crates>tower>pipes>loft>tunnel': 42132,
+  'crates>tower>loft>tunnel>pipes': 39564, 'crates>tower>loft>pipes>tunnel': 42448,
+  'crates>pipes>tunnel>tower>loft': 41936, 'crates>pipes>tunnel>loft>tower': 42332,
+  'crates>pipes>tower>tunnel>loft': 40740, 'crates>pipes>tower>loft>tunnel': 44160,
+  'crates>pipes>loft>tunnel>tower': 42132, 'crates>pipes>loft>tower>tunnel': 41428,
+  'crates>loft>tunnel>tower>pipes': 44348, 'crates>loft>tunnel>pipes>tower': 41548,
+  'crates>loft>tower>tunnel>pipes': 40108, 'crates>loft>tower>pipes>tunnel': 44636,
+  'crates>loft>pipes>tunnel>tower': 43536, 'crates>loft>pipes>tower>tunnel': 43464,
+});
+// </rig-daily>
+
+// A Daily Rig course: 3 to 5 segments, every lap of its run 20 to 40 s as
+// flown (its lap at pace, RIG_LOOP_MS, at least 20 s; that and the first
+// lap's extra from the pad, RIG_START_MS, at most 40 s; each a quarter second
+// inside, for the start it is turned to), and not the loop of any of the six
+// Rig days before it. A week's: five segments, every lap at most 50 s, so its
+// three-lap run stays well inside validateSubmittedRun's 180 s.
+export const RIG_DAILY_SEGMENTS = Object.freeze([3, 5]);
+export const RIG_DAILY_LAP_MS = Object.freeze([20000, 40000]);
+export const RIG_DAILY_FRESH = 6;
+export const RIG_WEEKLY_SEGMENTS = 5;
+export const RIG_WEEKLY_LAP_MS = 50000;
+export const RIG_LAP_MARGIN_MS = 250;
+
+const dayNumber = (day) => Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10)) / 86400000;
+
+// The Daily's map from RIG_GEN_DAILY_FROM: the Rig on the cut-over day and
+// every second day after, the House between; null before it.
+export function dailyMapFor(day) {
+  if (!(day >= RIG_GEN_DAILY_FROM)) return null;
+  return (dayNumber(day) - dayNumber(RIG_GEN_DAILY_FROM)) % 2 === 0 ? 'rig' : 'house';
+}
+
+// A chain's lap at pace, as flown (RIG_LOOP_MS); undefined for a loop that
+// did not fly clean.
+export function rigLapMs(ids) {
+  return RIG_LOOP_MS[rigLoopKey(ids)];
+}
+
+// A chain's loop, whichever segment it starts on: turned to start on its
+// segment first in RIG_SEGMENTS.
+export function rigLoopKey(ids) {
+  const order = Object.keys(RIG_SEGMENTS);
+  let k = 0;
+  ids.forEach((id, i) => { if (order.indexOf(id) < order.indexOf(ids[k])) k = i; });
+  return ids.slice(k).concat(ids.slice(0, k)).join('>');
+}
+
+// n segments in the order the seed draws them.
+function rigDraw(rand, n) {
+  const pool = Object.keys(RIG_SEGMENTS);
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(pool.splice(Math.floor(rand() * pool.length), 1)[0]);
+  return out;
+}
+function rigLapFits(ids, lo, hi) {
+  const ms = rigLapMs(ids);
+  return ms != null && ms >= lo + RIG_LAP_MARGIN_MS && ms + RIG_START_MS <= hi - RIG_LAP_MARGIN_MS;
+}
+
+// The Daily's Rig courses, Rig day by Rig day from the cut-over (kept as
+// drawn): each from its day's seed, 3 to 5 segments, drawn again until its
+// lap fits and its loop is none of the last RIG_DAILY_FRESH Rig days'. So any
+// 14 days running hold 7 Rig days and 7 different courses.
+const RIG_DAYS = [];
+export function rigCourseFor(day) {
+  if (dailyMapFor(day) !== 'rig') return null;
+  const j = (dayNumber(day) - dayNumber(RIG_GEN_DAILY_FROM)) / 2;
+  while (RIG_DAYS.length <= j) {
+    const k = RIG_DAYS.length, d = addUtcDays(RIG_GEN_DAILY_FROM, 2 * k);
+    const recent = new Set(RIG_DAYS.slice(Math.max(0, k - RIG_DAILY_FRESH)).map(rigLoopKey));
+    const rand = mulberry32(hashStr(seedPrefix() + 'rig-daily|' + d));
+    const [lo, hi] = RIG_DAILY_SEGMENTS;
+    let ids = null;
+    for (let tries = 0; tries < 1000 && !ids; tries++) {
+      const c = rigDraw(rand, lo + Math.floor(rand() * (hi - lo + 1)));
+      if (rigLapFits(c, RIG_DAILY_LAP_MS[0], RIG_DAILY_LAP_MS[1]) && !recent.has(rigLoopKey(c))) ids = c;
+    }
+    if (!ids) throw new Error('NO RIG COURSE ' + d);
+    RIG_DAYS.push(Object.freeze(ids));
+  }
+  return RIG_DAYS[j].slice();
+}
+
+// A week's Rig course: five segments from the week's seed, drawn again until
+// its lap fits.
+export function rigWeeklyCourse(week) {
+  const w = String(week).replace(/-g\d+$/, '');
+  const rand = mulberry32(hashStr(seedPrefix() + 'rig-weekly|' + w));
+  for (let tries = 0; tries < 1000; tries++) {
+    const c = rigDraw(rand, RIG_WEEKLY_SEGMENTS);
+    if (rigLapFits(c, 0, RIG_WEEKLY_LAP_MS)) return c;
+  }
+  throw new Error('NO RIG COURSE ' + w);
+}
+
+// A chain as a track: its segments' gates in order, the first segment's start
+// pad; `course` and `parts` name the chain.
+export function rigCourseTrack(ids, id, name) {
+  const gates = [];
+  for (const s of ids) for (const g of RIG_SEGMENTS[s].gates) gates.push({ x: g.x, y: g.y, z: g.z, ry: g.ry, size: g.size, solid: false });
+  return {
+    id, map: 'rig', name, class: 'whoop', course: ids.join('>'), parts: ids.map((s) => RIG_SEGMENTS[s].name),
+    start: { ...RIG_SEGMENTS[ids[0]].start }, gates, flags: [],
+  };
+}
+
+// A generated Rig track's chain, when its course names one.
+function rigChainOf(track) {
+  const ids = String((track && track.course) || '').split('>');
+  if (ids.length < RIG_DAILY_SEGMENTS[0] || ids.some((s) => !RIG_SEGMENTS[s]) || new Set(ids).size !== ids.length) return null;
+  return ids;
+}
+
 
 export function dailyLinePool(day) {
   return DAILY_LINE_TRACKS.filter((t) => !t.from || day >= t.from);
@@ -1076,12 +1434,15 @@ export function dailyTrackInvalidReason(track) {
   let t;
   try { t = normalizeTrack(track); }
   catch (e) { return 'BAD TRACK'; }
-  // A named Rig track (rigTrackOn) is drawn, not generated: valid when its
-  // gates are one of RIG_LINE_GATES's.
-  if (t.map === 'rig') {
+  // A named Rig or House track (namedTrackOn) is drawn, not generated: valid
+  // when its gates are one of LINE_GATES's. A generated Rig course (from
+  // rigCourseTrack): when its gates are its chain's.
+  if (LINE_GATES[t.map]) {
     const gates = JSON.stringify(t.gates);
-    const named = Object.values(RIG_LINE_GATES).some((src) => JSON.stringify(normalizeTrack(src).gates) === gates);
-    return named && t.class === 'whoop' ? '' : 'GATES';
+    const named = Object.values(LINE_GATES[t.map]).some((src) => JSON.stringify(normalizeTrack(src).gates) === gates);
+    const chain = t.map === 'rig' && rigChainOf(track);
+    const generated = !!chain && JSON.stringify(normalizeTrack(rigCourseTrack(chain, t.id, t.name)).gates) === gates;
+    return (named || generated) && t.class === 'whoop' ? '' : 'GATES';
   }
   const map = DAILY_MAPS.find((m) => m.id === t.map);
   if (!map) return 'MAP';
@@ -1128,14 +1489,14 @@ export function weekMonday(week) {
   return new Date(monday1 + (+m[2] - 1) * 7 * 86400000).toISOString().slice(0, 10);
 }
 
-// A named Rig track as a daily or weekly course: drawn from the Rig tracks in
+// A named track as a daily or weekly course: drawn from the map's tracks in
 // the line pool on `day`, under the course's own id and name.
-function rigTrackOn(day, seedKey, id, name) {
-  const pool = dailyLinePool(day).filter((t) => t.map === 'rig' && RIG_LINE_GATES[t.id]);
+function namedTrackOn(map, day, seedKey, id, name) {
+  const pool = dailyLinePool(day).filter((t) => t.map === map && LINE_GATES[map][t.id]);
   const line = pool[Math.floor(mulberry32(hashStr(seedKey))() * pool.length)];
-  const src = RIG_LINE_GATES[line.id];
+  const src = LINE_GATES[map][line.id];
   return {
-    id, map: 'rig', name: name + ' · ' + line.name, class: 'whoop', line: line.id,
+    id, map, name: name + ' · ' + line.name, class: 'whoop', line: line.id,
     start: { ...src.start }, gates: src.gates.map((g) => ({ ...g })), flags: [],
   };
 }
@@ -1144,17 +1505,21 @@ export function dailyTrackFor(utc, now) {
   const day = utc || utcDateId(now);
   const id = dailyIdFor(day);
   const name = 'Daily ' + day.slice(5);
-  if (day >= RIG_DAILY_FROM) return rigTrackOn(day, seedPrefix() + 'daily|' + day, id, name);
+  const map = dailyMapFor(day);
+  if (map === 'rig') return rigCourseTrack(rigCourseFor(day), id, name + ' · Rig mix');
+  if (map === 'house') return namedTrackOn('house', day, seedPrefix() + 'daily|' + day, id, name);
+  if (day >= RIG_DAILY_FROM) return namedTrackOn('rig', day, seedPrefix() + 'daily|' + day, id, name);
   const rand = mulberry32(hashStr(seedPrefix() + 'daily|' + day));
-  const map = DAILY_MAPS[Math.floor(rand() * DAILY_MAPS.length)];
-  return generateOnMap(seedPrefix() + 'daily|' + day, map, id, name);
+  const room = DAILY_MAPS[Math.floor(rand() * DAILY_MAPS.length)];
+  return generateOnMap(seedPrefix() + 'daily|' + day, room, id, name);
 }
 
 export function weeklyTrackFor(week, now) {
   const w = String(week || utcWeekId(now)).replace(/-g\d+$/, '');
   const id = weeklyIdFor(w);
   const name = 'Week ' + w.replace('W', '');
-  if (w >= RIG_WEEKLY_FROM) return rigTrackOn(weekMonday(w), seedPrefix() + 'weekly|' + w, id, name);
+  if (w >= RIG_GEN_WEEKLY_FROM) return rigCourseTrack(rigWeeklyCourse(w), id, name + ' · Rig mix');
+  if (w >= RIG_WEEKLY_FROM) return namedTrackOn('rig', weekMonday(w), seedPrefix() + 'weekly|' + w, id, name);
   const rand = mulberry32(hashStr(seedPrefix() + 'weekly|' + w));
   const map = DAILY_MAPS[Math.floor(rand() * DAILY_MAPS.length)];
   return generateOnMap(seedPrefix() + 'weekly|' + w, map, id, name);
