@@ -5,7 +5,7 @@
 // Stock skin ids / unlocks in sim-retention.js stay frozen.
 
 import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=de545a508675';
-import { LAYOUT } from './sim-maps.js?v=c1e0f018aeed';
+import { LAYOUT } from './sim-maps.js?v=d339e9b99172';
 import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=f8e3e6793ea8';
 
 export const SECRETS_KEY = 'quadmathSimSecrets';

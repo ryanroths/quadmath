@@ -4,8 +4,8 @@
 // Kenney kit (sim-art-kit.js) swaps wall clutter after first paint.
 // Procedural meshes stay if a mesh fails. Nothing from the GPL whoop sim.
 
-import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=aad33e981d59';
-import { GYM_PLAY } from './sim-maps.js?v=c1e0f018aeed';
+import { hexNum, propClearOfCourse, disposeArtGroup, swapOwnedMap } from './sim-art-city.js?v=8e73d4c8a283';
+import { GYM_PLAY } from './sim-maps.js?v=d339e9b99172';
 
 export const GYM_STOCK = Object.freeze({
   wall: 0xb8b4aa,
