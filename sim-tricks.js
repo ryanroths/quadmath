@@ -40,10 +40,15 @@ export const ROLL_WIN_S = 1.5;
 export const HIST_CAP = 4608;
 export const HIST_W = 6;
 // Trippy Spin: >= 720 degrees of yaw at >= 300 deg/s (so inside 2.4 s) while
-// the path orbits a centre 0.3-2.5 m away at >= 1 m/s. Upright or inverted.
+// the path orbits a centre 0.3-2.5 m away, a full turn, at >= 1 m/s. Upright
+// or inverted.
 // The orbit centre within POLE_NEAR_M of a pole or post (a collider at most
 // POLE_W_M across and at least POLE_H_M tall) earns TRIPPY_POLE_MUL points.
 export const TRIPPY_WIN_S = 2.4;
+// The spin's yaw rate (300 deg/s), and the share of it the spin keeps while
+// the orbit is measured over all of it.
+export const TRIPPY_RATE = 5.236;
+export const TRIPPY_HOLD = 0.8;
 export const POLE_W_M = 0.5;
 export const POLE_H_M = 1.0;
 export const POLE_NEAR_M = 0.5;
@@ -759,15 +764,15 @@ export function classifyFeat(f, out) {
   );
   {
     // Trippy Spin: >= 720 degrees of turn about the vertical at >= 300 deg/s
-    // between its two ends, while the path orbits a centre over that turn:
-    // it curves at a radius of 0.3-2.5 m, its direction turns half a turn or
-    // more, one way (80 % of its turning), at >= 1 m/s. Upright or inverted;
-    // no object needed (one at the centre earns TRIPPY_POLE_MUL points).
+    // between its two ends, while the path orbits a centre over the whole
+    // spin: it curves at a radius of 0.3-2.5 m, its direction turns a full
+    // turn or more, one way (80 % of its turning), at >= 1 m/s. Upright or
+    // inverted; no object needed (one at the centre earns TRIPPY_POLE_MUL).
     _sc.trippy = mul(
       atLeast(v.yawSpan, 12.566, 0),
       atLeast(v.yawRate, 5.236, 0),
       inBand(f.orbitR, 0.3, 2.5, 0),
-      atLeast(f.orbitSweep, 3.1416, 0),
+      atLeast(f.orbitSweep, 6.2832, 0),
       atLeast(f.orbitTurn, 0.8, 0),
       atLeast(f.orbitSpd, 1.0, 0),
     );
@@ -1347,7 +1352,28 @@ export function windowFeat(d) {
   // Trippy: the yaw window, then the circle the path fits over it.
   spanWithin(d.hist, d.histN, 3, TRIPPY_WIN_S, d.span, d.dq);
   f.yawUp = s.up; f.yawUpT = s.upT; f.yawDn = s.dn; f.yawDnT = s.dnT;
-  const a = s.up >= s.dn ? s.upA : s.dnA, b = s.up >= s.dn ? s.upB : s.dnB;
+  const up = s.up >= s.dn;
+  let a = up ? s.upA : s.dnA, b = up ? s.upB : s.dnB;
+  // The orbit is measured over the whole spin: out from that window, a
+  // 0.1 s piece at a time, while the turn keeps going the same way at
+  // TRIPPY_HOLD of TRIPPY_RATE or more.
+  {
+    const H = d.hist, W = HIST_W, sg = up ? 1 : -1, min = TRIPPY_RATE * TRIPPY_HOLD;
+    while (a > 0) {
+      let k = a - 1;
+      while (k > 0 && H[a * W] - H[k * W] < 0.1) k--;
+      const dt = H[a * W] - H[k * W];
+      if (!(dt > 0) || sg * (H[a * W + 3] - H[k * W + 3]) < min * dt) break;
+      a = k;
+    }
+    while (b < d.histN - 1) {
+      let k = b + 1;
+      while (k < d.histN - 1 && H[k * W] - H[b * W] < 0.1) k++;
+      const dt = H[k * W] - H[b * W];
+      if (!(dt > 0) || sg * (H[k * W + 3] - H[b * W + 3]) < min * dt) break;
+      b = k;
+    }
+  }
   const o = orbitFit(d.hist, a, b, d.orb);
   f.orbitR = o.r; f.orbitFit = o.fit; f.orbitSweep = o.sweep; f.orbitTurn = o.turn; f.orbitSpd = o.spd;
   const ws = d.ws || 3.5;

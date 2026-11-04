@@ -474,8 +474,11 @@ loft.
   floor.
 - **Trippy**, by the owner's definition: at least 720° of yaw at 300 °/s or
   more while the path orbits a centre. The orbit's radius is 0.3-2.5 m (the
-  path's curvature), its direction turns half a turn or more one way, at
-  1 m/s or more.
+  path's curvature), its direction turns a full turn (360°) or more one way,
+  at 1 m/s or more. The orbit is measured over the whole spin: out from the
+  720° window for as long as the yaw keeps turning the same way at 80 % of
+  300 °/s, since a full orbit usually takes longer than the 2.4 s that 720°
+  needs.
   - **Yaw.** It is measured about the vertical: in a tilted spin the
     body-axis yaw sees only cos(tilt) of the turn.
   - **Upright or inverted.** An inverted spin that orbits is a Trippy (the

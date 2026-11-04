@@ -53,7 +53,7 @@ site lists both 150 and 50).
 | `cubik` | Cubik's Rube | Intermediate | 350 | 450 | 180° roll → 360° flip → 180° roll, same roll direction. Open air. |
 | `rubik` | Rubik's Cube | Intermediate | 325 | 450 | 180° flip → 360° roll → 180° flip, same pitch direction. Open air. |
 | `ham` | Ham Spin | Intermediate | 300 | 300 | **Inverted yaw spin**: ≥360° yaw in ≤1.8s, little roll/pitch/drift, **upside-down the whole time** (tilt >135° from level). Also called ham. Flips/rolls that only pass through inverted, and upright yaw, are not Ham. |
-| `trippy` | Trippy Spin | Intermediate | 500 | 500 | **≥720° of yaw at ≥300°/s while the path orbits a centre**: radius 0.3–2.5 m (the path's curvature), its direction turning ≥180° one way, at ≥1 m/s. Yaw is the turn about the vertical, so a tilted spin counts in full. Upright or inverted. A nearby pole/post at the centre (within 0.5 m) is a bonus: 1.25× points. |
+| `trippy` | Trippy Spin | Intermediate | 500 | 500 | **≥720° of yaw at ≥300°/s while the path orbits a centre**: radius 0.3–2.5 m (the path's curvature), its direction turning a **full 360°** one way over the whole spin, at ≥1 m/s. Yaw is the turn about the vertical, so a tilted spin counts in full. Upright or inverted. A nearby pole/post at the centre (within 0.5 m) is a bonus: 1.25× points. |
 | `barani` | Barani | Novice | 100 | 125 | **A flip with a half twist**: ≥300° of pitch and 180 ± 45° of roll inside the same 1.5 s, ending upright (the twist at the vertical). Scores above Flip. |
 
 ## Decision boundaries
@@ -121,9 +121,11 @@ Same under → over → under path.
   is a Yaw Spin, not Ham.
 - Trippy Spin: **≥720° of yaw at ≥300°/s while the path orbits**. The
   yaw is the turn about the vertical (a tilted spin turns the heading at
-  the full rate). Over that yaw the path curves round a centre: radius
-  0.3–2.5 m, its direction turning at least half a turn, one way, at
-  1 m/s or more. Upright or inverted: an inverted spin that orbits is a
+  the full rate). Over the whole spin (for as long as the yaw keeps
+  turning the same way at 240°/s or more) the path goes all the way round
+  a centre: radius 0.3–2.5 m, its direction turning a full turn (360°) or
+  more, one way, at 1 m/s or more. Half or three-quarters of an orbit is
+  not a Trippy. Upright or inverted: an inverted spin that orbits is a
   Trippy, not Ham. A spin in place (no orbit) is a Yaw Spin or Ham Spin;
   a camera-lock orbit with one turn of yaw per orbit is not a Trippy.
   A nearby pole or post (a collider at most 0.5 m across and 1 m tall)

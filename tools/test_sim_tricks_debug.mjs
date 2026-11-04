@@ -195,7 +195,7 @@ function randFeat(r) {
   // window and the end's up-Z, near their thresholds often.
   f.yawUp = r() < 0.5 ? near(12.566) : u(0, 4); f.yawDn = r() < 0.5 ? near(12.566) : u(0, 4);
   f.yawUpT = u(0.5, 2.4); f.yawDnT = u(0.5, 2.4);
-  f.orbitR = r() < 0.5 ? u(0.1, 3) : u(0.3, 2.5); f.orbitSweep = near(3.1416); f.orbitTurn = u(0.6, 1); f.orbitSpd = u(0.5, 3);
+  f.orbitR = r() < 0.5 ? u(0.1, 3) : u(0.3, 2.5); f.orbitSweep = near(6.2832); f.orbitTurn = u(0.6, 1); f.orbitSpd = u(0.5, 3);
   f.barP = r() < 0.5 ? near(5.236) : u(0, 4); f.barR = u(1.5, 4.5); f.upEnd = r() < 0.6 ? u(0.5, 1) : u(-1, 1);
   if (r() < 0.12) {
     // A yaw spin, upright or inverted: little pitch and roll, a full turn of

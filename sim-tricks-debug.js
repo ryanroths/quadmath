@@ -26,7 +26,7 @@ import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL,
-} from './sim-tricks.js?v=a65ab08b106c';
+} from './sim-tricks.js?v=d85d424ef1de';
 
 const TAU = Math.PI * 2;
 
@@ -78,7 +78,7 @@ export const GATES = Object.freeze({
   ],
   trippy: [
     ge('v.yawSpan', 12.566, 0), ge('v.yawRate', 5.236, 0), band('f.orbitR', 0.3, 2.5, 0),
-    ge('f.orbitSweep', 3.1416, 0), ge('f.orbitTurn', 0.8, 0), ge('f.orbitSpd', 1.0, 0),
+    ge('f.orbitSweep', 6.2832, 0), ge('f.orbitTurn', 0.8, 0), ge('f.orbitSpd', 1.0, 0),
   ],
   barani: [
     ge('f.barP', 5.236, 0), band('f.barR', 2.356, 3.927, 0), ge('f.upEnd', 0.6, 0),
