@@ -2372,13 +2372,92 @@ const BUILDERS = {
   room: buildRoom,
 };
 
+// ---- Authored gaps (the trick detector's Gap) ----
+//
+// Every intentional gap of the Rig, the House and the Warehouse as a volume
+// the quad passes through: scene units, axis-aligned, and the axis it is
+// flown along ('x', 'y' or 'z'). A pass enters through one of the two faces
+// across that axis and leaves through the other (sim-tricks.js). Each volume
+// is the opening itself, between the boxes that make it, from the map's own
+// numbers above.
+function gapVolume(map, name, axis, s, x0, y0, z0, x1, y1, z1) {
+  const r = (v) => Math.round(v * s * 1e4) / 1e4;
+  return Object.freeze({
+    map, name, axis,
+    min: Object.freeze({ x: r(x0), y: r(y0), z: r(z0) }),
+    max: Object.freeze({ x: r(x1), y: r(y1), z: r(z1) }),
+  });
+}
+function rigGaps() {
+  const s = RIG_WS, out = [];
+  // Crate slots: on x = 9, through each 0.4 m wall of crates along z.
+  [[-1.0, 0.25], [-0.2, 0.21], [0.6, 0.18]].forEach(([z, g], w) => {
+    out.push(gapVolume('rig', `crate slot ${w + 1} (${Math.round(g * 100)} cm)`, 'z', s, 9 - g / 2, 0, z, 9 + g / 2, 2.0, z + 0.4));
+  });
+  // Tunnel: the 30 cm bore, 4 m along x.
+  out.push(gapVolume('rig', 'tunnel', 'x', s, 0.05, 1.05, 5.45, 4.05, 1.35, 5.75));
+  // Pipe slits: the 20 cm between the seven pipes of the run, down through it
+  // (the dive takes the one on the drop plane), and between the risers, along z.
+  for (let k = 0; k < 6; k++) {
+    const x0 = -10 + 0.35 * k + 0.15, x1 = -10 + 0.35 * (k + 1);
+    out.push(gapVolume('rig', `pipe slit ${k + 1}`, 'y', s, x0, 4.8, -7.5, x1, 4.95, 3.2));
+    out.push(gapVolume('rig', `riser slit ${k + 1}`, 'z', s, x0, 0, 3.2, x1, 4.8, 3.35));
+  }
+  // Loft hole: 1.0 x 1.8 m through the 10 cm slab, down or up.
+  out.push(gapVolume('rig', 'loft hole', 'y', s, RIG_DROP - 0.5, 2.7, -3.75, RIG_DROP + 0.5, 2.8, -1.95));
+  return out;
+}
+function houseGaps() {
+  const s = HOUSE_WS;
+  return [
+    // The bookshelf's middle bay, 0.9 to 1.68 m, through the shelf along z.
+    gapVolume('house', 'bookshelf gap', 'z', s, -1.2, 0.9, 1.45, -0.6, 1.68, 1.8),
+    // Under the patio table, between its legs, either way.
+    gapVolume('house', 'under the patio table (along z)', 'z', s, -7.99, 0, -0.85, -7.21, 0.69, 0.05),
+    gapVolume('house', 'under the patio table (along x)', 'x', s, -8.05, 0, -0.79, -7.15, 0.69, -0.01),
+  ];
+}
+function warehouseGaps() {
+  const P = WAREHOUSE_PLAY, out = [];
+  // Rack shelves: each level of each rack, floor to the first shelf and
+  // shelf to shelf, flown across the rack (along x) between its end posts.
+  const half = P.shelfH / 2;
+  const levels = [[0, P.shelfYs[0] - half]];
+  for (let i = 0; i + 1 < P.shelfYs.length; i++) levels.push([P.shelfYs[i] + half, P.shelfYs[i + 1] - half]);
+  for (const z of P.rackZs) {
+    for (const x of P.rackXs) {
+      levels.forEach(([y0, y1], i) => {
+        out.push(gapVolume('warehouse', `rack ${x},${z} level ${i}`, 'x', 1,
+          x - P.shelfW / 2, y0, z - P.postOffZ + P.post / 2, x + P.shelfW / 2, y1, z + P.postOffZ - P.post / 2));
+      });
+    }
+  }
+  // The gap: between the two orange blocks, along z.
+  const gl = P.gap.left, gr = P.gap.right;
+  out.push(gapVolume('warehouse', 'the gap', 'z', 1, gl.x + gl.w / 2, 0, gl.z - gl.d / 2, gr.x - gr.w / 2, gl.h, gl.z + gl.d / 2));
+  // The Ion hoop: its inner opening, along z.
+  const ion = P.ion;
+  out.push(gapVolume('warehouse', 'ion hoop', 'z', 1, ion.x - ion.innerW / 2, ion.y - ion.innerH / 2, ion.z - ion.depth / 2,
+    ion.x + ion.innerW / 2, ion.y + ion.innerH / 2, ion.z + ion.depth / 2));
+  return out;
+}
+const MAP_GAPS = Object.freeze({
+  rig: Object.freeze(rigGaps()),
+  house: Object.freeze(houseGaps()),
+  warehouse: Object.freeze(warehouseGaps()),
+});
+// A map's authored gap volumes (empty where it has none).
+export function mapGaps(mapId) {
+  return MAP_GAPS[mapId] || Object.freeze([]);
+}
+
 export function buildMap(THREE, mapId, opts) {
   const group = new THREE.Group();
   group.name = 'map_' + mapId;
   const colliders = [];
   const lights = [];
   const builder = BUILDERS[mapId];
-  if (!builder) return { group, colliders, lights, floor: null, orbit: MAP_ORBIT.city, mapId };
+  if (!builder) return { group, colliders, lights, floor: null, orbit: MAP_ORBIT.city, mapId, gaps: mapGaps(mapId) };
   const extra = mapId === 'room'
     ? builder(THREE, group, colliders, lights, opts && opts.room)
     : (builder(THREE, group, colliders, lights) || {});
@@ -2388,6 +2467,7 @@ export function buildMap(THREE, mapId, opts) {
     orbit: extra.orbit || MAP_ORBIT[mapId] || MAP_ORBIT.city,
     mapId,
     plan: extra.plan || null,
+    gaps: mapGaps(mapId),
   };
 }
 

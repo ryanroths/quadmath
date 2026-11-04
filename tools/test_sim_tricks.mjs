@@ -15,14 +15,15 @@ import {
   emptyStore, normalizeStore, loadStore, saveStore, recordBest, bestLine, bestForMap,
   makeDetector, resetDetector, stepDetector, encodeRecJson, REC_KEYS,
   makeCombo, resetCombo, pushCombo, comboRemain,
-  createTricks, makeFeat, trickLineupText,
+  createTricks, makeFeat, trickLineupText, TRIPPY_POLE_MUL,
 } from '../sim-tricks.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
 import { mapThrottle3d } from '../sim-3d.js';
 import { rateSetpoint, pilotRatesDefault } from '../sim-rates.js';
-import { createBfCore, emptyState } from '../sim-core-adapter.js';
+import { createBfCore, emptyState, boxToModule } from '../sim-core-adapter.js';
 import { SimCore } from '../vendor/sim-core/sim-core.js';
-import { BACKYARD_PLAY, CITY_PLAY } from '../sim-maps.js';
+import { BACKYARD_PLAY, CITY_PLAY, RIG_PLAY, buildMap, mapGaps } from '../sim-maps.js';
+import * as THREE from '../vendor/three.module.min.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const src = readFileSync(join(root, 'sim-tricks.js'), 'utf8');
@@ -53,6 +54,8 @@ function qpSample(qp, extra) {
     throttle: e.thr == null ? 0.5 : e.thr,
     armed: qp.armed,
     colliders: e.colliders || null,
+    gaps: e.gaps || null,
+    frameW: e.frameW || 0,
     ws: WS,
     sr: e.sr || 0, sp: e.sp || 0, sy: e.sy || 0,
   };
@@ -76,7 +79,7 @@ function fly(phases, opts) {
   const d = makeDetector();
   const hits = [];
   const dt = 1 / 60;
-  resetDetector(d, qpSample(qp, { thr: 0.5, clearance: o.clearance, colliders: o.colliders }));
+  resetDetector(d, qpSample(qp, { thr: 0.5, clearance: o.clearance, colliders: o.colliders, gaps: o.gaps }));
   d.lockout = 0;
   let t = 0, phaseI = 0, phaseT = 0;
   const maxT = o.maxT || 3.2;
@@ -84,17 +87,29 @@ function fly(phases, opts) {
     const ph = phases[Math.min(phaseI, phases.length - 1)];
     let thr = ph.thr == null ? 0.55 : ph.thr;
     if (o.threeD) thr = mapThrottle3d(thr);
-    qp.step(dt, { roll: ph.roll || 0, pitch: ph.pitch || 0, yaw: ph.yaw || 0 }, thr, { r: 0, p: 0, y: 0 });
+    const sp = ph.worldYaw ? worldYawRates(qp.quaternion, ph.worldYaw) : { roll: ph.roll || 0, pitch: ph.pitch || 0, yaw: ph.yaw || 0 };
+    qp.step(dt, sp, thr, { r: 0, p: 0, y: 0 });
     if (!o.allowFloor && qp.position.z < 0.4) {
       qp.position.z = 0.4;
       if (qp.velocity.z < 0) qp.velocity.z *= 0.15;
     }
-    const ev = stepDetector(d, qpSample(qp, { thr, clearance: o.clearance, colliders: o.colliders }), dt);
+    const ev = stepDetector(d, qpSample(qp, { thr, clearance: o.clearance, colliders: o.colliders, gaps: o.gaps }), dt);
     if (ev && TRICK_BY_ID[ev]) hits.push(ev);
     t += dt; phaseT += dt;
     if (ph.t != null && phaseT >= ph.t && phaseI < phases.length - 1) { phaseI++; phaseT = 0; }
   }
-  return { hits, last: d.lastId, why: d.lastWhy, feat: d.lastFeat, view: featView(d.lastFeat) };
+  return { hits, last: d.lastId, why: d.lastWhy, feat: d.lastFeat, view: featView(d.lastFeat), pole: d.lastPole };
+}
+
+// A pilot's yaw about the world vertical at w rad/s, as body rates for the
+// attitude q: what cyclic roll and pitch with yaw make of a tilted spin (the
+// thrust then swings round, and the path orbits).
+function worldYawRates(q, w) {
+  return {
+    roll: 2 * (q.x * q.z - q.w * q.y) * w,
+    pitch: 2 * (q.y * q.z + q.w * q.x) * w,
+    yaw: (1 - 2 * (q.x * q.x + q.y * q.y)) * w,
+  };
 }
 
 function labels(r) { return r.hits.slice(); }
@@ -182,6 +197,13 @@ const GAP_COLS = [
   { min: { x: 8, y: 0, z: 0.85 }, max: { x: 22, y: 12, z: 10 } },
   { min: { x: 8, y: 4.4, z: -10 }, max: { x: 22, y: 10, z: 10 } },
 ];
+// GAP_COLS' opening as an authored gap volume, flown along x.
+const GAP_VOLS = [{ name: 'test gap', axis: 'x', min: { x: 8, y: 0, z: -0.85 }, max: { x: 22, y: 4.4, z: 0.85 } }];
+// Two walls 0.36 m apart (0.18 m each side of the path) and nothing over it.
+const SLOT_COLS = [
+  { min: { x: 8, y: 0, z: -10 }, max: { x: 22, y: 12, z: -0.63 } },
+  { min: { x: 8, y: 0, z: 0.63 }, max: { x: 22, y: 12, z: 10 } },
+];
 const WALL_COLS = [
   { min: { x: -4, y: 0, z: 1.05 }, max: { x: 40, y: 14, z: 10 } },
 ];
@@ -222,10 +244,19 @@ const LIBRARY = [
   { id: 'maverick', name: 'mav-std', phases: [{ t: 0.50, pitch: -3.6, thr: 0.95 }, { t: 0.50, pitch: 3.4, thr: 0.22 }, { t: 0.45, pitch: 0.2, thr: 0.62 }, { t: 0.4, pitch: 0, thr: 0.5 }], opts: { z0: 3.5, vx: 4.5, maxT: 2.5, colliders: OBJ_BAR } },
   { id: 'maverick', name: 'mav-slow', phases: [{ t: 0.62, pitch: -3.0, thr: 0.92 }, { t: 0.58, pitch: 2.9, thr: 0.2 }, { t: 0.45, pitch: 0, thr: 0.58 }], opts: { z0: 3.2, vx: 4.0, maxT: 2.6, colliders: OBJ_BAR } },
   { id: 'maverick', name: 'mav-high', phases: [{ t: 0.52, pitch: -3.4, thr: 0.98 }, { t: 0.52, pitch: 3.2, thr: 0.18 }, { t: 0.45, pitch: 0, thr: 0.6 }], opts: { z0: 4.5, vx: 4.2, maxT: 2.5, colliders: OBJ_BAR } },
-  { id: 'trippy', name: 'trip-pole', phases: [{ t: 1.15, yaw: 7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }], opts: { ...NEAR_POLE, maxT: 2.1 } },
-  { id: 'trippy', name: 'trip-pole-fast', phases: [{ t: 0.95, yaw: 8.2, thr: 0.5 }, { t: 0.45, yaw: 0, thr: 0.44 }], opts: { ...NEAR_POLE, z0: 2.2, maxT: 1.9 } },
-  { id: 'trippy', name: 'trip-pole-ccw', phases: [{ t: 1.15, yaw: -7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }], opts: { ...NEAR_POLE, maxT: 2.1 } },
-  { id: 'trippy', name: 'trip-tree', phases: [{ t: 1.15, yaw: 7.4, thr: 0.5 }, { t: 0.5, yaw: 0, thr: 0.44 }], opts: { ...NEAR_TREE, maxT: 2.1 } },
+  // A spin in place by a pole or tree is a Yaw Spin: a Trippy orbits.
+  { id: 'yawspin', name: 'pole-spin', phases: [{ t: 1.15, yaw: 7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }], opts: { ...NEAR_POLE, maxT: 2.1 } },
+  { id: 'yawspin', name: 'pole-spin-fast', phases: [{ t: 0.95, yaw: 8.2, thr: 0.5 }, { t: 0.45, yaw: 0, thr: 0.44 }], opts: { ...NEAR_POLE, z0: 2.2, maxT: 1.9 } },
+  { id: 'yawspin', name: 'pole-spin-ccw', phases: [{ t: 1.15, yaw: -7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }], opts: { ...NEAR_POLE, maxT: 2.1 } },
+  { id: 'yawspin', name: 'tree-spin', phases: [{ t: 1.15, yaw: 7.4, thr: 0.5 }, { t: 0.5, yaw: 0, thr: 0.44 }], opts: { ...NEAR_TREE, maxT: 2.1 } },
+  // Trippy: tilt, then yaw about the vertical (the thrust swings round and
+  // the path orbits), starting at the orbit's speed a / w along it.
+  { id: 'trippy', name: 'trip-orbit', phases: [{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 5.8, thr: 0.6 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: -2.03, maxT: 3.7 } },
+  { id: 'trippy', name: 'trip-orbit-fast', phases: [{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 6.3, thr: 0.7 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: -1.86, maxT: 3.7 } },
+  { id: 'trippy', name: 'trip-orbit-cw', phases: [{ t: 0.14, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: -6.0, thr: 0.65 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: 2.4, maxT: 3.7 } },
+  // Barani: pitch to the vertical, a half twist there, pitch on to upright.
+  { id: 'barani', name: 'barani-front', phases: [{ t: 0.2, pitch: 8, thr: 0.5 }, { t: 0.286, roll: 11, thr: 0.4 }, { t: 0.59, pitch: 8, thr: 0.5 }, { t: 0.6, thr: 0.5 }], opts: { z0: 6, vx: 1, maxT: 2.2 } },
+  { id: 'barani', name: 'barani-back', phases: [{ t: 0.2, pitch: -8, thr: 0.5 }, { t: 0.286, roll: -11, thr: 0.4 }, { t: 0.59, pitch: -8, thr: 0.5 }, { t: 0.6, thr: 0.5 }], opts: { z0: 6, vx: 1, maxT: 2.2 } },
   { id: 'ham', name: 'ham-inv', phases: [{ t: 1.15, yaw: 7.2, thr: 0.28 }, { t: 0.55, yaw: 0, thr: 0.28 }], opts: { z0: 6, vx: 0.2, maxT: 2.2, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 } } },
   { id: 'ham', name: 'ham-inv-fast', phases: [{ t: 0.95, yaw: 8.2, thr: 0.26 }, { t: 0.55, yaw: 0, thr: 0.26 }], opts: { z0: 6.2, vx: 0.15, maxT: 2.0, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 } } },
   { id: 'ham', name: 'ham-inv-ccw', phases: [{ t: 1.15, yaw: -7.2, thr: 0.28 }, { t: 0.55, yaw: 0, thr: 0.28 }], opts: { z0: 6, vx: 0.2, maxT: 2.2, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 } } },
@@ -250,9 +281,11 @@ const LIBRARY = [
   { id: 'dive', name: 'dive-std', phases: [{ t: 0.85, pitch: 1.2, thr: 0.05 }], opts: { z0: 16, vx: 9, vz: -12, maxT: 1.2, clearance: 10, allowFloor: true } },
   { id: 'dive', name: 'dive-fast', phases: [{ t: 0.7, pitch: 1.4, thr: 0.04 }], opts: { z0: 18, vx: 8, vz: -13, maxT: 1.1, clearance: 12, allowFloor: true } },
   { id: 'dive', name: 'dive-steep', phases: [{ t: 0.9, pitch: 1.0, thr: 0.06 }], opts: { z0: 17, vx: 10, vz: -11, maxT: 1.25, clearance: 11, allowFloor: true } },
-  { id: 'gap', name: 'gap-std', phases: [{ t: 1.1, pitch: 0, thr: 0.72 }], opts: { z0: 0.9, vx: 8, maxT: 1.4, colliders: GAP_COLS, clearance: 0.9 } },
-  { id: 'gap', name: 'gap-fast', phases: [{ t: 1.0, pitch: 0, thr: 0.85 }], opts: { z0: 0.85, vx: 10, maxT: 1.3, colliders: GAP_COLS, clearance: 0.85 } },
-  { id: 'gap', name: 'gap-slow', phases: [{ t: 1.3, pitch: 0, thr: 0.62 }], opts: { z0: 0.95, vx: 6.5, maxT: 1.6, colliders: GAP_COLS, clearance: 0.95 } },
+  { id: 'gap', name: 'gap-std', phases: [{ t: 2.3, pitch: 0, thr: 0.36 }], opts: { z0: 0.9, vx: 8, maxT: 2.3, colliders: GAP_COLS, gaps: GAP_VOLS, clearance: 0.9 } },
+  { id: 'gap', name: 'gap-fast', phases: [{ t: 1.9, pitch: 0, thr: 0.36 }], opts: { z0: 0.85, vx: 10, maxT: 1.9, colliders: GAP_COLS, gaps: GAP_VOLS, clearance: 0.85 } },
+  { id: 'gap', name: 'gap-slow', phases: [{ t: 2.8, pitch: 0, thr: 0.36 }], opts: { z0: 0.95, vx: 6.5, maxT: 2.8, colliders: GAP_COLS, gaps: GAP_VOLS, clearance: 0.95 } },
+  // No authored volume: a slot narrow enough for the generic rule.
+  { id: 'gap', name: 'gap-generic-slot', phases: [{ t: 2.4, pitch: 0, thr: 0.36 }], opts: { z0: 0.9, vx: 6, maxT: 2.4, colliders: SLOT_COLS, clearance: 0.9 } },
   { id: 'prox', name: 'prox-std', phases: [{ t: 0.9, pitch: 0, thr: 0.8 }], opts: { z0: 1.2, vx: 12, maxT: 1.2, colliders: WALL_COLS, clearance: 1.2 } },
   { id: 'prox', name: 'prox-fast', phases: [{ t: 0.8, pitch: 0, thr: 0.9 }], opts: { z0: 1.3, vx: 14, maxT: 1.1, colliders: WALL_COLS, clearance: 1.3 } },
   { id: 'prox', name: 'prox-low', phases: [{ t: 0.95, pitch: 0, thr: 0.78 }], opts: { z0: 0.8, vx: 11, maxT: 1.25, colliders: WALL_COLS, clearance: 0.8 } },
@@ -269,9 +302,9 @@ const PILOT_LIBRARY = [
   { id: 'maverick', name: 'pilot-mav-052', phases: [{ t: 0.15, pitchS: 0, thr: 0.64 }, { t: 0.72, pitchS: -0.52, thr: 0.9 }, { t: 0.72, pitchS: 0.50, thr: 0.24 }, { t: 0.45, pitchS: 0, thr: 0.56 }], opts: { z0: 3.4, vx: 4.2, maxT: 2.9, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 202, noise: 0.06, thrWobble: 0.08 } },
   { id: 'maverick', name: 'pilot-mav-kiss', phases: [{ t: 0.15, pitchS: 0, thr: 0.62 }, { t: 0.50, pitchS: -0.55, thr: 0.9 }, { t: 0.52, pitchS: 0.52, thr: 0.22 }, { t: 0.4, pitchS: 0, thr: 0.55 }], opts: { z0: 3.6, vx: 4.4, maxT: 2.6, colliders: OBJ_BAR, rates: WHOOP_KISS, seed: 203, noise: 0.06, thrWobble: 0.08 } },
   { id: 'maverick', name: 'pilot-mav-against', phases: [{ t: 0.55, pitchS: -0.68, thr: 0.94 }, { t: 0.68, pitchS: 0.64, thr: 0.2 }, { t: 0.45, pitchS: 0.08, thr: 0.58 }], opts: { z0: 3.2, vx: 3.2, maxT: 2.6, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 204, noise: 0.05, thrWobble: 0.07 } },
-  { id: 'trippy', name: 'pilot-trip-pole-actual', phases: [{ t: 1.2, yawS: 0.95, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_POLE, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 301, noise: 0.04, thrWobble: 0.05 } },
-  { id: 'trippy', name: 'pilot-trip-pole-kiss', phases: [{ t: 1.15, yawS: 0.92, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_POLE, maxT: 2.1, rates: WHOOP_KISS, seed: 303, noise: 0.04, thrWobble: 0.05 } },
-  { id: 'trippy', name: 'pilot-trip-tree', phases: [{ t: 1.2, yawS: 0.94, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_TREE, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 304, noise: 0.04, thrWobble: 0.05 } },
+  { id: 'yawspin', name: 'pilot-pole-spin-actual', phases: [{ t: 1.2, yawS: 0.95, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_POLE, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 301, noise: 0.04, thrWobble: 0.05 } },
+  { id: 'yawspin', name: 'pilot-pole-spin-kiss', phases: [{ t: 1.15, yawS: 0.92, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_POLE, maxT: 2.1, rates: WHOOP_KISS, seed: 303, noise: 0.04, thrWobble: 0.05 } },
+  { id: 'yawspin', name: 'pilot-tree-spin', phases: [{ t: 1.2, yawS: 0.94, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_TREE, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 304, noise: 0.04, thrWobble: 0.05 } },
   { id: 'ham', name: 'pilot-ham-actual', phases: [{ t: 1.2, yawS: 0.95, thr: 0.28 }, { t: 0.5, yawS: 0, thr: 0.28 }], opts: { z0: 6, vx: 0.15, maxT: 2.3, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 }, rates: WHOOP_ACTUAL, seed: 351, noise: 0.03, thrWobble: 0.03 } },
   { id: 'sideloop', name: 'pilot-side-actual', phases: [{ t: 0.55, yawS: 0.75, thr: 0.55 }, { t: 0.95, rollS: 0.75, yawS: 0.28, thr: 0.84 }, { t: 0.35, rollS: 0.58, yawS: 0.14, thr: 0.22 }, { t: 0.4, rollS: 0.3, thr: 0.68 }, { t: 0.4, rollS: 0, yawS: 0, thr: 0.5 }], opts: { z0: 4.5, vx: 5.0, maxT: 3.4, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 401, noise: 0.05, thrWobble: 0.07 } },
   { id: 'sideloop', name: 'pilot-side-kiss', phases: [{ t: 0.38, yawS: 0.72, rollS: 0.08, thr: 0.58 }, { t: 1.05, rollS: 0.70, yawS: 0.38, thr: 0.8 }, { t: 0.35, rollS: 0.35, yawS: 0.1, thr: 0.28 }, { t: 0.4, rollS: 0, yawS: 0, thr: 0.55 }], opts: { z0: 4.8, vx: 5.2, maxT: 3.1, colliders: OBJ_BAR, rates: WHOOP_KISS, seed: 402, noise: 0.06, thrWobble: 0.07 } },
@@ -292,7 +325,7 @@ test('new storage key only; never writes old ryfly* keys', () => {
 
 test('trick list has the requested maneuvers and frozen point values', () => {
   const ids = TRICK_LIST.map((t) => t.id);
-  for (const id of ['flip', 'roll', 'yawspin', 'powerloop', 'sideloop', 'splits', 'matty', 'halfmatty', 'maverick', 'trippy', 'ham', 'dive', 'gap', 'prox', 'cradle', 'juicyflick', 'snapback', 'rubik', 'cubik']) {
+  for (const id of ['flip', 'roll', 'yawspin', 'powerloop', 'sideloop', 'splits', 'matty', 'halfmatty', 'maverick', 'trippy', 'ham', 'dive', 'gap', 'prox', 'cradle', 'juicyflick', 'snapback', 'rubik', 'cubik', 'barani']) {
     assert.ok(ids.includes(id), 'missing ' + id);
     assert.ok(TRICK_BY_ID[id].points > 0);
     assert.ok(TRICK_BY_ID[id].name);
@@ -325,6 +358,9 @@ test('trick list has the requested maneuvers and frozen point values', () => {
   assert.equal(TRICK_BY_ID.snapback.points, 200);
   assert.equal(TRICK_BY_ID.rubik.points, 325);
   assert.equal(TRICK_BY_ID.cubik.points, 350);
+  assert.equal(TRICK_BY_ID.barani.points, 100);
+  assert.equal(TRICK_BY_ID.barani.pointsIn, 125);
+  assert.ok(TRICK_BY_ID.barani.points > TRICK_BY_ID.flip.points && TRICK_BY_ID.barani.pointsIn > TRICK_BY_ID.flip.pointsIn, 'Barani above Flip');
   assert.equal(trickPoints('flip', false), 50);
   assert.equal(trickPoints('flip', true), 75);
   assert.equal(trickPoints('juicyflick', true), 225);
@@ -336,7 +372,7 @@ test('docs/sim-tricks.md defines each trick and the confused pairs', () => {
   assert.ok(docs.includes('# QuadMath freestyle trick definitions'));
   assert.ok(docs.includes("Tyrantt's Pro Whooper"));
   assert.ok(docs.includes('prowhooper.com'));
-  for (const id of ['powerloop', 'matty', 'halfmatty', 'maverick', 'trippy', 'ham', 'sideloop', 'splits', 'juicyflick', 'snapback', 'cradle', 'rubik', 'cubik']) {
+  for (const id of ['powerloop', 'matty', 'halfmatty', 'maverick', 'trippy', 'ham', 'sideloop', 'splits', 'juicyflick', 'snapback', 'cradle', 'rubik', 'cubik', 'barani', 'gap']) {
     assert.ok(docs.includes('`' + id + '`'), 'doc missing ' + id);
   }
   assert.ok(docs.includes('Powerloop vs Matty'));
@@ -434,23 +470,18 @@ test('Ryan bug: normal turn, yaw drift, and carve are not a Trippy Spin', () => 
   assert.equal(punch.hits.includes('trippy'), false, 'open-air yaw punch stole trippy why=' + (punch.why || ''));
 });
 
-test('Ryan bug: a real trippy spin around a pole or tree scores Trippy', () => {
-  const pole = fly(
-    [{ t: 1.15, yaw: 7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }],
-    { ...NEAR_POLE, maxT: 2.1 },
-  );
-  assert.deepEqual(labels(pole), ['trippy'], 'pole why=' + (pole.why || ''));
-  const tree = fly(
-    [{ t: 1.15, yaw: 7.4, thr: 0.5 }, { t: 0.5, yaw: 0, thr: 0.44 }],
-    { ...NEAR_TREE, maxT: 2.1 },
-  );
-  assert.deepEqual(labels(tree), ['trippy'], 'tree why=' + (tree.why || ''));
-  const openYaw = fly(
-    [{ t: 1.0, yaw: 7.5, thr: 0.45 }, { t: 0.5, yaw: 0, thr: 0.4 }],
-    { z0: 3, vx: 1.2, maxT: 2 },
-  );
-  assert.deepEqual(labels(openYaw), ['yawspin']);
-  assert.equal(openYaw.hits.includes('ham'), false, 'upright yaw is not Ham');
+test('Trippy, flown: yaw about the vertical while the path orbits scores Trippy; a spin in place is a Yaw Spin', () => {
+  // Tilt, then yaw about the vertical at 5.8 rad/s from the orbit's speed:
+  // the thrust swings round and the path circles.
+  const orbit = fly([{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 5.8, thr: 0.6 }, { t: 0.6, thr: 0.5 }], { z0: 5, vy: -2.03, maxT: 3.7 });
+  assert.deepEqual(labels(orbit), ['trippy'], 'orbit why=' + (orbit.why || ''));
+  const f = orbit.feat, v = orbit.view;
+  assert.ok(v.yawSpan >= 4 * Math.PI && v.yawRate >= 300 * DEG, 'yaw ' + (v.yawSpan / DEG).toFixed(0) + ' at ' + (v.yawRate / DEG).toFixed(0));
+  assert.ok(f.orbitR >= 0.3 && f.orbitR <= 2.5 && f.orbitSpd >= 1 && f.orbitSweep >= Math.PI, 'orbit r ' + f.orbitR.toFixed(2));
+  assert.equal(orbit.pole, 0, 'open air: no pole bonus');
+  // The same spin in place beside the pole is a Yaw Spin (the old Trippy).
+  const inPlace = fly([{ t: 1.15, yaw: 7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }], { ...NEAR_POLE, maxT: 2.1 });
+  assert.deepEqual(labels(inPlace), ['yawspin'], 'in place why=' + (inPlace.why || ''));
 });
 
 function aabbCyl(x, z, r, h) {
@@ -484,6 +515,9 @@ function flyOrbit(opts) {
     omega = (speedM * WS) / R;
   }
   const period = TAU / Math.abs(omega);
+  // yawRate: a spin of its own (rad/s) instead of the camera lock, for spinT
+  // s; inverted: upside down throughout.
+  const yawRate = o.yawRate || 0;
   const dt = 1 / 60;
   const settle = o.settle != null ? o.settle : 0.55;
   const d = makeDetector();
@@ -493,7 +527,8 @@ function flyOrbit(opts) {
   // World XZ circle → physics XY (wx=px*WS, wz=-py*WS). Camera-lock yaw
   // points at the object (meanDot≈0); tangent yaw follows velocity (≈1).
   const yawAt = (th) => (look === 'tangent' ? (-Math.PI * 0.5 - th) : (Math.PI - th));
-  const q0 = quatYaw(yawAt(0));
+  const qOf = (yaw) => (o.inverted ? quatMul(quatYaw(yaw), INV_ROLL) : quatYaw(yaw));
+  const q0 = qOf(yawAt(0));
   const vx0 = 0;
   const vy0 = -speedM;
   resetDetector(d, {
@@ -504,16 +539,18 @@ function flyOrbit(opts) {
   });
   d.lockout = 0;
   let t = 0;
-  const spinT = period * frac;
+  const spinT = yawRate ? o.spinT : period * frac;
+  let yawNow = yawAt(0);
   const maxT = o.maxT || (spinT + settle + 0.12);
   while (t < maxT) {
     const spinning = t < spinT + 0.02;
-    const om = spinning ? omega : 0;
+    const om = spinning ? (yawRate || omega) : 0;
     if (spinning) theta += omega * dt;
+    if (spinning && yawRate) yawNow += yawRate * dt;
     const rr = R + (drift ? drift * Math.sin(theta * 2) : 0);
     const wx = cx + rr * Math.cos(theta);
     const wz = cz + rr * Math.sin(theta);
-    const q = quatYaw(yawAt(theta));
+    const q = yawRate ? qOf(yawNow) : qOf(yawAt(theta));
     const vx = -Math.sin(theta) * speedM;
     const vy = -Math.cos(theta) * speedM;
     let ox = 0, oy = 0;
@@ -533,7 +570,7 @@ function flyOrbit(opts) {
   }
   return {
     hits, last: d.lastId, why: d.lastWhy, feat: d.lastFeat, view: featView(d.lastFeat),
-    period, speed: speedM, omega,
+    period, speed: speedM, omega, pole: d.lastPole,
   };
 }
 
@@ -551,36 +588,65 @@ function assertTrippy(r, name) {
   assert.deepEqual(labels(r), ['trippy'], name + ' why=' + (r.why || '') + ' last=' + r.last);
 }
 
-test('scripted camera-lock orbits around backyard / city / garage anchors score Trippy', () => {
-  assert.ok(YARD_FICUS.r >= 0.5 && YARD_FICUS.r <= 0.7, 'ficus trunk after 1.25× ' + YARD_FICUS.r);
+test('Trippy, scripted: >= 720 deg at >= 300 deg/s on a full orbit of 0.3-2.5 m at >= 1 m/s, upright or inverted; a pole at the centre earns the bonus', () => {
+  assert.ok(YARD_FICUS.r >= 0.5 && YARD_FICUS.r <= 0.7, 'ficus trunk after 1.25x ' + YARD_FICUS.r);
   assert.ok(BACKYARD_PLAY.planter.rOut >= 3.2 && BACKYARD_PLAY.planter.rOut <= 3.5, 'planter ' + BACKYARD_PLAY.planter.rOut);
-  const orbits = [
-    { name: 'yard-ficus-R4-v5', R: 4, speed: 5, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
-    { name: 'yard-ficus-R5-v5', R: 5, speed: 5, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
-    { name: 'yard-ficus-R7-v5', R: 7, speed: 5, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
-    { name: 'yard-ficus-R8-v6', R: 8, speed: 6, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
-    { name: 'yard-ficus-R10-v5', R: 10, speed: 5, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
-    { name: 'yard-ficus-R7-v4-drift', R: 7, speed: 4, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL, drift: 0.8 },
-    { name: 'yard-palm-R4-v5', R: 4, speed: 5, cx: YARD_PALM.x, cz: YARD_PALM.z, colliders: PALM_COL },
-    { name: 'city-tree-R4-v5', R: 4, speed: 5, cx: CITY_TREE.x, cz: CITY_TREE.z, colliders: CITY_TREE_COL },
-    { name: 'city-pole-R3.5-v6', R: 3.5, speed: 6, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL },
-    { name: 'garage-lamp-R3-v5', R: 3, speed: 5, cx: -6.2, cz: 8.2, colliders: GARAGE_LAMP_COL },
-    { name: 'old-tight-pole-R2-v6', R: 2, speed: 6, cx: 6.7, cz: 0, colliders: OBJ_POLE },
+  const M = WS;   // metres to scene units
+  const spins = [
+    { name: 'R0.35-v1.2', R: 0.35 * M, speed: 1.2, yawRate: 6.0, spinT: 2.3, cx: 0, cz: 0, colliders: [] },
+    { name: 'R0.8-v2', R: 0.8 * M, speed: 2, yawRate: 5.6, spinT: 3.0, cx: 0, cz: 0, colliders: [] },
+    { name: 'R1.5-v3.5', R: 1.5 * M, speed: 3.5, yawRate: 7, spinT: 3.2, cx: 0, cz: 0, colliders: [] },
+    { name: 'R2.4-v5', R: 2.4 * M, speed: 5, yawRate: 9, spinT: 3.6, cx: 0, cz: 0, colliders: [] },
+    { name: 'R0.8-ccw', R: 0.8 * M, speed: 2, yawRate: -6, spinT: 3.0, cx: 0, cz: 0, colliders: [] },
+    { name: 'R0.8-inverted', R: 0.8 * M, speed: 2, yawRate: 6, spinT: 3.0, cx: 0, cz: 0, colliders: [], inverted: true },
+    { name: 'ficus-R2', R: 2 * M, speed: 4, yawRate: 6.5, spinT: 3.7, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL, pole: 1 },
+    { name: 'city-pole-R1', R: 1 * M, speed: 2.5, yawRate: 6.5, spinT: 3.0, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL, pole: 1 },
+    { name: 'garage-lamp-R0.8', R: 0.8 * M, speed: 2, yawRate: 6, spinT: 3.0, cx: -6.2, cz: 8.2, colliders: GARAGE_LAMP_COL, pole: 1 },
+    { name: 'beside-ficus', R: 0.8 * M, speed: 2, yawRate: 6, spinT: 3.0, cx: YARD_FICUS.x + 3 * M, cz: YARD_FICUS.z, colliders: FICUS_COL, pole: 0 },
   ];
-  for (const spec of orbits) assertTrippy(flyOrbit(spec), spec.name);
+  for (const spec of spins) {
+    const r = flyOrbit(spec);
+    assertTrippy(r, spec.name);
+    assert.ok(r.feat.orbitSweep >= 2 * Math.PI, spec.name + ' a full orbit ' + r.feat.orbitSweep);
+    if (spec.pole != null) assert.equal(r.pole, spec.pole, spec.name + ' pole bonus');
+  }
+  // The bonus: TRIPPY_POLE_MUL of the points.
+  assert.equal(scoreTrick('trippy', 0, 1, 1, { bonus: TRIPPY_POLE_MUL }), Math.round(500 * TRIPPY_POLE_MUL));
+  assert.equal(scoreTrick('trippy', 0, 1, 1, {}), 500);
 });
 
-test('Ryan Actual-rate camera-lock orbits at several radii score Trippy', () => {
-  const actual = [
+test('Trippy is not: camera-lock orbits (one turn of yaw per orbit), slow or short spins, half or three-quarter orbits, wide orbits, a spin flown straight', () => {
+  const M = WS;
+  const lock = [
+    { name: 'ficus-R5-v5', R: 5, speed: 5, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
+    { name: 'city-pole-R3.5-v6', R: 3.5, speed: 6, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL },
     { name: 'actual-ficus-R5', R: 5, yawS: 0.62, rates: WHOOP_ACTUAL, seed: 401, noise: 0.08, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
-    { name: 'actual-ficus-R7', R: 7, yawS: 0.58, rates: WHOOP_ACTUAL, seed: 402, noise: 0.08, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
-    { name: 'actual-ficus-R8-faster', R: 8, yawS: 0.70, rates: WHOOP_ACTUAL, seed: 403, noise: 0.07, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
-    { name: 'actual-city-tree-R4', R: 4, yawS: 0.60, rates: WHOOP_ACTUAL, seed: 404, noise: 0.08, cx: CITY_TREE.x, cz: CITY_TREE.z, colliders: CITY_TREE_COL },
-    { name: 'actual-city-pole-R3.5', R: 3.5, yawS: 0.68, rates: WHOOP_ACTUAL, seed: 405, noise: 0.08, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL },
-    { name: 'actual-garage-R3', R: 3, yawS: 0.58, rates: WHOOP_ACTUAL, seed: 406, noise: 0.07, cx: -6.2, cz: 8.2, colliders: GARAGE_LAMP_COL },
     { name: 'kiss-ficus-R6', R: 6, yawS: 0.55, rates: WHOOP_KISS, seed: 407, noise: 0.06, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
   ];
-  for (const spec of actual) assertTrippy(flyOrbit(spec), spec.name);
+  for (const spec of lock) {
+    const r = flyOrbit(spec);
+    assert.equal(r.hits.includes('trippy'), false, spec.name + ' why=' + (r.why || ''));
+  }
+  const not = [
+    { name: 'slow yaw 258 deg/s', R: 0.8 * M, speed: 2, yawRate: 4.5, spinT: 3.0, cx: 0, cz: 0, colliders: [] },
+    { name: 'short 515 deg', R: 0.8 * M, speed: 2, yawRate: 6, spinT: 1.5, cx: 0, cz: 0, colliders: [] },
+    // 720 degrees and more of yaw, fast, round a centre, but the path only
+    // half or three-quarters of the way round it: a Trippy needs the full orbit.
+    { name: 'half orbit 200 deg', R: 0.8 * M, speed: 1.2, yawRate: 6.5, spinT: 2.3, cx: 0, cz: 0, colliders: [], sweep: [Math.PI, 2 * Math.PI] },
+    { name: 'three-quarter orbit 290 deg', R: 0.8 * M, speed: 1.75, yawRate: 6.5, spinT: 2.3, cx: 0, cz: 0, colliders: [], sweep: [Math.PI, 2 * Math.PI] },
+    { name: 'pole half orbit', R: 0.8 * M, speed: 1.2, yawRate: 6.5, spinT: 2.3, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL, sweep: [Math.PI, 2 * Math.PI] },
+    { name: 'wide orbit 3 m', R: 3 * M, speed: 4, yawRate: 7, spinT: 2.4, cx: 0, cz: 0, colliders: [] },
+    { name: 'slow orbit 0.8 m/s', R: 0.5 * M, speed: 0.8, yawRate: 6.5, spinT: 2.4, cx: 0, cz: 0, colliders: [] },
+    { name: 'flown straight', R: 1000 * M, speed: 3, yawRate: 7, spinT: 2.4, cx: 0, cz: 0, colliders: [] },
+  ];
+  for (const spec of not) {
+    const r = flyOrbit(spec);
+    assert.equal(r.hits.includes('trippy'), false, spec.name + ' why=' + (r.why || ''));
+    if (spec.sweep) {
+      const sw = r.feat.orbitSweep;
+      assert.ok(sw >= spec.sweep[0] && sw < spec.sweep[1], spec.name + ' sweep ' + sw);
+    }
+  }
 });
 
 test('false triggers: turns, small yaw, tangent circles, half orbits, open air', () => {
@@ -897,8 +963,8 @@ async function flyBf(phases, opts) {
 // do not climb 1.5 m at its throttle (full throttle does), and its matty
 // flips turn a full flip (Betaflight tracks the rate the js core lags).
 const BF_LIBRARY = [
-  ...['flip-front', 'flip-back', 'roll-fast', 'yaw-fast', 'hm-fast', 'ss-fast', 'mav-std', 'trip-pole', 'ham-inv',
-    'sl-std', 'crd-std', 'jf-fast', 'sb-fast', 'rk-std', 'ck-std', 'dive-std', 'gap-std', 'prox-std'].map((n) => LIBRARY.find((c) => c.name === n)),
+  ...['flip-front', 'flip-back', 'roll-fast', 'yaw-fast', 'hm-fast', 'ss-fast', 'mav-std', 'pole-spin', 'ham-inv',
+    'sl-std', 'crd-std', 'jf-fast', 'sb-fast', 'rk-std', 'ck-std', 'dive-std', 'gap-generic-slot', 'prox-std'].map((n) => LIBRARY.find((c) => c.name === n)),
   { id: 'powerloop', name: 'bf-powerloop', phases: [{ t: 0.25, pitch: 0, tS: 0.75 }, { t: 1.0, pitch: -6.4, tS: 1.0 }, { t: 0.6, pitch: 0, tS: 0.35 }], opts: { z0: 6, vx: 7, maxT: 2.6 } },
   { id: 'matty', name: 'bf-matty', phases: [{ t: 0.1, pitch: 0, tS: 0.25 }, { t: 0.55, pitch: 8.2, tS: 0.03 }, { t: 0.55, pitch: 0, tS: 0.45 }], opts: { z0: 9, vx: 7, maxT: 2.1 } },
 ];
@@ -919,7 +985,10 @@ test('bf core: every trick type, flown on sim-core and sampled every 4 ms, is it
     flown.add(c.id);
   }
   assert.equal(confuse.length, 0, 'bf core confusion:\n' + confuse.join('\n'));
-  for (const id of new Set(LIBRARY.map((c) => c.id))) assert.ok(flown.has(id), id + ' flown on the bf core');
+  // Trippy and Barani fly on the bf core in the Rig, in the tests below.
+  for (const id of new Set(LIBRARY.map((c) => c.id))) {
+    if (id !== 'trippy' && id !== 'barani') assert.ok(flown.has(id), id + ' flown on the bf core');
+  }
 });
 
 // The page's loop on the bf core at a given frame time: sticks polled and
@@ -1008,6 +1077,211 @@ test('bf core: a flight reads the same at 60 fps and at 12 fps (the detector run
   assert.deepEqual(fast.hits, ['flip:front', 'roll', 'flip:back']);
   assert.deepEqual(slow.hits, fast.hits);
   assert.deepEqual(slow.segs, fast.segs, 'the same features at either frame rate');
+});
+
+// ---- The bf core in the Rig ----
+//
+// sim-core flying in the Rig's own colliders (the page's bfWorld), the
+// detector given the same colliders and the Rig's authored gaps, the Air65's
+// frame width; armed on the floor, then put at the start pose and speed.
+let rigCache = null;
+function rigScene() {
+  if (rigCache) return rigCache;
+  if (!globalThis.document) {
+    globalThis.document = {
+      createElement: () => {
+        const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => ({ addColorStop() {} })), set: (t, k, v) => { t[k] = v; return true; } });
+        return { width: 0, height: 0, getContext: () => ctx };
+      },
+    };
+  }
+  const built = buildMap(THREE, 'rig');
+  const boxes = built.colliders.filter((b) => !b.isEmpty()).map((b) => boxToModule(b));
+  rigCache = { colliders: built.colliders, gaps: built.gaps, boxes };
+  return rigCache;
+}
+const AIR65_FRAME_W = 0.065 / Math.SQRT2 + 2 * 0.0181;   // wheelbase / sqrt 2 + both ducts, m
+async function flyRig(script, o) {
+  const rig = rigScene();
+  if (!bfWasm) bfWasm = WebAssembly.compile(readFileSync(join(root, 'vendor/sim-core/sim-core.wasm')));
+  const core = await createBfCore({
+    SimCore,
+    wasm: await bfWasm,
+    airframe: JSON.parse(readFileSync(join(root, 'vendor/sim-core/airframes/air65.json'), 'utf8')),
+    diff: readFileSync(join(root, 'vendor/sim-core/configs/air65-ryfly-2026-10-23.txt'), 'utf8'),
+    world: { floorZ: 0, boxes: rig.boxes, triggers: [] },
+  });
+  core.respawn({ x: -6, y: 6, z: 0.02 }, { x: 0, y: 0, z: 0, w: 1 });
+  core.setMode(o.mode);
+  let wall = 0;
+  let stick = { r: 0, p: 0, y: 0, t: 0 };
+  const events = [];
+  const poll = (onSample) => {
+    const ts = core.stamp(wall);
+    if (ts !== null) core.input(stick, ts);
+    core.advance(4, true, (e) => events.push(e), onSample);
+    wall += 4;
+    core.anchor(wall);
+  };
+  for (let i = 0; i < 100; i++) poll();
+  core.setArm(true);
+  for (let i = 0; i < 150 && !core.getState().armed; i++) poll();
+  assert.ok(core.getState().armed, 'armed');
+  core.teleport(o.pos, o.q || { x: 0, y: 0, z: 0, w: 1 }, o.vel || { x: 0, y: 0, z: 0 });
+  const fromUs = core.simTimeUs;
+  const d = makeDetector();
+  const st = emptyState();
+  const live = emptyState();
+  const sample = { ws: WS, colliders: rig.colliders, gaps: rig.gaps, frameW: AIR65_FRAME_W };
+  const hits = [];
+  const whys = [];
+  let first = true;
+  const onSample = () => {
+    const s = core.tickState(st);
+    const p = s.position, v = s.velocity, q = s.quaternion, w = s.omega;
+    Object.assign(sample, {
+      qx: q.x, qy: q.y, qz: q.z, qw: q.w, ox: w.x, oy: w.y, oz: w.z,
+      wx: -p.y * WS, wy: p.z * WS, wz: -p.x * WS, alt: p.z,   // toScene, as the page
+      vx: v.x, vy: v.y, vz: v.z, speed: Math.hypot(v.x, v.y, v.z),
+      clearance: s.clearance, armed: s.armed, throttle: stick.t,
+    });
+    if (first) { resetDetector(d, sample); d.lockout = 0; first = false; return; }
+    const ev = stepDetector(d, sample, 0.004);
+    if (ev && TRICK_BY_ID[ev]) { hits.push(ev); whys.push(d.lastWhy.replace(/\n/g, ' ')); }
+  };
+  let t = 0;
+  while (t < o.maxT) {
+    stick = script(t, core.tickState(live));
+    poll(onSample);
+    t += 0.004;
+  }
+  const hitsAfter = events.filter((e) => e.kind === 'contact' && e.tUs > fromUs);
+  return { hits, whys, contacts: hitsAfter.length, pole: d.lastPole, feat: d.lastFeat };
+}
+
+const clampTo = (v, a, b) => Math.max(a, Math.min(b, v));
+const headingOfQ = (q) => Math.atan2(2 * (q.x * q.y + q.w * q.z), 1 - 2 * (q.y * q.y + q.z * q.z));
+// A pilot in angle mode holding a circle of r0 m round c (module frame) at
+// vt m/s, yawing at yawRate rad/s about the body, altitude z0: the tilt it
+// wants, turned into sticks in its own heading (Betaflight's angle limit,
+// 60 degrees, at full stick; yaw right is nose right), that heading led by
+// lead s of the spin (angle mode's lag; without it the circle spirals out).
+function orbitPilot(c, r0, vt, yawRate, z0, dirSign, hover, lead = 0) {
+  const TILT = 60 * DEG, G = 9.81;
+  const yS = bfStick(-yawRate, 'yaw');
+  return (t, s) => {
+    const p = s.position, v = s.velocity;
+    const dx = p.x - c.x, dy = p.y - c.y, dist = Math.hypot(dx, dy) || 1e-6;
+    const rx = dx / dist, ry = dy / dist;
+    const tx = -ry * dirSign, ty = rx * dirSign;
+    const e = dist - r0;
+    const vdx = vt * tx - 2 * e * rx, vdy = vt * ty - 2 * e * ry;
+    const ax = 2.5 * (vdx - v.x) - (vt * vt / r0) * rx;
+    const ay = 2.5 * (vdy - v.y) - (vt * vt / r0) * ry;
+    const psi = headingOfQ(s.quaternion) + s.omega.z * lead;
+    const af = ax * Math.cos(psi) + ay * Math.sin(psi);
+    const al = -ax * Math.sin(psi) + ay * Math.cos(psi);
+    const tilt = Math.min(TILT, Math.hypot(Math.atan2(af, G), Math.atan2(al, G)));
+    return {
+      r: clampTo(Math.atan2(-al, G) / TILT, -1, 1),
+      p: clampTo(Math.atan2(af, G) / TILT, -1, 1),
+      y: t > 0.3 ? yS : 0,
+      t: clampTo(hover / Math.cos(tilt) + 0.12 * (z0 - p.z) - 0.08 * v.z, 0, 1),
+    };
+  };
+}
+
+test('bf core in the Rig: a full orbit of the spin pole is a Trippy with the pole bonus, three-quarters is not; a Barani is a Barani', async () => {
+  // The spin pole: scene metres (3.0, -1.5), RIG_PLAY.pole; module (1.5, -3.0).
+  const pole = { x: -RIG_PLAY.pole.z, y: -RIG_PLAY.pole.x };
+  const r0 = 0.6, vt = 2.0;
+  const orbitFor = (spinEnd) => {
+    const pilot = orbitPilot(pole, r0, vt, 7.5, 2.0, -1, 0.38, 0.08);
+    return flyRig((t, s) => (t < spinEnd ? pilot(t, s) : { r: 0, p: 0, y: 0, t: 0.38 }), {
+      mode: 'angle', pos: { x: pole.x - r0, y: pole.y, z: 2.0 }, vel: { x: 0, y: vt, z: 0 }, maxT: spinEnd + 0.6,
+    });
+  };
+  // Spinning from 0.3 s to 4.0 s: the path goes all the way round (about 425 deg).
+  const trip = await orbitFor(4.0);
+  assert.equal(trip.contacts, 0, 'clear of the pole');
+  assert.deepEqual(trip.hits, ['trippy'], 'why ' + trip.whys.join(' | '));
+  assert.equal(trip.pole, 1, 'the pole at the centre');
+  const f = trip.feat, v = featView(f);
+  assert.ok(v.yawSpan >= 4 * Math.PI && v.yawRate >= 300 * DEG);
+  assert.ok(f.orbitR >= 0.3 && f.orbitR <= 2.5 && f.orbitSpd >= 1);
+  assert.ok(f.orbitSweep >= 2 * Math.PI, 'a full orbit ' + f.orbitSweep);
+  // The same spin stopped at 2.7 s: over 720 deg of yaw, but the path only
+  // three-quarters of the way round (about 280 deg).
+  const part = await orbitFor(2.7);
+  assert.equal(part.contacts, 0);
+  assert.equal(part.hits.includes('trippy'), false, 'why ' + part.whys.join(' | '));
+  assert.ok(featView(part.feat).yawSpan >= 4 * Math.PI, 'the yaw is there');
+  assert.ok(part.feat.orbitSweep > Math.PI && part.feat.orbitSweep < 2 * Math.PI, 'short of a full orbit ' + part.feat.orbitSweep);
+  // Barani in acro: pitch till the nose is down, a half twist there, pitch
+  // on till upright, then hold 3.5 m. From 4 m up at scene (0, 3), the room's
+  // open middle ahead (the flip carries it forward, toward scene -z).
+  let phase = 0, rollInt = 0, pitchInt = 0, lastT = 0;
+  const bar = await flyRig((t, s) => {
+    const q = s.quaternion, w = s.omega, dt = t - lastT;
+    lastT = t;
+    const noseZ = 2 * (q.x * q.z - q.w * q.y), upZ = 1 - 2 * (q.x * q.x + q.y * q.y);
+    if (t < 0.3) return { r: 0, p: 0, y: 0, t: 0.45 };
+    pitchInt += w.y * dt;
+    if (phase === 0) { if (noseZ < -0.97) phase = 1; return { r: 0, p: 1, y: 0, t: 0.55 }; }
+    if (phase === 1) { rollInt += w.x * dt; if (rollInt > 2.9) phase = 2; return { r: 1, p: 0, y: 0, t: 0.55 }; }
+    if (phase === 2) { if (pitchInt > 5.6 && upZ > 0.9) phase = 3; return { r: 0, p: phase === 2 ? 1 : 0, y: 0, t: 0.55 }; }
+    return { r: 0, p: 0, y: 0, t: clampTo(0.4 + 0.1 * (3.5 - s.position.z) - 0.08 * s.velocity.z, 0, 1) };
+  }, { mode: 'acro', pos: { x: -3.0, y: 0, z: 4.0 }, maxT: 2.8 });
+  assert.equal(bar.contacts, 0);
+  assert.deepEqual(bar.hits, ['barani'], 'why ' + bar.whys.join(' | '));
+  assert.ok(bar.feat.upEnd > 0.9, 'ends upright');
+});
+
+test('bf core in the Rig: authored gaps fire through the crate slots; the loft overhang and an open edge do not', async () => {
+  // Level in angle mode, holding the height, sticks centred: the start speed carries it.
+  const hold = (z0) => (t, s) => ({ r: 0, p: 0, y: 0, t: clampTo(0.37 + 0.12 * (z0 - s.position.z) - 0.08 * s.velocity.z, 0, 1) });
+  const facePlusZ = { x: 0, y: 0, z: 1, w: 0 };                      // nose along scene +z
+  const facePlusX = { x: 0, y: 0, z: -Math.SQRT1_2, w: Math.SQRT1_2 }; // nose along scene +x
+  // Along x = 9 m through the three crate walls (slots 25, 21, 18 cm).
+  const crates = await flyRig(hold(1.0), { mode: 'angle', pos: { x: 2.0, y: -9.0, z: 1.0 }, vel: { x: -3.2, y: 0, z: 0 }, q: facePlusZ, maxT: 2.0 });
+  assert.equal(crates.contacts, 0, 'through clean');
+  assert.deepEqual(crates.hits, ['gap', 'gap', 'gap'], crates.whys.join(' | '));
+  assert.deepEqual(crates.whys.map((w) => w.replace(/^.*125  /, '')), ['crate slot 1 (25 cm)', 'crate slot 2 (21 cm)', 'crate slot 3 (18 cm)']);
+  // Under the loft's slab (2.7 m) at 1.5 m and out past its edge at x -7:
+  // the old rule (anything overhead within 4 m) scored this as a Gap.
+  const loft = await flyRig(hold(1.5), { mode: 'angle', pos: { x: 1.0, y: 9.6, z: 1.5 }, vel: { x: 0, y: -4.5, z: 0 }, q: facePlusX, maxT: 2.0 });
+  assert.equal(loft.contacts, 0);
+  assert.deepEqual(loft.hits, [], loft.whys.join(' | '));
+  // Past the crate walls' open end, 0.2 m off their -x face: one side only.
+  const edge = await flyRig(hold(1.0), { mode: 'angle', pos: { x: 2.0, y: -7.5, z: 1.0 }, vel: { x: -3.2, y: 0, z: 0 }, q: facePlusZ, maxT: 2.0 });
+  assert.equal(edge.contacts, 0);
+  assert.deepEqual(edge.hits, [], edge.whys.join(' | '));
+});
+
+test('the Rig, House and Warehouse gap volumes are openings: clear of every collider, walled on a side', () => {
+  if (!globalThis.document) rigScene();
+  for (const id of ['rig', 'house', 'warehouse']) {
+    const built = buildMap(THREE, id);
+    assert.deepEqual(built.gaps, mapGaps(id));
+    assert.ok(built.gaps.length > 0, id + ' has gaps');
+    for (const g of built.gaps) {
+      assert.ok(['x', 'y', 'z'].includes(g.axis), g.name);
+      let walled = 0;
+      for (const c of built.colliders) {
+        const ox = Math.min(g.max.x, c.max.x) - Math.max(g.min.x, c.min.x);
+        const oy = Math.min(g.max.y, c.max.y) - Math.max(g.min.y, c.min.y);
+        const oz = Math.min(g.max.z, c.max.z) - Math.max(g.min.z, c.min.z);
+        assert.ok(!(ox > 1e-3 && oy > 1e-3 && oz > 1e-3), id + ': ' + g.name + ' overlaps a collider');
+        // A collider touching one of the volume's sides (across its axis).
+        if (ox >= -0.02 && oy >= -0.02 && oz >= -0.02 && Math.min(ox, oy, oz) <= 0.02) walled++;
+      }
+      assert.ok(walled > 0, id + ': ' + g.name + ' has a wall');
+    }
+  }
+  assert.ok(mapGaps('rig').some((g) => g.name === 'loft hole') && mapGaps('rig').some((g) => g.name === 'tunnel'));
+  assert.ok(mapGaps('house').some((g) => g.name === 'bookshelf gap'));
+  assert.ok(mapGaps('warehouse').filter((g) => g.name.startsWith('rack ')).length === 48);
+  assert.deepEqual(mapGaps('city'), []);
 });
 
 test('Ryan bug: a power loop is only Power Loop, never also Matty', () => {
@@ -1150,7 +1424,7 @@ test('debug recorder dumps gyro/attitude/stick/throttle JSON for the last maneuv
   let t = 0;
   while (t < 2.0) {
     const yawS = t < 1.2 ? 0.95 : 0;
-    const rollS = t < 1.2 ? 0.5 : 0;
+    const rollS = 0;
     const thr = t < 1.2 ? 0.8 : 0.5;
     qp.step(dt, {
       roll: rateSetpoint(WHOOP_ACTUAL.type, rollS, WHOOP_ACTUAL.roll) * DEG,
@@ -1189,6 +1463,9 @@ test('sim.html wires tricks without touching physics or old keys', () => {
   assert.ok(simSrc.includes('const trickEv=tricks.step(trickSample,dt);'));
   assert.ok(simSrc.includes('core.advance(frameMs,!calib,onCoreEvent,trickSampling()?onTrickSample:null)'));
   assert.ok(simSrc.includes('const s=core.tickState(trickCs);'));
+  // The map's authored gaps and the quad's width go with each sample.
+  assert.ok(simSrc.includes('trickSample.gaps=trickGaps;') && simSrc.includes('trickSample.frameW=trickFrameW();'));
+  assert.ok(simSrc.includes('trickGaps=built.gaps||[];'));
   assert.ok(simSrc.includes('if(tricks&&!(coach&&coach.isActive()))tricks.frame();'));
   assert.equal(simSrc.includes('tricks.tick('), false, 'no per-frame detector step');
   assert.ok(simSrc.includes('try{') && simSrc.includes('tricks.step'));

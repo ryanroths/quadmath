@@ -33,9 +33,39 @@ export const DEAD = 1.15;
 export const SAMPLE_S = 0.004;
 export const FLIP_WIN_S = 1.2;
 export const ROLL_WIN_S = 1.5;
-// Each segment's attitude history (t, pitch, roll, yaw), for the windows:
+// Each segment's history, one row of HIST_W per step (t, pitch, roll, the
+// yaw about the vertical (vyaw, below), and the horizontal position in
+// metres, x and z), for the windows:
 // MANEUVER_MAX_S at 1 ms steps fits.
 export const HIST_CAP = 4608;
+export const HIST_W = 6;
+// Trippy Spin: >= 720 degrees of yaw at >= 300 deg/s (so inside 2.4 s) while
+// the path orbits a centre 0.3-2.5 m away, a full turn, at >= 1 m/s. Upright
+// or inverted.
+// The orbit centre within POLE_NEAR_M of a pole or post (a collider at most
+// POLE_W_M across and at least POLE_H_M tall) earns TRIPPY_POLE_MUL points.
+export const TRIPPY_WIN_S = 2.4;
+// The spin's yaw rate (300 deg/s), and the share of it the spin keeps while
+// the orbit is measured over all of it.
+export const TRIPPY_RATE = 5.236;
+export const TRIPPY_HOLD = 0.8;
+export const POLE_W_M = 0.5;
+export const POLE_H_M = 1.0;
+export const POLE_NEAR_M = 0.5;
+export const TRIPPY_POLE_MUL = 1.25;
+// Barani: a flip (>= 300 degrees of pitch) and a half twist (180 +- 45 degrees
+// of roll) inside one BARANI_WIN_S window, ending upright.
+export const BARANI_WIN_S = 1.5;
+// Gap, without an authored volume: both sides of the opening within
+// GAP_SIDE_K frame widths of the path, passed through at least
+// GAP_MIN_DEPTH_M. FRAME_W_M when the page does not say the quad's width.
+export const GAP_SIDE_K = 2.5;
+export const GAP_MIN_DEPTH_M = 0.1;
+export const FRAME_W_M = 0.09;
+// One authored gap scores again only after this long.
+export const GAP_REPEAT_S = 1.0;
+// No generic gap within this of an authored one (its walls start there).
+export const GAP_NEAR_M = 0.3;
 // Below this speed (m/s) the path has no direction to sweep (Powerloop).
 export const SWEEP_MIN_SPD = 0.8;
 // The recorder keeps one sample per REC_DT_S of segment time.
@@ -68,6 +98,7 @@ export const TRICK_LIST = Object.freeze([
   Object.freeze({ id: 'cubik', name: "Cubik's Rube", tier: 'Intermediate', points: 350, pointsIn: 450, type: 'Open Air' }),
   Object.freeze({ id: 'ham', name: 'Ham Spin', tier: 'Intermediate', points: 300, pointsIn: 300, type: 'Open Air' }),
   Object.freeze({ id: 'trippy', name: 'Trippy Spin', tier: 'Intermediate', points: 500, pointsIn: 500, type: 'Pole Dancing' }),
+  Object.freeze({ id: 'barani', name: 'Barani', tier: 'Novice', points: 100, pointsIn: 125, type: 'Open Air' }),
 ]);
 
 const BY_ID = Object.create(null);
@@ -76,9 +107,6 @@ export const TRICK_BY_ID = BY_ID;
 
 const DIVE_DROP = 3.4;
 const DIVE_VZ = -6.5;
-const GAP_UP_W = 14;
-const GAP_LAT_W = 7;
-const GAP_TRAVEL_W = 4.2;
 const PROX_M = 0.42;
 const PROX_SPD = 7.5;
 const COMBO_IDS = 16;
@@ -88,11 +116,11 @@ const HALF = PI * 0.78;
 const FULL = 5.2;
 const QTR = 1.15;
 const CLASS_IDS = [
-  'rubik', 'cubik', 'ham', 'trippy', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
+  'rubik', 'cubik', 'barani', 'ham', 'trippy', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
   'powerloop', 'matty', 'maverick', 'splits', 'cradle', 'flip', 'roll', 'yawspin',
 ];
 const SPEC = {
-  rubik: 0.12, cubik: 0.12, ham: 0.11, trippy: 0.11, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
+  rubik: 0.12, cubik: 0.12, barani: 0.12, ham: 0.11, trippy: 0.11, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
   halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
   cradle: 0.08, flip: 0, roll: 0, yawspin: 0,
 };
@@ -192,7 +220,8 @@ export function scoreTrick(id, priorSame, chainCount, uniqueN, opts) {
     * execMul(!!o.sloppy, !!o.bump)
     * comboMul(chainCount)
     * uniqueBonus(uniqueN)
-    * (o.streak == null ? 1 : o.streak);
+    * (o.streak == null ? 1 : o.streak)
+    * (o.bonus > 0 ? o.bonus : 1);
   if (raw <= 0) return 0;
   return Math.max(1, Math.round(raw));
 }
@@ -389,6 +418,20 @@ export function makeFeat() {
     // signed turn of the velocity in the vertical plane of the entry heading,
     // rad (+ climbing away from the entry heading, as a nose-up loop does).
     postMin: 0, sweep: 0, sweepTh: 0, sweepOn: 0,
+    // Trippy: the largest rise and fall of the turn about the vertical inside TRIPPY_WIN_S
+    // (rad) and the seconds between their ends; the circle the path fits over
+    // that yaw (radius m, rms misfit over radius, angle swept round its centre
+    // rad, mean horizontal speed m/s, its centre scene units) and whether a
+    // pole or post stands at the centre.
+    yawUp: 0, yawDn: 0, yawUpT: 0, yawDnT: 0,
+    // The turn about the world vertical (rad): each step's body rotation
+    // carried into the world, its up component. A tilted spin turns the
+    // heading at the full rate while its body-axis yaw sees only cos(tilt).
+    vyaw: 0,
+    orbitR: 0, orbitFit: 9, orbitSweep: 0, orbitTurn: 0, orbitSpd: 0, orbitCx: 0, orbitCz: 0, orbitPole: 0,
+    // Barani: the pitch and |roll| of the window (<= BARANI_WIN_S) with
+    // >= 300 degrees of pitch whose roll is nearest a half twist; up-Z at the end.
+    barP: 0, barR: 0, upEnd: 1,
   };
 }
 
@@ -412,6 +455,9 @@ export function resetFeat(f) {
   f.bump = 0; f.seg = 0; f.oppRY = 0; f.radMax = 0;
   f.flipUp = 0; f.flipDn = 0; f.rollUp = 0; f.rollDn = 0; f.rollUpT = 0; f.rollDnT = 0;
   f.postMin = 0; f.sweep = 0; f.sweepTh = 0; f.sweepOn = 0;
+  f.yawUp = 0; f.yawDn = 0; f.yawUpT = 0; f.yawDnT = 0; f.vyaw = 0;
+  f.orbitR = 0; f.orbitFit = 9; f.orbitSweep = 0; f.orbitTurn = 0; f.orbitSpd = 0; f.orbitCx = 0; f.orbitCz = 0; f.orbitPole = 0;
+  f.barP = 0; f.barR = 0; f.upEnd = 1;
   return f;
 }
 
@@ -441,34 +487,137 @@ export function copyFeat(src, dst) {
   d.flipUp = src.flipUp; d.flipDn = src.flipDn; d.rollUp = src.rollUp; d.rollDn = src.rollDn;
   d.rollUpT = src.rollUpT; d.rollDnT = src.rollDnT;
   d.postMin = src.postMin; d.sweep = src.sweep; d.sweepTh = src.sweepTh; d.sweepOn = src.sweepOn;
+  d.yawUp = src.yawUp; d.yawDn = src.yawDn; d.yawUpT = src.yawUpT; d.yawDnT = src.yawDnT; d.vyaw = src.vyaw;
+  d.orbitR = src.orbitR; d.orbitFit = src.orbitFit; d.orbitSweep = src.orbitSweep; d.orbitTurn = src.orbitTurn; d.orbitSpd = src.orbitSpd;
+  d.orbitCx = src.orbitCx; d.orbitCz = src.orbitCz; d.orbitPole = src.orbitPole;
+  d.barP = src.barP; d.barR = src.barR; d.upEnd = src.upEnd;
   return d;
 }
 
-// The largest rise and fall of column k of a segment's history (rows of t,
-// pitch, roll, yaw) inside any window of win seconds, and the time between
-// the two ends of each: monotonic deques, O(n). out: { up, upT, dn, dnT }.
-export function spanWithin(hist, n, k, win, out, dq) {
-  const o = out || { up: 0, upT: 0, dn: 0, dnT: 0 };
-  o.up = 0; o.upT = 0; o.dn = 0; o.dnT = 0;
+// The largest rise and fall of column k of a segment's history (rows of
+// stride w: t, pitch, roll, yaw, ...) inside any window of win seconds, the
+// time between the two ends of each and their rows: monotonic deques, O(n).
+// out: { up, upT, upA, upB, dn, dnT, dnA, dnB }.
+export function spanWithin(hist, n, k, win, out, dq, w) {
+  const W = w || HIST_W;
+  const o = out || {};
+  o.up = 0; o.upT = 0; o.upA = 0; o.upB = 0; o.dn = 0; o.dnT = 0; o.dnA = 0; o.dnB = 0;
   const q = dq || new Int32Array(Math.max(1, n) * 2);
   const half = q.length >> 1;
   // q[0..half): indices of rising minima; q[half..): falling maxima.
   let h0 = 0, t0 = 0, h1 = half, t1 = half;
   for (let b = 0; b < n; b++) {
-    const tb = hist[b * 4], ab = hist[b * 4 + k];
-    while (t0 > h0 && hist[q[t0 - 1] * 4 + k] >= ab) t0--;
+    const tb = hist[b * W], ab = hist[b * W + k];
+    while (t0 > h0 && hist[q[t0 - 1] * W + k] >= ab) t0--;
     q[t0++] = b;
-    while (hist[q[h0] * 4] < tb - win) h0++;
-    while (t1 > h1 && hist[q[t1 - 1] * 4 + k] <= ab) t1--;
+    while (hist[q[h0] * W] < tb - win) h0++;
+    while (t1 > h1 && hist[q[t1 - 1] * W + k] <= ab) t1--;
     q[t1++] = b;
-    while (hist[q[h1] * 4] < tb - win) h1++;
+    while (hist[q[h1] * W] < tb - win) h1++;
     const lo = q[h0], hi = q[h1];
-    const up = ab - hist[lo * 4 + k];
-    if (up > o.up) { o.up = up; o.upT = tb - hist[lo * 4]; }
-    const dn = hist[hi * 4 + k] - ab;
-    if (dn > o.dn) { o.dn = dn; o.dnT = tb - hist[hi * 4]; }
+    const up = ab - hist[lo * W + k];
+    if (up > o.up) { o.up = up; o.upT = tb - hist[lo * W]; o.upA = lo; o.upB = b; }
+    const dn = hist[hi * W + k] - ab;
+    if (dn > o.dn) { o.dn = dn; o.dnT = tb - hist[hi * W]; o.dnA = hi; o.dnB = b; }
   }
   return o;
+}
+
+// How the horizontal path (history columns 4, 5: metres) curves over rows
+// a..b, into out:
+// - sweep: how far the path's direction turned (|signed sum|, rad);
+// - turn: that over the sum of its turns either way (1: one way throughout);
+// - r: its radius of curvature, path length over sweep (m);
+// - spd: mean horizontal speed (m/s);
+// - cx, cz (m), kr (m), fit: the circle the path fits (Kasa's algebraic fit
+//   about the mean): its centre (the orbit's, for a pole there), radius and
+//   rms distance from it over that radius.
+export function orbitFit(hist, a, b, out, w) {
+  const W = w || HIST_W;
+  const o = out || {};
+  o.r = 0; o.fit = 9; o.sweep = 0; o.turn = 0; o.spd = 0; o.cx = 0; o.cz = 0; o.kr = 0;
+  const n = b - a + 1;
+  if (n < 8) return o;
+  let mx = 0, mz = 0;
+  for (let i = a; i <= b; i++) { mx += hist[i * W + 4]; mz += hist[i * W + 5]; }
+  mx /= n; mz /= n;
+  let suu = 0, svv = 0, suv = 0, suuu = 0, svvv = 0, suvv = 0, svuu = 0;
+  for (let i = a; i <= b; i++) {
+    const u = hist[i * W + 4] - mx, v = hist[i * W + 5] - mz;
+    suu += u * u; svv += v * v; suv += u * v;
+    suuu += u * u * u; svvv += v * v * v; suvv += u * v * v; svuu += v * u * u;
+  }
+  const det = suu * svv - suv * suv;
+  if (!(Math.abs(det) > 1e-12)) return o;
+  const ru = 0.5 * (suuu + suvv), rv = 0.5 * (svvv + svuu);
+  const uc = (ru * svv - rv * suv) / det, vc = (rv * suu - ru * suv) / det;
+  const kr = Math.sqrt(uc * uc + vc * vc + (suu + svv) / n);
+  const cx = mx + uc, cz = mz + vc;
+  let res = 0, path = 0, turnSum = 0, turnAbs = 0, haveDir = 0, dir = 0;
+  let px = hist[a * W + 4], pz = hist[a * W + 5];
+  for (let i = a; i <= b; i++) {
+    const x = hist[i * W + 4], z = hist[i * W + 5];
+    const dist = Math.hypot(x - cx, z - cz);
+    res += (dist - kr) * (dist - kr);
+    const step = Math.hypot(x - px, z - pz);
+    // The direction of travel over each 2 cm of path or more (finer steps
+    // are noise at 4 ms).
+    if (step >= 0.02) {
+      const nd = Math.atan2(z - pz, x - px);
+      if (haveDir) {
+        const dd = unwrapDelta(dir, nd);
+        turnSum += dd; turnAbs += Math.abs(dd);
+      }
+      dir = nd; haveDir = 1;
+      path += step;
+      px = x; pz = z;
+    }
+  }
+  const dt = hist[b * W] - hist[a * W];
+  const sweep = Math.abs(turnSum);
+  o.sweep = sweep; o.turn = turnAbs > 0 ? sweep / turnAbs : 0;
+  o.r = sweep > 1e-6 ? path / sweep : 99;
+  o.spd = dt > 0 ? path / dt : 0;
+  o.cx = cx; o.cz = cz; o.kr = kr; o.fit = kr > 0 ? Math.sqrt(res / n) / kr : 9;
+  return o;
+}
+
+// The Barani window: among the windows of at most win seconds with at least
+// minP of pitch, the one whose |roll| is nearest pi. out: { p, r } (rad), 0, 0
+// when no window turns minP. O(n x rows per window), once a segment.
+export function baraniWithin(hist, n, win, minP, out, w) {
+  const W = w || HIST_W;
+  const o = out || {};
+  o.p = 0; o.r = 0;
+  let best = 1e9;
+  for (let b = 1; b < n; b++) {
+    const tb = hist[b * W], pb = hist[b * W + 1], rb = hist[b * W + 2];
+    for (let a = b - 1; a >= 0 && tb - hist[a * W] <= win; a--) {
+      const dp = Math.abs(pb - hist[a * W + 1]);
+      if (dp < minP) continue;
+      const dr = Math.abs(rb - hist[a * W + 2]);
+      const off = Math.abs(dr - Math.PI);
+      if (off < best) { best = off; o.p = dp; o.r = dr; }
+    }
+  }
+  return o;
+}
+
+// Is there a pole or post (a collider at most POLE_W_M across, at least
+// POLE_H_M tall) within POLE_NEAR_M of the point (scene units x, z)?
+export function poleNear(colliders, x, z, ws) {
+  if (!colliders || !colliders.length) return 0;
+  const s = ws || 3.5;
+  for (let i = 0; i < colliders.length; i++) {
+    const c = colliders[i];
+    if (!c || !c.min || !c.max) continue;
+    const w = Math.max(c.max.x - c.min.x, c.max.z - c.min.z);
+    if (w > POLE_W_M * s || c.max.y - c.min.y < POLE_H_M * s) continue;
+    const dx = x < c.min.x ? c.min.x - x : (x > c.max.x ? x - c.max.x : 0);
+    const dz = z < c.min.z ? c.min.z - z : (z > c.max.z ? z - c.max.z : 0);
+    if (Math.hypot(dx, dz) <= POLE_NEAR_M * s) return 1;
+  }
+  return 0;
 }
 
 function atLeast(x, a, fade) {
@@ -531,10 +680,16 @@ export function featView(f) {
   const loopRise = f.altMax - f.alt0;
   const loopRet = f.alt0 - (f.postMin == null ? f.altMax : f.postMin);
   const loopSweep = flipDir > 0 ? -(f.sweep || 0) : (f.sweep || 0);
+  // Trippy: the yaw's size and mean rate between its two ends.
+  const yawUp = f.yawUp || 0, yawDn = f.yawDn || 0;
+  const yawSpan = yawUp >= yawDn ? yawUp : yawDn;
+  const yawT = yawUp >= yawDn ? (f.yawUpT || 0) : (f.yawDnT || 0);
+  const yawRate = yawT > 0 ? yawSpan / yawT : 0;
   return {
     absP, absR, absY, head, span, drop, follow, against, inv, close, hEnd, meanDot,
     invFol, invAg, pathP, pathR, pathY, under, over, obj, objOrbit, opp, front, rad,
     flipSpan, flipDir, rollSpan, rollRate, loopRise, loopRet, loopSweep,
+    yawSpan, yawRate,
   };
 }
 
@@ -601,36 +756,31 @@ export function classifyFeat(f, out) {
     atLeast(v.inv, 0.12, 0.08),
     atMost(absY, 2.4, 0.7),
   );
+  // Barani: a flip with a half twist inside BARANI_WIN_S, ending upright.
+  _sc.barani = mul(
+    atLeast(f.barP, 5.236, 0),
+    inBand(f.barR, 2.356, 3.927, 0),
+    atLeast(f.upEnd, 0.6, 0),
+  );
   {
-    // Camera-lock orbit around a nearby pole/tree: ≥360° yaw while circling,
-    // craft stays mostly level, camera pointed at the object (sideways to
-    // velocity). After the 1.25× backyard, a real ficus/palm orbit is R≈4–10
-    // wu (radMax≈8–20, travelH≈25–63, period≈1.4–3.6 s, peak yaw ≈ v/R).
-    // In-place pole spins still pass via the tight-rad term. Coordinated
-    // turns keep follow high; open-air punches have no nearby object.
+    // Trippy Spin: >= 720 degrees of turn about the vertical at >= 300 deg/s
+    // between its two ends, while the path orbits a centre over the whole
+    // spin: it curves at a radius of 0.3-2.5 m, its direction turns a full
+    // turn or more, one way (80 % of its turning), at >= 1 m/s. Upright or
+    // inverted; no object needed (one at the centre earns TRIPPY_POLE_MUL).
     _sc.trippy = mul(
-      atLeast(absY, TAU, 0.70),
-      atLeast(v.pathY, TAU, 0.70),
-      atMost(f.tYaw360, 3.20, 0.80),
-      atLeast(f.peakY, 1.60, 0.70),
-      atMost(absR, 1.80, 0.70),
-      atMost(absP, 1.60, 0.60),
-      atMost(v.pathR, 2.20, 0.90),
-      atMost(v.pathP, 2.00, 0.80),
-      atLeast(f.upMin, 0.45, 0.25),
-      atMost(v.inv, 0.12, 0.08),
-      atLeast(v.objOrbit, 0.45, 0.30),
-      atMost(v.rad, 22, 8),
-      atMost(f.travelH, 80, 24),
-      atMost(v.meanDot, 0.42, 0.20),
-      Math.max(atMost(v.rad, 8.0, 3.0), atMost(v.close, 0.55, 0.18)),
-      atLeast(f.dur, 0.55, 0.15),
+      atLeast(v.yawSpan, 12.566, 0),
+      atLeast(v.yawRate, 5.236, 0),
+      inBand(f.orbitR, 0.3, 2.5, 0),
+      atLeast(f.orbitSweep, 6.2832, 0),
+      atLeast(f.orbitTurn, 0.8, 0),
+      atLeast(f.orbitSpd, 1.0, 0),
     );
     // Ham Spin: inverted yaw spin. Tight in-place ≥360° yaw in ≤1.8s +
     // little roll/pitch/drift, but the craft stays upside-down the whole
     // window (tilt >135° from level, upZ < −0.70). Flips/rolls that only
     // pass through inverted have large pitch/roll and an upright upMax,
-    // so they do not score Ham. Upright orbits are Trippy, not Ham.
+    // so they do not score Ham. An orbit is Trippy, upright or inverted.
     _sc.ham = mul(
       atLeast(absY, TAU, 0.70),
       atLeast(v.pathY, TAU, 0.70),
@@ -800,7 +950,7 @@ export function classifyFeat(f, out) {
   }
   if (bestId === 'flip' && _sc.matty > 0.55 && f.pitch > 0) { bestId = 'matty'; best = _sc.matty; }
   if (bestId === 'yawspin' && _sc.ham > 0.42) { bestId = 'ham'; best = _sc.ham; }
-  if (bestId === 'trippy' && _sc.ham > 0.42) { bestId = 'ham'; best = _sc.ham; }
+  if (bestId === 'ham' && _sc.trippy > 0.42) { bestId = 'trippy'; best = _sc.trippy; }
   if (bestId === 'yawspin' && _sc.trippy > 0.42) { bestId = 'trippy'; best = _sc.trippy; }
   if (bestId === 'roll' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
   if (bestId === 'yawspin' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
@@ -835,7 +985,7 @@ export function makeDetector() {
     lastBump: 0,
     // The open segment's attitude history (t, pitch, roll, yaw per row) and
     // the scratch the rotation windows use.
-    hist: new Float64Array(HIST_CAP * 4),
+    hist: new Float64Array(HIST_CAP * HIST_W),
     histN: 0,
     dq: new Int32Array(HIST_CAP * 2),
     span: { up: 0, upT: 0, dn: 0, dnT: 0 },
@@ -847,7 +997,18 @@ export function makeDetector() {
     px: 0, py: 0, pz: 0,
     hangT: 0, hangGot: 0, hangCd: 0,
     diveOn: 0, diveAlt: 0, diveDrop: 0, diveCd: 0,
-    gapOn: 0, gapX: 0, gapY: 0, gapZ: 0, gapTravel: 0, gapSpd: 0, gapKind: 0, gapCd: 0,
+    // Gap. Authored (sample.gaps): per volume, the face a pass came in by
+    // (-1: none, or in through a side) and when it last scored; a pass during
+    // a rotation waits for its end (gapPend). Generic: both sides near the
+    // path along one axis (gapKind 1: x walls, moving along z; 2: z walls),
+    // from gapS0 to gapAlong along it, moving gapSign.
+    gapVols: null, gapFace: null, gapLastT: null, gapPend: '', gapPendT: 0, clock: 0,
+    gapOn: 0, gapKind: 0, gapS0: 0, gapAlong: 0, gapSign: 1, gapCd: 0,
+    gapSeq: 0, gapNote: '',
+    // Trippy and Barani scratch; the colliders and scale of the last step.
+    orb: { r: 0, fit: 9, sweep: 0, turn: 0, spd: 0, cx: 0, cz: 0, kr: 0 },
+    bar: { p: 0, r: 0 },
+    cols: null, ws: 3.5, lastPole: 0,
     proxT: 0, proxCd: 0,
     lockout: 0,
     airT: 0, landT: 0, armedPrev: 0, wasAir: 0,
@@ -915,7 +1076,8 @@ export function resetDetector(d, sample) {
   resetFeat(d.feat);
   d.hangT = 0; d.hangGot = 0;
   d.diveOn = 0; d.diveDrop = 0;
-  d.gapOn = 0; d.gapTravel = 0;
+  d.gapOn = 0; d.gapPend = '';
+  d.gapVols = null; d.gHave = 0;
   d.proxT = 0;
   d.lockout = 0;
   d.landT = 0;
@@ -993,13 +1155,84 @@ export function comboRemain(c, now) {
   return left > 0 ? left : 0;
 }
 
-function inGap(clr) {
-  const latX = clr.px + clr.nx;
-  const latZ = clr.pz + clr.nz;
-  if (latX < GAP_LAT_W && clr.px < 3.2 && clr.nx < 3.2) return 1;
-  if (latZ < GAP_LAT_W && clr.pz < 3.2 && clr.nz < 3.2) return 2;
-  if (clr.up < GAP_UP_W) return 3;
+// A step's segment against an axis-aligned volume (slab method): the entry
+// and exit as fractions of the step and the face of each (axis 0 x, 1 y,
+// 2 z, times 2, plus 1 for the max face). out.hit 0 when it misses.
+const AX = ['x', 'y', 'z'];
+function segBox(p0, p1, v, out) {
+  let tIn = -Infinity, tOut = Infinity, fIn = -1, fOut = -1;
+  for (let k = 0; k < 3; k++) {
+    const a = AX[k], o = p0[a], dd = p1[a] - o, lo = v.min[a], hi = v.max[a];
+    if (Math.abs(dd) < 1e-12) {
+      if (o < lo || o > hi) { out.hit = 0; return out; }
+      continue;
+    }
+    let t0 = (lo - o) / dd, t1 = (hi - o) / dd, f0 = k * 2, f1 = k * 2 + 1;
+    if (t0 > t1) { const tt = t0; t0 = t1; t1 = tt; const ff = f0; f0 = f1; f1 = ff; }
+    if (t0 > tIn) { tIn = t0; fIn = f0; }
+    if (t1 < tOut) { tOut = t1; fOut = f1; }
+  }
+  out.hit = tIn <= tOut && tOut >= 0 && tIn <= 1 ? 1 : 0;
+  out.tIn = tIn; out.tOut = tOut; out.fIn = fIn; out.fOut = fOut;
+  return out;
+}
+const _seg = { hit: 0, tIn: 0, tOut: 0, fIn: -1, fOut: -1 };
+const _p0 = { x: 0, y: 0, z: 0 };
+const _p1 = { x: 0, y: 0, z: 0 };
+
+// Authored gaps for one step: the volumes this step's segment passes into
+// or out of. A pass goes in through one face across the volume's axis and
+// out through the other; in or out through a side is a skim. Returns the
+// passed volume, or null.
+function authoredGapStep(d, vols, x0, y0, z0, x1, y1, z1) {
+  if (d.gapVols !== vols) {
+    d.gapVols = vols;
+    d.gapFace = vols ? new Int8Array(vols.length).fill(-1) : null;
+    d.gapLastT = vols ? new Float64Array(vols.length).fill(-1e9) : null;
+  }
+  if (!vols || !vols.length) return null;
+  _p0.x = x0; _p0.y = y0; _p0.z = z0; _p1.x = x1; _p1.y = y1; _p1.z = z1;
+  let passed = null;
+  for (let i = 0; i < vols.length; i++) {
+    const v = vols[i];
+    const r = segBox(_p0, _p1, v, _seg);
+    if (!r.hit) { if (d.gapFace[i] !== -1) d.gapFace[i] = -1; continue; }
+    const ax = AX.indexOf(v.axis) * 2;
+    if (r.tIn > 0) {
+      // In this step: by an axis face, or a side.
+      d.gapFace[i] = (r.fIn === ax || r.fIn === ax + 1) ? r.fIn : -2;
+    } else if (d.gapFace[i] === -1) {
+      d.gapFace[i] = -2;   // already inside (a respawn, a teleport): not a pass
+    }
+    if (r.tOut < 1) {
+      // Out this step: through the far axis face is a pass.
+      const fin = d.gapFace[i];
+      const ok = fin >= 0 && (r.fOut === ax || r.fOut === ax + 1) && r.fOut !== fin;
+      d.gapSeq++;
+      d.gapNote = (ok ? 'through ' : (fin === -2 ? 'skimmed (in by a side) ' : 'skimmed (out by a side) ')) + v.name;
+      d.gapFace[i] = -1;
+      if (ok && d.clock - d.gapLastT[i] >= GAP_REPEAT_S) { d.gapLastT[i] = d.clock; passed = v; }
+    }
+  }
+  return passed;
+}
+
+// Within GAP_NEAR_M (margin, scene units) of an authored volume?
+function nearAuthored(vols, x, y, z, margin) {
+  if (!vols) return 0;
+  for (let i = 0; i < vols.length; i++) {
+    const v = vols[i];
+    if (x >= v.min.x - margin && x <= v.max.x + margin && y >= v.min.y - margin && y <= v.max.y + margin
+      && z >= v.min.z - margin && z <= v.max.z + margin) return 1;
+  }
   return 0;
+}
+
+// Generic gap, the fallback: the walls on both sides of the path (along the
+// axis it moves most along) within sideMax of it. 1: x walls, 2: z walls, 0.
+function genericGapKind(clr, svx, svz, sideMax) {
+  if (Math.abs(svz) >= Math.abs(svx)) return clr.px <= sideMax && clr.nx <= sideMax ? 1 : 0;
+  return clr.pz <= sideMax && clr.nz <= sideMax ? 2 : 0;
 }
 
 function beginFeat(d, alt, wx, wz, head, speed, thr) {
@@ -1007,7 +1240,8 @@ function beginFeat(d, alt, wx, wz, head, speed, thr) {
   d.recNextT = 0;
   const f = resetFeat(d.feat);
   f.alt0 = alt; f.alt1 = alt; f.altMin = alt; f.altMax = alt; f.postMin = alt;
-  d.hist[0] = 0; d.hist[1] = 0; d.hist[2] = 0; d.hist[3] = 0;
+  const ws0 = d.ws || 3.5;
+  d.hist[0] = 0; d.hist[1] = 0; d.hist[2] = 0; d.hist[3] = 0; d.hist[4] = wx / ws0; d.hist[5] = wz / ws0;
   d.histN = 1;
   f.h0x = wx; f.h0z = wz; f.h1x = wx; f.h1z = wz;
   f.head0 = head; f.head1 = head;
@@ -1024,6 +1258,12 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
   f.dur += step;
   f.n += 1;
   f.pitch += dp; f.roll += dr; f.yaw += dy;
+  {
+    // The world-up component of this step's rotation (the body axes' up
+    // components from the step's attitude).
+    const qx = d.qx, qy = d.qy, qz = d.qz, qw = d.qw;
+    f.vyaw += 2 * (qx * qz - qw * qy) * dr + 2 * (qy * qz + qw * qx) * dp + (1 - 2 * (qx * qx + qy * qy)) * dy;
+  }
   f.pathP += Math.abs(dp); f.pathR += Math.abs(dr); f.pathY += Math.abs(dy);
   const ar = Math.abs(sample.ox || 0), ap = Math.abs(sample.oy || 0), ay = Math.abs(sample.oz || 0);
   if (ap > f.peakP) f.peakP = ap;
@@ -1035,8 +1275,10 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
   if (alt > f.altMax) { f.altMax = alt; f.postMin = alt; } else if (alt < f.postMin) f.postMin = alt;
   f.alt1 = alt;
   if (d.histN < HIST_CAP) {
-    const hi = d.histN * 4;
-    d.hist[hi] = f.dur; d.hist[hi + 1] = f.pitch; d.hist[hi + 2] = f.roll; d.hist[hi + 3] = f.yaw;
+    const hi = d.histN * HIST_W;
+    const wsH = d.ws || 3.5;
+    d.hist[hi] = f.dur; d.hist[hi + 1] = f.pitch; d.hist[hi + 2] = f.roll; d.hist[hi + 3] = f.vyaw;
+    d.hist[hi + 4] = wx / wsH; d.hist[hi + 5] = wz / wsH;
     d.histN += 1;
   }
   {
@@ -1070,6 +1312,7 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
   if (d.clr.over < 8) f.overN += 1;
   if (d.clr.near < 7) f.objNearN += 1;
   if (d.clr.near < 14) f.objOrbitN += 1;
+  f.upEnd = upZ;
   if (upZ < f.upMin) f.upMin = upZ;
   if (upZ > f.upMax) f.upMax = upZ;
   if (upZ < -0.35) f.invT += step;
@@ -1106,6 +1349,42 @@ export function windowFeat(d) {
   f.flipUp = s.up; f.flipDn = s.dn;
   spanWithin(d.hist, d.histN, 2, ROLL_WIN_S, d.span, d.dq);
   f.rollUp = s.up; f.rollUpT = s.upT; f.rollDn = s.dn; f.rollDnT = s.dnT;
+  // Trippy: the yaw window, then the circle the path fits over it.
+  spanWithin(d.hist, d.histN, 3, TRIPPY_WIN_S, d.span, d.dq);
+  f.yawUp = s.up; f.yawUpT = s.upT; f.yawDn = s.dn; f.yawDnT = s.dnT;
+  const up = s.up >= s.dn;
+  let a = up ? s.upA : s.dnA, b = up ? s.upB : s.dnB;
+  // The orbit is measured over the whole spin: out from that window, a
+  // 0.1 s piece at a time, while the turn keeps going the same way at
+  // TRIPPY_HOLD of TRIPPY_RATE or more.
+  {
+    const H = d.hist, W = HIST_W, sg = up ? 1 : -1, min = TRIPPY_RATE * TRIPPY_HOLD;
+    while (a > 0) {
+      let k = a - 1;
+      while (k > 0 && H[a * W] - H[k * W] < 0.1) k--;
+      const dt = H[a * W] - H[k * W];
+      if (!(dt > 0) || sg * (H[a * W + 3] - H[k * W + 3]) < min * dt) break;
+      a = k;
+    }
+    while (b < d.histN - 1) {
+      let k = b + 1;
+      while (k < d.histN - 1 && H[k * W] - H[b * W] < 0.1) k++;
+      const dt = H[k * W] - H[b * W];
+      if (!(dt > 0) || sg * (H[k * W + 3] - H[b * W + 3]) < min * dt) break;
+      b = k;
+    }
+  }
+  const o = orbitFit(d.hist, a, b, d.orb);
+  f.orbitR = o.r; f.orbitFit = o.fit; f.orbitSweep = o.sweep; f.orbitTurn = o.turn; f.orbitSpd = o.spd;
+  const ws = d.ws || 3.5;
+  f.orbitCx = o.cx * ws; f.orbitCz = o.cz * ws;
+  f.orbitPole = o.kr > 0 ? poleNear(d.cols, f.orbitCx, f.orbitCz, ws) : 0;
+  // Barani: only worth the scan when a flip's worth of pitch is there.
+  const pw = spanWithin(d.hist, d.histN, 1, BARANI_WIN_S, d.span, d.dq);
+  if (Math.max(pw.up, pw.dn) >= 5.236) {
+    const bw = baraniWithin(d.hist, d.histN, BARANI_WIN_S, 5.236, d.bar);
+    f.barP = bw.p; f.barR = bw.r;
+  } else { f.barP = 0; f.barR = 0; }
   return f;
 }
 
@@ -1118,6 +1397,7 @@ function finishManeuver(d) {
   d.lastWhy = cls.why || '';
   d.lastId = cls.id || '';
   d.lastDir = (d.feat.flipUp || 0) >= (d.feat.flipDn || 0) ? 1 : -1;
+  d.lastPole = cls.id === 'trippy' && d.feat.orbitPole ? 1 : 0;
   d.lastSloppy = (d.feat.seg && LOOP_IDS[cls.id]) ? 1 : 0;
   d.lastBump = d.feat.bump ? 1 : 0;
   try { d.recJson = encodeRecJson(d); } catch (e) { d.recJson = ''; }
@@ -1175,6 +1455,9 @@ export function stepDetector(d, sample, dt) {
   if (contact) { d.airT = 0; } else { d.airT += step; if (d.airT > 0.25) d.wasAir = 1; }
 
   scanClearance(wx, wy, wz, sample.colliders, d.clr);
+  d.cols = sample.colliders || null;
+  d.ws = ws;
+  if (!d.gHave) { d.gx = wx; d.gy = wy; d.gz = wz; d.gHave = 1; }
 
   let hit = null;
   const rotating = rate >= RATE_START;
@@ -1222,29 +1505,57 @@ export function stepDetector(d, sample, dt) {
     }
   } else if (d.diveCd > 0) d.diveCd -= step;
 
-  const kind = inGap(d.clr);
-  if (!hit && !d.live && armed && d.gapCd <= 0) {
-    if (kind && speed > 2.8) {
-      if (!d.gapOn) {
-        d.gapOn = 1; d.gapX = wx; d.gapY = wy; d.gapZ = wz; d.gapTravel = 0; d.gapSpd = speed; d.gapKind = kind;
-      } else {
-        d.gapTravel = Math.hypot(wx - d.gapX, wy - d.gapY, wz - d.gapZ);
-        if (speed > d.gapSpd) d.gapSpd = speed;
-      }
+  // Gap. Authored volumes first; the generic rule only away from them.
+  d.clock += step;
+  const passed = authoredGapStep(d, sample.gaps, d.gx, d.gy, d.gz, wx, wy, wz);
+  let inAuthored = 0;
+  if (d.gapFace) for (let i = 0; i < d.gapFace.length; i++) if (d.gapFace[i] !== -1) { inAuthored = 1; break; }
+  if (!inAuthored) inAuthored = nearAuthored(sample.gaps, wx, wy, wz, GAP_NEAR_M * ws);
+  if (passed) {
+    const why = (BY_ID.gap ? BY_ID.gap.name : 'Gap') + '  Beginner  ' + (BY_ID.gap ? BY_ID.gap.points : 125) + '  ' + passed.name;
+    if (!hit && !d.live && armed) { hit = 'gap'; d.lastId = 'gap'; d.lastWhy = why; d.gapCd = 1.0; }
+    else if (armed) { d.gapPend = why; d.gapPendT = d.clock; }
+  }
+  if (!hit && !d.live && d.gapPend && armed) {
+    if (d.clock - d.gapPendT <= 1.0) { hit = 'gap'; d.lastId = 'gap'; d.lastWhy = d.gapPend; d.gapCd = 1.0; }
+    d.gapPend = '';
+  }
+  {
+    // The way it moves in the scene, from the scene positions themselves.
+    const svx = wx - d.gx, svz = wz - d.gz;
+    const sideMax = GAP_SIDE_K * (sample.frameW > 0 ? sample.frameW : FRAME_W_M) * ws;
+    const k = !d.live && armed && !inAuthored ? genericGapKind(d.clr, svx, svz, sideMax) : 0;
+    if (inAuthored && d.gapOn) {
+      // An authored gap took over: it scores, not the generic one.
+      d.gapOn = 0;
+    } else if (k) {
+      const along = k === 1 ? wz : wx;
+      const vAl = k === 1 ? svz : svx;
+      if (!d.gapOn || d.gapKind !== k) {
+        d.gapOn = 1; d.gapKind = k; d.gapS0 = along; d.gapAlong = along; d.gapSign = vAl < 0 ? -1 : 1;
+      } else d.gapAlong = along;
     } else if (d.gapOn) {
-      if (d.gapTravel > GAP_TRAVEL_W && d.gapSpd > 3.4) {
-        hit = 'gap';
-        d.gapCd = 2.2;
-        d.lastId = 'gap';
-        d.lastWhy = (BY_ID.gap ? BY_ID.gap.name : 'Gap')
-          + '  Beginner  ' + (BY_ID.gap ? BY_ID.gap.points : 125)
-          + '  travel=' + d.gapTravel.toFixed(1);
+      // Out of the opening: through, if it went on the same way and covered
+      // the minimum depth between the walls; otherwise a skim.
+      const along = d.gapKind === 1 ? wz : wx;
+      const depth = (d.gapAlong - d.gapS0) * d.gapSign;
+      const onward = (along - d.gapAlong) * d.gapSign > 0;
+      const ok = depth >= GAP_MIN_DEPTH_M * ws && onward && !d.live;
+      d.gapSeq++;
+      d.gapNote = ok ? 'through an opening (' + (depth / ws).toFixed(2) + ' m between walls)'
+        : 'skimmed an opening (' + (depth / ws).toFixed(2) + ' m' + (onward ? '' : ', turned back') + ')';
+      if (ok && !hit && d.gapCd <= 0) {
+        hit = 'gap'; d.gapCd = 1.0; d.lastId = 'gap';
+        d.lastWhy = (BY_ID.gap ? BY_ID.gap.name : 'Gap') + '  Beginner  ' + (BY_ID.gap ? BY_ID.gap.points : 125)
+          + '  walls within ' + (sideMax / ws).toFixed(2) + ' m, ' + (depth / ws).toFixed(2) + ' m through';
       }
-      d.gapOn = 0; d.gapTravel = 0;
+      d.gapOn = 0;
     }
-  } else if (d.gapCd > 0) d.gapCd -= step;
+    if (d.gapCd > 0) d.gapCd -= step;
+  }
+  d.gx = wx; d.gy = wy; d.gz = wz;
 
-  if (!hit && !d.live && armed && d.proxCd <= 0 && !d.gapOn) {
+  if (!hit && !d.live && armed && d.proxCd <= 0 && !d.gapOn && !inAuthored) {
     const nearM = d.clr.near / ws;
     const close = nearM < PROX_M && speed > PROX_SPD && !contact && (sample.clearance == null || sample.clearance > 0.12);
     if (close) {
@@ -1560,8 +1871,9 @@ export function createTricks(opts) {
     const b2b = sessionLast === id ? sessionB2b + 1 : 0;
     const sloppy = !!det.lastSloppy;
     const bump = !!det.lastBump;
+    const pole = id === 'trippy' && det.lastPole;
     const got = pushCombo(combo, id, t, {
-      prior, b2b, sloppy, bump, indoor, streak,
+      prior, b2b, sloppy, bump, indoor, streak, bonus: pole ? TRIPPY_POLE_MUL : 1,
     });
     sessionCount[id] = prior + 1;
     if (sessionLast === id) sessionB2b += 1;
@@ -1569,7 +1881,7 @@ export function createTricks(opts) {
     sessionLast = id;
     if (got > 0) streak = nextStreak(streak, trickPoints(id, indoor));
     if (bump) streak = Math.max(1, streak * 0.5);
-    popName = trickName(id, det.lastDir);
+    popName = trickName(id, det.lastDir) + (pole ? ' · POLE' : '');
     popUntil = t + 1.05;
     if (got > 0) playBlip(audio, muted, 'trick', combo.mul);
     recordBest(store, mapId, combo.points, session);
@@ -1739,6 +2051,7 @@ export function createTricks(opts) {
     lastWhy: function () { return det.lastWhy; },
     lastId: function () { return det.lastId; },
     lastDir: function () { return det.lastDir; },
+    lastPole: function () { return det.lastPole; },
     lastSloppy: function () { return det.lastSloppy; },
     lastBump: function () { return det.lastBump; },
     indoor: function () { return indoor; },
