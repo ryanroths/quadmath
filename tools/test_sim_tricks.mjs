@@ -19,7 +19,9 @@ import {
 } from '../sim-tricks.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
 import { mapThrottle3d } from '../sim-3d.js';
-import { rateSetpoint } from '../sim-rates.js';
+import { rateSetpoint, pilotRatesDefault } from '../sim-rates.js';
+import { createBfCore, emptyState } from '../sim-core-adapter.js';
+import { SimCore } from '../vendor/sim-core/sim-core.js';
 import { BACKYARD_PLAY, CITY_PLAY } from '../sim-maps.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -802,6 +804,212 @@ test('Actual half-stick is above RATE_START so Maverick can open a window', () =
   assert.ok(RATE_START < 1.2, 'RATE_START should catch whoop Actual half-stick');
 });
 
+// ---- The library on the bf core ----
+//
+// sim-core (Betaflight 4.5.1, the owner's Air65 on the owner's diff), sampled
+// as the page samples it: the core's onSample every 4 ms of sim time, the
+// latest tick read with tickState (sim-core-adapter.js), the detector stepped
+// at 4 ms. Armed on a floor 60 m down, then put at the maneuver's start pose
+// and speed (a pose event), in acro. The library's body rates become sticks
+// through the diff's own rates (Actual: 20 deg/s centre, 740 max on roll and
+// pitch, 700 on yaw; Betaflight's yaw stick right is nose right, the module
+// frame's negative yaw); its throttle is scaled by BF_THR for the Air65, and a
+// phase's tS is a throttle stick as it is.
+const BF_THR = 0.7;
+const BF_RATES = pilotRatesDefault();
+let bfWasm = null;
+function bfStick(radps, axis) {
+  const want = Math.abs(radps) / DEG;
+  if (want < 1) return 0;
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 40; i++) {
+    const m = (lo + hi) / 2;
+    if (rateSetpoint(BF_RATES.type, m, BF_RATES[axis]) < want) lo = m; else hi = m;
+  }
+  return Math.sign(radps) * hi;
+}
+async function flyBf(phases, opts) {
+  const o = opts || {};
+  if (!bfWasm) bfWasm = WebAssembly.compile(readFileSync(join(root, 'vendor/sim-core/sim-core.wasm')));
+  const core = await createBfCore({
+    SimCore,
+    wasm: await bfWasm,
+    airframe: JSON.parse(readFileSync(join(root, 'vendor/sim-core/airframes/air65.json'), 'utf8')),
+    diff: readFileSync(join(root, 'vendor/sim-core/configs/air65-ryfly-2026-10-23.txt'), 'utf8'),
+    world: { floorZ: -60, boxes: [], triggers: [] },
+  });
+  core.respawn({ x: 0, y: 0, z: -59.98 }, { x: 0, y: 0, z: 0, w: 1 });
+  core.setMode('acro');
+  let wall = 0;
+  let stick = { r: 0, p: 0, y: 0, t: 0 };
+  const poll = (onSample) => {
+    const ts = core.stamp(wall);
+    if (ts !== null) core.input(stick, ts);
+    core.advance(4, true, null, onSample);
+    wall += 4;
+    core.anchor(wall);
+  };
+  for (let i = 0; i < 100; i++) poll();
+  core.setArm(true);
+  for (let i = 0; i < 150 && !core.getState().armed; i++) poll();
+  assert.ok(core.getState().armed, 'the bf core armed');
+  core.teleport({ x: o.x0 || 0, y: o.y0 || 0, z: o.z0 == null ? 8 : o.z0 }, o.quat || { x: 0, y: 0, z: 0, w: 1 }, { x: o.vx || 0, y: o.vy || 0, z: o.vz || 0 });
+  const d = makeDetector();
+  const hits = [];
+  const st = emptyState();
+  const sample = { ws: WS, colliders: o.colliders || null };
+  let first = true;
+  let samples = 0;
+  const onSample = () => {
+    const s = core.tickState(st);
+    const p = s.position, v = s.velocity, q = s.quaternion, w = s.omega;
+    sample.qx = q.x; sample.qy = q.y; sample.qz = q.z; sample.qw = q.w;
+    sample.ox = w.x; sample.oy = w.y; sample.oz = w.z;
+    sample.wx = p.x * WS; sample.wy = p.z * WS; sample.wz = -p.y * WS;   // as qpSample
+    sample.alt = p.z;
+    sample.vx = v.x; sample.vy = v.y; sample.vz = v.z; sample.speed = Math.hypot(v.x, v.y, v.z);
+    sample.clearance = s.clearance; sample.armed = s.armed; sample.throttle = stick.t;
+    sample.sr = stick.r; sample.sp = stick.p; sample.sy = stick.y;
+    samples++;
+    if (first) { resetDetector(d, sample); d.lockout = 0; first = false; return; }
+    const ev = stepDetector(d, sample, 0.004);
+    if (ev && TRICK_BY_ID[ev]) hits.push(ev);
+  };
+  let t = 0, phaseI = 0, phaseT = 0;
+  const maxT = o.maxT || 3.2;
+  while (t < maxT) {
+    const ph = phases[Math.min(phaseI, phases.length - 1)];
+    stick = {
+      r: bfStick(ph.roll || 0, 'roll'),
+      p: bfStick(ph.pitch || 0, 'pitch'),
+      y: bfStick(-(ph.yaw || 0), 'yaw'),
+      t: ph.tS != null ? ph.tS : Math.min(1, (ph.thr == null ? 0.55 : ph.thr) * BF_THR),
+    };
+    poll(onSample);
+    t += 0.004; phaseT += 0.004;
+    if (ph.t != null && phaseT >= ph.t - 1e-9 && phaseI < phases.length - 1) { phaseI++; phaseT = 0; }
+  }
+  return { hits, why: d.lastWhy, dir: d.lastDir, samples, feat: d.lastFeat };
+}
+
+// One flight per trick type: the library's own where it flies the same on the
+// bf core, and two of the bf core's own. On the Air65 the library's powerloops
+// do not climb 1.5 m at its throttle (full throttle does), and its matty
+// flips turn a full flip (Betaflight tracks the rate the js core lags).
+const BF_LIBRARY = [
+  ...['flip-front', 'flip-back', 'roll-fast', 'yaw-fast', 'hm-fast', 'ss-fast', 'mav-std', 'trip-pole', 'ham-inv',
+    'sl-std', 'crd-std', 'jf-fast', 'sb-fast', 'rk-std', 'ck-std', 'dive-std', 'gap-std', 'prox-std'].map((n) => LIBRARY.find((c) => c.name === n)),
+  { id: 'powerloop', name: 'bf-powerloop', phases: [{ t: 0.25, pitch: 0, tS: 0.75 }, { t: 1.0, pitch: -6.4, tS: 1.0 }, { t: 0.6, pitch: 0, tS: 0.35 }], opts: { z0: 6, vx: 7, maxT: 2.6 } },
+  { id: 'matty', name: 'bf-matty', phases: [{ t: 0.1, pitch: 0, tS: 0.25 }, { t: 0.55, pitch: 8.2, tS: 0.03 }, { t: 0.55, pitch: 0, tS: 0.45 }], opts: { z0: 9, vx: 7, maxT: 2.1 } },
+];
+
+test('bf core: every trick type, flown on sim-core and sampled every 4 ms, is its one label', async () => {
+  const confuse = [];
+  const flown = new Set();
+  for (const c of BF_LIBRARY) {
+    assert.ok(c, 'a BF_LIBRARY name is missing from LIBRARY');
+    const r = await flyBf(c.phases, c.opts);
+    assert.ok(r.samples > c.opts.maxT * 240, c.name + ': sampled every 4 ms (' + r.samples + ')');
+    if (r.hits.length !== 1 || r.hits[0] !== c.id) {
+      confuse.push(c.name + ' want=' + c.id + ' got=[' + r.hits.join(',') + '] why=' + (r.why || '').replace(/\n/g, ' '));
+      continue;
+    }
+    if (c.name === 'flip-front') assert.equal(r.dir, 1, 'a front flip says front');
+    if (c.name === 'flip-back') assert.equal(r.dir, -1, 'a back flip says back');
+    flown.add(c.id);
+  }
+  assert.equal(confuse.length, 0, 'bf core confusion:\n' + confuse.join('\n'));
+  for (const id of new Set(LIBRARY.map((c) => c.id))) assert.ok(flown.has(id), id + ' flown on the bf core');
+});
+
+// The page's loop on the bf core at a given frame time: sticks polled and
+// stamped every 4 ms of wall time (as pollInput), the core advanced once a
+// frame with the detector sampled on the sim clock (onSample). Returns the
+// labels and every segment's features.
+async function flyBfFrames(frameMs, script, seconds) {
+  if (!bfWasm) bfWasm = WebAssembly.compile(readFileSync(join(root, 'vendor/sim-core/sim-core.wasm')));
+  const core = await createBfCore({
+    SimCore,
+    wasm: await bfWasm,
+    airframe: JSON.parse(readFileSync(join(root, 'vendor/sim-core/airframes/air65.json'), 'utf8')),
+    diff: readFileSync(join(root, 'vendor/sim-core/configs/air65-ryfly-2026-10-23.txt'), 'utf8'),
+    world: { floorZ: -60, boxes: [], triggers: [] },
+  });
+  core.respawn({ x: 0, y: 0, z: -59.98 }, { x: 0, y: 0, z: 0, w: 1 });
+  core.setMode('acro');
+  let wall = 0;
+  const pollEvery = (ms, stick) => {
+    for (let k = 0; k < ms / 4; k++) {
+      const ts = core.stamp(wall);
+      if (ts !== null) core.input(stick, ts);
+      core.advance(4, true, null);
+      wall += 4;
+      core.anchor(wall);
+    }
+  };
+  pollEvery(400, { r: 0, p: 0, y: 0, t: 0 });
+  core.setArm(true);
+  pollEvery(600, { r: 0, p: 0, y: 0, t: 0 });
+  assert.ok(core.getState().armed, 'armed');
+  core.teleport({ x: 0, y: 0, z: 6 }, { x: 0, y: 0, z: 0, w: 1 }, { x: 1, y: 0, z: 0 });
+  const d = makeDetector();
+  const hits = [];
+  const segs = [];
+  const st = emptyState();
+  const sample = { ws: WS, colliders: null };
+  let first = true;
+  const onSample = () => {
+    const s = core.tickState(st);
+    const p = s.position, v = s.velocity, q = s.quaternion, w = s.omega;
+    Object.assign(sample, {
+      qx: q.x, qy: q.y, qz: q.z, qw: q.w, ox: w.x, oy: w.y, oz: w.z,
+      wx: -p.y * WS, wy: p.z * WS, wz: -p.x * WS, alt: p.z, vx: v.x, vy: v.y, vz: v.z,
+      speed: Math.hypot(v.x, v.y, v.z), clearance: s.clearance, armed: s.armed, throttle: 0.4,
+    });
+    if (first) { resetDetector(d, sample); d.lockout = 0; first = false; return; }
+    const ev = stepDetector(d, sample, 0.004);
+    if (ev && TRICK_BY_ID[ev]) {
+      hits.push(ev + (ev === 'flip' ? (d.lastDir < 0 ? ':back' : ':front') : ''));
+      segs.push(JSON.stringify(d.lastFeat));
+    }
+  };
+  // Polls every 4 ms of wall time; a frame every frameMs.
+  const t0 = wall;
+  let nextFrame = wall + frameMs;
+  let polled = wall;
+  while (wall - t0 < seconds * 1000) {
+    const stick = script((wall - t0) / 1000);
+    const ts = core.stamp(wall);
+    if (ts !== null) core.input(stick, ts);
+    wall += 4;
+    if (wall >= nextFrame) {
+      core.advance(wall - polled, true, null, onSample);
+      core.anchor(wall);
+      polled = wall;
+      nextFrame += frameMs;
+    }
+  }
+  return { hits, segs };
+}
+
+test('bf core: a flight reads the same at 60 fps and at 12 fps (the detector runs on the sim clock)', async () => {
+  // A front flip, a roll and a back flip at full stick, the throttle at about hover.
+  const script = (t) => {
+    const s = { r: 0, p: 0, y: 0, t: 0.42 };
+    if (t >= 0.5 && t < 1.1) s.p = 1;
+    if (t >= 2.3 && t < 2.9) s.r = 1;
+    if (t >= 4.1 && t < 4.7) s.p = -1;
+    if (t >= 1.1 && t < 1.5) s.t = 0.6;
+    if (t >= 4.7 && t < 5.1) s.t = 0.6;
+    return s;
+  };
+  const fast = await flyBfFrames(16, script, 6);
+  const slow = await flyBfFrames(80, script, 6);
+  assert.deepEqual(fast.hits, ['flip:front', 'roll', 'flip:back']);
+  assert.deepEqual(slow.hits, fast.hits);
+  assert.deepEqual(slow.segs, fast.segs, 'the same features at either frame rate');
+});
+
 test('Ryan bug: a power loop is only Power Loop, never also Matty', () => {
   const r = fly(
     [{ t: 0.25, pitch: 0, thr: 0.8 }, { t: 1.05, pitch: -6.4, thr: 0.88 }, { t: 0.55, pitch: 0, thr: 0.5 }],
@@ -976,8 +1184,14 @@ test('sim.html wires tricks without touching physics or old keys', () => {
   assert.ok(simSrc.includes('TRICKS_KEY'));
   assert.ok(simSrc.includes('id="cbTricksHud"') || simSrc.includes('cbTricksHud'));
   assert.ok(simSrc.includes('id="cbTrickDebug"') || simSrc.includes('trickdebug'));
-  assert.ok(simSrc.includes('tricks.tick') || simSrc.includes('tricks&&tricks.tick'));
-  assert.ok(simSrc.includes('try{') && simSrc.includes('tricks.tick'));
+  // The detector steps on the sim clock (the core's onSample every 4 ms of
+  // sim time, inside stepCore); the HUD draws once a frame.
+  assert.ok(simSrc.includes('const trickEv=tricks.step(trickSample,dt);'));
+  assert.ok(simSrc.includes('core.advance(frameMs,!calib,onCoreEvent,trickSampling()?onTrickSample:null)'));
+  assert.ok(simSrc.includes('const s=core.tickState(trickCs);'));
+  assert.ok(simSrc.includes('if(tricks&&!(coach&&coach.isActive()))tricks.frame();'));
+  assert.equal(simSrc.includes('tricks.tick('), false, 'no per-frame detector step');
+  assert.ok(simSrc.includes('try{') && simSrc.includes('tricks.step'));
   assert.ok(simSrc.includes('noteCrash'));
   assert.ok(simSrc.includes('setDebugOn') || simSrc.includes('trickdebug'));
   assert.ok(simSrc.includes('trickSample.sr=stick.r'));

@@ -23,9 +23,9 @@
 // Units, as the detector has them: angles in rad (the overlay shows degrees),
 // span/drop/alt in m, travelH/rad in scene units (WS = 3.5 per m), speeds m/s.
 import {
-  classifyFeat, featView, makeFeat, copyFeat, upZParts,
+  classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
-} from './sim-tricks.js?v=d0aa4b7ce820';
+} from './sim-tricks.js?v=bf248973ab83';
 
 const TAU = Math.PI * 2;
 
@@ -42,6 +42,9 @@ export const SPEC = Object.freeze({
 });
 export const PICK_MIN = 0.42;
 export const SPEC_MIN = 0.15;
+// classifyFeat's flip fallback: a pitch rotation this big is never nothing.
+export const FLIP_FALLBACK = 5.236;
+const FLIP_WIN_LABEL = '1.2 s';
 
 // stepDetector's spatial constants (sim-tricks.js DIVE_*, GAP_*), the dive
 // fallback inside classifyFeat, and the segment-start numbers.
@@ -106,10 +109,8 @@ export const GATES = Object.freeze({
     le('absY', 2.4, 0.7), le('v.pathR', 5.4, 0.6),
   ],
   powerloop: [
-    ge('-f.pitch', 4.0, 0.7), ge('absP', 4.35, 0.7), ge('v.span', 1.2, 0.45), ge('v.follow', 0.40, 0.15),
-    le('v.close', 0.38, 0.12), ge('f.travelH', 5.5, 1.5), le('absR', 2.7, 0.8), ge('v.inv', 0.08, 0.06),
-    le('v.head', 1.5, 0.5), ge('f.spdPeak', 3.2, 0.6),
-    floorOf(ge('objU', 0.08, 0.08), 0.72),
+    ge('v.flipSpan', 5.236, 0), le('absR', 1.7, 0.6), le('absY', 1.9, 0.6),
+    ge('v.loopRise', 1.5, 0), ge('v.loopRet', 0, 0), ge('v.loopSweep', 4.712, 0),
   ],
   matty: [
     ge('f.pitch', 2.0, 0.5), band('absP', 2.4, 5.6, 0.45), ge('v.drop', 0.35, 0.25),
@@ -133,10 +134,10 @@ export const GATES = Object.freeze({
     floorOf(ge('v.obj', 0.08, 0.08), 0.55),
   ],
   flip: [
-    ge('absP', 4.35, 0.5), le('absR', 1.7, 0.6), le('absY', 1.9, 0.6), le('f.travelH', 9.5, 2.5), ge('v.close', 0.35, 0.15),
+    ge('v.flipSpan', 5.236, 0), le('absR', 1.7, 0.6), le('absY', 1.9, 0.6),
   ],
   roll: [
-    ge('absR', 4.55, 0.55), le('absP', 1.85, 0.6), le('absY', 2.05, 0.6),
+    ge('v.rollSpan', 5.236, 0), ge('v.rollRate', 4.363, 0), le('absP', 1.85, 0.6), le('absY', 2.05, 0.6),
   ],
   yawspin: [
     ge('absY', 4.55, 0.55), le('absP', 1.05, 0.40), le('absR', 1.05, 0.40), le('v.pathR', 1.25, 0.40),
@@ -148,9 +149,7 @@ export const GATES = Object.freeze({
 // classifyFeat, after the dive fallback). keep: the label changes but best
 // does not (its two pitch-sign re-labels).
 export const OVERRIDES = Object.freeze([
-  { from: 'flip', to: 'powerloop', text: "flip→powerloop: powerloop > 0.55, pitch < 0, travelH > 6, close < 0.4", when: (c) => c.sc.powerloop > 0.55 && c.f.pitch < 0 && c.f.travelH > 6 && c.v.close < 0.4 },
   { from: 'flip', to: 'matty', text: 'flip→matty: matty > 0.55, pitch > 0', when: (c) => c.sc.matty > 0.55 && c.f.pitch > 0 },
-  { from: 'powerloop', to: 'flip', text: 'powerloop→flip: travelH < 5.5', when: (c) => c.f.travelH < 5.5 },
   { from: 'yawspin', to: 'ham', text: 'yawspin→ham: ham > 0.42', when: (c) => c.sc.ham > 0.42 },
   { from: 'trippy', to: 'ham', text: 'trippy→ham: ham > 0.42', when: (c) => c.sc.ham > 0.42 },
   { from: 'yawspin', to: 'trippy', text: 'yawspin→trippy: trippy > 0.42', when: (c) => c.sc.trippy > 0.42 },
@@ -174,7 +173,10 @@ export const OVERRIDE_TEXT = Object.freeze(OVERRIDES.map((r) => r.text));
 const ANGLE_SRC = new Set([
   'absP', 'absR', 'absY', 'v.pathP', 'v.pathR', 'v.pathY', 'f.pitch', '-f.pitch', 'v.head',
   'Math.max(absR, v.pathR)', 'Math.max(absY, v.pathY)', 'v.pathP - absP',
+  'v.flipSpan', 'v.rollSpan', 'v.loopSweep',
 ]);
+// Angular rates (shown in degrees a second).
+const RATE_SRC = new Set(['v.rollRate']);
 
 function atLeast(x, a, fade) {
   if (x >= a) return 1;
@@ -218,6 +220,8 @@ function context(f) {
     'v.against - v.follow': v.against - v.follow,
     'v.pathP - absP': v.pathP - absP,
     'Math.max(v.against, v.invAg)': Math.max(v.against, v.invAg),
+    'v.flipSpan': v.flipSpan, 'v.rollSpan': v.rollSpan, 'v.rollRate': v.rollRate,
+    'v.loopRise': v.loopRise, 'v.loopRet': v.loopRet, 'v.loopSweep': v.loopSweep,
   };
   return { f, v, absP, absR, absY, rollFirst, pitchFirst, yawFirst, tR, tP, tY, val, sc: Object.create(null) };
 }
@@ -251,6 +255,7 @@ export function gateLabel(src) {
 function fmtVal(src, x) {
   if (!Number.isFinite(x)) return String(x);
   if (ANGLE_SRC.has(src)) return degOf(x) + '°';
+  if (RATE_SRC.has(src)) return degOf(x) + '°/s';
   return Math.abs(x) >= 10 ? x.toFixed(1) : x.toFixed(2);
 }
 
@@ -292,6 +297,9 @@ function sawOf(f, v, ctx) {
     alignN: f.alignN, opp: r3(v.opp),
     under: r3(v.under), over: r3(v.over), obj: r3(v.obj), objOrbit: r3(v.objOrbit), under0: f.under0, over0: f.over0,
     thrMin: r3(f.thrMin), thrMax: r3(f.thrMax), seg: f.seg, bump: f.bump,
+    flipDeg: degOf(v.flipSpan), flipDir: v.flipDir > 0 ? 'front' : 'back',
+    rollDeg15: degOf(v.rollSpan), rollRateDeg: degOf(v.rollRate),
+    loopRise: r3(v.loopRise), loopRet: r3(v.loopRet), loopSweepDeg: degOf(v.loopSweep),
   };
 }
 
@@ -359,6 +367,12 @@ export function explainFeat(f) {
   const pick = { topId: bestId || null, top: r3(best), secondId: secondId || null, second: r3(second), min: PICK_MIN, overrides: [], fallback: null, id: null };
   let finalId = null, finalBest = best;
   if (best < PICK_MIN || !bestId) {
+    // A flip's rotation is never nothing (classifyFeat's flip fallback).
+    pick.flipFallback = { feature: 'v.flipSpan', value: r3(v.flipSpan), op: '>=', need: FLIP_FALLBACK, ok: v.flipSpan >= FLIP_FALLBACK };
+  }
+  if (pick.flipFallback && pick.flipFallback.ok) {
+    finalId = 'flip';
+  } else if (best < PICK_MIN || !bestId) {
     const fb = [
       { feature: 'v.drop', value: r3(v.drop), op: '>=', need: DIVE_FALLBACK.drop, ok: v.drop >= DIVE_FALLBACK.drop },
       { feature: 'f.spdPeak', value: r3(f.spdPeak), op: '>', need: DIVE_FALLBACK.spdPeak, ok: f.spdPeak > DIVE_FALLBACK.spdPeak },
@@ -398,7 +412,10 @@ export function explainFeat(f) {
     if (auth.id === id) {
       verdict = 'fired';
       const ov = viaOverride(id);
-      reason = ov ? 're-labelled from ' + ov.from + ' (' + ov.text + ')' : 'top score ' + total.toFixed(2) + ' ≥ ' + PICK_MIN;
+      reason = ov ? 're-labelled from ' + ov.from + ' (' + ov.text + ')'
+        : (id === 'flip' && pick.flipFallback && pick.flipFallback.ok)
+          ? 'no trick reached ' + PICK_MIN + '; ' + degOf(v.flipSpan) + '° of pitch in ' + FLIP_WIN_LABEL + ' is a Flip (fallback)'
+          : 'top score ' + total.toFixed(2) + ' ≥ ' + PICK_MIN;
     } else if (id === bestId && best >= PICK_MIN) {
       verdict = 'overridden';
       reason = 'top score ' + total.toFixed(2) + ', re-labelled ' + pick.overrides.map((o) => o.from + '→' + o.to).join(', ');
@@ -441,10 +458,10 @@ const GAP_KIND = ['none', 'side walls (x)', 'side walls (z)', 'overhead'];
 // ---- The observer: the detector before and after each step, from outside.
 //
 // before(sample, dt) and after(sample, dt, ev) bracket one stepDetector call
-// (tricks.tick). Each attempt goes to onAttempt(record):
+// (tricks.step, every 4 ms of sim time). Each attempt goes to onAttempt(record):
 // - type 'maneuver': a rotation segment that finished (classified or not);
-// - type 'abort': a segment dropped without a label (the detector's jump
-//   guard, or a crash/reset between ticks);
+// - type 'abort': a segment dropped without a label (a crash or reset
+//   between steps);
 // - type 'dive': a dive the detector armed (fired or not), or a descent past
 //   the detector's own "diving" vz (-3.8 m/s) it never armed, with why;
 // - type 'gap': a pass through a gap zone at speed (fired or not).
@@ -482,6 +499,7 @@ export function createTrickObserver(det, opts) {
     rec.result = ex.id;
     rec.event = ev || null;
     rec.why = det.lastWhy || '';
+    rec.dir = ex.id === 'flip' || ex.id === 'powerloop' ? (det.lastDir < 0 ? 'back' : 'front') : null;
     rec.sloppy = det.lastSloppy ? 1 : 0;
     rec.bump = det.lastBump ? 1 : 0;
     rec.mismatch = ex.mismatch;
@@ -550,10 +568,10 @@ export function createTrickObserver(det, opts) {
     if (st.live && !det.live) {
       const lf = det.lastFeat;
       // finishManeuver copies the segment (one step on from `pre`) into
-      // lastFeat; the jump guard drops it without touching lastFeat.
+      // lastFeat; anything else that ends a segment inside a step would not.
       finished = lf.n === pre.n + 1 && lf.alt0 === pre.alt0 && lf.h0x === pre.h0x && lf.h0z === pre.h0z;
       if (finished) emitManeuver(t, lf, ev);
-      else emitAbort(t, pre, 'jump guard: more than 2.4 rad of attitude change in one step (teleport/respawn) dropped the segment');
+      else emitAbort(t, pre, 'the segment ended inside a step without a finish');
     }
     view.live = det.live;
     view.liveT = det.live ? t - segT0 : 0;
@@ -808,7 +826,7 @@ export function createTrickDebug(opts) {
       const r = lm.rec;
       const s = r.saw || {};
       L.push('<span class="d">last #' + r.seq + ' (' + (t - r.t).toFixed(1) + 's ago)</span>  '
-        + (r.result ? '<span class="ok">' + esc(nameOf(r.result)) + '</span>' : '<span class="no">' + (r.type === 'abort' ? 'dropped' : 'no label') + '</span>')
+        + (r.result ? '<span class="ok">' + esc(r.result === 'flip' ? trickName('flip', r.dir === 'back' ? -1 : 1) : nameOf(r.result)) + '</span>' : '<span class="no">' + (r.type === 'abort' ? 'dropped' : 'no label') + '</span>')
         + '  <span class="d">P' + (s.pitchDeg ?? '?') + ' R' + (s.rollDeg ?? '?') + ' Y' + (s.yawDeg ?? '?') + ' ' + (s.dur ?? '?') + 's</span>');
       L.push('<span class="d">  ' + esc(r.reason || '') + '</span>');
       if (s.travelH != null) {

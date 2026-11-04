@@ -952,10 +952,10 @@
 import * as THREE from "three";
 import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=1592e07fcc0d";
 import {
-  WS as CORE_WS, TICK_US, toScene, toModule, boxToModule, emptyState,
+  WS as CORE_WS, TICK_US, SAMPLE_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, radioAux,
   BF_CLASS_TUNES, bfClassDiff,
-} from "./sim-core-adapter.js?v=978ea249359b";
+} from "./sim-core-adapter.js?v=0eebbb5c1ad7";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
 import {
@@ -1038,7 +1038,7 @@ import {
 } from "./sim-coach.js?v=b7c2ae993fad";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
-} from "./sim-tricks.js?v=d0aa4b7ce820";
+} from "./sim-tricks.js?v=bf248973ab83";
 import {
   DAILY_KEY, DAILY_LINE_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -7424,10 +7424,44 @@ function updateDust(dt){
 // draws its interpolated state. dt below is for decoration only.
 let last=performance.now();
 function simPaused(){return replayOn||(looks&&looks.menuOpen)||builderOn||(feel&&feel.promptOpen);}
+// The trick detector runs on the sim clock: while it is on, the core calls
+// onTrickSample each time its clock reaches a multiple of SAMPLE_US (4 ms),
+// with the latest tick's state, so a trick reads the same at any frame rate.
+// The HUD draws once a frame (tricks.frame() in the loop).
+const trickCs=emptyState();
+let trickLastUs=null;
+function trickSampling(){return !!(tricks&&tricks.isActive()&&!(coach&&coach.isActive()));}
+function onTrickSample(){
+  try{
+    const s=core.tickState(trickCs);
+    const us=core.simTimeUs;
+    let dt=trickLastUs===null?-1:(us-trickLastUs)/1e6;
+    trickLastUs=us;
+    const q=s.quaternion,om=s.omega,p=s.position,v=s.velocity;
+    trickSample.qx=q.x;trickSample.qy=q.y;trickSample.qz=q.z;trickSample.qw=q.w;
+    trickSample.ox=om.x;trickSample.oy=om.y;trickSample.oz=om.z;
+    trickSample.wx=-p.y*WS;trickSample.wy=p.z*WS;trickSample.wz=-p.x*WS; // toScene
+    trickSample.alt=p.z;
+    trickSample.speed=Math.hypot(v.x,v.y,v.z);
+    trickSample.vx=v.x;trickSample.vy=v.y;trickSample.vz=v.z;
+    trickSample.clearance=s.clearance;
+    trickSample.throttle=stick.t;
+    trickSample.sr=stick.r;trickSample.sp=stick.p;trickSample.sy=stick.y;
+    trickSample.armed=s.armed;
+    trickSample.colliders=colliders;
+    trickSample.ws=WS;
+    // A gap in the samples (the first, a pause, a respawn, a coach drill):
+    // start the detector over from this pose.
+    if(!(dt>0&&dt<=0.05)){tricks.resetDetector(trickSample);dt=SAMPLE_US/1e6;}
+    if(trickDebug)trickDebug.before(trickSample,dt);
+    const trickEv=tricks.step(trickSample,dt);
+    if(trickDebug)trickDebug.after(trickSample,dt,trickEv);
+  }catch(e){}
+}
 // Advance the flying core by one frame, then read it: events, then state.
 function stepCore(frameMs,now){
   try{
-    simClockMs+=core.advance(frameMs,!calib,onCoreEvent)*TICK_US/1000;
+    simClockMs+=core.advance(frameMs,!calib,onCoreEvent,trickSampling()?onTrickSample:null)*TICK_US/1000;
   }catch(e){
     // A plant fault stops a bf instance; start over at the map start.
     console.warn('sim-core: '+(e&&e.message||e)+' — respawning');
@@ -7861,24 +7895,8 @@ function loop(now){
       });
     }
     try{
-      if(tricks&&!(coach&&coach.isActive())){
-        const q=cs.quaternion,om=cs.omega;
-        trickSample.qx=q.x;trickSample.qy=q.y;trickSample.qz=q.z;trickSample.qw=q.w;
-        trickSample.ox=om.x;trickSample.oy=om.y;trickSample.oz=om.z;
-        trickSample.wx=state.pos.x;trickSample.wy=state.pos.y;trickSample.wz=state.pos.z;
-        trickSample.alt=cs.position.z;
-        trickSample.speed=Math.hypot(cs.velocity.x,cs.velocity.y,cs.velocity.z);
-        trickSample.vx=cs.velocity.x;trickSample.vy=cs.velocity.y;trickSample.vz=cs.velocity.z;
-        trickSample.clearance=cs.clearance;
-        trickSample.throttle=stick.t;
-        trickSample.sr=stick.r;trickSample.sp=stick.p;trickSample.sy=stick.y;
-        trickSample.armed=cs.armed;
-        trickSample.colliders=colliders;
-        trickSample.ws=WS;
-        if(trickDebug)trickDebug.before(trickSample,dt);
-        const trickEv=tricks.tick(trickSample,dt);
-        if(trickDebug)trickDebug.after(trickSample,dt,trickEv);
-      }
+      // The detector stepped in stepCore (onTrickSample); the HUD draws here.
+      if(tricks&&!(coach&&coach.isActive()))tricks.frame();
     }catch(e){}
   }
   const live=!replayOn&&!simPaused();
@@ -8085,7 +8103,7 @@ window._tricks=tricks;
 // the file is never fetched.
 try{
   if(new URLSearchParams(location.search).get('tricks')==='debug'){
-    import('./sim-tricks-debug.js?v=e0772e01c347').then((m)=>{
+    import('./sim-tricks-debug.js?v=1aff912772d9').then((m)=>{
       trickDebug=m.createTrickDebug({document,tricks,now:()=>performance.now()*0.001,info:()=>({core:cs.kind,map:currentMap})});
       window._trickDebug=trickDebug;
       trickDebug.paint();
