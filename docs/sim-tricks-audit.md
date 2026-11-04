@@ -2,8 +2,10 @@
 
 2026-11-04, against `main` at eb0344b (quadmath #305 merged: the 65 flies the
 bf core on the Air65, the 75 the bf core on the Fractal75, the 85 the js
-core) and sim-core v0.6.0 (754266f). No threshold changed. `sim-tricks.js`
-is unchanged by this work.
+core) and sim-core v0.6.0 (754266f). Sections 1-4 are the audit of the
+detector as it was (no threshold changed there). Section 5 is the tuning that
+followed it: the detector on the sim clock, and Flip, Roll and Powerloop
+classified by rotation first, with before/after tables on both logs.
 
 ## 1. What the detector reads, and where it comes from
 
@@ -61,7 +63,7 @@ Differences between the two cores that reach the detector, all small:
 
 ## 2. Things noticed, not changed
 
-- **Frame-rate dependence (both cores).** The detector's `dt` is clamped to
+- **Frame-rate dependence (both cores; fixed in section 5).** The detector's `dt` is clamped to
   0.05 s (`sim.html:7817`), but the core advances by the real frame time, up
   to 250 ms (`sim-core-adapter.js:23`, `sim.html:7429`). Below 20 fps the
   detector's own clocks (segment duration, settle, `tYaw360`, lockout,
@@ -100,7 +102,8 @@ reads the detector from outside, before and after each `tricks.tick`
 - **Console:** one line of JSON per attempt (`kind: 'quadmath-trick-attempt'`):
   - `maneuver`: every candidate's every term (feature, value, need, fade,
     factor), the pick, the re-labels and the dive fallback;
-  - `abort`: a segment dropped by the jump guard, a crash or a reset;
+  - `abort`: a segment dropped by a crash or a reset (before section 5, also
+    by the jump guard);
   - `dive`: a dive the detector armed, or a descent past −3.8 m/s it never
     armed, with which start gate failed;
   - `gap`: a pass through a gap zone, fired or missed.
@@ -273,3 +276,149 @@ labelled segment:
 - **The two dead-reckoned Dives** (95.2 and 188.3 s, after the punches) come
   from `classifyFeat`'s dive fallback on guessed speeds and drops. They are
   plausible, but not measured.
+
+## 5. Tuning: rotation first, path second
+
+The owner's brief after the audit was to classify by rotation first and path
+second.
+
+### What changed
+
+- **The detector runs on the sim clock.** While tricks are on, the core
+  calls `onTrickSample` each time its clock reaches a multiple of 4 ms
+  (`sim-core-adapter.js` `SAMPLE_US`, `advance(..., onSample)`). The detector
+  reads that tick's state (`tickState`, not render-interpolated) and steps
+  with `dt` = 4 ms.
+  - On the js core the hook is called inside its tick loop.
+  - On the bf core the frame time is fed to sim-core in pieces that end on
+    each 4 ms boundary. Whole ticks are unchanged, and a sliced and an
+    unsliced flight end byte-identical in sim-core's state and Betaflight
+    blocks.
+  - The HUD draws once a frame (`tricks.frame()`).
+  - A frame of 249 ms or more is a pause (sim-core drops the excess beyond 250
+    ticks). It advances unsampled, and the detector starts over at the next
+    sample.
+  - The 2.4 rad jump guard is gone. At 4 ms a sample turns a few degrees at
+    most, respawns already reset the detector, and a portal keeps the
+    attitude.
+- **Flip:** at least 300° of pitch inside any 1.2 s window of the segment, at
+  any speed and any travel. Flip's straight-path minimum (`close ≥ 0.35`) and
+  its 2.7 m travel maximum are dropped. Front or back is read from the way the
+  pitch turned, and the pop says "Front Flip" or "Back Flip" (same id, same
+  points). A pitch rotation that big is never nothing: if no trick reaches
+  0.42, it is a Flip.
+- **Powerloop:** a Flip whose path also loops. The path must:
+  - climb at least 1.5 m above the entry;
+  - come back down to the entry height or below after its top;
+  - turn its velocity through at least 270° in the vertical plane of the
+    entry heading, the way the flip turns.
+
+  The 270° is my reading of "path curvature consistent with a loop".
+  Otherwise the segment is a Flip. The two re-labels that leaned on travel
+  (`flip→powerloop` and `powerloop→flip`) are gone.
+- **Roll:** at least 300° of roll inside any 1.5 s window, at a mean rate of
+  at least 250 °/s between the window's two ends.
+- **Windows.** The windows come from the segment's attitude history (`hist`,
+  `spanWithin`, monotonic deques). Nothing else in the classifier changed.
+
+### Ground truth: the logs replayed through sim-core
+
+`tools/test_sim_tricks_logs.mjs` replays each log's sticks through sim-core
+with the owner's diff:
+- The fixtures were built by `tools/trick_log_fixture.mjs`: rcCommand inverted
+  to channels on a probe instance, as sim-core's `sim-vs-log.mjs` does, at
+  4 ms. They are 73 KB and 68 KB.
+- The quad is armed on the floor, then flown 1000 m up in open air.
+- The detector runs on the sim's state, as the page runs it.
+
+| Air65 freestyle (log 1) | Gyro shows | Before (per 16 ms frame) | After (4 ms sim clock) |
+|---|---:|---:|---:|
+| Roll | 10 | 10 | 10 |
+| Front flip | 5 | 5 (as Flip) | 5 |
+| Back flip | 5 | 2 (as Flip) | 4 |
+| Yaw spin | 4-5 | 4 | 4 |
+| Matty, Snapback, Cradle, Split-S | | 1 each | 1 each |
+| Juicy Flick | | 2 | 2 |
+
+The test requires each count within one of the log (yaw spins 3-6), and
+passes.
+- The back flips found are at 41.5, 42.8, 44.1 and 98.2 s. Before, the ones at
+  44.1 s and 98.2 s got no label.
+- The fifth back flip in the log (48.4 s) turns only 273° inside 1.2 s; its
+  341° are spread over 2.3 s.
+- The 66.5 s segment is a front flip by its window (310°), and Matty wins it.
+
+| Fractal75 (hover and punch) | Gyro shows | Before | After |
+|---|---:|---:|---:|
+| Roll | 0 (four slow post-punch turnarounds) | 1 (144.4 s) | 0 |
+
+On the replay, the turnaround that was a Roll reaches only 145° of roll inside
+1.5 s.
+
+### The same, on the logs' gyro attitude
+
+This is the audit's method (section 4): attitude integrated from the logged
+gyro. Before is the old detector at 60 Hz; after is the new one at 4 ms.
+
+Air65 freestyle, held in place (no position):
+
+| t0 (s) | pitch° | roll° | yaw° | Gyro shape | Before | After |
+|---:|---:|---:|---:|---|---|---|
+| 6.8, 11.0, 25.6, 27.7, 29.6, 33.3, 35.0, 36.3, 112.6, 116.1 | | ±348..376 | | roll ×10 | roll ×10 | roll ×10 |
+| 16.5 | 378 | 1 | -1 | front flip | — | front flip |
+| 18.8 | 314 | 1 | 0 | front flip | — | front flip |
+| 22.0 | 355 | -1 | -1 | front flip | — | front flip |
+| 109.6 | 338 | 3 | -1 | front flip | — | front flip |
+| 111.1 | 333 | 0 | 1 | front flip | — | front flip |
+| 66.5 | 247 | -105 | -50 | combined (310° in 1.2 s) | — | front flip |
+| 40.7 | -376 | -3 | 0 | back flip | — | back flip |
+| 42.1 | -345 | 0 | 0 | back flip | — | back flip |
+| 43.3 | -392 | -1 | 0 | back flip | — | back flip |
+| 48.4 | -341 | -64 | 2 | back flip, slow (271° in 1.2 s) | — | — |
+| 94.7 | -370 | -53 | 8 | back flip (299° in 1.2 s) | — | — |
+| 56.7 | -275 | 35 | 60 | slow, 4.5 s | — | — |
+| 75.0, 77.6, 104.9, 106.9 | | | ±423..506 | yaw spin ×4 | yawspin ×4 | yawspin ×4 |
+| 98.3 | 38 | 74 | -321 | yaw spin (crash, gyro clipped) | — | — |
+| 72.3 / 89.0 / 120.5 | | | | | snapback / juicy / juicy | the same |
+
+- **Held in place.** Before, held in place, no flip could score: `close` was
+  0. Now every flip found by the window scores.
+- **The two misses at 94.7 s and 48.4 s are honest misses.** The 94.7 s flip
+  is 1° short of 300° in the gyro's 1.2 s window; the sim's replay of it makes
+  303° and labels it. The 48.4 s flip is too slow.
+- **Dead-reckoned** (velocity integrated from the accelerometer, a rough
+  guess):
+  - Before, it had Flip on 4 of the 5 front flips and Matty on the 18.8 s
+    one; after, all 5 are front flips.
+  - Back flips: 0 → 3, as held in place.
+  - Matty, Split-S and Cradle as before.
+
+Fractal75: the four turnarounds before and after, the same either way:
+
+| t0 (s) | pitch° | roll° | yaw° | Best roll in 1.5 s | Before | After |
+|---:|---:|---:|---:|---|---|---|
+| 63.6 | -126 | -316 | 153 | 254° at 170 °/s | — | — |
+| 97.4 | -231 | 268 | -198 | 158° at 105 °/s | — | — |
+| 139.9 | -35 | -308 | 115 | 147° at 98 °/s | roll | — |
+| 190.7 | -135 | -406 | 213 | 178° at 119 °/s | — | — |
+
+### Tests
+
+- **`tools/test_sim_tricks.mjs`:**
+  - **Each trick type on the bf core.** 20 flights covering all 19 trick
+    types, on sim-core with the owner's Air65 diff and sampled every 4 ms
+    through the adapter. Each must be its one label, and the two flips must
+    say front and back. Eighteen are the library's own maneuvers, sticks
+    through the diff's rates. Two are the bf core's own:
+    - the library's powerloops climb under 1.5 m at its throttle on the
+      Air65, and full throttle loops;
+    - its matty flips turn a full flip on Betaflight, where the js core lags,
+      so the bf matty uses a shorter flip.
+  - **Frame rate.** A flight advanced in 16 ms frames and in 80 ms frames
+    gives the same labels and byte-identical segment features.
+  - **The js library still passes.** The library flown on `QuadPhysics` passes
+    unchanged, the powerloops included.
+- **`tools/test_sim_tricks_logs.mjs`:** the two log replays above (2.7 s).
+- **`tools/test_sim_tricks_debug.mjs`:** the overlay's copy of the classifier
+  follows the new terms (the source-parse test and the 150k-segment replica
+  check pass).

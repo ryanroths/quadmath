@@ -21,6 +21,14 @@
 export const WS = 3.5;                  // scene units per metre
 export const TICK_US = 1000;            // both cores tick at 1 kHz
 const MAX_TICKS_PER_FRAME = 250;        // a longer frame is a pause, not a catch-up
+// advance()'s onSample: called each time the sim clock reaches a multiple of
+// SAMPLE_US, with the latest tick's state readable (tickState), so a reader
+// (the trick detector) samples the flight on the sim clock, not per frame.
+export const SAMPLE_US = 4000;
+// The bf core samples by advancing in pieces up to each sample time; a frame
+// this long or longer is a pause (sim-core caps a call at 250 ticks) and
+// advances in one piece, unsampled.
+const SAMPLE_MAX_FRAME_MS = 249;
 
 // ---- The render boundary ----
 
@@ -213,8 +221,10 @@ export function createJsCore({ qp, tick, extras }) {
       if (ring.length > 1024) ring.shift();
     },
     // Frame time in, whole 1 ms ticks out (at most 250 a frame: a longer
-    // frame is a pause). Returns the ticks run.
-    advance(frameMs) {
+    // frame is a pause). Returns the ticks run. onSample: after each tick
+    // that lands on a multiple of SAMPLE_US (want and onEvent are the bf
+    // core's; the js core has neither link nor events).
+    advance(frameMs, want, onEvent, onSample = null) {
       if (!(frameMs > 0)) return 0;
       accUs += frameMs * 1000;
       let n = Math.floor(accUs / TICK_US);
@@ -227,6 +237,7 @@ export function createJsCore({ qp, tick, extras }) {
         tUs += TICK_US;
         flightUs += TICK_US;
         take(cur);
+        if (onSample && tUs % SAMPLE_US === 0) onSample();
       }
       return n;
     },
@@ -236,10 +247,12 @@ export function createJsCore({ qp, tick, extras }) {
       take(cur);
       take(prev);
     },
-    getState(out = emptyState()) {
+    // alpha: the render interpolation (default the accumulator's); 1 is the
+    // latest tick (tickState).
+    getState(out = emptyState(), alpha = null) {
       out.kind = 'js';
       out.flightMs = flightUs / 1000;
-      lerpPose(prev, cur, Math.min(1, accUs / TICK_US), out);
+      lerpPose(prev, cur, alpha == null ? Math.min(1, accUs / TICK_US) : alpha, out);
       copyVec(out.omega, qp.omega);
       out.armed = !!qp.armed;
       out.airborne = !!qp.airborne;
@@ -257,6 +270,10 @@ export function createJsCore({ qp, tick, extras }) {
       out.beeper = null;
       if (extras) extras(out);
       return out;
+    },
+    // The latest tick's state, not interpolated: what an onSample reader reads.
+    tickState(out = emptyState()) {
+      return core.getState(out, 1);
     },
   };
   return core;
@@ -746,7 +763,12 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     // onEvent(e), if given, is called for each event as it happens: a tick
     // that enters a trigger ends sim.advance() early, so a portal's teleport
     // lands on the next tick (sim-core.js advance()), not a frame later.
-    advance(frameMs, want = true, onEvent = null) {
+    // onSample, if given, is called each time the sim clock lands on a
+    // multiple of SAMPLE_US, the latest tick readable (tickState): the frame
+    // time is fed to sim-core in pieces that end there. Whole ticks are the
+    // same as one piece; a frame of SAMPLE_MAX_FRAME_MS or more (a pause)
+    // goes in one piece, unsampled.
+    advance(frameMs, want = true, onEvent = null, onSample = null) {
       if (!(frameMs >= 0)) return 0;
       const flush = () => {
         for (const e of sim.events()) {
@@ -754,17 +776,40 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
           else pending.push(e);
         }
       };
-      let ran = sim.advance(frameMs);
-      if (ran) pendingPose = null;
-      flush();
-      while (sim.alpha >= 1) {
-        const more = sim.advance(0);
-        if (more) pendingPose = null;
-        ran += more;
+      const run = (ms) => {
+        let n = sim.advance(ms);
+        if (n) pendingPose = null;
         flush();
-        if (!more) break;
+        while (sim.alpha >= 1) {
+          const more = sim.advance(0);
+          if (more) pendingPose = null;
+          n += more;
+          flush();
+          if (!more) break;
+        }
+        flightUs += n * TICK_US;
+        return n;
+      };
+      let ran = 0;
+      if (!onSample || frameMs >= SAMPLE_MAX_FRAME_MS) {
+        ran = run(frameMs);
+      } else {
+        let left = frameMs;
+        for (let guard = 0; left > 0 && guard < 512; guard++) {
+          // The frame time that brings the accumulator to the next sample.
+          const toUs = SAMPLE_US - (sim.simTimeUs % SAMPLE_US);
+          const needMs = Math.max(0, (toUs - sim.alpha * sim.tickUs) / 1000);
+          const ms = needMs < left ? needMs : left;
+          left -= ms;
+          const n = run(ms);
+          ran += n;
+          if (n && sim.simTimeUs % SAMPLE_US === 0) onSample();
+          if (!n && ms === 0) break;
+        }
+        // Never strand frame time: whatever the pieces did not feed goes in
+        // one piece, unsampled.
+        if (left > 0) ran += run(left);
       }
-      flightUs += ran * TICK_US;
       link.update(want);
       if (aux.holdThrottle && (sim.fc.armed || sim.simTimeUs >= holdUntilUs)) {
         if (!sim.fc.armed) aux.arm = false;   // Betaflight refused: the reason is on the OSD
@@ -820,8 +865,14 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
       rebooted();
       return r;
     },
-    getState(out = emptyState()) {
-      const s = sim.lerpState();
+    // The latest tick's state, not interpolated: what an onSample reader reads.
+    tickState(out = emptyState()) {
+      return core.getState(out, 1);
+    },
+    // alpha: the render interpolation (default the accumulator's); 1 is the
+    // latest tick.
+    getState(out = emptyState(), alpha = null) {
+      const s = alpha === 1 ? sim.state : sim.lerpState(alpha == null ? undefined : alpha);
       const fc = sim.fc;
       out.kind = 'bf';
       out.flightMs = flightUs / 1000;

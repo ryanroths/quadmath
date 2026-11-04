@@ -25,6 +25,21 @@ export const REC_KEYS = Object.freeze([
   't', 'ox', 'oy', 'oz', 'qx', 'qy', 'qz', 'qw', 'sr', 'sp', 'sy', 'thr',
 ]);
 export const DEAD = 1.15;
+// Rotation first (docs/sim-tricks.md "Flip, Roll, Powerloop"): a Flip is
+// >= 300 degrees of pitch inside any FLIP_WIN_S window of the segment, a Roll
+// >= 300 degrees of roll inside any ROLL_WIN_S window at a mean rate of at
+// least 250 deg/s. The page samples the detector on the sim clock, every
+// SAMPLE_S of sim time (sim.html onTrickSample), not per rendered frame.
+export const SAMPLE_S = 0.004;
+export const FLIP_WIN_S = 1.2;
+export const ROLL_WIN_S = 1.5;
+// Each segment's attitude history (t, pitch, roll, yaw), for the windows:
+// MANEUVER_MAX_S at 1 ms steps fits.
+export const HIST_CAP = 4608;
+// Below this speed (m/s) the path has no direction to sweep (Powerloop).
+export const SWEEP_MIN_SPD = 0.8;
+// The recorder keeps one sample per REC_DT_S of segment time.
+export const REC_DT_S = 1 / 60;
 export const STREAK_CAP = 2;
 export const SLOPPY_MUL = 0.65;
 export const BUMP_MUL = 0.5;
@@ -366,6 +381,14 @@ export function makeFeat() {
     tRoll90: 99, tPitch90: 99, tYaw90: 99,
     underN: 0, overN: 0, objNearN: 0, objOrbitN: 0, under0: 0, over0: 0,
     bump: 0, seg: 0, oppRY: 0, radMax: 0,
+    // Rotation windows (finishManeuver, spanWithin): the largest rise and
+    // fall of the pitch angle inside any FLIP_WIN_S, of the roll angle inside
+    // any ROLL_WIN_S, rad, and for roll the seconds between the two ends.
+    flipUp: 0, flipDn: 0, rollUp: 0, rollDn: 0, rollUpT: 0, rollDnT: 0,
+    // Path (Powerloop): the lowest altitude after the highest, m, and the
+    // signed turn of the velocity in the vertical plane of the entry heading,
+    // rad (+ climbing away from the entry heading, as a nose-up loop does).
+    postMin: 0, sweep: 0, sweepTh: 0, sweepOn: 0,
   };
 }
 
@@ -387,6 +410,8 @@ export function resetFeat(f) {
   f.tRoll90 = 99; f.tPitch90 = 99; f.tYaw90 = 99;
   f.underN = 0; f.overN = 0; f.objNearN = 0; f.objOrbitN = 0; f.under0 = 0; f.over0 = 0;
   f.bump = 0; f.seg = 0; f.oppRY = 0; f.radMax = 0;
+  f.flipUp = 0; f.flipDn = 0; f.rollUp = 0; f.rollDn = 0; f.rollUpT = 0; f.rollDnT = 0;
+  f.postMin = 0; f.sweep = 0; f.sweepTh = 0; f.sweepOn = 0;
   return f;
 }
 
@@ -413,7 +438,37 @@ export function copyFeat(src, dst) {
   d.objOrbitN = src.objOrbitN;
   d.under0 = src.under0; d.over0 = src.over0;
   d.bump = src.bump; d.seg = src.seg; d.oppRY = src.oppRY; d.radMax = src.radMax;
+  d.flipUp = src.flipUp; d.flipDn = src.flipDn; d.rollUp = src.rollUp; d.rollDn = src.rollDn;
+  d.rollUpT = src.rollUpT; d.rollDnT = src.rollDnT;
+  d.postMin = src.postMin; d.sweep = src.sweep; d.sweepTh = src.sweepTh; d.sweepOn = src.sweepOn;
   return d;
+}
+
+// The largest rise and fall of column k of a segment's history (rows of t,
+// pitch, roll, yaw) inside any window of win seconds, and the time between
+// the two ends of each: monotonic deques, O(n). out: { up, upT, dn, dnT }.
+export function spanWithin(hist, n, k, win, out, dq) {
+  const o = out || { up: 0, upT: 0, dn: 0, dnT: 0 };
+  o.up = 0; o.upT = 0; o.dn = 0; o.dnT = 0;
+  const q = dq || new Int32Array(Math.max(1, n) * 2);
+  const half = q.length >> 1;
+  // q[0..half): indices of rising minima; q[half..): falling maxima.
+  let h0 = 0, t0 = 0, h1 = half, t1 = half;
+  for (let b = 0; b < n; b++) {
+    const tb = hist[b * 4], ab = hist[b * 4 + k];
+    while (t0 > h0 && hist[q[t0 - 1] * 4 + k] >= ab) t0--;
+    q[t0++] = b;
+    while (hist[q[h0] * 4] < tb - win) h0++;
+    while (t1 > h1 && hist[q[t1 - 1] * 4 + k] <= ab) t1--;
+    q[t1++] = b;
+    while (hist[q[h1] * 4] < tb - win) h1++;
+    const lo = q[h0], hi = q[h1];
+    const up = ab - hist[lo * 4 + k];
+    if (up > o.up) { o.up = up; o.upT = tb - hist[lo * 4]; }
+    const dn = hist[hi * 4 + k] - ab;
+    if (dn > o.dn) { o.dn = dn; o.dnT = tb - hist[hi * 4]; }
+  }
+  return o;
 }
 
 function atLeast(x, a, fade) {
@@ -462,21 +517,45 @@ export function featView(f) {
   const opp = (f.n && f.oppRY) ? f.oppRY / f.n : 0;
   const front = f.pitch > 0 ? 1 : 0;
   const rad = f.radMax || 0;
+  // Rotation windows: the flip's size and way (+1 front: pitch rising, nose
+  // down; -1 back), the roll's size and mean rate between its two ends.
+  const flipUp = f.flipUp || 0, flipDn = f.flipDn || 0;
+  const flipSpan = flipUp >= flipDn ? flipUp : flipDn;
+  const flipDir = flipUp >= flipDn ? 1 : -1;
+  const rollUp = f.rollUp || 0, rollDn = f.rollDn || 0;
+  const rollSpan = rollUp >= rollDn ? rollUp : rollDn;
+  const rollT = rollUp >= rollDn ? (f.rollUpT || 0) : (f.rollDnT || 0);
+  const rollRate = rollT > 0 ? rollSpan / rollT : 0;
+  // Path: the climb above the entry, how far it came back down below the
+  // entry after the top, and the velocity's turn the way the flip turns.
+  const loopRise = f.altMax - f.alt0;
+  const loopRet = f.alt0 - (f.postMin == null ? f.altMax : f.postMin);
+  const loopSweep = flipDir > 0 ? -(f.sweep || 0) : (f.sweep || 0);
   return {
     absP, absR, absY, head, span, drop, follow, against, inv, close, hEnd, meanDot,
     invFol, invAg, pathP, pathR, pathY, under, over, obj, objOrbit, opp, front, rad,
+    flipSpan, flipDir, rollSpan, rollRate, loopRise, loopRet, loopSweep,
   };
 }
 
 const _cls = { id: null, why: '', best: 0, second: 0, secondId: '' };
 const _sc = Object.create(null);
 
+// A trick's name as the pilot sees it: a Flip says which way it went.
+export function trickName(id, dir) {
+  if (id === 'flip') return dir < 0 ? 'Back Flip' : 'Front Flip';
+  const def = BY_ID[id];
+  return def ? def.name : id;
+}
+
 function whyLine(id, f, v, secondId, second) {
   const def = BY_ID[id];
   const deg = (r) => Math.round(r * 180 / PI);
-  return (def ? def.name : id)
+  return trickName(id, v.flipDir)
     + (def ? ('  ' + def.tier + '  ' + def.points) : '')
     + '\n  P' + deg(f.pitch) + ' R' + deg(f.roll) + ' Y' + deg(f.yaw)
+    + '  flip=' + deg(v.flipSpan) + ' roll=' + deg(v.rollSpan) + '@' + deg(v.rollRate) + '/s'
+    + ' rise=' + v.loopRise.toFixed(1) + ' sweep=' + deg(v.loopSweep)
     + '  fol=' + v.follow.toFixed(2) + ' ag=' + v.against.toFixed(2)
     + '  span=' + v.span.toFixed(1) + ' hd=' + deg(v.head)
     + '  inv=' + v.inv.toFixed(2) + ' cl=' + v.close.toFixed(2)
@@ -610,18 +689,18 @@ export function classifyFeat(f, out) {
     atMost(absY, 2.4, 0.7),
     atMost(v.pathR, 5.4, 0.6),
   );
+  // Powerloop: a Flip (below) whose path climbs at least 1.5 m above the
+  // entry, comes back down to the entry height or below after its top, and
+  // turns its velocity through at least 270 degrees in the vertical plane of
+  // the entry heading, the way the flip turns. A flip whose path does not is
+  // a Flip.
   _sc.powerloop = mul(
-    atLeast(-f.pitch, 4.0, 0.7),
-    atLeast(absP, 4.35, 0.7),
-    atLeast(v.span, 1.2, 0.45),
-    atLeast(v.follow, 0.40, 0.15),
-    atMost(v.close, 0.38, 0.12),
-    atLeast(f.travelH, 5.5, 1.5),
-    atMost(absR, 2.7, 0.8),
-    atLeast(v.inv, 0.08, 0.06),
-    atMost(v.head, 1.5, 0.5),
-    atLeast(f.spdPeak, 3.2, 0.6),
-    Math.max(atLeast(objU, 0.08, 0.08), 0.72),
+    atLeast(v.flipSpan, 5.236, 0),
+    atMost(absR, 1.7, 0.6),
+    atMost(absY, 1.9, 0.6),
+    atLeast(v.loopRise, 1.5, 0),
+    atLeast(v.loopRet, 0, 0),
+    atLeast(v.loopSweep, 4.712, 0),
   );
   _sc.matty = mul(
     atLeast(f.pitch, 2.0, 0.5),
@@ -668,15 +747,18 @@ export function classifyFeat(f, out) {
     atLeast(f.dur, 0.4, 0.1),
     Math.max(atLeast(v.obj, 0.08, 0.08), 0.55),
   );
+  // Flip: >= 300 degrees of pitch inside FLIP_WIN_S, at any speed and any
+  // travel; front or back by the way the pitch turned (v.flipDir).
   _sc.flip = mul(
-    atLeast(absP, 4.35, 0.5),
+    atLeast(v.flipSpan, 5.236, 0),
     atMost(absR, 1.7, 0.6),
     atMost(absY, 1.9, 0.6),
-    atMost(f.travelH, 9.5, 2.5),
-    atLeast(v.close, 0.35, 0.15),
   );
+  // Roll: >= 300 degrees of roll inside ROLL_WIN_S at a mean rate of at
+  // least 250 deg/s between its two ends. Slower turns are not tricks.
   _sc.roll = mul(
-    atLeast(absR, 4.55, 0.55),
+    atLeast(v.rollSpan, 5.236, 0),
+    atLeast(v.rollRate, 4.363, 0),
     atMost(absP, 1.85, 0.6),
     atMost(absY, 2.05, 0.6),
   );
@@ -702,6 +784,13 @@ export function classifyFeat(f, out) {
   }
   o.best = best; o.second = second; o.secondId = secondId;
   if (best < 0.42 || !bestId) {
+    // A flip's rotation is never nothing: with no trick ahead of it (its
+    // roll or yaw too big for Flip's own terms), it is a Flip.
+    if (v.flipSpan >= 5.236) {
+      o.id = 'flip';
+      o.why = whyLine('flip', f, v, secondId, second);
+      return o;
+    }
     if (v.drop >= 3.2 && f.spdPeak > 8 && f.vzMin < -6.2 && absP < 3.2 && absR < 2.2 && v.pathY < 2.0) {
       o.id = 'dive';
       o.why = whyLine('dive', f, v, '', 0);
@@ -709,9 +798,7 @@ export function classifyFeat(f, out) {
     }
     return o;
   }
-  if (bestId === 'flip' && _sc.powerloop > 0.55 && f.pitch < 0 && f.travelH > 6 && v.close < 0.4) { bestId = 'powerloop'; best = _sc.powerloop; }
   if (bestId === 'flip' && _sc.matty > 0.55 && f.pitch > 0) { bestId = 'matty'; best = _sc.matty; }
-  if (bestId === 'powerloop' && f.travelH < 5.5) { bestId = 'flip'; best = _sc.flip; }
   if (bestId === 'yawspin' && _sc.ham > 0.42) { bestId = 'ham'; best = _sc.ham; }
   if (bestId === 'trippy' && _sc.ham > 0.42) { bestId = 'ham'; best = _sc.ham; }
   if (bestId === 'yawspin' && _sc.trippy > 0.42) { bestId = 'trippy'; best = _sc.trippy; }
@@ -743,8 +830,16 @@ export function makeDetector() {
     lastFeat: makeFeat(),
     lastWhy: '',
     lastId: '',
+    lastDir: 0,
     lastSloppy: 0,
     lastBump: 0,
+    // The open segment's attitude history (t, pitch, roll, yaw per row) and
+    // the scratch the rotation windows use.
+    hist: new Float64Array(HIST_CAP * 4),
+    histN: 0,
+    dq: new Int32Array(HIST_CAP * 2),
+    span: { up: 0, upT: 0, dn: 0, dnT: 0 },
+    recNextT: 0,
     live: 0,
     quiet: 0,
     haveQ: 0,
@@ -766,6 +861,10 @@ export function makeDetector() {
 
 function recPush(d, t, ox, oy, oz, qx, qy, qz, qw, sr, sp, sy, thr) {
   if (!d || !d.rec) return;
+  // One sample per REC_DT_S of segment time, at most REC_CAP: the detector
+  // steps every 4 ms on the sim clock.
+  if (d.recN >= REC_CAP || t < d.recNextT) return;
+  d.recNextT = t + REC_DT_S - 1e-9;
   const n = d.recN;
   const b = d.rec;
   let i = n * REC_STRIDE;
@@ -823,6 +922,8 @@ export function resetDetector(d, sample) {
   d.airT = 0;
   d.wasAir = 0;
   d.recN = 0;
+  d.recNextT = 0;
+  d.histN = 0;
   d.recJson = '';
   if (sample) {
     d.qx = sample.qx || 0; d.qy = sample.qy || 0; d.qz = sample.qz || 0; d.qw = sample.qw == null ? 1 : sample.qw;
@@ -903,8 +1004,11 @@ function inGap(clr) {
 
 function beginFeat(d, alt, wx, wz, head, speed, thr) {
   d.recN = 0;
+  d.recNextT = 0;
   const f = resetFeat(d.feat);
-  f.alt0 = alt; f.alt1 = alt; f.altMin = alt; f.altMax = alt;
+  f.alt0 = alt; f.alt1 = alt; f.altMin = alt; f.altMax = alt; f.postMin = alt;
+  d.hist[0] = 0; d.hist[1] = 0; d.hist[2] = 0; d.hist[3] = 0;
+  d.histN = 1;
   f.h0x = wx; f.h0z = wz; f.h1x = wx; f.h1z = wz;
   f.head0 = head; f.head1 = head;
   f.spd0 = speed; f.spd1 = speed; f.spdPeak = speed; f.spdMin = speed;
@@ -928,8 +1032,23 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
   const rate = Math.hypot(ar, ap, ay);
   if (rate > f.peakRate) f.peakRate = rate;
   if (alt < f.altMin) f.altMin = alt;
-  if (alt > f.altMax) f.altMax = alt;
+  if (alt > f.altMax) { f.altMax = alt; f.postMin = alt; } else if (alt < f.postMin) f.postMin = alt;
   f.alt1 = alt;
+  if (d.histN < HIST_CAP) {
+    const hi = d.histN * 4;
+    d.hist[hi] = f.dur; d.hist[hi + 1] = f.pitch; d.hist[hi + 2] = f.roll; d.hist[hi + 3] = f.yaw;
+    d.histN += 1;
+  }
+  {
+    // The velocity's direction in the vertical plane of the entry heading.
+    const va = vx * Math.cos(f.head0) + vy * Math.sin(f.head0);
+    if (Math.hypot(va, vz) > SWEEP_MIN_SPD) {
+      const th = Math.atan2(vz, va);
+      if (f.sweepOn) f.sweep += unwrapDelta(f.sweepTh, th);
+      f.sweepTh = th;
+      f.sweepOn = 1;
+    }
+  }
   const dxw = wx - d.px, dzw = wz - d.pz;
   f.travelH += Math.hypot(dxw, dzw);
   f.travel += Math.hypot(dxw, sample.wy != null ? (sample.wy - d.py) : 0, dzw);
@@ -980,13 +1099,25 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
   }
 }
 
+// The rotation windows of the open segment, into its features.
+export function windowFeat(d) {
+  const f = d.feat;
+  const s = spanWithin(d.hist, d.histN, 1, FLIP_WIN_S, d.span, d.dq);
+  f.flipUp = s.up; f.flipDn = s.dn;
+  spanWithin(d.hist, d.histN, 2, ROLL_WIN_S, d.span, d.dq);
+  f.rollUp = s.up; f.rollUpT = s.upT; f.rollDn = s.dn; f.rollDnT = s.dnT;
+  return f;
+}
+
 function finishManeuver(d) {
+  windowFeat(d);
   copyFeat(d.feat, d.lastFeat);
   d.live = 0;
   d.quiet = 0;
   const cls = classifyFeat(d.feat, _cls);
   d.lastWhy = cls.why || '';
   d.lastId = cls.id || '';
+  d.lastDir = (d.feat.flipUp || 0) >= (d.feat.flipDn || 0) ? 1 : -1;
   d.lastSloppy = (d.feat.seg && LOOP_IDS[cls.id]) ? 1 : 0;
   d.lastBump = d.feat.bump ? 1 : 0;
   try { d.recJson = encodeRecJson(d); } catch (e) { d.recJson = ''; }
@@ -1028,13 +1159,9 @@ export function stepDetector(d, sample, dt) {
   }
   if (vz == null) vz = 0;
   d.qx = sx; d.qy = sy; d.qz = sz; d.qw = sw; d.haveQ = 1;
-
-  if (Math.abs(dr) + Math.abs(dp) + Math.abs(dy) > 2.4) {
-    d.live = 0;
-    resetFeat(d.feat);
-    d.px = wx; d.py = wy; d.pz = wz;
-    return null;
-  }
+  // No jump guard: the page steps the detector every 4 ms of sim time, so a
+  // step turns at most a few degrees, and every respawn resets the detector
+  // (sim.html placeQuadAt, resetQuad); a portal keeps the attitude.
 
   const alt = sample.alt != null ? sample.alt : wy / ws;
   const speed = sample.speed != null ? sample.speed : Math.hypot(vx, vy, vz);
@@ -1442,8 +1569,7 @@ export function createTricks(opts) {
     sessionLast = id;
     if (got > 0) streak = nextStreak(streak, trickPoints(id, indoor));
     if (bump) streak = Math.max(1, streak * 0.5);
-    const def = BY_ID[id];
-    popName = def ? def.name : id;
+    popName = trickName(id, det.lastDir);
     popUntil = t + 1.05;
     if (got > 0) playBlip(audio, muted, 'trick', combo.mul);
     recordBest(store, mapId, combo.points, session);
@@ -1483,7 +1609,10 @@ export function createTricks(opts) {
   }
 
   let lastEv = null;
-  const tickWrapped = function (sample, dt) {
+  // step: one detector sample (the page calls it every 4 ms of sim time) and
+  // its scoring; no drawing. frame: the HUD, once a rendered frame. tick:
+  // both, for callers that step once a frame.
+  const stepWrapped = function (sample, dt) {
     lastEv = null;
     try {
       const t = nowFn();
@@ -1494,11 +1623,24 @@ export function createTricks(opts) {
         if (ev === 'land' || ev === 'disarm') bank(ev);
         else if (ev && BY_ID[ev]) award(ev);
       }
-      paintHud(t);
     } catch (err) {
       try { if (typeof console !== 'undefined') console.warn('tricks', err); } catch (e) { /* #198: never blank the FPV frame */ }
     }
     return lastEv;
+  };
+  const frameWrapped = function () {
+    try {
+      const t = nowFn();
+      if (combo.live && comboRemain(combo, t) <= 0) bank('timeout');
+      paintHud(t);
+    } catch (err) {
+      try { if (typeof console !== 'undefined') console.warn('tricks', err); } catch (e) { /* #198: never blank the FPV frame */ }
+    }
+  };
+  const tickWrapped = function (sample, dt) {
+    const ev = stepWrapped(sample, dt);
+    frameWrapped();
+    return ev;
   };
 
   function noteCrash() {
@@ -1574,6 +1716,8 @@ export function createTricks(opts) {
     setActive,
     setMap,
     tick: tickWrapped,
+    step: stepWrapped,
+    frame: frameWrapped,
     noteCrash,
     noteReset,
     setHudOn,
@@ -1594,6 +1738,7 @@ export function createTricks(opts) {
     lastTrace: function () { return det.recJson || ''; },
     lastWhy: function () { return det.lastWhy; },
     lastId: function () { return det.lastId; },
+    lastDir: function () { return det.lastDir; },
     lastSloppy: function () { return det.lastSloppy; },
     lastBump: function () { return det.lastBump; },
     indoor: function () { return indoor; },

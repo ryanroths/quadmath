@@ -12,6 +12,11 @@ specific wins). Atomic Flip / Roll / Yaw Spin only score when the maneuver is
 not a bigger named trick. Spatial tricks (Dive, Gap, Proximity) only score when
 no rotation segment is open.
 
+The page steps the detector on the **sim clock**: every 4 ms of sim time the
+core hands it the latest physics tick (sim-core-adapter.js `SAMPLE_US`,
+sim.html `onTrickSample`), whatever the frame rate. The HUD still draws once a
+frame.
+
 Coordinates: physics Z-up, X-forward, Y-left. Pitch/roll/yaw below are
 **body-axis integrals** (unwrapped). Camera-forward is body +X. Stick pitch up
 = nose down = **front** flip (positive pitch). Stick pitch down = **pull** /
@@ -30,8 +35,8 @@ site lists both 150 and 50).
 
 | Id | Name | Tier | Out | In | Detection essence |
 |---|---|---|---|---|---|
-| `flip` | Flip | Beginner | 50 | 75 | Continuous ~360° pitch, little roll/yaw, little travel. Front or back. |
-| `roll` | Roll | Beginner | 50 | 75 | Continuous ~360° roll, little pitch/yaw. |
+| `flip` | Flip | Beginner | 50 | 75 | **≥300° of pitch within any 1.2 s**, little net roll/yaw. Any speed, any travel. Front or back by the way the pitch turned (the pop says Front Flip / Back Flip). |
+| `roll` | Roll | Beginner | 50 | 75 | **≥300° of roll within any 1.5 s at a mean rate of ≥250°/s**, little net pitch/yaw. Slower turns are not tricks. |
 | `yawspin` | Yaw Spin | Beginner | 50 | 75 | Continuous ~360° yaw, mostly upright. |
 | `maverick` | Maverick Loop | Beginner | 100 | 100 | Under → over → under. Camera stays **forward-looking**; never inverts. |
 | `splits` | Split-S | Beginner | 100 | 100 | Over object, **180° roll**, dive the back, **pull** (pitch back) + throttle, pass **under flying forward**. |
@@ -39,7 +44,7 @@ site lists both 150 and 50).
 | `dive` | Building Dive | Beginner | 100 | 100 | Climb or start high, cut, nose down, fast altitude dump, level near the ground. |
 | `gap` | Gap | Beginner | 125 | 125 | Through a narrow opening at speed. 125 = TPW medium (12 in) gap. |
 | `prox` | Proximity | Beginner | 150 | 150 | Wall near-miss at speed. Sim-only spatial; TPW Wall Ride/Tap need a knife-edge roll or tap we do not require. |
-| `powerloop` | Powerloop | Novice | 200 | 200 | Start **under**, **pitch back** + throttle over until inverted, cut still pitching back, reapply, level **under**. Nose follows. Heading in ≈ out. |
+| `powerloop` | Powerloop | Novice | 200 | 200 | A **Flip whose path loops**: the path climbs **≥1.5 m** above the entry, comes back down to the entry height or below after its top, and the velocity turns **≥270°** in the vertical plane of the entry heading, the same way the flip turns. Otherwise it is a Flip. |
 | `sideloop` | Side Loop | Novice | 200 | 225 | 90° **yaw** under the object, then a **roll-driven** vertical loop (roll + some yaw) over inverted, cut, reapply, level under. Carves a loop **sideways**, not a pitch Powerloop. Indoor 225 = TPW Under/Over. |
 | `matty` | Matty Flip | Novice | 200 | 200 | Start **over**, **partial front flip** (pitch forward) keeping the object in view on the way down, throttle, level **flying backward under**. |
 | `juicyflick` | Juicy Flick | Novice | 200 | 225 | Open-air: pitch **forward** with throttle to inverted, then a prompt **180° roll**. Travel stays forward. |
@@ -52,12 +57,26 @@ site lists both 150 and 50).
 
 ## Decision boundaries
 
+### Flip, Roll, Powerloop: rotation first, path second
+
+- Flip is decided by the rotation alone: ≥300° of pitch inside a 1.2 s
+  window of the segment. Speed and travel do not matter. A pitch rotation that
+  big is **never nothing**: when no trick reaches the 0.42 score (its roll or
+  yaw too big for Flip's own terms), it is a Flip.
+- Powerloop is a Flip plus a path that loops (climb ≥1.5 m, back down to or
+  below the entry, ≥270° of velocity turn). A flip at speed whose path stays
+  straight is a Flip, not nothing.
+- Roll is ≥300° of roll inside a 1.5 s window at ≥250°/s on average between
+  the window's two ends. A slow rolling turnaround (the Fractal75's after a
+  punch: 300°+ over 3–4.5 s at under 272°/s) is not a Roll.
+
 ### Powerloop vs Matty Flip
 
 These are **not** the same family.
 
-- Powerloop: starts **under**, **back** pitch (pull) through inverted, nose
-  **follows** velocity, closes, heading in ≈ out.
+- Powerloop: a flip, normally **back** pitch (pull), whose **path loops**:
+  it climbs ≥1.5 m, comes back down to the entry height or below, and the
+  velocity turns ≥270° the way the pitch turns.
 - Matty: starts **over**, **front** pitch (nose down) over the object, camera
   on the object while descending, exits **backward under**.
 
@@ -84,8 +103,8 @@ Pitch sign after the roll + exit follow vs against.
 
 Same under → over → under path.
 
-- Powerloop: goes **inverted**, ~360° back pitch, nose follows. Net pitch ≈
-  path pitch.
+- Powerloop: a full flip (≥300° of pitch within 1.2 s) on a looping path.
+  Net pitch ≈ path pitch.
 - Maverick: camera stays **forward-looking**; brief invert is allowed but
   it is not a full flip. Pitch is an **S-curve** (path pitch ≫ net pitch).
   Often flies **backward** over the object while still looking forward, so

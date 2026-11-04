@@ -84,6 +84,7 @@ test('candidate order, specificity bonus, pick floor and dive fallback match cla
   assert.deepEqual({ ...SPEC }, spec);
   assert.ok(body.includes("(SPEC[id] || 0) * ((_sc[id] || 0) > 0.15 ? 1 : 0)"));
   assert.ok(body.includes('if (best < 0.42 || !bestId) {'));
+  assert.ok(body.includes('if (v.flipSpan >= 5.236) {'), 'the flip fallback');
   const fb = DIVE_FALLBACK;
   assert.ok(body.includes(`v.drop >= ${fb.drop} && f.spdPeak > ${fb.spdPeak} && f.vzMin < ${fb.vzMin} && absP < ${fb.absP} && absR < ${fb.absR} && v.pathY < ${fb.pathY.toFixed(1)}`));
   assert.ok(body.includes('if (!f || f.n < 4 || f.dur < 0.12) return o;'));
@@ -182,6 +183,13 @@ function randFeat(r) {
   f.objNearN = r() < 0.5 ? 0 : Math.floor(u(0, f.n)); f.objOrbitN = Math.max(f.objNearN, r() < 0.4 ? 0 : Math.floor(u(0, f.n)));
   f.under0 = r() < 0.2 ? 1 : 0; f.over0 = r() < 0.2 ? 1 : 0;
   f.bump = r() < 0.1 ? 1 : 0; f.seg = r() < 0.2 ? 1 : 0; f.oppRY = Math.floor(u(0, f.n));
+  // The rotation windows and the loop path: near their thresholds often.
+  const near = (a) => (r() < 0.5 ? a + u(-0.6, 0.6) : u(0, a * 1.4));
+  f.flipUp = r() < 0.5 ? near(5.236) : u(0, 2); f.flipDn = r() < 0.5 ? near(5.236) : u(0, 2);
+  f.rollUp = r() < 0.5 ? near(5.236) : u(0, 2); f.rollDn = r() < 0.5 ? near(5.236) : u(0, 2);
+  f.rollUpT = u(0.05, 1.5); f.rollDnT = u(0.05, 1.5);
+  f.postMin = f.altMax - u(0, Math.max(0.01, f.altMax - f.altMin));
+  f.sweep = (r() < 0.5 ? -1 : 1) * near(4.712);
   if (r() < 0.12) {
     // A yaw spin, upright or inverted: little pitch and roll, a full turn of
     // yaw in place (Yaw Spin, Trippy and Ham live here).
@@ -293,7 +301,7 @@ function run(phases, opts) {
     for (let i = 0; i < n; i++) {
       const w = ph.rate || [0, 0, 0];
       const v = ph.v || [0, 0, 0];
-      if (ph.jump && i === 0) q = qMul(q, qAxis(1, 0, 0, Math.PI));
+      if (ph.reset && i === 0) resetDetector(d, sample);
       q = qMul(q, qAxis(...(() => { const m = Math.hypot(...w) || 1; return [w[0] / m, w[1] / m, w[2] / m]; })(), Math.hypot(...w) * dt));
       p.x += v[0] * dt; p.y += v[1] * dt; p.z += v[2] * dt;
       fill(w, v);
@@ -324,20 +332,20 @@ test('observer: a flip is one maneuver record whose result is the detector\'s la
   assert.equal(flip.verdict, 'fired');
   const pl = m[0].candidates.find((c) => c.id === 'powerloop');
   assert.equal(pl.verdict, 'missed');
-  assert.match(pl.reason, /-pitch/);
+  assert.match(pl.reason, /loopRise|loopRet|loopSweep/);
   JSON.parse(JSON.stringify(m[0]));
 });
 
-test('observer: a segment the detector drops (jump guard) is an abort, not a maneuver', () => {
+test('observer: a segment dropped between steps (a reset) is an abort, not a maneuver', () => {
   const { recs } = run([
     { t: 0.3 },
     { t: 0.3, rate: [6, 0, 0] },
-    { t: 0.1, rate: [6, 0, 0], jump: true },
+    { t: 0.1, rate: [6, 0, 0], reset: true },
     { t: 0.6 },
   ]);
   const ab = recs.filter((r) => r.type === 'abort');
   assert.equal(ab.length, 1);
-  assert.match(ab[0].reason, /jump guard/);
+  assert.match(ab[0].reason, /reset/);
 });
 
 test('observer: a dive the detector arms and fires is a dive record with its gates', () => {
@@ -437,11 +445,11 @@ test('createTrickDebug: overlay lists the ten candidates and the console gets on
   assert.equal(dbg.attempts().length, json.length);
 });
 
-test('sim.html loads the overlay only with ?tricks=debug and brackets tricks.tick with it', () => {
+test('sim.html loads the overlay only with ?tricks=debug and brackets each tricks.step with it', () => {
   assert.match(simSrc, /get\('tricks'\)==='debug'\)\{\n\s*import\('\.\/sim-tricks-debug\.js\?v=[0-9a-f]{12}'\)/);
   assert.equal((simSrc.match(/sim-tricks-debug\.js\?v=/g) || []).length, 1, 'one import, behind the flag');
   assert.ok(simSrc.includes('let trickDebug=null;'));
-  assert.ok(simSrc.includes('if(trickDebug)trickDebug.before(trickSample,dt);\n        const trickEv=tricks.tick(trickSample,dt);\n        if(trickDebug)trickDebug.after(trickSample,dt,trickEv);'));
+  assert.ok(simSrc.includes('if(trickDebug)trickDebug.before(trickSample,dt);\n    const trickEv=tricks.step(trickSample,dt);\n    if(trickDebug)trickDebug.after(trickSample,dt,trickEv);'));
   // The overlay reads the detector and writes nothing back to it.
   const dbgSrc = readFileSync(join(root, 'sim-tricks-debug.js'), 'utf8');
   assert.equal(/\bdet\.\w+\s*=[^=]/.test(dbgSrc), false, 'no writes to the detector');
