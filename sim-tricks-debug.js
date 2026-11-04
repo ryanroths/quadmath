@@ -25,18 +25,19 @@
 import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
-} from './sim-tricks.js?v=bf248973ab83';
+  GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL,
+} from './sim-tricks.js?v=a65ab08b106c';
 
 const TAU = Math.PI * 2;
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
 export const CLASS_IDS = Object.freeze([
-  'rubik', 'cubik', 'ham', 'trippy', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
+  'rubik', 'cubik', 'barani', 'ham', 'trippy', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
   'powerloop', 'matty', 'maverick', 'splits', 'cradle', 'flip', 'roll', 'yawspin',
 ]);
 export const SPEC = Object.freeze({
-  rubik: 0.12, cubik: 0.12, ham: 0.11, trippy: 0.11, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
+  rubik: 0.12, cubik: 0.12, barani: 0.12, ham: 0.11, trippy: 0.11, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
   halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
   cradle: 0.08, flip: 0, roll: 0, yawspin: 0,
 });
@@ -50,12 +51,13 @@ const FLIP_WIN_LABEL = '1.2 s';
 // fallback inside classifyFeat, and the segment-start numbers.
 export const DIVE = Object.freeze({ vzStart: -6.5, speedStart: 8, altStart: 4, drop: 3.4, speedHold: 5.5, vzHold: -4.5, vzCancel: -2, cooldown: 3.2 });
 export const DIVE_FALLBACK = Object.freeze({ drop: 3.2, spdPeak: 8, vzMin: -6.2, absP: 3.2, absR: 2.2, pathY: 2.0 });
-export const GAP = Object.freeze({ upW: 14, latW: 7, side: 3.2, speedIn: 2.8, travel: 4.2, speed: 3.4 });
+// The gap rule's numbers are sim-tricks.js' own exports (imported above).
+export const GAP = Object.freeze({ sideK: GAP_SIDE_K, minDepth: GAP_MIN_DEPTH_M, near: GAP_NEAR_M, frameW: FRAME_W_M });
 export const SEG = Object.freeze({ divingThr: 0.18, divingRate: 1.55, divingVz: -3.8, contact: 0.08 });
 
 // The ten the overlay spells out (the brief's list). Inverted yaw spin is
 // Ham Spin ('ham'); dive and gap are stepDetector's state machines.
-export const FOCUS = Object.freeze(['flip', 'roll', 'powerloop', 'splits', 'matty', 'trippy', 'juicyflick', 'ham', 'dive', 'gap']);
+export const FOCUS = Object.freeze(['flip', 'roll', 'powerloop', 'splits', 'matty', 'trippy', 'juicyflick', 'ham', 'barani', 'dive', 'gap']);
 
 const ge = (src, a, fade) => ({ op: '>=', src, a, fade });
 const le = (src, a, fade) => ({ op: '<=', src, a, fade });
@@ -75,12 +77,11 @@ export const GATES = Object.freeze({
     ge('rollFirst', 0.0, 0.12), ge('v.inv', 0.12, 0.08), le('absY', 2.4, 0.7),
   ],
   trippy: [
-    ge('absY', TAU, 0.70), ge('v.pathY', TAU, 0.70), le('f.tYaw360', 3.20, 0.80), ge('f.peakY', 1.60, 0.70),
-    le('absR', 1.80, 0.70), le('absP', 1.60, 0.60), le('v.pathR', 2.20, 0.90), le('v.pathP', 2.00, 0.80),
-    ge('f.upMin', 0.45, 0.25), le('v.inv', 0.12, 0.08), ge('v.objOrbit', 0.45, 0.30), le('v.rad', 22, 8),
-    le('f.travelH', 80, 24), le('v.meanDot', 0.42, 0.20),
-    either(le('v.rad', 8.0, 3.0), le('v.close', 0.55, 0.18)),
-    ge('f.dur', 0.55, 0.15),
+    ge('v.yawSpan', 12.566, 0), ge('v.yawRate', 5.236, 0), band('f.orbitR', 0.3, 2.5, 0),
+    ge('f.orbitSweep', 3.1416, 0), ge('f.orbitTurn', 0.8, 0), ge('f.orbitSpd', 1.0, 0),
+  ],
+  barani: [
+    ge('f.barP', 5.236, 0), band('f.barR', 2.356, 3.927, 0), ge('f.upEnd', 0.6, 0),
   ],
   ham: [
     ge('absY', TAU, 0.70), ge('v.pathY', TAU, 0.70), le('f.tYaw360', 1.80, 0.50), ge('f.peakY', 4.0, 1.5),
@@ -151,7 +152,7 @@ export const GATES = Object.freeze({
 export const OVERRIDES = Object.freeze([
   { from: 'flip', to: 'matty', text: 'flip→matty: matty > 0.55, pitch > 0', when: (c) => c.sc.matty > 0.55 && c.f.pitch > 0 },
   { from: 'yawspin', to: 'ham', text: 'yawspin→ham: ham > 0.42', when: (c) => c.sc.ham > 0.42 },
-  { from: 'trippy', to: 'ham', text: 'trippy→ham: ham > 0.42', when: (c) => c.sc.ham > 0.42 },
+  { from: 'ham', to: 'trippy', text: 'ham→trippy: trippy > 0.42', when: (c) => c.sc.trippy > 0.42 },
   { from: 'yawspin', to: 'trippy', text: 'yawspin→trippy: trippy > 0.42', when: (c) => c.sc.trippy > 0.42 },
   { from: 'roll', to: 'sideloop', text: 'roll→sideloop: sideloop > 0.4', when: (c) => c.sc.sideloop > 0.4 },
   { from: 'yawspin', to: 'sideloop', text: 'yawspin→sideloop: sideloop > 0.4', when: (c) => c.sc.sideloop > 0.4 },
@@ -173,10 +174,10 @@ export const OVERRIDE_TEXT = Object.freeze(OVERRIDES.map((r) => r.text));
 const ANGLE_SRC = new Set([
   'absP', 'absR', 'absY', 'v.pathP', 'v.pathR', 'v.pathY', 'f.pitch', '-f.pitch', 'v.head',
   'Math.max(absR, v.pathR)', 'Math.max(absY, v.pathY)', 'v.pathP - absP',
-  'v.flipSpan', 'v.rollSpan', 'v.loopSweep',
+  'v.flipSpan', 'v.rollSpan', 'v.loopSweep', 'v.yawSpan', 'f.orbitSweep', 'f.barP', 'f.barR',
 ]);
 // Angular rates (shown in degrees a second).
-const RATE_SRC = new Set(['v.rollRate']);
+const RATE_SRC = new Set(['v.rollRate', 'v.yawRate']);
 
 function atLeast(x, a, fade) {
   if (x >= a) return 1;
@@ -222,6 +223,9 @@ function context(f) {
     'Math.max(v.against, v.invAg)': Math.max(v.against, v.invAg),
     'v.flipSpan': v.flipSpan, 'v.rollSpan': v.rollSpan, 'v.rollRate': v.rollRate,
     'v.loopRise': v.loopRise, 'v.loopRet': v.loopRet, 'v.loopSweep': v.loopSweep,
+    'v.yawSpan': v.yawSpan, 'v.yawRate': v.yawRate,
+    'f.orbitR': f.orbitR, 'f.orbitSweep': f.orbitSweep, 'f.orbitTurn': f.orbitTurn, 'f.orbitSpd': f.orbitSpd,
+    'f.barP': f.barP, 'f.barR': f.barR, 'f.upEnd': f.upEnd,
   };
   return { f, v, absP, absR, absY, rollFirst, pitchFirst, yawFirst, tR, tP, tY, val, sc: Object.create(null) };
 }
@@ -300,6 +304,10 @@ function sawOf(f, v, ctx) {
     flipDeg: degOf(v.flipSpan), flipDir: v.flipDir > 0 ? 'front' : 'back',
     rollDeg15: degOf(v.rollSpan), rollRateDeg: degOf(v.rollRate),
     loopRise: r3(v.loopRise), loopRet: r3(v.loopRet), loopSweepDeg: degOf(v.loopSweep),
+    vyawDeg: degOf(v.yawSpan), vyawRateDeg: degOf(v.yawRate),
+    orbitR: r3(f.orbitR), orbitSweepDeg: degOf(f.orbitSweep), orbitTurn: r3(f.orbitTurn), orbitSpd: r3(f.orbitSpd),
+    orbitFit: r3(f.orbitFit), orbitPole: f.orbitPole,
+    baraniPitchDeg: degOf(f.barP), baraniTwistDeg: degOf(f.barR), upEnd: r3(f.upEnd),
   };
 }
 
@@ -444,16 +452,15 @@ function diveFallbackRow(ex) {
   return { verdict: 'missed', reason: 'fallback: ' + bad.map((x) => gateLabel(x.feature) + ' ' + x.value + ' needs ' + x.op + x.need).join(' · ') };
 }
 
-// inGap (sim-tricks.js), from the detector's clearance scan.
-export function gapKindOf(clr) {
-  const latX = clr.px + clr.nx;
-  const latZ = clr.pz + clr.nz;
-  if (latX < GAP.latW && clr.px < GAP.side && clr.nx < GAP.side) return 1;
-  if (latZ < GAP.latW && clr.pz < GAP.side && clr.nz < GAP.side) return 2;
-  if (clr.up < GAP.upW) return 3;
-  return 0;
+// Where the detector's gap state stands, for the panel: in an authored
+// volume (its name), or the generic rule's sides against its limit.
+export function gapState(det, frameW, ws) {
+  const vols = det.gapVols, face = det.gapFace;
+  if (vols && face) for (let i = 0; i < face.length; i++) if (face[i] !== -1) return { authored: vols[i].name, inBySide: face[i] === -2 };
+  const sideMax = GAP.sideK * (frameW > 0 ? frameW : GAP.frameW) * (ws || 3.5);
+  const c = det.clr;
+  return { authored: null, sideMax, x: c ? [c.px, c.nx] : null, z: c ? [c.pz, c.nz] : null, on: det.gapOn, cd: det.gapCd };
 }
-const GAP_KIND = ['none', 'side walls (x)', 'side walls (z)', 'overhead'];
 
 // ---- The observer: the detector before and after each step, from outside.
 //
@@ -473,18 +480,18 @@ export function createTrickObserver(det, opts) {
   const pre = makeFeat();
   const held = makeFeat();
   const st = {
-    live: 0, lockout: 0, diveOn: 0, diveDrop: 0, diveCd: 0, gapOn: 0, gapTravel: 0, gapSpd: 0, gapKind: 0, gapCd: 0,
+    live: 0, lockout: 0, diveOn: 0, diveDrop: 0, diveCd: 0, gapOn: 0, gapCd: 0,
   };
   let heldLive = 0;
   let segT0 = 0;
   let dive = null;
   let watch = null;
   let sameDescent = false;   // still in the descent of a dive just recorded
-  let gap = null;
+  let gapSeq = 0;
   let seq = 0;
   const view = {
     t: 0, armed: false, contact: false, rate: 0, lockout: 0, diving: false, live: 0, liveT: 0,
-    vz: 0, speed: 0, alt: 0, thr: 0, gapZone: 0, clr: null, diveOn: 0, diveDrop: 0, diveCd: 0, gapCd: 0, gapOn: 0, gapTravel: 0,
+    vz: 0, speed: 0, alt: 0, thr: 0, gap: null, clr: null, diveOn: 0, diveDrop: 0, diveCd: 0, gapCd: 0,
   };
 
   function base(type, t) {
@@ -500,6 +507,7 @@ export function createTrickObserver(det, opts) {
     rec.event = ev || null;
     rec.why = det.lastWhy || '';
     rec.dir = ex.id === 'flip' || ex.id === 'powerloop' ? (det.lastDir < 0 ? 'back' : 'front') : null;
+    rec.pole = ex.id === 'trippy' && det.lastPole ? TRIPPY_POLE_MUL : 0;
     rec.sloppy = det.lastSloppy ? 1 : 0;
     rec.bump = det.lastBump ? 1 : 0;
     rec.mismatch = ex.mismatch;
@@ -537,7 +545,7 @@ export function createTrickObserver(det, opts) {
     copyFeat(det.feat, pre);
     st.live = det.live; st.lockout = det.lockout;
     st.diveOn = det.diveOn; st.diveDrop = det.diveDrop; st.diveCd = det.diveCd;
-    st.gapOn = det.gapOn; st.gapTravel = det.gapTravel; st.gapSpd = det.gapSpd; st.gapKind = det.gapKind; st.gapCd = det.gapCd;
+    st.gapOn = det.gapOn; st.gapCd = det.gapCd;
   }
 
   function after(sample, dt, ev) {
@@ -558,9 +566,8 @@ export function createTrickObserver(det, opts) {
 
     view.t = t; view.armed = armed; view.contact = contact; view.rate = rate; view.lockout = lockoutUsed;
     view.diving = diving; view.vz = vz; view.speed = speed; view.alt = alt; view.thr = thr;
-    view.clr = det.clr; view.gapZone = det.clr ? gapKindOf(det.clr) : 0;
+    view.clr = det.clr; view.gap = gapState(det, s.frameW, s.ws);
     view.diveOn = det.diveOn; view.diveDrop = det.diveDrop; view.diveCd = det.diveCd; view.gapCd = det.gapCd;
-    view.gapOn = det.gapOn; view.gapTravel = det.gapTravel;
 
     // Rotation segments.
     let finished = false;
@@ -656,25 +663,20 @@ export function createTrickObserver(det, opts) {
       }
     }
 
-    // Gap passes.
-    if (!st.gapOn && det.gapOn) gap = { t0: t, kind: det.gapKind, speed0: speed };
-    if (st.gapOn && !det.gapOn && gap) {
+    // Gaps: each pass the detector resolves (gapSeq), and each that scores.
+    if (ev === 'gap') {
       const rec = base('gap', t);
-      const fired = ev === 'gap';
-      rec.t0 = r3(gap.t0);
-      rec.result = fired ? 'gap' : null;
-      rec.saw = { zone: GAP_KIND[gap.kind] || gap.kind, travel: r3(st.gapTravel), peakSpeed: r3(st.gapSpd) };
-      rec.gates = [
-        { gate: 'in a gap zone at speed > ' + GAP.speedIn, value: r3(gap.speed0), ok: true },
-        { gate: 'travel through > ' + GAP.travel + ' (scene units)', value: r3(st.gapTravel), ok: st.gapTravel > GAP.travel },
-        { gate: 'peak speed > ' + GAP.speed + ' m/s', value: r3(st.gapSpd), ok: st.gapSpd > GAP.speed },
-      ];
-      rec.reason = fired ? 'fired: ' + st.gapTravel.toFixed(1) + ' through at ' + st.gapSpd.toFixed(1) + ' m/s'
-        : finished && det.lastId ? 'a trick (' + det.lastId + ') was awarded inside the gap; the pass was dropped'
-          : 'missed: ' + rec.gates.filter((g) => !g.ok).map((g) => g.gate + ' (' + g.value + ')').join(' · ');
+      rec.result = 'gap';
+      rec.reason = det.lastWhy.replace(/^Gap\s+Beginner\s+\d+\s+/, '');
+      rec.how = /walls within/.test(det.lastWhy) ? 'generic' : 'authored';
       emit(rec);
-      gap = null;
+    } else if (det.gapSeq !== gapSeq) {
+      const rec = base('gap', t);
+      rec.result = null;
+      rec.reason = det.gapNote + (/^through/.test(det.gapNote) ? ' (not scored: rotating, cooldown or a repeat)' : '');
+      emit(rec);
     }
+    gapSeq = det.gapSeq;
   }
 
   return { before, after, view, detector: det };
@@ -692,6 +694,9 @@ const CSS = '#trickXr{position:fixed;right:8px;top:132px;z-index:16;pointer-even
   + '#trickXr .near{color:#ff7a18}'
   + '#trickXr .no{color:#7d8aa3}'
   + '#trickXr .d{color:#7d8aa3}'
+  + '#trickXrCopy{pointer-events:auto;display:block;margin:0 0 6px auto;font-family:inherit;font-size:11px;letter-spacing:.08em;'
+  + 'text-transform:uppercase;color:#080612;background:#00f0ff;border:0;padding:4px 10px;cursor:pointer}'
+  + '#trickXrCopy.flash{background:#ff2bd6;color:#fff}'
   + 'body.menu-open #trickXr,body.builder-on #trickXr,body:has(#panel.open) #trickXr{opacity:.35}';
 
 function esc(s) {
@@ -759,14 +764,60 @@ export function createTrickDebug(opts) {
       st.textContent = CSS;
       doc.head.appendChild(st);
     }
-    el = doc.getElementById('trickXr');
-    if (!el) {
-      el = doc.createElement('div');
-      el.id = 'trickXr';
-      el.setAttribute('aria-hidden', 'true');
-      doc.body.appendChild(el);
+    let box = doc.getElementById('trickXr');
+    if (!box) {
+      box = doc.createElement('div');
+      box.id = 'trickXr';
+      doc.body.appendChild(box);
     }
+    // The button stays; the body under it is redrawn.
+    const btn = doc.createElement('button');
+    btn.id = 'trickXrCopy';
+    btn.type = 'button';
+    btn.textContent = 'Copy trick log';
+    btn.onclick = function (ev) {
+      try { if (ev && ev.preventDefault) ev.preventDefault(); } catch (e) { /* ignore */ }
+      const ok = copyLog();
+      btn.textContent = ok ? 'Copied ' + attempts.length : 'Copy failed';
+      btn.className = 'flash';
+      setTimeout(function () { btn.textContent = 'Copy trick log'; btn.className = ''; }, 1200);
+    };
+    box.appendChild(btn);
+    el = doc.createElement('div');
+    el.id = 'trickXrBody';
+    el.setAttribute('aria-hidden', 'true');
+    box.appendChild(el);
     return el;
+  }
+
+  // The log as text: one line of JSON per attempt, oldest first.
+  function logText() {
+    return attempts.map((a) => JSON.stringify(a)).join('\n');
+  }
+  function copyLog() {
+    const text = logText();
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(function () { fallbackCopy(text); });
+        return true;
+      }
+    } catch (e) { /* fall through */ }
+    return fallbackCopy(text);
+  }
+  function fallbackCopy(text) {
+    try {
+      if (!doc || !doc.body || !doc.createElement) return false;
+      const ta = doc.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      doc.body.appendChild(ta);
+      ta.select();
+      const ok = doc.execCommand && doc.execCommand('copy');
+      doc.body.removeChild(ta);
+      return !!ok;
+    } catch (e) { return false; }
   }
 
   function diveLine(t) {
@@ -784,15 +835,15 @@ export function createTrickDebug(opts) {
   }
 
   function gapLine(t) {
-    const v = obs.view;
+    const g = obs.view.gap;
     let s;
-    if (v.gapOn) s = '<span class="near">in gap</span> travel ' + v.gapTravel.toFixed(1) + '/' + GAP.travel + '  speed ' + v.speed.toFixed(1);
-    else if (lastGap && t - lastGap.t < 6) s = (lastGap.result ? '<span class="ok">✓ fired</span> ' : '<span class="no">✗</span> ') + esc(lastGap.reason) + '  <span class="d">' + (t - lastGap.t).toFixed(1) + 's ago</span>';
-    else if (v.clr) {
-      const c = v.clr;
-      s = '<span class="d">zone ' + GAP_KIND[v.gapZone] + ' (x ' + c.px.toFixed(1) + '+' + c.nx.toFixed(1) + ' z ' + c.pz.toFixed(1) + '+' + c.nz.toFixed(1)
-        + ' needs &lt;' + GAP.latW + ', up ' + c.up.toFixed(1) + ' needs &lt;' + GAP.upW + ') · speed ' + v.speed.toFixed(1) + '&gt;' + GAP.speedIn + ' ' + mark(v.speed > GAP.speedIn)
-        + (v.gapCd > 0 ? ' · cooldown ' + v.gapCd.toFixed(1) + 's' : '') + '</span>';
+    if (lastGap && t - lastGap.t < 6) s = (lastGap.result ? '<span class="ok">✓ fired</span> ' : '<span class="no">✗</span> ') + esc(lastGap.reason) + '  <span class="d">' + (t - lastGap.t).toFixed(1) + 's ago</span>';
+    else if (!g) s = '<span class="d">no step yet</span>';
+    else if (g.authored) s = '<span class="near">in ' + esc(g.authored) + '</span>' + (g.inBySide ? ' <span class="d">(came in by a side: a skim)</span>' : ' <span class="d">out the far face scores</span>');
+    else if (g.x) {
+      const f = (a) => a.map((v) => (v >= 50 ? '—' : (v / 3.5).toFixed(2))).join('+');
+      s = '<span class="d">generic: walls x ' + f(g.x) + ' z ' + f(g.z) + ' m, both sides need ≤' + (g.sideMax / 3.5).toFixed(2) + ' m'
+        + (g.on ? ' · <span class="near">between walls</span>' : '') + (g.cd > 0 ? ' · cooldown ' + g.cd.toFixed(1) + 's' : '') + '</span>';
     } else s = '<span class="d">no clearance scan yet</span>';
     const fired = lastGap && lastGap.result && t - lastGap.t < 6;
     return '<span class="' + (fired ? 'ok' : 'no') + '">' + (fired ? '✓' : '✗') + ' ' + pad('Gap', 18) + pad('—', 5) + '</span> ' + s;
@@ -827,6 +878,7 @@ export function createTrickDebug(opts) {
       const s = r.saw || {};
       L.push('<span class="d">last #' + r.seq + ' (' + (t - r.t).toFixed(1) + 's ago)</span>  '
         + (r.result ? '<span class="ok">' + esc(r.result === 'flip' ? trickName('flip', r.dir === 'back' ? -1 : 1) : nameOf(r.result)) + '</span>' : '<span class="no">' + (r.type === 'abort' ? 'dropped' : 'no label') + '</span>')
+        + (r.pole ? ' <span class="ok">· pole ×' + r.pole + '</span>' : '')
         + '  <span class="d">P' + (s.pitchDeg ?? '?') + ' R' + (s.rollDeg ?? '?') + ' Y' + (s.yawDeg ?? '?') + ' ' + (s.dur ?? '?') + 's</span>');
       L.push('<span class="d">  ' + esc(r.reason || '') + '</span>');
       if (s.travelH != null) {
@@ -865,6 +917,8 @@ export function createTrickDebug(opts) {
   return {
     before, after,
     paint: function () { paint(true); },
+    copyLog,
+    logText,
     attempts: function () { return attempts.slice(); },
     view: obs.view,
   };

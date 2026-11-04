@@ -422,3 +422,91 @@ Fractal75: the four turnarounds before and after, the same either way:
 - **`tools/test_sim_tricks_debug.mjs`:** the overlay's copy of the classifier
   follows the new terms (the source-parse test and the 150k-segment replica
   check pass).
+
+## 6. Fixes from flying: Trippy, Barani, Gap, the trick log
+
+### The gap rule as it was
+
+`stepDetector` (before this change) called a step a gap zone (`inGap`) when
+the clearance scan found any of:
+- walls on both x sides, each under 3.2 scene units (0.91 m) away and under
+  7 (2.0 m) together;
+- the same on z;
+- **anything overhead within 14 scene units (4.0 m)** (`clr.up < GAP_UP_W`).
+
+A box counted as a side when it overlapped the quad's height and its
+position along the path within 0.45 scene units (13 cm). It counted as
+overhead when it overlapped in x and z and sat more than 0.12 above.
+
+A gap started in such a zone at more than 2.8 m/s. It scored on leaving the
+zone if the quad had moved more than 4.2 scene units (1.2 m) through it at a
+peak above 3.4 m/s, with no rotation open and a 2.2 s cooldown.
+
+The overhead clause is what fired at random. In the House the ceiling is at
+2.7 m, so every fast straight run indoors was in a gap zone. In the Rig and
+the Warehouse (ceilings at 6 m) any flight above 2 m was in one, and so was
+any run under the loft, a tower deck, a shelf or a table. The side clause
+took openings up to 2 m wide (corridors, doorways), while the 3.4 m/s peak
+missed slow passes through real slots.
+
+On the bf core in the Rig, the old rule:
+- scored a Gap flying under the loft's slab and out past its edge (4.5 m/s);
+- scored nothing through the three crate slots at 3.2 m/s.
+
+The new rule scores the reverse: the three crate slots, and nothing under the
+loft.
+
+### What changed
+
+- **Gap, authored first.** The Rig (17), the House (3) and the Warehouse
+  (50) carry their intentional gaps as volumes (`sim-maps.js` `mapGaps`,
+  scene units, each with the axis it is flown along):
+  - Rig: crate slots, pipe slits and riser slits, the tunnel, the loft hole;
+  - House: the bookshelf gap, under the patio table (either way);
+  - Warehouse: every rack's shelf levels, the gap, the Ion hoop.
+
+  A pass goes in through one face across the axis and out through the
+  opposite face; in or out through a side is a skim. With no authored volume
+  near (0.3 m), the generic rule needs walls on both sides of the path, each
+  within 2.5 frame widths (the page passes the quad's width: the Air65 is
+  8.2 cm, so 0.21 m). It also needs at least 10 cm of the opening flown
+  through and out the far end. A floor or ceiling is never a side. No speed
+  floor.
+- **Trippy**, by the owner's definition: at least 720° of yaw at 300 °/s or
+  more while the path orbits a centre. The orbit's radius is 0.3-2.5 m (the
+  path's curvature), its direction turns half a turn or more one way, at
+  1 m/s or more.
+  - **Yaw.** It is measured about the vertical: in a tilted spin the
+    body-axis yaw sees only cos(tilt) of the turn.
+  - **Upright or inverted.** An inverted spin that orbits is a Trippy (the
+    old `trippy→ham` re-label is now `ham→trippy`).
+  - **Pole bonus.** A pole or post (a collider at most 0.5 m across and 1 m
+    tall) within 0.5 m of the orbit's centre earns 1.25× the points.
+  - **In-place spins.** A spin in place by a pole, the old Trippy, is now a
+    Yaw Spin.
+- **Barani**, new (Novice, 100 / 125 indoors, above Flip's 50 / 75): at
+  least 300° of pitch and 180 ± 45° of roll inside one 1.5 s window, ending
+  upright. The overlay lists it among its candidates.
+- **Copy trick log**: a button on the `?tricks=debug` overlay copies every
+  attempt it logged, one JSON line each.
+
+### Checks
+
+- **bf core in the Rig** (sim-core with the Rig's colliders, the page's
+  4 ms sampling):
+  - A Trippy round the spin pole (a pilot holding 0.7 m round it in angle
+    mode, yawing at 6.2 rad/s) scores Trippy with the pole bonus, clear of
+    the pole.
+  - A Barani (pitch to vertical, half twist, pitch to upright) scores
+    Barani.
+  - Through the crate slots: three Gaps, one per slot. Under the loft and out
+    past its edge: none. Past the crate walls' open end (one side): none.
+- **Volumes.** Every authored gap volume is clear of every collider and has
+  a wall.
+- **The owner's logs.** Replayed on the bf core, the counts are unchanged:
+  rolls 10, front flips 5, back flips 4, yaw spins 4. On the Fractal75,
+  nothing.
+  - The segment at 66.5 s in the Air65 freestyle (Flip after #307, Matty when
+    dead-reckoned) is now a Barani. On the logged gyro it turns 310° of pitch
+    with a 180° roll inside 1.5 s and ends upright.
+  - Neither log has a Trippy (no orbiting spins).

@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   classifyFeat, makeFeat, makeDetector, stepDetector, resetDetector, createTricks,
+  GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M,
 } from '../sim-tricks.js';
 import {
   GATES, CLASS_IDS, SPEC, OVERRIDES, DIVE, DIVE_FALLBACK, GAP, SEG, FOCUS,
@@ -118,12 +119,12 @@ test('dive, gap and segment-start numbers are stepDetector\'s', () => {
   assert.ok(src.includes(`d.diveDrop >= DIVE_DROP && (speed > ${DIVE.speedHold} || vz < ${DIVE.vzHold})`));
   assert.ok(src.includes(`if (vz > ${DIVE.vzCancel} || contact) d.diveOn = 0;`));
   assert.ok(src.includes(`d.diveOn = 0; d.diveCd = ${DIVE.cooldown};`));
-  assert.ok(src.includes(`const GAP_UP_W = ${GAP.upW};`));
-  assert.ok(src.includes(`const GAP_LAT_W = ${GAP.latW};`));
-  assert.ok(src.includes(`const GAP_TRAVEL_W = ${GAP.travel};`));
-  assert.ok(src.includes(`clr.px < ${GAP.side} && clr.nx < ${GAP.side}`));
-  assert.ok(src.includes(`if (kind && speed > ${GAP.speedIn}) {`));
-  assert.ok(src.includes(`d.gapTravel > GAP_TRAVEL_W && d.gapSpd > ${GAP.speed}`));
+  // The gap rule's numbers: the overlay shows sim-tricks.js' own exports,
+  // and the detector uses them.
+  assert.deepEqual({ ...GAP }, { sideK: GAP_SIDE_K, minDepth: GAP_MIN_DEPTH_M, near: GAP_NEAR_M, frameW: FRAME_W_M });
+  assert.ok(src.includes('const sideMax = GAP_SIDE_K * (sample.frameW > 0 ? sample.frameW : FRAME_W_M) * ws;'));
+  assert.ok(src.includes('const ok = depth >= GAP_MIN_DEPTH_M * ws && onward && !d.live;'));
+  assert.ok(src.includes('inAuthored = nearAuthored(sample.gaps, wx, wy, wz, GAP_NEAR_M * ws);'));
   assert.ok(src.includes(`const diving = thr < ${SEG.divingThr} && rate < ${SEG.divingRate} && vz < ${SEG.divingVz};`));
   assert.ok(src.includes(`(sample.clearance != null ? sample.clearance : 1) <= ${SEG.contact};`));
 });
@@ -190,6 +191,12 @@ function randFeat(r) {
   f.rollUpT = u(0.05, 1.5); f.rollDnT = u(0.05, 1.5);
   f.postMin = f.altMax - u(0, Math.max(0.01, f.altMax - f.altMin));
   f.sweep = (r() < 0.5 ? -1 : 1) * near(4.712);
+  // Trippy and Barani: the turn about the vertical, the orbit, the Barani
+  // window and the end's up-Z, near their thresholds often.
+  f.yawUp = r() < 0.5 ? near(12.566) : u(0, 4); f.yawDn = r() < 0.5 ? near(12.566) : u(0, 4);
+  f.yawUpT = u(0.5, 2.4); f.yawDnT = u(0.5, 2.4);
+  f.orbitR = r() < 0.5 ? u(0.1, 3) : u(0.3, 2.5); f.orbitSweep = near(3.1416); f.orbitTurn = u(0.6, 1); f.orbitSpd = u(0.5, 3);
+  f.barP = r() < 0.5 ? near(5.236) : u(0, 4); f.barR = u(1.5, 4.5); f.upEnd = r() < 0.6 ? u(0.5, 1) : u(-1, 1);
   if (r() < 0.12) {
     // A yaw spin, upright or inverted: little pitch and roll, a full turn of
     // yaw in place (Yaw Spin, Trippy and Ham live here).
@@ -285,7 +292,7 @@ function run(phases, opts) {
   let q = { x: 0, y: 0, z: 0, w: 1 };
   const p = { ...(o.pos || { x: 0, y: 0, z: 3 }) };
   const dt = 1 / 60;
-  const sample = { armed: true, colliders: o.colliders || null, ws: 3.5, throttle: 0.5, clearance: 2 };
+  const sample = { armed: true, colliders: o.colliders || null, gaps: o.gaps || null, ws: 3.5, throttle: 0.5, clearance: 2 };
   const fill = (w, v) => {
     sample.qx = q.x; sample.qy = q.y; sample.qz = q.z; sample.qw = q.w;
     sample.ox = w[0]; sample.oy = w[1]; sample.oz = w[2];
@@ -367,22 +374,39 @@ test('observer: a slow descent the detector never arms is a dive miss naming the
   assert.match(dv[0].reason, /speed never > 8/);
 });
 
-test('observer: a pass between two walls is a gap record, fired or missed with why', () => {
-  // Walls at scene x = ±2 (4 wu apart), z 0..-20; fly -z (module +x) through.
-  const walls = [
+test('observer: gaps are records: an authored pass fires, a skim and wide walls do not, narrow walls fire generically', () => {
+  // Fly scene -z (module +x) from scene z 1.75.
+  const vol = [{ name: 'test slot', axis: 'z', min: { x: -0.6, y: 0, z: -20 }, max: { x: 0.6, y: 20, z: 0 } }];
+  const through = run([{ t: 0.1 }, { t: 1.8, v: [5, 0, 0] }], { gaps: vol, pos: { x: -0.5, y: 0, z: 3 } });
+  assert.deepEqual(through.evs, ['gap']);
+  const g = through.recs.filter((r) => r.type === 'gap');
+  assert.equal(g.length, 1);
+  assert.equal(g[0].result, 'gap');
+  assert.equal(g[0].how, 'authored');
+  assert.match(g[0].reason, /test slot/);
+  // Across the same volume through its sides (scene +x, module -y): a skim.
+  const across = run([{ t: 0.1 }, { t: 1.0, v: [0, -3, 0] }], { gaps: vol, pos: { x: 3, y: 1.0, z: 3 } });
+  assert.deepEqual(across.evs, []);
+  const sk = across.recs.filter((r) => r.type === 'gap');
+  assert.equal(sk.length, 1);
+  assert.equal(sk[0].result, null);
+  assert.match(sk[0].reason, /skimmed/);
+  // Walls 0.3 m apart (0.15 m each side): the generic rule fires.
+  const narrow = [
+    { min: { x: 0.525, y: 0, z: -20 }, max: { x: 3, y: 20, z: 0 } },
+    { min: { x: -3, y: 0, z: -20 }, max: { x: -0.525, y: 20, z: 0 } },
+  ];
+  const gen = run([{ t: 0.1 }, { t: 1.8, v: [5, 0, 0] }], { colliders: narrow, pos: { x: -0.5, y: 0, z: 3 } });
+  assert.deepEqual(gen.evs, ['gap']);
+  const gg = gen.recs.filter((r) => r.type === 'gap' && r.result);
+  assert.equal(gg[0].how, 'generic');
+  // Walls 1.1 m apart (the old rule's gap): each side too far for a 9 cm quad.
+  const wide = [
     { min: { x: 2, y: 0, z: -20 }, max: { x: 3, y: 20, z: 0 } },
     { min: { x: -3, y: 0, z: -20 }, max: { x: -2, y: 20, z: 0 } },
   ];
-  const fast = run([{ t: 0.1 }, { t: 1.8, v: [5, 0, 0] }], { colliders: walls, pos: { x: -0.5, y: 0, z: 3 } });
-  assert.ok(fast.evs.includes('gap'), 'evs ' + fast.evs);
-  const g = fast.recs.filter((r) => r.type === 'gap');
-  assert.equal(g.length, 1);
-  assert.equal(g[0].result, 'gap');
-  const slow = run([{ t: 0.1 }, { t: 0.5, v: [3.0, 0, 0] }, { t: 0.05, v: [0.5, 0, 0] }], { colliders: walls, pos: { x: -0.5, y: 0, z: 3 } });
-  const gs = slow.recs.filter((r) => r.type === 'gap');
-  assert.equal(gs.length, 1);
-  assert.equal(gs[0].result, null);
-  assert.match(gs[0].reason, /missed/);
+  const w = run([{ t: 0.1 }, { t: 1.8, v: [5, 0, 0] }], { colliders: wide, pos: { x: -0.5, y: 0, z: 3 } });
+  assert.deepEqual(w.evs, []);
 });
 
 // ---- The overlay with a stand-in document ----
@@ -435,10 +459,15 @@ test('createTrickDebug: overlay lists the ten candidates and the console gets on
   assert.equal(json.filter((r) => r.type === 'maneuver').length, 1);
   assert.equal(json[0].result, 'roll');
   dbg.paint();
-  const el = doc.getElementById('trickXr');
-  assert.ok(el, 'overlay element');
+  assert.ok(doc.getElementById('trickXr'), 'overlay element');
+  const el = doc.getElementById('trickXrBody');
+  assert.ok(el, 'overlay body');
+  const btn = doc.getElementById('trickXrCopy');
+  assert.ok(btn && btn.textContent === 'Copy trick log', 'Copy trick log button');
+  assert.equal(dbg.logText().split('\n').length, json.length, 'one line per attempt');
+  assert.deepEqual(dbg.logText().split('\n').map((l) => JSON.parse(l).seq), json.map((r) => r.seq));
   for (const id of FOCUS) {
-    const name = { flip: 'Flip', roll: 'Roll', powerloop: 'Powerloop', splits: 'Split-S', matty: 'Matty Flip', trippy: 'Trippy Spin', juicyflick: 'Juicy Flick', ham: 'Inverted yaw spin', dive: 'Dive', gap: 'Gap' }[id];
+    const name = { flip: 'Flip', roll: 'Roll', powerloop: 'Powerloop', splits: 'Split-S', matty: 'Matty Flip', trippy: 'Trippy Spin', juicyflick: 'Juicy Flick', ham: 'Inverted yaw spin', barani: 'Barani', dive: 'Dive', gap: 'Gap' }[id];
     assert.ok(el.innerHTML.includes(name), 'overlay lists ' + name);
   }
   assert.match(el.innerHTML, /✓ Roll/);

@@ -42,7 +42,7 @@ site lists both 150 and 50).
 | `splits` | Split-S | Beginner | 100 | 100 | Over object, **180° roll**, dive the back, **pull** (pitch back) + throttle, pass **under flying forward**. |
 | `cradle` | Cradle | Beginner | 150 | 150 | Pass an object, pitch back to keep it in view, level out **flying backward** clear of it. Not a flip. |
 | `dive` | Building Dive | Beginner | 100 | 100 | Climb or start high, cut, nose down, fast altitude dump, level near the ground. |
-| `gap` | Gap | Beginner | 125 | 125 | Through a narrow opening at speed. 125 = TPW medium (12 in) gap. |
+| `gap` | Gap | Beginner | 125 | 125 | **Through an opening, in one face and out the other.** On the Rig, the House and the Warehouse, the map's authored gap volumes (crate slots, pipe and riser slits, tunnel, loft hole; bookshelf gap, under the patio table; rack shelves, the gap, the Ion hoop). Elsewhere a generic rule: walls on both sides within 2.5 frame widths of the path, passed through at least 10 cm; a floor or ceiling is never a side. 125 = TPW medium (12 in) gap. |
 | `prox` | Proximity | Beginner | 150 | 150 | Wall near-miss at speed. Sim-only spatial; TPW Wall Ride/Tap need a knife-edge roll or tap we do not require. |
 | `powerloop` | Powerloop | Novice | 200 | 200 | A **Flip whose path loops**: the path climbs **≥1.5 m** above the entry, comes back down to the entry height or below after its top, and the velocity turns **≥270°** in the vertical plane of the entry heading, the same way the flip turns. Otherwise it is a Flip. |
 | `sideloop` | Side Loop | Novice | 200 | 225 | 90° **yaw** under the object, then a **roll-driven** vertical loop (roll + some yaw) over inverted, cut, reapply, level under. Carves a loop **sideways**, not a pitch Powerloop. Indoor 225 = TPW Under/Over. |
@@ -53,7 +53,8 @@ site lists both 150 and 50).
 | `cubik` | Cubik's Rube | Intermediate | 350 | 450 | 180° roll → 360° flip → 180° roll, same roll direction. Open air. |
 | `rubik` | Rubik's Cube | Intermediate | 325 | 450 | 180° flip → 360° roll → 180° flip, same pitch direction. Open air. |
 | `ham` | Ham Spin | Intermediate | 300 | 300 | **Inverted yaw spin**: ≥360° yaw in ≤1.8s, little roll/pitch/drift, **upside-down the whole time** (tilt >135° from level). Also called ham. Flips/rolls that only pass through inverted, and upright yaw, are not Ham. |
-| `trippy` | Trippy Spin | Intermediate | 500 | 500 | **Camera-lock orbit around a nearby pole/tree**: ≈360° yaw while circling within a reasonable radius (after the 1.25× backyard, about 4–10 wu), craft mostly level, camera pointed at the object. Natural drift is OK. Open-air yaw punches, coordinated turns, and small yaw are not Trippy. |
+| `trippy` | Trippy Spin | Intermediate | 500 | 500 | **≥720° of yaw at ≥300°/s while the path orbits a centre**: radius 0.3–2.5 m (the path's curvature), its direction turning ≥180° one way, at ≥1 m/s. Yaw is the turn about the vertical, so a tilted spin counts in full. Upright or inverted. A nearby pole/post at the centre (within 0.5 m) is a bonus: 1.25× points. |
+| `barani` | Barani | Novice | 100 | 125 | **A flip with a half twist**: ≥300° of pitch and 180 ± 45° of roll inside the same 1.5 s, ending upright (the twist at the vertical). Scores above Flip. |
 
 ## Decision boundaries
 
@@ -118,17 +119,40 @@ Same under → over → under path.
   OK. A flip or roll that only passes through inverted is not Ham — those
   have large pitch/roll and an upright start or exit. Normal upright yaw
   is a Yaw Spin, not Ham.
-- Trippy Spin is a **camera-lock orbit around a nearby pole/tree**. Upright
-  ≥360° yaw while circling, craft **mostly level**, camera pointed at the
-  object (flight is sideways to velocity). After Ryan's Yard scaled 1.25×
-  (ficus trunk r=0.56 wu, planter rOut=3.31), a real orbit is about 4–10 wu
-  from the trunk: period can run ~1.4–3.6 s, yaw rate is just v/R, and the
-  path can drift. Tight in-place pole spins still count.
+- Trippy Spin: **≥720° of yaw at ≥300°/s while the path orbits**. The
+  yaw is the turn about the vertical (a tilted spin turns the heading at
+  the full rate). Over that yaw the path curves round a centre: radius
+  0.3–2.5 m, its direction turning at least half a turn, one way, at
+  1 m/s or more. Upright or inverted: an inverted spin that orbits is a
+  Trippy, not Ham. A spin in place (no orbit) is a Yaw Spin or Ham Spin;
+  a camera-lock orbit with one turn of yaw per orbit is not a Trippy.
+  A nearby pole or post (a collider at most 0.5 m across and 1 m tall)
+  within 0.5 m of the orbit's centre earns 1.25× the points.
 - A coordinated turn, carve, or slight yaw is not a Trippy — those stay
-  well under 360° yaw, bank to turn (nose follows the path), or never
-  close a circle around an object.
-- Open-air yaw punch (no object, flying forward) stays a Yaw Spin, or
-  scores nothing if roll/pitch leak too much. Do not steal those as Trippy.
+  well under 720° of yaw.
+
+### Barani vs Flip vs Juicy Flick
+
+- Barani: a full flip (≥300° of pitch) **and** a half twist (180 ± 45° of
+  roll) inside one 1.5 s window, ending upright. The twist comes at the
+  vertical (nose straight down or up); twisted while inverted, the quad
+  ends upside down and it is not a Barani.
+- Flip: the pitch with little roll. Juicy Flick: half a flip to inverted,
+  then a 180° roll.
+
+### Gap: authored first
+
+- The Rig, the House and the Warehouse carry their intentional gaps as
+  volumes (sim-maps.js `mapGaps`). A pass goes in through one face across
+  the volume's axis and out through the opposite face: flown through. In
+  or out through a side is a skim and does not score. A pass during a
+  rotation scores when the rotation ends (within 1 s). One volume scores
+  again only after 1 s.
+- Generic fallback, away from authored volumes (and 0.3 m clear of them):
+  walls on both sides of the path, along the axis it moves most along,
+  each within 2.5 frame widths of it (about 0.2 m on the Air65), passed
+  through at least 10 cm and out the far end. A floor or ceiling is never a
+  side: flying under a loft or a deck is not a gap.
 
 ### How to record a real trace
 
@@ -137,6 +161,9 @@ Same under → over → under path.
 3. When it settles, click **Copy last trace**. That JSON is gyro
    (`ox,oy,oz`), attitude (`qx…qw`), stick (`sr,sp,sy`), and throttle.
 4. Paste it to Ryan / an issue. Replay is `kind: quadmath-trick-trace`.
+5. With `?tricks=debug`, the overlay's **Copy trick log** button copies every
+   attempt it logged (one JSON line each, `kind: quadmath-trick-attempt`):
+   every candidate's terms, the gap passes and skims, the dives.
 
 ### Side Loop vs Powerloop / Roll / Trippy
 
@@ -146,8 +173,8 @@ Same under → over → under path.
   over the top. Novice Jump Rope, same outdoor points as Powerloop.
 - Roll: ~360° roll, little yaw, little altitude span. A Side Loop has
   both yaw and a loop-sized altitude span, so it is not a Roll.
-- Trippy: **level 360° yaw** while orbiting a nearby pole/tree with the
-  camera on it, not yaw-then-roll, not a completed vertical loop, not a
+- Trippy: **≥720° of yaw** while orbiting a centre (a nearby pole/tree a
+  bonus), not yaw-then-roll, not a completed vertical loop, not a
   coordinated turn.
 
 ### Juicy Flick vs Snapback vs Split-S vs Immelmann (skipped)

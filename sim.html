@@ -985,7 +985,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=1c0fde3fbe7e";
+} from "./sim-art.js?v=532a1d734023";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -1012,13 +1012,13 @@ import {
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
 } from "./sim-tracks.js?v=d0f1340b861b";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=66cbe7a1fa91";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=0b67a55cee2b";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=54d5cf5d69fc";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=11c2a53009ee";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=bdc74f333653";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=d55c6a2d63e0";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -1035,10 +1035,10 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=b7c2ae993fad";
+} from "./sim-coach.js?v=a23faea5fced";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
-} from "./sim-tricks.js?v=bf248973ab83";
+} from "./sim-tricks.js?v=a65ab08b106c";
 import {
   DAILY_KEY, DAILY_LINE_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -1064,7 +1064,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=f65e576902bf";
+} from "./sim-secrets.js?v=d7bd0767eb7b";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1277,6 +1277,7 @@ let feel=null;
 let coach=null;
 let tricks=null;
 let trickDebug=null; // ?tricks=debug only (sim-tricks-debug.js); null otherwise
+let trickGaps=[];    // the map's authored gap volumes (sim-maps.js mapGaps), for the trick detector's Gap
 function resize(){
   const w=canvas.clientWidth||1,h=canvas.clientHeight||1;
   renderer.setSize(w,h,false);
@@ -3190,6 +3191,7 @@ async function setMap(mapId,trackId,opts){
     cityWorld.visible=true;
     indoorWorld.visible=false;
     restoreColliders(cityColliderSnap);
+    trickGaps=[];
     bfSyncPlant();
     if(wantFree){
       clearRace();
@@ -3209,6 +3211,7 @@ async function setMap(mapId,trackId,opts){
     const built=ensureIndoor(currentMap);
     indoorLights=built.lights||[];
     restoreColliders(built.colliders);
+    trickGaps=built.gaps||[];
     bfSyncPlant();
     clearRace();
     if(wantFree){
@@ -7431,6 +7434,23 @@ function simPaused(){return replayOn||(looks&&looks.menuOpen)||builderOn||(feel&
 const trickCs=emptyState();
 let trickLastUs=null;
 function trickSampling(){return !!(tricks&&tricks.isActive()&&!(coach&&coach.isActive()));}
+// The flying quad's width across, metres, for the Gap's generic rule: on the
+// bf core the airframe's (wheelbase over root 2, and a duct each side), on the
+// js core the class's frame (about 1.26 x its wheelbase for a ducted whoop).
+let trickFrameKey='',trickFrameM=0.09;
+function trickFrameW(){
+  const key=core.kind+':'+droneType;
+  if(key===trickFrameKey)return trickFrameM;
+  trickFrameKey=key;
+  const b=core.kind==='bf'?bfOf():null;
+  const v=b&&b.airframe&&b.airframe.values;
+  if(v&&v.wheelbase&&v.ductOuterRadius)trickFrameM=v.wheelbase.value/Math.SQRT2+2*v.ductOuterRadius.value;
+  else{
+    const t=DRONE_TYPES[droneType]||{};
+    trickFrameM=t.frame?t.frame/1000*1.26:(droneType==='freestyle5'?0.3:0.15);
+  }
+  return trickFrameM;
+}
 function onTrickSample(){
   try{
     const s=core.tickState(trickCs);
@@ -7450,6 +7470,8 @@ function onTrickSample(){
     trickSample.armed=s.armed;
     trickSample.colliders=colliders;
     trickSample.ws=WS;
+    trickSample.gaps=trickGaps;
+    trickSample.frameW=trickFrameW();
     // A gap in the samples (the first, a pause, a respawn, a coach drill):
     // start the detector over from this pose.
     if(!(dt>0&&dt<=0.05)){tricks.resetDetector(trickSample);dt=SAMPLE_US/1e6;}
@@ -8103,7 +8125,7 @@ window._tricks=tricks;
 // the file is never fetched.
 try{
   if(new URLSearchParams(location.search).get('tricks')==='debug'){
-    import('./sim-tricks-debug.js?v=1aff912772d9').then((m)=>{
+    import('./sim-tricks-debug.js?v=9347c592fab9').then((m)=>{
       trickDebug=m.createTrickDebug({document,tricks,now:()=>performance.now()*0.001,info:()=>({core:cs.kind,map:currentMap})});
       window._trickDebug=trickDebug;
       trickDebug.paint();
