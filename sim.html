@@ -1276,6 +1276,7 @@ let looks=null;
 let feel=null;
 let coach=null;
 let tricks=null;
+let trickDebug=null; // ?tricks=debug only (sim-tricks-debug.js); null otherwise
 function resize(){
   const w=canvas.clientWidth||1,h=canvas.clientHeight||1;
   renderer.setSize(w,h,false);
@@ -7874,7 +7875,9 @@ function loop(now){
         trickSample.armed=cs.armed;
         trickSample.colliders=colliders;
         trickSample.ws=WS;
-        tricks.tick(trickSample,dt);
+        if(trickDebug)trickDebug.before(trickSample,dt);
+        const trickEv=tricks.tick(trickSample,dt);
+        if(trickDebug)trickDebug.after(trickSample,dt,trickEv);
       }
     }catch(e){}
   }
@@ -8075,6 +8078,21 @@ tricks=createTricks({
 });
 try{tricks.setActive(isFreeFlight(currentTrackObj,activeTrackId),currentMap);}catch(e){}
 window._tricks=tricks;
+// ?tricks=debug: the trick detector's debug overlay. For each attempt it shows
+// what the detector saw, every candidate's thresholds and why it fired or
+// missed, and logs the attempt to the console as one line of JSON. It reads
+// the detector around each tricks.tick and changes nothing; without the flag
+// the file is never fetched.
+try{
+  if(new URLSearchParams(location.search).get('tricks')==='debug'){
+    import('./sim-tricks-debug.js?v=e0772e01c347').then((m)=>{
+      trickDebug=m.createTrickDebug({document,tricks,now:()=>performance.now()*0.001,info:()=>({core:cs.kind,map:currentMap})});
+      window._trickDebug=trickDebug;
+      trickDebug.paint();
+      console.info('tricks debug: overlay on (?tricks=debug); one JSON line per attempt; window._trickDebug.attempts()');
+    }).catch((e)=>console.warn('tricks debug: failed to load',e));
+  }
+}catch(e){}
 const tricksCbBoot=document.getElementById('cbTricksHud');
 if(tricksCbBoot)tricksCbBoot.checked=tricks.hudOn();
 const trickDbgBoot=document.getElementById('cbTrickDebug');
