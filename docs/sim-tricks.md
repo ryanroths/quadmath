@@ -44,7 +44,7 @@ site lists both 150 and 50).
 | `dive` | Building Dive | Beginner | 100 | 100 | Climb or start high, cut, nose down, fast altitude dump, level near the ground. |
 | `gap` | Gap | Beginner | 125 | 125 | **Through an opening, in one face and out the other.** On the Rig, the House and the Warehouse, the map's authored gap volumes (crate slots, pipe and riser slits, tunnel, loft hole; bookshelf gap, under the patio table; rack shelves, the gap, the Ion hoop). Elsewhere a generic rule: walls on both sides within 2.5 frame widths of the path, passed through at least 10 cm; a floor or ceiling is never a side. 125 = TPW medium (12 in) gap. |
 | `prox` | Proximity | Beginner | 150 | 150 | Wall near-miss at speed. Sim-only spatial; TPW Wall Ride/Tap need a knife-edge roll or tap we do not require. |
-| `powerloop` | Powerloop | Novice | 200 | 200 | A **Flip whose path loops**: the path climbs **≥1.5 m** above the entry, comes back down to the entry height or below after its top, and the velocity turns **≥270°** in the vertical plane of the entry heading, the same way the flip turns. Otherwise it is a Flip. |
+| `powerloop` | Powerloop | Novice | 200 | 200 | **≥300° of pitch within any 3.5 s** (its own window: a loop is slower than a flip), little net roll/yaw, on a **path that loops**: it climbs **≥1.5 m** above the entry, after its top comes back down to **at most 1.5 m above the entry**, and the velocity turns **≥270°** in the vertical plane of the entry heading, the way the pitch turns. Otherwise a flip is a Flip. Loops are counted over the whole turn of pitch: **≥600° is a Double Powerloop**, then one more loop per further 360° (Triple from 960°); each loop scores the 200 points. |
 | `sideloop` | Side Loop | Novice | 200 | 225 | 90° **yaw** under the object, then a **roll-driven** vertical loop (roll + some yaw) over inverted, cut, reapply, level under. Carves a loop **sideways**, not a pitch Powerloop. Indoor 225 = TPW Under/Over. |
 | `matty` | Matty Flip | Novice | 200 | 200 | Start **over**, **partial front flip** (pitch forward) keeping the object in view on the way down, throttle, level **flying backward under**. |
 | `juicyflick` | Juicy Flick | Novice | 200 | 225 | Open-air: pitch **forward** with throttle to inverted, then a prompt **180° roll**. Travel stays forward. |
@@ -53,7 +53,7 @@ site lists both 150 and 50).
 | `cubik` | Cubik's Rube | Intermediate | 350 | 450 | 180° roll → 360° flip → 180° roll, same roll direction. Open air. |
 | `rubik` | Rubik's Cube | Intermediate | 325 | 450 | 180° flip → 360° roll → 180° flip, same pitch direction. Open air. |
 | `ham` | Ham Spin | Intermediate | 300 | 300 | **Inverted yaw spin**: ≥360° yaw in ≤1.8s, little roll/pitch/drift, **upside-down the whole time** (tilt >135° from level). Also called ham. Flips/rolls that only pass through inverted, and upright yaw, are not Ham. |
-| `trippy` | Trippy Spin | Intermediate | 500 | 500 | **≥720° of yaw at ≥300°/s while the path orbits a centre**: radius 0.3–2.5 m (the path's curvature), its direction turning a **full 360°** one way over the whole spin, at ≥1 m/s. Yaw is the turn about the vertical, so a tilted spin counts in full. Upright or inverted. A nearby pole/post at the centre (within 0.5 m) is a bonus: 1.25× points. |
+| `trippy` | Trippy Spin | Intermediate | 500 | 500 | **≥360° of yaw at ≥150°/s while the path orbits a centre ≥360°**: radius 0.3–2.5 m (the path's curvature), its direction turning a **full 360°** one way over the whole spin, at ≥1 m/s. Yaw is the turn about the vertical, so a tilted spin counts in full. Upright or inverted; the body may roll as it spins (the owner's rolls 600–780°). A nearby pole/post at the centre (within 0.5 m) is a bonus: 1.25× points. |
 | `barani` | Barani | Novice | 100 | 125 | **A flip with a half twist**: ≥300° of pitch and 180 ± 45° of roll inside the same 1.5 s, ending upright (the twist at the vertical). Scores above Flip. |
 
 ## Decision boundaries
@@ -64,9 +64,11 @@ site lists both 150 and 50).
   window of the segment. Speed and travel do not matter. A pitch rotation that
   big is **never nothing**: when no trick reaches the 0.42 score (its roll or
   yaw too big for Flip's own terms), it is a Flip.
-- Powerloop is a Flip plus a path that loops (climb ≥1.5 m, back down to or
-  below the entry, ≥270° of velocity turn). A flip at speed whose path stays
-  straight is a Flip, not nothing.
+- Powerloop has its own window: ≥300° of pitch inside 3.5 s (a slow loop
+  turns 150–200°/s, under a Flip's 300° in 1.2 s), on a path that loops
+  (climb ≥1.5 m, back down to at most 1.5 m above the entry, ≥270° of
+  velocity turn). A flip at speed whose path stays straight is a Flip, not
+  nothing. Two loops (≥600° of pitch) are one Double Powerloop.
 - Roll is ≥300° of roll inside a 1.5 s window at ≥250°/s on average between
   the window's two ends. A slow rolling turnaround (the Fractal75's after a
   punch: 300°+ over 3–4.5 s at under 272°/s) is not a Roll.
@@ -76,8 +78,8 @@ site lists both 150 and 50).
 These are **not** the same family.
 
 - Powerloop: a flip, normally **back** pitch (pull), whose **path loops**:
-  it climbs ≥1.5 m, comes back down to the entry height or below, and the
-  velocity turns ≥270° the way the pitch turns.
+  ≥300° of pitch inside 3.5 s, it climbs ≥1.5 m, comes back down to at most
+  1.5 m above the entry, and the velocity turns ≥270° the way the pitch turns.
 - Matty: starts **over**, **front** pitch (nose down) over the object, camera
   on the object while descending, exits **backward under**.
 
@@ -104,7 +106,7 @@ Pitch sign after the roll + exit follow vs against.
 
 Same under → over → under path.
 
-- Powerloop: a full flip (≥300° of pitch within 1.2 s) on a looping path.
+- Powerloop: a full loop of pitch (≥300° within 3.5 s) on a looping path.
   Net pitch ≈ path pitch.
 - Maverick: camera stays **forward-looking**; brief invert is allowed but
   it is not a full flip. Pitch is an **S-curve** (path pitch ≫ net pitch).
@@ -119,19 +121,20 @@ Same under → over → under path.
   OK. A flip or roll that only passes through inverted is not Ham — those
   have large pitch/roll and an upright start or exit. Normal upright yaw
   is a Yaw Spin, not Ham.
-- Trippy Spin: **≥720° of yaw at ≥300°/s while the path orbits**. The
-  yaw is the turn about the vertical (a tilted spin turns the heading at
-  the full rate). Over the whole spin (for as long as the yaw keeps
-  turning the same way at 240°/s or more) the path goes all the way round
+- Trippy Spin: **≥360° of yaw at ≥150°/s while the path orbits ≥360°**.
+  The yaw is the turn about the vertical (a tilted spin turns the heading at
+  the full rate); the body may roll as it spins. Over the whole spin (for as
+  long as the yaw keeps turning the same way at 120°/s or more) the path goes all the way round
   a centre: radius 0.3–2.5 m, its direction turning a full turn (360°) or
   more, one way, at 1 m/s or more. Half or three-quarters of an orbit is
   not a Trippy. Upright or inverted: an inverted spin that orbits is a
-  Trippy, not Ham. A spin in place (no orbit) is a Yaw Spin or Ham Spin;
-  a camera-lock orbit with one turn of yaw per orbit is not a Trippy.
+  Trippy, not Ham. A spin in place (no orbit) is a Yaw Spin or Ham Spin.
+  A camera-lock orbit (one turn of yaw per orbit) is a Trippy when it is
+  tight and fast enough: 0.3–2.5 m at 150°/s or more.
   A nearby pole or post (a collider at most 0.5 m across and 1 m tall)
   within 0.5 m of the orbit's centre earns 1.25× the points.
-- A coordinated turn, carve, or slight yaw is not a Trippy — those stay
-  well under 720° of yaw.
+- A coordinated turn, carve, or slight yaw is not a Trippy — those do not
+  go all the way round a centre 2.5 m or closer at 150°/s.
 
 ### Barani vs Flip vs Juicy Flick
 
@@ -175,7 +178,7 @@ Same under → over → under path.
   over the top. Novice Jump Rope, same outdoor points as Powerloop.
 - Roll: ~360° roll, little yaw, little altitude span. A Side Loop has
   both yaw and a loop-sized altitude span, so it is not a Roll.
-- Trippy: **≥720° of yaw** while orbiting a centre (a nearby pole/tree a
+- Trippy: **≥360° of yaw** while orbiting a centre (a nearby pole/tree a
   bonus), not yaw-then-roll, not a completed vertical loop, not a
   coordinated turn.
 
@@ -234,7 +237,12 @@ Inverted hover alone does not start one. A throttle-cut building dive
 (fast downward, modest rate) does not steal the dive spatial detector.
 
 End: rates quiet for a short settle, or a max window (~4.5 s, long enough
-for a slow camera-lock orbit). While
+for a slow camera-lock orbit). A **sustained** rotation runs past it while
+it keeps turning, up to **10 s**: a turn about the vertical at Trippy's
+rate (≥360° at ≥150°/s: a Trippy, a Yaw Spin) while it keeps 120°/s over
+the last 0.5 s, or a loop's pitch (≥300° in 3.5 s with the velocity
+turning: a run of Powerloops) while it keeps 69°/s. So a long Trippy is
+one Trippy and a double loop one Double Powerloop. While
 **inverted**, settle is longer so a Cradle does not split on a brief
 rate dip.
 

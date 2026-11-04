@@ -189,11 +189,14 @@ function randFeat(r) {
   f.flipUp = r() < 0.5 ? near(5.236) : u(0, 2); f.flipDn = r() < 0.5 ? near(5.236) : u(0, 2);
   f.rollUp = r() < 0.5 ? near(5.236) : u(0, 2); f.rollDn = r() < 0.5 ? near(5.236) : u(0, 2);
   f.rollUpT = u(0.05, 1.5); f.rollDnT = u(0.05, 1.5);
+  f.loopUp = r() < 0.5 ? near(5.236) : u(0, 2); f.loopDn = r() < 0.5 ? near(5.236) : u(0, 2);
+  f.loopTot = Math.max(f.loopUp, f.loopDn) + (r() < 0.5 ? 0 : u(0, 8));
   f.postMin = f.altMax - u(0, Math.max(0.01, f.altMax - f.altMin));
+  if (r() < 0.3) f.postMin = f.alt0 + u(-0.5, 2.5);
   f.sweep = (r() < 0.5 ? -1 : 1) * near(4.712);
   // Trippy and Barani: the turn about the vertical, the orbit, the Barani
   // window and the end's up-Z, near their thresholds often.
-  f.yawUp = r() < 0.5 ? near(12.566) : u(0, 4); f.yawDn = r() < 0.5 ? near(12.566) : u(0, 4);
+  f.yawUp = r() < 0.5 ? near(6.2832) : u(0, 4); f.yawDn = r() < 0.5 ? near(6.2832) : u(0, 4);
   f.yawUpT = u(0.5, 2.4); f.yawDnT = u(0.5, 2.4);
   f.orbitR = r() < 0.5 ? u(0.1, 3) : u(0.3, 2.5); f.orbitSweep = near(6.2832); f.orbitTurn = u(0.6, 1); f.orbitSpd = u(0.5, 3);
   f.barP = r() < 0.5 ? near(5.236) : u(0, 4); f.barR = u(1.5, 4.5); f.upEnd = r() < 0.6 ? u(0.5, 1) : u(-1, 1);

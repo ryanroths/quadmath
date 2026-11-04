@@ -19,6 +19,13 @@ export const RATE_END = 0.55;
 export const SETTLE_S = 0.16;
 export const SETTLE_INV_S = 0.42;
 export const MANEUVER_MAX_S = 4.5;
+// A sustained rotation is not cut at MANEUVER_MAX_S: a turn about the vertical
+// at Trippy's rate (a Trippy, a Yaw Spin) or a loop's pitch (a run of
+// Powerloops) runs on while it keeps turning that way at SUSTAIN_HOLD of its
+// rate over the last SUSTAIN_LOOK_S, up to MANEUVER_SUSTAIN_S.
+export const MANEUVER_SUSTAIN_S = 10;
+export const SUSTAIN_LOOK_S = 0.5;
+export const SUSTAIN_HOLD = 0.8;
 export const REC_CAP = 240;
 export const REC_STRIDE = 12;
 export const REC_KEYS = Object.freeze([
@@ -36,18 +43,25 @@ export const ROLL_WIN_S = 1.5;
 // Each segment's history, one row of HIST_W per step (t, pitch, roll, the
 // yaw about the vertical (vyaw, below), and the horizontal position in
 // metres, x and z), for the windows:
-// MANEUVER_MAX_S at 1 ms steps fits.
-export const HIST_CAP = 4608;
+// MANEUVER_SUSTAIN_S at 1 ms steps fits.
+export const HIST_CAP = 10240;
 export const HIST_W = 6;
-// Trippy Spin: >= 720 degrees of yaw at >= 300 deg/s (so inside 2.4 s) while
-// the path orbits a centre 0.3-2.5 m away, a full turn, at >= 1 m/s. Upright
-// or inverted.
+// Powerloop: >= 300 degrees of pitch inside any LOOP_WIN_S window (a loop is
+// slower than a flip). The loops are counted over the segment's whole turn
+// of pitch the loop's way: two from LOOP_TWO (600 degrees), then one more for
+// each further 360 (loopCount); each loop scores the Powerloop's points.
+export const LOOP_WIN_S = 3.5;
+export const LOOP_MIN = 5.236;
+export const LOOP_TWO = 10.472;
+// Trippy Spin: >= 360 degrees of turn about the vertical at >= 150 deg/s (so
+// inside 2.4 s) while the path orbits a centre 0.3-2.5 m away, a full turn,
+// at >= 1 m/s. Upright or inverted; the body may roll as it spins.
 // The orbit centre within POLE_NEAR_M of a pole or post (a collider at most
 // POLE_W_M across and at least POLE_H_M tall) earns TRIPPY_POLE_MUL points.
 export const TRIPPY_WIN_S = 2.4;
-// The spin's yaw rate (300 deg/s), and the share of it the spin keeps while
-// the orbit is measured over all of it.
-export const TRIPPY_RATE = 5.236;
+// The spin's rate (150 deg/s), and the share of it the spin keeps while the
+// orbit is measured over all of it.
+export const TRIPPY_RATE = 2.618;
 export const TRIPPY_HOLD = 0.8;
 export const POLE_W_M = 0.5;
 export const POLE_H_M = 1.0;
@@ -414,6 +428,10 @@ export function makeFeat() {
     // fall of the pitch angle inside any FLIP_WIN_S, of the roll angle inside
     // any ROLL_WIN_S, rad, and for roll the seconds between the two ends.
     flipUp: 0, flipDn: 0, rollUp: 0, rollDn: 0, rollUpT: 0, rollDnT: 0,
+    // Powerloop: the largest rise and fall of the pitch angle inside any
+    // LOOP_WIN_S, and the whole segment's largest turn of pitch the loop's
+    // way (rad, the loops' count).
+    loopUp: 0, loopDn: 0, loopTot: 0,
     // Path (Powerloop): the lowest altitude after the highest, m, and the
     // signed turn of the velocity in the vertical plane of the entry heading,
     // rad (+ climbing away from the entry heading, as a nose-up loop does).
@@ -454,6 +472,7 @@ export function resetFeat(f) {
   f.underN = 0; f.overN = 0; f.objNearN = 0; f.objOrbitN = 0; f.under0 = 0; f.over0 = 0;
   f.bump = 0; f.seg = 0; f.oppRY = 0; f.radMax = 0;
   f.flipUp = 0; f.flipDn = 0; f.rollUp = 0; f.rollDn = 0; f.rollUpT = 0; f.rollDnT = 0;
+  f.loopUp = 0; f.loopDn = 0; f.loopTot = 0;
   f.postMin = 0; f.sweep = 0; f.sweepTh = 0; f.sweepOn = 0;
   f.yawUp = 0; f.yawDn = 0; f.yawUpT = 0; f.yawDnT = 0; f.vyaw = 0;
   f.orbitR = 0; f.orbitFit = 9; f.orbitSweep = 0; f.orbitTurn = 0; f.orbitSpd = 0; f.orbitCx = 0; f.orbitCz = 0; f.orbitPole = 0;
@@ -486,6 +505,7 @@ export function copyFeat(src, dst) {
   d.bump = src.bump; d.seg = src.seg; d.oppRY = src.oppRY; d.radMax = src.radMax;
   d.flipUp = src.flipUp; d.flipDn = src.flipDn; d.rollUp = src.rollUp; d.rollDn = src.rollDn;
   d.rollUpT = src.rollUpT; d.rollDnT = src.rollDnT;
+  d.loopUp = src.loopUp; d.loopDn = src.loopDn; d.loopTot = src.loopTot;
   d.postMin = src.postMin; d.sweep = src.sweep; d.sweepTh = src.sweepTh; d.sweepOn = src.sweepOn;
   d.yawUp = src.yawUp; d.yawDn = src.yawDn; d.yawUpT = src.yawUpT; d.yawDnT = src.yawDnT; d.vyaw = src.vyaw;
   d.orbitR = src.orbitR; d.orbitFit = src.orbitFit; d.orbitSweep = src.orbitSweep; d.orbitTurn = src.orbitTurn; d.orbitSpd = src.orbitSpd;
@@ -675,11 +695,17 @@ export function featView(f) {
   const rollSpan = rollUp >= rollDn ? rollUp : rollDn;
   const rollT = rollUp >= rollDn ? (f.rollUpT || 0) : (f.rollDnT || 0);
   const rollRate = rollT > 0 ? rollSpan / rollT : 0;
+  // Powerloop: the loop window's size and way, and the loops in the segment.
+  const loopUp = f.loopUp || 0, loopDn = f.loopDn || 0;
+  const loopSpan = loopUp >= loopDn ? loopUp : loopDn;
+  const loopDir = loopUp >= loopDn ? 1 : -1;
+  const loops = loopCount(f.loopTot || 0);
   // Path: the climb above the entry, how far it came back down below the
-  // entry after the top, and the velocity's turn the way the flip turns.
+  // entry after the top (negative: it stayed above), and the velocity's turn
+  // the way the loop turns.
   const loopRise = f.altMax - f.alt0;
   const loopRet = f.alt0 - (f.postMin == null ? f.altMax : f.postMin);
-  const loopSweep = flipDir > 0 ? -(f.sweep || 0) : (f.sweep || 0);
+  const loopSweep = loopDir > 0 ? -(f.sweep || 0) : (f.sweep || 0);
   // Trippy: the yaw's size and mean rate between its two ends.
   const yawUp = f.yawUp || 0, yawDn = f.yawDn || 0;
   const yawSpan = yawUp >= yawDn ? yawUp : yawDn;
@@ -688,17 +714,29 @@ export function featView(f) {
   return {
     absP, absR, absY, head, span, drop, follow, against, inv, close, hEnd, meanDot,
     invFol, invAg, pathP, pathR, pathY, under, over, obj, objOrbit, opp, front, rad,
-    flipSpan, flipDir, rollSpan, rollRate, loopRise, loopRet, loopSweep,
+    flipSpan, flipDir, rollSpan, rollRate, loopSpan, loopDir, loops, loopRise, loopRet, loopSweep,
     yawSpan, yawRate,
   };
+}
+
+// How many loops a turn of pitch (rad, one way) holds: one from LOOP_MIN
+// (300 degrees), two from LOOP_TWO (600), then one more per further 360.
+export function loopCount(tot) {
+  if (!(tot >= LOOP_MIN)) return 0;
+  if (tot < LOOP_TWO) return 1;
+  return 2 + Math.floor((tot - LOOP_TWO) / TAU + 1e-9);
 }
 
 const _cls = { id: null, why: '', best: 0, second: 0, secondId: '' };
 const _sc = Object.create(null);
 
-// A trick's name as the pilot sees it: a Flip says which way it went.
-export function trickName(id, dir) {
+// A trick's name as the pilot sees it: a Flip says which way it went, a
+// Powerloop how many loops (Double Powerloop from two).
+export function trickName(id, dir, loops) {
   if (id === 'flip') return dir < 0 ? 'Back Flip' : 'Front Flip';
+  if (id === 'powerloop' && loops >= 2) {
+    return (loops === 2 ? 'Double' : loops === 3 ? 'Triple' : loops + '×') + ' Powerloop';
+  }
   const def = BY_ID[id];
   return def ? def.name : id;
 }
@@ -706,11 +744,11 @@ export function trickName(id, dir) {
 function whyLine(id, f, v, secondId, second) {
   const def = BY_ID[id];
   const deg = (r) => Math.round(r * 180 / PI);
-  return trickName(id, v.flipDir)
+  return trickName(id, v.flipDir, v.loops)
     + (def ? ('  ' + def.tier + '  ' + def.points) : '')
     + '\n  P' + deg(f.pitch) + ' R' + deg(f.roll) + ' Y' + deg(f.yaw)
     + '  flip=' + deg(v.flipSpan) + ' roll=' + deg(v.rollSpan) + '@' + deg(v.rollRate) + '/s'
-    + ' rise=' + v.loopRise.toFixed(1) + ' sweep=' + deg(v.loopSweep)
+    + ' loop=' + deg(v.loopSpan) + ' rise=' + v.loopRise.toFixed(1) + ' sweep=' + deg(v.loopSweep)
     + '  fol=' + v.follow.toFixed(2) + ' ag=' + v.against.toFixed(2)
     + '  span=' + v.span.toFixed(1) + ' hd=' + deg(v.head)
     + '  inv=' + v.inv.toFixed(2) + ' cl=' + v.close.toFixed(2)
@@ -763,14 +801,15 @@ export function classifyFeat(f, out) {
     atLeast(f.upEnd, 0.6, 0),
   );
   {
-    // Trippy Spin: >= 720 degrees of turn about the vertical at >= 300 deg/s
+    // Trippy Spin: >= 360 degrees of turn about the vertical at >= 150 deg/s
     // between its two ends, while the path orbits a centre over the whole
     // spin: it curves at a radius of 0.3-2.5 m, its direction turns a full
     // turn or more, one way (80 % of its turning), at >= 1 m/s. Upright or
-    // inverted; no object needed (one at the centre earns TRIPPY_POLE_MUL).
+    // inverted, rolling or not (no roll term); no object needed (one at the
+    // centre earns TRIPPY_POLE_MUL).
     _sc.trippy = mul(
-      atLeast(v.yawSpan, 12.566, 0),
-      atLeast(v.yawRate, 5.236, 0),
+      atLeast(v.yawSpan, 6.2832, 0),
+      atLeast(v.yawRate, 2.618, 0),
       inBand(f.orbitR, 0.3, 2.5, 0),
       atLeast(f.orbitSweep, 6.2832, 0),
       atLeast(f.orbitTurn, 0.8, 0),
@@ -839,17 +878,18 @@ export function classifyFeat(f, out) {
     atMost(absY, 2.4, 0.7),
     atMost(v.pathR, 5.4, 0.6),
   );
-  // Powerloop: a Flip (below) whose path climbs at least 1.5 m above the
-  // entry, comes back down to the entry height or below after its top, and
-  // turns its velocity through at least 270 degrees in the vertical plane of
-  // the entry heading, the way the flip turns. A flip whose path does not is
-  // a Flip.
+  // Powerloop: >= 300 degrees of pitch inside LOOP_WIN_S (its own window, a
+  // loop is slower than a flip), with Flip's roll and yaw limits, whose path
+  // climbs at least 1.5 m above the entry, after its top comes back down to
+  // 1.5 m above the entry or lower, and turns its velocity through at least
+  // 270 degrees in the vertical plane of the entry heading, the way the pitch
+  // turns. A flip whose path does not is a Flip. v.loops counts the loops.
   _sc.powerloop = mul(
-    atLeast(v.flipSpan, 5.236, 0),
+    atLeast(v.loopSpan, 5.236, 0),
     atMost(absR, 1.7, 0.6),
     atMost(absY, 1.9, 0.6),
     atLeast(v.loopRise, 1.5, 0),
-    atLeast(v.loopRet, 0, 0),
+    atLeast(v.loopRet, -1.5, 0),
     atLeast(v.loopSweep, 4.712, 0),
   );
   _sc.matty = mul(
@@ -981,6 +1021,7 @@ export function makeDetector() {
     lastWhy: '',
     lastId: '',
     lastDir: 0,
+    lastLoops: 0,
     lastSloppy: 0,
     lastBump: 0,
     // The open segment's attitude history (t, pitch, roll, yaw per row) and
@@ -989,6 +1030,10 @@ export function makeDetector() {
     histN: 0,
     dq: new Int32Array(HIST_CAP * 2),
     span: { up: 0, upT: 0, dn: 0, dnT: 0 },
+    // A sustained rotation past MANEUVER_MAX_S: the history column it turns
+    // (0: not looked at yet, -1: none, 1: pitch, 3: the vertical), which way
+    // (+1, -1) and the rate it must keep (rad/s).
+    susCol: 0, susSg: 1, susMin: 0,
     recNextT: 0,
     live: 0,
     quiet: 0,
@@ -1086,6 +1131,7 @@ export function resetDetector(d, sample) {
   d.recN = 0;
   d.recNextT = 0;
   d.histN = 0;
+  d.susCol = 0;
   d.recJson = '';
   if (sample) {
     d.qx = sample.qx || 0; d.qy = sample.qy || 0; d.qz = sample.qz || 0; d.qw = sample.qw == null ? 1 : sample.qw;
@@ -1243,6 +1289,7 @@ function beginFeat(d, alt, wx, wz, head, speed, thr) {
   const ws0 = d.ws || 3.5;
   d.hist[0] = 0; d.hist[1] = 0; d.hist[2] = 0; d.hist[3] = 0; d.hist[4] = wx / ws0; d.hist[5] = wz / ws0;
   d.histN = 1;
+  d.susCol = 0;
   f.h0x = wx; f.h0z = wz; f.h1x = wx; f.h1z = wz;
   f.head0 = head; f.head1 = head;
   f.spd0 = speed; f.spd1 = speed; f.spdPeak = speed; f.spdMin = speed;
@@ -1347,6 +1394,12 @@ export function windowFeat(d) {
   const f = d.feat;
   const s = spanWithin(d.hist, d.histN, 1, FLIP_WIN_S, d.span, d.dq);
   f.flipUp = s.up; f.flipDn = s.dn;
+  // Powerloop: the loop window, then the segment's whole turn the loop's way.
+  spanWithin(d.hist, d.histN, 1, LOOP_WIN_S, d.span, d.dq);
+  f.loopUp = s.up; f.loopDn = s.dn;
+  const loopUpWay = s.up >= s.dn;
+  spanWithin(d.hist, d.histN, 1, 1e9, d.span, d.dq);
+  f.loopTot = loopUpWay ? s.up : s.dn;
   spanWithin(d.hist, d.histN, 2, ROLL_WIN_S, d.span, d.dq);
   f.rollUp = s.up; f.rollUpT = s.upT; f.rollDn = s.dn; f.rollDnT = s.dnT;
   // Trippy: the yaw window, then the circle the path fits over it.
@@ -1397,6 +1450,7 @@ function finishManeuver(d) {
   d.lastWhy = cls.why || '';
   d.lastId = cls.id || '';
   d.lastDir = (d.feat.flipUp || 0) >= (d.feat.flipDn || 0) ? 1 : -1;
+  d.lastLoops = cls.id === 'powerloop' ? Math.max(1, loopCount(d.feat.loopTot || 0)) : 0;
   d.lastPole = cls.id === 'trippy' && d.feat.orbitPole ? 1 : 0;
   d.lastSloppy = (d.feat.seg && LOOP_IDS[cls.id]) ? 1 : 0;
   d.lastBump = d.feat.bump ? 1 : 0;
@@ -1413,6 +1467,31 @@ function finishManeuver(d) {
     return cls.id;
   }
   return null;
+}
+
+// Past MANEUVER_MAX_S, does the segment's rotation go on? What turns is looked
+// at once, at the cap: a turn about the vertical at Trippy's rate (>= 360
+// degrees at >= TRIPPY_RATE in its window: a Trippy, a Yaw Spin) or a loop
+// (>= LOOP_MIN of pitch inside LOOP_WIN_S, the velocity turned 270 degrees
+// with it). Then, each step, it must have turned on that way at SUSTAIN_HOLD
+// of that rate or more over the last SUSTAIN_LOOK_S.
+function sustained(d) {
+  if (!d.susCol) {
+    const f = windowFeat(d);
+    const v = featView(f);
+    d.susCol = -1;
+    if (v.yawSpan >= TAU && v.yawRate >= TRIPPY_RATE) {
+      d.susCol = 3; d.susSg = f.yawUp >= f.yawDn ? 1 : -1; d.susMin = TRIPPY_RATE * SUSTAIN_HOLD;
+    } else if (v.loopSpan >= LOOP_MIN && v.loopSweep >= 4.712) {
+      d.susCol = 1; d.susSg = v.loopDir; d.susMin = LOOP_MIN / LOOP_WIN_S * SUSTAIN_HOLD;
+    }
+  }
+  if (d.susCol < 0 || d.histN >= HIST_CAP) return false;
+  const H = d.hist, W = HIST_W, b = d.histN - 1, tb = H[b * W];
+  let a = b;
+  while (a > 0 && tb - H[a * W] < SUSTAIN_LOOK_S) a--;
+  const dt = tb - H[a * W];
+  return dt > 0 && d.susSg * (H[b * W + d.susCol] - H[a * W + d.susCol]) >= d.susMin * dt;
 }
 
 export function stepDetector(d, sample, dt) {
@@ -1478,7 +1557,8 @@ export function stepDetector(d, sample, dt) {
       d.quiet = 0;
     }
     const quietNeed = upZ < -0.22 ? SETTLE_INV_S : SETTLE_S;
-    const timedOut = d.feat.dur >= MANEUVER_MAX_S;
+    const timedOut = d.feat.dur >= MANEUVER_MAX_S
+      && (d.feat.dur >= MANEUVER_SUSTAIN_S || !sustained(d));
     const settled = d.quiet >= quietNeed && d.feat.dur >= 0.22;
     if (settled || timedOut || (contact && d.feat.dur > 0.2)) {
       hit = finishManeuver(d);
@@ -1872,8 +1952,10 @@ export function createTricks(opts) {
     const sloppy = !!det.lastSloppy;
     const bump = !!det.lastBump;
     const pole = id === 'trippy' && det.lastPole;
+    // A Double Powerloop (or more) scores the Powerloop's points per loop.
+    const loops = id === 'powerloop' ? Math.max(1, det.lastLoops || 1) : 1;
     const got = pushCombo(combo, id, t, {
-      prior, b2b, sloppy, bump, indoor, streak, bonus: pole ? TRIPPY_POLE_MUL : 1,
+      prior, b2b, sloppy, bump, indoor, streak, bonus: pole ? TRIPPY_POLE_MUL : loops,
     });
     sessionCount[id] = prior + 1;
     if (sessionLast === id) sessionB2b += 1;
@@ -1881,7 +1963,7 @@ export function createTricks(opts) {
     sessionLast = id;
     if (got > 0) streak = nextStreak(streak, trickPoints(id, indoor));
     if (bump) streak = Math.max(1, streak * 0.5);
-    popName = trickName(id, det.lastDir) + (pole ? ' · POLE' : '');
+    popName = trickName(id, det.lastDir, loops) + (pole ? ' · POLE' : '');
     popUntil = t + 1.05;
     if (got > 0) playBlip(audio, muted, 'trick', combo.mul);
     recordBest(store, mapId, combo.points, session);
@@ -2052,6 +2134,7 @@ export function createTricks(opts) {
     lastId: function () { return det.lastId; },
     lastDir: function () { return det.lastDir; },
     lastPole: function () { return det.lastPole; },
+    lastLoops: function () { return det.lastLoops; },
     lastSloppy: function () { return det.lastSloppy; },
     lastBump: function () { return det.lastBump; },
     indoor: function () { return indoor; },

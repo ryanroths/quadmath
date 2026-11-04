@@ -513,3 +513,68 @@ loft.
     dead-reckoned) is now a Barani. On the logged gyro it turns 310° of pitch
     with a 180° roll inside 1.5 s and ends upright.
   - Neither log has a Trippy (no orbiting spins).
+
+## 7. Fixes from the trick log: Powerloop, Trippy, long tricks
+
+The owner flew 90 attempts in the Warehouse on the bf core with
+`?tricks=debug` and copied the log. It is a fixture now
+(`tools/fixtures/tricklog-depot-bf-1.jsonl.gz`, replayed by
+`tools/test_sim_tricks_attempt_log.mjs`).
+
+### What the log showed
+
+- **Powerloops scored nothing.** Seq 4 (701° of pitch), 59 (606°) and 79
+  (372°) are loops at 150-200°/s:
+  - none turns 300° inside Flip's 1.2 s window (286°, 224°, 233°);
+  - 4 and 59 also end 0.5-0.8 m above their entry, and the old rule wanted
+    the path back at the entry height or below.
+- **The trippy scored nothing.** Seq 22, 23 and 24 are one trippy cut into
+  4.5 s segments. Each turns 460-590° about the vertical at 190-245°/s
+  round a 1.3-1.7 m orbit, rolling 600-780°. The old rule wanted 720° at
+  300°/s.
+- **Long tricks were cut at 4.5 s**: the trippy above, and both double loops
+  (dur 4.504, the cap).
+
+### The fixes
+
+- **Powerloop**, the owner's definition:
+  - at least 300° of pitch inside its own window of up to 3.5 s
+    (`LOOP_WIN_S`), not Flip's 1.2 s;
+  - after its top the path comes back down to at most 1.5 m above the entry
+    (`loopRet ≥ -1.5`); the climb (≥1.5 m) and the velocity's turn (≥270°,
+    now the way the loop's pitch turns) stay;
+  - loops are counted over the segment's whole turn of pitch the loop's way
+    (`loopTot`): 600° or more is a **Double Powerloop**, then one more per
+    further 360°. Each loop scores the Powerloop's 200 points (`bonus` of
+    `scoreTrick`), and the pop says Double / Triple Powerloop.
+- **Trippy**, the owner's definition: at least 360° about the vertical at
+  150°/s or more while the path orbits 360° or more at a radius of
+  0.3-2.5 m. No roll term, so a rolling trippy counts. The orbit is still
+  measured over the whole spin, now while the yaw keeps 80 % of 150°/s, and
+  it still needs to turn one way (80 % of its turning) at 1 m/s or more.
+- **Long tricks**: a segment that reaches 4.5 s while turning about the
+  vertical at Trippy's rate, or looping (300° in 3.5 s, the velocity turning
+  with it), runs on while it keeps 80 % of that rate over the last 0.5 s,
+  up to 10 s (`MANEUVER_SUSTAIN_S`). The history holds 10 s at 1 ms steps.
+
+### The log, replayed
+
+The log carries what each segment saw and every gate's value, but not the
+new loop window. The replay rebuilds each maneuver's features from them
+(checked against every logged gate value) and bounds the loop window from
+below: for seq 4, 59 and 79 the pitch turned one way only (`pathP` =
+`|pitch|`), so their whole turn is exact, and their last 3.5 s hold at least
+531°, 425° and 372°.
+
+- Seq 4, 59 and 79: Powerloop; 4 and 59 Double Powerloops.
+- Seq 22, 23 and 24: Trippy.
+- The 16 labels the log fired are unchanged.
+- Two more change: seq 25, the same trippy's last 4.4 s, is a Trippy; seq
+  75, a front loop of 309° that climbed 2.1 m and ended 0.5 m above its
+  entry, is a Powerloop.
+- The log has no traces, so the longer segments are not replayed: flown
+  again, the spin of seq 22-25 would run on past 4.5 s (up to 10 s) while it
+  keeps turning, and so would seq 4 and 59 while their pitch keeps turning.
+
+A camera-lock orbit (one turn of yaw per orbit) at 150°/s or more inside
+2.5 m is now a Trippy, as the definition says; wider or slower ones are not.
