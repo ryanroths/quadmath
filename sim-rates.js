@@ -227,15 +227,16 @@ export function pilotRatesDefault() {
 }
 
 // The Tune panel's line naming where the flying rates come from. core 'bf':
-// the bf config's rates (the Air65 diff's for every class), with a session's
+// the bf config's rates (the flying quad's diff, quad: the Air65's on the 65,
+// the Fractal75's on the 75; the two hold the same stick rates), with a session's
 // IMPORT CLI paste on top (cli 'top') or in its place (cli 'replace'). core
 // 'js': the page's one profile, the pilot's ('saved'), a rates link's for the
 // session ('link'), or the Air65 diff's until they change it ('default').
-export function ratesSourceText({ core, cli, js } = {}) {
+export function ratesSourceText({ core, cli, js, quad = 'Air65' } = {}) {
   if (core === 'bf') {
     if (cli === 'replace') return 'Rates: your pasted diff (bf, this session)';
-    if (cli === 'top') return 'Rates: your Air65 diff, your CLI lines on top (bf, this session)';
-    return 'Rates: your Air65 diff (bf)';
+    if (cli === 'top') return 'Rates: your ' + quad + ' diff, your CLI lines on top (bf, this session)';
+    return 'Rates: your ' + quad + ' diff (bf)';
   }
   if (js === 'saved') return 'Rates: your saved profile (js, every class)';
   if (js === 'link') return 'Rates: the rates link (js, this session)';

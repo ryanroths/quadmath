@@ -133,6 +133,39 @@ const ownerCore = () => createBfCore({
   world: { floorZ: 0 },
 });
 
+// The 75 as the page builds it: the Fractal75 on its own diff, as it is (no
+// class card on top).
+const FRACTAL_DIFF = readFileSync('vendor/sim-core/configs/fractal75-ryfly-2026-11-03.txt', 'utf8');
+const FRACTAL = JSON.parse(readFileSync('vendor/sim-core/airframes/fractal75.json', 'utf8'));
+test('bf core loads the Fractal75 on its own diff: props out, its P, I and D, 1S, its thrust; arms on AUX1 and climbs', async () => {
+  const core = await createBfCore({ SimCore, wasm: readFileSync('vendor/sim-core/sim-core.wasm'), airframe: FRACTAL, diff: FRACTAL_DIFF, world: { floorZ: 0 } });
+  assert.ok(core.report.applied >= 60, `${core.report.applied} lines applied`);
+  assert.deepEqual(core.report.added, [], 'its own aux lines: sim-core adds none');
+  const got = core.sim.get(['yaw_motors_reversed', 'motor_poles', 'thr_mid', 'thr_expo', 'p_roll', 'i_roll', 'p_pitch', 'p_yaw', 'roll_srate'], { profile: 0, rateprofile: 0 });
+  assert.equal(got.yaw_motors_reversed, 'ON', 'props out');
+  assert.equal(got.motor_poles, '12');
+  assert.deepEqual([got.thr_mid, got.thr_expo], ['65', '35']);
+  assert.deepEqual([got.p_roll, got.i_roll, got.p_pitch, got.p_yaw], ['61', '110', '64', '61'], 'the diff\'s own profile (GF 40mm)');
+  assert.equal(got.roll_srate, '74', 'the same rates as the Air65 diff');
+  assert.equal(core.cells, 1);
+  assert.ok(Math.abs(core.maxThrustN - 4 * FRACTAL.values.tmax.value) < 1e-12, 'its full thrust');
+  assert.equal(FRACTAL.values.thrustExponent.value, 1.805, 'the plant flies its fitted thrust exponent');
+  let wall = 0;
+  const run = (ms, t) => {
+    for (const end = wall + ms; wall < end; wall += 4) {
+      const u = core.stamp(wall);
+      if (u !== null) core.input({ r: 0, p: 0, y: 0, t }, u);
+      if (wall % 16 === 0) { core.advance(16); core.anchor(wall); }
+    }
+  };
+  run(400, 0);
+  core.setArm(true);
+  run(300, 0);
+  assert.equal(core.sim.fc.armed, true, `armed (flags ${armingFlagNames(core.sim.fc.armingDisableFlags)})`);
+  run(1500, 0.6);
+  assert.ok(core.sim.state.pos[2] > 1, `climbs at 0.6 throttle: ${core.sim.state.pos[2].toFixed(2)} m`);
+});
+
 test('bf core loads the owner\'s full Air65 diff: vbat_sag_compensation 70, thrust_linear 20, dynamic idle on', async () => {
   const core = await ownerCore();
   assert.ok(tunes().tunes.find((t) => t.id === '65-betafpv-ryfly-1219s'), 'the tune-database card the page names stays');
@@ -747,15 +780,27 @@ test('the bf core is the default; ?core=js is deprecated; the OSD names the js c
   const html = readFileSync('sim.html', 'utf8');
   assert.match(html, /const CORE_KIND=new URLSearchParams\(location\.search\)\.get\('core'\)==='js'\?'js':'bf';/);
   assert.match(html, /if\(CORE_KIND==='js'\)console\.warn\('sim-core: \?core=js is deprecated, removed next release/);
-  assert.ok(html.includes("cs.kind==='bf'?'BF CORE · AIR65<br>':'JS CORE<br>'"), 'osdTR names the core either way');
-  assert.ok(html.includes("const BF_CLASS='whoop65';"), 'only the 65 has a sim-core plant');
+  assert.ok(html.includes("cs.kind==='bf'?'BF CORE · '+bfQuad(bfFlyingType()).toUpperCase()+'<br>':'JS CORE<br>'"), 'osdTR names the core, and on bf the quad');
+  // The classes with a sim-core plant: the 65 (Air65, its tune card on top)
+  // and the 75 (Fractal75, its own diff as it is); the 85 is not one.
+  const at = html.indexOf('const BF_CLASSES={');
+  const table = html.slice(at, html.indexOf('};', at) + 2);
+  assert.ok(table.includes("whoop65:{quad:'Air65',airframe:'vendor/sim-core/airframes/air65.json',diff:'vendor/sim-core/configs/air65-ryfly-2026-10-23.txt',tune:BF_CLASS_TUNES.whoop65}"), table);
+  assert.ok(table.includes("whoop75:{quad:'Fractal75',airframe:'vendor/sim-core/airframes/fractal75.json',diff:'vendor/sim-core/configs/fractal75-ryfly-2026-11-03.txt',tune:null}"), table);
+  assert.ok(!table.includes('whoop85'), 'the 85 flies the js core');
+  for (const m of table.matchAll(/(?:airframe|diff):'([^']+)'/g)) assert.ok(readFileSync(m[1]).length > 0, m[1] + ' is vendored');
+  // So the OSD reads BF CORE · AIR65 on the 65 and BF CORE · FRACTAL75 on the 75.
+  const quad = new Function('BF_CLASS_TUNES', table + 'return (t)=>BF_CLASSES[t].quad.toUpperCase();')({ whoop65: 'x' });
+  assert.equal('BF CORE · ' + quad('whoop65'), 'BF CORE · AIR65');
+  assert.equal('BF CORE · ' + quad('whoop75'), 'BF CORE · FRACTAL75');
 });
 
-test('a js-core run on the 65 stays off the boards (PHYS MISMATCH); Tune hides the rates on bf behind IMPORT CLI', () => {
+test('a js-core run on a bf class (the 65, the 75) stays off the boards (PHYS MISMATCH); Tune hides the rates on bf behind IMPORT CLI', () => {
   const html = readFileSync('sim.html', 'utf8').replace(/\r\n/g, '\n');
-  // Any js-core time in a run that lands on a 65 board (the build's class), not
-  // the class name; the 75 and 85 boards are js boards.
-  assert.ok(html.includes("function runOffBoards(){return (runSawJs||core.kind==='js')&&classId(currentBuild&&currentBuild.frameMm)===DRONE_TYPES[BF_CLASS].frame;}"));
+  // Any js-core time in a run that lands on a 65 or 75 board (the build's
+  // class), not the class name; the 85 boards are js boards.
+  assert.ok(html.includes("const BF_FRAMES=new Set(Object.keys(BF_CLASSES).map(t=>DRONE_TYPES[t].frame));"));
+  assert.ok(html.includes("function runOffBoards(){return (runSawJs||core.kind==='js')&&BF_FRAMES.has(classId(currentBuild&&currentBuild.frameMm));}"));
   const start = html.slice(html.indexOf('function startRun(){'), html.indexOf('function startRun(){') + 80);
   assert.ok(start.includes("runSawJs=core.kind==='js';"));
   assert.ok(html.includes("if(runActive&&core.kind==='js')runSawJs=true;"));
@@ -771,7 +816,7 @@ test('a js-core run on the 65 stays off the boards (PHYS MISMATCH); Tune hides t
   // IMPORT CLI on bf: to Betaflight on top of the owner's diff, ahead of the js
   // parse (Betaflight decides), refused while loading or armed, js rates untouched.
   const imp = html.slice(html.indexOf('function importCli(text){'), html.indexOf('function importCli(text){') + 120);
-  assert.ok(imp.includes('if(bfWanted()&&!bfFailed)return importCliToBf(text);'));
+  assert.ok(imp.includes('if(bfWanted()&&!bfOf().failed)return importCliToBf(text);'));
   assert.ok(imp.indexOf('importCliToBf') < imp.indexOf('parseCli') || imp.indexOf('parseCli') === -1);
   const toBf = html.slice(html.indexOf('function importCliToBf(text){'), html.indexOf('function importCli(text){'));
   // Set lines on top of the owner's diff; a full diff (from `defaults`) in its place.
@@ -783,7 +828,7 @@ test('a js-core run on the 65 stays off the boards (PHYS MISMATCH); Tune hides t
   assert.ok(toBf.includes('}catch(e){') && toBf.indexOf('bfLoadDiff(prev,label());') < toBf.indexOf("if(!r){"));
   assert.ok(toBf.includes('const took=mine.filter(bfLineChanges).length;'));
   for (const js of ['saveRates', 'rates[ax]', 'qp.setTune']) assert.ok(!toBf.includes(js), 'the bf import leaves the js core alone: ' + js);
-  assert.ok(html.includes("const want=bfWantDiff();\n      if(bfDiff()&&want!==bfDiffLoaded)bfLoadDiff(want,bfCliText?'CLI import':BF_TUNE_ID);"));
+  assert.ok(html.includes("const want=bfWantDiff();\n      if(bfDiff()&&want!==b.diffLoaded)bfLoadDiff(want,b.cliText?'CLI import':bfTuneId());"));
 
   const css = 'body.bf-core .rates-js,body:not(.bf-core) .rates-bf{display:none!important}';
   assert.ok(html.includes(css));
@@ -793,9 +838,10 @@ test('a js-core run on the 65 stays off the boards (PHYS MISMATCH); Tune hides t
   assert.ok(html.includes('<select id="ratePreset" class="rates-js">'));
   assert.ok(html.includes('id="btnRatesShare" class="rates-js"'));
   assert.ok(html.includes("function syncCoreUI(){document.body.classList.toggle('bf-core',core.kind==='bf');}"));
-  // After every core switch in selectCore and the bf load.
+  // After every core switch in selectCore (to the js core, to a loaded bf
+  // core, the js core while one loads) and the bf load.
   const select = html.slice(html.indexOf('function selectCore'), html.indexOf('// ---------- Input poll'));
-  assert.equal(select.split('syncCoreUI();').length - 1, 3);
+  assert.equal(select.split('syncCoreUI();').length - 1, 4);
 });
 
 // The Rig on the bf core: its plant gets the same contact profile as the js
