@@ -26,7 +26,7 @@ import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL,
-} from './sim-tricks.js?v=d85d424ef1de';
+} from './sim-tricks.js?v=fb282c8a119c';
 
 const TAU = Math.PI * 2;
 
@@ -77,7 +77,7 @@ export const GATES = Object.freeze({
     ge('rollFirst', 0.0, 0.12), ge('v.inv', 0.12, 0.08), le('absY', 2.4, 0.7),
   ],
   trippy: [
-    ge('v.yawSpan', 12.566, 0), ge('v.yawRate', 5.236, 0), band('f.orbitR', 0.3, 2.5, 0),
+    ge('v.yawSpan', 6.2832, 0), ge('v.yawRate', 2.618, 0), band('f.orbitR', 0.3, 2.5, 0),
     ge('f.orbitSweep', 6.2832, 0), ge('f.orbitTurn', 0.8, 0), ge('f.orbitSpd', 1.0, 0),
   ],
   barani: [
@@ -110,8 +110,8 @@ export const GATES = Object.freeze({
     le('absY', 2.4, 0.7), le('v.pathR', 5.4, 0.6),
   ],
   powerloop: [
-    ge('v.flipSpan', 5.236, 0), le('absR', 1.7, 0.6), le('absY', 1.9, 0.6),
-    ge('v.loopRise', 1.5, 0), ge('v.loopRet', 0, 0), ge('v.loopSweep', 4.712, 0),
+    ge('v.loopSpan', 5.236, 0), le('absR', 1.7, 0.6), le('absY', 1.9, 0.6),
+    ge('v.loopRise', 1.5, 0), ge('v.loopRet', -1.5, 0), ge('v.loopSweep', 4.712, 0),
   ],
   matty: [
     ge('f.pitch', 2.0, 0.5), band('absP', 2.4, 5.6, 0.45), ge('v.drop', 0.35, 0.25),
@@ -174,7 +174,7 @@ export const OVERRIDE_TEXT = Object.freeze(OVERRIDES.map((r) => r.text));
 const ANGLE_SRC = new Set([
   'absP', 'absR', 'absY', 'v.pathP', 'v.pathR', 'v.pathY', 'f.pitch', '-f.pitch', 'v.head',
   'Math.max(absR, v.pathR)', 'Math.max(absY, v.pathY)', 'v.pathP - absP',
-  'v.flipSpan', 'v.rollSpan', 'v.loopSweep', 'v.yawSpan', 'f.orbitSweep', 'f.barP', 'f.barR',
+  'v.flipSpan', 'v.rollSpan', 'v.loopSpan', 'v.loopSweep', 'v.yawSpan', 'f.orbitSweep', 'f.barP', 'f.barR',
 ]);
 // Angular rates (shown in degrees a second).
 const RATE_SRC = new Set(['v.rollRate', 'v.yawRate']);
@@ -222,7 +222,7 @@ function context(f) {
     'v.pathP - absP': v.pathP - absP,
     'Math.max(v.against, v.invAg)': Math.max(v.against, v.invAg),
     'v.flipSpan': v.flipSpan, 'v.rollSpan': v.rollSpan, 'v.rollRate': v.rollRate,
-    'v.loopRise': v.loopRise, 'v.loopRet': v.loopRet, 'v.loopSweep': v.loopSweep,
+    'v.loopSpan': v.loopSpan, 'v.loopRise': v.loopRise, 'v.loopRet': v.loopRet, 'v.loopSweep': v.loopSweep,
     'v.yawSpan': v.yawSpan, 'v.yawRate': v.yawRate,
     'f.orbitR': f.orbitR, 'f.orbitSweep': f.orbitSweep, 'f.orbitTurn': f.orbitTurn, 'f.orbitSpd': f.orbitSpd,
     'f.barP': f.barP, 'f.barR': f.barR, 'f.upEnd': f.upEnd,
@@ -303,6 +303,7 @@ function sawOf(f, v, ctx) {
     thrMin: r3(f.thrMin), thrMax: r3(f.thrMax), seg: f.seg, bump: f.bump,
     flipDeg: degOf(v.flipSpan), flipDir: v.flipDir > 0 ? 'front' : 'back',
     rollDeg15: degOf(v.rollSpan), rollRateDeg: degOf(v.rollRate),
+    loopDeg: degOf(v.loopSpan), loopDir: v.loopDir > 0 ? 'front' : 'back', loopTotDeg: degOf(f.loopTot), loops: v.loops,
     loopRise: r3(v.loopRise), loopRet: r3(v.loopRet), loopSweepDeg: degOf(v.loopSweep),
     vyawDeg: degOf(v.yawSpan), vyawRateDeg: degOf(v.yawRate),
     orbitR: r3(f.orbitR), orbitSweepDeg: degOf(f.orbitSweep), orbitTurn: r3(f.orbitTurn), orbitSpd: r3(f.orbitSpd),
@@ -508,6 +509,7 @@ export function createTrickObserver(det, opts) {
     rec.why = det.lastWhy || '';
     rec.dir = ex.id === 'flip' || ex.id === 'powerloop' ? (det.lastDir < 0 ? 'back' : 'front') : null;
     rec.pole = ex.id === 'trippy' && det.lastPole ? TRIPPY_POLE_MUL : 0;
+    rec.loops = ex.id === 'powerloop' ? (det.lastLoops || 1) : 0;
     rec.sloppy = det.lastSloppy ? 1 : 0;
     rec.bump = det.lastBump ? 1 : 0;
     rec.mismatch = ex.mismatch;
@@ -877,7 +879,7 @@ export function createTrickDebug(opts) {
       const r = lm.rec;
       const s = r.saw || {};
       L.push('<span class="d">last #' + r.seq + ' (' + (t - r.t).toFixed(1) + 's ago)</span>  '
-        + (r.result ? '<span class="ok">' + esc(r.result === 'flip' ? trickName('flip', r.dir === 'back' ? -1 : 1) : nameOf(r.result)) + '</span>' : '<span class="no">' + (r.type === 'abort' ? 'dropped' : 'no label') + '</span>')
+        + (r.result ? '<span class="ok">' + esc(r.result === 'flip' ? trickName('flip', r.dir === 'back' ? -1 : 1) : r.result === 'powerloop' ? trickName('powerloop', 0, r.loops) : nameOf(r.result)) + '</span>' : '<span class="no">' + (r.type === 'abort' ? 'dropped' : 'no label') + '</span>')
         + (r.pole ? ' <span class="ok">· pole ×' + r.pole + '</span>' : '')
         + '  <span class="d">P' + (s.pitchDeg ?? '?') + ' R' + (s.rollDeg ?? '?') + ' Y' + (s.yawDeg ?? '?') + ' ' + (s.dur ?? '?') + 's</span>');
       L.push('<span class="d">  ' + esc(r.reason || '') + '</span>');

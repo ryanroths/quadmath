@@ -16,6 +16,7 @@ import {
   makeDetector, resetDetector, stepDetector, encodeRecJson, REC_KEYS,
   makeCombo, resetCombo, pushCombo, comboRemain,
   createTricks, makeFeat, trickLineupText, TRIPPY_POLE_MUL,
+  trickName, MANEUVER_MAX_S, MANEUVER_SUSTAIN_S,
 } from '../sim-tricks.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
 import { mapThrottle3d } from '../sim-3d.js';
@@ -588,7 +589,7 @@ function assertTrippy(r, name) {
   assert.deepEqual(labels(r), ['trippy'], name + ' why=' + (r.why || '') + ' last=' + r.last);
 }
 
-test('Trippy, scripted: >= 720 deg at >= 300 deg/s on a full orbit of 0.3-2.5 m at >= 1 m/s, upright or inverted; a pole at the centre earns the bonus', () => {
+test('Trippy, scripted: >= 360 deg at >= 150 deg/s on a full orbit of 0.3-2.5 m at >= 1 m/s, upright or inverted; a pole at the centre earns the bonus', () => {
   assert.ok(YARD_FICUS.r >= 0.5 && YARD_FICUS.r <= 0.7, 'ficus trunk after 1.25x ' + YARD_FICUS.r);
   assert.ok(BACKYARD_PLAY.planter.rOut >= 3.2 && BACKYARD_PLAY.planter.rOut <= 3.5, 'planter ' + BACKYARD_PLAY.planter.rOut);
   const M = WS;   // metres to scene units
@@ -603,6 +604,11 @@ test('Trippy, scripted: >= 720 deg at >= 300 deg/s on a full orbit of 0.3-2.5 m 
     { name: 'city-pole-R1', R: 1 * M, speed: 2.5, yawRate: 6.5, spinT: 3.0, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL, pole: 1 },
     { name: 'garage-lamp-R0.8', R: 0.8 * M, speed: 2, yawRate: 6, spinT: 3.0, cx: -6.2, cz: 8.2, colliders: GARAGE_LAMP_COL, pole: 1 },
     { name: 'beside-ficus', R: 0.8 * M, speed: 2, yawRate: 6, spinT: 3.0, cx: YARD_FICUS.x + 3 * M, cz: YARD_FICUS.z, colliders: FICUS_COL, pole: 0 },
+    // 360 degrees at 160 deg/s is enough.
+    { name: 'slow-160dps', R: 0.8 * M, speed: 2, yawRate: 2.8, spinT: 3.0, cx: 0, cz: 0, colliders: [] },
+    // So is a camera-lock orbit (one turn of yaw per orbit) when it is tight
+    // and fast: 1 m at 6 m/s turns 344 deg/s.
+    { name: 'camera-lock city-pole-R1-v6', R: 3.5, speed: 6, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL, pole: 1 },
   ];
   for (const spec of spins) {
     const r = flyOrbit(spec);
@@ -615,11 +621,11 @@ test('Trippy, scripted: >= 720 deg at >= 300 deg/s on a full orbit of 0.3-2.5 m 
   assert.equal(scoreTrick('trippy', 0, 1, 1, {}), 500);
 });
 
-test('Trippy is not: camera-lock orbits (one turn of yaw per orbit), slow or short spins, half or three-quarter orbits, wide orbits, a spin flown straight', () => {
+test('Trippy is not: camera-lock orbits wider than 2.5 m or slower than 150 deg/s, slow or short spins, half or three-quarter orbits, wide orbits, a spin flown straight', () => {
   const M = WS;
   const lock = [
-    { name: 'ficus-R5-v5', R: 5, speed: 5, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
-    { name: 'city-pole-R3.5-v6', R: 3.5, speed: 6, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL },
+    { name: 'ficus-R2.9-v8', R: 10, speed: 8, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
+    { name: 'city-pole-R1-v2', R: 3.5, speed: 2, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL },
     { name: 'actual-ficus-R5', R: 5, yawS: 0.62, rates: WHOOP_ACTUAL, seed: 401, noise: 0.08, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
     { name: 'kiss-ficus-R6', R: 6, yawS: 0.55, rates: WHOOP_KISS, seed: 407, noise: 0.06, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
   ];
@@ -628,9 +634,10 @@ test('Trippy is not: camera-lock orbits (one turn of yaw per orbit), slow or sho
     assert.equal(r.hits.includes('trippy'), false, spec.name + ' why=' + (r.why || ''));
   }
   const not = [
-    { name: 'slow yaw 258 deg/s', R: 0.8 * M, speed: 2, yawRate: 4.5, spinT: 3.0, cx: 0, cz: 0, colliders: [] },
-    { name: 'short 515 deg', R: 0.8 * M, speed: 2, yawRate: 6, spinT: 1.5, cx: 0, cz: 0, colliders: [] },
-    // 720 degrees and more of yaw, fast, round a centre, but the path only
+    { name: 'slow yaw 140 deg/s', R: 0.8 * M, speed: 2, yawRate: 2.44, spinT: 3.0, cx: 0, cz: 0, colliders: [] },
+    // A full orbit (6.7 rad) but 337 degrees of yaw.
+    { name: 'short 337 deg', R: 0.35 * M, speed: 2.2, yawRate: 5.5, spinT: 1.05, cx: 0, cz: 0, colliders: [] },
+    // 360 degrees and more of yaw, fast, round a centre, but the path only
     // half or three-quarters of the way round it: a Trippy needs the full orbit.
     { name: 'half orbit 200 deg', R: 0.8 * M, speed: 1.2, yawRate: 6.5, spinT: 2.3, cx: 0, cz: 0, colliders: [], sweep: [Math.PI, 2 * Math.PI] },
     { name: 'three-quarter orbit 290 deg', R: 0.8 * M, speed: 1.75, yawRate: 6.5, spinT: 2.3, cx: 0, cz: 0, colliders: [], sweep: [Math.PI, 2 * Math.PI] },
@@ -1294,6 +1301,95 @@ test('Ryan bug: a power loop is only Power Loop, never also Matty', () => {
   assert.equal(r.hits.includes('flip'), false);
   const cls = classifyFeat(r.feat);
   assert.equal(cls.id, 'powerloop');
+});
+
+// Scripted vertical loops in the plane of the entry heading (+x): level for
+// lead s, n nose-up loops of radius r m at v m/s climbing `climb` m over them
+// (a spiral), then level for tail s. The nose follows the velocity. Each
+// sample goes to tick(sample, dt), every 4 ms as the page samples.
+function feedLoops(o, tick) {
+  const v = o.v, r = o.r, n = o.n, climb = o.climb || 0, z0 = o.z0 == null ? 5 : o.z0;
+  const w = v / r, T = n * TAU / w;
+  const lead = 0.3, tail = 0.8, dt = 0.004;
+  for (let i = 0, t = 0; t < lead + T + tail; i++, t = i * dt) {
+    let x, z, vx, vz, th, om;
+    if (t < lead) { x = v * (t - lead); z = z0; vx = v; vz = 0; th = 0; om = 0; }
+    else if (t < lead + T) {
+      const u = t - lead;
+      th = w * u; om = -w;
+      x = r * Math.sin(th); z = z0 + r - r * Math.cos(th) + climb * u / T;
+      vx = v * Math.cos(th); vz = v * Math.sin(th) + climb / T;
+    } else { x = v * (t - lead - T); z = z0 + climb; vx = v; vz = 0; th = n * TAU; om = 0; }
+    const h = -th / 2;
+    tick({
+      qx: 0, qy: Math.sin(h), qz: 0, qw: Math.cos(h), ox: 0, oy: om, oz: 0,
+      wx: x * WS, wy: z * WS, wz: 0, alt: z, speed: Math.hypot(vx, vz), vx, vy: 0, vz,
+      clearance: 2, throttle: 0.6, armed: true, ws: WS,
+    }, dt);
+  }
+}
+
+function loopRun(o) {
+  const d = makeDetector();
+  resetDetector(d, null);
+  d.lockout = 0;
+  const hits = [];
+  feedLoops(o, (s, dt) => {
+    const ev = stepDetector(d, s, dt);
+    if (ev && TRICK_BY_ID[ev]) hits.push(ev);
+  });
+  return { hits, loops: d.lastLoops, feat: d.lastFeat, view: featView(d.lastFeat), why: d.lastWhy };
+}
+
+test('Powerloop: >= 300 deg of pitch in its own 3.5 s window (a slow loop is not a Flip\'s 1.2 s), ending up to 1.5 m above its entry', () => {
+  // 5 m/s round 1.8 m: 159 deg/s, 191 deg in Flip's window.
+  const slow = loopRun({ v: 5, r: 1.8, n: 1, climb: 1.0 });
+  assert.deepEqual(slow.hits, ['powerloop'], slow.why);
+  assert.ok(slow.view.flipSpan < 5.236, 'flip window ' + slow.view.flipSpan);
+  assert.ok(slow.view.loopSpan >= 5.236, 'loop window ' + slow.view.loopSpan);
+  assert.ok(slow.view.loopRet < -0.9 && slow.view.loopRet > -1.1, 'ends 1 m above the entry: ' + slow.view.loopRet);
+  assert.equal(slow.loops, 1);
+  // 2 m above the entry is not a Powerloop.
+  const high = loopRun({ v: 5, r: 1.8, n: 1, climb: 2.0 });
+  assert.equal(high.hits.includes('powerloop'), false, high.why);
+});
+
+test('Double Powerloop: two loops in one segment (past the 4.5 s cap) are one Powerloop of 2 loops, named so, scoring twice', () => {
+  const two = loopRun({ v: 5, r: 1.8, n: 2, climb: 0.5 });
+  assert.deepEqual(two.hits, ['powerloop'], two.why);
+  assert.equal(two.loops, 2);
+  assert.ok(two.feat.dur > MANEUVER_MAX_S, 'one segment of ' + two.feat.dur + ' s');
+  assert.equal(trickName('powerloop', -1, two.loops), 'Double Powerloop');
+  assert.match(two.why, /^Double Powerloop/);
+  const three = loopRun({ v: 7, r: 1.8, n: 3 });
+  assert.deepEqual(three.hits, ['powerloop'], three.why);
+  assert.equal(three.loops, 3);
+  assert.equal(trickName('powerloop', -1, three.loops), 'Triple Powerloop');
+  // Scored: the Powerloop's points once a loop.
+  const single = scoreTrick('powerloop', 0, 1, 1, { streak: 1 });
+  for (const [n, loops] of [[1, 1], [2, 2]]) {
+    const clock = { t: 5 };
+    const tricks = createTricks({ document: null, storage: memStore(), muted: () => true, now: () => clock.t });
+    tricks.setActive(true, 'city');
+    feedLoops({ v: 5, r: 1.8, n, climb: 0.5 }, (s, dt) => { clock.t += dt; tricks.step(s, dt); });
+    assert.equal(tricks.lastId(), 'powerloop');
+    assert.equal(tricks.lastLoops(), loops);
+    assert.equal(tricks.comboPoints(), single * loops, n + ' loop(s)');
+  }
+});
+
+test('sustained: a Trippy or a Yaw Spin past 4.5 s is one trick while it keeps turning, cut at 10 s', () => {
+  const M = WS;
+  const long = flyOrbit({ R: 0.8 * M, speed: 2, yawRate: 6, spinT: 7, cx: 0, cz: 0, colliders: [] });
+  assert.deepEqual(labels(long), ['trippy'], long.why);
+  assert.ok(long.feat.dur > 6.5 && long.feat.dur < MANEUVER_SUSTAIN_S, 'one segment of ' + long.feat.dur + ' s');
+  // 14 s of spin: the first 10 s, then the rest.
+  const longer = flyOrbit({ R: 0.8 * M, speed: 2, yawRate: 6, spinT: 14, cx: 0, cz: 0, colliders: [] });
+  assert.deepEqual(labels(longer), ['trippy', 'trippy'], longer.why);
+  // A yaw spin in place for 6 s.
+  const spin = fly([{ t: 6, yaw: 5, thr: 0.5 }, { t: 0.8, yaw: 0, thr: 0.5 }], { z0: 6, maxT: 7.2 });
+  assert.deepEqual(labels(spin), ['yawspin'], spin.why);
+  assert.ok(spin.feat.dur > MANEUVER_MAX_S, 'one segment of ' + spin.feat.dur + ' s');
 });
 
 test('scanClearance finds overhead decks and side walls without allocating', () => {
