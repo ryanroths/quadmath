@@ -30,7 +30,7 @@ const days = (from, n) => Array.from({ length: n }, (_, i) => addUtcDays(from, i
 const m = (v) => v / WS;
 
 test('PHYS_VER and the generator version are unchanged; sim-retention.js still imports nothing, for the Worker', () => {
-  assert.equal(PHYS_VER, 5);
+  assert.equal(PHYS_VER, 6);
   assert.equal(DAILY_GEN, 2);
   const src = readFileSync(join(root, 'sim-retention.js'), 'utf8');
   assert.ok(!/^import /m.test(src), 'no imports');

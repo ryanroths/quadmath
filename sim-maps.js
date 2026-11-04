@@ -5,7 +5,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=74928ed0772f';
+import { planRoom } from './sim-room.js?v=54d5cf5d69fc';
 import {
   LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, lookShafts, floorAo,
 } from './sim-look.js?v=d55c6a2d63e0';

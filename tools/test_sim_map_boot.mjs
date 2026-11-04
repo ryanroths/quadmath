@@ -123,12 +123,18 @@ const CASES = MAP_IDS.map((map) => ({
 const JS_CASES = [...new Set(MAP_IDS)].map((map) => ({
   map, track: null, look: LOOK[map], q: 'med', core: 'js',
 }));
+// The classes the default core has a plant for, and the quad the OSD names on
+// each (sim.html BF_CLASSES): the 75 boots its own Betaflight core, the
+// Fractal75.
+const BF_QUAD = { whoop65: 'AIR65', whoop75: 'FRACTAL75' };
 // The default core on classes sim-core has no plant for: the js core flies
 // them, with JS CORE on the OSD. The class is the one the page restores. The
 // gym case is also the reload that used to catch the gym's kit landing before
-// its boot-time restyle (sim-art-gym.js inGymArt).
+// its boot-time restyle (sim-art-gym.js inGymArt). The living case with the 75
+// flies Betaflight.
 const FALLBACK_CASES = [
   { map: 'living', track: null, look: 'livingWhoop', q: 'med', droneType: 'whoop75' },
+  { map: 'living', track: null, look: 'livingWhoop', q: 'med', droneType: 'whoop85' },
   { map: 'gym', track: null, look: 'gymWhoop', q: 'med', droneType: 'freestyle5' },
 ];
 
@@ -228,8 +234,9 @@ async function bootPageOnce(base, spec) {
   const devQ = spec.map === 'rig' ? '' : '&dev=1';
   const url = `${base}/sim.html?map=${spec.map}${trackQ}&look=${spec.look}&quality=${spec.q}&menu=1&fpv=1${coreQ}${devQ}`;
   // The core the page should fly: bf by default on the 65 (the class a fresh
-  // profile starts on), js for ?core=js and for a class with no sim-core plant.
-  const wantCore = spec.core === 'js' || spec.droneType ? 'js' : 'bf';
+  // profile starts on) and the 75, js for ?core=js and for a class with no
+  // sim-core plant.
+  const wantCore = spec.core === 'js' || (spec.droneType && !BF_QUAD[spec.droneType]) ? 'js' : 'bf';
   bootSeq += 1;
   const port = 9700 + bootSeq;
   const userData = `/tmp/qm-boot-${process.pid}-${bootSeq}-${Date.now()}`;
@@ -468,7 +475,7 @@ async function bootCases(cases) {
       // The core that flies, and the OSD line that says so.
       const warns = got.warnings || [];
       if (got.core !== got.wantCore) failures.push(name + ' flies the ' + got.core + ' core, want ' + got.wantCore);
-      const line = got.wantCore === 'bf' ? 'BF CORE' : 'JS CORE';
+      const line = got.wantCore === 'bf' ? 'BF CORE · ' + BF_QUAD[spec.droneType || 'whoop65'] : 'JS CORE';
       if (!String(got.osdTR || '').includes(line)) failures.push(name + ' OSD has no ' + line + ': ' + JSON.stringify(got.osdTR));
       // Tune's rates drive the js core only: on bf they give way to the IMPORT CLI line.
       const ratesShown = got.ratesJs !== 'none' && got.ratesBf === 'none';

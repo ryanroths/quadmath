@@ -179,7 +179,7 @@ test('without ?dev=1 Daily, Boards, Freestyle this map, builder Import and duel 
     assert.equal(r.builder, false, 'and the builder closes');
 
     // Ghost / duel codes.
-    const ghost = (track) => `{ v: 1, phys: 5, track: ${JSON.stringify(track)}, name: 'RIVAL', lapTime: 12345,
+    const ghost = (track) => `{ v: 1, phys: window._whoop.PHYSICS_VER, track: ${JSON.stringify(track)}, name: 'RIVAL', lapTime: 12345,
       samples: Array.from({ length: 12 }, (_, i) => [i * 100, i * 0.1, 2, 0, 0, 0, 0, 1]) }`;
     const duel = (trackJs, track) => `
       document.getElementById('ghostCode').value = window._sim.encodeDuel({ ghost: ${ghost(track)}, track: ${trackJs} });

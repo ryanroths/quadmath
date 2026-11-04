@@ -364,7 +364,8 @@ test('FOV default is 90 vertical; only a bare 110 migrates', () => {
   store.setItem(CAM_KEY, 'junk');
   assert.equal(loadCamDeg(store), null);
   assert.ok(/whoop65:\{[^}]*cam:30[,}]/.test(simSrc), 'the 65 class defaults to 30 degrees');
-  assert.ok(/whoop75:\{[^}]*cam:15[,}]/.test(simSrc) && /whoop85:\{[^}]*cam:15[,}]/.test(simSrc), 'the 75 and 85 keep 15');
+  assert.ok(/whoop75:\{[^}]*cam:30[,}]/.test(simSrc), 'the 75 class defaults to 30 degrees (the owner\'s Fractal75)');
+  assert.ok(/whoop85:\{[^}]*cam:15[,}]/.test(simSrc), 'the 85 keeps 15');
   assert.ok(simSrc.includes('camSaved!=null?camSaved:d.cam'), 'a saved angle beats the class default');
   // Up/down arrows: 5 degrees a press within 0..45, saved through the slider.
   assert.equal(CAM_NUDGE_DEG, 5);

@@ -427,14 +427,15 @@ export function contactPlant(airframe, profile) {
 }
 
 // The tune-database.js card each class's bf config takes its P, I and D from:
-// the owner's own quads. Only the 65 has a sim-core plant for now.
+// the owner's own quads. The bf core takes the 65's (sim.html BF_CLASSES); the
+// 75 flies the Fractal75's own diff, whose P, I and D are not this card's.
 export const BF_CLASS_TUNES = Object.freeze({
   whoop65: '65-betafpv-ryfly-1219s',
   whoop75: '75-betafpv-ryfly-hamo-45mm',
   whoop85: '85-happymodel-ryfly',
 });
 
-// A class's bf config: the owner's Air65 diff as it is (rates, filters,
+// A class's bf config: the owner's diff for it as it is (rates, filters,
 // switches), with the class tune's P, I and D set on top in the diff's
 // selected profile (a later set wins). Its rateprofile is never touched:
 // rates are the pilot's, so every class flies the diff's. pids is a tune

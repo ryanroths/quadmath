@@ -2,9 +2,11 @@
 // Rates are the pilot's, not the quad's: one rates profile for every class.
 //   - The js core's default is the owner's Air65 diff's rateprofile 0
 //     (sim-rates.js pilotRatesDefault), the rates the bf core flies.
-//   - A class's bf config (sim-core-adapter.js bfClassDiff) is that diff with
-//     only the class tune's P, I and D on top: read back from Betaflight, every
-//     class holds the diff's rates and its own tune's PIDs.
+//   - The 65's bf config (sim-core-adapter.js bfClassDiff) is that diff with
+//     only the class tune's P, I and D on top: read back from Betaflight, that
+//     holds the diff's rates and the tune's PIDs, as each class card would.
+//   - The 75's bf config is the owner's Fractal75 diff as it is: the Air65
+//     diff's stick rates, and its own throttle curve and PIDs.
 //   - A class switch (sim.html applyDroneType) never touches the rates.
 //   - The Tune panel names where the rates come from.
 // tools/test_sim_rates_page.mjs flies the same in headless Chrome.
@@ -75,7 +77,23 @@ test('bfClassDiff: the diff as it is, with the class\'s P, I and D set on top in
   assert.equal(bfClassDiff(OWNER_DIFF, null), OWNER_DIFF, 'no tune: the diff as it is');
 });
 
-test('every class\'s bf config holds the Air65 diff\'s rates and its own tune\'s PIDs (read back from Betaflight)', async () => {
+test('the 75 flies the Fractal75 diff as it is: the Air65 diff\'s stick rates, its own throttle curve and P, I and D', async () => {
+  const fractalDiff = read('vendor/sim-core/configs/fractal75-ryfly-2026-11-03.txt');
+  assert.equal(bfClassDiff(fractalDiff, null), fractalDiff, 'no class card on top');
+  const fractal = await createBfCore({
+    SimCore, wasm: readFileSync(join(root, 'vendor/sim-core/sim-core.wasm')),
+    airframe: JSON.parse(read('vendor/sim-core/airframes/fractal75.json')), diff: fractalDiff, world: { floorZ: 0 },
+  });
+  const air65 = await bfCore(OWNER_DIFF);
+  const stick = RATE_KEYS.filter((k) => !k.startsWith('thr_'));
+  assert.deepEqual(fractal.sim.get(stick, { rateprofile: 0 }), air65.sim.get(stick, { rateprofile: 0 }), 'the same stick rates');
+  const thr = fractal.sim.get(['thr_mid', 'thr_expo'], { rateprofile: 0 });
+  assert.deepEqual([thr.thr_mid, thr.thr_expo], ['65', '35'], 'its own throttle curve, as flown');
+  const pid = fractal.sim.get(PID_KEYS, { profile: 0 });
+  assert.deepEqual([pid.p_roll, pid.i_roll, pid.p_pitch, pid.i_pitch, pid.p_yaw, pid.i_yaw], ['61', '110', '64', '115', '61', '110'], 'its own profile (GF 40mm)');
+});
+
+test('bfClassDiff with each class card on the Air65 diff holds its rates and the card\'s PIDs (read back from Betaflight)', async () => {
   const base = await bfCore(OWNER_DIFF);
   const want = base.sim.get(RATE_KEYS, { rateprofile: 0 });
   assert.equal(want.rates_type, 'ACTUAL');
@@ -143,17 +161,20 @@ test('sim.html: a class switch never touches the rates; the bf config is the cla
   assert.ok(!/\bsr:/.test(types), 'DRONE_TYPES carry no rates');
   for (const keep of ['mass:', 'drag:', 'spool:', 'cam:', 'fov:']) assert.equal(types.split(keep).length - 1, 5, 'every class keeps its ' + keep);
   assert.ok(html.includes('const rates=Object.assign({quickRatesRcExpo:false},pilotRatesDefault());'));
-  // The bf core: the flying class's config, built from the owner's diff.
-  assert.ok(html.includes('const BF_TUNE_ID=BF_CLASS_TUNES[BF_CLASS];'));
+  // The bf core: the flying class's config, built from that class's diff (the
+  // 65's card on top of the Air65's; the 75's Fractal75 diff as it is).
+  assert.ok(html.includes("tune:BF_CLASS_TUNES.whoop65}") && html.includes("diff:'vendor/sim-core/configs/fractal75-ryfly-2026-11-03.txt',tune:null}"));
   const bfDiff = extract(html, 'bfDiff');
-  assert.ok(bfDiff.includes('BF_CLASS_TUNES[droneType]') && bfDiff.includes('bfClassDiff(bfOwnerDiff,tune&&tune.pids)'), bfDiff);
-  assert.ok(html.includes('diff:bfDiff(),world:bfWorld()})') && html.includes('bfDiffLoaded=bfDiff();'), 'the bf core boots on the class config');
+  assert.ok(bfDiff.includes('c.tune&&db&&db.find(t=>t.id===c.tune)') && bfDiff.includes('bfClassDiff(b.ownerDiff,tune&&tune.pids)'), bfDiff);
+  assert.ok(html.includes('diff:bfDiff(type),world:bfWorld()})') && html.includes('b.diffLoaded=bfDiff(type);'), 'the bf core boots on the class config');
 });
 
 test('the Tune panel names where the rates come from', () => {
   assert.equal(ratesSourceText({ core: 'bf' }), 'Rates: your Air65 diff (bf)');
   assert.equal(ratesSourceText({ core: 'bf', cli: 'top' }), 'Rates: your Air65 diff, your CLI lines on top (bf, this session)');
   assert.equal(ratesSourceText({ core: 'bf', cli: 'replace' }), 'Rates: your pasted diff (bf, this session)');
+  assert.equal(ratesSourceText({ core: 'bf', quad: 'Fractal75' }), 'Rates: your Fractal75 diff (bf)', 'on the 75');
+  assert.equal(ratesSourceText({ core: 'bf', quad: 'Fractal75', cli: 'top' }), 'Rates: your Fractal75 diff, your CLI lines on top (bf, this session)');
   assert.equal(ratesSourceText({ core: 'js', js: 'saved' }), 'Rates: your saved profile (js, every class)');
   assert.equal(ratesSourceText({ core: 'js', js: 'link' }), 'Rates: the rates link (js, this session)');
   assert.equal(ratesSourceText({ core: 'js', js: 'default' }), 'Rates: your Air65 diff\'s (js default, every class)');
@@ -164,9 +185,9 @@ test('the Tune panel names where the rates come from', () => {
   assert.ok(html.includes('body.bf-core .rates-js,body:not(.bf-core) .rates-bf{display:none!important}'));
   const sync = extract(html, 'syncRatesSource');
   assert.ok(sync.includes("js:ratesFromLink?'link':ratesAreCustom?'saved':'default'"), sync);
-  assert.ok(sync.includes("cli:!bfCliText?'':bfPasteReplaces(bfCliText)?'replace':'top'"), sync);
+  assert.ok(sync.includes("const t=bfFlyingType(),cli=bfOf(t).cliText;") && sync.includes("quad:bfQuad(t),cli:!cli?'':bfPasteReplaces(cli)?'replace':'top'"), sync);
   assert.ok(extract(html, 'refreshRatesUI').includes('syncRatesSource();'));
-  assert.ok(html.includes('  bfCliText=text;\n  syncRatesSource();\n'), 'an IMPORT CLI paste renames the bf source');
+  assert.ok(html.includes('  bfOf().cliText=text;\n  syncRatesSource();\n'), 'an IMPORT CLI paste renames the bf source');
   assert.equal(html.split('ratesFromLink=true;').length - 1, 2, 'preset= and rates= links');
   assert.ok(extract(html, 'saveRates').includes('ratesFromLink=false;\n  syncRatesSource();'));
 });

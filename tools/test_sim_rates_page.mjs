@@ -2,13 +2,15 @@
 // Headless Chrome: rates are the pilot's, one profile for every class, on
 // both cores. The page boots on the bf core (the 65); the class picker goes
 // 65, 75, 85 and back:
-//   - the bf core holds the Air65 diff's rates (read back from Betaflight,
-//     the same as the diff alone in Node) and the 65's tune's PIDs, every
-//     time the 65 flies;
-//   - the js core (the 75 and 85) flies the page's one profile: the Air65
-//     diff's by default, the pilot's once they move a slider, unchanged by
-//     every class switch, and saved once (ryflyRates);
-//   - an IMPORT CLI paste on bf stays through the class switches;
+//   - the 65's bf core holds the Air65 diff's rates (read back from
+//     Betaflight, the same as the diff alone in Node) and the 65's tune's
+//     PIDs, every time the 65 flies;
+//   - the 75's bf core (the Fractal75) holds its own diff: the same stick
+//     rates, its throttle curve and its own PIDs, as in Node;
+//   - the js core (the 85) flies the page's one profile: the Air65 diff's by
+//     default, the pilot's once they move a slider, unchanged by every class
+//     switch, and saved once (ryflyRates);
+//   - an IMPORT CLI paste on bf stays with its class through the switches;
 //   - under ?core=js the 65, 75 and 85 all fly the same saved profile;
 //   - Tune names the source: "Rates: your Air65 diff (bf)", the default or
 //     the saved profile on js.
@@ -154,13 +156,22 @@ test('rates are the pilot\'s: 65, 75, 85 and back keep the same rates on the bf 
     diff: read('vendor/sim-core/configs/air65-ryfly-2026-10-23.txt'), world: { floorZ: 0 },
   });
   const diffRates = air65.sim.get(RATE_KEYS, { rateprofile: 0 });
+  // And on the Fractal75's diff alone: what the 75 flies.
+  const fractal = await createBfCore({
+    SimCore, wasm: readFileSync(join(root, 'vendor/sim-core/sim-core.wasm')),
+    airframe: JSON.parse(read('vendor/sim-core/airframes/fractal75.json')),
+    diff: read('vendor/sim-core/configs/fractal75-ryfly-2026-11-03.txt'), world: { floorZ: 0 },
+  });
+  const rates75 = fractal.sim.get(RATE_KEYS, { rateprofile: 0 });
+  const pids75 = fractal.sim.get(PID_KEYS, { profile: 0 });
+  for (const k of RATE_KEYS) if (!k.startsWith('thr_')) assert.equal(rates75[k], diffRates[k], k + ': the same stick rates');
   const w = {};
   vm.runInNewContext(read('tune-database.js'), { window: w, document: { readyState: 'complete', getElementById: () => null } });
   const card65 = w.QuadMathTunes.tunes.find((c) => c.id === '65-betafpv-ryfly-1219s');
   const pids65 = Object.fromEntries(AXES.flatMap((a) => card65.pids[a].map((v, i) => [`${'pid'[i]}_${a}`, String(v)])));
   const jsDefault = { quickRatesRcExpo: false, ...pilotRatesDefault() };
   const SRC = {
-    bf: ratesSourceText({ core: 'bf' }), bfCli: ratesSourceText({ core: 'bf', cli: 'top' }),
+    bf: ratesSourceText({ core: 'bf' }), bfCli: ratesSourceText({ core: 'bf', cli: 'top' }), bf75: ratesSourceText({ core: 'bf', quad: 'Fractal75' }),
     jsDefault: ratesSourceText({ core: 'js', js: 'default' }), jsSaved: ratesSourceText({ core: 'js', js: 'saved' }),
   };
 
@@ -216,20 +227,27 @@ test('rates are the pilot\'s: 65, 75, 85 and back keep the same rates on the bf 
     assert.deepEqual(b65.rates, jsDefault, 'the js profile is the Air65 diff\'s by default');
     assert.equal(b65.saved, null);
 
-    // 75 and 85 fly the js core: the same rates, the default named.
+    // The 75 flies its own bf core, the Fractal75 on its diff; the 85 the js
+    // core: the same rates, the default named.
     const trip = await run(`const out = [];
-      out.push(await R.cls('whoop75', 'js'));
+      out.push(await R.cls('whoop75', 'bf'));
       out.push(await R.cls('whoop85', 'js'));
       out.push(await R.cls('whoop65', 'bf'));
       return JSON.stringify(out);`);
+    assert.equal(trip[0].core, 'bf', 'the 75 flies Betaflight');
+    assert.deepEqual(trip[0].bfRates, rates75, 'the Fractal75 diff\'s rates');
+    assert.deepEqual(trip[0].bfPids, pids75, 'and its own PIDs');
+    assert.deepEqual(trip[0].srcBf, { text: SRC.bf75, shown: true });
+    assert.equal(trip[0].srcJs.shown, false);
     for (const s of trip.slice(0, 2)) {
-      assert.equal(s.core, 'js', s.type);
-      assert.deepEqual(s.rates, b65.rates, s.type + ' keeps the rates');
-      assert.equal(s.maxAll, b65.maxAll, s.type + ' max rate readout');
-      assert.deepEqual(s.srcJs, { text: SRC.jsDefault, shown: true }, s.type);
-      assert.equal(s.srcBf.shown, false, s.type);
+      assert.deepEqual(s.rates, b65.rates, s.type + ' keeps the js profile');
       assert.equal(s.saved, null, s.type + ': a class switch saves no rates');
     }
+    const s85 = trip[1];
+    assert.equal(s85.core, 'js', s85.type);
+    assert.equal(s85.maxAll, b65.maxAll, s85.type + ' max rate readout');
+    assert.deepEqual(s85.srcJs, { text: SRC.jsDefault, shown: true }, s85.type);
+    assert.equal(s85.srcBf.shown, false, s85.type);
     assert.equal(trip[2].core, 'bf');
     assert.deepEqual(trip[2].bfRates, diffRates, 'back on the 65: the Air65 diff\'s rates');
     assert.deepEqual(trip[2].bfPids, pids65);
@@ -241,7 +259,7 @@ test('rates are the pilot\'s: 65, 75, 85 and back keep the same rates on the bf 
       R.slider('s_sr', 60);
       await R.wait(200);
       out.push(R.snap());
-      out.push(await R.cls('whoop75', 'js'));
+      out.push(await R.cls('whoop75', 'bf'));
       out.push(await R.cls('whoop65', 'bf'));
       out.push(await R.cls('whoop85', 'js'));
       return JSON.stringify(out);`);
@@ -250,10 +268,11 @@ test('rates are the pilot\'s: 65, 75, 85 and back keep the same rates on the bf 
     assert.ok(mine.saved, 'saved as the pilot\'s');
     assert.deepEqual(mine.srcJs, { text: SRC.jsSaved, shown: true });
     for (const s of [own[2], own[4]]) {
-      assert.deepEqual(s.rates, mine.rates, s.type + ' flies the pilot\'s profile');
+      assert.deepEqual(s.rates, mine.rates, s.type + ': the pilot\'s profile');
       assert.equal(s.saved, mine.saved, s.type + ': saved profile unchanged');
-      assert.deepEqual(s.srcJs, { text: SRC.jsSaved, shown: true }, s.type);
     }
+    assert.deepEqual(own[4].srcJs, { text: SRC.jsSaved, shown: true }, 'the 85 flies it');
+    assert.deepEqual(own[2].bfRates, rates75, 'the 75 keeps flying the Fractal75 diff\'s rates');
     assert.deepEqual(own[3].bfRates, diffRates, 'the bf core keeps flying its diff\'s rates');
     assert.deepEqual(own[3].rates, mine.rates, 'and the js profile is left alone on the 65');
 
@@ -262,7 +281,7 @@ test('rates are the pilot\'s: 65, 75, 85 and back keep the same rates on the bf 
       out.push(await R.cls('whoop65', 'bf'));
       const status = await R.importCli('set roll_srate = 80');
       out.push(Object.assign(R.snap(), { status }));
-      out.push(await R.cls('whoop75', 'js'));
+      out.push(await R.cls('whoop75', 'bf'));
       out.push(await R.cls('whoop85', 'js'));
       out.push(await R.cls('whoop65', 'bf'));
       return JSON.stringify(out);`);
@@ -271,6 +290,8 @@ test('rates are the pilot\'s: 65, 75, 85 and back keep the same rates on the bf 
     assert.deepEqual(cli[1].srcBf, { text: SRC.bfCli, shown: true });
     assert.deepEqual(cli[1].rates, mine.rates, 'the bf import leaves the js profile alone');
     for (const s of [cli[2], cli[3]]) assert.deepEqual(s.rates, mine.rates, s.type);
+    assert.deepEqual(cli[2].bfRates, rates75, 'the paste stays with the 65: the 75 flies its own diff');
+    assert.deepEqual(cli[2].srcBf, { text: SRC.bf75, shown: true });
     assert.deepEqual(cli[4].bfRates, { ...diffRates, roll_srate: '80' }, 'back on the 65: the paste still flies');
     assert.deepEqual(cli[4].bfPids, pids65);
     assert.deepEqual(cli[4].srcBf, { text: SRC.bfCli, shown: true });

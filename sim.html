@@ -688,7 +688,7 @@
   <p class="build-note rates-js" id="ratesSourceJs"></p>
   <!-- The rates below drive the js core only (body.bf-core hides them):
        Betaflight flies the rates in its diff, changed through IMPORT CLI. -->
-  <p class="build-note rates-bf">Betaflight flies the rates in the Air65 diff (TUNE on the OSD). To fly yours, paste set lines (on top of it) or your full diff (in its place) below and press IMPORT CLI, disarmed. It lasts the session.</p>
+  <p class="build-note rates-bf">Betaflight flies the rates in the class's diff, the Air65's or the Fractal75's (TUNE on the OSD). To fly yours, paste set lines (on top of it) or your full diff (in its place) below and press IMPORT CLI, disarmed. It lasts the session.</p>
   <div class="rates-js">
   <div class="row"><label>Rate type</label></div>
   <select id="ratesType" title="Betaflight rates_type. CLI import sets this from the dump.">
@@ -729,7 +729,7 @@
   <div class="row"><label>Cam angle</label><span class="val" id="v_cam"></span></div>
   <input type="range" id="s_cam" min="0" max="60" step="1" value="15">
   <div class="row"><label>Tilt preset</label></div>
-  <select id="camTiltPreset" title="Indoor whoop 15°. Race whoop 25°. 30°: the 65mm default (the owner's Air65) and the 5-inch number.">
+  <select id="camTiltPreset" title="Indoor whoop 15°. Race whoop 25°. 30°: the 65mm and 75mm defaults (the owner's Air65 and Fractal75) and the 5-inch number.">
     <option value="15" selected>Indoor whoop 15°</option>
     <option value="25">Race whoop 25°</option>
     <option value="30">Freestyle 30°</option>
@@ -955,7 +955,7 @@ import {
   WS as CORE_WS, TICK_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, radioAux,
   BF_CLASS_TUNES, bfClassDiff,
-} from "./sim-core-adapter.js?v=273cda7f47a8";
+} from "./sim-core-adapter.js?v=978ea249359b";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
 import {
@@ -969,7 +969,7 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=a24a99da1943";
+} from "./sim-whoop.js?v=82cc9657b1cb";
 import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=fa186d29adc1";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
@@ -985,7 +985,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=5df5f9d6c515";
+} from "./sim-art.js?v=1c0fde3fbe7e";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -1011,14 +1011,14 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=f8e3e6793ea8";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=d339e9b99172";
+} from "./sim-tracks.js?v=d0f1340b861b";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=66cbe7a1fa91";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=74928ed0772f";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=58557f14fe09";
+} from "./sim-room.js?v=54d5cf5d69fc";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=11c2a53009ee";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=d55c6a2d63e0";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -1027,7 +1027,7 @@ import {
   drawRateCurve, normalizeRateType, isRateType, bfCurve as bfCurveOf,
   actualRate as actualRateOf, encodeRates, decodeRates, ratesDeepLink, RATE_CARDS,
   pilotRatesDefault, ratesSourceText,
-} from "./sim-rates.js?v=5024bc889685";
+} from "./sim-rates.js?v=c776b0804b34";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -1035,7 +1035,7 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=2f014ded0cc9";
+} from "./sim-coach.js?v=b7c2ae993fad";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=d0aa4b7ce820";
@@ -1058,13 +1058,13 @@ import {
   loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   defaultWhoopKit,
-} from "./sim-retention.js?v=de545a508675";
+} from "./sim-retention.js?v=b86c7c401319";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=d9697036ff3e";
+} from "./sim-secrets.js?v=f65e576902bf";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1081,8 +1081,8 @@ function ensureGltf(){
   }
   return gltfReady;
 }
-// The default core is quadmath-sim-core (Betaflight 4.5.1 in WASM, the Air65
-// for now); classes it has no plant for fly the js core, quadphysics.js, with
+// The default core is quadmath-sim-core (Betaflight 4.5.1 in WASM: the 65 is
+// the Air65, the 75 the Fractal75); classes it has no plant for fly the js core, quadphysics.js, with
 // JS CORE on the OSD. ?core=js keeps the js core for every class, for one
 // release. Read once, at boot.
 const CORE_KIND=new URLSearchParams(location.search).get('core')==='js'?'js':'bf';
@@ -3433,7 +3433,7 @@ let jsTickS=0;                       // the js core's sim time, s
 const jsCore=createJsCore({qp,tick:(sample,tUs)=>jsTick(sample,tUs),
   extras:(o)=>{o.clearance=qp.groundClearance?qp.groundClearance(qp):qp.position.z;}});
 let core=jsCore;                     // the flying core: jsCore, or the bf core once loaded
-let bfCore=null;
+let bfCore=null;                     // the flying class's bf core (bfOf(type).core per class)
 function syncStateFromCore(){
   core.getState(cs);
   toScene(cs.position,state.pos);
@@ -4373,14 +4373,21 @@ function refreshRatesUI(){
   syncRatesSource();
 }
 // Tune names where the flying rates come from, a line per core (body.bf-core
-// shows the bf one): the bf config's (the Air65 diff's, for every class) or
-// the js core's one profile. The bf line changes only with an IMPORT CLI
-// paste, which needs the bf core loaded.
+// shows the bf one): the bf config's (the flying class's diff: the Air65's or
+// the Fractal75's, with the same stick rates) or the js core's one profile.
+// The bf line changes with the class and with an IMPORT CLI paste, which
+// needs the bf core loaded.
 function syncRatesSource(){
   const js=document.getElementById('ratesSourceJs');
   if(js)js.textContent=ratesSourceText({core:'js',js:ratesFromLink?'link':ratesAreCustom?'saved':'default'});
   const bf=document.getElementById('ratesSourceBf');
-  if(bf&&bfCore)bf.textContent=ratesSourceText({core:'bf',cli:!bfCliText?'':bfPasteReplaces(bfCliText)?'replace':'top'});
+  // Only once a bf core is loaded (Tune can refresh before the class state
+  // exists), and for the class whose core it is: a class switch refreshes
+  // Tune before selectCore hands over, which refreshes it again.
+  if(bf&&bfCore){
+    const t=bfFlyingType(),cli=bfOf(t).cliText;
+    bf.textContent=ratesSourceText({core:'bf',quad:bfQuad(t),cli:!cli?'':bfPasteReplaces(cli)?'replace':'top'});
+  }
 }
 function setRateAxis(ax){rateAxis=ax;refreshRatesUI();}
 function refreshMax(){refreshRatesUI();}
@@ -4434,8 +4441,8 @@ function toggleFlightMode(){
 function setThreeD(on,persist){
   const want=!!on;
   // Refused while the bf core flies or is on its way; after a failed load the
-  // js core flies the 65, and 3D with it.
-  if(want&&(core.kind==='bf'||(bfWanted()&&!bfFailed))){
+  // js core flies that class, and 3D with it.
+  if(want&&(core.kind==='bf'||(bfWanted()&&!bfOf().failed))){
     console.info('sim-core: 3D is not wired to the bf core yet; staying 2D');
     toast('3D — NOT ON THE BF CORE YET');
     syncTouchModeBtn(); // the 3D checkbox and HUD button back to 2D
@@ -4468,9 +4475,9 @@ function setThreeD(on,persist){
 }
 function tryArm(opts){
   if(armGate&&padLive){toast('STICKS NOT SAFE');return false;}
-  // The 65 waits for Betaflight: armed on the js core meanwhile, the quad would
-  // be respawned and disarmed mid-flight when the bf core takes over.
-  if(core.kind!=='bf'&&bfWanted()&&!bfCore&&!bfFailed){toast('LOADING BETAFLIGHT CORE…');return false;}
+  // A bf class waits for Betaflight: armed on the js core meanwhile, the quad
+  // would be respawned and disarmed mid-flight when the bf core takes over.
+  if(core.kind!=='bf'&&bfWanted()&&!bfOf().core&&!bfOf().failed){toast('LOADING BETAFLIGHT CORE…');return false;}
   if(!(opts&&opts.fromAuto)&&!throttleSafeToArm(stick.t,threeD)){
     toast(threeD?'CENTER THROTTLE TO ARM':'Lower throttle to arm');
     return false;
@@ -4884,9 +4891,9 @@ function updateOSD(){
   // Which core flies, always: JS CORE whenever Betaflight is not flying (a
   // class with no sim-core plant, ?core=js, or the bf core still loading or
   // failed), so nobody takes the js core for Betaflight.
-  osdTR.innerHTML=(cs.kind==='bf'?'BF CORE · AIR65<br>':'JS CORE<br>')+`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):(touchCtl&&touchCtl.enabled?'TOUCH':'KEYBOARD')}${axisMap&&gpConnected?' (CAL)':''}<br>`+
+  osdTR.innerHTML=(cs.kind==='bf'?'BF CORE · '+bfQuad(bfFlyingType()).toUpperCase()+'<br>':'JS CORE<br>')+`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):(touchCtl&&touchCtl.enabled?'TOUCH':'KEYBOARD')}${axisMap&&gpConnected?' (CAL)':''}<br>`+
     // Rates are per axis; name the one being shown so it cannot read as global.
-    (cs.kind==='bf'?`TUNE ${bfDiffLoaded&&bfDiffLoaded===bfDiff()?BF_TUNE_ID:'CLI IMPORT'}<br>`:
+    (cs.kind==='bf'?`TUNE ${bfOf().diffLoaded&&bfOf().diffLoaded===bfDiff()?bfTuneId():'CLI IMPORT'}<br>`:
     `RATES ${rateAxis.toUpperCase()} ${maxRateDps(rateAxis).toFixed(0)}°/s ${rates.type}<br>`)+
     `CAM ${CFG.camDeg}° FOV ${Math.round(fpvFov())}${usingGltf?'<br>GLTF MAP':''}`+
     (ghostRoom?`<br>ROOM ${ghostRoom.code} · ${ghostRoom.pilots.size+1}/${ghostRoom.max}`:'');
@@ -5948,7 +5955,7 @@ syncWhoopUI();
 // No rates here: rates are the pilot's, one profile for every class.
 const DRONE_TYPES={
   whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,spool:0.013,cam:30,fov:VFOV_DEFAULT},
-  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,spool:0.014,cam:15,fov:VFOV_DEFAULT},
+  whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,spool:0.014,cam:30,fov:VFOV_DEFAULT},
   whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,spool:0.015,cam:15,fov:VFOV_DEFAULT},
   freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,spool:0.040,cam:30,fov:VFOV_DEFAULT},
   freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,spool:0.060,cam:30,fov:VFOV_DEFAULT}
@@ -5996,7 +6003,8 @@ function setSlider(id,val){
   s.value=val;s.dispatchEvent(new Event('input'));
 }
 // Camera tilt follows the class default (DRONE_TYPES[...].cam: the 65 at 30°,
-// the owner's Air65; the 75 and 85 at 15°; freestyle 30°) until the pilot
+// the owner's Air65; the 75 at 30°, the owner's Fractal75; the 85 at 15°;
+// freestyle 30°) until the pilot
 // moves the Cam angle slider: then their angle is saved (quadmathSimCamDeg)
 // and beats every class default. setSlider() dispatches synthetic 'input'
 // events, so a suppress flag separates user drags from class switches. The
@@ -6217,12 +6225,11 @@ function setCliStatus(text,kind){
 // decides what it takes. Set lines go on top of the owner's diff (a later set
 // wins, so a few rate lines change just those); a full diff, which starts
 // from `defaults`, takes the owner's diff's place. The js core's rates are
-// left alone, and the paste stays on for the session (selectCore loads it
-// again on the way back to the 65).
-let bfCliText='';
+// left alone, and the paste stays with the class it was pasted on for the
+// session (bfOf().cliText; selectCore loads it again on the way back).
 function bfPasteReplaces(text){return /^\s*defaults\b/im.test(text);}
 function bfDiffWith(text){return !text?bfDiff():bfPasteReplaces(text)?text:bfDiff()+'\n'+text;}
-function bfWantDiff(){return bfDiffWith(bfCliText);}
+function bfWantDiff(){return bfDiffWith(bfOf().cliText);}
 // A pasted line that changes something: a setting or feature Betaflight took,
 // or a config command with arguments (get, dump, diff, a bare aux, ... only print).
 function bfLineChanges(l){
@@ -6235,7 +6242,7 @@ function importCliToBf(text){
     return null;
   }
   const prev=bfWantDiff();
-  const label=()=>bfCliText?'CLI import':BF_TUNE_ID;
+  const label=()=>bfOf().cliText?'CLI import':bfTuneId();
   let r;
   try{
     r=bfLoadDiff(bfDiffWith(text),'CLI import');
@@ -6262,13 +6269,13 @@ function importCliToBf(text){
     setCliStatus('Betaflight took none of it'+detail+'; it flies what it flew before','err');
     return r;
   }
-  bfCliText=text;
+  bfOf().cliText=text;
   syncRatesSource();
-  setCliStatus('Betaflight took '+took+' line'+(took===1?'':'s')+(bfPasteReplaces(text)?' (a full diff, in place of '+BF_TUNE_ID+')':' on top of '+BF_TUNE_ID)+detail,'ok');
+  setCliStatus('Betaflight took '+took+' line'+(took===1?'':'s')+(bfPasteReplaces(text)?' (a full diff, in place of '+bfTuneId()+')':' on top of '+bfTuneId())+detail,'ok');
   return r;
 }
 function importCli(text){
-  if(bfWanted()&&!bfFailed)return importCliToBf(text);
+  if(bfWanted()&&!bfOf().failed)return importCliToBf(text);
   let p;
   try{
     p=parseCli(text,rates.type);
@@ -7441,54 +7448,76 @@ function onCoreEvent(ev){
   }
   else if(ev.kind==='trigger')bfPortal(ev.id);
 }
-// ---------- The bf core (the default): quadmath-sim-core, the Air65 for now ----------
-// Plant: vendor/sim-core/airframes/air65.json. Config: the owner's full Air65
-// Betaflight diff, vendor/sim-core/configs/air65-ryfly-2026-10-23.txt, as it
-// is (rates, PIDs, filters, sag compensation, thrust linear, dynamic idle,
-// and its own switches: ARM AUX1, ANGLE AUX2, BEEPER and FLIP OVER AFTER
-// CRASH AUX3). The tune database's 1219s card stays the tune the page names.
-// Rates are the pilot's: a class's config is that diff with only the class
-// tune's P, I and D set on top (sim-core-adapter.js bfClassDiff,
-// BF_CLASS_TUNES), so every class flies the diff's rates; the 65's tune is
-// the diff's own profile. Other classes fly the js core until sim-core has
-// their plants. World: every collider as a module-frame box, plus the city
-// portals as triggers; a changed world is sent on the next spawn, or when the
-// quad is disarmed.
-const BF_CLASS='whoop65';
-const BF_TUNE_ID=BF_CLASS_TUNES[BF_CLASS];
+// ---------- The bf core (the default): quadmath-sim-core, the 65 and the 75 ----------
+// One Betaflight instance per class sim-core has a plant for (BF_CLASSES),
+// made the first time that class flies on it (the plant's mass and thrust are
+// fixed when an instance loads). The 65 is the owner's Air65
+// (vendor/sim-core/airframes/air65.json) on the owner's full Air65 diff
+// (vendor/sim-core/configs/air65-ryfly-2026-10-23.txt); the 75 is the owner's
+// Fractal75 (airframes/fractal75.json) on its diff
+// (configs/fractal75-ryfly-2026-11-03.txt). Each diff flies as it is (rates,
+// PIDs, filters, sag compensation, thrust linear, dynamic idle, and its own
+// switches: ARM AUX1, ANGLE AUX2, BEEPER and FLIP OVER AFTER CRASH AUX3). The
+// 65 takes its class tune's P, I and D on top (sim-core-adapter.js
+// bfClassDiff; that card is the diff's own profile); the 75's card is another
+// quad's (a Meteor75 Pro), so the Fractal75 flies its diff's own P, I and D.
+// Rates are the pilot's: the two diffs hold the same stick rates, so every
+// class flies them (the Fractal75's adds its throttle curve, thr_mid 65 and
+// thr_expo 35, flown as it is). The 85 and the freestyle classes fly the js
+// core until sim-core has their plants. World: every collider as a
+// module-frame box, plus the city portals as triggers; a changed world is
+// sent on the next spawn, or when the quad is disarmed.
+const BF_CLASSES={
+  whoop65:{quad:'Air65',airframe:'vendor/sim-core/airframes/air65.json',diff:'vendor/sim-core/configs/air65-ryfly-2026-10-23.txt',tune:BF_CLASS_TUNES.whoop65},
+  whoop75:{quad:'Fractal75',airframe:'vendor/sim-core/airframes/fractal75.json',diff:'vendor/sim-core/configs/fractal75-ryfly-2026-11-03.txt',tune:null},
+};
 // vendor/sim-core/VERSION; versions the vendored URLs (cache) and the test
 // tools/test_sim_core.mjs holds the two equal.
-const SIM_CORE_VERSION='v0.5.0';
-const BF_DIFF_PATH='vendor/sim-core/configs/air65-ryfly-2026-10-23.txt';
-let bfOwnerDiff=null;                // that diff's text, once fetched
-let bfDiffLoaded=null;               // the CLI text the bf core last configured with
-let bfAirframe=null;                 // air65.json as fetched
-let bfPlantMap=null;                 // the map whose contact profile the plant carries ('' = none)
+const SIM_CORE_VERSION='v0.6.0';
+// Per class: its core once made (bfCore is the flying class's), the airframe
+// and diff as fetched, the CLI text the core last configured with, the map
+// whose contact profile its plant carries ('' = none), the world last sent to
+// it, this session's IMPORT CLI paste (it stays with the class it was pasted
+// on), the config built for the class (the OSD compares it each frame), and a
+// failed load (the js core then flies that class for the session).
+const bfClasses={};
+function bfOf(type=droneType){
+  return bfClasses[type]||(bfClasses[type]={core:null,airframe:null,ownerDiff:null,diffLoaded:null,plantMap:null,worldSigSent:'',cliText:'',memo:null,loading:null,failed:false});
+}
+// The quad the bf core flies for a class, for the OSD and the console.
+function bfQuad(type=droneType){return BF_CLASSES[type]?BF_CLASSES[type].quad:'';}
+// The class whose core bfCore is (the class picker can be ahead of it
+// mid-switch).
+function bfFlyingType(){return Object.keys(bfClasses).find(t=>bfCore&&bfClasses[t].core===bfCore)||droneType;}
+// The tune the OSD names: the class's card, or its diff when it flies its own.
+function bfTuneId(type=droneType){
+  const c=BF_CLASSES[type];
+  return !c?'':c.tune||c.diff.replace(/^.*\//,'').replace(/\.txt$/,'');
+}
 // The bf plant carries the current map's contact profile (BOUNCE_MAPS: the
-// Rig's bounce walls), set when the map changes; Betaflight reboots on it.
+// Rig's bounce walls), set when the map changes or a class's core takes over;
+// Betaflight reboots on it.
 function bfSyncPlant(){
-  if(!bfCore||!bfAirframe)return;
+  const b=bfOf();
+  if(!bfCore||b.core!==bfCore||!b.airframe)return;
   const want=BOUNCE_MAPS[currentMap]?currentMap:'';
-  if(want===bfPlantMap)return;
+  if(want===b.plantMap)return;
   try{
-    bfCore.setPlant(contactPlant(bfAirframe,BOUNCE_MAPS[currentMap]));
-    bfPlantMap=want;
+    bfCore.setPlant(contactPlant(b.airframe,BOUNCE_MAPS[currentMap]));
+    b.plantMap=want;
   }catch(e){console.warn('sim-core: the '+(want||'base')+' contact plant did not load ('+(e&&e.message||e)+')');}
 }
-let bfLoading=null;
-let bfFailed=false;                  // the load failed: the js core flies the 65 for the session
-let bfWorldSigSent='';
 let bfWorldCheckAt=0;
-// The flying class's config, built once per class (the OSD compares it each frame).
-let bfClassMemo=null;
-function bfDiff(){
-  if(!bfOwnerDiff)return null;
-  if(!bfClassMemo||bfClassMemo.type!==droneType||bfClassMemo.from!==bfOwnerDiff){
+// A class's config: its diff, with the class card's P, I and D on top (the 65).
+function bfDiff(type=droneType){
+  const b=bfOf(type),c=BF_CLASSES[type];
+  if(!c||!b.ownerDiff)return null;
+  if(!b.memo||b.memo.from!==b.ownerDiff){
     const db=window.QuadMathTunes&&window.QuadMathTunes.tunes;
-    const tune=db&&db.find(t=>t.id===BF_CLASS_TUNES[droneType]);
-    bfClassMemo={type:droneType,from:bfOwnerDiff,text:bfClassDiff(bfOwnerDiff,tune&&tune.pids)};
+    const tune=c.tune&&db&&db.find(t=>t.id===c.tune);
+    b.memo={from:b.ownerDiff,text:bfClassDiff(b.ownerDiff,tune&&tune.pids)};
   }
-  return bfClassMemo.text;
+  return b.memo.text;
 }
 // What Betaflight holds after a configure, for the console: the settings the
 // owner's diff is flown for.
@@ -7533,19 +7562,24 @@ function curHeading(){
   return Math.atan2(-fx,-fz)||0.0001; // placeQuadAt ignores an exact 0
 }
 // The battery the OSD warns on follows the flying core's pack: the Build's on
-// the js core, the airframe's (the Air65's 1S) on the bf core.
+// the js core, the airframe's (1S on the Air65 and the Fractal75) on the bf core.
 function syncPackForCore(){
   if(core.kind==='bf')applyPackFromBuild({...currentBuild,cells:core.cells});
   else applyPackFromBuild(currentBuild);
 }
 function bfDrop3D(){if(threeD)setThreeD(false,false);}
+// The prop sound follows the flying class's airframe.
+function bfAudio(b){
+  if(!b.core||!b.airframe)return;
+  simAudio.setAirframe({blades:airframeBlades(b.airframe,currentBuild.blades),rpmHover:b.airframe.values.rpmHover.value,maxThrustN:b.core.maxThrustN});
+}
 // Feed a CLI diff to the bf core (configure: Betaflight reboots, disarmed),
 // then put the quad back where it stands. Disarmed only.
 function bfLoadDiff(text,label){
   if(core.kind!=='bf')return null;
   if(coreArmed()){toast('DISARM TO LOAD A DIFF');return null;}
   const r=core.loadDiff(text);
-  bfDiffLoaded=text;
+  bfOf().diffLoaded=text;
   placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
   bfSyncMode();
   console.info('sim-core: '+label+': '+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target; '+bfConfigNote(core));
@@ -7554,9 +7588,10 @@ function bfLoadDiff(text,label){
 }
 // Respawn the bf core at a module pose, with the world sent again if it changed.
 function bfSpawn(pos,q,opts){
+  const b=bfOf();
   const sig=bfWorldSig();
-  const world=sig!==bfWorldSigSent?bfWorld():null;
-  bfWorldSigSent=sig;
+  const world=sig!==b.worldSigSent?bfWorld():null;
+  b.worldSigSent=sig;
   core.respawn(pos,q,{freshPack:!!(opts&&opts.freshPack),world});
   core.setMode(flightMode);
   bfSyncMode();
@@ -7568,93 +7603,121 @@ function bfWorldWatch(now){
   if(core.kind!=='bf'||now-bfWorldCheckAt<500)return;
   bfWorldCheckAt=now;
   if(coreArmed())return;
+  const b=bfOf();
   const sig=bfWorldSig();
-  if(sig===bfWorldSigSent)return;
-  bfWorldSigSent=sig;
+  if(sig===b.worldSigSent)return;
+  b.worldSigSent=sig;
   core.respawn({...cs.position},{...cs.quaternion},{world:bfWorld()});
   core.setMode(flightMode);
 }
-function bfWanted(){return CORE_KIND==='bf'&&droneType===BF_CLASS;}
+function bfWanted(){return CORE_KIND==='bf'&&!!BF_CLASSES[droneType];}
 // Tune's rates (sliders, rate type and preset, the rates link) drive the js
 // core only: body.bf-core swaps them for a line pointing to IMPORT CLI.
 function syncCoreUI(){document.body.classList.toggle('bf-core',core.kind==='bf');}
-// The 65 boards hold Betaflight runs. A run the js core flew any part of
-// (runSawJs) that lands on a 65 board (the board class comes from the build:
-// the 65 under ?core=js or after a failed bf load, a 2.5"/5" on a 65 build, or
-// a class switch mid-run) is not that physics: it stays off the boards and
-// the Daily Line, local and online, refused as the Worker refuses another
-// physics version. The 75 and 85 boards are js boards: not affected.
-function runOffBoards(){return (runSawJs||core.kind==='js')&&classId(currentBuild&&currentBuild.frameMm)===DRONE_TYPES[BF_CLASS].frame;}
-// Pick the flying core for the class: the bf core for the Air65 (the default),
-// the js core for a class with no sim-core plant, silently (JS CORE on the OSD,
-// one console note per class), and for every class under ?core=js.
+// The 65 and 75 boards hold Betaflight runs. A run the js core flew any part
+// of (runSawJs) that lands on one of them (the board class comes from the
+// build: a bf class under ?core=js or after a failed bf load, a 2.5"/5" on a
+// 65 or 75 build, or a class switch mid-run) is not that physics: it stays off
+// the boards and the Daily Line, local and online, refused as the Worker
+// refuses another physics version. The 85 boards are js boards: not affected.
+const BF_FRAMES=new Set(Object.keys(BF_CLASSES).map(t=>DRONE_TYPES[t].frame));
+function runOffBoards(){return (runSawJs||core.kind==='js')&&BF_FRAMES.has(classId(currentBuild&&currentBuild.frameMm));}
+// Park whichever core flies on the js core, where the quad stands.
+function bfPark(){
+  if(core.kind!=='bf')return;
+  core.setArm(false); // parked: no arm intent left for the way back
+  core=jsCore;
+  placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
+}
+// Pick the flying core for the class: the class's bf core for the 65 and the
+// 75 (the default; loaded the first time the class flies, the js core flying
+// meanwhile), the js core for a class with no sim-core plant, silently (JS
+// CORE on the OSD, one console note per class), and for every class under
+// ?core=js.
 const bfFallbackNoted=new Set();
 function selectCore(){
   if(CORE_KIND!=='bf')return;
   if(!bfWanted()){
-    if(core.kind==='bf'){
-      core.setArm(false); // parked: no arm intent left for the way back
-      core=jsCore;
-      placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
-    }
+    bfPark();
+    bfCore=null;
     syncPackForCore();
     syncCoreUI();
     if(!bfFallbackNoted.has(droneType)){
       bfFallbackNoted.add(droneType);
-      console.info('sim-core: only the 65 mm whoop (Air65) has a sim-core plant for now; '+(DRONE_TYPES[droneType]||{label:droneType}).label+' flies the js core');
+      console.info('sim-core: sim-core has plants for the 65 (Air65) and the 75 (Fractal75) only; '+(DRONE_TYPES[droneType]||{label:droneType}).label+' flies the js core');
     }
     return;
   }
-  if(bfCore){
-    if(core!==bfCore){
+  const b=bfOf();
+  if(b.core){
+    if(core!==b.core){
+      bfPark(); // the other class's core, if it was flying
       bfDrop3D();
-      core=bfCore;
-      // Back on the bf core: respawned (disarmed) where the quad stands, then the
-      // owner's diff (with this session's CLI import on top) if it differs.
+      bfCore=b.core;
+      core=b.core;
+      // On this class's core: respawned (disarmed) where the quad stands, with
+      // the map's contact profile, then its diff (with this class's CLI import
+      // on top) if it differs.
       placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
+      bfSyncPlant();
       const want=bfWantDiff();
-      if(bfDiff()&&want!==bfDiffLoaded)bfLoadDiff(want,bfCliText?'CLI import':BF_TUNE_ID);
+      if(bfDiff()&&want!==b.diffLoaded)bfLoadDiff(want,b.cliText?'CLI import':bfTuneId());
+      core.setMode(flightMode);
+      bfSyncMode();
+      bfAudio(b);
     }
     syncPackForCore();
     syncCoreUI();
+    syncRatesSource();
     return;
   }
-  if(bfLoading)return;
+  // Not made yet: the js core flies while it loads.
+  bfPark();
+  bfCore=null;
+  syncPackForCore();
+  syncCoreUI();
+  if(b.loading)return;
+  const type=droneType;
+  const c=BF_CLASSES[type];
   bfDrop3D();
   toast('LOADING BETAFLIGHT CORE…');
   const v='?v='+SIM_CORE_VERSION;
-  bfLoading=Promise.all([
+  const file=(path)=>path.replace(/^.*\//,'');
+  b.loading=Promise.all([
     import('./vendor/sim-core/sim-core.js'+v),
-    fetch('vendor/sim-core/airframes/air65.json'+v).then(r=>{if(!r.ok)throw new Error('air65.json HTTP '+r.status);return r.json();}),
-    fetch(BF_DIFF_PATH+v).then(r=>{if(!r.ok)throw new Error('the Air65 diff HTTP '+r.status);return r.text();}),
+    fetch(c.airframe+v).then(r=>{if(!r.ok)throw new Error(file(c.airframe)+' HTTP '+r.status);return r.json();}),
+    fetch(c.diff+v).then(r=>{if(!r.ok)throw new Error('the '+c.quad+' diff HTTP '+r.status);return r.text();}),
   ]).then(([mod,airframe,diff])=>{
-    bfOwnerDiff=diff;
-    bfAirframe=airframe;
-    bfWorldSigSent=bfWorldSig();
+    b.ownerDiff=diff;
+    b.airframe=airframe;
+    b.worldSigSent=bfWorldSig();
     const plantMap=BOUNCE_MAPS[currentMap]?currentMap:'';
-    return createBfCore({SimCore:mod.SimCore,wasm:new URL('vendor/sim-core/sim-core.wasm'+v,location.href),airframe:contactPlant(airframe,BOUNCE_MAPS[currentMap]),diff:bfDiff(),world:bfWorld()}).then(bf=>{
+    return createBfCore({SimCore:mod.SimCore,wasm:new URL('vendor/sim-core/sim-core.wasm'+v,location.href),airframe:contactPlant(airframe,BOUNCE_MAPS[currentMap]),diff:bfDiff(type),world:bfWorld()}).then(bf=>{
       const r=bf.report;
-      bfDiffLoaded=bfDiff();
-      bfPlantMap=plantMap;
-      console.info('sim-core '+SIM_CORE_VERSION+': Air65, '+BF_DIFF_PATH+' ('+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target; '+bfConfigNote(bf)+'); tune shown: '+BF_TUNE_ID+'; '+bfWorld().boxes.length+' world boxes; the Build\'s cells and mAh are not used (the plant is the Air65)');
+      b.diffLoaded=bfDiff(type);
+      b.plantMap=plantMap;
+      b.core=bf;
+      console.info('sim-core '+SIM_CORE_VERSION+': '+c.quad+', '+c.diff+' ('+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target; '+bfConfigNote(bf)+'); tune shown: '+bfTuneId(type)+'; '+bfWorld().boxes.length+' world boxes; the Build\'s cells and mAh are not used (the plant is the '+c.quad+')');
+      // The class can change while the wasm loads: this core waits for it.
+      if(!bfWanted()||droneType!==type)return;
       bfCore=bf;
-      simAudio.setAirframe({blades:airframeBlades(airframe,currentBuild.blades),rpmHover:airframe.values.rpmHover.value,maxThrustN:bf.maxThrustN});
+      bfAudio(b);
       // The map can change while the wasm loads (the boot map landing): its
       // bounce profile is checked again now that there is a core to give it to.
       bfSyncPlant();
-      if(!bfWanted())return;
       bfDrop3D();
       core=bf;
       core.setMode(flightMode);
       bfSyncMode();
       syncPackForCore();
       syncCoreUI();
+      syncRatesSource();
       placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
-      toast('BETAFLIGHT CORE — AIR65');
+      toast('BETAFLIGHT CORE — '+c.quad.toUpperCase());
     });
   }).catch(e=>{
-    bfFailed=true;
-    console.warn('sim-core: the bf core did not load ('+(e&&e.message||e)+'); flying the js core');
+    b.failed=true;
+    console.warn('sim-core: the bf core for the '+c.quad+' did not load ('+(e&&e.message||e)+'); flying the js core');
   });
 }
 // ---------- Input poll: every 4 ms, stamped in sim time ----------
@@ -8108,7 +8171,7 @@ function applyQueryBoot(){
   const presetRaw=q.get('preset');
   const ratesRaw=q.get('rates');
   // Rates links set the js core's rates; Betaflight flies its diff's.
-  if((presetRaw||ratesRaw)&&bfWanted()&&!bfFailed)toast('RATES LINK — JS CORE ONLY; BETAFLIGHT FLIES ITS DIFF (TUNE → IMPORT CLI)');
+  if((presetRaw||ratesRaw)&&bfWanted()&&!bfOf().failed)toast('RATES LINK — JS CORE ONLY; BETAFLIGHT FLIES ITS DIFF (TUNE → IMPORT CLI)');
   // Query rates are session-only: rates= > preset= > saved ryflyRates. Do not persist.
   if(presetRaw&&applyRatePreset(rates,presetRaw)){
     const sel=document.getElementById('ratePreset');
