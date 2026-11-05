@@ -261,6 +261,10 @@ const LIBRARY = [
   { id: 'ham', name: 'ham-inv', phases: [{ t: 1.15, yaw: 7.2, thr: 0.28 }, { t: 0.55, yaw: 0, thr: 0.28 }], opts: { z0: 6, vx: 0.2, maxT: 2.2, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 } } },
   { id: 'ham', name: 'ham-inv-fast', phases: [{ t: 0.95, yaw: 8.2, thr: 0.26 }, { t: 0.55, yaw: 0, thr: 0.26 }], opts: { z0: 6.2, vx: 0.15, maxT: 2.0, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 } } },
   { id: 'ham', name: 'ham-inv-ccw', phases: [{ t: 1.15, yaw: -7.2, thr: 0.28 }, { t: 0.55, yaw: 0, thr: 0.28 }], opts: { z0: 6, vx: 0.2, maxT: 2.2, threeD: true, quat: { x: 1, y: 0, z: 0, w: 0 } } },
+  // The owner's inverted yaw spin: a half flip in, a yaw while inverted (about
+  // 330 degrees), a half flip out. One Ham, not a Flip.
+  { id: 'ham', name: 'ham-flip-yaw-flip', phases: [{ t: 0.3, pitch: -10.5, thr: 0.5 }, { t: 0.8, yaw: 7.2, thr: 0.3 }, { t: 0.26, pitch: -10.5, thr: 0.5 }, { t: 0.7, thr: 0.5 }], opts: { z0: 7, vx: 1, maxT: 2.6 } },
+  { id: 'ham', name: 'ham-flip-yaw-flip-front', phases: [{ t: 0.3, pitch: 10.5, thr: 0.5 }, { t: 0.8, yaw: -7.2, thr: 0.3 }, { t: 0.26, pitch: 10.5, thr: 0.5 }, { t: 0.7, thr: 0.5 }], opts: { z0: 7, vx: 1, maxT: 2.6 } },
   { id: 'sideloop', name: 'sl-std', phases: [{ t: 0.38, yaw: 6.2, thr: 0.55 }, { t: 0.95, roll: 7.0, yaw: 2.4, thr: 0.85 }, { t: 0.32, roll: 6.2, yaw: 1.0, thr: 0.22 }, { t: 0.4, roll: 0, yaw: 0, thr: 0.55 }], opts: { z0: 4.5, vx: 5.5, maxT: 2.8, colliders: OBJ_BAR } },
   { id: 'sideloop', name: 'sl-fast', phases: [{ t: 0.32, yaw: 7.0, thr: 0.58 }, { t: 0.82, roll: 8.0, yaw: 2.6, thr: 0.88 }, { t: 0.28, roll: 6.5, yaw: 1.1, thr: 0.2 }, { t: 0.4, roll: 0, yaw: 0, thr: 0.55 }], opts: { z0: 4.8, vx: 6.0, maxT: 2.5, colliders: OBJ_BAR } },
   { id: 'sideloop', name: 'sl-slow', phases: [{ t: 0.48, yaw: 5.4, thr: 0.52 }, { t: 1.1, roll: 6.2, yaw: 2.0, thr: 0.8 }, { t: 0.38, roll: 5.6, yaw: 0.9, thr: 0.24 }, { t: 0.45, roll: 0, yaw: 0, thr: 0.52 }], opts: { z0: 4.2, vx: 5.0, maxT: 3.1, colliders: OBJ_BAR } },
@@ -781,6 +785,9 @@ function hamFeat(extra) {
   f.travelH = e.travelH != null ? e.travelH : 2.2;
   f.radMax = e.radMax != null ? e.radMax : 1.8;
   f.objNearN = e.objNearN || 0;
+  // The turn about the vertical while inverted: the yaw, when the whole
+  // segment stayed past up-Z -0.5.
+  f.invYawUp = e.invYaw != null ? e.invYaw : (f.upMax < -0.5 ? Math.abs(f.yaw) : 0);
   return f;
 }
 
@@ -817,6 +824,27 @@ test('Ham Spin does not fire on flips, rolls, or normal yaw', () => {
   assert.notEqual(rollPass.id, 'ham', 'roll-through-inverted feat scored ' + rollPass.id);
   const levelYaw = classifyFeat(hamFeat({ upMin: 0.8, upMax: 0.99, inv: 0 }));
   assert.notEqual(levelYaw.id, 'ham', 'upright 360 feat scored ' + levelYaw.id);
+});
+
+test('Ham Spin counts only the turn about the vertical while inverted; a full Roll stays a Roll', () => {
+  // Inverted the whole time: all of the yaw. Upright at both ends, the turn
+  // made past up-Z -0.5 is what counts (invYaw), not the body's yaw.
+  assert.equal(classifyFeat(hamFeat({ yaw: 5.4, pathY: 5.4, upMax: 1, invYaw: 5.3 })).id, 'ham');
+  assert.notEqual(classifyFeat(hamFeat({ yaw: 6.0, pathY: 6.0, upMax: 1, invYaw: 5.1 })).id, 'ham');
+  assert.equal(classifyFeat(hamFeat({ yaw: 4.0, pathY: 4.0, upMax: 1, invYaw: 5.5 })).id, 'ham');
+  // A flip in and out does not make it a Flip.
+  const fyf = hamFeat({ yaw: 5.9, pathY: 5.9, pitch: -5.85, pathP: 5.85, upMax: 1, upMin: -1, inv: 0.61, invYaw: 5.32 });
+  fyf.flipDn = 5.25;
+  assert.equal(classifyFeat(fyf).id, 'ham');
+  fyf.invYawUp = 4.5;
+  assert.equal(classifyFeat(fyf).id, 'flip');
+  // A full Roll (300 degrees in 1.5 s at 250 deg/s) that also turned 300
+  // degrees about the vertical past up-Z -0.5 is a Roll.
+  const roll = hamFeat({ yaw: 0.3, pathY: 0.3, roll: 6.4, pathR: 6.4, upMax: 0.95, upMin: -1, inv: 0.3, invYaw: 5.6 });
+  roll.rollUp = 6.4; roll.rollUpT = 1.0;
+  assert.equal(classifyFeat(roll).id, 'roll');
+  roll.rollUpT = 2.0;   // 183 deg/s: no Roll, so the inverted turn is a Ham
+  assert.equal(classifyFeat(roll).id, 'ham');
 });
 
 test('turtled inverted deck does not score a trick', () => {
@@ -970,7 +998,7 @@ async function flyBf(phases, opts) {
 // do not climb 1.5 m at its throttle (full throttle does), and its matty
 // flips turn a full flip (Betaflight tracks the rate the js core lags).
 const BF_LIBRARY = [
-  ...['flip-front', 'flip-back', 'roll-fast', 'yaw-fast', 'hm-fast', 'ss-fast', 'mav-std', 'pole-spin', 'ham-inv',
+  ...['flip-front', 'flip-back', 'roll-fast', 'yaw-fast', 'hm-fast', 'ss-fast', 'mav-std', 'pole-spin', 'ham-inv', 'ham-flip-yaw-flip',
     'sl-std', 'crd-std', 'jf-fast', 'sb-fast', 'rk-std', 'ck-std', 'dive-std', 'gap-generic-slot', 'prox-std'].map((n) => LIBRARY.find((c) => c.name === n)),
   { id: 'powerloop', name: 'bf-powerloop', phases: [{ t: 0.25, pitch: 0, tS: 0.75 }, { t: 1.0, pitch: -6.4, tS: 1.0 }, { t: 0.6, pitch: 0, tS: 0.35 }], opts: { z0: 6, vx: 7, maxT: 2.6 } },
   { id: 'matty', name: 'bf-matty', phases: [{ t: 0.1, pitch: 0, tS: 0.25 }, { t: 0.55, pitch: 8.2, tS: 0.03 }, { t: 0.55, pitch: 0, tS: 0.45 }], opts: { z0: 9, vx: 7, maxT: 2.1 } },
@@ -995,6 +1023,35 @@ test('bf core: every trick type, flown on sim-core and sampled every 4 ms, is it
   // Trippy and Barani fly on the bf core in the Rig, in the tests below.
   for (const id of new Set(LIBRARY.map((c) => c.id))) {
     if (id !== 'trippy' && id !== 'barani') assert.ok(flown.has(id), id + ' flown on the bf core');
+  }
+});
+
+// The owner's inverted yaw spin on both cores: a half flip in, a yaw while
+// inverted, a half flip out. Clean, with about 330 degrees of yaw, it is one
+// Ham; with 260 it is a Flip; with the yaw run into the flips the turn about
+// the vertical drops (the yaw made while tilted turns little about it) and it
+// is a Flip. In every one the turn made past up-Z -0.5 comes within a few
+// degrees of the whole turn about the vertical (v.yawSpan): the attempt-log
+// replay (test_sim_tricks_attempt_log.mjs) takes one for the other in logs
+// recorded before the first was.
+const FYF_OPTS = { z0: 7, vx: 1, maxT: 2.6 };
+const FYF = [
+  { want: 'ham', name: 'clean, 330 deg of yaw', phases: [{ t: 0.3, pitch: -10.5, thr: 0.5 }, { t: 0.8, yaw: 7.2, thr: 0.3 }, { t: 0.26, pitch: -10.5, thr: 0.5 }, { t: 0.7, thr: 0.5 }] },
+  { want: 'flip', name: 'clean, 260 deg of yaw', phases: [{ t: 0.3, pitch: -10.5, thr: 0.5 }, { t: 0.63, yaw: 7.2, thr: 0.3 }, { t: 0.26, pitch: -10.5, thr: 0.5 }, { t: 0.7, thr: 0.5 }] },
+  { want: 'flip', name: 'yaw run 0.1 s into each flip', phases: [{ t: 0.2, pitch: -10.5, thr: 0.5 }, { t: 0.1, pitch: -10.5, yaw: 7.2, thr: 0.4 }, { t: 0.62, yaw: 7.2, thr: 0.3 }, { t: 0.1, pitch: -10.5, yaw: 7.2, thr: 0.4 }, { t: 0.16, pitch: -10.5, thr: 0.5 }, { t: 0.7, thr: 0.5 }] },
+  { want: 'flip', name: 'yaw run 0.15 s into each flip', phases: [{ t: 0.15, pitch: -10.5, thr: 0.5 }, { t: 0.15, pitch: -10.5, yaw: 7.2, thr: 0.4 }, { t: 0.55, yaw: 7.2, thr: 0.3 }, { t: 0.15, pitch: -10.5, yaw: 7.2, thr: 0.4 }, { t: 0.11, pitch: -10.5, thr: 0.5 }, { t: 0.7, thr: 0.5 }] },
+];
+
+test('Ham Spin as the owner flies it (half flip in, yaw while inverted, half flip out), on both cores', async () => {
+  for (const c of FYF) {
+    for (const core of ['js', 'bf']) {
+      const r = core === 'js' ? fly(c.phases, FYF_OPTS) : await flyBf(c.phases, FYF_OPTS);
+      const tag = core + ' ' + c.name;
+      assert.deepEqual(r.hits, [c.want], tag + ': ' + (r.why || '').replace(/\n/g, ' '));
+      const v = featView(r.feat);
+      assert.ok(r.feat.upMin < -0.9 && r.feat.upEnd > 0.4, tag + ': over and back');
+      assert.ok(Math.abs(v.invYaw - v.yawSpan) <= 5 * DEG, tag + ': inverted ' + (v.invYaw / DEG).toFixed(1) + ', whole ' + (v.yawSpan / DEG).toFixed(1));
+    }
   }
 });
 

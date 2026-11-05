@@ -70,6 +70,12 @@ export const TRIPPY_POLE_MUL = 1.25;
 // Barani: a flip (>= 300 degrees of pitch) and a half twist (180 +- 45 degrees
 // of roll) inside one BARANI_WIN_S window, ending upright.
 export const BARANI_WIN_S = 1.5;
+// Ham Spin (the inverted yaw spin): >= HAM_MIN of turn about the vertical
+// counted only while inverted, up-Z below HAM_UPZ (tilted more than 120
+// degrees). The half flips in and out turn little about the vertical and
+// count only while past HAM_UPZ, so they are allowed and score no Flip.
+export const HAM_UPZ = -0.5;
+export const HAM_MIN = 5.236;
 // Gap, without an authored volume: both sides of the opening within
 // GAP_SIDE_K frame widths of the path, passed through at least
 // GAP_MIN_DEPTH_M. FRAME_W_M when the page does not say the quad's width.
@@ -450,6 +456,11 @@ export function makeFeat() {
     // Barani: the pitch and |roll| of the window (<= BARANI_WIN_S) with
     // >= 300 degrees of pitch whose roll is nearest a half twist; up-Z at the end.
     barP: 0, barR: 0, upEnd: 1,
+    // Ham: the turn about the vertical while up-Z < HAM_UPZ (rad): its
+    // running sum (invC) and that sum's lowest and highest so far (invLo,
+    // invHi) give the largest rise and fall (invYawUp, invYawDn); invYawT is
+    // the seconds spent there.
+    invC: 0, invLo: 0, invHi: 0, invYawUp: 0, invYawDn: 0, invYawT: 0,
   };
 }
 
@@ -477,6 +488,7 @@ export function resetFeat(f) {
   f.yawUp = 0; f.yawDn = 0; f.yawUpT = 0; f.yawDnT = 0; f.vyaw = 0;
   f.orbitR = 0; f.orbitFit = 9; f.orbitSweep = 0; f.orbitTurn = 0; f.orbitSpd = 0; f.orbitCx = 0; f.orbitCz = 0; f.orbitPole = 0;
   f.barP = 0; f.barR = 0; f.upEnd = 1;
+  f.invC = 0; f.invLo = 0; f.invHi = 0; f.invYawUp = 0; f.invYawDn = 0; f.invYawT = 0;
   return f;
 }
 
@@ -511,6 +523,8 @@ export function copyFeat(src, dst) {
   d.orbitR = src.orbitR; d.orbitFit = src.orbitFit; d.orbitSweep = src.orbitSweep; d.orbitTurn = src.orbitTurn; d.orbitSpd = src.orbitSpd;
   d.orbitCx = src.orbitCx; d.orbitCz = src.orbitCz; d.orbitPole = src.orbitPole;
   d.barP = src.barP; d.barR = src.barR; d.upEnd = src.upEnd;
+  d.invC = src.invC; d.invLo = src.invLo; d.invHi = src.invHi;
+  d.invYawUp = src.invYawUp; d.invYawDn = src.invYawDn; d.invYawT = src.invYawT;
   return d;
 }
 
@@ -711,11 +725,13 @@ export function featView(f) {
   const yawSpan = yawUp >= yawDn ? yawUp : yawDn;
   const yawT = yawUp >= yawDn ? (f.yawUpT || 0) : (f.yawDnT || 0);
   const yawRate = yawT > 0 ? yawSpan / yawT : 0;
+  // Ham: the turn about the vertical while inverted, the larger way.
+  const invYaw = Math.max(f.invYawUp || 0, f.invYawDn || 0);
   return {
     absP, absR, absY, head, span, drop, follow, against, inv, close, hEnd, meanDot,
     invFol, invAg, pathP, pathR, pathY, under, over, obj, objOrbit, opp, front, rad,
     flipSpan, flipDir, rollSpan, rollRate, loopSpan, loopDir, loops, loopRise, loopRet, loopSweep,
-    yawSpan, yawRate,
+    yawSpan, yawRate, invYaw,
   };
 }
 
@@ -815,24 +831,14 @@ export function classifyFeat(f, out) {
       atLeast(f.orbitTurn, 0.8, 0),
       atLeast(f.orbitSpd, 1.0, 0),
     );
-    // Ham Spin: inverted yaw spin. Tight in-place ≥360° yaw in ≤1.8s +
-    // little roll/pitch/drift, but the craft stays upside-down the whole
-    // window (tilt >135° from level, upZ < −0.70). Flips/rolls that only
-    // pass through inverted have large pitch/roll and an upright upMax,
-    // so they do not score Ham. An orbit is Trippy, upright or inverted.
+    // Ham Spin, the inverted yaw spin: >= 300 degrees of turn about the
+    // vertical counted only while inverted (up-Z < HAM_UPZ). A half flip in
+    // and a half flip out are allowed: they turn little about the vertical,
+    // and the segment is one Ham, not a Flip. A flip or roll that only passes
+    // through inverted turns little about the vertical there. An orbit is
+    // Trippy, a full Roll a Roll (the re-labels below).
     _sc.ham = mul(
-      atLeast(absY, TAU, 0.70),
-      atLeast(v.pathY, TAU, 0.70),
-      atMost(f.tYaw360, 1.80, 0.50),
-      atLeast(f.peakY, 4.0, 1.5),
-      atMost(absR, 1.40, 0.60),
-      atMost(absP, 1.20, 0.50),
-      atMost(v.pathR, 1.60, 0.70),
-      atMost(v.pathP, 1.40, 0.60),
-      atMost(f.upMax, -0.70, 0.15),
-      atLeast(v.inv, 0.85, 0.20),
-      atMost(f.travelH, 14, 6),
-      atLeast(f.dur, 0.55, 0.15),
+      atLeast(v.invYaw, 5.236, 0),
     );
   }
   _sc.sideloop = mul(
@@ -991,6 +997,7 @@ export function classifyFeat(f, out) {
   if (bestId === 'flip' && _sc.matty > 0.55 && f.pitch > 0) { bestId = 'matty'; best = _sc.matty; }
   if (bestId === 'yawspin' && _sc.ham > 0.42) { bestId = 'ham'; best = _sc.ham; }
   if (bestId === 'ham' && _sc.trippy > 0.42) { bestId = 'trippy'; best = _sc.trippy; }
+  if (bestId === 'ham' && _sc.roll > 0.42) { bestId = 'roll'; best = _sc.roll; }
   if (bestId === 'yawspin' && _sc.trippy > 0.42) { bestId = 'trippy'; best = _sc.trippy; }
   if (bestId === 'roll' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
   if (bestId === 'yawspin' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
@@ -1309,7 +1316,17 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
     // The world-up component of this step's rotation (the body axes' up
     // components from the step's attitude).
     const qx = d.qx, qy = d.qy, qz = d.qz, qw = d.qw;
-    f.vyaw += 2 * (qx * qz - qw * qy) * dr + 2 * (qy * qz + qw * qx) * dp + (1 - 2 * (qx * qx + qy * qy)) * dy;
+    const dv = 2 * (qx * qz - qw * qy) * dr + 2 * (qy * qz + qw * qx) * dp + (1 - 2 * (qx * qx + qy * qy)) * dy;
+    f.vyaw += dv;
+    // Ham: the same turn, counted only while inverted.
+    if (upZ < HAM_UPZ) {
+      f.invYawT += step;
+      f.invC += dv;
+      if (f.invC - f.invLo > f.invYawUp) f.invYawUp = f.invC - f.invLo;
+      if (f.invHi - f.invC > f.invYawDn) f.invYawDn = f.invHi - f.invC;
+      if (f.invC < f.invLo) f.invLo = f.invC;
+      if (f.invC > f.invHi) f.invHi = f.invC;
+    }
   }
   f.pathP += Math.abs(dp); f.pathR += Math.abs(dr); f.pathY += Math.abs(dy);
   const ar = Math.abs(sample.ox || 0), ap = Math.abs(sample.oy || 0), ay = Math.abs(sample.oz || 0);

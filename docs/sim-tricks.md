@@ -52,7 +52,7 @@ site lists both 150 and 50).
 | `halfmatty` | Half Matty | Intermediate | 350 | 350 | **180° roll first**, then the second half of a Matty, ending **backward under**. Optional stall after the roll. |
 | `cubik` | Cubik's Rube | Intermediate | 350 | 450 | 180° roll → 360° flip → 180° roll, same roll direction. Open air. |
 | `rubik` | Rubik's Cube | Intermediate | 325 | 450 | 180° flip → 360° roll → 180° flip, same pitch direction. Open air. |
-| `ham` | Ham Spin | Intermediate | 300 | 300 | **Inverted yaw spin**: ≥360° yaw in ≤1.8s, little roll/pitch/drift, **upside-down the whole time** (tilt >135° from level). Also called ham. Flips/rolls that only pass through inverted, and upright yaw, are not Ham. |
+| `ham` | Ham Spin | Intermediate | 300 | 300 | **Inverted yaw spin**: **≥300° of yaw counted only while inverted** (up-Z below −0.5, tilted more than 120° from level). The yaw is the turn about the vertical. A **half flip in and a half flip out are allowed** and the whole maneuver is one Ham, not a Flip: the flips turn little about the vertical. A flip or roll that only passes through inverted, and upright yaw, are not Ham; a full Roll stays a Roll, and an inverted spin that orbits is a Trippy. Also called ham. |
 | `trippy` | Trippy Spin | Intermediate | 500 | 500 | **≥360° of yaw at ≥150°/s while the path orbits a centre ≥360°**: radius 0.3–2.5 m (the path's curvature), its direction turning a **full 360°** one way over the whole spin, at ≥1 m/s. Yaw is the turn about the vertical, so a tilted spin counts in full. Upright or inverted; the body may roll as it spins (the owner's rolls 600–780°). A nearby pole/post at the centre (within 0.5 m) is a bonus: 1.25× points. |
 | `barani` | Barani | Novice | 100 | 125 | **A flip with a half twist**: ≥300° of pitch and 180 ± 45° of roll inside the same 1.5 s, ending upright (the twist at the vertical). Scores above Flip. |
 
@@ -116,11 +116,18 @@ Same under → over → under path.
 ### Trippy Spin vs Yaw Spin vs Ham Spin
 
 - Yaw Spin: ~360° yaw, **little** roll/pitch, **upright**, open air OK.
-- Ham Spin (ham): the same short-window ≥360° yaw and little drift, but
-  **inverted the whole time** (tilt more than 135° from level). Open air
-  OK. A flip or roll that only passes through inverted is not Ham — those
-  have large pitch/roll and an upright start or exit. Normal upright yaw
-  is a Yaw Spin, not Ham.
+- Ham Spin (ham), the inverted yaw spin: **≥300° of yaw while inverted**.
+  Only the yaw made while up-Z is below −0.5 (tilted more than 120° from
+  level) counts, and the yaw is the turn about the vertical, as for
+  Trippy. Inverted the whole time, or flipped into and out of: a half flip
+  in, the yaw upside down and a half flip out is one Ham, not a Flip (the
+  owner's: 330–385° of pitch round 304–318° of turn about the vertical,
+  inverted for 55–65 % of the segment). Yaw made while tilting in or out
+  counts little or not at all: run 0.1 s into each flip, 340–350° of stick
+  yaw turns only 190–275° inverted. A flip or roll that only passes through inverted turns little
+  about the vertical there, so it is not Ham; a full Roll (≥300° in 1.5 s
+  at ≥250°/s) that also turns about the vertical stays a Roll. Normal
+  upright yaw is a Yaw Spin, not Ham.
 - Trippy Spin: **≥360° of yaw at ≥150°/s while the path orbits ≥360°**.
   The yaw is the turn about the vertical (a tilted spin turns the heading at
   the full rate); the body may roll as it spins. Over the whole spin (for as
@@ -269,7 +276,8 @@ Actual/KISS curves from `sim-rates.js`).
 - **Orbits / Jump Rope / Cinnamon / Trippy Switch / Pole Dance** — need
   sustained object tracking and multi-orbit counts; false-positive on carve.
 - **Inverted Yaw Tracking / Uh-uh** — extra inverted-yaw flavors beyond
-  Ham Spin. Ham covers the sustained inverted 360° yaw; tracking / uh-uh
+  Ham Spin. Ham covers the inverted yaw (≥300°, flipped into and out of or
+  not); tracking / uh-uh
   variants need camera-on-object features we do not have.
 - **Wall Tap / Wall Ride / Ceiling Tap / Perch / Slide / Face Punch** — need
   a judged tap, land, or the pilot's face.
