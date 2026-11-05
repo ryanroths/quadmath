@@ -119,7 +119,7 @@ Same under → over → under path.
 - Ham Spin (ham), the inverted yaw spin: **≥300° of yaw while inverted**.
   Only the yaw made while up-Z is below −0.5 (tilted more than 120° from
   level) counts, and the yaw is the turn about the vertical, as for
-  Trippy. Inverted the whole time, or flipped into and out of: a half flip
+  Trippy. Ham allows inverted the whole time or flipped into and out of: a half flip
   in, the yaw upside down and a half flip out is one Ham, not a Flip (the
   owner's: 330–385° of pitch round 304–318° of turn about the vertical,
   inverted for 55–65 % of the segment). Yaw made while tilting in or out
