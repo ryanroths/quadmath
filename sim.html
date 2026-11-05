@@ -1038,7 +1038,7 @@ import {
 } from "./sim-coach.js?v=a23faea5fced";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
-} from "./sim-tricks.js?v=fb282c8a119c";
+} from "./sim-tricks.js?v=6609a2058fe5";
 import {
   DAILY_KEY, DAILY_LINE_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -8125,7 +8125,7 @@ window._tricks=tricks;
 // the file is never fetched.
 try{
   if(new URLSearchParams(location.search).get('tricks')==='debug'){
-    import('./sim-tricks-debug.js?v=2f737a29a71a').then((m)=>{
+    import('./sim-tricks-debug.js?v=17ca8017e705').then((m)=>{
       trickDebug=m.createTrickDebug({document,tricks,now:()=>performance.now()*0.001,info:()=>({core:cs.kind,map:currentMap})});
       window._trickDebug=trickDebug;
       trickDebug.paint();

@@ -211,6 +211,10 @@ function randFeat(r) {
     f.travelH = u(0, 30); f.radMax = u(0, Math.max(f.travelH, 0.01));
     f.h1x = f.h0x + u(-1, 1) * f.radMax * 0.5; f.h1z = f.h0z + u(-1, 1) * f.radMax * 0.5;
   }
+  // Ham: the turn about the vertical while inverted, near its threshold
+  // often; none when the segment never passed up-Z -0.5.
+  f.invYawUp = f.upMin < -0.5 ? (r() < 0.5 ? near(5.236) : u(0, 3)) : 0;
+  f.invYawDn = f.upMin < -0.5 && r() < 0.3 ? near(5.236) : 0;
   return f;
 }
 

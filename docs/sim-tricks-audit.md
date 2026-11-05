@@ -578,3 +578,75 @@ below: for seq 4, 59 and 79 the pitch turned one way only (`pathP` =
 
 A camera-lock orbit (one turn of yaw per orbit) at 150°/s or more inside
 2.5 m is now a Trippy, as the definition says; wider or slower ones are not.
+
+## 8. Ham Spin, the inverted yaw spin, from the second trick log
+
+The owner flew a second log (89 attempts, Warehouse, bf core) and copied it
+with "Copy trick log". It is a fixture now
+(`tools/fixtures/tricklog-depot-bf-2.jsonl.gz`, verbatim), replayed with the
+first by `tools/test_sim_tricks_attempt_log.mjs`.
+
+### What the log showed
+
+- **The inverted yaw spins scored nothing, or a Flip.** Seq 9, 20, 26 and 77
+  are a half flip in, a yaw while inverted and a half flip out: 331-383° of
+  pitch, 304-318° of turn about the vertical, below up-Z -0.35 for 56-67 %
+  of the segment, upright at both ends. Ham wanted the pitch under 69° and
+  the craft inverted the whole time, so it never fired; seq 26 scored Flip
+  (301° of pitch in 1.2 s).
+- **Body yaw would not do.** Seq 9 turned 228° of body yaw in all and seq 20
+  289°, but 318° and 311° about the vertical: yaw made while tilted, then
+  pitched round, turns the heading further than the yaw axis does.
+
+### The fix
+
+- **Ham Spin**, the owner's definition: ≥300° of yaw counted only while
+  inverted, up-Z below -0.5 (`HAM_UPZ`, `HAM_MIN`). The yaw is the turn
+  about the vertical, as for Trippy (`invYaw`: the largest one-way turn of
+  that sum, over the steps past up-Z -0.5). The half flips in and out turn
+  little about the vertical and count only while past -0.5, so they are
+  allowed, and the maneuver is one Ham (300 points), not a Flip. Ham's old
+  terms (≥360° of body yaw in 1.8 s, pitch and roll small, inverted the
+  whole time) are gone; an in-place inverted spin still is a Ham.
+- **Re-labels:** an inverted spin that orbits is a Trippy (as before); a
+  full Roll (≥300° in 1.5 s at ≥250°/s) that also turned about the
+  vertical is a Roll. Log 1's seq 42 is such a roll: 318° about the
+  vertical, 372° of roll.
+- **The overlay** shows Ham's one gate (`invYaw`) and logs `invYawDeg` and
+  `inv50` (the share of the segment past up-Z -0.5), so the next log
+  replays it exactly.
+
+### Flown
+
+On both cores (`tools/test_sim_tricks.mjs`): a half back flip at 600°/s,
+330° of yaw while inverted and a half flip out is one Ham, front or back;
+260° of yaw is a Flip; with the yaw run 0.1-0.15 s into each flip,
+340-350° of stick yaw turns only 190-275° about the vertical and it is a
+Flip. In all
+eight flights the turn past up-Z -0.5 comes within 5° of the segment's
+whole turn about the vertical (`v.yawSpan`).
+
+### The logs, replayed
+
+Both logs predate the inverted turn. A segment that never went below up-Z
+-0.5 has none, exactly. For the others the replay takes the segment's whole
+turn about the vertical (the logged `vyawDeg`, its largest in 2.4 s), which
+is what the flights above show for a half flip, a yaw and a half flip.
+
+- Log 2: seq 9, 20, 26 and 77 are Ham Spins; seq 29 and 30 Trippy; seq 4 a
+  Powerloop (554° of pitch, one loop).
+- Of the 30 labels the two logs fired, one changes: log 2's seq 26, Flip,
+  is a Ham Spin.
+- Five unlabelled maneuvers change:
+  - log 1's seq 12, 40 and 67 are Ham Spins: back flips of 335-423° with
+    328-415° of yaw and 313-321° about the vertical, the same maneuver;
+  - log 2's seq 82 and 84 are Ham by the estimate only: one tumble of 7.8 s
+    (pitch, roll and yaw together, gyro peaks of 2500-5000°/s) that turned
+    339° and 343° about the vertical. 84 was below up-Z -0.35 for 0.39 s,
+    so it likely turned far less while inverted.
+- The Air65 and Fractal75 replays (`tools/test_sim_tricks_logs.mjs`) give
+  the same labels at the same times.
+
+The owner's spins sit near the line: 304-318° about the vertical, and seq
+26 and 77 at 305° and 304°. Flown, the inverted part comes 0-4° under the
+whole turn, so a spin of 300-305° can fall either side of 300.

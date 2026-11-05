@@ -26,9 +26,7 @@ import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL,
-} from './sim-tricks.js?v=fb282c8a119c';
-
-const TAU = Math.PI * 2;
+} from './sim-tricks.js?v=6609a2058fe5';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
@@ -84,9 +82,7 @@ export const GATES = Object.freeze({
     ge('f.barP', 5.236, 0), band('f.barR', 2.356, 3.927, 0), ge('f.upEnd', 0.6, 0),
   ],
   ham: [
-    ge('absY', TAU, 0.70), ge('v.pathY', TAU, 0.70), le('f.tYaw360', 1.80, 0.50), ge('f.peakY', 4.0, 1.5),
-    le('absR', 1.40, 0.60), le('absP', 1.20, 0.50), le('v.pathR', 1.60, 0.70), le('v.pathP', 1.40, 0.60),
-    le('f.upMax', -0.70, 0.15), ge('v.inv', 0.85, 0.20), le('f.travelH', 14, 6), ge('f.dur', 0.55, 0.15),
+    ge('v.invYaw', 5.236, 0),
   ],
   sideloop: [
     ge('Math.max(absR, v.pathR)', 3.2, 0.7), ge('Math.max(absY, v.pathY)', 1.15, 0.4), ge('v.span', 1.5, 0.5),
@@ -153,6 +149,7 @@ export const OVERRIDES = Object.freeze([
   { from: 'flip', to: 'matty', text: 'flip→matty: matty > 0.55, pitch > 0', when: (c) => c.sc.matty > 0.55 && c.f.pitch > 0 },
   { from: 'yawspin', to: 'ham', text: 'yawspin→ham: ham > 0.42', when: (c) => c.sc.ham > 0.42 },
   { from: 'ham', to: 'trippy', text: 'ham→trippy: trippy > 0.42', when: (c) => c.sc.trippy > 0.42 },
+  { from: 'ham', to: 'roll', text: 'ham→roll: roll > 0.42', when: (c) => c.sc.roll > 0.42 },
   { from: 'yawspin', to: 'trippy', text: 'yawspin→trippy: trippy > 0.42', when: (c) => c.sc.trippy > 0.42 },
   { from: 'roll', to: 'sideloop', text: 'roll→sideloop: sideloop > 0.4', when: (c) => c.sc.sideloop > 0.4 },
   { from: 'yawspin', to: 'sideloop', text: 'yawspin→sideloop: sideloop > 0.4', when: (c) => c.sc.sideloop > 0.4 },
@@ -175,6 +172,7 @@ const ANGLE_SRC = new Set([
   'absP', 'absR', 'absY', 'v.pathP', 'v.pathR', 'v.pathY', 'f.pitch', '-f.pitch', 'v.head',
   'Math.max(absR, v.pathR)', 'Math.max(absY, v.pathY)', 'v.pathP - absP',
   'v.flipSpan', 'v.rollSpan', 'v.loopSpan', 'v.loopSweep', 'v.yawSpan', 'f.orbitSweep', 'f.barP', 'f.barR',
+  'v.invYaw',
 ]);
 // Angular rates (shown in degrees a second).
 const RATE_SRC = new Set(['v.rollRate', 'v.yawRate']);
@@ -223,7 +221,7 @@ function context(f) {
     'Math.max(v.against, v.invAg)': Math.max(v.against, v.invAg),
     'v.flipSpan': v.flipSpan, 'v.rollSpan': v.rollSpan, 'v.rollRate': v.rollRate,
     'v.loopSpan': v.loopSpan, 'v.loopRise': v.loopRise, 'v.loopRet': v.loopRet, 'v.loopSweep': v.loopSweep,
-    'v.yawSpan': v.yawSpan, 'v.yawRate': v.yawRate,
+    'v.yawSpan': v.yawSpan, 'v.yawRate': v.yawRate, 'v.invYaw': v.invYaw,
     'f.orbitR': f.orbitR, 'f.orbitSweep': f.orbitSweep, 'f.orbitTurn': f.orbitTurn, 'f.orbitSpd': f.orbitSpd,
     'f.barP': f.barP, 'f.barR': f.barR, 'f.upEnd': f.upEnd,
   };
@@ -309,6 +307,9 @@ function sawOf(f, v, ctx) {
     orbitR: r3(f.orbitR), orbitSweepDeg: degOf(f.orbitSweep), orbitTurn: r3(f.orbitTurn), orbitSpd: r3(f.orbitSpd),
     orbitFit: r3(f.orbitFit), orbitPole: f.orbitPole,
     baraniPitchDeg: degOf(f.barP), baraniTwistDeg: degOf(f.barR), upEnd: r3(f.upEnd),
+    // Ham: the turn about the vertical while up-Z < -0.5, and that time's
+    // share of the segment.
+    invYawDeg: degOf(v.invYaw), inv50: r3(f.dur > 0 ? f.invYawT / f.dur : 0),
   };
 }
 
