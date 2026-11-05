@@ -17,8 +17,22 @@
 // - log 2: seq 9, 20, 26 and 77 (the inverted yaw spins) are Ham Spins; seq
 //   29 and 30 Trippy; seq 4 a Powerloop;
 // - every label a log fired stays the same, except log 2's seq 26 (it fired
-//   Flip, and is a Ham Spin), and every other maneuver keeps the label pinned
-//   here (no label for most).
+//   Flip, and is a Ham Spin) and the ones the phase matcher's definitions
+//   change (below), and every other maneuver keeps the label pinned here (no
+//   label for most);
+// - Flip, Powerloop and Split-S, now the phase matcher's, fire exactly where
+//   they did; the owner's Maverick, Matty and Half Matty and the new
+//   Immelmann change eight labels:
+//   - log 1 seq 14 and 21, log 2 seq 51 and 71 (Maverick): none topped out
+//     inverted after 150-210 degrees back (back 117, 260, 63 and 85; 14,
+//     51 and 71 never went inverted): no label;
+//   - log 1 seq 33 (Matty): 202 degrees of forward pitch, no climb: none;
+//   - log 1 seq 80 (Snapback): back 171, roll 163, a climb of 1.26 m, out
+//     0.26 m higher, the heading turned 168: an Immelmann (the climb taken
+//     as the top above the entry, below);
+//   - log 1 seq 82, log 2 seq 73 (Half Matty): a half roll then a forward
+//     pitch, the old Half Matty; the owner's is a forward half loop over an
+//     object ending inverted. 82 is a Cradle (its next best), 73 nothing.
 //
 // Both logs predate two features; the replay uses what the logged ones say:
 // - the Powerloop's own window (LOOP_WIN_S), bounded from below (loopFrom):
@@ -42,6 +56,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   classifyFeat, featView, makeFeat, loopCount, trickName, LOOP_WIN_S, SAMPLE_S, HAM_UPZ, HAM_MIN,
+  PHASE_SPECS, PHASE_FIELD, matchSpec,
 } from '../sim-tricks.js';
 import { explainFeat } from '../sim-tricks-debug.js';
 
@@ -102,6 +117,48 @@ export function invYawFrom(s, g) {
   return { v: 'v.yawSpan' in g ? g['v.yawSpan'] : s.vyawDeg * DEG, exact: false };
 }
 
+// The phase matcher's scores (PHASE_SPECS), for logs that predate them,
+// with matchSpec on what the logs measured (a log that has the score's gate
+// replays it as logged):
+// - Flip and Powerloop are one turn of pitch inside a window: the logged
+//   flip window (exact) and the replay's loop window (loopFrom). Their
+//   scores are the old terms' exactly;
+// - Split-S is a half roll then a back pitch: the whole roll and the net
+//   pitch (the old terms', exactly; the order is in its rollFirst term);
+// - the others (Immelmann, Maverick, Matty, Half Matty, Half Mavvy) are
+//   estimated. The pitch turned back B and forward F, from its whole turn and
+//   its net (exact when each way turned once: B = (pathP - pitch) / 2,
+//   F = (pathP + pitch) / 2), back first unless the larger flip window went
+//   forward; the roll turned |roll|, before the pitch when rollFirst > 0.
+//   Climb is the top above the entry (loopRise), up-Z at the top upMin, at
+//   the end upEnd; an object below (over) or above (under) on any step; the
+//   tail the share flown against the nose (against) times the duration, and
+//   none unless it flew against the nose more than with it (the tail is the
+//   end flown back against the nose; where in the segment the logs do not
+//   say). Turning outside and across the phases is not in the logs: none.
+export function phasesFromLog(s, f, v, flipSpan, flipDir, loop) {
+  const absR = Math.abs(s.roll);
+  const B = Math.max(0, (s.pathP - s.pitch) / 2), F = Math.max(0, (s.pathP + s.pitch) / 2);
+  const rollFirst = s.rollFirst;
+  const over = s.over > 0 || !!s.over0, under = s.under > 0;
+  const rise = s.loopRise;
+  const ph = (turn, x) => ({ turn, t: 0, climb: rise, up: 0, over: 0, under: 0, cross: 0, back: 0, ...x });
+  const ms = (list, x) => ({ ph: list, lead: 0, trail: 0, tail: 0, ...x });
+  const est = {
+    flip: ms([{ turn: flipSpan, t: 0 }]),
+    powerloop: ms([{ turn: Math.max(loop.up, loop.dn), t: 0 }]),
+    splits: ms([{ turn: absR, cross: 0, back: 0 }, { turn: -s.pitch, cross: 0, back: 0 }]),
+    immelmann: rollFirst < 0 ? ms([ph(B, { back: F }), ph(absR, { climb: 0 })]) : null,
+    maverick: flipDir < 0 || B >= F ? ms([ph(B, { up: s.upMin }), ph(F, { climb: 0 })], { tail: s.against > s.follow ? s.against * s.dur : 0 }) : null,
+    matty: ms([ph(F, { over: over ? 1 : 0, under: under ? 1 : 0, back: B })]),
+    halfmatty: ms([ph(F, { over: over ? 1 : 0, up: s.upEnd, back: B })]),
+    halfmavvy: rollFirst < 0 ? ms([ph(B), ph(absR, { climb: 0 }), ph(F, { climb: 0, under: under ? 1 : 0 })]) : null,
+  };
+  const out = {};
+  for (const id of Object.keys(PHASE_SPECS)) out[id] = est[id] ? matchSpec(PHASE_SPECS[id], est[id], f, v) : 0;
+  return out;
+}
+
 // The segment's features from a maneuver record.
 export function featFromLog(rec) {
   const s = rec.saw, g = gateValues(rec);
@@ -145,7 +202,15 @@ export function featFromLog(rec) {
   f.loopUp = lp.up; f.loopDn = lp.dn; f.loopTot = lp.tot;
   const inv = invYawFrom(s, g);
   f.invYawUp = inv.v; f.invYawT = (s.inv50 || 0) * s.dur;
-  return { f, g, flipDir, loop: lp, inv };
+  // The phase matcher's scores: as logged, or from what the log measured.
+  const est = phasesFromLog(s, f, featView(f), flipSpan, flipDir, lp);
+  const phExact = {};
+  for (const id of Object.keys(PHASE_FIELD)) {
+    const k = 'f.' + PHASE_FIELD[id];
+    phExact[id] = k in g;
+    f[PHASE_FIELD[id]] = k in g ? g[k] : est[id];
+  }
+  return { f, g, flipDir, loop: lp, inv, phExact };
 }
 
 const classify = (f) => classifyFeat(f, { id: null, why: '', best: 0, second: 0, secondId: '' });
@@ -163,6 +228,7 @@ const LOGS = [
     NEW: {
       4: 'powerloop', 59: 'powerloop', 79: 'powerloop', 22: 'trippy', 23: 'trippy', 24: 'trippy', 25: 'trippy', 75: 'powerloop',
       12: 'ham', 40: 'ham', 67: 'ham',
+      14: null, 21: null, 33: null, 80: 'immelmann', 82: 'cradle',
     },
   },
   {
@@ -174,6 +240,7 @@ const LOGS = [
     NEW: {
       9: 'ham', 20: 'ham', 26: 'ham', 77: 'ham', 29: 'trippy', 30: 'trippy', 4: 'powerloop',
       82: 'ham', 84: 'ham',
+      51: null, 71: null, 73: null,
     },
   },
 ];
@@ -279,7 +346,7 @@ test('log 2: seq 29 and 30 are Trippy Spins, seq 4 a Powerloop', () => {
   assert.equal(featView(f).loops, 1);
 });
 
-test('every label a log fired stays the same (but log 2 seq 26), and no other maneuver changes', () => {
+test('every label a log fired stays the same (but log 2 seq 26 and the phase matcher\'s eight), and no other maneuver changes', () => {
   for (const L of LOGS) {
     const fired = L.scored.filter((r) => r.result);
     assert.equal(fired.length, L.fired, L.name + ' fired');
@@ -291,9 +358,67 @@ test('every label a log fired stays the same (but log 2 seq 26), and no other ma
     }
     assert.deepEqual(off, [], L.name);
   }
-  // The only fired label that changes.
-  const changed = LOGS.flatMap((L) => L.scored.filter((r) => r.result && r.seq in L.NEW && L.NEW[r.seq] !== r.result).map((r) => L.name + ' seq ' + r.seq));
-  assert.deepEqual(changed, ['log 2 seq 26']);
+  // The fired labels that change.
+  const changed = LOGS.flatMap((L) => L.scored.filter((r) => r.result && r.seq in L.NEW && L.NEW[r.seq] !== r.result).map((r) => L.name + ' seq ' + r.seq + ' ' + r.result + '->' + (L.NEW[r.seq] || 'none')));
+  assert.deepEqual(changed, [
+    'log 1 seq 14 maverick->none', 'log 1 seq 21 maverick->none', 'log 1 seq 33 matty->none',
+    'log 1 seq 80 snapback->immelmann', 'log 1 seq 82 halfmatty->cradle',
+    'log 2 seq 26 flip->ham', 'log 2 seq 51 maverick->none', 'log 2 seq 71 maverick->none', 'log 2 seq 73 halfmatty->none',
+  ]);
+});
+
+test('Flip, Powerloop and Split-S, now the phase matcher\'s, fire on both logs exactly where they did', () => {
+  const OLD = new Set(['flip', 'powerloop', 'splits']);
+  for (const L of LOGS) {
+    for (const r of L.scored) {
+      const was = r.seq in L.NEW ? L.NEW[r.seq] : r.result;
+      const { f } = featFromLog(r);
+      const got = classify(f).id;
+      if (OLD.has(was) || OLD.has(got)) assert.equal(got, was, L.name + ' seq ' + r.seq);
+    }
+  }
+  // The flips and Split-S the logs fired, and the Powerloops pinned above.
+  const fired = (L, id) => L.scored.filter((r) => (r.seq in L.NEW ? L.NEW[r.seq] : r.result) === id).map((r) => r.seq);
+  assert.deepEqual(fired(LOG1, 'flip'), [7, 86]);
+  assert.deepEqual(fired(LOG1, 'splits'), [19]);
+  assert.deepEqual(fired(LOG1, 'powerloop'), [4, 59, 75, 79]);
+  assert.deepEqual(fired(LOG2, 'flip'), [55, 67, 78]);
+  assert.deepEqual(fired(LOG2, 'splits'), [19]);
+  assert.deepEqual(fired(LOG2, 'powerloop'), [4]);
+});
+
+test('the phase matcher\'s Maverick, Matty and Half Matty, and Immelmann, on both logs', () => {
+  // The Mavericks the logs fired: back B, forward F from the whole pitch and
+  // the net; none topped out inverted after 150-210 back.
+  for (const [L, seq] of [[LOG1, 14], [LOG1, 21], [LOG2, 51], [LOG2, 71]]) {
+    const s = L.bySeq.get(seq).saw;
+    const back = (s.pathP - s.pitch) / 2 / DEG;
+    assert.ok(back < 150 || back > 210 || s.upMin > -0.5, L.name + ' seq ' + seq + ': back ' + back.toFixed(0) + ', up-Z ' + s.upMin);
+    assert.equal(featFromLog(L.bySeq.get(seq)).f.phMav, 0);
+  }
+  // Log 1 seq 33: a Matty of 202 degrees that did not climb.
+  const s33 = LOG1.bySeq.get(33).saw;
+  assert.ok(s33.pitchDeg < 300 && s33.loopRise < 1, 'seq 33');
+  // The Matties that stay: a forward loop of 300 or more climbing 2-3.6 m,
+  // over an object and under one.
+  for (const [L, seq] of [[LOG1, 49], [LOG2, 16]]) {
+    const r = L.bySeq.get(seq);
+    assert.equal(r.result, 'matty');
+    assert.equal(featFromLog(r).f.phMatty, 1, L.name + ' seq ' + seq);
+    assert.equal(classify(featFromLog(r).f).id, 'matty', L.name + ' seq ' + seq);
+  }
+  // Log 1 seq 80: back 171, a roll of 163, out higher with the heading turned.
+  const r80 = LOG1.bySeq.get(80);
+  assert.ok(r80.saw.pitchDeg <= -135 && Math.abs(r80.saw.rollDeg) >= 135 && r80.saw.rollFirst < 0 && r80.saw.loopRise >= 1 && r80.saw.drop <= 0, 'seq 80');
+  const { f: f80, phExact } = featFromLog(r80);
+  assert.equal(phExact.immelmann, false, 'the log predates the matcher');
+  assert.equal(f80.phImmel, 1);
+  // The old Half Matties (a half roll, then a forward pitch).
+  for (const [L, seq] of [[LOG1, 82], [LOG2, 73]]) {
+    const s = L.bySeq.get(seq).saw;
+    assert.ok(Math.abs(s.rollDeg) >= 135 && s.rollFirst > 0, L.name + ' seq ' + seq);
+    assert.equal(featFromLog(L.bySeq.get(seq)).f.phHMatty, 0);
+  }
 });
 
 test('loop count: one from 300 degrees, two from 600, one more per further 360', () => {

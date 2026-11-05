@@ -17,6 +17,7 @@ import {
   makeCombo, resetCombo, pushCombo, comboRemain,
   createTricks, makeFeat, trickLineupText, TRIPPY_POLE_MUL,
   trickName, MANEUVER_MAX_S, MANEUVER_SUSTAIN_S,
+  PHASE_SPECS, matchSpec, MAV_GAP_MUL, PH_SLOP,
 } from '../sim-tricks.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
 import { mapThrottle3d } from '../sim-3d.js';
@@ -217,6 +218,21 @@ const OBJ_POLE = [
 const OBJ_TREE = [
   { min: { x: 8, y: 0, z: -1.0 }, max: { x: 10.2, y: 16, z: 1.0 } },
 ];
+// The phase matcher's objects (metres: x along the flight, y the altitude),
+// each placed round the path its flight flies and clear of it: a bar across
+// the path (z -3..3 m), and an authored gap volume flown along x.
+const barAt = (x0, x1, y0, y1) => [{ min: { x: x0 * WS, y: y0 * WS, z: -3 * WS }, max: { x: x1 * WS, y: y1 * WS, z: 3 * WS } }];
+const gapAt = (x0, x1, y0, y1) => [{ name: 'test gap', axis: 'x', min: { x: x0 * WS, y: y0 * WS, z: -0.6 * WS }, max: { x: x1 * WS, y: y1 * WS, z: 0.6 * WS } }];
+// The js core's Matty climbs over this bar, comes down behind it and back
+// under it; its Half Matty stops inverted behind it.
+const MATTY_BAR = barAt(1.8, 2.3, 3.9, 4.6);
+// The same, for the bf core's (the Air65 climbs higher).
+const BF_MATTY_BAR = barAt(2.0, 2.4, 5.4, 5.9);
+// The Half Mavvy falls over under these.
+const MAVVY_BAR = barAt(-1.3, -0.7, 7.9, 8.3);
+const BF_MAVVY_BAR = barAt(-0.2, 0.35, 7.2, 7.6);
+// The Maverick's gap: flown through before the pull-up and back out after.
+const MAV_GAP = gapAt(-1.3, -0.9, 4.3, 7.5);
 const NEAR_POLE = { z0: 2.4, x0: 1.45, vx: 0.25, colliders: OBJ_POLE };
 const NEAR_TREE = { z0: 2.6, x0: 1.9, y0: 0.55, vx: 0.4, vy: 1.4, colliders: OBJ_TREE };
 
@@ -233,18 +249,33 @@ const LIBRARY = [
   { id: 'powerloop', name: 'pl-fast', phases: [{ t: 0.25, pitch: 0, thr: 0.8 }, { t: 1.05, pitch: -6.4, thr: 0.88 }, { t: 0.55, pitch: 0, thr: 0.5 }], opts: { z0: 6, vx: 7, maxT: 2.4, colliders: OBJ_BAR } },
   { id: 'powerloop', name: 'pl-slow', phases: [{ t: 0.3, pitch: 0, thr: 0.75 }, { t: 1.35, pitch: -5.0, thr: 0.82 }, { t: 0.6, pitch: 0, thr: 0.48 }], opts: { z0: 7, vx: 5.5, maxT: 2.8, colliders: OBJ_BAR } },
   { id: 'powerloop', name: 'pl-high', phases: [{ t: 0.28, pitch: 0, thr: 0.9 }, { t: 1.15, pitch: -6.0, thr: 0.9 }, { t: 0.55, pitch: 0, thr: 0.5 }], opts: { z0: 8, vx: 6.5, maxT: 2.5, colliders: OBJ_BAR } },
-  { id: 'matty', name: 'matty-fast', phases: [{ t: 0.10, pitch: 0, thr: 0.35 }, { t: 0.72, pitch: 8.2, thr: 0.08 }, { t: 0.55, pitch: 0, thr: 0.62 }], opts: { z0: 9, vx: 7, maxT: 2.1, colliders: OBJ_BAR } },
-  { id: 'matty', name: 'matty-high', phases: [{ t: 0.10, pitch: 0, thr: 0.32 }, { t: 0.80, pitch: 7.4, thr: 0.06 }, { t: 0.55, pitch: 0, thr: 0.6 }], opts: { z0: 11, vx: 6.5, maxT: 2.2, colliders: OBJ_BAR } },
-  { id: 'matty', name: 'matty-sloppy', phases: [{ t: 0.10, pitch: 0, thr: 0.35 }, { t: 0.75, pitch: 8.0, yaw: 0.5, thr: 0.08 }, { t: 0.55, pitch: 0, yaw: 0, thr: 0.6 }], opts: { z0: 9.5, vx: 6.8, maxT: 2.15, colliders: OBJ_BAR } },
-  { id: 'halfmatty', name: 'hm-fast', phases: [{ t: 0.28, roll: 11, pitch: 0, thr: 0.5 }, { t: 0.48, roll: 0, pitch: 7.4, thr: 0.32 }, { t: 0.55, pitch: 0, thr: 0.5 }], opts: { z0: 9, vx: 7, maxT: 2.0, colliders: OBJ_BAR } },
-  { id: 'halfmatty', name: 'hm-slow', phases: [{ t: 0.32, roll: 10, pitch: 0, thr: 0.48 }, { t: 0.55, roll: 0, pitch: 6.4, thr: 0.3 }, { t: 0.55, pitch: 0, thr: 0.5 }], opts: { z0: 9.4, vx: 6.4, maxT: 2.15, colliders: OBJ_BAR } },
-  { id: 'halfmatty', name: 'hm-high', phases: [{ t: 0.28, roll: 11, pitch: 0, thr: 0.5 }, { t: 0.50, roll: 0, pitch: 7.0, thr: 0.28 }, { t: 0.55, pitch: 0, thr: 0.5 }], opts: { z0: 10.5, vx: 7.2, maxT: 2.05, colliders: OBJ_BAR } },
+  // Matty: a punch, then a forward loop up over the bar, down behind it and
+  // back under it (the bar is where that path goes round).
+  { id: 'matty', name: 'matty-std', phases: [{ t: 0.15, thr: 1.0 }, { t: 0.5, pitch: 6, thr: 0.15 }, { t: 0.45, pitch: 6, thr: 0.95 }, { t: 0.8, thr: 0.55 }], opts: { z0: 4, vx: 5, maxT: 2.4, colliders: MATTY_BAR } },
+  { id: 'matty', name: 'matty-fast', phases: [{ t: 0.15, thr: 1.0 }, { t: 0.45, pitch: 6.6, thr: 0.15 }, { t: 0.42, pitch: 6.6, thr: 0.95 }, { t: 0.8, thr: 0.55 }], opts: { z0: 4, vx: 5, maxT: 2.4, colliders: MATTY_BAR } },
+  { id: 'matty', name: 'matty-slow', phases: [{ t: 0.15, thr: 1.0 }, { t: 0.55, pitch: 5.5, thr: 0.15 }, { t: 0.5, pitch: 5.5, thr: 0.95 }, { t: 0.8, thr: 0.55 }], opts: { z0: 4, vx: 5, maxT: 2.5, colliders: MATTY_BAR } },
+  // Half Matty: the Matty's first half over the bar, held inverted behind it.
+  { id: 'halfmatty', name: 'hm-std', phases: [{ t: 0.15, thr: 1.0 }, { t: 0.52, pitch: 6, thr: 0.15 }, { t: 0.9, thr: 0.1 }], opts: { z0: 4, vx: 5, maxT: 2.0, colliders: MATTY_BAR } },
+  { id: 'halfmatty', name: 'hm-fast', phases: [{ t: 0.15, thr: 1.0 }, { t: 0.46, pitch: 6.8, thr: 0.15 }, { t: 0.9, thr: 0.1 }], opts: { z0: 4, vx: 5, maxT: 2.0, colliders: MATTY_BAR } },
+  { id: 'halfmatty', name: 'hm-slow', phases: [{ t: 0.15, thr: 1.0 }, { t: 0.6, pitch: 5.2, thr: 0.15 }, { t: 0.9, thr: 0.1 }], opts: { z0: 4, vx: 5, maxT: 2.1, colliders: MATTY_BAR } },
+  // Half Mavvy: a pull to the vertical, a half roll there, the fall over the
+  // other way under the bar, upright.
+  { id: 'halfmavvy', name: 'hmv-std', phases: [{ t: 0.15, thr: 0.95 }, { t: 0.2, pitch: -6.5, thr: 0.9 }, { t: 0.12, thr: 0.7 }, { t: 0.27, roll: 11.5, thr: 0.4 }, { t: 0.3, pitch: 5, thr: 0.3 }, { t: 0.9, thr: 0.6 }], opts: { z0: 4, vx: 7, maxT: 2.2, colliders: MAVVY_BAR } },
+  { id: 'halfmavvy', name: 'hmv-left', phases: [{ t: 0.15, thr: 0.95 }, { t: 0.2, pitch: -6.5, thr: 0.9 }, { t: 0.12, thr: 0.7 }, { t: 0.27, roll: -11.5, thr: 0.4 }, { t: 0.3, pitch: 5, thr: 0.3 }, { t: 0.9, thr: 0.6 }], opts: { z0: 4, vx: 7, maxT: 2.2, colliders: MAVVY_BAR } },
   { id: 'splits', name: 'ss-fast', phases: [{ t: 0.28, roll: 11, pitch: 0, thr: 0.55 }, { t: 0.55, roll: 0, pitch: -7.5, thr: 0.35 }, { t: 0.5, roll: 0, pitch: 0, thr: 0.5 }], opts: { z0: 10, vx: 8, maxT: 2.0, colliders: OBJ_BAR } },
   { id: 'splits', name: 'ss-slow', phases: [{ t: 0.30, roll: 11, pitch: 0, thr: 0.5 }, { t: 0.60, roll: 0, pitch: -7.2, thr: 0.32 }, { t: 0.5, roll: 0, pitch: 0, thr: 0.5 }], opts: { z0: 10.4, vx: 7.6, maxT: 2.15, colliders: OBJ_BAR } },
   { id: 'splits', name: 'ss-sloppy', phases: [{ t: 0.28, roll: 11, pitch: 0.2, thr: 0.55 }, { t: 0.55, roll: 0, pitch: -7.4, thr: 0.34 }, { t: 0.5, pitch: 0, thr: 0.5 }], opts: { z0: 10.2, vx: 8.2, maxT: 2.1, colliders: OBJ_BAR } },
-  { id: 'maverick', name: 'mav-std', phases: [{ t: 0.50, pitch: -3.6, thr: 0.95 }, { t: 0.50, pitch: 3.4, thr: 0.22 }, { t: 0.45, pitch: 0.2, thr: 0.62 }, { t: 0.4, pitch: 0, thr: 0.5 }], opts: { z0: 3.5, vx: 4.5, maxT: 2.5, colliders: OBJ_BAR } },
-  { id: 'maverick', name: 'mav-slow', phases: [{ t: 0.62, pitch: -3.0, thr: 0.92 }, { t: 0.58, pitch: 2.9, thr: 0.2 }, { t: 0.45, pitch: 0, thr: 0.58 }], opts: { z0: 3.2, vx: 4.0, maxT: 2.6, colliders: OBJ_BAR } },
-  { id: 'maverick', name: 'mav-high', phases: [{ t: 0.52, pitch: -3.4, thr: 0.98 }, { t: 0.52, pitch: 3.2, thr: 0.18 }, { t: 0.45, pitch: 0, thr: 0.6 }], opts: { z0: 4.5, vx: 4.2, maxT: 2.5, colliders: OBJ_BAR } },
+  // Maverick: a half loop back to an inverted top, a forward pitch that stops
+  // it, flown back towards the entry against the nose; once through a gap and
+  // back out of it.
+  { id: 'maverick', name: 'mav-std', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitch: -7.5, thr: 1.0 }, { t: 0.21, pitch: -7.5, thr: 0.15 }, { t: 0.6, pitch: 5.0, thr: 0.4 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.4 } },
+  { id: 'maverick', name: 'mav-slow', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitch: -7.5, thr: 1.0 }, { t: 0.21, pitch: -7.5, thr: 0.15 }, { t: 0.8, pitch: 3.5, thr: 0.35 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.6 } },
+  { id: 'maverick', name: 'mav-gap', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitch: -7.5, thr: 1.0 }, { t: 0.21, pitch: -7.5, thr: 0.15 }, { t: 0.8, pitch: 3.5, thr: 0.35 }, { t: 0.7, thr: 0.6 }], opts: { x0: -2, z0: 5, vx: 6, maxT: 2.6, gaps: MAV_GAP } },
+  // Immelmann: a half loop back climbing, the throttle cut over the top, a
+  // half roll to upright, out the way it came and higher.
+  { id: 'immelmann', name: 'imm-std', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitch: -7.5, thr: 1.0 }, { t: 0.21, pitch: -7.5, thr: 0.15 }, { t: 0.26, roll: 12, thr: 0.15 }, { t: 0.7, thr: 0.8 }], opts: { z0: 5, vx: 8, maxT: 2.0 } },
+  { id: 'immelmann', name: 'imm-slow', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.25, pitch: -6.3, thr: 1.0 }, { t: 0.25, pitch: -6.3, thr: 0.2 }, { t: 0.26, roll: 12, thr: 0.2 }, { t: 0.7, thr: 0.8 }], opts: { z0: 5, vx: 7, maxT: 2.0 } },
+  { id: 'immelmann', name: 'imm-left', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitch: -7.5, thr: 1.0 }, { t: 0.21, pitch: -7.5, thr: 0.15 }, { t: 0.26, roll: -12, thr: 0.15 }, { t: 0.7, thr: 0.8 }], opts: { z0: 5, vx: 8, maxT: 2.0 } },
   // A spin in place by a pole or tree is a Yaw Spin: a Trippy orbits.
   { id: 'yawspin', name: 'pole-spin', phases: [{ t: 1.15, yaw: 7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }], opts: { ...NEAR_POLE, maxT: 2.1 } },
   { id: 'yawspin', name: 'pole-spin-fast', phases: [{ t: 0.95, yaw: 8.2, thr: 0.5 }, { t: 0.45, yaw: 0, thr: 0.44 }], opts: { ...NEAR_POLE, z0: 2.2, maxT: 1.9 } },
@@ -301,12 +332,12 @@ const PILOT_LIBRARY = [
   { id: 'roll', name: 'pilot-roll-kiss', phases: [{ t: 0.85, rollS: 0.86, thr: 0.5 }, { t: 0.4, rollS: 0, thr: 0.45 }], opts: { z0: 4, vx: 3, maxT: 1.9, rates: WHOOP_KISS, seed: 102, noise: 0.05, thrWobble: 0.06 } },
   { id: 'juicyflick', name: 'pilot-juicy-actual', phases: [{ t: 0.48, pitchS: 0.86, thr: 0.86 }, { t: 0.32, pitchS: 0, rollS: 0.9, thr: 0.5 }, { t: 0.4, rollS: 0, thr: 0.5 }], opts: { z0: 5, vx: 6, maxT: 1.9, rates: WHOOP_ACTUAL, seed: 103, noise: 0.05, thrWobble: 0.06 } },
   { id: 'snapback', name: 'pilot-snap-kiss', phases: [{ t: 0.48, pitchS: -0.86, thr: 0.72 }, { t: 0.32, pitchS: 0, rollS: 0.9, thr: 0.5 }, { t: 0.4, rollS: 0, thr: 0.5 }], opts: { z0: 4.5, vx: 6, maxT: 1.9, colliders: OBJ_BAR, rates: WHOOP_KISS, seed: 104, noise: 0.05, thrWobble: 0.06 } },
-  { id: 'matty', name: 'pilot-matty-actual', phases: [{ t: 0.12, pitchS: 0, thr: 0.34 }, { t: 0.78, pitchS: 0.84, thr: 0.08 }, { t: 0.55, pitchS: 0, thr: 0.62 }], opts: { z0: 9, vx: 7, maxT: 2.2, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 105, noise: 0.05, thrWobble: 0.05 } },
+  { id: 'matty', name: 'pilot-matty-actual', phases: [{ t: 0.15, thr: 1.0 }, { t: 0.5, pitchS: 0.81, thr: 0.15 }, { t: 0.45, pitchS: 0.81, thr: 0.95 }, { t: 0.8, thr: 0.55 }], opts: { z0: 4, vx: 5, maxT: 2.4, colliders: MATTY_BAR, rates: WHOOP_ACTUAL, seed: 105, noise: 0.05, thrWobble: 0.05 } },
+  { id: 'matty', name: 'pilot-matty-kiss', phases: [{ t: 0.15, thr: 1.0 }, { t: 0.5, pitchS: 0.77, thr: 0.15 }, { t: 0.45, pitchS: 0.77, thr: 0.95 }, { t: 0.8, thr: 0.55 }], opts: { z0: 4, vx: 5, maxT: 2.4, colliders: MATTY_BAR, rates: WHOOP_KISS, seed: 106, noise: 0.05, thrWobble: 0.05 } },
   { id: 'powerloop', name: 'pilot-pl-actual', phases: [{ t: 0.22, pitchS: 0, thr: 0.8 }, { t: 1.05, pitchS: -0.82, thr: 0.86 }, { t: 0.5, pitchS: 0, thr: 0.5 }], opts: { z0: 6, vx: 7, maxT: 2.5, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 106, noise: 0.05, thrWobble: 0.06 } },
-  { id: 'maverick', name: 'pilot-mav-half', phases: [{ t: 0.18, pitchS: 0, thr: 0.62 }, { t: 0.78, pitchS: -0.48, thr: 0.9 }, { t: 0.78, pitchS: 0.48, thr: 0.26 }, { t: 0.45, pitchS: 0, thr: 0.55 }], opts: { z0: 3.5, vx: 4.5, maxT: 3.0, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 201, noise: 0.05, thrWobble: 0.08 } },
-  { id: 'maverick', name: 'pilot-mav-052', phases: [{ t: 0.15, pitchS: 0, thr: 0.64 }, { t: 0.72, pitchS: -0.52, thr: 0.9 }, { t: 0.72, pitchS: 0.50, thr: 0.24 }, { t: 0.45, pitchS: 0, thr: 0.56 }], opts: { z0: 3.4, vx: 4.2, maxT: 2.9, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 202, noise: 0.06, thrWobble: 0.08 } },
-  { id: 'maverick', name: 'pilot-mav-kiss', phases: [{ t: 0.15, pitchS: 0, thr: 0.62 }, { t: 0.50, pitchS: -0.55, thr: 0.9 }, { t: 0.52, pitchS: 0.52, thr: 0.22 }, { t: 0.4, pitchS: 0, thr: 0.55 }], opts: { z0: 3.6, vx: 4.4, maxT: 2.6, colliders: OBJ_BAR, rates: WHOOP_KISS, seed: 203, noise: 0.06, thrWobble: 0.08 } },
-  { id: 'maverick', name: 'pilot-mav-against', phases: [{ t: 0.55, pitchS: -0.68, thr: 0.94 }, { t: 0.68, pitchS: 0.64, thr: 0.2 }, { t: 0.45, pitchS: 0.08, thr: 0.58 }], opts: { z0: 3.2, vx: 3.2, maxT: 2.6, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 204, noise: 0.05, thrWobble: 0.07 } },
+  { id: 'maverick', name: 'pilot-mav-actual', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitchS: -0.87, thr: 1.0 }, { t: 0.21, pitchS: -0.87, thr: 0.15 }, { t: 0.8, pitchS: 0.68, thr: 0.35 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.6, rates: WHOOP_ACTUAL, seed: 201, noise: 0.05, thrWobble: 0.08 } },
+  { id: 'maverick', name: 'pilot-mav-kiss', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitchS: -0.84, thr: 1.0 }, { t: 0.21, pitchS: -0.84, thr: 0.15 }, { t: 0.8, pitchS: 0.61, thr: 0.35 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.6, rates: WHOOP_KISS, seed: 203, noise: 0.06, thrWobble: 0.08 } },
+  { id: 'maverick', name: 'pilot-mav-fwd', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitchS: -0.87, thr: 1.0 }, { t: 0.21, pitchS: -0.87, thr: 0.15 }, { t: 0.6, pitchS: 0.77, thr: 0.4 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.4, rates: WHOOP_ACTUAL, seed: 204, noise: 0.05, thrWobble: 0.07 } },
   { id: 'yawspin', name: 'pilot-pole-spin-actual', phases: [{ t: 1.2, yawS: 0.95, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_POLE, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 301, noise: 0.04, thrWobble: 0.05 } },
   { id: 'yawspin', name: 'pilot-pole-spin-kiss', phases: [{ t: 1.15, yawS: 0.92, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_POLE, maxT: 2.1, rates: WHOOP_KISS, seed: 303, noise: 0.04, thrWobble: 0.05 } },
   { id: 'yawspin', name: 'pilot-tree-spin', phases: [{ t: 1.2, yawS: 0.94, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_TREE, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 304, noise: 0.04, thrWobble: 0.05 } },
@@ -330,7 +361,7 @@ test('new storage key only; never writes old ryfly* keys', () => {
 
 test('trick list has the requested maneuvers and frozen point values', () => {
   const ids = TRICK_LIST.map((t) => t.id);
-  for (const id of ['flip', 'roll', 'yawspin', 'powerloop', 'sideloop', 'splits', 'matty', 'halfmatty', 'maverick', 'trippy', 'ham', 'dive', 'gap', 'prox', 'cradle', 'juicyflick', 'snapback', 'rubik', 'cubik', 'barani']) {
+  for (const id of ['flip', 'roll', 'yawspin', 'powerloop', 'sideloop', 'splits', 'immelmann', 'matty', 'halfmatty', 'maverick', 'halfmavvy', 'trippy', 'ham', 'dive', 'gap', 'prox', 'cradle', 'juicyflick', 'snapback', 'rubik', 'cubik', 'barani']) {
     assert.ok(ids.includes(id), 'missing ' + id);
     assert.ok(TRICK_BY_ID[id].points > 0);
     assert.ok(TRICK_BY_ID[id].name);
@@ -355,6 +386,14 @@ test('trick list has the requested maneuvers and frozen point values', () => {
   assert.ok(trickLineupText().includes('Ham Spin'));
   assert.ok(trickLineupText().includes('Trippy Spin'));
   assert.equal(TRICK_BY_ID.splits.points, 100);
+  // Immelmann: the Split-S's mirror, its tier and points. Half Mavvy scores
+  // above Maverick and Matty.
+  assert.equal(TRICK_BY_ID.immelmann.name, 'Immelmann');
+  assert.equal(TRICK_BY_ID.immelmann.tier, TRICK_BY_ID.splits.tier);
+  assert.equal(TRICK_BY_ID.immelmann.points, TRICK_BY_ID.splits.points);
+  assert.equal(TRICK_BY_ID.halfmavvy.name, 'Half Mavvy');
+  assert.equal(TRICK_BY_ID.halfmavvy.points, 400);
+  assert.ok(TRICK_BY_ID.halfmavvy.points > TRICK_BY_ID.maverick.points && TRICK_BY_ID.halfmavvy.points > TRICK_BY_ID.matty.points);
   assert.equal(TRICK_BY_ID.dive.points, 100);
   assert.equal(TRICK_BY_ID.gap.points, 125);
   assert.equal(TRICK_BY_ID.prox.points, 150);
@@ -377,13 +416,16 @@ test('docs/sim-tricks.md defines each trick and the confused pairs', () => {
   assert.ok(docs.includes('# QuadMath freestyle trick definitions'));
   assert.ok(docs.includes("Tyrantt's Pro Whooper"));
   assert.ok(docs.includes('prowhooper.com'));
-  for (const id of ['powerloop', 'matty', 'halfmatty', 'maverick', 'trippy', 'ham', 'sideloop', 'splits', 'juicyflick', 'snapback', 'cradle', 'rubik', 'cubik', 'barani', 'gap']) {
+  for (const id of ['powerloop', 'matty', 'halfmatty', 'maverick', 'halfmavvy', 'immelmann', 'trippy', 'ham', 'sideloop', 'splits', 'juicyflick', 'snapback', 'cradle', 'rubik', 'cubik', 'barani', 'gap']) {
     assert.ok(docs.includes('`' + id + '`'), 'doc missing ' + id);
   }
   assert.ok(docs.includes('Powerloop vs Matty'));
   assert.ok(docs.includes('Matty vs Half Matty'));
   assert.ok(docs.includes('Split-S vs Half Matty'));
   assert.ok(docs.includes('Maverick Loop vs Powerloop'));
+  assert.ok(docs.includes('Phase matcher'));
+  assert.ok(docs.includes('Immelmann vs Split-S'));
+  assert.ok(docs.includes('Half Mavvy vs Maverick'));
   assert.ok(docs.includes('Trippy Spin vs Yaw Spin'));
   assert.ok(docs.includes('Ham Spin'));
   assert.ok(docs.includes('inverted the whole time') || docs.includes('upside-down the whole time'));
@@ -958,7 +1000,7 @@ async function flyBf(phases, opts) {
   const d = makeDetector();
   const hits = [];
   const st = emptyState();
-  const sample = { ws: WS, colliders: o.colliders || null };
+  const sample = { ws: WS, colliders: o.colliders || null, gaps: o.gaps || null };
   let first = true;
   let samples = 0;
   const onSample = () => {
@@ -990,18 +1032,24 @@ async function flyBf(phases, opts) {
     t += 0.004; phaseT += 0.004;
     if (ph.t != null && phaseT >= ph.t - 1e-9 && phaseI < phases.length - 1) { phaseI++; phaseT = 0; }
   }
-  return { hits, why: d.lastWhy, dir: d.lastDir, samples, feat: d.lastFeat };
+  return { hits, why: d.lastWhy, dir: d.lastDir, samples, feat: d.lastFeat, phases: d.lastPhases, gapBack: d.lastGapBack };
 }
 
 // One flight per trick type: the library's own where it flies the same on the
-// bf core, and two of the bf core's own. On the Air65 the library's powerloops
-// do not climb 1.5 m at its throttle (full throttle does), and its matty
-// flips turn a full flip (Betaflight tracks the rate the js core lags).
+// bf core, and the bf core's own. On the Air65 the library's powerloops do
+// not climb 1.5 m at its throttle (full throttle does), and the phase
+// matcher's tricks fly their paths a little differently (their objects are
+// placed round the Air65's path).
+const BF_MATTY = { id: 'matty', name: 'bf-matty', phases: [{ t: 0.3, tS: 1.0 }, { t: 0.5, pitch: 6, tS: 0.05 }, { t: 0.45, pitch: 6, tS: 0.9 }, { t: 0.8, tS: 0.45 }], opts: { z0: 4, vx: 5, maxT: 2.5, colliders: BF_MATTY_BAR } };
+const BF_HALFMATTY = { id: 'halfmatty', name: 'bf-halfmatty', phases: [{ t: 0.3, tS: 1.0 }, { t: 0.52, pitch: 6, tS: 0.05 }, { t: 0.9, tS: 0.1 }], opts: { z0: 4, vx: 5, maxT: 2.0, colliders: BF_MATTY_BAR } };
+const BF_MAVERICK = { id: 'maverick', name: 'bf-maverick', phases: [{ t: 0.1, tS: 0.6 }, { t: 0.25, pitch: -6.3, tS: 1.0 }, { t: 0.25, pitch: -6.3, tS: 0.15 }, { t: 0.8, pitch: 3.5, tS: 0.25 }, { t: 0.7, tS: 0.5 }], opts: { z0: 5, vx: 6, maxT: 2.6 } };
+const BF_IMMELMANN = { id: 'immelmann', name: 'bf-immelmann', phases: [{ t: 0.1, tS: 0.6 }, { t: 0.25, pitch: -6.3, tS: 1.0 }, { t: 0.25, pitch: -6.3, tS: 0.15 }, { t: 0.26, roll: 12, tS: 0.15 }, { t: 0.7, tS: 0.6 }], opts: { z0: 5, vx: 7, maxT: 2.0 } };
+const BF_HALFMAVVY = { id: 'halfmavvy', name: 'bf-halfmavvy', phases: [{ t: 0.15, tS: 1.0 }, { t: 0.24, pitch: -6.5, tS: 1.0 }, { t: 0.1, tS: 0.6 }, { t: 0.25, roll: 12, tS: 0.3 }, { t: 0.3, pitch: 5.5, tS: 0.2 }, { t: 0.9, tS: 0.45 }], opts: { z0: 4, vx: 7, maxT: 2.0, colliders: BF_MAVVY_BAR } };
 const BF_LIBRARY = [
-  ...['flip-front', 'flip-back', 'roll-fast', 'yaw-fast', 'hm-fast', 'ss-fast', 'mav-std', 'pole-spin', 'ham-inv', 'ham-flip-yaw-flip',
+  ...['flip-front', 'flip-back', 'roll-fast', 'yaw-fast', 'ss-fast', 'pole-spin', 'ham-inv', 'ham-flip-yaw-flip',
     'sl-std', 'crd-std', 'jf-fast', 'sb-fast', 'rk-std', 'ck-std', 'dive-std', 'gap-generic-slot', 'prox-std'].map((n) => LIBRARY.find((c) => c.name === n)),
   { id: 'powerloop', name: 'bf-powerloop', phases: [{ t: 0.25, pitch: 0, tS: 0.75 }, { t: 1.0, pitch: -6.4, tS: 1.0 }, { t: 0.6, pitch: 0, tS: 0.35 }], opts: { z0: 6, vx: 7, maxT: 2.6 } },
-  { id: 'matty', name: 'bf-matty', phases: [{ t: 0.1, pitch: 0, tS: 0.25 }, { t: 0.55, pitch: 8.2, tS: 0.03 }, { t: 0.55, pitch: 0, tS: 0.45 }], opts: { z0: 9, vx: 7, maxT: 2.1 } },
+  BF_MATTY, BF_HALFMATTY, BF_MAVERICK, BF_IMMELMANN, BF_HALFMAVVY,
 ];
 
 test('bf core: every trick type, flown on sim-core and sampled every 4 ms, is its one label', async () => {
@@ -1053,6 +1101,122 @@ test('Ham Spin as the owner flies it (half flip in, yaw while inverted, half fli
       assert.ok(Math.abs(v.invYaw - v.yawSpan) <= 5 * DEG, tag + ': inverted ' + (v.invYaw / DEG).toFixed(1) + ', whole ' + (v.yawSpan / DEG).toFixed(1));
     }
   }
+});
+
+// ---- The phase matcher's tricks, flown on the bf core ----
+//
+// The owner's definitions as ordered phases (PHASE_SPECS, docs/sim-tricks.md
+// "Phase matcher"), one test each: the bf core's flight is the trick, with the
+// phases the matcher measured inside their bounds, and the near miss beside
+// it is not. The objects stand round each flight's path, clear of it.
+const inDeg = (x, lo, hi) => x >= lo * DEG - 1e-9 && x <= hi * DEG + 1e-9;
+const phTag = (r, id) => JSON.stringify((r.phases[id].ms ? r.phases[id].ms.ph : []).map((m) => Math.round(m.turn / DEG)));
+
+test('bf core, Maverick: back 150-210 climbing to an inverted top, forward 60 or more, back towards the entry against the nose; out through the gap it came in by earns the bonus', async () => {
+  const r = await flyBf(BF_MAVERICK.phases, BF_MAVERICK.opts);
+  assert.deepEqual(r.hits, ['maverick'], r.why);
+  const ms = r.phases.maverick.ms;
+  const [back, fwd] = ms.ph;
+  assert.ok(inDeg(back.turn, 150, 210) && back.climb >= 1 && back.up <= -0.5, 'back ' + phTag(r, 'maverick') + ' climb ' + back.climb.toFixed(2));
+  assert.ok(fwd.turn >= 60 * DEG, 'forward ' + phTag(r, 'maverick'));
+  assert.ok(ms.tail >= 0.3, 'against the nose for ' + ms.tail.toFixed(2) + ' s');
+  assert.equal(r.gapBack, 0, 'no gap, no bonus');
+  // In through a gap before the pull-up and back out of it: the bonus.
+  const g = await flyBf(BF_MAVERICK.phases, { ...BF_MAVERICK.opts, x0: -2, gaps: MAV_GAP });
+  assert.equal(g.hits.filter((h) => h === 'maverick').length, 1, g.why);
+  assert.equal(g.gapBack, 1, 'back out through the gap it came in by');
+  assert.equal(scoreTrick('maverick', 0, 1, 1, { bonus: MAV_GAP_MUL }), Math.round(TRICK_BY_ID.maverick.points * MAV_GAP_MUL));
+  // Topping out short of inverted (about 120 degrees back) is not one.
+  const short = await flyBf([{ t: 0.1, tS: 0.6 }, { t: 0.17, pitch: -6.3, tS: 1.0 }, { t: 0.17, pitch: -6.3, tS: 0.15 }, { t: 0.8, pitch: 3.5, tS: 0.25 }, { t: 0.7, tS: 0.5 }], BF_MAVERICK.opts);
+  assert.ok(!short.hits.includes('maverick'), 'short top: ' + short.hits.join(','));
+});
+
+test('bf core, Matty: a forward loop of 300 or more climbing 1 m over the bar, down behind it and back under it, upright; over a solid block it is a Flip', async () => {
+  const r = await flyBf(BF_MATTY.phases, BF_MATTY.opts);
+  assert.deepEqual(r.hits, ['matty'], r.why);
+  const [loop] = r.phases.matty.ms.ph;
+  assert.ok(loop.turn >= 300 * DEG && loop.climb >= 1 && loop.over === 1 && loop.under === 1, phTag(r, 'matty') + ' climb ' + loop.climb.toFixed(2));
+  assert.ok(r.feat.upEnd >= 0.5);
+  // The same flight over a block it cannot pass under, and in open air.
+  const solid = await flyBf(BF_MATTY.phases, { ...BF_MATTY.opts, colliders: barAt(2.0, 2.4, 0, 5.9) });
+  assert.deepEqual(solid.hits, ['flip'], 'over a solid block: ' + solid.why);
+  const open = await flyBf(BF_MATTY.phases, { ...BF_MATTY.opts, colliders: null });
+  assert.deepEqual(open.hits, ['flip'], 'open air: ' + open.why);
+});
+
+test('bf core, Half Matty: the Matty\'s first 135-225 degrees climbing 1 m over the bar, inverted behind it; with nothing to go over it is nothing', async () => {
+  const r = await flyBf(BF_HALFMATTY.phases, BF_HALFMATTY.opts);
+  assert.deepEqual(r.hits, ['halfmatty'], r.why);
+  const [half] = r.phases.halfmatty.ms.ph;
+  assert.ok(inDeg(half.turn, 135, 225) && half.climb >= 1 && half.over === 1 && half.up <= -0.5, phTag(r, 'halfmatty'));
+  assert.ok(r.feat.upEnd <= -0.5, 'ends inverted');
+  const open = await flyBf(BF_HALFMATTY.phases, { ...BF_HALFMATTY.opts, colliders: null });
+  assert.deepEqual(open.hits, [], 'open air: ' + open.why);
+});
+
+test('bf core, Half Mavvy: a pull back climbing 1 m, a half roll, a forward pitch down under the bar, upright; back 180 and forward 180 end inverted', async () => {
+  const r = await flyBf(BF_HALFMAVVY.phases, BF_HALFMAVVY.opts);
+  assert.deepEqual(r.hits, ['halfmavvy'], r.why);
+  const [back, roll, fwd] = r.phases.halfmavvy.ms.ph;
+  assert.ok(inDeg(back.turn, 60, 225) && back.climb >= 1, 'back ' + phTag(r, 'halfmavvy'));
+  assert.ok(inDeg(roll.turn, 135, 225), 'roll ' + phTag(r, 'halfmavvy'));
+  assert.ok(inDeg(fwd.turn, 60, 225) && fwd.under === 1, 'forward ' + phTag(r, 'halfmavvy'));
+  assert.ok(r.feat.upEnd >= 0.5, 'upright');
+  // Upright needs the two pitches to add to about 180 (here a pull to the
+  // vertical and the fall over the other way).
+  assert.ok(inDeg(back.turn + fwd.turn, 120, 240), 'pitches add to ' + Math.round((back.turn + fwd.turn) / DEG));
+  const open = await flyBf(BF_HALFMAVVY.phases, { ...BF_HALFMAVVY.opts, colliders: null });
+  assert.deepEqual(open.hits, [], 'nothing to go under: ' + open.why);
+  // A half loop back, a half roll and a forward half flip end inverted.
+  const full = await flyBf([{ t: 0.1, tS: 0.6 }, { t: 0.25, pitch: -6.3, tS: 1.0 }, { t: 0.25, pitch: -6.3, tS: 0.15 }, { t: 0.26, roll: 12, tS: 0.15 }, { t: 0.55, pitch: 5.5, tS: 0.2 }, { t: 0.9, tS: 0.1 }], { z0: 5, vx: 7, maxT: 2.4, colliders: barAt(-3, 3, 8.5, 9) });
+  assert.ok(full.feat.upEnd <= -0.5 && !full.hits.includes('halfmavvy'), '180/180: up ' + full.feat.upEnd.toFixed(2) + ' ' + full.hits.join(','));
+});
+
+test('bf core, Immelmann: a back half loop climbing 1 m, a half roll, upright, the heading reversed, out higher; flown sinking it is a Snapback', async () => {
+  const r = await flyBf(BF_IMMELMANN.phases, BF_IMMELMANN.opts);
+  assert.deepEqual(r.hits, ['immelmann'], r.why);
+  const [back, roll] = r.phases.immelmann.ms.ph;
+  assert.ok(inDeg(back.turn, 135, 225) && back.climb >= 1, 'back ' + phTag(r, 'immelmann'));
+  assert.ok(inDeg(roll.turn, 135, 225), 'roll ' + phTag(r, 'immelmann'));
+  const v = featView(r.feat);
+  assert.ok(r.feat.upEnd >= 0.5 && v.head >= 135 * DEG && v.drop <= 0, 'upright, reversed, higher: up ' + r.feat.upEnd.toFixed(2) + ' head ' + Math.round(v.head / DEG) + ' drop ' + v.drop.toFixed(2));
+  // The same turns, no climb, out lower.
+  const sink = await flyBf([{ t: 0.1, tS: 0.3 }, { t: 0.5, pitch: -6.3, tS: 0.2 }, { t: 0.26, roll: 12, tS: 0.15 }, { t: 0.7, tS: 0.45 }], { z0: 5, vx: 7, maxT: 2.0 });
+  assert.deepEqual(sink.hits, ['snapback'], 'sinking: ' + sink.why);
+});
+
+// Flip, Powerloop and Split-S are the matcher's too: one phase in a window
+// (Flip, Powerloop) and a half roll then a back pitch (Split-S). Their
+// scores are the terms classifyFeat had: the same features score the same.
+test('the phase matcher scores Flip, Powerloop and Split-S as their old terms did', () => {
+  const rnd = mulberry(77);
+  for (let i = 0; i < 4000; i++) {
+    const f = makeFeat();
+    f.n = 50; f.dur = 0.3 + rnd() * 3;
+    f.pitch = (rnd() - 0.5) * 16; f.roll = (rnd() - 0.5) * 12; f.yaw = (rnd() - 0.5) * 8;
+    f.pathP = Math.abs(f.pitch) + rnd() * 2; f.pathR = Math.abs(f.roll) + rnd() * 2; f.pathY = Math.abs(f.yaw) + rnd();
+    f.flipUp = rnd() * 7; f.flipDn = rnd() * 7; f.loopUp = f.flipUp + rnd() * 2; f.loopDn = f.flipDn + rnd() * 2;
+    f.alt0 = 5; f.altMax = 5 + rnd() * 4; f.altMin = 4; f.postMin = 3 + rnd() * 4; f.alt1 = 3 + rnd() * 4;
+    f.sweep = (rnd() - 0.5) * 14; f.alignN = 20; f.followN = Math.floor(rnd() * 20); f.invT = rnd() * f.dur;
+    f.tRoll90 = rnd() < 0.8 ? rnd() : 99; f.tPitch90 = rnd() < 0.8 ? rnd() : 99;
+    const v = featView(f);
+    const absP = v.absP, absR = v.absR, absY = v.absY;
+    const tR = f.tRoll90 < 90 ? f.tRoll90 : 99, tP = f.tPitch90 < 90 ? f.tPitch90 : 99;
+    const rollFirst = (tR < 90 && tP < 90) ? (tP - tR) : (tR < 90 && tP >= 90 ? 0.5 : -0.5);
+    const lo = (x, a, fd) => (x >= a ? 1 : x <= a - fd ? 0 : (x - (a - fd)) / fd);
+    const hi = (x, a, fd) => (x <= a ? 1 : x >= a + fd ? 0 : (a + fd - x) / fd);
+    const oldFlip = lo(v.flipSpan, 5.236, 0) * hi(absR, 1.7, 0.6) * hi(absY, 1.9, 0.6);
+    const oldLoop = lo(v.loopSpan, 5.236, 0) * hi(absR, 1.7, 0.6) * hi(absY, 1.9, 0.6) * lo(v.loopRise, 1.5, 0) * lo(v.loopRet, -1.5, 0) * lo(v.loopSweep, 4.712, 0);
+    const oldSplits = lo(absR, 1.8, 0.45) * hi(absR, 4.5, 0.45) * lo(absP, 1.2, 0.45) * hi(absP, 4.5, 0.45) * lo(-f.pitch, 0.6, 0.4)
+      * lo(v.drop, 0.35, 0.25) * lo(v.inv, 0.06, 0.05) * lo(rollFirst, 0.02, 0.10) * lo(v.follow, 0.18, 0.12) * hi(absY, 2.4, 0.7) * hi(v.pathR, 5.4, 0.6);
+    const one = (turn) => ({ ph: [{ turn, t: 0 }], lead: 0, trail: 0, tail: 0 });
+    assert.equal(matchSpec(PHASE_SPECS.flip, one(v.flipSpan), f, v), oldFlip, 'flip ' + i);
+    assert.equal(matchSpec(PHASE_SPECS.powerloop, one(v.loopSpan), f, v), oldLoop, 'powerloop ' + i);
+    const two = { ph: [{ turn: absR, cross: 0, back: 0 }, { turn: -f.pitch, cross: 0, back: 0 }], lead: 0, trail: 0, tail: 0 };
+    assert.ok(Math.abs(matchSpec(PHASE_SPECS.splits, two, f, v) - oldSplits) < 1e-12, 'splits ' + i);
+  }
+  // Outside the phases pitch and roll may turn PH_SLOP at most.
+  assert.ok(PH_SLOP > 0.78 && PH_SLOP < 0.79);
 });
 
 // The page's loop on the bf core at a given frame time: sticks polled and
