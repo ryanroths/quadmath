@@ -8,13 +8,17 @@ on:
 
 permissions:
   contents: read
+  # The human-override check reads the PR's timeline to see who applied the label.
+  issues: read
+  pull-requests: read
 
 jobs:
   agent-gate:
     name: Validate agent-authored changes
     runs-on: ubuntu-latest
-    # A human reviewer can wave a PR through by adding the 'human-override' label.
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'human-override') }}
+    # The owner can wave a PR through with the 'human-override' label. The job
+    # always runs: the label only counts once the 'Check human-override' step
+    # has confirmed from the timeline that ryanroths applied it by hand.
 
     steps:
       - name: Check out full history
@@ -34,28 +38,42 @@ jobs:
         run: |
           git fetch --no-tags origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
 
-      - name: Resolve the gate script from the base branch
+      - name: Resolve the gate scripts from the base branch
         env:
           BASE: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
-          # Run the validator from the BASE branch, not from the PR head. The
+          # Run the gate scripts from the BASE branch, not from the PR head. The
           # policy is already loaded from the base, but the checkout for a
-          # pull_request event gives us the PR's copy of the script itself --
-          # so a PR that rewrites validate_agent_pr.py down to `sys.exit(0)`
-          # would otherwise approve its own changes.
-          if git cat-file -e "origin/$BASE:scripts/ci/validate_agent_pr.py" 2>/dev/null; then
-            git show "origin/$BASE:scripts/ci/validate_agent_pr.py" > "$RUNNER_TEMP/agent_gate.py"
-            echo "Gate script taken from the tip of $BASE."
-          else
-            echo "::notice::No gate script at the tip of $BASE; bootstrap PR, falling back to the head copy."
-            cp scripts/ci/validate_agent_pr.py "$RUNNER_TEMP/agent_gate.py"
-          fi
+          # pull_request event gives us the PR's copy of each script -- so a PR
+          # that rewrites validate_agent_pr.py down to `sys.exit(0)`, or teaches
+          # check_human_override.py to trust anyone, would otherwise approve its
+          # own changes.
+          for name in validate_agent_pr check_human_override; do
+            if git cat-file -e "origin/$BASE:scripts/ci/$name.py" 2>/dev/null; then
+              git show "origin/$BASE:scripts/ci/$name.py" > "$RUNNER_TEMP/$name.py"
+              echo "$name.py taken from the tip of $BASE."
+            else
+              echo "::notice::No $name.py at the tip of $BASE; bootstrap PR, falling back to the head copy."
+              cp "scripts/ci/$name.py" "$RUNNER_TEMP/$name.py"
+            fi
+          done
+
+      - name: Check human-override
+        id: override
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Exits 0 with override=false when there is no label, 0 with
+        # override=true when ryanroths applied it by hand, and fails with
+        # "human-override must be applied by the owner" when anyone or
+        # anything else did -- another user, a bot, or an app using the owner's token.
+        run: python "$RUNNER_TEMP/check_human_override.py"
 
       - name: Validate pull request against base policy
+        if: steps.override.outputs.override != 'true'
         env:
           BASE: ${{ github.event.pull_request.base.ref }}
         run: |
-          python "$RUNNER_TEMP/agent_gate.py" \
+          python "$RUNNER_TEMP/validate_agent_pr.py" \
             --base "origin/$BASE" \
             --policy scripts/ci/agent_policy.json

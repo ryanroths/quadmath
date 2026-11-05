@@ -1,0 +1,138 @@
+[
+  {
+    "sha": "c56d07d311f6e1cb49d4da005e048ddc29493389",
+    "node_id": "C_kwDOS7y5O9oAKGM1NmQwN2QzMTFmNmUxY2I0OWQ0ZGEwMDVlMDQ4ZGRjMjk0OTMzODk",
+    "url": "https://api.github.com/repos/ryanroths/quadmath/git/commits/c56d07d311f6e1cb49d4da005e048ddc29493389",
+    "html_url": "https://github.com/ryanroths/quadmath/commit/c56d07d311f6e1cb49d4da005e048ddc29493389",
+    "author": {
+      "name": "ryanroths",
+      "email": "redacted@example.invalid",
+      "date": "2026-11-04T22:06:31Z"
+    },
+    "committer": {
+      "name": "ryanroths",
+      "email": "redacted@example.invalid",
+      "date": "2026-11-04T22:06:31Z"
+    },
+    "tree": {
+      "sha": "d374a15a8e06aa37724209656e4c8384a5d7e98a",
+      "url": "https://api.github.com/repos/ryanroths/quadmath/git/trees/d374a15a8e06aa37724209656e4c8384a5d7e98a"
+    },
+    "message": "Tricks: Powerloop's own window and Double Powerloop, Trippy at 360 deg / 150 deg/s, long tricks to 10 s; the owner's depot log as a fixture\n\nFrom the owner's ?tricks=debug log (90 attempts, Warehouse, bf core):\n\n- Powerloop: >= 300 deg of pitch inside its own 3.5 s window (LOOP_WIN_S),\n  not Flip's 1.2 s; after the top the path may end up to 1.5 m above the\n  entry (loopRet >= -1.5). Loops are counted over the segment's whole turn\n  of pitch: 600 deg is a Double Powerloop, then one per further 360 deg;\n  each loop scores the Powerloop's points and the pop names it.\n- Trippy: >= 360 deg about the vertical at >= 150 deg/s while the path\n  orbits >= 360 deg at 0.3-2.5 m; no roll term, so a rolling trippy counts.\n- Long tricks: a segment turning about the vertical at Trippy's rate, or\n  looping, runs past 4.5 s while it keeps turning, up to 10 s.\n- tools/fixtures/tricklog-depot-bf-1.jsonl.gz (the log, verbatim) and\n  tools/test_sim_tricks_attempt_log.mjs: seq 4/59/79 -> Powerloop (4, 59\n  Double), 22/23/24 -> Trippy, every fired label unchanged, the rest pinned\n  (25 -> Trippy, 75 -> Powerloop).\n- Overlay: gate copy, loop fields in its records, Double Powerloop name.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>",
+    "parents": [
+      {
+        "sha": "05d35b9b55a31ae4299d142bd1bee69ab966ff12",
+        "url": "https://api.github.com/repos/ryanroths/quadmath/git/commits/05d35b9b55a31ae4299d142bd1bee69ab966ff12",
+        "html_url": "https://github.com/ryanroths/quadmath/commit/05d35b9b55a31ae4299d142bd1bee69ab966ff12"
+      }
+    ],
+    "verification": {
+      "verified": false,
+      "reason": "unsigned",
+      "signature": null,
+      "payload": null,
+      "verified_at": null
+    },
+    "event": "committed"
+  },
+  {
+    "id": 35180698032,
+    "node_id": "LE_lADOS7y5O88AAAABckgWh88AAAAIMO7ZsA",
+    "url": "https://api.github.com/repos/ryanroths/quadmath/issues/events/35180698032",
+    "actor": {
+      "login": "ryanroths",
+      "id": 79865338,
+      "node_id": "MDQ6VXNlcjc5ODY1MzM4",
+      "avatar_url": "https://avatars.githubusercontent.com/u/79865338?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/ryanroths",
+      "html_url": "https://github.com/ryanroths",
+      "followers_url": "https://api.github.com/users/ryanroths/followers",
+      "following_url": "https://api.github.com/users/ryanroths/following{/other_user}",
+      "gists_url": "https://api.github.com/users/ryanroths/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/ryanroths/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/ryanroths/subscriptions",
+      "organizations_url": "https://api.github.com/users/ryanroths/orgs",
+      "repos_url": "https://api.github.com/users/ryanroths/repos",
+      "events_url": "https://api.github.com/users/ryanroths/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/ryanroths/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "event": "labeled",
+    "commit_id": null,
+    "commit_url": null,
+    "created_at": "2026-11-04T22:14:20Z",
+    "label": {
+      "name": "human-override",
+      "color": "56799c"
+    },
+    "intent": null,
+    "performed_via_github_app": null
+  },
+  {
+    "id": 35185542295,
+    "node_id": "ME_lADOS7y5O88AAAABckgWh88AAAAIMTjElw",
+    "url": "https://api.github.com/repos/ryanroths/quadmath/issues/events/35185542295",
+    "actor": {
+      "login": "ryanroths",
+      "id": 79865338,
+      "node_id": "MDQ6VXNlcjc5ODY1MzM4",
+      "avatar_url": "https://avatars.githubusercontent.com/u/79865338?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/ryanroths",
+      "html_url": "https://github.com/ryanroths",
+      "followers_url": "https://api.github.com/users/ryanroths/followers",
+      "following_url": "https://api.github.com/users/ryanroths/following{/other_user}",
+      "gists_url": "https://api.github.com/users/ryanroths/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/ryanroths/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/ryanroths/subscriptions",
+      "organizations_url": "https://api.github.com/users/ryanroths/orgs",
+      "repos_url": "https://api.github.com/users/ryanroths/repos",
+      "events_url": "https://api.github.com/users/ryanroths/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/ryanroths/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "event": "merged",
+    "commit_id": "2582d16a45b7a72ed6a31a3734be1e23cca242f9",
+    "commit_url": "https://api.github.com/repos/ryanroths/quadmath/commits/2582d16a45b7a72ed6a31a3734be1e23cca242f9",
+    "created_at": "2026-11-04T23:21:13Z",
+    "performed_via_github_app": null
+  },
+  {
+    "id": 35185542401,
+    "node_id": "CE_lADOS7y5O88AAAABckgWh88AAAAIMTjFAQ",
+    "url": "https://api.github.com/repos/ryanroths/quadmath/issues/events/35185542401",
+    "actor": {
+      "login": "ryanroths",
+      "id": 79865338,
+      "node_id": "MDQ6VXNlcjc5ODY1MzM4",
+      "avatar_url": "https://avatars.githubusercontent.com/u/79865338?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/ryanroths",
+      "html_url": "https://github.com/ryanroths",
+      "followers_url": "https://api.github.com/users/ryanroths/followers",
+      "following_url": "https://api.github.com/users/ryanroths/following{/other_user}",
+      "gists_url": "https://api.github.com/users/ryanroths/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/ryanroths/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/ryanroths/subscriptions",
+      "organizations_url": "https://api.github.com/users/ryanroths/orgs",
+      "repos_url": "https://api.github.com/users/ryanroths/repos",
+      "events_url": "https://api.github.com/users/ryanroths/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/ryanroths/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "event": "closed",
+    "commit_id": null,
+    "commit_url": null,
+    "created_at": "2026-11-04T23:21:13Z",
+    "state_reason": null,
+    "intent": null,
+    "performed_via_github_app": null
+  }
+]

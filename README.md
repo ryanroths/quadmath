@@ -47,7 +47,7 @@ The interesting part is what it **refuses to do**:
 - **No fixes it structurally can't make.** Orphan-page gaps (a page nobody links to) require editing a *different* page, so the single-file generator skips them and flags a human.
 - **Model refusals are never retried or rerouted.** A declined or cut-off generation is logged to stderr with the gap's name and skipped, and the run moves to the next gap. It exits 0 when nothing is pushed, so the cron's `&&` chain still reaches the tune ingest — the run's stderr is where a declined gap shows up.
 
-CI enforces the same policy on the receiving end: an `agent-gate` job checks every agent PR against path allowlists, diff caps, and HTML rules read from the base branch, so the agent can't loosen its own leash. A `human-override` label exists for maintainer changes to protected paths and is never applied reflexively.
+CI enforces the same policy on the receiving end: an `agent-gate` job checks every agent PR against path allowlists, diff caps, and HTML rules read from the base branch, so the agent can't loosen its own leash. A `human-override` label exists for maintainer changes to protected paths and is never applied reflexively; it counts only when the PR's timeline shows ryanroths applied it by hand, so a label added by a bot, another user, or an app acting on the owner's behalf fails the gate.
 
 ## Repo layout
 
