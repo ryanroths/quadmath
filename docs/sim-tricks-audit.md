@@ -847,3 +847,114 @@ Immelmann as logged.
   the flip and climbed inside it, so they stay a Flip and a Powerloop.
 - The Air65 and Fractal75 replays (`tools/test_sim_tricks_logs.mjs`) give
   the same labels at the same times as before.
+
+## 11. The fourth trick log: the owner's Baranis
+
+The owner flew a Barani log (11 attempts, Warehouse, bf core): Baranis at
+28.6, 34.2 and 38.1 s. It is a fixture now
+(`tools/fixtures/tricklog-depot-bf-4.jsonl.gz`, verbatim).
+
+### What the log showed
+
+- **The Barani's terms read 0 on every segment** (`baraniPitchDeg`,
+  `baraniTwistDeg`). The detector looked for a Barani only where a 1.5 s
+  window held 300° of **net** pitch, and counted **roll** alone as the twist.
+  None of the three had that:
+  - 28.6 and 34.2 s twisted by **yaw** (202° and 184°, roll 22° and 28°).
+    A half twist turns the body round, so the flip that goes on pitches the
+    body the other way: net pitch −8° and −51° of 466° and 397° turned.
+    Each way turned under 300° (back 237 and 224, forward 229 and 173).
+  - 38.1 s turned 299° of pitch one way with a roll of 180°, but over 3.3 s
+    (its 1.2 s window held 220°), and ended at up-Z 0.595, under the
+    Barani's 0.6.
+- **34.2 s fired Maverick**: back 224° climbing 5.7 m, forward 173°, 0.93 s
+  against the nose, with the yaw of 184° between: a Barani twisted by yaw
+  at its top pitches the body as a Maverick does.
+
+### The changes
+
+- **Barani**, as the owner flies it: ≥300° of **pitch path** (faded over
+  20°) with a **half twist of 180 ± 45° inside it**, ending upright (up-Z
+  0.5, as the Half Mavvy's and the Immelmann's). Any climb (the 2 m limit is
+  gone), any time (the 1.5 s window too). `baraniWithin` finds the stretch
+  of the segment (ends on every 200th row) that scores best, the twist inside
+  the pitch: 60° or more of pitch path before the twist is half done, and
+  after.
+- **The twist**: a new history column, each step's turn about the **body
+  axis nearest the flight path**, roll (the nose) or yaw (the up axis). At
+  under 3 m/s (`TWIST_SPD`) the path is no direction to speak of, and the
+  axis turning faster counts. The twist is the body rate's own way: signed
+  along the path, a yaw at the top of a vertical punch turned back on itself
+  as the velocity reversed (186° read 58°, flown).
+- **Maverick**: no twist (`still`): across its phases the roll and the yaw
+  each turn under 60° (the owner's uses no yaw: a pull back to start the
+  loop, a sharp push forward while it floats on backwards). Ends travelling
+  against the nose, as before. The owner, after: it **drops back under or
+  through an object**, so the push and glide back must be near one (within
+  2 m, the clearance scan's `near`, a new history flag `PH_NEAR`) for a
+  quarter of their steps or more, or go back out through an authored gap
+  (`near`). Log 3's Mavericks were near one for 95-100 % of theirs.
+- **Half Mavvy** goes **through an object**: under one (an object above,
+  within 2.3 m) a quarter of the maneuver or more, and flown against the
+  nose 0.3 of the time or more after the roll (a phase's `ag`). Without
+  it, the same flight is a Barani.
+- The record logs the segment's twist (`saw.twistDeg`), each phase's
+  against share (`ag`) and the Maverick's twist (`stillDeg`).
+
+### Flown
+
+On the bf core (`tools/test_sim_tricks.mjs`):
+
+- The 28.6/34.2 s Barani: a punch, a half flip back, a yaw of 186° falling
+  inverted, a half flip on (forward in the body): Barani, net pitch about 0,
+  360° of path; not a Maverick.
+- The 38.1 s Barani: fast forward, a front flip past inverted, a half roll
+  there, on to upright: Barani.
+- The bf Maverick with a 181° yaw at its top: Barani, the Maverick's phases
+  there but its twist 181°. With 41° of yaw: a Maverick still.
+- The bf Maverick drops back under a bar (near it 0.4 of its push and
+  glide): a Maverick; in open air, not one; in and back out through an
+  authored gap, a Maverick with the bonus. The library's and the pilot
+  traces' Mavericks fly beside a wall 1 m off their path (the js `mav-gap`
+  passes its gap during the pull only, so it has the wall too).
+- The Half Mavvy under a slab 1 m above its climb: Half Mavvy (under it 42 %
+  of the time). The same flight in open air: Barani.
+- The js library's Barani rolled nose down while its thrust carried it along
+  its up axis: by the owner's twist that roll turns across the path, and it
+  read a Flip. Its Baranis twist by yaw there now, and two fly the 38.1 s
+  roll Barani. Its Half Mavvies fly under the slab; one more flies it in open
+  air, a Barani.
+
+### The logs, replayed
+
+The logs predate the twist: the replay (`baraniFrom`) takes the segment's
+pitch path, and for the twist the roll whole or the yaw as far as the turn
+about the vertical it made (a twist by yaw is made with the up axis along
+the path, punched up or falling inverted, so it turns the heading about as
+far; a yaw made on its side turns it little), the larger. Whether the twist
+was inside the pitch is not in the logs: taken as inside. Log 4 was flown
+under the compound tricks' definitions: its Maverick and Half Mavvy scores
+replay as logged, times the twist and object terms.
+
+- **Log 4**: 28.6, 34.2 and 38.1 s are Baranis (twisted by yaw, yaw and
+  roll); 34.2 s is not a Maverick (yaw 184°). Seq 4 (23.9 s, not labelled by
+  the owner) reads Barani too: back about 190°, a yaw of 187° (the heading
+  turned 160°), forward 244°, up-Z 0.66 at the end.
+- The Maverick's object moves no label: log 3's two Mavericks stay (their
+  records within 2 m of an object 0.95-1.0 of their steps), logs 1 and 2
+  have none left.
+- **Logs 1-3**: three labels move, none of them fired before, all to
+  Barani by the estimate:
+  - log 2 seq 33 and 40 (82.6 and 91.4 s): back about 240° and 200°, a yaw
+    of 165° and 171° (the heading turned as far), forward, upright. The
+    shape of the 34.2 s Barani, flown in the inverted yaw spin log.
+  - log 3 seq 56 (124.0 s, flown as a Matty, which it is not): 429° of
+    pitch path with a roll of 171°, upright. The roll came 2.9 s after the
+    pitch's quarter turn; the detector also asks that the twist be inside
+    the pitch, which the log cannot show.
+  - Everything else is unchanged: log 1 entirely; log 2's Ham Spins (seq 9
+    yawed 227°, over the band) and its Flip seq 67 (a yaw of 159° that turned
+    the heading 80°, made on its side); log 3's Half Mavvies (under an object
+    0.44 and 0.28 of the time).
+- The Air65 and Fractal75 replays (`tools/test_sim_tricks_logs.mjs`) give
+  the same labels as before.

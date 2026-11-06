@@ -39,7 +39,7 @@ site lists both 150 and 50).
 | `flip` | Flip | Beginner | 50 | 75 | Phase matcher: **≥300° of pitch within any 1.2 s**, little net roll/yaw. Any speed, any travel. Front or back by the way the pitch turned (the pop says Front Flip / Back Flip). |
 | `roll` | Roll | Beginner | 50 | 75 | **≥300° of roll within any 1.5 s at a mean rate of ≥250°/s**, little net pitch/yaw. Slower turns are not tricks. |
 | `yawspin` | Yaw Spin | Beginner | 50 | 75 | Continuous ~360° yaw, mostly upright. |
-| `maverick` | Maverick Loop | Beginner | 100 | 100 | Phase matcher, as the owner flies it: a **pull back of 120–225° climbing ≥1 m** (it need not go inverted), then a **forward pitch ≥60°** that stops it, then **back towards the entry against the nose** (velocity·nose ≤ −0.3 on average) for **≥0.3 s**: the glide back. Often two segments, the pull and the push, merged (below). Back out through the authored gap it came in by (passed at most 1.5 s before, or in the maneuver): **1.25×** points. |
+| `maverick` | Maverick Loop | Beginner | 100 | 100 | Phase matcher, as the owner flies it: a **pull back of 120–225° climbing ≥1 m** (it need not go inverted), then a **forward pitch ≥60°** that stops it, then **back towards the entry against the nose** (velocity·nose ≤ −0.3 on average) for **≥0.3 s**: the glide back. **No twist** between the pull and the push: the roll and the yaw each turn **under 60°** across them (the owner's Maverick uses no yaw). The push and glide back **drop back under or through an object**: near one (within 2 m) for **≥25 %** of them, or back out through an authored gap. In open air it is not a Maverick. Often two segments, the pull and the push, merged (below). Back out through the authored gap it came in by (passed at most 1.5 s before, or in the maneuver): **1.25×** points. |
 | `splits` | Split-S | Beginner | 100 | 100 | Phase matcher: a **roll of 103–258°**, then a **back pitch of 69–258°** (pull), the path dropping ≥0.35 m, flying with the nose. The old terms' tolerances, so it fires where it did. |
 | `immelmann` | Immelmann | Beginner | 100 | 100 | Phase matcher, the Split-S's mirror: **back pitch 180 ± 45° climbing ≥1 m**, then a **roll of 180 ± 45°**, ending **upright**, the **heading reversed** (180 ± 45°), **out higher** than in. |
 | `cradle` | Cradle | Beginner | 150 | 150 | Pass an object, pitch back to keep it in view, level out **flying backward** clear of it. Not a flip. |
@@ -52,12 +52,12 @@ site lists both 150 and 50).
 | `juicyflick` | Juicy Flick | Novice | 200 | 225 | Open-air: pitch **forward** with throttle to inverted, then a prompt **180° roll**. Travel stays forward. |
 | `snapback` | Snapback | Novice | 200 | 225 | Pitch **back** to inverted (half-loop style), then a prompt **180° roll**. Not a completed Powerloop. |
 | `halfmatty` | Half Matty | Intermediate | 350 | 350 | Phase matcher: a Matty's **first 180 ± 45°** of forward pitch, climbing **≥1 m over the object**, ending **inverted** (nose down behind it). |
-| `halfmavvy` | Half Mavvy | Intermediate | 400 | 400 | Phase matcher, as the owner flies it: **forward pitch, a roll of 180 ± 45° between its halves, forward pitch on to upright**: **330–450° of forward pitch net**, a **climb ≥3 m**, the segment **≥2 s**, ending **upright**. The pull-up before it may turn 120° back; the pitch may run on through the roll. Scores above Maverick and Matty. |
+| `halfmavvy` | Half Mavvy | Intermediate | 400 | 400 | Phase matcher, as the owner flies it: **forward pitch, a roll of 180 ± 45° between its halves, forward pitch on to upright**: **330–450° of forward pitch net**, a **climb ≥3 m**, the segment **≥2 s**, ending **upright**, **through an object**: under one (an object above, within 2.3 m) for **≥25 %** of the maneuver, and flown **against the nose ≥30 %** of the time after the roll. The pull-up before it may turn 120° back; the pitch may run on through the roll. Without the object it is a Barani. Scores above Maverick, Matty and Barani. |
 | `cubik` | Cubik's Rube | Intermediate | 350 | 450 | 180° roll → 360° flip → 180° roll, same roll direction. Open air. |
 | `rubik` | Rubik's Cube | Intermediate | 325 | 450 | 180° flip → 360° roll → 180° flip, same pitch direction. Open air. |
 | `ham` | Ham Spin | Intermediate | 300 | 300 | **Inverted yaw spin**: **≥300° of yaw counted only while inverted** (up-Z below −0.5, tilted more than 120° from level). The yaw is the turn about the vertical. A **half flip in and a half flip out are allowed** and the whole maneuver is one Ham, not a Flip: the flips turn little about the vertical. A flip or roll that only passes through inverted, and upright yaw, are not Ham; a full Roll stays a Roll, and an inverted spin that orbits is a Trippy. Also called ham. |
 | `trippy` | Trippy Spin | Intermediate | 500 | 500 | **≥360° of yaw at ≥150°/s while the path orbits a centre ≥360°**: radius 0.3–2.5 m (the path's curvature), its direction turning a **full 360°** one way over the whole spin, at ≥1 m/s. Yaw is the turn about the vertical, so a tilted spin counts in full. Upright or inverted; the body may roll as it spins (the owner's rolls 600–780°). A nearby pole/post at the centre (within 0.5 m) is a bonus: 1.25× points. |
-| `barani` | Barani | Novice | 100 | 125 | **A flip with a half twist**: ≥300° of pitch and 180 ± 45° of roll inside the same 1.5 s, ending upright (the twist at the vertical), **low**: the segment climbs under 2 m. Scores above Flip. The slow, high one is a Half Mavvy. |
+| `barani` | Barani | Novice | 100 | 125 | **A flip with a half twist**, as the owner flies it: **≥300° of pitch path** (the pitch turned either way, summed; the term fades over 20°) with a **half twist of 180 ± 45° inside it** (≥60° of pitch path before the twist is half done, and after), ending **upright** (up-Z ≥ 0.5). The twist is the turn about the **body axis nearest the flight path**: **roll** when the nose is along it (flying level), **yaw** when the up axis is (punched up, or inverted and falling); under 3 m/s, whichever of the two turns faster. Any climb, any time. Scores above Flip and Maverick. |
 
 ## Decision boundaries
 
@@ -112,7 +112,17 @@ sections 9 and 10).
 
 The Half Mavvy's shape: forward to the nose straight down (after a pull-up),
 the half roll there, then forward on through to upright (the owner's turn
-360–430° forward net). A Barani turns the same way, quick and low.
+360–430° forward net), under an object. A Barani turns the same way, and is
+the Half Mavvy's shape without the object.
+
+The Maverick's **still**: across its phases, first to last, the roll and the
+yaw (about the body's up axis) each turn at most 60° (from lowest to
+highest). A Barani twisted by yaw at its top pitches the body back, then
+forward, as a Maverick does; the twist tells them apart. A phase may also
+ask a share of it flown **against the nose** (the Half Mavvy's after its
+roll, 0.3), and a trick a share of its last phase and what follows **near an
+object** (the Maverick's, 0.25, within 2 m; an authored gap passed counts
+whole).
 
 ### Flip, Roll, Powerloop: rotation first, path second
 
@@ -167,7 +177,8 @@ Pitch **sign** is the primary split. A Powerloop must never also score as Matty.
 
 ### Half Mavvy vs Maverick
 
-- Maverick: back, then forward, no roll; flown back against the nose.
+- Maverick: back, then forward, no roll and no yaw (each under 60° across
+  it); flown back against the nose, dropping back near an object.
 - Half Mavvy: forward, a **half roll**, forward on to upright, 330–450° net,
   climbing 3 m, 2 s or longer. The roll and the way of the pitch are the
   split; Half Mavvy scores above both Maverick and Matty.
@@ -213,14 +224,27 @@ Mirrors: the same two turns in the other order and the other way up.
 
 ### Barani vs Flip vs Juicy Flick
 
-- Barani: a full flip (≥300° of pitch) **and** a half twist (180 ± 45° of
-  roll) inside one 1.5 s window, ending upright. The twist comes at the
-  vertical (nose straight down or up); twisted while inverted, the quad
-  ends upside down and it is not a Barani.
-- Flip: the pitch with little roll. Juicy Flick: half a flip to inverted,
-  then a 180° roll.
-- Half Mavvy: the same flip and twist slow and high: 330–450° net over 2 s
-  or more, climbing 3 m or more. A Barani climbs under 2 m.
+- Barani: a full flip's **pitch path** (≥300°, the pitch turned either way:
+  a twist turns the body round, so the same flip pitches the body the other
+  way after it) **and** a half twist (180 ± 45°) inside it, ending upright.
+  The twist is about the body axis nearest the flight path: roll flying
+  level, yaw punched up or falling inverted. A roll made nose down while the
+  thrust carries the quad along its up axis turns across the path, not
+  about it: a Flip.
+- Flip: the pitch with little roll or twist. Juicy Flick: half a flip to
+  inverted, then a 180° roll (pitch path about 180°).
+- Half Mavvy: the same flip and twist (forward, a half roll, forward) over
+  2 s or more, climbing 3 m or more, **through an object** (under one a
+  quarter of the time, against the nose after the roll). Without the object
+  it is a Barani.
+
+### Barani vs Maverick
+
+- Maverick: a pull back, the pitch reversed, glided back against the nose;
+  the roll and yaw under 60° across it.
+- Barani twisted by yaw at its top (the owner's 28.6 and 34.2 s): the body
+  pitches back, yaws 180°, pitches forward: a Maverick's pitch, with a twist.
+  Barani.
 
 ### Gap: authored first
 
@@ -281,8 +305,9 @@ Order of the 180° axis is the split.
 
 - Cradle: look-back at a passed object, then level **backward**. Small invert
   fraction. Not a loop closure.
-- Maverick: a pull back, the pitch reversed, flown back against the nose.
-  Its glide back alone looks like a Cradle; split from its pull by a pause
+- Maverick: a pull back, the pitch reversed, flown back against the nose
+  and dropped back under or through an object (near one, within 2 m, a
+  quarter of the push and glide). Its glide back alone looks like a Cradle; split from its pull by a pause
   under 0.8 s, it is the Maverick (compound tricks, above).
 - Matty: a forward flip over an object, climbed into.
 

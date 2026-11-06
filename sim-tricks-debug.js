@@ -26,7 +26,7 @@ import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
-} from './sim-tricks.js?v=38570eab92da';
+} from './sim-tricks.js?v=1b98eeca2296';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
@@ -84,8 +84,7 @@ export const GATES = Object.freeze({
     ge('f.orbitSweep', 6.2832, 0), ge('f.orbitTurn', 0.8, 0), ge('f.orbitSpd', 1.0, 0),
   ],
   barani: [
-    ge('f.barP', 5.236, 0), band('f.barR', 2.356, 3.927, 0), ge('f.upEnd', 0.6, 0),
-    le('v.loopRise', 2, 0),
+    ge('f.barP', 5.236, 0.35), band('f.barR', 2.356, 3.927, 0), ge('f.upEnd', 0.5, 0),
   ],
   immelmann: [
     ge('f.phImmel', 1, 1),
@@ -210,7 +209,7 @@ function context(f) {
     absP, absR, absY, rollFirst, pitchFirst, yawFirst, objU, objO,
     'v.pathP': v.pathP, 'v.pathR': v.pathR, 'v.pathY': v.pathY, 'v.inv': v.inv, 'v.span': v.span,
     'v.drop': v.drop, 'v.follow': v.follow, 'v.close': v.close, 'v.head': v.head, 'v.opp': v.opp,
-    'v.rad': v.rad, 'v.objOrbit': v.objOrbit, 'v.obj': v.obj, 'v.meanDot': v.meanDot,
+    'v.rad': v.rad, 'v.objOrbit': v.objOrbit, 'v.obj': v.obj, 'v.meanDot': v.meanDot, 'v.under': v.under,
     'f.pitch': f.pitch, '-f.pitch': -f.pitch, 'f.tYaw360': f.tYaw360, 'f.peakY': f.peakY,
     'f.upMin': f.upMin, 'f.upMax': f.upMax, 'f.travelH': f.travelH, 'f.dur': f.dur, 'f.spdPeak': f.spdPeak,
     'Math.max(absR, v.pathR)': Math.max(absR, v.pathR),
@@ -308,6 +307,9 @@ function sawOf(f, v, ctx) {
     orbitR: r3(f.orbitR), orbitSweepDeg: degOf(f.orbitSweep), orbitTurn: r3(f.orbitTurn), orbitSpd: r3(f.orbitSpd),
     orbitFit: r3(f.orbitFit), orbitPole: f.orbitPole,
     baraniPitchDeg: degOf(f.barP), baraniTwistDeg: degOf(f.barR), upEnd: r3(f.upEnd),
+    // The segment's twist: its turn about the body axis nearest the flight
+    // path, roll or yaw (the Barani's).
+    twistDeg: degOf(f.twist),
     // Ham: the turn about the vertical while up-Z < -0.5, and that time's
     // share of the segment.
     invYawDeg: degOf(v.invYaw), inv50: r3(f.dur > 0 ? f.invYawT / f.dur : 0),
@@ -340,10 +342,13 @@ export function phaseRecord(lp) {
         if (m.climb != null) {
           x.climb = r3(m.climb); x.up = r3(m.up); x.over = m.over; x.under = m.under;
           x.crossDeg = degOf(m.cross); x.backDeg = degOf(m.back);
+          if (m.ag != null) x.ag = r3(m.ag);
         }
         return x;
       });
       o.leadDeg = degOf(r.ms.lead); o.trailDeg = degOf(r.ms.trail); o.tail = r3(r.ms.tail);
+      if (r.ms.still != null) o.stillDeg = degOf(r.ms.still);
+      if (r.ms.near != null) o.near = r3(r.ms.near);
     }
     out[id] = o;
   }
@@ -369,7 +374,7 @@ function weakest(gates, n) {
 const SEG_SRC = {
   absR: 'absR', absY: 'absY', loopRise: 'v.loopRise', loopRet: 'v.loopRet', loopSweep: 'v.loopSweep',
   drop: 'v.drop', inv: 'v.inv', rollFirst: 'rollFirst', follow: 'v.follow', pathR: 'v.pathR', head: 'v.head', upEnd: 'f.upEnd',
-  pitch: 'f.pitch', dur: 'f.dur', againstNose: 'Math.max(v.against, v.invAg)',
+  pitch: 'f.pitch', dur: 'f.dur', againstNose: 'Math.max(v.against, v.invAg)', under: 'v.under',
 };
 function phaseMiss(id, val, lp) {
   const spec = PHASE_SPECS[id];
@@ -378,8 +383,13 @@ function phaseMiss(id, val, lp) {
   const w = weakest(segs, 2).map(gateText);
   const r = lp && lp[id];
   if (r) {
-    if (r.reached < spec.ph.length) w.push('phases ' + r.reached + '/' + spec.ph.length + ' in order');
-    else if (r.ms && spec.tail && !(r.ms.tail >= spec.tail.t)) w.push('tail ' + r.ms.tail.toFixed(2) + ' s needs ≥' + spec.tail.t);
+    if (r.reached < spec.ph.length) {
+      // The last phase also asks its tail and, the Maverick's, an object near.
+      const last = r.reached === spec.ph.length - 1 && spec.near != null ? ' (the last: an object within 2 m ' + spec.near + ' of the push and glide, or a gap)' : '';
+      w.push('phases ' + r.reached + '/' + spec.ph.length + ' in order' + last);
+    } else if (r.ms && spec.tail && !(r.ms.tail >= spec.tail.t)) w.push('tail ' + r.ms.tail.toFixed(2) + ' s needs ≥' + spec.tail.t);
+    else if (r.ms && spec.still != null && !(r.ms.still <= spec.still)) w.push('twist ' + degOf(r.ms.still) + '° across the phases needs ≤' + degOf(spec.still) + '°');
+    else if (r.ms && spec.near != null && !(r.ms.near >= spec.near)) w.push('near an object ' + (r.ms.near || 0).toFixed(2) + ' of the push and glide needs ≥' + spec.near);
   }
   return w;
 }
