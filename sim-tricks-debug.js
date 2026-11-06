@@ -26,7 +26,7 @@ import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
-} from './sim-tricks.js?v=a6abea13a319';
+} from './sim-tricks.js?v=1b98eeca2296';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
@@ -348,6 +348,7 @@ export function phaseRecord(lp) {
       });
       o.leadDeg = degOf(r.ms.lead); o.trailDeg = degOf(r.ms.trail); o.tail = r3(r.ms.tail);
       if (r.ms.still != null) o.stillDeg = degOf(r.ms.still);
+      if (r.ms.near != null) o.near = r3(r.ms.near);
     }
     out[id] = o;
   }
@@ -382,9 +383,13 @@ function phaseMiss(id, val, lp) {
   const w = weakest(segs, 2).map(gateText);
   const r = lp && lp[id];
   if (r) {
-    if (r.reached < spec.ph.length) w.push('phases ' + r.reached + '/' + spec.ph.length + ' in order');
-    else if (r.ms && spec.tail && !(r.ms.tail >= spec.tail.t)) w.push('tail ' + r.ms.tail.toFixed(2) + ' s needs ≥' + spec.tail.t);
+    if (r.reached < spec.ph.length) {
+      // The last phase also asks its tail and, the Maverick's, an object near.
+      const last = r.reached === spec.ph.length - 1 && spec.near != null ? ' (the last: an object within 2 m ' + spec.near + ' of the push and glide, or a gap)' : '';
+      w.push('phases ' + r.reached + '/' + spec.ph.length + ' in order' + last);
+    } else if (r.ms && spec.tail && !(r.ms.tail >= spec.tail.t)) w.push('tail ' + r.ms.tail.toFixed(2) + ' s needs ≥' + spec.tail.t);
     else if (r.ms && spec.still != null && !(r.ms.still <= spec.still)) w.push('twist ' + degOf(r.ms.still) + '° across the phases needs ≤' + degOf(spec.still) + '°');
+    else if (r.ms && spec.near != null && !(r.ms.near >= spec.near)) w.push('near an object ' + (r.ms.near || 0).toFixed(2) + ' of the push and glide needs ≥' + spec.near);
   }
   return w;
 }

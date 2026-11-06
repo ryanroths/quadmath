@@ -230,6 +230,12 @@ const MATTY_BAR = barAt(1.8, 2.3, 3.9, 4.6);
 const BF_MATTY_BAR = barAt(2.0, 2.4, 5.4, 5.9);
 // The Maverick's gap: flown through before the pull-up and back out after.
 const MAV_GAP = gapAt(-1.3, -0.9, 4.3, 7.5);
+// The Maverick drops back under or through an object (near one, within 2 m,
+// a quarter of its push and glide back): a bar over the bf Maverick's glide
+// back, clear of its path; a wall 1 m beside the others' (the Warehouse's
+// racks and decks are never far).
+const MAV_BAR = barAt(-1.5, -0.5, 5.2, 5.6);
+const MAV_WALL = [{ min: { x: -15 * WS, y: 0, z: 1.0 * WS }, max: { x: 15 * WS, y: 12 * WS, z: 1.3 * WS } }];
 // The Half Mavvy's object: a slab 1 m above the top of its climb, over the
 // whole of it (under it for 40 % of the maneuver).
 const HMV_CEIL = barAt(-6, 3, 9.0, 9.5);
@@ -270,9 +276,9 @@ const LIBRARY = [
   // Maverick: a half loop back to an inverted top, a forward pitch that stops
   // it, flown back towards the entry against the nose; once through a gap and
   // back out of it.
-  { id: 'maverick', name: 'mav-std', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitch: -7.5, thr: 1.0 }, { t: 0.21, pitch: -7.5, thr: 0.15 }, { t: 0.6, pitch: 5.0, thr: 0.4 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.4 } },
-  { id: 'maverick', name: 'mav-slow', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitch: -7.5, thr: 1.0 }, { t: 0.21, pitch: -7.5, thr: 0.15 }, { t: 0.8, pitch: 3.5, thr: 0.35 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.6 } },
-  { id: 'maverick', name: 'mav-gap', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitch: -7.5, thr: 1.0 }, { t: 0.21, pitch: -7.5, thr: 0.15 }, { t: 0.8, pitch: 3.5, thr: 0.35 }, { t: 0.7, thr: 0.6 }], opts: { x0: -2, z0: 5, vx: 6, maxT: 2.6, gaps: MAV_GAP } },
+  { id: 'maverick', name: 'mav-std', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitch: -7.5, thr: 1.0 }, { t: 0.21, pitch: -7.5, thr: 0.15 }, { t: 0.6, pitch: 5.0, thr: 0.4 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.4, colliders: MAV_WALL } },
+  { id: 'maverick', name: 'mav-slow', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitch: -7.5, thr: 1.0 }, { t: 0.21, pitch: -7.5, thr: 0.15 }, { t: 0.8, pitch: 3.5, thr: 0.35 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.6, colliders: MAV_WALL } },
+  { id: 'maverick', name: 'mav-gap', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitch: -7.5, thr: 1.0 }, { t: 0.21, pitch: -7.5, thr: 0.15 }, { t: 0.8, pitch: 3.5, thr: 0.35 }, { t: 0.7, thr: 0.6 }], opts: { x0: -2, z0: 5, vx: 6, maxT: 2.6, gaps: MAV_GAP, colliders: MAV_WALL } },
   // Immelmann: a half loop back climbing, the throttle cut over the top, a
   // half roll to upright, out the way it came and higher.
   { id: 'immelmann', name: 'imm-std', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitch: -7.5, thr: 1.0 }, { t: 0.21, pitch: -7.5, thr: 0.15 }, { t: 0.26, roll: 12, thr: 0.15 }, { t: 0.7, thr: 0.8 }], opts: { z0: 5, vx: 8, maxT: 2.0 } },
@@ -345,9 +351,9 @@ const PILOT_LIBRARY = [
   { id: 'matty', name: 'pilot-matty-actual', phases: [{ t: 0.15, thr: 1.0 }, { t: 0.5, pitchS: 0.81, thr: 0.15 }, { t: 0.45, pitchS: 0.81, thr: 0.95 }, { t: 0.8, thr: 0.55 }], opts: { z0: 4, vx: 5, maxT: 2.4, colliders: MATTY_BAR, rates: WHOOP_ACTUAL, seed: 105, noise: 0.05, thrWobble: 0.05 } },
   { id: 'matty', name: 'pilot-matty-kiss', phases: [{ t: 0.15, thr: 1.0 }, { t: 0.5, pitchS: 0.77, thr: 0.15 }, { t: 0.45, pitchS: 0.77, thr: 0.95 }, { t: 0.8, thr: 0.55 }], opts: { z0: 4, vx: 5, maxT: 2.4, colliders: MATTY_BAR, rates: WHOOP_KISS, seed: 106, noise: 0.05, thrWobble: 0.05 } },
   { id: 'powerloop', name: 'pilot-pl-actual', phases: [{ t: 0.22, pitchS: 0, thr: 0.8 }, { t: 1.05, pitchS: -0.82, thr: 0.86 }, { t: 0.5, pitchS: 0, thr: 0.5 }], opts: { z0: 6, vx: 7, maxT: 2.5, colliders: OBJ_BAR, rates: WHOOP_ACTUAL, seed: 106, noise: 0.05, thrWobble: 0.06 } },
-  { id: 'maverick', name: 'pilot-mav-actual', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitchS: -0.87, thr: 1.0 }, { t: 0.21, pitchS: -0.87, thr: 0.15 }, { t: 0.8, pitchS: 0.68, thr: 0.35 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.6, rates: WHOOP_ACTUAL, seed: 201, noise: 0.05, thrWobble: 0.08 } },
-  { id: 'maverick', name: 'pilot-mav-kiss', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitchS: -0.84, thr: 1.0 }, { t: 0.21, pitchS: -0.84, thr: 0.15 }, { t: 0.8, pitchS: 0.61, thr: 0.35 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.6, rates: WHOOP_KISS, seed: 203, noise: 0.06, thrWobble: 0.08 } },
-  { id: 'maverick', name: 'pilot-mav-fwd', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitchS: -0.87, thr: 1.0 }, { t: 0.21, pitchS: -0.87, thr: 0.15 }, { t: 0.6, pitchS: 0.77, thr: 0.4 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.4, rates: WHOOP_ACTUAL, seed: 204, noise: 0.05, thrWobble: 0.07 } },
+  { id: 'maverick', name: 'pilot-mav-actual', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitchS: -0.87, thr: 1.0 }, { t: 0.21, pitchS: -0.87, thr: 0.15 }, { t: 0.8, pitchS: 0.68, thr: 0.35 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.6, rates: WHOOP_ACTUAL, seed: 201, noise: 0.05, thrWobble: 0.08, colliders: MAV_WALL } },
+  { id: 'maverick', name: 'pilot-mav-kiss', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitchS: -0.84, thr: 1.0 }, { t: 0.21, pitchS: -0.84, thr: 0.15 }, { t: 0.8, pitchS: 0.61, thr: 0.35 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.6, rates: WHOOP_KISS, seed: 203, noise: 0.06, thrWobble: 0.08, colliders: MAV_WALL } },
+  { id: 'maverick', name: 'pilot-mav-fwd', phases: [{ t: 0.1, thr: 0.8 }, { t: 0.21, pitchS: -0.87, thr: 1.0 }, { t: 0.21, pitchS: -0.87, thr: 0.15 }, { t: 0.6, pitchS: 0.77, thr: 0.4 }, { t: 0.7, thr: 0.6 }], opts: { z0: 5, vx: 6, maxT: 2.4, rates: WHOOP_ACTUAL, seed: 204, noise: 0.05, thrWobble: 0.07, colliders: MAV_WALL } },
   { id: 'yawspin', name: 'pilot-pole-spin-actual', phases: [{ t: 1.2, yawS: 0.95, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_POLE, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 301, noise: 0.04, thrWobble: 0.05 } },
   { id: 'yawspin', name: 'pilot-pole-spin-kiss', phases: [{ t: 1.15, yawS: 0.92, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_POLE, maxT: 2.1, rates: WHOOP_KISS, seed: 303, noise: 0.04, thrWobble: 0.05 } },
   { id: 'yawspin', name: 'pilot-tree-spin', phases: [{ t: 1.2, yawS: 0.94, thr: 0.5 }, { t: 0.45, yawS: 0, thr: 0.45 }], opts: { ...NEAR_TREE, maxT: 2.2, rates: WHOOP_ACTUAL, seed: 304, noise: 0.04, thrWobble: 0.05 } },
@@ -1055,7 +1061,7 @@ async function flyBf(phases, opts) {
 // placed round the Air65's path).
 const BF_MATTY = { id: 'matty', name: 'bf-matty', phases: [{ t: 0.3, tS: 1.0 }, { t: 0.5, pitch: 6, tS: 0.05 }, { t: 0.45, pitch: 6, tS: 0.9 }, { t: 0.8, tS: 0.45 }], opts: { z0: 4, vx: 5, maxT: 2.5, colliders: BF_MATTY_BAR } };
 const BF_HALFMATTY = { id: 'halfmatty', name: 'bf-halfmatty', phases: [{ t: 0.3, tS: 1.0 }, { t: 0.52, pitch: 6, tS: 0.05 }, { t: 0.9, tS: 0.1 }], opts: { z0: 4, vx: 5, maxT: 2.0, colliders: BF_MATTY_BAR } };
-const BF_MAVERICK = { id: 'maverick', name: 'bf-maverick', phases: [{ t: 0.1, tS: 0.6 }, { t: 0.25, pitch: -6.3, tS: 1.0 }, { t: 0.25, pitch: -6.3, tS: 0.15 }, { t: 0.8, pitch: 3.5, tS: 0.25 }, { t: 0.7, tS: 0.5 }], opts: { z0: 5, vx: 6, maxT: 2.6 } };
+const BF_MAVERICK = { id: 'maverick', name: 'bf-maverick', phases: [{ t: 0.1, tS: 0.6 }, { t: 0.25, pitch: -6.3, tS: 1.0 }, { t: 0.25, pitch: -6.3, tS: 0.15 }, { t: 0.8, pitch: 3.5, tS: 0.25 }, { t: 0.7, tS: 0.5 }], opts: { z0: 5, vx: 6, maxT: 2.6, colliders: MAV_BAR } };
 const BF_IMMELMANN = { id: 'immelmann', name: 'bf-immelmann', phases: [{ t: 0.1, tS: 0.6 }, { t: 0.25, pitch: -6.3, tS: 1.0 }, { t: 0.25, pitch: -6.3, tS: 0.15 }, { t: 0.26, roll: 12, tS: 0.15 }, { t: 0.7, tS: 0.6 }], opts: { z0: 5, vx: 7, maxT: 2.0 } };
 const BF_HALFMAVVY = { id: 'halfmavvy', name: 'bf-halfmavvy', phases: [{ t: 0.45, pitch: -2.7, tS: 1.0 }, { t: 0.55, pitch: 5, tS: 0.3 }, { t: 0.27, roll: 11.5, tS: 0.3 }, { t: 0.95, pitch: 5, tS: 0.5 }, { t: 0.9, tS: 0.45 }], opts: { z0: 4, vx: 5, maxT: 3.6, colliders: HMV_CEIL } };
 // The owner's Baranis on the bf core: at 28.6 and 34.2 s a punch, a half
@@ -1069,7 +1075,7 @@ const mavYaw = (yawT) => [{ t: 0.1, tS: 0.6 }, { t: 0.25, pitch: -6.3, tS: 1.0 }
 // The Maverick as the owner flies it in two segments: the pull, a pause
 // (MERGE_GAP_S or less after the first settles), the push gliding back.
 const mavInTwo = (pause) => [{ t: 0.1, tS: 0.6 }, { t: 0.8, pitch: -3.0, tS: 0.9 }, { t: pause, tS: 0.55 }, { t: 0.6, pitch: 3.8, tS: 0.25 }, { t: 0.8, tS: 0.4 }];
-const MAV_TWO_OPTS = { z0: 8, vx: 6, maxT: 4.2 };
+const MAV_TWO_OPTS = { z0: 8, vx: 6, maxT: 4.2, colliders: MAV_WALL };
 const BF_LIBRARY = [
   ...['flip-front', 'flip-back', 'roll-fast', 'yaw-fast', 'ss-fast', 'pole-spin', 'ham-inv', 'ham-flip-yaw-flip',
     'sl-std', 'crd-std', 'jf-fast', 'sb-fast', 'rk-std', 'ck-std', 'dive-std', 'gap-generic-slot', 'prox-std'].map((n) => LIBRARY.find((c) => c.name === n)),
@@ -1146,11 +1152,17 @@ test('bf core, Maverick: a pull back of 120-225 climbing 1 m, forward 60 or more
   assert.ok(fwd.turn >= 60 * DEG, 'forward ' + phTag(r, 'maverick'));
   assert.ok(ms.tail >= 0.3, 'against the nose for ' + ms.tail.toFixed(2) + ' s');
   assert.ok(ms.still < 60 * DEG, 'no twist across it: ' + Math.round(ms.still / DEG));
+  assert.ok(ms.near >= 0.25, 'dropped back under the bar: near it ' + ms.near.toFixed(2) + ' of the push and glide');
   assert.equal(r.gapBack, 0, 'no gap, no bonus');
+  // The same flight in open air: no object to drop back under, no Maverick.
+  const open = await flyBf(BF_MAVERICK.phases, { ...BF_MAVERICK.opts, colliders: null });
+  assert.ok(!open.hits.includes('maverick'), 'open air: ' + open.hits.join(',') + ' ' + open.why);
+  assert.equal(open.phases.maverick.score, 0);
   // In through a gap before the pull-up and back out of it: the bonus.
   const g = await flyBf(BF_MAVERICK.phases, { ...BF_MAVERICK.opts, x0: -2, gaps: MAV_GAP });
   assert.equal(g.hits.filter((h) => h === 'maverick').length, 1, g.why);
   assert.equal(g.gapBack, 1, 'back out through the gap it came in by');
+  assert.equal(g.phases.maverick.ms.near, 1, 'through the gap: an object passed');
   assert.equal(scoreTrick('maverick', 0, 1, 1, { bonus: MAV_GAP_MUL }), Math.round(TRICK_BY_ID.maverick.points * MAV_GAP_MUL));
   // A pull of about 90 degrees is not one.
   const short = await flyBf([{ t: 0.1, tS: 0.6 }, { t: 0.125, pitch: -6.3, tS: 1.0 }, { t: 0.125, pitch: -6.3, tS: 0.15 }, { t: 0.8, pitch: 3.5, tS: 0.25 }, { t: 0.7, tS: 0.5 }], BF_MAVERICK.opts);

@@ -39,7 +39,7 @@ site lists both 150 and 50).
 | `flip` | Flip | Beginner | 50 | 75 | Phase matcher: **≥300° of pitch within any 1.2 s**, little net roll/yaw. Any speed, any travel. Front or back by the way the pitch turned (the pop says Front Flip / Back Flip). |
 | `roll` | Roll | Beginner | 50 | 75 | **≥300° of roll within any 1.5 s at a mean rate of ≥250°/s**, little net pitch/yaw. Slower turns are not tricks. |
 | `yawspin` | Yaw Spin | Beginner | 50 | 75 | Continuous ~360° yaw, mostly upright. |
-| `maverick` | Maverick Loop | Beginner | 100 | 100 | Phase matcher, as the owner flies it: a **pull back of 120–225° climbing ≥1 m** (it need not go inverted), then a **forward pitch ≥60°** that stops it, then **back towards the entry against the nose** (velocity·nose ≤ −0.3 on average) for **≥0.3 s**: the glide back. **No twist** between the pull and the push: the roll and the yaw each turn **under 60°** across them. Often two segments, the pull and the push, merged (below). Back out through the authored gap it came in by (passed at most 1.5 s before, or in the maneuver): **1.25×** points. |
+| `maverick` | Maverick Loop | Beginner | 100 | 100 | Phase matcher, as the owner flies it: a **pull back of 120–225° climbing ≥1 m** (it need not go inverted), then a **forward pitch ≥60°** that stops it, then **back towards the entry against the nose** (velocity·nose ≤ −0.3 on average) for **≥0.3 s**: the glide back. **No twist** between the pull and the push: the roll and the yaw each turn **under 60°** across them (the owner's Maverick uses no yaw). The push and glide back **drop back under or through an object**: near one (within 2 m) for **≥25 %** of them, or back out through an authored gap. In open air it is not a Maverick. Often two segments, the pull and the push, merged (below). Back out through the authored gap it came in by (passed at most 1.5 s before, or in the maneuver): **1.25×** points. |
 | `splits` | Split-S | Beginner | 100 | 100 | Phase matcher: a **roll of 103–258°**, then a **back pitch of 69–258°** (pull), the path dropping ≥0.35 m, flying with the nose. The old terms' tolerances, so it fires where it did. |
 | `immelmann` | Immelmann | Beginner | 100 | 100 | Phase matcher, the Split-S's mirror: **back pitch 180 ± 45° climbing ≥1 m**, then a **roll of 180 ± 45°**, ending **upright**, the **heading reversed** (180 ± 45°), **out higher** than in. |
 | `cradle` | Cradle | Beginner | 150 | 150 | Pass an object, pitch back to keep it in view, level out **flying backward** clear of it. Not a flip. |
@@ -120,7 +120,9 @@ yaw (about the body's up axis) each turn at most 60° (from lowest to
 highest). A Barani twisted by yaw at its top pitches the body back, then
 forward, as a Maverick does; the twist tells them apart. A phase may also
 ask a share of it flown **against the nose** (the Half Mavvy's after its
-roll, 0.3).
+roll, 0.3), and a trick a share of its last phase and what follows **near an
+object** (the Maverick's, 0.25, within 2 m; an authored gap passed counts
+whole).
 
 ### Flip, Roll, Powerloop: rotation first, path second
 
@@ -176,7 +178,7 @@ Pitch **sign** is the primary split. A Powerloop must never also score as Matty.
 ### Half Mavvy vs Maverick
 
 - Maverick: back, then forward, no roll and no yaw (each under 60° across
-  it); flown back against the nose.
+  it); flown back against the nose, dropping back near an object.
 - Half Mavvy: forward, a **half roll**, forward on to upright, 330–450° net,
   climbing 3 m, 2 s or longer. The roll and the way of the pitch are the
   split; Half Mavvy scores above both Maverick and Matty.
@@ -303,8 +305,9 @@ Order of the 180° axis is the split.
 
 - Cradle: look-back at a passed object, then level **backward**. Small invert
   fraction. Not a loop closure.
-- Maverick: a pull back, the pitch reversed, flown back against the nose.
-  Its glide back alone looks like a Cradle; split from its pull by a pause
+- Maverick: a pull back, the pitch reversed, flown back against the nose
+  and dropped back under or through an object (near one, within 2 m, a
+  quarter of the push and glide). Its glide back alone looks like a Cradle; split from its pull by a pause
   under 0.8 s, it is the Maverick (compound tricks, above).
 - Matty: a forward flip over an object, climbed into.
 

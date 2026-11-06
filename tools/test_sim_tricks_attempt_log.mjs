@@ -193,9 +193,11 @@ export function baraniFrom(s, g) {
 //   roll, the pull before it (B) its lead. Turning outside and across the
 //   phases is not in the logs: none, but the roll across the Maverick's and
 //   the Matty's pitch. The Maverick's twist across its phases is the
-//   segment's roll or yaw, the larger (net); the Half Mavvy's share against
-//   the nose after the roll the segment's (against, or of the inverted part,
-//   the larger).
+//   segment's roll or yaw, the larger (net), and its push and glide back
+//   near an object the segment's share (obj), or 1 when it went back out
+//   through the gap it came in by; the Half Mavvy's share against the nose
+//   after the roll the segment's (against, or of the inverted part, the
+//   larger).
 export function phasesFromLog(s, f, v, flipSpan, flipDir, loop, pre) {
   const absR = Math.abs(s.roll);
   const B = Math.max(0, (s.pathP - s.pitch) / 2), F = Math.max(0, (s.pathP + s.pitch) / 2);
@@ -210,7 +212,7 @@ export function phasesFromLog(s, f, v, flipSpan, flipDir, loop, pre) {
     powerloop: ms([{ turn: Math.max(loop.up, loop.dn), t: 0 }]),
     splits: ms([{ turn: absR, cross: 0, back: 0 }, { turn: -s.pitch, cross: 0, back: 0 }]),
     immelmann: rollFirst < 0 ? ms([ph(B, { back: F }), ph(absR, { climb: 0 })]) : null,
-    maverick: B >= 1 * DEG ? ms([ph(B, { cross: absR }), ph(F, { climb: 0, cross: absR })], { tail: s.against > s.follow ? s.against * s.dur : 0, still: Math.max(absR, Math.abs(s.yaw)) }) : null,
+    maverick: B >= 1 * DEG ? ms([ph(B, { cross: absR }), ph(F, { climb: 0, cross: absR })], { tail: s.against > s.follow ? s.against * s.dur : 0, still: Math.max(absR, Math.abs(s.yaw)), near: s.gapBack ? 1 : s.obj }) : null,
     matty: ms([ph(F, { climb: pre === pre && pre != null && s.alt0 >= pre ? top - pre : 0, over: over ? 1 : 0, back: B, cross: absR })]),
     halfmatty: ms([ph(F, { over: over ? 1 : 0, up: s.upEnd, back: B })]),
     halfmavvy: rollFirst < 0 ? ms([ph(F / 2, { climb: 0 }), ph(absR, { climb: 0 }), ph(F / 2, { climb: 0, ag: Math.max(s.against, s.invAg) })], { lead: B }) : null,
@@ -231,7 +233,7 @@ const LOGGED_PH = new Set(['flip', 'powerloop', 'splits', 'immelmann']);
 const SINCE_MERGE = {
   matty: () => 1,
   halfmatty: () => 1,
-  maverick: (s) => (Math.max(Math.abs(s.roll), Math.abs(s.yaw)) <= PHASE_SPECS.maverick.still ? 1 : 0),
+  maverick: (s) => (Math.max(Math.abs(s.roll), Math.abs(s.yaw)) <= PHASE_SPECS.maverick.still && (s.gapBack || s.obj >= PHASE_SPECS.maverick.near) ? 1 : 0),
   halfmavvy: (s) => (s.under >= 0.25 && Math.max(s.against, s.invAg) >= 0.3 ? 1 : 0),
 };
 
@@ -350,14 +352,21 @@ export function mergeFromLog(win, pre) {
     let i = 0, pull = 0, climb = 0;
     while (i < moves.length && moves[i].turn < 0) { pull -= moves[i].turn; climb = Math.max(climb, riseOf(moves[i].r.saw)); i++; }
     let push = 0, back = 0, bigBack = 0;
+    // The push and glide back near an object: the share its records were
+    // (obj, by their steps), or 1 when the last went back out through a gap.
+    const pushRecs = new Set();
     for (; i < moves.length; i++) {
       push += moves[i].turn;
+      pushRecs.add(moves[i].r);
       if (moves[i].turn < 0) { back = Math.max(back, -moves[i].turn); if (-moves[i].turn > 0.785) bigBack = 1; }
     }
+    let nN = 0, nObj = 0;
+    for (const r of pushRecs) { nN += r.saw.n || 0; nObj += (r.saw.obj || 0) * (r.saw.n || 0); }
+    const near = win[win.length - 1].saw.gapBack ? 1 : (nN ? nObj / nN : 0);
     const ms = { ph: [
       { turn: pull, t: 0, climb, up: 0, over: 0, under: 0, cross: roll, back: 0 },
       { turn: push, t: 0, climb: 0, up: 0, over: 0, under: 0, cross: roll, back: bigBack ? 9 : back },
-    ], lead: 0, trail: 0, tail, still };
+    ], lead: 0, trail: 0, tail, still, near };
     out.maverick = matchSpec(PHASE_SPECS.maverick, ms, f, v);
   }
   // Matty: one forward run.
@@ -721,6 +730,9 @@ test('log 3: the Mavericks split across segments are one Maverick each, and no C
       assert.ok(r.t0 - LOG3.bySeq.get(b).t < 2 && r.t0 > LOG3.bySeq.get(b).t);
     }
   }
+  // Both dropped back near an object (the push and glide records 0.95-1.0
+  // of their steps within 2 m of one).
+  for (const seq of [61, 62, 63, 65, 66]) assert.ok(LOG3.bySeq.get(seq).saw.obj >= 0.9, 'seq ' + seq + ' near an object');
   // Alone, the glide back is still a Cradle; merged, it is not one.
   assert.equal(classify(featNow(LOG3, LOG3.bySeq.get(66)).f).id, 'cradle');
   assert.ok(MERGE_GAP_S > 0.79 && MERGE_GAP_S < 0.81);

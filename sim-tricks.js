@@ -44,7 +44,8 @@ export const ROLL_WIN_S = 1.5;
 // the phase matcher: t, pitch, roll, the yaw about the vertical (vyaw,
 // below), the horizontal position in metres (x, z), the altitude (m), up-Z,
 // velocity·nose (NaN below 0.85 m/s), the velocity along physics x (m/s),
-// the objects at hand (PH_OVER: one below, PH_UNDER: one above), the
+// the objects at hand (PH_OVER: one below, PH_UNDER: one above, PH_NEAR:
+// one within 2 m), the
 // authored gaps passed so far, the velocity along physics y, the heading
 // (rad), the yaw about the body's up axis and the twist (rad, each summed
 // from the segment's start; the twist below, BARANI_P). MANEUVER_SUSTAIN_S
@@ -101,6 +102,7 @@ export const PH_CROSS = 0.785;
 export const PH_ROWS = 200;
 export const PH_OVER = 1;
 export const PH_UNDER = 2;
+export const PH_NEAR = 4;
 // Maverick: back out through the authored gap it came in by (passed at most
 // MAV_GAP_S before the segment began, or in it) earns MAV_GAP_MUL points.
 export const MAV_GAP_S = 1.5;
@@ -800,6 +802,9 @@ function mul() {
 //   still across the phases, first to last, the roll and the yaw (about the
 //         body's up axis) each turn at most this (rad, the most each turned
 //         from its lowest to its highest): no twist in it
+//   near  from the last phase's start to the end, this share of the steps or
+//         more near an object (PH_NEAR: within 2 m), or an authored gap
+//         passed through
 // matchSpec scores one set of measured phases (0-1); measureSpec finds the
 // best set in a history. The scores are the features classifyFeat reads
 // (f.phFlip ... f.phHMavvy); the attempt-log replay scores logs that predate
@@ -838,11 +843,14 @@ export const PHASE_SPECS = Object.freeze({
   // about 70 degrees past level). Often two segments (the pull, the push).
   // No twist between the pull and the push: the roll and the yaw each turn
   // under 60 degrees across them (a Barani twisted with yaw at its top
-  // pitches the body back, then forward, too).
+  // pitches the body back, then forward, too). The push and the glide back
+  // drop back under or through an object: near one (within 2 m) a quarter of
+  // the time or more, or back through an authored gap.
   maverick: Object.freeze({
     ph: [{ ax: 'p', sg: -1, lo: 2.094, hi: 3.927, climb: 1 }, { ax: 'p', sg: 1, lo: 1.047 }],
     tail: { dot: -0.3, t: 0.3 },
     still: 1.047,
+    near: 0.25,
     merge: 1,
   }),
   // Matty, as the owner flies it: 250-400 degrees of forward pitch over an
@@ -924,7 +932,7 @@ export function phaseTerm(ph, m, crossMax) {
 }
 
 // A trick's score (0-1) on measured phases ms: { ph: [m, ...], lead, trail,
-// tail, still } and the maneuver's features.
+// tail, still, near } and the maneuver's features.
 export function matchSpec(spec, ms, f, v) {
   const ph = spec.ph;
   if (!ms || !ms.ph || ms.ph.length !== ph.length) return 0;
@@ -933,6 +941,7 @@ export function matchSpec(spec, ms, f, v) {
   if (spec.seg) for (let i = 0; i < spec.seg.length; i++) s *= segTerm(spec.seg[i], f, v);
   if (spec.tail) s *= atLeast(ms.tail || 0, spec.tail.t, 0);
   if (spec.still != null) s *= atMost(ms.still || 0, spec.still, 0);
+  if (spec.near != null) s *= (ms.near || 0) >= spec.near ? 1 : 0;
   if (ph[0].win == null) s *= atMost(ms.lead || 0, spec.lead || PH_SLOP, 0) * atMost(ms.trail || 0, PH_SLOP, 0);
   return s;
 }
@@ -984,6 +993,20 @@ function stillOf(H, a, b) {
     if (Y < yLo) yLo = Y; else if (Y > yHi) yHi = Y;
   }
   return Math.max(rHi - rLo, yHi - yLo);
+}
+
+// For each row u, the share of rows u..n-1 near an object (PH_NEAR), or 1
+// when an authored gap is passed in them, into out (Float64Array(n)).
+function nearFrom(H, n, out) {
+  const W = HIST_W;
+  let c = 0, gap = 0;
+  for (let u = n - 1; u >= 0; u--) {
+    const o = u * W;
+    if (H[o + 10] & PH_NEAR) c++;
+    if (u > 0 && H[o + 11] > H[o - W + 11]) gap = 1;
+    out[u] = gap ? 1 : c / (n - u);
+  }
+  return out;
 }
 
 // Pitch and roll's turn between rows a and b, the larger.
@@ -1068,6 +1091,7 @@ export function measureSpec(spec, H, n, f, v, dq, ctx) {
     prev[j] = lead <= leadMax ? 1 - PH_TIE * lead / leadMax : 0;
   }
   const nxt = spec.tail ? tailFrom(H, n, spec.tail.dot, new Int32Array(n), ux, uy) : null;
+  const nearU = spec.near != null ? nearFrom(H, n, new Float64Array(n)) : null;
   const pm = {};
   for (let i = 0; i < K; i++) {
     const p = ph[i], col = PH_COL[p.ax], last = i === K - 1, fromPre = p.climbFrom === 'pre';
@@ -1114,6 +1138,7 @@ export function measureSpec(spec, H, n, f, v, dq, ctx) {
           const trail = turnPR(H, r, n - 1);
           if (trail > PH_SLOP) sc = 0;
           else if (spec.tail && !(tailT >= spec.tail.t)) sc = 0;
+          else if (nearU && !(nearU[a] >= spec.near)) sc = 0;
           else sc *= 1 - PH_TIE * trail / PH_SLOP;
         }
         if (sc > cur[jb]) { cur[jb] = sc; arg[i * m + jb] = ja; any = 1; }
@@ -1138,6 +1163,7 @@ export function measureSpec(spec, H, n, f, v, dq, ctx) {
   ms.lead = turnPR(H, 0, ms.ph[0].a);
   ms.trail = turnPR(H, ms.ph[K - 1].b, n - 1);
   if (spec.still != null) ms.still = stillOf(H, ms.ph[0].a, ms.ph[K - 1].b);
+  if (nearU) ms.near = nearU[ms.ph[K - 1].a];
   if (nxt) {
     const a = ms.ph[K - 1].a;
     ms.tail = nxt[a] < n ? H[(n - 1) * W] - H[nxt[a] * W] : 0;
@@ -1952,9 +1978,10 @@ function noseDot(d, vx, vy, vz) {
 }
 
 // The objects at hand for the phase matcher: one below (PH_OVER), one above
-// (PH_UNDER), as the features count them (overN, underN).
+// (PH_UNDER), one within 2 m (PH_NEAR), as the features count them (overN,
+// underN, objNearN).
 function objFlags(clr) {
-  return (clr.over < 8 ? PH_OVER : 0) | (clr.up < 8 ? PH_UNDER : 0);
+  return (clr.over < 8 ? PH_OVER : 0) | (clr.up < 8 ? PH_UNDER : 0) | (clr.near < 7 ? PH_NEAR : 0);
 }
 
 function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, thr, vx, vy, vz, dtw) {

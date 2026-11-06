@@ -887,7 +887,13 @@ The owner flew a Barani log (11 attempts, Warehouse, bf core): Baranis at
   along the path, a yaw at the top of a vertical punch turned back on itself
   as the velocity reversed (186° read 58°, flown).
 - **Maverick**: no twist (`still`): across its phases the roll and the yaw
-  each turn under 60°. Ends travelling against the nose, as before.
+  each turn under 60° (the owner's uses no yaw: a pull back to start the
+  loop, a sharp push forward while it floats on backwards). Ends travelling
+  against the nose, as before. The owner, after: it **drops back under or
+  through an object**, so the push and glide back must be near one (within
+  2 m, the clearance scan's `near`, a new history flag `PH_NEAR`) for a
+  quarter of their steps or more, or go back out through an authored gap
+  (`near`). Log 3's Mavericks were near one for 95-100 % of theirs.
 - **Half Mavvy** goes **through an object**: under one (an object above,
   within 2.3 m) a quarter of the maneuver or more, and flown against the
   nose 0.3 of the time or more after the roll (a phase's `ag`). Without
@@ -906,6 +912,11 @@ On the bf core (`tools/test_sim_tricks.mjs`):
   there, on to upright: Barani.
 - The bf Maverick with a 181° yaw at its top: Barani, the Maverick's phases
   there but its twist 181°. With 41° of yaw: a Maverick still.
+- The bf Maverick drops back under a bar (near it 0.4 of its push and
+  glide): a Maverick; in open air, not one; in and back out through an
+  authored gap, a Maverick with the bonus. The library's and the pilot
+  traces' Mavericks fly beside a wall 1 m off their path (the js `mav-gap`
+  passes its gap during the pull only, so it has the wall too).
 - The Half Mavvy under a slab 1 m above its climb: Half Mavvy (under it 42 %
   of the time). The same flight in open air: Barani.
 - The js library's Barani rolled nose down while its thrust carried it along
@@ -929,6 +940,9 @@ replay as logged, times the twist and object terms.
   roll); 34.2 s is not a Maverick (yaw 184°). Seq 4 (23.9 s, not labelled by
   the owner) reads Barani too: back about 190°, a yaw of 187° (the heading
   turned 160°), forward 244°, up-Z 0.66 at the end.
+- The Maverick's object moves no label: log 3's two Mavericks stay (their
+  records within 2 m of an object 0.95-1.0 of their steps), logs 1 and 2
+  have none left.
 - **Logs 1-3**: three labels move, none of them fired before, all to
   Barani by the estimate:
   - log 2 seq 33 and 40 (82.6 and 91.4 s): back about 240° and 200°, a yaw
