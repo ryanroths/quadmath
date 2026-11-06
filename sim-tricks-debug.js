@@ -26,7 +26,7 @@ import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
-} from './sim-tricks.js?v=5396021d677d';
+} from './sim-tricks.js?v=38570eab92da';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
@@ -85,6 +85,7 @@ export const GATES = Object.freeze({
   ],
   barani: [
     ge('f.barP', 5.236, 0), band('f.barR', 2.356, 3.927, 0), ge('f.upEnd', 0.6, 0),
+    le('v.loopRise', 2, 0),
   ],
   immelmann: [
     ge('f.phImmel', 1, 1),
@@ -316,6 +317,8 @@ function sawOf(f, v, ctx) {
       maverick: r3(f.phMav), matty: r3(f.phMatty), halfmatty: r3(f.phHMatty), halfmavvy: r3(f.phHMavvy),
     },
     gapIn: f.gapIn, gapBack: f.gapBack,
+    // The altitude 1.0 s before the segment began (the Matty's climb).
+    alt1s: r3(f.alt1s),
   };
 }
 
@@ -366,6 +369,7 @@ function weakest(gates, n) {
 const SEG_SRC = {
   absR: 'absR', absY: 'absY', loopRise: 'v.loopRise', loopRet: 'v.loopRet', loopSweep: 'v.loopSweep',
   drop: 'v.drop', inv: 'v.inv', rollFirst: 'rollFirst', follow: 'v.follow', pathR: 'v.pathR', head: 'v.head', upEnd: 'f.upEnd',
+  pitch: 'f.pitch', dur: 'f.dur', againstNose: 'Math.max(v.against, v.invAg)',
 };
 function phaseMiss(id, val, lp) {
   const spec = PHASE_SPECS[id];
@@ -560,7 +564,10 @@ export function createTrickObserver(det, opts) {
     const ex = explainFeat(f, det.lastPhases);
     const rec = base('maneuver', t);
     rec.t0 = r3(segT0);
-    rec.result = ex.id;
+    // A compound trick: the merge's label (the detector's), and what merged.
+    const mg = det.lastMerge;
+    rec.result = mg ? det.lastId : ex.id;
+    rec.merged = mg ? { id: mg.id, segs: mg.segs, t: r3(mg.t), score: r3(mg.score), alone: ex.id } : null;
     rec.event = ev || null;
     rec.why = det.lastWhy || '';
     rec.dir = ex.id === 'flip' || ex.id === 'powerloop' ? (det.lastDir < 0 ? 'back' : 'front') : null;
@@ -581,6 +588,7 @@ export function createTrickObserver(det, opts) {
     else if (ex.pre.tiny) rec.reason = 'too small: every axis under ~97° turned and ~92° of path, inverted < 35 %';
     else if (!ex.id) rec.reason = 'no candidate reached ' + PICK_MIN + ' (top ' + (ex.pick.topId || '—') + ' ' + ex.pick.top + ')';
     else rec.reason = ex.candidates.find((c) => c.id === ex.id)?.reason || (ex.id === 'dive' ? 'dive fallback' : '');
+    if (mg) rec.reason = 'merged with the ' + (mg.segs - 1) + ' segment(s) before (pauses under 0.8 s): ' + mg.id + '; this one alone: ' + (ex.id || 'nothing');
     rec._explain = ex;
     emit(rec);
   }

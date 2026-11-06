@@ -758,3 +758,92 @@ with it).
   the estimate.
 - The Air65 and Fractal75 replays (`tools/test_sim_tricks_logs.mjs`) give
   the same labels at the same times as before.
+
+## 10. The third trick log: the owner's tricks as flown, and compound tricks
+
+The owner flew a third log (68 attempts, Warehouse, bf core) after the phase
+matcher shipped, in this order: Immelmanns (28-48 s), Half Mavvies
+(57-70 s), Matties (113-124 s), Mavericks (148-153 s). It is a fixture now
+(`tools/fixtures/tricklog-depot-bf-3.jsonl.gz`, verbatim), replayed with the
+other two.
+
+### What the log showed
+
+- **The Immelmanns scored** (seq 6, 10, 18): 3 of 3.
+- **The Mavericks split in two and scored Cradle.** At 151.4 + 152.0: seq 65
+  pulls back 138° (never inverted: up-Z no lower than 0.32), and 0.08 s later
+  seq 66 pushes 131° forward, flying against the nose (0.87). Alone, the push
+  is a Cradle. At 148.2: seq 61 pulls back about 152° and pitches forward,
+  seq 62 pulls 27° climbing, seq 63 pushes 121° against the nose; the pauses
+  0.57 and 0.07 s. The owner's Maverick does not go inverted, and pauses.
+- **The Matties climbed before the flip, not in it** (seq 50, 53): 286° and
+  296° of forward pitch over an object, against the nose (0.80), but rising
+  0.26 and 0.10 m inside the segment. The climb is in the second before.
+- **The Half Mavvies scored Barani** (seq 20, 27): a pull-up, forward pitch,
+  a half roll, forward pitch on to upright: 427° and 364° forward net, roll
+  203° and 179°, climbing 6.6 and 5.3 m over 3.1 s. The flip-and-twist fits
+  a Barani's 1.5 s window; nothing said a Barani is low.
+
+### The changes
+
+- **Compound tricks** (`mergeFeat`, `MERGE_GAP_S` = 0.8 s): the detector
+  keeps one history across consecutive segments while each pause is under
+  0.8 s and none of them scored, and when a segment finishes it scores the
+  matcher's tricks (all but Flip, Powerloop and Split-S) over the run from
+  each earlier segment's start, at most 4.5 s. A match stands over the
+  segment's own label unless that is a matcher trick ranked above it.
+- **Maverick**, as the owner flies it: a pull back of 120-225° climbing 1 m
+  (the 138° pull), forward 60° or more, then 0.3 s against the nose; no
+  inverted top.
+- **Matty**, as the owner flies it: 250-400° of forward pitch over an object,
+  against the nose half the time or more (or of the inverted part), upright,
+  climbed into: its top 1 m or more above the altitude 1.0 s before the
+  maneuver began (an altitude ring, `ALT_RING`), and no lower at the start
+  than then. Under or through the object is no longer asked (seq 50 passed
+  over nothing below it afterwards).
+- **Half Mavvy**, as the owner flies it: forward, a roll of 180 ± 45° between
+  the halves, forward on to upright; 330-450° forward net, a climb of 3 m,
+  2 s or longer. The pull-up before it may turn 120°, the pitch may run on
+  through the roll (90°). The previous Half Mavvy (pull to the vertical,
+  half roll, fall over the other way) is gone.
+- **Barani** climbs under 2 m. Its flip and twist were already inside 1.5 s.
+  (A segment limit of 1.5 s would have turned the Air65 log's Barani at
+  69.55 s, a longer segment, into a Flip.)
+- A phase's **climb** is from its low: a dive and a pull climbs from the
+  dive's bottom (the Maverick at 151.4 dived 3.3 m first).
+- The overlay logs each merge (`merged`: the trick, the segments, the
+  seconds, this one alone) and `saw.alt1s`.
+
+### Flown
+
+On the bf core (`tools/test_sim_tricks.mjs`):
+
+- A Maverick flown as a pull (137°), a pause (0.42 s to settle, 0.28 s more)
+  and a push (132° against the nose): one Maverick, merged from 2 segments;
+  the push alone is a Cradle and does not fire. With 1.08 s between them:
+  a Cradle, no Maverick.
+- A Matty punched into: 328° forward over the bar, upright, against the nose
+  0.89. The same over a solid block: still a Matty. In open air, or without
+  the punch (topping out level with the entry over a block): a Flip.
+- The owner's Half Mavvy: 363° forward net, roll 178°, climbing 4.0 m over
+  2.4 s, upright. The library's quick, low Barani is still a Barani.
+
+### The logs, replayed
+
+The replay (`replayLog`) scores each log as the detector does now, merges
+included. Logs before the matcher have no phases, and log 3's were the old
+definitions': the replay estimates the changed tricks from the logged totals
+(the Matty's climb from the records around 1.0 s before; merges for the
+pitch-only Maverick and Matty), and replays Flip, Powerloop, Split-S and
+Immelmann as logged.
+
+- **Log 3**: six labels change, the owner's six. Seq 20 and 27 Barani to
+  Half Mavvy; seq 50 and 53 nothing to Matty (climbed 1.2 and 1.7 m into
+  them); seq 63 Cradle to Maverick (merged with 61 and 62); seq 66 Cradle to
+  Maverick (merged with 65). The Immelmanns stay. Seq 56 (forward 260° net
+  with a half roll and 85° back inside it, cut at 4.5 s) is not a Matty.
+- **Logs 1 and 2**: unchanged. Two Flip and Powerloop segments there (log 1
+  seq 7 and 75) fit the new Matty but for the climb: each came down into
+  the flip and climbed inside it, so they stay a Flip and a Powerloop.
+- The Air65 and Fractal75 replays (`tools/test_sim_tricks_logs.mjs`) give
+  the same labels at the same times as before.

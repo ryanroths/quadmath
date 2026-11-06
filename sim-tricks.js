@@ -43,12 +43,12 @@ export const ROLL_WIN_S = 1.5;
 // Each segment's history, one row of HIST_W per step, for the windows and
 // the phase matcher: t, pitch, roll, the yaw about the vertical (vyaw,
 // below), the horizontal position in metres (x, z), the altitude (m), up-Z,
-// velocity·nose (NaN below 0.85 m/s), the horizontal velocity along the
-// entry's direction of travel (m/s, negative: back towards the entry), the
-// objects at hand (PH_OVER: one below, PH_UNDER: one above) and the authored
-// gaps passed so far. MANEUVER_SUSTAIN_S at 1 ms steps fits.
+// velocity·nose (NaN below 0.85 m/s), the velocity along physics x (m/s),
+// the objects at hand (PH_OVER: one below, PH_UNDER: one above), the
+// authored gaps passed so far, the velocity along physics y, the heading
+// (rad). MANEUVER_SUSTAIN_S at 1 ms steps fits.
 export const HIST_CAP = 10240;
-export const HIST_W = 12;
+export const HIST_W = 14;
 // Powerloop: >= 300 degrees of pitch inside any LOOP_WIN_S window (a loop is
 // slower than a flip). The loops are counted over the segment's whole turn
 // of pitch the loop's way: two from LOOP_TWO (600 degrees), then one more for
@@ -92,6 +92,11 @@ export const PH_UNDER = 2;
 // MAV_GAP_S before the segment began, or in it) earns MAV_GAP_MUL points.
 export const MAV_GAP_S = 1.5;
 export const MAV_GAP_MUL = 1.25;
+// Compound tricks across segments: consecutive segments with pauses under
+// MERGE_GAP_S between them, none scored, are scored as one too (mergeFeat).
+export const MERGE_GAP_S = 0.8;
+// The detector's altitude ring, for the climb before a maneuver (steps).
+export const ALT_RING = 512;
 // Gap, without an authored volume: both sides of the opening within
 // GAP_SIDE_K frame widths of the path, passed through at least
 // GAP_MIN_DEPTH_M. FRAME_W_M when the page does not say the quad's width.
@@ -487,6 +492,9 @@ export function makeFeat() {
     // gap: the volume it came in by (index + 1, 0: none) and that pass's entry
     // face, and whether it went back out through it (gapBack).
     u0x: 0, u0y: 0, gapN: 0, gapIn: 0, gapInFin: -1, gapBack: 0,
+    // The altitude 1.0 s before the segment began (m), for a climb flown
+    // before the rotation (the Matty's).
+    alt1s: 0,
   };
 }
 
@@ -517,6 +525,7 @@ export function resetFeat(f) {
   f.invC = 0; f.invLo = 0; f.invHi = 0; f.invYawUp = 0; f.invYawDn = 0; f.invYawT = 0;
   f.phFlip = 0; f.phLoop = 0; f.phSplits = 0; f.phImmel = 0; f.phMav = 0; f.phMatty = 0; f.phHMatty = 0; f.phHMavvy = 0;
   f.u0x = 0; f.u0y = 0; f.gapN = 0; f.gapIn = 0; f.gapInFin = -1; f.gapBack = 0;
+  f.alt1s = 0;
   return f;
 }
 
@@ -556,6 +565,7 @@ export function copyFeat(src, dst) {
   d.phFlip = src.phFlip; d.phLoop = src.phLoop; d.phSplits = src.phSplits; d.phImmel = src.phImmel;
   d.phMav = src.phMav; d.phMatty = src.phMatty; d.phHMatty = src.phHMatty; d.phHMavvy = src.phHMavvy;
   d.u0x = src.u0x; d.u0y = src.u0y; d.gapN = src.gapN; d.gapIn = src.gapIn; d.gapInFin = src.gapInFin; d.gapBack = src.gapBack;
+  d.alt1s = src.alt1s;
   return d;
 }
 
@@ -719,25 +729,34 @@ function mul() {
 //   win   inside at most win seconds: the largest such turn anywhere in the
 //         segment (spanWithin), for a trick of that one phase alone
 // and, when asked:
-//   climb  the phase's highest point at least this far above its start (m)
+//   climb  the climb in the phase (m): its highest point above the lowest
+//          before it; with climbFrom 'pre', above the altitude 1.0 s before
+//          the maneuver began, climbed into (no lower at the start than
+//          then: a climb flown into the rotation, not one made inside it
+//          after a descent)
 //   up     it ends upright (1: up-Z >= 0.5) or inverted (-1: up-Z <= -0.5)
-//   over   an object below the quad (PH_OVER) at or before that highest point
+//   over   an object below the quad (PH_OVER) at or before its highest point
 //   under  after that highest point, an object above it (PH_UNDER) or an
 //          authored gap passed through
 // The phases follow one another. Before the first and after the last, pitch
-// and roll each turn at most PH_SLOP (lead, trail); inside a phase, the one
-// of the two it does not turn about at most PH_CROSS (cross), and its own
-// axis turns back against its way at most PH_CROSS (back: the phase is one
-// turn, not a turn and part of the next). A trick may also ask:
+// and roll each turn at most PH_SLOP (lead, trail; a trick's lead may allow
+// more); inside a phase, the one of the two it does not turn about at most
+// PH_CROSS (a trick's cross may allow more), and its own axis turns back
+// against its way at most PH_CROSS (back: the phase is one turn, not a turn
+// and part of the next). A trick may also ask:
 //   tail  { dot, t }: from the last phase's start, a final stretch of t
 //         seconds or more moving back along the entry's direction of travel
 //         with velocity·nose at most dot on average (flying against the nose)
-//   seg   terms on the whole segment, [value, '>=' | '<=', a, fade], on
-//         featView's values, up-Z at the end (upEnd) and rollFirst
+//   seg   terms on the whole maneuver, [value, '>=' | '<=', a, fade], on
+//         featView's values and upEnd, rollFirst, pitch (net, rad), dur (s),
+//         againstNose (the share flown against the nose, or of the inverted
+//         part, the larger)
+//   merge the trick may span consecutive segments (mergeFeat): a compound
+//         trick the segmentation split at a pause
 // matchSpec scores one set of measured phases (0-1); measureSpec finds the
-// best set in a segment's history. The scores are the features classifyFeat
-// reads (f.phFlip ... f.phHMavvy); the attempt-log replay scores logs that
-// predate them with matchSpec on what the logs measured.
+// best set in a history. The scores are the features classifyFeat reads
+// (f.phFlip ... f.phHMavvy); the attempt-log replay scores logs that predate
+// them with matchSpec on what the logs measured.
 export const PHASE_SPECS = Object.freeze({
   // Flip: >= 300 degrees of pitch inside FLIP_WIN_S, either way.
   flip: Object.freeze({
@@ -763,33 +782,42 @@ export const PHASE_SPECS = Object.freeze({
   immelmann: Object.freeze({
     ph: [{ ax: 'p', sg: -1, lo: 2.356, hi: 3.927, climb: 1 }, { ax: 'r', sg: 0, lo: 2.356, hi: 3.927 }],
     seg: [['upEnd', '>=', 0.5, 0], ['head', '>=', 2.356, 0], ['drop', '<=', 0, 0]],
+    merge: 1,
   }),
-  // Maverick: a back pitch of 150-210 degrees climbing 1 m to an inverted
-  // top, a forward pitch of 60 or more that stops the loop, then back
-  // towards the entry against the nose (velocity·nose -0.3 or less) for 0.3 s.
+  // Maverick, as the owner flies it: a pull back of 120-225 degrees,
+  // climbing 1 m, a forward pitch of 60 or more that stops it, then back
+  // towards the entry against the nose (velocity·nose -0.3 or less) for
+  // 0.3 s: the glide back. It need not go inverted (the owner's top out at
+  // about 70 degrees past level). Often two segments (the pull, the push).
   maverick: Object.freeze({
-    ph: [{ ax: 'p', sg: -1, lo: 2.618, hi: 3.665, climb: 1, up: -1 }, { ax: 'p', sg: 1, lo: 1.047 }],
+    ph: [{ ax: 'p', sg: -1, lo: 2.094, hi: 3.927, climb: 1 }, { ax: 'p', sg: 1, lo: 1.047 }],
     tail: { dot: -0.3, t: 0.3 },
+    merge: 1,
   }),
-  // Matty: a forward pitch of 300 or more climbing 1 m over an object, then
-  // down behind it and under or through it; upright at the end.
+  // Matty, as the owner flies it: 250-400 degrees of forward pitch over an
+  // object, climbed into (1 m from 1.0 s before the maneuver began to the
+  // top), flown against the nose half the time or more, upright at the end.
   matty: Object.freeze({
-    ph: [{ ax: 'p', sg: 1, lo: 5.236, climb: 1, over: 1, under: 1 }],
-    seg: [['upEnd', '>=', 0.5, 0]],
+    ph: [{ ax: 'p', sg: 1, lo: 4.363, hi: 6.981, climb: 1, climbFrom: 'pre', over: 1 }],
+    seg: [['upEnd', '>=', 0.5, 0], ['againstNose', '>=', 0.5, 0]],
+    merge: 1,
   }),
   // Half Matty: a Matty's first 180 +- 45: over the object, inverted behind it.
   halfmatty: Object.freeze({
     ph: [{ ax: 'p', sg: 1, lo: 2.356, hi: 3.927, climb: 1, over: 1, up: -1 }],
     seg: [['upEnd', '<=', -0.5, 0]],
+    merge: 1,
   }),
-  // Half Mavvy: a back pitch climbing 1 m, a roll of 180 +- 45, a forward
-  // pitch down under or through the object, upright at the end. Back, roll
-  // 180 and forward end upright only when the two pitches add to about 180
-  // (120-240: a pull to the vertical, the roll there, the fall over the other
-  // way, flying against the nose); 180 and 180 end inverted. Each is 60-225.
+  // Half Mavvy, as the owner flies it: forward pitch, a roll of 180 +- 45
+  // between its halves, forward pitch on to upright; 330-450 degrees of
+  // forward pitch net, a climb of 3 m or more, 2 s or longer. The pull-up
+  // before it may turn 120 degrees (lead); the pitch may run on through the
+  // roll (cross 90). A Barani is the quick, low one.
   halfmavvy: Object.freeze({
-    ph: [{ ax: 'p', sg: -1, lo: 1.047, hi: 3.927, climb: 1 }, { ax: 'r', sg: 0, lo: 2.356, hi: 3.927 }, { ax: 'p', sg: 1, lo: 1.047, hi: 3.927, under: 1 }],
-    seg: [['upEnd', '>=', 0.5, 0]],
+    ph: [{ ax: 'p', sg: 1, lo: 1.047 }, { ax: 'r', sg: 0, lo: 2.356, hi: 3.927 }, { ax: 'p', sg: 1, lo: 1.571 }],
+    seg: [['pitch', '>=', 5.76, 0], ['pitch', '<=', 7.854, 0], ['loopRise', '>=', 3, 0], ['dur', '>=', 2, 0], ['upEnd', '>=', 0.5, 0]],
+    lead: 2.094, cross: 1.571,
+    merge: 1,
   }),
 });
 // The feature each trick's score goes to.
@@ -808,14 +836,25 @@ function rollFirstOf(f) {
   return (tR < 90 && tP < 90) ? (tP - tR) : (tR < 90 && tP >= 90 ? 0.5 : -0.5);
 }
 
+function segValue(name, f, v) {
+  switch (name) {
+    case 'upEnd': return f.upEnd;
+    case 'rollFirst': return rollFirstOf(f);
+    case 'pitch': return f.pitch;
+    case 'dur': return f.dur;
+    case 'againstNose': return Math.max(v.against || 0, v.invAg || 0);
+    default: return v[name];
+  }
+}
+
 function segTerm(g, f, v) {
-  const x = g[0] === 'upEnd' ? f.upEnd : g[0] === 'rollFirst' ? rollFirstOf(f) : v[g[0]];
+  const x = segValue(g[0], f, v);
   return g[1] === '>=' ? atLeast(x, g[2], g[3]) : atMost(x, g[2], g[3]);
 }
 
 // One phase's terms on its measurement m: { turn, t, climb, up, over, under,
-// cross, back } (turn the phase's way, rad).
-export function phaseTerm(ph, m) {
+// cross, back } (turn the phase's way, rad); crossMax: the trick's cross.
+export function phaseTerm(ph, m, crossMax) {
   const fade = ph.fade || 0;
   let s = atLeast(m.turn, ph.lo, fade);
   if (ph.hi != null) s *= atMost(m.turn, ph.hi, fade);
@@ -826,25 +865,26 @@ export function phaseTerm(ph, m) {
   if (ph.up === -1 && !(m.up <= -0.5)) return 0;
   if (ph.over && !m.over) return 0;
   if (ph.under && !m.under) return 0;
-  if (!(m.cross <= PH_CROSS) || !(m.back <= PH_CROSS)) return 0;
+  if (!(m.cross <= (crossMax || PH_CROSS)) || !(m.back <= PH_CROSS)) return 0;
   return s;
 }
 
 // A trick's score (0-1) on measured phases ms: { ph: [m, ...], lead, trail,
-// tail } and the segment's features.
+// tail } and the maneuver's features.
 export function matchSpec(spec, ms, f, v) {
   const ph = spec.ph;
   if (!ms || !ms.ph || ms.ph.length !== ph.length) return 0;
   let s = 1;
-  for (let i = 0; i < ph.length; i++) s *= phaseTerm(ph[i], ms.ph[i]);
+  for (let i = 0; i < ph.length; i++) s *= phaseTerm(ph[i], ms.ph[i], spec.cross);
   if (spec.seg) for (let i = 0; i < spec.seg.length; i++) s *= segTerm(spec.seg[i], f, v);
   if (spec.tail) s *= atLeast(ms.tail || 0, spec.tail.t, 0);
-  if (ph[0].win == null) s *= atMost(ms.lead || 0, PH_SLOP, 0) * atMost(ms.trail || 0, PH_SLOP, 0);
+  if (ph[0].win == null) s *= atMost(ms.lead || 0, spec.lead || PH_SLOP, 0) * atMost(ms.trail || 0, PH_SLOP, 0);
   return s;
 }
 
-// Rows a..b of a history (stride HIST_W) as phase ph's measurement.
-function measurePhase(H, ph, a, b, out) {
+// Rows a..b of a history (stride HIST_W) as phase ph's measurement; pre:
+// the altitude 1.0 s before the maneuver began.
+function measurePhase(H, ph, a, b, pre, out) {
   const W = HIST_W, col = PH_COL[ph.ax];
   const m = out || {};
   const raw = H[b * W + col] - H[a * W + col];
@@ -852,18 +892,20 @@ function measurePhase(H, ph, a, b, out) {
   m.sign = raw >= 0 ? 1 : -1;
   m.a = a; m.b = b;
   m.t = H[b * W] - H[a * W];
-  let altMax = H[a * W + 6], apex = a, firstOver = -1, lastUnder = -1;
+  let altMax = H[a * W + 6], apex = a, low = altMax, rise = 0, firstOver = -1, lastUnder = -1;
   let hiA = H[a * W + col], loA = hiA, ddUp = 0, ddDn = 0;
   for (let r = a; r <= b; r++) {
     const o = r * W;
     const A = H[o + col];
     if (A > hiA) hiA = A; else if (hiA - A > ddUp) ddUp = hiA - A;
     if (A < loA) loA = A; else if (A - loA > ddDn) ddDn = A - loA;
-    if (H[o + 6] > altMax) { altMax = H[o + 6]; apex = r; }
+    const alt = H[o + 6];
+    if (alt > altMax) { altMax = alt; apex = r; }
+    if (alt < low) low = alt; else if (alt - low > rise) rise = alt - low;
     if ((H[o + 10] & PH_OVER) && firstOver < 0) firstOver = r;
     if ((H[o + 10] & PH_UNDER) || (r > a && H[o + 11] > H[o - W + 11])) lastUnder = r;
   }
-  m.climb = altMax - H[a * W + 6];
+  m.climb = ph.climbFrom === 'pre' ? (H[6] >= pre ? altMax - pre : 0) : rise;
   m.up = H[b * W + 7];
   m.over = firstOver >= 0 && firstOver <= apex ? 1 : 0;
   m.under = lastUnder > apex ? 1 : 0;
@@ -880,17 +922,17 @@ function turnPR(H, a, b) {
 }
 
 // For a tail asking velocity·nose at most dot: for each row u, the first
-// row at or after it (n: none) from which the segment's final stretch moves
-// back along the entry's direction of travel (its mean along it < 0) with
+// row at or after it (n: none) from which the final stretch moves back along
+// the entry's direction of travel (ux, uy: its mean along it < 0) with
 // velocity·nose at most dot on average. Into okU (Int32Array(n)).
-function tailFrom(H, n, dot, okU) {
+function tailFrom(H, n, dot, okU, ux, uy) {
   const W = HIST_W;
   let sD = 0, cD = 0, sH = 0;
   for (let u = n - 1; u >= 0; u--) {
     const o = u * W;
     const x = H[o + 8];
     if (x === x) { sD += x; cD++; }
-    sH += H[o + 9];
+    sH += H[o + 9] * ux + H[o + 12] * uy;
     okU[u] = cD > 0 && sD / cD <= dot && sH < 0 ? 1 : 0;
   }
   let next = n;
@@ -901,15 +943,17 @@ function tailFrom(H, n, dot, okU) {
   return okU;
 }
 
-// The best measurement of a trick's phases in a segment's history (rows of
-// HIST_W, n rows) with its features f and view v. One phase with win: the
-// largest turn inside the window (spanWithin). Otherwise the phases' bounds
-// on every PH_ROWS-th row, best first (each phase's score times the ones
-// before it; among equals, the bounds that leave the least turning outside
-// the phases and across them), within MANEUVER_MAX_S. Returns { score, ms,
-// reached }: reached, how many phases in order matched (the score 0 short
-// of all). The score is matchSpec's on the bounds found.
-export function measureSpec(spec, H, n, f, v, dq) {
+// The best measurement of a trick's phases in a history (rows of HIST_W, n
+// rows) with the maneuver's features f and view v; ctx: { ux, uy } the
+// entry's direction of travel, pre the altitude 1.0 s before it began. One
+// phase with win: the largest turn inside the window (spanWithin).
+// Otherwise the phases' bounds on every PH_ROWS-th row, best first (each
+// phase's score times the ones before it; among equals, the bounds that
+// leave the least turning outside the phases and across them), within
+// MANEUVER_MAX_S. Returns { score, ms, reached }: reached, how many phases
+// in order matched (the score 0 short of all). The score is matchSpec's on
+// the bounds found.
+export function measureSpec(spec, H, n, f, v, dq, ctx) {
   const out = { score: 0, ms: null, reached: 0 };
   const ph = spec.ph, K = ph.length;
   if (!H || n < 2) return out;
@@ -935,6 +979,11 @@ export function measureSpec(spec, H, n, f, v, dq) {
     if (ph[i].ax === 'p') needP += lo; else if (ph[i].ax === 'r') needR += lo;
   }
   if (v.pathP < needP - 1e-9 || v.pathR < needR - 1e-9) return out;
+  const c = ctx || {};
+  const ux = c.ux || 0, uy = c.uy || 0, pre = c.pre == null ? H[6] : c.pre;
+  const leadMax = spec.lead || PH_SLOP, crossMax = spec.cross || PH_CROSS;
+  // Climbed into: no lower at the start than 1.0 s before.
+  const into = H[6] >= pre;
   const W = HIST_W;
   const stride = Math.max(1, Math.ceil(n / PH_ROWS));
   const m = Math.ceil((n - 1) / stride) + 1;
@@ -945,12 +994,12 @@ export function measureSpec(spec, H, n, f, v, dq) {
   // the phases over its limit.
   for (let j = 0; j < m; j++) {
     const lead = turnPR(H, 0, rowOf(j));
-    prev[j] = lead <= PH_SLOP ? 1 - PH_TIE * lead / PH_SLOP : 0;
+    prev[j] = lead <= leadMax ? 1 - PH_TIE * lead / leadMax : 0;
   }
-  const nxt = spec.tail ? tailFrom(H, n, spec.tail.dot, new Int32Array(n)) : null;
+  const nxt = spec.tail ? tailFrom(H, n, spec.tail.dot, new Int32Array(n), ux, uy) : null;
   const pm = {};
   for (let i = 0; i < K; i++) {
-    const p = ph[i], col = PH_COL[p.ax], last = i === K - 1;
+    const p = ph[i], col = PH_COL[p.ax], last = i === K - 1, fromPre = p.climbFrom === 'pre';
     cur.fill(0);
     let any = 0;
     for (let ja = 0; ja < m - 1; ja++) {
@@ -958,7 +1007,7 @@ export function measureSpec(spec, H, n, f, v, dq) {
       if (!(base > 0)) continue;
       const a = rowOf(ja), ao = a * W;
       const A0 = H[ao + col], P0 = H[ao + 1], R0 = H[ao + 2], alt0 = H[ao + 6], t0 = H[ao];
-      let altMax = alt0, apex = a, firstOver = (H[ao + 10] & PH_OVER) ? a : -1, lastUnder = -1;
+      let altMax = alt0, apex = a, low = alt0, rise = 0, firstOver = (H[ao + 10] & PH_OVER) ? a : -1, lastUnder = -1;
       let hiA = A0, loA = A0, ddUp = 0, ddDn = 0;
       const tailT = nxt ? (nxt[a] < n ? H[(n - 1) * W] - H[nxt[a] * W] : 0) : 0;
       let jb = ja + 1, rb = rowOf(jb);
@@ -967,22 +1016,24 @@ export function measureSpec(spec, H, n, f, v, dq) {
         const A = H[o + col];
         if (A > hiA) hiA = A; else if (hiA - A > ddUp) ddUp = hiA - A;
         if (A < loA) loA = A; else if (A - loA > ddDn) ddDn = A - loA;
-        if (H[o + 6] > altMax) { altMax = H[o + 6]; apex = r; }
+        const alt = H[o + 6];
+        if (alt > altMax) { altMax = alt; apex = r; }
+        if (alt < low) low = alt; else if (alt - low > rise) rise = alt - low;
         const fl = H[o + 10];
         if ((fl & PH_OVER) && firstOver < 0) firstOver = r;
         if ((fl & PH_UNDER) || H[o + 11] > H[o - W + 11]) lastUnder = r;
         if (r !== rb) continue;
-        const raw = H[o + col] - A0;
+        const raw = A - A0;
         pm.turn = p.sg > 0 ? raw : p.sg < 0 ? -raw : Math.abs(raw);
         pm.t = H[o] - t0;
-        pm.climb = altMax - alt0;
+        pm.climb = fromPre ? (into ? altMax - pre : 0) : rise;
         pm.up = H[o + 7];
         pm.over = firstOver >= 0 && firstOver <= apex ? 1 : 0;
         pm.under = lastUnder > apex ? 1 : 0;
         const dP = Math.abs(H[o + 1] - P0), dR = Math.abs(H[o + 2] - R0);
         pm.cross = col === 1 ? dR : col === 2 ? dP : Math.max(dP, dR);
         pm.back = p.sg > 0 || (p.sg === 0 && raw >= 0) ? ddUp : ddDn;
-        let sc = base * phaseTerm(p, pm) * (1 - PH_TIE * (pm.cross + pm.back) / PH_CROSS);
+        let sc = base * phaseTerm(p, pm, crossMax) * (1 - PH_TIE * (pm.cross / crossMax + pm.back / PH_CROSS));
         if (sc > 0 && last) {
           const trail = turnPR(H, r, n - 1);
           if (trail > PH_SLOP) sc = 0;
@@ -1005,7 +1056,7 @@ export function measureSpec(spec, H, n, f, v, dq) {
   let j = jb;
   for (let i = K - 1; i >= 0; i--) {
     const ja = arg[i * m + j];
-    ms.ph[i] = measurePhase(H, ph[i], rowOf(ja), rowOf(j), {});
+    ms.ph[i] = measurePhase(H, ph[i], rowOf(ja), rowOf(j), pre, {});
     j = ja;
   }
   ms.lead = turnPR(H, 0, ms.ph[0].a);
@@ -1024,13 +1075,127 @@ export function measureSpec(spec, H, n, f, v, dq) {
 export function phaseFeat(d) {
   const f = d.feat;
   const v = featView(f);
+  const ctx = { ux: f.u0x, uy: f.u0y, pre: f.alt1s };
   const rep = {};
   for (const id in PHASE_SPECS) {
-    const r = measureSpec(PHASE_SPECS[id], d.hist, d.histN, f, v, d.dq);
+    const r = measureSpec(PHASE_SPECS[id], d.hist, d.histN, f, v, d.dq, ctx);
     f[PHASE_FIELD[id]] = r.score;
     rep[id] = r;
   }
   return rep;
+}
+
+// ---- Compound tricks across segments ----
+//
+// A trick the segmentation split at a pause (the Maverick's pull and its
+// glide back, say) is one trick: the detector keeps one history across
+// consecutive segments while each pause between them is under MERGE_GAP_S
+// and none of them scored (d.chain), and when a segment finishes it scores
+// the merge tricks (PHASE_SPECS merge) over the run from each earlier
+// segment's start to now, at most MANEUVER_MAX_S (mergeFeat).
+
+// What the phase matcher's segment terms read, from history rows 0..n-1:
+// f: { dur, pitch, upEnd }; v: { pathP, pathR, loopRise, drop, head,
+// against, invAg }, as the features count them.
+export function rowView(H, n) {
+  const W = HIST_W, e = (n - 1) * W;
+  let pathP = 0, pathR = 0, altMax = H[6], aN = 0, agN = 0, iN = 0, iAg = 0;
+  for (let r = 0; r < n; r++) {
+    const o = r * W;
+    if (r) { pathP += Math.abs(H[o + 1] - H[o - W + 1]); pathR += Math.abs(H[o + 2] - H[o - W + 2]); }
+    if (H[o + 6] > altMax) altMax = H[o + 6];
+    const dot = H[o + 8];
+    if (dot === dot) {
+      aN++; if (dot < -0.18) agN++;
+      if (H[o + 7] < -0.2) { iN++; if (dot < -0.18) iAg++; }
+    }
+  }
+  return {
+    f: { dur: H[e] - H[0], pitch: H[e + 1] - H[1], upEnd: H[e + 7] },
+    v: {
+      pathP, pathR, loopRise: altMax - H[6], drop: H[6] - H[e + 6],
+      head: Math.abs(unwrapDelta(H[13], H[e + 13])),
+      against: aN ? agN / aN : 0, invAg: iN ? iAg / iN : 0,
+    },
+  };
+}
+
+// The merge tricks over the chain: for each earlier segment's start, the run
+// from there to now; the best (by classifyFeat's ranking, at its pick
+// floor), or null. { id, score, k, segs, t, ms }.
+export function mergeFeat(d) {
+  const S = d.chainSegs, n = d.chainN, W = HIST_W;
+  if (!S || S.length < 2 || n < 2) return null;
+  let best = null, bestSc = 0;
+  for (let k = 0; k < S.length - 1; k++) {
+    const a = S[k].row;
+    const sub = d.chain.subarray(a * W, n * W), len = n - a;
+    const rv = rowView(sub, len);
+    if (rv.f.dur > MANEUVER_MAX_S + 1e-6) continue;
+    const ctx = { ux: S[k].ux, uy: S[k].uy, pre: S[k].pre };
+    for (const id in PHASE_SPECS) {
+      const spec = PHASE_SPECS[id];
+      if (!spec.merge) continue;
+      const r = measureSpec(spec, sub, len, rv.f, rv.v, null, ctx);
+      const sc = r.score + (SPEC[id] || 0) * (r.score > 0.15 ? 1 : 0);
+      if (r.score >= 0.42 && sc > bestSc) {
+        bestSc = sc;
+        best = { id, score: r.score, k, segs: S.length - k, t: rv.f.dur, ms: r.ms, gapBack: S[k].gapBack ? 1 : 0 };
+      }
+    }
+  }
+  return best;
+}
+
+// One row of the chain for this step: the chain's own time and its pitch,
+// roll and turn about the vertical, summed from its first step.
+function chainPush(d, dr, dp, dv, step, alt, wx, wz, upZ, vx, vy, vz, head) {
+  if (d.chainN >= HIST_CAP) { d.chainOn = 0; return; }
+  const W = HIST_W, i = d.chainN * W, ws = d.ws || 3.5;
+  if (d.chainN) { d.cT += step; d.cP += dp; d.cR += dr; d.cV += dv; }
+  const H = d.chain;
+  H[i] = d.cT; H[i + 1] = d.cP; H[i + 2] = d.cR; H[i + 3] = d.cV;
+  H[i + 4] = wx / ws; H[i + 5] = wz / ws; H[i + 6] = alt; H[i + 7] = upZ;
+  H[i + 8] = noseDot(d, vx, vy, vz); H[i + 9] = vx; H[i + 10] = objFlags(d.clr);
+  H[i + 11] = d.cGapN; H[i + 12] = vy; H[i + 13] = head;
+  d.chainN += 1;
+}
+
+// A segment begins: the chain goes on if the last one ended under
+// MERGE_GAP_S ago unscored, else starts again; segments that began more than
+// MANEUVER_MAX_S ago drop off its front.
+function chainBegin(d, f, head) {
+  if (!d.chainOn || d.chainGap >= MERGE_GAP_S) {
+    d.chainN = 0; d.cT = 0; d.cP = 0; d.cR = 0; d.cV = 0; d.cGapN = 0;
+    d.chainSegs = [];
+  } else if (d.chainSegs.length) {
+    const W = HIST_W, now = d.chainN ? d.chain[(d.chainN - 1) * W] : 0;
+    let k = 0;
+    while (k < d.chainSegs.length && now - d.chain[d.chainSegs[k].row * W] > MANEUVER_MAX_S) k++;
+    if (k) {
+      const r0 = k < d.chainSegs.length ? d.chainSegs[k].row : d.chainN;
+      d.chain.copyWithin(0, r0 * W, d.chainN * W);
+      d.chainN -= r0;
+      d.chainSegs = d.chainSegs.slice(k);
+      for (const s of d.chainSegs) s.row -= r0;
+    }
+  }
+  d.chainOn = 1;
+  d.chainGap = 0;
+  d.chainSegs.push({ row: d.chainN, ux: f.u0x, uy: f.u0y, pre: f.alt1s, gapIn: f.gapIn, gapInFin: f.gapInFin, gapBack: 0, head });
+}
+
+// The altitude seconds ago (the detector's altitude ring, ALT_RING steps):
+// the newest sample at least that old, or the oldest kept.
+function altAgo(d, ago) {
+  const n = d.altN;
+  if (!n) return NaN;
+  const want = d.clock - ago;
+  for (let k = 1; k <= n; k++) {
+    const i = (d.altI - k + ALT_RING) % ALT_RING;
+    if (d.altT[i] <= want) return d.altA[i];
+  }
+  return d.altA[(d.altI - n + ALT_RING) % ALT_RING];
 }
 
 export function featView(f) {
@@ -1167,10 +1332,13 @@ export function classifyFeat(f, out) {
     atMost(absY, 2.4, 0.7),
   );
   // Barani: a flip with a half twist inside BARANI_WIN_S, ending upright.
+  // Quick (the flip and twist inside BARANI_WIN_S) and low (a climb under
+  // 2 m): the owner's Half Mavvy turns the same way, slower and higher.
   _sc.barani = mul(
     atLeast(f.barP, 5.236, 0),
     inBand(f.barR, 2.356, 3.927, 0),
     atLeast(f.upEnd, 0.6, 0),
+    atMost(v.loopRise, 2, 0),
   );
   {
     // Trippy Spin: >= 360 degrees of turn about the vertical at >= 150 deg/s
@@ -1238,8 +1406,9 @@ export function classifyFeat(f, out) {
   _sc.halfmatty = mul(
     atLeast(f.phHMatty, 1, 1),
   );
-  // Half Mavvy: a back pitch climbing 1 m, a half roll, a forward pitch down
-  // under or through the object, upright. Above Maverick and Matty.
+  // Half Mavvy: forward pitch, a half roll between its halves, forward on to
+  // upright; 330-450 degrees of it, climbing 3 m, 2 s or longer. Above
+  // Maverick and Matty.
   _sc.halfmavvy = mul(
     atLeast(f.phHMavvy, 1, 1),
   );
@@ -1257,14 +1426,13 @@ export function classifyFeat(f, out) {
   _sc.powerloop = mul(
     atLeast(f.phLoop, 1, 1),
   );
-  // Matty: >= 300 degrees of forward pitch climbing 1 m over an object, then
-  // down behind it and under or through it, upright at the end.
+  // Matty: 250-400 degrees of forward pitch over an object, climbed into
+  // (1 m from 1.0 s before), flown against the nose, upright at the end.
   _sc.matty = mul(
     atLeast(f.phMatty, 1, 1),
   );
-  // Maverick: a back pitch of 150-210 climbing 1 m to an inverted top, a
-  // forward pitch of 60 or more, then back towards the entry against the nose
-  // for 0.3 s.
+  // Maverick: a pull back of 120-225 climbing 1 m, a forward pitch of 60 or
+  // more, then back towards the entry against the nose for 0.3 s.
   _sc.maverick = mul(
     atLeast(f.phMav, 1, 1),
   );
@@ -1399,6 +1567,13 @@ export function makeDetector() {
     // Maverick's way back out; the phase matcher's measurements of the last
     // segment, by trick.
     gapPassI: -1, gapPassFin: -1, gapPassAt: -1e9, lastPhases: null, lastGapBack: 0,
+    // Compound tricks: the chain of consecutive unscored segments and the
+    // pauses between them (rows of HIST_W, its own time and summed turns),
+    // each segment's start in it, the pause so far; the last merge scored.
+    chain: new Float64Array(HIST_CAP * HIST_W), chainN: 0, chainOn: 0, chainGap: 0, chainSegs: [],
+    cT: 0, cP: 0, cR: 0, cV: 0, cGapN: 0, lastMerge: null,
+    // The altitude ring: clock and altitude, the next slot, the count.
+    altT: new Float64Array(ALT_RING), altA: new Float64Array(ALT_RING), altI: 0, altN: 0,
     // Trippy and Barani scratch; the colliders and scale of the last step.
     orb: { r: 0, fit: 9, sweep: 0, turn: 0, spd: 0, cx: 0, cz: 0, kr: 0 },
     bar: { p: 0, r: 0 },
@@ -1473,6 +1648,8 @@ export function resetDetector(d, sample) {
   d.gapOn = 0; d.gapPend = '';
   d.gapVols = null; d.gHave = 0;
   d.gapPassI = -1; d.gapPassFin = -1; d.gapPassAt = -1e9;
+  d.chainOn = 0; d.chainN = 0; d.chainSegs = []; d.lastMerge = null;
+  d.altN = 0; d.altI = 0;
   d.proxT = 0;
   d.lockout = 0;
   d.landT = 0;
@@ -1613,6 +1790,15 @@ function authoredGapStep(d, vols, x0, y0, z0, x1, y1, z1) {
           if (f.gapIn === i + 1 && fin !== f.gapInFin) f.gapBack = 1;
           else if (!f.gapIn) { f.gapIn = i + 1; f.gapInFin = fin; }
         }
+        // The chain's: its passes, and each segment's way back out.
+        if (d.chainOn) {
+          d.cGapN += 1;
+          if (d.chainN > 0) d.chain[(d.chainN - 1) * HIST_W + 11] = d.cGapN;
+          for (const sg of d.chainSegs) {
+            if (sg.gapIn === i + 1 && fin !== sg.gapInFin) sg.gapBack = 1;
+            else if (!sg.gapIn) { sg.gapIn = i + 1; sg.gapInFin = fin; }
+          }
+        }
         d.gapPassI = i; d.gapPassFin = fin; d.gapPassAt = d.clock;
       }
       d.gapSeq++;
@@ -1653,13 +1839,17 @@ function beginFeat(d, alt, wx, wz, head, speed, thr, upZ, vx, vy, vz) {
   if (hs > 0.5) { f.u0x = vx / hs; f.u0y = vy / hs; } else { f.u0x = Math.cos(head); f.u0y = Math.sin(head); }
   // The authored gap it came in by, if one was passed just before.
   if (d.gapPassI >= 0 && d.clock - d.gapPassAt <= MAV_GAP_S) { f.gapIn = d.gapPassI + 1; f.gapInFin = d.gapPassFin; }
+  const pre = altAgo(d, 1.0);
+  f.alt1s = pre === pre ? pre : alt;
   const ws0 = d.ws || 3.5;
   d.hist[0] = 0; d.hist[1] = 0; d.hist[2] = 0; d.hist[3] = 0; d.hist[4] = wx / ws0; d.hist[5] = wz / ws0;
   d.hist[6] = alt; d.hist[7] = upZ == null ? 1 : upZ;
   d.hist[8] = noseDot(d, vx || 0, vy || 0, vz || 0);
-  d.hist[9] = (vx || 0) * f.u0x + (vy || 0) * f.u0y;
+  d.hist[9] = vx || 0;
   d.hist[10] = objFlags(d.clr);
   d.hist[11] = 0;
+  d.hist[12] = vy || 0;
+  d.hist[13] = head;
   d.histN = 1;
   d.susCol = 0;
   f.h0x = wx; f.h0z = wz; f.h1x = wx; f.h1z = wz;
@@ -1724,9 +1914,11 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
     d.hist[hi + 4] = wx / wsH; d.hist[hi + 5] = wz / wsH;
     d.hist[hi + 6] = alt; d.hist[hi + 7] = upZ;
     d.hist[hi + 8] = noseDot(d, vx, vy, vz);
-    d.hist[hi + 9] = vx * f.u0x + vy * f.u0y;
+    d.hist[hi + 9] = vx;
     d.hist[hi + 10] = objFlags(d.clr);
     d.hist[hi + 11] = f.gapN;
+    d.hist[hi + 12] = vy;
+    d.hist[hi + 13] = head;
     d.histN += 1;
   }
   {
@@ -1849,17 +2041,33 @@ function finishManeuver(d) {
   d.live = 0;
   d.quiet = 0;
   const cls = classifyFeat(d.feat, _cls);
-  d.lastWhy = cls.why || '';
-  d.lastId = cls.id || '';
+  let id = cls.id || '';
+  let why = cls.why || '';
+  // A compound trick split across segments: the merge's label stands over
+  // this segment's own unless that is a matcher trick ranked above it.
+  const mg = d.chainSegs.length > 1 ? mergeFeat(d) : null;
+  d.lastMerge = null;
+  if (mg && (!id || !PHASE_SPECS[id] || (SPEC[mg.id] || 0) >= (SPEC[id] || 0))) {
+    id = mg.id;
+    const def = BY_ID[id];
+    why = (def ? def.name + '  ' + def.tier + '  ' + def.points : id)
+      + '\n  merged ' + mg.segs + ' segments, ' + mg.t.toFixed(2) + ' s (this one alone: ' + (cls.id || 'none') + ')';
+    d.lastMerge = mg;
+  }
+  d.lastWhy = why;
+  d.lastId = id;
   d.lastDir = (d.feat.flipUp || 0) >= (d.feat.flipDn || 0) ? 1 : -1;
-  d.lastLoops = cls.id === 'powerloop' ? Math.max(1, loopCount(d.feat.loopTot || 0)) : 0;
-  d.lastPole = cls.id === 'trippy' && d.feat.orbitPole ? 1 : 0;
-  d.lastGapBack = cls.id === 'maverick' && d.feat.gapBack ? 1 : 0;
-  d.lastSloppy = (d.feat.seg && LOOP_IDS[cls.id]) ? 1 : 0;
+  d.lastLoops = id === 'powerloop' ? Math.max(1, loopCount(d.feat.loopTot || 0)) : 0;
+  d.lastPole = id === 'trippy' && d.feat.orbitPole ? 1 : 0;
+  d.lastGapBack = id === 'maverick' && (d.lastMerge ? d.lastMerge.gapBack : d.feat.gapBack) ? 1 : 0;
+  d.lastSloppy = (d.feat.seg && LOOP_IDS[id]) ? 1 : 0;
   d.lastBump = d.feat.bump ? 1 : 0;
   try { d.recJson = encodeRecJson(d); } catch (e) { d.recJson = ''; }
   resetFeat(d.feat);
-  if (cls.id) {
+  // A scored segment ends the chain; an unscored one leaves it open for
+  // MERGE_GAP_S.
+  if (id) d.chainOn = 0; else d.chainGap = 0;
+  if (id) {
     d.lockout = LOCKOUT_S;
     d.hangGot = 1;
     d.hangT = 0;
@@ -1867,7 +2075,7 @@ function finishManeuver(d) {
     d.diveCd = Math.max(d.diveCd, 2.4);
     d.gapOn = 0;
     d.proxT = 0;
-    return cls.id;
+    return id;
   }
   return null;
 }
@@ -1921,6 +2129,8 @@ export function stepDetector(d, sample, dt) {
   }
   if (vz == null) vz = 0;
   d.qx = sx; d.qy = sy; d.qz = sz; d.qw = sw; d.haveQ = 1;
+  // This step's turn about the vertical (as accumFeat sums it), for the chain.
+  const dv = 2 * (sx * sz - sw * sy) * dr + 2 * (sy * sz + sw * sx) * dp + (1 - 2 * (sx * sx + sy * sy)) * dy;
   // No jump guard: the page steps the detector every 4 ms of sim time, so a
   // step turns at most a few degrees, and every respawn resets the detector
   // (sim.html placeQuadAt, resetQuad); a portal keeps the attitude.
@@ -1942,10 +2152,20 @@ export function stepDetector(d, sample, dt) {
   if (!d.gHave) { d.gx = wx; d.gy = wy; d.gz = wz; d.gHave = 1; }
 
   let hit = null;
+  // The altitude ring: this step's, at the clock before it advances.
+  d.altT[d.altI] = d.clock; d.altA[d.altI] = alt;
+  d.altI = (d.altI + 1) % ALT_RING;
+  if (d.altN < ALT_RING) d.altN += 1;
   const rotating = rate >= RATE_START;
   const diving = thr < 0.18 && rate < 1.55 && vz < -3.8;
   if (armed && !contact && rotating && !d.live && d.lockout <= 0 && !diving) {
     beginFeat(d, alt, wx, wz, head, speed, thr, upZ, vx, vy, vz);
+    chainBegin(d, d.feat, head);
+  }
+  if (d.live || d.chainOn) chainPush(d, dr, dp, dv, step, alt, wx, wz, upZ, vx, vy, vz, head);
+  if (!d.live && d.chainOn) {
+    d.chainGap += step;
+    if (d.chainGap >= MERGE_GAP_S || !armed || contact) d.chainOn = 0;
   }
   if (d.live) {
     if (contact) d.feat.bump = 1;
@@ -2452,6 +2672,7 @@ export function createTricks(opts) {
         det.lastId = '';
         det.lastWhy = 'crash 0';
       }
+      det.chainOn = 0;
       return bank('crash');
     } catch (e) { return 0; }
   }

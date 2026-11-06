@@ -5,7 +5,10 @@
 //   a trippy;
 // - tools/fixtures/tricklog-depot-bf-2.jsonl.gz, 89 attempts: inverted yaw
 //   spins (half flip in, yaw while inverted, half flip out), two trippies and
-//   a Powerloop.
+//   a Powerloop;
+// - tools/fixtures/tricklog-depot-bf-3.jsonl.gz, 68 attempts, flown after the
+//   phase matcher: in the owner's order, Immelmanns (28-48 s), Half Mavvies
+//   (57-70 s), Matties (113-124 s) and Mavericks (148-153 s).
 //
 // Each maneuver record carries what the detector saw (saw, rounded) and every
 // candidate's gate values (3 decimals, rad). The test rebuilds the segment's
@@ -32,7 +35,21 @@
 //     as the top above the entry, below);
 //   - log 1 seq 82, log 2 seq 73 (Half Matty): a half roll then a forward
 //     pitch, the old Half Matty; the owner's is a forward half loop over an
-//     object ending inverted. 82 is a Cradle (its next best), 73 nothing.
+//     object ending inverted. 82 is a Cradle (its next best), 73 nothing;
+// - log 3, with the owner's Maverick, Matty and Half Mavvy as the owner
+//   flies them and compound tricks merged across segments (replayLog): six
+//   labels change, all the owner's:
+//   - seq 20 and 27 (Barani): Half Mavvies, forward 427 and 364 degrees net
+//     with a half roll between, climbing 6.6 and 5.3 m over 3.1 s; a Barani
+//     is quick (its flip and twist inside 1.5 s) and low (under 2 m);
+//   - seq 50 and 53 (none): Matties, 286 and 296 degrees of forward pitch
+//     over an object, against the nose, climbed into from 1.0 s before
+//     (1.2 and 1.7 m, by the records around then);
+//   - seq 63 and 66 (Cradle): Mavericks, each the glide back of a pull a
+//     pause of under 0.8 s before (63 with 61 and 62, 66 with 65), one
+//     trick, and no Cradle;
+//   - the Immelmanns (seq 6, 10, 18) stay; seq 56 (forward 260 net with a
+//     half roll and 85 back, cut at 4.5 s) is not a Matty.
 //
 // Both logs predate two features; the replay uses what the logged ones say:
 // - the Powerloop's own window (LOOP_WIN_S), bounded from below (loopFrom):
@@ -56,9 +73,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   classifyFeat, featView, makeFeat, loopCount, trickName, LOOP_WIN_S, SAMPLE_S, HAM_UPZ, HAM_MIN,
-  PHASE_SPECS, PHASE_FIELD, matchSpec,
+  PHASE_SPECS, PHASE_FIELD, matchSpec, MERGE_GAP_S, MANEUVER_MAX_S,
 } from '../sim-tricks.js';
-import { explainFeat } from '../sim-tricks-debug.js';
+import { explainFeat, SPEC } from '../sim-tricks-debug.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEG = Math.PI / 180;
@@ -117,50 +134,61 @@ export function invYawFrom(s, g) {
   return { v: 'v.yawSpan' in g ? g['v.yawSpan'] : s.vyawDeg * DEG, exact: false };
 }
 
-// The phase matcher's scores (PHASE_SPECS), for logs that predate them,
-// with matchSpec on what the logs measured (a log that has the score's gate
-// replays it as logged):
+// The phase matcher's scores (PHASE_SPECS), for logs that predate them or
+// the current definitions, with matchSpec on what the logs measured (a log
+// whose definition of a trick is today's replays its logged score):
 // - Flip and Powerloop are one turn of pitch inside a window: the logged
 //   flip window (exact) and the replay's loop window (loopFrom). Their
 //   scores are the old terms' exactly;
 // - Split-S is a half roll then a back pitch: the whole roll and the net
 //   pitch (the old terms', exactly; the order is in its rollFirst term);
-// - the others (Immelmann, Maverick, Matty, Half Matty, Half Mavvy) are
-//   estimated. The pitch turned back B and forward F, from its whole turn and
-//   its net (exact when each way turned once: B = (pathP - pitch) / 2,
-//   F = (pathP + pitch) / 2), back first unless the larger flip window went
-//   forward; the roll turned |roll|, before the pitch when rollFirst > 0.
-//   Climb is the top above the entry (loopRise), up-Z at the top upMin, at
-//   the end upEnd; an object below (over) or above (under) on any step; the
-//   tail the share flown against the nose (against) times the duration, and
-//   none unless it flew against the nose more than with it (the tail is the
-//   end flown back against the nose; where in the segment the logs do not
-//   say). Turning outside and across the phases is not in the logs: none.
-export function phasesFromLog(s, f, v, flipSpan, flipDir, loop) {
+// - the others are estimated. The pitch turned back B and forward F, from
+//   its whole turn and its net (exact when each way turned once: B = (pathP -
+//   pitch) / 2, F = (pathP + pitch) / 2), back first; the roll turned |roll|,
+//   before the pitch when rollFirst > 0. A phase's climb is the segment's:
+//   from its low when it ended at its top (span), else the top above the
+//   entry (loopRise); the Matty's from the altitude 1.0 s before it began,
+//   read off the records around then (altAt; none known, no climb), and none
+//   unless it started no lower than that (climbed into). Up-Z at
+//   the end upEnd; an object below (over) on any step; the tail the share
+//   flown against the nose (against) times the duration, and none unless it
+//   flew against the nose more than with it (where in the segment the logs
+//   do not say). The Half Mavvy's forward pitch splits evenly round the
+//   roll, the pull before it (B) its lead. Turning outside and across the
+//   phases is not in the logs: none, but the roll across the Maverick's and
+//   the Matty's pitch.
+export function phasesFromLog(s, f, v, flipSpan, flipDir, loop, pre) {
   const absR = Math.abs(s.roll);
   const B = Math.max(0, (s.pathP - s.pitch) / 2), F = Math.max(0, (s.pathP + s.pitch) / 2);
   const rollFirst = s.rollFirst;
-  const over = s.over > 0 || !!s.over0, under = s.under > 0;
-  const rise = s.loopRise;
-  const ph = (turn, x) => ({ turn, t: 0, climb: rise, up: 0, over: 0, under: 0, cross: 0, back: 0, ...x });
+  const over = s.over > 0 || !!s.over0;
+  const riseIn = s.alt1 >= s.alt0 + s.loopRise - 0.05 ? s.span : s.loopRise;
+  const top = s.alt0 + s.loopRise;
+  const ph = (turn, x) => ({ turn, t: 0, climb: riseIn, up: 0, over: 0, under: 0, cross: 0, back: 0, ...x });
   const ms = (list, x) => ({ ph: list, lead: 0, trail: 0, tail: 0, ...x });
   const est = {
     flip: ms([{ turn: flipSpan, t: 0 }]),
     powerloop: ms([{ turn: Math.max(loop.up, loop.dn), t: 0 }]),
     splits: ms([{ turn: absR, cross: 0, back: 0 }, { turn: -s.pitch, cross: 0, back: 0 }]),
     immelmann: rollFirst < 0 ? ms([ph(B, { back: F }), ph(absR, { climb: 0 })]) : null,
-    maverick: flipDir < 0 || B >= F ? ms([ph(B, { up: s.upMin }), ph(F, { climb: 0 })], { tail: s.against > s.follow ? s.against * s.dur : 0 }) : null,
-    matty: ms([ph(F, { over: over ? 1 : 0, under: under ? 1 : 0, back: B })]),
+    maverick: B >= 1 * DEG ? ms([ph(B, { cross: absR }), ph(F, { climb: 0, cross: absR })], { tail: s.against > s.follow ? s.against * s.dur : 0 }) : null,
+    matty: ms([ph(F, { climb: pre === pre && pre != null && s.alt0 >= pre ? top - pre : 0, over: over ? 1 : 0, back: B, cross: absR })]),
     halfmatty: ms([ph(F, { over: over ? 1 : 0, up: s.upEnd, back: B })]),
-    halfmavvy: rollFirst < 0 ? ms([ph(B), ph(absR, { climb: 0 }), ph(F, { climb: 0, under: under ? 1 : 0 })]) : null,
+    halfmavvy: rollFirst < 0 ? ms([ph(F / 2, { climb: 0 }), ph(absR, { climb: 0 }), ph(F / 2, { climb: 0 })], { lead: B }) : null,
   };
   const out = {};
   for (const id of Object.keys(PHASE_SPECS)) out[id] = est[id] ? matchSpec(PHASE_SPECS[id], est[id], f, v) : 0;
   return out;
 }
 
-// The segment's features from a maneuver record.
-export function featFromLog(rec) {
+// The matcher tricks whose definitions a log's logged score still is:
+// unchanged since the matcher came in. (The Immelmann's climb is measured
+// from its low now, never less than from its start: a logged 1 stands.)
+const LOGGED_PH = new Set(['flip', 'powerloop', 'splits', 'immelmann']);
+
+// The segment's features from a maneuver record; ctx.pre the altitude 1.0 s
+// before it began, when known (altAt).
+export function featFromLog(rec, ctx) {
   const s = rec.saw, g = gateValues(rec);
   const f = makeFeat();
   f.dur = s.dur; f.n = s.n;
@@ -202,16 +230,120 @@ export function featFromLog(rec) {
   f.loopUp = lp.up; f.loopDn = lp.dn; f.loopTot = lp.tot;
   const inv = invYawFrom(s, g);
   f.invYawUp = inv.v; f.invYawT = (s.inv50 || 0) * s.dur;
-  // The phase matcher's scores: as logged, or from what the log measured.
-  const est = phasesFromLog(s, f, featView(f), flipSpan, flipDir, lp);
+  // The phase matcher's scores: as logged where that definition is today's,
+  // or from what the log measured.
+  const pre = ctx && ctx.pre != null ? ctx.pre : NaN;
+  f.alt1s = pre === pre ? pre : s.alt0;
+  const est = phasesFromLog(s, f, featView(f), flipSpan, flipDir, lp, pre);
   const phExact = {};
   for (const id of Object.keys(PHASE_FIELD)) {
     const k = 'f.' + PHASE_FIELD[id];
-    phExact[id] = k in g;
-    f[PHASE_FIELD[id]] = k in g ? g[k] : est[id];
+    phExact[id] = k in g && LOGGED_PH.has(id);
+    f[PHASE_FIELD[id]] = phExact[id] ? g[k] : est[id];
   }
   return { f, g, flipDir, loop: lp, inv, phExact };
 }
+
+// The altitude at time t (s, the log's clock) from the maneuver records
+// around it: inside one, between its start and end altitudes; in a pause
+// under 1.5 s, between the two around it; NaN when none says.
+export function altAt(man, t) {
+  let prev = null, next = null;
+  for (const r of man) {
+    if (r.t0 <= t && t <= r.t) return r.saw.alt0 + (r.saw.alt1 - r.saw.alt0) * (r.t > r.t0 ? (t - r.t0) / (r.t - r.t0) : 0);
+    if (r.t < t && (!prev || r.t > prev.t)) prev = r;
+    if (r.t0 > t && (!next || r.t0 < next.t0)) next = r;
+  }
+  if (prev && next && next.t0 - prev.t < 1.5) return prev.saw.alt1 + (next.saw.alt0 - prev.saw.alt1) * (t - prev.t) / (next.t0 - prev.t);
+  return NaN;
+}
+
+// A compound trick across consecutive records (mergeFeat in the detector),
+// estimated for the pitch-only ones, Maverick and Matty: each record's
+// pitch is its back B then its forward F; the phases are the runs of one
+// way, a turn back the other way of PH_CROSS or less inside a run kept in
+// it. The Maverick's pull is the first back run, its push the rest; the
+// Matty's loop the forward run. The climb is the pull's records' (as
+// phasesFromLog), the Matty's from pre; the tail the last record's. The
+// others (Immelmann, Half Matty, Half Mavvy) turn about two axes and are
+// not merged here. { id: score }.
+export function mergeFromLog(win, pre) {
+  const moves = [];
+  for (const r of win) {
+    const s = r.saw;
+    const B = Math.max(0, (s.pathP - s.pitch) / 2), F = Math.max(0, (s.pathP + s.pitch) / 2);
+    if (B >= DEG) moves.push({ turn: -B, r });
+    if (F >= DEG) moves.push({ turn: F, r });
+  }
+  const out = {};
+  const last = win[win.length - 1].saw;
+  const tail = last.against > last.follow ? last.against * last.dur : 0;
+  const riseOf = (s) => (s.alt1 >= s.alt0 + s.loopRise - 0.05 ? s.span : s.loopRise);
+  const f = { upEnd: last.upEnd, dur: win[win.length - 1].t - win[0].t0 };
+  let aN = 0, ag = 0, iN = 0, ia = 0;
+  for (const r of win) { aN += r.saw.alignN || 0; ag += (r.saw.against || 0) * (r.saw.alignN || 0); iN += r.saw.alignN || 0; ia += (r.saw.invAg || 0) * (r.saw.alignN || 0); }
+  const v = { against: aN ? ag / aN : 0, invAg: iN ? ia / iN : 0 };
+  // The roll across the pitch: the most any record of it rolled.
+  let roll = 0;
+  for (const r of win) roll = Math.max(roll, Math.abs(r.saw.roll));
+  // Maverick: the first back run, then the rest forward.
+  if (moves.length >= 2 && moves[0].turn < 0) {
+    let i = 0, pull = 0, climb = 0;
+    while (i < moves.length && moves[i].turn < 0) { pull -= moves[i].turn; climb = Math.max(climb, riseOf(moves[i].r.saw)); i++; }
+    let push = 0, back = 0, bigBack = 0;
+    for (; i < moves.length; i++) {
+      push += moves[i].turn;
+      if (moves[i].turn < 0) { back = Math.max(back, -moves[i].turn); if (-moves[i].turn > 0.785) bigBack = 1; }
+    }
+    const ms = { ph: [
+      { turn: pull, t: 0, climb, up: 0, over: 0, under: 0, cross: roll, back: 0 },
+      { turn: push, t: 0, climb: 0, up: 0, over: 0, under: 0, cross: roll, back: bigBack ? 9 : back },
+    ], lead: 0, trail: 0, tail };
+    out.maverick = matchSpec(PHASE_SPECS.maverick, ms, f, v);
+  }
+  // Matty: one forward run.
+  {
+    let fwd = 0, back = 0, top = -Infinity, over = 0;
+    for (const m of moves) { fwd += m.turn; if (m.turn < 0) back = Math.max(back, -m.turn); }
+    for (const r of win) { top = Math.max(top, r.saw.alt0 + r.saw.loopRise); if (r.saw.over > 0 || r.saw.over0) over = 1; }
+    const into = pre === pre && win[0].saw.alt0 >= pre;
+    const ms = { ph: [{ turn: fwd, t: 0, climb: into ? top - pre : 0, up: 0, over, under: 0, cross: roll, back }], lead: 0, trail: 0, tail: 0 };
+    out.matty = matchSpec(PHASE_SPECS.matty, ms, f, v);
+  }
+  return out;
+}
+
+// A log replayed as the detector scores it: each record's own label, and
+// over the unscored records before it with pauses under MERGE_GAP_S, the
+// merge's (mergeFeat's ranking: its score plus the specificity bonus, at
+// classifyFeat's 0.42; it stands unless this record's own label is a
+// matcher trick ranked above it). Map seq -> { id, merged }.
+export function replayLog(L) {
+  const man = L.recs.filter((r) => r.type === 'maneuver' && r.saw && !r.pre.short).sort((a, b) => a.t0 - b.t0);
+  const out = new Map();
+  let chain = [];
+  for (const r of man) {
+    const prev = chain.length ? chain[chain.length - 1] : null;
+    if (prev && r.t0 - prev.t >= MERGE_GAP_S) chain = [];
+    const { f } = featFromLog(r, { pre: altAt(man, r.t0 - 1.0) });
+    let id = classify(f).id || null;
+    let merged = 0, best = null, bestSc = 0;
+    for (let k = 0; k < chain.length; k++) {
+      const win = chain.slice(k).concat([r]);
+      if (r.t - win[0].t0 > MANEUVER_MAX_S + 1e-6) continue;
+      const m = mergeFromLog(win, altAt(man, win[0].t0 - 1.0));
+      for (const [mid, sc] of Object.entries(m)) {
+        const tot = sc + (SPEC[mid] || 0) * (sc > 0.15 ? 1 : 0);
+        if (sc >= 0.42 && tot > bestSc) { bestSc = tot; best = { id: mid, segs: win.length }; }
+      }
+    }
+    if (best && (!id || !PHASE_SPECS[id] || (SPEC[best.id] || 0) >= (SPEC[id] || 0))) { id = best.id; merged = best.segs; }
+    out.set(r.seq, { id, merged });
+    if (id) chain = []; else chain.push(r);
+  }
+  return out;
+}
+
 
 const classify = (f) => classifyFeat(f, { id: null, why: '', best: 0, second: 0, secondId: '' });
 
@@ -243,13 +375,26 @@ const LOGS = [
       51: null, 71: null, 73: null,
     },
   },
+  {
+    name: 'log 3', file: 'tools/fixtures/tricklog-depot-bf-3.jsonl.gz', records: 68, maneuvers: 49, fired: 8,
+    // The owner's: Immelmann 6, 10, 18 (as fired); Half Mavvy 20, 27; Matty
+    // 50, 53; Maverick 63 (merged with 61, 62) and 66 (with 65).
+    NEW: {
+      20: 'halfmavvy', 27: 'halfmavvy', 50: 'matty', 53: 'matty', 63: 'maverick', 66: 'maverick',
+    },
+  },
 ];
 for (const L of LOGS) {
   L.recs = readLog(L.file);
   L.bySeq = new Map(L.recs.map((r) => [r.seq, r]));
   L.scored = L.recs.filter((r) => r.type === 'maneuver' && r.saw && !r.pre.short);
+  L.man = L.scored.slice().sort((a, b) => a.t0 - b.t0);
 }
-const [LOG1, LOG2] = LOGS;
+// Each log as the detector scores it today (merges and all), by seq.
+const REPLAY = new Map();
+const replayed = (L) => { if (!REPLAY.has(L)) REPLAY.set(L, replayLog(L)); return REPLAY.get(L); };
+const featNow = (L, r) => featFromLog(r, { pre: altAt(L.man, r.t0 - 1.0) });
+const [LOG1, LOG2, LOG3] = LOGS;
 
 test('the fixtures are the owner\'s logs, on the bf core in the Warehouse', () => {
   for (const L of LOGS) {
@@ -277,6 +422,8 @@ test('the rebuilt features reproduce every logged gate value', () => {
         // flip's.
         if (k === 'v.loopSweep' && loopDir !== flipDir) continue;
         if (!(k in now)) continue;   // a gate a later change removed
+        // A matcher trick defined differently since the log (log 3's).
+        if (/^f\.ph(Mav|Matty|HMatty|HMavvy)$/.test(k)) continue;
         const tol = 0.0025 + 0.002 * Math.abs(g[k]);
         assert.ok(Math.abs(now[k] - g[k]) <= tol, L.name + ' seq ' + r.seq + ' ' + k + ': logged ' + g[k] + ', rebuilt ' + now[k]);
       }
@@ -346,34 +493,38 @@ test('log 2: seq 29 and 30 are Trippy Spins, seq 4 a Powerloop', () => {
   assert.equal(featView(f).loops, 1);
 });
 
-test('every label a log fired stays the same (but log 2 seq 26 and the phase matcher\'s eight), and no other maneuver changes', () => {
+test('every label a log fired stays the same (but log 2 seq 26, the phase matcher\'s eight and log 3\'s six), and no other maneuver changes', () => {
   for (const L of LOGS) {
     const fired = L.scored.filter((r) => r.result);
     assert.equal(fired.length, L.fired, L.name + ' fired');
+    const out = replayed(L);
     const off = [];
     for (const r of L.scored) {
-      const got = classify(featFromLog(r).f).id;
+      const got = out.get(r.seq).id;
       const want = r.seq in L.NEW ? L.NEW[r.seq] : r.result;
       if (got !== want) off.push('seq ' + r.seq + ' is ' + got + ', want ' + want + ' (the log fired ' + r.result + ')');
     }
     assert.deepEqual(off, [], L.name);
   }
-  // The fired labels that change.
-  const changed = LOGS.flatMap((L) => L.scored.filter((r) => r.result && r.seq in L.NEW && L.NEW[r.seq] !== r.result).map((r) => L.name + ' seq ' + r.seq + ' ' + r.result + '->' + (L.NEW[r.seq] || 'none')));
+  // The labels that change: every fired one listed, and the unlabelled ones
+  // that score now.
+  const changed = LOGS.flatMap((L) => L.scored.filter((r) => r.seq in L.NEW && L.NEW[r.seq] !== r.result && (r.result || L.name === 'log 3')).map((r) => L.name + ' seq ' + r.seq + ' ' + (r.result || 'none') + '->' + (L.NEW[r.seq] || 'none')));
   assert.deepEqual(changed, [
     'log 1 seq 14 maverick->none', 'log 1 seq 21 maverick->none', 'log 1 seq 33 matty->none',
     'log 1 seq 80 snapback->immelmann', 'log 1 seq 82 halfmatty->cradle',
     'log 2 seq 26 flip->ham', 'log 2 seq 51 maverick->none', 'log 2 seq 71 maverick->none', 'log 2 seq 73 halfmatty->none',
+    'log 3 seq 20 barani->halfmavvy', 'log 3 seq 27 barani->halfmavvy', 'log 3 seq 50 none->matty', 'log 3 seq 53 none->matty',
+    'log 3 seq 63 cradle->maverick', 'log 3 seq 66 cradle->maverick',
   ]);
 });
 
-test('Flip, Powerloop and Split-S, now the phase matcher\'s, fire on both logs exactly where they did', () => {
+test('Flip, Powerloop and Split-S, now the phase matcher\'s, fire on every log exactly where they did', () => {
   const OLD = new Set(['flip', 'powerloop', 'splits']);
   for (const L of LOGS) {
+    const out = replayed(L);
     for (const r of L.scored) {
       const was = r.seq in L.NEW ? L.NEW[r.seq] : r.result;
-      const { f } = featFromLog(r);
-      const got = classify(f).id;
+      const got = out.get(r.seq).id;
       if (OLD.has(was) || OLD.has(got)) assert.equal(got, was, L.name + ' seq ' + r.seq);
     }
   }
@@ -388,24 +539,32 @@ test('Flip, Powerloop and Split-S, now the phase matcher\'s, fire on both logs e
 });
 
 test('the phase matcher\'s Maverick, Matty and Half Matty, and Immelmann, on both logs', () => {
-  // The Mavericks the logs fired: back B, forward F from the whole pitch and
-  // the net; none topped out inverted after 150-210 back.
+  // The Mavericks logs 1 and 2 fired: back B, forward F from the whole pitch
+  // and the net; none pulled back 120-225.
   for (const [L, seq] of [[LOG1, 14], [LOG1, 21], [LOG2, 51], [LOG2, 71]]) {
     const s = L.bySeq.get(seq).saw;
     const back = (s.pathP - s.pitch) / 2 / DEG;
-    assert.ok(back < 150 || back > 210 || s.upMin > -0.5, L.name + ' seq ' + seq + ': back ' + back.toFixed(0) + ', up-Z ' + s.upMin);
-    assert.equal(featFromLog(L.bySeq.get(seq)).f.phMav, 0);
+    assert.ok(back < 120 || back > 225, L.name + ' seq ' + seq + ': back ' + back.toFixed(0));
+    assert.equal(featNow(L, L.bySeq.get(seq)).f.phMav, 0);
   }
   // Log 1 seq 33: a Matty of 202 degrees that did not climb.
   const s33 = LOG1.bySeq.get(33).saw;
   assert.ok(s33.pitchDeg < 300 && s33.loopRise < 1, 'seq 33');
-  // The Matties that stay: a forward loop of 300 or more climbing 2-3.6 m,
-  // over an object and under one.
+  // The Matties that stay: forward 321 and 301 over an object, against the
+  // nose (or of the inverted part), climbed into: 3.7 and 5.2 m above the
+  // altitude 1.0 s before, by the records around then.
   for (const [L, seq] of [[LOG1, 49], [LOG2, 16]]) {
     const r = L.bySeq.get(seq);
     assert.equal(r.result, 'matty');
-    assert.equal(featFromLog(r).f.phMatty, 1, L.name + ' seq ' + seq);
-    assert.equal(classify(featFromLog(r).f).id, 'matty', L.name + ' seq ' + seq);
+    assert.equal(featNow(L, r).f.phMatty, 1, L.name + ' seq ' + seq);
+    assert.equal(replayed(L).get(seq).id, 'matty', L.name + ' seq ' + seq);
+  }
+  // Log 1 seq 7 (a Flip) and 75 (a Powerloop) climbed inside the flip after
+  // a descent: not climbed into, not Matties.
+  for (const seq of [7, 75]) {
+    const r = LOG1.bySeq.get(seq);
+    assert.ok(r.saw.alt0 < altAt(LOG1.man, r.t0 - 1.0), 'seq ' + seq + ' came down into it');
+    assert.equal(featNow(LOG1, r).f.phMatty, 0, 'seq ' + seq);
   }
   // Log 1 seq 80: back 171, a roll of 163, out higher with the heading turned.
   const r80 = LOG1.bySeq.get(80);
@@ -419,6 +578,72 @@ test('the phase matcher\'s Maverick, Matty and Half Matty, and Immelmann, on bot
     assert.ok(Math.abs(s.rollDeg) >= 135 && s.rollFirst > 0, L.name + ' seq ' + seq);
     assert.equal(featFromLog(L.bySeq.get(seq)).f.phHMatty, 0);
   }
+});
+
+test('log 3: the owner\'s Immelmanns stay; seq 20 and 27 are Half Mavvies, not Baranis', () => {
+  const out = replayed(LOG3);
+  for (const seq of [6, 10, 18]) {
+    assert.equal(LOG3.bySeq.get(seq).result, 'immelmann');
+    assert.equal(out.get(seq).id, 'immelmann', 'seq ' + seq);
+  }
+  for (const seq of [20, 27]) {
+    const r = LOG3.bySeq.get(seq), s = r.saw;
+    assert.equal(r.result, 'barani', 'seq ' + seq + ' fired Barani');
+    // Forward 330-450 net with a half roll between its halves (the pitch
+    // first), a climb of 3 m or more, 2 s or longer, upright: slow and high.
+    assert.ok(s.pitchDeg >= 330 && s.pitchDeg <= 450, 'seq ' + seq + ' pitch ' + s.pitchDeg);
+    assert.ok(Math.abs(s.rollDeg) >= 135 && Math.abs(s.rollDeg) <= 225 && s.rollFirst < 0, 'seq ' + seq + ' roll ' + s.rollDeg);
+    assert.ok(s.loopRise >= 3 && s.dur >= 2 && s.upEnd >= 0.5, 'seq ' + seq);
+    const { f } = featNow(LOG3, r);
+    assert.equal(f.phHMavvy, 1, 'seq ' + seq);
+    assert.equal(out.get(seq).id, 'halfmavvy', 'seq ' + seq);
+    // The Barani's terms: low (a climb under 2 m); its flip and twist are
+    // inside 1.5 s, as a Barani's are.
+    const bar = explainFeat(f).candidates.find((c) => c.id === 'barani');
+    assert.ok(bar.score === 0, 'seq ' + seq + ' Barani ' + bar.reason);
+  }
+});
+
+test('log 3: seq 50 and 53 are Matties, climbed into; seq 56 does not fit', () => {
+  const out = replayed(LOG3);
+  for (const seq of [50, 53]) {
+    const r = LOG3.bySeq.get(seq), s = r.saw;
+    assert.equal(r.result, null, 'seq ' + seq + ' scored nothing in the log');
+    assert.ok(s.pitchDeg >= 250 && s.pitchDeg <= 400 && s.over > 0 && s.against >= 0.5, 'seq ' + seq);
+    // Hardly a climb inside it: the climb is before it.
+    assert.ok(s.loopRise < 0.3, 'seq ' + seq + ' rose ' + s.loopRise + ' inside');
+    const pre = altAt(LOG3.man, r.t0 - 1.0);
+    assert.ok(s.alt0 >= pre && s.alt0 + s.loopRise - pre >= 1, 'seq ' + seq + ': ' + pre.toFixed(2) + ' 1 s before, ' + s.alt0 + ' at the start');
+    assert.equal(out.get(seq).id, 'matty', 'seq ' + seq);
+  }
+  // Seq 56: forward 260 net, but a half roll (171) and 85 back inside it, and
+  // cut at the 4.5 s cap.
+  const s56 = LOG3.bySeq.get(56).saw;
+  assert.ok(Math.abs(s56.rollDeg) > 45 && s56.dur >= 4.5, 'seq 56');
+  assert.equal(out.get(56).id, null);
+});
+
+test('log 3: the Mavericks split across segments are one Maverick each, and no Cradle', () => {
+  const out = replayed(LOG3);
+  // 151.4 + 152.0: seq 65 pulls back 138 (never inverted), seq 66 pushes 131
+  // forward against the nose, 0.08 s apart. 148.2: seq 61 pulls back 152
+  // and pitches forward, seq 62 pulls 27, seq 63 pushes 121 against the
+  // nose, the pauses 0.57 and 0.07 s.
+  const s65 = LOG3.bySeq.get(65).saw, s66 = LOG3.bySeq.get(66).saw;
+  assert.ok(s65.pitchDeg === -138 && s65.upMin > 0 && s66.pitchDeg === 131 && s66.against >= 0.85);
+  for (const [seq, segs, before] of [[66, 2, [65]], [63, 3, [61, 62]]]) {
+    const r = LOG3.bySeq.get(seq);
+    assert.equal(r.result, 'cradle', 'seq ' + seq + ' fired Cradle');
+    assert.deepEqual(out.get(seq), { id: 'maverick', merged: segs }, 'seq ' + seq);
+    for (const b of before) {
+      assert.equal(LOG3.bySeq.get(b).result, null, 'seq ' + b + ' scored nothing');
+      assert.equal(out.get(b).id, null, 'seq ' + b);
+      assert.ok(r.t0 - LOG3.bySeq.get(b).t < 2 && r.t0 > LOG3.bySeq.get(b).t);
+    }
+  }
+  // Alone, the glide back is still a Cradle; merged, it is not one.
+  assert.equal(classify(featNow(LOG3, LOG3.bySeq.get(66)).f).id, 'cradle');
+  assert.ok(MERGE_GAP_S > 0.79 && MERGE_GAP_S < 0.81);
 });
 
 test('loop count: one from 300 degrees, two from 600, one more per further 360', () => {
