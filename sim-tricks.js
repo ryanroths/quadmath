@@ -46,9 +46,11 @@ export const ROLL_WIN_S = 1.5;
 // velocity·nose (NaN below 0.85 m/s), the velocity along physics x (m/s),
 // the objects at hand (PH_OVER: one below, PH_UNDER: one above), the
 // authored gaps passed so far, the velocity along physics y, the heading
-// (rad). MANEUVER_SUSTAIN_S at 1 ms steps fits.
+// (rad), the yaw about the body's up axis and the twist (rad, each summed
+// from the segment's start; the twist below, BARANI_P). MANEUVER_SUSTAIN_S
+// at 1 ms steps fits.
 export const HIST_CAP = 10240;
-export const HIST_W = 14;
+export const HIST_W = 16;
 // Powerloop: >= 300 degrees of pitch inside any LOOP_WIN_S window (a loop is
 // slower than a flip). The loops are counted over the segment's whole turn
 // of pitch the loop's way: two from LOOP_TWO (600 degrees), then one more for
@@ -70,9 +72,20 @@ export const POLE_W_M = 0.5;
 export const POLE_H_M = 1.0;
 export const POLE_NEAR_M = 0.5;
 export const TRIPPY_POLE_MUL = 1.25;
-// Barani: a flip (>= 300 degrees of pitch) and a half twist (180 +- 45 degrees
-// of roll) inside one BARANI_WIN_S window, ending upright.
-export const BARANI_WIN_S = 1.5;
+// Barani, as the owner flies it: BARANI_P or more of pitch path (the pitch
+// turned either way, summed: a twist turns the body round, so the same flip
+// pitches the body the other way after it) with a half twist (180 +- 45
+// degrees) inside it, ending upright. Any climb, any time. The twist is the
+// turn about the body axis nearest the flight path: roll when the nose is
+// along it (flying level), yaw when the up axis is (punched up, or inverted
+// and falling); slower than TWIST_SPD (m/s), where the path is no direction
+// to speak of, whichever of the two turns faster. Inside: BARANI_SIDE of
+// pitch path or more before the twist is half done, and after. 300 degrees
+// fades over BARANI_FADE (the owner's 38.1 s Barani turned 299).
+export const BARANI_P = 5.236;
+export const BARANI_FADE = 0.35;
+export const BARANI_SIDE = 1.047;
+export const TWIST_SPD = 3;
 // Ham Spin (the inverted yaw spin): >= HAM_MIN of turn about the vertical
 // counted only while inverted, up-Z below HAM_UPZ (tilted more than 120
 // degrees). The half flips in and out turn little about the vertical and
@@ -475,9 +488,12 @@ export function makeFeat() {
     // carried into the world, its up component. A tilted spin turns the
     // heading at the full rate while its body-axis yaw sees only cos(tilt).
     vyaw: 0,
+    // The twist (rad, summed): each step's turn about the body axis nearest
+    // the flight path, roll or yaw (BARANI_P).
+    twist: 0,
     orbitR: 0, orbitFit: 9, orbitSweep: 0, orbitTurn: 0, orbitSpd: 0, orbitCx: 0, orbitCz: 0, orbitPole: 0,
-    // Barani: the pitch and |roll| of the window (<= BARANI_WIN_S) with
-    // >= 300 degrees of pitch whose roll is nearest a half twist; up-Z at the end.
+    // Barani (baraniWithin): the pitch path and |twist| of the stretch that
+    // scores best as a Barani's, the twist inside the pitch; up-Z at the end.
     barP: 0, barR: 0, upEnd: 1,
     // Ham: the turn about the vertical while up-Z < HAM_UPZ (rad): its
     // running sum (invC) and that sum's lowest and highest so far (invLo,
@@ -519,7 +535,7 @@ export function resetFeat(f) {
   f.flipUp = 0; f.flipDn = 0; f.rollUp = 0; f.rollDn = 0; f.rollUpT = 0; f.rollDnT = 0;
   f.loopUp = 0; f.loopDn = 0; f.loopTot = 0;
   f.postMin = 0; f.sweep = 0; f.sweepTh = 0; f.sweepOn = 0;
-  f.yawUp = 0; f.yawDn = 0; f.yawUpT = 0; f.yawDnT = 0; f.vyaw = 0;
+  f.yawUp = 0; f.yawDn = 0; f.yawUpT = 0; f.yawDnT = 0; f.vyaw = 0; f.twist = 0;
   f.orbitR = 0; f.orbitFit = 9; f.orbitSweep = 0; f.orbitTurn = 0; f.orbitSpd = 0; f.orbitCx = 0; f.orbitCz = 0; f.orbitPole = 0;
   f.barP = 0; f.barR = 0; f.upEnd = 1;
   f.invC = 0; f.invLo = 0; f.invHi = 0; f.invYawUp = 0; f.invYawDn = 0; f.invYawT = 0;
@@ -556,7 +572,7 @@ export function copyFeat(src, dst) {
   d.rollUpT = src.rollUpT; d.rollDnT = src.rollDnT;
   d.loopUp = src.loopUp; d.loopDn = src.loopDn; d.loopTot = src.loopTot;
   d.postMin = src.postMin; d.sweep = src.sweep; d.sweepTh = src.sweepTh; d.sweepOn = src.sweepOn;
-  d.yawUp = src.yawUp; d.yawDn = src.yawDn; d.yawUpT = src.yawUpT; d.yawDnT = src.yawDnT; d.vyaw = src.vyaw;
+  d.yawUp = src.yawUp; d.yawDn = src.yawDn; d.yawUpT = src.yawUpT; d.yawDnT = src.yawDnT; d.vyaw = src.vyaw; d.twist = src.twist;
   d.orbitR = src.orbitR; d.orbitFit = src.orbitFit; d.orbitSweep = src.orbitSweep; d.orbitTurn = src.orbitTurn; d.orbitSpd = src.orbitSpd;
   d.orbitCx = src.orbitCx; d.orbitCz = src.orbitCz; d.orbitPole = src.orbitPole;
   d.barP = src.barP; d.barR = src.barR; d.upEnd = src.upEnd;
@@ -657,22 +673,48 @@ export function orbitFit(hist, a, b, out, w) {
   return o;
 }
 
-// The Barani window: among the windows of at most win seconds with at least
-// minP of pitch, the one whose |roll| is nearest pi. out: { p, r } (rad), 0, 0
-// when no window turns minP. O(n x rows per window), once a segment.
-export function baraniWithin(hist, n, win, minP, out, w) {
+// Barani: over a segment's history (rows of stride w), the stretch a..b
+// whose pitch path (the pitch turned either way, summed) and |twist| (the
+// twist column's change) score best as a Barani's: BARANI_P of pitch path
+// (faded over BARANI_FADE) and a twist of 180 +- 45 degrees, the twist
+// inside the pitch (BARANI_SIDE of pitch path or more before the row where
+// the twist is half done, and after it). Ends on every PH_ROWS-th row, the
+// pitch path summed over every row; among equals, the twist nearer 180.
+// out: { p, r } (rad; 0 when none).
+const _barPP = new Float64Array(PH_ROWS + 2);
+const _barTW = new Float64Array(PH_ROWS + 2);
+export function baraniWithin(hist, n, out, w) {
   const W = w || HIST_W;
   const o = out || {};
   o.p = 0; o.r = 0;
-  let best = 1e9;
-  for (let b = 1; b < n; b++) {
-    const tb = hist[b * W], pb = hist[b * W + 1], rb = hist[b * W + 2];
-    for (let a = b - 1; a >= 0 && tb - hist[a * W] <= win; a--) {
-      const dp = Math.abs(pb - hist[a * W + 1]);
-      if (dp < minP) continue;
-      const dr = Math.abs(rb - hist[a * W + 2]);
-      const off = Math.abs(dr - Math.PI);
-      if (off < best) { best = off; o.p = dp; o.r = dr; }
+  if (!hist || n < 2) return o;
+  const stride = Math.max(1, Math.ceil(n / PH_ROWS));
+  const m = Math.ceil((n - 1) / stride) + 1;
+  // The pitch path and the twist at each kept row.
+  let path = 0, j = 0;
+  _barPP[0] = 0; _barTW[0] = hist[15];
+  for (let r = 1; r < n; r++) {
+    path += Math.abs(hist[r * W + 1] - hist[(r - 1) * W + 1]);
+    if (r === n - 1 || r % stride === 0) { j++; _barPP[j] = path; _barTW[j] = hist[r * W + 15]; }
+  }
+  const lo = BARANI_P - BARANI_FADE;
+  if (path < lo) return o;
+  let best = 0, bestOff = 9;
+  for (let ja = 0; ja < m - 1; ja++) {
+    for (let jb = m - 1; jb > ja; jb--) {
+      const P = _barPP[jb] - _barPP[ja];
+      if (P < lo) break;
+      const raw = _barTW[jb] - _barTW[ja], T = Math.abs(raw);
+      const sc = atLeast(P, BARANI_P, BARANI_FADE) * inBand(T, 2.356, 3.927, 0);
+      if (!(sc > 0)) continue;
+      const off = Math.abs(T - Math.PI);
+      if (sc < best - 1e-9 || (sc <= best + 1e-9 && off >= bestOff)) continue;
+      // Inside the pitch: the row where the twist is half done.
+      const sg = raw >= 0 ? 1 : -1;
+      let k = ja + 1;
+      while (k < jb && sg * (_barTW[k] - _barTW[ja]) < T / 2) k++;
+      if (_barPP[k] - _barPP[ja] < BARANI_SIDE || _barPP[jb] - _barPP[k] < BARANI_SIDE) continue;
+      best = sc; bestOff = off; o.p = P; o.r = T;
     }
   }
   return o;
@@ -738,6 +780,8 @@ function mul() {
 //   over   an object below the quad (PH_OVER) at or before its highest point
 //   under  after that highest point, an object above it (PH_UNDER) or an
 //          authored gap passed through
+//   ag     the share of the phase flown against the nose (velocity·nose
+//          under -0.18, of the steps it is known) at least this
 // The phases follow one another. Before the first and after the last, pitch
 // and roll each turn at most PH_SLOP (lead, trail; a trick's lead may allow
 // more); inside a phase, the one of the two it does not turn about at most
@@ -753,6 +797,9 @@ function mul() {
 //         part, the larger)
 //   merge the trick may span consecutive segments (mergeFeat): a compound
 //         trick the segmentation split at a pause
+//   still across the phases, first to last, the roll and the yaw (about the
+//         body's up axis) each turn at most this (rad, the most each turned
+//         from its lowest to its highest): no twist in it
 // matchSpec scores one set of measured phases (0-1); measureSpec finds the
 // best set in a history. The scores are the features classifyFeat reads
 // (f.phFlip ... f.phHMavvy); the attempt-log replay scores logs that predate
@@ -789,9 +836,13 @@ export const PHASE_SPECS = Object.freeze({
   // towards the entry against the nose (velocity·nose -0.3 or less) for
   // 0.3 s: the glide back. It need not go inverted (the owner's top out at
   // about 70 degrees past level). Often two segments (the pull, the push).
+  // No twist between the pull and the push: the roll and the yaw each turn
+  // under 60 degrees across them (a Barani twisted with yaw at its top
+  // pitches the body back, then forward, too).
   maverick: Object.freeze({
     ph: [{ ax: 'p', sg: -1, lo: 2.094, hi: 3.927, climb: 1 }, { ax: 'p', sg: 1, lo: 1.047 }],
     tail: { dot: -0.3, t: 0.3 },
+    still: 1.047,
     merge: 1,
   }),
   // Matty, as the owner flies it: 250-400 degrees of forward pitch over an
@@ -812,10 +863,12 @@ export const PHASE_SPECS = Object.freeze({
   // between its halves, forward pitch on to upright; 330-450 degrees of
   // forward pitch net, a climb of 3 m or more, 2 s or longer. The pull-up
   // before it may turn 120 degrees (lead); the pitch may run on through the
-  // roll (cross 90). A Barani is the quick, low one.
+  // roll (cross 90). Through an object: under one (an object above, PH_UNDER)
+  // a quarter of the maneuver or more, and after the roll flown against the
+  // nose 0.3 of the time or more. Without that it is a Barani.
   halfmavvy: Object.freeze({
-    ph: [{ ax: 'p', sg: 1, lo: 1.047 }, { ax: 'r', sg: 0, lo: 2.356, hi: 3.927 }, { ax: 'p', sg: 1, lo: 1.571 }],
-    seg: [['pitch', '>=', 5.76, 0], ['pitch', '<=', 7.854, 0], ['loopRise', '>=', 3, 0], ['dur', '>=', 2, 0], ['upEnd', '>=', 0.5, 0]],
+    ph: [{ ax: 'p', sg: 1, lo: 1.047 }, { ax: 'r', sg: 0, lo: 2.356, hi: 3.927 }, { ax: 'p', sg: 1, lo: 1.571, ag: 0.3 }],
+    seg: [['pitch', '>=', 5.76, 0], ['pitch', '<=', 7.854, 0], ['loopRise', '>=', 3, 0], ['dur', '>=', 2, 0], ['upEnd', '>=', 0.5, 0], ['under', '>=', 0.25, 0]],
     lead: 2.094, cross: 1.571,
     merge: 1,
   }),
@@ -853,7 +906,7 @@ function segTerm(g, f, v) {
 }
 
 // One phase's terms on its measurement m: { turn, t, climb, up, over, under,
-// cross, back } (turn the phase's way, rad); crossMax: the trick's cross.
+// ag, cross, back } (turn the phase's way, rad); crossMax: the trick's cross.
 export function phaseTerm(ph, m, crossMax) {
   const fade = ph.fade || 0;
   let s = atLeast(m.turn, ph.lo, fade);
@@ -865,12 +918,13 @@ export function phaseTerm(ph, m, crossMax) {
   if (ph.up === -1 && !(m.up <= -0.5)) return 0;
   if (ph.over && !m.over) return 0;
   if (ph.under && !m.under) return 0;
+  if (ph.ag != null && !(m.ag >= ph.ag)) return 0;
   if (!(m.cross <= (crossMax || PH_CROSS)) || !(m.back <= PH_CROSS)) return 0;
   return s;
 }
 
 // A trick's score (0-1) on measured phases ms: { ph: [m, ...], lead, trail,
-// tail } and the maneuver's features.
+// tail, still } and the maneuver's features.
 export function matchSpec(spec, ms, f, v) {
   const ph = spec.ph;
   if (!ms || !ms.ph || ms.ph.length !== ph.length) return 0;
@@ -878,6 +932,7 @@ export function matchSpec(spec, ms, f, v) {
   for (let i = 0; i < ph.length; i++) s *= phaseTerm(ph[i], ms.ph[i], spec.cross);
   if (spec.seg) for (let i = 0; i < spec.seg.length; i++) s *= segTerm(spec.seg[i], f, v);
   if (spec.tail) s *= atLeast(ms.tail || 0, spec.tail.t, 0);
+  if (spec.still != null) s *= atMost(ms.still || 0, spec.still, 0);
   if (ph[0].win == null) s *= atMost(ms.lead || 0, spec.lead || PH_SLOP, 0) * atMost(ms.trail || 0, PH_SLOP, 0);
   return s;
 }
@@ -893,10 +948,12 @@ function measurePhase(H, ph, a, b, pre, out) {
   m.a = a; m.b = b;
   m.t = H[b * W] - H[a * W];
   let altMax = H[a * W + 6], apex = a, low = altMax, rise = 0, firstOver = -1, lastUnder = -1;
-  let hiA = H[a * W + col], loA = hiA, ddUp = 0, ddDn = 0;
+  let hiA = H[a * W + col], loA = hiA, ddUp = 0, ddDn = 0, aN = 0, agN = 0;
   for (let r = a; r <= b; r++) {
     const o = r * W;
     const A = H[o + col];
+    const dot = H[o + 8];
+    if (dot === dot) { aN++; if (dot < -0.18) agN++; }
     if (A > hiA) hiA = A; else if (hiA - A > ddUp) ddUp = hiA - A;
     if (A < loA) loA = A; else if (A - loA > ddDn) ddDn = A - loA;
     const alt = H[o + 6];
@@ -909,10 +966,24 @@ function measurePhase(H, ph, a, b, pre, out) {
   m.up = H[b * W + 7];
   m.over = firstOver >= 0 && firstOver <= apex ? 1 : 0;
   m.under = lastUnder > apex ? 1 : 0;
+  m.ag = aN ? agN / aN : 0;
   const dP = Math.abs(H[b * W + 1] - H[a * W + 1]), dR = Math.abs(H[b * W + 2] - H[a * W + 2]);
   m.cross = col === 1 ? dR : col === 2 ? dP : Math.max(dP, dR);
   m.back = ph.sg > 0 || (ph.sg === 0 && raw >= 0) ? ddUp : ddDn;
   return m;
+}
+
+// Across rows a..b, the most the roll and the yaw about the body's up axis
+// each turned (from its lowest to its highest), the larger (rad).
+function stillOf(H, a, b) {
+  const W = HIST_W;
+  let rLo = H[a * W + 2], rHi = rLo, yLo = H[a * W + 14], yHi = yLo;
+  for (let r = a + 1; r <= b; r++) {
+    const R = H[r * W + 2], Y = H[r * W + 14];
+    if (R < rLo) rLo = R; else if (R > rHi) rHi = R;
+    if (Y < yLo) yLo = Y; else if (Y > yHi) yHi = Y;
+  }
+  return Math.max(rHi - rLo, yHi - yLo);
 }
 
 // Pitch and roll's turn between rows a and b, the larger.
@@ -1009,6 +1080,8 @@ export function measureSpec(spec, H, n, f, v, dq, ctx) {
       const A0 = H[ao + col], P0 = H[ao + 1], R0 = H[ao + 2], alt0 = H[ao + 6], t0 = H[ao];
       let altMax = alt0, apex = a, low = alt0, rise = 0, firstOver = (H[ao + 10] & PH_OVER) ? a : -1, lastUnder = -1;
       let hiA = A0, loA = A0, ddUp = 0, ddDn = 0;
+      const d0 = H[ao + 8];
+      let aN = d0 === d0 ? 1 : 0, agN = d0 === d0 && d0 < -0.18 ? 1 : 0;
       const tailT = nxt ? (nxt[a] < n ? H[(n - 1) * W] - H[nxt[a] * W] : 0) : 0;
       let jb = ja + 1, rb = rowOf(jb);
       for (let r = a + 1; r < n; r++) {
@@ -1022,6 +1095,8 @@ export function measureSpec(spec, H, n, f, v, dq, ctx) {
         const fl = H[o + 10];
         if ((fl & PH_OVER) && firstOver < 0) firstOver = r;
         if ((fl & PH_UNDER) || H[o + 11] > H[o - W + 11]) lastUnder = r;
+        const dot = H[o + 8];
+        if (dot === dot) { aN++; if (dot < -0.18) agN++; }
         if (r !== rb) continue;
         const raw = A - A0;
         pm.turn = p.sg > 0 ? raw : p.sg < 0 ? -raw : Math.abs(raw);
@@ -1030,6 +1105,7 @@ export function measureSpec(spec, H, n, f, v, dq, ctx) {
         pm.up = H[o + 7];
         pm.over = firstOver >= 0 && firstOver <= apex ? 1 : 0;
         pm.under = lastUnder > apex ? 1 : 0;
+        pm.ag = aN ? agN / aN : 0;
         const dP = Math.abs(H[o + 1] - P0), dR = Math.abs(H[o + 2] - R0);
         pm.cross = col === 1 ? dR : col === 2 ? dP : Math.max(dP, dR);
         pm.back = p.sg > 0 || (p.sg === 0 && raw >= 0) ? ddUp : ddDn;
@@ -1061,6 +1137,7 @@ export function measureSpec(spec, H, n, f, v, dq, ctx) {
   }
   ms.lead = turnPR(H, 0, ms.ph[0].a);
   ms.trail = turnPR(H, ms.ph[K - 1].b, n - 1);
+  if (spec.still != null) ms.still = stillOf(H, ms.ph[0].a, ms.ph[K - 1].b);
   if (nxt) {
     const a = ms.ph[K - 1].a;
     ms.tail = nxt[a] < n ? H[(n - 1) * W] - H[nxt[a] * W] : 0;
@@ -1148,16 +1225,18 @@ export function mergeFeat(d) {
 }
 
 // One row of the chain for this step: the chain's own time and its pitch,
-// roll and turn about the vertical, summed from its first step.
-function chainPush(d, dr, dp, dv, step, alt, wx, wz, upZ, vx, vy, vz, head) {
+// roll, turn about the vertical, body yaw and twist, summed from its first
+// step.
+function chainPush(d, dr, dp, dv, dy, dtw, step, alt, wx, wz, upZ, vx, vy, vz, head) {
   if (d.chainN >= HIST_CAP) { d.chainOn = 0; return; }
   const W = HIST_W, i = d.chainN * W, ws = d.ws || 3.5;
-  if (d.chainN) { d.cT += step; d.cP += dp; d.cR += dr; d.cV += dv; }
+  if (d.chainN) { d.cT += step; d.cP += dp; d.cR += dr; d.cV += dv; d.cY += dy; d.cTw += dtw; }
   const H = d.chain;
   H[i] = d.cT; H[i + 1] = d.cP; H[i + 2] = d.cR; H[i + 3] = d.cV;
   H[i + 4] = wx / ws; H[i + 5] = wz / ws; H[i + 6] = alt; H[i + 7] = upZ;
   H[i + 8] = noseDot(d, vx, vy, vz); H[i + 9] = vx; H[i + 10] = objFlags(d.clr);
   H[i + 11] = d.cGapN; H[i + 12] = vy; H[i + 13] = head;
+  H[i + 14] = d.cY; H[i + 15] = d.cTw;
   d.chainN += 1;
 }
 
@@ -1166,7 +1245,7 @@ function chainPush(d, dr, dp, dv, step, alt, wx, wz, upZ, vx, vy, vz, head) {
 // MANEUVER_MAX_S ago drop off its front.
 function chainBegin(d, f, head) {
   if (!d.chainOn || d.chainGap >= MERGE_GAP_S) {
-    d.chainN = 0; d.cT = 0; d.cP = 0; d.cR = 0; d.cV = 0; d.cGapN = 0;
+    d.chainN = 0; d.cT = 0; d.cP = 0; d.cR = 0; d.cV = 0; d.cY = 0; d.cTw = 0; d.cGapN = 0;
     d.chainSegs = [];
   } else if (d.chainSegs.length) {
     const W = HIST_W, now = d.chainN ? d.chain[(d.chainN - 1) * W] : 0;
@@ -1331,14 +1410,16 @@ export function classifyFeat(f, out) {
     atLeast(v.inv, 0.12, 0.08),
     atMost(absY, 2.4, 0.7),
   );
-  // Barani: a flip with a half twist inside BARANI_WIN_S, ending upright.
-  // Quick (the flip and twist inside BARANI_WIN_S) and low (a climb under
-  // 2 m): the owner's Half Mavvy turns the same way, slower and higher.
+  // Barani, as the owner flies it: BARANI_P of pitch path with a half twist
+  // (180 +- 45, roll or yaw: the axis nearest the flight path) inside it,
+  // ending upright (up-Z 0.5, as the Half Mavvy's and the Immelmann's). Any
+  // climb, any time. A Half Mavvy turns the same way and goes under an
+  // object against the nose after its roll; it ranks above.
+  // (5.236 and 0.35: BARANI_P and BARANI_FADE.)
   _sc.barani = mul(
-    atLeast(f.barP, 5.236, 0),
+    atLeast(f.barP, 5.236, 0.35),
     inBand(f.barR, 2.356, 3.927, 0),
-    atLeast(f.upEnd, 0.6, 0),
-    atMost(v.loopRise, 2, 0),
+    atLeast(f.upEnd, 0.5, 0),
   );
   {
     // Trippy Spin: >= 360 degrees of turn about the vertical at >= 150 deg/s
@@ -1571,7 +1652,7 @@ export function makeDetector() {
     // pauses between them (rows of HIST_W, its own time and summed turns),
     // each segment's start in it, the pause so far; the last merge scored.
     chain: new Float64Array(HIST_CAP * HIST_W), chainN: 0, chainOn: 0, chainGap: 0, chainSegs: [],
-    cT: 0, cP: 0, cR: 0, cV: 0, cGapN: 0, lastMerge: null,
+    cT: 0, cP: 0, cR: 0, cV: 0, cY: 0, cTw: 0, cGapN: 0, lastMerge: null,
     // The altitude ring: clock and altitude, the next slot, the count.
     altT: new Float64Array(ALT_RING), altA: new Float64Array(ALT_RING), altI: 0, altN: 0,
     // Trippy and Barani scratch; the colliders and scale of the last step.
@@ -1876,11 +1957,12 @@ function objFlags(clr) {
   return (clr.over < 8 ? PH_OVER : 0) | (clr.up < 8 ? PH_UNDER : 0);
 }
 
-function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, thr, vx, vy, vz) {
+function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, thr, vx, vy, vz, dtw) {
   const f = d.feat;
   f.dur += step;
   f.n += 1;
   f.pitch += dp; f.roll += dr; f.yaw += dy;
+  f.twist += dtw || 0;
   {
     // The world-up component of this step's rotation (the body axes' up
     // components from the step's attitude).
@@ -1919,6 +2001,8 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
     d.hist[hi + 11] = f.gapN;
     d.hist[hi + 12] = vy;
     d.hist[hi + 13] = head;
+    d.hist[hi + 14] = f.yaw;
+    d.hist[hi + 15] = f.twist;
     d.histN += 1;
   }
   {
@@ -2025,10 +2109,9 @@ export function windowFeat(d) {
   const ws = d.ws || 3.5;
   f.orbitCx = o.cx * ws; f.orbitCz = o.cz * ws;
   f.orbitPole = o.kr > 0 ? poleNear(d.cols, f.orbitCx, f.orbitCz, ws) : 0;
-  // Barani: only worth the scan when a flip's worth of pitch is there.
-  const pw = spanWithin(d.hist, d.histN, 1, BARANI_WIN_S, d.span, d.dq);
-  if (Math.max(pw.up, pw.dn) >= 5.236) {
-    const bw = baraniWithin(d.hist, d.histN, BARANI_WIN_S, 5.236, d.bar);
+  // Barani: only worth the scan when a flip's worth of pitch path is there.
+  if ((f.pathP || 0) >= BARANI_P - BARANI_FADE) {
+    const bw = baraniWithin(d.hist, d.histN, d.bar);
     f.barP = bw.p; f.barR = bw.r;
   } else { f.barP = 0; f.barR = 0; }
   return f;
@@ -2131,6 +2214,16 @@ export function stepDetector(d, sample, dt) {
   d.qx = sx; d.qy = sy; d.qz = sz; d.qw = sw; d.haveQ = 1;
   // This step's turn about the vertical (as accumFeat sums it), for the chain.
   const dv = 2 * (sx * sz - sw * sy) * dr + 2 * (sy * sz + sw * sx) * dp + (1 - 2 * (sx * sx + sy * sy)) * dy;
+  // The twist: this step's turn about the body axis nearest the flight path,
+  // the nose (roll) or the up axis (yaw); slower than TWIST_SPD, the one of
+  // the two turning faster.
+  let twYaw;
+  if (Math.hypot(vx, vy, vz) > TWIST_SPD) {
+    const nd = (1 - 2 * (sy * sy + sz * sz)) * vx + 2 * (sx * sy + sw * sz) * vy + 2 * (sx * sz - sw * sy) * vz;
+    const ud = 2 * (sx * sz + sw * sy) * vx + 2 * (sy * sz - sw * sx) * vy + (1 - 2 * (sx * sx + sy * sy)) * vz;
+    twYaw = Math.abs(ud) > Math.abs(nd);
+  } else twYaw = Math.abs(dy) > Math.abs(dr);
+  const dtw = twYaw ? dy : dr;
   // No jump guard: the page steps the detector every 4 ms of sim time, so a
   // step turns at most a few degrees, and every respawn resets the detector
   // (sim.html placeQuadAt, resetQuad); a portal keeps the attitude.
@@ -2162,14 +2255,14 @@ export function stepDetector(d, sample, dt) {
     beginFeat(d, alt, wx, wz, head, speed, thr, upZ, vx, vy, vz);
     chainBegin(d, d.feat, head);
   }
-  if (d.live || d.chainOn) chainPush(d, dr, dp, dv, step, alt, wx, wz, upZ, vx, vy, vz, head);
+  if (d.live || d.chainOn) chainPush(d, dr, dp, dv, dy, dtw, step, alt, wx, wz, upZ, vx, vy, vz, head);
   if (!d.live && d.chainOn) {
     d.chainGap += step;
     if (d.chainGap >= MERGE_GAP_S || !armed || contact) d.chainOn = 0;
   }
   if (d.live) {
     if (contact) d.feat.bump = 1;
-    accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, thr, vx, vy, vz);
+    accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, thr, vx, vy, vz, dtw);
     recPush(
       d, d.feat.dur, ox, oy, oz, sx, sy, sz, sw,
       sample.sr || 0, sample.sp || 0, sample.sy || 0, thr,
