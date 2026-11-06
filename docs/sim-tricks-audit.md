@@ -650,3 +650,111 @@ is what the flights above show for a half flip, a yaw and a half flip.
 The owner's spins sit near the line: 304-318° about the vertical, and seq
 26 and 77 at 305° and 304°. Flown, the inverted part comes 0-4° under the
 whole turn, so a spin of 300-305° can fall either side of 300.
+
+## 9. The phase matcher: the owner's tricks as ordered phases
+
+The owner defined Maverick, Matty, Half Matty, Half Mavvy and Immelmann as
+phase sequences, and asked for one matcher in `sim-tricks.js` with Split-S,
+Powerloop and Flip re-expressed through it, firing exactly where they did on
+both owner logs.
+
+### The matcher
+
+- **Phases** (`PHASE_SPECS`): a turn about one axis (pitch, roll or the turn
+  about the vertical), a way (pitch back = nose up, the Powerloop's way;
+  forward = nose down) and a size (180 ± 45° unless the trick says
+  otherwise); optionally a climb, an end state (upright, inverted) and an
+  object over (below the quad at or before the phase's top) or under /
+  through (after it: one above, or an authored gap passed).
+- **Between the phases**: before the first and after the last, pitch and
+  roll turn at most 45°; inside a phase the other turns at most 45°, and
+  its own axis turns back against its way at most 45°. Without that last
+  rule a phase could end early and leave its extra turn in the next (a
+  210° bound would not bite).
+- **The whole segment**: end state, heading change, climb or drop from entry
+  to exit, and the Maverick's tail (the last stretch flown back towards the
+  entry against the nose, velocity·nose ≤ −0.3).
+- **The search** (`measureSpec`): each phase's bounds in the segment's
+  history (now 12 columns a row: altitude, up-Z, velocity·nose, the velocity
+  along the entry's direction, the objects at hand, the gaps passed), on at
+  most 200 rows, best first; ties go to the bounds that leave the least
+  turning outside and across the phases. One segment of at most 4.5 s.
+  Worst case 1.3 ms at a segment's end on a 4.4 s tumble.
+- **The score** (0–1) is each trick's one term in `classifyFeat`
+  (`f.phFlip` … `f.phHMavvy`). The overlay explains a miss by the trick's
+  segment terms and how many phases matched, and logs every trick's
+  measured phases (`phases`) and scores (`saw.ph`), so the next log
+  replays them exactly.
+
+### The tricks
+
+- **Flip** and **Powerloop**: one phase, the largest turn of pitch inside
+  1.2 s and 3.5 s, with their roll, yaw and path terms. **Split-S**: a roll
+  of 103–258°, then a back pitch of 69–258°, with its drop, order and
+  flying-with-the-nose terms. Their scores are their old terms exactly
+  (tested on 4000 random segments).
+- **Maverick**: back 150–210° climbing 1 m to an inverted top, forward
+  ≥60°, then back towards the entry against the nose for 0.3 s. Out through
+  the authored gap it came in by: 1.25× points (`MAV_GAP_MUL`).
+- **Matty**: forward ≥300° climbing 1 m over an object, down behind and
+  under or through it, upright. Without the object it is a Flip.
+- **Half Matty**: forward 180 ± 45° climbing 1 m over the object, ending
+  inverted.
+- **Half Mavvy** (new, 400, Intermediate, above Maverick and Matty): back
+  60–225° climbing 1 m, a roll of 180 ± 45°, forward 60–225° down under or
+  through the object, upright. As written (back ~180, roll 180, forward
+  ~180, upright) it cannot happen: the three compose to a plain half roll,
+  inverted, facing the entry way. The owner's account (roll to inverted,
+  then a slow forward pitch blind through the object like a Matty) holds
+  when the two pitches add to about 180°: a pull to the vertical, the roll
+  there, the fall over the other way. Upright needs 120–240° between them.
+- **Immelmann** (new, 100, Beginner, the Split-S's tier): back 180 ± 45°
+  climbing 1 m, a roll of 180 ± 45°, upright, the heading reversed (≥135°),
+  out higher than in. It scores above Snapback where both match.
+
+### Flown
+
+On the bf core (`tools/test_sim_tricks.mjs`), each the trick and its near
+miss not:
+
+| Trick | Phases measured | Near miss |
+|---|---|---|
+| Maverick | back 181° (climb 1.36 m, inverted), forward 154°, 0.96 s against the nose; through a gap and back out: the bonus | back about 120°: nothing |
+| Matty | forward 328° (climb 1.77 m), over the bar and under it | over a solid block, or open air: Flip |
+| Half Matty | forward 181° (climb 1.78 m), over the bar, inverted | open air: nothing |
+| Half Mavvy | back 72° (climb 1.09 m), roll 174°, forward 76° under the bar, upright | no bar: nothing; back 180, roll, forward 180: ends inverted |
+| Immelmann | back 182° (climb 1.34 m), roll 172°, heading 179°, out 0.89 m higher | the same turns sinking: Snapback |
+
+On the js core the library has three of each (two Half Mavvies, the roll
+either way) and pilot traces of the Matty and the Maverick (Actual and KISS
+rates, noisy sticks).
+
+### The logs, replayed
+
+Neither log has the matcher's phases. The replay scores Flip and Powerloop
+on their logged windows and Split-S on the whole roll and net pitch, which
+are their old terms exactly; the others are estimated from the logged
+totals (back B and forward F from the pitch's whole turn and net, the roll's
+whole turn, the climb as the top above the entry, objects over and under on
+any step; the tail only when the segment flew against the nose more than
+with it).
+
+- Flip (log 1 seq 7, 86; log 2 seq 55, 67, 78), Split-S (log 1 seq 19, log 2
+  seq 19) and the Powerloops (log 1 seq 4, 59, 75, 79; log 2 seq 4) fire
+  exactly where they did.
+- Eight labels change, all fired ones:
+  - log 1 seq 14 and 21, log 2 seq 51 and 71, Maverick: none topped out
+    inverted after 150–210° back (back 117°, 260°, 63°, 85°; 14, 51 and 71
+    never went inverted). No label.
+  - log 1 seq 33, Matty: 202° of forward pitch, no climb. No label.
+  - log 1 seq 80, Snapback: back 171°, roll 163°, a climb of 1.26 m, out
+    0.26 m higher, heading 168°. An Immelmann (by the estimate: the climb
+    is the top above the entry, not measured in the half loop).
+  - log 1 seq 82 and log 2 seq 73, Half Matty: a half roll then a forward
+    pitch, the old Half Matty. Not the owner's (a forward half loop over an
+    object ending inverted): 82 is a Cradle, its next best, 73 nothing.
+- The two Matties that stay (log 1 seq 49, log 2 seq 16) are forward loops
+  of 321° and 301° climbing 3.6 and 2.0 m, over an object and under one, by
+  the estimate.
+- The Air65 and Fractal75 replays (`tools/test_sim_tricks_logs.mjs`) give
+  the same labels at the same times as before.

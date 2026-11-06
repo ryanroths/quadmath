@@ -25,17 +25,17 @@
 import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
-  GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL,
-} from './sim-tricks.js?v=6609a2058fe5';
+  GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
+} from './sim-tricks.js?v=5396021d677d';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
 export const CLASS_IDS = Object.freeze([
-  'rubik', 'cubik', 'barani', 'ham', 'trippy', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
+  'halfmavvy', 'rubik', 'cubik', 'barani', 'immelmann', 'ham', 'trippy', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
   'powerloop', 'matty', 'maverick', 'splits', 'cradle', 'flip', 'roll', 'yawspin',
 ]);
 export const SPEC = Object.freeze({
-  rubik: 0.12, cubik: 0.12, barani: 0.12, ham: 0.11, trippy: 0.11, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
+  halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, barani: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
   halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
   cradle: 0.08, flip: 0, roll: 0, yawspin: 0,
 });
@@ -65,7 +65,12 @@ const either = (g1, g2) => ({ op: 'max', parts: [g1, g2] });
 
 // classifyFeat's mul(...) terms, per candidate, in its order. src is the
 // expression classifyFeat passes (the test matches it against the source).
+// The phase matcher's tricks have one term, the matcher's score (f.ph...);
+// each record's phases say what it measured (phaseRecord).
 export const GATES = Object.freeze({
+  halfmavvy: [
+    ge('f.phHMavvy', 1, 1),
+  ],
   rubik: [
     ge('v.pathP', 5.2, 0.7), ge('v.pathR', 5.2, 0.7), ge('absP', 4.4, 0.6), ge('absR', 4.4, 0.6),
     ge('pitchFirst', 0.0, 0.12), ge('v.inv', 0.12, 0.08), le('absY', 2.4, 0.7),
@@ -80,6 +85,9 @@ export const GATES = Object.freeze({
   ],
   barani: [
     ge('f.barP', 5.236, 0), band('f.barR', 2.356, 3.927, 0), ge('f.upEnd', 0.6, 0),
+  ],
+  immelmann: [
+    ge('f.phImmel', 1, 1),
   ],
   ham: [
     ge('v.invYaw', 5.236, 0),
@@ -101,29 +109,19 @@ export const GATES = Object.freeze({
     le('v.pathP', 6.2, 0.8), le('v.pathR', 5.4, 0.6),
   ],
   halfmatty: [
-    band('absR', 2.0, 4.6, 0.45), band('absP', 1.4, 4.4, 0.45), ge('f.pitch', 0.6, 0.4),
-    ge('rollFirst', 0.02, 0.10), ge('v.against - v.follow', 0.0, 0.12), ge('v.inv', 0.06, 0.05),
-    le('absY', 2.4, 0.7), le('v.pathR', 5.4, 0.6),
+    ge('f.phHMatty', 1, 1),
   ],
   powerloop: [
-    ge('v.loopSpan', 5.236, 0), le('absR', 1.7, 0.6), le('absY', 1.9, 0.6),
-    ge('v.loopRise', 1.5, 0), ge('v.loopRet', -1.5, 0), ge('v.loopSweep', 4.712, 0),
+    ge('f.phLoop', 1, 1),
   ],
   matty: [
-    ge('f.pitch', 2.0, 0.5), band('absP', 2.4, 5.6, 0.45), ge('v.drop', 0.35, 0.25),
-    ge('Math.max(v.against, v.invAg)', 0.22, 0.12), le('absR', 1.85, 0.5), ge('f.travelH', 2.2, 0.8),
-    le('v.close', 0.95, 0.12), ge('f.spdPeak', 1.8, 0.5),
-    floorOf(ge('objO', 0.08, 0.08), 0.72),
+    ge('f.phMatty', 1, 1),
   ],
   maverick: [
-    ge('v.span', 1.0, 0.4), le('v.close', 1.08, 0.14), band('v.pathP', 1.1, 6.2, 0.5), le('absP', 4.2, 0.5),
-    ge('v.pathP - absP', 0.55, 0.35), le('v.inv', 0.32, 0.12), ge('f.dur', 0.35, 0.12), ge('f.spdPeak', 1.1, 0.4),
-    le('absR', 2.8, 0.7), le('v.head', 2.0, 0.5), le('absY', 2.4, 0.7),
+    ge('f.phMav', 1, 1),
   ],
   splits: [
-    band('absR', 1.8, 4.5, 0.45), band('absP', 1.2, 4.5, 0.45), ge('-f.pitch', 0.6, 0.4), ge('v.drop', 0.35, 0.25),
-    ge('v.inv', 0.06, 0.05), ge('rollFirst', 0.02, 0.10), ge('v.follow', 0.18, 0.12), le('absY', 2.4, 0.7),
-    le('v.pathR', 5.4, 0.6),
+    ge('f.phSplits', 1, 1),
   ],
   cradle: [
     band('v.pathP', 1.3, 4.4, 0.45), le('absP', 3.6, 0.5), le('v.inv', 0.22, 0.1),
@@ -131,7 +129,7 @@ export const GATES = Object.freeze({
     floorOf(ge('v.obj', 0.08, 0.08), 0.55),
   ],
   flip: [
-    ge('v.flipSpan', 5.236, 0), le('absR', 1.7, 0.6), le('absY', 1.9, 0.6),
+    ge('f.phFlip', 1, 1),
   ],
   roll: [
     ge('v.rollSpan', 5.236, 0), ge('v.rollRate', 4.363, 0), le('absP', 1.85, 0.6), le('absY', 2.05, 0.6),
@@ -224,6 +222,8 @@ function context(f) {
     'v.yawSpan': v.yawSpan, 'v.yawRate': v.yawRate, 'v.invYaw': v.invYaw,
     'f.orbitR': f.orbitR, 'f.orbitSweep': f.orbitSweep, 'f.orbitTurn': f.orbitTurn, 'f.orbitSpd': f.orbitSpd,
     'f.barP': f.barP, 'f.barR': f.barR, 'f.upEnd': f.upEnd,
+    'f.phFlip': f.phFlip, 'f.phLoop': f.phLoop, 'f.phSplits': f.phSplits, 'f.phImmel': f.phImmel,
+    'f.phMav': f.phMav, 'f.phMatty': f.phMatty, 'f.phHMatty': f.phHMatty, 'f.phHMavvy': f.phHMavvy,
   };
   return { f, v, absP, absR, absY, rollFirst, pitchFirst, yawFirst, tR, tP, tY, val, sc: Object.create(null) };
 }
@@ -310,7 +310,41 @@ function sawOf(f, v, ctx) {
     // Ham: the turn about the vertical while up-Z < -0.5, and that time's
     // share of the segment.
     invYawDeg: degOf(v.invYaw), inv50: r3(f.dur > 0 ? f.invYawT / f.dur : 0),
+    // The phase matcher's scores (PHASE_SPECS), and the Maverick's gap.
+    ph: {
+      flip: r3(f.phFlip), powerloop: r3(f.phLoop), splits: r3(f.phSplits), immelmann: r3(f.phImmel),
+      maverick: r3(f.phMav), matty: r3(f.phMatty), halfmatty: r3(f.phHMatty), halfmavvy: r3(f.phHMavvy),
+    },
+    gapIn: f.gapIn, gapBack: f.gapBack,
   };
+}
+
+// What the phase matcher measured in the last segment (the detector's
+// lastPhases), per trick: its score, how many phases in order matched, and
+// each phase's turn (deg, its way), seconds, climb (m), up-Z at its end,
+// object over / under, the other axis's turn across it and its own back
+// (deg); outside the phases, pitch and roll's turn before and after (deg),
+// and the tail (s). JSON-able, for the record.
+export function phaseRecord(lp) {
+  if (!lp) return null;
+  const out = {};
+  for (const id of Object.keys(lp)) {
+    const r = lp[id];
+    const o = { score: r3(r.score), reached: r.reached };
+    if (r.ms) {
+      o.ph = r.ms.ph.map((m) => {
+        const x = { deg: degOf(m.turn), t: r3(m.t) };
+        if (m.climb != null) {
+          x.climb = r3(m.climb); x.up = r3(m.up); x.over = m.over; x.under = m.under;
+          x.crossDeg = degOf(m.cross); x.backDeg = degOf(m.back);
+        }
+        return x;
+      });
+      o.leadDeg = degOf(r.ms.lead); o.trailDeg = degOf(r.ms.trail); o.tail = r3(r.ms.tail);
+    }
+    out[id] = o;
+  }
+  return out;
 }
 
 function nameOf(id) {
@@ -326,11 +360,32 @@ function weakest(gates, n) {
   return flat.slice(0, n).map((x) => x.g);
 }
 
+// A phase-matcher trick's segment terms (PHASE_SPECS seg), as gates on the
+// context's values, and why its phases missed when the detector's
+// measurements (lastPhases) are at hand.
+const SEG_SRC = {
+  absR: 'absR', absY: 'absY', loopRise: 'v.loopRise', loopRet: 'v.loopRet', loopSweep: 'v.loopSweep',
+  drop: 'v.drop', inv: 'v.inv', rollFirst: 'rollFirst', follow: 'v.follow', pathR: 'v.pathR', head: 'v.head', upEnd: 'f.upEnd',
+};
+function phaseMiss(id, val, lp) {
+  const spec = PHASE_SPECS[id];
+  if (!spec) return null;
+  const segs = (spec.seg || []).map((g) => evalGate((g[1] === '>=' ? ge : le)(SEG_SRC[g[0]], g[2], g[3]), val));
+  const w = weakest(segs, 2).map(gateText);
+  const r = lp && lp[id];
+  if (r) {
+    if (r.reached < spec.ph.length) w.push('phases ' + r.reached + '/' + spec.ph.length + ' in order');
+    else if (r.ms && spec.tail && !(r.ms.tail >= spec.tail.t)) w.push('tail ' + r.ms.tail.toFixed(2) + ' s needs ≥' + spec.tail.t);
+  }
+  return w;
+}
+
 // classifyFeat, explained: every candidate's terms, the pick, the re-labels.
 // Re-runs classifyFeat (into its own out object) for the authoritative id,
 // best, second and why, and computes the replica alongside; mismatch says
-// whether they disagree.
-export function explainFeat(f) {
+// whether they disagree. lp: the detector's phase measurements of the same
+// segment (lastPhases), for the phase-matcher tricks' reasons.
+export function explainFeat(f, lp) {
   const cls = classifyFeat(f, { id: null, why: '', best: 0, second: 0, secondId: '' });
   const auth = { id: cls.id, best: cls.best, second: cls.second, secondId: cls.secondId, why: cls.why };
   const out = {
@@ -431,7 +486,7 @@ export function explainFeat(f) {
       reason = 'top score ' + total.toFixed(2) + ', re-labelled ' + pick.overrides.map((o) => o.from + '→' + o.to).join(', ');
     } else if (total < PICK_MIN) {
       verdict = 'missed';
-      const w = weakest(gates, 2).map(gateText);
+      const w = phaseMiss(id, ctx.val, lp) || weakest(gates, 2).map(gateText);
       reason = 'score ' + total.toFixed(2) + ' < ' + PICK_MIN + (w.length ? ': ' + w.join(' · ') : '');
     } else {
       verdict = 'lost';
@@ -502,7 +557,7 @@ export function createTrickObserver(det, opts) {
   }
 
   function emitManeuver(t, f, ev) {
-    const ex = explainFeat(f);
+    const ex = explainFeat(f, det.lastPhases);
     const rec = base('maneuver', t);
     rec.t0 = r3(segT0);
     rec.result = ex.id;
@@ -516,6 +571,8 @@ export function createTrickObserver(det, opts) {
     rec.mismatch = ex.mismatch;
     rec.pre = ex.pre;
     rec.saw = ex.saw;
+    rec.phases = phaseRecord(det.lastPhases);
+    rec.gapBack = ex.id === 'maverick' && det.lastGapBack ? MAV_GAP_MUL : 0;
     rec.pick = ex.pick;
     rec.candidates = ex.candidates.map((c) => ({ id: c.id, total: c.total, score: c.score, verdict: c.verdict, reason: c.reason, gates: c.gates }));
     const fb = diveFallbackRow(ex);

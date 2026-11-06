@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   classifyFeat, makeFeat, makeDetector, stepDetector, resetDetector, createTricks,
-  GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M,
+  GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, featView, matchSpec, PHASE_SPECS,
 } from '../sim-tricks.js';
 import {
   GATES, CLASS_IDS, SPEC, OVERRIDES, DIVE, DIVE_FALLBACK, GAP, SEG, FOCUS,
@@ -215,6 +215,17 @@ function randFeat(r) {
   // often; none when the segment never passed up-Z -0.5.
   f.invYawUp = f.upMin < -0.5 ? (r() < 0.5 ? near(5.236) : u(0, 3)) : 0;
   f.invYawDn = f.upMin < -0.5 && r() < 0.3 ? near(5.236) : 0;
+  // The phase matcher's scores: Flip, Powerloop and Split-S as the matcher
+  // scores what these features measured; the other tricks' phases are not
+  // in the features, so their scores are drawn (often 0, often 1, some
+  // between).
+  const v = featView(f);
+  const one = (turn) => ({ ph: [{ turn, t: 0 }] });
+  f.phFlip = matchSpec(PHASE_SPECS.flip, one(v.flipSpan), f, v);
+  f.phLoop = matchSpec(PHASE_SPECS.powerloop, one(v.loopSpan), f, v);
+  f.phSplits = matchSpec(PHASE_SPECS.splits, { ph: [{ turn: v.absR, cross: 0, back: 0 }, { turn: -f.pitch, cross: 0, back: 0 }] }, f, v);
+  const drawn = () => (r() < 0.7 ? 0 : r() < 0.6 ? 1 : u(0, 1));
+  f.phImmel = drawn(); f.phMav = drawn(); f.phMatty = drawn(); f.phHMatty = drawn(); f.phHMavvy = drawn();
   return f;
 }
 
