@@ -4,9 +4,9 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=b2eb1d0a8359';
+import { hexNum } from './sim-art-city.js?v=36fd509d5390';
 import { lookVibe, markBloom } from './sim-look.js?v=826bc4bd463d';
-import { HOUSE_KEY, DEPOT_KEY, DEPOT_SHADOW, BANDO_KEY, BANDO_SHADOW, BANDO_SHADOW_INTENSITY } from './sim-maps.js?v=2e41d26b27a6';
+import { HOUSE_KEY, DEPOT_KEY, DEPOT_SHADOW, BANDO_KEY, BANDO_SHADOW, BANDO_SHADOW_INTENSITY } from './sim-maps.js?v=5237f2529b7c';
 export {
   FELT_SCALE, applyFeltMaterial, feltBasic, feltClay, feltEmissive,
   studioPhoneBudget, qualityWantsStudioBloom,
@@ -24,54 +24,54 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=b2eb1d0a8359';
+} from './sim-art-city.js?v=36fd509d5390';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget, planLivingKit,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=047bfa82b93a';
+} from './sim-art-living.js?v=d15f461ee426';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=d22e7bdc6bd0';
+} from './sim-art-garage.js?v=0436c441311c';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=4170ebc1291d';
+} from './sim-art-warehouse.js?v=10035e9d0bbe';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
   planGymKit,
-} from './sim-art-gym.js?v=63b570c24d48';
+} from './sim-art-gym.js?v=0335ead9575b';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget, planOfficeKit,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=2f1ebd884a81';
+} from './sim-art-office.js?v=d47bed30349e';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=6d6da49aebb1';
+} from './sim-art-trainer.js?v=8f4bb1ec1d9e';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildRyanYard, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
   planBackyardKit,
-} from './sim-art-backyard.js?v=b3b924b2ec51';
+} from './sim-art-backyard.js?v=bf1bb7f1abcb';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=3dfa1f0683ca';
+} from './sim-art-room.js?v=4fc0eee689bd';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
@@ -80,7 +80,7 @@ export {
   tryDressGymKit, gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA,
   tryDressLivingKit, livingKitBytesForQuality, LIVING_KIT_CORE, LIVING_KIT_EXTRA,
   tryDressBackyardKit, backyardKitBytesForQuality, BACKYARD_KIT_CORE, BACKYARD_KIT_EXTRA,
-} from './sim-art-kit.js?v=802f468bfabd';
+} from './sim-art-kit.js?v=1685041e34dd';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';

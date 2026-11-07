@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
-// Writes tracks/bando-loop.json from The Bando's line (sim-maps.js
+// Writes tracks/bando-loop-v2.json from The Bando's line (sim-maps.js
 // bandoLine): each gate where the line puts it, facing along the line, in
 // world units; the start pad from BANDO_PLAY. Writes its hosted pace ghost,
-// ghosts/bando-loop.json, along the same line. Run it again after a change to
+// ghosts/bando-loop-v2.json, along the same line. Run it again after a change to
 // the line, then check it with node --test tools/test_sim_bando.mjs:
 //   node tools/build_bando_loop.mjs
 // Also flies the loop: flyBandoLoop() puts the Coach autopilot
 // (tools/coach_rig_autopilot.mjs) on the bf core with The Bando's colliders
-// and flies the line from the pad on the ground floor, three laps.
+// and flies the line from the pad on the roof, three laps.
 //   node tools/build_bando_loop.mjs --fly
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -17,13 +17,16 @@ import { PHYSICS_VER } from '../sim-whoop.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const r4 = (v) => Math.round(v * 1e4) / 1e4 + 0;
+// The course's id: -v2 since it was relaid from the roof, so the old
+// course's bests and ghosts do not carry over (sim-tracks.js RETIRED_TRACKS).
+export const BANDO_TRACK_ID = 'bando-loop-v2';
 
 export function bandoLoopTrack() {
   const line = bandoLine(0.01);
   const w = (v) => r4(v * BANDO_WS);
   const [sx, sy, sz] = BANDO_PLAY.start;
   return {
-    id: 'bando-loop',
+    id: BANDO_TRACK_ID,
     map: 'bando',
     name: 'Bando Loop',
     class: 'whoop',
@@ -101,7 +104,7 @@ export function bandoLoopGhost() {
     const r2 = (x) => Math.round(x * 100) / 100 + 0, r3 = (x) => Math.round(x * 1000) / 1000 + 0;
     samples.push([Math.round(t * 1000), r2(p[0] * BANDO_WS), r2(p[1] * BANDO_WS), r2(p[2] * BANDO_WS), r3(q[0]), r3(q[1]), r3(q[2]), r3(q[3])]);
   }
-  return { v: 1, phys: PHYSICS_VER, track: 'bando-loop', name: 'PACE BOT', lapTime: Math.round(T * 1000), samples };
+  return { v: 1, phys: PHYSICS_VER, track: BANDO_TRACK_ID, name: 'PACE BOT', lapTime: Math.round(T * 1000), samples };
 }
 
 // ---- The loop, flown ----
@@ -109,9 +112,10 @@ export function bandoLoopGhost() {
 // The autopilot's speed caps along the line, m/s: 7 on the open runs; 4
 // from the parapet gap down the drop and through the courtyard to the van,
 // from the rebar gap down through the floors and along the ground floor to
-// the door, and from the shaft's door up the shaft; 5 round the dead tree to
-// the window. Each zone runs from `before` metres ahead of its first gate to
-// `after` past its last.
+// the door, and from the shaft's door up the shaft and out over the roof; 5
+// round the dead tree to the window. Each zone runs from `before` metres
+// ahead of its first gate to `after` past its last, round the lap's end when
+// it wraps (the shaft's: each lap ends up the shaft).
 export const BANDO_FLY = Object.freeze({
   cap: 7, laps: 3,
   zones: Object.freeze([
@@ -129,10 +133,11 @@ export function bandoLoopPlan(laps) {
   const line = bandoLine(0.01), P = line.points, S = line.s, L = line.length;
   const first = (n) => line.gates.find((g) => g.name === n).s;
   const last = (n) => line.gates.filter((g) => g.name === n).pop().s;
-  const zones = BANDO_FLY.zones.map((z) => ({ a: first(z.from) - z.before, b: last(z.to) + z.after, cap: z.cap }));
+  const mod = (s) => ((s % L) + L) % L;
+  const zones = BANDO_FLY.zones.map((z) => ({ a: mod(first(z.from) - z.before), b: mod(last(z.to) + z.after), cap: z.cap }));
   const cap = (s) => {
-    const u = ((s % L) + L) % L;
-    const z = zones.find((q) => (u >= q.a && u <= q.b) || (q.a < 0 && u >= q.a + L));
+    const u = mod(s);
+    const z = zones.find((q) => (q.a <= q.b ? u >= q.a && u <= q.b : u >= q.a || u <= q.b));
     return z ? z.cap : BANDO_FLY.cap;
   };
   const at = (s) => {
@@ -171,7 +176,7 @@ export function bandoRace(samples, gates) {
 }
 
 // Flies the loop on the bf core (the Air65 on the owner's diff, The Bando's
-// colliders and contact plant), from the pad on the ground floor: the samples, the
+// colliders and contact plant), from the pad on the roof: the samples, the
 // race, any touch, and whether it stalled.
 export async function flyBandoLoop(opts) {
   const o = opts || {};
@@ -180,7 +185,7 @@ export async function flyBandoLoop(opts) {
   const { toModule, WS } = await import('../sim-core-adapter.js');
   const core = o.core || await mapCore('bando');
   const [px, py, pz] = BANDO_PLAY.start, floor = py - 0.35;
-  // Nose south to the shaft's door (+z): a half turn about the module's up.
+  // Nose south to the first gate (+z): a half turn about the module's up.
   core.respawn(toModule({ x: px * WS, y: floor * WS + 0.15, z: pz * WS }, {}), { x: 0, y: 0, z: 1, w: 0 });
   core.setMode('angle');
   let wall = 0, stick = { r: 0, p: 0, y: 0, t: 0 };
@@ -232,12 +237,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     }
     if (f.stalled) { const s = f.samples[f.samples.length - 1]; console.log('  stalled near', [s.x / BANDO_WS, s.y / BANDO_WS, s.z / BANDO_WS].map((v) => v.toFixed(2)).join(', ')); }
   } else {
-    const file = join(root, 'tracks/bando-loop.json');
+    const file = join(root, `tracks/${BANDO_TRACK_ID}.json`);
     writeFileSync(file, bandoLoopJson());
     const t = bandoLoopTrack();
     console.log(`${file}: ${t.gates.length} gates`);
     const g = bandoLoopGhost();
-    writeFileSync(join(root, 'ghosts/bando-loop.json'), JSON.stringify(g));
-    console.log(`ghosts/bando-loop.json: ${g.samples.length} samples, ${g.lapTime} ms`);
+    writeFileSync(join(root, `ghosts/${BANDO_TRACK_ID}.json`), JSON.stringify(g));
+    console.log(`ghosts/${BANDO_TRACK_ID}.json: ${g.samples.length} samples, ${g.lapTime} ms`);
   }
 }

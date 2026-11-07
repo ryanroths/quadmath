@@ -965,7 +965,7 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=1592e07fcc0d";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=d6d792c3aefd";
 import {
   WS as CORE_WS, TICK_US, SAMPLE_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, radioAux,
@@ -982,9 +982,9 @@ import {
 import {
   WHOOP_KEY, PHYSICS_VER, BOUNCE_MAPS,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
-  stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
+  stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=ba69d98f1363";
+} from "./sim-whoop.js?v=51206465bd01";
 import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=24ab2372574b";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
@@ -1000,7 +1000,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=6ee5bf52eb27";
+} from "./sim-art.js?v=401e3e00a35d";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -1026,14 +1026,14 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=6257c359c198";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=2e41d26b27a6";
+} from "./sim-tracks.js?v=5ff585ec78c7";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=5237f2529b7c";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=2b1154ef73fb";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=b96e32bcfee0";
+} from "./sim-room.js?v=2108fba17d3d";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=62d9a5ccc01f";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=826bc4bd463d";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -1050,10 +1050,10 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=bf51fd99431a";
+} from "./sim-coach.js?v=ef761abb1bde";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
-} from "./sim-tricks.js?v=4e8a912823c5";
+} from "./sim-tricks.js?v=27f3a73d68ec";
 import {
   DAILY_KEY, DAILY_LINE_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -1079,7 +1079,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=fe2ee28916f6";
+} from "./sim-secrets.js?v=14a7b858798c";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -3370,36 +3370,12 @@ function hitEffects(crashed,into){
 qp.onSubstep=(s)=>{
   toScene(s.position,_cp);
   toScene(s.velocity,_cv);
-  let floorHit=false;
-  if(_cp.y<FLOOR_Y){
-    const impact=-_cv.y;_cp.y=FLOOR_Y;floorHit=true;
-    if(impact>4.5)applyDuctHit(s,{x:0,y:1,z:0},impact,true);
-    else{_cv.y=Math.max(_cv.y,0);_cv.x*=.85;_cv.z*=.85;}
-  }
-  for(const bb of colliders){
-    if(bb.containsPoint(_cp)){
-      const dx=Math.min(_cp.x-bb.min.x,bb.max.x-_cp.x);
-      const dy=Math.min(_cp.y-bb.min.y,bb.max.y-_cp.y);
-      const dzp=Math.min(_cp.z-bb.min.z,bb.max.z-_cp.z);
-      if(dx<dy&&dx<dzp){
-        const sx=_cp.x-(bb.min.x+bb.max.x)/2>0?1:-1;
-        _cp.x+=sx*dx;
-        applyDuctHit(s,{x:sx,y:0,z:0},Math.abs(_cv.x),false);
-      }else if(dy<dzp){
-        const sy=_cp.y-(bb.min.y+bb.max.y)/2>0?1:-1;
-        _cp.y+=sy*dy;
-        applyDuctHit(s,{x:0,y:sy,z:0},Math.abs(_cv.y),sy>0);
-      }else{
-        const sz=_cp.z-(bb.min.z+bb.max.z)/2>0?1:-1;
-        _cp.z+=sz*dzp;
-        applyDuctHit(s,{x:0,y:0,z:sz},Math.abs(_cv.z),false);
-      }
-      break;
-    }
-  }
+  // The floor and box tops settle a slow contact, with no bounce or spin;
+  // the rest bounce (sim-whoop.js jsContact).
+  const floorHit=jsContact(_cp,_cv,colliders,FLOOR_Y,(n,into,fl)=>applyDuctHit(s,n,into,fl));
   toModule(_cp,s.position);
   toModule(_cv,s.velocity);
-  // Ground scrub: frame and props dragging on the floor bleed rotation fast —
+  // Ground scrub: frame and props dragging on the floor (or a box top) bleed rotation fast —
   // a tumble SETTLES within ~half a second of ground contact instead of
   // spinning in place forever. 0.97^240 per second ≈ hard decay, contact only.
   if(floorHit){
@@ -3421,6 +3397,14 @@ qp.groundClearance=(s)=>{
     }
   }
   return (_gp.y-top)/WS;
+};
+// Support: the floor or the box top under the quad (m, module z, the floor's
+// pad taken off), so a quad parked on a raised slab brakes and relaxes its
+// I-term as on the floor (quadphysics.js supportZ, sim-whoop.js jsSupportZ).
+const _sp=new THREE.Vector3();
+qp.supportZ=(s)=>{
+  toScene(s.position,_sp);
+  return jsSupportZ(_sp,colliders,FLOOR_Y,WS);
 };
 const _wd=new THREE.Vector3();
 function nearestWallDistSI(s){
@@ -3451,7 +3435,7 @@ const cs=emptyState();               // the core's state this frame (module fram
 let tickStick={r:0,p:0,y:0,t:0};     // the sample the js core's tick flies on (its hooks read it)
 let jsTickS=0;                       // the js core's sim time, s
 const jsCore=createJsCore({qp,tick:(sample,tUs)=>jsTick(sample,tUs),
-  extras:(o)=>{o.clearance=qp.groundClearance?qp.groundClearance(qp):qp.position.z;}});
+  extras:(o)=>{o.clearance=qp.groundClearance?qp.groundClearance(qp):qp.position.z-qp.supportZ(qp);}});
 let core=jsCore;                     // the flying core: jsCore, or the bf core once loaded
 let bfCore=null;                     // the flying class's bf core (bfOf(type).core per class)
 function syncStateFromCore(){
@@ -4669,7 +4653,7 @@ function jsTick(stick,tUs){
   // the quad back over (per tick on sim time; on the bf core the same gesture
   // is Betaflight's crash flip, bfTurtleTick).
   if(qp.armed&&!threeD&&bodyUpZ(qp.quaternion)<-0.35){
-    const clr=qp.groundClearance?qp.groundClearance(qp):qp.position.z;
+    const clr=qp.groundClearance?qp.groundClearance(qp):qp.position.z-qp.supportZ(qp);
     if(wantsTurtle({upZ:bodyUpZ(qp.quaternion),clearanceM:clr,contact:clr<=0.04,armed:qp.armed,threeD,throttle:stick.t,rollStick:stick.r})){
       qp.omega.x+=(stick.r<0?-1:1)*22*dt;
     }
@@ -8141,7 +8125,7 @@ window._tricks=tricks;
 // the file is never fetched.
 try{
   if(new URLSearchParams(location.search).get('tricks')==='debug'){
-    import('./sim-tricks-debug.js?v=381166610eb3').then((m)=>{
+    import('./sim-tricks-debug.js?v=2c986845c59f').then((m)=>{
       trickDebug=m.createTrickDebug({document,tricks,now:()=>performance.now()*0.001,info:()=>({core:cs.kind,map:currentMap})});
       window._trickDebug=trickDebug;
       trickDebug.paint();

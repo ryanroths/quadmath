@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  DEPOT_PLAY, DEPOT_WS, DEPOT_LOOK, DEPOT_KEY, DEPOT_SHADOW, depotLine, depotShafts, LAYOUT, MAP_ORBIT, MAP_LOOKS, MAP_IDS, buildMap,
+  DEPOT_PLAY, DEPOT_WS, DEPOT_LOOK, DEPOT_KEY, DEPOT_SHADOW, depotLine, depotShafts, LAYOUT, MAP_ORBIT, MAP_LOOKS, MAP_IDS, buildMap, mapGaps,
 } from '../sim-maps.js';
 import { WS } from '../sim-core-adapter.js';
 import {
@@ -366,6 +366,78 @@ test('the loop: every feature on the line, flow-first, 30 cm clear outside its d
   // Through the rack: in at one face of run B, out at the other.
   const rack = PTS.filter((p) => p[0] > gapX && p[0] < gapX + K.bay && p[2] > K.frames[1][0] && p[2] < K.frames[2][1]);
   assert.ok(rack.length && rack.every((p) => p[1] > 1.08 && p[1] < 1.68), 'through the 60 cm gap');
+});
+
+// A pass through the gap volume g by the path pts (metres): in through one
+// of its two faces across g's axis, out through the other, as sim-tricks.js
+// scores a Gap. A path in or out through a side does not pass.
+function passesThrough(pts, g) {
+  const k = 'xyz'.indexOf(g.axis), lo = [m(g.min.x), m(g.min.y), m(g.min.z)], hi = [m(g.max.x), m(g.max.y), m(g.max.z)];
+  for (let i = 1; i < pts.length; i++) {
+    if (!inside(pts[i], lo, hi) || inside(pts[i - 1], lo, hi)) continue;
+    let j = i;
+    while (j + 1 < pts.length && inside(pts[j + 1], lo, hi)) j++;
+    if (j + 1 >= pts.length) return false;
+    const face = (q) => (q[k] < lo[k] ? -1 : q[k] > hi[k] ? 1 : 0);
+    if (face(pts[i - 1]) && face(pts[j + 1]) === -face(pts[i - 1])) return true;
+    i = j;
+  }
+  return false;
+}
+// A line's points every centimetre.
+function dense(pts) {
+  const out = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], n = Math.max(1, Math.ceil(len(sub(b, a)) / 0.01));
+    for (let t = 1; t <= n; t++) out.push(lerp(a, b, t / n));
+  }
+  return out;
+}
+
+test('every designed gap has its authored gap volume: the Loop and each new line pass in one face and out the other', () => {
+  const gaps = mapGaps('depot'), named = (n) => gaps.find((g) => g.name === n);
+  assert.deepEqual(buildMap(THREE, 'depot').gaps, gaps);
+  // The Loop, from the pad and round twice: its doors, the curtain, the
+  // forks, the rack, two trusses, the hatch.
+  const loop = [];
+  for (let i = 0; i < 100; i++) loop.push(lerp(START, PTS[0], i / 100));
+  loop.push(...PTS, ...PTS);
+  for (const n of ['roll-up door, z 1.65', 'roll-up door, z -3.85', 'chain curtain parting', 'under the forks', 'rack gap', 'truss gap, x -12.5', 'truss gap, x -5', 'the hatch']) {
+    assert.ok(named(n), n + ' is authored');
+    assert.ok(passesThrough(loop, named(n)), 'the Loop passes through ' + n);
+  }
+  // Each new obstacle's own line through its volume (or volumes).
+  const by = {
+    'crossing gap': ['crossing gap, run C', 'crossing gap, run B'],
+    'between the trays': ['between the cable trays, z -4.4'],
+    'under the truss': ['under the truss over the cable trays, x -5'],
+    'through the container': ['through the container'],
+    'through the scissors': ['through the scissors'],
+    'dive the net': ['cargo net hole'],
+    'thread the tyres': ['tyre bore, middle row, west'],
+  };
+  for (const line of DEPOT_PLAY.lines.filter((l) => l.feature !== 'pole')) {
+    assert.ok(by[line.name], line.name + ' has its gap');
+    for (const n of by[line.name]) {
+      assert.ok(named(n), n + ' is authored');
+      assert.ok(passesThrough(dense(line.pts), named(n)), line.name + ' passes through ' + n);
+    }
+  }
+  // Every obstacle the owner named for the follow-up has its volumes: every
+  // tyre's bore, both tray gaps, a gap under each truss over the trays.
+  assert.equal(gaps.filter((g) => g.name.startsWith('tyre bore')).length, 6);
+  assert.equal(gaps.filter((g) => g.name.startsWith('between the cable trays')).length, 2);
+  assert.equal(gaps.filter((g) => g.name.startsWith('under the truss over the cable trays')).length, 3);
+  assert.equal(gaps.filter((g) => g.name.startsWith('truss gap')).length, T.xs.length);
+  // A volume is the opening: the 60 cm, 40 cm, a bore's 56 cm, the net's
+  // hole inside its ropes.
+  const size = (n) => { const g = named(n); return [g.max.x - g.min.x, g.max.y - g.min.y, g.max.z - g.min.z].map((v) => Math.round(m(v) * 1000) / 1000); };
+  assert.deepEqual(size('rack gap').slice(1, 2), [0.6]);
+  assert.deepEqual(size('truss gap, x -5').slice(2), [0.6]);
+  assert.deepEqual(size('between the cable trays, z -5.1').slice(2), [0.4]);
+  assert.deepEqual(size('under the truss over the cable trays, x 2.5').slice(1, 2), [0.4]);
+  assert.deepEqual(size('tyre bore, top').slice(0, 2), [0.56, 0.56]);
+  assert.deepEqual([size('cargo net hole')[0], size('cargo net hole')[2]], [0.94, 0.94]);
 });
 
 test('the Warehouse Loop: 18–22 gates, 120–160 m, tightest radius 2.5 m', () => {

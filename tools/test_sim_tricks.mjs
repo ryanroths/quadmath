@@ -25,6 +25,7 @@ import { rateSetpoint, pilotRatesDefault } from '../sim-rates.js';
 import { createBfCore, emptyState, boxToModule } from '../sim-core-adapter.js';
 import { SimCore } from '../vendor/sim-core/sim-core.js';
 import { BACKYARD_PLAY, CITY_PLAY, RIG_PLAY, buildMap, mapGaps } from '../sim-maps.js';
+import { MAPS } from '../sim-tracks.js';
 import * as THREE from '../vendor/three.module.min.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -426,6 +427,11 @@ test('trick list has the requested maneuvers and frozen point values', () => {
   assert.equal(trickPoints('juicyflick', true), 225);
   assert.equal(mapIsIndoor('garage'), true);
   assert.equal(mapIsIndoor('city'), false);
+  // Every indoor map scores indoors (TPW Indoors), every open-air one
+  // outdoors: sim-tracks.js MAPS is the list.
+  for (const m of MAPS) assert.equal(mapIsIndoor(m.id), !!m.indoor, m.id + (m.indoor ? ' is indoor' : ' is open air'));
+  assert.equal(mapIsIndoor('house'), true, 'the House scores indoors');
+  assert.equal(trickPoints('flip', mapIsIndoor('house')), 75);
 });
 
 test('docs/sim-tricks.md defines each trick and the confused pairs', () => {
@@ -1585,9 +1591,9 @@ test('bf core in the Rig: authored gaps fire through the crate slots; the loft o
   assert.deepEqual(edge.hits, [], edge.whys.join(' | '));
 });
 
-test('the Rig, House, Warehouse and Bando gap volumes are openings: clear of every collider, walled on a side', () => {
+test('the Rig, House, Warehouse (depot and the archived one) and Bando gap volumes are openings: clear of every collider, walled on a side', () => {
   if (!globalThis.document) rigScene();
-  for (const id of ['rig', 'house', 'warehouse', 'bando']) {
+  for (const id of ['rig', 'house', 'warehouse', 'depot', 'bando']) {
     const built = buildMap(THREE, id);
     assert.deepEqual(built.gaps, mapGaps(id));
     assert.ok(built.gaps.length > 0, id + ' has gaps');
@@ -1608,6 +1614,15 @@ test('the Rig, House, Warehouse and Bando gap volumes are openings: clear of eve
   assert.ok(mapGaps('rig').some((g) => g.name === 'loft hole') && mapGaps('rig').some((g) => g.name === 'tunnel'));
   assert.ok(mapGaps('house').some((g) => g.name === 'bookshelf gap'));
   assert.ok(mapGaps('warehouse').filter((g) => g.name.startsWith('rack ')).length === 48);
+  assert.equal(mapGaps('warehouse').length, 50, "#308's 50, on the archived Warehouse");
+  for (const n of ['rack gap', 'crossing gap, run C', 'crossing gap, run B', 'truss gap, x -12.5', 'the hatch', 'through the container', 'through the scissors',
+    'cargo net hole', 'between the cable trays, z -4.4', 'under the truss over the cable trays, x -5', 'tyre bore, middle row, west']) {
+    assert.ok(mapGaps('depot').some((g) => g.name === n), 'the Warehouse: ' + n);
+  }
+  for (const id of ['rig', 'house', 'warehouse', 'depot', 'bando']) {
+    const names = mapGaps(id).map((g) => g.name);
+    assert.equal(new Set(names).size, names.length, id + ': each gap named once');
+  }
   assert.ok(mapGaps('bando').some((g) => g.name === 'shaft door, ground') && mapGaps('bando').some((g) => g.name === 'floor hole, second floor, east')
     && mapGaps('bando').some((g) => g.name === 'parapet gap') && mapGaps('bando').some((g) => g.name === 'under the leaning slab'));
   assert.deepEqual(mapGaps('city'), []);

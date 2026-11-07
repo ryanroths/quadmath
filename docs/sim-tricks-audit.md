@@ -458,8 +458,9 @@ loft.
 
 ### What changed
 
-- **Gap, authored first.** The Rig (17), the House (3) and the Warehouse
-  (50) carry their intentional gaps as volumes (`sim-maps.js` `mapGaps`,
+- **Gap, authored first.** The Rig (17), the House (3) and the archived
+  Warehouse (`warehouse`, 50; The Warehouse, `depot`, got its own 28 later)
+  carry their intentional gaps as volumes (`sim-maps.js` `mapGaps`,
   scene units, each with the axis it is flown along):
   - Rig: crate slots, pipe slits and riser slits, the tunnel, the loft hole;
   - House: the bookshelf gap, under the patio table (either way);

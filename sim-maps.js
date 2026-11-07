@@ -5,7 +5,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=2b1154ef73fb';
+import { planRoom } from './sim-room.js?v=2108fba17d3d';
 import {
   LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, lookShafts, lookGraffiti, floorAo,
 } from './sim-look.js?v=826bc4bd463d';
@@ -2388,15 +2388,15 @@ function buildDepot(THREE, parent, colliders) {
 // 6 cm thick, no slot of 10 cm or less between any two, every box on the
 // ground or at least 15 cm over it. The leaning slab collides as a run of
 // steps under the slab drawn at 30°.
-// The Bando Loop (tracks/bando-loop.json) is a designed line, as the
-// House's and the Warehouse's, but in 3D (bandoLine): from the ground floor
-// in at the lift shaft's door and up it to the roof; out over the roof,
-// through the parapet gap and down into the courtyard; between the
-// pallets and through the van; a climbing turn and a quarter round the dead
-// tree, in at a second-floor window; between the columns and round one,
-// through a rebar gap, down through two floor holes in one dive to the
-// ground; round a column, under the leaning slab, through a door, round a
-// column back to the shaft's door.
+// The Bando Loop (tracks/bando-loop-v2.json) is a designed line, as the
+// House's and the Warehouse's, but in 3D (bandoLine): from the pad on the
+// roof beside the lift shaft's top, south over the roof, through the parapet
+// gap and down into the courtyard; between the pallets and through the van;
+// a climbing turn and a quarter round the dead tree, in at a second-floor
+// window; between the columns and round one, through a rebar gap, down
+// through two floor holes in one dive to the ground; round a column, under
+// the leaning slab, through a door, round a column, in at the shaft's door
+// on the ground floor and up it to the finish at its top, by the pad.
 export const BANDO_WS = 3.5; // world units per metre, as sim-core-adapter.js WS
 // The lot: the courtyard and the yards round the frame, inside a 2.4 m block
 // wall (the shell); open sky over it (h only bounds the flying).
@@ -2472,11 +2472,6 @@ const BANDO_R = 2.5, BANDO_T = 2.75;
 const rad = (d) => d * Math.PI / 180;
 const arcRise = (deg) => BANDO_R * (1 - Math.cos(rad(deg)));
 const arcRun = (deg) => BANDO_R * Math.sin(rad(deg));
-// The start: over the pad on the ground floor, 5 m short of the lift
-// shaft's middle, heading south (+z) for its door, where the U-turn round
-// the column ends each lap. A pad on the floor, not on a slab (the js core
-// settles a quad at rest on the floor only).
-const BANDO_START = Object.freeze([BANDO_SHAFT.x, 1.0, BANDO_SHAFT.z - 5]);
 // The double dive: off the second floor at y2, from x d along z 1.75, at
 // pitch, to the ground at y0.
 const BANDO_DIVE = Object.freeze({ x: 1.6, z: 1.75, pitch: 50, y2: 8.6, y0: 1.0 });
@@ -2499,6 +2494,11 @@ const BANDO_CLIMB = Object.freeze((() => {
 const BANDO_GAP_Y = BANDO_FRAME.tops[3] + 0.55;
 // Out of the shaft the line levels at BANDO_EXIT_Y, 1.3 m over the roof.
 const BANDO_EXIT_Y = BANDO_FRAME.tops[3] + 1.3;
+// The start: where the line levels out of the shaft, 1.3 m over the roof,
+// above the pad, heading south (+z) for the first gate, 2 m on; each lap
+// ends up the shaft, at the finish gate over its top, and levels out back
+// here.
+const BANDO_START = Object.freeze([BANDO_SHAFT.x, BANDO_EXIT_Y, BANDO_SHAFT.z + BANDO_R]);
 const BANDO_ROOF_DIP = Math.acos(1 - (BANDO_EXIT_Y - BANDO_GAP_Y) / (2 * BANDO_R)) * 180 / Math.PI;
 // The dive into the courtyard: from the gap at 65° to 1.2 m, levelling out
 // 12 m south, where the turn round to the van starts.
@@ -2515,17 +2515,13 @@ const BANDO_DROP = Object.freeze((() => {
 // HOUSE_LINE), a helix when pitched (its radius r / cos^2 of the pitch);
 // ['P', r, deg] a pitch arc in the heading's vertical plane, up for a
 // positive angle, radius r, through vertical and over with the heading held;
-// ['G', size, name] a gate here, its ring radius size. tracks/bando-loop.json
+// ['G', size, name] a gate here, its ring radius size. tracks/bando-loop-v2.json
 // is its gates (tools/build_bando_loop.mjs).
 const BANDO_LINE = Object.freeze((() => {
   const D = BANDO_DIVE, C = BANDO_CLIMB, Q = BANDO_DROP, S = BANDO_SHAFT, r = BANDO_R, t = BANDO_T;
   return [
-    // In at the shaft's door and up it to the roof.
-    ['Z', S.z - r], ['P', r, 40], ['G', 0.35, 'shaft door'], ['P', r, 50],
-    ['Y', BANDO_EXIT_Y - r], ['P', r, -90],
     // Out of the shaft and over the roof, down to the parapet gap.
-    ['Z', S.z + r + 0.8], ['G', 0.45, 'out of the shaft'],
-    ['Z', -1.5], ['P', r, -BANDO_ROOF_DIP], ['P', r, BANDO_ROOF_DIP],
+    ['Z', -1.5], ['G', 0.45, 'out of the shaft'], ['P', r, -BANDO_ROOF_DIP], ['P', r, BANDO_ROOF_DIP],
     ['Z', BANDO_FRAME.z1 - BANDO_FRAME.wall / 2], ['G', 0.45, 'parapet gap'],
     // The roof dive into the courtyard.
     ['Z', Q.z], ['P', r, -Q.pitch], ['Y', Q.y1 + arcRise(Q.pitch)], ['P', r, Q.pitch], ['G', 0.5, 'into the courtyard'],
@@ -2551,6 +2547,10 @@ const BANDO_LINE = Object.freeze((() => {
     ['X', 11], ['A', t, 90], ['Z', (BANDO_LEAN.z0 + BANDO_LEAN.z1) / 2], ['G', 0.45, 'under the slab'],
     ['Z', -8.5], ['G', 0.35, 'door'],
     ['Z', -11], ['A', t, 90], ['G', 0.45, 'round the column'], ['A', t, 90],
+    // In at the shaft's door and up it to the roof: the finish over its top,
+    // halfway round the arc out of it, so the climb is in every timed run.
+    ['Z', S.z - r], ['P', r, 40], ['G', 0.35, 'shaft door'], ['P', r, 50],
+    ['Y', BANDO_EXIT_Y - r], ['P', r, -45], ['G', 0.45, 'top of the shaft'], ['P', r, -45],
   ].map((op) => Object.freeze(op));
 })());
 
@@ -2941,8 +2941,9 @@ export const BANDO_PLAY = Object.freeze({
   room: Object.freeze({ w: BANDO_LOT.w, d: BANDO_LOT.d, h: BANDO_LOT.h }),
   lot: BANDO_LOT,
   frame: BANDO_FRAME,
-  // The start pad, on the ground floor, nose south to the shaft's door (+z).
-  start: Object.freeze([BANDO_START[0], 0.35, BANDO_START[2]]),
+  // The start pad, on the roof by the shaft's top, nose south (+z) to the
+  // first gate, out of the shaft.
+  start: Object.freeze([BANDO_START[0], BANDO_FRAME.tops[3] + 0.35, BANDO_START[2]]),
   windows: BANDO_WINDOWS,
   parapet: BANDO_PARAPET,
   columns: BANDO_COLUMNS,
@@ -3325,7 +3326,8 @@ const BUILDERS = {
 
 // ---- Authored gaps (the trick detector's Gap) ----
 //
-// Every intentional gap of the Rig, the House and the Warehouse as a volume
+// Every intentional gap of the Rig, the House, the Warehouse (depot), the
+// Bando and the archived Warehouse (warehouse) as a volume
 // the quad passes through: scene units, axis-aligned, and the axis it is
 // flown along ('x', 'y' or 'z'). A pass enters through one of the two faces
 // across that axis and leaves through the other (sim-tricks.js). Each volume
@@ -3392,9 +3394,81 @@ function warehouseGaps() {
     ion.x + ion.innerW / 2, ion.y + ion.innerH / 2, ion.z + ion.depth / 2));
   return out;
 }
+// The Warehouse's (depot): the Loop's gaps and every one of its new
+// obstacles' (the second aisle's crossing gap, the cable trays, the
+// container, the scissor lift, the cargo net, the tyres), each from its
+// numbers above. Its pallet stacks and the mezzanine's open rail ends are
+// left to the generic rule, as the Bando's pallets.
+function depotGaps() {
+  const s = DEPOT_WS, out = [];
+  const g = (name, axis, x0, y0, z0, x1, y1, z1) => out.push(gapVolume('depot', name, axis, s, x0, y0, z0, x1, y1, z1));
+  // The Loop's. The roll-up doors, under each half-open curtain through the
+  // dock partition, along x.
+  const D = DEPOT_DOCK, hw = D.doorW / 2;
+  for (const z of D.doors) g(`roll-up door, z ${z}`, 'x', D.x, 0, z - hw, D.x + D.t, D.open, z + hw);
+  // The chain curtain's parting: between the strands either side of it, floor
+  // to header, along z.
+  const C = DEPOT_CURTAIN, strands = [];
+  for (let x = D.x + D.t + 0.2; x < 22.5 - 0.15; x += C.pitch) if (Math.abs(x - C.x) >= C.gap / 2 + 0.03) strands.push(x);
+  const sw = Math.max(...strands.filter((x) => x < C.x)), se = Math.min(...strands.filter((x) => x > C.x));
+  g('chain curtain parting', 'z', sw + 0.03, 0, C.z - 0.03, se - 0.03, C.y, C.z + 0.03);
+  // Under the forklift's raised load: the forks' length, the load's width,
+  // floor to forks, along x.
+  g('under the forks', 'x', 9.0 - 0.6, 0, -4.5, 9.0 + 0.6, 2.04, -3.38);
+  // The racking's 60 cm gaps, over the lowered floor loads (1.08 m) to the
+  // first beams, between a bay's uprights, through the run along z: the
+  // Loop's through run B, the crossing gap's through run C and run B.
+  const K = DEPOT_RACK, bayX = (k) => K.x0 + K.bay * k;
+  const rack = (name, k, z0, z1) => g(name, 'z', bayX(k) + K.post, 1.08, z0, bayX(k + 1), K.levels[0] - 0.12, z1);
+  rack('rack gap', K.gapBay, K.frames[1][0], K.frames[2][1]);
+  rack('crossing gap, run C', K.crossBay, K.runC[0], K.runC[1]);
+  rack('crossing gap, run B', K.crossBay, K.frames[1][0], K.frames[2][1]);
+  // Each truss's 60 cm web gap on the line's z, between two posts and the
+  // chords, along x (the Loop flies two of them).
+  const T = DEPOT_TRUSS, tg = T.pitch / 2 - T.post / 2;
+  for (const x of T.xs) g(`truss gap, x ${x}`, 'x', x - 0.06, T.y0 + T.chord, T.gapZ - tg, x + 0.06, T.y1 - T.chord, T.gapZ + tg);
+  // The mezzanine's drop-through hatch, through the deck, down or up.
+  const M = DEPOT_MEZZ, H = M.hatch;
+  g('the hatch', 'y', H.x0, M.y - 0.25, H.z0, H.x1, M.y, H.z1);
+  // The new obstacles'. The cable trays: down through the 40 cm between two
+  // trays, along their length; along over them under a truss's bottom chord,
+  // between the trapeze's rods.
+  const Y = DEPOT_TRAYS, yz0 = Y.zs[0] - 0.06, yz1 = Y.zs[Y.zs.length - 1] + Y.w + 0.06;
+  for (let i = 0; i + 1 < Y.zs.length; i++) {
+    const z0 = Y.zs[i] + Y.w, z1 = Y.zs[i + 1];
+    g(`between the cable trays, z ${Math.round((z0 + z1) / 2 * 100) / 100}`, 'y', Y.x0, Y.y0, z0, Y.x1, Y.y1, z1);
+  }
+  for (const x of T.xs.filter((q) => q > Y.x0 && q < Y.x1)) {
+    g(`under the truss over the cable trays, x ${x}`, 'x', x - 0.06, Y.y1, yz0 + 0.06, x + 0.06, T.y0, yz1 - 0.06);
+  }
+  // Through the container, end to end: between its corner posts, its floor
+  // to the headers over its doors.
+  const CT = DEPOT_CONTAINER;
+  g('through the container', 'x', CT.x0, 0.15, CT.z0 + CT.post, CT.x1, CT.header, CT.z1 - CT.post);
+  // The scissor lift's diamond between its two stages, across the lift: the
+  // biggest box clear of every arm step, two steps (42 cm) either side of
+  // the lift's middle along z, from the top of the lower stage's highest arm
+  // step there to the bottom of the upper stage's lowest.
+  const F = DEPOT_LIFT, za = F.z0 + 0.1, fz = (F.z1 - 0.1 - za) / F.steps, fy = F.stage / F.steps, hb = 0.14, half = F.steps / 2, w = 2;
+  g('through the scissors', 'x', F.x0, F.base + fy * (half - 1 + w) + hb, za + fz * (half - w), F.x1, F.base + F.stage + fy * (half - w), za + fz * (half + w));
+  // The cargo net's hole, inside the ropes round it, down or up through it.
+  const N = DEPOT_NET, NH = N.hole, rr = 0.03;
+  g('cargo net hole', 'y', NH.x0 + rr, N.y, NH.z0 + rr, NH.x1 - rr, N.y + 0.06, NH.z1 - rr);
+  // Every tyre's bore, through the stack along z.
+  const W = DEPOT_TYRES, wr = W.d / 2, wi = W.bore / 2;
+  const rows = ['bottom row', 'middle row', 'top'], at = [['west', 'middle', 'east'], ['west', 'east'], ['']];
+  for (let row = 0; row < W.rows; row++) {
+    for (let k = 0; k < W.rows - row; k++) {
+      const cx = W.x0 + wr * (row + 1) + W.d * k, cy = wr + W.d * row;
+      g(['tyre bore', rows[row], at[row][k]].filter(Boolean).join(', '), 'z', cx - wi, cy - wi, W.z0, cx + wi, cy + wi, W.z1);
+    }
+  }
+  return out;
+}
 const MAP_GAPS = Object.freeze({
   rig: Object.freeze(rigGaps()),
   house: Object.freeze(houseGaps()),
+  depot: Object.freeze(depotGaps()),
   bando: Object.freeze(bandoGaps()),
   warehouse: Object.freeze(warehouseGaps()),
 });

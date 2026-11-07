@@ -21,7 +21,7 @@ Swap from the pairing table. Two-link pages (analog vs HDZero, Air vs Meteor, 65
 | --- | --- |
 | `map` | `rig` (The Rig, the launch map), `house` (The House), `depot` (The Warehouse), `bando` (The Bando). `city` `living` `garage` `warehouse` `office` `gym` `trainer` `room` `backyard` open only with `dev=1`; without it the link lands on The Rig (free flight). |
 | `build` | Share code. Named presets (`QB1.air65`) or full `QB1.65-23000-31x3-1s300-27`. Physics only. |
-| `track` | Course id (`rig-loop`, `house-loop`, `depot-loop`, `bando-loop`; with `dev=1`: `living-sofa`, `office-cubicles`, `gym-court`, `trainer-figure8`, `city-loop`, `0` / `1` for legacy city). |
+| `track` | Course id (`rig-loop`, `house-loop`, `depot-loop`, `bando-loop-v2` (the retired `bando-loop` opens it); with `dev=1`: `living-sofa`, `office-cubicles`, `gym-court`, `trainer-figure8`, `city-loop`, `0` / `1` for legacy city). |
 | `mode` | `angle` (default for newcomers), `horizon`, or `acro`. |
 | `preset` | Rate preset id: `whoopBeginner` `whoopRace` `freestyle` `ryanActual`. |
 | `rates` | Compact token `TYPE.rollRc.rollSr.rollEx.pitchRc.pitchSr.pitchEx.yawRc.yawSr.yawEx` (CLI integers; expo 0–100). Wins over `preset`. Example: `ACTUAL.4.74.56.4.74.56.4.70.56`. Card aliases: `card.65-betafpv-stock`, `card.65-betafpv-ryfly-1219s`, `card.75-betafpv-ryfly-o4-gf1811`, `card.75-happymodel-aio-stock`. |
@@ -65,7 +65,7 @@ Published cards (also `?rates=card.<id>`):
 | `card.75-betafpv-ryfly-o4-gf1811` | Actual | 2,73,56 / 2,73,56 / 2,70,56 |
 | `card.75-happymodel-aio-stock` | Betaflight | 100,70,0 (all axes) |
 
-The Rig is the launch map; it, The House, The Warehouse and The Bando are the maps open without `dev=1`: `?map=rig` (free flight) or `?track=rig-loop` (the 17-gate loop), `?map=house` or `?track=house-loop` (the 20-gate loop), `?map=depot` or `?track=depot-loop` (the Warehouse Loop; the map id is `depot`, since `warehouse` is the archived map), `?map=bando` or `?track=bando-loop` (the Bando Loop, from the roof). Links to any other map carry `&dev=1`; the snippet and every example here do. A link without it opens The Rig. A link with no map or track, for a pilot with no saved map, opens the class's map: the 65 The Rig, the 75 and 85 The Warehouse.
+The Rig is the launch map; it, The House, The Warehouse and The Bando are the maps open without `dev=1`: `?map=rig` (free flight) or `?track=rig-loop` (the 17-gate loop), `?map=house` or `?track=house-loop` (the 20-gate loop), `?map=depot` or `?track=depot-loop` (the Warehouse Loop; the map id is `depot`, since `warehouse` is the archived map), `?map=bando` or `?track=bando-loop-v2` (the Bando Loop, from the roof; an old `?track=bando-loop` link opens it too, with fresh bests and ghosts). Links to any other map carry `&dev=1`; the snippet and every example here do. A link without it opens The Rig. A link with no map or track, for a pilot with no saved map, opens the class's map: the 65 The Rig, the 75 and 85 The Warehouse.
 
 Your room (W3) is generated in the sim from L×W×H. Deep-link the last saved cell with `?map=room&dev=1` or `?track=room-practice` (a generated course, open without `dev=1`), or pass `?room=16x12x8ft` / `?room=5x4x2.6m`.
 

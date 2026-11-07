@@ -14,7 +14,7 @@ import {
   PUBLIC_MAPS, CLASS_MAPS, classDefaultMap, hasSelected, freestyleStart,
   isLineTrackId, lineFinishIndex, afterLinePass, ghostSampleDue, downsampleGhost,
   interpolateGhostPose, lineDeltaMs, fmtSignedDelta, visibleSplits,
-  LINE_GHOST_HZ, LINE_GHOST_MAX,
+  LINE_GHOST_HZ, LINE_GHOST_MAX, RETIRED_TRACKS, currentTrackId,
 } from './sim-tracks.js';
 
 function readTrack(file) {
@@ -270,15 +270,33 @@ assert.ok(Math.abs(depotStart.yaw + Math.PI / 2) < 1e-12, 'nose +x, down the cen
 assert.equal(mapOpen('bando', false), true);
 assert.ok(MAPS.some((m) => m.id === 'bando' && m.name === 'The Bando' && m.class === 'whoop' && m.indoor));
 assert.equal(MAPS[MAPS.findIndex((m) => m.id === 'depot') + 1].id, 'bando', 'right after the Warehouse');
-assert.ok(BUILTIN_TRACK_FILES.some((t) => t.id === 'bando-loop' && t.map === 'bando' && t.name === 'Bando Loop'));
-assert.equal(files.find((t) => t.id === 'bando-loop').map, 'bando');
-const bandoLink = resolveSimBoot({ map: 'bando', track: 'bando-loop' }, null, files, { dev: false });
-assert.deepEqual([bandoLink.map, bandoLink.track, bandoLink.closedMap], ['bando', 'bando-loop', undefined]);
-const bandoSaved = resolveSimBoot({}, { map: 'bando', track: 'bando-loop' }, files, { dev: false });
+assert.ok(BUILTIN_TRACK_FILES.some((t) => t.id === 'bando-loop-v2' && t.file === 'tracks/bando-loop-v2.json' && t.map === 'bando' && t.name === 'Bando Loop'));
+assert.equal(files.find((t) => t.id === 'bando-loop-v2').map, 'bando');
+const bandoLink = resolveSimBoot({ map: 'bando', track: 'bando-loop-v2' }, null, files, { dev: false });
+assert.deepEqual([bandoLink.map, bandoLink.track, bandoLink.closedMap], ['bando', 'bando-loop-v2', undefined]);
+const bandoSaved = resolveSimBoot({}, { map: 'bando', track: 'bando-loop-v2' }, files, { dev: false });
 assert.deepEqual([bandoSaved.map, bandoSaved.track], ['bando', 'bando-freestyle']);
+// The Bando Loop was relaid (from the roof, a finish over the shaft), so it
+// is a new course id: the first course's bests, splits and ghosts, keyed by
+// its id, do not carry over. A link to the retired id opens the new course,
+// with or without its map; the retired id is no course of its own.
+assert.deepEqual({ ...RETIRED_TRACKS }, { 'bando-loop': 'bando-loop-v2' });
+assert.ok(!BUILTIN_TRACK_FILES.some((t) => t.id === 'bando-loop') && !files.some((t) => t.id === 'bando-loop'), 'bando-loop is retired');
+assert.equal(existsSync(new URL('./tracks/bando-loop.json', import.meta.url)), false);
+assert.equal(existsSync(new URL('./ghosts/bando-loop.json', import.meta.url)), false);
+for (const q of [{ track: 'bando-loop' }, { map: 'bando', track: 'bando-loop' }]) {
+  const r = resolveSimBoot(q, null, files, { dev: false });
+  assert.deepEqual([r.map, r.track, r.mode, r.closedMap], ['bando', 'bando-loop-v2', 'race', undefined], JSON.stringify(q));
+}
+for (const key of [ghostStorageKey, bestLapStorageKey, bestRunStorageKey]) {
+  assert.notEqual(key('bando-loop-v2'), key('bando-loop'), key.name + ': fresh for the relaid course');
+}
+assert.equal(currentTrackId('rig-loop'), 'rig-loop');
+assert.equal(currentTrackId('constructor'), 'constructor', 'not an inherited key');
+assert.equal(currentTrackId(0), 0);
 const bandoStart = freestyleStart('bando');
-assert.deepEqual([bandoStart.x, bandoStart.y, bandoStart.z], [28.875, 1.225, -38.5], 'freestyle starts on the loop pad, on the ground floor');
-assert.ok(Math.abs(Math.abs(bandoStart.yaw) - Math.PI) < 1e-12, 'nose +z, to the shaft\'s door');
+assert.deepEqual([bandoStart.x, bandoStart.y, bandoStart.z], [28.875, 37.975, -12.25], 'freestyle starts on the loop pad, on the roof');
+assert.ok(Math.abs(Math.abs(bandoStart.yaw) - Math.PI) < 1e-12, 'nose +z, to the first gate, out of the shaft');
 // Each whoop class's own map (CLASS_MAPS): the 65 the Rig, the 75 and 85 The
 // Warehouse; no frame (a freestyle class) the Rig. It is the boot map only
 // when nothing is asked and nothing is saved; a closed or unknown map, and
