@@ -229,6 +229,15 @@ export function resolveTrackPick(mapId, trackId, tracks) {
   return { map, track: freestyleIdFor(map), mode: 'free' };
 }
 
+// Retired course ids, each to the course that replaced it. A relaid course
+// takes a new id, so its best times, splits and ghosts, all keyed by the id,
+// start fresh; a link to the old id opens the new course. The Bando Loop,
+// relaid from the roof with a finish over the shaft: bando-loop-v2.
+export const RETIRED_TRACKS = Object.freeze({ 'bando-loop': 'bando-loop-v2' });
+export function currentTrackId(id) {
+  return typeof id === 'string' && Object.prototype.hasOwnProperty.call(RETIRED_TRACKS, id) ? RETIRED_TRACKS[id] : id;
+}
+
 // Deep-link / reload resolver. Track id wins map when they disagree.
 // Map-only query, saved state, and empty boot are free flight on that map.
 // Daily / weekly / room-practice in localStorage must not lock boot to a race.
@@ -239,6 +248,7 @@ export function resolveTrackPick(mapId, trackId, tracks) {
 // opts.defaultMap (the page passes classDefaultMap of the pilot's class): the
 // map for nothing asked and nothing saved (saved null), and only for that; a
 // closed or unknown map still lands on DEFAULT_MAP.
+// A retired ?track= id (RETIRED_TRACKS) opens the course that replaced it.
 export function resolveSimBoot(query, saved, tracks, opts) {
   const r = resolveSimBootAnyMap(query, saved, tracks, opts);
   if (!opts || opts.dev !== false || mapOpen(r.map, false) || isEphemeralTrackId(r.track)) return r;
@@ -263,7 +273,7 @@ function resolveSimBootAnyMap(query, saved, tracks, opts) {
   if (q.track === 'room-practice') {
     return { map: 'room', track: 'room-practice', save: false, mode: 'race' };
   }
-  const found = findTrackIn(q.track, tracks);
+  const found = findTrackIn(currentTrackId(q.track), tracks);
   if (found) {
     const mode = found.freestyle ? 'free' : 'race';
     return { map: found.map, track: trackRefId(found), save: true, mode };
@@ -798,7 +808,7 @@ export const BUILTIN_TRACK_FILES = [
   { id: 'rig-loop', file: 'tracks/rig-loop.json', map: 'rig', name: 'Rig Loop' },
   { id: 'house-loop', file: 'tracks/house-loop.json', map: 'house', name: 'House Loop' },
   { id: 'depot-loop', file: 'tracks/depot-loop.json', map: 'depot', name: 'Warehouse Loop' },
-  { id: 'bando-loop', file: 'tracks/bando-loop.json', map: 'bando', name: 'Bando Loop' },
+  { id: 'bando-loop-v2', file: 'tracks/bando-loop-v2.json', map: 'bando', name: 'Bando Loop' },
   { id: 'city-loop', file: 'tracks/city-loop.json', legacyId: 0, map: 'city', name: 'City Loop' },
   { id: 'city-zigzag', file: 'tracks/city-zigzag.json', legacyId: 1, map: 'city', name: 'Mesa Zigzag' },
   { id: 'city-inside', file: 'tracks/city-inside.json', map: 'city', name: 'Interior Run' },

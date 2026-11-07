@@ -1,5 +1,5 @@
 // The Bando: the owner's spec checked on the shipped data (sim-maps.js
-// BANDO_PLAY, bandoLine, BANDO_LOOK, mapGaps('bando') + tracks/bando-loop.json),
+// BANDO_PLAY, bandoLine, BANDO_LOOK, mapGaps('bando') + tracks/bando-loop-v2.json),
 // in metres, and the loop flown on the bf core.
 // node --test tools/test_sim_bando.mjs
 import test from 'node:test';
@@ -15,16 +15,16 @@ import {
 import { WS } from '../sim-core-adapter.js';
 import {
   normalizeTrack, gateRadius, lapLengthMetres, BUILTIN_TRACK_FILES, MAPS, PUBLIC_MAPS, mapOpen, freestyleStart, startPad,
-  CLASS_MAPS, classDefaultMap,
+  CLASS_MAPS, classDefaultMap, hostedGhostUrl,
 } from '../sim-tracks.js';
 import { BOUNCE_MAPS } from '../sim-whoop.js';
 import { vibeFor, mergeStaticArt, resolveMapLighting } from '../sim-art.js';
 import { LOOK, lookTextureBytes } from '../sim-look.js';
 import { resolveSceneLighting } from '../sim-lighting.js';
-import { bandoLoopJson, bandoLoopGhost, flyBandoLoop } from './build_bando_loop.mjs';
+import { bandoLoopJson, bandoLoopGhost, flyBandoLoop, BANDO_TRACK_ID } from './build_bando_loop.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const raw = JSON.parse(readFileSync(join(root, 'tracks/bando-loop.json'), 'utf8'));
+const raw = JSON.parse(readFileSync(join(root, 'tracks/bando-loop-v2.json'), 'utf8'));
 const track = normalizeTrack(raw);
 const ROOM = BANDO_PLAY.room;
 const F = BANDO_PLAY.frame;
@@ -95,7 +95,10 @@ test('The Bando is registered, a 30 x 20 m frame of three 3.5 m storeys in a 36 
   assert.ok(MAP_IDS.includes('bando'));
   assert.ok(MAPS.some((q) => q.id === 'bando' && q.name === 'The Bando' && q.indoor && q.class === 'whoop'));
   assert.ok(PUBLIC_MAPS.includes('bando') && mapOpen('bando', false), 'open without ?dev=1');
-  assert.ok(BUILTIN_TRACK_FILES.some((t) => t.id === 'bando-loop' && t.map === 'bando' && t.name === 'Bando Loop'));
+  // The relaid course's id (the first, bando-loop, is retired; sim-tracks-test.mjs).
+  assert.equal(BANDO_TRACK_ID, 'bando-loop-v2');
+  assert.equal(raw.id, BANDO_TRACK_ID);
+  assert.ok(BUILTIN_TRACK_FILES.some((t) => t.id === BANDO_TRACK_ID && t.file === 'tracks/' + BANDO_TRACK_ID + '.json' && t.map === 'bando' && t.name === 'Bando Loop'));
   assert.equal(track.map, 'bando');
   // Freestyle starts on the loop's pad on the roof, nose toward the first gate.
   const f = freestyleStart('bando'), pad = startPad(track);
@@ -356,8 +359,8 @@ test('the Bando Loop: 18 to 24 gates, 120 to 160 m, tightest radius 2.5 m', () =
 });
 
 test('the gates mark the line: written from it, entered in order, once each, from the pad', () => {
-  assert.equal(readFileSync(join(root, 'tracks/bando-loop.json'), 'utf8').replace(/\r\n/g, '\n'), bandoLoopJson(),
-    'tracks/bando-loop.json is node tools/build_bando_loop.mjs');
+  assert.equal(readFileSync(join(root, 'tracks/bando-loop-v2.json'), 'utf8').replace(/\r\n/g, '\n'), bandoLoopJson(),
+    'tracks/bando-loop-v2.json is node tools/build_bando_loop.mjs');
   LINE.gates.forEach((g, i) => {
     assert.ok(len(sub(GATES[i].p, PTS[g.at])) < 1e-3, g.name + ' on the line');
     assert.ok(GATES[i].size >= 0.28 - 1e-9, g.name + ' ring visible');
@@ -389,9 +392,10 @@ test('the gates mark the line: written from it, entered in order, once each, fro
 });
 
 test('the hosted pace ghost flies the line, from the first gate, clear of the Bando', () => {
-  const g = JSON.parse(readFileSync(join(root, 'ghosts/bando-loop.json'), 'utf8'));
-  assert.deepEqual(g, bandoLoopGhost(), 'ghosts/bando-loop.json is node tools/build_bando_loop.mjs');
-  assert.equal(g.track, 'bando-loop');
+  const g = JSON.parse(readFileSync(join(root, 'ghosts/bando-loop-v2.json'), 'utf8'));
+  assert.deepEqual(g, bandoLoopGhost(), 'ghosts/bando-loop-v2.json is node tools/build_bando_loop.mjs');
+  assert.equal(g.track, 'bando-loop-v2');
+  assert.equal(hostedGhostUrl(BANDO_TRACK_ID), 'ghosts/bando-loop-v2.json', 'where the page fetches it');
   assert.ok(g.lapTime < 600000, 'under the ghost limit');
   assert.ok(len(sub(g.samples[0].slice(1, 4).map(m), GATES[0].p)) < 0.01, 'starts at the first gate');
   for (const s of g.samples) assert.ok(nearest(s.slice(1, 4).map(m)).d >= 0.085, 'ghost clips at ' + s.slice(1, 4));

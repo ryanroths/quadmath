@@ -5,7 +5,7 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=995f59bd7468';
+import { planRoom } from './sim-room.js?v=2108fba17d3d';
 import {
   LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, lookShafts, lookGraffiti, floorAo,
 } from './sim-look.js?v=826bc4bd463d';
@@ -2388,7 +2388,7 @@ function buildDepot(THREE, parent, colliders) {
 // 6 cm thick, no slot of 10 cm or less between any two, every box on the
 // ground or at least 15 cm over it. The leaning slab collides as a run of
 // steps under the slab drawn at 30°.
-// The Bando Loop (tracks/bando-loop.json) is a designed line, as the
+// The Bando Loop (tracks/bando-loop-v2.json) is a designed line, as the
 // House's and the Warehouse's, but in 3D (bandoLine): from the pad on the
 // roof beside the lift shaft's top, south over the roof, through the parapet
 // gap and down into the courtyard; between the pallets and through the van;
@@ -2515,7 +2515,7 @@ const BANDO_DROP = Object.freeze((() => {
 // HOUSE_LINE), a helix when pitched (its radius r / cos^2 of the pitch);
 // ['P', r, deg] a pitch arc in the heading's vertical plane, up for a
 // positive angle, radius r, through vertical and over with the heading held;
-// ['G', size, name] a gate here, its ring radius size. tracks/bando-loop.json
+// ['G', size, name] a gate here, its ring radius size. tracks/bando-loop-v2.json
 // is its gates (tools/build_bando_loop.mjs).
 const BANDO_LINE = Object.freeze((() => {
   const D = BANDO_DIVE, C = BANDO_CLIMB, Q = BANDO_DROP, S = BANDO_SHAFT, r = BANDO_R, t = BANDO_T;

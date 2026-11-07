@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
-// Writes tracks/bando-loop.json from The Bando's line (sim-maps.js
+// Writes tracks/bando-loop-v2.json from The Bando's line (sim-maps.js
 // bandoLine): each gate where the line puts it, facing along the line, in
 // world units; the start pad from BANDO_PLAY. Writes its hosted pace ghost,
-// ghosts/bando-loop.json, along the same line. Run it again after a change to
+// ghosts/bando-loop-v2.json, along the same line. Run it again after a change to
 // the line, then check it with node --test tools/test_sim_bando.mjs:
 //   node tools/build_bando_loop.mjs
 // Also flies the loop: flyBandoLoop() puts the Coach autopilot
@@ -17,13 +17,16 @@ import { PHYSICS_VER } from '../sim-whoop.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const r4 = (v) => Math.round(v * 1e4) / 1e4 + 0;
+// The course's id: -v2 since it was relaid from the roof, so the old
+// course's bests and ghosts do not carry over (sim-tracks.js RETIRED_TRACKS).
+export const BANDO_TRACK_ID = 'bando-loop-v2';
 
 export function bandoLoopTrack() {
   const line = bandoLine(0.01);
   const w = (v) => r4(v * BANDO_WS);
   const [sx, sy, sz] = BANDO_PLAY.start;
   return {
-    id: 'bando-loop',
+    id: BANDO_TRACK_ID,
     map: 'bando',
     name: 'Bando Loop',
     class: 'whoop',
@@ -101,7 +104,7 @@ export function bandoLoopGhost() {
     const r2 = (x) => Math.round(x * 100) / 100 + 0, r3 = (x) => Math.round(x * 1000) / 1000 + 0;
     samples.push([Math.round(t * 1000), r2(p[0] * BANDO_WS), r2(p[1] * BANDO_WS), r2(p[2] * BANDO_WS), r3(q[0]), r3(q[1]), r3(q[2]), r3(q[3])]);
   }
-  return { v: 1, phys: PHYSICS_VER, track: 'bando-loop', name: 'PACE BOT', lapTime: Math.round(T * 1000), samples };
+  return { v: 1, phys: PHYSICS_VER, track: BANDO_TRACK_ID, name: 'PACE BOT', lapTime: Math.round(T * 1000), samples };
 }
 
 // ---- The loop, flown ----
@@ -234,12 +237,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     }
     if (f.stalled) { const s = f.samples[f.samples.length - 1]; console.log('  stalled near', [s.x / BANDO_WS, s.y / BANDO_WS, s.z / BANDO_WS].map((v) => v.toFixed(2)).join(', ')); }
   } else {
-    const file = join(root, 'tracks/bando-loop.json');
+    const file = join(root, `tracks/${BANDO_TRACK_ID}.json`);
     writeFileSync(file, bandoLoopJson());
     const t = bandoLoopTrack();
     console.log(`${file}: ${t.gates.length} gates`);
     const g = bandoLoopGhost();
-    writeFileSync(join(root, 'ghosts/bando-loop.json'), JSON.stringify(g));
-    console.log(`ghosts/bando-loop.json: ${g.samples.length} samples, ${g.lapTime} ms`);
+    writeFileSync(join(root, `ghosts/${BANDO_TRACK_ID}.json`), JSON.stringify(g));
+    console.log(`ghosts/${BANDO_TRACK_ID}.json: ${g.samples.length} samples, ${g.lapTime} ms`);
   }
 }
