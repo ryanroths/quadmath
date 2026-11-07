@@ -213,8 +213,8 @@ test('without ?dev=1 Daily, Boards, Freestyle this map, builder Import and duel 
       });
     })()`;
     let fly = JSON.parse(await evaluate(ws, chooser));
-    assert.deepEqual(fly.maps, ['rig', 'house', 'depot'], 'Fly offers the Rig, the House and The Warehouse');
-    assert.deepEqual(fly.thumbs, [480, 480, 480], 'each with its thumbnail');
+    assert.deepEqual(fly.maps, ['rig', 'house', 'depot', 'bando'], 'Fly offers the Rig, the House, The Warehouse and The Bando');
+    assert.deepEqual(fly.thumbs, [480, 480, 480, 480], 'each with its thumbnail');
     assert.deepEqual(fly.on, ['rig'], 'the last map flown is marked');
     assert.equal(fly.focus, 'rig', 'and has the focus');
     r = JSON.parse(await evaluate(ws, after(`document.querySelector('#menuLayer [data-fly-map="house"]').click();`)));

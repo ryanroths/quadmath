@@ -100,8 +100,8 @@ test('backyard never shows the dawn HDRI; indoor never shows the yard HDRI', () 
   assert.equal(resolveSceneLighting(garageYardOnly).environment, null);
 });
 
-test('the look loads one HDRI, its own, and the Rig, the House and The Warehouse are on the look', () => {
-  const onLook = ['rig', 'house', 'depot'];
+test('the look loads its own HDRIs, and the Rig, the House, The Warehouse and The Bando are on the look', () => {
+  const onLook = ['rig', 'house', 'depot', 'bando'];
   for (const mapId of onLook) {
     assert.equal(vibeFor(mapId).look, true, mapId);
     assert.equal(resolveMapLighting(mapId).look, true, mapId);
@@ -111,6 +111,17 @@ test('the look loads one HDRI, its own, and the Rig, the House and The Warehouse
   assert.match(looks, /const HDRI_LOOK = LOOK\.lighting\.hdri;/);
   assert.match(looks, /envLook = await loadHdr\(HDRI_LOOK\)/);
   assert.match(LOOK.lighting.hdri, /^assets\/sim-looks\/hdri\/[a-z0-9_]+_512\.hdr$/);
+  // An open map on the look (The Bando) takes the look's overcast sky, the
+  // rooms keep the room HDRI; nothing off the look takes either.
+  assert.match(looks, /const HDRI_OVERCAST = LOOK\.lighting\.overcast\.hdri;/);
+  assert.match(looks, /envOvercast = await loadHdr\(HDRI_OVERCAST\)/);
+  assert.match(LOOK.lighting.overcast.hdri, /^assets\/sim-looks\/hdri\/overcast_cie_128\.hdr$/);
+  for (const mapId of onLook) assert.equal(resolveMapLighting(mapId).lookHdri, mapId === 'bando' ? 'overcast' : 'room', mapId);
+  for (const mapId of MAP_VIBE_IDS) if (!onLook.includes(mapId)) assert.equal(resolveMapLighting(mapId).lookHdri, null, mapId);
+  const envs = { dawn: 'dawn', yard: 'yard', look: 'look', overcast: 'overcast' };
+  assert.equal(resolveSceneLighting({ mapId: 'bando', look: true, lookHdri: 'overcast', envs }).environment, 'overcast');
+  assert.equal(resolveSceneLighting({ mapId: 'depot', look: true, lookHdri: 'room', envs }).environment, 'look');
+  assert.equal(resolveSceneLighting({ mapId: 'rig', look: true, envs }).environment, 'look');
 });
 
 test('applyVibeLighting gives the Rig the look HDRI at its fill, in either order, across map switches', async () => {

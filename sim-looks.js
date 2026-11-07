@@ -5,8 +5,8 @@
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
 import { resolveAutoQuality, gpuTier, autoQualityStep } from './sim-touch.js?v=72029e559bf5';
-import { updateSceneLighting } from './sim-lighting.js?v=87ade1287271';
-import { LOOK } from './sim-look.js?v=d55c6a2d63e0';
+import { updateSceneLighting } from './sim-lighting.js?v=db386ea7cfd2';
+import { LOOK } from './sim-look.js?v=826bc4bd463d';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
@@ -146,6 +146,25 @@ export const LOOK_SPOTS = {
   // sim.html?map=depot&quality=high&look=depotThumb, UI hidden, 960x540
   // scaled to 480x270.
   depotThumb: { pos: [45.5, 23.1, -4.2], target: [-28, 5.25, 28] },
+  // The Bando: from behind the loop's pad on the roof, over it toward the
+  // parapet gap and the courtyard; from the roof's far corner over it all;
+  // inside the lift shaft over its ground-floor door, up it to the sky;
+  // across the courtyard to the courtyard face; across the ground floor under
+  // the slabs; the second floor's rebar wall; under the leaning slab; down the
+  // stair's open well. World units (m x 3.5).
+  bandoStart: { pos: [28.875, 41.3, -17.5], target: [28.875, 31.5, 35] },
+  bandoRoof: { pos: [-45.5, 44.1, -50.75], target: [28, 29.75, 17.5] },
+  bandoShaft: { pos: [28.875, 9.1, -22.925], target: [28.35, 42, -19.25] },
+  bandoCourtyard: { pos: [42, 6.3, 56], target: [-21, 12.25, 21] },
+  bandoGround: { pos: [-45.5, 5.25, 8.75], target: [42, 5.95, -21] },
+  bandoSecond: { pos: [-8.75, 30.1, 8.75], target: [17.5, 26.6, 4.2] },
+  bandoSlab: { pos: [49.7, 3.15, 7], target: [42, 6.3, -24.5] },
+  bandoStair: { pos: [-37.8, 40.6, -44.8], target: [-46.9, 1.75, -45.15] },
+  // The Fly chooser's Bando thumbnail (assets/sim-thumbs/bando.jpg): high over
+  // the courtyard's corner, the courtyard face, its windows and graffiti, the
+  // van, the dead tree and the parapet gap. sim.html?map=bando&quality=high
+  // &look=bandoThumb, UI hidden, 960x540 scaled to 480x270.
+  bandoThumb: { pos: [59.5, 45.5, 59.5], target: [-7, 14, -14] },
   builder: { pos: [0, 14, 0.1], target: [0, 0, 0] },
 };
 
@@ -154,6 +173,8 @@ const HDRI_1K = `${ASSET}/hdri/kiara_1_dawn_1k.hdr`;
 const HDRI_2K = `${ASSET}/hdri/kiara_1_dawn_2k.hdr`;
 const HDRI_YARD_1K = 'assets/sim-backyard/hdri/kloofendal_48d_partly_cloudy_1k.hdr';
 const HDRI_LOOK = LOOK.lighting.hdri;
+// An open map's fill on the look (The Bando): the overcast sky.
+const HDRI_OVERCAST = LOOK.lighting.overcast.hdri;
 
 export function phoneLookOverrides(mobile, preset, dpr) {
   const p = Object.assign({}, preset || PRESETS.med);
@@ -499,7 +520,7 @@ export async function createLooks(ctx) {
   let skyMesh = null, sunSprite = null, groundMesh = null;
   let composer = null, bloomPass = null, aoPass = null, fpvPass = null, motionPass = null;
   let skyMode = 'hdri';
-  let env1k = null, env2k = null, envYard = null, envLook = null, envLevel = null, hdriLevel = null, yardFailed = false;
+  let env1k = null, env2k = null, envYard = null, envLook = null, envOvercast = null, envLevel = null, hdriLevel = null, yardFailed = false;
   let texCache = {};
   let maxAniso = 8;
   try { maxAniso = renderer.capabilities.getMaxAnisotropy() || 8; } catch (e) { /* ignore */ }
@@ -740,11 +761,12 @@ export async function createLooks(ctx) {
       skyCity: !!(skyMesh && skyMesh.userData && skyMesh.userData.citySky),
       fogColor: LIGHTING.fogColor,
       exposure: LIGHTING.exposure,
-      envs: { dawn, yard: envYard || (yardFailed && dawn) || null, look: envLook },
+      envs: { dawn, yard: envYard || (yardFailed && dawn) || null, look: envLook, overcast: envOvercast },
     };
     if (mapLighting) {
       patch.mapId = mapLighting.mapId;
       patch.look = !!mapLighting.look;
+      patch.lookHdri = mapLighting.lookHdri || null;
       patch.citySky = !!mapLighting.citySky;
     }
     if (mapLooksSpec) patch.looks = mapLooksSpec;
@@ -770,6 +792,12 @@ export async function createLooks(ctx) {
     if (level) hdriLevel = level;
     // A map on the look takes the look's one HDRI, 1k, whatever the quality.
     if (lookOn()) {
+      if (mapLighting.lookHdri === 'overcast') {
+        if (!envOvercast) envOvercast = await loadHdr(HDRI_OVERCAST);
+        envLevel = 'look-overcast';
+        applyLighting();
+        return;
+      }
       if (!envLook) envLook = await loadHdr(HDRI_LOOK);
       envLevel = 'look-1k';
       applyLighting();
@@ -1089,7 +1117,7 @@ export async function createLooks(ctx) {
     // yard — that reads flat grey). Load it now for the yard, or once quality
     // has asked for HDRIs.
     const r = applyLighting();
-    if (!r.envReady && (r.want === 'yard' || r.want === 'look' || hdriLevel)) {
+    if (!r.envReady && (r.want === 'yard' || r.want === 'look' || r.want === 'overcast' || hdriLevel)) {
       ensureHdr().catch((e) => console.warn('looks HDRI', e));
     }
     return mapLighting;

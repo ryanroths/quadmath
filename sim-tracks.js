@@ -46,6 +46,8 @@ export const MAPS = [
   { id: 'house', name: 'The House', class: 'whoop', indoor: true },
   // The Warehouse: id depot, since the archived map below owns 'warehouse'.
   { id: 'depot', name: 'The Warehouse', class: 'whoop', indoor: true },
+  // The Bando: a gutted concrete frame and its courtyard, at the Warehouse's scale.
+  { id: 'bando', name: 'The Bando', class: 'whoop', indoor: true },
   { id: 'city', name: 'City', class: 'open', indoor: false },
   { id: 'living', name: 'Living Room', class: 'whoop', indoor: true },
   { id: 'garage', name: 'Garage', class: 'whoop', indoor: true },
@@ -82,11 +84,11 @@ export function knownMapId(id) {
 }
 
 // The fallback for an unknown or closed map, and the map a fresh pilot
-// launches into when the class names none (CLASS_MAPS). The House and The
-// Warehouse are open beside it (Fly and Tracks); the other maps are open with
+// launches into when the class names none (CLASS_MAPS). The House, The
+// Warehouse and The Bando are open beside it (Fly and Tracks); the other maps are open with
 // ?dev=1 only (mapOpen).
 export const DEFAULT_MAP = 'rig';
-export const PUBLIC_MAPS = Object.freeze([DEFAULT_MAP, 'house', 'depot']);
+export const PUBLIC_MAPS = Object.freeze([DEFAULT_MAP, 'house', 'depot', 'bando']);
 export function mapOpen(mapId, dev) {
   return !!dev || PUBLIC_MAPS.includes(mapId);
 }
@@ -168,6 +170,8 @@ export function freestyleStart(mapId) {
   if (map === 'house') return { x: -14.7, y: 1.225, z: 15.05, yaw: -Math.PI / 2 };
   // The Warehouse: the Warehouse Loop pad, nose down the centre run (+x).
   if (map === 'depot') return { x: -43.225, y: 1.225, z: 5.775, yaw: -Math.PI / 2 };
+  // The Bando: the Bando Loop pad, on the ground floor, nose south to the shaft's door (+z).
+  if (map === 'bando') return { x: 28.875, y: 1.225, z: -38.5, yaw: -Math.PI };
   return { x: 0, y: 1.2, z: 0, yaw: 0 };
 }
 
@@ -794,6 +798,7 @@ export const BUILTIN_TRACK_FILES = [
   { id: 'rig-loop', file: 'tracks/rig-loop.json', map: 'rig', name: 'Rig Loop' },
   { id: 'house-loop', file: 'tracks/house-loop.json', map: 'house', name: 'House Loop' },
   { id: 'depot-loop', file: 'tracks/depot-loop.json', map: 'depot', name: 'Warehouse Loop' },
+  { id: 'bando-loop', file: 'tracks/bando-loop.json', map: 'bando', name: 'Bando Loop' },
   { id: 'city-loop', file: 'tracks/city-loop.json', legacyId: 0, map: 'city', name: 'City Loop' },
   { id: 'city-zigzag', file: 'tracks/city-zigzag.json', legacyId: 1, map: 'city', name: 'Mesa Zigzag' },
   { id: 'city-inside', file: 'tracks/city-inside.json', map: 'city', name: 'Interior Run' },

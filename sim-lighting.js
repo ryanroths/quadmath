@@ -12,13 +12,14 @@ export function sceneLightingInputs(over) {
   return Object.assign({
     mapId: null,      // resolved map id ('city', 'backyard', indoor ids)
     look: false,      // the map is on the sim look (sim-look.js): its HDRI, fill only
+    lookHdri: null,   // which of the look's HDRIs: 'room' (default) or 'overcast' (an open map)
     citySky: false,   // map paints its own night sky (no IBL)
     skyCity: false,   // sky dome currently wears the city texture
     sky: null,        // looks sky mode: 'gradient' | 'hdri' (null = looks not ready)
     fogColor: null,   // hex; LIGHTING.fogColor of the active vibe
     exposure: null,
     looks: null,      // vibe looks { env, bg }
-    envs: null,       // { dawn, yard, look } PMREM textures once loaded, else null
+    envs: null,       // { dawn, yard, look, overcast } PMREM textures once loaded, else null
   }, over || {});
 }
 
@@ -26,9 +27,10 @@ export function resolveSceneLighting(input) {
   const s = sceneLightingInputs(input);
   const citySky = !!s.citySky || (s.sky === 'gradient' && !!s.skyCity);
   const yard = s.mapId === 'backyard';
-  // A map on the look takes the look's HDRI (sim-look.js), never another.
+  // A map on the look takes one of the look's HDRIs (sim-look.js): the
+  // rooms' one, or an open map's overcast sky; never another.
   const look = !!s.look && !citySky;
-  const want = citySky ? null : (look ? 'look' : yard ? 'yard' : 'dawn');
+  const want = citySky ? null : (look ? (s.lookHdri === 'overcast' ? 'overcast' : 'look') : yard ? 'yard' : 'dawn');
   const env = (want && s.envs && s.envs[want]) || null;
   const looks = s.looks || {};
   const out = {

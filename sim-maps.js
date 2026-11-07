@@ -5,10 +5,10 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=54d5cf5d69fc';
+import { planRoom } from './sim-room.js?v=2b1154ef73fb';
 import {
-  LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, lookShafts, floorAo,
-} from './sim-look.js?v=d55c6a2d63e0';
+  LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, lookShafts, lookGraffiti, floorAo,
+} from './sim-look.js?v=826bc4bd463d';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -195,6 +195,8 @@ export const LAYOUT = {
   house: { w: 63, d: 42, h: 9.45, wall: 0.35 },
   // Inner faces at exactly 45 × 30 × 9 m (see buildDepot).
   depot: { w: 157.5, d: 105, h: 31.5, wall: 0.35 },
+  // The lot, 36 x 36 m, open sky to 16 m (see buildBando).
+  bando: { w: 126, d: 126, h: 56, wall: 0.3 },
 };
 
 // The House's one key: a low afternoon sun from the west-north-west, warm.
@@ -210,6 +212,15 @@ export const HOUSE_KEY = Object.freeze({ elevation: 25, azimuth: 250, color: 0xf
 // floor outside the box as if it had no roof (checked corner to corner).
 export const DEPOT_KEY = Object.freeze({ elevation: 26, azimuth: 345, color: 0xffe0b0, intensity: 8.5 });
 export const DEPOT_SHADOW = Object.freeze({ viewR: 160, height: 34 });
+
+// The Bando's one key: a pale sun breaking through the overcast, low in the
+// south over the courtyard (35°, azimuth 20°), so it comes in at the
+// courtyard face's windows and down through the roof's holes; soft
+// shadows (shadowIntensity), the overcast filling the rest. Its shadow box
+// (world units) covers the lot from over the parapet.
+export const BANDO_KEY = Object.freeze({ elevation: 35, azimuth: 20, color: 0xfff0dc, intensity: 4.2 });
+export const BANDO_SHADOW = Object.freeze({ viewR: 92, height: 46 });
+export const BANDO_SHADOW_INTENSITY = 0.8;
 
 export const MAP_ORBIT = {
   city: { cx: 0, cy: 5, cz: 0, r: 92, h: 22, fov: 62 },
@@ -228,6 +239,8 @@ export const MAP_ORBIT = {
   // Round the middle of the hall at 6 m, over the centre run and the second
   // aisle's racking, under the trusses.
   depot: { cx: 0, cy: 7, cz: 10.5, r: 21, h: 21, fov: 68 },
+  // Round the Bando from over the lot's wall, 16 m up, looking in at it.
+  bando: { cx: 0, cy: 17.5, cz: -10.5, r: 77, h: 56, fov: 62 },
 };
 
 export const MAP_LOOKS = {
@@ -245,9 +258,10 @@ export const MAP_LOOKS = {
   rig: lookLooks(),
   house: lookLooks({ sun: HOUSE_KEY.intensity }),
   depot: lookLooks({ sun: DEPOT_KEY.intensity }),
+  bando: lookLooks({ sun: BANDO_KEY.intensity }),
 };
 
-export const MAP_IDS = ['rig', 'house', 'depot', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room'];
+export const MAP_IDS = ['rig', 'house', 'depot', 'bando', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room'];
 
 function mat(THREE, hex, set, extras) {
   const m = new THREE.MeshStandardMaterial(Object.assign({
@@ -2358,10 +2372,947 @@ function buildDepot(THREE, parent, colliders) {
   return { floor, orbit: MAP_ORBIT.depot };
 }
 
+// The Bando: a gutted three-storey concrete frame, 30 × 20 m, 3.5 m a
+// storey, its open roof and a ground-level courtyard, at the Warehouse's
+// micro-class scale, sized for the 75 and 85 mm whoops (the 65 flies it
+// too): the fourth map on the look. Metres here, scene axes (y up, +z the
+// courtyard side, south; +x east); buildBando scales by BANDO_WS.
+// Vertical first: ragged floor holes on every level, stacked so one dive
+// takes two (or three) of them; an open switchback stair, no rails; a
+// 1.6 × 1.6 m lift shaft from the ground to the roof with a door gap on each
+// floor; empty window frames in every facade; broken block walls with rebar
+// gaps and door openings; a grid of columns to orbit; a slab fallen from the
+// first floor, leaning at 30° to fly under; a parapet round the roof with a
+// gap to dive into the courtyard, where a rusted van, pallets and a dead
+// tree stand. Boxes only, axis-aligned, by the Rig's rules: nothing under
+// 6 cm thick, no slot of 10 cm or less between any two, every box on the
+// ground or at least 15 cm over it. The leaning slab collides as a run of
+// steps under the slab drawn at 30°.
+// The Bando Loop (tracks/bando-loop.json) is a designed line, as the
+// House's and the Warehouse's, but in 3D (bandoLine): from the ground floor
+// in at the lift shaft's door and up it to the roof; out over the roof,
+// through the parapet gap and down into the courtyard; between the
+// pallets and through the van; a climbing turn and a quarter round the dead
+// tree, in at a second-floor window; between the columns and round one,
+// through a rebar gap, down through two floor holes in one dive to the
+// ground; round a column, under the leaning slab, through a door, round a
+// column back to the shaft's door.
+export const BANDO_WS = 3.5; // world units per metre, as sim-core-adapter.js WS
+// The lot: the courtyard and the yards round the frame, inside a 2.4 m block
+// wall (the shell); open sky over it (h only bounds the flying).
+const BANDO_LOT = Object.freeze({ w: 36, d: 36, h: 16, wall: 2.4 });
+// The frame: its footprint, walls and slabs 25 cm, the floors' tops (the
+// ground, the first and second floors, the roof).
+const BANDO_FRAME = Object.freeze({ x0: -15, x1: 15, z0: -16, z1: 4, wall: 0.25, slab: 0.25, tops: Object.freeze([0, 3.5, 7, 10.5]) });
+// Window frames on every facade, every storey: centres along the facade,
+// widths 1.2 m (the long faces) and 0.9 m (the ends), sills 0.9 m over the
+// floor, heads 2.1 m. On the ground, the courtyard face's middle window is a
+// doorway, 2.4 × 2.6 m.
+const BANDO_WINDOWS = Object.freeze({
+  south: Object.freeze({ at: Object.freeze([-12.5, -8.25, -4, 0, 4, 8.25, 12.5]), w: 1.2 }),
+  north: Object.freeze({ at: Object.freeze([-9, -4.5, 0, 4.5, 9, 12.75]), w: 1.2 }),
+  east: Object.freeze({ at: Object.freeze([-12.75, -6.25, -3.3, 0.75]), w: 0.9 }),
+  west: Object.freeze({ at: Object.freeze([-9.5, -5.5, -1.5, 2.0]), w: 0.9 }),
+  sill: 0.9, head: 2.1,
+  doorway: Object.freeze({ at: 0, w: 2.4, h: 2.6 }),
+});
+// The parapet round the roof: 1.1 m, the wall's thickness; the gap in its
+// courtyard side, 1.6 m, x0..x1.
+const BANDO_PARAPET = Object.freeze({ h: 1.1, gap: Object.freeze([7.45, 9.05]) });
+// The columns: 40 cm square, on a grid, every storey.
+const BANDO_COLUMNS = Object.freeze({ xs: Object.freeze([-11, -5.5, 0, 5.5, 11]), zs: Object.freeze([-11, -6, -1]), d: 0.4 });
+// The lift shaft: 1.6 × 1.6 m inside, 20 cm walls, ground to roof, a door
+// gap 1.0 × 2.1 m in its north wall on every floor; its top open.
+const BANDO_SHAFT = Object.freeze({ x: 8.25, z: -6, inner: 1.6, wall: 0.2, door: Object.freeze({ w: 1.0, h: 2.1 }) });
+// The stair: switchback, no rails, in the north-west corner over x0..x1,
+// z0..z1. Each storey two flights of 10 risers (17.5 cm, 30 cm goings), 1.2 m
+// wide, 40 cm apart (the open well), a 1.5 m landing against the north wall;
+// flight A up the west wall northward, flight B back south to the floor over.
+// Flight A stands 15 cm off the wall and the slab's opening runs 15 cm past
+// flight B's open side (inset), so no tread sits in a slot.
+const BANDO_STAIR = Object.freeze({ x0: -14.75, x1: -11.65, z0: -15.75, z1: -11.55, inset: 0.15, flight: 1.2, well: 0.4, risers: 10, rise: 0.175, going: 0.3, tread: 0.2, landing: 1.5 });
+// The fallen slab: out of the first floor's collapse (hole), its foot on the
+// ground at xf, its top against the east wall 3 m up, z0..z1 wide, 25 cm
+// thick, at 30°. It collides as steps every d along x.
+const BANDO_LEAN = Object.freeze((() => {
+  const a = 30 * Math.PI / 180, top = 3.0, x1 = 14.75, xf = x1 - top / Math.tan(a);
+  // The steps stop 15 cm short of the wall (no slot under the floor's edge
+  // over it).
+  return { angle: 30, xf, x1, top, z0: -4.8, z1: -1.8, t: 0.25, steps: 34, stepEnd: x1 - 0.15, hole: Object.freeze([8.9, 14.75, -5.0, -1.6]) };
+})());
+// The courtyard: a rusted van (its glass long gone: fly in at the windscreen
+// and out at the back, or through its side windows), pallets stacked either
+// side of the line in, a dead tree.
+const BANDO_VAN = Object.freeze({ x0: -2.1, x1: 2.1, z0: 13.85, z1: 15.65, sill: 0.9, roof: 1.5, roofT: 0.08, cab: Object.freeze([-1.4, 1.0]), b: -0.2, inset: 0.1, pillar: 0.06, wheel: 0.62 });
+const BANDO_PALLETS = Object.freeze([
+  Object.freeze({ x0: 3.0, x1: 4.2, z0: 13.15, z1: 13.95, n: 6 }),
+  Object.freeze({ x0: 3.0, x1: 4.2, z0: 15.55, z1: 16.35, n: 4 }),
+  Object.freeze({ x0: 11.0, x1: 12.2, z0: 15.0, z1: 15.8, n: 3 }),
+  Object.freeze({ x0: 12.6, x1: 13.8, z0: 15.0, z1: 15.8, n: 7 }),
+]);
+const BANDO_TREE = Object.freeze({ x: -5.5, z: 12.0 });
+// Every pallet's base is a multiple of this (the pallet shader).
+const BANDO_PALLET = 0.15;
+// Interior walls: block, 20 cm, floor to slab, along 'x' (at z = c) or 'z'
+// (at x = c) from a to b; door openings 0.9 × 2.1 m at their centres;
+// breaks u0..u1 by v0..v1 over the floor with rebar standing across them
+// (centres, 6 cm bars): the gaps between, 30 to 60 cm.
+const BANDO_WALLS = Object.freeze([
+  { s: 0, along: 'x', c: -8.5, a: 10.0, b: 14.75, doors: [13.75], breaks: [] },
+  { s: 0, along: 'x', c: -3.5, a: -14.75, b: -8.0, doors: [-12.55], breaks: [{ u0: -10.6, u1: -8.8, v0: 0.6, v1: 2.2, bars: [-10.15, -9.65, -9.2] }] },
+  { s: 1, along: 'z', c: 2.75, a: -15.75, b: -10.2, doors: [-11.4], breaks: [{ u0: -14.6, u1: -13.0, v0: 0.5, v1: 2.3, bars: [-14.1, -13.5] }] },
+  { s: 1, along: 'x', c: -3.5, a: -14.75, b: -7.0, doors: [-9.0], breaks: [{ u0: -13.4, u1: -11.8, v0: 0.5, v1: 2.3, bars: [-12.9, -12.3] }] },
+  { s: 2, along: 'z', c: 0, a: -0.8, b: 3.75, doors: [], breaks: [{ u0: 0.85, u1: 2.95, v0: 0.6, v1: 2.7, bars: [1.42, 2.08, 2.59] }] },
+  { s: 2, along: 'x', c: -7.4, a: -2.5, b: 4.0, doors: [2.25], breaks: [{ u0: -1.6, u1: 0.4, v0: 0.4, v1: 2.4, bars: [-1.05, -0.45, 0.07] }] },
+].map((w) => Object.freeze(w)));
+const BANDO_DOOR = Object.freeze({ w: 0.9, h: 2.1 });
+
+// The line's arcs: every pitch arc 2.5 m, every turn 2.75 m in plan.
+const BANDO_R = 2.5, BANDO_T = 2.75;
+const rad = (d) => d * Math.PI / 180;
+const arcRise = (deg) => BANDO_R * (1 - Math.cos(rad(deg)));
+const arcRun = (deg) => BANDO_R * Math.sin(rad(deg));
+// The start: over the pad on the ground floor, 5 m short of the lift
+// shaft's middle, heading south (+z) for its door, where the U-turn round
+// the column ends each lap. A pad on the floor, not on a slab (the js core
+// settles a quad at rest on the floor only).
+const BANDO_START = Object.freeze([BANDO_SHAFT.x, 1.0, BANDO_SHAFT.z - 5]);
+// The double dive: off the second floor at y2, from x d along z 1.75, at
+// pitch, to the ground at y0.
+const BANDO_DIVE = Object.freeze({ x: 1.6, z: 1.75, pitch: 50, y2: 8.6, y0: 1.0 });
+// Where the dive's straight crosses height y.
+const diveX = (y) => {
+  const D = BANDO_DIVE, x0 = D.x + arcRun(D.pitch), y0 = D.y2 - arcRise(D.pitch);
+  return x0 + (y0 - y) / Math.tan(rad(D.pitch));
+};
+// The climbing turn round the dead tree: from x climb (after the van) to the
+// second-floor window, rising at a pitch found here.
+const BANDO_CLIMB = Object.freeze((() => {
+  const y0 = 1.2, y1 = BANDO_DIVE.y2, x = -2.6, helix = BANDO_T * rad(450);
+  const rise = (p) => 2 * arcRise(p) + (x - arcRun(p) - (BANDO_TREE.x)) * Math.tan(rad(p)) + helix * Math.tan(rad(p));
+  let lo = 1, hi = 40;
+  for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (rise(m) < y1 - y0) lo = m; else hi = m; }
+  return { x, y0, pitch: (lo + hi) / 2 };
+})());
+// The roof's descent to the parapet gap: from the shaft's exit to 55 cm
+// over the roof, two arcs.
+const BANDO_GAP_Y = BANDO_FRAME.tops[3] + 0.55;
+// Out of the shaft the line levels at BANDO_EXIT_Y, 1.3 m over the roof.
+const BANDO_EXIT_Y = BANDO_FRAME.tops[3] + 1.3;
+const BANDO_ROOF_DIP = Math.acos(1 - (BANDO_EXIT_Y - BANDO_GAP_Y) / (2 * BANDO_R)) * 180 / Math.PI;
+// The dive into the courtyard: from the gap at 65° to 1.2 m, levelling out
+// 12 m south, where the turn round to the van starts.
+const BANDO_DROP = Object.freeze((() => {
+  const p = 65, y1 = 1.2, zEnd = 12.0;
+  const z = zEnd - 2 * arcRun(p) - (BANDO_GAP_Y - y1 - 2 * arcRise(p)) / Math.tan(rad(p));
+  return { pitch: p, y1, z, zEnd };
+})());
+
+// The Bando Loop's line, metres: a turtle in 3D from BANDO_START heading +z,
+// level. ['L', d] straight on at the line's pitch; ['X', x], ['Y', y], ['Z', z]
+// straight on until that coordinate is reached; ['A', r, deg] a turn about
+// the vertical, radius r in plan, left for a positive angle (+x toward -z, as
+// HOUSE_LINE), a helix when pitched (its radius r / cos^2 of the pitch);
+// ['P', r, deg] a pitch arc in the heading's vertical plane, up for a
+// positive angle, radius r, through vertical and over with the heading held;
+// ['G', size, name] a gate here, its ring radius size. tracks/bando-loop.json
+// is its gates (tools/build_bando_loop.mjs).
+const BANDO_LINE = Object.freeze((() => {
+  const D = BANDO_DIVE, C = BANDO_CLIMB, Q = BANDO_DROP, S = BANDO_SHAFT, r = BANDO_R, t = BANDO_T;
+  return [
+    // In at the shaft's door and up it to the roof.
+    ['Z', S.z - r], ['P', r, 40], ['G', 0.35, 'shaft door'], ['P', r, 50],
+    ['Y', BANDO_EXIT_Y - r], ['P', r, -90],
+    // Out of the shaft and over the roof, down to the parapet gap.
+    ['Z', S.z + r + 0.8], ['G', 0.45, 'out of the shaft'],
+    ['Z', -1.5], ['P', r, -BANDO_ROOF_DIP], ['P', r, BANDO_ROOF_DIP],
+    ['Z', BANDO_FRAME.z1 - BANDO_FRAME.wall / 2], ['G', 0.45, 'parapet gap'],
+    // The roof dive into the courtyard.
+    ['Z', Q.z], ['P', r, -Q.pitch], ['Y', Q.y1 + arcRise(Q.pitch)], ['P', r, Q.pitch], ['G', 0.5, 'into the courtyard'],
+    // Round to the van, between the pallets, through the van.
+    ['A', t, -90], ['X', 3.6], ['G', 0.45, 'between the pallets'],
+    ['X', -0.2], ['G', 0.28, 'through the van'],
+    // The climbing turn and a quarter round the dead tree.
+    ['X', C.x], ['P', r, C.pitch], ['X', BANDO_TREE.x],
+    ['A', t, -90], ['G', 0.45, 'round the dead tree'], ['A', t, -90], ['G', 0.45, 'round the dead tree'],
+    ['A', t, -90], ['G', 0.45, 'round the dead tree'], ['A', t, -90], ['G', 0.45, 'round the dead tree'],
+    ['A', t, -90], ['P', r, -C.pitch],
+    // In at the second-floor window; between the columns, round one.
+    ['Z', BANDO_FRAME.z1 - BANDO_FRAME.wall / 2], ['G', 0.45, 'second-floor window'],
+    ['Z', -3.25], ['G', 0.45, 'between the columns'],
+    ['Z', -6], ['A', t, -90], ['G', 0.45, 'round the column'], ['A', t, -90],
+    ['Z', -1], ['A', t, 45], ['G', 0.45, 'round the column'], ['A', t, 45],
+    // The rebar gap; the dive through two floor holes to the ground.
+    ['X', 0], ['G', 0.28, 'rebar gap'],
+    ['X', D.x], ['P', r, -D.pitch], ['Y', (BANDO_FRAME.tops[1] + BANDO_FRAME.tops[2] - BANDO_FRAME.slab) / 2], ['G', 0.45, 'through the floors'],
+    ['Y', D.y0 + arcRise(D.pitch)], ['P', r, D.pitch],
+    ['X', 10.6], ['G', 0.45, 'ground floor'],
+    // Round a column, under the leaning slab, through the door, round a column.
+    ['X', 11], ['A', t, 90], ['Z', (BANDO_LEAN.z0 + BANDO_LEAN.z1) / 2], ['G', 0.45, 'under the slab'],
+    ['Z', -8.5], ['G', 0.35, 'door'],
+    ['Z', -11], ['A', t, 90], ['G', 0.45, 'round the column'], ['A', t, 90],
+  ].map((op) => Object.freeze(op));
+})());
+
+export function bandoLine(ds) {
+  return pathLine(BANDO_LINE, BANDO_START, [0, 1], ds);
+}
+
+// A designed line in 3D (BANDO_LINE) from p0, heading h0 [x, z] level,
+// sampled every ds metres of line: points, the arc length s along it, and the
+// gates { at (index), s, size, name, ry (the plan heading) }.
+function pathLine(ops, p0, h0, ds) {
+  const step = ds || 0.01;
+  let [x, y, z] = p0, [hx, hz] = h0, ph = 0, s = 0;
+  const pts = [[x, y, z]], S = [0], gates = [];
+  const push = () => { pts.push([x, y, z]); S.push(s); };
+  const dir = (p) => [hx * Math.cos(p), Math.sin(p), hz * Math.cos(p)];
+  const run = (d) => {
+    const n = Math.max(1, Math.ceil(d / step)), u = dir(ph);
+    for (let i = 1; i <= n; i++) { x += u[0] * d / n; y += u[1] * d / n; z += u[2] * d / n; s += d / n; push(); }
+  };
+  for (const op of ops) {
+    if (op[0] === 'L') run(op[1]);
+    else if (op[0] === 'X' || op[0] === 'Y' || op[0] === 'Z') {
+      const k = 'XYZ'.indexOf(op[0]), u = dir(ph)[k], at = [x, y, z][k], d = (op[1] - at) / u;
+      if (!(d > -1e-9) || !Number.isFinite(d)) throw new Error('bando line: ' + op[0] + ' ' + op[1] + ' is behind (at ' + at.toFixed(3) + ')');
+      if (d > 1e-9) run(d);
+    } else if (op[0] === 'A') {
+      const r = op[1], a = Math.abs(op[2]) * Math.PI / 180, sg = Math.sign(op[2]);
+      const plan = r * a, len = plan / Math.cos(ph), n = Math.max(1, Math.ceil(len / step));
+      for (let i = 1; i <= n; i++) {
+        const p = sg * a / n, c = Math.cos(p), sn = Math.sin(p);
+        // The chord of this step, then the turn: a left turn takes +x to -z.
+        const mx = hx * Math.cos(p / 2) + hz * Math.sin(p / 2), mz = -hx * Math.sin(p / 2) + hz * Math.cos(p / 2);
+        const chord = 2 * r * Math.sin(a / n / 2);
+        x += mx * chord; z += mz * chord; y += plan / n * Math.tan(ph); s += len / n;
+        [hx, hz] = [hx * c + hz * sn, -hx * sn + hz * c];
+        push();
+      }
+    } else if (op[0] === 'P') {
+      const r = op[1], a = op[2] * Math.PI / 180, n = Math.max(1, Math.ceil(r * Math.abs(a) / step));
+      for (let i = 1; i <= n; i++) {
+        const p1 = ph + a / n, u = dir((ph + p1) / 2), chord = 2 * r * Math.sin(Math.abs(a / n) / 2);
+        x += u[0] * chord; y += u[1] * chord; z += u[2] * chord; s += r * Math.abs(a) / n; ph = p1;
+        push();
+      }
+    } else if (op[0] === 'G') gates.push({ s, size: op[1], name: op[2], ry: Math.atan2(hx, hz) });
+  }
+  const at = (t) => S.findIndex((q) => q >= t - 1e-9);
+  return {
+    length: s,
+    closes: Math.hypot(x - p0[0], y - p0[1], z - p0[2]) + Math.hypot(hx - h0[0], hz - h0[1]) + Math.abs(ph),
+    points: pts,
+    s: S,
+    gates: gates.map((g) => Object.assign(g, { at: at(g.s) })),
+  };
+}
+
+// A wall or a slab with openings: the rectangle u0..u1 by v0..v1 less the
+// holes [u0, u1, v0, v1], as the solid's rectangles (each band's runs, merged
+// on while they repeat) and its outline (the sides between solid and open,
+// the rectangle's own included), for the edge lines. Breakpoints are rounded
+// to 0.1 mm.
+function bandoPanel(u0, u1, v0, v1, holes) {
+  const r = (v) => Math.round(v * 1e4) / 1e4;
+  const hs = holes.map((h) => [Math.max(u0, h[0]), Math.min(u1, h[1]), Math.max(v0, h[2]), Math.min(v1, h[3])].map(r))
+    .filter((h) => h[1] > h[0] && h[3] > h[2]);
+  const us = [...new Set([u0, u1, ...hs.flatMap((h) => [h[0], h[1]])].map(r))].sort((a, b) => a - b);
+  const vs = [...new Set([v0, v1, ...hs.flatMap((h) => [h[2], h[3]])].map(r))].sort((a, b) => a - b);
+  const I = us.length - 1, J = vs.length - 1;
+  const solid = (i, j) => {
+    if (i < 0 || j < 0 || i >= I || j >= J) return false;
+    const cu = (us[i] + us[i + 1]) / 2, cv = (vs[j] + vs[j + 1]) / 2;
+    return !hs.some((h) => cu > h[0] && cu < h[1] && cv > h[2] && cv < h[3]);
+  };
+  const rects = [];
+  let open = [];
+  for (let j = 0; j < J; j++) {
+    const runs = [];
+    for (let i = 0; i < I; i++) {
+      if (!solid(i, j)) continue;
+      if (runs.length && runs[runs.length - 1][1] === i) runs[runs.length - 1][1] = i + 1;
+      else runs.push([i, i + 1]);
+    }
+    const next = [];
+    for (const [a, b] of runs) {
+      let q = open.find((o) => o.a === a && o.b === b);
+      if (q) q.j1 = j + 1;
+      else { q = { a, b, j0: j, j1: j + 1 }; rects.push(q); }
+      next.push(q);
+    }
+    open = next;
+  }
+  // Outline: along u at each v line, along v at each u line, merged.
+  const lines = new Map();
+  const add = (axis, c, a, b) => {
+    const k = axis + c;
+    if (!lines.has(k)) lines.set(k, { axis, c, segs: [] });
+    lines.get(k).segs.push([a, b]);
+  };
+  for (let j = 0; j <= J; j++) for (let i = 0; i < I; i++) if (solid(i, j - 1) !== solid(i, j)) add('u', vs[j], us[i], us[i + 1]);
+  for (let i = 0; i <= I; i++) for (let j = 0; j < J; j++) if (solid(i - 1, j) !== solid(i, j)) add('v', us[i], vs[j], vs[j + 1]);
+  const segs = [];
+  for (const { axis, c, segs: list } of lines.values()) {
+    list.sort((p, q) => p[0] - q[0]);
+    let cur = null;
+    for (const s of list) {
+      if (cur && Math.abs(s[0] - cur[1]) < 1e-9) cur[1] = s[1];
+      else { if (cur) segs.push([axis, c, cur[0], cur[1]]); cur = [s[0], s[1]]; }
+    }
+    if (cur) segs.push([axis, c, cur[0], cur[1]]);
+  }
+  const cells = [];
+  for (let j = 0; j < J; j++) for (let i = 0; i < I; i++) cells.push(solid(i, j) ? 1 : 0);
+  return { rects: rects.map((q) => [us[q.a], us[q.b], vs[q.j0], vs[q.j1]]), segs, us, vs, cells };
+}
+
+// A ragged hole: its core (1.35 to 1.5 m by 1.2 to 1.4 m) and the notches
+// bitten out round it, on a 15 cm grid from its corner (no slot); 2 m across
+// at the most, either way.
+function bandoRagged(x0, x1, z0, z1, flip) {
+  const z = (a) => (flip ? z1 - a : z0 + a), zz = (a, b) => [Math.min(z(a), z(b)), Math.max(z(a), z(b))];
+  return [
+    [x0, x1, z0, z1],
+    [x0 - 0.15, x0, ...zz(0.3, 0.9)],
+    [x0 - 0.3, x0 - 0.15, ...zz(0.45, 0.75)],
+    [x1, x1 + 0.15, ...zz(0.15, 0.6)],
+    [x0 + 0.3, x0 + 0.9, ...(flip ? [z0 - 0.3, z0] : [z1, z1 + 0.3])],
+    [x0 + 0.6, x0 + 1.2, ...(flip ? [z1, z1 + 0.3] : [z0 - 0.3, z0])],
+  ];
+}
+
+// The floor holes, every level: the loop's pair where its dive crosses the
+// second floor and the first, the roof's over them in line (one dive takes
+// all three), and a second stack west along z -9. Each { slab (1 the first
+// floor, 3 the roof), name, core [x0, x1, z0, z1], rects (the ragged hole) }.
+const BANDO_HOLES = Object.freeze((() => {
+  const F = BANDO_FRAME, s5 = (v) => Math.round(v * 20) / 20, D = BANDO_DIVE;
+  const mid = (k) => F.tops[k] - F.slab / 2;
+  const at = (k, w, d0, d1) => { const c = s5(diveX(mid(k))); return [s5(c - w / 2), s5(c + w / 2), d0, d1]; };
+  const out = [];
+  const r4 = (v) => Math.round(v * 1e4) / 1e4;
+  const put = (slab, name, core, flip) => out.push(Object.freeze({ slab, name, core: Object.freeze(core.map(r4)), rects: Object.freeze(bandoRagged(...core, flip).map((q) => Object.freeze(q.map(r4)))) }));
+  put(2, 'second floor, east', at(2, 1.5, D.z - 0.7, D.z + 0.7), false);
+  put(1, 'first floor, east', at(1, 1.5, D.z - 0.7, D.z + 0.7), true);
+  put(3, 'roof, east', at(3, 1.35, D.z - 0.6, D.z + 0.6), true);
+  put(3, 'roof, west', [-3.75, -2.25, -9.6, -8.4], false);
+  put(2, 'second floor, west', [-0.75, 0.75, -9.6, -8.4], true);
+  put(1, 'first floor, west', [2.25, 3.75, -9.6, -8.4], false);
+  return out;
+})());
+
+const BANDO_EDGES = [];
+// The walls and slabs drawn whole (bandoPanelMesh): each panel's frame,
+// thickness and cell grid; its boxes collide.
+const BANDO_PANELS = [];
+
+function bandoBoxes() {
+  const out = [];
+  BANDO_EDGES.length = 0;
+  BANDO_PANELS.length = 0;
+  const r = (v) => Math.round(v * 1e4) / 1e4;
+  const b = (zone, mat, feature, part, x0, y0, z0, x1, y1, z1, extra) => {
+    const rec = Object.assign({ zone, mat, feature, part, min: [r(x0), r(y0), r(z0)], max: [r(x1), r(y1), r(z1)] }, extra || {});
+    out.push(Object.freeze(rec));
+    return rec;
+  };
+  const line = (p, q) => BANDO_EDGES.push(p[0], p[1], p[2], q[0], q[1], q[2]);
+  const boxEdges = (a, c) => {
+    for (const y of [a[1], c[1]]) {
+      line([a[0], y, a[2]], [c[0], y, a[2]]); line([a[0], y, c[2]], [c[0], y, c[2]]);
+      line([a[0], y, a[2]], [a[0], y, c[2]]); line([c[0], y, a[2]], [c[0], y, c[2]]);
+    }
+    for (const [x, z] of [[a[0], a[2]], [c[0], a[2]], [a[0], c[2]], [c[0], c[2]]]) line([x, a[1], z], [x, c[1], z]);
+  };
+  const box = (zone, mat, feature, part, x0, y0, z0, x1, y1, z1, extra) => {
+    const rec = b(zone, mat, feature, part, x0, y0, z0, x1, y1, z1, extra);
+    if (!rec.round && rec.draw !== false) boxEdges(rec.min, rec.max);
+    return rec;
+  };
+  // A panel: frame 'y' a slab (u x, v z, thickness y), 'z' a wall along x
+  // (u x, v y, thickness z), 'x' a wall along z (u z, v y, thickness x).
+  const P = (frame, t0, t1) => (u, v, t) => (frame === 'y' ? [u, t, v] : frame === 'z' ? [u, v, t] : [t, v, u]);
+  const panel = (zone, mat, feature, part, frame, t0, t1, u0, u1, v0, v1, holes) => {
+    const p = P(frame, t0, t1), pan = bandoPanel(u0, u1, v0, v1, holes), id = BANDO_PANELS.length;
+    BANDO_PANELS.push(Object.freeze({ mat, frame, t0, t1, us: Object.freeze(pan.us), vs: Object.freeze(pan.vs), cells: Object.freeze(pan.cells) }));
+    for (const [a0, a1, c0, c1] of pan.rects) {
+      const lo = p(a0, c0, t0), hi = p(a1, c1, t1);
+      b(zone, mat, feature, part, Math.min(lo[0], hi[0]), Math.min(lo[1], hi[1]), Math.min(lo[2], hi[2]), Math.max(lo[0], hi[0]), Math.max(lo[1], hi[1]), Math.max(lo[2], hi[2]), { panel: id });
+    }
+    const corners = new Set();
+    for (const [axis, c, a0, a1] of pan.segs) {
+      for (const t of [t0, t1]) line(axis === 'u' ? p(a0, c, t) : p(c, a0, t), axis === 'u' ? p(a1, c, t) : p(c, a1, t));
+      for (const e of [a0, a1]) corners.add(axis === 'u' ? e + ',' + c : c + ',' + e);
+    }
+    for (const k of corners) { const [u, v] = k.split(',').map(Number); line(p(u, v, t0), p(u, v, t1)); }
+  };
+  const F = BANDO_FRAME, T = F.tops, w = F.wall, W = BANDO_WINDOWS, Sh = BANDO_SHAFT, St = BANDO_STAIR, L = BANDO_LEAN;
+  const ceil = (s) => T[s + 1] - F.slab;
+  const name = ['ground', 'first floor', 'second floor', 'roof'];
+  // Facades, a storey at a time, their window frames open.
+  for (let s = 0; s < 3; s++) {
+    const win = (list) => list.at.map((c) => [c - list.w / 2, c + list.w / 2, T[s] + W.sill, T[s] + W.head]);
+    const south = win(W.south).filter((h, i) => !(s === 0 && W.south.at[i] === W.doorway.at));
+    if (s === 0) south.push([W.doorway.at - W.doorway.w / 2, W.doorway.at + W.doorway.w / 2, T[0], T[0] + W.doorway.h]);
+    panel(name[s], 'concrete', 'facade', 'south wall', 'z', F.z1 - w, F.z1, F.x0, F.x1, T[s], ceil(s), south);
+    panel(name[s], 'concrete', 'facade', 'north wall', 'z', F.z0, F.z0 + w, F.x0, F.x1, T[s], ceil(s), win(W.north));
+    panel(name[s], 'concrete', 'facade', 'east wall', 'x', F.x1 - w, F.x1, F.z0 + w, F.z1 - w, T[s], ceil(s), win(W.east));
+    panel(name[s], 'concrete', 'facade', 'west wall', 'x', F.x0, F.x0 + w, F.z0 + w, F.z1 - w, T[s], ceil(s), win(W.west));
+  }
+  // The slabs: the first floor, the second, the roof; each open over the
+  // shaft and the stair, its ragged holes, the first floor's collapse.
+  const sx0 = Sh.x - Sh.inner / 2 - Sh.wall, sx1 = Sh.x + Sh.inner / 2 + Sh.wall, sz0 = Sh.z - Sh.inner / 2 - Sh.wall, sz1 = Sh.z + Sh.inner / 2 + Sh.wall;
+  for (let k = 1; k <= 3; k++) {
+    const holes = [[sx0, sx1, sz0, sz1], [St.x0, St.x1, St.z0, St.z1]];
+    for (const h of BANDO_HOLES.filter((q) => q.slab === k)) holes.push(...h.rects.map((q) => [q[0], q[1], q[2], q[3]]));
+    if (k === 1) holes.push(L.hole.slice());
+    panel(name[k], 'concrete', k === 3 ? 'roof' : 'slab', k === 3 ? 'roof slab' : 'slab', 'y', T[k] - F.slab, T[k], F.x0, F.x1, F.z0, F.z1, holes);
+  }
+  // The parapet on the roof's edge, its gap on the courtyard side.
+  const top = T[3] + BANDO_PARAPET.h;
+  panel('roof', 'concrete', 'parapet', 'parapet', 'z', F.z1 - w, F.z1, F.x0, F.x1, T[3], top, [[BANDO_PARAPET.gap[0], BANDO_PARAPET.gap[1], T[3], top]]);
+  panel('roof', 'concrete', 'parapet', 'parapet', 'z', F.z0, F.z0 + w, F.x0, F.x1, T[3], top, []);
+  panel('roof', 'concrete', 'parapet', 'parapet', 'x', F.x1 - w, F.x1, F.z0 + w, F.z1 - w, T[3], top, []);
+  panel('roof', 'concrete', 'parapet', 'parapet', 'x', F.x0, F.x0 + w, F.z0 + w, F.z1 - w, T[3], top, []);
+  // The lift shaft, ground to roof: a door gap in its north wall on every floor.
+  const doors = [0, 1, 2].map((s) => [Sh.x - Sh.door.w / 2, Sh.x + Sh.door.w / 2, T[s], T[s] + Sh.door.h]);
+  panel('shaft', 'concrete', 'lift shaft', 'shaft wall', 'z', sz0, sz0 + Sh.wall, sx0, sx1, 0, T[3], doors);
+  panel('shaft', 'concrete', 'lift shaft', 'shaft wall', 'z', sz1 - Sh.wall, sz1, sx0, sx1, 0, T[3], []);
+  panel('shaft', 'concrete', 'lift shaft', 'shaft wall', 'x', sx0, sx0 + Sh.wall, sz0 + Sh.wall, sz1 - Sh.wall, 0, T[3], []);
+  panel('shaft', 'concrete', 'lift shaft', 'shaft wall', 'x', sx1 - Sh.wall, sx1, sz0 + Sh.wall, sz1 - Sh.wall, 0, T[3], []);
+  // The columns, every storey, floor to slab.
+  const C = BANDO_COLUMNS, cd = C.d / 2;
+  for (let s = 0; s < 3; s++) for (const x of C.xs) for (const z of C.zs) box(name[s], 'concrete', 'columns', 'column', x - cd, T[s], z - cd, x + cd, ceil(s), z + cd);
+  // The stair: per storey flight A north up the west wall, the landing,
+  // flight B south to the floor over. Treads 20 cm thick over 17.5 cm
+  // risers, so each sits on the one before (no slot under a flight).
+  for (let s = 0; s < 3; s++) {
+    const y = T[s], ax0 = St.x0 + St.inset, ax1 = ax0 + St.flight, bx1 = St.x1 - St.inset, bx0 = bx1 - St.flight;
+    for (let k = 1; k < St.risers; k++) {
+      const zt = St.z1 - St.going * k, yt = y + St.rise * k;
+      box(name[s], 'concrete', 'stair', 'tread', ax0, Math.max(y, yt - St.tread), zt, ax1, yt, zt + St.going);
+    }
+    const yl = y + St.rise * St.risers, zl = St.z1 - St.going * (St.risers - 1);
+    box(name[s], 'concrete', 'stair', 'landing', St.x0, yl - St.tread, St.z0, bx1, yl, zl);
+    for (let k = 1; k < St.risers; k++) {
+      const zt = zl + St.going * (k - 1), yt = yl + St.rise * k;
+      box(name[s], 'concrete', 'stair', 'tread', bx0, yt - St.tread, zt, bx1, yt, zt + St.going);
+    }
+  }
+  // The block walls inside, broken, their doors and rebar.
+  for (const wl of BANDO_WALLS) {
+    const y0 = T[wl.s], y1 = ceil(wl.s), t0 = wl.c - 0.1, t1 = wl.c + 0.1, frame = wl.along === 'x' ? 'z' : 'x';
+    const holes = wl.doors.map((c) => [c - BANDO_DOOR.w / 2, c + BANDO_DOOR.w / 2, y0, y0 + BANDO_DOOR.h]);
+    for (const k of wl.breaks) holes.push([k.u0, k.u1, y0 + k.v0, y0 + k.v1]);
+    panel(name[wl.s], 'block', 'block walls', 'wall', frame, t0, t1, wl.a, wl.b, y0, y1, holes);
+    for (const k of wl.breaks) {
+      for (const u of k.bars) {
+        if (wl.along === 'x') box(name[wl.s], 'rust', 'rebar', 'bar', u - 0.03, y0 + k.v0, wl.c - 0.03, u + 0.03, y0 + k.v1, wl.c + 0.03, { round: 'y' });
+        else box(name[wl.s], 'rust', 'rebar', 'bar', wl.c - 0.03, y0 + k.v0, u - 0.03, wl.c + 0.03, y0 + k.v1, u + 0.03, { round: 'y' });
+      }
+    }
+  }
+  // The fallen slab's steps: each d along x, from the slab's underside at
+  // its middle to its top there; a step under 15 cm sits on the ground.
+  const d = (L.stepEnd - L.xf) / L.steps, tan = Math.tan(rad(L.angle)), thick = L.t / Math.cos(rad(L.angle));
+  for (let k = 0; k < L.steps; k++) {
+    const x0 = L.xf + d * k, yb = (d * (k + 0.5)) * tan;
+    b('ground', 'concrete', 'leaning slab', 'step', x0, yb < 0.15 ? 0 : yb, L.z0, x0 + d, yb + thick, L.z1, { draw: false });
+  }
+  // The courtyard: the van, rusted through, its glass gone.
+  const V = BANDO_VAN, pz0 = V.z0 + V.inset, pz1 = V.z1 - V.inset, pp = V.pillar;
+  box('courtyard', 'rust', 'van', 'body', V.x0, 0.3, V.z0, V.x1, V.sill, V.z1);
+  box('courtyard', 'rust', 'van', 'roof', V.cab[0], V.roof, pz0, V.cab[1], V.roof + V.roofT, pz1);
+  for (const x of [V.cab[1] - pp, V.b, V.cab[0]]) {
+    for (const z of [pz0, pz1 - pp]) box('courtyard', 'rust', 'van', 'pillar', x, V.sill, z, x + pp, V.roof, z + pp);
+  }
+  for (const x of [V.x0 + 0.55, V.x1 - 0.55]) {
+    for (const [z0, z1] of [[V.z0 - 0.05, V.z0 + 0.2], [V.z1 - 0.2, V.z1 + 0.05]]) box('courtyard', 'dark', 'van', 'wheel', x - V.wheel / 2, 0, z0, x + V.wheel / 2, V.wheel, z1, { round: 'z' });
+  }
+  // The pallets, stacked.
+  for (const p of BANDO_PALLETS) for (let i = 0; i < p.n; i++) box('courtyard', 'pallet', 'pallets', 'pallet', p.x0, i * BANDO_PALLET, p.z0, p.x1, (i + 1) * BANDO_PALLET, p.z1);
+  // The dead tree: a trunk and three limbs, each a run of short stems
+  // stepping out as it climbs, gnarled; each stem drawn round inside its box,
+  // so the bark never stands outside what collides. All within 1.2 m of the
+  // trunk.
+  const TR = BANDO_TREE;
+  box('courtyard', 'bark', 'dead tree', 'trunk', TR.x - 0.18, 0, TR.z - 0.18, TR.x + 0.18, 3.0, TR.z + 0.18, { round: 'y' });
+  // A limb: n stems from y0, each h tall, w0 wide less 2 cm a stem, stepping
+  // `shift` along (dx, dz) from `from` off the trunk's axis.
+  const limb = (dx, dz, from, shift, y0, n, w0, h) => {
+    for (let k = 0; k < n; k++) {
+      const wk = w0 - 0.02 * k, cx = TR.x + dx * (from + shift * k), cz = TR.z + dz * (from + shift * k);
+      box('courtyard', 'bark', 'dead tree', 'limb', cx - wk / 2, y0 + h * k, cz - wk / 2, cx + wk / 2, y0 + h * (k + 1), cz + wk / 2, { round: 'y' });
+    }
+  };
+  limb(1, 0, 0.06, 0.12, 3.0, 4, 0.26, 0.7);
+  limb(0, -1, 0.27, 0.14, 2.2, 4, 0.24, 0.65);
+  limb(-Math.SQRT1_2, Math.SQRT1_2, 0.2, 0.16, 1.5, 4, 0.22, 0.6);
+  return out;
+}
+
+// The off-loop lines for freestyle, each a pass an 85 flies clear (15 cm
+// from every box: half its 13 cm span and margin; tools/test_sim_bando.mjs).
+function bandoLines() {
+  const F = BANDO_FRAME, D = BANDO_DIVE, V = BANDO_VAN, Sh = BANDO_SHAFT, St = BANDO_STAIR;
+  const west = (y) => (6.875 - y) * 3 / 3.5;
+  const round = (x, y, z, r) => Array.from({ length: 49 }, (_, i) => [x + r * Math.cos(i * Math.PI / 24), y, z + r * Math.sin(i * Math.PI / 24)]);
+  return [
+    // The roof's hole, the second floor's and the first's, in one dive.
+    { name: 'the triple drop', feature: 'floor holes', pts: [[diveX(12.6), 12.6, D.z], [diveX(1.4), 1.4, D.z]] },
+    { name: 'the west drop', feature: 'floor holes', pts: [[west(12.6), 12.6, -9.0], [west(1.4), 1.4, -9.0]] },
+    // Straight down the stair's open well, roof to ground.
+    { name: 'down the stairwell', feature: 'stair', pts: [[St.x0 + St.inset + St.flight + St.well / 2, 12.6, -13.0], [St.x0 + St.inset + St.flight + St.well / 2, 0.6, -13.0]] },
+    // In at a side window of the van and out the other side.
+    { name: 'through the van sideways', feature: 'van', pts: [[(V.cab[1] + V.b + V.pillar) / 2, 1.2, 12.4], [(V.cab[1] + V.b + V.pillar) / 2, 1.2, 17.2]] },
+    // Down the shaft from the roof and out at the second floor's door.
+    { name: 'down the shaft', feature: 'lift shaft', pts: [[Sh.x, 12.6, Sh.z], [Sh.x, F.tops[2] + 1.1, Sh.z], [Sh.x, F.tops[2] + 1.1, Sh.z - 3]] },
+    // The second floor's other rebar gaps, 45 and 33 cm; the ground's.
+    { name: 'the 45 cm rebar gap', feature: 'rebar', pts: [[-1.6, 8.6, 2.335], [1.7, 8.6, 2.335]] },
+    { name: 'the 33 cm rebar gap', feature: 'rebar', pts: [[-1.6, 8.6, 2.785], [1.7, 8.6, 2.785]] },
+    { name: 'the ground floor rebar gap', feature: 'rebar', pts: [[-9.425, 1.4, -5.5], [-9.425, 1.4, -1.6]] },
+    // Orbits round a first-floor column.
+    { name: 'round a first-floor column', feature: 'columns', pts: round(-5.5, 5.1, -6, 1.2) },
+  ];
+}
+
+// The authored gaps (sim-tricks.js Gap): every opening the Bando is built
+// with, as gapVolume. Windows and doors through their wall's thickness; floor
+// holes, the stair's well and the shaft's top through their slab's; the slab
+// underpass along z under the steps; the parapet gap; the van.
+function bandoGaps() {
+  const s = BANDO_WS, F = BANDO_FRAME, T = F.tops, w = F.wall, W = BANDO_WINDOWS, Sh = BANDO_SHAFT, St = BANDO_STAIR, L = BANDO_LEAN, V = BANDO_VAN;
+  const out = [];
+  const g = (name, axis, x0, y0, z0, x1, y1, z1) => out.push(gapVolume('bando', name, axis, s, x0, y0, z0, x1, y1, z1));
+  const floor = ['ground', 'first floor', 'second floor'];
+  for (let k = 0; k < 3; k++) {
+    for (const [face, list] of Object.entries({ south: W.south, north: W.north, east: W.east, west: W.west })) {
+      for (const c of list.at) {
+        const y0 = T[k] + W.sill, y1 = T[k] + W.head, a = c - list.w / 2, b = c + list.w / 2;
+        if (face === 'south' && k === 0 && c === W.doorway.at) {
+          g('courtyard doorway', 'z', c - W.doorway.w / 2, 0, F.z1 - w, c + W.doorway.w / 2, W.doorway.h, F.z1);
+          continue;
+        }
+        const nm = `${floor[k]} window, ${face} face, ${face === 'south' || face === 'north' ? 'x' : 'z'} ${c}`;
+        if (face === 'south') g(nm, 'z', a, y0, F.z1 - w, b, y1, F.z1);
+        else if (face === 'north') g(nm, 'z', a, y0, F.z0, b, y1, F.z0 + w);
+        else if (face === 'east') g(nm, 'x', F.x1 - w, y0, a, F.x1, y1, b);
+        else g(nm, 'x', F.x0, y0, a, F.x0 + w, y1, b);
+      }
+    }
+  }
+  for (const h of BANDO_HOLES) g('floor hole, ' + h.name, 'y', h.core[0], T[h.slab] - F.slab, h.core[2], h.core[1], T[h.slab], h.core[3]);
+  for (let k = 1; k <= 3; k++) g('stair well, ' + ['', 'first floor', 'second floor', 'roof'][k], 'y', St.x0, T[k] - F.slab, St.z0, St.x1, T[k], St.z1 - St.going);
+  const zs0 = Sh.z - Sh.inner / 2 - Sh.wall;
+  for (let k = 0; k < 3; k++) g('shaft door, ' + floor[k], 'z', Sh.x - Sh.door.w / 2, T[k], zs0, Sh.x + Sh.door.w / 2, T[k] + Sh.door.h, zs0 + Sh.wall);
+  g('shaft top', 'y', Sh.x - Sh.inner / 2, T[3] - F.slab, Sh.z - Sh.inner / 2, Sh.x + Sh.inner / 2, T[3], Sh.z + Sh.inner / 2);
+  for (const wl of BANDO_WALLS) {
+    const y0 = T[wl.s], t0 = wl.c - 0.1, t1 = wl.c + 0.1;
+    const put = (nm, u0, u1, v0, v1) => (wl.along === 'x' ? g(nm, 'z', u0, v0, t0, u1, v1, t1) : g(nm, 'x', t0, v0, u0, t1, v1, u1));
+    for (const c of wl.doors) put(`${floor[wl.s]} door, ${wl.along === 'x' ? 'x' : 'z'} ${c}`, c - BANDO_DOOR.w / 2, c + BANDO_DOOR.w / 2, y0, y0 + BANDO_DOOR.h);
+    for (const k of wl.breaks) {
+      const edges = [k.u0, ...k.bars.flatMap((u) => [u - 0.03, u + 0.03]), k.u1];
+      for (let i = 0; i < edges.length; i += 2) {
+        const gap = Math.round((edges[i + 1] - edges[i]) * 100);
+        put(`${floor[wl.s]} rebar gap, ${gap} cm, ${wl.along === 'x' ? 'x' : 'z'} ${((edges[i] + edges[i + 1]) / 2).toFixed(2)}`, edges[i], edges[i + 1], y0 + k.v0, y0 + k.v1);
+      }
+    }
+  }
+  // Under the fallen slab: from the step at x 12.4 on, up to that step's
+  // underside, to the east wall.
+  const d = (L.stepEnd - L.xf) / L.steps, k0 = Math.ceil((12.4 - L.xf) / d), tan = Math.tan(rad(L.angle));
+  g('under the leaning slab', 'z', L.xf + d * k0, 0, L.z0, L.x1, Math.round(d * (k0 + 0.5) * tan * 1e4) / 1e4, L.z1);
+  // The collapse in the first floor, where the slab came from: clear of the
+  // steps' tops.
+  const thick = L.t / Math.cos(rad(L.angle));
+  let k1 = 0;
+  while (k1 < L.steps && d * (k1 + 0.5) * tan + thick < T[1] - F.slab - 1e-9) k1++;
+  g('first floor collapse', 'y', L.hole[0], T[1] - F.slab, L.hole[2], k1 >= L.steps ? L.hole[1] : Math.round((L.xf + d * k1) * 1e4) / 1e4, T[1], L.hole[3]);
+  g('parapet gap', 'z', BANDO_PARAPET.gap[0], T[3], F.z1 - w, BANDO_PARAPET.gap[1], T[3] + BANDO_PARAPET.h, F.z1);
+  const pz0 = V.z0 + V.inset, pz1 = V.z1 - V.inset, pp = V.pillar;
+  g('through the van', 'x', V.cab[0], V.sill, pz0 + pp, V.cab[1], V.roof, pz1 - pp);
+  g('the van, front side windows', 'z', V.b + pp, V.sill, pz0, V.cab[1] - pp, V.roof, pz1);
+  g('the van, rear side windows', 'z', V.cab[0] + pp, V.sill, pz0, V.b, V.roof, pz1);
+  return out;
+}
+
+export const BANDO_PLAY = Object.freeze({
+  room: Object.freeze({ w: BANDO_LOT.w, d: BANDO_LOT.d, h: BANDO_LOT.h }),
+  lot: BANDO_LOT,
+  frame: BANDO_FRAME,
+  // The start pad, on the ground floor, nose south to the shaft's door (+z).
+  start: Object.freeze([BANDO_START[0], 0.35, BANDO_START[2]]),
+  windows: BANDO_WINDOWS,
+  parapet: BANDO_PARAPET,
+  columns: BANDO_COLUMNS,
+  shaft: BANDO_SHAFT,
+  stair: BANDO_STAIR,
+  lean: BANDO_LEAN,
+  van: BANDO_VAN,
+  pallets: BANDO_PALLETS,
+  pallet: BANDO_PALLET,
+  tree: BANDO_TREE,
+  walls: BANDO_WALLS,
+  door: BANDO_DOOR,
+  holes: BANDO_HOLES,
+  dive: BANDO_DIVE,
+  boxes: Object.freeze(bandoBoxes()),
+  edges: Object.freeze(BANDO_EDGES.slice()),
+  panels: Object.freeze(BANDO_PANELS.slice()),
+  lines: Object.freeze(bandoLines().map((l) => Object.freeze(l))),
+});
+
+// The Bando on the look: every surface a look surface, the look's sets, no
+// new texture. Raw concrete (the floor's set, weathered in the shader:
+// mottle, streaks under every slab edge, rising damp, old puddles), painted
+// block gone pale, rusted steel, perished rubber, weathered pallet wood and
+// dead wood. Under the roof the overcast's fill is dimmed (opts.shelter),
+// eased up toward the facades and their windows. The colour is the graffiti.
+function bandoSurface(type, look, color, albedoVar) {
+  const s = LOOK.surfaces[look];
+  return Object.freeze({ type, look, color, roughness: s.roughness, metalness: s.metalness, albedoVar });
+}
+export const BANDO_LOOK = Object.freeze({
+  surfaces: Object.freeze({
+    concrete: bandoSurface('raw concrete', 'concrete', 0xf0ece4),
+    floor: bandoSurface('concrete floor', 'concrete', 0xddd8cf),
+    block: bandoSurface('pale painted block', 'paintedBlock', 0xd6dccd),
+    rust: bandoSurface('rusted steel', 'rust', 0x9c5630),
+    dark: bandoSurface('perished rubber', 'paintedSteel', 0x2b2c2e, 0.5),
+    pallet: bandoSurface('weathered pallet wood', 'plywood', 0xb7a183),
+    bark: bandoSurface('dead wood', 'plywood', 0x75695c),
+  }),
+  // The overcast's balance on every surface (sim-look.js opts.fill): a
+  // touch cool. Under the roof it falls to `shelter.fill` of itself, eased
+  // in over `ramp` metres from the facades; the slabs' undersides take
+  // `soffit` times that (the floors' bounce).
+  fill: Object.freeze([1.5, 1.53, 1.62]),
+  shelter: Object.freeze({ fill: 0.5, ramp: 3.0, soffit: 3.2 }),
+  // The yard's concrete: a saw cut every 3 m, wider every 6 m.
+  joints: Object.freeze({ minor: 3, major: 6, minorWidth: 0.01, majorWidth: 0.018, minorDark: 0.45, majorDark: 0.55 }),
+  // The sky past the windows and over the roof: overcast, a grey dome
+  // brighter at the horizon (linear RGB, unlit); the ground beyond the wall;
+  // the town round the lot, grey blocks in the haze.
+  sky: Object.freeze({ zenith: [0.42, 0.45, 0.5], horizon: [0.78, 0.79, 0.8], ground: [0.1, 0.1, 0.095], yard: [0.12, 0.118, 0.11], town: [0.2, 0.215, 0.24] }),
+  // The graffiti, metres: original pieces (sim-look.js lookGraffiti), on the
+  // courtyard face, the yard's walls, the shaft, a block wall, the parapet.
+  // Hues apart from the gates' brand orange and green.
+  graffiti: Object.freeze([
+    { c: [-10.4, 1.35, 4.0], n: '+z', w: 2.6, h: 1.2, style: 0, seed: 1.3, a: 0x3fb85f, b: 0xd6f06a },
+    { c: [6.1, 1.4, 4.0], n: '+z', w: 2.4, h: 1.1, style: 2, seed: 2.7, a: 0xc92f78, b: 0xff9ec9 },
+    { c: [-2.0, 5.0, 4.0], n: '+z', w: 2.2, h: 1.0, style: 1, seed: 4.1, a: 0x1f9fc6, b: 0xa6efff },
+    { c: [-9.0, 1.25, 18.0], n: '-z', w: 4.2, h: 1.6, style: 0, seed: 5.9, a: 0xe0a01c, b: 0xffe56e },
+    { c: [7.5, 1.3, 18.0], n: '-z', w: 2.6, h: 1.5, style: 1, seed: 7.3, a: 0x6a3fd0, b: 0xc9a6ff },
+    { c: [18.0, 1.2, 9.0], n: '-x', w: 3.4, h: 1.4, style: 2, seed: 8.8, a: 0x12a58a, b: 0x9fe8ff },
+    { c: [-18.0, 1.25, 13.0], n: '+x', w: 3.0, h: 1.4, style: 0, seed: 9.6, a: 0xc8323c, b: 0xff9ad6 },
+    { c: [11.6, 1.4, -8.4], n: '+z', w: 2.2, h: 1.1, style: 1, seed: 3.3, a: 0xe4be19, b: 0xfff3a0 },
+    { c: [8.25, 1.5, -5.0], n: '+z', w: 1.7, h: 0.9, style: 0, seed: 6.6, a: 0x2a62d8, b: 0x8fd8ff },
+    { c: [8.25, 8.4, -5.0], n: '+z', w: 1.7, h: 0.9, style: 2, seed: 10.2, a: 0x58c234, b: 0xe2ff8a },
+    { c: [0.1, 8.3, 0.0], n: '+x', w: 1.4, h: 0.9, style: 0, seed: 11.4, a: 0xd23a8c, b: 0xffd84a },
+    { c: [-6.0, 11.0, 3.75], n: '-z', w: 3.2, h: 0.85, style: 2, seed: 12.5, a: 0x1fb5c8, b: 0xd2fbff },
+    { c: [-6.75, 5.2, -15.75], n: '+z', w: 2.8, h: 1.2, style: 1, seed: 13.7, a: 0x4a5fe0, b: 0xb8c4ff },
+  ].map((d) => Object.freeze(d))),
+});
+
+
+// The sun shafts, metres (sim-look.js lookShafts): from the courtyard face's
+// windows whose light falls clear to the floor inside, and down from the
+// roof's holes to the second floor. A window or a hole whose light meets a
+// box on its way, or lands where the key's shadow is, has none.
+export function bandoShafts() {
+  const d = toSun(BANDO_KEY).map((v) => -v), F = BANDO_FRAME, T = F.tops, W = BANDO_WINDOWS, B = BANDO_PLAY.boxes;
+  // Whether the ray p + u t, t0 <= t <= t1, meets a box (the slab test).
+  const hits = (p, u, t0, t1) => B.some((b) => {
+    let lo = t0, hi = t1;
+    for (let k = 0; k < 3; k++) {
+      if (Math.abs(u[k]) < 1e-12) { if (p[k] <= b.min[k] || p[k] >= b.max[k]) return false; continue; }
+      const a = (b.min[k] - p[k]) / u[k], c = (b.max[k] - p[k]) / u[k];
+      lo = Math.max(lo, Math.min(a, c)); hi = Math.min(hi, Math.max(a, c));
+      if (hi - lo < 1e-9) return false;
+    }
+    return true;
+  });
+  // Clear: every sample of the quad reaches the floor without meeting a box,
+  // and nothing stands between it and the sun.
+  const up = d.map((c) => -c);
+  const clear = (quad, floor) => {
+    for (let u = 0.05; u <= 0.95 + 1e-9; u += 0.1125) {
+      for (let v = 0.05; v <= 0.95 + 1e-9; v += 0.225) {
+        const p = [0, 1, 2].map((k) => quad[0][k] + (quad[1][k] - quad[0][k]) * u + (quad[3][k] - quad[0][k]) * v);
+        if (hits(p, d, 0.02, (p[1] - floor) / -d[1] - 0.01)) return false;
+        if (hits(p, up, 0.02, 60)) return false;
+      }
+    }
+    return true;
+  };
+  const out = [];
+  const z = F.z1 - F.wall - 0.015;
+  for (let s = 0; s < 3; s++) {
+    for (const c of W.south.at) {
+      if (s === 0 && c === W.doorway.at) continue;
+      // The window's inner opening, less the part its reveals keep in shade
+      // (the outer opening seen along the light through the wall).
+      const sh = F.wall / -d[2], x0 = Math.max(c - W.south.w / 2, c - W.south.w / 2 + d[0] * sh), x1 = Math.min(c + W.south.w / 2, c + W.south.w / 2 + d[0] * sh);
+      const y0 = T[s] + W.sill, y1 = T[s] + W.head + d[1] * sh;
+      const quad = [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]];
+      if (clear(quad, T[s])) out.push({ quad, dir: d, length: (y1 - T[s]) / -d[1] + 0.3, from: 'window' });
+    }
+  }
+  for (const h of BANDO_HOLES.filter((q) => q.slab === 3)) {
+    // Under the roof slab: the part of the hole the sun sees through it.
+    const y = T[3] - F.slab - 0.01, sh = F.slab / -d[1];
+    const x0 = Math.max(h.core[0], h.core[0] + d[0] * sh), x1 = Math.min(h.core[1], h.core[1] + d[0] * sh);
+    const z0 = Math.max(h.core[2], h.core[2] + d[2] * sh), z1 = Math.min(h.core[3], h.core[3] + d[2] * sh);
+    const quad = [[x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1]];
+    if (clear(quad, T[2])) out.push({ quad, dir: d, length: (y - T[2]) / -d[1] + 0.3, from: 'roof hole' });
+  }
+  return out;
+}
+
+// The town round the lot: blocks on two rings, 40 to 86 m out, world units
+// (seeded, the same every build). bandoSky draws them; buildBando makes each
+// a collider, so they are as solid as they look.
+export function bandoTown(s) {
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  const out = [];
+  for (const [ring, n] of [[40, 14], [56, 18]]) {
+    for (let i = 0; i < n; i++) {
+      const a = (i + rnd() * 0.6) / n * Math.PI * 2, r = (ring + rnd() * 16) * s;
+      const cx = Math.cos(a) * r, cz = Math.sin(a) * r, w = (8 + rnd() * 12) * s, d = (8 + rnd() * 10) * s, h = (6 + rnd() * (ring > 50 ? 30 : 16)) * s;
+      out.push({ x0: cx - w / 2, x1: cx + w / 2, z0: cz - d / 2, z1: cz + d / 2, h, far: ring > 50 });
+    }
+  }
+  return out;
+}
+// The flying's bounds: walls 86 m out and a ceiling 72 m up, 3 m thick,
+// unseen, inside the sky's dome (91 m, 74 m), so a pilot never flies out of
+// the world.
+const BANDO_BOUNDS = Object.freeze({ r: 86, h: 72, t: 3 });
+
+// The sky round the Bando: an overcast dome as a box, brighter at the
+// horizon; the ground beyond the lot's wall; the town round it, grey blocks
+// in the haze, all inside the dome (40 to 86 m out; its walls 91 m). One
+// unlit mesh, behind everything (world units).
+function bandoSky(THREE, s) {
+  const K = BANDO_LOOK.sky, pos = [], col = [];
+  const quad = (a, b, c, d, cl) => { for (const p of [a, b, c, a, c, d]) { pos.push(...p); col.push(...(cl(p) || cl)); } };
+  // Inside the camera's far plane (600) to the corners.
+  const R = 320, Y = 260;
+  // The far ground's haze, where the yard meets the dome's foot.
+  const haze = K.yard.map((v, k) => v + (K.horizon[k] - v) * 0.6);
+  const skyCol = (p) => {
+    const u = Math.pow(Math.min(1, Math.max(0, p[1] / Y)), 0.55);
+    if (p[1] < 0) return K.ground;
+    if (p[1] < 60) return haze.map((v, k) => v + (K.horizon[k] - v) * (p[1] / 60));
+    return K.horizon.map((v, k) => v + (K.zenith[k] - v) * u);
+  };
+  // The dome's box, its walls split at the horizon and up it.
+  const ys = [-Y, 0, 20, 60, 150, Y];
+  const sides = [[[-R, -R], [R, -R]], [[R, -R], [R, R]], [[R, R], [-R, R]], [[-R, R], [-R, -R]]];
+  for (const [[ax, az], [bx, bz]] of sides) {
+    for (let i = 0; i + 1 < ys.length; i++) quad([ax, ys[i], az], [bx, ys[i], bz], [bx, ys[i + 1], bz], [ax, ys[i + 1], az], skyCol);
+  }
+  quad([-R, Y, -R], [R, Y, -R], [R, Y, R], [-R, Y, R], () => K.zenith);
+  quad([-R, -Y, -R], [-R, -Y, R], [R, -Y, R], [R, -Y, -R], () => K.ground);
+  // The ground round the lot, out to the dome's foot, hazing out with distance.
+  const L = BANDO_LOT, hx = L.w / 2 * s, hz = L.d / 2 * s, G = R, g = -0.03 * s;
+  const yard = (p) => {
+    const t = Math.min(1, Math.max(0, (Math.max(Math.abs(p[0]), Math.abs(p[2])) - hx) / (G - hx)));
+    return K.yard.map((v, k) => v + (haze[k] - v) * t);
+  };
+  quad([-G, g, -G], [G, g, -G], [G, g, -hz], [-G, g, -hz], yard);
+  quad([-G, g, hz], [G, g, hz], [G, g, G], [-G, g, G], yard);
+  quad([-G, g, -hz], [-hx, g, -hz], [-hx, g, hz], [-G, g, hz], yard);
+  quad([hx, g, -hz], [G, g, -hz], [G, g, hz], [hx, g, hz], yard);
+  // The town: blocks on two rings, their faces shaded by facing, hazier far.
+  for (const { x0, x1, z0, z1, h, far } of bandoTown(s)) {
+    const haze = far ? 0.35 : 0.18;
+    const shade = (f) => () => K.town.map((v, k) => (v * f) * (1 - haze) + K.horizon[k] * haze);
+    quad([x0, 0, z1], [x1, 0, z1], [x1, h, z1], [x0, h, z1], shade(0.95));
+    quad([x1, 0, z0], [x0, 0, z0], [x0, h, z0], [x1, h, z0], shade(0.8));
+    quad([x1, 0, z1], [x1, 0, z0], [x1, h, z0], [x1, h, z1], shade(0.88));
+    quad([x0, 0, z0], [x0, 0, z1], [x0, h, z1], [x0, h, z0], shade(0.85));
+    quad([x0, h, z1], [x1, h, z1], [x1, h, z0], [x0, h, z0], shade(1.05));
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.computeBoundingSphere();
+  // It writes depth, so the town's blocks hide each other right; drawn
+  // first and farthest, everything else draws over it.
+  const m = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog: false });
+  m.userData.looksSkip = true;
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.name = 'bandoSky';
+  mesh.renderOrder = -1;
+  mesh.frustumCulled = false;
+  mesh.userData.artKeep = true;
+  return mesh;
+}
+
+// A wall or a slab drawn whole (BANDO_PANELS): its two faces from the solid
+// cells of its grid, its sides along the outline only, every vertex on the
+// grid, so no T-junction opens a crack; uvs in tile units from world space,
+// as lookBoxUv's. World units.
+function bandoPanelMesh(THREE, pan, s, material) {
+  const { frame, us, vs, cells } = pan, I = us.length - 1, J = vs.length - 1, t0 = pan.t0 * s, t1 = pan.t1 * s;
+  const P = (u, v, t) => (frame === 'y' ? [u * s, t, v * s] : frame === 'z' ? [u * s, v * s, t] : [t, v * s, u * s]);
+  const ax = frame === 'y' ? 1 : frame === 'z' ? 2 : 0;
+  const tile = (material.userData.lookTile || 1) * s;
+  const pos = [], nor = [], uv = [];
+  const solid = (i, j) => i >= 0 && j >= 0 && i < I && j < J && cells[j * I + i] === 1;
+  const quad = (q, n) => {
+    // Wound to face n.
+    const e1 = q[1].map((v, k) => v - q[0][k]), e2 = q[2].map((v, k) => v - q[0][k]);
+    const c = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    const o = c[0] * n[0] + c[1] * n[1] + c[2] * n[2] > 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2];
+    for (const k of o) {
+      const p = q[k];
+      pos.push(...p);
+      nor.push(...n);
+      if (Math.abs(n[0]) > 0.5) uv.push(p[2] / tile, p[1] / tile);
+      else if (Math.abs(n[1]) > 0.5) uv.push(p[0] / tile, p[2] / tile);
+      else uv.push(p[0] / tile, p[1] / tile);
+    }
+  };
+  const N = (k, sg) => [0, 1, 2].map((i) => (i === k ? sg : 0));
+  // The u and v axes in the scene.
+  const au = frame === 'x' ? 2 : 0, av = frame === 'y' ? 2 : 1;
+  for (let j = 0; j < J; j++) {
+    for (let i = 0; i < I; i++) {
+      if (!solid(i, j)) continue;
+      const [a, b, c, d] = [[us[i], vs[j]], [us[i + 1], vs[j]], [us[i + 1], vs[j + 1]], [us[i], vs[j + 1]]];
+      quad([P(...a, t1), P(...b, t1), P(...c, t1), P(...d, t1)], N(ax, 1));
+      quad([P(...a, t0), P(...b, t0), P(...c, t0), P(...d, t0)], N(ax, -1));
+      // Sides where the cell meets open (or the panel's edge).
+      if (!solid(i, j - 1)) quad([P(us[i], vs[j], t0), P(us[i + 1], vs[j], t0), P(us[i + 1], vs[j], t1), P(us[i], vs[j], t1)], N(av, -1));
+      if (!solid(i, j + 1)) quad([P(us[i], vs[j + 1], t0), P(us[i + 1], vs[j + 1], t0), P(us[i + 1], vs[j + 1], t1), P(us[i], vs[j + 1], t1)], N(av, 1));
+      if (!solid(i - 1, j)) quad([P(us[i], vs[j], t0), P(us[i], vs[j + 1], t0), P(us[i], vs[j + 1], t1), P(us[i], vs[j], t1)], N(au, -1));
+      if (!solid(i + 1, j)) quad([P(us[i + 1], vs[j], t0), P(us[i + 1], vs[j + 1], t0), P(us[i + 1], vs[j + 1], t1), P(us[i + 1], vs[j], t1)], N(au, 1));
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.computeBoundingSphere();
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.castShadow = mesh.receiveShadow = true;
+  return mesh;
+}
+
+function buildBando(THREE, parent, colliders) {
+  const P = BANDO_PLAY, s = BANDO_WS, R = P.room, F = P.frame, Lk = BANDO_LOOK, S = Lk.surfaces;
+  const hx = R.w * s / 2, hz = R.d * s / 2;
+  const shelter = {
+    min: [(F.x0 + 0.02) * s, -s, (F.z0 + 0.02) * s],
+    max: [(F.x1 - 0.02) * s, (F.tops[3] - 0.02) * s, (F.z1 - 0.02) * s],
+    fill: Lk.shelter.fill, ramp: Lk.shelter.ramp * s, soffit: Lk.shelter.soffit,
+  };
+  // Faces sit a hair behind their edge lines so the lines never z-fight.
+  const mats = {};
+  for (const [key, f] of Object.entries(S)) {
+    const o = { extras: { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }, fill: Lk.fill, albedoVar: f.albedoVar, shelter };
+    if (key === 'concrete' || key === 'floor' || key === 'block') o.stains = { unit: s, storey: 3.5 };
+    if (key === 'floor') o.joints = { origin: [-hx, -hz], unit: s, spec: Lk.joints };
+    if (key === 'pallet') o.pallet = { unit: s, module: P.pallet };
+    mats[key] = lookMaterial(THREE, f.look, f.color, o);
+    mats[key].name = 'bando ' + f.type;
+  }
+  const tiled = (mesh) => lookBoxUv(mesh, mesh.material.userData.lookTile * s);
+  const vis = new THREE.Group();
+  vis.name = 'bandoArtVisuals';
+  parent.add(vis);
+  for (const r of P.boxes) {
+    const a = r.min.map((v) => v * s), b = r.max.map((v) => v * s);
+    if (r.draw === false || r.panel != null) {
+      // A step of the fallen slab, a strip of a wall or a slab: it collides;
+      // the slab and the panels are drawn whole.
+      const bb = new THREE.Box3(new THREE.Vector3(...a), new THREE.Vector3(...b));
+      bb._tag = 'map';
+      colliders.push(bb);
+      continue;
+    }
+    const mesh = box(THREE, vis, colliders, (a[0] + b[0]) / 2, a[1], (a[2] + b[2]) / 2,
+      b[0] - a[0], b[1] - a[1], b[2] - a[2], mats[r.mat]);
+    mesh.name = 'bando_' + r.mat;
+    if (r.round) {
+      // Round to look at (rebar, the tree, the van's wheels); the collider
+      // box() took stays the box.
+      const w = b[0] - a[0], h = b[1] - a[1], d = b[2] - a[2];
+      mesh.geometry.dispose();
+      if (r.round === 'z') mesh.geometry = new THREE.CylinderGeometry(Math.min(w, h) / 2, Math.min(w, h) / 2, d, 18).rotateX(Math.PI / 2);
+      else mesh.geometry = new THREE.CylinderGeometry(Math.min(w, d) / 2, Math.min(w, d) / 2, h, 10);
+      continue;
+    }
+    tiled(mesh);
+  }
+  // The walls and slabs, each one mesh on its cell grid: no seam between
+  // its strips (they meet in T-junctions), no face inside it.
+  for (const pan of P.panels) {
+    const mesh = bandoPanelMesh(THREE, pan, s, mats[pan.mat]);
+    mesh.name = 'bando_' + pan.mat;
+    vis.add(mesh);
+  }
+  // The fallen slab, drawn whole at 30°: its underside from the foot on the
+  // ground to the east wall; uvs laid before it tilts.
+  const L = P.lean, ang = L.angle * Math.PI / 180, len = (L.x1 - L.xf) / Math.cos(ang);
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(len * s, L.t * s, (L.z1 - L.z0) * s), mats.concrete);
+  const bx = (L.xf + L.x1) / 2 - Math.sin(ang) * L.t / 2, by = L.top / 2 + Math.cos(ang) * L.t / 2, bz = (L.z0 + L.z1) / 2;
+  slab.position.set(bx * s, by * s, bz * s);
+  tiled(slab);
+  slab.rotation.z = ang;
+  slab.castShadow = slab.receiveShadow = true;
+  slab.name = 'bando_leaning_slab';
+  vis.add(slab);
+  const edges = P.edges.map((v) => v * s);
+  slab.updateMatrixWorld(true);
+  const se = new THREE.EdgesGeometry(slab.geometry).applyMatrix4(slab.matrixWorld).getAttribute('position');
+  for (let i = 0; i < se.count; i++) edges.push(se.getX(i), se.getY(i), se.getZ(i));
+  // The ground: the lot's concrete, one patch, its AO from everything low.
+  const ao = lookAoTexture(THREE, floorAo(P.boxes.filter((q) => q.max[1] <= 3.6), R, { texel: 0.1 }));
+  const floor = lookFloorPatch(THREE, mats.floor, R, s, { x0: -R.w / 2, x1: R.w / 2, z0: -R.d / 2, z1: R.d / 2 }, ao);
+  floor.name = 'bando floor';
+  vis.add(floor);
+  // Shell: the lot's block wall, outside the lot, 2.4 m.
+  const lw = P.lot.wall * s, t = 0.3 * s;
+  for (const [x0, x1, z0, z1] of [[-hx - t, hx + t, -hz - t, -hz], [-hx - t, hx + t, hz, hz + t], [-hx - t, -hx, -hz, hz], [hx, hx + t, -hz, hz]]) {
+    const mesh = box(THREE, vis, colliders, (x0 + x1) / 2, 0, (z0 + z1) / 2, x1 - x0, lw, z1 - z0, mats.block);
+    mesh.name = 'bando_lot_wall';
+    tiled(mesh);
+  }
+  edges.push(-hx, lw, -hz, hx, lw, -hz, hx, lw, -hz, hx, lw, hz, hx, lw, hz, -hx, lw, hz, -hx, lw, hz, -hx, lw, -hz);
+  // The sun shafts; the graffiti; the sky.
+  const shafts = lookShafts(THREE, bandoShafts().map((q) => ({ quad: q.quad.map((p) => p.map((v) => v * s)), dir: q.dir, length: q.length * s })), { name: 'bandoShafts' });
+  vis.add(shafts);
+  const paint = lookGraffiti(THREE, Lk.graffiti.map((g) => Object.assign({}, g, { c: g.c.map((v) => v * s), w: g.w * s, h: g.h * s })), { fill: Lk.fill, shelter, unit: s, name: 'bandoGraffiti' });
+  vis.add(paint);
+  vis.add(bandoSky(THREE, s));
+  // The town's blocks collide; the flying's bounds, unseen, inside the sky.
+  const solid = (x0, y0, z0, x1, y1, z1) => {
+    const bb = new THREE.Box3(new THREE.Vector3(x0, y0, z0), new THREE.Vector3(x1, y1, z1));
+    bb._tag = 'map';
+    colliders.push(bb);
+  };
+  for (const q of bandoTown(s)) solid(q.x0, 0, q.z0, q.x1, q.h, q.z1);
+  const Bd = BANDO_BOUNDS, br = Bd.r * s, bt = Bd.t * s, bh = Bd.h * s;
+  for (const [x0, x1, z0, z1] of [[-br - bt, br + bt, -br - bt, -br], [-br - bt, br + bt, br, br + bt], [-br - bt, -br, -br, br], [br, br + bt, -br, br]]) solid(x0, 0, z0, x1, bh + bt, z1);
+  solid(-br - bt, bh, -br - bt, br + bt, bh + bt, br + bt);
+  // The edge lines at the look's 60%, bloomed (sim-look.js lookLines).
+  const lines = lookLines(THREE, edges);
+  lines.name = 'bandoEdges';
+  lines.userData.artKeep = true;
+  vis.add(lines);
+  return { floor, orbit: MAP_ORBIT.bando };
+}
+
 const BUILDERS = {
   rig: buildRig,
   house: buildHouse,
   depot: buildDepot,
+  bando: buildBando,
   living: buildLiving,
   garage: buildGarage,
   warehouse: buildWarehouse,
@@ -2444,6 +3395,7 @@ function warehouseGaps() {
 const MAP_GAPS = Object.freeze({
   rig: Object.freeze(rigGaps()),
   house: Object.freeze(houseGaps()),
+  bando: Object.freeze(bandoGaps()),
   warehouse: Object.freeze(warehouseGaps()),
 });
 // A map's authored gap volumes (empty where it has none).

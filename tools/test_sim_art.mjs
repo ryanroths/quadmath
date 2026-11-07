@@ -231,8 +231,8 @@ test('hexNum and vibeTable are stable helpers', () => {
   assert.equal(hexNum('#ff2bd6'), 0xff2bd6);
   assert.equal(hexNum(0x88a0ff), 0x88a0ff);
   const table = vibeTable();
-  assert.equal(table.length, 12);
-  assert.equal(table.filter((r) => r.implemented).length, 12);
+  assert.equal(table.length, 13);
+  assert.equal(table.filter((r) => r.implemented).length, 13);
 });
 
 test('Phase 1 city art module does not ship GLB or WebFPV paths', () => {

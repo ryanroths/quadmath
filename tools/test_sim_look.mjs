@@ -68,8 +68,24 @@ test('every texture is a Poly Haven set, shipped at its size and licensed, under
   // A set with no normal ships packed: the albedo with its roughness in alpha.
   for (const s of Object.values(LOOK.surfaces)) if (LOOK.sets[s.set].packed) assert.equal(s.normal, 0, s.set);
   const b = lookTextureBytes();
-  assert.equal(b.env, 384 * 512 * 8, 'PMREM of a 512 HDRI, HalfFloat');
+  assert.equal(b.env, 384 * 512 * 8 + 336 * 128 * 8, 'PMREMs of the 512 room HDRI and the 128 overcast sky, HalfFloat');
+  assert.equal(lookTextureBytes(['concrete_floor']).env, 384 * 512 * 8, 'a map that names its sets takes the room HDRI unless it names its fill');
+  assert.equal(lookTextureBytes(['concrete_floor'], ['overcast']).env, 336 * 128 * 8);
   assert.ok(b.total < 24e6, 'textures ' + (b.total / 1e6).toFixed(2) + ' MB');
+});
+
+test('the open maps\' fill: a CIE overcast sky, generated, 128 wide, licensed, its irradiance the room HDRI\'s', () => {
+  const O = LOOK.lighting.overcast;
+  const f = join(root, O.hdri);
+  assert.ok(existsSync(f), O.hdri);
+  const head = readFileSync(f).subarray(0, 200).toString('latin1');
+  assert.match(head, /^#\?RADIANCE/);
+  assert.match(head, /-Y 64 \+X 128/, '128 equirect');
+  assert.equal(O.hdriWidth, 128);
+  assert.ok(licenses.includes('`' + O.hdri + '`'), 'licensed');
+  const py = readFileSync(join(root, 'tools/build_sim_look_textures.py'), 'utf8');
+  assert.match(py, /def build_overcast\(/);
+  assert.match(py, /'irradiance': 3\.07/);
 });
 
 test('the camera: the Air65 lens, a diagonal FOV, rendered at its aspect', () => {
@@ -299,8 +315,9 @@ test('corrugated sheet and pallets: drawn in the shader on existing sets, each i
   assert.ok(Math.abs(P.x - 0.15 * W) < 1e-9 && Math.abs(P.y - 0.135 * W) < 1e-9, 'module and board pitch in world units');
   assert.ok(Math.abs(P.z - 0.1 / 0.135) < 1e-9 && Math.abs(P.w - LOOK.pallet.deck / 0.15) < 1e-9);
   assert.deepEqual(p.uniforms.lookPalletShade.value.toArray(), [LOOK.pallet.band, LOOK.pallet.slot, LOOK.pallet.shade]);
-  // No new texture bytes: the 24 MB budget is spent.
-  assert.equal(lookTextureBytes().total, 23243431, 'the look\'s textures, unchanged');
+  // No new texture bytes but the open maps' overcast fill (The Bando, a 128
+  // PMREM, 344,064 B): the 24 MB budget is all but spent.
+  assert.equal(lookTextureBytes().total, 23243431 + 344064, 'the look\'s textures and the overcast fill');
   for (const d of [LOOK.ribs, LOOK.pallet]) assert.ok(Object.isFrozen(d));
   assert.ok(LOOK.ribs.dark <= 0.4 && LOOK.ribs.depth > 0 && LOOK.ribs.depth <= 1);
 });
