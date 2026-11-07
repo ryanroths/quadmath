@@ -6,6 +6,7 @@ from the Poly Haven downloads, so every shipped texel can be traced back to
 its source:
 
   python tools/build_sim_look_textures.py <dir of Poly Haven 1k files> [set ...]
+  python tools/build_sim_look_textures.py --overcast
 
 The directory holds <asset>_{diff,nor_gl,rough}_1k.png and the HDRI's
 <hdri>_1k.hdr as downloaded from https://polyhaven.com (see
@@ -21,6 +22,11 @@ Each set ships two files:
 A set with no normal (packed) ships one:
   look_<set>_dr_<res>.webp    the albedo, with that roughness in its alpha.
 The HDRI is box-filtered 2 x 2 from 1k to 512 (the look uses it as fill only).
+
+--overcast writes the open maps' fill (The Bando), downloading nothing: a
+CIE standard overcast sky (luminance (1 + 2 sin elevation) / 3 of the
+zenith's, the same all round) over a dull ground, 128 x 64, its up-facing
+irradiance set to the room HDRI's (3.07 a unit, so env 0.5 fills alike).
 """
 
 from __future__ import annotations
@@ -227,7 +233,46 @@ def build_hdri(src_dir: str, out_dir: str) -> None:
     print(f'hdri: {HDRI} {w}x{h} -> {w // 2}x{h // 2}')
 
 
+# The overcast fill: size, the up-facing irradiance it gives, the sky's tint
+# (a touch cool) and the ground's (warm grey, its albedo under that sky).
+OVERCAST = {'w': 128, 'h': 64, 'irradiance': 3.07, 'sky': (0.96, 1.0, 1.06), 'ground': (1.0, 0.96, 0.9), 'albedo': 0.18}
+
+
+def build_overcast(out_dir: str) -> None:
+    o = OVERCAST
+    w, h = o['w'], o['h']
+    # The CIE overcast sky's up-facing irradiance is 7 pi / 9 of its zenith's
+    # luminance; the ground is lambertian under it.
+    lz = o['irradiance'] / (7 * math.pi / 9)
+    lg = o['albedo'] * o['irradiance'] / math.pi
+    rows = []
+    for j in range(h):
+        el = math.pi / 2 - (j + 0.5) / h * math.pi
+        sky = lz * (1 + 2 * math.sin(max(el, 0.0))) / 3
+        # A two-degree blend across the horizon, no seam.
+        t = min(1.0, max(0.0, (el + math.radians(2)) / math.radians(2)))
+        rgb = tuple(sky * o['sky'][c] * t + lg * o['ground'][c] * (1 - t) for c in range(3))
+        rows.append([rgb] * w)
+    path = os.path.join(out_dir, f'overcast_cie_{w}.hdr')
+    write_hdr(path, w, h, rows)
+    # Check: the up-facing irradiance of what was written, read back.
+    _, _, back = read_hdr(path)
+    e = 0.0
+    for j in range(h):
+        el = math.pi / 2 - (j + 0.5) / h * math.pi
+        if el <= 0:
+            continue
+        lum = sum(back[j][0]) / 3
+        dw = (2 * math.pi / w) * (math.pi / h) * math.cos(el)
+        e += w * lum * math.sin(el) * dw
+    print(f'hdri: overcast_cie_{w} {w}x{h}, up-facing irradiance {e:.3f}')
+
+
 def main() -> int:
+    if sys.argv[1:] == ['--overcast']:
+        here = os.path.dirname(os.path.abspath(__file__))
+        build_overcast(os.path.join(os.path.dirname(here), 'assets', 'sim-looks', 'hdri'))
+        return 0
     if len(sys.argv) < 2 or any(k not in SETS for k in sys.argv[2:]):
         print(__doc__)
         return 2

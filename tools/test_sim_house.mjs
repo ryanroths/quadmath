@@ -80,7 +80,7 @@ test('The House is registered, 18 × 12 × 2.7 m, open beside the Rig, bouncing 
   assert.ok(MAPS.some((q) => q.id === 'house' && q.indoor && q.class === 'whoop'));
   // Open beside the Rig without ?dev=1 (Fly, Tracks), as The Warehouse is;
   // the Rig stays the default.
-  assert.deepEqual([...PUBLIC_MAPS], ['rig', 'house', 'depot']);
+  assert.deepEqual([...PUBLIC_MAPS], ['rig', 'house', 'depot', 'bando']);
   assert.equal(DEFAULT_MAP, 'rig');
   assert.equal(mapOpen('house', false), true);
   assert.ok(BUILTIN_TRACK_FILES.some((t) => t.id === 'house-loop' && t.map === 'house'));

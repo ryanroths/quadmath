@@ -4,9 +4,9 @@
 // procedural fallback. Nothing here is copied from WebFPV.
 // Visual only: do not push new colliders, do not move gates.
 
-import { hexNum } from './sim-art-city.js?v=ab8f5c49fd51';
-import { lookVibe, markBloom } from './sim-look.js?v=d55c6a2d63e0';
-import { HOUSE_KEY, DEPOT_KEY, DEPOT_SHADOW } from './sim-maps.js?v=0b67a55cee2b';
+import { hexNum } from './sim-art-city.js?v=b2eb1d0a8359';
+import { lookVibe, markBloom } from './sim-look.js?v=826bc4bd463d';
+import { HOUSE_KEY, DEPOT_KEY, DEPOT_SHADOW, BANDO_KEY, BANDO_SHADOW, BANDO_SHADOW_INTENSITY } from './sim-maps.js?v=2e41d26b27a6';
 export {
   FELT_SCALE, applyFeltMaterial, feltBasic, feltClay, feltEmissive,
   studioPhoneBudget, qualityWantsStudioBloom,
@@ -24,54 +24,54 @@ export {
   SIGN_WORDS, GATE_STYLES, BRAND_BLOCKLIST, signsAreOriginal, RAIN_KEY,
   loadRain, saveRain, distToSeg, pointHitsGate,
   CAR_TYPES, carTypeForSeed, carYawFromDir, carHeading, makeCarGeo,
-} from './sim-art-city.js?v=ab8f5c49fd51';
+} from './sim-art-city.js?v=b2eb1d0a8359';
 export {
   LIVING_STOCK, LIVING_KEEP_GATES, livingWantsGlow, livingBudget, planLivingKit,
   hideStockLivingMeshes, restyleLivingShell, buildClayParlor,
   decorateLivingGate, pulseLivingGate, tickLivingArt, restyleLiving,
-} from './sim-art-living.js?v=11ba9668d300';
+} from './sim-art-living.js?v=047bfa82b93a';
 export {
   GARAGE_STOCK, GARAGE_KEEP_GATES, garageWantsGlow, garageBudget, planGarageKit,
   hideStockGarageMeshes, restyleGarageShell, buildVoltStall,
   decorateGarageGate, pulseGarageGate, tickGarageArt, restyleGarage,
-} from './sim-art-garage.js?v=1d01140d7410';
+} from './sim-art-garage.js?v=d22e7bdc6bd0';
 export {
   WAREHOUSE_STOCK, WAREHOUSE_KEEP_GATES, warehouseWantsGlow, warehouseBudget, planWarehouseKit,
   hideStockWarehouseMeshes, restyleWarehouseShell, buildIonNave,
   decorateWarehouseGate, pulseWarehouseGate, tickWarehouseArt, restyleWarehouse,
-} from './sim-art-warehouse.js?v=2816dcd30619';
+} from './sim-art-warehouse.js?v=4170ebc1291d';
 
 export {
   GYM_STOCK, GYM_KEEP_GATES, gymWantsGlow, gymBudget,
   hideStockGymMeshes, restyleGymShell, buildAmberCourt,
   decorateGymGate, pulseGymGate, tickGymArt, restyleGym,
   planGymKit,
-} from './sim-art-gym.js?v=5375f06622ba';
+} from './sim-art-gym.js?v=63b570c24d48';
 
 export {
   OFFICE_STOCK, OFFICE_KEEP_GATES, officeWantsGlow, officeBudget, planOfficeKit,
   hideStockOfficeMeshes, restyleOfficeShell, buildPaperSun,
   decorateOfficeGate, pulseOfficeGate, tickOfficeArt, restyleOffice,
-} from './sim-art-office.js?v=6fb5825efce2';
+} from './sim-art-office.js?v=2f1ebd884a81';
 
 export {
   TRAINER_STOCK, TRAINER_KEEP_GATES, trainerWantsGlow, trainerBudget,
   hideStockTrainerMeshes, restyleTrainerShell, buildLicoriceGrid,
   decorateTrainerGate, pulseTrainerGate, tickTrainerArt, restyleTrainer,
-} from './sim-art-trainer.js?v=3cf24342b63d';
+} from './sim-art-trainer.js?v=6d6da49aebb1';
 
 export {
   BACKYARD_STOCK, BACKYARD_KEEP_GATES, backyardWantsGlow, backyardBudget,
   hideStockBackyardMeshes, restyleBackyardShell, buildRyanYard, buildJadeLot,
   decorateBackyardGate, pulseBackyardGate, tickBackyardArt, restyleBackyard,
   planBackyardKit,
-} from './sim-art-backyard.js?v=47e3edb31bef';
+} from './sim-art-backyard.js?v=b3b924b2ec51';
 
 export {
   ROOM_STOCK, ROOM_KEEP_GATES, roomWantsGlow, roomBudget,
   hideStockRoomMeshes, restyleRoomShell, buildPocketStage,
   decorateRoomGate, pulseRoomGate, tickRoomArt, restyleRoom,
-} from './sim-art-room.js?v=21665aedb165';
+} from './sim-art-room.js?v=3dfa1f0683ca';
 export {
   tryDressCityKit, kitBytesForQuality, CITY_KIT_CARS, CITY_KIT_PROPS,
   tryDressGarageKit, garageKitBytesForQuality, GARAGE_KIT_CORE, GARAGE_KIT_EXTRA, GARAGE_KIT_SKIP,
@@ -80,7 +80,7 @@ export {
   tryDressGymKit, gymKitBytesForQuality, GYM_KIT_CORE, GYM_KIT_EXTRA,
   tryDressLivingKit, livingKitBytesForQuality, LIVING_KIT_CORE, LIVING_KIT_EXTRA,
   tryDressBackyardKit, backyardKitBytesForQuality, BACKYARD_KIT_CORE, BACKYARD_KIT_EXTRA,
-} from './sim-art-kit.js?v=be3f6568d90c';
+} from './sim-art-kit.js?v=802f468bfabd';
 
 export const CITY_VIBE_ID = 'city';
 export const LIVING_VIBE_ID = 'living';
@@ -498,10 +498,37 @@ export const VIBES = Object.freeze({
     // warehouse (sim-maps.js DEPOT_SHADOW).
     shadow: DEPOT_SHADOW,
   }),
+  // The Bando, the fourth map on the look and its first open one. Its own:
+  // the fill is an overcast sky (the look's 'overcast' HDRI, dimmed under the
+  // roof), the one key a pale sun low in the south breaking through it, in at
+  // the courtyard face's windows and down the roof's holes (sim-maps.js
+  // BANDO_KEY), its shadows soft. Raw concrete, weathered in the shader; the
+  // colour is the graffiti (BANDO_LOOK).
+  bando: lookVibe({
+    id: 'bando',
+    name: 'Overcast Bando',
+    tagline: 'A gutted concrete frame under an overcast sky, a pale sun through its holes and windows, graffiti on the walls',
+    palette: Object.freeze({
+      void: '#0b0c0d', zenith: '#a9b1bb', horizon: '#e6e6e2', dusk: '#ff4d1a',
+      street: '#5d5a55', sidewalk: '#bdb8ae', lane: '#e6e2d8', laneAlt: '#ff4d1a',
+      facade: '#a8a399', facadeAlt: '#7c8a74', windowOn: '#f3ede0', windowAlt: '#9c5630',
+      neonA: '#f2f0ea', neonB: '#ff4d1a', neonC: '#3ddc97', mesa: '#75695c',
+      gateA: '#ff4d1a', gateB: '#3ddc97',
+    }),
+    // The Rig's brand rings: they read against grey concrete and the sky.
+    gates: Object.freeze({ style: 'hard-ring', keepBrand: true }),
+    props: Object.freeze(['floor holes', 'open stairwell', 'lift shaft', 'window frames', 'rebar gaps', 'door openings', 'columns', 'leaning slab', 'parapet gap', 'courtyard', 'rusted van', 'pallets', 'dead tree', 'graffiti']),
+    key: BANDO_KEY,
+    hdri: 'overcast',
+    shadowIntensity: BANDO_SHADOW_INTENSITY,
+    // The key's shadow box, world units, fitted to the 36 x 36 m lot and the
+    // parapet (sim-maps.js BANDO_SHADOW).
+    shadow: BANDO_SHADOW,
+  }),
 });
 
 export const MAP_VIBE_IDS = Object.freeze([
-  'city', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room', 'rig', 'house', 'depot',
+  'city', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room', 'rig', 'house', 'depot', 'bando',
 ]);
 
 export function vibeFor(mapId) {
@@ -553,6 +580,8 @@ export function resolveMapLighting(mapId) {
   return Object.freeze({
     mapId: id,
     look: !!vibe.look,
+    // The look's fill: 'room' (its one HDRI) or 'overcast' (an open map's).
+    lookHdri: vibe.look ? vibe.lookHdri || 'room' : null,
     sky: vibe.sky,
     citySky: id === 'city',
     outdoorSky: id === 'city',

@@ -254,11 +254,26 @@
      90 there, whole pixels: a fractional height leaves the cards' and Close's
      rounded corners a pixel off where a tap lands. A narrow screen keeps two
      columns, the odd last card centred under them. Two maps keep the two-card
-     look. */
+     look. Four (.four): a row of four in a 756 px layer, the same 160 x 90
+     thumbnails, whole pixels, on a landscape phone; where the launch card
+     stands beside it (500 px tall or more) and 756 px would not fit (under
+     1220 px wide), two by two at 572 px as the three were; on a short
+     landscape phone under 700 px, the row tighter so a thumbnail keeps about
+     120 px; two by two on a narrow screen. */
   .fly-maps.many{grid-template-columns:repeat(3,1fr)}
   .menu-layer.wide:has(.fly-maps.many){width:min(572px,92vw)}
+  .fly-maps.many.four{grid-template-columns:repeat(4,1fr)}
+  .menu-layer.wide:has(.fly-maps.four){width:min(756px,92vw)}
+  @media (max-width:1219px) and (min-height:500px){
+    .fly-maps.many.four{grid-template-columns:1fr 1fr}
+    .menu-layer.wide:has(.fly-maps.four){width:min(572px,92vw)}
+  }
+  @media (max-width:699px) and (max-height:499px){
+    .fly-maps.many.four{gap:6px}
+    .menu-layer .fly-maps.four .fly-map{padding:4px 4px 6px}
+  }
   @media (max-width:559px){
-    .fly-maps.many{grid-template-columns:1fr 1fr}
+    .fly-maps.many,.fly-maps.many.four{grid-template-columns:1fr 1fr}
     .fly-maps.many>.fly-map:last-child:nth-child(odd){grid-column:1/-1;justify-self:center;width:calc(50% - 5px)}
   }
   /* The launch screen shows five; the in-flight menu (#startMenu.in-flight) its
@@ -969,8 +984,8 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=82cc9657b1cb";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=fa186d29adc1";
+} from "./sim-whoop.js?v=ba69d98f1363";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=24ab2372574b";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -985,7 +1000,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=532a1d734023";
+} from "./sim-art.js?v=6ee5bf52eb27";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
@@ -1011,15 +1026,15 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=d0f1340b861b";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=0b67a55cee2b";
+} from "./sim-tracks.js?v=6257c359c198";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=2e41d26b27a6";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=54d5cf5d69fc";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=bdc74f333653";
-import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=d55c6a2d63e0";
+} from "./sim-room.js?v=2b1154ef73fb";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=b96e32bcfee0";
+import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=826bc4bd463d";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
   parseCli as parseCliDump, rateSetpoint, maxRateDps as maxRateDpsOf,
@@ -1035,10 +1050,10 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=a23faea5fced";
+} from "./sim-coach.js?v=bf51fd99431a";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
-} from "./sim-tricks.js?v=1b98eeca2296";
+} from "./sim-tricks.js?v=4e8a912823c5";
 import {
   DAILY_KEY, DAILY_LINE_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -1064,7 +1079,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=d7bd0767eb7b";
+} from "./sim-secrets.js?v=fe2ee28916f6";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -3175,6 +3190,7 @@ function applyMapLooks(mapId){
     else if(mapId==='rig')credit.textContent='The Rig is original procedural geometry — Soft Industrial. Poly Haven CC0 HDRI and textures.';
     else if(mapId==='house')credit.textContent='The House is original procedural geometry — Afternoon House. Poly Haven CC0 HDRI and textures.';
     else if(mapId==='depot')credit.textContent='The Warehouse is original procedural geometry — Morning Warehouse. Poly Haven CC0 HDRI and textures.';
+    else if(mapId==='bando')credit.textContent='The Bando is original procedural geometry and graffiti — Overcast Bando. Poly Haven CC0 textures, a generated overcast sky.';
   }
 }
 function isFreeFlight(t,trackId){
@@ -5028,11 +5044,11 @@ function toggleStartMenu(force){
   if(next){panel.classList.remove('open');syncMenuSparks();}
 }
 // Fly: a map chooser. The open maps (mapOpen without ?dev=1: The Rig, The
-// House, The Warehouse), each with its thumbnail; with ?dev=1 an archived map
+// House, The Warehouse, The Bando), each with its thumbnail; with ?dev=1 an archived map
 // flown last is offered too. The last map flown (the saved selection) is
 // marked and has the focus, so Fly then Enter flies it again; with none saved,
 // the class's map (classMap). A tap flies that map.
-const FLY_THUMBS={rig:'assets/sim-thumbs/rig.jpg',house:'assets/sim-thumbs/house.jpg',depot:'assets/sim-thumbs/depot.jpg'};
+const FLY_THUMBS={rig:'assets/sim-thumbs/rig.jpg',house:'assets/sim-thumbs/house.jpg',depot:'assets/sim-thumbs/depot.jpg',bando:'assets/sim-thumbs/bando.jpg'};
 function flyMapChoices(){
   const maps=MAPS.filter(m=>mapOpen(m.id,false));
   const saved=savedSelection();
@@ -5042,7 +5058,7 @@ function flyMapChoices(){
 }
 function openFlyPicker(){
   const {maps,last}=flyMapChoices();
-  showMenuLayer('<h2>Fly</h2><p>Free flight: no gates, no timer. Pick a map.</p><div class="fly-maps'+(maps.length>2?' many':'')+'">'+
+  showMenuLayer('<h2>Fly</h2><p>Free flight: no gates, no timer. Pick a map.</p><div class="fly-maps'+(maps.length>2?' many':'')+(maps.length>3?' four':'')+'">'+
     maps.map(m=>'<button type="button" class="fly-map'+(m.id===last?' on':'')+'" data-fly-map="'+m.id+'">'+
       (FLY_THUMBS[m.id]?'<img src="'+FLY_THUMBS[m.id]+'" alt="" width="480" height="270">':'')+
       '<span>'+m.name+'</span>'+(m.id===last?'<small>Last flown</small>':'')+'</button>').join('')+
@@ -8125,7 +8141,7 @@ window._tricks=tricks;
 // the file is never fetched.
 try{
   if(new URLSearchParams(location.search).get('tricks')==='debug'){
-    import('./sim-tricks-debug.js?v=795ae313e5b8').then((m)=>{
+    import('./sim-tricks-debug.js?v=381166610eb3').then((m)=>{
       trickDebug=m.createTrickDebug({document,tricks,now:()=>performance.now()*0.001,info:()=>({core:cs.kind,map:currentMap})});
       window._trickDebug=trickDebug;
       trickDebug.paint();

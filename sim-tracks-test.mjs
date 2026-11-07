@@ -253,7 +253,7 @@ assert.deepEqual([houseLink.map, houseLink.track, houseLink.closedMap], ['house'
 const houseSaved = resolveSimBoot({}, { map: 'house', track: 'house-loop' }, files, { dev: false });
 assert.deepEqual([houseSaved.map, houseSaved.track], ['house', 'house-freestyle']);
 // The Warehouse (map id depot; the archived map owns 'warehouse'), as the House.
-assert.deepEqual([...PUBLIC_MAPS], ['rig', 'house', 'depot']);
+assert.deepEqual([...PUBLIC_MAPS], ['rig', 'house', 'depot', 'bando']);
 assert.equal(mapOpen('depot', false), true);
 assert.ok(MAPS.some((m) => m.id === 'depot' && m.name === 'The Warehouse' && m.class === 'whoop' && m.indoor));
 assert.equal(MAPS[MAPS.findIndex((m) => m.id === 'house') + 1].id, 'depot', 'right after the House');
@@ -266,6 +266,19 @@ assert.deepEqual([depotSaved.map, depotSaved.track], ['depot', 'depot-freestyle'
 const depotStart = freestyleStart('depot');
 assert.deepEqual([depotStart.x, depotStart.y, depotStart.z], [-43.225, 1.225, 5.775], 'freestyle starts on the loop pad');
 assert.ok(Math.abs(depotStart.yaw + Math.PI / 2) < 1e-12, 'nose +x, down the centre run');
+// The Bando, as the Warehouse: open, right after it, its loop and pad.
+assert.equal(mapOpen('bando', false), true);
+assert.ok(MAPS.some((m) => m.id === 'bando' && m.name === 'The Bando' && m.class === 'whoop' && m.indoor));
+assert.equal(MAPS[MAPS.findIndex((m) => m.id === 'depot') + 1].id, 'bando', 'right after the Warehouse');
+assert.ok(BUILTIN_TRACK_FILES.some((t) => t.id === 'bando-loop' && t.map === 'bando' && t.name === 'Bando Loop'));
+assert.equal(files.find((t) => t.id === 'bando-loop').map, 'bando');
+const bandoLink = resolveSimBoot({ map: 'bando', track: 'bando-loop' }, null, files, { dev: false });
+assert.deepEqual([bandoLink.map, bandoLink.track, bandoLink.closedMap], ['bando', 'bando-loop', undefined]);
+const bandoSaved = resolveSimBoot({}, { map: 'bando', track: 'bando-loop' }, files, { dev: false });
+assert.deepEqual([bandoSaved.map, bandoSaved.track], ['bando', 'bando-freestyle']);
+const bandoStart = freestyleStart('bando');
+assert.deepEqual([bandoStart.x, bandoStart.y, bandoStart.z], [28.875, 1.225, -38.5], 'freestyle starts on the loop pad, on the ground floor');
+assert.ok(Math.abs(Math.abs(bandoStart.yaw) - Math.PI) < 1e-12, 'nose +z, to the shaft\'s door');
 // Each whoop class's own map (CLASS_MAPS): the 65 the Rig, the 75 and 85 The
 // Warehouse; no frame (a freestyle class) the Rig. It is the boot map only
 // when nothing is asked and nothing is saved; a closed or unknown map, and

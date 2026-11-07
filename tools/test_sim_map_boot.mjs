@@ -105,7 +105,7 @@ export function pngRgbAverage(buf) {
   return n ? sum / (n * 3) : 0;
 }
 const LOOK = {
-  rig: 'rigWhoop', depot: 'depotStart',
+  rig: 'rigWhoop', depot: 'depotStart', bando: 'bandoStart',
   city: 'whoopStreet', living: 'livingWhoop', garage: 'garageWhoop',
   warehouse: 'warehouseWhoop', gym: 'gymWhoop', office: 'officeWhoop',
   trainer: 'trainerWhoop', backyard: 'backyardWhoop', room: 'roomWhoop',

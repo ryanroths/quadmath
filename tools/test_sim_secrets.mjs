@@ -35,8 +35,8 @@ function memStore() {
 
 test('secret maps match the freestyle catalog minus Your Room and the maps on the look', () => {
   // The Rig has no decor, sparks or secrets: the owner's spec ("no decor"). The
-  // House and The Warehouse (depot), on the same look, have none either.
-  const ids = MAPS.map((m) => m.id).filter((id) => id !== 'room' && id !== 'rig' && id !== 'house' && id !== 'depot');
+  // House, The Warehouse (depot) and The Bando, on the same look, have none either.
+  const ids = MAPS.map((m) => m.id).filter((id) => id !== 'room' && id !== 'rig' && id !== 'house' && id !== 'depot' && id !== 'bando');
   assert.deepEqual([...SECRET_MAP_IDS].sort(), ids.slice().sort());
   assert.equal(SPARK_NAME, 'Spark');
   assert.equal(SECRETS_KEY, 'quadmathSimSecrets');

@@ -1585,9 +1585,9 @@ test('bf core in the Rig: authored gaps fire through the crate slots; the loft o
   assert.deepEqual(edge.hits, [], edge.whys.join(' | '));
 });
 
-test('the Rig, House and Warehouse gap volumes are openings: clear of every collider, walled on a side', () => {
+test('the Rig, House, Warehouse and Bando gap volumes are openings: clear of every collider, walled on a side', () => {
   if (!globalThis.document) rigScene();
-  for (const id of ['rig', 'house', 'warehouse']) {
+  for (const id of ['rig', 'house', 'warehouse', 'bando']) {
     const built = buildMap(THREE, id);
     assert.deepEqual(built.gaps, mapGaps(id));
     assert.ok(built.gaps.length > 0, id + ' has gaps');
@@ -1608,6 +1608,8 @@ test('the Rig, House and Warehouse gap volumes are openings: clear of every coll
   assert.ok(mapGaps('rig').some((g) => g.name === 'loft hole') && mapGaps('rig').some((g) => g.name === 'tunnel'));
   assert.ok(mapGaps('house').some((g) => g.name === 'bookshelf gap'));
   assert.ok(mapGaps('warehouse').filter((g) => g.name.startsWith('rack ')).length === 48);
+  assert.ok(mapGaps('bando').some((g) => g.name === 'shaft door, ground') && mapGaps('bando').some((g) => g.name === 'floor hole, second floor, east')
+    && mapGaps('bando').some((g) => g.name === 'parapet gap') && mapGaps('bando').some((g) => g.name === 'under the leaning slab'));
   assert.deepEqual(mapGaps('city'), []);
 });
 

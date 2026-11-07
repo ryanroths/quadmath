@@ -1,7 +1,7 @@
 // Headless Chrome as a phone (touch, DPR 3, a phone UA): the launch screen and
 // Fly's map chooser at 390x844 (portrait) and 844x390 (landscape). The five
 // launch buttons are on screen and on top where a thumb lands; Fly opens the
-// chooser, whose three cards (The Rig, The House, The Warehouse) and
+// chooser, whose four cards (The Rig, The House, The Warehouse, The Bando) and
 // thumbnails (loaded) are on screen and on top; a tap on The House's
 // thumbnail flies The House.
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
@@ -202,7 +202,7 @@ for (const size of [{ name: 'portrait 390x844', width: 390, height: 844 }, { nam
       }
       console.log(size.name + ' chooser: ' + JSON.stringify(C));
       assert.ok(C.shown, 'a tap on Fly opens the chooser');
-      assert.deepEqual(C.cards.map((c) => c.label), ['rig', 'house', 'depot']);
+      assert.deepEqual(C.cards.map((c) => c.label), ['rig', 'house', 'depot', 'bando']);
       for (const th of C.thumbs) {
         assert.ok(th.loaded, `${th.label} thumbnail loaded`);
         assert.ok(th.inView, `${th.label} thumbnail wholly on screen (${JSON.stringify(th)})`);
