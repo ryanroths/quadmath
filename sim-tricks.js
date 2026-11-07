@@ -131,7 +131,7 @@ export const SLOPPY_MUL = 0.65;
 export const BUMP_MUL = 0.5;
 
 const INDOOR_IDS = Object.freeze({
-  living: 1, garage: 1, warehouse: 1, office: 1, gym: 1, trainer: 1, room: 1, rig: 1, depot: 1, bando: 1,
+  living: 1, garage: 1, warehouse: 1, office: 1, gym: 1, trainer: 1, room: 1, rig: 1, house: 1, depot: 1, bando: 1,
 });
 
 export const TRICK_LIST = Object.freeze([

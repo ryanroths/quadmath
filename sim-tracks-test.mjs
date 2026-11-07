@@ -277,8 +277,8 @@ assert.deepEqual([bandoLink.map, bandoLink.track, bandoLink.closedMap], ['bando'
 const bandoSaved = resolveSimBoot({}, { map: 'bando', track: 'bando-loop' }, files, { dev: false });
 assert.deepEqual([bandoSaved.map, bandoSaved.track], ['bando', 'bando-freestyle']);
 const bandoStart = freestyleStart('bando');
-assert.deepEqual([bandoStart.x, bandoStart.y, bandoStart.z], [28.875, 1.225, -38.5], 'freestyle starts on the loop pad, on the ground floor');
-assert.ok(Math.abs(Math.abs(bandoStart.yaw) - Math.PI) < 1e-12, 'nose +z, to the shaft\'s door');
+assert.deepEqual([bandoStart.x, bandoStart.y, bandoStart.z], [28.875, 37.975, -12.25], 'freestyle starts on the loop pad, on the roof');
+assert.ok(Math.abs(Math.abs(bandoStart.yaw) - Math.PI) < 1e-12, 'nose +z, to the first gate, out of the shaft');
 // Each whoop class's own map (CLASS_MAPS): the 65 the Rig, the 75 and 85 The
 // Warehouse; no frame (a freestyle class) the Rig. It is the boot map only
 // when nothing is asked and nothing is saved; a closed or unknown map, and

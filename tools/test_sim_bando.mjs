@@ -101,8 +101,15 @@ test('The Bando is registered, a 30 x 20 m frame of three 3.5 m storeys in a 36 
   const f = freestyleStart('bando'), pad = startPad(track);
   assert.deepEqual([f.x, f.y, f.z], [raw.start.x, raw.start.y, raw.start.z]);
   assert.ok(Math.abs(f.yaw - pad.yaw) < 1e-9);
-  assert.ok(Math.abs(START[1] - 0.35) < 1e-9, 'the pad is on the ground floor (the js core settles a quad at rest on the floor only)');
-  assert.ok(START[0] > F.x0 && START[0] < F.x1 && START[2] > F.z0 && START[2] < F.z1 && nearest(START).d > 1, 'inside, clear');
+  // The pad is on the roof, over its slab and not a hole, 35 cm up as every
+  // pad; nothing within a metre but the roof under it (tools/test_sim_slab_rest.mjs
+  // parks a quad there on the js core).
+  assert.ok(Math.abs(START[1] - (T[3] + 0.35)) < 1e-9, 'the pad is 35 cm over the roof');
+  const under = BOXES.filter((b) => START[0] >= b.min[0] && START[0] <= b.max[0] && START[2] >= b.min[2] && START[2] <= b.max[2] && b.max[1] <= START[1]);
+  assert.ok(Math.abs(Math.max(...under.map((b) => b.max[1])) - T[3]) < 1e-9, 'the pad is on the roof\'s slab, not over a hole');
+  assert.ok(START[0] > F.x0 && START[0] < F.x1 && START[2] > F.z0 && START[2] < F.z1, 'over the frame');
+  const near1 = BOXES.filter((b) => boxDist(START, b) < 1);
+  assert.ok(near1.length > 0 && near1.every((b) => Math.abs(b.max[1] - T[3]) < 1e-9), 'clear but for the roof: ' + near1.map((b) => b.feature + '/' + b.part).join(', '));
   // The menu camera circles over the lot's wall, above the parapet, clear of
   // the frame.
   const o = MAP_ORBIT.bando;
@@ -316,8 +323,17 @@ test('the loop: roof dive to the ground and back up the shaft, 30 cm clear outsi
   // Every gate named for what it marks.
   const names = new Set(LINE.gates.map((g) => g.name));
   for (const n of ['out of the shaft', 'parapet gap', 'into the courtyard', 'between the pallets', 'through the van', 'round the dead tree',
-    'second-floor window', 'between the columns', 'round the column', 'rebar gap', 'through the floors', 'under the slab', 'door', 'shaft door']) assert.ok(names.has(n), n);
-  assert.equal(LINE.gates[0].name, 'shaft door', 'each lap from the shaft\'s door');
+    'second-floor window', 'between the columns', 'round the column', 'rebar gap', 'through the floors', 'under the slab', 'door', 'shaft door',
+    'top of the shaft']) assert.ok(names.has(n), n);
+  assert.equal(LINE.gates[0].name, 'out of the shaft', 'each run from the roof, out of the shaft');
+  const fin = LINE.gates[LINE.gates.length - 1];
+  assert.equal(fin.name, 'top of the shaft', 'and back up the shaft to the finish over its top');
+  // The page times a run from gate 0 to the last gate (a line track): the
+  // climb up the shaft is inside it, and under 5 m of the line is not.
+  const run = PTS.filter((p, i) => LINE.s[i] > LINE.gates[0].s && LINE.s[i] < fin.s);
+  assert.ok(run.filter((p) => inside(p, ZONES.shaft[0], ZONES.shaft[1]) && p[1] > 4 && p[1] < 9).length > 100, 'the shaft climb is timed');
+  assert.ok(LINE.length - (fin.s - LINE.gates[0].s) < 5, 'untimed ' + (LINE.length - (fin.s - LINE.gates[0].s)).toFixed(2) + ' m');
+  assert.ok(PTS[fin.at][1] > T[3] + 0.45, 'the finish over the roof');
 });
 
 test('the Bando Loop: 18 to 24 gates, 120 to 160 m, tightest radius 2.5 m', () => {
@@ -365,6 +381,11 @@ test('the gates mark the line: written from it, entered in order, once each, fro
   assert.equal(passes, 2 * GATES.length);
   const last = GATES[GATES.length - 1];
   assert.ok(len(sub(START, last.p)) > last.r + 1, 'pad clear of the last gate');
+  // Gate 0 ahead of the pad as on the other loops: 2 m on, under 35° up, in
+  // the FPV view from the pad.
+  const g0 = GATES[0], ahead = Math.hypot(g0.p[0] - START[0], g0.p[2] - START[2]);
+  assert.ok(ahead >= 1.5, 'gate 0 is ' + ahead.toFixed(2) + ' m ahead of the pad');
+  assert.ok(Math.atan2(g0.p[1] - START[1], ahead) < 35 * Math.PI / 180, 'gate 0 within 35° over the pad\'s level');
 });
 
 test('the hosted pace ghost flies the line, from the first gate, clear of the Bando', () => {

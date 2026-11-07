@@ -415,6 +415,13 @@ export class QuadPhysics {
     // below, in meters (SI). When set, thrust picks up a smooth cushion bonus
     // below ~1 prop diameter. Null disables the effect entirely.
     this.groundClearance = null;
+    // hook: support. fn(state) -> where the open floor's z = 0 would be (m,
+    // module z) for the surface right under the quad: 0 over the open floor,
+    // where the quad rests at FLOOR_CLEARANCE_M; over a box top the quad rests
+    // on directly, the top less FLOOR_CLEARANCE_M (sim-whoop.js jsSupportZ).
+    // The ground-contact brake and the I-term relax measure from it, so their
+    // bands over a box top are the floor's. Null: the open floor only.
+    this.supportZ = null;
     // hook: W2 disturbances (propwash, indoor drafts). fn(state) ->
     // {force, torque} in SI (world newtons, body N·m). Applied after drag.
     this.externalDisturbance = null;
@@ -771,7 +778,10 @@ export class QuadPhysics {
       force = vAdd(force, this.externalDrag(this.velocity, this));
     }
     // Linear stopDamp is a ground-contact brake only — never an in-air damper.
-    const nearFloor = this.position.z <= FLOOR_CLEARANCE_M + 0.015;
+    // On the floor or a box top (supportZ): a quad parked on a raised slab
+    // rests as on the floor.
+    const groundZ = this.supportZ ? this.supportZ(this) : 0;
+    const nearFloor = this.position.z - groundZ <= FLOOR_CLEARANCE_M + 0.015;
     if (nearFloor) {
       const sd = 0.55 * cfg.mass;
       force.x -= this.velocity.x * sd;
@@ -790,7 +800,7 @@ export class QuadPhysics {
     this.velocity = vAdd(this.velocity, vScale(force, dt / cfg.mass));
     this.position = vAdd(this.position, vScale(this.velocity, dt));
 
-    this.airborne = this.position.z > FLOOR_CLEARANCE_M + 0.04
+    this.airborne = this.position.z - groundZ > FLOOR_CLEARANCE_M + 0.04
       || Math.abs(totalThrust) > cfg.mass * G * 0.5;
 
     if (this.onSubstep) this.onSubstep(this);

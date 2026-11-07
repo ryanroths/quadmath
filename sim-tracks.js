@@ -170,8 +170,8 @@ export function freestyleStart(mapId) {
   if (map === 'house') return { x: -14.7, y: 1.225, z: 15.05, yaw: -Math.PI / 2 };
   // The Warehouse: the Warehouse Loop pad, nose down the centre run (+x).
   if (map === 'depot') return { x: -43.225, y: 1.225, z: 5.775, yaw: -Math.PI / 2 };
-  // The Bando: the Bando Loop pad, on the ground floor, nose south to the shaft's door (+z).
-  if (map === 'bando') return { x: 28.875, y: 1.225, z: -38.5, yaw: -Math.PI };
+  // The Bando: the Bando Loop pad, on the roof by the shaft's top, nose south to the first gate (+z).
+  if (map === 'bando') return { x: 28.875, y: 37.975, z: -12.25, yaw: -Math.PI };
   return { x: 0, y: 1.2, z: 0, yaw: 0 };
 }
 

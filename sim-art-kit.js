@@ -6,8 +6,8 @@
 // fails, the procedural meshes already in the scene stay visible. Nothing
 // from the GPL whoop sim.
 
-import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=b2eb1d0a8359';
-import { BACKYARD_PLAY } from './sim-maps.js?v=2e41d26b27a6';
+import { hexNum, CAR_TYPES, carHeading } from './sim-art-city.js?v=492271daab89';
+import { BACKYARD_PLAY } from './sim-maps.js?v=5ac9b683ab7e';
 
 const KIT_ROOT = 'assets/sim-city/';
 

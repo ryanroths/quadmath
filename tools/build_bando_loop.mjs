@@ -7,7 +7,7 @@
 //   node tools/build_bando_loop.mjs
 // Also flies the loop: flyBandoLoop() puts the Coach autopilot
 // (tools/coach_rig_autopilot.mjs) on the bf core with The Bando's colliders
-// and flies the line from the pad on the ground floor, three laps.
+// and flies the line from the pad on the roof, three laps.
 //   node tools/build_bando_loop.mjs --fly
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -109,9 +109,10 @@ export function bandoLoopGhost() {
 // The autopilot's speed caps along the line, m/s: 7 on the open runs; 4
 // from the parapet gap down the drop and through the courtyard to the van,
 // from the rebar gap down through the floors and along the ground floor to
-// the door, and from the shaft's door up the shaft; 5 round the dead tree to
-// the window. Each zone runs from `before` metres ahead of its first gate to
-// `after` past its last.
+// the door, and from the shaft's door up the shaft and out over the roof; 5
+// round the dead tree to the window. Each zone runs from `before` metres
+// ahead of its first gate to `after` past its last, round the lap's end when
+// it wraps (the shaft's: each lap ends up the shaft).
 export const BANDO_FLY = Object.freeze({
   cap: 7, laps: 3,
   zones: Object.freeze([
@@ -129,10 +130,11 @@ export function bandoLoopPlan(laps) {
   const line = bandoLine(0.01), P = line.points, S = line.s, L = line.length;
   const first = (n) => line.gates.find((g) => g.name === n).s;
   const last = (n) => line.gates.filter((g) => g.name === n).pop().s;
-  const zones = BANDO_FLY.zones.map((z) => ({ a: first(z.from) - z.before, b: last(z.to) + z.after, cap: z.cap }));
+  const mod = (s) => ((s % L) + L) % L;
+  const zones = BANDO_FLY.zones.map((z) => ({ a: mod(first(z.from) - z.before), b: mod(last(z.to) + z.after), cap: z.cap }));
   const cap = (s) => {
-    const u = ((s % L) + L) % L;
-    const z = zones.find((q) => (u >= q.a && u <= q.b) || (q.a < 0 && u >= q.a + L));
+    const u = mod(s);
+    const z = zones.find((q) => (q.a <= q.b ? u >= q.a && u <= q.b : u >= q.a || u <= q.b));
     return z ? z.cap : BANDO_FLY.cap;
   };
   const at = (s) => {
@@ -171,7 +173,7 @@ export function bandoRace(samples, gates) {
 }
 
 // Flies the loop on the bf core (the Air65 on the owner's diff, The Bando's
-// colliders and contact plant), from the pad on the ground floor: the samples, the
+// colliders and contact plant), from the pad on the roof: the samples, the
 // race, any touch, and whether it stalled.
 export async function flyBandoLoop(opts) {
   const o = opts || {};
@@ -180,7 +182,7 @@ export async function flyBandoLoop(opts) {
   const { toModule, WS } = await import('../sim-core-adapter.js');
   const core = o.core || await mapCore('bando');
   const [px, py, pz] = BANDO_PLAY.start, floor = py - 0.35;
-  // Nose south to the shaft's door (+z): a half turn about the module's up.
+  // Nose south to the first gate (+z): a half turn about the module's up.
   core.respawn(toModule({ x: px * WS, y: floor * WS + 0.15, z: pz * WS }, {}), { x: 0, y: 0, z: 1, w: 0 });
   core.setMode('angle');
   let wall = 0, stick = { r: 0, p: 0, y: 0, t: 0 };

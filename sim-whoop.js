@@ -310,6 +310,86 @@ export function resolveDuctHit(hit, build, settings, profile) {
   };
 }
 
+// The js core's contact pass (sim.html qp.onSubstep), in world units: the
+// quad's point p and velocity v (THREE.Vector3s, both changed in place)
+// against the open floor at floorY and the map's AABB colliders. A floor or a
+// box top met slower than REST_INTO settles the quad: it stops sinking and its
+// slide bleeds, with no bounce and no spin kick. A faster one, or any wall or
+// underside, goes to hit(normal, into, floor), which bounces v and kicks the
+// spin (resolveDuctHit). Returns true when the quad is on the floor or a box
+// top, and the caller then scrubs its rotation. Box tops settle as the floor
+// does: a quad parked on a raised slab touches it every tick, and a bounce
+// each tick, with its spin kick, turned it about 50° in 10 s, never settling.
+// Onto a floor or a top, into is the speed down into it, as the floor's: a
+// quad climbing out past a top's edge is not met, where |v.y| bounced it up
+// at twice its climb.
+export const REST_INTO = 4.5; // world units/s
+const UP = Object.freeze({ x: 0, y: 1, z: 0 });
+export function jsContact(p, v, colliders, floorY, hit) {
+  let support = false;
+  const settle = () => { v.y = Math.max(v.y, 0); v.x *= 0.85; v.z *= 0.85; };
+  if (p.y < floorY) {
+    const into = -v.y;
+    p.y = floorY;
+    support = true;
+    if (into > REST_INTO) hit(UP, into, true);
+    else settle();
+  }
+  for (const bb of colliders) {
+    if (!bb.containsPoint(p)) continue;
+    const dx = Math.min(p.x - bb.min.x, bb.max.x - p.x);
+    const dy = Math.min(p.y - bb.min.y, bb.max.y - p.y);
+    const dz = Math.min(p.z - bb.min.z, bb.max.z - p.z);
+    if (dx < dy && dx < dz) {
+      const sx = p.x - (bb.min.x + bb.max.x) / 2 > 0 ? 1 : -1;
+      p.x += sx * dx;
+      hit({ x: sx, y: 0, z: 0 }, Math.abs(v.x), false);
+    } else if (dy < dz) {
+      const sy = p.y - (bb.min.y + bb.max.y) / 2 > 0 ? 1 : -1;
+      p.y += sy * dy;
+      if (sy > 0) {
+        const into = -v.y;
+        support = true;
+        if (into > REST_INTO) hit(UP, into, true);
+        else settle();
+      } else {
+        hit({ x: 0, y: -1, z: 0 }, Math.abs(v.y), false);
+      }
+    } else {
+      const sz = p.z - (bb.min.z + bb.max.z) / 2 > 0 ? 1 : -1;
+      p.z += sz * dz;
+      hit({ x: 0, y: 0, z: sz }, Math.abs(v.z), false);
+    }
+    break;
+  }
+  return support;
+}
+
+// The top of the highest box straight under the point p (world units) that p
+// is on, over, or no more than tol inside: the box top jsContact would set it
+// on. -Infinity when there is none.
+export function boxTopUnder(p, colliders, tol = 0) {
+  let top = -Infinity;
+  for (const bb of colliders) {
+    if (p.x >= bb.min.x && p.x <= bb.max.x && p.z >= bb.min.z && p.z <= bb.max.z
+      && bb.max.y <= p.y + tol && bb.max.y > top) top = bb.max.y;
+  }
+  return top;
+}
+
+// quadphysics.js's support (supportZ) for the js core, metres in the module's
+// z: 0 for the open floor, or the box top under the quad's point p (world
+// units) less the floor's pad (floorY), so a quad resting on a top is as high
+// over its support as one resting on the floor and the module's ground bands
+// (its brake, its I-term relax) are the floor's. The module reads it on the
+// position the last contact pass left, so the tolerance only takes the
+// metres-to-world round trip.
+export const SUPPORT_TOL = 1e-4; // world units
+export function jsSupportZ(p, colliders, floorY, ws) {
+  const top = boxTopUnder(p, colliders, SUPPORT_TOL);
+  return top > floorY ? (top - floorY) / ws : 0;
+}
+
 // Deterministic [0,1) hash — no Math.random in the models so tests lock.
 export function hash01(x, y, z) {
   const s = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
