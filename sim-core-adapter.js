@@ -549,7 +549,8 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
   };
   // The short way over: toward the lower side, so the high side lifts over the
   // low edge; pitch when the nose or tail is lower than either side; flat to
-  // 0.1 (about 6 degrees), a right roll (either way is the same there). The
+  // 0.1 (about 6 degrees), a right roll (either way is the same there), or for
+  // Easy mode's turtle the way the pilot's stick says. The
   // Air65 resting 38 degrees down on one side is up in 208 ms rolling that
   // way, 272 ms the other; resting tail-down, 208 ms on pitch, 240 on roll.
   const aimFlip = () => {
@@ -557,9 +558,11 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     const left = 2 * (y * z + w * x);   // world Z of the body's left (+Y)
     const nose = 2 * (x * z - w * y);   // world Z of the nose (+X)
     auto.atUs = sim.simTimeUs;
+    const flat = Math.max(Math.abs(left), Math.abs(nose)) < 0.1;
+    if (flat && auto.easy) return;
     auto.r = 0;
     auto.p = 0;
-    if (Math.max(Math.abs(left), Math.abs(nose)) < 0.1) auto.r = 1;
+    if (flat) auto.r = 1;
     else if (Math.abs(left) >= Math.abs(nose)) auto.r = left > 0 ? -1 : 1;
     else auto.p = nose > 0 ? 1 : -1;
   };
@@ -742,17 +745,18 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
       simFlips++;
       return true;
     },
-    // Easy mode's turtle: upside down at rest, a full stick the way r or p (-1
-    // or 1, the other 0) says. The page drives FLIP and ARM as for F, and holds
-    // FLIP_STICK that way (a full stick carries the Air65 back over), to
-    // upright; there it re-arms ('quick'), or with rearm false lets go
+    // Easy mode's turtle: at rest and not upright (the page's wantsEasyTurtle),
+    // a full stick. Lying flat on its back the stick's way (r or p, -1 or 1, the
+    // other 0) rolls it; on a side, the short way toward upright (aimFlip). The
+    // page drives FLIP and ARM as for F, and holds FLIP_STICK (a full stick
+    // carries the Air65 back over), to upright; there it re-arms ('quick'), or with rearm false lets go
     // disarmed. Not an assist: not counted as an F flip. The page takes the AUX
     // channels from a radio here for the length of the turtle (a switch layout
     // with no turtle switch); true when it starts, otherwise 'busy',
     // 'not-flipped' or 'no-switch'.
     startEasyTurtle(r, p, rearm = true) {
       if (turtle) return 'busy';
-      if (!(upZ() < -0.35 && sim.state.groundClearance <= 0.04)) return 'not-flipped';
+      if (!(upZ() < 0.5 && sim.state.groundClearance <= 0.04)) return 'not-flipped';
       if (!ranges.some((x) => x.box === 35)) return 'no-switch';
       auxSource = 'page';
       core.startTurtle();
@@ -787,8 +791,7 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
         case 'arm':
           if (fc.armed && fc.crashFlip) {
             toTurtle('flip');
-            if (auto && auto.easy) auto.atUs = sim.simTimeUs;
-            else if (auto) aimFlip();
+            if (auto) aimFlip();
             return 'flip';
           }
           if (sinceUs > 400_000) {

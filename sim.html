@@ -907,7 +907,7 @@
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
     <b>R</b> last-gate respawn &nbsp;<b>P</b> new pack (bf) &nbsp;<b>Tab</b> panel<br>
     🔊 <b>M</b> mute &nbsp;<b>N</b> next track &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
-    Throttle down 1 s, then up: armed. Down 2 s landed: disarmed. Upside down: full roll or pitch.<br>
+    Throttle down 1 s, then up: armed. Down 2 s landed: disarmed. Upside down or on its side: full roll or pitch.<br>
     3D (Tune panel): center throttle = zero, below = reverse. Acro only. Not counted on boards.<br>
     <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach<br>
     <b>F</b> upside down on bf: sim flip (logged as an assist); else next mode
@@ -974,7 +974,7 @@ import {
   WS as CORE_WS, TICK_US, SAMPLE_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux,
   BF_CLASS_TUNES, bfClassDiff,
-} from "./sim-core-adapter.js?v=666a7e4f8da1";
+} from "./sim-core-adapter.js?v=39519e7c66ee";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
 import {
@@ -1039,7 +1039,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=2108fba17d3d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle} from "./sim-feel.js?v=624c2fe678fc";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z} from "./sim-feel.js?v=f8f44294860a";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=826bc4bd463d";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -4714,7 +4714,7 @@ function tickEasyArm(dt){
   if(core.kind==='bf'&&core.turtlePhase!=null)return; // an F flip or an arm while flipped: armed, upside down, not a crash
   const speed=Math.hypot(cs.velocity.x,cs.velocity.y,cs.velocity.z);
   const omega=Math.hypot(cs.omega.x,cs.omega.y,cs.omega.z);
-  const flipped=!threeD&&bodyUpZ(cs.quaternion)<-0.35&&cs.clearance<=0.04;
+  const flipped=!threeD&&bodyUpZ(cs.quaternion)<EASY_TURTLE_UP_Z&&cs.clearance<=0.04;
   const out=stepEasyArm(easyArmState,{
     t:stick.t,threeD,dt,armed:coreArmed(),autoArm:autoArmOn,
     ready:!(armGate&&padLive),
@@ -4823,7 +4823,8 @@ function jsTick(stick,tUs){
   // roll stick rolls the quad back over (per tick on sim time; on the bf core
   // the same gesture is Betaflight's crash flip, bfTurtleTick).
   const stickTurtle=!threeD&&(stickTurtleOn()||(switchesOn()&&radioSwitches.turtle&&pollGp&&armSwitchValue(pollGp,radioSwitches.turtle)>0.5));
-  if(jsTurtle||((stickTurtle||qp.armed)&&!threeD&&bodyUpZ(qp.quaternion)<-0.35)){
+  const upNow=bodyUpZ(qp.quaternion);
+  if(jsTurtle||(!threeD&&((stickTurtle&&upNow<EASY_TURTLE_UP_Z)||(qp.armed&&upNow<-0.35)))){
     const clr=qp.groundClearance?qp.groundClearance(qp):qp.position.z-qp.supportZ(qp);
     if(jsTurtle||stickTurtle)jsEasyTurtle(stick,dt,clr);
     else if(wantsTurtle({upZ:bodyUpZ(qp.quaternion),clearanceM:clr,contact:clr<=0.04,armed:qp.armed,threeD,throttle:stick.t,rollStick:stick.r})){
@@ -4840,32 +4841,37 @@ function jsTick(stick,tUs){
   thrustActual=(qp.totalThrustAbsN||Math.abs(qp.totalThrustN))*WS; // |N|, audio + battery load
   jsPortals();
 }
-// The js core's stick turtle, per tick: a full stick the way it is pushed,
-// upside down at rest, rolls or pitches the quad over, braking into level; it
-// lets go level, or as near as this axis takes it, and the next poll re-arms
-// (Easy mode).
+// The js core's stick turtle, per tick: at rest and not upright, a full stick
+// swings the body's up straight onto the world's, braking into level (flat on
+// its back, the first of it the way the stick is pushed); it lets go level and
+// the next poll re-arms (Easy mode).
 let jsTurtle=null;
 let jsTurtleDone=false;
 function jsEasyTurtle(st,dt,clr){
   const upZ=bodyUpZ(qp.quaternion);
-  if(jsTurtle){
-    const tilt=Math.acos(Math.max(-1,Math.min(1,upZ)));
-    if(tilt<0.03||(upZ>0.5&&tilt>jsTurtle.best+0.05)){
-      qp.omega[jsTurtle.axis]=0;
-      jsTurtle=null;
-      jsTurtleDone=true;
-      return;
-    }
-    jsTurtle.best=Math.min(jsTurtle.best,tilt);
-    qp.omega[jsTurtle.axis]=jsTurtle.sign*Math.min(jsTurtle.sign*qp.omega[jsTurtle.axis]+45*dt,tilt*30);
+  if(!jsTurtle){
+    if(upZ>=EASY_TURTLE_UP_Z)return;
+    if(!wantsEasyTurtle({upZ,clearanceM:clr,speed:Math.hypot(qp.velocity.x,qp.velocity.y,qp.velocity.z),omega:Math.hypot(qp.omega.x,qp.omega.y,qp.omega.z),threeD,r:st.r,p:st.p}))return;
+    if(qp.armed)qp.disarm();
+    const roll=Math.abs(st.r)>=Math.abs(st.p);
+    jsTurtle={x:roll?(st.r<0?-1:1):0,y:roll?0:(st.p<0?-1:1),w:0};
+    toast('TURTLE');
+  }
+  const tilt=Math.acos(Math.max(-1,Math.min(1,upZ)));
+  if(tilt<0.03){
+    qp.omega.x=qp.omega.y=0;
+    jsTurtle=null;
+    jsTurtleDone=true;
     return;
   }
-  if(upZ>=-0.35)return;
-  if(!wantsEasyTurtle({upZ,clearanceM:clr,speed:Math.hypot(qp.velocity.x,qp.velocity.y,qp.velocity.z),omega:Math.hypot(qp.omega.x,qp.omega.y,qp.omega.z),threeD,r:st.r,p:st.p}))return;
-  if(qp.armed)qp.disarm();
-  const roll=Math.abs(st.r)>=Math.abs(st.p);
-  jsTurtle=roll?{axis:'x',sign:st.r<0?-1:1,best:Math.PI}:{axis:'y',sign:st.p<0?-1:1,best:Math.PI};
-  toast('TURTLE');
+  // World up in the body frame; the body rate that swings body up onto it.
+  const q=qp.quaternion;
+  const vx=2*(q.x*q.z-q.w*q.y),vy=2*(q.y*q.z+q.w*q.x),h=Math.hypot(vx,vy);
+  if(h>0.05){jsTurtle.x=-vy/h;jsTurtle.y=vx/h;}
+  jsTurtle.w=Math.min(jsTurtle.w+45*dt,8,tilt*30);
+  qp.omega.x=jsTurtle.x*jsTurtle.w;
+  qp.omega.y=jsTurtle.y*jsTurtle.w;
+  qp.omega.z=0;
 }
 function bounce(){
   state.bounces++;   // counter kept for stats; the BOUNCE #N toast is gone —
@@ -5882,7 +5888,7 @@ function wireLooksUI(){
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
       '<span class="n">R</span> last-gate respawn · <span class="n">P</span> new pack (bf) · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
       '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
-      'Throttle down 1 s, then up: armed. Down 2 s landed: disarmed. Upside down: full roll or pitch.<br>'+
+      'Throttle down 1 s, then up: armed. Down 2 s landed: disarmed. Upside down or on its side: full roll or pitch.<br>'+
       '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">N</span> next track · <span class="n">G</span> ghost · <span class="n">C</span> coach<br>'+
       '<span class="n">F</span> upside down on bf: sim flip (logged as an assist) · else next flight mode</p>'+
       '<div class="row"><label>Angle mode</label><input type="checkbox" class="cb-angle-mode" style="accent-color:var(--orange)"></div>'+
@@ -5898,7 +5904,7 @@ function wireLooksUI(){
   };
   document.getElementById('menuHowTo').onclick=()=>{
     showMenuLayer('<h2>How to</h2><ol>'+
-      '<li>Throttle down for a second, then up, arms and flies. Space arms too. Upside down, a full roll or pitch stick flips it back and re-arms. Angle on keyboard and touch, acro on a radio or gamepad; angle is a toggle in Controls (1 / 2 / 3 = Angle / Horizon / Acro). 3D (Tune panel) is reversible-motor acro — center throttle is zero, below center inverts thrust. 3D runs are not counted on boards.</li>'+
+      '<li>Throttle down for a second, then up, arms and flies. Space arms too. Upside down or on its side, a full roll or pitch stick flips it back and re-arms. Angle on keyboard and touch, acro on a radio or gamepad; angle is a toggle in Controls (1 / 2 / 3 = Angle / Horizon / Acro). 3D (Tune panel) is reversible-motor acro — center throttle is zero, below center inverts thrust. 3D runs are not counted on boards.</li>'+
       '<li>How to → Start tutorial: hover, three gates, land (about two minutes, skippable).</li>'+
       '<li>R respawns at the last gate you passed. H toggles the stick HUD.</li>'+
       '<li>Fly the lit gate. A 3-lap run starts at gate 1. Splits per gate; missed gates add +2.0s.</li>'+
@@ -8053,13 +8059,14 @@ function bfTurtleTick(){
   }
   const low=throttleSafeToArm(stick.t,false);
   const centred=Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15&&Math.abs(stick.y)<0.15;
+  const easyTurtle=core.turtleEasy;
   const ev=core.stepTurtle(low,centred);
   if(ev==='upright'&&(stickTurtleOn()||core.turtleAuto))toast('UPRIGHT');
   else if(ev==='upright')toast(low&&centred?'UPRIGHT':'UPRIGHT — STICKS DOWN AND CENTRED TO ARM');
   else if(ev==='rearm'&&core.sim.fc.armed)turtleRearmed();
   else if(ev==='rearm')bfArmPendingMs=simClockMs;
   else if(ev==='ended')toast('DISARMED');
-  else if(ev==='stuck'&&core.turtleEasy)toast('STUCK — R RESPAWNS');
+  else if(ev==='stuck'&&easyTurtle)toast('STUCK — R RESPAWNS');
   else if(ev==='stuck')toast('SIM FLIP STUCK — R RESPAWNS');
   else if(ev==='refused'){
     const why=armingFlagNames(cs.armingDisableFlags);
@@ -8583,7 +8590,7 @@ fetchBuiltinTracks().then(list=>{
 });
 Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
-  placeQuadAt, map:()=>currentMap, track:()=>activeTrackId, artError:()=>window._artError||null,
+  placeQuadAt, map:()=>currentMap, track:()=>activeTrackId, colliders:()=>colliders, artError:()=>window._artError||null,
   artStats:()=>artStats(renderer,currentMap==='city'?cityWorld:indoorWorld),vibe:()=>vibeFor(currentMap),VIBES,qualityWantsBloom,
   rain:()=>loadRain(),setRain(v){saveRain(!!v);if(currentMap==='city')applyCityArt(looks&&looks.applied);},RAIN_KEY,
   QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,WHOOP_KIT_KEY,CROSSHAIR_KEY,canopyGroup,craftGroup,skinTrail,

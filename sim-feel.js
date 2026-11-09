@@ -200,7 +200,7 @@ export function isStuckInverted(info) {
   const upZ = info.upZ == null
     ? (info.upsideDown ? -1 : 1)
     : +info.upZ;
-  if (!(upZ < STUCK_UP_Z)) return false;
+  if (!(upZ < (info.easy ? EASY_TURTLE_UP_Z : STUCK_UP_Z))) return false;
   const clearance = info.clearanceM == null ? info.height : info.clearanceM;
   const contact = !!info.contact || (clearance != null && +clearance <= STUCK_CLEARANCE_M);
   if (!contact) return false;
@@ -258,14 +258,15 @@ export function wantsTurtle(info) {
   return true;
 }
 
-// Easy mode's turtle: upside down at rest on the deck, a full roll or pitch
-// stick, armed or not and at any throttle. info: upZ, clearanceM, contact,
-// speed, omega, threeD, r, p (sticks).
+// Easy mode's turtle: at rest and not upright (on its back or on any side), a
+// full roll or pitch stick, armed or not and at any throttle. info: upZ,
+// clearanceM, contact, speed, omega, threeD, r, p (sticks).
 export const EASY_TURTLE_STICK = 0.9;
+export const EASY_TURTLE_UP_Z = 0.5;
 export function wantsEasyTurtle(info) {
   if (!info || info.threeD) return false;
   const upZ = info.upZ == null ? 1 : +info.upZ;
-  if (!(upZ < -0.35)) return false;
+  if (!(upZ < EASY_TURTLE_UP_Z)) return false;
   const contact = !!info.contact || (info.clearanceM != null && +info.clearanceM <= 0.04);
   if (!contact) return false;
   if (!(+info.speed < STUCK_SPEED_MS) || !(+info.omega < STUCK_OMEGA)) return false;
