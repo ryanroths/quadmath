@@ -11,6 +11,8 @@
 //     A profile saved before Easy mode starts in Easy mode like any other. And
 //     the other input and core pairs: the radio on ?core=js, the keyboard on
 //     both cores (Angle by default; F still flips), a gamepad, touch (Angle).
+//     At rest on either side, the nose, the tail or its back, on the floor and
+//     on a slab, a full stick brings it back with no restart, on both cores.
 //     Calibration asks for the sticks only.
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
 import test from 'node:test';
@@ -22,14 +24,14 @@ import { dirname, join, extname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { stepEasyArm, EASY_ARM_HOLD_S, EASY_DISARM_HOLD_S, isLanded, armHintText } from '../sim-3d.js';
-import { wantsEasyTurtle, flipHintText } from '../sim-feel.js';
+import { wantsEasyTurtle, flipHintText, isStuckInverted } from '../sim-feel.js';
 import {
   AETR_MAP, ARM_SWITCH_PREFIX, AXIS_MAP_PREFIX, RADIO_PRESET_PREFIX, SWITCHES_PREFIX, GP_ID_KEY, sanitizeId,
   loadRadioSwitches, saveRadioSwitches, switchesAxisMap, auxNumberOfAxis, normalizeSwitches,
   SWITCH_WIZARD_STEPS, createSwitchWizard, stepSwitchWizard, skipSwitchWizard, switchWizardResult,
   defaultFlightMode, saveFlightMode, hasArmSwitch,
 } from '../sim-touch.js';
-import { switchAux, radioAux, auxRanges, createBfCore, armingFlagNames } from '../sim-core-adapter.js';
+import { switchAux, radioAux, auxRanges, createBfCore, armingFlagNames, WS } from '../sim-core-adapter.js';
 import { SimCore } from '../vendor/sim-core/sim-core.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -131,7 +133,7 @@ test('isLanded and the hint texts', () => {
   assert.equal(flipHintText({ easy: true, core: 'js', touch: true }), 'FLIPPED — FULL ROLL OR PITCH STICK · OR RESPAWN');
 });
 
-test('easy turtle: upside down at rest, a full roll or pitch stick, armed or not, any throttle', () => {
+test('easy turtle: at rest and not upright, a full roll or pitch stick, armed or not, any throttle', () => {
   const rest = { upZ: -1, clearanceM: 0.01, speed: 0, omega: 0, threeD: false, r: 1, p: 0 };
   assert.equal(wantsEasyTurtle(rest), true, 'full right roll');
   assert.equal(wantsEasyTurtle({ ...rest, r: -1 }), true, 'full left roll');
@@ -139,6 +141,13 @@ test('easy turtle: upside down at rest, a full roll or pitch stick, armed or not
   assert.equal(wantsEasyTurtle({ ...rest, r: 0, p: -1 }), true, 'full pitch back');
   assert.equal(wantsEasyTurtle({ ...rest, r: 0.5 }), false, 'half a stick');
   assert.equal(wantsEasyTurtle({ ...rest, upZ: 1 }), false, 'upright');
+  assert.equal(wantsEasyTurtle({ ...rest, upZ: -0.788 }), true, 'tipped onto a duct edge');
+  assert.equal(wantsEasyTurtle({ ...rest, upZ: 0 }), true, 'square on its side');
+  assert.equal(wantsEasyTurtle({ ...rest, upZ: 0.49 }), true, 'just past 60 degrees of tilt');
+  assert.equal(wantsEasyTurtle({ ...rest, upZ: 0.51 }), false, 'nearly upright: it stays as it is');
+  const sideways = { upZ: 0, clearanceM: 0.01, speed: 0, omega: 0 };
+  assert.equal(isStuckInverted({ ...sideways, easy: true }), true, 'Easy mode names the way out on its side');
+  assert.equal(isStuckInverted(sideways), false, 'off Easy mode, only on its back');
   assert.equal(wantsEasyTurtle({ ...rest, clearanceM: 1 }), false, 'in the air');
   assert.equal(wantsEasyTurtle({ ...rest, speed: 2 }), false, 'still sliding');
   assert.equal(wantsEasyTurtle({ ...rest, omega: 9 }), false, 'still tumbling');
@@ -378,6 +387,79 @@ test('bf core: re-armed at idle in angle, it rests upright; a lost estimate wait
   assert.ok(minUp > 0.95, `stays upright (lowest up Z ${minUp.toFixed(3)})`);
 });
 
+// At rest on each side, on the floor and on a slab. A free Air65 does not stay
+// square on its side: it tips onto a duct edge, 38 degrees off its back.
+const HALF = Math.SQRT1_2;
+const RESTS = [
+  ['its right side', { x: HALF, y: 0, z: 0, w: HALF }],
+  ['its left side', { x: -HALF, y: 0, z: 0, w: HALF }],
+  ['its nose', { x: 0, y: HALF, z: 0, w: HALF }],
+  ['its tail', { x: 0, y: -HALF, z: 0, w: HALF }],
+  ['its back', { x: 1, y: 0, z: 0, w: 0 }],
+];
+const SURFACES = [
+  ['the floor', [], 0],
+  ['a slab', [{ min: [-1, -1, 0], max: [1, 1, 0.3] }], 0.3],
+];
+
+async function restRig(q, boxes, top) {
+  const core = await createBfCore({
+    SimCore,
+    wasm: readFileSync(join(root, 'vendor/sim-core/sim-core.wasm')),
+    airframe: JSON.parse(readFileSync(join(root, 'vendor/sim-core/airframes/air65.json'), 'utf8')),
+    diff: DIFF,
+    world: { floorZ: 0, boxes },
+  });
+  core.setMode('acro');
+  const rig = { core, stick: { r: 0, p: 0, y: 0, t: 0 }, events: [], wall: 0, each: null };
+  rig.upZ = () => { const [, x, y] = core.sim.state.quat; return 1 - 2 * (x * x + y * y); };
+  rig.run = (ms) => {
+    for (const end = rig.wall + ms; rig.wall < end; rig.wall += 4) {
+      const tUs = core.stamp(rig.wall);
+      if (core.turtlePhase) { const e = core.stepTurtle(true, true); if (e) rig.events.push(e); }
+      if (tUs !== null) core.input(rig.stick, tUs);
+      if (rig.wall % 16 === 0) { core.advance(16); core.anchor(rig.wall); }
+      if (rig.each) rig.each();
+    }
+  };
+  rig.run(400);
+  core.teleport({ x: 0, y: 0, z: top + 0.1 }, q);
+  rig.run(1500);
+  return rig;
+}
+
+for (const [where, boxes, top] of SURFACES) {
+  for (const [pose, q] of RESTS) {
+    for (const [stick, r, p] of [['a full roll', 1, 0], ['a full pitch', 0, -1]]) {
+      test(`bf core, at rest on ${pose} on ${where}: ${stick} brings it back and re-arms it`, async () => {
+        const rig = await restRig(q, boxes, top);
+        const s = rig.core.sim.state;
+        assert.ok(rig.upZ() < 0.5, `not upright (up Z ${rig.upZ().toFixed(3)})`);
+        assert.ok(s.groundClearance <= 0.04, `on the surface (${s.groundClearance.toFixed(3)} m)`);
+        assert.ok(Math.hypot(...s.omega) < 0.1, 'at rest');
+        assert.equal(rig.core.startEasyTurtle(r, p), true);
+        const out = toFlyable(rig);
+        assert.deepEqual(rig.events, ['flip', 'upright', 'rearm']);
+        assert.ok(out.ms !== null && out.ms < 300, `upright to flyable: ${out.ms} ms`);
+        assert.ok(rig.upZ() > 0.9, `upright (${rig.upZ().toFixed(3)})`);
+        assert.equal(rig.core.getState().armed, true, flags(rig.core));
+        assert.ok(Math.abs(s.pos[2] - top) < 0.05, `still on ${where} (z ${s.pos[2].toFixed(3)})`);
+      });
+    }
+  }
+}
+
+test('bf core: resting against a wall, on a duct and leaning on it, the stick brings it back', async () => {
+  const half = -75 * Math.PI / 360;
+  const rig = await restRig({ x: Math.sin(half), y: 0, z: 0, w: Math.cos(half) }, [{ min: [-1, 0.04, 0], max: [1, 0.24, 1] }], -0.025);
+  assert.ok(rig.upZ() > -0.7 && rig.upZ() < 0.5, `propped, neither upright nor on its back (up Z ${rig.upZ().toFixed(3)})`);
+  assert.equal(rig.core.startEasyTurtle(1, 0), true);
+  const out = toFlyable(rig);
+  assert.deepEqual(rig.events, ['flip', 'upright', 'rearm']);
+  assert.ok(out.ms < 300, `upright to flyable: ${out.ms} ms`);
+  assert.equal(rig.core.getState().armed, true, flags(rig.core));
+});
+
 test('bf core: rearm false lets go disarmed, for a radio on its switches', async () => {
   const rig = await quickRig({ mode: 'acro' });
   rig.core.startEasyTurtle(1, 0, false);
@@ -527,6 +609,64 @@ const PAGE = String.raw`(() => {
     if (c.kind === 'bf') await wait(1200);
     return rest;
   }
+  // Where to test a rest: open floor near the quad, and the widest slab in
+  // the map with nothing over it, in module metres (z: the surface).
+  function spots(ws) {
+    const bbs = s.colliders().filter((b) => !b.isEmpty());
+    const free = (x, z, top) => !bbs.some((b) => x > b.min.x - 0.4 * ws && x < b.max.x + 0.4 * ws && z > b.min.z - 0.4 * ws && z < b.max.z + 0.4 * ws
+      && b.max.y > top + 0.001 * ws && b.min.y < top + 1.2 * ws);
+    const mod = (x, y, z) => ({ x: -z / ws, y: -x / ws, z: y / ws });
+    const c = s.coreState().position, cx = -c.y * ws, cz = -c.x * ws;
+    let floor = null;
+    for (let r = 0.5; r < 20 && !floor; r += 0.5) {
+      for (let a = 0; a < 16 && !floor; a++) {
+        const x = cx + Math.cos(a * Math.PI / 8) * r * ws, z = cz + Math.sin(a * Math.PI / 8) * r * ws;
+        if (free(x, z, 0) && !bbs.some((b) => x > b.min.x && x < b.max.x && z > b.min.z && z < b.max.z)) floor = mod(x, 0, z);
+      }
+    }
+    let slab = null, best = 0;
+    for (const b of bbs) {
+      const w = b.max.x - b.min.x, d = b.max.z - b.min.z, h = b.max.y / ws;
+      if (w < 0.7 * ws || d < 0.7 * ws || h < 0.12 || h > 3) continue;
+      const x = (b.min.x + b.max.x) / 2, z = (b.min.z + b.max.z) / 2;
+      if (w * d > best && free(x, z, b.max.y)) { best = w * d; slab = mod(x, b.max.y, z); }
+    }
+    return { floor, slab };
+  }
+  // Put down at this attitude just over the surface: it settles as it will.
+  async function restOn(q, spot) {
+    const c = s.coreState(), z = spot.z + 0.1;
+    if (c.kind === 'bf') s.bfCore().teleport({ x: spot.x, y: spot.y, z }, q, { x: 0, y: 0, z: 0 });
+    else {
+      const p = window._qp;
+      p.position.x = spot.x; p.position.y = spot.y; p.position.z = z;
+      p.velocity.x = p.velocity.y = p.velocity.z = 0;
+      p.omega.x = p.omega.y = p.omega.z = 0;
+      p.quaternion = { ...q };
+    }
+    await wait(c.kind === 'bf' ? 600 : 250);
+    const w = () => { const o = s.coreState().omega; return Math.hypot(o.x, o.y, o.z); };
+    return until(() => upZ() < 0.5 && s.coreState().clearance <= 0.04 && speed() < 0.2 && w() < 1, 4000);
+  }
+  // A full stick on axis i: did it start, come upright and re-arm, and how long
+  // from upright to flyable (sim time on bf).
+  async function recover(i, v) {
+    const bf = s.coreState().kind === 'bf', b = bf ? s.bfCore() : null;
+    const busy = () => (bf ? b.turtlePhase !== null : !!s.easy().jsTurtle);
+    const clock = () => (bf ? b.simTimeUs / 1000 : performance.now());
+    const up0 = upZ();
+    axis(i, v);
+    const started = await until(busy, 2000);
+    let upT = null, flyT = null;
+    const flyable = await until(() => {
+      if (upT === null && (bf ? tickUp() : upZ()) > 0.9) upT = clock();
+      if (upT !== null && flyT === null && s.coreState().armed && !busy()) flyT = clock();
+      return flyT !== null;
+    }, 6000);
+    axis(i, 0);
+    await wait(120);
+    return { up0, started, flyable, ms: flyT - upT, up: upZ(), armed: s.coreState().armed, pos: { ...s.coreState().position }, map: s.map() };
+  }
   // A fall onto the floor at speed: a crash (the Rig's walls are foam: about
   // 20 m/s on the bf core).
   function drop() {
@@ -535,7 +675,7 @@ const PAGE = String.raw`(() => {
     if (c.kind === 'bf') s.bfCore().teleport({ x: c.position.x, y: c.position.y, z: 2.5 }, q, { x: 0, y: 0, z: -25 });
     else { window._qp.position.z = 2.5; window._qp.velocity.z = -40; }
   }
-  window.__easy = { s, wait, until, axis, thr, upZ, tickUp, speed, landed, fc, menus, state, flip, drop };
+  window.__easy = { s, wait, until, axis, thr, upZ, tickUp, speed, landed, fc, menus, state, flip, drop, spots, restOn, recover };
   return true;
 })()`;
 
@@ -1079,6 +1219,51 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         }
       });
     });
+
+    // Every rest, on both surfaces, in one session: no respawn between them.
+    for (const [core, query] of [['bf', ''], ['js', 'core=js']]) {
+      await t.test(`on the ${core} core: at rest on each side and its back, floor and slab, the stick recovers it with no restart`, async () => {
+        await pass(query, { core, pad: tx([0, 0, -1, 0, -1, -1, -1, -1]) }, async ({ js }) => {
+          const where = await js(`return JSON.stringify(E.spots(${WS}));`);
+          console.log(`${core} spots: ` + JSON.stringify(where));
+          assert.ok(where.floor, 'open floor found');
+          assert.ok(where.slab && where.slab.z > 0.1, 'a slab found');
+          // stick: which axis and way, across and along the side it lies on.
+          const sticks = [[0, 1], [1, 1], [0, -1], [1, -1], [0, 1]];
+          for (const [surface, spot] of [['the floor', where.floor], ['a slab', where.slab]]) {
+            let n = 0;
+            for (const [pose, q] of RESTS) {
+              const [i, v] = sticks[n++];
+              const r = await js(`
+                E.thr(0);
+                const rest = await E.restOn(${JSON.stringify(q)}, ${JSON.stringify(spot)});
+                const out = await E.recover(${i}, ${v});
+                return JSON.stringify({ rest, ...out });`);
+              const name = `${core}, ${pose} on ${surface}`;
+              console.log(`${name}: ` + JSON.stringify({ up0: +r.up0.toFixed(3), ms: Math.round(r.ms), up: +r.up.toFixed(3), armed: r.armed }));
+              assert.equal(r.rest, true, `${name}: at rest and not upright`);
+              assert.ok(r.up0 < 0.5, `${name}: not upright (${r.up0.toFixed(3)})`);
+              assert.equal(r.started, true, `${name}: the stick starts it`);
+              assert.equal(r.flyable, true, `${name}: upright and re-armed`);
+              assert.ok(r.ms < 300, `${name}: under 300 ms from upright to flyable (${Math.round(r.ms)} ms)`);
+              assert.ok(r.up > 0.9, `${name}: upright (${r.up.toFixed(3)})`);
+              assert.equal(r.armed, true, `${name}: armed`);
+              assert.ok(Math.hypot(r.pos.x - spot.x, r.pos.y - spot.y) < 0.6 && Math.abs(r.pos.z - spot.z) < 0.3, `${name}: where it lay, no respawn (${JSON.stringify(r.pos)})`);
+              assert.equal(r.map, 'rig', `${name}: same map`);
+            }
+            // And it flies from there, in the same session.
+            const f = await js(`
+              E.thr(0.6);
+              await E.wait(500);
+              const z = E.s.coreState().position.z;
+              E.thr(0);
+              await E.wait(300);
+              return JSON.stringify({ z, armed: E.s.coreState().armed });`);
+            assert.ok(f.z > spot.z + 0.2, `${core} flies off ${surface} (z ${f.z.toFixed(2)})`);
+          }
+        });
+      });
+    }
 
     await t.test('the keyboard on the bf core: W arms, S and 2 s disarm, an arrow turtles', async () => {
       await pass('map=rig', {}, async ({ js, key }) => {
