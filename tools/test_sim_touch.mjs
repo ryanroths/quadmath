@@ -96,23 +96,23 @@ test('throttle hold keeps Y; spring centers both axes', () => {
   assert.ok(Math.abs(throttleFromStickY(-1)) < 1e-9);
 });
 
-test('default flight mode is acro for a first visit', () => {
+test('default flight mode is angle for a first visit', () => {
   const empty = memStore();
   assert.equal(hasSavedSettings(empty), false);
-  assert.equal(defaultFlightMode(empty), 'acro');
-  assert.equal(loadFlightMode(empty), null);
-  saveFlightMode('angle', empty);
   assert.equal(defaultFlightMode(empty), 'angle');
+  assert.equal(loadFlightMode(empty), null);
+  saveFlightMode('acro', empty);
+  assert.equal(defaultFlightMode(empty), 'acro');
   assert.equal(hasSavedSettings(empty), true);
   assert.equal(toggleAcro('angle'), 'acro');
   assert.equal(toggleAcro('acro'), 'angle');
   assert.equal(toggleAcro('horizon'), 'acro');
 });
 
-test('saved rates without a flight-mode key still default to acro', () => {
+test('saved rates without a flight-mode key still default to angle', () => {
   const store = memStore({ ryflyRates: '{"type":"BETAFLIGHT"}' });
   assert.equal(hasSavedSettings(store), true);
-  assert.equal(defaultFlightMode(store), 'acro');
+  assert.equal(defaultFlightMode(store), 'angle');
 });
 
 test('auto quality is low on mobile; touch enable / landscape rules', () => {

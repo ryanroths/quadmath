@@ -681,7 +681,7 @@
 <div id="panel">
   <a id="panelHome" href="/">← Back to QuadMath</a>
   <h1>QUADMATH SIM</h1>
-  <div class="sub">acro by default. Throttle down, then up to fly · 1/2/3 mode · H HUD · touch sticks on phones</div>
+  <div class="sub">Angle on the keyboard, acro on a radio or gamepad. Throttle down, then up to fly · 1/2/3 mode · H HUD · touch sticks on phones</div>
 
   <h2>Radio</h2>
   <div class="kbd" id="radioInfo">no gamepad detected</div>
@@ -974,14 +974,14 @@ import {
   WS as CORE_WS, TICK_US, SAMPLE_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux,
   BF_CLASS_TUNES, bfClassDiff,
-} from "./sim-core-adapter.js?v=b6524b74c84f";
+} from "./sim-core-adapter.js?v=487334b3fc04";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
   parseThreeDQuery, runCountsForBoards, throttleHudText,
-  throttleCollective, armHintText, stepAutoArm, stepEasyArm, isLanded,
+  throttleCollective, armHintText, stepEasyArm, isLanded,
 } from "./sim-3d.js?v=aa32f62b4164";
 import {
   WHOOP_KEY, PHYSICS_VER, BOUNCE_MAPS,
@@ -989,7 +989,7 @@ import {
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=51206465bd01";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=f2bc5bb03546";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=2acfd5cb7b46";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -1007,18 +1007,18 @@ import {
 } from "./sim-art.js?v=401e3e00a35d";
 import {
   loadTouch, saveTouch,
-  detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
+  detectMobile, defaultFlightMode, loadFlightMode, saveFlightMode, toggleAcro,
   shouldEnableTouch, createTouchControls, guardPageGestures,
   sanitizeId, isRadio, radioScore, pickPreferredPad, RADIO_PRESETS,
   effectiveAxisMap, applyAxisMap, loadRadioProfile, saveAxisMap,
   saveRadioPreset, clearRadioCalibration, GP_ID_KEY, createCalibState, stepCalib, skipCalibAux,
   guessRadioPreset, isKnownRadio, radioShortName,
-  loadAutoArm, saveAutoArm, loadArmSwitch, saveArmSwitch, mergeArmSwitch,
+  loadAutoArm, saveAutoArm,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
   loadRadioSwitches, saveRadioSwitches, switchesAxisMap, auxNumberOfAxis,
   createSwitchWizard, stepSwitchWizard, skipSwitchWizard, switchWizardResult,
-} from "./sim-touch.js?v=c7ac352d037d";
+} from "./sim-touch.js?v=4244b831d10d";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -1039,7 +1039,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=2108fba17d3d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle} from "./sim-feel.js?v=8b317f3788b1";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle} from "./sim-feel.js?v=624c2fe678fc";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=826bc4bd463d";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -3489,7 +3489,6 @@ function placeQuadAt(x,y,z,yaw,opts){
   thrustActual=0; // motors spool from zero on re-arm — no thrust jump
   camShake=0;
   washState=emptyWake();
-  autoArmState={seenLow:false};
   easyArmState={};
   easyCrashAt=-Infinity;
   jsTurtle=null;
@@ -3563,9 +3562,7 @@ function newPack(){
 // stomp each other's profiles. Legacy global keys are deleted on load.
 // Maps / load-save live in sim-touch.js so a TX16S mock can unit-test them.
 let axisMap=null;
-let armOverlay=null;
 let autoArmOn=loadAutoArm();
-let autoArmState={seenLow:false};
 let armSwState={prev:null};
 let armSwitchBlocked=false;
 let armDetecting=false;
@@ -3583,12 +3580,10 @@ const EASY_CRASH_MEMORY_MS=3000;    // a crash still counts this long, while it 
 let switchWiz=null;                 // the "flip your switch" wizard while it runs
 function switchesOn(){return !!(gpConnected&&radioSwitches&&radioSwitches.on);}
 function easyMode(){return !switchesOn();}
-// The wizard's switches, not a migrated radio's: a function it skipped stays
-// the page's.
-function wizardSwitches(){return switchesOn()&&!radioSwitches.migrated;}
-function pageOwnsAngle(){return wizardSwitches()&&!radioSwitches.angle;}
+// What the wizard skipped stays the page's.
+function pageOwnsAngle(){return switchesOn()&&!radioSwitches.angle;}
 // Who turtles with the sticks: Easy mode, and a wizard with no turtle switch.
-function stickTurtleOn(){return easyMode()||(wizardSwitches()&&!radioSwitches.turtle);}
+function stickTurtleOn(){return easyMode()||!radioSwitches.turtle;}
 function setRadioSwitches(rec){
   radioSwitches=rec;
   if(gpName)saveRadioSwitches(gpName,rec);
@@ -3608,7 +3603,7 @@ function saveMap(){saveAxisMap(gpName,axisMap);}
 let radioPreset='auto'; // per-device — loaded by loadDeviceProfile() when a controller is selected
 function presetMap(){return RADIO_PRESETS[radioPreset].map;}
 function liveAxisMap(gp){
-  return switchesAxisMap(effectiveAxisMap(axisMap,radioPreset,gp),armOverlay,gpConnected?radioSwitches:null);
+  return switchesAxisMap(effectiveAxisMap(axisMap,radioPreset,gp),gpConnected?radioSwitches:null);
 }
 
 // Calibration wizard
@@ -4141,12 +4136,10 @@ function listPads(){
   return out;
 }
 function loadDeviceProfile(id,gp){
-  // First: a radio seen for the first time gets its preset saved below.
   radioSwitches=loadRadioSwitches(id);
   const prof=loadRadioProfile(id);
   radioPreset=prof.radioPreset;
   axisMap=prof.axisMap;
-  armOverlay=loadArmSwitch(id);
   // No saved calib: known radios (TX16S / EdgeTX / RadioMaster / Jumper / FrSky)
   // get Mode 2 AETR with full ±1 throttle. Wizard stays optional.
   if(!axisMap && gp && isKnownRadio(gp)){
@@ -4249,18 +4242,10 @@ function armSwitchKey(arm){
   if(Number.isFinite(arm.i))return 'a'+arm.i;
   return '';
 }
+// A switch picked here is "use my radio switches" with that arm; none is Easy
+// mode.
 function setArmFromUI(arm){
-  armOverlay=arm||null;
-  saveArmSwitch(gpName,armOverlay);
-  if(axisMap){
-    if(armOverlay)axisMap.arm=armOverlay;
-    else delete axisMap.arm;
-    saveAxisMap(gpName,axisMap);
-  }
-  // A switch picked here is "use my radio switches" with that arm; none is
-  // Easy mode.
-  if(radioSwitches)setRadioSwitches(Object.assign({},radioSwitches,{on:!!armOverlay,arm:armOverlay}));
-  armSwState={prev:null};
+  if(radioSwitches)setRadioSwitches(Object.assign({},radioSwitches,{on:!!arm,arm:arm||null}));
   fillArmSwitchUI(null,liveMap);
 }
 function fillArmSwitchUI(gp,map){
@@ -4268,7 +4253,7 @@ function fillArmSwitchUI(gp,map){
   const live=document.getElementById('armSwitchLive');
   const inv=document.getElementById('cbArmInvert');
   const auto=document.getElementById('cbAutoArm');
-  const merged=map||(gp?liveAxisMap(gp):switchesOn()?mergeArmSwitch(null,armOverlay):null);
+  const merged=map||(gp?liveAxisMap(gp):switchesOn()?{arm:radioSwitches.arm}:null);
   const arm=merged&&merged.arm;
   const has=hasArmSwitch(merged);
   if(auto){auto.checked=!!autoArmOn;auto.disabled=has;}
@@ -4369,9 +4354,6 @@ function readInput(dt){
     if(!stick.aux&&switchesOn()&&radioSwitches.angle){
       const m=armSwitchValue(gp,radioSwitches.angle)>0.5?'angle':'acro';
       if(m!==flightMode&&!threeD)setFlightMode(m,false);
-    }else if(map.mode&&feel&&!stick.aux){
-      const m=feel.modeFromAux(feel.auxValue(gp,map.mode));
-      if(m&&m!==flightMode)setFlightMode(m);
     }
     return;
   } else if(touchCtl&&touchCtl.enabled){
@@ -4398,7 +4380,7 @@ function readInput(dt){
 // stick turtle.
 function bfRadioAux(gp,map){
   if(core.kind!=='bf'||!switchesOn()||!padIsRadio(gp))return null;
-  if(wizardSwitches()&&!radioSwitches.turtle&&(core.turtlePhase!=null||bfWantsEasyTurtle()))return null;
+  if(!radioSwitches.turtle&&(core.turtlePhase!=null||bfWantsEasyTurtle()))return null;
   return switchAux(gp,map,radioSwitches,core.auxRanges,{mode:flightMode});
 }
 
@@ -4540,7 +4522,6 @@ function syncTouchModeBtn(){
 // The Controls toggles, wherever they are drawn (Tune, the menu's card).
 function switchesSummary(){
   if(!radioSwitches||!radioSwitches.on)return 'off';
-  if(radioSwitches.migrated)return (core.kind==='bf'?'ARM AUX'+(core.auxOf('arm')||'?')+' · TURTLE AUX'+(core.auxOf('flip')||'?')+' · ':'')+'your saved setup';
   const name=(key,label)=>{
     const n=pilotAux(key);
     return label+(n?' AUX'+n:' on');
@@ -4595,6 +4576,19 @@ function toggleFlightMode(){
   const order=['angle','horizon','acro'].filter(m=>core.kind!=='bf'||core.hasMode(m));
   setFlightMode(order[(order.indexOf(qp.flightMode)+1)%order.length]);
 }
+// No saved mode: Angle on the keyboard, Acro on a radio, a gamepad or touch
+// (sim-touch.js defaultFlightMode), following the input that flies now. A
+// saved mode and a ?mode= link stay.
+let flyingInput='keyboard';
+let modeFromLink=false;
+function followInputMode(){
+  const input=gpConnected||(touchCtl&&touchCtl.enabled)?'sticks':'keyboard';
+  if(input===flyingInput)return;
+  flyingInput=input;
+  if(modeFromLink||threeD||loadFlightMode())return;
+  const m=defaultFlightMode(undefined,input);
+  if(m!==flightMode)setFlightMode(m,false);
+}
 function setThreeD(on,persist){
   const want=!!on;
   // Refused while the bf core flies or is on its way; after a failed load the
@@ -4616,7 +4610,6 @@ function setThreeD(on,persist){
   const unsafe=coreArmed()&&!throttleSafeToArm(stick.t,want);
   if(unsafe){
     coreDisarm();
-    autoArmState={seenLow:false};
     easyArmState={};
   }
   let forcedAcro=false;
@@ -4711,18 +4704,9 @@ function tickArming(gp,dt){
     if(out.blocked)toast('Lower throttle to arm');
     else if(out.arm)tryArm();
     else if(out.disarm&&coreArmed()){coreDisarm();if(core.kind!=='bf')toast('DISARMED');}
-    autoArmState={seenLow:false};
   }else if(easyMode()){
     armSwitchBlocked=false;
     tickEasyArm(dt);
-  }else{
-    armSwitchBlocked=false;
-    const out=stepAutoArm(autoArmState,{
-      t:stick.t,threeD,armed:coreArmed(),
-      autoArm:autoArmOn,hasSwitch:false,
-    });
-    autoArmState=out.state;
-    if(out.arm)tryArm({fromAuto:true});
   }
   // The poll runs at 250 Hz; the panel's live readout needs ten.
   const nowMs=performance.now();
@@ -4734,6 +4718,7 @@ function tickArming(gp,dt){
 let armUiAt=0;
 // Easy mode's arm and disarm, from the sticks alone (sim-3d.js stepEasyArm).
 function tickEasyArm(dt){
+  if(core.kind==='bf'&&core.turtlePhase!=null)return; // an F flip or an arm while flipped: armed, upside down, not a crash
   const speed=Math.hypot(cs.velocity.x,cs.velocity.y,cs.velocity.z);
   const omega=Math.hypot(cs.omega.x,cs.omega.y,cs.omega.z);
   const flipped=!threeD&&bodyUpZ(cs.quaternion)<-0.35&&cs.clearance<=0.04;
@@ -5901,7 +5886,7 @@ function wireLooksUI(){
   };
   document.getElementById('menuHowTo').onclick=()=>{
     showMenuLayer('<h2>How to</h2><ol>'+
-      '<li>Throttle down for a second, then up, arms and flies. Space arms too. Upside down, a full roll or pitch stick flips it back. Acro by default; angle is a toggle in Controls (1 / 2 / 3 = Angle / Horizon / Acro). 3D (Tune panel) is reversible-motor acro — center throttle is zero, below center inverts thrust. 3D runs are not counted on boards.</li>'+
+      '<li>Throttle down for a second, then up, arms and flies. Space arms too. Upside down, a full roll or pitch stick flips it back. Angle on the keyboard, acro on a radio or gamepad; angle is a toggle in Controls (1 / 2 / 3 = Angle / Horizon / Acro). 3D (Tune panel) is reversible-motor acro — center throttle is zero, below center inverts thrust. 3D runs are not counted on boards.</li>'+
       '<li>How to → Start tutorial: hover, three gates, land (about two minutes, skippable).</li>'+
       '<li>R respawns at the last gate you passed. H toggles the stick HUD.</li>'+
       '<li>Fly the lit gate. A 3-lap run starts at gate 1. Splits per gate; missed gates add +2.0s.</li>'+
@@ -6124,7 +6109,7 @@ document.getElementById('cb3d').onchange=e=>{
 document.getElementById('cbAutoArm').onchange=e=>{
   autoArmOn=!!e.target.checked;
   saveAutoArm(autoArmOn);
-  autoArmState={seenLow:false};
+  easyArmState={};
   toast(autoArmOn?'AUTO-ARM ON':'AUTO-ARM OFF');
 };
 (function(){const el=document.getElementById('cbAutoArm');if(el)el.checked=!!autoArmOn;})();
@@ -6139,8 +6124,7 @@ document.getElementById('armSwitch').onchange=e=>{
   toast('ARM SWITCH SET');
 };
 document.getElementById('cbArmInvert').onchange=e=>{
-  if(!armOverlay&&!(liveMap&&liveMap.arm))return;
-  const cur=(liveMap&&liveMap.arm)||armOverlay;
+  const cur=liveMap&&liveMap.arm;
   if(!cur)return;
   setArmFromUI(Object.assign({},cur,{sign:e.target.checked?-1:1}));
 };
@@ -8248,6 +8232,7 @@ function enableTouchLayer(on){
   touchCtl.setEnabled(!!on);
   touchCtl.syncLandscape(touchViewport());
   document.body.classList.toggle('touch-on',!!on);
+  followInputMode();
 }
 function syncTouchSettingsUI(s){
   const st=s||(touchCtl?touchCtl.settings:loadTouch());
@@ -8310,7 +8295,7 @@ feel=createFeel({
       enableTouchLayer(false);
       return;
     }
-    setFlightMode(defaultFlightMode(),false);toast('TOUCH STICKS — THROTTLE UP TO FLY');enableTouchLayer(true);
+    setFlightMode(defaultFlightMode(undefined,'sticks'),false);toast('TOUCH STICKS — THROTTLE UP TO FLY');enableTouchLayer(true);
   },
   onToggleAcro(){setFlightMode(toggleAcro(qp.flightMode||flightMode));},
   onToggleThreeD(){setThreeD(!threeD);},
@@ -8450,6 +8435,7 @@ function applyQueryBoot(){
     // Saved/query 3D stays acro. Do not let ?mode=angle overwrite that.
     if(!(threeD && modeRaw!=='acro')){
       flightMode=setFlightMode(modeRaw,false);
+      modeFromLink=true;
     }
   }
   const presetRaw=q.get('preset');

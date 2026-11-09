@@ -169,25 +169,6 @@ export function saveInputChoice(v) {
   try { localStorage.setItem(INPUT_CHOICE_KEY, v); } catch (e) { /* ignore */ }
 }
 
-export function auxValue(gp, map) {
-  if (!gp || !map) return null;
-  if (map.button != null) {
-    const b = gp.buttons && gp.buttons[map.button];
-    if (!b) return 0;
-    return (b.pressed || b.value > 0.5) ? 1 : -1;
-  }
-  if (map.i == null) return null;
-  const v = gp.axes[map.i];
-  return typeof v === 'number' ? v * (map.sign || 1) : 0;
-}
-
-export function modeFromAux(v) {
-  if (v == null || Number.isNaN(v)) return null;
-  if (v < -0.33) return 'angle';
-  if (v > 0.33) return 'acro';
-  return 'horizon';
-}
-
 export function applyRatePreset(rates, name) {
   const p = RATE_PRESETS[name];
   if (!p || !rates) return false;
@@ -730,7 +711,5 @@ export function createFeel(ctx) {
     applyRatePreset,
     loadInputChoice,
     saveInputChoice,
-    auxValue,
-    modeFromAux,
   };
 }

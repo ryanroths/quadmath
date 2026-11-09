@@ -255,8 +255,6 @@ test('Coach on the Rig in the page: the picker, six drills on their pads, the tu
     })()`);
     await sleep(300);
     await cdp(ws, 'Page.bringToFront');
-    // The autopilot flies angle-mode sticks; the page's default is acro.
-    await press(ws, '1', 'Digit1', 49);
     let armed = null;
     for (let k = 0; k < 3 && !(armed && armed.armed); k++) {
       await press(ws, ' ', 'Space', 32);

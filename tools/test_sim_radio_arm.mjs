@@ -92,7 +92,7 @@ function killTree(child) {
 // TX16S axes (EdgeTX AETR: roll, pitch, throttle, yaw, then AUX1..AUX4); both
 // live in sessionStorage, so a reload keeps them.
 const FAKE_PADS = String.raw`(() => {
-  try { localStorage.setItem(${JSON.stringify(SWITCHES_PREFIX + sanitizeId(TX_ID))}, JSON.stringify({ on: true })); } catch (e) { /* about:blank */ }
+  try { localStorage.setItem(${JSON.stringify(SWITCHES_PREFIX + sanitizeId(TX_ID))}, JSON.stringify({ on: true, arm: { i: 4, sign: 1 }, turtle: { i: 6, sign: 1 }, angle: { i: 5, sign: 1 } })); } catch (e) { /* about:blank */ }
   const KEY = '__fakePads';
   let saved = null;
   try { saved = JSON.parse(sessionStorage.getItem(KEY)); } catch (e) { /* none */ }

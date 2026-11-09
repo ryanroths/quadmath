@@ -408,14 +408,13 @@ const switchOn = (gp, s) => {
 // with the pilot's own switches (sim-touch.js normalizeSwitches) moved onto
 // the channels the loaded config's boxes listen on (ranges, auxRanges), so a
 // radio with its ARM on AUX4 arms a diff that has ARM on AUX1. A switch
-// already on its box's channel, the right way up, goes through untouched, and
-// a migrated radio's unpicked boxes stay as they are: an owner's radio on an
-// owner's diff is radioAux, value for value. A skipped angle takes the page's
-// flight mode (page.mode); a skipped turtle's box stays off.
+// already on its box's channel, the right way up, goes through untouched: an
+// owner's radio on an owner's diff is radioAux, value for value. A skipped
+// angle takes the page's flight mode (page.mode); a skipped turtle's box stays
+// off.
 export function switchAux(gp, map, switches, ranges, page = {}) {
   const base = radioAux(gp, map);
   const sw = switches;
-  if (!sw || (!sw.arm && !sw.turtle && !sw.angle)) return base;
   const out = base ? base.slice() : new Array(AUX_CHANNELS).fill(1000);
   const sticks = new Set(['r', 'p', 'y', 't'].map((k) => map[k] && map[k].i));
   const free = [];
@@ -432,7 +431,6 @@ export function switchAux(gp, map, switches, ranges, page = {}) {
     const name = PAGE_BOXES[r.box];
     if (!name) continue;
     const s = own[name];
-    if (!s && sw.migrated) continue;
     if (s && s.sign === 1 && Number.isFinite(s.i) && free[r.ch] === s.i) continue;
     out[r.ch] = paged[r.ch];
   }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim W6 — touch sticks, mobile boot, default flight mode.
-// Dual virtual sticks, deadzone/expo, acro-first newcomers, lazy-load hooks.
+// Dual virtual sticks, deadzone/expo, angle-first newcomers, lazy-load hooks.
 // Ideas only — nothing here is copied from WebFPV (GPL) or other simulators.
 // New localStorage keys: quadmathSimTouch, quadmathSimFlightMode,
 //   quadmathSimAutoArm, quadmathSimArm_<id>.
@@ -236,10 +236,10 @@ export function saveFlightMode(mode, storage) {
   catch (e) { /* ignore */ }
 }
 
-// First visit / no saved mode → acro (angle is a toggle in Controls). A stored
-// mode wins.
-export function defaultFlightMode(storage) {
-  return loadFlightMode(storage) || 'acro';
+// No saved mode: Angle on the keyboard, Acro on sticks (a radio, a gamepad,
+// touch: input 'sticks'). A stored mode wins.
+export function defaultFlightMode(storage, input) {
+  return loadFlightMode(storage) || (input === 'sticks' ? 'acro' : 'angle');
 }
 
 export function toggleAcro(current) {
@@ -735,20 +735,18 @@ export function mergeArmSwitch(map, arm) {
 }
 
 // ---- "Use my radio switches", per radio ----
-// { on, migrated, arm, turtle, angle }. Off (the default) is Easy mode: the
-// page arms, turtles and picks the flight mode whatever the radio's switches
-// do. On: arm, turtle and angle are each { i, sign } or { button, sign } from
-// the wizard, or null where it was skipped (a skipped turtle stays on the
-// sticks, a skipped angle stays a toggle in Controls).
-// migrated: the radio flew before Easy mode, on its switches as they were. No
-// wizard picks; its channels go on as they always did (AUX1 arm, AUX2 angle,
-// AUX3 turtle on the owner's diffs, passed straight through on the bf core).
+// { on, arm, turtle, angle }. Off (the default, for every radio, saved or not)
+// is Easy mode: the page arms, turtles and picks the flight mode whatever the
+// radio's switches do. On: arm, turtle and angle are each { i, sign } or
+// { button, sign } from the wizard, or null where it was skipped (a skipped
+// turtle stays on the sticks, a skipped angle stays a toggle in Controls). On
+// needs an arm switch.
 export function normalizeSwitches(raw) {
   const r = raw && typeof raw === 'object' ? raw : {};
+  const arm = parseArmSwitch(r.arm);
   return {
-    on: !!r.on,
-    migrated: !!r.migrated,
-    arm: parseArmSwitch(r.arm),
+    on: !!r.on && !!arm,
+    arm,
     turtle: parseArmSwitch(r.turtle),
     angle: parseArmSwitch(r.angle),
   };
@@ -761,40 +759,21 @@ export function saveRadioSwitches(id, switches, storage) {
   catch (e) { /* ignore quota / private mode */ }
 }
 
-// A radio's record; made the first time the radio is seen, and never again.
-// No record and anything else saved for this radio from before Easy mode (a
-// preset, which every radio that ever connected has, a calibration or an arm
-// switch): it has been flying on its switches, so it stays on them. Call this
-// before anything saves a preset for a radio seen for the first time.
 export function loadRadioSwitches(id, storage) {
   const store = storeOf(storage);
   if (!store || !id) return normalizeSwitches(null);
-  const sid = sanitizeId(id);
-  let rec = null;
-  try {
-    const raw = store.getItem(SWITCHES_PREFIX + sid);
-    if (raw) return normalizeSwitches(JSON.parse(raw));
-    const flew = [RADIO_PRESET_PREFIX, AXIS_MAP_PREFIX, ARM_SWITCH_PREFIX].some((p) => store.getItem(p + sid) != null);
-    rec = normalizeSwitches({ on: flew, migrated: flew });
-  } catch (e) {
-    rec = normalizeSwitches(null);
-  }
-  saveRadioSwitches(id, rec, store);
-  return rec;
+  try { return normalizeSwitches(JSON.parse(store.getItem(SWITCHES_PREFIX + sanitizeId(id)))); }
+  catch (e) { return normalizeSwitches(null); }
 }
 
-// The stick map the page reads: Easy mode has no arm or mode switch, even
-// where a calibration saved them; the switches' own arm wins when on.
-export function switchesAxisMap(base, armOverlay, switches) {
-  if (!switches || !switches.on) {
-    if (!base || (!base.arm && !base.mode)) return base;
-    const sticks = Object.assign({}, base);
-    delete sticks.arm;
-    delete sticks.mode;
-    return sticks;
-  }
-  if (switches.arm) return Object.assign({}, base, { arm: switches.arm });
-  return hasArmSwitch(base) ? base : mergeArmSwitch(base, armOverlay);
+// The stick map the page reads: the sticks, and the arm switch when the
+// radio's switches are on. A calibration's saved arm and mode are not used.
+export function switchesAxisMap(base, switches) {
+  const map = Object.assign({}, base);
+  delete map.arm;
+  delete map.mode;
+  if (switches && switches.on) map.arm = switches.arm;
+  return map;
 }
 
 // The AUX number a gamepad axis goes to Betaflight as (radioAux: the axes the

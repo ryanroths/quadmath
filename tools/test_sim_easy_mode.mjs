@@ -1,17 +1,16 @@
 // Easy mode, the default for every input on every core.
 //   - In node: the throttle arm and disarm (sim-3d.js stepEasyArm), the stick
 //     turtle (sim-feel.js wantsEasyTurtle), the "flip your switch" wizard and
-//     the per-radio save and migration (sim-touch.js), and the switches moved
+//     the per-radio save (sim-touch.js), and the switches moved
 //     onto the diff's channels (sim-core-adapter.js switchAux).
 //   - In headless Chrome (fresh profile each): a fake TX16S with ARM on AUX4,
 //     its AUX1 and AUX3 resting high. From the page opening to flying in the
 //     Rig with no menu; arms by throttle, flies, disarms on the 2 s rule and
 //     after a crash, turtles by roll and by pitch stick (the page on
 //     Betaflight's turtle channel). The wizard on that radio, saved per radio.
-//     A profile saved before Easy mode (AUX1 arm, AUX3 turtle) migrates to
-//     switches-on and its channels pass through unchanged. And the other
-//     input and core pairs: the radio on ?core=js, the keyboard on both cores,
-//     a gamepad, touch.
+//     A profile saved before Easy mode starts in Easy mode like any other. And
+//     the other input and core pairs: the radio on ?core=js, the keyboard on
+//     both cores (Angle by default; F still flips), a gamepad, touch.
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,7 +24,7 @@ import { stepEasyArm, EASY_ARM_HOLD_S, EASY_DISARM_HOLD_S, isLanded, armHintText
 import { wantsEasyTurtle, flipHintText } from '../sim-feel.js';
 import {
   AETR_MAP, ARM_SWITCH_PREFIX, AXIS_MAP_PREFIX, RADIO_PRESET_PREFIX, SWITCHES_PREFIX, GP_ID_KEY, sanitizeId,
-  loadRadioSwitches, saveRadioSwitches, switchesAxisMap, auxNumberOfAxis,
+  loadRadioSwitches, saveRadioSwitches, switchesAxisMap, auxNumberOfAxis, normalizeSwitches,
   SWITCH_WIZARD_STEPS, createSwitchWizard, stepSwitchWizard, skipSwitchWizard, switchWizardResult,
   defaultFlightMode, saveFlightMode, hasArmSwitch,
 } from '../sim-touch.js';
@@ -144,11 +143,15 @@ test('easy turtle: upside down at rest, a full roll or pitch stick, armed or not
   assert.equal(wantsEasyTurtle({ ...rest, threeD: true }), false, '3D has no turtle');
 });
 
-test('acro is the first-visit flight mode; a saved one wins', () => {
+test('the first-visit flight mode: Angle on the keyboard, Acro on sticks; a saved one wins', () => {
   const store = memStore();
-  assert.equal(defaultFlightMode(store), 'acro');
+  assert.equal(defaultFlightMode(store, 'keyboard'), 'angle');
+  assert.equal(defaultFlightMode(store, 'sticks'), 'acro');
+  assert.equal(defaultFlightMode(store), 'angle', 'no input named: the keyboard');
+  saveFlightMode('acro', store);
+  assert.equal(defaultFlightMode(store, 'keyboard'), 'acro');
   saveFlightMode('angle', store);
-  assert.equal(defaultFlightMode(store), 'angle');
+  assert.equal(defaultFlightMode(store, 'sticks'), 'angle');
 });
 
 // A TX16S's HID report; axes 4..7 are AUX1..AUX4.
@@ -180,7 +183,7 @@ test('the wizard: channel and direction of each switch, turtle and angle skippab
   assert.deepEqual(w.picks.turtle, { i: 4, sign: -1 }, 'direction: the end it was flipped to');
   const out = skipSwitchWizard(w, pad(axes));
   assert.equal(out.done, true, 'angle skipped');
-  assert.deepEqual(switchWizardResult(w), { on: true, migrated: false, arm: { i: 7, sign: 1 }, turtle: { i: 4, sign: -1 }, angle: null });
+  assert.deepEqual(switchWizardResult(w), { on: true, arm: { i: 7, sign: 1 }, turtle: { i: 4, sign: -1 }, angle: null });
 });
 
 test('the wizard: sticks are never a switch, no switch twice, a slow switch and a 3-position switch', () => {
@@ -207,11 +210,9 @@ test('the wizard: sticks are never a switch, no switch twice, a slow switch and 
   assert.deepEqual(w3.picks.arm, { button: 2, sign: 1 });
 });
 
-test('saved per radio: a radio seen for the first time is off, and stays off once its preset is saved', () => {
+test('saved per radio: a radio seen for the first time is off', () => {
   const store = memStore();
-  assert.deepEqual(loadRadioSwitches(TX, store), { on: false, migrated: false, arm: null, turtle: null, angle: null });
-  store.setItem(RADIO_PRESET_PREFIX + SID, 'radiomaster'); // what selectPad then saves
-  assert.equal(loadRadioSwitches(TX, store).on, false, 'still off: this is not a radio from before Easy mode');
+  assert.deepEqual(loadRadioSwitches(TX, store), { on: false, arm: null, turtle: null, angle: null });
   saveRadioSwitches(TX, { on: true, arm: { i: 7, sign: 1 } }, store);
   assert.equal(loadRadioSwitches(TX, store).on, true);
   assert.deepEqual(loadRadioSwitches(TX, store).arm, { i: 7, sign: 1 });
@@ -219,12 +220,9 @@ test('saved per radio: a radio seen for the first time is off, and stays off onc
   assert.equal(loadRadioSwitches(TX, store).on, true);
 });
 
-// The shapes main saved for a radio. On the bf core main passed AUX straight
-// through (radioAux), so a pilot's AUX1 arm and AUX3 turtle are stored nowhere
-// as such: what localStorage holds is the radio's preset, its calibration
-// (ryflyAxisMap_<id>: the sticks plus arm and mode, written by the wizard's
-// ARM and MODE steps or the Tune arm picker) and its arm switch
-// (quadmathSimArm_<id>).
+// What an older page saved for a radio: its preset, its calibration
+// (ryflyAxisMap_<id>: the sticks plus arm and mode) and its arm switch
+// (quadmathSimArm_<id>). None of it turns the radio's switches on.
 const CAL_MAP = { r: { i: 0, sign: 1 }, p: { i: 1, sign: 1 }, y: { i: 3, sign: 1 }, t: { i: 2, min: -1, max: 1 }, arm: { i: 4, sign: 1 }, mode: { i: 5, sign: 1 }, ver: 2 };
 const SAVED = {
   'preset only (every radio that ever connected)': { [RADIO_PRESET_PREFIX + SID]: 'radiomaster' },
@@ -232,34 +230,31 @@ const SAVED = {
   'calibrated, arm and mode saved': { [RADIO_PRESET_PREFIX + SID]: 'custom', [AXIS_MAP_PREFIX + SID]: JSON.stringify(CAL_MAP), [ARM_SWITCH_PREFIX + SID]: JSON.stringify({ i: 4, sign: 1 }) },
 };
 
-test('migration: a radio saved before Easy mode goes to switches-on, once', () => {
+test('no migration: a radio saved before Easy mode starts in Easy mode', () => {
   for (const [name, init] of Object.entries(SAVED)) {
     const store = memStore({ [GP_ID_KEY]: TX, ...init });
-    const rec = loadRadioSwitches(TX, store);
-    assert.deepEqual(rec, { on: true, migrated: true, arm: null, turtle: null, angle: null }, name);
-    assert.ok(store.getItem(SWITCHES_PREFIX + SID), `${name}: written`);
-    saveRadioSwitches(TX, { ...rec, on: false }, store);
-    assert.equal(loadRadioSwitches(TX, store).on, false, `${name}: switched off stays off, never migrated again`);
+    assert.deepEqual(loadRadioSwitches(TX, store), { on: false, arm: null, turtle: null, angle: null }, name);
+    assert.equal(hasArmSwitch(switchesAxisMap(CAL_MAP, loadRadioSwitches(TX, store))), false, `${name}: its saved arm switch is not used`);
   }
-  assert.equal(loadRadioSwitches(TX, memStore({ [GP_ID_KEY]: ZORRO })).on, false, "another radio's id is not this radio's setup");
+  assert.equal(normalizeSwitches({ on: true }).on, false, 'on needs an arm switch');
 });
 
-test('the stick map: Easy mode has no arm or mode switch, even from a calibration; switches on keep them', () => {
-  const off = switchesAxisMap(CAL_MAP, { i: 6, sign: 1 }, { on: false });
+test('the stick map: no arm or mode switch from a calibration; the wizard\'s arm when switches are on', () => {
+  const off = switchesAxisMap(CAL_MAP, { on: false });
   assert.equal(hasArmSwitch(off), false);
   assert.equal(off.mode, undefined);
   assert.equal(off.t.i, 2, 'sticks kept');
   assert.equal(CAL_MAP.arm.i, 4, 'the saved map is not touched');
-  assert.equal(switchesAxisMap(CAL_MAP, null, { on: true, migrated: true }), CAL_MAP, 'migrated: as it was');
-  assert.deepEqual(switchesAxisMap(AETR_MAP, { i: 6, sign: 1 }, { on: true, migrated: true }).arm, { i: 6, sign: 1 }, 'its Tune arm switch');
-  assert.deepEqual(switchesAxisMap(CAL_MAP, null, { on: true, arm: { i: 7, sign: -1 } }).arm, { i: 7, sign: -1 }, 'a wizard switch wins');
+  const on = switchesAxisMap(CAL_MAP, { on: true, arm: { i: 7, sign: -1 } });
+  assert.deepEqual(on.arm, { i: 7, sign: -1 }, 'the wizard\'s switch');
+  assert.equal(on.mode, undefined, 'a skipped angle stays the Controls toggle');
   assert.equal(auxNumberOfAxis(AETR_MAP, 7), 4, 'axis 7 is AUX4');
   assert.equal(auxNumberOfAxis(AETR_MAP, 2), null, 'a stick');
 });
 
 test('switchAux: ARM on AUX4 reaches ARM on AUX1; the owner\'s layout passes through value for value', () => {
   const ranges = auxRanges(DIFF);
-  const sw = { on: true, migrated: false, arm: { i: 7, sign: 1 }, turtle: { i: 5, sign: 1 }, angle: null };
+  const sw = { on: true, arm: { i: 7, sign: 1 }, turtle: { i: 5, sign: 1 }, angle: null };
   // AUX1 rests high on this radio. ARM off: Betaflight's AUX1 low, whatever AUX1 does.
   let aux = switchAux(pad(REST), AETR_MAP, sw, ranges, { mode: 'acro' });
   assert.equal(aux[0], 1000, 'ARM off');
@@ -273,11 +268,11 @@ test('switchAux: ARM on AUX4 reaches ARM on AUX1; the owner\'s layout passes thr
   const rev = { ...sw, arm: { i: 7, sign: -1 } };
   assert.equal(switchAux(pad(REST), AETR_MAP, rev, ranges, {})[0], 2000, 'direction: armed at the low end');
   assert.equal(switchAux(pad(withAxis(REST, 7, 1)), AETR_MAP, rev, ranges, {})[0], 1000);
-  // The owner's radio, migrated (no picks): exactly radioAux, half-way values included.
+  // The owner's layout through the wizard (AUX1 arm, AUX2 angle, AUX3 turtle):
+  // exactly radioAux, half-way values included.
   const owner = [0, 0, -1, 0, 0.42, 1, -0.3, 1];
-  assert.deepEqual(switchAux(pad(owner), AETR_MAP, { on: true, migrated: true }, ranges, {}), radioAux(pad(owner), AETR_MAP));
-  // Migrated with a Tune arm pick on AUX1: still verbatim.
-  assert.deepEqual(switchAux(pad(owner), AETR_MAP, { on: true, migrated: true, arm: { i: 4, sign: 1 } }, ranges, {}), radioAux(pad(owner), AETR_MAP));
+  const picks = { on: true, arm: { i: 4, sign: 1 }, angle: { i: 5, sign: 1 }, turtle: { i: 6, sign: 1 } };
+  assert.deepEqual(switchAux(pad(owner), AETR_MAP, picks, ranges, {}), radioAux(pad(owner), AETR_MAP));
   // A radio with its switches as buttons: no AUX axes at all.
   const buttons = pad([0, 0, -1, 0], [1, 0]);
   const b = switchAux(buttons, AETR_MAP, { on: true, arm: { button: 0, sign: 1 } }, ranges, {});
@@ -681,7 +676,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.equal(r.skip, '', 'the turtle has a skip');
         assert.match(r.step2, /FLIP YOUR ANGLE SWITCH/);
         assert.equal(r.calib, false, 'done');
-        assert.deepEqual(r.saved, { on: true, migrated: false, arm: { i: 7, sign: 1 }, turtle: { i: 4, sign: -1 }, angle: null }, 'saved: channels and directions');
+        assert.deepEqual(r.saved, { on: true, arm: { i: 7, sign: 1 }, turtle: { i: 4, sign: -1 }, angle: null }, 'saved: channels and directions');
         assert.equal(r.st.easy, false, 'off Easy mode');
 
         // Flying it: ARM on AUX4, onto the diff's AUX1. AUX1 (the turtle now) is low = on.
@@ -765,7 +760,6 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           return JSON.stringify({ st, armed, saved: JSON.parse(localStorage.getItem(${JSON.stringify(KEY_TX)})) });`);
         assert.equal(r.st.easy, true);
         assert.equal(r.saved.on, false);
-        assert.deepEqual(r.saved.arm, { i: 7, sign: 1 }, 'its picks kept');
         assert.equal(r.armed, true, 'arms by throttle again');
 
         // The wizard again, turtle and angle skipped: the stick still turtles.
@@ -809,10 +803,18 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           document.getElementById('menuFly').click();
           await E.wait(200);
           const before = E.menus();
+          const kbMode = E.state().flight;
           Object.assign(window.__pads, { on: true, id: ${JSON.stringify(TX)}, mapping: '', axes: [0, 0, -1, 0, -1, -1, -1, -1], buttons: 0 });
           window.dispatchEvent(new Event('gamepadconnected'));
           await E.wait(500);
-          return JSON.stringify({ before, st: E.state() });`);
+          const st = E.state();
+          window.__pads.on = false;
+          window.dispatchEvent(new Event('gamepaddisconnected'));
+          await E.wait(300);
+          return JSON.stringify({ before, kbMode, st, unplugged: E.state().flight });`);
+        assert.equal(r.kbMode, 'angle', 'no radio yet: the keyboard\'s Angle');
+        assert.equal(r.st.flight, 'acro', 'the radio: Acro');
+        assert.equal(r.unplugged, 'angle', 'unplugged: Angle again');
         assert.equal(r.before.layer, true, 'no radio seen yet: the map menu');
         assert.deepEqual(r.st.menus, { start: false, looks: false, layer: false, prompt: false, picker: false }, 'closed by the radio');
         assert.equal(r.st.map, 'rig');
@@ -820,65 +822,40 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
       });
     });
 
-    await t.test('a profile saved before Easy mode (AUX1 arm, AUX3 turtle): switches on, nothing changes', async () => {
+    await t.test('a profile saved before Easy mode (calibrated, AUX1 arm saved): starts in Easy mode', async () => {
       const saved = {
         [GP_ID_KEY]: TX,
         [RADIO_PRESET_PREFIX + SID]: 'custom',
         [AXIS_MAP_PREFIX + SID]: JSON.stringify(CAL_MAP),
         [ARM_SWITCH_PREFIX + SID]: JSON.stringify({ i: 4, sign: 1 }),
         quadmathSimInputChoice: 'radio',
+        quadmathSimFlightMode: 'angle',
       };
       await pass('', { storage: saved, pad: tx([0, 0, -1, 0, -1, -1, -1, -1]) }, async ({ js, reload }) => {
         let r = await js(`await E.wait(800); return JSON.stringify(E.state());`);
-        console.log('migrated: ' + JSON.stringify(r.switches) + ' ' + r.rc);
-        assert.deepEqual(r.switches, { on: true, migrated: true, arm: null, turtle: null, angle: null }, 'switches on');
-        assert.equal(r.easy, false);
-        assert.equal(r.source, 'radio', 'AUX pass through');
-        // A half-way value too: it goes through as sent.
+        console.log('saved profile: ' + JSON.stringify(r.switches) + ' ' + r.rc);
+        assert.deepEqual(r.switches, { on: false, arm: null, turtle: null, angle: null }, 'switches off');
+        assert.equal(r.easy, true, 'Easy mode');
+        assert.equal(r.source, 'page', 'the page drives AUX');
+        assert.equal(r.flight, 'angle', 'a saved flight mode still wins');
+        // Its saved AUX1 arm switch does nothing; the throttle arms.
         r = await js(`
-          E.axis(5, 0.5);
-          await E.wait(120);
-          const half = E.state().rc[1];
-          E.axis(5, -1);
           E.thr(0);
           await E.wait(1300);
-          E.thr(0.5);
-          await E.wait(500);
-          const thrUp = E.state();
-          E.thr(0);
-          await E.wait(800);
           E.axis(4, 1);
-          const armed = await E.until(() => E.s.coreState().armed, 2500);
-          await E.wait(100);
-          const on = E.state();
+          await E.wait(400);
+          const aux1 = E.state();
           E.axis(4, -1);
-          await E.wait(500);
-          return JSON.stringify({ half, thrUp, armed, on, off: E.state() });`);
-        assert.equal(r.half, 1750, 'AUX2 at 0.5 stays 1750');
-        assert.equal(r.thrUp.armed, false, 'the throttle does not arm');
-        assert.equal(r.armed, true, `armed on AUX1 (flags ${r.on.flags})`);
-        assert.equal(r.on.rc[0], 2000, 'AUX1 high reaches Betaflight');
-        assert.equal(r.off.armed, false, 'AUX1 low disarms');
-        r = await js(`
-          E.axis(6, 1);
-          await E.wait(120);
-          const aux3 = E.state().rc[2];
-          E.axis(6, -1);
-          return JSON.stringify({ aux3 });`);
-        assert.equal(r.aux3, 2000, 'AUX3 reaches Betaflight, the owner\'s turtle switch');
-
+          E.thr(0.6);
+          const armed = await E.until(() => E.s.coreState().armed, 1500);
+          E.thr(0);
+          return JSON.stringify({ aux1, armed });`);
+        assert.equal(r.aux1.armed, false, 'its saved AUX1 switch does not arm');
+        assert.equal(r.aux1.rc[0], 1000, 'and does not reach Betaflight');
+        assert.equal(r.armed, true, 'the throttle arms');
         await reload();
         r = await js(`await E.wait(600); return JSON.stringify(E.state());`);
-        assert.equal(r.switches.migrated, true, 'still migrated');
-        assert.equal(r.source, 'radio');
-        r = await js(`
-          document.querySelector('#panel .cb-radio-switches').click();
-          await E.wait(200);
-          return JSON.stringify(E.state());`);
-        assert.equal(r.easy, true, 'switched off');
-        await reload();
-        r = await js(`await E.wait(600); return JSON.stringify(E.state());`);
-        assert.equal(r.easy, true, 'stays off: not migrated twice');
+        assert.equal(r.easy, true, 'after a reload: still Easy mode');
       });
     });
 
@@ -942,7 +919,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         await key('keyUp', 'w', 'KeyW', 87);
         console.log('kb bf: ' + JSON.stringify({ armed: r.a, flags: r.st.flags, mode: r.st.mode }));
         assert.equal(r.a, true, `W arms (flags ${r.st.flags})`);
-        assert.equal(r.st.mode, 'acro');
+        assert.equal(r.st.mode, 'angle', 'the keyboard defaults to Angle');
         await key('keyDown', 's', 'KeyS', 83);
         r = await js(`await E.wait(1100); return JSON.stringify(1);`);
         r = await js(`
@@ -961,6 +938,19 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           return JSON.stringify({ started, upright });`);
         await key('keyUp', 'ArrowRight', 'ArrowRight', 39);
         assert.deepEqual(r, { started: true, upright: true }, 'the arrow turtles');
+
+        // F, the sim's flip: an armed turtle upside down is not a crash.
+        r = await js(`await E.wait(600); const rest = await E.flip(); await E.wait(300); return JSON.stringify({ rest });`);
+        assert.equal(r.rest, true);
+        await key('rawKeyDown', 'f', 'KeyF', 70);
+        await key('keyDown', 'f', 'KeyF', 70);
+        await key('keyUp', 'f', 'KeyF', 70);
+        r = await js(`
+          const started = await E.until(() => E.s.bfCore().turtlePhase !== null, 2000);
+          let auto = false;
+          const upright = await E.until(() => { auto = auto || E.s.bfCore().turtleAuto; return E.upZ() > 0.9; }, 5000);
+          return JSON.stringify({ started, auto, upright, flips: E.s.bfCore().simFlips });`);
+        assert.deepEqual(r, { started: true, auto: true, upright: true, flips: 1 }, 'F flips it over in Easy mode');
       });
     });
 
@@ -969,9 +959,9 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         await js(`window._feel.hideFirstRun(); await E.wait(1300); return JSON.stringify(1);`);
         await key('rawKeyDown', 'w', 'KeyW', 87);
         await key('keyDown', 'w', 'KeyW', 87);
-        let r = await js(`return JSON.stringify(await E.until(() => E.s.coreState().armed, 2000));`);
+        let r = await js(`return JSON.stringify({ armed: await E.until(() => E.s.coreState().armed, 2000), mode: E.s.coreState().flightMode });`);
         await key('keyUp', 'w', 'KeyW', 87);
-        assert.equal(r, true, 'js keyboard: W arms');
+        assert.deepEqual(r, { armed: true, mode: 'angle' }, 'js keyboard: W arms, in Angle');
         await key('keyDown', 's', 'KeyS', 83);
         r = await js(`await E.wait(1100); const a = await E.until(E.landed, 8000); return JSON.stringify(a && await E.until(() => !E.s.coreState().armed, 6000));`);
         await key('keyUp', 's', 'KeyS', 83);
@@ -997,8 +987,9 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           const a = await E.until(() => E.s.coreState().armed, 2000);
           E.axis(1, 0);
           return JSON.stringify({ a, st: E.state() });`);
-        console.log('gamepad bf: ' + JSON.stringify({ armed: r.a, source: r.st.source, flags: r.st.flags }));
+        console.log('gamepad bf: ' + JSON.stringify({ armed: r.a, source: r.st.source, flags: r.st.flags, mode: r.st.mode }));
         assert.equal(r.a, true, `gamepad: stick up arms (flags ${r.st.flags})`);
+        assert.equal(r.st.mode, 'acro', 'the gamepad defaults to Acro');
         assert.equal(r.st.source, 'page', 'gamepad: the page drives AUX');
         r = await js(`
           const down = await E.until(E.landed, 8000);
@@ -1024,8 +1015,8 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           stick.t = 0.6;
           const a = await E.until(() => E.s.coreState().armed, 2000);
           stick.t = 0;
-          return JSON.stringify(a);`);
-        assert.equal(r, true, 'touch: throttle up arms');
+          return JSON.stringify({ a, mode: E.s.coreState().flightMode });`);
+        assert.deepEqual(r, { a: true, mode: 'acro' }, 'touch: throttle up arms, in Acro');
         r = await js(`
           const stick = window.__touchStick;
           const down = await E.until(E.landed, 8000);
