@@ -10,7 +10,8 @@
 //     Betaflight's turtle channel). The wizard on that radio, saved per radio.
 //     A profile saved before Easy mode starts in Easy mode like any other. And
 //     the other input and core pairs: the radio on ?core=js, the keyboard on
-//     both cores (Angle by default; F still flips), a gamepad, touch.
+//     both cores (Angle by default; F still flips), a gamepad, touch (Angle).
+//     Calibration asks for the sticks only.
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -143,15 +144,15 @@ test('easy turtle: upside down at rest, a full roll or pitch stick, armed or not
   assert.equal(wantsEasyTurtle({ ...rest, threeD: true }), false, '3D has no turtle');
 });
 
-test('the first-visit flight mode: Angle on the keyboard, Acro on sticks; a saved one wins', () => {
+test('the first-visit flight mode: Angle on the keyboard and touch, Acro on a pad; a saved one wins', () => {
   const store = memStore();
   assert.equal(defaultFlightMode(store, 'keyboard'), 'angle');
-  assert.equal(defaultFlightMode(store, 'sticks'), 'acro');
-  assert.equal(defaultFlightMode(store), 'angle', 'no input named: the keyboard');
+  assert.equal(defaultFlightMode(store, 'pad'), 'acro');
+  assert.equal(defaultFlightMode(store), 'angle', 'no pad: keyboard and touch');
   saveFlightMode('acro', store);
   assert.equal(defaultFlightMode(store, 'keyboard'), 'acro');
   saveFlightMode('angle', store);
-  assert.equal(defaultFlightMode(store, 'sticks'), 'angle');
+  assert.equal(defaultFlightMode(store, 'pad'), 'angle');
 });
 
 // A TX16S's HID report; axes 4..7 are AUX1..AUX4.
@@ -794,6 +795,34 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.ok(r.flipRc >= 1700, `the page drives FLIP for the turtle (${r.flipRc})`);
         assert.equal(r.upright, true, 'upright');
         assert.equal(r.after.source, 'radio', 'AUX back on the radio afterwards');
+
+        // Calibration: the sticks only.
+        r = await js(`
+          for (const [i, v] of [[0, 0], [1, 0], [2, -1], [3, 0]]) E.axis(i, v);
+          await E.wait(100);
+          document.getElementById('btnCalib').click();
+          const seen = new Set();
+          let skipShown = false;
+          const hold = async (ms) => {
+            const t0 = performance.now();
+            while (performance.now() - t0 < ms) {
+              seen.add(document.getElementById('calibStep').textContent);
+              skipShown = skipShown || document.getElementById('calibSkip').style.display !== 'none';
+              await E.wait(20);
+            }
+          };
+          await hold(1300);
+          for (const i of [0, 1, 3]) { E.axis(i, 1); await hold(900); E.axis(i, 0); await hold(60); }
+          E.axis(2, 1); await hold(400);
+          E.axis(2, -1); await hold(500);
+          return JSON.stringify({ open: document.getElementById('calib').classList.contains('show'), seen: [...seen], skipShown, map: JSON.parse(localStorage.getItem(${JSON.stringify(AXIS_MAP_PREFIX + SID)})) });`);
+        console.log('calibration: ' + JSON.stringify(r));
+        assert.equal(r.open, false, 'done after the throttle');
+        assert.ok(!r.seen.some((l) => /ARM|MODE/.test(l)), 'never asks for a switch: ' + r.seen.join(' | '));
+        assert.equal(r.skipShown, false, 'nothing to skip');
+        assert.deepEqual([r.map.r.i, r.map.p.i, r.map.y.i, r.map.t.i], [0, 1, 3, 2], 'the sticks found');
+        assert.equal(r.map.arm, undefined, 'no arm switch saved');
+        assert.equal(r.map.mode, undefined, 'no mode switch saved');
       });
     });
 
@@ -1016,7 +1045,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           const a = await E.until(() => E.s.coreState().armed, 2000);
           stick.t = 0;
           return JSON.stringify({ a, mode: E.s.coreState().flightMode });`);
-        assert.deepEqual(r, { a: true, mode: 'acro' }, 'touch: throttle up arms, in Acro');
+        assert.deepEqual(r, { a: true, mode: 'angle' }, 'touch: throttle up arms, in Angle');
         r = await js(`
           const stick = window.__touchStick;
           const down = await E.until(E.landed, 8000);

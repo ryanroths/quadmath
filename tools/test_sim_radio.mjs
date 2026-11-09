@@ -171,7 +171,7 @@ test('mocked navigator.getGamepads TX16S: mapping + calib persist + touch off', 
   assert.ok(Math.abs(empty.stick.r - roll07) < 1e-9, 'hold last radio sticks');
   present = true;
 
-  // Calibration wizard on 8 axes, skip aux, persist.
+  // Calibration wizard on 8 axes, the sticks only, persist.
   axes = [0, 0, -1, 0, 0.1, -0.1, 0, 0];
   assert.equal(router.startCalib(), true);
   hold(router, 0.4, 3); // center > 1s
@@ -184,10 +184,10 @@ test('mocked navigator.getGamepads TX16S: mapping + calib persist + touch off', 
   axes = [0, 0, 1, 0, 0.1, -0.1, 0, 0];
   hold(router, 0.25, 3); // throttle up
   axes = [0, 0, -1, 0, 0.1, -0.1, 0, 0];
-  hold(router, 0.25, 3); // throttle down
-  router.skipCalibAux(); // arm
-  const finished = router.skipCalibAux(); // mode
+  const finished = router.tickCalib(0.25); // throttle down, the last step
   assert.equal(finished.done, true);
+  assert.equal(finished.axisMap.arm, undefined, 'calibration has no arm switch');
+  assert.equal(finished.axisMap.mode, undefined, 'calibration has no mode switch');
   assert.equal(finished.axisMap.r.i, 0);
   assert.equal(finished.axisMap.p.i, 1);
   assert.equal(finished.axisMap.p.sign, -1);
@@ -266,7 +266,7 @@ test('sim.html still owns the Radio panel and per-device keys', () => {
   assert.ok(touchSrc.includes('createRadioRouter'));
   assert.ok(touchSrc.includes('clearRadioCalibration'));
   assert.ok(simSrc.includes('clearRadioCalibration'));
-  assert.equal(CAL_STEPS.length, 8);
+  assert.deepEqual(CAL_STEPS.map((s) => s.key), ['center', 'r', 'p', 'y', 'thi', 'tlo'], 'sticks only');
 });
 
 test('stick HUD is mode 2: left pad first, no row-reverse', () => {
@@ -293,6 +293,7 @@ function sweepThrottle(router, setAxes, rest, full, dt) {
   for (const v of frames) {
     setAxes(v);
     last = router.tickCalib(dt);
+    if (last.done) break;
   }
   return last;
 }
@@ -318,12 +319,8 @@ test('EdgeTX throttle sweep -1 rest → +1 advances thi and tlo', () => {
   hold(router, 0.05, 4);
   const afterThi = router.tickCalib(0.05);
   assert.equal(afterThi.label, 'THROTTLE FULL DOWN', 'thi advanced after -1→+1 sweep');
-  sweepThrottle(router, setT, 1, -1, 0.04);
-  const afterTlo = router.tickCalib(0.05);
-  assert.equal(afterTlo.skipAux, true, 'tlo advanced into arm/mode');
-  router.skipCalibAux();
-  const finished = router.skipCalibAux();
-  assert.equal(finished.done, true);
+  const finished = sweepThrottle(router, setT, 1, -1, 0.04);
+  assert.equal(finished.done, true, 'tlo is the last step');
   assert.equal(finished.axisMap.t.i, 2, 'detected by movement, not a hardcoded index');
   assert.ok(finished.axisMap.t.max > 0.5);
   assert.ok(finished.axisMap.t.min < -0.5);
@@ -349,9 +346,7 @@ test('wizard finds throttle on a non-AETR axis (index 3) by movement', () => {
   hold(router, 0.25, 3);
   const setT = (v) => { axes = [0, 0, 0, v, 0, 0, 0, 0]; };
   sweepThrottle(router, setT, -1, 1, 0.04);
-  sweepThrottle(router, setT, 1, -1, 0.04);
-  router.skipCalibAux();
-  const finished = router.skipCalibAux();
+  const finished = sweepThrottle(router, setT, 1, -1, 0.04);
   assert.equal(finished.done, true);
   assert.equal(finished.axisMap.t.i, 3);
   assert.equal(finished.axisMap.y.i, 2);

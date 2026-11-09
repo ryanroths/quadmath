@@ -236,10 +236,10 @@ export function saveFlightMode(mode, storage) {
   catch (e) { /* ignore */ }
 }
 
-// No saved mode: Angle on the keyboard, Acro on sticks (a radio, a gamepad,
-// touch: input 'sticks'). A stored mode wins.
+// No saved mode: Angle on the keyboard and touch, Acro on a pad (a radio or a
+// gamepad: input 'pad'). A stored mode wins.
 export function defaultFlightMode(storage, input) {
-  return loadFlightMode(storage) || (input === 'sticks' ? 'acro' : 'angle');
+  return loadFlightMode(storage) || (input === 'pad' ? 'acro' : 'angle');
 }
 
 export function toggleAcro(current) {
@@ -1015,8 +1015,6 @@ export const CAL_STEPS = Object.freeze([
   { key: 'y', label: 'YAW — LEFT STICK FULL RIGHT', hint: 'hold deflection' },
   { key: 'thi', label: 'THROTTLE FULL UP', hint: 'hold' },
   { key: 'tlo', label: 'THROTTLE FULL DOWN', hint: 'hold' },
-  { key: 'arm', label: 'ARM SWITCH — FLIP IT', hint: 'or Skip Aux and use Space' },
-  { key: 'mode', label: 'MODE SWITCH — MOVE IT', hint: '3-pos Angle / Horizon / Acro — or Skip Aux' },
 ]);
 
 export function createCalibState() {
@@ -1153,23 +1151,13 @@ function clearSweep(calib) {
   calib.timer = 0;
 }
 
-export function skipCalibAux(calib) {
-  const st = CAL_STEPS[calib.step];
-  if (st && (st.key === 'arm' || st.key === 'mode')) {
-    calib.step++;
-    clearSweep(calib);
-  }
-  return { state: calib, done: calib.step >= CAL_STEPS.length };
-}
-
 export function stepCalib(calib, gp, dt) {
   const st = CAL_STEPS[calib.step];
   if (!st || !gp) {
-    return { state: calib, done: false, skipAux: false, label: '', hint: '' };
+    return { state: calib, done: false, label: '', hint: '' };
   }
   const ax = listAxes(gp);
-  const skipAux = st.key === 'arm' || st.key === 'mode';
-  const ui = { state: calib, done: false, skipAux, label: st.label, hint: st.hint };
+  const ui = { state: calib, done: false, label: st.label, hint: st.hint };
 
   if (st.key === 'center') {
     calib.timer += dt;
@@ -1253,36 +1241,6 @@ export function stepCalib(calib, gp, dt) {
         ui.done = calib.step >= CAL_STEPS.length;
       }
     } else calib.timer = 0;
-    return ui;
-  }
-  if (st.key === 'arm' || st.key === 'mode') {
-    const moved = bestUnusedAxis(ax, calib.center, calib.used, 0.5);
-    if (moved) {
-      calib.timer += dt;
-      if (calib.timer > 0.45) {
-        calib.result[st.key] = { i: moved.i, sign: Math.sign(moved.d) || 1 };
-        calib.used.add(moved.i);
-        calib.step++;
-        clearSweep(calib);
-        ui.done = calib.step >= CAL_STEPS.length;
-      }
-    } else {
-      let btn = -1;
-      if (gp.buttons) {
-        for (let i = 0; i < gp.buttons.length; i++) {
-          if (gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.6)) { btn = i; break; }
-        }
-      }
-      if (btn >= 0) {
-        calib.timer += dt;
-        if (calib.timer > 0.35) {
-          calib.result[st.key] = { button: btn };
-          calib.step++;
-          clearSweep(calib);
-          ui.done = calib.step >= CAL_STEPS.length;
-        }
-      } else calib.timer = 0;
-    }
     return ui;
   }
   // r / p / y: still a hold on a self-centering gimbal, but never assign an
@@ -1425,7 +1383,7 @@ export function createRadioRouter(opts) {
       calib = null;
       return { done: true, axisMap, touch: false };
     }
-    return { done: false, skipAux: out.skipAux, label: out.label, hint: out.hint, touch: false };
+    return { done: false, label: out.label, hint: out.hint, touch: false };
   }
 
   function rememberedId() {
@@ -1449,20 +1407,6 @@ export function createRadioRouter(opts) {
     startCalib,
     tickCalib,
     clearCalibration,
-    skipCalibAux() {
-      if (!calib) return { done: false };
-      const out = skipCalibAux(calib);
-      calib = out.state;
-      if (out.done) {
-        axisMap = calib.result;
-        radioPreset = 'custom';
-        saveAxisMap(gpName, axisMap, storage);
-        saveRadioPreset(gpName, 'custom', storage);
-        calib = null;
-        return { done: true, axisMap };
-      }
-      return { done: false };
-    },
     touchAllowed(info) {
       return shouldEnableTouch(Object.assign({}, info || o, { hasGamepad: gpConnected, gamepadConnected: gpConnected }));
     },

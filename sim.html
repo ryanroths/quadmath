@@ -670,7 +670,7 @@
   <div id="calibHint"></div>
   <div id="calibBars"></div>
   <button id="calibCancel">CANCEL</button>
-  <button id="calibSkip" style="display:none">SKIP AUX</button>
+  <button id="calibSkip" style="display:none">SKIP</button>
 </div>
 
 <div id="hudBtns">
@@ -681,7 +681,7 @@
 <div id="panel">
   <a id="panelHome" href="/">← Back to QuadMath</a>
   <h1>QUADMATH SIM</h1>
-  <div class="sub">Angle on the keyboard, acro on a radio or gamepad. Throttle down, then up to fly · 1/2/3 mode · H HUD · touch sticks on phones</div>
+  <div class="sub">Angle on keyboard and touch, acro on a radio or gamepad. Throttle down, then up to fly · 1/2/3 mode · H HUD · touch sticks on phones</div>
 
   <h2>Radio</h2>
   <div class="kbd" id="radioInfo">no gamepad detected</div>
@@ -989,7 +989,7 @@ import {
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=51206465bd01";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=2acfd5cb7b46";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=943d9747eda0";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -1011,14 +1011,14 @@ import {
   shouldEnableTouch, createTouchControls, guardPageGestures,
   sanitizeId, isRadio, radioScore, pickPreferredPad, RADIO_PRESETS,
   effectiveAxisMap, applyAxisMap, loadRadioProfile, saveAxisMap,
-  saveRadioPreset, clearRadioCalibration, GP_ID_KEY, createCalibState, stepCalib, skipCalibAux,
+  saveRadioPreset, clearRadioCalibration, GP_ID_KEY, createCalibState, stepCalib,
   guessRadioPreset, isKnownRadio, radioShortName,
   loadAutoArm, saveAutoArm,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
   loadRadioSwitches, saveRadioSwitches, switchesAxisMap, auxNumberOfAxis,
   createSwitchWizard, stepSwitchWizard, skipSwitchWizard, switchWizardResult,
-} from "./sim-touch.js?v=4244b831d10d";
+} from "./sim-touch.js?v=62e0a37fafce";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -3634,19 +3634,12 @@ document.getElementById('btnCalib').onclick=startCalib;
 document.getElementById('calibCancel').onclick=()=>{
   if(switchWiz){endSwitchWizard();syncEasyControls();return;}
   calib=null;setCalibrating(false);calibEl.classList.remove('show');
-  document.getElementById('calibSkip').style.display='none';
 };
 document.getElementById('calibSkip').onclick=()=>{
-  if(switchWiz){
-    const pads=navigator.getGamepads&&navigator.getGamepads();
-    const out=skipSwitchWizard(switchWiz,gpIndex>=0&&pads?pads[gpIndex]:null);
-    if(out.done)finishSwitchWizard();
-    return;
-  }
-  if(!calib)return;
-  const out=skipCalibAux(calib);
-  calib=out.state;
-  if(out.done)finishCalib();
+  if(!switchWiz)return;
+  const pads=navigator.getGamepads&&navigator.getGamepads();
+  const out=skipSwitchWizard(switchWiz,gpIndex>=0&&pads?pads[gpIndex]:null);
+  if(out.done)finishSwitchWizard();
 };
 let calibDrawAt=0;
 function runCalib(gp,dt){
@@ -3658,7 +3651,6 @@ function runCalib(gp,dt){
     calibDrawAt=nowMs;
     calibStepEl.textContent=out.label;
     calibHintEl.textContent=out.hint;
-    document.getElementById('calibSkip').style.display=out.skipAux?'':'none';
     const ax=Array.prototype.slice.call(gp.axes||[]);
     calibBarsEl.innerHTML=ax.map((a,i)=>
       `ax${i} ${'▮'.repeat(Math.round((a+1)*5)).padEnd(10,'▯')} ${Number(a).toFixed(2)}`).join('<br>');
@@ -3679,7 +3671,6 @@ function startSwitchWizard(){
   switchWiz=createSwitchWizard(gp);
   setCalibrating(true);
   document.getElementById('calibTitle').textContent='YOUR RADIO SWITCHES';
-  document.getElementById('calibSkip').textContent='SKIP';
   calibEl.classList.add('show');
 }
 function runSwitchWizard(gp,dt){
@@ -3701,9 +3692,7 @@ function endSwitchWizard(){
   setCalibrating(false);
   calibEl.classList.remove('show');
   document.getElementById('calibTitle').textContent='RADIO CALIBRATION';
-  const skip=document.getElementById('calibSkip');
-  skip.style.display='none';
-  skip.textContent='SKIP AUX';
+  document.getElementById('calibSkip').style.display='none';
 }
 function finishSwitchWizard(){
   const rec=switchWizardResult(switchWiz);
@@ -3718,7 +3707,6 @@ function finishCalib(){
   if(presetSel)presetSel.value='custom';
   saveMap();
   calib=null;setCalibrating(false);calibEl.classList.remove('show');
-  document.getElementById('calibSkip').style.display='none';
   toast('CALIBRATED — SAVED');
   updateRadioInfo();
 }
@@ -4174,6 +4162,7 @@ function selectPad(gp,remember){
   loadDeviceProfile(gp.id,gp);   // per-device preset + calibration
   armGate=true;               // block throttle until sticks proven safe once
   enableTouchLayer(false);    // radio wins; empty Chrome polls must not mix touch
+  followInputMode();
   updateRadioInfo();
   if(isKnownRadio(gp)){
     flyWithRadio();
@@ -4213,6 +4202,7 @@ function dropPad(){
   if(gpPickerEl){gpPickerEl.remove();gpPickerEl=null;}
   updateRadioInfo();
   bootTouchLayer();
+  followInputMode();
 }
 function pickGamepad(){
   const pads=listPads();
@@ -4576,13 +4566,13 @@ function toggleFlightMode(){
   const order=['angle','horizon','acro'].filter(m=>core.kind!=='bf'||core.hasMode(m));
   setFlightMode(order[(order.indexOf(qp.flightMode)+1)%order.length]);
 }
-// No saved mode: Angle on the keyboard, Acro on a radio, a gamepad or touch
-// (sim-touch.js defaultFlightMode), following the input that flies now. A
-// saved mode and a ?mode= link stay.
+// No saved mode: Angle on the keyboard and touch, Acro on a radio or a gamepad
+// (sim-touch.js defaultFlightMode), following a pad plugged in or out. A saved
+// mode and a ?mode= link stay.
 let flyingInput='keyboard';
 let modeFromLink=false;
 function followInputMode(){
-  const input=gpConnected||(touchCtl&&touchCtl.enabled)?'sticks':'keyboard';
+  const input=gpConnected?'pad':'keyboard';
   if(input===flyingInput)return;
   flyingInput=input;
   if(modeFromLink||threeD||loadFlightMode())return;
@@ -5886,7 +5876,7 @@ function wireLooksUI(){
   };
   document.getElementById('menuHowTo').onclick=()=>{
     showMenuLayer('<h2>How to</h2><ol>'+
-      '<li>Throttle down for a second, then up, arms and flies. Space arms too. Upside down, a full roll or pitch stick flips it back. Angle on the keyboard, acro on a radio or gamepad; angle is a toggle in Controls (1 / 2 / 3 = Angle / Horizon / Acro). 3D (Tune panel) is reversible-motor acro — center throttle is zero, below center inverts thrust. 3D runs are not counted on boards.</li>'+
+      '<li>Throttle down for a second, then up, arms and flies. Space arms too. Upside down, a full roll or pitch stick flips it back. Angle on keyboard and touch, acro on a radio or gamepad; angle is a toggle in Controls (1 / 2 / 3 = Angle / Horizon / Acro). 3D (Tune panel) is reversible-motor acro — center throttle is zero, below center inverts thrust. 3D runs are not counted on boards.</li>'+
       '<li>How to → Start tutorial: hover, three gates, land (about two minutes, skippable).</li>'+
       '<li>R respawns at the last gate you passed. H toggles the stick HUD.</li>'+
       '<li>Fly the lit gate. A 3-lap run starts at gate 1. Splits per gate; missed gates add +2.0s.</li>'+
@@ -8232,7 +8222,6 @@ function enableTouchLayer(on){
   touchCtl.setEnabled(!!on);
   touchCtl.syncLandscape(touchViewport());
   document.body.classList.toggle('touch-on',!!on);
-  followInputMode();
 }
 function syncTouchSettingsUI(s){
   const st=s||(touchCtl?touchCtl.settings:loadTouch());
@@ -8295,7 +8284,7 @@ feel=createFeel({
       enableTouchLayer(false);
       return;
     }
-    setFlightMode(defaultFlightMode(undefined,'sticks'),false);toast('TOUCH STICKS — THROTTLE UP TO FLY');enableTouchLayer(true);
+    setFlightMode(defaultFlightMode(),false);toast('TOUCH STICKS — THROTTLE UP TO FLY');enableTouchLayer(true);
   },
   onToggleAcro(){setFlightMode(toggleAcro(qp.flightMode||flightMode));},
   onToggleThreeD(){setThreeD(!threeD);},
