@@ -299,6 +299,10 @@ const us = (v) => Math.round(clamp(1500 + 500 * v, 1000, 2000));
 // to up Z 0.22, and full stick carries it on over onto its back again (held,
 // it tumbles about 800 ms before it settles).
 export const FLIP_STICK = 0.7;
+// How long the sim's own turtles (F, Easy mode's stick) stay upright before
+// they let go: its roll is held at FLIP_STICK, so it does not rock back.
+export const QUICK_UPRIGHT_US = 60_000;
+const QUICK_ESTIMATE_DEG = 20;
 
 // ---- The bf core's aux channels ----
 
@@ -392,6 +396,49 @@ export function radioAux(gp, map) {
     out.push(us(Number.isFinite(v) ? v : -1));
   }
   return out.length ? out : null;
+}
+
+const switchOn = (gp, s) => {
+  if (!s) return false;
+  if (Number.isFinite(s.button)) {
+    const b = gp.buttons && gp.buttons[s.button];
+    return ((b && (b.pressed || b.value > 0.5)) ? 1 : -1) * (s.sign || 1) > 0.5;
+  }
+  const v = Number(gp.axes && gp.axes[s.i]);
+  return Number.isFinite(v) && v * (s.sign || 1) > 0.5;
+};
+
+// "Use my radio switches" on the bf core: the radio's AUX channels (radioAux)
+// with the pilot's own switches (sim-touch.js normalizeSwitches) moved onto
+// the channels the loaded config's boxes listen on (ranges, auxRanges), so a
+// radio with its ARM on AUX4 arms a diff that has ARM on AUX1. A switch
+// already on its box's channel, the right way up, goes through untouched: an
+// owner's radio on an owner's diff is radioAux, value for value. A skipped
+// angle takes the page's flight mode (page.mode); a skipped turtle's box stays
+// off.
+export function switchAux(gp, map, switches, ranges, page = {}) {
+  const base = radioAux(gp, map);
+  const sw = switches;
+  const out = base ? base.slice() : new Array(AUX_CHANNELS).fill(1000);
+  const sticks = new Set(['r', 'p', 'y', 't'].map((k) => map[k] && map[k].i));
+  const free = [];
+  for (let i = 0; i < ((gp.axes && gp.axes.length) || 0); i++) if (!sticks.has(i)) free.push(i);
+  const mode = sw.angle ? (switchOn(gp, sw.angle) ? 'angle' : 'acro') : page.mode;
+  const paged = pageAux(ranges, {
+    arm: switchOn(gp, sw.arm),
+    flip: switchOn(gp, sw.turtle),
+    angle: mode === 'angle',
+    horizon: mode === 'horizon',
+  });
+  const own = { arm: sw.arm, flip: sw.turtle, angle: sw.angle, horizon: sw.angle };
+  for (const r of ranges) {
+    const name = PAGE_BOXES[r.box];
+    if (!name) continue;
+    const s = own[name];
+    if (s && s.sign === 1 && Number.isFinite(s.i) && free[r.ch] === s.i) continue;
+    out[r.ch] = paged[r.ch];
+  }
+  return out;
 }
 
 // RC channels for core.input(), function order: roll, pitch, yaw, throttle,
@@ -639,6 +686,16 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     //             An arm with the roll stick still over flies it back onto
     //             its back. ARM on with any flag latches ARM_SWITCH until ARM
     //             drops.)
+    //   'quick'   the sim's own turtles (F, and Easy mode's stick): upright
+    //             for QUICK_UPRIGHT_US, FLIP and ARM off; once Betaflight has
+    //             disarmed and shows no arming flag, ARM on, the throttle
+    //             channel still held low and the sticks centred (input());
+    //             armed, the pilot's sticks are handed back. No wait for the
+    //             gyro: flyable in a few ticks. Only in a mode that flies on
+    //             Betaflight's attitude estimate (angle, horizon) does ARM wait
+    //             for it, when it is QUICK_ESTIMATE_DEG or more off the quad's
+    //             tilt: armed on a lost estimate, angle mode rights the quad
+    //             onto its back. A flip it tracked is under 10 degrees off.
     get turtlePhase() { return turtle; },
     // false when the config has no FLIP OVER AFTER CRASH switch.
     startTurtle() {
@@ -685,6 +742,25 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
       simFlips++;
       return true;
     },
+    // Easy mode's turtle: upside down at rest, a full stick the way r or p (-1
+    // or 1, the other 0) says. The page drives FLIP and ARM as for F, and holds
+    // FLIP_STICK that way (a full stick carries the Air65 back over), to
+    // upright; there it re-arms ('quick'), or with rearm false lets go
+    // disarmed. Not an assist: not counted as an F flip. The page takes the AUX
+    // channels from a radio here for the length of the turtle (a switch layout
+    // with no turtle switch); true when it starts, otherwise 'busy',
+    // 'not-flipped' or 'no-switch'.
+    startEasyTurtle(r, p, rearm = true) {
+      if (turtle) return 'busy';
+      if (!(upZ() < -0.35 && sim.state.groundClearance <= 0.04)) return 'not-flipped';
+      if (!ranges.some((x) => x.box === 35)) return 'no-switch';
+      auxSource = 'page';
+      core.startTurtle();
+      auto = { r, p, atUs: null, easy: true, rearm };
+      return true;
+    },
+    // Whether the turtle under way is Easy mode's.
+    get turtleEasy() { return !!(auto && auto.easy); },
     // Whether the turtle under way is an F flip, and how many F flips this
     // core has started.
     get turtleAuto() { return !!auto; },
@@ -711,7 +787,8 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
         case 'arm':
           if (fc.armed && fc.crashFlip) {
             toTurtle('flip');
-            if (auto) aimFlip();
+            if (auto && auto.easy) auto.atUs = sim.simTimeUs;
+            else if (auto) aimFlip();
             return 'flip';
           }
           if (sinceUs > 400_000) {
@@ -731,10 +808,11 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
           }
           if (upZ() <= 0.9) uprightAtUs = null;
           else if (uprightAtUs === null) uprightAtUs = sim.simTimeUs;
-          else if (sim.simTimeUs - uprightAtUs >= 150_000) {
+          else if (sim.simTimeUs - uprightAtUs >= (auto ? QUICK_UPRIGHT_US : 150_000)) {
             aux.turtle = false;
             aux.arm = false;
-            toTurtle('rearm');
+            if (auto && auto.rearm === false) endTurtle();
+            else toTurtle(auto ? 'quick' : 'rearm');
             return 'upright';
           }
           if (auto && uprightAtUs === null && sim.simTimeUs - auto.atUs >= 3_000_000) {
@@ -742,6 +820,20 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
             aux.arm = false;
             endTurtle();
             return 'stuck';
+          }
+          return null;
+        case 'quick':
+          if (!aux.arm) {
+            if (!fc.armed && (fc.armingDisableFlags & ~(1 << 25)) === 0
+              && (aux.mode === 'acro' || Math.abs(estimateTiltDeg(fc) - tiltDeg()) < QUICK_ESTIMATE_DEG)) aux.arm = true;
+          } else if (fc.armed) {
+            endTurtle();
+            return 'rearm';
+          }
+          if (sinceUs > 2_000_000) {
+            aux.arm = false;
+            endTurtle();
+            return 'refused';
           }
           return null;
         case 'rearm':

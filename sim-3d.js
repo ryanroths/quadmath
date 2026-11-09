@@ -143,6 +143,72 @@ export function stepAutoArm(state, sample) {
   return { state: next, arm: false };
 }
 
+// Easy mode, the default for every input on every core: the throttle arms and
+// disarms the quad, with no switch. Throttle at the bottom (3D: centred) for
+// EASY_ARM_HOLD_S, then raised: armed. Landed with the throttle at the bottom
+// for EASY_DISARM_HOLD_S: disarmed. A crash (the page's latch) disarms once
+// the quad has come to rest.
+export const EASY_ARM_HOLD_S = 1;
+export const EASY_DISARM_HOLD_S = 2;
+const EASY_LANDED_CLEARANCE_M = 0.04;
+const EASY_LANDED_SPEED_MS = 0.5;
+const EASY_LANDED_OMEGA = 2;             // rad/s
+
+export function isLanded(info) {
+  const i = info || {};
+  return i.clearanceM <= EASY_LANDED_CLEARANCE_M && i.speed < EASY_LANDED_SPEED_MS && i.omega < EASY_LANDED_OMEGA;
+}
+
+// One input sample (every 4 ms). state: { lowS, downS, raised }, {} to start.
+// sample: t, threeD, dt (s), armed, autoArm (false: the throttle never arms),
+// ready (false: the sticks are not proven safe yet, so nothing counts), landed,
+// crashed (a crash is latched, or the quad lies upside down), blocked (no arm
+// from here: upside down, where the stick turtles it).
+// The disarm waits for the throttle to have been raised since the arm, so
+// Space or the touch ARM button at idle on the pad stays armed until the pilot
+// flies.
+export function stepEasyArm(state, sample) {
+  const s = sample || {};
+  const dt = Number.isFinite(s.dt) && s.dt > 0 ? s.dt : 0;
+  const was = state || {};
+  const next = { lowS: +was.lowS || 0, downS: +was.downS || 0, raised: !!was.raised };
+  const safe = throttleSafeToArm(s.t, s.threeD);
+  const wants = throttleWantsArm(s.t, s.threeD);
+  if (s.ready === false) next.lowS = 0;
+  else if (safe) next.lowS += dt;
+  const none = { state: next, arm: false, disarm: false, reason: null };
+  if (s.armed) {
+    if (!safe) next.lowS = 0;
+    if (wants) next.raised = true;
+    if (s.landed && s.crashed) {
+      next.downS = 0;
+      next.raised = false;
+      return { state: next, arm: false, disarm: true, reason: 'crash' };
+    }
+    if (s.landed && safe && next.raised) {
+      next.downS += dt;
+      if (next.downS >= EASY_DISARM_HOLD_S - 1e-9) {
+        next.downS = 0;
+        next.raised = false;
+        return { state: next, arm: false, disarm: true, reason: 'landed' };
+      }
+    } else {
+      next.downS = 0;
+    }
+    return none;
+  }
+  next.downS = 0;
+  next.raised = false;
+  if (safe || !wants) return none;
+  // Raised: the auto-arm's own rule, its "seen low" earned by the hold. Raised
+  // too soon, or from where it cannot arm, the hold starts over.
+  const held = next.lowS >= EASY_ARM_HOLD_S - 1e-9;
+  next.lowS = 0;
+  if (s.blocked) return none;
+  const arm = stepAutoArm({ seenLow: held }, { t: s.t, threeD: s.threeD, armed: false, autoArm: s.autoArm, hasSwitch: false }).arm;
+  return { state: next, arm, disarm: false, reason: null };
+}
+
 export function armHintText(threeDOrOpts, extra) {
   const o = (threeDOrOpts && typeof threeDOrOpts === 'object')
     ? threeDOrOpts
@@ -150,6 +216,9 @@ export function armHintText(threeDOrOpts, extra) {
   if (o.hasSwitch) {
     if (o.blocked) return o.threeD ? 'Center throttle to arm' : 'Lower throttle to arm';
     return 'Flip arm switch';
+  }
+  if (o.easy && o.autoArm !== false) {
+    return o.threeD ? 'Throttle centred 1 s, then move it to fly' : 'Throttle down 1 s, then up to fly';
   }
   if (o.autoArm !== false) {
     return o.threeD ? 'Leave center to fly (auto-arm)' : 'Raise throttle to fly (auto-arm)';

@@ -12,6 +12,7 @@ export const TOUCH_KEY = 'quadmathSimTouch';
 export const FLIGHT_MODE_KEY = 'quadmathSimFlightMode';
 export const AUTOARM_KEY = 'quadmathSimAutoArm';
 export const ARM_SWITCH_PREFIX = 'quadmathSimArm_';
+export const SWITCHES_PREFIX = 'quadmathSimSwitches_';
 // Radio stick deadzone. EdgeTX already has its own deadband; this is a tiny
 // extra hole that must rescale like touch ((abs-d)/(1-d)) or center reads
 // as a notch. 0.02 is enough for HID noise without eating micro-corrections.
@@ -235,9 +236,10 @@ export function saveFlightMode(mode, storage) {
   catch (e) { /* ignore */ }
 }
 
-// First visit / no saved settings → angle. A stored mode wins.
-export function defaultFlightMode(storage) {
-  return loadFlightMode(storage) || 'angle';
+// No saved mode: Angle on the keyboard and touch, Acro on a pad (a radio or a
+// gamepad: input 'pad'). A stored mode wins.
+export function defaultFlightMode(storage, input) {
+  return loadFlightMode(storage) || (input === 'pad' ? 'acro' : 'angle');
 }
 
 export function toggleAcro(current) {
@@ -732,6 +734,130 @@ export function mergeArmSwitch(map, arm) {
   return Object.assign({}, map || {}, { arm: parsed });
 }
 
+// ---- "Use my radio switches", per radio ----
+// { on, arm, turtle, angle }. Off (the default, for every radio, saved or not)
+// is Easy mode: the page arms, turtles and picks the flight mode whatever the
+// radio's switches do. On: arm, turtle and angle are each { i, sign } or
+// { button, sign } from the wizard, or null where it was skipped (a skipped
+// turtle stays on the sticks, a skipped angle stays a toggle in Controls). On
+// needs an arm switch.
+export function normalizeSwitches(raw) {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const arm = parseArmSwitch(r.arm);
+  return {
+    on: !!r.on && !!arm,
+    arm,
+    turtle: parseArmSwitch(r.turtle),
+    angle: parseArmSwitch(r.angle),
+  };
+}
+
+export function saveRadioSwitches(id, switches, storage) {
+  const store = storeOf(storage);
+  if (!store || !id) return;
+  try { store.setItem(SWITCHES_PREFIX + sanitizeId(id), JSON.stringify(normalizeSwitches(switches))); }
+  catch (e) { /* ignore quota / private mode */ }
+}
+
+export function loadRadioSwitches(id, storage) {
+  const store = storeOf(storage);
+  if (!store || !id) return normalizeSwitches(null);
+  try { return normalizeSwitches(JSON.parse(store.getItem(SWITCHES_PREFIX + sanitizeId(id)))); }
+  catch (e) { return normalizeSwitches(null); }
+}
+
+// The stick map the page reads: the sticks, and the arm switch when the
+// radio's switches are on. A calibration's saved arm and mode are not used.
+export function switchesAxisMap(base, switches) {
+  const map = Object.assign({}, base);
+  delete map.arm;
+  delete map.mode;
+  if (switches && switches.on) map.arm = switches.arm;
+  return map;
+}
+
+// The AUX number a gamepad axis goes to Betaflight as (radioAux: the axes the
+// stick map leaves free, in order), or null for a stick axis.
+export function auxNumberOfAxis(map, i) {
+  if (!Number.isFinite(i) || i < 0) return null;
+  const used = occupiedStickAxes(map);
+  if (used.has(i)) return null;
+  let n = 0;
+  for (let a = 0; a <= i; a++) if (!used.has(a)) n++;
+  return n;
+}
+
+export const SWITCH_WIZARD_STEPS = Object.freeze([
+  { key: 'arm', label: 'FLIP YOUR ARM SWITCH', hint: 'to where it arms', skippable: false },
+  { key: 'turtle', label: 'FLIP YOUR TURTLE SWITCH', hint: 'to where it flips. None? Skip: full stick turtles it.', skippable: true },
+  { key: 'angle', label: 'FLIP YOUR ANGLE SWITCH', hint: 'to angle. None? Skip: angle stays a toggle in Controls.', skippable: true },
+]);
+const WIZARD_HOLD_S = 0.12;   // settled there: a 3-position switch passing through the middle is not it
+
+export function createSwitchWizard(gp) {
+  return { step: 0, picks: {}, taken: new Set(), base: snapshotArmInputs(gp), cand: null, heldS: 0 };
+}
+
+function wizardNext(w, gp) {
+  w.step++;
+  w.base = snapshotArmInputs(gp);
+  w.cand = null;
+  w.heldS = 0;
+}
+
+// What has moved since this step began: an axis off the sticks that has
+// travelled most of its range and ended near an end (the direction is that
+// end), or a button that changed. Compared to the step's start, not the last
+// sample: a radio's slowed switch moves over many samples.
+function wizardMoved(w, gp, map) {
+  const used = occupiedStickAxes(map);
+  const axes = gp.axes || [];
+  let best = null, bestD = 0;
+  for (let i = 4; i < axes.length; i++) {
+    if (used.has(i) || w.taken.has('a' + i)) continue;
+    const now = Number(axes[i]);
+    const was = Number(w.base.axes[i]);
+    if (!Number.isFinite(now) || !Number.isFinite(was) || Math.abs(now) < 0.5) continue;
+    const d = Math.abs(now - was);
+    if (d >= 0.85 && d > bestD) { bestD = d; best = { i, sign: now >= 0 ? 1 : -1 }; }
+  }
+  if (best) return best;
+  const btns = gp.buttons || [];
+  for (let i = 0; i < btns.length; i++) {
+    if (w.taken.has('b' + i)) continue;
+    const now = !!(btns[i] && (btns[i].pressed || btns[i].value > 0.5));
+    if (now !== !!w.base.buttons[i]) return { button: i, sign: now ? 1 : -1 };
+  }
+  return null;
+}
+
+export function stepSwitchWizard(w, gp, map, dt) {
+  const st = SWITCH_WIZARD_STEPS[w.step];
+  const ui = { state: w, done: !st, label: st ? st.label : '', hint: st ? st.hint : '', skippable: !!(st && st.skippable) };
+  if (!st || !gp) return ui;
+  const moved = wizardMoved(w, gp, map);
+  const same = moved && w.cand && moved.i === w.cand.i && moved.button === w.cand.button && moved.sign === w.cand.sign;
+  w.heldS = same ? w.heldS + (dt > 0 ? dt : 0) : 0;
+  w.cand = moved;
+  if (moved && w.heldS >= WIZARD_HOLD_S) {
+    w.picks[st.key] = moved;
+    w.taken.add(moved.button != null ? 'b' + moved.button : 'a' + moved.i);
+    wizardNext(w, gp);
+    ui.done = w.step >= SWITCH_WIZARD_STEPS.length;
+  }
+  return ui;
+}
+
+export function skipSwitchWizard(w, gp) {
+  const st = SWITCH_WIZARD_STEPS[w.step];
+  if (st && st.skippable) wizardNext(w, gp);
+  return { state: w, done: w.step >= SWITCH_WIZARD_STEPS.length };
+}
+
+export function switchWizardResult(w) {
+  return normalizeSwitches(Object.assign({ on: true }, w.picks));
+}
+
 export function occupiedStickAxes(map) {
   const m = map || {};
   const out = new Set();
@@ -889,8 +1015,6 @@ export const CAL_STEPS = Object.freeze([
   { key: 'y', label: 'YAW — LEFT STICK FULL RIGHT', hint: 'hold deflection' },
   { key: 'thi', label: 'THROTTLE FULL UP', hint: 'hold' },
   { key: 'tlo', label: 'THROTTLE FULL DOWN', hint: 'hold' },
-  { key: 'arm', label: 'ARM SWITCH — FLIP IT', hint: 'or Skip Aux and use Space' },
-  { key: 'mode', label: 'MODE SWITCH — MOVE IT', hint: '3-pos Angle / Horizon / Acro — or Skip Aux' },
 ]);
 
 export function createCalibState() {
@@ -1027,23 +1151,13 @@ function clearSweep(calib) {
   calib.timer = 0;
 }
 
-export function skipCalibAux(calib) {
-  const st = CAL_STEPS[calib.step];
-  if (st && (st.key === 'arm' || st.key === 'mode')) {
-    calib.step++;
-    clearSweep(calib);
-  }
-  return { state: calib, done: calib.step >= CAL_STEPS.length };
-}
-
 export function stepCalib(calib, gp, dt) {
   const st = CAL_STEPS[calib.step];
   if (!st || !gp) {
-    return { state: calib, done: false, skipAux: false, label: '', hint: '' };
+    return { state: calib, done: false, label: '', hint: '' };
   }
   const ax = listAxes(gp);
-  const skipAux = st.key === 'arm' || st.key === 'mode';
-  const ui = { state: calib, done: false, skipAux, label: st.label, hint: st.hint };
+  const ui = { state: calib, done: false, label: st.label, hint: st.hint };
 
   if (st.key === 'center') {
     calib.timer += dt;
@@ -1127,36 +1241,6 @@ export function stepCalib(calib, gp, dt) {
         ui.done = calib.step >= CAL_STEPS.length;
       }
     } else calib.timer = 0;
-    return ui;
-  }
-  if (st.key === 'arm' || st.key === 'mode') {
-    const moved = bestUnusedAxis(ax, calib.center, calib.used, 0.5);
-    if (moved) {
-      calib.timer += dt;
-      if (calib.timer > 0.45) {
-        calib.result[st.key] = { i: moved.i, sign: Math.sign(moved.d) || 1 };
-        calib.used.add(moved.i);
-        calib.step++;
-        clearSweep(calib);
-        ui.done = calib.step >= CAL_STEPS.length;
-      }
-    } else {
-      let btn = -1;
-      if (gp.buttons) {
-        for (let i = 0; i < gp.buttons.length; i++) {
-          if (gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.6)) { btn = i; break; }
-        }
-      }
-      if (btn >= 0) {
-        calib.timer += dt;
-        if (calib.timer > 0.35) {
-          calib.result[st.key] = { button: btn };
-          calib.step++;
-          clearSweep(calib);
-          ui.done = calib.step >= CAL_STEPS.length;
-        }
-      } else calib.timer = 0;
-    }
     return ui;
   }
   // r / p / y: still a hold on a self-centering gimbal, but never assign an
@@ -1299,7 +1383,7 @@ export function createRadioRouter(opts) {
       calib = null;
       return { done: true, axisMap, touch: false };
     }
-    return { done: false, skipAux: out.skipAux, label: out.label, hint: out.hint, touch: false };
+    return { done: false, label: out.label, hint: out.hint, touch: false };
   }
 
   function rememberedId() {
@@ -1323,20 +1407,6 @@ export function createRadioRouter(opts) {
     startCalib,
     tickCalib,
     clearCalibration,
-    skipCalibAux() {
-      if (!calib) return { done: false };
-      const out = skipCalibAux(calib);
-      calib = out.state;
-      if (out.done) {
-        axisMap = calib.result;
-        radioPreset = 'custom';
-        saveAxisMap(gpName, axisMap, storage);
-        saveRadioPreset(gpName, 'custom', storage);
-        calib = null;
-        return { done: true, axisMap };
-      }
-      return { done: false };
-    },
     touchAllowed(info) {
       return shouldEnableTouch(Object.assign({}, info || o, { hasGamepad: gpConnected, gamepadConnected: gpConnected }));
     },

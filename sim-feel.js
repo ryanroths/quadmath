@@ -169,25 +169,6 @@ export function saveInputChoice(v) {
   try { localStorage.setItem(INPUT_CHOICE_KEY, v); } catch (e) { /* ignore */ }
 }
 
-export function auxValue(gp, map) {
-  if (!gp || !map) return null;
-  if (map.button != null) {
-    const b = gp.buttons && gp.buttons[map.button];
-    if (!b) return 0;
-    return (b.pressed || b.value > 0.5) ? 1 : -1;
-  }
-  if (map.i == null) return null;
-  const v = gp.axes[map.i];
-  return typeof v === 'number' ? v * (map.sign || 1) : 0;
-}
-
-export function modeFromAux(v) {
-  if (v == null || Number.isNaN(v)) return null;
-  if (v < -0.33) return 'angle';
-  if (v > 0.33) return 'acro';
-  return 'horizon';
-}
-
 export function applyRatePreset(rates, name) {
   const p = RATE_PRESETS[name];
   if (!p || !rates) return false;
@@ -255,6 +236,7 @@ export function flipHintText(info) {
   const i = info || {};
   if (i.threeD) return i.touch ? 'FLIPPED — TAP RESPAWN' : 'FLIPPED — R TO RESPAWN';
   const respawn = i.touch ? ' · OR RESPAWN' : ' · R RESPAWNS';
+  if (i.easy) return 'FLIPPED — FULL ROLL OR PITCH STICK' + respawn;
   if (i.core === 'bf' && (i.radio || !i.flipAux)) {
     if (!i.flipAux) return 'FLIPPED — NO TURTLE SWITCH IN THE DIFF' + respawn;
     return 'FLIPPED — ' + (i.armed ? 'DISARM, ' : '') + 'AUX' + i.flipAux + ' ON, ARM, ROLL' + respawn;
@@ -276,6 +258,20 @@ export function wantsTurtle(info) {
   return true;
 }
 
+// Easy mode's turtle: upside down at rest on the deck, a full roll or pitch
+// stick, armed or not and at any throttle. info: upZ, clearanceM, contact,
+// speed, omega, threeD, r, p (sticks).
+export const EASY_TURTLE_STICK = 0.9;
+export function wantsEasyTurtle(info) {
+  if (!info || info.threeD) return false;
+  const upZ = info.upZ == null ? 1 : +info.upZ;
+  if (!(upZ < -0.35)) return false;
+  const contact = !!info.contact || (info.clearanceM != null && +info.clearanceM <= 0.04);
+  if (!contact) return false;
+  if (!(+info.speed < STUCK_SPEED_MS) || !(+info.omega < STUCK_OMEGA)) return false;
+  return Math.abs(info.r || 0) >= EASY_TURTLE_STICK || Math.abs(info.p || 0) >= EASY_TURTLE_STICK;
+}
+
 // East of the default spawn, facing +Z (away from the afternoon sun) so the
 // hover column and gates are readable. Independent of racing gate coordinates.
 const TUTORIAL_ORIGIN = { x: 36, y: 0, z: 44 };
@@ -284,7 +280,7 @@ const TUTORIAL_STEPS = ['arm', 'hover', 'gate1', 'gate2', 'gate3', 'land', 'done
 
 function stepCopy(step) {
   switch (step) {
-    case 'arm': return 'Press Space to arm.';
+    case 'arm': return 'Throttle down, then up to arm. Or press Space.';
     case 'hover': return 'Hover in the glow — hold altitude for a moment.';
     case 'gate1': return 'Fly through the first marked gate.';
     case 'gate2': return 'Second gate — keep it smooth.';
@@ -715,7 +711,5 @@ export function createFeel(ctx) {
     applyRatePreset,
     loadInputChoice,
     saveInputChoice,
-    auxValue,
-    modeFromAux,
   };
 }

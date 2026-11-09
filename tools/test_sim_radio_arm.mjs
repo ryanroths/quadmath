@@ -1,5 +1,6 @@
-// Headless Chrome, the bf core, a fresh profile and a fake TX16S: arm on AUX1
-// and lift off. An Xbox pad is plugged in too and is seen first, alone (a
+// Headless Chrome, the bf core and a fake TX16S on "use my radio switches" (a
+// fresh profile but for that: tools/test_sim_easy_mode.mjs flies the default):
+// arm on AUX1 and lift off. An Xbox pad is plugged in too and is seen first, alone (a
 // lone pad is remembered as the pilot's, ryflyGamepadId); the radio must still
 // be the pad the page flies, now and after a reload, with its AUX channels
 // going to Betaflight. And the look's textures upload with no GL error (a
@@ -13,8 +14,10 @@ import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { SWITCHES_PREFIX, sanitizeId } from '../sim-touch.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const TX_ID = 'RM TX16S Joystick (Vendor: 1209 Product: 4f54)';
 
 function resolveChrome() {
   const names = [process.env.CHROME, 'google-chrome', 'google-chrome-stable', 'chromium-browser', 'chromium', 'chrome'].filter(Boolean);
@@ -89,13 +92,14 @@ function killTree(child) {
 // TX16S axes (EdgeTX AETR: roll, pitch, throttle, yaw, then AUX1..AUX4); both
 // live in sessionStorage, so a reload keeps them.
 const FAKE_PADS = String.raw`(() => {
+  try { localStorage.setItem(${JSON.stringify(SWITCHES_PREFIX + sanitizeId(TX_ID))}, JSON.stringify({ on: true, arm: { i: 4, sign: 1 }, turtle: { i: 6, sign: 1 }, angle: { i: 5, sign: 1 } })); } catch (e) { /* about:blank */ }
   const KEY = '__fakePads';
   let saved = null;
   try { saved = JSON.parse(sessionStorage.getItem(KEY)); } catch (e) { /* none */ }
   const pads = window.__pads = saved || { xbox: false, tx: false, axes: [0, 0, -1, 0, -1, -1, -1, -1] };
   const xbox = () => ({ id: 'Xbox One Game Controller (STANDARD GAMEPAD)', index: 0, mapping: 'standard', connected: true,
     timestamp: performance.now(), axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) });
-  const tx = () => ({ id: 'RM TX16S Joystick (Vendor: 1209 Product: 4f54)', index: 1, mapping: '', connected: true,
+  const tx = () => ({ id: ${JSON.stringify(TX_ID)}, index: 1, mapping: '', connected: true,
     timestamp: performance.now(), axes: pads.axes.slice(), buttons: Array.from({ length: 24 }, () => ({ pressed: false, touched: false, value: 0 })) });
   Object.defineProperty(Navigator.prototype, 'getGamepads', {
     configurable: true,
@@ -142,7 +146,7 @@ const PAGE = String.raw`(() => {
   return true;
 })()`;
 
-test('the bf core: a fresh profile, a fake TX16S with an Xbox pad seen first, arms on AUX1 and lifts off, before and after a reload; the look textures upload with no GL error', { timeout: 5 * 60 * 1000 }, async (t) => {
+test('the bf core: a fake TX16S on its switches, with an Xbox pad seen first, arms on AUX1 and lifts off, before and after a reload; the look textures upload with no GL error', { timeout: 5 * 60 * 1000 }, async (t) => {
   if (process.env.SKIP_CHROME_BOOT === '1') {
     t.skip('SKIP_CHROME_BOOT');
     return;

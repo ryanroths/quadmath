@@ -665,12 +665,12 @@
 </div>
 
 <div id="calib">
-  <h2>RADIO CALIBRATION</h2>
+  <h2 id="calibTitle">RADIO CALIBRATION</h2>
   <div id="calibStep"></div>
   <div id="calibHint"></div>
   <div id="calibBars"></div>
   <button id="calibCancel">CANCEL</button>
-  <button id="calibSkip" style="display:none">SKIP AUX</button>
+  <button id="calibSkip" style="display:none">SKIP</button>
 </div>
 
 <div id="hudBtns">
@@ -681,7 +681,7 @@
 <div id="panel">
   <a id="panelHome" href="/">← Back to QuadMath</a>
   <h1>QUADMATH SIM</h1>
-  <div class="sub">angle by default. 1/2/3 mode · Space arm · H HUD · touch sticks on phones</div>
+  <div class="sub">Angle on keyboard and touch, acro on a radio or gamepad. Throttle down, then up to fly · 1/2/3 mode · H HUD · touch sticks on phones</div>
 
   <h2>Radio</h2>
   <div class="kbd" id="radioInfo">no gamepad detected</div>
@@ -842,7 +842,7 @@
   <div class="row"><label>Throttle Curve</label><span class="val" id="v_thc"></span></div>
   <input type="range" id="s_thc" min="0.4" max="2.6" step="0.05" value="1.0">
   <div class="row"><label>3D mode</label><input type="checkbox" id="cb3d" style="accent-color:var(--orange)" title="Reversible motors. Center stick = zero thrust. Acro only."></div>
-  <div class="row"><label>Auto-arm</label><input type="checkbox" id="cbAutoArm" checked style="accent-color:var(--orange)" title="Arm the first time throttle rises from low. Off when an arm switch is mapped. Space still toggles."></div>
+  <div class="row"><label>Auto-arm</label><input type="checkbox" id="cbAutoArm" checked style="accent-color:var(--orange)" title="Arm by raising the throttle after holding it at the bottom for a second. Off when an arm switch is mapped. Space still toggles."></div>
   <p class="build-note">Betaflight 3D: throttle center is zero, below center reverses the props. Flown in Acro. 3D runs are not counted on boards or as ghosts.</p>
   <div class="row"><label>Battery Simulation</label><input type="checkbox" id="cbBattSim" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Sag affects thrust</label><input type="checkbox" id="cbSagThrust" checked style="accent-color:var(--orange)"></div>
@@ -898,12 +898,16 @@
   <p class="build-note">Mode 2 is the default. Throttle holds where you leave it unless auto-center is on.</p>
 
   <h2>Controls</h2>
+  <div class="row"><label>Angle mode</label><input type="checkbox" class="cb-angle-mode" style="accent-color:var(--orange)" title="Off is acro."></div>
+  <div class="row"><label>Use my radio switches</label><input type="checkbox" class="cb-radio-switches" style="accent-color:var(--orange)" title="Arm, turtle and angle on your own switches. Off: the throttle arms and full stick turtles."></div>
+  <div class="kbd switches-info"></div>
   <div class="kbd">
     Phones/tablets: dual on-screen sticks. TX16S: EdgeTX USB = <b>Joystick</b>.<br>
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
     <b>R</b> last-gate respawn &nbsp;<b>P</b> new pack (bf) &nbsp;<b>Tab</b> panel<br>
     🔊 <b>M</b> mute &nbsp;<b>N</b> next track &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
+    Throttle down 1 s, then up: armed. Down 2 s landed: disarmed. Upside down: full roll or pitch.<br>
     3D (Tune panel): center throttle = zero, below = reverse. Acro only. Not counted on boards.<br>
     <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach<br>
     <b>F</b> upside down on bf: sim flip (logged as an assist); else next mode
@@ -968,24 +972,24 @@ import * as THREE from "three";
 import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=d6d792c3aefd";
 import {
   WS as CORE_WS, TICK_US, SAMPLE_US, toScene, toModule, boxToModule, emptyState,
-  createJsCore, createBfCore, contactPlant, armingFlagNames, radioAux,
+  createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux,
   BF_CLASS_TUNES, bfClassDiff,
-} from "./sim-core-adapter.js?v=0eebbb5c1ad7";
+} from "./sim-core-adapter.js?v=666a7e4f8da1";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
   parseThreeDQuery, runCountsForBoards, throttleHudText,
-  throttleCollective, armHintText, stepAutoArm,
-} from "./sim-3d.js?v=712268ce8b16";
+  throttleCollective, armHintText, stepEasyArm, isLanded,
+} from "./sim-3d.js?v=aa32f62b4164";
 import {
   WHOOP_KEY, PHYSICS_VER, BOUNCE_MAPS,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=51206465bd01";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=24ab2372574b";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=943d9747eda0";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -1003,16 +1007,18 @@ import {
 } from "./sim-art.js?v=401e3e00a35d";
 import {
   loadTouch, saveTouch,
-  detectMobile, defaultFlightMode, saveFlightMode, toggleAcro,
+  detectMobile, defaultFlightMode, loadFlightMode, saveFlightMode, toggleAcro,
   shouldEnableTouch, createTouchControls, guardPageGestures,
   sanitizeId, isRadio, radioScore, pickPreferredPad, RADIO_PRESETS,
   effectiveAxisMap, applyAxisMap, loadRadioProfile, saveAxisMap,
-  saveRadioPreset, clearRadioCalibration, GP_ID_KEY, createCalibState, stepCalib, skipCalibAux,
+  saveRadioPreset, clearRadioCalibration, GP_ID_KEY, createCalibState, stepCalib,
   guessRadioPreset, isKnownRadio, radioShortName,
-  loadAutoArm, saveAutoArm, loadArmSwitch, saveArmSwitch, mergeArmSwitch,
+  loadAutoArm, saveAutoArm,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
-} from "./sim-touch.js?v=72029e559bf5";
+  loadRadioSwitches, saveRadioSwitches, switchesAxisMap, auxNumberOfAxis,
+  createSwitchWizard, stepSwitchWizard, skipSwitchWizard, switchWizardResult,
+} from "./sim-touch.js?v=62e0a37fafce";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -1033,7 +1039,7 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=2108fba17d3d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle} from "./sim-feel.js?v=62d9a5ccc01f";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle} from "./sim-feel.js?v=624c2fe678fc";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy} from "./sim-look.js?v=826bc4bd463d";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -1390,6 +1396,9 @@ looksReady=createLooks({
 }).then(function(l){
   looks=l;composer=l.composer;bloomPass=l.bloomPass;
   l.attachSky(skyMesh,sunSprite);
+  // A radio awake at load closes the menu before the looks exist (flyWithRadio);
+  // they start with it open, which would pause the sim behind nothing.
+  if(!document.getElementById('startMenu').classList.contains('open'))l.setMenuOpen(false);
   // The boot map may have landed before the looks did (the early switch to it).
   if(currentMap!=='city')applyMapLooks(currentMap);
   sizeComposer();
@@ -3359,6 +3368,7 @@ function applyDuctHit(s,normal,into,floorHit){
 // impact speed in world units/s (the bf core's contact events give m/s × WS).
 function hitEffects(crashed,into){
   if(crashed){
+    if(coreArmed())easyCrashAt=simClockMs;
     bounce();
     camShake=Math.max(camShake,Math.min(1.4,into/16));
     if(coach&&coach.isActive())coach.noteCrash();
@@ -3479,7 +3489,11 @@ function placeQuadAt(x,y,z,yaw,opts){
   thrustActual=0; // motors spool from zero on re-arm — no thrust jump
   camShake=0;
   washState=emptyWake();
-  autoArmState={seenLow:false};
+  easyArmState={};
+  easyCrashAt=-Infinity;
+  jsTurtle=null;
+  jsTurtleDone=false;
+  turtleStickHold=false;
   armSwState={prev:null};
   armSwitchBlocked=false;
   clearSkinTrail(skinTrail);
@@ -3550,22 +3564,48 @@ function newPack(){
 // stomp each other's profiles. Legacy global keys are deleted on load.
 // Maps / load-save live in sim-touch.js so a TX16S mock can unit-test them.
 let axisMap=null;
-let armOverlay=null;
 let autoArmOn=loadAutoArm();
-let autoArmState={seenLow:false};
 let armSwState={prev:null};
 let armSwitchBlocked=false;
 let armDetecting=false;
 let armDetectPrev=null;
 let liveMap=null;
+// Easy mode, the default for every input on every core: the throttle arms and
+// disarms, a full stick turtles, and no switch is needed. "Use my radio
+// switches" (per radio, sim-touch.js normalizeSwitches) hands those back to
+// the radio. radioSwitches is the selected pad's record, null with no pad.
+let radioSwitches=null;
+let easyArmState={};
+let easyCrashAt=-Infinity;          // simClockMs of the last crash (hitEffects)
+let easyDisarmReason=null;          // why Easy mode last disarmed (test hook)
+const EASY_CRASH_MEMORY_MS=3000;    // a crash still counts this long, while it comes to rest
+let switchWiz=null;                 // the "flip your switch" wizard while it runs
+function switchesOn(){return !!(gpConnected&&radioSwitches&&radioSwitches.on);}
+function easyMode(){return !switchesOn();}
+// What the wizard skipped stays the page's.
+function pageOwnsAngle(){return switchesOn()&&!radioSwitches.angle;}
+// Who turtles with the sticks: Easy mode, and a wizard with no turtle switch.
+function stickTurtleOn(){return easyMode()||!radioSwitches.turtle;}
+function setRadioSwitches(rec){
+  radioSwitches=rec;
+  if(gpName)saveRadioSwitches(gpName,rec);
+  armSwState={prev:null};
+  easyArmState={};
+  syncEasyControls();
+}
+// The physical AUX a switch is on, for what the page tells the pilot.
+function pilotAux(key){
+  const sw=radioSwitches&&radioSwitches[key];
+  if(sw&&Number.isFinite(sw.i)&&liveMap)return auxNumberOfAxis(liveMap,sw.i);
+  if(sw)return null;
+  return core.kind==='bf'?core.auxOf(key==='turtle'?'flip':key):null;
+}
 try{localStorage.removeItem('ryflyAxisMap');localStorage.removeItem('ryflyRadioPreset');}catch(e){}
 function saveMap(){saveAxisMap(gpName,axisMap);}
 let radioPreset='auto'; // per-device — loaded by loadDeviceProfile() when a controller is selected
 function presetMap(){return RADIO_PRESETS[radioPreset].map;}
 function liveAxisMap(gp){
-  const base=effectiveAxisMap(axisMap,radioPreset,gp);
-  if(hasArmSwitch(base))return base;
-  return mergeArmSwitch(base,armOverlay);
+  return switchesAxisMap(effectiveAxisMap(axisMap,radioPreset,gp),gpConnected?radioSwitches:null);
 }
 
 // Calibration wizard
@@ -3594,14 +3634,14 @@ function startCalib(){
 }
 document.getElementById('btnCalib').onclick=startCalib;
 document.getElementById('calibCancel').onclick=()=>{
+  if(switchWiz){endSwitchWizard();syncEasyControls();return;}
   calib=null;setCalibrating(false);calibEl.classList.remove('show');
-  document.getElementById('calibSkip').style.display='none';
 };
 document.getElementById('calibSkip').onclick=()=>{
-  if(!calib)return;
-  const out=skipCalibAux(calib);
-  calib=out.state;
-  if(out.done)finishCalib();
+  if(!switchWiz)return;
+  const pads=navigator.getGamepads&&navigator.getGamepads();
+  const out=skipSwitchWizard(switchWiz,gpIndex>=0&&pads?pads[gpIndex]:null);
+  if(out.done)finishSwitchWizard();
 };
 let calibDrawAt=0;
 function runCalib(gp,dt){
@@ -3613,12 +3653,54 @@ function runCalib(gp,dt){
     calibDrawAt=nowMs;
     calibStepEl.textContent=out.label;
     calibHintEl.textContent=out.hint;
-    document.getElementById('calibSkip').style.display=out.skipAux?'':'none';
     const ax=Array.prototype.slice.call(gp.axes||[]);
     calibBarsEl.innerHTML=ax.map((a,i)=>
       `ax${i} ${'▮'.repeat(Math.round((a+1)*5)).padEnd(10,'▯')} ${Number(a).toFixed(2)}`).join('<br>');
   }
   if(out.done)finishCalib();
+}
+// "Use my radio switches": flip each switch, once; the same overlay as the
+// calibration. Run from the input poll, so the menus close while it does.
+function startSwitchWizard(){
+  const pads=navigator.getGamepads&&navigator.getGamepads();
+  const gp=gpIndex>=0&&pads?pads[gpIndex]:null;
+  if(!gp||calib){toast('PLUG A RADIO');syncEasyControls();return;}
+  enableTouchLayer(false);
+  if(feel&&feel.hideFirstRun)feel.hideFirstRun();
+  if(gpPickerEl){gpPickerEl.remove();gpPickerEl=null;}
+  hideMenuLayer();
+  toggleStartMenu(false);
+  switchWiz=createSwitchWizard(gp);
+  setCalibrating(true);
+  document.getElementById('calibTitle').textContent='YOUR RADIO SWITCHES';
+  calibEl.classList.add('show');
+}
+function runSwitchWizard(gp,dt){
+  const out=stepSwitchWizard(switchWiz,gp,liveAxisMap(gp),dt);
+  const nowMs=performance.now();
+  if(out.done||nowMs-calibDrawAt>60){
+    calibDrawAt=nowMs;
+    calibStepEl.textContent=out.label;
+    calibHintEl.textContent=out.hint;
+    document.getElementById('calibSkip').style.display=out.skippable?'':'none';
+    const ax=Array.prototype.slice.call(gp.axes||[]);
+    calibBarsEl.innerHTML=ax.map((a,i)=>
+      `ax${i} ${'▮'.repeat(Math.round((a+1)*5)).padEnd(10,'▯')} ${Number(a).toFixed(2)}`).join('<br>');
+  }
+  if(out.done)finishSwitchWizard();
+}
+function endSwitchWizard(){
+  switchWiz=null;
+  setCalibrating(false);
+  calibEl.classList.remove('show');
+  document.getElementById('calibTitle').textContent='RADIO CALIBRATION';
+  document.getElementById('calibSkip').style.display='none';
+}
+function finishSwitchWizard(){
+  const rec=switchWizardResult(switchWiz);
+  endSwitchWizard();
+  setRadioSwitches(rec);
+  toast('SWITCHES SAVED — '+switchesSummary());
 }
 function finishCalib(){
   axisMap=calib.result;
@@ -3627,7 +3709,6 @@ function finishCalib(){
   if(presetSel)presetSel.value='custom';
   saveMap();
   calib=null;setCalibrating(false);calibEl.classList.remove('show');
-  document.getElementById('calibSkip').style.display='none';
   toast('CALIBRATED — SAVED');
   updateRadioInfo();
 }
@@ -4045,10 +4126,10 @@ function listPads(){
   return out;
 }
 function loadDeviceProfile(id,gp){
+  radioSwitches=loadRadioSwitches(id);
   const prof=loadRadioProfile(id);
   radioPreset=prof.radioPreset;
   axisMap=prof.axisMap;
-  armOverlay=loadArmSwitch(id);
   // No saved calib: known radios (TX16S / EdgeTX / RadioMaster / Jumper / FrSky)
   // get Mode 2 AETR with full ±1 throttle. Wizard stays optional.
   if(!axisMap && gp && isKnownRadio(gp)){
@@ -4059,15 +4140,17 @@ function loadDeviceProfile(id,gp){
     }
   }
   if(presetSel)presetSel.value=radioPreset;
+  syncEasyControls();
 }
 let skipSafeUntil=0;
 function announcePlugAndFly(gp){
   const name=radioShortName(gp);
   skipSafeUntil=performance.now()+3600;
-  toast(name+' detected, Mode 2 loaded. Arm and fly<br><button type="button" id="toastRecalib">Recalibrate</button>',{html:true,ms:3200});
+  toast(name+' detected, Mode 2 loaded. '+(switchesOn()?'Arm and fly':'Throttle down, then up to fly')+'<br><button type="button" id="toastRecalib">Recalibrate</button>',{html:true,ms:3200});
 }
 function flyWithRadio(){
   sessionLive=true;
+  hideMenuLayer();
   toggleStartMenu(false);
   enableTouchLayer(false);
   if(feel){
@@ -4081,6 +4164,7 @@ function selectPad(gp,remember){
   loadDeviceProfile(gp.id,gp);   // per-device preset + calibration
   armGate=true;               // block throttle until sticks proven safe once
   enableTouchLayer(false);    // radio wins; empty Chrome polls must not mix touch
+  followInputMode();
   updateRadioInfo();
   if(isKnownRadio(gp)){
     flyWithRadio();
@@ -4114,9 +4198,13 @@ function dropPad(){
   gpIndex=-1;gpConnected=false;gpName='';
   armGate=false; // keyboard must not stay FC-disarmed after the pad is gone
   liveMap=null;armDetecting=false;
+  if(switchWiz)endSwitchWizard();
+  radioSwitches=null;
+  syncEasyControls();
   if(gpPickerEl){gpPickerEl.remove();gpPickerEl=null;}
   updateRadioInfo();
   bootTouchLayer();
+  followInputMode();
 }
 function pickGamepad(){
   const pads=listPads();
@@ -4146,15 +4234,10 @@ function armSwitchKey(arm){
   if(Number.isFinite(arm.i))return 'a'+arm.i;
   return '';
 }
+// A switch picked here is "use my radio switches" with that arm; none is Easy
+// mode.
 function setArmFromUI(arm){
-  armOverlay=arm||null;
-  saveArmSwitch(gpName,armOverlay);
-  if(axisMap){
-    if(armOverlay)axisMap.arm=armOverlay;
-    else delete axisMap.arm;
-    saveAxisMap(gpName,axisMap);
-  }
-  armSwState={prev:null};
+  if(radioSwitches)setRadioSwitches(Object.assign({},radioSwitches,{on:!!arm,arm:arm||null}));
   fillArmSwitchUI(null,liveMap);
 }
 function fillArmSwitchUI(gp,map){
@@ -4162,7 +4245,7 @@ function fillArmSwitchUI(gp,map){
   const live=document.getElementById('armSwitchLive');
   const inv=document.getElementById('cbArmInvert');
   const auto=document.getElementById('cbAutoArm');
-  const merged=map||(gp?liveAxisMap(gp):mergeArmSwitch(null,armOverlay));
+  const merged=map||(gp?liveAxisMap(gp):switchesOn()?{arm:radioSwitches.arm}:null);
   const arm=merged&&merged.arm;
   const has=hasArmSwitch(merged);
   if(auto){auto.checked=!!autoArmOn;auto.disabled=has;}
@@ -4180,7 +4263,7 @@ function fillArmSwitchUI(gp,map){
   if(live){
     if(!gpConnected)live.textContent='plug a radio to map an arm switch';
     else if(armDetecting)live.textContent='listening — flip a switch (aux, not a stick)';
-    else if(!has)live.textContent=autoArmOn?'no arm switch — raise throttle to fly':'no arm switch — Space to arm';
+    else if(!has)live.textContent=autoArmOn?'no arm switch — throttle down 1 s, then up to fly':'no arm switch — Space to arm';
     else{
       const v=gp?armSwitchValue(gp,arm):null;
       live.textContent='arm '+(arm.button!=null?'btn'+arm.button:'ax'+arm.i)+
@@ -4222,8 +4305,11 @@ function readInput(dt){
     // Connected radio/gamepad owns the sticks even on Chrome's empty polls.
     // Falling through to touch was the W6 regression (channel map "off").
     if(!gp)return;
+    const parked=calib||switchWiz;
     if(calib){
       runCalib(gp,dt);
+    }else if(switchWiz)runSwitchWizard(gp,dt);
+    if(parked){
       stick.r=stick.p=stick.y=0;
       stick.aux=null;
       // 3D: t=0 is full reverse. Match the arm-gate idle (center = zero thrust).
@@ -4237,9 +4323,10 @@ function readInput(dt){
     // The bf core takes the radio's channels 1:1 (Betaflight owns stick shaping).
     const next=applyAxisMap(gp.axes,map,core.kind==='bf'?{threeD,deadzone:0}:{threeD});
     stick.r=next.r;stick.p=next.p;stick.y=next.y;stick.t=next.t;
-    // On bf a radio's AUX channels go to Betaflight unchanged: its own arm,
-    // mode and turtle switches, on the diff's aux lines.
-    stick.aux=core.kind==='bf'&&padIsRadio(gp)?radioAux(gp,map):null;
+    // On bf with "use my radio switches", the radio's AUX channels go to
+    // Betaflight: its own arm, mode and turtle switches, on the diff's aux
+    // lines. In Easy mode the page drives them, whatever the radio's layout.
+    stick.aux=bfRadioAux(gp,map);
     // Radio-only pilots make no keyboard or mouse gesture, so a stick deflection
     // is what unlocks audio for them, once the browser allows it (unlockAudio).
     // Roll/pitch/yaw only — a ratcheted TX16S throttle sits wherever it was
@@ -4256,9 +4343,9 @@ function readInput(dt){
         if(performance.now()>skipSafeUntil)toast('STICKS SAFE — LIVE');
       }else stick.t=threeD?0.5:0;
     }
-    if(map.mode&&feel&&!stick.aux){
-      const m=feel.modeFromAux(feel.auxValue(gp,map.mode));
-      if(m&&m!==flightMode)setFlightMode(m);
+    if(!stick.aux&&switchesOn()&&radioSwitches.angle){
+      const m=armSwitchValue(gp,radioSwitches.angle)>0.5?'angle':'acro';
+      if(m!==flightMode&&!threeD)setFlightMode(m,false);
     }
     return;
   } else if(touchCtl&&touchCtl.enabled){
@@ -4278,6 +4365,15 @@ function readInput(dt){
     kbThrottle=THREE.MathUtils.clamp(kbThrottle,0,1);
     stick.t=kbThrottle;
   }
+}
+
+// The AUX channels the radio sends the bf core (null: the page drives them).
+// A wizard with no turtle switch hands them to the page for the length of a
+// stick turtle.
+function bfRadioAux(gp,map){
+  if(core.kind!=='bf'||!switchesOn()||!padIsRadio(gp))return null;
+  if(!radioSwitches.turtle&&(core.turtlePhase!=null||bfWantsEasyTurtle()))return null;
+  return switchAux(gp,map,radioSwitches,core.auxRanges,{mode:flightMode});
 }
 
 // ---------- Rates (Betaflight / Actual / KISS / Quick / RaceFlight) ----------
@@ -4413,6 +4509,36 @@ function syncTouchModeBtn(){
     hud3d.classList.toggle('on',!!threeD);
     hud3d.setAttribute('aria-pressed',threeD?'true':'false');
   }
+  syncEasyControls();
+}
+// The Controls toggles, wherever they are drawn (Tune, the menu's card).
+function switchesSummary(){
+  if(!radioSwitches||!radioSwitches.on)return 'off';
+  const name=(key,label)=>{
+    const n=pilotAux(key);
+    return label+(n?' AUX'+n:' on');
+  };
+  return name('arm','ARM')+' · '+(radioSwitches.turtle?name('turtle','TURTLE'):'TURTLE stick')+' · '+(radioSwitches.angle?name('angle','ANGLE'):'ANGLE toggle');
+}
+function syncEasyControls(){
+  const angle=(qp.flightMode||flightMode)==='angle';
+  const radioMode=core.kind==='bf'&&bfRadio()&&!pageOwnsAngle();
+  document.querySelectorAll('.cb-angle-mode').forEach(el=>{el.checked=angle;el.disabled=!!threeD||radioMode;});
+  document.querySelectorAll('.cb-radio-switches').forEach(el=>{el.checked=switchesOn();});
+  document.querySelectorAll('.switches-info').forEach(el=>{
+    el.textContent=!gpConnected?'plug a radio to use its switches':
+      switchesOn()?switchesSummary():
+      'off: throttle arms, full stick turtles';
+  });
+}
+function wireEasyControls(root){
+  root.querySelectorAll('.cb-angle-mode').forEach(el=>{el.onchange=()=>{setFlightMode(el.checked?'angle':'acro');syncEasyControls();};});
+  root.querySelectorAll('.cb-radio-switches').forEach(el=>{el.onchange=()=>{
+    if(el.checked){startSwitchWizard();syncEasyControls();return;}
+    if(radioSwitches)setRadioSwitches(Object.assign({},radioSwitches,{on:false}));
+    toast('RADIO SWITCHES OFF');
+  };});
+  syncEasyControls();
 }
 function setFlightMode(mode,persist){
   if(threeD && String(mode||'').toLowerCase()!=='acro'){
@@ -4420,7 +4546,7 @@ function setFlightMode(mode,persist){
     syncTouchModeBtn();
     return qp.flightMode;
   }
-  if(core.kind==='bf'&&bfRadio()){
+  if(core.kind==='bf'&&bfRadio()&&!pageOwnsAngle()){
     toast('FLIGHT MODE IS ON THE RADIO');
     syncTouchModeBtn();
     return flightMode;
@@ -4441,6 +4567,20 @@ function toggleFlightMode(){
   if(threeD){setFlightMode('acro');return;}
   const order=['angle','horizon','acro'].filter(m=>core.kind!=='bf'||core.hasMode(m));
   setFlightMode(order[(order.indexOf(qp.flightMode)+1)%order.length]);
+}
+// No saved mode: Angle on the keyboard and touch, Acro on a radio or a gamepad
+// (sim-touch.js defaultFlightMode), following a pad plugged in or out. A saved
+// mode and a ?mode= link stay.
+let flyingInput='keyboard';
+let modeFromLink=false;
+function followInputMode(){
+  const input=gpConnected?'pad':'keyboard';
+  if(input===flyingInput)return;
+  flyingInput=input;
+  stick.aux=null; // the last input's AUX, until the next poll
+  if(modeFromLink||threeD||loadFlightMode())return;
+  const m=defaultFlightMode(undefined,input);
+  if(m!==flightMode)setFlightMode(m,false);
 }
 function setThreeD(on,persist){
   const want=!!on;
@@ -4463,7 +4603,7 @@ function setThreeD(on,persist){
   const unsafe=coreArmed()&&!throttleSafeToArm(stick.t,want);
   if(unsafe){
     coreDisarm();
-    autoArmState={seenLow:false};
+    easyArmState={};
   }
   let forcedAcro=false;
   if(want && qp.flightMode!=='acro'){
@@ -4531,22 +4671,20 @@ function bfArmWatch(){
   }
   bfWasArmed=cs.armed;
 }
-function tickArming(gp){
-  if(calib||bfRadio())return;
+function tickArming(gp,dt){
+  if(calib||switchWiz||easyTurtleBusy())return;
   const map=liveMap||(gp?liveAxisMap(gp):null);
-  const hasSw=hasArmSwitch(map);
   if(armDetecting&&gp){
     const found=detectArmSwitch(armDetectPrev,gp,map);
     armDetectPrev=snapshotArmInputs(gp);
     if(found){
-      armOverlay=found;
-      saveArmSwitch(gpName,found);
-      liveMap=mergeArmSwitch(map,found);
       armDetecting=false;
+      setArmFromUI(found);
       toast('ARM SWITCH SET');
-      fillArmSwitchUI(gp,liveMap);
     }
   }
+  if(bfRadio())return;
+  const hasSw=hasArmSwitch(map);
   if(hasSw){
     if(!gp)return;
     const v=armSwitchValue(gp,map.arm);
@@ -4559,15 +4697,9 @@ function tickArming(gp){
     if(out.blocked)toast('Lower throttle to arm');
     else if(out.arm)tryArm();
     else if(out.disarm&&coreArmed()){coreDisarm();if(core.kind!=='bf')toast('DISARMED');}
-    autoArmState={seenLow:false};
-  }else{
+  }else if(easyMode()){
     armSwitchBlocked=false;
-    const out=stepAutoArm(autoArmState,{
-      t:stick.t,threeD,armed:coreArmed(),
-      autoArm:autoArmOn,hasSwitch:false,
-    });
-    autoArmState=out.state;
-    if(out.arm)tryArm({fromAuto:true});
+    tickEasyArm(dt);
   }
   // The poll runs at 250 Hz; the panel's live readout needs ten.
   const nowMs=performance.now();
@@ -4577,8 +4709,45 @@ function tickArming(gp){
   }
 }
 let armUiAt=0;
+// Easy mode's arm and disarm, from the sticks alone (sim-3d.js stepEasyArm).
+function tickEasyArm(dt){
+  if(core.kind==='bf'&&core.turtlePhase!=null)return; // an F flip or an arm while flipped: armed, upside down, not a crash
+  const speed=Math.hypot(cs.velocity.x,cs.velocity.y,cs.velocity.z);
+  const omega=Math.hypot(cs.omega.x,cs.omega.y,cs.omega.z);
+  const flipped=!threeD&&bodyUpZ(cs.quaternion)<-0.35&&cs.clearance<=0.04;
+  const out=stepEasyArm(easyArmState,{
+    t:stick.t,threeD,dt,armed:coreArmed(),autoArm:autoArmOn,
+    ready:!(armGate&&padLive),
+    landed:isLanded({clearanceM:cs.clearance,speed,omega}),
+    crashed:flipped||simClockMs-easyCrashAt<EASY_CRASH_MEMORY_MS,
+    blocked:flipped,
+  });
+  easyArmState=out.state;
+  if(out.arm){
+    easyCrashAt=-Infinity;
+    tryArm({fromAuto:true});
+    syncTouchModeBtn();
+  }else if(out.disarm){
+    easyDisarmReason=out.reason;
+    easyCrashAt=-Infinity;
+    if(core.kind!=='bf')toast('DISARMED');
+    coreDisarm();
+    syncTouchModeBtn();
+  }
+}
+// A turtle done and re-armed: no 1 s hold, and the throttle is the pilot's. A
+// stick still over would fly it back onto its back, so roll and pitch wait for
+// the pilot to centre them (pollInput).
+let turtleStickHold=false;
+function turtleRearmed(){
+  easyCrashAt=-Infinity;
+  easyArmState={};
+  turtleStickHold=true;
+  syncTouchModeBtn();
+}
+function easyTurtleBusy(){return core.kind==='bf'?(core.turtlePhase!=null&&core.turtleEasy):!!jsTurtle;}
 function toggleArm(){
-  if(bfRadio()){toast('ARM ON THE RADIO (AUX'+(core.auxOf('arm')||'?')+')');return;}
+  if(bfRadio()){toast('ARM ON THE RADIO (AUX'+(pilotAux('arm')||'?')+')');return;}
   if(coreArmed()){coreDisarm();if(core.kind!=='bf')toast('DISARMED');}
   else tryArm();
   syncTouchModeBtn();
@@ -4649,12 +4818,15 @@ function jsTick(stick,tUs){
   // still drops arm until sticks are proven safe.
   if(armGate&&padLive&&qp.armed)qp.disarm();
 
-  // Turtle: flipped on the ground, full throttle and a hard roll stick rolls
-  // the quad back over (per tick on sim time; on the bf core the same gesture
-  // is Betaflight's crash flip, bfTurtleTick).
-  if(qp.armed&&!threeD&&bodyUpZ(qp.quaternion)<-0.35){
+  // Turtle: Easy mode's stick turtle (no arm, no throttle), or a turtle switch
+  // and the stick; otherwise, flipped on the ground, full throttle and a hard
+  // roll stick rolls the quad back over (per tick on sim time; on the bf core
+  // the same gesture is Betaflight's crash flip, bfTurtleTick).
+  const stickTurtle=!threeD&&(stickTurtleOn()||(switchesOn()&&radioSwitches.turtle&&pollGp&&armSwitchValue(pollGp,radioSwitches.turtle)>0.5));
+  if(jsTurtle||((stickTurtle||qp.armed)&&!threeD&&bodyUpZ(qp.quaternion)<-0.35)){
     const clr=qp.groundClearance?qp.groundClearance(qp):qp.position.z-qp.supportZ(qp);
-    if(wantsTurtle({upZ:bodyUpZ(qp.quaternion),clearanceM:clr,contact:clr<=0.04,armed:qp.armed,threeD,throttle:stick.t,rollStick:stick.r})){
+    if(jsTurtle||stickTurtle)jsEasyTurtle(stick,dt,clr);
+    else if(wantsTurtle({upZ:bodyUpZ(qp.quaternion),clearanceM:clr,contact:clr<=0.04,armed:qp.armed,threeD,throttle:stick.t,rollStick:stick.r})){
       qp.omega.x+=(stick.r<0?-1:1)*22*dt;
     }
   }
@@ -4667,6 +4839,33 @@ function jsTick(stick,tUs){
   qp.step(dt,qpSetpoint,throttle,stick);
   thrustActual=(qp.totalThrustAbsN||Math.abs(qp.totalThrustN))*WS; // |N|, audio + battery load
   jsPortals();
+}
+// The js core's stick turtle, per tick: a full stick the way it is pushed,
+// upside down at rest, rolls or pitches the quad over, braking into level; it
+// lets go level, or as near as this axis takes it, and the next poll re-arms
+// (Easy mode).
+let jsTurtle=null;
+let jsTurtleDone=false;
+function jsEasyTurtle(st,dt,clr){
+  const upZ=bodyUpZ(qp.quaternion);
+  if(jsTurtle){
+    const tilt=Math.acos(Math.max(-1,Math.min(1,upZ)));
+    if(tilt<0.03||(upZ>0.5&&tilt>jsTurtle.best+0.05)){
+      qp.omega[jsTurtle.axis]=0;
+      jsTurtle=null;
+      jsTurtleDone=true;
+      return;
+    }
+    jsTurtle.best=Math.min(jsTurtle.best,tilt);
+    qp.omega[jsTurtle.axis]=jsTurtle.sign*Math.min(jsTurtle.sign*qp.omega[jsTurtle.axis]+45*dt,tilt*30);
+    return;
+  }
+  if(upZ>=-0.35)return;
+  if(!wantsEasyTurtle({upZ,clearanceM:clr,speed:Math.hypot(qp.velocity.x,qp.velocity.y,qp.velocity.z),omega:Math.hypot(qp.omega.x,qp.omega.y,qp.omega.z),threeD,r:st.r,p:st.p}))return;
+  if(qp.armed)qp.disarm();
+  const roll=Math.abs(st.r)>=Math.abs(st.p);
+  jsTurtle=roll?{axis:'x',sign:st.r<0?-1:1,best:Math.PI}:{axis:'y',sign:st.p<0?-1:1,best:Math.PI};
+  toast('TURTLE');
 }
 function bounce(){
   state.bounces++;   // counter kept for stats; the BOUNCE #N toast is gone —
@@ -5631,7 +5830,9 @@ function wireBuilderUI(){
 
 function wireLooksUI(){
   const fly=document.getElementById('menuFly');
-  if(fly)fly.onclick=()=>openFlyPicker();
+  // A first flight with a radio plugged in goes straight to the class's map
+  // (the Rig, on the 65): no menu beyond Fly.
+  if(fly)fly.onclick=()=>{if(gpConnected&&!savedSelection())startFreestyle();else openFlyPicker();};
   const menuFree=document.getElementById('menuFreestyle');
   if(menuFree)menuFree.onclick=()=>startFreestyle();
   const panelFree=document.getElementById('btnFreestyle');
@@ -5681,18 +5882,23 @@ function wireLooksUI(){
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
       '<span class="n">R</span> last-gate respawn · <span class="n">P</span> new pack (bf) · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
       '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
+      'Throttle down 1 s, then up: armed. Down 2 s landed: disarmed. Upside down: full roll or pitch.<br>'+
       '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">N</span> next track · <span class="n">G</span> ghost · <span class="n">C</span> coach<br>'+
       '<span class="n">F</span> upside down on bf: sim flip (logged as an assist) · else next flight mode</p>'+
+      '<div class="row"><label>Angle mode</label><input type="checkbox" class="cb-angle-mode" style="accent-color:var(--orange)"></div>'+
+      '<div class="row"><label>Use my radio switches</label><input type="checkbox" class="cb-radio-switches" style="accent-color:var(--orange)"></div>'+
+      '<div class="kbd switches-info"></div>'+
       '<div class="row"><label>Master volume</label><span class="val sound-vol-val"></span></div>'+
       '<input type="range" class="sound-vol" min="0" max="1" step="0.05">'+
       '<button type="button" class="sound-btn"></button>'+
       '<button type="button" id="layerClose">Close</button>');
     wireSoundControls(document.getElementById('menuLayer'));
+    wireEasyControls(document.getElementById('menuLayer'));
     document.getElementById('layerClose').onclick=hideMenuLayer;
   };
   document.getElementById('menuHowTo').onclick=()=>{
     showMenuLayer('<h2>How to</h2><ol>'+
-      '<li>Space arms. 1 / 2 / 3 = Angle / Horizon / Acro. Keyboard starts in Angle. 3D (Tune panel) is reversible-motor acro — center throttle is zero, below center inverts thrust. 3D runs are not counted on boards.</li>'+
+      '<li>Throttle down for a second, then up, arms and flies. Space arms too. Upside down, a full roll or pitch stick flips it back and re-arms. Angle on keyboard and touch, acro on a radio or gamepad; angle is a toggle in Controls (1 / 2 / 3 = Angle / Horizon / Acro). 3D (Tune panel) is reversible-motor acro — center throttle is zero, below center inverts thrust. 3D runs are not counted on boards.</li>'+
       '<li>How to → Start tutorial: hover, three gates, land (about two minutes, skippable).</li>'+
       '<li>R respawns at the last gate you passed. H toggles the stick HUD.</li>'+
       '<li>Fly the lit gate. A 3-lap run starts at gate 1. Splits per gate; missed gates add +2.0s.</li>'+
@@ -5915,10 +6121,11 @@ document.getElementById('cb3d').onchange=e=>{
 document.getElementById('cbAutoArm').onchange=e=>{
   autoArmOn=!!e.target.checked;
   saveAutoArm(autoArmOn);
-  autoArmState={seenLow:false};
+  easyArmState={};
   toast(autoArmOn?'AUTO-ARM ON':'AUTO-ARM OFF');
 };
 (function(){const el=document.getElementById('cbAutoArm');if(el)el.checked=!!autoArmOn;})();
+wireEasyControls(document.getElementById('panel'));
 document.getElementById('armSwitch').onchange=e=>{
   const v=e.target.value;
   if(!v){setArmFromUI(null);toast('ARM SWITCH OFF — AUTO-ARM');return;}
@@ -5929,8 +6136,7 @@ document.getElementById('armSwitch').onchange=e=>{
   toast('ARM SWITCH SET');
 };
 document.getElementById('cbArmInvert').onchange=e=>{
-  if(!armOverlay&&!(liveMap&&liveMap.arm))return;
-  const cur=(liveMap&&liveMap.arm)||armOverlay;
+  const cur=liveMap&&liveMap.arm;
   if(!cur)return;
   setArmFromUI(Object.assign({},cur,{sign:e.target.checked?-1:1}));
 };
@@ -7799,9 +8005,17 @@ function pollInput(){
   lastPollUs=tUs;
   readInput(dt);
   if(testStick){stick.r=testStick.r;stick.p=testStick.p;stick.y=testStick.y;stick.t=testStick.t;stick.aux=null;}
-  tickArming(pollGp);
+  tickArming(pollGp,dt);
   if(core.kind==='bf'&&!bfRadio()&&armGate&&padLive&&coreArmed())core.setArm(false);
   if(core.kind==='bf'&&!bfRadio())bfTurtleTick();
+  if(jsTurtleDone){
+    jsTurtleDone=false;
+    if(easyMode()&&tryArm({fromAuto:true}))turtleRearmed();
+  }
+  if(turtleStickHold){
+    if(Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15)turtleStickHold=false;
+    else stick.r=stick.p=0;
+  }
   core.input(stick,tUs);
 }
 // ---------- Turtle on the bf core: Betaflight's crash flip ----------
@@ -7817,8 +8031,21 @@ function pollInput(){
 function bfFlippedOnFloor(){
   return bodyUpZ(cs.quaternion)<-0.35&&cs.clearance<=0.04;
 }
+// Easy mode's gesture on the bf core: upside down at rest, a full stick.
+function bfWantsEasyTurtle(){
+  return wantsEasyTurtle({upZ:bodyUpZ(cs.quaternion),clearanceM:cs.clearance,speed:Math.hypot(cs.velocity.x,cs.velocity.y,cs.velocity.z),omega:Math.hypot(cs.omega.x,cs.omega.y,cs.omega.z),threeD,r:stick.r,p:stick.p});
+}
 function bfTurtleTick(){
   if(core.turtlePhase==null){
+    if(stickTurtleOn()){
+      if(bfWantsEasyTurtle()){
+        const roll=Math.abs(stick.r)>=Math.abs(stick.p);
+        const r=core.startEasyTurtle(roll?Math.sign(stick.r):0,roll?0:Math.sign(stick.p),easyMode());
+        if(r===true)toast('TURTLE');
+        else if(r==='no-switch')toast('NO TURTLE SWITCH IN THE DIFF');
+      }
+      return;
+    }
     if(wantsTurtle({upZ:bodyUpZ(cs.quaternion),clearanceM:cs.clearance,contact:cs.clearance<=0.04,armed:cs.armed,threeD,throttle:stick.t,rollStick:stick.r})){
       if(core.startTurtle())toast('TURTLE');
     }
@@ -7827,9 +8054,12 @@ function bfTurtleTick(){
   const low=throttleSafeToArm(stick.t,false);
   const centred=Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15&&Math.abs(stick.y)<0.15;
   const ev=core.stepTurtle(low,centred);
-  if(ev==='upright')toast(low&&centred?'UPRIGHT':'UPRIGHT — STICKS DOWN AND CENTRED TO ARM');
+  if(ev==='upright'&&(stickTurtleOn()||core.turtleAuto))toast('UPRIGHT');
+  else if(ev==='upright')toast(low&&centred?'UPRIGHT':'UPRIGHT — STICKS DOWN AND CENTRED TO ARM');
+  else if(ev==='rearm'&&core.sim.fc.armed)turtleRearmed();
   else if(ev==='rearm')bfArmPendingMs=simClockMs;
   else if(ev==='ended')toast('DISARMED');
+  else if(ev==='stuck'&&core.turtleEasy)toast('STUCK — R RESPAWNS');
   else if(ev==='stuck')toast('SIM FLIP STUCK — R RESPAWNS');
   else if(ev==='refused'){
     const why=armingFlagNames(cs.armingDisableFlags);
@@ -7894,7 +8124,7 @@ function loop(now){
     if(feel){
       state.stickT=stick.t;
       feel.updateHud({stick,battV,battOn:CFG.battSimOn||cs.kind==='bf',mode:cs.flightMode,armed:cs.armed,threeD,thrText:throttleHudText(stick.t,threeD),
-        armHint:bfRadio()?'Arm on the radio (AUX'+(core.auxOf('arm')||'?')+')':armHintText({threeD,autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked})});
+        armHint:bfRadio()?'Arm on the radio (AUX'+(pilotAux('arm')||'?')+')':armHintText({threeD,easy:easyMode(),autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked})});
       feel.tickTutorial(state,dt,cs.armed);
       const upZ=bodyUpZ(cs.quaternion);
       const clearanceM=cs.clearance;
@@ -7903,7 +8133,8 @@ function loop(now){
       const contact=clearanceM<=0.02;
       feel.noteFlip({upZ,clearanceM,contact,speed,omega,dt,armed:cs.armed,
         core:cs.kind,radio:bfRadio(),threeD,touch:!!(touchCtl&&touchCtl.enabled),
-        flipAux:core.kind==='bf'?core.auxOf('flip'):null,
+        easy:stickTurtleOn(),
+        flipAux:core.kind==='bf'?(bfRadio()?pilotAux('turtle'):core.auxOf('flip')):null,
         turtling:core.kind==='bf'&&(core.turtlePhase!=null||cs.crashFlip)});
     }
     if(coach&&coach.isActive()){
@@ -8077,14 +8308,14 @@ feel=createFeel({
   THREE,scene,toast,decorateGate,LIGHTING,
   onCalibrate(){sessionLive=true;toggleStartMenu(false);startCalib();enableTouchLayer(false);},
   onRadio(){flyWithRadio();if(gpConnected)announcePlugAndFly({id:gpName});else toast('PLUG A RADIO — USB JOYSTICK');},
-  onKeyboard(){setFlightMode('angle',false);toast('KEYBOARD — SPACE TO ARM');enableTouchLayer(false);},
+  onKeyboard(){toast('KEYBOARD — HOLD W TO FLY');enableTouchLayer(false);},
   onTouch(){
     if(gpConnected){
       toast('RADIO CONNECTED — TOUCH OFF');
       enableTouchLayer(false);
       return;
     }
-    setFlightMode(defaultFlightMode(),false);toast('TOUCH STICKS — TAP ARM');enableTouchLayer(true);
+    setFlightMode(defaultFlightMode(),false);toast('TOUCH STICKS — THROTTLE UP TO FLY');enableTouchLayer(true);
   },
   onToggleAcro(){setFlightMode(toggleAcro(qp.flightMode||flightMode));},
   onToggleThreeD(){setThreeD(!threeD);},
@@ -8096,7 +8327,7 @@ feel=createFeel({
     nextGateIndex=0;runActive=false;runLap=0;runSplits=[];
     updateGateUI();updateGateHighlight();
     sessionLive=true;
-    toast('TRACK 1 — SPACE TO ARM');
+    toast('TRACK 1 — THROTTLE UP TO FLY');
   },
   onSkipTutorial(){toast('TUTORIAL SKIPPED');},
 });
@@ -8224,6 +8455,7 @@ function applyQueryBoot(){
     // Saved/query 3D stays acro. Do not let ?mode=angle overwrite that.
     if(!(threeD && modeRaw!=='acro')){
       flightMode=setFlightMode(modeRaw,false);
+      modeFromLink=true;
     }
   }
   const presetRaw=q.get('preset');
@@ -8373,6 +8605,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
   audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
+  easy:()=>({mode:easyMode(),switches:radioSwitches,wizard:switchWiz?{step:switchWiz.step,picks:switchWiz.picks}:null,flightMode,arm:easyArmState,jsTurtle,crashAt:easyCrashAt,disarmReason:easyDisarmReason,stickHold:turtleStickHold}),
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,
   TRICKS_KEY,tricks,

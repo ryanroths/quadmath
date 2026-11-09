@@ -286,5 +286,5 @@ test('sim.html owns extraG only and arms at 1000 Hz; 3D path stays wired', () =>
   assert.ok(!/K2=0\.001,K1=0\.007/.test(simSrc), 'old K1/K2 drag hook must be gone');
   assert.ok(simSrc.includes('setPhysicsHz(PHYSICS_HZ_FAST)'));
   assert.ok(simSrc.includes('throttleCollective(stick.t,threeD,CFG.thrCurve,CFG.thrMid)'));
-  assert.ok(simSrc.includes('mapThrottle3d') && simSrc.includes('stepAutoArm'));
+  assert.ok(simSrc.includes('mapThrottle3d') && simSrc.includes('stepEasyArm'));
 });
