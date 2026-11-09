@@ -316,8 +316,9 @@ test('corrugated sheet and pallets: drawn in the shader on existing sets, each i
   assert.ok(Math.abs(P.z - 0.1 / 0.135) < 1e-9 && Math.abs(P.w - LOOK.pallet.deck / 0.15) < 1e-9);
   assert.deepEqual(p.uniforms.lookPalletShade.value.toArray(), [LOOK.pallet.band, LOOK.pallet.slot, LOOK.pallet.shade]);
   // No new texture bytes but the open maps' overcast fill (The Bando, a 128
-  // PMREM, 344,064 B): the 24 MB budget is all but spent.
-  assert.equal(lookTextureBytes().total, 23243431 + 344064, 'the look\'s textures and the overcast fill');
+  // PMREM, 344,064 B) and The Bando's graffiti atlas (512, one channel, mips,
+  // 349,525 B): the 24 MB budget is all but spent.
+  assert.equal(lookTextureBytes().total, 23243431 + 344064 + 349525, 'the look\'s textures, the overcast fill, the decal atlas');
   for (const d of [LOOK.ribs, LOOK.pallet]) assert.ok(Object.isFrozen(d));
   assert.ok(LOOK.ribs.dark <= 0.4 && LOOK.ribs.depth > 0 && LOOK.ribs.depth <= 1);
 });

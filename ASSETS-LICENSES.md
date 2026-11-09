@@ -59,6 +59,10 @@ project, under its licence).
 |---|---|---|
 | `assets/sim-looks/hdri/overcast_cie_128.hdr` | generated (`tools/build_sim_look_textures.py --overcast`) | HDRI, 128 x 64: the CIE standard overcast sky's luminance, (1 + 2 sin elevation) / 3 of its zenith's, over a ground of albedo 0.18; its up-facing irradiance the autoshop HDRI's |
 
+The Bando's graffiti atlas is not a download: `assets/sim-looks/tex/look_bando_decals_sdf_512.png` is signed distance fields of
+the original lettering in `tools/build_bando_decals.mjs` (`node tools/build_bando_decals.mjs`; its own stroked capitals, no font, no copied
+piece; original to this project, under its licence).
+
 ## Inter — SIL Open Font License 1.1
 
 Source: https://github.com/rsms/inter/releases/tag/v4.1

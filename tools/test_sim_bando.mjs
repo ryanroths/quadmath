@@ -20,6 +20,7 @@ import {
 import { BOUNCE_MAPS } from '../sim-whoop.js';
 import { vibeFor, mergeStaticArt, resolveMapLighting } from '../sim-art.js';
 import { LOOK, lookTextureBytes } from '../sim-look.js';
+import { BANDO_ATLAS, BANDO_PROPS, bandoPropBounds, bandoScatter } from '../sim-bando-dress.js';
 import { resolveSceneLighting } from '../sim-lighting.js';
 import { bandoLoopJson, bandoLoopGhost, flyBandoLoop, BANDO_TRACK_ID } from './build_bando_loop.mjs';
 
@@ -465,12 +466,12 @@ test('the look, inherited: an overcast fill, one pale sun in at the windows and 
   const sets = [...new Set(Object.values(Sf).map((f) => LOOK.surfaces[f.look].set))].sort();
   assert.deepEqual(sets, ['concrete_floor', 'painted_steel', 'plywood']);
   assert.deepEqual(Object.keys(LOOK.sets).sort(), ['concrete_floor', 'fabric', 'galvanised', 'painted_steel', 'plywood', 'rubber_mat'], 'no new texture set');
-  // Textures: the Bando's sets with its overcast fill, and every look set and
-  // both fills together, under the 24 MB budget.
-  assert.ok(lookTextureBytes(sets, ['overcast']).total < 24e6, 'the Bando ' + (lookTextureBytes(sets, ['overcast']).total / 1e6).toFixed(2) + ' MB');
+  // Textures: the Bando's sets with its overcast fill and its decal atlas, and
+  // every look set, both fills and every atlas together, under the 24 MB budget.
+  assert.ok(lookTextureBytes(sets, ['overcast'], ['bando']).total < 24e6, 'the Bando ' + (lookTextureBytes(sets, ['overcast'], ['bando']).total / 1e6).toFixed(2) + ' MB');
   assert.ok(lookTextureBytes().total < 24e6, 'every look set ' + (lookTextureBytes().total / 1e6).toFixed(2) + ' MB');
-  // The graffiti: original shapes drawn in the shader (no texture), hues
-  // clear of the gates' brand orange and green.
+  // The graffiti: original pieces from the atlas (one channel), hues clear of
+  // the gates' brand orange and green; a style per mode.
   const hue = (hex) => {
     const rr = (hex >> 16 & 255) / 255, g = (hex >> 8 & 255) / 255, b = (hex & 255) / 255;
     const mx = Math.max(rr, g, b), d = mx - Math.min(rr, g, b);
@@ -490,8 +491,9 @@ test('the look, inherited: an overcast fill, one pale sun in at the windows and 
   const built = buildMap(THREE, 'bando');
   const vis = built.group.getObjectByName('bandoArtVisuals');
   const paint = vis.getObjectByName('bandoGraffiti');
-  assert.ok(paint && !paint.material.map && paint.userData.artKeep && paint.castShadow === false);
-  assert.equal(paint.geometry.getAttribute('position').count, 4 * BANDO_LOOK.graffiti.length);
+  assert.ok(paint && paint.material.map && paint.material.map.name === 'look_decals_bando' && paint.userData.artKeep && paint.castShadow === false, 'the graffiti reads its one atlas');
+  assert.equal(paint.material.map.format, THREE.RedFormat, 'one channel');
+  assert.equal(paint.geometry.getAttribute('position').count, 4 * (BANDO_LOOK.graffiti.length + BANDO_LOOK.decay.length), 'graffiti and rot, one mesh');
   assert.equal(vis.getObjectByName('bandoEdges').material.userData.lookBloom, true);
   for (const o of vis.children.filter((q) => q.isMesh && q.name.startsWith('bando_'))) {
     const key = o.name.slice(6);
@@ -512,6 +514,112 @@ test('the look, inherited: an overcast fill, one pale sun in at the windows and 
     assert.deepEqual(built.colliders[i].min.toArray().map((u) => +m(u).toFixed(4) + 0), b.min, b.feature + ' / ' + b.part + ' collider');
     assert.deepEqual(built.colliders[i].max.toArray().map((u) => +m(u).toFixed(4) + 0), b.max, b.feature + ' / ' + b.part + ' collider');
   });
+});
+
+test('the graffiti: 12 to 20 pieces on one 512 atlas, original words, on solid wall', async () => {
+  const pieces = Object.entries(BANDO_ATLAS.pieces);
+  assert.ok(pieces.length >= 12 && pieces.length <= 20, pieces.length + ' pieces');
+  assert.equal(BANDO_ATLAS.size, 512);
+  assert.equal(BANDO_ATLAS.file, LOOK.decals.bando.file);
+  assert.equal(LOOK.decals.bando.px, 512);
+  assert.equal(LOOK.decals.bando.channels, 1);
+  // The atlas: packed, the pieces disjoint and inside it.
+  for (const [id, r] of pieces) {
+    assert.ok(r.x >= 0 && r.y >= 0 && r.x + r.w <= 512 && r.y + r.h <= 512, id + ' in the atlas');
+    for (const [jd, q] of pieces) {
+      if (id >= jd) continue;
+      assert.ok(r.x + r.w <= q.x || q.x + q.w <= r.x || r.y + r.h <= q.y || q.y + q.h <= r.y, id + ' overlaps ' + jd);
+    }
+  }
+  const png = readFileSync(join(root, BANDO_ATLAS.file));
+  assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20), png[24], png[25]], [512, 512, 8, 0], '512 x 512, 8 bit grey');
+  const { buildAtlas } = await import('./build_bando_decals.mjs');
+  const { inflateSync } = await import('node:zlib');
+  let at = 33, data = [];
+  while (at < png.length) {
+    const n = png.readUInt32BE(at), type = png.toString('latin1', at + 4, at + 8);
+    if (type === 'IDAT') data.push(png.subarray(at + 8, at + 8 + n));
+    at += 12 + n;
+  }
+  const raw = inflateSync(Buffer.concat(data)), got = new Uint8Array(512 * 512);
+  for (let y = 0; y < 512; y++) {
+    assert.equal(raw[y * 513], 2, 'up filter');
+    for (let x = 0; x < 512; x++) got[y * 512 + x] = (raw[y * 513 + 1 + x] + (y ? got[(y - 1) * 512 + x] : 0)) & 255;
+  }
+  assert.deepEqual(got, buildAtlas(), 'the atlas is node tools/build_bando_decals.mjs');
+  // Every piece on the walls, from every kind.
+  const G = BANDO_LOOK.graffiti;
+  assert.deepEqual(G.map((d) => d.piece).sort(), Object.keys(BANDO_ATLAS.pieces).sort(), 'each piece used once');
+  assert.ok(BANDO_ATLAS.pieces.damp.mode === 0 && BANDO_ATLAS.pieces.mould.mode === 0 && BANDO_ATLAS.pieces.nofly.mode === 2);
+  const src = readFileSync(join(root, 'tools/build_bando_decals.mjs'), 'utf8');
+  assert.match(src, /'NO FLY'/);
+  assert.match(src, /'ZONE'/);
+  // Solid wall behind every corner and the middle of each.
+  for (const d of G) {
+    const ax = d.n[1], s = d.n[0] === '-' ? -1 : 1, t = ax === 'x' ? [0, 0, -s] : [s, 0, 0];
+    for (const [u, v] of [[0, 0], [1, 0], [1, 1], [0, 1], [0.5, 0.5], [0.25, 0.75], [0.75, 0.25]]) {
+      const p = [0, 1, 2].map((k) => d.c[k] + t[k] * (u - 0.5) * d.w + (k === 1 ? (v - 0.5) * d.h : 0));
+      const onLot = Math.abs(Math.abs(p[0]) - ROOM.w / 2) < 0.03 || Math.abs(Math.abs(p[2]) - ROOM.d / 2) < 0.03;
+      assert.ok(onLot || nearest(p).d < 0.03, d.piece + ' floats off its wall at ' + p.map((c) => c.toFixed(2)));
+    }
+  }
+});
+
+test('the dressing leaves the flying as it was: nothing in a gap, near a line only if it collides, cheap', async () => {
+  // Every sample of every flight line, the loop's and the off-loop lines'.
+  const lines = [PTS];
+  for (const l of BANDO_PLAY.lines) {
+    const seg = [];
+    for (let i = 1; i < l.pts.length; i++) for (let j = 0; j <= 20; j++) seg.push(lerp(l.pts[i - 1], l.pts[i], j / 20));
+    lines.push(seg);
+  }
+  const lineClear = (b) => Math.min(...lines.map((pts) => pts.reduce((best, p) => Math.min(best, boxDist(p, b)), Infinity)));
+  const inGap = (q) => GAPS.find((g) => overlaps(q, g.min, g.max));
+  // Props: a collider each if solid; otherwise flat on a floor or well clear.
+  for (const p of BANDO_PROPS) {
+    const b = bandoPropBounds(p);
+    assert.equal(inGap(b), undefined, p.kind + ' in a gap volume');
+    const h = b.max[1] - b.min[1];
+    if (p.collide) assert.ok(BOXES.some((q) => q.feature === 'debris' && q.part === p.kind && Math.abs(q.min[0] - b.min[0]) < 0.01 && Math.abs(q.max[1] - b.max[1]) < 0.01), p.kind + ' has its box');
+    else if (h > 0.08) assert.ok(lineClear(b) >= 0.6, p.kind + ' stands ' + lineClear(b).toFixed(2) + ' m from a line with no collider');
+  }
+  assert.ok(BOXES.filter((q) => q.feature === 'debris').length >= 10, 'the rubbish that stands up collides');
+  // The instanced kits: out of every gap; big lumps sit inside their colliders.
+  const S = bandoScatter();
+  const all = [...S.rubble, ...S.flakes, ...S.cans];
+  assert.ok(S.rubble.length > 50 && S.flakes.length > 300 && S.cans.length >= 12, 'something on the floors');
+  for (const q of all) {
+    const r = Math.max(...q.s) * 0.65;
+    const b = { min: q.p.map((v) => v - r), max: q.p.map((v) => v + r) };
+    assert.equal(inGap(b), undefined, 'kit piece in a gap at ' + q.p.map((v) => v.toFixed(2)) + ': ' + (inGap(b) || {}).name);
+    if (Math.max(...q.s) >= 0.18 && q.s[1] < 0.3) assert.ok(lineClear(b) >= 0.5, 'lump near a line at ' + q.p);
+  }
+  // The decals: inside the lot, out of every gap.
+  for (const d of [...BANDO_LOOK.graffiti, ...BANDO_LOOK.decay]) {
+    const pts = d.quad || (() => {
+      const s = d.n[0] === '-' ? -1 : 1, ax = d.n[1], t = ax === 'x' ? [0, 0, -s] : ax === 'y' ? [1, 0, 0] : [s, 0, 0], up = ax === 'y' ? [0, 0, -1] : [0, 1, 0];
+      return [[0, 0], [1, 0], [1, 1], [0, 1]].map(([u, v]) => [0, 1, 2].map((k) => d.c[k] + t[k] * (u - 0.5) * d.w + up[k] * (v - 0.5) * d.h));
+    })();
+    for (const p of pts) assert.ok(inside(p, [-18.05, -0.02, -18.05], [18.05, 11.7, 18.05]), 'decal out of the lot at ' + p);
+    const q = { min: [0, 1, 2].map((k) => Math.min(...pts.map((p) => p[k])) - 0.005), max: [0, 1, 2].map((k) => Math.max(...pts.map((p) => p[k])) + 0.005) };
+    const g = inGap(q);
+    assert.equal(g, undefined, 'decal in the gap ' + (g && g.name) + ' at ' + pts[0].map((v) => v.toFixed(2)));
+  }
+  // Cheap: three kits are the only new objects; the props fold into the merge
+  // (the next test counts the total against its limit).
+  installDomStub();
+  const built = buildMap(THREE, 'bando');
+  const vis = built.group.getObjectByName('bandoArtVisuals');
+  const kits = vis.children.filter((o) => o.isInstancedMesh).map((o) => o.name).sort();
+  assert.deepEqual(kits, ['bandoCans', 'bandoFlakes', 'bandoRubble']);
+  for (const o of vis.children.filter((q) => q.isInstancedMesh)) assert.equal(o.castShadow, false, o.name + ' casts through its own draw');
+  // Dust in the sun shafts, in the shafts' one mesh; puddles and moss in the decals'.
+  const shafts = vis.getObjectByName('bandoShafts');
+  const motes = (shafts.geometry.getAttribute('lookShaft').array.filter((v, i) => i % 3 === 2 && v > 1.5).length) / 4;
+  assert.ok(motes >= bandoShafts().length * 30, 'dust in every shaft: ' + motes + ' motes');
+  const count = (n) => BANDO_LOOK.decay.filter((d) => d.style === n).length;
+  assert.ok(count(3) >= 10 && count(4) >= 15 && count(5) >= 8 && count(6) >= 10, 'stains, moss, puddles, cracks');
+  for (const d of BANDO_LOOK.decay.filter((q) => q.style === 5)) assert.ok(d.w <= 2.6 && d.h <= 1.6, 'puddles stay small');
 });
 
 test('the draw-call merge keeps every texture; the Bando draws in 14 objects or fewer', () => {
