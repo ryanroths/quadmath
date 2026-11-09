@@ -8,7 +8,8 @@
 import { planRoom } from './sim-room.js?v=2108fba17d3d';
 import {
   LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, lookShafts, lookGraffiti, floorAo,
-} from './sim-look.js?v=826bc4bd463d';
+} from './sim-look.js?v=4fe91d31bea9';
+import { BANDO_GRAFFITI, BANDO_DECAY, BANDO_PROP_BOXES, dressBando, bandoAtlas } from './sim-bando-dress.js?v=656b5673c074';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -2849,6 +2850,9 @@ function bandoBoxes() {
   limb(1, 0, 0.06, 0.12, 3.0, 4, 0.26, 0.7);
   limb(0, -1, 0.27, 0.14, 2.2, 4, 0.24, 0.65);
   limb(-Math.SQRT1_2, Math.SQRT1_2, 0.2, 0.16, 1.5, 4, 0.22, 0.6);
+  // The rubbish that stands up (sim-bando-dress.js): each its own collider,
+  // drawn there.
+  for (const q of BANDO_PROP_BOXES) b(q.min[1] > 5 ? 'roof' : 'courtyard', q.mat, 'debris', q.kind, q.min[0], q.min[1], q.min[2], q.max[0], q.max[1], q.max[2], { draw: false });
   return out;
 }
 
@@ -2996,24 +3000,12 @@ export const BANDO_LOOK = Object.freeze({
   // brighter at the horizon (linear RGB, unlit); the ground beyond the wall;
   // the town round the lot, grey blocks in the haze.
   sky: Object.freeze({ zenith: [0.42, 0.45, 0.5], horizon: [0.78, 0.79, 0.8], ground: [0.1, 0.1, 0.095], yard: [0.12, 0.118, 0.11], town: [0.2, 0.215, 0.24] }),
-  // The graffiti, metres: original pieces (sim-look.js lookGraffiti), on the
-  // courtyard face, the yard's walls, the shaft, a block wall, the parapet.
-  // Hues apart from the gates' brand orange and green.
-  graffiti: Object.freeze([
-    { c: [-10.4, 1.35, 4.0], n: '+z', w: 2.6, h: 1.2, style: 0, seed: 1.3, a: 0x3fb85f, b: 0xd6f06a },
-    { c: [6.1, 1.4, 4.0], n: '+z', w: 2.4, h: 1.1, style: 2, seed: 2.7, a: 0xc92f78, b: 0xff9ec9 },
-    { c: [-2.0, 5.0, 4.0], n: '+z', w: 2.2, h: 1.0, style: 1, seed: 4.1, a: 0x1f9fc6, b: 0xa6efff },
-    { c: [-9.0, 1.25, 18.0], n: '-z', w: 4.2, h: 1.6, style: 0, seed: 5.9, a: 0xe0a01c, b: 0xffe56e },
-    { c: [7.5, 1.3, 18.0], n: '-z', w: 2.6, h: 1.5, style: 1, seed: 7.3, a: 0x6a3fd0, b: 0xc9a6ff },
-    { c: [18.0, 1.2, 9.0], n: '-x', w: 3.4, h: 1.4, style: 2, seed: 8.8, a: 0x12a58a, b: 0x9fe8ff },
-    { c: [-18.0, 1.25, 13.0], n: '+x', w: 3.0, h: 1.4, style: 0, seed: 9.6, a: 0xc8323c, b: 0xff9ad6 },
-    { c: [11.6, 1.4, -8.4], n: '+z', w: 2.2, h: 1.1, style: 1, seed: 3.3, a: 0xe4be19, b: 0xfff3a0 },
-    { c: [8.25, 1.5, -5.0], n: '+z', w: 1.7, h: 0.9, style: 0, seed: 6.6, a: 0x2a62d8, b: 0x8fd8ff },
-    { c: [8.25, 8.4, -5.0], n: '+z', w: 1.7, h: 0.9, style: 2, seed: 10.2, a: 0x58c234, b: 0xe2ff8a },
-    { c: [0.1, 8.3, 0.0], n: '+x', w: 1.4, h: 0.9, style: 0, seed: 11.4, a: 0xd23a8c, b: 0xffd84a },
-    { c: [-6.0, 11.0, 3.75], n: '-z', w: 3.2, h: 0.85, style: 2, seed: 12.5, a: 0x1fb5c8, b: 0xd2fbff },
-    { c: [-6.75, 5.2, -15.75], n: '+z', w: 2.8, h: 1.2, style: 1, seed: 13.7, a: 0x4a5fe0, b: 0xb8c4ff },
-  ].map((d) => Object.freeze(d))),
+  // The graffiti, metres: original pieces on an atlas of distance fields
+  // (sim-bando-dress.js), on the lot's walls, the courtyard face, the parapet,
+  // a block wall, the shaft. Hues apart from the gates' brand orange and green.
+  graffiti: BANDO_GRAFFITI,
+  // Damp, moss, cracks and puddles, on the same decal mesh.
+  decay: BANDO_DECAY,
 });
 
 
@@ -3022,7 +3014,7 @@ export const BANDO_LOOK = Object.freeze({
 // roof's holes to the second floor. A window or a hole whose light meets a
 // box on its way, or lands where the key's shadow is, has none.
 export function bandoShafts() {
-  const d = toSun(BANDO_KEY).map((v) => -v), F = BANDO_FRAME, T = F.tops, W = BANDO_WINDOWS, B = BANDO_PLAY.boxes;
+  const d = toSun(BANDO_KEY).map((v) => -v), F = BANDO_FRAME, T = F.tops, W = BANDO_WINDOWS, B = BANDO_PLAY.boxes.filter((q) => q.feature !== 'debris');
   // Whether the ray p + u t, t0 <= t <= t1, meets a box (the slab test).
   const hits = (p, u, t0, t1) => B.some((b) => {
     let lo = t0, hi = t1;
@@ -3286,10 +3278,15 @@ function buildBando(THREE, parent, colliders) {
   }
   edges.push(-hx, lw, -hz, hx, lw, -hz, hx, lw, -hz, hx, lw, hz, hx, lw, hz, -hx, lw, hz, -hx, lw, hz, -hx, lw, -hz);
   // The sun shafts; the graffiti; the sky.
-  const shafts = lookShafts(THREE, bandoShafts().map((q) => ({ quad: q.quad.map((p) => p.map((v) => v * s)), dir: q.dir, length: q.length * s })), { name: 'bandoShafts' });
+  // Dust motes drifting in the light (in the shafts' own draw).
+  const shafts = lookShafts(THREE, bandoShafts().map((q) => ({ quad: q.quad.map((p) => p.map((v) => v * s)), dir: q.dir, length: q.length * s })), { name: 'bandoShafts', motes: { each: 44, size: 0.011 * s, drift: 0.24 * s, strength: 0.42, seed: 3 } });
   vis.add(shafts);
-  const paint = lookGraffiti(THREE, Lk.graffiti.map((g) => Object.assign({}, g, { c: g.c.map((v) => v * s), w: g.w * s, h: g.h * s })), { fill: Lk.fill, shelter, unit: s, name: 'bandoGraffiti' });
+  // The paint and the rot, one draw (in the atlas, or from noise).
+  const scaled = (g) => Object.assign({}, g, g.quad ? { quad: g.quad.map((p) => p.map((v) => v * s)) } : { c: g.c.map((v) => v * s), w: g.w * s, h: g.h * s });
+  const paint = lookGraffiti(THREE, Lk.graffiti.concat(Lk.decay).map(scaled), { atlas: bandoAtlas(), fill: Lk.fill, shelter, unit: s, name: 'bandoGraffiti' });
   vis.add(paint);
+  // The props, on the map's materials (merged by sim-art.js), and the kits.
+  dressBando(THREE, vis, mats, s, shelter, Lk.fill);
   vis.add(bandoSky(THREE, s));
   // The town's blocks collide; the flying's bounds, unseen, inside the sky.
   const solid = (x0, y0, z0, x1, y1, z1) => {

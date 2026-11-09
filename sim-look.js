@@ -125,11 +125,17 @@ export const LOOK = Object.freeze({
     puddle: Object.freeze({ scale: 2.4, share: 0.28, dark: 0.32 }),
     tint: Object.freeze([0.86, 0.84, 0.78]),
   }),
-  // Graffiti (lookGraffiti): paint on the walls, drawn in the shader from
-  // shapes, no texture. Original pieces only: bubble blobs, a star burst and
-  // zigzag strokes, an outline, a drop shadow, drips and overspray; no
-  // letters, names, tags or logos.
-  graffiti: Object.freeze({ outline: 0.045, shadow: 0.035, roughness: 0.62 }),
+  // Graffiti (lookGraffiti): paint on the walls from one greyscale atlas of
+  // signed distances (LOOK.decals, tools/build_bando_decals.mjs), so an edge
+  // stays sharp up close: the fill, a dark outline, a block shadow down and
+  // right, a light edge up and left, overspray and wear. Distances are in the
+  // piece's own heights. Original lettering only: no real names, crews, brands
+  // or logos. Damp, moss, puddles and cracks are drawn on the same mesh, from
+  // noise, and need no atlas (lookGraffiti's styles 3 to 6); a puddle's water
+  // reflects the fill and the key at `water` roughness, `puddle` times over.
+  graffiti: Object.freeze({ outline: 0.035, shadow: 0.05, highlight: 0.02, roughness: 0.62, water: 0.035, puddle: 1.6 }),
+  // The decal atlases: one channel with mips, so 512 x 512 costs 350 KB.
+  decals: Object.freeze({ bando: Object.freeze({ file: 'assets/sim-looks/tex/look_bando_decals_sdf_512.png', px: 512, channels: 1 }) }),
   post: Object.freeze({
     // Bloom on the gates and the edge lines only: they mark themselves
     // (markBloom), and the bright pass takes nothing else.
@@ -175,12 +181,13 @@ export const LOOK_TEXTURES = Object.freeze((() => {
 // 3 x max(face, 112) wide, 4 x face high). sets: the set names a map uses;
 // every set when omitted. envs: the fills it uses ('room', the look's HDRI;
 // 'overcast', LOOK.lighting.overcast): the room's when sets are named, both
-// when nothing is.
+// when nothing is. decals: the atlases it uses (LOOK.decals, one channel,
+// mips): none when sets are named, every one when nothing is.
 const envBytes = (width) => {
   const face = width / 4;
   return 3 * Math.max(face, 112) * 4 * face * 8;
 };
-export function lookTextureBytes(sets, envs) {
+export function lookTextureBytes(sets, envs, decals) {
   let b = 0;
   for (const [file, px] of Object.entries(LOOK_TEXTURES)) {
     if (sets && !sets.some((n) => file.includes(`/look_${n}_`))) continue;
@@ -188,7 +195,8 @@ export function lookTextureBytes(sets, envs) {
   }
   const E = envs || (sets ? ['room'] : ['room', 'overcast']);
   const env = E.reduce((t, e) => t + envBytes(e === 'overcast' ? LOOK.lighting.overcast.hdriWidth : LOOK.lighting.hdriWidth), 0);
-  return { sets: b, env, total: b + env };
+  const dec = (decals || (sets ? [] : Object.keys(LOOK.decals))).reduce((t, n) => t + Math.round(LOOK.decals[n].px ** 2 * LOOK.decals[n].channels * 4 / 3), 0);
+  return { sets: b, env, decals: dec, total: b + env + dec };
 }
 
 // Vertical FOV, degrees, of a rectilinear view with this diagonal FOV.
@@ -366,6 +374,29 @@ export function lookTextureSet(THREE, name) {
     : { map: make('diff', [204, 204, 204, 255], true), nr: make('nr', [128, 128, 255, 128], false) };
   SETS.set(name, out);
   return out;
+}
+
+// A decal atlas (LOOK.decals): one channel, linear, its rows as stored (row 0
+// at v 0). It starts as an empty texel: nothing drawn until it lands.
+const ATLASES = new Map();
+export function lookDecalAtlas(THREE, name) {
+  if (ATLASES.has(name)) return ATLASES.get(name);
+  const spec = LOOK.decals[name];
+  const t = new THREE.Texture(placeholder([0, 0, 0, 255]));
+  t.name = 'look_decals_' + name;
+  t.format = THREE.RedFormat;
+  t.flipY = false;
+  t.anisotropy = 8;
+  if (t.image) t.needsUpdate = true;
+  if (canFetch()) {
+    fetch(spec.file)
+      .then((r) => { if (!r.ok) throw new Error(r.status + ' ' + t.name); return r.blob(); })
+      .then((b) => createImageBitmap(b, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }))
+      .then((bmp) => { t.dispose(); t.source = new THREE.Source(bmp); t.needsUpdate = true; })
+      .catch((e) => { if (typeof console !== 'undefined') console.warn('look decals', e); });
+  }
+  ATLASES.set(name, t);
+  return t;
 }
 
 const ROUGH_CHUNK = `float roughnessFactor = roughness;
@@ -777,6 +808,7 @@ export function lookGlass(THREE) {
 
 const SHAFT_VERT = `
 attribute vec3 lookShaft;
+uniform vec3 lookMote;
 varying vec3 vLookShaft;
 varying vec3 vLookWorld;
 #include <common>
@@ -785,7 +817,15 @@ void main() {
 	vLookShaft = lookShaft;
 	vec4 w = modelMatrix * vec4( position, 1.0 );
 	vLookWorld = w.xyz;
-	gl_Position = projectionMatrix * viewMatrix * w;
+	if ( lookShaft.z > 1.5 ) {
+		// A mote: lookShaft is its corner (-1 to 1, twice) and 2 + its seed.
+		// It wanders about where it was put, and turns to the camera.
+		float k = lookShaft.z - 2.0, t = lookMote.x * ( 0.5 + k );
+		w.xyz += lookMote.y * vec3( sin( t * 0.7 + k * 40.0 ), sin( t * 0.43 + k * 90.0 ) * 0.6, cos( t * 0.57 + k * 70.0 ) );
+		vec4 e = viewMatrix * w;
+		e.xy += lookShaft.xy * lookMote.z * ( 0.55 + k );
+		gl_Position = projectionMatrix * e;
+	} else gl_Position = projectionMatrix * viewMatrix * w;
 	#include <logdepthbuf_vertex>
 }`;
 
@@ -799,6 +839,7 @@ void main() {
 // own.
 const SHAFT_FRAG = `
 uniform vec3 lookShaftColor;
+uniform vec3 lookMoteColor;
 uniform vec2 lookShaftFade;
 varying vec3 vLookShaft;
 varying vec3 vLookWorld;
@@ -806,6 +847,17 @@ varying vec3 vLookWorld;
 #include <logdepthbuf_pars_fragment>
 void main() {
 	#include <logdepthbuf_fragment>
+	if ( vLookShaft.z > 1.5 ) {
+		float m = 1.0 - smoothstep( 0.2, 1.0, length( vLookShaft.xy ) );
+		if ( m <= 0.0 ) discard;
+		vec4 mote = vec4( vec3( 0.1 ) + lookMoteColor * m, 1.0 ), floorC = vec4( vec3( 0.1 ), 1.0 );
+	#if defined( TONE_MAPPING )
+		mote.rgb = toneMapping( mote.rgb );
+		floorC.rgb = toneMapping( floorC.rgb );
+	#endif
+		gl_FragColor = vec4( max( linearToOutputTexel( mote ).rgb - linearToOutputTexel( floorC ).rgb, 0.0 ), 1.0 );
+		return;
+	}
 	vec3 n = normalize( cross( dFdx( vLookWorld ), dFdy( vLookWorld ) ) );
 	vec3 v = normalize( cameraPosition - vLookWorld );
 	vec2 q = vLookShaft.xy * ( 1.0 - vLookShaft.xy );
@@ -845,14 +897,36 @@ export function lookShafts(THREE, shafts, opts) {
     }
     idx.push(b, b + 2, b + 1, b, b + 3, b + 2, b + 4, b + 5, b + 6, b + 4, b + 6, b + 7);
   }
+  // Dust in the light (opts.motes: { each, size, drift, strength, seed }):
+  // each shaft's motes are quads in the same mesh, the same draw.
+  if (o.motes) {
+    const M = o.motes;
+    let seed = (M.seed || 7) * 7919;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+    for (const s of shafts) {
+      const d = s.dir, l = s.length;
+      for (let n = 0; n < M.each; n++) {
+        const u = rnd(), v = rnd(), t = 0.04 + rnd() * 0.92, k = rnd(), b = pos.length / 3;
+        const p = [0, 1, 2].map((a) => s.quad[0][a] + (s.quad[1][a] - s.quad[0][a]) * u + (s.quad[3][a] - s.quad[0][a]) * v + d[a] * l * t);
+        for (const [x, y] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { pos.push(...p); at.push(x, y, 2 + k); }
+        idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+      }
+    }
+  }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('lookShaft', new THREE.Float32BufferAttribute(at, 3));
   geo.setIndex(idx);
   geo.computeBoundingSphere();
   const c = new THREE.Color(o.color != null ? o.color : S.color).multiplyScalar(o.strength != null ? o.strength : S.strength);
+  const M = o.motes || null;
   const mat = new THREE.ShaderMaterial({
-    uniforms: { lookShaftColor: { value: c }, lookShaftFade: { value: new THREE.Vector2(S.tail, S.edge) } },
+    uniforms: {
+      lookShaftColor: { value: c },
+      lookShaftFade: { value: new THREE.Vector2(S.tail, S.edge) },
+      lookMote: { value: new THREE.Vector3(0, M ? M.drift : 0, M ? M.size : 0) },
+      lookMoteColor: { value: new THREE.Color(o.color != null ? o.color : S.color).multiplyScalar(M ? M.strength : 0) },
+    },
     vertexShader: SHAFT_VERT,
     fragmentShader: SHAFT_FRAG,
     transparent: true,
@@ -869,6 +943,8 @@ export function lookShafts(THREE, shafts, opts) {
   mat.userData.lookKind = 'shafts';
   mat.userData.looksSkip = true;
   const mesh = new THREE.Mesh(geo, mat);
+  // The dust keeps moving: its clock, read as the mesh draws.
+  if (o.motes) mesh.onBeforeRender = () => { mat.uniforms.lookMote.value.x = performance.now() * 0.001; };
   mesh.name = o.name || 'lookShafts';
   mesh.castShadow = false;
   mesh.receiveShadow = false;
@@ -877,119 +953,124 @@ export function lookShafts(THREE, shafts, opts) {
   return mesh;
 }
 
-// Graffiti (LOOK.graffiti), in place of map_fragment: a piece drawn from its
-// signed distance in the decal's own units (its height 1, aspect wide).
-// Style 0 bubble blobs with counters and drips; 1 a star burst; 2 a zigzag
-// stroke ending in an arrow. A dark outline, a drop shadow down and right,
-// the fill from colour A at the foot to B at the top with a light edge up and
-// left, overspray specks round it, flaked where the wall shows through.
-// Outside it, nothing (discarded: the wall's own pixel, and the bloom mask's
-// alpha untouched).
-const GRAFFITI_FRAG = `
-	float lookAspect = vLookTag.z, lookSeed = vLookTag.y;
-	vec2 lookQ = vec2( vLookUv.x * lookAspect, vLookUv.y );
-	float lookD = lookPiece( lookQ, vLookTag.x, lookSeed, lookAspect );
-	float lookDs = lookPiece( lookQ - vec2( lookGraffiti.y, -lookGraffiti.y ), vLookTag.x, lookSeed, lookAspect );
-	float lookDh = lookPiece( lookQ + vec2( -0.035, 0.035 ), vLookTag.x, lookSeed, lookAspect );
-	float lookSpeck = lookHash( floor( lookQ * 140.0 ) + lookSeed );
-	float lookFlake = lookNoise( lookQ * 9.0 + lookSeed * 3.0 ) * 0.7 + lookNoise( lookQ * 23.0 ) * 0.3;
-	vec3 lookPaint;
-	if ( lookD < 0.0 ) {
-		lookPaint = mix( vLookColA, vLookColB, smoothstep( 0.2, 0.85, vLookUv.y ) );
-		if ( lookDh > 0.0 ) lookPaint = mix( lookPaint, vec3( 1.0 ), 0.55 );
-	} else if ( lookD < lookGraffiti.x ) {
-		lookPaint = vec3( 0.025, 0.025, 0.03 );
-	} else if ( lookDs < lookGraffiti.x ) {
-		lookPaint = vec3( 0.06, 0.055, 0.07 );
-	} else if ( lookD < lookGraffiti.x + 0.09 && lookSpeck < 0.16 * ( 1.0 - ( lookD - lookGraffiti.x ) / 0.09 ) ) {
-		lookPaint = vLookColA;
-	} else discard;
-	if ( lookFlake < 0.2 ) discard;
-	diffuseColor.rgb = lookPaint * mix( 0.82, 1.0, lookNoise( lookQ * 4.0 ) );`;
-
+// Paint and rot on the walls, in place of map_fragment; each decal says which
+// by its style. 0 to 2 read the atlas (map): lookField is the distance from a
+// piece's edge in the piece's heights, negative inside. 0 a piece: its block
+// shadow down and right, a dark outline, the fill from A at its foot to B at
+// its top, a light edge up and left. 1 a tag, A alone. 2 a stencil, A with its
+// overspray. Then wear, flaked where the wall shows through. 3 damp running
+// down from the decal's top, A to B; 4 moss, A to B in clumps; 5 a puddle, dark
+// glass in a damp rim; 6 a crack along the decal with moss in it. Outside the
+// paint, nothing: the wall's own pixel, and the bloom mask's alpha untouched.
 const GRAFFITI_GLSL = `
-float lookSmin( float a, float b, float k ) { float h = clamp( 0.5 + 0.5 * ( b - a ) / k, 0.0, 1.0 ); return mix( b, a, h ) - k * h * ( 1.0 - h ); }
-float lookSeg( vec2 p, vec2 a, vec2 b ) { vec2 pa = p - a, ba = b - a; return length( pa - ba * clamp( dot( pa, ba ) / dot( ba, ba ), 0.0, 1.0 ) ); }
-float lookStar( vec2 p, float r, float k ) {
-	float a = atan( p.y, p.x ), seg = 6.2831853 / 5.0;
-	float b = mod( a + seg * 0.25, seg ) - seg * 0.5;
-	return length( p ) - mix( r, r * k, abs( b ) / ( seg * 0.5 ) );
-}
-float lookPiece( vec2 p, float style, float seed, float aspect ) {
-	float d = 1e3;
-	if ( style < 0.5 ) {
-		float n = floor( 3.0 + lookHash( vec2( seed, 1.0 ) ) * 2.99 );
-		for ( int i = 0; i < 5; i++ ) {
-			float fi = float( i );
-			if ( fi >= n ) break;
-			vec2 c = vec2( 0.28 + ( fi + 0.5 ) / n * ( aspect - 0.56 ), 0.55 + 0.12 * ( lookHash( vec2( seed, fi + 3.0 ) ) - 0.5 ) );
-			float r = 0.2 + 0.09 * lookHash( vec2( seed, fi + 9.0 ) );
-			float di = length( ( p - c ) * vec2( 1.0, 1.1 ) ) - r;
-			if ( lookHash( vec2( seed, fi + 17.0 ) ) > 0.45 ) di = max( di, -( length( p - c - vec2( 0.02, 0.03 ) ) - r * 0.28 ) );
-			d = lookSmin( d, di, 0.08 );
+float lookField( vec2 uv, float scale ) { return ( 0.5 - texture2D( map, uv ).r ) * scale; }`;
+const GRAFFITI_FRAG = `
+	float lookStyle = vLookTag.x, lookSeed = vLookTag.y, lookAspect = vLookTag.z, lookScale = vLookTag.w;
+	vec2 lookQ = vec2( vLookLocal.x * lookAspect, vLookLocal.y );
+	float lookFlake = lookNoise( lookQ * 26.0 + lookSeed * 3.0 ) * 0.7 + lookNoise( lookQ * 71.0 + lookSeed ) * 0.3;
+	vec3 lookPaint = vLookColA;
+	float lookA = 0.0, lookRough = lookGraffiti.w;
+	if ( lookStyle < 2.5 ) {
+		float lookD = lookField( vMapUv, lookScale );
+		float lookAa = max( fwidth( lookD ) * 0.75, 1e-3 );
+		float lookSpeck = lookHash( floor( lookQ * 130.0 ) + lookSeed );
+		float lookFilled = 1.0 - smoothstep( -lookAa, lookAa, lookD );
+		if ( lookStyle < 0.5 ) {
+			// Atlas uv per piece height: 2 spread / size over the scale.
+			float lookStep = lookAtlasK / lookScale;
+			vec2 lookS = vec2( -1.0, -1.0 ) * lookGraffiti.y * lookStep;
+			float lookB = min( lookField( vMapUv + lookS, lookScale ), lookField( vMapUv + lookS * 2.0, lookScale ) );
+			float lookH = lookField( vMapUv + vec2( -1.0, -1.0 ) * lookGraffiti.z * lookStep, lookScale );
+			float lookO = lookGraffiti.x;
+			float lookOut = 1.0 - smoothstep( lookO - lookAa, lookO + lookAa, lookD );
+			vec3 lookFillC = mix( vLookColA, vLookColB, smoothstep( 0.1, 0.9, vLookLocal.y ) );
+			if ( lookH >= 0.0 ) lookFillC = mix( lookFillC, vec3( 1.0 ), 0.5 );
+			lookPaint = mix( vLookColA * 0.16, vec3( 0.03 ), 0.55 );
+			lookA = 1.0 - smoothstep( lookO - lookAa, lookO + lookAa, lookB );
+			lookPaint = mix( lookPaint, vec3( 0.022, 0.022, 0.027 ), lookOut );
+			lookA = max( lookA, lookOut );
+			lookPaint = mix( lookPaint, lookFillC, lookFilled );
+			lookA = max( lookA, lookFilled );
+			if ( lookA < 0.02 && lookD < lookO + 0.05 && lookSpeck < 0.09 * ( 1.0 - ( lookD - lookO ) / 0.05 ) ) { lookPaint = vLookColA; lookA = 0.75; }
+		} else {
+			lookA = lookFilled;
+			float lookHalo = lookStyle < 1.5 ? 0.04 : 0.09;
+			if ( lookA < 0.02 && lookD < lookHalo && lookSpeck < 0.15 * ( 1.0 - lookD / lookHalo ) ) lookA = 0.7;
 		}
-		for ( int k = 0; k < 4; k++ ) {
-			float fk = float( k ), x = 0.3 + lookHash( vec2( seed, fk + 31.0 ) ) * ( aspect - 0.6 );
-			float l = 0.08 + 0.2 * lookHash( vec2( seed, fk + 41.0 ) );
-			d = min( d, lookSeg( p, vec2( x, 0.4 ), vec2( x, 0.4 - l ) ) - 0.016 );
-		}
-	} else if ( style < 1.5 ) {
-		d = lookStar( p - vec2( aspect * 0.5, 0.52 ), 0.43, 0.45 );
-		for ( int k = 0; k < 3; k++ ) {
-			float fk = float( k );
-			vec2 c = vec2( 0.12 + lookHash( vec2( seed, fk + 5.0 ) ) * ( aspect - 0.24 ), 0.15 + 0.7 * lookHash( vec2( seed, fk + 7.0 ) ) );
-			d = min( d, lookStar( p - c, 0.09, 0.5 ) );
-		}
-		d = lookSmin( d, abs( length( p - vec2( aspect * 0.5, 0.52 ) ) - 0.47 ) - 0.025, 0.02 );
+		lookA *= smoothstep( 0.1, 0.2, lookFlake ) * 0.94;
+	} else if ( lookStyle < 3.5 ) {
+		float lookRun = lookNoise( vec2( lookQ.x * 7.0 + lookSeed, lookQ.y * 0.7 ) ) * 0.72 + lookNoise( vec2( lookQ.x * 17.0, lookSeed ) ) * 0.4;
+		float lookEdge = smoothstep( 0.0, 0.18, vLookLocal.x ) * ( 1.0 - smoothstep( 0.82, 1.0, vLookLocal.x ) );
+		lookA = ( 1.0 - smoothstep( lookRun * 0.45, lookRun * 1.05, 1.0 - vLookLocal.y ) ) * lookEdge * 0.6;
+		lookPaint = mix( vLookColA, vLookColB, lookNoise( lookQ * 3.0 + lookSeed ) );
+		lookRough = 0.86;
+	} else if ( lookStyle < 4.5 ) {
+		float lookR = 1.0 - smoothstep( 0.45, 1.0, length( vLookLocal * 2.0 - 1.0 ) );
+		float lookN = lookNoise( lookQ * 8.0 + lookSeed ) * 0.6 + lookNoise( lookQ * 26.0 + lookSeed * 2.0 ) * 0.4;
+		lookA = smoothstep( 0.62, 0.78, lookN + lookR * 0.55 - 0.18 );
+		lookPaint = mix( vLookColA, vLookColB, lookNoise( lookQ * 52.0 + lookSeed ) );
+		lookRough = 1.0;
+	} else if ( lookStyle < 5.5 ) {
+		float lookR = length( vLookLocal * 2.0 - 1.0 ) + ( lookNoise( lookQ * 3.0 + lookSeed ) - 0.5 ) * 0.55;
+		float lookWater = 1.0 - smoothstep( 0.62, 0.7, lookR );
+		float lookDamp = 1.0 - smoothstep( 0.66, 1.0, lookR );
+		lookPaint = mix( vec3( 0.06, 0.055, 0.05 ), vec3( 0.012, 0.014, 0.018 ), lookWater );
+		lookA = max( lookWater, lookDamp * 0.5 );
+		lookRough = mix( 0.62, lookGraffiti2.x, lookWater );
 	} else {
-		vec2 a = vec2( 0.12, 0.3 + 0.4 * lookHash( vec2( seed, 2.0 ) ) );
-		for ( int k = 1; k < 6; k++ ) {
-			float fk = float( k );
-			vec2 b = vec2( 0.12 + fk / 5.0 * ( aspect - 0.42 ), mod( fk, 2.0 ) > 0.5 ? 0.2 + 0.15 * lookHash( vec2( seed, fk ) ) : 0.65 + 0.15 * lookHash( vec2( seed, fk + 13.0 ) ) );
-			d = min( d, lookSeg( p, a, b ) - 0.075 );
-			a = b;
-		}
-		vec2 t = vec2( aspect - 0.12, a.y ), dir = normalize( t - a + vec2( 1e-4, 0.0 ) ), nrm = vec2( -dir.y, dir.x );
-		d = min( d, lookSeg( p, a, t - dir * 0.12 ) - 0.06 );
-		vec2 q = p - t;
-		float tri = max( dot( q, -dir ) - 0.22, abs( dot( q, nrm ) ) - dot( q, -dir ) * 0.75 );
-		d = min( d, max( tri, -dot( q, -dir ) ) );
+		float lookLine = 0.5 + ( lookNoise( vec2( lookQ.x * 2.6 + lookSeed, lookSeed ) ) - 0.5 ) * 0.7 + ( lookNoise( vec2( lookQ.x * 9.0, lookSeed * 2.0 ) ) - 0.5 ) * 0.2;
+		float lookDd = abs( vLookLocal.y - lookLine );
+		float lookCrack = 1.0 - smoothstep( 0.035, 0.085, lookDd );
+		float lookFringe = ( 1.0 - smoothstep( 0.1, 0.42, lookDd ) ) * smoothstep( 0.55, 0.75, lookNoise( lookQ * 14.0 + lookSeed ) + 0.12 );
+		lookPaint = mix( mix( vLookColA, vLookColB, lookNoise( lookQ * 40.0 ) ), vec3( 0.014 ), lookCrack );
+		lookA = max( lookCrack * 0.92, lookFringe * 0.85 );
+		lookRough = 1.0;
 	}
-	return d;
-}`;
+	if ( lookA < 0.02 ) discard;
+	diffuseColor.rgb = lookPaint * mix( 0.84, 1.0, lookNoise( lookQ * 4.0 + lookSeed ) );
+	diffuseColor.a = lookA;`;
 
-// Graffiti on a map's walls: one mesh of decals, one draw, kept out of the
-// merge (its uvs are its own). decals: [{ c: [x, y, z] (centre), n: '+x',
-// '-x', '+z' or '-z' (the wall's face, its way out), w, h, style, seed, a, b
-// (0xRRGGBB, the fill's foot and top) }], world units; each sits 4 mm off
-// its face. opts: { fill, shelter } as lookMaterial's, so paint under a roof
-// is lit as the wall under it.
+// Paint and rot on a map's surfaces: one mesh of decals, one draw, kept out of
+// the merge (its uvs are its own), blended over what is under it with the
+// bloom mask's alpha left alone. decals: [{ c: [x, y, z], n: '+x', '-x', '+y',
+// '+z' or '-z' (the face's way out), w, h, style, seed, a, b (0xRRGGBB), rect:
+// a piece's pixels in the atlas (styles 0 to 2); quad: [4 corners], foot left
+// first, instead of c, w and h }], world units; each sits 4 mm off its face.
+// opts: { atlas: { name, size, spread }, fill, shelter, unit, name }.
 export function lookGraffiti(THREE, decals, opts) {
-  const o = opts || {}, G = LOOK.graffiti;
-  const pos = [], nor = [], uv = [], tag = [], ca = [], cb = [], idx = [];
+  const o = opts || {}, G = LOOK.graffiti, A = o.atlas || null;
+  const pos = [], nor = [], uv = [], local = [], tag = [], ca = [], cb = [], idx = [];
   const lin = (hex) => { const c = new THREE.Color(hex); return [c.r, c.g, c.b]; };
+  const off = 0.004 * (o.unit || 1);
   for (const d of decals) {
     const s = d.n[0] === '-' ? -1 : 1, ax = d.n[1];
-    const n = ax === 'x' ? [s, 0, 0] : [0, 0, s];
-    // Right along the wall as seen facing it.
+    const n = ax === 'x' ? [s, 0, 0] : ax === 'y' ? [0, s, 0] : [0, 0, s];
+    // Right along the face as seen facing it; up the wall, or north on a floor.
     const t = ax === 'x' ? [0, 0, -s] : [s, 0, 0];
-    const off = 0.004 * (o.unit || 1);
-    const b = pos.length / 3;
-    for (const [u, v] of [[0, 0], [1, 0], [1, 1], [0, 1]]) {
+    const up = ax === 'y' ? [0, 0, -1] : [0, 1, 0];
+    const corners = d.quad || [[0, 0], [1, 0], [1, 1], [0, 1]].map(([u, v]) => {
       const du = (u - 0.5) * d.w, dv = (v - 0.5) * d.h;
-      pos.push(d.c[0] + t[0] * du + n[0] * off, d.c[1] + dv, d.c[2] + t[2] * du + n[2] * off);
+      return [0, 1, 2].map((k) => d.c[k] + t[k] * du + up[k] * dv);
+    });
+    const b = pos.length / 3, r = d.rect;
+    const aspect = d.quad ? Math.hypot(corners[1][0] - corners[0][0], corners[1][2] - corners[0][2]) / Math.hypot(corners[3][0] - corners[0][0], corners[3][2] - corners[0][2]) : d.w / d.h;
+    corners.forEach((p, i) => {
+      const u = i === 1 || i === 2 ? 1 : 0, v = i >= 2 ? 1 : 0;
+      pos.push(p[0] + n[0] * off, p[1] + n[1] * off, p[2] + n[2] * off);
       nor.push(...n);
-      uv.push(u, v);
-      tag.push(d.style, d.seed, d.w / d.h, 0);
+      local.push(u, v);
+      uv.push(r ? (r.x + u * r.w) / A.size : 0, r ? (r.y + (1 - v) * r.h) / A.size : 0);
+      tag.push(d.style, d.seed, aspect, r ? 2 * A.spread / r.h : 0);
       ca.push(...lin(d.a));
       cb.push(...lin(d.b));
-    }
+    });
     idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setAttribute('lookLocal', new THREE.Float32BufferAttribute(local, 2));
   geo.setAttribute('lookTag', new THREE.Float32BufferAttribute(tag, 4));
   geo.setAttribute('lookColA', new THREE.Float32BufferAttribute(ca, 3));
   geo.setAttribute('lookColB', new THREE.Float32BufferAttribute(cb, 3));
@@ -997,18 +1078,80 @@ export function lookGraffiti(THREE, decals, opts) {
   geo.computeBoundingSphere();
   const m = new THREE.MeshStandardMaterial({
     color: 0xffffff, roughness: G.roughness, metalness: 0,
+    map: A ? lookDecalAtlas(THREE, A.name) : null,
+    transparent: true, depthWrite: false,
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.AddEquation,
+    blendSrc: THREE.SrcAlphaFactor,
+    blendDst: THREE.OneMinusSrcAlphaFactor,
+    blendSrcAlpha: THREE.ZeroFactor,
+    blendDstAlpha: THREE.OneFactor,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   });
   const fill = o.fill || [1, 1, 1], sh = o.shelter || null;
   m.onBeforeCompile = (shader) => {
-    shader.uniforms.lookGraffiti = { value: new THREE.Vector2(G.outline, G.shadow) };
+    shader.uniforms.lookGraffiti = { value: new THREE.Vector4(G.outline, G.shadow, G.highlight, G.roughness) };
+    shader.uniforms.lookGraffiti2 = { value: new THREE.Vector2(G.water, G.puddle) };
+    shader.uniforms.lookAtlasK = { value: A ? 2 * A.spread / A.size : 0 };
     shader.uniforms.lookFill = { value: new THREE.Vector3(...fill) };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 lookTag;\nattribute vec3 lookColA;\nattribute vec3 lookColB;\nvarying vec4 vLookTag;\nvarying vec3 vLookColA;\nvarying vec3 vLookColB;\nvarying vec2 vLookUv;\nvarying vec3 vLookWorld;')
-      .replace('#include <project_vertex>', '#include <project_vertex>\n\tvLookTag = lookTag;\n\tvLookColA = lookColA;\n\tvLookColB = lookColB;\n\tvLookUv = uv;\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+      .replace('#include <common>', '#include <common>\nattribute vec4 lookTag;\nattribute vec3 lookColA;\nattribute vec3 lookColB;\nattribute vec2 lookLocal;\nvarying vec4 vLookTag;\nvarying vec3 vLookColA;\nvarying vec3 vLookColB;\nvarying vec2 vLookLocal;\nvarying vec3 vLookWorld;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\n\tvLookTag = lookTag;\n\tvLookColA = lookColA;\n\tvLookColB = lookColB;\n\tvLookLocal = lookLocal;\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
     let frag = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec4 vLookTag;\nvarying vec3 vLookColA;\nvarying vec3 vLookColB;\nvarying vec2 vLookUv;\nvarying vec3 vLookWorld;\nuniform vec2 lookGraffiti;\nuniform vec3 lookFill;' + NOISE_GLSL + GRAFFITI_GLSL)
-      .replace('#include <map_fragment>', GRAFFITI_FRAG);
+      .replace('#include <common>', '#include <common>\nvarying vec4 vLookTag;\nvarying vec3 vLookColA;\nvarying vec3 vLookColB;\nvarying vec2 vLookLocal;\nvarying vec3 vLookWorld;\nuniform vec4 lookGraffiti;\nuniform vec2 lookGraffiti2;\nuniform float lookAtlasK;\nuniform vec3 lookFill;' + NOISE_GLSL)
+      .replace('#include <map_pars_fragment>', '#include <map_pars_fragment>' + GRAFFITI_GLSL)
+      .replace('#include <map_fragment>', GRAFFITI_FRAG)
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = lookRough;');
+    const water = `
+#if defined( RE_IndirectSpecular )
+	if ( lookStyle > 4.5 && lookStyle < 5.5 ) {
+		// The water sees the sky, and low down the walls and blocks round the
+		// lot, dark, a little broken by a ripple.
+		vec3 lookR = inverseTransformDirection( reflect( -geometryViewDir, geometryNormal ), viewMatrix );
+		radiance *= lookGraffiti2.y * mix( 0.2, 1.0, smoothstep( 0.03, 0.34, lookR.y + ( lookNoise( lookQ * 34.0 + lookSeed ) - 0.5 ) * 0.05 ) );
+	}
+#endif`;
+    if (sh) {
+      shader.uniforms.lookShelterMin = { value: new THREE.Vector3(...sh.min) };
+      shader.uniforms.lookShelterMax = { value: new THREE.Vector3(...sh.max) };
+      shader.uniforms.lookShelter = { value: new THREE.Vector3(sh.fill, sh.ramp || 1e-3, sh.soffit || 1) };
+      frag = frag
+        .replace('#include <common>', '#include <common>\nuniform vec3 lookShelterMin;\nuniform vec3 lookShelterMax;\nuniform vec3 lookShelter;')
+        .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>' + SHELTER_FRAG + water);
+    } else frag = frag.replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>' + FILL_FRAG + water);
+    shader.fragmentShader = frag;
+  };
+  m.customProgramCacheKey = () => 'look:graffiti2' + (sh ? '+shelter' : '');
+  m.userData.lookKind = 'graffiti';
+  m.userData.looksSkip = true;
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.name = o.name || 'lookGraffiti';
+  mesh.castShadow = false;
+  mesh.receiveShadow = true;
+  mesh.userData.artKeep = true;
+  return mesh;
+}
+
+// The material for a map's instanced kit (rubble, flakes, cans): plain
+// standard, each instance its own colour, under the map's fill and shelter as
+// any look surface. opts: { map, roughness, flat, doubleSide, gloss, fill,
+// shelter }. gloss: true reads a per-instance attribute lookGloss, 0 the
+// material's roughness and 1 polished (a shard of glass).
+export function lookKitMaterial(THREE, opts) {
+  const o = opts || {};
+  const m = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: o.roughness != null ? o.roughness : 0.9, metalness: 0,
+    map: o.map || null, flatShading: !!o.flat, side: o.doubleSide ? THREE.DoubleSide : THREE.FrontSide,
+  });
+  const fill = o.fill || [1, 1, 1], sh = o.shelter || null, gloss = !!o.gloss;
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.lookFill = { value: new THREE.Vector3(...fill) };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vLookWorld;' + (gloss ? '\nattribute float lookGloss;\nvarying float vLookGloss;' : ''))
+      .replace('#include <project_vertex>', '#include <project_vertex>\n#ifdef USE_INSTANCING\n\tvLookWorld = ( modelMatrix * instanceMatrix * vec4( transformed, 1.0 ) ).xyz;\n#else\n\tvLookWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;\n#endif' + (gloss ? '\n\tvLookGloss = lookGloss;' : ''));
+    let frag = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vLookWorld;\nuniform vec3 lookFill;' + (gloss ? '\nvarying float vLookGloss;' : ''));
+    if (gloss) frag = frag.replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix( roughness, 0.05, vLookGloss );');
     if (sh) {
       shader.uniforms.lookShelterMin = { value: new THREE.Vector3(...sh.min) };
       shader.uniforms.lookShelterMax = { value: new THREE.Vector3(...sh.max) };
@@ -1019,15 +1162,9 @@ export function lookGraffiti(THREE, decals, opts) {
     } else frag = frag.replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>' + FILL_FRAG);
     shader.fragmentShader = frag;
   };
-  m.customProgramCacheKey = () => 'look:graffiti' + (sh ? '+shelter' : '');
-  m.userData.lookKind = 'graffiti';
+  m.customProgramCacheKey = () => 'look:kit' + (sh ? '+shelter' : '') + (gloss ? '+gloss' : '');
   m.userData.looksSkip = true;
-  const mesh = new THREE.Mesh(geo, m);
-  mesh.name = o.name || 'lookGraffiti';
-  mesh.castShadow = false;
-  mesh.receiveShadow = true;
-  mesh.userData.artKeep = true;
-  return mesh;
+  return m;
 }
 
 // Bloom marks: the gates and the edge lines write alpha 0 into the HDR frame;

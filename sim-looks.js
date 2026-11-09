@@ -6,7 +6,7 @@
 // quadmathSimCrosshair.
 import { resolveAutoQuality, gpuTier, autoQualityStep } from './sim-touch.js?v=62e0a37fafce';
 import { updateSceneLighting } from './sim-lighting.js?v=db386ea7cfd2';
-import { LOOK } from './sim-look.js?v=826bc4bd463d';
+import { LOOK } from './sim-look.js?v=4fe91d31bea9';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';
@@ -160,6 +160,10 @@ export const LOOK_SPOTS = {
   bandoSecond: { pos: [-8.75, 30.1, 8.75], target: [17.5, 26.6, 4.2] },
   bandoSlab: { pos: [49.7, 3.15, 7], target: [42, 6.3, -24.5] },
   bandoStair: { pos: [-37.8, 40.6, -44.8], target: [-46.9, 1.75, -45.15] },
+  // The big wall in the yard, across the courtyard, and the sun's dust on the
+  // second floor.
+  bandoWall: { pos: [-37.8, 4.55, 39.2], target: [-36.4, 5.0, 62.5] },
+  bandoDust: { pos: [-14, 3.2, -6.3], target: [-14, 6.3, 12.95] },
   // The Fly chooser's Bando thumbnail (assets/sim-thumbs/bando.jpg): high over
   // the courtyard's corner, the courtyard face, its windows and graffiti, the
   // van, the dead tree and the parapet gap. sim.html?map=bando&quality=high
