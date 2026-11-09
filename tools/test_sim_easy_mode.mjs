@@ -29,7 +29,8 @@ import {
   SWITCH_WIZARD_STEPS, createSwitchWizard, stepSwitchWizard, skipSwitchWizard, switchWizardResult,
   defaultFlightMode, saveFlightMode, hasArmSwitch,
 } from '../sim-touch.js';
-import { switchAux, radioAux, auxRanges } from '../sim-core-adapter.js';
+import { switchAux, radioAux, auxRanges, createBfCore, armingFlagNames } from '../sim-core-adapter.js';
+import { SimCore } from '../vendor/sim-core/sim-core.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const DIFF = readFileSync(join(root, 'vendor/sim-core/configs/air65-ryfly-2026-10-23.txt'), 'utf8');
@@ -281,6 +282,111 @@ test('switchAux: ARM on AUX4 reaches ARM on AUX1; the owner\'s layout passes thr
   assert.equal(b.length, 12);
 });
 
+// The bf core itself, stepped as the page does (a 4 ms poll, 60 Hz frames): on
+// its back with a few degrees of lean, as a quad that got there by rolling
+// (it settles over onto the edge of a duct, 38 degrees down on one side).
+// A teleport skips Betaflight's estimate, and from dead flat it would be a
+// full 180 degrees out, which its accelerometer cannot correct.
+async function quickRig({ mode, leanDeg = 4, frameMs = 16 }) {
+  const core = await createBfCore({
+    SimCore,
+    wasm: readFileSync(join(root, 'vendor/sim-core/sim-core.wasm')),
+    airframe: JSON.parse(readFileSync(join(root, 'vendor/sim-core/airframes/air65.json'), 'utf8')),
+    diff: DIFF,
+    world: { floorZ: 0, boxes: [] },
+  });
+  core.setMode(mode);
+  const rig = { core, stick: { r: 0, p: 0, y: 0, t: 0 }, events: [], wall: 0, each: null };
+  rig.upZ = () => { const [, x, y] = core.sim.state.quat; return 1 - 2 * (x * x + y * y); };
+  rig.run = (ms) => {
+    for (const end = rig.wall + ms; rig.wall < end; rig.wall += 4) {
+      const tUs = core.stamp(rig.wall);
+      if (core.turtlePhase) { const e = core.stepTurtle(true, true); if (e) rig.events.push(e); }
+      if (tUs !== null) core.input(rig.stick, tUs);
+      if (rig.wall % frameMs === 0) { core.advance(frameMs); core.anchor(rig.wall); }
+      if (rig.each) rig.each();
+    }
+  };
+  rig.run(400);
+  const half = (180 - leanDeg) * Math.PI / 360;
+  core.teleport({ x: 0, y: 0, z: 0.05 }, { x: Math.sin(half), y: 0, z: 0, w: Math.cos(half) });
+  rig.run(1500);
+  assert.ok(rig.upZ() < -0.5, `on its back or side (up Z ${rig.upZ().toFixed(3)})`);
+  return rig;
+}
+
+// Runs a turtle to flyable: its time from upright (up Z over 0.9), and the
+// throttle channel's highest value before it was armed.
+function toFlyable(rig) {
+  const { core } = rig;
+  let upUs = null, flyUs = null, heldThr = 0;
+  rig.each = () => {
+    const f = core.sim.fc;
+    if (upUs === null && rig.upZ() > 0.9) upUs = core.sim.simTimeUs;
+    if (upUs !== null && flyUs === null) {
+      if (f.armed && core.turtlePhase === null) flyUs = core.sim.simTimeUs;
+      else heldThr = Math.max(heldThr, Math.round(f.rcData[3]));
+    }
+  };
+  rig.run(1500);
+  rig.each = null;
+  return { ms: upUs !== null && flyUs !== null ? (flyUs - upUs) / 1000 : null, heldThr };
+}
+
+const flags = (core) => armingFlagNames(core.sim.fc.armingDisableFlags).join(' ');
+
+for (const [name, opts, start] of [
+  ['the stick, in acro', { mode: 'acro' }, (c) => c.startEasyTurtle(1, 0)],
+  ['the stick, in angle', { mode: 'angle' }, (c) => c.startEasyTurtle(0, -1)],
+  ['F, in angle', { mode: 'angle' }, (c) => c.startFlip()],
+  ['the stick, at 15 frames a second', { mode: 'angle', frameMs: 64 }, (c) => c.startEasyTurtle(1, 0)],
+]) {
+  test(`bf core, ${name}: upright to flyable under 300 ms, the throttle channel low until armed, then the pilot's; stays up`, async () => {
+    const rig = await quickRig(opts);
+    rig.stick = { r: 0, p: 0, y: 0, t: 0.6 };   // a pilot who left the throttle up
+    assert.equal(start(rig.core), true);
+    const out = toFlyable(rig);
+    assert.deepEqual(rig.events, ['flip', 'upright', 'rearm']);
+    assert.ok(out.ms !== null && out.ms < 300, `upright to flyable: ${out.ms} ms`);
+    assert.ok(out.heldThr <= 1000, `throttle channel held low until armed (${out.heldThr})`);
+    assert.equal(rig.core.getState().armed, true, flags(rig.core));
+    assert.equal(rig.core.getState().crashFlip, false, 'crash flip ended');
+    assert.equal(Math.round(rig.core.sim.fc.rcData[3]), 1600, 'the pilot\'s throttle, handed back');
+    assert.ok(rig.core.sim.state.pos[2] > 0.3, `flying on it (z ${rig.core.sim.state.pos[2].toFixed(2)})`);
+    assert.ok(rig.upZ() > 0.9, `upright in the air (${rig.upZ().toFixed(3)})`);
+  });
+}
+
+test('bf core: re-armed at idle in angle, it rests upright; a lost estimate waits rather than rolling it back over', async () => {
+  let rig = await quickRig({ mode: 'angle' });
+  rig.core.startEasyTurtle(1, 0);
+  assert.ok(toFlyable(rig).ms < 300);
+  let minUp = 1;
+  rig.each = () => { minUp = Math.min(minUp, rig.upZ()); };
+  rig.run(3000);
+  assert.ok(minUp > 0.95, `rests upright armed at idle (lowest up Z ${minUp.toFixed(3)})`);
+  assert.equal(rig.core.getState().armed, true);
+  // Dead flat by teleport: the estimate is 180 degrees out, so ARM waits.
+  rig = await quickRig({ mode: 'angle', leanDeg: 0 });
+  rig.core.startEasyTurtle(1, 0);
+  rig.run(1800);
+  assert.deepEqual(rig.events, ['flip', 'upright', 'rearm']);
+  assert.equal(rig.core.getState().armed, true, flags(rig.core));
+  minUp = 1;
+  rig.each = () => { minUp = Math.min(minUp, rig.upZ()); };
+  rig.run(2000);
+  assert.ok(minUp > 0.95, `stays upright (lowest up Z ${minUp.toFixed(3)})`);
+});
+
+test('bf core: rearm false lets go disarmed, for a radio on its switches', async () => {
+  const rig = await quickRig({ mode: 'acro' });
+  rig.core.startEasyTurtle(1, 0, false);
+  rig.run(1500);
+  assert.deepEqual(rig.events, ['flip', 'upright']);
+  assert.equal(rig.core.turtlePhase, null);
+  assert.equal(rig.core.getState().armed, false);
+});
+
 // ---- headless Chrome ----
 
 function resolveChrome() {
@@ -386,6 +492,7 @@ const PAGE = String.raw`(() => {
   const speed = () => { const v = s.coreState().velocity; return Math.hypot(v.x, v.y, v.z); };
   const landed = () => s.coreState().clearance <= 0.04 && speed() < 0.5;
   const fc = () => s.bfCore().sim.fc;
+  const tickUp = () => { const [, x, y] = s.bfCore().sim.state.quat; return 1 - 2 * (x * x + y * y); };
   function menus() {
     const on = (id, c) => { const el = document.getElementById(id); return !!(el && el.classList.contains(c)); };
     return { start: on('startMenu', 'open'), looks: !!(s.looks && s.looks.menuOpen), layer: on('menuLayer', 'show'), prompt: on('feelPrompt', 'show'), picker: !!document.getElementById('gpPicker') };
@@ -405,14 +512,20 @@ const PAGE = String.raw`(() => {
     }
     return out;
   }
-  // On its back at rest where it stands: a pose only, no fall to speak of.
+  // On its back at rest where it stands: a pose only, no fall to speak of, with
+  // a few degrees of lean, and on bf time for Betaflight's estimate to settle
+  // on it disarmed, as if it had rolled there.
   async function flip() {
     const c = s.coreState(), z = c.position.z;
-    const q = { x: 1, y: 0, z: 0, w: 0 };
+    const half = 88 * Math.PI / 180;
+    const q = { x: Math.sin(half), y: 0, z: 0, w: Math.cos(half) };
     if (c.kind === 'bf') s.bfCore().teleport({ x: c.position.x, y: c.position.y, z: z + 0.03 }, q);
     else { window._qp.quaternion = q; window._qp.omega.x = window._qp.omega.y = window._qp.omega.z = 0; }
     await wait(150);
-    return until(() => upZ() < -0.9 && s.coreState().clearance <= 0.04 && speed() < 0.3, 4000);
+    await wait(c.kind === 'bf' ? 400 : 0);
+    const rest = await until(() => upZ() < -0.5 && s.coreState().clearance <= 0.04 && speed() < 0.3, 4000);
+    if (c.kind === 'bf') await wait(1200);
+    return rest;
   }
   // A fall onto the floor at speed: a crash (the Rig's walls are foam: about
   // 20 m/s on the bf core).
@@ -422,7 +535,7 @@ const PAGE = String.raw`(() => {
     if (c.kind === 'bf') s.bfCore().teleport({ x: c.position.x, y: c.position.y, z: 2.5 }, q, { x: 0, y: 0, z: -25 });
     else { window._qp.position.z = 2.5; window._qp.velocity.z = -40; }
   }
-  window.__easy = { s, wait, until, axis, thr, upZ, speed, landed, fc, menus, state, flip, drop };
+  window.__easy = { s, wait, until, axis, thr, upZ, tickUp, speed, landed, fc, menus, state, flip, drop };
   return true;
 })()`;
 
@@ -594,54 +707,58 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.equal(r.off, true, 'disarmed after the crash, throttle still at 20 %');
         assert.equal(r.reason, 'crash', 'as a crash');
 
-        // Turtle by roll: upside down at rest, disarmed. Full stick.
-        for (const [name, stick, val] of [['full right roll', 0, 1], ['full back pitch', 1, -1]]) {
+        // Turtle by stick: upside down at rest, disarmed. Upright, it re-arms
+        // with no hold: the throttle channel held low until armed, then the
+        // pilot's. Once at the bottom, once left at half.
+        for (const [name, stick, val, thr] of [['full right roll, throttle down', 0, 1, 0], ['full back pitch, throttle at half', 1, -1, 0.5]]) {
           r = await js(`
             E.thr(0);
             const rest = await E.flip();
-            await E.wait(400);
             const before = E.state();
+            E.thr(${thr});
             E.axis(${stick}, ${val});
-            const started = await E.until(() => E.s.bfCore().turtlePhase !== null, 2000);
-            let crashFlip = false, flipRc = 0;
-            const upright = await E.until(() => {
+            const b = E.s.bfCore();
+            const started = await E.until(() => b.turtlePhase !== null, 2000);
+            let crashFlip = false, flipRc = 0, upUs = null, flyUs = null, heldThr = 0;
+            const flyable = await E.until(() => {
               const f = E.fc();
               if (f.crashFlip) { crashFlip = true; flipRc = Math.max(flipRc, Math.round(f.rcData[6])); }
-              return E.s.bfCore().turtlePhase === null && E.upZ() > 0.9;
-            }, 5000);
-            await E.wait(500);
+              if (upUs === null && E.tickUp() > 0.9) upUs = b.simTimeUs;
+              if (upUs !== null && flyUs === null) {
+                if (f.armed && b.turtlePhase === null && !f.crashFlip) flyUs = b.simTimeUs;
+                else heldThr = Math.max(heldThr, Math.round(f.rcData[3]));
+              }
+              return flyUs !== null;
+            }, 6000);
+            await E.wait(150);
+            const f = E.fc();
+            const handed = { thr: Math.round(f.rcData[3]), held: Math.round(f.rcData[${stick}]) };
+            await E.wait(350);
             const heldUp = E.state();
             E.axis(${stick}, 0);
-            await E.wait(800);
-            return JSON.stringify({ rest, before, started, crashFlip, flipRc, upright, heldUp, after: E.state() });`);
-          console.log(`turtle (${name}): ` + JSON.stringify({ before: r.before.upZ, started: r.started, crashFlip: r.crashFlip, flipRc: r.flipRc, upright: r.upright, upZ: r.after.upZ, armed: r.after.armed }));
+            await E.wait(500);
+            return JSON.stringify({ rest, before, started, crashFlip, flipRc, flyable, ms: (flyUs - upUs) / 1000, heldThr, handed, heldUp, after: E.state() });`);
+          console.log(`turtle (${name}): ` + JSON.stringify({ started: r.started, crashFlip: r.crashFlip, flipRc: r.flipRc, ms: r.ms, heldThr: r.heldThr, handed: r.handed, upZ: r.after.upZ, armed: r.after.armed, z: r.after.z }));
           assert.equal(r.rest, true, `${name}: upside down at rest`);
-          assert.ok(r.before.upZ < -0.9, `${name}: on its back`);
+          assert.ok(r.before.upZ < -0.5, `${name}: upside down (${r.before.upZ.toFixed(2)})`);
           assert.equal(r.before.armed, false, `${name}: disarmed upside down`);
           assert.equal(r.before.rc[2], 1000, `${name}: the turtle channel off, though the radio's AUX3 is high`);
           assert.equal(r.started, true, `${name}: the stick starts the turtle`);
           assert.equal(r.crashFlip, true, `${name}: Betaflight in crash flip`);
           assert.ok(r.flipRc >= 1700, `${name}: the page drives the turtle channel (${r.flipRc})`);
-          assert.equal(r.upright, true, `${name}: upright`);
+          assert.equal(r.flyable, true, `${name}: re-armed`);
+          assert.ok(r.ms < 300, `${name}: under 300 ms from upright to flyable (${r.ms} ms)`);
+          assert.ok(r.heldThr <= 1000, `${name}: the throttle channel held low until armed (${r.heldThr})`);
+          assert.equal(r.handed.thr, 1000 + 1000 * thr, `${name}: then the pilot's throttle`);
+          assert.equal(r.handed.held, 1500, `${name}: a stick still held waits for centre`);
           assert.ok(r.heldUp.upZ > 0.9, `${name}: stays up, stick still held (${r.heldUp.upZ.toFixed(2)})`);
           assert.equal(r.after.auxTurtle, false, `${name}: released`);
           assert.equal(r.after.rc[2], 1000, `${name}: turtle channel low again`);
-          assert.equal(r.after.armed, false, `${name}: not armed by the turtle`);
+          assert.equal(r.after.armed, true, `${name}: armed, no hold (flags ${r.after.flags})`);
           assert.ok(r.after.upZ > 0.9, `${name}: still upright (${r.after.upZ.toFixed(2)})`);
+          if (thr) assert.ok(r.after.z > 0.3, `${name}: flying on the pilot's throttle (z ${r.after.z.toFixed(2)})`);
+          r = await js(`E.thr(0); await E.until(E.landed, 8000); await E.wait(200); return JSON.stringify(1);`);
         }
-
-        // And flies again: throttle down 1 s, up.
-        r = await js(`
-          E.thr(0);
-          await E.wait(1300);
-          E.thr(0.6);
-          const armed = await E.until(() => E.s.coreState().armed, 1500);
-          await E.wait(900);
-          const st = E.state();
-          E.thr(0);
-          return JSON.stringify({ armed, st });`);
-        assert.equal(r.armed, true, `armed after the turtles (flags ${r.st.flags})`);
-        assert.ok(r.st.z > 0.4, `flies after the turtles (z ${r.st.z.toFixed(2)})`);
       });
     });
 
@@ -795,6 +912,21 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.ok(r.flipRc >= 1700, `the page drives FLIP for the turtle (${r.flipRc})`);
         assert.equal(r.upright, true, 'upright');
         assert.equal(r.after.source, 'radio', 'AUX back on the radio afterwards');
+        assert.equal(r.after.armed, false, 'on its switches: the switch arms it, not the turtle');
+
+        // Unplugged: the keyboard's Angle, with no word from the radio it was.
+        r = await js(`
+          localStorage.removeItem('quadmathSimFlightMode');
+          window.__pads.on = false;
+          window.dispatchEvent(new Event('gamepaddisconnected'));
+          await E.wait(200);
+          const out = { flight: E.state().flight, toast: document.getElementById('toast').textContent };
+          window.__pads.on = true;
+          window.dispatchEvent(new Event('gamepadconnected'));
+          await E.wait(600);
+          return JSON.stringify(out);`);
+        assert.equal(r.flight, 'angle', 'unplugged from its switches: Angle');
+        assert.doesNotMatch(r.toast, /ON THE RADIO/, r.toast);
 
         // Calibration: the sticks only.
         r = await js(`
@@ -926,14 +1058,23 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
             await E.wait(300);
             E.axis(${stick}, ${val});
             const started = await E.until(() => E.state().jsTurtle, 1500);
-            const upright = await E.until(() => !E.state().jsTurtle && E.upZ() > 0.9, 6000);
+            let upT = null, flyT = null;
+            const upright = await E.until(() => {
+              if (upT === null && E.upZ() > 0.9) upT = performance.now();
+              if (upT !== null && flyT === null && E.s.coreState().armed) flyT = performance.now();
+              return flyT !== null;
+            }, 6000);
+            await E.wait(400);
+            const held = E.state();
             E.axis(${stick}, 0);
-            await E.wait(900);
-            return JSON.stringify({ rest, started, upright, st: E.state() });`);
-          console.log(`js turtle ${name}: ` + JSON.stringify({ rest: r.rest, started: r.started, upright: r.upright, upZ: r.st.upZ, armed: r.st.armed }));
+            await E.wait(500);
+            return JSON.stringify({ rest, started, upright, ms: flyT - upT, held, st: E.state() });`);
+          console.log(`js turtle ${name}: ` + JSON.stringify({ rest: r.rest, started: r.started, upright: r.upright, ms: r.ms, upZ: r.st.upZ, armed: r.st.armed }));
           assert.equal(r.started, true, `${name}: the stick starts it`);
-          assert.equal(r.upright, true, `${name}: upright`);
-          assert.equal(r.st.armed, false, `${name}: disarmed`);
+          assert.equal(r.upright, true, `${name}: upright and re-armed`);
+          assert.ok(r.ms < 300, `${name}: under 300 ms from upright to flyable (${Math.round(r.ms)} ms)`);
+          assert.ok(r.held.upZ > 0.9, `${name}: stays up, stick still held (${r.held.upZ.toFixed(2)})`);
+          assert.equal(r.st.armed, true, `${name}: armed, no hold`);
           assert.ok(r.st.upZ > 0.97, `${name}: lands level (${r.st.upZ.toFixed(3)})`);
         }
       });
@@ -975,11 +1116,25 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         await key('keyDown', 'f', 'KeyF', 70);
         await key('keyUp', 'f', 'KeyF', 70);
         r = await js(`
-          const started = await E.until(() => E.s.bfCore().turtlePhase !== null, 2000);
-          let auto = false;
-          const upright = await E.until(() => { auto = auto || E.s.bfCore().turtleAuto; return E.upZ() > 0.9; }, 5000);
-          return JSON.stringify({ started, auto, upright, flips: E.s.bfCore().simFlips });`);
-        assert.deepEqual(r, { started: true, auto: true, upright: true, flips: 1 }, 'F flips it over in Easy mode');
+          const b = E.s.bfCore();
+          const started = await E.until(() => b.turtlePhase !== null, 2000);
+          let auto = false, upUs = null, flyUs = null;
+          const flyable = await E.until(() => {
+            auto = auto || b.turtleAuto;
+            if (upUs === null && E.tickUp() > 0.9) upUs = b.simTimeUs;
+            if (upUs !== null && flyUs === null && E.fc().armed && b.turtlePhase === null) flyUs = b.simTimeUs;
+            return flyUs !== null;
+          }, 6000);
+          await E.wait(400);
+          return JSON.stringify({ started, auto, flyable, ms: (flyUs - upUs) / 1000, flips: b.simFlips, armed: E.s.coreState().armed, upZ: E.upZ() });`);
+        console.log('F flip: ' + JSON.stringify(r));
+        assert.equal(r.started, true, 'F starts');
+        assert.equal(r.auto, true, 'as an F flip');
+        assert.equal(r.flyable, true, 'F re-arms in Easy mode');
+        assert.ok(r.ms < 300, `F: under 300 ms from upright to flyable (${r.ms} ms)`);
+        assert.equal(r.flips, 1, 'counted once');
+        assert.equal(r.armed, true, 'stays armed');
+        assert.ok(r.upZ > 0.9, `stays up (${r.upZ.toFixed(2)})`);
       });
     });
 

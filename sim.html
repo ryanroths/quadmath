@@ -974,7 +974,7 @@ import {
   WS as CORE_WS, TICK_US, SAMPLE_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux,
   BF_CLASS_TUNES, bfClassDiff,
-} from "./sim-core-adapter.js?v=487334b3fc04";
+} from "./sim-core-adapter.js?v=666a7e4f8da1";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
 import {
@@ -3492,6 +3492,8 @@ function placeQuadAt(x,y,z,yaw,opts){
   easyArmState={};
   easyCrashAt=-Infinity;
   jsTurtle=null;
+  jsTurtleDone=false;
+  turtleStickHold=false;
   armSwState={prev:null};
   armSwitchBlocked=false;
   clearSkinTrail(skinTrail);
@@ -4575,6 +4577,7 @@ function followInputMode(){
   const input=gpConnected?'pad':'keyboard';
   if(input===flyingInput)return;
   flyingInput=input;
+  stick.aux=null; // the last input's AUX, until the next poll
   if(modeFromLink||threeD||loadFlightMode())return;
   const m=defaultFlightMode(undefined,input);
   if(m!==flightMode)setFlightMode(m,false);
@@ -4732,6 +4735,16 @@ function tickEasyArm(dt){
     syncTouchModeBtn();
   }
 }
+// A turtle done and re-armed: no 1 s hold, and the throttle is the pilot's. A
+// stick still over would fly it back onto its back, so roll and pitch wait for
+// the pilot to centre them (pollInput).
+let turtleStickHold=false;
+function turtleRearmed(){
+  easyCrashAt=-Infinity;
+  easyArmState={};
+  turtleStickHold=true;
+  syncTouchModeBtn();
+}
 function easyTurtleBusy(){return core.kind==='bf'?(core.turtlePhase!=null&&core.turtleEasy):!!jsTurtle;}
 function toggleArm(){
   if(bfRadio()){toast('ARM ON THE RADIO (AUX'+(pilotAux('arm')||'?')+')');return;}
@@ -4828,21 +4841,30 @@ function jsTick(stick,tUs){
   jsPortals();
 }
 // The js core's stick turtle, per tick: a full stick the way it is pushed,
-// upside down at rest, rolls or pitches the quad over; it lets go when the
-// spin left, scrubbed by the floor (e^-7.3t, qp.onSubstep), carries it level.
+// upside down at rest, rolls or pitches the quad over, braking into level; it
+// lets go level, or as near as this axis takes it, and the next poll re-arms
+// (Easy mode).
 let jsTurtle=null;
+let jsTurtleDone=false;
 function jsEasyTurtle(st,dt,clr){
   const upZ=bodyUpZ(qp.quaternion);
   if(jsTurtle){
-    if(Math.acos(Math.max(-1,Math.min(1,upZ)))<=Math.abs(qp.omega[jsTurtle.axis])/7.3)jsTurtle=null;
-    else qp.omega[jsTurtle.axis]+=jsTurtle.sign*22*dt;
+    const tilt=Math.acos(Math.max(-1,Math.min(1,upZ)));
+    if(tilt<0.03||(upZ>0.5&&tilt>jsTurtle.best+0.05)){
+      qp.omega[jsTurtle.axis]=0;
+      jsTurtle=null;
+      jsTurtleDone=true;
+      return;
+    }
+    jsTurtle.best=Math.min(jsTurtle.best,tilt);
+    qp.omega[jsTurtle.axis]=jsTurtle.sign*Math.min(jsTurtle.sign*qp.omega[jsTurtle.axis]+45*dt,tilt*30);
     return;
   }
   if(upZ>=-0.35)return;
   if(!wantsEasyTurtle({upZ,clearanceM:clr,speed:Math.hypot(qp.velocity.x,qp.velocity.y,qp.velocity.z),omega:Math.hypot(qp.omega.x,qp.omega.y,qp.omega.z),threeD,r:st.r,p:st.p}))return;
   if(qp.armed)qp.disarm();
   const roll=Math.abs(st.r)>=Math.abs(st.p);
-  jsTurtle=roll?{axis:'x',sign:st.r<0?-1:1}:{axis:'y',sign:st.p<0?-1:1};
+  jsTurtle=roll?{axis:'x',sign:st.r<0?-1:1,best:Math.PI}:{axis:'y',sign:st.p<0?-1:1,best:Math.PI};
   toast('TURTLE');
 }
 function bounce(){
@@ -5876,7 +5898,7 @@ function wireLooksUI(){
   };
   document.getElementById('menuHowTo').onclick=()=>{
     showMenuLayer('<h2>How to</h2><ol>'+
-      '<li>Throttle down for a second, then up, arms and flies. Space arms too. Upside down, a full roll or pitch stick flips it back. Angle on keyboard and touch, acro on a radio or gamepad; angle is a toggle in Controls (1 / 2 / 3 = Angle / Horizon / Acro). 3D (Tune panel) is reversible-motor acro — center throttle is zero, below center inverts thrust. 3D runs are not counted on boards.</li>'+
+      '<li>Throttle down for a second, then up, arms and flies. Space arms too. Upside down, a full roll or pitch stick flips it back and re-arms. Angle on keyboard and touch, acro on a radio or gamepad; angle is a toggle in Controls (1 / 2 / 3 = Angle / Horizon / Acro). 3D (Tune panel) is reversible-motor acro — center throttle is zero, below center inverts thrust. 3D runs are not counted on boards.</li>'+
       '<li>How to → Start tutorial: hover, three gates, land (about two minutes, skippable).</li>'+
       '<li>R respawns at the last gate you passed. H toggles the stick HUD.</li>'+
       '<li>Fly the lit gate. A 3-lap run starts at gate 1. Splits per gate; missed gates add +2.0s.</li>'+
@@ -7986,6 +8008,14 @@ function pollInput(){
   tickArming(pollGp,dt);
   if(core.kind==='bf'&&!bfRadio()&&armGate&&padLive&&coreArmed())core.setArm(false);
   if(core.kind==='bf'&&!bfRadio())bfTurtleTick();
+  if(jsTurtleDone){
+    jsTurtleDone=false;
+    if(easyMode()&&tryArm({fromAuto:true}))turtleRearmed();
+  }
+  if(turtleStickHold){
+    if(Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15)turtleStickHold=false;
+    else stick.r=stick.p=0;
+  }
   core.input(stick,tUs);
 }
 // ---------- Turtle on the bf core: Betaflight's crash flip ----------
@@ -8010,7 +8040,7 @@ function bfTurtleTick(){
     if(stickTurtleOn()){
       if(bfWantsEasyTurtle()){
         const roll=Math.abs(stick.r)>=Math.abs(stick.p);
-        const r=core.startEasyTurtle(roll?Math.sign(stick.r):0,roll?0:Math.sign(stick.p));
+        const r=core.startEasyTurtle(roll?Math.sign(stick.r):0,roll?0:Math.sign(stick.p),easyMode());
         if(r===true)toast('TURTLE');
         else if(r==='no-switch')toast('NO TURTLE SWITCH IN THE DIFF');
       }
@@ -8024,8 +8054,9 @@ function bfTurtleTick(){
   const low=throttleSafeToArm(stick.t,false);
   const centred=Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15&&Math.abs(stick.y)<0.15;
   const ev=core.stepTurtle(low,centred);
-  if(ev==='upright'&&stickTurtleOn())toast('UPRIGHT');
+  if(ev==='upright'&&(stickTurtleOn()||core.turtleAuto))toast('UPRIGHT');
   else if(ev==='upright')toast(low&&centred?'UPRIGHT':'UPRIGHT — STICKS DOWN AND CENTRED TO ARM');
+  else if(ev==='rearm'&&core.sim.fc.armed)turtleRearmed();
   else if(ev==='rearm')bfArmPendingMs=simClockMs;
   else if(ev==='ended')toast('DISARMED');
   else if(ev==='stuck'&&core.turtleEasy)toast('STUCK — R RESPAWNS');
@@ -8574,7 +8605,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
   audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
-  easy:()=>({mode:easyMode(),switches:radioSwitches,wizard:switchWiz?{step:switchWiz.step,picks:switchWiz.picks}:null,flightMode,arm:easyArmState,jsTurtle,crashAt:easyCrashAt,disarmReason:easyDisarmReason}),
+  easy:()=>({mode:easyMode(),switches:radioSwitches,wizard:switchWiz?{step:switchWiz.step,picks:switchWiz.picks}:null,flightMode,arm:easyArmState,jsTurtle,crashAt:easyCrashAt,disarmReason:easyDisarmReason,stickHold:turtleStickHold}),
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,
   TRICKS_KEY,tricks,
