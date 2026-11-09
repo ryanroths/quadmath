@@ -1,0 +1,102 @@
+name: Deploy Pages
+
+# Publishes quadmath.com as a GitHub Actions Pages deployment: only the files
+# scripts/ci/build_pages_site.py selects, byte for byte, with no Jekyll.
+#
+# Pull requests run the build and the crawl and stop, so a page or asset that
+# would go missing shows up on the PR and not on the live site.
+#
+# On main the deploy runs only once Settings > Pages > Source is "GitHub
+# Actions". While the source is still "Deploy from a branch", the branch build
+# owns the site, and deploying from here as well would race it.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and crawl the site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Read the Pages source setting.
+      pages: read
+    outputs:
+      build_type: ${{ steps.source.outputs.build_type }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # Fails on any tracked file that no publish or exclude rule covers.
+      - name: Select the published files
+        run: python scripts/ci/build_pages_site.py --out _site
+
+      - name: Check every referenced page and asset is published
+        run: python scripts/ci/check_pages_site.py _site
+
+      - name: Report the artifact size
+        run: |
+          {
+            echo "### Pages artifact"
+            echo "$(find _site -type f | wc -l) files, $(du -sb _site | cut -f1) bytes"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Fails loudly if the setting cannot be read, so a deploy is never
+      # skipped by accident.
+      - name: Read the Pages source setting
+        id: source
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          build_type="$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .build_type)"
+          echo "build_type=$build_type" >> "$GITHUB_OUTPUT"
+          if [ "$build_type" != "workflow" ]; then
+            echo "::notice::Pages source is '$build_type', so nothing was deployed from here. Settings > Pages > Source: GitHub Actions."
+          fi
+
+      # .nojekyll is a dotfile, which this action drops unless told otherwise.
+      - name: Upload the artifact
+        if: steps.source.outputs.build_type == 'workflow'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+          include-hidden-files: true
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.ref == 'refs/heads/main' && needs.build.outputs.build_type == 'workflow'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # One deploy at a time, and never cancel one partway through.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5
