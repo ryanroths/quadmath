@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // QuadMath sim W6 — touch sticks, mobile boot, default flight mode.
-// Dual virtual sticks, deadzone/expo, angle-first newcomers, lazy-load hooks.
+// Dual virtual sticks, deadzone/expo, acro-first newcomers, lazy-load hooks.
 // Ideas only — nothing here is copied from WebFPV (GPL) or other simulators.
 // New localStorage keys: quadmathSimTouch, quadmathSimFlightMode,
 //   quadmathSimAutoArm, quadmathSimArm_<id>.
@@ -12,6 +12,7 @@ export const TOUCH_KEY = 'quadmathSimTouch';
 export const FLIGHT_MODE_KEY = 'quadmathSimFlightMode';
 export const AUTOARM_KEY = 'quadmathSimAutoArm';
 export const ARM_SWITCH_PREFIX = 'quadmathSimArm_';
+export const SWITCHES_PREFIX = 'quadmathSimSwitches_';
 // Radio stick deadzone. EdgeTX already has its own deadband; this is a tiny
 // extra hole that must rescale like touch ((abs-d)/(1-d)) or center reads
 // as a notch. 0.02 is enough for HID noise without eating micro-corrections.
@@ -235,9 +236,10 @@ export function saveFlightMode(mode, storage) {
   catch (e) { /* ignore */ }
 }
 
-// First visit / no saved settings → angle. A stored mode wins.
+// First visit / no saved mode → acro (angle is a toggle in Controls). A stored
+// mode wins.
 export function defaultFlightMode(storage) {
-  return loadFlightMode(storage) || 'angle';
+  return loadFlightMode(storage) || 'acro';
 }
 
 export function toggleAcro(current) {
@@ -730,6 +732,151 @@ export function mergeArmSwitch(map, arm) {
   const parsed = parseArmSwitch(arm);
   if (!parsed) return map;
   return Object.assign({}, map || {}, { arm: parsed });
+}
+
+// ---- "Use my radio switches", per radio ----
+// { on, migrated, arm, turtle, angle }. Off (the default) is Easy mode: the
+// page arms, turtles and picks the flight mode whatever the radio's switches
+// do. On: arm, turtle and angle are each { i, sign } or { button, sign } from
+// the wizard, or null where it was skipped (a skipped turtle stays on the
+// sticks, a skipped angle stays a toggle in Controls).
+// migrated: the radio flew before Easy mode, on its switches as they were. No
+// wizard picks; its channels go on as they always did (AUX1 arm, AUX2 angle,
+// AUX3 turtle on the owner's diffs, passed straight through on the bf core).
+export function normalizeSwitches(raw) {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  return {
+    on: !!r.on,
+    migrated: !!r.migrated,
+    arm: parseArmSwitch(r.arm),
+    turtle: parseArmSwitch(r.turtle),
+    angle: parseArmSwitch(r.angle),
+  };
+}
+
+export function saveRadioSwitches(id, switches, storage) {
+  const store = storeOf(storage);
+  if (!store || !id) return;
+  try { store.setItem(SWITCHES_PREFIX + sanitizeId(id), JSON.stringify(normalizeSwitches(switches))); }
+  catch (e) { /* ignore quota / private mode */ }
+}
+
+// A radio's record; made the first time the radio is seen, and never again.
+// No record and anything else saved for this radio from before Easy mode (a
+// preset, which every radio that ever connected has, a calibration or an arm
+// switch): it has been flying on its switches, so it stays on them. Call this
+// before anything saves a preset for a radio seen for the first time.
+export function loadRadioSwitches(id, storage) {
+  const store = storeOf(storage);
+  if (!store || !id) return normalizeSwitches(null);
+  const sid = sanitizeId(id);
+  let rec = null;
+  try {
+    const raw = store.getItem(SWITCHES_PREFIX + sid);
+    if (raw) return normalizeSwitches(JSON.parse(raw));
+    const flew = [RADIO_PRESET_PREFIX, AXIS_MAP_PREFIX, ARM_SWITCH_PREFIX].some((p) => store.getItem(p + sid) != null);
+    rec = normalizeSwitches({ on: flew, migrated: flew });
+  } catch (e) {
+    rec = normalizeSwitches(null);
+  }
+  saveRadioSwitches(id, rec, store);
+  return rec;
+}
+
+// The stick map the page reads: Easy mode has no arm or mode switch, even
+// where a calibration saved them; the switches' own arm wins when on.
+export function switchesAxisMap(base, armOverlay, switches) {
+  if (!switches || !switches.on) {
+    if (!base || (!base.arm && !base.mode)) return base;
+    const sticks = Object.assign({}, base);
+    delete sticks.arm;
+    delete sticks.mode;
+    return sticks;
+  }
+  if (switches.arm) return Object.assign({}, base, { arm: switches.arm });
+  return hasArmSwitch(base) ? base : mergeArmSwitch(base, armOverlay);
+}
+
+// The AUX number a gamepad axis goes to Betaflight as (radioAux: the axes the
+// stick map leaves free, in order), or null for a stick axis.
+export function auxNumberOfAxis(map, i) {
+  if (!Number.isFinite(i) || i < 0) return null;
+  const used = occupiedStickAxes(map);
+  if (used.has(i)) return null;
+  let n = 0;
+  for (let a = 0; a <= i; a++) if (!used.has(a)) n++;
+  return n;
+}
+
+export const SWITCH_WIZARD_STEPS = Object.freeze([
+  { key: 'arm', label: 'FLIP YOUR ARM SWITCH', hint: 'to where it arms', skippable: false },
+  { key: 'turtle', label: 'FLIP YOUR TURTLE SWITCH', hint: 'to where it flips. None? Skip: full stick turtles it.', skippable: true },
+  { key: 'angle', label: 'FLIP YOUR ANGLE SWITCH', hint: 'to angle. None? Skip: angle stays a toggle in Controls.', skippable: true },
+]);
+const WIZARD_HOLD_S = 0.12;   // settled there: a 3-position switch passing through the middle is not it
+
+export function createSwitchWizard(gp) {
+  return { step: 0, picks: {}, taken: new Set(), base: snapshotArmInputs(gp), cand: null, heldS: 0 };
+}
+
+function wizardNext(w, gp) {
+  w.step++;
+  w.base = snapshotArmInputs(gp);
+  w.cand = null;
+  w.heldS = 0;
+}
+
+// What has moved since this step began: an axis off the sticks that has
+// travelled most of its range and ended near an end (the direction is that
+// end), or a button that changed. Compared to the step's start, not the last
+// sample: a radio's slowed switch moves over many samples.
+function wizardMoved(w, gp, map) {
+  const used = occupiedStickAxes(map);
+  const axes = gp.axes || [];
+  let best = null, bestD = 0;
+  for (let i = 4; i < axes.length; i++) {
+    if (used.has(i) || w.taken.has('a' + i)) continue;
+    const now = Number(axes[i]);
+    const was = Number(w.base.axes[i]);
+    if (!Number.isFinite(now) || !Number.isFinite(was) || Math.abs(now) < 0.5) continue;
+    const d = Math.abs(now - was);
+    if (d >= 0.85 && d > bestD) { bestD = d; best = { i, sign: now >= 0 ? 1 : -1 }; }
+  }
+  if (best) return best;
+  const btns = gp.buttons || [];
+  for (let i = 0; i < btns.length; i++) {
+    if (w.taken.has('b' + i)) continue;
+    const now = !!(btns[i] && (btns[i].pressed || btns[i].value > 0.5));
+    if (now !== !!w.base.buttons[i]) return { button: i, sign: now ? 1 : -1 };
+  }
+  return null;
+}
+
+export function stepSwitchWizard(w, gp, map, dt) {
+  const st = SWITCH_WIZARD_STEPS[w.step];
+  const ui = { state: w, done: !st, label: st ? st.label : '', hint: st ? st.hint : '', skippable: !!(st && st.skippable) };
+  if (!st || !gp) return ui;
+  const moved = wizardMoved(w, gp, map);
+  const same = moved && w.cand && moved.i === w.cand.i && moved.button === w.cand.button && moved.sign === w.cand.sign;
+  w.heldS = same ? w.heldS + (dt > 0 ? dt : 0) : 0;
+  w.cand = moved;
+  if (moved && w.heldS >= WIZARD_HOLD_S) {
+    w.picks[st.key] = moved;
+    w.taken.add(moved.button != null ? 'b' + moved.button : 'a' + moved.i);
+    wizardNext(w, gp);
+    ui.done = w.step >= SWITCH_WIZARD_STEPS.length;
+  }
+  return ui;
+}
+
+export function skipSwitchWizard(w, gp) {
+  const st = SWITCH_WIZARD_STEPS[w.step];
+  if (st && st.skippable) wizardNext(w, gp);
+  return { state: w, done: w.step >= SWITCH_WIZARD_STEPS.length };
+}
+
+export function switchWizardResult(w) {
+  return normalizeSwitches(Object.assign({ on: true }, w.picks));
 }
 
 export function occupiedStickAxes(map) {

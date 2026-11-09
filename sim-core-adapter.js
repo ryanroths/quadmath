@@ -394,6 +394,51 @@ export function radioAux(gp, map) {
   return out.length ? out : null;
 }
 
+const switchOn = (gp, s) => {
+  if (!s) return false;
+  if (Number.isFinite(s.button)) {
+    const b = gp.buttons && gp.buttons[s.button];
+    return ((b && (b.pressed || b.value > 0.5)) ? 1 : -1) * (s.sign || 1) > 0.5;
+  }
+  const v = Number(gp.axes && gp.axes[s.i]);
+  return Number.isFinite(v) && v * (s.sign || 1) > 0.5;
+};
+
+// "Use my radio switches" on the bf core: the radio's AUX channels (radioAux)
+// with the pilot's own switches (sim-touch.js normalizeSwitches) moved onto
+// the channels the loaded config's boxes listen on (ranges, auxRanges), so a
+// radio with its ARM on AUX4 arms a diff that has ARM on AUX1. A switch
+// already on its box's channel, the right way up, goes through untouched, and
+// a migrated radio's unpicked boxes stay as they are: an owner's radio on an
+// owner's diff is radioAux, value for value. A skipped angle takes the page's
+// flight mode (page.mode); a skipped turtle's box stays off.
+export function switchAux(gp, map, switches, ranges, page = {}) {
+  const base = radioAux(gp, map);
+  const sw = switches;
+  if (!sw || (!sw.arm && !sw.turtle && !sw.angle)) return base;
+  const out = base ? base.slice() : new Array(AUX_CHANNELS).fill(1000);
+  const sticks = new Set(['r', 'p', 'y', 't'].map((k) => map[k] && map[k].i));
+  const free = [];
+  for (let i = 0; i < ((gp.axes && gp.axes.length) || 0); i++) if (!sticks.has(i)) free.push(i);
+  const mode = sw.angle ? (switchOn(gp, sw.angle) ? 'angle' : 'acro') : page.mode;
+  const paged = pageAux(ranges, {
+    arm: switchOn(gp, sw.arm),
+    flip: switchOn(gp, sw.turtle),
+    angle: mode === 'angle',
+    horizon: mode === 'horizon',
+  });
+  const own = { arm: sw.arm, flip: sw.turtle, angle: sw.angle, horizon: sw.angle };
+  for (const r of ranges) {
+    const name = PAGE_BOXES[r.box];
+    if (!name) continue;
+    const s = own[name];
+    if (!s && sw.migrated) continue;
+    if (s && s.sign === 1 && Number.isFinite(s.i) && free[r.ch] === s.i) continue;
+    out[r.ch] = paged[r.ch];
+  }
+  return out;
+}
+
 // RC channels for core.input(), function order: roll, pitch, yaw, throttle,
 // AUX1..AUX12. The sticks pass 1:1 (stick forward is pitch above 1500; the
 // throttle 0..1 is 1000..2000). AUX: sample.aux (a radio's, radioAux) as it
@@ -685,6 +730,25 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
       simFlips++;
       return true;
     },
+    // Easy mode's turtle: upside down at rest, a full stick the way r or p (-1
+    // or 1, the other 0) says. The page drives FLIP and ARM as for F, and holds
+    // FLIP_STICK that way (a full stick carries the Air65 back over), to
+    // upright; there it lets go, disarmed: the throttle arms it again, and it
+    // does not re-arm by itself. Not an assist: not counted as an F flip. The
+    // page takes the AUX channels from a radio here for the length of the
+    // turtle (a switch layout with no turtle switch); true when it starts,
+    // otherwise 'busy', 'not-flipped' or 'no-switch'.
+    startEasyTurtle(r, p) {
+      if (turtle) return 'busy';
+      if (!(upZ() < -0.35 && sim.state.groundClearance <= 0.04)) return 'not-flipped';
+      if (!ranges.some((x) => x.box === 35)) return 'no-switch';
+      auxSource = 'page';
+      core.startTurtle();
+      auto = { r, p, atUs: null, easy: true };
+      return true;
+    },
+    // Whether the turtle under way is Easy mode's.
+    get turtleEasy() { return !!(auto && auto.easy); },
     // Whether the turtle under way is an F flip, and how many F flips this
     // core has started.
     get turtleAuto() { return !!auto; },
@@ -711,7 +775,8 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
         case 'arm':
           if (fc.armed && fc.crashFlip) {
             toTurtle('flip');
-            if (auto) aimFlip();
+            if (auto && auto.easy) auto.atUs = sim.simTimeUs;
+            else if (auto) aimFlip();
             return 'flip';
           }
           if (sinceUs > 400_000) {
@@ -734,7 +799,8 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
           else if (sim.simTimeUs - uprightAtUs >= 150_000) {
             aux.turtle = false;
             aux.arm = false;
-            toTurtle('rearm');
+            if (auto && auto.easy) endTurtle();
+            else toTurtle('rearm');
             return 'upright';
           }
           if (auto && uprightAtUs === null && sim.simTimeUs - auto.atUs >= 3_000_000) {

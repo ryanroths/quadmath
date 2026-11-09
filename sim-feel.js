@@ -255,6 +255,7 @@ export function flipHintText(info) {
   const i = info || {};
   if (i.threeD) return i.touch ? 'FLIPPED — TAP RESPAWN' : 'FLIPPED — R TO RESPAWN';
   const respawn = i.touch ? ' · OR RESPAWN' : ' · R RESPAWNS';
+  if (i.easy) return 'FLIPPED — FULL ROLL OR PITCH STICK' + respawn;
   if (i.core === 'bf' && (i.radio || !i.flipAux)) {
     if (!i.flipAux) return 'FLIPPED — NO TURTLE SWITCH IN THE DIFF' + respawn;
     return 'FLIPPED — ' + (i.armed ? 'DISARM, ' : '') + 'AUX' + i.flipAux + ' ON, ARM, ROLL' + respawn;
@@ -276,6 +277,20 @@ export function wantsTurtle(info) {
   return true;
 }
 
+// Easy mode's turtle: upside down at rest on the deck, a full roll or pitch
+// stick, armed or not and at any throttle. info: upZ, clearanceM, contact,
+// speed, omega, threeD, r, p (sticks).
+export const EASY_TURTLE_STICK = 0.9;
+export function wantsEasyTurtle(info) {
+  if (!info || info.threeD) return false;
+  const upZ = info.upZ == null ? 1 : +info.upZ;
+  if (!(upZ < -0.35)) return false;
+  const contact = !!info.contact || (info.clearanceM != null && +info.clearanceM <= 0.04);
+  if (!contact) return false;
+  if (!(+info.speed < STUCK_SPEED_MS) || !(+info.omega < STUCK_OMEGA)) return false;
+  return Math.abs(info.r || 0) >= EASY_TURTLE_STICK || Math.abs(info.p || 0) >= EASY_TURTLE_STICK;
+}
+
 // East of the default spawn, facing +Z (away from the afternoon sun) so the
 // hover column and gates are readable. Independent of racing gate coordinates.
 const TUTORIAL_ORIGIN = { x: 36, y: 0, z: 44 };
@@ -284,7 +299,7 @@ const TUTORIAL_STEPS = ['arm', 'hover', 'gate1', 'gate2', 'gate3', 'land', 'done
 
 function stepCopy(step) {
   switch (step) {
-    case 'arm': return 'Press Space to arm.';
+    case 'arm': return 'Throttle down, then up to arm. Or press Space.';
     case 'hover': return 'Hover in the glow — hold altitude for a moment.';
     case 'gate1': return 'Fly through the first marked gate.';
     case 'gate2': return 'Second gate — keep it smooth.';
