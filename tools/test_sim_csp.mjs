@@ -295,7 +295,8 @@ async function flows(d, label, { core, share, menus, record }) {
     touchOn: document.body.classList.contains('touch-on'), choice: localStorage.getItem('quadmathSimInputChoice'),
     coarse: matchMedia('(pointer: coarse)').matches, pointerNone: matchMedia('(pointer: none)').matches,
     screen: [screen.width, screen.height], touchPoints: navigator.maxTouchPoints, ontouchstart: 'ontouchstart' in window,
-    focus: document.hasFocus(), active: document.activeElement && document.activeElement.tagName });`);
+    focus: document.hasFocus(), active: document.activeElement && document.activeElement.tagName,
+    throttle: window._axis ? window._axis().stick.t : null });`);
   say('input: ' + JSON.stringify(input));
   say('armed and flown: ' + JSON.stringify(st));
   assert.equal(st.armed, true, label + ': still armed');

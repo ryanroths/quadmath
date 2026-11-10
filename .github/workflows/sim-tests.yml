@@ -163,6 +163,7 @@ jobs:
               echo "PASS $f in $(( $(date +%s) - start )) s"
             else
               echo "::error file=$f::test file failed"
+              echo "FAIL $f in $(( $(date +%s) - start )) s"
               failed+=("$f")
             fi
             echo "::endgroup::"

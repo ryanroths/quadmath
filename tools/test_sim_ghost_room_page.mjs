@@ -249,6 +249,7 @@ test('ghost room in the page: same map, late join, ghost and voice, no collision
     // Measured, not checked: from the page starting its join (code to socket)
     // to the Node pilot hearing it, on this machine's clock.
     const joinMs = hostEvents.find((e) => e.type === 'join' && e.slot === 1).at - r.joinAt;
+    console.log('latency: join heard by the host ' + joinMs + ' ms after the page began joining');
 
     // From here the Node pilot keeps sending, as a pilot in a room does: it
     // waits where the fly-through will start, 2 m before the page's quad,
@@ -342,7 +343,7 @@ test('ghost room in the page: same map, late join, ghost and voice, no collision
     assert.ok(await heard(() => hostEvents.some((e) => e.type === 'leave' && e.slot === 1)), 'the host hears the page leave');
     // Measured, not checked: from the page leaving the room's map to the Node pilot hearing it.
     const leaveMs = hostEvents.find((e) => e.type === 'leave' && e.slot === 1).at - leaveAt;
-    console.log('latency: join heard by the host ' + joinMs + ' ms after the page began joining; leave heard ' + leaveMs + ' ms after the page left the room\'s map');
+    console.log('latency: leave heard by the host ' + leaveMs + ' ms after the page left the room\'s map');
 
     // ---- Create on the page's map; the Node pilot joins it there
     r = await page(ws, `const room = await s.roomCreate(); return JSON.stringify({ code: room && room.code, map: room && room.map, slot: room && room.slot, here: s.map() });`);
