@@ -9,7 +9,10 @@
 //     long for a link, stored on the Worker; then, the Worker down, the long
 //     link); a second fresh profile opens each link and lands on the track
 //     with the ghost and the banner; and a custom track travels with its
-//     ghost. The Worker is the real handler, answering the page's requests in
+//     ghost. SHARE outlives the finish toast: 30 s after a finish it is still
+//     under the result on the lap panel and in the pause menu, each clicked
+//     with the mouse, and on the K key; it leaves the panel when the next run
+//     starts. The Worker is the real handler, answering the page's requests in
 //     place of the network (CDP Fetch): nothing reaches the deployed one.
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
 import test from 'node:test';
@@ -337,6 +340,11 @@ test('the files: sim-share.js imports nothing (the Worker bundles it), is stampe
   assert.match(read('workers/sim-leaderboard/DEPLOY.md'), /migrate-lines\.sql/);
   const html = read('sim.html');
   assert.match(html, /<button type="button" id="toastShare">SHARE<\/button>/, 'SHARE on the finish screen');
+  assert.match(html, /'<button type="button" id="lapShare">SHARE<\/button><\/span>'/, 'SHARE under the result on the lap panel');
+  assert.match(html, /<button class="menu-flight" id="menuShare" disabled>Finish a run to share<\/button>/, 'SHARE in the pause menu');
+  assert.match(html, /if\(e\.key\.toLowerCase\(\)==='k'&&!e\.repeat&&!e\.ctrlKey&&!e\.metaKey&&!e\.altKey\)shareLine\(\);/, 'K shares');
+  assert.match(html, /if\(e\.key\.toLowerCase\(\)==='h'\)\{\s+if\(feel\)toast\(feel\.toggleHud\(\)/, 'H is the stick HUD already, so SHARE is K');
+  assert.match(html, /<b>K — Share last run \(link\)<\/b>/, 'K is in the legend');
   assert.match(html, /syncBuildUI\(\);\s+applyLineLink\(\);\s+\}\s+function publishTracks/, 'a line link is read once the boot has landed its map and track');
   assert.match(html, /<div id="lineBanner" role="status"><\/div>/);
 });
@@ -441,12 +449,17 @@ const PAGE = String.raw`(() => {
   const toast = () => document.getElementById('toast');
   // The quad put at each gate of the active track in turn (the core's own
   // teleport, so the page sees it cross them): gate 1 starts the run, the last
-  // finishes it. A hop every 150 ms; ws: scene units per metre.
+  // finishes it. A hop once the page has counted the gate before (a slow
+  // frame must not skip one), and never under 150 ms apart; ws: scene units
+  // per metre.
   async function flyGates(ws) {
     const track = s.tracks().find((t) => t.id === s.track());
     const b = s.bfCore();
+    const counter = () => document.getElementById('osdGate').textContent;
     for (const g of track.gates) {
+      const before = counter();
       b.teleport({ x: -g.z / ws, y: -g.x / ws, z: g.y / ws }, { x: 0, y: 0, z: 0, w: 1 });
+      await until(() => counter() !== before, 1500);
       await wait(150);
     }
     const done = await until(() => !!document.getElementById('toastShare'), 3000);
@@ -471,7 +484,30 @@ const PAGE = String.raw`(() => {
       gates: (s.tracks().find((t) => t.id === s.track()) || { gates: [] }).gates.length, toast: toast().textContent,
     };
   }
-  window.__sh = { s, wait, until, flyGates, share, landed };
+  // The lap panel: its text, whether it is a result, its buttons.
+  function panel() {
+    const el = document.getElementById('osdLap');
+    const btn = document.getElementById('lapShare');
+    const box = btn ? btn.getBoundingClientRect() : null;
+    return {
+      text: el.textContent, result: / RESULT /.test(el.textContent),
+      replay: !!document.getElementById('lapReplay'), share: !!btn,
+      inView: !!box && box.width > 0 && box.top >= 0 && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth,
+    };
+  }
+  // Before a share by any button or key: nothing said, and something else on
+  // the clipboard. After it: what the page said and what the clipboard holds.
+  async function unmark(mark) {
+    toast().textContent = '';
+    await navigator.clipboard.writeText(mark);
+  }
+  async function shared() {
+    const said = await until(() => /LINK COPIED|CLIPBOARD/.test(toast().textContent), 6000);
+    let clip = null;
+    try { clip = await navigator.clipboard.readText(); } catch (e) { clip = 'unreadable: ' + e.message; }
+    return { said, link: s.line().link, toast: toast().textContent, clip };
+  }
+  window.__sh = { s, wait, until, flyGates, share, landed, panel, unmark, shared };
   return true;
 })()`;
 
@@ -564,7 +600,39 @@ test('Fly my line in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
       await cdp(ws, 'Browser.grantPermissions', { origin, permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'] });
       await evaluate(ws, PAGE);
       const js = async (body) => JSON.parse(await evaluate(ws, `(async () => { const S = window.__sh; ${body} })()`));
-      await flow({ js });
+      // A real click: the mouse, at the middle of the element, when the element is what is there.
+      const click = async (id) => {
+        const p = JSON.parse(await evaluate(ws, `(() => {
+          const el = document.getElementById(${JSON.stringify(id)});
+          if (!el) return JSON.stringify({ found: false });
+          el.scrollIntoView({ block: 'center' });
+          const b = el.getBoundingClientRect();
+          const x = b.left + b.width / 2, y = b.top + b.height / 2;
+          const top = document.elementFromPoint(x, y);
+          // And it is what the pilot sees there: nothing painted over it (a box that
+          // takes no clicks, as the key legend, would hide it and still let the click through).
+          const all = document.createElement('style');
+          all.textContent = '*{pointer-events:auto !important}';
+          document.head.appendChild(all);
+          const stack = document.elementsFromPoint(x, y);
+          all.remove();
+          const shown = (e) => { for (let n = e; n; n = n.parentElement) { const c = getComputedStyle(n); if (c.opacity === '0' || c.visibility === 'hidden' || c.display === 'none') return false; } return true; };
+          const over = stack.find(shown);
+          return JSON.stringify({ found: true, x, y, hit: top === el, seen: over === el, over: over ? (over.id || over.tagName) : null, top: top ? (top.id || top.tagName) : null, disabled: !!el.disabled, text: el.textContent });
+        })()`));
+        if (p.found && p.hit) {
+          await cdp(ws, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y });
+          await cdp(ws, 'Input.dispatchMouseEvent', { type: 'mousePressed', x: p.x, y: p.y, button: 'left', clickCount: 1 });
+          await cdp(ws, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x: p.x, y: p.y, button: 'left', clickCount: 1 });
+        }
+        return p;
+      };
+      // A real key, pressed and let go.
+      const key = async (k, code, vk) => {
+        await cdp(ws, 'Input.dispatchKeyEvent', { type: 'rawKeyDown', key: k, code, windowsVirtualKeyCode: vk });
+        await cdp(ws, 'Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk });
+      };
+      await flow({ js, click, key });
     } finally {
       try { if (ws) ws.close(); } catch (e) { /* ignore */ }
       killTree(child);
@@ -641,6 +709,81 @@ test('Fly my line in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         const line = await decodeLineCode(lineFromHash(new URL(r.out.link).hash));
         assert.equal(ghostPayloadError(line.ghost, 'rig-loop'), null, 'and it is a line');
         assert.equal(worker.env.DB.lines.size, 1, 'nothing more stored');
+      });
+    });
+
+    await t.test('SHARE 30 s after a finish: still on the lap panel and in the pause menu, by the mouse; K shares too; off the panel when the next run starts', async () => {
+      await pass(sim('map=rig&track=rig-loop'), { pad: tx }, async ({ js, click, key }) => {
+        // Before any run: nothing on the panel, the menu's button says what to do, and so does K.
+        let r = await js(`
+          const menu = document.getElementById('menuShare');
+          await S.unmark('none yet');
+          return JSON.stringify({ panel: S.panel(), menu: { text: menu.textContent, disabled: menu.disabled }, run: S.s.line().run });`);
+        assert.equal(r.run, null);
+        assert.equal(r.panel.share, false, 'no SHARE on the panel before a run');
+        assert.deepEqual(r.menu, { text: 'Finish a run to share', disabled: true }, 'the menu says how to have one');
+        await key('k', 'KeyK', 75);
+        r = await js(`await S.wait(300); return JSON.stringify({ toast: document.getElementById('toast').textContent, link: S.s.line().link });`);
+        assert.equal(r.toast, 'FINISH A RUN TO SHARE', 'K with no run says so');
+        assert.equal(r.link, '');
+
+        // A run, then 30 s of nothing: the finish toast has been gone for 25.
+        r = await js(`
+          const fly = await S.flyGates(${WS});
+          const t0 = performance.now();
+          await S.wait(30000);
+          const toastEl = document.getElementById('toast');
+          return JSON.stringify({ fly, waited: performance.now() - t0, toast: { opacity: getComputedStyle(toastEl).opacity, clicks: getComputedStyle(toastEl).pointerEvents }, panel: S.panel() });`);
+        console.log('30 s after: ' + JSON.stringify({ waited: Math.round(r.waited), toast: r.toast, panel: r.panel }));
+        assert.equal(r.fly.done, true, 'the run finished');
+        assert.ok(r.waited >= 30000, `${Math.round(r.waited)} ms after the finish`);
+        assert.deepEqual(r.toast, { opacity: '0', clicks: 'none' }, 'the finish toast is gone and takes no click');
+        assert.deepEqual([r.panel.result, r.panel.replay, r.panel.share], [true, true, true], 'the result, with Replay and SHARE under it: ' + r.panel.text);
+        assert.equal(r.panel.inView, true, 'on screen');
+
+        // The panel's SHARE, with the mouse.
+        await js(`await S.unmark('before the panel'); return 1;`);
+        let hit = await click('lapShare');
+        assert.deepEqual([hit.found, hit.hit, hit.text], [true, true, 'SHARE'], 'the button is what is under the mouse: ' + JSON.stringify(hit));
+        assert.equal(hit.seen, true, 'and nothing is painted over it: ' + JSON.stringify(hit));
+        r = await js(`return JSON.stringify(await S.shared());`);
+        assert.equal(r.toast, 'LINK COPIED — RACE MY LINE', 'the panel SHARE works');
+        assert.ok(r.link.startsWith(`${origin}/sim.html?map=rig&track=rig-loop#line=L1.`), r.link.slice(0, 90));
+        assert.equal(r.clip, r.link, 'the link is on the clipboard');
+        const link = r.link;
+
+        // The pause menu's, with the mouse.
+        await key('Escape', 'Escape', 27);
+        r = await js(`
+          await S.wait(400);
+          const menu = document.getElementById('menuShare');
+          await S.unmark('before the menu');
+          return JSON.stringify({ open: document.body.classList.contains('menu-open'), text: menu.textContent, disabled: menu.disabled });`);
+        assert.deepEqual(r, { open: true, text: 'SHARE last run', disabled: false }, 'the pause menu offers the last run');
+        hit = await click('menuShare');
+        assert.deepEqual([hit.found, hit.hit, hit.seen], [true, true, true], 'the button is what is under the mouse, in plain sight: ' + JSON.stringify(hit));
+        r = await js(`return JSON.stringify(await S.shared());`);
+        assert.equal(r.toast, 'LINK COPIED — RACE MY LINE', 'the menu SHARE works');
+        assert.equal(r.clip, link, 'the same run, the same link');
+
+        // K, flying again.
+        await key('Escape', 'Escape', 27);
+        await js(`await S.wait(400); await S.unmark('before K'); return 1;`);
+        await key('k', 'KeyK', 75);
+        r = await js(`return JSON.stringify({ ...(await S.shared()), menu: document.body.classList.contains('menu-open'), panel: S.panel() });`);
+        assert.equal(r.menu, false, 'back in flight');
+        assert.equal(r.toast, 'LINK COPIED — RACE MY LINE', 'K works');
+        assert.equal(r.clip, link, 'K copies the same link');
+        assert.equal(r.panel.share, true, 'and SHARE is still on the panel');
+
+        // The next run starts: the panel is the live clock, without the buttons.
+        r = await js(`
+          const g = S.s.tracks().find((t) => t.id === S.s.track()).gates[0];
+          S.s.bfCore().teleport({ x: -g.z / ${WS}, y: -g.x / ${WS}, z: g.y / ${WS} }, { x: 0, y: 0, z: 0, w: 1 });
+          await S.wait(600);
+          return JSON.stringify(S.panel());`);
+        assert.deepEqual([r.result, r.share, r.replay], [false, false, false], 'a run under way: ' + r.text);
+        assert.match(r.text, / LINE /, 'the live clock');
       });
     });
 

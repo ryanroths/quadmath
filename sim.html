@@ -101,7 +101,7 @@
   #osdBL{display:none}
   #osdBR{bottom:18px;right:16px;text-align:right}
   #osdGate{top:14px;left:50%;transform:translateX(-50%);color:var(--txt);font-weight:600}
-  #osdLap{top:84px;left:16px;font-weight:600}
+  #osdLap{top:84px;left:16px;font-weight:600;z-index:6} /* over the key legend (5): in a short window it reaches up to here, and would hide the result's buttons */
   #osdLand{position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);z-index:6;
     font-size:34px;font-weight:700;letter-spacing:3px;color:#ff3b2f;
     text-shadow:0 0 16px rgba(255,59,47,.7);pointer-events:none;display:none}
@@ -188,6 +188,10 @@
   #toast a,#toast button{display:inline-block;width:auto;margin:10px auto 0;padding:6px 14px;font-size:13px;font-weight:600;
     color:var(--orange);background:rgba(16,18,24,.85);border:1px solid rgba(255,77,26,.55);border-radius:10px;cursor:pointer}
   #toast button+button{margin-left:8px}
+  /* The finished run's Replay and SHARE under its result (updateLapOSD). The HUD takes no clicks; these do. */
+  #osdLap .lap-actions{display:block;margin-top:6px}
+  #osdLap button{display:inline-block;width:auto;margin:0 6px 0 0;padding:5px 12px;font-size:12px;font-weight:600;pointer-events:auto;
+    color:var(--orange);background:rgba(16,18,24,.85);border:1px solid rgba(255,77,26,.55);border-radius:10px;cursor:pointer}
   /* "Race RyFly's line": the banner of a line a link loaded (sim-share.js). */
   #lineBanner{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:13;display:none;max-width:92vw;
     padding:6px 16px;background:var(--glass);border:1px solid rgba(255,77,26,.6);border-radius:999px;
@@ -555,6 +559,7 @@
     <button class="menu-flight dev-only" id="menuRoom">Your room</button>
     <button class="menu-flight" id="menuBuild">Your build</button>
     <button class="menu-flight" id="menuReplay">Replay</button>
+    <button class="menu-flight" id="menuShare" disabled>Finish a run to share</button>
     <button class="menu-flight" id="menuGhostCodes">Ghost / Duel codes</button>
     <button class="menu-flight" id="menuClip">Clip</button>
     <button class="menu-flight" id="menuFreestyleMap">Freestyle this map</button>
@@ -642,6 +647,7 @@
   <b>Space — Arm / Disarm</b><br>
   <b>H — Stick HUD</b><br>
   <b id="legendGhost">G — Ghost Replay</b><br>
+  <b>K — Share last run (link)</b><br>
   <b>C — Coach / line</b><br>
   <b>R — Respawn last gate</b><br>
   <b>F — Sim flip when upside down</b><br>
@@ -1318,6 +1324,9 @@ applyCanopyVis({fpv:false,menuOpen:true});
 let composer=null,bloomPass=null;   // set once the looks post chain finishes
 let looks=null;
 let feel=null;
+// The last finished run, for SHARE (shareLine): {track,map,total,rec}. Up here
+// because the pause menu and the lap panel read it from their first draw.
+let lastRunLine=null;
 let coach=null;
 let tricks=null;
 let trickDebug=null; // ?tricks=debug only (sim-tricks-debug.js); null otherwise
@@ -1845,6 +1854,7 @@ function finishRun(){
   lastRunReplayRec=replayRec&&replayRec.length?downsampleGhost(replayRec,REPLAY_GHOST_MAX):(rec&&rec.length?rec:null);
   // The run SHARE links to (shareLine): this one, whatever is flown next.
   lastRunLine=rec&&rec.length>1?{track:shareTrackParam(),map:currentMap,total,rec}:null;
+  syncMenuShare();
   const msg=label+' '+fmtLap(total)+(parts.length?' ['+parts.map(fmtLap).join(' / ')+']':'')+(best?' — NEW BEST!':'')+(extra?' · '+extra:'')+(runSimFlips?' · SIM FLIP ×'+runSimFlips:'');
   const buttons=(lastRunReplayRec&&lastRunReplayRec.length>1?'<button type="button" id="toastReplay">Replay</button>':'')+
     (lastRunLine?'<button type="button" id="toastShare">SHARE</button>':'');
@@ -4057,7 +4067,7 @@ function updateMotorSound(live){
 // the class as it muted. On a select these keys do only their own job; any
 // other letter still picks an option. With Ctrl, Cmd or Alt held there is
 // no type-ahead, so the browser's shortcuts (Ctrl+R, Ctrl+F, ...) go through.
-const SIM_KEYS=new Set(['w','a','s','d','1','2','3','h','r','p','m','n','f','g','v','c','l']);
+const SIM_KEYS=new Set(['w','a','s','d','1','2','3','h','r','p','m','n','f','g','v','c','l','k']);
 addEventListener('keydown',e=>{
   if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&(e.target.type==='text'||e.target.type==='range'))))return; // typing in the CLI/ghost/pilot-name boxes must not trigger R/M/F/G hotkeys
   if(e.target&&e.target.tagName==='SELECT'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&SIM_KEYS.has(e.key.toLowerCase()))e.preventDefault();
@@ -4119,6 +4129,8 @@ addEventListener('keydown',e=>{
     if(replayOn){stopReplay();return;}
     startReplay();
   }
+  // K: the last finished run's link, as SHARE does (H is the stick HUD).
+  if(e.key.toLowerCase()==='k'&&!e.repeat&&!e.ctrlKey&&!e.metaKey&&!e.altKey)shareLine();
   if(e.key.toLowerCase()==='c'){
     if(coach&&coach.isActive()){coach.toggleRibbon();return;}
     openCoachPicker();
@@ -5118,10 +5130,22 @@ function lineHudHtml(id, now){
   if(dailyLineLive)html='<span class="daily-badge">DAILY</span> '+html;
   return html;
 }
+// Replay and SHARE for the run whose result is on the panel: the last one
+// finished, on this track. They stay until the next run starts (the finish
+// toast, which has them too, is gone in 5 s).
+function lapActionsHtml(){
+  const run=lastRunLine;
+  if(!run||run.map!==currentMap||String(run.track)!==String(shareTrackParam()))return '';
+  return '<span class="lap-actions">'+
+    (lastRunReplayRec&&lastRunReplayRec.length>1?'<button type="button" id="lapReplay">Replay</button>':'')+
+    '<button type="button" id="lapShare">SHARE</button></span>';
+}
+let lapOsdHtml=null; // what the panel holds now
 function updateLapOSD(){
   osdLap.style.color=performance.now()<lapFlashUntil?'#3DDC97':''; // green flash on new best
   const now=simNowMs(); // the live clocks run on sim time
   if(isFreestyleTrackId(activeTrackId)||!trackGates(activeTrackId).length){
+    lapOsdHtml=null;
     osdLap.textContent=secretsLive()?'FREESTYLE · '+sparksLabel(currentMap, loadSecrets()):'FREESTYLE';
     return;
   }
@@ -5150,7 +5174,15 @@ function updateLapOSD(){
   }
   const rv=activeRival(); // racing a shared/hosted ghost — show who + their time
   if(rv)html+='<br><span style="color:#FF4D1A">VS '+escapeHtml(rv.name)+(rv.lapTime?' '+fmtLap(rv.lapTime):'')+'</span>';
+  if(!runActive&&lastRunTotal[id])html+=lapActionsHtml();
+  // Drawn only when it changes: a button replaced every frame cannot be clicked.
+  if(html===lapOsdHtml)return;
+  lapOsdHtml=html;
   osdLap.innerHTML=html;
+  const replayBtn=document.getElementById('lapReplay');
+  if(replayBtn)replayBtn.onclick=function(e){e.preventDefault();startReplay();};
+  const shareBtn=document.getElementById('lapShare');
+  if(shareBtn)shareBtn.onclick=function(e){e.preventDefault();shareLine();};
 }
 const toastEl=document.getElementById('toast');let toastTimer;
 function toast(m,opts){
@@ -5321,7 +5353,14 @@ function toggleStartMenu(force){
   if(!next)leftLaunch=true;
   if(looks)looks.setMenuOpen(next);
   else{el.classList.toggle('open',next);document.body.classList.toggle('menu-open',next);}
-  if(next){panel.classList.remove('open');syncMenuSparks();}
+  if(next){panel.classList.remove('open');syncMenuSparks();syncMenuShare();}
+}
+// The pause menu's SHARE: the last finished run, or how to have one.
+function syncMenuShare(){
+  const b=document.getElementById('menuShare');
+  if(!b)return;
+  b.disabled=!lastRunLine;
+  b.textContent=lastRunLine?'SHARE last run':'Finish a run to share';
 }
 // Fly: a map chooser. The open maps (mapOpen without ?dev=1: The Rig, The
 // House, The Warehouse, The Bando), each with its thumbnail; with ?dev=1 an archived map
@@ -5960,6 +5999,7 @@ function wireLooksUI(){
   on('menuResume',()=>{hideMenuLayer();toggleStartMenu(false);});
   on('menuHome',()=>{hideMenuLayer();document.getElementById('startMenu').classList.remove('in-flight');});
   on('menuReplay',()=>{hideMenuLayer();startReplay();});
+  on('menuShare',()=>{shareLine();});
   on('menuClip',()=>{hideMenuLayer();if(startReplay())recordReplayClip();});
   on('menuGhostCodes',()=>{
     hideMenuLayer();toggleStartMenu(false);panel.classList.add('open');syncBuildUI();
@@ -5981,7 +6021,7 @@ function wireLooksUI(){
       '<span class="n">R</span> last-gate respawn · <span class="n">P</span> new pack (bf) · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
       '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
       'Throttle down 1 s, then up: armed. Down 2 s landed: disarmed. Upside down or on its side: full roll or pitch.<br>'+
-      '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">N</span> next track · <span class="n">G</span> ghost · <span class="n">C</span> coach<br>'+
+      '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">N</span> next track · <span class="n">G</span> ghost · <span class="n">C</span> coach · <span class="n">K</span> share last run<br>'+
       '<span class="n">F</span> upside down on bf: sim flip (logged as an assist) · else next flight mode</p>'+
       '<div class="row"><label>Angle mode</label><input type="checkbox" class="cb-angle-mode" style="accent-color:var(--orange)"></div>'+
       '<div class="row"><label>Use my radio switches</label><input type="checkbox" class="cb-radio-switches" style="accent-color:var(--orange)"></div>'+
@@ -7586,7 +7626,8 @@ function applyDuel(parsed){
 // (LINE_URL_MAX) goes to the leaderboard Worker and the link carries its id;
 // with no Worker to take it, the long link is copied as it is. Opening a link
 // lands on the track with that ghost as the rival, under "Race RyFly's line".
-let lastRunLine=null;               // {track,map,total,rec} of the last finished run
+// SHARE is on the finish toast (5 s), under the result on the lap panel until
+// the next run starts, in the pause menu, and on K.
 let lastLineLink='';                // the last link copied (test hook)
 let lineUrlMax=LINE_URL_MAX;
 let activeLine=null;                // the line a link loaded: {name,rival}
@@ -7605,7 +7646,7 @@ async function storeLine(code){
 }
 async function shareLine(){
   const run=lastRunLine;
-  if(!run){toast('NO RUN TO SHARE — FINISH ONE FIRST');return;}
+  if(!run){toast('FINISH A RUN TO SHARE');return;}
   const track=findTrack(run.track);
   // A track the other end cannot find by its id (a custom one) goes with the ghost.
   const known=!track||builtinTracks.some(t=>t.id===track.id)||!!trackFromRetentionId(run.track);
