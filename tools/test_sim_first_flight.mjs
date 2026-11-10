@@ -573,12 +573,15 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
     }
 
     // The same radio, and a pilot who does not wait for the page: the throttle
-    // goes up while it is still loading, before the 1 s hold or after it.
+    // goes up by itself, before the 1 s hold or after it. On a slow load that
+    // is while Betaflight is still loading; on a fast one the page is ready.
     for (const raiseAt of [300, 1600]) {
-      await t.test(`a TX16S awake before the page loads, throttled up ${raiseAt} ms into the page, while it loads: the card`, async () => {
+      await t.test(`a TX16S awake before the page loads, throttled up ${raiseAt} ms after its scripts, loaded or not: the card`, async () => {
         await pass('', { pad: { ...tx([0, 0, -1, 0, -1, -1, -1, -1]), afterBoot: 0, raiseAt } }, async ({ js }) => {
+          // The throttle may go up after the page is ready: wait for the card, then let it stand.
           const r = await js(`
-            await F.wait(1200);
+            await F.until(() => window.__early && window.__early.shownAt !== null, 8000);
+            await F.wait(1300);
             return JSON.stringify({ early: window.__early, card: F.card(), armed: F.s.coreState().armed, paused: F.paused() });`);
           console.log('throttled up ' + raiseAt + ' ms in: ' + JSON.stringify({ early: r.early, on: r.card.on, saved: r.card.saved, armed: r.armed }));
           assert.ok(r.early && r.early.raisedAt !== null, 'the throttle went up');
