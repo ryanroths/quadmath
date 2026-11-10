@@ -14,7 +14,7 @@
 // flight line unless it is flat on a floor; anything standing proud that a
 // pilot could meet has a collider (BANDO_PROP_BOXES, tools/test_sim_bando.mjs
 // holds every rule).
-import { lookKitMaterial, lookTextureSet, lookBoxUv } from './sim-look.js?v=4fe91d31bea9';
+import { lookKitMaterial, lookTextureSet, lookBoxUv } from './sim-look.js?v=73378d552076';
 
 // The graffiti atlas: one 512 greyscale PNG of signed distance fields
 // (tools/build_bando_decals.mjs), each piece's rectangle in pixels, y down.

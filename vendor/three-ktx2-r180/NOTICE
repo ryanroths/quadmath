@@ -1,0 +1,10 @@
+three.js r180 KTX2 addons, unmodified, from the npm package three@0.180.0
+(examples/jsm): loaders/KTX2Loader.js, utils/WorkerPool.js, math/ColorSpaces.js,
+libs/ktx-parse.module.js, libs/zstddec.module.js, libs/basis/.
+
+three.js: MIT, see LICENSE in this folder. https://github.com/mrdoob/three.js
+Basis Universal transcoder (libs/basis): Apache-2.0, Binomial LLC.
+https://github.com/BinomialLLC/basis_universal
+ktx-parse: MIT, Don McCurdy. https://github.com/donmccurdy/KTX-Parse
+zstddec: MIT and BSD, Don McCurdy; Zstandard, Meta Platforms.
+https://github.com/donmccurdy/zstddec

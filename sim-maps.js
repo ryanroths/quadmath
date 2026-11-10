@@ -8,8 +8,8 @@
 import { planRoom } from './sim-room.js?v=2108fba17d3d';
 import {
   LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, lookShafts, lookGraffiti, floorAo,
-} from './sim-look.js?v=4fe91d31bea9';
-import { BANDO_GRAFFITI, BANDO_DECAY, BANDO_PROP_BOXES, dressBando, bandoAtlas } from './sim-bando-dress.js?v=656b5673c074';
+} from './sim-look.js?v=73378d552076';
+import { BANDO_GRAFFITI, BANDO_DECAY, BANDO_PROP_BOXES, dressBando, bandoAtlas } from './sim-bando-dress.js?v=1c85071f2564';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).

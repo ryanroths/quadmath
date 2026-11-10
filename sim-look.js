@@ -199,6 +199,28 @@ export function lookTextureBytes(sets, envs, decals) {
   return { sets: b, env, decals: dec, total: b + env + dec };
 }
 
+// GPU bytes of the look's textures on the KTX2 path, block by block with
+// mips; everything else as lookTextureBytes (which stays the worst case, the
+// WebP fallback). target: 'bc7' (desktop: every set 1 byte a pixel) or 'mobile'
+// (an ASTC phone: UASTC to ASTC 4x4 at 1 byte, an ETC1S albedo with no alpha to
+// ETC at half that, a packed one with its alpha to ETC2 RGBA at 1).
+export function lookKtx2Bytes(target, sets, envs, decals) {
+  const mips = (px, block) => {
+    let n = 0;
+    for (let w = px; ; w >>= 1) {
+      n += Math.ceil(w / 4) ** 2 * block;
+      if (w <= 1) return n;
+    }
+  };
+  let b = 0;
+  for (const [file, px] of Object.entries(LOOK_TEXTURES)) {
+    if (sets && !sets.some((n) => file.includes(`/look_${n}_`))) continue;
+    b += mips(px, target === 'mobile' && file.includes('_diff_') ? 8 : 16);
+  }
+  const rest = lookTextureBytes(sets, envs, decals);
+  return { sets: b, env: rest.env, decals: rest.decals, total: b + rest.env + rest.decals };
+}
+
 // Vertical FOV, degrees, of a rectilinear view with this diagonal FOV.
 export function vfovForDiagonal(diagDeg, aspect) {
   const t = Math.tan(diagDeg * Math.PI / 360) / Math.sqrt(1 + aspect * aspect);
@@ -336,6 +358,51 @@ function placeholder(rgba) {
   return cv;
 }
 
+// The KTX2 path: three's loader (vendored, r180, loaded when first wanted) and
+// the Basis transcoder in its workers. sim.html turns it on with its renderer;
+// without that (a test, ?ktx2=0) every texture is its WebP. Null until on;
+// false once it has failed, so nothing asks again. The workers and their wasm
+// heaps last only as long as a batch of textures is landing: the last one
+// disposes the loader, and the next map's first makes a new one.
+const KTX2_ADDON = './vendor/three-ktx2-r180/loaders/KTX2Loader.js';
+const KTX2_TRANSCODER = 'vendor/three-ktx2-r180/libs/basis/';
+let ktx2 = null, ktx2Renderer = null, ktx2Loader = null, ktx2Pending = 0;
+export function lookEnableKtx2(renderer) {
+  if (ktx2 !== null || !canFetch()) return;
+  ktx2Renderer = renderer;
+  ktx2 = import(KTX2_ADDON);
+  ktx2.catch((e) => { ktx2 = false; if (typeof console !== 'undefined') console.warn('look ktx2 off', e); });
+}
+function ktx2Load(url) {
+  return ktx2.then(({ KTX2Loader }) => {
+    if (!ktx2Loader) ktx2Loader = new KTX2Loader().setTranscoderPath(KTX2_TRANSCODER).setWorkerLimit(2).detectSupport(ktx2Renderer);
+    const loader = ktx2Loader;
+    ktx2Pending++;
+    return loader.loadAsync(url).finally(() => {
+      if (--ktx2Pending > 0) return;
+      ktx2Loader = null;
+      loader.dispose();
+    });
+  });
+}
+
+// Puts a transcoded KTX2 into the texture the materials already hold. A GPU
+// the transcoder has no compressed format for would get RGBA at 4 bytes a
+// pixel and worse than the WebP: refused, so the caller falls back.
+function adoptKtx2(THREE, t, c) {
+  if (!c.isCompressedTexture || c.format === THREE.RGBAFormat) { c.dispose(); throw new Error('no compressed format'); }
+  // As for an image landing (below): dispose first, so the blocks get a GL
+  // texture of their own size and format.
+  t.dispose();
+  t.isCompressedTexture = true;
+  t.mipmaps = c.mipmaps;
+  t.format = c.format;
+  t.type = c.type;
+  t.generateMipmaps = false;
+  t.source = new THREE.Source(c.image);
+  t.needsUpdate = true;
+}
+
 // One shared set of textures per set: albedo (sRGB) and normal + roughness
 // (linear; the roughness deviation in alpha), or for a packed set the albedo
 // alone with the roughness in its alpha. They start as a neutral texel and
@@ -357,7 +424,7 @@ export function lookTextureSet(THREE, name) {
     if (canFetch()) {
       // ImageBitmap with no premultiply and no colour conversion: the alpha
       // is data (roughness), so it must reach the GPU as stored.
-      fetch(`${TEX}/look_${name}_${kind}_${res}.webp`)
+      const webp = () => fetch(`${TEX}/look_${name}_${kind}_${res}.webp`)
         .then((r) => { if (!r.ok) throw new Error(r.status + ' ' + t.name); return r.blob(); })
         .then((b) => createImageBitmap(b, { imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' }))
         // A texture drawn before its image lands holds the placeholder in
@@ -366,6 +433,12 @@ export function lookTextureSet(THREE, name) {
         // (else GL_INVALID_OPERATION texStorage2D and the 1x1 stays).
         .then((bmp) => { t.dispose(); t.source = new THREE.Source(bmp); t.needsUpdate = true; })
         .catch((e) => { if (typeof console !== 'undefined') console.warn('look texture', e); });
+      // KTX2 where it can be had, the WebP where it cannot.
+      if (ktx2) {
+        ktx2Load(`${TEX}/look_${name}_${kind}_${res}.ktx2`)
+          .then((c) => adoptKtx2(THREE, t, c))
+          .catch(webp);
+      } else webp();
     }
     return t;
   };
