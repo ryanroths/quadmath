@@ -455,11 +455,21 @@ const PAGE = String.raw`(() => {
   async function flyGates(ws) {
     const track = s.tracks().find((t) => t.id === s.track());
     const b = s.bfCore();
-    const counter = () => document.getElementById('osdGate').textContent;
+    // The gate number only: the split beside it ticks every frame.
+    const counter = () => (/ GATE (\d+)\//.exec(document.getElementById('osdGate').textContent) || [])[1];
     for (const g of track.gates) {
       const before = counter();
-      b.teleport({ x: -g.z / ws, y: -g.x / ws, z: g.y / ws }, { x: 0, y: 0, z: 0, w: 1 });
-      await until(() => counter() !== before, 1500);
+      // A pass is entering the gate's sphere: a gate whose sphere already holds
+      // the gate before it is entered from above it.
+      const put = (up) => b.teleport({ x: -g.z / ws, y: -g.x / ws, z: (g.y + up) / ws }, { x: 0, y: 0, z: 0, w: 1 });
+      put(0);
+      let counted = await until(() => counter() !== before, 600);
+      for (let i = 0; i < 3 && !counted; i++) {
+        put(3 * (g.size || 2));
+        await wait(120);
+        put(0);
+        counted = await until(() => counter() !== before, 600);
+      }
       await wait(150);
     }
     const done = await until(() => !!document.getElementById('toastShare'), 3000);

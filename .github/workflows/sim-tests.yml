@@ -14,6 +14,11 @@ name: Sim tests
 #                 GitHub-hosted runners have no GPU: give Chrome
 #                 ANGLE/SwiftShader (flags live in the test). three/addons
 #                 load from cdn.jsdelivr.net, so this job needs the network.
+#                 Its csp entry runs tools/test_sim_csp.mjs instead: the sim
+#                 under its Content-Security-Policy in Chrome, both cores and
+#                 every open map, rooms and the leaderboard on `wrangler dev`
+#                 (installed in that entry). Its own entry, so no map shard
+#                 nears 10 minutes.
 #   asset-stamps  scripts/ci/stamp_asset_cache.py --check. The stamper's own
 #                 unit tests already run in agent-signals.yml (gate-tests).
 
@@ -71,7 +76,7 @@ jobs:
           [ "${#failed[@]}" -eq 0 ]
 
   sim-map-boot:
-    name: Boot sim maps (${{ matrix.core }} core, shard ${{ matrix.shard }}/${{ matrix.of }})
+    name: ${{ matrix.suite == 'csp' && 'Sim under its CSP (Chrome)' || format('Boot sim maps ({0} core, shard {1}/{2})', matrix.core, matrix.shard, matrix.of) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -80,12 +85,14 @@ jobs:
       matrix:
         include:
           # Default core: 21 cases, 7 a shard. The launch-screen checks run in 1/3.
-          - { core: bf, shard: 1, of: 3 }
-          - { core: bf, shard: 2, of: 3 }
-          - { core: bf, shard: 3, of: 3 }
+          - { suite: boot, core: bf, shard: 1, of: 3 }
+          - { suite: boot, core: bf, shard: 2, of: 3 }
+          - { suite: boot, core: bf, shard: 3, of: 3 }
           # ?core=js: 13 cases, 7 and 6.
-          - { core: js, shard: 1, of: 2 }
-          - { core: js, shard: 2, of: 2 }
+          - { suite: boot, core: js, shard: 1, of: 2 }
+          - { suite: boot, core: js, shard: 2, of: 2 }
+          # tools/test_sim_csp.mjs, both cores in one run.
+          - { suite: csp, core: both, shard: 1, of: 1 }
 
     steps:
       - name: Check out
@@ -109,11 +116,28 @@ jobs:
           echo "CHROME=$CHROME_BIN" >> "$GITHUB_ENV"
 
       - name: Boot this shard's maps
+        if: matrix.suite == 'boot'
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
           SIM_BOOT_CORE: ${{ matrix.core }}
           SIM_BOOT_SHARD: ${{ matrix.shard }}/${{ matrix.of }}
         run: node --test tools/test_sim_map_boot.mjs
+
+      # wrangler for the rooms and leaderboard Workers under `wrangler dev`
+      # (tools/sim_rooms_dev.mjs finds it here). Without it the test skips
+      # its room and local-Worker steps. Pinned to the version the test was
+      # verified with: there is no lockfile, and a new 4.x could change the
+      # flags or the "Ready on" line the test waits for.
+      - name: Install wrangler
+        if: matrix.suite == 'csp'
+        working-directory: workers/sim-rooms
+        run: npm install --no-audit --no-fund --no-save wrangler@4.151.1
+
+      - name: The sim under its Content-Security-Policy
+        if: matrix.suite == 'csp'
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: node --test tools/test_sim_csp.mjs
 
   asset-stamps:
     name: Check asset cache stamps
