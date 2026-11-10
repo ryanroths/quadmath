@@ -273,6 +273,77 @@ export function wantsEasyTurtle(info) {
   return Math.abs(info.r || 0) >= EASY_TURTLE_STICK || Math.abs(info.p || 0) >= EASY_TURTLE_STICK;
 }
 
+// ---- The first-flight card ----
+// Once per profile, on the first arm attempt: FIRST_FLIGHT_TEXT, over the
+// flight, not pausing it. And once per profile, for a pilot with no controller
+// (none detected after FIRST_FLIGHT_KEYS_AFTER_S of the flying page, and no
+// touch sticks) who has not armed yet: the keyboard layout, as an image under
+// the same line. Either goes on any stick or key, once it has been up long
+// enough to read (FIRST_FLIGHT_MIN_S: the stick that raised it is still moving).
+export const FIRST_FLIGHT_KEY = 'quadmathSimFirstFlight';
+export const FIRST_FLIGHT_TEXT = 'Throttle up to fly · Full stick to flip back over · Esc for menu';
+export const FIRST_FLIGHT_KEYS_IMG = 'assets/sim-ui/keyboard-layout.svg';
+export const FIRST_FLIGHT_KEYS_ALT = 'Keyboard: W and S throttle, A and D yaw, up and down arrows pitch, left and right arrows roll, Space arm or disarm, R respawn, Esc menu.';
+export const FIRST_FLIGHT_KEYS_AFTER_S = 3;
+export const FIRST_FLIGHT_MIN_S = 2.5;
+const FIRST_FLIGHT_STICK = 0.2;
+
+// What this profile has been shown: { card, keys }, stored as a list.
+export function loadFirstFlight(storage) {
+  const store = fovStore(storage);
+  let raw = '';
+  try { raw = (store && store.getItem(FIRST_FLIGHT_KEY)) || ''; } catch (e) { /* ignore */ }
+  const parts = String(raw).split(',');
+  return { card: parts.includes('card'), keys: parts.includes('keys') };
+}
+
+export function saveFirstFlight(seen, storage) {
+  const store = fovStore(storage);
+  const parts = ['card', 'keys'].filter((k) => seen && seen[k]);
+  try { if (store) store.setItem(FIRST_FLIGHT_KEY, parts.join(',')); } catch (e) { /* ignore quota / private mode */ }
+}
+
+// One sample of the flying page (not paused). state: {} to start. sample: dt
+// (s), seen { card, keys }, attempt (an arm attempt in this sample), armed,
+// controller (a gamepad or radio is connected), touch (touch sticks, or a
+// phone), stick { r, p, y, t }, key (a key went down since the last sample).
+// Returns the next state, the card on screen (null, 'card' or 'keys') and
+// seen, to be saved when it changed.
+export function stepFirstFlight(state, sample) {
+  const s = sample || {};
+  const was = state || {};
+  const dt = Number.isFinite(s.dt) && s.dt > 0 ? s.dt : 0;
+  const seen = { card: !!(s.seen && s.seen.card), keys: !!(s.seen && s.seen.keys) };
+  const st = { liveS: (+was.liveS || 0) + dt, show: was.show || null, shownS: +was.shownS || 0, base: was.base || null, input: !!was.input };
+  const stick = s.stick || {};
+  const at = (k) => +stick[k] || 0;
+  if (st.show) {
+    st.shownS += dt;
+    const moved = ['r', 'p', 'y', 't'].some((k) => Math.abs(at(k) - (+st.base[k] || 0)) >= FIRST_FLIGHT_STICK);
+    if (s.key || moved || (st.show === 'keys' && s.controller)) st.input = true;
+    if (st.input && st.shownS >= FIRST_FLIGHT_MIN_S - 1e-9) st.show = null;
+    return { state: st, show: st.show, seen };
+  }
+  const open = (kind) => {
+    st.show = kind;
+    st.shownS = 0;
+    st.input = false;
+    st.base = { r: at('r'), p: at('p'), y: at('y'), t: at('t') };
+  };
+  const keyboard = !s.controller && !s.touch;
+  if (s.attempt && !seen.card) {
+    seen.card = true;
+    // After the keyboard card, which carries the same line, an arm on the
+    // keys needs no second card.
+    if (!(keyboard && seen.keys)) open('card');
+  } else if (keyboard && !seen.keys && st.liveS >= FIRST_FLIGHT_KEYS_AFTER_S - 1e-9) {
+    seen.keys = true;
+    // Armed already: flying on the keys, no layout needed.
+    if (!s.armed) open('keys');
+  }
+  return { state: st, show: st.show, seen };
+}
+
 // East of the default spawn, facing +Z (away from the afternoon sun) so the
 // hover column and gates are readable. Independent of racing gate coordinates.
 const TUTORIAL_ORIGIN = { x: 36, y: 0, z: 44 };

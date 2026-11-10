@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 232" width="520" height="232" role="img" aria-label="Keyboard layout for the QuadMath sim">
+  <style>
+    .k{fill:#1b1e26;stroke:#ffffff;stroke-opacity:.26;stroke-width:1.5}
+    .h{stroke:#FF4D1A;stroke-opacity:1}
+    .c{font:700 17px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#E8E9ED;text-anchor:middle}
+    .l{font:600 13px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#E8E9ED}
+    .d{font:500 12px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#9aa0ad}
+  </style>
+  <!-- throttle and yaw -->
+  <rect class="k h" x="78" y="10" width="44" height="44" rx="7"/><text class="c" x="100" y="38">W</text>
+  <rect class="k" x="30" y="60" width="44" height="44" rx="7"/><text class="c" x="52" y="88">A</text>
+  <rect class="k" x="78" y="60" width="44" height="44" rx="7"/><text class="c" x="100" y="88">S</text>
+  <rect class="k" x="126" y="60" width="44" height="44" rx="7"/><text class="c" x="148" y="88">D</text>
+  <text class="l" x="30" y="128">W / S</text><text class="d" x="78" y="128">throttle up / down</text>
+  <text class="l" x="30" y="148">A / D</text><text class="d" x="78" y="148">yaw left / right</text>
+  <!-- pitch and roll -->
+  <rect class="k" x="398" y="10" width="44" height="44" rx="7"/><text class="c" x="420" y="38">&#8593;</text>
+  <rect class="k" x="350" y="60" width="44" height="44" rx="7"/><text class="c" x="372" y="88">&#8592;</text>
+  <rect class="k" x="398" y="60" width="44" height="44" rx="7"/><text class="c" x="420" y="88">&#8595;</text>
+  <rect class="k" x="446" y="60" width="44" height="44" rx="7"/><text class="c" x="468" y="88">&#8594;</text>
+  <text class="l" x="330" y="128">&#8593; / &#8595;</text><text class="d" x="378" y="128">pitch forward / back</text>
+  <text class="l" x="330" y="148">&#8592; / &#8594;</text><text class="d" x="378" y="148">roll left / right</text>
+  <!-- the rest -->
+  <rect class="k" x="30" y="176" width="52" height="38" rx="7"/><text class="c" x="56" y="201">Esc</text>
+  <text class="d" x="90" y="200">menu</text>
+  <rect class="k" x="150" y="176" width="150" height="38" rx="7"/><text class="c" x="225" y="201">Space</text>
+  <text class="d" x="308" y="200">arm / disarm</text>
+  <rect class="k" x="410" y="176" width="38" height="38" rx="7"/><text class="c" x="429" y="201">R</text>
+  <text class="d" x="456" y="200">respawn</text>
+</svg>
