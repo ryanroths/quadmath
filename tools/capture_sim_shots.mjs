@@ -90,7 +90,7 @@ try {
     await cdp(ws, 'Runtime.evaluate', {
       expression: `(function(){
         document.body.style.cursor='none';
-        var ids=['startMenu','feelPrompt','menuLayer','legend','audioHint','toast','panel'];
+        var ids=['startMenu','feelPrompt','menuLayer','legend','audioHint','toast','panel','firstFlight'];
         ids.forEach(function(id){var el=document.getElementById(id);if(!el)return;
           el.classList.remove('open','show');el.style.display='none';});
         document.body.classList.remove('menu-open');

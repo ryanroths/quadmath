@@ -293,6 +293,7 @@
   .menu-layer p,.menu-layer li{font-size:13px;line-height:1.55;color:var(--dim)}
   .menu-layer ol{padding-left:18px}
   .menu-layer button{width:auto;margin-top:12px}
+  body.menu-open #firstFlight,body.builder-on #firstFlight,body.calibrating #firstFlight{display:none}
   body.menu-open #legend,body.menu-open #audioHint,body.menu-open #gear,body.menu-open #menuBtn,body.menu-open #fpsHud,
     body.menu-open .osd,body.menu-open #feelHud,body.menu-open #feelTutorial,body.menu-open #coachHud,
     body.menu-open #trickHud,body.menu-open #trickScore,body.menu-open #touchLayer,body.menu-open #replayHud{opacity:0;pointer-events:none}
@@ -413,6 +414,14 @@
     width:min(420px,92vw);padding:14px 16px;background:var(--glass);border:1px solid var(--line);
     border-radius:16px;backdrop-filter:blur(16px);text-align:center}
   #feelTutorial.show{display:block}
+  /* The first-flight card (sim-feel.js stepFirstFlight): over the flight, never in its way. */
+  #firstFlight{position:fixed;top:max(17%,96px);left:50%;transform:translateX(-50%);z-index:14;display:none;
+    width:max-content;max-width:min(560px,92vw);padding:12px 18px;background:var(--glass);border:1px solid var(--line);
+    border-radius:16px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);text-align:center;
+    font-size:14px;font-weight:600;line-height:1.5;color:var(--txt);pointer-events:none}
+  #firstFlight.show{display:block}
+  #firstFlight.keys{width:min(560px,92vw)}
+  #firstFlight img{display:block;width:auto;height:auto;max-width:100%;max-height:52vh;margin:10px auto 0}
   #feelTutMsg{font-size:14px;font-weight:600;margin-bottom:8px}
   #feelTutorial button{width:auto;display:inline-block;margin:4px 6px}
   button.primary{background:var(--orange);color:#140802;border-color:var(--orange)}
@@ -646,6 +655,7 @@
     <button type="button" id="hud3d" aria-pressed="false">3D</button>
   </div>
 </div>
+<div id="firstFlight" role="status" aria-live="polite"></div>
 <div id="feelTutorial">
   <div id="feelTutMsg">Tutorial</div>
   <button type="button" id="feelTutSkip">Skip</button>
@@ -1039,7 +1049,8 @@ import {
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=2108fba17d3d";
-import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z} from "./sim-feel.js?v=5d7a46493722";
+import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z,
+  loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT} from "./sim-feel.js?v=3cc5f760bece";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -4626,6 +4637,7 @@ function setThreeD(on,persist){
   return threeD;
 }
 function tryArm(opts){
+  firstFlightAttempt=true;
   if(armGate&&padLive){toast('STICKS NOT SAFE');return false;}
   // A bf class waits for Betaflight: armed on the js core meanwhile, the quad
   // would be respawned and disarmed mid-flight when the bf core takes over.
@@ -4742,6 +4754,60 @@ function tickEasyArm(dt){
     coreDisarm();
     syncTouchModeBtn();
   }
+}
+// ---------- The first-flight card (sim-feel.js stepFirstFlight) ----------
+// In Easy mode, on the first arm attempt (the throttle leaving its bottom
+// while disarmed, whether or not it arms, or Space or the touch ARM button):
+// "Throttle up to fly · Full stick to flip back over · Esc for menu". Once per
+// profile for each kind of input (keyboard, touch, controller), so a radio's
+// first throttle-up gets it on a profile that has flown the keys. With no
+// controller and no touch sticks 3 s into the flying page, and not armed yet:
+// the keyboard layout, an image under the same line. It never pauses the sim,
+// and goes on any stick or key. Every 4 ms, on wall time.
+let firstFlightSeen=loadFirstFlight();
+let firstFlightState={};
+let firstFlightAttempt=false;   // tryArm was called since the last poll
+let firstFlightKey=false;       // a key went down since the last poll
+let firstFlightLow=false;       // the throttle was at its bottom at the last poll
+let firstFlightAt=null;
+const firstFlightEl=document.getElementById('firstFlight');
+window.addEventListener('keydown',(e)=>{if(!e.repeat)firstFlightKey=true;},true);
+function paintFirstFlight(kind){
+  firstFlightEl.classList.toggle('show',!!kind);
+  firstFlightEl.classList.toggle('keys',kind==='keys');
+  firstFlightEl.dataset.kind=kind||'';
+  firstFlightEl.textContent='';
+  if(!kind)return;
+  const line=document.createElement('div');
+  line.textContent=FIRST_FLIGHT_TEXT;
+  firstFlightEl.appendChild(line);
+  if(kind==='keys'){
+    const img=document.createElement('img');
+    img.src=FIRST_FLIGHT_KEYS_IMG;img.width=520;img.height=232;img.alt=FIRST_FLIGHT_KEYS_ALT;
+    firstFlightEl.appendChild(img);
+  }
+}
+function tickFirstFlight(nowMs){
+  const low=throttleSafeToArm(stick.t,threeD);
+  const armed=coreArmed();
+  const attempt=easyMode()&&(firstFlightAttempt||(!armed&&firstFlightLow&&!low));
+  const key=firstFlightKey;
+  firstFlightLow=low;firstFlightAttempt=false;firstFlightKey=false;
+  const on={controller:gpConnected,touch:mobileHint||!!(touchCtl&&touchCtl.enabled)};
+  // Nothing left to show on this input.
+  const input=firstFlightInput(on);
+  if(!firstFlightState.show&&firstFlightSeen[input]&&(input!=='keyboard'||firstFlightSeen.keys))return;
+  const dt=firstFlightAt===null?0:Math.min(0.1,(nowMs-firstFlightAt)/1000);
+  firstFlightAt=nowMs;
+  const was=firstFlightState.show||null;
+  const out=stepFirstFlight(firstFlightState,{dt,seen:firstFlightSeen,attempt,armed,key,stick,
+    controller:on.controller,touch:on.touch});
+  firstFlightState=out.state;
+  if(out.changed){
+    firstFlightSeen=out.seen;
+    saveFirstFlight(firstFlightSeen);
+  }
+  if(out.show!==was)paintFirstFlight(out.show);
 }
 // A turtle done and re-armed: no 1 s hold, and the throttle is the pilot's. A
 // stick still over would fly it back onto its back, so roll and pitch wait for
@@ -8010,7 +8076,8 @@ let pollCore=null;
 // keyboard's. null in normal use.
 let testStick=null;
 function pollInput(){
-  if(simPaused()){lastPollUs=null;return;}
+  if(simPaused()){lastPollUs=null;firstFlightAt=null;return;}
+  tickFirstFlight(performance.now());
   const tUs=core.stamp(performance.now());
   if(tUs===null)return;
   // A bf reboot restarts that core's clock and a core switch changes clocks:
@@ -8621,6 +8688,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
   audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
+  firstFlight:()=>({show:firstFlightState.show||null,seen:{...firstFlightSeen},liveS:firstFlightState.liveS||0,shownS:firstFlightState.shownS||0}),
   easy:()=>({mode:easyMode(),switches:radioSwitches,wizard:switchWiz?{step:switchWiz.step,picks:switchWiz.picks}:null,flightMode,arm:easyArmState,jsTurtle,crashAt:easyCrashAt,disarmReason:easyDisarmReason,stickHold:turtleStickHold}),
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,
