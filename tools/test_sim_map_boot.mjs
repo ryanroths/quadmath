@@ -449,7 +449,7 @@ async function bootPageAttached(spec, boot, run, url, wantCore) {
     boot.step = 'closing the menu to fly';
     await cdp(ws, 'Runtime.evaluate', {
       expression: `(function(){
-        ['startMenu','feelPrompt','menuLayer','legend','audioHint','toast','panel'].forEach(function(id){
+        ['startMenu','feelPrompt','menuLayer','legend','audioHint','toast','panel','firstFlight'].forEach(function(id){
           var el=document.getElementById(id); if(!el)return;
           el.classList.remove('open','show'); el.style.display='none';
         });

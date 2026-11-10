@@ -79,6 +79,9 @@ The Bando's graffiti atlas is not a download: `assets/sim-looks/tex/look_bando_d
 the original lettering in `tools/build_bando_decals.mjs` (`node tools/build_bando_decals.mjs`; its own stroked capitals, no font, no copied
 piece; original to this project, under its licence).
 
+The sim's keyboard layout card is not a download: `assets/sim-ui/keyboard-layout.svg` was drawn for this project
+(original to this project, under its licence).
+
 ## Inter — SIL Open Font License 1.1
 
 Source: https://github.com/rsms/inter/releases/tag/v4.1
