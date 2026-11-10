@@ -16,6 +16,9 @@ Source: https://github.com/ryanroths/quadmath (this page and its modules).
 
 THIRD-PARTY CODE
 
+three.js r180 KTX2 loader and the Basis Universal transcoder, vendored unmodified in
+vendor/three-ktx2-r180/ (MIT, Apache-2.0; see its NOTICE and LICENSE).
+
 quadmath-sim-core, vendored in vendor/sim-core/ (GPL-3.0-or-later):
 https://github.com/ryanroths/quadmath-sim-core, the version named in
 vendor/sim-core/VERSION. It compiles Betaflight

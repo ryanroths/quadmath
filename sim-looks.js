@@ -6,7 +6,7 @@
 // quadmathSimCrosshair.
 import { resolveAutoQuality, gpuTier, autoQualityStep } from './sim-touch.js?v=62e0a37fafce';
 import { updateSceneLighting } from './sim-lighting.js?v=db386ea7cfd2';
-import { LOOK } from './sim-look.js?v=4fe91d31bea9';
+import { LOOK } from './sim-look.js?v=73378d552076';
 
 export const QUALITY_KEY = 'quadmathSimQuality';
 export const FPV_KEY = 'quadmathSimFpv';

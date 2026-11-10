@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  LOOK, LOOK_TEXTURES, lookTextureBytes, vfovForDiagonal, lookVfov, yawBlurPx, floorAo,
+  LOOK, LOOK_TEXTURES, lookTextureBytes, lookKtx2Bytes, lookEnableKtx2, vfovForDiagonal, lookVfov, yawBlurPx, floorAo,
   lookVibe, lookLooks, markBloom, lookShadowProxy, lookBoxUv, lookMaterial, lookShafts, lookTextureSet,
 } from '../sim-look.js';
 import { RIG_PLAY } from '../sim-maps.js';
@@ -72,6 +72,48 @@ test('every texture is a Poly Haven set, shipped at its size and licensed, under
   assert.equal(lookTextureBytes(['concrete_floor']).env, 384 * 512 * 8, 'a map that names its sets takes the room HDRI unless it names its fill');
   assert.equal(lookTextureBytes(['concrete_floor'], ['overcast']).env, 336 * 128 * 8);
   assert.ok(b.total < 24e6, 'textures ' + (b.total / 1e6).toFixed(2) + ' MB');
+});
+
+test('every look texture also ships as KTX2: ETC1S albedo, UASTC normals, every mip, licensed; the WebP stays as the fallback', () => {
+  for (const [file, px] of Object.entries(LOOK_TEXTURES)) {
+    const k = file.replace(/\.webp$/, '.ktx2');
+    assert.ok(existsSync(join(root, k)), k);
+    assert.ok(existsSync(join(root, file)), file + ' kept');
+    assert.ok(licenses.includes('`' + k + '`'), k + ' licensed');
+    const b = readFileSync(join(root, k));
+    assert.deepEqual([...b.subarray(0, 12)], [0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a], k + ' KTX2 magic');
+    const u = (at) => b.readUInt32LE(at);
+    assert.equal(u(12), 0, k + ' a Basis payload (vkFormat undefined)');
+    assert.deepEqual([u(20), u(24)], [px, px], k + ' size');
+    assert.equal(u(40), Math.log2(px) + 1, k + ' every mip');
+    const normal = file.includes('_nr_'), dfd = u(48), model = b[dfd + 12], transfer = b[dfd + 14];
+    if (normal) {
+      assert.equal(model, 166, k + ' UASTC');
+      assert.equal(transfer, 1, k + ' linear');
+      assert.equal(u(44), 2, k + ' zstd');
+    } else {
+      assert.equal(model, 163, k + ' ETC1S');
+      assert.equal(transfer, 2, k + ' sRGB');
+      assert.equal(u(44), 1, k + ' BasisLZ');
+    }
+  }
+});
+
+test('the KTX2 path: the transcoder is vendored at three\'s revision; off in node and with ?ktx2=0; the cap has room', () => {
+  assert.equal(THREE.REVISION, '180', 'vendor/three-ktx2-r180 is this revision\'s');
+  for (const f of ['loaders/KTX2Loader.js', 'utils/WorkerPool.js', 'math/ColorSpaces.js', 'libs/ktx-parse.module.js', 'libs/zstddec.module.js', 'libs/basis/basis_transcoder.js', 'libs/basis/basis_transcoder.wasm', 'LICENSE', 'NOTICE']) {
+    assert.ok(existsSync(join(root, 'vendor/three-ktx2-r180', f)), f);
+  }
+  const sim = readFileSync(join(root, 'sim.html'), 'utf8');
+  assert.match(sim, /get\('ktx2'\)!=='0'\)lookEnableKtx2\(renderer\);/);
+  lookEnableKtx2(null); // no fetch in node: stays off
+  // The fallback still fits; compressed, there is room.
+  const all = lookTextureBytes().total, bc7 = lookKtx2Bytes('bc7').total, phone = lookKtx2Bytes('mobile').total;
+  assert.ok(all < 24e6, 'the WebP fallback is the worst case and fits: ' + all);
+  assert.ok(bc7 < 9e6, 'BC7 desktop ' + bc7);
+  assert.ok(phone < bc7, 'ETC albedos on a phone ' + phone);
+  // 1024 at 1 byte a pixel with mips, to the byte, for the sum's sake.
+  assert.equal(lookKtx2Bytes('bc7', ['concrete_floor'], ['room'], []).sets, 2 * 1398128);
 });
 
 test('the open maps\' fill: a CIE overcast sky, generated, 128 wide, licensed, its irradiance the room HDRI\'s', () => {
