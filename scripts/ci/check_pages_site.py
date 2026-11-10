@@ -72,7 +72,7 @@ SITE_URL = re.compile(r"""https?://(?:www\.)?quadmath\.com(/[^\s"'<>)\\]*)""")
 
 # Skip third-party bundles when looking for path-shaped literals; their strings
 # are not addresses on this site. Their imports are still followed.
-VENDORED_BUNDLES = ("vendor/three.", "vendor/blackbox-log.")
+VENDORED_BUNDLES = ("vendor/three.", "vendor/three-ktx2-", "vendor/blackbox-log.")
 
 # String literals that look like paths and are not. Key: literal, or the
 # pattern a runtime-built one turns into.
