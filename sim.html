@@ -1050,7 +1050,7 @@ import {
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=2108fba17d3d";
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z,
-  loadFirstFlight,saveFirstFlight,stepFirstFlight,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT} from "./sim-feel.js?v=5ef35877760a";
+  loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT} from "./sim-feel.js?v=3cc5f760bece";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -4750,12 +4750,14 @@ function tickEasyArm(dt){
   }
 }
 // ---------- The first-flight card (sim-feel.js stepFirstFlight) ----------
-// Once per profile, in Easy mode: on the first arm attempt (the throttle
-// leaving its bottom while disarmed, whether or not it arms, or Space or the
-// touch ARM button), "Throttle up to fly · Full stick to flip back over · Esc
-// for menu". With no controller and no touch sticks 3 s into the flying page,
-// and not armed yet: the keyboard layout, an image under the same line. It
-// never pauses the sim, and goes on any stick or key. Every 4 ms, on wall time.
+// In Easy mode, on the first arm attempt (the throttle leaving its bottom
+// while disarmed, whether or not it arms, or Space or the touch ARM button):
+// "Throttle up to fly · Full stick to flip back over · Esc for menu". Once per
+// profile for each kind of input (keyboard, touch, controller), so a radio's
+// first throttle-up gets it on a profile that has flown the keys. With no
+// controller and no touch sticks 3 s into the flying page, and not armed yet:
+// the keyboard layout, an image under the same line. It never pauses the sim,
+// and goes on any stick or key. Every 4 ms, on wall time.
 let firstFlightSeen=loadFirstFlight();
 let firstFlightState={};
 let firstFlightAttempt=false;   // tryArm was called since the last poll
@@ -4785,14 +4787,17 @@ function tickFirstFlight(nowMs){
   const attempt=easyMode()&&(firstFlightAttempt||(!armed&&firstFlightLow&&!low));
   const key=firstFlightKey;
   firstFlightLow=low;firstFlightAttempt=false;firstFlightKey=false;
-  if(firstFlightSeen.card&&firstFlightSeen.keys&&!firstFlightState.show)return;
+  const on={controller:gpConnected,touch:mobileHint||!!(touchCtl&&touchCtl.enabled)};
+  // Nothing left to show on this input.
+  const input=firstFlightInput(on);
+  if(!firstFlightState.show&&firstFlightSeen[input]&&(input!=='keyboard'||firstFlightSeen.keys))return;
   const dt=firstFlightAt===null?0:Math.min(0.1,(nowMs-firstFlightAt)/1000);
   firstFlightAt=nowMs;
   const was=firstFlightState.show||null;
   const out=stepFirstFlight(firstFlightState,{dt,seen:firstFlightSeen,attempt,armed,key,stick,
-    controller:gpConnected,touch:mobileHint||!!(touchCtl&&touchCtl.enabled)});
+    controller:on.controller,touch:on.touch});
   firstFlightState=out.state;
-  if(out.seen.card!==firstFlightSeen.card||out.seen.keys!==firstFlightSeen.keys){
+  if(out.changed){
     firstFlightSeen=out.seen;
     saveFirstFlight(firstFlightSeen);
   }

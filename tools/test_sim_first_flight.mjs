@@ -1,12 +1,17 @@
-// The first-flight card: once per profile, on the first arm attempt, "Throttle
-// up to fly · Full stick to flip back over · Esc for menu"; with no controller
-// 3 s into the flying page, the keyboard layout as an image card. Dismissed by
-// any stick or key, never shown again.
+// The first-flight card: on the first arm attempt, "Throttle up to fly · Full
+// stick to flip back over · Esc for menu"; with no controller 3 s into the
+// flying page, the keyboard layout as an image card. Dismissed by any stick or
+// key. Once per profile for each kind of input (keyboard, touch, controller),
+// never shown again on that input.
 //   - In node: the card's rules (sim-feel.js stepFirstFlight) and its storage.
 //   - In headless Chrome, a fresh profile each: a fake TX16S (the card on the
 //     first throttle raise, armed or not; it does not pause the flight; gone
-//     on the stick; never again, across a reload), the keyboard through the
-//     real launch path (the layout image after 3 s, there until a key), a
+//     on the stick; never again, across a reload), a TX16S awake before the
+//     page loads with its throttle at the bottom (there at the page's first
+//     look, or handed over by gamepadconnected after its scripts: the first
+//     throttle-up arms and shows the card), the keyboard through the
+//     real launch path (the layout image after 3 s, there until a key; then
+//     the same profile opened again with the TX16S awake: its card), a
 //     keyboard pilot who arms at once (the text card, no layout), touch, and
 //     a radio on its own switches (no card: the throttle is not its arm).
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
@@ -20,7 +25,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   FIRST_FLIGHT_KEY, FIRST_FLIGHT_TEXT, FIRST_FLIGHT_KEYS_IMG, FIRST_FLIGHT_KEYS_ALT, FIRST_FLIGHT_KEYS_AFTER_S, FIRST_FLIGHT_MIN_S,
-  loadFirstFlight, saveFirstFlight, stepFirstFlight,
+  loadFirstFlight, saveFirstFlight, stepFirstFlight, firstFlightInput, FIRST_FLIGHT_SEEN,
 } from '../sim-feel.js';
 import { SWITCHES_PREFIX, sanitizeId } from '../sim-touch.js';
 
@@ -37,11 +42,13 @@ function memStore(init) {
 }
 
 const DT = 0.004;
+// Nothing shown yet.
+const NONE = { keys: false, keyboard: false, touch: false, controller: false };
 const REST = { r: 0, p: 0, y: 0, t: 0 };
 // Step the card for some seconds of 4 ms samples; returns the state, what
 // shows, what is seen, and when the card on screen changed.
 function run(from, seconds, sample) {
-  let state = from.state || {}, seen = from.seen || { card: false, keys: false }, show = state.show || null;
+  let state = from.state || {}, seen = from.seen || NONE, show = state.show || null;
   const changes = [];
   const n = Math.round(seconds / DT);
   for (let i = 0; i < n; i++) {
@@ -64,22 +71,29 @@ test('the card says what the owner wrote, and its storage round-trips', () => {
   }
   assert.match(FIRST_FLIGHT_KEYS_ALT, /W and S throttle/);
   const store = memStore();
-  assert.deepEqual(loadFirstFlight(store), { card: false, keys: false }, 'a fresh profile');
-  saveFirstFlight({ card: true, keys: false }, store);
-  assert.equal(store.getItem(FIRST_FLIGHT_KEY), 'card');
-  assert.deepEqual(loadFirstFlight(store), { card: true, keys: false });
-  saveFirstFlight({ card: true, keys: true }, store);
-  assert.deepEqual(loadFirstFlight(store), { card: true, keys: true });
-  assert.deepEqual(loadFirstFlight(memStore({ [FIRST_FLIGHT_KEY]: 'junk' })), { card: false, keys: false });
+  assert.deepEqual(FIRST_FLIGHT_SEEN, ['keys', 'keyboard', 'touch', 'controller']);
+  assert.deepEqual(loadFirstFlight(store), NONE, 'a fresh profile');
+  saveFirstFlight({ ...NONE, controller: true }, store);
+  assert.equal(store.getItem(FIRST_FLIGHT_KEY), 'controller');
+  assert.deepEqual(loadFirstFlight(store), { ...NONE, controller: true });
+  saveFirstFlight({ ...NONE, keys: true, keyboard: true, controller: true }, store);
+  assert.equal(store.getItem(FIRST_FLIGHT_KEY), 'keys,keyboard,controller');
+  assert.deepEqual(loadFirstFlight(store), { ...NONE, keys: true, keyboard: true, controller: true });
+  assert.deepEqual(loadFirstFlight(memStore({ [FIRST_FLIGHT_KEY]: 'junk' })), NONE);
+  // The input a pilot is on.
+  assert.equal(firstFlightInput({}), 'keyboard');
+  assert.equal(firstFlightInput({ touch: true }), 'touch');
+  assert.equal(firstFlightInput({ controller: true }), 'controller');
+  assert.equal(firstFlightInput({ controller: true, touch: true }), 'controller', 'a radio on a phone');
 });
 
 test('the first arm attempt shows the card, once; a controller never gets the keyboard layout', () => {
   let r = run({}, 5, { controller: true });
   assert.equal(r.show, null, 'no attempt, a controller: nothing, however long');
-  assert.deepEqual(r.seen, { card: false, keys: false });
+  assert.deepEqual(r.seen, NONE);
   r = run(r, 0.1, (t) => ({ controller: true, attempt: t === 0 }));
   assert.equal(r.show, 'card', 'the attempt shows it');
-  assert.deepEqual(r.seen, { card: true, keys: false }, 'seen as soon as it is shown');
+  assert.deepEqual(r.seen, { ...NONE, controller: true }, 'seen as soon as it is shown');
   // No input: it stays.
   r = run(r, 10, { controller: true });
   assert.equal(r.show, 'card', 'there until a stick or key');
@@ -116,7 +130,7 @@ test('no controller after 3 s: the keyboard layout; not on touch, not once armed
   assert.equal(r.show, null, 'not before 3 s');
   r = run(r, 0.2, {});
   assert.equal(r.show, 'keys', 'the layout');
-  assert.deepEqual(r.seen, { card: false, keys: true });
+  assert.deepEqual(r.seen, { ...NONE, keys: true });
   r = run(r, 5, {});
   assert.equal(r.show, 'keys', 'there until a key');
   r = run(r, 0.02, once('key'));
@@ -124,18 +138,52 @@ test('no controller after 3 s: the keyboard layout; not on touch, not once armed
   // Then an arm on the keys: the layout carried the line, no second card.
   r = run(r, 1, once('attempt'));
   assert.equal(r.show, null);
-  assert.deepEqual(r.seen, { card: true, keys: true });
+  assert.deepEqual(r.seen, { ...NONE, keys: true, keyboard: true });
   // A controller or touch never gets it.
   assert.equal(run({}, 10, { controller: true }).show, null);
   assert.equal(run({}, 10, { touch: true }).show, null);
-  assert.deepEqual(run({}, 10, { touch: true }).seen, { card: false, keys: false }, 'and it is not used up');
+  assert.deepEqual(run({}, 10, { touch: true }).seen, NONE, 'and it is not used up');
   // Flying on the keys by 3 s: no layout, and none later.
   r = run({}, 1, once('attempt'));
   assert.equal(r.show, 'card', 'the arm attempt card first');
   r = run(r, 4, (t) => ({ armed: true, key: Math.abs(t - 3) < 0.002 }));
   assert.equal(r.show, null);
-  assert.deepEqual(r.seen, { card: true, keys: true }, 'the layout is not needed');
+  assert.deepEqual(r.seen, { ...NONE, keys: true, keyboard: true }, 'the layout is not needed');
   assert.equal(run(r, 10, {}).show, null);
+});
+
+test('one card for each input: the keys used up, a radio and touch sticks still get theirs', () => {
+  // The keyboard layout, a key, then W: the keyboard's card is used up unseen.
+  let r = run({}, 3.1, {});
+  r = run(r, 3, once('key'));
+  r = run(r, 1, once('attempt'));
+  assert.equal(r.show, null);
+  assert.deepEqual(r.seen, { ...NONE, keys: true, keyboard: true });
+  // The page is opened again with a radio awake: its first throttle-up.
+  r = run({ seen: r.seen }, 5, { controller: true });
+  assert.equal(r.show, null, 'not before the throttle moves');
+  r = run(r, 0.1, (t) => ({ controller: true, attempt: t === 0 }));
+  assert.equal(r.show, 'card', 'the radio gets the card');
+  assert.deepEqual(r.seen, { ...NONE, keys: true, keyboard: true, controller: true });
+  r = run(r, 3, (t) => ({ controller: true, stick: { ...REST, t: 0.5 } }));
+  assert.equal(r.show, null);
+  r = run(r, 1, (t) => ({ controller: true, attempt: t === 0 }));
+  assert.equal(r.show, null, 'once: not on its second');
+  // Touch sticks on the same profile: theirs.
+  r = run({ seen: r.seen }, 0.1, (t) => ({ touch: true, attempt: t === 0 }));
+  assert.equal(r.show, 'card', 'touch gets the card');
+  assert.deepEqual(r.seen, { keys: true, keyboard: true, touch: true, controller: true });
+  // A pilot who saw the card on a radio first, then flies the keys: the layout, and no second card after it.
+  r = run({}, 0.1, (t) => ({ controller: true, attempt: t === 0 }));
+  r = run(r, 3, (t) => ({ controller: true, stick: { ...REST, t: 0.5 } }));
+  r = run({ seen: r.seen }, 3.1, {});
+  assert.equal(r.show, 'keys', 'the keyboard layout is still new to them');
+  r = run(r, 3, once('key'));
+  r = run(r, 1, once('attempt'));
+  assert.equal(r.show, null);
+  // And one who arms on the keys at once gets the card there too.
+  r = run({ seen: { ...NONE, controller: true } }, 0.1, once('attempt'));
+  assert.equal(r.show, 'card', 'the keys get the card');
 });
 
 test('the keyboard layout, then a radio: its first arm attempt still gets the card', () => {
@@ -244,11 +292,49 @@ const FAKE_PADS = String.raw`(() => {
   const pads = window.__pads = saved || { on: false, id: '', mapping: '', axes: [], buttons: 0 };
   const make = () => ({ id: pads.id, index: 0, mapping: pads.mapping, connected: true, timestamp: performance.now(), axes: pads.axes.slice(),
     buttons: Array.from({ length: 24 }, () => ({ pressed: false, touched: false, value: 0 })) });
+  // afterBoot: as Chrome hands over a radio that was awake before the page was
+  // opened. getGamepads() is empty while the page's scripts run; this many ms
+  // after they have, the pad is there and gamepadconnected fires. Without it
+  // the pad is there from the first call.
+  let there = !(pads.afterBoot >= 0);
+  if (!there) {
+    const iv = setInterval(() => {
+      if (!window._feel) return;
+      clearInterval(iv);
+      setTimeout(() => { there = true; window.dispatchEvent(new Event('gamepadconnected')); }, pads.afterBoot);
+    }, 4);
+  }
+  // raiseAt: this many ms after the page's scripts have run, the throttle goes
+  // to 60% by itself: a pilot who throttles up while the page is still
+  // loading, before a test could. __early: when, on which core, and how long
+  // the card has been on screen since.
+  if (pads.raiseAt >= 0) {
+    const iv = setInterval(() => {
+      if (!window._feel) return;
+      clearInterval(iv);
+      const early = window.__early = { raisedAt: null, core: null, shownAt: null, cardMs: 0 };
+      setTimeout(() => {
+        pads.axes[2] = 0.2;
+        early.raisedAt = performance.now();
+        early.core = window._sim && window._sim.core ? window._sim.core() : null;
+      }, pads.raiseAt);
+      let last = performance.now();
+      setInterval(() => {
+        const now = performance.now();
+        const el = document.getElementById('firstFlight');
+        if (el && el.classList.contains('show') && getComputedStyle(el).display !== 'none') {
+          if (early.shownAt === null) early.shownAt = now;
+          early.cardMs += now - last;
+        }
+        last = now;
+      }, 50);
+    }, 4);
+  }
   Object.defineProperty(Navigator.prototype, 'getGamepads', {
     configurable: true,
     value() {
       try { sessionStorage.setItem(KEY, JSON.stringify(pads)); } catch (e) { /* ignore */ }
-      return [pads.on ? make() : null, null, null, null];
+      return [pads.on && there ? make() : null, null, null, null];
     },
   });
 })()`;
@@ -409,7 +495,7 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         assert.equal(r.first.img, null, 'no keyboard layout for a radio');
         assert.equal(r.first.inView, true, 'on screen');
         assert.equal(r.first.clicks, 'none', 'takes no click');
-        assert.equal(r.first.saved, 'card', 'stored as soon as it is shown');
+        assert.equal(r.first.saved, 'controller', 'stored as soon as it is shown');
         assert.equal(r.flew, true, 'it arms and flies with the card up');
         assert.equal(r.during.on, true, 'still up a second and a half in');
         assert.equal(r.paused, false, 'the sim is not paused');
@@ -435,9 +521,78 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           await F.wait(2000);
           return JSON.stringify({ again, card: F.card() });`);
         assert.equal(r.again, false, 'after a reload: never again');
-        assert.equal(r.card.saved, 'card', 'the keyboard layout is still unused: a radio never needs it');
+        assert.equal(r.card.saved, 'controller', 'the keyboard layout is still unused: a radio never needs it');
       });
     });
+
+    // The radio on the bench: plugged in, switched on and its throttle at the
+    // bottom before the page is opened. Chrome hands such a pad to the page on
+    // its first look, or by gamepadconnected once its scripts have run.
+    for (const afterBoot of [null, 0, 300, 1500]) {
+      const when = afterBoot === null ? 'there at the first look' : `handed over ${afterBoot} ms after the scripts`;
+      await t.test(`a TX16S awake before the page loads (${when}), throttle at the bottom: the first throttle-up arms and shows the card`, async () => {
+        await pass('', { pad: afterBoot === null ? tx([0, 0, -1, 0, -1, -1, -1, -1]) : { ...tx([0, 0, -1, 0, -1, -1, -1, -1]), afterBoot } }, async ({ js }) => {
+          let r = await js(`
+            await F.wait(4200);
+            return JSON.stringify({ card: F.card(), paused: F.paused(), armed: F.s.coreState().armed, ff: F.s.firstFlight(), body: document.body.className,
+              prompt: !!(window._feel && window._feel.promptOpen), radio: document.getElementById('radioInfo').textContent.slice(0, 30) });`);
+          console.log('awake at load, ' + when + ': ' + JSON.stringify(r));
+          assert.equal(r.paused, false, 'flying, no menu');
+          assert.equal(r.armed, false, 'not armed by itself');
+          assert.equal(r.card.on, false, 'no card before the throttle moves');
+          assert.equal(r.card.saved, null, 'nothing stored yet');
+
+          // Held at the bottom long enough already: the first raise arms.
+          r = await js(`
+            F.thr(0.6);
+            const shown = await F.shown(1500);
+            const first = F.card();
+            const ff = F.s.firstFlight();
+            const flew = await F.until(() => F.s.coreState().armed && F.s.coreState().position.z > 0.3, 2500);
+            const during = F.card();
+            // The throttle has not moved since the card came up: it stays. A stick does it.
+            await F.wait(1200);
+            const held = F.card();
+            F.thr(0.35);
+            const gone = await F.gone(4000);
+            F.thr(0);
+            return JSON.stringify({ shown, first, ff, flew, during, held, gone, body: document.body.className });`);
+          console.log('  first raise: ' + JSON.stringify({ shown: r.shown, ff: r.ff, flew: r.flew, saved: r.first.saved, body: r.body }));
+          assert.equal(r.shown, true, 'the first throttle-up shows it');
+          assert.equal(r.first.kind, 'card');
+          assert.equal(r.first.text, FIRST_FLIGHT_TEXT, 'the line');
+          assert.equal(r.first.img, null, 'no keyboard layout for a radio');
+          assert.equal(r.first.inView, true, 'on screen');
+          assert.equal(r.first.saved, 'controller', 'stored as soon as it is shown');
+          assert.equal(r.flew, true, 'that raise arms and flies, the card up');
+          assert.equal(r.during.on, true, 'still up while it climbs');
+          assert.equal(r.held.on, true, 'and until a stick moves');
+          assert.equal(r.gone, true, 'gone on the stick');
+        });
+      });
+    }
+
+    // The same radio, and a pilot who does not wait for the page: the throttle
+    // goes up while it is still loading, before the 1 s hold or after it.
+    for (const raiseAt of [300, 1600]) {
+      await t.test(`a TX16S awake before the page loads, throttled up ${raiseAt} ms into the page, while it loads: the card`, async () => {
+        await pass('', { pad: { ...tx([0, 0, -1, 0, -1, -1, -1, -1]), afterBoot: 0, raiseAt } }, async ({ js }) => {
+          const r = await js(`
+            await F.wait(1200);
+            return JSON.stringify({ early: window.__early, card: F.card(), armed: F.s.coreState().armed, paused: F.paused() });`);
+          console.log('throttled up ' + raiseAt + ' ms in: ' + JSON.stringify({ early: r.early, on: r.card.on, saved: r.card.saved, armed: r.armed }));
+          assert.ok(r.early && r.early.raisedAt !== null, 'the throttle went up');
+          assert.equal(r.paused, false, 'flying, no menu');
+          assert.ok(r.early.shownAt !== null, 'the card came up');
+          assert.ok(r.early.shownAt - r.early.raisedAt < 1500, `on that throttle-up (${Math.round(r.early.shownAt - r.early.raisedAt)} ms after it)`);
+          assert.equal(r.card.kind, 'card');
+          assert.equal(r.card.saved, 'controller');
+          // No stick has moved since: it is still there, and has been all along.
+          assert.equal(r.card.on, true, 'still up');
+          assert.ok(r.early.cardMs >= 1000, `on screen since (${Math.round(r.early.cardMs)} ms)`);
+        });
+      });
+    }
 
     await t.test('a fresh profile with no controller: Fly with keyboard, Fly, the Rig; 3 s later the keyboard layout, there until a key; never again', async () => {
       await pass('', {}, async ({ js, reload, key, hold }) => {
@@ -492,7 +647,7 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         await hold(false, 'w', 'KeyW', 87);
         assert.equal(r.armed, true, 'W arms');
         assert.equal(r.card.on, false, 'no second card on the keys');
-        assert.equal(r.card.saved, 'card,keys');
+        assert.equal(r.card.saved, 'keys,keyboard');
 
         await reload();
         r = await js(`
@@ -503,6 +658,37 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           return JSON.stringify({ again, prompt: !!(window._feel && window._feel.promptOpen) });`);
         assert.equal(r.prompt, false);
         assert.equal(r.again, false, 'after a reload: never again');
+
+        // The same profile, the page opened again with the TX16S awake and its
+        // throttle at the bottom (an incognito window keeps its storage from
+        // one page to the next). The keys' card is used up; the radio's is not.
+        await js(`
+          Object.assign(window.__pads, ${JSON.stringify({ ...tx([0, 0, -1, 0, -1, -1, -1, -1]), afterBoot: 0 })});
+          navigator.getGamepads();
+          return JSON.stringify(1);`);
+        await reload();
+        r = await js(`
+          await F.wait(1500);
+          const before = F.card();
+          const paused = F.paused();
+          const radio = document.getElementById('radioInfo').textContent;
+          F.thr(0.6);
+          const shown = await F.shown(1500);
+          const first = F.card();
+          const armed = await F.until(() => F.s.coreState().armed, 2500);
+          F.thr(0.3);
+          const gone = await F.gone(4000);
+          F.thr(0);
+          return JSON.stringify({ before, paused, radio, shown, first, armed, gone });`);
+        assert.match(r.radio, /TX16S/, 'the radio is the input');
+        assert.equal(r.paused, false, 'a radio awake at load flies at once');
+        assert.equal(r.before.on, false, 'no card before the throttle moves');
+        assert.equal(r.shown, true, "the radio's first throttle-up gets the card on a profile that has flown the keys");
+        assert.equal(r.first.kind, 'card');
+        assert.equal(r.first.img, null);
+        assert.equal(r.first.saved, 'keys,keyboard,controller');
+        assert.equal(r.armed, true, 'that raise arms');
+        assert.equal(r.gone, true, 'gone on the stick');
       });
     });
 
@@ -530,7 +716,7 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           return JSON.stringify({ gone, card: F.card() });`);
         assert.equal(r.gone, true, 'a key takes it away');
         assert.equal(r.card.on, false, 'armed by 3 s: no keyboard layout');
-        assert.equal(r.card.saved, 'card,keys');
+        assert.equal(r.card.saved, 'keys,keyboard');
       });
     });
 
@@ -551,7 +737,7 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         assert.equal(r.idle.saved, null);
         assert.equal(r.shown, true, 'the card on the throttle');
         assert.equal(r.card.kind, 'card');
-        assert.equal(r.card.saved, 'card');
+        assert.equal(r.card.saved, 'touch');
       });
     });
 
@@ -572,7 +758,7 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         assert.equal(r.easy, false, 'on its switches');
         assert.equal(r.armed, true, 'armed on its switch');
         assert.equal(r.card.on, false, 'no card');
-        assert.deepEqual(r.card.seen, { card: false, keys: false }, 'and not used up: it shows if the pilot goes back to Easy mode');
+        assert.deepEqual(r.card.seen, NONE, 'and not used up: it shows if the pilot goes back to Easy mode');
       });
     });
   } finally {
