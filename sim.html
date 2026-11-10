@@ -1694,6 +1694,9 @@ function spawnTrackData(track,trackId,parent){
   return id;
 }
 const gateUI=document.getElementById('osdGate');
+// A track's name as its builder wrote it (or its id): text. A pasted code can
+// carry any characters, so where this goes into markup it goes through
+// escapeHtml.
 function trackLabel(id){
   const t=findTrack(id);
   return t&&t.name?t.name:(isLegacyTrackId(id)?'T'+(legacyIndex(id)+1):String(id));
@@ -4114,6 +4117,9 @@ function nudgeCam(dir){
   toast('CAM '+v+'°',{ms:1000});
 }
 let kbThrottle=0,gpConnected=false,gpName='';
+// The controller's name is the device's own text. sim-feel.js puts it into the
+// first-run prompt's markup, so it is handed over escaped.
+function gpNameHtml(){return escapeHtml(gpName.slice(0,40));}
 let threeD=false;
 // ---------- gamepad selection ----------
 // Never assume index 0: scan ALL non-null pads, prefer radios. A TX16S
@@ -4174,8 +4180,8 @@ function selectPad(gp,remember){
     return;
   }
   toast(radioScore(gp)===2?'RADIO SELECTED':'GAMEPAD SELECTED');
-  if(feel&&feel.promptOpen)feel.showFirstRun({hasGamepad:true,gpName,mobile:mobileHint});
-  else if(feel&&(sessionLive||feel.loadInputChoice()==='keyboard'))feel.onGamepadConnected({gpName});
+  if(feel&&feel.promptOpen)feel.showFirstRun({hasGamepad:true,gpName:gpNameHtml(),mobile:mobileHint});
+  else if(feel&&(sessionLive||feel.loadInputChoice()==='keyboard'))feel.onGamepadConnected({gpName:gpNameHtml()});
 }
 function showGpPicker(pads){
   if(!gpPickerEl){
@@ -4277,7 +4283,7 @@ function fillArmSwitchUI(gp,map){
 function updateRadioInfo(){
   const el=document.getElementById('radioInfo');
   if(!gpConnected){el.textContent='no gamepad detected. TX16S: plug USB, pick Joystick on radio popup, wiggle a stick.';fillArmSwitchUI(null,null);return;}
-  el.innerHTML='<b>'+gpName.slice(0,40)+'</b><br>'+
+  el.innerHTML='<b>'+gpNameHtml()+'</b><br>'+
     (axisMap?'custom calibration active':
      presetMap()?'preset: '+RADIO_PRESETS[radioPreset].label:
      'default map ('+(isRadio({id:gpName})?'EdgeTX AETR':'spring pad')+')');
@@ -5018,7 +5024,7 @@ function lineHudHtml(id, now){
   const delta=(runActive||lastRunTotal[id])?lineDeltaMs(live,pb):null;
   const dCol=delta==null?'':(delta<0?'#3DDC97':(delta>0?'#FF4D1A':''));
   const phone=typeof window!=='undefined'&&window.innerWidth<560;
-  let html=trackLabel(activeTrackId)+(runActive?' LINE ':' RESULT ')+fmtLap(live||0);
+  let html=escapeHtml(trackLabel(activeTrackId))+(runActive?' LINE ':' RESULT ')+fmtLap(live||0);
   html+='<br>Δ '+(delta==null?'--':(dCol?'<span style="color:'+dCol+'">':'')+fmtSignedDelta(delta)+(dCol?'</span>':''));
   const gs=runActive?runGateSplits:(lastGateSplits[id]||[]);
   const shown=visibleSplits(gs,phone?3:6);
@@ -5043,7 +5049,7 @@ function updateLapOSD(){
   if(isLineTrackId(activeTrackId)){
     html=lineHudHtml(id,now);
   }else if(runActive){ // live: current lap clock + running total + splits banked so far
-    html=trackLabel(activeTrackId)+' RUN · LAP '+runLap+'/'+RUN_LAPS+
+    html=escapeHtml(trackLabel(activeTrackId))+' RUN · LAP '+runLap+'/'+RUN_LAPS+
       '<br>LAP '+fmtLap(now-lapStartTime)+
       '<br>TOTAL '+fmtLap(now-runStartTime);
     for(let i=0;i<runSplits.length;i++)html+='<br> L'+(i+1)+' '+fmtLap(runSplits[i]);
@@ -5051,7 +5057,7 @@ function updateLapOSD(){
     if(missTotal)html+='<br>MISS +'+(missTotal*MISS_PENALTY_MS/1000).toFixed(1)+'s';
     if(runSimFlips)html+='<br>SIM ASSIST · F FLIP ×'+runSimFlips;
   }else if(lastRunTotal[id]){ // results: finished run's total + its three splits
-    html=trackLabel(activeTrackId)+' RESULT · TOTAL '+fmtLap(lastRunTotal[id]);
+    html=escapeHtml(trackLabel(activeTrackId))+' RESULT · TOTAL '+fmtLap(lastRunTotal[id]);
     const sp=lastRunSplits[id]||[];
     for(let i=0;i<sp.length;i++)html+='<br> L'+(i+1)+' '+fmtLap(sp[i]);
     const gs=lastGateSplits[id]||[];
@@ -5059,10 +5065,10 @@ function updateLapOSD(){
     if(lastRunSimFlips[id])html+='<br>SIM ASSIST · F FLIP ×'+lastRunSimFlips[id];
     html+='<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
   }else{ // idle, no run yet on this track
-    html=trackLabel(activeTrackId)+' RUN --:--.--<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
+    html=escapeHtml(trackLabel(activeTrackId))+' RUN --:--.--<br>BEST '+(bestRunMs[id]?fmtLap(bestRunMs[id]):'--:--.--');
   }
   const rv=activeRival(); // racing a shared/hosted ghost — show who + their time
-  if(rv)html+='<br><span style="color:#FF4D1A">VS '+rv.name+(rv.lapTime?' '+fmtLap(rv.lapTime):'')+'</span>';
+  if(rv)html+='<br><span style="color:#FF4D1A">VS '+escapeHtml(rv.name)+(rv.lapTime?' '+fmtLap(rv.lapTime):'')+'</span>';
   osdLap.innerHTML=html;
 }
 const toastEl=document.getElementById('toast');let toastTimer;
@@ -5252,7 +5258,7 @@ function openFlyPicker(){
   showMenuLayer('<h2>Fly</h2><p>Free flight: no gates, no timer. Pick a map.</p><div class="fly-maps'+(maps.length>2?' many':'')+(maps.length>3?' four':'')+'">'+
     maps.map(m=>'<button type="button" class="fly-map'+(m.id===last?' on':'')+'" data-fly-map="'+m.id+'">'+
       (FLY_THUMBS[m.id]?'<img src="'+FLY_THUMBS[m.id]+'" alt="" width="480" height="270">':'')+
-      '<span>'+m.name+'</span>'+(m.id===last?'<small>Last flown</small>':'')+'</button>').join('')+
+      '<span>'+escapeHtml(m.name)+'</span>'+(m.id===last?'<small>Last flown</small>':'')+'</button>').join('')+
     '</div><button type="button" id="layerClose">Close</button>');
   document.getElementById('menuLayer').classList.add('wide');
   document.querySelectorAll('#menuLayer [data-fly-map]').forEach(b=>{b.onclick=()=>startFreestyle(b.dataset.flyMap);});
@@ -5479,13 +5485,13 @@ function openDailyCard(){
   const d=loadDaily();
   const best=d.bestByDay[utcDateId()];
   showMenuLayer('<h2>Daily whoop</h2>'+
-    '<p>Seeded from UTC '+utcDateId()+'. Same gates for everyone today. Indoor map: <b style="color:var(--txt)">'+t.map+'</b>.</p>'+
+    '<p>Seeded from UTC '+utcDateId()+'. Same gates for everyone today. Indoor map: <b style="color:var(--txt)">'+escapeHtml(t.map)+'</b>.</p>'+
     // A generated Rig course: its drills, in the order flown.
     (t.parts?'<p class="daily-meta">Course: '+t.parts.map(escapeHtml).join(' › ')+'</p>':'')+
     '<p class="daily-meta">Resets 5 PM Phoenix (UTC midnight).</p>'+
     '<p class="daily-meta">Streak '+d.streak+' · best today '+(best?fmtLap(best):'—')+
     ' · all-time streak '+d.bestStreak+'</p>'+
-    '<button type="button" class="primary" id="dailyFly">Fly '+t.name+'</button>'+
+    '<button type="button" class="primary" id="dailyFly">Fly '+escapeHtml(t.name)+'</button>'+
     '<button type="button" id="dailySkins" class="dev-only">Skins</button>'+
     '<button type="button" id="layerClose">Close</button>');
   document.getElementById('dailyFly').onclick=()=>flyGeneratedTrack(t);
@@ -5528,7 +5534,7 @@ function openBoardsCard(){
   showMenuLayer('<h2>Weekly boards</h2>'+
     '<p>'+week+' · class <b style="color:var(--txt)">'+cls+'mm</b> from Your build. Local always. '+
     (online?'Online: on.':'Online: off until a leaderboard URL is set.')+'</p>'+
-    '<p class="daily-meta">Course: '+t.name+' · '+t.map+(t.parts?' · '+t.parts.map(escapeHtml).join(' › '):'')+'</p>'+
+    '<p class="daily-meta">Course: '+escapeHtml(t.name)+' · '+escapeHtml(t.map)+(t.parts?' · '+t.parts.map(escapeHtml).join(' › '):'')+'</p>'+
     '<div id="boardBody"></div>'+
     (online?'<button type="button" id="boardRefresh">Refresh online</button>':'')+
     '<button type="button" class="primary" id="boardFly">Fly this week</button>'+
@@ -5589,12 +5595,13 @@ function openTrackPicker(startMap){
   const layer=document.getElementById('menuLayer');
   if(layer)layer.classList.add('wide');
   function render(){
-    const maps=MAPS.filter(m=>mapOpen(m.id,DEV_UI)).map(m=>'<button type="button" data-map="'+m.id+'" class="'+(m.id===pickerMap?'on':'')+'">'+m.name+'</button>').join('');
+    const maps=MAPS.filter(m=>mapOpen(m.id,DEV_UI)).map(m=>'<button type="button" data-map="'+m.id+'" class="'+(m.id===pickerMap?'on':'')+'">'+escapeHtml(m.name)+'</button>').join('');
     const list=tracksForMap(pickerMap);
+    // A custom track's name and id are whatever its code said: text, here.
     const rows=list.map(t=>{
       const id=t.legacyId!=null?t.legacyId:t.id;
       const on=String(id)===String(activeTrackId)&&pickerMap===currentMap?'on':'';
-      return '<button type="button" class="'+on+'" data-tid="'+id+'"><span>'+t.name+'</span><span class="best">'+bestText(id)+'</span></button>';
+      return '<button type="button" class="'+on+'" data-tid="'+escapeHtml(id)+'"><span>'+escapeHtml(t.name)+'</span><span class="best">'+escapeHtml(bestText(id))+'</span></button>';
     }).join('')||'<p>No tracks on this map.</p>';
     const roomBlock=pickerMap==='room'?roomFormHtml():'';
     showMenuLayer('<h2>Tracks</h2><p>Tap a race to fly it. Freestyle is no gates and no timer. Combo / session are local. Best lap is local.</p>'+
@@ -8403,7 +8410,7 @@ document.getElementById('ratePreset').onchange=function(){
 // detectMobile only — Chrome desktop ontouchstart/maxTouchPoints must not
 // auto-enable touch and steal a TX16S before the first stick wiggle.
 const touchFirst=!!mobileHint;
-feel.maybeFirstRun({hasGamepad:gpConnected,gpName,mobile:mobileHint,touch:touchFirst});
+feel.maybeFirstRun({hasGamepad:gpConnected,gpName:gpNameHtml(),mobile:mobileHint,touch:touchFirst});
 bootTouchLayer();
 pickGamepad();
 bootTouchLayer();
