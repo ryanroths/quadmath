@@ -201,8 +201,11 @@ function killTree(child) {
   else { try { child.kill('SIGKILL'); } catch (e) { /* ignore */ } }
 }
 
-// Before the page's scripts: every violation the document sees.
+// Before the page's scripts: every violation the document sees. And no
+// controller: a radio or gamepad plugged into the machine running the test
+// would be the page's input (the flights here are on the keyboard).
 const COLLECT = String.raw`(() => {
+  Object.defineProperty(Navigator.prototype, 'getGamepads', { configurable: true, value() { return [null, null, null, null]; } });
   window.__csp = [];
   document.addEventListener('securitypolicyviolation', (e) => {
     window.__csp.push({ d: e.effectiveDirective, u: String(e.blockedURI || '').slice(0, 120), f: String(e.sourceFile || '').slice(-60), l: e.lineNumber });
@@ -285,6 +288,15 @@ async function flows(d, label, { core, share, menus, record }) {
   await sleep(2200);
   await d.hold(false, 'w', 'KeyW', 87);
   let st = await d.js(`return T.state();`);
+  // What the page takes input from, and whether it is paused: printed on
+  // every run, for a CI flight that does not climb.
+  const input = await d.js(`return JSON.stringify({
+    paused: { menu: document.body.classList.contains('menu-open'), prompt: !!(window._feel && window._feel.promptOpen), replay: T.s.replayOn() },
+    touchOn: document.body.classList.contains('touch-on'), choice: localStorage.getItem('quadmathSimInputChoice'),
+    coarse: matchMedia('(pointer: coarse)').matches, pointerNone: matchMedia('(pointer: none)').matches,
+    screen: [screen.width, screen.height], touchPoints: navigator.maxTouchPoints, ontouchstart: 'ontouchstart' in window,
+    focus: document.hasFocus(), active: document.activeElement && document.activeElement.tagName });`);
+  say('input: ' + JSON.stringify(input));
   say('armed and flown: ' + JSON.stringify(st));
   assert.equal(st.armed, true, label + ': still armed');
   assert.ok(st.z > 0.3, label + ': it climbed (' + st.z + ' m)');
