@@ -141,6 +141,21 @@ Anti-cheat on POST `/api/submit`:
 
 Rate limit is 12 posts / IP / UTC hour.
 
+## "Fly my line" (`/api/line`)
+
+`POST /api/line` keeps a line code too long for a link (`sim-share.js`) in
+the `lines` table, under an id made from its content, and returns the id;
+`GET /api/line?id=` gives the code back. It shares the rate limit above.
+
+Before the first deploy with these routes, add the table (idempotent):
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --file=./src/migrate-lines.sql --remote
+```
+
+Until a Worker with these routes is live, SHARE copies the long link
+instead, and links that carry the ghost in the URL work without it.
+
 ## Local
 
 ```bash

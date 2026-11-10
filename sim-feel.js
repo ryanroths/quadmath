@@ -477,13 +477,22 @@ export function createFeel(ctx) {
     }
   }
 
+  // Text into the prompt's markup: the five characters markup is made of (as
+  // sim-retention.js escapeHtml, which this module does not import).
+  function escText(raw) {
+    return String(raw == null ? '' : raw)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   function showFirstRun(info) {
     if (!promptEl) return;
     promptOpen = true;
     const has = !!(info && info.hasGamepad);
     const mobile = !!(info && info.mobile);
     const touchy = !!(info && (info.touch || info.mobile));
-    const name = (info && info.gpName) ? String(info.gpName).slice(0, 48) : '';
+    // The controller's name is the device's own text, handed over as written:
+    // escaped here, where it becomes markup.
+    const name = (info && info.gpName) ? escText(String(info.gpName).slice(0, 48)) : '';
     const title = has ? 'Controller / radio detected' : 'No controller';
     const lead = has
       ? (name ? name : 'Gamepad connected') + ' — one click on Radio and you are flying. Mode 2 AETR is already loaded. Calibrate only if a stick is wrong. Touch sticks stay off while a radio is connected.'
