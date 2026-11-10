@@ -16,7 +16,9 @@ import {
   pickCorsOrigin,
   DEFAULT_ALLOWED_ORIGIN,
   hashPilotToken,
+  ghostPayloadError,
 } from '../../../sim-retention.js';
+import { decodeLineCode, lineIdOf, LINE_CODE_MAX, LINE_ID_RE } from '../../../sim-share.js';
 
 const CORS_METHODS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -197,6 +199,40 @@ export async function handleLeaderboard(request, env) {
       ok: true, improved: saved.improved, timeMs: saved.timeMs, entries,
       day: checked.day, trackId: checked.trackId,
     });
+  }
+
+  // "Fly my line" (sim-share.js): a line code too long for a link, kept under
+  // an id made from its content, so the same line is stored once.
+  if (request.method === 'POST' && path === '/api/line') {
+    if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);
+    const ip = clientIp(request);
+    const allowed = await checkRate(env, ip, Date.now());
+    if (!allowed) return reply({ ok: false, reason: 'RATE LIMIT' }, 429);
+    const parsed = await readJson(request);
+    if (parsed.error) return reply({ ok: false, reason: parsed.error }, 400);
+    const code = parsed.body && parsed.body.code;
+    if (typeof code !== 'string' || code.length > LINE_CODE_MAX) return reply({ ok: false, reason: 'BAD LINE CODE' }, 400);
+    try {
+      const line = await decodeLineCode(code);
+      const bad = ghostPayloadError(line.ghost, null);
+      if (bad) return reply({ ok: false, reason: bad }, 400);
+    } catch (e) {
+      return reply({ ok: false, reason: 'BAD LINE CODE' }, 400);
+    }
+    const id = await lineIdOf(code);
+    await env.DB.prepare(
+      'INSERT OR IGNORE INTO lines (id, code, created_ms) VALUES (?, ?, ?)',
+    ).bind(id, code, Date.now()).run();
+    return reply({ ok: true, id });
+  }
+
+  if (request.method === 'GET' && path === '/api/line') {
+    const id = url.searchParams.get('id') || '';
+    if (!LINE_ID_RE.test(id)) return reply({ ok: false, reason: 'BAD ID' }, 400);
+    if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);
+    const row = await env.DB.prepare('SELECT code FROM lines WHERE id = ?').bind(id).first();
+    if (!row || !row.code) return reply({ ok: false, reason: 'NOT FOUND' }, 404);
+    return reply({ ok: true, id, code: row.code });
   }
 
   return reply({ ok: false, reason: 'NOT FOUND' }, 404);

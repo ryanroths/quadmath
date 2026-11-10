@@ -187,6 +187,14 @@
   #toast.has-action{pointer-events:auto}
   #toast a,#toast button{display:inline-block;width:auto;margin:10px auto 0;padding:6px 14px;font-size:13px;font-weight:600;
     color:var(--orange);background:rgba(16,18,24,.85);border:1px solid rgba(255,77,26,.55);border-radius:10px;cursor:pointer}
+  #toast button+button{margin-left:8px}
+  /* "Race RyFly's line": the banner of a line a link loaded (sim-share.js). */
+  #lineBanner{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:13;display:none;max-width:92vw;
+    padding:6px 16px;background:var(--glass);border:1px solid rgba(255,77,26,.6);border-radius:999px;
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-size:13px;font-weight:700;letter-spacing:.3px;
+    color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+  #lineBanner.show{display:block}
+  body.menu-open #lineBanner,body.builder-on #lineBanner,body.calibrating #lineBanner{display:none}
   #portalFlash{position:fixed;inset:0;background:#B14EFF;opacity:0;pointer-events:none;
     transition:opacity .3s;z-index:15}
   .menu-sparks{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:var(--dim);margin:8px 0 0}
@@ -661,6 +669,7 @@
   <button type="button" id="feelTutSkip">Skip</button>
   <button type="button" class="primary" id="feelTutLap" style="display:none">Now try a lap</button>
 </div>
+<div id="lineBanner" role="status"></div>
 <div id="coachHud">
   <div id="coachTitle">Coach</div>
   <div id="coachMsg">Short scored drill.</div>
@@ -985,6 +994,7 @@ import {
   createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux,
   BF_CLASS_TUNES, bfClassDiff,
 } from "./sim-core-adapter.js?v=39519e7c66ee";
+import {LINE_URL_MAX,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=d290021684b8";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
 import {
@@ -1089,7 +1099,7 @@ import {
   REPLAY_GHOST_HZ, REPLAY_GHOST_MAX, REPLAY_CLIP_MS,
   loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
-  defaultWhoopKit,
+  defaultWhoopKit, ghostFromObj, shareTrackPayload, fromShareTrackPayload,
 } from "./sim-retention.js?v=b86c7c401319";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
@@ -1833,10 +1843,13 @@ function finishRun(){
   const label=line?'LINE':'RUN';
   const parts=line?runGateSplits:runSplits;
   lastRunReplayRec=replayRec&&replayRec.length?downsampleGhost(replayRec,REPLAY_GHOST_MAX):(rec&&rec.length?rec:null);
+  // The run SHARE links to (shareLine): this one, whatever is flown next.
+  lastRunLine=rec&&rec.length>1?{track:shareTrackParam(),map:currentMap,total,rec}:null;
   const msg=label+' '+fmtLap(total)+(parts.length?' ['+parts.map(fmtLap).join(' / ')+']':'')+(best?' — NEW BEST!':'')+(extra?' · '+extra:'')+(runSimFlips?' · SIM FLIP ×'+runSimFlips:'');
-  if(lastRunReplayRec&&lastRunReplayRec.length>1){
-    toast(msg+'<br><button type="button" id="toastReplay">Replay</button>',{html:true,ms:5200});
-  }else toast(msg);
+  const buttons=(lastRunReplayRec&&lastRunReplayRec.length>1?'<button type="button" id="toastReplay">Replay</button>':'')+
+    (lastRunLine?'<button type="button" id="toastShare">SHARE</button>':'');
+  if(buttons)toast(msg+'<br>'+buttons,{html:true,ms:5200});
+  else toast(msg);
 }
 function liveTrackIds(){
   const ids=[];
@@ -5147,6 +5160,8 @@ function toast(m,opts){
     if(rec)rec.onclick=function(e){e.preventDefault();startCalib();};
     const replayBtn=document.getElementById('toastReplay');
     if(replayBtn)replayBtn.onclick=function(e){e.preventDefault();startReplay();};
+    const shareBtn=document.getElementById('toastShare');
+    if(shareBtn)shareBtn.onclick=function(e){e.preventDefault();shareLine();};
   }else toastEl.textContent=m;
   toastEl.style.opacity=1;
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toastEl.style.opacity=0;toastEl.classList.remove('has-action');},o.ms||1500);
@@ -7563,6 +7578,107 @@ function applyDuel(parsed){
   ghostVisible=true;
   toast('DUEL: '+rivalGhost.name+(rivalGhost.lapTime?' — '+fmtLap(rivalGhost.lapTime):'')+moved);
 }
+// ---------- "Fly my line": a finished run as a link (sim-share.js) ----------
+// SHARE on the finish screen copies a link to the run just flown: the map and
+// track in the query, the ghost in the fragment. A ghost too long for a link
+// (LINE_URL_MAX) goes to the leaderboard Worker and the link carries its id;
+// with no Worker to take it, the long link is copied as it is. Opening a link
+// lands on the track with that ghost as the rival, under "Race RyFly's line".
+let lastRunLine=null;               // {track,map,total,rec} of the last finished run
+let lastLineLink='';                // the last link copied (test hook)
+let lineUrlMax=LINE_URL_MAX;
+let activeLine=null;                // the line a link loaded: {name,rival}
+let lineBannerShown='';             // what the banner says now
+let lineNote='',lineNoteUntil=0;    // a link that did not load: said in the banner for a while
+const lineBannerEl=document.getElementById('lineBanner');
+// The Worker's id for a code, or null (offline, or a Worker without /api/line).
+async function storeLine(code){
+  const url=leaderboardUrl();
+  if(!url)return null;
+  try{
+    const r=await fetch(url+'/api/line',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+    const j=await r.json();
+    return j&&j.ok&&j.id?String(j.id):null;
+  }catch(e){return null;}
+}
+async function shareLine(){
+  const run=lastRunLine;
+  if(!run){toast('NO RUN TO SHARE — FINISH ONE FIRST');return;}
+  const track=findTrack(run.track);
+  // A track the other end cannot find by its id (a custom one) goes with the ghost.
+  const known=!track||builtinTracks.some(t=>t.id===track.id)||!!trackFromRetentionId(run.track);
+  const map=(track&&track.map)||run.map;
+  const base={origin:location.origin,path:location.pathname,map,track:run.track,dev:linkNeedsDev(map,run.track)};
+  let out=null;
+  try{
+    out=await lineForLink({ghost:ghostFromObj(ghostPayloadOf(run.track,run.rec,run.total)),trackPayload:known?null:shareTrackPayload(track)},base,{max:lineUrlMax});
+  }catch(e){toast('SHARE FAILED');return;}
+  let link=out.link,note='';
+  if(!out.fits){
+    const id=await storeLine(out.code);
+    if(id)link=lineLink({...base,code:'@'+id});
+    else note=' — LONG LINK ('+Math.max(1,Math.round(link.length/1024))+'KB)';
+  }
+  lastLineLink=link;
+  try{
+    await navigator.clipboard.writeText(link);
+    toast('LINK COPIED — RACE MY LINE'+note);
+  }catch(e){
+    // clipboard blocked (permissions/insecure context) — drop it in the box to copy by hand
+    const ta=document.getElementById('ghostCode');
+    ta.value=link;ta.select();
+    toast('CLIPBOARD BLOCKED — LINK IS IN TUNE → GHOST SHARING');
+  }
+}
+// The banner: up while the link's ghost is the rival on the track flown.
+function syncLineBanner(){
+  const racing=!!(activeLine&&rivalGhost===activeLine.rival&&rivalMatches(rivalGhost.track,activeTrackId));
+  const text=racing?lineBannerText(activeLine.name):(performance.now()<lineNoteUntil?lineNote:'');
+  if(text===lineBannerShown)return;
+  lineBannerShown=text;
+  lineBannerEl.textContent=text;
+  lineBannerEl.classList.toggle('show',!!text);
+}
+// A line link (#line=...): after the boot has landed the query's map and track.
+async function applyLineLink(){
+  const code=lineFromHash(location.hash);
+  if(!code)return;
+  const stored=code[0]==='@';
+  try{
+    let c=code;
+    if(stored){
+      const r=await fetch(leaderboardUrl()+'/api/line?id='+encodeURIComponent(code.slice(1)));
+      const j=await r.json();
+      if(!j||!j.ok||!j.code)throw new Error('NOT FOUND');
+      c=j.code;
+    }
+    const line=await decodeLineCode(c);
+    const ghost=ghostFromObj(line.ghost);
+    let track=null;
+    if(line.trackPayload){
+      // Its own track came with it: this session's, not saved.
+      track=fromShareTrackPayload(line.trackPayload);
+      customTracks=customTracks.filter(t=>t.id!==track.id);
+      customTracks.push(track);
+    }else if(typeof ghost.track==='string')track=trackFromRetentionId(ghost.track);
+    applyDuel({type:'duel',ghost,track});
+    // Not on a closed map's track (applyDuel went to the Rig without the rival).
+    if(rivalGhost&&rivalGhost.samples===ghost.samples)activeLine={name:ghost.name,rival:rivalGhost};
+    syncLineBanner();
+  }catch(e){
+    // In the banner, not a toast: the boot's own toasts would cover it.
+    lineNote=stored?'Line link not found':'Line link not valid';
+    lineNoteUntil=performance.now()+8000;
+    syncLineBanner();
+  }
+}
+// Test hooks: the last link, the run on offer, the rival loaded, and a link
+// limit a test can lower.
+Object.assign(window._sim,{
+  line:()=>({link:lastLineLink,run:lastRunLine?{track:lastRunLine.track,total:lastRunLine.total,n:lastRunLine.rec.length}:null,
+    rival:rivalGhost?{name:rivalGhost.name,lapTime:rivalGhost.lapTime,track:rivalGhost.track,n:rivalGhost.samples.length}:null}),
+  setLineUrlMax(n){lineUrlMax=n>0?n:LINE_URL_MAX;},
+});
 document.getElementById('btnGhostCopy').onclick=exportGhost;
 document.getElementById('btnGhostDuel').onclick=exportDuel;
 document.getElementById('btnGhostLoad').onclick=importGhost;
@@ -8203,7 +8319,7 @@ function loop(now){
     tickReplay(now);
   }else if(!simPaused()){
     stepCore(frameMs,now);
-    updateSunShadow();updateOSD();updateGates();updateGhost();updatePortals();updateDust(dt);
+    updateSunShadow();updateOSD();updateGates();updateGhost();syncLineBanner();updatePortals();updateDust(dt);
     if(feel){
       state.stickT=stick.t;
       feel.updateHud({stick,battV,battOn:CFG.battSimOn||cs.kind==='bf',mode:cs.flightMode,armed:cs.armed,threeD,thrText:throttleHudText(stick.t,threeD),
@@ -8635,6 +8751,7 @@ function applyQueryBoot(){
   }
   syncMenuSparks();
   syncBuildUI();
+  applyLineLink();
 }
 function publishTracks(){
   Object.assign(window._sim,{tracks:()=>builtinTracks.concat(customTracks)});
