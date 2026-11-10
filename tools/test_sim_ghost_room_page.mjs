@@ -11,9 +11,13 @@
 //     the pad, and sim-core's state does not move
 //   - leaving the room's map leaves the room; Create makes one on the
 //     page's map and the Node pilot joins it there
-// Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs) and wrangler
-// (tools/sim_rooms_dev.mjs); skipped under SKIP_CHROME_BOOT=1 or without
-// wrangler.
+// The rooms Worker runs under `wrangler dev` over https, and Chrome reaches
+// it at the deployed address (sim-rooms.ryan-roths.workers.dev, mapped to
+// it): the page uses its own ROOMS_URL, under its Content-Security-Policy,
+// as on the live site. The Node pilot trusts the run's test certificate.
+// Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs), wrangler
+// (tools/sim_rooms_dev.mjs) and openssl for the certificate; skipped under
+// SKIP_CHROME_BOOT=1 or without them.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -22,9 +26,9 @@ import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { openRoom, createRoom, POSE_HZ } from '../sim-ghost-rooms.js';
+import { openRoom, createRoom, POSE_HZ, ROOMS_URL } from '../sim-ghost-rooms.js';
 import { remoteLevel } from '../sim-audio.js';
-import { findWrangler, startRoomsDev, sleep } from './sim_rooms_dev.mjs';
+import { findWrangler, startRoomsDev, trustCert, sleep } from './sim_rooms_dev.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const WS = 3.5;   // world units per metre (sim-core-adapter.js CORE_WS)
@@ -101,6 +105,14 @@ function killChrome(child) {
   else { try { child.kill('SIGKILL'); } catch (e) { /* ignore */ } }
 }
 
+// Until fn() holds, for up to ms: a message over the room's socket can take
+// longer than a fixed wait on a busy machine.
+async function heard(fn, ms = 3000) {
+  const t0 = performance.now();
+  while (!fn() && performance.now() - t0 < ms) await sleep(20);
+  return !!fn();
+}
+
 // The page's quad in the render frame (sim-core is Z up: x fwd, y left).
 const QUAD = `const c = s.coreState().position; const quad = [-c.y * 3.5, c.z * 3.5, -c.x * 3.5];`;
 
@@ -118,6 +130,8 @@ function sender(room, poseAt) {
       due += 1000 / POSE_HZ;
     }
   }, 5);
+  // Not what keeps the test alive: a failed run still ends.
+  if (timer.unref) timer.unref();
   return { sent, stop: () => clearInterval(timer) };
 }
 
@@ -127,22 +141,31 @@ test('ghost room in the page: same map, late join, ghost and voice, no collision
   if (!bin) { t.skip('no wrangler (npm install in workers/sim-rooms, or WRANGLER=)'); return; }
   const { server, port } = await serveRoot();
   const origin = 'http://127.0.0.1:' + port;
-  const dev = await startRoomsDev(bin, { ALLOWED_ORIGIN: origin });
+  const dev = await startRoomsDev(bin, { ALLOWED_ORIGIN: origin }, { https: true });
+  if (!trustCert(dev.cert)) {
+    await dev.stop();
+    server.close();
+    t.skip('no test certificate this Node can trust (needs openssl, and tls.setDefaultCACertificates)');
+    return;
+  }
   const profile = mkdtempSync(join(tmpdir(), 'qm-roompage-'));
   const debugPort = 9300 + (process.pid % 300);
-  const url = `${origin}/sim.html?quality=low&dev=1&rooms=${encodeURIComponent(dev.base)}`;
+  // No ?rooms=: the page's own ROOMS_URL, which Chrome resolves to wrangler dev.
+  const url = `${origin}/sim.html?quality=low&dev=1`;
   const child = spawn(resolveChrome(), [
     '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
     '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
     '--mute-audio', '--no-first-run', '--no-default-browser-check',
     '--disable-extensions', '--disable-component-update', '--disable-background-networking', '--disable-sync',
     '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--window-size=640,360',
+    `--host-resolver-rules=MAP ${new URL(ROOMS_URL).hostname} 127.0.0.1:${dev.port}`, '--ignore-certificate-errors',
     `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profile}`, url,
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   let stderr = '';
   child.stderr.on('data', (d) => { stderr += d.toString(); });
   let ws = null;
   const rooms = [];
+  let waiting = null, fly = null; // the Node pilot's senders, stopped however the test ends
   try {
     let target = null;
     for (let i = 0; i < 100 && !target; i++) {
@@ -174,7 +197,16 @@ test('ghost room in the page: same map, late join, ghost and voice, no collision
     {
       // Fly, the Rig from its map chooser (leaves the launch screen), then
       // Trainer freestyle; a key unlocks audio.
-      await evaluate(ws, `document.getElementById('menuFly').click(), document.querySelector('#menuLayer [data-fly-map="rig"]').click(), true`);
+      // Fly is wired once the page has set up its looks, which can be a
+      // moment after it first flies: click until the map chooser is up.
+      const chooser = await page(ws, `for (let i = 0; i < 100; i++) {
+          const rig = document.querySelector('#menuLayer [data-fly-map="rig"]');
+          if (rig) { rig.click(); return JSON.stringify(true); }
+          document.getElementById('menuFly').click();
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        return JSON.stringify(false);`);
+      assert.equal(chooser, true, 'Fly opens the map chooser');
       await press(ws, '1', 'Digit1', 49);
       const r = await page(ws, `await s.setMap('trainer','trainer-freestyle'); s.placeQuadAt(0, 0.15, 0, 0);
         await new Promise((r) => setTimeout(r, 800));
@@ -212,7 +244,14 @@ test('ghost room in the page: same map, late join, ghost and voice, no collision
     assert.match(r.osd, new RegExp('ROOM ' + made.code + ' · 2/4'));
     assert.equal(r.menu, false, 'flying');
     await sleep(500);
-    assert.ok(hostEvents.some((e) => e.type === 'join' && e.slot === 1), 'the host hears the page join');
+    assert.ok(await heard(() => hostEvents.some((e) => e.type === 'join' && e.slot === 1)), 'the host hears the page join');
+
+    // From here the Node pilot keeps sending, as a pilot in a room does: it
+    // waits where the fly-through will start, 2 m before the page's quad,
+    // until that starts. (A ghost not heard from for STALE_MS, 3 s, is hidden:
+    // the steps below take longer than that.)
+    const q0 = (await page(ws, `${QUAD} return JSON.stringify({ quad });`)).quad;
+    waiting = sender(host, (i, now) => ({ t: Math.round(now), pos: [q0[0] - 2 * WS, q0[1], q0[2]], quat: [0, 0, 0, 1], rpm: [30000, 30000, 30000, 30000] }));
 
     // ---- the page sends its pose at 20 Hz, where its quad is. The pose
     // changes once a frame, so a page drawing fewer than 20 fps (SwiftShader
@@ -241,15 +280,27 @@ test('ghost room in the page: same map, late join, ghost and voice, no collision
     const before = await page(ws, `const c = s.coreState(); return JSON.stringify({ p: [c.position.x, c.position.y, c.position.z], v: [c.velocity.x, c.velocity.y, c.velocity.z], armed: c.armed });`);
     assert.equal(before.armed, false);
     const speed = 1.5 * WS;   // 1.5 m/s
-    const fly = sender(host, (i, now) => {
+    waiting.stop();
+    fly = sender(host, (i, now) => {
       const x = quad[0] - 2 * WS + speed * i / POSE_HZ;   // from 2 m before the quad to past it
       return { t: Math.round(now), pos: [x, quad[1], quad[2]], quat: [0, 0, 0, 1], rpm: [30000, 30000, 30000, 30000] };
     });
     const looks = [];
+    let lastArrival = -Infinity;
     for (let i = 0; i < 12; i++) {
       await sleep(250);
-      looks.push(await page(ws, `${QUAD} const g = s.roomGhosts.get(0); const a = s.audio.debug().remotes.find((x) => x.id === 0);
-        return JSON.stringify({ at: performance.now(), g: g.mesh.position.toArray(), visible: g.mesh.visible, quad, a });`));
+      // Each look once a pose has arrived since the last one and the page has
+      // drawn a frame after it: on a busy machine one SwiftShader frame can
+      // take longer than 250 ms, and two looks would see the same frame.
+      const l = await page(ws, `const tr = s.ghostRoom().pilots.get(0).track;
+        const until = async (fn) => { const t0 = performance.now(); while (!fn() && performance.now() - t0 < 2000) await new Promise((r) => setTimeout(r, 5)); };
+        await until(() => tr.arrival > ${lastArrival});
+        const f = window.__frames;
+        await until(() => window.__frames > f);
+        ${QUAD} const g = s.roomGhosts.get(0); const a = s.audio.debug().remotes.find((x) => x.id === 0);
+        return JSON.stringify({ at: performance.now(), arrival: tr.arrival, g: g.mesh.position.toArray(), visible: g.mesh.visible, quad, a });`);
+      lastArrival = l.arrival;
+      looks.push(l);
     }
     fly.stop();
     const after = await page(ws, `const c = s.coreState(); return JSON.stringify({ p: [c.position.x, c.position.y, c.position.z], v: [c.velocity.x, c.velocity.y, c.velocity.z] });`);
@@ -281,7 +332,7 @@ test('ghost room in the page: same map, late join, ghost and voice, no collision
       return JSON.stringify({ room: !!s.ghostRoom(), ghosts: s.roomGhosts.size, remotes: s.audio.debug().remotes.length });`);
     assert.deepEqual(r, { room: false, ghosts: 0, remotes: 0 });
     await sleep(300);
-    assert.ok(hostEvents.some((e) => e.type === 'leave' && e.slot === 1), 'the host hears the page leave');
+    assert.ok(await heard(() => hostEvents.some((e) => e.type === 'leave' && e.slot === 1)), 'the host hears the page leave');
 
     // ---- Create on the page's map; the Node pilot joins it there
     r = await page(ws, `const room = await s.roomCreate(); return JSON.stringify({ code: room && room.code, map: room && room.map, slot: room && room.slot, here: s.map() });`);
@@ -302,6 +353,8 @@ test('ghost room in the page: same map, late join, ghost and voice, no collision
     assert.ok(r.card.includes('Guest'), 'the card lists the guest');
     assert.equal(r.room, false);
   } finally {
+    if (waiting) waiting.stop();
+    if (fly) fly.stop();
     for (const room of rooms) room.close();
     if (ws) try { ws.close(); } catch (e) { /* ignore */ }
     killChrome(child);
