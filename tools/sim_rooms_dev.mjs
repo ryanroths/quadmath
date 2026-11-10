@@ -40,12 +40,15 @@ export function killTree(child) {
 }
 
 // vars: {ROOM_TTL_MS: '6000', ALLOWED_ORIGIN: '...'}. Local storage goes to
-// a temp dir, removed by stop().
-export async function startRoomsDev(bin, vars = {}) {
+// a temp dir, removed by stop(). opts.https: served over TLS with wrangler's
+// own self-signed certificate (a browser told to map the deployed host here
+// reaches it at the deployed address: tools/test_sim_csp.mjs).
+export async function startRoomsDev(bin, vars = {}, opts = {}) {
   const port = await freePort();
   const persist = mkdtempSync(join(tmpdir(), 'qm-rooms-'));
   const args = [bin, 'dev', '--ip', '127.0.0.1', '--port', String(port), '--persist-to', persist,
     '--show-interactive-dev-session=false'];
+  if (opts.https) args.push('--local-protocol', 'https');
   for (const [k, v] of Object.entries(vars)) args.push('--var', k + ':' + v);
   const child = spawn(process.execPath, args, {
     cwd: roomsWorkerDir,
@@ -63,7 +66,7 @@ export async function startRoomsDev(bin, vars = {}) {
   };
   const t0 = Date.now();
   while (Date.now() - t0 < 90000) {
-    if (/Ready on/.test(log)) return { port, base: 'http://127.0.0.1:' + port, log: () => log, stop };
+    if (/Ready on/.test(log)) return { port, base: (opts.https ? 'https' : 'http') + '://127.0.0.1:' + port, log: () => log, stop };
     if (child.exitCode != null) break;
     await sleep(200);
   }
