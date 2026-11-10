@@ -1060,7 +1060,7 @@ import {
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=2108fba17d3d";
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z,
-  loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT} from "./sim-feel.js?v=3cc5f760bece";
+  loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT} from "./sim-feel.js?v=d7a832ead999";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -4141,8 +4141,10 @@ function nudgeCam(dir){
   toast('CAM '+v+'°',{ms:1000});
 }
 let kbThrottle=0,gpConnected=false,gpName='';
-// The controller's name is the device's own text. sim-feel.js puts it into the
-// first-run prompt's markup, so it is handed over escaped.
+// The controller's name is the device's own text: escaped where it becomes
+// markup, once. Here for Tune's radio line; sim-feel.js is handed the name as
+// written and escapes it in the first-run prompt itself (twice would show the
+// pilot "&lt;").
 function gpNameHtml(){return escapeHtml(gpName.slice(0,40));}
 let threeD=false;
 // ---------- gamepad selection ----------
@@ -4204,8 +4206,8 @@ function selectPad(gp,remember){
     return;
   }
   toast(radioScore(gp)===2?'RADIO SELECTED':'GAMEPAD SELECTED');
-  if(feel&&feel.promptOpen)feel.showFirstRun({hasGamepad:true,gpName:gpNameHtml(),mobile:mobileHint});
-  else if(feel&&(sessionLive||feel.loadInputChoice()==='keyboard'))feel.onGamepadConnected({gpName:gpNameHtml()});
+  if(feel&&feel.promptOpen)feel.showFirstRun({hasGamepad:true,gpName,mobile:mobileHint});
+  else if(feel&&(sessionLive||feel.loadInputChoice()==='keyboard'))feel.onGamepadConnected({gpName});
 }
 function showGpPicker(pads){
   if(!gpPickerEl){
@@ -8593,7 +8595,7 @@ document.getElementById('ratePreset').onchange=function(){
 // detectMobile only — Chrome desktop ontouchstart/maxTouchPoints must not
 // auto-enable touch and steal a TX16S before the first stick wiggle.
 const touchFirst=!!mobileHint;
-feel.maybeFirstRun({hasGamepad:gpConnected,gpName:gpNameHtml(),mobile:mobileHint,touch:touchFirst});
+feel.maybeFirstRun({hasGamepad:gpConnected,gpName,mobile:mobileHint,touch:touchFirst});
 bootTouchLayer();
 pickGamepad();
 bootTouchLayer();

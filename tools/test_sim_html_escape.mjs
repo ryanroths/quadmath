@@ -9,7 +9,10 @@
 //     HUD, the track picker and its rows, across a reload); pastes a ghost
 //     code whose pilot name is markup (the HUD's VS line); and plugs in a
 //     controller whose name is markup (the first-run prompt, Tune's radio
-//     line). Nothing runs, and each name reads as it was written.
+//     line). Nothing runs, and each name reads as it was written. And a "Fly
+//     my line" link opened with one click: markup for its track name and its
+//     pilot name comes out as plain text, markup for its track id is refused,
+//     nothing runs, and the same after a reload.
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,7 +24,8 @@ import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { encodeShare, decodeShare } from '../sim-tracks.js';
-import { escapeHtml, encodeDuel, decodeQm2 } from '../sim-retention.js';
+import { escapeHtml, encodeDuel, decodeQm2, shareTrackPayload, ghostFromObj } from '../sim-retention.js';
+import { packLine, lineLink, decodeLineCode } from '../sim-share.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -35,6 +39,30 @@ const GATES = [{ x: -15, y: 4, z: -19, ry: 1.57, size: 1.9 }, { x: 15, y: 4, z: 
 const TRACK_NAME = { id: 'custom-evil-name', name: EVIL_NAME, map: 'rig', gates: GATES };
 const TRACK_ID = { id: EVIL_ID, name: 'Plain', map: 'rig', gates: GATES };
 const SAMPLES = [[0, 0, 2, 0, 0, 0, 0, 1], [100, 1, 2, 0, 0, 0, 0, 1], [200, 2, 2, 0, 0, 0, 0, 1]];
+
+// A "Fly my line" link's code is bytes anyone can write: a real one's header,
+// rewritten.
+const LINK_TRACK = { id: 'custom-evil-link', name: 'Yard', map: 'rig', gates: GATES };
+function forgeLineCode(change) {
+  const bytes = packLine({
+    ghost: { v: 1, phys: 'x', track: LINK_TRACK.id, name: 'RyFly', lapTime: 12340, samples: SAMPLES },
+    trackPayload: shareTrackPayload(LINK_TRACK),
+  }, 10);
+  const headLen = bytes[1] | (bytes[2] << 8);
+  const head = JSON.parse(new TextDecoder().decode(bytes.subarray(3, 3 + headLen)));
+  const lie = new TextEncoder().encode(JSON.stringify(change(head)));
+  const out = new Uint8Array(3 + lie.length + bytes.length - 3 - headLen);
+  out.set([bytes[0], lie.length & 0xff, lie.length >> 8]);
+  out.set(lie, 3);
+  out.set(bytes.subarray(3 + headLen), 3 + lie.length);
+  return 'L0.' + Buffer.from(out).toString('base64url');
+}
+// Markup for the track's name and the pilot's; and markup for the track's id.
+const LINK_NAMES = forgeLineCode((h) => ({ ...h, n: EVIL_PILOT, tr: { ...h.tr, n: EVIL_NAME } }));
+const LINK_ID = forgeLineCode((h) => ({ ...h, t: EVIL_ID, tr: { ...h.tr, id: EVIL_ID } }));
+// What is left of each name: its letters, digits, spaces and . _ -
+const PLAIN_NAME = 'img srcx onerror__pwn1';
+const PLAIN_PILOT = 'svg onloada';
 
 test('escapeHtml: the five characters markup is made of', () => {
   assert.equal(escapeHtml('<b a="1" c=\'2\'>&</b>'), '&lt;b a=&quot;1&quot; c=&#39;2&#39;&gt;&amp;&lt;/b&gt;');
@@ -52,6 +80,14 @@ test('a code keeps a name and an id as written, so the page shows them as text',
   // A duel code carries its track the same way.
   const duel = decodeQm2(encodeDuel({ ghost: { v: 1, phys: 'x', track: TRACK_NAME.id, name: 'RyFly', lapTime: 200, samples: SAMPLES }, track: TRACK_NAME }));
   assert.equal(duel.track.name, EVIL_NAME);
+});
+
+test('a Fly my line link: its names come out as plain text, an id with markup is refused', async () => {
+  const line = await decodeLineCode(LINK_NAMES);
+  assert.equal(line.trackPayload.n, PLAIN_NAME);
+  assert.equal(line.trackPayload.id, LINK_TRACK.id);
+  assert.equal(ghostFromObj(line.ghost).name, PLAIN_PILOT);
+  await assert.rejects(decodeLineCode(LINK_ID), /BAD LINE CODE/);
 });
 
 test('the page: no name goes into markup as written', () => {
@@ -73,12 +109,18 @@ test('the page: no name goes into markup as written', () => {
     const line = m[0];
     assert.ok(/function trackLabel\(|escapeHtml\(trackLabel\(|\.textContent=|\btoast\(trackLabel\(/.test(line), 'trackLabel as text: ' + line.trim().slice(0, 120));
   }
-  // The controller's name: sim-feel.js puts it into the first-run prompt's
-  // markup, so the page hands it over escaped, every time.
+  // The controller's name is escaped where it becomes markup, once: the radio
+  // line in the page, the first-run prompt in sim-feel.js, which is handed the
+  // name as written (escaped twice it would show the pilot "&lt;").
+  assert.match(html, /el\.innerHTML='<b>'\+gpNameHtml\(\)\+'<\/b><br>'\+/, 'the radio line');
+  assert.match(html, /function gpNameHtml\(\)\{return escapeHtml\(gpName\.slice\(0,40\)\);\}/);
   const handed = [...html.matchAll(/\bfeel\.\w+\(\{[^}]*\bgpName\b[^}]*\}/g)].map((m) => m[0]);
   assert.equal(handed.length, 3, 'the three places the prompt is given a controller name');
-  for (const call of handed) assert.match(call, /\bgpName:gpNameHtml\(\)/, call);
-  assert.match(html, /function gpNameHtml\(\)\{return escapeHtml\(gpName\.slice\(0,40\)\);\}/);
+  for (const call of handed) assert.doesNotMatch(call, /gpName\s*:/, 'the name as written: ' + call);
+  const feel = readFileSync(join(root, 'sim-feel.js'), 'utf8');
+  assert.match(feel, /const name = \(info && info\.gpName\) \? escText\(String\(info\.gpName\)\.slice\(0, 48\)\) : '';/, 'the prompt escapes it');
+  const prompt = feel.slice(feel.indexOf('function showFirstRun('), feel.indexOf('function maybeFirstRun('));
+  assert.equal([...prompt.matchAll(/\binfo\.gpName\b/g)].length, 2, 'and uses it nowhere else');
 });
 
 function resolveChrome() {
@@ -178,6 +220,8 @@ const PAGE = String.raw`(() => {
   const rows = () => rowEls().map((b) => ({ tid: b.dataset.tid, name: b.children[0] ? b.children[0].textContent : '', kids: b.children.length, tags: look(b).tags }));
   // Set by the markup in a name, if it ever runs.
   const pwn = () => (window.__pwn === undefined ? null : window.__pwn);
+  // Elements a name's markup would have made, anywhere on the page.
+  const made = () => document.querySelectorAll('img[src="x"], svg[onload], [onerror]').length;
   window.a = () => { window.__pwn = 3; };
   async function importAndFly(code) {
     s.openTrackPicker('rig');
@@ -201,7 +245,7 @@ const PAGE = String.raw`(() => {
     await wait(800);
     return true;
   }
-  window.__esc = { s, wait, $, look, rows, pwn, importAndFly, pick };
+  window.__esc = { s, wait, $, look, rows, pwn, made, importAndFly, pick };
   return true;
 })()`;
 
@@ -215,8 +259,8 @@ test('names as text in Chrome', { timeout: 8 * 60 * 1000 }, async (t) => {
   const { server, port } = await serveRoot();
   const debugPort = 9640 + (process.pid % 300);
 
-  // A pass: a fresh Chrome profile, the given pad, the page.
-  async function pass(pad, flow) {
+  // A pass: a fresh Chrome profile, the given pad, the page (or the link given).
+  async function pass(pad, flow, link) {
     const profile = mkdtempSync(join(tmpdir(), 'qm-esc-'));
     const child = spawn(resolveChrome(), [
       '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
@@ -251,7 +295,7 @@ test('names as text in Chrome', { timeout: 8 * 60 * 1000 }, async (t) => {
         sessionStorage.setItem('__fakePads', JSON.stringify(${JSON.stringify(pad || { on: false, id: '', mapping: '', axes: [], buttons: 0 })}));
         return true;
       })()`);
-      await cdp(ws, 'Page.navigate', { url: `http://127.0.0.1:${port}/sim.html?quality=low` });
+      await cdp(ws, 'Page.navigate', { url: link || `http://127.0.0.1:${port}/sim.html?quality=low` });
       const boot = async () => {
         let ready = false;
         for (let i = 0; i < 240 && !ready; i++) {
@@ -385,8 +429,61 @@ test('names as text in Chrome', { timeout: 8 * 60 * 1000 }, async (t) => {
         assert.deepEqual(onlyTags(r.radio.tags, ['B', 'BR']), [], 'the radio line is its own markup only');
         assert.equal(r.open, true, 'a pad that is not a known radio gets the prompt');
         assert.ok(r.prompt.text.includes(EVIL_PAD), 'the prompt shows the name as written: ' + r.prompt.text.slice(0, 160));
+        assert.ok(!/&(lt|gt|amp|quot|#39);/.test(r.prompt.text + r.radio.text), 'escaped once, not twice');
         assert.deepEqual(onlyTags(r.prompt.tags, ['BUTTON', 'DIV', 'H1', 'P']), [], 'the prompt is its own markup only');
       });
+    });
+
+    // One click on a link someone sent. A radio awake, so the page flies at once.
+    const tx = { on: true, id: 'RM TX16S Joystick (Vendor: 1209 Product: 4f54)', mapping: '', axes: [0, 0, -1, 0, -1, -1, -1, -1], buttons: 0 };
+    const linkTo = (track, code) => lineLink({ origin: `http://127.0.0.1:${port}`, path: '/sim.html', map: 'rig', track, code }).replace('#', '&quality=low#');
+    const landed = `
+      const banner = F.look(F.$('lineBanner'));
+      await F.wait(900);
+      const hud = F.look(F.$('osdLap'));
+      const line = F.s.line();
+      F.s.openTrackPicker('rig');
+      await F.wait(400);
+      const out = { banner, hud, track: F.s.track(), map: F.s.map(), rival: line.rival, rows: F.rows(),
+        list: F.look(document.querySelector('#menuLayer .track-list')).tags, made: F.made(), pwn: F.pwn() };
+      F.$('layerClose').click();
+      return JSON.stringify(out);`;
+
+    await t.test('a Fly my line link with markup for its track name and its pilot name: plain text, nothing runs, across a reload', async () => {
+      await pass(tx, async ({ js, reload }) => {
+        for (const when of ['opened', 'reloaded']) {
+          const r = await js(landed);
+          assert.equal(r.pwn, null, when + ': nothing in the link ran');
+          assert.equal(r.made, 0, when + ': no element came of it');
+          assert.deepEqual([r.map, r.track], ['rig', LINK_TRACK.id], when + ': on the track the link carries');
+          assert.equal(r.rival && r.rival.name, PLAIN_PILOT, when + ': the ghost is loaded, its pilot in plain text');
+          assert.deepEqual([r.banner.text, r.banner.tags], [`Race ${PLAIN_PILOT}'s line`, []], when + ': the banner is text');
+          assert.deepEqual(onlyTags(r.hud.tags, HUD_TAGS), [], when + ': the HUD is its own markup only');
+          assert.ok(r.hud.text.includes(PLAIN_NAME) && r.hud.text.includes('VS ' + PLAIN_PILOT), when + ': the HUD names both in plain text: ' + r.hud.text);
+          const row = r.rows.find((x) => x.tid === LINK_TRACK.id);
+          assert.ok(row, when + ': the picker lists the track');
+          assert.deepEqual([row.name, row.kids, row.tags], [PLAIN_NAME, 2, ['SPAN']], when + ': by its name in plain text');
+          assert.deepEqual(onlyTags(r.list, ['BUTTON', 'SPAN']), [], when + ': the list is rows only');
+          if (when === 'opened') await reload();
+        }
+      }, linkTo(LINK_TRACK.id, LINK_NAMES));
+    });
+
+    await t.test('a Fly my line link with markup for its track id, in the code and in the address: refused, nothing runs, across a reload', async () => {
+      await pass(tx, async ({ js, reload }) => {
+        for (const when of ['opened', 'reloaded']) {
+          const r = await js(landed);
+          assert.equal(r.pwn, null, when + ': nothing in the link ran');
+          assert.equal(r.made, 0, when + ': no element came of it');
+          assert.deepEqual([r.banner.text, r.banner.tags], ['Line link not valid', []], when + ': the banner says so, in text');
+          assert.equal(r.map, 'rig');
+          assert.ok(!r.rival || r.rival.name !== 'RyFly', when + ': no ghost from the link');
+          assert.ok(!r.rows.some((x) => x.tid === EVIL_ID || x.name === 'Yard'), when + ': no track from the link');
+          assert.deepEqual(onlyTags(r.hud.tags, HUD_TAGS), [], when + ': the HUD is its own markup only');
+          assert.deepEqual(onlyTags(r.list, ['BUTTON', 'SPAN']), [], when + ': the list is rows only');
+          if (when === 'opened') await reload();
+        }
+      }, linkTo(EVIL_ID, LINK_ID));
     });
   } finally {
     server.close();
