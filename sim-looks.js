@@ -299,13 +299,22 @@ export function saveCrosshairOn(on, storage) {
   }
 }
 
+// A context's renderer string never changes, and reading it is a synchronous
+// round trip that waits for the GPU process to drain everything queued before
+// it. Under software WebGL that is a whole frame, so ask once per renderer.
+const gpuHints = new WeakMap();
+
 function gpuHint(renderer) {
+  const known = gpuHints.get(renderer);
+  if (known) return known;
   try {
     const gl = renderer.getContext();
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
     const info = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '') : '';
     const tier = gpuTier(info);
-    return { info, tier, low: tier === 'low', high: tier === 'high' };
+    const hint = { info, tier, low: tier === 'low', high: tier === 'high' };
+    gpuHints.set(renderer, hint);
+    return hint;
   } catch (e) {
     return { info: '', tier: null, low: false, high: false };
   }
