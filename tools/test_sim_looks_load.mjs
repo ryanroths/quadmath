@@ -54,3 +54,23 @@ test('concurrent setQuality fetches each HDRI and texture once; raw equirect dis
   for (const t of globalThis.__hdrTex) assert.equal(t.disposed, 1);
   assert.ok(ctx.scene.environment && ctx.scene.environment.pmrem);
 });
+
+// Reading the renderer string waits for the GPU process to drain its queue, so
+// a read per preset lookup blocked the page once per texture during map load.
+test('the renderer string is read from the GPU once per renderer', async () => {
+  const { createLooks } = await import('../sim-looks.js');
+  let reads = 0;
+  const gl = {
+    getExtension: () => ({ UNMASKED_RENDERER_WEBGL: 0x9246 }),
+    getParameter: (p) => { if (p === 0x9246) reads += 1; return 'Google SwiftShader'; },
+  };
+  const renderer = { ...ctx.renderer, getContext: () => gl };
+  const looks = await createLooks({ ...ctx, renderer });
+  await looks.setQuality('med');
+  await looks.setQuality('high');
+  await looks.setQuality('auto');
+  assert.equal(reads, 1);
+  assert.equal(looks.gpu.tier, 'low');
+  assert.equal(looks.gpu.low, true);
+  assert.equal(looks.gpu.info, 'Google SwiftShader');
+});
