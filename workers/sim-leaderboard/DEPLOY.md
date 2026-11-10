@@ -9,7 +9,7 @@ logged into Cloudflare (`npx wrangler login`).
 
 ## Once
 
-1. Node 20+ and npm.
+1. Node 22+ and npm (wrangler 4 needs Node 22).
 2. From this folder:
 
    ```bash
@@ -32,13 +32,9 @@ logged into Cloudflare (`npx wrangler login`).
    npx wrangler d1 execute quadmath-sim-leaderboard --file=./src/schema.sql --remote
    ```
 
-5. `ALLOWED_ORIGIN` in `wrangler.jsonc` is `https://quadmath.com`. For local
-   `wrangler dev`, override with a comma-separated list that includes
-   localhost, e.g.
-
-   ```bash
-   npx wrangler dev --var ALLOWED_ORIGIN:https://quadmath.com,http://localhost:4173,http://127.0.0.1:5500
-   ```
+5. `ALLOWED_ORIGIN` in `wrangler.jsonc` is `https://quadmath.com`. To run
+   the Worker locally, see "Local" below: it overrides `ALLOWED_ORIGIN` with
+   the local page's origin.
 
 ## Every release of this Worker
 
@@ -102,9 +98,16 @@ Pick one (first match wins):
    `sim.html?lb=https://sim-leaderboard.<subdomain>.workers.dev`
    Production origins ignore `?lb=`.
 
-Reload. Start menu → **Boards** should show an Online column. A 3-lap
-finish on this week's course (class 65 / 75 / 85 from Your build) can
-submit. Pilot name is `quadmath_pilotName`. The per-browser claim token
+Any host other than `https://sim-leaderboard.ryan-roths.workers.dev` (or
+this machine) must also be added to `connect-src` in the
+`<meta http-equiv="Content-Security-Policy">` at the top of `sim.html`.
+Until it is, the page's requests to it are refused, with a
+`[CSP] connect-src blocked ...` warning in the console.
+
+Reload. Start menu → **Boards**: the card says "Online: on.", and
+**Refresh online** loads the board with no `ONLINE UNAVAILABLE` toast (and
+no `[CSP]` warning in the console). A 3-lap finish on this week's course
+(class 65 / 75 / 85 from Your build) can submit. Pilot name is `quadmath_pilotName`. The per-browser claim token
 is `quadmathSimPilotToken`.
 
 ## Checks
@@ -158,12 +161,31 @@ instead, and links that carry the ghost in the URL work without it.
 
 ## Local
 
+The client takes `https://` leaderboard URLs only, so run the Worker over
+https, on a local D1 with its tables made first:
+
 ```bash
-npx wrangler dev --var ALLOWED_ORIGIN:https://quadmath.com,http://localhost:4173,http://127.0.0.1:8787
-# then open sim.html on localhost; ?lb=https://... is honored only there.
-# http://127.0.0.1:8787 is ignored by the client (https only). Use a
-# tunnel or set LEADERBOARD_URL_KEY after deploying.
+cd workers/sim-leaderboard
+npx wrangler d1 execute quadmath-sim-leaderboard --local --file=./src/schema.sql
+npx wrangler dev --local-protocol https --ip 127.0.0.1 --port 8787 --var ALLOWED_ORIGIN:http://127.0.0.1:4173
 ```
 
-The client only accepts `https://` URLs so a Pages origin talking to
-plain `wrangler dev` will stay on local boards. That is intentional.
+and, in another terminal, serve the site from the repo root (`python` on
+Windows):
+
+```bash
+python3 -m http.server 4173 --bind 127.0.0.1
+```
+
+Open `https://127.0.0.1:8787/health` once and accept wrangler's self-signed
+certificate, then open `http://127.0.0.1:4173/sim.html?lb=https://127.0.0.1:8787`.
+`?lb=` is honored only on a localhost page. To check it: Start menu →
+**Boards** → **Refresh online** shows the (empty) board with no
+`ONLINE UNAVAILABLE` toast, and SHARE on a run too long for a link says
+`LINK COPIED — RACE MY LINE` with no `LONG LINK`: the line is stored in the
+local D1. No `[CSP]` warning in the console.
+
+The page's Content-Security-Policy lets it connect to this machine
+(`localhost` and `127.0.0.1`, any port) and to the deployed Worker. A
+tunnel, or a Worker on another `workers.dev` subdomain, is refused until its
+host is added to `connect-src` in `sim.html` (see "Point the sim at it").

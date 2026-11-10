@@ -34,7 +34,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { LEADERBOARD_URL } from '../sim-retention.js';
 import { ROOMS_URL } from '../sim-ghost-rooms.js';
 import { handleLeaderboard } from '../workers/sim-leaderboard/src/index.js';
-import { findWrangler, startRoomsDev } from './sim_rooms_dev.mjs';
+import { findWrangler, startRoomsDev, startLeaderboardDev, trustCert } from './sim_rooms_dev.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -50,14 +50,17 @@ const POLICY = "default-src 'self'; " +
   "media-src 'self' blob:; " +
   "font-src 'self'; " +
   'connect-src \'self\' data: blob: https://cdn.jsdelivr.net https://sim-leaderboard.ryan-roths.workers.dev ' +
-  'https://sim-rooms.ryan-roths.workers.dev wss://sim-rooms.ryan-roths.workers.dev https://cloudflareinsights.com; ' +
+  'https://sim-rooms.ryan-roths.workers.dev wss://sim-rooms.ryan-roths.workers.dev https://cloudflareinsights.com ' +
+  // A Worker on this machine, for local development (?lb=, ?rooms=).
+  'http://localhost:* https://localhost:* ws://localhost:* wss://localhost:* ' +
+  'http://127.0.0.1:* https://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:*; ' +
   "worker-src 'self' blob:; " +
   "frame-src 'none'; " +
   "object-src 'none'; " +
   "base-uri 'none'; " +
   "form-action 'none'";
 
-test('the policy: a <meta> first in <head>, exactly step 1, with sim-csp.js right after it', () => {
+test('the policy: a <meta> first in <head>, exactly as agreed (step 1, and this machine for connections), with sim-csp.js right after it', () => {
   const html = read('sim.html');
   const metas = [...html.matchAll(/<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]*)">/gi)];
   assert.equal(metas.length, 1, 'one policy');
@@ -71,11 +74,28 @@ test('the policy: a <meta> first in <head>, exactly step 1, with sim-csp.js righ
   // Right after it: the listener, a plain file from this site, before anything else.
   const after = head.slice(at + metas[0][0].length).trimStart();
   assert.match(after, /^<script src="sim-csp\.js\?v=[0-9a-f]{12}"><\/script>\s*<title>/, 'sim-csp.js first');
-  // Step 1: handlers off, no base, frames, plugins or form posts; nothing for localhost or any host.
+  // Step 1: handlers off, no base, frames, plugins or form posts.
   const dirs = Object.fromEntries(POLICY.split(';').map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v]));
   assert.deepEqual(dirs['script-src-attr'], ["'none'"]);
   for (const k of ['frame-src', 'object-src', 'base-uri', 'form-action']) assert.deepEqual(dirs[k], ["'none'"], k);
-  assert.ok(!/localhost|127\.0\.0\.1|\bhttp:|ws:|\*/.test(POLICY), 'no wildcard, no plain http or ws, no local hosts');
+  // This machine, any port, for connections only (a Worker in local
+  // development); no other directive names it, and nothing else is a wildcard.
+  const LOCAL = ['http://localhost:*', 'https://localhost:*', 'ws://localhost:*', 'wss://localhost:*',
+    'http://127.0.0.1:*', 'https://127.0.0.1:*', 'ws://127.0.0.1:*', 'wss://127.0.0.1:*'];
+  assert.deepEqual(dirs['connect-src'].filter((src) => /localhost|127\.0\.0\.1/.test(src)), LOCAL, 'connect-src: this machine');
+  assert.ok(dirs['connect-src'].filter((src) => src.includes('*')).every((src) => LOCAL.includes(src)), 'connect-src: no other wildcard');
+  // Its other sources: this site, data:, blob:, or a named https or wss host. No bare scheme, no plain http or ws.
+  for (const src of dirs['connect-src']) {
+    if (LOCAL.includes(src)) continue;
+    assert.ok(["'self'", 'data:', 'blob:'].includes(src) || /^(https|wss):\/\/[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(src), 'connect-src: ' + src);
+  }
+  // Each directive once (a second one would be read past by the checks above).
+  const names = POLICY.split(';').map((d) => d.trim().split(/\s+/)[0]);
+  assert.equal(new Set(names).size, names.length, 'no directive twice');
+  for (const [k, v] of Object.entries(dirs)) {
+    if (k === 'connect-src') continue;
+    assert.ok(!v.some((src) => /localhost|127\.0\.0\.1|^http:|^ws:|\*/.test(src)), k + ': no local host, plain http or ws, or wildcard');
+  }
   assert.match(read('scripts/ci/stamp_asset_cache.py'), /"sim-csp\.js",/, 'sim-csp.js is stamped');
 });
 
@@ -427,6 +447,8 @@ test('the sim under its policy in Chrome: no violations; injected handlers do no
     if (!rooms) console.log('rooms: no wrangler (npm install in workers/sim-rooms, or WRANGLER=): the room steps are skipped');
     const worker = { env: { DB: fakeD1(), ALLOWED_ORIGIN: origin }, calls: [] };
     const outside = [];
+    const local = []; // Workers on this machine, reached by ?rooms= and ?lb=: sent as they are.
+    const localCalls = []; // what the page sent them
     profile = mkdtempSync(join(tmpdir(), 'qm-csp-'));
     const flags = [
       '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
@@ -485,7 +507,8 @@ test('the sim under its policy in Chrome: no violations; injected handlers do no
                 responseHeaders: [...res.headers].map(([name, value]) => ({ name, value })),
                 body: Buffer.from(await res.arrayBuffer()).toString('base64'),
               });
-            } else if (rooms && u.startsWith(ROOMS_URL + '/')) {
+            } else if ((rooms && u.startsWith(ROOMS_URL + '/')) || local.some((base) => u.startsWith(base + '/'))) {
+              if (local.some((base) => u.startsWith(base + '/'))) localCalls.push(request.method + ' ' + u.split('?')[0]);
               await send('Fetch.continueRequest', { requestId });
             } else {
               // Past the policy, and not sent.
@@ -630,6 +653,82 @@ test('the sim under its policy in Chrome: no violations; injected handlers do no
       }
       await none(b, 'joining the room');
       await none(a, 'the room');
+    });
+
+    // The local steps in workers/sim-rooms/DEPLOY.md and workers/sim-leaderboard/DEPLOY.md:
+    // a page on this machine pointed at a rooms Worker over http (?rooms=) and a
+    // leaderboard Worker over https (?lb=, the client takes https only), each
+    // under wrangler dev on its own port. A room is made and a run is shared
+    // (stored on the local leaderboard); the boards are read from it.
+    await t.test('local Workers by ?rooms= (http) and ?lb= (https): a room, the boards, a stored line, no violation', { skip: rooms ? false : 'no wrangler' }, async () => {
+      const devRooms = await startRoomsDev(findWrangler(), { ALLOWED_ORIGIN: origin });
+      let devLb = null;
+      try {
+        devLb = await startLeaderboardDev(findWrangler(), { ALLOWED_ORIGIN: origin }, { https: true });
+        local.push(devRooms.base, devLb.base);
+        const info = await (await fetch(`http://127.0.0.1:${debugPort}/json/new?about:blank`, { method: 'PUT' })).json();
+        const c = await tab(info);
+        await c.front();
+        await c.open(`quality=low&map=rig&track=rig-loop&rooms=${encodeURIComponent(devRooms.base)}&lb=${encodeURIComponent(devLb.base)}`, 'bf');
+        await none(c, 'the boot');
+        const calls0 = worker.calls.length;
+        let r = await c.js(`
+          if (window._feel && window._feel.promptOpen && T.$('feelKeys')) T.$('feelKeys').click();
+          await T.wait(800);
+          // The boards, read from the local leaderboard.
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+          await T.wait(400);
+          T.$('menuBoards').click();
+          await T.wait(500);
+          const refresh = !!T.$('boardRefresh');
+          if (refresh) T.$('boardRefresh').click();
+          await T.wait(1500);
+          const boards = { refresh, toast: T.toast(), body: T.$('boardBody') ? T.$('boardBody').textContent.slice(0, 80) : null };
+          T.$('layerClose').click();
+          T.$('menuResume').click();
+          await T.wait(400);
+          // A run, shared: the line too long for a link goes to the local leaderboard.
+          T.s.setLineUrlMax(200);
+          const done = await T.flyGates();
+          const before = T.s.line().link;
+          T.$('lapShare').click();
+          const shared = await T.shared(before);
+          // A room on the local rooms Worker.
+          T.s.openRoomCard();
+          await T.wait(300);
+          T.$('roomCreate').click();
+          const room = await T.until(() => T.s.ghostRoom() && T.s.ghostRoom().open, 15000);
+          const g = T.s.ghostRoom();
+          const out = { boards, done, shared, room, code: g && g.code, roomToast: T.toast() };
+          T.s.leaveGhostRoom();
+          return JSON.stringify(out);`);
+        console.log('local Workers: ' + JSON.stringify(r));
+        assert.equal(r.boards.refresh, true, 'the boards are online (?lb= taken)');
+        assert.notEqual(r.boards.toast, 'ONLINE UNAVAILABLE', 'and read from the local leaderboard');
+        console.log('sent to the local Workers: ' + [...new Set(localCalls)].join(', '));
+        for (const call of [`GET ${devLb.base}/api/board`, `POST ${devLb.base}/api/line`, `POST ${devRooms.base}/rooms`]) {
+          assert.ok(localCalls.includes(call), 'the page sent ' + call + ': ' + localCalls.join(', '));
+        }
+        assert.equal(r.done, true, 'the run finished');
+        assert.equal(r.shared.said, true, 'SHARE: ' + r.shared.toast);
+        assert.match(r.shared.link, /#line=@[A-Za-z0-9_-]{10,32}$/, 'the line stored on the local leaderboard');
+        assert.equal(r.room, true, 'a room on the local rooms Worker: ' + r.roomToast);
+        assert.match(String(r.code), /^[A-Z]{4}$/);
+        assert.equal(worker.calls.length, calls0, 'nothing went to the deployed leaderboard\'s address');
+        // And the stored line comes back from the local leaderboard (where
+        // this Node can trust the run's certificate).
+        if (trustCert(devLb.cert)) {
+          const id = r.shared.link.split('#line=@')[1];
+          const back = await (await fetch(devLb.base + '/api/line?id=' + id, { headers: { Origin: origin } })).json();
+          assert.ok(back && back.ok && /^L[01]\./.test(back.code), 'the line is in the local D1: ' + JSON.stringify(back).slice(0, 120));
+        }
+        await none(c, 'local Workers');
+        steps.push('local Workers by ?rooms= and ?lb=');
+      } finally {
+        local.length = 0;
+        await devRooms.stop();
+        if (devLb) await devLb.stop();
+      }
     });
 
     await t.test('markup with handlers put into the page: nothing runs, and the page warns', async () => {

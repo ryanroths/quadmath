@@ -26,7 +26,7 @@ The rooms are not in `workers/sim-leaderboard`:
 
 ## Once
 
-1. Node 20+ and npm.
+1. Node 22+ and npm (wrangler 4 needs Node 22).
 2. From this folder:
 
    ```bash
@@ -49,7 +49,9 @@ The rooms are not in `workers/sim-leaderboard`:
 
    It prints the URL, e.g. `https://sim-rooms.ryan-roths.workers.dev`.
    That is the page's default (`ROOMS_URL` in `sim-ghost-rooms.js`). If the
-   printed URL differs, set `ROOMS_URL` to it, restamp
+   printed URL differs, set `ROOMS_URL` to it, add its `https://` and
+   `wss://` hosts to `connect-src` in the `<meta http-equiv="Content-Security-Policy">`
+   at the top of `sim.html`, restamp
    (`python3 scripts/ci/stamp_asset_cache.py`), commit, deploy Pages.
 
 ## Checks
@@ -124,9 +126,17 @@ class a new tag (`v2`); see the Durable Objects migrations docs.
 
 ## Local
 
+Serve the site from the repo root on port 4173 (`python` on Windows):
+
+```bash
+python3 -m http.server 4173 --bind 127.0.0.1
+```
+
+and, in another terminal, the Worker on port 8787:
+
 ```bash
 cd workers/sim-rooms
-npx wrangler dev --var ALLOWED_ORIGIN:http://127.0.0.1:4173
+npx wrangler dev --ip 127.0.0.1 --port 8787 --var ALLOWED_ORIGIN:http://127.0.0.1:4173
 ```
 
 Then open `http://127.0.0.1:4173/sim.html?rooms=http://127.0.0.1:8787`.
@@ -134,8 +144,18 @@ Then open `http://127.0.0.1:4173/sim.html?rooms=http://127.0.0.1:8787`.
 `http://`. Elsewhere the page takes localStorage `quadmathSimRoomsUrl`
 (`https://` only), then `ROOMS_URL`.
 
-Tests (wrangler from this folder's `npm install`, or `WRANGLER=<path to
-wrangler/bin/wrangler.js>`; without one they skip, as in CI):
+The page's Content-Security-Policy (the `<meta http-equiv>` at the top of
+`sim.html`) lets it connect to this machine (`localhost` and `127.0.0.1`,
+any port, `http`/`https`/`ws`/`wss`) and to the deployed Worker. A rooms
+Worker anywhere else (another `workers.dev` subdomain, a tunnel, a changed
+`ROOMS_URL`) is refused, with a `[CSP] connect-src blocked ...` warning in
+the console, until its `https://` and `wss://` hosts are added to
+`connect-src` there.
+
+Tests, from the repo root (wrangler from this folder's `npm install`, or
+`WRANGLER=<path to wrangler/bin/wrangler.js>`; without one they skip, as in
+the CI job that runs every test file. The page test also needs openssl for
+its test certificate):
 
 ```bash
 node tools/test_sim_rooms_wrangler.mjs      # 4 scripted pilots against wrangler dev
