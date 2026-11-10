@@ -4,10 +4,13 @@ name: Sim tests
 # the asset cache-stamp check. Independent of #220 (stamp-on-main).
 # Ryan: review before adding any of these as a required check.
 #
-# Three jobs so they run in parallel and report separately:
+# Jobs run in parallel and report separately:
 #   sim-tests     every test file, with the Chrome map boot skipped (fast).
 #   sim-map-boot  tools/test_sim_map_boot.mjs boots every map in headless
-#                 Chrome and asserts the FPV screenshot is not blank (~5 min).
+#                 Chrome and asserts the FPV screenshot is not blank. One job
+#                 per core and shard (SIM_BOOT_CORE, SIM_BOOT_SHARD), so no
+#                 job nears its limit as maps are added: add a shard instead.
+#                 Each job's summary lists its cases and their times.
 #                 GitHub-hosted runners have no GPU: give Chrome
 #                 ANGLE/SwiftShader (flags live in the test). three/addons
 #                 load from cdn.jsdelivr.net, so this job needs the network.
@@ -68,9 +71,21 @@ jobs:
           [ "${#failed[@]}" -eq 0 ]
 
   sim-map-boot:
-    name: Boot sim maps in headless Chrome
+    name: Boot sim maps (${{ matrix.core }} core, shard ${{ matrix.shard }}/${{ matrix.of }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      # Every shard reports, so one failing map does not hide the others.
+      fail-fast: false
+      matrix:
+        include:
+          # Default core: 21 cases, 7 a shard. The launch-screen checks run in 1/3.
+          - { core: bf, shard: 1, of: 3 }
+          - { core: bf, shard: 2, of: 3 }
+          - { core: bf, shard: 3, of: 3 }
+          # ?core=js: 13 cases, 7 and 6.
+          - { core: js, shard: 1, of: 2 }
+          - { core: js, shard: 2, of: 2 }
 
     steps:
       - name: Check out
@@ -93,9 +108,11 @@ jobs:
           "$CHROME_BIN" --version
           echo "CHROME=$CHROME_BIN" >> "$GITHUB_ENV"
 
-      - name: Boot every map
+      - name: Boot this shard's maps
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
+          SIM_BOOT_CORE: ${{ matrix.core }}
+          SIM_BOOT_SHARD: ${{ matrix.shard }}/${{ matrix.of }}
         run: node --test tools/test_sim_map_boot.mjs
 
   asset-stamps:
