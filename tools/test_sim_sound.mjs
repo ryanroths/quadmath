@@ -181,6 +181,22 @@ async function evaluate(ws, expression) {
   return r.result ? r.result.value : undefined;
 }
 
+// Polls a page expression until it is true or the ceiling passes; the
+// assertion after it still fails if the ceiling passes first. For what the
+// page does in its own time after a key (the AudioContext resumed, the master
+// gain's glide), which a slow runner takes longer over than a fixed hold.
+// Returns whether it came true and after how long, so a slow resume or glide
+// shows in the log, and a failing assertion says the ceiling ran out first.
+async function waitFor(ws, expression, ceilingMs) {
+  const start = Date.now();
+  for (;;) {
+    if (await evaluate(ws, expression)) return { ok: true, ms: Date.now() - start };
+    if (Date.now() - start >= ceilingMs) return { ok: false, ms: Date.now() - start };
+    await sleep(50);
+  }
+}
+const waited = (w) => (w.ok ? `came true after ${w.ms} ms` : `the ${w.ms} ms wait ran out`);
+
 // A real key through CDP: trusted, so it is a user activation.
 async function press(ws, key, code, vk) {
   const text = key.length === 1 ? key : undefined;
@@ -203,9 +219,17 @@ const FLIGHT = String.raw`(() => {
     beep: { firstOn: null, lastOn: null, onTicks: 0, peakGain: 0 } };
   const T_PUNCH = [8000, 28000, 48000, 68000, 88000, 108000];
   const PUNCH_MS = 150, HOVER_Z = 1.5, WALL_AT = 118000;
-  let t0 = null, x0 = 0, y0 = 0, tHover = 0.4, punch = null, hoverHz = [], wallStart = null;
+  let t0 = null, x0 = 0, y0 = 0, tHover = 0.4, punch = null, punchTail = null, hoverHz = [], wallStart = null;
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const mean = (v) => v.reduce((x, y) => x + y, 0) / v.length;
+  // A punch's peaks: the voice's live pitch and prop level, the pitch it is
+  // set to, and the rpm.
+  const readPunch = (pu, d, cs) => {
+    pu.peakHz = Math.max(pu.peakHz, mean(d.motorHz));
+    pu.peakTargetHz = Math.max(pu.peakTargetHz, mean(d.motorTargetHz));
+    pu.peakRpm = Math.max(pu.peakRpm, mean(cs.rpm));
+    pu.peakProp = Math.max(pu.peakProp, d.propGain);
+  };
   const id = setInterval(() => {
     try {
       const cs = s.coreState();
@@ -254,15 +278,24 @@ const FLIGHT = String.raw`(() => {
           F.wall = { step: 'approach', contacts: 0, peakScrape: 0, peakScrapeSpeed: 0 };
         }
       }
+      // The frame that ends a punch was flown at full throttle, but the page
+      // sets the voice once a frame and the voice glides to it on the audio
+      // clock, so the first poll after that frame still hears the pitch from
+      // before it. The peaks are read on through that frame (sim time
+      // unchanged) and stop at the next one, the first flown with the
+      // throttle back at the hover. The stick is released where it always
+      // was; only the reading runs on. On a slow runner one frame can carry
+      // most of the punch, and its pitch was otherwise never heard.
+      if (punchTail !== null) {
+        if (t === punchTail.t) readPunch(punchTail.punch, d, cs);
+        else punchTail = null;
+      }
       if (F.phase === 'punch') {
         thr = 1;
-        const hz = mean(d.motorHz);
-        if (hz > punch.peakHz) punch.peakHz = hz;
-        punch.peakTargetHz = Math.max(punch.peakTargetHz, mean(d.motorTargetHz));
-        punch.peakRpm = Math.max(punch.peakRpm, mean(cs.rpm));
-        punch.peakProp = Math.max(punch.peakProp, d.propGain);
+        readPunch(punch, d, cs);
         if (t - punch.at >= PUNCH_MS) {
           F.punches.push(punch);
+          punchTail = { punch, t };
           hoverHz = [];
           F.phase = 'hover';
         }
@@ -408,10 +441,13 @@ test('bf core sound: graph on the first key, motor pitch from rpm rises on a pun
 
     await cdp(ws, 'Page.bringToFront');
     await press(ws, '1', 'Digit1', 49);
-    await sleep(300);
+    // The key makes the AudioContext and the graph, and the context runs once
+    // the browser has resumed it: wait for that (10 s ceiling), not 300 ms.
+    const running = await waitFor(ws, `(() => { const d = window._sim.audio.debug(); return d.graph === true && d.state === 'running'; })()`, 10000);
+    t.diagnostic(`audio graph and running context after the first key: ${waited(running)}`);
     const g = JSON.parse(await evaluate(ws, `JSON.stringify(window._sim.audio.debug())`));
-    assert.equal(g.graph, true, 'the first key builds the audio graph');
-    assert.equal(g.state, 'running', 'the AudioContext runs after the key');
+    assert.equal(g.graph, true, `the first key builds the audio graph (${waited(running)})`);
+    assert.equal(g.state, 'running', `the AudioContext runs after the key (${waited(running)})`);
     assert.equal(g.motors, 4, 'four motors');
     assert.equal(g.oscillators, 8, 'two voices a motor');
     assert.equal(g.flightLowpassHz, 3000, 'the flight voices through the 3 kHz lowpass');
@@ -438,11 +474,15 @@ test('bf core sound: graph on the first key, motor pitch from rpm rises on a pun
     // M mutes everything, M again unmutes; the start menu's Controls card
     // carries the master volume, and its slider sets it.
     const master = async () => JSON.parse(await evaluate(ws, `JSON.stringify({ master: window._sim.audio.debug().master, muted: window._sim.audio.muted })`));
+    // Each change glides the master gain (a 30 ms time constant on the audio
+    // clock): each read waits for the glide to arrive (10 s ceiling), not 400 ms.
     await press(ws, 'm', 'KeyM', 77);
-    await sleep(400);
+    const muteWait = await waitFor(ws, `window._sim.audio.muted === true && window._sim.audio.debug().master < 0.01`, 10000);
+    t.diagnostic(`M mutes: ${waited(muteWait)}`);
     const muted = await master();
     await press(ws, 'm', 'KeyM', 77);
-    await sleep(400);
+    const unmuteWait = await waitFor(ws, `window._sim.audio.muted === false && Math.abs(window._sim.audio.debug().master - 0.6) < 0.01`, 10000);
+    t.diagnostic(`M again unmutes: ${waited(unmuteWait)}`);
     const unmuted = await master();
     const card = JSON.parse(await evaluate(ws, `(function(){
       document.getElementById('menuControls').click();
@@ -451,7 +491,8 @@ test('bf core sound: graph on the first key, motor pitch from rpm rises on a pun
       el.value='0.3'; el.dispatchEvent(new Event('input'));
       return JSON.stringify(shown);
     })()`));
-    await sleep(400);
+    const setWait = await waitFor(ws, `Math.abs(window._sim.audio.debug().master - 0.3) < 0.01`, 10000);
+    t.diagnostic(`the slider sets the master: ${waited(setWait)}`);
     const set = await master();
     const stored = await evaluate(ws, `localStorage.getItem('quadmathSimSoundVol')`);
 
@@ -530,11 +571,11 @@ test('bf core sound: graph on the first key, motor pitch from rpm rises on a pun
     assert.ok(flight.wall.peakScrape > 0.1 && flight.wall.peakScrapeSpeed > 1.5, `sliding along the wall scrapes (${flight.wall.peakScrape} at ${flight.wall.peakScrapeSpeed} m/s)`);
     assert.ok(flight.floor.thudsAfter > flight.floor.thudsBefore, 'the drop onto the floor thuds');
 
-    assert.ok(muted.muted && muted.master < 0.01, `M mutes (master ${muted.master})`);
-    assert.ok(!unmuted.muted && Math.abs(unmuted.master - 0.6) < 0.01, `M again unmutes (master ${unmuted.master})`);
+    assert.ok(muted.muted && muted.master < 0.01, `M mutes (master ${muted.master}; ${waited(muteWait)})`);
+    assert.ok(!unmuted.muted && Math.abs(unmuted.master - 0.6) < 0.01, `M again unmutes (master ${unmuted.master}; ${waited(unmuteWait)})`);
     assert.equal(card.value, 0.6, 'the Controls card shows the master volume, 60%');
     assert.match(card.label, /SOUND \[M\]/, 'and the mute button');
-    assert.ok(Math.abs(set.master - 0.3) < 0.01, `its slider sets the master (${set.master})`);
+    assert.ok(Math.abs(set.master - 0.3) < 0.01, `its slider sets the master (${set.master}; ${waited(setWait)})`);
     assert.equal(stored, '0.3', 'and saves it');
 
     // Off quadmath.com, the page's Cloudflare analytics beacon has its report

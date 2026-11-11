@@ -297,31 +297,70 @@ const FAKE_PADS = String.raw`(() => {
   // opened. getGamepads() is empty while the page's scripts run; this many ms
   // after they have, the pad is there and gamepadconnected fires. Without it
   // the pad is there from the first call.
+  // The page's own Easy-mode hold of the throttle at the bottom (sim-3d.js
+  // stepEasyArm), and what it was when the pad was handed over. It counts
+  // only while the page reads the sticks as safe, so once it has risen since
+  // the handover, the page has read this radio with its throttle down.
+  const lowS = () => {
+    try { const a = window._sim && window._sim.easy && window._sim.easy().arm; return a ? +a.lowS || 0 : 0; } catch (e) { return 0; }
+  };
   let there = !(pads.afterBoot >= 0);
+  let handedLowS = there ? 0 : null;
   if (!there) {
     const iv = setInterval(() => {
       if (!window._feel) return;
       clearInterval(iv);
-      setTimeout(() => { there = true; window.dispatchEvent(new Event('gamepadconnected')); }, pads.afterBoot);
+      setTimeout(() => { there = true; window.dispatchEvent(new Event('gamepadconnected')); handedLowS = lowS(); }, pads.afterBoot);
     }, 4);
   }
   // raiseAt: this many ms after the page's scripts have run, the throttle goes
   // to 60% by itself: a pilot who throttles up while the page is still
-  // loading, before a test could. __early: when, on which core, and how long
-  // the card has been on screen since.
+  // loading, before a test could. The raise is on wall time, as a pilot's hand
+  // is, wherever it lands in the load (on a slow runner, near the moment the
+  // Betaflight core takes over): how soon the card follows it is what the
+  // case measures. One condition only: the page must have read this radio
+  // with its throttle down at least once since it was handed over. The page's
+  // arm gate keeps a throttle that is up when it first reads a radio at zero
+  // until it has been down (sim.html readInput), so to the page a raise before
+  // that first read is no throttle-up at all; on a slow CI runner a raise
+  // 300 ms in came before it, and no card could follow. The sign of that read
+  // is the page's own Easy-mode hold count (sim-3d.js stepEasyArm): it grows
+  // only on polls that read the sticks as safe, so once it has grown since the
+  // handover, the page has read the radio down. It is latched: a later reset
+  // of the count (the Betaflight core re-places the quad when it takes over)
+  // does not hold the raise back. Where the page has read the radio by
+  // raiseAt, the raise is at raiseAt exactly; where it has not, the log shows
+  // it (readAt later than feelAt + raiseAt). __early: when the scripts had
+  // run, when the page had read the radio down, when the Betaflight core was
+  // first seen flying, when the throttle went up (on which core, at what hold
+  // count), when the card came up and how long it has been on screen since.
   if (pads.raiseAt >= 0) {
     const iv = setInterval(() => {
       if (!window._feel) return;
       clearInterval(iv);
-      const early = window.__early = { raisedAt: null, core: null, shownAt: null, cardMs: 0 };
-      setTimeout(() => {
+      const t0 = performance.now();
+      const early = window.__early = { feelAt: t0, readAt: null, bfAt: null, raisedAt: null, core: null, lowS: null, shownAt: null, cardMs: 0 };
+      const readDown = () => {
+        if (early.readAt === null && handedLowS !== null && lowS() > handedLowS) early.readAt = performance.now();
+        return early.readAt !== null;
+      };
+      const read = setInterval(() => { if (readDown()) clearInterval(read); }, 4);
+      const raise = () => {
+        if (!readDown()) return false;
         pads.axes[2] = 0.2;
         early.raisedAt = performance.now();
+        early.lowS = lowS();
         early.core = window._sim && window._sim.core ? window._sim.core() : null;
+        return true;
+      };
+      setTimeout(() => {
+        if (raise()) return;
+        const late = setInterval(() => { if (raise()) clearInterval(late); }, 4);
       }, pads.raiseAt);
       let last = performance.now();
       setInterval(() => {
         const now = performance.now();
+        if (early.bfAt === null && window._sim && window._sim.core && window._sim.core() === 'bf') early.bfAt = now;
         const el = document.getElementById('firstFlight');
         if (el && el.classList.contains('show') && getComputedStyle(el).display !== 'none') {
           if (early.shownAt === null) early.shownAt = now;
@@ -538,23 +577,42 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         assert.equal(marks.everPaused, false, 'the sim never paused while the card was up');
 
         // Land, and arm again: no card. Then a reload: none.
+        // The landing's disarm is the page's own 2 s count, slow where frames
+        // are: the wait for it allows for that, in a call of its own (CDP gives
+        // each call 45 s), and it must have happened, or the raise below would
+        // be no arm attempt at all and "no card" would prove nothing. Each
+        // raise waits for the page's own count of the throttle held down a
+        // second, so that it is an arm where frames are slow too; right after a
+        // landing that count already stands at the disarm's 2 s, as it does for
+        // a pilot who lands and throttles up again. And the look for a card
+        // starts once the page has read the raise: its hold count drops to 0
+        // the moment it reads the throttle up, and before that a slow page has
+        // had nothing to show a card on. The hold's ceiling keeps each call
+        // inside CDP's 45 s.
+        const landed = await js(`return JSON.stringify(await F.until(() => !F.s.coreState().armed, 40000));`);
+        assert.equal(landed, true, 'landed and disarmed');
         r = await js(`
-          await F.until(() => !F.s.coreState().armed, 9000);
-          await F.wait(1300);
+          const heldOk = await F.held(1.05, 25000);
           F.thr(0.5);
+          const read = await F.until(() => F.lowS() < 1, 8000);
           const again = await F.shown(1200);
           F.thr(0);
-          return JSON.stringify({ again, card: F.card() });`);
+          return JSON.stringify({ heldOk, read, again, card: F.card() });`);
+        assert.equal(r.heldOk, true, 'the page held it down a second again');
+        assert.equal(r.read, true, 'the page read the second raise');
         assert.equal(r.again, false, 'a second arm: no card');
         await reload();
         r = await js(`
           F.thr(0);
-          await F.wait(1400);
+          const heldOk = await F.held(1.05, 25000);
           F.thr(0.5);
+          const read = await F.until(() => F.lowS() < 1, 8000);
           const again = await F.shown(1500);
           F.thr(0);
           await F.wait(2000);
-          return JSON.stringify({ again, card: F.card() });`);
+          return JSON.stringify({ heldOk, read, again, card: F.card() });`);
+        assert.equal(r.heldOk, true, 'after a reload, the page held it down a second');
+        assert.equal(r.read, true, 'the page read the raise after the reload');
         assert.equal(r.again, false, 'after a reload: never again');
         assert.equal(r.card.saved, 'controller', 'the keyboard layout is still unused: a radio never needs it');
       });
@@ -610,6 +668,10 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
     // The same radio, and a pilot who does not wait for the page: the throttle
     // goes up by itself, before the 1 s hold or after it. On a slow load that
     // is while Betaflight is still loading; on a fast one the page is ready.
+    // (On a slow runner 1600 ms can still be before the page's own count of
+    // the hold, and can land as the Betaflight core takes over. The card does
+    // not wait on the hold: a throttle leaving the bottom while disarmed is
+    // the attempt, armed or not.)
     for (const raiseAt of [300, 1600]) {
       await t.test(`a TX16S awake before the page loads, throttled up ${raiseAt} ms after its scripts, loaded or not: the card`, async () => {
         await pass('', { pad: { ...tx([0, 0, -1, 0, -1, -1, -1, -1]), afterBoot: 0, raiseAt } }, async ({ js }) => {
