@@ -336,7 +336,7 @@ test('bf core sound: graph on the first key, motor pitch from rpm rises on a pun
     '--disable-extensions', '--disable-component-update',
     '--disable-background-networking', '--disable-sync',
     '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
-    '--window-size=640,360', `--remote-debugging-port=${debugPort}`,
+    '--window-size=640,360', ...(process.env.SIM_GPU_OFF === '1' ? ['--disable-gpu'] : []), `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${profile}`, url,
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   let stderr = '';
@@ -378,6 +378,8 @@ test('bf core sound: graph on the first key, motor pitch from rpm rises on a pun
     await cdp(ws, 'Runtime.enable');
     await cdp(ws, 'Log.enable');
     await cdp(ws, 'Page.enable');
+    // SIM_CPU_THROTTLE=4: the page's CPU slowed 4x, to run as on a slow CI runner.
+    if (process.env.SIM_CPU_THROTTLE) await cdp(ws, 'Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
 
     // The bf core flying, the menus and first-run prompt out of the way
     // (by script: no gesture yet).

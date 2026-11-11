@@ -696,7 +696,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
       '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
       '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
       '--mute-audio', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update',
-      '--disable-background-networking', '--disable-sync', '--window-size=480,270',
+      '--disable-background-networking', '--disable-sync', '--window-size=480,270', ...(process.env.SIM_GPU_OFF === '1' ? ['--disable-gpu'] : []),
       `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profile}`, 'about:blank',
     ], { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
@@ -716,6 +716,9 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
       await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
       await cdp(ws, 'Runtime.enable');
       await cdp(ws, 'Page.enable');
+      // SIM_CPU_THROTTLE=4: the page's CPU slowed 4x (DevTools' throttling), to
+      // run as on a slow CI runner.
+      if (process.env.SIM_CPU_THROTTLE) await cdp(ws, 'Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
       await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: FAKE_PADS });
       const url = `http://127.0.0.1:${port}/sim.html?quality=low${query ? '&' + query : ''}`;
       // Same origin first, for localStorage and sessionStorage before the page's scripts.

@@ -467,7 +467,7 @@ test('the sim under its policy in Chrome: no violations; injected handlers do no
       '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
       '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
       '--mute-audio', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update',
-      '--disable-background-networking', '--disable-sync', '--window-size=960,540',
+      '--disable-background-networking', '--disable-sync', '--window-size=960,540', ...(process.env.SIM_GPU_OFF === '1' ? ['--disable-gpu'] : []),
       '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows',
       // Port 0: Chrome takes a free one and names it in DevToolsActivePort, so no
       // other test's Chrome can be the one this test drives.
@@ -532,6 +532,8 @@ test('the sim under its policy in Chrome: no violations; injected handlers do no
         }
       });
       await send('Runtime.enable');
+      // SIM_CPU_THROTTLE=4: the page's CPU slowed 4x, to run as on a slow CI runner.
+      if (process.env.SIM_CPU_THROTTLE) await send('Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
       await send('Page.enable');
       await send('Log.enable');
       await send('Fetch.enable', { patterns: [{ urlPattern: '*' }] });
