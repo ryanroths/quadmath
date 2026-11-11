@@ -810,8 +810,15 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
 
     await t.test('a keyboard pilot who arms at once: the card on Space, there until a key, and no layout after it', async () => {
       await pass('map=rig', {}, async ({ js, key }) => {
-        // Betaflight wants a moment after the prompt's pause before it will arm.
-        await js(`document.getElementById('feelKeys').click(); await F.wait(1500); return JSON.stringify(1);`);
+        // Betaflight arms only once its own guards are clear (its boot grace
+        // runs on the sim clock, which the prompt paused): Space once its
+        // arming flags read clear on a core that has stepped since the prompt
+        // closed. A fixed wall time is too little of that where frames are slow.
+        let ready = await js(`document.getElementById('feelKeys').click();
+          const s0 = F.s.bfCore().simTimeUs;
+          const ok = await F.until(() => !F.paused() && F.s.bfCore().simTimeUs - s0 >= 50000 && F.s.coreState().armingDisableFlags === 0, 30000);
+          return JSON.stringify({ ok, flags: F.s.coreState().armingDisableFlags, paused: F.paused(), simMs: Math.round((F.s.bfCore().simTimeUs - s0) / 1000) });`);
+        assert.equal(ready.ok, true, 'Betaflight ready to arm after the prompt: ' + JSON.stringify(ready));
         await key(' ', 'Space', 32);
         let r = await js(`
           const shown = await F.shown(1000);
