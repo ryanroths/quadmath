@@ -80,7 +80,7 @@ jobs:
           [ "${#failed[@]}" -eq 0 ]
 
   sim-map-boot:
-    name: ${{ matrix.suite == 'csp' && 'Sim under its CSP (Chrome)' || matrix.suite == 'page' && format('Sim page tests in Chrome ({0})', matrix.label) || matrix.suite == 'ab' && format('TEMP A/B keyboard, CSP meta {0}', matrix.csp) || format('Boot sim maps ({0} core, shard {1}/{2})', matrix.core, matrix.shard, matrix.of) }}
+    name: ${{ matrix.suite == 'csp' && 'Sim under its CSP (Chrome)' || matrix.suite == 'page' && format('Sim page tests in Chrome ({0})', matrix.label) || format('Boot sim maps ({0} core, shard {1}/{2})', matrix.core, matrix.shard, matrix.of) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -102,9 +102,6 @@ jobs:
           - { suite: page, label: 'easy mode', tests: 'tools/test_sim_easy_mode.mjs' }
           - { suite: page, label: 'first flight, coach', tests: 'tools/test_sim_first_flight.mjs tools/test_sim_coach_page.mjs' }
           - { suite: page, label: 'sound', tests: 'tools/test_sim_sound.mjs' }
-          # TEMPORARY A/B: the keyboard drive with the CSP meta in and stripped.
-          - { suite: ab, csp: 'on' }
-          - { suite: ab, csp: 'off' }
 
     steps:
       - name: Check out
@@ -150,16 +147,6 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: node --test tools/test_sim_csp.mjs
-
-      # TEMPORARY A/B (tools/zz_ab_probe.mjs): prints only.
-      - name: TEMP A/B keyboard probe
-        if: matrix.suite == 'ab'
-        env:
-          LIBGL_ALWAYS_SOFTWARE: '1'
-          CSP: ${{ matrix.csp }}
-        run: |
-          if [ "$CSP" = off ]; then sed -i '/http-equiv="Content-Security-Policy"/d' sim.html; fi
-          node tools/zz_ab_probe.mjs
 
       # Each file on its own, Chrome parts included; all run even if one fails.
       - name: This entry's page tests
