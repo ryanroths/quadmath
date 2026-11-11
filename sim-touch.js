@@ -253,7 +253,9 @@ export function shouldEnableTouch(info) {
   // fall through to on-screen sticks and scramble the channel map.
   if (i.gamepadConnected || i.hasGamepad || i.padLive) return false;
   if (i.inputChoice === 'touch') return true;
-  if (i.inputChoice === 'keyboard' || i.inputChoice === 'calibrate' || i.inputChoice === 'radio') return false;
+  if (i.inputChoice === 'keyboard') return false;
+  // A remembered radio (or calibration) with no pad connected is not a pad:
+  // the device's own default, touch on a phone, until one is plugged in.
   return !!i.mobile;
 }
 

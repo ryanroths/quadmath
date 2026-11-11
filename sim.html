@@ -1029,7 +1029,7 @@ import {
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=51206465bd01";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=0d50343158ab";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=d9f44bdf04e4";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -1058,7 +1058,7 @@ import {
   armSwitchValue, stepArmSwitch,
   loadRadioSwitches, saveRadioSwitches, switchesAxisMap, auxNumberOfAxis,
   createSwitchWizard, stepSwitchWizard, skipSwitchWizard, switchWizardResult,
-} from "./sim-touch.js?v=62e0a37fafce";
+} from "./sim-touch.js?v=347d42cc89aa";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -4182,8 +4182,18 @@ let armGate=false;       // safety: throttle dead after device connect/change un
 let gpPickerEl=null;
 function listPads(){
   const out=[],pads=navigator.getGamepads?navigator.getGamepads():[];
-  for(const gp of pads)if(gp)out.push(gp);
+  for(const gp of pads)if(gp&&gp.connected!==false&&!padRecentlyGone(gp))out.push(gp);
   return out;
+}
+// A pad that went away (unplugged, or missing from getGamepads for
+// PAD_GONE_MS) is not picked again until a pad is plugged in
+// (gamepadconnected) or PAD_REPICK_MS have passed: a stale entry Chrome still
+// lists for it must not take the sticks back with what it last sent.
+const PAD_GONE_MS=500, PAD_REPICK_MS=3000;
+let padGone=null;      // {id, at}: the pad that went away last
+let padMissingSince=null; // performance.now() when the active pad stopped answering
+function padRecentlyGone(gp){
+  return !!(padGone&&gp.id===padGone.id&&performance.now()-padGone.at<PAD_REPICK_MS);
 }
 function loadDeviceProfile(id,gp){
   radioSwitches=loadRadioSwitches(id);
@@ -4254,17 +4264,29 @@ function showGpPicker(pads){
     gpPickerEl.appendChild(b);
   }
 }
-function dropPad(){
+function dropPad(why){
+  const was=gpConnected,id=gpName;
   gpIndex=-1;gpConnected=false;gpName='';
   armGate=false; // keyboard must not stay FC-disarmed after the pad is gone
-  liveMap=null;armDetecting=false;
+  padLive=false;pollGp=null;padMissingSince=null;
+  if(was&&id)padGone={id,at:performance.now()};
+  // Nothing the pad last sent may stay: its sticks, its AUX, its arm switch
+  // and Easy-mode hold, a wizard or calibration it was in the middle of. The
+  // keyboard (or touch) starts from rest, throttle down.
+  stick.r=stick.p=stick.y=0;stick.aux=null;
+  kbThrottle=threeD?0.5:0;stick.t=kbThrottle;
+  liveMap=null;armDetecting=false;armDetectPrev=null;
+  armSwState={prev:null};armSwitchBlocked=false;
+  easyArmState={};turtleStickHold=false;
   if(switchWiz)endSwitchWizard();
+  if(calib){calib=null;setCalibrating(false);calibEl.classList.remove('show');}
   radioSwitches=null;
   syncEasyControls();
   if(gpPickerEl){gpPickerEl.remove();gpPickerEl=null;}
   updateRadioInfo();
   bootTouchLayer();
   followInputMode();
+  if(was&&why)toast(why+' — '+(touchCtl&&touchCtl.enabled?'TOUCH':'KEYBOARD'),{ms:2200});
 }
 function pickGamepad(){
   const pads=listPads();
@@ -4283,9 +4305,18 @@ function pickGamepad(){
   selectPad(best,false);     // best candidate goes live immediately...
   showGpPicker(pads);        // ...while the picker lets the pilot override + remember
 }
-addEventListener('gamepadconnected',()=>pickGamepad());
-addEventListener('gamepaddisconnected',()=>{
-  dropPad();
+// Plugged (back) in: whatever went away may take the sticks again at once,
+// and a radio outranks a pad already flying (pickPreferredPad), as before.
+addEventListener('gamepadconnected',()=>{
+  padGone=null;
+  pickGamepad();
+});
+// Unplugged: the active pad is dropped (another one may take over); a
+// different pad going away leaves the active one alone.
+addEventListener('gamepaddisconnected',(e)=>{
+  const g=e&&e.gamepad;
+  if(gpConnected&&g&&g.id!==gpName&&listPads().some((p)=>p.id===gpName))return;
+  dropPad(gpConnected?'CONTROLLER UNPLUGGED':null);
   pickGamepad();
 });
 function armSwitchKey(arm){
@@ -4342,9 +4373,17 @@ function updateRadioInfo(){
   fillArmSwitchUI(null,liveMap);
 }
 let padLive=false; // this frame actually read a gamepad (not an empty Chrome poll)
+let padLookAt=0;
 function readInput(dt){
   const pads=navigator.getGamepads&&navigator.getGamepads();
   let gp=gpConnected&&pads?pads[gpIndex]:null;
+  if(gp&&gp.connected===false)gp=null;
+  if(!gpConnected&&performance.now()-padLookAt>500){
+    // No event for it (some browsers fire none on a replug): a pad that is
+    // there and answering, and not the one just gone, takes the sticks.
+    padLookAt=performance.now();
+    if(listPads().length)pickGamepad();
+  }
   if(gpConnected&&!gp){
     const live=listPads();
     if(live.length){
@@ -4364,7 +4403,14 @@ function readInput(dt){
   if(gpConnected){
     // Connected radio/gamepad owns the sticks even on Chrome's empty polls.
     // Falling through to touch was the W6 regression (channel map "off").
-    if(!gp)return;
+    // But a pad missing for PAD_GONE_MS is unplugged, event or not: drop it
+    // and fly the keyboard (or touch) from here.
+    if(!gp){
+      if(padMissingSince===null)padMissingSince=performance.now();
+      else if(performance.now()-padMissingSince>=PAD_GONE_MS)dropPad('CONTROLLER GONE');
+      return;
+    }
+    padMissingSince=null;
     const parked=calib||switchWiz;
     if(calib){
       runCalib(gp,dt);
