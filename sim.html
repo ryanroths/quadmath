@@ -1013,7 +1013,7 @@ import {
   WS as CORE_WS, TICK_US, SAMPLE_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux,
   BF_CLASS_TUNES, bfClassDiff,
-} from "./sim-core-adapter.js?v=c9822040113f";
+} from "./sim-core-adapter.js?v=ce7406fe12d2";
 import {LINE_URL_MAX,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=d290021684b8";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
@@ -4749,7 +4749,7 @@ function tryArm(opts){
     // Betaflight decides: AUX1 goes high (with the throttle held low until it
     // arms, for a throttle-rise auto-arm) and bfArmWatch() reports the outcome.
     core.setArm(true,{holdThrottle:!!(opts&&opts.fromAuto)});
-    bfArmPendingMs=simClockMs;
+    bfArmAsk();
     return true;
   }
   qp.arm();
@@ -4770,14 +4770,24 @@ function bfRadio(){return core.kind==='bf'&&Array.isArray(stick.aux);}
 function padIsRadio(gp){
   return isKnownRadio(gp)||!!(radioPreset&&!['auto','pad','custom'].includes(radioPreset)&&RADIO_PRESETS[radioPreset]);
 }
+// An arm on the bf core waits for Betaflight from when the switch reaches it,
+// not from the key: tryArm and a turtle's re-arm ask (bfArmAsk), the next
+// input sample carries ARM to Betaflight (pollInput), and bfArmPendingMs is
+// the simClockMs that sample lands. bfArmWatch gives Betaflight 300 ms from
+// there. Counted from the key, a late poll (a slow device polls about once a
+// frame) or a sample stamped ahead of slow frames used the 300 ms up before
+// Betaflight saw the switch: NOT ARMED, then ARMED on the switch already
+// sent, then DISARMED by the page's own NOT ARMED.
+let bfArmAsked=false;
 let bfArmPendingMs=null;
 let bfWasArmed=false;
+function bfArmAsk(){bfArmAsked=true;bfArmPendingMs=null;}
 // Once a frame on the bf core: toast what Betaflight did with the arm intent.
 // A turtle's own disarm and arms are not news.
 function bfArmWatch(){
   if(core.kind!=='bf')return;
   if(core.turtlePhase!=null){bfWasArmed=cs.armed;return;}
-  if(cs.armed&&!bfWasArmed){toast('ARMED');bfArmPendingMs=null;}
+  if(cs.armed&&!bfWasArmed){toast('ARMED');bfArmAsked=false;bfArmPendingMs=null;}
   else if(!cs.armed&&bfWasArmed)toast('DISARMED');
   else if(bfArmPendingMs!=null&&!cs.armed&&simClockMs-bfArmPendingMs>300){
     bfArmPendingMs=null;
@@ -8334,6 +8344,10 @@ function pollInput(){
     else stick.r=stick.p=0;
   }
   core.input(stick,tUs);
+  // This sample carries an arm asked since the last one (bfArmAsk): Betaflight
+  // sees the switch when it lands, tUs, ahead of the core's clock by
+  // tUs-simTimeUs, and its 300 ms start there (bfArmWatch).
+  if(bfArmAsked&&core.kind==='bf'){bfArmAsked=false;bfArmPendingMs=simClockMs+(tUs-core.simTimeUs)/1000;}
 }
 // ---------- Turtle on the bf core: Betaflight's crash flip ----------
 // With a radio, the radio's own switch (FLIP OVER AFTER CRASH, AUX3 on the
@@ -8375,7 +8389,7 @@ function bfTurtleTick(){
   if(ev==='upright'&&(stickTurtleOn()||core.turtleAuto))toast('UPRIGHT');
   else if(ev==='upright')toast(low&&centred?'UPRIGHT':'UPRIGHT — STICKS DOWN AND CENTRED TO ARM');
   else if(ev==='rearm'&&core.sim.fc.armed)turtleRearmed();
-  else if(ev==='rearm')bfArmPendingMs=simClockMs;
+  else if(ev==='rearm')bfArmAsk();
   else if(ev==='ended')toast('DISARMED');
   else if(ev==='stuck'&&easyTurtle)toast('STUCK — R RESPAWNS');
   else if(ev==='stuck')toast('SIM FLIP STUCK — R RESPAWNS');
