@@ -123,7 +123,13 @@ test('auto quality is low on mobile; touch enable / landscape rules', () => {
   assert.equal(resolveAutoQuality({}), 'med');
   assert.equal(shouldEnableTouch({ inputChoice: 'touch' }), true);
   assert.equal(shouldEnableTouch({ inputChoice: 'keyboard', mobile: true }), false);
-  assert.equal(shouldEnableTouch({ inputChoice: 'radio', mobile: true }), false);
+  // A remembered radio with none connected does not keep touch off on a phone
+  // (the owner's rule: a remembered input kind must not keep a missing pad
+  // active); with the radio connected it does.
+  assert.equal(shouldEnableTouch({ inputChoice: 'radio', mobile: true }), true);
+  assert.equal(shouldEnableTouch({ inputChoice: 'radio', mobile: false }), false);
+  assert.equal(shouldEnableTouch({ inputChoice: 'radio', mobile: true, gamepadConnected: true }), false);
+  assert.equal(shouldEnableTouch({ inputChoice: 'calibrate', mobile: true }), true);
   assert.equal(shouldEnableTouch({ mobile: true }), true);
   assert.equal(shouldEnableTouch({}), false);
   assert.equal(shouldEnableTouch({ inputChoice: 'touch', hasGamepad: true }), false);
