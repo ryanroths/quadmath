@@ -206,7 +206,8 @@ test('the page: the card element, hidden behind the menus and out of the screens
   assert.match(html, /<div id="firstFlight" role="status" aria-live="polite"><\/div>/);
   assert.match(html, /#firstFlight\{[^}]*pointer-events:none/, 'never in the way of a click');
   assert.match(html, /body\.menu-open #firstFlight,body\.builder-on #firstFlight,body\.calibrating #firstFlight\{display:none\}/);
-  assert.match(html, /if\(simPaused\(\)\)\{lastPollUs=null;firstFlightAt=null;return;\}\s+tickFirstFlight\(performance\.now\(\)\);/, 'stepped only while flying');
+  assert.match(html, /if\(simPaused\(\)\)\{lastPollUs=null;return;\}/, 'stepped only while flying');
+  assert.match(html, /lastPollUs=tUs;\s+\/\/[^\n]*\n\s+tickFirstFlight\(dt\);\s+readInput\(dt\);/, 'on each poll the page reads, with its input time');
   for (const f of ['tools/test_sim_map_boot.mjs', 'tools/capture_sim_shots.mjs']) {
     assert.match(readFileSync(join(root, f), 'utf8'), /'toast','panel','firstFlight'\]/, f + ' hides it before a screenshot');
   }
