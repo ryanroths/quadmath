@@ -54,6 +54,12 @@ test('InputClock: wall time to sim time from the frame anchor, monotonic, capped
   assert.equal(clock.stamp(sim, 1004), 5_104_250);
   assert.equal(clock.stamp(sim, 1003), 5_104_250, 'never backwards');
   assert.equal(clock.stamp(sim, 1150), null, 'past the horizon: dropped');
+  // The default horizon: the longest step a frame takes (250 ticks), so a poll
+  // after a frame whose own work took 200 ms is kept for the next frame.
+  const wide = new InputClock();
+  wide.anchor(sim, 1000);
+  assert.equal(wide.stamp(sim, 1200), 5_300_250, 'a poll 200 ms after a frame began: kept');
+  assert.equal(wide.stamp(sim, 1260), null, 'past 250 ms: dropped');
 });
 
 // The owner's Air65 diff, as the page loads it (vendored from
