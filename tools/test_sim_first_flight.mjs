@@ -474,6 +474,7 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           F.thr(0.6);
           const shown = await F.shown(1500);
           const at = performance.now();
+          const atSim = F.s.coreState().flightMs;
           const first = F.card();
           const armed = F.s.coreState().armed;
           // Down a second, then up: it arms and flies under the card.
@@ -483,8 +484,10 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           const flew = await F.until(() => F.s.coreState().armed && F.s.coreState().position.z > 0.3, 2500);
           const during = F.card();
           const paused = F.paused();
-          const gone = await F.gone(4000);
-          const ms = performance.now() - at;
+          // The card's time on screen is on its own clock, the sim's (it steps
+          // on the input poll's time): where the sim runs slow, more wall time.
+          const gone = await F.until(() => !F.card().on || F.s.coreState().flightMs - atSim > 4000, 30000) && !F.card().on;
+          const ms = F.s.coreState().flightMs - atSim;
           F.thr(0);
           return JSON.stringify({ low, shown, first, armed, flew, during, paused, gone, ms });`);
         console.log('radio: ' + JSON.stringify({ shown: r.shown, armedAtShow: r.armed, flew: r.flew, goneMs: Math.round(r.ms), saved: r.first.saved }));
@@ -501,7 +504,7 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         assert.equal(r.during.on, true, 'still up a second and a half in');
         assert.equal(r.paused, false, 'the sim is not paused');
         assert.equal(r.gone, true, 'gone on the stick');
-        assert.ok(r.ms >= FIRST_FLIGHT_MIN_S * 1000 - 150 && r.ms < 3600, `after ${FIRST_FLIGHT_MIN_S} s on screen, not before (${Math.round(r.ms)} ms)`);
+        assert.ok(r.ms >= FIRST_FLIGHT_MIN_S * 1000 - 150 && r.ms < 3600, `after ${FIRST_FLIGHT_MIN_S} s on screen, not before (${Math.round(r.ms)} ms of sim time)`);
 
         // Land, and arm again: no card. Then a reload: none.
         r = await js(`
@@ -610,11 +613,13 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           await F.wait(3500);
           const onMenu = F.card();
           document.querySelector('#menuLayer [data-fly-map="rig"]').click();
-          const t0 = performance.now();
-          await F.wait(1800);
+          // The layout's 3 s is on the sim's clock (the input poll's time), as
+          // the card's is: read at 1.8 s of it, and timed on it.
+          const t0 = F.s.coreState().flightMs;
+          await F.until(() => F.s.coreState().flightMs - t0 >= 1800, 20000);
           const early = F.card();
-          const shown = await F.shown(4000);
-          const ms = performance.now() - t0;
+          const shown = await F.until(() => F.card().on || F.s.coreState().flightMs - t0 > 6000, 30000) && F.card().on;
+          const ms = F.s.coreState().flightMs - t0;
           await F.until(() => { const i = document.querySelector('#firstFlight img'); return i && i.complete; }, 3000);
           return JSON.stringify({ prompt, pausedOnMenu, onMenu, early, shown, ms, card: F.card(), map: F.s.map() });`);
         console.log('keyboard: ' + JSON.stringify({ shownMs: Math.round(r.ms), img: r.card.img, saved: r.card.saved }));
@@ -624,7 +629,7 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         assert.equal(r.map, 'rig');
         assert.equal(r.early.on, false, 'not at 1.8 s');
         assert.equal(r.shown, true, 'the keyboard layout shows');
-        assert.ok(r.ms >= 2800 && r.ms < 5000, `about 3 s into the flying page (${Math.round(r.ms)} ms)`);
+        assert.ok(r.ms >= 2800 && r.ms < 5000, `about 3 s into the flying page (${Math.round(r.ms)} ms of sim time)`);
         assert.equal(r.card.kind, 'keys');
         assert.equal(r.card.text, FIRST_FLIGHT_TEXT, 'under the same line');
         assert.ok(r.card.img, 'an image card');
