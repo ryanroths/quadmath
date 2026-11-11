@@ -845,7 +845,13 @@ export function stepSwitchWizard(w, gp, map, dt) {
     w.picks[st.key] = moved;
     w.taken.add(moved.button != null ? 'b' + moved.button : 'a' + moved.i);
     wizardNext(w, gp);
-    ui.done = w.step >= SWITCH_WIZARD_STEPS.length;
+    // Taken: what to show now is the next step's prompt (advanced).
+    const next = SWITCH_WIZARD_STEPS[w.step];
+    ui.done = !next;
+    ui.advanced = true;
+    ui.label = next ? next.label : '';
+    ui.hint = next ? next.hint : '';
+    ui.skippable = !!(next && next.skippable);
   }
   return ui;
 }
