@@ -367,9 +367,16 @@ const PAGE = String.raw`(() => {
     };
   }
   const shown = (ms) => until(() => card().on, ms);
+  // The page's own Easy-mode hold of the throttle down (sim-3d.js stepEasyArm),
+  // in the page's input time. A test that raises after a fixed wall time
+  // raises too soon where frames are slow (a CI runner): the page counts the
+  // hold only on the polls it accepts, so 1300 ms of wall time can be 0.2 s
+  // of hold there. Raising on the page's own count drives it as a pilot does.
+  const lowS = () => { const e = s.easy && s.easy().arm; return e ? +e.lowS || 0 : 0; };
+  const held = (sec, ms) => until(() => lowS() >= sec, ms || 30000);
   const gone = (ms) => until(() => !card().on, ms);
   const paused = () => document.body.classList.contains('menu-open') || !!(window._feel && window._feel.promptOpen);
-  window.__ff = { s, wait, until, axis, thr, card, shown, gone, paused };
+  window.__ff = { s, wait, until, axis, thr, card, shown, gone, paused, lowS, held };
   return true;
 })()`;
 
@@ -388,7 +395,7 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
       '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
       '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
       '--mute-audio', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update',
-      '--disable-background-networking', '--disable-sync', '--window-size=960,540',
+      '--disable-background-networking', '--disable-sync', '--window-size=960,540', ...(process.env.SIM_GPU_OFF === '1' ? ['--disable-gpu'] : []),
       `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profile}`, 'about:blank',
     ], { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
@@ -408,6 +415,9 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
       await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
       await cdp(ws, 'Runtime.enable');
       await cdp(ws, 'Page.enable');
+      // SIM_CPU_THROTTLE=4: the page's CPU slowed 4x (DevTools' throttling), to
+      // run as on a slow CI runner.
+      if (process.env.SIM_CPU_THROTTLE) await cdp(ws, 'Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
       await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: FAKE_PADS });
       const url = `http://127.0.0.1:${port}/sim.html?quality=low${query ? '&' + query : ''}`;
       // Same origin first, for localStorage and sessionStorage before the page's scripts.
@@ -466,10 +476,11 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         assert.equal(r.card.on, false, 'no card before an arm attempt (and no keyboard layout with a radio)');
         assert.equal(r.card.saved, null, 'nothing stored yet');
 
-        // Down for a moment, then up: too soon to arm, but an attempt.
+        // Down for a moment (the page has read it down), then up: too soon to
+        // arm, but an attempt.
         r = await js(`
           F.thr(0);
-          await F.wait(400);
+          const read = await F.until(() => F.lowS() > 0, 20000);
           const low = F.card();
           // The card's own moments, as the poll that paints it does (a
           // MutationObserver runs in that poll's task, before any frame can),
@@ -488,9 +499,10 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           const atSim = marks.onSim === null ? F.s.coreState().flightMs : marks.onSim;
           const first = F.card();
           const armed = F.s.coreState().armed;
-          // Down a second, then up: it arms and flies under the card.
+          // Down a second (the page's own count of it), then up: it arms and
+          // flies under the card.
           F.thr(0);
-          await F.wait(1300);
+          const heldOk = await F.held(1.05);
           F.thr(0.6);
           const flew = await F.until(() => F.s.coreState().armed && F.s.coreState().position.z > 0.3, 2500);
           const during = F.card();
@@ -501,8 +513,10 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           const ms = marks.offSim === null ? F.s.coreState().flightMs - atSim : marks.offSim - atSim;
           marks.wallMs = marks.offWall === null ? performance.now() - at : marks.offWall - (marks.onWall === null ? at : marks.onWall);
           F.thr(0);
-          return JSON.stringify({ low, shown, first, armed, flew, during, paused, gone, ms });`);
+          return JSON.stringify({ read, heldOk, low, shown, first, armed, flew, during, paused, gone, ms });`);
         console.log('radio: ' + JSON.stringify({ shown: r.shown, armedAtShow: r.armed, flew: r.flew, goneMs: Math.round(r.ms), saved: r.first.saved }));
+        assert.equal(r.read, true, 'the page read the throttle down');
+        assert.equal(r.heldOk, true, 'the page held it down a second');
         assert.equal(r.low.on, false, 'the throttle going down is not an attempt');
         assert.equal(r.shown, true, 'the first throttle raise shows it');
         assert.equal(r.armed, false, 'on an attempt that did not arm');
@@ -706,7 +720,8 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           return JSON.stringify(1);`);
         await reload();
         r = await js(`
-          await F.wait(1500);
+          // The radio sits at the bottom from load: up once the page has held it there a second.
+          const heldOk = await F.held(1.05);
           const before = F.card();
           const paused = F.paused();
           const radio = document.getElementById('radioInfo').textContent;
@@ -717,7 +732,8 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           F.thr(0.3);
           const gone = await F.gone(4000);
           F.thr(0);
-          return JSON.stringify({ before, paused, radio, shown, first, armed, gone });`);
+          return JSON.stringify({ heldOk, before, paused, radio, shown, first, armed, gone });`);
+        assert.equal(r.heldOk, true, 'the page held the throttle down a second');
         assert.match(r.radio, /TX16S/, 'the radio is the input');
         assert.equal(r.paused, false, 'a radio awake at load flies at once');
         assert.equal(r.before.on, false, 'no card before the throttle moves');
