@@ -1029,7 +1029,7 @@ import {
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=51206465bd01";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=d9f44bdf04e4";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=255644e34651";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -1058,7 +1058,7 @@ import {
   armSwitchValue, stepArmSwitch,
   loadRadioSwitches, saveRadioSwitches, switchesAxisMap, auxNumberOfAxis,
   createSwitchWizard, stepSwitchWizard, skipSwitchWizard, switchWizardResult,
-} from "./sim-touch.js?v=347d42cc89aa";
+} from "./sim-touch.js?v=3656bcad2aa9";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -3731,7 +3731,8 @@ function startSwitchWizard(){
 function runSwitchWizard(gp,dt){
   const out=stepSwitchWizard(switchWiz,gp,liveAxisMap(gp),dt);
   const nowMs=performance.now();
-  if(out.done||nowMs-calibDrawAt>60){
+  // A step taken is drawn at once: the next step's prompt, not a poll later.
+  if(out.done||out.advanced||nowMs-calibDrawAt>60){
     calibDrawAt=nowMs;
     calibStepEl.textContent=out.label;
     calibHintEl.textContent=out.hint;
@@ -3792,6 +3793,14 @@ presetSel.onchange=()=>{
 };
 
 // ---------- Input ----------
+// The longest gap between input polls that counts as time passing, in s: the
+// core's longest frame step (sim-core-adapter.js MAX_TICKS_PER_FRAME, 250 ms).
+// A longer gap is a pause. Input-timed things (the keyboard throttle's ramp,
+// Easy mode's holds, the switch wizard's settle, the calibration's holds, the
+// first-flight card's time on screen) count the real time between polls up
+// to this, not a fixed share of each poll, so they take the same time at any
+// frame rate a pilot flies at.
+const POLL_DT_MAX_S=0.25;
 // aux: on the bf core with a radio, its AUX channels as it sends them
 // (radioAux); null when the page drives AUX (keyboard, touch, a gamepad).
 const stick={r:0,p:0,y:0,t:0,aux:null};
@@ -4884,7 +4893,7 @@ function tickFirstFlight(nowMs){
   // Nothing left to show on this input.
   const input=firstFlightInput(on);
   if(!firstFlightState.show&&firstFlightSeen[input]&&(input!=='keyboard'||firstFlightSeen.keys))return;
-  const dt=firstFlightAt===null?0:Math.min(0.1,(nowMs-firstFlightAt)/1000);
+  const dt=firstFlightAt===null?0:Math.min(POLL_DT_MAX_S,(nowMs-firstFlightAt)/1000);
   firstFlightAt=nowMs;
   const was=firstFlightState.show||null;
   const out=stepFirstFlight(firstFlightState,{dt,seen:firstFlightSeen,attempt,armed,key,stick,
@@ -8288,6 +8297,11 @@ function selectCore(){
 // sample goes to the core stamped with the sim time of its own wall time
 // (sim-core-adapter.js InputClock), so the 1 ms ticks see a new sample every
 // 4 ms instead of one a frame. Keyboard smoothing runs on that sim-time dt.
+// dt is the time between the stamps of two accepted polls. A poll the clock
+// drops leaves its time to the next accepted one, and on a busy main thread
+// polls come tens of ms apart: so dt is that whole gap, up to POLL_DT_MAX_S,
+// never a fixed share of it (a 50 ms cap here made the 1 s arm hold take 1.5 s
+// of wall time at 20 fps).
 let lastPollUs=null;
 let pollGp=null;
 let pollCore=null;
@@ -8302,7 +8316,7 @@ function pollInput(){
   // A bf reboot restarts that core's clock and a core switch changes clocks:
   // either is a fresh start, never a negative dt.
   if(pollCore!==core){pollCore=core;lastPollUs=null;}
-  const dt=(lastPollUs===null||tUs<lastPollUs)?0:Math.min(0.05,(tUs-lastPollUs)/1e6);
+  const dt=(lastPollUs===null||tUs<lastPollUs)?0:Math.min(POLL_DT_MAX_S,(tUs-lastPollUs)/1e6);
   lastPollUs=tUs;
   readInput(dt);
   if(testStick){stick.r=testStick.r;stick.p=testStick.p;stick.y=testStick.y;stick.t=testStick.t;stick.aux=null;}
