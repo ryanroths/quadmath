@@ -55,7 +55,7 @@ test('the page counts a poll\'s whole gap', () => {
   const html = readFileSync(join(root, 'sim.html'), 'utf8');
   assert.match(html, /const POLL_DT_MAX_S=0\.25;/);
   assert.match(html, /const dt=\(lastPollUs===null\|\|tUs<lastPollUs\)\?0:Math\.min\(POLL_DT_MAX_S,\(tUs-lastPollUs\)\/1e6\);/);
-  assert.match(html, /const dt=firstFlightAt===null\?0:Math\.min\(POLL_DT_MAX_S,\(nowMs-firstFlightAt\)\/1000\);/);
+  assert.match(html, /tickFirstFlight\(dt\);\s+readInput\(dt\);/, 'the first-flight card on the same dt');
   assert.match(html, /if\(out\.done\|\|out\.advanced\|\|nowMs-calibDrawAt>60\)\{/);
 });
 

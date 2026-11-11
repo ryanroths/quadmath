@@ -4859,13 +4859,16 @@ function tickEasyArm(dt){
 // first throttle-up gets it on a profile that has flown the keys. With no
 // controller and no touch sticks 3 s into the flying page, and not armed yet:
 // the keyboard layout, an image under the same line. It never pauses the sim,
-// and goes on any stick or key. Every 4 ms, on wall time.
+// and goes on any stick or key. Stepped on every input poll the page reads,
+// with that poll's dt: the time Easy mode's hold and the flight itself run
+// on. On a device too slow to keep its sim at full speed, the card then stays
+// up for as much flying as it does at full speed (2.5 s of it), and is not
+// gone before the quad that raised it has taken off.
 let firstFlightSeen=loadFirstFlight();
 let firstFlightState={};
 let firstFlightAttempt=false;   // tryArm was called since the last poll
 let firstFlightKey=false;       // a key went down since the last poll
 let firstFlightLow=false;       // the throttle was at its bottom at the last poll
-let firstFlightAt=null;
 const firstFlightEl=document.getElementById('firstFlight');
 window.addEventListener('keydown',(e)=>{if(!e.repeat)firstFlightKey=true;},true);
 function paintFirstFlight(kind){
@@ -4883,7 +4886,7 @@ function paintFirstFlight(kind){
     firstFlightEl.appendChild(img);
   }
 }
-function tickFirstFlight(nowMs){
+function tickFirstFlight(dt){
   const low=throttleSafeToArm(stick.t,threeD);
   const armed=coreArmed();
   const attempt=easyMode()&&(firstFlightAttempt||(!armed&&firstFlightLow&&!low));
@@ -4893,8 +4896,6 @@ function tickFirstFlight(nowMs){
   // Nothing left to show on this input.
   const input=firstFlightInput(on);
   if(!firstFlightState.show&&firstFlightSeen[input]&&(input!=='keyboard'||firstFlightSeen.keys))return;
-  const dt=firstFlightAt===null?0:Math.min(POLL_DT_MAX_S,(nowMs-firstFlightAt)/1000);
-  firstFlightAt=nowMs;
   const was=firstFlightState.show||null;
   const out=stepFirstFlight(firstFlightState,{dt,seen:firstFlightSeen,attempt,armed,key,stick,
     controller:on.controller,touch:on.touch});
@@ -8309,8 +8310,7 @@ let pollCore=null;
 // keyboard's. null in normal use.
 let testStick=null;
 function pollInput(){
-  if(simPaused()){lastPollUs=null;firstFlightAt=null;return;}
-  tickFirstFlight(performance.now());
+  if(simPaused()){lastPollUs=null;return;}
   const tUs=core.stamp(performance.now());
   if(tUs===null)return;
   // A bf reboot restarts that core's clock and a core switch changes clocks:
@@ -8318,6 +8318,8 @@ function pollInput(){
   if(pollCore!==core){pollCore=core;lastPollUs=null;}
   const dt=(lastPollUs===null||tUs<lastPollUs)?0:Math.min(POLL_DT_MAX_S,(tUs-lastPollUs)/1e6);
   lastPollUs=tUs;
+  // Before this poll's read: the card sees the sticks as the last poll left them.
+  tickFirstFlight(dt);
   readInput(dt);
   if(testStick){stick.r=testStick.r;stick.p=testStick.p;stick.y=testStick.y;stick.t=testStick.t;stick.aux=null;}
   tickArming(pollGp,dt);

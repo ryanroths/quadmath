@@ -206,7 +206,8 @@ test('the page: the card element, hidden behind the menus and out of the screens
   assert.match(html, /<div id="firstFlight" role="status" aria-live="polite"><\/div>/);
   assert.match(html, /#firstFlight\{[^}]*pointer-events:none/, 'never in the way of a click');
   assert.match(html, /body\.menu-open #firstFlight,body\.builder-on #firstFlight,body\.calibrating #firstFlight\{display:none\}/);
-  assert.match(html, /if\(simPaused\(\)\)\{lastPollUs=null;firstFlightAt=null;return;\}\s+tickFirstFlight\(performance\.now\(\)\);/, 'stepped only while flying');
+  assert.match(html, /if\(simPaused\(\)\)\{lastPollUs=null;return;\}/, 'stepped only while flying');
+  assert.match(html, /lastPollUs=tUs;\s+\/\/[^\n]*\n\s+tickFirstFlight\(dt\);\s+readInput\(dt\);/, 'on each poll the page reads, with its input time');
   for (const f of ['tools/test_sim_map_boot.mjs', 'tools/capture_sim_shots.mjs']) {
     assert.match(readFileSync(join(root, f), 'utf8'), /'toast','panel','firstFlight'\]/, f + ' hides it before a screenshot');
   }
@@ -470,9 +471,21 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           F.thr(0);
           await F.wait(400);
           const low = F.card();
+          // The card's own moments, as the poll that paints it does (a
+          // MutationObserver runs in that poll's task, before any frame can),
+          // on the sim's clock and the wall's.
+          const marks = window.__ffMarks = { onSim: null, onWall: null, offSim: null, offWall: null, everPaused: false };
+          const el = document.getElementById('firstFlight');
+          const mo = new MutationObserver(() => {
+            const on = el.classList.contains('show');
+            if (on && marks.onSim === null) { marks.onSim = F.s.coreState().flightMs; marks.onWall = performance.now(); }
+            else if (!on && marks.onSim !== null && marks.offSim === null) { marks.offSim = F.s.coreState().flightMs; marks.offWall = performance.now(); mo.disconnect(); }
+          });
+          mo.observe(el, { attributes: true, attributeFilter: ['class'] });
           F.thr(0.6);
           const shown = await F.shown(1500);
           const at = performance.now();
+          const atSim = marks.onSim === null ? F.s.coreState().flightMs : marks.onSim;
           const first = F.card();
           const armed = F.s.coreState().armed;
           // Down a second, then up: it arms and flies under the card.
@@ -482,8 +495,11 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           const flew = await F.until(() => F.s.coreState().armed && F.s.coreState().position.z > 0.3, 2500);
           const during = F.card();
           const paused = F.paused();
-          const gone = await F.gone(4000);
-          const ms = performance.now() - at;
+          // The card's time on screen is on its own clock, the sim's (it steps
+          // on the input poll's time): where the sim runs slow, more wall time.
+          const gone = await F.until(() => { marks.everPaused = marks.everPaused || F.paused(); return !F.card().on || F.s.coreState().flightMs - atSim > 4000; }, 30000) && !F.card().on;
+          const ms = marks.offSim === null ? F.s.coreState().flightMs - atSim : marks.offSim - atSim;
+          marks.wallMs = marks.offWall === null ? performance.now() - at : marks.offWall - (marks.onWall === null ? at : marks.onWall);
           F.thr(0);
           return JSON.stringify({ low, shown, first, armed, flew, during, paused, gone, ms });`);
         console.log('radio: ' + JSON.stringify({ shown: r.shown, armedAtShow: r.armed, flew: r.flew, goneMs: Math.round(r.ms), saved: r.first.saved }));
@@ -500,7 +516,12 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         assert.equal(r.during.on, true, 'still up a second and a half in');
         assert.equal(r.paused, false, 'the sim is not paused');
         assert.equal(r.gone, true, 'gone on the stick');
-        assert.ok(r.ms >= FIRST_FLIGHT_MIN_S * 1000 - 150 && r.ms < 3600, `after ${FIRST_FLIGHT_MIN_S} s on screen, not before (${Math.round(r.ms)} ms)`);
+        assert.ok(r.ms >= FIRST_FLIGHT_MIN_S * 1000 - 150 && r.ms < 3600, `after ${FIRST_FLIGHT_MIN_S} s on screen, not before (${Math.round(r.ms)} ms of sim time)`);
+        // Sim time is never ahead of the wall's: not before 2.5 s of wall time
+        // either. And the card never pauses the sim while it is up.
+        const marks = await js(`return JSON.stringify(window.__ffMarks);`);
+        assert.ok(marks.wallMs >= FIRST_FLIGHT_MIN_S * 1000 - 150, `not before ${FIRST_FLIGHT_MIN_S} s of wall time either (${Math.round(marks.wallMs)} ms)`);
+        assert.equal(marks.everPaused, false, 'the sim never paused while the card was up');
 
         // Land, and arm again: no card. Then a reload: none.
         r = await js(`
@@ -608,22 +629,36 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           const pausedOnMenu = F.paused();
           await F.wait(3500);
           const onMenu = F.card();
+          // The layout's moment as the poll that paints it does (a
+          // MutationObserver runs in that poll's task, before any frame can).
+          const el = document.getElementById('firstFlight');
+          let onSim = null, onWall = null;
+          const mo = new MutationObserver(() => {
+            if (onSim === null && el.classList.contains('show')) { onSim = F.s.coreState().flightMs; onWall = performance.now(); mo.disconnect(); }
+          });
+          mo.observe(el, { attributes: true, attributeFilter: ['class'] });
           document.querySelector('#menuLayer [data-fly-map="rig"]').click();
-          const t0 = performance.now();
-          await F.wait(1800);
+          // The layout's 3 s is on the sim's clock (the input poll's time), as
+          // the card's is: read at 1.8 s of it, and timed on it. The ceilings
+          // keep this call inside CDP's 45 s.
+          const t0 = F.s.coreState().flightMs, t0Wall = performance.now();
+          const at18 = await F.until(() => F.s.coreState().flightMs - t0 >= 1800, 15000);
           const early = F.card();
-          const shown = await F.shown(4000);
-          const ms = performance.now() - t0;
+          const shown = await F.until(() => F.card().on || F.s.coreState().flightMs - t0 > 6000, 20000) && F.card().on;
+          const ms = (onSim === null ? F.s.coreState().flightMs : onSim) - t0;
+          const msWall = (onWall === null ? performance.now() : onWall) - t0Wall;
           await F.until(() => { const i = document.querySelector('#firstFlight img'); return i && i.complete; }, 3000);
-          return JSON.stringify({ prompt, pausedOnMenu, onMenu, early, shown, ms, card: F.card(), map: F.s.map() });`);
+          return JSON.stringify({ prompt, pausedOnMenu, onMenu, at18, early, shown, ms, msWall, card: F.card(), map: F.s.map() });`);
         console.log('keyboard: ' + JSON.stringify({ shownMs: Math.round(r.ms), img: r.card.img, saved: r.card.saved }));
         assert.equal(r.prompt, true, 'the first-run prompt offers the keyboard');
         assert.equal(r.pausedOnMenu, true);
         assert.equal(r.onMenu.on, false, 'time on the menus does not count');
         assert.equal(r.map, 'rig');
+        assert.equal(r.at18, true, '1.8 s of sim time on the flying page');
         assert.equal(r.early.on, false, 'not at 1.8 s');
         assert.equal(r.shown, true, 'the keyboard layout shows');
-        assert.ok(r.ms >= 2800 && r.ms < 5000, `about 3 s into the flying page (${Math.round(r.ms)} ms)`);
+        assert.ok(r.ms >= 2800 && r.ms < 5000, `about 3 s into the flying page (${Math.round(r.ms)} ms of sim time)`);
+        assert.ok(r.msWall >= 2800, `not before 3 s of wall time either (${Math.round(r.msWall)} ms)`);
         assert.equal(r.card.kind, 'keys');
         assert.equal(r.card.text, FIRST_FLIGHT_TEXT, 'under the same line');
         assert.ok(r.card.img, 'an image card');
