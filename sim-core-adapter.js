@@ -65,8 +65,15 @@ export function boxToModule(bb) {
 // ahead of the sim wait in the ring for their tick. horizonUs caps how far
 // ahead a stamp may go: past it (the frames stopped) a poll is dropped, so the
 // ring never fills while the sim waits. Stamps never go backwards.
+// The default is the longest step a frame can take (MAX_TICKS_PER_FRAME): the
+// frame's wall time is when it began, so a poll that comes after a frame whose
+// own work ran past the horizon is that far ahead already. With 100 ms, every
+// poll after such a frame was dropped, and a device whose frames take that
+// long read no input at all (a throttle raised as the bf core took over, with
+// its first frames the slowest, was read late). Within 250 ms the next frame
+// steps that far and flies it. The rings hold 1024 samples, 4 s at 4 ms.
 export class InputClock {
-  constructor({ horizonUs = 100_000 } = {}) {
+  constructor({ horizonUs = MAX_TICKS_PER_FRAME * TICK_US } = {}) {
     this.horizonUs = horizonUs;
     this.rebase();
   }
