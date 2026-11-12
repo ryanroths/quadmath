@@ -438,10 +438,13 @@ test('the draw-call merge keeps the floors\' AO and every texture; the House dra
   const root = new THREE.Group();
   root.add(built.group);
   assert.ok(mergeStaticArt(THREE, root) > 0, 'something merged');
+  // The House's own art group: its backyard (houseYardArtVisuals, a sibling)
+  // is budgeted on its own in tools/test_sim_house_yard.mjs.
+  const house = root.getObjectByName('houseArtVisuals');
+  assert.ok(house, 'houseArtVisuals');
   let objects = 0;
+  house.traverse((o) => { if (o.isMesh || o.isLineSegments) objects += 1; });
   root.traverse((o) => {
-    if (!o.isMesh && !o.isLineSegments) return;
-    objects += 1;
     if (!o.isMesh || !o.material.map) return;
     assert.ok(o.geometry.getAttribute('uv'), (o.material.name || o.name) + ' lost its uvs');
     if (o.material.aoMap) assert.ok(o.geometry.getAttribute('uv1'), o.material.name + ' lost its AO uvs');

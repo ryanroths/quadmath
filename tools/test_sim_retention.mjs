@@ -1108,8 +1108,9 @@ test('Daily Line seed is stable, named, and not a city 3-lap', () => {
   for (const meta of BUILTIN_TRACK_FILES) {
     // The House's loop joins the pool with the generator (RIG_GEN_DAILY_FROM).
     // The Warehouse's and The Bando's loops are not in the pool (owner: no
-    // Daily asked for them).
-    if (meta.legacyId != null || meta.map === 'depot' || meta.map === 'bando') {
+    // Daily asked for them). The House's Backyard Lap is not in the pool either
+    // (owner: no Daily asked for it yet; adding it would redraw played days).
+    if (meta.legacyId != null || meta.map === 'depot' || meta.map === 'bando' || meta.id === 'house-backyard-lap') {
       assert.equal(named.has(meta.id), false, meta.id);
       continue;
     }

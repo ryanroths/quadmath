@@ -807,6 +807,7 @@ export function ghostPayloadError(p, expectTrack) {
 export const BUILTIN_TRACK_FILES = [
   { id: 'rig-loop', file: 'tracks/rig-loop.json', map: 'rig', name: 'Rig Loop' },
   { id: 'house-loop', file: 'tracks/house-loop.json', map: 'house', name: 'House Loop' },
+  { id: 'house-backyard-lap', file: 'tracks/house-backyard-lap.json', map: 'house', name: 'Backyard Lap' },
   { id: 'depot-loop', file: 'tracks/depot-loop.json', map: 'depot', name: 'Warehouse Loop' },
   { id: 'bando-loop-v2', file: 'tracks/bando-loop-v2.json', map: 'bando', name: 'Bando Loop' },
   { id: 'city-loop', file: 'tracks/city-loop.json', legacyId: 0, map: 'city', name: 'City Loop' },

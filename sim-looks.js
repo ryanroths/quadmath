@@ -132,6 +132,17 @@ export const LOOK_SPOTS = {
   // bookshelf and the back hall's door beyond. sim.html?map=house&quality=high
   // &look=houseThumb, UI hidden, 960x540 scaled to 480x270.
   houseThumb: { pos: [15.4, 6.3, 18.2], target: [-3.5, 3.5, 10.5] },
+  // The House's backyard (sim-house-yard.js, world units = m x 3.5): the
+  // covered patio from the west lawn; the pool from the roof's back edge
+  // (the dive); the trampoline from the pool's east end; the swing set from
+  // the deck; the shed's door from the swings; over the back wall on the
+  // neighbour's gravel, down at the crashed whoop.
+  houseYardPatio: { pos: [-49, 5.6, 8.75], target: [-26.25, 4.2, -1.75] },
+  houseYardPool: { pos: [-7, 11.9, -19.6], target: [-7, 0, -37.1] },
+  houseYardTramp: { pos: [8.75, 6.3, -28], target: [19.25, 4.2, -42.35] },
+  houseYardSwing: { pos: [-33.25, 5.6, -31.5], target: [-48.3, 4.2, -42.7] },
+  houseYardShed: { pos: [-44.1, 5.25, -46.2], target: [-57.4, 3.5, -52.5] },
+  houseYardNeighbor: { pos: [-11.9, 4.55, -63.7], target: [-14, 0.105, -68.25] },
   // The Warehouse (map id depot; the warehouse* spots above are the archived
   // map's): from the loop's pad down the centre run, the racking on the left,
   // the dock's roll-up doors ahead, a sun shaft and the mezzanine on the right;
