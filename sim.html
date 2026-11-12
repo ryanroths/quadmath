@@ -7871,6 +7871,14 @@ const dust=(function(){
     acc:0,cursor:0,wasAlive:false,sizePatched:function(){return sizePatched;}};
 })();
 Object.assign(window._sim,{dust,DUST}); // debug handle, same convention as _qp/_sim.sun
+// The fly-every-map tour (tools/test_sim_map_boot.mjs): where the quad and the
+// camera are against the pad the map spawns on, and the arm, in scene units.
+// armed: the page's arm (on bf, its intent too); fcArmed: the core's own.
+Object.assign(window._sim,{flyCheck(){
+  const p=resetSpawnPos();
+  return {armed:coreArmed(),fcArmed:core.kind==='bf'?!!cs.armed:!!qp.armed,pad:{x:p.x,y:p.y,z:p.z},quad:{x:state.pos.x,y:state.pos.y,z:state.pos.z},
+    cam:{x:camera.position.x,y:camera.position.y,z:camera.position.z},chase:!!chaseCamOn,env:!!scene.environment};
+},flyDisarm(){coreDisarm();}});
 // Driven from the render loop on frame dt, not from the fixed physics step:
 // this is decoration and must not change with the 240Hz substep count.
 function updateDust(dt){
