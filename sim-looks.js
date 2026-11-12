@@ -304,6 +304,18 @@ export function saveCrosshairOn(on, storage) {
 // it. Under software WebGL that is a whole frame, so ask once per renderer.
 const gpuHints = new WeakMap();
 
+// A render target's MSAA sample count. three builds a target's framebuffers
+// on its first bind, for the samples it has then; only setSize() to a new size
+// or dispose() builds them again. So a count that changes is disposed with it:
+// left built for 0, a target set to 4 has no multisampled framebuffer and
+// every draw into it throws (#337 at HIGH). Returns whether it changed.
+export function syncTargetSamples(rt, samples) {
+  if (!rt || rt.samples === samples) return false;
+  rt.samples = samples;
+  try { rt.dispose(); } catch (e) { /* not built yet */ }
+  return true;
+}
+
 function gpuHint(renderer) {
   const known = gpuHints.get(renderer);
   if (known) return known;
@@ -540,6 +552,14 @@ export async function createLooks(ctx) {
 
   const fps = { inst: 0, avg: 60, auto: {}, samples: [], ready: false, t0: 0, sum: 0 };
   let firstFrameDone = false;
+  // Boot hold (afterFirstFrame until every setQuality in flight settles): the HDRI IBL
+  // and the post chain land together. Each one alone recompiles every scene
+  // program (envMap on; then the composer's linear target), and which landed
+  // first was a race (CDN imports vs HDR + PMREM), so a boot paid one or two
+  // big recompile frames. Held, boot frames keep the first frame's picture
+  // (fog-colour sky, renderer.render) and the final variants compile once.
+  let bootHold = false;
+  let heldComposer = null;
   let readyResolve = function () {};
   const ready = new Promise(function (r) { readyResolve = r; });
 
@@ -709,18 +729,20 @@ export async function createLooks(ctx) {
   }
 
   function sizeComposer() {
-    if (!composer) return;
+    // The held composer too (boot hold): the boot's precompile binds its
+    // target, so it must have this quality's samples before that.
+    const c = composer || heldComposer;
+    if (!c) return;
     const canvas = renderer.domElement;
     const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
     const p = presetOf(applied);
-    try {
-      composer.renderTarget1.samples = p.postSamples;
-      composer.renderTarget2.samples = p.postSamples;
-    } catch (e) { /* ignore */ }
-    composer.setSize(w, h);
+    // The preset's MSAA, rebuilt when it changes (syncTargetSamples).
+    syncTargetSamples(c.renderTarget1, p.postSamples);
+    syncTargetSamples(c.renderTarget2, p.postSamples);
+    c.setSize(w, h);
     if (fpvPass && fpvPass.uniforms.aspect) fpvPass.uniforms.aspect.value = w / h;
-    attachDepthTexture(composer.renderTarget1);
-    attachDepthTexture(composer.renderTarget2);
+    attachDepthTexture(c.renderTarget1);
+    attachDepthTexture(c.renderTarget2);
     if (aoPass && aoPass.setSize) {
       const pr = renderer.getPixelRatio();
       aoPass.setSize(Math.max(1, Math.round(w * pr)), Math.max(1, Math.round(h * pr)));
@@ -774,7 +796,9 @@ export async function createLooks(ctx) {
       skyCity: !!(skyMesh && skyMesh.userData && skyMesh.userData.citySky),
       fogColor: LIGHTING.fogColor,
       exposure: LIGHTING.exposure,
-      envs: { dawn, yard: envYard || (yardFailed && dawn) || null, look: envLook, overcast: envOvercast },
+      envs: bootHold
+        ? { dawn: null, yard: null, look: null, overcast: null }
+        : { dawn, yard: envYard || (yardFailed && dawn) || null, look: envLook, overcast: envOvercast },
     };
     if (mapLighting) {
       patch.mapId = mapLighting.mapId;
@@ -1023,7 +1047,20 @@ export async function createLooks(ctx) {
     }
   }
 
-  async function setQuality(name, fromAuto) {
+  // Every setQuality in flight, so the boot hold can wait for all of them: a
+  // ?quality= link's setQuality (sim.html applyQueryBoot, once the tracks
+  // load) overlaps afterFirstFrame's own, and fps.ready used to follow
+  // whichever settled first.
+  const qualityInFlight = new Set();
+  function setQuality(name, fromAuto) {
+    const p = setQualityNow(name, fromAuto);
+    qualityInFlight.add(p);
+    const done = () => { qualityInFlight.delete(p); };
+    p.then(done, done);
+    return p;
+  }
+
+  async function setQualityNow(name, fromAuto) {
     if (name !== 'low' && name !== 'med' && name !== 'high' && name !== 'auto') return applied;
     if (!fromAuto) {
       choice = name;
@@ -1045,8 +1082,12 @@ export async function createLooks(ctx) {
     applyFpvUniforms();
     sizeComposer();
     if (ctx.onResize) ctx.onResize();
-    try { await ensureHdr(mobile && p.hdri === '2k' ? '1k' : p.hdri); } catch (e) { console.warn('looks HDRI', e); }
-    try { await applyWorldMaps(); } catch (e) { console.warn('looks PBR', e); }
+    // The HDRI and the world maps are independent (IBL vs material maps):
+    // fetched and decoded side by side, not one after the other.
+    const hdrDone = ensureHdr(mobile && p.hdri === '2k' ? '1k' : p.hdri).catch((e) => console.warn('looks HDRI', e));
+    const mapsDone = applyWorldMaps().catch((e) => console.warn('looks PBR', e));
+    await hdrDone;
+    await mapsDone;
     applyMapLooksNow();
     applyLighting();
     fps.auto = {};
@@ -1205,12 +1246,70 @@ export async function createLooks(ctx) {
   async function afterFirstFrame() {
     if (firstFrameDone) return;
     firstFrameDone = true;
+    bootHold = true;
     if (qualityWantsPost()) {
       try { await ensureComposer(); } catch (e) { /* renderer-only fallback */ }
     }
     try { await setQuality(choice); } catch (e) { console.warn('looks quality', e); }
+    while (qualityInFlight.size) await Promise.allSettled([...qualityInFlight]);
+    try { await precompileHeld(); } catch (e) { /* the release frame compiles */ }
+    releaseBootHold();
     fps.ready = true;
     readyResolve();
+  }
+
+  // The scene programs the next frame draws, created now with the state it
+  // draws in (scene IBL, composer target or the canvas). renderer.compile()
+  // makes programs only, no draw; it walks every mesh, so a stand-in root
+  // hands it the visible ones on the camera's layers (not hidden maps, not
+  // the shadow-only proxy). Lights still come from the scene.
+  function compileFinal() {
+    const visible = {
+      traverse(cb) { scene.traverseVisible((o) => { if (o.layers.test(camera.layers)) cb(o); }); },
+      traverseVisible() {},
+    };
+    const prev = renderer.getRenderTarget();
+    // The target the next frame draws into: sim.html's loop draws through
+    // whichever composer it was handed, at low too, once one exists.
+    const c = composer || heldComposer;
+    renderer.setRenderTarget(c ? c.renderTarget1 : null);
+    try { return renderer.compile(visible, camera, scene); }
+    finally { renderer.setRenderTarget(prev); }
+  }
+
+  // Where the GPU links in parallel (KHR_parallel_shader_compile), compile
+  // the final variants while still held, so boot frames keep drawing the
+  // first frame's picture until they are linked; the IBL is on the scene
+  // only for the synchronous compile() call. Without the extension (e.g.
+  // SwiftShader) this is a no-op and the frame after the release links them.
+  async function precompileHeld() {
+    if (!bootHold || !renderer.extensions.has('KHR_parallel_shader_compile')) return;
+    bootHold = false;
+    applyLighting();
+    let mats;
+    try { mats = compileFinal(); }
+    finally { bootHold = true; applyLighting(); }
+    const progs = [];
+    mats.forEach((m) => { const p = renderer.properties.get(m).currentProgram; if (p) progs.push(p); });
+    const t0 = performance.now();
+    while (progs.some((p) => !p.isReady()) && performance.now() - t0 < 4000) {
+      await new Promise((r) => setTimeout(r, 16));
+    }
+  }
+
+  // IBL and post chain on in one synchronous step: one recompile frame.
+  function releaseBootHold() {
+    if (!bootHold) return;
+    bootHold = false;
+    applyLighting();
+    if (heldComposer) {
+      composer = heldComposer;
+      heldComposer = null;
+      sizeComposer();
+      if (ctx.onComposer) ctx.onComposer(composer);
+      if (ctx.onResize) ctx.onResize();
+    }
+    try { compileFinal(); } catch (e) { /* the frame compiles */ }
   }
 
   function upgradeMaterials(root) {
@@ -1272,7 +1371,10 @@ export async function createLooks(ctx) {
   function ensureComposer() {
     if (!composerReady) {
       composerReady = buildComposer().then(function (c) {
-        if (ctx.onComposer) ctx.onComposer(c);
+        // Held at boot (releaseBootHold puts it back): sim.html and the
+        // composer getter draw through it as soon as it is set.
+        if (bootHold) { heldComposer = c; composer = null; }
+        else if (ctx.onComposer) ctx.onComposer(c);
         return c;
       }).catch(function () { return null; });
     }

@@ -1029,7 +1029,7 @@ import {
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=51206465bd01";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=255644e34651";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=fc7532dd11b2";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -1221,6 +1221,20 @@ renderer.setPixelRatio(Math.min(devicePixelRatio,detectMobile(window)?1:1.5));
 if(new URLSearchParams(location.search).get('ktx2')!=='0')lookEnableKtx2(renderer);
 renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=detectMobile(window)?THREE.PCFShadowMap:THREE.PCFSoftShadowMap;
+// Layer 1 is shadow-only (the look's shadow proxy, syncShadowProxy). three r180's
+// shadow pass tests object.layers against the VIEW camera's layers (not
+// light.shadow.camera's), and render() builds the camera's render list BEFORE
+// it calls shadowMap.render(). So layer 1 is switched on for the shadow pass
+// alone: the proxy casts exactly as before, but is never drawn (or compiled) in
+// the colour passes, where it wrote nothing anyway.
+{
+  const shadowRender=renderer.shadowMap.render;
+  renderer.shadowMap.render=function(lights,scene,cam){
+    const mask=cam.layers.mask;
+    cam.layers.enable(1);
+    try{shadowRender.call(this,lights,scene,cam);}finally{cam.layers.mask=mask;}
+  };
+}
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=LIGHTING.exposure;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -5156,6 +5170,9 @@ function syncShadowProxy(){
   for(const g of gates)take(g.mesh);
   if(!casters.length)return;
   shadowProxy=lookShadowProxy(THREE,casters);
+  // It writes no colour and no depth: layer 1, so only the shadow pass draws it
+  // (see the renderer.shadowMap.render wrapper by the renderer's setup).
+  shadowProxy.layers.set(1);
   scene.add(shadowProxy);
 }
 
