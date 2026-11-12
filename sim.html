@@ -3628,6 +3628,29 @@ function newPack(){
   placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading(),FRESH);
   toast('NEW PACK');
 }
+// ---------- The House's backyard at boot ----------
+// Drawn in the boot's frames, the yard (its ground, wall, pool and kit: more
+// than the house's interior) slowed every one of them, and with them the
+// look's own loads: ready came 17-24% later on the House at med, settled 10%
+// (tools/bench_house_boot.mjs, SwiftShader). Not drawn until the look is
+// first ready, it costs 1-2%, and its first frames are the ones after ready.
+// Its colliders are there from the start; only the picture (and its share of
+// the shadow proxy, syncShadowProxy) waits. The hold ends for good at the
+// first of: the look ready, the look failed, the pilot's first arm (a pilot
+// can fly before ready on a slow HDRI fetch: never into a yard not drawn), or
+// YARD_HOLD_MAX_MS after the page's start. Once only: a later map switch to
+// the House draws it at once. yardHeld: the group the loop switches off for
+// one render, or null.
+const YARD_HOLD_MAX_MS=12000;
+let yardBootDone=false,yardVis=null,yardLooksFailed=false;
+looksReady.then(function(l){if(!l)yardLooksFailed=true;},function(){yardLooksFailed=true;});
+function yardHeld(){
+  if(yardBootDone)return null;
+  if((looks&&looks.fps&&looks.fps.ready)||yardLooksFailed||coreArmed()||performance.now()>YARD_HOLD_MAX_MS){yardBootDone=true;return null;}
+  if(currentMap!=='house'||!indoorBuilt.house)return null;
+  if(!yardVis||!yardVis.parent)yardVis=indoorWorld.getObjectByName('houseYardArtVisuals')||null;
+  return yardVis&&yardVis.visible?yardVis:null;
+}
 // ---------- The House's backyard: the pool and the soft boundary ----------
 // Once a frame while the core flies (stepCore: not in a replay, the menu or
 // the builder), both cores, on the scene position. Data: the built map's yard
@@ -5239,8 +5262,10 @@ let shadowProxy=null,shadowProxySig=0;
 function syncShadowProxy(){
   const built=vibeFor(currentMap).look&&indoorBuilt[currentMap];
   let sig=0;
+  // The House's yard joins the proxy when its boot hold ends (yardHeld).
+  const held=built?yardHeld():null;
   if(built){
-    sig=built.group.id*1e6+gates.length*1e3;
+    sig=built.group.id*1e6+gates.length*1e3+(held?0.5:0);
     for(const g of gates)sig+=g.mesh.id;
   }
   if(sig===shadowProxySig)return;
@@ -5252,7 +5277,8 @@ function syncShadowProxy(){
     if(!o.isMesh||!(o.castShadow||o.userData.lookProxied))return;
     o.castShadow=false;o.userData.lookProxied=true;casters.push(o);
   };
-  built.group.traverseVisible(take);
+  if(held)held.visible=false;
+  try{built.group.traverseVisible(take);}finally{if(held)held.visible=true;}
   for(const g of gates)take(g.mesh);
   if(!casters.length)return;
   shadowProxy=lookShadowProxy(THREE,casters);
@@ -8606,7 +8632,12 @@ function loop(now){
   // composer is null until the post chain resolves, and stays null if the
   // addons CDN is unreachable - either way the sim keeps rendering.
   const c=looks&&looks.composer?looks.composer:composer;
-  if(c)c.render();else renderer.render(scene,camera);
+  // The House's backyard is not drawn until the look is first ready (yardHeld):
+  // switched off for this render alone, so merging and colliders never see it.
+  const yv=yardHeld();
+  if(yv)yv.visible=false;
+  try{if(c)c.render();else renderer.render(scene,camera);}
+  finally{if(yv)yv.visible=true;}
 }
 requestAnimationFrame(loop);
 looksReady.then(function(l){
