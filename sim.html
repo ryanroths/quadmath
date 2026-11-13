@@ -1011,7 +1011,7 @@ import * as THREE from "three";
 import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=d6d792c3aefd";
 import {
   WS as CORE_WS, TICK_US, SAMPLE_US, toScene, toModule, boxToModule, emptyState,
-  createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux,
+  createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux, rangeActive,
   BF_CLASS_TUNES, bfClassDiff,
 } from "./sim-core-adapter.js?v=ce7406fe12d2";
 import {LINE_URL_MAX,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=d290021684b8";
@@ -1029,7 +1029,7 @@ import {
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=51206465bd01";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=fc7532dd11b2";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=57294ece5c7a";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -1044,7 +1044,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=8c2792ea99ed";
+} from "./sim-art.js?v=7e836a85a408";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, loadFlightMode, saveFlightMode, toggleAcro,
@@ -1072,15 +1072,15 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=5ff585ec78c7";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=80765d813c3a";
+} from "./sim-tracks.js?v=8bc1d4a0bb89";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=b70528f3bcfc";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=2108fba17d3d";
+} from "./sim-room.js?v=51d207d2c91f";
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z,
-  loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT} from "./sim-feel.js?v=d7a832ead999";
+  loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT} from "./sim-feel.js?v=725393adca62";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -1097,7 +1097,7 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=806d16d2c5d4";
+} from "./sim-coach.js?v=141d66020492";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=27f3a73d68ec";
@@ -1126,7 +1126,7 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=f48cd212dd6f";
+} from "./sim-secrets.js?v=bb7f2caae199";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -3536,6 +3536,10 @@ let BATT_FULL=4.2,BATT_EMPTY=3.5;
 let BATT_WARN=3.5,BATT_CRIT=3.3;
 let battHoverS=180,battSagDrop=0.25;
 let battCharge=1,battV=BATT_FULL;
+// The House's backyard, page-side (yardWatch below): edge states, cleared on
+// every placement, so a respawn or a map change starts in the yard, dry.
+// armHold: the pool's motor cut on the bf core with a radio (yardHoldArm).
+const yardSt={water:false,out:false,muteDisarm:false,armHold:false,splashes:0,turnBacks:0,respawns:0};
 function resetSpawnPos(){
   const t=currentTrackObj||findTrack(activeTrackId);
   const legacy=t&&t.legacyId!=null?t.legacyId:legacyIndex(activeTrackId);
@@ -3564,6 +3568,7 @@ function placeQuadAt(x,y,z,yaw,opts){
   armSwState={prev:null};
   armSwitchBlocked=false;
   clearSkinTrail(skinTrail);
+  yardSt.water=false;yardSt.out=false;
   try{if(tricks)tricks.resetDetector&&tricks.resetDetector();}catch(e){}
 }
 // The pack. Each attempt starts on a full one: a Coach drill (its start,
@@ -3622,6 +3627,100 @@ function newPack(){
   if(cs.airborne){toast('LAND FOR A NEW PACK');return;}
   placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading(),FRESH);
   toast('NEW PACK');
+}
+// ---------- The House's backyard at boot ----------
+// Drawn in the boot's frames, the yard (its ground, wall, pool and kit: more
+// than the house's interior) slowed every one of them, and with them the
+// look's own loads: ready came 17-24% later on the House at med, settled 10%
+// (tools/bench_house_boot.mjs, SwiftShader). Not drawn until the look is
+// first ready, it costs 1-2%, and its first frames are the ones after ready.
+// Its colliders are there from the start; only the picture (and its share of
+// the shadow proxy, syncShadowProxy) waits. The hold ends for good at the
+// first of: the look ready, the look failed, the pilot's first arm (a pilot
+// can fly before ready on a slow HDRI fetch: never into a yard not drawn), or
+// YARD_HOLD_MAX_MS after the page's start. Once only: a later map switch to
+// the House draws it at once. yardHeld: the group the loop switches off for
+// one render, or null.
+const YARD_HOLD_MAX_MS=12000;
+let yardBootDone=false,yardVis=null,yardLooksFailed=false;
+looksReady.then(function(l){if(!l)yardLooksFailed=true;},function(){yardLooksFailed=true;});
+function yardHeld(){
+  if(yardBootDone)return null;
+  if((looks&&looks.fps&&looks.fps.ready)||yardLooksFailed||coreArmed()||performance.now()>YARD_HOLD_MAX_MS){yardBootDone=true;return null;}
+  if(currentMap!=='house'||!indoorBuilt.house)return null;
+  if(!yardVis||!yardVis.parent)yardVis=indoorWorld.getObjectByName('houseYardArtVisuals')||null;
+  return yardVis&&yardVis.visible?yardVis:null;
+}
+// ---------- The House's backyard: the pool and the soft boundary ----------
+// Once a frame while the core flies (stepCore: not in a replay, the menu or
+// the builder), both cores, on the scene position. Data: the built map's yard
+// (sim-maps.js buildMap -> yard, sim-house-yard.js buildHouseYard), world units.
+// Water: entering a hazard volume armed is a crash (the contacts' effects and
+// sound) and the motors cut, a drowned whoop; once per entry. The boundary:
+// out of the soft rectangle (or over its ceiling) toasts TURN BACK once per
+// exit, no collider; past the respawn margin, the page's own reset (resetQuad).
+function yardWatch(){
+  const built=currentMap==='house'?indoorBuilt.house:null;
+  const yard=built&&built.yard;
+  if(!yard)return;
+  const p=state.pos;
+  let wet=false;
+  for(const h of yard.hazards){
+    if(h.kind==='water'&&p.x>=h.min.x&&p.x<=h.max.x&&p.y>=h.min.y&&p.y<=h.max.y&&p.z>=h.min.z&&p.z<=h.max.z){wet=true;break;}
+  }
+  if(wet&&!yardSt.water&&coreArmed()){
+    const into=state.vel.length();          // wu/s
+    hitEffects(true,into);                  // before the disarm: it notes the crash while armed
+    simAudio.contact(into/WS,true);         // m/s, as the bf core's contact events
+    yardSt.muteDisarm=core.kind==='bf'&&cs.armed; // bfArmWatch: no DISARMED over the splash
+    coreDisarm();
+    // With a radio Betaflight reads the radio's ARM switch, not the page's
+    // intent: hold that switch's channels off until the radio shows it off.
+    if(bfRadio())yardSt.armHold=true;
+    yardSt.splashes++;
+    toast('SPLASH — CRASHED');
+  }
+  yardSt.water=wet;
+  const B=yard.bounds,S=B.soft,R=B.respawn;
+  if(p.x<R.min.x||p.x>R.max.x||p.z<R.min.z||p.z>R.max.z||p.y>R.ceiling){
+    yardSt.respawns++;
+    resetQuad();                            // clears yardSt.water/out (placeQuadAt)
+    toast('OUT OF THE YARD');
+    return;
+  }
+  const out=p.x<S.min.x||p.x>S.max.x||p.z<S.min.z||p.z>S.max.z||p.y>S.ceiling;
+  if(out&&!yardSt.out){yardSt.turnBacks++;toast('TURN BACK');}
+  yardSt.out=out;
+}
+// The pool's motor cut on the bf core with a radio: the radio's AUX channels
+// go to Betaflight as they are (bfChannels), so core.setArm(false) cuts
+// nothing while the radio's ARM switch is on. While yardSt.armHold, the
+// channels of Betaflight's ARM box (box 0) go out at a value in none of its
+// ranges, and Betaflight disarms; once the radio's own channels show ARM off
+// (the pilot flipped the switch), the hold ends and the radio drives again,
+// so arming is the usual switch off, then on. aux: the radio's AUX1..AUX12
+// (stick.aux, never changed); returns the channels to send.
+function yardHoldArm(aux){
+  if(!yardSt.armHold||!Array.isArray(aux))return aux;
+  const sent=(v)=>{const n=Number(v);return Number.isFinite(n)?Math.round(Math.min(2000,Math.max(1000,n))):1000;};
+  const arms=(core.auxRanges||[]).filter(r=>r.box===0);
+  if(!arms.some(r=>rangeActive(r,sent(aux[r.ch])))){yardSt.armHold=false;return aux;}
+  const out=aux.slice();
+  for(const ch of new Set(arms.map(r=>r.ch))){
+    const on=arms.filter(r=>r.ch===ch);
+    if(!on.some(r=>rangeActive(r,sent(out[ch]))))continue;
+    let off=null;
+    for(let v=1000;v<=2000&&off===null;v+=25)if(!on.some(r=>rangeActive(r,v)))off=v;
+    if(off===null){
+      // ARM on that channel's whole travel: no value cuts it. Tell the pilot,
+      // and let the next DISARMED through.
+      yardSt.armHold=false;yardSt.muteDisarm=false;
+      toast('FLIP ARM OFF (AUX'+(pilotAux('arm')||'?')+')');
+      return aux;
+    }
+    out[ch]=off;
+  }
+  return out;
 }
 
 // ---------- Radio: axis map + calibration ----------
@@ -4802,7 +4901,7 @@ function bfArmWatch(){
   if(core.kind!=='bf')return;
   if(core.turtlePhase!=null){bfWasArmed=cs.armed;return;}
   if(cs.armed&&!bfWasArmed){toast('ARMED');bfArmAsked=false;bfArmPendingMs=null;}
-  else if(!cs.armed&&bfWasArmed)toast('DISARMED');
+  else if(!cs.armed&&bfWasArmed){if(!yardSt.muteDisarm)toast('DISARMED');yardSt.muteDisarm=false;}
   else if(bfArmPendingMs!=null&&!cs.armed&&simClockMs-bfArmPendingMs>300){
     bfArmPendingMs=null;
     core.setArm(false);
@@ -5163,8 +5262,10 @@ let shadowProxy=null,shadowProxySig=0;
 function syncShadowProxy(){
   const built=vibeFor(currentMap).look&&indoorBuilt[currentMap];
   let sig=0;
+  // The House's yard joins the proxy when its boot hold ends (yardHeld).
+  const held=built?yardHeld():null;
   if(built){
-    sig=built.group.id*1e6+gates.length*1e3;
+    sig=built.group.id*1e6+gates.length*1e3+(held?0.5:0);
     for(const g of gates)sig+=g.mesh.id;
   }
   if(sig===shadowProxySig)return;
@@ -5176,7 +5277,8 @@ function syncShadowProxy(){
     if(!o.isMesh||!(o.castShadow||o.userData.lookProxied))return;
     o.castShadow=false;o.userData.lookProxied=true;casters.push(o);
   };
-  built.group.traverseVisible(take);
+  if(held)held.visible=false;
+  try{built.group.traverseVisible(take);}finally{if(held)held.visible=true;}
   for(const g of gates)take(g.mesh);
   if(!casters.length)return;
   shadowProxy=lookShadowProxy(THREE,casters);
@@ -8047,6 +8149,7 @@ function stepCore(frameMs,now){
   if(runActive&&core.kind==='js')runSawJs=true;
   bfArmWatch();
   bfWorldWatch(now);
+  yardWatch();
 }
 // ---------- Core events: contacts and portal triggers (the bf core) ----------
 function onCoreEvent(ev){
@@ -8368,7 +8471,9 @@ function pollInput(){
     if(Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15)turtleStickHold=false;
     else stick.r=stick.p=0;
   }
-  core.input(stick,tUs);
+  // The pool's cut with a radio (yardHoldArm): a copy, stick.aux stays the radio's.
+  const held=core.kind==='bf'&&yardSt.armHold?yardHoldArm(stick.aux):stick.aux;
+  core.input(held===stick.aux?stick:Object.assign({},stick,{aux:held}),tUs);
   // This sample carries an arm asked since the last one (bfArmAsk): Betaflight
   // sees the switch when it lands, tUs, ahead of the core's clock by
   // tUs-simTimeUs, and its 300 ms start there (bfArmWatch).
@@ -8527,7 +8632,12 @@ function loop(now){
   // composer is null until the post chain resolves, and stays null if the
   // addons CDN is unreachable - either way the sim keeps rendering.
   const c=looks&&looks.composer?looks.composer:composer;
-  if(c)c.render();else renderer.render(scene,camera);
+  // The House's backyard is not drawn until the look is first ready (yardHeld):
+  // switched off for this render alone, so merging and colliders never see it.
+  const yv=yardHeld();
+  if(yv)yv.visible=false;
+  try{if(c)c.render();else renderer.render(scene,camera);}
+  finally{if(yv)yv.visible=true;}
 }
 requestAnimationFrame(loop);
 looksReady.then(function(l){
@@ -8965,6 +9075,11 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
   audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
   firstFlight:()=>({show:firstFlightState.show||null,seen:{...firstFlightSeen},liveS:firstFlightState.liveS||0,shownS:firstFlightState.shownS||0}),
+  // The House's backyard (yardWatch): its data and edge state, and the check itself.
+  yardState:()=>({yard:currentMap==='house'&&indoorBuilt.house?indoorBuilt.house.yard:null,...yardSt}),yardWatch,tryArm,coreArmed,
+  // The radio's ARM hold after a splash (tests): hold true/false sets it first.
+  yardHoldArm:(aux,hold)=>{if(hold!=null)yardSt.armHold=!!hold;const out=yardHoldArm(aux);
+    return {aux:out,hold:yardSt.armHold,arm:core.kind==='bf'?(core.auxRanges||[]).filter(r=>r.box===0):[]};},
   easy:()=>({mode:easyMode(),switches:radioSwitches,wizard:switchWiz?{step:switchWiz.step,picks:switchWiz.picks}:null,flightMode,arm:easyArmState,jsTurtle,crashAt:easyCrashAt,disarmReason:easyDisarmReason,stickHold:turtleStickHold}),
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,

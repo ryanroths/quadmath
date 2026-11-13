@@ -5,11 +5,12 @@
 // W3 adds office, school gym, Tiny Trainer hall, and Your-room (from sim-room.js).
 // Nothing here is copied from WebFPV (GPL).
 
-import { planRoom } from './sim-room.js?v=2108fba17d3d';
+import { planRoom } from './sim-room.js?v=51d207d2c91f';
 import {
   LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, lookShafts, lookGraffiti, floorAo,
 } from './sim-look.js?v=73378d552076';
 import { BANDO_GRAFFITI, BANDO_DECAY, BANDO_PROP_BOXES, dressBando, bandoAtlas } from './sim-bando-dress.js?v=1c85071f2564';
+import { HOUSE_YARD, buildHouseYard } from './sim-house-yard.js?v=964cfff3d92e';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -1322,9 +1323,18 @@ function houseBoxes() {
   b('hall', 'white', 'doors', 'bathroom door', -3.55, 0, -5.56, -2.75, 2.0, -5.5);
   b('patio', 'white', 'doors', 'garden door', -6.5, 0, 4.7, -5.7, 2.0, 4.76);
   b('entry', 'blue', 'doors', 'front door', -4.5, 0, 5.94, -3.5, 2.1, 6);
-  // The sliding door: the moving pane parked over the fixed one.
+  // The sliding door: the moving pane parked over the fixed one, both in a
+  // black frame (two stiles, the sill, a mid rail at 1 m, the head), 5 mm
+  // proud of the glass either side, so the solid half reads at flying speed.
+  // The panes as they were; the frame over them (houseAoBoxes leaves it out:
+  // it stands in the panes' footprint).
   b('hall', 'glass', 'sliding door', 'fixed pane', -5.63, 0, -4.6, -5.57, 2.05, -3.6);
   b('hall', 'glass', 'sliding door', 'sliding pane', -5.69, 0, -4.6, -5.63, 2.05, -3.6);
+  const fx0 = -5.695, fx1 = -5.565;
+  for (const [z0, z1] of [[-4.6, -4.54], [-3.66, -3.6]]) b('hall', 'black', 'sliding door', 'frame stile', fx0, 0, z0, fx1, 2.05, z1);
+  for (const [y0, y1, part] of [[0, 0.08, 'frame sill'], [0.98, 1.06, 'frame mid rail'], [1.97, 2.05, 'frame head']]) {
+    b('hall', 'black', 'sliding door', part, fx0, y0, -4.6, fx1, y1, -3.6);
+  }
   b('hall', 'steel', 'sliding door', 'mullion', -5.7, 0, -4.66, -5.5, 2.05, -4.6);
   // Entry hall: a sideboard and its mirror, a bench by the front door.
   b('entry', 'wood', 'entry', 'sideboard', -5.1, 0, 1.1, -3.7, 0.8, 1.5);
@@ -1441,12 +1451,12 @@ function houseBoxes() {
   // Back hall: a sideboard and a pot by the sliding door's light.
   b('hall', 'wood', 'hall', 'sideboard', -3.0, 0, -1.2, -2.55, 0.8, 0.8);
   b('hall', 'terracotta', 'hall', 'pot', -5.35, 0, 0.45, -4.95, 0.45, 0.85);
-  // Patio: posts holding the roof's edge, glass over the garden wall (the
-  // shell's), the table, a chair either side of the line, two pots.
-  for (const z of [-6, -0.06, 5.88]) b('patio', 'wood', 'patio', 'post', -9, 0, z, -8.88, HOUSE_H, z + 0.12);
-  b('patio', 'glass', 'patio', 'screen', -9, 0.9, -6, -8.94, HOUSE_H, 6);
-  b('patio', 'glass', 'patio', 'screen', -9, 0.9, -6, -5.7, HOUSE_H, -5.94);
-  b('patio', 'glass', 'patio', 'screen', -9, 0.9, 5.94, -5.7, HOUSE_H, 6);
+  // Patio: the covered patio, open on its west side to the yard (sim-house-
+  // yard.js): four posts holding the roof's edge, the garden wall (the
+  // shell's) at either end open above to the roof (the patio wall gaps), the
+  // table, a chair either side of the line, two pots, a ceiling fan clear of
+  // the table's powerloop and of the sun coming in through the garden door.
+  for (const z of [-6, -2.04, 1.92, 5.88]) b('patio', 'wood', 'patio', 'post', -9, 0, z, -8.88, HOUSE_H, z + 0.12);
   b('patio', 'wood', 'patio table', 'top', -8.05, 0.69, -0.85, -7.15, 0.75, 0.05);
   for (const [x, z] of [[-8.05, -0.85], [-7.21, -0.85], [-8.05, -0.01], [-7.21, -0.01]]) b('patio', 'wood', 'patio table', 'leg', x, 0, z, x + 0.06, 0.69, z + 0.06);
   // A chair: the back legs run up as its back's posts.
@@ -1462,6 +1472,13 @@ function houseBoxes() {
   chair(-7.45, 1.775, 2.165);
   b('patio', 'terracotta', 'patio', 'pot', -8.7, 0, -5.8, -8.25, 0.5, -5.35);
   b('patio', 'terracotta', 'patio', 'pot', -8.7, 0, 5.35, -8.25, 0.5, 5.8);
+  // The patio fan, built as the living room's: two crossed 1.3 m blades, the
+  // motor, the downrod to the ceiling.
+  const pfx = -7.35, pfz = 2.3;
+  b('patio', 'steel', 'patio fan', 'blade', pfx - 0.65, 2.29, pfz - 0.065, pfx + 0.65, 2.35, pfz + 0.065);
+  b('patio', 'steel', 'patio fan', 'blade', pfx - 0.065, 2.29, pfz - 0.65, pfx + 0.065, 2.35, pfz + 0.65);
+  b('patio', 'steel', 'patio fan', 'motor', pfx - 0.1, 2.35, pfz - 0.1, pfx + 0.1, 2.5, pfz + 0.1);
+  b('patio', 'steel', 'patio fan', 'downrod', pfx - 0.03, 2.5, pfz - 0.03, pfx + 0.03, 2.7, pfz + 0.03);
   // Clutter, every piece a collider and each a line of its own, clear of the
   // loop and of both powerloops (HOUSE_PLAY.powerloops).
   // Living room. An arc lamp over the coffee table: under its arm, round its
@@ -1575,7 +1592,7 @@ export function houseLine(ds) {
 
 // A designed line (HOUSE_LINE, DEPOT_LINE) from its start (x0, z0), heading
 // +x, sampled every ds metres.
-function turtleLine(ops, x0, z0, ds) {
+export function turtleLine(ops, x0, z0, ds) {
   const step = ds || 0.01;
   let x = x0, z = z0, hx = 1, hz = 0, s = 0;
   const plan = [[x, z, s, hx, hz]], pins = [], gates = [];
@@ -1633,8 +1650,8 @@ export const HOUSE_PLAY = Object.freeze({
   room: Object.freeze({ w: 18, d: 12, h: HOUSE_H }),
   // The start pad, on the floor of the entry hall, nose down the line (+x).
   start: Object.freeze([-4.2, 0.35, 4.3]),
-  // The patio strip, open air under the roof's edge: glass over a 0.9 m
-  // garden wall on its three outer sides.
+  // The patio strip, open air under the roof's edge: a 0.9 m garden wall at
+  // its back and front ends, open above it to the roof; its west side open.
   patio: Object.freeze({ x0: -9, x1: -5.7, z0: -6, z1: 6, gardenWall: 0.9 }),
   // The owner's real dimensions, metres.
   sizes: Object.freeze({ door: Object.freeze([0.8, 2.0]), table: 0.75, chairBack: 0.9, counter: 0.9, sofaSeat: 0.45, bed: 0.55 }),
@@ -1692,9 +1709,15 @@ export const HOUSE_LOOK = Object.freeze({
   // hallway), 30 cm (bathroom), 40 cm (patio).
   boards: Object.freeze({ width: 0.18, length: 1.2 }),
   tiles: Object.freeze({ floorTile: 0.6, floorBath: 0.3, floorPatio: 0.4 }),
-  // The sky past the patio glass: zenith, horizon, ground (linear RGB).
+  // The sky past the patio: zenith, horizon, ground (linear RGB).
   sky: Object.freeze({ zenith: [0.42, 0.62, 0.95], horizon: [1.25, 1.12, 0.95], ground: [0.22, 0.26, 0.17] }),
 });
+
+// The boxes the House's floor AO sees: all of HOUSE_PLAY.boxes but the
+// sliding door's frame, which stands in its panes' footprint.
+export function houseAoBoxes() {
+  return HOUSE_PLAY.boxes.filter((q) => !(q.feature === 'sliding door' && /^frame/.test(q.part)));
+}
 
 function buildHouse(THREE, parent, colliders) {
   const P = HOUSE_PLAY, s = HOUSE_WS, R = P.room, L = LAYOUT.house;
@@ -1739,7 +1762,7 @@ function buildHouse(THREE, parent, colliders) {
     edge(a, b);
   }
   // The floors share one AO map (floorAo) over the 18 × 12 m.
-  const ao = lookAoTexture(THREE, floorAo(P.boxes, R));
+  const ao = lookAoTexture(THREE, floorAo(houseAoBoxes(), R));
   let floor = null;
   for (const f of P.floors) {
     const mesh = lookFloorPatch(THREE, mats[f.mat], R, s, f, ao);
@@ -1748,19 +1771,26 @@ function buildHouse(THREE, parent, colliders) {
     if (!floor) floor = mesh;
   }
   // Shell: inner faces at exactly ±9 × ±6 × 2.7 m. The house's outer walls,
-  // the 0.9 m garden wall round the patio (glass above it is the patio's), the
-  // ceiling and the patio roof as one slab. Everything casts: the key is a
-  // low afternoon sun from the west, and it comes in off the patio only.
+  // the 0.9 m garden wall round the patio's two ends (open above it to the
+  // roof; the patio's west side is open to the yard), the ceiling and the patio
+  // roof as one slab. Everything casts: the key is a low afternoon sun from
+  // the west, and it comes in off the patio only. The east wall is pieces
+  // (HOUSE_YARD.eastWall): the kitchen window and the doggy door, on the side
+  // away from the sun.
   const px = P.patio.x1 * s, gw = P.patio.gardenWall * s;
   const shell = [
-    box(THREE, vis, colliders, hx + t / 2, 0, 0, t, H, 2 * hz + 2 * t, mats.wall),
     box(THREE, vis, colliders, (px + hx + t) / 2, 0, -hz - t / 2, hx + t - px, H, t, mats.wall),
     box(THREE, vis, colliders, (px + hx + t) / 2, 0, hz + t / 2, hx + t - px, H, t, mats.wall),
     box(THREE, vis, colliders, (-hx - t + px) / 2, 0, -hz - t / 2, px + hx + t, gw, t, mats.wall),
     box(THREE, vis, colliders, (-hx - t + px) / 2, 0, hz + t / 2, px + hx + t, gw, t, mats.wall),
-    box(THREE, vis, colliders, -hx - t / 2, 0, 0, t, gw, 2 * hz, mats.wall),
     box(THREE, vis, colliders, 0, H, 0, 2 * hx + 2 * t, 0.24, 2 * hz + 2 * t, mats.ceiling),
   ];
+  for (const q of HOUSE_YARD.eastWall) {
+    const a = q.min.map((v) => v * s), c = q.max.map((v) => v * s);
+    const mesh = box(THREE, vis, colliders, (a[0] + c[0]) / 2, a[1], (a[2] + c[2]) / 2, c[0] - a[0], c[1] - a[1], c[2] - a[2], mats[q.mat]);
+    if (q.mat === 'glass') mesh.castShadow = false;
+    else shell.push(mesh);
+  }
   for (const m of shell) tiled(m);
   edge([-hx, 0, -hz], [hx, H, hz]);
   // The sky past the glass: a gradient box, unlit, behind everything.
@@ -1786,7 +1816,10 @@ function buildHouse(THREE, parent, colliders) {
   lines.name = 'houseEdges';
   lines.userData.artKeep = true;
   vis.add(lines);
-  return { floor, orbit: MAP_ORBIT.house };
+  // The backyard, its own art group beside this one; its colliders after the
+  // house's boxes and the shell.
+  const yard = buildHouseYard(THREE, parent, colliders, { ao });
+  return { floor, orbit: MAP_ORBIT.house, yard: { hazards: yard.hazards, bounds: yard.bounds } };
 }
 
 // The Warehouse: a 45 × 30 × 9 m warehouse at micro-class scale, sized for
@@ -3365,6 +3398,8 @@ function houseGaps() {
     // Under the patio table, between its legs, either way.
     gapVolume('house', 'under the patio table (along z)', 'z', s, -7.99, 0, -0.85, -7.21, 0.69, 0.05),
     gapVolume('house', 'under the patio table (along x)', 'x', s, -8.05, 0, -0.79, -7.15, 0.69, -0.01),
+    // The backyard's (sim-house-yard.js HOUSE_YARD.gaps, metres), after.
+    ...HOUSE_YARD.gaps.map((g) => gapVolume('house', g.name, g.axis, s, g.min[0], g.min[1], g.min[2], g.max[0], g.max[1], g.max[2])),
   ];
 }
 function warehouseGaps() {
@@ -3491,6 +3526,8 @@ export function buildMap(THREE, mapId, opts) {
     mapId,
     plan: extra.plan || null,
     gaps: mapGaps(mapId),
+    // The House's backyard (world units): its water hazards and soft boundary.
+    yard: extra.yard || null,
   };
 }
 
