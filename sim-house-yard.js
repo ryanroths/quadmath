@@ -18,8 +18,13 @@
 // (one entry, one box() mesh, one collider, in order); sloped parts (the slide
 // chute, the swing set's A-frame legs) are stepped stacks of boxes. Every
 // gap passes the 75 mm whoop (WHOOP_75) with 40 mm clear a side (20 mm where
-// tight). Tall things stay out of the two sun corridors (the low key comes in
-// off the patio through the sliding door and the garden door, toward -x, -z):
+// tight). Anything that stops the quad, on this map, house and yard alike, is
+// clearly visible at flying speed: an opaque mesh its size. The only
+// see-through colliders are the real windows (the sliding door's panes, the
+// kitchen window's upper sash) and the trampoline's net, listed by name in
+// tools/test_sim_house_yard.mjs (SEE_THROUGH_OK); no glass where a pilot
+// would see an opening. Tall things stay out of the two sun corridors (the
+// low key comes in off the patio through the sliding door and the garden door, toward -x, -z):
 // the west lawn stays low, the swing set and shed stand south of the corridor.
 // The yard's materials are look surfaces on the House's four texture sets
 // only (painted steel, galvanised, plywood, fabric): no new texture. Water and
@@ -383,6 +388,11 @@ function yardGaps() {
   g('sliding door', 'x', 'sliding door', [-5.7, 0, -5.6], [-5.5, 2.05, -4.66]);
   const posts = [-6, -2.04, 1.92, 5.88];
   ['back', 'middle', 'front'].forEach((n, i) => g(`patio posts (${n})`, 'x', 'patio', [-9, 0, posts[i] + 0.12], [-8.88, 2.7, posts[i + 1]]));
+  // The garden wall at the patio's back and front ends, open from its 0.9 m
+  // top to the roof: through the wall's 10 cm, from its west end to the
+  // house's back and front walls.
+  g('patio wall gap (back)', 'z', 'patio', [-9.1, 0.9, -6.1], [-5.7, 2.7, -6.0]);
+  g('patio wall gap (front)', 'z', 'patio', [-9.1, 0.9, 6.0], [-5.7, 2.7, 6.1]);
   return out;
 }
 

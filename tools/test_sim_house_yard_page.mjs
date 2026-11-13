@@ -25,8 +25,8 @@ const SPOTS = ['houseEntry', 'houseYardPatio', 'houseYardPool', 'houseYardTramp'
 // pass: shadow, scene, post), fewer than this.
 const DRAW_CALL_LIMIT = 60;
 // Colliders the House builds with its yard (tools/test_sim_house_yard.mjs pins
-// the exact layout): at least these.
-const MIN_COLLIDERS = 411;
+// the exact layout): at least these (the patio's two glass screens gone).
+const MIN_COLLIDERS = 409;
 
 function resolveChrome() {
   const names = [

@@ -10,7 +10,7 @@ import {
   LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, lookShafts, lookGraffiti, floorAo,
 } from './sim-look.js?v=73378d552076';
 import { BANDO_GRAFFITI, BANDO_DECAY, BANDO_PROP_BOXES, dressBando, bandoAtlas } from './sim-bando-dress.js?v=1c85071f2564';
-import { HOUSE_YARD, buildHouseYard } from './sim-house-yard.js?v=94087de727f8';
+import { HOUSE_YARD, buildHouseYard } from './sim-house-yard.js?v=faaeb6827648';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -1443,13 +1443,11 @@ function houseBoxes() {
   b('hall', 'wood', 'hall', 'sideboard', -3.0, 0, -1.2, -2.55, 0.8, 0.8);
   b('hall', 'terracotta', 'hall', 'pot', -5.35, 0, 0.45, -4.95, 0.45, 0.85);
   // Patio: the covered patio, open on its west side to the yard (sim-house-
-  // yard.js): four posts holding the roof's edge, glass over the garden wall
-  // (the shell's) at either end, the table, a chair either side of the line,
-  // two pots, a ceiling fan clear of the table's powerloop and of the sun
-  // coming in through the garden door.
+  // yard.js): four posts holding the roof's edge, the garden wall (the
+  // shell's) at either end open above to the roof (the patio wall gaps), the
+  // table, a chair either side of the line, two pots, a ceiling fan clear of
+  // the table's powerloop and of the sun coming in through the garden door.
   for (const z of [-6, -2.04, 1.92, 5.88]) b('patio', 'wood', 'patio', 'post', -9, 0, z, -8.88, HOUSE_H, z + 0.12);
-  b('patio', 'glass', 'patio', 'screen', -9, 0.9, -6, -5.7, HOUSE_H, -5.94);
-  b('patio', 'glass', 'patio', 'screen', -9, 0.9, 5.94, -5.7, HOUSE_H, 6);
   b('patio', 'wood', 'patio table', 'top', -8.05, 0.69, -0.85, -7.15, 0.75, 0.05);
   for (const [x, z] of [[-8.05, -0.85], [-7.21, -0.85], [-8.05, -0.01], [-7.21, -0.01]]) b('patio', 'wood', 'patio table', 'leg', x, 0, z, x + 0.06, 0.69, z + 0.06);
   // A chair: the back legs run up as its back's posts.
@@ -1643,8 +1641,8 @@ export const HOUSE_PLAY = Object.freeze({
   room: Object.freeze({ w: 18, d: 12, h: HOUSE_H }),
   // The start pad, on the floor of the entry hall, nose down the line (+x).
   start: Object.freeze([-4.2, 0.35, 4.3]),
-  // The patio strip, open air under the roof's edge: glass over a 0.9 m
-  // garden wall on its three outer sides.
+  // The patio strip, open air under the roof's edge: a 0.9 m garden wall at
+  // its back and front ends, open above it to the roof; its west side open.
   patio: Object.freeze({ x0: -9, x1: -5.7, z0: -6, z1: 6, gardenWall: 0.9 }),
   // The owner's real dimensions, metres.
   sizes: Object.freeze({ door: Object.freeze([0.8, 2.0]), table: 0.75, chairBack: 0.9, counter: 0.9, sofaSeat: 0.45, bed: 0.55 }),
@@ -1702,7 +1700,7 @@ export const HOUSE_LOOK = Object.freeze({
   // hallway), 30 cm (bathroom), 40 cm (patio).
   boards: Object.freeze({ width: 0.18, length: 1.2 }),
   tiles: Object.freeze({ floorTile: 0.6, floorBath: 0.3, floorPatio: 0.4 }),
-  // The sky past the patio glass: zenith, horizon, ground (linear RGB).
+  // The sky past the patio: zenith, horizon, ground (linear RGB).
   sky: Object.freeze({ zenith: [0.42, 0.62, 0.95], horizon: [1.25, 1.12, 0.95], ground: [0.22, 0.26, 0.17] }),
 });
 
@@ -1758,8 +1756,8 @@ function buildHouse(THREE, parent, colliders) {
     if (!floor) floor = mesh;
   }
   // Shell: inner faces at exactly ±9 × ±6 × 2.7 m. The house's outer walls,
-  // the 0.9 m garden wall round the patio's two ends (glass above it is the
-  // patio's; its west side is open to the yard), the ceiling and the patio
+  // the 0.9 m garden wall round the patio's two ends (open above it to the
+  // roof; the patio's west side is open to the yard), the ceiling and the patio
   // roof as one slab. Everything casts: the key is a low afternoon sun from
   // the west, and it comes in off the patio only. The east wall is pieces
   // (HOUSE_YARD.eastWall): the kitchen window and the doggy door, on the side

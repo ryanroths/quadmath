@@ -45,7 +45,7 @@ const I_WHOOP = I_YARD + Y.boxes.length;
 const SPEC_GAPS = ['kitchen window', 'doggy door', 'under the slide', 'pool ladder rails', 'trampoline zipper',
   'trampoline open top', 'swing A-frame (west)', 'swing A-frame (east)', 'between the swings', 'swing gap (west)',
   'swing gap (east)', 'citrus branch gap (west)', 'citrus branch gap (east)', 'shed door', 'shed window'];
-const OPTIONAL_GAP = (n) => n === 'sliding door' || /^patio posts/.test(n);
+const OPTIONAL_GAP = (n) => n === 'sliding door' || /^patio posts/.test(n) || /^patio wall gap/.test(n);
 // The only gaps the spec marks tight (20 mm a side, not 40).
 const TIGHT_GAPS = ['kitchen window'];
 // The sky box (houseSky): x ±27 m, z ±24 m, y -5.4..27 m about the origin.
@@ -327,10 +327,83 @@ test('each yard gap: clear of colliders, walled within 2 cm, collider == visual 
   }
 });
 
+// The House's rule: anything that stops the quad is clearly visible at flying
+// speed. Every collider is drawn by an opaque mesh the same size (the crashed
+// whoop: its opaque parts, inside its one box), except the real windows and
+// the trampoline's net, listed here by name: a new see-through collider fails
+// until the owner adds it. Nothing stands as glass over the patio's garden
+// wall: open to the roof, back and front.
+const SEE_THROUGH_OK = [
+  'sliding door:fixed pane', 'sliding door:sliding pane', ':kitchen window glass',
+  'trampoline:net', 'trampoline:net over the zipper',
+];
+test('the House\'s rule: every collider drawn opaque at its size, the real windows and the net the only see-through ones', () => {
+  const b = built(), cols = b.colliders;
+  const meshes = [];
+  b.group.traverse((o) => { if (o.isMesh && o.name !== 'houseSky') meshes.push({ mesh: o, bb: box3Arr(new THREE.Box3().setFromObject(o)) }); });
+  const shown = (o) => { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true; };
+  const opaque = (m) => !m.material.transparent && (m.material.opacity ?? 1) >= 1 && m.material.colorWrite !== false && shown(m);
+  const name = (i) => {
+    if (i < BOXES.length) return label(BOXES[i]);
+    if (i < I_EAST) return 'shell:' + (i - BOXES.length);
+    if (i < I_YARD) return label(Y.eastWall[i - I_EAST]);
+    if (i < I_WHOOP) return label(Y.boxes[i - I_YARD]);
+    return 'crashed whoop';
+  };
+  const seeThrough = [];
+  cols.forEach((c, i) => {
+    const n = name(i);
+    if (i === I_WHOOP) {
+      const parts = meshes.filter((m) => [0, 1, 2].every((k) => m.bb.min[k] >= c.min.getComponent(k) - 1e-6 && m.bb.max[k] <= c.max.getComponent(k) + 1e-6));
+      assert.equal(parts.length, Y.whoop.parts.length, 'the crashed whoop: its parts inside its box');
+      for (const m of parts) assert.ok(opaque(m.mesh), 'the crashed whoop: a part drawn opaque');
+      return;
+    }
+    const own = meshes.filter((m) => sameBox(m.bb, box3Arr(c), 1e-4));
+    assert.ok(own.length > 0, n + ': a collider with no mesh its size');
+    if (own.some((m) => opaque(m.mesh))) return;
+    seeThrough.push(n);
+  });
+  for (const n of seeThrough) assert.ok(SEE_THROUGH_OK.includes(n), 'a see-through collider not on the list: ' + n);
+  assert.ok(!BOXES.some((q) => q.feature === 'patio' && q.mat === 'glass'), 'no glass on the patio');
+  console.log(`# visible: ${cols.length} colliders, see-through only: ${[...new Set(seeThrough)].join(', ')}`);
+});
+
+// A ring through every gap: the 75's footprint with its clearance (W + 40 mm
+// a side, 20 mm where tight; a square, 3 cm thick) flown straight through each of the House's named gaps
+// on its axis, through its centre, from 30 cm before the gap to 30 cm past
+// it, meets no collider.
+test('a ring through every House gap: the 75 at the gap\'s centre, 30 cm either side, touches no collider', async (t) => {
+  const cols = built().colliders.map(box3Arr);
+  const all = mapGaps('house');
+  assert.ok(all.some((g) => g.name === 'patio wall gap (back)') && all.some((g) => g.name === 'patio wall gap (front)'), 'the patio wall gaps named');
+  const yardTight = new Set(Y.gaps.filter((g) => g.tight).map((g) => g.name));
+  for (const g of all) {
+    await t.test(g.name, () => {
+      const a = AX[g.axis];
+      const lo = [g.min.x, g.min.y, g.min.z], hi = [g.max.x, g.max.y, g.max.z];
+      const c = [0, 1, 2].map((k) => (lo[k] + hi[k]) / 2);
+      const half = (WHOOP_75.W / 2 + (yardTight.has(g.name) ? WHOOP_75.tight : WHOOP_75.clear)) * s;
+      const ring = 0.015 * s;
+      let hits = [];
+      for (let u = lo[a] - 0.3 * s; u <= hi[a] + 0.3 * s + 1e-9; u += 0.01 * s) {
+        const mn = [0, 1, 2].map((k) => (k === a ? u - ring : c[k] - half));
+        const mx = [0, 1, 2].map((k) => (k === a ? u + ring : c[k] + half));
+        for (const q of cols) {
+          if ([0, 1, 2].every((k) => Math.min(mx[k], q.max[k]) - Math.max(mn[k], q.min[k]) > 1e-6)) hits.push(JSON.stringify(boxM({ min: new THREE.Vector3(...q.min), max: new THREE.Vector3(...q.max) })));
+        }
+      }
+      hits = [...new Set(hits)];
+      assert.deepEqual(hits, [], g.name + ' ring hits');
+      t.diagnostic(`${g.name}: ${g.axis}, ring ${(2 * half / s * 1000).toFixed(0)} mm clear through ${((hi[a] - lo[a]) / s + 0.6).toFixed(2)} m`);
+    });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // The interior, as it was (origin/main 8b5119e): HOUSE_PLAY.boxes then
-// (three patio posts at z -6, -0.06, 5.88 and the long west glass screen; no
-// patio fan) and the shell then (the east wall one box, the west 0.9 m garden
+// (three patio posts at z -6, -0.06, 5.88, the long west glass screen and the
+// two end screens over the garden wall; no patio fan) and the shell then (the east wall one box, the west 0.9 m garden
 // wall), from the values in yard-spec.md and git show 8b5119e:sim-maps.js.
 // sha256 of JSON.stringify(HOUSE_PLAY.boxes) at 8b5119e:
 const ORIGINAL_BOXES_SHA = '782c69e4cc9a44e27c575a713a3a4b1505ba3c738b1ce8970a04dc6853e92c1e';
@@ -346,6 +419,8 @@ function originalBoxes() {
       posts = true;
       for (const z of [-6, -0.06, 5.88]) out.push(b('patio', 'wood', 'patio', 'post', -9, 0, z, -8.88, ROOM.h, z + 0.12));
       out.push(b('patio', 'glass', 'patio', 'screen', -9, 0.9, -6, -8.94, ROOM.h, 6));
+      out.push(b('patio', 'glass', 'patio', 'screen', -9, 0.9, -6, -5.7, ROOM.h, -5.94));
+      out.push(b('patio', 'glass', 'patio', 'screen', -9, 0.9, 5.94, -5.7, ROOM.h, 6));
       continue;
     }
     out.push(q);
