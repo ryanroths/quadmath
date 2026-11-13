@@ -37,8 +37,8 @@ The rooms are not in `workers/sim-leaderboard`:
 
 3. Nothing to create by hand. `wrangler.jsonc` declares two bindings,
    `ROOMS` to the `Room` class and `CREATE_LIMIT` to the `CreateLimit`
-   class, and their migration `v1`
-   (`new_sqlite_classes: ["Room", "CreateLimit"]`). The first deploy creates
+   class, and their migrations: `v1` (`new_sqlite_classes: ["Room"]`) and
+   `v2` (`new_sqlite_classes: ["CreateLimit"]`). The first deploy creates
    both Durable Object namespaces. SQLite-backed, so it runs on the Workers
    Free plan.
 4. Deploy:
@@ -89,9 +89,9 @@ map) are in Durable Object storage and are kept. A room whose sockets went
 this way (no close reached the object) is found empty by its next alarm
 and expires one TTL after that, so at most 20 min instead of 10.
 
-Do not rename the `Room` or `CreateLimit` class or drop the `v1`
+Do not rename the `Room` or `CreateLimit` class or drop the `v1` or `v2`
 migration. A class rename needs a `renamed_classes` migration, and a new
-class a new tag (`v2`); see the Durable Objects migrations docs.
+class a new tag (`v3`); see the Durable Objects migrations docs.
 
 ## What it does
 

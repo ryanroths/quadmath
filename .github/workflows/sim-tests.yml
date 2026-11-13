@@ -18,7 +18,12 @@ name: Sim tests
 #                 under its Content-Security-Policy in Chrome, both cores and
 #                 every open map, rooms and the leaderboard on `wrangler dev`
 #                 (installed in that entry). Its own entry, so no map shard
-#                 nears 10 minutes.
+#                 nears 10 minutes. Its page entries run the Chrome parts of
+#                 page tests the sim-tests job runs with SKIP_CHROME_BOOT:
+#                 test_sim_easy_mode, and test_sim_first_flight with
+#                 test_sim_coach_page, each entry under about 10 minutes.
+#                 test_sim_sound has no entry for now: it samples the page
+#                 once a frame, so its result depends on the frame rate.
 #   asset-stamps  scripts/ci/stamp_asset_cache.py --check. The stamper's own
 #                 unit tests already run in agent-signals.yml (gate-tests).
 
@@ -76,7 +81,7 @@ jobs:
           [ "${#failed[@]}" -eq 0 ]
 
   sim-map-boot:
-    name: ${{ matrix.suite == 'csp' && 'Sim under its CSP (Chrome)' || format('Boot sim maps ({0} core, shard {1}/{2})', matrix.core, matrix.shard, matrix.of) }}
+    name: ${{ matrix.suite == 'csp' && 'Sim under its CSP (Chrome)' || matrix.suite == 'page' && format('Sim page tests in Chrome ({0})', matrix.label) || format('Boot sim maps ({0} core, shard {1}/{2})', matrix.core, matrix.shard, matrix.of) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -93,6 +98,10 @@ jobs:
           - { suite: boot, core: js, shard: 2, of: 2 }
           # tools/test_sim_csp.mjs, both cores in one run.
           - { suite: csp, core: both, shard: 1, of: 1 }
+          # Page tests' Chrome parts. About 4 and 3.5 minutes on a Windows
+          # desktop; split so each entry stays under about 10 here.
+          - { suite: page, label: 'easy mode', tests: 'tools/test_sim_easy_mode.mjs' }
+          - { suite: page, label: 'first flight, coach', tests: 'tools/test_sim_first_flight.mjs tools/test_sim_coach_page.mjs' }
 
     steps:
       - name: Check out
@@ -138,6 +147,29 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: node --test tools/test_sim_csp.mjs
+
+      # Each file on its own, Chrome parts included; all run even if one fails.
+      - name: This entry's page tests
+        if: matrix.suite == 'page'
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          TESTS: ${{ matrix.tests }}
+        run: |
+          failed=()
+          for f in $TESTS; do
+            echo "::group::$f"
+            start=$(date +%s)
+            if node --test "$f"; then
+              echo "PASS $f in $(( $(date +%s) - start )) s"
+            else
+              echo "::error file=$f::test file failed"
+              echo "FAIL $f in $(( $(date +%s) - start )) s"
+              failed+=("$f")
+            fi
+            echo "::endgroup::"
+          done
+          for f in "${failed[@]}"; do echo "FAIL $f"; done
+          [ "${#failed[@]}" -eq 0 ]
 
   asset-stamps:
     name: Check asset cache stamps

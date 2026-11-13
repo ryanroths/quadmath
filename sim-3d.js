@@ -146,10 +146,12 @@ export function stepAutoArm(state, sample) {
 // Easy mode, the default for every input on every core: the throttle arms and
 // disarms the quad, with no switch. Throttle at the bottom (3D: centred) for
 // EASY_ARM_HOLD_S, then raised: armed. Landed with the throttle at the bottom
-// for EASY_DISARM_HOLD_S: disarmed. A crash (the page's latch) disarms once
-// the quad has come to rest.
+// for EASY_DISARM_HOLD_S: disarmed, so a new pilot does not sit on the floor
+// armed after a flight (half a second: long enough for a touch-and-go, short
+// enough that the props stop as the quad settles). A crash (the page's latch)
+// disarms once the quad has come to rest.
 export const EASY_ARM_HOLD_S = 1;
-export const EASY_DISARM_HOLD_S = 2;
+export const EASY_DISARM_HOLD_S = 0.5;
 const EASY_LANDED_CLEARANCE_M = 0.04;
 const EASY_LANDED_SPEED_MS = 0.5;
 const EASY_LANDED_OMEGA = 2;             // rad/s

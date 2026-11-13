@@ -5,7 +5,7 @@
 //     onto the diff's channels (sim-core-adapter.js switchAux).
 //   - In headless Chrome (fresh profile each): a fake TX16S with ARM on AUX4,
 //     its AUX1 and AUX3 resting high. From the page opening to flying in the
-//     Rig with no menu; arms by throttle, flies, disarms on the 2 s rule and
+//     Rig with no menu; arms by throttle, flies, disarms on the 0.5 s rule and
 //     after a crash, turtles by roll and by pitch stick (the page on
 //     Betaflight's turtle channel). The wizard on that radio, saved per radio.
 //     A profile saved before Easy mode starts in Easy mode like any other. And
@@ -92,22 +92,26 @@ test('easy arm: a throttle that was never low, unsafe sticks, or upside down nev
   assert.equal(run(r.state, 0.05, { t: 0.9, threeD: true, armed: false }).out.arm, true, '3D: then leaving centre arms');
 });
 
-test('easy disarm: throttle at the bottom 2 s while landed, not in the air, not before it flew', () => {
-  assert.equal(EASY_DISARM_HOLD_S, 2);
+test('easy disarm: throttle at the bottom 0.5 s while landed, not in the air, not before it flew', () => {
+  assert.equal(EASY_DISARM_HOLD_S, 0.5);
   let r = run({}, 0.1, { t: 0.5, armed: true, landed: false });
   r = run(r.state, 3, { t: 0, armed: true, landed: false });
   assert.equal(r.out, null, 'falling at zero throttle stays armed');
-  r = run(r.state, 1.9, { t: 0, armed: true, landed: true });
-  assert.equal(r.out, null, 'landed 1.9 s');
+  r = run(r.state, 0.4, { t: 0, armed: true, landed: true });
+  assert.equal(r.out, null, 'landed 0.4 s');
   r = run(r.state, 0.2, { t: 0, armed: true, landed: true });
-  assert.equal(r.out.disarm, true, 'landed 2 s disarms');
+  assert.equal(r.out.disarm, true, 'landed 0.5 s disarms');
   assert.equal(r.out.reason, 'landed');
-  assert.ok(r.at <= 0.11 && r.at >= 0.09, `at 2.0 s (${1.9 + r.at})`);
-  r = run({ raised: true }, 1.9, { t: 0, armed: true, landed: true });
+  assert.ok(r.at <= 0.11 && r.at >= 0.09, `at 0.5 s (${0.4 + r.at})`);
+  r = run({ raised: true }, 0.4, { t: 0, armed: true, landed: true });
   r = run(r.state, 0.2, { t: 0.2, armed: true, landed: true });
   assert.equal(r.out, null);
-  r = run(r.state, 1.9, { t: 0, armed: true, landed: true });
-  assert.equal(r.out, null, 'throttle touched: the 2 s start over');
+  r = run(r.state, 0.4, { t: 0, armed: true, landed: true });
+  assert.equal(r.out, null, 'throttle touched: the 0.5 s start over');
+  r = run({ raised: true }, 0.4, { t: 0, armed: true, landed: true });
+  r = run(r.state, 0.05, { t: 0, armed: true, landed: false });
+  r = run(r.state, 0.4, { t: 0, armed: true, landed: true });
+  assert.equal(r.out, null, 'a hop off the floor: the 0.5 s start over');
   assert.equal(run({}, 5, { t: 0, armed: true, landed: true }).out, null, 'armed at idle (Space, the touch ARM button), never raised: stays armed');
 });
 
@@ -471,6 +475,25 @@ test('bf core: rearm false lets go disarmed, for a radio on its switches', async
 
 // ---- headless Chrome ----
 
+// Upright to flyable in the page: the 300 ms is checked only where the page's
+// frames step the sim clock by under FRAME_STEP_MAX_MS. The page steps the
+// core, the turtle and the read-back here once a frame, so each end of the
+// time is good to a frame; a CI runner's software GL takes 80 ms frames and
+// more, which adds frames, not turtle. There the sequence is still checked
+// (it recovers, re-arms and flies); tools/test_sim_turtle_rearm.mjs times the
+// 300 ms to the tick on the sim clock, tools/smoke_sim_headed.mjs at a real
+// frame rate.
+const FRAME_STEP_MAX_MS = 50;
+function checkFlyableTime(name, ms, stepMs) {
+  assert.ok(Number.isFinite(ms), `${name}: upright to flyable measured (${ms})`);
+  assert.ok(Number.isFinite(stepMs) && stepMs > 0, `${name}: frame step measured (${stepMs})`);
+  if (stepMs < FRAME_STEP_MAX_MS) {
+    assert.ok(ms < 300, `${name}: under 300 ms from upright to flyable (${Math.round(ms)} ms, frame step ${stepMs} ms)`);
+  } else {
+    console.log(`${name}: upright to flyable ${Math.round(ms)} ms not timed: frame step ${stepMs} ms of sim time (timed under ${FRAME_STEP_MAX_MS} ms)`);
+  }
+}
+
 function resolveChrome() {
   const names = [process.env.CHROME, 'google-chrome', 'google-chrome-stable', 'chromium-browser', 'chromium', 'chrome'].filter(Boolean);
   for (const n of names) {
@@ -575,6 +598,49 @@ const PAGE = String.raw`(() => {
   const landed = () => s.coreState().clearance <= 0.04 && speed() < 0.5;
   const fc = () => s.bfCore().sim.fc;
   const tickUp = () => { const [, x, y] = s.bfCore().sim.state.quat; return 1 - 2 * (x * x + y * y); };
+  // Easy mode's own count of the throttle at the bottom, its arm hold
+  // (sim-3d.js stepEasyArm, kept in easy().arm). The page counts it only on
+  // the input polls it accepts, so where frames are slow (a CI runner) a fixed
+  // wall time with the throttle down can be a fraction of that hold, and a
+  // raise after it starts the hold over. Raising once held() is true drives it
+  // as a pilot does; a hold the page never counts still fails at the ceiling.
+  const lowS = () => { const e = s.easy && s.easy().arm; return e ? +e.lowS || 0 : 0; };
+  const held = (sec, ms) => until(() => lowS() >= sec, ms || 12000);
+  // A wait of ms on the wall clock and as much again on the bf core's own
+  // clock (simTimeUs). The core steps only inside frames, so where frames are
+  // slow a fixed wall time can be much less of the page's time; a wait on both
+  // is never shorter than the wall time alone. Used where the page keeps no
+  // count of the thing waited for. Summed per core: a reboot starts its clock over.
+  const simWait = (ms, ceil) => {
+    const w0 = performance.now();
+    let b = null, last = 0, us = 0;
+    return until(() => {
+      const nb = s.bfCore();
+      if (nb && nb !== b) { b = nb; last = nb.simTimeUs; }
+      if (b) { us += Math.max(0, b.simTimeUs - last); last = b.simTimeUs; }
+      return performance.now() - w0 >= ms && us >= ms * 1000;
+    }, ceil || 8000);
+  };
+  // The page's frame step on the sim clock (simClockMs, both cores), largest
+  // since frames() began: the page runs one stepCore per animation frame
+  // (loop), so the clock's change from one animation frame to the next is one
+  // frame's step. The page steps the core, the turtle and its read-back only
+  // in frames, so a time read here is good to a frame at each end; under
+  // FRAME_STEP_MAX_MS it is timed, over it only the sequence is checked
+  // (tools/test_sim_turtle_rearm.mjs times it to the tick, and
+  // tools/smoke_sim_headed.mjs at a real frame rate).
+  function frames() {
+    let last = s.simClockMs(), max = 0, on = true;
+    const f = () => {
+      if (!on) return;
+      const now = s.simClockMs();
+      max = Math.max(max, now - last);
+      last = now;
+      requestAnimationFrame(f);
+    };
+    requestAnimationFrame(f);
+    return () => { on = false; return Math.round(max * 10) / 10; };
+  }
   function menus() {
     const on = (id, c) => { const el = document.getElementById(id); return !!(el && el.classList.contains(c)); };
     return { start: on('startMenu', 'open'), looks: !!(s.looks && s.looks.menuOpen), layer: on('menuLayer', 'show'), prompt: on('feelPrompt', 'show'), picker: !!document.getElementById('gpPicker') };
@@ -648,13 +714,15 @@ const PAGE = String.raw`(() => {
     const w = () => { const o = s.coreState().omega; return Math.hypot(o.x, o.y, o.z); };
     return until(() => upZ() < 0.5 && s.coreState().clearance <= 0.04 && speed() < 0.2 && w() < 1, 4000);
   }
-  // A full stick on axis i: did it start, come upright and re-arm, and how long
-  // from upright to flyable (sim time on bf).
+  // A full stick on axis i: did it start, come upright and re-arm, how long
+  // from upright to flyable on the sim clock, and the largest frame step
+  // meanwhile (frames()).
   async function recover(i, v) {
     const bf = s.coreState().kind === 'bf', b = bf ? s.bfCore() : null;
     const busy = () => (bf ? b.turtlePhase !== null : !!s.easy().jsTurtle);
-    const clock = () => (bf ? b.simTimeUs / 1000 : performance.now());
+    const clock = () => (bf ? b.simTimeUs / 1000 : s.simClockMs());
     const up0 = upZ();
+    const step = frames();
     axis(i, v);
     const started = await until(busy, 2000);
     let upT = null, flyT = null;
@@ -663,9 +731,10 @@ const PAGE = String.raw`(() => {
       if (upT !== null && flyT === null && s.coreState().armed && !busy()) flyT = clock();
       return flyT !== null;
     }, 6000);
+    const stepMs = step();
     axis(i, 0);
     await wait(120);
-    return { up0, started, flyable, ms: flyT - upT, up: upZ(), armed: s.coreState().armed, pos: { ...s.coreState().position }, map: s.map() };
+    return { up0, started, flyable, ms: flyT - upT, stepMs, up: upZ(), armed: s.coreState().armed, pos: { ...s.coreState().position }, map: s.map() };
   }
   // A fall onto the floor at speed: a crash (the Rig's walls are foam: about
   // 20 m/s on the bf core).
@@ -675,11 +744,13 @@ const PAGE = String.raw`(() => {
     if (c.kind === 'bf') s.bfCore().teleport({ x: c.position.x, y: c.position.y, z: 2.5 }, q, { x: 0, y: 0, z: -25 });
     else { window._qp.position.z = 2.5; window._qp.velocity.z = -40; }
   }
-  window.__easy = { s, wait, until, axis, thr, upZ, tickUp, speed, landed, fc, menus, state, flip, drop, spots, restOn, recover };
+  window.__easy = { s, wait, until, axis, thr, upZ, tickUp, lowS, held, simWait, speed, landed, fc, menus, state, flip, drop, spots, restOn, recover, frames };
   return true;
 })()`;
 
 const LAYOUT = [0, 0, 0, 0, 1, -1, 1, -1];   // throttle left mid-stick, AUX1 and AUX3 resting high, ARM on AUX4
+// A raise comes once the page has counted its arm hold, and a little over.
+const HOLD_S = EASY_ARM_HOLD_S + 0.05;
 
 test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
   if (process.env.SKIP_CHROME_BOOT === '1') {
@@ -696,7 +767,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
       '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
       '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
       '--mute-audio', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update',
-      '--disable-background-networking', '--disable-sync', '--window-size=480,270',
+      '--disable-background-networking', '--disable-sync', '--window-size=480,270', ...(process.env.SIM_GPU_OFF === '1' ? ['--disable-gpu'] : []),
       `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profile}`, 'about:blank',
     ], { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
@@ -716,6 +787,9 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
       await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
       await cdp(ws, 'Runtime.enable');
       await cdp(ws, 'Page.enable');
+      // SIM_CPU_THROTTLE=4: the page's CPU slowed 4x (DevTools' throttling), to
+      // run as on a slow CI runner.
+      if (process.env.SIM_CPU_THROTTLE) await cdp(ws, 'Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
       await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: FAKE_PADS });
       const url = `http://127.0.0.1:${port}/sim.html?quality=low${query ? '&' + query : ''}`;
       // Same origin first, for localStorage and sessionStorage before the page's scripts.
@@ -789,60 +863,74 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.deepEqual(r.st.menus, { start: false, looks: false, layer: false, prompt: false, picker: false }, 'Fly, no map menu');
         assert.equal(r.st.map, 'rig', 'and the Rig');
 
-        // Throttle left up at load, then a short hold: nothing arms.
+        // Throttle left up at load, then a short hold: nothing arms. The short
+        // hold is 0.35 s of the page's own count, and the arm state is read
+        // once the page has seen the raise (its count back to 0), so a slow
+        // runner still tries a short hold rather than none at all.
         r = await js(`
           await E.wait(1200);
           const up = E.state().armed;
           E.thr(0);
-          await E.wait(350);
+          const counted = await E.held(0.35);
           E.thr(0.6);
+          const read = await E.until(() => E.lowS() === 0, 5000);
           await E.wait(700);
-          return JSON.stringify({ up, short: E.state().armed });`);
-        assert.deepEqual(r, { up: false, short: false }, 'mid-stick at load does not arm; 0.35 s at the bottom does not');
+          return JSON.stringify({ up, counted, read, short: E.state().armed });`);
+        assert.equal(r.counted, true, 'the page counted 0.35 s at the bottom');
+        assert.equal(r.read, true, 'the page read the raise');
+        assert.deepEqual({ up: r.up, short: r.short }, { up: false, short: false }, 'mid-stick at load does not arm; 0.35 s at the bottom does not');
 
-        // Down for over a second, then up: armed and flying.
+        // Down for over a second (the page's own count of it), then up: armed and flying.
         r = await js(`
           E.thr(0);
-          await E.wait(1300);
+          const held = await E.held(${HOLD_S});
           const before = E.state();
           E.thr(0.6);
           const t0 = performance.now();
           const armed = await E.until(() => E.s.coreState().armed, 1500);
           const armMs = performance.now() - t0;
           await E.wait(900);
-          return JSON.stringify({ before, armed, armMs, after: E.state() });`);
+          return JSON.stringify({ held, before, armed, armMs, after: E.state() });`);
         console.log('arm: ' + JSON.stringify({ armMs: r.armMs, z: r.after.z, flags: r.after.flags }));
+        assert.equal(r.held, true, 'the page held the throttle down a second');
         assert.equal(r.before.armed, false);
         assert.equal(r.armed, true, `armed by throttle (flags ${r.after.flags})`);
         assert.ok(r.after.z > 0.5, `flies (z ${r.after.z.toFixed(2)} m)`);
         assert.equal(r.after.rc[0], 2000, 'the page has ARM on, on the diff\'s AUX1');
 
-        // Throttle to the bottom in the air: armed all the way down; then the 2 s.
+        // Throttle to the bottom in the air: armed all the way down; then the
+        // 0.5 s. The hold counts the page's input time, which is the sim's: so
+        // it is timed on the sim's clock (the core's flight time), with the
+        // wall's as a floor (the sim never runs ahead of it).
         r = await js(`
           E.thr(0);
           let armedInAir = true;
           const down = await E.until(() => { if (!E.landed()) armedInAir = armedInAir && E.s.coreState().armed; return E.landed(); }, 8000);
-          const t0 = performance.now();
-          let earliest = null;
-          const off = await E.until(() => { if (!E.s.coreState().armed && earliest === null) earliest = performance.now() - t0; return earliest !== null; }, 6000);
-          return JSON.stringify({ down, armedInAir, off, ms: earliest });`);
+          const t0 = performance.now(), s0 = E.s.coreState().flightMs;
+          let earliest = null, sim = null;
+          const off = await E.until(() => { if (!E.s.coreState().armed && earliest === null) { earliest = performance.now() - t0; sim = E.s.coreState().flightMs - s0; } return earliest !== null; }, 6000);
+          return JSON.stringify({ down, armedInAir, off, ms: earliest, simMs: sim });`);
         console.log('disarm: ' + JSON.stringify(r));
         assert.equal(r.down, true, 'it landed');
         assert.equal(r.armedInAir, true, 'armed in the air at zero throttle');
         assert.equal(r.off, true, 'disarmed landed');
-        assert.ok(r.ms >= 1800 && r.ms < 4500, `about 2 s after landing (${Math.round(r.ms)} ms)`);
+        assert.ok(r.simMs >= 450 && r.simMs < 1125, `about 0.5 s after landing (${Math.round(r.simMs)} ms of sim time)`);
+        assert.ok(r.ms >= 450, `not before 0.5 s of wall time either (${Math.round(r.ms)} ms)`);
 
         // A crash: a throttle at 20 % never reaches the bottom; it disarms at rest.
+        // A fresh second down, counted by the page from here: the count it kept
+        // through the landing would arm at once.
         r = await js(`
           E.thr(0);
-          await E.wait(1300);
+          const held = await E.held(E.lowS() + ${HOLD_S});
           E.thr(0.2);
           const armed = await E.until(() => E.s.coreState().armed, 1500);
           await E.wait(200);
           E.drop();
           const off = await E.until(() => !E.s.coreState().armed, 6000);
-          return JSON.stringify({ armed, off, st: E.state(), reason: E.s.easy().disarmReason });`);
+          return JSON.stringify({ held, armed, off, st: E.state(), reason: E.s.easy().disarmReason });`);
         console.log('crash: ' + JSON.stringify({ armed: r.armed, off: r.off, thr: 0.2, upZ: r.st.upZ }));
+        assert.equal(r.held, true, 'the page held the throttle down a second');
         assert.equal(r.armed, true);
         assert.equal(r.off, true, 'disarmed after the crash, throttle still at 20 %');
         assert.equal(r.reason, 'crash', 'as a crash');
@@ -858,6 +946,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
             E.thr(${thr});
             E.axis(${stick}, ${val});
             const b = E.s.bfCore();
+            const step = E.frames();
             const started = await E.until(() => b.turtlePhase !== null, 2000);
             let crashFlip = false, flipRc = 0, upUs = null, flyUs = null, heldThr = 0;
             const flyable = await E.until(() => {
@@ -870,6 +959,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
               }
               return flyUs !== null;
             }, 6000);
+            const stepMs = step();
             await E.wait(150);
             const f = E.fc();
             const handed = { thr: Math.round(f.rcData[3]), held: Math.round(f.rcData[${stick}]) };
@@ -877,8 +967,8 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
             const heldUp = E.state();
             E.axis(${stick}, 0);
             await E.wait(500);
-            return JSON.stringify({ rest, before, started, crashFlip, flipRc, flyable, ms: (flyUs - upUs) / 1000, heldThr, handed, heldUp, after: E.state() });`);
-          console.log(`turtle (${name}): ` + JSON.stringify({ started: r.started, crashFlip: r.crashFlip, flipRc: r.flipRc, ms: r.ms, heldThr: r.heldThr, handed: r.handed, upZ: r.after.upZ, armed: r.after.armed, z: r.after.z }));
+            return JSON.stringify({ rest, before, started, crashFlip, flipRc, flyable, ms: (flyUs - upUs) / 1000, stepMs, heldThr, handed, heldUp, after: E.state() });`);
+          console.log(`turtle (${name}): ` + JSON.stringify({ started: r.started, crashFlip: r.crashFlip, flipRc: r.flipRc, ms: r.ms, stepMs: r.stepMs, heldThr: r.heldThr, handed: r.handed, upZ: r.after.upZ, armed: r.after.armed, z: r.after.z }));
           assert.equal(r.rest, true, `${name}: upside down at rest`);
           assert.ok(r.before.upZ < -0.5, `${name}: upside down (${r.before.upZ.toFixed(2)})`);
           assert.equal(r.before.armed, false, `${name}: disarmed upside down`);
@@ -887,7 +977,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           assert.equal(r.crashFlip, true, `${name}: Betaflight in crash flip`);
           assert.ok(r.flipRc >= 1700, `${name}: the page drives the turtle channel (${r.flipRc})`);
           assert.equal(r.flyable, true, `${name}: re-armed`);
-          assert.ok(r.ms < 300, `${name}: under 300 ms from upright to flyable (${r.ms} ms)`);
+          checkFlyableTime(name, r.ms, r.stepMs);
           assert.ok(r.heldThr <= 1000, `${name}: the throttle channel held low until armed (${r.heldThr})`);
           assert.equal(r.handed.thr, 1000 + 1000 * thr, `${name}: then the pilot's throttle`);
           assert.equal(r.handed.held, 1500, `${name}: a stick still held waits for centre`);
@@ -909,7 +999,10 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           const cb = document.querySelector('#panel .cb-radio-switches');
           const was = cb.checked;
           cb.click();
-          await E.wait(150);
+          // The wizard draws its step on an input poll the page accepts, not as
+          // it opens: wait for that first draw, which slow frames can hold back
+          // past any fixed wait.
+          await E.until(() => document.getElementById('calibStep').textContent !== '', 10000);
           const calib = document.getElementById('calib');
           return JSON.stringify({ was, open: calib.classList.contains('show'), step: document.getElementById('calibStep').textContent, skip: document.getElementById('calibSkip').style.display, wiz: E.state().wizard });`);
         console.log('wizard open: ' + JSON.stringify(r));
@@ -917,19 +1010,27 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.equal(r.open, true, 'the wizard opens');
         assert.match(r.step, /FLIP YOUR ARM SWITCH/);
         assert.equal(r.skip, 'none', 'the arm has no skip');
+        // A step's text and its Skip are drawn on a later accepted poll than the
+        // one that moves the step, and at most every 60 ms, so each is read once
+        // the page has redrawn the step text rather than after a fixed wait. The
+        // step itself must still move within 2 s of the flip, as it always had to.
         r = await js(`
+          const drawn = (was) => E.until(() => document.getElementById('calibStep').textContent !== was, 10000);
+          const armText = document.getElementById('calibStep').textContent;
           E.axis(7, 1);
-          await E.until(() => E.state().wizard && E.state().wizard.step === 1, 2000);
-          await E.wait(100);
+          const s1 = await E.until(() => E.state().wizard && E.state().wizard.step === 1, 2000);
+          await drawn(armText);
           const step = document.getElementById('calibStep').textContent, skip = document.getElementById('calibSkip').style.display;
           E.axis(4, -1);
-          await E.until(() => E.state().wizard && E.state().wizard.step === 2, 2000);
-          await E.wait(100);
+          const s2 = await E.until(() => E.state().wizard && E.state().wizard.step === 2, 2000);
+          await drawn(step);
           const step2 = document.getElementById('calibStep').textContent;
           document.getElementById('calibSkip').click();
           await E.wait(150);
-          return JSON.stringify({ step, skip, step2, st: E.state(), saved: JSON.parse(localStorage.getItem(${JSON.stringify(KEY_TX)})), calib: document.getElementById('calib').classList.contains('show') });`);
+          return JSON.stringify({ s1, s2, step, skip, step2, st: E.state(), saved: JSON.parse(localStorage.getItem(${JSON.stringify(KEY_TX)})), calib: document.getElementById('calib').classList.contains('show') });`);
         console.log('wizard done: ' + JSON.stringify({ ...r, st: r.st.switches }));
+        assert.equal(r.s1, true, 'the arm switch taken within 2 s of its flip');
+        assert.equal(r.s2, true, 'the turtle switch taken within 2 s of its flip');
         assert.match(r.step, /FLIP YOUR TURTLE SWITCH/);
         assert.equal(r.skip, '', 'the turtle has a skip');
         assert.match(r.step2, /FLIP YOUR ANGLE SWITCH/);
@@ -938,24 +1039,30 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.equal(r.st.easy, false, 'off Easy mode');
 
         // Flying it: ARM on AUX4, onto the diff's AUX1. AUX1 (the turtle now) is low = on.
+        // On its switches the page keeps no count of the throttle at the bottom
+        // to wait on, so each hold here is on the bf core's clock as well as the
+        // wall's: never shorter than it was, and that much of the page's own
+        // time however slow its frames, before the raise that must not arm and
+        // before each state is read.
         r = await js(`
           E.axis(7, -1);
           E.axis(4, 1);
-          await E.wait(1300);
+          const low = await E.simWait(1300);
           const off = E.state();
           E.thr(0.6);
-          await E.wait(500);
+          const upHeld = await E.simWait(500);
           const thrUp = E.state();
           E.thr(0);
-          await E.wait(800);
+          const downHeld = await E.simWait(800);
           E.axis(7, 1);
           const armed = await E.until(() => E.s.coreState().armed, 2500);
           await E.wait(100);
           const on = E.state();
           E.axis(7, -1);
-          await E.wait(600);
-          return JSON.stringify({ off, thrUp, armed, on, after: E.state() });`);
+          const offHeld = await E.simWait(600);
+          return JSON.stringify({ low, upHeld, downHeld, offHeld, off, thrUp, armed, on, after: E.state() });`);
         console.log('flown: ' + JSON.stringify({ off: r.off.rc, on: r.on.rc, armed: r.armed, flags: r.on.flags }));
+        assert.deepEqual([r.low, r.upHeld, r.downHeld, r.offHeld], [true, true, true, true], 'each hold lasted its time on the sim clock too');
         assert.equal(r.off.source, 'radio', 'the radio drives AUX');
         assert.equal(r.off.rc[0], 1000, 'ARM channel low, though the radio\'s AUX1 is high');
         assert.equal(r.thrUp.armed, false, 'the throttle does not arm');
@@ -1010,14 +1117,15 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           await E.wait(200);
           E.axis(7, -1);
           E.thr(0);
-          await E.wait(1300);
+          const held = await E.held(${HOLD_S});
           const st = E.state();
           E.thr(0.5);
           const armed = await E.until(() => E.s.coreState().armed, 1500);
           E.thr(0);
-          return JSON.stringify({ st, armed, saved: JSON.parse(localStorage.getItem(${JSON.stringify(KEY_TX)})) });`);
+          return JSON.stringify({ held, st, armed, saved: JSON.parse(localStorage.getItem(${JSON.stringify(KEY_TX)})) });`);
         assert.equal(r.st.easy, true);
         assert.equal(r.saved.on, false);
+        assert.equal(r.held, true, 'the page held the throttle down a second');
         assert.equal(r.armed, true, 'arms by throttle again');
 
         // The wizard again, turtle and angle skipped: the stick still turtles.
@@ -1027,7 +1135,10 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           document.querySelector('#panel .cb-radio-switches').click();
           await E.wait(150);
           E.axis(7, 1);
-          await E.until(() => E.state().wizard && E.state().wizard.step === 1, 2000);
+          const s1 = await E.until(() => E.state().wizard && E.state().wizard.step === 1, 2000);
+          // Skip is clicked once the page shows it, with the turtle step drawn
+          // (on a later accepted poll than the step itself).
+          const skipUp = await E.until(() => document.getElementById('calibSkip').style.display === '', 10000);
           document.getElementById('calibSkip').click();
           await E.wait(100);
           document.getElementById('calibSkip').click();
@@ -1043,8 +1154,10 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           const upright = await E.until(() => { flipRc = Math.max(flipRc, Math.round(E.fc().rcData[6])); return E.s.bfCore().turtlePhase === null && E.upZ() > 0.9; }, 5000);
           E.axis(0, 0);
           await E.wait(600);
-          return JSON.stringify({ set, rest, started, flipRc, upright, after: E.state() });`);
+          return JSON.stringify({ s1, skipUp, set, rest, started, flipRc, upright, after: E.state() });`);
         console.log('skipped: ' + JSON.stringify({ sw: r.set.switches, started: r.started, flipRc: r.flipRc, upright: r.upright, source: r.after.source }));
+        assert.equal(r.s1, true, 'again: the arm switch taken within 2 s of its flip');
+        assert.equal(r.skipUp, true, 'the turtle step shows its skip');
         assert.equal(r.set.source, 'radio', 'on the radio');
         assert.deepEqual([r.set.switches.turtle, r.set.switches.angle], [null, null], 'both skipped');
         assert.equal(r.rest, true);
@@ -1068,27 +1181,45 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.equal(r.flight, 'angle', 'unplugged from its switches: Angle');
         assert.doesNotMatch(r.toast, /ON THE RADIO/, r.toast);
 
-        // Calibration: the sticks only.
+        // Calibration: the sticks only. It takes the centre and each stick after
+        // a hold it counts on the input polls it accepts (1 s centred, 0.6 s a
+        // stick), and draws its next prompt on a later one; so each pose is held
+        // until the page has drawn its next prompt, not for a fixed time that
+        // slow frames can make too short.
         r = await js(`
           for (const [i, v] of [[0, 0], [1, 0], [2, -1], [3, 0]]) E.axis(i, v);
           await E.wait(100);
           document.getElementById('btnCalib').click();
           const seen = new Set();
           let skipShown = false;
+          const prompt = () => document.getElementById('calibStep').textContent;
+          const note = () => {
+            seen.add(prompt());
+            skipShown = skipShown || document.getElementById('calibSkip').style.display !== 'none';
+          };
           const hold = async (ms) => {
             const t0 = performance.now();
-            while (performance.now() - t0 < ms) {
-              seen.add(document.getElementById('calibStep').textContent);
-              skipShown = skipShown || document.getElementById('calibSkip').style.display !== 'none';
-              await E.wait(20);
-            }
+            while (performance.now() - t0 < ms) { note(); await E.wait(20); }
           };
-          await hold(1300);
-          for (const i of [0, 1, 3]) { E.axis(i, 1); await hold(900); E.axis(i, 0); await hold(60); }
-          E.axis(2, 1); await hold(400);
-          E.axis(2, -1); await hold(500);
-          return JSON.stringify({ open: document.getElementById('calib').classList.contains('show'), seen: [...seen], skipShown, map: JSON.parse(localStorage.getItem(${JSON.stringify(AXIS_MAP_PREFIX + SID)})) });`);
+          // The sticks kept as they are until the page draws a new prompt (or ms
+          // pass); true if it did, so a pose that ran out its time is reported.
+          const next = async (ms) => {
+            const was = prompt();
+            const t0 = performance.now();
+            while (prompt() === was && performance.now() - t0 < ms) { note(); await E.wait(20); }
+            note();
+            return prompt() !== was;
+          };
+          const drawn = [];
+          drawn.push(await next(3000));    // its first prompt drawn (the text was still the wizard's)
+          drawn.push(await next(10000));   // the centre taken
+          for (const i of [0, 1, 3]) { E.axis(i, 1); drawn.push(await next(6000)); E.axis(i, 0); await hold(60); }
+          E.axis(2, 1); drawn.push(await next(4000));
+          E.axis(2, -1);
+          await E.until(() => { note(); return !document.getElementById('calib').classList.contains('show'); }, 4000);
+          return JSON.stringify({ drawn, open: document.getElementById('calib').classList.contains('show'), seen: [...seen], skipShown, map: JSON.parse(localStorage.getItem(${JSON.stringify(AXIS_MAP_PREFIX + SID)})) });`);
         console.log('calibration: ' + JSON.stringify(r));
+        assert.deepEqual(r.drawn, [true, true, true, true, true, true], 'each pose ended on the page\'s next prompt: ' + r.seen.join(' | '));
         assert.equal(r.open, false, 'done after the throttle');
         assert.ok(!r.seen.some((l) => /ARM|MODE/.test(l)), 'never asks for a switch: ' + r.seen.join(' | '));
         assert.equal(r.skipShown, false, 'nothing to skip');
@@ -1139,18 +1270,22 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.equal(r.easy, true, 'Easy mode');
         assert.equal(r.source, 'page', 'the page drives AUX');
         assert.equal(r.flight, 'angle', 'a saved flight mode still wins');
-        // Its saved AUX1 arm switch does nothing; the throttle arms.
+        // Its saved AUX1 arm switch does nothing; the throttle arms. AUX1 is
+        // read 400 ms after it goes high on the bf core's clock as well as the
+        // wall's, so the core has stepped with it high however slow its frames.
         r = await js(`
           E.thr(0);
-          await E.wait(1300);
+          const held = await E.held(${HOLD_S});
           E.axis(4, 1);
-          await E.wait(400);
+          const saw = await E.simWait(400);
           const aux1 = E.state();
           E.axis(4, -1);
           E.thr(0.6);
           const armed = await E.until(() => E.s.coreState().armed, 1500);
           E.thr(0);
-          return JSON.stringify({ aux1, armed });`);
+          return JSON.stringify({ held, saw, aux1, armed });`);
+        assert.equal(r.held, true, 'the page held the throttle down a second');
+        assert.equal(r.saw, true, 'AUX1 high for 400 ms on the sim clock too');
         assert.equal(r.aux1.armed, false, 'its saved AUX1 switch does not arm');
         assert.equal(r.aux1.rc[0], 1000, 'and does not reach Betaflight');
         assert.equal(r.armed, true, 'the throttle arms');
@@ -1167,52 +1302,65 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.equal(r.easy, true);
         assert.equal(r.mode, 'acro', 'acro on the js core');
         assert.deepEqual(r.menus, { start: false, looks: false, layer: false, prompt: false, picker: false });
+        // The short hold and the long one are the page's own count of the
+        // throttle down; after the short one the arm state is read once the
+        // page has seen the raise (its count back to 0). Two evaluations, so
+        // their waits together stay inside one page call's time.
         r = await js(`
           E.thr(0);
-          await E.wait(350);
+          const counted = await E.held(0.35);
           E.thr(0.7);
+          const read = await E.until(() => E.lowS() === 0, 5000);
           await E.wait(300);
-          const short = E.state().armed;
+          return JSON.stringify({ counted, read, short: E.state().armed });`);
+        console.log('js radio, short hold: ' + JSON.stringify(r));
+        assert.equal(r.counted, true, 'the page counted 0.35 s at the bottom');
+        assert.equal(r.read, true, 'the page read the raise');
+        assert.equal(r.short, false, 'a short hold does not arm');
+        r = await js(`
           E.thr(0);
-          await E.wait(1300);
+          const held = await E.held(${HOLD_S});
           E.thr(0.62);
           const armed = await E.until(() => E.s.coreState().armed, 1000);
           await E.wait(700);
           const up = E.state();
           E.thr(0);
           const down = await E.until(E.landed, 8000);
-          const t0 = performance.now();
+          const t0 = performance.now(), s0 = E.s.coreState().flightMs;
           const off = await E.until(() => !E.s.coreState().armed, 6000);
-          return JSON.stringify({ short, armed, up: up.z, down, off, ms: performance.now() - t0, reason: E.s.easy().disarmReason });`);
+          return JSON.stringify({ held, armed, up: up.z, down, off, ms: performance.now() - t0, simMs: E.s.coreState().flightMs - s0, reason: E.s.easy().disarmReason });`);
         console.log('js radio: ' + JSON.stringify(r));
-        assert.equal(r.short, false, 'a short hold does not arm');
+        assert.equal(r.held, true, 'the page held the throttle down a second');
         assert.equal(r.armed, true, 'armed by throttle');
         assert.ok(r.up > 0.3, `flies (z ${r.up})`);
         assert.equal(r.off, true, 'disarmed landed');
-        assert.equal(r.reason, 'landed', 'on the 2 s rule, not as a crash');
-        assert.ok(r.ms >= 1800 && r.ms < 4500, `about 2 s (${Math.round(r.ms)} ms)`);
+        assert.equal(r.reason, 'landed', 'on the 0.5 s rule, not as a crash');
+        assert.ok(r.simMs >= 450 && r.simMs < 1125, `about 0.5 s (${Math.round(r.simMs)} ms of sim time)`);
+        assert.ok(r.ms >= 450, `not before 0.5 s of wall time either (${Math.round(r.ms)} ms)`);
         for (const [name, stick, val] of [['roll', 0, -1], ['pitch', 1, 1]]) {
           r = await js(`
             E.thr(0);
             const rest = await E.flip();
             await E.wait(300);
+            const step = E.frames();
             E.axis(${stick}, ${val});
             const started = await E.until(() => E.state().jsTurtle, 1500);
             let upT = null, flyT = null;
             const upright = await E.until(() => {
-              if (upT === null && E.upZ() > 0.9) upT = performance.now();
-              if (upT !== null && flyT === null && E.s.coreState().armed) flyT = performance.now();
+              if (upT === null && E.upZ() > 0.9) upT = E.s.simClockMs();
+              if (upT !== null && flyT === null && E.s.coreState().armed) flyT = E.s.simClockMs();
               return flyT !== null;
             }, 6000);
+            const stepMs = step();
             await E.wait(400);
             const held = E.state();
             E.axis(${stick}, 0);
             await E.wait(500);
-            return JSON.stringify({ rest, started, upright, ms: flyT - upT, held, st: E.state() });`);
-          console.log(`js turtle ${name}: ` + JSON.stringify({ rest: r.rest, started: r.started, upright: r.upright, ms: r.ms, upZ: r.st.upZ, armed: r.st.armed }));
+            return JSON.stringify({ rest, started, upright, ms: flyT - upT, stepMs, held, st: E.state() });`);
+          console.log(`js turtle ${name}: ` + JSON.stringify({ rest: r.rest, started: r.started, upright: r.upright, ms: r.ms, stepMs: r.stepMs, upZ: r.st.upZ, armed: r.st.armed }));
           assert.equal(r.started, true, `${name}: the stick starts it`);
           assert.equal(r.upright, true, `${name}: upright and re-armed`);
-          assert.ok(r.ms < 300, `${name}: under 300 ms from upright to flyable (${Math.round(r.ms)} ms)`);
+          checkFlyableTime(name, r.ms, r.stepMs);
           assert.ok(r.held.upZ > 0.9, `${name}: stays up, stick still held (${r.held.upZ.toFixed(2)})`);
           assert.equal(r.st.armed, true, `${name}: armed, no hold`);
           assert.ok(r.st.upZ > 0.97, `${name}: lands level (${r.st.upZ.toFixed(3)})`);
@@ -1240,12 +1388,12 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
                 const out = await E.recover(${i}, ${v});
                 return JSON.stringify({ rest, ...out });`);
               const name = `${core}, ${pose} on ${surface}`;
-              console.log(`${name}: ` + JSON.stringify({ up0: +r.up0.toFixed(3), ms: Math.round(r.ms), up: +r.up.toFixed(3), armed: r.armed }));
+              console.log(`${name}: ` + JSON.stringify({ up0: +r.up0.toFixed(3), ms: Math.round(r.ms), stepMs: r.stepMs, up: +r.up.toFixed(3), armed: r.armed }));
               assert.equal(r.rest, true, `${name}: at rest and not upright`);
               assert.ok(r.up0 < 0.5, `${name}: not upright (${r.up0.toFixed(3)})`);
               assert.equal(r.started, true, `${name}: the stick starts it`);
               assert.equal(r.flyable, true, `${name}: upright and re-armed`);
-              assert.ok(r.ms < 300, `${name}: under 300 ms from upright to flyable (${Math.round(r.ms)} ms)`);
+              checkFlyableTime(name, r.ms, r.stepMs);
               assert.ok(r.up > 0.9, `${name}: upright (${r.up.toFixed(3)})`);
               assert.equal(r.armed, true, `${name}: armed`);
               assert.ok(Math.hypot(r.pos.x - spot.x, r.pos.y - spot.y) < 0.6 && Math.abs(r.pos.z - spot.z) < 0.3, `${name}: where it lay, no respawn (${JSON.stringify(r.pos)})`);
@@ -1265,12 +1413,15 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
       });
     }
 
-    await t.test('the keyboard on the bf core: W arms, S and 2 s disarm, an arrow turtles', async () => {
+    await t.test('the keyboard on the bf core: W arms, S and 0.5 s disarm, an arrow turtles', async () => {
       await pass('map=rig', {}, async ({ js, key }) => {
-        await js(`window._feel.hideFirstRun(); await E.wait(1300); return JSON.stringify(1);`);
+        // W once the page has counted the throttle down a second (a fixed wall
+        // time can be much less of a hold where frames are slow).
+        let r = await js(`window._feel.hideFirstRun(); return JSON.stringify(await E.held(${HOLD_S}));`);
+        assert.equal(r, true, 'the page held the throttle down a second');
         await key('rawKeyDown', 'w', 'KeyW', 87);
         await key('keyDown', 'w', 'KeyW', 87);
-        let r = await js(`const a = await E.until(() => E.s.coreState().armed, 2000); return JSON.stringify({ a, st: E.state() });`);
+        r = await js(`const a = await E.until(() => E.s.coreState().armed, 2000); return JSON.stringify({ a, st: E.state() });`);
         await key('keyUp', 'w', 'KeyW', 87);
         console.log('kb bf: ' + JSON.stringify({ armed: r.a, flags: r.st.flags, mode: r.st.mode }));
         assert.equal(r.a, true, `W arms (flags ${r.st.flags})`);
@@ -1282,7 +1433,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           const off = await E.until(() => !E.s.coreState().armed, 6000);
           return JSON.stringify({ down, off });`);
         await key('keyUp', 's', 'KeyS', 83);
-        assert.deepEqual(r, { down: true, off: true }, 'S to the bottom, landed 2 s: disarmed');
+        assert.deepEqual(r, { down: true, off: true }, 'S to the bottom, landed 0.5 s: disarmed');
         r = await js(`const rest = await E.flip(); await E.wait(200); return JSON.stringify({ rest });`);
         assert.equal(r.rest, true);
         await key('rawKeyDown', 'ArrowRight', 'ArrowRight', 39);
@@ -1302,6 +1453,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         await key('keyUp', 'f', 'KeyF', 70);
         r = await js(`
           const b = E.s.bfCore();
+          const step = E.frames();
           const started = await E.until(() => b.turtlePhase !== null, 2000);
           let auto = false, upUs = null, flyUs = null;
           const flyable = await E.until(() => {
@@ -1310,13 +1462,14 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
             if (upUs !== null && flyUs === null && E.fc().armed && b.turtlePhase === null) flyUs = b.simTimeUs;
             return flyUs !== null;
           }, 6000);
+          const stepMs = step();
           await E.wait(400);
-          return JSON.stringify({ started, auto, flyable, ms: (flyUs - upUs) / 1000, flips: b.simFlips, armed: E.s.coreState().armed, upZ: E.upZ() });`);
+          return JSON.stringify({ started, auto, flyable, ms: (flyUs - upUs) / 1000, stepMs, flips: b.simFlips, armed: E.s.coreState().armed, upZ: E.upZ() });`);
         console.log('F flip: ' + JSON.stringify(r));
         assert.equal(r.started, true, 'F starts');
         assert.equal(r.auto, true, 'as an F flip');
         assert.equal(r.flyable, true, 'F re-arms in Easy mode');
-        assert.ok(r.ms < 300, `F: under 300 ms from upright to flyable (${r.ms} ms)`);
+        checkFlyableTime('F', r.ms, r.stepMs);
         assert.equal(r.flips, 1, 'counted once');
         assert.equal(r.armed, true, 'stays armed');
         assert.ok(r.upZ > 0.9, `stays up (${r.upZ.toFixed(2)})`);
@@ -1325,10 +1478,12 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
 
     await t.test('the keyboard on ?core=js, a gamepad and touch: arm by throttle, turtle by stick', async () => {
       await pass('core=js&map=rig', { core: 'js' }, async ({ js, key }) => {
-        await js(`window._feel.hideFirstRun(); await E.wait(1300); return JSON.stringify(1);`);
+        // W once the page has counted the throttle down a second.
+        let r = await js(`window._feel.hideFirstRun(); return JSON.stringify(await E.held(${HOLD_S}));`);
+        assert.equal(r, true, 'js keyboard: the page held the throttle down a second');
         await key('rawKeyDown', 'w', 'KeyW', 87);
         await key('keyDown', 'w', 'KeyW', 87);
-        let r = await js(`return JSON.stringify({ armed: await E.until(() => E.s.coreState().armed, 2000), mode: E.s.coreState().flightMode });`);
+        r = await js(`return JSON.stringify({ armed: await E.until(() => E.s.coreState().armed, 2000), mode: E.s.coreState().flightMode });`);
         await key('keyUp', 'w', 'KeyW', 87);
         assert.deepEqual(r, { armed: true, mode: 'angle' }, 'js keyboard: W arms, in Angle');
         await key('keyDown', 's', 'KeyS', 83);
@@ -1349,9 +1504,11 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
 
       const xbox = { on: true, id: 'Xbox One Game Controller (STANDARD GAMEPAD)', mapping: 'standard', axes: [0, 0, 0, 0], buttons: 0 };
       await pass('map=rig', { pad: xbox }, async ({ js }) => {
-        await js(`window._feel.hideFirstRun(); await E.wait(1300); return JSON.stringify(1);`);
+        // Stick up once the page has counted the throttle down a second.
+        let r = await js(`window._feel.hideFirstRun(); return JSON.stringify(await E.held(${HOLD_S}));`);
+        assert.equal(r, true, 'gamepad: the page held the throttle down a second');
         // A spring pad: left stick up is throttle (axis 1, up is -1).
-        let r = await js(`
+        r = await js(`
           E.axis(1, -0.7);
           const a = await E.until(() => E.s.coreState().armed, 2000);
           E.axis(1, 0);
@@ -1374,13 +1531,17 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
       });
 
       await pass('core=js&map=rig', { core: 'js', storage: { quadmathSimInputChoice: 'touch' } }, async ({ js }) => {
-        // Touch's read(), as the sticks would report it.
+        // Touch's read(), as the sticks would report it. Up once the page has
+        // counted the throttle down a second.
         let r = await js(`
           const stick = window.__touchStick = { r: 0, p: 0, y: 0, t: 0 };
           window._touch.read = () => ({ ...stick });
           window._touch.enabled = true;
           window._feel.hideFirstRun();
-          await E.wait(1300);
+          return JSON.stringify(await E.held(${HOLD_S}));`);
+        assert.equal(r, true, 'touch: the page held the throttle down a second');
+        r = await js(`
+          const stick = window.__touchStick;
           stick.t = 0.6;
           const a = await E.until(() => E.s.coreState().armed, 2000);
           stick.t = 0;
