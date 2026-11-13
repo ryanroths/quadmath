@@ -545,13 +545,15 @@ function matSig(mat) {
     map: t(mat.map), normalMap: t(mat.normalMap), roughnessMap: t(mat.roughnessMap), aoMap: t(mat.aoMap),
     aoMapIntensity: mat.aoMapIntensity, normalScale: mat.normalScale ? mat.normalScale.toArray() : null,
     polygonOffset: mat.polygonOffset, vertexColors: mat.vertexColors, side: mat.side, depthWrite: mat.depthWrite,
-    lookKind: mat.userData.lookKind || null, cacheKey: mat.customProgramCacheKey ? mat.customProgramCacheKey() : null,
+    // three's default program cache key is onBeforeCompile.toString(), so it
+    // carries the checkout's line endings: LF, as the repo stores it.
+    lookKind: mat.userData.lookKind || null, cacheKey: mat.customProgramCacheKey ? mat.customProgramCacheKey().replace(/\r\n/g, '\n') : null,
     uniforms: shaderUniforms(mat),
   });
 }
 // sha256 of the sorted, unique matSig of every material under houseArtVisuals
 // at origin/main 8b5119e (19 materials), and of the look data then.
-const HOUSE_MATERIALS_SHA = '351d8a4ea9ccc5c342e60d876fca968edb7b8fe24b288bc1988305edeb9abe27';
+const HOUSE_MATERIALS_SHA = '4e247da1c27042eec5abfa23515659705a39c1a5e48c1b195cee0d702bd914f8';
 const HOUSE_LOOK_SHA = 'bdcb173bc5f04a2da619b1e4727b4740888d8fa6f6323e257df55e38b6f988a5';
 const HOUSE_VIBE_SHA = '0b2983844eaaaf7bb716aeb5422d6327247693fe4298e0aa376bf7b7bcaeabad';
 const MAP_LOOKS_HOUSE_SHA = '90a47dd880636d6dbce851fd5a036d6d18407cd93797f17a8f6de87050f70e81';
