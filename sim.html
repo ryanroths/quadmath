@@ -8936,6 +8936,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   dailyLineFor,flyDailyLine,dailyLineLive:()=>dailyLineLive,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
   core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
+  simClockMs:()=>simClockMs,
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
   audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
   firstFlight:()=>({show:firstFlightState.show||null,seen:{...firstFlightSeen},liveS:firstFlightState.liveS||0,shownS:firstFlightState.shownS||0}),

@@ -475,6 +475,25 @@ test('bf core: rearm false lets go disarmed, for a radio on its switches', async
 
 // ---- headless Chrome ----
 
+// Upright to flyable in the page: the 300 ms is checked only where the page's
+// frames step the sim clock by under FRAME_STEP_MAX_MS. The page steps the
+// core, the turtle and the read-back here once a frame, so each end of the
+// time is good to a frame; a CI runner's software GL takes 80 ms frames and
+// more, which adds frames, not turtle. There the sequence is still checked
+// (it recovers, re-arms and flies); tools/test_sim_turtle_rearm.mjs times the
+// 300 ms to the tick on the sim clock, tools/smoke_sim_headed.mjs at a real
+// frame rate.
+const FRAME_STEP_MAX_MS = 50;
+function checkFlyableTime(name, ms, stepMs) {
+  assert.ok(Number.isFinite(ms), `${name}: upright to flyable measured (${ms})`);
+  assert.ok(Number.isFinite(stepMs) && stepMs > 0, `${name}: frame step measured (${stepMs})`);
+  if (stepMs < FRAME_STEP_MAX_MS) {
+    assert.ok(ms < 300, `${name}: under 300 ms from upright to flyable (${Math.round(ms)} ms, frame step ${stepMs} ms)`);
+  } else {
+    console.log(`${name}: upright to flyable ${Math.round(ms)} ms not timed: frame step ${stepMs} ms of sim time (timed under ${FRAME_STEP_MAX_MS} ms)`);
+  }
+}
+
 function resolveChrome() {
   const names = [process.env.CHROME, 'google-chrome', 'google-chrome-stable', 'chromium-browser', 'chromium', 'chrome'].filter(Boolean);
   for (const n of names) {
@@ -602,6 +621,26 @@ const PAGE = String.raw`(() => {
       return performance.now() - w0 >= ms && us >= ms * 1000;
     }, ceil || 8000);
   };
+  // The page's frame step on the sim clock (simClockMs, both cores), largest
+  // since frames() began: the page runs one stepCore per animation frame
+  // (loop), so the clock's change from one animation frame to the next is one
+  // frame's step. The page steps the core, the turtle and its read-back only
+  // in frames, so a time read here is good to a frame at each end; under
+  // FRAME_STEP_MAX_MS it is timed, over it only the sequence is checked
+  // (tools/test_sim_turtle_rearm.mjs times it to the tick, and
+  // tools/smoke_sim_headed.mjs at a real frame rate).
+  function frames() {
+    let last = s.simClockMs(), max = 0, on = true;
+    const f = () => {
+      if (!on) return;
+      const now = s.simClockMs();
+      max = Math.max(max, now - last);
+      last = now;
+      requestAnimationFrame(f);
+    };
+    requestAnimationFrame(f);
+    return () => { on = false; return Math.round(max * 10) / 10; };
+  }
   function menus() {
     const on = (id, c) => { const el = document.getElementById(id); return !!(el && el.classList.contains(c)); };
     return { start: on('startMenu', 'open'), looks: !!(s.looks && s.looks.menuOpen), layer: on('menuLayer', 'show'), prompt: on('feelPrompt', 'show'), picker: !!document.getElementById('gpPicker') };
@@ -675,13 +714,15 @@ const PAGE = String.raw`(() => {
     const w = () => { const o = s.coreState().omega; return Math.hypot(o.x, o.y, o.z); };
     return until(() => upZ() < 0.5 && s.coreState().clearance <= 0.04 && speed() < 0.2 && w() < 1, 4000);
   }
-  // A full stick on axis i: did it start, come upright and re-arm, and how long
-  // from upright to flyable (sim time on bf).
+  // A full stick on axis i: did it start, come upright and re-arm, how long
+  // from upright to flyable on the sim clock, and the largest frame step
+  // meanwhile (frames()).
   async function recover(i, v) {
     const bf = s.coreState().kind === 'bf', b = bf ? s.bfCore() : null;
     const busy = () => (bf ? b.turtlePhase !== null : !!s.easy().jsTurtle);
-    const clock = () => (bf ? b.simTimeUs / 1000 : performance.now());
+    const clock = () => (bf ? b.simTimeUs / 1000 : s.simClockMs());
     const up0 = upZ();
+    const step = frames();
     axis(i, v);
     const started = await until(busy, 2000);
     let upT = null, flyT = null;
@@ -690,9 +731,10 @@ const PAGE = String.raw`(() => {
       if (upT !== null && flyT === null && s.coreState().armed && !busy()) flyT = clock();
       return flyT !== null;
     }, 6000);
+    const stepMs = step();
     axis(i, 0);
     await wait(120);
-    return { up0, started, flyable, ms: flyT - upT, up: upZ(), armed: s.coreState().armed, pos: { ...s.coreState().position }, map: s.map() };
+    return { up0, started, flyable, ms: flyT - upT, stepMs, up: upZ(), armed: s.coreState().armed, pos: { ...s.coreState().position }, map: s.map() };
   }
   // A fall onto the floor at speed: a crash (the Rig's walls are foam: about
   // 20 m/s on the bf core).
@@ -702,7 +744,7 @@ const PAGE = String.raw`(() => {
     if (c.kind === 'bf') s.bfCore().teleport({ x: c.position.x, y: c.position.y, z: 2.5 }, q, { x: 0, y: 0, z: -25 });
     else { window._qp.position.z = 2.5; window._qp.velocity.z = -40; }
   }
-  window.__easy = { s, wait, until, axis, thr, upZ, tickUp, lowS, held, simWait, speed, landed, fc, menus, state, flip, drop, spots, restOn, recover };
+  window.__easy = { s, wait, until, axis, thr, upZ, tickUp, lowS, held, simWait, speed, landed, fc, menus, state, flip, drop, spots, restOn, recover, frames };
   return true;
 })()`;
 
@@ -904,6 +946,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
             E.thr(${thr});
             E.axis(${stick}, ${val});
             const b = E.s.bfCore();
+            const step = E.frames();
             const started = await E.until(() => b.turtlePhase !== null, 2000);
             let crashFlip = false, flipRc = 0, upUs = null, flyUs = null, heldThr = 0;
             const flyable = await E.until(() => {
@@ -916,6 +959,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
               }
               return flyUs !== null;
             }, 6000);
+            const stepMs = step();
             await E.wait(150);
             const f = E.fc();
             const handed = { thr: Math.round(f.rcData[3]), held: Math.round(f.rcData[${stick}]) };
@@ -923,8 +967,8 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
             const heldUp = E.state();
             E.axis(${stick}, 0);
             await E.wait(500);
-            return JSON.stringify({ rest, before, started, crashFlip, flipRc, flyable, ms: (flyUs - upUs) / 1000, heldThr, handed, heldUp, after: E.state() });`);
-          console.log(`turtle (${name}): ` + JSON.stringify({ started: r.started, crashFlip: r.crashFlip, flipRc: r.flipRc, ms: r.ms, heldThr: r.heldThr, handed: r.handed, upZ: r.after.upZ, armed: r.after.armed, z: r.after.z }));
+            return JSON.stringify({ rest, before, started, crashFlip, flipRc, flyable, ms: (flyUs - upUs) / 1000, stepMs, heldThr, handed, heldUp, after: E.state() });`);
+          console.log(`turtle (${name}): ` + JSON.stringify({ started: r.started, crashFlip: r.crashFlip, flipRc: r.flipRc, ms: r.ms, stepMs: r.stepMs, heldThr: r.heldThr, handed: r.handed, upZ: r.after.upZ, armed: r.after.armed, z: r.after.z }));
           assert.equal(r.rest, true, `${name}: upside down at rest`);
           assert.ok(r.before.upZ < -0.5, `${name}: upside down (${r.before.upZ.toFixed(2)})`);
           assert.equal(r.before.armed, false, `${name}: disarmed upside down`);
@@ -933,7 +977,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           assert.equal(r.crashFlip, true, `${name}: Betaflight in crash flip`);
           assert.ok(r.flipRc >= 1700, `${name}: the page drives the turtle channel (${r.flipRc})`);
           assert.equal(r.flyable, true, `${name}: re-armed`);
-          assert.ok(r.ms < 300, `${name}: under 300 ms from upright to flyable (${r.ms} ms)`);
+          checkFlyableTime(name, r.ms, r.stepMs);
           assert.ok(r.heldThr <= 1000, `${name}: the throttle channel held low until armed (${r.heldThr})`);
           assert.equal(r.handed.thr, 1000 + 1000 * thr, `${name}: then the pilot's throttle`);
           assert.equal(r.handed.held, 1500, `${name}: a stick still held waits for centre`);
@@ -1298,23 +1342,25 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
             E.thr(0);
             const rest = await E.flip();
             await E.wait(300);
+            const step = E.frames();
             E.axis(${stick}, ${val});
             const started = await E.until(() => E.state().jsTurtle, 1500);
             let upT = null, flyT = null;
             const upright = await E.until(() => {
-              if (upT === null && E.upZ() > 0.9) upT = performance.now();
-              if (upT !== null && flyT === null && E.s.coreState().armed) flyT = performance.now();
+              if (upT === null && E.upZ() > 0.9) upT = E.s.simClockMs();
+              if (upT !== null && flyT === null && E.s.coreState().armed) flyT = E.s.simClockMs();
               return flyT !== null;
             }, 6000);
+            const stepMs = step();
             await E.wait(400);
             const held = E.state();
             E.axis(${stick}, 0);
             await E.wait(500);
-            return JSON.stringify({ rest, started, upright, ms: flyT - upT, held, st: E.state() });`);
-          console.log(`js turtle ${name}: ` + JSON.stringify({ rest: r.rest, started: r.started, upright: r.upright, ms: r.ms, upZ: r.st.upZ, armed: r.st.armed }));
+            return JSON.stringify({ rest, started, upright, ms: flyT - upT, stepMs, held, st: E.state() });`);
+          console.log(`js turtle ${name}: ` + JSON.stringify({ rest: r.rest, started: r.started, upright: r.upright, ms: r.ms, stepMs: r.stepMs, upZ: r.st.upZ, armed: r.st.armed }));
           assert.equal(r.started, true, `${name}: the stick starts it`);
           assert.equal(r.upright, true, `${name}: upright and re-armed`);
-          assert.ok(r.ms < 300, `${name}: under 300 ms from upright to flyable (${Math.round(r.ms)} ms)`);
+          checkFlyableTime(name, r.ms, r.stepMs);
           assert.ok(r.held.upZ > 0.9, `${name}: stays up, stick still held (${r.held.upZ.toFixed(2)})`);
           assert.equal(r.st.armed, true, `${name}: armed, no hold`);
           assert.ok(r.st.upZ > 0.97, `${name}: lands level (${r.st.upZ.toFixed(3)})`);
@@ -1342,12 +1388,12 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
                 const out = await E.recover(${i}, ${v});
                 return JSON.stringify({ rest, ...out });`);
               const name = `${core}, ${pose} on ${surface}`;
-              console.log(`${name}: ` + JSON.stringify({ up0: +r.up0.toFixed(3), ms: Math.round(r.ms), up: +r.up.toFixed(3), armed: r.armed }));
+              console.log(`${name}: ` + JSON.stringify({ up0: +r.up0.toFixed(3), ms: Math.round(r.ms), stepMs: r.stepMs, up: +r.up.toFixed(3), armed: r.armed }));
               assert.equal(r.rest, true, `${name}: at rest and not upright`);
               assert.ok(r.up0 < 0.5, `${name}: not upright (${r.up0.toFixed(3)})`);
               assert.equal(r.started, true, `${name}: the stick starts it`);
               assert.equal(r.flyable, true, `${name}: upright and re-armed`);
-              assert.ok(r.ms < 300, `${name}: under 300 ms from upright to flyable (${Math.round(r.ms)} ms)`);
+              checkFlyableTime(name, r.ms, r.stepMs);
               assert.ok(r.up > 0.9, `${name}: upright (${r.up.toFixed(3)})`);
               assert.equal(r.armed, true, `${name}: armed`);
               assert.ok(Math.hypot(r.pos.x - spot.x, r.pos.y - spot.y) < 0.6 && Math.abs(r.pos.z - spot.z) < 0.3, `${name}: where it lay, no respawn (${JSON.stringify(r.pos)})`);
@@ -1407,6 +1453,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         await key('keyUp', 'f', 'KeyF', 70);
         r = await js(`
           const b = E.s.bfCore();
+          const step = E.frames();
           const started = await E.until(() => b.turtlePhase !== null, 2000);
           let auto = false, upUs = null, flyUs = null;
           const flyable = await E.until(() => {
@@ -1415,13 +1462,14 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
             if (upUs !== null && flyUs === null && E.fc().armed && b.turtlePhase === null) flyUs = b.simTimeUs;
             return flyUs !== null;
           }, 6000);
+          const stepMs = step();
           await E.wait(400);
-          return JSON.stringify({ started, auto, flyable, ms: (flyUs - upUs) / 1000, flips: b.simFlips, armed: E.s.coreState().armed, upZ: E.upZ() });`);
+          return JSON.stringify({ started, auto, flyable, ms: (flyUs - upUs) / 1000, stepMs, flips: b.simFlips, armed: E.s.coreState().armed, upZ: E.upZ() });`);
         console.log('F flip: ' + JSON.stringify(r));
         assert.equal(r.started, true, 'F starts');
         assert.equal(r.auto, true, 'as an F flip');
         assert.equal(r.flyable, true, 'F re-arms in Easy mode');
-        assert.ok(r.ms < 300, `F: under 300 ms from upright to flyable (${r.ms} ms)`);
+        checkFlyableTime('F', r.ms, r.stepMs);
         assert.equal(r.flips, 1, 'counted once');
         assert.equal(r.armed, true, 'stays armed');
         assert.ok(r.upZ > 0.9, `stays up (${r.upZ.toFixed(2)})`);
