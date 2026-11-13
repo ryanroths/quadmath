@@ -201,8 +201,11 @@ function killTree(child) {
   else { try { child.kill('SIGKILL'); } catch (e) { /* ignore */ } }
 }
 
-// Before the page's scripts: every violation the document sees.
+// Before the page's scripts: every violation the document sees. And no
+// controller: a radio or gamepad plugged into the machine running the test
+// would be the page's input (the flights here are on the keyboard).
 const COLLECT = String.raw`(() => {
+  Object.defineProperty(Navigator.prototype, 'getGamepads', { configurable: true, value() { return [null, null, null, null]; } });
   window.__csp = [];
   document.addEventListener('securitypolicyviolation', (e) => {
     window.__csp.push({ d: e.effectiveDirective, u: String(e.blockedURI || '').slice(0, 120), f: String(e.sourceFile || '').slice(-60), l: e.lineNumber });
@@ -222,24 +225,42 @@ const PAGE = String.raw`(() => {
   const $ = (id) => document.getElementById(id);
   const toast = () => $('toast').textContent;
   // The quad put at each gate of the active track in turn (the bf core's own
-  // teleport): gate 1 starts the run, the last finishes it. A pass is entering
-  // a gate's sphere, so a gate whose sphere already holds the gate before it
-  // is entered from above it. A hop once the page has counted the gate.
+  // teleport): gate 1 starts the run, the last finishes it. A pass is the
+  // quad entering a gate's sphere between two of the page's looks, which come
+  // once a frame, after the frame's step of the core. On a slow runner that
+  // step is up to 250 ms of sim time, in which a quad put at a gate at rest
+  // falls 0.3 m: out of the smallest spheres here (0.24 m) before the page
+  // looks. So the quad is put at the gate rising at the speed that 250 ms of
+  // free fall brings back to the gate; at the page's next look it is within
+  // 8 cm of the gate, however long the frame was. A hop once the page has
+  // counted the gate. If the page looked and did not count it (its look before
+  // already had the quad inside this sphere, as when a gate's sphere holds the
+  // gate before it), the quad goes out above the gate until the page has
+  // looked again, then back in. The page's look is known by the core's flight
+  // time, which moves only in a frame that stepped the core. The whole run has
+  // a ceiling: a gate not counted by then ends it unfinished.
   async function flyGates() {
     const track = s.tracks().find((t) => t.id === s.track());
     const b = s.bfCore();
     // The gate number only: the split beside it ticks every frame.
     const counter = () => (/ GATE (\d+)\//.exec($('osdGate').textContent) || [])[1];
+    const simMs = () => s.coreState().flightMs;
+    const RISE = 9.81 * 0.125; // m/s up: back at the gate after 250 ms of free fall
+    const end = performance.now() + 40000;
+    const left = () => Math.max(0, end - performance.now());
     for (const g of track.gates) {
       const before = counter();
-      const put = (up) => b.teleport({ x: -g.z / ${WS}, y: -g.x / ${WS}, z: (g.y + up) / ${WS} }, { x: 0, y: 0, z: 0, w: 1 });
-      put(0);
-      let counted = await until(() => counter() !== before, 600);
-      for (let i = 0; i < 3 && !counted; i++) {
-        put(3 * (g.size || 2));
-        await wait(120);
-        put(0);
-        counted = await until(() => counter() !== before, 600);
+      const counted = () => counter() !== before;
+      const put = (up, vz) => b.teleport({ x: -g.z / ${WS}, y: -g.x / ${WS}, z: (g.y + up) / ${WS} }, { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: 0, z: vz });
+      while (!counted()) {
+        let t0 = simMs();
+        put(0, RISE);
+        await until(() => counted() || simMs() !== t0, left());
+        if (counted()) break;
+        if (!left()) return false;
+        t0 = simMs();
+        put(3 * (g.size || 2), 0);
+        if (!(await until(() => simMs() !== t0, left()))) return false;
       }
       await wait(150);
     }
@@ -281,16 +302,43 @@ async function flows(d, label, { core, share, menus, record }) {
     armed = await d.js(`return await T.until(() => T.state().armed, 1500);`);
   }
   assert.equal(armed, true, label + ': Space arms');
+  // W ramps the page's keyboard throttle by 1.4 per second of input time, and
+  // the page counts input time only on the input polls it keeps. A slow runner
+  // draws few frames and the page drops most polls between them, so the ramp
+  // to full takes many times its 0.7 s there. W is therefore held until the
+  // page reads full throttle, and for at least the 2.2 s it was always held,
+  // counted on the page's sim clock (the core's flight time) so that the quad
+  // has flown as long as on a desktop before the climb is measured.
   await d.hold(true, 'w', 'KeyW', 87);
-  await sleep(2200);
+  const wHeld = await d.js(`const f0 = T.s.coreState().flightMs;
+    const ok = await T.until(() => window._axis().stick.t >= 1 && T.s.coreState().flightMs - f0 >= 2200, 40000);
+    return JSON.stringify({ ok, throttle: window._axis().stick.t, simMs: Math.round(T.s.coreState().flightMs - f0) });`);
   await d.hold(false, 'w', 'KeyW', 87);
   let st = await d.js(`return T.state();`);
+  // What the page takes input from, and whether it is paused: printed on
+  // every run, for a CI flight that does not climb.
+  const input = await d.js(`return JSON.stringify({
+    paused: { menu: document.body.classList.contains('menu-open'), prompt: !!(window._feel && window._feel.promptOpen), replay: T.s.replayOn() },
+    touchOn: document.body.classList.contains('touch-on'), choice: localStorage.getItem('quadmathSimInputChoice'),
+    coarse: matchMedia('(pointer: coarse)').matches, pointerNone: matchMedia('(pointer: none)').matches,
+    screen: [screen.width, screen.height], touchPoints: navigator.maxTouchPoints, ontouchstart: 'ontouchstart' in window,
+    focus: document.hasFocus(), active: document.activeElement && document.activeElement.tagName,
+    throttle: window._axis ? window._axis().stick.t : null });`);
+  say('input: ' + JSON.stringify(input));
+  say('W held: ' + JSON.stringify(wHeld));
   say('armed and flown: ' + JSON.stringify(st));
+  assert.equal(wHeld.ok, true, label + ': W held to full throttle and 2.2 s of sim time: ' + JSON.stringify(wHeld));
   assert.equal(st.armed, true, label + ': still armed');
   assert.ok(st.z > 0.3, label + ': it climbed (' + st.z + ' m)');
+  // S the same way: held until the page's throttle is back at zero, and for at
+  // least its 1.5 s of sim time, so Space disarms the quad at zero throttle as
+  // it does on a desktop.
   await d.hold(true, 's', 'KeyS', 83);
-  await sleep(1500);
+  const sHeld = await d.js(`const f0 = T.s.coreState().flightMs;
+    const ok = await T.until(() => window._axis().stick.t <= 0 && T.s.coreState().flightMs - f0 >= 1500, 40000);
+    return JSON.stringify({ ok, throttle: window._axis().stick.t, simMs: Math.round(T.s.coreState().flightMs - f0) });`);
   await d.hold(false, 's', 'KeyS', 83);
+  assert.equal(sHeld.ok, true, label + ': S held to zero throttle and 1.5 s of sim time: ' + JSON.stringify(sHeld));
   await d.key(' ', 'Space', 32);
   await sleep(800);
   record('arm and fly');
@@ -454,7 +502,7 @@ test('the sim under its policy in Chrome: no violations; injected handlers do no
       '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
       '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
       '--mute-audio', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update',
-      '--disable-background-networking', '--disable-sync', '--window-size=960,540',
+      '--disable-background-networking', '--disable-sync', '--window-size=960,540', ...(process.env.SIM_GPU_OFF === '1' ? ['--disable-gpu'] : []),
       '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows',
       // Port 0: Chrome takes a free one and names it in DevToolsActivePort, so no
       // other test's Chrome can be the one this test drives.
@@ -519,6 +567,8 @@ test('the sim under its policy in Chrome: no violations; injected handlers do no
         }
       });
       await send('Runtime.enable');
+      // SIM_CPU_THROTTLE=4: the page's CPU slowed 4x, to run as on a slow CI runner.
+      if (process.env.SIM_CPU_THROTTLE) await send('Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
       await send('Page.enable');
       await send('Log.enable');
       await send('Fetch.enable', { patterns: [{ urlPattern: '*' }] });
@@ -690,26 +740,29 @@ test('the sim under its policy in Chrome: no violations; injected handlers do no
           // A run, shared: the line too long for a link goes to the local leaderboard.
           T.s.setLineUrlMax(200);
           const done = await T.flyGates();
+          const gate = T.$('osdGate').textContent;
           const before = T.s.line().link;
-          T.$('lapShare').click();
-          const shared = await T.shared(before);
+          // An unfinished run has no SHARE: the run's own assertion reports it.
+          if (done) T.$('lapShare').click();
+          const shared = done ? await T.shared(before) : null;
           // A room on the local rooms Worker.
           T.s.openRoomCard();
           await T.wait(300);
           T.$('roomCreate').click();
           const room = await T.until(() => T.s.ghostRoom() && T.s.ghostRoom().open, 15000);
           const g = T.s.ghostRoom();
-          const out = { boards, done, shared, room, code: g && g.code, roomToast: T.toast() };
+          const out = { boards, done, gate, shared, room, code: g && g.code, roomToast: T.toast() };
           T.s.leaveGhostRoom();
           return JSON.stringify(out);`);
         console.log('local Workers: ' + JSON.stringify(r));
         assert.equal(r.boards.refresh, true, 'the boards are online (?lb= taken)');
         assert.notEqual(r.boards.toast, 'ONLINE UNAVAILABLE', 'and read from the local leaderboard');
         console.log('sent to the local Workers: ' + [...new Set(localCalls)].join(', '));
+        // Before the calls: the line is posted only from a finished run.
+        assert.equal(r.done, true, 'the run finished: ' + r.gate);
         for (const call of [`GET ${devLb.base}/api/board`, `POST ${devLb.base}/api/line`, `POST ${devRooms.base}/rooms`]) {
           assert.ok(localCalls.includes(call), 'the page sent ' + call + ': ' + localCalls.join(', '));
         }
-        assert.equal(r.done, true, 'the run finished');
         assert.equal(r.shared.said, true, 'SHARE: ' + r.shared.toast);
         assert.match(r.shared.link, /#line=@[A-Za-z0-9_-]{10,32}$/, 'the line stored on the local leaderboard');
         assert.equal(r.room, true, 'a room on the local rooms Worker: ' + r.roomToast);

@@ -148,7 +148,7 @@ test('Coach on the Rig in the page: the picker, six drills on their pads, the tu
     '--disable-extensions', '--disable-component-update',
     '--disable-background-networking', '--disable-sync',
     '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
-    '--window-size=640,360', `--remote-debugging-port=${debugPort}`,
+    '--window-size=640,360', ...(process.env.SIM_GPU_OFF === '1' ? ['--disable-gpu'] : []), `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${profile}`, 'about:blank',
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   let stderr = '';
@@ -180,6 +180,7 @@ test('Coach on the Rig in the page: the picker, six drills on their pads, the tu
     });
     await cdp(ws, 'Runtime.enable');
     await cdp(ws, 'Page.enable');
+    if (process.env.SIM_CPU_THROTTLE) await cdp(ws, 'Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
     await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', {
       source: `try{if(!sessionStorage.getItem('qmCoachSeed')){localStorage.setItem(${JSON.stringify(COACH_KEY)},${JSON.stringify(JSON.stringify(SEED))});sessionStorage.setItem('qmCoachSeed','1');}}catch(e){}`,
     });

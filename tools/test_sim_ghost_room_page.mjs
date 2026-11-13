@@ -218,7 +218,7 @@ test('ghost room in the page: same map, late join, ghost and voice, no collision
     // ---- the Node pilot makes a room on the Rig, flies, then holds still
     const made = await createRoom(dev.base, 'rig');
     const hostEvents = [];
-    const host = await openRoom({ base: dev.base, code: made.code, name: 'Host', WebSocket, onEvent: (e) => hostEvents.push(e) });
+    const host = await openRoom({ base: dev.base, code: made.code, name: 'Host', WebSocket, onEvent: (e) => hostEvents.push({ ...e, at: Date.now() }) });
     rooms.push(host);
     const hold = { t: 1234, pos: [0.5, 1.2, -0.75], quat: [0, Math.sin(0.3), 0, Math.cos(0.3)], rpm: [30000, 30000, 30000, 30000] };
     for (let i = 0; i < 5; i++) { host.sendPose({ ...hold, t: hold.t - 50 * (5 - i) }); await sleep(50); }
@@ -226,14 +226,15 @@ test('ghost room in the page: same map, late join, ghost and voice, no collision
     await sleep(400);
 
     // ---- the page joins by code: the Rig, rig-freestyle, the held pose at once
-    let r = await page(ws, `const room = await s.roomJoinCode(${JSON.stringify(made.code.toLowerCase())});
+    let r = await page(ws, `const joinAt = Date.now();
+      const room = await s.roomJoinCode(${JSON.stringify(made.code.toLowerCase())});
       await new Promise((r) => setTimeout(r, 300));
       const g = s.roomGhosts.get(0);
       return JSON.stringify({ ok: !!room, map: s.map(), track: s.track(), slot: room && room.slot,
         n: room && room.pilots.get(0).track.samples.length,
         visible: !!(g && g.mesh.visible), pos: g && g.mesh.position.toArray(), name: g && g.name,
         label: !!(g && g.label.visible && g.label.material.map),
-        osd: document.getElementById('osdTR').textContent, menu: document.body.classList.contains('menu-open') });`);
+        osd: document.getElementById('osdTR').textContent, menu: document.body.classList.contains('menu-open'), joinAt });`);
     console.log('join: ' + JSON.stringify(r));
     assert.ok(r.ok, 'joined');
     assert.deepEqual([r.map, r.track], ['rig', 'rig-freestyle'], 'joining puts the page on the host\'s map and track');
@@ -245,6 +246,10 @@ test('ghost room in the page: same map, late join, ghost and voice, no collision
     assert.equal(r.menu, false, 'flying');
     await sleep(500);
     assert.ok(await heard(() => hostEvents.some((e) => e.type === 'join' && e.slot === 1)), 'the host hears the page join');
+    // Measured, not checked: from the page starting its join (code to socket)
+    // to the Node pilot hearing it, on this machine's clock.
+    const joinMs = hostEvents.find((e) => e.type === 'join' && e.slot === 1).at - r.joinAt;
+    console.log('latency: join heard by the host ' + joinMs + ' ms after the page began joining');
 
     // From here the Node pilot keeps sending, as a pilot in a room does: it
     // waits where the fly-through will start, 2 m before the page's quad,
@@ -327,12 +332,18 @@ test('ghost room in the page: same map, late join, ghost and voice, no collision
     assert.ok(dv < 1e-6, 'nor its velocity: ' + dv + ' m/s');
 
     // ---- the pilot leaves the room's map: the room is left
-    r = await page(ws, `await s.setMap('trainer','trainer-freestyle');
+    r = await page(ws, `const leaveAt = Date.now();
+      await s.setMap('trainer','trainer-freestyle');
       await new Promise((r) => setTimeout(r, 400));
-      return JSON.stringify({ room: !!s.ghostRoom(), ghosts: s.roomGhosts.size, remotes: s.audio.debug().remotes.length });`);
+      return JSON.stringify({ room: !!s.ghostRoom(), ghosts: s.roomGhosts.size, remotes: s.audio.debug().remotes.length, leaveAt });`);
+    const leaveAt = r.leaveAt;
+    delete r.leaveAt;
     assert.deepEqual(r, { room: false, ghosts: 0, remotes: 0 });
     await sleep(300);
     assert.ok(await heard(() => hostEvents.some((e) => e.type === 'leave' && e.slot === 1)), 'the host hears the page leave');
+    // Measured, not checked: from the page leaving the room's map to the Node pilot hearing it.
+    const leaveMs = hostEvents.find((e) => e.type === 'leave' && e.slot === 1).at - leaveAt;
+    console.log('latency: leave heard by the host ' + leaveMs + ' ms after the page left the room\'s map');
 
     // ---- Create on the page's map; the Node pilot joins it there
     r = await page(ws, `const room = await s.roomCreate(); return JSON.stringify({ code: room && room.code, map: room && room.map, slot: room && room.slot, here: s.map() });`);
