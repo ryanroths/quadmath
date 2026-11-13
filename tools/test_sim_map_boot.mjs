@@ -9,6 +9,9 @@
 // Unset, it runs everything. QM_BOOT_SHOTS=<dir> keeps each map's screenshot
 // there; otherwise nothing is written outside the run's temp directory, which
 // is removed when the run ends, pass or fail.
+//
+// The tours at the end fly every map as a pilot does, at low, med and high on
+// both cores (sharded with the boot cases): see "Fly every map" below.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -63,10 +66,10 @@ function removeDir(dir) {
 let bootSeq = 0;
 const liveChromes = new Set();
 
-function startChrome(startUrl) {
+function startChrome(startUrl, opts) {
   bootSeq += 1;
   const run = { port: 9700 + bootSeq, profile: join(runDir(), 'profile-' + bootSeq) };
-  run.child = spawn(chrome, chromeArgs(run.port, run.profile, startUrl), {
+  run.child = spawn(chrome, chromeArgs(run.port, run.profile, startUrl, opts), {
     stdio: ['ignore', 'pipe', 'pipe'],
     // Its own process group on POSIX, so stopping it stops the GPU and
     // renderer processes with it.
@@ -260,7 +263,7 @@ async function serveRoot() {
   return { server, port };
 }
 
-async function cdp(ws, method, params) {
+async function cdp(ws, method, params, ms) {
   if (ws.readyState !== 1) throw new Error('cdp socket closed before ' + method);
   const id = cdp._n = (cdp._n || 0) + 1;
   ws.send(JSON.stringify({ id, method, params: params || {} }));
@@ -270,7 +273,7 @@ async function cdp(ws, method, params) {
       ws.removeEventListener('message', on);
       ws.removeEventListener('close', closed);
     };
-    const t = setTimeout(() => { done(); reject(new Error('cdp timeout ' + method)); }, 20000);
+    const t = setTimeout(() => { done(); reject(new Error('cdp timeout ' + method)); }, ms || 20000);
     // A Chrome stopped mid-call (the per-map limit) answers nothing: fail now.
     function closed() { done(); reject(new Error('cdp socket closed during ' + method)); }
     function on(msg) {
@@ -289,11 +292,19 @@ async function cdp(ws, method, params) {
   });
 }
 
-function chromeArgs(port, userData, startUrl) {
-  return [
+// opts.gpu: a headed Chrome on this machine's own GPU (QM_BOOT_GPU=1, the
+// tours only), not headless SwiftShader.
+function chromeArgs(port, userData, startUrl, opts) {
+  // Headed, a window under others is throttled to a few frames a second:
+  // never, here.
+  const gl = opts && opts.gpu ? ['--autoplay-policy=no-user-gesture-required', '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding', '--disable-background-timer-throttling'] : [
     '--headless=new', '--no-sandbox', '--disable-gpu-sandbox',
     '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
     '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+  ];
+  return [
+    ...gl,
     '--enable-webgl', '--hide-scrollbars',
     '--no-first-run', '--no-default-browser-check',
     '--disable-extensions', '--disable-component-update',
@@ -834,3 +845,391 @@ test('headless Chrome boots every map on ?core=js (deprecated) without errors or
   if (!runsBoots(t, 'js', JS_RUN)) return;
   assert.equal((await bootCases(`?core=js, shard ${SHARD.k}/${SHARD.n}`, JS_RUN)).join('\n'), '');
 });
+
+// ---------- Fly every map: a pilot's tour, every quality, both cores ----------
+// The boot cases above check a map's first picture through a ?look= spot with
+// the menus forced shut. A pilot does neither: they boot (or pick a map from
+// Tracks), the camera goes to the quad on its pad, and they arm with the
+// radio. A tour is one fresh profile per core and quality with a TX16S on
+// the Easy-mode arm: booted on one map with ?map=, then every other map
+// through the real menu (MENU, Tracks, the map's tab, Freestyle). On each map:
+//   - no page exception, console TypeError/ReferenceError/SyntaxError, "did
+//     not load" warning or art error since the map was picked (for the boot
+//     map: since the page loaded);
+//   - the look: the quality applied, the post chain on at med and high, the
+//     HDRI's light on the scene (not the City's own sky), a picture that is
+//     not blank;
+//   - the camera on the quad, the quad on the map's pad, no chase cam;
+//   - throttle down 1.2 s (the sim's clock) then up: Betaflight (or the js
+//     core) armed, and the quad climbs; an arm refused or dropped before
+//     the climb is tried again, as a pilot would, up to three tries, and
+//     each is reported (#336, slow devices).
+// What CI cannot see: GitHub's runners have no GPU, and on software WebGL the
+// look turns MSAA off (sim-looks.js presetOf), so #337's e51c907 (the post
+// chain's targets built at 0 samples, then set to 2 or 4: every
+// composer.render() threw at med and high on a real GPU) passes the tours in
+// CI. QM_BOOT_GPU=1 runs them headed on this machine's GPU, where e51c907
+// fails at med and high on both cores. The shim below gives SwiftShader
+// KHR_parallel_shader_compile (every program reported linked), so the look's
+// parallel-compile path at least runs in CI.
+const TOUR_GPU = process.env.QM_BOOT_GPU === '1';
+const TOUR_QUALITIES = ['low', 'med', 'high'];
+const TOUR_MAPS = [...new Set(MAP_IDS)];
+const TOURS = ['bf', 'js'].flatMap((core) => TOUR_QUALITIES.map((q, i) => ({
+  core, q,
+  // Each tour boots a different map with ?map=, so both ways in are covered.
+  first: TOUR_MAPS[(i * 5 + (core === 'js' ? 2 : 0)) % TOUR_MAPS.length],
+})));
+// One map of a tour: the pick, its art and look (TOUR_STEP), then the arm and
+// climb (TOUR_FLY). Each in-page step's own waits add up to less than its
+// limit, so a step never outlives the CDP call that awaits it.
+const TOUR_STEP_MS = 75000;
+const TOUR_FLY_MS = 70000;
+// A CI job is cut at 15 minutes (.github/workflows/sim-tests.yml), whatever a
+// test's own timeout says, and its setup (checkout, Node, Chrome) runs before
+// this process starts. On CI a tour starts a map only while that map's worst
+// case (its two steps and the screenshot) still ends by TOUR_JOB_BUDGET_MS
+// after this process started, and names the maps it did not fly.
+const TOUR_JOB_BUDGET_MS = 12 * 60000;
+const TOUR_MAP_WORST_MS = TOUR_STEP_MS + TOUR_FLY_MS + 20000;
+const tourDeadline = () => (process.env.GITHUB_ACTIONS ? TOUR_JOB_BUDGET_MS - process.uptime() * 1000 + Date.now() - TOUR_MAP_WORST_MS : Infinity);
+
+const PARALLEL_COMPILE_SHIM = String.raw`(() => {
+  const EXT = 'KHR_parallel_shader_compile', DONE = 0x91B1;
+  for (const C of [window.WebGL2RenderingContext, window.WebGLRenderingContext]) {
+    if (!C) continue;
+    const getExt = C.prototype.getExtension, getSupported = C.prototype.getSupportedExtensions, getParam = C.prototype.getProgramParameter;
+    const shimmed = new WeakSet();
+    C.prototype.getExtension = function (name) {
+      const real = getExt.call(this, name);
+      if (name !== EXT || real) return real;
+      shimmed.add(this);
+      return { COMPLETION_STATUS_KHR: DONE };
+    };
+    C.prototype.getSupportedExtensions = function () {
+      const list = getSupported.call(this) || [];
+      return list.includes(EXT) ? list : list.concat([EXT]);
+    };
+    C.prototype.getProgramParameter = function (program, pname) {
+      if (pname === DONE && shimmed.has(this)) return true;
+      return getParam.call(this, program, pname);
+    };
+  }
+  window.__parallelShim = true;
+})()`;
+
+// A TX16S as Chrome reports it (tools/test_sim_first_flight.mjs): roll, pitch,
+// throttle (axis 2, -1 at the bottom), yaw, AUX1..AUX4 off. The page's own
+// switches are not set up, so this is Easy mode: throttle down 1 s, then up.
+const TOUR_TX = 'RM TX16S Joystick (Vendor: 1209 Product: 4f54)';
+const TOUR_PAD = String.raw`(() => {
+  const pads = window.__pads = { axes: [0, 0, -1, 0, -1, -1, -1, -1] };
+  Object.defineProperty(Navigator.prototype, 'getGamepads', { configurable: true, value() {
+    return [{ id: ${JSON.stringify(TOUR_TX)}, index: 0, mapping: '', connected: true, timestamp: performance.now(),
+      axes: pads.axes.slice(), buttons: Array.from({ length: 24 }, () => ({ pressed: false, touched: false, value: 0 })) }, null, null, null];
+  } });
+})()`;
+
+// Shared by both in-page steps: each claims window.__tourGen, and its waits
+// stop as soon as a newer step has claimed it (a step whose CDP call timed out
+// must not keep driving the throttle on the next map).
+const TOUR_HELPERS = String.raw`
+  const s = window._sim;
+  const gen = window.__tourGen = (window.__tourGen || 0) + 1;
+  const live = () => window.__tourGen === gen;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const until = async (fn, ms) => {
+    const t0 = performance.now();
+    while (live() && performance.now() - t0 < ms) { try { if (fn()) return true; } catch (e) { /* not yet */ } await wait(25); }
+    try { return live() && !!fn(); } catch (e) { return false; }
+  };`;
+
+// One map of a tour, in the page: picked through the menu unless it is the
+// one the page booted on, then checked. Returns what it saw. Its waits: 3 x 4 s
+// of menu, 40 s to fly, 12 s for the HDRI, 0.7 s: under TOUR_STEP_MS.
+const TOUR_STEP = String.raw`async (map, picked, wantCore) => {${TOUR_HELPERS}
+  const shown = (el) => !!(el && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
+  const out = { map, steps: [] };
+  const step = (m) => out.steps.push(m);
+  if (picked) {
+    window._artError = null;
+    // The pilot's way: MENU, Tracks, the map's tab, its Freestyle row.
+    if (!shown(document.getElementById('menuTracks'))) document.getElementById('menuBtn').click();
+    if (!(await until(() => shown(document.getElementById('menuTracks')), 4000))) { out.error = 'MENU did not open the menu'; return out; }
+    document.getElementById('menuTracks').click();
+    const tab = () => document.querySelector('.track-maps [data-map="' + map + '"]');
+    if (!(await until(() => tab(), 4000))) { out.error = 'Tracks has no ' + map + ' tab'; return out; }
+    tab().click();
+    const fid = s.freestyleIdFor(map);
+    const row = () => [...document.querySelectorAll('.track-list [data-tid]')].find((b) => b.dataset.tid === fid || b.dataset.tid === 'freestyle');
+    if (!(await until(() => row(), 4000))) { out.error = 'no Freestyle row on ' + map; return out; }
+    row().click();
+    step('picked');
+  } else if (shown(document.getElementById('menuFly'))) {
+    // A launch card over the boot map: Fly, as a pilot would.
+    document.getElementById('menuFly').click();
+    step('fly');
+  }
+  const arrived = () => s.map() === map && s.vibe() && s.vibe().id === map && s.looks && s.looks.fps.ready
+    && window._simQueryBooted && s.core() === wantCore && !document.body.classList.contains('menu-open')
+    && !(s.looks.menuOpen);
+  if (!(await until(arrived, 40000))) {
+    if (document.visibilityState === 'hidden') { out.error = 'the page is hidden (a minimized or covered headed window draws no frames): not a sim failure'; return out; }
+    out.error = 'never flying on ' + map + ': ' + JSON.stringify({ map: s.map(), vibe: s.vibe() && s.vibe().id, ready: s.looks && s.looks.fps.ready,
+      core: s.core(), menu: document.body.classList.contains('menu-open'), lookMenu: s.looks && s.looks.menuOpen,
+      shown: document.visibilityState, frames: s.renderer && s.renderer.info.render.frame, fps: s.looks && Math.round(s.looks.fps.avg), applied: s.looks && s.looks.applied });
+    return out;
+  }
+  if (window._feel && window._feel.promptOpen && window._feel.hideFirstRun) window._feel.hideFirstRun();
+  // A map's own HDRI (the Backyard's yard sky) may still be on its way: its
+  // light, not the fog-colour stand-in. The City lights itself.
+  await until(() => map === 'city' || !!s.scene.environment, 12000);
+  await wait(700);
+  // The look, as it is now; the picture is the screenshot taken next.
+  const L = s.looks;
+  out.look = { applied: L.applied, composer: !!L.composer, env: !!s.scene.environment, sky: L.skyMode || null };
+  out.artError = s.artError();
+  // Where everything is, before the arm.
+  out.at = s.flyCheck();
+  return out;
+}`;
+
+// Then the arm and the climb, on the sim's clock (Easy mode's hold counts the
+// input polls' time, which SwiftShader runs slower than the wall's). Its
+// waits: 0.3 s, then per try 8 s down, 4 s to arm, 6 s of climb, 0.5 s:
+// under TOUR_FLY_MS.
+const TOUR_FLY = String.raw`async () => {${TOUR_HELPERS}
+  const thr = (v) => { if (live()) window.__pads.axes[2] = v; };
+  const out = { tries: [] };
+  if (s.flyCheck().armed) { s.flyDisarm(); await wait(300); }
+  const why = (stage) => {
+    const cs = s.coreState ? s.coreState() : {};
+    const t = document.getElementById('toast');
+    return { stage, flags: cs.armingDisableFlags, fcArmed: s.flyCheck().fcArmed, flightMs: cs.flightMs, easy: s.easy().arm,
+      toast: t ? t.innerText : null, paused: document.body.classList.contains('menu-open') || !!(s.looks && s.looks.menuOpen) };
+  };
+  // Throttle down until Easy mode has seen it there 1.2 s, then up past half:
+  // the core's own arm (Betaflight's, on bf), and a climb. A pilot whose arm
+  // was refused, or dropped before the quad left the pad, does it again: up
+  // to three tries, each failed one reported. On a slow device (SwiftShader)
+  // Betaflight can refuse an arm, or arm and drop it, with THROTTLE: the
+  // arm's throttle hold runs out before its sample lands (#336).
+  for (let i = 0; i < 3 && !out.flew && live(); i++) {
+    thr(-1);
+    out.held = await until(() => (+(s.easy().arm || {}).lowS || 0) >= 1.2, 8000);
+    if (!out.held) { out.heldWhy = why('hold'); break; }
+    thr(0.3);
+    out.armed = await until(() => s.flyCheck().fcArmed, 4000);
+    if (out.armed) {
+      const y0 = s.flyCheck().quad.y;
+      await until(() => s.flyCheck().quad.y - y0 > 0.5 || !s.flyCheck().fcArmed, 6000);
+      out.climb = s.flyCheck().quad.y - y0;
+      out.flew = out.climb > 0.3;
+      if (!out.flew) out.tries.push(Object.assign(why(s.flyCheck().fcArmed ? 'armed, no climb' : 'armed, then dropped'), { climb: out.climb }));
+    } else {
+      out.tries.push(why('refused'));
+    }
+    thr(-1);
+    if (live()) s.flyDisarm();
+    await wait(500);
+  }
+  return out;
+}`;
+
+function tourLabel(tour) {
+  return `tour ${tour.core} core, q=${tour.q}${TOUR_GPU ? ', real GPU' : ''}`;
+}
+
+// The checks on one map's step: one line per failure. errors: the page's
+// exceptions and console errors and warnings since the map was picked, read
+// as the boot cases read them: a Type/Reference/SyntaxError in an exception
+// or console.error, a "did not load" warning.
+function tourFailures(tour, got, errors) {
+  const name = `${tourLabel(tour)}: ${got.map}`;
+  const f = [];
+  const fatal = errors.filter((e) => e.kind !== 'warning' && /TypeError|ReferenceError|SyntaxError/.test(e.text));
+  if (fatal.length) f.push(`${name}: page ${fatal[0].kind} ${fatal[0].text.slice(0, 300)}`);
+  const unloaded = errors.find((e) => e.kind === 'warning' && /did not load/.test(e.text));
+  if (unloaded) f.push(`${name}: ${unloaded.text.slice(0, 200)}`);
+  if (got.error) { f.push(`${name}: ${got.error}`); return f; }
+  if (got.artError) f.push(`${name}: art error ${String(got.artError).slice(0, 300)}`);
+  const L = got.look || {};
+  if (L.applied !== tour.q) f.push(`${name}: look applied ${L.applied}, want ${tour.q}`);
+  if (L.composer !== (tour.q !== 'low')) f.push(`${name}: post chain ${L.composer ? 'on' : 'off'} at ${tour.q}`);
+  if (got.map !== 'city' && !L.env) f.push(`${name}: no HDRI light on the scene`);
+  if (!(got.avg > 12)) f.push(`${name}: blank picture (avg ${got.avg}${got.avgError ? ', ' + got.avgError : ''})`);
+  const at = got.at || {};
+  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  if (at.quad && at.pad) {
+    const off = Math.hypot(at.quad.x - at.pad.x, at.quad.z - at.pad.z);
+    if (off > 1 || Math.abs(at.quad.y - at.pad.y) > 1.5) f.push(`${name}: quad ${JSON.stringify(at.quad)} is not on the pad ${JSON.stringify(at.pad)}`);
+  } else f.push(`${name}: no position`);
+  if (at.chase) f.push(`${name}: chase cam, not FPV`);
+  if (at.cam && at.quad && d(at.cam, at.quad) > 0.6) f.push(`${name}: camera ${JSON.stringify(at.cam)} is not on the quad ${JSON.stringify(at.quad)}`);
+  if (got.flyError) f.push(`${name}: flying: ${got.flyError}`);
+  else if (!got.held) f.push(`${name}: the throttle never counted as down (Easy mode's hold): ${JSON.stringify(got.heldWhy)}`);
+  else if (!got.flew) f.push(`${name}: no arm and climb in three tries (throttle down 1.2 s, then up): ${JSON.stringify(got.tries)}`);
+  return f;
+}
+
+// One page-side step through CDP: its value, or { error } (the step threw, or
+// ran past its limit).
+async function tourEval(ws, expression, ms) {
+  try {
+    const r = await cdp(ws, 'Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, ms);
+    if (r.exceptionDetails) {
+      const ex = r.exceptionDetails.exception;
+      return { error: 'threw ' + ((ex && (ex.description || ex.value)) || r.exceptionDetails.text) };
+    }
+    return (r.result && r.result.value) || { error: 'no value' };
+  } catch (e) {
+    return { error: String(e && e.message || e) };
+  }
+}
+
+async function runTour(base, tour, deadline) {
+  const failures = [];
+  const times = [];
+  const label = tourLabel(tour);
+  const coreQ = tour.core === 'js' ? '&core=js' : '';
+  const url = `${base}/sim.html?map=${tour.first}&quality=${tour.q}&dev=1${coreQ}`;
+  const run = startChrome('about:blank', { gpu: TOUR_GPU });
+  // A whole tour is minutes of Chrome: keep its pipes drained.
+  run.child.stdout.resume();
+  run.child.stderr.resume();
+  let ws = null;
+  let step = 'starting Chrome';
+  const errors = [];
+  try {
+    step = 'waiting for Chrome\'s DevTools page';
+    const page = await waitForCdpPage(run.port, (p) => p.type === 'page' && p.webSocketDebuggerUrl, 100);
+    if (!page) throw new Error('no CDP');
+    ws = new WebSocket(page.webSocketDebuggerUrl);
+    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
+    ws.addEventListener('message', (msg) => {
+      try {
+        const o = JSON.parse(typeof msg.data === 'string' ? msg.data : msg.data.toString());
+        if (o.method === 'Runtime.exceptionThrown') {
+          const ex = o.params.exceptionDetails || {};
+          errors.push({ kind: 'exception', text: String((ex.exception && (ex.exception.description || ex.exception.value)) || ex.text || 'exception') });
+        } else if (o.method === 'Runtime.consoleAPICalled' && (o.params.type === 'error' || o.params.type === 'warning')) {
+          errors.push({ kind: o.params.type, text: (o.params.args || []).map((a) => a.value || a.description || '').join(' ') });
+        }
+      } catch (e) { /* ignore */ }
+    });
+    await cdp(ws, 'Runtime.enable');
+    await cdp(ws, 'Page.enable');
+    if (!TOUR_GPU) await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: PARALLEL_COMPILE_SHIM });
+    if (TOUR_GPU) {
+      // Headed: a minimized or covered window's page is hidden and draws no
+      // frames at all (document.visibilityState 'hidden'): to the front, normal.
+      try {
+        await cdp(ws, 'Page.bringToFront');
+        const { windowId } = await cdp(ws, 'Browser.getWindowForTarget');
+        await cdp(ws, 'Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+      } catch (e) { /* best effort; a hidden page is named below */ }
+    }
+    await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: TOUR_PAD });
+    step = 'loading ' + url;
+    await cdp(ws, 'Page.navigate', { url });
+    for (let i = 0; i < 100; i++) {
+      await sleep(200);
+      try {
+        const r = await cdp(ws, 'Runtime.evaluate', { expression: '!!(window._sim && window._sim.flyCheck && window._sim.freestyleIdFor)', returnByValue: true });
+        if (r.result && r.result.value) break;
+      } catch (e) { /* loading */ }
+    }
+    const order = [tour.first].concat(TOUR_MAPS.filter((m) => m !== tour.first));
+    let stuck = 0;
+    for (let i = 0; i < order.length; i++) {
+      const map = order[i];
+      if (Date.now() > deadline) {
+        failures.push(`${label}: out of the CI job's time before flying ${order.slice(i).join(', ')}`);
+        break;
+      }
+      const t0 = Date.now();
+      step = 'flying ' + map;
+      // The boot map's errors count from the page's load.
+      if (i > 0) errors.length = 0;
+      const got = await tourEval(ws, `(${TOUR_STEP})(${JSON.stringify(map)}, ${i > 0}, ${JSON.stringify(tour.core)})`, TOUR_STEP_MS);
+      got.map = map;
+      if (!got.error && ws.readyState === 1) {
+        try {
+          const shot = await cdp(ws, 'Page.captureScreenshot', { format: 'png' });
+          const png = Buffer.from(shot.data, 'base64');
+          got.avg = pngRgbAverage(png);
+          if (process.env.QM_BOOT_SHOTS) {
+            mkdirSync(process.env.QM_BOOT_SHOTS, { recursive: true });
+            writeFileSync(join(process.env.QM_BOOT_SHOTS, `tour-${tour.core}-${tour.q}-${map}.png`), png);
+          }
+        } catch (e) { got.avgError = String(e && e.message || e); }
+        const fly = await tourEval(ws, `(${TOUR_FLY})()`, TOUR_FLY_MS);
+        if (fly.error) got.flyError = fly.error;
+        else Object.assign(got, fly);
+      }
+      const f = tourFailures(tour, got, errors.slice());
+      if (got.flew && got.tries && got.tries.length) console.log(`${label}: ${map}: flew on try ${got.tries.length + 1}; before that: ${JSON.stringify(got.tries)}`);
+      if (process.env.QM_TOUR_LOG) console.log(JSON.stringify({ tour: label, ...got }));
+      failures.push(...f);
+      const secs = (Date.now() - t0) / 1000;
+      times.push([`${label}: ${map}`, secs, !f.length]);
+      // As it goes, so a job cut short still names what it flew.
+      console.log(`  ${secs.toFixed(1).padStart(6)} s  ${f.length ? 'FAIL' : 'pass'}  ${label}: ${map} (as flown)`);
+      // A page that never flies again (e51c907 threw on every frame): four
+      // such maps are enough.
+      if (got.error && /never flying|did not open|timeout/.test(got.error)) stuck++;
+      if (stuck >= 4) {
+        failures.push(`${label}: stopped after ${map}: ${order.slice(i + 1).join(', ')} not flown`);
+        break;
+      }
+    }
+  } catch (e) {
+    failures.push(`${label}: ${e.message}, while ${step}`);
+  } finally {
+    try { if (ws) ws.close(); } catch (e) { /* ignore */ }
+    await stopChrome(run);
+  }
+  reportTimes(label, times);
+  return failures;
+}
+
+// The bf tours one to a default-core shard (3 shards in CI). The js tours on
+// the ?core=js shards from the last: with 2 shards, shard 2 (the 6 boot cases)
+// takes two tours and shard 1 (7) one.
+function tourShardOf(tours, core, k, n) {
+  return core === 'js' ? pickShard(tours, n - k + 1, n) : pickShard(tours, k, n);
+}
+const BF_TOURS = tourShardOf(TOURS.filter((t) => t.core === 'bf'), 'bf', SHARD.k, SHARD.n);
+const JS_TOURS = tourShardOf(TOURS.filter((t) => t.core === 'js'), 'js', SHARD.k, SHARD.n);
+const tourLimit = (tours) => tours.length * (TOUR_MAPS.length * (TOUR_STEP_MS + TOUR_FLY_MS + 10000) + 60000) + 60000;
+
+test('the tours cover every map at every quality on both cores, each map booted with ?map= by some tour', () => {
+  assert.equal(TOURS.length, 6);
+  for (const core of ['bf', 'js']) {
+    const all = TOURS.filter((t) => t.core === core);
+    assert.deepEqual(all.map((t) => t.q), TOUR_QUALITIES);
+    for (let n = 1; n <= 3; n++) {
+      const seen = [];
+      for (let k = 1; k <= n; k++) seen.push(...tourShardOf(all, core, k, n));
+      assert.equal(seen.length, all.length, `${core}, ${n} shards`);
+      assert.equal(new Set(seen).size, all.length, `${core}, ${n} shards, no tour twice`);
+    }
+  }
+  assert.deepEqual(tourShardOf(TOURS.filter((t) => t.core === 'js'), 'js', 1, 2).map((t) => t.q), ['med'], 'js shard 1 of 2 (7 boot cases): one tour');
+  assert.equal(new Set(TOURS.map((t) => t.first)).size, TOURS.length, 'six different boot maps');
+});
+
+for (const [core, tours] of [['bf', BF_TOURS], ['js', JS_TOURS]]) {
+  test(`a pilot flies every map on the ${core} core at ${tours.map((t) => t.q).join(', ') || 'no quality in this shard'}: the look on, the camera at the pad, the TX16S arms, the quad climbs`, { timeout: tourLimit(tours) }, async (t) => {
+    if (!runsBoots(t, core, tours)) return;
+    const { server, port } = await serveRoot();
+    const deadline = tourDeadline();
+    try {
+      const failures = [];
+      for (const tour of tours) failures.push(...await runTour('http://127.0.0.1:' + port, tour, deadline));
+      assert.equal(failures.join('\n'), '');
+    } finally {
+      await new Promise((res) => server.close(res));
+    }
+  });
+}
