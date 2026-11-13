@@ -577,14 +577,14 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         assert.equal(marks.everPaused, false, 'the sim never paused while the card was up');
 
         // Land, and arm again: no card. Then a reload: none.
-        // The landing's disarm is the page's own 2 s count, slow where frames
+        // The landing's disarm is the page's own 0.5 s count, slow where frames
         // are: the wait for it allows for that, in a call of its own (CDP gives
         // each call 45 s), and it must have happened, or the raise below would
         // be no arm attempt at all and "no card" would prove nothing. Each
         // raise waits for the page's own count of the throttle held down a
         // second, so that it is an arm where frames are slow too; right after a
-        // landing that count already stands at the disarm's 2 s, as it does for
-        // a pilot who lands and throttles up again. And the look for a card
+        // landing that count already stands at the disarm's 0.5 s or more, as it
+        // does for a pilot who lands and throttles up again. And the look for a card
         // starts once the page has read the raise: its hold count drops to 0
         // the moment it reads the throttle up, and before that a slow page has
         // had nothing to show a card on. The hold's ceiling keeps each call
