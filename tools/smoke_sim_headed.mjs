@@ -11,8 +11,8 @@
 //   2. Virtual radio (a TX16S plugged in): Easy mode's hold at the bottom,
 //      then the throttle up: armed and climbing within 1 s of the raise.
 //   3. Turtle and re-arm: on its back at rest, a full roll stick turns it
-//      over; upright it re-arms; the throttle up climbs within 1 s of the
-//      re-arm.
+//      over; upright it re-arms, flyable under 300 ms of sim time from
+//      upright; the throttle up climbs within 1 s of the re-arm.
 //   4. Unplug: the radio pulled in flight; Space, W: the keyboard climbs
 //      within 1 s of W.
 //   5. Every map the Fly picker offers loads with its look applied.
@@ -226,15 +226,24 @@ async function main() {
         const bf = U.st().kind === 'bf';
         const busy = () => (bf ? U.s.bfCore().turtlePhase !== null : !!U.s.easy().jsTurtle);
         const started = await U.until(busy, 2000);
-        const rearmed = await U.until(() => !busy() && U.st().upZ > 0.9 && U.st().armed, 6000);
+        // Upright to flyable on the sim clock, at this machine's frame rate.
+        let upT = null, flyT = null;
+        const rearmed = await U.until(() => {
+          const x = U.st();
+          if (upT === null && x.upZ > 0.9) upT = U.s.simClockMs();
+          if (upT !== null && flyT === null && x.armed && !busy()) flyT = U.s.simClockMs();
+          return !busy() && x.upZ > 0.9 && x.armed;
+        }, 6000);
+        const flyMs = upT !== null && flyT !== null ? Math.round(flyT - upT) : null;
         window.__pads.axes[0] = 0;
         const z0 = U.st().z;
         window.__pads.axes[2] = 0.2;
         const t0 = performance.now();
         const ms = rearmed ? await U.climb(z0, t0, 1000, 0.5) : null;
-        return JSON.stringify({ rest, started, rearmed, ms, st: U.st(), toasts: U.toasts.slice() });`);
+        return JSON.stringify({ rest, started, rearmed, flyMs, ms, st: U.st(), toasts: U.toasts.slice() });`);
       check(`${tag}: turtle by roll stick, re-armed upright, throttle up climbs within 1 s`, r.rest && r.started && r.rearmed && r.ms !== null,
         `rest ${r.rest}, started ${r.started}, re-armed ${r.rearmed}, ${r.ms === null ? 'no climb' : 'up 0.5 m in ' + r.ms + ' ms'}; armed ${r.st.armed}, z ${r.st.z.toFixed(2)}, toasts ${JSON.stringify(r.toasts)}`);
+      check(`${tag}: turtle upright to flyable under 300 ms of sim time`, r.flyMs !== null && r.flyMs < 300, `${r.flyMs} ms`);
 
       // 4. Unplug in flight, then the keyboard: Space (disarm what the radio
       // armed if it still is), Space, W.
