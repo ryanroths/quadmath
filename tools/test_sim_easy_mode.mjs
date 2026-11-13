@@ -5,7 +5,7 @@
 //     onto the diff's channels (sim-core-adapter.js switchAux).
 //   - In headless Chrome (fresh profile each): a fake TX16S with ARM on AUX4,
 //     its AUX1 and AUX3 resting high. From the page opening to flying in the
-//     Rig with no menu; arms by throttle, flies, disarms on the 2 s rule and
+//     Rig with no menu; arms by throttle, flies, disarms on the 0.5 s rule and
 //     after a crash, turtles by roll and by pitch stick (the page on
 //     Betaflight's turtle channel). The wizard on that radio, saved per radio.
 //     A profile saved before Easy mode starts in Easy mode like any other. And
@@ -92,22 +92,26 @@ test('easy arm: a throttle that was never low, unsafe sticks, or upside down nev
   assert.equal(run(r.state, 0.05, { t: 0.9, threeD: true, armed: false }).out.arm, true, '3D: then leaving centre arms');
 });
 
-test('easy disarm: throttle at the bottom 2 s while landed, not in the air, not before it flew', () => {
-  assert.equal(EASY_DISARM_HOLD_S, 2);
+test('easy disarm: throttle at the bottom 0.5 s while landed, not in the air, not before it flew', () => {
+  assert.equal(EASY_DISARM_HOLD_S, 0.5);
   let r = run({}, 0.1, { t: 0.5, armed: true, landed: false });
   r = run(r.state, 3, { t: 0, armed: true, landed: false });
   assert.equal(r.out, null, 'falling at zero throttle stays armed');
-  r = run(r.state, 1.9, { t: 0, armed: true, landed: true });
-  assert.equal(r.out, null, 'landed 1.9 s');
+  r = run(r.state, 0.4, { t: 0, armed: true, landed: true });
+  assert.equal(r.out, null, 'landed 0.4 s');
   r = run(r.state, 0.2, { t: 0, armed: true, landed: true });
-  assert.equal(r.out.disarm, true, 'landed 2 s disarms');
+  assert.equal(r.out.disarm, true, 'landed 0.5 s disarms');
   assert.equal(r.out.reason, 'landed');
-  assert.ok(r.at <= 0.11 && r.at >= 0.09, `at 2.0 s (${1.9 + r.at})`);
-  r = run({ raised: true }, 1.9, { t: 0, armed: true, landed: true });
+  assert.ok(r.at <= 0.11 && r.at >= 0.09, `at 0.5 s (${0.4 + r.at})`);
+  r = run({ raised: true }, 0.4, { t: 0, armed: true, landed: true });
   r = run(r.state, 0.2, { t: 0.2, armed: true, landed: true });
   assert.equal(r.out, null);
-  r = run(r.state, 1.9, { t: 0, armed: true, landed: true });
-  assert.equal(r.out, null, 'throttle touched: the 2 s start over');
+  r = run(r.state, 0.4, { t: 0, armed: true, landed: true });
+  assert.equal(r.out, null, 'throttle touched: the 0.5 s start over');
+  r = run({ raised: true }, 0.4, { t: 0, armed: true, landed: true });
+  r = run(r.state, 0.05, { t: 0, armed: true, landed: false });
+  r = run(r.state, 0.4, { t: 0, armed: true, landed: true });
+  assert.equal(r.out, null, 'a hop off the floor: the 0.5 s start over');
   assert.equal(run({}, 5, { t: 0, armed: true, landed: true }).out, null, 'armed at idle (Space, the touch ARM button), never raised: stays armed');
 });
 
@@ -852,20 +856,24 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.ok(r.after.z > 0.5, `flies (z ${r.after.z.toFixed(2)} m)`);
         assert.equal(r.after.rc[0], 2000, 'the page has ARM on, on the diff\'s AUX1');
 
-        // Throttle to the bottom in the air: armed all the way down; then the 2 s.
+        // Throttle to the bottom in the air: armed all the way down; then the
+        // 0.5 s. The hold counts the page's input time, which is the sim's: so
+        // it is timed on the sim's clock (the core's flight time), with the
+        // wall's as a floor (the sim never runs ahead of it).
         r = await js(`
           E.thr(0);
           let armedInAir = true;
           const down = await E.until(() => { if (!E.landed()) armedInAir = armedInAir && E.s.coreState().armed; return E.landed(); }, 8000);
-          const t0 = performance.now();
-          let earliest = null;
-          const off = await E.until(() => { if (!E.s.coreState().armed && earliest === null) earliest = performance.now() - t0; return earliest !== null; }, 6000);
-          return JSON.stringify({ down, armedInAir, off, ms: earliest });`);
+          const t0 = performance.now(), s0 = E.s.coreState().flightMs;
+          let earliest = null, sim = null;
+          const off = await E.until(() => { if (!E.s.coreState().armed && earliest === null) { earliest = performance.now() - t0; sim = E.s.coreState().flightMs - s0; } return earliest !== null; }, 6000);
+          return JSON.stringify({ down, armedInAir, off, ms: earliest, simMs: sim });`);
         console.log('disarm: ' + JSON.stringify(r));
         assert.equal(r.down, true, 'it landed');
         assert.equal(r.armedInAir, true, 'armed in the air at zero throttle');
         assert.equal(r.off, true, 'disarmed landed');
-        assert.ok(r.ms >= 1800 && r.ms < 4500, `about 2 s after landing (${Math.round(r.ms)} ms)`);
+        assert.ok(r.simMs >= 450 && r.simMs < 1125, `about 0.5 s after landing (${Math.round(r.simMs)} ms of sim time)`);
+        assert.ok(r.ms >= 450, `not before 0.5 s of wall time either (${Math.round(r.ms)} ms)`);
 
         // A crash: a throttle at 20 % never reaches the bottom; it disarms at rest.
         // A fresh second down, counted by the page from here: the count it kept
@@ -1274,16 +1282,17 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           const up = E.state();
           E.thr(0);
           const down = await E.until(E.landed, 8000);
-          const t0 = performance.now();
+          const t0 = performance.now(), s0 = E.s.coreState().flightMs;
           const off = await E.until(() => !E.s.coreState().armed, 6000);
-          return JSON.stringify({ held, armed, up: up.z, down, off, ms: performance.now() - t0, reason: E.s.easy().disarmReason });`);
+          return JSON.stringify({ held, armed, up: up.z, down, off, ms: performance.now() - t0, simMs: E.s.coreState().flightMs - s0, reason: E.s.easy().disarmReason });`);
         console.log('js radio: ' + JSON.stringify(r));
         assert.equal(r.held, true, 'the page held the throttle down a second');
         assert.equal(r.armed, true, 'armed by throttle');
         assert.ok(r.up > 0.3, `flies (z ${r.up})`);
         assert.equal(r.off, true, 'disarmed landed');
-        assert.equal(r.reason, 'landed', 'on the 2 s rule, not as a crash');
-        assert.ok(r.ms >= 1800 && r.ms < 4500, `about 2 s (${Math.round(r.ms)} ms)`);
+        assert.equal(r.reason, 'landed', 'on the 0.5 s rule, not as a crash');
+        assert.ok(r.simMs >= 450 && r.simMs < 1125, `about 0.5 s (${Math.round(r.simMs)} ms of sim time)`);
+        assert.ok(r.ms >= 450, `not before 0.5 s of wall time either (${Math.round(r.ms)} ms)`);
         for (const [name, stick, val] of [['roll', 0, -1], ['pitch', 1, 1]]) {
           r = await js(`
             E.thr(0);
@@ -1358,7 +1367,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
       });
     }
 
-    await t.test('the keyboard on the bf core: W arms, S and 2 s disarm, an arrow turtles', async () => {
+    await t.test('the keyboard on the bf core: W arms, S and 0.5 s disarm, an arrow turtles', async () => {
       await pass('map=rig', {}, async ({ js, key }) => {
         // W once the page has counted the throttle down a second (a fixed wall
         // time can be much less of a hold where frames are slow).
@@ -1378,7 +1387,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           const off = await E.until(() => !E.s.coreState().armed, 6000);
           return JSON.stringify({ down, off });`);
         await key('keyUp', 's', 'KeyS', 83);
-        assert.deepEqual(r, { down: true, off: true }, 'S to the bottom, landed 2 s: disarmed');
+        assert.deepEqual(r, { down: true, off: true }, 'S to the bottom, landed 0.5 s: disarmed');
         r = await js(`const rest = await E.flip(); await E.wait(200); return JSON.stringify({ rest });`);
         assert.equal(r.rest, true);
         await key('rawKeyDown', 'ArrowRight', 'ArrowRight', 39);
