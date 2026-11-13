@@ -310,6 +310,9 @@ export const FLIP_STICK = 0.7;
 // they let go: its roll is held at FLIP_STICK, so it does not rock back.
 export const QUICK_UPRIGHT_US = 60_000;
 const QUICK_ESTIMATE_DEG = 20;
+// How long an arm's throttle hold (setArm holdThrottle, a turtle's arm) waits
+// for Betaflight to arm, from when its first sample lands.
+const HOLD_US = 200_000;
 
 // ---- The bf core's aux channels ----
 
@@ -537,7 +540,11 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
   const clock = new InputClock();
   const link = new RadioLink(sim);
   const aux = { arm: false, mode: 'angle', turtle: false, holdThrottle: false };
-  let holdUntilUs = 0;
+  // When a hold (holdThrottle) ends unarmed: HOLD_US after the first input()
+  // sample that carries it lands, null until that sample goes in. Counted
+  // from setArm, a sample stamped ahead of slow frames or a late poll used
+  // the hold up before Betaflight saw the arm.
+  let holdUntilUs = null;
   // Turtle: null, or the step it is on (see startTurtle) and when it began.
   let turtle = null;
   let turtleAtUs = 0;
@@ -654,19 +661,20 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
       try {
         sim.input(bfChannels(sample, aux, ranges), stampUs);
         link.sample(stampUs);
+        if (aux.holdThrottle && holdUntilUs === null) holdUntilUs = stampUs + HOLD_US;
       } catch (err) {
         inputErrors++;
       }
     },
     // Arm intent drives the ARM switch; Betaflight decides. holdThrottle
-    // sends the throttle low with it until Betaflight has armed or 200 ms
-    // have passed, so a throttle-rise auto-arm meets Betaflight's
-    // low-throttle check.
+    // sends the throttle low with it until Betaflight has armed or HOLD_US
+    // (200 ms) have passed since the first sample with it landed, so a
+    // throttle-rise auto-arm meets Betaflight's low-throttle check.
     // A disarm also ends a turtle.
     setArm(on, { holdThrottle = false } = {}) {
       aux.arm = !!on;
       aux.holdThrottle = !!on && holdThrottle;
-      holdUntilUs = sim.simTimeUs + 200_000;
+      holdUntilUs = null;
       if (!on && turtle) {
         aux.turtle = false;
         endTurtle();
@@ -719,7 +727,7 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
       } else {
         aux.arm = true;
         aux.holdThrottle = true;
-        holdUntilUs = sim.simTimeUs + 200_000;
+        holdUntilUs = null;
         toTurtle('arm');
       }
       return true;
@@ -791,7 +799,7 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
           if (!fc.armed) {
             aux.arm = true;
             aux.holdThrottle = true;
-            holdUntilUs = sim.simTimeUs + 200_000;
+            holdUntilUs = null;
             toTurtle('arm');
           }
           return null;
@@ -913,7 +921,7 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
         if (left > 0) ran += run(left);
       }
       link.update(want);
-      if (aux.holdThrottle && (sim.fc.armed || sim.simTimeUs >= holdUntilUs)) {
+      if (aux.holdThrottle && (sim.fc.armed || (holdUntilUs !== null && sim.simTimeUs >= holdUntilUs))) {
         if (!sim.fc.armed) aux.arm = false;   // Betaflight refused: the reason is on the OSD
         aux.holdThrottle = false;
       }
