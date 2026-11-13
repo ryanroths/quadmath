@@ -136,13 +136,15 @@ export const LOOK_SPOTS = {
   // covered patio from the west lawn; the pool from the roof's back edge
   // (the dive); the trampoline from the pool's east end; the swing set from
   // the deck; the shed's door from the swings; over the back wall on the
-  // neighbour's gravel, down at the crashed whoop.
+  // neighbour's gravel, down at the crashed whoop; the jungle gym.
   houseYardPatio: { pos: [-49, 5.6, 8.75], target: [-26.25, 4.2, -1.75] },
   houseYardPool: { pos: [-7, 11.9, -19.6], target: [-7, 0, -37.1] },
   houseYardTramp: { pos: [8.75, 6.3, -28], target: [19.25, 4.2, -42.35] },
   houseYardSwing: { pos: [-33.25, 5.6, -31.5], target: [-48.3, 4.2, -42.7] },
   houseYardShed: { pos: [-44.1, 5.25, -46.2], target: [-57.4, 3.5, -52.5] },
   houseYardNeighbor: { pos: [-11.9, 4.55, -63.7], target: [-14, 0.105, -68.25] },
+  // The jungle gym on its green sandbox, from the trampoline's north side.
+  houseYardGym: { pos: [16.1, 6.3, -36.4], target: [33.6, 2.8, -26.6] },
   // The Warehouse (map id depot; the warehouse* spots above are the archived
   // map's): from the loop's pad down the centre run, the racking on the left,
   // the dock's roll-up doors ahead, a sun shaft and the mezzanine on the right;

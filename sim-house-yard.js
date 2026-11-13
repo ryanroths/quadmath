@@ -6,6 +6,7 @@
 // The covered patio (the house's own patio strip, open now on its west side)
 // gives onto the west lawn; round the back: the pool with its slide and
 // ladder, the trampoline, the swing set, the shed and the citrus tree, all
+// the green sandbox and its jungle gym (dome, monkey bars, tube slide),
 // inside a 1.8 m block wall whose top is flyable; the east side yard with the
 // kitchen window and the doggy door (pieces of the house's east wall,
 // HOUSE_YARD.eastWall, built by sim-maps.js buildHouse); past the back wall
@@ -68,6 +69,8 @@ export const YARD_LOOK = Object.freeze({
     steel: yardSurface('galvanised steel', 'galvanised', 0xc3c8cd),
     plastic: yardSurface('slide plastic', 'enamel', 0x2f7dc0, 0.4),
     mat: yardSurface('black mat', 'fabric', 0x1e1f22),
+    green: yardSurface('green-painted timber', 'plywood', 0x2f8a3e),
+    sand: yardSurface('play sand', 'deck', 0xd8c08c, 0.9),
   }),
   // Untextured: the pool's water, the trampoline's net.
   water: Object.freeze({ color: 0x3d9fc6, roughness: 0.06, opacity: 0.8 }),
@@ -99,15 +102,31 @@ const SHED = Object.freeze({
   x0: -17.6, x1: -15.2, z0: -16.0, z1: -14.0, t: 0.1, h: 2.2, roof: 0.08, eave: 0.1,
   door: Object.freeze({ z0: -15.75, z1: -14.95, h: 1.8 }), window: Object.freeze({ z0: -15.3, z1: -14.7, y0: 1.0, y1: 1.5 }),
 });
+// The green sandbox east of the trampoline, off the house's back wall, and
+// the jungle gym on it: the dome climber (rings on four stepped meridians,
+// its crown open to dive through), the monkey-bar arch, the tower and its
+// short tube slide. Painted bars (the 'orange' surface) and a blue tube.
+const SANDBOX = Object.freeze({ x0: 6.5, x1: 12.5, z0: -9.1, z1: -6.5, t: 0.12, h: 0.27, sand: 0.15 });
+const DOME = Object.freeze({
+  x: 7.75, z: -7.8, R: 1.0, H: 1.5, bar: 0.06, rings: Object.freeze([0.15, 0.55, 0.95, 1.25]),
+  // The meridians' steps (bottoms and tops): each ring inside one, which
+  // reaches 12 cm under it (the base ring: 11 cm over it), every step 11 cm
+  // or more, so no two boxes stand 0-10 cm apart.
+  steps: Object.freeze([0.15, 0.32, 0.43, 0.61, 0.72, 0.83, 1.01, 1.13, 1.31]),
+});
+const ARCH = Object.freeze({ x0: 9.3, x1: 11.1, z: -7.8, half: 0.25, bar: 0.06, top: 1.8, rise: 0.4, steps: 11, rungs: Object.freeze([9.7, 10.0133, 10.3267, 10.64]) });
+const TOWER = Object.freeze({ x0: 11.3, x1: 11.86, z0: -8.86, z1: -8.3, post: 0.06, deck: 0.9, top: 1.5 });
+const TUBE = Object.freeze({ seg: 0.18, segs: 6, drop: 0.1, wall: 0.06, floor: 0.12, inside: 0.36, end: -6.75 });
 // The citrus tree.
 const TREE = Object.freeze({ x0: 10.9, x1: 11.1, z0: -14.1, z1: -13.9, fork: 1.2, limb: 0.12, reach: 0.6, canopy: 2.0 });
 
 // The house's east wall (x 9.0..9.1, z -6.1..6.1, 2.7 m) as pieces, in place
 // of the shell's one box: the kitchen window (its lower sash raised to leave
-// 17 cm open over the sill: tight) and the doggy door at the floor, its flap
+// 17 cm open over the sill: tight; its upper sash's glass in a black frame)
+// and the doggy door at the floor, its flap
 // swung up outside. mat: the house's material key (sim-maps.js HOUSE_LOOK
 // surfaces, or 'glass'). Built by buildHouse after the house boxes.
-const KW = Object.freeze({ z0: 2.6, z1: 3.5, sill: 1.0, open: 0.17, rail: 0.06, head: 2.1 });
+const KW = Object.freeze({ z0: 2.6, z1: 3.5, sill: 1.0, open: 0.17, rail: 0.06, head: 2.1, frame: 0.06 });
 const DOG = Object.freeze({ z0: 4.3, z1: 4.52, h: 0.30, flap: 0.22 });
 function eastWallPieces() {
   const out = [], x0 = 9.0, x1 = 9.1, H = 2.7, zA = -6.1, zB = 6.1;
@@ -115,7 +134,18 @@ function eastWallPieces() {
   p('wall', 'wall', [x0, 0, zA], [x1, H, KW.z0]);
   p('kitchen window sill', 'wall', [x0, 0, KW.z0], [x1, KW.sill, KW.z1]);
   p('kitchen window sash rail', 'white', [x0, KW.sill + KW.open, KW.z0], [x1, KW.sill + KW.open + KW.rail, KW.z1]);
-  p('kitchen window glass', 'glass', [x0 + 0.02, KW.sill + KW.open + KW.rail, KW.z0], [x1 - 0.02, KW.head, KW.z1]);
+  // The upper sash: a black frame (two stiles, the head rail, a muntin
+  // across its middle) on its glass, so it reads as solid. The glass one
+  // pane, the frame through it; the muntin and the head
+  // rail the window's width (the wall either side is 0-10 cm from anything
+  // that stops short of it).
+  const g0 = KW.sill + KW.open + KW.rail, f = KW.frame, zf0 = KW.z0 + f, zf1 = KW.z1 - f;
+  const m0 = (g0 + KW.head - f) / 2 - f / 2, m1 = m0 + f;
+  p('kitchen window glass', 'glass', [x0 + 0.02, g0, KW.z0], [x1 - 0.02, KW.head, KW.z1]);
+  p('kitchen window frame stile', 'black', [x0, g0, KW.z0], [x1, KW.head, zf0]);
+  p('kitchen window frame stile', 'black', [x0, g0, zf1], [x1, KW.head, KW.z1]);
+  p('kitchen window frame muntin', 'black', [x0, m0, KW.z0], [x1, m1, KW.z1]);
+  p('kitchen window frame head', 'black', [x0, KW.head - f, KW.z0], [x1, KW.head, KW.z1]);
   p('kitchen window head', 'wall', [x0, KW.head, KW.z0], [x1, H, KW.z1]);
   p('wall', 'wall', [x0, 0, KW.z1], [x1, H, DOG.z0]);
   p('doggy door head', 'wall', [x0, DOG.h, DOG.z0], [x1, H, DOG.z1]);
@@ -232,6 +262,7 @@ function yardBoxes() {
     b('back', 'mat', 'swing set', 'seat', s0, G.seat, G.zc - G.seatD / 2, s1, G.seat + 0.06, G.zc + G.seatD / 2);
     for (const hx of [s0, s1 - h]) b('back', 'steel', 'swing set', 'hanger', hx, G.seat + 0.06, G.zc - h / 2, hx + h, G.barY, G.zc + h / 2);
   }
+  jungleGym(b);
   // The shed, in the back-west corner: 10 cm walls, the door (open, its leaf
   // swung back against the east wall) in, the window (open, no glass) out on
   // the west face to the alley along the wall; a shelf unit and a mower in.
@@ -303,6 +334,82 @@ function swingAGap(ax0) {
   let half = Infinity;
   for (let k = 0; k * h < G.brace; k++) half = Math.min(half, swingLegOffset(k) - G.legW / 2);
   return [ax0, 0, G.zc - half, ax0 + G.legT, G.brace, G.zc + half];
+}
+
+// The dome's radius at height y (an ellipsoid, R across, H high).
+function domeR(y) {
+  const D = DOME;
+  return D.R * Math.sqrt(Math.max(0, 1 - (y / D.H) ** 2));
+}
+// The arch's west leg's x at height y (a quarter ellipse: upright at the
+// foot, level at the top); the east leg mirrors it.
+function archX(y) {
+  const A = ARCH, b = A.top - A.bar - SANDBOX.sand, u = Math.min(1, (y - SANDBOX.sand) / b);
+  return A.x0 + A.rise - A.rise * Math.sqrt(Math.max(0, 1 - u * u));
+}
+function archStepY(k) {
+  const A = ARCH;
+  return SANDBOX.sand + (A.top - A.bar - SANDBOX.sand) * k / A.steps;
+}
+// The tube's floor top, segment i (0 at the tower's deck; segs: the level exit).
+function tubeFloor(i) {
+  return TOWER.deck - TUBE.drop * i;
+}
+function tubeZ(i) {
+  const T = TUBE;
+  return i < T.segs ? [TOWER.z1 + T.seg * i, TOWER.z1 + T.seg * (i + 1)] : [TOWER.z1 + T.seg * T.segs, T.end];
+}
+// The sandbox and the jungle gym, into yardBoxes' b().
+function jungleGym(b) {
+  const X = SANDBOX, t = X.t, steps = { edges: true };
+  b('back', 'green', 'sandbox', 'frame', X.x0, 0, X.z0, X.x1, X.h, X.z0 + t);
+  b('back', 'green', 'sandbox', 'frame', X.x0, 0, X.z1 - t, X.x1, X.h, X.z1);
+  b('back', 'green', 'sandbox', 'frame', X.x0, 0, X.z0 + t, X.x0 + t, X.h, X.z1 - t);
+  b('back', 'green', 'sandbox', 'frame', X.x1 - t, 0, X.z0 + t, X.x1, X.h, X.z1 - t);
+  b('back', 'sand', 'sandbox', 'sand', X.x0 + t, 0, X.z0 + t, X.x1 - t, X.sand, X.z1 - t);
+  // The dome: four square rings, the crown the last; the four meridians
+  // stepped up the ellipsoid through each ring's middles.
+  const D = DOME, h = D.bar / 2;
+  for (const y of D.rings) {
+    const r = domeR(y + h);
+    for (const sz of [-1, 1]) b('back', 'orange', 'jungle gym', 'dome ring', D.x - r - h, y, D.z + sz * r - h, D.x + r + h, y + D.bar, D.z + sz * r + h);
+    for (const sx of [-1, 1]) b('back', 'orange', 'jungle gym', 'dome ring', D.x + sx * r - h, y, D.z - r + h, D.x + sx * r + h, y + D.bar, D.z + r - h);
+  }
+  for (let k = 0; k + 1 < D.steps.length; k++) {
+    const y0 = D.steps[k], y1 = D.steps[k + 1], ra = domeR(y1) - h, rb = domeR(y0) + h;
+    for (const sg of [-1, 1]) {
+      b('back', 'orange', 'jungle gym', 'dome meridian', ...(sg > 0 ? [D.x + ra, y0, D.z - h, D.x + rb, y1, D.z + h] : [D.x - rb, y0, D.z - h, D.x - ra, y1, D.z + h]), steps);
+      b('back', 'orange', 'jungle gym', 'dome meridian', ...(sg > 0 ? [D.x - h, y0, D.z + ra, D.x + h, y1, D.z + rb] : [D.x - h, y0, D.z - rb, D.x + h, y1, D.z - ra]), steps);
+    }
+  }
+  // The monkey-bar arch: two rails (z either side), each a stepped leg up
+  // from the sand, a level run along the top, the other leg down; rungs
+  // across the top run.
+  const A = ARCH, ah = A.bar / 2, top = A.top - A.bar;
+  for (const sz of [-1, 1]) {
+    const z0 = sz < 0 ? A.z - A.half - A.bar : A.z + A.half, z1 = z0 + A.bar;
+    for (let k = 0; k < A.steps; k++) {
+      const y0 = archStepY(k), y1 = archStepY(k + 1), xa = archX(y0) - ah, xb = archX(y1) + ah;
+      b('back', 'orange', 'jungle gym', 'monkey bar rail', xa, y0, z0, xb, y1, z1, steps);
+      b('back', 'orange', 'jungle gym', 'monkey bar rail', A.x0 + A.x1 - xb, y0, z0, A.x0 + A.x1 - xa, y1, z1, steps);
+    }
+    b('back', 'orange', 'jungle gym', 'monkey bar rail', A.x0 + A.rise - ah, top, z0, A.x1 - A.rise + ah, A.top, z1);
+  }
+  for (const x of A.rungs) b('back', 'orange', 'jungle gym', 'monkey bar', x, top, A.z - A.half, x + A.bar, A.top, A.z + A.half);
+  // The tower: four posts, its deck at 0.9 m, a guard rail at its back;
+  // the tube slide off its front (+z), stepped down to a level exit on the
+  // sand: each segment's floor and roof between its two full-height sides.
+  const W = TOWER, sp = W.post;
+  for (const x of [W.x0, W.x1 - sp]) for (const z of [W.z0, W.z1 - sp]) b('back', 'orange', 'jungle gym', 'tower post', x, X.sand, z, x + sp, W.top, z + sp);
+  b('back', 'green', 'jungle gym', 'tower deck', W.x0, W.deck - 0.06, W.z0, W.x1, W.deck, W.z1);
+  b('back', 'orange', 'jungle gym', 'tower guard rail', W.x0 + sp, W.top - 0.06, W.z0, W.x1 - sp, W.top, W.z0 + sp);
+  const T = TUBE;
+  for (let i = 0; i <= T.segs; i++) {
+    const [z0, z1] = tubeZ(i), f = tubeFloor(i), fb = i === T.segs ? X.sand : f - T.floor, rt = f + T.inside + T.floor;
+    for (const x of [W.x0, W.x1 - T.wall]) b('back', 'plastic', 'jungle gym', 'tube slide side', x, fb, z0, x + T.wall, rt, z1, steps);
+    b('back', 'plastic', 'jungle gym', 'tube slide floor', W.x0 + T.wall, fb, z0, W.x1 - T.wall, f, z1, steps);
+    b('back', 'plastic', 'jungle gym', 'tube slide roof', W.x0 + T.wall, f + T.inside, z0, W.x1 - T.wall, rt, z1, steps);
+  }
 }
 
 // The crashed whoop on the neighbour's gravel, upside down: frame, four
@@ -382,6 +489,24 @@ function yardGaps() {
   const H = SHED;
   g('shed door', 'x', 'shed', [H.x1 - H.t, 0, H.door.z0], [H.x1, H.door.h, H.door.z1]);
   g('shed window', 'x', 'shed', [H.x0, H.window.y0, H.window.z0], [H.x0 + H.t, H.window.y1, H.window.z1]);
+  // The jungle gym: the dome's crown (dive in) and a window either side,
+  // under the monkey-bar arch and down between its middle rungs, out of the
+  // tube slide's mouth.
+  const D = DOME, dh = D.bar / 2, crown = D.rings[D.rings.length - 1];
+  const ci = Math.min(domeR(crown + dh), domeR(D.steps[D.steps.length - 1])) - dh - 0.005;
+  g('dome crown', 'y', 'jungle gym', [D.x - ci, crown + D.bar - 0.1, D.z - ci], [D.x + ci, crown + D.bar, D.z + ci]);
+  const wy0 = D.rings[1] + D.bar, wy1 = D.rings[2], wr = domeR(wy1 + dh);
+  for (const [n, sx] of [['east', 1], ['west', -1]]) {
+    const xa = D.x + sx * (wr + 0.05), xb = D.x + sx * (wr + 0.15);
+    g(`dome window (${n})`, 'x', 'jungle gym', [Math.min(xa, xb), wy0, D.z + 0.13], [Math.max(xa, xb), wy1, D.z + wr - dh]);
+  }
+  const A = ARCH, ay1 = 1.2;
+  let ax0 = -Infinity;
+  for (let k = 0; k < A.steps; k++) if (archStepY(k) < ay1) ax0 = Math.max(ax0, archX(archStepY(k + 1)) + A.bar / 2);
+  g('under the monkey bars', 'z', 'jungle gym', [ax0, SANDBOX.sand, A.z - A.half - A.bar], [A.x0 + A.x1 - ax0, ay1, A.z + A.half + A.bar]);
+  g('between the monkey bars', 'y', 'jungle gym', [A.rungs[1] + A.bar, A.top - 0.1, A.z - A.half], [A.rungs[2], A.top, A.z + A.half]);
+  const U = TUBE, W = TOWER, ft = tubeFloor(U.segs);
+  g('tube slide', 'z', 'jungle gym', [W.x0 + U.wall, ft, U.end - 0.1], [W.x1 - U.wall, ft + U.inside, U.end]);
   // The house's own openings onto the yard: the back hall's sliding door
   // (its open half, between the wall's end and the mullion) and the covered
   // patio's posts, back to front.
@@ -424,6 +549,13 @@ export const HOUSE_YARD = Object.freeze({
       min: Object.freeze([r4(SWING.seats[0] + SWING.seatW / 2), 0, r4(SWING.zc - 1.5)]),
       max: Object.freeze([r4(SWING.seats[1] - SWING.seatW / 2), r4(SWING.barY + SWING.bar + 1.5), r4(SWING.zc + 1.5)]),
     }),
+    // Over the dome climber, along z (its crown the dive back in): its
+    // width, the ground to 1.5 m over the crown, 1.5 m out either side.
+    dome: Object.freeze({
+      feature: 'jungle gym',
+      min: Object.freeze([r4(DOME.x - DOME.R), 0, r4(DOME.z - 1.5)]),
+      max: Object.freeze([r4(DOME.x + DOME.R), r4(DOME.rings[DOME.rings.length - 1] + DOME.bar + 1.5), r4(DOME.z + 1.5)]),
+    }),
   }),
   // Named places, metres: where the Backyard Lap can start (the west lawn,
   // off the patio), the roof edge over the pool, each feature.
@@ -440,6 +572,7 @@ export const HOUSE_YARD = Object.freeze({
     kitchenWindow: Object.freeze([9.05, 1.085, 3.05]),
     doggyDoor: Object.freeze([9.05, 0.15, 4.41]),
     neighborWhoop: Object.freeze([-4.0, 0.03, -19.5]),
+    jungleGym: Object.freeze([9.5, 0.15, -7.8]),
   }),
 });
 

@@ -15,7 +15,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  HOUSE_PLAY, HOUSE_WS, HOUSE_LOOK, HOUSE_KEY, MAP_LOOKS, LAYOUT, buildMap, mapGaps,
+  HOUSE_PLAY, HOUSE_WS, HOUSE_LOOK, HOUSE_KEY, MAP_LOOKS, LAYOUT, buildMap, mapGaps, houseAoBoxes,
 } from '../sim-maps.js';
 import * as YARD from '../sim-house-yard.js';
 import { HOUSE_YARD, YARD_LOOK, WHOOP_75, YARD_WS } from '../sim-house-yard.js';
@@ -46,6 +46,8 @@ const SPEC_GAPS = ['kitchen window', 'doggy door', 'under the slide', 'pool ladd
   'trampoline open top', 'swing A-frame (west)', 'swing A-frame (east)', 'between the swings', 'swing gap (west)',
   'swing gap (east)', 'citrus branch gap (west)', 'citrus branch gap (east)', 'shed door', 'shed window'];
 const OPTIONAL_GAP = (n) => n === 'sliding door' || /^patio posts/.test(n) || /^patio wall gap/.test(n);
+// The jungle gym's (on the green sandbox, after the spec): all of them.
+const GYM_GAPS = ['dome crown', 'dome window (east)', 'dome window (west)', 'under the monkey bars', 'between the monkey bars', 'tube slide'];
 // The only gaps the spec marks tight (20 mm a side, not 40).
 const TIGHT_GAPS = ['kitchen window'];
 // The sky box (houseSky): x ±27 m, z ±24 m, y -5.4..27 m about the origin.
@@ -259,7 +261,9 @@ test('yard gaps: names, metadata, which are tight, all in mapGaps(house) at worl
   const names = Y.gaps.map((g) => g.name);
   assert.equal(new Set(names).size, names.length, 'yard gap names unique');
   for (const n of SPEC_GAPS) assert.ok(names.includes(n), 'spec gap ' + n);
-  for (const n of names) assert.ok(SPEC_GAPS.includes(n) || OPTIONAL_GAP(n), 'a gap the spec names: ' + n);
+  for (const n of GYM_GAPS) assert.ok(names.includes(n), 'jungle gym gap ' + n);
+  for (const n of names) assert.ok(SPEC_GAPS.includes(n) || GYM_GAPS.includes(n) || OPTIONAL_GAP(n), 'a gap the spec names: ' + n);
+  for (const g of Y.gaps) if (GYM_GAPS.includes(g.name)) assert.equal(g.feature, 'jungle gym', g.name + ' feature');
   assert.deepEqual(Y.gaps.filter((g) => g.tight).map((g) => g.name), TIGHT_GAPS, 'tight: the kitchen window only');
   const all = mapGaps('house');
   const allNames = all.map((g) => g.name);
@@ -403,7 +407,8 @@ test('a ring through every House gap: the 75 at the gap\'s centre, 30 cm either 
 // ---------------------------------------------------------------------------
 // The interior, as it was (origin/main 8b5119e): HOUSE_PLAY.boxes then
 // (three patio posts at z -6, -0.06, 5.88, the long west glass screen and the
-// two end screens over the garden wall; no patio fan) and the shell then (the east wall one box, the west 0.9 m garden
+// two end screens over the garden wall; no patio fan; the sliding door's two
+// panes without their frame) and the shell then (the east wall one box, the west 0.9 m garden
 // wall), from the values in yard-spec.md and git show 8b5119e:sim-maps.js.
 // sha256 of JSON.stringify(HOUSE_PLAY.boxes) at 8b5119e:
 const ORIGINAL_BOXES_SHA = '782c69e4cc9a44e27c575a713a3a4b1505ba3c738b1ce8970a04dc6853e92c1e';
@@ -414,6 +419,8 @@ function originalBoxes() {
   let posts = false;
   for (const q of BOXES) {
     if (q.feature === 'patio fan') continue;
+    // The sliding door's panes, no frame.
+    if (q.feature === 'sliding door' && /^frame/.test(q.part)) continue;
     if (q.feature === 'patio' && q.part === 'post') {
       if (posts) continue;
       posts = true;
@@ -476,12 +483,18 @@ test('interior unchanged: the sun on a dense interior grid is the same as with t
   const b = built(), cols = b.colliders;
   // Casters: every collider whose mesh casts (not the glass, not the net).
   const glassEast = new Set(Y.eastWall.map((q, i) => (q.mat === 'glass' ? I_EAST + i : -1)));
-  const now = cols.map((c, i) => ({ c, i })).filter(({ i }) => {
+  // The sliding door's frame (new, round the glass the key comes in by)
+  // shades a few points the bare glass did not: that is the only change.
+  const frame = (i) => i < BOXES.length && BOXES[i].feature === 'sliding door' && /^frame/.test(BOXES[i].part);
+  const casts = cols.map((c, i) => ({ c, i })).filter(({ i }) => {
     if (i < BOXES.length) return BOXES[i].mat !== 'glass';
     if (glassEast.has(i)) return false;
     if (i >= I_YARD && i < I_WHOOP) return Y.boxes[i - I_YARD].mat !== 'net';
     return true;
-  }).map(({ c }) => toM(c));
+  });
+  const now = casts.filter(({ i }) => !frame(i)).map(({ c }) => toM(c));
+  const litFrame = litFn(casts.map(({ c }) => toM(c)));
+  let framed = 0;
   const then = [
     ...orig.filter((q) => q.mat !== 'glass'),
     ...originalShell(cols).map((c) => ({ min: c.min.map((v) => v / s), max: c.max.map((v) => v / s) })),
@@ -500,6 +513,7 @@ test('interior unchanged: the sun on a dense interior grid is the same as with t
         const a = litThen(p), c = litNow(p);
         n++;
         if (a) lit++;
+        if (c && !litFrame(p)) framed++;
         if (a !== c) diff.push(p.map((v) => +v.toFixed(2)).join(',') + (a ? ' was lit' : ' was dark'));
       }
     }
@@ -507,6 +521,8 @@ test('interior unchanged: the sun on a dense interior grid is the same as with t
   assert.ok(n > 5000, n + ' points');
   assert.ok(lit > 20, lit + ' lit points (the sun does come in)');
   assert.deepEqual(diff, [], 'sun changed at ' + diff.length + ' of ' + n + ' interior points');
+  console.log(`# interior sun: ${framed} of ${lit} lit points in the sliding door frame's shadow`);
+  assert.ok(framed < lit / 4, 'the frame shades ' + framed + ' of ' + lit);
 });
 
 // A material's shader uniforms as its onBeforeCompile writes them (the look's
@@ -570,7 +586,7 @@ test('interior unchanged: the House\'s materials, look, key, vibe and sets as be
   // (blades at 2.29 m, reach 1.2 + 2.29 m), which shades the back hall and
   // entry floor by at most 2/255; the patio's own texels see the posts move.
   const R = ROOM;
-  const aoNow = floorAo(BOXES, R), aoThen = floorAo(originalBoxes(), R);
+  const aoNow = floorAo(houseAoBoxes(), R), aoThen = floorAo(originalBoxes(), R);
   assert.equal(aoNow.width, aoThen.width);
   let changed = 0, worst = 0;
   for (let v = 0; v < aoNow.height; v++) {
@@ -717,6 +733,22 @@ test('powerloop: the swing set\'s top bar loop volume holds nothing but the swin
   const stray = built().colliders.map((c, i) => ({ i, m: toM(c) })).filter(({ i, m }) => ov(m) && !swingIdx.has(i));
   assert.deepEqual(stray.map(({ i }) => i), [], 'no other collider in the loop');
   assert.ok(Y.boxes.some((q) => q.feature === 'swing set' && ov(q)), 'the bar and its swings are in it');
+});
+
+test('powerloop: over the dome climber, its volume holds nothing but the jungle gym and its sandbox', () => {
+  const v = Y.powerloops.dome;
+  assert.equal(v.feature, 'jungle gym');
+  const crown = Y.gaps.find((g) => g.name === 'dome crown');
+  assert.ok(inside(crown.min, v.min, v.max) && inside(crown.max, v.min, v.max), 'the loop comes down through the crown');
+  const rings = Y.boxes.filter((q) => q.part === 'dome ring');
+  const top = Math.max(...rings.map((q) => q.max[1]));
+  assert.ok(v.min[1] === 0 && v.max[1] >= top + 1.5 - 1e-9, 'ground to 1.5 m over the crown');
+  const ov = (m) => [0, 1, 2].every((k) => m.min[k] < v.max[k] - EPS && v.min[k] < m.max[k] - EPS);
+  const gym = (q) => q.feature === 'jungle gym' || q.feature === 'sandbox';
+  assert.deepEqual(Y.boxes.filter((q) => ov(q) && !gym(q)).map(label), [], 'dome powerloop clear');
+  const own = new Set(Y.boxes.map((q, i) => (gym(q) ? I_YARD + i : -1)));
+  const stray = built().colliders.map((c, i) => ({ i, m: toM(c) })).filter(({ i, m }) => ov(m) && !own.has(i));
+  assert.deepEqual(stray.map(({ i }) => i), [], 'no other collider in the loop');
 });
 
 // ---------------------------------------------------------------------------

@@ -10,7 +10,7 @@ import {
   LOOK, lookMaterial, lookBoxUv, lookFloor, lookFloorPatch, lookAoTexture, lookGlass, lookLines, lookLooks, lookShafts, lookGraffiti, floorAo,
 } from './sim-look.js?v=73378d552076';
 import { BANDO_GRAFFITI, BANDO_DECAY, BANDO_PROP_BOXES, dressBando, bandoAtlas } from './sim-bando-dress.js?v=1c85071f2564';
-import { HOUSE_YARD, buildHouseYard } from './sim-house-yard.js?v=faaeb6827648';
+import { HOUSE_YARD, buildHouseYard } from './sim-house-yard.js?v=964cfff3d92e';
 
 // Garage playground. Gaps sized for a 65–85 mm whoop (~0.23–0.30 wu).
 // Clearance stays ≥ 0.85 wu except the raised-car crawl (1.32 wu / ~38 cm).
@@ -1323,9 +1323,18 @@ function houseBoxes() {
   b('hall', 'white', 'doors', 'bathroom door', -3.55, 0, -5.56, -2.75, 2.0, -5.5);
   b('patio', 'white', 'doors', 'garden door', -6.5, 0, 4.7, -5.7, 2.0, 4.76);
   b('entry', 'blue', 'doors', 'front door', -4.5, 0, 5.94, -3.5, 2.1, 6);
-  // The sliding door: the moving pane parked over the fixed one.
+  // The sliding door: the moving pane parked over the fixed one, both in a
+  // black frame (two stiles, the sill, a mid rail at 1 m, the head), 5 mm
+  // proud of the glass either side, so the solid half reads at flying speed.
+  // The panes as they were; the frame over them (houseAoBoxes leaves it out:
+  // it stands in the panes' footprint).
   b('hall', 'glass', 'sliding door', 'fixed pane', -5.63, 0, -4.6, -5.57, 2.05, -3.6);
   b('hall', 'glass', 'sliding door', 'sliding pane', -5.69, 0, -4.6, -5.63, 2.05, -3.6);
+  const fx0 = -5.695, fx1 = -5.565;
+  for (const [z0, z1] of [[-4.6, -4.54], [-3.66, -3.6]]) b('hall', 'black', 'sliding door', 'frame stile', fx0, 0, z0, fx1, 2.05, z1);
+  for (const [y0, y1, part] of [[0, 0.08, 'frame sill'], [0.98, 1.06, 'frame mid rail'], [1.97, 2.05, 'frame head']]) {
+    b('hall', 'black', 'sliding door', part, fx0, y0, -4.6, fx1, y1, -3.6);
+  }
   b('hall', 'steel', 'sliding door', 'mullion', -5.7, 0, -4.66, -5.5, 2.05, -4.6);
   // Entry hall: a sideboard and its mirror, a bench by the front door.
   b('entry', 'wood', 'entry', 'sideboard', -5.1, 0, 1.1, -3.7, 0.8, 1.5);
@@ -1704,6 +1713,12 @@ export const HOUSE_LOOK = Object.freeze({
   sky: Object.freeze({ zenith: [0.42, 0.62, 0.95], horizon: [1.25, 1.12, 0.95], ground: [0.22, 0.26, 0.17] }),
 });
 
+// The boxes the House's floor AO sees: all of HOUSE_PLAY.boxes but the
+// sliding door's frame, which stands in its panes' footprint.
+export function houseAoBoxes() {
+  return HOUSE_PLAY.boxes.filter((q) => !(q.feature === 'sliding door' && /^frame/.test(q.part)));
+}
+
 function buildHouse(THREE, parent, colliders) {
   const P = HOUSE_PLAY, s = HOUSE_WS, R = P.room, L = LAYOUT.house;
   const hx = R.w * s / 2, hz = R.d * s / 2, H = R.h * s, t = L.wall;
@@ -1747,7 +1762,7 @@ function buildHouse(THREE, parent, colliders) {
     edge(a, b);
   }
   // The floors share one AO map (floorAo) over the 18 × 12 m.
-  const ao = lookAoTexture(THREE, floorAo(P.boxes, R));
+  const ao = lookAoTexture(THREE, floorAo(houseAoBoxes(), R));
   let floor = null;
   for (const f of P.floors) {
     const mesh = lookFloorPatch(THREE, mats[f.mat], R, s, f, ao);

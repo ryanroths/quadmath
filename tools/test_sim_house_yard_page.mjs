@@ -19,8 +19,8 @@ import { fileURLToPath } from 'node:url';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const SKIP = process.env.SKIP_CHROME_BOOT === '1';
 
-// The spots: the House's entry (the interior, for comparison) and the yard's six.
-const SPOTS = ['houseEntry', 'houseYardPatio', 'houseYardPool', 'houseYardTramp', 'houseYardSwing', 'houseYardShed', 'houseYardNeighbor'];
+// The spots: the House's entry (the interior, for comparison) and the yard's seven.
+const SPOTS = ['houseEntry', 'houseYardPatio', 'houseYardPool', 'houseYardTramp', 'houseYardSwing', 'houseYardShed', 'houseYardNeighbor', 'houseYardGym'];
 // The owner's budget with the yard in view: draw calls a whole frame (every
 // pass: shadow, scene, post), fewer than this.
 const DRAW_CALL_LIMIT = 60;
