@@ -135,6 +135,34 @@ test('each gap does not register when flown past it, beside or above/below its o
   }
 });
 
+// 20 m/s, a fast whoop pass: a frame's step (0.33 m at 60 fps, 2 m at
+// 10 fps) is longer than most gaps are deep (10 cm), so a sample seldom lands
+// inside one. The ring test is on the step's segment, not its samples.
+const FAST_MS = 20;
+test('at 20 m/s each gap still registers through its centre, at 60, 30, 15 and 10 fps, wherever the frames fall; past it, still not', () => {
+  for (const fps of [60, 30, 15, 10]) {
+    const step = FAST_MS * WS / fps;
+    assert.ok(step < HUNT_MAX_STEP_M * WS, `${fps} fps: a 20 m/s step (${(step / WS).toFixed(2)} m) is under the teleport guard`);
+    for (const g of huntGaps('house')) {
+      for (const phase of [0, 0.37, 0.81]) {
+        const [a0, b] = throughPath(g, 3 * WS);
+        // Start a fraction of a step further back, so the plane falls at
+        // another point of a step.
+        const k = g.gate.axis, a = { ...a0 };
+        a[k] -= Math.sign(b[k] - a0[k]) * step * phase;
+        const h = makeHunt('house', memStorage(), WS);
+        const evs = fly(h, a, b, { step });
+        assert.equal(evs.filter((e) => e.gap === g.name).length, 1, `${g.name} at 20 m/s, ${fps} fps, phase ${phase}: found once`);
+        const hp = makeHunt('house', memStorage(), WS);
+        const [pa, pb] = pastPath(g, 3 * WS, 0, 0.15 * WS);
+        pa[k] -= Math.sign(pb[k] - pa[k]) * step * phase;
+        fly(hp, pa, pb, { step });
+        assert.ok(!hp.found.has(g.name), `${g.name} at 20 m/s, ${fps} fps: flown past, not found`);
+      }
+    }
+  }
+});
+
 test('a respawn or teleport across a gap is not a pass', () => {
   const g = huntGaps('house').find((x) => x.name === 'bookshelf gap');
   const [a, b] = throughPath(g, 0.6);
