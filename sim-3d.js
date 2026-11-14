@@ -168,7 +168,10 @@ export function isLanded(info) {
 // from here: upside down, where the stick turtles it).
 // The disarm waits for the throttle to have been raised since the arm, so
 // Space or the touch ARM button at idle on the pad stays armed until the pilot
-// flies.
+// flies. A throttle-up that arms is that raise: the next sample may already
+// have the throttle back at the bottom (the page polls on a 4 ms timer, which
+// a long frame holds back, so the next poll can come a frame later with the
+// throttle already down), and that flight still disarms when it lands.
 export function stepEasyArm(state, sample) {
   const s = sample || {};
   const dt = Number.isFinite(s.dt) && s.dt > 0 ? s.dt : 0;
@@ -208,6 +211,7 @@ export function stepEasyArm(state, sample) {
   next.lowS = 0;
   if (s.blocked) return none;
   const arm = stepAutoArm({ seenLow: held }, { t: s.t, threeD: s.threeD, armed: false, autoArm: s.autoArm, hasSwitch: false }).arm;
+  if (arm) next.raised = true;
   return { state: next, arm, disarm: false, reason: null };
 }
 

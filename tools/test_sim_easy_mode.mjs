@@ -116,6 +116,27 @@ test('easy disarm: throttle at the bottom 0.5 s while landed, not in the air, no
   assert.equal(run({}, 5, { t: 0, armed: true, landed: true }).out, null, 'armed at idle (Space, the touch ARM button), never raised: stays armed');
 });
 
+test('easy disarm: the throttle-up that armed counts as raised, though the next sample has it at the bottom', () => {
+  // CI's ?core=js keyboard run (PR 342): one poll a long frame, the arm on the
+  // raise, and S already down at the next poll. It flew 2.9 m and landed, and
+  // stayed armed on the floor.
+  let r = run({}, 1.01, { t: 0, armed: false });
+  const armed = stepEasyArm(r.state, { t: 0.6, dt: DT, ready: true, autoArm: true, armed: false });
+  assert.equal(armed.arm, true, 'raised after the hold arms');
+  r = run(armed.state, 1.5, { t: 0, armed: true, landed: false });
+  assert.equal(r.out, null, 'in the air at zero throttle: armed');
+  r = run(r.state, 0.4, { t: 0, armed: true, landed: true });
+  assert.equal(r.out, null, 'landed 0.4 s');
+  r = run(r.state, 0.2, { t: 0, armed: true, landed: true });
+  assert.equal(r.out && r.out.disarm, true, 'landed 0.5 s disarms');
+  assert.equal(r.out.reason, 'landed');
+  // An arm the core refused: the next sample is not armed, and the raise is gone.
+  const refused = stepEasyArm(run({}, 1.01, { t: 0, armed: false }).state, { t: 0.6, dt: DT, ready: true, autoArm: true, armed: false });
+  r = run(refused.state, 0.1, { t: 0, armed: false });
+  assert.equal(r.state.raised, false, 'refused: not raised');
+  assert.equal(run(r.state, 5, { t: 0, armed: true, landed: true }).out, null, 'then armed at idle (Space): stays armed');
+});
+
 test('easy disarm: a crash, once it has come to rest, at any throttle; the arm after it needs a new hold', () => {
   let r = run({ raised: true }, 0.1, { t: 0.4, armed: true, landed: false, crashed: true });
   assert.equal(r.out, null, 'still moving: a wall tap flies on');

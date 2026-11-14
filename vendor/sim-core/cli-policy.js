@@ -75,6 +75,24 @@ export const FEATURES_APPLIED = new Set(['AIRMODE', 'ANTI_GRAVITY', 'MOTOR_STOP'
 // Aux channels sim-core.input() can drive: AUX1..AUX12 (indices 0..11).
 export const AUX_CHANNELS = 12;
 
+// Settings the sim sets itself after the diff, whatever the diff says; a diff
+// line that sets one is rejected with the reason. sim-core.js applies them
+// before save and checks them again after the saved image boots.
+//   The RPM filter (owner, 2026-11-13): in the sim's 1 kHz loop its notches
+//   sit next to Nyquist, and on the floor at zero throttle with air mode
+//   latched the PID's motor outputs alternate every loop, the motors' rpm
+//   with them, and the rpm telemetry moves the notches every loop: the
+//   filtered gyro rings at 500 Hz while the raw gyro does not, and the quad
+//   lifts itself off the floor. The sim has no motor noise for it to remove.
+//   Bidirectional DShot stays on: its rpm telemetry still reaches Betaflight
+//   (dyn idle, the OSD's rpm, the blackbox).
+export const POLICY_SETS = Object.freeze([
+  {
+    key: 'rpm_filter_harmonics', value: '0',
+    msg: 'the RPM filter is off in the sim: in its 1 kHz loop the notches sit next to Nyquist and ring on a contact; bidirectional DShot stays on',
+  },
+]);
+
 export function classifyLine(rawText, { loopHz = 1000 } = {}) {
   const text = String(rawText).replace(/\r$/, '');
   const full = text.trim();
@@ -135,6 +153,10 @@ export function classifyLine(rawText, { loopHz = 1000 } = {}) {
     const value = m[2].trim();
     if (REJECT_SET.has(key)) {
       return { status: 'rejected', msg: REJECT_SET.get(key) };
+    }
+    const policy = POLICY_SETS.find((p) => p.key === key);
+    if (policy) {
+      return { status: 'rejected', msg: `${policy.msg} (the sim sets ${key} = ${policy.value})` };
     }
     if (key === 'motor_pwm_protocol' && !/^dshot/i.test(value)) {
       return { status: 'rejected', msg: 'sim-core needs a DShot protocol (digital idle, telemetry, one PID per gyro sample)' };

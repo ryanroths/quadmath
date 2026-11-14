@@ -18,7 +18,7 @@
 // This file is part of quadmath-sim-core, GPL-3.0-or-later. See LICENSE.
 
 import {
-  AUX_CHANNELS, DEFAULT_AUX, auxLine, classifyLine, parseAuxOutput, parseFeatureOutput, parseGetOutput, parseMapOutput,
+  AUX_CHANNELS, DEFAULT_AUX, POLICY_SETS, auxLine, classifyLine, parseAuxOutput, parseFeatureOutput, parseGetOutput, parseMapOutput,
   parseGetEntry, parseSetEcho, sameSettingValue,
 } from './cli-policy.js';
 
@@ -371,17 +371,26 @@ export class SimCore {
 
     const added = SimCore.#addDefaultAux(e);
     const rcmap = parseMapOutput(SimCore.#cli(e, 'map').output) || 'AETR1234';
+    // The policy's own settings (cli-policy.js POLICY_SETS), after the diff.
+    const policy = POLICY_SETS.map((p) => {
+      const { rc, output } = SimCore.#cli(e, `set ${p.key} = ${p.value}`);
+      const stored = parseSetEcho(output, p.key);
+      if (rc !== 0 || stored === undefined || !sameSettingValue(p.value, stored)) {
+        throw new Error(`policy: Betaflight did not take set ${p.key} = ${p.value}: ${output.trim()}`);
+      }
+      return { key: p.key, value: p.value, msg: p.msg };
+    });
 
     // Save: Betaflight writes the EEPROM image and asks for a reboot.
     SimCore.#cli(e, 'save');
     if (!e.sc_reboot_requested()) throw new Error('save did not request a reboot');
     const saved = new Uint8Array(e.memory.buffer, e.sc_eeprom_ptr(), e.sc_eeprom_size()).slice();
 
-    this.#checkAfterBoot(lines, saved);
+    this.#checkAfterBoot(lines, saved, policy);
 
     const count = (s) => lines.filter((l) => l.status === s).length;
     const report = {
-      lines, added, rcmap, loopHz,
+      lines, added, policy, rcmap, loopHz,
       applied: count('applied'), rejected: count('rejected'), errors: count('error'), comments: count('comment'),
     };
     return { report, eeprom: saved, rcmap };
@@ -425,7 +434,16 @@ export class SimCore {
   // validateAndFixConfig, validateAndFixGyroConfig) can change a value or
   // clear a feature the CLI accepted. Only the last line for each feature, and
   // for each setting in its own scope, decides; earlier ones are superseded.
-  #checkAfterBoot(lines, eeprom) {
+  #checkAfterBoot(lines, eeprom, policy = []) {
+    if (policy.length) {
+      const e = this.#configInstance(eeprom);
+      for (const p of policy) {
+        const now = parseGetOutput(SimCore.#cli(e, `get ${p.key}`).output, p.key);
+        if (now === undefined || !sameSettingValue(p.value, now)) {
+          throw new Error(`policy: Betaflight booted ${p.key} as '${now}', not ${p.value}`);
+        }
+      }
+    }
     const last = new Map();
     for (const l of lines) {
       if (l.status !== 'applied') continue;
