@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // "Fly my line": a finished run as a link. The map and track ride in the query
 // (sim.html?map=..&track=..) and the pilot's ghost in the fragment
-// (#line=<code>), which is never sent to a server.
+// (#line=<code>). SHARE stores the code on the leaderboard Worker and copies
+// the short form (#line=@<id>); the long form, the ghost itself in the
+// fragment, is what it copies when the Worker is down or refuses, and every
+// long link still opens.
 //
 // A line code is the ghost resampled at a fixed rate and packed: a small JSON
 // header (track, pilot name, time, physics version, rate), then the positions
@@ -10,8 +13,8 @@
 // base64url.
 //   L1.<base64url>   deflate-raw
 //   L0.<base64url>   not compressed (no CompressionStream)
-//   @<id>            stored on the leaderboard Worker (POST /api/line), for a
-//                    code too long for a link
+//   @<id>            stored on the leaderboard Worker (POST /api/line): the
+//                    short link
 // The Worker bundles this file, so the page and the Worker read a code the
 // same way. No imports: what comes out of a code is checked by the caller
 // with sim-retention.js (ghostPayloadError, fromShareTrackPayload).
@@ -257,16 +260,17 @@ export function lineFromHash(hash) {
 
 // The best code for a link to the page at base (lineLink's arguments, less
 // code): the highest rate whose whole link fits LINE_URL_MAX. fits false: none
-// did, and code is the full-rate one, for the Worker.
+// did, and code is the full-rate one. full is always the full-rate code, the
+// one the Worker stores.
 export async function lineForLink(line, base, { max = LINE_URL_MAX, compress = true } = {}) {
   let full = null;
   for (const hz of LINE_RATES_HZ) {
     const code = await encodeLineCode(line, hz, { compress });
     if (!full) full = code;
     const link = lineLink({ ...base, code });
-    if (link.length <= max) return { fits: true, hz, code, link };
+    if (link.length <= max) return { fits: true, hz, code, link, full };
   }
-  return { fits: false, hz: LINE_RATES_HZ[0], code: full, link: lineLink({ ...base, code: full }) };
+  return { fits: false, hz: LINE_RATES_HZ[0], code: full, link: lineLink({ ...base, code: full }), full };
 }
 
 // The Worker's id for a code: from its content, so the same line is the same id.

@@ -201,7 +201,7 @@ export async function handleLeaderboard(request, env) {
     });
   }
 
-  // "Fly my line" (sim-share.js): a line code too long for a link, kept under
+  // "Fly my line" (sim-share.js): a line code behind a short link, kept under
   // an id made from its content, so the same line is stored once.
   if (request.method === 'POST' && path === '/api/line') {
     if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);

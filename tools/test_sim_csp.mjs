@@ -267,8 +267,10 @@ const PAGE = String.raw`(() => {
     }
     return until(() => !!$('lapShare'), 4000);
   }
+  // before: the link a new run's must differ from; null for the same run
+  // shared again (the same short link: clear the toast first).
   async function shared(before) {
-    const said = await until(() => /LINK COPIED|CLIPBOARD BLOCKED/.test(toast()) && s.line().link !== before, 8000);
+    const said = await until(() => /LINK COPIED|CLIPBOARD BLOCKED/.test(toast()) && (before === null || s.line().link !== before), 8000);
     return { said, toast: toast(), link: s.line().link };
   }
   // Where a button is, and whether it is what the pilot sees and clicks there.
@@ -345,9 +347,9 @@ async function flows(d, label, { core, share, menus, record }) {
   record('arm and fly');
 
   if (share) {
-    // A run on the Rig Loop (the boot's track), long enough a link that the
-    // Worker keeps it: a post to the leaderboard.
-    let r = await d.js(`T.s.setLineUrlMax(200); const done = await T.flyGates(); return JSON.stringify({ done, panel: T.$('osdLap').textContent.slice(0, 40) });`);
+    // A run on the Rig Loop (the boot's track): SHARE posts it to the
+    // leaderboard and copies the short link.
+    let r = await d.js(`const done = await T.flyGates(); return JSON.stringify({ done, panel: T.$('osdLap').textContent.slice(0, 40) });`);
     assert.equal(r.done, true, label + ': the run finished with SHARE on the lap panel: ' + r.panel);
     const before = await d.js(`return T.s.line().link;`);
     let hit = await d.click('lapShare');
@@ -361,18 +363,18 @@ async function flows(d, label, { core, share, menus, record }) {
     // The pause menu's.
     await d.key('Escape', 'Escape', 27);
     await sleep(500);
-    await d.js(`T.s.setLineUrlMax(0); return 1;`);
+    await d.js(`T.$('toast').textContent = ''; return 1;`);
     hit = await d.click('menuShare');
     assert.deepEqual([hit.found, hit.hit, hit.text], [true, true, 'SHARE last run'], label + ': menu SHARE under the mouse');
-    r = await d.js(`return JSON.stringify(await T.shared(${JSON.stringify(link)}));`);
+    r = await d.js(`return JSON.stringify(await T.shared(null));`);
     say('menu SHARE: ' + r.toast);
     assert.equal(r.said, true, label + ': the menu SHARE copied: ' + r.toast);
+    assert.equal(r.link, link, label + ': the menu shares the same run as the panel');
     record('menu SHARE');
     // K, in flight.
-    await d.js(`T.$('menuResume').click(); await T.wait(400); T.s.setLineUrlMax(200); return 1;`);
-    const k0 = r.link;
+    await d.js(`T.$('menuResume').click(); await T.wait(400); T.$('toast').textContent = ''; return 1;`);
     await d.key('k', 'KeyK', 75);
-    r = await d.js(`return JSON.stringify(await T.shared(${JSON.stringify(k0)}));`);
+    r = await d.js(`return JSON.stringify(await T.shared(null));`);
     say('K: ' + r.toast);
     assert.equal(r.said, true, label + ': K copied: ' + r.toast);
     assert.equal(r.link, link, label + ': K shares the same run as the panel');
@@ -738,8 +740,7 @@ test('the sim under its policy in Chrome: no violations; injected handlers do no
           T.$('layerClose').click();
           T.$('menuResume').click();
           await T.wait(400);
-          // A run, shared: the line too long for a link goes to the local leaderboard.
-          T.s.setLineUrlMax(200);
+          // A run, shared: the line goes to the local leaderboard.
           const done = await T.flyGates();
           const gate = T.$('osdGate').textContent;
           const before = T.s.line().link;

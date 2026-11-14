@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS rate_limit (
   PRIMARY KEY (ip, window)
 );
 
--- "Fly my line" (sim-share.js): line codes too long for a link, by content id.
+-- "Fly my line" (sim-share.js): line codes behind short links, by content id.
 CREATE TABLE IF NOT EXISTS lines (
   id TEXT PRIMARY KEY,
   code TEXT NOT NULL,
