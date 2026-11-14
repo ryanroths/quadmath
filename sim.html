@@ -199,6 +199,9 @@
     color:var(--orange);text-shadow:0 0 12px rgba(255,77,26,.6);pointer-events:none;opacity:0;
     transition:opacity .3s;text-align:center;max-width:90vw}
   #toast.has-action{pointer-events:auto}
+  /* Gap Hunt (sim-gap-hunt.js): a found gap's small toast; a hidden gap's, gold. */
+  #toast.gap-toast{font-size:16px;letter-spacing:.04em}
+  #toast.gap-secret{font-size:20px;color:#ffd400;text-shadow:0 0 14px rgba(255,212,0,.7)}
   #toast a,#toast button{display:inline-block;width:auto;margin:10px auto 0;padding:6px 14px;font-size:13px;font-weight:600;
     color:var(--orange);background:rgba(16,18,24,.85);border:1px solid rgba(255,77,26,.55);border-radius:10px;cursor:pointer}
   #toast button+button{margin-left:8px}
@@ -490,6 +493,12 @@
   .board-row span{color:var(--dim)}
   .skin-list{display:flex;flex-direction:column;gap:6px;margin:10px 0;max-height:min(70vh,640px);overflow-y:auto}
   .menu-layer.skins{width:min(460px,94vw)}
+  .gap-list{list-style:none;display:flex;flex-direction:column;gap:4px;margin:10px 0;padding:0;max-height:min(60vh,520px);overflow-y:auto;text-align:left}
+  .gap-list li{padding:5px 8px;border:1px solid var(--line);border-radius:8px}
+  .gap-list b{display:block;font-size:13px;color:var(--dim)}
+  .gap-list li.found b{color:var(--txt)}
+  .gap-list li.found.hidden b{color:#ffd400}
+  .gap-list i{display:block;font-style:normal;font-size:11px;color:var(--dim);margin-top:2px}
   .skin-row{width:100%;text-align:left;display:flex;justify-content:space-between;gap:10px;align-items:center;
     padding:8px 10px;color:var(--txt);border-color:var(--line)}
   .skin-row:hover{background:rgba(255,77,26,.1);color:var(--txt)}
@@ -577,6 +586,7 @@
     <button class="menu-flight" id="menuGhostCodes">Ghost / Duel codes</button>
     <button class="menu-flight" id="menuClip">Clip</button>
     <button class="menu-flight" id="menuFreestyleMap">Freestyle this map</button>
+    <button class="menu-flight" id="menuGaps" style="display:none">Gaps</button>
     <button class="menu-flight" id="menuGhostRoom">Room</button>
     <button class="menu-flight" id="menuRecalib">Recalibrate</button>
     <button class="menu-hide" id="menuWhoop">Whoop</button>
@@ -1128,6 +1138,8 @@ import {
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
 } from "./sim-secrets.js?v=629748852120";
+import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
+  fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=66dcc5b43f27";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -3357,8 +3369,88 @@ async function setMap(mapId,trackId,opts){
     else applyDailyLineMod(dailyLineMod);
   }
   syncSecrets();
+  syncGapHunt();
   if(typeof roomCheckPlace==='function')roomCheckPlace();
 }
+
+// ---------- Gap Hunt (sim-gap-hunt.js) ----------
+// Every named gap of the map (its authored gap volumes): the first pass
+// through each is a toast, "n / total"; a hidden one's is gold. The menu's
+// Gaps lists them (??? and a hint until found); all of them, a card with the
+// flying time and SHARE. Per map, in this browser only.
+let gapHunt=null;
+function gapStore(){try{return window.localStorage;}catch(e){return null;}}
+function syncGapHunt(){
+  try{
+    if(gapHunt&&gapHunt.mapId!==currentMap){huntSave(gapHunt);gapHunt=null;}
+    if(!gapHunt&&hasHunt(currentMap))gapHunt=makeHunt(currentMap,gapStore(),CORE_WS);
+    if(gapHunt)huntReset(gapHunt);
+  }catch(e){gapHunt=null;}
+  syncMenuGaps();
+}
+function syncMenuGaps(){
+  const b=document.getElementById('menuGaps');
+  if(!b)return;
+  b.style.display=gapHunt?'':'none';
+  if(gapHunt){const c=huntCounts(gapHunt);b.textContent='Gaps '+c.found+' / '+c.total;}
+}
+function gapHuntLive(){
+  return !!gapHunt&&!builderOn&&!(coach&&coach.isActive())&&!(feel&&feel.isTutorial());
+}
+function updateGapHunt(){
+  if(!gapHunt)return;
+  try{
+    if(!gapHuntLive()){huntReset(gapHunt);return;}
+    huntTick(gapHunt,simClockMs);
+    const ev=huntStep(gapHunt,state.pos);
+    if(ev)onGapFound(ev);
+  }catch(e){/* never abort the frame */}
+}
+function onGapFound(ev){
+  const n=ev.found+' / '+ev.total;
+  if(ev.hidden)toast('HIDDEN GAP! '+ev.gap.toUpperCase()+' · '+n,{ms:3200,cls:'gap-secret'});
+  else toast('GAP '+ev.gap.toUpperCase()+' · '+n,{ms:2200,cls:'gap-toast'});
+  if(ev.complete)setTimeout(()=>{
+    // Opening the menu ends a race run: mid-run, the card waits in the menu.
+    if(runActive){toast('ALL '+ev.total+' GAPS FOUND · MENU → GAPS',{ms:3500,cls:'gap-secret'});return;}
+    toggleStartMenu(true);openGapHuntDone();
+  },1400);
+}
+function gapListHtml(){
+  return '<ol class="gap-list">'+huntList(gapHunt).map(r=>
+    '<li class="'+(r.found?'found':'')+(r.hidden?' hidden':'')+'"><b>'+escapeHtml(r.name)+'</b><i>'+escapeHtml(r.hint)+'</i></li>').join('')+'</ol>';
+}
+function openGapsCard(){
+  if(!gapHunt){toast('NO GAP HUNT ON THIS MAP');return;}
+  const c=huntCounts(gapHunt),done=huntComplete(gapHunt);
+  showMenuLayer('<h2>Gaps · '+c.found+' / '+c.total+'</h2>'+
+    '<p>'+escapeHtml(huntTitle(gapHunt.mapId))+'. Fly through a gap to find it. Hidden gaps count too. Saved in this browser only.</p>'+
+    (done?'<p>All found in '+fmtHuntTime(gapHunt.doneMs)+' of flying.</p><button type="button" class="primary" id="gapShare">SHARE</button>':'')+
+    gapListHtml()+
+    '<button type="button" id="layerClose">Close</button>');
+  const sh=document.getElementById('gapShare');
+  if(sh)sh.onclick=()=>shareGapHunt();
+  document.getElementById('layerClose').onclick=hideMenuLayer;
+}
+function openGapHuntDone(){
+  if(!gapHunt)return;
+  const c=huntCounts(gapHunt);
+  showMenuLayer('<h2>All '+c.total+' gaps found</h2>'+
+    '<p>'+escapeHtml(huntTitle(gapHunt.mapId))+': every gap in <b id="gapDoneTime">'+fmtHuntTime(gapHunt.doneMs)+'</b> of flying.</p>'+
+    '<button type="button" class="primary" id="gapShare">SHARE</button>'+
+    '<button type="button" id="gapDoneList">Gaps</button>'+
+    '<button type="button" id="layerClose">Close</button>');
+  document.getElementById('gapShare').onclick=()=>shareGapHunt();
+  document.getElementById('gapDoneList').onclick=()=>openGapsCard();
+  document.getElementById('layerClose').onclick=hideMenuLayer;
+}
+async function shareGapHunt(){
+  if(!gapHunt||!huntComplete(gapHunt))return;
+  const c=huntCounts(gapHunt);
+  const text=huntShareText(gapHunt.mapId,c.total,gapHunt.doneMs)+' '+location.origin+location.pathname+'?map='+encodeURIComponent(gapHunt.mapId);
+  try{await navigator.clipboard.writeText(text);toast('GAP HUNT COPIED');}catch(e){toast(text,{ms:5000,cls:'gap-toast'});}
+}
+addEventListener('pagehide',()=>{try{if(gapHunt)huntSave(gapHunt);}catch(e){}});
 
 // ---------- Quad state ----------
 const state={pos:new THREE.Vector3(0,.15,20),vel:new THREE.Vector3(),
@@ -3558,6 +3650,7 @@ function placeQuadAt(x,y,z,yaw,opts){
   if(core.kind==='bf')bfSpawn(toModule(state.pos,{x:0,y:0,z:0}),{x:0,y:0,z:Math.sin(h),w:Math.cos(h)},opts);
   else jsCore.resetPose();
   syncStateFromCore();
+  if(gapHunt)huntReset(gapHunt,state.pos);
   thrustActual=0; // motors spool from zero on re-arm — no thrust jump
   camShake=0;
   washState=emptyWake();
@@ -5388,6 +5481,8 @@ const toastEl=document.getElementById('toast');let toastTimer;
 function toast(m,opts){
   const o=opts||{};
   toastEl.classList.toggle('has-action',!!o.html);
+  toastEl.classList.remove('gap-toast','gap-secret');
+  if(o.cls)toastEl.classList.add(...String(o.cls).split(' ').filter(Boolean));
   if(o.html){
     toastEl.innerHTML=m;
     const rec=document.getElementById('toastRecalib');
@@ -5553,7 +5648,7 @@ function toggleStartMenu(force){
   if(!next)leftLaunch=true;
   if(looks)looks.setMenuOpen(next);
   else{el.classList.toggle('open',next);document.body.classList.toggle('menu-open',next);}
-  if(next){panel.classList.remove('open');syncMenuSparks();syncMenuShare();}
+  if(next){panel.classList.remove('open');syncMenuSparks();syncMenuShare();syncMenuGaps();}
 }
 // The pause menu's SHARE: the last finished run, or how to have one.
 function syncMenuShare(){
@@ -6207,6 +6302,7 @@ function wireLooksUI(){
     if(h)h.scrollIntoView({block:'start'});
   });
   on('menuFreestyleMap',()=>startFreestyle(currentMap));
+  on('menuGaps',()=>openGapsCard());
   on('menuGhostRoom',()=>openRoomCard());
   // Calibration needs a gamepad (startCalib toasts if there is none): the menu
   // closes only once it starts.
@@ -8592,10 +8688,11 @@ function loop(now){
   }catch(e){/* never abort the FPV render loop */}
   try{if(secrets&&secrets.active)secrets.tick(now,state.pos,dt);}catch(e){}
   if(replayOn){
+    if(gapHunt)huntReset(gapHunt);
     tickReplay(now);
   }else if(!simPaused()){
     stepCore(frameMs,now);
-    updateSunShadow();updateOSD();updateGates();updateGhost();syncLineBanner();updatePortals();updateDust(dt);
+    updateSunShadow();updateOSD();updateGates();updateGapHunt();updateGhost();syncLineBanner();updatePortals();updateDust(dt);
     if(feel){
       state.stickT=stick.t;
       feel.updateHud({stick,battV,battOn:CFG.battSimOn||cs.kind==='bf',mode:cs.flightMode,armed:cs.armed,threeD,thrText:throttleHudText(stick.t,threeD),
@@ -9097,7 +9194,11 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,
   TRICKS_KEY,tricks,
-  ghostRoom:()=>ghostRoom,roomGhosts,roomCreate,roomJoinCode,leaveGhostRoom,openRoomCard});
+  ghostRoom:()=>ghostRoom,roomGhosts,roomCreate,roomJoinCode,leaveGhostRoom,openRoomCard,
+  // Gap Hunt: the map's hunt (names found, counts, flying time), its menu cards.
+  gapHunt:()=>gapHunt?{map:gapHunt.mapId,...huntCounts(gapHunt),names:[...gapHunt.found],ms:gapHunt.ms,doneMs:gapHunt.doneMs,
+    gaps:gapHunt.gaps.map(g=>({name:g.name,hidden:g.hidden,gate:g.gate}))}:null,
+  openGapsCard,openGapHuntDone,GAP_HUNT_KEY});
 </script>
 <!-- Flattened to single-line spans so the whole thing fits the fixed 14px bar.
      The .container wrappers and the opacity:.6 on the credit are gone: the
