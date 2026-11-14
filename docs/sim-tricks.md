@@ -253,6 +253,9 @@ nothing in the combo, the streak or the repeat count. Gap Hunt
 (`sim-gap-hunt.js`, the House, the Warehouse and the Bando) is the only thing
 that answers flying a gap. Until 2026-11-14 `gap` scored 125 (TPW medium
 gap); it was taken out because a pass is the hunt's, not a freestyle trick.
+The per-map bests saved before then counted it, so the store went to
+version 2 (`STORE_VER`): loading drops bests saved under version 1, and
+keeps the HUD and debug settings.
 
 The detector still **tracks every pass**, exactly as it did when it scored,
 because tricks read them:

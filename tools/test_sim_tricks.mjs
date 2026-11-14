@@ -367,7 +367,7 @@ const PILOT_LIBRARY = [
 
 test('new storage key only; never writes old ryfly* keys', () => {
   assert.equal(TRICKS_KEY, 'quadmathSimTricks');
-  assert.equal(STORE_VER, 1);
+  assert.equal(STORE_VER, 2);
   assert.ok(src.includes('setItem(TRICKS_KEY') || src.includes('store.setItem(TRICKS_KEY'));
   assert.equal(src.includes('ryflyDroneType'), false);
   assert.equal(src.includes('ryflyRates'), false);
@@ -1915,6 +1915,41 @@ test('normalizeStore rejects junk and keeps hud default on', () => {
   assert.equal(bestForMap(loaded, 'city').bestSession, 900);
   assert.equal(formatScore(2400), '2.4k');
   assert.equal(formatScoreFull(2400), '2,400');
+});
+
+// Store version 2: a gap no longer scores, and the bests saved before it
+// counted the Gap trick. Loading drops them (a store with no version is the
+// first); the HUD and debug settings stay, and so do version 2's bests.
+test('store version 2: bests saved under version 1 (Gap scored) are dropped on load; the HUD and debug settings stay', () => {
+  const old = { v: 1, hud: false, debug: true, maps: { rig: { bestCombo: 3000, bestSession: 9000 }, city: { bestCombo: 400, bestSession: 700 } } };
+  const s1 = normalizeStore(old);
+  assert.equal(s1.v, 2);
+  assert.equal(s1.hud, false, 'HUD setting kept');
+  assert.equal(s1.debug, true, 'debug setting kept');
+  assert.deepEqual(Object.keys(s1.maps), [], 'version 1 bests dropped');
+  assert.deepEqual(bestForMap(s1, 'rig'), { bestCombo: 0, bestSession: 0 });
+  // No version at all: the first store, dropped the same way.
+  const s0 = normalizeStore({ hud: false, maps: { rig: { bestCombo: 50, bestSession: 60 } } });
+  assert.equal(s0.hud, false);
+  assert.deepEqual(Object.keys(s0.maps), []);
+  // Version 2's own bests stay.
+  const s2 = normalizeStore({ v: 2, hud: true, debug: false, maps: { rig: { bestCombo: 120, bestSession: 340 } } });
+  assert.deepEqual(bestForMap(s2, 'rig'), { bestCombo: 120, bestSession: 340 });
+  // Through the page's own path: a browser holding a version 1 store.
+  const store = memStore();
+  store.setItem(TRICKS_KEY, JSON.stringify(old));
+  const tricks = createTricks({ document: null, storage: store, muted: () => true, now: () => 1 });
+  assert.deepEqual(tricks.bestFor('rig'), { bestCombo: 0, bestSession: 0 }, 'no old best in the menu');
+  assert.equal(tricks.hudOn(), false);
+  assert.equal(tricks.debugOn(), true);
+  // The next save writes version 2, without the old bests.
+  tricks.setHudOn(true);
+  const saved = JSON.parse(store.getItem(TRICKS_KEY));
+  assert.equal(saved.v, 2);
+  assert.equal(saved.hud, true);
+  assert.equal(saved.debug, true);
+  assert.deepEqual(saved.maps, {});
+  assert.deepEqual(Object.keys(loadStore(store).maps), []);
 });
 
 test('debug recorder dumps gyro/attitude/stick/throttle JSON for the last maneuver', () => {

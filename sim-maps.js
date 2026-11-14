@@ -2914,7 +2914,7 @@ function bandoLines() {
   ];
 }
 
-// The authored gaps (sim-tricks.js Gap): every opening the Bando is built
+// The authored gaps (gap passes, Gap Hunt): every opening the Bando is built
 // with, as gapVolume. Windows and doors through their wall's thickness; floor
 // holes, the stair's well and the shaft's top through their slab's; the slab
 // underpass along z under the steps; the parapet gap; the van.
@@ -3354,7 +3354,7 @@ const BUILDERS = {
   room: buildRoom,
 };
 
-// ---- Authored gaps (the trick detector's Gap) ----
+// ---- Authored gaps (the trick detector's gap passes, and Gap Hunt's) ----
 //
 // Every intentional gap of the Rig, the House, the Warehouse (depot), the
 // Bando and the archived Warehouse (warehouse) as a volume

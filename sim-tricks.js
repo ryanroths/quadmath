@@ -10,7 +10,10 @@
 // This file has no sim-*.js imports. Do not change flight physics.
 
 export const TRICKS_KEY = 'quadmathSimTricks';
-export const STORE_VER = 1;
+// 2 (2026-11-14): a gap no longer scores. Bests saved under an older version
+// counted the Gap trick, so normalizeStore drops them; the HUD and debug
+// settings stay.
+export const STORE_VER = 2;
 export const COMBO_WINDOW_S = 2.8;
 export const MUL_CAP = 6;
 export const LOCKOUT_S = 0.45;
@@ -394,6 +397,8 @@ export function normalizeStore(raw) {
   if (!raw || typeof raw !== 'object') return s;
   if (raw.hud === false) s.hud = false;
   if (raw.debug === true) s.debug = true;
+  // Bests from before STORE_VER (no version: the first) are not kept.
+  if (!((+raw.v || 0) >= STORE_VER)) return s;
   const maps = raw.maps;
   if (maps && typeof maps === 'object') {
     for (const k in maps) {
