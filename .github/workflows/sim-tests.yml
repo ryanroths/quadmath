@@ -102,6 +102,8 @@ jobs:
           # desktop; split so each entry stays under about 10 here.
           - { suite: page, label: 'easy mode', tests: 'tools/test_sim_easy_mode.mjs' }
           - { suite: page, label: 'first flight, coach', tests: 'tools/test_sim_first_flight.mjs tools/test_sim_coach_page.mjs' }
+          # Gap Hunt's page part: three maps, bf and js cores each.
+          - { suite: page, label: 'gap hunt', tests: 'tools/test_sim_gap_hunt.mjs' }
 
     steps:
       - name: Check out
