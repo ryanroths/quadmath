@@ -946,7 +946,8 @@ const TOUR_HELPERS = String.raw`
 
 // One map of a tour, in the page: picked through the menu unless it is the
 // one the page booted on, then checked. Returns what it saw. Its waits: 3 x 4 s
-// of menu, 40 s to fly, 12 s for the HDRI, 0.7 s: under TOUR_STEP_MS.
+// of menu, 40 s to fly, 12 s for the HDRI, 0.7 s, 8 s for a frame drawn:
+// under TOUR_STEP_MS.
 const TOUR_STEP = String.raw`async (map, picked, wantCore) => {${TOUR_HELPERS}
   const shown = (el) => !!(el && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
   const out = { map, steps: [] };
@@ -985,6 +986,16 @@ const TOUR_STEP = String.raw`async (map, picked, wantCore) => {${TOUR_HELPERS}
   // light, not the fog-colour stand-in. The City lights itself.
   await until(() => map === 'city' || !!s.scene.environment, 12000);
   await wait(700);
+  // The camera follows the quad only in the render loop (updateCamera), and
+  // the pick moved the quad synchronously, between frames. Under SwiftShader
+  // a frame on a new map can take longer than the 700 ms above, so until the
+  // loop has drawn once the camera (and the screenshot) are still the last
+  // map's. Two of this step's own animation frames: the loop's callback was
+  // queued a frame earlier than ours, so it has run at least once after them.
+  let rafs = 0;
+  const rafTick = () => { rafs++; if (rafs < 2 && live()) requestAnimationFrame(rafTick); };
+  requestAnimationFrame(rafTick);
+  if (!(await until(() => rafs >= 2, 8000))) { out.error = 'no frame drawn in 8 s after arriving on ' + map; return out; }
   // The look, as it is now; the picture is the screenshot taken next.
   const L = s.looks;
   out.look = { applied: L.applied, composer: !!L.composer, env: !!s.scene.environment, sky: L.skyMode || null };
