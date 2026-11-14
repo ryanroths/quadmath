@@ -9,7 +9,9 @@
 import { normalizeBuild, DEFAULT_BUILD, batteryFromBuild } from './sim-build.js?v=1dedc1c1fd57';
 
 export const WHOOP_KEY = 'quadmathSimWhoop';
-// 6: sim-core v0.6.0, the 75 on the bf core too (the owner's Fractal75:
+// 7: sim-core v0.7.0, the RPM filter off in the sim's policy (both
+// whoops sat buzzing and hopping on the floor, armed at zero throttle), so
+// the boards start clean; 6: sim-core v0.6.0, the 75 on the bf core too (the owner's Fractal75:
 // thrust and prop torque at its fitted exponent, its plan drag fitted to its
 // punches), so its boards start clean with the rest; 5: sim-core v0.4.0,
 // wall contact (the ducts' sides, 14.5 mm from BetaFPV's
@@ -20,7 +22,7 @@ export const WHOOP_KEY = 'quadmathSimWhoop';
 // 1 kHz cores, js the default and ?core=bf, with sim-time input; 2 ran on
 // frame time. sim-retention.js PHYS_VER (what the leaderboard Worker accepts)
 // is the same number.
-export const PHYSICS_VER = 6;
+export const PHYSICS_VER = 7;
 export const WHOOP_FEEL_VER = 3; // bump: wash + drafts default Off; migrate once
 export const GHOST_FORMAT_V = 1;
 

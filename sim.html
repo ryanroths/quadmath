@@ -1028,7 +1028,7 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=51206465bd01";
+} from "./sim-whoop.js?v=b246f97ca059";
 import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=57294ece5c7a";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
@@ -1097,7 +1097,7 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=141d66020492";
+} from "./sim-coach.js?v=ce2f07312aea";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=27f3a73d68ec";
@@ -1120,13 +1120,13 @@ import {
   loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   defaultWhoopKit, ghostFromObj, shareTrackPayload, fromShareTrackPayload,
-} from "./sim-retention.js?v=b86c7c401319";
+} from "./sim-retention.js?v=f29b824dec58";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=bb7f2caae199";
+} from "./sim-secrets.js?v=47b3015de2f1";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -8184,7 +8184,7 @@ const BF_CLASSES={
 };
 // vendor/sim-core/VERSION; versions the vendored URLs (cache) and the test
 // tools/test_sim_core.mjs holds the two equal.
-const SIM_CORE_VERSION='v0.6.0';
+const SIM_CORE_VERSION='v0.7.0';
 // Per class: its core once made (bfCore is the flying class's), the airframe
 // and diff as fetched, the CLI text the core last configured with, the map
 // whose contact profile its plant carries ('' = none), the world last sent to

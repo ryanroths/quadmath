@@ -563,7 +563,7 @@ test('worker health and board routes work without D1; submit needs DB', async ()
 });
 
 test('H1 server derives week track, rejects pace-bot/phys/class/week, claims names', async () => {
-  assert.equal(PHYS_VER, 6);
+  assert.equal(PHYS_VER, 7);
   assert.equal(weekAllowed('2026-W42', NOW_W42), true);
   assert.equal(weekAllowed('2026-W41', NOW_W42), false);
   const mondayW43 = Date.UTC(2026, 9, 19, 10, 0, 0);
@@ -624,6 +624,12 @@ test('H1 server derives week track, rejects pace-bot/phys/class/week, claims nam
   }, NOW_W42);
   assert.equal(phys5.ok, false);
   assert.equal(phys5.reason, 'PHYS MISMATCH');
+  // And one from before sim-core v0.7.0 turned the RPM filter off (phys 6).
+  const phys6 = normalizeSubmit({
+    name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost: { ...ghost, phys: 6 }, track,
+  }, NOW_W42);
+  assert.equal(phys6.ok, false);
+  assert.equal(phys6.reason, 'PHYS MISMATCH');
 
   const cls = normalizeSubmit({
     name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost, track, build: { frameMm: 85 },
@@ -719,20 +725,22 @@ test('worker week/board/submit use weekly-YYYY-Wxx-g2 and do not mix old ids', a
   assert.ok(!mixedBody.entries.some((row) => row.name === 'OLD'));
 });
 
-test('boards are kept per PHYS_VER: after the bump to 6 a phys 5, 4 or 3 row neither lists nor blocks', async () => {
+test('boards are kept per PHYS_VER: after the bump to 7 a phys 6, 5, 4 or 3 row neither lists nor blocks', async () => {
   const { handleLeaderboard } = await import('../workers/sim-leaderboard/src/index.js');
-  assert.equal(boardKeyFor('2026-W44'), '2026-W44.p6');
-  assert.equal(boardKeyFor(dailyLineBoardKey('2026-10-27')), 'D2026-10-27.p6');
+  assert.equal(boardKeyFor('2026-W44'), '2026-W44.p7');
+  assert.equal(boardKeyFor(dailyLineBoardKey('2026-10-27')), 'D2026-10-27.p7');
   const week = utcWeekId();
   const track = weeklyTrackFor(week);
   const db = fakeD1();
   const env = { DB: db, ALLOWED_ORIGIN: 'https://quadmath.com' };
   const insert = 'INSERT INTO scores (week, class, name, time_ms, track_id, submitted_ms) VALUES (?, ?, ?, ?, ?, ?)';
-  // What the phys 3, 4 and 5 Workers wrote this week: the bare week, week.p4
-  // and week.p5 as the key, and the same pilot faster than the run below.
+  // What the phys 3, 4, 5 and 6 Workers wrote this week: the bare week,
+  // week.p4, week.p5 and week.p6 as the key, and the same pilot faster than
+  // the run below.
   await db.prepare(insert).bind(week, 65, 'Ry', 1000, track.id, Date.now()).run();
   await db.prepare(insert).bind(week + '.p4', 65, 'Ry', 1100, track.id, Date.now()).run();
   await db.prepare(insert).bind(week + '.p5', 65, 'Ry', 1200, track.id, Date.now()).run();
+  await db.prepare(insert).bind(week + '.p6', 65, 'Ry', 1300, track.id, Date.now()).run();
   const boardUrl = 'https://x/api/board?week=' + week + '&class=65';
   const before = await (await handleLeaderboard(new Request(boardUrl), env)).json();
   assert.deepEqual(before.entries, []);
@@ -753,13 +761,14 @@ test('boards are kept per PHYS_VER: after the bump to 6 a phys 5, 4 or 3 row nei
   const after = await (await handleLeaderboard(new Request(boardUrl), env)).json();
   assert.deepEqual(after.entries.map((r) => r.name), ['Ry']);
 
-  // The Daily Line board: today's phys 3, 4 and 5 rows are gone, a phys 6
+  // The Daily Line board: today's phys 3, 4, 5 and 6 rows are gone, a phys 7
   // row lists.
   const day = utcDateId();
   const line = dailyLineFor(day);
   await db.prepare(insert).bind(dailyLineBoardKey(day), 65, 'OLD', 3000, line.trackId, Date.now()).run();
   await db.prepare(insert).bind(dailyLineBoardKey(day) + '.p4', 65, 'OLD', 3000, line.trackId, Date.now()).run();
   await db.prepare(insert).bind(dailyLineBoardKey(day) + '.p5', 65, 'OLD', 3000, line.trackId, Date.now()).run();
+  await db.prepare(insert).bind(dailyLineBoardKey(day) + '.p6', 65, 'OLD', 3000, line.trackId, Date.now()).run();
   const lineUrl = 'https://x/api/daily?day=' + day + '&class=65';
   assert.deepEqual((await (await handleLeaderboard(new Request(lineUrl), env)).json()).entries, []);
   await db.prepare(insert).bind(boardKeyFor(dailyLineBoardKey(day)), 65, 'NEW', 9000, line.trackId, Date.now()).run();
@@ -767,9 +776,9 @@ test('boards are kept per PHYS_VER: after the bump to 6 a phys 5, 4 or 3 row nei
 });
 
 test('the local board is kept per PHYS_VER under its own key; older rows are never read or written', () => {
-  assert.equal(boardStoreKey(), 'quadmathSimBoard.p6');
+  assert.equal(boardStoreKey(), 'quadmathSimBoard.p7');
   const store = memStore();
-  // What phys 3, 4 and 5 pages left (and an old page still open in a tab
+  // What phys 3, 4, 5 and 6 pages left (and an old page still open in a tab
   // keeps writing).
   const legacy = JSON.stringify({
     v: 1,
@@ -778,6 +787,7 @@ test('the local board is kept per PHYS_VER under its own key; older rows are nev
   store.setItem(BOARD_KEY, legacy);
   store.setItem(BOARD_KEY + '.p4', legacy);
   store.setItem(BOARD_KEY + '.p5', legacy);
+  store.setItem(BOARD_KEY + '.p6', legacy);
   assert.deepEqual(boardRows(loadBoard(store), '2026-W44', 65), []);
   saveBoard(recordLocalBoard(loadBoard(store), {
     week: '2026-W44', frameMm: 65, name: 'RY', timeMs: 40000, trackId: 'weekly-2026-W44-g2',
@@ -786,6 +796,7 @@ test('the local board is kept per PHYS_VER under its own key; older rows are nev
   assert.equal(store.getItem(BOARD_KEY), legacy, 'the old key is left as it was');
   assert.equal(store.getItem(BOARD_KEY + '.p4'), legacy, 'the phys 4 key is left as it was');
   assert.equal(store.getItem(BOARD_KEY + '.p5'), legacy, 'the phys 5 key is left as it was');
+  assert.equal(store.getItem(BOARD_KEY + '.p6'), legacy, 'the phys 6 key is left as it was');
 });
 
 test('L4 only today\'s daily counts; missed-day streak resets on load', () => {

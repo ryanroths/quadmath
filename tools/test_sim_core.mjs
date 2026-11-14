@@ -183,7 +183,13 @@ test('bf core loads the owner\'s full Air65 diff: vbat_sag_compensation 70, thru
   assert.equal(got.thrust_linear, '20');
   assert.equal(got.dyn_idle_min_rpm, '55');
   assert.equal(got.dshot_bidir, 'ON', 'RPM telemetry, which dynamic idle runs on');
-  assert.equal(core.sim.fc.rpmFilter, true);
+  // sim-core v0.7.0's policy turns the RPM filter off, whatever the diff says
+  // (rpm_filter_harmonics 0): in the sim's 1 kHz loop the notches sit next to
+  // Nyquist and ring on a floor contact. Bidirectional DShot stays on, and
+  // dynamic idle (below) still runs on its rpm telemetry.
+  assert.equal(core.sim.fc.rpmFilter, false, 'the RPM filter is off in the sim');
+  assert.equal(core.sim.get(['rpm_filter_harmonics'], { profile: 0 }).rpm_filter_harmonics, '0');
+  assert.deepEqual(core.report.policy.map((p) => `${p.key} = ${p.value}`), ['rpm_filter_harmonics = 0'], 'the policy the report lists');
   // Dynamic idle at work: armed at zero throttle, the motors hold its
   // minimum (55 x 100 rpm), above the idle the same diff gives without it.
   const idleRpm = async (c) => {

@@ -775,7 +775,7 @@ export function makePaceGhost(gates, opts) {
   }
   return {
     v: 1,
-    phys: o.phys != null ? o.phys : 6, // sim-whoop.js PHYSICS_VER (this file has no imports); playback is still kinematic v:1
+    phys: o.phys != null ? o.phys : 7, // sim-whoop.js PHYSICS_VER (this file has no imports); playback is still kinematic v:1
     track: o.track != null ? o.track : 0,
     name: o.name || 'PACE BOT',
     lapTime: Math.round(T * 1000),

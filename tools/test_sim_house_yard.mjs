@@ -20,6 +20,7 @@ import {
 import * as YARD from '../sim-house-yard.js';
 import { HOUSE_YARD, YARD_LOOK, WHOOP_75, YARD_WS } from '../sim-house-yard.js';
 import { normalizeTrack, gateRadius, BUILTIN_TRACK_FILES, ghostPayloadError } from '../sim-tracks.js';
+import { PHYSICS_VER } from '../sim-whoop.js';
 import { vibeFor, mergeStaticArt } from '../sim-art.js';
 import { LOOK, lookTextureBytes, lookKtx2Bytes, floorAo } from '../sim-look.js';
 import { GAP_MIN_DEPTH_M } from '../sim-tricks.js';
@@ -885,6 +886,12 @@ test('Backyard Lap: threads at least 7 named yard gaps, in one face and out the 
 
 // ---------------------------------------------------------------------------
 // The House's own tracks and ghosts, as on origin/main 8b5119e (LF bytes).
+// A ghost's phys tag is the physics version (sim-whoop.js PHYSICS_VER), bumped
+// with each sim-core release that moves the physics (7 since v0.7.0), so the
+// ghost is pinned with its tag read as 8b5119e's (6), and the tag is checked
+// against PHYSICS_VER on its own. Every other byte is 8b5119e's.
+const PHYS_TAG = /"phys":\d+,/;
+const HOUSE_LOOP_PHYS = { 'ghosts/house-loop.json': 6 };
 const HOUSE_LOOP_SHA = {
   'tracks/house-loop.json': 'f05e61954666e78c075b01b7669bfc80072d5456b5bc2d638389ea09e01688aa',
   'ghosts/house-loop.json': '951478566541e9249a133dec5dac5fb0d6ae7a7464ebe830c3460fde8f9d3fc3',
@@ -893,10 +900,17 @@ const HOUSE_LOOP_SHA = {
 test('existing House tracks and ghosts: house-loop byte-identical to origin/main, every house track loads', (t) => {
   for (const [f, want] of Object.entries(HOUSE_LOOP_SHA)) {
     const here = readFileSync(join(root, f), 'utf8').replace(/\r\n/g, '\n');
-    assert.equal(sha(here), want, f + ' as at origin/main 8b5119e');
+    const tagged = f in HOUSE_LOOP_PHYS;
+    if (tagged) {
+      assert.equal(JSON.parse(here).phys, PHYSICS_VER, f + ' is tagged with the physics version');
+      assert.equal((here.match(new RegExp(PHYS_TAG.source, 'g')) || []).length, 1, f + ': one phys tag');
+    }
+    const pinned = tagged ? here.replace(PHYS_TAG, `"phys":${HOUSE_LOOP_PHYS[f]},`) : here;
+    assert.equal(sha(pinned), want, f + ' as at origin/main 8b5119e' + (tagged ? ', its phys tag apart' : ''));
     // Where the clone has origin/main (not CI's shallow checkout), the blob too.
     const r = spawnSync('git', ['show', 'origin/main:' + f], { cwd: root, encoding: 'utf8', maxBuffer: 64 << 20 });
-    if (r.status === 0) assert.equal(here, r.stdout.replace(/\r\n/g, '\n'), f + ' == git show origin/main:' + f);
+    const untag = (s) => (tagged ? s.replace(PHYS_TAG, '"phys":0,') : s);
+    if (r.status === 0) assert.equal(untag(here), untag(r.stdout.replace(/\r\n/g, '\n')), f + ' == git show origin/main:' + f + (tagged ? ', its phys tag apart' : ''));
     else t.diagnostic('no origin/main here (' + (r.stderr || '').trim().split('\n')[0] + '): pinned sha256 only for ' + f);
   }
   const house = BUILTIN_TRACK_FILES.filter((q) => q.map === 'house');
