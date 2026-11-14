@@ -27,9 +27,9 @@
 // UNTIMED (exit 2) if nothing failed: no 300 ms verdict either way.
 // The window must stay visible and drawing (each page tracks its visibility,
 // focus and animation-frame rate; CDP gives the window's state). A window
-// hidden, minimized or not drawing (no animation frame for a whole second; a
-// slow frame rate alone is not that, and shows in the text) is reported as
-// that, not as a boot or flight failure, and the run
+// hidden, minimized or not drawing (no animation frame for WINDOW_STALL_MS;
+// a map load's long frame or a slow frame rate alone is not that, and shows
+// in the text) is reported as that, not as a boot or flight failure, and the run
 // ends SMOKE INVALID (exit 3): it says nothing about the sim.
 // Not in CI (it needs a display and a GPU): its name is not tools/test_*.
 import { spawn, spawnSync } from 'node:child_process';
@@ -49,7 +49,7 @@ const FRAME_STEP_MAX_MS = 50;
 const MACHINE_LOAD_MAX = 0.75;
 const OTHER_LOAD_MAX = 0.25;
 const CPU_SAMPLE_MS = 200;
-const WINDOW_MIN_FPS = 1;
+const WINDOW_STALL_MS = 3000;
 
 // This machine's CPU over a window: all of it, and the part not used by this
 // test's own Chrome (its processes' CPU time from SystemInfo.getProcessInfo)
@@ -145,20 +145,20 @@ function killTree(child) {
 const FAKE_PADS = String.raw`(() => {
   // The window, from the page: hidden time, blurs, and the animation frames
   // of the last second (a hidden or occluded window draws none or few).
-  const vis = window.__vis = { hiddenMs: 0, since: document.visibilityState === 'hidden' ? performance.now() : null, blurs: 0, frames: [] };
+  const vis = window.__vis = { hiddenMs: 0, since: document.visibilityState === 'hidden' ? performance.now() : null, blurs: 0, frames: [], last: performance.now() };
   document.addEventListener('visibilitychange', () => {
     const now = performance.now();
     if (document.visibilityState === 'hidden') { if (vis.since === null) vis.since = now; }
     else if (vis.since !== null) { vis.hiddenMs += now - vis.since; vis.since = null; }
   });
   addEventListener('blur', () => { vis.blurs++; });
-  const tick = (t) => { vis.frames.push(t); while (vis.frames.length && vis.frames[0] < t - 1000) vis.frames.shift(); requestAnimationFrame(tick); };
+  const tick = (t) => { vis.last = performance.now(); vis.frames.push(t); while (vis.frames.length && vis.frames[0] < t - 1000) vis.frames.shift(); requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
   vis.now = () => {
     const now = performance.now();
     return { visibility: document.visibilityState, focused: document.hasFocus(), blurs: vis.blurs,
       hiddenMs: Math.round(vis.hiddenMs + (vis.since !== null ? now - vis.since : 0)),
-      fps: vis.frames.filter((t) => t >= now - 1000).length };
+      fps: vis.frames.filter((t) => t >= now - 1000).length, sinceFrameMs: Math.round(now - vis.last) };
   };
   const pads = window.__pads = { on: false, id: ${JSON.stringify(TX)}, axes: [0, 0, -1, 0, -1, -1, -1, -1] };
   const make = () => ({ id: pads.id, index: 0, mapping: '', connected: true, timestamp: performance.now(), axes: pads.axes.slice(),
@@ -225,8 +225,8 @@ function windowVerdict(w) {
   if (!w) return { hidden: false, text: 'window state not read' };
   if (w.visibility && w.visibility !== 'visible') why.push(`page ${w.visibility}`);
   if (w.windowState && w.windowState !== 'normal' && w.windowState !== 'maximized' && w.windowState !== 'fullscreen') why.push(`window ${w.windowState}`);
-  if (Number.isFinite(w.fps) && w.fps < WINDOW_MIN_FPS) why.push('no animation frame in the last second (not drawing)');
-  const text = `visibility ${w.visibility}, window ${w.windowState || 'n/a'}, focused ${w.focused}, ${w.fps} fps, hidden ${w.hiddenMs} ms, blurs ${w.blurs}`;
+  if (Number.isFinite(w.sinceFrameMs) && w.sinceFrameMs >= WINDOW_STALL_MS) why.push(`no animation frame for ${w.sinceFrameMs} ms (not drawing)`);
+  const text = `visibility ${w.visibility}, window ${w.windowState || 'n/a'}, focused ${w.focused}, ${w.fps} fps, last frame ${w.sinceFrameMs} ms ago, hidden ${w.hiddenMs} ms, blurs ${w.blurs}`;
   return { hidden: why.length > 0, text: why.length ? why.join('; ') + ' [' + text + ']' : text };
 }
 function windowCheck(name, w) {
@@ -488,8 +488,10 @@ async function main() {
           return JSON.stringify({ ok, map: U.s.map(), vibe: v && v.id, core: U.s.core() });`);
         check(`${tag}: map ${id} loads with its look`, r.ok && r.core === core, `map ${r.map}, look ${r.vibe}, core ${r.core}, ${((Date.now() - t0) / 1000).toFixed(1)} s`);
       }
-      // The window over this core's run (hidden time since this page loaded).
-      const endWin = await winState();
+      // The window over this core's run (hidden time since this page loaded),
+      // read once its frames are back after the last map's load (up to 4 s).
+      let endWin = await winState();
+      for (let i = 0; i < 16 && endWin.visibility === 'visible' && !(endWin.sinceFrameMs < 1000); i++) { await sleep(250); endWin = await winState(); }
       if (endWin && endWin.hiddenMs > 0 && windowVerdict(endWin).hidden === false) endWin.visibility = 'hidden for part of the run';
       windowCheck(`${tag}: window stayed visible and drawing`, endWin);
     }
