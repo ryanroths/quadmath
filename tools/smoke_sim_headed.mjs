@@ -32,7 +32,8 @@
 // in the text) is reported as that, not as a boot or flight failure, and the run
 // ends SMOKE INVALID (exit 3): it says nothing about the sim.
 // Not in CI (it needs a display and a GPU): its name is not tools/test_*.
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { spawnBrowser } from './browser_guard.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
@@ -266,7 +267,7 @@ async function main() {
   const preLoad = cpuLoad(pre0, await cpuSnap(null));
   const { server, origin } = await serveRoot();
   const profile = mkdtempSync(join(tmpdir(), 'qm-smoke-'));
-  const child = spawn(resolveChrome(), [
+  const child = spawnBrowser(resolveChrome(), [
     // Headed, on the real GPU, never paused or throttled as a hidden window.
     '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update', '--disable-sync',
     '--disable-background-networking', '--window-size=1280,760', '--mute-audio',

@@ -53,7 +53,8 @@
 //                 alone, glPost the rest (composer passes).
 // The renderer is window._sim.renderer (sim.html sets
 // window._sim={renderer,scene,camera}); nothing in sim.html is edited.
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { spawnBrowser } from './browser_guard.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, writeFileSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, extname, resolve, sep } from 'node:path';
@@ -192,7 +193,7 @@ let seq = 0;
 async function launchChrome(chromePath) {
   seq += 1;
   const profile = join(runDir(), 'p' + seq);
-  const child = spawn(chromePath, chromeArgs(profile), {
+  const child = spawnBrowser(chromePath, chromeArgs(profile), {
     stdio: ['ignore', 'ignore', 'pipe'], detached: process.platform !== 'win32',
   });
   live.add(child);

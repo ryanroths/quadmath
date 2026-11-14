@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Headless Chrome shots of the sim / mood preview. Node 22 + system Chrome.
-import { spawn } from 'node:child_process';
+import { spawnBrowser } from './browser_guard.mjs';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,7 +46,7 @@ async function cdp(ws, method, params) {
 
 const port = 9223 + Math.floor(Math.random() * 40);
 const userData = '/tmp/qm-chrome-' + process.pid;
-const child = spawn(chrome, [
+const child = spawnBrowser(chrome, [
   '--headless=new',
   '--no-sandbox',
   '--disable-gpu-sandbox',

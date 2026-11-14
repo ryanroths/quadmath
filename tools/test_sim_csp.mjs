@@ -25,7 +25,8 @@
 // wrangler (tools/sim_rooms_dev.mjs) and are skipped without it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { spawnBrowser } from './browser_guard.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
@@ -510,7 +511,7 @@ test('the sim under its policy in Chrome: no violations; injected handlers do no
     ];
     // The rooms Worker answers at the deployed address: the policy judges the URL the live site uses.
     if (rooms) flags.push(`--host-resolver-rules=MAP ${new URL(ROOMS_URL).hostname} 127.0.0.1:${rooms.port}`, '--ignore-certificate-errors');
-    child = spawn(resolveChrome(), [...flags, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+    child = spawnBrowser(resolveChrome(), [...flags, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
     child.stderr.on('data', (x) => { stderr += x.toString(); });
 
     // A tab: its own CDP connection, what it saw, and its driver.

@@ -14,7 +14,8 @@
 // both cores (sharded with the boot cases): see "Fly every map" below.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { spawnBrowser, closeBrowsers, killBrowserTree } from './browser_guard.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, appendFileSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
@@ -69,7 +70,7 @@ const liveChromes = new Set();
 function startChrome(startUrl, opts) {
   bootSeq += 1;
   const run = { port: 9700 + bootSeq, profile: join(runDir(), 'profile-' + bootSeq) };
-  run.child = spawn(chrome, chromeArgs(run.port, run.profile, startUrl, opts), {
+  run.child = spawnBrowser(chrome, chromeArgs(run.port, run.profile, startUrl, opts), {
     stdio: ['ignore', 'pipe', 'pipe'],
     // Its own process group on POSIX, so stopping it stops the GPU and
     // renderer processes with it.
@@ -96,6 +97,9 @@ function killTree(child) {
 
 async function stopChrome(run) {
   killTree(run.child);
+  // And by its profile: a browser Edge's launcher handed off to is in no
+  // tree of ours (tools/browser_guard.mjs).
+  killBrowserTree(run.child);
   if (!exited(run.child)) await Promise.race([new Promise((res) => run.child.once('exit', res)), sleep(5000)]);
   liveChromes.delete(run);
   removeDir(run.profile);
@@ -104,6 +108,8 @@ async function stopChrome(run) {
 function cleanUp() {
   for (const run of liveChromes) killTree(run.child);
   liveChromes.clear();
+  // A test node:test timed out is still running: it starts no more browsers.
+  closeBrowsers();
   if (runDirPath) removeDir(runDirPath);
   runDirPath = null;
 }
@@ -946,7 +952,8 @@ const TOUR_HELPERS = String.raw`
 
 // One map of a tour, in the page: picked through the menu unless it is the
 // one the page booted on, then checked. Returns what it saw. Its waits: 3 x 4 s
-// of menu, 40 s to fly, 12 s for the HDRI, 0.7 s: under TOUR_STEP_MS.
+// of menu, 40 s to fly, 12 s for the HDRI, 0.7 s, 8 s for a frame drawn:
+// under TOUR_STEP_MS.
 const TOUR_STEP = String.raw`async (map, picked, wantCore) => {${TOUR_HELPERS}
   const shown = (el) => !!(el && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
   const out = { map, steps: [] };
@@ -985,6 +992,18 @@ const TOUR_STEP = String.raw`async (map, picked, wantCore) => {${TOUR_HELPERS}
   // light, not the fog-colour stand-in. The City lights itself.
   await until(() => map === 'city' || !!s.scene.environment, 12000);
   await wait(700);
+  // The camera follows the quad only in the render loop (updateCamera), and
+  // the pick moved the quad synchronously, between frames. Under SwiftShader
+  // a frame on a new map can take longer than the 700 ms above, so until the
+  // loop has drawn once the camera (and the screenshot) are still the last
+  // map's. Two of this step's own animation frames: the loop's callback was
+  // queued a frame earlier than ours, so it has run at least once after them.
+  let rafs = 0;
+  const rafTick = () => { rafs++; if (rafs < 2 && live()) requestAnimationFrame(rafTick); };
+  requestAnimationFrame(rafTick);
+  if (!(await until(() => rafs >= 2, 8000))) { out.error = 'no frame drawn in 8 s after arriving on ' + map; return out; }
+  // The screenshot (taken next, outside the page) waits on this too.
+  out.drawn = true;
   // The look, as it is now; the picture is the screenshot taken next.
   const L = s.looks;
   out.look = { applied: L.applied, composer: !!L.composer, env: !!s.scene.environment, sky: L.skyMode || null };
@@ -1153,6 +1172,10 @@ async function runTour(base, tour, deadline) {
       if (i > 0) errors.length = 0;
       const got = await tourEval(ws, `(${TOUR_STEP})(${JSON.stringify(map)}, ${i > 0}, ${JSON.stringify(tour.core)})`, TOUR_STEP_MS);
       got.map = map;
+      // The screenshot, and the fly after it, only once the loop has drawn
+      // this map (got.drawn, TOUR_STEP): before that the page still shows the
+      // last map's picture, from the last map's camera.
+      if (!got.error && !got.drawn) got.error = 'the step returned before a frame was drawn on ' + map;
       if (!got.error && ws.readyState === 1) {
         try {
           const shot = await cdp(ws, 'Page.captureScreenshot', { format: 'png' });
