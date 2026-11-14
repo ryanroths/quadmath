@@ -19,7 +19,8 @@
 // SKIP_CHROME_BOOT=1.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { spawnBrowser } from './browser_guard.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
@@ -179,7 +180,7 @@ test('rates are the pilot\'s: 65, 75, 85 and back keep the same rates on the bf 
   const profile = mkdtempSync(join(tmpdir(), 'qm-rates-'));
   const debugPort = 9400 + (process.pid % 300);
   const base = `http://127.0.0.1:${port}/sim.html?quality=low`;
-  const child = spawn(resolveChrome(), [
+  const child = spawnBrowser(resolveChrome(), [
     '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
     '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
     '--mute-audio', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update',

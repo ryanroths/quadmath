@@ -8,7 +8,8 @@
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { spawnBrowser } from './browser_guard.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
@@ -154,7 +155,7 @@ test('the bf core: a fake TX16S on its switches, with an Xbox pad seen first, ar
   const { server, port } = await serveRoot();
   const profile = mkdtempSync(join(tmpdir(), 'qm-radio-'));
   const debugPort = 9300 + (process.pid % 300);
-  const child = spawn(resolveChrome(), [
+  const child = spawnBrowser(resolveChrome(), [
     '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
     '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
     '--mute-audio', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update',
