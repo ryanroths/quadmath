@@ -784,6 +784,18 @@ test('the page versions the vendored sim-core with its VERSION', () => {
   const m = html.match(/const SIM_CORE_VERSION='([^']+)'/);
   assert.ok(m, 'SIM_CORE_VERSION in sim.html');
   assert.equal(m[1], readFileSync('vendor/sim-core/VERSION', 'utf8').trim());
+  // sim-core.js's own imports (./cli-policy.js) carry no version, so the
+  // import map gives each vendor/sim-core URL one: ?v= that VERSION. Without
+  // it a browser can pair a new sim-core.js with the last release's cached
+  // cli-policy.js, and a missing export fails the bf core.
+  const map = JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports;
+  const own = [...readFileSync('vendor/sim-core/sim-core.js', 'utf8').matchAll(/\bfrom\s+['"](\.\/[^'"]+)['"]|\bimport\s*\(\s*['"](\.\/[^'"]+)['"]/g)]
+    .map((x) => x[1] || x[2]);
+  assert.ok(own.includes('./cli-policy.js'), `sim-core.js imports ${own.join(', ')}`);
+  for (const spec of own) {
+    const url = './vendor/sim-core/' + spec.slice(2);
+    assert.equal(map[url], `${url}?v=${m[1]}`, `the import map versions ${url} with SIM_CORE_VERSION`);
+  }
 });
 
 // tools/test_sim_map_boot.mjs flies both in headless Chrome; this is the

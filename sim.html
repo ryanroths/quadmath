@@ -1001,7 +1001,8 @@
 {
   "imports": {
     "three": "./vendor/three.module.min.js?v=e2b5ee6bccd3",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+    "./vendor/sim-core/cli-policy.js": "./vendor/sim-core/cli-policy.js?v=v0.7.0"
   }
 }
 </script>
@@ -8183,7 +8184,10 @@ const BF_CLASSES={
   whoop75:{quad:'Fractal75',airframe:'vendor/sim-core/airframes/fractal75.json',diff:'vendor/sim-core/configs/fractal75-ryfly-2026-11-03.txt',tune:null},
 };
 // vendor/sim-core/VERSION; versions the vendored URLs (cache) and the test
-// tools/test_sim_core.mjs holds the two equal.
+// tools/test_sim_core.mjs holds the two equal. sim-core.js imports
+// ./cli-policy.js itself, unversioned (the vendor files ship byte for byte), so
+// the import map above maps that URL to ?v= this version too: a browser holding
+// the last release's cli-policy.js must not pair it with this sim-core.js.
 const SIM_CORE_VERSION='v0.7.0';
 // Per class: its core once made (bfCore is the flying class's), the airframe
 // and diff as fetched, the CLI text the core last configured with, the map
