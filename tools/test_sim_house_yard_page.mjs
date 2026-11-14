@@ -9,7 +9,8 @@
 // The server and Chrome helpers are tools/test_sim_map_boot.mjs's, copied.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { spawnBrowser } from './browser_guard.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
@@ -75,7 +76,7 @@ function chromeArgs(port, userData, startUrl) {
 function startChrome(startUrl) {
   bootSeq += 1;
   const run = { port: 9780 + bootSeq, profile: join(runDir(), 'profile-' + bootSeq) };
-  run.child = spawn(resolveChrome(), chromeArgs(run.port, run.profile, startUrl), {
+  run.child = spawnBrowser(resolveChrome(), chromeArgs(run.port, run.profile, startUrl), {
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: process.platform !== 'win32',
   });

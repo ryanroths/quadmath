@@ -14,7 +14,8 @@
 // both cores (sharded with the boot cases): see "Fly every map" below.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { spawnBrowser, closeBrowsers, killBrowserTree } from './browser_guard.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, appendFileSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
@@ -69,7 +70,7 @@ const liveChromes = new Set();
 function startChrome(startUrl, opts) {
   bootSeq += 1;
   const run = { port: 9700 + bootSeq, profile: join(runDir(), 'profile-' + bootSeq) };
-  run.child = spawn(chrome, chromeArgs(run.port, run.profile, startUrl, opts), {
+  run.child = spawnBrowser(chrome, chromeArgs(run.port, run.profile, startUrl, opts), {
     stdio: ['ignore', 'pipe', 'pipe'],
     // Its own process group on POSIX, so stopping it stops the GPU and
     // renderer processes with it.
@@ -96,6 +97,9 @@ function killTree(child) {
 
 async function stopChrome(run) {
   killTree(run.child);
+  // And by its profile: a browser Edge's launcher handed off to is in no
+  // tree of ours (tools/browser_guard.mjs).
+  killBrowserTree(run.child);
   if (!exited(run.child)) await Promise.race([new Promise((res) => run.child.once('exit', res)), sleep(5000)]);
   liveChromes.delete(run);
   removeDir(run.profile);
@@ -104,6 +108,8 @@ async function stopChrome(run) {
 function cleanUp() {
   for (const run of liveChromes) killTree(run.child);
   liveChromes.clear();
+  // A test node:test timed out is still running: it starts no more browsers.
+  closeBrowsers();
   if (runDirPath) removeDir(runDirPath);
   runDirPath = null;
 }

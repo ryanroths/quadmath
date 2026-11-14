@@ -4,7 +4,7 @@
 // node --test tools/test_sim_ktx2.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawnBrowser } from './browser_guard.mjs';
 import { createServer } from 'node:http';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
@@ -43,7 +43,7 @@ async function boot(query, opts) {
   const { srv, fetched, port } = await serve(opts || {});
   const dbg = 9500 + (process.pid % 300) + (portSeq++);
   const profile = mkdtempSync(join(tmpdir(), 'qm-ktx2-'));
-  const child = spawn(chrome, ['--headless=new', '--no-sandbox', '--ignore-gpu-blocklist', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--window-size=800,450', `--remote-debugging-port=${dbg}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
+  const child = spawnBrowser(chrome, ['--headless=new', '--no-sandbox', '--ignore-gpu-blocklist', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--window-size=800,450', `--remote-debugging-port=${dbg}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
   let ws;
   try {
     let page = null;

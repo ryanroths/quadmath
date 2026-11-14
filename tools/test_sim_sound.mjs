@@ -22,7 +22,8 @@
 // in Node.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { spawnBrowser } from './browser_guard.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
@@ -360,7 +361,7 @@ test('bf core sound: graph on the first key, motor pitch from rpm rises on a pun
   const profile = mkdtempSync(join(tmpdir(), 'qm-sound-'));
   const debugPort = 9600 + (process.pid % 300);
   const url = `http://127.0.0.1:${port}/sim.html?map=rig&quality=low&menu=1&fpv=1`;
-  const child = spawn(resolveChrome(), [
+  const child = spawnBrowser(resolveChrome(), [
     '--headless=new', '--no-sandbox', '--disable-gpu-sandbox',
     '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
     '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',

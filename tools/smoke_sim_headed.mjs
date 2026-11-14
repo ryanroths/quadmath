@@ -17,7 +17,8 @@
 //      within 1 s of W.
 //   5. Every map the Fly picker offers loads with its look applied.
 // Not in CI (it needs a display and a GPU): its name is not tools/test_*.
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { spawnBrowser } from './browser_guard.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
@@ -122,7 +123,7 @@ function check(name, ok, detail) {
 async function main() {
   const { server, origin } = await serveRoot();
   const profile = mkdtempSync(join(tmpdir(), 'qm-smoke-'));
-  const child = spawn(resolveChrome(), [
+  const child = spawnBrowser(resolveChrome(), [
     // Headed, on the real GPU, never paused or throttled as a hidden window.
     '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update', '--disable-sync',
     '--disable-background-networking', '--window-size=1280,760', '--mute-audio',
