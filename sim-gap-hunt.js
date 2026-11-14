@@ -1,7 +1,7 @@
 // QuadMath sim — Gap Hunt: fly through every named gap of a map.
 //
-// The gaps are the map's authored gap volumes (sim-maps.js mapGaps, the trick
-// detector's Gap), scene units, axis-aligned, each flown along its axis. A
+// The gaps are the map's authored gap volumes (sim-maps.js mapGaps, also the
+// trick detector's gap passes), scene units, axis-aligned, each flown along its axis. A
 // gap is found the first time a frame's step crosses the plane through its
 // middle, across its axis, inside its opening: the coach's ring test
 // (sim-coach.js gateCrossing) with the opening as a rectangular aperture.
@@ -12,8 +12,8 @@
 // the time the last one was found in. No meshes, no textures: the page shows
 // it as a toast, a list in the menu and a card.
 
-import { mapGaps } from './sim-maps.js?v=2677c28cc6f2';
-import { gateCrossing } from './sim-coach.js?v=14e860c757b3';
+import { mapGaps } from './sim-maps.js?v=46239d27449d';
+import { gateCrossing } from './sim-coach.js?v=20b0bf9b6ba5';
 
 export const GAP_HUNT_KEY = 'qm_gap_hunt_v1';
 
