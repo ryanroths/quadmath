@@ -16,19 +16,92 @@
 //   4. Unplug: the radio pulled in flight; Space, W: the keyboard climbs
 //      within 1 s of W.
 //   5. Every map the Fly picker offers loads with its look applied.
+// The turtle's time is a timing only when the run can be trusted for one: the
+// sim clock's largest step from one animation frame to the next while it is
+// measured under FRAME_STEP_MAX_MS (the page reads it once a frame, so a read
+// is good to a frame at each end), and this machine not busy (all of it under
+// MACHINE_LOAD_MAX, and the processes other than this test's Chrome and node
+// under OTHER_LOAD_MAX of it, over the same window: node samples the CPU every
+// CPU_SAMPLE_MS and takes the samples either side of it). Otherwise the check
+// says NOT TIMED with the frame step and the load, and the run ends SMOKE
+// UNTIMED (exit 2) if nothing failed: no 300 ms verdict either way.
+// The window must stay visible and drawing (each page tracks its visibility,
+// focus and animation-frame rate; CDP gives the window's state). A window
+// hidden, minimized or not drawing (no animation frame for WINDOW_STALL_MS;
+// a map load's long frame or a slow frame rate alone is not that, and shows
+// in the text) is reported as that, not as a boot or flight failure, and the run
+// ends SMOKE INVALID (exit 3): it says nothing about the sim.
 // Not in CI (it needs a display and a GPU): its name is not tools/test_*.
 import { spawnSync } from 'node:child_process';
 import { spawnBrowser } from './browser_guard.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
-import { tmpdir } from 'node:os';
+import { tmpdir, cpus } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const BUDGET_MS = 180_000;
 const TX = 'RM TX16S Joystick (Vendor: 1209 Product: 4f54)';
 const T0 = Date.now();
+// The trust rules for the turtle's sim-time measurement (see the header).
+// FRAME_STEP_MAX_MS is tools/test_sim_easy_mode.mjs's.
+const FRAME_STEP_MAX_MS = 50;
+const MACHINE_LOAD_MAX = 0.75;
+const OTHER_LOAD_MAX = 0.25;
+const CPU_SAMPLE_MS = 200;
+const WINDOW_STALL_MS = 3000;
+
+// This machine's CPU over a window: all of it, and the part not used by this
+// test's own Chrome (its processes' CPU time from SystemInfo.getProcessInfo)
+// or node. Fractions of every logical CPU.
+function cpuTimes() {
+  let busy = 0, all = 0;
+  for (const c of cpus()) {
+    const t = c.times;
+    const sum = t.user + t.nice + t.sys + t.idle + t.irq;
+    all += sum;
+    busy += sum - t.idle;
+  }
+  return { busy: busy / 1000, all: all / 1000 }; // s, summed over CPUs
+}
+function nodeCpuS() { const u = process.cpuUsage(); return (u.user + u.system) / 1e6; }
+async function cpuSnap(browserSend) {
+  let chrome = null;
+  if (browserSend) {
+    try {
+      const r = await browserSend('SystemInfo.getProcessInfo');
+      chrome = r.processInfo.reduce((a, q) => a + (+q.cpuTime || 0), 0);
+    } catch (e) { chrome = null; }
+  }
+  return { m: cpuTimes(), chrome, node: nodeCpuS(), wall: Date.now() };
+}
+// Samples every CPU_SAMPLE_MS until stop(); between(t0, t1) is the load over
+// the samples either side of [t0, t1] (epoch ms), so it holds the window and
+// at most a sample's time more at each end.
+function cpuSampler(browserSend) {
+  const snaps = [];
+  let on = true, busy = false;
+  const take = async () => { if (busy) return; busy = true; try { snaps.push(await cpuSnap(browserSend)); } finally { busy = false; } };
+  take();
+  const timer = setInterval(() => { if (on) take(); }, CPU_SAMPLE_MS);
+  return {
+    async stop() { on = false; clearInterval(timer); while (busy) await sleep(5); await take(); },
+    between(t0, t1) {
+      let a = null, b = null;
+      for (const q of snaps) { if (q.wall <= t0) a = q; if (b === null && q.wall >= t1) b = q; }
+      return a && b && b.wall > a.wall ? { load: cpuLoad(a, b), spanMs: b.wall - a.wall } : null;
+    },
+  };
+}
+function cpuLoad(a, b) {
+  const all = b.m.all - a.m.all, busy = b.m.busy - a.m.busy;
+  if (!(all > 0)) return null;
+  const mine = (a.chrome !== null && b.chrome !== null ? b.chrome - a.chrome : NaN) + (b.node - a.node);
+  const other = Number.isFinite(mine) ? Math.max(0, busy - mine) / all : null;
+  return { machine: busy / all, other };
+}
+const pct = (x) => (x === null || !Number.isFinite(x) ? 'n/a' : Math.round(x * 100) + '%');
 
 function resolveChrome() {
   const names = [process.env.CHROME,
@@ -71,6 +144,23 @@ function killTree(child) {
 // unplugged until window.__plug(); window.__pads drives its axes (roll,
 // pitch, throttle, yaw, AUX1..AUX4; -1..1).
 const FAKE_PADS = String.raw`(() => {
+  // The window, from the page: hidden time, blurs, and the animation frames
+  // of the last second (a hidden or occluded window draws none or few).
+  const vis = window.__vis = { hiddenMs: 0, since: document.visibilityState === 'hidden' ? performance.now() : null, blurs: 0, frames: [], last: performance.now() };
+  document.addEventListener('visibilitychange', () => {
+    const now = performance.now();
+    if (document.visibilityState === 'hidden') { if (vis.since === null) vis.since = now; }
+    else if (vis.since !== null) { vis.hiddenMs += now - vis.since; vis.since = null; }
+  });
+  addEventListener('blur', () => { vis.blurs++; });
+  const tick = (t) => { vis.last = performance.now(); vis.frames.push(t); while (vis.frames.length && vis.frames[0] < t - 1000) vis.frames.shift(); requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+  vis.now = () => {
+    const now = performance.now();
+    return { visibility: document.visibilityState, focused: document.hasFocus(), blurs: vis.blurs,
+      hiddenMs: Math.round(vis.hiddenMs + (vis.since !== null ? now - vis.since : 0)),
+      fps: vis.frames.filter((t) => t >= now - 1000).length, sinceFrameMs: Math.round(now - vis.last) };
+  };
   const pads = window.__pads = { on: false, id: ${JSON.stringify(TX)}, axes: [0, 0, -1, 0, -1, -1, -1, -1] };
   const make = () => ({ id: pads.id, index: 0, mapping: '', connected: true, timestamp: performance.now(), axes: pads.axes.slice(),
     buttons: Array.from({ length: 24 }, () => ({ pressed: false, touched: false, value: 0 })) });
@@ -110,17 +200,71 @@ const PAGE = String.raw`(() => {
     while (performance.now() - t0 < ms) { if (st().z > z0 + dz) return Math.round(performance.now() - t0); await wait(4); }
     return null;
   }
-  window.__u = { s, wait, until, st, open, radio, lowS, toasts, keys, landed, flip, climb };
+  // The sim clock's largest step from one animation frame to the next, from
+  // now until the returned function is called (as tools/test_sim_easy_mode.mjs).
+  function frames() {
+    let last = s.simClockMs(), max = 0, n = 0, on = true;
+    const f = () => {
+      if (!on) return;
+      const now = s.simClockMs();
+      max = Math.max(max, now - last);
+      last = now;
+      n++;
+      requestAnimationFrame(f);
+    };
+    requestAnimationFrame(f);
+    return () => { on = false; return { max: Math.round(max * 10) / 10, n }; };
+  }
+  window.__u = { s, wait, until, st, open, radio, lowS, toasts, keys, landed, flip, climb, frames };
   return true;
 })()`;
 
 const results = [];
+// The window as the page and the browser see it; hidden: why it cannot count.
+function windowVerdict(w) {
+  const why = [];
+  if (!w) return { hidden: false, text: 'window state not read' };
+  if (w.visibility && w.visibility !== 'visible') why.push(`page ${w.visibility}`);
+  if (w.windowState && w.windowState !== 'normal' && w.windowState !== 'maximized' && w.windowState !== 'fullscreen') why.push(`window ${w.windowState}`);
+  if (Number.isFinite(w.sinceFrameMs) && w.sinceFrameMs >= WINDOW_STALL_MS) why.push(`no animation frame for ${w.sinceFrameMs} ms (not drawing)`);
+  const text = `visibility ${w.visibility}, window ${w.windowState || 'n/a'}, focused ${w.focused}, ${w.fps} fps, last frame ${w.sinceFrameMs} ms ago, hidden ${w.hiddenMs} ms, blurs ${w.blurs}`;
+  return { hidden: why.length > 0, text: why.length ? why.join('; ') + ' [' + text + ']' : text };
+}
+function windowCheck(name, w) {
+  const v = windowVerdict(w);
+  results.push({ name, ok: !v.hidden, window: true, detail: v.text });
+  console.log(`${v.hidden ? 'WINDOW HIDDEN' : 'WINDOW OK'}  ${name}  ${v.text}`);
+  return !v.hidden;
+}
 function check(name, ok, detail) {
   results.push({ name, ok: !!ok, detail });
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`);
 }
+// A check that is a timing: judged only when the run can be trusted for one.
+function timedCheck(name, ok, value, trust) {
+  if (trust.ok) { check(name, ok, `${value}; ${trust.text}`); return; }
+  results.push({ name, ok: true, untimed: true, detail: trust.text });
+  console.log(`NOT TIMED  ${name}  read ${value}, not a timing: ${trust.text}`);
+}
+function trustOf(step, load) {
+  const why = [];
+  if (!(step && step.max > 0)) why.push('no frame step measured');
+  else if (step.max >= FRAME_STEP_MAX_MS) why.push(`frame step ${step.max} ms of sim time (timed under ${FRAME_STEP_MAX_MS})`);
+  if (!load) why.push('no CPU load measured');
+  else {
+    if (load.machine >= MACHINE_LOAD_MAX) why.push(`machine CPU ${pct(load.machine)} (timed under ${pct(MACHINE_LOAD_MAX)})`);
+    if (load.other === null) why.push('CPU of other processes not measured');
+    else if (load.other >= OTHER_LOAD_MAX) why.push(`other processes ${pct(load.other)} of the CPU (timed under ${pct(OTHER_LOAD_MAX)})`);
+  }
+  const text = `frame step ${step ? step.max : 'n/a'} ms over ${step ? step.n : 0} frames, CPU ${load ? pct(load.machine) : 'n/a'} (other processes ${load ? pct(load.other) : 'n/a'})`;
+  return { ok: !why.length, text: why.length ? why.join('; ') + ' [' + text + ']' : text };
+}
 
 async function main() {
+  // The machine before Chrome starts: 2 s of its CPU, for the summary.
+  const pre0 = await cpuSnap(null);
+  await sleep(2000);
+  const preLoad = cpuLoad(pre0, await cpuSnap(null));
   const { server, origin } = await serveRoot();
   const profile = mkdtempSync(join(tmpdir(), 'qm-smoke-'));
   const child = spawnBrowser(resolveChrome(), [
@@ -131,13 +275,30 @@ async function main() {
     '--disable-renderer-backgrounding', '--disable-background-timer-throttling',
     '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank',
   ], { stdio: 'ignore' });
-  let ws = null;
+  let ws = null, browserSend = null, closeBrowserWs = () => {}, runSnap0 = null, runLoad = null;
   try {
     let port = null;
     for (let i = 0; i < 100 && !port; i++) { await sleep(150); try { port = +readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split(/\r?\n/)[0] || null; } catch (e) { /* not yet */ } }
     if (!port) throw new Error('Chrome gave no DevTools port');
     let target = null;
     for (let i = 0; i < 100 && !target; i++) { await sleep(150); try { target = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((p) => p.type === 'page' && p.webSocketDebuggerUrl); } catch (e) { /* not yet */ } }
+    // The browser's own target, for its processes' CPU time.
+    let bws = null, bseq = 0;
+    const bwait = new Map();
+    try {
+      const ver = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+      bws = new WebSocket(ver.webSocketDebuggerUrl);
+      await new Promise((res, rej) => { bws.onopen = res; bws.onerror = () => rej(new Error('browser ws')); });
+      bws.addEventListener('message', (m) => { const o = JSON.parse(m.data); if (o.id && bwait.has(o.id)) { bwait.get(o.id)(o); bwait.delete(o.id); } });
+    } catch (e) { bws = null; }
+    browserSend = bws && ((method, params) => new Promise((resolve, reject) => {
+      const id = ++bseq;
+      const timer = setTimeout(() => { bwait.delete(id); reject(new Error('cdp timeout ' + method)); }, 10000);
+      bwait.set(id, (o) => { clearTimeout(timer); if (o.error) reject(new Error(method + ': ' + JSON.stringify(o.error))); else resolve(o.result || {}); });
+      bws.send(JSON.stringify({ id, method, params: params || {} }));
+    }));
+    closeBrowserWs = () => { try { if (bws) bws.close(); } catch (e) { /* closed */ } };
+    runSnap0 = await cpuSnap(browserSend);
     ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
     let seq = 0;
@@ -156,6 +317,13 @@ async function main() {
     };
     const js = async (body) => { const v = await ev(`(async () => { const U = window.__u; ${body} })()`); return typeof v === 'string' && /^[[{]/.test(v) ? JSON.parse(v) : v; };
     const key = (type, k, code, vk) => send('Input.dispatchKeyEvent', { type, key: k, code, windowsVirtualKeyCode: vk });
+    const winState = async () => {
+      let w = null;
+      try { w = await ev(`window.__vis ? window.__vis.now() : null`); } catch (e) { w = null; }
+      w = w || { visibility: null, focused: null, fps: null, hiddenMs: null, blurs: null };
+      try { w.windowState = (await send('Browser.getWindowForTarget')).bounds.windowState; } catch (e) { w.windowState = null; }
+      return w;
+    };
     const tap = async (k, code, vk) => { await key('rawKeyDown', k, code, vk); await key('keyUp', k, code, vk); };
     const SPACE = [' ', 'Space', 32], W = ['w', 'KeyW', 87], R = ['r', 'KeyR', 82], ESC = ['Escape', 'Escape', 27];
 
@@ -175,7 +343,21 @@ async function main() {
         await sleep(150);
         try { ready = await ev(`!!(window._sim && window._sim.core && window._sim.core() === ${JSON.stringify(core)} && window._simQueryBooted && window._sim.looks && window._sim.looks.fps && window._sim.looks.fps.ready)`); } catch (e) { /* loading */ }
       }
-      check(`${tag}: boots`, ready);
+      // A boot that never got there says which part did not, and whether the
+      // window was there to draw it: a hidden one is reported as that.
+      let why = '';
+      const bootWin = await winState();
+      if (!ready && windowVerdict(bootWin).hidden) {
+        windowCheck(`${tag}: window visible and drawing while it boots`, bootWin);
+        continue;
+      }
+      if (!ready) {
+        try {
+          why = JSON.stringify(await ev(`(() => { const s = window._sim, l = s && s.looks; return { url: location.pathname + location.search, sim: !!s, core: s && s.core ? s.core() : null, queryBooted: !!window._simQueryBooted, looks: !!l, fpsReady: !!(l && l.fps && l.fps.ready), quality: l && l.quality ? l.quality : null, gl: (() => { try { const g = document.createElement('canvas').getContext('webgl2'); const d = g && g.getExtension('WEBGL_debug_renderer_info'); return d ? g.getParameter(d.UNMASKED_RENDERER_WEBGL) : null; } catch (e) { return String(e); } })() }; })()`));
+        } catch (e) { why = 'page did not answer: ' + (e && e.message || e); }
+      }
+      if (!ready) why += `; window: ${windowVerdict(bootWin).text}`;
+      check(`${tag}: boots`, ready, why);
       if (!ready) continue;
       await ev(PAGE);
       const gl = await ev(`(() => { const g = window._sim.renderer.getContext(); const d = g.getExtension('WEBGL_debug_renderer_info'); return d ? g.getParameter(d.UNMASKED_RENDERER_WEBGL) : '?'; })()`);
@@ -219,6 +401,7 @@ async function main() {
       await tap(...SPACE);           // disarm (Easy mode's radio: the page's arm, not a switch)
       await sleep(100);
       await tap(...R);
+      const sampler = cpuSampler(browserSend);
       r = await js(`
         await U.until(() => !U.st().armed && U.landed(), 4000);
         const rest = await U.flip();
@@ -228,6 +411,8 @@ async function main() {
         const busy = () => (bf ? U.s.bfCore().turtlePhase !== null : !!U.s.easy().jsTurtle);
         const started = await U.until(busy, 2000);
         // Upright to flyable on the sim clock, at this machine's frame rate.
+        const step = U.frames();
+        const w0 = performance.timeOrigin + performance.now();
         let upT = null, flyT = null;
         const rearmed = await U.until(() => {
           const x = U.st();
@@ -235,16 +420,28 @@ async function main() {
           if (upT !== null && flyT === null && x.armed && !busy()) flyT = U.s.simClockMs();
           return !busy() && x.upZ > 0.9 && x.armed;
         }, 6000);
+        const stepMs = step();
+        const w1 = performance.timeOrigin + performance.now();
         const flyMs = upT !== null && flyT !== null ? Math.round(flyT - upT) : null;
         window.__pads.axes[0] = 0;
         const z0 = U.st().z;
         window.__pads.axes[2] = 0.2;
         const t0 = performance.now();
         const ms = rearmed ? await U.climb(z0, t0, 1000, 0.5) : null;
-        return JSON.stringify({ rest, started, rearmed, flyMs, ms, st: U.st(), toasts: U.toasts.slice() });`);
+        return JSON.stringify({ rest, started, rearmed, flyMs, stepMs, w0, w1, ms, st: U.st(), toasts: U.toasts.slice() });`);
+      await sampler.stop();
+      // The load over the timed window alone (frames() to step()), not the
+      // waits for the landing, the flip and the start around it.
+      const win = sampler.between(r.w0, r.w1);
+      const turtleLoad = win ? win.load : null;
       check(`${tag}: turtle by roll stick, re-armed upright, throttle up climbs within 1 s`, r.rest && r.started && r.rearmed && r.ms !== null,
         `rest ${r.rest}, started ${r.started}, re-armed ${r.rearmed}, ${r.ms === null ? 'no climb' : 'up 0.5 m in ' + r.ms + ' ms'}; armed ${r.st.armed}, z ${r.st.z.toFixed(2)}, toasts ${JSON.stringify(r.toasts)}`);
-      check(`${tag}: turtle upright to flyable under 300 ms of sim time`, r.flyMs !== null && r.flyMs < 300, `${r.flyMs} ms`);
+      if (r.flyMs === null) check(`${tag}: turtle upright to flyable under 300 ms of sim time`, false, 'not measured');
+      else {
+        const trust = trustOf(r.stepMs, turtleLoad);
+        trust.text += `, over ${Math.round(r.w1 - r.w0)} ms timed (CPU over ${win ? win.spanMs : 'n/a'} ms)`;
+        timedCheck(`${tag}: turtle upright to flyable under 300 ms of sim time`, r.flyMs < 300, `${r.flyMs} ms`, trust);
+      }
 
       // 4. Unplug in flight, then the keyboard: Space (disarm what the radio
       // armed if it still is), Space, W.
@@ -292,19 +489,32 @@ async function main() {
           return JSON.stringify({ ok, map: U.s.map(), vibe: v && v.id, core: U.s.core() });`);
         check(`${tag}: map ${id} loads with its look`, r.ok && r.core === core, `map ${r.map}, look ${r.vibe}, core ${r.core}, ${((Date.now() - t0) / 1000).toFixed(1)} s`);
       }
+      // The window over this core's run (hidden time since this page loaded),
+      // read once its frames are back after the last map's load (up to 4 s).
+      let endWin = await winState();
+      for (let i = 0; i < 16 && endWin.visibility === 'visible' && !(endWin.sinceFrameMs < 1000); i++) { await sleep(250); endWin = await winState(); }
+      if (endWin && endWin.hiddenMs > 0 && windowVerdict(endWin).hidden === false) endWin.visibility = 'hidden for part of the run';
+      windowCheck(`${tag}: window stayed visible and drawing`, endWin);
     }
+    if (runSnap0) runLoad = cpuLoad(runSnap0, await cpuSnap(browserSend));
   } finally {
     try { if (ws) ws.close(); } catch (e) { /* closed */ }
+    closeBrowserWs();
     killTree(child);
     await sleep(800);
     for (let i = 0; i < 10; i++) { try { rmSync(profile, { recursive: true, force: true }); break; } catch (e) { await sleep(300); } }
     server.close();
   }
   const ms = Date.now() - T0;
-  const failed = results.filter((x) => !x.ok);
+  const hidden = results.filter((x) => x.window && !x.ok);
+  const failed = results.filter((x) => !x.ok && !x.window);
+  const untimed = results.filter((x) => x.untimed);
   const inTime = ms < BUDGET_MS;
-  console.log(`${failed.length || !inTime ? 'SMOKE FAIL' : 'SMOKE PASS'}: ${results.length - failed.length}/${results.length} checks in ${(ms / 1000).toFixed(0)} s (limit ${BUDGET_MS / 1000} s)`);
-  process.exit(failed.length || !inTime ? 1 : 0);
+  const verdict = hidden.length ? 'SMOKE INVALID (window hidden or occluded)' : failed.length || !inTime ? 'SMOKE FAIL' : untimed.length ? 'SMOKE UNTIMED' : 'SMOKE PASS';
+  const judged = results.length - untimed.length - results.filter((x) => x.window).length;
+  console.log(`CPU: before Chrome ${pct(preLoad && preLoad.machine)}; through the run ${pct(runLoad && runLoad.machine)} (other processes ${pct(runLoad && runLoad.other)})`);
+  console.log(`${verdict}: ${judged - failed.length}/${judged} checks${untimed.length ? `, ${untimed.length} not timed (${untimed.map((x) => x.name.split(':')[0]).join(', ')})` : ''} in ${(ms / 1000).toFixed(0)} s (limit ${BUDGET_MS / 1000} s)`);
+  process.exit(hidden.length ? 3 : failed.length || !inTime ? 1 : untimed.length ? 2 : 0);
 }
 
 main().catch((e) => { console.error('SMOKE FAIL: ' + (e && e.stack || e)); process.exit(1); });

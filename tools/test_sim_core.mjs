@@ -183,7 +183,13 @@ test('bf core loads the owner\'s full Air65 diff: vbat_sag_compensation 70, thru
   assert.equal(got.thrust_linear, '20');
   assert.equal(got.dyn_idle_min_rpm, '55');
   assert.equal(got.dshot_bidir, 'ON', 'RPM telemetry, which dynamic idle runs on');
-  assert.equal(core.sim.fc.rpmFilter, true);
+  // sim-core v0.7.0's policy turns the RPM filter off, whatever the diff says
+  // (rpm_filter_harmonics 0): in the sim's 1 kHz loop the notches sit next to
+  // Nyquist and ring on a floor contact. Bidirectional DShot stays on, and
+  // dynamic idle (below) still runs on its rpm telemetry.
+  assert.equal(core.sim.fc.rpmFilter, false, 'the RPM filter is off in the sim');
+  assert.equal(core.sim.get(['rpm_filter_harmonics'], { profile: 0 }).rpm_filter_harmonics, '0');
+  assert.deepEqual(core.report.policy.map((p) => `${p.key} = ${p.value}`), ['rpm_filter_harmonics = 0'], 'the policy the report lists');
   // Dynamic idle at work: armed at zero throttle, the motors hold its
   // minimum (55 x 100 rpm), above the idle the same diff gives without it.
   const idleRpm = async (c) => {
@@ -778,6 +784,18 @@ test('the page versions the vendored sim-core with its VERSION', () => {
   const m = html.match(/const SIM_CORE_VERSION='([^']+)'/);
   assert.ok(m, 'SIM_CORE_VERSION in sim.html');
   assert.equal(m[1], readFileSync('vendor/sim-core/VERSION', 'utf8').trim());
+  // sim-core.js's own imports (./cli-policy.js) carry no version, so the
+  // import map gives each vendor/sim-core URL one: ?v= that VERSION. Without
+  // it a browser can pair a new sim-core.js with the last release's cached
+  // cli-policy.js, and a missing export fails the bf core.
+  const map = JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports;
+  const own = [...readFileSync('vendor/sim-core/sim-core.js', 'utf8').matchAll(/\bfrom\s+['"](\.\/[^'"]+)['"]|\bimport\s*\(\s*['"](\.\/[^'"]+)['"]/g)]
+    .map((x) => x[1] || x[2]);
+  assert.ok(own.includes('./cli-policy.js'), `sim-core.js imports ${own.join(', ')}`);
+  for (const spec of own) {
+    const url = './vendor/sim-core/' + spec.slice(2);
+    assert.equal(map[url], `${url}?v=${m[1]}`, `the import map versions ${url} with SIM_CORE_VERSION`);
+  }
 });
 
 // tools/test_sim_map_boot.mjs flies both in headless Chrome; this is the
