@@ -392,32 +392,36 @@ test('observer: a slow descent the detector never arms is a dive miss naming the
   assert.match(dv[0].reason, /speed never > 8/);
 });
 
-test('observer: gaps are records: an authored pass fires, a skim and wide walls do not, narrow walls fire generically', () => {
+test('observer: gap passes are records, never a trick: an authored pass, a skim, narrow walls (generic) and wide walls (none)', () => {
   // Fly scene -z (module +x) from scene z 1.75.
   const vol = [{ name: 'test slot', axis: 'z', min: { x: -0.6, y: 0, z: -20 }, max: { x: 0.6, y: 20, z: 0 } }];
   const through = run([{ t: 0.1 }, { t: 1.8, v: [5, 0, 0] }], { gaps: vol, pos: { x: -0.5, y: 0, z: 3 } });
-  assert.deepEqual(through.evs, ['gap']);
+  assert.deepEqual(through.evs, [], 'a gap scores nothing');
   const g = through.recs.filter((r) => r.type === 'gap');
   assert.equal(g.length, 1);
-  assert.equal(g[0].result, 'gap');
+  assert.equal(g[0].result, null);
   assert.equal(g[0].how, 'authored');
-  assert.match(g[0].reason, /test slot/);
+  assert.equal(g[0].reason, 'through test slot');
   // Across the same volume through its sides (scene +x, module -y): a skim.
   const across = run([{ t: 0.1 }, { t: 1.0, v: [0, -3, 0] }], { gaps: vol, pos: { x: 3, y: 1.0, z: 3 } });
   assert.deepEqual(across.evs, []);
   const sk = across.recs.filter((r) => r.type === 'gap');
   assert.equal(sk.length, 1);
   assert.equal(sk[0].result, null);
+  assert.equal(sk[0].how, 'authored');
   assert.match(sk[0].reason, /skimmed/);
-  // Walls 0.3 m apart (0.15 m each side): the generic rule fires.
+  // Walls 0.3 m apart (0.15 m each side): a pass by the generic rule.
   const narrow = [
     { min: { x: 0.525, y: 0, z: -20 }, max: { x: 3, y: 20, z: 0 } },
     { min: { x: -3, y: 0, z: -20 }, max: { x: -0.525, y: 20, z: 0 } },
   ];
   const gen = run([{ t: 0.1 }, { t: 1.8, v: [5, 0, 0] }], { colliders: narrow, pos: { x: -0.5, y: 0, z: 3 } });
-  assert.deepEqual(gen.evs, ['gap']);
-  const gg = gen.recs.filter((r) => r.type === 'gap' && r.result);
+  assert.deepEqual(gen.evs, [], 'a gap scores nothing');
+  const gg = gen.recs.filter((r) => r.type === 'gap');
+  assert.equal(gg.length, 1);
+  assert.equal(gg[0].result, null);
   assert.equal(gg[0].how, 'generic');
+  assert.match(gg[0].reason, /^through an opening \(/);
   // Walls 1.1 m apart (the old rule's gap): each side too far for a 9 cm quad.
   const wide = [
     { min: { x: 2, y: 0, z: -20 }, max: { x: 3, y: 20, z: 0 } },
@@ -425,6 +429,7 @@ test('observer: gaps are records: an authored pass fires, a skim and wide walls 
   ];
   const w = run([{ t: 0.1 }, { t: 1.8, v: [5, 0, 0] }], { colliders: wide, pos: { x: -0.5, y: 0, z: 3 } });
   assert.deepEqual(w.evs, []);
+  assert.equal(w.recs.filter((r) => r.type === 'gap').length, 0);
 });
 
 // ---- The overlay with a stand-in document ----
@@ -445,7 +450,7 @@ function fakeDoc() {
   return doc;
 }
 
-test('createTrickDebug: overlay lists the ten candidates and the console gets one JSON line per attempt', () => {
+test('createTrickDebug: overlay lists the ten candidates, then the gap passes (not a trick), and the console gets one JSON line per attempt', () => {
   const doc = fakeDoc();
   const lines = [];
   const con = { info: (s) => lines.push(s), warn: () => {} };
@@ -485,9 +490,14 @@ test('createTrickDebug: overlay lists the ten candidates and the console gets on
   assert.equal(dbg.logText().split('\n').length, json.length, 'one line per attempt');
   assert.deepEqual(dbg.logText().split('\n').map((l) => JSON.parse(l).seq), json.map((r) => r.seq));
   for (const id of FOCUS) {
-    const name = { flip: 'Flip', roll: 'Roll', powerloop: 'Powerloop', splits: 'Split-S', matty: 'Matty Flip', trippy: 'Trippy Spin', juicyflick: 'Juicy Flick', ham: 'Inverted yaw spin', barani: 'Barani', dive: 'Dive', gap: 'Gap' }[id];
+    const name = { flip: 'Flip', roll: 'Roll', powerloop: 'Powerloop', splits: 'Split-S', matty: 'Matty Flip', trippy: 'Trippy Spin', juicyflick: 'Juicy Flick', ham: 'Inverted yaw spin', barani: 'Barani', dive: 'Dive' }[id];
     assert.ok(el.innerHTML.includes(name), 'overlay lists ' + name);
   }
+  assert.equal(FOCUS.length, 10);
+  assert.equal(FOCUS.includes('gap'), false, 'a gap is not a candidate trick');
+  assert.ok(el.innerHTML.includes('gap passes'), 'the gap passes line');
+  assert.ok(el.innerHTML.includes('(not a trick)'));
+  assert.equal(/[✓✗] Gap\b/.test(el.innerHTML), false, 'no Gap trick row');
   assert.match(el.innerHTML, /✓ Roll/);
   assert.equal(dbg.attempts().length, json.length);
 });

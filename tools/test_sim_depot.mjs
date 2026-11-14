@@ -370,7 +370,7 @@ test('the loop: every feature on the line, flow-first, 30 cm clear outside its d
 
 // A pass through the gap volume g by the path pts (metres): in through one
 // of its two faces across g's axis, out through the other, as sim-tricks.js
-// scores a Gap. A path in or out through a side does not pass.
+// counts a gap pass. A path in or out through a side does not pass.
 function passesThrough(pts, g) {
   const k = 'xyz'.indexOf(g.axis), lo = [m(g.min.x), m(g.min.y), m(g.min.z)], hi = [m(g.max.x), m(g.max.y), m(g.max.z)];
   for (let i = 1; i < pts.length; i++) {
