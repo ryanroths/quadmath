@@ -22,9 +22,14 @@ export const HUNT_MAX_STEP_M = 3;
 // A clock step longer than this (ms) is a pause, not flying time.
 export const HUNT_MAX_TICK_MS = 250;
 
-// The maps with a hunt, and for each its gaps' hints (one line each, by the
-// gap's name) and which are hidden. Every gap mapGaps lists for the map must
-// have a hint here (tools/test_sim_gap_hunt.mjs).
+// The maps with a hunt. The House's: every gap mapGaps lists, by its own
+// name, each with a hint (one line) here, and which are hidden. The Bando's
+// and the Warehouse's (depot): the gaps picked out of mapGaps (its volume's
+// name), each with the name the hunt shows, its hint, and whether it is
+// hidden; the rest of the map's volumes are not in the hunt. The names are
+// what progress is saved under: do not rename one that has shipped.
+// tools/test_sim_gap_hunt.mjs checks every hint and every pick's volume.
+const pick = (vol, name, hint, hidden) => Object.freeze({ vol, name, hint, hidden: !!hidden });
 const HUNTS = Object.freeze({
   house: Object.freeze({
     title: 'House + backyard',
@@ -62,6 +67,62 @@ const HUNTS = Object.freeze({
       'patio wall gap (front)': 'Over the patio\'s low wall, front end.',
     }),
   }),
+  bando: Object.freeze({
+    title: 'The Bando',
+    picks: Object.freeze([
+      pick('courtyard doorway', 'courtyard doorway', 'The big opening in the south face, at the ground.'),
+      pick('ground door, x 13.75', 'east ground-floor door', 'A doorway in an inside wall, ground floor, east end.'),
+      pick('ground door, x -12.55', 'west ground-floor door', 'A doorway in an inside wall, ground floor, west end.'),
+      pick('ground window, south face, x -12.5', 'south-west corner window', 'Ground floor: the south face\'s westmost window.'),
+      pick('first floor window, north face, x 0', 'north window, first floor', 'First floor, the middle of the north face.'),
+      pick('second floor window, east face, z -12.75', 'high east window', 'Second floor, east face: the window furthest north.'),
+      pick('second floor window, west face, z 2', 'high west window', 'Second floor, west face: the window furthest south.'),
+      pick('floor hole, first floor, east', 'east floor hole, first floor', 'A ragged hole in the first floor: the east one.'),
+      pick('floor hole, second floor, west', 'west floor hole, second floor', 'A ragged hole in the second floor: the west one.'),
+      pick('floor hole, roof, west', 'west roof hole', 'A hole in the roof, the one further west.'),
+      pick('stair well, second floor', 'stair well', 'Up or down the stairs\' well, north-west corner.'),
+      pick('shaft door, ground', 'lift shaft door', 'The lift shaft\'s door at the ground.'),
+      pick('shaft top', 'top of the lift shaft', 'Something by the start goes all the way down.', true),
+      pick('ground rebar gap, 37 cm, x -8.98', 'ground-floor rebar gap', 'Between the bars of a broken wall, ground floor.'),
+      pick('first floor rebar gap, 54 cm, z -13.80', 'first-floor rebar gap', 'Between the bars of a broken wall, first floor, north end.'),
+      pick('second floor rebar gap, 30 cm, x 0.25', '30 cm rebar gap', 'The tightest gap between bars is upstairs.', true),
+      pick('first floor door, z -11.4', 'first-floor door', 'A doorway in an inside wall, first floor.'),
+      pick('second floor door, x 2.25', 'second-floor door', 'A doorway in an inside wall, second floor.'),
+      pick('under the leaning slab', 'under the leaning slab', 'Under the fallen slab, east end.'),
+      pick('first floor collapse', 'first floor collapse', 'Where the fallen slab came from.'),
+      pick('parapet gap', 'parapet gap', 'A gap in the roof\'s low wall, south side.'),
+      pick('through the van', 'through the van', 'End to end through the van out in the lot.'),
+      pick('the van, front side windows', 'van cab windows', 'In one cab window of the van and out the other.', true),
+    ]),
+  }),
+  depot: Object.freeze({
+    title: 'The Warehouse',
+    picks: Object.freeze([
+      pick('roll-up door, z 1.65', 'first roll-up door', 'Under a half-open roll-up door into the dock.'),
+      pick('roll-up door, z -3.85', 'second roll-up door', 'Under the other half-open roll-up door.'),
+      pick('chain curtain parting', 'chain curtain', 'The parting in the hanging chain curtain.'),
+      pick('under the forks', 'under the forks', 'Under the forklift\'s raised load.'),
+      pick('rack gap', 'rack gap', 'The 60 cm gap through the double rack.'),
+      pick('crossing gap, run B', 'crossing gap, first rack', 'Across the aisle: a second gap through the racks.'),
+      pick('crossing gap, run C', 'crossing gap, second rack', 'The crossing gap goes through one more rack.'),
+      pick('truss gap, x -20', 'roof truss, west end', 'Between a roof truss\'s posts, at the west end.'),
+      pick('truss gap, x 2.5', 'roof truss, middle', 'Between a roof truss\'s posts, near the middle.'),
+      pick('truss gap, x 17.5', 'roof truss, east end', 'Between a roof truss\'s posts, at the east end.'),
+      pick('the hatch', 'the hatch', 'The mezzanine floor has a way through it.', true),
+      pick('between the cable trays, z -5.1', 'between the cable trays', 'Down between two of the cable trays.'),
+      pick('between the cable trays, z -4.4', 'between the other cable trays', 'Down between the other two cable trays.'),
+      pick('under the truss over the cable trays, x -12.5', 'over the trays, under a truss', 'Along over the cable trays, under a truss.'),
+      pick('through the container', 'through the container', 'End to end through the shipping container.'),
+      pick('through the scissors', 'through the scissors', 'Across the scissor lift, between its two stages.'),
+      pick('cargo net hole', 'cargo net hole', 'Look up: the cargo net has a hole.', true),
+      pick('tyre bore, bottom row, west', 'tyre, bottom row, west', 'Through a tyre in the stack, bottom row, west.'),
+      pick('tyre bore, bottom row, middle', 'tyre, bottom row, middle', 'Through a tyre in the stack, bottom row, middle.'),
+      pick('tyre bore, bottom row, east', 'tyre, bottom row, east', 'Through a tyre in the stack, bottom row, east.'),
+      pick('tyre bore, middle row, west', 'tyre, middle row, west', 'Through a tyre in the stack, middle row, west.'),
+      pick('tyre bore, middle row, east', 'tyre, middle row, east', 'Through a tyre in the stack, middle row, east.'),
+      pick('tyre bore, top', 'top tyre', 'The tyre at the very top of the stack.', true),
+    ]),
+  }),
 });
 
 const PLANE = Object.freeze({ x: ['z', 'y'], y: ['x', 'z'], z: ['x', 'y'] });
@@ -79,19 +140,28 @@ export function huntTitle(mapId) {
 // The map's gaps for the hunt: each its name, hint, hidden flag, volume, and
 // the ring test's gate (the plane through the volume's middle across its
 // axis, the opening's half sizes along the plane's two axes).
+// The House's: all of mapGaps. The others': the picks, in their order (a
+// pick whose volume is gone is left out; the test fails on it).
+function huntVolumes(mapId) {
+  const H = HUNTS[mapId], vols = mapGaps(mapId);
+  if (!H.picks) return vols.map((v) => ({ v, name: v.name, hint: H.hints[v.name] || 'Somewhere on this map.', hidden: H.hidden.includes(v.name) }));
+  const by = new Map(vols.map((v) => [v.name, v]));
+  return H.picks.filter((p) => by.has(p.vol)).map((p) => ({ v: by.get(p.vol), name: p.name, hint: p.hint, hidden: p.hidden }));
+}
+// The picks' volume names (the test checks each is one of mapGaps').
+export function huntPickVolumes(mapId) {
+  return hasHunt(mapId) && HUNTS[mapId].picks ? HUNTS[mapId].picks.map((p) => p.vol) : [];
+}
 export function huntGaps(mapId) {
   if (!hasHunt(mapId)) return [];
-  const H = HUNTS[mapId];
-  return mapGaps(mapId).map((v) => {
+  return huntVolumes(mapId).map(({ v, name, hint, hidden }) => {
     const g = { axis: v.axis, shape: 'rect' };
     for (const a of ['x', 'y', 'z']) g[a] = (v.min[a] + v.max[a]) / 2;
     const [u, w] = PLANE[v.axis];
     g.hw = (v.max[u] - v.min[u]) / 2;
     g.hh = (v.max[w] - v.min[w]) / 2;
     return Object.freeze({
-      name: v.name,
-      hint: H.hints[v.name] || 'Somewhere on this map.',
-      hidden: H.hidden.includes(v.name),
+      name, hint, hidden, vol: v.name,
       min: v.min, max: v.max,
       gate: Object.freeze(g),
     });
@@ -239,5 +309,5 @@ export function fmtHuntTime(ms) {
 
 // The completion's SHARE text.
 export function huntShareText(mapId, total, ms) {
-  return 'I found all ' + total + ' gaps on the QuadMath sim\'s ' + huntTitle(mapId) + ' map in ' + fmtHuntTime(ms) + ' of flying.';
+  return 'I found all ' + total + ' gaps in the QuadMath sim (' + huntTitle(mapId) + ') in ' + fmtHuntTime(ms) + ' of flying.';
 }
