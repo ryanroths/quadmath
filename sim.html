@@ -1111,7 +1111,7 @@ import {
 } from "./sim-coach.js?v=14e860c757b3";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
-} from "./sim-tricks.js?v=27f3a73d68ec";
+} from "./sim-tricks.js?v=7821db988ef3";
 import {
   DAILY_KEY, DAILY_LINE_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -1371,7 +1371,7 @@ let lastRunLine=null;
 let coach=null;
 let tricks=null;
 let trickDebug=null; // ?tricks=debug only (sim-tricks-debug.js); null otherwise
-let trickGaps=[];    // the map's authored gap volumes (sim-maps.js mapGaps), for the trick detector's Gap
+let trickGaps=[];    // the map's authored gap volumes (sim-maps.js mapGaps), for the trick detector's gap passes (not a trick)
 function resize(){
   const w=canvas.clientWidth||1,h=canvas.clientHeight||1;
   renderer.setSize(w,h,false);
@@ -8193,7 +8193,7 @@ function simPaused(){return replayOn||(looks&&looks.menuOpen)||builderOn||(feel&
 const trickCs=emptyState();
 let trickLastUs=null;
 function trickSampling(){return !!(tricks&&tricks.isActive()&&!(coach&&coach.isActive()));}
-// The flying quad's width across, metres, for the Gap's generic rule: on the
+// The flying quad's width across, metres, for the generic gap rule: on the
 // bf core the airframe's (wheelbase over root 2, and a duct each side), on the
 // js core the class's frame (about 1.26 x its wheelbase for a ducted whoop).
 let trickFrameKey='',trickFrameM=0.09;
@@ -8933,7 +8933,7 @@ window._tricks=tricks;
 // the file is never fetched.
 try{
   if(new URLSearchParams(location.search).get('tricks')==='debug'){
-    import('./sim-tricks-debug.js?v=2c986845c59f').then((m)=>{
+    import('./sim-tricks-debug.js?v=d72846e3d067').then((m)=>{
       trickDebug=m.createTrickDebug({document,tricks,now:()=>performance.now()*0.001,info:()=>({core:cs.kind,map:currentMap})});
       window._trickDebug=trickDebug;
       trickDebug.paint();

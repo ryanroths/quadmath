@@ -112,13 +112,17 @@ export const MAV_GAP_MUL = 1.25;
 export const MERGE_GAP_S = 0.8;
 // The detector's altitude ring, for the climb before a maneuver (steps).
 export const ALT_RING = 512;
-// Gap, without an authored volume: both sides of the opening within
-// GAP_SIDE_K frame widths of the path, passed through at least
-// GAP_MIN_DEPTH_M. FRAME_W_M when the page does not say the quad's width.
+// Gap passes. A gap is not a trick and scores nothing (Gap Hunt,
+// sim-gap-hunt.js, is what answers flying one); the detector still tracks
+// each pass for the phase matcher's "through", the Maverick's way back out
+// and the chain, and a pass holds Proximity off for its step.
+// Without an authored volume: both sides of the opening within GAP_SIDE_K
+// frame widths of the path, passed through at least GAP_MIN_DEPTH_M.
+// FRAME_W_M when the page does not say the quad's width.
 export const GAP_SIDE_K = 2.5;
 export const GAP_MIN_DEPTH_M = 0.1;
 export const FRAME_W_M = 0.09;
-// One authored gap scores again only after this long.
+// One authored gap's pass counts again (for Proximity's hold) only after this long.
 export const GAP_REPEAT_S = 1.0;
 // No generic gap within this of an authored one (its walls start there).
 export const GAP_NEAR_M = 0.3;
@@ -142,7 +146,6 @@ export const TRICK_LIST = Object.freeze([
   Object.freeze({ id: 'splits', name: 'Split-S', tier: 'Beginner', points: 100, pointsIn: 100, type: "Split S'" }),
   Object.freeze({ id: 'immelmann', name: 'Immelmann', tier: 'Beginner', points: 100, pointsIn: 100, type: "Split S'" }),
   Object.freeze({ id: 'dive', name: 'Building Dive', tier: 'Beginner', points: 100, pointsIn: 100, type: 'Wall Tricks' }),
-  Object.freeze({ id: 'gap', name: 'Gap', tier: 'Beginner', points: 125, pointsIn: 125, type: 'Gaps' }),
   Object.freeze({ id: 'cradle', name: 'Cradle', tier: 'Beginner', points: 150, pointsIn: 150, type: 'Pole Dancing' }),
   Object.freeze({ id: 'prox', name: 'Proximity', tier: 'Beginner', points: 150, pointsIn: 150, type: 'Wall Tricks' }),
   Object.freeze({ id: 'powerloop', name: 'Powerloop', tier: 'Novice', points: 200, pointsIn: 200, type: 'Powerloops' }),
@@ -1662,11 +1665,12 @@ export function makeDetector() {
     px: 0, py: 0, pz: 0,
     hangT: 0, hangGot: 0, hangCd: 0,
     diveOn: 0, diveAlt: 0, diveDrop: 0, diveCd: 0,
-    // Gap. Authored (sample.gaps): per volume, the face a pass came in by
-    // (-1: none, or in through a side) and when it last scored; a pass during
-    // a rotation waits for its end (gapPend). Generic: both sides near the
-    // path along one axis (gapKind 1: x walls, moving along z; 2: z walls),
-    // from gapS0 to gapAlong along it, moving gapSign.
+    // Gap passes (not a trick). Authored (sample.gaps): per volume, the face
+    // a pass came in by (-1: none, or in through a side) and when it last
+    // counted; a pass during a rotation waits for its end (gapPend, the
+    // volume's name). Generic: both sides near the path along one axis
+    // (gapKind 1: x walls, moving along z; 2: z walls), from gapS0 to
+    // gapAlong along it, moving gapSign.
     gapVols: null, gapFace: null, gapLastT: null, gapPend: '', gapPendT: 0, clock: 0,
     gapOn: 0, gapKind: 0, gapS0: 0, gapAlong: 0, gapSign: 1, gapCd: 0,
     gapSeq: 0, gapNote: '',
@@ -2328,19 +2332,24 @@ export function stepDetector(d, sample, dt) {
     }
   } else if (d.diveCd > 0) d.diveCd -= step;
 
-  // Gap. Authored volumes first; the generic rule only away from them.
+  // Gap passes. Authored volumes first; the generic rule only away from
+  // them. A gap is not a trick: nothing is returned or scored. gapHeld is
+  // the step a pass resolves (out of a rotation, or after one ends): it
+  // holds Proximity off for that step and starts the gap cooldown, as when
+  // a gap scored, so every other trick fires where it did. (A land or a
+  // disarm on that step is returned now; a scored gap used to hide it.)
   d.clock += step;
   const passed = authoredGapStep(d, sample.gaps, d.gx, d.gy, d.gz, wx, wy, wz);
   let inAuthored = 0;
   if (d.gapFace) for (let i = 0; i < d.gapFace.length; i++) if (d.gapFace[i] !== -1) { inAuthored = 1; break; }
   if (!inAuthored) inAuthored = nearAuthored(sample.gaps, wx, wy, wz, GAP_NEAR_M * ws);
+  let gapHeld = 0;
   if (passed) {
-    const why = (BY_ID.gap ? BY_ID.gap.name : 'Gap') + '  Beginner  ' + (BY_ID.gap ? BY_ID.gap.points : 125) + '  ' + passed.name;
-    if (!hit && !d.live && armed) { hit = 'gap'; d.lastId = 'gap'; d.lastWhy = why; d.gapCd = 1.0; }
-    else if (armed) { d.gapPend = why; d.gapPendT = d.clock; }
+    if (!hit && !d.live && armed) { gapHeld = 1; d.gapCd = 1.0; }
+    else if (armed) { d.gapPend = passed.name || 'gap'; d.gapPendT = d.clock; }
   }
-  if (!hit && !d.live && d.gapPend && armed) {
-    if (d.clock - d.gapPendT <= 1.0) { hit = 'gap'; d.lastId = 'gap'; d.lastWhy = d.gapPend; d.gapCd = 1.0; }
+  if (!hit && !gapHeld && !d.live && d.gapPend && armed) {
+    if (d.clock - d.gapPendT <= 1.0) { gapHeld = 1; d.gapCd = 1.0; }
     d.gapPend = '';
   }
   {
@@ -2349,7 +2358,7 @@ export function stepDetector(d, sample, dt) {
     const sideMax = GAP_SIDE_K * (sample.frameW > 0 ? sample.frameW : FRAME_W_M) * ws;
     const k = !d.live && armed && !inAuthored ? genericGapKind(d.clr, svx, svz, sideMax) : 0;
     if (inAuthored && d.gapOn) {
-      // An authored gap took over: it scores, not the generic one.
+      // An authored gap took over: its pass counts, not the generic one.
       d.gapOn = 0;
     } else if (k) {
       const along = k === 1 ? wz : wx;
@@ -2367,18 +2376,14 @@ export function stepDetector(d, sample, dt) {
       d.gapSeq++;
       d.gapNote = ok ? 'through an opening (' + (depth / ws).toFixed(2) + ' m between walls)'
         : 'skimmed an opening (' + (depth / ws).toFixed(2) + ' m' + (onward ? '' : ', turned back') + ')';
-      if (ok && !hit && d.gapCd <= 0) {
-        hit = 'gap'; d.gapCd = 1.0; d.lastId = 'gap';
-        d.lastWhy = (BY_ID.gap ? BY_ID.gap.name : 'Gap') + '  Beginner  ' + (BY_ID.gap ? BY_ID.gap.points : 125)
-          + '  walls within ' + (sideMax / ws).toFixed(2) + ' m, ' + (depth / ws).toFixed(2) + ' m through';
-      }
+      if (ok && !hit && !gapHeld && d.gapCd <= 0) { gapHeld = 1; d.gapCd = 1.0; }
       d.gapOn = 0;
     }
     if (d.gapCd > 0) d.gapCd -= step;
   }
   d.gx = wx; d.gy = wy; d.gz = wz;
 
-  if (!hit && !d.live && armed && d.proxCd <= 0 && !d.gapOn && !inAuthored) {
+  if (!hit && !gapHeld && !d.live && armed && d.proxCd <= 0 && !d.gapOn && !inAuthored) {
     const nearM = d.clr.near / ws;
     const close = nearM < PROX_M && speed > PROX_SPD && !contact && (sample.clearance == null || sample.clearance > 0.12);
     if (close) {

@@ -101,7 +101,7 @@ function fly(phases, opts) {
     t += dt; phaseT += dt;
     if (ph.t != null && phaseT >= ph.t && phaseI < phases.length - 1) { phaseI++; phaseT = 0; }
   }
-  return { hits, last: d.lastId, why: d.lastWhy, feat: d.lastFeat, view: featView(d.lastFeat), pole: d.lastPole };
+  return { hits, last: d.lastId, why: d.lastWhy, feat: d.lastFeat, view: featView(d.lastFeat), pole: d.lastPole, gapSeq: d.gapSeq, gapNote: d.gapNote };
 }
 
 // A pilot's yaw about the world vertical at w rad/s, as body rates for the
@@ -334,11 +334,13 @@ const LIBRARY = [
   { id: 'dive', name: 'dive-std', phases: [{ t: 0.85, pitch: 1.2, thr: 0.05 }], opts: { z0: 16, vx: 9, vz: -12, maxT: 1.2, clearance: 10, allowFloor: true } },
   { id: 'dive', name: 'dive-fast', phases: [{ t: 0.7, pitch: 1.4, thr: 0.04 }], opts: { z0: 18, vx: 8, vz: -13, maxT: 1.1, clearance: 12, allowFloor: true } },
   { id: 'dive', name: 'dive-steep', phases: [{ t: 0.9, pitch: 1.0, thr: 0.06 }], opts: { z0: 17, vx: 10, vz: -11, maxT: 1.25, clearance: 11, allowFloor: true } },
-  { id: 'gap', name: 'gap-std', phases: [{ t: 2.3, pitch: 0, thr: 0.36 }], opts: { z0: 0.9, vx: 8, maxT: 2.3, colliders: GAP_COLS, gaps: GAP_VOLS, clearance: 0.9 } },
-  { id: 'gap', name: 'gap-fast', phases: [{ t: 1.9, pitch: 0, thr: 0.36 }], opts: { z0: 0.85, vx: 10, maxT: 1.9, colliders: GAP_COLS, gaps: GAP_VOLS, clearance: 0.85 } },
-  { id: 'gap', name: 'gap-slow', phases: [{ t: 2.8, pitch: 0, thr: 0.36 }], opts: { z0: 0.95, vx: 6.5, maxT: 2.8, colliders: GAP_COLS, gaps: GAP_VOLS, clearance: 0.95 } },
+  // Through a gap: not a trick (no label), but the detector tracks the pass
+  // (pass: the start of its note) for the phase matcher and the Maverick.
+  { id: null, pass: 'through test gap', name: 'gap-std', phases: [{ t: 2.3, pitch: 0, thr: 0.36 }], opts: { z0: 0.9, vx: 8, maxT: 2.3, colliders: GAP_COLS, gaps: GAP_VOLS, clearance: 0.9 } },
+  { id: null, pass: 'through test gap', name: 'gap-fast', phases: [{ t: 1.9, pitch: 0, thr: 0.36 }], opts: { z0: 0.85, vx: 10, maxT: 1.9, colliders: GAP_COLS, gaps: GAP_VOLS, clearance: 0.85 } },
+  { id: null, pass: 'through test gap', name: 'gap-slow', phases: [{ t: 2.8, pitch: 0, thr: 0.36 }], opts: { z0: 0.95, vx: 6.5, maxT: 2.8, colliders: GAP_COLS, gaps: GAP_VOLS, clearance: 0.95 } },
   // No authored volume: a slot narrow enough for the generic rule.
-  { id: 'gap', name: 'gap-generic-slot', phases: [{ t: 2.4, pitch: 0, thr: 0.36 }], opts: { z0: 0.9, vx: 6, maxT: 2.4, colliders: SLOT_COLS, clearance: 0.9 } },
+  { id: null, pass: 'through an opening', name: 'gap-generic-slot', phases: [{ t: 2.4, pitch: 0, thr: 0.36 }], opts: { z0: 0.9, vx: 6, maxT: 2.4, colliders: SLOT_COLS, clearance: 0.9 } },
   { id: 'prox', name: 'prox-std', phases: [{ t: 0.9, pitch: 0, thr: 0.8 }], opts: { z0: 1.2, vx: 12, maxT: 1.2, colliders: WALL_COLS, clearance: 1.2 } },
   { id: 'prox', name: 'prox-fast', phases: [{ t: 0.8, pitch: 0, thr: 0.9 }], opts: { z0: 1.3, vx: 14, maxT: 1.1, colliders: WALL_COLS, clearance: 1.3 } },
   { id: 'prox', name: 'prox-low', phases: [{ t: 0.95, pitch: 0, thr: 0.78 }], opts: { z0: 0.8, vx: 11, maxT: 1.25, colliders: WALL_COLS, clearance: 0.8 } },
@@ -378,13 +380,18 @@ test('new storage key only; never writes old ryfly* keys', () => {
 
 test('trick list has the requested maneuvers and frozen point values', () => {
   const ids = TRICK_LIST.map((t) => t.id);
-  for (const id of ['flip', 'roll', 'yawspin', 'powerloop', 'sideloop', 'splits', 'immelmann', 'matty', 'halfmatty', 'maverick', 'halfmavvy', 'trippy', 'ham', 'dive', 'gap', 'prox', 'cradle', 'juicyflick', 'snapback', 'rubik', 'cubik', 'barani']) {
+  for (const id of ['flip', 'roll', 'yawspin', 'powerloop', 'sideloop', 'splits', 'immelmann', 'matty', 'halfmatty', 'maverick', 'halfmavvy', 'trippy', 'ham', 'dive', 'prox', 'cradle', 'juicyflick', 'snapback', 'rubik', 'cubik', 'barani']) {
     assert.ok(ids.includes(id), 'missing ' + id);
     assert.ok(TRICK_BY_ID[id].points > 0);
     assert.ok(TRICK_BY_ID[id].name);
     assert.ok(TRICK_BY_ID[id].tier);
   }
   assert.equal(ids.includes('hang'), false);
+  // A gap is not a trick (Gap Hunt is what answers flying one).
+  assert.equal(ids.includes('gap'), false);
+  assert.equal(TRICK_BY_ID.gap, undefined);
+  assert.equal(trickPoints('gap', false), 0);
+  assert.equal(/\bGap\b/.test(trickLineupText()), false);
   assert.equal(TRICK_BY_ID.flip.points, 50);
   assert.equal(TRICK_BY_ID.roll.points, 50);
   assert.equal(TRICK_BY_ID.yawspin.points, 50);
@@ -412,7 +419,6 @@ test('trick list has the requested maneuvers and frozen point values', () => {
   assert.equal(TRICK_BY_ID.halfmavvy.points, 400);
   assert.ok(TRICK_BY_ID.halfmavvy.points > TRICK_BY_ID.maverick.points && TRICK_BY_ID.halfmavvy.points > TRICK_BY_ID.matty.points);
   assert.equal(TRICK_BY_ID.dive.points, 100);
-  assert.equal(TRICK_BY_ID.gap.points, 125);
   assert.equal(TRICK_BY_ID.prox.points, 150);
   assert.equal(TRICK_BY_ID.cradle.points, 150);
   assert.equal(TRICK_BY_ID.juicyflick.points, 200);
@@ -438,9 +444,12 @@ test('docs/sim-tricks.md defines each trick and the confused pairs', () => {
   assert.ok(docs.includes('# QuadMath freestyle trick definitions'));
   assert.ok(docs.includes("Tyrantt's Pro Whooper"));
   assert.ok(docs.includes('prowhooper.com'));
-  for (const id of ['powerloop', 'matty', 'halfmatty', 'maverick', 'halfmavvy', 'immelmann', 'trippy', 'ham', 'sideloop', 'splits', 'juicyflick', 'snapback', 'cradle', 'rubik', 'cubik', 'barani', 'gap']) {
+  for (const id of ['powerloop', 'matty', 'halfmatty', 'maverick', 'halfmavvy', 'immelmann', 'trippy', 'ham', 'sideloop', 'splits', 'juicyflick', 'snapback', 'cradle', 'rubik', 'cubik', 'barani']) {
     assert.ok(docs.includes('`' + id + '`'), 'doc missing ' + id);
   }
+  // Gap is no trick: no row in the table, and the passes it still tracks.
+  assert.equal(docs.includes('| `gap` |'), false);
+  assert.ok(docs.includes('Gap passes (not a trick)'));
   assert.ok(docs.includes('Powerloop vs Matty'));
   assert.ok(docs.includes('Matty vs Half Matty'));
   assert.ok(docs.includes('Split-S vs Half Matty'));
@@ -925,9 +934,12 @@ test('labeled QuadPhysics library: one label per maneuver, zero doubles', () => 
   for (const c of LIBRARY) {
     const r = fly(c.phases, c.opts);
     const got = labels(r);
-    rows.push({ name: c.name, want: c.id, got: got.join(',') || 'none' });
-    if (got.length !== 1 || got[0] !== c.id) {
-      confuse.push(c.name + ' want=' + c.id + ' got=[' + got.join(',') + '] why=' + (r.why || ''));
+    const want = c.id ? [c.id] : [];
+    rows.push({ name: c.name, want: c.id || 'none', got: got.join(',') || 'none' });
+    if (got.join(',') !== want.join(',')) {
+      confuse.push(c.name + ' want=' + (c.id || 'none') + ' got=[' + got.join(',') + '] why=' + (r.why || ''));
+    } else if (c.pass && !(r.gapSeq > 0 && r.gapNote.startsWith(c.pass))) {
+      confuse.push(c.name + ' want a pass "' + c.pass + '", the last: ' + (r.gapNote || 'none'));
     }
   }
   assert.equal(confuse.length, 0, 'confusion:\n' + confuse.join('\n') + '\n' + rows.map((x) => x.name + '→' + x.got).join('\n'));
@@ -1057,7 +1069,7 @@ async function flyBf(phases, opts) {
     t += 0.004; phaseT += 0.004;
     if (ph.t != null && phaseT >= ph.t - 1e-9 && phaseI < phases.length - 1) { phaseI++; phaseT = 0; }
   }
-  return { hits, why: d.lastWhy, dir: d.lastDir, samples, feat: d.lastFeat, phases: d.lastPhases, gapBack: d.lastGapBack, merge: d.lastMerge, ends };
+  return { hits, why: d.lastWhy, dir: d.lastDir, samples, feat: d.lastFeat, phases: d.lastPhases, gapBack: d.lastGapBack, merge: d.lastMerge, ends, gapSeq: d.gapSeq, gapNote: d.gapNote };
 }
 
 // One flight per trick type: the library's own where it flies the same on the
@@ -1096,8 +1108,13 @@ test('bf core: every trick type, flown on sim-core and sampled every 4 ms, is it
     assert.ok(c, 'a BF_LIBRARY name is missing from LIBRARY');
     const r = await flyBf(c.phases, c.opts);
     assert.ok(r.samples > c.opts.maxT * 240, c.name + ': sampled every 4 ms (' + r.samples + ')');
-    if (r.hits.length !== 1 || r.hits[0] !== c.id) {
-      confuse.push(c.name + ' want=' + c.id + ' got=[' + r.hits.join(',') + '] why=' + (r.why || '').replace(/\n/g, ' '));
+    const want = c.id ? [c.id] : [];
+    if (r.hits.join(',') !== want.join(',')) {
+      confuse.push(c.name + ' want=' + (c.id || 'none') + ' got=[' + r.hits.join(',') + '] why=' + (r.why || '').replace(/\n/g, ' '));
+      continue;
+    }
+    if (c.pass && !(r.gapSeq > 0 && r.gapNote.startsWith(c.pass))) {
+      confuse.push(c.name + ' want a pass "' + c.pass + '", the last: ' + (r.gapNote || 'none'));
       continue;
     }
     if (c.name === 'flip-front') assert.equal(r.dir, 1, 'a front flip says front');
@@ -1107,7 +1124,7 @@ test('bf core: every trick type, flown on sim-core and sampled every 4 ms, is it
   assert.equal(confuse.length, 0, 'bf core confusion:\n' + confuse.join('\n'));
   // Trippy and Barani fly on the bf core in the Rig, in the tests below.
   for (const id of new Set(LIBRARY.map((c) => c.id))) {
-    if (id !== 'trippy' && id !== 'barani') assert.ok(flown.has(id), id + ' flown on the bf core');
+    if (id && id !== 'trippy' && id !== 'barani') assert.ok(flown.has(id), id + ' flown on the bf core');
   }
 });
 
@@ -1166,7 +1183,7 @@ test('bf core, Maverick: a pull back of 120-225 climbing 1 m, forward 60 or more
   assert.equal(open.phases.maverick.score, 0);
   // In through a gap before the pull-up and back out of it: the bonus.
   const g = await flyBf(BF_MAVERICK.phases, { ...BF_MAVERICK.opts, x0: -2, gaps: MAV_GAP });
-  assert.equal(g.hits.filter((h) => h === 'maverick').length, 1, g.why);
+  assert.deepEqual(g.hits, ['maverick'], 'one Maverick, and no Gap: a gap is not a trick (' + g.why + ')');
   assert.equal(g.gapBack, 1, 'back out through the gap it came in by');
   assert.equal(g.phases.maverick.ms.near, 1, 'through the gap: an object passed');
   assert.equal(scoreTrick('maverick', 0, 1, 1, { bonus: MAV_GAP_MUL }), Math.round(TRICK_BY_ID.maverick.points * MAV_GAP_MUL));
@@ -1468,7 +1485,9 @@ async function flyRig(script, o) {
   const sample = { ws: WS, colliders: rig.colliders, gaps: rig.gaps, frameW: AIR65_FRAME_W };
   const hits = [];
   const whys = [];
+  const passes = [];
   let first = true;
+  let gapSeq = 0;
   const onSample = () => {
     const s = core.tickState(st);
     const p = s.position, v = s.velocity, q = s.quaternion, w = s.omega;
@@ -1481,6 +1500,7 @@ async function flyRig(script, o) {
     if (first) { resetDetector(d, sample); d.lockout = 0; first = false; return; }
     const ev = stepDetector(d, sample, 0.004);
     if (ev && TRICK_BY_ID[ev]) { hits.push(ev); whys.push(d.lastWhy.replace(/\n/g, ' ')); }
+    if (d.gapSeq !== gapSeq) { passes.push(d.gapNote); gapSeq = d.gapSeq; }
   };
   let t = 0;
   while (t < o.maxT) {
@@ -1489,7 +1509,7 @@ async function flyRig(script, o) {
     t += 0.004;
   }
   const hitsAfter = events.filter((e) => e.kind === 'contact' && e.tUs > fromUs);
-  return { hits, whys, contacts: hitsAfter.length, pole: d.lastPole, feat: d.lastFeat };
+  return { hits, whys, passes, contacts: hitsAfter.length, pole: d.lastPole, feat: d.lastFeat };
 }
 
 const clampTo = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -1570,7 +1590,7 @@ test('bf core in the Rig: a full orbit of the spin pole is a Trippy with the pol
   assert.ok(bar.feat.upEnd > 0.9, 'ends upright');
 });
 
-test('bf core in the Rig: authored gaps fire through the crate slots; the loft overhang and an open edge do not', async () => {
+test('bf core in the Rig: the detector tracks a pass through each crate slot (no trick: a gap scores nothing); the loft overhang and an open edge are no passes', async () => {
   // Level in angle mode, holding the height, sticks centred: the start speed carries it.
   const hold = (z0) => (t, s) => ({ r: 0, p: 0, y: 0, t: clampTo(0.37 + 0.12 * (z0 - s.position.z) - 0.08 * s.velocity.z, 0, 1) });
   const facePlusZ = { x: 0, y: 0, z: 1, w: 0 };                      // nose along scene +z
@@ -1578,17 +1598,19 @@ test('bf core in the Rig: authored gaps fire through the crate slots; the loft o
   // Along x = 9 m through the three crate walls (slots 25, 21, 18 cm).
   const crates = await flyRig(hold(1.0), { mode: 'angle', pos: { x: 2.0, y: -9.0, z: 1.0 }, vel: { x: -3.2, y: 0, z: 0 }, q: facePlusZ, maxT: 2.0 });
   assert.equal(crates.contacts, 0, 'through clean');
-  assert.deepEqual(crates.hits, ['gap', 'gap', 'gap'], crates.whys.join(' | '));
-  assert.deepEqual(crates.whys.map((w) => w.replace(/^.*125  /, '')), ['crate slot 1 (25 cm)', 'crate slot 2 (21 cm)', 'crate slot 3 (18 cm)']);
+  assert.deepEqual(crates.hits, [], crates.whys.join(' | '));
+  assert.deepEqual(crates.passes, ['through crate slot 1 (25 cm)', 'through crate slot 2 (21 cm)', 'through crate slot 3 (18 cm)']);
   // Under the loft's slab (2.7 m) at 1.5 m and out past its edge at x -7:
   // the old rule (anything overhead within 4 m) scored this as a Gap.
   const loft = await flyRig(hold(1.5), { mode: 'angle', pos: { x: 1.0, y: 9.6, z: 1.5 }, vel: { x: 0, y: -4.5, z: 0 }, q: facePlusX, maxT: 2.0 });
   assert.equal(loft.contacts, 0);
   assert.deepEqual(loft.hits, [], loft.whys.join(' | '));
+  assert.equal(loft.passes.some((p) => p.startsWith('through')), false, loft.passes.join(' | '));
   // Past the crate walls' open end, 0.2 m off their -x face: one side only.
   const edge = await flyRig(hold(1.0), { mode: 'angle', pos: { x: 2.0, y: -7.5, z: 1.0 }, vel: { x: -3.2, y: 0, z: 0 }, q: facePlusZ, maxT: 2.0 });
   assert.equal(edge.contacts, 0);
   assert.deepEqual(edge.hits, [], edge.whys.join(' | '));
+  assert.equal(edge.passes.some((p) => p.startsWith('through')), false, edge.passes.join(' | '));
 });
 
 test('the Rig, House, Warehouse (depot and the archived one) and Bando gap volumes are openings: clear of every collider, walled on a side', () => {
@@ -1599,6 +1621,9 @@ test('the Rig, House, Warehouse (depot and the archived one) and Bando gap volum
     assert.ok(built.gaps.length > 0, id + ' has gaps');
     for (const g of built.gaps) {
       assert.ok(['x', 'y', 'z'].includes(g.axis), g.name);
+      assert.ok(g.name, id + ': a gap volume has a name');
+      // The debug log tells a generic pass by ' an opening ' in its note.
+      assert.doesNotMatch(g.name, / an opening /, id + ': ' + g.name);
       let walled = 0;
       for (const c of built.colliders) {
         const ox = Math.min(g.max.x, c.max.x) - Math.max(g.min.x, c.min.x);
@@ -1626,6 +1651,56 @@ test('the Rig, House, Warehouse (depot and the archived one) and Bando gap volum
   assert.ok(mapGaps('bando').some((g) => g.name === 'shaft door, ground') && mapGaps('bando').some((g) => g.name === 'floor hole, second floor, east')
     && mapGaps('bando').some((g) => g.name === 'parapet gap') && mapGaps('bando').some((g) => g.name === 'under the leaning slab'));
   assert.deepEqual(mapGaps('city'), []);
+});
+
+// A gap is not a trick, but the step a pass resolves still holds Proximity
+// off, as when the Gap scored there: a roll flown through a gap volume
+// (the pass waits for the roll's end), out of the roll beside a wall at
+// 9 m/s. The roll scores on step S; the pass resolves on S + 1 (gap
+// cooldown set, Proximity held: proxT stays 0); Proximity starts counting
+// on S + 2 and fires later, once. Without the hold it would start a step
+// early.
+test('a gap pass scores nothing and still holds Proximity off for the step it resolves', () => {
+  const HOLD_GAP = [{ name: 'hold gap', axis: 'x', min: { x: 8, y: 0, z: -1 }, max: { x: 9, y: 7, z: 1 } }];
+  const HOLD_WALL = [{ min: { x: 20, y: 0, z: 1.0 }, max: { x: 60, y: 7, z: 3 } }];
+  const d = makeDetector();
+  const v = 9, dt = 0.004;
+  let q = { x: 0, y: 0, z: 0, w: 1 };
+  const steps = [];
+  const sample = (t, wr) => {
+    const x = v * t * WS;
+    return {
+      qx: q.x, qy: q.y, qz: q.z, qw: q.w, ox: wr, oy: 0, oz: 0,
+      wx: x, wy: 3.5, wz: 0, alt: 1, vx: v, vy: 0, vz: 0, speed: v,
+      clearance: 0.29, armed: true, throttle: 0.5, sr: wr / 12, sp: 0, sy: 0,
+      colliders: HOLD_WALL, gaps: HOLD_GAP, frameW: 0.09, ws: WS,
+    };
+  };
+  resetDetector(d, sample(0, 0));
+  d.lockout = 0;
+  for (let i = 1; i * dt <= 2.2; i++) {
+    const t = i * dt;
+    const wr = t >= 0.1 && t < 0.62 ? 12 : 0;
+    if (wr) {
+      const h = wr * dt / 2;
+      const r = { x: q.w * Math.sin(h) + q.x * Math.cos(h), y: q.y * Math.cos(h) + q.z * Math.sin(h), z: q.z * Math.cos(h) - q.y * Math.sin(h), w: q.w * Math.cos(h) - q.x * Math.sin(h) };
+      const n = Math.hypot(r.x, r.y, r.z, r.w);
+      q = { x: r.x / n, y: r.y / n, z: r.z / n, w: r.w / n };
+    }
+    const ev = stepDetector(d, sample(t, wr), dt);
+    steps.push({ ev, proxT: d.proxT, gapCd: d.gapCd, pend: d.gapPend, note: d.gapNote, seq: d.gapSeq });
+  }
+  const evs = steps.map((s) => s.ev).filter(Boolean);
+  assert.deepEqual(evs, ['roll', 'prox'], 'a roll, then Proximity by the wall; no Gap');
+  const S = steps.findIndex((s) => s.ev === 'roll');
+  assert.equal(steps[S].seq, 1);
+  assert.equal(steps[S].note, 'through hold gap', 'the pass was tracked');
+  assert.equal(steps[S].pend, 'hold gap', 'the pass waits for the roll to end');
+  assert.equal(steps[S].proxT, 0);
+  assert.equal(steps[S + 1].pend, '', 'the pass resolves the step after the roll');
+  assert.ok(Math.abs(steps[S + 1].gapCd - (1 - dt)) < 1e-9, 'the gap cooldown starts: ' + steps[S + 1].gapCd);
+  assert.equal(steps[S + 1].proxT, 0, 'Proximity held for the step the pass resolves');
+  assert.ok(Math.abs(steps[S + 2].proxT - dt) < 1e-9, 'Proximity counts from the next step: ' + steps[S + 2].proxT);
 });
 
 test('Ryan bug: a power loop is only Power Loop, never also Matty', () => {

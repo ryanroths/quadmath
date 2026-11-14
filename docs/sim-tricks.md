@@ -9,8 +9,9 @@ file is not their text, and we do not vendor their JSON.
 The detector does **not** run independent overlapping triggers. It segments a
 rotation into one maneuver, then classifies it as **exactly one** label (most
 specific wins). Atomic Flip / Roll / Yaw Spin only score when the maneuver is
-not a bigger named trick. Spatial tricks (Dive, Gap, Proximity) only score when
-no rotation segment is open.
+not a bigger named trick. Spatial tricks (Dive, Proximity) only score when
+no rotation segment is open. Flying through a gap is not a trick and scores
+nothing (Gap Hunt answers it; see "Gap passes (not a trick)" below).
 
 The page steps the detector on the **sim clock**: every 4 ms of sim time the
 core hands it the latest physics tick (sim-core-adapter.js `SAMPLE_US`,
@@ -44,7 +45,6 @@ site lists both 150 and 50).
 | `immelmann` | Immelmann | Beginner | 100 | 100 | Phase matcher, the Split-S's mirror: **back pitch 180 ± 45° climbing ≥1 m**, then a **roll of 180 ± 45°**, ending **upright**, the **heading reversed** (180 ± 45°), **out higher** than in. |
 | `cradle` | Cradle | Beginner | 150 | 150 | Pass an object, pitch back to keep it in view, level out **flying backward** clear of it. Not a flip. |
 | `dive` | Building Dive | Beginner | 100 | 100 | Climb or start high, cut, nose down, fast altitude dump, level near the ground. |
-| `gap` | Gap | Beginner | 125 | 125 | **Through an opening, in one face and out the other.** On the Rig, the House, the Warehouse, the Bando and the archived Warehouse, the map's authored gap volumes (crate slots, pipe and riser slits, tunnel, loft hole; bookshelf gap, under the patio table; the roll-up doors, the chain curtain's parting, under the forks, the rack gap and the crossing gap through both runs, the trusses' gaps, the hatch, between the cable trays and under a truss over them, through the container, through the scissor lift, the cargo net's hole, every tyre's bore; every window frame, floor hole, stair well, shaft door and the shaft's top, rebar gap, door opening, the parapet gap, under the leaning slab, the first floor's collapse and the van; rack shelves, the gap, the Ion hoop). Elsewhere a generic rule: walls on both sides within 2.5 frame widths of the path, passed through at least 10 cm; a floor or ceiling is never a side. 125 = TPW medium (12 in) gap. |
 | `prox` | Proximity | Beginner | 150 | 150 | Wall near-miss at speed. Sim-only spatial; TPW Wall Ride/Tap need a knife-edge roll or tap we do not require. |
 | `powerloop` | Powerloop | Novice | 200 | 200 | Phase matcher: **≥300° of pitch within any 3.5 s** (its own window: a loop is slower than a flip), little net roll/yaw, on a **path that loops**: it climbs **≥1.5 m** above the entry, after its top comes back down to **at most 1.5 m above the entry**, and the velocity turns **≥270°** in the vertical plane of the entry heading, the way the pitch turns. Otherwise a flip is a Flip. Loops are counted over the whole turn of pitch: **≥600° is a Double Powerloop**, then one more loop per further 360° (Triple from 960°); each loop scores the 200 points. |
 | `sideloop` | Side Loop | Novice | 200 | 225 | 90° **yaw** under the object, then a **roll-driven** vertical loop (roll + some yaw) over inverted, cut, reapply, level under. Carves a loop **sideways**, not a pitch Powerloop. Indoor 225 = TPW Under/Over. |
@@ -246,14 +246,52 @@ Mirrors: the same two turns in the other order and the other way up.
   pitches back, yaws 180°, pitches forward: a Maverick's pitch, with a twist.
   Barani.
 
-### Gap: authored first
+### Gap passes (not a trick)
 
-- The Rig, the House, the Warehouse and the Bando carry their intentional gaps as
-  volumes (sim-maps.js `mapGaps`). A pass goes in through one face across
-  the volume's axis and out through the opposite face: flown through. In
-  or out through a side is a skim and does not score. A pass during a
-  rotation scores when the rotation ends (within 1 s). One volume scores
-  again only after 1 s.
+A gap is **not a trick**: no callout, no points, no row in the list above,
+nothing in the combo, the streak or the repeat count. Gap Hunt
+(`sim-gap-hunt.js`, the House, the Warehouse and the Bando) is the only thing
+that answers flying a gap. Until 2026-11-14 `gap` scored 125 (TPW medium
+gap); it was taken out because a pass is the hunt's, not a freestyle trick.
+
+The detector still **tracks every pass**, exactly as it did when it scored,
+because tricks read them:
+
+- the Maverick's drop back **under or through an object**: a pass in its
+  push and glide back counts as near an object the whole time;
+- the Maverick's **1.25×** for back out through the gap it came in by;
+- compound tricks across segments: the chain keeps its own passes, so a
+  Maverick split at a pause still sees them;
+- the phase matcher's per-phase "under / through" measurement counts a
+  pass too, though no trick asks for it today (the Matty and Half Matty
+  ask for an object **over** them, the Half Mavvy for one **above** it:
+  colliders, not gaps);
+- Proximity: it waits while the path is in or near a gap (between generic
+  walls, in an authored volume or 0.3 m from one), and for the step a pass
+  resolves (out of the gap, or when a rotation it was passed in ends,
+  within 1 s; one volume again only after 1 s; generic, 1 s apart).
+
+One thing differs from when it scored: a landing or a disarm on the step a
+pass resolves now banks the combo (a scored Gap used to hide it, and the
+combo banked when it timed out).
+
+What counts as a pass:
+
+- The Rig, the House, the Warehouse, the Bando and the archived Warehouse
+  carry their intentional gaps as volumes (sim-maps.js `mapGaps`): crate
+  slots, pipe and riser slits, tunnel, loft hole; bookshelf gap, under the
+  patio table and the backyard's (sim-house-yard.js: the windows, the
+  doggy door, the slide, the pool ladder, the trampoline, the swings, the
+  citrus tree, the shed, the dome, the monkey bars); the roll-up doors, the
+  chain curtain's parting, under the forks, the rack gap and the crossing
+  gap through both runs, the trusses' gaps, the hatch, between the cable
+  trays and under a truss over them, through the container, through the
+  scissor lift, the cargo net's hole, every tyre's bore; every window
+  frame, floor hole, stair well, shaft door and the shaft's top, rebar gap,
+  door opening, the parapet gap, under the leaning slab, the first floor's
+  collapse and the van; rack shelves, the gap, the Ion hoop. A pass goes in
+  through one face across the volume's axis and out through the opposite
+  face: flown through. In or out through a side is a skim.
 - Generic fallback, away from authored volumes (and 0.3 m clear of them):
   walls on both sides of the path, along the axis it moves most along,
   each within 2.5 frame widths of it (about 0.2 m on the Air65), passed
@@ -269,7 +307,9 @@ Mirrors: the same two turns in the other order and the other way up.
 4. Paste it to Ryan / an issue. Replay is `kind: quadmath-trick-trace`.
 5. With `?tricks=debug`, the overlay's **Copy trick log** button copies every
    attempt it logged (one JSON line each, `kind: quadmath-trick-attempt`):
-   every candidate's terms, the gap passes and skims, the dives.
+   every candidate's terms, the gap passes and skims (type `gap`, never a
+   result: not a trick), the dives. The overlay shows the gap passes on a
+   line of their own under the candidates, marked "not a trick".
 
 ### Side Loop vs Powerloop / Roll / Trippy
 
@@ -364,6 +404,8 @@ Actual/KISS curves from `sim-rates.js`).
 
 **Skipped** (and why):
 
+- **Gap** — scored until 2026-11-14, now not a trick: Gap Hunt answers
+  flying a gap. The passes are still tracked (above).
 - **Inverted Hang** — not a TPW trick.
 - **Barani / Power Swap** — Barani requires horizon or back-wall in view
   before the inverted yaw; without a camera feature they collapse into

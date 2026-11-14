@@ -26,7 +26,7 @@ import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
-} from './sim-tricks.js?v=27f3a73d68ec';
+} from './sim-tricks.js?v=7821db988ef3';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
@@ -54,8 +54,9 @@ export const GAP = Object.freeze({ sideK: GAP_SIDE_K, minDepth: GAP_MIN_DEPTH_M,
 export const SEG = Object.freeze({ divingThr: 0.18, divingRate: 1.55, divingVz: -3.8, contact: 0.08 });
 
 // The ten the overlay spells out (the brief's list). Inverted yaw spin is
-// Ham Spin ('ham'); dive and gap are stepDetector's state machines.
-export const FOCUS = Object.freeze(['flip', 'roll', 'powerloop', 'splits', 'matty', 'trippy', 'juicyflick', 'ham', 'barani', 'dive', 'gap']);
+// Ham Spin ('ham'); dive is stepDetector's state machine. Gap passes are not
+// a trick: the overlay shows them on a line of their own, after these.
+export const FOCUS = Object.freeze(['flip', 'roll', 'powerloop', 'splits', 'matty', 'trippy', 'juicyflick', 'ham', 'barani', 'dive']);
 
 const ge = (src, a, fade) => ({ op: '>=', src, a, fade });
 const le = (src, a, fade) => ({ op: '<=', src, a, fade });
@@ -542,7 +543,9 @@ export function gapState(det, frameW, ws) {
 //   between steps);
 // - type 'dive': a dive the detector armed (fired or not), or a descent past
 //   the detector's own "diving" vz (-3.8 m/s) it never armed, with why;
-// - type 'gap': a pass through a gap zone at speed (fired or not).
+// - type 'gap': a pass through, or a skim of, a gap the detector tracks
+//   (authored or generic). Not a trick: it never has a result. The phase
+//   matcher's "through" and the Maverick's way back out use the passes.
 export function createTrickObserver(det, opts) {
   const o = opts || {};
   const emit = o.onAttempt || function () {};
@@ -741,17 +744,12 @@ export function createTrickObserver(det, opts) {
       }
     }
 
-    // Gaps: each pass the detector resolves (gapSeq), and each that scores.
-    if (ev === 'gap') {
-      const rec = base('gap', t);
-      rec.result = 'gap';
-      rec.reason = det.lastWhy.replace(/^Gap\s+Beginner\s+\d+\s+/, '');
-      rec.how = /walls within/.test(det.lastWhy) ? 'generic' : 'authored';
-      emit(rec);
-    } else if (det.gapSeq !== gapSeq) {
+    // Gaps: each pass or skim the detector resolves (gapSeq). Not a trick.
+    if (det.gapSeq !== gapSeq) {
       const rec = base('gap', t);
       rec.result = null;
-      rec.reason = det.gapNote + (/^through/.test(det.gapNote) ? ' (not scored: rotating, cooldown or a repeat)' : '');
+      rec.reason = det.gapNote;
+      rec.how = / an opening /.test(det.gapNote) ? 'generic' : 'authored';
       emit(rec);
     }
     gapSeq = det.gapSeq;
@@ -912,19 +910,20 @@ export function createTrickDebug(opts) {
     return '<span class="' + (lastDive && lastDive.result && t - lastDive.t < 6 ? 'ok' : 'no') + '">' + (lastDive && lastDive.result && t - lastDive.t < 6 ? '✓' : '✗') + ' ' + pad('Dive', 18) + pad('—', 5) + '</span> ' + s;
   }
 
+  // Gap passes: not a trick, no points. What the detector last resolved, or
+  // where it stands now (the phase matcher and the Maverick read the passes).
   function gapLine(t) {
     const g = obs.view.gap;
     let s;
-    if (lastGap && t - lastGap.t < 6) s = (lastGap.result ? '<span class="ok">✓ fired</span> ' : '<span class="no">✗</span> ') + esc(lastGap.reason) + '  <span class="d">' + (t - lastGap.t).toFixed(1) + 's ago</span>';
+    if (lastGap && t - lastGap.t < 6) s = esc(lastGap.reason) + '  <span class="d">' + (t - lastGap.t).toFixed(1) + 's ago</span>';
     else if (!g) s = '<span class="d">no step yet</span>';
-    else if (g.authored) s = '<span class="near">in ' + esc(g.authored) + '</span>' + (g.inBySide ? ' <span class="d">(came in by a side: a skim)</span>' : ' <span class="d">out the far face scores</span>');
+    else if (g.authored) s = '<span class="near">in ' + esc(g.authored) + '</span>' + (g.inBySide ? ' <span class="d">(came in by a side: a skim)</span>' : ' <span class="d">out the far face is a pass</span>');
     else if (g.x) {
       const f = (a) => a.map((v) => (v >= 50 ? '—' : (v / 3.5).toFixed(2))).join('+');
       s = '<span class="d">generic: walls x ' + f(g.x) + ' z ' + f(g.z) + ' m, both sides need ≤' + (g.sideMax / 3.5).toFixed(2) + ' m'
         + (g.on ? ' · <span class="near">between walls</span>' : '') + (g.cd > 0 ? ' · cooldown ' + g.cd.toFixed(1) + 's' : '') + '</span>';
     } else s = '<span class="d">no clearance scan yet</span>';
-    const fired = lastGap && lastGap.result && t - lastGap.t < 6;
-    return '<span class="' + (fired ? 'ok' : 'no') + '">' + (fired ? '✓' : '✗') + ' ' + pad('Gap', 18) + pad('—', 5) + '</span> ' + s;
+    return '<span class="d">  ' + pad('gap passes', 18) + pad('—', 5) + '</span> ' + s + '  <span class="d">(not a trick)</span>';
   }
 
   function paint(force) {
@@ -970,11 +969,11 @@ export function createTrickDebug(opts) {
     L.push('<span class="d">' + '─'.repeat(6) + (ex ? ' candidates for #' + lastEx.rec.seq + ' ' : ' candidates ') + '─'.repeat(30) + '</span>');
     for (const id of FOCUS) {
       if (id === 'dive') { L.push(diveLine(t)); continue; }
-      if (id === 'gap') { L.push(gapLine(t)); continue; }
       const c = ex && ex.candidates.find((x) => x.id === id);
       if (c) L.push(candidateLine(c));
       else L.push('<span class="no">· ' + esc(pad(nameOf(id).replace(' (Ham)', ''), 18)) + pad('—', 5) + '</span> <span class="d">no classified maneuver yet</span>');
     }
+    L.push(gapLine(t));
     if (ex) {
       const others = ex.candidates.filter((c) => FOCUS.indexOf(c.id) < 0).map((c) => (c.verdict === 'fired' ? '✓' : '') + c.id + ' ' + c.total.toFixed(2));
       L.push('<span class="d">others  ' + esc(others.join('  ')) + '</span>');

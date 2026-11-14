@@ -258,7 +258,8 @@ test('every intentional gap has an authored gap volume: open, walled, named once
   assert.equal(names.size, built.gaps.length, 'names unique');
   for (const g of built.gaps) {
     assert.ok(['x', 'y', 'z'].includes(g.axis), g.name);
-    assert.doesNotMatch(g.name, /walls within/);
+    // The debug log tells a generic pass by ' an opening ' in its note.
+    assert.doesNotMatch(g.name, / an opening /);
     let walled = 0;
     for (const c of built.colliders) {
       const ox = Math.min(g.max.x, c.max.x) - Math.max(g.min.x, c.min.x);
