@@ -147,7 +147,7 @@ Rate limit is 12 posts / IP / UTC hour.
 
 ## "Fly my line" (`/api/line`)
 
-`POST /api/line` keeps a line code too long for a link (`sim-share.js`) in
+`POST /api/line` keeps a line code (`sim-share.js`: every SHARE posts one) in
 the `lines` table, under an id made from its content, and returns the id;
 `GET /api/line?id=` gives the code back. It shares the rate limit above.
 
@@ -182,8 +182,8 @@ Open `https://127.0.0.1:8787/health` once and accept wrangler's self-signed
 certificate, then open `http://127.0.0.1:4173/sim.html?lb=https://127.0.0.1:8787`.
 `?lb=` is honored only on a localhost page. To check it: Start menu →
 **Boards** → **Refresh online** shows the (empty) board with no
-`ONLINE UNAVAILABLE` toast, and SHARE on a run too long for a link says
-`LINK COPIED — RACE MY LINE` with no `LONG LINK`: the line is stored in the
+`ONLINE UNAVAILABLE` toast, and SHARE on a finished run says
+`SHORT LINK COPIED` (not `LONG LINK COPIED`): the line is stored in the
 local D1. No `[CSP]` warning in the console.
 
 The page's Content-Security-Policy lets it connect to this machine

@@ -1015,7 +1015,7 @@ import {
   createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux, rangeActive,
   BF_CLASS_TUNES, bfClassDiff,
 } from "./sim-core-adapter.js?v=ce7406fe12d2";
-import {LINE_URL_MAX,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=d290021684b8";
+import {LINE_URL_MAX,LINE_ID_RE,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=6ac4c874e781";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
 import {
@@ -7822,10 +7822,12 @@ function applyDuel(parsed){
 }
 // ---------- "Fly my line": a finished run as a link (sim-share.js) ----------
 // SHARE on the finish screen copies a link to the run just flown: the map and
-// track in the query, the ghost in the fragment. A ghost too long for a link
-// (LINE_URL_MAX) goes to the leaderboard Worker and the link carries its id;
-// with no Worker to take it, the long link is copied as it is. Opening a link
-// lands on the track with that ghost as the rival, under "Race RyFly's line".
+// track in the query, the line in the fragment. Every line goes to the
+// leaderboard Worker and the link carries its id (the short link, about 80
+// characters), whatever the code's length; with the Worker down or refusing,
+// the long link (the ghost itself in the fragment) is copied instead, and the
+// toast says which the pilot got. Opening either lands on the track with that
+// ghost as the rival, under "Race RyFly's line".
 // SHARE is on the finish toast (5 s), under the result on the lap panel until
 // the next run starts, in the pause menu, and on K.
 let lastLineLink='';                // the last link copied (test hook)
@@ -7834,15 +7836,23 @@ let activeLine=null;                // the line a link loaded: {name,rival}
 let lineBannerShown='';             // what the banner says now
 let lineNote='',lineNoteUntil=0;    // a link that did not load: said in the banner for a while
 const lineBannerEl=document.getElementById('lineBanner');
-// The Worker's id for a code, or null (offline, or a Worker without /api/line).
+// How long SHARE waits on the Worker before it copies the long link.
+const LINE_STORE_TIMEOUT_MS=4000;
+// The Worker's id for a code, or null: offline, slow, refused (a flood, a
+// Worker without /api/line), or an answer that is not an id (the id goes into
+// a link, so only LINE_ID_RE's plain characters do).
 async function storeLine(code){
   const url=leaderboardUrl();
   if(!url)return null;
+  const ctl=typeof AbortController==='function'?new AbortController():null;
+  const timer=ctl?setTimeout(()=>ctl.abort(),LINE_STORE_TIMEOUT_MS):0;
   try{
-    const r=await fetch(url+'/api/line',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+    const r=await fetch(url+'/api/line',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code}),signal:ctl?ctl.signal:undefined});
+    if(!r.ok)return null;
     const j=await r.json();
-    return j&&j.ok&&j.id?String(j.id):null;
+    return j&&j.ok===true&&typeof j.id==='string'&&LINE_ID_RE.test(j.id)?j.id:null;
   }catch(e){return null;}
+  finally{clearTimeout(timer);}
 }
 async function shareLine(){
   const run=lastRunLine;
@@ -7856,16 +7866,15 @@ async function shareLine(){
   try{
     out=await lineForLink({ghost:ghostFromObj(ghostPayloadOf(run.track,run.rec,run.total)),trackPayload:known?null:shareTrackPayload(track)},base,{max:lineUrlMax});
   }catch(e){toast('SHARE FAILED');return;}
-  let link=out.link,note='';
-  if(!out.fits){
-    const id=await storeLine(out.code);
-    if(id)link=lineLink({...base,code:'@'+id});
-    else note=' — LONG LINK ('+Math.max(1,Math.round(link.length/1024))+'KB)';
-  }
+  // The short link first: the Worker's id for the full-rate code. A run it
+  // already took is not posted again (SHARE again, the menu, K).
+  if(!run.lineId)run.lineId=await storeLine(out.full);
+  const short=!!run.lineId;
+  const link=short?lineLink({...base,code:'@'+run.lineId}):out.link;
   lastLineLink=link;
   try{
     await navigator.clipboard.writeText(link);
-    toast('LINK COPIED — RACE MY LINE'+note);
+    toast(short?'SHORT LINK COPIED':'LONG LINK COPIED');
   }catch(e){
     // clipboard blocked (permissions/insecure context) — drop it in the box to copy by hand
     const ta=document.getElementById('ghostCode');

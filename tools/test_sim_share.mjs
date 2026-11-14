@@ -5,11 +5,12 @@
 //     and its fragment, the rates a link tries), and the leaderboard Worker's
 //     /api/line on an in-memory D1.
 //   - In headless Chrome, fresh profiles: a pilot flies the Rig Loop, presses
-//     SHARE and the link is on the clipboard (the ghost in the URL; then, too
-//     long for a link, stored on the Worker; then, the Worker down, the long
-//     link); a second fresh profile opens each link and lands on the track
-//     with the ghost and the banner; and a custom track travels with its
-//     ghost. SHARE outlives the finish toast: 30 s after a finish it is still
+//     SHARE and the short link is on the clipboard (the line stored on the
+//     Worker, "SHORT LINK COPIED"); with the Worker down, refusing, or
+//     answering an id that is not one, the long link (the ghost in the URL,
+//     "LONG LINK COPIED"); a second fresh profile opens each link and lands on
+//     the track with the ghost and the banner; a hostile id in a link is
+//     never asked of the Worker; and a custom track travels with its ghost. SHARE outlives the finish toast: 30 s after a finish it is still
 //     under the result on the lap panel and in the pause menu, each clicked
 //     with the mouse, and on the K key; it leaves the panel when the next run
 //     starts. The Worker is the real handler, answering the page's requests in
@@ -134,6 +135,12 @@ test('the link: map and track in the query, the ghost in the fragment; the best 
   assert.equal(long.code, await encodeLineCode({ ghost: flight(240) }, 10));
   // A dev-only map's link says so; a legacy track id rides as its name.
   assert.equal(lineLink({ ...BASE, map: 'city', track: 'city-loop', dev: true, code: 'L0.AA' }), 'https://quadmath.com/sim.html?map=city&track=city-loop&dev=1#line=L0.AA');
+  // full: the full-rate code, whichever rate the link took (what the Worker stores).
+  for (const seconds of [20, 90, 600]) {
+    const out = await lineForLink({ ghost: flight(seconds) }, BASE);
+    assert.equal(out.full, await encodeLineCode({ ghost: flight(seconds) }, LINE_RATES_HZ[0]), `${seconds} s: full is the ${LINE_RATES_HZ[0]} Hz code`);
+    assert.ok(out.full.length <= LINE_CODE_MAX, `${seconds} s: and the Worker takes it (${out.full.length})`);
+  }
   assert.equal(lineLink({ ...BASE, code: '@abcDEF123456_-xy' }), 'https://quadmath.com/sim.html?map=rig&track=rig-loop#line=@abcDEF123456_-xy');
 });
 
@@ -142,7 +149,9 @@ test('the fragment: a code or a Worker id, nothing else', () => {
   assert.equal(lineFromHash('#foo=1&line=L0.AAAA&bar=2'), 'L0.AAAA');
   assert.equal(lineFromHash('#line=@abcDEF123456_-xy'), '@abcDEF123456_-xy');
   assert.equal(lineFromHash('#line=%40abcDEF123456_-xy'), '@abcDEF123456_-xy', 'an @ a chat app escaped');
-  for (const bad of ['', '#', '#line=', '#line=<script>', '#line=L2.abc', '#line=@short', '#line=@has space1234', '#other=L1.abc', '#line=javascript:alert(1)']) {
+  for (const bad of ['', '#', '#line=', '#line=<script>', '#line=L2.abc', '#line=@short', '#line=@has space1234', '#other=L1.abc', '#line=javascript:alert(1)',
+    '#line=@"><img src=x onerror=alert(1)>', '#line=@%22%3E%3Cimg%20src=x%20onerror=alert(1)%3E', '#line=@AAAAAAAAAAAAAAAA/../../api/board', '#line=@AAAAAAAAAAAAAAAA%2F..%2Fboard',
+    '#line=@AAAAAAAAAAAAAAAA?id=BBBBBBBBBBBBBBBB', '#line=@' + 'A'.repeat(33), '#line=@@AAAAAAAAAAAAAAAA', '#line=@AAAAAAAAAAAAAAAA%00']) {
     assert.equal(lineFromHash(bad), null, bad);
   }
 });
@@ -532,7 +541,8 @@ test('Fly my line in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
   const debugPort = 9300 + (process.pid % 300);
   // The leaderboard Worker, in this process: its real handler on an in-memory
   // D1, answering the page's requests to the deployed Worker's address.
-  const worker = { env: { DB: fakeD1(), ALLOWED_ORIGIN: origin }, up: true, calls: [] };
+  const worker = { env: { DB: fakeD1(), ALLOWED_ORIGIN: origin }, up: true, answer: null, calls: [] };
+  const posts = () => worker.calls.filter((c) => c === 'POST /api/line').length;
 
   // A pass: a fresh Chrome profile, the given pad and localStorage, the page at url.
   async function pass(url, seed, flow) {
@@ -568,6 +578,15 @@ test('Fly my line in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         try {
           worker.calls.push(request.method + ' ' + new URL(request.url).pathname);
           if (!worker.up) { await cdp(ws, 'Fetch.failRequest', { requestId, errorReason: 'ConnectionRefused' }); return; }
+          // An answer in the Worker's place to a line posted: [status, body], with its CORS headers.
+          if (worker.answer && request.method === 'POST' && new URL(request.url).pathname === '/api/line') {
+            await cdp(ws, 'Fetch.fulfillRequest', {
+              requestId, responseCode: worker.answer[0],
+              responseHeaders: [{ name: 'Content-Type', value: 'application/json' }, { name: 'Access-Control-Allow-Origin', value: origin }],
+              body: Buffer.from(JSON.stringify(worker.answer[1])).toString('base64'),
+            });
+            return;
+          }
           const headers = { ...request.headers };
           if (!Object.keys(headers).some((k) => k.toLowerCase() === 'origin')) headers.Origin = origin;
           const init = { method: request.method, headers };
@@ -661,7 +680,7 @@ test('Fly my line in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
   const flown = {};
 
   try {
-    await t.test('a fresh profile flies the Rig Loop; SHARE on the finish screen copies a link: in the URL, then on the Worker, then (Worker down) the long link', async () => {
+    await t.test('a fresh profile flies the Rig Loop; SHARE on the finish screen copies the short link (the Worker), and the long one when the Worker is down, refuses, or answers a hostile id', async () => {
       await pass(sim('map=rig&track=rig-loop'), { pad: tx }, async ({ js }) => {
         let r = await js(`
           const name = document.getElementById('pilotName');
@@ -679,47 +698,71 @@ test('Fly my line in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.match(r.fly.toast, /^LINE \d/, 'the finish screen');
         assert.match(r.fly.toast, /Replay\s*SHARE$/, 'Replay and SHARE');
         assert.ok(r.fly.run.n >= 2, 'a ghost was recorded');
+        // The Worker up: the short link, though the code would have fitted a link.
+        const SHORT = new RegExp('^' + origin.replace(/\./g, '\\.') + '/sim\\.html\\?map=rig&track=rig-loop#line=@[A-Za-z0-9_-]{10,32}$');
         assert.equal(r.out.copied, true);
-        assert.equal(r.out.toast, 'LINK COPIED — RACE MY LINE');
+        assert.equal(r.out.toast, 'SHORT LINK COPIED');
+        assert.match(r.out.link, SHORT, 'the link carries the id');
+        assert.ok(r.out.link.length <= 100, `about 80 characters (${r.out.link.length})`);
         assert.equal(r.out.clip, r.out.link, 'the link is on the clipboard');
-        assert.ok(r.out.link.startsWith(`${origin}/sim.html?map=rig&track=rig-loop#line=L1.`), r.out.link.slice(0, 90));
-        assert.ok(r.out.link.length <= LINE_URL_MAX, `a link that fits (${r.out.link.length})`);
-        assert.deepEqual(worker.calls, [], 'no Worker needed');
-        links.inline = r.out.link;
-        flown.inline = r.fly.run;
-
-        // The same flight with a link limit it cannot meet: the Worker keeps it.
-        r = await js(`
-          S.s.setLineUrlMax(200);
-          await S.wait(400);
-          const fly = await S.flyGates(${WS});
-          const out = await S.share();
-          return JSON.stringify({ fly, out });`);
-        console.log('stored: ' + JSON.stringify({ link: r.out.link, said: r.out.toast, calls: worker.calls }));
-        assert.equal(r.fly.done, true);
-        assert.equal(r.out.toast, 'LINK COPIED — RACE MY LINE');
-        assert.match(r.out.link, new RegExp('^' + origin.replace(/\./g, '\\.') + '/sim\\.html\\?map=rig&track=rig-loop#line=@[A-Za-z0-9_-]{10,32}$'), 'the link carries the id');
-        assert.equal(r.out.clip, r.out.link);
-        assert.ok(worker.calls.includes('POST /api/line'), worker.calls.join(', '));
+        assert.equal(posts(), 1, worker.calls.join(', '));
         assert.equal(worker.env.DB.lines.size, 1, 'one line stored');
+        const kept = await decodeLineCode(worker.env.DB.lines.get(r.out.link.split('#line=@')[1]));
+        assert.equal(ghostPayloadError(kept.ghost, 'rig-loop'), null, 'what the Worker keeps is the line');
         links.stored = r.out.link;
         flown.stored = r.fly.run;
 
-        // The Worker unreachable: the long link, said to be one.
+        // Each long link: a run, shared with the Worker as given; nothing more is stored.
+        const long = async (label, setup) => {
+          const before = posts();
+          const o = await js(`
+            ${setup || ''}
+            await S.wait(400);
+            const fly = await S.flyGates(${WS});
+            const out = await S.share();
+            return JSON.stringify({ fly, out });`);
+          console.log(label + ': ' + JSON.stringify({ link: o.out.link.length, said: o.out.toast }));
+          assert.equal(o.fly.done, true, label);
+          assert.equal(o.out.toast, 'LONG LINK COPIED', label);
+          assert.ok(o.out.link.startsWith(`${origin}/sim.html?map=rig&track=rig-loop#line=L1.`), label + ': the ghost itself, in the link: ' + o.out.link.slice(0, 90));
+          assert.equal(o.out.clip, o.out.link, label + ': on the clipboard');
+          assert.equal(posts(), before + 1, label + ': the Worker was asked first');
+          const line = await decodeLineCode(lineFromHash(new URL(o.out.link).hash));
+          assert.equal(ghostPayloadError(line.ghost, 'rig-loop'), null, label + ': and it is a line');
+          assert.equal(worker.env.DB.lines.size, 1, label + ': nothing more stored');
+          return o;
+        };
+
+        // The Worker unreachable: the long link, one that fits.
         worker.up = false;
-        r = await js(`
-          await S.wait(400);
-          const fly = await S.flyGates(${WS});
-          const out = await S.share();
-          return JSON.stringify({ fly, out });`);
+        r = await long('worker down');
+        assert.ok(r.out.link.length <= LINE_URL_MAX, `a link that fits (${r.out.link.length})`);
+        links.inline = r.out.link;
+        flown.inline = r.fly.run;
+        // And with a link limit the run cannot meet: the long link all the same.
+        r = await long('worker down, over the limit', 'S.s.setLineUrlMax(200);');
+        assert.ok(r.out.link.length > 200);
+        await js(`S.s.setLineUrlMax(0); return 1;`);
         worker.up = true;
-        console.log('worker down: ' + JSON.stringify({ link: r.out.link.length, said: r.out.toast }));
-        assert.match(r.out.toast, /^LINK COPIED — RACE MY LINE — LONG LINK \(\d+KB\)$/);
-        assert.ok(r.out.link.includes('#line=L1.') && r.out.link.length > 200, 'the ghost itself, in the link');
-        assert.equal(r.out.clip, r.out.link);
-        const line = await decodeLineCode(lineFromHash(new URL(r.out.link).hash));
-        assert.equal(ghostPayloadError(line.ghost, 'rig-loop'), null, 'and it is a line');
-        assert.equal(worker.env.DB.lines.size, 1, 'nothing more stored');
+
+        // The Worker refuses (a flood): the long link.
+        worker.answer = [429, { ok: false, reason: 'RATE LIMIT' }];
+        await long('worker refuses');
+        // A Worker that says no with a 200.
+        worker.answer = [200, { ok: false, reason: 'BAD LINE CODE' }];
+        await long('worker says no');
+        // An answer whose id is not an id never reaches a link.
+        for (const id of ['"><img src=x onerror=alert(1)>', 'AAAAAAAAAAAA&dev=1#x', '../../../etc/passwd', 'short', ['AAAAAAAAAAAAAAAA'], 12345678901234]) {
+          worker.answer = [200, { ok: true, id }];
+          r = await long('hostile id ' + JSON.stringify(id));
+          assert.ok(!r.out.link.includes('@') && !/onerror|passwd|dev=1/.test(r.out.link), 'none of it in the link');
+        }
+        worker.answer = null;
+
+        // The Worker back: the same pilot's next run is a short link again.
+        r = await js(`await S.wait(400); const fly = await S.flyGates(${WS}); const out = await S.share(); return JSON.stringify({ fly, out });`);
+        assert.equal(r.out.toast, 'SHORT LINK COPIED', 'short again once the Worker answers');
+        assert.match(r.out.link, SHORT);
       });
     });
 
@@ -758,10 +801,11 @@ test('Fly my line in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.deepEqual([hit.found, hit.hit, hit.text], [true, true, 'SHARE'], 'the button is what is under the mouse: ' + JSON.stringify(hit));
         assert.equal(hit.seen, true, 'and nothing is painted over it: ' + JSON.stringify(hit));
         r = await js(`return JSON.stringify(await S.shared());`);
-        assert.equal(r.toast, 'LINK COPIED — RACE MY LINE', 'the panel SHARE works');
-        assert.ok(r.link.startsWith(`${origin}/sim.html?map=rig&track=rig-loop#line=L1.`), r.link.slice(0, 90));
+        assert.equal(r.toast, 'SHORT LINK COPIED', 'the panel SHARE works');
+        assert.ok(r.link.startsWith(`${origin}/sim.html?map=rig&track=rig-loop#line=@`), r.link.slice(0, 90));
         assert.equal(r.clip, r.link, 'the link is on the clipboard');
         const link = r.link;
+        const posted = posts();
 
         // The pause menu's, with the mouse.
         await key('Escape', 'Escape', 27);
@@ -774,7 +818,7 @@ test('Fly my line in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         hit = await click('menuShare');
         assert.deepEqual([hit.found, hit.hit, hit.seen], [true, true, true], 'the button is what is under the mouse, in plain sight: ' + JSON.stringify(hit));
         r = await js(`return JSON.stringify(await S.shared());`);
-        assert.equal(r.toast, 'LINK COPIED — RACE MY LINE', 'the menu SHARE works');
+        assert.equal(r.toast, 'SHORT LINK COPIED', 'the menu SHARE works');
         assert.equal(r.clip, link, 'the same run, the same link');
 
         // K, flying again.
@@ -783,8 +827,9 @@ test('Fly my line in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         await key('k', 'KeyK', 75);
         r = await js(`return JSON.stringify({ ...(await S.shared()), menu: document.body.classList.contains('menu-open'), panel: S.panel() });`);
         assert.equal(r.menu, false, 'back in flight');
-        assert.equal(r.toast, 'LINK COPIED — RACE MY LINE', 'K works');
+        assert.equal(r.toast, 'SHORT LINK COPIED', 'K works');
         assert.equal(r.clip, link, 'K copies the same link');
+        assert.equal(posts(), posted, 'a run the Worker took is not posted again');
         assert.equal(r.panel.share, true, 'and SHARE is still on the panel');
 
         // The next run starts: the panel is the live clock, without the buttons.
@@ -846,6 +891,19 @@ test('Fly my line in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.equal(r.rival, null, 'no rival');
         assert.equal(r.gone, true, 'and the note goes');
       });
+      // A hostile id in a link: not an id, so never asked of the Worker, and
+      // nothing of it on the page.
+      for (const frag of ['@"><img src=x onerror=window.__pwn=1>', '@AAAAAAAAAAAAAAAA/../../api/board', '@AAAAAAAAAAAAAAAA%26id=BBBBBBBBBBBBBBBB', '@' + 'A'.repeat(33)]) {
+        const before = worker.calls.filter((c) => c === 'GET /api/line').length;
+        await pass(sim('map=rig&track=rig-loop') + '#line=' + frag, { pad: tx }, async ({ js }) => {
+          const r = await js(`await S.wait(1500); return JSON.stringify({ landed: S.landed(), pwn: window.__pwn || 0, imgs: document.querySelectorAll('img[src="x"]').length });`);
+          assert.equal(worker.calls.filter((c) => c === 'GET /api/line').length, before, 'the Worker is not asked: ' + frag);
+          assert.equal(r.landed.line.rival, null, 'no rival: ' + frag);
+          assert.equal(r.landed.banner.on, false, 'no banner: ' + frag);
+          assert.equal(r.landed.track, 'rig-loop', 'still on the track');
+          assert.deepEqual([r.pwn, r.imgs], [0, 0], 'nothing of it ran or was drawn');
+        });
+      }
       // A link cut short in a chat: not valid, said the same way.
       await pass(links.inline.replace('?', '?quality=low&').slice(0, -30), { pad: tx }, async ({ js }) => {
         const r = await js(`return JSON.stringify(S.landed());`);
@@ -863,9 +921,9 @@ test('Fly my line in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         const r = await js(`await S.wait(500); const track = S.s.track(); const fly = await S.flyGates(${WS}); const out = await S.share(); return JSON.stringify({ track, fly, out });`);
         assert.equal(r.track, 'custom-yard');
         assert.equal(r.fly.done, true, r.fly.toast);
-        assert.match(r.out.toast, /^LINK COPIED — RACE MY LINE/);
+        assert.equal(r.out.toast, 'SHORT LINK COPIED');
         link = r.out.link;
-        const line = await decodeLineCode(lineFromHash(new URL(link).hash));
+        const line = await decodeLineCode(worker.env.DB.lines.get(lineFromHash(new URL(link).hash).slice(1)));
         assert.equal(fromShareTrackPayload(line.trackPayload).gates.length, 3, 'the track is in the link');
       });
       await pass(link.replace('?', '?quality=low&'), { pad: tx }, async ({ js }) => {
