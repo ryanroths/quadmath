@@ -996,6 +996,8 @@ const TOUR_STEP = String.raw`async (map, picked, wantCore) => {${TOUR_HELPERS}
   const rafTick = () => { rafs++; if (rafs < 2 && live()) requestAnimationFrame(rafTick); };
   requestAnimationFrame(rafTick);
   if (!(await until(() => rafs >= 2, 8000))) { out.error = 'no frame drawn in 8 s after arriving on ' + map; return out; }
+  // The screenshot (taken next, outside the page) waits on this too.
+  out.drawn = true;
   // The look, as it is now; the picture is the screenshot taken next.
   const L = s.looks;
   out.look = { applied: L.applied, composer: !!L.composer, env: !!s.scene.environment, sky: L.skyMode || null };
@@ -1164,6 +1166,10 @@ async function runTour(base, tour, deadline) {
       if (i > 0) errors.length = 0;
       const got = await tourEval(ws, `(${TOUR_STEP})(${JSON.stringify(map)}, ${i > 0}, ${JSON.stringify(tour.core)})`, TOUR_STEP_MS);
       got.map = map;
+      // The screenshot, and the fly after it, only once the loop has drawn
+      // this map (got.drawn, TOUR_STEP): before that the page still shows the
+      // last map's picture, from the last map's camera.
+      if (!got.error && !got.drawn) got.error = 'the step returned before a frame was drawn on ' + map;
       if (!got.error && ws.readyState === 1) {
         try {
           const shot = await cdp(ws, 'Page.captureScreenshot', { format: 'png' });
