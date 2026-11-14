@@ -25,6 +25,12 @@
 // CPU_SAMPLE_MS and takes the samples either side of it). Otherwise the check
 // says NOT TIMED with the frame step and the load, and the run ends SMOKE
 // UNTIMED (exit 2) if nothing failed: no 300 ms verdict either way.
+// The window must stay visible and drawing (each page tracks its visibility,
+// focus and animation-frame rate; CDP gives the window's state). A window
+// hidden, minimized or not drawing (no animation frame for a whole second; a
+// slow frame rate alone is not that, and shows in the text) is reported as
+// that, not as a boot or flight failure, and the run
+// ends SMOKE INVALID (exit 3): it says nothing about the sim.
 // Not in CI (it needs a display and a GPU): its name is not tools/test_*.
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -43,6 +49,7 @@ const FRAME_STEP_MAX_MS = 50;
 const MACHINE_LOAD_MAX = 0.75;
 const OTHER_LOAD_MAX = 0.25;
 const CPU_SAMPLE_MS = 200;
+const WINDOW_MIN_FPS = 1;
 
 // This machine's CPU over a window: all of it, and the part not used by this
 // test's own Chrome (its processes' CPU time from SystemInfo.getProcessInfo)
@@ -136,6 +143,23 @@ function killTree(child) {
 // unplugged until window.__plug(); window.__pads drives its axes (roll,
 // pitch, throttle, yaw, AUX1..AUX4; -1..1).
 const FAKE_PADS = String.raw`(() => {
+  // The window, from the page: hidden time, blurs, and the animation frames
+  // of the last second (a hidden or occluded window draws none or few).
+  const vis = window.__vis = { hiddenMs: 0, since: document.visibilityState === 'hidden' ? performance.now() : null, blurs: 0, frames: [] };
+  document.addEventListener('visibilitychange', () => {
+    const now = performance.now();
+    if (document.visibilityState === 'hidden') { if (vis.since === null) vis.since = now; }
+    else if (vis.since !== null) { vis.hiddenMs += now - vis.since; vis.since = null; }
+  });
+  addEventListener('blur', () => { vis.blurs++; });
+  const tick = (t) => { vis.frames.push(t); while (vis.frames.length && vis.frames[0] < t - 1000) vis.frames.shift(); requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+  vis.now = () => {
+    const now = performance.now();
+    return { visibility: document.visibilityState, focused: document.hasFocus(), blurs: vis.blurs,
+      hiddenMs: Math.round(vis.hiddenMs + (vis.since !== null ? now - vis.since : 0)),
+      fps: vis.frames.filter((t) => t >= now - 1000).length };
+  };
   const pads = window.__pads = { on: false, id: ${JSON.stringify(TX)}, axes: [0, 0, -1, 0, -1, -1, -1, -1] };
   const make = () => ({ id: pads.id, index: 0, mapping: '', connected: true, timestamp: performance.now(), axes: pads.axes.slice(),
     buttons: Array.from({ length: 24 }, () => ({ pressed: false, touched: false, value: 0 })) });
@@ -195,6 +219,22 @@ const PAGE = String.raw`(() => {
 })()`;
 
 const results = [];
+// The window as the page and the browser see it; hidden: why it cannot count.
+function windowVerdict(w) {
+  const why = [];
+  if (!w) return { hidden: false, text: 'window state not read' };
+  if (w.visibility && w.visibility !== 'visible') why.push(`page ${w.visibility}`);
+  if (w.windowState && w.windowState !== 'normal' && w.windowState !== 'maximized' && w.windowState !== 'fullscreen') why.push(`window ${w.windowState}`);
+  if (Number.isFinite(w.fps) && w.fps < WINDOW_MIN_FPS) why.push('no animation frame in the last second (not drawing)');
+  const text = `visibility ${w.visibility}, window ${w.windowState || 'n/a'}, focused ${w.focused}, ${w.fps} fps, hidden ${w.hiddenMs} ms, blurs ${w.blurs}`;
+  return { hidden: why.length > 0, text: why.length ? why.join('; ') + ' [' + text + ']' : text };
+}
+function windowCheck(name, w) {
+  const v = windowVerdict(w);
+  results.push({ name, ok: !v.hidden, window: true, detail: v.text });
+  console.log(`${v.hidden ? 'WINDOW HIDDEN' : 'WINDOW OK'}  ${name}  ${v.text}`);
+  return !v.hidden;
+}
 function check(name, ok, detail) {
   results.push({ name, ok: !!ok, detail });
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`);
@@ -276,6 +316,13 @@ async function main() {
     };
     const js = async (body) => { const v = await ev(`(async () => { const U = window.__u; ${body} })()`); return typeof v === 'string' && /^[[{]/.test(v) ? JSON.parse(v) : v; };
     const key = (type, k, code, vk) => send('Input.dispatchKeyEvent', { type, key: k, code, windowsVirtualKeyCode: vk });
+    const winState = async () => {
+      let w = null;
+      try { w = await ev(`window.__vis ? window.__vis.now() : null`); } catch (e) { w = null; }
+      w = w || { visibility: null, focused: null, fps: null, hiddenMs: null, blurs: null };
+      try { w.windowState = (await send('Browser.getWindowForTarget')).bounds.windowState; } catch (e) { w.windowState = null; }
+      return w;
+    };
     const tap = async (k, code, vk) => { await key('rawKeyDown', k, code, vk); await key('keyUp', k, code, vk); };
     const SPACE = [' ', 'Space', 32], W = ['w', 'KeyW', 87], R = ['r', 'KeyR', 82], ESC = ['Escape', 'Escape', 27];
 
@@ -295,13 +342,20 @@ async function main() {
         await sleep(150);
         try { ready = await ev(`!!(window._sim && window._sim.core && window._sim.core() === ${JSON.stringify(core)} && window._simQueryBooted && window._sim.looks && window._sim.looks.fps && window._sim.looks.fps.ready)`); } catch (e) { /* loading */ }
       }
-      // A boot that never got there says which part did not.
+      // A boot that never got there says which part did not, and whether the
+      // window was there to draw it: a hidden one is reported as that.
       let why = '';
+      const bootWin = await winState();
+      if (!ready && windowVerdict(bootWin).hidden) {
+        windowCheck(`${tag}: window visible and drawing while it boots`, bootWin);
+        continue;
+      }
       if (!ready) {
         try {
           why = JSON.stringify(await ev(`(() => { const s = window._sim, l = s && s.looks; return { url: location.pathname + location.search, sim: !!s, core: s && s.core ? s.core() : null, queryBooted: !!window._simQueryBooted, looks: !!l, fpsReady: !!(l && l.fps && l.fps.ready), quality: l && l.quality ? l.quality : null, gl: (() => { try { const g = document.createElement('canvas').getContext('webgl2'); const d = g && g.getExtension('WEBGL_debug_renderer_info'); return d ? g.getParameter(d.UNMASKED_RENDERER_WEBGL) : null; } catch (e) { return String(e); } })() }; })()`));
         } catch (e) { why = 'page did not answer: ' + (e && e.message || e); }
       }
+      if (!ready) why += `; window: ${windowVerdict(bootWin).text}`;
       check(`${tag}: boots`, ready, why);
       if (!ready) continue;
       await ev(PAGE);
@@ -434,6 +488,10 @@ async function main() {
           return JSON.stringify({ ok, map: U.s.map(), vibe: v && v.id, core: U.s.core() });`);
         check(`${tag}: map ${id} loads with its look`, r.ok && r.core === core, `map ${r.map}, look ${r.vibe}, core ${r.core}, ${((Date.now() - t0) / 1000).toFixed(1)} s`);
       }
+      // The window over this core's run (hidden time since this page loaded).
+      const endWin = await winState();
+      if (endWin && endWin.hiddenMs > 0 && windowVerdict(endWin).hidden === false) endWin.visibility = 'hidden for part of the run';
+      windowCheck(`${tag}: window stayed visible and drawing`, endWin);
     }
     if (runSnap0) runLoad = cpuLoad(runSnap0, await cpuSnap(browserSend));
   } finally {
@@ -445,14 +503,15 @@ async function main() {
     server.close();
   }
   const ms = Date.now() - T0;
-  const failed = results.filter((x) => !x.ok);
+  const hidden = results.filter((x) => x.window && !x.ok);
+  const failed = results.filter((x) => !x.ok && !x.window);
   const untimed = results.filter((x) => x.untimed);
   const inTime = ms < BUDGET_MS;
-  const verdict = failed.length || !inTime ? 'SMOKE FAIL' : untimed.length ? 'SMOKE UNTIMED' : 'SMOKE PASS';
-  const judged = results.length - untimed.length;
+  const verdict = hidden.length ? 'SMOKE INVALID (window hidden or occluded)' : failed.length || !inTime ? 'SMOKE FAIL' : untimed.length ? 'SMOKE UNTIMED' : 'SMOKE PASS';
+  const judged = results.length - untimed.length - results.filter((x) => x.window).length;
   console.log(`CPU: before Chrome ${pct(preLoad && preLoad.machine)}; through the run ${pct(runLoad && runLoad.machine)} (other processes ${pct(runLoad && runLoad.other)})`);
   console.log(`${verdict}: ${judged - failed.length}/${judged} checks${untimed.length ? `, ${untimed.length} not timed (${untimed.map((x) => x.name.split(':')[0]).join(', ')})` : ''} in ${(ms / 1000).toFixed(0)} s (limit ${BUDGET_MS / 1000} s)`);
-  process.exit(failed.length || !inTime ? 1 : untimed.length ? 2 : 0);
+  process.exit(hidden.length ? 3 : failed.length || !inTime ? 1 : untimed.length ? 2 : 0);
 }
 
 main().catch((e) => { console.error('SMOKE FAIL: ' + (e && e.stack || e)); process.exit(1); });
