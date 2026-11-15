@@ -140,9 +140,10 @@ Anti-cheat on POST `/api/submit`:
 - The run is one pass, as the page flies it (every track but the city
   loops is a line, `isLineTrackId`): the ghost passes gate 0, then every
   gate in order to the last (`lineRunPasses`, swept between samples), and
-  ends on the finish frame. The time must be the ghost's, from the gate-0
-  sample to the last, plus whole 2 s miss penalties, within 150 ms. At most
-  1600 samples.
+  ends on the finish frame, inside the last gate's sphere. A step may pass
+  a gate at most 0.6 u outside its sphere, and steps are at most 500 ms
+  apart. The time must be the ghost's, from the gate-0 sample to the last,
+  plus whole 2 s miss penalties, within 150 ms. At most 1600 samples.
 - Class must match submitted build `frameMm`; speeds use that class cap.
 - Generated pace-bot ghosts are rejected.
 - Pilot names are sanitized (Unicode letters, length cap). First browser
@@ -170,9 +171,16 @@ npx wrangler deploy
 
 (With the predeploy guard merged: `npm run predeploy`, then `npm run deploy`.)
 
-Until the Worker is deployed, a weekly finish on the new page shows the old
-Worker's `INCOMPLETE LAPS` toast and stays on the local board. No D1
+Until the Worker is deployed, a weekly finish on the new page is refused by
+the old Worker (toast `INCOMPLETE LAPS`, or `TIME MISMATCH` for a run with
+misses) and stays on the local board only; it is not sent again. Deploying
+this Worker before the merge would be safe (the old page never sends a
+one-pass run), but it means deploying from a branch, which the predeploy
+guard refuses; deploy from main right after the merge instead. No D1
 migration.
+
+A run that fails the page's own check now says so (`NOT SENT: <reason>`,
+and a console warning) instead of being dropped silently.
 
 To see the row land after a weekly finish (newest first):
 

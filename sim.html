@@ -1134,13 +1134,13 @@ import {
   loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   defaultWhoopKit, ghostFromObj, shareTrackPayload, fromShareTrackPayload,
-} from "./sim-retention.js?v=1182cd7210ac";
+} from "./sim-retention.js?v=cfbbedf3c2c0";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=c7b19e74bb69";
+} from "./sim-secrets.js?v=80b97730e330";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
   fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=faef974b6827";
 window._simBooted=true; // tells the watchdog above the module actually executed
@@ -1874,10 +1874,18 @@ function finishRun(){
   // The finish frame's pose: updateGhost runs after updateGates, so the ghost
   // would otherwise stop up to a sample short of the last gate (the Worker
   // checks a line run's gates and time on its ghost).
+  // A sample less than half a period old gives way to it, so no step is a
+  // few ms long.
   if(ghostRec&&ghostRec.length){
     const t=Math.round(simNowMs()-runStartTime);
-    if(t>ghostRec[ghostRec.length-1][0])ghostRec.push([t,_gr2(state.pos.x),_gr2(state.pos.y),_gr2(state.pos.z),
-      _gr3(state.q.x),_gr3(state.q.y),_gr3(state.q.z),_gr3(state.q.w)]);
+    const lastS=ghostRec[ghostRec.length-1];
+    const pose=[t,_gr2(state.pos.x),_gr2(state.pos.y),_gr2(state.pos.z),
+      _gr3(state.q.x),_gr3(state.q.y),_gr3(state.q.z),_gr3(state.q.w)];
+    const halfMs=500/(line?LINE_GHOST_HZ:CITY_GHOST_HZ);
+    if(t>lastS[0]){
+      if(ghostRec.length>1&&t-lastS[0]<halfMs)ghostRec[ghostRec.length-1]=pose;
+      else ghostRec.push(pose);
+    }
   }
   const cap=line?LINE_GHOST_MAX:GHOST_MAX;
   let rec=ghostRec&&ghostRec.length?downsampleGhost(ghostRec,cap):null;
@@ -5740,8 +5748,12 @@ function showMenuLayer(html){
   el.innerHTML=html;
   el.classList.add('show');
 }
+// Bumped each time a board card opens (and when the menu layer hides), so a
+// late online reply paints only the card that asked for it.
+let boardCardSeq=0;
 function hideMenuLayer(){
   const el=document.getElementById('menuLayer');
+  boardCardSeq++;
   if(el)el.classList.remove('show');
 }
 function bestText(id){
@@ -5892,25 +5904,38 @@ function openDailyLineCard(){
     if(!onlineRows)rankEl.textContent=online?'Online: '+onlineNote:'Online off. This browser only.';
     else if(!best)rankEl.textContent='Fly to post online.';
     else{
-      const r=dailyLineRank(onlineRows,name,best.timeMs);
-      rankEl.textContent=r.listed?'You #'+r.rank+' of '+r.of+' online.':'Not on the online board yet.';
+      // The pilot's online row, by name: this browser's best may not have
+      // been posted (offline, refused) or may be another class's.
+      const who=sanitizePilotName(name);
+      const i=onlineRows.findIndex((r)=>sanitizePilotName(r.name)===who);
+      if(i<0)rankEl.textContent='Not on the online board yet.';
+      else{
+        const t=+(onlineRows[i].timeMs||onlineRows[i].time_ms);
+        rankEl.textContent='You #'+(i+1)+' of '+onlineRows.length+' online.'+(best.timeMs<t?' Best here '+fmtLap(best.timeMs)+', not posted.':'');
+      }
     }
   }
   paint();
   const rf=document.getElementById('dailyLineRefresh');
+  const card=++boardCardSeq;
+  let req=0;
   async function pull(fromButton){
     if(!online)return;
+    const mineReq=++req;
+    let rows=null, note='Online unavailable.';
     try{
       const r=await fetch(url+'/api/daily?day='+encodeURIComponent(c.date)+'&class='+cls);
       const j=await r.json();
       if(!r.ok||!j||j.online===false)throw new Error('offline');
-      onlineRows=Array.isArray(j.entries)?j.entries:[];
-      onlineNote='No online times yet.';
+      rows=Array.isArray(j.entries)?j.entries:[];
+      note='No online times yet.';
     }catch(e){
-      onlineRows=null;
-      onlineNote='Online unavailable.';
-      if(fromButton)toast('ONLINE UNAVAILABLE');
+      if(fromButton&&card===boardCardSeq)toast('ONLINE UNAVAILABLE');
     }
+    // A reply for a card since closed or reopened, or an older request, is dropped.
+    if(card!==boardCardSeq||mineReq!==req)return;
+    onlineRows=rows;
+    onlineNote=note;
     paint();
   }
   if(rf)rf.onclick=()=>pull(true);
@@ -6008,19 +6033,25 @@ function openBoardsCard(){
     { title:'This browser', rows:localRows, empty:'No times on this browser yet.' },
   ]);
   paint();
+  const card=++boardCardSeq;
+  let req=0;
   async function pull(fromButton){
     if(!online)return;
+    const mineReq=++req;
+    let rows=null, note='Online unavailable.';
     try{
       const r=await fetch(url+'/api/board?week='+encodeURIComponent(week)+'&class='+cls);
       const j=await r.json();
       if(!r.ok||!j||j.online===false)throw new Error('offline');
-      onlineRows=Array.isArray(j.entries)?j.entries:[];
-      onlineNote='No online times yet.';
+      rows=Array.isArray(j.entries)?j.entries:[];
+      note='No online times yet.';
     }catch(e){
-      onlineRows=null;
-      onlineNote='Online unavailable.';
-      if(fromButton)toast('ONLINE UNAVAILABLE');
+      if(fromButton&&card===boardCardSeq)toast('ONLINE UNAVAILABLE');
     }
+    // A reply for a card since closed or reopened, or an older request, is dropped.
+    if(card!==boardCardSeq||mineReq!==req)return;
+    onlineRows=rows;
+    onlineNote=note;
     paint();
   }
   const rf=document.getElementById('boardRefresh');
@@ -7901,7 +7932,12 @@ async function maybeSubmitOnline(id, total, rec){
     build: currentBuild, token: issuePilotToken(),
   };
   const checked=validateSubmittedRun({ ghost, track, frameMm: body.frameMm, timeMs: total });
-  if(!checked.ok)return;
+  if(!checked.ok){
+    // Said, not dropped: a run the Worker would refuse stays on the local board.
+    console.warn('weekly submit not sent: '+checked.reason);
+    toast('NOT SENT: '+String(checked.reason));
+    return;
+  }
   try{
     const r=await fetch(url+'/api/submit', {
       method:'POST', headers:{'Content-Type':'application/json'},

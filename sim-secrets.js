@@ -4,7 +4,7 @@
 // New localStorage key only: quadmathSimSecrets.
 // Stock skin ids / unlocks in sim-retention.js stay frozen.
 
-import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=1182cd7210ac';
+import { SKINS, isSkinUnlocked, mapObstacles, skinById as stockSkinById } from './sim-retention.js?v=cfbbedf3c2c0';
 import { LAYOUT } from './sim-maps.js?v=46239d27449d';
 import { MAPS, knownMapId, isFreestyleTrackId } from './sim-tracks.js?v=816c09c57c00';
 
