@@ -164,13 +164,23 @@ class JudgeTest(unittest.TestCase):
 class CommandLineTest(unittest.TestCase):
     """The script as the workflow runs it: exit code, annotation, GITHUB_OUTPUT."""
 
-    def run_script(self, events: list[dict] | None, payload: dict) -> tuple[int, str, str]:
+    def run_script(self, events: list[dict] | None, payload: dict, live: list[str] | None | bool = True) -> tuple[int, str, str]:
+        """`live` is what the API says the PR's labels are now: True for the
+        same as the payload's, a list for something else, None to leave the
+        script to fetch them (a test then patches fetch_labels)."""
         with tempfile.TemporaryDirectory() as tmp:
             event_path = os.path.join(tmp, "event.json")
             output_path = os.path.join(tmp, "output")
             with open(event_path, "w", encoding="utf-8") as fh:
                 json.dump(payload, fh)
-            argv = ["--event", event_path, "--retries", "1", "--wait", "0"]
+            argv = ["--event", event_path, "--repo", "o/r", "--retries", "1", "--wait", "0"]
+            if live is True:
+                live = [l["name"] for l in payload["pull_request"]["labels"]]
+            if live is not None:
+                labels_path = os.path.join(tmp, "labels.json")
+                with open(labels_path, "w", encoding="utf-8") as fh:
+                    json.dump([{"id": i, "name": n, "color": "ededed"} for i, n in enumerate(live)], fh)
+                argv += ["--labels", labels_path]
             if events is not None:
                 timeline_path = os.path.join(tmp, "timeline.json")
                 with open(timeline_path, "w", encoding="utf-8") as fh:
@@ -234,6 +244,89 @@ class CommandLineTest(unittest.TestCase):
         self.assertEqual(output, "override=false\n")
         self.assertIn("::error::" + FAIL, out)
 
+    # The labels are the PR's as it is now, not as the event payload has them.
+
+    def test_a_label_applied_after_the_event_passes_on_a_rerun(self):
+        # A push in the same second as the owner's label: the payload has no
+        # label, and a re-run replays that payload. The PR carries it now.
+        stale = self.payload([], "synchronize")
+        code, out, output = self.run_script(by_hand(), stale, live=LABELS)
+        self.assertEqual(code, 0)
+        self.assertEqual(output, "override=true\n")
+        self.assertIn("::notice::", out)
+        self.assertIn("ryanroths", out)
+
+    def test_a_label_applied_after_the_event_by_someone_else_still_fails(self):
+        stale = self.payload([], "synchronize")
+        for events, who in ((with_actor(STRANGER), "octocat"), (with_actor(BOT), "github-actions[bot]"),
+                            (timeline(311), "Cursor")):
+            code, out, output = self.run_script(events, stale, live=LABELS)
+            self.assertEqual(code, 1, who)
+            self.assertEqual(output, "override=false\n", who)
+            self.assertIn("::error::" + FAIL, out)
+            self.assertIn(who, out)
+
+    def test_a_non_owner_label_fails_whatever_the_payload_says(self):
+        for payload in (self.payload(LABELS), self.payload(LABELS, "labeled", "octocat"),
+                        self.payload([], "opened")):
+            code, out, output = self.run_script(with_actor(STRANGER), payload, live=LABELS)
+            self.assertEqual(code, 1)
+            self.assertEqual(output, "override=false\n")
+            self.assertIn("::error::" + FAIL, out)
+
+    def test_a_label_taken_off_after_the_event_does_not_count(self):
+        # The payload still has the owner's label; the PR no longer does.
+        with mock.patch.object(h, "fetch_timeline", side_effect=AssertionError("fetched")):
+            code, out, output = self.run_script(None, self.payload(LABELS), live=["bug"])
+        self.assertEqual(code, 0)
+        self.assertEqual(output, "override=false\n")
+        self.assertIn("the gate runs", out)
+
+    def test_the_labels_and_the_timeline_are_fetched_for_the_payloads_pr(self):
+        calls = []
+
+        def labels(repo, number, token, api):
+            calls.append(("labels", repo, number, token, api))
+            return list(LABELS)
+
+        def events(repo, number, token, api):
+            calls.append(("timeline", repo, number, token, api))
+            return by_hand()
+
+        env = {"GH_TOKEN": "tkn", "GITHUB_API_URL": "https://api.example"}
+        with mock.patch.object(h, "fetch_labels", labels), mock.patch.object(h, "fetch_timeline", events), \
+                mock.patch.dict(os.environ, env):
+            code, out, output = self.run_script(None, self.payload([], "synchronize"), live=None)
+        self.assertEqual(code, 0)
+        self.assertEqual(output, "override=true\n")
+        self.assertEqual(calls, [("labels", "o/r", 309, "tkn", "https://api.example"),
+                                 ("timeline", "o/r", 309, "tkn", "https://api.example")])
+
+    def test_a_labels_api_error_fails_closed(self):
+        with mock.patch.object(h, "fetch_labels", side_effect=OSError("HTTP 502")), \
+                mock.patch.object(h, "fetch_timeline", side_effect=AssertionError("fetched")):
+            code, out, output = self.run_script(None, self.payload(LABELS), live=None)
+        self.assertEqual(code, 2)
+        self.assertEqual(output, "override=false\n")
+        self.assertIn("::error::" + FAIL, out)
+        self.assertIn("labels", out)
+
+    def test_labels_that_are_not_labels_fail_closed(self):
+        with mock.patch.object(h, "fetch_pages", return_value=[{"message": "Not Found"}]):
+            code, out, output = self.run_script(None, self.payload(LABELS), live=None)
+        self.assertEqual(code, 2)
+        self.assertEqual(output, "override=false\n")
+
+    def test_a_label_that_goes_on_between_two_reads_is_judged_on_the_second(self):
+        # First read: the label is on but the timeline is behind. Second read:
+        # the timeline has caught up.
+        behind = [e for e in by_hand() if e.get("event") != "labeled"]
+        reads = iter([behind, by_hand()])
+        with mock.patch.object(h, "fetch_timeline", lambda *a: next(reads)):
+            code, out, output = self.run_script(None, self.payload([], "synchronize"), live=LABELS)
+        self.assertEqual(code, 0)
+        self.assertEqual(output, "override=true\n")
+
 
 class FetchTest(unittest.TestCase):
     def test_next_link(self):
@@ -269,6 +362,24 @@ class FetchTest(unittest.TestCase):
         self.assertEqual([u for u, _ in seen], list(pages))
         self.assertTrue(all(a == "Bearer tkn" for _, a in seen))
 
+    def test_labels_come_from_the_issue_labels_endpoint(self):
+        seen = []
+
+        class Response(io.BytesIO):
+            headers = {}
+
+            def __exit__(self, *exc):
+                self.close()
+
+        def urlopen(request, timeout):
+            seen.append((request.full_url, request.get_header("Authorization")))
+            return Response(json.dumps([{"id": 1, "name": "bug"}, {"id": 2, "name": "human-override"}]).encode())
+
+        with mock.patch.object(h.urllib.request, "urlopen", urlopen):
+            got = h.fetch_labels("o/r", 9, "tkn", "https://api.example/")
+        self.assertEqual(got, ["bug", "human-override"])
+        self.assertEqual(seen, [("https://api.example/repos/o/r/issues/9/labels?per_page=100", "Bearer tkn")])
+
 
 class WorkflowTest(unittest.TestCase):
     """The label must not skip the job before the actor is checked."""
@@ -285,6 +396,11 @@ class WorkflowTest(unittest.TestCase):
         self.assertIn('run: python "$RUNNER_TEMP/check_human_override.py"', self.text)
         self.assertIn("if: steps.override.outputs.override != 'true'", self.text)
         self.assertIn("pull-requests: read", self.text)
+
+    def test_the_check_can_read_the_labels_and_the_timeline(self):
+        # Both come from the issues API, with the job's own token.
+        self.assertIn("issues: read", self.text)
+        self.assertIn("GH_TOKEN: ${{ github.token }}", self.text)
 
 
 if __name__ == "__main__":
