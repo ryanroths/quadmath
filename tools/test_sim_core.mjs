@@ -53,13 +53,29 @@ test('InputClock: wall time to sim time from the frame anchor, monotonic, capped
   clock.anchor(sim, 1000);
   assert.equal(clock.stamp(sim, 1004), 5_104_250);
   assert.equal(clock.stamp(sim, 1003), 5_104_250, 'never backwards');
-  assert.equal(clock.stamp(sim, 1150), null, 'past the horizon: dropped');
+  // Past the horizon the sim is behind the wall by more than a frame can
+  // step. The first such poll is kept, at the horizon; the ones after it are
+  // dropped until the sim has moved (the ring never fills while it waits).
+  assert.equal(clock.stamp(sim, 1150), 5_200_000, 'past the horizon: kept, at the horizon');
+  assert.equal(clock.stamp(sim, 1154), null, 'the next one there: dropped');
+  assert.equal(clock.stamp(sim, 5000), null, 'and every one after it, while the sim waits');
+  // The sim steps (a frame that took 400 ms of wall time flies 250 ticks, and
+  // anchors where it began): one poll again, at the new horizon.
+  const later = { simTimeUs: 5_350_000, alpha: 0, tickUs: 1000 };
+  clock.anchor(later, 1400);
+  assert.equal(clock.stamp(later, 1900), 5_450_000, 'the sim has moved: one more, at its horizon');
+  assert.equal(clock.stamp(later, 1904), null);
+  // And a poll inside the horizon again is stamped as ever, never backwards.
+  const caught = { simTimeUs: 5_600_000, alpha: 0, tickUs: 1000 };
+  clock.anchor(caught, 2000);
+  assert.equal(clock.stamp(caught, 2010), 5_610_000);
   // The default horizon: the longest step a frame takes (250 ticks), so a poll
   // after a frame whose own work took 200 ms is kept for the next frame.
   const wide = new InputClock();
   wide.anchor(sim, 1000);
   assert.equal(wide.stamp(sim, 1200), 5_300_250, 'a poll 200 ms after a frame began: kept');
-  assert.equal(wide.stamp(sim, 1260), null, 'past 250 ms: dropped');
+  assert.equal(wide.stamp(sim, 1260), 5_350_000, 'past 250 ms: kept once, at 250 ms');
+  assert.equal(wide.stamp(sim, 1264), null, 'then dropped');
 });
 
 // The owner's Air65 diff, as the page loads it (vendored from

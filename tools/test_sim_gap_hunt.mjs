@@ -294,7 +294,7 @@ test('all 30: complete on the last, with the flying time from the first find; pa
 test('sim.html wires the hunt: import, the frame, a respawn, the menu, the toasts, the card', () => {
   const html = readFileSync(join(root, 'sim.html'), 'utf8');
   assert.match(html, /from "\.\/sim-gap-hunt\.js\?v=[0-9a-f]{12}"/, 'stamped import');
-  assert.match(html, /stepCore\(frameMs,now\);\s*updateSunShadow\(\);updateOSD\(\);updateGates\(\);updateGapHunt\(\);/, 'after each core step, either core');
+  assert.match(html, /stepCore\(frameMs,at\);\s*updateSunShadow\(\);updateOSD\(\);updateGates\(\);updateGapHunt\(\);/, 'after each core step, either core');
   assert.match(html, /syncStateFromCore\(\);\s*if\(gapHunt\)huntReset\(gapHunt,state\.pos\);/, 'placeQuadAt starts the hunt from the spawn');
   assert.match(html, /<button class="menu-flight" id="menuGaps" style="display:none">Gaps<\/button>/, 'Gaps in the in-flight menu');
   assert.match(html, /on\('menuGaps',\(\)=>openGapsCard\(\)\);/);
