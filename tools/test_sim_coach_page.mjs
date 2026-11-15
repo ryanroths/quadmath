@@ -231,16 +231,26 @@ test('Coach on the Rig in the page: the picker, six drills on their pads, the tu
     await sleep(1500);
     await evaluate(ws, `import('/tools/coach_rig_autopilot.mjs').then(function(A){
       var s=window._sim, path=A.buildPath(A.PLANS.tunnel), mem=A.trackerMemory();
-      var F=window.__fly={done:false,error:null,polls:0};
-      s.setTestStick({r:0,p:0,y:0,t:0});
+      var F=window.__fly={done:false,error:null,polls:0,trace:[]};
+      // The pilot flies on the sim's own samples (_sim.setTestPilot: every
+      // 4 ms of sim time, on that tick's state), as tools/fly_coach_rig.mjs
+      // does: a page timer comes every 50 ms on a loaded runner, too coarse to
+      // hold the tunnel's 30 cm openings.
+      s.setTestPilot(function(cs){
+        if(!cs.armed||window._coach.phase()!=='fly')return {r:0,p:0,y:0,t:0};
+        var st=A.sceneState(cs);
+        var c=A.track(path,st,mem,{});
+        F.polls++;
+        if(F.polls%100===1&&F.trace.length<60)F.trace.push([Math.round(cs.flightMs),+st.p.x.toFixed(2),+st.p.y.toFixed(2),+st.p.z.toFixed(2),mem.i,+c.t.toFixed(2)]);
+        return {r:c.r,p:c.p,y:c.y,t:c.t};
+      });
       var id=setInterval(function(){
         try{
-          if(window._coach.phase()==='result'){clearInterval(id);s.setTestStick({r:0,p:0,y:0,t:0});F.done=true;return;}
-          var cs=s.coreState(); if(!cs.armed)return;
-          var c=A.track(path,A.sceneState(cs),mem,{});
-          s.setTestStick({r:c.r,p:c.p,y:c.y,t:c.t}); F.polls++;
-        }catch(e){F.error=String(e&&e.stack||e);clearInterval(id);}
-      },4);
+          var err=s.testPilotError();
+          if(err){F.error=err;clearInterval(id);s.setTestPilot(null);return;}
+          if(window._coach.phase()==='result'){clearInterval(id);s.setTestPilot(null);F.done=true;}
+        }catch(e){F.error=String(e&&e.stack||e);clearInterval(id);s.setTestPilot(null);}
+      },20);
       return true;
     })`);
     // The first-run prompt and any menu out of the way (as the sound test),
@@ -271,13 +281,14 @@ test('Coach on the Rig in the page: the picker, six drills on their pads, the tu
       if (fly.done || fly.error) break;
     }
     const after = JSON.parse(await evaluate(ws, `JSON.stringify({title:document.getElementById('coachTitle').textContent,msg:document.getElementById('coachMsg').textContent,
-      actions:document.getElementById('coachActions').classList.contains('show'),saved:JSON.parse(localStorage.getItem(${JSON.stringify(COACH_KEY)}))})`));
-    await evaluate(ws, `window._sim.setTestStick(null), true`);
+      actions:document.getElementById('coachActions').classList.contains('show'),saved:JSON.parse(localStorage.getItem(${JSON.stringify(COACH_KEY)})),
+      result:(function(r){return r?{passes:r.passes,gates:r.gates,done:r.done,time:r.time,crashes:r.crashes,crashed:r.crashed,medal:r.medal}:null;})(window._coach.phase()==='result'?window._coach.finish():null)})`));
+    await evaluate(ws, `window._sim.setTestPilot(null), window._sim.setTestStick(null), true`);
     assert.equal(fly.error, null, 'the in-page pilot: ' + fly.error);
     assert.ok(fly.done, `the tunnel finished (${fly.polls} polls; ${after.title} / ${after.msg})`);
     const medal = after.saved.medals.tunnel;
     assert.ok(['bronze', 'silver', 'gold'].includes(medal), `a medal on the tunnel: ${after.title} / ${after.msg}`);
-    assert.match(after.title, /^Tunnel — (GOLD|SILVER|BRONZE)$/);
+    assert.match(after.title, /^Tunnel — (GOLD|SILVER|BRONZE)$/, `the tunnel's medal: ${after.title} / ${after.msg} / ${JSON.stringify(after.result)} (${fly.polls} pilot samples) trace ${JSON.stringify(fly.trace)}`);
     assert.match(after.msg, /^Time \d+\.\d\d s · score \d+$/);
     assert.ok(after.actions, 'Retry / Next / Menu');
     assert.ok(after.saved.best.tunnel && after.saved.ghosts.tunnel && after.saved.ghosts.tunnel.length >= 2, 'best run and its ghost saved');

@@ -8303,6 +8303,10 @@ function trickFrameW(){
   }
   return trickFrameM;
 }
+function onPilotSample(){
+  if(trickSampling())onTrickSample();
+  if(testPilot)flyTestPilot();
+}
 function onTrickSample(){
   try{
     const s=core.tickState(trickCs);
@@ -8335,7 +8339,14 @@ function onTrickSample(){
 // Advance the flying core by one frame, then read it: events, then state.
 function stepCore(frameMs,now){
   try{
-    simClockMs+=core.advance(frameMs,!calib,onCoreEvent,trickSampling()?onTrickSample:null)*TICK_US/1000;
+    if(testPilotOn()){
+      // The test pilot's frame in pieces the core samples (under 249 ms,
+      // sim-core-adapter.js SAMPLE_MAX_FRAME_MS), so a long frame neither goes
+      // unpiloted nor loses time.
+      let left=frameMs,ran=0;
+      do{const ms=Math.min(left,200);ran+=core.advance(ms,!calib,onCoreEvent,onPilotSample);left-=ms;}while(left>0);
+      simClockMs+=ran*TICK_US/1000;
+    }else simClockMs+=core.advance(frameMs,!calib,onCoreEvent,trickSampling()?onTrickSample:null)*TICK_US/1000;
   }catch(e){
     // A plant fault stops a bf instance; start over at the map start.
     console.warn('sim-core: '+(e&&e.message||e)+' — respawning');
@@ -8649,6 +8660,22 @@ let pollCore=null;
 // Test hook (_sim.setTestStick): sticks a headless test flies on, over the
 // keyboard's. null in normal use.
 let testStick=null;
+// Test hook (_sim.setTestPilot): a headless test's pilot on the bf core,
+// fn(state) -> {r,p,y,t}, called on every sim sample (4 ms of sim time,
+// inside the core's step, onSample) on that tick's state, its sticks stamped
+// at that tick: closed at the sim's rate, as tools/fly_coach_rig.mjs flies
+// the core, however long the page's frames and timers run. While it flies,
+// this poll sends the core no sticks of its own (the core takes samples in
+// time order). null in normal use.
+let testPilot=null;
+let testPilotError=null;
+function testPilotOn(){return !!testPilot&&core.kind==='bf';}
+function flyTestPilot(){
+  try{
+    const c=testPilot(core.tickState());
+    if(c)core.input({r:+c.r||0,p:+c.p||0,y:+c.y||0,t:+c.t||0},core.simTimeUs);
+  }catch(e){testPilotError=String(e&&e.stack||e);testPilot=null;}
+}
 function pollInput(){
   if(simPaused()){lastPollUs=null;return;}
   const tUs=core.stamp(performance.now());
@@ -8675,7 +8702,7 @@ function pollInput(){
   }
   // The pool's cut with a radio (yardHoldArm): a copy, stick.aux stays the radio's.
   const held=core.kind==='bf'&&yardSt.armHold?yardHoldArm(stick.aux):stick.aux;
-  core.input(held===stick.aux?stick:Object.assign({},stick,{aux:held}),tUs);
+  if(!testPilotOn())core.input(held===stick.aux?stick:Object.assign({},stick,{aux:held}),tUs);
   // This sample carries an arm asked since the last one (bfArmAsk): Betaflight
   // sees the switch when it lands, tUs, ahead of the core's clock by
   // tUs-simTimeUs, and its 300 ms start there (bfArmWatch).
@@ -9293,7 +9320,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
   simClockMs:()=>simClockMs,
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
-  audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
+  audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},setTestPilot(fn){testPilot=typeof fn==='function'?fn:null;testPilotError=null;},testPilotError:()=>testPilotError,
   firstFlight:()=>({show:firstFlightState.show||null,seen:{...firstFlightSeen},liveS:firstFlightState.liveS||0,shownS:firstFlightState.shownS||0}),
   // The House's backyard (yardWatch): its data and edge state, and the check itself.
   yardState:()=>({yard:currentMap==='house'&&indoorBuilt.house?indoorBuilt.house.yard:null,...yardSt}),yardWatch,tryArm,coreArmed,
