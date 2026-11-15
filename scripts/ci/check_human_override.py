@@ -10,16 +10,23 @@ the gate with:
 
     human-override must be applied by the owner
 
-The PR number and its labels come from the event payload ($GITHUB_EVENT_PATH),
-the timeline from the REST API (or --timeline FILE, for tests). The verdict is
-written to $GITHUB_OUTPUT as override=true|false:
+Only the PR's number comes from the event payload ($GITHUB_EVENT_PATH). The
+labels the PR carries and the timeline that says who applied them are both
+read from the REST API when the script runs (or from --labels FILE and
+--timeline FILE, for tests). The payload's own copy of the labels is not used:
+it is what the PR looked like when the event fired, so a push that landed in
+the same second as the owner's label carried no label, and a re-run of that
+job replays the same payload however long ago the label went on.
+
+The verdict is written to $GITHUB_OUTPUT as override=true|false:
 
     exit 0, override=false   no label: run the gate as usual
     exit 0, override=true    the owner applied it: skip the gate
     exit 1, override=false   someone else applied it: fail
 
-Anything this script cannot establish -- an API error, a timeline that never
-shows the label being applied -- fails closed.
+Anything this script cannot establish -- an API error reading the labels or
+the timeline, a timeline that never shows the label being applied -- fails
+closed.
 
 Standard library only.
 """
@@ -117,8 +124,8 @@ def next_link(header: str | None) -> str | None:
     return None
 
 
-def fetch_timeline(repo: str, number: int, token: str, api: str = "https://api.github.com") -> list[dict]:
-    url = "%s/repos/%s/issues/%d/timeline?per_page=100" % (api.rstrip("/"), repo, number)
+def fetch_pages(url: str | None, token: str, what: str) -> list[dict]:
+    """Every page of a list endpoint, following rel="next"."""
     events: list[dict] = []
     while url:
         request = urllib.request.Request(
@@ -133,10 +140,30 @@ def fetch_timeline(repo: str, number: int, token: str, api: str = "https://api.g
         with urllib.request.urlopen(request, timeout=30) as response:
             page = json.load(response)
             if not isinstance(page, list):
-                raise ValueError("timeline page is not a list")
+                raise ValueError("%s page is not a list" % what)
             events.extend(page)
             url = next_link(response.headers.get("Link"))
     return events
+
+
+def fetch_timeline(repo: str, number: int, token: str, api: str = "https://api.github.com") -> list[dict]:
+    url = "%s/repos/%s/issues/%d/timeline?per_page=100" % (api.rstrip("/"), repo, number)
+    return fetch_pages(url, token, "timeline")
+
+
+def fetch_labels(repo: str, number: int, token: str, api: str = "https://api.github.com") -> list[str]:
+    """The names of the labels the PR carries now."""
+    url = "%s/repos/%s/issues/%d/labels?per_page=100" % (api.rstrip("/"), repo, number)
+    return label_names(fetch_pages(url, token, "labels"))
+
+
+def label_names(labels: list) -> list[str]:
+    names = []
+    for item in labels:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+            raise ValueError("a label without a name")
+        names.append(item["name"])
+    return names
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--event", default=os.environ.get("GITHUB_EVENT_PATH"), help="event payload JSON")
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY"), help="owner/name")
+    parser.add_argument("--labels", help="read the PR's labels from this JSON file instead of the API")
     parser.add_argument("--timeline", help="read the timeline from this JSON file instead of the API")
     parser.add_argument("--retries", type=int, default=3, help="re-reads of a timeline that is behind")
     parser.add_argument("--wait", type=float, default=5.0, help="seconds between re-reads")
@@ -167,31 +195,45 @@ def main(argv: list[str] | None = None) -> int:
     with open(args.event, encoding="utf-8") as fh:
         payload = json.load(fh)
     pr = payload.get("pull_request") or {}
-    labels = [l.get("name") for l in pr.get("labels") or []]
+    # The number is all the payload is trusted for: it does not change. Its
+    # labels are the PR as it was when the event fired (see the docstring).
+    number = pr.get("number") or payload.get("number")
     sender = None
     if payload.get("action") == "labeled" and (payload.get("label") or {}).get("name") == LABEL:
         sender = (payload.get("sender") or {}).get("login")
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
+    api = os.environ.get("GITHUB_API_URL") or "https://api.github.com"
 
-    if LABEL not in labels:
-        print("No %s label; the gate runs." % LABEL)
-        write_output(False)
-        return 0
+    def read_labels() -> list[str]:
+        if args.labels:
+            with open(args.labels, encoding="utf-8") as fh:
+                return label_names(json.load(fh))
+        return fetch_labels(args.repo, int(number), token, api)
 
-    def read() -> list[dict]:
+    def read_timeline() -> list[dict]:
         if args.timeline:
             with open(args.timeline, encoding="utf-8") as fh:
                 return json.load(fh)
-        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
-        api = os.environ.get("GITHUB_API_URL") or "https://api.github.com"
-        return fetch_timeline(args.repo, int(pr["number"]), token, api)
+        return fetch_timeline(args.repo, int(number), token, api)
 
+    # Each attempt reads the labels and then the timeline, both as they are
+    # now: a label taken off between two attempts is off.
     verdict, detail = "stale", ""
     for attempt in range(args.retries + 1):
         if attempt:
             time.sleep(args.wait)
         try:
-            events = read()
+            labels = read_labels()
         except Exception as exc:  # fail closed on anything the API throws
+            print("::error::%s (could not read the PR's labels: %s)" % (FAIL, exc))
+            write_output(False)
+            return 2
+        if LABEL not in labels:
+            verdict, detail = "absent", "no %s label" % LABEL
+            break
+        try:
+            events = read_timeline()
+        except Exception as exc:
             print("::error::%s (could not read the PR timeline: %s)" % (FAIL, exc))
             write_output(False)
             return 2
@@ -199,6 +241,10 @@ def main(argv: list[str] | None = None) -> int:
         if verdict != "stale":
             break
 
+    if verdict == "absent":
+        print("No %s label; the gate runs." % LABEL)
+        write_output(False)
+        return 0
     if verdict == "granted":
         print("::notice::%s %s; the gate is skipped." % (LABEL, detail))
         write_output(True)
