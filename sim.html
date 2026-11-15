@@ -491,6 +491,9 @@
   .board-list{display:flex;flex-direction:column;gap:6px;margin:10px 0;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px}
   .board-row{display:flex;justify-content:space-between;gap:10px;color:var(--txt)}
   .board-row span{color:var(--dim)}
+  .board-head{margin:10px 0 0}
+  .board-head b{color:var(--txt)}
+  .board-empty{margin:4px 0 8px}
   .skin-list{display:flex;flex-direction:column;gap:6px;margin:10px 0;max-height:min(70vh,640px);overflow-y:auto}
   .menu-layer.skins{width:min(460px,94vw)}
   .gap-list{list-style:none;display:flex;flex-direction:column;gap:4px;margin:10px 0;padding:0;max-height:min(60vh,520px);overflow-y:auto;text-align:left}
@@ -1122,7 +1125,7 @@ import {
   loadCanopyOn, saveCanopyOn, CANOPY_KEY, tintGroup, sanitizePilotName, classId,
   validateSubmittedRun, CLASS_IDS, issuePilotToken, syncDailyStreak,
   dailyLineFor, loadDailyLine, saveDailyLine, recordDailyLineFinish, dailyLineRank,
-  validateDailyLineRun, DAILY_LINE_STRICT_MISS_MS,
+  validateDailyLineRun, DAILY_LINE_STRICT_MISS_MS, WEEKLY_SUBMIT_GHOST_MAX,
   skinUnlockLabel, skinCssVars, skinMiniMarkup, skinById, skinPalette, skinHex,
   makeCraftGroup, craftChaseVisible, makeSkinTrail, pushSkinTrail, clearSkinTrail,
   escapeHtml,
@@ -1131,13 +1134,13 @@ import {
   loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   defaultWhoopKit, ghostFromObj, shareTrackPayload, fromShareTrackPayload,
-} from "./sim-retention.js?v=f29b824dec58";
+} from "./sim-retention.js?v=cfbbedf3c2c0";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=991cfa478d58";
+} from "./sim-secrets.js?v=80b97730e330";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
   fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=faef974b6827";
 window._simBooted=true; // tells the watchdog above the module actually executed
@@ -1868,8 +1871,27 @@ function finishRun(){
   lastRunSplits[id]=runSplits.slice();
   lastGateSplits[id]=runGateSplits.slice();
   lastRunSimFlips[id]=runSimFlips;
+  // The finish frame's pose: updateGhost runs after updateGates, so the ghost
+  // would otherwise stop up to a sample short of the last gate (the Worker
+  // checks a line run's gates and time on its ghost).
+  // A sample less than half a period old gives way to it, so no step is a
+  // few ms long.
+  if(ghostRec&&ghostRec.length){
+    const t=Math.round(simNowMs()-runStartTime);
+    const lastS=ghostRec[ghostRec.length-1];
+    const pose=[t,_gr2(state.pos.x),_gr2(state.pos.y),_gr2(state.pos.z),
+      _gr3(state.q.x),_gr3(state.q.y),_gr3(state.q.z),_gr3(state.q.w)];
+    const halfMs=500/(line?LINE_GHOST_HZ:CITY_GHOST_HZ);
+    if(t>lastS[0]){
+      if(ghostRec.length>1&&t-lastS[0]<halfMs)ghostRec[ghostRec.length-1]=pose;
+      else ghostRec.push(pose);
+    }
+  }
   const cap=line?LINE_GHOST_MAX:GHOST_MAX;
   let rec=ghostRec&&ghostRec.length?downsampleGhost(ghostRec,cap):null;
+  // A weekly submit sends the run at up to 15 Hz for 100 s, not the stored
+  // 480-sample ghost (strided on a run over 32 s).
+  const submitRec=ghostRec&&ghostRec.length?downsampleGhost(ghostRec,WEEKLY_SUBMIT_GHOST_MAX):null;
   lastRunGhostRec=rec;
   let best=false;
   const counted=runCountsForBoards(threeD);
@@ -1889,7 +1911,7 @@ function finishRun(){
     const gt=loadGhostTotal(id);
     if(!gt||total<gt)commitGhost(id,total);
   }
-  const extra=counted?noteRetentionFinish(id,total,rec):(threeD?'3D — NOT COUNTED':'');
+  const extra=counted?noteRetentionFinish(id,total,rec,submitRec):(threeD?'3D — NOT COUNTED':'');
   const label=line?'LINE':'RUN';
   const parts=line?runGateSplits:runSplits;
   lastRunReplayRec=replayRec&&replayRec.length?downsampleGhost(replayRec,REPLAY_GHOST_MAX):(rec&&rec.length?rec:null);
@@ -5726,8 +5748,12 @@ function showMenuLayer(html){
   el.innerHTML=html;
   el.classList.add('show');
 }
+// Bumped each time a board card opens (and when the menu layer hides), so a
+// late online reply paints only the card that asked for it.
+let boardCardSeq=0;
 function hideMenuLayer(){
   const el=document.getElementById('menuLayer');
+  boardCardSeq++;
   if(el)el.classList.remove('show');
 }
 function bestText(id){
@@ -5855,7 +5881,7 @@ function openDailyLineCard(){
     ' · best '+(best?fmtLap(best.timeMs):'—')+'</p>'+
     '<p class="daily-meta" id="dailyLineTricks">Tricks '+escapeHtml(trickLineupText())+'</p>'+
     '<div id="dailyLineBoard"></div>'+
-    '<p class="daily-meta" id="dailyLineRank">'+(online?'Online top 20.':'Offline — local best only.')+'</p>'+
+    '<p class="daily-meta" id="dailyLineRank">'+(online?'Online: loading…':'Online off. This browser only.')+'</p>'+
     '<button type="button" class="primary" id="dailyLineFly">Fly '+escapeHtml(c.name)+'</button>'+
     (online?'<button type="button" id="dailyLineRefresh">Refresh</button>':'')+
     '<button type="button" id="layerClose">Close</button>');
@@ -5863,28 +5889,57 @@ function openDailyLineCard(){
   if(layer){layer.classList.remove('skins');layer.classList.add('daily-line');}
   document.getElementById('dailyLineFly').onclick=()=>flyDailyLine(c);
   document.getElementById('layerClose').onclick=hideMenuLayer;
-  function paint(entries){
-    const rows=entries||(best?[{name:name,timeMs:best.timeMs}]:[]);
-    renderBoardBody(document.getElementById('dailyLineBoard'), utcWeekId(), cls, rows);
+  // Online rows only ever come from the Worker; this browser's best is listed
+  // apart, under its own label.
+  const mine=best?[{name:name,timeMs:best.timeMs}]:[];
+  let onlineRows=null;
+  let onlineNote=online?'Loading…':'Online off until a leaderboard URL is set.';
+  function paint(){
+    renderBoardBody(document.getElementById('dailyLineBoard'), [
+      { title:'Online · top 20', rows:onlineRows, empty:onlineNote },
+      { title:'This browser', rows:mine, empty:'No time on this browser today.' },
+    ]);
     const rankEl=document.getElementById('dailyLineRank');
     if(!rankEl)return;
-    if(best){
-      const r=dailyLineRank(rows,name,best.timeMs);
-      rankEl.textContent='You #'+r.rank+' of '+r.of+(online?' online.':' local.');
-    }else rankEl.textContent=online?'Online top 20. Fly to post.':'Offline — local best only.';
+    if(!onlineRows)rankEl.textContent=online?'Online: '+onlineNote:'Online off. This browser only.';
+    else if(!best)rankEl.textContent='Fly to post online.';
+    else{
+      // The pilot's online row, by name: this browser's best may not have
+      // been posted (offline, refused) or may be another class's.
+      const who=sanitizePilotName(name);
+      const i=onlineRows.findIndex((r)=>sanitizePilotName(r.name)===who);
+      if(i<0)rankEl.textContent='Not on the online board yet.';
+      else{
+        const t=+(onlineRows[i].timeMs||onlineRows[i].time_ms);
+        rankEl.textContent='You #'+(i+1)+' of '+onlineRows.length+' online.'+(best.timeMs<t?' Best here '+fmtLap(best.timeMs)+', not posted.':'');
+      }
+    }
   }
   paint();
   const rf=document.getElementById('dailyLineRefresh');
-  async function pull(){
+  const card=++boardCardSeq;
+  let req=0;
+  async function pull(fromButton){
     if(!online)return;
+    const mineReq=++req;
+    let rows=null, note='Online unavailable.';
     try{
       const r=await fetch(url+'/api/daily?day='+encodeURIComponent(c.date)+'&class='+cls);
       const j=await r.json();
-      paint(j.entries||[]);
-    }catch(e){toast('ONLINE UNAVAILABLE');}
+      if(!r.ok||!j||j.online===false)throw new Error('offline');
+      rows=Array.isArray(j.entries)?j.entries:[];
+      note='No online times yet.';
+    }catch(e){
+      if(fromButton&&card===boardCardSeq)toast('ONLINE UNAVAILABLE');
+    }
+    // A reply for a card since closed or reopened, or an older request, is dropped.
+    if(card!==boardCardSeq||mineReq!==req)return;
+    onlineRows=rows;
+    onlineNote=note;
+    paint();
   }
-  if(rf)rf.onclick=pull;
-  pull();
+  if(rf)rf.onclick=()=>pull(true);
+  pull(false);
 }
 function flyGeneratedTrack(t){
   if(!t)return;
@@ -5915,32 +5970,43 @@ function openDailyCard(){
   document.getElementById('dailySkins').onclick=()=>openSkinsCard();
   document.getElementById('layerClose').onclick=hideMenuLayer;
 }
-function renderBoardBody(el, week, frameMm, onlineRows){
+// A board card's lists, each under the label of where its rows come from
+// (online from the Worker, or this browser's own): sections of
+// {title, rows, empty}. rows null or [] shows `empty` in its place; one list
+// never stands in for another.
+function renderBoardBody(el, sections){
   if(!el)return;
   el.textContent='';
-  const local=boardRows(loadBoard(), week, frameMm);
-  const rows=(onlineRows&&onlineRows.length)?onlineRows:local;
-  if(!rows.length){
-    const p=document.createElement('p');
-    p.className='daily-meta';
-    p.textContent='No times yet.';
-    el.appendChild(p);
-    return;
+  for(const sec of sections||[]){
+    const head=document.createElement('p');
+    head.className='daily-meta board-head';
+    const hb=document.createElement('b');
+    hb.textContent=sec.title;
+    head.appendChild(hb);
+    el.appendChild(head);
+    const rows=Array.isArray(sec.rows)?sec.rows:[];
+    if(!rows.length){
+      const p=document.createElement('p');
+      p.className='daily-meta board-empty';
+      p.textContent=sec.empty||'No times yet.';
+      el.appendChild(p);
+      continue;
+    }
+    const wrap=document.createElement('div');
+    wrap.className='board-list';
+    rows.forEach((r,i)=>{
+      const row=document.createElement('div');
+      row.className='board-row';
+      const b=document.createElement('b');
+      b.textContent=(i+1)+' '+sanitizePilotName(r.name);
+      const span=document.createElement('span');
+      span.textContent=fmtMs(r.timeMs||r.time_ms);
+      row.appendChild(b);
+      row.appendChild(span);
+      wrap.appendChild(row);
+    });
+    el.appendChild(wrap);
   }
-  const wrap=document.createElement('div');
-  wrap.className='board-list';
-  rows.forEach((r,i)=>{
-    const row=document.createElement('div');
-    row.className='board-row';
-    const b=document.createElement('b');
-    b.textContent=(i+1)+' '+sanitizePilotName(r.name);
-    const span=document.createElement('span');
-    span.textContent=fmtMs(r.timeMs||r.time_ms);
-    row.appendChild(b);
-    row.appendChild(span);
-    wrap.appendChild(row);
-  });
-  el.appendChild(wrap);
 }
 function openBoardsCard(){
   const week=utcWeekId();
@@ -5949,8 +6015,7 @@ function openBoardsCard(){
   const online=onlineBoardsEnabled(url);
   const cls=classId(currentBuild&&currentBuild.frameMm);
   showMenuLayer('<h2>Weekly boards</h2>'+
-    '<p>'+week+' · class <b style="color:var(--txt)">'+cls+'mm</b> from Your build. Local always. '+
-    (online?'Online: on.':'Online: off until a leaderboard URL is set.')+'</p>'+
+    '<p>'+week+' · class <b style="color:var(--txt)">'+cls+'mm</b> from Your build. Online times and this browser\'s are listed apart.</p>'+
     '<p class="daily-meta">Course: '+escapeHtml(t.name)+' · '+escapeHtml(t.map)+(t.parts?' · '+t.parts.map(escapeHtml).join(' › '):'')+'</p>'+
     '<div id="boardBody"></div>'+
     (online?'<button type="button" id="boardRefresh">Refresh online</button>':'')+
@@ -5960,15 +6025,38 @@ function openBoardsCard(){
   document.getElementById('boardFly').onclick=()=>flyGeneratedTrack(t);
   document.getElementById('boardSkins').onclick=()=>openSkinsCard();
   document.getElementById('layerClose').onclick=hideMenuLayer;
-  renderBoardBody(document.getElementById('boardBody'), week, cls);
-  const rf=document.getElementById('boardRefresh');
-  if(rf)rf.onclick=async()=>{
+  const localRows=boardRows(loadBoard(), week, cls);
+  let onlineRows=null;
+  let onlineNote=online?'Loading…':'Online off until a leaderboard URL is set.';
+  const paint=()=>renderBoardBody(document.getElementById('boardBody'), [
+    { title:'Online · top 20', rows:onlineRows, empty:onlineNote },
+    { title:'This browser', rows:localRows, empty:'No times on this browser yet.' },
+  ]);
+  paint();
+  const card=++boardCardSeq;
+  let req=0;
+  async function pull(fromButton){
+    if(!online)return;
+    const mineReq=++req;
+    let rows=null, note='Online unavailable.';
     try{
       const r=await fetch(url+'/api/board?week='+encodeURIComponent(week)+'&class='+cls);
       const j=await r.json();
-      renderBoardBody(document.getElementById('boardBody'), week, cls, j.entries);
-    }catch(e){toast('ONLINE UNAVAILABLE');}
-  };
+      if(!r.ok||!j||j.online===false)throw new Error('offline');
+      rows=Array.isArray(j.entries)?j.entries:[];
+      note='No online times yet.';
+    }catch(e){
+      if(fromButton&&card===boardCardSeq)toast('ONLINE UNAVAILABLE');
+    }
+    // A reply for a card since closed or reopened, or an older request, is dropped.
+    if(card!==boardCardSeq||mineReq!==req)return;
+    onlineRows=rows;
+    onlineNote=note;
+    paint();
+  }
+  const rf=document.getElementById('boardRefresh');
+  if(rf)rf.onclick=()=>pull(true);
+  pull(false);
 }
 function openSkinsCard(){
   const prog=skinProgress();
@@ -7789,7 +7877,7 @@ function ghostPayloadOf(id, samples, timeMs){
     samples: samples||[],
   });
 }
-function noteRetentionFinish(id, total, rec){
+function noteRetentionFinish(id, total, rec, submitRec){
   let extra='';
   const offBoards=runOffBoards();
   if(isDailyTrackId(id)){
@@ -7824,7 +7912,7 @@ function noteRetentionFinish(id, total, rec){
     });
     saveBoard(board);
     extra=(extra?extra+' · ':'')+'LOCAL BOARD';
-    maybeSubmitOnline(id, total, rec);
+    maybeSubmitOnline(id, total, submitRec||rec);
   }
   if(activeDuel&&rivalGhost&&rivalMatches(rivalGhost.track,id)){
     const r=duelResult(total, rivalGhost.lapTime);
@@ -7844,7 +7932,12 @@ async function maybeSubmitOnline(id, total, rec){
     build: currentBuild, token: issuePilotToken(),
   };
   const checked=validateSubmittedRun({ ghost, track, frameMm: body.frameMm, timeMs: total });
-  if(!checked.ok)return;
+  if(!checked.ok){
+    // Said, not dropped: a run the Worker would refuse stays on the local board.
+    console.warn('weekly submit not sent: '+checked.reason);
+    toast('NOT SENT: '+String(checked.reason));
+    return;
+  }
   try{
     const r=await fetch(url+'/api/submit', {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -8210,6 +8303,10 @@ function trickFrameW(){
   }
   return trickFrameM;
 }
+function onPilotSample(){
+  if(trickSampling())onTrickSample();
+  if(testPilot)flyTestPilot();
+}
 function onTrickSample(){
   try{
     const s=core.tickState(trickCs);
@@ -8242,7 +8339,14 @@ function onTrickSample(){
 // Advance the flying core by one frame, then read it: events, then state.
 function stepCore(frameMs,now){
   try{
-    simClockMs+=core.advance(frameMs,!calib,onCoreEvent,trickSampling()?onTrickSample:null)*TICK_US/1000;
+    if(testPilotOn()){
+      // The test pilot's frame in pieces the core samples (under 249 ms,
+      // sim-core-adapter.js SAMPLE_MAX_FRAME_MS), so a long frame neither goes
+      // unpiloted nor loses time.
+      let left=frameMs,ran=0;
+      do{const ms=Math.min(left,200);ran+=core.advance(ms,!calib,onCoreEvent,onPilotSample);left-=ms;}while(left>0);
+      simClockMs+=ran*TICK_US/1000;
+    }else simClockMs+=core.advance(frameMs,!calib,onCoreEvent,trickSampling()?onTrickSample:null)*TICK_US/1000;
   }catch(e){
     // A plant fault stops a bf instance; start over at the map start.
     console.warn('sim-core: '+(e&&e.message||e)+' — respawning');
@@ -8556,6 +8660,22 @@ let pollCore=null;
 // Test hook (_sim.setTestStick): sticks a headless test flies on, over the
 // keyboard's. null in normal use.
 let testStick=null;
+// Test hook (_sim.setTestPilot): a headless test's pilot on the bf core,
+// fn(state) -> {r,p,y,t}, called on every sim sample (4 ms of sim time,
+// inside the core's step, onSample) on that tick's state, its sticks stamped
+// at that tick: closed at the sim's rate, as tools/fly_coach_rig.mjs flies
+// the core, however long the page's frames and timers run. While it flies,
+// this poll sends the core no sticks of its own (the core takes samples in
+// time order). null in normal use.
+let testPilot=null;
+let testPilotError=null;
+function testPilotOn(){return !!testPilot&&core.kind==='bf';}
+function flyTestPilot(){
+  try{
+    const c=testPilot(core.tickState());
+    if(c)core.input({r:+c.r||0,p:+c.p||0,y:+c.y||0,t:+c.t||0},core.simTimeUs);
+  }catch(e){testPilotError=String(e&&e.stack||e);testPilot=null;}
+}
 function pollInput(){
   if(simPaused()){lastPollUs=null;return;}
   const tUs=core.stamp(performance.now());
@@ -8582,7 +8702,7 @@ function pollInput(){
   }
   // The pool's cut with a radio (yardHoldArm): a copy, stick.aux stays the radio's.
   const held=core.kind==='bf'&&yardSt.armHold?yardHoldArm(stick.aux):stick.aux;
-  core.input(held===stick.aux?stick:Object.assign({},stick,{aux:held}),tUs);
+  if(!testPilotOn())core.input(held===stick.aux?stick:Object.assign({},stick,{aux:held}),tUs);
   // This sample carries an arm asked since the last one (bfArmAsk): Betaflight
   // sees the switch when it lands, tUs, ahead of the core's clock by
   // tUs-simTimeUs, and its 300 ms start there (bfArmWatch).
@@ -9200,7 +9320,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
   simClockMs:()=>simClockMs,
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
-  audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},
+  audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},setTestPilot(fn){testPilot=typeof fn==='function'?fn:null;testPilotError=null;},testPilotError:()=>testPilotError,
   firstFlight:()=>({show:firstFlightState.show||null,seen:{...firstFlightSeen},liveS:firstFlightState.liveS||0,shownS:firstFlightState.shownS||0}),
   // The House's backyard (yardWatch): its data and edge state, and the check itself.
   yardState:()=>({yard:currentMap==='house'&&indoorBuilt.house?indoorBuilt.house.yard:null,...yardSt}),yardWatch,tryArm,coreArmed,

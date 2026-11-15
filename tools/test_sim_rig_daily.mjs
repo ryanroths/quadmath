@@ -182,6 +182,24 @@ function ghostOf(f) {
   }
   return { samples, timeMs: Math.round((t1 - t0) * 1000) };
 }
+// A weekly run as the page records it (sim-tracks.js isLineTrackId: one pass):
+// 15 Hz on sim time from the gate-0 pass to the last gate's, the finish
+// frame's pose last.
+function lineGhostOf(f, gateCount) {
+  const t0 = f.passes.find((p) => p.i === 0).t;
+  const t1 = f.passes.find((p) => p.i === gateCount - 1 && p.t > t0).t;
+  const samples = [];
+  let next = t0;
+  let last = null;
+  for (const s of f.samples) {
+    if (s.t < t0 - 1e-9 || s.t > t1 + 1e-9) continue;
+    last = s;
+    if (s.t + 1e-9 >= next) { samples.push([Math.round((s.t - t0) * 1000), s.x, s.y, s.z, 0, 0, 0, 0]); next += 1 / 15; }
+  }
+  const tEnd = Math.round((t1 - t0) * 1000);
+  if (last && samples[samples.length - 1][0] < tEnd) samples.push([tEnd, last.x, last.y, last.z, 0, 0, 0, 0]);
+  return { samples, timeMs: tEnd };
+}
 
 test('the autopilot flies every Daily of the 14 days, three laps each, every lap 20 to 40 s', { timeout: 10 * 60 * 1000 }, async () => {
   const rig = days(RIG_GEN_DAILY_FROM, 14).filter((x) => dailyMapFor(x) === 'rig');
@@ -203,7 +221,7 @@ test('the autopilot flies Boards for the weeks the 14 days reach, and the Worker
   weeks.forEach((w, k) => {
     const t = weeklyTrackFor(w), f = flights[k];
     for (const lap of f.laps) assert.ok(lap * 1000 <= RIG_WEEKLY_LAP_MS, w + ' lap ' + lap.toFixed(2));
-    const g = ghostOf(f);
+    const g = lineGhostOf(f, t.gates.length);
     // normalizeSubmit is what the Worker runs on a submit (it bundles this file).
     const now = Date.parse(weekMonday(w)) + 36e5 * 30;
     const r = normalizeSubmit({ name: 'AUTOPILOT', week: w, frameMm: 65, timeMs: g.timeMs, track: t.id, ghost: { v: 1, track: t.id, phys: PHYS_VER, name: 'AUTOPILOT', samples: g.samples } }, now);

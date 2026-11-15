@@ -19,7 +19,8 @@ import {
   dailyTrackValid, dailyTrackInvalidReason, dailyTrackOnMap, isDailyTrackId, isWeeklyTrackId,
   trackFromRetentionId, DAILY_GEN, GATE_SIZE_MIN, GATE_SIZE_MAX, WS_PER_METRE,
   mapObstacles, gateHasClearance, minGateSpacing, dailyLapRange, estimateLapSeconds,
-  validateSubmittedRun, countGhostLaps, encodeDuel, decodeDuel, decodeQm2,
+  validateSubmittedRun, countGhostLaps, lineRunPasses, MISS_PENALTY_MS, LINE_TIME_TOL_MS, WEEKLY_GHOST_MAX_SAMPLES, LINE_SWEEP_SLACK_MAX,
+  encodeDuel, decodeDuel, decodeQm2,
   duelResult, emptyDaily, recordDailyFinish, loadDaily, saveDaily,
   loadBoard, saveBoard, recordLocalBoard, boardRows, leaderboardUrl,
   onlineBoardsEnabled, unlockedSkins, isSkinUnlocked, resolveSkin,
@@ -56,10 +57,36 @@ function memStore() {
   };
 }
 
+// A one-pass ghost ends as the page's does: on the frame the quad enters the
+// last gate's sphere (the finish), not at its centre.
+function endAtFinish(g, track) {
+  const last = track.gates[track.gates.length - 1];
+  const r = (last.size || 1.8) * 0.8;
+  const s = g.samples;
+  for (let i = Math.floor(s.length / 2); i < s.length; i++) {
+    const a = s[i - 1], b = s[i];
+    const d = (p) => Math.hypot(p[1] - last.x, p[2] - last.y, p[3] - last.z);
+    if (d(b) >= r) continue;
+    let lo = 0, hi = 1;
+    for (let k = 0; k < 30; k++) {
+      const m = (lo + hi) / 2;
+      const p = a.map((v, j) => v + (b[j] - v) * m);
+      if (d(p) < r) hi = m; else lo = m;
+    }
+    const e = a.map((v, j) => v + (b[j] - v) * hi);
+    e[0] = Math.round(e[0]);
+    g.samples = s.slice(0, i).concat([e]);
+    return g;
+  }
+  return g;
+}
+
 function pace(track, extra) {
+  const laps = extra && extra.laps || 1;
   const g = makePaceGhost(track.gates, {
-    track: track.id, name: extra && extra.name || 'PACE', speed: extra && extra.speed || 8, hz: extra && extra.hz || 16, laps: extra && extra.laps || 3,
+    track: track.id, name: extra && extra.name || 'PACE', speed: extra && extra.speed || 8, hz: extra && extra.hz || 16, laps,
   });
+  if (laps === 1) endAtFinish(g, track);
   g.lapTime = g.samples[g.samples.length - 1][0];
   return g;
 }
@@ -246,18 +273,45 @@ test('daily generator: 64 seeds on every indoor map stay clear, spaced, and in-b
   assert.deepEqual(DAILY_MAPS.map((m) => m.id), ['living', 'garage', 'warehouse', 'office', 'gym', 'trainer']);
 });
 
-test('anti-cheat accepts a 3-lap pace ghost and rejects speed / incomplete / sparse', () => {
+// The page flies every track but the city loops as one pass (sim-tracks.js
+// isLineTrackId): a weekly run is gate 0 to the last gate, once.
+test('anti-cheat takes a one-pass line run and rejects speed / incomplete / sparse / time', () => {
   const track = dailyTrackFor('2026-10-17');
-  const ghost = pace(track, { speed: 8, hz: 16, laps: 3 });
+  const ghost = pace(track, { speed: 8, hz: 15 });
   const ok = validateSubmittedRun({ ghost, track, frameMm: 65, timeMs: ghost.lapTime });
   assert.equal(ok.ok, true, ok.reason);
-  assert.ok(countGhostLaps(ghost.samples, track) >= 3, 'laps ' + countGhostLaps(ghost.samples, track));
+  assert.equal(ok.misses, 0);
+  const pass = lineRunPasses(ghost.samples, track);
+  assert.equal(pass.start, 0);
+  assert.equal(pass.finish, ghost.samples.length - 1);
 
-  const short = pace(track, { speed: 8, hz: 16, laps: 1 });
-  short.lapTime = short.samples[short.samples.length - 1][0];
-  const incomplete = validateSubmittedRun({ ghost: short, track, frameMm: 65, timeMs: short.lapTime });
+  // Misses add whole penalties to the page's time: 2 misses is the ghost
+  // time + 4 s; anything between, or less than the ghost's, is not a run.
+  const two = validateSubmittedRun({ ghost, track, frameMm: 65, timeMs: ghost.lapTime + 2 * MISS_PENALTY_MS });
+  assert.equal(two.ok, true, two.reason);
+  assert.equal(two.misses, 2);
+  for (const off of [-LINE_TIME_TOL_MS - 50, LINE_TIME_TOL_MS + 50, MISS_PENALTY_MS / 2]) {
+    const bad = validateSubmittedRun({ ghost, track, frameMm: 65, timeMs: ghost.lapTime + off });
+    assert.equal(bad.ok, false, 'off ' + off);
+    assert.equal(bad.reason, 'TIME MISMATCH');
+  }
+
+  // Half the gates: the line never finishes.
+  const half = JSON.parse(JSON.stringify(ghost));
+  half.samples = ghost.samples.slice(0, Math.floor(ghost.samples.length / 2));
+  half.lapTime = half.samples[half.samples.length - 1][0];
+  const incomplete = validateSubmittedRun({ ghost: half, track, frameMm: 65, timeMs: half.lapTime });
   assert.equal(incomplete.ok, false);
-  assert.equal(incomplete.reason, 'INCOMPLETE LAPS');
+  assert.equal(incomplete.reason, 'INCOMPLETE LINE');
+
+  // A ghost that flies on past the finish and comes back to it is timed to
+  // its last sample: it can only be slower, never claim the first pass.
+  const three = pace(track, { speed: 8, hz: 15, laps: 3 });
+  const over = validateSubmittedRun({ ghost: three, track, frameMm: 65, timeMs: three.lapTime });
+  assert.equal(over.ok, true, over.reason);
+  const early = validateSubmittedRun({ ghost: three, track, frameMm: 65, timeMs: ghost.lapTime });
+  assert.equal(early.ok, false);
+  assert.equal(early.reason, 'TIME MISMATCH');
 
   const fast = JSON.parse(JSON.stringify(ghost));
   for (let i = 1; i < fast.samples.length; i++) fast.samples[i][1] = ghost.samples[i - 1][1] + 80;
@@ -272,9 +326,9 @@ test('anti-cheat accepts a 3-lap pace ghost and rejects speed / incomplete / spa
   const sp = validateSubmittedRun({ ghost: sparse, track, frameMm: 65, timeMs: sparse.lapTime });
   assert.equal(sp.ok, false);
 
-  const mismatch = validateSubmittedRun({ ghost, track, frameMm: 65, timeMs: 9000 });
-  assert.equal(mismatch.ok, false);
-  assert.equal(mismatch.reason, 'TIME MISMATCH');
+  const tooMany = JSON.parse(JSON.stringify(ghost));
+  while (tooMany.samples.length <= WEEKLY_GHOST_MAX_SAMPLES) tooMany.samples.push(tooMany.samples[tooMany.samples.length - 1]);
+  assert.equal(validateSubmittedRun({ ghost: tooMany, track, frameMm: 65, timeMs: ghost.lapTime }).reason, 'TOO MANY SAMPLES');
 
   const tagged = Object.assign({}, ghost, { threeD: true });
   const d3 = validateSubmittedRun({ ghost: tagged, track, frameMm: 65, timeMs: ghost.lapTime });
@@ -285,10 +339,133 @@ test('anti-cheat accepts a 3-lap pace ghost and rejects speed / incomplete / spa
   assert.equal(flag.reason, '3D MODE');
 });
 
+test('the city loops still need three laps', () => {
+  const base = dailyTrackFor('2026-10-17');
+  const track = { ...base, id: 'city-loop' };
+  const ghost = pace(track, { speed: 8, hz: 16, laps: 3 });
+  const ok = validateSubmittedRun({ ghost, track, frameMm: 65, timeMs: ghost.lapTime });
+  assert.equal(ok.ok, true, ok.reason);
+  assert.ok(countGhostLaps(ghost.samples, track) >= 3);
+  const one = pace(track, { speed: 8, hz: 16, laps: 1 });
+  const short = validateSubmittedRun({ ghost: one, track, frameMm: 65, timeMs: one.lapTime + 5000 });
+  assert.equal(short.ok, false);
+});
+
+// What the page sends for a weekly run: 15 Hz on sim time from the gate-0
+// frame, the finish frame's pose last. At a 65's top speed a sample is 3.2 u
+// apart, more than the smallest Rig gate's sphere; the old point check missed
+// gates and dropped every such run.
+test('a fast page-shaped weekly run passes; a skipped or out-of-order gate does not', () => {
+  const week = RIG_GEN_WEEKLY_FROM;
+  const track = weeklyTrackFor(week);
+  const speed = CLASS_MAX_SPEED[65] * 0.95;
+  const ghost = humanRun(track, { speed, hz: 15 });
+  ghost.phys = PHYS_VER;
+  assert.ok(track.gates.some((g) => g.size * 0.8 * 2 < speed / 15), 'a gate smaller than a sample step');
+  assert.ok(countGhostLaps(ghost.samples, track) < 1, 'the point check misses gates at this speed');
+  const now = Date.parse(weekMonday(week)) + 36e5 * 30;
+  const ok = normalizeSubmit({ name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost, track: track.id, build: { frameMm: 65 }, token: 'a'.repeat(32) }, now);
+  assert.equal(ok.ok, true, ok.reason);
+
+  // Skip a middle gate: fly 15 Hz straight from the gate before it to the
+  // gate after it, wide of it by more than the sweep's slack.
+  const r = (g) => g.size * 0.8;
+  const dGate = (s, g) => Math.hypot(s[1] - g.x, s[2] - g.y, s[3] - g.z);
+  let k = -1;
+  for (let j = 1; j < track.gates.length - 2 && k < 0; j++) {
+    const ga = track.gates[j - 1], gb = track.gates[j + 1], gk = track.gates[j];
+    const ab = [gb.x - ga.x, gb.y - ga.y, gb.z - ga.z];
+    const L2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2;
+    const u = Math.max(0, Math.min(1, ((gk.x - ga.x) * ab[0] + (gk.y - ga.y) * ab[1] + (gk.z - ga.z) * ab[2]) / L2));
+    const off = Math.hypot(ga.x + ab[0] * u - gk.x, ga.y + ab[1] * u - gk.y, ga.z + ab[2] * u - gk.z);
+    if (off > r(gk) + LINE_SWEEP_SLACK_MAX + 0.5) k = j;
+  }
+  assert.ok(k > 0, 'a gate off the line between its neighbours');
+  const ga = track.gates[k - 1], gb = track.gates[k + 1];
+  const iA = ghost.samples.findIndex((s) => dGate(s, ga) < r(ga));
+  const iB = ghost.samples.findIndex((s, i) => i > iA && dGate(s, gb) < r(gb));
+  const a = ghost.samples[iA], b = ghost.samples[iB];
+  const straight = [];
+  for (let t = a[0] + 67; t < b[0]; t += 67) {
+    const f = (t - a[0]) / (b[0] - a[0]);
+    straight.push([t, ...[1, 2, 3].map((j) => Math.round((a[j] + (b[j] - a[j]) * f) * 100) / 100), 0, 0, 0, 1]);
+  }
+  const skipped = { ...ghost, samples: ghost.samples.slice(0, iA + 1).concat(straight, ghost.samples.slice(iB)) };
+  const sk = validateSubmittedRun({ ghost: skipped, track, frameMm: 65, timeMs: ghost.lapTime });
+  assert.equal(sk.ok, false, 'skipped gate ' + k);
+  assert.equal(sk.reason, 'INCOMPLETE LINE');
+  assert.equal(lineRunPasses(skipped.samples, track).passed, k);
+
+  // The same flight backwards: every gate, in the wrong order.
+  const back = JSON.parse(JSON.stringify(ghost));
+  const T = back.samples[back.samples.length - 1][0];
+  back.samples = back.samples.slice().reverse().map((s) => [T - s[0], ...s.slice(1)]);
+  const bk = validateSubmittedRun({ ghost: back, track, frameMm: 65, timeMs: T });
+  assert.equal(bk.ok, false);
+  assert.equal(bk.reason, 'INCOMPLETE LINE');
+
+  // A sparse forged ghost (a sample every 0.6 s) is not the page's.
+  const sparse = { ...ghost, samples: ghost.samples.filter((s, i) => i % 9 === 0 || i === ghost.samples.length - 1) };
+  assert.equal(validateSubmittedRun({ ghost: sparse, track, frameMm: 65, timeMs: ghost.lapTime }).reason, 'SPARSE SAMPLES');
+
+  // The page's finish frame can land a few ms after a sample: at near the
+  // cap, that short step's rounding must not read as over it.
+  const tail = JSON.parse(JSON.stringify(ghost));
+  const end = tail.samples[tail.samples.length - 1], prev = tail.samples[tail.samples.length - 2];
+  const f = 1 - 4 / (end[0] - prev[0]);
+  tail.samples.splice(tail.samples.length - 1, 0, [end[0] - 4, ...[1, 2, 3].map((j) => Math.round((prev[j] + (end[j] - prev[j]) * f) * 100) / 100 + 0.005), 0, 0, 0, 1]);
+  const tl = validateSubmittedRun({ ghost: tail, track, frameMm: 65, timeMs: ghost.lapTime });
+  assert.equal(tl.ok, true, tl.reason);
+});
+
+// A pilot who flies just wide of the finish gate, turns back and enters it:
+// the page finishes on the entry, and so must the check.
+test('a near miss of the finish gate, then the finish, is one run', () => {
+  const track = weeklyTrackFor(RIG_GEN_WEEKLY_FROM);
+  const ghost = humanRun(track, { speed: 30, hz: 15 });
+  const fin = track.gates[track.gates.length - 1];
+  const r = fin.size * 0.8;
+  const iIn = ghost.samples.findIndex((s) => Math.hypot(s[1] - fin.x, s[2] - fin.y, s[3] - fin.z) < r + 3);
+  const head = ghost.samples.slice(0, iIn);
+  const from = head[head.length - 1];
+  // Past the gate, r + 0.4 to its side (outside the sphere, inside the
+  // slack), on 3 u, then back into the sphere.
+  const side = { x: fin.x + (r + 0.4), y: fin.y, z: fin.z };
+  const beyond = { x: side.x + (side.x - from[1]), y: from[2], z: side.z + (side.z - from[3]) };
+  const way = [side, beyond, { x: fin.x + r * 0.5, y: fin.y, z: fin.z }];
+  let t = from[0], p = { x: from[1], y: from[2], z: from[3] };
+  const samples = head.slice();
+  for (const w of way) {
+    const L = Math.hypot(w.x - p.x, w.y - p.y, w.z - p.z);
+    const steps = Math.max(1, Math.ceil(L / (20 / 15)));
+    for (let i = 1; i <= steps; i++) {
+      t += Math.round(1000 / 15);
+      const q = { x: p.x + (w.x - p.x) * i / steps, y: p.y + (w.y - p.y) * i / steps, z: p.z + (w.z - p.z) * i / steps };
+      samples.push([t, Math.round(q.x * 100) / 100, Math.round(q.y * 100) / 100, Math.round(q.z * 100) / 100, 0, 0, 0, 1]);
+    }
+    p = w;
+  }
+  const g = { ...ghost, samples };
+  const res = validateSubmittedRun({ ghost: g, track, frameMm: 65, timeMs: t });
+  assert.equal(res.ok, true, res.reason);
+  assert.equal(lineRunPasses(samples, track).finish, samples.length - 1);
+});
+
+test('an unnamed one-pass pace path is the pace bot', () => {
+  const week = RIG_GEN_WEEKLY_FROM;
+  const track = weeklyTrackFor(week);
+  const bot = makePaceGhost(track.gates, { track: track.id, name: 'RYAN', speed: 8, hz: 16, laps: 1 });
+  bot.phys = PHYS_VER;
+  const now = Date.parse(weekMonday(week)) + 36e5 * 30;
+  const r = normalizeSubmit({ name: 'Ry', week, frameMm: 65, timeMs: bot.samples[bot.samples.length - 1][0], ghost: bot, track: track.id, build: { frameMm: 65 } }, now);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'PACE BOT');
+});
+
 test('anti-cheat class speed limits follow W1 65/75/85', () => {
   assert.deepEqual(CLASS_IDS, [65, 75, 85]);
   const track = weeklyTrackFor('2026-W42');
-  const ghost = humanRun(track, { speed: 8, hz: 12, laps: 3 });
+  const ghost = humanRun(track, { speed: 8, hz: 12 });
   for (const c of CLASS_IDS) {
     const r = validateSubmittedRun({ ghost, track, frameMm: c, timeMs: ghost.lapTime });
     assert.equal(r.ok, true, c + ' ' + r.reason);
@@ -662,7 +839,7 @@ test('H1 server derives week track, rejects pace-bot/phys/class/week, claims nam
   assert.equal(ok.status, 200, oj.reason);
   assert.equal(oj.ok, true);
   const steal = await handleLeaderboard(new Request('https://x/api/submit', {
-    method: 'POST', body: JSON.stringify({ ...payload, token: tokenB, timeMs: liveGhost.lapTime - 1000 }),
+    method: 'POST', body: JSON.stringify({ ...payload, token: tokenB }),
   }), env);
   assert.equal(steal.status, 403);
   const sj = await steal.json();
