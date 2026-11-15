@@ -10,6 +10,12 @@
 //     With the 100 ms horizon (the page before this test), every poll came
 //     more than 150 ms after its frame began and was dropped: the throttle
 //     stayed at zero.
+//   - The same with 320 ms of work a frame, past the 250 ms horizon too (the
+//     CI runner on the Depot, a device that slow): a TX16S raised from the
+//     bottom is read, and with the throttle back down Easy mode's hold counts
+//     up to the 1.2 s a tour waits for, inside the tour's 8 s. When every
+//     poll past the horizon was dropped, every poll was: the throttle stayed
+//     at zero and the hold stood still while the sim flew on, 250 ms a frame.
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,6 +31,7 @@ import { InputClock } from '../sim-core-adapter.js';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const TX = 'RM TX16S Joystick (Vendor: 1209 Product: 4f54)';
 const BUSY_MS = 150;             // each frame's own work: past the old 100 ms horizon
+const BUSY_PAST_MS = 320;        // and past the horizon there is now (250 ms)
 
 test('the input clock keeps a poll for the next frame up to its longest step', () => {
   assert.equal(new InputClock().horizonUs, 250_000);
@@ -252,6 +259,39 @@ test('input in Chrome with frames whose own work takes 150 ms', { timeout: 8 * 6
           return JSON.stringify({ read, ms: Math.round(performance.now() - t0), thr: L.thr() });`);
         console.log('radio: raised to 0.6, read ' + (r.read ? 'in ' + r.ms + ' ms' : 'never (' + r.thr + ')'));
         assert.equal(r.read, true, `the page's throttle follows the radio (${r.thr})`);
+      });
+    });
+
+    await t.test('a TX16S, frames past the 250 ms horizon: the raise is read, and the hold counts', async () => {
+      await pass({ pad: { on: true, id: TX, axes: [0, 0, -1, 0, -1, -1, -1, -1] } }, async ({ js }) => {
+        let r = await js(`
+          await L.until(() => !/no gamepad/.test(document.getElementById('radioInfo').textContent), 5000);
+          const ok = L.busy(${BUSY_PAST_MS});
+          return JSON.stringify({ ok, radio: document.getElementById('radioInfo').textContent.slice(0, 30), frameMs: await L.frames(3000), thr: L.thr() });`);
+        console.log('radio, past the horizon: frames ' + r.frameMs + ' ms, ' + r.radio);
+        assert.match(r.radio, /TX16S/, 'the radio has the sticks');
+        assert.ok(r.frameMs > 250, `frames past the 250 ms horizon (${r.frameMs} ms)`);
+        r = await js(`
+          window.__pads.axes[2] = 0.2;
+          const t0 = performance.now();
+          const read = await L.until(() => Math.abs(L.thr() - 0.6) < 0.02, 5000);
+          return JSON.stringify({ read, ms: Math.round(performance.now() - t0), thr: L.thr() });`);
+        console.log('radio, past the horizon: raised to 0.6, read ' + (r.read ? 'in ' + r.ms + ' ms' : 'never (' + r.thr + ')'));
+        assert.equal(r.read, true, `the page's throttle follows the radio (${r.thr})`);
+        // Back to the bottom: Easy mode's hold, as the tours wait for it
+        // (tools/test_sim_map_boot.mjs TOUR_FLY: 1.2 s of it within 8 s).
+        r = await js(`
+          const lowS = () => +((window._sim.easy().arm || {}).lowS) || 0;
+          const f0 = window._sim.coreState().flightMs;
+          window.__pads.axes[2] = -1;
+          const down = await L.until(() => L.thr() < 0.02, 5000);
+          if (window._sim.coreState().armed) window._sim.bfCore().setArm(false);
+          const t0 = performance.now();
+          const held = await L.until(() => lowS() >= 1.2, 8000);
+          return JSON.stringify({ down, held, lowS: lowS(), ms: Math.round(performance.now() - t0), flightMs: Math.round(window._sim.coreState().flightMs - f0) });`);
+        console.log('radio, past the horizon: the hold ' + JSON.stringify(r));
+        assert.equal(r.down, true, 'the throttle back at the bottom is read');
+        assert.equal(r.held, true, `Easy mode's hold counts 1.2 s (${r.lowS.toFixed(2)} s in ${r.ms} ms, the sim flying ${r.flightMs} ms)`);
       });
     });
   } finally {

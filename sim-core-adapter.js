@@ -63,8 +63,16 @@ export function boxToModule(bb) {
 // After each frame's advance(), the frame's wall time maps to
 // simTimeUs + alpha x tickUs; a poll w ms later is that plus w ms. Stamps
 // ahead of the sim wait in the ring for their tick. horizonUs caps how far
-// ahead a stamp may go: past it (the frames stopped) a poll is dropped, so the
-// ring never fills while the sim waits. Stamps never go backwards.
+// ahead a stamp may go. Past it the sim is behind the wall by more than a
+// frame can step: the first such poll is kept, stamped at the horizon (the
+// furthest the next frame can fly to), and the ones after it are dropped
+// until the sim has moved, so the ring never fills while the sim waits (the
+// frames stopped). Stamps never go backwards.
+// Dropping every poll past the horizon made the page deaf wherever a frame's
+// own work ran longer than it: each poll came after such a frame, all were
+// dropped, and the sticks, the arm and Easy mode's hold stood still while the
+// sim went on at 250 ms a frame (a slow device; the CI runner on the Depot,
+// where the 1.2 s hold then took over 8 s).
 // The default is the longest step a frame can take (MAX_TICKS_PER_FRAME): the
 // frame's wall time is when it began, so a poll that comes after a frame whose
 // own work ran past the horizon is that far ahead already. With 100 ms, every
@@ -95,7 +103,12 @@ export class InputClock {
     const now = core.simTimeUs;
     const want = this.anchorWallMs === null ? now : this.anchorSimUs + (wallMs - this.anchorWallMs) * 1000;
     const t = Math.max(Math.round(want), now, this.lastUs);
-    if (t > now + this.horizonUs) return null;
+    const far = now + this.horizonUs;
+    if (t > far) {
+      if (this.lastUs >= far) return null;
+      this.lastUs = far;
+      return far;
+    }
     this.lastUs = t;
     return t;
   }
