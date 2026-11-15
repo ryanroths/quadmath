@@ -38,13 +38,31 @@ logged into Cloudflare (`npx wrangler login`).
 
 ## Every release of this Worker
 
-From the repo root, after this anti-cheat change is on the branch you are
-shipping:
+Ship only what is merged: deploy from the main checkout, on `main`, after
+`git pull --ff-only`. Work on branches in their own worktrees
+(`git worktree add`), never by switching this checkout off `main`.
 
 ```bash
 cd workers/sim-leaderboard
-npx wrangler deploy
+npm run deploy
 ```
+
+`npm run deploy` runs `scripts/predeploy.mjs` first. That script fetches
+`main` from origin and refuses, deploying nothing, unless:
+
+- the checkout is on `main` (not another branch, not a detached HEAD),
+- `main` is the same commit as `origin/main`, and
+- nothing the Worker ships has uncommitted changes, staged or not: the
+  tracked files in this folder and the modules `src/index.js` imports
+  (`sim-retention.js`, `sim-share.js`). An imported module that git does not
+  track also refuses. Untracked files here (such as `package-lock.json`) and
+  uncommitted changes elsewhere in the repo do not.
+
+It lists every reason it refuses. When it lets the deploy through, it prints
+the commit and the `PHYS_VER` the Worker will run. Boards are kept per
+`PHYS_VER` (see "Checks"), so check that it matches the live `sim.html`'s
+before the deploy goes on. `npx wrangler deploy` skips the guard, so do not
+ship with it.
 
 No D1 migration for the weekly id bump (`weekly-YYYY-Wxx-g2`). The Worker
 imports `weeklyTrackFor` from `sim-retention.js`; after deploy it writes and
