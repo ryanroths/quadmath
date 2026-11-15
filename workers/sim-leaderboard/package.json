@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "predeploy": "node scripts/predeploy.mjs",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy --config wrangler.jsonc"
   },
   "devDependencies": {
     "wrangler": "^4.45.0"

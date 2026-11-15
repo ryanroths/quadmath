@@ -64,10 +64,16 @@ git(tmp, 'init', '-q', '--bare', '-b', 'main', ORIGIN);
   git(seed, 'push', '-q', 'origin', 'main');
 }
 
+// Each case gets its own copy of the origin, so what one case pushes no other sees.
 let n = 0;
-function clone() {
+function origin() {
+  const o = join(tmp, `o${++n}.git`);
+  git(tmp, 'clone', '-q', '--bare', ORIGIN, o);
+  return o;
+}
+function clone(from = origin()) {
   const dir = join(tmp, `c${++n}`);
-  git(tmp, 'clone', '-q', ORIGIN, dir);
+  git(tmp, 'clone', '-q', from, dir);
   return dir;
 }
 
@@ -87,8 +93,11 @@ function refused(r, ...res) {
 test('npm run deploy runs the guard first, and DEPLOY.md deploys with it', () => {
   const pkg = JSON.parse(readFileSync(join(root, WORKER, 'package.json'), 'utf8'));
   assert.equal(pkg.scripts.predeploy, 'node scripts/predeploy.mjs');
-  assert.equal(pkg.scripts.deploy, 'wrangler deploy');
+  // The guard checks wrangler.jsonc, so wrangler is told to use that one and
+  // no wrangler.json above it or .wrangler/deploy redirect.
+  assert.equal(pkg.scripts.deploy, 'wrangler deploy --config wrangler.jsonc');
   const doc = readFileSync(join(root, WORKER, 'DEPLOY.md'), 'utf8');
+  assert.match(doc, /^npm run predeploy\r?$/m);
   assert.match(doc, /^npm run deploy\r?$/m);
   assert.doesNotMatch(doc, /^\s*npx wrangler deploy\b/m, 'no bare `npx wrangler deploy` step, which skips the guard');
 });
@@ -111,6 +120,24 @@ test('on main, level with origin/main, nothing shipped uncommitted: clear, with 
   assert.deepEqual(bundles[1].split(', ').sort(), ['sim-retention.js', 'sim-share.js', `${WORKER}/src/index.js`]);
 });
 
+test('PHYS_VER is the one in the commit it ships, read from sim-retention.js', () => {
+  const dir = clone();
+  const retention = join(dir, 'sim-retention.js');
+  const src = readFileSync(retention, 'utf8');
+  assert.match(src, new RegExp(`^export const PHYS_VER = ${PHYS_VER};`, 'm'));
+  writeFileSync(retention, src.replace(/^export const PHYS_VER = \d+;/m, 'export const PHYS_VER = 99;'));
+  commit(dir, 'PHYS_VER 99');
+  git(dir, 'push', '-q', 'origin', 'main');
+  const r = guard(dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^  PHYS_VER +99 \(sim-retention\.js; boards are keyed \.p99\)$/m);
+  // Not a plain integer literal: refused rather than guessed.
+  writeFileSync(retention, src.replace(/^export const PHYS_VER = \d+;/m, 'export const PHYS_VER = 90 + 9;'));
+  commit(dir, 'PHYS_VER computed');
+  git(dir, 'push', '-q', 'origin', 'main');
+  refused(guard(dir), /no `export const PHYS_VER = <integer>;` line/);
+});
+
 test('another branch, or a detached HEAD: refused', () => {
   const dir = clone();
   git(dir, 'checkout', '-q', '-b', 'sim/some-feature');
@@ -127,8 +154,9 @@ test('main with local commits not on origin/main: refused', () => {
 });
 
 test('main behind origin/main, found by the fetch: refused until pulled', () => {
-  const dir = clone();
-  const other = clone();
+  const o = origin();
+  const dir = clone(o);
+  const other = clone(o);
   appendFileSync(join(other, 'README.md'), 'merged elsewhere\n');
   commit(other, 'merged on GitHub');
   git(other, 'push', '-q', 'origin', 'main');
@@ -138,8 +166,9 @@ test('main behind origin/main, found by the fetch: refused until pulled', () => 
 });
 
 test('main and origin/main diverged: refused', () => {
-  const dir = clone();
-  const other = clone();
+  const o = origin();
+  const dir = clone(o);
+  const other = clone(o);
   appendFileSync(join(other, 'README.md'), 'merged elsewhere\n');
   commit(other, 'merged on GitHub');
   git(other, 'push', '-q', 'origin', 'main');
@@ -165,10 +194,11 @@ test('uncommitted changes in what the Worker ships, staged or not: refused, each
   assert.doesNotMatch(r.stderr, /README/);
 });
 
-test('a module the bundle imports that git does not track: refused', () => {
+test('a module the bundle imports that git does not track, two imports deep: refused', () => {
   const dir = clone();
-  const entry = join(dir, WORKER, 'src/index.js');
-  writeFileSync(entry, "import '../../../local-extra.js';\n" + readFileSync(entry, 'utf8'));
+  // src/index.js imports sim-share.js, which now imports the untracked file.
+  const share = join(dir, 'sim-share.js');
+  writeFileSync(share, "import './local-extra.js';\n" + readFileSync(share, 'utf8'));
   writeFileSync(join(dir, '.gitignore'), 'local-extra.js\n');
   commit(dir, 'imports a file kept out of git');
   git(dir, 'push', '-q', 'origin', 'main');
@@ -181,4 +211,8 @@ test('every reason at once, not just the first', () => {
   git(dir, 'checkout', '-q', '-b', 'wip');
   appendFileSync(join(dir, 'sim-share.js'), '\n// wip\n');
   refused(guard(dir), /on branch 'wip', not main/, / M sim-share\.js/);
+  // With no entry module to walk from, the other reasons still come through
+  // (the bundle's modules outside this folder are then unknown).
+  rmSync(join(dir, WORKER, 'wrangler.jsonc'));
+  refused(guard(dir), /on branch 'wip', not main/, /no wrangler\.jsonc in /, / D workers\/sim-leaderboard\/wrangler\.jsonc/);
 });

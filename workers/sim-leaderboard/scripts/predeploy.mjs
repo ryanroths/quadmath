@@ -9,14 +9,18 @@
 //     git does not track does.
 // When it lets the deploy through it prints the commit and the PHYS_VER that
 // sim-retention.js gives the Worker: boards are kept per PHYS_VER, so that is
-// the board set the deploy switches to.
+// the board set the deploy switches to. `npm run predeploy` runs it alone, to
+// see that before anything ships.
 //
-// `npx wrangler deploy` does not run this. Deploy with `npm run deploy`.
+// It checks wrangler.jsonc, so the deploy script passes `--config
+// wrangler.jsonc`: without it wrangler would take a wrangler.json from this
+// folder or any folder above it, or a .wrangler/deploy/config.json redirect,
+// first. `npx wrangler deploy` does not run this. Deploy with `npm run deploy`.
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 const WORKER_DIR = realpathSync.native(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
 const NAME = 'sim-leaderboard';
@@ -51,20 +55,19 @@ function isFile(p) {
   }
 }
 
-// The Worker's entry module, from wrangler.jsonc "main".
+// The Worker's entry module, from wrangler.jsonc "main", or a reason it has none.
 function entryModule() {
-  const cfg = join(WORKER_DIR, 'wrangler.jsonc');
   let text;
   try {
-    text = readFileSync(cfg, 'utf8');
+    text = readFileSync(join(WORKER_DIR, 'wrangler.jsonc'), 'utf8');
   } catch {
-    refuse([`no wrangler.jsonc in ${WORKER_DIR}; this guard reads the entry module from it.`]);
+    return { why: `no wrangler.jsonc in ${WORKER_DIR}; this guard reads the entry module from it.` };
   }
   const m = /"main"\s*:\s*"([^"]+)"/.exec(text);
-  if (!m) refuse(['wrangler.jsonc has no "main"; this guard reads the entry module from it.']);
+  if (!m) return { why: 'wrangler.jsonc has no "main"; this guard reads the entry module from it.' };
   const entry = resolve(WORKER_DIR, m[1]);
-  if (!isFile(entry)) refuse([`the entry module ${m[1]} (wrangler.jsonc "main") does not exist.`]);
-  return entry;
+  if (!isFile(entry)) return { why: `the entry module ${m[1]} (wrangler.jsonc "main") does not exist.` };
+  return { entry };
 }
 
 // Every local module the bundle reaches from the entry: static imports,
@@ -151,14 +154,18 @@ if (fetched && head) {
   }
 }
 
-const modules = bundleModules(entryModule());
+const found = entryModule();
+if (found.why) reasons.push(found.why);
+const modules = found.entry ? bundleModules(found.entry) : [];
 const shipped = [rel(WORKER_DIR), ...modules.map(rel).filter((p) => !p.startsWith(rel(WORKER_DIR) + '/'))];
 
 try {
-  const tracked = new Set(git(['ls-files', '-z', '--', ...modules.map(rel)], { cwd: top }).split('\0').filter(Boolean));
-  const untracked = modules.map(rel).filter((p) => !tracked.has(p));
-  if (untracked.length) {
-    reasons.push(`the bundle imports files git does not track, so they are not on main: ${untracked.join(', ')}`);
+  if (modules.length) {
+    const tracked = new Set(git(['ls-files', '-z', '--', ...modules.map(rel)], { cwd: top }).split('\0').filter(Boolean));
+    const untracked = modules.map(rel).filter((p) => !tracked.has(p));
+    if (untracked.length) {
+      reasons.push(`the bundle imports files git does not track, so they are not on main: ${untracked.join(', ')}`);
+    }
   }
   const dirty = git(['status', '--porcelain', '--untracked-files=no', '--', ...shipped], { cwd: top, raw: true })
     .split(/\r?\n/)
@@ -174,19 +181,20 @@ try {
 }
 
 const retention = join(top, 'sim-retention.js');
-if (!modules.map(rel).includes('sim-retention.js')) {
+if (found.entry && !modules.map(rel).includes('sim-retention.js')) {
   reasons.push(`the bundle no longer imports sim-retention.js, so this guard cannot tell which PHYS_VER it ships. Update ${rel(fileURLToPath(import.meta.url))}.`);
 }
 
 if (reasons.length) refuse(reasons);
 
-let physVer;
-try {
-  ({ PHYS_VER: physVer } = await import(pathToFileURL(retention).href));
-} catch (e) {
-  refuse([`could not load sim-retention.js to read PHYS_VER: ${(e && e.message) || e}`]);
+// Read from the source, not by importing it: importing runs the module, and
+// with no package.json between it and a typeless one higher up (such as
+// C:\Users\<you>\package.json), Node prints a MODULE_TYPELESS_PACKAGE_JSON warning.
+const physDecl = /^export const PHYS_VER = (\d+);/m.exec(readFileSync(retention, 'utf8'));
+if (!physDecl) {
+  refuse([`sim-retention.js has no \`export const PHYS_VER = <integer>;\` line, so this guard cannot tell which PHYS_VER it ships.`]);
 }
-if (!Number.isInteger(physVer)) refuse([`sim-retention.js exports no integer PHYS_VER (got ${String(physVer)}).`]);
+const physVer = Number(physDecl[1]);
 
 const subject = git(['log', '-1', '--format=%s', head]);
 console.log(`predeploy: ${NAME} is clear to deploy.`);
