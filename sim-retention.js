@@ -41,6 +41,14 @@ export const DAILY_LINE_MIN_MS = 2500;
 export const DAILY_LINE_MAX_MS = 180000;
 export const DAILY_LINE_GHOST_MAX = 480;
 export const DAILY_LINE_STRICT_MISS_MS = 3000;
+// A weekly submit: the page sends its ghost at up to this many samples (15 Hz
+// for 100 s before it is strided), and the Worker takes no more than
+// WEEKLY_GHOST_MAX_SAMPLES.
+export const WEEKLY_SUBMIT_GHOST_MAX = 1500;
+export const WEEKLY_GHOST_MAX_SAMPLES = 1600;
+// A line run's time against its ghost: ghost time from the gate-0 sample to
+// the finish sample, plus whole miss penalties, within this many ms.
+export const LINE_TIME_TOL_MS = 150;
 // From RIG_GEN_DAILY_FROM the Daily alternates by UTC day: on the cut-over
 // day and every second day after it a Rig course generated from the six Coach
 // drills (rigCourseFor), between them the House Loop (the line pool's House
@@ -1580,6 +1588,49 @@ export function countGhostLaps(samples, track) {
   return Math.max(lapsFrom(samples, gates, 0), lapsFrom(samples, gates, 1));
 }
 
+// Closest approach of the segment a→b to the gate's centre.
+function segmentGateDist(a, b, g) {
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const len2 = dx * dx + dy * dy + dz * dz;
+  let t = len2 > 0 ? ((g.x - a.x) * dx + (g.y - a.y) * dy + (g.z - a.z) * dz) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(a.x + dx * t - g.x, a.y + dy * t - g.y, a.z + dz * t - g.z);
+}
+
+// A line run (the page flies every track but the city loops as one pass,
+// sim-tracks.js isLineTrackId): gate 0, then each gate in order to the last.
+// The page counts a gate when the quad enters its sphere on any frame; the
+// ghost has a sample every 67 ms or more, which at 48 u/s is 3.2 u, more than
+// a small gate's sphere. So each step between samples is swept, and may pass
+// a gate within its radius plus a quarter of the step (the chord cuts the
+// corner the quad flew). Returns the sample indices of the gate-0 pass and the
+// finish, or -1.
+export function lineRunPasses(samples, track) {
+  const gates = ((track && track.gates) || []).map((g) => normalizeGate(g));
+  const n = gates.length;
+  const out = { start: -1, finish: -1, passed: 0 };
+  if (n < 2 || !Array.isArray(samples) || samples.length < 2) return out;
+  const at = (s) => ({ x: s[1], y: s[2], z: s[3] });
+  let next = 0;
+  // The page's first sample is the frame the run starts on, inside gate 0.
+  if (dist3(at(samples[0]), gates[0]) < gates[0].r + 0.05) { out.start = 0; next = 1; }
+  for (let i = 1; i < samples.length && next < n; i++) {
+    const a = at(samples[i - 1]), b = at(samples[i]);
+    const slack = dist3(a, b) * 0.25;
+    while (next < n && segmentGateDist(a, b, gates[next]) < gates[next].r + slack) {
+      if (next === 0) out.start = i;
+      next++;
+      if (next === n) out.finish = i;
+    }
+  }
+  out.passed = next;
+  return out;
+}
+
+function isCityLoopId(id) {
+  return id === 0 || id === 1 || id === '0' || id === '1' || id === 'city-loop' || id === 'city-zigzag';
+}
+
 export function sampleSpeeds(samples) {
   const out = [];
   for (let i = 1; i < samples.length; i++) {
@@ -1626,10 +1677,12 @@ export function validateSubmittedRun(input) {
   if (payloadErr) return { ok: false, reason: payloadErr };
 
   const samples = ghost.samples;
+  const line = !isCityLoopId(track.id);
   if (samples.length < 8) return { ok: false, reason: 'TOO FEW SAMPLES' };
+  if (samples.length > WEEKLY_GHOST_MAX_SAMPLES) return { ok: false, reason: 'TOO MANY SAMPLES' };
   if (!Number.isFinite(timeMs) || timeMs < 5000 || timeMs > 180000) return { ok: false, reason: 'BAD TIME' };
   const span = samples[samples.length - 1][0] - samples[0][0];
-  if (Math.abs(span - timeMs) > 4000) return { ok: false, reason: 'TIME MISMATCH' };
+  if (!line && Math.abs(span - timeMs) > 4000) return { ok: false, reason: 'TIME MISMATCH' };
 
   let lastT = samples[0][0];
   const maxV = CLASS_MAX_SPEED[frameMm];
@@ -1646,6 +1699,22 @@ export function validateSubmittedRun(input) {
       if (dist / dt > maxV * 1.08) return { ok: false, reason: 'SPEED LIMIT' };
     }
     lastT = samples[i][0];
+  }
+
+  if (line) {
+    // One pass, gates in order, ending on the ghost's last samples (the page
+    // stops recording on the finish frame). Its time is the ghost's, from the
+    // gate-0 sample to the last one, plus whole miss penalties.
+    const pass = lineRunPasses(samples, track);
+    if (pass.start < 0 || pass.finish < 0) return { ok: false, reason: 'INCOMPLETE LINE' };
+    if (pass.finish < samples.length - 2) return { ok: false, reason: 'TIME MISMATCH' };
+    const raw = samples[samples.length - 1][0] - samples[pass.start][0];
+    const extra = timeMs - raw;
+    const misses = Math.round(extra / MISS_PENALTY_MS);
+    if (misses < 0 || misses > 99 || Math.abs(extra - misses * MISS_PENALTY_MS) > LINE_TIME_TOL_MS) {
+      return { ok: false, reason: 'TIME MISMATCH' };
+    }
+    return { ok: true, laps: 1, misses, frameMm, timeMs, trackId: track.id };
   }
 
   const laps = countGhostLaps(samples, track);
@@ -3080,8 +3149,11 @@ function positionsMatch(a, b, tol) {
   return checks > 0 && hits / checks >= 0.9;
 }
 
-export function isPaceBotGhost(ghost, track) {
+// laps: the pace path to compare with; a line track's is one pass (the city
+// loops' three).
+export function isPaceBotGhost(ghost, track, laps) {
   if (!ghost || !Array.isArray(ghost.samples) || ghost.samples.length < 8) return false;
+  const paceLaps = laps > 0 ? laps : (track && !isCityLoopId(track.id) ? 1 : RUN_LAPS);
   const name = String(ghost.name || '').replace(/\s+/g, ' ').trim().toUpperCase();
   if (name === 'PACE BOT' || name === 'PACE') return true;
   const gates = track && track.gates;
@@ -3109,7 +3181,7 @@ export function isPaceBotGhost(ghost, track) {
       const key = speed + ':' + hz;
       if (seen.has(key) || !(speed > 0) || !(hz > 0)) continue;
       seen.add(key);
-      const pace = pacePositions(gates, speed, hz, RUN_LAPS);
+      const pace = pacePositions(gates, speed, hz, paceLaps);
       if (positionsMatch(samples, pace, 0.025)) return true;
     }
   }

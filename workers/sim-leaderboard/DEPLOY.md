@@ -104,10 +104,11 @@ this machine) must also be added to `connect-src` in the
 Until it is, the page's requests to it are refused, with a
 `[CSP] connect-src blocked ...` warning in the console.
 
-Reload. Start menu → **Boards**: the card says "Online: on.", and
-**Refresh online** loads the board with no `ONLINE UNAVAILABLE` toast (and
-no `[CSP]` warning in the console). A 3-lap finish on this week's course
-(class 65 / 75 / 85 from Your build) can submit. Pilot name is `quadmath_pilotName`. The per-browser claim token
+Reload. Start menu → **Boards**: the card lists **Online · top 20** and
+**This browser** apart, and the online list loads (or says "No online times
+yet.") with no `ONLINE UNAVAILABLE` toast on **Refresh online** (and no
+`[CSP]` warning in the console). A finish on this week's course, one pass
+from gate 0 to the last gate (class 65 / 75 / 85 from Your build), submits. Pilot name is `quadmath_pilotName`. The per-browser claim token
 is `quadmathSimPilotToken`.
 
 ## Checks
@@ -136,6 +137,12 @@ Anti-cheat on POST `/api/submit`:
   empty, and the old rows stay in D1 unlisted. Deploy it when the page with
   the same `PHYS_VER` goes live: until then each side refuses the other's
   submits (`PHYS MISMATCH`).
+- The run is one pass, as the page flies it (every track but the city
+  loops is a line, `isLineTrackId`): the ghost passes gate 0, then every
+  gate in order to the last (`lineRunPasses`, swept between samples), and
+  ends on the finish frame. The time must be the ghost's, from the gate-0
+  sample to the last, plus whole 2 s miss penalties, within 150 ms. At most
+  1600 samples.
 - Class must match submitted build `frameMm`; speeds use that class cap.
 - Generated pace-bot ghosts are rejected.
 - Pilot names are sanitized (Unicode letters, length cap). First browser
@@ -144,6 +151,49 @@ Anti-cheat on POST `/api/submit`:
   lists it).
 
 Rate limit is 12 posts / IP / UTC hour.
+
+## Weekly one-pass rule (first real rows)
+
+Before this release the page flew the weekly course as one pass but the
+Worker wanted three laps, and the page dropped every submit before sending
+it: D1 held no score rows. After the page and this Worker are both live, a
+finish on this week's course writes a row.
+
+The page goes live when the PR merges (Pages). Deploy the Worker right
+after, from the main checkout:
+
+```bash
+git pull --ff-only
+cd workers/sim-leaderboard
+npx wrangler deploy
+```
+
+(With the predeploy guard merged: `npm run predeploy`, then `npm run deploy`.)
+
+Until the Worker is deployed, a weekly finish on the new page shows the old
+Worker's `INCOMPLETE LAPS` toast and stays on the local board. No D1
+migration.
+
+To see the row land after a weekly finish (newest first):
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT week, class, name, time_ms, track_id, datetime(submitted_ms/1000,'unixepoch') AS at FROM scores ORDER BY submitted_ms DESC LIMIT 10"
+```
+
+## Removing a row
+
+`name` is the name as stored (sanitized, as the board shows it) and `week`
+the board key from the query above (e.g. `2026-W47.p7`):
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM scores WHERE week='2026-W47.p7' AND class=65 AND name='SomeName'"
+```
+
+To free a claimed name so another browser can take it (its rows stay):
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM pilots WHERE name='SomeName'"
+```
 
 ## "Fly my line" (`/api/line`)
 
