@@ -189,15 +189,15 @@ it: D1 held no score rows. After the page and this Worker are both live, a
 finish on this week's course writes a row.
 
 The page goes live when the PR merges (Pages). Deploy the Worker right
-after, from the main checkout:
+after, from the main checkout, through the guard (see "Every release of
+this Worker" above):
 
 ```bash
 git pull --ff-only
 cd workers/sim-leaderboard
-npx wrangler deploy
+npm run predeploy
+npm run deploy
 ```
-
-(With the predeploy guard merged: `npm run predeploy`, then `npm run deploy`.)
 
 Until the Worker is deployed, a weekly finish on the new page is refused by
 the old Worker (toast `INCOMPLETE LAPS`, or `TIME MISMATCH` for a run with
