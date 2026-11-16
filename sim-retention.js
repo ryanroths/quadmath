@@ -1694,7 +1694,9 @@ export function validateSubmittedRun(input) {
   const line = !isCityLoopId(track.id);
   if (samples.length < 8) return { ok: false, reason: 'TOO FEW SAMPLES' };
   if (samples.length > WEEKLY_GHOST_MAX_SAMPLES) return { ok: false, reason: 'TOO MANY SAMPLES' };
-  if (!Number.isFinite(timeMs) || timeMs < 5000 || timeMs > 180000) return { ok: false, reason: 'BAD TIME' };
+  // minTimeMs: a builder track's floor is the Daily Line's (normalizeTrackSubmit).
+  const minMs = Number.isFinite(src.minTimeMs) ? src.minTimeMs : 5000;
+  if (!Number.isFinite(timeMs) || timeMs < minMs || timeMs > 180000) return { ok: false, reason: 'BAD TIME' };
   const span = samples[samples.length - 1][0] - samples[0][0];
   if (!line && Math.abs(span - timeMs) > 4000) return { ok: false, reason: 'TIME MISMATCH' };
 
@@ -1992,6 +1994,148 @@ export function isDailyLineBoardKey(week) {
 // no longer blocks a new one: the bump starts every board clean.
 export function boardKeyFor(week) {
   return String(week || '') + '.p' + PHYS_VER;
+}
+
+// ---------- Custom track boards (builder tracks, #trk= links) ----------
+// A builder track has no id the Worker can trust (a link can carry any), so
+// its board is keyed by the track itself: customBoardKey hashes the map and
+// the gates and adds PHYS_VER, like boardKeyFor. The Worker computes it from
+// the track a run is submitted with, never from anything the client names.
+// Gates are rounded to 0.01 u (positions, size) and 0.001 rad (ry) first: the
+// builder places and drags to 0.01 u and turns in 15 degree steps, so no edit
+// is lost, and a float that went through a share code, JSON or a storage
+// round trip lands on the same key.
+export const CUSTOM_TRACK_MIN_GATES = 3;
+// The longest canonical share code (QM2., base64) a board will key: twice the
+// 2000-character link limit (sim-share.js LINE_URL_MAX), about 65 gates and a
+// name. A track past it still flies and keeps its local best; it gets no
+// online board, and a submit can't store a big blob in D1.
+export const CUSTOM_TRACK_CODE_MAX = 4096;
+// 'c.' + 16 hex + '.p' + PHYS_VER.
+export const CUSTOM_BOARD_KEY_RE = /^c\.[0-9a-f]{16}\.p[1-9][0-9]{0,3}$/;
+// The ids the page gives builder tracks (sim-tracks.js: 'custom-' + time,
+// 'custom-shared-' + hash, 'custom-' + index): always a one-pass line run.
+export const CUSTOM_TRACK_ID_RE = /^custom-[A-Za-z0-9_-]{1,40}$/;
+
+function roundTo(v, dp) {
+  const k = 10 ** dp;
+  const r = Math.round(v * k) / k;
+  return r === 0 ? 0 : r; // never -0 in the JSON
+}
+
+// The canonical form the key hashes: [map, [[x, y, z, ry, size, solid]...]].
+// The id, the name and the flags are not part of it.
+export function customTrackCanon(track) {
+  const t = normalizeTrack(track);
+  return JSON.stringify([String(t.map), t.gates.map((g) => [
+    roundTo(g.x, 2), roundTo(g.y, 2), roundTo(g.z, 2), roundTo(g.ry, 3), roundTo(g.size, 2), g.solid ? 1 : 0,
+  ])]);
+}
+
+export async function customBoardKey(track) {
+  const hex = await hashPilotToken(customTrackCanon(track)); // SHA-256 hex (crypto.subtle)
+  return 'c.' + hex.slice(0, 16) + '.p' + PHYS_VER;
+}
+
+// The track's share code (the builder's QM2. format), as the Worker stores it.
+export function customTrackCode(track) {
+  return SHARE_PREFIX + b64utf8(JSON.stringify(shareTrackPayload(track)));
+}
+
+// The maps the builder builds on (sim-tracks.js MAPS ids; this file has no
+// imports, and tools/test_sim_track_boards.mjs keeps the two in step).
+export const CUSTOM_TRACK_MAPS = Object.freeze(['rig', 'house', 'depot', 'bando', 'city', 'living', 'garage', 'warehouse', 'backyard', 'office', 'gym', 'trainer', 'room']);
+// Gate sizes and places a builder track can have (the builder's are 1.8 u
+// indoors and 7 u in the city, on maps well inside 400 u), and no more gates
+// or flags than a code within CUSTOM_TRACK_CODE_MAX can hold: a gate costs at
+// least about 21 code characters, a flag about 12. Checked on the raw counts
+// before anything is built from them.
+export const CUSTOM_GATE_SIZE_MIN = 0.5;
+export const CUSTOM_GATE_SIZE_MAX = 8;
+export const CUSTOM_TRACK_XZ_MAX = 400;
+export const CUSTOM_TRACK_Y_MIN = -5;
+export const CUSTOM_TRACK_Y_MAX = 300;
+export const CUSTOM_TRACK_GATES_SCAN_MAX = 200;
+export const CUSTOM_TRACK_FLAGS_SCAN_MAX = 400;
+
+// What keeps a track (normalized) off the boards, or null: a map the builder
+// has not got, a gate of a size or in a place it can't make, or two gates in a
+// row whose spheres touch (a quad hovering there would pass both at once:
+// every gate has to be flown to).
+export function customTrackProblem(track) {
+  if (!track || typeof track.map !== 'string' || !CUSTOM_TRACK_MAPS.includes(track.map)) return 'BAD MAP';
+  const gates = track.gates || [];
+  for (const g of gates) {
+    if (!(g.size >= CUSTOM_GATE_SIZE_MIN && g.size <= CUSTOM_GATE_SIZE_MAX)) return 'BAD GATE';
+    if (Math.abs(g.x) > CUSTOM_TRACK_XZ_MAX || Math.abs(g.z) > CUSTOM_TRACK_XZ_MAX ||
+      !(g.y >= CUSTOM_TRACK_Y_MIN && g.y <= CUSTOM_TRACK_Y_MAX)) return 'BAD GATE';
+  }
+  for (let i = 1; i < gates.length; i++) {
+    const a = gates[i - 1], b = gates[i];
+    if (dist3(a, b) < gateRadius(a) + gateRadius(b) + 0.1) return 'GATES TOO CLOSE';
+  }
+  return null;
+}
+
+// Whether a track (by id) gets a custom board: a builder track, not a built-in
+// course, a daily, a weekly or a room's.
+export function isCustomBoardTrackId(id) {
+  return CUSTOM_TRACK_ID_RE.test(String(id == null ? '' : id));
+}
+
+// POST /api/track/submit, checked: the track is the one submitted (its own
+// id, at least CUSTOM_TRACK_MIN_GATES gates, its code at most
+// CUSTOM_TRACK_CODE_MAX), the run is a valid one-pass run of it
+// (validateSubmittedRun on the whole track), and the board key is computed
+// here. A key in the body is ignored.
+export async function normalizeTrackSubmit(body) {
+  if (!body || typeof body !== 'object') return { ok: false, reason: 'BAD JSON' };
+  const frameMm = classId(body.frameMm || body.class);
+  const builtClass = classFromBuild(body.build);
+  if (builtClass != null && builtClass !== frameMm) return { ok: false, reason: 'CLASS MISMATCH' };
+  const raw = body.track;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, reason: 'NO TRACK' };
+  // Counts first: a body can carry many thousands of gates, and no code that
+  // fits CUSTOM_TRACK_CODE_MAX holds that many.
+  if ((Array.isArray(raw.gates) && raw.gates.length > CUSTOM_TRACK_GATES_SCAN_MAX) ||
+    (Array.isArray(raw.flags) && raw.flags.length > CUSTOM_TRACK_FLAGS_SCAN_MAX)) return { ok: false, reason: 'TRACK TOO BIG' };
+  // The map as sent (normalizeTrack would fill a missing one in).
+  if (typeof raw.map !== 'string' || !CUSTOM_TRACK_MAPS.includes(raw.map)) return { ok: false, reason: 'BAD MAP' };
+  let track;
+  try { track = normalizeTrack(raw); }
+  catch (e) { return { ok: false, reason: 'BAD TRACK' }; }
+  if (!isCustomBoardTrackId(track.id)) return { ok: false, reason: 'NOT A CUSTOM TRACK' };
+  if (track.gates.length < CUSTOM_TRACK_MIN_GATES) return { ok: false, reason: 'TOO FEW GATES' };
+  const problem = customTrackProblem(track);
+  if (problem) return { ok: false, reason: problem };
+  let code;
+  try { code = customTrackCode(track); }
+  catch (e) { return { ok: false, reason: 'BAD TRACK' }; }
+  if (code.length > CUSTOM_TRACK_CODE_MAX) return { ok: false, reason: 'TRACK TOO BIG' };
+  const name = sanitizePilotName(body.name);
+  const timeMs = +body.timeMs;
+  const ghost = body.ghost;
+  const bad = ghostPayloadError(ghost, null);
+  if (bad) return { ok: false, reason: bad };
+  if (ghost.phys !== PHYS_VER) return { ok: false, reason: 'PHYS MISMATCH' };
+  if (isPaceBotGhost(ghost, track)) return { ok: false, reason: 'PACE BOT' };
+  // A builder track can be a few gates across a room: the Daily Line's
+  // floor, not the weekly course's 5 s.
+  const checked = validateSubmittedRun({ ghost, track, frameMm, timeMs, threeD: body.threeD, minTimeMs: DAILY_LINE_MIN_MS });
+  if (!checked.ok) return checked;
+  const token = typeof body.token === 'string' ? body.token.trim() : '';
+  return {
+    ok: true,
+    key: await customBoardKey(track),
+    code,
+    map: String(track.map),
+    gates: track.gates.length,
+    frameMm,
+    name,
+    timeMs: timeMs | 0,
+    trackId: track.id,
+    token,
+  };
 }
 
 // The local board (shown when the online one is empty) is kept per physics

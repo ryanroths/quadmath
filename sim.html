@@ -206,6 +206,13 @@
   #toast button+button{margin-left:8px}
   /* The finished run's Replay and SHARE under its result (updateLapOSD). The HUD takes no clicks; these do. */
   #osdLap .lap-actions{display:block;margin-top:6px}
+  /* A builder track's online board under the result (trackBoardHtml). */
+  #osdLap .lap-board{display:block;margin-top:6px;font-weight:500;font-size:11px;line-height:1.45;color:var(--dim)}
+  #osdLap .lap-board b{color:var(--txt);font-weight:600}
+  #osdLap .lap-board button{margin-top:4px}
+  #builderBoard{min-width:160px;max-height:140px;overflow:auto;margin:0;padding:0 12px 8px;
+    background:var(--glass);border:1px solid var(--line);border-radius:12px;font-size:11px}
+  #builderBoard .board-list{margin:6px 0 0;font-size:11px;gap:2px}
   #osdLap button{display:inline-block;width:auto;margin:0 6px 0 0;padding:5px 12px;font-size:12px;font-weight:600;pointer-events:auto;
     color:var(--orange);background:rgba(16,18,24,.85);border:1px solid rgba(255,77,26,.55);border-radius:10px;cursor:pointer}
   /* "Race RyFly's line": the banner of a line a link loaded (sim-share.js). */
@@ -665,6 +672,7 @@
   <div id="builderDock">
     <textarea id="builderCode" rows="3" placeholder="paste a QM2. share code here"></textarea>
     <ol id="builderList"></ol>
+    <div id="builderBoard" hidden></div>
   </div>
 </div>
 <div id="audioHint">🔊 Sound starts on your first key, click or stick move · M mutes</div>
@@ -1141,13 +1149,15 @@ import {
   loadWhoopKit, saveWhoopKit, applyWhoopKitToSkin, applyCraftCanopyShape,
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   defaultWhoopKit, ghostFromObj, shareTrackPayload, fromShareTrackPayload,
-} from "./sim-retention.js?v=cfbbedf3c2c0";
+  customBoardKey, customTrackCode, normalizeTrackSubmit, isCustomBoardTrackId, customTrackProblem,
+  CUSTOM_TRACK_MIN_GATES, CUSTOM_TRACK_CODE_MAX,
+} from "./sim-retention.js?v=469836d92e95";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=03fc89300e05";
+} from "./sim-secrets.js?v=3498e6242ff9";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
   fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=3f314d837c01";
 window._simBooted=true; // tells the watchdog above the module actually executed
@@ -5550,6 +5560,7 @@ function updateLapOSD(){
   const rv=activeRival(); // racing a shared/hosted ghost — show who + their time
   if(rv)html+='<br><span style="color:#FF4D1A">VS '+escapeHtml(rv.name)+(rv.lapTime?' '+fmtLap(rv.lapTime):'')+'</span>';
   if(!runActive&&lastRunTotal[id])html+=lapActionsHtml();
+  if(!runActive)html+=trackBoardHtml();
   // Drawn only when it changes: a button replaced every frame cannot be clicked.
   if(html===lapOsdHtml)return;
   lapOsdHtml=html;
@@ -5558,6 +5569,8 @@ function updateLapOSD(){
   if(replayBtn)replayBtn.onclick=function(e){e.preventDefault();startReplay();};
   const shareBtn=document.getElementById('lapShare');
   if(shareBtn)shareBtn.onclick=function(e){e.preventDefault();shareLine();};
+  const boardBtn=document.getElementById('lapBoard');
+  if(boardBtn)boardBtn.onclick=function(e){e.preventDefault();openTrackBoardCard();};
 }
 const toastEl=document.getElementById('toast');let toastTimer;
 function toast(m,opts){
@@ -6239,6 +6252,7 @@ function renderBuilderList(){
     li.onclick=()=>{builder.sel={kind:li.dataset.kind,index:+li.dataset.i};renderBuilderList();};
   });
   builderLenReadout();
+  queueBuilderBoard();
 }
 function selectedBuilderObj(){
   const list=builder.sel.kind==='flag'?builder.draft.flags:builder.draft.gates;
@@ -7982,12 +7996,224 @@ function noteRetentionFinish(id, total, rec, submitRec){
     extra=(extra?extra+' · ':'')+'LOCAL BOARD';
     maybeSubmitOnline(id, total, submitRec||rec);
   }
+  // A builder track (not a built-in course, a daily or a weekly): its own board.
+  if(isCustomBoardTrackId(id)&&!offBoards)maybeSubmitTrackBoard(id, total, submitRec||rec);
   if(activeDuel&&rivalGhost&&rivalMatches(rivalGhost.track,id)){
     const r=duelResult(total, rivalGhost.lapTime);
     extra=(extra?extra+' · ':'')+r.text;
     activeDuel.result=r;
   }
   return extra;
+}
+// ---------- Custom track boards (builder tracks, #trk= links) ----------
+// A builder track's online board: sim-retention.js customBoardKey (the map and
+// the gates, and PHYS_VER), the Worker's /api/track/board and
+// /api/track/submit. The board is shown on the lap panel (its top 5 and the
+// pilot's place, with a Board button for the top 20) and in the builder. It
+// is online only: a page with no leaderboard URL, a Worker that is offline,
+// answers 404 (deployed before these routes) or refuses, shows no board and
+// says nothing. The local best is kept as always.
+const TRACK_BOARD_TIMEOUT_MS=4000;
+const trackBoards=new Map();        // board key -> {cls, rows}; rows null: nothing to show
+// track id -> {key, code}: its board key and the code (gates) it was computed
+// from. A track saved again under its id with other gates has another board.
+const trackBoardKeyOf=new Map();
+const trackBoardPending=new Map();  // track id + class -> the request fetching it
+const trackBoardSeq=new Map();      // track id -> its latest request: an older reply is dropped
+const trackBoardSent=new Set();     // board keys a run was posted to this session
+function nextTrackBoardSeq(id){
+  const n=(trackBoardSeq.get(String(id))||0)+1;
+  trackBoardSeq.set(String(id),n);
+  return n;
+}
+// A track object's share code ('' if it has none), kept per object for the
+// lap panel, which asks every frame; fresh: computed again (the builder's
+// draft changes in place).
+const trackBoardCodes=new WeakMap();
+function trackCodeOf(t,fresh){
+  if(!t||typeof t!=='object')return '';
+  if(!fresh&&trackBoardCodes.has(t))return trackBoardCodes.get(t);
+  let c='';
+  try{c=customTrackCode(t);}catch(e){c='';}
+  if(!fresh)trackBoardCodes.set(t,c);
+  return c;
+}
+// Whether a track can have a board: enough gates, a code the Worker would
+// key, and a track it would take (customTrackProblem). fresh: as trackCodeOf.
+function trackFitsBoard(t,fresh){
+  if(!t||!Array.isArray(t.gates)||t.gates.length<CUSTOM_TRACK_MIN_GATES)return false;
+  const code=trackCodeOf(t,fresh);
+  if(!code||code.length>CUSTOM_TRACK_CODE_MAX)return false;
+  try{return !customTrackProblem(t);}catch(e){return false;}
+}
+// The track, if it gets a custom board: a builder track that fits one.
+function customBoardTrack(id){
+  if(!isCustomBoardTrackId(id))return null;
+  const t=findTrack(id);
+  return trackFitsBoard(t)?t:null;
+}
+// The board noted for this track's gates now, or null.
+function trackBoardOf(t,fresh){
+  const e=trackBoardKeyOf.get(String(t.id));
+  return e&&e.code===trackCodeOf(t,fresh)?trackBoards.get(e.key)||null:null;
+}
+// JSON from the Worker, or null for anything else (offline, slow, 404, refused).
+async function trackBoardFetch(path, init){
+  const url=leaderboardUrl();
+  if(!onlineBoardsEnabled(url))return null;
+  const ctl=typeof AbortController==='function'?new AbortController():null;
+  const timer=ctl?setTimeout(()=>ctl.abort(),TRACK_BOARD_TIMEOUT_MS):0;
+  try{
+    const r=await fetch(url+path,Object.assign({signal:ctl?ctl.signal:undefined},init||{}));
+    if(!r.ok)return null;
+    const j=await r.json();
+    return j&&j.ok&&Array.isArray(j.entries)&&j.online!==false?j:null;
+  }catch(e){return null;}
+  finally{clearTimeout(timer);}
+}
+function trackBoardClass(){return classId(currentBuild&&currentBuild.frameMm);}
+function noteTrackBoard(track,key,code,cls,rows){
+  trackBoardKeyOf.set(String(track.id),{key,code});
+  trackBoards.set(key,{cls,rows:Array.isArray(rows)?rows:null});
+  syncBuilderBoard();
+}
+// Fetch a track's board (the pilot's class) for the gates it has now. Resolves
+// to the rows, or null. A reply that a later request (an edit, a class
+// change, a submit) has overtaken is dropped.
+async function loadTrackBoard(track){
+  if(!track||!Array.isArray(track.gates))return null;
+  const cls=trackBoardClass();
+  const id=String(track.id);
+  const code=trackCodeOf(track,true);
+  // No leaderboard URL, or a track no board takes: no board, noted once
+  // (the lap panel asks every frame).
+  if(!onlineBoardsEnabled(leaderboardUrl())||!trackFitsBoard(track,true)){
+    nextTrackBoardSeq(id);
+    noteTrackBoard(track,'none:'+id,code,cls,null);
+    return null;
+  }
+  const tag=id+'|'+cls;
+  const seq=nextTrackBoardSeq(id);
+  trackBoardPending.set(tag,seq);
+  try{
+    let key;
+    try{key=await customBoardKey(track);}
+    catch(e){
+      // No key (no crypto.subtle): no board, asked once.
+      if(trackBoardSeq.get(id)===seq)noteTrackBoard(track,'none:'+id,code,cls,null);
+      return null;
+    }
+    const j=await trackBoardFetch('/api/track/board?key='+encodeURIComponent(key)+'&class='+cls);
+    if(trackBoardSeq.get(id)!==seq)return null;
+    noteTrackBoard(track,key,code,cls,j?j.entries:null);
+    return j?j.entries:null;
+  }finally{if(trackBoardPending.get(tag)===seq)trackBoardPending.delete(tag);}
+}
+// The active track's board, as the lap panel shows it: fetched the first
+// time it is needed, again for another class or other gates.
+function activeTrackBoard(){
+  const t=customBoardTrack(activeTrackId);
+  if(!t)return null;
+  const b=trackBoardOf(t);
+  if(!b||b.cls!==trackBoardClass()){
+    if(!trackBoardPending.has(String(t.id)+'|'+trackBoardClass()))loadTrackBoard(t);
+    return null;
+  }
+  return b.rows?Object.assign({track:t},b):null;
+}
+// The pilot's place on rows (by name), or -1.
+function trackBoardRank(rows){
+  const who=sanitizePilotName(currentPilotName());
+  return rows.findIndex((r)=>sanitizePilotName(r.name)===who);
+}
+function trackBoardHtml(){
+  const b=activeTrackBoard();
+  if(!b)return '';
+  let h='<span class="lap-board"><b>'+escapeHtml(b.track.name||'Custom')+' · online</b>';
+  if(!b.rows.length)h+='<br>No online times yet';
+  b.rows.slice(0,5).forEach((r,i)=>{h+='<br>'+(i+1)+' '+escapeHtml(sanitizePilotName(r.name))+' '+fmtMs(r.timeMs);});
+  const i=trackBoardRank(b.rows);
+  if(i>=5)h+='<br>You #'+(i+1)+' '+fmtMs(b.rows[i].timeMs);
+  return h+'<br><button type="button" id="lapBoard">Board</button></span>';
+}
+// The top 20, on a card titled with the track's name.
+function openTrackBoardCard(track){
+  const t=track||customBoardTrack(activeTrackId);
+  if(!t)return;
+  const b=trackBoardOf(t);
+  const id=ensureTrackStats(t.id);
+  const mine=bestRunMs[id]?[{name:currentPilotName(),timeMs:bestRunMs[id]}]:[];
+  showMenuLayer('<h2>'+escapeHtml(t.name)+'</h2>'+
+    '<p>Class <b style="color:var(--txt)">'+trackBoardClass()+'mm</b> from Your build. Everyone who flies this track\'s gates, from its link or its code.</p>'+
+    '<div id="trackBoardBody"></div>'+
+    '<button type="button" id="layerClose">Close</button>');
+  document.getElementById('layerClose').onclick=hideMenuLayer;
+  const paint=(rows)=>renderBoardBody(document.getElementById('trackBoardBody'),[
+    {title:'Online · top 20',rows,empty:'No online times yet.'},
+    {title:'This browser',rows:mine,empty:'No time on this browser yet.'},
+  ]);
+  paint(b&&b.cls===trackBoardClass()?b.rows:null);
+  // Fresh rows, if the card is still the one open when they come.
+  const card=++boardCardSeq;
+  loadTrackBoard(t).then((rows)=>{if(rows&&card===boardCardSeq)paint(rows);});
+}
+// The builder's board: the draft's, once it has the gates for one (a copy of
+// a track flown has its gates, and so its board). Shown only with rows to show.
+let builderBoardTimer=0;
+function syncBuilderBoard(){
+  const el=document.getElementById('builderBoard');
+  if(!el)return;
+  const d=builderOn&&builder.draft;
+  let rows=null;
+  if(d&&Array.isArray(d.gates)&&d.gates.length>=CUSTOM_TRACK_MIN_GATES){
+    const b=trackBoardOf(d,true);
+    if(b&&b.rows&&b.cls===trackBoardClass())rows=b.rows;
+  }
+  el.hidden=!rows;
+  if(!rows)return;
+  renderBoardBody(el,[{title:String(d.name||'Custom')+' · online top 20',rows,empty:'No online times yet.'}]);
+}
+// After an edit, the draft's board (its key is its gates'), a moment later.
+function queueBuilderBoard(){
+  clearTimeout(builderBoardTimer);
+  syncBuilderBoard();
+  if(!builderOn||!builder.draft)return;
+  builderBoardTimer=setTimeout(()=>{
+    const d=builder.draft;
+    if(builderOn&&d&&d.gates&&d.gates.length>=CUSTOM_TRACK_MIN_GATES)loadTrackBoard(d);
+  },700);
+}
+// A finished run on a builder track: the Worker's board, quietly. Checked here
+// first (normalizeTrackSubmit, as the Worker checks it): a run it would refuse
+// is not sent. Posts share an hourly budget with the weekly submit and SHARE,
+// so a run is sent when it is this browser's best, or the first run this
+// session on that board (a best from before the board existed); the Worker
+// keeps only a pilot's lowest time anyway.
+async function maybeSubmitTrackBoard(id,total,rec){
+  const track=customBoardTrack(id);
+  if(!track||!rec||rec.length<2||!onlineBoardsEnabled(leaderboardUrl()))return;
+  const body={
+    track:{id:track.id,name:track.name,map:track.map,gates:track.gates,flags:track.flags||[]},
+    frameMm:trackBoardClass(),name:currentPilotName(),timeMs:total,
+    ghost:ghostPayloadOf(id,rec,total),build:currentBuild,token:issuePilotToken(),
+  };
+  let checked;
+  try{checked=await normalizeTrackSubmit(body);}catch(e){checked={ok:false,reason:String(e&&e.message||e)};}
+  if(!checked.ok){console.warn('track board submit not sent: '+checked.reason);return;}
+  const pb=bestRunMs[ensureTrackStats(id)]||0;
+  const sentKey=checked.key+'|'+body.frameMm;
+  if(pb&&total>pb&&trackBoardSent.has(sentKey))return;
+  trackBoardSent.add(sentKey);
+  const j=await trackBoardFetch('/api/track/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(j&&j.key===checked.key){
+    // Any board request still out for this track is older than this answer.
+    nextTrackBoardSeq(track.id);
+    noteTrackBoard(track,checked.key,trackCodeOf(track),body.frameMm,j.entries);
+  }else{
+    // Refused (the rate limit, a name taken) or no Worker: the board as it
+    // stands, by GET (no rate limit, no claim); hidden if that fails too.
+    loadTrackBoard(track);
+  }
 }
 async function maybeSubmitOnline(id, total, rec){
   const url=leaderboardUrl();
@@ -8207,6 +8433,8 @@ function applyTrackLink(){
     resetQuad();
   }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
   toast('SHARED TRACK: '+t.name,{ms:4000});
+  // Its board up front: times to chase before the first run.
+  loadTrackBoard(t);
 }
 // Test hooks: the last link, the run on offer, the rival loaded, and a link
 // limit a test can lower.
