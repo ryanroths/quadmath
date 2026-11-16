@@ -245,7 +245,9 @@ export class SimCore {
   // Applies a Betaflight diff through Betaflight's own CLI, saves, and boots a
   // fresh flight instance to arm-ready. Every input line gets exactly one
   // result: applied, rejected (with the reason), error (with Betaflight's
-  // message), or comment. A class diff starts from factory defaults, so
+  // message), comment, or overridden (a setting the sim sets itself,
+  // cli-policy.js POLICY_SETS: not sent to Betaflight, with a note for the
+  // host to show; it blocks nothing). report.notes lists those notes once each. A class diff starts from factory defaults, so
   // nothing from an earlier configure() carries over.
   //
   // plant: an airframe (airframes/*.json); without one the quad is the M3
@@ -392,6 +394,8 @@ export class SimCore {
     const report = {
       lines, added, policy, rcmap, loopHz,
       applied: count('applied'), rejected: count('rejected'), errors: count('error'), comments: count('comment'),
+      overridden: count('overridden'),
+      notes: [...new Set(lines.filter((l) => l.status === 'overridden').map((l) => l.msg))],
     };
     return { report, eeprom: saved, rcmap };
   }

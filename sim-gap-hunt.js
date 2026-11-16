@@ -13,7 +13,7 @@
 // it as a toast, a list in the menu and a card.
 
 import { mapGaps } from './sim-maps.js?v=bae83928661c';
-import { gateCrossing } from './sim-coach.js?v=1d668ea8ac83';
+import { gateCrossing } from './sim-coach.js?v=4d1a58da78f3';
 
 export const GAP_HUNT_KEY = 'qm_gap_hunt_v1';
 

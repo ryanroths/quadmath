@@ -155,7 +155,8 @@ Anti-cheat on POST `/api/submit`:
 - Board GET filters by that week's track id.
 - Ghost `phys` must equal current physics version (`PHYS_VER` in
   `sim-retention.js`: 7 since sim-core v0.7.0 turned the RPM filter off in
-  the sim's policy, 6 since sim-core v0.6.0 put the 75 on the bf core
+  the sim's policy, kept by v0.8.0, which changes only the config report and
+  no trace, 6 since sim-core v0.6.0 put the 75 on the bf core
   (the Fractal75), 5 since sim-core v0.4.0's wall contact, 4 since the
   bf core became the default, 3 for the fixed 1 kHz cores before it).
 - Every board is kept per physics version: `scores.week` holds

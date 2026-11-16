@@ -1028,7 +1028,7 @@
   "imports": {
     "three": "./vendor/three.module.min.js?v=e2b5ee6bccd3",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
-    "./vendor/sim-core/cli-policy.js": "./vendor/sim-core/cli-policy.js?v=v0.7.0"
+    "./vendor/sim-core/cli-policy.js": "./vendor/sim-core/cli-policy.js?v=v0.8.0"
   }
 }
 </script>
@@ -1126,7 +1126,7 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=1d668ea8ac83";
+} from "./sim-coach.js?v=4d1a58da78f3";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=7e842d305df4";
@@ -1151,15 +1151,15 @@ import {
   defaultWhoopKit, ghostFromObj, shareTrackPayload, fromShareTrackPayload,
   customBoardKey, customTrackCode, normalizeTrackSubmit, isCustomBoardTrackId, customTrackProblem,
   CUSTOM_TRACK_MIN_GATES, CUSTOM_TRACK_CODE_MAX,
-} from "./sim-retention.js?v=469836d92e95";
+} from "./sim-retention.js?v=8dc268f18c23";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=3498e6242ff9";
+} from "./sim-secrets.js?v=1190f50c074a";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
-  fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=3f314d837c01";
+  fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=3f4158ced8a5";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -7076,16 +7076,21 @@ function importCliToBf(text){
   const mine=(r.lines||[]).filter(l=>l.n>from);
   const took=mine.filter(bfLineChanges).length;
   const refused=mine.filter(l=>l.status==='rejected').length,missing=mine.filter(l=>l.status==='error').length;
-  const detail=(refused>0?', refused '+refused:'')+(missing>0?', '+missing+' not in the sim target':'');
+  // A setting the sim sets itself (sim-core's policy, rpm_filter_harmonics):
+  // the line is not sent to Betaflight and blocks nothing; its note says why.
+  const over=mine.filter(l=>l.status==='overridden');
+  const detail=(refused>0?', refused '+refused:'')+(missing>0?', '+missing+' not in the sim target':'')+(over.length>0?', '+over.length+' set by the sim':'');
+  const notes=[...new Set(over.map(l=>l.msg).filter(Boolean))];
+  const noteText=notes.length?'\n'+notes.join('\n'):'';
   if(took<=0){
     // Nothing taken: Betaflight goes back to what it flew before this paste.
     bfLoadDiff(prev,label());
-    setCliStatus('Betaflight took none of it'+detail+'; it flies what it flew before','err');
+    setCliStatus('Betaflight took none of it'+detail+'; it flies what it flew before'+noteText,'err');
     return r;
   }
   bfOf().cliText=text;
   syncRatesSource();
-  setCliStatus('Betaflight took '+took+' line'+(took===1?'':'s')+(bfPasteReplaces(text)?' (a full diff, in place of '+bfTuneId()+')':' on top of '+bfTuneId())+detail,'ok');
+  setCliStatus('Betaflight took '+took+' line'+(took===1?'':'s')+(bfPasteReplaces(text)?' (a full diff, in place of '+bfTuneId()+')':' on top of '+bfTuneId())+detail+noteText,'ok');
   return r;
 }
 function importCli(text){
@@ -8721,7 +8726,7 @@ const BF_CLASSES={
 // ./cli-policy.js itself, unversioned (the vendor files ship byte for byte), so
 // the import map above maps that URL to ?v= this version too: a browser holding
 // the last release's cli-policy.js must not pair it with this sim-core.js.
-const SIM_CORE_VERSION='v0.7.0';
+const SIM_CORE_VERSION='v0.8.0';
 // Per class: its core once made (bfCore is the flying class's), the airframe
 // and diff as fetched, the CLI text the core last configured with, the map
 // whose contact profile its plant carries ('' = none), the world last sent to
@@ -8767,6 +8772,8 @@ function bfDiff(type=droneType){
   }
   return b.memo.text;
 }
+// The lines the sim set itself (sim-core's policy), for the console record.
+function bfOverrideNote(r){return r&&r.overridden>0?', '+r.overridden+' set by the sim ('+(r.notes||[]).join('; ')+')':'';}
 // What Betaflight holds after a configure, for the console: the settings the
 // owner's diff is flown for.
 function bfConfigNote(bf){
@@ -8830,7 +8837,7 @@ function bfLoadDiff(text,label){
   bfOf().diffLoaded=text;
   placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
   bfSyncMode();
-  console.info('sim-core: '+label+': '+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target; '+bfConfigNote(core));
+  console.info('sim-core: '+label+': '+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target'+bfOverrideNote(r)+'; '+bfConfigNote(core));
   toast('BETAFLIGHT — '+label.toUpperCase());
   return r;
 }
@@ -8945,7 +8952,7 @@ function selectCore(){
       b.diffLoaded=bfDiff(type);
       b.plantMap=plantMap;
       b.core=bf;
-      console.info('sim-core '+SIM_CORE_VERSION+': '+c.quad+', '+c.diff+' ('+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target; '+bfConfigNote(bf)+'); tune shown: '+bfTuneId(type)+'; '+bfWorld().boxes.length+' world boxes; the Build\'s cells and mAh are not used (the plant is the '+c.quad+')');
+      console.info('sim-core '+SIM_CORE_VERSION+': '+c.quad+', '+c.diff+' ('+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target'+bfOverrideNote(r)+'; '+bfConfigNote(bf)+'); tune shown: '+bfTuneId(type)+'; '+bfWorld().boxes.length+' world boxes; the Build\'s cells and mAh are not used (the plant is the '+c.quad+')');
       // The class can change while the wasm loads: this core waits for it.
       if(!bfWanted()||droneType!==type)return;
       bfCore=bf;
