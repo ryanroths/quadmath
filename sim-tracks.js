@@ -625,6 +625,65 @@ export function decodeShare(code) {
   return fromSharePayload(JSON.parse(utf8b64(body)));
 }
 
+// ---------- A shared track as a link ----------
+// The builder's share code (encodeShare) in a link to the page:
+// sim.html?map=<map>#trk=<QM2 code>. The code rides in the fragment, which
+// never reaches a server. Standard base64 is legal there as it is; a reader
+// takes it whole, and percent-decodes it in case a chat app encoded it.
+export const TRACK_PARAM = 'trk';
+
+// origin + path is the sim page. dev: the map is closed without ?dev=1.
+export function trackLink({ origin, path, map, dev, code } = {}) {
+  const q = [];
+  if (map) q.push('map=' + encodeURIComponent(map));
+  if (dev) q.push('dev=1');
+  return String(origin || '') + String(path || '/sim.html') + (q.length ? '?' + q.join('&') : '') +
+    '#' + TRACK_PARAM + '=' + String(code || '');
+}
+
+// The trk= code in a location's fragment ('' for an empty one: a bad code),
+// or null when there is none. Also null when the fragment carries a line
+// (#line=): a line link wins and its trk is ignored.
+export function trackCodeFromHash(hash) {
+  const h = String(hash || '').replace(/^#/, '');
+  let code = null;
+  for (const part of h.split('&')) {
+    const eq = part.indexOf('=');
+    const name = eq < 0 ? part : part.slice(0, eq);
+    if (name === 'line') return null;
+    if (name === TRACK_PARAM && code === null) {
+      let v = eq < 0 ? '' : part.slice(eq + 1);
+      try { v = decodeURIComponent(v); } catch (e) { /* as it is */ }
+      code = v;
+    }
+  }
+  return code;
+}
+
+// A builder id ('custom-' + its time) is kept. Any other id a link carries
+// (a built-in course's, a daily's, a weekly's) would fly that course and its
+// boards instead of these gates: it becomes custom-shared- and a hash of the
+// gates, the same for the same track every time it is opened.
+const LINK_ID_RE = /^custom-[A-Za-z0-9_-]{1,40}$/;
+function gatesHash(t) {
+  let h = 0x811c9dc5;
+  const s = JSON.stringify([t.map, t.gates.map((g) => [g.x, g.y, g.z, g.ry, g.size, g.solid])]);
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(36);
+}
+
+// A track link's code as a track to fly this session: decodeShare, then a
+// safe id (LINK_ID_RE) and a name with no control characters. Throws 'BAD
+// TRACK CODE' on any code decodeShare refuses.
+export function trackFromLinkCode(code) {
+  let t;
+  try { t = decodeShare(code); } catch (e) { throw new Error('BAD TRACK CODE'); }
+  if (!LINK_ID_RE.test(t.id)) t.id = 'custom-shared-' + gatesHash(t);
+  t.legacyId = null;
+  t.name = String(t.name).replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim() || 'Custom';
+  return t;
+}
+
 export function loadCustomTracks(storage) {
   const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
   if (!store) return [];

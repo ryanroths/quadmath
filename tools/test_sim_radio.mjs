@@ -20,6 +20,7 @@ import {
 } from '../sim-touch.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
 import { throttleCollective, armHintText, stepAutoArm } from '../sim-3d.js';
+import { stickDots } from '../sim-feel.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const simSrc = existsSync(join(root, 'sim.html')) ? readFileSync(join(root, 'sim.html'), 'utf8') : '';
@@ -269,17 +270,21 @@ test('sim.html still owns the Radio panel and per-device keys', () => {
   assert.deepEqual(CAL_STEPS.map((s) => s.key), ['center', 'r', 'p', 'y', 'thi', 'tlo'], 'sticks only');
 });
 
-test('stick HUD is mode 2: left pad first, no row-reverse', () => {
+test('stick HUD is mode 2: the overlay, left box yaw/throttle, right box roll/pitch', () => {
   assert.match(simSrc, /#feelHud\{[^}]*pointer-events:none;\s*flex-direction:\s*row;/);
   assert.equal(/#feelHud\{[^}]*row-reverse/.test(simSrc), false);
-  const l = simSrc.indexOf('id="stickDotL"');
-  const r = simSrc.indexOf('id="stickDotR"');
-  assert.ok(l > 0 && r > l, 'DOM left stick before right stick');
-  const feelSrc = readFileSync(join(root, 'sim-feel.js'), 'utf8');
-  assert.ok(feelSrc.includes('50 + st.y * 42') && feelSrc.includes('92 - st.t * 84'),
-    'left HUD dot is yaw/throttle');
-  assert.ok(feelSrc.includes('50 + st.r * 42') && feelSrc.includes('50 - st.p * 42'),
-    'right HUD dot is roll/pitch');
+  // The sticks moved from #feelHud's pads to the stick overlay (one canvas).
+  assert.equal(simSrc.includes('id="stickDotL"'), false, 'no second stick display');
+  assert.ok(simSrc.includes('<canvas id="stickOverlay"'));
+  const c = stickDots({ r: 0, p: 0, y: 0, t: 0.5 }, 72);
+  const yawRight = stickDots({ r: 0, p: 0, y: 1, t: 0.5 }, 72);
+  const thrUp = stickDots({ r: 0, p: 0, y: 0, t: 1 }, 72);
+  const rollRight = stickDots({ r: 1, p: 0, y: 0, t: 0.5 }, 72);
+  const pitchUp = stickDots({ r: 0, p: 1, y: 0, t: 0.5 }, 72);
+  assert.ok(yawRight.l.x > c.l.x && yawRight.r.x === c.r.x, 'left box x is yaw');
+  assert.ok(thrUp.l.y < c.l.y && thrUp.r.y === c.r.y, 'left box y is throttle, up is more');
+  assert.ok(rollRight.r.x > c.r.x && rollRight.l.x === c.l.x, 'right box x is roll');
+  assert.ok(pitchUp.r.y < c.r.y && pitchUp.l.y === c.l.y, 'right box y is pitch, forward is up');
 });
 
 function sweepThrottle(router, setAxes, rest, full, dt) {
