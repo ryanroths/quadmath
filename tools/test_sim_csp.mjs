@@ -27,6 +27,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { spawnBrowser } from './browser_guard.mjs';
+import { sqliteD1 } from './d1_sqlite.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
@@ -134,31 +135,10 @@ test('sim-csp.js: whatever the policy blocks is a console warning naming the dir
 
 // ---- the browsers ----
 
-// An in-memory D1 for what the leaderboard Worker runs: lines, the rate limit,
-// and empty boards.
+// The leaderboard Worker's D1: real SQLite made from schema.sql
+// (tools/d1_sqlite.mjs).
 function fakeD1() {
-  const lines = new Map(), rate = new Map();
-  return {
-    lines,
-    prepare(sql) {
-      let args = [];
-      const stmt = {
-        bind(...a) { args = a; return stmt; },
-        async first() {
-          if (/FROM rate_limit/.test(sql)) { const n = rate.get(args.join('|')); return n ? { n } : null; }
-          if (/FROM lines/.test(sql)) { const code = lines.get(args[0]); return code ? { code } : null; }
-          return null;
-        },
-        async run() {
-          if (/INTO rate_limit/.test(sql)) { const k = args.join('|'); rate.set(k, (rate.get(k) || 0) + 1); return {}; }
-          if (/INTO lines/.test(sql)) { if (!lines.has(args[0])) lines.set(args[0], args[1]); return {}; }
-          return {};
-        },
-        async all() { return { results: [] }; },
-      };
-      return stmt;
-    },
-  };
+  return sqliteD1();
 }
 
 function resolveChrome() {
@@ -241,7 +221,7 @@ const PAGE = String.raw`(() => {
   // time, which moves only in a frame that stepped the core. The whole run has
   // a ceiling: a gate not counted by then ends it unfinished.
   async function flyGates() {
-    const track = s.tracks().find((t) => t.id === s.track());
+    const track = s.tracks().find((t) => t.id === s.track()) || s.findTrack(s.track());
     const b = s.bfCore();
     // The gate number only: the split beside it ticks every frame.
     const counter = () => (/ GATE (\d+)\//.exec($('osdGate').textContent) || [])[1];
@@ -784,6 +764,45 @@ test('the sim under its policy in Chrome: no violations; injected handlers do no
         await devRooms.stop();
         if (devLb) await devLb.stop();
       }
+    });
+
+    // Last on this tab: once a test's pilot has flown in a page, every run in
+    // it is marked as a test pilot's (sim.html testPilotUsed).
+    await t.test('test pilot runs: marked, sent to no board, not stored as a shared line', async () => {
+      await a.front();
+      const calls0 = worker.calls.length;
+      let r = await a.js(`
+        if (document.body.classList.contains('menu-open')) { T.$('menuResume').click(); await T.wait(300); }
+        // The pilot set, then cleared before the run: still a test pilot's page.
+        T.s.setTestPilot(() => ({ r: 0, p: 0, y: 0, t: 0 }));
+        T.s.setTestPilot(null);
+        const used = T.s.testPilotUsed();
+        const done = await T.flyGates();
+        T.$('toast').textContent = '';
+        if (done) T.$('lapShare').click();
+        await T.wait(1500);
+        return JSON.stringify({ used, done, toast: T.toast(), gate: T.$('osdGate').textContent });`);
+      assert.equal(r.used, true);
+      assert.equal(r.done, true, 'the run finished: ' + r.gate);
+      assert.equal(r.toast, 'TEST PILOT RUN · NOT SHARED', 'SHARE refuses it');
+      // The weekly course: its finish says so, and nothing is posted.
+      r = await a.js(`
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        await T.wait(400);
+        T.$('menuBoards').click();
+        await T.wait(600);
+        T.$('boardFly').click();
+        await T.until(() => /^weekly-/.test(T.s.track()), 8000);
+        await T.wait(800);
+        const track = T.s.track();
+        const done = await T.flyGates();
+        return JSON.stringify({ track, done, toast: T.toast(), gate: T.$('osdGate').textContent });`);
+      assert.match(r.track, /^weekly-/);
+      assert.equal(r.done, true, 'the weekly run finished: ' + r.gate);
+      assert.match(r.toast, /TEST PILOT · NOT SENT/, 'the weekly finish says it was not sent: ' + r.toast);
+      await sleep(1500);
+      const sent = worker.calls.slice(calls0).filter((c) => /^POST \/api\/(line|submit|daily\/submit|track\/submit|builtin\/submit)$/.test(c));
+      assert.deepEqual(sent, [], 'nothing posted: ' + worker.calls.slice(calls0).join(', '));
     });
 
     await t.test('markup with handlers put into the page: nothing runs, and the page warns', async () => {

@@ -1611,24 +1611,26 @@ function segmentGateDist(a, b, g) {
 // LINE_SWEEP_SLACK_MAX (the chord cuts the corner the quad flew), and any
 // further gate on the same step within its radius alone. The page records the
 // finish frame last, inside the last gate's sphere, so that is the finish.
-// Returns the sample indices of the gate-0 pass and the finish, or -1.
+// Returns the sample indices of the gate-0 pass and the finish, or -1, and
+// in `at` the sample index each gate was passed on, in order.
 export function lineRunPasses(samples, track) {
   const gates = ((track && track.gates) || []).map((g) => normalizeGate(g));
   const n = gates.length;
-  const out = { start: -1, finish: -1, passed: 0 };
+  const out = { start: -1, finish: -1, passed: 0, at: [] };
   if (n < 2 || !Array.isArray(samples) || samples.length < 2) return out;
   const at = (s) => ({ x: s[1], y: s[2], z: s[3] });
   const last = n - 1;
   const end = samples.length - 1;
   let next = 0;
   // The page's first sample is the frame the run starts on, inside gate 0.
-  if (dist3(at(samples[0]), gates[0]) < gates[0].r + 0.05) { out.start = 0; next = 1; }
+  if (dist3(at(samples[0]), gates[0]) < gates[0].r + 0.05) { out.start = 0; next = 1; out.at.push(0); }
   for (let i = 1; i <= end && next < last; i++) {
     const a = at(samples[i - 1]), b = at(samples[i]);
     const slack = Math.min(dist3(a, b) * 0.25, LINE_SWEEP_SLACK_MAX);
     let credited = 0;
     while (next < last && segmentGateDist(a, b, gates[next]) < gates[next].r + (credited ? 0 : slack)) {
       if (next === 0) out.start = i;
+      out.at.push(i);
       next++;
       credited++;
     }
@@ -1637,8 +1639,23 @@ export function lineRunPasses(samples, track) {
   if (next === last && out.start >= 0 && out.start < end && dist3(at(samples[end]), gates[last]) < gates[last].r + 0.05) {
     out.finish = end;
     out.passed = n;
+    out.at.push(end);
   }
   return out;
+}
+
+// A finished line run's splits: each gate after gate 0, its pass's ghost time
+// from the gate-0 sample, ms (the last is the run's ghost time).
+export function lineRunSplits(samples, pass) {
+  if (!pass || pass.finish < 0 || !Array.isArray(pass.at)) return [];
+  const t0 = samples[pass.start][0];
+  return pass.at.slice(1).map((i) => Math.round(samples[i][0] - t0));
+}
+
+// A run flown by a test's pilot (sim.html _sim.setTestPilot): the page tags
+// its ghost, and no board or shared line takes it.
+export function isTestPilotGhost(ghost) {
+  return !!(ghost && typeof ghost === 'object' && ghost.testPilot);
 }
 
 function isCityLoopId(id) {
@@ -2117,6 +2134,7 @@ export async function normalizeTrackSubmit(body) {
   const ghost = body.ghost;
   const bad = ghostPayloadError(ghost, null);
   if (bad) return { ok: false, reason: bad };
+  if (isTestPilotGhost(ghost)) return { ok: false, reason: 'TEST PILOT' };
   if (ghost.phys !== PHYS_VER) return { ok: false, reason: 'PHYS MISMATCH' };
   if (isPaceBotGhost(ghost, track)) return { ok: false, reason: 'PACE BOT' };
   // A builder track can be a few gates across a room: the Daily Line's
@@ -2320,6 +2338,7 @@ export function normalizeDailyLineSubmit(body, now) {
   const givenId = submittedTrackId(body.track) || String(body.trackId || '');
   if (givenId && givenId !== challenge.trackId) return { ok: false, reason: 'TRACK MISMATCH' };
   const ghost = body.ghost;
+  if (isTestPilotGhost(ghost)) return { ok: false, reason: 'TEST PILOT' };
   if (ghost && ghost.phys != null && ghost.phys !== PHYS_VER) return { ok: false, reason: 'PHYS MISMATCH' };
   const checked = validateDailyLineRun({
     challenge,
@@ -2343,6 +2362,82 @@ export function normalizeDailyLineSubmit(body, now) {
     trackId: challenge.trackId,
     token,
   };
+}
+
+// ---- Built-in track boards (the public maps' races) ----
+// The Worker passes the tracks (sim-builtin-boards.js BUILTIN_BOARD_TRACKS,
+// generated from tracks/*.json); this file has no imports. A board is keyed
+// by the track's geometry as a builder track's is (customTrackCanon): 'b.' +
+// 16 hex of SHA-256 + '.p' + PHYS_VER, so an edit to a track's gates starts
+// its boards clean. The run is checked against the Worker's copy of the
+// track; a client sends only the track's id and the hash of the gates it
+// flew (builtinTrackHash), and a hash that is not the Worker's (a stale page,
+// a track changed under a built-in id) is refused.
+export const BUILTIN_BOARD_KEY_RE = /^b\.[0-9a-f]{16}\.p[1-9][0-9]{0,3}$/;
+// A built-in board keeps this many rows per class, and the full ghost of this
+// many (the rest keep time, splits and the ghost's digest).
+export const BUILTIN_BOARD_ROWS = 200;
+export const BUILTIN_BOARD_GHOSTS = 10;
+
+export async function builtinTrackHash(track) {
+  return (await hashPilotToken(customTrackCanon(track))).slice(0, 16);
+}
+
+export async function builtinBoardKey(track) {
+  return 'b.' + (await builtinTrackHash(track)) + '.p' + PHYS_VER;
+}
+
+export function builtinBoardTrack(tracks, id) {
+  const want = String(id == null ? '' : id);
+  return (tracks || []).find((t) => t.id === want) || null;
+}
+
+// POST /api/builtin/submit, checked: { track: id (or {id}), trackHash,
+// frameMm, name, timeMs, ghost, build, token }. The name is returned as sent:
+// the Worker checks it (sim-pilot-names.js) and claims it.
+export async function normalizeBuiltinSubmit(body, tracks) {
+  if (!body || typeof body !== 'object') return { ok: false, reason: 'BAD JSON' };
+  const frameMm = classId(body.frameMm || body.class);
+  const builtClass = classFromBuild(body.build);
+  if (builtClass != null && builtClass !== frameMm) return { ok: false, reason: 'CLASS MISMATCH' };
+  const raw = builtinBoardTrack(tracks, submittedTrackId(body.track) || body.trackId);
+  if (!raw) return { ok: false, reason: 'NO BOARD' };
+  let track;
+  try { track = normalizeTrack(raw); }
+  catch (e) { return { ok: false, reason: 'BAD TRACK' }; }
+  const hash = await builtinTrackHash(track);
+  if (body.trackHash !== hash) return { ok: false, reason: 'TRACK CHANGED' };
+  const ghost = body.ghost;
+  const bad = ghostPayloadError(ghost, track.id);
+  if (bad) return { ok: false, reason: bad };
+  if (isTestPilotGhost(ghost)) return { ok: false, reason: 'TEST PILOT' };
+  if (ghost.phys !== PHYS_VER) return { ok: false, reason: 'PHYS MISMATCH' };
+  if (isPaceBotGhost(ghost, track)) return { ok: false, reason: 'PACE BOT' };
+  const timeMs = +body.timeMs;
+  const checked = validateSubmittedRun({ ghost, track, frameMm, timeMs, threeD: body.threeD, minTimeMs: DAILY_LINE_MIN_MS });
+  if (!checked.ok) return checked;
+  const splits = lineRunSplits(ghost.samples, lineRunPasses(ghost.samples, track));
+  return {
+    ok: true,
+    key: 'b.' + hash + '.p' + PHYS_VER,
+    trackId: track.id,
+    frameMm,
+    name: typeof body.name === 'string' ? body.name : '',
+    timeMs: timeMs | 0,
+    misses: checked.misses | 0,
+    splits,
+    token: typeof body.token === 'string' ? body.token.trim() : '',
+  };
+}
+
+// A ghost's digest: its positions to 5 cm, in order, without its times or
+// name: the same flight resubmitted (a shared run, under another name) has
+// the same digest. 16 hex of SHA-256.
+export async function ghostDigest(ghost) {
+  const s = (ghost && Array.isArray(ghost.samples)) ? ghost.samples : [];
+  const q = (v) => Math.round(+v * 20);
+  const text = s.map((p) => q(p[1]) + ',' + q(p[2]) + ',' + q(p[3])).join(';');
+  return (await hashPilotToken(text)).slice(0, 16);
 }
 
 export function emptyBoard() {
@@ -3373,6 +3468,7 @@ export function normalizeSubmit(body, now) {
   }
   const ghost = body.ghost;
   if (ghostPayloadError(ghost, null)) return { ok: false, reason: ghostPayloadError(ghost, null) };
+  if (isTestPilotGhost(ghost)) return { ok: false, reason: 'TEST PILOT' };
   const ghostPhys = ghost && ghost.phys;
   if (ghostPhys !== PHYS_VER) return { ok: false, reason: 'PHYS MISMATCH' };
   if (isPaceBotGhost(ghost, track)) return { ok: false, reason: 'PACE BOT' };

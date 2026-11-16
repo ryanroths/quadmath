@@ -175,12 +175,20 @@ Anti-cheat on POST `/api/submit`:
   plus whole 2 s miss penalties, within 150 ms. At most 1600 samples.
 - Class must match submitted build `frameMm`; speeds use that class cap.
 - Generated pace-bot ghosts are rejected.
-- Pilot names are sanitized (Unicode letters, length cap). First browser
-  to use a name claims it; other tokens get `NAME TAKEN`.
+- Pilot names follow `sim-pilot-names.js` (see "Built-in track boards,
+  names and bans" below): 3 to 16 ASCII letters and digits with single
+  separators, not reserved or blocked. A name is claimed under its key
+  (look-alikes are one name) by the first browser to post under it; other
+  tokens get `NAME TAKEN`.
+- A run flown by a test's pilot (`_sim.setTestPilot`) is refused (`TEST
+  PILOT`), as is a run already posted or shared under another name
+  (`COPIED RUN`), and any post from a banned token (`BANNED`).
 - CORS origin is `https://quadmath.com` (plus localhost when that var
   lists it).
 
-Rate limit is 12 posts / IP / UTC hour.
+Rate limits, per IP per UTC hour: 30 score posts (weekly, Daily Line,
+builder and built-in boards, together) and, apart from them, 12 SHAREs
+(`/api/line`). Reads are not limited.
 
 ## Weekly one-pass rule (first real rows)
 
@@ -219,18 +227,146 @@ npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT week
 
 ## Removing a row
 
-`name` is the name as stored (sanitized, as the board shows it) and `week`
-the board key from the query above (e.g. `2026-W47.p7`):
+`name` is the name as the board shows it and `week` the board key from the
+query above (e.g. `2026-W47.p7`):
 
 ```bash
 npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM scores WHERE week='2026-W47.p7' AND class=65 AND name='SomeName'"
 ```
 
-To free a claimed name so another browser can take it (its rows stay):
+Built-in boards, freeing a name and bans: see "Built-in track boards, names
+and bans" below.
+
+## Built-in track boards, names and bans
+
+Every race on a public map has its own board: `rig-loop`, `house-loop`,
+`house-backyard-lap`, `depot-loop` and `bando-loop-v2`
+(`sim-builtin-boards.js`, generated from `tracks/*.json` by
+`node tools/build_builtin_boards.mjs --write`). Routes:
+
+- `POST /api/builtin/submit` `{track, trackHash, frameMm, name, timeMs, ghost, build, token}`
+- `GET /api/builtin/board?track=&class=[&name=]`: the top 20, the row count, the named pilot's place
+- `GET /api/builtin/tops?class=`: each track's fastest
+- `GET /api/builtin/ghost?track=&class=&name=`: a top-10 pilot's ghost
+
+A board is keyed `b.` + 16 hex of the track's gates + `.p` + `PHYS_VER`: an
+edit to a track's gates starts its boards clean once this Worker (with the
+regenerated module) is deployed. Until then the Worker refuses runs from the
+new page on that track (`TRACK CHANGED`). The run is checked against the
+Worker's copy of the track, never one a client sent:
+
+- one pass, every gate in order;
+- the time is the ghost's plus whole miss penalties;
+- the speed cap for the class, `PHYS_VER`;
+- not a pace bot, not a test pilot's run, not a copy of another name's run.
+
+A board keeps its 200 fastest per class, each row with its time, splits
+and the ghost's digest. The full ghost is kept for the 10 fastest only
+(about 14 MB at most over the five tracks' fifteen boards). A run slower
+than the 200th is not stored, and the reply gives its place. Builder boards
+also keep their 200 fastest. A clean Daily Line (no modifier) on one of
+these tracks is also posted to that track's board.
+
+Names (`sim-pilot-names.js`), on every board:
+
+- 3 to 16 characters: ASCII letters and digits, with single spaces, dots,
+  dashes or underscores between them. At least one letter.
+- A name is claimed under its key: lower case, separators dropped,
+  look-alikes folded (0 o, 1 i l, 3 e, 4 a, 5 s, 7 t, v u). "RyFly",
+  "ry_fly", "RYFLY", "Ry Fly", "RyFIy" and "RyF1y" are one name. The first
+  token to post under a key holds it, and the boards show the name it was
+  claimed with.
+- Refused: no name or the default `PILOT` (`SET A NAME`); anything outside
+  the rules (`BAD NAME`); reserved names, a blocked word anywhere in the
+  key, or a word in D1's `blocked_names` (`NAME NOT ALLOWED`).
+
+### Deploy (in this order)
+
+The migration first: the new Worker reads its tables, and the old Worker
+never touches them.
+
+1. Merge the PR (Pages ships the page).
+2. From the main checkout:
 
 ```bash
-npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM pilots WHERE name='SomeName'"
+git pull --ff-only
 ```
+
+```bash
+cd workers/sim-leaderboard
+```
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --file=./src/migrate-builtin-boards.sql
+```
+
+```bash
+npm run predeploy
+```
+
+Check that it prints `PHYS_VER 7` and bundles `sim-builtin-boards.js` and
+`sim-pilot-names.js`, then:
+
+```bash
+npm run deploy
+```
+
+3. Check:
+
+```bash
+curl -sS 'https://sim-leaderboard.ryan-roths.workers.dev/api/builtin/tops?class=65'
+```
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT key, name FROM pilot_keys"
+```
+
+The first lists the five tracks with `"top":null`. The second shows each
+earlier claim under its key (`ryfly | RyFly`).
+
+Never `migrations apply`: production's `d1_migrations` table is empty.
+
+Between the merge and the Worker deploy, nothing changes for players: this
+release's page sends no built-in submits (the boards' page comes next). The
+page's only change is that a test pilot's runs are never sent or shared.
+
+### One-line commands
+
+A pilot is found by their key, from `pilot_keys` (`SELECT key, name FROM
+pilot_keys WHERE name LIKE '%fly%'`):
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM track_scores WHERE name_key='somekey'; DELETE FROM track_ghosts WHERE name_key='somekey'"
+```
+
+deletes their rows on every built-in board (add `AND track_id='rig-loop'`
+to both for one track).
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "INSERT OR IGNORE INTO bans (token_hash, reason, created_ms) SELECT token_hash, 'why', strftime('%s','now')*1000 FROM pilot_keys WHERE key='somekey'"
+```
+
+bans the browser that holds a name: its score posts and SHAREs are refused
+(`BANNED`). A ban is per browser token: clearing the browser's storage gives
+a new token and needs a new name.
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM bans WHERE token_hash=(SELECT token_hash FROM pilot_keys WHERE key='somekey')"
+```
+
+lifts that ban.
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "INSERT OR IGNORE INTO blocked_names (word) VALUES ('someword')"
+```
+
+blocks a word anywhere in a name's key, from the next minute.
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM pilot_keys WHERE key='somekey'"
+```
+
+frees a name for the next browser to post under it. Its rows stay.
 
 ## "Fly my line" (`/api/line`)
 

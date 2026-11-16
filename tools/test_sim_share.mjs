@@ -20,6 +20,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { spawnBrowser } from './browser_guard.mjs';
+import { sqliteD1 } from './d1_sqlite.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
@@ -260,29 +261,9 @@ test('the banner and the id', async () => {
   assert.notEqual(id, await lineIdOf(await encodeLineCode({ ghost: flight(5, { seed: 2 }) }, 10)));
 });
 
-// An in-memory D1 for the statements the Worker's line and rate-limit code runs.
+// The Worker's D1: real SQLite made from schema.sql (tools/d1_sqlite.mjs).
 function fakeD1() {
-  const lines = new Map(), rate = new Map();
-  return {
-    lines,
-    prepare(sql) {
-      let args = [];
-      const stmt = {
-        bind(...a) { args = a; return stmt; },
-        async first() {
-          if (/FROM rate_limit/.test(sql)) { const n = rate.get(args.join('|')); return n ? { n } : null; }
-          if (/FROM lines/.test(sql)) { const code = lines.get(args[0]); return code ? { code } : null; }
-          throw new Error('fake D1: ' + sql);
-        },
-        async run() {
-          if (/INTO rate_limit/.test(sql)) { const k = args.join('|'); rate.set(k, (rate.get(k) || 0) + 1); return {}; }
-          if (/INTO lines/.test(sql)) { if (!lines.has(args[0])) lines.set(args[0], args[1]); return {}; }
-          throw new Error('fake D1: ' + sql);
-        },
-      };
-      return stmt;
-    },
-  };
+  return sqliteD1();
 }
 
 const post = (body, headers) => new Request('https://x/api/line', { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });

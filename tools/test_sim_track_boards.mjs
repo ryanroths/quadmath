@@ -28,7 +28,7 @@ import {
   customTrackProblem, CUSTOM_TRACK_MAPS, CUSTOM_TRACK_GATES_SCAN_MAX,
 } from '../sim-retention.js';
 import { encodeShare, trackLink, MAPS } from '../sim-tracks.js';
-import { handleLeaderboard } from '../workers/sim-leaderboard/src/index.js';
+import { handleLeaderboard, RATE_SCORE_MAX } from '../workers/sim-leaderboard/src/index.js';
 import { WS } from '../sim-core-adapter.js';
 import { builtTrack, hugeTrack, flownRun, hoverRun, pilotToken, submitBody, trackBoardsD1 } from './track_boards_fixture.mjs';
 
@@ -259,8 +259,9 @@ test('Worker (in process): refusals write no track, a forged key is refused, the
     assert.equal(r.status, 400, bad);
     assert.equal(r.json.reason, 'BAD KEY', bad);
   }
-  // 12 posts an IP an hour, shared with /api/submit and /api/line.
-  for (let i = 0; i < 12; i++) await call('POST', '/api/track/submit', '{}', '192.0.2.9');
+  // RATE_SCORE_MAX posts an IP an hour, shared with /api/submit (not with
+  // /api/line, which has its own).
+  for (let i = 0; i < RATE_SCORE_MAX; i++) await call('POST', '/api/track/submit', '{}', '192.0.2.9');
   await refused(submitBody(t, flownRun(t)), 429, 'RATE LIMIT', '192.0.2.9');
   r = await call('POST', '/api/submit', '{}', '192.0.2.9');
   assert.equal(r.status, 429, 'the same count as the weekly submit');
@@ -284,9 +285,13 @@ test('the Worker\'s tables: schema.sql and migrate-track-boards.sql, idempotent,
   assert.ok(idx.indexOf('INSERT OR IGNORE INTO custom_tracks') > idx.indexOf("path === '/api/track/submit'"));
   // The track row comes after every check and the claim, never before.
   const route = idx.slice(idx.indexOf("path === '/api/track/submit'"), idx.indexOf("path === '/api/track/board'"));
-  for (const before of ['checkRate(', 'normalizeTrackSubmit(', 'TOKEN_RE.test(', 'claimPilot(']) {
+  // (postScore: the rate limit and the body; scorePilot: the token and the
+  // name's claim.)
+  for (const before of ['postScore(', 'normalizeTrackSubmit(', 'scorePilot(']) {
     assert.ok(route.indexOf(before) >= 0 && route.indexOf(before) < route.indexOf('INTO custom_tracks'), before);
   }
+  const shared = idx.slice(idx.indexOf('async function scorePilot('), idx.indexOf('export async function handleLeaderboard('));
+  for (const step of ['checkRate(', 'TOKEN_RE.test(', 'pilotFor(']) assert.ok(shared.includes(step), step);
 });
 
 test('sim.html: a builder track\'s finish goes to its board, quietly', () => {
@@ -297,7 +302,7 @@ test('sim.html: a builder track\'s finish goes to its board, quietly', () => {
     for (; i < html.length; i++) { if (html[i] === '{') depth++; else if (html[i] === '}' && --depth === 0) return html.slice(start, i + 1); }
     throw new Error(name);
   };
-  assert.match(extract('noteRetentionFinish'), /if\(isCustomBoardTrackId\(id\)&&!offBoards\)maybeSubmitTrackBoard\(id, total, submitRec\|\|rec\);/);
+  assert.match(extract('noteRetentionFinish'), /if\(isCustomBoardTrackId\(id\)&&!offBoards\)\{\s*if\(testPilotUsed\)held=true;\s*else maybeSubmitTrackBoard\(id, total, submitRec\|\|rec\);/);
   const submit = extract('maybeSubmitTrackBoard');
   assert.match(submit, /normalizeTrackSubmit\(body\)/, 'checked as the Worker checks it');
   assert.doesNotMatch(submit, /toast\(/, 'no toast, refused or not');

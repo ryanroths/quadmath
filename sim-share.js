@@ -104,6 +104,9 @@ export function packLine({ ghost, trackPayload } = {}, hz = LINE_RATES_HZ[0]) {
   const r = resampleGhost(g.samples, dtMs);
   const head = { t: g.track, n: String(g.name || ''), l: Math.round(g.lapTime) || 0, p: g.phys, s: r.startMs, e: r.endMs, d: r.dtMs, c: r.rows.length };
   if (trackPayload) head.tr = trackPayload;
+  // A test pilot's run (sim.html _sim.setTestPilot) says so in its code, so
+  // the Worker refuses to store it.
+  if (g.testPilot) head.x = 1;
   const headBytes = utf8.encode(JSON.stringify(head));
   if (headBytes.length > 0xffff) throw new Error('LINE TOO LARGE');
   const out = [FORMAT, headBytes.length & 0xff, headBytes.length >> 8];
@@ -180,6 +183,7 @@ export function unpackLine(bytes) {
   }
   if (typeof head.t === 'string' ? !TRACK_ID_RE.test(head.t) : !(head.t === 0 || head.t === 1)) throw new Error('BAD LINE CODE');
   const ghost = { v: 1, phys: head.p, track: head.t, name: String(head.n || '').slice(0, 64), lapTime: +head.l || 0, samples };
+  if (head.x === 1) ghost.testPilot = true;
   let trackPayload = null;
   if (head.tr && typeof head.tr === 'object') {
     // Its own track: the one the ghost names, on a plainly named map.

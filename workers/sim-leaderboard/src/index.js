@@ -1,5 +1,7 @@
 // QuadMath sim W5 weekly leaderboard Worker.
-// Bundles ../../.. /sim-retention.js so anti-cheat stays one implementation.
+// Bundles ../../.. /sim-retention.js so anti-cheat stays one implementation,
+// ../../../sim-pilot-names.js for the name rules and
+// ../../../sim-builtin-boards.js for the built-in tracks' gates.
 // Do not deploy from the agent — Ryan deploys (see DEPLOY.md).
 
 import {
@@ -19,8 +21,18 @@ import {
   ghostPayloadError,
   normalizeTrackSubmit,
   CUSTOM_BOARD_KEY_RE,
+  normalizeBuiltinSubmit,
+  builtinBoardKey,
+  builtinBoardTrack,
+  builtinTrackHash,
+  BUILTIN_BOARD_ROWS,
+  BUILTIN_BOARD_GHOSTS,
+  ghostDigest,
+  isTestPilotGhost,
 } from '../../../sim-retention.js';
 import { decodeLineCode, lineIdOf, LINE_CODE_MAX, LINE_ID_RE } from '../../../sim-share.js';
+import { pilotNameProblem, pilotNameKey, pilotDisplayName } from '../../../sim-pilot-names.js';
+import { BUILTIN_BOARD_TRACKS } from '../../../sim-builtin-boards.js';
 
 const CORS_METHODS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -29,7 +41,14 @@ const CORS_METHODS = {
   Vary: 'Origin',
 };
 
-const RATE_MAX = 12;
+// Posts per IP per UTC hour: score submits (weekly, Daily Line, builder and
+// built-in boards) share one budget, SHARE (/api/line) has its own, so
+// sharing runs never uses up the boards' and the other way round.
+export const RATE_SCORE_MAX = 30;
+export const RATE_SHARE_MAX = 12;
+const RATE_MAX = { score: RATE_SCORE_MAX, share: RATE_SHARE_MAX };
+// A builder track's board keeps this many rows per class, as a built-in's.
+const CUSTOM_BOARD_ROWS = BUILTIN_BOARD_ROWS;
 const JSON_LIMIT = 350_000;
 const TOKEN_RE = /^[a-f0-9]{32,64}$/i;
 
@@ -64,13 +83,15 @@ async function readJson(request) {
   catch (e) { return { error: 'BAD JSON' }; }
 }
 
-async function checkRate(env, ip, now) {
-  const window = rateWindowId(now);
+// bucket: 'score' or 'share'. The window is the bucket and the UTC hour
+// (rows from before the split, the bare hour, are not read).
+async function checkRate(env, ip, now, bucket) {
+  const window = bucket + ':' + rateWindowId(now);
   const row = await env.DB.prepare(
     'SELECT n FROM rate_limit WHERE ip = ? AND window = ?',
   ).bind(ip, window).first();
   const n = row && row.n ? row.n : 0;
-  if (n >= RATE_MAX) return false;
+  if (n >= RATE_MAX[bucket]) return false;
   await env.DB.prepare(
     'INSERT INTO rate_limit (ip, window, n) VALUES (?, ?, 1) ON CONFLICT(ip, window) DO UPDATE SET n = n + 1',
   ).bind(ip, window).run();
@@ -90,21 +111,23 @@ async function listBoard(env, week, frameMm, trackId) {
 
 async function upsertScore(env, week, frameMm, name, timeMs, trackId) {
   const key = boardKeyFor(week);
+  const c = classId(frameMm);
   const existing = await env.DB.prepare(
     'SELECT time_ms FROM scores WHERE week = ? AND class = ? AND name = ?',
-  ).bind(key, frameMm, name).first();
+  ).bind(key, c, name).first();
   if (existing && existing.time_ms <= timeMs) {
     return { improved: false, timeMs: existing.time_ms };
   }
   await env.DB.prepare(
     'INSERT INTO scores (week, class, name, time_ms, track_id, submitted_ms) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(week, class, name) DO UPDATE SET time_ms = excluded.time_ms, track_id = excluded.track_id, submitted_ms = excluded.submitted_ms WHERE excluded.time_ms < scores.time_ms',
-  ).bind(key, frameMm, name, timeMs, trackId, Date.now()).run();
+  ).bind(key, c, name, timeMs, trackId, Date.now()).run();
   return { improved: true, timeMs };
 }
 
 // Custom track boards (builder tracks): custom_scores, keyed by
 // customBoardKey (sim-retention.js), which normalizeTrackSubmit computes from
-// the submitted track. A pilot keeps their best time, as upsertScore.
+// the submitted track. A pilot keeps their best time, as upsertScore; a board
+// keeps its CUSTOM_BOARD_ROWS fastest pilots per class.
 async function listTrackBoard(env, key, frameMm) {
   const { results } = await env.DB.prepare(
     'SELECT name, time_ms AS timeMs, submitted_ms AS at FROM custom_scores WHERE key = ? AND class = ? ORDER BY time_ms ASC LIMIT 20',
@@ -113,28 +136,164 @@ async function listTrackBoard(env, key, frameMm) {
 }
 
 async function upsertTrackScore(env, key, frameMm, name, timeMs) {
+  const c = classId(frameMm);
   const existing = await env.DB.prepare(
     'SELECT time_ms FROM custom_scores WHERE key = ? AND class = ? AND name = ?',
-  ).bind(key, frameMm, name).first();
+  ).bind(key, c, name).first();
   if (existing && existing.time_ms <= timeMs) {
     return { improved: false, timeMs: existing.time_ms };
   }
+  const ahead = await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM custom_scores WHERE key = ? AND class = ? AND name != ? AND time_ms <= ?',
+  ).bind(key, c, name, timeMs).first();
+  if (ahead && ahead.n >= CUSTOM_BOARD_ROWS) return { improved: false, ranked: false, timeMs };
   await env.DB.prepare(
     'INSERT INTO custom_scores (key, class, name, time_ms, submitted_ms) VALUES (?, ?, ?, ?, ?) ON CONFLICT(key, class, name) DO UPDATE SET time_ms = excluded.time_ms, submitted_ms = excluded.submitted_ms WHERE excluded.time_ms < custom_scores.time_ms',
-  ).bind(key, frameMm, name, timeMs, Date.now()).run();
+  ).bind(key, c, name, timeMs, Date.now()).run();
+  await env.DB.prepare(
+    'DELETE FROM custom_scores WHERE key = ? AND class = ? AND name IN (SELECT name FROM custom_scores WHERE key = ? AND class = ? ORDER BY time_ms ASC, submitted_ms ASC LIMIT -1 OFFSET ?)',
+  ).bind(key, c, key, c, CUSTOM_BOARD_ROWS).run();
   return { improved: true, timeMs };
 }
 
-async function claimPilot(env, name, tokenHash) {
+// ---- Built-in track boards ----
+// track_scores: one row per pilot (name_key, sim-pilot-names.js) per board
+// (builtinBoardKey) per class, with the run's splits and its ghost's digest;
+// the BUILTIN_BOARD_ROWS fastest are kept. track_ghosts: the full ghost of the
+// BUILTIN_BOARD_GHOSTS fastest only.
+const builtinKeys = new Map();
+async function builtinKeyOf(track) {
+  if (!builtinKeys.has(track.id)) builtinKeys.set(track.id, await builtinBoardKey(track));
+  return builtinKeys.get(track.id);
+}
+
+const ORDER = 'ORDER BY time_ms ASC, submitted_ms ASC';
+
+async function listBuiltin(env, key, c, limit) {
+  const { results } = await env.DB.prepare(
+    `SELECT name, time_ms AS timeMs, splits, submitted_ms AS at FROM track_scores WHERE board = ? AND class = ? ${ORDER} LIMIT ?`,
+  ).bind(key, c, limit).all();
+  return (results || []).map((r) => {
+    let splits = [];
+    try { splits = JSON.parse(r.splits || '[]'); } catch (e) { splits = []; }
+    return { name: r.name, timeMs: r.timeMs, splits, at: r.at };
+  });
+}
+
+async function builtinCount(env, key, c) {
+  const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM track_scores WHERE board = ? AND class = ?').bind(key, c).first();
+  return row ? row.n : 0;
+}
+
+// A pilot's place on a board: 1 + the rows ahead (faster, or as fast and
+// posted first), or null if they have no row.
+async function builtinPlace(env, key, c, nameKey) {
+  const me = await env.DB.prepare(
+    'SELECT name, time_ms, submitted_ms FROM track_scores WHERE board = ? AND class = ? AND name_key = ?',
+  ).bind(key, c, nameKey).first();
+  if (!me) return null;
+  const ahead = await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM track_scores WHERE board = ? AND class = ? AND (time_ms < ? OR (time_ms = ? AND submitted_ms < ?))',
+  ).bind(key, c, me.time_ms, me.time_ms, me.submitted_ms).first();
+  return { rank: (ahead ? ahead.n : 0) + 1, name: me.name, timeMs: me.time_ms };
+}
+
+async function upsertBuiltin(env, run, pilot, digest, ghost) {
+  const { key, frameMm: c, timeMs } = run;
+  const existing = await env.DB.prepare(
+    'SELECT time_ms FROM track_scores WHERE board = ? AND class = ? AND name_key = ?',
+  ).bind(key, c, pilot.key).first();
+  if (existing && existing.time_ms <= timeMs) return { improved: false, timeMs: existing.time_ms };
+  const ahead = await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM track_scores WHERE board = ? AND class = ? AND name_key != ? AND time_ms <= ?',
+  ).bind(key, c, pilot.key, timeMs).first();
+  const n = ahead ? ahead.n : 0;
+  // Past the kept rows: not stored (and its place said), so a pilot pruned
+  // off the board is not told a slower run is a new best.
+  if (n >= BUILTIN_BOARD_ROWS) return { improved: false, ranked: false, timeMs, rank: n + 1 };
+  const now = Date.now();
   await env.DB.prepare(
-    'INSERT OR IGNORE INTO pilots (name, token_hash, claimed_ms) VALUES (?, ?, ?)',
-  ).bind(name, tokenHash, Date.now()).run();
-  const row = await env.DB.prepare(
-    'SELECT token_hash FROM pilots WHERE name = ?',
-  ).bind(name).first();
-  if (!row || !row.token_hash) return { ok: false, reason: 'NAME TAKEN' };
-  if (row.token_hash !== tokenHash) return { ok: false, reason: 'NAME TAKEN' };
-  return { ok: true };
+    'INSERT INTO track_scores (board, class, name_key, name, time_ms, splits, digest, track_id, submitted_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(board, class, name_key) DO UPDATE SET name = excluded.name, time_ms = excluded.time_ms, splits = excluded.splits, digest = excluded.digest, submitted_ms = excluded.submitted_ms WHERE excluded.time_ms < track_scores.time_ms',
+  ).bind(key, c, pilot.key, pilot.name, timeMs, JSON.stringify(run.splits || []), digest, run.trackId, now).run();
+  await env.DB.prepare(
+    `DELETE FROM track_scores WHERE board = ? AND class = ? AND name_key IN (SELECT name_key FROM track_scores WHERE board = ? AND class = ? ${ORDER} LIMIT -1 OFFSET ?)`,
+  ).bind(key, c, key, c, BUILTIN_BOARD_ROWS).run();
+  if (n < BUILTIN_BOARD_GHOSTS) {
+    await env.DB.prepare(
+      'INSERT INTO track_ghosts (board, class, name_key, ghost, time_ms) VALUES (?, ?, ?, ?, ?) ON CONFLICT(board, class, name_key) DO UPDATE SET ghost = excluded.ghost, time_ms = excluded.time_ms',
+    ).bind(key, c, pilot.key, JSON.stringify(ghost), timeMs).run();
+  }
+  await env.DB.prepare(
+    `DELETE FROM track_ghosts WHERE board = ? AND class = ? AND name_key NOT IN (SELECT name_key FROM track_scores WHERE board = ? AND class = ? ${ORDER} LIMIT ?)`,
+  ).bind(key, c, key, c, BUILTIN_BOARD_GHOSTS).run();
+  return { improved: true, timeMs, rank: n + 1 };
+}
+
+// ---- Pilots: names, claims, bans ----
+// blocked_names: words Ryan adds (DEPLOY.md), refused anywhere in a name's
+// key, as sim-pilot-names.js NAME_BLOCK_ROOTS. Read at most once a minute per
+// database.
+const blockedCache = new WeakMap();
+async function blockedWords(env) {
+  const now = Date.now();
+  const hit = blockedCache.get(env.DB);
+  if (hit && now - hit.at < 60_000) return hit.words;
+  const { results } = await env.DB.prepare('SELECT word FROM blocked_names').all();
+  const words = (results || []).map((r) => pilotNameKey(r.word)).filter((w) => w.length >= 2);
+  blockedCache.set(env.DB, { at: now, words });
+  return words;
+}
+
+// The pilot behind a post: the token not banned, the name allowed, and its
+// key (look-alikes are one name) held by this token, claimed on its first
+// post. The name the boards show is the one it was claimed under.
+async function pilotFor(env, rawName, tokenHash) {
+  const ban = await env.DB.prepare('SELECT reason FROM bans WHERE token_hash = ?').bind(tokenHash).first();
+  if (ban) return { ok: false, reason: 'BANNED', status: 403 };
+  const problem = pilotNameProblem(rawName);
+  if (problem) return { ok: false, reason: problem, status: 400 };
+  const key = pilotNameKey(rawName);
+  if ((await blockedWords(env)).some((w) => key.includes(w))) return { ok: false, reason: 'NAME NOT ALLOWED', status: 400 };
+  await env.DB.prepare(
+    'INSERT OR IGNORE INTO pilot_keys (key, name, token_hash, claimed_ms) VALUES (?, ?, ?, ?)',
+  ).bind(key, pilotDisplayName(rawName), tokenHash, Date.now()).run();
+  const row = await env.DB.prepare('SELECT name, token_hash FROM pilot_keys WHERE key = ?').bind(key).first();
+  if (!row || row.token_hash !== tokenHash) return { ok: false, reason: 'NAME TAKEN', status: 403 };
+  return { ok: true, key, name: row.name };
+}
+
+// A run already posted or shared under another pilot's name: the same
+// positions (ghostDigest), refused. Exact copies only.
+async function copiedRun(env, digest, nameKey) {
+  const row = await env.DB.prepare('SELECT name_key FROM ghost_digests WHERE digest = ?').bind(digest).first();
+  return !!(row && row.name_key && row.name_key !== nameKey);
+}
+
+async function noteDigest(env, digest, nameKey) {
+  await env.DB.prepare(
+    'INSERT OR IGNORE INTO ghost_digests (digest, name_key, created_ms) VALUES (?, ?, ?)',
+  ).bind(digest, nameKey, Date.now()).run();
+}
+
+// The steps every score submit shares after its run is checked: the token,
+// the pilot, and a copied run. { ok, pilot, digest } or { ok:false, reason, status }.
+async function scorePilot(env, checked, rawName, ghost) {
+  if (!TOKEN_RE.test(checked.token || '')) return { ok: false, reason: 'NO TOKEN', status: 400 };
+  const tokenHash = await hashPilotToken(checked.token);
+  const pilot = await pilotFor(env, rawName, tokenHash);
+  if (!pilot.ok) return pilot;
+  const digest = await ghostDigest(ghost);
+  if (await copiedRun(env, digest, pilot.key)) return { ok: false, reason: 'COPIED RUN', status: 403 };
+  return { ok: true, pilot, digest };
+}
+
+async function postScore(env, request, reply) {
+  if (!env || !env.DB) return { early: reply({ ok: false, reason: 'NO DATABASE' }, 503) };
+  const allowed = await checkRate(env, clientIp(request), Date.now(), 'score');
+  if (!allowed) return { early: reply({ ok: false, reason: 'RATE LIMIT' }, 429) };
+  const parsed = await readJson(request);
+  if (parsed.error) return { early: reply({ ok: false, reason: parsed.error }, 400) };
+  return { body: parsed.body };
 }
 
 export async function handleLeaderboard(request, env) {
@@ -188,40 +347,38 @@ export async function handleLeaderboard(request, env) {
   }
 
   if (request.method === 'POST' && path === '/api/submit') {
-    if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);
-    const ip = clientIp(request);
-    const allowed = await checkRate(env, ip, Date.now());
-    if (!allowed) return reply({ ok: false, reason: 'RATE LIMIT' }, 429);
-    const parsed = await readJson(request);
-    if (parsed.error) return reply({ ok: false, reason: parsed.error }, 400);
-    const checked = normalizeSubmit(parsed.body);
+    const p = await postScore(env, request, reply);
+    if (p.early) return p.early;
+    const checked = normalizeSubmit(p.body);
     if (!checked.ok) return reply({ ok: false, reason: checked.reason }, 400);
-    if (!TOKEN_RE.test(checked.token || '')) return reply({ ok: false, reason: 'NO TOKEN' }, 400);
-    const tokenHash = await hashPilotToken(checked.token);
-    const claim = await claimPilot(env, checked.name, tokenHash);
-    if (!claim.ok) return reply({ ok: false, reason: claim.reason }, 403);
-    const saved = await upsertScore(env, checked.week, checked.frameMm, checked.name, checked.timeMs, checked.trackId);
+    const who = await scorePilot(env, checked, p.body.name, p.body.ghost);
+    if (!who.ok) return reply({ ok: false, reason: who.reason }, who.status);
+    const saved = await upsertScore(env, checked.week, checked.frameMm, who.pilot.name, checked.timeMs, checked.trackId);
+    await noteDigest(env, who.digest, who.pilot.key);
     const entries = await listBoard(env, checked.week, checked.frameMm, checked.trackId);
-    return reply({ ok: true, improved: saved.improved, timeMs: saved.timeMs, entries });
+    return reply({ ok: true, improved: saved.improved, timeMs: saved.timeMs, name: who.pilot.name, entries });
   }
 
   if (request.method === 'POST' && path === '/api/daily/submit') {
-    if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);
-    const ip = clientIp(request);
-    const allowed = await checkRate(env, ip, Date.now());
-    if (!allowed) return reply({ ok: false, reason: 'RATE LIMIT' }, 429);
-    const parsed = await readJson(request);
-    if (parsed.error) return reply({ ok: false, reason: parsed.error }, 400);
-    const checked = normalizeDailyLineSubmit(parsed.body);
+    const p = await postScore(env, request, reply);
+    if (p.early) return p.early;
+    const checked = normalizeDailyLineSubmit(p.body);
     if (!checked.ok) return reply({ ok: false, reason: checked.reason }, 400);
-    if (!TOKEN_RE.test(checked.token || '')) return reply({ ok: false, reason: 'NO TOKEN' }, 400);
-    const tokenHash = await hashPilotToken(checked.token);
-    const claim = await claimPilot(env, checked.name, tokenHash);
-    if (!claim.ok) return reply({ ok: false, reason: claim.reason }, 403);
-    const saved = await upsertScore(env, checked.week, checked.frameMm, checked.name, checked.timeMs, checked.trackId);
+    const who = await scorePilot(env, checked, p.body.name, p.body.ghost);
+    if (!who.ok) return reply({ ok: false, reason: who.reason }, who.status);
+    const saved = await upsertScore(env, checked.week, checked.frameMm, who.pilot.name, checked.timeMs, checked.trackId);
+    await noteDigest(env, who.digest, who.pilot.key);
+    // A clean Daily Line (no modifier) on a built-in track is a run on that
+    // track: its board takes it too, if it passes that board's check.
+    const challenge = dailyLineFor(checked.day);
+    const bt = builtinBoardTrack(BUILTIN_BOARD_TRACKS, checked.trackId);
+    if (bt && challenge.modifier === 'none') {
+      const run = await normalizeBuiltinSubmit({ ...p.body, track: bt.id, trackHash: await builtinTrackHash(bt) }, BUILTIN_BOARD_TRACKS);
+      if (run.ok) await upsertBuiltin(env, run, who.pilot, who.digest, p.body.ghost);
+    }
     const entries = await listBoard(env, checked.week, checked.frameMm, checked.trackId);
     return reply({
-      ok: true, improved: saved.improved, timeMs: saved.timeMs, entries,
+      ok: true, improved: saved.improved, timeMs: saved.timeMs, name: who.pilot.name, entries,
       day: checked.day, trackId: checked.trackId,
     });
   }
@@ -233,24 +390,19 @@ export async function handleLeaderboard(request, env) {
   // client's id is never used. The track's row is written on its first
   // accepted run, so a refused submit writes nothing but the rate count.
   if (request.method === 'POST' && path === '/api/track/submit') {
-    if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);
-    const ip = clientIp(request);
-    const allowed = await checkRate(env, ip, Date.now());
-    if (!allowed) return reply({ ok: false, reason: 'RATE LIMIT' }, 429);
-    const parsed = await readJson(request);
-    if (parsed.error) return reply({ ok: false, reason: parsed.error }, 400);
-    const checked = await normalizeTrackSubmit(parsed.body);
+    const p = await postScore(env, request, reply);
+    if (p.early) return p.early;
+    const checked = await normalizeTrackSubmit(p.body);
     if (!checked.ok) return reply({ ok: false, reason: checked.reason }, 400);
-    if (!TOKEN_RE.test(checked.token || '')) return reply({ ok: false, reason: 'NO TOKEN' }, 400);
-    const tokenHash = await hashPilotToken(checked.token);
-    const claim = await claimPilot(env, checked.name, tokenHash);
-    if (!claim.ok) return reply({ ok: false, reason: claim.reason }, 403);
+    const who = await scorePilot(env, checked, p.body.name, p.body.ghost);
+    if (!who.ok) return reply({ ok: false, reason: who.reason }, who.status);
     await env.DB.prepare(
       'INSERT OR IGNORE INTO custom_tracks (key, map, gates, code, created_ms) VALUES (?, ?, ?, ?, ?)',
     ).bind(checked.key, checked.map, checked.gates, checked.code, Date.now()).run();
-    const saved = await upsertTrackScore(env, checked.key, checked.frameMm, checked.name, checked.timeMs);
+    const saved = await upsertTrackScore(env, checked.key, checked.frameMm, who.pilot.name, checked.timeMs);
+    await noteDigest(env, who.digest, who.pilot.key);
     const entries = await listTrackBoard(env, checked.key, checked.frameMm);
-    return reply({ ok: true, improved: saved.improved, timeMs: saved.timeMs, key: checked.key, class: checked.frameMm, entries });
+    return reply({ ok: true, improved: saved.improved, timeMs: saved.timeMs, name: who.pilot.name, key: checked.key, class: checked.frameMm, entries });
   }
 
   if (request.method === 'GET' && path === '/api/track/board') {
@@ -262,28 +414,105 @@ export async function handleLeaderboard(request, env) {
     return reply({ ok: true, key, class: frameMm, entries, online: true });
   }
 
+  // Built-in track boards (the public maps' races, sim-builtin-boards.js).
+  // The run is checked against the Worker's copy of the track; the body names
+  // the track and the hash of the gates it flew, and nothing else of it.
+  if (request.method === 'POST' && path === '/api/builtin/submit') {
+    const p = await postScore(env, request, reply);
+    if (p.early) return p.early;
+    const run = await normalizeBuiltinSubmit(p.body, BUILTIN_BOARD_TRACKS);
+    if (!run.ok) return reply({ ok: false, reason: run.reason }, 400);
+    const who = await scorePilot(env, run, p.body.name, p.body.ghost);
+    if (!who.ok) return reply({ ok: false, reason: who.reason }, who.status);
+    const saved = await upsertBuiltin(env, run, who.pilot, who.digest, p.body.ghost);
+    await noteDigest(env, who.digest, who.pilot.key);
+    const entries = await listBuiltin(env, run.key, run.frameMm, 20);
+    const count = await builtinCount(env, run.key, run.frameMm);
+    const place = await builtinPlace(env, run.key, run.frameMm, who.pilot.key);
+    return reply({
+      ok: true, improved: saved.improved, ranked: saved.ranked !== false, timeMs: saved.timeMs,
+      track: run.trackId, key: run.key, class: run.frameMm, name: who.pilot.name,
+      rank: place ? place.rank : (saved.rank || null), count, entries,
+    });
+  }
+
+  // GET /api/builtin/board?track=&class=[&name=]: the top 20, the board's row
+  // count, and the named pilot's place.
+  if (request.method === 'GET' && path === '/api/builtin/board') {
+    const bt = builtinBoardTrack(BUILTIN_BOARD_TRACKS, url.searchParams.get('track'));
+    if (!bt) return reply({ ok: false, reason: 'NO BOARD' }, 404);
+    const c = classId(url.searchParams.get('class') || url.searchParams.get('frameMm') || 65);
+    const key = await builtinKeyOf(bt);
+    const hash = key.slice(2, 18);
+    if (!env || !env.DB) return reply({ ok: true, track: bt.id, key, hash, class: c, entries: [], count: 0, online: false, note: 'no D1' });
+    const entries = await listBuiltin(env, key, c, 20);
+    const count = await builtinCount(env, key, c);
+    const name = url.searchParams.get('name');
+    const you = name && !pilotNameProblem(name) ? await builtinPlace(env, key, c, pilotNameKey(name)) : null;
+    return reply({ ok: true, track: bt.id, key, hash, class: c, entries, count, you, online: true });
+  }
+
+  // GET /api/builtin/tops?class=: each built-in track's fastest run.
+  if (request.method === 'GET' && path === '/api/builtin/tops') {
+    const c = classId(url.searchParams.get('class') || url.searchParams.get('frameMm') || 65);
+    const tops = {};
+    for (const bt of BUILTIN_BOARD_TRACKS) {
+      const key = await builtinKeyOf(bt);
+      const row = env && env.DB ? (await listBuiltin(env, key, c, 1))[0] : null;
+      tops[bt.id] = { hash: key.slice(2, 18), top: row ? { name: row.name, timeMs: row.timeMs } : null };
+    }
+    return reply({ ok: true, class: c, tops, online: !!(env && env.DB) });
+  }
+
+  // GET /api/builtin/ghost?track=&class=&name=: a top-BUILTIN_BOARD_GHOSTS
+  // pilot's ghost.
+  if (request.method === 'GET' && path === '/api/builtin/ghost') {
+    const bt = builtinBoardTrack(BUILTIN_BOARD_TRACKS, url.searchParams.get('track'));
+    if (!bt) return reply({ ok: false, reason: 'NO BOARD' }, 404);
+    if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);
+    const c = classId(url.searchParams.get('class') || url.searchParams.get('frameMm') || 65);
+    const key = await builtinKeyOf(bt);
+    const row = await env.DB.prepare(
+      'SELECT ghost, time_ms AS timeMs FROM track_ghosts WHERE board = ? AND class = ? AND name_key = ?',
+    ).bind(key, c, pilotNameKey(url.searchParams.get('name') || '')).first();
+    if (!row) return reply({ ok: false, reason: 'NOT FOUND' }, 404);
+    let ghost = null;
+    try { ghost = JSON.parse(row.ghost); } catch (e) { ghost = null; }
+    return reply({ ok: !!ghost, track: bt.id, class: c, timeMs: row.timeMs, ghost });
+  }
+
   // "Fly my line" (sim-share.js): a line code behind a short link, kept under
-  // an id made from its content, so the same line is stored once.
+  // an id made from its content, so the same line is stored once. A test
+  // pilot's run is never stored; a banned token's share is refused; the
+  // line's ghost digest is kept so it can't be posted under another name.
   if (request.method === 'POST' && path === '/api/line') {
     if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);
     const ip = clientIp(request);
-    const allowed = await checkRate(env, ip, Date.now());
+    const allowed = await checkRate(env, ip, Date.now(), 'share');
     if (!allowed) return reply({ ok: false, reason: 'RATE LIMIT' }, 429);
     const parsed = await readJson(request);
     if (parsed.error) return reply({ ok: false, reason: parsed.error }, 400);
     const code = parsed.body && parsed.body.code;
     if (typeof code !== 'string' || code.length > LINE_CODE_MAX) return reply({ ok: false, reason: 'BAD LINE CODE' }, 400);
+    const token = typeof parsed.body.token === 'string' ? parsed.body.token.trim() : '';
+    if (TOKEN_RE.test(token)) {
+      const ban = await env.DB.prepare('SELECT reason FROM bans WHERE token_hash = ?').bind(await hashPilotToken(token)).first();
+      if (ban) return reply({ ok: false, reason: 'BANNED' }, 403);
+    }
+    let line;
     try {
-      const line = await decodeLineCode(code);
+      line = await decodeLineCode(code);
       const bad = ghostPayloadError(line.ghost, null);
       if (bad) return reply({ ok: false, reason: bad }, 400);
     } catch (e) {
       return reply({ ok: false, reason: 'BAD LINE CODE' }, 400);
     }
+    if (isTestPilotGhost(line.ghost)) return reply({ ok: false, reason: 'TEST PILOT' }, 400);
     const id = await lineIdOf(code);
     await env.DB.prepare(
       'INSERT OR IGNORE INTO lines (id, code, created_ms) VALUES (?, ?, ?)',
     ).bind(id, code, Date.now()).run();
+    await noteDigest(env, await ghostDigest(line.ghost), pilotNameProblem(line.ghost.name) ? '' : pilotNameKey(line.ghost.name));
     return reply({ ok: true, id });
   }
 

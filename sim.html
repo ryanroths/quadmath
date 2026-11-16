@@ -1041,7 +1041,7 @@ import {
   createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux, rangeActive,
   BF_CLASS_TUNES, bfClassDiff,
 } from "./sim-core-adapter.js?v=eae197833699";
-import {LINE_URL_MAX,LINE_ID_RE,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=6ac4c874e781";
+import {LINE_URL_MAX,LINE_ID_RE,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=c7b112319e28";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
 import {
@@ -1151,13 +1151,13 @@ import {
   defaultWhoopKit, ghostFromObj, shareTrackPayload, fromShareTrackPayload,
   customBoardKey, customTrackCode, normalizeTrackSubmit, isCustomBoardTrackId, customTrackProblem,
   CUSTOM_TRACK_MIN_GATES, CUSTOM_TRACK_CODE_MAX,
-} from "./sim-retention.js?v=8dc268f18c23";
+} from "./sim-retention.js?v=4d8acc088681";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=1190f50c074a";
+} from "./sim-secrets.js?v=e09d5ff06cdc";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
   fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=3f4158ced8a5";
 window._simBooted=true; // tells the watchdog above the module actually executed
@@ -1986,7 +1986,7 @@ function finishRun(){
   const parts=line?runGateSplits:runSplits;
   lastRunReplayRec=replayRec&&replayRec.length?downsampleGhost(replayRec,REPLAY_GHOST_MAX):(rec&&rec.length?rec:null);
   // The run SHARE links to (shareLine): this one, whatever is flown next.
-  lastRunLine=rec&&rec.length>1?{track:shareTrackParam(),map:currentMap,total,rec}:null;
+  lastRunLine=rec&&rec.length>1?{track:shareTrackParam(),map:currentMap,total,rec,testPilot:testPilotUsed}:null;
   syncMenuShare();
   const msg=label+' '+fmtLap(total)+(parts.length?' ['+parts.map(fmtLap).join(' / ')+']':'')+(best?' — NEW BEST!':'')+(extra?' · '+extra:'')+(runSimFlips?' · SIM FLIP ×'+runSimFlips:'');
   const buttons=(lastRunReplayRec&&lastRunReplayRec.length>1?'<button type="button" id="toastReplay">Replay</button>':'')+
@@ -7957,15 +7957,18 @@ function applyActiveSkin(){
   applyCraftCanopyShape(craftGroup, kit.shape);
 }
 function ghostPayloadOf(id, samples, timeMs){
-  return tagGhost({
+  const g=tagGhost({
     track: legacyIndex(id)!==null?legacyIndex(id):id,
     lapTime: timeMs||0,
     name: currentPilotName(),
     samples: samples||[],
   });
+  if(testPilotUsed)g.testPilot=true;
+  return g;
 }
 function noteRetentionFinish(id, total, rec, submitRec){
   let extra='';
+  let held=false; // a test pilot's run, kept off the online boards
   const offBoards=runOffBoards();
   if(isDailyTrackId(id)){
     const recd=recordDailyFinish(loadDaily(), { utc: utcDateId(), timeMs: total, trackId: id });
@@ -7987,7 +7990,8 @@ function noteRetentionFinish(id, total, rec, submitRec){
       });
       saveDailyLine(recd.progress);
       extra=(extra?extra+' · ':'')+(recd.improved?'DAILY PB':'DAILY');
-      maybeSubmitDailyLine(today, total, rec, recd.progress.days[today.date]&&recd.progress.days[today.date].splits);
+      if(testPilotUsed)held=true;
+      else maybeSubmitDailyLine(today, total, rec, recd.progress.days[today.date]&&recd.progress.days[today.date].splits);
     }
   }
   if(isWeeklyTrackId(id)&&offBoards){
@@ -7999,10 +8003,15 @@ function noteRetentionFinish(id, total, rec, submitRec){
     });
     saveBoard(board);
     extra=(extra?extra+' · ':'')+'LOCAL BOARD';
-    maybeSubmitOnline(id, total, submitRec||rec);
+    if(testPilotUsed)held=true;
+    else maybeSubmitOnline(id, total, submitRec||rec);
   }
   // A builder track (not a built-in course, a daily or a weekly): its own board.
-  if(isCustomBoardTrackId(id)&&!offBoards)maybeSubmitTrackBoard(id, total, submitRec||rec);
+  if(isCustomBoardTrackId(id)&&!offBoards){
+    if(testPilotUsed)held=true;
+    else maybeSubmitTrackBoard(id, total, submitRec||rec);
+  }
+  if(held)extra=(extra?extra+' · ':'')+'TEST PILOT · NOT SENT';
   if(activeDuel&&rivalGhost&&rivalMatches(rivalGhost.track,id)){
     const r=duelResult(total, rivalGhost.lapTime);
     extra=(extra?extra+' · ':'')+r.text;
@@ -8195,6 +8204,7 @@ function queueBuilderBoard(){
 // session on that board (a best from before the board existed); the Worker
 // keeps only a pilot's lowest time anyway.
 async function maybeSubmitTrackBoard(id,total,rec){
+  if(testPilotUsed)return;
   const track=customBoardTrack(id);
   if(!track||!rec||rec.length<2||!onlineBoardsEnabled(leaderboardUrl()))return;
   const body={
@@ -8221,6 +8231,7 @@ async function maybeSubmitTrackBoard(id,total,rec){
   }
 }
 async function maybeSubmitOnline(id, total, rec){
+  if(testPilotUsed)return;
   const url=leaderboardUrl();
   if(!onlineBoardsEnabled(url)||!rec||!rec.length)return;
   const track=findTrack(id);
@@ -8248,6 +8259,7 @@ async function maybeSubmitOnline(id, total, rec){
   }catch(e){ /* local boards still hold the time */ }
 }
 async function maybeSubmitDailyLine(challenge, total, rec, splits){
+  if(testPilotUsed)return;
   const url=leaderboardUrl();
   if(!onlineBoardsEnabled(url)||!rec||!rec.length||!challenge)return;
   const ghost=ghostPayloadOf(challenge.trackId, rec, total);
@@ -8331,11 +8343,11 @@ const LINE_STORE_TIMEOUT_MS=4000;
 // a link, so only LINE_ID_RE's plain characters do).
 async function storeLine(code){
   const url=leaderboardUrl();
-  if(!url)return null;
+  if(!url||testPilotUsed)return null;
   const ctl=typeof AbortController==='function'?new AbortController():null;
   const timer=ctl?setTimeout(()=>ctl.abort(),LINE_STORE_TIMEOUT_MS):0;
   try{
-    const r=await fetch(url+'/api/line',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code}),signal:ctl?ctl.signal:undefined});
+    const r=await fetch(url+'/api/line',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,token:issuePilotToken()}),signal:ctl?ctl.signal:undefined});
     if(!r.ok)return null;
     const j=await r.json();
     return j&&j.ok===true&&typeof j.id==='string'&&LINE_ID_RE.test(j.id)?j.id:null;
@@ -8345,6 +8357,8 @@ async function storeLine(code){
 async function shareLine(){
   const run=lastRunLine;
   if(!run){toast('FINISH A RUN TO SHARE');return;}
+  // A test pilot's run is not shared: no stored line, no link.
+  if(run.testPilot||testPilotUsed){toast('TEST PILOT RUN · NOT SHARED');return;}
   const track=findTrack(run.track);
   // A track the other end cannot find by its id (a custom one) goes with the ghost.
   const known=!track||builtinTracks.some(t=>t.id===track.id)||!!trackFromRetentionId(run.track);
@@ -9000,6 +9014,11 @@ let testStick=null;
 // time order). null in normal use.
 let testPilot=null;
 let testPilotError=null;
+// Once a test's pilot has flown in this page (set at any point, even if
+// cleared since), every run here is a test pilot's: its ghost carries
+// testPilot, it goes to no online board, and SHARE does not store it. The
+// Worker refuses such a ghost on every board and on /api/line too.
+let testPilotUsed=false;
 function testPilotOn(){return !!testPilot&&core.kind==='bf';}
 function flyTestPilot(){
   try{
@@ -9616,7 +9635,8 @@ function applyQueryBoot(){
   applyLineLink();
 }
 function publishTracks(){
-  Object.assign(window._sim,{tracks:()=>builtinTracks.concat(customTracks)});
+  // findTrack: any flyable track by id, the generated ones (daily, weekly) too.
+  Object.assign(window._sim,{tracks:()=>builtinTracks.concat(customTracks),findTrack:(id)=>findTrack(id)});
 }
 // The page is built on City. Land on the boot map now, not when the tracks
 // fetch below lets applyQueryBoot run, so the launch screen never shows a
@@ -9667,7 +9687,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
   simClockMs:()=>simClockMs,
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
-  audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},setTestPilot(fn){testPilot=typeof fn==='function'?fn:null;testPilotError=null;},testPilotError:()=>testPilotError,
+  audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},setTestPilot(fn){testPilot=typeof fn==='function'?fn:null;if(testPilot)testPilotUsed=true;testPilotError=null;},testPilotError:()=>testPilotError,testPilotUsed:()=>testPilotUsed,
   firstFlight:()=>({show:firstFlightState.show||null,seen:{...firstFlightSeen},liveS:firstFlightState.liveS||0,shownS:firstFlightState.shownS||0}),
   // The House's backyard (yardWatch): its data and edge state, and the check itself.
   yardState:()=>({yard:currentMap==='house'&&indoorBuilt.house?indoorBuilt.house.yard:null,...yardSt}),yardWatch,tryArm,coreArmed,
