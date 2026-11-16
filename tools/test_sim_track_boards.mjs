@@ -28,7 +28,8 @@ import {
   customTrackProblem, CUSTOM_TRACK_MAPS, CUSTOM_TRACK_GATES_SCAN_MAX,
 } from '../sim-retention.js';
 import { encodeShare, trackLink, MAPS } from '../sim-tracks.js';
-import { handleLeaderboard, RATE_SCORE_MAX } from '../workers/sim-leaderboard/src/index.js';
+import { handleLeaderboard } from '../workers/sim-leaderboard/src/index.js';
+import { RATE_SCORE_MAX } from '../sim-retention.js';
 import { WS } from '../sim-core-adapter.js';
 import { builtTrack, hugeTrack, flownRun, hoverRun, pilotToken, submitBody, trackBoardsD1 } from './track_boards_fixture.mjs';
 

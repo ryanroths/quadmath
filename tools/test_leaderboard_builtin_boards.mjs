@@ -20,7 +20,8 @@ import { pilotNameKey, pilotNameProblem, NAME_BLOCK_ROOTS } from '../sim-pilot-n
 import { BUILTIN_BOARD_TRACKS } from '../sim-builtin-boards.js';
 import { builtinBoardsModule, builtinBoardTracks } from './build_builtin_boards.mjs';
 import { sqliteD1, LEADERBOARD_SQL_DIR } from './d1_sqlite.mjs';
-import { handleLeaderboard, RATE_SCORE_MAX, RATE_SHARE_MAX } from '../workers/sim-leaderboard/src/index.js';
+import { handleLeaderboard } from '../workers/sim-leaderboard/src/index.js';
+import { RATE_SCORE_MAX, RATE_SHARE_MAX } from '../sim-retention.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 // A pilot token (32 hex) from one hex character.
@@ -77,6 +78,13 @@ test('sim-builtin-boards.js is the public maps\' tracks, as tracks/*.json has th
   for (const t of builtinBoardTracks()) {
     const file = JSON.parse(readFileSync(join(root, 'tracks', t.id + '.json'), 'utf8'));
     assert.deepEqual(track(t.id).gates, file.gates.map(({ x, y, z, ry, size, solid }) => ({ x, y, z, ry, size, solid: !!solid })), t.id);
+  }
+});
+
+test('the Worker entry module exports only functions and its handler (workerd reads every export as an entrypoint)', async () => {
+  const mod = await import('../workers/sim-leaderboard/src/index.js');
+  for (const [k, v] of Object.entries(mod)) {
+    assert.ok(typeof v === 'function' || (k === 'default' && typeof v.fetch === 'function'), k + ' is a ' + typeof v);
   }
 });
 
@@ -555,5 +563,39 @@ test('the migration\'s SQL key is pilotNameKey for any name the rules take', () 
   for (const [a, b] of [['Mario', 'Rnario'], ['Willow', 'Wiilow'], ['Wolf', 'VVolf'], ['B8by', 'Bbby'], ['Zig9', 'Zigg']]) {
     if (a === 'Willow') continue;
     assert.equal(pilotNameKey(a), pilotNameKey(b), a + ' ' + b);
+  }
+});
+
+// The same Worker under wrangler dev (workerd, a local D1 made from
+// schema.sql): what running it in Node can't show (its module loads as a
+// Worker, its SQL runs on D1's SQLite).
+test('built-in boards on wrangler dev (real D1)', { timeout: 300000 }, async (t) => {
+  const { findWrangler, startLeaderboardDev } = await import('./sim_rooms_dev.mjs');
+  const bin = findWrangler();
+  if (!bin) { t.skip('no wrangler (npm install in workers/sim-rooms or workers/sim-leaderboard, or WRANGLER=)'); return; }
+  const ORIGIN = 'https://quadmath.com';
+  const w = await startLeaderboardDev(bin, { ALLOWED_ORIGIN: ORIGIN });
+  try {
+    const req = (path, b) => fetch(w.base + path, b === undefined ? { headers: { Origin: ORIGIN } } : {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': '203.0.113.40' }, body: JSON.stringify(b),
+    }).then(async (r) => ({ status: r.status, json: await r.json() }));
+    const t1 = track('house-backyard-lap');
+    const run = pageRun(t1, { name: 'RyFly', seed: 2 });
+    let r = await req('/api/builtin/submit', await body(t1, run));
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.deepEqual([r.json.improved, r.json.rank, r.json.count, r.json.name], [true, 1, 1, 'RyFly']);
+    r = await req('/api/builtin/board?track=' + t1.id + '&class=65&name=ry_fly');
+    assert.equal(r.json.entries[0].timeMs, run.lapTime);
+    assert.equal(r.json.entries[0].splits.length, t1.gates.length - 1);
+    assert.equal(r.json.you.rank, 1);
+    r = await req('/api/builtin/ghost?track=' + t1.id + '&class=65&name=RyFly');
+    assert.equal(r.status, 200);
+    assert.equal(r.json.ghost.name, 'RyFly');
+    r = await req('/api/builtin/submit', await body(t1, { ...pageRun(t1, { seed: 5 }), testPilot: true }));
+    assert.equal(r.json.reason, 'TEST PILOT');
+    r = await req('/api/builtin/tops?class=65');
+    assert.equal(r.json.tops[t1.id].top.name, 'RyFly');
+  } finally {
+    await w.stop();
   }
 });

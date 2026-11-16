@@ -22,7 +22,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { findWrangler, startLeaderboardDev, leaderboardWorkerDir } from './sim_rooms_dev.mjs';
-import { PHYS_VER, customBoardKey, customTrackCode } from '../sim-retention.js';
+import { PHYS_VER, customBoardKey, customTrackCode, RATE_SCORE_MAX } from '../sim-retention.js';
 import { builtTrack, hugeTrack, flownRun, hoverRun, pilotToken, submitBody } from './track_boards_fixture.mjs';
 
 const DB = 'quadmath-sim-leaderboard';
@@ -129,9 +129,9 @@ test('custom track boards on wrangler dev (real D1)', { timeout: 300000 }, async
       assert.deepEqual((await board('c.0123456789abcdef.p' + PHYS_VER)).json.entries, []);
     });
 
-    await t.test('the rate limit: 12 posts an IP an hour, shared with the weekly submit; boards are read freely', async () => {
+    await t.test('the rate limit: RATE_SCORE_MAX posts an IP an hour, shared with the weekly submit; boards are read freely', async () => {
       const ip = '192.0.2.77';
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < RATE_SCORE_MAX; i++) {
         const r = await post('{}', ip);
         assert.notEqual(r.status, 429, 'post ' + (i + 1));
       }

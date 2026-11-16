@@ -49,6 +49,12 @@ export const WEEKLY_GHOST_MAX_SAMPLES = 1600;
 // A line run's time against its ghost: ghost time from the gate-0 sample to
 // the finish sample, plus whole miss penalties, within this many ms.
 export const LINE_TIME_TOL_MS = 150;
+// The leaderboard Worker's posts per IP per UTC hour: score submits (weekly,
+// Daily Line, builder and built-in boards) share one budget, SHARE
+// (/api/line) has its own, so sharing runs never uses up the boards' and the
+// other way round.
+export const RATE_SCORE_MAX = 30;
+export const RATE_SHARE_MAX = 12;
 // A line run's sweep: the most a step may miss a gate by and still pass it,
 // and the longest step between samples (the page samples every 67 ms; a
 // hitched frame is longer).

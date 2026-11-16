@@ -773,6 +773,12 @@ test('the sim under its policy in Chrome: no violations; injected handlers do no
       const calls0 = worker.calls.length;
       let r = await a.js(`
         if (document.body.classList.contains('menu-open')) { T.$('menuResume').click(); await T.wait(300); }
+        // On the Rig Loop (the steps before left another track up).
+        T.s.openTrackPicker('rig');
+        await T.wait(300);
+        document.querySelector('#menuLayer [data-tid="rig-loop"]').click();
+        await T.until(() => T.s.track() === 'rig-loop', 8000);
+        await T.wait(800);
         // The pilot set, then cleared before the run: still a test pilot's page.
         T.s.setTestPilot(() => ({ r: 0, p: 0, y: 0, t: 0 }));
         T.s.setTestPilot(null);

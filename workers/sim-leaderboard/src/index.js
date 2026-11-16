@@ -30,6 +30,8 @@ import {
   ghostDigest,
   ghostPathDistance,
   isTestPilotGhost,
+  RATE_SCORE_MAX,
+  RATE_SHARE_MAX,
 } from '../../../sim-retention.js';
 import { decodeLineCode, lineIdOf, LINE_CODE_MAX, LINE_ID_RE } from '../../../sim-share.js';
 import { pilotNameProblem, pilotNameKey, pilotDisplayName } from '../../../sim-pilot-names.js';
@@ -42,11 +44,9 @@ const CORS_METHODS = {
   Vary: 'Origin',
 };
 
-// Posts per IP per UTC hour: score submits (weekly, Daily Line, builder and
-// built-in boards) share one budget, SHARE (/api/line) has its own, so
-// sharing runs never uses up the boards' and the other way round.
-export const RATE_SCORE_MAX = 30;
-export const RATE_SHARE_MAX = 12;
+// Posts per IP per UTC hour (sim-retention.js RATE_SCORE_MAX, RATE_SHARE_MAX:
+// this module exports only the handler, as workerd reads every named export
+// of a Worker's entry module as an entrypoint).
 const RATE_MAX = { score: RATE_SCORE_MAX, share: RATE_SHARE_MAX };
 // A builder track's board keeps this many rows per class, as a built-in's.
 const CUSTOM_BOARD_ROWS = BUILTIN_BOARD_ROWS;
