@@ -1,0 +1,684 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
+// The stick overlay (sim-feel.js createStickOverlay, sim.html syncStickOverlay):
+// the sticks the core flies on, drawn small on the HUD, Mode 2.
+//   node tools/test_sim_stick_overlay.mjs
+// The Chrome part (one fresh profile per input path: keyboard, radio,
+// gamepad, touch) needs CHROME set to a Chrome binary locally, and is skipped
+// with SKIP_CHROME_BOOT=1 (the sim-tests job).
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { spawnBrowser } from './browser_guard.mjs';
+import { createServer } from 'node:http';
+import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { dirname, join, extname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import {
+  STICK_OVERLAY_KEY, STICK_BOX_PX, STICK_BOX_PHONE_PX, STICK_GAP_PX, STICK_OVERLAY_BOTTOM_PX, STICK_CLEAR_PX,
+  STICK_OVERLAY_PHONE, STICK_DOT,
+  loadStickOverlay, saveStickOverlay, stickOverlayDefault, stickOverlayOn, stickDots, stickDotRadius,
+  stickOverlayPlacement, createStickOverlay,
+} from '../sim-feel.js';
+
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const read = (p) => readFileSync(join(root, p), 'utf8');
+const html = read('sim.html');
+
+function memStore(init) {
+  const m = new Map(Object.entries(init || {}));
+  return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)); }, m };
+}
+const throwing = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
+
+// A function's source in sim.html, braces matched.
+function extract(name) {
+  const start = html.indexOf(`function ${name}(`);
+  assert.notEqual(start, -1, `${name}() not found in sim.html`);
+  let i = html.indexOf('{', start), depth = 0, end = -1;
+  for (; i < html.length; i++) {
+    if (html[i] === '{') depth++;
+    else if (html[i] === '}' && --depth === 0) { end = i + 1; break; }
+  }
+  assert.notEqual(end, -1, `${name}() has unbalanced braces`);
+  return html.slice(start, end);
+}
+
+test('the saved choice: on, off, or none; every access survives a storage that throws', () => {
+  const s = memStore();
+  assert.equal(STICK_OVERLAY_KEY, 'quadmathSimStickOverlay');
+  assert.equal(loadStickOverlay(s), null, 'never chosen');
+  assert.equal(saveStickOverlay(true, s), true);
+  assert.equal(s.m.get(STICK_OVERLAY_KEY), '1');
+  assert.equal(loadStickOverlay(s), true);
+  saveStickOverlay(false, s);
+  assert.equal(s.m.get(STICK_OVERLAY_KEY), '0');
+  assert.equal(loadStickOverlay(s), false);
+  assert.equal(loadStickOverlay(memStore({ [STICK_OVERLAY_KEY]: 'yes' })), null, 'anything else is no choice');
+  assert.equal(loadStickOverlay(throwing), null);
+  assert.equal(saveStickOverlay(true, throwing), false);
+});
+
+test('on by default for keyboard and touch, off for a radio or a gamepad; a saved choice wins', () => {
+  assert.equal(stickOverlayDefault('keyboard'), true);
+  assert.equal(stickOverlayDefault('touch'), true);
+  assert.equal(stickOverlayDefault('radio'), false);
+  assert.equal(stickOverlayDefault('gamepad'), false);
+  for (const kind of ['keyboard', 'touch', 'radio', 'gamepad']) {
+    assert.equal(stickOverlayOn(null, kind), stickOverlayDefault(kind), kind);
+    assert.equal(stickOverlayOn(true, kind), true, kind);
+    assert.equal(stickOverlayOn(false, kind), false, kind);
+  }
+});
+
+test('the dots: Mode 2, inside their boxes, whatever the sticks say', () => {
+  for (const box of [STICK_BOX_PX, STICK_BOX_PHONE_PX]) {
+    const pad = stickDotRadius(box) + 2;
+    const rest = stickDots({ r: 0, p: 0, y: 0, t: 0 }, box);
+    assert.equal(rest.r.x, box / 2); assert.equal(rest.r.y, box / 2, 'roll/pitch centred');
+    assert.equal(rest.l.x, box / 2); assert.equal(rest.l.y, box - pad, 'throttle down: the bottom');
+    const full = stickDots({ r: 1, p: 1, y: 1, t: 1 }, box);
+    assert.deepEqual(full, { l: { x: box - pad, y: pad }, r: { x: box - pad, y: pad } }, 'all the way: right and up');
+    const low = stickDots({ r: -1, p: -1, y: -1, t: 0 }, box);
+    assert.deepEqual(low, { l: { x: pad, y: box - pad }, r: { x: pad, y: box - pad } });
+    // 3D: the throttle's middle (no thrust) is the box's middle.
+    assert.equal(stickDots({ t: 0.5 }, box).l.y, box / 2);
+    // Past the ends, or not a number: clamped, or at rest, never out of the box.
+    for (const s of [{ r: 9, p: -9, y: 9, t: 9 }, { r: NaN, p: undefined, y: 'x', t: Infinity }, null]) {
+      const d = stickDots(s, box);
+      for (const v of [d.l.x, d.l.y, d.r.x, d.r.y]) assert.ok(v >= pad && v <= box - pad, JSON.stringify(s) + ' ' + v);
+    }
+  }
+});
+
+const overlaps = (a, b, m = 0) => a.left < b.right + m && a.right > b.left - m && a.top < b.bottom + m && a.bottom > b.top - m;
+const boxOf = (p, vh) => ({ left: p.left, right: p.left + p.w, top: vh - p.bottom - p.h, bottom: vh - p.bottom });
+// The touch sticks as sim.html lays them out (#touchLayer .vstick).
+function touchSticks(vw, vh, size, insetX = 18, insetY = vh <= 430 ? 10 : 28) {
+  return [
+    { left: insetX, right: insetX + size, top: vh - insetY - size, bottom: vh - insetY },
+    { left: vw - insetX - size, right: vw - insetX, top: vh - insetY - size, bottom: vh - insetY },
+  ];
+}
+
+test('placement: bottom centre; with touch sticks, never over one, and up only when it has to', () => {
+  const desk = stickOverlayPlacement({ vw: 1280, vh: 720, box: STICK_BOX_PX });
+  assert.deepEqual(desk, { left: Math.round((1280 - (2 * STICK_BOX_PX + STICK_GAP_PX)) / 2), bottom: STICK_OVERLAY_BOTTOM_PX, w: 2 * STICK_BOX_PX + STICK_GAP_PX, h: STICK_BOX_PX });
+  // A landscape phone with the default sticks: room between them, so it stays down.
+  const land = stickOverlayPlacement({ vw: 844, vh: 390, box: STICK_BOX_PHONE_PX, sticks: touchSticks(844, 390, 112) });
+  assert.equal(land.bottom, STICK_OVERLAY_BOTTOM_PX);
+  // A portrait phone with big sticks: no room between, so above them.
+  const sticks = touchSticks(390, 844, 168);
+  const port = stickOverlayPlacement({ vw: 390, vh: 844, box: STICK_BOX_PHONE_PX, sticks });
+  assert.equal(port.bottom, 844 - sticks[0].top + STICK_CLEAR_PX);
+  // Every size the Touch sticks slider gives, on phones and tablets both ways: clear of both.
+  for (const [vw, vh] of [[390, 844], [844, 390], [667, 375], [375, 667], [768, 1024], [1024, 768], [360, 740], [740, 360]]) {
+    for (let size = 64; size <= 180; size += 4) {
+      const s = touchSticks(vw, vh, size);
+      for (const box of [STICK_BOX_PX, STICK_BOX_PHONE_PX]) {
+        const p = stickOverlayPlacement({ vw, vh, box, sticks: s });
+        const o = boxOf(p, vh);
+        for (const b of s) assert.equal(overlaps(o, b), false, `${vw}x${vh} size ${size} box ${box}: over a stick ${JSON.stringify({ o, b })}`);
+        assert.ok(o.top >= 0, `${vw}x${vh} size ${size}: on screen`);
+      }
+    }
+  }
+  // Without sticks a short window keeps it on screen.
+  const tiny = stickOverlayPlacement({ vw: 300, vh: 100, box: STICK_BOX_PX });
+  assert.ok(100 - tiny.bottom - tiny.h >= 0);
+});
+
+test('placement: above a three-line throttle readout, and clear of the key legend and the #feelHud card', () => {
+  // #osdBC: 18 px up, three 12 px lines (about 16 px each) on the bf core while it refuses to arm.
+  assert.ok(STICK_OVERLAY_BOTTOM_PX >= 18 + 3 * 16, 'bottom ' + STICK_OVERLAY_BOTTOM_PX);
+  // The desktop HUD: the legend bottom left (about 274 x 307), the card bottom right (up to 240 wide with the arm hint).
+  const hud = (vw, vh, cardW = 240) => [
+    { left: 16, right: 290, top: vh - 323, bottom: vh - 16 },
+    { left: vw - 16 - cardW, right: vw - 16, top: vh - 86 - 160, bottom: vh - 86 },
+  ];
+  const wide = stickOverlayPlacement({ vw: 1280, vh: 720, box: STICK_BOX_PX, avoid: hud(1280, 720) });
+  assert.equal(wide.left, Math.round((1280 - wide.w) / 2), 'a wide screen: centred');
+  assert.equal(wide.bottom, STICK_OVERLAY_BOTTOM_PX);
+  for (const [vw, vh] of [[683, 720], [640, 720], [640, 600], [600, 700], [720, 540], [800, 600], [1024, 600]]) {
+    for (const cardW of [108, 240]) {
+      const avoid = hud(vw, vh, cardW);
+      const p = stickOverlayPlacement({ vw, vh, box: STICK_BOX_PX, avoid });
+      const o = boxOf(p, vh);
+      for (const b of avoid) assert.equal(overlaps(o, b), false, `${vw}x${vh} card ${cardW}: over the HUD ${JSON.stringify({ o, b })}`);
+      assert.ok(o.left >= 0 && o.right <= vw && o.top >= 0, `${vw}x${vh}: on screen`);
+    }
+  }
+  // Room beside the legend: it slides along the bottom rather than climb.
+  const slid = stickOverlayPlacement({ vw: 683, vh: 720, box: STICK_BOX_PX, avoid: hud(683, 720, 108) });
+  assert.equal(slid.bottom, STICK_OVERLAY_BOTTOM_PX);
+  assert.equal(slid.left, 290 + STICK_CLEAR_PX);
+});
+
+// A canvas stand-in: its 2D calls counted, its class list and style kept.
+function fakeCanvas() {
+  const calls = [];
+  const classes = new Set();
+  const ctx = new Proxy({}, { get: (o, k) => (k in o ? o[k] : (...a) => { calls.push(k); }), set: (o, k, v) => { o[k] = v; return true; } });
+  return {
+    width: 0, height: 0, style: {}, calls, classes, ctx,
+    getContext: () => ctx,
+    classList: { toggle(c, on) { if (on) classes.add(c); else classes.delete(c); calls.push('toggle:' + c + ':' + on); } },
+  };
+}
+
+test('createStickOverlay: paints only when a dot moved, writes its class only when it changes, sizes for the screen', () => {
+  const c = fakeCanvas();
+  const o = createStickOverlay(c, { lineColor: 'rgba(1,2,3,.4)' });
+  const p = o.place({ vw: 1000, vh: 600, phone: false, sticks: [], dpr: 2 });
+  assert.equal(c.width, (2 * STICK_BOX_PX + STICK_GAP_PX) * 2, 'device pixels');
+  assert.equal(c.height, STICK_BOX_PX * 2);
+  assert.equal(c.style.width, p.w + 'px');
+  assert.equal(c.style.left, p.left + 'px');
+  assert.equal(c.style.bottom, STICK_OVERLAY_BOTTOM_PX + 'px');
+  const s = { r: 0, p: 0, y: 0, t: 0 };
+  assert.equal(o.draw(s), true, 'the first paint');
+  const n = c.calls.length;
+  assert.equal(o.draw({ ...s }), false, 'nothing moved: no paint');
+  assert.equal(o.draw({ ...s, r: 0.001 }), false, 'a hair (under a quarter pixel): no paint');
+  assert.equal(c.calls.length, n);
+  assert.equal(o.draw({ ...s, r: 0.5 }), true);
+  assert.equal(o.state.draws, 2);
+  assert.deepEqual(o.state.drawn, { r: 0.5, p: 0, y: 0, t: 0 });
+  assert.ok(c.calls.includes('arc') && c.calls.includes('clearRect'));
+  assert.equal(c.ctx.strokeStyle, 'rgba(1,2,3,.4)', 'the page\'s --line');
+  assert.equal(c.ctx.fillStyle, STICK_DOT, 'the dot is the last fill');
+  // A resize repaints on the next draw, at the phone box.
+  o.place({ vw: 400, vh: 800, phone: true, sticks: [], dpr: 1 });
+  assert.equal(o.state.box, STICK_BOX_PHONE_PX);
+  assert.equal(o.draw({ ...s, r: 0.5 }), true);
+  o.setShown(true); o.setShown(true); o.setShown(false); o.setShown(false);
+  assert.deepEqual(c.calls.filter((k) => k.startsWith('toggle:')), ['toggle:on:true', 'toggle:on:false']);
+  // No canvas (or no 2D): nothing breaks.
+  const none = createStickOverlay(null);
+  none.place({ vw: 100, vh: 100 });
+  assert.equal(none.draw(s), false);
+  none.setShown(true);
+});
+
+test('sim.html: the overlay reads the merged stick in the frame loop, and hides as the HUD does', () => {
+  assert.match(html, /<canvas id="stickOverlay" [^>]*aria-hidden="true"><\/canvas>/);
+  assert.match(html, /#stickOverlay\{position:fixed;[^}]*pointer-events:none;display:none\}/);
+  assert.match(html, /#stickOverlay\.on\{display:block\}/);
+  for (const c of ['body.menu-open', 'body.builder-on', 'body.calibrating', 'body:has(#panel.open)']) {
+    assert.ok(new RegExp(c.replace(/[.()#:]/g, '\\$&') + ' #stickOverlay[,{]').test(html), c + ' hides it');
+  }
+  // :has() in a rule of its own: a browser without it drops only that rule.
+  assert.match(html, /\n\s*body:has\(#panel\.open\) #stickOverlay\{visibility:hidden\}/);
+  assert.match(html, /body\.menu-open #stickOverlay,body\.builder-on #stickOverlay,body\.calibrating #stickOverlay\{visibility:hidden\}/);
+  assert.equal(STICK_OVERLAY_PHONE, '(max-width:559px),(max-height:500px)', 'the page\'s phone breakpoints');
+  // The checkbox: in the Camera section, before Quality.
+  const cam = html.indexOf('<h2>Camera</h2>'), q = html.indexOf('<h2>Quality</h2>');
+  const cb = html.indexOf('id="cbStickOverlay"');
+  assert.ok(cam > 0 && cb > cam && cb < q, 'Camera section');
+  // Drawn from `stick` (readInput's output, as handed to core.input), once a frame.
+  const sync = extract('syncStickOverlay');
+  assert.match(sync, /stickOverlay\.draw\(stick\)/);
+  assert.doesNotMatch(sync, /getGamepads|\.axes|getBoundingClientRect|offset(Width|Height|Top|Left)|style\./, 'no raw pad, no layout read, no style write per frame');
+  assert.match(sync, /feel\.hudVisible/, 'H hides it with the HUD');
+  assert.match(sync, /replayOn/);
+  for (const c of ['menu-open', 'builder-on', 'calibrating']) assert.ok(sync.includes(`b.contains('${c}')`), c + ': off in script too');
+  assert.match(sync, /const shown=want&&!covered&&/);
+  assert.match(extract('loop'), /\n\s+syncStickOverlay\(\);\r?\n/);
+  assert.match(html, /core\.input\(held===stick\.aux\?stick:/, 'the core flies the same object');
+  // Placed only on a resize and a touch-stick change.
+  assert.match(html, /addEventListener\('resize',\(\)=>placeStickOverlay\(\)\);/, 'on a resize');
+  assert.match(html, /new ResizeObserver\(\(\)=>placeStickOverlay\(\)\);\r?\n\s+for\(const id of \['legend','feelHud'\]\)/, 'when a card it avoids changes size');
+  assert.match(html, /touchCtl=createTouchControls\(\{[\s\S]{0,400}?\nsyncTouchSettingsUI\(\);\r?\n\/\/[^\n]*\r?\nplaceStickOverlay\(\);/, 'at boot, once the touch sticks exist');
+  assert.match(extract('placeStickOverlay'), /getElementById\('legend'\)[\s\S]*getElementById\('feelHud'\)/);
+  assert.match(extract('enableTouchLayer'), /placeStickOverlay\(\);/);
+  assert.match(extract('applyTouchFromUI'), /placeStickOverlay\(\);/);
+  // The old #feelHud pads are gone (one stick display).
+  assert.equal(html.includes('stick-pad'), false);
+  assert.equal(read('sim-feel.js').includes('stickDotL'), false);
+  // The input the overlay names is the one the OSD names.
+  assert.match(extract('stickInputKind'), /gpConnected\?\(isRadio\(\{id:gpName\}\)\?'radio':'gamepad'\):\(touchCtl&&touchCtl\.enabled\?'touch':'keyboard'\)/);
+});
+
+// ---- headless Chrome ----
+
+function resolveChrome() {
+  const names = [process.env.CHROME, 'google-chrome', 'google-chrome-stable', 'chromium-browser', 'chromium', 'chrome'].filter(Boolean);
+  for (const n of names) {
+    if (existsSync(n)) return n;
+    const which = spawnSync('which', [n], { encoding: 'utf8' });
+    if (which.status === 0 && which.stdout.trim()) return which.stdout.trim();
+  }
+  return process.env.CHROME || 'google-chrome';
+}
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+function mime(p) {
+  return ({
+    '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
+    '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml',
+    '.wasm': 'application/wasm', '.txt': 'text/plain', '.webp': 'image/webp', '.hdr': 'application/octet-stream',
+    '.mp3': 'audio/mpeg', '.ktx2': 'image/ktx2',
+  })[extname(p)] || 'application/octet-stream';
+}
+
+async function serveRoot() {
+  const server = createServer((req, res) => {
+    const url = new URL(req.url || '/', 'http://127.0.0.1');
+    let rel = decodeURIComponent(url.pathname);
+    if (rel === '/') rel = '/sim.html';
+    const file = join(root, rel.replace(/^\/+/, ''));
+    if (!file.startsWith(root) || !existsSync(file)) { res.writeHead(404); res.end('missing'); return; }
+    try { res.writeHead(200, { 'content-type': mime(file) }); res.end(readFileSync(file)); }
+    catch (e) { res.writeHead(500); res.end(String(e)); }
+  });
+  await new Promise((res) => server.listen(0, '127.0.0.1', res));
+  return { server, port: server.address().port };
+}
+
+let cdpSeq = 0;
+function cdp(ws, method, params) {
+  const id = ++cdpSeq;
+  ws.send(JSON.stringify({ id, method, params: params || {} }));
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('cdp timeout ' + method)), 45000);
+    function on(msg) {
+      try {
+        const o = JSON.parse(typeof msg.data === 'string' ? msg.data : msg.data.toString());
+        if (o.id === id) {
+          clearTimeout(t);
+          ws.removeEventListener('message', on);
+          if (o.error) reject(new Error(method + ': ' + JSON.stringify(o.error)));
+          else resolve(o.result || {});
+        }
+      } catch (e) { /* ignore */ }
+    }
+    ws.addEventListener('message', on);
+  });
+}
+
+async function evaluate(ws, expression) {
+  const r = await cdp(ws, 'Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+  if (r.exceptionDetails) throw new Error('page: ' + JSON.stringify(r.exceptionDetails.exception || r.exceptionDetails.text));
+  return r.result ? r.result.value : undefined;
+}
+
+// Chrome's renderer and GPU processes outlive a killed parent on Windows.
+function killTree(child) {
+  if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+  else { try { child.kill('SIGKILL'); } catch (e) { /* ignore */ } }
+}
+
+// Before the page's scripts: navigator.getGamepads() with one fake pad, as
+// Chrome reports it; window.__pads drives its axes.
+const FAKE_PADS = String.raw`(() => {
+  const KEY = '__fakePads';
+  let saved = null;
+  try { saved = JSON.parse(sessionStorage.getItem(KEY)); } catch (e) { /* none */ }
+  const pads = window.__pads = saved || { on: false, id: '', mapping: '', axes: [] };
+  const make = () => ({ id: pads.id, index: 0, mapping: pads.mapping || '', connected: true, timestamp: performance.now(), axes: pads.axes.slice(),
+    buttons: Array.from({ length: 24 }, () => ({ pressed: false, touched: false, value: 0 })) });
+  Object.defineProperty(Navigator.prototype, 'getGamepads', {
+    configurable: true,
+    value() {
+      try { sessionStorage.setItem(KEY, JSON.stringify(pads)); } catch (e) { /* ignore */ }
+      return [pads.on ? make() : null, null, null, null];
+    },
+  });
+})()`;
+
+// In the page: the overlay's state, the canvas's pixels under each dot, and
+// where the rest of the HUD sits (a toggle must move none of it).
+const PAGE = String.raw`(() => {
+  const s = window._sim;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const until = async (fn, ms) => {
+    const t0 = performance.now();
+    while (performance.now() - t0 < ms) { if (fn()) return true; await wait(16); }
+    return !!fn();
+  };
+  const el = () => document.getElementById('stickOverlay');
+  const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  function px(x, y) {
+    const c = el();
+    const d = c.getContext('2d').getImageData(Math.round(x), Math.round(y), 1, 1).data;
+    return [d[0], d[1], d[2], d[3]];
+  }
+  // The colour under each dot, and under the left box's top-left inside corner.
+  function pixels() {
+    const o = s.stickOverlay();
+    if (!o.dots) return null;
+    const k = o.dpr, gap = o.box + 8;
+    return { l: px(o.dots.l.x * k, o.dots.l.y * k), r: px((gap + o.dots.r.x) * k, o.dots.r.y * k), corner: px(6 * k, 6 * k) };
+  }
+  function seen() {
+    const c = el(), cs = getComputedStyle(c), b = c.getBoundingClientRect();
+    return { display: cs.display, visibility: cs.visibility, on: c.classList.contains('on'), pe: cs.pointerEvents, pos: cs.position,
+      rect: { left: b.left, top: b.top, right: b.right, bottom: b.bottom, w: b.width, h: b.height } };
+  }
+  // Layout shifts the browser saw (the CLS entries), counted from here on.
+  const shifts = [];
+  try {
+    new PerformanceObserver((l) => { for (const e of l.getEntries()) shifts.push(e.value); }).observe({ type: 'layout-shift', buffered: false });
+  } catch (e) { /* no layout-shift entries in this browser */ }
+  // The boxes whose text does not tick every frame (the OSD's readouts do).
+  function layout() {
+    const out = { shifts: shifts.length };
+    for (const id of ['feelHud', 'legend', 'touchLayer', 'menuBtn', 'gear']) {
+      const e = document.getElementById(id);
+      if (!e) continue;
+      const b = e.getBoundingClientRect();
+      out[id] = [b.left, b.top, b.width, b.height].map((v) => Math.round(v * 10) / 10);
+    }
+    out.doc = [document.documentElement.scrollWidth, document.documentElement.scrollHeight];
+    return out;
+  }
+  const close = (a, b, eps) => ['r', 'p', 'y', 't'].every((k) => Math.abs(a[k] - b[k]) <= eps);
+  window.__so = { s, wait, until, frame, pixels, seen, layout, close };
+  return true;
+})()`;
+
+const green = (p) => !!p && p[1] > 150 && p[0] < 140 && p[3] > 200;
+const TX = 'RM TX16S Joystick (Vendor: 1209 Product: 4f54)';
+const PAD = 'Xbox 360 Controller (XInput STANDARD GAMEPAD)';
+
+test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 10 * 60 * 1000 }, async (t) => {
+  if (process.env.SKIP_CHROME_BOOT === '1') {
+    t.skip('SKIP_CHROME_BOOT');
+    return;
+  }
+  const { server, port } = await serveRoot();
+  const origin = `http://127.0.0.1:${port}`;
+
+  // A pass: a fresh Chrome profile, the given pad, storage and screen, the page at url.
+  async function pass(url, seed, flow) {
+    const profile = mkdtempSync(join(tmpdir(), 'qm-sticks-'));
+    const child = spawnBrowser(resolveChrome(), [
+      '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
+      '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
+      '--mute-audio', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update',
+      '--disable-background-networking', '--disable-sync', '--window-size=960,540',
+      '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank',
+    ], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (d) => { stderr += d.toString(); });
+    let ws = null;
+    try {
+      let debugPort = 0;
+      for (let i = 0; i < 100 && !debugPort; i++) {
+        await sleep(100);
+        try { debugPort = +readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]; } catch (e) { /* not yet */ }
+      }
+      assert.ok(debugPort, 'no DevTools port\n' + stderr.slice(-400));
+      let page = null;
+      for (let i = 0; i < 100 && !page; i++) {
+        await sleep(100);
+        try {
+          const pages = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json();
+          page = pages.find((p) => p.type === 'page' && p.webSocketDebuggerUrl);
+        } catch (e) { /* Chrome is still coming up */ }
+      }
+      assert.ok(page, 'no CDP page\n' + stderr.slice(-400));
+      ws = new WebSocket(page.webSocketDebuggerUrl);
+      await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
+      await cdp(ws, 'Runtime.enable');
+      await cdp(ws, 'Page.enable');
+      if (seed.phone) {
+        const [w, h] = seed.phone;
+        await cdp(ws, 'Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: w > h ? 'landscapePrimary' : 'portraitPrimary', angle: w > h ? 90 : 0 } });
+        await cdp(ws, 'Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+        await cdp(ws, 'Emulation.setUserAgentOverride', { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36', platform: 'Android' });
+      } else {
+        // A desktop screen (the headless window's own viewport is under the phone breakpoint's 500 px).
+        await cdp(ws, 'Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+      }
+      await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: FAKE_PADS });
+      // Same origin first, for localStorage and sessionStorage before the page's scripts.
+      await cdp(ws, 'Page.navigate', { url: `${origin}/robots.txt` });
+      await sleep(250);
+      await evaluate(ws, `(() => {
+        localStorage.clear();
+        const seed = ${JSON.stringify(seed.storage || {})};
+        for (const k of Object.keys(seed)) localStorage.setItem(k, seed[k]);
+        sessionStorage.setItem('__fakePads', JSON.stringify(${JSON.stringify(seed.pad || { on: false, id: '', mapping: '', axes: [] })}));
+        return true;
+      })()`);
+      await cdp(ws, 'Page.navigate', { url });
+      let ready = false;
+      for (let i = 0; i < 240 && !ready; i++) {
+        await sleep(250);
+        try {
+          ready = await evaluate(ws, `!!(window._sim && window._sim.stickOverlay && window._simQueryBooted && window._sim.looks && window._sim.looks.fps && window._sim.looks.fps.ready && window._ttff)`);
+        } catch (e) { /* the page is still loading */ }
+      }
+      assert.ok(ready, 'the page booted');
+      await evaluate(ws, PAGE);
+      const js = async (body) => JSON.parse(await evaluate(ws, `(async () => { const S = window.__so; ${body} })()`));
+      const hold = (down, k, code, vk) => cdp(ws, 'Input.dispatchKeyEvent', { type: down ? 'rawKeyDown' : 'keyUp', key: k, code, windowsVirtualKeyCode: vk });
+      const key = async (k, code, vk) => { await hold(true, k, code, vk); await hold(false, k, code, vk); };
+      await flow({ js, hold, key, cdp: (m, p) => cdp(ws, m, p) });
+    } finally {
+      try { if (ws) ws.close(); } catch (e) { /* ignore */ }
+      killTree(child);
+      await Promise.race([new Promise((res) => child.once('exit', res)), sleep(3000)]);
+      for (let i = 0; i < 10; i++) {
+        try { rmSync(profile, { recursive: true, force: true }); break; } catch (e) { await sleep(500); }
+      }
+    }
+  }
+
+  const sim = (query) => `${origin}/sim.html?quality=low&${query}`;
+  // The overlay drawn: the values it painted are the sticks the core has (a
+  // frame apart at most: eps), and the green dot is under each one.
+  const tracks = async (js, label, eps = 0.02) => {
+    const r = await js(`await S.frame(); await S.frame(); return JSON.stringify({ o: S.s.stickOverlay(), px: S.pixels(), seen: S.seen() });`);
+    assert.equal(r.o.shown, true, label + ': shown');
+    assert.equal(r.seen.display, 'block', label);
+    assert.equal(r.seen.visibility, 'visible', label);
+    assert.ok(r.o.drawn, label + ': painted');
+    for (const k of ['r', 'p', 'y', 't']) assert.ok(Math.abs(r.o.drawn[k] - r.o.stick[k]) <= eps, `${label}: drawn ${k} ${r.o.drawn[k]} vs stick ${r.o.stick[k]}`);
+    assert.ok(green(r.px.l) && green(r.px.r), label + ': a dot under each value ' + JSON.stringify(r.px));
+    return r;
+  };
+
+  try {
+    await t.test('keyboard: on by default; the dots follow the keys; H, the menu and the checkbox hide it, and none of it moves the HUD', async () => {
+      await pass(sim('map=rig'), { storage: { quadmathSimInputChoice: 'keyboard' } }, async ({ js, hold, key, cdp: send }) => {
+        let r = await js(`await S.frame(); return JSON.stringify({ o: S.s.stickOverlay(), seen: S.seen(), cb: document.getElementById('cbStickOverlay').checked, prompt: !!(window._feel && window._feel.promptOpen), menu: document.body.classList.contains('menu-open') });`);
+        assert.equal(r.prompt, false); assert.equal(r.menu, false);
+        assert.equal(r.o.kind, 'keyboard');
+        assert.equal(r.o.saved, null, 'nothing saved');
+        assert.equal(r.o.wanted, true, 'on for the keyboard');
+        assert.equal(r.cb, true, 'the checkbox says so');
+        assert.equal(r.seen.pe, 'none'); assert.equal(r.seen.pos, 'fixed');
+        assert.equal(r.o.box, STICK_BOX_PX);
+        assert.equal(r.seen.rect.w, 2 * STICK_BOX_PX + STICK_GAP_PX); assert.equal(r.seen.rect.h, STICK_BOX_PX);
+        assert.equal(r.seen.rect.bottom, 720 - STICK_OVERLAY_BOTTOM_PX, 'bottom centre');
+        assert.equal(r.seen.rect.left, (1280 - r.seen.rect.w) / 2);
+        await tracks(js, 'at rest');
+        // Clear of the HUD around it, with the bf core's arming flags under the throttle bar.
+        const clearOfHud = async (label) => {
+          const h = await js(`await S.frame(); const b = (id) => { const e = document.getElementById(id); const r = e && e.getBoundingClientRect(); return r && r.width > 0 && getComputedStyle(e).opacity !== '0' ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom, lines: e.innerHTML.split('<br>').length } : null; };
+            return JSON.stringify({ seen: S.seen(), osdBC: b('osdBC'), legend: b('legend'), feelHud: b('feelHud'), core: S.s.core() });`);
+          for (const id of ['osdBC', 'legend', 'feelHud']) {
+            if (h[id]) assert.equal(overlaps(h.seen.rect, h[id]), false, `${label}: over #${id} ${JSON.stringify({ o: h.seen.rect, b: h[id] })}`);
+          }
+          return h;
+        };
+        let hud = await clearOfHud('at rest');
+        assert.equal(hud.core, 'bf');
+        assert.ok(hud.osdBC, 'the throttle bar is up');
+        // Roll right, yaw right, throttle up (W ramps it, and it stays when let go).
+        await hold(true, 'ArrowRight', 'ArrowRight', 39);
+        await hold(true, 'd', 'KeyD', 68);
+        await hold(true, 'w', 'KeyW', 87);
+        await js(`await S.wait(500); return 1;`);
+        await hold(false, 'w', 'KeyW', 87);
+        await js(`await S.wait(500); return 1;`);
+        r = await tracks(js, 'keys held');
+        hud = await clearOfHud('keys held');
+        console.log('osdBC lines with W up: ' + hud.osdBC.lines);
+        assert.ok(r.o.stick.r > 0.9 && r.o.stick.y > 0.9 && r.o.stick.t > 0.4, 'the keys moved the sticks ' + JSON.stringify(r.o.stick));
+        assert.ok(r.o.dots.r.x > r.o.box * 0.8 && r.o.dots.l.x > r.o.box * 0.8, 'both dots to the right');
+        assert.ok(r.o.dots.l.y < r.o.box * 0.7, 'throttle up');
+        assert.equal(green(r.px.corner), false, 'not painted green everywhere');
+        await hold(false, 'ArrowRight', 'ArrowRight', 39);
+        await hold(true, 'ArrowUp', 'ArrowUp', 38);
+        await js(`await S.wait(600); return 1;`);
+        r = await tracks(js, 'pitch forward');
+        assert.ok(r.o.stick.p > 0.9 && r.o.dots.r.y < r.o.box * 0.2, 'pitch forward: the right dot up');
+        await hold(false, 'ArrowUp', 'ArrowUp', 38);
+        await hold(false, 'd', 'KeyD', 68);
+        await js(`await S.wait(800); return 1;`);
+        await tracks(js, 'let go', 0.05);
+
+        // H: hidden with the rest of the HUD, and back.
+        const before = await js(`return JSON.stringify(S.layout());`);
+        await key('h', 'KeyH', 72);
+        r = await js(`await S.frame(); return JSON.stringify({ o: S.s.stickOverlay(), seen: S.seen(), hud: window._feel.hudVisible, layout: S.layout() });`);
+        assert.equal(r.hud, false);
+        assert.equal(r.o.shown, false, 'H hides it');
+        assert.equal(r.seen.display, 'none');
+        await key('h', 'KeyH', 72);
+        r = await js(`await S.frame(); return JSON.stringify({ o: S.s.stickOverlay(), layout: S.layout() });`);
+        assert.equal(r.o.shown, true, 'H again shows it');
+        assert.deepEqual(r.layout, before, 'H moved nothing else');
+
+        // The menu (Esc) hides it; closing it brings it back.
+        await key('Escape', 'Escape', 27);
+        r = await js(`await S.wait(300); return JSON.stringify({ menu: document.body.classList.contains('menu-open'), seen: S.seen(), o: S.s.stickOverlay() });`);
+        assert.equal(r.menu, true);
+        assert.equal(r.o.shown, false, 'not over the menu');
+        assert.equal(r.seen.display, 'none');
+        assert.equal(r.seen.visibility, 'hidden', 'and the CSS rule says so too');
+        await key('Escape', 'Escape', 27);
+        r = await js(`await S.wait(300); return JSON.stringify({ menu: document.body.classList.contains('menu-open'), seen: S.seen() });`);
+        assert.equal(r.menu, false);
+        assert.equal(r.seen.visibility, 'visible');
+        assert.equal(r.seen.display, 'block');
+
+        // The checkbox: off, saved, and nothing else on the page moves.
+        r = await js(`
+          const cb = document.getElementById('cbStickOverlay');
+          const a = S.layout();
+          cb.click();
+          await S.frame();
+          const off = { o: S.s.stickOverlay(), seen: S.seen(), saved: localStorage.getItem('${STICK_OVERLAY_KEY}'), layout: S.layout() };
+          cb.click();
+          await S.frame();
+          const on = { o: S.s.stickOverlay(), saved: localStorage.getItem('${STICK_OVERLAY_KEY}'), layout: S.layout() };
+          return JSON.stringify({ a, off, on });`);
+        assert.equal(r.off.o.shown, false); assert.equal(r.off.seen.display, 'none');
+        assert.equal(r.off.saved, '0', 'saved off');
+        assert.deepEqual(r.off.layout, r.a, 'off: no layout shift');
+        assert.equal(r.on.o.shown, true);
+        assert.equal(r.on.saved, '1', 'saved on');
+        assert.deepEqual(r.on.layout, r.a, 'on: no layout shift');
+        // The Tune panel (Tab) covers it as it covers #feelHud.
+        await key('Tab', 'Tab', 9);
+        r = await js(`await S.wait(300); return JSON.stringify({ open: document.getElementById('panel').classList.contains('open'), seen: S.seen() });`);
+        assert.equal(r.open, true);
+        assert.equal(r.seen.display, 'none', 'not under the Tune panel');
+        await key('Tab', 'Tab', 9);
+        r = await js(`await S.wait(300); return JSON.stringify({ open: document.getElementById('panel').classList.contains('open'), seen: S.seen() });`);
+        assert.equal(r.open, false);
+        assert.equal(r.seen.display, 'block');
+        // A narrow window (a laptop screen split in two): still clear of the legend and the card.
+        for (const [w, h] of [[683, 720], [640, 600]]) {
+          await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
+          await js(`await S.wait(300); return 1;`);
+          const n = await clearOfHud(`${w}x${h}`);
+          assert.ok(n.seen.rect.left >= 0 && n.seen.rect.right <= w, `${w}x${h}: on screen`);
+        }
+      });
+    });
+
+    await t.test('radio: off by default; switched on, the dots are the mapped channels, not the raw axes', async () => {
+      // Sticks low and centred first: the safety gate opens.
+      await pass(sim('map=rig'), { pad: { on: true, id: TX, axes: [0, 0, -1, 0, -1, -1, -1, -1] } }, async ({ js }) => {
+        let r = await js(`await S.wait(600); return JSON.stringify({ o: S.s.stickOverlay(), seen: S.seen(), cb: document.getElementById('cbStickOverlay').checked });`);
+        assert.equal(r.o.kind, 'radio');
+        assert.equal(r.o.wanted, false, 'off for a radio');
+        assert.equal(r.cb, false);
+        assert.equal(r.seen.display, 'none');
+        r = await js(`document.getElementById('cbStickOverlay').click(); window.__pads.axes = [0.5, -0.4, 0.2, -0.6, -1, -1, -1, -1]; await S.wait(500); return JSON.stringify({ saved: localStorage.getItem('${STICK_OVERLAY_KEY}') });`);
+        assert.equal(r.saved, '1');
+        r = await tracks(js, 'radio');
+        // TX16S channels: roll, pitch, throttle (-1..1 to 0..1), yaw.
+        assert.ok(S_near(r.o.stick, { r: 0.5, p: -0.4, t: 0.6, y: -0.6 }, 0.03), 'mapped ' + JSON.stringify(r.o.stick));
+        assert.ok(Math.abs(r.o.drawn.t - 0.6) < 0.03, 'the throttle drawn is the mapped 0.6, not the raw axis 0.2');
+      });
+    });
+
+    await t.test('gamepad: off by default, a saved choice shows it; the dots follow the pad', async () => {
+      await pass(sim('map=rig'), { pad: { on: true, id: PAD, mapping: 'standard', axes: [0, 0, 0, 0] }, storage: { [STICK_OVERLAY_KEY]: '1', quadmathSimInputChoice: 'radio' } }, async ({ js }) => {
+        let r = await js(`await S.wait(600); return JSON.stringify({ o: S.s.stickOverlay(), prompt: !!(window._feel && window._feel.promptOpen) });`);
+        assert.equal(r.prompt, false, 'no first-run prompt');
+        assert.equal(r.o.kind, 'gamepad');
+        assert.equal(stickOverlayDefault(r.o.kind), false);
+        assert.equal(r.o.saved, true, 'the saved choice');
+        assert.equal(r.o.wanted, true);
+        await js(`window.__pads.axes = [0.7, -0.5, 0.3, 0.4]; await S.wait(500); return 1;`);
+        r = await tracks(js, 'gamepad');
+        assert.ok(r.o.stick.y > 0.5 && r.o.stick.r > 0.2 && r.o.stick.p < -0.2 && r.o.stick.t > 0.3, 'the pad moved the sticks ' + JSON.stringify(r.o.stick));
+      });
+    });
+
+    await t.test('touch: on by default, the phone box, clear of the thumb sticks; real touches move the dots; big sticks push it up', async () => {
+      await pass(sim('map=rig'), { phone: [844, 390], storage: { quadmathSimInputChoice: 'touch' } }, async ({ js, cdp: send }) => {
+        let ok = await js(`return JSON.stringify(await S.until(() => document.body.classList.contains('touch-on'), 8000));`);
+        assert.equal(ok, true, 'touch sticks on');
+        let r = await js(`await S.frame(); const st = [...document.querySelectorAll('#touchLayer .vstick')].map((e) => { const b = e.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom }; });
+          return JSON.stringify({ o: S.s.stickOverlay(), seen: S.seen(), sticks: st, prompt: !!(window._feel && window._feel.promptOpen) });`);
+        assert.equal(r.o.kind, 'touch');
+        assert.equal(r.o.wanted, true, 'on for touch');
+        assert.equal(r.o.box, STICK_BOX_PHONE_PX, 'the phone box');
+        assert.equal(r.sticks.length, 2);
+        for (const b of r.sticks) assert.equal(overlaps(r.seen.rect, b), false, 'never over a stick ' + JSON.stringify({ o: r.seen.rect, b }));
+        await tracks(js, 'touch at rest');
+        // A thumb on the right stick, pushed right and up.
+        const [L, R] = r.sticks;
+        const c = (b) => ({ x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2 });
+        const rc = c(R), lc = c(L);
+        await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: rc.x, y: rc.y, id: 1 }] });
+        for (let i = 1; i <= 6; i++) {
+          await send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: rc.x + i * 7, y: rc.y - i * 6, id: 1 }] });
+          await sleep(30);
+        }
+        await js(`await S.wait(200); return 1;`);
+        r = await tracks(js, 'right thumb');
+        assert.ok(r.o.stick.r > 0.3 && r.o.stick.p > 0.3, 'roll right, pitch forward ' + JSON.stringify(r.o.stick));
+        await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        // A thumb on the left stick, up: throttle (it holds where it is left).
+        await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: lc.x, y: lc.y, id: 2 }] });
+        for (let i = 1; i <= 6; i++) {
+          await send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: lc.x, y: lc.y - i * 8, id: 2 }] });
+          await sleep(30);
+        }
+        await js(`await S.wait(200); return 1;`);
+        r = await tracks(js, 'left thumb');
+        assert.ok(r.o.stick.t > 0.6, 'throttle up ' + JSON.stringify(r.o.stick));
+        await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
+        // Portrait with the biggest sticks: no room between them, so it moves up, never over them.
+        await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: 'portraitPrimary', angle: 0 } });
+        r = await js(`
+          const s = document.getElementById('s_touchSize');
+          s.value = s.max; s.dispatchEvent(new Event('input', { bubbles: true })); s.dispatchEvent(new Event('change', { bubbles: true }));
+          await S.wait(400); await S.frame();
+          const st = [...document.querySelectorAll('#touchLayer .vstick')].map((e) => { const b = e.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom }; });
+          return JSON.stringify({ o: S.s.stickOverlay(), seen: S.seen(), sticks: st, vh: innerHeight });`);
+        assert.ok(r.sticks[0].right - r.sticks[0].left >= 160, 'big sticks ' + JSON.stringify(r.sticks[0]));
+        for (const b of r.sticks) assert.equal(overlaps(r.seen.rect, b), false, 'portrait: never over a stick ' + JSON.stringify({ o: r.seen.rect, b }));
+        assert.ok(r.seen.rect.bottom <= Math.min(...r.sticks.map((b) => b.top)), 'above the sticks');
+        assert.ok(r.seen.rect.top >= 0);
+      });
+    });
+  } finally {
+    server.close();
+  }
+});
+
+function S_near(a, b, eps) {
+  return ['r', 'p', 'y', 't'].every((k) => Math.abs(a[k] - b[k]) <= eps);
+}

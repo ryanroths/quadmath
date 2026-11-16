@@ -2,10 +2,10 @@
 // QuadMath sim M1 feel — first-run, tutorial, HUD, rate presets, aux helpers.
 // Keep physics in quadphysics.js. Do not touch racing track layouts or ghosts.
 // New localStorage keys: quadmathSimInputChoice, quadmathSimFloatiness,
-//   quadmathSimFov.
+//   quadmathSimFov, quadmathSimStickOverlay.
 // Nothing here is copied from WebFPV.
 
-import { makeWorldLabel } from './sim-art.js?v=f8b0b4d17aab';
+import { makeWorldLabel } from './sim-art.js?v=2cb300829b94';
 
 export const INPUT_CHOICE_KEY = 'quadmathSimInputChoice';
 export const FLOATINESS_KEY = 'quadmathSimFloatiness';
@@ -380,6 +380,233 @@ function stepCopy(step) {
   }
 }
 
+// ---------- The stick overlay (HUD) ----------
+// The two sticks the core flies on, drawn small: Mode 2, the left box yaw (x)
+// and throttle (y), the right box roll (x) and pitch (y). The page hands draw()
+// its merged `stick` (sim.html readInput: axis map, calibration and deadband
+// done, rates not yet applied), the values every input path (radio, gamepad,
+// keyboard, touch) gives the core. Never a pad's raw axes.
+//
+// One 2D canvas, position:fixed, pointer-events:none. The frame loop calls
+// draw(), which repaints only when a dot moved and writes no DOM style, so a
+// frame costs no layout. place() sizes and positions it (and the page reads
+// the touch sticks' boxes for it): on a resize or a touch-stick change only.
+//
+// quadmathSimStickOverlay: '1' on, '0' off. Absent: the input's default
+// (stickOverlayDefault).
+export const STICK_OVERLAY_KEY = 'quadmathSimStickOverlay';
+// A box's side in CSS px: desktop, and a phone (STICK_OVERLAY_PHONE, the
+// page's own phone breakpoints).
+export const STICK_BOX_PX = 72;
+export const STICK_BOX_PHONE_PX = 56;
+export const STICK_OVERLAY_PHONE = '(max-width:559px),(max-height:500px)';
+// Between the two boxes.
+export const STICK_GAP_PX = 8;
+// The overlay's bottom edge: above the bottom-centre throttle readout (#osdBC,
+// 18 px up), which is three lines on the bf core while it refuses to arm.
+export const STICK_OVERLAY_BOTTOM_PX = 72;
+// Clear space kept around whatever it must not cover.
+export const STICK_CLEAR_PX = 12;
+// The site's colours: #0D0E12 at 55%, the green dot. The border is the page's
+// --line (the page reads it and passes it in); this is its value in sim.html.
+export const STICK_BG = 'rgba(13,14,18,.55)';
+export const STICK_DOT = '#3DDC97';
+export const STICK_LINE = 'rgba(255,255,255,.12)';
+
+function overlayStore(storage) {
+  if (storage) return storage;
+  try { return typeof localStorage !== 'undefined' ? localStorage : null; }
+  catch (e) { return null; }
+}
+
+// The saved choice: true, false, or null when the pilot never chose.
+export function loadStickOverlay(storage) {
+  const store = overlayStore(storage);
+  if (!store) return null;
+  try {
+    const v = store.getItem(STICK_OVERLAY_KEY);
+    return v === '1' ? true : v === '0' ? false : null;
+  } catch (e) { return null; }
+}
+
+export function saveStickOverlay(on, storage) {
+  const store = overlayStore(storage);
+  if (!store) return false;
+  try { store.setItem(STICK_OVERLAY_KEY, on ? '1' : '0'); return true; }
+  catch (e) { return false; }
+}
+
+// kind: 'keyboard' | 'touch' | 'radio' | 'gamepad'. On where there are no
+// sticks in the pilot's hands to look at; off with a radio or a gamepad.
+export function stickOverlayDefault(kind) {
+  return kind === 'keyboard' || kind === 'touch';
+}
+
+// On or off: the saved choice, else the input's default.
+export function stickOverlayOn(saved, kind) {
+  return saved === true || saved === false ? saved : stickOverlayDefault(kind);
+}
+
+function clampAxis(v, lo, hi) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return n < lo ? lo : n > hi ? hi : n;
+}
+
+// A dot's radius in CSS px for a box of side box.
+export function stickDotRadius(box) {
+  return Math.max(3, Math.round(box * 0.14) / 2);
+}
+
+// The two dots' centres in CSS px, each in its own box's coordinates
+// (0..box), for the sticks s {r, p, y in -1..1; t in 0..1}. Mode 2: left x
+// yaw, left y throttle (0 at the bottom), right x roll, right y pitch (+1 at
+// the top). In 3D the throttle's 0.5 (no thrust) is the box's middle, where it
+// is on the stick.
+export function stickDots(s, box) {
+  const st = s || {};
+  const pad = stickDotRadius(box) + 2;
+  const span = box - 2 * pad;
+  const across = (v) => pad + (clampAxis(v, -1, 1) + 1) / 2 * span;
+  return {
+    l: { x: across(st.y), y: pad + (1 - clampAxis(st.t, 0, 1)) * span },
+    r: { x: across(st.r), y: pad + (1 - clampAxis(st.p, -1, 1)) / 2 * span },
+  };
+}
+
+// Where the overlay goes, in CSS px: {left, bottom, w, h}, left from the
+// viewport's left edge and bottom from its bottom edge. sticks and avoid are
+// boxes it must not cover, in viewport coordinates {left, right, top,
+// bottom}: the touch sticks, and the HUD beside it (the key legend, the
+// #feelHud card). STICK_OVERLAY_BOTTOM_PX up: centred when that clears every
+// box by STICK_CLEAR_PX, else the nearest spot along that line that does; with
+// none, centred and up above the boxes under it, as far as it takes. Never off
+// screen; over a box only when the screen is too small to miss it.
+export function stickOverlayPlacement({ vw, vh, box, sticks, avoid } = {}) {
+  const w = box * 2 + STICK_GAP_PX, h = box;
+  const C = STICK_CLEAR_PX;
+  const list = [...(sticks || []), ...(avoid || [])].filter((b) => b && b.right > b.left && b.bottom > b.top);
+  const maxLeft = Math.max(0, vw - w - 8);
+  const atX = (x) => Math.round(Math.max(Math.min(8, maxLeft), Math.min(x, maxLeft)));
+  const beside = (x, b) => x >= b.right + C || x + w <= b.left - C;
+  const clears = (x, bot) => {
+    const top = vh - bot - h, under = vh - bot;
+    return list.every((b) => beside(x, b) || top >= b.bottom + C || under <= b.top - C);
+  };
+  const centre = atX((vw - w) / 2);
+  const xs = [centre];
+  for (const b of list) xs.push(atX(b.right + C), atX(b.left - C - w));
+  xs.sort((a, b) => Math.abs(a - centre) - Math.abs(b - centre));
+  let left = xs.find((x) => clears(x, STICK_OVERLAY_BOTTOM_PX));
+  let bottom = STICK_OVERLAY_BOTTOM_PX;
+  if (left === undefined) {
+    left = centre;
+    // Up past each box in its column, the lowest first, until it clears.
+    const tops = list.filter((b) => !beside(left, b)).map((b) => b.top).sort((a, b) => b - a);
+    for (const top of tops) {
+      bottom = Math.max(bottom, Math.round(vh - top + C));
+      if (clears(left, bottom)) break;
+    }
+  }
+  bottom = Math.max(0, Math.min(bottom, vh - h - 8));
+  return { left, bottom, w, h };
+}
+
+// The overlay on canvas (an HTMLCanvasElement; null draws nothing). Returns
+// { place(opts), draw(stick), setShown(on), state }.
+//   place({vw, vh, phone, sticks, avoid, dpr}): size and position.
+//   draw(stick): repaint if a dot moved since the last paint; true if it did.
+//   setShown(on): the canvas's 'on' class, written only when it changes.
+export function createStickOverlay(canvas, { lineColor } = {}) {
+  const ctx = canvas && canvas.getContext ? canvas.getContext('2d') : null;
+  const line = lineColor || STICK_LINE;
+  let box = STICK_BOX_PX;
+  let dpr = 1;
+  let shown = false;
+  let key = '';
+  let draws = 0;
+  let dots = null;
+  let drawn = null;
+  let placed = null;
+
+  function place({ vw, vh, phone, sticks, avoid, dpr: ratio } = {}) {
+    box = phone ? STICK_BOX_PHONE_PX : STICK_BOX_PX;
+    dpr = Math.max(1, Math.min(3, Number(ratio) || 1));
+    placed = stickOverlayPlacement({ vw, vh, box, sticks, avoid });
+    if (canvas) {
+      const bw = Math.round(placed.w * dpr), bh = Math.round(placed.h * dpr);
+      if (canvas.width !== bw) canvas.width = bw;
+      if (canvas.height !== bh) canvas.height = bh;
+      const st = canvas.style;
+      if (st) {
+        st.width = placed.w + 'px';
+        st.height = placed.h + 'px';
+        st.left = placed.left + 'px';
+        st.bottom = placed.bottom + 'px';
+      }
+    }
+    key = ''; // a resized canvas is blank: the next draw paints
+    return placed;
+  }
+
+  function paintBox(ox, dot) {
+    const r = Math.max(4, Math.round(box * 0.14));
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') ctx.roundRect(ox + 0.5, 0.5, box - 1, box - 1, r);
+    else ctx.rect(ox + 0.5, 0.5, box - 1, box - 1);
+    ctx.fillStyle = STICK_BG;
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = line;
+    ctx.stroke();
+    // The centre, faint: where a sprung stick rests.
+    const c = box / 2;
+    ctx.beginPath();
+    ctx.moveTo(ox + c, c - 4); ctx.lineTo(ox + c, c + 4);
+    ctx.moveTo(ox + c - 4, c); ctx.lineTo(ox + c + 4, c);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(ox + dot.x, dot.y, stickDotRadius(box), 0, Math.PI * 2);
+    ctx.fillStyle = STICK_DOT;
+    ctx.fill();
+  }
+
+  function draw(s) {
+    const st = s || {};
+    const d = stickDots(st, box);
+    // Quarter-pixel steps: a dot that has not visibly moved is not repainted.
+    const q = (v) => Math.round(v * 4);
+    const k = box + ':' + q(d.l.x) + ',' + q(d.l.y) + ',' + q(d.r.x) + ',' + q(d.r.y);
+    if (k === key) return false;
+    key = k;
+    dots = d;
+    drawn = { r: +st.r || 0, p: +st.p || 0, y: +st.y || 0, t: +st.t || 0 };
+    if (!ctx) return false;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, box * 2 + STICK_GAP_PX, box);
+    paintBox(0, d.l);
+    paintBox(box + STICK_GAP_PX, d.r);
+    draws++;
+    return true;
+  }
+
+  function setShown(on) {
+    const v = !!on;
+    if (v === shown) return;
+    shown = v;
+    if (canvas && canvas.classList) canvas.classList.toggle('on', v);
+  }
+
+  return {
+    place,
+    draw,
+    setShown,
+    // Test hook: what is on the canvas now. dots in box coordinates, drawn the
+    // stick values of the last paint.
+    get state() { return { shown, box, dpr, draws, dots, drawn, placed }; },
+  };
+}
+
 export function createFeel(ctx) {
   const {
     THREE, scene, toast, decorateGate, LIGHTING,
@@ -396,8 +623,6 @@ export function createFeel(ctx) {
   const promptEl = document.getElementById('feelPrompt');
   const tutEl = document.getElementById('feelTutorial');
   const tutMsg = document.getElementById('feelTutMsg');
-  const dotL = document.getElementById('stickDotL');
-  const dotR = document.getElementById('stickDotR');
   const hudThr = document.getElementById('hudThr');
   const hudBatt = document.getElementById('hudBatt');
   const hudMode = document.getElementById('hudMode');
@@ -426,15 +651,8 @@ export function createFeel(ctx) {
 
   function updateHud(s) {
     if (!hudEl || !hudVisible) return;
+    // The sticks themselves are the stick overlay's (createStickOverlay).
     const st = s.stick || { r: 0, p: 0, y: 0, t: 0 };
-    if (dotL) {
-      dotL.style.left = (50 + st.y * 42) + '%';
-      dotL.style.top = (92 - st.t * 84) + '%';
-    }
-    if (dotR) {
-      dotR.style.left = (50 + st.r * 42) + '%';
-      dotR.style.top = (50 - st.p * 42) + '%';
-    }
     if (hudThr) {
       if (s.thrText) hudThr.textContent = s.thrText;
       else hudThr.textContent = 'THR ' + ((st.t * 100) | 0) + '%';

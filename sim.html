@@ -152,7 +152,6 @@
     top:max(52px, calc(env(safe-area-inset-top, 0px) + 44px));
     z-index:20;flex-direction:column;align-items:flex-end;
     max-height:calc(100dvh - var(--stick-size, 112px) - 56px - env(safe-area-inset-bottom, 0px))}
-  body.touch-on #feelHud .stick-pad{display:none}
   body.touch-on #osdLap{max-width:46vw;z-index:12}
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7;display:none}
   #crosshair.on{display:block}
@@ -428,10 +427,16 @@
   #feelHud{position:fixed;right:16px;bottom:86px;z-index:12;display:flex;align-items:flex-end;gap:10px;
     pointer-events:none;flex-direction:row;}
   #feelHud.hide{display:none}
-  .stick-pad{width:72px;height:72px;border:1px solid var(--line);border-radius:12px;background:var(--glass);
-    backdrop-filter:blur(12px);position:relative}
-  .stick-pad i{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--orange);
-    transform:translate(-50%,-50%);left:50%;top:50%;box-shadow:0 0 8px rgba(255,77,26,.6)}
+  /* The stick overlay (sim-feel.js createStickOverlay): bottom centre, above
+     the throttle readout, beside the key legend and the #feelHud card, and
+     with touch sticks never over them (stickOverlayPlacement sets left and
+     bottom). Fixed and out of the flow, so showing or hiding it moves
+     nothing. The :has() rule stands alone: a browser without :has() drops
+     only it (syncStickOverlay hides it under the panel too). */
+  #stickOverlay{position:fixed;left:calc(50% - 76px);bottom:72px;z-index:12;pointer-events:none;display:none}
+  #stickOverlay.on{display:block}
+  body.menu-open #stickOverlay,body.builder-on #stickOverlay,body.calibrating #stickOverlay{visibility:hidden}
+  body:has(#panel.open) #stickOverlay{visibility:hidden}
   .feel-meta{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid var(--line);
     border-radius:12px;background:var(--glass);backdrop-filter:blur(12px);font-size:11px;min-width:108px}
   .feel-meta span{color:var(--txt)}
@@ -652,7 +657,7 @@
     <button type="button" id="builderRot">Rotate 15°</button>
     <button type="button" id="builderDel">Delete</button>
     <button type="button" id="builderSave">Save local</button>
-    <button type="button" id="builderShare">Copy share code</button>
+    <button type="button" id="builderShare" title="A link that flies this track. The code stays in the box below, for Import.">Copy share link</button>
     <button type="button" id="builderImport">Import</button>
     <button type="button" id="builderFly">Fly this</button>
     <button type="button" id="builderClose">Close</button>
@@ -684,8 +689,6 @@
 </div>
 <div id="feelPrompt" aria-hidden="true"></div>
 <div id="feelHud">
-  <div class="stick-pad" aria-hidden="true"><i id="stickDotL"></i></div>
-  <div class="stick-pad" aria-hidden="true"><i id="stickDotR"></i></div>
   <div class="feel-meta">
     <span id="hudThr">THR 0%</span>
     <span id="hudBatt">BATT --</span>
@@ -696,6 +699,7 @@
     <button type="button" id="hud3d" aria-pressed="false">3D</button>
   </div>
 </div>
+<canvas id="stickOverlay" width="152" height="72" aria-hidden="true"></canvas>
 <div id="firstFlight" role="status" aria-live="polite"></div>
 <div id="feelTutorial">
   <div id="feelTutMsg">Tutorial</div>
@@ -812,6 +816,7 @@
   <div class="row"><label>Motion blur</label><input type="checkbox" id="cbMotionBlur" style="accent-color:var(--orange)"></div>
   <div class="row"><label>Show canopy</label><input type="checkbox" id="cbCanopy" style="accent-color:var(--orange)"></div>
   <div class="row"><label>Show crosshair</label><input type="checkbox" id="cbCrosshair" style="accent-color:var(--orange)"></div>
+  <div class="row"><label>Stick overlay</label><input type="checkbox" id="cbStickOverlay" style="accent-color:var(--orange)" title="Your two sticks as the sim reads them (Mode 2). On for keyboard and touch, off for a radio or gamepad, until you choose. H hides it with the HUD."></div>
   <div class="row"><label>Trick HUD</label><input type="checkbox" id="cbTricksHud" checked style="accent-color:var(--orange)" title="Freestyle combo meter. Hidden in races."></div>
   <div class="row"><label>Trick debug</label><input type="checkbox" id="cbTrickDebug" style="accent-color:var(--orange)" title="Classifier overlay. Records last maneuver JSON — Copy last trace. Also ?trickdebug=1"></div>
 
@@ -1058,7 +1063,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=f8b0b4d17aab";
+} from "./sim-art.js?v=2cb300829b94";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, loadFlightMode, saveFlightMode, toggleAcro,
@@ -1086,15 +1091,17 @@ import {
   resolveFly, persistableSelection,
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
-} from "./sim-tracks.js?v=816c09c57c00";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=46239d27449d";
+  trackLink, trackCodeFromHash, trackFromLinkCode,
+} from "./sim-tracks.js?v=830f74397b43";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=bae83928661c";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=530c0d0f33fb";
+} from "./sim-room.js?v=dfa4b922ade4";
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z,
-  loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT} from "./sim-feel.js?v=794337efab45";
+  loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT,
+  loadStickOverlay,saveStickOverlay,stickOverlayOn,createStickOverlay,STICK_OVERLAY_PHONE} from "./sim-feel.js?v=1855c2687977";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -1111,7 +1118,7 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=20b0bf9b6ba5";
+} from "./sim-coach.js?v=1d668ea8ac83";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=7e842d305df4";
@@ -1140,9 +1147,9 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=80b97730e330";
+} from "./sim-secrets.js?v=03fc89300e05";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
-  fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=faef974b6827";
+  fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=3f314d837c01";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1310,6 +1317,59 @@ function applyCrosshair(){
   if(cb)cb.checked=!!crosshairOn;
 }
 applyCrosshair();
+// ---------- The stick overlay (sim-feel.js createStickOverlay) ----------
+// The sticks the core flies on: the module's `stick`, as readInput and the
+// 4 ms poll leave it (axis map, calibration, deadband; before rates), drawn
+// once a frame (syncStickOverlay, in loop). On with the keyboard or touch,
+// off with a radio or a gamepad (stickOverlayDefault), until the pilot
+// chooses (Tune: Camera, Stick overlay; quadmathSimStickOverlay). H hides it
+// with the rest of the HUD (feel.hudVisible). The menu, the builder,
+// calibration and the Tune panel hide it (CSS, and syncStickOverlay), and so
+// does a replay, which flies no sticks.
+const stickOverlayEl=document.getElementById('stickOverlay');
+const stickOverlayCb=document.getElementById('cbStickOverlay');
+const stickPanelEl=document.getElementById('panel');
+const stickOverlay=createStickOverlay(stickOverlayEl,{
+  lineColor:getComputedStyle(document.documentElement).getPropertyValue('--line').trim()||undefined});
+let stickOverlaySaved=loadStickOverlay();
+// The input flying now, as the OSD names it.
+function stickInputKind(){
+  return gpConnected?(isRadio({id:gpName})?'radio':'gamepad'):(touchCtl&&touchCtl.enabled?'touch':'keyboard');
+}
+function stickOverlayWanted(){return stickOverlayOn(stickOverlaySaved,stickInputKind());}
+// Size and place it: the one layout read (the touch sticks', the key
+// legend's and the #feelHud card's boxes, which it keeps clear of). On a
+// resize, a touch-stick change, or either card changing size
+// (ResizeObserver), never per frame.
+function placeStickOverlay(){
+  const touch=!!(touchCtl&&touchCtl.enabled);
+  const box=(el)=>{const b=el&&el.getBoundingClientRect();return b&&b.width>0&&b.height>0?b:null;};
+  const sticks=touch?Array.from(document.querySelectorAll('#touchLayer .vstick'),box):[];
+  // The legend fades out under touch (body.touch-on #legend).
+  const avoid=[touch?null:box(document.getElementById('legend')),box(document.getElementById('feelHud'))];
+  const de=document.documentElement;
+  let phone=false;
+  try{phone=matchMedia(STICK_OVERLAY_PHONE).matches;}catch(e){}
+  stickOverlay.place({vw:de.clientWidth,vh:de.clientHeight,phone,sticks,avoid,dpr:window.devicePixelRatio});
+}
+// Each frame: the checkbox shows what is in force, and the dots follow the
+// sticks while the overlay is on screen. No layout read or style write here
+// (setShown writes the class only when it changes).
+function syncStickOverlay(){
+  const want=stickOverlayWanted();
+  if(stickOverlayCb&&stickOverlayCb.checked!==want)stickOverlayCb.checked=want;
+  const b=document.body.classList;
+  const covered=b.contains('menu-open')||b.contains('builder-on')||b.contains('calibrating')||!!(stickPanelEl&&stickPanelEl.classList.contains('open'));
+  const shown=want&&!covered&&!replayOn&&!(feel&&!feel.hudVisible);
+  stickOverlay.setShown(shown);
+  if(shown)stickOverlay.draw(stick);
+}
+if(stickOverlayCb){
+  stickOverlayCb.onchange=()=>{
+    stickOverlaySaved=!!stickOverlayCb.checked;
+    saveStickOverlay(stickOverlaySaved);
+  };
+}
 function applyCanopyLayout(){
   if(canopyGroup)layoutCanopyGroup(canopyGroup, camera);
 }
@@ -6312,14 +6372,22 @@ function wireBuilderUI(){
       toast('SAVED LOCAL ('+t.gates.length+' gates)');
     }catch(e){toast(e.message||'NEED 2+ GATES');}
   };
+  // Share copies a link that flies the track (sim-tracks.js trackLink:
+  // ?map= and the code in #trk=, applyTrackLink); the box keeps the bare
+  // code, for Import. A link over lineUrlMax (LINE_URL_MAX) copies the code.
   document.getElementById('builderShare').onclick=async()=>{
+    let code;
+    try{code=encodeShare(builder.draft);}catch(e){toast(e.message||'NEED 2+ GATES');return;}
+    const ta=document.getElementById('builderCode');
+    ta.value=code;
+    const map=builder.draft.map||currentMap;
+    const link=trackLink({origin:location.origin,path:location.pathname,map,dev:linkNeedsDev(map,builder.draft.id),code});
+    const fits=link.length<=lineUrlMax;
+    lastTrackLink=fits?link:'';
     try{
-      const code=encodeShare(builder.draft);
-      const ta=document.getElementById('builderCode');
-      ta.value=code;
-      try{await navigator.clipboard.writeText(code);toast('SHARE CODE COPIED');}
-      catch(e){ta.select();toast('COPY THE CODE IN THE BOX');}
-    }catch(e){toast(e.message||'NEED 2+ GATES');}
+      await navigator.clipboard.writeText(fits?link:code);
+      toast(fits?'TRACK LINK COPIED':'TRACK TOO BIG FOR A LINK — CODE COPIED');
+    }catch(e){ta.select();toast(fits?'COPY THE CODE IN THE BOX':'TRACK TOO BIG FOR A LINK — COPY THE CODE IN THE BOX');}
   };
   document.getElementById('builderImport').onclick=()=>{
     try{
@@ -8113,12 +8181,40 @@ async function applyLineLink(){
     syncLineBanner();
   }
 }
+// ---------- A shared track from the link (#trk=, sim-tracks.js trackLink) ----------
+// After the boot has landed the query's map. A line in the fragment wins: its
+// trk is ignored (trackCodeFromHash). The checks are Import's (an open map,
+// else the Rig: archivedToRig), and the track is raced as the picker races
+// one, this session's only, as a line link's own track is: listed and raced,
+// written to quadmathSimCustomTracks only when the pilot saves it (builder
+// Save local or Fly this). A bad code says so and the boot goes on as it was.
+let lastTrackLink='';               // the last track link copied (test hook)
+function applyTrackLink(){
+  const code=trackCodeFromHash(location.hash);
+  if(code===null)return;
+  let t=null;
+  try{t=trackFromLinkCode(code);}catch(e){t=null;}
+  if(!t||!knownMapId(t.map)){toast('BAD TRACK CODE');return;}
+  if(!mapOpen(t.map,DEV_UI)){archivedToRig();return;}
+  if(builderOn)closeBuilder();
+  customTracks=customTracks.filter(c=>c.id!==t.id);
+  customTracks.push(t);
+  hideMenuLayer();leaveRace();
+  if(coach&&coach.isActive())coach.cancel();
+  toggleStartMenu(false);sessionLive=true;
+  try{
+    setMap(t.map,t.id,{save:false});
+    resetQuad();
+  }catch(e){try{window._artError=String(e&&e.stack||e);}catch(err){/* ignore */}}
+  toast('SHARED TRACK: '+t.name,{ms:4000});
+}
 // Test hooks: the last link, the run on offer, the rival loaded, and a link
 // limit a test can lower.
 Object.assign(window._sim,{
   line:()=>({link:lastLineLink,run:lastRunLine?{track:lastRunLine.track,total:lastRunLine.total,n:lastRunLine.rec.length}:null,
     rival:rivalGhost?{name:rivalGhost.name,lapTime:rivalGhost.lapTime,track:rivalGhost.track,n:rivalGhost.samples.length}:null}),
   setLineUrlMax(n){lineUrlMax=n>0?n:LINE_URL_MAX;},
+  trackLink:()=>lastTrackLink,
 });
 document.getElementById('btnGhostCopy').onclick=exportGhost;
 document.getElementById('btnGhostDuel').onclick=exportDuel;
@@ -8861,6 +8957,7 @@ function loop(now){
       if(tricks&&!(coach&&coach.isActive()))tricks.frame();
     }catch(e){}
   }
+  syncStickOverlay();
   const live=!replayOn&&!simPaused();
   updateMotorSound(live);
   simAudio.update(live?cs:null);
@@ -8967,6 +9064,7 @@ function enableTouchLayer(on){
   touchCtl.setEnabled(!!on);
   touchCtl.syncLandscape(touchViewport());
   document.body.classList.toggle('touch-on',!!on);
+  placeStickOverlay();
 }
 function syncTouchSettingsUI(s){
   const st=s||(touchCtl?touchCtl.settings:loadTouch());
@@ -8998,6 +9096,7 @@ function applyTouchFromUI(){
   saveTouch(touchCtl.settings);
   syncTouchSettingsUI(touchCtl.settings);
   touchCtl.paint();
+  placeStickOverlay();
 }
 touchCtl=createTouchControls({
   root:document.getElementById('touchLayer'),
@@ -9008,6 +9107,18 @@ touchCtl=createTouchControls({
   onRespawn(){resetQuad();},
 });
 syncTouchSettingsUI();
+// The stick overlay: placed now, and again on a resize or a card changing size.
+placeStickOverlay();
+addEventListener('resize',()=>placeStickOverlay());
+if(typeof ResizeObserver==='function'){
+  const ro=new ResizeObserver(()=>placeStickOverlay());
+  for(const id of ['legend','feelHud']){const el=document.getElementById(id);if(el)ro.observe(el);}
+}
+// Test hook: the stick overlay, what it is showing and why.
+Object.assign(window._sim,{
+  stickOverlay:()=>Object.assign({wanted:stickOverlayWanted(),saved:stickOverlaySaved,kind:stickInputKind(),
+    stick:{r:stick.r,p:stick.p,y:stick.y,t:stick.t}},stickOverlay.state),
+});
 ['touchStickMode','s_touchSize','s_touchOp','s_touchDz','s_touchEx','cbThrSpring'].forEach(id=>{
   const el=document.getElementById(id);
   if(el)el.addEventListener(el.type==='checkbox'||el.tagName==='SELECT'?'change':'input',applyTouchFromUI);
@@ -9264,6 +9375,7 @@ function applyQueryBoot(){
       }
     }
   }
+  applyTrackLink();
   syncMenuSparks();
   syncBuildUI();
   applyLineLink();
