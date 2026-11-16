@@ -117,7 +117,8 @@ export async function startWorkerDev(dir, bin, vars = {}, opts = {}) {
   const t0 = Date.now();
   while (Date.now() - t0 < 90000) {
     if (/Ready on/.test(log)) {
-      return { port, base: (opts.https ? 'https' : 'http') + '://127.0.0.1:' + port, cert: cert ? cert.pem : null, log: () => log, stop: () => stop(child) };
+      // persist: the local state (D1) dir, for a test's own wrangler d1 execute.
+      return { port, base: (opts.https ? 'https' : 'http') + '://127.0.0.1:' + port, cert: cert ? cert.pem : null, persist, log: () => log, stop: () => stop(child) };
     }
     if (child.exitCode != null) break;
     await sleep(200);

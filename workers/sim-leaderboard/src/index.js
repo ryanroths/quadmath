@@ -17,6 +17,8 @@ import {
   DEFAULT_ALLOWED_ORIGIN,
   hashPilotToken,
   ghostPayloadError,
+  normalizeTrackSubmit,
+  CUSTOM_BOARD_KEY_RE,
 } from '../../../sim-retention.js';
 import { decodeLineCode, lineIdOf, LINE_CODE_MAX, LINE_ID_RE } from '../../../sim-share.js';
 
@@ -97,6 +99,29 @@ async function upsertScore(env, week, frameMm, name, timeMs, trackId) {
   await env.DB.prepare(
     'INSERT INTO scores (week, class, name, time_ms, track_id, submitted_ms) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(week, class, name) DO UPDATE SET time_ms = excluded.time_ms, track_id = excluded.track_id, submitted_ms = excluded.submitted_ms WHERE excluded.time_ms < scores.time_ms',
   ).bind(key, frameMm, name, timeMs, trackId, Date.now()).run();
+  return { improved: true, timeMs };
+}
+
+// Custom track boards (builder tracks): custom_scores, keyed by
+// customBoardKey (sim-retention.js), which normalizeTrackSubmit computes from
+// the submitted track. A pilot keeps their best time, as upsertScore.
+async function listTrackBoard(env, key, frameMm) {
+  const { results } = await env.DB.prepare(
+    'SELECT name, time_ms AS timeMs, submitted_ms AS at FROM custom_scores WHERE key = ? AND class = ? ORDER BY time_ms ASC LIMIT 20',
+  ).bind(key, classId(frameMm)).all();
+  return results || [];
+}
+
+async function upsertTrackScore(env, key, frameMm, name, timeMs) {
+  const existing = await env.DB.prepare(
+    'SELECT time_ms FROM custom_scores WHERE key = ? AND class = ? AND name = ?',
+  ).bind(key, frameMm, name).first();
+  if (existing && existing.time_ms <= timeMs) {
+    return { improved: false, timeMs: existing.time_ms };
+  }
+  await env.DB.prepare(
+    'INSERT INTO custom_scores (key, class, name, time_ms, submitted_ms) VALUES (?, ?, ?, ?, ?) ON CONFLICT(key, class, name) DO UPDATE SET time_ms = excluded.time_ms, submitted_ms = excluded.submitted_ms WHERE excluded.time_ms < custom_scores.time_ms',
+  ).bind(key, frameMm, name, timeMs, Date.now()).run();
   return { improved: true, timeMs };
 }
 
@@ -199,6 +224,42 @@ export async function handleLeaderboard(request, env) {
       ok: true, improved: saved.improved, timeMs: saved.timeMs, entries,
       day: checked.day, trackId: checked.trackId,
     });
+  }
+
+  // Custom track boards. The run is checked against the track it came with
+  // (normalizeTrackSubmit: a builder id, 3+ gates, a code within
+  // CUSTOM_TRACK_CODE_MAX, a valid one-pass ghost of those gates, PHYS_VER),
+  // and the board key is computed from that track: a key in the body or a
+  // client's id is never used. The track's row is written on its first
+  // accepted run, so a refused submit writes nothing but the rate count.
+  if (request.method === 'POST' && path === '/api/track/submit') {
+    if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);
+    const ip = clientIp(request);
+    const allowed = await checkRate(env, ip, Date.now());
+    if (!allowed) return reply({ ok: false, reason: 'RATE LIMIT' }, 429);
+    const parsed = await readJson(request);
+    if (parsed.error) return reply({ ok: false, reason: parsed.error }, 400);
+    const checked = await normalizeTrackSubmit(parsed.body);
+    if (!checked.ok) return reply({ ok: false, reason: checked.reason }, 400);
+    if (!TOKEN_RE.test(checked.token || '')) return reply({ ok: false, reason: 'NO TOKEN' }, 400);
+    const tokenHash = await hashPilotToken(checked.token);
+    const claim = await claimPilot(env, checked.name, tokenHash);
+    if (!claim.ok) return reply({ ok: false, reason: claim.reason }, 403);
+    await env.DB.prepare(
+      'INSERT OR IGNORE INTO custom_tracks (key, map, gates, code, created_ms) VALUES (?, ?, ?, ?, ?)',
+    ).bind(checked.key, checked.map, checked.gates, checked.code, Date.now()).run();
+    const saved = await upsertTrackScore(env, checked.key, checked.frameMm, checked.name, checked.timeMs);
+    const entries = await listTrackBoard(env, checked.key, checked.frameMm);
+    return reply({ ok: true, improved: saved.improved, timeMs: saved.timeMs, key: checked.key, class: checked.frameMm, entries });
+  }
+
+  if (request.method === 'GET' && path === '/api/track/board') {
+    const key = url.searchParams.get('key') || '';
+    if (!CUSTOM_BOARD_KEY_RE.test(key)) return reply({ ok: false, reason: 'BAD KEY' }, 400);
+    const frameMm = classId(url.searchParams.get('class') || url.searchParams.get('frameMm') || 65);
+    if (!env || !env.DB) return reply({ ok: true, key, class: frameMm, entries: [], online: false, note: 'no D1' });
+    const entries = await listTrackBoard(env, key, frameMm);
+    return reply({ ok: true, key, class: frameMm, entries, online: true });
   }
 
   // "Fly my line" (sim-share.js): a line code behind a short link, kept under

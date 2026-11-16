@@ -30,3 +30,23 @@ CREATE TABLE IF NOT EXISTS pilots (
   token_hash TEXT NOT NULL,
   claimed_ms INTEGER NOT NULL
 );
+
+-- Custom track boards (migrate-track-boards.sql): keyed by sim-retention.js
+-- customBoardKey, which the Worker computes from the submitted track.
+CREATE TABLE IF NOT EXISTS custom_tracks (
+  key TEXT PRIMARY KEY,
+  map TEXT NOT NULL,
+  gates INTEGER NOT NULL,
+  code TEXT NOT NULL,
+  created_ms INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS custom_scores (
+  key TEXT NOT NULL,
+  class INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  time_ms INTEGER NOT NULL,
+  submitted_ms INTEGER NOT NULL,
+  PRIMARY KEY (key, class, name)
+);
+CREATE INDEX IF NOT EXISTS custom_scores_rank ON custom_scores (key, class, time_ms);

@@ -246,6 +246,60 @@ npx wrangler d1 execute quadmath-sim-leaderboard --file=./src/migrate-lines.sql 
 Until a Worker with these routes is live, SHARE copies the long link
 instead, and links that carry the ghost in the URL work without it.
 
+## Builder track boards (`/api/track/submit`, `/api/track/board`)
+
+Online boards for builder tracks: the ones a pilot builds, saves, or opens
+from a `#trk=` link. A board is keyed by the track itself
+(`sim-retention.js` `customBoardKey`: `c.` + 16 hex of SHA-256 over the map
+and the gates + `.p` + `PHYS_VER`), which the Worker computes from the track
+each run is submitted with. Runs go into `custom_scores` (a pilot's best per
+board and class, as `scores`), and the track's code into `custom_tracks` on its
+first accepted run. `scores`, the weekly and daily routes and `PHYS_VER` are
+unchanged.
+
+Caps: a track needs 3 gates (`CUSTOM_TRACK_MIN_GATES`), and its share code at
+most 4096 characters (`CUSTOM_TRACK_CODE_MAX`, about 65 gates). The run must
+be at least 2.5 s (the Daily Line's floor) and is checked like a weekly run
+(`validateSubmittedRun`: one pass, gates in order, speed, time). Posts share
+the 12 / IP / hour rate limit.
+
+Deploy order (the page copes with either order: until the Worker answers
+these routes, a 404 hides the board quietly):
+
+1. Merge the PR (Pages ships the page).
+2. From the main checkout, add the tables, then deploy through the guard:
+
+   ```bash
+   git pull --ff-only
+   cd workers/sim-leaderboard
+   npx wrangler d1 execute quadmath-sim-leaderboard --file=./src/migrate-track-boards.sql --remote
+   npm run predeploy
+   npm run deploy
+   ```
+
+   The migration is idempotent (`IF NOT EXISTS`) and touches only the two new
+   tables. Run it before `npm run deploy`: the new routes need the tables.
+
+3. Check:
+
+   ```bash
+   curl -sS 'https://sim-leaderboard.ryan-roths.workers.dev/api/track/board?key=c.0123456789abcdef.p7&class=65'
+   curl -sS 'https://sim-leaderboard.ryan-roths.workers.dev/api/track/board?key=bad'
+   ```
+
+   The first answers `{"ok":true,...,"entries":[],"online":true}`, the second
+   `{"ok":false,"reason":"BAD KEY"}` (400). In the sim, a finished run on a
+   builder track (or a `#trk=` link) shows "<track name> · online" under the
+   result on the lap panel.
+
+To see the rows:
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT key, class, name, time_ms, datetime(submitted_ms/1000,'unixepoch') AS at FROM custom_scores ORDER BY submitted_ms DESC LIMIT 10"
+```
+
+Removing a row: `DELETE FROM custom_scores WHERE key='c.…' AND class=65 AND name='SomeName'`.
+
 ## Local
 
 The client takes `https://` leaderboard URLs only, so run the Worker over
