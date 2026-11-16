@@ -40,34 +40,60 @@ export function pilotNameKey(raw) {
     .replace(/[01i23456789v]/g, (c) => LOOK_ALIKE[c] || c);
 }
 
-// A key as the blocklist reads it: ph f, repeated letters made one.
-export function blockKey(key) {
-  return String(key).replace(/ph/g, 'f').replace(/(.)\1+/g, '$1');
+// The blocklist reads a name three ways, and a word with each:
+//   base    lower case, separators dropped, the one-letter look-alikes
+//           folded (not rn m or vv w: "porn" would read "pom" and refuse
+//           Pompey)
+//   folded  base, with ph f and repeated letters made one ("Fuuck",
+//           "Phuck"), for words that stay 4 letters or more folded ('kkk'
+//           folds to 'k')
+//   key     the claim key, for words with no rn or vv in them ("VVhore")
+function singleFold(raw) {
+  return pilotDisplayName(raw).toLowerCase().replace(/[ ._-]/g, '').replace(/[01i23456789v]/g, (c) => LOOK_ALIKE[c] || c);
 }
-
-// Whether a key holds a blocked word (words: keys, as NAME_BLOCK_ROOTS).
-export function keyHasBlockedWord(key, words) {
-  const k = String(key), b = blockKey(k);
-  // Folded, a word must stay 4 letters or more ('kkk' folds to 'k').
-  return words.some((w) => { const f = blockKey(w); return k.includes(w) || (f.length >= 4 && b.includes(f)); });
+export function blockKey(base) {
+  return String(base).replace(/ph/g, 'f').replace(/(.)\1+/g, '$1');
+}
+function wordForms(word) {
+  const base = singleFold(word);
+  const key = pilotNameKey(word);
+  return { base, folded: blockKey(base), key: key === base ? key : null };
+}
+function nameForms(raw) {
+  const base = singleFold(raw);
+  return { base, folded: blockKey(base), key: pilotNameKey(raw) };
+}
+// Whether a name holds one of these words anywhere (roots).
+export function nameHasBlockedWord(raw, words) {
+  const n = nameForms(raw);
+  return (words || []).some((w) => {
+    const f = typeof w === 'string' ? wordForms(w) : w;
+    return n.base.includes(f.base) || (f.folded.length >= 4 && n.folded.includes(f.folded)) || (f.key && n.key.includes(f.key));
+  });
+}
+// Whether a name is one of these words whole.
+function nameIsWord(raw, words) {
+  const n = nameForms(raw);
+  return words.some((f) => n.base === f.base || n.folded === f.folded || (f.key && n.key === f.key));
 }
 
 const keys = (list) => Object.freeze(list.map(pilotNameKey));
+const forms = (list) => Object.freeze(list.map(wordForms));
 
 export const NAME_RESERVED = keys([
   'pilot', 'pace', 'pace bot', 'autopilot', 'quadmath', 'admin', 'moderator', 'official', 'system',
 ]);
-// Roots refused anywhere in a key. Kept to words that are not inside common
+// Roots refused anywhere in a name. Kept to words that are not inside common
 // names or words once look-alikes are folded (no "ass", "cock", "rape",
 // "heil", "nazi", "rapist": Bass, Hancock, Grape, Shelly, Nazir, therapist).
-export const NAME_BLOCK_ROOTS = keys([
+export const NAME_BLOCK_ROOTS = forms([
   'fuck', 'shit', 'cunt', 'bitch', 'nigg', 'faggot', 'fagot', 'whore', 'slut',
   'hitler', 'kike', 'chink', 'gook', 'wetback', 'beaner', 'retard', 'tranny',
   'penis', 'vagina', 'pussy', 'porn', 'wanker', 'twat', 'jizz', 'molest', 'pedophile', 'paedo', 'kkk',
   'cocksuck', 'dickhead', 'motherf', 'asshole', 'arsehole', 'blowjob', 'handjob', 'cumshot', 'dildo',
 ]);
-// Short words refused only as the whole key.
-export const NAME_BLOCK_EXACT = keys([
+// Short words refused only as the whole name.
+export const NAME_BLOCK_EXACT = forms([
   'ass', 'arse', 'cum', 'dick', 'cock', 'fag', 'rape', 'spic', 'pedo', 'tit', 'tits', 'sex', 'anal', 'piss',
 ]);
 
@@ -83,7 +109,7 @@ export function pilotNameProblem(raw) {
   if (name.length < PILOT_NAME_MIN || name.length > PILOT_NAME_MAX) return 'BAD NAME';
   if (!NAME_RE.test(name) || !/[A-Za-z]/.test(name)) return 'BAD NAME';
   if (NAME_RESERVED.includes(key)) return 'NAME NOT ALLOWED';
-  if (NAME_BLOCK_EXACT.includes(key) || NAME_BLOCK_EXACT.includes(blockKey(key))) return 'NAME NOT ALLOWED';
-  if (keyHasBlockedWord(key, NAME_BLOCK_ROOTS)) return 'NAME NOT ALLOWED';
+  if (nameIsWord(name, NAME_BLOCK_EXACT)) return 'NAME NOT ALLOWED';
+  if (nameHasBlockedWord(name, NAME_BLOCK_ROOTS)) return 'NAME NOT ALLOWED';
   return null;
 }

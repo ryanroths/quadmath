@@ -258,6 +258,8 @@ Worker's copy of the track, never one a client sent:
 - one pass, every gate in order;
 - the time is the ghost's plus whole miss penalties;
 - the speed cap for the class, `PHYS_VER`;
+- at the page's rate: the median step between samples at most 80 ms
+  (`SPARSE SAMPLES`), so a turn can be seen, and up to 2800 samples;
 - flown as a whoop can fly (`IMPLAUSIBLE FLIGHT` otherwise): the force on
   the quad at most 1.3 x its thrust plus drag, a few bumps allowed. A ghost
   drawn straight from gate to gate fails this; a smooth path scripted at
@@ -266,7 +268,9 @@ Worker's copy of the track, never one a client sent:
 - not a pace bot, not a test pilot's run;
 - not a copy (`COPIED RUN`): not the exact flight already posted or shared
   under another name, and not within 0.2 u (mean) of the path of a stored
-  top-10 ghost under another name, however it was nudged or retimed.
+  top-10 ghost under another name, however it was nudged or retimed. A
+  SHARE notes its run as its name's only when the sharing browser holds
+  that name.
 
 A board keeps its 200 fastest per class, each row with its time, splits
 and the ghost's digest. The full ghost is kept for the 10 fastest only,
@@ -276,7 +280,9 @@ tracks' fifteen boards. A pilot who moves into the top 10 because rows
 above were deleted has no ghost until their next better run. A run slower
 than the 200th is not stored, and the reply gives its place. Builder boards
 also keep their 200 fastest. A clean Daily Line (no modifier) on one of
-these tracks is also posted to that track's board.
+these tracks is also posted to that track's board, when its ghost passes
+these checks (the Daily's ghost is strided to 480 samples, so on a run over
+about 40 s it is too sparse and only the Daily Line board takes it).
 
 Names (`sim-pilot-names.js`), on every board:
 

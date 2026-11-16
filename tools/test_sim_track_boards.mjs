@@ -309,7 +309,9 @@ test('sim.html: a builder track\'s finish goes to its board, quietly', () => {
   assert.doesNotMatch(submit, /toast\(/, 'no toast, refused or not');
   assert.match(submit, /'\/api\/track\/submit'/);
   const fetchFn = extract('trackBoardFetch');
-  assert.match(fetchFn, /if\(!r\.ok\)return null;/, 'a 404 or a refusal is no board');
+  // A 404 or a refusal is no board; asked for (init.refusal), a refusal says why.
+  assert.match(fetchFn, /if\(!r\.ok\)\{\s*if\(!\(init&&init\.refusal\)\)return null;/, 'a 404 or a refusal is no board');
+  assert.match(submit, /j\.refused&&j\.status!==429/, 'a refused run is not sent again, unless rate limited');
   assert.match(fetchFn, /AbortController/);
   assert.doesNotMatch(extract('loadTrackBoard') + fetchFn + extract('trackBoardHtml'), /toast\(/);
   assert.match(extract('applyTrackLink'), /loadTrackBoard\(t\);/, 'a link fetches its board up front');

@@ -1042,7 +1042,7 @@ import {
   BF_CLASS_TUNES, bfClassDiff,
 } from "./sim-core-adapter.js?v=eae197833699";
 import {LINE_URL_MAX,LINE_ID_RE,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=c7b112319e28";
-import {pilotNameProblem} from "./sim-pilot-names.js?v=13b29760ad13";
+import {pilotNameProblem} from "./sim-pilot-names.js?v=265d8504aeef";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
 import {
@@ -1152,13 +1152,13 @@ import {
   defaultWhoopKit, ghostFromObj, shareTrackPayload, fromShareTrackPayload,
   customBoardKey, customTrackCode, normalizeTrackSubmit, isCustomBoardTrackId, customTrackProblem,
   CUSTOM_TRACK_MIN_GATES, CUSTOM_TRACK_CODE_MAX,
-} from "./sim-retention.js?v=303475a6e40c";
+} from "./sim-retention.js?v=10411c6fac2e";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=258df0ed72ad";
+} from "./sim-secrets.js?v=b547b772411a";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
   fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=3f4158ced8a5";
 window._simBooted=true; // tells the watchdog above the module actually executed
@@ -7936,18 +7936,14 @@ async function importGhost(){
 function currentPilotName(){
   return sanitizePilotName(pilotNameEl&&pilotNameEl.value);
 }
-// Whether the boards take the pilot's name (sim-pilot-names.js, the Worker's
-// rules), and if not, says why once a session rather than sending a run the
-// Worker will refuse.
-let nameToldAt=0;
-function onlineNameOk(){
-  const why=pilotNameProblem(pilotNameEl&&pilotNameEl.value);
-  if(!why)return true;
-  if(performance.now()-nameToldAt>60000){
-    nameToldAt=performance.now();
-    toast((why==='SET A NAME'?'SET A PILOT NAME':'PILOT NAME '+why)+' — 3-16 letters/digits, Tune → Ghost sharing');
-  }
-  return false;
+// Why the boards won't take the pilot's name (sim-pilot-names.js, the
+// Worker's rules, on the name the page sends), or null. A run is not sent
+// under a name the Worker would refuse; the finish says why instead.
+function onlineNameProblem(){return pilotNameProblem(currentPilotName());}
+function onlineNameOk(){return !onlineNameProblem();}
+function onlineNameNote(){
+  const why=onlineNameProblem();
+  return why?(why==='SET A NAME'?'SET A PILOT NAME (TUNE)':'PILOT NAME '+why):'';
 }
 function skinProgress(){
   const medals=(coach&&coach.progress())?coach.progress().medals:{};
@@ -8028,6 +8024,11 @@ function noteRetentionFinish(id, total, rec, submitRec){
     else maybeSubmitTrackBoard(id, total, submitRec||rec);
   }
   if(held)extra=(extra?extra+' · ':'')+'TEST PILOT · NOT SENT';
+  // A board run not sent for the pilot's name: the finish says so.
+  if(!held&&onlineBoardsEnabled(leaderboardUrl())&&(isWeeklyTrackId(id)||isCustomBoardTrackId(id)||(dailyLineLive&&String(id)===String(dailyLineFor(utcDateId()).trackId)))&&!offBoards){
+    const note=onlineNameNote();
+    if(note)extra=(extra?extra+' · ':'')+note;
+  }
   if(activeDuel&&rivalGhost&&rivalMatches(rivalGhost.track,id)){
     const r=duelResult(total, rivalGhost.lapTime);
     extra=(extra?extra+' · ':'')+r.text;
@@ -8095,7 +8096,13 @@ async function trackBoardFetch(path, init){
   const timer=ctl?setTimeout(()=>ctl.abort(),TRACK_BOARD_TIMEOUT_MS):0;
   try{
     const r=await fetch(url+path,Object.assign({signal:ctl?ctl.signal:undefined},init||{}));
-    if(!r.ok)return null;
+    // init.refusal: a refusal comes back as {refused, status} instead of null.
+    if(!r.ok){
+      if(!(init&&init.refusal))return null;
+      let reason=String(r.status);
+      try{const e=await r.json();if(e&&e.reason)reason=String(e.reason);}catch(e){}
+      return {refused:reason,status:r.status};
+    }
     const j=await r.json();
     return j&&j.ok&&Array.isArray(j.entries)&&j.online!==false?j:null;
   }catch(e){return null;}
@@ -8235,11 +8242,11 @@ async function maybeSubmitTrackBoard(id,total,rec){
   const sentKey=checked.key+'|'+body.frameMm;
   if(pb&&total>pb&&trackBoardSent.has(sentKey))return;
   if(!onlineNameOk())return;
-  const j=await trackBoardFetch('/api/track/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const j=await trackBoardFetch('/api/track/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),refusal:true});
+  // Sent once the Worker answered, taken or refused, but not for the rate
+  // limit or no answer: those leave the run to be sent again.
+  if(j&&(j.key===checked.key||(j.refused&&j.status!==429)))trackBoardSent.add(sentKey);
   if(j&&j.key===checked.key){
-    // Sent only once the Worker took it: a refusal (a name it won't take, the
-    // rate limit) leaves the run to be sent again.
-    trackBoardSent.add(sentKey);
     // Any board request still out for this track is older than this answer.
     nextTrackBoardSeq(track.id);
     noteTrackBoard(track,checked.key,trackCodeOf(track),body.frameMm,j.entries);

@@ -46,6 +46,11 @@ export const DAILY_LINE_STRICT_MISS_MS = 3000;
 // WEEKLY_GHOST_MAX_SAMPLES.
 export const WEEKLY_SUBMIT_GHOST_MAX = 1500;
 export const WEEKLY_GHOST_MAX_SAMPLES = 1600;
+// A built-in board's run: 15 Hz for its whole length (up to 180 s), and its
+// steps no sparser than BUILTIN_STEP_MEDIAN_MS at the median: the force check
+// (flightSpikes) can't see a turn spread over long steps.
+export const BUILTIN_GHOST_MAX_SAMPLES = 2800;
+export const BUILTIN_STEP_MEDIAN_MS = 80;
 // A line run's time against its ghost: ghost time from the gate-0 sample to
 // the finish sample, plus whole miss penalties, within this many ms.
 export const LINE_TIME_TOL_MS = 150;
@@ -1707,32 +1712,44 @@ export function flightSpikes(samples, frameMm) {
   return spikes;
 }
 
+// A ghost's path: GHOST_PATH_POINTS points evenly spaced along it (by
+// distance, so its times don't matter), to 0.01 u; null for one too short.
+// The board keeps a top ghost's path beside it, so a copy check compares
+// paths without parsing ghosts.
+export const GHOST_PATH_POINTS = 64;
+export function ghostPath(samples, n = GHOST_PATH_POINTS) {
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const s = (samples || []).filter((p) => Array.isArray(p) && p.length >= 4);
+  if (s.length < 2) return null;
+  const cum = [0];
+  for (let i = 1; i < s.length; i++) cum.push(cum[i - 1] + Math.hypot(s[i][1] - s[i - 1][1], s[i][2] - s[i - 1][2], s[i][3] - s[i - 1][3]));
+  const L = cum[cum.length - 1];
+  if (!(L > 1)) return null;
+  const out = [];
+  let j = 0;
+  for (let k = 0; k < n; k++) {
+    const d = L * k / (n - 1);
+    while (j < cum.length - 2 && cum[j + 1] < d) j++;
+    const f = cum[j + 1] > cum[j] ? (d - cum[j]) / (cum[j + 1] - cum[j]) : 0;
+    out.push([1, 2, 3].map((c) => r2(s[j][c] + (s[j + 1][c] - s[j][c]) * f)));
+  }
+  return out;
+}
+
+// Mean distance (u) between two paths (ghostPath), Infinity if either is
+// missing or they differ in length.
+export function pathDistance(pa, pb) {
+  if (!Array.isArray(pa) || !Array.isArray(pb) || !pa.length || pa.length !== pb.length) return Infinity;
+  let sum = 0;
+  for (let k = 0; k < pa.length; k++) sum += Math.hypot(pa[k][0] - pb[k][0], pa[k][1] - pb[k][1], pa[k][2] - pb[k][2]);
+  return sum / pa.length;
+}
+
 // Mean distance (u) between two ghosts' paths, each resampled by distance
 // along it to `n` points: small for the same flight however its times were
 // changed. Infinity for a path too short to compare.
 export function ghostPathDistance(a, b, n = 64) {
-  const along = (samples) => {
-    const s = (samples || []).filter((p) => Array.isArray(p) && p.length >= 4);
-    if (s.length < 2) return null;
-    const cum = [0];
-    for (let i = 1; i < s.length; i++) cum.push(cum[i - 1] + Math.hypot(s[i][1] - s[i - 1][1], s[i][2] - s[i - 1][2], s[i][3] - s[i - 1][3]));
-    const L = cum[cum.length - 1];
-    if (!(L > 1)) return null;
-    const out = [];
-    let j = 0;
-    for (let k = 0; k < n; k++) {
-      const d = L * k / (n - 1);
-      while (j < cum.length - 2 && cum[j + 1] < d) j++;
-      const f = cum[j + 1] > cum[j] ? (d - cum[j]) / (cum[j + 1] - cum[j]) : 0;
-      out.push([1, 2, 3].map((c) => s[j][c] + (s[j + 1][c] - s[j][c]) * f));
-    }
-    return out;
-  };
-  const pa = along(a), pb = along(b);
-  if (!pa || !pb) return Infinity;
-  let sum = 0;
-  for (let k = 0; k < n; k++) sum += Math.hypot(pa[k][0] - pb[k][0], pa[k][1] - pb[k][1], pa[k][2] - pb[k][2]);
-  return sum / n;
+  return pathDistance(ghostPath(a, n), ghostPath(b, n));
 }
 
 function isCityLoopId(id) {
@@ -1787,7 +1804,7 @@ export function validateSubmittedRun(input) {
   const samples = ghost.samples;
   const line = !isCityLoopId(track.id);
   if (samples.length < 8) return { ok: false, reason: 'TOO FEW SAMPLES' };
-  if (samples.length > WEEKLY_GHOST_MAX_SAMPLES) return { ok: false, reason: 'TOO MANY SAMPLES' };
+  if (samples.length > (src.maxSamples || WEEKLY_GHOST_MAX_SAMPLES)) return { ok: false, reason: 'TOO MANY SAMPLES' };
   // minTimeMs: a builder track's floor is the Daily Line's (normalizeTrackSubmit).
   const minMs = Number.isFinite(src.minTimeMs) ? src.minTimeMs : 5000;
   if (!Number.isFinite(timeMs) || timeMs < minMs || timeMs > 180000) return { ok: false, reason: 'BAD TIME' };
@@ -2491,8 +2508,13 @@ export async function normalizeBuiltinSubmit(body, tracks) {
   if (ghost.phys !== PHYS_VER) return { ok: false, reason: 'PHYS MISMATCH' };
   if (isPaceBotGhost(ghost, track)) return { ok: false, reason: 'PACE BOT' };
   const timeMs = +body.timeMs;
-  const checked = validateSubmittedRun({ ghost, track, frameMm, timeMs, threeD: body.threeD, minTimeMs: DAILY_LINE_MIN_MS });
+  const checked = validateSubmittedRun({ ghost, track, frameMm, timeMs, threeD: body.threeD, minTimeMs: DAILY_LINE_MIN_MS, maxSamples: BUILTIN_GHOST_MAX_SAMPLES });
   if (!checked.ok) return checked;
+  // At the page's rate, so a turn is seen (a forger's sparse samples spread it).
+  const steps = [];
+  for (let i = 1; i < ghost.samples.length; i++) steps.push(ghost.samples[i][0] - ghost.samples[i - 1][0]);
+  steps.sort((a, b) => a - b);
+  if (steps[Math.floor(steps.length / 2)] > BUILTIN_STEP_MEDIAN_MS) return { ok: false, reason: 'SPARSE SAMPLES' };
   // Flown as a whoop flies (flightSpikes): on these boards only for now,
   // until real runs show how often an honest one scrapes a wall.
   if (flightSpikes(ghost.samples, frameMm) > flightSpikesMax(track.gates.length)) return { ok: false, reason: 'IMPLAUSIBLE FLIGHT' };

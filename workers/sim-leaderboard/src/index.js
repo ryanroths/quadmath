@@ -28,13 +28,14 @@ import {
   BUILTIN_BOARD_ROWS,
   BUILTIN_BOARD_GHOSTS,
   ghostDigest,
-  ghostPathDistance,
+  ghostPath,
+  pathDistance,
   isTestPilotGhost,
   RATE_SCORE_MAX,
   RATE_SHARE_MAX,
 } from '../../../sim-retention.js';
 import { decodeLineCode, lineIdOf, LINE_CODE_MAX, LINE_ID_RE } from '../../../sim-share.js';
-import { pilotNameProblem, pilotNameKey, pilotDisplayName } from '../../../sim-pilot-names.js';
+import { pilotNameProblem, pilotNameKey, pilotDisplayName, nameHasBlockedWord } from '../../../sim-pilot-names.js';
 import { BUILTIN_BOARD_TRACKS } from '../../../sim-builtin-boards.js';
 
 const CORS_METHODS = {
@@ -234,8 +235,8 @@ async function upsertBuiltin(env, run, pilot, digest, ghost) {
   ).bind(key, c, key, c, BUILTIN_BOARD_ROWS).run();
   if (n < BUILTIN_BOARD_GHOSTS) {
     await env.DB.prepare(
-      'INSERT INTO track_ghosts (board, class, name_key, ghost, time_ms, track_id) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(board, class, name_key) DO UPDATE SET ghost = excluded.ghost, time_ms = excluded.time_ms WHERE excluded.time_ms < track_ghosts.time_ms',
-    ).bind(key, c, pilot.key, JSON.stringify(keptGhost(run, pilot, ghost)), timeMs, run.trackId).run();
+      'INSERT INTO track_ghosts (board, class, name_key, ghost, time_ms, track_id, path) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(board, class, name_key) DO UPDATE SET ghost = excluded.ghost, time_ms = excluded.time_ms, path = excluded.path WHERE excluded.time_ms < track_ghosts.time_ms',
+    ).bind(key, c, pilot.key, JSON.stringify(keptGhost(run, pilot, ghost)), timeMs, run.trackId, JSON.stringify(ghostPath(ghost.samples) || [])).run();
   }
   await env.DB.prepare(
     `DELETE FROM track_ghosts WHERE board = ? AND class = ? AND name_key NOT IN (SELECT name_key FROM track_scores WHERE board = ? AND class = ? ${ORDER} LIMIT ?)`,
@@ -253,7 +254,7 @@ async function blockedWords(env) {
   const hit = blockedCache.get(env.DB);
   if (hit && now - hit.at < 60_000) return hit.words;
   const { results } = await env.DB.prepare('SELECT word FROM blocked_names').all();
-  const words = (results || []).map((r) => pilotNameKey(r.word)).filter((w) => w.length >= 2);
+  const words = (results || []).map((r) => String(r.word || '')).filter((w) => pilotNameKey(w).length >= 2);
   blockedCache.set(env.DB, { at: now, words });
   return words;
 }
@@ -267,7 +268,7 @@ async function pilotFor(env, rawName, tokenHash) {
   const problem = pilotNameProblem(rawName);
   if (problem) return { ok: false, reason: problem, status: 400 };
   const key = pilotNameKey(rawName);
-  if ((await blockedWords(env)).some((w) => key.includes(w))) return { ok: false, reason: 'NAME NOT ALLOWED', status: 400 };
+  if (nameHasBlockedWord(rawName, await blockedWords(env))) return { ok: false, reason: 'NAME NOT ALLOWED', status: 400 };
   let row = await env.DB.prepare('SELECT name, token_hash FROM pilot_keys WHERE key = ?').bind(key).first();
   if (!row) {
     // A name claimed by the Worker before name keys (pilots, by its exact
@@ -300,12 +301,15 @@ async function copiedRun(env, digest, nameKey) {
 
 // A run that follows a stored top ghost of this board (any class) under
 // another name: a copy of a ghost the board served, nudged or retimed.
+// Compared on the paths kept beside the ghosts (ghostPath), not the ghosts.
 async function copiesStoredGhost(env, board, nameKey, ghost) {
-  const { results } = await env.DB.prepare('SELECT name_key, ghost FROM track_ghosts WHERE board = ? AND name_key != ?').bind(board, nameKey).all();
+  const mine = ghostPath(ghost.samples);
+  if (!mine) return false;
+  const { results } = await env.DB.prepare('SELECT path FROM track_ghosts WHERE board = ? AND name_key != ?').bind(board, nameKey).all();
   for (const r of results || []) {
-    let g = null;
-    try { g = JSON.parse(r.ghost); } catch (e) { g = null; }
-    if (g && ghostPathDistance(ghost.samples, g.samples) < COPY_PATH_TOL) return true;
+    let pth = null;
+    try { pth = JSON.parse(r.path || 'null'); } catch (e) { pth = null; }
+    if (pathDistance(mine, pth) < COPY_PATH_TOL) return true;
   }
   return false;
 }
@@ -416,7 +420,7 @@ export async function handleLeaderboard(request, env) {
     const bt = builtinBoardTrack(BUILTIN_BOARD_TRACKS, checked.trackId);
     if (bt && challenge.modifier === 'none') {
       const run = await normalizeBuiltinSubmit({ ...p.body, track: bt.id, trackHash: await builtinTrackHash(bt) }, BUILTIN_BOARD_TRACKS);
-      if (run.ok) await upsertBuiltin(env, run, who.pilot, who.digest, p.body.ghost);
+      if (run.ok && !(await copiesStoredGhost(env, run.key, who.pilot.key, p.body.ghost))) await upsertBuiltin(env, run, who.pilot, who.digest, p.body.ghost);
     }
     const entries = await listBoard(env, checked.week, checked.frameMm, checked.trackId);
     return reply({
@@ -541,7 +545,8 @@ export async function handleLeaderboard(request, env) {
     // from before this sends none and gets the long link instead.)
     const token = typeof parsed.body.token === 'string' ? parsed.body.token.trim() : '';
     if (!TOKEN_RE.test(token)) return reply({ ok: false, reason: 'NO TOKEN' }, 400);
-    const ban = await env.DB.prepare('SELECT reason FROM bans WHERE token_hash = ?').bind(await hashPilotToken(token)).first();
+    const tokenHash = await hashPilotToken(token);
+    const ban = await env.DB.prepare('SELECT reason FROM bans WHERE token_hash = ?').bind(tokenHash).first();
     if (ban) return reply({ ok: false, reason: 'BANNED' }, 403);
     let line;
     try {
@@ -553,7 +558,12 @@ export async function handleLeaderboard(request, env) {
     }
     if (isTestPilotGhost(line.ghost)) return reply({ ok: false, reason: 'TEST PILOT' }, 400);
     const id = await lineIdOf(code);
-    await noteDigest(env, await ghostDigest(line.ghost), pilotNameProblem(line.ghost.name) ? '' : pilotNameKey(line.ghost.name));
+    // The run is noted as its name's only when that name is this browser's
+    // (its key held by this token): a SHARE can't claim a run for a name.
+    if (!pilotNameProblem(line.ghost.name)) {
+      const holder = await env.DB.prepare('SELECT token_hash FROM pilot_keys WHERE key = ?').bind(pilotNameKey(line.ghost.name)).first();
+      if (holder && holder.token_hash === tokenHash) await noteDigest(env, await ghostDigest(line.ghost), pilotNameKey(line.ghost.name));
+    }
     await env.DB.prepare(
       'INSERT OR IGNORE INTO lines (id, code, created_ms) VALUES (?, ?, ?)',
     ).bind(id, code, Date.now()).run();

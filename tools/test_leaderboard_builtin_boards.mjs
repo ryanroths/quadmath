@@ -100,7 +100,10 @@ test('names: the rules, look-alikes are one key, reserved and blocked names refu
   };
   for (const [n, why] of Object.entries(cases)) assert.equal(pilotNameProblem(n), why, JSON.stringify(n));
   for (const n of ['RYFLY', 'ry_fly', 'Ry Fly', 'RyFIy', 'RyF1y', 'Ry.Fly', '  RyFly ']) assert.equal(pilotNameKey(n), pilotNameKey('RyFly'), n);
-  assert.ok(NAME_BLOCK_ROOTS.every((w) => w.length >= 3));
+  assert.ok(NAME_BLOCK_ROOTS.every((w) => w.base.length >= 3));
+  // The rn and vv folds are not read into the words: "porn" is not "pom".
+  for (const ok of ['Pompey', 'Pomelo', 'PomPom', 'Tompom', 'Cornelius']) assert.equal(pilotNameProblem(ok), null, ok);
+  for (const bad of ['Fuuck', 'Phuck', 'VVhore', 'P0rn', 'Asss', 'Pisss', 'Dickk']) assert.equal(pilotNameProblem(bad), 'NAME NOT ALLOWED', bad);
 });
 
 test('a built-in board takes an honest run on each of the five tracks: splits, digest, ghost, place', async () => {
@@ -264,6 +267,11 @@ test('a run already posted or shared under another name is refused', async () =>
   const code = await encodeLineCode({ ghost: shared });
   r = await call(env, 'POST', '/api/line', { code, token: token('a') });
   assert.equal(r.status, 200, r.json.reason);
+  // A SHARE under a name another browser holds does not claim the run for it.
+  const other = await encodeLineCode({ ghost: pageRun(t, { name: 'Alice', seed: 4 }) });
+  assert.equal((await call(env, 'POST', '/api/line', { code: other, token: token('d') })).status, 200);
+  const od = await ghostDigest((await decodeLineCode(other)).ghost);
+  assert.equal(env.DB.rows(`SELECT COUNT(*) AS n FROM ghost_digests WHERE digest = '${od}'`)[0].n, 0);
   // Without a pilot token, no SHARE (a banned browser can't leave it out).
   assert.equal((await call(env, 'POST', '/api/line', { code })).json.reason, 'NO TOKEN');
   // A line under no name the boards take is not recorded as anyone's.
@@ -469,6 +477,15 @@ test('a built-in board refuses a ghost no whoop could fly, and a nudged or retim
     assert.ok(flightSpikes(samples, 65) > flightSpikesMax(t.gates.length), t.id);
     const r = await call(env, 'POST', '/api/builtin/submit', await body(t, forged, { name: 'Forger', token: token('e') }));
     assert.equal(r.json.reason, 'IMPLAUSIBLE FLIGHT', t.id + ': ' + JSON.stringify(r.json));
+    // The same, sampled sparsely so the turns spread: the page's rate is required.
+    for (const stepMs of [200, 300, 450]) {
+      const sparse = [samples[0]];
+      for (const p of samples) if (p[0] - sparse[sparse.length - 1][0] >= stepMs) sparse.push(p);
+      if (sparse[sparse.length - 1] !== samples[samples.length - 1]) sparse.push(samples[samples.length - 1]);
+      const sg = { ...forged, samples: sparse };
+      const rs = await call(env, 'POST', '/api/builtin/submit', await body(t, sg, { name: 'Forger', token: token('e') }));
+      assert.equal(rs.status, 400, t.id + ' at ' + stepMs + ' ms: ' + JSON.stringify(rs.json));
+    }
   }
   // A stored top ghost, nudged 3 cm and flown 3% faster, under another name.
   const t = track('depot-loop');
