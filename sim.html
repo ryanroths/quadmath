@@ -1324,8 +1324,8 @@ applyCrosshair();
 // off with a radio or a gamepad (stickOverlayDefault), until the pilot
 // chooses (Tune: Camera, Stick overlay; quadmathSimStickOverlay). H hides it
 // with the rest of the HUD (feel.hudVisible). The menu, the builder,
-// calibration and the Tune panel hide it in CSS; a replay, which flies no
-// sticks, hides it here.
+// calibration and the Tune panel hide it (CSS, and syncStickOverlay), and so
+// does a replay, which flies no sticks.
 const stickOverlayEl=document.getElementById('stickOverlay');
 const stickOverlayCb=document.getElementById('cbStickOverlay');
 const stickPanelEl=document.getElementById('panel');
