@@ -199,13 +199,15 @@ test('bf core loads the owner\'s full Air65 diff: vbat_sag_compensation 70, thru
   assert.equal(got.thrust_linear, '20');
   assert.equal(got.dyn_idle_min_rpm, '55');
   assert.equal(got.dshot_bidir, 'ON', 'RPM telemetry, which dynamic idle runs on');
-  // sim-core v0.7.0's policy turns the RPM filter off, whatever the diff says
+  // sim-core's policy (since v0.7.0) turns the RPM filter off, whatever the diff says
   // (rpm_filter_harmonics 0): in the sim's 1 kHz loop the notches sit next to
   // Nyquist and ring on a floor contact. Bidirectional DShot stays on, and
   // dynamic idle (below) still runs on its rpm telemetry.
   assert.equal(core.sim.fc.rpmFilter, false, 'the RPM filter is off in the sim');
   assert.equal(core.sim.get(['rpm_filter_harmonics'], { profile: 0 }).rpm_filter_harmonics, '0');
   assert.deepEqual(core.report.policy.map((p) => `${p.key} = ${p.value}`), ['rpm_filter_harmonics = 0'], 'the policy the report lists');
+  assert.equal(core.report.overridden, 0, 'the owner\'s diff sets nothing the sim overrides');
+  assert.deepEqual(core.report.notes, []);
   // Dynamic idle at work: armed at zero throttle, the motors hold its
   // minimum (55 x 100 rpm), above the idle the same diff gives without it.
   const idleRpm = async (c) => {
@@ -222,6 +224,28 @@ test('bf core loads the owner\'s full Air65 diff: vbat_sag_compensation 70, thru
   const off = await idleRpm(core);
   assert.ok(Math.abs(on - 5500) / 5500 < 0.05, `armed idle ${on.toFixed(0)} rpm, dynamic idle's floor 5500`);
   assert.ok(on > off + 300, `idle ${on.toFixed(0)} rpm with dynamic idle, ${off.toFixed(0)} without`);
+});
+
+test('bf core: a diff line that sets rpm_filter_harmonics loads, set by the sim with a note (sim-core v0.8.0)', async () => {
+  const NOTE = "rpm_filter_harmonics set to 0 in the sim (1 kHz loop can't track whoop motor rpm)";
+  const plain = await ownerCore();
+  const withLine = await createBfCore({
+    SimCore,
+    wasm: readFileSync('vendor/sim-core/sim-core.wasm'),
+    airframe: JSON.parse(readFileSync('vendor/sim-core/airframes/air65.json', 'utf8')),
+    diff: OWNER_DIFF + '\nset rpm_filter_harmonics = 3',
+    world: { floorZ: 0 },
+  });
+  const r = withLine.report;
+  const line = r.lines.find((l) => l.text === 'set rpm_filter_harmonics = 3');
+  assert.equal(line.status, 'overridden', 'not refused');
+  assert.equal(line.msg, NOTE);
+  assert.equal(r.overridden, 1);
+  assert.deepEqual(r.notes, [NOTE]);
+  assert.deepEqual([r.applied, r.rejected, r.errors], [plain.report.applied, plain.report.rejected, plain.report.errors], 'every other line as without it');
+  assert.equal(withLine.sim.get(['rpm_filter_harmonics'], { profile: 0 }).rpm_filter_harmonics, '0');
+  assert.equal(withLine.sim.fc.rpmFilter, false);
+  assert.deepEqual(withLine.sim.eeprom, plain.sim.eeprom, 'the saved config image is the one without the line');
 });
 
 test('the 65-betafpv-ryfly-1219s card is the diff the bf core flies, on every field the card carries', async () => {
@@ -867,6 +891,12 @@ test('a js-core run on a bf class (the 65, the 75) stays off the boards (PHYS MI
   // A boot fault restores what flew; the count is the paste's own changing lines.
   assert.ok(toBf.includes('}catch(e){') && toBf.indexOf('bfLoadDiff(prev,label());') < toBf.indexOf("if(!r){"));
   assert.ok(toBf.includes('const took=mine.filter(bfLineChanges).length;'));
+  // A line the sim sets itself (sim-core v0.8.0: 'overridden', with a note):
+  // counted as set by the sim, not refused, and its note shown in the status.
+  assert.ok(toBf.includes("const over=mine.filter(l=>l.status==='overridden');"));
+  assert.ok(toBf.includes("(over.length>0?', '+over.length+' set by the sim':'')"));
+  assert.ok(toBf.includes("+'; it flies what it flew before'+noteText,'err');"));
+  assert.ok(toBf.includes("+detail+noteText,'ok');"));
   for (const js of ['saveRates', 'rates[ax]', 'qp.setTune']) assert.ok(!toBf.includes(js), 'the bf import leaves the js core alone: ' + js);
   assert.ok(html.includes("const want=bfWantDiff();\n      if(bfDiff()&&want!==b.diffLoaded)bfLoadDiff(want,b.cliText?'CLI import':bfTuneId());"));
 

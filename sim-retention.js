@@ -171,7 +171,7 @@ const LINE_GATES = Object.freeze({ rig: RIG_LINE_GATES, house: HOUSE_LINE_GATES 
 // The six Coach drills as race segments (tools/rig_daily.mjs SEGMENTS), world
 // units: each one's start pad (a course starts on its first segment's) and its
 // gates (the first its link gate). Every loop of 3 to 5 of them, flown two laps
-// by the Coach autopilot on the bf core (sim-core v0.7.0, the Air65 on the
+// by the Coach autopilot on the bf core (sim-core v0.8.0, the Air65 on the
 // owner's diff): RIG_LOOP_MS its lap at pace, ms (a loop is its segments in
 // order, turned to start on the first in RIG_SEGMENTS; the same lap whichever
 // it starts on); RIG_START_MS the most the first lap, from the pad, ran

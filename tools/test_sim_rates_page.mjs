@@ -297,6 +297,22 @@ test('rates are the pilot\'s: 65, 75, 85 and back keep the same rates on the bf 
     assert.deepEqual(cli[4].bfPids, pids65);
     assert.deepEqual(cli[4].srcBf, { text: SRC.bfCli, shown: true });
 
+    // A paste that sets one of the sim's own settings (sim-core v0.8.0's
+    // policy): it loads, the line is set by the sim, and the status shows the
+    // note. Alone it changes nothing, so the earlier paste still flies.
+    const NOTE = "rpm_filter_harmonics set to 0 in the sim (1 kHz loop can't track whoop motor rpm)";
+    const pol = await run(`const out = [];
+      const alone = await R.importCli('set rpm_filter_harmonics = 3');
+      out.push(Object.assign(R.snap(), { status: alone }));
+      const mixed = await R.importCli('set roll_srate = 81\\nset rpm_filter_harmonics = 3');
+      out.push(Object.assign(R.snap(), { status: mixed }));
+      return JSON.stringify(out);`);
+    assert.equal(pol[0].status, 'Betaflight took none of it, 1 set by the sim; it flies what it flew before\n' + NOTE);
+    assert.equal(pol[0].bfRates.roll_srate, '80', 'the earlier paste still flies');
+    assert.equal(pol[1].status, 'Betaflight took 1 line on top of 65-betafpv-ryfly-1219s, 1 set by the sim\n' + NOTE);
+    assert.equal(pol[1].bfRates.roll_srate, '81');
+    for (const s of pol) assert.deepEqual(s.rates, mine.rates, 'the bf import leaves the js profile alone');
+
     // ?core=js (deprecated): the 65 on the js core too, the saved profile on every class.
     await cdp(ws, 'Page.navigate', { url: base + '&core=js' });
     await sleep(1000);

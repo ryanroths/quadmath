@@ -4,7 +4,9 @@
 // Betaflight's echo and again after the saved image boots, aux slots against
 // Betaflight's resolved slot, and features after boot.
 //
-// Verdicts: 'apply' (sent to the CLI), 'rejected' (with msg), 'comment'.
+// Verdicts: 'apply' (sent to the CLI), 'rejected' (with msg), 'comment', and
+// 'overridden' (a setting the sim sets itself, POLICY_SETS: not sent, msg is
+// the policy's note for the host to show).
 //
 // This file is part of quadmath-sim-core, GPL-3.0-or-later. See LICENSE.
 
@@ -75,9 +77,12 @@ export const FEATURES_APPLIED = new Set(['AIRMODE', 'ANTI_GRAVITY', 'MOTOR_STOP'
 // Aux channels sim-core.input() can drive: AUX1..AUX12 (indices 0..11).
 export const AUX_CHANNELS = 12;
 
-// Settings the sim sets itself after the diff, whatever the diff says; a diff
-// line that sets one is rejected with the reason. sim-core.js applies them
-// before save and checks them again after the saved image boots.
+// Settings the sim sets itself after the diff, whatever the diff says. A diff
+// line that sets one is not sent to Betaflight: it is 'overridden', with the
+// policy's note for the host to show, and the rest of the diff applies as
+// it would without it (owner, 2026-11-16: a pasted diff must still load).
+// sim-core.js applies them before save and checks them again after the
+// saved image boots.
 //   The RPM filter (owner, 2026-11-13): in the sim's 1 kHz loop its notches
 //   sit next to Nyquist, and on the floor at zero throttle with air mode
 //   latched the PID's motor outputs alternate every loop, the motors' rpm
@@ -90,6 +95,7 @@ export const POLICY_SETS = Object.freeze([
   {
     key: 'rpm_filter_harmonics', value: '0',
     msg: 'the RPM filter is off in the sim: in its 1 kHz loop the notches sit next to Nyquist and ring on a contact; bidirectional DShot stays on',
+    note: "rpm_filter_harmonics set to 0 in the sim (1 kHz loop can't track whoop motor rpm)",
   },
 ]);
 
@@ -156,7 +162,7 @@ export function classifyLine(rawText, { loopHz = 1000 } = {}) {
     }
     const policy = POLICY_SETS.find((p) => p.key === key);
     if (policy) {
-      return { status: 'rejected', msg: `${policy.msg} (the sim sets ${key} = ${policy.value})` };
+      return { status: 'overridden', msg: policy.note };
     }
     if (key === 'motor_pwm_protocol' && !/^dshot/i.test(value)) {
       return { status: 'rejected', msg: 'sim-core needs a DShot protocol (digital idle, telemetry, one PID per gyro sample)' };
