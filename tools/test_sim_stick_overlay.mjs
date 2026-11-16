@@ -512,7 +512,10 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         await hold(true, 'ArrowRight', 'ArrowRight', 39);
         await hold(true, 'd', 'KeyD', 68);
         await hold(true, 'w', 'KeyW', 87);
-        await js(`await S.wait(500); return 1;`);
+        // The keys move the sticks in sim time (W ramps the throttle 1.4 a
+        // second): held until they are there, however fast this machine runs
+        // the sim against the wall clock (a CI runner's is about half).
+        await js(`await S.until(() => { const k = S.s.stickOverlay().stick; return k.r > 0.9 && k.y > 0.9 && k.t > 0.4; }, 8000); return 1;`);
         await hold(false, 'w', 'KeyW', 87);
         await js(`await S.wait(500); return 1;`);
         r = await tracks(js, 'keys held');

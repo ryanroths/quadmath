@@ -669,6 +669,9 @@ test('track boards in Chrome: a link\'s run lands on its board, a second profile
             wk.calls.length = 0;
             r = await js(`return JSON.stringify(await S.flyPath(${WS}, 6));`);
             assert.equal(r.done, true, 'raced to the finish: ' + JSON.stringify(r));
+            // The send comes from the finish, in the sim's time: waited for
+            // (up to 10 s), then the same 1.5 s for any toast it would raise.
+            for (let i = 0; i < 100 && !wk.calls.some((c) => c.endsWith(' /api/track/submit')); i++) await sleep(100);
             r = await js(`await S.wait(1500); return JSON.stringify(S.landed());`);
             // The page tried to send it: its preflight (OPTIONS) or the POST, which a
             // down or 404 Worker fails.
