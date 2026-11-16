@@ -109,5 +109,6 @@ CREATE TABLE IF NOT EXISTS track_ghosts (
   name_key TEXT NOT NULL,
   ghost TEXT NOT NULL,
   time_ms INTEGER NOT NULL,
+  track_id TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (board, class, name_key)
 );

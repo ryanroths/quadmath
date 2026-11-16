@@ -28,6 +28,7 @@ import {
   BUILTIN_BOARD_ROWS,
   BUILTIN_BOARD_GHOSTS,
   ghostDigest,
+  ghostPathDistance,
   isTestPilotGhost,
 } from '../../../sim-retention.js';
 import { decodeLineCode, lineIdOf, LINE_CODE_MAX, LINE_ID_RE } from '../../../sim-share.js';
@@ -50,6 +51,10 @@ const RATE_MAX = { score: RATE_SCORE_MAX, share: RATE_SHARE_MAX };
 // A builder track's board keeps this many rows per class, as a built-in's.
 const CUSTOM_BOARD_ROWS = BUILTIN_BOARD_ROWS;
 const JSON_LIMIT = 350_000;
+// A run whose path is within this (mean, u, sim-retention.js
+// ghostPathDistance) of a stored top ghost under another name is a copy of
+// it, however it was nudged or retimed.
+const COPY_PATH_TOL = 0.2;
 const TOKEN_RE = /^[a-f0-9]{32,64}$/i;
 
 function corsHeaders(env, request) {
@@ -85,17 +90,14 @@ async function readJson(request) {
 
 // bucket: 'score' or 'share'. The window is the bucket and the UTC hour
 // (rows from before the split, the bare hour, are not read).
+// One statement, so posts sent at once can't all read the count before any
+// of them adds to it.
 async function checkRate(env, ip, now, bucket) {
   const window = bucket + ':' + rateWindowId(now);
   const row = await env.DB.prepare(
-    'SELECT n FROM rate_limit WHERE ip = ? AND window = ?',
+    'INSERT INTO rate_limit (ip, window, n) VALUES (?, ?, 1) ON CONFLICT(ip, window) DO UPDATE SET n = n + 1 RETURNING n',
   ).bind(ip, window).first();
-  const n = row && row.n ? row.n : 0;
-  if (n >= RATE_MAX[bucket]) return false;
-  await env.DB.prepare(
-    'INSERT INTO rate_limit (ip, window, n) VALUES (?, ?, 1) ON CONFLICT(ip, window) DO UPDATE SET n = n + 1',
-  ).bind(ip, window).run();
-  return true;
+  return !!row && row.n <= RATE_MAX[bucket];
 }
 
 // The scores.week column holds boardKeyFor(week): the week (or Daily Line day
@@ -198,6 +200,15 @@ async function builtinPlace(env, key, c, nameKey) {
   return { rank: (ahead ? ahead.n : 0) + 1, name: me.name, timeMs: me.time_ms };
 }
 
+// The ghost as a board keeps and serves it: the run's samples (8 numbers
+// each) under the pilot's claimed name, nothing else the body carried.
+function keptGhost(run, pilot, ghost) {
+  return {
+    v: 1, phys: ghost.phys, track: run.trackId, name: pilot.name, lapTime: run.timeMs,
+    samples: ghost.samples.map((p) => p.slice(0, 8).map((x) => +x)),
+  };
+}
+
 async function upsertBuiltin(env, run, pilot, digest, ghost) {
   const { key, frameMm: c, timeMs } = run;
   const existing = await env.DB.prepare(
@@ -212,16 +223,19 @@ async function upsertBuiltin(env, run, pilot, digest, ghost) {
   // off the board is not told a slower run is a new best.
   if (n >= BUILTIN_BOARD_ROWS) return { improved: false, ranked: false, timeMs, rank: n + 1 };
   const now = Date.now();
-  await env.DB.prepare(
+  const wrote = await env.DB.prepare(
     'INSERT INTO track_scores (board, class, name_key, name, time_ms, splits, digest, track_id, submitted_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(board, class, name_key) DO UPDATE SET name = excluded.name, time_ms = excluded.time_ms, splits = excluded.splits, digest = excluded.digest, submitted_ms = excluded.submitted_ms WHERE excluded.time_ms < track_scores.time_ms',
   ).bind(key, c, pilot.key, pilot.name, timeMs, JSON.stringify(run.splits || []), digest, run.trackId, now).run();
+  // A faster run of theirs landed first (two posts at once): this one is not
+  // their best, and its ghost is not kept.
+  if (!(wrote && wrote.meta && wrote.meta.changes > 0)) return { improved: false, timeMs };
   await env.DB.prepare(
     `DELETE FROM track_scores WHERE board = ? AND class = ? AND name_key IN (SELECT name_key FROM track_scores WHERE board = ? AND class = ? ${ORDER} LIMIT -1 OFFSET ?)`,
   ).bind(key, c, key, c, BUILTIN_BOARD_ROWS).run();
   if (n < BUILTIN_BOARD_GHOSTS) {
     await env.DB.prepare(
-      'INSERT INTO track_ghosts (board, class, name_key, ghost, time_ms) VALUES (?, ?, ?, ?, ?) ON CONFLICT(board, class, name_key) DO UPDATE SET ghost = excluded.ghost, time_ms = excluded.time_ms',
-    ).bind(key, c, pilot.key, JSON.stringify(ghost), timeMs).run();
+      'INSERT INTO track_ghosts (board, class, name_key, ghost, time_ms, track_id) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(board, class, name_key) DO UPDATE SET ghost = excluded.ghost, time_ms = excluded.time_ms WHERE excluded.time_ms < track_ghosts.time_ms',
+    ).bind(key, c, pilot.key, JSON.stringify(keptGhost(run, pilot, ghost)), timeMs, run.trackId).run();
   }
   await env.DB.prepare(
     `DELETE FROM track_ghosts WHERE board = ? AND class = ? AND name_key NOT IN (SELECT name_key FROM track_scores WHERE board = ? AND class = ? ${ORDER} LIMIT ?)`,
@@ -254,11 +268,26 @@ async function pilotFor(env, rawName, tokenHash) {
   if (problem) return { ok: false, reason: problem, status: 400 };
   const key = pilotNameKey(rawName);
   if ((await blockedWords(env)).some((w) => key.includes(w))) return { ok: false, reason: 'NAME NOT ALLOWED', status: 400 };
-  await env.DB.prepare(
-    'INSERT OR IGNORE INTO pilot_keys (key, name, token_hash, claimed_ms) VALUES (?, ?, ?, ?)',
-  ).bind(key, pilotDisplayName(rawName), tokenHash, Date.now()).run();
-  const row = await env.DB.prepare('SELECT name, token_hash FROM pilot_keys WHERE key = ?').bind(key).first();
+  let row = await env.DB.prepare('SELECT name, token_hash FROM pilot_keys WHERE key = ?').bind(key).first();
+  if (!row) {
+    // A name claimed by the Worker before name keys (pilots, by its exact
+    // name) after the migration carried the others over: its claim holds,
+    // for its look-alikes too (pilots stopped growing when this Worker
+    // shipped, so reading it whole is cheap).
+    const { results: olds } = await env.DB.prepare('SELECT name, token_hash, claimed_ms FROM pilots ORDER BY claimed_ms ASC').all();
+    const old = (olds || []).find((o) => pilotNameKey(o.name) === key) || null;
+    await env.DB.prepare(
+      'INSERT OR IGNORE INTO pilot_keys (key, name, token_hash, claimed_ms) VALUES (?, ?, ?, ?)',
+    ).bind(key, pilotDisplayName(rawName), old ? old.token_hash : tokenHash, old ? old.claimed_ms : Date.now()).run();
+    row = await env.DB.prepare('SELECT name, token_hash FROM pilot_keys WHERE key = ?').bind(key).first();
+  }
   if (!row || row.token_hash !== tokenHash) return { ok: false, reason: 'NAME TAKEN', status: 403 };
+  // A claim carried over under a name the rules refuse (e.g. "Ry..Fly"): the
+  // boards show the name its holder posts under now.
+  if (pilotNameProblem(row.name)) {
+    await env.DB.prepare('UPDATE pilot_keys SET name = ? WHERE key = ?').bind(pilotDisplayName(rawName), key).run();
+    row = { name: pilotDisplayName(rawName) };
+  }
   return { ok: true, key, name: row.name };
 }
 
@@ -269,7 +298,20 @@ async function copiedRun(env, digest, nameKey) {
   return !!(row && row.name_key && row.name_key !== nameKey);
 }
 
+// A run that follows a stored top ghost of this board (any class) under
+// another name: a copy of a ghost the board served, nudged or retimed.
+async function copiesStoredGhost(env, board, nameKey, ghost) {
+  const { results } = await env.DB.prepare('SELECT name_key, ghost FROM track_ghosts WHERE board = ? AND name_key != ?').bind(board, nameKey).all();
+  for (const r of results || []) {
+    let g = null;
+    try { g = JSON.parse(r.ghost); } catch (e) { g = null; }
+    if (g && ghostPathDistance(ghost.samples, g.samples) < COPY_PATH_TOL) return true;
+  }
+  return false;
+}
+
 async function noteDigest(env, digest, nameKey) {
+  if (!nameKey) return; // a run with no name to own it: not recorded
   await env.DB.prepare(
     'INSERT OR IGNORE INTO ghost_digests (digest, name_key, created_ms) VALUES (?, ?, ?)',
   ).bind(digest, nameKey, Date.now()).run();
@@ -424,6 +466,7 @@ export async function handleLeaderboard(request, env) {
     if (!run.ok) return reply({ ok: false, reason: run.reason }, 400);
     const who = await scorePilot(env, run, p.body.name, p.body.ghost);
     if (!who.ok) return reply({ ok: false, reason: who.reason }, who.status);
+    if (await copiesStoredGhost(env, run.key, who.pilot.key, p.body.ghost)) return reply({ ok: false, reason: 'COPIED RUN' }, 403);
     const saved = await upsertBuiltin(env, run, who.pilot, who.digest, p.body.ghost);
     await noteDigest(env, who.digest, who.pilot.key);
     const entries = await listBuiltin(env, run.key, run.frameMm, 20);
@@ -494,11 +537,12 @@ export async function handleLeaderboard(request, env) {
     if (parsed.error) return reply({ ok: false, reason: parsed.error }, 400);
     const code = parsed.body && parsed.body.code;
     if (typeof code !== 'string' || code.length > LINE_CODE_MAX) return reply({ ok: false, reason: 'BAD LINE CODE' }, 400);
+    // The pilot token: a SHARE from a banned browser is refused. (A page
+    // from before this sends none and gets the long link instead.)
     const token = typeof parsed.body.token === 'string' ? parsed.body.token.trim() : '';
-    if (TOKEN_RE.test(token)) {
-      const ban = await env.DB.prepare('SELECT reason FROM bans WHERE token_hash = ?').bind(await hashPilotToken(token)).first();
-      if (ban) return reply({ ok: false, reason: 'BANNED' }, 403);
-    }
+    if (!TOKEN_RE.test(token)) return reply({ ok: false, reason: 'NO TOKEN' }, 400);
+    const ban = await env.DB.prepare('SELECT reason FROM bans WHERE token_hash = ?').bind(await hashPilotToken(token)).first();
+    if (ban) return reply({ ok: false, reason: 'BANNED' }, 403);
     let line;
     try {
       line = await decodeLineCode(code);
@@ -509,10 +553,10 @@ export async function handleLeaderboard(request, env) {
     }
     if (isTestPilotGhost(line.ghost)) return reply({ ok: false, reason: 'TEST PILOT' }, 400);
     const id = await lineIdOf(code);
+    await noteDigest(env, await ghostDigest(line.ghost), pilotNameProblem(line.ghost.name) ? '' : pilotNameKey(line.ghost.name));
     await env.DB.prepare(
       'INSERT OR IGNORE INTO lines (id, code, created_ms) VALUES (?, ?, ?)',
     ).bind(id, code, Date.now()).run();
-    await noteDigest(env, await ghostDigest(line.ghost), pilotNameProblem(line.ghost.name) ? '' : pilotNameKey(line.ghost.name));
     return reply({ ok: true, id });
   }
 
@@ -533,6 +577,8 @@ export default {
     try {
       return await handleLeaderboard(request, env);
     } catch (e) {
+      // Deployed before migrate-builtin-boards.sql ran (DEPLOY.md): say so.
+      if (/no such table/i.test(String(e && e.message))) return json({ ok: false, reason: 'NOT MIGRATED' }, 503, env, request);
       return json({ ok: false, reason: 'SERVER' }, 500, env, request);
     }
   },

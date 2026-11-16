@@ -258,11 +258,22 @@ Worker's copy of the track, never one a client sent:
 - one pass, every gate in order;
 - the time is the ghost's plus whole miss penalties;
 - the speed cap for the class, `PHYS_VER`;
-- not a pace bot, not a test pilot's run, not a copy of another name's run.
+- flown as a whoop can fly (`IMPLAUSIBLE FLIGHT` otherwise): the force on
+  the quad at most 1.3 x its thrust plus drag, a few bumps allowed. A ghost
+  drawn straight from gate to gate fails this; a smooth path scripted at
+  the speed cap does not. On these boards only, not yet on the weekly or
+  builder boards;
+- not a pace bot, not a test pilot's run;
+- not a copy (`COPIED RUN`): not the exact flight already posted or shared
+  under another name, and not within 0.2 u (mean) of the path of a stored
+  top-10 ghost under another name, however it was nudged or retimed.
 
 A board keeps its 200 fastest per class, each row with its time, splits
-and the ghost's digest. The full ghost is kept for the 10 fastest only
-(about 14 MB at most over the five tracks' fifteen boards). A run slower
+and the ghost's digest. The full ghost is kept for the 10 fastest only,
+stored as the board serves it (its samples under the pilot's claimed name;
+at most 1600 samples, about 100 KB), so about 14 MB at most over the five
+tracks' fifteen boards. A pilot who moves into the top 10 because rows
+above were deleted has no ghost until their next better run. A run slower
 than the 200th is not stored, and the reply gives its place. Builder boards
 also keep their 200 fastest. A clean Daily Line (no modifier) on one of
 these tracks is also posted to that track's board.
@@ -300,21 +311,35 @@ cd workers/sim-leaderboard
 npx wrangler d1 execute quadmath-sim-leaderboard --remote --file=./src/migrate-builtin-boards.sql
 ```
 
+Check that the tables are there (it errors with `no such table` if not):
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT COUNT(*) FROM pilot_keys, bans, blocked_names, ghost_digests, track_scores, track_ghosts"
+```
+
 ```bash
 npm run predeploy
 ```
 
-Check that it prints `PHYS_VER 7` and bundles `sim-builtin-boards.js` and
-`sim-pilot-names.js`, then:
+Check that its `PHYS_VER` line shows 7 and its `bundles` line lists
+`sim-builtin-boards.js` and `sim-pilot-names.js`, then:
 
 ```bash
 npm run deploy
 ```
 
+Then run the migration once more: the old Worker kept claiming new names in
+`pilots` until this deploy, and this carries those over too (it is
+idempotent, and keeps every claim already made).
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --file=./src/migrate-builtin-boards.sql
+```
+
 3. Check:
 
 ```bash
-curl -sS 'https://sim-leaderboard.ryan-roths.workers.dev/api/builtin/tops?class=65'
+curl.exe -sS "https://sim-leaderboard.ryan-roths.workers.dev/api/builtin/tops?class=65"
 ```
 
 ```bash
@@ -326,9 +351,24 @@ earlier claim under its key (`ryfly | RyFly`).
 
 Never `migrations apply`: production's `d1_migrations` table is empty.
 
-Between the merge and the Worker deploy, nothing changes for players: this
-release's page sends no built-in submits (the boards' page comes next). The
-page's only change is that a test pilot's runs are never sent or shared.
+Deployed before the migration, the new Worker answers the routes that need
+the new tables with `503 NOT MIGRATED` (the boards' reads keep working):
+run the migration, nothing else is needed.
+
+Between the merge and the Worker deploy:
+
+- this release's page sends no built-in submits (the boards' page comes
+  next);
+- its SHAREs carry the pilot token, which the old Worker ignores;
+- a test pilot's runs are never sent, shared or counted locally;
+- a name the new rules refuse is not sent: the page says why ("SET A PILOT
+  NAME" or "PILOT NAME BAD NAME", with the rule) instead of posting it.
+
+Once the new Worker is live:
+
+- a page from before this release still posts. A name the rules refuse
+  gets that reason back as a toast.
+- its SHARE gets `NO TOKEN` and copies the long link instead.
 
 ### One-line commands
 
@@ -340,15 +380,15 @@ npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM
 ```
 
 deletes their rows on every built-in board (add `AND track_id='rig-loop'`
-to both for one track).
+to both statements for one track).
 
 ```bash
 npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "INSERT OR IGNORE INTO bans (token_hash, reason, created_ms) SELECT token_hash, 'why', strftime('%s','now')*1000 FROM pilot_keys WHERE key='somekey'"
 ```
 
 bans the browser that holds a name: its score posts and SHAREs are refused
-(`BANNED`). A ban is per browser token: clearing the browser's storage gives
-a new token and needs a new name.
+(`BANNED`; a SHARE needs the token). A ban is per browser token: clearing
+the browser's storage gives a new token, which needs a new name.
 
 ```bash
 npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM bans WHERE token_hash=(SELECT token_hash FROM pilot_keys WHERE key='somekey')"
@@ -363,10 +403,11 @@ npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "INSERT OR I
 blocks a word anywhere in a name's key, from the next minute.
 
 ```bash
-npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM pilot_keys WHERE key='somekey'"
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM scores WHERE name=(SELECT name FROM pilot_keys WHERE key='somekey'); DELETE FROM custom_scores WHERE name=(SELECT name FROM pilot_keys WHERE key='somekey'); DELETE FROM track_scores WHERE name_key='somekey'; DELETE FROM track_ghosts WHERE name_key='somekey'; DELETE FROM ghost_digests WHERE name_key='somekey'; DELETE FROM pilot_keys WHERE key='somekey'"
 ```
 
-frees a name for the next browser to post under it. Its rows stay.
+frees a name for the next browser to post under it, with its rows on every
+board, so the next holder starts with none of them.
 
 ## "Fly my line" (`/api/line`)
 

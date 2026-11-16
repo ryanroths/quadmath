@@ -54,6 +54,21 @@ export const LINE_TIME_TOL_MS = 150;
 // hitched frame is longer).
 export const LINE_SWEEP_SLACK_MAX = 0.6;
 export const LINE_MAX_GAP_MS = 500;
+// A line run's flight, as a whoop flies it: the force on it (its
+// acceleration less gravity) at most FLIGHT_FORCE_MARGIN x (its thrust's,
+// FLIGHT_THRUST_MS2, from vendor/sim-core/airframes: the Air65 57 m/s^2, the
+// Fractal75 50; the 85 as the 65) plus drag's at that speed (FLIGHT_DRAG_K
+// v^2), on steps of 30 ms or more. A few steps over it are bumps (a wall, a
+// gate's frame): flightSpikesMax of them. A ghost drawn gate to gate in
+// straight lines turns at every gate faster than any whoop can; a smooth
+// path at the speed cap is not caught. Checked on the built-in boards only
+// (normalizeBuiltinSubmit).
+export const FLIGHT_THRUST_MS2 = Object.freeze({ 65: 57, 75: 50, 85: 57 });
+export const FLIGHT_FORCE_MARGIN = 1.3;
+export const FLIGHT_DRAG_K = 0.25;
+export function flightSpikesMax(gateCount) {
+  return 3 + Math.floor((gateCount | 0) / 4);
+}
 // From RIG_GEN_DAILY_FROM the Daily alternates by UTC day: on the cut-over
 // day and every second day after it a Rig course generated from the six Coach
 // drills (rigCourseFor), between them the House Loop (the line pool's House
@@ -1658,6 +1673,62 @@ export function isTestPilotGhost(ghost) {
   return !!(ghost && typeof ghost === 'object' && ghost.testPilot);
 }
 
+// The steps of a ghost (samples 30 ms apart or more) where the force on the
+// quad is more than a whoop of the class can make (see FLIGHT_THRUST_MS2).
+export function flightSpikes(samples, frameMm) {
+  const thrust = FLIGHT_THRUST_MS2[classId(frameMm)] || FLIGHT_THRUST_MS2[65];
+  const g = 9.81 * WS_PER_METRE;
+  const pts = [];
+  for (const p of samples || []) {
+    if (!pts.length || p[0] - pts[pts.length - 1][0] >= 30) pts.push(p);
+    else if (p === samples[samples.length - 1]) pts[pts.length - 1] = p;
+  }
+  let spikes = 0;
+  let prev = null;
+  for (let i = 1; i < pts.length; i++) {
+    const dt = (pts[i][0] - pts[i - 1][0]) / 1000;
+    if (!(dt > 0)) continue;
+    const v = { x: (pts[i][1] - pts[i - 1][1]) / dt, y: (pts[i][2] - pts[i - 1][2]) / dt, z: (pts[i][3] - pts[i - 1][3]) / dt, dt };
+    if (prev) {
+      const da = (prev.dt + v.dt) / 2;
+      const fx = (v.x - prev.x) / da, fy = (v.y - prev.y) / da + g, fz = (v.z - prev.z) / da;
+      const speedM = Math.hypot(v.x + prev.x, v.y + prev.y, v.z + prev.z) / 2 / WS_PER_METRE;
+      const limit = WS_PER_METRE * FLIGHT_FORCE_MARGIN * (thrust + FLIGHT_DRAG_K * speedM * speedM);
+      if (Math.hypot(fx, fy, fz) > limit) spikes++;
+    }
+    prev = v;
+  }
+  return spikes;
+}
+
+// Mean distance (u) between two ghosts' paths, each resampled by distance
+// along it to `n` points: small for the same flight however its times were
+// changed. Infinity for a path too short to compare.
+export function ghostPathDistance(a, b, n = 64) {
+  const along = (samples) => {
+    const s = (samples || []).filter((p) => Array.isArray(p) && p.length >= 4);
+    if (s.length < 2) return null;
+    const cum = [0];
+    for (let i = 1; i < s.length; i++) cum.push(cum[i - 1] + Math.hypot(s[i][1] - s[i - 1][1], s[i][2] - s[i - 1][2], s[i][3] - s[i - 1][3]));
+    const L = cum[cum.length - 1];
+    if (!(L > 1)) return null;
+    const out = [];
+    let j = 0;
+    for (let k = 0; k < n; k++) {
+      const d = L * k / (n - 1);
+      while (j < cum.length - 2 && cum[j + 1] < d) j++;
+      const f = cum[j + 1] > cum[j] ? (d - cum[j]) / (cum[j + 1] - cum[j]) : 0;
+      out.push([1, 2, 3].map((c) => s[j][c] + (s[j + 1][c] - s[j][c]) * f));
+    }
+    return out;
+  };
+  const pa = along(a), pb = along(b);
+  if (!pa || !pb) return Infinity;
+  let sum = 0;
+  for (let k = 0; k < n; k++) sum += Math.hypot(pa[k][0] - pb[k][0], pa[k][1] - pb[k][1], pa[k][2] - pb[k][2]);
+  return sum / n;
+}
+
 function isCityLoopId(id) {
   return id === 0 || id === 1 || id === '0' || id === '1' || id === 'city-loop' || id === 'city-zigzag';
 }
@@ -2416,6 +2487,9 @@ export async function normalizeBuiltinSubmit(body, tracks) {
   const timeMs = +body.timeMs;
   const checked = validateSubmittedRun({ ghost, track, frameMm, timeMs, threeD: body.threeD, minTimeMs: DAILY_LINE_MIN_MS });
   if (!checked.ok) return checked;
+  // Flown as a whoop flies (flightSpikes): on these boards only for now,
+  // until real runs show how often an honest one scrapes a wall.
+  if (flightSpikes(ghost.samples, frameMm) > flightSpikesMax(track.gates.length)) return { ok: false, reason: 'IMPLAUSIBLE FLIGHT' };
   const splits = lineRunSplits(ghost.samples, lineRunPasses(ghost.samples, track));
   return {
     ok: true,

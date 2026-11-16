@@ -19,9 +19,7 @@ CREATE TABLE IF NOT EXISTS pilot_keys (
 -- (tools/test_leaderboard_builtin_boards.mjs checks it against the JS).
 INSERT OR IGNORE INTO pilot_keys (key, name, token_hash, claimed_ms)
   SELECT
-    replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(
-      lower(trim(name)), ' ', ''), '.', ''), '-', ''), '_', ''),
-      '0', 'o'), '1', 'l'), 'i', 'l'), '3', 'e'), '4', 'a'), '5', 's'), '7', 't'), 'v', 'u'),
+    replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(trim(name)), ' ', ''), '.', ''), '-', ''), '_', ''), 'vv', 'w'), 'rn', 'm'), '0', 'o'), '1', 'l'), 'i', 'l'), '2', 'z'), '3', 'e'), '4', 'a'), '5', 's'), '6', 'b'), '7', 't'), '8', 'b'), '9', 'g'), 'v', 'u'),
     trim(name), token_hash, claimed_ms
   FROM pilots ORDER BY claimed_ms ASC;
 
@@ -71,5 +69,6 @@ CREATE TABLE IF NOT EXISTS track_ghosts (
   name_key TEXT NOT NULL,
   ghost TEXT NOT NULL,
   time_ms INTEGER NOT NULL,
+  track_id TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (board, class, name_key)
 );

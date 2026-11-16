@@ -1042,6 +1042,7 @@ import {
   BF_CLASS_TUNES, bfClassDiff,
 } from "./sim-core-adapter.js?v=eae197833699";
 import {LINE_URL_MAX,LINE_ID_RE,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=c7b112319e28";
+import {pilotNameProblem} from "./sim-pilot-names.js?v=13b29760ad13";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
 import {
@@ -1151,13 +1152,13 @@ import {
   defaultWhoopKit, ghostFromObj, shareTrackPayload, fromShareTrackPayload,
   customBoardKey, customTrackCode, normalizeTrackSubmit, isCustomBoardTrackId, customTrackProblem,
   CUSTOM_TRACK_MIN_GATES, CUSTOM_TRACK_CODE_MAX,
-} from "./sim-retention.js?v=4d8acc088681";
+} from "./sim-retention.js?v=3042d460bde2";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=e09d5ff06cdc";
+} from "./sim-secrets.js?v=cde8a8209b60";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
   fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=3f4158ced8a5";
 window._simBooted=true; // tells the watchdog above the module actually executed
@@ -1964,7 +1965,9 @@ function finishRun(){
   const submitRec=ghostRec&&ghostRec.length?downsampleGhost(ghostRec,WEEKLY_SUBMIT_GHOST_MAX):null;
   lastRunGhostRec=rec;
   let best=false;
-  const counted=runCountsForBoards(threeD);
+  // A test pilot's run (testPilotUsed) counts nowhere: no local best, board
+  // or Daily, nothing sent; it is still shown and can be replayed.
+  const counted=runCountsForBoards(threeD)&&!testPilotUsed;
   if(counted && (!bestRunMs[id]||total<bestRunMs[id])){
     bestRunMs[id]=total;
     try{localStorage.setItem(bestRunStorageKey(id),String(total));}catch(e){}
@@ -1981,7 +1984,7 @@ function finishRun(){
     const gt=loadGhostTotal(id);
     if(!gt||total<gt)commitGhost(id,total);
   }
-  const extra=counted?noteRetentionFinish(id,total,rec,submitRec):(threeD?'3D — NOT COUNTED':'');
+  const extra=counted?noteRetentionFinish(id,total,rec,submitRec):(testPilotUsed?'TEST PILOT · NOT SENT':(threeD?'3D — NOT COUNTED':''));
   const label=line?'LINE':'RUN';
   const parts=line?runGateSplits:runSplits;
   lastRunReplayRec=replayRec&&replayRec.length?downsampleGhost(replayRec,REPLAY_GHOST_MAX):(rec&&rec.length?rec:null);
@@ -7933,6 +7936,19 @@ async function importGhost(){
 function currentPilotName(){
   return sanitizePilotName(pilotNameEl&&pilotNameEl.value);
 }
+// Whether the boards take the pilot's name (sim-pilot-names.js, the Worker's
+// rules), and if not, says why once a session rather than sending a run the
+// Worker will refuse.
+let nameToldAt=0;
+function onlineNameOk(){
+  const why=pilotNameProblem(pilotNameEl&&pilotNameEl.value);
+  if(!why)return true;
+  if(performance.now()-nameToldAt>60000){
+    nameToldAt=performance.now();
+    toast((why==='SET A NAME'?'SET A PILOT NAME':'PILOT NAME '+why)+' — 3-16 letters/digits, Tune → Ghost sharing');
+  }
+  return false;
+}
 function skinProgress(){
   const medals=(coach&&coach.progress())?coach.progress().medals:{};
   return { medals, daily: loadDaily() };
@@ -8218,9 +8234,12 @@ async function maybeSubmitTrackBoard(id,total,rec){
   const pb=bestRunMs[ensureTrackStats(id)]||0;
   const sentKey=checked.key+'|'+body.frameMm;
   if(pb&&total>pb&&trackBoardSent.has(sentKey))return;
-  trackBoardSent.add(sentKey);
+  if(!onlineNameOk())return;
   const j=await trackBoardFetch('/api/track/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(j&&j.key===checked.key){
+    // Sent only once the Worker took it: a refusal (a name it won't take, the
+    // rate limit) leaves the run to be sent again.
+    trackBoardSent.add(sentKey);
     // Any board request still out for this track is older than this answer.
     nextTrackBoardSeq(track.id);
     noteTrackBoard(track,checked.key,trackCodeOf(track),body.frameMm,j.entries);
@@ -8234,6 +8253,7 @@ async function maybeSubmitOnline(id, total, rec){
   if(testPilotUsed)return;
   const url=leaderboardUrl();
   if(!onlineBoardsEnabled(url)||!rec||!rec.length)return;
+  if(!onlineNameOk())return;
   const track=findTrack(id);
   const ghost=ghostPayloadOf(id, rec, total);
   const body={
@@ -8262,6 +8282,7 @@ async function maybeSubmitDailyLine(challenge, total, rec, splits){
   if(testPilotUsed)return;
   const url=leaderboardUrl();
   if(!onlineBoardsEnabled(url)||!rec||!rec.length||!challenge)return;
+  if(!onlineNameOk())return;
   const ghost=ghostPayloadOf(challenge.trackId, rec, total);
   const frameMm=classId(currentBuild&&currentBuild.frameMm);
   const checked=validateDailyLineRun({

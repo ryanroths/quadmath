@@ -266,7 +266,8 @@ function fakeD1() {
   return sqliteD1();
 }
 
-const post = (body, headers) => new Request('https://x/api/line', { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+// A SHARE as the page sends it: the line code and the pilot token.
+const post = (body, headers) => new Request('https://x/api/line', { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify({ token: 'ab'.repeat(16), ...body }) });
 
 test('the Worker: POST /api/line stores a line once under its content id; GET gives it back', async () => {
   const env = { DB: fakeD1(), ALLOWED_ORIGIN: 'https://quadmath.com' };
@@ -297,6 +298,8 @@ test('the Worker: refuses what is not a line, an unknown id, and a flood', async
   const env = { DB: fakeD1() };
   const status = async (req, e = env) => { const r = await handleLeaderboard(req, e); return [r.status, (await r.json()).reason]; };
   assert.deepEqual(await status(post({ code: 'L1.notaline' })), [400, 'BAD LINE CODE']);
+  // No pilot token (a page from before bans): refused, and the page copies the long link.
+  assert.deepEqual(await status(post({ code: (await lineForLink({ ghost: flight(60) }, BASE)).code, token: undefined })), [400, 'NO TOKEN']);
   assert.deepEqual(await status(post({ code: 42 })), [400, 'BAD LINE CODE']);
   assert.deepEqual(await status(post({})), [400, 'BAD LINE CODE']);
   assert.deepEqual(await status(post('{')), [400, 'BAD JSON']);

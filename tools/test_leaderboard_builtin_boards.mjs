@@ -36,10 +36,13 @@ async function call(env, method, path, body, ip = '198.51.100.1') {
 
 // A run as the page records it on a one-pass track: 15 Hz on sim time from
 // the gate-0 frame, the finish frame (entering the last gate's sphere) last,
-// a little off the pace bot's line (seed moves it, so two runs differ).
+// off the pace bot's line by a weave whose phase is the seed, so two pilots'
+// runs (two seeds) are a quarter unit or more apart on average, as two
+// people's lines are.
 function pageRun(t, { speed = 8, seed = 0, name = 'RyFly', gates = t.gates } = {}) {
   const g = makePaceGhost(gates, { track: t.id, name, speed, hz: 15, laps: 1 });
-  for (let i = 0; i < g.samples.length; i++) g.samples[i][2] += 0.08 + (i % 3) * 0.01 + seed * 0.004;
+  // Each seed its own weave rate and phase, so no two seeds' lines line up.
+  for (let i = 0; i < g.samples.length; i++) g.samples[i][2] += 0.08 + 0.45 * Math.sin(i * (0.17 + 0.043 * seed) + seed * 2.4);
   const fin = t.gates[t.gates.length - 1];
   const r = fin.size * 0.8;
   const d = (p) => Math.hypot(p[1] - fin.x, p[2] - fin.y, p[3] - fin.z);
@@ -253,6 +256,12 @@ test('a run already posted or shared under another name is refused', async () =>
   const code = await encodeLineCode({ ghost: shared });
   r = await call(env, 'POST', '/api/line', { code, token: token('a') });
   assert.equal(r.status, 200, r.json.reason);
+  // Without a pilot token, no SHARE (a banned browser can't leave it out).
+  assert.equal((await call(env, 'POST', '/api/line', { code })).json.reason, 'NO TOKEN');
+  // A line under no name the boards take is not recorded as anyone's.
+  const anon = await encodeLineCode({ ghost: pageRun(t, { name: 'PILOT', seed: 9 }) });
+  assert.equal((await call(env, 'POST', '/api/line', { code: anon, token: token('c') })).status, 200);
+  assert.equal(env.DB.rows("SELECT COUNT(*) AS n FROM ghost_digests WHERE name_key = ''")[0].n, 0);
   const got = (await call(env, 'GET', '/api/line?id=' + r.json.id)).json.code;
   const line = await decodeLineCode(got);
   const digest = await ghostDigest(line.ghost);
@@ -260,19 +269,42 @@ test('a run already posted or shared under another name is refused', async () =>
 });
 
 test('a test pilot\'s run is refused on every board and as a shared line', async () => {
-  const env = { DB: sqliteD1() };
   const t = track('rig-loop');
-  const ghost = { ...pageRun(t), testPilot: true };
-  for (const path of ['/api/builtin/submit', '/api/submit', '/api/daily/submit', '/api/track/submit']) {
-    const r = await call(env, 'POST', path, await body(t, ghost));
-    assert.equal(r.status, 400, path);
-    assert.notEqual(r.json.ok, true, path);
+  const { weeklyTrackFor, weekMonday, utcWeekId } = await import('../sim-retention.js');
+  const { builtTrack, flownRun, submitBody } = await import('./track_boards_fixture.mjs');
+  // Each board's own body for one run; with testPilot it is refused for that
+  // and nothing else (the same body without it is taken).
+  const week = utcWeekId(Date.parse('2026-11-18T12:00:00Z'));
+  const wt = weeklyTrackFor(week);
+  const bodies = {
+    '/api/builtin/submit': async (g) => body(t, g),
+    '/api/submit': async (g) => ({ week, frameMm: 65, build: { frameMm: 65 }, name: 'RyFly', timeMs: g.lapTime, ghost: g, track: wt.id, token: token('a') }),
+    '/api/track/submit': async (g) => submitBody(builtTrack(4), { timeMs: g.lapTime, ghost: g }, { name: 'RyFly', token: token('a') }),
+  };
+  const runs = {
+    '/api/builtin/submit': () => pageRun(t),
+    '/api/submit': () => pageRun({ id: wt.id, gates: wt.gates }, { speed: 9 }),
+    '/api/track/submit': () => flownRun(builtTrack(4)).ghost,
+  };
+  mock.timers.enable({ apis: ['Date'], now: Date.parse(weekMonday(week)) + 36e5 * 30 });
+  try {
+    for (const path of Object.keys(bodies)) {
+      const env = { DB: sqliteD1() };
+      const g = runs[path]();
+      let r = await call(env, 'POST', path, await bodies[path]({ ...g, testPilot: true }));
+      assert.equal(r.status, 400, path);
+      assert.equal(r.json.reason, 'TEST PILOT', path);
+      r = await call(env, 'POST', path, await bodies[path](g));
+      assert.equal(r.status, 200, path + ' takes the same run without the tag: ' + r.json.reason);
+    }
+  } finally {
+    mock.timers.reset();
   }
-  const r = await call(env, 'POST', '/api/builtin/submit', await body(t, ghost));
-  assert.equal(r.json.reason, 'TEST PILOT');
+  const env = { DB: sqliteD1() };
+  const ghost = { ...pageRun(t), testPilot: true };
   const code = await encodeLineCode({ ghost });
   assert.equal((await decodeLineCode(code)).ghost.testPilot, true, 'the code says so');
-  const line = await call(env, 'POST', '/api/line', { code });
+  const line = await call(env, 'POST', '/api/line', { code, token: token('a') });
   assert.equal(line.status, 400);
   assert.equal(line.json.reason, 'TEST PILOT');
   assert.equal(env.DB.lines.size, 0);
@@ -409,5 +441,119 @@ test('a clean Daily Line on a built-in track goes to that track\'s board too', a
     assert.equal(b.json.entries[0].name, 'RyFly');
   } finally {
     mock.timers.reset();
+  }
+});
+
+test('a built-in board refuses a ghost no whoop could fly, and a nudged or retimed copy of a stored ghost', async () => {
+  const { flightSpikes, flightSpikesMax, ghostPathDistance } = await import('../sim-retention.js');
+  const env = { DB: sqliteD1() };
+  for (const t of BUILTIN_BOARD_TRACKS) {
+    // Straight from gate centre to gate centre at 44 u/s, a sample each 50 ms.
+    const pts = t.gates.map((g) => [g.x, g.y + 0.03, g.z]);
+    const samples = [[0, ...pts[0], 0, 0, 0, 1]];
+    let tm = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i], L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const n = Math.max(1, Math.ceil(L / (44 * 0.05)));
+      for (let k = 1; k <= n; k++) { tm += Math.round(L / n / 44 * 1000); samples.push([tm, ...a.map((v, j) => v + (b[j] - v) * k / n), 0, 0, 0, 1]); }
+    }
+    const forged = { v: 1, track: t.id, phys: PHYS_VER, name: 'Forger', lapTime: tm, samples };
+    assert.ok(flightSpikes(samples, 65) > flightSpikesMax(t.gates.length), t.id);
+    const r = await call(env, 'POST', '/api/builtin/submit', await body(t, forged, { name: 'Forger', token: token('e') }));
+    assert.equal(r.json.reason, 'IMPLAUSIBLE FLIGHT', t.id + ': ' + JSON.stringify(r.json));
+  }
+  // A stored top ghost, nudged 3 cm and flown 3% faster, under another name.
+  const t = track('depot-loop');
+  const top = pageRun(t, { name: 'Topgun', seed: 1 });
+  let r = await call(env, 'POST', '/api/builtin/submit', await body(t, top, { name: 'Topgun', token: token('a') }));
+  assert.equal(r.status, 200, r.json.reason);
+  const served = (await call(env, 'GET', '/api/builtin/ghost?track=depot-loop&class=65&name=Topgun')).json.ghost;
+  assert.equal(served.name, 'Topgun', 'the ghost under the claimed name');
+  assert.deepEqual(Object.keys(served).sort(), ['lapTime', 'name', 'phys', 'samples', 'track', 'v']);
+  const copy = { ...served, name: 'Copycat', samples: served.samples.map((p) => [Math.round(p[0] * 0.97), p[1] + 0.105, p[2], p[3], 0, 0, 0, 1]) };
+  copy.lapTime = copy.samples[copy.samples.length - 1][0];
+  assert.ok(ghostPathDistance(copy.samples, top.samples) < 0.2);
+  r = await call(env, 'POST', '/api/builtin/submit', await body(t, copy, { name: 'Copycat', token: token('b') }));
+  assert.equal(r.json.reason, 'COPIED RUN');
+  // Another pilot's own line is not a copy.
+  const own = pageRun(t, { name: 'Rival', seed: 3 });
+  assert.ok(ghostPathDistance(own.samples, top.samples) >= 0.2, String(ghostPathDistance(own.samples, top.samples)));
+  r = await call(env, 'POST', '/api/builtin/submit', await body(t, own, { name: 'Rival', token: token('c') }));
+  assert.equal(r.status, 200, r.json.reason);
+});
+
+test('a builder board keeps its 200 fastest (Worker writes prune it)', async () => {
+  const { builtTrack, flownRun, submitBody } = await import('./track_boards_fixture.mjs');
+  const { customBoardKey } = await import('../sim-retention.js');
+  const env = { DB: sqliteD1() };
+  const t = builtTrack(4);
+  const key = await customBoardKey(t);
+  const ins = env.DB.sqlite.prepare('INSERT INTO custom_scores (key, class, name, time_ms, submitted_ms) VALUES (?, 65, ?, ?, ?)');
+  for (let i = 0; i < 200; i++) ins.run(key, 'C' + i, 1000 + i, i);
+  // 200 rows, all faster than any run here (1.0 to 1.2 s); then one slower
+  // than all (not stored), then the board's times moved up past a new run
+  // (stored, the slowest pruned).
+  const run = flownRun(t, { speed: 6 });
+  let r = await call(env, 'POST', '/api/track/submit', submitBody(t, run, { name: 'Fresh', token: token('a') }));
+  assert.equal(r.status, 200, r.json.reason);
+  assert.equal(env.DB.rows('SELECT COUNT(*) AS n FROM custom_scores')[0].n, 200, 'slower than the 200th: not stored');
+  assert.equal(env.DB.rows("SELECT COUNT(*) AS n FROM custom_scores WHERE name = 'Fresh'")[0].n, 0);
+  env.DB.exec('UPDATE custom_scores SET time_ms = time_ms + 100000');
+  r = await call(env, 'POST', '/api/track/submit', submitBody(t, flownRun(t, { speed: 6, weave: 0.3 }), { name: 'Fresh', token: token('a') }));
+  assert.equal(r.status, 200, r.json.reason);
+  assert.equal(env.DB.rows('SELECT COUNT(*) AS n FROM custom_scores')[0].n, 200, 'the 201st pruned');
+  assert.equal(env.DB.rows("SELECT COUNT(*) AS n FROM custom_scores WHERE name = 'C199'")[0].n, 0);
+  assert.equal(env.DB.rows("SELECT COUNT(*) AS n FROM custom_scores WHERE name = 'Fresh'")[0].n, 1);
+});
+
+test('a new Worker on a database not yet migrated says NOT MIGRATED; old claims made after the migration still hold', async () => {
+  const schema = readFileSync(join(LEADERBOARD_SQL_DIR, 'schema.sql'), 'utf8');
+  const before = schema.slice(0, schema.indexOf('-- Built-in track boards, name keys'));
+  const old = { DB: sqliteD1({ files: [] }) };
+  old.DB.exec(before);
+  const worker = (await import('../workers/sim-leaderboard/src/index.js')).default;
+  const t = track('rig-loop');
+  const r = await worker.fetch(new Request('https://x/api/builtin/tops?class=65'), old);
+  assert.equal(r.status, 503);
+  assert.equal((await r.json()).reason, 'NOT MIGRATED');
+  const s = await worker.fetch(new Request('https://x/api/builtin/submit', { method: 'POST', body: JSON.stringify(await body(t, pageRun(t))) }), old);
+  assert.equal(s.status, 503);
+  assert.equal((await s.json()).reason, 'NOT MIGRATED');
+  // Migrated, then the old Worker claimed "Late Pilot" in pilots: it holds.
+  const env = { DB: sqliteD1() };
+  const h = await hashPilotToken(token('9'));
+  env.DB.exec(`INSERT INTO pilots (name, token_hash, claimed_ms) VALUES ('Late Pilot', '${h}', 5)`);
+  let p = await call(env, 'POST', '/api/builtin/submit', await body(t, pageRun(t, { name: 'Late Pilot', seed: 2 }), { name: 'late_pilot', token: token('8') }));
+  assert.equal(p.json.reason, 'NAME TAKEN', 'another browser');
+  p = await call(env, 'POST', '/api/builtin/submit', await body(t, pageRun(t, { name: 'Late Pilot', seed: 4 }), { name: 'Late Pilot', token: token('9') }));
+  assert.equal(p.status, 200, p.json.reason);
+  // A carried-over name the rules refuse shows as its holder posts it.
+  env.DB.exec(`INSERT INTO pilot_keys (key, name, token_hash, claimed_ms) VALUES ('dotfly', 'Dot..Fly', '${h}', 6)`);
+  p = await call(env, 'POST', '/api/builtin/submit', await body(t, pageRun(t, { name: 'DotFly', seed: 6 }), { name: 'DotFly', token: token('9') }));
+  assert.equal(p.status, 200, p.json.reason);
+  assert.equal(p.json.name, 'DotFly');
+});
+
+test('the migration\'s SQL key is pilotNameKey for any name the rules take', () => {
+  const migrate = readFileSync(join(LEADERBOARD_SQL_DIR, 'migrate-builtin-boards.sql'), 'utf8');
+  const sel = /INSERT OR IGNORE INTO pilot_keys[^;]*SELECT\s+([\s\S]*?),\s+trim\(name\), token_hash/.exec(migrate)[1];
+  const db = sqliteD1({ files: [] });
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-';
+  let seed = 7, n = 0;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const q = db.sqlite.prepare('SELECT ' + sel.replace(/\bname\b/g, '?') + ' AS k');
+  for (let i = 0; i < 5000; i++) {
+    let name = '';
+    const len = 3 + Math.floor(rnd() * 14);
+    for (let k = 0; k < len; k++) name += chars[Math.floor(rnd() * chars.length)];
+    for (const extra of ['rn', 'vv', 'RN', 'VV', 'vvv', 'rnrn']) if (rnd() < 0.1) name = name.slice(0, 8) + extra + name.slice(8);
+    if (pilotNameProblem(name)) continue;
+    n++;
+    assert.equal(q.get(name).k, pilotNameKey(name), JSON.stringify(name));
+  }
+  assert.ok(n > 1000, 'names checked: ' + n);
+  for (const [a, b] of [['Mario', 'Rnario'], ['Willow', 'Wiilow'], ['Wolf', 'VVolf'], ['B8by', 'Bbby'], ['Zig9', 'Zigg']]) {
+    if (a === 'Willow') continue;
+    assert.equal(pilotNameKey(a), pilotNameKey(b), a + ' ' + b);
   }
 });

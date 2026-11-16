@@ -800,6 +800,8 @@ test('the sim under its policy in Chrome: no violations; injected handlers do no
       assert.match(r.track, /^weekly-/);
       assert.equal(r.done, true, 'the weekly run finished: ' + r.gate);
       assert.match(r.toast, /TEST PILOT · NOT SENT/, 'the weekly finish says it was not sent: ' + r.toast);
+      // Held before any check or send: not the page's own refusal of the run.
+      assert.doesNotMatch(r.toast, /NOT SENT:/, 'held as a test pilot run, not checked and refused: ' + r.toast);
       await sleep(1500);
       const sent = worker.calls.slice(calls0).filter((c) => /^POST \/api\/(line|submit|daily\/submit|track\/submit|builtin\/submit)$/.test(c));
       assert.deepEqual(sent, [], 'nothing posted: ' + worker.calls.slice(calls0).join(', '));
