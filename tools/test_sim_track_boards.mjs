@@ -439,10 +439,24 @@ const PAGE = String.raw`(() => {
   // A run the Worker takes: from gate 0 along the line through every gate at
   // speed u/s, the quad put on the path every frame (the core's teleport), with
   // a weave so it is no pace bot's straight line. ws: scene units per metre.
+  // A gate counts when the page, which looks once a frame after the frame's
+  // step of the core, finds the quad entering its sphere (sim-tracks.js
+  // detectPassOrMiss); entering any other gate is a miss. On a slow runner:
+  // - No frame moves the quad more than half the smallest gate's radius along
+  //   the path: one long frame had stepped it past a gate whole ("MISSED
+  //   GATE"). A long frame slows the run; it skips nothing.
+  // - A step is up to 250 ms of sim time, in which a quad put at rest falls
+  //   0.3 m: out of a sphere it was in, and back in at the next put, a miss.
+  //   So it is put rising at the speed 250 ms of free fall brings back to the
+  //   path (as test_sim_csp.mjs does): at the page's look it is within 8 cm.
+  // - The loop starts at gate 0's sphere edge, so a quad that fell from the
+  //   start gate while the page counted it does not come back into it, and it
+  //   stops once the finish has counted, so nothing re-enters the last gate.
   async function flyPath(ws, speed) {
     const track = s.tracks().find((t) => t.id === s.track());
     const b = s.bfCore();
-    const put = (p) => b.teleport({ x: -p.z / ws, y: -p.x / ws, z: p.y / ws }, { x: 0, y: 0, z: 0, w: 1 });
+    const RISE = 9.81 * 0.125; // m/s up: back on the path after 250 ms of free fall
+    const put = (p) => b.teleport({ x: -p.z / ws, y: -p.x / ws, z: p.y / ws }, { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: 0, z: RISE });
     const counter = () => (/ GATE (\d+)\//.exec($('osdGate').textContent) || [])[1];
     const pts = track.gates.map((g) => ({ x: g.x, y: g.y, z: g.z }));
     const seg = [];
@@ -464,16 +478,20 @@ const PAGE = String.raw`(() => {
     put(pts[0]);
     const started = await until(() => counter() !== before, 2000);
     const frame = () => new Promise((r) => requestAnimationFrame(r));
-    const t0 = performance.now();
-    for (;;) {
-      const d = (performance.now() - t0) / 1000 * speed;
-      if (d >= total) break;
+    const maxStep = Math.min(...track.gates.map((g) => g.r)) / 2;
+    if (!(maxStep > 0)) throw new Error('flyPath: no gate radius on ' + track.id);
+    const finished = () => !!$('toastShare');
+    let d = track.gates[0].r + 0.05, last = performance.now(), frames = 0, longestMs = 0;
+    while (d < total && !finished()) {
       put(at(d));
       await frame();
+      const now = performance.now(), ms = now - last;
+      last = now; frames++; longestMs = Math.max(longestMs, ms);
+      d += Math.min(ms / 1000 * speed, maxStep);
     }
-    put(pts[pts.length - 1]);
-    const done = await until(() => !!$('toastShare'), 3000);
-    return { started, done, total, toast: $('toast').textContent };
+    if (!finished()) put(pts[pts.length - 1]);
+    const done = await until(finished, 3000);
+    return { started, done, total, toast: $('toast').textContent, toasts: (window.__toasts || []).slice(), frames, longestMs: Math.round(longestMs), maxStep };
   }
   // The lap panel's board block, as the pilot sees it.
   function board() {
