@@ -1151,14 +1151,14 @@ import {
   replayChaseOffset, replayOrbitOffset, replayDurationMs, replayClipSpan, canRecordClip,
   defaultWhoopKit, ghostFromObj, shareTrackPayload, fromShareTrackPayload,
   customBoardKey, customTrackCode, normalizeTrackSubmit, isCustomBoardTrackId, customTrackProblem,
-  CUSTOM_TRACK_MIN_GATES, CUSTOM_TRACK_CODE_MAX,
-} from "./sim-retention.js?v=10411c6fac2e";
+  CUSTOM_TRACK_MIN_GATES, CUSTOM_TRACK_CODE_MAX, builtinFloorMs,
+} from "./sim-retention.js?v=e1c175aad068";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=b547b772411a";
+} from "./sim-secrets.js?v=e266883e789f";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
   fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=3f4158ced8a5";
 window._simBooted=true; // tells the watchdog above the module actually executed
@@ -9716,6 +9716,8 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   simClockMs:()=>simClockMs,
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
   audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},setTestPilot(fn){testPilot=typeof fn==='function'?fn:null;if(testPilot)testPilotUsed=true;testPilotError=null;},testPilotError:()=>testPilotError,testPilotUsed:()=>testPilotUsed,
+  // A built-in track's online board floor (sim-retention.js builtinFloorMs, as the Worker has it), or null.
+  builtinFloorMs:(id,c)=>{const t=findTrack(id);return t?builtinFloorMs(t,c):null;},
   firstFlight:()=>({show:firstFlightState.show||null,seen:{...firstFlightSeen},liveS:firstFlightState.liveS||0,shownS:firstFlightState.shownS||0}),
   // The House's backyard (yardWatch): its data and edge state, and the check itself.
   yardState:()=>({yard:currentMap==='house'&&indoorBuilt.house?indoorBuilt.house.yard:null,...yardSt}),yardWatch,tryArm,coreArmed,

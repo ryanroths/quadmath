@@ -29,7 +29,8 @@ import {
 } from '../sim-retention.js';
 import { encodeShare, trackLink, MAPS } from '../sim-tracks.js';
 import { handleLeaderboard } from '../workers/sim-leaderboard/src/index.js';
-import { RATE_SCORE_MAX } from '../sim-retention.js';
+import { RATE_SCORE_MAX, builtinFloorMs, CLASS_IDS } from '../sim-retention.js';
+import { BUILTIN_BOARD_TRACKS } from '../sim-builtin-boards.js';
 import { WS } from '../sim-core-adapter.js';
 import { builtTrack, hugeTrack, flownRun, hoverRun, pilotToken, submitBody, trackBoardsD1 } from './track_boards_fixture.mjs';
 
@@ -734,6 +735,15 @@ test('track boards in Chrome: a link\'s run lands on its board, a second profile
         assert.equal(b.on, true);
         assert.equal(b.hidden, false, 'the builder shows the board');
         assert.match(b.text, /Desk loop copy · online top 20[\s\S]*1 RyFly/, 'titled with the draft\'s name: ' + b.text);
+      });
+    });
+
+    await t.test('the page computes the floor of each built-in board as the Worker does (sim-retention.js builtinFloorMs)', async () => {
+      const want = {};
+      for (const bt of BUILTIN_BOARD_TRACKS) want[bt.id] = CLASS_IDS.map((c) => builtinFloorMs(bt, c));
+      await pass(link, pilot('Floor', 'f'), async ({ js }) => {
+        const got = await js(`const out = {}; for (const id of ${JSON.stringify(Object.keys(want))}) out[id] = ${JSON.stringify(CLASS_IDS)}.map((c) => S.s.builtinFloorMs(id, c)); return JSON.stringify(out);`);
+        assert.deepEqual(got, want, 'the tracks of the page give the floors of the Worker');
       });
     });
 
