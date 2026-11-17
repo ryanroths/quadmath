@@ -222,7 +222,8 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .hero-sim-card { max-width: 356px; }
-  .hero-intro h1 { text-wrap: balance; } /* no lone "it." when the column is narrow */
+  /* no lone "it." or "keyboard" when the column is narrow */
+  .hero-intro h1, .hero-sim-card .sim-teaser-sub { text-wrap: balance; }
   @media (min-width: 800px) {
     .hero-top {
       grid-template-columns: minmax(0, 1fr) 356px;
@@ -1659,8 +1660,10 @@
   }
   .sim-teaser-card:is(:hover, :focus-visible) { border-color: var(--orange); }
   /* A <picture> (index.html's phone/desktop poster) steps aside so its <img>
-     is the card's flex item, exactly like gear.html's bare <img>. */
+     is the card's flex item, exactly like gear.html's bare <img>. Its <source>
+     would otherwise become an empty flex item and add a gap above the image. */
   .sim-teaser-card picture { display: contents; }
+  .sim-teaser-card source { display: none; }
   /* img now, a poster-framed <video> later: both get the full-bleed media box */
   .sim-teaser-card :is(img, video) {
     /* negative margins only SHIFT a box, they don't grow it — width:100%
