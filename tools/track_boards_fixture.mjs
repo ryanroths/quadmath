@@ -4,6 +4,7 @@
 // Worker accepts (and runs it refuses), and an in-memory D1 for the
 // statements the leaderboard Worker runs on these routes.
 import { PHYS_VER, CUSTOM_TRACK_CODE_MAX, customTrackCode } from '../sim-retention.js';
+import { sqliteD1 } from './d1_sqlite.mjs';
 
 // A builder track: n gates along a zigzag on the Rig, 6 u apart.
 export function builtTrack(n = 4, extra = {}) {
@@ -75,53 +76,9 @@ export function submitBody(track, run, { name = 'RyFly', token = pilotToken(), f
   return { track, frameMm, name, token, timeMs: run.timeMs, ghost: run.ghost, build: { frameMm } };
 }
 
-// An in-memory D1 for the leaderboard Worker's track routes (and the rate
-// limit and pilot claims they share): statements matched by their text,
-// with the same results SQLite gives them. Unknown SQL throws.
+// The leaderboard Worker's D1 for the track routes: real SQLite made from
+// schema.sql (tools/d1_sqlite.mjs), with the tracks and scores views the
+// tests read.
 export function trackBoardsD1() {
-  const rate = new Map(), pilots = new Map(), tracks = new Map(), scores = new Map();
-  const sk = (key, cls, name) => key + '|' + cls + '|' + name;
-  const db = {
-    rate, pilots, tracks, scores,
-    prepare(sql) {
-      let a = [];
-      const s = sql.replace(/\s+/g, ' ');
-      const stmt = {
-        bind(...args) { a = args; return stmt; },
-        async first() {
-          if (s.startsWith('SELECT n FROM rate_limit')) { const n = rate.get(a[0] + '|' + a[1]); return n ? { n } : null; }
-          if (s.startsWith('SELECT token_hash FROM pilots')) { const h = pilots.get(a[0]); return h ? { token_hash: h } : null; }
-          if (s.startsWith('SELECT time_ms FROM custom_scores')) { const r = scores.get(sk(a[0], a[1], a[2])); return r ? { time_ms: r.time_ms } : null; }
-          throw new Error('fake D1 first: ' + s);
-        },
-        async all() {
-          if (s.startsWith('SELECT name, time_ms AS timeMs, submitted_ms AS at FROM custom_scores')) {
-            const out = [...scores.values()].filter((r) => r.key === a[0] && r.class === a[1])
-              .sort((x, y) => x.time_ms - y.time_ms).slice(0, 20)
-              .map((r) => ({ name: r.name, timeMs: r.time_ms, at: r.submitted_ms }));
-            return { results: out };
-          }
-          throw new Error('fake D1 all: ' + s);
-        },
-        async run() {
-          if (s.startsWith('INSERT INTO rate_limit')) { const k = a[0] + '|' + a[1]; rate.set(k, (rate.get(k) || 0) + 1); return {}; }
-          if (s.startsWith('INSERT OR IGNORE INTO pilots')) { if (!pilots.has(a[0])) pilots.set(a[0], a[1]); return {}; }
-          if (s.startsWith('INSERT OR IGNORE INTO custom_tracks')) {
-            if (!tracks.has(a[0])) tracks.set(a[0], { key: a[0], map: a[1], gates: a[2], code: a[3], created_ms: a[4] });
-            return {};
-          }
-          if (s.startsWith('INSERT INTO custom_scores')) {
-            const k = sk(a[0], a[1], a[2]);
-            const old = scores.get(k);
-            // ON CONFLICT(key, class, name) DO UPDATE ... WHERE excluded.time_ms < custom_scores.time_ms
-            if (!old || a[3] < old.time_ms) scores.set(k, { key: a[0], class: a[1], name: a[2], time_ms: a[3], submitted_ms: a[4] });
-            return {};
-          }
-          throw new Error('fake D1 run: ' + s);
-        },
-      };
-      return stmt;
-    },
-  };
-  return db;
+  return sqliteD1();
 }

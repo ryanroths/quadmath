@@ -785,7 +785,7 @@ test('the page: F is flipKey: a bf flip logged once as a sim assist, else the ne
   // No board rule for assists yet: what decides the boards does not read it.
   const boards = html.slice(html.indexOf('function noteRetentionFinish'), html.indexOf('async function maybeSubmitOnline'));
   assert.ok(!/SimFlip/.test(boards) && !/SimFlip/.test(html.slice(html.indexOf('function runOffBoards'), html.indexOf('function runOffBoards') + 200)));
-  assert.ok(html.includes('const counted=runCountsForBoards(threeD);'));
+  assert.ok(html.includes('const counted=runCountsForBoards(threeD)&&!testPilotUsed;'));
 });
 
 test('quadphysics FF: 4 ms samples at 1 kHz ticks get the same feedforward as 60 fps frames', () => {

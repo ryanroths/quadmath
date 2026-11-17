@@ -20,6 +20,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { spawnBrowser } from './browser_guard.mjs';
+import { sqliteD1 } from './d1_sqlite.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
@@ -260,32 +261,13 @@ test('the banner and the id', async () => {
   assert.notEqual(id, await lineIdOf(await encodeLineCode({ ghost: flight(5, { seed: 2 }) }, 10)));
 });
 
-// An in-memory D1 for the statements the Worker's line and rate-limit code runs.
+// The Worker's D1: real SQLite made from schema.sql (tools/d1_sqlite.mjs).
 function fakeD1() {
-  const lines = new Map(), rate = new Map();
-  return {
-    lines,
-    prepare(sql) {
-      let args = [];
-      const stmt = {
-        bind(...a) { args = a; return stmt; },
-        async first() {
-          if (/FROM rate_limit/.test(sql)) { const n = rate.get(args.join('|')); return n ? { n } : null; }
-          if (/FROM lines/.test(sql)) { const code = lines.get(args[0]); return code ? { code } : null; }
-          throw new Error('fake D1: ' + sql);
-        },
-        async run() {
-          if (/INTO rate_limit/.test(sql)) { const k = args.join('|'); rate.set(k, (rate.get(k) || 0) + 1); return {}; }
-          if (/INTO lines/.test(sql)) { if (!lines.has(args[0])) lines.set(args[0], args[1]); return {}; }
-          throw new Error('fake D1: ' + sql);
-        },
-      };
-      return stmt;
-    },
-  };
+  return sqliteD1();
 }
 
-const post = (body, headers) => new Request('https://x/api/line', { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+// A SHARE as the page sends it: the line code and the pilot token.
+const post = (body, headers) => new Request('https://x/api/line', { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify({ token: 'ab'.repeat(16), ...body }) });
 
 test('the Worker: POST /api/line stores a line once under its content id; GET gives it back', async () => {
   const env = { DB: fakeD1(), ALLOWED_ORIGIN: 'https://quadmath.com' };
@@ -316,6 +298,8 @@ test('the Worker: refuses what is not a line, an unknown id, and a flood', async
   const env = { DB: fakeD1() };
   const status = async (req, e = env) => { const r = await handleLeaderboard(req, e); return [r.status, (await r.json()).reason]; };
   assert.deepEqual(await status(post({ code: 'L1.notaline' })), [400, 'BAD LINE CODE']);
+  // No pilot token (a page from before bans): refused, and the page copies the long link.
+  assert.deepEqual(await status(post({ code: (await lineForLink({ ghost: flight(60) }, BASE)).code, token: undefined })), [400, 'NO TOKEN']);
   assert.deepEqual(await status(post({ code: 42 })), [400, 'BAD LINE CODE']);
   assert.deepEqual(await status(post({})), [400, 'BAD LINE CODE']);
   assert.deepEqual(await status(post('{')), [400, 'BAD JSON']);

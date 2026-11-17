@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY, makePaceGhost, SHARE_PREFIX as TRACK_PREFIX, encodeShare, decodeShare, ghostPayloadError as trackGhostErr, MAPS, BUILTIN_TRACK_FILES } from '../sim-tracks.js';
 import { BUILD_KEY } from '../sim-build.js';
+import { sqliteD1 } from './d1_sqlite.mjs';
 import { WHOOP_KEY } from '../sim-whoop.js';
 import { ROOM_KEY } from '../sim-room.js';
 import { COACH_KEY } from '../sim-coach.js';
@@ -204,12 +205,12 @@ test('the Worker takes a W45 run on the Rig track and rejects its pace bot', () 
   const track = weeklyTrackFor(week);
   assert.equal(track.map, 'rig');
   const ghost = humanRun(track);
-  const ok = normalizeSubmit({ name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost, track: track.id, build: { frameMm: 65 } }, now);
+  const ok = normalizeSubmit({ name: 'RyFly', week, frameMm: 65, timeMs: ghost.lapTime, ghost, track: track.id, build: { frameMm: 65 } }, now);
   assert.equal(ok.ok, true, ok.reason);
   assert.equal(ok.trackId, track.id);
   const bot = pace(track, { name: 'PACE BOT' });
   assert.equal(isPaceBotGhost(bot, track), true);
-  const rejected = normalizeSubmit({ name: 'Ry', week, frameMm: 65, timeMs: bot.lapTime, ghost: bot, track: track.id, build: { frameMm: 65 } }, now);
+  const rejected = normalizeSubmit({ name: 'RyFly', week, frameMm: 65, timeMs: bot.lapTime, ghost: bot, track: track.id, build: { frameMm: 65 } }, now);
   assert.equal(rejected.ok, false);
 });
 
@@ -364,7 +365,7 @@ test('a fast page-shaped weekly run passes; a skipped or out-of-order gate does 
   assert.ok(track.gates.some((g) => g.size * 0.8 * 2 < speed / 15), 'a gate smaller than a sample step');
   assert.ok(countGhostLaps(ghost.samples, track) < 1, 'the point check misses gates at this speed');
   const now = Date.parse(weekMonday(week)) + 36e5 * 30;
-  const ok = normalizeSubmit({ name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost, track: track.id, build: { frameMm: 65 }, token: 'a'.repeat(32) }, now);
+  const ok = normalizeSubmit({ name: 'RyFly', week, frameMm: 65, timeMs: ghost.lapTime, ghost, track: track.id, build: { frameMm: 65 }, token: 'a'.repeat(32) }, now);
   assert.equal(ok.ok, true, ok.reason);
 
   // Skip a middle gate: fly 15 Hz straight from the gate before it to the
@@ -457,7 +458,7 @@ test('an unnamed one-pass pace path is the pace bot', () => {
   const bot = makePaceGhost(track.gates, { track: track.id, name: 'RYAN', speed: 8, hz: 16, laps: 1 });
   bot.phys = PHYS_VER;
   const now = Date.parse(weekMonday(week)) + 36e5 * 30;
-  const r = normalizeSubmit({ name: 'Ry', week, frameMm: 65, timeMs: bot.samples[bot.samples.length - 1][0], ghost: bot, track: track.id, build: { frameMm: 65 } }, now);
+  const r = normalizeSubmit({ name: 'RyFly', week, frameMm: 65, timeMs: bot.samples[bot.samples.length - 1][0], ghost: bot, track: track.id, build: { frameMm: 65 } }, now);
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'PACE BOT');
 });
@@ -647,61 +648,9 @@ test('skin unlock ids and localStorage keys stay frozen', () => {
   assert.ok(!simSrc.includes('Canopy colors only'));
 });
 
+// The Worker's tests run on real SQLite made from schema.sql (tools/d1_sqlite.mjs).
 function fakeD1() {
-  const scores = new Map();
-  const pilots = new Map();
-  const rate = new Map();
-  const k = (...p) => p.join('|');
-  return {
-    prepare(sql) {
-      const s = String(sql);
-      return {
-        bind(...args) {
-          return {
-            async first() {
-              if (s.includes('FROM rate_limit')) {
-                const n = rate.get(k(args[0], args[1]));
-                return n ? { n } : null;
-              }
-              if (s.includes('FROM pilots')) {
-                const h = pilots.get(args[0]);
-                return h ? { token_hash: h } : null;
-              }
-              if (s.includes('time_ms FROM scores')) {
-                const row = scores.get(k(args[0], args[1], args[2]));
-                return row ? { time_ms: row.time_ms } : null;
-              }
-              return null;
-            },
-            async all() {
-              const out = [];
-              for (const row of scores.values()) {
-                if (row.week === args[0] && row.class === args[1] && row.track_id === args[2]) {
-                  out.push({ name: row.name, timeMs: row.time_ms, trackId: row.track_id, at: row.submitted_ms });
-                }
-              }
-              out.sort((a, b) => a.timeMs - b.timeMs);
-              return { results: out.slice(0, 20) };
-            },
-            async run() {
-              if (s.includes('rate_limit')) {
-                const id = k(args[0], args[1]);
-                rate.set(id, (rate.get(id) || 0) + 1);
-              } else if (s.includes('INTO pilots')) {
-                if (!pilots.has(args[0])) pilots.set(args[0], args[1]);
-              } else if (s.includes('INTO scores')) {
-                scores.set(k(args[0], args[1], args[2]), {
-                  week: args[0], class: args[1], name: args[2],
-                  time_ms: args[3], track_id: args[4], submitted_ms: args[5],
-                });
-              }
-              return { success: true };
-            },
-          };
-        },
-      };
-    },
-  };
+  return sqliteD1();
 }
 
 test('worker health and board routes work without D1; submit needs DB', async () => {
@@ -759,13 +708,13 @@ test('H1 server derives week track, rejects pace-bot/phys/class/week, claims nam
   assert.equal(isPaceBotGhost(ghost, track), false);
 
   const mismatch = normalizeSubmit({
-    name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost, track: dailyTrackFor('2026-10-17'),
+    name: 'RyFly', week, frameMm: 65, timeMs: ghost.lapTime, ghost, track: dailyTrackFor('2026-10-17'),
   }, NOW_W42);
   assert.equal(mismatch.ok, false);
   assert.equal(mismatch.reason, 'TRACK MISMATCH');
 
   const oldWeek = normalizeSubmit({
-    name: 'Ry', week: '2020-W01', frameMm: 65, timeMs: ghost.lapTime, ghost, track,
+    name: 'RyFly', week: '2020-W01', frameMm: 65, timeMs: ghost.lapTime, ghost, track,
   }, NOW_W42);
   assert.equal(oldWeek.ok, false);
   assert.equal(oldWeek.reason, 'BAD WEEK');
@@ -773,49 +722,49 @@ test('H1 server derives week track, rejects pace-bot/phys/class/week, claims nam
   const noPhys = JSON.parse(JSON.stringify(ghost));
   delete noPhys.phys;
   const phys = normalizeSubmit({
-    name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost: noPhys, track,
+    name: 'RyFly', week, frameMm: 65, timeMs: ghost.lapTime, ghost: noPhys, track,
   }, NOW_W42);
   assert.equal(phys.ok, false);
   assert.equal(phys.reason, 'PHYS MISMATCH');
   // A run recorded before the fixed 1 kHz cores (phys 2) is refused too.
   const phys2 = normalizeSubmit({
-    name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost: { ...ghost, phys: 2 }, track,
+    name: 'RyFly', week, frameMm: 65, timeMs: ghost.lapTime, ghost: { ...ghost, phys: 2 }, track,
   }, NOW_W42);
   assert.equal(phys2.ok, false);
   assert.equal(phys2.reason, 'PHYS MISMATCH');
   // And one from before the bf core became the default (phys 3).
   const phys3 = normalizeSubmit({
-    name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost: { ...ghost, phys: 3 }, track,
+    name: 'RyFly', week, frameMm: 65, timeMs: ghost.lapTime, ghost: { ...ghost, phys: 3 }, track,
   }, NOW_W42);
   assert.equal(phys3.ok, false);
   assert.equal(phys3.reason, 'PHYS MISMATCH');
   // And one from before sim-core v0.4.0's wall contact (phys 4).
   const phys4 = normalizeSubmit({
-    name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost: { ...ghost, phys: 4 }, track,
+    name: 'RyFly', week, frameMm: 65, timeMs: ghost.lapTime, ghost: { ...ghost, phys: 4 }, track,
   }, NOW_W42);
   assert.equal(phys4.ok, false);
   assert.equal(phys4.reason, 'PHYS MISMATCH');
   // And one from before the 75 went on the bf core (phys 5).
   const phys5 = normalizeSubmit({
-    name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost: { ...ghost, phys: 5 }, track,
+    name: 'RyFly', week, frameMm: 65, timeMs: ghost.lapTime, ghost: { ...ghost, phys: 5 }, track,
   }, NOW_W42);
   assert.equal(phys5.ok, false);
   assert.equal(phys5.reason, 'PHYS MISMATCH');
   // And one from before sim-core v0.7.0 turned the RPM filter off (phys 6).
   const phys6 = normalizeSubmit({
-    name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost: { ...ghost, phys: 6 }, track,
+    name: 'RyFly', week, frameMm: 65, timeMs: ghost.lapTime, ghost: { ...ghost, phys: 6 }, track,
   }, NOW_W42);
   assert.equal(phys6.ok, false);
   assert.equal(phys6.reason, 'PHYS MISMATCH');
 
   const cls = normalizeSubmit({
-    name: 'Ry', week, frameMm: 65, timeMs: ghost.lapTime, ghost, track, build: { frameMm: 85 },
+    name: 'RyFly', week, frameMm: 65, timeMs: ghost.lapTime, ghost, track, build: { frameMm: 85 },
   }, NOW_W42);
   assert.equal(cls.ok, false);
   assert.equal(cls.reason, 'CLASS MISMATCH');
 
   const bot = normalizeSubmit({
-    name: 'Ry', week, frameMm: 65, timeMs: paceGhost.lapTime, ghost: paceGhost, track,
+    name: 'RyFly', week, frameMm: 65, timeMs: paceGhost.lapTime, ghost: paceGhost, track,
   }, NOW_W42);
   assert.equal(bot.ok, false);
   assert.equal(bot.reason, 'PACE BOT');
@@ -829,7 +778,7 @@ test('H1 server derives week track, rejects pace-bot/phys/class/week, claims nam
   const liveTrack = weeklyTrackFor(liveWeek);
   const liveGhost = humanRun(liveTrack);
   const payload = {
-    week: liveWeek, frameMm: 65, name: 'Ry', timeMs: liveGhost.lapTime, ghost: liveGhost, track: liveTrack,
+    week: liveWeek, frameMm: 65, name: 'RyFly', timeMs: liveGhost.lapTime, ghost: liveGhost, track: liveTrack,
     build: { frameMm: 65 }, token: tokenA,
   };
   const ok = await handleLeaderboard(new Request('https://x/api/submit', {
@@ -872,7 +821,7 @@ test('worker week/board/submit use weekly-YYYY-Wxx-g2 and do not mix old ids', a
   const posted = await handleLeaderboard(new Request('https://x/api/submit', {
     method: 'POST',
     body: JSON.stringify({
-      week, frameMm: 65, name: 'Ry', timeMs: ghost.lapTime, ghost, track,
+      week, frameMm: 65, name: 'RyFly', timeMs: ghost.lapTime, ghost, track,
       build: { frameMm: 65 }, token,
     }),
   }), env);
@@ -881,7 +830,7 @@ test('worker week/board/submit use weekly-YYYY-Wxx-g2 and do not mix old ids', a
   assert.equal(postedBody.ok, true);
 
   const oldId = normalizeSubmit({
-    week, frameMm: 65, name: 'Ry', timeMs: ghost.lapTime, ghost,
+    week, frameMm: 65, name: 'RyFly', timeMs: ghost.lapTime, ghost,
     track: oldAlias, build: { frameMm: 65 }, token,
   });
   assert.equal(oldId.ok, true, oldId.reason);
@@ -914,10 +863,10 @@ test('boards are kept per PHYS_VER: after the bump to 7 a phys 6, 5, 4 or 3 row 
   // What the phys 3, 4, 5 and 6 Workers wrote this week: the bare week,
   // week.p4, week.p5 and week.p6 as the key, and the same pilot faster than
   // the run below.
-  await db.prepare(insert).bind(week, 65, 'Ry', 1000, track.id, Date.now()).run();
-  await db.prepare(insert).bind(week + '.p4', 65, 'Ry', 1100, track.id, Date.now()).run();
-  await db.prepare(insert).bind(week + '.p5', 65, 'Ry', 1200, track.id, Date.now()).run();
-  await db.prepare(insert).bind(week + '.p6', 65, 'Ry', 1300, track.id, Date.now()).run();
+  await db.prepare(insert).bind(week, 65, 'RyFly', 1000, track.id, Date.now()).run();
+  await db.prepare(insert).bind(week + '.p4', 65, 'RyFly', 1100, track.id, Date.now()).run();
+  await db.prepare(insert).bind(week + '.p5', 65, 'RyFly', 1200, track.id, Date.now()).run();
+  await db.prepare(insert).bind(week + '.p6', 65, 'RyFly', 1300, track.id, Date.now()).run();
   const boardUrl = 'https://x/api/board?week=' + week + '&class=65';
   const before = await (await handleLeaderboard(new Request(boardUrl), env)).json();
   assert.deepEqual(before.entries, []);
@@ -927,16 +876,16 @@ test('boards are kept per PHYS_VER: after the bump to 7 a phys 6, 5, 4 or 3 row 
   const posted = await handleLeaderboard(new Request('https://x/api/submit', {
     method: 'POST',
     body: JSON.stringify({
-      week, frameMm: 65, name: 'Ry', timeMs: ghost.lapTime, ghost, track,
+      week, frameMm: 65, name: 'RyFly', timeMs: ghost.lapTime, ghost, track,
       build: { frameMm: 65 }, token: '12'.repeat(16),
     }),
   }), env);
   const pj = await posted.json();
   assert.equal(posted.status, 200, pj.reason);
   assert.equal(pj.improved, true);
-  assert.deepEqual(pj.entries.map((r) => [r.name, r.timeMs]), [['Ry', ghost.lapTime]]);
+  assert.deepEqual(pj.entries.map((r) => [r.name, r.timeMs]), [['RyFly', ghost.lapTime]]);
   const after = await (await handleLeaderboard(new Request(boardUrl), env)).json();
-  assert.deepEqual(after.entries.map((r) => r.name), ['Ry']);
+  assert.deepEqual(after.entries.map((r) => r.name), ['RyFly']);
 
   // The Daily Line board: today's phys 3, 4, 5 and 6 rows are gone, a phys 7
   // row lists.
@@ -1348,17 +1297,17 @@ test('Daily Line anti-junk rejects fast / split / ghost errors', () => {
   for (let i = 1; i < fast.samples.length; i++) fast.samples[i][1] = ghost.samples[i - 1][1] + 80;
   assert.equal(validateDailyLineRun({ challenge: ch, timeMs, splits, ghost: fast, frameMm: 65 }).reason, 'SPEED LIMIT');
   const body = normalizeDailyLineSubmit({
-    day: '2026-10-21', frameMm: 65, name: 'Ry', timeMs, splits, ghost,
+    day: '2026-10-21', frameMm: 65, name: 'RyFly', timeMs, splits, ghost,
     trackId: ch.trackId, token: 'a'.repeat(32),
   }, now);
   assert.equal(body.ok, true, body.reason);
   assert.equal(body.week, 'D2026-10-21');
   const wrong = normalizeDailyLineSubmit({
-    day: '2026-10-21', frameMm: 65, name: 'Ry', timeMs, splits, ghost,
+    day: '2026-10-21', frameMm: 65, name: 'RyFly', timeMs, splits, ghost,
     trackId: 'city-loop', token: 'a'.repeat(32),
   }, now);
   assert.equal(wrong.ok, false);
-  const rank = dailyLineRank([{ name: 'A', timeMs: 8000 }, { name: 'Ry', timeMs: 9000 }], 'Ry', 9000);
+  const rank = dailyLineRank([{ name: 'A', timeMs: 8000 }, { name: 'RyFly', timeMs: 9000 }], 'RyFly', 9000);
   assert.equal(rank.rank, 2);
   assert.equal(rank.of, 2);
   assert.ok(DAILY_LINE_MIN_MS >= 2000);

@@ -19,7 +19,7 @@ import { PHYS_VER } from '../sim-retention.js';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const WORKER = 'workers/sim-leaderboard';
 const GUARD = `${WORKER}/scripts/predeploy.mjs`;
-const FILES = [GUARD, `${WORKER}/package.json`, `${WORKER}/wrangler.jsonc`, `${WORKER}/src/index.js`, 'sim-retention.js', 'sim-share.js'];
+const FILES = [GUARD, `${WORKER}/package.json`, `${WORKER}/wrangler.jsonc`, `${WORKER}/src/index.js`, 'sim-retention.js', 'sim-share.js', 'sim-pilot-names.js', 'sim-builtin-boards.js'];
 
 const tmp = mkdtempSync(join(tmpdir(), 'qm-predeploy-'));
 after(() => rmSync(tmp, { recursive: true, force: true, maxRetries: 5 }));
@@ -117,7 +117,7 @@ test('on main, level with origin/main, nothing shipped uncommitted: clear, with 
   assert.match(r.stdout, new RegExp(`^  PHYS_VER +${PHYS_VER} \\(sim-retention\\.js; boards are keyed \\.p${PHYS_VER}\\)$`, 'm'));
   const bundles = /^  bundles +(.*)$/m.exec(r.stdout);
   assert.ok(bundles, r.stdout);
-  assert.deepEqual(bundles[1].split(', ').sort(), ['sim-retention.js', 'sim-share.js', `${WORKER}/src/index.js`]);
+  assert.deepEqual(bundles[1].split(', ').sort(), ['sim-builtin-boards.js', 'sim-pilot-names.js', 'sim-retention.js', 'sim-share.js', `${WORKER}/src/index.js`]);
 });
 
 test('PHYS_VER is the one in the commit it ships, read from sim-retention.js', () => {

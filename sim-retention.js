@@ -46,14 +46,40 @@ export const DAILY_LINE_STRICT_MISS_MS = 3000;
 // WEEKLY_GHOST_MAX_SAMPLES.
 export const WEEKLY_SUBMIT_GHOST_MAX = 1500;
 export const WEEKLY_GHOST_MAX_SAMPLES = 1600;
+// A built-in board's run: 15 Hz for its whole length (up to 180 s), and its
+// steps no sparser than BUILTIN_STEP_MEDIAN_MS at the median: the force check
+// (flightSpikes) can't see a turn spread over long steps.
+export const BUILTIN_GHOST_MAX_SAMPLES = 2800;
+export const BUILTIN_STEP_MEDIAN_MS = 80;
 // A line run's time against its ghost: ghost time from the gate-0 sample to
 // the finish sample, plus whole miss penalties, within this many ms.
 export const LINE_TIME_TOL_MS = 150;
+// The leaderboard Worker's posts per IP per UTC hour: score submits (weekly,
+// Daily Line, builder and built-in boards) share one budget, SHARE
+// (/api/line) has its own, so sharing runs never uses up the boards' and the
+// other way round.
+export const RATE_SCORE_MAX = 30;
+export const RATE_SHARE_MAX = 12;
 // A line run's sweep: the most a step may miss a gate by and still pass it,
 // and the longest step between samples (the page samples every 67 ms; a
 // hitched frame is longer).
 export const LINE_SWEEP_SLACK_MAX = 0.6;
 export const LINE_MAX_GAP_MS = 500;
+// A line run's flight, as a whoop flies it: the force on it (its
+// acceleration less gravity) at most FLIGHT_FORCE_MARGIN x (its thrust's,
+// FLIGHT_THRUST_MS2, from vendor/sim-core/airframes: the Air65 57 m/s^2, the
+// Fractal75 50; the 85 as the 65) plus drag's at that speed (FLIGHT_DRAG_K
+// v^2), on steps of 30 ms or more. A few steps over it are bumps (a wall, a
+// gate's frame): flightSpikesMax of them. A ghost drawn gate to gate in
+// straight lines turns at every gate faster than any whoop can; a smooth
+// path at the speed cap is not caught. Checked on the built-in boards only
+// (normalizeBuiltinSubmit).
+export const FLIGHT_THRUST_MS2 = Object.freeze({ 65: 57, 75: 50, 85: 57 });
+export const FLIGHT_FORCE_MARGIN = 1.3;
+export const FLIGHT_DRAG_K = 0.25;
+export function flightSpikesMax(gateCount) {
+  return 3 + Math.floor((gateCount | 0) / 4);
+}
 // From RIG_GEN_DAILY_FROM the Daily alternates by UTC day: on the cut-over
 // day and every second day after it a Rig course generated from the six Coach
 // drills (rigCourseFor), between them the House Loop (the line pool's House
@@ -1611,24 +1637,26 @@ function segmentGateDist(a, b, g) {
 // LINE_SWEEP_SLACK_MAX (the chord cuts the corner the quad flew), and any
 // further gate on the same step within its radius alone. The page records the
 // finish frame last, inside the last gate's sphere, so that is the finish.
-// Returns the sample indices of the gate-0 pass and the finish, or -1.
+// Returns the sample indices of the gate-0 pass and the finish, or -1, and
+// in `at` the sample index each gate was passed on, in order.
 export function lineRunPasses(samples, track) {
   const gates = ((track && track.gates) || []).map((g) => normalizeGate(g));
   const n = gates.length;
-  const out = { start: -1, finish: -1, passed: 0 };
+  const out = { start: -1, finish: -1, passed: 0, at: [] };
   if (n < 2 || !Array.isArray(samples) || samples.length < 2) return out;
   const at = (s) => ({ x: s[1], y: s[2], z: s[3] });
   const last = n - 1;
   const end = samples.length - 1;
   let next = 0;
   // The page's first sample is the frame the run starts on, inside gate 0.
-  if (dist3(at(samples[0]), gates[0]) < gates[0].r + 0.05) { out.start = 0; next = 1; }
+  if (dist3(at(samples[0]), gates[0]) < gates[0].r + 0.05) { out.start = 0; next = 1; out.at.push(0); }
   for (let i = 1; i <= end && next < last; i++) {
     const a = at(samples[i - 1]), b = at(samples[i]);
     const slack = Math.min(dist3(a, b) * 0.25, LINE_SWEEP_SLACK_MAX);
     let credited = 0;
     while (next < last && segmentGateDist(a, b, gates[next]) < gates[next].r + (credited ? 0 : slack)) {
       if (next === 0) out.start = i;
+      out.at.push(i);
       next++;
       credited++;
     }
@@ -1637,8 +1665,91 @@ export function lineRunPasses(samples, track) {
   if (next === last && out.start >= 0 && out.start < end && dist3(at(samples[end]), gates[last]) < gates[last].r + 0.05) {
     out.finish = end;
     out.passed = n;
+    out.at.push(end);
   }
   return out;
+}
+
+// A finished line run's splits: each gate after gate 0, its pass's ghost time
+// from the gate-0 sample, ms (the last is the run's ghost time).
+export function lineRunSplits(samples, pass) {
+  if (!pass || pass.finish < 0 || !Array.isArray(pass.at)) return [];
+  const t0 = samples[pass.start][0];
+  return pass.at.slice(1).map((i) => Math.round(samples[i][0] - t0));
+}
+
+// A run flown by a test's pilot (sim.html _sim.setTestPilot): the page tags
+// its ghost, and no board or shared line takes it.
+export function isTestPilotGhost(ghost) {
+  return !!(ghost && typeof ghost === 'object' && ghost.testPilot);
+}
+
+// The steps of a ghost (samples 30 ms apart or more) where the force on the
+// quad is more than a whoop of the class can make (see FLIGHT_THRUST_MS2).
+export function flightSpikes(samples, frameMm) {
+  const thrust = FLIGHT_THRUST_MS2[classId(frameMm)] || FLIGHT_THRUST_MS2[65];
+  const g = 9.81 * WS_PER_METRE;
+  const pts = [];
+  for (const p of samples || []) {
+    if (!pts.length || p[0] - pts[pts.length - 1][0] >= 30) pts.push(p);
+    else if (p === samples[samples.length - 1]) pts[pts.length - 1] = p;
+  }
+  let spikes = 0;
+  let prev = null;
+  for (let i = 1; i < pts.length; i++) {
+    const dt = (pts[i][0] - pts[i - 1][0]) / 1000;
+    if (!(dt > 0)) continue;
+    const v = { x: (pts[i][1] - pts[i - 1][1]) / dt, y: (pts[i][2] - pts[i - 1][2]) / dt, z: (pts[i][3] - pts[i - 1][3]) / dt, dt };
+    if (prev) {
+      const da = (prev.dt + v.dt) / 2;
+      const fx = (v.x - prev.x) / da, fy = (v.y - prev.y) / da + g, fz = (v.z - prev.z) / da;
+      const speedM = Math.hypot(v.x + prev.x, v.y + prev.y, v.z + prev.z) / 2 / WS_PER_METRE;
+      const limit = WS_PER_METRE * FLIGHT_FORCE_MARGIN * (thrust + FLIGHT_DRAG_K * speedM * speedM);
+      if (Math.hypot(fx, fy, fz) > limit) spikes++;
+    }
+    prev = v;
+  }
+  return spikes;
+}
+
+// A ghost's path: GHOST_PATH_POINTS points evenly spaced along it (by
+// distance, so its times don't matter), to 0.01 u; null for one too short.
+// The board keeps a top ghost's path beside it, so a copy check compares
+// paths without parsing ghosts.
+export const GHOST_PATH_POINTS = 64;
+export function ghostPath(samples, n = GHOST_PATH_POINTS) {
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const s = (samples || []).filter((p) => Array.isArray(p) && p.length >= 4);
+  if (s.length < 2) return null;
+  const cum = [0];
+  for (let i = 1; i < s.length; i++) cum.push(cum[i - 1] + Math.hypot(s[i][1] - s[i - 1][1], s[i][2] - s[i - 1][2], s[i][3] - s[i - 1][3]));
+  const L = cum[cum.length - 1];
+  if (!(L > 1)) return null;
+  const out = [];
+  let j = 0;
+  for (let k = 0; k < n; k++) {
+    const d = L * k / (n - 1);
+    while (j < cum.length - 2 && cum[j + 1] < d) j++;
+    const f = cum[j + 1] > cum[j] ? (d - cum[j]) / (cum[j + 1] - cum[j]) : 0;
+    out.push([1, 2, 3].map((c) => r2(s[j][c] + (s[j + 1][c] - s[j][c]) * f)));
+  }
+  return out;
+}
+
+// Mean distance (u) between two paths (ghostPath), Infinity if either is
+// missing or they differ in length.
+export function pathDistance(pa, pb) {
+  if (!Array.isArray(pa) || !Array.isArray(pb) || !pa.length || pa.length !== pb.length) return Infinity;
+  let sum = 0;
+  for (let k = 0; k < pa.length; k++) sum += Math.hypot(pa[k][0] - pb[k][0], pa[k][1] - pb[k][1], pa[k][2] - pb[k][2]);
+  return sum / pa.length;
+}
+
+// Mean distance (u) between two ghosts' paths, each resampled by distance
+// along it to `n` points: small for the same flight however its times were
+// changed. Infinity for a path too short to compare.
+export function ghostPathDistance(a, b, n = 64) {
+  return pathDistance(ghostPath(a, n), ghostPath(b, n));
 }
 
 function isCityLoopId(id) {
@@ -1693,7 +1804,7 @@ export function validateSubmittedRun(input) {
   const samples = ghost.samples;
   const line = !isCityLoopId(track.id);
   if (samples.length < 8) return { ok: false, reason: 'TOO FEW SAMPLES' };
-  if (samples.length > WEEKLY_GHOST_MAX_SAMPLES) return { ok: false, reason: 'TOO MANY SAMPLES' };
+  if (samples.length > (src.maxSamples || WEEKLY_GHOST_MAX_SAMPLES)) return { ok: false, reason: 'TOO MANY SAMPLES' };
   // minTimeMs: a builder track's floor is the Daily Line's (normalizeTrackSubmit).
   const minMs = Number.isFinite(src.minTimeMs) ? src.minTimeMs : 5000;
   if (!Number.isFinite(timeMs) || timeMs < minMs || timeMs > 180000) return { ok: false, reason: 'BAD TIME' };
@@ -2117,6 +2228,7 @@ export async function normalizeTrackSubmit(body) {
   const ghost = body.ghost;
   const bad = ghostPayloadError(ghost, null);
   if (bad) return { ok: false, reason: bad };
+  if (isTestPilotGhost(ghost)) return { ok: false, reason: 'TEST PILOT' };
   if (ghost.phys !== PHYS_VER) return { ok: false, reason: 'PHYS MISMATCH' };
   if (isPaceBotGhost(ghost, track)) return { ok: false, reason: 'PACE BOT' };
   // A builder track can be a few gates across a room: the Daily Line's
@@ -2320,6 +2432,7 @@ export function normalizeDailyLineSubmit(body, now) {
   const givenId = submittedTrackId(body.track) || String(body.trackId || '');
   if (givenId && givenId !== challenge.trackId) return { ok: false, reason: 'TRACK MISMATCH' };
   const ghost = body.ghost;
+  if (isTestPilotGhost(ghost)) return { ok: false, reason: 'TEST PILOT' };
   if (ghost && ghost.phys != null && ghost.phys !== PHYS_VER) return { ok: false, reason: 'PHYS MISMATCH' };
   const checked = validateDailyLineRun({
     challenge,
@@ -2343,6 +2456,90 @@ export function normalizeDailyLineSubmit(body, now) {
     trackId: challenge.trackId,
     token,
   };
+}
+
+// ---- Built-in track boards (the public maps' races) ----
+// The Worker passes the tracks (sim-builtin-boards.js BUILTIN_BOARD_TRACKS,
+// generated from tracks/*.json); this file has no imports. A board is keyed
+// by the track's geometry as a builder track's is (customTrackCanon): 'b.' +
+// 16 hex of SHA-256 + '.p' + PHYS_VER, so an edit to a track's gates starts
+// its boards clean. The run is checked against the Worker's copy of the
+// track; a client sends only the track's id and the hash of the gates it
+// flew (builtinTrackHash), and a hash that is not the Worker's (a stale page,
+// a track changed under a built-in id) is refused.
+export const BUILTIN_BOARD_KEY_RE = /^b\.[0-9a-f]{16}\.p[1-9][0-9]{0,3}$/;
+// A built-in board keeps this many rows per class, and the full ghost of this
+// many (the rest keep time, splits and the ghost's digest).
+export const BUILTIN_BOARD_ROWS = 200;
+export const BUILTIN_BOARD_GHOSTS = 10;
+
+export async function builtinTrackHash(track) {
+  return (await hashPilotToken(customTrackCanon(track))).slice(0, 16);
+}
+
+export async function builtinBoardKey(track) {
+  return 'b.' + (await builtinTrackHash(track)) + '.p' + PHYS_VER;
+}
+
+export function builtinBoardTrack(tracks, id) {
+  const want = String(id == null ? '' : id);
+  return (tracks || []).find((t) => t.id === want) || null;
+}
+
+// POST /api/builtin/submit, checked: { track: id (or {id}), trackHash,
+// frameMm, name, timeMs, ghost, build, token }. The name is returned as sent:
+// the Worker checks it (sim-pilot-names.js) and claims it.
+export async function normalizeBuiltinSubmit(body, tracks) {
+  if (!body || typeof body !== 'object') return { ok: false, reason: 'BAD JSON' };
+  const frameMm = classId(body.frameMm || body.class);
+  const builtClass = classFromBuild(body.build);
+  if (builtClass != null && builtClass !== frameMm) return { ok: false, reason: 'CLASS MISMATCH' };
+  const raw = builtinBoardTrack(tracks, submittedTrackId(body.track) || body.trackId);
+  if (!raw) return { ok: false, reason: 'NO BOARD' };
+  let track;
+  try { track = normalizeTrack(raw); }
+  catch (e) { return { ok: false, reason: 'BAD TRACK' }; }
+  const hash = await builtinTrackHash(track);
+  if (body.trackHash !== hash) return { ok: false, reason: 'TRACK CHANGED' };
+  const ghost = body.ghost;
+  const bad = ghostPayloadError(ghost, track.id);
+  if (bad) return { ok: false, reason: bad };
+  if (isTestPilotGhost(ghost)) return { ok: false, reason: 'TEST PILOT' };
+  if (ghost.phys !== PHYS_VER) return { ok: false, reason: 'PHYS MISMATCH' };
+  if (isPaceBotGhost(ghost, track)) return { ok: false, reason: 'PACE BOT' };
+  const timeMs = +body.timeMs;
+  const checked = validateSubmittedRun({ ghost, track, frameMm, timeMs, threeD: body.threeD, minTimeMs: DAILY_LINE_MIN_MS, maxSamples: BUILTIN_GHOST_MAX_SAMPLES });
+  if (!checked.ok) return checked;
+  // At the page's rate, so a turn is seen (a forger's sparse samples spread it).
+  const steps = [];
+  for (let i = 1; i < ghost.samples.length; i++) steps.push(ghost.samples[i][0] - ghost.samples[i - 1][0]);
+  steps.sort((a, b) => a - b);
+  if (steps[Math.floor(steps.length / 2)] > BUILTIN_STEP_MEDIAN_MS) return { ok: false, reason: 'SPARSE SAMPLES' };
+  // Flown as a whoop flies (flightSpikes): on these boards only for now,
+  // until real runs show how often an honest one scrapes a wall.
+  if (flightSpikes(ghost.samples, frameMm) > flightSpikesMax(track.gates.length)) return { ok: false, reason: 'IMPLAUSIBLE FLIGHT' };
+  const splits = lineRunSplits(ghost.samples, lineRunPasses(ghost.samples, track));
+  return {
+    ok: true,
+    key: 'b.' + hash + '.p' + PHYS_VER,
+    trackId: track.id,
+    frameMm,
+    name: typeof body.name === 'string' ? body.name : '',
+    timeMs: timeMs | 0,
+    misses: checked.misses | 0,
+    splits,
+    token: typeof body.token === 'string' ? body.token.trim() : '',
+  };
+}
+
+// A ghost's digest: its positions to 5 cm, in order, without its times or
+// name: the same flight resubmitted (a shared run, under another name) has
+// the same digest. 16 hex of SHA-256.
+export async function ghostDigest(ghost) {
+  const s = (ghost && Array.isArray(ghost.samples)) ? ghost.samples : [];
+  const q = (v) => Math.round(+v * 20);
+  const text = s.map((p) => q(p[1]) + ',' + q(p[2]) + ',' + q(p[3])).join(';');
+  return (await hashPilotToken(text)).slice(0, 16);
 }
 
 export function emptyBoard() {
@@ -3373,6 +3570,7 @@ export function normalizeSubmit(body, now) {
   }
   const ghost = body.ghost;
   if (ghostPayloadError(ghost, null)) return { ok: false, reason: ghostPayloadError(ghost, null) };
+  if (isTestPilotGhost(ghost)) return { ok: false, reason: 'TEST PILOT' };
   const ghostPhys = ghost && ghost.phys;
   if (ghostPhys !== PHYS_VER) return { ok: false, reason: 'PHYS MISMATCH' };
   if (isPaceBotGhost(ghost, track)) return { ok: false, reason: 'PACE BOT' };
