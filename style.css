@@ -1658,6 +1658,9 @@
     gap: 8px;
   }
   .sim-teaser-card:is(:hover, :focus-visible) { border-color: var(--orange); }
+  /* A <picture> (index.html's phone/desktop poster) steps aside so its <img>
+     is the card's flex item, exactly like gear.html's bare <img>. */
+  .sim-teaser-card picture { display: contents; }
   /* img now, a poster-framed <video> later: both get the full-bleed media box */
   .sim-teaser-card :is(img, video) {
     /* negative margins only SHIFT a box, they don't grow it — width:100%
