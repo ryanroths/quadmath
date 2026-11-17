@@ -357,12 +357,20 @@ async function serveRoot() {
   return { server, port: server.address().port };
 }
 
+// One CDP call's limit, and the longest a call waits on a flight in the page
+// (flyWait): well inside it, however long the flight.
+const CDP_MS = 45000;
+const FLY_WAIT_MS = 8000;
+// A flight's own time and pace, reported on a pass as on a failure.
+const flown = (r) => `flight: ${r.ms} ms in the page, ${r.frames} frames (longest ${r.longestMs} ms), ` +
+  `${r.calls} waits (longest ${r.longestCallMs} ms)`;
+
 let cdpSeq = 0;
 function cdp(ws, method, params) {
   const id = ++cdpSeq;
   ws.send(JSON.stringify({ id, method, params: params || {} }));
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('cdp timeout ' + method)), 45000);
+    const t = setTimeout(() => reject(new Error('cdp timeout ' + method)), CDP_MS);
     function on(msg) {
       try {
         const o = JSON.parse(typeof msg.data === 'string' ? msg.data : msg.data.toString());
@@ -439,10 +447,29 @@ const PAGE = String.raw`(() => {
   // A run the Worker takes: from gate 0 along the line through every gate at
   // speed u/s, the quad put on the path every frame (the core's teleport), with
   // a weave so it is no pace bot's straight line. ws: scene units per metre.
-  async function flyPath(ws, speed) {
+  // A gate counts when the page, which looks once a frame after the frame's
+  // step of the core, finds the quad entering its sphere (sim-tracks.js
+  // detectPassOrMiss); entering any other gate is a miss. On a slow runner:
+  // - No frame moves the quad more than half the smallest gate's radius along
+  //   the path: one long frame had stepped it past a gate whole ("MISSED
+  //   GATE"). A long frame slows the run; it skips nothing.
+  // - A step is up to 250 ms of sim time, in which a quad put at rest falls
+  //   0.3 m: out of a sphere it was in, and back in at the next put, a miss.
+  //   So it is put rising at the speed 250 ms of free fall brings back to the
+  //   path (as test_sim_csp.mjs does): at the page's look it is within 8 cm.
+  // - The loop starts at gate 0's sphere edge, so a quad that fell from the
+  //   start gate while the page counted it does not come back into it, and it
+  //   stops once the finish has counted, so nothing re-enters the last gate.
+  // - The flight runs in the page from its start to its end and never waits on
+  //   the test: a pause between calls would leave the quad falling, out of a
+  //   gate and back in. The test starts it (flyStart), then waits on it in
+  //   calls of a few seconds each (flyWait), so a slow runner's long flight
+  //   spans many calls and none comes near a CDP call's limit.
+  async function flyPath(ws, speed, progress = {}) {
     const track = s.tracks().find((t) => t.id === s.track());
     const b = s.bfCore();
-    const put = (p) => b.teleport({ x: -p.z / ws, y: -p.x / ws, z: p.y / ws }, { x: 0, y: 0, z: 0, w: 1 });
+    const RISE = 9.81 * 0.125; // m/s up: back on the path after 250 ms of free fall
+    const put = (p) => b.teleport({ x: -p.z / ws, y: -p.x / ws, z: p.y / ws }, { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: 0, z: RISE });
     const counter = () => (/ GATE (\d+)\//.exec($('osdGate').textContent) || [])[1];
     const pts = track.gates.map((g) => ({ x: g.x, y: g.y, z: g.z }));
     const seg = [];
@@ -464,16 +491,42 @@ const PAGE = String.raw`(() => {
     put(pts[0]);
     const started = await until(() => counter() !== before, 2000);
     const frame = () => new Promise((r) => requestAnimationFrame(r));
-    const t0 = performance.now();
-    for (;;) {
-      const d = (performance.now() - t0) / 1000 * speed;
-      if (d >= total) break;
+    const maxStep = Math.min(...track.gates.map((g) => g.r)) / 2;
+    if (!(maxStep > 0)) throw new Error('flyPath: no gate radius on ' + track.id);
+    const finished = () => !!$('toastShare');
+    let d = track.gates[0].r + 0.05, last = performance.now(), frames = 0, longestMs = 0;
+    progress.total = total;
+    while (d < total && !finished()) {
       put(at(d));
       await frame();
+      const now = performance.now(), ms = now - last;
+      last = now; frames++; longestMs = Math.max(longestMs, ms);
+      d += Math.min(ms / 1000 * speed, maxStep);
+      progress.frames = frames; progress.d = d;
     }
-    put(pts[pts.length - 1]);
-    const done = await until(() => !!$('toastShare'), 3000);
-    return { started, done, total, toast: $('toast').textContent };
+    if (!finished()) put(pts[pts.length - 1]);
+    const done = await until(finished, 3000);
+    return { started, done, total, toast: $('toast').textContent, toasts: (window.__toasts || []).slice(), frames, longestMs: Math.round(longestMs), maxStep };
+  }
+  // One flight at a time: started here, flown by flyPath to its end.
+  let flight = null;
+  function flyStart(ws, speed) {
+    if (flight && !flight.over) throw new Error('flyStart: a flight is still on');
+    const f = { over: false, result: null, error: null, progress: { frames: 0, d: 0, total: 0 }, t0: performance.now(), ms: 0 };
+    flight = f;
+    flyPath(ws, speed, f.progress)
+      .then((r) => { f.result = r; }, (e) => { f.error = String((e && e.stack) || e); })
+      .finally(() => { f.ms = Math.round(performance.now() - f.t0); f.over = true; });
+    return true;
+  }
+  // Waits up to ms for the flight's end: its result then, else where it is.
+  async function flyWait(ms) {
+    const f = flight;
+    if (!f) throw new Error('flyWait: no flight started');
+    await until(() => f.over, ms);
+    if (f.error) throw new Error('flyPath: ' + f.error);
+    if (!f.over) return { over: false, ...f.progress, ms: Math.round(performance.now() - f.t0) };
+    return { over: true, ...f.result, ms: f.ms };
   }
   // The lap panel's board block, as the pilot sees it.
   function board() {
@@ -484,7 +537,7 @@ const PAGE = String.raw`(() => {
     return { map: s.map(), track: s.track(), board: board(), toasts: window.__toasts.slice(), errors: window.__errors.slice(),
       lap: $('osdLap').innerText, best: localStorage.getItem('quadmathSimBestRun_' + s.track()) };
   }
-  window.__tb = { s, wait, until, $, flyGates, flyPath, board, landed };
+  window.__tb = { s, wait, until, $, flyGates, flyPath, flyStart, flyWait, board, landed };
   return true;
 })()`;
 
@@ -584,6 +637,23 @@ test('track boards in Chrome: a link\'s run lands on its board, a second profile
       assert.ok(ready, 'the page booted on the bf core');
       await evaluate(ws, PAGE);
       const js = async (body) => JSON.parse(await evaluate(ws, `(async () => { const S = window.__tb; ${body} })()`));
+      // A flight runs in the page from start to finish (S.flyStart). Each call
+      // here waits on it for at most FLY_WAIT_MS, so a long flight on a slow
+      // runner spans calls and no call comes near CDP_MS. A flight that lands
+      // no frame in CDP_MS fails, as one call that long did.
+      const fly = async (speed) => {
+        const t0 = Date.now();
+        await js(`S.flyStart(${WS}, ${speed}); return 'true';`);
+        let calls = 0, longestCallMs = 0, frames = -1, moved = Date.now();
+        for (;;) {
+          const c0 = Date.now();
+          const r = await js(`return JSON.stringify(await S.flyWait(${FLY_WAIT_MS}));`);
+          calls++; longestCallMs = Math.max(longestCallMs, Date.now() - c0);
+          if (r.over) return { ...r, calls, longestCallMs, wallMs: Date.now() - t0 };
+          if (r.frames !== frames) { frames = r.frames; moved = Date.now(); }
+          else if (Date.now() - moved > CDP_MS) throw new Error(`flyPath: no frame in ${CDP_MS} ms: ` + JSON.stringify(r));
+        }
+      };
       const click = async (id) => {
         const p = JSON.parse(await evaluate(ws, `(() => { const el = document.getElementById(${JSON.stringify(id)}); if (!el) return JSON.stringify({ found: false });
           const b = el.getBoundingClientRect(); const x = b.left + b.width / 2, y = b.top + b.height / 2;
@@ -593,7 +663,7 @@ test('track boards in Chrome: a link\'s run lands on its board, a second profile
           await cdp(ws, 'Input.dispatchMouseEvent', { type, x: p.x, y: p.y, button: 'left', clickCount: 1 });
         }
       };
-      await flow({ js, click });
+      await flow({ js, click, fly });
     } finally {
       try { if (ws) ws.close(); } catch (e) { /* ignore */ }
       killTree(child);
@@ -613,15 +683,16 @@ test('track boards in Chrome: a link\'s run lands on its board, a second profile
   const pilot = (name, seed) => ({ storage: { quadmathSimInputChoice: 'keyboard', quadmath_pilotName: name, quadmathSimPilotToken: pilotToken(seed) } });
 
   try {
-    await t.test('a pilot opens the link and races: the run lands on the track\'s board, on the lap panel and its card', async () => {
-      await pass(link, pilot('RyFly', 'r'), async ({ js, click }) => {
+    await t.test('a pilot opens the link and races: the run lands on the track\'s board, on the lap panel and its card', async (st) => {
+      await pass(link, pilot('RyFly', 'r'), async ({ js, click, fly }) => {
         let r = await js(`await S.until(() => !!S.board(), 4000); return JSON.stringify(S.landed());`);
         assert.equal(r.track, track.id);
         assert.ok(wk.calls.some((c) => c === 'GET /api/track/board'), 'the board asked for up front: ' + wk.calls.join(', '));
         assert.ok(r.board, 'an (empty) board before the first run: ' + r.lap);
         assert.match(r.board.text, /Desk loop · online/);
         assert.match(r.board.text, /No online times yet/);
-        r = await js(`return JSON.stringify(await S.flyPath(${WS}, 6));`);
+        r = await fly(6);
+        st.diagnostic(flown(r));
         assert.equal(r.done, true, 'raced to the finish: ' + JSON.stringify(r));
         r = await js(`await S.until(() => S.board() && /RyFly/.test(S.board().text), 5000); return JSON.stringify(S.landed());`);
         assert.ok(wk.calls.includes('POST /api/track/submit'), wk.calls.join(', '));
@@ -659,16 +730,20 @@ test('track boards in Chrome: a link\'s run lands on its board, a second profile
     });
 
     for (const mode of ['down', 'old']) {
-      await t.test(`the Worker ${mode === 'down' ? 'down' : 'without these routes (404)'}: the link boots, races and keeps its local best, with no board and no error toast`, async () => {
+      await t.test(`the Worker ${mode === 'down' ? 'down' : 'without these routes (404)'}: the link boots, races and keeps its local best, with no board and no error toast`, async (st) => {
         wk.mode = mode;
         try {
-          await pass(link, pilot('Ana', 'a'), async ({ js }) => {
+          await pass(link, pilot('Ana', 'a'), async ({ js, fly }) => {
             let r = await js(`await S.wait(1500); return JSON.stringify(S.landed());`);
             assert.equal(r.track, track.id);
             assert.equal(r.board, null, 'no board: ' + r.lap);
             wk.calls.length = 0;
-            r = await js(`return JSON.stringify(await S.flyPath(${WS}, 6));`);
+            r = await fly(6);
+            st.diagnostic(flown(r));
             assert.equal(r.done, true, 'raced to the finish: ' + JSON.stringify(r));
+            // The send comes from the finish, in the sim's time: waited for
+            // (up to 10 s), then the same 1.5 s for any toast it would raise.
+            for (let i = 0; i < 100 && !wk.calls.some((c) => c.endsWith(' /api/track/submit')); i++) await sleep(100);
             r = await js(`await S.wait(1500); return JSON.stringify(S.landed());`);
             // The page tried to send it: its preflight (OPTIONS) or the POST, which a
             // down or 404 Worker fails.

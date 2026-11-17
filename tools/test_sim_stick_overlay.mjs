@@ -512,7 +512,10 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         await hold(true, 'ArrowRight', 'ArrowRight', 39);
         await hold(true, 'd', 'KeyD', 68);
         await hold(true, 'w', 'KeyW', 87);
-        await js(`await S.wait(500); return 1;`);
+        // The keys move the sticks in sim time (W ramps the throttle 1.4 a
+        // second): held until they are there, however fast this machine runs
+        // the sim against the wall clock (a CI runner's is about half).
+        await js(`await S.until(() => { const k = S.s.stickOverlay().stick; return k.r > 0.9 && k.y > 0.9 && k.t > 0.4; }, 8000); return 1;`);
         await hold(false, 'w', 'KeyW', 87);
         await js(`await S.wait(500); return 1;`);
         r = await tracks(js, 'keys held');
@@ -524,7 +527,8 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         assert.equal(green(r.px.corner), false, 'not painted green everywhere');
         await hold(false, 'ArrowRight', 'ArrowRight', 39);
         await hold(true, 'ArrowUp', 'ArrowUp', 38);
-        await js(`await S.wait(600); return 1;`);
+        // The arrows glide the stick in sim time too: held until it is there.
+        await js(`await S.until(() => S.s.stickOverlay().stick.p > 0.9, 8000); return 1;`);
         r = await tracks(js, 'pitch forward');
         assert.ok(r.o.stick.p > 0.9 && r.o.dots.r.y < r.o.box * 0.2, 'pitch forward: the right dot up');
         await hold(false, 'ArrowUp', 'ArrowUp', 38);
@@ -544,15 +548,18 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         assert.equal(r.o.shown, true, 'H again shows it');
         assert.deepEqual(r.layout, before, 'H moved nothing else');
 
-        // The menu (Esc) hides it; closing it brings it back.
+        // The menu (Esc) hides it; closing it brings it back. The frame loop
+        // (syncStickOverlay) shows or hides it, so each read waits for the
+        // page's own class, then a frame, not a fixed 300 ms: a CI runner's
+        // frame can be longer than that.
         await key('Escape', 'Escape', 27);
-        r = await js(`await S.wait(300); return JSON.stringify({ menu: document.body.classList.contains('menu-open'), seen: S.seen(), o: S.s.stickOverlay() });`);
+        r = await js(`await S.until(() => document.body.classList.contains('menu-open'), 5000); await S.frame(); return JSON.stringify({ menu: document.body.classList.contains('menu-open'), seen: S.seen(), o: S.s.stickOverlay() });`);
         assert.equal(r.menu, true);
         assert.equal(r.o.shown, false, 'not over the menu');
         assert.equal(r.seen.display, 'none');
         assert.equal(r.seen.visibility, 'hidden', 'and the CSS rule says so too');
         await key('Escape', 'Escape', 27);
-        r = await js(`await S.wait(300); return JSON.stringify({ menu: document.body.classList.contains('menu-open'), seen: S.seen() });`);
+        r = await js(`await S.until(() => !document.body.classList.contains('menu-open'), 5000); await S.frame(); return JSON.stringify({ menu: document.body.classList.contains('menu-open'), seen: S.seen() });`);
         assert.equal(r.menu, false);
         assert.equal(r.seen.visibility, 'visible');
         assert.equal(r.seen.display, 'block');
@@ -576,11 +583,11 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         assert.deepEqual(r.on.layout, r.a, 'on: no layout shift');
         // The Tune panel (Tab) covers it as it covers #feelHud.
         await key('Tab', 'Tab', 9);
-        r = await js(`await S.wait(300); return JSON.stringify({ open: document.getElementById('panel').classList.contains('open'), seen: S.seen() });`);
+        r = await js(`await S.until(() => document.getElementById('panel').classList.contains('open'), 5000); await S.frame(); return JSON.stringify({ open: document.getElementById('panel').classList.contains('open'), seen: S.seen() });`);
         assert.equal(r.open, true);
         assert.equal(r.seen.display, 'none', 'not under the Tune panel');
         await key('Tab', 'Tab', 9);
-        r = await js(`await S.wait(300); return JSON.stringify({ open: document.getElementById('panel').classList.contains('open'), seen: S.seen() });`);
+        r = await js(`await S.until(() => !document.getElementById('panel').classList.contains('open'), 5000); await S.frame(); return JSON.stringify({ open: document.getElementById('panel').classList.contains('open'), seen: S.seen() });`);
         assert.equal(r.open, false);
         assert.equal(r.seen.display, 'block');
         // A narrow window (a laptop screen split in two): still clear of the legend and the card.

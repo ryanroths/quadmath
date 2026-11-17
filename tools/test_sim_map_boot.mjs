@@ -69,8 +69,12 @@ const liveChromes = new Set();
 
 function startChrome(startUrl, opts) {
   bootSeq += 1;
-  const run = { port: 9700 + bootSeq, profile: join(runDir(), 'profile-' + bootSeq) };
-  run.child = spawnBrowser(chrome, chromeArgs(run.port, run.profile, startUrl, opts), {
+  // DevTools on port 0: Chrome takes a free port and writes it to the
+  // profile's DevToolsActivePort (devToolsPort). A fixed port can already be
+  // held by another run's Chrome on the same machine, and the page list read
+  // there would be that Chrome's.
+  const run = { port: 0, profile: join(runDir(), 'profile-' + bootSeq) };
+  run.child = spawnBrowser(chrome, chromeArgs(0, run.profile, startUrl, opts), {
     stdio: ['ignore', 'pipe', 'pipe'],
     // Its own process group on POSIX, so stopping it stops the GPU and
     // renderer processes with it.
@@ -320,10 +324,25 @@ function chromeArgs(port, userData, startUrl, opts) {
   ];
 }
 
-async function waitForCdpPage(port, pred, tries) {
+// The DevTools port a run's Chrome took, once Chrome has written it (line 1
+// of DevToolsActivePort in the run's own, fresh profile); 0 until then.
+function devToolsPort(run) {
+  if (!run.port) {
+    try {
+      run.port = parseInt(readFileSync(join(run.profile, 'DevToolsActivePort'), 'utf8').split('\n')[0], 10) || 0;
+    } catch (e) { /* not written yet */ }
+  }
+  return run.port;
+}
+
+// Up to `tries` looks 200 ms apart, and none past `deadline` (epoch ms) when
+// one is given.
+async function waitForCdpPage(run, pred, tries, deadline) {
   const n = tries > 0 ? tries : 100;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n && !(deadline && Date.now() >= deadline); i++) {
     await sleep(200);
+    const port = devToolsPort(run);
+    if (!port) continue;
     try {
       const pages = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json();
       const hit = pages.find(pred)
@@ -387,7 +406,7 @@ async function bootPageAttached(spec, boot, run, url, wantCore) {
   run.child.stderr.on('data', (d) => { stderr += d.toString(); });
   const mapQ = 'map=' + spec.map;
   boot.step = 'waiting for Chrome\'s DevTools page';
-  const page = await waitForCdpPage(run.port, (p) => (
+  const page = await waitForCdpPage(run, (p) => (
     p.type === 'page' && p.webSocketDebuggerUrl && String(p.url || '').includes(mapQ)
   ), 100);
   if (!page) throw new Error('no CDP for ' + spec.map + '\n' + stderr.slice(-400));
@@ -648,7 +667,7 @@ async function bootCases(title, cases) {
     // Warm the binary so the city case can attach CDP in time.
     const warm = startChrome('about:blank');
     try {
-      await waitForCdpPage(warm.port, (p) => p.type === 'page' && p.webSocketDebuggerUrl, 80);
+      await waitForCdpPage(warm, (p) => p.type === 'page' && p.webSocketDebuggerUrl, 80);
     } finally {
       await stopChrome(warm);
     }
@@ -700,26 +719,44 @@ async function bootCases(title, cases) {
   }
 }
 
-// What a fresh profile (no saved choices) shows once the page has booted and
-// its boot map is applied: the labels of the launch card's visible buttons,
-// and the map behind them. opts.droneType: the class the profile restores
+// What a fresh profile (no saved choices, no controller: NO_PADS) shows once
+// the page has booted and its boot map is applied: the labels of the launch
+// card's visible buttons, and the map behind them. opts.droneType: the class the profile restores
 // (ryflyDroneType), set on the sim's origin before the sim's first load.
+//
+// A launch screen is one map's boot, so it has one map's limit, PER_MAP_MS,
+// from Chrome's start, and never runs past opts.testEnd. Every wait in it
+// polls for the state it needs until then; past it, the error says which
+// part of the ready state the page did not have.
 async function launchScreen(base, query, opts) {
+  const t0 = Date.now();
+  const testEnd = (opts && opts.testEnd) || Infinity;
+  const deadline = Math.min(t0 + PER_MAP_MS, testEnd);
+  // Which limit the deadline is, for the errors.
+  const bound = deadline === testEnd ? 'the test\'s end' : `the ${PER_MAP_MS / 1000} s per-map limit`;
   const url = `${base}/sim.html${query || ''}`;
   const droneType = opts && opts.droneType;
   const label = `launch screen (${query || 'no query'}${droneType ? ', ' + droneType : ''})`;
+  if (deadline <= t0) throw new Error(`${label}: not started, no time left: ${bound} passed ${((t0 - deadline) / 1000).toFixed(1)} s before it`);
   let step = 'starting Chrome';
   const start = droneType ? `${base}/tracks/catalog.json` : url;
-  const run = startChrome(start);
+  // On about:blank, so NO_PADS is in place before the sim's first load.
+  const run = startChrome('about:blank');
+  // Both pipes drained, so Chrome never blocks on a full one; the tail of its
+  // stderr goes in the error when it never shows a DevTools page.
+  let stderr = '';
+  run.child.stdout.resume();
+  run.child.stderr.on('data', (d) => { stderr = (stderr + d.toString()).slice(-600); });
   let ws = null;
   try {
     step = 'waiting for Chrome\'s DevTools page';
-    const page = await waitForCdpPage(run.port, (p) => p.type === 'page' && p.webSocketDebuggerUrl && String(p.url || '').includes(droneType ? '/tracks/catalog.json' : '/sim.html'), 100);
-    if (!page) throw new Error('no CDP for the launch screen');
+    const page = await waitForCdpPage(run, (p) => p.type === 'page' && p.webSocketDebuggerUrl, Infinity, deadline);
+    // With no limit on the looks, no page means the deadline passed.
+    if (!page) throw new Error(`no DevTools page by the deadline (${bound}, ${((deadline - t0) / 1000).toFixed(1)} s after Chrome's start)\n` + stderr);
     step = 'attaching to the page';
     ws = new WebSocket(page.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
-    return await launchScreenSteps(ws, base, url, start, droneType, (s) => { step = s; });
+    await byDeadline(new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); }), deadline, 'the DevTools socket did not open');
+    return await launchScreenSteps(ws, base, url, start, droneType, (s) => { step = s; }, deadline);
   } catch (e) {
     throw new Error(`${label}: ${e.message}, while ${step}`, { cause: e });
   } finally {
@@ -727,61 +764,123 @@ async function launchScreen(base, query, opts) {
   }
 }
 
-async function launchScreenSteps(ws, base, url, start, droneType, at) {
+// p, or a rejection saying `what` once the deadline (epoch ms) passes first.
+function byDeadline(p, deadline, what) {
+  let t;
+  const late = new Promise((res, rej) => { t = setTimeout(() => rej(new Error(what + ' by the deadline')), Math.max(0, deadline - Date.now())); });
+  return Promise.race([p, late]).finally(() => clearTimeout(t));
+}
+
+// No controller reaches a launch screen from the machine the test runs on.
+// With a radio plugged in, Chrome hands it to the page once it reads a button
+// pressed or an axis past half travel, which a TX16S at rest already does
+// (throttle down and its switches read -1). A known radio flies at once:
+// sim.html selectPad calls flyWithRadio, which closes the launch card (plug
+// and fly), so the card showed no buttons. Installed before the page's scripts: getGamepads()
+// lists none, and the connect and disconnect events stop here. A fresh pilot
+// on these screens has no controller, as on a CI runner.
+const NO_PADS = String.raw`(() => {
+  Object.defineProperty(Navigator.prototype, 'getGamepads', { configurable: true, value() { return [null, null, null, null]; } });
+  for (const type of ['gamepadconnected', 'gamepaddisconnected']) addEventListener(type, (e) => e.stopImmediatePropagation(), true);
+})()`;
+
+// The launch screen's ready state: the boot map set, the looks ready
+// (sim-looks.js afterFirstFrame) and the query boot run, so a ?map= has
+// landed too. Until then the probe returns which of those the page has.
+const LAUNCH_PROBE = `JSON.stringify((function(){
+  var s=window._sim||{};
+  var st={
+    map: s.map?s.map():null,
+    looks: !!s.looks,
+    fpsReady: !!(s.looks&&s.looks.fps&&s.looks.fps.ready),
+    queryBooted: !!window._simQueryBooted,
+    readyState: document.readyState,
+    href: location.href
+  };
+  if(!(st.map&&st.fpsReady&&st.queryBooted))return st;
+  var sparks=document.getElementById('menuSparks');
+  st.ready=true;
+  st.sparks=!!(sparks&&sparks.getClientRects().length);
+  st.labels=Array.prototype.filter.call(document.querySelectorAll('#startMenu .menu-card button'),function(b){
+    var cs=getComputedStyle(b);
+    return b.getClientRects().length>0&&cs.visibility!=='hidden'&&cs.opacity!=='0';
+  }).map(function(b){return b.textContent.trim();});
+  return st;
+})())`;
+
+async function launchScreenSteps(ws, base, url, start, droneType, at, deadline) {
+  // A call has no limit of its own inside the case's: it may take what is
+  // left of the deadline. On a loaded machine one Page.navigate alone has
+  // taken longer than cdp's usual 20 s. A Chrome that dies fails the call at
+  // once (cdp listens for the socket's close).
+  const callMs = () => Math.max(1000, deadline - Date.now());
   const href = async () => {
     try {
-      const h = await cdp(ws, 'Runtime.evaluate', { expression: 'location.href', returnByValue: true });
+      const h = await cdp(ws, 'Runtime.evaluate', { expression: 'location.href', returnByValue: true }, callMs());
       return String(h && h.result && h.result.value || '');
-    } catch (e) { return ''; }
+    } catch (e) {
+      // A closed socket never reopens: fail with its cause now. Any other
+      // error (a navigation destroying the context) means not there yet.
+      if (ws.readyState !== 1) throw e;
+      return '';
+    }
+  };
+  // Looks every 200 ms until test() holds; past the deadline, says what not.
+  const waitFor = async (what, test) => {
+    while (!(await test())) {
+      if (Date.now() >= deadline) throw new Error('not ' + what + ' by the deadline');
+      await sleep(200);
+    }
   };
   try {
     at('loading the page');
-    await cdp(ws, 'Runtime.enable');
+    await cdp(ws, 'Runtime.enable', {}, callMs());
+    await cdp(ws, 'Page.enable', {}, callMs());
+    await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: NO_PADS }, callMs());
     if (droneType) {
-      // A plain page on the sim's origin first (Chrome may still be on
-      // about:blank), the class there, then the sim.
+      // A plain page on the sim's origin first (Chrome is on about:blank),
+      // the class there, then the sim.
       at('restoring class ' + droneType + ' on the sim\'s origin');
-      if (!(await href()).startsWith(base)) await cdp(ws, 'Page.navigate', { url: start });
-      for (let i = 0; i < 40 && !(await href()).startsWith(base); i++) await sleep(200);
-      await cdp(ws, 'Runtime.evaluate', { expression: `localStorage.setItem('ryflyDroneType', ${JSON.stringify(droneType)}); true` });
-      await cdp(ws, 'Page.navigate', { url });
-      for (let i = 0; i < 40 && !(await href()).includes('/sim.html'); i++) await sleep(200);
+      if (!(await href()).startsWith(base)) await cdp(ws, 'Page.navigate', { url: start }, callMs());
+      await waitFor('on the sim\'s origin', async () => (await href()).startsWith(base));
+      const kept = await cdp(ws, 'Runtime.evaluate', {
+        expression: `localStorage.setItem('ryflyDroneType', ${JSON.stringify(droneType)}); localStorage.getItem('ryflyDroneType')`,
+        returnByValue: true,
+      }, callMs());
+      const stored = kept && kept.result && kept.result.value;
+      if (stored !== droneType) throw new Error('the class was not stored: ryflyDroneType is ' + JSON.stringify(stored));
+      await cdp(ws, 'Page.navigate', { url }, callMs());
+      await waitFor('on sim.html', async () => (await href()).includes('/sim.html'));
     }
     at('loading sim.html');
-    const here = await cdp(ws, 'Runtime.evaluate', { expression: 'location.href', returnByValue: true });
-    if (!String(here && here.result && here.result.value || '').includes('/sim.html')) await cdp(ws, 'Page.navigate', { url });
+    const here = await cdp(ws, 'Runtime.evaluate', { expression: 'location.href', returnByValue: true }, callMs());
+    if (!String(here && here.result && here.result.value || '').includes('/sim.html')) await cdp(ws, 'Page.navigate', { url }, callMs());
     at('waiting for the launch screen and its boot map');
-    let out = null;
+    const t0 = Date.now();
     let first = null;
-    for (let i = 0; i < 80; i++) {
-      const got = await cdp(ws, 'Runtime.evaluate', {
-        expression: `JSON.stringify((function(){
-          var s=window._sim||{};
-          var first=s.map?s.map():null;
-          if(!(s.map&&s.map()&&s.looks&&s.looks.fps&&s.looks.fps.ready))return {first:first};
-          // Wait for the query boot so a ?map= has landed too.
-          if(!window._simQueryBooted)return {first:first};
-          var sparks=document.getElementById('menuSparks');
-          return {
-            first: first,
-            sparks: !!(sparks&&sparks.getClientRects().length),
-            map: s.map(),
-            labels: Array.prototype.filter.call(document.querySelectorAll('#startMenu .menu-card button'),function(b){
-              var cs=getComputedStyle(b);
-              return b.getClientRects().length>0&&cs.visibility!=='hidden'&&cs.opacity!=='0';
-            }).map(function(b){return b.textContent.trim();})
-          };
-        })())`,
-        returnByValue: true,
-      });
-      out = got && got.result && got.result.value ? JSON.parse(got.result.value) : null;
-      if (out && !first) first = out.first;
-      if (out && out.map) break;
-      out = null;
+    let last = null;
+    let probes = 0;
+    for (;;) {
+      let got;
+      try {
+        got = await cdp(ws, 'Runtime.evaluate', { expression: LAUNCH_PROBE, returnByValue: true }, callMs());
+      } catch (e) {
+        // callMs() gives a probe all that is left of the deadline, so its
+        // timeout is the deadline's cutoff (Node's timer can fire a
+        // millisecond before Date.now() gets there): report the page's last
+        // state below. A closed socket or a protocol error still throws.
+        if (!/^cdp timeout/.test(e.message)) throw e;
+        break;
+      }
+      probes += 1;
+      last = got && got.result && got.result.value ? JSON.parse(got.result.value) : null;
+      // The first map the page reported, before the tracks loaded.
+      if (last && last.map && !first) first = last.map;
+      if (last && last.ready) return { first, sparks: last.sparks, map: last.map, labels: last.labels };
+      if (Date.now() >= deadline) break;
       await sleep(250);
     }
-    // The first map the page reported, before the tracks loaded.
-    return out && { ...out, first };
+    throw new Error(`not ready by the deadline: ${probes} probes over ${((Date.now() - t0) / 1000).toFixed(1)} s, the last saw ${JSON.stringify(last)}`);
   } finally {
     try { ws.close(); } catch (e) { /* ignore */ }
   }
@@ -794,37 +893,46 @@ function runsLaunchScreen(t) {
   return true;
 }
 
-test('the launch screen shows exactly five buttons without ?dev: Fly, Daily, Boards, Tune, Controls; The Rig behind them from the first frame, and closed, unknown and spark links land there too', { timeout: 240000 }, async (t) => {
+// Each launch-screen test's limit. Its cases stop starting new waits STOP_MS
+// before it, the most a last stopChrome takes (the profile sweep's 20 s, the
+// 5 s exit wait, the rm retries), so a slow case fails with its own error
+// and not with node:test's.
+const LAUNCH_TEST_MS = 240000;
+const STOP_MS = 30000;
+
+test('the launch screen shows exactly five buttons without ?dev: Fly, Daily, Boards, Tune, Controls; The Rig behind them from the first frame, and closed, unknown and spark links land there too', { timeout: LAUNCH_TEST_MS }, async (t) => {
   if (!runsLaunchScreen(t)) return;
+  const testEnd = Date.now() + LAUNCH_TEST_MS - STOP_MS;
   const { server, port } = await serveRoot();
   try {
-    const plain = await launchScreen('http://127.0.0.1:' + port, '');
-    assert.deepEqual(plain && plain.labels, ['Fly', 'Daily', 'Boards', 'Tune', 'Controls']);
-    assert.equal(plain && plain.map, 'rig', 'a fresh pilot launches into The Rig');
-    assert.equal(plain && plain.first, 'rig', 'no City behind the launch card while the tracks load');
-    assert.equal(plain && plain.sparks, false, 'every spark is on a closed map: no tally without ?dev=1');
-    const closed = await launchScreen('http://127.0.0.1:' + port, '?map=garage&menu=1');
-    assert.equal(closed && closed.map, 'rig', 'garage without ?dev=1 lands on The Rig');
-    const unknown = await launchScreen('http://127.0.0.1:' + port, '?map=narnia');
-    assert.equal(unknown && unknown.map, 'rig', 'an unknown ?map= lands on The Rig');
-    const spark = await launchScreen('http://127.0.0.1:' + port, '?spark=garage:0');
-    assert.equal(spark && spark.map, 'rig', 'a spark link to a closed map stays on The Rig');
+    const plain = await launchScreen('http://127.0.0.1:' + port, '', { testEnd });
+    assert.deepEqual(plain.labels, ['Fly', 'Daily', 'Boards', 'Tune', 'Controls']);
+    assert.equal(plain.map, 'rig', 'a fresh pilot launches into The Rig');
+    assert.equal(plain.first, 'rig', 'no City behind the launch card while the tracks load');
+    assert.equal(plain.sparks, false, 'every spark is on a closed map: no tally without ?dev=1');
+    const closed = await launchScreen('http://127.0.0.1:' + port, '?map=garage&menu=1', { testEnd });
+    assert.equal(closed.map, 'rig', 'garage without ?dev=1 lands on The Rig');
+    const unknown = await launchScreen('http://127.0.0.1:' + port, '?map=narnia', { testEnd });
+    assert.equal(unknown.map, 'rig', 'an unknown ?map= lands on The Rig');
+    const spark = await launchScreen('http://127.0.0.1:' + port, '?spark=garage:0', { testEnd });
+    assert.equal(spark.map, 'rig', 'a spark link to a closed map stays on The Rig');
   } finally {
     await new Promise((res) => server.close(res));
   }
 });
 
-test('with nothing saved the launch screen is the class\'s map: a 75 launches into The Warehouse from the first frame, a 65 still into The Rig', { timeout: 240000 }, async (t) => {
+test('with nothing saved the launch screen is the class\'s map: a 75 launches into The Warehouse from the first frame, a 65 still into The Rig', { timeout: LAUNCH_TEST_MS }, async (t) => {
   if (!runsLaunchScreen(t)) return;
+  const testEnd = Date.now() + LAUNCH_TEST_MS - STOP_MS;
   const { server, port } = await serveRoot();
   try {
-    const w75 = await launchScreen('http://127.0.0.1:' + port, '', { droneType: 'whoop75' });
-    assert.deepEqual(w75 && w75.labels, ['Fly', 'Daily', 'Boards', 'Tune', 'Controls']);
-    assert.equal(w75 && w75.map, 'depot', 'a fresh 75 launches into The Warehouse');
-    assert.equal(w75 && w75.first, 'depot', 'no other map behind the launch card while the tracks load');
-    const w65 = await launchScreen('http://127.0.0.1:' + port, '', { droneType: 'whoop65' });
-    assert.equal(w65 && w65.map, 'rig', 'a fresh 65 still launches into The Rig');
-    assert.equal(w65 && w65.first, 'rig');
+    const w75 = await launchScreen('http://127.0.0.1:' + port, '', { droneType: 'whoop75', testEnd });
+    assert.deepEqual(w75.labels, ['Fly', 'Daily', 'Boards', 'Tune', 'Controls']);
+    assert.equal(w75.map, 'depot', 'a fresh 75 launches into The Warehouse');
+    assert.equal(w75.first, 'depot', 'no other map behind the launch card while the tracks load');
+    const w65 = await launchScreen('http://127.0.0.1:' + port, '', { droneType: 'whoop65', testEnd });
+    assert.equal(w65.map, 'rig', 'a fresh 65 still launches into The Rig');
+    assert.equal(w65.first, 'rig');
   } finally {
     await new Promise((res) => server.close(res));
   }
@@ -1121,7 +1229,7 @@ async function runTour(base, tour, deadline) {
   const errors = [];
   try {
     step = 'waiting for Chrome\'s DevTools page';
-    const page = await waitForCdpPage(run.port, (p) => p.type === 'page' && p.webSocketDebuggerUrl, 100);
+    const page = await waitForCdpPage(run, (p) => p.type === 'page' && p.webSocketDebuggerUrl, 100);
     if (!page) throw new Error('no CDP');
     ws = new WebSocket(page.webSocketDebuggerUrl);
     await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
