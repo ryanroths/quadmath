@@ -719,9 +719,9 @@ async function bootCases(title, cases) {
   }
 }
 
-// What a fresh profile (no saved choices) shows once the page has booted and
-// its boot map is applied: the labels of the launch card's visible buttons,
-// and the map behind them. opts.droneType: the class the profile restores
+// What a fresh profile (no saved choices, no controller: NO_PADS) shows once
+// the page has booted and its boot map is applied: the labels of the launch
+// card's visible buttons, and the map behind them. opts.droneType: the class the profile restores
 // (ryflyDroneType), set on the sim's origin before the sim's first load.
 //
 // A launch screen is one map's boot, so it has one map's limit, PER_MAP_MS,
@@ -740,7 +740,8 @@ async function launchScreen(base, query, opts) {
   if (deadline <= t0) throw new Error(`${label}: not started, no time left: ${bound} passed ${((t0 - deadline) / 1000).toFixed(1)} s before it`);
   let step = 'starting Chrome';
   const start = droneType ? `${base}/tracks/catalog.json` : url;
-  const run = startChrome(start);
+  // On about:blank, so NO_PADS is in place before the sim's first load.
+  const run = startChrome('about:blank');
   // Both pipes drained, so Chrome never blocks on a full one; the tail of its
   // stderr goes in the error when it never shows a DevTools page.
   let stderr = '';
@@ -749,7 +750,7 @@ async function launchScreen(base, query, opts) {
   let ws = null;
   try {
     step = 'waiting for Chrome\'s DevTools page';
-    const page = await waitForCdpPage(run, (p) => p.type === 'page' && p.webSocketDebuggerUrl && String(p.url || '').includes(droneType ? '/tracks/catalog.json' : '/sim.html'), Infinity, deadline);
+    const page = await waitForCdpPage(run, (p) => p.type === 'page' && p.webSocketDebuggerUrl, Infinity, deadline);
     // With no limit on the looks, no page means the deadline passed.
     if (!page) throw new Error(`no DevTools page by the deadline (${bound}, ${((deadline - t0) / 1000).toFixed(1)} s after Chrome's start)\n` + stderr);
     step = 'attaching to the page';
@@ -769,6 +770,19 @@ function byDeadline(p, deadline, what) {
   const late = new Promise((res, rej) => { t = setTimeout(() => rej(new Error(what + ' by the deadline')), Math.max(0, deadline - Date.now())); });
   return Promise.race([p, late]).finally(() => clearTimeout(t));
 }
+
+// No controller reaches a launch screen from the machine the test runs on.
+// With a radio plugged in, Chrome hands it to the page once it reads a button
+// pressed or an axis past half travel, which a TX16S at rest already does
+// (throttle down and its switches read -1). A known radio flies at once:
+// sim.html selectPad calls flyWithRadio, which closes the launch card (plug
+// and fly), so the card showed no buttons. Installed before the page's scripts: getGamepads()
+// lists none, and the connect and disconnect events stop here. A fresh pilot
+// on these screens has no controller, as on a CI runner.
+const NO_PADS = String.raw`(() => {
+  Object.defineProperty(Navigator.prototype, 'getGamepads', { configurable: true, value() { return [null, null, null, null]; } });
+  for (const type of ['gamepadconnected', 'gamepaddisconnected']) addEventListener(type, (e) => e.stopImmediatePropagation(), true);
+})()`;
 
 // The launch screen's ready state: the boot map set, the looks ready
 // (sim-looks.js afterFirstFrame) and the query boot run, so a ?map= has
@@ -821,9 +835,11 @@ async function launchScreenSteps(ws, base, url, start, droneType, at, deadline) 
   try {
     at('loading the page');
     await cdp(ws, 'Runtime.enable', {}, callMs());
+    await cdp(ws, 'Page.enable', {}, callMs());
+    await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: NO_PADS }, callMs());
     if (droneType) {
-      // A plain page on the sim's origin first (Chrome may still be on
-      // about:blank), the class there, then the sim.
+      // A plain page on the sim's origin first (Chrome is on about:blank),
+      // the class there, then the sim.
       at('restoring class ' + droneType + ' on the sim\'s origin');
       if (!(await href()).startsWith(base)) await cdp(ws, 'Page.navigate', { url: start }, callMs());
       await waitFor('on the sim\'s origin', async () => (await href()).startsWith(base));
