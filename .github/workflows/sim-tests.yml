@@ -20,8 +20,14 @@ name: Sim tests
 #                 (installed in that entry). Its own entry, so no map shard
 #                 nears 10 minutes. Its page entries run the Chrome parts of
 #                 page tests the sim-tests job runs with SKIP_CHROME_BOOT:
-#                 test_sim_easy_mode, and test_sim_first_flight with
-#                 test_sim_coach_page, each entry under about 10 minutes.
+#                 test_sim_easy_mode; test_sim_first_flight with
+#                 test_sim_coach_page; test_sim_gap_hunt; and
+#                 test_sim_stick_overlay, test_sim_track_url and
+#                 test_sim_track_boards, with test_leaderboard_track_boards
+#                 (custom track boards on `wrangler dev` with a real D1,
+#                 wrangler installed in that entry, which the sim-tests job
+#                 skips for want of wrangler). Each entry under about 10
+#                 minutes.
 #                 test_sim_sound has no entry for now: it samples the page
 #                 once a frame, so its result depends on the frame rate.
 #   asset-stamps  scripts/ci/stamp_asset_cache.py --check. The stamper's own
@@ -104,6 +110,9 @@ jobs:
           - { suite: page, label: 'first flight, coach', tests: 'tools/test_sim_first_flight.mjs tools/test_sim_coach_page.mjs' }
           # Gap Hunt's page part: three maps, bf and js cores each.
           - { suite: page, label: 'gap hunt', tests: 'tools/test_sim_gap_hunt.mjs' }
+          # The stick overlay, shared track links and track boards in Chrome,
+          # and the track boards' Worker on wrangler dev (wrangler: true).
+          - { suite: page, label: 'sticks, track links, track boards', tests: 'tools/test_sim_stick_overlay.mjs tools/test_sim_track_url.mjs tools/test_sim_track_boards.mjs tools/test_leaderboard_track_boards.mjs', wrangler: true }
 
     steps:
       - name: Check out
@@ -135,12 +144,13 @@ jobs:
         run: node --test tools/test_sim_map_boot.mjs
 
       # wrangler for the rooms and leaderboard Workers under `wrangler dev`
-      # (tools/sim_rooms_dev.mjs finds it here). Without it the test skips
-      # its room and local-Worker steps. Pinned to the version the test was
-      # verified with: there is no lockfile, and a new 4.x could change the
-      # flags or the "Ready on" line the test waits for.
+      # (tools/sim_rooms_dev.mjs finds it here), for the csp entry and any
+      # entry with wrangler: true. Without it those tests skip their
+      # wrangler steps. Pinned to the version the tests were verified with:
+      # there is no lockfile, and a new 4.x could change the flags or the
+      # "Ready on" line the tests wait for.
       - name: Install wrangler
-        if: matrix.suite == 'csp'
+        if: matrix.suite == 'csp' || matrix.wrangler
         working-directory: workers/sim-rooms
         run: npm install --no-audit --no-fund --no-save wrangler@4.151.1
 
