@@ -244,6 +244,54 @@ async function upsertBuiltin(env, run, pilot, digest, ghost) {
   return { improved: true, timeMs, rank: n + 1 };
 }
 
+// ---- Held runs (faster than the board's floor, sim-retention.js
+// builtinFloorMs) ----
+// track_held: a pilot's fastest held run per board per class, with its ghost,
+// apart from track_scores: never in a list, a count, a place, the tops, the
+// ghosts served or the trim, and the pilot's public row stays as it was.
+// DEPLOY.md approves one onto its board, or rejects it.
+async function holdBuiltin(env, run, pilot, digest, ghost) {
+  const wrote = await env.DB.prepare(
+    'INSERT INTO track_held (board, class, name_key, name, time_ms, floor_ms, splits, digest, track_id, ghost, path, submitted_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(board, class, name_key) DO UPDATE SET name = excluded.name, time_ms = excluded.time_ms, floor_ms = excluded.floor_ms, splits = excluded.splits, digest = excluded.digest, ghost = excluded.ghost, path = excluded.path, submitted_ms = excluded.submitted_ms WHERE excluded.time_ms < track_held.time_ms',
+  ).bind(
+    run.key, run.frameMm, pilot.key, pilot.name, run.timeMs, run.floorMs, JSON.stringify(run.splits || []), digest, run.trackId,
+    JSON.stringify(keptGhost(run, pilot, ghost)), JSON.stringify(ghostPath(ghost.samples) || []), Date.now(),
+  ).run();
+  return !!(wrote && wrote.meta && wrote.meta.changes > 0);
+}
+
+// The submit's reply for a held run, as it would be had the run been stored:
+// the pilot sees their run (their best of it and their public row), its
+// place among the public rows, and the top 20 with it in. Only this reply has
+// it; every other read is of track_scores alone.
+async function heldReply(env, run, pilot, wrote) {
+  const { key, frameMm: c } = run;
+  const pub = await env.DB.prepare(
+    'SELECT time_ms, splits, submitted_ms FROM track_scores WHERE board = ? AND class = ? AND name_key = ?',
+  ).bind(key, c, pilot.key).first();
+  const held = await env.DB.prepare(
+    'SELECT time_ms, splits, submitted_ms FROM track_held WHERE board = ? AND class = ? AND name_key = ?',
+  ).bind(key, c, pilot.key).first();
+  const mine = held && (!pub || held.time_ms < pub.time_ms) ? held : pub;
+  // Ahead: faster, or as fast and posted first (builtinPlace's order).
+  const ahead = await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM track_scores WHERE board = ? AND class = ? AND name_key != ? AND (time_ms < ? OR (time_ms = ? AND submitted_ms < ?))',
+  ).bind(key, c, pilot.key, mine.time_ms, mine.time_ms, mine.submitted_ms).first();
+  let splits = [];
+  try { splits = JSON.parse(mine.splits || '[]'); } catch (e) { splits = []; }
+  const others = (await listBuiltin(env, key, c, 21)).filter((r) => r.name !== pilot.name);
+  const entries = others.concat([{ name: pilot.name, timeMs: mine.time_ms, splits, at: mine.submitted_ms }])
+    .sort((a, b) => a.timeMs - b.timeMs || a.at - b.at).slice(0, 20);
+  return {
+    improved: wrote && (!pub || run.timeMs < pub.time_ms),
+    timeMs: mine.time_ms,
+    rank: (ahead ? ahead.n : 0) + 1,
+    // A stored run would trim the board to BUILTIN_BOARD_ROWS.
+    count: Math.min((await builtinCount(env, key, c)) + (pub ? 0 : 1), BUILTIN_BOARD_ROWS),
+    entries,
+  };
+}
+
 // ---- Pilots: names, claims, bans ----
 // blocked_names: words Ryan adds (DEPLOY.md), refused anywhere in a name's
 // key, as sim-pilot-names.js NAME_BLOCK_ROOTS. Read at most once a minute per
@@ -420,7 +468,10 @@ export async function handleLeaderboard(request, env) {
     const bt = builtinBoardTrack(BUILTIN_BOARD_TRACKS, checked.trackId);
     if (bt && challenge.modifier === 'none') {
       const run = await normalizeBuiltinSubmit({ ...p.body, track: bt.id, trackHash: await builtinTrackHash(bt) }, BUILTIN_BOARD_TRACKS);
-      if (run.ok && !(await copiesStoredGhost(env, run.key, who.pilot.key, p.body.ghost))) await upsertBuiltin(env, run, who.pilot, who.digest, p.body.ghost);
+      if (run.ok && !(await copiesStoredGhost(env, run.key, who.pilot.key, p.body.ghost))) {
+        if (run.held) await holdBuiltin(env, run, who.pilot, who.digest, p.body.ghost);
+        else await upsertBuiltin(env, run, who.pilot, who.digest, p.body.ghost);
+      }
     }
     const entries = await listBoard(env, checked.week, checked.frameMm, checked.trackId);
     return reply({
@@ -471,6 +522,17 @@ export async function handleLeaderboard(request, env) {
     const who = await scorePilot(env, run, p.body.name, p.body.ghost);
     if (!who.ok) return reply({ ok: false, reason: who.reason }, who.status);
     if (await copiesStoredGhost(env, run.key, who.pilot.key, p.body.ghost)) return reply({ ok: false, reason: 'COPIED RUN' }, 403);
+    // Faster than the floor: held, and answered as if stored.
+    if (run.held) {
+      const wrote = await holdBuiltin(env, run, who.pilot, who.digest, p.body.ghost);
+      await noteDigest(env, who.digest, who.pilot.key);
+      const as = await heldReply(env, run, who.pilot, wrote);
+      return reply({
+        ok: true, improved: as.improved, ranked: true, timeMs: as.timeMs,
+        track: run.trackId, key: run.key, class: run.frameMm, name: who.pilot.name,
+        rank: as.rank, count: as.count, entries: as.entries,
+      });
+    }
     const saved = await upsertBuiltin(env, run, who.pilot, who.digest, p.body.ghost);
     await noteDigest(env, who.digest, who.pilot.key);
     const entries = await listBuiltin(env, run.key, run.frameMm, 20);

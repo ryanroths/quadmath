@@ -2473,6 +2473,20 @@ export const BUILTIN_BOARD_KEY_RE = /^b\.[0-9a-f]{16}\.p[1-9][0-9]{0,3}$/;
 export const BUILTIN_BOARD_ROWS = 200;
 export const BUILTIN_BOARD_GHOSTS = 10;
 
+// A board's floor: the time to fly the gate path (gate 0's centre to each
+// next gate's, to the last) at the class's speed cap (CLASS_MAX_SPEED) the
+// whole way, x BUILTIN_FLOOR_MARGIN, in ms. From the track's gates alone, so
+// the page and the Worker (which bundles this file) compute the same one. A
+// run faster than it (timeMs < floor) is held for review: the Worker keeps it
+// apart, out of every public list, until approved (DEPLOY.md).
+export const BUILTIN_FLOOR_MARGIN = 1.10;
+export function builtinFloorMs(track, frameMm) {
+  const gates = track && Array.isArray(track.gates) ? track.gates : [];
+  let path = 0;
+  for (let i = 1; i < gates.length; i++) path += dist3(gates[i - 1], gates[i]);
+  return Math.round((path / CLASS_MAX_SPEED[classId(frameMm)]) * 1000 * BUILTIN_FLOOR_MARGIN);
+}
+
 export async function builtinTrackHash(track) {
   return (await hashPilotToken(customTrackCanon(track))).slice(0, 16);
 }
@@ -2519,6 +2533,7 @@ export async function normalizeBuiltinSubmit(body, tracks) {
   // until real runs show how often an honest one scrapes a wall.
   if (flightSpikes(ghost.samples, frameMm) > flightSpikesMax(track.gates.length)) return { ok: false, reason: 'IMPLAUSIBLE FLIGHT' };
   const splits = lineRunSplits(ghost.samples, lineRunPasses(ghost.samples, track));
+  const floorMs = builtinFloorMs(track, frameMm);
   return {
     ok: true,
     key: 'b.' + hash + '.p' + PHYS_VER,
@@ -2526,6 +2541,8 @@ export async function normalizeBuiltinSubmit(body, tracks) {
     frameMm,
     name: typeof body.name === 'string' ? body.name : '',
     timeMs: timeMs | 0,
+    floorMs,
+    held: (timeMs | 0) < floorMs,
     misses: checked.misses | 0,
     splits,
     token: typeof body.token === 'string' ? body.token.trim() : '',

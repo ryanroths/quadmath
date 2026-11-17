@@ -382,11 +382,11 @@ A pilot is found by their key, from `pilot_keys` (`SELECT key, name FROM
 pilot_keys WHERE name LIKE '%fly%'`):
 
 ```bash
-npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM track_scores WHERE name_key='somekey'; DELETE FROM track_ghosts WHERE name_key='somekey'"
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM track_scores WHERE name_key='somekey'; DELETE FROM track_ghosts WHERE name_key='somekey'; DELETE FROM track_held WHERE name_key='somekey'"
 ```
 
 deletes their rows on every built-in board (add `AND track_id='rig-loop'`
-to both statements for one track).
+to each statement for one track).
 
 ```bash
 npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "INSERT OR IGNORE INTO bans (token_hash, reason, created_ms) SELECT token_hash, 'why', strftime('%s','now')*1000 FROM pilot_keys WHERE key='somekey'"
@@ -409,11 +409,65 @@ npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "INSERT OR I
 blocks a word anywhere in a name's key, from the next minute.
 
 ```bash
-npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM scores WHERE name=(SELECT name FROM pilot_keys WHERE key='somekey'); DELETE FROM custom_scores WHERE name=(SELECT name FROM pilot_keys WHERE key='somekey'); DELETE FROM track_scores WHERE name_key='somekey'; DELETE FROM track_ghosts WHERE name_key='somekey'; DELETE FROM ghost_digests WHERE name_key='somekey'; DELETE FROM pilot_keys WHERE key='somekey'"
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM scores WHERE name=(SELECT name FROM pilot_keys WHERE key='somekey'); DELETE FROM custom_scores WHERE name=(SELECT name FROM pilot_keys WHERE key='somekey'); DELETE FROM track_scores WHERE name_key='somekey'; DELETE FROM track_ghosts WHERE name_key='somekey'; DELETE FROM track_held WHERE name_key='somekey'; DELETE FROM ghost_digests WHERE name_key='somekey'; DELETE FROM pilot_keys WHERE key='somekey'"
 ```
 
 frees a name for the next browser to post under it, with its rows on every
 board, so the next holder starts with none of them.
+
+### Held runs (faster than a board's floor)
+
+Each built-in board has a floor per class: the time to fly the track's gate
+path (gate 0's centre to each next gate's, to the last) at the class's speed
+cap the whole way, x 1.10 (`builtinFloorMs` in `sim-retention.js`, from the
+track's gates; the page computes the same, `_sim.builtinFloorMs(track,
+class)`). A run faster than its floor is held:
+
+- stored in `track_held`, with its ghost: the pilot's fastest held run per
+  board per class;
+- out of the board's list, its count, every place, `/api/builtin/tops`, the
+  ghosts served and the 200-row trim, so it pushes no run off a board;
+- answered as if stored: the pilot gets their time, place and the top 20
+  with it in, no error and no toast. Their public row, if any, stays.
+
+A clean Daily Line under the floor on one of these tracks is held the same
+way (the Daily Line board itself takes it as before).
+
+Deploy: the migration first, then the Worker (the Worker before it never
+touches `track_held`; this one, on a database without it, answers a held
+run with `503 NOT MIGRATED`):
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --file=./src/migrate-board-floor.sql
+```
+
+It is idempotent (`CREATE TABLE IF NOT EXISTS`). Never `migrations apply`.
+
+List the held runs, newest first (times in ms; `name_key` and `track_id`
+are what the commands below take):
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT board, class, name, time_ms, floor_ms, datetime(submitted_ms / 1000, 'unixepoch') AS submitted, track_id, name_key FROM track_held ORDER BY submitted_ms DESC"
+```
+
+Approve one (`somekey`'s held run on `rig-loop`, class 65): it goes onto
+the board as a run of theirs (if faster than their row there), its ghost
+with it while it is in the top 10, and the board is trimmed to its 200
+fastest and 10 ghosts again:
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "INSERT INTO track_scores (board, class, name_key, name, time_ms, splits, digest, track_id, submitted_ms) SELECT board, class, name_key, name, time_ms, splits, digest, track_id, submitted_ms FROM track_held WHERE name_key='somekey' AND track_id='rig-loop' AND class=65 ON CONFLICT(board, class, name_key) DO UPDATE SET name = excluded.name, time_ms = excluded.time_ms, splits = excluded.splits, digest = excluded.digest, submitted_ms = excluded.submitted_ms WHERE excluded.time_ms < track_scores.time_ms; INSERT INTO track_ghosts (board, class, name_key, ghost, time_ms, track_id, path) SELECT board, class, name_key, ghost, time_ms, track_id, path FROM track_held WHERE name_key='somekey' AND track_id='rig-loop' AND class=65 ON CONFLICT(board, class, name_key) DO UPDATE SET ghost = excluded.ghost, time_ms = excluded.time_ms, path = excluded.path WHERE excluded.time_ms < track_ghosts.time_ms; DELETE FROM track_held WHERE name_key='somekey' AND track_id='rig-loop' AND class=65; DELETE FROM track_scores WHERE rowid IN (SELECT rowid FROM (SELECT rowid, ROW_NUMBER() OVER (PARTITION BY board, class ORDER BY time_ms, submitted_ms) AS r FROM track_scores) WHERE r > 200); DELETE FROM track_ghosts WHERE NOT EXISTS (SELECT 1 FROM (SELECT board, class, name_key, ROW_NUMBER() OVER (PARTITION BY board, class ORDER BY time_ms, submitted_ms) AS r FROM track_scores) s WHERE s.board = track_ghosts.board AND s.class = track_ghosts.class AND s.name_key = track_ghosts.name_key AND s.r <= 10)"
+```
+
+Reject one: the run is deleted. Its digest stays in `ghost_digests`, so the
+same flight is refused under another name. Add a ban (above) if needed.
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM track_held WHERE name_key='somekey' AND track_id='rig-loop' AND class=65"
+```
+
+The first real held runs are the data `IMPLAUSIBLE FLIGHT`'s threshold is
+calibrated on. It is not changed with the floor.
 
 ## "Fly my line" (`/api/line`)
 

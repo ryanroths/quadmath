@@ -14,6 +14,7 @@ import { makePaceGhost, PUBLIC_MAPS } from '../sim-tracks.js';
 import {
   PHYS_VER, builtinTrackHash, builtinBoardKey, BUILTIN_BOARD_KEY_RE, BUILTIN_BOARD_ROWS, BUILTIN_BOARD_GHOSTS,
   lineRunPasses, lineRunSplits, hashPilotToken, ghostDigest, dailyLineFor, utcDateId, addUtcDays, MISS_PENALTY_MS,
+  builtinFloorMs, BUILTIN_FLOOR_MARGIN, normalizeBuiltinSubmit, CLASS_MAX_SPEED, CLASS_IDS, DAILY_LINE_MIN_MS,
 } from '../sim-retention.js';
 import { encodeLineCode, decodeLineCode } from '../sim-share.js';
 import { pilotNameKey, pilotNameProblem, NAME_BLOCK_ROOTS } from '../sim-pilot-names.js';
@@ -61,6 +62,20 @@ function pageRun(t, { speed = 8, seed = 0, name = 'RyFly', gates = t.gates } = {
   g.phys = PHYS_VER;
   g.lapTime = g.samples[g.samples.length - 1][0];
   return g;
+}
+
+// A run whose time from gate 0 to the finish is within 100 ms of ms: a smooth
+// page-shaped run (pageRun) at the speed that lands it there, near the class
+// cap. Submitted with timeMs set to ms, which the board takes as its time
+// (the ghost's, within LINE_TIME_TOL_MS).
+function runNear(t, ms, { seed = 0, name = 'RyFly' } = {}) {
+  for (let speed = 41; speed <= 47.5; speed += 0.125) {
+    const g = pageRun(t, { speed, seed, name });
+    const p = lineRunPasses(g.samples, t);
+    if (p.start < 0 || p.finish < 0) continue;
+    if (Math.abs(g.samples[p.finish][0] - g.samples[p.start][0] - ms) <= 100) return g;
+  }
+  throw new Error('no run near ' + ms + ' ms on ' + t.id);
 }
 
 async function body(t, ghost, extra = {}) {
@@ -363,6 +378,149 @@ test('a board keeps its 200 fastest and the ghosts of its 10 fastest', async () 
   assert.equal(env.DB.rows('SELECT COUNT(*) AS n FROM custom_scores')[0].n, 201, 'rows put in directly; the Worker prunes on its next write');
 });
 
+test('a board\'s floor: the gate path at the class cap x 1.10, the same from every copy of the track', async () => {
+  assert.equal(BUILTIN_FLOOR_MARGIN, 1.1);
+  const fromJson = builtinBoardTracks();
+  for (const t of BUILTIN_BOARD_TRACKS) {
+    let path = 0;
+    for (let i = 1; i < t.gates.length; i++) {
+      const a = t.gates[i - 1], b = t.gates[i];
+      path += Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    }
+    for (const c of CLASS_IDS) {
+      const floor = builtinFloorMs(t, c);
+      assert.equal(floor, Math.round((path / CLASS_MAX_SPEED[c]) * 1000 * 1.1), t.id + ' ' + c);
+      assert.ok(floor > DAILY_LINE_MIN_MS, t.id + ' ' + c + ': above the shortest time a board takes');
+      // tracks/*.json (what the page loads) and the Worker's generated copy.
+      assert.equal(builtinFloorMs(fromJson.find((x) => x.id === t.id), c), floor, t.id + ' ' + c + ' from tracks/*.json');
+    }
+    assert.ok(builtinFloorMs(t, 85) < builtinFloorMs(t, 75) && builtinFloorMs(t, 75) < builtinFloorMs(t, 65), 'a faster class, a lower floor');
+  }
+  // The Worker's check (on its normalized track) says the floor it used.
+  const t = track('rig-loop');
+  const g = runNear(t, builtinFloorMs(t, 65));
+  const run = await normalizeBuiltinSubmit(await body(t, g, { timeMs: builtinFloorMs(t, 65) }), BUILTIN_BOARD_TRACKS);
+  assert.equal(run.ok, true, run.reason);
+  assert.deepEqual([run.floorMs, run.held], [builtinFloorMs(t, 65), false]);
+  const under = await normalizeBuiltinSubmit(await body(t, g, { timeMs: builtinFloorMs(t, 65) - 1 }), BUILTIN_BOARD_TRACKS);
+  assert.deepEqual([under.ok, under.held], [true, true]);
+});
+
+test('a run faster than the floor is held: out of the board, its count, places, tops, ghosts and trim, until approved or rejected', async () => {
+  const env = { DB: sqliteD1() };
+  const t = track('rig-loop');
+  const key = await builtinBoardKey(t);
+  const floor = builtinFloorMs(t, 65);
+  let ip = 0;
+  const post = async (ghost, name, tok, timeMs) => call(env, 'POST', '/api/builtin/submit',
+    await body(t, ghost, { name, token: token(tok), ...(timeMs == null ? {} : { timeMs }) }), '198.51.100.' + (++ip));
+  const board = async (name) => (await call(env, 'GET', '/api/builtin/board?track=' + t.id + '&class=65' + (name ? '&name=' + name : ''))).json;
+  const tops = async () => (await call(env, 'GET', '/api/builtin/tops?class=65')).json.tops[t.id].top;
+  const held = () => env.DB.rows('SELECT name_key, time_ms, floor_ms FROM track_held ORDER BY time_ms');
+
+  // RyFly's honest, slow run: on the board.
+  const slow = pageRun(t, { name: 'RyFly', seed: 1 });
+  let r = await post(slow, 'RyFly', 'a');
+  assert.equal(r.status, 200, r.json.reason);
+  // A run at the floor: on the board, first.
+  r = await post(runNear(t, floor, { seed: 2, name: 'AtFloor' }), 'AtFloor', 'b', floor);
+  assert.equal(r.status, 200, r.json.reason);
+  assert.deepEqual([r.json.improved, r.json.rank, r.json.count], [true, 1, 2]);
+  assert.equal((await tops()).name, 'AtFloor');
+  assert.equal(held().length, 0, 'at the floor is not under it');
+
+  // RyFly under the floor: answered as if stored, held, the public row kept.
+  const fast = runNear(t, floor, { seed: 3 });
+  r = await post(fast, 'RyFly', 'a', floor - 5);
+  assert.equal(r.status, 200, r.json.reason);
+  assert.equal(r.json.ok, true);
+  assert.deepEqual([r.json.improved, r.json.ranked, r.json.timeMs, r.json.rank, r.json.count], [true, true, floor - 5, 1, 2]);
+  assert.deepEqual(r.json.entries.map((e) => [e.name, e.timeMs]), [['RyFly', floor - 5], ['AtFloor', floor]], 'their reply has their run in');
+  assert.deepEqual(held(), [{ name_key: 'ryfly', time_ms: floor - 5, floor_ms: floor }]);
+  let b = await board('RyFly');
+  assert.deepEqual(b.entries.map((e) => [e.name, e.timeMs]), [['AtFloor', floor], ['RyFly', slow.lapTime]], 'the board as it was');
+  assert.equal(b.count, 2);
+  assert.deepEqual(b.you, { rank: 2, name: 'RyFly', timeMs: slow.lapTime }, 'their public place is their stored run');
+  assert.equal((await tops()).name, 'AtFloor');
+  const g = await call(env, 'GET', '/api/builtin/ghost?track=' + t.id + '&class=65&name=RyFly');
+  assert.equal(g.json.timeMs, slow.lapTime, 'the ghost served is the stored run\'s');
+  // A slower held run does not replace their held one; their reply says so.
+  r = await post(runNear(t, floor, { seed: 4 }), 'RyFly', 'a', floor - 2);
+  assert.equal(r.status, 200, r.json.reason);
+  assert.deepEqual([r.json.improved, r.json.timeMs], [false, floor - 5]);
+  assert.equal(held()[0].time_ms, floor - 5);
+
+  // The trim: a full board (200 rows) keeps all 200 when a held run lands.
+  const ins = env.DB.sqlite.prepare('INSERT INTO track_scores (board, class, name_key, name, time_ms, splits, digest, track_id, submitted_ms) VALUES (?, 65, ?, ?, ?, ?, ?, ?, ?)');
+  for (let i = 2; i < BUILTIN_BOARD_ROWS; i++) ins.run(key, 'p' + i, 'P' + i, slow.lapTime + i, '[]', '', t.id, i);
+  assert.equal((await board()).count, BUILTIN_BOARD_ROWS);
+  r = await post(runNear(t, floor, { seed: 5, name: 'Fresh' }), 'Fresh', 'c', floor - 10);
+  assert.equal(r.status, 200, r.json.reason);
+  assert.deepEqual([r.json.rank, r.json.count], [1, BUILTIN_BOARD_ROWS], 'their reply: first, on a full board, as a stored run is told');
+  assert.equal((await board()).count, BUILTIN_BOARD_ROWS, 'no row pushed off');
+  assert.equal(env.DB.rows(`SELECT COUNT(*) AS n FROM track_scores WHERE name_key = 'p${BUILTIN_BOARD_ROWS - 1}'`)[0].n, 1, 'the 200th still there');
+  // An honest run that ranks still trims as before: the 201st goes.
+  r = await post(pageRun(t, { name: 'Honest', seed: 6, speed: 9 }), 'Honest', 'd');
+  assert.equal(r.status, 200, r.json.reason);
+  assert.equal((await board()).count, BUILTIN_BOARD_ROWS);
+  assert.equal(env.DB.rows(`SELECT COUNT(*) AS n FROM track_scores WHERE name_key = 'p${BUILTIN_BOARD_ROWS - 1}'`)[0].n, 0, 'the 201st pruned');
+
+  // DEPLOY.md's commands, as written, on 'somekey' (rig-loop, class 65).
+  const deploy = readFileSync(join(root, 'workers', 'sim-leaderboard', 'DEPLOY.md'), 'utf8');
+  const section = deploy.slice(deploy.indexOf('### Held runs'), deploy.indexOf('## "Fly my line"'));
+  const commands = [...section.matchAll(/--command "([^"]+)"/g)].map((m) => m[1]);
+  const sql = (start) => { const c = commands.find((x) => x.startsWith(start)); assert.ok(c, 'DEPLOY.md has: ' + start); return c; };
+  // The list: board, class, name, time, floor, submitted.
+  const list = env.DB.rows(sql('SELECT board, class, name, time_ms, floor_ms')).sort((x, y) => x.name.localeCompare(y.name));
+  assert.deepEqual(list.map((x) => [x.board, x.class, x.name, x.time_ms, x.floor_ms, x.track_id, x.name_key]),
+    [[key, 65, 'Fresh', floor - 10, floor, t.id, 'fresh'], [key, 65, 'RyFly', floor - 5, floor, t.id, 'ryfly']]);
+  assert.match(list[0].submitted, /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/);
+  // Approve Fresh's: first on the board, its ghost served, the 200 kept.
+  env.DB.exec(sql('INSERT INTO track_scores').replace(/somekey/g, 'fresh'));
+  b = await board('Fresh');
+  assert.deepEqual([b.entries[0].name, b.entries[0].timeMs, b.count, b.you.rank], ['Fresh', floor - 10, BUILTIN_BOARD_ROWS, 1]);
+  assert.equal((await tops()).name, 'Fresh');
+  const fg = await call(env, 'GET', '/api/builtin/ghost?track=' + t.id + '&class=65&name=Fresh');
+  assert.equal(fg.status, 200, fg.json.reason);
+  assert.equal(fg.json.timeMs, floor - 10);
+  assert.ok(env.DB.rows(`SELECT COUNT(*) AS n FROM track_ghosts WHERE board = '${key}'`)[0].n <= BUILTIN_BOARD_GHOSTS, 'the board keeps 10 ghosts at most');
+  assert.deepEqual(held().map((x) => x.name_key), ['ryfly']);
+  // Reject RyFly's: gone, their stored run stays, and the flight is refused under another name.
+  env.DB.exec(sql('DELETE FROM track_held').replace(/somekey/g, 'ryfly'));
+  assert.equal(held().length, 0);
+  b = await board('RyFly');
+  assert.equal(b.you.timeMs, slow.lapTime);
+  r = await post(fast, 'Someone Else', 'e', floor - 5);
+  assert.equal(r.json.reason, 'COPIED RUN', 'the rejected flight under another name');
+});
+
+test('migrate-board-floor.sql: only track_held, safe to run twice; before it, a held run says NOT MIGRATED and the rest works', async () => {
+  const schema = readFileSync(join(LEADERBOARD_SQL_DIR, 'schema.sql'), 'utf8');
+  const before = schema.slice(0, schema.indexOf("-- A built-in board's held runs"));
+  assert.ok(before.length > 0 && !before.includes('track_held'));
+  const migrate = readFileSync(join(LEADERBOARD_SQL_DIR, 'migrate-board-floor.sql'), 'utf8');
+  assert.doesNotMatch(migrate, /DROP |ALTER |DELETE |INSERT |UPDATE /, 'creates, nothing else');
+  assert.match(migrate, /CREATE TABLE IF NOT EXISTS track_held \(/);
+  const env = { DB: sqliteD1({ files: [] }) };
+  env.DB.exec(before);
+  const t = track('rig-loop');
+  const floor = builtinFloorMs(t, 65);
+  let r = await call(env, 'POST', '/api/builtin/submit', await body(t, pageRun(t, { seed: 1 })));
+  assert.equal(r.status, 200, 'a run over the floor, as before: ' + r.json.reason);
+  const worker = (await import('../workers/sim-leaderboard/src/index.js')).default;
+  const held = await worker.fetch(new Request('https://x/api/builtin/submit', { method: 'POST', headers: { 'CF-Connecting-IP': '198.51.100.9' },
+    body: JSON.stringify(await body(t, runNear(t, floor, { seed: 2, name: 'Kim' }), { name: 'Kim', token: token('b'), timeMs: floor - 5 })) }), env);
+  assert.deepEqual([held.status, (await held.json()).reason], [503, 'NOT MIGRATED']);
+  env.DB.exec(migrate);
+  env.DB.exec(migrate);
+  r = await call(env, 'POST', '/api/builtin/submit', await body(t, runNear(t, floor, { seed: 3, name: 'Kim' }), { name: 'Kim', token: token('b'), timeMs: floor - 5 }));
+  assert.equal(r.status, 200, r.json.reason);
+  assert.equal(env.DB.rows('SELECT COUNT(*) AS n FROM track_held')[0].n, 1);
+  // The same table as schema.sql's.
+  const cols = (db) => db.rows("SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('track_held')");
+  assert.deepEqual(cols(env.DB), cols(sqliteD1()));
+});
+
 test('score posts and SHARE have their own hourly budgets', async () => {
   const env = { DB: sqliteD1() };
   const ip = '203.0.113.7';
@@ -611,6 +769,17 @@ test('built-in boards on wrangler dev (real D1)', { timeout: 300000 }, async (t)
     r = await req('/api/builtin/submit', await body(t1, { ...pageRun(t1, { seed: 5 }), testPilot: true }));
     assert.equal(r.json.reason, 'TEST PILOT');
     r = await req('/api/builtin/tops?class=65');
+    assert.equal(r.json.tops[t1.id].top.name, 'RyFly');
+    // Under the floor (rig-loop): answered as if stored, held off the board and the tops.
+    const t2 = track('rig-loop');
+    const f2 = builtinFloorMs(t2, 65);
+    r = await req('/api/builtin/submit', await body(t2, runNear(t2, f2, { seed: 7, name: 'Kim' }), { name: 'Kim', token: token('b'), timeMs: f2 - 5 }));
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.deepEqual([r.json.improved, r.json.rank, r.json.count, r.json.timeMs], [true, 1, 1, f2 - 5]);
+    r = await req('/api/builtin/board?track=' + t2.id + '&class=65&name=Kim');
+    assert.deepEqual([r.json.count, r.json.entries.length, r.json.you], [0, 0, null]);
+    r = await req('/api/builtin/tops?class=65');
+    assert.equal(r.json.tops[t2.id].top, null);
     assert.equal(r.json.tops[t1.id].top.name, 'RyFly');
   } finally {
     await w.stop();
