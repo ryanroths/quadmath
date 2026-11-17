@@ -212,6 +212,25 @@
     margin-bottom: 32px;
   }
 
+  /* Sim card beside the intro: one column (card under the scope note, above
+     the frame buttons) below the calc-grid breakpoint, intro | card above it.
+     356px keeps the card's 16:9 media at 354x199, under the shared 200px
+     max-height, so the frame is never cropped. The card itself is the shared
+     .sim-teaser-card from gear.html. */
+  .hero-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero-sim-card { max-width: 356px; }
+  .hero-intro h1 { text-wrap: balance; } /* no lone "it." when the column is narrow */
+  @media (min-width: 800px) {
+    .hero-top {
+      grid-template-columns: minmax(0, 1fr) 356px;
+      column-gap: 40px;
+      align-items: start;
+    }
+  }
+
   /* Frame size selector */
   .frame-select {
     display: flex;
@@ -1639,7 +1658,8 @@
     gap: 8px;
   }
   .sim-teaser-card:is(:hover, :focus-visible) { border-color: var(--orange); }
-  .sim-teaser-card img {
+  /* img now, a poster-framed <video> later: both get the full-bleed media box */
+  .sim-teaser-card :is(img, video) {
     /* negative margins only SHIFT a box, they don't grow it — width:100%
        resolves against the padded content area (same as the text below),
        so a plain 100% + negative margin still falls short of the card's
@@ -1671,12 +1691,15 @@
     letter-spacing: -0.02em;
     line-height: 1.2;
   }
+  /* 1rem and the 12px bottom margin are what gear.html always rendered:
+     its card sits in a .section, whose `.section p` outranks this rule. Stated
+     here so the hero's card, outside any .section, renders the same. */
   .sim-teaser-sub {
     font-family: 'Inter', sans-serif;
-    font-size: 0.75rem;
+    font-size: 1rem;
     color: var(--muted);
     line-height: 1.5;
-    margin: 0;
+    margin: 0 0 12px;
     max-width: none;
   }
   .sim-teaser-cta {
