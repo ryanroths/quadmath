@@ -1040,7 +1040,7 @@ import {
   WS as CORE_WS, TICK_US, SAMPLE_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux, rangeActive,
   BF_CLASS_TUNES, bfClassDiff,
-} from "./sim-core-adapter.js?v=eae197833699";
+} from "./sim-core-adapter.js?v=f99d6918d4a3";
 import {LINE_URL_MAX,LINE_ID_RE,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=c7b112319e28";
 import {pilotNameProblem} from "./sim-pilot-names.js?v=265d8504aeef";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
@@ -8717,7 +8717,14 @@ function stepCore(frameMs,now){
       let left=frameMs,ran=0;
       do{const ms=Math.min(left,200);ran+=core.advance(ms,!calib,onCoreEvent,onPilotSample);left-=ms;}while(left>0);
       simClockMs+=ran*TICK_US/1000;
-    }else simClockMs+=core.advance(frameMs,!calib,onCoreEvent,trickSampling()?onTrickSample:null)*TICK_US/1000;
+    }else{
+      // The sim's own turtle on the core's samples (bfTurtleSample), with the
+      // trick detector's when both run.
+      bfTurtleSampled=false;
+      const turtle=bfTurtleOnTicks(),trick=trickSampling();
+      const onSample=turtle?(trick?bfTurtleTrickSample:bfTurtleSample):(trick?onTrickSample:null);
+      simClockMs+=core.advance(frameMs,!calib,onCoreEvent,onSample)*TICK_US/1000;
+    }
   }catch(e){
     // A plant fault stops a bf instance; start over at the map start.
     console.warn('sim-core: '+(e&&e.message||e)+' — respawning');
@@ -9069,7 +9076,9 @@ function pollInput(){
   if(testStick){stick.r=testStick.r;stick.p=testStick.p;stick.y=testStick.y;stick.t=testStick.t;stick.aux=null;}
   tickArming(pollGp,dt);
   if(core.kind==='bf'&&!bfRadio()&&armGate&&padLive&&coreArmed())core.setArm(false);
-  if(core.kind==='bf'&&!bfRadio())bfTurtleTick();
+  // The sim's own turtle steps on the core's samples while they run (bfTurtleSample).
+  const turtleOnTicks=bfTurtleOnTicks()&&bfTurtleSampled;
+  if(core.kind==='bf'&&!bfRadio()&&!turtleOnTicks)bfTurtleTick();
   if(jsTurtleDone){
     jsTurtleDone=false;
     if(easyMode()&&tryArm({fromAuto:true}))turtleRearmed();
@@ -9080,7 +9089,7 @@ function pollInput(){
   }
   // The pool's cut with a radio (yardHoldArm): a copy, stick.aux stays the radio's.
   const held=core.kind==='bf'&&yardSt.armHold?yardHoldArm(stick.aux):stick.aux;
-  if(!testPilotOn())core.input(held===stick.aux?stick:Object.assign({},stick,{aux:held}),tUs);
+  if(!testPilotOn()&&!turtleOnTicks)core.input(held===stick.aux?stick:Object.assign({},stick,{aux:held}),tUs);
   // This sample carries an arm asked since the last one (bfArmAsk): Betaflight
   // sees the switch when it lands, tUs, ahead of the core's clock by
   // tUs-simTimeUs, and its 300 ms start there (bfArmWatch).
@@ -9135,6 +9144,35 @@ function bfTurtleTick(){
     toast('NOT ARMED'+(why.length?' — '+why.join(' '):''));
   }
 }
+// The sim's own turtles on the bf core (Easy mode's stick turtle and F, the
+// page on the AUX channels: core.turtleAuto) step on the sim's 4 ms samples,
+// inside the core's advance (stepCore's onSample), and each step's sample
+// goes to the core stamped at its tick. Stepped on the input poll instead,
+// each handoff (upright held 60 ms, ARM off, ARM on once Betaflight has
+// disarmed, armed) waited for a frame to run its sample and for a poll after
+// that frame to see the result. The poll's stamp is its wall time against
+// the frame's rAF timestamp, and on a loaded device that lands past the next
+// frame, so from upright to flyable took about 8 frames at any frame rate:
+// 107 ms at 75 fps, 117 ms in CI, up to 370 ms under 10x CPU throttle,
+// where Betaflight's own path is 90 ms. On the samples it is that 90 ms at
+// any frame rate. While they step it the poll sends the core nothing (the
+// core takes samples in time order; in such a turtle input() flies its own
+// sticks, so none of the pilot's are lost), and the first sample waits for
+// the sim to pass the last stamp the ring took. A frame the core does not
+// sample (a pause: sim-core-adapter.js SAMPLE_MAX_FRAME_MS) leaves the next
+// poll to step it, as before. A turtle the pilot flies (an arm while
+// flipped: its 'rearm' waits for the pilot's throttle and sticks), a radio's
+// switches and the test pilot (_sim.setTestPilot) stay on the poll.
+let bfTurtleSampled=false;          // the last frame stepped the turtle on its samples
+function bfTurtleOnTicks(){return core.kind==='bf'&&!bfRadio()&&!testPilotOn()&&core.turtlePhase!=null&&core.turtleAuto;}
+function bfTurtleSample(){
+  bfTurtleSampled=true;
+  if(!bfTurtleOnTicks()||core.simTimeUs<core.lastInputUs)return;
+  bfTurtleTick();
+  // Re-armed on this tick (turtleRearmed): roll and pitch wait for centre, as in pollInput.
+  core.input(turtleStickHold?Object.assign({},stick,{r:0,p:0}):stick,core.simTimeUs);
+}
+function bfTurtleTrickSample(){bfTurtleSample();onTrickSample();}
 // F: upside down on the floor on the bf core, with the page on the switches,
 // the sim flips the quad over for the pilot: FLIP OVER AFTER CRASH on, the
 // arm, the roll, then the turtle's own rearm (sim-core-adapter.js startFlip);
