@@ -26,7 +26,7 @@ import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
-} from './sim-tricks.js?v=7e842d305df4';
+} from './sim-tricks.js?v=50c7de842a14';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
@@ -563,6 +563,14 @@ export function createTrickObserver(det, opts) {
   let sameDescent = false;   // still in the descent of a dive just recorded
   let gapSeq = 0;
   let seq = 0;
+  // The camera, for the debug log only (nothing scores it): each step of a
+  // live segment, the body's up-Z, the camera's up-Z and the camera's axis
+  // (sim-core frame: x forward, z up) at the page's cam tilt (info().camDeg;
+  // 30 when the page gives none), and the position (m). camRecord reads
+  // them over the orbit's window when the segment ends.
+  const CAM_W = 9, CAM_CAP = 4096;
+  const camBuf = new Float64Array(CAM_CAP * CAM_W);
+  let camN = 0, camDeg = 30, camFrom = 'default', camWs = 3.5;
   const view = {
     t: 0, armed: false, contact: false, rate: 0, lockout: 0, diving: false, live: 0, liveT: 0,
     vz: 0, speed: 0, alt: 0, thr: 0, gap: null, clr: null, diveOn: 0, diveDrop: 0, diveCd: 0, gapCd: 0,
@@ -591,6 +599,7 @@ export function createTrickObserver(det, opts) {
     rec.mismatch = ex.mismatch;
     rec.pre = ex.pre;
     rec.saw = ex.saw;
+    rec.cam = camRecord(f);
     rec.phases = phaseRecord(det.lastPhases);
     rec.gapBack = ex.id === 'maverick' && det.lastGapBack ? MAV_GAP_MUL : 0;
     rec.pick = ex.pick;
@@ -604,6 +613,96 @@ export function createTrickObserver(det, opts) {
     if (mg) rec.reason = 'merged with the ' + (mg.segs - 1) + ' segment(s) before (pauses under 0.8 s): ' + mg.id + '; this one alone: ' + (ex.id || 'nothing');
     rec._explain = ex;
     emit(rec);
+  }
+
+  // One step of the camera: t the segment's clock (feat.dur, the history's
+  // column 0), the body's axes from the attitude (the detector's own nose
+  // and up columns), the camera's axis and up pitched up by the cam tilt.
+  function camPush(s, t) {
+    if (camN >= CAM_CAP) return;
+    const x = s.qx || 0, y = s.qy || 0, z = s.qz || 0, w = s.qw == null ? 1 : s.qw;
+    const fx = 1 - 2 * (y * y + z * z), fy = 2 * (x * y + w * z), fz = 2 * (x * z - w * y);
+    const ux = 2 * (x * z + w * y), uy = 2 * (y * z - w * x), uz = 1 - 2 * (x * x + y * y);
+    const c = camDeg * Math.PI / 180, cc = Math.cos(c), sc = Math.sin(c);
+    const k = camN * CAM_W;
+    camBuf[k] = t; camBuf[k + 1] = uz; camBuf[k + 2] = cc * uz - sc * fz;
+    camBuf[k + 3] = cc * fx + sc * ux; camBuf[k + 4] = cc * fy + sc * uy; camBuf[k + 5] = cc * fz + sc * uz;
+    // toScene: wx = -y, wz = -x (scene units).
+    camBuf[k + 6] = -(s.wz || 0) / camWs; camBuf[k + 7] = -(s.wx || 0) / camWs;
+    camBuf[k + 8] = s.alt != null ? s.alt : (s.wy || 0) / camWs;
+    camN++;
+  }
+
+  // The camera over the orbit's window (lastFeat.orbitTa..orbitTb; the whole
+  // segment when no orbit was fitted). Its up-Z: min, mean, max, the share
+  // below 0 (the picture upside down) and below -0.35, and the body's share
+  // below 0 beside it. Toward the orbit's centre, at the quad's height: the
+  // camera axis's angle to it (deg: mean, median, the share within 45), its
+  // azimuth off the centre's bearing (deg, mean), the distance (m, mean).
+  // The camera's elevation (deg, mean; 90 straight up). rows: 24 steps evenly
+  // over the window, as cols.
+  function camRecord(f) {
+    const orb = f.orbitR > 0 && f.orbitTb > f.orbitTa;
+    const ta = orb ? f.orbitTa : -Infinity, tb = orb ? f.orbitTb : Infinity;
+    const cx = -f.orbitCz / camWs, cy = -f.orbitCx / camWs;
+    const idx = [];
+    let segNeg = 0;
+    for (let i = 0; i < camN; i++) {
+      const t = camBuf[i * CAM_W];
+      if (camBuf[i * CAM_W + 2] < 0) segNeg++;
+      if (t >= ta - 1e-6 && t <= tb + 1e-6) idx.push(i);
+    }
+    const out = { deg: camDeg, degFrom: camFrom, win: orb ? [r3(ta), r3(tb)] : null, n: idx.length, segUpZNeg: camN ? r3(segNeg / camN) : 0 };
+    if (!idx.length) return out;
+    const D = 180 / Math.PI, cl = (u) => (u > 1 ? 1 : u < -1 ? -1 : u);
+    let mn = Infinity, mx = -Infinity, sum = 0, neg = 0, neg35 = 0, bodyNeg = 0, el = 0;
+    let offN = 0, offIn = 0, azSum = 0, azN = 0, dSum = 0;
+    const offs = [];
+    const at = (i) => {
+      const k = i * CAM_W, ax = camBuf[k + 3], ay = camBuf[k + 4], az = camBuf[k + 5];
+      const r = { t: camBuf[k], up: camBuf[k + 1], cu: camBuf[k + 2], el: Math.asin(cl(az)) * D, off: null, azOff: null, d: null };
+      if (orb) {
+        const dx = cx - camBuf[k + 6], dy = cy - camBuf[k + 7], d = Math.hypot(dx, dy), ah = Math.hypot(ax, ay);
+        r.d = d;
+        if (d > 0.05) {
+          r.off = Math.acos(cl((ax * dx + ay * dy) / d)) * D;
+          if (ah > 1e-3) r.azOff = Math.acos(cl((ax * dx + ay * dy) / (d * ah))) * D;
+        }
+      }
+      return r;
+    };
+    for (const i of idx) {
+      const r = at(i);
+      if (r.cu < mn) mn = r.cu;
+      if (r.cu > mx) mx = r.cu;
+      sum += r.cu; el += r.el;
+      if (r.cu < 0) neg++;
+      if (r.cu < -0.35) neg35++;
+      if (r.up < 0) bodyNeg++;
+      if (r.off != null) { offs.push(r.off); offN++; if (r.off <= 45) offIn++; }
+      if (r.azOff != null) { azSum += r.azOff; azN++; }
+      if (r.d != null) dSum += r.d;
+    }
+    const n = idx.length;
+    out.upZMin = r3(mn); out.upZMean = r3(sum / n); out.upZMax = r3(mx);
+    out.upZNeg = r3(neg / n); out.upZNeg35 = r3(neg35 / n); out.bodyUpZNeg = r3(bodyNeg / n);
+    out.elDegMean = Math.round(el / n);
+    if (offN) {
+      offs.sort((a, b) => a - b);
+      out.offDegMean = Math.round(offs.reduce((a, b) => a + b, 0) / offN);
+      out.offDegMed = Math.round(offs[offN >> 1]);
+      out.offIn45 = r3(offIn / offN);
+      out.distMean = r3(dSum / n);
+    }
+    if (azN) out.azDegMean = Math.round(azSum / azN);
+    out.cols = ['t', 'upZ', 'camUpZ', 'offDeg', 'azDeg', 'elDeg', 'dist'];
+    out.rows = [];
+    const R = Math.min(24, n);
+    for (let j = 0; j < R; j++) {
+      const r = at(idx[R > 1 ? Math.round((j * (n - 1)) / (R - 1)) : 0]);
+      out.rows.push([r3(r.t), r3(r.up), r3(r.cu), r.off == null ? null : Math.round(r.off), r.azOff == null ? null : Math.round(r.azOff), Math.round(r.el), r.d == null ? null : r3(r.d)]);
+    }
+    return out;
   }
 
   function emitAbort(t, f, why) {
@@ -649,6 +748,15 @@ export function createTrickObserver(det, opts) {
     view.diving = diving; view.vz = vz; view.speed = speed; view.alt = alt; view.thr = thr;
     view.clr = det.clr; view.gap = gapState(det, s.frameW, s.ws);
     view.diveOn = det.diveOn; view.diveDrop = det.diveDrop; view.diveCd = det.diveCd; view.gapCd = det.gapCd;
+
+    // The camera's steps (camRecord): from a segment's first step to the one
+    // that ends it.
+    if (!st.live && det.live) {
+      const i = info() || {};
+      const given = typeof i.camDeg === 'number' && isFinite(i.camDeg);
+      camN = 0; camDeg = given ? i.camDeg : 30; camFrom = given ? 'page' : 'default'; camWs = ws;
+    }
+    if (det.live || st.live) camPush(s, det.live ? det.feat.dur : det.lastFeat.dur);
 
     // Rotation segments.
     let finished = false;
@@ -958,6 +1066,12 @@ export function createTrickDebug(opts) {
         + (r.pole ? ' <span class="ok">· pole ×' + r.pole + '</span>' : '')
         + '  <span class="d">P' + (s.pitchDeg ?? '?') + ' R' + (s.rollDeg ?? '?') + ' Y' + (s.yawDeg ?? '?') + ' ' + (s.dur ?? '?') + 's</span>');
       L.push('<span class="d">  ' + esc(r.reason || '') + '</span>');
+      const c = r.cam;
+      if (c && c.n) {
+        L.push('<span class="d">  cam ' + c.deg + '°' + (c.win ? ' over the orbit ' + c.win[0] + '-' + c.win[1] + 's' : ' over the segment')
+          + '  cam up-Z<0 ' + c.upZNeg.toFixed(2) + ' (body ' + c.bodyUpZNeg.toFixed(2) + ')  mean ' + c.upZMean.toFixed(2)
+          + (c.offDegMean != null ? '  to centre ' + c.offDegMean + '° (az ' + c.azDegMean + '°, el ' + c.elDegMean + '°, ' + c.distMean.toFixed(1) + ' m)' : '  el ' + c.elDegMean + '°') + '</span>');
+      }
       if (s.travelH != null) {
         L.push('<span class="d">  travelH ' + s.travelH.toFixed(1) + ' close ' + s.close.toFixed(2) + ' span ' + s.span.toFixed(1) + 'm drop ' + s.drop.toFixed(1)
           + 'm fol ' + s.follow.toFixed(2) + ' ag ' + s.against.toFixed(2) + ' inv ' + s.inv.toFixed(2) + ' spd ' + s.spdPeak.toFixed(1) + '</span>');

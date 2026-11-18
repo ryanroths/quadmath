@@ -502,6 +502,9 @@ export function makeFeat() {
     // the flight path, roll or yaw (BARANI_P).
     twist: 0,
     orbitR: 0, orbitFit: 9, orbitSweep: 0, orbitTurn: 0, orbitSpd: 0, orbitCx: 0, orbitCz: 0, orbitPole: 0,
+    // The orbit's window (s from the segment's start), for the debug log's
+    // camera terms (sim-tricks-debug.js); nothing scores it.
+    orbitTa: 0, orbitTb: 0,
     // Barani (baraniWithin): the pitch path and |twist| of the stretch that
     // scores best as a Barani's, the twist inside the pitch; up-Z at the end.
     barP: 0, barR: 0, upEnd: 1,
@@ -547,6 +550,7 @@ export function resetFeat(f) {
   f.postMin = 0; f.sweep = 0; f.sweepTh = 0; f.sweepOn = 0;
   f.yawUp = 0; f.yawDn = 0; f.yawUpT = 0; f.yawDnT = 0; f.vyaw = 0; f.twist = 0;
   f.orbitR = 0; f.orbitFit = 9; f.orbitSweep = 0; f.orbitTurn = 0; f.orbitSpd = 0; f.orbitCx = 0; f.orbitCz = 0; f.orbitPole = 0;
+  f.orbitTa = 0; f.orbitTb = 0;
   f.barP = 0; f.barR = 0; f.upEnd = 1;
   f.invC = 0; f.invLo = 0; f.invHi = 0; f.invYawUp = 0; f.invYawDn = 0; f.invYawT = 0;
   f.phFlip = 0; f.phLoop = 0; f.phSplits = 0; f.phImmel = 0; f.phMav = 0; f.phMatty = 0; f.phHMatty = 0; f.phHMavvy = 0;
@@ -585,6 +589,7 @@ export function copyFeat(src, dst) {
   d.yawUp = src.yawUp; d.yawDn = src.yawDn; d.yawUpT = src.yawUpT; d.yawDnT = src.yawDnT; d.vyaw = src.vyaw; d.twist = src.twist;
   d.orbitR = src.orbitR; d.orbitFit = src.orbitFit; d.orbitSweep = src.orbitSweep; d.orbitTurn = src.orbitTurn; d.orbitSpd = src.orbitSpd;
   d.orbitCx = src.orbitCx; d.orbitCz = src.orbitCz; d.orbitPole = src.orbitPole;
+  d.orbitTa = src.orbitTa; d.orbitTb = src.orbitTb;
   d.barP = src.barP; d.barR = src.barR; d.upEnd = src.upEnd;
   d.invC = src.invC; d.invLo = src.invLo; d.invHi = src.invHi;
   d.invYawUp = src.invYawUp; d.invYawDn = src.invYawDn; d.invYawT = src.invYawT;
@@ -2145,6 +2150,7 @@ export function windowFeat(d) {
   const ws = d.ws || 3.5;
   f.orbitCx = o.cx * ws; f.orbitCz = o.cz * ws;
   f.orbitPole = o.kr > 0 ? poleNear(d.cols, f.orbitCx, f.orbitCz, ws) : 0;
+  f.orbitTa = d.histN ? d.hist[a * HIST_W] : 0; f.orbitTb = d.histN ? d.hist[b * HIST_W] : 0;
   // Barani: only worth the scan when a flip's worth of pitch path is there.
   if ((f.pathP || 0) >= BARANI_P - BARANI_FADE) {
     const bw = baraniWithin(d.hist, d.histN, d.bar);
