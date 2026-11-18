@@ -2004,7 +2004,12 @@ test('sim.html wires tricks without touching physics or old keys', () => {
   // The detector steps on the sim clock (the core's onSample every 4 ms of
   // sim time, inside stepCore); the HUD draws once a frame.
   assert.ok(simSrc.includes('const trickEv=tricks.step(trickSample,dt);'));
-  assert.ok(simSrc.includes('core.advance(frameMs,!calib,onCoreEvent,trickSampling()?onTrickSample:null)'));
+  // The detector samples inside the core's advance, alone or with the bf
+  // turtle's own samples (bfTurtleSample) when both run.
+  assert.ok(simSrc.includes('const turtle=bfTurtleOnTicks(),trick=trickSampling();'));
+  assert.ok(simSrc.includes('const onSample=turtle?(trick?bfTurtleTrickSample:bfTurtleSample):(trick?onTrickSample:null);'));
+  assert.ok(simSrc.includes('function bfTurtleTrickSample(){bfTurtleSample();onTrickSample();}'));
+  assert.ok(simSrc.includes('core.advance(frameMs,!calib,onCoreEvent,onSample)'));
   assert.ok(simSrc.includes('const s=core.tickState(trickCs);'));
   // The map's authored gaps and the quad's width go with each sample.
   assert.ok(simSrc.includes('trickSample.gaps=trickGaps;') && simSrc.includes('trickSample.frameW=trickFrameW();'));
