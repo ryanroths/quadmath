@@ -114,7 +114,14 @@
   #fpsHud{align-self:center;margin-top:6px;white-space:pre;min-width:14ch;text-align:right;pointer-events:none;font-size:11px;
     color:var(--dim);text-shadow:0 1px 6px rgba(0,0,0,.8)}
   #osdTL{top:14px;left:16px} #osdTR{top:48px;right:16px;text-align:right}
-  #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center}
+  /* One box whatever it reads (osdBcHtml): the throttle and TWR padded to
+     fixed widths (white-space:pre), and the bf core's won't-arm line always
+     laid out, blank while armed, its text in a span taken out of layout so a
+     long list of flags overflows on screen without widening the box. It grew a
+     line on every disarm before, lifting THR and FLT 18 px. */
+  #osdBC{bottom:18px;left:50%;transform:translateX(-50%);text-align:center;white-space:pre}
+  #osdBC .osdbc-why{position:relative}
+  #osdBC .osdbc-why>span{position:absolute;left:50%;top:0;transform:translateX(-50%);white-space:nowrap}
   #osdBL{display:none}
   #osdBR{bottom:18px;right:16px;text-align:right}
   #osdGate{top:14px;left:50%;transform:translateX(-50%);color:var(--txt);font-weight:600}
@@ -5657,15 +5664,25 @@ function updateOSD(){
   const thrPct=threeD?((thrShow*100)|0):((stick.t*100)|0);
   const thrLabel=threeD?(thrPct===0?'0':(thrPct>0?'+':'')+thrPct):String(thrPct);
   const thrBarSrc=threeD?(thrShow+1)/2:stick.t;
-  osdBC.innerHTML=`THR ${'█'.repeat(Math.round(Math.max(0,Math.min(1,thrBarSrc))*10)).padEnd(10,'░')} ${thrLabel}%`+
-    `<br>FLT ${String(t/60|0).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`+
-    `&nbsp;&nbsp;TWR ${(cs.twr||0).toFixed(1)}`+(threeD?' · 3D':'')+
-    // The bf core shows why Betaflight will not arm, as its OSD would.
-    (cs.kind==='bf'&&!cs.armed&&cs.armingDisableFlags?'<br>'+armingFlagNames(cs.armingDisableFlags).join(' '):'');
+  // The bf core shows why Betaflight will not arm, as its OSD would.
+  osdBC.innerHTML=osdBcHtml(thrBarSrc,thrLabel,t,cs.twr||0,threeD,
+    cs.kind==='bf'&&!cs.armed&&cs.armingDisableFlags?armingFlagNames(cs.armingDisableFlags).join(' '):'');
   osdBR.innerHTML=`<span style="font-size:.85em;opacity:.85">`+
     `M4 ${bar(mo[3])}&nbsp;M2 ${bar(mo[1])}<br>`+
     `M3 ${bar(mo[2])}&nbsp;M1 ${bar(mo[0])}</span>`;
   updateLapOSD();
+}
+
+// #osdBC's markup: THR bar and %, FLT and TWR, and the won't-arm line. The %
+// is padded to 3 characters (4 in 3D, signed) and TWR to 4, under the box's
+// white-space:pre, so the box keeps one width as the numbers cross 9/10 or
+// 99/100; the why line is always there (blank armed) and its text is out of
+// layout, so the box keeps one height and width armed or disarmed.
+function osdBcHtml(barSrc,label,tSec,twr,threeD,why){
+  const esc=(x)=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  return `THR ${'█'.repeat(Math.round(Math.max(0,Math.min(1,barSrc))*10)).padEnd(10,'░')} ${String(label).padStart(threeD?4:3,' ')}%`+
+    `<br>FLT ${String(tSec/60|0).padStart(2,'0')}:${String(tSec%60).padStart(2,'0')}  TWR ${Number(twr).toFixed(1).padStart(4,' ')}`+(threeD?' · 3D':'')+
+    `<br><span class="osdbc-why"> <span>${esc(why||'')}</span></span>`;
 }
 
 // ---------- Panel ----------
@@ -9091,7 +9108,16 @@ function pollInput(){
   if(core.kind==='bf'&&!bfRadio())bfTurtleTick();
   if(jsTurtleDone){
     jsTurtleDone=false;
-    if(easyMode()&&tryArm({fromAuto:true}))turtleRearmed();
+    if(easyMode()&&tryArm({fromAuto:true})){
+      turtleRearmed();
+      // The hold (below) zeroes roll and pitch from this poll's sample on, but
+      // the js core arms now and still runs the ticks up to that sample's stamp
+      // on the one before it: the stick still over, from the turtle. A zero
+      // roll/pitch sample at the core's own time covers those ticks. Without
+      // it a long frame flew a frame of full-rate roll (7-13 rad/s at 6x CPU
+      // throttle) the instant it re-armed, and it came to rest tipped 15-20°.
+      if(core.kind==='js')core.input({r:0,p:0,y:stick.y,t:stick.t},core.simTimeUs);
+    }
   }
   if(turtleStickHold){
     if(Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15)turtleStickHold=false;
@@ -9731,7 +9757,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   isLineTrackId,demoLineGhostForShot,ghostVisible:()=>ghostVisible,ghostMesh,
   dailyLineFor,flyDailyLine,dailyLineLive:()=>dailyLineLive,
   physicsHz:()=>qp.physicsHz,floatiness:()=>qp.floatiness,
-  core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
+  osdBcHtml,core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
   simClockMs:()=>simClockMs,
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
   audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},setTestPilot(fn){testPilot=typeof fn==='function'?fn:null;if(testPilot)testPilotUsed=true;testPilotError=null;},testPilotError:()=>testPilotError,testPilotUsed:()=>testPilotUsed,

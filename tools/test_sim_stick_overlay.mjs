@@ -361,10 +361,11 @@ const PAGE = String.raw`(() => {
   try {
     new PerformanceObserver((l) => { for (const e of l.getEntries()) shifts.push(e.value); }).observe({ type: 'layout-shift', buffered: false });
   } catch (e) { /* no layout-shift entries in this browser */ }
-  // The boxes whose text does not tick every frame (the OSD's readouts do).
+  // The boxes whose size does not tick with what they read: the OSD's corner
+  // readouts do; #osdBC keeps one box (osdBcHtml), so it is in the list.
   function layout() {
     const out = { shifts: shifts.length };
-    for (const id of ['feelHud', 'legend', 'touchLayer', 'menuBtn', 'gear']) {
+    for (const id of ['feelHud', 'legend', 'touchLayer', 'menuBtn', 'gear', 'osdBC']) {
       const e = document.getElementById(id);
       if (!e) continue;
       const b = e.getBoundingClientRect();
@@ -506,20 +507,13 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         assert.equal(rest.hint, true, 'the arm hint shows at rest: ' + rest.text);
         assert.equal(rest.inCard, false, 'the arm hint is outside the card');
         const cardBox = rest.L.feelHud;
-        // #hudBtns keeps one width whatever the fps readout says: 9, 10, 99 and
-        // 100 fps on every quality label (the page's own formatter and labels).
-        r = await js(`const el = document.getElementById('fpsHud'), btns = document.getElementById('hudBtns');
-          const live = el.textContent, w0 = btns.getBoundingClientRect().width, labels = S.s.looks.qualityLabels, widths = {};
-          for (const f of [9, 10, 99, 100]) for (const q of labels) { el.textContent = S.s.looks.fpsHudText(f, q); widths[f + ' fps ' + q] = btns.getBoundingClientRect().width; }
-          el.textContent = live;
-          return JSON.stringify({ live, w0, labels, widths });`);
-        assert.ok(r.labels.length >= 3, 'every quality label ' + JSON.stringify(r.labels));
-        assert.ok(r.w0 > 0, '#hudBtns is on screen');
-        for (const [k, w] of Object.entries(r.widths)) assert.equal(w, r.w0, `#hudBtns width at ${k} (as at "${r.live}")`);
+        const osdBox = rest.L.osdBC;
         // Clear of the HUD around it, with the bf core's arming flags under the throttle bar.
         const clearOfHud = async (label) => {
           const h = await js(`await S.frame(); const b = (id) => { const e = document.getElementById(id); const r = e && e.getBoundingClientRect(); const cs = e && getComputedStyle(e); return r && r.width > 0 && cs.opacity !== '0' && cs.visibility !== 'hidden' ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom, lines: e.innerHTML.split('<br>').length } : null; };
-            return JSON.stringify({ seen: S.seen(), osdBC: b('osdBC'), legend: b('legend'), feelHud: b('feelHud'), hudArmHint: b('hudArmHint'), core: S.s.core() });`);
+            return JSON.stringify({ seen: S.seen(), osdBC: b('osdBC'), legend: b('legend'), feelHud: b('feelHud'), hudArmHint: b('hudArmHint'), core: S.s.core(),
+              L: S.layout(), hudArm: document.getElementById('hudArm').textContent, hint: document.getElementById('hudArmHint').classList.contains('show'),
+              st: { armed: S.s.coreState().armed, z: +S.s.coreState().position.z.toFixed(2), reason: S.s.easy().disarmReason, arm: S.s.easy().arm, t: +S.s.stickOverlay().stick.t.toFixed(2), hint: document.getElementById('hudArmHint').textContent } });`);
           for (const id of ['osdBC', 'legend', 'feelHud', 'hudArmHint']) {
             if (h[id]) assert.equal(overlaps(h.seen.rect, h[id]), false, `${label}: over #${id} ${JSON.stringify({ o: h.seen.rect, b: h[id] })}`);
           }
@@ -531,10 +525,17 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         let hud = await clearOfHud('at rest');
         assert.equal(hud.core, 'bf');
         assert.ok(hud.osdBC, 'the throttle bar is up');
-        // Roll right, yaw right, throttle up (W ramps it, and it stays when let go).
+        // Throttle up (W ramps it, and it stays when let go), then roll right
+        // and yaw right. Easy mode arms on the throttle once it has been down a
+        // second (the page's own count), so W waits for that; roll and yaw wait
+        // until it is armed and off the floor (the page's own state): full roll
+        // before lift-off tips it over on the floor, a crash, and the turtle
+        // that follows holds roll and pitch at zero until both are centred.
+        await js(`await S.until(() => { const a = S.s.easy().arm; return !!a && a.lowS >= 1; }, 8000); return 1;`);
+        await hold(true, 'w', 'KeyW', 87);
+        await js(`await S.until(() => S.s.coreState().armed && S.s.coreState().position.z > 0.5, 8000); return 1;`);
         await hold(true, 'ArrowRight', 'ArrowRight', 39);
         await hold(true, 'd', 'KeyD', 68);
-        await hold(true, 'w', 'KeyW', 87);
         // The keys move the sticks in sim time (W ramps the throttle 1.4 a
         // second): held until they are there, however fast this machine runs
         // the sim against the wall clock (a CI runner's is about half).
@@ -544,11 +545,13 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         r = await tracks(js, 'keys held');
         hud = await clearOfHud('keys held');
         console.log('osdBC lines with W up: ' + hud.osdBC.lines);
-        const armedNow = await js(`const armed = await S.until(() => S.s.coreState().armed, 5000); await S.frame();
-          return JSON.stringify({ armed, L: S.layout(), hint: document.getElementById('hudArmHint').classList.contains('show') });`);
-        assert.equal(armedNow.armed, true, 'armed by the throttle');
-        assert.equal(armedNow.hint, false, 'no arm hint while armed');
-        assert.deepEqual(armedNow.L.feelHud, cardBox, '#feelHud: the same box armed as disarmed');
+        // Armed, as the HUD itself says (its label and the hint are written in
+        // one update, read here in one snapshot, the read above: no extra round
+        // trip while the keys still fly it).
+        assert.equal(hud.hudArm, 'ARMED', 'armed by the throttle ' + JSON.stringify(hud.st));
+        assert.equal(hud.hint, false, 'no arm hint while armed');
+        assert.deepEqual(hud.L.feelHud, cardBox, '#feelHud: the same box armed as disarmed');
+        assert.deepEqual(hud.L.osdBC, osdBox, '#osdBC: the same box armed as disarmed');
         assert.ok(r.o.stick.r > 0.9 && r.o.stick.y > 0.9 && r.o.stick.t > 0.4, 'the keys moved the sticks ' + JSON.stringify(r.o.stick));
         assert.ok(r.o.dots.r.x > r.o.box * 0.8 && r.o.dots.l.x > r.o.box * 0.8, 'both dots to the right');
         assert.ok(r.o.dots.l.y < r.o.box * 0.7, 'throttle up');
@@ -558,7 +561,7 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         // The arrows glide the stick in sim time too: held until it is there.
         await js(`await S.until(() => S.s.stickOverlay().stick.p > 0.9, 8000); return 1;`);
         r = await tracks(js, 'pitch forward');
-        assert.ok(r.o.stick.p > 0.9 && r.o.dots.r.y < r.o.box * 0.2, 'pitch forward: the right dot up');
+        assert.ok(r.o.stick.p > 0.9 && r.o.dots.r.y < r.o.box * 0.2, 'pitch forward: the right dot up ' + JSON.stringify({ stick: r.o.stick, dots: r.o.dots, box: r.o.box, armed: r.armed }));
         await hold(false, 'ArrowUp', 'ArrowUp', 38);
         await hold(false, 'd', 'KeyD', 68);
         await js(`await S.wait(800); return 1;`);
@@ -596,7 +599,36 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         assert.equal(r.reason, 'crash', 'as a crash');
         assert.equal(r.hint, true, 'the arm hint shows after the crash');
         assert.deepEqual(r.L.feelHud, cardBox, '#feelHud: the same box after a crash');
+        assert.deepEqual(r.L.osdBC, osdBox, '#osdBC: the same box after a crash, with the won\'t-arm line');
         await clearOfHud('after the crash');
+
+        // At rest after the crash, nothing flying: the readouts' widths, on the page's own formatters.
+        // #hudBtns keeps one width whatever the fps readout says: 9, 10, 99 and
+        // 100 fps on every quality label (the page's own formatter and labels).
+        r = await js(`const el = document.getElementById('fpsHud'), btns = document.getElementById('hudBtns');
+          const live = el.textContent, w0 = btns.getBoundingClientRect().width, labels = S.s.looks.qualityLabels, widths = {};
+          for (const f of [9, 10, 99, 100]) for (const q of labels) { el.textContent = S.s.looks.fpsHudText(f, q); widths[f + ' fps ' + q] = btns.getBoundingClientRect().width; }
+          el.textContent = live;
+          return JSON.stringify({ live, w0, labels, widths });`);
+        assert.ok(r.labels.length >= 3, 'every quality label ' + JSON.stringify(r.labels));
+        assert.ok(r.w0 > 0, '#hudBtns is on screen');
+        for (const [k, w] of Object.entries(r.widths)) assert.equal(w, r.w0, `#hudBtns width at ${k} (as at "${r.live}")`);
+        // #osdBC keeps one box whatever it reads: the throttle at 0, 9, 10 and
+        // 100 %, TWR under and over 10, the flight clock, and every arming flag
+        // at once on the won't-arm line (the page's own markup, osdBcHtml).
+        r = await js(`const el = document.getElementById('osdBC'), live = el.innerHTML, box = () => { const b = el.getBoundingClientRect(); return [b.width, b.height].map((v) => Math.round(v * 10) / 10); };
+          const { armingFlagNames } = await import('/sim-core-adapter.js');
+          const all = armingFlagNames(0x3fffffff).join(' '), w0 = box(), out = {};
+          for (const [l, bar] of [['0', 0], ['9', 0.09], ['10', 0.1], ['100', 1]]) for (const twr of [0, 9.96, 10.5]) for (const t of [7, 600, 5999]) for (const why of ['', all]) {
+            el.innerHTML = S.s.osdBcHtml(bar, l, t, twr, false, why); out[[l + '%', 'TWR ' + twr, t + ' s', why ? 'all flags' : 'armed'].join(', ')] = box(); }
+          const d3 = {};
+          for (const l of ['0', '+9', '-10', '+100', '-100']) { el.innerHTML = S.s.osdBcHtml(0.5, l, 7, 1.2, true, ''); d3[l] = box(); }
+          el.innerHTML = live;
+          return JSON.stringify({ w0, out, d3, flags: all.length });`);
+        assert.ok(r.flags > 60, 'a long list of flags ' + r.flags);
+        for (const [k, b] of Object.entries(r.out)) assert.deepEqual(b, r.w0, `#osdBC box at ${k}`);
+        const d3 = Object.values(r.d3);
+        for (const b of d3) assert.deepEqual(b, d3[0], '#osdBC box in 3D ' + JSON.stringify(r.d3));
 
         // The menu (Esc) hides it; closing it brings it back. The frame loop
         // (syncStickOverlay) shows or hides it, so each read waits for the
