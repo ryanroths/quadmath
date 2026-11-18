@@ -26,6 +26,7 @@ import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
+  HIST_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE,
 } from './sim-tricks.js?v=50c7de842a14';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
@@ -600,6 +601,7 @@ export function createTrickObserver(det, opts) {
     rec.pre = ex.pre;
     rec.saw = ex.saw;
     rec.cam = camRecord(f);
+    rec.barani = baraniProbe(f);
     rec.phases = phaseRecord(det.lastPhases);
     rec.gapBack = ex.id === 'maverick' && det.lastGapBack ? MAV_GAP_MUL : 0;
     rec.pick = ex.pick;
@@ -657,7 +659,7 @@ export function createTrickObserver(det, opts) {
     const D = 180 / Math.PI, cl = (u) => (u > 1 ? 1 : u < -1 ? -1 : u);
     let mn = Infinity, mx = -Infinity, sum = 0, neg = 0, neg35 = 0, bodyNeg = 0, el = 0;
     let offN = 0, offIn = 0, azSum = 0, azN = 0, dSum = 0;
-    const offs = [];
+    const offs = [], cus = [], ups = [];
     const at = (i) => {
       const k = i * CAM_W, ax = camBuf[k + 3], ay = camBuf[k + 4], az = camBuf[k + 5];
       const r = { t: camBuf[k], up: camBuf[k + 1], cu: camBuf[k + 2], el: Math.asin(cl(az)) * D, off: null, azOff: null, d: null };
@@ -675,7 +677,7 @@ export function createTrickObserver(det, opts) {
       const r = at(i);
       if (r.cu < mn) mn = r.cu;
       if (r.cu > mx) mx = r.cu;
-      sum += r.cu; el += r.el;
+      sum += r.cu; el += r.el; cus.push(r.cu); ups.push(r.up);
       if (r.cu < 0) neg++;
       if (r.cu < -0.35) neg35++;
       if (r.up < 0) bodyNeg++;
@@ -687,6 +689,10 @@ export function createTrickObserver(det, opts) {
     out.upZMin = r3(mn); out.upZMean = r3(sum / n); out.upZMax = r3(mx);
     out.upZNeg = r3(neg / n); out.upZNeg35 = r3(neg35 / n); out.bodyUpZNeg = r3(bodyNeg / n);
     out.elDegMean = Math.round(el / n);
+    // Quantiles (10, 25, 50, 75, 90 %) of the camera's up-Z and the body's,
+    // so a gate's level can be set with margin from the log.
+    const q = (a) => { a.sort((x, y) => x - y); return [0.1, 0.25, 0.5, 0.75, 0.9].map((p) => r3(a[Math.min(a.length - 1, Math.floor(p * a.length))])); };
+    out.upZQ = q(cus); out.bodyUpZQ = q(ups);
     if (offN) {
       offs.sort((a, b) => a - b);
       out.offDegMean = Math.round(offs.reduce((a, b) => a + b, 0) / offN);
@@ -702,6 +708,59 @@ export function createTrickObserver(det, opts) {
       const r = at(idx[R > 1 ? Math.round((j * (n - 1)) / (R - 1)) : 0]);
       out.rows.push([r3(r.t), r3(r.up), r3(r.cu), r.off == null ? null : Math.round(r.off), r.azOff == null ? null : Math.round(r.azOff), Math.round(r.el), r.d == null ? null : r3(r.d)]);
     }
+    return out;
+  }
+
+  // The Barani's terms over the finished segment's history (det.hist, read
+  // only), as baraniWithin scans it but with the band ignored: the stretch
+  // of BARANI_P less BARANI_FADE or more of pitch path whose twist is
+  // nearest 180, without and with BARANI_SIDE (pitch path before and after
+  // the row where the twist is half done), each with its pitch path, twist
+  // and the pitch path either side (deg) and its time (s); which term
+  // zeroed it (limit: barP, barR band, BARANI_SIDE, upEnd, or none).
+  function baraniProbe(f) {
+    const H = det.hist, n = det.histN, W = HIST_W, D = 180 / Math.PI;
+    const lo = BARANI_P - BARANI_FADE, bandLo = 2.356, bandHi = 3.927;
+    const out = { pathDeg: degOf(f.pathP), twistDeg: degOf(f.twist), upEnd: r3(f.upEnd), band: [135, 225], sideDeg: degOf(BARANI_SIDE), any: null, inside: null, limit: null };
+    if (!H || n < 2 || !(f.pathP >= lo)) { out.limit = 'barP'; return out; }
+    const stride = Math.max(1, Math.ceil(n / PH_ROWS));
+    const pp = [0], tw = [H[15]], tt = [H[0]];
+    let path = 0;
+    for (let r = 1; r < n; r++) {
+      path += Math.abs(H[r * W + 1] - H[(r - 1) * W + 1]);
+      if (r === n - 1 || r % stride === 0) { pp.push(path); tw.push(H[r * W + 15]); tt.push(H[r * W]); }
+    }
+    const m = pp.length;
+    const half = (ja, jb) => {
+      const raw = tw[jb] - tw[ja], T = Math.abs(raw), sg = raw >= 0 ? 1 : -1;
+      let k = ja + 1;
+      while (k < jb && sg * (tw[k] - tw[ja]) < T / 2) k++;
+      return { before: pp[k] - pp[ja], after: pp[jb] - pp[k] };
+    };
+    const row = (ja, jb) => {
+      const h = half(ja, jb);
+      return { pDeg: Math.round((pp[jb] - pp[ja]) * D), twistDeg: Math.round(Math.abs(tw[jb] - tw[ja]) * D), beforeDeg: Math.round(h.before * D), afterDeg: Math.round(h.after * D), t: [r3(tt[ja]), r3(tt[jb])] };
+    };
+    let anyOff = 9, anyA = -1, anyB = -1, inOff = 9, inA = -1, inB = -1;
+    for (let ja = 0; ja < m - 1; ja++) {
+      for (let jb = m - 1; jb > ja; jb--) {
+        if (pp[jb] - pp[ja] < lo) break;
+        const off = Math.abs(Math.abs(tw[jb] - tw[ja]) - Math.PI);
+        if (off < anyOff) { anyOff = off; anyA = ja; anyB = jb; }
+        if (off < inOff) {
+          const h = half(ja, jb);
+          if (h.before >= BARANI_SIDE && h.after >= BARANI_SIDE) { inOff = off; inA = ja; inB = jb; }
+        }
+      }
+    }
+    const inBandT = (o) => o <= Math.PI - bandLo + 1e-9 && o <= bandHi - Math.PI + 1e-9;
+    if (anyA >= 0) out.any = row(anyA, anyB);
+    if (inA >= 0) out.inside = row(inA, inB);
+    if (anyA < 0) out.limit = 'barP';
+    else if (!inBandT(anyOff)) out.limit = 'barR band';
+    else if (!(inA >= 0 && inBandT(inOff))) out.limit = 'BARANI_SIDE';
+    else if (!(f.upEnd >= 0.5)) out.limit = 'upEnd';
+    else out.limit = 'none';
     return out;
   }
 

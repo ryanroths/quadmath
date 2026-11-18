@@ -561,6 +561,8 @@ test('observer: the camera terms (rec.cam) over the orbit, logged only', () => {
   assert.equal(c.offIn45, 1);
   assert.deepEqual(c.cols, ['t', 'upZ', 'camUpZ', 'offDeg', 'azDeg', 'elDeg', 'dist']);
   assert.equal(c.rows.length, 24);
+  assert.equal(c.upZQ.length, 5); assert.equal(c.bodyUpZQ.length, 5);
+  near(c.upZQ[2], 0.94, 0.01, 'cam up-Z median'); near(c.bodyUpZQ[2], 0.64, 0.01, 'body up-Z median');
   // Tail to the centre, tilted back 66: the body upright, the picture upside
   // down, the camera up, 84 off the centre.
   const back = camOrbit({ pitch: -66, toCentre: false, info: { camDeg: 30 } }).cam;
@@ -581,4 +583,29 @@ test('observer: the camera terms (rec.cam) over the orbit, logged only', () => {
   assert.equal(f.orbitTa, 0); assert.equal(f.orbitTb, 0);
   // The page gives the overlay its cam tilt.
   assert.ok(simSrc.includes('info:()=>({core:cs.kind,map:currentMap,camDeg:CFG.camDeg})'), 'sim.html passes camDeg');
+});
+
+test('observer: the Barani probe (rec.barani) names the term that zeroed it', () => {
+  // A front flip with a half roll inside it, nose down (90 of pitch, the
+  // roll, 270 more: upright at the end): the probe's best stretch twists
+  // about 180 with the pitch either side.
+  const flip = (rollT) => run([
+    { t: Math.PI / 2 / 6, rate: [0, 6, 0] },
+    { t: rollT, rate: [9, 0, 0] },
+    { t: 1.5 * Math.PI / 6, rate: [0, 6, 0] },
+    { t: 0.8 },
+  ]).recs.filter((r) => r.type === 'maneuver');
+  const half = flip(Math.PI / 9);
+  assert.equal(half.length, 1);
+  const b = half[0].barani;
+  assert.ok(b.inside && Math.abs(b.inside.twistDeg - 180) <= 6, JSON.stringify(b));
+  assert.ok(b.inside.beforeDeg >= 60 && b.inside.afterDeg >= 60, JSON.stringify(b.inside));
+  assert.equal(b.limit, 'none');
+  assert.equal(half[0].result, 'barani');
+  // 110 of roll: under the band.
+  const short = flip((110 * Math.PI / 180) / 9)[0].barani;
+  assert.equal(short.limit, 'barR band', JSON.stringify(short));
+  assert.ok(Math.abs(short.any.twistDeg - 110) <= 6, JSON.stringify(short.any));
+  // An orbit: too little pitch to scan.
+  assert.equal(camOrbit({ pitch: 50, toCentre: true, info: { camDeg: 30 } }).barani.limit, 'barP');
 });
