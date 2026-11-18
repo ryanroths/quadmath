@@ -48,7 +48,7 @@
      connection and the preconnect is wasted. -->
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=optional" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=2f595d174b9d">
+<link rel="stylesheet" href="style.css?v=cc506213e392">
 <!-- Sets the flag the scroll-reveal styles hang off, before first paint so
      revealed content never flashes in and back out. Only when the observer
      exists, so unsupported browsers are never left with hidden content. -->
@@ -80,9 +80,25 @@
 
 <div class="container">
   <section class="hero" id="calculator">
-    <h1>Know your build<br>before you <span class="accent">solder it</span>.</h1>
-    <p class="sub">Enter your motor KV, prop pitch, and battery — get estimated top speed, flight time, and thrust-to-weight. Compare motors side by side.</p>
-    <p class="calc-scope-note">Built for 65–85mm whoops — accuracy calibrated against real whoop builds. Not for 5-inch quads, and not a 5-inch parts picker. Estimates swap in measured numbers when your inputs match our <a href="bench.html#build-air65">Air65</a> and <a href="bench.html#build-mobula6">Mobula6</a> bench runs.</p>
+    <div class="hero-top">
+      <div class="hero-intro">
+        <h1>Know your build<br>before you <span class="accent">solder it</span>.</h1>
+        <p class="sub">Enter your motor KV, prop pitch, and battery — get estimated top speed, flight time, and thrust-to-weight. Compare motors side by side.</p>
+        <p class="calc-scope-note">Built for 65–85mm whoops — accuracy calibrated against real whoop builds. Not for 5-inch quads, and not a 5-inch parts picker. Estimates swap in measured numbers when your inputs match our <a href="bench.html#build-air65">Air65</a> and <a href="bench.html#build-mobula6">Mobula6</a> bench runs.</p>
+      </div>
+      <a href="sim.html" class="sim-teaser-card hero-sim-card">
+        <!-- Media slot: for the clip, swap this <picture> for <video src="..." poster="assets/sim-hero.webp" width="720" height="405" muted loop playsinline autoplay aria-hidden="true"></video>
+             (style.css sizes both) and preload the poster in <head> with fetchpriority="high": it is the LCP element. -->
+        <picture>
+          <source media="(max-width: 767px)" srcset="assets/sim-hero-360.webp" width="360" height="203">
+          <img src="assets/sim-hero.webp" width="720" height="405" alt="In-flight FPV view in the QuadMath sim: a whoop on the Betaflight core flies a gate through the orange-lit underpass at The Bando, OSD on screen" decoding="async" fetchpriority="high">
+        </picture>
+        <div class="sim-teaser-label">// free browser sim</div>
+        <div class="sim-teaser-title">QUADMATH <span class="accent">SIM</span></div>
+        <p class="sim-teaser-sub">Real Betaflight 4.5 · your rates · radio or keyboard</p>
+        <div class="sim-teaser-cta">LAUNCH SIM →</div>
+      </a>
+    </div>
 
     <div class="frame-select">
       <button class="frame-btn active" data-frame="65">65mm Whoop</button>
@@ -535,7 +551,7 @@
   <section class="section reveal" id="ryfly-sim">
     <h2>QUADMATH FLIGHT SIMULATOR</h2>
     <p class="sub">Built by RyFly — FPV pilot &amp; IGOW competitor.</p>
-    <p class="sub">Free browser-based FPV flight simulator that flies your own Betaflight rates — paste a diff or CLI rates straight in — with acro and angle mode, a 3-lap race course, and TX16S/EdgeTX radio support.</p>
+    <p class="sub">Free browser FPV whoop sim. The 65 and 75 run real Betaflight 4.5 flight code compiled to WebAssembly, so paste your diff or CLI rates and it flies your own rates, acro or angle, on a radio or gamepad (TX16S/EdgeTX over USB) or the keyboard, across the Rig, House, Warehouse and Bando.</p>
     <a href="sim.html" class="sim-launch-btn">EXPLORE THE SIMULATOR →</a>
   </section>
 
