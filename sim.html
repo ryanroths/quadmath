@@ -380,7 +380,12 @@
     .menu-sparks{margin:6px 0 0}
     body.touch-on #feelHud{top:max(48px, calc(env(safe-area-inset-top, 0px) + 40px));
       max-height:calc(100dvh - var(--stick-size, 112px) - 40px - env(safe-area-inset-bottom, 0px))}
-    body.touch-on #feelHud .feel-meta{padding:6px 8px;min-width:0;max-width:168px}
+    /* One width that holds the card's widest line (BATT 4.44V makes it
+       80.9 px at 11 px Inter; THR +100% and the ANGLE button come just under),
+       so the card keeps its box as BATT's proportional digits tick, on arm
+       and disarm and on a mode change, and the hint's slot beside it stays
+       put. min-width:0 made the card as wide as whatever it read. */
+    body.touch-on #feelHud .feel-meta{padding:6px 8px;min-width:84px;max-width:168px}
     /* Short landscape: below the card is where the biggest right stick
        reaches, so the hint sits left of the card, level with its foot. */
     body.touch-on #hudArmSlot{top:auto;bottom:0;right:calc(100% + 8px);align-items:flex-end}
@@ -5679,14 +5684,18 @@ function updateOSD(){
 
 // #osdBC's markup: THR bar and %, FLT and TWR, and the won't-arm line. The %
 // is padded to 3 characters (4 in 3D, signed), FLT's minutes to 3 (the sim
-// clock runs from page load; 999 at most) and TWR to 4, under the box's
+// clock runs from page load; it holds at 999:59) and TWR to 4 (5 in 3D, where
+// reverse thrust reads negative; clamped to what that holds, -9.9 or -99.9 to
+// 99.9, which only a hand-lightened build reaches), under the box's
 // white-space:pre, so the box keeps one width as the numbers cross 9/10 or
 // 99/100; the why line is always there (blank armed) and its text is out of
 // layout, so the box keeps one height and width armed or disarmed.
 function osdBcHtml(barSrc,label,tSec,twr,threeD,why){
   const esc=(x)=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const s=Math.max(0,Math.min(999*60+59,tSec|0));
+  const tw=Math.max(threeD?-99.9:-9.9,Math.min(99.9,Number(twr)||0));
   return `THR ${'█'.repeat(Math.round(Math.max(0,Math.min(1,barSrc))*10)).padEnd(10,'░')} ${String(label).padStart(threeD?4:3,' ')}%`+
-    `<br>FLT ${String(Math.min(999,tSec/60|0)).padStart(2,'0').padStart(3,' ')}:${String(tSec%60).padStart(2,'0')}  TWR ${Number(twr).toFixed(1).padStart(4,' ')}`+(threeD?' · 3D':'')+
+    `<br>FLT ${String(s/60|0).padStart(2,'0').padStart(3,' ')}:${String(s%60).padStart(2,'0')}  TWR ${tw.toFixed(1).padStart(threeD?5:4,' ')}`+(threeD?' · 3D':'')+
     `<br><span class="osdbc-why"> <span>${esc(why||'')}</span></span>`;
 }
 

@@ -614,21 +614,29 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         assert.ok(r.w0 > 0, '#hudBtns is on screen');
         for (const [k, w] of Object.entries(r.widths)) assert.equal(w, r.w0, `#hudBtns width at ${k} (as at "${r.live}")`);
         // #osdBC keeps one box whatever it reads: the throttle at 0, 9, 10 and
-        // 100 %, TWR under and over 10, the flight clock, and every arming flag
-        // at once on the won't-arm line (the page's own markup, osdBcHtml).
+        // 100 %, TWR under and over 10 and past what its field holds (a
+        // hand-lightened build; reverse thrust in 3D), the flight clock up to
+        // and past 999:59, and every arming flag at once on the won't-arm line
+        // (the page's own markup, osdBcHtml).
         r = await js(`const el = document.getElementById('osdBC'), live = el.innerHTML, box = () => { const b = el.getBoundingClientRect(); return [b.width, b.height].map((v) => Math.round(v * 10) / 10); };
           const { armingFlagNames } = await import('/sim-core-adapter.js');
           const all = armingFlagNames(0x3fffffff).join(' '), w0 = box(), out = {};
-          for (const [l, bar] of [['0', 0], ['9', 0.09], ['10', 0.1], ['100', 1]]) for (const twr of [0, 9.96, 10.5]) for (const t of [7, 600, 5999, 6000, 59999]) for (const why of ['', all]) {
+          for (const [l, bar] of [['0', 0], ['9', 0.09], ['10', 0.1], ['100', 1]]) for (const twr of [0, 9.96, 10.5, 122.3, -10.4]) for (const t of [7, 600, 5999, 6000, 59999, 60061]) for (const why of ['', all]) {
             el.innerHTML = S.s.osdBcHtml(bar, l, t, twr, false, why); out[[l + '%', 'TWR ' + twr, t + ' s', why ? 'all flags' : 'armed'].join(', ')] = box(); }
           const d3 = {};
-          for (const l of ['0', '+9', '-10', '+100', '-100']) { el.innerHTML = S.s.osdBcHtml(0.5, l, 7, 1.2, true, ''); d3[l] = box(); }
+          for (const l of ['0', '+9', '-10', '+100', '-100']) for (const twr of [1.2, -10.4, -150, 12.5, 122.3]) { el.innerHTML = S.s.osdBcHtml(0.5, l, 7, twr, true, ''); d3[l + '% TWR ' + twr] = box(); }
           el.innerHTML = live;
-          return JSON.stringify({ w0, out, d3, flags: all.length });`);
+          const txt = { flt: S.s.osdBcHtml(0, '0', 60061, 0, false, ''), twr2: S.s.osdBcHtml(0, '0', 7, 122.3, false, ''), twr3: S.s.osdBcHtml(0.5, '-100', 7, -150, true, '') };
+          return JSON.stringify({ w0, out, d3, flags: all.length, txt });`);
         assert.ok(r.flags > 60, 'a long list of flags ' + r.flags);
         for (const [k, b] of Object.entries(r.out)) assert.deepEqual(b, r.w0, `#osdBC box at ${k}`);
         const d3 = Object.values(r.d3);
         for (const b of d3) assert.deepEqual(b, d3[0], '#osdBC box in 3D ' + JSON.stringify(r.d3));
+        // The box can't see the clock run backwards: past 999:59 it holds there.
+        assert.ok(r.txt.flt.includes('FLT 999:59'), 'the flight clock holds at 999:59 ' + JSON.stringify(r.txt.flt));
+        assert.ok(r.txt.twr2.includes('TWR 99.9'), 'TWR holds at 99.9 ' + JSON.stringify(r.txt.twr2));
+        assert.ok(r.txt.twr3.includes('TWR -99.9'), 'TWR holds at -99.9 in 3D ' + JSON.stringify(r.txt.twr3));
+        await cardSweep(js, 'keyboard 1280x720');
 
         // The menu (Esc) hides it; closing it brings it back. The frame loop
         // (syncStickOverlay) shows or hides it, so each read waits for the
@@ -790,6 +798,34 @@ async function hintClear(js, r, label, shown = false) {
   for (const s of r.sticks) assert.equal(overlaps(h.box, s), false, `${label}: the arm hint over a thumb stick ${JSON.stringify({ h: h.box, s })}`);
   assert.equal(overlaps(h.box, r.seen.rect), false, `${label}: the arm hint over the stick overlay`);
   assert.ok(h.box.left >= 0 && h.box.right <= h.vw && h.box.top >= 0 && h.box.bottom <= h.vh, `${label}: the arm hint on screen ${JSON.stringify(h.box)}`);
+  await cardSweep(js, label);
+}
+
+// #feelHud and the arm hint's slot keep one box whatever the card reads, in
+// one synchronous sweep through the page's own formatters (sim-feel.js
+// updateHud, sim-3d.js throttleHudText): the throttle 0-100 % and 3D's
+// -100-+100 %, BATT off and every reading from 2.50 to 8.50 V (1S and 2S),
+// every flight mode, armed and disarmed. The next frame puts the live
+// readouts back.
+async function cardSweep(js, label) {
+  const c = await js(`const { throttleHudText } = await import('/sim-3d.js');
+    const card = document.getElementById('feelHud'), slot = document.getElementById('hudArmSlot');
+    const bx = (e) => { const b = e.getBoundingClientRect(); return [b.left, b.top, b.width, b.height].map((v) => Math.round(v * 10) / 10).join(','); };
+    const base = { stick: { r: 0, p: 0, y: 0, t: 0 }, battV: 4.2, battOn: true, mode: 'angle', armed: false, threeD: false };
+    const seen = {};
+    const u = (k, o) => { const s = { ...base, ...o }; s.thrText = throttleHudText(s.stick.t, s.threeD); window._feel.updateHud(s); const b = bx(card) + ' | ' + bx(slot); (seen[b] = seen[b] || []).push(k); };
+    for (let i = 0; i <= 100; i++) for (const threeD of [false, true]) u('THR stick ' + i + (threeD ? ' 3D' : ''), { stick: { r: 0, p: 0, y: 0, t: i / 100 }, threeD });
+    for (let v = 250; v <= 850; v++) u('BATT ' + (v / 100).toFixed(2), { battV: v / 100 });
+    for (const mode of ['angle', 'horizon', 'acro']) for (const armed of [false, true]) for (const battOn of [false, true]) for (const threeD of [false, true])
+      u([mode, armed ? 'armed' : 'disarmed', battOn ? 'BATT on' : 'BATT off', threeD ? '3D' : '2D'].join(' '), { mode, armed, battOn, threeD });
+    // The card took the sweep (updateHud writes nothing while the HUD is hidden).
+    u('probe', { battV: 4.44, mode: 'horizon', armed: true });
+    const probe = ['hudBatt', 'hudMode', 'hudArm'].map((id) => document.getElementById(id).textContent).join(' ');
+    return JSON.stringify({ probe, groups: Object.entries(seen).map(([b, ks]) => ({ box: b, n: ks.length, e: ks.slice(0, 3) })) });`);
+  console.log(`${label}: #feelHud | hint slot boxes across the card sweep ${JSON.stringify(c.groups)}`);
+  assert.equal(c.probe, 'BATT 4.44V HORIZON ARMED', `${label}: the card took the sweep`);
+  assert.ok(c.groups.reduce((n, x) => n + x.n, 0) > 800, `${label}: the sweep ran ${JSON.stringify(c.groups)}`);
+  assert.equal(c.groups.length, 1, `${label}: #feelHud and the hint slot keep one box whatever the card reads ${JSON.stringify(c.groups)}`);
 }
 
 function S_near(a, b, eps) {
