@@ -206,7 +206,7 @@ function randFeat(r) {
   f.slowUpT = u(0.5, 4.4); f.slowDnT = u(0.5, 4.4);
   f.orbit2R = r() < 0.5 ? u(0.1, 3) : u(0.3, 2.5); f.orbit2Sweep = near(6.2832); f.orbit2Turn = u(0.6, 1); f.orbit2Spd = u(0.5, 3);
   f.orbit2Tail = r() < 0.5 ? u(0, 0.5) : u(0, 1);
-  f.barP = r() < 0.5 ? near(5.236) : u(0, 4); f.barR = u(1.5, 4.5); f.upEnd = r() < 0.6 ? u(0.5, 1) : u(-1, 1);
+  f.barP = r() < 0.5 ? near(5.236) : u(0, 4); f.barR = u(1.5, 4.5); f.barVia = r() < 0.5 ? 1 : 0; f.upEnd = r() < 0.6 ? u(0.5, 1) : u(-1, 1);
   if (r() < 0.12) {
     // A yaw spin, upright or inverted: little pitch and roll, a full turn of
     // yaw in place (Yaw Spin, Trippy and Ham live here).

@@ -26,8 +26,8 @@ import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
-  HIST_W, BH_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE,
-} from './sim-tricks.js?v=13acaf135042';
+  HIST_W, BH_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE, BARANI_HD_LO,
+} from './sim-tricks.js?v=b0e0781d13b6';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
@@ -92,7 +92,7 @@ export const GATES = Object.freeze({
     le('f.orbit2Tail', 0.3, 0),
   ],
   barani: [
-    ge('f.barP', 5.236, 0.35), band('f.barR', 2.356, 3.927, 0), ge('f.upEnd', 0.5, 0),
+    ge('f.barP', 5.236, 0.35), either(band('barRTwist', 2.356, 3.927, 0), band('barRHead', 2.094, 3.927, 0)), ge('f.upEnd', 0.5, 0),
   ],
   immelmann: [
     ge('f.phImmel', 1, 1),
@@ -177,7 +177,7 @@ export const OVERRIDE_TEXT = Object.freeze(OVERRIDES.map((r) => r.text));
 const ANGLE_SRC = new Set([
   'absP', 'absR', 'absY', 'v.pathP', 'v.pathR', 'v.pathY', 'f.pitch', '-f.pitch', 'v.head',
   'Math.max(absR, v.pathR)', 'Math.max(absY, v.pathY)', 'v.pathP - absP',
-  'v.flipSpan', 'v.rollSpan', 'v.loopSpan', 'v.loopSweep', 'v.yawSpan', 'f.orbitSweep', 'f.barP', 'f.barR',
+  'v.flipSpan', 'v.rollSpan', 'v.loopSpan', 'v.loopSweep', 'v.yawSpan', 'f.orbitSweep', 'f.barP', 'f.barR', 'barRTwist', 'barRHead',
   'v.invYaw', 'v.slowSpan', 'f.orbit2Sweep',
 ]);
 // Angular rates (shown in degrees a second).
@@ -233,6 +233,8 @@ function context(f) {
     'f.orbit2R': f.orbit2R, 'f.orbit2Sweep': f.orbit2Sweep, 'f.orbit2Turn': f.orbit2Turn, 'f.orbit2Spd': f.orbit2Spd,
     'f.orbit2Tail': f.orbit2Tail,
     'f.barP': f.barP, 'f.barR': f.barR, 'f.upEnd': f.upEnd,
+    // The Barani's twist by which measure gave it (-1 for the other).
+    barRTwist: f.barVia ? -1 : f.barR, barRHead: f.barVia ? f.barR : -1,
     'f.phFlip': f.phFlip, 'f.phLoop': f.phLoop, 'f.phSplits': f.phSplits, 'f.phImmel': f.phImmel,
     'f.phMav': f.phMav, 'f.phMatty': f.phMatty, 'f.phHMatty': f.phHMatty, 'f.phHMavvy': f.phHMavvy,
   };
@@ -770,7 +772,7 @@ export function createTrickObserver(det, opts) {
   function baraniProbe(f) {
     const H = det.hist, n = det.histN, W = HIST_W, D = 180 / Math.PI;
     const lo = BARANI_P - BARANI_FADE, bandLo = 2.356, bandHi = 3.927;
-    const out = { pathDeg: degOf(f.pathP), twistDeg: degOf(f.twist), upEnd: r3(f.upEnd), band: [135, 225], sideDeg: degOf(BARANI_SIDE), any: null, inside: null, limit: null };
+    const out = { pathDeg: degOf(f.pathP), twistDeg: degOf(f.twist), upEnd: r3(f.upEnd), band: [135, 225], bandHeading: [degOf(BARANI_HD_LO), 225], sideDeg: degOf(BARANI_SIDE), any: null, inside: null, limit: null };
     if (!H || n < 2 || !(f.pathP >= lo)) { out.limit = 'barP'; return out; }
     const stride = Math.max(1, Math.ceil(n / PH_ROWS));
     // The twist (column 15) and the heading's turn (the yaw's own turn about
@@ -794,27 +796,30 @@ export function createTrickObserver(det, opts) {
       const A = cols[c], h = half(A, ja, jb);
       return { pDeg: Math.round((pp[jb] - pp[ja]) * D), twistDeg: Math.round(Math.abs(A[jb] - A[ja]) * D), beforeDeg: Math.round(h.before * D), afterDeg: Math.round(h.after * D), t: [r3(tt[ja]), r3(tt[jb])], via: c ? 'heading' : 'twist' };
     };
-    let anyOff = 9, anyA = -1, anyB = -1, anyC = 0, inOff = 9, inA = -1, inB = -1, inC = 0;
+    // Each stretch's twist in its measure's band (the heading's from
+    // BARANI_HD_LO): the in-band one nearest 180 first, else the nearest.
+    const inBandC = (c, T) => T >= (c ? BARANI_HD_LO : bandLo) - 1e-9 && T <= bandHi + 1e-9;
+    const better = (ok, off, bOk, bOff) => (ok && !bOk) || (ok === bOk && off < bOff);
+    let anyOff = 9, anyOk = false, anyA = -1, anyB = -1, anyC = 0, inOff = 9, inOk = false, inA = -1, inB = -1, inC = 0;
     for (let ja = 0; ja < m - 1; ja++) {
       for (let jb = m - 1; jb > ja; jb--) {
         if (pp[jb] - pp[ja] < lo) break;
         for (let c = 0; c < 2; c++) {
           const A = cols[c];
-          const off = Math.abs(Math.abs(A[jb] - A[ja]) - Math.PI);
-          if (off < anyOff) { anyOff = off; anyA = ja; anyB = jb; anyC = c; }
-          if (off < inOff) {
+          const T = Math.abs(A[jb] - A[ja]), off = Math.abs(T - Math.PI), ok = inBandC(c, T);
+          if (better(ok, off, anyOk, anyOff)) { anyOff = off; anyOk = ok; anyA = ja; anyB = jb; anyC = c; }
+          if (better(ok, off, inOk, inOff)) {
             const h = half(A, ja, jb);
-            if (h.before >= BARANI_SIDE && h.after >= BARANI_SIDE) { inOff = off; inA = ja; inB = jb; inC = c; }
+            if (h.before >= BARANI_SIDE && h.after >= BARANI_SIDE) { inOff = off; inOk = ok; inA = ja; inB = jb; inC = c; }
           }
         }
       }
     }
-    const inBandT = (o) => o <= Math.PI - bandLo + 1e-9 && o <= bandHi - Math.PI + 1e-9;
     if (anyA >= 0) out.any = row(anyC, anyA, anyB);
     if (inA >= 0) out.inside = row(inC, inA, inB);
     if (anyA < 0) out.limit = 'barP';
-    else if (!inBandT(anyOff)) out.limit = 'barR band';
-    else if (!(inA >= 0 && inBandT(inOff))) out.limit = 'BARANI_SIDE';
+    else if (!anyOk) out.limit = 'barR band';
+    else if (!(inA >= 0 && inOk)) out.limit = 'BARANI_SIDE';
     else if (!(f.upEnd >= 0.5)) out.limit = 'upEnd';
     else out.limit = 'none';
     return out;

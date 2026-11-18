@@ -112,10 +112,13 @@ export const TRIPPY_POLE_MUL = 1.25;
 // yaw's own turn about the vertical while inverted (the owner yaws the half
 // twist upside down at the top of the loop, moving along the nose, where the
 // twist above sees the roll only; baraniWithin). Whichever of the two
-// scores, nearer 180 when both do. Inside: BARANI_SIDE of
+// scores, nearer 180 when both do; the heading's from BARANI_HD_LO (120
+// degrees: the owner's yaw at the top reads 132-166 of it), the twist's
+// from 135. Inside: BARANI_SIDE of
 // pitch path or more before the twist is half done, and after. 300 degrees
 // fades over BARANI_FADE (the owner's 38.1 s Barani turned 299).
 export const BARANI_P = 5.236;
+export const BARANI_HD_LO = 2.094;
 export const BARANI_FADE = 0.35;
 export const BARANI_SIDE = 1.047;
 export const TWIST_SPD = 3;
@@ -785,7 +788,7 @@ export function baraniWithin(hist, n, out, w, bh) {
       for (let c = 0; c < cols; c++) {
         const A = c ? _barVH : _barTW;
         const raw = A[jb] - A[ja], T = Math.abs(raw);
-        const sc = atLeast(P, BARANI_P, BARANI_FADE) * inBand(T, 2.356, 3.927, 0);
+        const sc = atLeast(P, BARANI_P, BARANI_FADE) * inBand(T, c ? BARANI_HD_LO : 2.356, 3.927, 0);
         if (!(sc > 0)) continue;
         const off = Math.abs(T - Math.PI);
         if (sc < best - 1e-9 || (sc <= best + 1e-9 && off >= bestOff)) continue;
@@ -1571,14 +1574,18 @@ export function classifyFeat(f, out) {
     atMost(absY, 2.4, 0.7),
   );
   // Barani, as the owner flies it: BARANI_P of pitch path with a half twist
-  // (180 +- 45, roll or yaw: the axis nearest the flight path) inside it,
+  // (180 +- 45, roll or yaw: the axis nearest the flight path; or the
+  // heading's turn, the yaw made inverted, 120-225) inside it,
   // ending upright (up-Z 0.5, as the Half Mavvy's and the Immelmann's). Any
   // climb, any time. A Half Mavvy turns the same way and goes under an
   // object against the nose after its roll; it ranks above.
   // (5.236 and 0.35: BARANI_P and BARANI_FADE.)
+  // The twist by the measure that gave it (-1 for the other): the heading's
+  // from BARANI_HD_LO (120), the twist's from 135.
+  const barRTwist = f.barVia ? -1 : f.barR, barRHead = f.barVia ? f.barR : -1;
   _sc.barani = mul(
     atLeast(f.barP, 5.236, 0.35),
-    inBand(f.barR, 2.356, 3.927, 0),
+    Math.max(inBand(barRTwist, 2.356, 3.927, 0), inBand(barRHead, 2.094, 3.927, 0)),
     atLeast(f.upEnd, 0.5, 0),
   );
   {

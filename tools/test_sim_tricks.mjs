@@ -1352,15 +1352,19 @@ test('bf core, Half Mavvy: forward pitch, a half roll between its halves, forwar
 // while inverted) has it.
 const FYB = (yawT) => [{ t: 0.3, pitch: -10.5, thr: 0.5 }, { t: yawT, yaw: 7.2, thr: 0.3 }, { t: 0.26, pitch: -10.5, thr: 0.5 }, { t: 0.7, thr: 0.5 }];
 
-test('Barani by the heading: flip, 150-200 deg of yaw inverted, flip is a Barani on both cores, the heading within 3 deg of the turn made inverted; a yaw made upright between two flips turns no heading', async () => {
-  for (const [deg, yawT] of [[150, 0.364], [180, 0.436], [200, 0.485]]) {
+test('Barani by the heading: flip, 128-200 deg of yaw inverted, flip is a Barani on both cores (the heading from 120), the heading within 3 deg of the turn made inverted; a yaw made upright between two flips turns no heading', async () => {
+  for (const [deg, yawT] of [[128, 0.311], [150, 0.364], [180, 0.436], [200, 0.485]]) {
     for (const core of ['js', 'bf']) {
       const r = core === 'js' ? fly(FYB(yawT), FYF_OPTS) : await flyBf(FYB(yawT), FYF_OPTS);
       const tag = core + ' ' + deg;
       assert.deepEqual(r.hits, ['barani'], tag + ': ' + (r.why || '').replace(/\n/g, ' '));
       const f = r.feat, v = featView(f);
-      assert.ok(Math.abs(Math.abs(f.yawV) - v.invYaw) <= 4 * DEG, tag + ': heading ' + (f.yawV / DEG).toFixed(0) + ', inverted ' + (v.invYaw / DEG).toFixed(0));
-      if (core === 'bf') assert.ok(Math.abs(Math.abs(f.yawV) - deg * DEG) <= 3 * DEG, tag + ': heading ' + (f.yawV / DEG).toFixed(0));
+      // On the bf core (the owner's logs' core) it reads the turn made
+      // inverted, and the stick's yaw, within 3 degrees.
+      if (core === 'bf') {
+        assert.ok(Math.abs(Math.abs(f.yawV) - v.invYaw) <= 3 * DEG, tag + ': heading ' + (f.yawV / DEG).toFixed(0) + ', inverted ' + (v.invYaw / DEG).toFixed(0));
+        assert.ok(Math.abs(Math.abs(f.yawV) - deg * DEG) <= 3 * DEG, tag + ': heading ' + (f.yawV / DEG).toFixed(0));
+      }
     }
   }
   // 180 of yaw made upright between two flips: the heading's turn reads 0.

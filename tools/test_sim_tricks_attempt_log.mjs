@@ -96,7 +96,7 @@ import { dirname, join } from 'node:path';
 import {
   classifyFeat, featView, makeFeat, loopCount, trickName, LOOP_WIN_S, SAMPLE_S, HAM_UPZ, HAM_MIN,
   PHASE_SPECS, PHASE_FIELD, matchSpec, MERGE_GAP_S, MANEUVER_MAX_S,
-  NOSE_SIDE, ORBIT_WIN_S, ORBIT_RATE, TRIPPY_HOLD, BARANI_P, BARANI_FADE,
+  NOSE_SIDE, ORBIT_WIN_S, ORBIT_RATE, TRIPPY_HOLD, BARANI_P, BARANI_FADE, BARANI_HD_LO,
 } from '../sim-tricks.js';
 import { explainFeat, SPEC } from '../sim-tricks-debug.js';
 
@@ -177,10 +177,10 @@ export function invYawFrom(s, g) {
 // pitch.
 export function baraniFrom(s, g) {
   if (s.twistDeg != null) {
-    const tw = { p: 'f.barP' in g ? g['f.barP'] : s.baraniPitchDeg * DEG, r: 'f.barR' in g ? g['f.barR'] : s.baraniTwistDeg * DEG, exact: true, via: 0 };
+    const tw = { p: 'f.barP' in g ? g['f.barP'] : s.baraniPitchDeg * DEG, r: 'f.barR' in g ? g['f.barR'] : s.baraniTwistDeg * DEG, exact: true, via: s.baraniVia || 0 };
     if (s.yawVDeg != null || s.invYawDeg == null) return tw;
     const hd = { p: s.pathP, r: s.invYawDeg * DEG, exact: false, via: 1 };
-    const sc = (b) => atLeastL(b.p, BARANI_P, BARANI_FADE) * (b.r >= 2.356 && b.r <= 3.927 ? 1 : 0);
+    const sc = (b) => atLeastL(b.p, BARANI_P, BARANI_FADE) * (b.r >= (b.via ? BARANI_HD_LO : 2.356) && b.r <= 3.927 ? 1 : 0);
     const a = sc(tw), b = sc(hd);
     if (b > a + 1e-9 || (b > 0 && Math.abs(b - a) <= 1e-9 && Math.abs(hd.r - Math.PI) < Math.abs(tw.r - Math.PI))) return hd;
     return tw;
@@ -613,10 +613,8 @@ const LOGS = [
     name: 'depot baranis', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-barani.jsonl.gz', records: 26, maneuvers: 18, fired: 1,
     // The re-fly's Baranis, none fired: seq 4, 11, 18 and 22, by the
     // heading's estimate (the turn about the vertical made inverted: 159,
-    // 132, 161, 166). Seq 11's 132 is short of 135 by the estimate, which
-    // its exact value (the build logs it, yawVDeg) may not be.
-    NEW: { 4: 'barani', 18: 'barani', 22: 'barani' },
-    OPEN: { 11: 'barani' },
+    // 132, 161, 166; the heading's band from 120).
+    NEW: { 4: 'barani', 11: 'barani', 18: 'barani', 22: 'barani' },
   },
 ];
 for (const L of LOGS) {
@@ -765,11 +763,11 @@ test('the dumps of 2026-11-17 and 18: every label that changes, and the open one
   assert.deepEqual(changed, [
     'bando orbits seq 7 trippy->orbit', 'bando orbits seq 11 trippy->orbit',
     'rig orbits seq 3 trippy->orbit', 'rig orbits seq 8 trippy->orbit',
-    'depot baranis seq 4 none->barani', 'depot baranis seq 18 none->barani', 'depot baranis seq 22 none->barani',
+    'depot baranis seq 4 none->barani', 'depot baranis seq 11 none->barani', 'depot baranis seq 18 none->barani', 'depot baranis seq 22 none->barani',
   ]);
   // What the open ones read now (not asserted as the owner's).
   const open = NEWER.flatMap((L) => Object.keys(L.OPEN || {}).map((seq) => L.name + ' seq ' + seq + ' ' + (replayed(L).get(Number(seq)).id || 'none')));
-  assert.deepEqual(open, ['bando baranis seq 9 barani', 'depot baranis seq 11 none']);
+  assert.deepEqual(open, ['bando baranis seq 9 barani']);
   // Every label they fired that stays: the Trippies, Hams and Baranis.
   const kept = (L, id) => L.scored.filter((r) => r.result === id && replayed(L).get(r.seq).id === id).map((r) => r.seq);
   const [BO, BT, BH, BB, RT] = NEWER;
