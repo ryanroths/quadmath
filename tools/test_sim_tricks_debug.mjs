@@ -559,7 +559,10 @@ test('observer: the camera terms (rec.cam) over the orbit, logged only', () => {
   assert.equal(c.upZNeg, 0); near(c.upZMean, 0.94, 0.01, 'cam up-Z');
   near(c.offDegMean, 20, 2, 'off the centre'); near(c.elDegMean, -20, 2, 'elevation'); near(c.azDegMean, 0, 2, 'azimuth'); near(c.distMean, 1.5, 0.05, 'distance');
   assert.equal(c.offIn45, 1);
-  assert.deepEqual(c.cols, ['t', 'upZ', 'camUpZ', 'offDeg', 'azDeg', 'elDeg', 'dist']);
+  assert.deepEqual(c.cols, ['t', 'upZ', 'camUpZ', 'offDeg', 'azDeg', 'elDeg', 'dist', 'noseDeg', 'leanDeg', 'side']);
+  // The body against the centre, whatever the cam tilt: nose 50 below the
+  // centre, the up axis leaning 50 toward it, the tail never toward it.
+  near(c.noseDegMean, -50, 2, 'nose'); assert.equal(c.tailShare, 0); near(c.leanDegQ[2], 50, 2, 'lean'); near(c.sideMean, 0, 0.02, 'side');
   assert.equal(c.rows.length, 24);
   assert.equal(c.upZQ.length, 5); assert.equal(c.bodyUpZQ.length, 5);
   near(c.upZQ[2], 0.94, 0.01, 'cam up-Z median'); near(c.bodyUpZQ[2], 0.64, 0.01, 'body up-Z median');
@@ -569,10 +572,15 @@ test('observer: the camera terms (rec.cam) over the orbit, logged only', () => {
   assert.equal(back.bodyUpZNeg, 0);
   assert.ok(back.upZNeg > 0.98, 'cam up-Z < 0 ' + back.upZNeg);
   near(back.upZMean, -0.1, 0.02, 'cam up-Z'); near(back.offDegMean, 84, 2, 'off the centre'); near(back.elDegMean, 84, 2, 'elevation');
+  // Nose up and over (114: 66 above level, away from the centre), the tail
+  // toward the centre, the up axis leaning 66 toward it.
+  near(back.noseDegMean, 114, 2, 'nose'); assert.ok(back.tailShare > 0.98, 'tail ' + back.tailShare); near(back.leanDegQ[2], 66, 2, 'lean');
   // The body inverted, the camera level on the centre: both upside down, on it.
   const inv = camOrbit({ pitch: -30, toCentre: true, inverted: true, info: { camDeg: 30 } }).cam;
   assert.ok(inv.bodyUpZNeg > 0.98 && inv.upZNeg > 0.98, 'inverted ' + inv.bodyUpZNeg + ' ' + inv.upZNeg);
   near(inv.offDegMean, 0, 2, 'off the centre');
+  // Nose 30 up at the centre, the up axis leaning 150 (inverted, toward it).
+  near(inv.noseDegMean, 30, 2, 'nose'); assert.equal(inv.tailShare, 0); near(inv.leanDegQ[2], 150, 2, 'lean');
   // No tilt from the page: 30, said so.
   const def = camOrbit({ pitch: 50, toCentre: true, info: {} }).cam;
   assert.equal(def.deg, 30); assert.equal(def.degFrom, 'default');

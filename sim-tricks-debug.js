@@ -567,9 +567,10 @@ export function createTrickObserver(det, opts) {
   // The camera, for the debug log only (nothing scores it): each step of a
   // live segment, the body's up-Z, the camera's up-Z and the camera's axis
   // (sim-core frame: x forward, z up) at the page's cam tilt (info().camDeg;
-  // 30 when the page gives none), and the position (m). camRecord reads
-  // them over the orbit's window when the segment ends.
-  const CAM_W = 9, CAM_CAP = 4096;
+  // 30 when the page gives none), the position (m), and the body's nose and
+  // up axes. camRecord reads them over the orbit's window when the segment
+  // ends.
+  const CAM_W = 14, CAM_CAP = 4096;
   const camBuf = new Float64Array(CAM_CAP * CAM_W);
   let camN = 0, camDeg = 30, camFrom = 'default', camWs = 3.5;
   const view = {
@@ -632,6 +633,7 @@ export function createTrickObserver(det, opts) {
     // toScene: wx = -y, wz = -x (scene units).
     camBuf[k + 6] = -(s.wz || 0) / camWs; camBuf[k + 7] = -(s.wx || 0) / camWs;
     camBuf[k + 8] = s.alt != null ? s.alt : (s.wy || 0) / camWs;
+    camBuf[k + 9] = fx; camBuf[k + 10] = fy; camBuf[k + 11] = fz; camBuf[k + 12] = ux; camBuf[k + 13] = uy;
     camN++;
   }
 
@@ -641,8 +643,16 @@ export function createTrickObserver(det, opts) {
   // below 0 beside it. Toward the orbit's centre, at the quad's height: the
   // camera axis's angle to it (deg: mean, median, the share within 45), its
   // azimuth off the centre's bearing (deg, mean), the distance (m, mean).
-  // The camera's elevation (deg, mean; 90 straight up). rows: 24 steps evenly
-  // over the window, as cols.
+  // The camera's elevation (deg, mean; 90 straight up).
+  // The body against the centre, whatever the cam tilt: in the vertical
+  // plane through the quad and the centre, the nose's angle (noseDeg: 0
+  // level at the centre, -90 straight down, 90 straight up, 180 level away
+  // from it; -90..270), the share past 90 (tailShare: nose up and over, the
+  // tail toward the centre), the nose out of that plane (side: 0 in it, 1
+  // square to it; mean), and the up axis's lean toward the centre from
+  // vertical (leanDeg: 0 upright, 90 on its side toward the centre, 180
+  // inverted). Quantiles as the up-Z's. rows: 24 steps evenly over the
+  // window, as cols.
   function camRecord(f) {
     const orb = f.orbitR > 0 && f.orbitTb > f.orbitTa;
     const ta = orb ? f.orbitTa : -Infinity, tb = orb ? f.orbitTb : Infinity;
@@ -659,16 +669,23 @@ export function createTrickObserver(det, opts) {
     const D = 180 / Math.PI, cl = (u) => (u > 1 ? 1 : u < -1 ? -1 : u);
     let mn = Infinity, mx = -Infinity, sum = 0, neg = 0, neg35 = 0, bodyNeg = 0, el = 0;
     let offN = 0, offIn = 0, azSum = 0, azN = 0, dSum = 0;
-    const offs = [], cus = [], ups = [];
+    const offs = [], cus = [], ups = [], noses = [], leans = [];
+    let tail = 0, sideSum = 0;
     const at = (i) => {
       const k = i * CAM_W, ax = camBuf[k + 3], ay = camBuf[k + 4], az = camBuf[k + 5];
-      const r = { t: camBuf[k], up: camBuf[k + 1], cu: camBuf[k + 2], el: Math.asin(cl(az)) * D, off: null, azOff: null, d: null };
+      const r = { t: camBuf[k], up: camBuf[k + 1], cu: camBuf[k + 2], el: Math.asin(cl(az)) * D, off: null, azOff: null, d: null, nose: null, lean: null, side: null };
       if (orb) {
         const dx = cx - camBuf[k + 6], dy = cy - camBuf[k + 7], d = Math.hypot(dx, dy), ah = Math.hypot(ax, ay);
         r.d = d;
         if (d > 0.05) {
           r.off = Math.acos(cl((ax * dx + ay * dy) / d)) * D;
           if (ah > 1e-3) r.azOff = Math.acos(cl((ax * dx + ay * dy) / (d * ah))) * D;
+          const hx = dx / d, hy = dy / d;
+          let nose = Math.atan2(camBuf[k + 11], camBuf[k + 9] * hx + camBuf[k + 10] * hy) * D;
+          if (nose < -90) nose += 360;
+          r.nose = nose;
+          r.side = Math.abs(-camBuf[k + 9] * hy + camBuf[k + 10] * hx);
+          r.lean = Math.atan2(camBuf[k + 12] * hx + camBuf[k + 13] * hy, camBuf[k + 1]) * D;
         }
       }
       return r;
@@ -684,6 +701,7 @@ export function createTrickObserver(det, opts) {
       if (r.off != null) { offs.push(r.off); offN++; if (r.off <= 45) offIn++; }
       if (r.azOff != null) { azSum += r.azOff; azN++; }
       if (r.d != null) dSum += r.d;
+      if (r.nose != null) { noses.push(r.nose); leans.push(r.lean); sideSum += r.side; if (r.nose > 90) tail++; }
     }
     const n = idx.length;
     out.upZMin = r3(mn); out.upZMean = r3(sum / n); out.upZMax = r3(mx);
@@ -701,12 +719,21 @@ export function createTrickObserver(det, opts) {
       out.distMean = r3(dSum / n);
     }
     if (azN) out.azDegMean = Math.round(azSum / azN);
-    out.cols = ['t', 'upZ', 'camUpZ', 'offDeg', 'azDeg', 'elDeg', 'dist'];
+    if (noses.length) {
+      const N = noses.length;
+      out.noseDegMean = Math.round(noses.reduce((a, b) => a + b, 0) / N);
+      out.noseDegQ = q(noses).map((x) => Math.round(x));
+      out.tailShare = r3(tail / N);
+      out.sideMean = r3(sideSum / N);
+      out.leanDegQ = q(leans).map((x) => Math.round(x));
+    }
+    out.cols = ['t', 'upZ', 'camUpZ', 'offDeg', 'azDeg', 'elDeg', 'dist', 'noseDeg', 'leanDeg', 'side'];
     out.rows = [];
     const R = Math.min(24, n);
     for (let j = 0; j < R; j++) {
       const r = at(idx[R > 1 ? Math.round((j * (n - 1)) / (R - 1)) : 0]);
-      out.rows.push([r3(r.t), r3(r.up), r3(r.cu), r.off == null ? null : Math.round(r.off), r.azOff == null ? null : Math.round(r.azOff), Math.round(r.el), r.d == null ? null : r3(r.d)]);
+      const rd = (x) => (x == null ? null : Math.round(x));
+      out.rows.push([r3(r.t), r3(r.up), r3(r.cu), rd(r.off), rd(r.azOff), Math.round(r.el), r.d == null ? null : r3(r.d), rd(r.nose), rd(r.lean), r.side == null ? null : r3(r.side)]);
     }
     return out;
   }
@@ -1129,7 +1156,8 @@ export function createTrickDebug(opts) {
       if (c && c.n) {
         L.push('<span class="d">  cam ' + c.deg + '°' + (c.win ? ' over the orbit ' + c.win[0] + '-' + c.win[1] + 's' : ' over the segment')
           + '  cam up-Z<0 ' + c.upZNeg.toFixed(2) + ' (body ' + c.bodyUpZNeg.toFixed(2) + ')  mean ' + c.upZMean.toFixed(2)
-          + (c.offDegMean != null ? '  to centre ' + c.offDegMean + '° (az ' + c.azDegMean + '°, el ' + c.elDegMean + '°, ' + c.distMean.toFixed(1) + ' m)' : '  el ' + c.elDegMean + '°') + '</span>');
+          + (c.offDegMean != null ? '  to centre ' + c.offDegMean + '° (az ' + c.azDegMean + '°, el ' + c.elDegMean + '°, ' + c.distMean.toFixed(1) + ' m)' : '  el ' + c.elDegMean + '°')
+          + (c.noseDegMean != null ? '  nose ' + c.noseDegMean + '° tail ' + c.tailShare.toFixed(2) + ' lean ' + c.leanDegQ[2] + '°' : '') + '</span>');
       }
       if (s.travelH != null) {
         L.push('<span class="d">  travelH ' + s.travelH.toFixed(1) + ' close ' + s.close.toFixed(2) + ' span ' + s.span.toFixed(1) + 'm drop ' + s.drop.toFixed(1)
