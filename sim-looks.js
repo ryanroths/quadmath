@@ -250,6 +250,18 @@ export const PRESETS = {
   },
 };
 
+// The fps readout in #hudBtns (#fpsHud): the frame rate padded to three
+// characters and the quality label to the longest preset's, shown monospace
+// with white-space: pre, so the readout, and #hudBtns with it, keeps one width
+// at 9 or 100 fps and on any quality. A changing width moved #hudBtns' left
+// edge, a layout shift on every 9/10 or 99/100 crossing. Over 999 reads 999.
+export const QUALITY_LABELS = Object.keys(PRESETS);
+const FPS_HUD_LABEL_CHARS = Math.max(...QUALITY_LABELS.map((k) => k.length));
+export function fpsHudText(avg, quality) {
+  const n = Math.max(0, Math.min(999, Math.round(Number(avg) || 0)));
+  return String(n).padStart(3, ' ') + ' fps · ' + String(quality || '').toUpperCase().padEnd(FPS_HUD_LABEL_CHARS, ' ');
+}
+
 const EXISTING_SAVE_KEYS = [
   'ryflyRates', 'ryflyRatesType', 'ryflyDroneType', 'ryflyCamCustom',
   'ryflyMusicVol', 'ryflyGamepadId', 'quadmath_pilotName',
@@ -1253,7 +1265,7 @@ export async function createLooks(ctx) {
       if (down) { autoCap = down; setQuality('auto', true); }
     }
     const hud = document.getElementById('fpsHud');
-    if (hud) hud.textContent = Math.round(fps.avg) + ' fps · ' + applied.toUpperCase();
+    if (hud) hud.textContent = fpsHudText(fps.avg, applied);
   }
 
   async function afterFirstFrame() {
@@ -1405,6 +1417,8 @@ export async function createLooks(ctx) {
     get fpv() { return fpv; },
     get menuOpen() { return menuOpen; },
     fps,
+    fpsHudText,
+    qualityLabels: QUALITY_LABELS,
     attachSky(sky, sprite) { skyMesh = sky; sunSprite = sprite; },
     attachGround(mesh) { groundMesh = mesh; },
     attachHemi(h) { /* reserved */ },

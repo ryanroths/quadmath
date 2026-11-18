@@ -618,6 +618,11 @@ const PAGE = String.raw`(() => {
   const upZ = () => { const q = s.coreState().quaternion; return 1 - 2 * (q.x * q.x + q.y * q.y); };
   const speed = () => { const v = s.coreState().velocity; return Math.hypot(v.x, v.y, v.z); };
   const landed = () => s.coreState().clearance <= 0.04 && speed() < 0.5;
+  // At rest on the page's own state: landed and no longer rocking. A read of
+  // its attitude waits for this, not a fixed wall time: where frames are slow,
+  // a wall wait is much less of the sim's time and catches it mid-rock.
+  const omega = () => { const w = s.coreState().omega; return w ? Math.hypot(w.x, w.y, w.z) : 0; };
+  const settled = () => landed() && omega() < 0.1;
   const fc = () => s.bfCore().sim.fc;
   const tickUp = () => { const [, x, y] = s.bfCore().sim.state.quat; return 1 - 2 * (x * x + y * y); };
   // Easy mode's own count of the throttle at the bottom, its arm hold
@@ -755,8 +760,9 @@ const PAGE = String.raw`(() => {
     }, 6000);
     const stepMs = step();
     axis(i, 0);
-    await wait(120);
-    return { up0, started, flyable, ms: flyT - upT, stepMs, up: upZ(), armed: s.coreState().armed, pos: { ...s.coreState().position }, map: s.map() };
+    const w0 = performance.now();
+    const still = await until(() => performance.now() - w0 >= 120 && settled(), 3000);
+    return { up0, started, flyable, ms: flyT - upT, stepMs, still, up: upZ(), armed: s.coreState().armed, pos: { ...s.coreState().position }, map: s.map() };
   }
   // A fall onto the floor at speed: a crash (the Rig's walls are foam: about
   // 20 m/s on the bf core).
@@ -766,7 +772,7 @@ const PAGE = String.raw`(() => {
     if (c.kind === 'bf') s.bfCore().teleport({ x: c.position.x, y: c.position.y, z: 2.5 }, q, { x: 0, y: 0, z: -25 });
     else { window._qp.position.z = 2.5; window._qp.velocity.z = -40; }
   }
-  window.__easy = { s, wait, until, axis, thr, upZ, tickUp, lowS, held, simWait, speed, landed, fc, menus, state, flip, drop, spots, restOn, recover, frames };
+  window.__easy = { s, wait, until, axis, thr, upZ, tickUp, lowS, held, simWait, speed, landed, settled, fc, menus, state, flip, drop, spots, restOn, recover, frames };
   return true;
 })()`;
 
@@ -1377,9 +1383,12 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
             await E.wait(400);
             const held = E.state();
             E.axis(${stick}, 0);
-            await E.wait(500);
-            return JSON.stringify({ rest, started, upright, ms: flyT - upT, stepMs, held, st: E.state() });`);
-          console.log(`js turtle ${name}: ` + JSON.stringify({ rest: r.rest, started: r.started, upright: r.upright, ms: r.ms, stepMs: r.stepMs, upZ: r.st.upZ, armed: r.st.armed }));
+            // Settled before it is read: 500 ms of the sim's clock (both cores)
+            // and at rest on the page's own state, not 500 ms of wall time.
+            const t1 = E.s.simClockMs();
+            const settled = await E.until(() => E.s.simClockMs() - t1 >= 500 && E.settled(), 6000);
+            return JSON.stringify({ rest, started, upright, ms: flyT - upT, stepMs, held, settled, st: E.state() });`);
+          console.log(`js turtle ${name}: ` + JSON.stringify({ rest: r.rest, started: r.started, upright: r.upright, ms: r.ms, stepMs: r.stepMs, settled: r.settled, upZ: r.st.upZ, armed: r.st.armed }));
           assert.equal(r.started, true, `${name}: the stick starts it`);
           assert.equal(r.upright, true, `${name}: upright and re-armed`);
           checkFlyableTime(name, r.ms, r.stepMs);
