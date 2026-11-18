@@ -10,7 +10,11 @@
 //   phase matcher: in the owner's order, Immelmanns (28-48 s), Half Mavvies
 //   (57-70 s), Matties (113-124 s) and Mavericks (148-153 s);
 // - tools/fixtures/tricklog-depot-bf-4.jsonl.gz, 11 attempts, flown after the
-//   compound tricks: three Baranis, at 28.6, 34.2 and 38.1 s.
+//   compound tricks: three Baranis, at 28.6, 34.2 and 38.1 s;
+// - tools/fixtures/tricklog-{bando,rig,depot}-bf-*.jsonl.gz, the owner's
+//   dumps of 2026-11-17 and 18, each under a label of what was flown (LOGS,
+//   below): orbits and Trippies in the Bando, and the re-fly's Trippies and
+//   orbits in the Rig.
 //
 // Each maneuver record carries what the detector saw (saw, rounded) and every
 // candidate's gate values (3 decimals, rad). The test rebuilds the segment's
@@ -92,6 +96,7 @@ import { dirname, join } from 'node:path';
 import {
   classifyFeat, featView, makeFeat, loopCount, trickName, LOOP_WIN_S, SAMPLE_S, HAM_UPZ, HAM_MIN,
   PHASE_SPECS, PHASE_FIELD, matchSpec, MERGE_GAP_S, MANEUVER_MAX_S,
+  NOSE_SIDE,
 } from '../sim-tricks.js';
 import { explainFeat, SPEC } from '../sim-tricks-debug.js';
 
@@ -168,6 +173,31 @@ export function baraniFrom(s, g) {
   }
   const yawSpan = 'v.yawSpan' in g ? g['v.yawSpan'] : s.vyawDeg * DEG;
   return { p: s.pathP, r: Math.max(Math.abs(s.roll), Math.min(Math.abs(s.yaw), yawSpan)), exact: false };
+}
+
+// Trippy's tail share (f.orbitTail), which no log
+// has yet. Estimated: from the camera's rows when the log has them (rec.cam,
+// 24 steps over the orbit's window) by the detector's own rule (a row
+// upside down, or the nose up and over away from the centre and within
+// NOSE_SIDE of the plane through it); else the inverted share or 1 - opp
+// (the share of steps whose roll and yaw rates agree), the larger: tilted
+// round an orbit the body turns about the vertical, which reads as roll and
+// yaw of one sign with the nose up (the tail in) and of opposite signs with
+// it down. 1 - opp reads high on a part orbit (1.0 where the rows say
+// 0.52-0.65), so it backs no threshold; on the owner's whole Trippies and
+// orbits the two agree.
+export function tailFrom(rec, g) {
+  const s = rec.saw, c = rec.cam;
+  if ('f.orbitTail' in g) return { v: g['f.orbitTail'], v2: 'f.orbit2Tail' in g ? g['f.orbit2Tail'] : g['f.orbitTail'], exact: true };
+  if (s.orbitTail != null) return { v: s.orbitTail, v2: s.orbit2Tail != null ? s.orbit2Tail : s.orbitTail, exact: true };
+  if (c && c.rows && c.rows.length && c.cols) {
+    const I = {};
+    c.cols.forEach((k, i) => { I[k] = i; });
+    const k = c.rows.filter((x) => x[I.upZ] < 0 || (x[I.noseDeg] > 90 && x[I.noseDeg] < 270 && x[I.side] < NOSE_SIDE)).length;
+    return { v: k / c.rows.length, v2: k / c.rows.length, exact: false, from: 'cam' };
+  }
+  const v = Math.max(s.inv || 0, 1 - (s.opp || 0));
+  return { v, v2: v, exact: false, from: 'opp' };
 }
 
 // The phase matcher's scores (PHASE_SPECS), for logs that predate them or
@@ -273,6 +303,8 @@ export function featFromLog(rec, ctx) {
   f.yawUp = yawSpan; f.yawUpT = yawRate > 0 ? yawSpan / yawRate : 0;
   f.orbitR = 'f.orbitR' in g ? g['f.orbitR'] : s.orbitR; f.orbitSweep = val('f.orbitSweep', s.orbitSweepDeg);
   f.orbitTurn = s.orbitTurn; f.orbitSpd = s.orbitSpd; f.orbitFit = s.orbitFit; f.orbitPole = s.orbitPole;
+  const tail = tailFrom(rec, g);
+  f.orbitTail = tail.v;
   const bar = baraniFrom(s, g);
   f.barP = bar.p; f.barR = bar.r;
   // The logged sweep is the velocity's turn the flip's way.
@@ -295,7 +327,7 @@ export function featFromLog(rec, ctx) {
     else if (k in g && 'merged' in rec && SINCE_MERGE[id]) f[PHASE_FIELD[id]] = g[k] * SINCE_MERGE[id](s);
     else f[PHASE_FIELD[id]] = est[id];
   }
-  return { f, g, flipDir, loop: lp, inv, phExact };
+  return { f, g, flipDir, loop: lp, inv, phExact, tail };
 }
 
 // The altitude at time t (s, the log's clock) from the maneuver records
@@ -461,6 +493,37 @@ const LOGS = [
     // (38.1 s). Seq 4 (23.9 s) by the estimate (see the top).
     NEW: { 6: 'barani', 8: 'barani', 11: 'barani', 4: 'barani' },
   },
+  // The owner's dumps from 2026-11-17 and 18, each a "Copy trick log" pasted
+  // under a label of what was flown (NEW below each).
+  // The owner's dumps of 2026-11-17 and 18, each a "Copy trick log" pasted
+  // under a label of what was flown. The Bando's two, with no counts or order
+  // to match the segments by, back the labels each fired and pin only the
+  // orbits (both fired Trippy: the orbits the owner says are not Trippies);
+  // the re-fly's two pin what the owner noted flying, in order.
+  {
+    name: 'bando orbits', map: 'bando', file: 'tools/fixtures/tricklog-bando-bf-orbit.jsonl.gz', records: 16, maneuvers: 10, fired: 2,
+    // "This is an orbit, not a trippy spin": seq 7 and 11 (fired Trippy),
+    // upright, the nose on the centre (1 - opp 0.05, 0.03): no Trippy.
+    NEW: { 7: null, 11: null },
+  },
+  {
+    name: 'bando trippies', map: 'bando', file: 'tools/fixtures/tricklog-bando-bf-trippy.jsonl.gz', records: 16, maneuvers: 12, fired: 3,
+    // "Real trippy spin": seq 11, 13 and 15 fired Trippy and stay.
+    NEW: {},
+  },
+  {
+    name: 'rig trippies', map: 'rig', file: 'tools/fixtures/tricklog-rig-bf-trippy.jsonl.gz', records: 25, maneuvers: 19, fired: 3,
+    // The re-fly's Trippies, off the floor: seq 6, 10 and 23 (fired Trippy).
+    NEW: {},
+  },
+  {
+    name: 'rig orbits', map: 'rig', file: 'tools/fixtures/tricklog-rig-bf-orbit.jsonl.gz', records: 9, maneuvers: 9, fired: 2,
+    // The re-fly's two orbits, each cut at the 4.5 s cap: seq 2 and 3 (284
+    // then 360 degrees; 3 fired Trippy), seq 6, 7 and 8 (324, 345, then 432;
+    // 8 fired Trippy). Upright, the nose on the centre: no Trippy.
+    NEW: { 3: null, 8: null },
+  },
+
 ];
 for (const L of LOGS) {
   L.recs = readLog(L.file);
@@ -480,7 +543,7 @@ test('the fixtures are the owner\'s logs, on the bf core in the Warehouse', () =
     for (const r of L.recs) {
       assert.equal(r.kind, 'quadmath-trick-attempt');
       assert.equal(r.core, 'bf');
-      assert.equal(r.map, 'depot');
+      assert.equal(r.map, L.map || 'depot');
     }
     assert.equal(L.recs.filter((r) => r.type === 'maneuver').length, L.maneuvers, L.name);
     // The dives are stepDetector's own state machine, not classifyFeat; none fired.
@@ -580,7 +643,7 @@ test('every label a log fired stays the same (but log 2 seq 26, the phase matche
     const out = replayed(L);
     const off = [];
     for (const r of L.scored) {
-      const got = out.get(r.seq).id;
+        const got = out.get(r.seq).id;
       const want = r.seq in L.NEW ? L.NEW[r.seq] : r.result;
       if (got !== want) off.push('seq ' + r.seq + ' is ' + got + ', want ' + want + ' (the log fired ' + r.result + ')');
     }
@@ -588,7 +651,7 @@ test('every label a log fired stays the same (but log 2 seq 26, the phase matche
   }
   // The labels that change: every fired one listed, and the unlabelled ones
   // that score now.
-  const changed = LOGS.flatMap((L) => L.scored.filter((r) => r.seq in L.NEW && L.NEW[r.seq] !== r.result && (r.result || L.name === 'log 3' || L.NEW[r.seq] === 'barani')).map((r) => L.name + ' seq ' + r.seq + ' ' + (r.result || 'none') + '->' + (L.NEW[r.seq] || 'none')));
+  const changed = LOGS.slice(0, 4).flatMap((L) => L.scored.filter((r) => r.seq in L.NEW && L.NEW[r.seq] !== r.result && (r.result || L.name === 'log 3' || L.NEW[r.seq] === 'barani')).map((r) => L.name + ' seq ' + r.seq + ' ' + (r.result || 'none') + '->' + (L.NEW[r.seq] || 'none')));
   assert.deepEqual(changed, [
     'log 1 seq 14 maverick->none', 'log 1 seq 21 maverick->none', 'log 1 seq 33 matty->none',
     'log 1 seq 80 snapback->immelmann', 'log 1 seq 82 halfmatty->cradle',
@@ -598,6 +661,37 @@ test('every label a log fired stays the same (but log 2 seq 26, the phase matche
     'log 3 seq 56 none->barani', 'log 3 seq 63 cradle->maverick', 'log 3 seq 66 cradle->maverick',
     'log 4 seq 4 none->barani', 'log 4 seq 6 none->barani', 'log 4 seq 8 maverick->barani', 'log 4 seq 11 none->barani',
   ]);
+});
+
+test('the dumps of 2026-11-17 and 18: every label that changes', () => {
+  const NEWER = LOGS.slice(4);
+  const changed = NEWER.flatMap((L) => L.scored.filter((r) => r.seq in L.NEW && L.NEW[r.seq] !== r.result).map((r) => L.name + ' seq ' + r.seq + ' ' + (r.result || 'none') + '->' + (L.NEW[r.seq] || 'none')));
+  assert.deepEqual(changed, [
+    'bando orbits seq 7 trippy->none', 'bando orbits seq 11 trippy->none',
+    'rig orbits seq 3 trippy->none', 'rig orbits seq 8 trippy->none',
+  ]);
+  // Every label they fired that stays: the Trippies.
+  const kept = (L, id) => L.scored.filter((r) => r.result === id && replayed(L).get(r.seq).id === id).map((r) => r.seq);
+  const [BO, BT, RT] = NEWER;
+  assert.deepEqual(kept(BT, 'trippy'), [11, 13, 15]);
+  assert.deepEqual(kept(RT, 'trippy'), [6, 10, 23]);
+  assert.equal(BO.scored.filter((r) => r.result === 'trippy').length, 2);
+});
+
+test('the dumps: Trippy is the tail to the centre, an upright orbit with the nose on it none (the tail share estimated)', () => {
+  const [BO, BT, RT, RO] = LOGS.slice(4);
+  const tail = (L, seq) => tailFrom(L.bySeq.get(seq), gateValues(L.bySeq.get(seq)));
+  // The re-fly's rows (24 a segment over the orbit's window), by the
+  // detector's rule: the Trippies 0.92-1, the orbits 0.
+  for (const seq of [6, 10, 23]) {
+    const t = tail(RT, seq);
+    assert.equal(t.from, 'cam');
+    assert.ok(t.v >= 0.9, 'rig trippies seq ' + seq + ' tail ' + t.v);
+  }
+  for (const seq of [2, 3, 6, 7, 8]) assert.equal(tail(RO, seq).v, 0, 'rig orbits seq ' + seq);
+  // The Bando's, by 1 - opp: the Trippies 0.98-1, the orbits 0.03-0.05.
+  for (const seq of [11, 13, 15]) assert.ok(tail(BT, seq).v >= 0.95, 'bando trippies seq ' + seq);
+  for (const seq of [7, 11]) assert.ok(tail(BO, seq).v <= 0.06, 'bando orbits seq ' + seq);
 });
 
 test('Flip, Powerloop and Split-S, now the phase matcher\'s, fire on every log exactly where they did', () => {

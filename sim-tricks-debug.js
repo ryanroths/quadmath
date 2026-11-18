@@ -27,7 +27,7 @@ import {
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
   HIST_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE,
-} from './sim-tricks.js?v=50c7de842a14';
+} from './sim-tricks.js?v=6b41947b210b';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
@@ -82,8 +82,9 @@ export const GATES = Object.freeze({
     ge('rollFirst', 0.0, 0.12), ge('v.inv', 0.12, 0.08), le('absY', 2.4, 0.7),
   ],
   trippy: [
-    ge('v.yawSpan', 6.2832, 0), ge('v.yawRate', 2.618, 0), band('f.orbitR', 0.3, 2.5, 0),
+    ge('v.yawSpan', 6.2832, 0), ge('v.yawRate', 2.618, 0), ge('f.orbitR', 0.3, 0),
     ge('f.orbitSweep', 6.2832, 0), ge('f.orbitTurn', 0.8, 0), ge('f.orbitSpd', 1.0, 0),
+    ge('f.orbitTail', 0.7, 0),
   ],
   barani: [
     ge('f.barP', 5.236, 0.35), band('f.barR', 2.356, 3.927, 0), ge('f.upEnd', 0.5, 0),
@@ -223,6 +224,7 @@ function context(f) {
     'v.loopSpan': v.loopSpan, 'v.loopRise': v.loopRise, 'v.loopRet': v.loopRet, 'v.loopSweep': v.loopSweep,
     'v.yawSpan': v.yawSpan, 'v.yawRate': v.yawRate, 'v.invYaw': v.invYaw,
     'f.orbitR': f.orbitR, 'f.orbitSweep': f.orbitSweep, 'f.orbitTurn': f.orbitTurn, 'f.orbitSpd': f.orbitSpd,
+    'f.orbitTail': f.orbitTail,
     'f.barP': f.barP, 'f.barR': f.barR, 'f.upEnd': f.upEnd,
     'f.phFlip': f.phFlip, 'f.phLoop': f.phLoop, 'f.phSplits': f.phSplits, 'f.phImmel': f.phImmel,
     'f.phMav': f.phMav, 'f.phMatty': f.phMatty, 'f.phHMatty': f.phHMatty, 'f.phHMavvy': f.phHMavvy,
@@ -308,6 +310,8 @@ function sawOf(f, v, ctx) {
     vyawDeg: degOf(v.yawSpan), vyawRateDeg: degOf(v.yawRate),
     orbitR: r3(f.orbitR), orbitSweepDeg: degOf(f.orbitSweep), orbitTurn: r3(f.orbitTurn), orbitSpd: r3(f.orbitSpd),
     orbitFit: r3(f.orbitFit), orbitPole: f.orbitPole,
+    // Trippy's share of the orbit tilted back or inverted.
+    orbitTail: r3(f.orbitTail),
     baraniPitchDeg: degOf(f.barP), baraniTwistDeg: degOf(f.barR), upEnd: r3(f.upEnd),
     // The segment's twist: its turn about the body axis nearest the flight
     // path, roll or yaw (the Barani's).

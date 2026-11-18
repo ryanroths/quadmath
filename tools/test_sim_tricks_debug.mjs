@@ -199,6 +199,8 @@ function randFeat(r) {
   f.yawUp = r() < 0.5 ? near(6.2832) : u(0, 4); f.yawDn = r() < 0.5 ? near(6.2832) : u(0, 4);
   f.yawUpT = u(0.5, 2.4); f.yawDnT = u(0.5, 2.4);
   f.orbitR = r() < 0.5 ? u(0.1, 3) : u(0.3, 2.5); f.orbitSweep = near(6.2832); f.orbitTurn = u(0.6, 1); f.orbitSpd = u(0.5, 3);
+  // Trippy's tail share, near 0.7 or past it often.
+  f.orbitTail = r() < 0.5 ? u(0.5, 1) : u(0, 1);
   f.barP = r() < 0.5 ? near(5.236) : u(0, 4); f.barR = u(1.5, 4.5); f.upEnd = r() < 0.6 ? u(0.5, 1) : u(-1, 1);
   if (r() < 0.12) {
     // A yaw spin, upright or inverted: little pitch and roll, a full turn of
@@ -568,7 +570,8 @@ test('observer: the camera terms (rec.cam) over the orbit, logged only', () => {
   near(c.upZQ[2], 0.94, 0.01, 'cam up-Z median'); near(c.bodyUpZQ[2], 0.64, 0.01, 'body up-Z median');
   // Tail to the centre, tilted back 66: the body upright, the picture upside
   // down, the camera up, 84 off the centre.
-  const back = camOrbit({ pitch: -66, toCentre: false, info: { camDeg: 30 } }).cam;
+  const backRec = camOrbit({ pitch: -66, toCentre: false, info: { camDeg: 30 } });
+  const back = backRec.cam;
   assert.equal(back.bodyUpZNeg, 0);
   assert.ok(back.upZNeg > 0.98, 'cam up-Z < 0 ' + back.upZNeg);
   near(back.upZMean, -0.1, 0.02, 'cam up-Z'); near(back.offDegMean, 84, 2, 'off the centre'); near(back.elDegMean, 84, 2, 'elevation');
@@ -576,7 +579,8 @@ test('observer: the camera terms (rec.cam) over the orbit, logged only', () => {
   // toward the centre, the up axis leaning 66 toward it.
   near(back.noseDegMean, 114, 2, 'nose'); assert.ok(back.tailShare > 0.98, 'tail ' + back.tailShare); near(back.leanDegQ[2], 66, 2, 'lean');
   // The body inverted, the camera level on the centre: both upside down, on it.
-  const inv = camOrbit({ pitch: -30, toCentre: true, inverted: true, info: { camDeg: 30 } }).cam;
+  const invRec = camOrbit({ pitch: -30, toCentre: true, inverted: true, info: { camDeg: 30 } });
+  const inv = invRec.cam;
   assert.ok(inv.bodyUpZNeg > 0.98 && inv.upZNeg > 0.98, 'inverted ' + inv.bodyUpZNeg + ' ' + inv.upZNeg);
   near(inv.offDegMean, 0, 2, 'off the centre');
   // Nose 30 up at the centre, the up axis leaning 150 (inverted, toward it).
@@ -584,9 +588,12 @@ test('observer: the camera terms (rec.cam) over the orbit, logged only', () => {
   // No tilt from the page: 30, said so.
   const def = camOrbit({ pitch: 50, toCentre: true, info: {} }).cam;
   assert.equal(def.deg, 30); assert.equal(def.degFrom, 'default');
-  // Logged only: the same label as the detector's own, and the feature copy
-  // carries the window.
-  assert.equal(fwd.result, 'trippy');
+  // Logged only: the same label as the detector's own (the nose on the
+  // centre, upright: none; the tail to it, or the body inverted: a Trippy),
+  // and the feature copy carries the window.
+  assert.equal(fwd.result, null);
+  assert.equal(backRec.result, 'trippy');
+  assert.equal(invRec.result, 'trippy');
   const f = makeFeat();
   assert.equal(f.orbitTa, 0); assert.equal(f.orbitTb, 0);
   // The page gives the overlay its cam tilt.

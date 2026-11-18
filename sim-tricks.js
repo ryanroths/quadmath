@@ -13,7 +13,9 @@ export const TRICKS_KEY = 'quadmathSimTricks';
 // 2 (2026-11-14): a gap no longer scores. Bests saved under an older version
 // counted the Gap trick, so normalizeStore drops them; the HUD and debug
 // settings stay.
-export const STORE_VER = 2;
+// 3 (2026-11-18): an upright orbit scored as a 500-point Trippy; bests saved
+// before are dropped the same way.
+export const STORE_VER = 3;
 export const COMBO_WINDOW_S = 2.8;
 export const MUL_CAP = 6;
 export const LOCKOUT_S = 0.45;
@@ -55,6 +57,9 @@ export const ROLL_WIN_S = 1.5;
 // at 1 ms steps fits.
 export const HIST_CAP = 10240;
 export const HIST_W = 16;
+// Beside each history row, the nose (BH_W per row: its x, y and up
+// components, in the sample's own frame, as the velocity columns 9 and 12).
+export const BH_W = 3;
 // Powerloop: >= 300 degrees of pitch inside any LOOP_WIN_S window (a loop is
 // slower than a flip). The loops are counted over the segment's whole turn
 // of pitch the loop's way: two from LOOP_TWO (600 degrees), then one more for
@@ -63,11 +68,18 @@ export const LOOP_WIN_S = 3.5;
 export const LOOP_MIN = 5.236;
 export const LOOP_TWO = 10.472;
 // Trippy Spin: >= 360 degrees of turn about the vertical at >= 150 deg/s (so
-// inside 2.4 s) while the path orbits a centre 0.3-2.5 m away, a full turn,
-// at >= 1 m/s. Upright or inverted; the body may roll as it spins.
+// inside 2.4 s) while the path orbits a centre 0.3 m or more away, a full
+// turn, at >= 1 m/s, and for TRIPPY_TAIL of the orbit or more the quad is
+// tilted back round the centre (the tail toward it: the nose points away
+// from it, within NOSE_SIDE of the vertical plane through it) or upside down
+// (body up-Z < 0). That is the picture upside down in the goggles whatever
+// the cam tilt; an upright orbit, the nose and camera on the centre, is not
+// one. The body may roll as it spins.
 // The orbit centre within POLE_NEAR_M of a pole or post (a collider at most
 // POLE_W_M across and at least POLE_H_M tall) earns TRIPPY_POLE_MUL points.
 export const TRIPPY_WIN_S = 2.4;
+export const TRIPPY_TAIL = 0.7;
+export const NOSE_SIDE = 0.7;
 // The spin's rate (150 deg/s), and the share of it the spin keeps while the
 // orbit is measured over all of it.
 export const TRIPPY_RATE = 2.618;
@@ -505,6 +517,9 @@ export function makeFeat() {
     // The orbit's window (s from the segment's start), for the debug log's
     // camera terms (sim-tricks-debug.js); nothing scores it.
     orbitTa: 0, orbitTb: 0,
+    // Trippy: the share of the orbit's steps tilted back round its centre or
+    // inverted (TRIPPY_TAIL).
+    orbitTail: 0,
     // Barani (baraniWithin): the pitch path and |twist| of the stretch that
     // scores best as a Barani's, the twist inside the pitch; up-Z at the end.
     barP: 0, barR: 0, upEnd: 1,
@@ -550,7 +565,7 @@ export function resetFeat(f) {
   f.postMin = 0; f.sweep = 0; f.sweepTh = 0; f.sweepOn = 0;
   f.yawUp = 0; f.yawDn = 0; f.yawUpT = 0; f.yawDnT = 0; f.vyaw = 0; f.twist = 0;
   f.orbitR = 0; f.orbitFit = 9; f.orbitSweep = 0; f.orbitTurn = 0; f.orbitSpd = 0; f.orbitCx = 0; f.orbitCz = 0; f.orbitPole = 0;
-  f.orbitTa = 0; f.orbitTb = 0;
+  f.orbitTa = 0; f.orbitTb = 0; f.orbitTail = 0;
   f.barP = 0; f.barR = 0; f.upEnd = 1;
   f.invC = 0; f.invLo = 0; f.invHi = 0; f.invYawUp = 0; f.invYawDn = 0; f.invYawT = 0;
   f.phFlip = 0; f.phLoop = 0; f.phSplits = 0; f.phImmel = 0; f.phMav = 0; f.phMatty = 0; f.phHMatty = 0; f.phHMavvy = 0;
@@ -589,7 +604,7 @@ export function copyFeat(src, dst) {
   d.yawUp = src.yawUp; d.yawDn = src.yawDn; d.yawUpT = src.yawUpT; d.yawDnT = src.yawDnT; d.vyaw = src.vyaw; d.twist = src.twist;
   d.orbitR = src.orbitR; d.orbitFit = src.orbitFit; d.orbitSweep = src.orbitSweep; d.orbitTurn = src.orbitTurn; d.orbitSpd = src.orbitSpd;
   d.orbitCx = src.orbitCx; d.orbitCz = src.orbitCz; d.orbitPole = src.orbitPole;
-  d.orbitTa = src.orbitTa; d.orbitTb = src.orbitTb;
+  d.orbitTa = src.orbitTa; d.orbitTb = src.orbitTb; d.orbitTail = src.orbitTail;
   d.barP = src.barP; d.barR = src.barR; d.upEnd = src.upEnd;
   d.invC = src.invC; d.invLo = src.invLo; d.invHi = src.invHi;
   d.invYawUp = src.invYawUp; d.invYawDn = src.invYawDn; d.invYawT = src.invYawT;
@@ -732,6 +747,56 @@ export function baraniWithin(hist, n, out, w) {
       best = sc; bestOff = off; o.p = P; o.r = T;
     }
   }
+  return o;
+}
+
+// The share of history rows a..b tilted back round the orbit's centre or
+// upside down: the nose pointing away from the centre, within NOSE_SIDE of
+// the vertical plane through it, or the body's up-Z below 0 (TRIPPY_TAIL,
+// ORBIT_TAIL). The centre is square to the horizontal velocity, on the side
+// the path turns to over a..b (the velocity's own turn, not the yaw's: a
+// spin of its own can go the other way); a row slower than 0.5 m/s has no
+// centre to speak of.
+export function tailShare(hist, bh, a, b) {
+  const W = HIST_W;
+  let turn = 0;
+  for (let i = a + 1; i <= b; i++) {
+    const p = (i - 1) * W, q = i * W;
+    turn += hist[p + 9] * hist[q + 12] - hist[p + 12] * hist[q + 9];
+  }
+  const sg = turn >= 0 ? 1 : -1;
+  let n = 0, k = 0;
+  for (let i = a; i <= b; i++) {
+    n++;
+    if (hist[i * W + 7] < 0) { k++; continue; }
+    const vx = hist[i * W + 9], vy = hist[i * W + 12], vh = Math.hypot(vx, vy);
+    if (!(vh > 0.5)) continue;
+    const ux = vx / vh, uy = vy / vh, j = i * BH_W, fx = bh[j], fy = bh[j + 1];
+    const along = sg * (fy * ux - fx * uy), side = Math.abs(fx * ux + fy * uy);
+    if (along < 0 && side < NOSE_SIDE) k++;
+  }
+  return n ? k / n : 0;
+}
+
+// Widen a spin's window a..b out, a 0.1 s piece at a time, while the turn
+// about the vertical keeps going the way sg at min rad/s or more; into o.
+function widenSpin(H, n, a, b, sg, min, o) {
+  const W = HIST_W;
+  while (a > 0) {
+    let k = a - 1;
+    while (k > 0 && H[a * W] - H[k * W] < 0.1) k--;
+    const dt = H[a * W] - H[k * W];
+    if (!(dt > 0) || sg * (H[a * W + 3] - H[k * W + 3]) < min * dt) break;
+    a = k;
+  }
+  while (b < n - 1) {
+    let k = b + 1;
+    while (k < n - 1 && H[k * W] - H[b * W] < 0.1) k++;
+    const dt = H[k * W] - H[b * W];
+    if (!(dt > 0) || sg * (H[k * W + 3] - H[b * W + 3]) < min * dt) break;
+    b = k;
+  }
+  o.a = a; o.b = b;
   return o;
 }
 
@@ -1463,24 +1528,28 @@ export function classifyFeat(f, out) {
   {
     // Trippy Spin: >= 360 degrees of turn about the vertical at >= 150 deg/s
     // between its two ends, while the path orbits a centre over the whole
-    // spin: it curves at a radius of 0.3-2.5 m, its direction turns a full
-    // turn or more, one way (80 % of its turning), at >= 1 m/s. Upright or
-    // inverted, rolling or not (no roll term); no object needed (one at the
-    // centre earns TRIPPY_POLE_MUL).
+    // spin: it curves at a radius of 0.3 m or more (no upper limit: the
+    // distance does not decide it), its direction turns a full turn or more,
+    // one way (80 % of its turning), at >= 1 m/s, and 70 % of it or more
+    // tilted back round the centre or inverted (TRIPPY_TAIL): the picture
+    // upside down, whatever the cam tilt. An upright orbit is not one.
+    // Rolling or not (no roll term); no object needed (one at the centre
+    // earns TRIPPY_POLE_MUL).
     _sc.trippy = mul(
       atLeast(v.yawSpan, 6.2832, 0),
       atLeast(v.yawRate, 2.618, 0),
-      inBand(f.orbitR, 0.3, 2.5, 0),
+      atLeast(f.orbitR, 0.3, 0),
       atLeast(f.orbitSweep, 6.2832, 0),
       atLeast(f.orbitTurn, 0.8, 0),
       atLeast(f.orbitSpd, 1.0, 0),
+      atLeast(f.orbitTail, 0.7, 0),
     );
     // Ham Spin, the inverted yaw spin: >= 300 degrees of turn about the
     // vertical counted only while inverted (up-Z < HAM_UPZ). A half flip in
     // and a half flip out are allowed: they turn little about the vertical,
     // and the segment is one Ham, not a Flip. A flip or roll that only passes
-    // through inverted turns little about the vertical there. An orbit is
-    // Trippy, a full Roll a Roll (the re-labels below).
+    // through inverted turns little about the vertical there. An inverted
+    // orbit is a Trippy, a full Roll a Roll (the re-labels below).
     _sc.ham = mul(
       atLeast(v.invYaw, 5.236, 0),
     );
@@ -1697,7 +1766,10 @@ export function makeDetector() {
     altT: new Float64Array(ALT_RING), altA: new Float64Array(ALT_RING), altI: 0, altN: 0,
     // Trippy and Barani scratch; the colliders and scale of the last step.
     orb: { r: 0, fit: 9, sweep: 0, turn: 0, spd: 0, cx: 0, cz: 0, kr: 0 },
+    wid: { a: 0, b: 0 },
     bar: { p: 0, r: 0 },
+    // The nose beside each history row (BH_W).
+    bh: new Float64Array(HIST_CAP * BH_W),
     cols: null, ws: 3.5, lastPole: 0,
     proxT: 0, proxCd: 0,
     lockout: 0,
@@ -1949,6 +2021,12 @@ function genericGapKind(clr, svx, svz, sideMax) {
   return clr.pz <= sideMax && clr.nz <= sideMax ? 2 : 0;
 }
 
+// The nose at the step's attitude into body-history row r (BH_W).
+function bodyRow(d, r) {
+  const x = d.qx, y = d.qy, z = d.qz, w = d.qw, i = r * BH_W, B = d.bh;
+  B[i] = 1 - 2 * (y * y + z * z); B[i + 1] = 2 * (x * y + w * z); B[i + 2] = 2 * (x * z - w * y);
+}
+
 function beginFeat(d, alt, wx, wz, head, speed, thr, upZ, vx, vy, vz) {
   d.recN = 0;
   d.recNextT = 0;
@@ -1971,6 +2049,7 @@ function beginFeat(d, alt, wx, wz, head, speed, thr, upZ, vx, vy, vz) {
   d.hist[11] = 0;
   d.hist[12] = vy || 0;
   d.hist[13] = head;
+  bodyRow(d, 0);
   d.histN = 1;
   d.susCol = 0;
   f.h0x = wx; f.h0z = wz; f.h1x = wx; f.h1z = wz;
@@ -2044,6 +2123,7 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
     d.hist[hi + 13] = head;
     d.hist[hi + 14] = f.yaw;
     d.hist[hi + 15] = f.twist;
+    bodyRow(d, d.histN);
     d.histN += 1;
   }
   {
@@ -2128,29 +2208,15 @@ export function windowFeat(d) {
   // The orbit is measured over the whole spin: out from that window, a
   // 0.1 s piece at a time, while the turn keeps going the same way at
   // TRIPPY_HOLD of TRIPPY_RATE or more.
-  {
-    const H = d.hist, W = HIST_W, sg = up ? 1 : -1, min = TRIPPY_RATE * TRIPPY_HOLD;
-    while (a > 0) {
-      let k = a - 1;
-      while (k > 0 && H[a * W] - H[k * W] < 0.1) k--;
-      const dt = H[a * W] - H[k * W];
-      if (!(dt > 0) || sg * (H[a * W + 3] - H[k * W + 3]) < min * dt) break;
-      a = k;
-    }
-    while (b < d.histN - 1) {
-      let k = b + 1;
-      while (k < d.histN - 1 && H[k * W] - H[b * W] < 0.1) k++;
-      const dt = H[k * W] - H[b * W];
-      if (!(dt > 0) || sg * (H[k * W + 3] - H[b * W + 3]) < min * dt) break;
-      b = k;
-    }
-  }
+  widenSpin(d.hist, d.histN, a, b, up ? 1 : -1, TRIPPY_RATE * TRIPPY_HOLD, d.wid);
+  a = d.wid.a; b = d.wid.b;
   const o = orbitFit(d.hist, a, b, d.orb);
   f.orbitR = o.r; f.orbitFit = o.fit; f.orbitSweep = o.sweep; f.orbitTurn = o.turn; f.orbitSpd = o.spd;
   const ws = d.ws || 3.5;
   f.orbitCx = o.cx * ws; f.orbitCz = o.cz * ws;
   f.orbitPole = o.kr > 0 ? poleNear(d.cols, f.orbitCx, f.orbitCz, ws) : 0;
   f.orbitTa = d.histN ? d.hist[a * HIST_W] : 0; f.orbitTb = d.histN ? d.hist[b * HIST_W] : 0;
+  f.orbitTail = o.kr > 0 ? tailShare(d.hist, d.bh, a, b) : 0;
   // Barani: only worth the scan when a flip's worth of pitch path is there.
   if ((f.pathP || 0) >= BARANI_P - BARANI_FADE) {
     const bw = baraniWithin(d.hist, d.histN, d.bar);

@@ -15,7 +15,7 @@ import {
   emptyStore, normalizeStore, loadStore, saveStore, recordBest, bestLine, bestForMap,
   makeDetector, resetDetector, stepDetector, encodeRecJson, REC_KEYS,
   makeCombo, resetCombo, pushCombo, comboRemain,
-  createTricks, makeFeat, trickLineupText, TRIPPY_POLE_MUL,
+  createTricks, makeFeat, trickLineupText, TRIPPY_POLE_MUL, TRIPPY_TAIL,
   trickName, MANEUVER_MAX_S, MANEUVER_SUSTAIN_S,
   PHASE_SPECS, matchSpec, MAV_GAP_MUL, PH_SLOP, MERGE_GAP_S, TWIST_SPD,
 } from '../sim-tricks.js';
@@ -290,11 +290,16 @@ const LIBRARY = [
   { id: 'yawspin', name: 'pole-spin-fast', phases: [{ t: 0.95, yaw: 8.2, thr: 0.5 }, { t: 0.45, yaw: 0, thr: 0.44 }], opts: { ...NEAR_POLE, z0: 2.2, maxT: 1.9 } },
   { id: 'yawspin', name: 'pole-spin-ccw', phases: [{ t: 1.15, yaw: -7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }], opts: { ...NEAR_POLE, maxT: 2.1 } },
   { id: 'yawspin', name: 'tree-spin', phases: [{ t: 1.15, yaw: 7.4, thr: 0.5 }, { t: 0.5, yaw: 0, thr: 0.44 }], opts: { ...NEAR_TREE, maxT: 2.1 } },
-  // Trippy: tilt, then yaw about the vertical (the thrust swings round and
-  // the path orbits), starting at the orbit's speed a / w along it.
-  { id: 'trippy', name: 'trip-orbit', phases: [{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 5.8, thr: 0.6 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: -2.03, maxT: 3.7 } },
-  { id: 'trippy', name: 'trip-orbit-fast', phases: [{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 6.3, thr: 0.7 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: -1.86, maxT: 3.7 } },
-  { id: 'trippy', name: 'trip-orbit-cw', phases: [{ t: 0.14, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: -6.0, thr: 0.65 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: 2.4, maxT: 3.7 } },
+  // Tilt nose down, then yaw about the vertical (the thrust swings round and
+  // the path orbits, the nose on the centre), starting at the orbit's speed
+  // a / w along it: an upright orbit, no Trippy.
+  { id: null, name: 'orbit-nose-down', phases: [{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 5.8, thr: 0.6 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: -2.03, maxT: 3.7 } },
+  { id: null, name: 'orbit-nose-down-fast', phases: [{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 6.3, thr: 0.7 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: -1.86, maxT: 3.7 } },
+  { id: null, name: 'orbit-nose-down-cw', phases: [{ t: 0.14, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: -6.0, thr: 0.65 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: 2.4, maxT: 3.7 } },
+  // Trippy: the same tilted back (nose up, the tail toward the centre).
+  { id: 'trippy', name: 'trip-tilted-back', phases: [{ t: 0.125, pitch: -7, thr: 0.55 }, { t: 2.5, worldYaw: 5.8, thr: 0.6 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: 2.03, maxT: 3.7 } },
+  { id: 'trippy', name: 'trip-tilted-back-fast', phases: [{ t: 0.125, pitch: -7, thr: 0.55 }, { t: 2.5, worldYaw: 6.3, thr: 0.7 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: 1.86, maxT: 3.7 } },
+  { id: 'trippy', name: 'trip-tilted-back-cw', phases: [{ t: 0.14, pitch: -7, thr: 0.55 }, { t: 2.5, worldYaw: -6.0, thr: 0.65 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: -2.4, maxT: 3.7 } },
   // Barani: pitch to the vertical, a half twist there, pitch on to upright
   // (the body pitching back now: the twist turned it round). The twist is
   // about the body axis nearest the flight path: nose down, thrust carries
@@ -367,7 +372,7 @@ const PILOT_LIBRARY = [
 
 test('new storage key only; never writes old ryfly* keys', () => {
   assert.equal(TRICKS_KEY, 'quadmathSimTricks');
-  assert.equal(STORE_VER, 2);
+  assert.equal(STORE_VER, 3);
   assert.ok(src.includes('setItem(TRICKS_KEY') || src.includes('store.setItem(TRICKS_KEY'));
   assert.equal(src.includes('ryflyDroneType'), false);
   assert.equal(src.includes('ryflyRates'), false);
@@ -548,15 +553,21 @@ test('Ryan bug: normal turn, yaw drift, and carve are not a Trippy Spin', () => 
   assert.equal(punch.hits.includes('trippy'), false, 'open-air yaw punch stole trippy why=' + (punch.why || ''));
 });
 
-test('Trippy, flown: yaw about the vertical while the path orbits scores Trippy; a spin in place is a Yaw Spin', () => {
-  // Tilt, then yaw about the vertical at 5.8 rad/s from the orbit's speed:
-  // the thrust swings round and the path circles.
-  const orbit = fly([{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 5.8, thr: 0.6 }, { t: 0.6, thr: 0.5 }], { z0: 5, vy: -2.03, maxT: 3.7 });
-  assert.deepEqual(labels(orbit), ['trippy'], 'orbit why=' + (orbit.why || ''));
-  const f = orbit.feat, v = orbit.view;
+test('Trippy, flown: yaw about the vertical while the path orbits; tilted back (the tail to the centre) it is a Trippy, nose down on the centre it is not; a spin in place is a Yaw Spin', () => {
+  // Tilt back, then yaw about the vertical at 5.8 rad/s from the orbit's
+  // speed: the thrust swings round and the path circles, the tail inward.
+  const trip = fly([{ t: 0.125, pitch: -7, thr: 0.55 }, { t: 2.5, worldYaw: 5.8, thr: 0.6 }, { t: 0.6, thr: 0.5 }], { z0: 5, vy: 2.03, maxT: 3.7 });
+  assert.deepEqual(labels(trip), ['trippy'], 'tilted back why=' + (trip.why || ''));
+  const f = trip.feat, v = trip.view;
   assert.ok(v.yawSpan >= 4 * Math.PI && v.yawRate >= 300 * DEG, 'yaw ' + (v.yawSpan / DEG).toFixed(0) + ' at ' + (v.yawRate / DEG).toFixed(0));
   assert.ok(f.orbitR >= 0.3 && f.orbitR <= 2.5 && f.orbitSpd >= 1 && f.orbitSweep >= Math.PI, 'orbit r ' + f.orbitR.toFixed(2));
-  assert.equal(orbit.pole, 0, 'open air: no pole bonus');
+  assert.ok(f.orbitTail >= TRIPPY_TAIL, 'the tail to the centre ' + f.orbitTail.toFixed(2));
+  assert.equal(trip.pole, 0, 'open air: no pole bonus');
+  // The same tilted nose down: the nose on the centre, upright. Never a
+  // Trippy.
+  const orbit = fly([{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 5.8, thr: 0.6 }, { t: 0.6, thr: 0.5 }], { z0: 5, vy: -2.03, maxT: 3.7 });
+  assert.deepEqual(labels(orbit), [], 'nose down why=' + (orbit.why || ''));
+  assert.ok(orbit.feat.orbitTail <= 0.3, 'no tail to the centre ' + orbit.feat.orbitTail.toFixed(2));
   // The same spin in place beside the pole is a Yaw Spin (the old Trippy).
   const inPlace = fly([{ t: 1.15, yaw: 7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }], { ...NEAR_POLE, maxT: 2.1 });
   assert.deepEqual(labels(inPlace), ['yawspin'], 'in place why=' + (inPlace.why || ''));
@@ -604,7 +615,8 @@ function flyOrbit(opts) {
   const wx0 = cx + R, wz0 = cz;
   // World XZ circle → physics XY (wx=px*WS, wz=-py*WS). Camera-lock yaw
   // points at the object (meanDot≈0); tangent yaw follows velocity (≈1).
-  const yawAt = (th) => (look === 'tangent' ? (-Math.PI * 0.5 - th) : (Math.PI - th));
+  // look 'out': the nose away from the centre (the tail toward it).
+  const yawAt = (th) => (look === 'tangent' ? (-Math.PI * 0.5 - th) : look === 'out' ? -th : (Math.PI - th));
   const qOf = (yaw) => (o.inverted ? quatMul(quatYaw(yaw), INV_ROLL) : quatYaw(yaw));
   const q0 = qOf(yawAt(0));
   const vx0 = 0;
@@ -666,31 +678,49 @@ function assertTrippy(r, name) {
   assert.deepEqual(labels(r), ['trippy'], name + ' why=' + (r.why || '') + ' last=' + r.last);
 }
 
-test('Trippy, scripted: >= 360 deg at >= 150 deg/s on a full orbit of 0.3-2.5 m at >= 1 m/s, upright or inverted; a pole at the centre earns the bonus', () => {
+test('Trippy, scripted: >= 360 deg at >= 150 deg/s on a full orbit of 0.3 m or more at >= 1 m/s, the tail to the centre or the body inverted; a pole at the centre earns the bonus', () => {
   assert.ok(YARD_FICUS.r >= 0.5 && YARD_FICUS.r <= 0.7, 'ficus trunk after 1.25x ' + YARD_FICUS.r);
   assert.ok(BACKYARD_PLAY.planter.rOut >= 3.2 && BACKYARD_PLAY.planter.rOut <= 3.5, 'planter ' + BACKYARD_PLAY.planter.rOut);
   const M = WS;   // metres to scene units
-  const spins = [
-    { name: 'R0.35-v1.2', R: 0.35 * M, speed: 1.2, yawRate: 6.0, spinT: 2.3, cx: 0, cz: 0, colliders: [] },
-    { name: 'R0.8-v2', R: 0.8 * M, speed: 2, yawRate: 5.6, spinT: 3.0, cx: 0, cz: 0, colliders: [] },
-    { name: 'R1.5-v3.5', R: 1.5 * M, speed: 3.5, yawRate: 7, spinT: 3.2, cx: 0, cz: 0, colliders: [] },
-    { name: 'R2.4-v5', R: 2.4 * M, speed: 5, yawRate: 9, spinT: 3.6, cx: 0, cz: 0, colliders: [] },
-    { name: 'R0.8-ccw', R: 0.8 * M, speed: 2, yawRate: -6, spinT: 3.0, cx: 0, cz: 0, colliders: [] },
-    { name: 'R0.8-inverted', R: 0.8 * M, speed: 2, yawRate: 6, spinT: 3.0, cx: 0, cz: 0, colliders: [], inverted: true },
+  // The tail held on the centre (look 'out': one turn of yaw per orbit, the
+  // nose away from the centre), the way the owner flies it.
+  const out = [
+    { name: 'R0.35-v1.2', R: 0.35 * M, speed: 1.2 },
+    { name: 'R1-v3', R: 1 * M, speed: 3 },
+    { name: 'R1.5-v4.5', R: 1.5 * M, speed: 4.5 },
+    { name: 'R2.4-v7', R: 2.4 * M, speed: 7 },
+    // No top to the radius: 3 m at 9 m/s turns 172 deg/s.
+    { name: 'R3-v9', R: 3 * M, speed: 9 },
+    { name: 'ficus-R2', R: 2 * M, speed: 6, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL, pole: 1 },
+    { name: 'city-pole-R1', R: 1 * M, speed: 3, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL, pole: 1 },
+    { name: 'city-pole-R1-v6', R: 1 * M, speed: 6, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL, pole: 1 },
+    { name: 'garage-lamp-R0.8', R: 0.8 * M, speed: 2.4, cx: -6.2, cz: 8.2, colliders: GARAGE_LAMP_COL, pole: 1 },
+    { name: 'beside-ficus', R: 0.8 * M, speed: 2.4, cx: YARD_FICUS.x + 3 * M, cz: YARD_FICUS.z, colliders: FICUS_COL, pole: 0 },
+    // 360 degrees at 160 deg/s is enough.
+    { name: 'slow-160dps', R: 0.8 * M, speed: 2.24 },
+    // KISS rates, a stick of 0.55: 165 deg/s.
+    { name: 'kiss-ficus-R6 165dps', R: 6, yawS: 0.55, rates: WHOOP_KISS, seed: 407, noise: 0.06, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL, pole: 1 },
+  ].map((s) => ({ cx: 0, cz: 0, colliders: [], frac: 1.2, ...s, name: 'tail in ' + s.name, look: 'out' }));
+  // Upside down (synthetic only: no flown trace has the body inverted), the
+  // nose anywhere: spinning on its own, or locked on the centre.
+  const inv = [
+    { name: 'R0.35-v1.2', R: 0.35 * M, speed: 1.2, yawRate: 6.0, spinT: 2.3 },
+    { name: 'R0.8-v2', R: 0.8 * M, speed: 2, yawRate: 5.6, spinT: 3.0 },
+    { name: 'R1.5-v3.5', R: 1.5 * M, speed: 3.5, yawRate: 7, spinT: 3.2 },
+    { name: 'R2.4-v5', R: 2.4 * M, speed: 5, yawRate: 9, spinT: 3.6 },
+    { name: 'R0.8-ccw', R: 0.8 * M, speed: 2, yawRate: -6, spinT: 3.0 },
     { name: 'ficus-R2', R: 2 * M, speed: 4, yawRate: 6.5, spinT: 3.7, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL, pole: 1 },
     { name: 'city-pole-R1', R: 1 * M, speed: 2.5, yawRate: 6.5, spinT: 3.0, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL, pole: 1 },
     { name: 'garage-lamp-R0.8', R: 0.8 * M, speed: 2, yawRate: 6, spinT: 3.0, cx: -6.2, cz: 8.2, colliders: GARAGE_LAMP_COL, pole: 1 },
-    { name: 'beside-ficus', R: 0.8 * M, speed: 2, yawRate: 6, spinT: 3.0, cx: YARD_FICUS.x + 3 * M, cz: YARD_FICUS.z, colliders: FICUS_COL, pole: 0 },
-    // 360 degrees at 160 deg/s is enough.
-    { name: 'slow-160dps', R: 0.8 * M, speed: 2, yawRate: 2.8, spinT: 3.0, cx: 0, cz: 0, colliders: [] },
-    // So is a camera-lock orbit (one turn of yaw per orbit) when it is tight
-    // and fast: 1 m at 6 m/s turns 344 deg/s.
-    { name: 'camera-lock city-pole-R1-v6', R: 3.5, speed: 6, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL, pole: 1 },
-  ];
+    { name: 'slow-160dps', R: 0.8 * M, speed: 2, yawRate: 2.8, spinT: 3.0 },
+    { name: 'nose on the centre R1-v3', R: 1 * M, speed: 3, frac: 1.2 },
+  ].map((s) => ({ cx: 0, cz: 0, colliders: [], ...s, name: 'inverted ' + s.name, inverted: true }));
+  const spins = out.concat(inv);
   for (const spec of spins) {
     const r = flyOrbit(spec);
     assertTrippy(r, spec.name);
     assert.ok(r.feat.orbitSweep >= 2 * Math.PI, spec.name + ' a full orbit ' + r.feat.orbitSweep);
+    assert.ok(r.feat.orbitTail >= TRIPPY_TAIL, spec.name + ' tail ' + r.feat.orbitTail);
     if (spec.pole != null) assert.equal(r.pole, spec.pole, spec.name + ' pole bonus');
   }
   // The bonus: TRIPPY_POLE_MUL of the points.
@@ -698,18 +728,35 @@ test('Trippy, scripted: >= 360 deg at >= 150 deg/s on a full orbit of 0.3-2.5 m 
   assert.equal(scoreTrick('trippy', 0, 1, 1, {}), 500);
 });
 
-test('Trippy is not: camera-lock orbits wider than 2.5 m or slower than 150 deg/s, slow or short spins, half or three-quarter orbits, wide orbits, a spin flown straight', () => {
+test('Trippy is not: an upright orbit with the nose on the centre or spinning on its own, orbits slower than 150 deg/s, slow or short spins, half or three-quarter orbits, a spin flown straight', () => {
   const M = WS;
-  const lock = [
-    { name: 'ficus-R2.9-v8', R: 10, speed: 8, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
-    { name: 'city-pole-R1-v2', R: 3.5, speed: 2, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL },
-    { name: 'actual-ficus-R5', R: 5, yawS: 0.62, rates: WHOOP_ACTUAL, seed: 401, noise: 0.08, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
-    { name: 'kiss-ficus-R6', R: 6, yawS: 0.55, rates: WHOOP_KISS, seed: 407, noise: 0.06, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
-  ];
-  for (const spec of lock) {
+  // Upright, the nose on the centre (camera lock) or spinning on its own:
+  // however tight and fast, an upright orbit is never a Trippy (the tail
+  // share of a spin of its own is about a quarter).
+  const upright = [
+    { name: 'nose in R1-v3', R: 1 * M, speed: 3, frac: 1.2 },
+    { name: 'nose in city-pole-R1-v6', R: 3.5, speed: 6, frac: 1.2, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL },
+    { name: 'own spin R0.35-v1.2', R: 0.35 * M, speed: 1.2, yawRate: 6.0, spinT: 2.3 },
+    { name: 'own spin R0.8-v2', R: 0.8 * M, speed: 2, yawRate: 5.6, spinT: 3.0 },
+    { name: 'own spin R1.5-v3.5', R: 1.5 * M, speed: 3.5, yawRate: 7, spinT: 3.2 },
+    { name: 'own spin R0.8-ccw', R: 0.8 * M, speed: 2, yawRate: -6, spinT: 3.0 },
+    { name: 'own spin city-pole-R1', R: 1 * M, speed: 2.5, yawRate: 6.5, spinT: 3.0, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL },
+  ].map((s) => ({ cx: 0, cz: 0, colliders: [], ...s }));
+  for (const spec of upright) {
     const r = flyOrbit(spec);
     assert.equal(r.hits.includes('trippy'), false, spec.name + ' why=' + (r.why || ''));
+    assert.ok(r.feat.orbitTail < TRIPPY_TAIL, spec.name + ' tail ' + r.feat.orbitTail);
   }
+  // The tail in, but slower than 150 deg/s.
+  const lock = [
+    { name: 'city-pole-R1-v2', R: 3.5, speed: 2, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL },
+    { name: 'actual-ficus-R5 144dps', R: 5, yawS: 0.62, rates: WHOOP_ACTUAL, seed: 401, noise: 0.08, cx: YARD_FICUS.x, cz: YARD_FICUS.z, colliders: FICUS_COL },
+  ];
+  for (const spec of lock) {
+    const r = flyOrbit({ ...spec, look: 'out', frac: 1.2 });
+    assert.equal(r.hits.includes('trippy'), false, spec.name + ' why=' + (r.why || ''));
+  }
+  // Upside down (the tail term passes), each short of another gate.
   const not = [
     { name: 'slow yaw 140 deg/s', R: 0.8 * M, speed: 2, yawRate: 2.44, spinT: 3.0, cx: 0, cz: 0, colliders: [] },
     // A full orbit (6.7 rad) but 337 degrees of yaw.
@@ -719,11 +766,12 @@ test('Trippy is not: camera-lock orbits wider than 2.5 m or slower than 150 deg/
     { name: 'half orbit 200 deg', R: 0.8 * M, speed: 1.2, yawRate: 6.5, spinT: 2.3, cx: 0, cz: 0, colliders: [], sweep: [Math.PI, 2 * Math.PI] },
     { name: 'three-quarter orbit 290 deg', R: 0.8 * M, speed: 1.75, yawRate: 6.5, spinT: 2.3, cx: 0, cz: 0, colliders: [], sweep: [Math.PI, 2 * Math.PI] },
     { name: 'pole half orbit', R: 0.8 * M, speed: 1.2, yawRate: 6.5, spinT: 2.3, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL, sweep: [Math.PI, 2 * Math.PI] },
-    { name: 'wide orbit 3 m', R: 3 * M, speed: 4, yawRate: 7, spinT: 2.4, cx: 0, cz: 0, colliders: [] },
+    { name: 'wide orbit 3 m, 2.4 s', R: 3 * M, speed: 4, yawRate: 7, spinT: 2.4, cx: 0, cz: 0, colliders: [], sweep: [0, 2 * Math.PI] },
     { name: 'slow orbit 0.8 m/s', R: 0.5 * M, speed: 0.8, yawRate: 6.5, spinT: 2.4, cx: 0, cz: 0, colliders: [] },
     { name: 'flown straight', R: 1000 * M, speed: 3, yawRate: 7, spinT: 2.4, cx: 0, cz: 0, colliders: [] },
   ];
-  for (const spec of not) {
+  for (const s of not) {
+    const spec = { ...s, inverted: true };
     const r = flyOrbit(spec);
     assert.equal(r.hits.includes('trippy'), false, spec.name + ' why=' + (r.why || ''));
     if (spec.sweep) {
@@ -1544,26 +1592,28 @@ function orbitPilot(c, r0, vt, yawRate, z0, dirSign, hover, lead = 0) {
   };
 }
 
-test('bf core in the Rig: a full orbit of the spin pole is a Trippy with the pole bonus, three-quarters is not; a Barani is a Barani', async () => {
+// A Trippy flown tail-in is the js core's (LIBRARY trip-tilted-back): this
+// angle-mode pilot holding the tail on the pole drifts out to about 1 m and
+// 115 deg/s, short of the Trippy's 150.
+test('bf core in the Rig: a full orbit of the spin pole, upright and spinning on its own, is not a Trippy, nor three-quarters; a Barani is a Barani', async () => {
   // The spin pole: scene metres (3.0, -1.5), RIG_PLAY.pole; module (1.5, -3.0).
   const pole = { x: -RIG_PLAY.pole.z, y: -RIG_PLAY.pole.x };
   const r0 = 0.6, vt = 2.0;
-  const orbitFor = (spinEnd) => {
-    const pilot = orbitPilot(pole, r0, vt, 7.5, 2.0, -1, 0.38, 0.08);
-    return flyRig((t, s) => (t < spinEnd ? pilot(t, s) : { r: 0, p: 0, y: 0, t: 0.38 }), {
-      mode: 'angle', pos: { x: pole.x - r0, y: pole.y, z: 2.0 }, vel: { x: 0, y: vt, z: 0 }, maxT: spinEnd + 0.6,
-    });
-  };
-  // Spinning from 0.3 s to 4.0 s: the path goes all the way round (about 425 deg).
-  const trip = await orbitFor(4.0);
-  assert.equal(trip.contacts, 0, 'clear of the pole');
-  assert.deepEqual(trip.hits, ['trippy'], 'why ' + trip.whys.join(' | '));
-  assert.equal(trip.pole, 1, 'the pole at the centre');
-  const f = trip.feat, v = featView(f);
+  const rigOrbit = (pilot, spinEnd) => flyRig((t, s) => (t < spinEnd ? pilot(t, s) : { r: 0, p: 0, y: 0, t: 0.38 }), {
+    mode: 'angle', pos: { x: pole.x - r0, y: pole.y, z: 2.0 }, vel: { x: 0, y: vt, z: 0 }, maxT: spinEnd + 0.6,
+  });
+  const orbitFor = (spinEnd) => rigOrbit(orbitPilot(pole, r0, vt, 7.5, 2.0, -1, 0.38, 0.08), spinEnd);
+  // Spinning from 0.3 s to 4.0 s: the path goes all the way round (about
+  // 425 deg), upright, the nose all round the compass: no Trippy.
+  const orb = await orbitFor(4.0);
+  assert.equal(orb.contacts, 0, 'clear of the pole');
+  assert.equal(orb.hits.includes('trippy'), false, 'why ' + orb.whys.join(' | '));
+  const f = orb.feat, v = featView(f);
   assert.ok(v.yawSpan >= 4 * Math.PI && v.yawRate >= 300 * DEG);
   assert.ok(f.orbitR >= 0.3 && f.orbitR <= 2.5 && f.orbitSpd >= 1);
   assert.ok(f.orbitSweep >= 2 * Math.PI, 'a full orbit ' + f.orbitSweep);
-  // The same spin stopped at 2.7 s: over 720 deg of yaw, but the path only
+  assert.ok(f.orbitTail < TRIPPY_TAIL, 'upright, spinning on its own: tail ' + f.orbitTail);
+  // The spin stopped at 2.7 s: over 720 deg of yaw, but the path only
   // three-quarters of the way round (about 280 deg).
   const part = await orbitFor(2.7);
   assert.equal(part.contacts, 0);
@@ -1792,11 +1842,11 @@ test('Double Powerloop: two loops in one segment (past the 4.5 s cap) are one Po
 
 test('sustained: a Trippy or a Yaw Spin past 4.5 s is one trick while it keeps turning, cut at 10 s', () => {
   const M = WS;
-  const long = flyOrbit({ R: 0.8 * M, speed: 2, yawRate: 6, spinT: 7, cx: 0, cz: 0, colliders: [] });
+  const long = flyOrbit({ R: 0.8 * M, speed: 2, yawRate: 6, spinT: 7, cx: 0, cz: 0, colliders: [], inverted: true });
   assert.deepEqual(labels(long), ['trippy'], long.why);
   assert.ok(long.feat.dur > 6.5 && long.feat.dur < MANEUVER_SUSTAIN_S, 'one segment of ' + long.feat.dur + ' s');
   // 14 s of spin: the first 10 s, then the rest.
-  const longer = flyOrbit({ R: 0.8 * M, speed: 2, yawRate: 6, spinT: 14, cx: 0, cz: 0, colliders: [] });
+  const longer = flyOrbit({ R: 0.8 * M, speed: 2, yawRate: 6, spinT: 14, cx: 0, cz: 0, colliders: [], inverted: true });
   assert.deepEqual(labels(longer), ['trippy', 'trippy'], longer.why);
   // A yaw spin in place for 6 s.
   const spin = fly([{ t: 6, yaw: 5, thr: 0.5 }, { t: 0.8, yaw: 0, thr: 0.5 }], { z0: 6, maxT: 7.2 });
@@ -1920,10 +1970,10 @@ test('normalizeStore rejects junk and keeps hud default on', () => {
 // Store version 2: a gap no longer scores, and the bests saved before it
 // counted the Gap trick. Loading drops them (a store with no version is the
 // first); the HUD and debug settings stay, and so do version 2's bests.
-test('store version 2: bests saved under version 1 (Gap scored) are dropped on load; the HUD and debug settings stay', () => {
+test('store version 3: bests saved under versions 1 (Gap scored) and 2 (an upright orbit scored as a Trippy) are dropped on load; the HUD and debug settings stay', () => {
   const old = { v: 1, hud: false, debug: true, maps: { rig: { bestCombo: 3000, bestSession: 9000 }, city: { bestCombo: 400, bestSession: 700 } } };
   const s1 = normalizeStore(old);
-  assert.equal(s1.v, 2);
+  assert.equal(s1.v, 3);
   assert.equal(s1.hud, false, 'HUD setting kept');
   assert.equal(s1.debug, true, 'debug setting kept');
   assert.deepEqual(Object.keys(s1.maps), [], 'version 1 bests dropped');
@@ -1932,9 +1982,13 @@ test('store version 2: bests saved under version 1 (Gap scored) are dropped on l
   const s0 = normalizeStore({ hud: false, maps: { rig: { bestCombo: 50, bestSession: 60 } } });
   assert.equal(s0.hud, false);
   assert.deepEqual(Object.keys(s0.maps), []);
-  // Version 2's own bests stay.
+  // Version 2's bests go too (an upright orbit scored 500 as a Trippy).
   const s2 = normalizeStore({ v: 2, hud: true, debug: false, maps: { rig: { bestCombo: 120, bestSession: 340 } } });
-  assert.deepEqual(bestForMap(s2, 'rig'), { bestCombo: 120, bestSession: 340 });
+  assert.deepEqual(bestForMap(s2, 'rig'), { bestCombo: 0, bestSession: 0 });
+  assert.equal(s2.hud, true);
+  // Version 3's own bests stay.
+  const s3 = normalizeStore({ v: 3, hud: true, debug: false, maps: { rig: { bestCombo: 120, bestSession: 340 } } });
+  assert.deepEqual(bestForMap(s3, 'rig'), { bestCombo: 120, bestSession: 340 });
   // Through the page's own path: a browser holding a version 1 store.
   const store = memStore();
   store.setItem(TRICKS_KEY, JSON.stringify(old));
@@ -1942,10 +1996,10 @@ test('store version 2: bests saved under version 1 (Gap scored) are dropped on l
   assert.deepEqual(tricks.bestFor('rig'), { bestCombo: 0, bestSession: 0 }, 'no old best in the menu');
   assert.equal(tricks.hudOn(), false);
   assert.equal(tricks.debugOn(), true);
-  // The next save writes version 2, without the old bests.
+  // The next save writes version 3, without the old bests.
   tricks.setHudOn(true);
   const saved = JSON.parse(store.getItem(TRICKS_KEY));
-  assert.equal(saved.v, 2);
+  assert.equal(saved.v, 3);
   assert.equal(saved.hud, true);
   assert.equal(saved.debug, true);
   assert.deepEqual(saved.maps, {});
