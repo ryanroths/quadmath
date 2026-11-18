@@ -670,18 +670,21 @@ const PAGE = String.raw`(() => {
   // A rAF callback runs every frame. A timer poll (until) on a slow runner
   // can come frames late, and reads its wall time then against the sim's
   // time at the last frame, so the two drift apart by how late each end ran.
-  // inStart, if given, is called on every frame until start() is met.
-  function framesUntil(start, end, ms, inStart) {
+  // startMs and endMs: how long each may take on the wall clock (end from the
+  // start's frame). inStart, if given, is called on every frame until start()
+  // is met.
+  function framesUntil(start, end, startMs, endMs, inStart) {
     return new Promise((resolve) => {
-      const t0 = performance.now();
+      let t0 = performance.now();
       let a = null, b = null;
       const f = (ts) => {
         const flightMs = s.coreState().flightMs;
         if (a === null) {
           if (inStart) inStart();
-          if (start()) a = { ts, flightMs };
+          if (start()) { a = { ts, flightMs }; t0 = performance.now(); }
+          else if (performance.now() - t0 > startMs) { resolve({ a, b }); return; }
         } else if (end()) b = { ts, flightMs };
-        if (b || performance.now() - t0 > ms) { resolve({ a, b }); return; }
+        if (b || (a && performance.now() - t0 > endMs)) { resolve({ a, b }); return; }
         requestAnimationFrame(f);
       };
       requestAnimationFrame(f);
@@ -953,7 +956,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         r = await js(`
           E.thr(0);
           let armedInAir = true;
-          const fr = await E.framesUntil(E.landed, () => !E.s.coreState().armed, 14000, () => { if (!E.landed()) armedInAir = armedInAir && E.s.coreState().armed; });
+          const fr = await E.framesUntil(E.landed, () => !E.s.coreState().armed, 8000, 6000, () => { if (!E.landed()) armedInAir = armedInAir && E.s.coreState().armed; });
           const down = !!fr.a, off = !!fr.b;
           return JSON.stringify({ down, armedInAir, off, ms: off ? fr.b.ts - fr.a.ts : null, simMs: off ? fr.b.flightMs - fr.a.flightMs : null });`);
         console.log('disarm: ' + JSON.stringify(r));
@@ -1372,7 +1375,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           const up = E.state();
           E.thr(0);
           // First frame landed to first frame disarmed, on both clocks (framesUntil).
-          const fr = await E.framesUntil(E.landed, () => !E.s.coreState().armed, 14000);
+          const fr = await E.framesUntil(E.landed, () => !E.s.coreState().armed, 8000, 6000);
           const down = !!fr.a, off = !!fr.b;
           return JSON.stringify({ held, armed, up: up.z, down, off, ms: off ? fr.b.ts - fr.a.ts : null, simMs: off ? fr.b.flightMs - fr.a.flightMs : null, reason: E.s.easy().disarmReason });`);
         console.log('js radio: ' + JSON.stringify(r));

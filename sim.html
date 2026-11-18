@@ -9169,6 +9169,12 @@ function bfTurtleSample(){
   bfTurtleSampled=true;
   if(!bfTurtleOnTicks()||core.simTimeUs<core.lastInputUs)return;
   bfTurtleTick();
+  // Ended on this tick: bfArmWatch, once a frame, takes the arm as the turtle
+  // left it. A frame can end in the few ms Betaflight is disarmed between the
+  // turtle's own disarm and re-arm, and the next would then toast ARMED; or
+  // armed in its roll, and an 'ended' would toast DISARMED twice. On the poll
+  // a frame always showed the turtle's last state before it ended.
+  if(core.turtlePhase==null)bfWasArmed=!!core.sim.fc.armed;
   // Re-armed on this tick (turtleRearmed): roll and pitch wait for centre, as in pollInput.
   core.input(turtleStickHold?Object.assign({},stick,{r:0,p:0}):stick,core.simTimeUs);
 }
