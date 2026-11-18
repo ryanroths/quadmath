@@ -15,7 +15,7 @@ import {
   emptyStore, normalizeStore, loadStore, saveStore, recordBest, bestLine, bestForMap,
   makeDetector, resetDetector, stepDetector, encodeRecJson, REC_KEYS,
   makeCombo, resetCombo, pushCombo, comboRemain,
-  createTricks, makeFeat, trickLineupText, TRIPPY_POLE_MUL, TRIPPY_TAIL,
+  createTricks, makeFeat, trickLineupText, TRIPPY_POLE_MUL, TRIPPY_TAIL, ORBIT_TAIL,
   trickName, MANEUVER_MAX_S, MANEUVER_SUSTAIN_S,
   PHASE_SPECS, matchSpec, MAV_GAP_MUL, PH_SLOP, MERGE_GAP_S, TWIST_SPD,
 } from '../sim-tricks.js';
@@ -290,12 +290,12 @@ const LIBRARY = [
   { id: 'yawspin', name: 'pole-spin-fast', phases: [{ t: 0.95, yaw: 8.2, thr: 0.5 }, { t: 0.45, yaw: 0, thr: 0.44 }], opts: { ...NEAR_POLE, z0: 2.2, maxT: 1.9 } },
   { id: 'yawspin', name: 'pole-spin-ccw', phases: [{ t: 1.15, yaw: -7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }], opts: { ...NEAR_POLE, maxT: 2.1 } },
   { id: 'yawspin', name: 'tree-spin', phases: [{ t: 1.15, yaw: 7.4, thr: 0.5 }, { t: 0.5, yaw: 0, thr: 0.44 }], opts: { ...NEAR_TREE, maxT: 2.1 } },
-  // Tilt nose down, then yaw about the vertical (the thrust swings round and
-  // the path orbits, the nose on the centre), starting at the orbit's speed
-  // a / w along it: an upright orbit, no Trippy.
-  { id: null, name: 'orbit-nose-down', phases: [{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 5.8, thr: 0.6 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: -2.03, maxT: 3.7 } },
-  { id: null, name: 'orbit-nose-down-fast', phases: [{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 6.3, thr: 0.7 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: -1.86, maxT: 3.7 } },
-  { id: null, name: 'orbit-nose-down-cw', phases: [{ t: 0.14, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: -6.0, thr: 0.65 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: 2.4, maxT: 3.7 } },
+  // Orbit: tilt nose down, then yaw about the vertical (the thrust swings
+  // round and the path orbits, the nose on the centre), starting at the
+  // orbit's speed a / w along it.
+  { id: 'orbit', name: 'orbit-nose-down', phases: [{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 5.8, thr: 0.6 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: -2.03, maxT: 3.7 } },
+  { id: 'orbit', name: 'orbit-nose-down-fast', phases: [{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 6.3, thr: 0.7 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: -1.86, maxT: 3.7 } },
+  { id: 'orbit', name: 'orbit-nose-down-cw', phases: [{ t: 0.14, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: -6.0, thr: 0.65 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: 2.4, maxT: 3.7 } },
   // Trippy: the same tilted back (nose up, the tail toward the centre).
   { id: 'trippy', name: 'trip-tilted-back', phases: [{ t: 0.125, pitch: -7, thr: 0.55 }, { t: 2.5, worldYaw: 5.8, thr: 0.6 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: 2.03, maxT: 3.7 } },
   { id: 'trippy', name: 'trip-tilted-back-fast', phases: [{ t: 0.125, pitch: -7, thr: 0.55 }, { t: 2.5, worldYaw: 6.3, thr: 0.7 }, { t: 0.6, thr: 0.5 }], opts: { z0: 5, vy: 1.86, maxT: 3.7 } },
@@ -553,7 +553,7 @@ test('Ryan bug: normal turn, yaw drift, and carve are not a Trippy Spin', () => 
   assert.equal(punch.hits.includes('trippy'), false, 'open-air yaw punch stole trippy why=' + (punch.why || ''));
 });
 
-test('Trippy, flown: yaw about the vertical while the path orbits; tilted back (the tail to the centre) it is a Trippy, nose down on the centre it is not; a spin in place is a Yaw Spin', () => {
+test('Trippy and Orbit, flown: yaw about the vertical while the path orbits; tilted back (the tail to the centre) it is a Trippy, nose down on the centre an Orbit; a spin in place is a Yaw Spin', () => {
   // Tilt back, then yaw about the vertical at 5.8 rad/s from the orbit's
   // speed: the thrust swings round and the path circles, the tail inward.
   const trip = fly([{ t: 0.125, pitch: -7, thr: 0.55 }, { t: 2.5, worldYaw: 5.8, thr: 0.6 }, { t: 0.6, thr: 0.5 }], { z0: 5, vy: 2.03, maxT: 3.7 });
@@ -563,11 +563,11 @@ test('Trippy, flown: yaw about the vertical while the path orbits; tilted back (
   assert.ok(f.orbitR >= 0.3 && f.orbitR <= 2.5 && f.orbitSpd >= 1 && f.orbitSweep >= Math.PI, 'orbit r ' + f.orbitR.toFixed(2));
   assert.ok(f.orbitTail >= TRIPPY_TAIL, 'the tail to the centre ' + f.orbitTail.toFixed(2));
   assert.equal(trip.pole, 0, 'open air: no pole bonus');
-  // The same tilted nose down: the nose on the centre, upright. Never a
-  // Trippy.
+  // The same tilted nose down: the nose on the centre, upright. An Orbit,
+  // never a Trippy.
   const orbit = fly([{ t: 0.125, pitch: 7, thr: 0.55 }, { t: 2.5, worldYaw: 5.8, thr: 0.6 }, { t: 0.6, thr: 0.5 }], { z0: 5, vy: -2.03, maxT: 3.7 });
-  assert.deepEqual(labels(orbit), [], 'nose down why=' + (orbit.why || ''));
-  assert.ok(orbit.feat.orbitTail <= 0.3, 'no tail to the centre ' + orbit.feat.orbitTail.toFixed(2));
+  assert.deepEqual(labels(orbit), ['orbit'], 'nose down why=' + (orbit.why || ''));
+  assert.ok(orbit.feat.orbitTail <= ORBIT_TAIL && orbit.feat.orbit2Tail <= ORBIT_TAIL, 'no tail to the centre ' + orbit.feat.orbitTail.toFixed(2));
   // The same spin in place beside the pole is a Yaw Spin (the old Trippy).
   const inPlace = fly([{ t: 1.15, yaw: 7.2, thr: 0.48 }, { t: 0.5, yaw: 0, thr: 0.42 }], { ...NEAR_POLE, maxT: 2.1 });
   assert.deepEqual(labels(inPlace), ['yawspin'], 'in place why=' + (inPlace.why || ''));
@@ -634,15 +634,17 @@ function flyOrbit(opts) {
   const maxT = o.maxT || (spinT + settle + 0.12);
   while (t < maxT) {
     const spinning = t < spinT + 0.02;
-    const om = spinning ? (yawRate || omega) : 0;
-    if (spinning) theta += omega * dt;
+    // rateAt(t): the orbit's rate (and speed) times this, for a camera lock.
+    const k = o.rateAt ? o.rateAt(t) : 1;
+    const om = spinning ? (yawRate || omega * k) : 0;
+    if (spinning) theta += omega * k * dt;
     if (spinning && yawRate) yawNow += yawRate * dt;
     const rr = R + (drift ? drift * Math.sin(theta * 2) : 0);
     const wx = cx + rr * Math.cos(theta);
     const wz = cz + rr * Math.sin(theta);
     const q = yawRate ? qOf(yawNow) : qOf(yawAt(theta));
-    const vx = -Math.sin(theta) * speedM;
-    const vy = -Math.cos(theta) * speedM;
+    const vx = -Math.sin(theta) * speedM * k;
+    const vy = -Math.cos(theta) * speedM * k;
     let ox = 0, oy = 0;
     if (rng && noise && spinning) {
       ox = (rng() - 0.5) * noise * 1.2;
@@ -652,7 +654,7 @@ function flyOrbit(opts) {
       qx: q.x, qy: q.y, qz: q.z, qw: q.w,
       ox, oy, oz: om,
       wx, wy: 7, wz, alt: 2,
-      speed: speedM, vx, vy, vz: 0,
+      speed: speedM * k, vx, vy, vz: 0,
       clearance: 2, throttle: 0.5, armed: true, colliders, ws: WS,
     }, dt);
     if (ev && TRICK_BY_ID[ev]) hits.push(ev);
@@ -728,11 +730,11 @@ test('Trippy, scripted: >= 360 deg at >= 150 deg/s on a full orbit of 0.3 m or m
   assert.equal(scoreTrick('trippy', 0, 1, 1, {}), 500);
 });
 
-test('Trippy is not: an upright orbit with the nose on the centre or spinning on its own, orbits slower than 150 deg/s, slow or short spins, half or three-quarter orbits, a spin flown straight', () => {
+test('Trippy is not: an upright orbit with the nose on the centre or spinning on its own (an Orbit), orbits slower than 150 deg/s, slow or short spins, half or three-quarter orbits, a spin flown straight', () => {
   const M = WS;
   // Upright, the nose on the centre (camera lock) or spinning on its own:
-  // however tight and fast, an upright orbit is never a Trippy (the tail
-  // share of a spin of its own is about a quarter).
+  // however tight and fast, an upright orbit is never a Trippy. Each is an
+  // Orbit (the tail share of a spin of its own is about a quarter).
   const upright = [
     { name: 'nose in R1-v3', R: 1 * M, speed: 3, frac: 1.2 },
     { name: 'nose in city-pole-R1-v6', R: 3.5, speed: 6, frac: 1.2, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL },
@@ -746,6 +748,7 @@ test('Trippy is not: an upright orbit with the nose on the centre or spinning on
     const r = flyOrbit(spec);
     assert.equal(r.hits.includes('trippy'), false, spec.name + ' why=' + (r.why || ''));
     assert.ok(r.feat.orbitTail < TRIPPY_TAIL, spec.name + ' tail ' + r.feat.orbitTail);
+    assert.deepEqual(labels(r), ['orbit'], spec.name + ' why=' + (r.why || ''));
   }
   // The tail in, but slower than 150 deg/s.
   const lock = [
@@ -778,6 +781,35 @@ test('Trippy is not: an upright orbit with the nose on the centre or spinning on
       const sw = r.feat.orbitSweep;
       assert.ok(sw >= spec.sweep[0] && sw < spec.sweep[1], spec.name + ' sweep ' + sw);
     }
+  }
+});
+
+test('Orbit: a full orbit, upright, >= 360 deg of yaw inside 4.4 s at >= 90 deg/s, 0.3 m or more at >= 1 m/s; 75 points, 100 indoors, the pole bonus as the Trippy\'s', () => {
+  const M = WS;
+  const def = TRICK_BY_ID.orbit;
+  assert.equal(def.tier, 'Beginner');
+  assert.equal(trickPoints('orbit', false), 75);
+  assert.equal(trickPoints('orbit', true), 100);
+  assert.equal(scoreTrick('orbit', 0, 1, 1, { bonus: TRIPPY_POLE_MUL }), Math.round(75 * TRIPPY_POLE_MUL));
+  // Nose in at 100 deg/s, 1 m: one orbit in 3.6 s, 1.15 of them in 4.1 s.
+  const slow = flyOrbit({ R: 1 * M, speed: 100 * DEG, frac: 1.15, cx: 0, cz: 0, colliders: [] });
+  assert.deepEqual(labels(slow), ['orbit'], 'slow why=' + (slow.why || ''));
+  assert.equal(slow.pole, 0, 'open air');
+  // Round the city pole: the bonus.
+  const pole = flyOrbit({ R: 1 * M, speed: 2, frac: 1.2, cx: CITY_POLE.x, cz: CITY_POLE.z, colliders: CITY_POLE_COL });
+  assert.deepEqual(labels(pole), ['orbit'], 'pole why=' + (pole.why || ''));
+  assert.equal(pole.pole, 1, 'the pole at the centre');
+  // Not: 75 deg/s (330 deg inside the 4.4 s window), three-quarters of an
+  // orbit, a 0.25 m orbit, a crawl under 1 m/s.
+  const crawl = [
+    { name: '75 deg/s', R: 1 * M, speed: 75 * DEG, frac: 1.2 },
+    { name: 'three-quarters', R: 1 * M, speed: 2, frac: 0.75 },
+    { name: '0.25 m', R: 0.25 * M, speed: 0.6, frac: 1.2 },
+    { name: '0.9 m/s', R: 0.5 * M, speed: 0.9, frac: 1.2 },
+  ];
+  for (const s of crawl) {
+    const r = flyOrbit({ cx: 0, cz: 0, colliders: [], ...s });
+    assert.equal(r.hits.includes('orbit'), false, s.name + ' why=' + (r.why || ''));
   }
 });
 
@@ -1170,9 +1202,9 @@ test('bf core: every trick type, flown on sim-core and sampled every 4 ms, is it
     flown.add(c.id);
   }
   assert.equal(confuse.length, 0, 'bf core confusion:\n' + confuse.join('\n'));
-  // Trippy and Barani fly on the bf core in the Rig, in the tests below.
+  // Trippy, Orbit and Barani fly on the bf core in the Rig, in the tests below.
   for (const id of new Set(LIBRARY.map((c) => c.id))) {
-    if (id && id !== 'trippy' && id !== 'barani') assert.ok(flown.has(id), id + ' flown on the bf core');
+    if (id && id !== 'trippy' && id !== 'orbit' && id !== 'barani') assert.ok(flown.has(id), id + ' flown on the bf core');
   }
 });
 
@@ -1595,7 +1627,7 @@ function orbitPilot(c, r0, vt, yawRate, z0, dirSign, hover, lead = 0) {
 // A Trippy flown tail-in is the js core's (LIBRARY trip-tilted-back): this
 // angle-mode pilot holding the tail on the pole drifts out to about 1 m and
 // 115 deg/s, short of the Trippy's 150.
-test('bf core in the Rig: a full orbit of the spin pole, upright and spinning on its own, is not a Trippy, nor three-quarters; a Barani is a Barani', async () => {
+test('bf core in the Rig: a full orbit of the spin pole, upright and spinning on its own, is an Orbit with the pole bonus, not a Trippy; three-quarters is neither; a Barani is a Barani', async () => {
   // The spin pole: scene metres (3.0, -1.5), RIG_PLAY.pole; module (1.5, -3.0).
   const pole = { x: -RIG_PLAY.pole.z, y: -RIG_PLAY.pole.x };
   const r0 = 0.6, vt = 2.0;
@@ -1604,10 +1636,11 @@ test('bf core in the Rig: a full orbit of the spin pole, upright and spinning on
   });
   const orbitFor = (spinEnd) => rigOrbit(orbitPilot(pole, r0, vt, 7.5, 2.0, -1, 0.38, 0.08), spinEnd);
   // Spinning from 0.3 s to 4.0 s: the path goes all the way round (about
-  // 425 deg), upright, the nose all round the compass: no Trippy.
+  // 425 deg), upright, the nose all round the compass: an Orbit.
   const orb = await orbitFor(4.0);
   assert.equal(orb.contacts, 0, 'clear of the pole');
-  assert.equal(orb.hits.includes('trippy'), false, 'why ' + orb.whys.join(' | '));
+  assert.deepEqual(orb.hits, ['orbit'], 'why ' + orb.whys.join(' | '));
+  assert.equal(orb.pole, 1, 'the pole at the centre');
   const f = orb.feat, v = featView(f);
   assert.ok(v.yawSpan >= 4 * Math.PI && v.yawRate >= 300 * DEG);
   assert.ok(f.orbitR >= 0.3 && f.orbitR <= 2.5 && f.orbitSpd >= 1);
@@ -1618,6 +1651,7 @@ test('bf core in the Rig: a full orbit of the spin pole, upright and spinning on
   const part = await orbitFor(2.7);
   assert.equal(part.contacts, 0);
   assert.equal(part.hits.includes('trippy'), false, 'why ' + part.whys.join(' | '));
+  assert.equal(part.hits.includes('orbit'), false, 'why ' + part.whys.join(' | '));
   assert.ok(featView(part.feat).yawSpan >= 4 * Math.PI, 'the yaw is there');
   assert.ok(part.feat.orbitSweep > Math.PI && part.feat.orbitSweep < 2 * Math.PI, 'short of a full orbit ' + part.feat.orbitSweep);
   // Barani in acro: pitch till the nose is down, a half twist there, pitch
@@ -1840,7 +1874,7 @@ test('Double Powerloop: two loops in one segment (past the 4.5 s cap) are one Po
   }
 });
 
-test('sustained: a Trippy or a Yaw Spin past 4.5 s is one trick while it keeps turning, cut at 10 s', () => {
+test('sustained: a Trippy or a Yaw Spin past 4.5 s is one trick while it keeps turning, cut at 10 s; an Orbit scores once however long it goes on', () => {
   const M = WS;
   const long = flyOrbit({ R: 0.8 * M, speed: 2, yawRate: 6, spinT: 7, cx: 0, cz: 0, colliders: [], inverted: true });
   assert.deepEqual(labels(long), ['trippy'], long.why);
@@ -1848,6 +1882,23 @@ test('sustained: a Trippy or a Yaw Spin past 4.5 s is one trick while it keeps t
   // 14 s of spin: the first 10 s, then the rest.
   const longer = flyOrbit({ R: 0.8 * M, speed: 2, yawRate: 6, spinT: 14, cx: 0, cz: 0, colliders: [], inverted: true });
   assert.deepEqual(labels(longer), ['trippy', 'trippy'], longer.why);
+  // Upright, the same 14 s is one Orbit: the piece after the 10 s cut goes
+  // straight on from it and scores nothing.
+  const orb = flyOrbit({ R: 0.8 * M, speed: 2, yawRate: 6, spinT: 14, cx: 0, cz: 0, colliders: [] });
+  assert.deepEqual(labels(orb), ['orbit'], orb.why);
+  // So is 14 s of nose-in camera lock (three and a half orbits at 143 deg/s).
+  const lock = flyOrbit({ R: 0.8 * M, speed: 2, frac: 3.5, cx: 0, cz: 0, colliders: [] });
+  assert.deepEqual(labels(lock), ['orbit'], lock.why);
+  // An orbit that slows between two faster stretches, nose in: 126 deg/s
+  // for 4.5 s (an Orbit, cut at the cap), 77 deg/s for 4.5 s (340 degrees:
+  // no Orbit alone, but still orbiting), 126 again: one Orbit.
+  const W1 = 2.2, W2 = 1.35, cut = (t) => (t < 4.5 || t >= 9 ? 1 : W2 / W1);
+  const uneven = flyOrbit({ R: 1 * M, speed: W1, frac: 13.5 * W1 / TAU, rateAt: cut, cx: 0, cz: 0, colliders: [] });
+  assert.deepEqual(labels(uneven), ['orbit'], uneven.why);
+  // Stopped for 1.5 s between (over MERGE_GAP_S): two Orbits.
+  const stop = (t) => (t < 4.5 ? 1 : t < 6 ? 0 : 1);
+  const two = flyOrbit({ R: 1 * M, speed: W1, frac: 9 * W1 / TAU, rateAt: stop, maxT: 11, cx: 0, cz: 0, colliders: [] });
+  assert.deepEqual(labels(two), ['orbit', 'orbit'], two.why);
   // A yaw spin in place for 6 s.
   const spin = fly([{ t: 6, yaw: 5, thr: 0.5 }, { t: 0.8, yaw: 0, thr: 0.5 }], { z0: 6, maxT: 7.2 });
   assert.deepEqual(labels(spin), ['yawspin'], spin.why);

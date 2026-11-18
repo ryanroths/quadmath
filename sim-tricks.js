@@ -73,13 +73,22 @@ export const LOOP_TWO = 10.472;
 // tilted back round the centre (the tail toward it: the nose points away
 // from it, within NOSE_SIDE of the vertical plane through it) or upside down
 // (body up-Z < 0). That is the picture upside down in the goggles whatever
-// the cam tilt; an upright orbit, the nose and camera on the centre, is not
-// one. The body may roll as it spins.
+// the cam tilt; an upright orbit, the nose and camera on the centre, is an
+// Orbit. The body may roll as it spins.
 // The orbit centre within POLE_NEAR_M of a pole or post (a collider at most
-// POLE_W_M across and at least POLE_H_M tall) earns TRIPPY_POLE_MUL points.
+// POLE_W_M across and at least POLE_H_M tall) earns TRIPPY_POLE_MUL points
+// (an Orbit's too).
 export const TRIPPY_WIN_S = 2.4;
 export const TRIPPY_TAIL = 0.7;
 export const NOSE_SIDE = 0.7;
+// Orbit: >= 360 degrees about the vertical inside ORBIT_WIN_S at >= ORBIT_RATE
+// (90 deg/s: a lap in 4.0 s, inside the 4.5 s segment cap) while the path
+// orbits a centre as Trippy's does, measured over the whole orbit at
+// TRIPPY_HOLD of ORBIT_RATE, upright: ORBIT_TAIL of it or less tilted back or
+// inverted. One orbit cut at the cap into segments scores once.
+export const ORBIT_WIN_S = 4.4;
+export const ORBIT_RATE = 1.571;
+export const ORBIT_TAIL = 0.3;
 // The spin's rate (150 deg/s), and the share of it the spin keeps while the
 // orbit is measured over all of it.
 export const TRIPPY_RATE = 2.618;
@@ -162,6 +171,7 @@ export const TRICK_LIST = Object.freeze([
   Object.freeze({ id: 'immelmann', name: 'Immelmann', tier: 'Beginner', points: 100, pointsIn: 100, type: "Split S'" }),
   Object.freeze({ id: 'dive', name: 'Building Dive', tier: 'Beginner', points: 100, pointsIn: 100, type: 'Wall Tricks' }),
   Object.freeze({ id: 'cradle', name: 'Cradle', tier: 'Beginner', points: 150, pointsIn: 150, type: 'Pole Dancing' }),
+  Object.freeze({ id: 'orbit', name: 'Orbit', tier: 'Beginner', points: 75, pointsIn: 100, type: 'Pole Dancing' }),
   Object.freeze({ id: 'prox', name: 'Proximity', tier: 'Beginner', points: 150, pointsIn: 150, type: 'Wall Tricks' }),
   Object.freeze({ id: 'powerloop', name: 'Powerloop', tier: 'Novice', points: 200, pointsIn: 200, type: 'Powerloops' }),
   Object.freeze({ id: 'sideloop', name: 'Side Loop', tier: 'Novice', points: 200, pointsIn: 225, type: 'Jump Ropes' }),
@@ -192,11 +202,11 @@ const HALF = PI * 0.78;
 const FULL = 5.2;
 const QTR = 1.15;
 const CLASS_IDS = [
-  'halfmavvy', 'rubik', 'cubik', 'barani', 'immelmann', 'ham', 'trippy', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
+  'halfmavvy', 'rubik', 'cubik', 'barani', 'immelmann', 'ham', 'trippy', 'orbit', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
   'powerloop', 'matty', 'maverick', 'splits', 'cradle', 'flip', 'roll', 'yawspin',
 ];
 const SPEC = {
-  halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, barani: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
+  halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, barani: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, orbit: 0.05, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
   halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
   cradle: 0.08, flip: 0, roll: 0, yawspin: 0,
 };
@@ -520,6 +530,10 @@ export function makeFeat() {
     // Trippy: the share of the orbit's steps tilted back round its centre or
     // inverted (TRIPPY_TAIL).
     orbitTail: 0,
+    // Orbit: the turn about the vertical inside ORBIT_WIN_S (as yawUp..yawDnT)
+    // and the orbit over it, as Trippy's (ORBIT_RATE).
+    slowUp: 0, slowDn: 0, slowUpT: 0, slowDnT: 0,
+    orbit2R: 0, orbit2Sweep: 0, orbit2Turn: 0, orbit2Spd: 0, orbit2Tail: 0, orbit2Pole: 0,
     // Barani (baraniWithin): the pitch path and |twist| of the stretch that
     // scores best as a Barani's, the twist inside the pitch; up-Z at the end.
     barP: 0, barR: 0, upEnd: 1,
@@ -566,6 +580,8 @@ export function resetFeat(f) {
   f.yawUp = 0; f.yawDn = 0; f.yawUpT = 0; f.yawDnT = 0; f.vyaw = 0; f.twist = 0;
   f.orbitR = 0; f.orbitFit = 9; f.orbitSweep = 0; f.orbitTurn = 0; f.orbitSpd = 0; f.orbitCx = 0; f.orbitCz = 0; f.orbitPole = 0;
   f.orbitTa = 0; f.orbitTb = 0; f.orbitTail = 0;
+  f.slowUp = 0; f.slowDn = 0; f.slowUpT = 0; f.slowDnT = 0;
+  f.orbit2R = 0; f.orbit2Sweep = 0; f.orbit2Turn = 0; f.orbit2Spd = 0; f.orbit2Tail = 0; f.orbit2Pole = 0;
   f.barP = 0; f.barR = 0; f.upEnd = 1;
   f.invC = 0; f.invLo = 0; f.invHi = 0; f.invYawUp = 0; f.invYawDn = 0; f.invYawT = 0;
   f.phFlip = 0; f.phLoop = 0; f.phSplits = 0; f.phImmel = 0; f.phMav = 0; f.phMatty = 0; f.phHMatty = 0; f.phHMavvy = 0;
@@ -605,6 +621,9 @@ export function copyFeat(src, dst) {
   d.orbitR = src.orbitR; d.orbitFit = src.orbitFit; d.orbitSweep = src.orbitSweep; d.orbitTurn = src.orbitTurn; d.orbitSpd = src.orbitSpd;
   d.orbitCx = src.orbitCx; d.orbitCz = src.orbitCz; d.orbitPole = src.orbitPole;
   d.orbitTa = src.orbitTa; d.orbitTb = src.orbitTb; d.orbitTail = src.orbitTail;
+  d.slowUp = src.slowUp; d.slowDn = src.slowDn; d.slowUpT = src.slowUpT; d.slowDnT = src.slowDnT;
+  d.orbit2R = src.orbit2R; d.orbit2Sweep = src.orbit2Sweep; d.orbit2Turn = src.orbit2Turn; d.orbit2Spd = src.orbit2Spd;
+  d.orbit2Tail = src.orbit2Tail; d.orbit2Pole = src.orbit2Pole;
   d.barP = src.barP; d.barR = src.barR; d.upEnd = src.upEnd;
   d.invC = src.invC; d.invLo = src.invLo; d.invHi = src.invHi;
   d.invYawUp = src.invYawUp; d.invYawDn = src.invYawDn; d.invYawT = src.invYawT;
@@ -1430,13 +1449,18 @@ export function featView(f) {
   const yawSpan = yawUp >= yawDn ? yawUp : yawDn;
   const yawT = yawUp >= yawDn ? (f.yawUpT || 0) : (f.yawDnT || 0);
   const yawRate = yawT > 0 ? yawSpan / yawT : 0;
+  // Orbit: the same inside ORBIT_WIN_S.
+  const slowUp = f.slowUp || 0, slowDn = f.slowDn || 0;
+  const slowSpan = slowUp >= slowDn ? slowUp : slowDn;
+  const slowT = slowUp >= slowDn ? (f.slowUpT || 0) : (f.slowDnT || 0);
+  const slowRate = slowT > 0 ? slowSpan / slowT : 0;
   // Ham: the turn about the vertical while inverted, the larger way.
   const invYaw = Math.max(f.invYawUp || 0, f.invYawDn || 0);
   return {
     absP, absR, absY, head, span, drop, follow, against, inv, close, hEnd, meanDot,
     invFol, invAg, pathP, pathR, pathY, under, over, obj, objOrbit, opp, front, rad,
     flipSpan, flipDir, rollSpan, rollRate, loopSpan, loopDir, loops, loopRise, loopRet, loopSweep,
-    yawSpan, yawRate, invYaw,
+    yawSpan, yawRate, slowSpan, slowRate, invYaw,
   };
 }
 
@@ -1532,7 +1556,7 @@ export function classifyFeat(f, out) {
     // distance does not decide it), its direction turns a full turn or more,
     // one way (80 % of its turning), at >= 1 m/s, and 70 % of it or more
     // tilted back round the centre or inverted (TRIPPY_TAIL): the picture
-    // upside down, whatever the cam tilt. An upright orbit is not one.
+    // upside down, whatever the cam tilt. An upright orbit is an Orbit.
     // Rolling or not (no roll term); no object needed (one at the centre
     // earns TRIPPY_POLE_MUL).
     _sc.trippy = mul(
@@ -1543,6 +1567,20 @@ export function classifyFeat(f, out) {
       atLeast(f.orbitTurn, 0.8, 0),
       atLeast(f.orbitSpd, 1.0, 0),
       atLeast(f.orbitTail, 0.7, 0),
+    );
+    // Orbit: the upright orbit, the nose and camera on the centre, at its own
+    // rate: >= 360 degrees about the vertical inside ORBIT_WIN_S at >= 90
+    // deg/s, the path orbiting a centre as Trippy's over the whole orbit, and
+    // 30 % of it or less tilted back or inverted (ORBIT_TAIL). One orbit cut
+    // into segments scores once (finishManeuver).
+    _sc.orbit = mul(
+      atLeast(v.slowSpan, 6.2832, 0),
+      atLeast(v.slowRate, 1.571, 0),
+      atLeast(f.orbit2R, 0.3, 0),
+      atLeast(f.orbit2Sweep, 6.2832, 0),
+      atLeast(f.orbit2Turn, 0.8, 0),
+      atLeast(f.orbit2Spd, 1.0, 0),
+      atMost(f.orbit2Tail, 0.3, 0),
     );
     // Ham Spin, the inverted yaw spin: >= 300 degrees of turn about the
     // vertical counted only while inverted (up-Z < HAM_UPZ). A half flip in
@@ -1766,10 +1804,14 @@ export function makeDetector() {
     altT: new Float64Array(ALT_RING), altA: new Float64Array(ALT_RING), altI: 0, altN: 0,
     // Trippy and Barani scratch; the colliders and scale of the last step.
     orb: { r: 0, fit: 9, sweep: 0, turn: 0, spd: 0, cx: 0, cz: 0, kr: 0 },
+    orb2: { r: 0, fit: 9, sweep: 0, turn: 0, spd: 0, cx: 0, cz: 0, kr: 0 },
     wid: { a: 0, b: 0 },
     bar: { p: 0, r: 0 },
     // The nose beside each history row (BH_W).
     bh: new Float64Array(HIST_CAP * BH_W),
+    // An orbit scores once: when the last orbit segment ended (clock), and
+    // whether the last segment was one going on (not scored again).
+    orbitEnd: -1e9, orbitSg: 0, lastCont: 0,
     cols: null, ws: 3.5, lastPole: 0,
     proxT: 0, proxCd: 0,
     lockout: 0,
@@ -1853,6 +1895,7 @@ export function resetDetector(d, sample) {
   d.histN = 0;
   d.susCol = 0;
   d.recJson = '';
+  d.orbitEnd = -1e9; d.orbitSg = 0; d.lastCont = 0;
   if (sample) {
     d.qx = sample.qx || 0; d.qy = sample.qy || 0; d.qz = sample.qz || 0; d.qw = sample.qw == null ? 1 : sample.qw;
     d.haveQ = 1;
@@ -2217,6 +2260,18 @@ export function windowFeat(d) {
   f.orbitPole = o.kr > 0 ? poleNear(d.cols, f.orbitCx, f.orbitCz, ws) : 0;
   f.orbitTa = d.histN ? d.hist[a * HIST_W] : 0; f.orbitTb = d.histN ? d.hist[b * HIST_W] : 0;
   f.orbitTail = o.kr > 0 ? tailShare(d.hist, d.bh, a, b) : 0;
+  // Orbit: the same inside ORBIT_WIN_S, widened at TRIPPY_HOLD of ORBIT_RATE.
+  spanWithin(d.hist, d.histN, 3, ORBIT_WIN_S, d.span, d.dq);
+  f.slowUp = s.up; f.slowUpT = s.upT; f.slowDn = s.dn; f.slowDnT = s.dnT;
+  {
+    const up2 = s.up >= s.dn;
+    widenSpin(d.hist, d.histN, up2 ? s.upA : s.dnA, up2 ? s.upB : s.dnB, up2 ? 1 : -1, ORBIT_RATE * TRIPPY_HOLD, d.wid);
+    const a2 = d.wid.a, b2 = d.wid.b;
+    const o2 = orbitFit(d.hist, a2, b2, d.orb2);
+    f.orbit2R = o2.r; f.orbit2Sweep = o2.sweep; f.orbit2Turn = o2.turn; f.orbit2Spd = o2.spd;
+    f.orbit2Tail = o2.kr > 0 ? tailShare(d.hist, d.bh, a2, b2) : 0;
+    f.orbit2Pole = o2.kr > 0 ? poleNear(d.cols, o2.cx * ws, o2.cz * ws, ws) : 0;
+  }
   // Barani: only worth the scan when a flip's worth of pitch path is there.
   if ((f.pathP || 0) >= BARANI_P - BARANI_FADE) {
     const bw = baraniWithin(d.hist, d.histN, d.bar);
@@ -2245,11 +2300,39 @@ function finishManeuver(d) {
       + '\n  merged ' + mg.segs + ' segments, ' + mg.t.toFixed(2) + ' s (this one alone: ' + (cls.id || 'none') + ')';
     d.lastMerge = mg;
   }
+  // An orbit scores once: a segment cut at the cap that goes on orbiting the
+  // same way (the orbit went on to under MERGE_GAP_S before this one began)
+  // is the same orbit, and scores nothing. So is one that goes on turning
+  // that way at TRIPPY_HOLD of ORBIT_RATE, half a turn or more inside
+  // ORBIT_WIN_S, the path still going round (half an orbit or more): a
+  // slower piece of the same orbit, which alone is nothing or a Yaw Spin. It
+  // carries the orbit on.
+  d.lastCont = 0;
+  {
+    const lf = d.lastFeat, on = d.clock - lf.dur - d.orbitEnd < MERGE_GAP_S;
+    if (id === 'orbit') {
+      const sg = (lf.slowUp || 0) >= (lf.slowDn || 0) ? 1 : -1;
+      if (on && sg === d.orbitSg) {
+        d.lastCont = 1; id = '';
+        why = 'Orbit, going on: one orbit scores once';
+      }
+      d.orbitEnd = d.clock; d.orbitSg = sg;
+    } else if ((!id || id === 'yawspin') && on) {
+      const sp = d.orbitSg > 0 ? lf.slowUp : lf.slowDn, st = d.orbitSg > 0 ? lf.slowUpT : lf.slowDnT;
+      if (sp >= Math.PI && st > 0 && sp >= ORBIT_RATE * TRIPPY_HOLD * st && lf.orbit2Sweep >= Math.PI) {
+        d.orbitEnd = d.clock;
+        if (id) {
+          d.lastCont = 1; id = '';
+          why = 'Orbit, going on: one orbit scores once (alone, a Yaw Spin)';
+        }
+      }
+    }
+  }
   d.lastWhy = why;
   d.lastId = id;
   d.lastDir = (d.feat.flipUp || 0) >= (d.feat.flipDn || 0) ? 1 : -1;
   d.lastLoops = id === 'powerloop' ? Math.max(1, loopCount(d.feat.loopTot || 0)) : 0;
-  d.lastPole = id === 'trippy' && d.feat.orbitPole ? 1 : 0;
+  d.lastPole = (id === 'trippy' && d.feat.orbitPole) || (id === 'orbit' && d.feat.orbit2Pole) ? 1 : 0;
   d.lastGapBack = id === 'maverick' && (d.lastMerge ? d.lastMerge.gapBack : d.feat.gapBack) ? 1 : 0;
   d.lastSloppy = (d.feat.seg && LOOP_IDS[id]) ? 1 : 0;
   d.lastBump = d.feat.bump ? 1 : 0;
@@ -2776,7 +2859,7 @@ export function createTricks(opts) {
     const b2b = sessionLast === id ? sessionB2b + 1 : 0;
     const sloppy = !!det.lastSloppy;
     const bump = !!det.lastBump;
-    const pole = id === 'trippy' && det.lastPole;
+    const pole = (id === 'trippy' || id === 'orbit') && det.lastPole;
     // A Maverick back out through the gap it came in by.
     const gapBack = id === 'maverick' && det.lastGapBack;
     // A Double Powerloop (or more) scores the Powerloop's points per loop.

@@ -27,16 +27,16 @@ import {
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
   HIST_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE,
-} from './sim-tricks.js?v=6b41947b210b';
+} from './sim-tricks.js?v=040caecbcab0';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
 export const CLASS_IDS = Object.freeze([
-  'halfmavvy', 'rubik', 'cubik', 'barani', 'immelmann', 'ham', 'trippy', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
+  'halfmavvy', 'rubik', 'cubik', 'barani', 'immelmann', 'ham', 'trippy', 'orbit', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
   'powerloop', 'matty', 'maverick', 'splits', 'cradle', 'flip', 'roll', 'yawspin',
 ]);
 export const SPEC = Object.freeze({
-  halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, barani: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
+  halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, barani: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, orbit: 0.05, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
   halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
   cradle: 0.08, flip: 0, roll: 0, yawspin: 0,
 });
@@ -85,6 +85,11 @@ export const GATES = Object.freeze({
     ge('v.yawSpan', 6.2832, 0), ge('v.yawRate', 2.618, 0), ge('f.orbitR', 0.3, 0),
     ge('f.orbitSweep', 6.2832, 0), ge('f.orbitTurn', 0.8, 0), ge('f.orbitSpd', 1.0, 0),
     ge('f.orbitTail', 0.7, 0),
+  ],
+  orbit: [
+    ge('v.slowSpan', 6.2832, 0), ge('v.slowRate', 1.571, 0), ge('f.orbit2R', 0.3, 0),
+    ge('f.orbit2Sweep', 6.2832, 0), ge('f.orbit2Turn', 0.8, 0), ge('f.orbit2Spd', 1.0, 0),
+    le('f.orbit2Tail', 0.3, 0),
   ],
   barani: [
     ge('f.barP', 5.236, 0.35), band('f.barR', 2.356, 3.927, 0), ge('f.upEnd', 0.5, 0),
@@ -173,10 +178,10 @@ const ANGLE_SRC = new Set([
   'absP', 'absR', 'absY', 'v.pathP', 'v.pathR', 'v.pathY', 'f.pitch', '-f.pitch', 'v.head',
   'Math.max(absR, v.pathR)', 'Math.max(absY, v.pathY)', 'v.pathP - absP',
   'v.flipSpan', 'v.rollSpan', 'v.loopSpan', 'v.loopSweep', 'v.yawSpan', 'f.orbitSweep', 'f.barP', 'f.barR',
-  'v.invYaw',
+  'v.invYaw', 'v.slowSpan', 'f.orbit2Sweep',
 ]);
 // Angular rates (shown in degrees a second).
-const RATE_SRC = new Set(['v.rollRate', 'v.yawRate']);
+const RATE_SRC = new Set(['v.rollRate', 'v.yawRate', 'v.slowRate']);
 
 function atLeast(x, a, fade) {
   if (x >= a) return 1;
@@ -224,7 +229,9 @@ function context(f) {
     'v.loopSpan': v.loopSpan, 'v.loopRise': v.loopRise, 'v.loopRet': v.loopRet, 'v.loopSweep': v.loopSweep,
     'v.yawSpan': v.yawSpan, 'v.yawRate': v.yawRate, 'v.invYaw': v.invYaw,
     'f.orbitR': f.orbitR, 'f.orbitSweep': f.orbitSweep, 'f.orbitTurn': f.orbitTurn, 'f.orbitSpd': f.orbitSpd,
-    'f.orbitTail': f.orbitTail,
+    'f.orbitTail': f.orbitTail, 'v.slowSpan': v.slowSpan, 'v.slowRate': v.slowRate,
+    'f.orbit2R': f.orbit2R, 'f.orbit2Sweep': f.orbit2Sweep, 'f.orbit2Turn': f.orbit2Turn, 'f.orbit2Spd': f.orbit2Spd,
+    'f.orbit2Tail': f.orbit2Tail,
     'f.barP': f.barP, 'f.barR': f.barR, 'f.upEnd': f.upEnd,
     'f.phFlip': f.phFlip, 'f.phLoop': f.phLoop, 'f.phSplits': f.phSplits, 'f.phImmel': f.phImmel,
     'f.phMav': f.phMav, 'f.phMatty': f.phMatty, 'f.phHMatty': f.phHMatty, 'f.phHMavvy': f.phHMavvy,
@@ -310,8 +317,12 @@ function sawOf(f, v, ctx) {
     vyawDeg: degOf(v.yawSpan), vyawRateDeg: degOf(v.yawRate),
     orbitR: r3(f.orbitR), orbitSweepDeg: degOf(f.orbitSweep), orbitTurn: r3(f.orbitTurn), orbitSpd: r3(f.orbitSpd),
     orbitFit: r3(f.orbitFit), orbitPole: f.orbitPole,
-    // Trippy's share of the orbit tilted back or inverted.
+    // Trippy's share of the orbit tilted back or inverted; Orbit's turn
+    // inside ORBIT_WIN_S, its orbit and that share.
     orbitTail: r3(f.orbitTail),
+    slowYawDeg: degOf(v.slowSpan), slowRateDeg: degOf(v.slowRate),
+    orbit2R: r3(f.orbit2R), orbit2SweepDeg: degOf(f.orbit2Sweep), orbit2Turn: r3(f.orbit2Turn), orbit2Spd: r3(f.orbit2Spd),
+    orbit2Tail: r3(f.orbit2Tail), orbit2Pole: f.orbit2Pole,
     baraniPitchDeg: degOf(f.barP), baraniTwistDeg: degOf(f.barR), upEnd: r3(f.upEnd),
     // The segment's twist: its turn about the body axis nearest the flight
     // path, roll or yaw (the Barani's).
@@ -593,12 +604,13 @@ export function createTrickObserver(det, opts) {
     rec.t0 = r3(segT0);
     // A compound trick: the merge's label (the detector's), and what merged.
     const mg = det.lastMerge;
-    rec.result = mg ? det.lastId : ex.id;
+    // An orbit going on (the one before it scored): the detector's nothing.
+    rec.result = mg || det.lastCont ? (det.lastId || null) : ex.id;
     rec.merged = mg ? { id: mg.id, segs: mg.segs, t: r3(mg.t), score: r3(mg.score), alone: ex.id } : null;
     rec.event = ev || null;
     rec.why = det.lastWhy || '';
     rec.dir = ex.id === 'flip' || ex.id === 'powerloop' ? (det.lastDir < 0 ? 'back' : 'front') : null;
-    rec.pole = ex.id === 'trippy' && det.lastPole ? TRIPPY_POLE_MUL : 0;
+    rec.pole = (ex.id === 'trippy' || ex.id === 'orbit') && det.lastPole ? TRIPPY_POLE_MUL : 0;
     rec.loops = ex.id === 'powerloop' ? (det.lastLoops || 1) : 0;
     rec.sloppy = det.lastSloppy ? 1 : 0;
     rec.bump = det.lastBump ? 1 : 0;
@@ -618,6 +630,7 @@ export function createTrickObserver(det, opts) {
     else if (!ex.id) rec.reason = 'no candidate reached ' + PICK_MIN + ' (top ' + (ex.pick.topId || '—') + ' ' + ex.pick.top + ')';
     else rec.reason = ex.candidates.find((c) => c.id === ex.id)?.reason || (ex.id === 'dive' ? 'dive fallback' : '');
     if (mg) rec.reason = 'merged with the ' + (mg.segs - 1) + ' segment(s) before (pauses under 0.8 s): ' + mg.id + '; this one alone: ' + (ex.id || 'nothing');
+    if (det.lastCont) rec.reason = 'the orbit before it goes on (one orbit scores once)';
     rec._explain = ex;
     emit(rec);
   }
