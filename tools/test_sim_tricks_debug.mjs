@@ -199,7 +199,14 @@ function randFeat(r) {
   f.yawUp = r() < 0.5 ? near(6.2832) : u(0, 4); f.yawDn = r() < 0.5 ? near(6.2832) : u(0, 4);
   f.yawUpT = u(0.5, 2.4); f.yawDnT = u(0.5, 2.4);
   f.orbitR = r() < 0.5 ? u(0.1, 3) : u(0.3, 2.5); f.orbitSweep = near(6.2832); f.orbitTurn = u(0.6, 1); f.orbitSpd = u(0.5, 3);
-  f.barP = r() < 0.5 ? near(5.236) : u(0, 4); f.barR = u(1.5, 4.5); f.upEnd = r() < 0.6 ? u(0.5, 1) : u(-1, 1);
+  // Trippy's tail share, near 0.7 or past it often; Orbit's own window and
+  // orbit, and its share near 0.3 often.
+  f.orbitTail = r() < 0.5 ? u(0.5, 1) : u(0, 1);
+  f.slowUp = r() < 0.5 ? near(6.2832) : u(0, 4); f.slowDn = r() < 0.5 ? near(6.2832) : u(0, 4);
+  f.slowUpT = u(0.5, 4.4); f.slowDnT = u(0.5, 4.4);
+  f.orbit2R = r() < 0.5 ? u(0.1, 3) : u(0.3, 2.5); f.orbit2Sweep = near(6.2832); f.orbit2Turn = u(0.6, 1); f.orbit2Spd = u(0.5, 3);
+  f.orbit2Tail = r() < 0.5 ? u(0, 0.5) : u(0, 1);
+  f.barP = r() < 0.5 ? near(5.236) : u(0, 4); f.barR = u(1.5, 4.5); f.barVia = r() < 0.5 ? 1 : 0; f.upEnd = r() < 0.6 ? u(0.5, 1) : u(-1, 1);
   if (r() < 0.12) {
     // A yaw spin, upright or inverted: little pitch and roll, a full turn of
     // yaw in place (Yaw Spin, Trippy and Ham live here).
@@ -511,4 +518,114 @@ test('sim.html loads the overlay only with ?tricks=debug and brackets each trick
   const dbgSrc = readFileSync(join(root, 'sim-tricks-debug.js'), 'utf8');
   assert.equal(/\bdet\.\w+\s*=[^=]/.test(dbgSrc), false, 'no writes to the detector');
   assert.equal(/\b(stepDetector|resetDetector|pushCombo|saveStore|setDebugOn|setHudOn)\(/.test(dbgSrc), false, 'no detector or store calls');
+});
+
+// The camera terms in the log (rec.cam), for setting the Trippy's from the
+// owner's flying: logged only, nothing scores them. A kinematic orbit 1.5 m
+// round a centre at 3.2 rad/s for 3 s (the trippy's window), at the page's cam
+// tilt (30): the nose to the centre, tilted forward 50 (the owner's orbits);
+// the tail to the centre, tilted back 66 (the owner's trippies, by their roll
+// and yaw); the body inverted, the camera level on the centre.
+function camOrbit({ pitch, toCentre, inverted, info }) {
+  const d = makeDetector();
+  const recs = [];
+  let t = 0;
+  const obs = createTrickObserver(d, { now: () => t, onAttempt: (r) => recs.push(r), info: () => info });
+  const R = 1.5, W = 3.2, dt = 0.004;
+  let first = true;
+  for (let i = 0; i <= 3.6 / dt; i++) {
+    t = i * dt;
+    const spin = t <= 3, ph = W * Math.min(t, 3);
+    const px = R * Math.cos(ph), py = R * Math.sin(ph);
+    let q = qMul(qAxis(0, 0, 1, toCentre ? ph + Math.PI : ph), qAxis(0, 1, 0, spin ? pitch * Math.PI / 180 : 0));
+    if (inverted && spin) q = qMul(q, qAxis(1, 0, 0, Math.PI));
+    const s = {
+      qx: q.x, qy: q.y, qz: q.z, qw: q.w, ox: 0, oy: 0, oz: spin ? W : 0,
+      wx: -py * 3.5, wy: 5 * 3.5, wz: -px * 3.5, alt: 5,
+      vx: spin ? -R * W * Math.sin(ph) : 0, vy: spin ? R * W * Math.cos(ph) : 0, vz: 0, speed: spin ? R * W : 0,
+      clearance: 5, armed: true, throttle: 0.5, ws: 3.5, colliders: null,
+    };
+    if (first) { resetDetector(d, s); d.lockout = 0; first = false; continue; }
+    obs.before(s, dt);
+    const ev = stepDetector(d, s, dt);
+    obs.after(s, dt, ev);
+  }
+  const m = recs.filter((r) => r.type === 'maneuver');
+  assert.equal(m.length, 1);
+  return m[0];
+}
+
+test('observer: the camera terms (rec.cam) over the orbit, logged only', () => {
+  const near = (got, want, tol, what) => assert.ok(Math.abs(got - want) <= tol, what + ': ' + got + ', want ' + want);
+  // Nose to the centre, tilted forward: the camera upright, on the centre (20
+  // below it at a 30 degree cam).
+  const fwd = camOrbit({ pitch: 50, toCentre: true, info: { camDeg: 30 } });
+  const c = fwd.cam;
+  assert.equal(c.deg, 30); assert.equal(c.degFrom, 'page');
+  assert.ok(c.win && c.win[1] - c.win[0] > 2.5, 'the orbit window ' + c.win);
+  assert.equal(c.upZNeg, 0); near(c.upZMean, 0.94, 0.01, 'cam up-Z');
+  near(c.offDegMean, 20, 2, 'off the centre'); near(c.elDegMean, -20, 2, 'elevation'); near(c.azDegMean, 0, 2, 'azimuth'); near(c.distMean, 1.5, 0.05, 'distance');
+  assert.equal(c.offIn45, 1);
+  assert.deepEqual(c.cols, ['t', 'upZ', 'camUpZ', 'offDeg', 'azDeg', 'elDeg', 'dist', 'noseDeg', 'leanDeg', 'side']);
+  // The body against the centre, whatever the cam tilt: nose 50 below the
+  // centre, the up axis leaning 50 toward it, the tail never toward it.
+  near(c.noseDegMean, -50, 2, 'nose'); assert.equal(c.tailShare, 0); near(c.leanDegQ[2], 50, 2, 'lean'); near(c.sideMean, 0, 0.02, 'side');
+  assert.equal(c.rows.length, 24);
+  assert.equal(c.upZQ.length, 5); assert.equal(c.bodyUpZQ.length, 5);
+  near(c.upZQ[2], 0.94, 0.01, 'cam up-Z median'); near(c.bodyUpZQ[2], 0.64, 0.01, 'body up-Z median');
+  // Tail to the centre, tilted back 66: the body upright, the picture upside
+  // down, the camera up, 84 off the centre.
+  const backRec = camOrbit({ pitch: -66, toCentre: false, info: { camDeg: 30 } });
+  const back = backRec.cam;
+  assert.equal(back.bodyUpZNeg, 0);
+  assert.ok(back.upZNeg > 0.98, 'cam up-Z < 0 ' + back.upZNeg);
+  near(back.upZMean, -0.1, 0.02, 'cam up-Z'); near(back.offDegMean, 84, 2, 'off the centre'); near(back.elDegMean, 84, 2, 'elevation');
+  // Nose up and over (114: 66 above level, away from the centre), the tail
+  // toward the centre, the up axis leaning 66 toward it.
+  near(back.noseDegMean, 114, 2, 'nose'); assert.ok(back.tailShare > 0.98, 'tail ' + back.tailShare); near(back.leanDegQ[2], 66, 2, 'lean');
+  // The body inverted, the camera level on the centre: both upside down, on it.
+  const invRec = camOrbit({ pitch: -30, toCentre: true, inverted: true, info: { camDeg: 30 } });
+  const inv = invRec.cam;
+  assert.ok(inv.bodyUpZNeg > 0.98 && inv.upZNeg > 0.98, 'inverted ' + inv.bodyUpZNeg + ' ' + inv.upZNeg);
+  near(inv.offDegMean, 0, 2, 'off the centre');
+  // Nose 30 up at the centre, the up axis leaning 150 (inverted, toward it).
+  near(inv.noseDegMean, 30, 2, 'nose'); assert.equal(inv.tailShare, 0); near(inv.leanDegQ[2], 150, 2, 'lean');
+  // No tilt from the page: 30, said so.
+  const def = camOrbit({ pitch: 50, toCentre: true, info: {} }).cam;
+  assert.equal(def.deg, 30); assert.equal(def.degFrom, 'default');
+  // Logged only: the same label as the detector's own (the nose on the
+  // centre, upright: an Orbit; the tail to it, or the body inverted: a
+  // Trippy), and the feature copy carries the window.
+  assert.equal(fwd.result, 'orbit');
+  assert.equal(backRec.result, 'trippy');
+  assert.equal(invRec.result, 'trippy');
+  const f = makeFeat();
+  assert.equal(f.orbitTa, 0); assert.equal(f.orbitTb, 0);
+  // The page gives the overlay its cam tilt.
+  assert.ok(simSrc.includes('info:()=>({core:cs.kind,map:currentMap,camDeg:CFG.camDeg})'), 'sim.html passes camDeg');
+});
+
+test('observer: the Barani probe (rec.barani) names the term that zeroed it', () => {
+  // A front flip with a half roll inside it, nose down (90 of pitch, the
+  // roll, 270 more: upright at the end): the probe's best stretch twists
+  // about 180 with the pitch either side.
+  const flip = (rollT) => run([
+    { t: Math.PI / 2 / 6, rate: [0, 6, 0] },
+    { t: rollT, rate: [9, 0, 0] },
+    { t: 1.5 * Math.PI / 6, rate: [0, 6, 0] },
+    { t: 0.8 },
+  ]).recs.filter((r) => r.type === 'maneuver');
+  const half = flip(Math.PI / 9);
+  assert.equal(half.length, 1);
+  const b = half[0].barani;
+  assert.ok(b.inside && Math.abs(b.inside.twistDeg - 180) <= 6, JSON.stringify(b));
+  assert.ok(b.inside.beforeDeg >= 60 && b.inside.afterDeg >= 60, JSON.stringify(b.inside));
+  assert.equal(b.limit, 'none');
+  assert.equal(half[0].result, 'barani');
+  // 110 of roll: under the band.
+  const short = flip((110 * Math.PI / 180) / 9)[0].barani;
+  assert.equal(short.limit, 'barR band', JSON.stringify(short));
+  assert.ok(Math.abs(short.any.twistDeg - 110) <= 6, JSON.stringify(short.any));
+  // An orbit: too little pitch to scan.
+  assert.equal(camOrbit({ pitch: 50, toCentre: true, info: { camDeg: 30 } }).barani.limit, 'barP');
 });

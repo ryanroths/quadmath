@@ -13,7 +13,9 @@ export const TRICKS_KEY = 'quadmathSimTricks';
 // 2 (2026-11-14): a gap no longer scores. Bests saved under an older version
 // counted the Gap trick, so normalizeStore drops them; the HUD and debug
 // settings stay.
-export const STORE_VER = 2;
+// 3 (2026-11-18): an upright orbit scored as a 500-point Trippy; bests saved
+// before are dropped the same way.
+export const STORE_VER = 3;
 export const COMBO_WINDOW_S = 2.8;
 export const MUL_CAP = 6;
 export const LOCKOUT_S = 0.45;
@@ -55,6 +57,13 @@ export const ROLL_WIN_S = 1.5;
 // at 1 ms steps fits.
 export const HIST_CAP = 10240;
 export const HIST_W = 16;
+// Beside each history row (BH_W per row): the nose (its x, y and up
+// components, in the sample's own frame, as the velocity columns 9 and 12),
+// then the yaw's own turn about the vertical while inverted so far (rad):
+// each step's yaw times the body's up-Z, while up-Z is below HAM_UPZ, so a
+// yaw made upright or with the nose near vertical, or a flip about a banked
+// axis, turns nothing in it (the Barani's heading).
+export const BH_W = 4;
 // Powerloop: >= 300 degrees of pitch inside any LOOP_WIN_S window (a loop is
 // slower than a flip). The loops are counted over the segment's whole turn
 // of pitch the loop's way: two from LOOP_TWO (600 degrees), then one more for
@@ -63,11 +72,27 @@ export const LOOP_WIN_S = 3.5;
 export const LOOP_MIN = 5.236;
 export const LOOP_TWO = 10.472;
 // Trippy Spin: >= 360 degrees of turn about the vertical at >= 150 deg/s (so
-// inside 2.4 s) while the path orbits a centre 0.3-2.5 m away, a full turn,
-// at >= 1 m/s. Upright or inverted; the body may roll as it spins.
+// inside 2.4 s) while the path orbits a centre 0.3 m or more away, a full
+// turn, at >= 1 m/s, and for TRIPPY_TAIL of the orbit or more the quad is
+// tilted back round the centre (the tail toward it: the nose points away
+// from it, within NOSE_SIDE of the vertical plane through it) or upside down
+// (body up-Z < 0). That is the picture upside down in the goggles whatever
+// the cam tilt; an upright orbit, the nose and camera on the centre, is an
+// Orbit. The body may roll as it spins.
 // The orbit centre within POLE_NEAR_M of a pole or post (a collider at most
-// POLE_W_M across and at least POLE_H_M tall) earns TRIPPY_POLE_MUL points.
+// POLE_W_M across and at least POLE_H_M tall) earns TRIPPY_POLE_MUL points
+// (an Orbit's too).
 export const TRIPPY_WIN_S = 2.4;
+export const TRIPPY_TAIL = 0.7;
+export const NOSE_SIDE = 0.7;
+// Orbit: >= 360 degrees about the vertical inside ORBIT_WIN_S at >= ORBIT_RATE
+// (90 deg/s: a lap in 4.0 s, inside the 4.5 s segment cap) while the path
+// orbits a centre as Trippy's does, measured over the whole orbit at
+// TRIPPY_HOLD of ORBIT_RATE, upright: ORBIT_TAIL of it or less tilted back or
+// inverted. One orbit cut at the cap into segments scores once.
+export const ORBIT_WIN_S = 4.4;
+export const ORBIT_RATE = 1.571;
+export const ORBIT_TAIL = 0.3;
 // The spin's rate (150 deg/s), and the share of it the spin keeps while the
 // orbit is measured over all of it.
 export const TRIPPY_RATE = 2.618;
@@ -83,10 +108,17 @@ export const TRIPPY_POLE_MUL = 1.25;
 // turn about the body axis nearest the flight path: roll when the nose is
 // along it (flying level), yaw when the up axis is (punched up, or inverted
 // and falling); slower than TWIST_SPD (m/s), where the path is no direction
-// to speak of, whichever of the two turns faster. Inside: BARANI_SIDE of
+// to speak of, whichever of the two turns faster. Or the heading's turn: the
+// yaw's own turn about the vertical while inverted (the owner yaws the half
+// twist upside down at the top of the loop, moving along the nose, where the
+// twist above sees the roll only; baraniWithin). Whichever of the two
+// scores, nearer 180 when both do; the heading's from BARANI_HD_LO (120
+// degrees: the owner's yaw at the top reads 132-166 of it), the twist's
+// from 135. Inside: BARANI_SIDE of
 // pitch path or more before the twist is half done, and after. 300 degrees
 // fades over BARANI_FADE (the owner's 38.1 s Barani turned 299).
 export const BARANI_P = 5.236;
+export const BARANI_HD_LO = 2.094;
 export const BARANI_FADE = 0.35;
 export const BARANI_SIDE = 1.047;
 export const TWIST_SPD = 3;
@@ -150,6 +182,7 @@ export const TRICK_LIST = Object.freeze([
   Object.freeze({ id: 'immelmann', name: 'Immelmann', tier: 'Beginner', points: 100, pointsIn: 100, type: "Split S'" }),
   Object.freeze({ id: 'dive', name: 'Building Dive', tier: 'Beginner', points: 100, pointsIn: 100, type: 'Wall Tricks' }),
   Object.freeze({ id: 'cradle', name: 'Cradle', tier: 'Beginner', points: 150, pointsIn: 150, type: 'Pole Dancing' }),
+  Object.freeze({ id: 'orbit', name: 'Orbit', tier: 'Beginner', points: 75, pointsIn: 100, type: 'Pole Dancing' }),
   Object.freeze({ id: 'prox', name: 'Proximity', tier: 'Beginner', points: 150, pointsIn: 150, type: 'Wall Tricks' }),
   Object.freeze({ id: 'powerloop', name: 'Powerloop', tier: 'Novice', points: 200, pointsIn: 200, type: 'Powerloops' }),
   Object.freeze({ id: 'sideloop', name: 'Side Loop', tier: 'Novice', points: 200, pointsIn: 225, type: 'Jump Ropes' }),
@@ -180,11 +213,11 @@ const HALF = PI * 0.78;
 const FULL = 5.2;
 const QTR = 1.15;
 const CLASS_IDS = [
-  'halfmavvy', 'rubik', 'cubik', 'barani', 'immelmann', 'ham', 'trippy', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
+  'halfmavvy', 'rubik', 'cubik', 'barani', 'immelmann', 'ham', 'trippy', 'orbit', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
   'powerloop', 'matty', 'maverick', 'splits', 'cradle', 'flip', 'roll', 'yawspin',
 ];
 const SPEC = {
-  halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, barani: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
+  halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, barani: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, orbit: 0.05, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
   halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
   cradle: 0.08, flip: 0, roll: 0, yawspin: 0,
 };
@@ -498,13 +531,28 @@ export function makeFeat() {
     // carried into the world, its up component. A tilted spin turns the
     // heading at the full rate while its body-axis yaw sees only cos(tilt).
     vyaw: 0,
+    // The yaw's own turn about the vertical while inverted (rad): each step's
+    // yaw times the body's up-Z, while up-Z is below HAM_UPZ (BH_W, the
+    // Barani's heading).
+    yawV: 0,
     // The twist (rad, summed): each step's turn about the body axis nearest
     // the flight path, roll or yaw (BARANI_P).
     twist: 0,
     orbitR: 0, orbitFit: 9, orbitSweep: 0, orbitTurn: 0, orbitSpd: 0, orbitCx: 0, orbitCz: 0, orbitPole: 0,
+    // The orbit's window (s from the segment's start), for the debug log's
+    // camera terms (sim-tricks-debug.js); nothing scores it.
+    orbitTa: 0, orbitTb: 0,
+    // Trippy: the share of the orbit's steps tilted back round its centre or
+    // inverted (TRIPPY_TAIL).
+    orbitTail: 0,
+    // Orbit: the turn about the vertical inside ORBIT_WIN_S (as yawUp..yawDnT)
+    // and the orbit over it, as Trippy's (ORBIT_RATE).
+    slowUp: 0, slowDn: 0, slowUpT: 0, slowDnT: 0,
+    orbit2R: 0, orbit2Sweep: 0, orbit2Turn: 0, orbit2Spd: 0, orbit2Tail: 0, orbit2Pole: 0,
     // Barani (baraniWithin): the pitch path and |twist| of the stretch that
     // scores best as a Barani's, the twist inside the pitch; up-Z at the end.
-    barP: 0, barR: 0, upEnd: 1,
+    // barVia: 1 when the heading's turn gave the twist.
+    barP: 0, barR: 0, barVia: 0, upEnd: 1,
     // Ham: the turn about the vertical while up-Z < HAM_UPZ (rad): its
     // running sum (invC) and that sum's lowest and highest so far (invLo,
     // invHi) give the largest rise and fall (invYawUp, invYawDn); invYawT is
@@ -545,9 +593,12 @@ export function resetFeat(f) {
   f.flipUp = 0; f.flipDn = 0; f.rollUp = 0; f.rollDn = 0; f.rollUpT = 0; f.rollDnT = 0;
   f.loopUp = 0; f.loopDn = 0; f.loopTot = 0;
   f.postMin = 0; f.sweep = 0; f.sweepTh = 0; f.sweepOn = 0;
-  f.yawUp = 0; f.yawDn = 0; f.yawUpT = 0; f.yawDnT = 0; f.vyaw = 0; f.twist = 0;
+  f.yawUp = 0; f.yawDn = 0; f.yawUpT = 0; f.yawDnT = 0; f.vyaw = 0; f.yawV = 0; f.twist = 0;
   f.orbitR = 0; f.orbitFit = 9; f.orbitSweep = 0; f.orbitTurn = 0; f.orbitSpd = 0; f.orbitCx = 0; f.orbitCz = 0; f.orbitPole = 0;
-  f.barP = 0; f.barR = 0; f.upEnd = 1;
+  f.orbitTa = 0; f.orbitTb = 0; f.orbitTail = 0;
+  f.slowUp = 0; f.slowDn = 0; f.slowUpT = 0; f.slowDnT = 0;
+  f.orbit2R = 0; f.orbit2Sweep = 0; f.orbit2Turn = 0; f.orbit2Spd = 0; f.orbit2Tail = 0; f.orbit2Pole = 0;
+  f.barP = 0; f.barR = 0; f.barVia = 0; f.upEnd = 1;
   f.invC = 0; f.invLo = 0; f.invHi = 0; f.invYawUp = 0; f.invYawDn = 0; f.invYawT = 0;
   f.phFlip = 0; f.phLoop = 0; f.phSplits = 0; f.phImmel = 0; f.phMav = 0; f.phMatty = 0; f.phHMatty = 0; f.phHMavvy = 0;
   f.u0x = 0; f.u0y = 0; f.gapN = 0; f.gapIn = 0; f.gapInFin = -1; f.gapBack = 0;
@@ -582,10 +633,14 @@ export function copyFeat(src, dst) {
   d.rollUpT = src.rollUpT; d.rollDnT = src.rollDnT;
   d.loopUp = src.loopUp; d.loopDn = src.loopDn; d.loopTot = src.loopTot;
   d.postMin = src.postMin; d.sweep = src.sweep; d.sweepTh = src.sweepTh; d.sweepOn = src.sweepOn;
-  d.yawUp = src.yawUp; d.yawDn = src.yawDn; d.yawUpT = src.yawUpT; d.yawDnT = src.yawDnT; d.vyaw = src.vyaw; d.twist = src.twist;
+  d.yawUp = src.yawUp; d.yawDn = src.yawDn; d.yawUpT = src.yawUpT; d.yawDnT = src.yawDnT; d.vyaw = src.vyaw; d.yawV = src.yawV; d.twist = src.twist;
   d.orbitR = src.orbitR; d.orbitFit = src.orbitFit; d.orbitSweep = src.orbitSweep; d.orbitTurn = src.orbitTurn; d.orbitSpd = src.orbitSpd;
   d.orbitCx = src.orbitCx; d.orbitCz = src.orbitCz; d.orbitPole = src.orbitPole;
-  d.barP = src.barP; d.barR = src.barR; d.upEnd = src.upEnd;
+  d.orbitTa = src.orbitTa; d.orbitTb = src.orbitTb; d.orbitTail = src.orbitTail;
+  d.slowUp = src.slowUp; d.slowDn = src.slowDn; d.slowUpT = src.slowUpT; d.slowDnT = src.slowDnT;
+  d.orbit2R = src.orbit2R; d.orbit2Sweep = src.orbit2Sweep; d.orbit2Turn = src.orbit2Turn; d.orbit2Spd = src.orbit2Spd;
+  d.orbit2Tail = src.orbit2Tail; d.orbit2Pole = src.orbit2Pole;
+  d.barP = src.barP; d.barR = src.barR; d.barVia = src.barVia; d.upEnd = src.upEnd;
   d.invC = src.invC; d.invLo = src.invLo; d.invHi = src.invHi;
   d.invYawUp = src.invYawUp; d.invYawDn = src.invYawDn; d.invYawT = src.invYawT;
   d.phFlip = src.phFlip; d.phLoop = src.phLoop; d.phSplits = src.phSplits; d.phImmel = src.phImmel;
@@ -690,43 +745,112 @@ export function orbitFit(hist, a, b, out, w) {
 // inside the pitch (BARANI_SIDE of pitch path or more before the row where
 // the twist is half done, and after it). Ends on every PH_ROWS-th row, the
 // pitch path summed over every row; among equals, the twist nearer 180.
-// out: { p, r } (rad; 0 when none).
+// The twist is the twist column's change or, with bh (the body history,
+// BH_W) passed, the heading's turn, whichever scores (nearer 180 when both
+// do). The heading's turn is the yaw's own turn about the vertical while
+// inverted (bh's fourth: each step's yaw times the body's up-Z, while up-Z
+// is below HAM_UPZ), the owner's half twist: the yaw made at the top of the
+// flip. It means something only with the nose off the vertical: with the
+// nose near vertical the up axis is near level, and a yaw there counts
+// nothing (the twist column has that turn, about the flight path); nor does
+// a yaw made upright (a flip, a yaw, a flip is no Barani), or the pitch or
+// roll, so a flip about a banked axis, which turns the body about the
+// vertical by the bank's share of it, counts nothing. A yaw made inverted
+// and near level reads within a few degrees of the body's yaw. out:
+// { p, r, via } (rad; 0 when none; via 1: the heading's turn).
 const _barPP = new Float64Array(PH_ROWS + 2);
 const _barTW = new Float64Array(PH_ROWS + 2);
-export function baraniWithin(hist, n, out, w) {
+const _barVH = new Float64Array(PH_ROWS + 2);
+export function baraniWithin(hist, n, out, w, bh) {
   const W = w || HIST_W;
   const o = out || {};
-  o.p = 0; o.r = 0;
+  o.p = 0; o.r = 0; o.via = 0;
   if (!hist || n < 2) return o;
   const stride = Math.max(1, Math.ceil(n / PH_ROWS));
   const m = Math.ceil((n - 1) / stride) + 1;
-  // The pitch path and the twist at each kept row.
+  // The pitch path, the twist and the heading's turn at each kept row.
   let path = 0, j = 0;
-  _barPP[0] = 0; _barTW[0] = hist[15];
+  _barPP[0] = 0; _barTW[0] = hist[15]; _barVH[0] = bh ? bh[3] : 0;
   for (let r = 1; r < n; r++) {
     path += Math.abs(hist[r * W + 1] - hist[(r - 1) * W + 1]);
-    if (r === n - 1 || r % stride === 0) { j++; _barPP[j] = path; _barTW[j] = hist[r * W + 15]; }
+    if (r === n - 1 || r % stride === 0) {
+      j++; _barPP[j] = path; _barTW[j] = hist[r * W + 15]; _barVH[j] = bh ? bh[r * BH_W + 3] : 0;
+    }
   }
   const lo = BARANI_P - BARANI_FADE;
   if (path < lo) return o;
+  const cols = bh ? 2 : 1;
   let best = 0, bestOff = 9;
   for (let ja = 0; ja < m - 1; ja++) {
     for (let jb = m - 1; jb > ja; jb--) {
       const P = _barPP[jb] - _barPP[ja];
       if (P < lo) break;
-      const raw = _barTW[jb] - _barTW[ja], T = Math.abs(raw);
-      const sc = atLeast(P, BARANI_P, BARANI_FADE) * inBand(T, 2.356, 3.927, 0);
-      if (!(sc > 0)) continue;
-      const off = Math.abs(T - Math.PI);
-      if (sc < best - 1e-9 || (sc <= best + 1e-9 && off >= bestOff)) continue;
-      // Inside the pitch: the row where the twist is half done.
-      const sg = raw >= 0 ? 1 : -1;
-      let k = ja + 1;
-      while (k < jb && sg * (_barTW[k] - _barTW[ja]) < T / 2) k++;
-      if (_barPP[k] - _barPP[ja] < BARANI_SIDE || _barPP[jb] - _barPP[k] < BARANI_SIDE) continue;
-      best = sc; bestOff = off; o.p = P; o.r = T;
+      for (let c = 0; c < cols; c++) {
+        const A = c ? _barVH : _barTW;
+        const raw = A[jb] - A[ja], T = Math.abs(raw);
+        const sc = atLeast(P, BARANI_P, BARANI_FADE) * inBand(T, c ? BARANI_HD_LO : 2.356, 3.927, 0);
+        if (!(sc > 0)) continue;
+        const off = Math.abs(T - Math.PI);
+        if (sc < best - 1e-9 || (sc <= best + 1e-9 && off >= bestOff)) continue;
+        // Inside the pitch: the row where the twist is half done.
+        const sg = raw >= 0 ? 1 : -1;
+        let k = ja + 1;
+        while (k < jb && sg * (A[k] - A[ja]) < T / 2) k++;
+        if (_barPP[k] - _barPP[ja] < BARANI_SIDE || _barPP[jb] - _barPP[k] < BARANI_SIDE) continue;
+        best = sc; bestOff = off; o.p = P; o.r = T; o.via = c;
+      }
     }
   }
+  return o;
+}
+
+// The share of history rows a..b tilted back round the orbit's centre or
+// upside down: the nose pointing away from the centre, within NOSE_SIDE of
+// the vertical plane through it, or the body's up-Z below 0 (TRIPPY_TAIL,
+// ORBIT_TAIL). The centre is square to the horizontal velocity, on the side
+// the path turns to over a..b (the velocity's own turn, not the yaw's: a
+// spin of its own can go the other way); a row slower than 0.5 m/s has no
+// centre to speak of.
+export function tailShare(hist, bh, a, b) {
+  const W = HIST_W;
+  let turn = 0;
+  for (let i = a + 1; i <= b; i++) {
+    const p = (i - 1) * W, q = i * W;
+    turn += hist[p + 9] * hist[q + 12] - hist[p + 12] * hist[q + 9];
+  }
+  const sg = turn >= 0 ? 1 : -1;
+  let n = 0, k = 0;
+  for (let i = a; i <= b; i++) {
+    n++;
+    if (hist[i * W + 7] < 0) { k++; continue; }
+    const vx = hist[i * W + 9], vy = hist[i * W + 12], vh = Math.hypot(vx, vy);
+    if (!(vh > 0.5)) continue;
+    const ux = vx / vh, uy = vy / vh, j = i * BH_W, fx = bh[j], fy = bh[j + 1];
+    const along = sg * (fy * ux - fx * uy), side = Math.abs(fx * ux + fy * uy);
+    if (along < 0 && side < NOSE_SIDE) k++;
+  }
+  return n ? k / n : 0;
+}
+
+// Widen a spin's window a..b out, a 0.1 s piece at a time, while the turn
+// about the vertical keeps going the way sg at min rad/s or more; into o.
+function widenSpin(H, n, a, b, sg, min, o) {
+  const W = HIST_W;
+  while (a > 0) {
+    let k = a - 1;
+    while (k > 0 && H[a * W] - H[k * W] < 0.1) k--;
+    const dt = H[a * W] - H[k * W];
+    if (!(dt > 0) || sg * (H[a * W + 3] - H[k * W + 3]) < min * dt) break;
+    a = k;
+  }
+  while (b < n - 1) {
+    let k = b + 1;
+    while (k < n - 1 && H[k * W] - H[b * W] < 0.1) k++;
+    const dt = H[k * W] - H[b * W];
+    if (!(dt > 0) || sg * (H[k * W + 3] - H[b * W + 3]) < min * dt) break;
+    b = k;
+  }
+  o.a = a; o.b = b;
   return o;
 }
 
@@ -1360,13 +1484,18 @@ export function featView(f) {
   const yawSpan = yawUp >= yawDn ? yawUp : yawDn;
   const yawT = yawUp >= yawDn ? (f.yawUpT || 0) : (f.yawDnT || 0);
   const yawRate = yawT > 0 ? yawSpan / yawT : 0;
+  // Orbit: the same inside ORBIT_WIN_S.
+  const slowUp = f.slowUp || 0, slowDn = f.slowDn || 0;
+  const slowSpan = slowUp >= slowDn ? slowUp : slowDn;
+  const slowT = slowUp >= slowDn ? (f.slowUpT || 0) : (f.slowDnT || 0);
+  const slowRate = slowT > 0 ? slowSpan / slowT : 0;
   // Ham: the turn about the vertical while inverted, the larger way.
   const invYaw = Math.max(f.invYawUp || 0, f.invYawDn || 0);
   return {
     absP, absR, absY, head, span, drop, follow, against, inv, close, hEnd, meanDot,
     invFol, invAg, pathP, pathR, pathY, under, over, obj, objOrbit, opp, front, rad,
     flipSpan, flipDir, rollSpan, rollRate, loopSpan, loopDir, loops, loopRise, loopRet, loopSweep,
-    yawSpan, yawRate, invYaw,
+    yawSpan, yawRate, slowSpan, slowRate, invYaw,
   };
 }
 
@@ -1445,37 +1574,59 @@ export function classifyFeat(f, out) {
     atMost(absY, 2.4, 0.7),
   );
   // Barani, as the owner flies it: BARANI_P of pitch path with a half twist
-  // (180 +- 45, roll or yaw: the axis nearest the flight path) inside it,
+  // (180 +- 45, roll or yaw: the axis nearest the flight path; or the
+  // heading's turn, the yaw made inverted, 120-225) inside it,
   // ending upright (up-Z 0.5, as the Half Mavvy's and the Immelmann's). Any
   // climb, any time. A Half Mavvy turns the same way and goes under an
   // object against the nose after its roll; it ranks above.
   // (5.236 and 0.35: BARANI_P and BARANI_FADE.)
+  // The twist by the measure that gave it (-1 for the other): the heading's
+  // from BARANI_HD_LO (120), the twist's from 135.
+  const barRTwist = f.barVia ? -1 : f.barR, barRHead = f.barVia ? f.barR : -1;
   _sc.barani = mul(
     atLeast(f.barP, 5.236, 0.35),
-    inBand(f.barR, 2.356, 3.927, 0),
+    Math.max(inBand(barRTwist, 2.356, 3.927, 0), inBand(barRHead, 2.094, 3.927, 0)),
     atLeast(f.upEnd, 0.5, 0),
   );
   {
     // Trippy Spin: >= 360 degrees of turn about the vertical at >= 150 deg/s
     // between its two ends, while the path orbits a centre over the whole
-    // spin: it curves at a radius of 0.3-2.5 m, its direction turns a full
-    // turn or more, one way (80 % of its turning), at >= 1 m/s. Upright or
-    // inverted, rolling or not (no roll term); no object needed (one at the
-    // centre earns TRIPPY_POLE_MUL).
+    // spin: it curves at a radius of 0.3 m or more (no upper limit: the
+    // distance does not decide it), its direction turns a full turn or more,
+    // one way (80 % of its turning), at >= 1 m/s, and 70 % of it or more
+    // tilted back round the centre or inverted (TRIPPY_TAIL): the picture
+    // upside down, whatever the cam tilt. An upright orbit is an Orbit.
+    // Rolling or not (no roll term); no object needed (one at the centre
+    // earns TRIPPY_POLE_MUL).
     _sc.trippy = mul(
       atLeast(v.yawSpan, 6.2832, 0),
       atLeast(v.yawRate, 2.618, 0),
-      inBand(f.orbitR, 0.3, 2.5, 0),
+      atLeast(f.orbitR, 0.3, 0),
       atLeast(f.orbitSweep, 6.2832, 0),
       atLeast(f.orbitTurn, 0.8, 0),
       atLeast(f.orbitSpd, 1.0, 0),
+      atLeast(f.orbitTail, 0.7, 0),
+    );
+    // Orbit: the upright orbit, the nose and camera on the centre, at its own
+    // rate: >= 360 degrees about the vertical inside ORBIT_WIN_S at >= 90
+    // deg/s, the path orbiting a centre as Trippy's over the whole orbit, and
+    // 30 % of it or less tilted back or inverted (ORBIT_TAIL). One orbit cut
+    // into segments scores once (finishManeuver).
+    _sc.orbit = mul(
+      atLeast(v.slowSpan, 6.2832, 0),
+      atLeast(v.slowRate, 1.571, 0),
+      atLeast(f.orbit2R, 0.3, 0),
+      atLeast(f.orbit2Sweep, 6.2832, 0),
+      atLeast(f.orbit2Turn, 0.8, 0),
+      atLeast(f.orbit2Spd, 1.0, 0),
+      atMost(f.orbit2Tail, 0.3, 0),
     );
     // Ham Spin, the inverted yaw spin: >= 300 degrees of turn about the
     // vertical counted only while inverted (up-Z < HAM_UPZ). A half flip in
     // and a half flip out are allowed: they turn little about the vertical,
     // and the segment is one Ham, not a Flip. A flip or roll that only passes
-    // through inverted turns little about the vertical there. An orbit is
-    // Trippy, a full Roll a Roll (the re-labels below).
+    // through inverted turns little about the vertical there. An inverted
+    // orbit is a Trippy, a full Roll a Roll (the re-labels below).
     _sc.ham = mul(
       atLeast(v.invYaw, 5.236, 0),
     );
@@ -1692,7 +1843,14 @@ export function makeDetector() {
     altT: new Float64Array(ALT_RING), altA: new Float64Array(ALT_RING), altI: 0, altN: 0,
     // Trippy and Barani scratch; the colliders and scale of the last step.
     orb: { r: 0, fit: 9, sweep: 0, turn: 0, spd: 0, cx: 0, cz: 0, kr: 0 },
-    bar: { p: 0, r: 0 },
+    orb2: { r: 0, fit: 9, sweep: 0, turn: 0, spd: 0, cx: 0, cz: 0, kr: 0 },
+    wid: { a: 0, b: 0 },
+    bar: { p: 0, r: 0, via: 0 },
+    // The nose beside each history row (BH_W).
+    bh: new Float64Array(HIST_CAP * BH_W),
+    // An orbit scores once: when the last orbit segment ended (clock), and
+    // whether the last segment was one going on (not scored again).
+    orbitEnd: -1e9, orbitSg: 0, lastCont: 0,
     cols: null, ws: 3.5, lastPole: 0,
     proxT: 0, proxCd: 0,
     lockout: 0,
@@ -1776,6 +1934,7 @@ export function resetDetector(d, sample) {
   d.histN = 0;
   d.susCol = 0;
   d.recJson = '';
+  d.orbitEnd = -1e9; d.orbitSg = 0; d.lastCont = 0;
   if (sample) {
     d.qx = sample.qx || 0; d.qy = sample.qy || 0; d.qz = sample.qz || 0; d.qw = sample.qw == null ? 1 : sample.qw;
     d.haveQ = 1;
@@ -1944,6 +2103,14 @@ function genericGapKind(clr, svx, svz, sideMax) {
   return clr.pz <= sideMax && clr.nz <= sideMax ? 2 : 0;
 }
 
+// The nose at the step's attitude, and the yaw's turn about the vertical so
+// far, into body-history row r (BH_W).
+function bodyRow(d, r) {
+  const x = d.qx, y = d.qy, z = d.qz, w = d.qw, i = r * BH_W, B = d.bh;
+  B[i] = 1 - 2 * (y * y + z * z); B[i + 1] = 2 * (x * y + w * z); B[i + 2] = 2 * (x * z - w * y);
+  B[i + 3] = d.feat.yawV;
+}
+
 function beginFeat(d, alt, wx, wz, head, speed, thr, upZ, vx, vy, vz) {
   d.recN = 0;
   d.recNextT = 0;
@@ -1966,6 +2133,7 @@ function beginFeat(d, alt, wx, wz, head, speed, thr, upZ, vx, vy, vz) {
   d.hist[11] = 0;
   d.hist[12] = vy || 0;
   d.hist[13] = head;
+  bodyRow(d, 0);
   d.histN = 1;
   d.susCol = 0;
   f.h0x = wx; f.h0z = wz; f.h1x = wx; f.h1z = wz;
@@ -2003,10 +2171,13 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
     // The world-up component of this step's rotation (the body axes' up
     // components from the step's attitude).
     const qx = d.qx, qy = d.qy, qz = d.qz, qw = d.qw;
-    const dv = 2 * (qx * qz - qw * qy) * dr + 2 * (qy * qz + qw * qx) * dp + (1 - 2 * (qx * qx + qy * qy)) * dy;
+    const yv = (1 - 2 * (qx * qx + qy * qy)) * dy;
+    const dv = 2 * (qx * qz - qw * qy) * dr + 2 * (qy * qz + qw * qx) * dp + yv;
     f.vyaw += dv;
-    // Ham: the same turn, counted only while inverted.
+    // Ham: the same turn, counted only while inverted; the Barani's heading
+    // the yaw's share of it alone.
     if (upZ < HAM_UPZ) {
+      f.yawV += yv;
       f.invYawT += step;
       f.invC += dv;
       if (f.invC - f.invLo > f.invYawUp) f.invYawUp = f.invC - f.invLo;
@@ -2039,6 +2210,7 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
     d.hist[hi + 13] = head;
     d.hist[hi + 14] = f.yaw;
     d.hist[hi + 15] = f.twist;
+    bodyRow(d, d.histN);
     d.histN += 1;
   }
   {
@@ -2123,33 +2295,32 @@ export function windowFeat(d) {
   // The orbit is measured over the whole spin: out from that window, a
   // 0.1 s piece at a time, while the turn keeps going the same way at
   // TRIPPY_HOLD of TRIPPY_RATE or more.
-  {
-    const H = d.hist, W = HIST_W, sg = up ? 1 : -1, min = TRIPPY_RATE * TRIPPY_HOLD;
-    while (a > 0) {
-      let k = a - 1;
-      while (k > 0 && H[a * W] - H[k * W] < 0.1) k--;
-      const dt = H[a * W] - H[k * W];
-      if (!(dt > 0) || sg * (H[a * W + 3] - H[k * W + 3]) < min * dt) break;
-      a = k;
-    }
-    while (b < d.histN - 1) {
-      let k = b + 1;
-      while (k < d.histN - 1 && H[k * W] - H[b * W] < 0.1) k++;
-      const dt = H[k * W] - H[b * W];
-      if (!(dt > 0) || sg * (H[k * W + 3] - H[b * W + 3]) < min * dt) break;
-      b = k;
-    }
-  }
+  widenSpin(d.hist, d.histN, a, b, up ? 1 : -1, TRIPPY_RATE * TRIPPY_HOLD, d.wid);
+  a = d.wid.a; b = d.wid.b;
   const o = orbitFit(d.hist, a, b, d.orb);
   f.orbitR = o.r; f.orbitFit = o.fit; f.orbitSweep = o.sweep; f.orbitTurn = o.turn; f.orbitSpd = o.spd;
   const ws = d.ws || 3.5;
   f.orbitCx = o.cx * ws; f.orbitCz = o.cz * ws;
   f.orbitPole = o.kr > 0 ? poleNear(d.cols, f.orbitCx, f.orbitCz, ws) : 0;
+  f.orbitTa = d.histN ? d.hist[a * HIST_W] : 0; f.orbitTb = d.histN ? d.hist[b * HIST_W] : 0;
+  f.orbitTail = o.kr > 0 ? tailShare(d.hist, d.bh, a, b) : 0;
+  // Orbit: the same inside ORBIT_WIN_S, widened at TRIPPY_HOLD of ORBIT_RATE.
+  spanWithin(d.hist, d.histN, 3, ORBIT_WIN_S, d.span, d.dq);
+  f.slowUp = s.up; f.slowUpT = s.upT; f.slowDn = s.dn; f.slowDnT = s.dnT;
+  {
+    const up2 = s.up >= s.dn;
+    widenSpin(d.hist, d.histN, up2 ? s.upA : s.dnA, up2 ? s.upB : s.dnB, up2 ? 1 : -1, ORBIT_RATE * TRIPPY_HOLD, d.wid);
+    const a2 = d.wid.a, b2 = d.wid.b;
+    const o2 = orbitFit(d.hist, a2, b2, d.orb2);
+    f.orbit2R = o2.r; f.orbit2Sweep = o2.sweep; f.orbit2Turn = o2.turn; f.orbit2Spd = o2.spd;
+    f.orbit2Tail = o2.kr > 0 ? tailShare(d.hist, d.bh, a2, b2) : 0;
+    f.orbit2Pole = o2.kr > 0 ? poleNear(d.cols, o2.cx * ws, o2.cz * ws, ws) : 0;
+  }
   // Barani: only worth the scan when a flip's worth of pitch path is there.
   if ((f.pathP || 0) >= BARANI_P - BARANI_FADE) {
-    const bw = baraniWithin(d.hist, d.histN, d.bar);
-    f.barP = bw.p; f.barR = bw.r;
-  } else { f.barP = 0; f.barR = 0; }
+    const bw = baraniWithin(d.hist, d.histN, d.bar, HIST_W, d.bh);
+    f.barP = bw.p; f.barR = bw.r; f.barVia = bw.via;
+  } else { f.barP = 0; f.barR = 0; f.barVia = 0; }
   return f;
 }
 
@@ -2173,11 +2344,39 @@ function finishManeuver(d) {
       + '\n  merged ' + mg.segs + ' segments, ' + mg.t.toFixed(2) + ' s (this one alone: ' + (cls.id || 'none') + ')';
     d.lastMerge = mg;
   }
+  // An orbit scores once: a segment cut at the cap that goes on orbiting the
+  // same way (the orbit went on to under MERGE_GAP_S before this one began)
+  // is the same orbit, and scores nothing. So is one that goes on turning
+  // that way at TRIPPY_HOLD of ORBIT_RATE, half a turn or more inside
+  // ORBIT_WIN_S, the path still going round (half an orbit or more): a
+  // slower piece of the same orbit, which alone is nothing or a Yaw Spin. It
+  // carries the orbit on.
+  d.lastCont = 0;
+  {
+    const lf = d.lastFeat, on = d.clock - lf.dur - d.orbitEnd < MERGE_GAP_S;
+    if (id === 'orbit') {
+      const sg = (lf.slowUp || 0) >= (lf.slowDn || 0) ? 1 : -1;
+      if (on && sg === d.orbitSg) {
+        d.lastCont = 1; id = '';
+        why = 'Orbit, going on: one orbit scores once';
+      }
+      d.orbitEnd = d.clock; d.orbitSg = sg;
+    } else if ((!id || id === 'yawspin') && on) {
+      const sp = d.orbitSg > 0 ? lf.slowUp : lf.slowDn, st = d.orbitSg > 0 ? lf.slowUpT : lf.slowDnT;
+      if (sp >= Math.PI && st > 0 && sp >= ORBIT_RATE * TRIPPY_HOLD * st && lf.orbit2Sweep >= Math.PI) {
+        d.orbitEnd = d.clock;
+        if (id) {
+          d.lastCont = 1; id = '';
+          why = 'Orbit, going on: one orbit scores once (alone, a Yaw Spin)';
+        }
+      }
+    }
+  }
   d.lastWhy = why;
   d.lastId = id;
   d.lastDir = (d.feat.flipUp || 0) >= (d.feat.flipDn || 0) ? 1 : -1;
   d.lastLoops = id === 'powerloop' ? Math.max(1, loopCount(d.feat.loopTot || 0)) : 0;
-  d.lastPole = id === 'trippy' && d.feat.orbitPole ? 1 : 0;
+  d.lastPole = (id === 'trippy' && d.feat.orbitPole) || (id === 'orbit' && d.feat.orbit2Pole) ? 1 : 0;
   d.lastGapBack = id === 'maverick' && (d.lastMerge ? d.lastMerge.gapBack : d.feat.gapBack) ? 1 : 0;
   d.lastSloppy = (d.feat.seg && LOOP_IDS[id]) ? 1 : 0;
   d.lastBump = d.feat.bump ? 1 : 0;
@@ -2704,7 +2903,7 @@ export function createTricks(opts) {
     const b2b = sessionLast === id ? sessionB2b + 1 : 0;
     const sloppy = !!det.lastSloppy;
     const bump = !!det.lastBump;
-    const pole = id === 'trippy' && det.lastPole;
+    const pole = (id === 'trippy' || id === 'orbit') && det.lastPole;
     // A Maverick back out through the gap it came in by.
     const gapBack = id === 'maverick' && det.lastGapBack;
     // A Double Powerloop (or more) scores the Powerloop's points per loop.
