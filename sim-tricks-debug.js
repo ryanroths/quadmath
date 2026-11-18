@@ -26,8 +26,8 @@ import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
-  HIST_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE,
-} from './sim-tricks.js?v=040caecbcab0';
+  HIST_W, BH_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE,
+} from './sim-tricks.js?v=13acaf135042';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
@@ -323,10 +323,13 @@ function sawOf(f, v, ctx) {
     slowYawDeg: degOf(v.slowSpan), slowRateDeg: degOf(v.slowRate),
     orbit2R: r3(f.orbit2R), orbit2SweepDeg: degOf(f.orbit2Sweep), orbit2Turn: r3(f.orbit2Turn), orbit2Spd: r3(f.orbit2Spd),
     orbit2Tail: r3(f.orbit2Tail), orbit2Pole: f.orbit2Pole,
-    baraniPitchDeg: degOf(f.barP), baraniTwistDeg: degOf(f.barR), upEnd: r3(f.upEnd),
+    // baraniVia: 1 when the heading's turn gave the twist.
+    baraniPitchDeg: degOf(f.barP), baraniTwistDeg: degOf(f.barR), baraniVia: f.barVia || 0, upEnd: r3(f.upEnd),
     // The segment's twist: its turn about the body axis nearest the flight
-    // path, roll or yaw (the Barani's).
-    twistDeg: degOf(f.twist),
+    // path, roll or yaw (the Barani's); and the heading's turn (the yaw's
+    // own turn about the vertical while inverted: each step's yaw times the
+    // body's up-Z while it is below -0.5, summed).
+    twistDeg: degOf(f.twist), yawVDeg: degOf(f.yawV),
     // Ham: the turn about the vertical while up-Z < -0.5, and that time's
     // share of the segment.
     invYawDeg: degOf(v.invYaw), inv50: r3(f.dur > 0 ? f.invYawT / f.dur : 0),
@@ -760,46 +763,55 @@ export function createTrickObserver(det, opts) {
   // of BARANI_P less BARANI_FADE or more of pitch path whose twist is
   // nearest 180, without and with BARANI_SIDE (pitch path before and after
   // the row where the twist is half done), each with its pitch path, twist
-  // and the pitch path either side (deg) and its time (s); which term
-  // zeroed it (limit: barP, barR band, BARANI_SIDE, upEnd, or none).
+  // and the pitch path either side (deg), its time (s) and which twist
+  // (via: 'twist', the body axis nearest the path, or 'heading', the
+  // heading's turn); which term zeroed it (limit: barP, barR band,
+  // BARANI_SIDE, upEnd, or none).
   function baraniProbe(f) {
     const H = det.hist, n = det.histN, W = HIST_W, D = 180 / Math.PI;
     const lo = BARANI_P - BARANI_FADE, bandLo = 2.356, bandHi = 3.927;
     const out = { pathDeg: degOf(f.pathP), twistDeg: degOf(f.twist), upEnd: r3(f.upEnd), band: [135, 225], sideDeg: degOf(BARANI_SIDE), any: null, inside: null, limit: null };
     if (!H || n < 2 || !(f.pathP >= lo)) { out.limit = 'barP'; return out; }
     const stride = Math.max(1, Math.ceil(n / PH_ROWS));
-    const pp = [0], tw = [H[15]], tt = [H[0]];
+    // The twist (column 15) and the heading's turn (the yaw's own turn about
+    // the vertical while inverted, the body history's fourth), as
+    // baraniWithin.
+    const B = det.bh;
+    const pp = [0], cols = [[H[15]], [B[3]]], tt = [H[0]];
     let path = 0;
     for (let r = 1; r < n; r++) {
       path += Math.abs(H[r * W + 1] - H[(r - 1) * W + 1]);
-      if (r === n - 1 || r % stride === 0) { pp.push(path); tw.push(H[r * W + 15]); tt.push(H[r * W]); }
+      if (r === n - 1 || r % stride === 0) { pp.push(path); cols[0].push(H[r * W + 15]); cols[1].push(B[r * BH_W + 3]); tt.push(H[r * W]); }
     }
     const m = pp.length;
-    const half = (ja, jb) => {
-      const raw = tw[jb] - tw[ja], T = Math.abs(raw), sg = raw >= 0 ? 1 : -1;
+    const half = (A, ja, jb) => {
+      const raw = A[jb] - A[ja], T = Math.abs(raw), sg = raw >= 0 ? 1 : -1;
       let k = ja + 1;
-      while (k < jb && sg * (tw[k] - tw[ja]) < T / 2) k++;
+      while (k < jb && sg * (A[k] - A[ja]) < T / 2) k++;
       return { before: pp[k] - pp[ja], after: pp[jb] - pp[k] };
     };
-    const row = (ja, jb) => {
-      const h = half(ja, jb);
-      return { pDeg: Math.round((pp[jb] - pp[ja]) * D), twistDeg: Math.round(Math.abs(tw[jb] - tw[ja]) * D), beforeDeg: Math.round(h.before * D), afterDeg: Math.round(h.after * D), t: [r3(tt[ja]), r3(tt[jb])] };
+    const row = (c, ja, jb) => {
+      const A = cols[c], h = half(A, ja, jb);
+      return { pDeg: Math.round((pp[jb] - pp[ja]) * D), twistDeg: Math.round(Math.abs(A[jb] - A[ja]) * D), beforeDeg: Math.round(h.before * D), afterDeg: Math.round(h.after * D), t: [r3(tt[ja]), r3(tt[jb])], via: c ? 'heading' : 'twist' };
     };
-    let anyOff = 9, anyA = -1, anyB = -1, inOff = 9, inA = -1, inB = -1;
+    let anyOff = 9, anyA = -1, anyB = -1, anyC = 0, inOff = 9, inA = -1, inB = -1, inC = 0;
     for (let ja = 0; ja < m - 1; ja++) {
       for (let jb = m - 1; jb > ja; jb--) {
         if (pp[jb] - pp[ja] < lo) break;
-        const off = Math.abs(Math.abs(tw[jb] - tw[ja]) - Math.PI);
-        if (off < anyOff) { anyOff = off; anyA = ja; anyB = jb; }
-        if (off < inOff) {
-          const h = half(ja, jb);
-          if (h.before >= BARANI_SIDE && h.after >= BARANI_SIDE) { inOff = off; inA = ja; inB = jb; }
+        for (let c = 0; c < 2; c++) {
+          const A = cols[c];
+          const off = Math.abs(Math.abs(A[jb] - A[ja]) - Math.PI);
+          if (off < anyOff) { anyOff = off; anyA = ja; anyB = jb; anyC = c; }
+          if (off < inOff) {
+            const h = half(A, ja, jb);
+            if (h.before >= BARANI_SIDE && h.after >= BARANI_SIDE) { inOff = off; inA = ja; inB = jb; inC = c; }
+          }
         }
       }
     }
     const inBandT = (o) => o <= Math.PI - bandLo + 1e-9 && o <= bandHi - Math.PI + 1e-9;
-    if (anyA >= 0) out.any = row(anyA, anyB);
-    if (inA >= 0) out.inside = row(inA, inB);
+    if (anyA >= 0) out.any = row(anyC, anyA, anyB);
+    if (inA >= 0) out.inside = row(inC, inA, inB);
     if (anyA < 0) out.limit = 'barP';
     else if (!inBandT(anyOff)) out.limit = 'barR band';
     else if (!(inA >= 0 && inBandT(inOff))) out.limit = 'BARANI_SIDE';

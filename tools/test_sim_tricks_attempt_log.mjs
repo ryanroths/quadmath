@@ -13,8 +13,8 @@
 //   compound tricks: three Baranis, at 28.6, 34.2 and 38.1 s;
 // - tools/fixtures/tricklog-{bando,rig,depot}-bf-*.jsonl.gz, the owner's
 //   dumps of 2026-11-17 and 18, each under a label of what was flown (LOGS,
-//   below): orbits and Trippies in the Bando, and the re-fly's Trippies and
-//   orbits in the Rig.
+//   below): orbits, Trippies, Hams and Baranis in the Bando, and the re-fly's
+//   Trippies and orbits in the Rig and Baranis in the Warehouse.
 //
 // Each maneuver record carries what the detector saw (saw, rounded) and every
 // candidate's gate values (3 decimals, rad). The test rebuilds the segment's
@@ -96,7 +96,7 @@ import { dirname, join } from 'node:path';
 import {
   classifyFeat, featView, makeFeat, loopCount, trickName, LOOP_WIN_S, SAMPLE_S, HAM_UPZ, HAM_MIN,
   PHASE_SPECS, PHASE_FIELD, matchSpec, MERGE_GAP_S, MANEUVER_MAX_S,
-  NOSE_SIDE, ORBIT_WIN_S, ORBIT_RATE, TRIPPY_HOLD,
+  NOSE_SIDE, ORBIT_WIN_S, ORBIT_RATE, TRIPPY_HOLD, BARANI_P, BARANI_FADE,
 } from '../sim-tricks.js';
 import { explainFeat, SPEC } from '../sim-tricks-debug.js';
 
@@ -167,12 +167,33 @@ export function invYawFrom(s, g) {
 // about as much; a yaw made on its side, the path across the up axis, turns
 // it little. The larger of the two. Whether the twist was inside the pitch
 // is not in the logs either: taken as inside.
+// Since the twist, the Barani takes the heading's turn too (the yaw's own
+// turn about the vertical, yawVDeg), whichever scores, nearer 180 when both
+// do: a log with yawVDeg has the gates' (exact); one with the twist but not
+// the heading has the twist's stretch exactly and the heading's estimated,
+// from the turn about the vertical made inverted (invYawDeg; flip, yaw
+// while inverted, flip, on the bf core, the two agree within 2 degrees,
+// tools/test_sim_tricks.mjs), over the segment's pitch path, inside the
+// pitch.
 export function baraniFrom(s, g) {
   if (s.twistDeg != null) {
-    return { p: 'f.barP' in g ? g['f.barP'] : s.baraniPitchDeg * DEG, r: 'f.barR' in g ? g['f.barR'] : s.baraniTwistDeg * DEG, exact: true };
+    const tw = { p: 'f.barP' in g ? g['f.barP'] : s.baraniPitchDeg * DEG, r: 'f.barR' in g ? g['f.barR'] : s.baraniTwistDeg * DEG, exact: true, via: 0 };
+    if (s.yawVDeg != null || s.invYawDeg == null) return tw;
+    const hd = { p: s.pathP, r: s.invYawDeg * DEG, exact: false, via: 1 };
+    const sc = (b) => atLeastL(b.p, BARANI_P, BARANI_FADE) * (b.r >= 2.356 && b.r <= 3.927 ? 1 : 0);
+    const a = sc(tw), b = sc(hd);
+    if (b > a + 1e-9 || (b > 0 && Math.abs(b - a) <= 1e-9 && Math.abs(hd.r - Math.PI) < Math.abs(tw.r - Math.PI))) return hd;
+    return tw;
   }
   const yawSpan = 'v.yawSpan' in g ? g['v.yawSpan'] : s.vyawDeg * DEG;
   return { p: s.pathP, r: Math.max(Math.abs(s.roll), Math.min(Math.abs(s.yaw), yawSpan)), exact: false };
+}
+
+// classifyFeat's atLeast, for the estimates above.
+function atLeastL(x, a, fade) {
+  if (x >= a) return 1;
+  if (!(fade > 0) || x <= a - fade) return 0;
+  return (x - (a - fade)) / fade;
 }
 
 // Trippy's and Orbit's tail share (f.orbitTail, f.orbit2Tail), which no log
@@ -337,7 +358,7 @@ export function featFromLog(rec, ctx) {
   f.orbit2Tail = tail.v2;
   f.orbit2Pole = s.orbit2Pole != null ? s.orbit2Pole : f.orbitPole;
   const bar = baraniFrom(s, g);
-  f.barP = bar.p; f.barR = bar.r;
+  f.barP = bar.p; f.barR = bar.r; f.barVia = bar.via || 0;
   // The logged sweep is the velocity's turn the flip's way.
   const loopSweep = val('v.loopSweep', s.loopSweepDeg);
   f.sweep = flipDir > 0 ? -loopSweep : loopSweep;
@@ -358,7 +379,7 @@ export function featFromLog(rec, ctx) {
     else if (k in g && 'merged' in rec && SINCE_MERGE[id]) f[PHASE_FIELD[id]] = g[k] * SINCE_MERGE[id](s);
     else f[PHASE_FIELD[id]] = est[id];
   }
-  return { f, g, flipDir, loop: lp, inv, phExact, tail, slow };
+  return { f, g, flipDir, loop: lp, inv, phExact, tail, slow, bar };
 }
 
 // The altitude at time t (s, the log's clock) from the maneuver records
@@ -546,10 +567,11 @@ const LOGS = [
   // The owner's dumps from 2026-11-17 and 18, each a "Copy trick log" pasted
   // under a label of what was flown (NEW below each).
   // The owner's dumps of 2026-11-17 and 18, each a "Copy trick log" pasted
-  // under a label of what was flown. The Bando's two, with no counts or order
-  // to match the segments by, back the labels each fired and pin only the
-  // Orbits (both fired Trippy: the orbits the owner says are not Trippies);
-  // the re-fly's two pin what the owner noted flying, in order.
+  // under a label of what was flown. The first four (the Bando), with no
+  // counts or order to match the segments by, back the labels each fired
+  // and pin only the Orbits (both fired Trippy: the orbits the owner says
+  // are not Trippies); the re-fly's three pin what the owner noted flying,
+  // in order. OPEN: segments no label is asserted for (said why).
   {
     name: 'bando orbits', map: 'bando', file: 'tools/fixtures/tricklog-bando-bf-orbit.jsonl.gz', records: 16, maneuvers: 10, fired: 2,
     // "This is an orbit, not a trippy spin": seq 7 and 11 (fired Trippy),
@@ -560,6 +582,20 @@ const LOGS = [
     name: 'bando trippies', map: 'bando', file: 'tools/fixtures/tricklog-bando-bf-trippy.jsonl.gz', records: 16, maneuvers: 12, fired: 3,
     // "Real trippy spin": seq 11, 13 and 15 fired Trippy and stay.
     NEW: {},
+  },
+  {
+    name: 'bando hams', map: 'bando', file: 'tools/fixtures/tricklog-bando-bf-ham.jsonl.gz', records: 15, maneuvers: 11, fired: 4,
+    // Seq 3, 8 and 12 fired Ham and stay; seq 14 fired Barani and stays (not
+    // the owner's label either way).
+    NEW: {},
+  },
+  {
+    name: 'bando baranis', map: 'bando', file: 'tools/fixtures/tricklog-bando-bf-barani.jsonl.gz', records: 31, maneuvers: 16, fired: 5,
+    // Seq 6, 12, 17 and 28 fired Barani and stay.
+    NEW: {},
+    // Unmatched to an attempt: 139 of yaw inverted over 381 of pitch path,
+    // upright at the end, a Barani by the estimate (baraniFrom).
+    OPEN: { 9: 'barani' },
   },
   {
     name: 'rig trippies', map: 'rig', file: 'tools/fixtures/tricklog-rig-bf-trippy.jsonl.gz', records: 25, maneuvers: 19, fired: 3,
@@ -573,7 +609,15 @@ const LOGS = [
     // 8 fired Trippy). One Orbit each, on the piece that holds 360.
     NEW: { 3: 'orbit', 8: 'orbit' },
   },
-
+  {
+    name: 'depot baranis', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-barani.jsonl.gz', records: 26, maneuvers: 18, fired: 1,
+    // The re-fly's Baranis, none fired: seq 4, 11, 18 and 22, by the
+    // heading's estimate (the turn about the vertical made inverted: 159,
+    // 132, 161, 166). Seq 11's 132 is short of 135 by the estimate, which
+    // its exact value (the build logs it, yawVDeg) may not be.
+    NEW: { 4: 'barani', 18: 'barani', 22: 'barani' },
+    OPEN: { 11: 'barani' },
+  },
 ];
 for (const L of LOGS) {
   L.recs = readLog(L.file);
@@ -605,7 +649,7 @@ test('the rebuilt features reproduce every logged gate value', () => {
   for (const L of LOGS) {
     for (const r of L.scored) {
       if (r.pre.tiny) continue;
-      const { f, g, flipDir } = featFromLog(r);
+      const { f, g, flipDir, bar } = featFromLog(r);
       const now = gateValues(explainFeat(f));
       const loopDir = featView(f).loopDir;
       for (const k of Object.keys(g)) {
@@ -615,8 +659,9 @@ test('the rebuilt features reproduce every logged gate value', () => {
         if (!(k in now)) continue;   // a gate a later change removed
         // A matcher trick defined differently since the log (log 3's).
         if (/^f\.ph(Mav|Matty|HMatty|HMavvy)$/.test(k)) continue;
-        // The Barani's terms, measured since by the twist (baraniFrom).
-        if ((k === 'f.barP' || k === 'f.barR') && r.saw.twistDeg == null) continue;
+        // The Barani's terms, measured since by the twist, and by the
+        // heading where it scores (baraniFrom).
+        if ((k === 'f.barP' || k === 'f.barR') && (r.saw.twistDeg == null || (r.saw.yawVDeg == null && bar.via))) continue;
         const tol = 0.0025 + 0.002 * Math.abs(g[k]);
         assert.ok(Math.abs(now[k] - g[k]) <= tol, L.name + ' seq ' + r.seq + ' ' + k + ': logged ' + g[k] + ', rebuilt ' + now[k]);
       }
@@ -693,7 +738,8 @@ test('every label a log fired stays the same (but log 2 seq 26, the phase matche
     const out = replayed(L);
     const off = [];
     for (const r of L.scored) {
-        const got = out.get(r.seq).id;
+      if (L.OPEN && r.seq in L.OPEN) continue;
+      const got = out.get(r.seq).id;
       const want = r.seq in L.NEW ? L.NEW[r.seq] : r.result;
       if (got !== want) off.push('seq ' + r.seq + ' is ' + got + ', want ' + want + ' (the log fired ' + r.result + ')');
     }
@@ -713,23 +759,30 @@ test('every label a log fired stays the same (but log 2 seq 26, the phase matche
   ]);
 });
 
-test('the dumps of 2026-11-17 and 18: every label that changes', () => {
+test('the dumps of 2026-11-17 and 18: every label that changes, and the open ones', () => {
   const NEWER = LOGS.slice(4);
   const changed = NEWER.flatMap((L) => L.scored.filter((r) => r.seq in L.NEW && L.NEW[r.seq] !== r.result).map((r) => L.name + ' seq ' + r.seq + ' ' + (r.result || 'none') + '->' + L.NEW[r.seq]));
   assert.deepEqual(changed, [
     'bando orbits seq 7 trippy->orbit', 'bando orbits seq 11 trippy->orbit',
     'rig orbits seq 3 trippy->orbit', 'rig orbits seq 8 trippy->orbit',
+    'depot baranis seq 4 none->barani', 'depot baranis seq 18 none->barani', 'depot baranis seq 22 none->barani',
   ]);
-  // Every label they fired that stays: the Trippies.
+  // What the open ones read now (not asserted as the owner's).
+  const open = NEWER.flatMap((L) => Object.keys(L.OPEN || {}).map((seq) => L.name + ' seq ' + seq + ' ' + (replayed(L).get(Number(seq)).id || 'none')));
+  assert.deepEqual(open, ['bando baranis seq 9 barani', 'depot baranis seq 11 none']);
+  // Every label they fired that stays: the Trippies, Hams and Baranis.
   const kept = (L, id) => L.scored.filter((r) => r.result === id && replayed(L).get(r.seq).id === id).map((r) => r.seq);
-  const [BO, BT, RT] = NEWER;
+  const [BO, BT, BH, BB, RT] = NEWER;
   assert.deepEqual(kept(BT, 'trippy'), [11, 13, 15]);
+  assert.deepEqual(kept(BH, 'ham'), [3, 8, 12]);
+  assert.deepEqual(kept(BH, 'barani'), [14]);
+  assert.deepEqual(kept(BB, 'barani'), [6, 12, 17, 28]);
   assert.deepEqual(kept(RT, 'trippy'), [6, 10, 23]);
   assert.equal(BO.scored.filter((r) => r.result === 'trippy').length, 2);
 });
 
 test('the dumps: Trippy is the tail to the centre, an upright orbit with the nose on it an Orbit (the tail share estimated), and one orbit cut at the cap scores once', () => {
-  const [BO, BT, RT, RO] = LOGS.slice(4);
+  const [BO, BT, , , RT, RO] = LOGS.slice(4);
   const tail = (L, seq) => tailFrom(L.bySeq.get(seq), gateValues(L.bySeq.get(seq)));
   // The re-fly's rows (24 a segment over the orbit's window), by the
   // detector's rule: the Trippies 0.92-1, the orbits 0.

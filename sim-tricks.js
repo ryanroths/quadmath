@@ -57,9 +57,13 @@ export const ROLL_WIN_S = 1.5;
 // at 1 ms steps fits.
 export const HIST_CAP = 10240;
 export const HIST_W = 16;
-// Beside each history row, the nose (BH_W per row: its x, y and up
-// components, in the sample's own frame, as the velocity columns 9 and 12).
-export const BH_W = 3;
+// Beside each history row (BH_W per row): the nose (its x, y and up
+// components, in the sample's own frame, as the velocity columns 9 and 12),
+// then the yaw's own turn about the vertical while inverted so far (rad):
+// each step's yaw times the body's up-Z, while up-Z is below HAM_UPZ, so a
+// yaw made upright or with the nose near vertical, or a flip about a banked
+// axis, turns nothing in it (the Barani's heading).
+export const BH_W = 4;
 // Powerloop: >= 300 degrees of pitch inside any LOOP_WIN_S window (a loop is
 // slower than a flip). The loops are counted over the segment's whole turn
 // of pitch the loop's way: two from LOOP_TWO (600 degrees), then one more for
@@ -104,7 +108,11 @@ export const TRIPPY_POLE_MUL = 1.25;
 // turn about the body axis nearest the flight path: roll when the nose is
 // along it (flying level), yaw when the up axis is (punched up, or inverted
 // and falling); slower than TWIST_SPD (m/s), where the path is no direction
-// to speak of, whichever of the two turns faster. Inside: BARANI_SIDE of
+// to speak of, whichever of the two turns faster. Or the heading's turn: the
+// yaw's own turn about the vertical while inverted (the owner yaws the half
+// twist upside down at the top of the loop, moving along the nose, where the
+// twist above sees the roll only; baraniWithin). Whichever of the two
+// scores, nearer 180 when both do. Inside: BARANI_SIDE of
 // pitch path or more before the twist is half done, and after. 300 degrees
 // fades over BARANI_FADE (the owner's 38.1 s Barani turned 299).
 export const BARANI_P = 5.236;
@@ -520,6 +528,10 @@ export function makeFeat() {
     // carried into the world, its up component. A tilted spin turns the
     // heading at the full rate while its body-axis yaw sees only cos(tilt).
     vyaw: 0,
+    // The yaw's own turn about the vertical while inverted (rad): each step's
+    // yaw times the body's up-Z, while up-Z is below HAM_UPZ (BH_W, the
+    // Barani's heading).
+    yawV: 0,
     // The twist (rad, summed): each step's turn about the body axis nearest
     // the flight path, roll or yaw (BARANI_P).
     twist: 0,
@@ -536,7 +548,8 @@ export function makeFeat() {
     orbit2R: 0, orbit2Sweep: 0, orbit2Turn: 0, orbit2Spd: 0, orbit2Tail: 0, orbit2Pole: 0,
     // Barani (baraniWithin): the pitch path and |twist| of the stretch that
     // scores best as a Barani's, the twist inside the pitch; up-Z at the end.
-    barP: 0, barR: 0, upEnd: 1,
+    // barVia: 1 when the heading's turn gave the twist.
+    barP: 0, barR: 0, barVia: 0, upEnd: 1,
     // Ham: the turn about the vertical while up-Z < HAM_UPZ (rad): its
     // running sum (invC) and that sum's lowest and highest so far (invLo,
     // invHi) give the largest rise and fall (invYawUp, invYawDn); invYawT is
@@ -577,12 +590,12 @@ export function resetFeat(f) {
   f.flipUp = 0; f.flipDn = 0; f.rollUp = 0; f.rollDn = 0; f.rollUpT = 0; f.rollDnT = 0;
   f.loopUp = 0; f.loopDn = 0; f.loopTot = 0;
   f.postMin = 0; f.sweep = 0; f.sweepTh = 0; f.sweepOn = 0;
-  f.yawUp = 0; f.yawDn = 0; f.yawUpT = 0; f.yawDnT = 0; f.vyaw = 0; f.twist = 0;
+  f.yawUp = 0; f.yawDn = 0; f.yawUpT = 0; f.yawDnT = 0; f.vyaw = 0; f.yawV = 0; f.twist = 0;
   f.orbitR = 0; f.orbitFit = 9; f.orbitSweep = 0; f.orbitTurn = 0; f.orbitSpd = 0; f.orbitCx = 0; f.orbitCz = 0; f.orbitPole = 0;
   f.orbitTa = 0; f.orbitTb = 0; f.orbitTail = 0;
   f.slowUp = 0; f.slowDn = 0; f.slowUpT = 0; f.slowDnT = 0;
   f.orbit2R = 0; f.orbit2Sweep = 0; f.orbit2Turn = 0; f.orbit2Spd = 0; f.orbit2Tail = 0; f.orbit2Pole = 0;
-  f.barP = 0; f.barR = 0; f.upEnd = 1;
+  f.barP = 0; f.barR = 0; f.barVia = 0; f.upEnd = 1;
   f.invC = 0; f.invLo = 0; f.invHi = 0; f.invYawUp = 0; f.invYawDn = 0; f.invYawT = 0;
   f.phFlip = 0; f.phLoop = 0; f.phSplits = 0; f.phImmel = 0; f.phMav = 0; f.phMatty = 0; f.phHMatty = 0; f.phHMavvy = 0;
   f.u0x = 0; f.u0y = 0; f.gapN = 0; f.gapIn = 0; f.gapInFin = -1; f.gapBack = 0;
@@ -617,14 +630,14 @@ export function copyFeat(src, dst) {
   d.rollUpT = src.rollUpT; d.rollDnT = src.rollDnT;
   d.loopUp = src.loopUp; d.loopDn = src.loopDn; d.loopTot = src.loopTot;
   d.postMin = src.postMin; d.sweep = src.sweep; d.sweepTh = src.sweepTh; d.sweepOn = src.sweepOn;
-  d.yawUp = src.yawUp; d.yawDn = src.yawDn; d.yawUpT = src.yawUpT; d.yawDnT = src.yawDnT; d.vyaw = src.vyaw; d.twist = src.twist;
+  d.yawUp = src.yawUp; d.yawDn = src.yawDn; d.yawUpT = src.yawUpT; d.yawDnT = src.yawDnT; d.vyaw = src.vyaw; d.yawV = src.yawV; d.twist = src.twist;
   d.orbitR = src.orbitR; d.orbitFit = src.orbitFit; d.orbitSweep = src.orbitSweep; d.orbitTurn = src.orbitTurn; d.orbitSpd = src.orbitSpd;
   d.orbitCx = src.orbitCx; d.orbitCz = src.orbitCz; d.orbitPole = src.orbitPole;
   d.orbitTa = src.orbitTa; d.orbitTb = src.orbitTb; d.orbitTail = src.orbitTail;
   d.slowUp = src.slowUp; d.slowDn = src.slowDn; d.slowUpT = src.slowUpT; d.slowDnT = src.slowDnT;
   d.orbit2R = src.orbit2R; d.orbit2Sweep = src.orbit2Sweep; d.orbit2Turn = src.orbit2Turn; d.orbit2Spd = src.orbit2Spd;
   d.orbit2Tail = src.orbit2Tail; d.orbit2Pole = src.orbit2Pole;
-  d.barP = src.barP; d.barR = src.barR; d.upEnd = src.upEnd;
+  d.barP = src.barP; d.barR = src.barR; d.barVia = src.barVia; d.upEnd = src.upEnd;
   d.invC = src.invC; d.invLo = src.invLo; d.invHi = src.invHi;
   d.invYawUp = src.invYawUp; d.invYawDn = src.invYawDn; d.invYawT = src.invYawT;
   d.phFlip = src.phFlip; d.phLoop = src.phLoop; d.phSplits = src.phSplits; d.phImmel = src.phImmel;
@@ -729,41 +742,60 @@ export function orbitFit(hist, a, b, out, w) {
 // inside the pitch (BARANI_SIDE of pitch path or more before the row where
 // the twist is half done, and after it). Ends on every PH_ROWS-th row, the
 // pitch path summed over every row; among equals, the twist nearer 180.
-// out: { p, r } (rad; 0 when none).
+// The twist is the twist column's change or, with bh (the body history,
+// BH_W) passed, the heading's turn, whichever scores (nearer 180 when both
+// do). The heading's turn is the yaw's own turn about the vertical while
+// inverted (bh's fourth: each step's yaw times the body's up-Z, while up-Z
+// is below HAM_UPZ), the owner's half twist: the yaw made at the top of the
+// flip. It means something only with the nose off the vertical: with the
+// nose near vertical the up axis is near level, and a yaw there counts
+// nothing (the twist column has that turn, about the flight path); nor does
+// a yaw made upright (a flip, a yaw, a flip is no Barani), or the pitch or
+// roll, so a flip about a banked axis, which turns the body about the
+// vertical by the bank's share of it, counts nothing. A yaw made inverted
+// and near level reads within a few degrees of the body's yaw. out:
+// { p, r, via } (rad; 0 when none; via 1: the heading's turn).
 const _barPP = new Float64Array(PH_ROWS + 2);
 const _barTW = new Float64Array(PH_ROWS + 2);
-export function baraniWithin(hist, n, out, w) {
+const _barVH = new Float64Array(PH_ROWS + 2);
+export function baraniWithin(hist, n, out, w, bh) {
   const W = w || HIST_W;
   const o = out || {};
-  o.p = 0; o.r = 0;
+  o.p = 0; o.r = 0; o.via = 0;
   if (!hist || n < 2) return o;
   const stride = Math.max(1, Math.ceil(n / PH_ROWS));
   const m = Math.ceil((n - 1) / stride) + 1;
-  // The pitch path and the twist at each kept row.
+  // The pitch path, the twist and the heading's turn at each kept row.
   let path = 0, j = 0;
-  _barPP[0] = 0; _barTW[0] = hist[15];
+  _barPP[0] = 0; _barTW[0] = hist[15]; _barVH[0] = bh ? bh[3] : 0;
   for (let r = 1; r < n; r++) {
     path += Math.abs(hist[r * W + 1] - hist[(r - 1) * W + 1]);
-    if (r === n - 1 || r % stride === 0) { j++; _barPP[j] = path; _barTW[j] = hist[r * W + 15]; }
+    if (r === n - 1 || r % stride === 0) {
+      j++; _barPP[j] = path; _barTW[j] = hist[r * W + 15]; _barVH[j] = bh ? bh[r * BH_W + 3] : 0;
+    }
   }
   const lo = BARANI_P - BARANI_FADE;
   if (path < lo) return o;
+  const cols = bh ? 2 : 1;
   let best = 0, bestOff = 9;
   for (let ja = 0; ja < m - 1; ja++) {
     for (let jb = m - 1; jb > ja; jb--) {
       const P = _barPP[jb] - _barPP[ja];
       if (P < lo) break;
-      const raw = _barTW[jb] - _barTW[ja], T = Math.abs(raw);
-      const sc = atLeast(P, BARANI_P, BARANI_FADE) * inBand(T, 2.356, 3.927, 0);
-      if (!(sc > 0)) continue;
-      const off = Math.abs(T - Math.PI);
-      if (sc < best - 1e-9 || (sc <= best + 1e-9 && off >= bestOff)) continue;
-      // Inside the pitch: the row where the twist is half done.
-      const sg = raw >= 0 ? 1 : -1;
-      let k = ja + 1;
-      while (k < jb && sg * (_barTW[k] - _barTW[ja]) < T / 2) k++;
-      if (_barPP[k] - _barPP[ja] < BARANI_SIDE || _barPP[jb] - _barPP[k] < BARANI_SIDE) continue;
-      best = sc; bestOff = off; o.p = P; o.r = T;
+      for (let c = 0; c < cols; c++) {
+        const A = c ? _barVH : _barTW;
+        const raw = A[jb] - A[ja], T = Math.abs(raw);
+        const sc = atLeast(P, BARANI_P, BARANI_FADE) * inBand(T, 2.356, 3.927, 0);
+        if (!(sc > 0)) continue;
+        const off = Math.abs(T - Math.PI);
+        if (sc < best - 1e-9 || (sc <= best + 1e-9 && off >= bestOff)) continue;
+        // Inside the pitch: the row where the twist is half done.
+        const sg = raw >= 0 ? 1 : -1;
+        let k = ja + 1;
+        while (k < jb && sg * (A[k] - A[ja]) < T / 2) k++;
+        if (_barPP[k] - _barPP[ja] < BARANI_SIDE || _barPP[jb] - _barPP[k] < BARANI_SIDE) continue;
+        best = sc; bestOff = off; o.p = P; o.r = T; o.via = c;
+      }
     }
   }
   return o;
@@ -1806,7 +1838,7 @@ export function makeDetector() {
     orb: { r: 0, fit: 9, sweep: 0, turn: 0, spd: 0, cx: 0, cz: 0, kr: 0 },
     orb2: { r: 0, fit: 9, sweep: 0, turn: 0, spd: 0, cx: 0, cz: 0, kr: 0 },
     wid: { a: 0, b: 0 },
-    bar: { p: 0, r: 0 },
+    bar: { p: 0, r: 0, via: 0 },
     // The nose beside each history row (BH_W).
     bh: new Float64Array(HIST_CAP * BH_W),
     // An orbit scores once: when the last orbit segment ended (clock), and
@@ -2064,10 +2096,12 @@ function genericGapKind(clr, svx, svz, sideMax) {
   return clr.pz <= sideMax && clr.nz <= sideMax ? 2 : 0;
 }
 
-// The nose at the step's attitude into body-history row r (BH_W).
+// The nose at the step's attitude, and the yaw's turn about the vertical so
+// far, into body-history row r (BH_W).
 function bodyRow(d, r) {
   const x = d.qx, y = d.qy, z = d.qz, w = d.qw, i = r * BH_W, B = d.bh;
   B[i] = 1 - 2 * (y * y + z * z); B[i + 1] = 2 * (x * y + w * z); B[i + 2] = 2 * (x * z - w * y);
+  B[i + 3] = d.feat.yawV;
 }
 
 function beginFeat(d, alt, wx, wz, head, speed, thr, upZ, vx, vy, vz) {
@@ -2130,10 +2164,13 @@ function accumFeat(d, sample, dr, dp, dy, step, alt, wx, wz, head, speed, upZ, t
     // The world-up component of this step's rotation (the body axes' up
     // components from the step's attitude).
     const qx = d.qx, qy = d.qy, qz = d.qz, qw = d.qw;
-    const dv = 2 * (qx * qz - qw * qy) * dr + 2 * (qy * qz + qw * qx) * dp + (1 - 2 * (qx * qx + qy * qy)) * dy;
+    const yv = (1 - 2 * (qx * qx + qy * qy)) * dy;
+    const dv = 2 * (qx * qz - qw * qy) * dr + 2 * (qy * qz + qw * qx) * dp + yv;
     f.vyaw += dv;
-    // Ham: the same turn, counted only while inverted.
+    // Ham: the same turn, counted only while inverted; the Barani's heading
+    // the yaw's share of it alone.
     if (upZ < HAM_UPZ) {
+      f.yawV += yv;
       f.invYawT += step;
       f.invC += dv;
       if (f.invC - f.invLo > f.invYawUp) f.invYawUp = f.invC - f.invLo;
@@ -2274,9 +2311,9 @@ export function windowFeat(d) {
   }
   // Barani: only worth the scan when a flip's worth of pitch path is there.
   if ((f.pathP || 0) >= BARANI_P - BARANI_FADE) {
-    const bw = baraniWithin(d.hist, d.histN, d.bar);
-    f.barP = bw.p; f.barR = bw.r;
-  } else { f.barP = 0; f.barR = 0; }
+    const bw = baraniWithin(d.hist, d.histN, d.bar, HIST_W, d.bh);
+    f.barP = bw.p; f.barR = bw.r; f.barVia = bw.via;
+  } else { f.barP = 0; f.barR = 0; f.barVia = 0; }
   return f;
 }
 
