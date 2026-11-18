@@ -162,8 +162,12 @@
     top:max(52px, calc(env(safe-area-inset-top, 0px) + 44px));
     z-index:20;flex-direction:column;align-items:flex-end;
     max-height:calc(100dvh - var(--stick-size, 112px) - 56px - env(safe-area-inset-bottom, 0px))}
-  /* Under touch the card hangs from the top: its arm hint goes below it. */
+  /* Under touch the card hangs from the top: its arm hint goes below it. The
+     Coach card and the tutorial come down the middle from the top, where a
+     short screen puts the hint: hidden while either is up (still laid out, so
+     nothing moves). */
   body.touch-on #hudArmSlot{bottom:auto;top:calc(100% + 6px);align-items:flex-start}
+  body.touch-on:has(#coachHud.show) #hudArmSlot,body.touch-on:has(#feelTutorial.show) #hudArmSlot{visibility:hidden}
   body.touch-on #osdLap{max-width:46vw;z-index:12}
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;width:14px;height:14px;opacity:.7;display:none}
   #crosshair.on{display:block}
@@ -1065,7 +1069,7 @@ import {
   WS as CORE_WS, TICK_US, SAMPLE_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux, rangeActive,
   BF_CLASS_TUNES, bfClassDiff,
-} from "./sim-core-adapter.js?v=eae197833699";
+} from "./sim-core-adapter.js?v=bfc8bb1fcb60";
 import {LINE_URL_MAX,LINE_ID_RE,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=c7b112319e28";
 import {pilotNameProblem} from "./sim-pilot-names.js?v=265d8504aeef";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
@@ -5674,14 +5678,15 @@ function updateOSD(){
 }
 
 // #osdBC's markup: THR bar and %, FLT and TWR, and the won't-arm line. The %
-// is padded to 3 characters (4 in 3D, signed) and TWR to 4, under the box's
+// is padded to 3 characters (4 in 3D, signed), FLT's minutes to 3 (the sim
+// clock runs from page load; 999 at most) and TWR to 4, under the box's
 // white-space:pre, so the box keeps one width as the numbers cross 9/10 or
 // 99/100; the why line is always there (blank armed) and its text is out of
 // layout, so the box keeps one height and width armed or disarmed.
 function osdBcHtml(barSrc,label,tSec,twr,threeD,why){
   const esc=(x)=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   return `THR ${'█'.repeat(Math.round(Math.max(0,Math.min(1,barSrc))*10)).padEnd(10,'░')} ${String(label).padStart(threeD?4:3,' ')}%`+
-    `<br>FLT ${String(tSec/60|0).padStart(2,'0')}:${String(tSec%60).padStart(2,'0')}  TWR ${Number(twr).toFixed(1).padStart(4,' ')}`+(threeD?' · 3D':'')+
+    `<br>FLT ${String(Math.min(999,tSec/60|0)).padStart(2,'0').padStart(3,' ')}:${String(tSec%60).padStart(2,'0')}  TWR ${Number(twr).toFixed(1).padStart(4,' ')}`+(threeD?' · 3D':'')+
     `<br><span class="osdbc-why"> <span>${esc(why||'')}</span></span>`;
 }
 
@@ -9112,11 +9117,11 @@ function pollInput(){
       turtleRearmed();
       // The hold (below) zeroes roll and pitch from this poll's sample on, but
       // the js core arms now and still runs the ticks up to that sample's stamp
-      // on the one before it: the stick still over, from the turtle. A zero
-      // roll/pitch sample at the core's own time covers those ticks. Without
-      // it a long frame flew a frame of full-rate roll (7-13 rad/s at 6x CPU
-      // throttle) the instant it re-armed, and it came to rest tipped 15-20°.
-      if(core.kind==='js')core.input({r:0,p:0,y:stick.y,t:stick.t},core.simTimeUs);
+      // on the samples before it: the stick still over, from the turtle. The
+      // core zeroes roll and pitch in those too. Without it a long frame flew
+      // a frame of full-rate roll (7-13 rad/s at 6x CPU throttle) the instant
+      // it re-armed, and it came to rest tipped 15-20°.
+      if(core.kind==='js'&&core.holdRollPitch)core.holdRollPitch();
     }
   }
   if(turtleStickHold){

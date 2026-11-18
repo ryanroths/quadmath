@@ -474,7 +474,7 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
   // The overlay drawn: the values it painted are the sticks the core has (a
   // frame apart at most: eps), and the green dot is under each one.
   const tracks = async (js, label, eps = 0.02) => {
-    const r = await js(`await S.frame(); await S.frame(); return JSON.stringify({ o: S.s.stickOverlay(), px: S.pixels(), seen: S.seen() });`);
+    const r = await js(`await S.frame(); await S.frame(); return JSON.stringify({ o: S.s.stickOverlay(), px: S.pixels(), seen: S.seen(), armed: S.s.coreState().armed });`);
     assert.equal(r.o.shown, true, label + ': shown');
     assert.equal(r.seen.display, 'block', label);
     assert.equal(r.seen.visibility, 'visible', label);
@@ -619,7 +619,7 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         r = await js(`const el = document.getElementById('osdBC'), live = el.innerHTML, box = () => { const b = el.getBoundingClientRect(); return [b.width, b.height].map((v) => Math.round(v * 10) / 10); };
           const { armingFlagNames } = await import('/sim-core-adapter.js');
           const all = armingFlagNames(0x3fffffff).join(' '), w0 = box(), out = {};
-          for (const [l, bar] of [['0', 0], ['9', 0.09], ['10', 0.1], ['100', 1]]) for (const twr of [0, 9.96, 10.5]) for (const t of [7, 600, 5999]) for (const why of ['', all]) {
+          for (const [l, bar] of [['0', 0], ['9', 0.09], ['10', 0.1], ['100', 1]]) for (const twr of [0, 9.96, 10.5]) for (const t of [7, 600, 5999, 6000, 59999]) for (const why of ['', all]) {
             el.innerHTML = S.s.osdBcHtml(bar, l, t, twr, false, why); out[[l + '%', 'TWR ' + twr, t + ' s', why ? 'all flags' : 'armed'].join(', ')] = box(); }
           const d3 = {};
           for (const l of ['0', '+9', '-10', '+100', '-100']) { el.innerHTML = S.s.osdBcHtml(0.5, l, 7, 1.2, true, ''); d3[l] = box(); }
@@ -724,7 +724,15 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         assert.equal(r.o.box, STICK_BOX_PHONE_PX, 'the phone box');
         assert.equal(r.sticks.length, 2);
         for (const b of r.sticks) assert.equal(overlaps(r.seen.rect, b), false, 'never over a stick ' + JSON.stringify({ o: r.seen.rect, b }));
-        await hintClear(js, r, 'landscape');
+        await hintClear(js, r, 'landscape', true);
+        // The Coach card comes down the middle from the top: the hint hides
+        // while it is up, and its slot keeps its box (nothing moves).
+        ok = await js(`const sl = document.getElementById('hudArmSlot'), coach = document.getElementById('coachHud'), bx = () => { const b = sl.getBoundingClientRect(); return [b.left, b.top, b.width, b.height]; };
+          const a = bx(); coach.classList.add('show'); const vis = getComputedStyle(sl).visibility, b = bx(); coach.classList.remove('show');
+          return JSON.stringify({ same: JSON.stringify(a) === JSON.stringify(b), vis, back: getComputedStyle(sl).visibility });`);
+        assert.equal(ok.vis, 'hidden', 'the hint hides under the Coach card');
+        assert.equal(ok.same, true, 'its slot keeps its box');
+        assert.equal(ok.back, 'visible');
         await tracks(js, 'touch at rest');
         // A thumb on the right stick, pushed right and up.
         const [L, R] = r.sticks;
@@ -770,14 +778,15 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
   }
 });
 
-// Under touch, the arm hint's slot (laid out whether the hint shows or not)
-// covers neither thumb stick nor the stick overlay, and stays on screen.
-// r: { sticks, seen } as the touch test reads them.
-async function hintClear(js, r, label) {
+// Under touch, the arm hint's slot is laid out (whether the hint shows or not)
+// and covers neither thumb stick nor the stick overlay, and stays on screen;
+// with shown, the hint shows in it. r: { sticks, seen } as the touch test reads them.
+async function hintClear(js, r, label, shown = false) {
   const h = await js(`await S.frame(); const e = document.getElementById('hudArmHint'), b = document.getElementById('hudArmSlot').getBoundingClientRect();
     return JSON.stringify({ laid: b.width > 0 && b.height > 0, shown: e.classList.contains('show') && getComputedStyle(e).display !== 'none', box: { left: b.left, right: b.right, top: b.top, bottom: b.bottom }, vw: innerWidth, vh: innerHeight, text: e.textContent });`);
   console.log(`touch ${label}: arm hint slot ${h.laid ? JSON.stringify(h.box) : 'not laid out'}, ${h.shown ? 'showing "' + h.text + '"' : 'hidden'}`);
-  if (!h.laid) return;
+  assert.equal(h.laid, true, `${label}: the arm hint's slot is laid out`);
+  if (shown) assert.equal(h.shown, true, `${label}: the arm hint shows at rest, disarmed`);
   for (const s of r.sticks) assert.equal(overlaps(h.box, s), false, `${label}: the arm hint over a thumb stick ${JSON.stringify({ h: h.box, s })}`);
   assert.equal(overlaps(h.box, r.seen.rect), false, `${label}: the arm hint over the stick overlay`);
   assert.ok(h.box.left >= 0 && h.box.right <= h.vw && h.box.top >= 0 && h.box.bottom <= h.vh, `${label}: the arm hint on screen ${JSON.stringify(h.box)}`);
