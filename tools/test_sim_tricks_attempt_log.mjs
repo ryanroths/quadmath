@@ -15,9 +15,11 @@
 //   dumps of 2026-11-17 and 18, each under a label of what was flown (LOGS,
 //   below): orbits, Trippies, Hams and Baranis in the Bando, and the re-fly's
 //   Trippies and orbits in the Rig and Baranis in the Warehouse;
-// - tools/fixtures/tricklog-depot-bf-build.jsonl.gz, flown on this build
-//   (2026-11-18) in the Warehouse: every term it scores logged, so its
-//   labels are exact, no estimate (Trippies, Orbits, Baranis).
+// - tools/fixtures/tricklog-depot-bf-build.jsonl.gz, two flights on this
+//   build (2026-11-18) in the Warehouse, one after the other in the file
+//   (each from seq 1): Trippies, Orbits and Baranis (lines 1-60), then flips
+//   and rolls (lines 61-91). Every term it scores is logged, so its labels
+//   are exact, no estimate.
 //
 // Each maneuver record carries what the detector saw (saw, rounded) and every
 // candidate's gate values (3 decimals, rad). The test rebuilds the segment's
@@ -625,16 +627,29 @@ const LOGS = [
     NEW: { 4: 'barani', 11: 'barani', 18: 'barani', 22: 'barani' },
   },
   {
-    name: 'depot build flight', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-build.jsonl.gz', records: 60, maneuvers: 39, fired: 10,
+    name: 'depot build flight', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-build.jsonl.gz', lines: [0, 60], records: 60, maneuvers: 39, fired: 10,
     // Flown on this build: every label as fired, which the owner confirmed
     // (Orbit 2, 54; Barani 15, 39, 44, 52; Trippy 18, 48; Ham 21; Juicy
     // Flick 26), every other maneuver none.
     NEW: {},
     exact: true,
   },
+  {
+    name: 'depot build flips and rolls', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-build.jsonl.gz', lines: [60, 91], records: 31, maneuvers: 27, fired: 11,
+    // The owner's "rolls and flips" on this build, flown to be Flip or Roll
+    // and never Barani: every label as fired. Flips 1, 3, 4, 24, 26 and 27,
+    // and 17 the banked back flip (rolled 140 as it flipped, turned 258
+    // about the vertical, 3 of it inverted); Rolls 7, 8 and 12.
+    NEW: {},
+    exact: true,
+    // Right after 17, which ended on its side (up-Z -0.08) with a bump: 158
+    // of forward pitch, not inverted, fired Cradle. Not the owner's label.
+    OPEN: { 18: 'cradle' },
+  },
 ];
 for (const L of LOGS) {
-  L.recs = readLog(L.file);
+  // A file can hold more than one flight (seq restarts at 1): lines [a, b).
+  L.recs = readLog(L.file).slice(...(L.lines || []));
   L.bySeq = new Map(L.recs.map((r) => [r.seq, r]));
   L.scored = L.recs.filter((r) => r.type === 'maneuver' && r.saw && !r.pre.short);
   L.man = L.scored.slice().sort((a, b) => a.t0 - b.t0);
@@ -783,7 +798,7 @@ test('the dumps of 2026-11-17 and 18: every label that changes, and the open one
   ]);
   // What the open ones read now (not asserted as the owner's).
   const open = NEWER.flatMap((L) => Object.keys(L.OPEN || {}).map((seq) => L.name + ' seq ' + seq + ' ' + (replayed(L).get(Number(seq)).id || 'none')));
-  assert.deepEqual(open, ['bando baranis seq 9 barani']);
+  assert.deepEqual(open, ['bando baranis seq 9 barani', 'depot build flips and rolls seq 18 cradle']);
   // Every label they fired that stays: the Trippies, Hams and Baranis.
   const kept = (L, id) => L.scored.filter((r) => r.result === id && replayed(L).get(r.seq).id === id).map((r) => r.seq);
   const [BO, BT, BH, BB, RT] = NEWER;
@@ -833,6 +848,33 @@ test('the build flight: every Trippy, Orbit and Barani term logged (exact, no es
   // 174, 179; seq 44 by the twist about the path, 166.
   const tw = (seq) => { const b = featFromLog(L.bySeq.get(seq)).bar; return [b.via, Math.round(b.r / DEG)]; };
   assert.deepEqual([15, 39, 44, 52].map(tw), [[1, 197], [1, 174], [0, 166], [1, 179]]);
+});
+
+test('the build flight of flips and rolls: exact terms, each label as it fired, and never a Barani', () => {
+  const L = LOGS.find((x) => x.name === 'depot build flips and rolls');
+  for (const r of L.scored) {
+    const g = gateValues(r);
+    const { tail, slow, bar } = featFromLog(r, { pre: altAt(L.man, r.t0 - 1.0) });
+    assert.ok(tail.exact && slow.exact && bar.exact, 'seq ' + r.seq + ' exact');
+    assert.ok(r.saw.yawVDeg != null && r.saw.orbitTail != null && r.saw.slowYawDeg != null, 'seq ' + r.seq + ' logged');
+    if (!r.pre.tiny) assert.ok('f.orbitTail' in g && 'v.slowSpan' in g && ('barRHead' in g || 'barRTwist' in g), 'seq ' + r.seq + ' gates');
+  }
+  const out = replayed(L);
+  const fired = L.scored.filter((r) => out.get(r.seq).id && !(r.seq in L.OPEN)).map((r) => r.seq + ' ' + out.get(r.seq).id);
+  assert.deepEqual(fired, ['1 flip', '3 flip', '4 flip', '7 roll', '8 roll', '12 roll', '17 flip', '24 flip', '26 flip', '27 flip']);
+  for (const r of L.scored) {
+    assert.notEqual(out.get(r.seq).id, 'barani', 'seq ' + r.seq);
+    assert.notEqual(classify(featNow(L, r).f).id, 'barani', 'seq ' + r.seq);
+  }
+  // Seq 17, the banked back flip: 258 about the vertical, but 3 of it made
+  // inverted, so the heading reads no half twist. The twist about the path
+  // reads 161, in its band: it is no Barani because it ended on its side
+  // (BARANI_SIDE, up-Z -0.08).
+  const r17 = L.bySeq.get(17), s17 = r17.saw;
+  assert.ok(Math.abs(s17.rollDeg) >= 135 && s17.vyawDeg >= 250 && Math.abs(s17.yawVDeg) <= 5, 'seq 17');
+  assert.ok(Math.abs(s17.yawVDeg) * DEG < BARANI_HD_LO, 'seq 17 heading');
+  assert.equal(r17.barani.limit, 'BARANI_SIDE');
+  assert.ok(Math.abs(r17.barani.twistDeg) >= 135 && Math.abs(r17.barani.twistDeg) <= 225, 'seq 17 twist ' + r17.barani.twistDeg);
 });
 
 test('Flip, Powerloop and Split-S, now the phase matcher\'s, fire on every log exactly where they did', () => {
