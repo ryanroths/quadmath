@@ -14,7 +14,10 @@
 // - tools/fixtures/tricklog-{bando,rig,depot}-bf-*.jsonl.gz, the owner's
 //   dumps of 2026-11-17 and 18, each under a label of what was flown (LOGS,
 //   below): orbits, Trippies, Hams and Baranis in the Bando, and the re-fly's
-//   Trippies and orbits in the Rig and Baranis in the Warehouse.
+//   Trippies and orbits in the Rig and Baranis in the Warehouse;
+// - tools/fixtures/tricklog-depot-bf-build.jsonl.gz, flown on this build
+//   (2026-11-18) in the Warehouse: every term it scores logged, so its
+//   labels are exact, no estimate (Trippies, Orbits, Baranis).
 //
 // Each maneuver record carries what the detector saw (saw, rounded) and every
 // candidate's gate values (3 decimals, rad). The test rebuilds the segment's
@@ -177,7 +180,10 @@ export function invYawFrom(s, g) {
 // pitch.
 export function baraniFrom(s, g) {
   if (s.twistDeg != null) {
-    const tw = { p: 'f.barP' in g ? g['f.barP'] : s.baraniPitchDeg * DEG, r: 'f.barR' in g ? g['f.barR'] : s.baraniTwistDeg * DEG, exact: true, via: s.baraniVia || 0 };
+    // Logged since the heading: the twist by the measure that gave it
+    // (barRTwist, barRHead), and which (baraniVia).
+    const via = s.baraniVia || 0, rk = via ? 'barRHead' : 'barRTwist';
+    const tw = { p: 'f.barP' in g ? g['f.barP'] : s.baraniPitchDeg * DEG, r: rk in g ? g[rk] : 'f.barR' in g ? g['f.barR'] : s.baraniTwistDeg * DEG, exact: true, via };
     if (s.yawVDeg != null || s.invYawDeg == null) return tw;
     const hd = { p: s.pathP, r: s.invYawDeg * DEG, exact: false, via: 1 };
     const sc = (b) => atLeastL(b.p, BARANI_P, BARANI_FADE) * (b.r >= (b.via ? BARANI_HD_LO : 2.356) && b.r <= 3.927 ? 1 : 0);
@@ -233,6 +239,8 @@ export function tailFrom(rec, g) {
 export function slowFrom(rec, g) {
   const s = rec.saw;
   if ('v.slowSpan' in g) return { span: g['v.slowSpan'], t: 'v.slowRate' in g && g['v.slowRate'] > 0 ? g['v.slowSpan'] / g['v.slowRate'] : 0, exact: true };
+  // A segment too small for the candidates logs no gates, but its saw has it.
+  if (s.slowYawDeg != null) return { span: s.slowYawDeg * DEG, t: s.slowRateDeg > 0 ? s.slowYawDeg / s.slowRateDeg : 0, exact: true };
   let span = 'v.yawSpan' in g ? g['v.yawSpan'] : Math.abs(s.vyawDeg) * DEG;
   const rate = 'v.yawRate' in g ? g['v.yawRate'] : (s.vyawRateDeg || 0) * DEG;
   if (rec.result === 'trippy') span = Math.max(span, 6.2832);
@@ -616,6 +624,14 @@ const LOGS = [
     // 132, 161, 166; the heading's band from 120).
     NEW: { 4: 'barani', 11: 'barani', 18: 'barani', 22: 'barani' },
   },
+  {
+    name: 'depot build flight', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-build.jsonl.gz', records: 60, maneuvers: 39, fired: 10,
+    // Flown on this build: every label as fired, which the owner confirmed
+    // (Orbit 2, 54; Barani 15, 39, 44, 52; Trippy 18, 48; Ham 21; Juicy
+    // Flick 26), every other maneuver none.
+    NEW: {},
+    exact: true,
+  },
 ];
 for (const L of LOGS) {
   L.recs = readLog(L.file);
@@ -798,6 +814,25 @@ test('the dumps: Trippy is the tail to the centre, an upright orbit with the nos
   const out = replayed(RO);
   assert.deepEqual([2, 3, 5, 6, 7, 8].map((s) => out.get(s).id), [null, 'orbit', null, null, null, 'orbit']);
   for (const [a, b] of [[2, 3], [6, 7], [7, 8]]) assert.ok(RO.bySeq.get(b).t0 - RO.bySeq.get(a).t < MERGE_GAP_S, a + ' to ' + b);
+});
+
+test('the build flight: every Trippy, Orbit and Barani term logged (exact, no estimate), and each label as it fired', () => {
+  const L = LOGS.find((x) => x.name === 'depot build flight');
+  for (const r of L.scored) {
+    const g = gateValues(r);
+    const { tail, slow, bar } = featFromLog(r, { pre: altAt(L.man, r.t0 - 1.0) });
+    assert.ok(tail.exact && slow.exact && bar.exact, 'seq ' + r.seq + ' exact');
+    assert.ok(r.saw.yawVDeg != null && r.saw.orbitTail != null && r.saw.slowYawDeg != null, 'seq ' + r.seq + ' logged');
+    // Each segment big enough for the candidates logs their gates.
+    if (!r.pre.tiny) assert.ok('f.orbitTail' in g && 'v.slowSpan' in g && ('barRHead' in g || 'barRTwist' in g), 'seq ' + r.seq + ' gates');
+  }
+  const out = replayed(L);
+  const fired = L.scored.filter((r) => out.get(r.seq).id).map((r) => r.seq + ' ' + out.get(r.seq).id);
+  assert.deepEqual(fired, ['2 orbit', '15 barani', '18 trippy', '21 ham', '26 juicyflick', '39 barani', '44 barani', '48 trippy', '52 barani', '54 orbit']);
+  // The Baranis' half twists: by the heading (the yaw made inverted) 197,
+  // 174, 179; seq 44 by the twist about the path, 166.
+  const tw = (seq) => { const b = featFromLog(L.bySeq.get(seq)).bar; return [b.via, Math.round(b.r / DEG)]; };
+  assert.deepEqual([15, 39, 44, 52].map(tw), [[1, 197], [1, 174], [0, 166], [1, 179]]);
 });
 
 test('Flip, Powerloop and Split-S, now the phase matcher\'s, fire on every log exactly where they did', () => {
