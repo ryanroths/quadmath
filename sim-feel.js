@@ -2,7 +2,7 @@
 // QuadMath sim M1 feel — first-run, tutorial, HUD, rate presets, aux helpers.
 // Keep physics in quadphysics.js. Do not touch racing track layouts or ghosts.
 // New localStorage keys: quadmathSimInputChoice, quadmathSimFloatiness,
-//   quadmathSimFov, quadmathSimStickOverlay.
+//   quadmathSimFov, quadmathSimStickOverlay, quadmathSimSpeedUnits.
 // Nothing here is copied from WebFPV.
 
 import { makeWorldLabel } from './sim-art.js?v=2cb300829b94';
@@ -445,6 +445,71 @@ export function stickOverlayDefault(kind) {
 // On or off: the saved choice, else the input's default.
 export function stickOverlayOn(saved, kind) {
   return saved === true || saved === false ? saved : stickOverlayDefault(kind);
+}
+
+// ---------- Speed units ----------
+// The one place a speed becomes text the pilot reads: the OSD's SPD line
+// (sim.html updateOSD) and anything else the sim shows as a speed. Speeds
+// come in as true m/s, the physics' own unit; the scene's world units (WS per
+// metre) are divided out by the caller before it gets here.
+//
+// quadmathSimSpeedUnits: 'mph', 'kmh' or 'off' (Tune: Camera, Speed units).
+// Absent, or anything else: the pilot never chose, and the units follow the
+// browser (speedUnitsDefault). The default is never written back, so a pilot
+// who never chose keeps following their browser's language.
+export const SPEED_UNITS_KEY = 'quadmathSimSpeedUnits';
+export const SPEED_UNITS = Object.freeze(['mph', 'kmh', 'off']);
+// m/s to each unit: 3600 s an hour over 1609.344 m an international mile;
+// 3.6 for km/h.
+export const SPEED_UNIT_FACTOR = Object.freeze({ mph: 3600 / 1609.344, kmh: 3.6 });
+export const SPEED_UNIT_LABEL = Object.freeze({ mph: 'mph', kmh: 'km/h' });
+// The OSD's number field: this many characters, right-aligned and capped at
+// 999, so 9, 10 and 100 leave the unit where it was (the rule #fpsHud's rate
+// follows). Shown with white-space: pre in a monospace font.
+export const SPEED_FIELD_CHARS = 3;
+const SPEED_FIELD_MAX = 999;
+
+// mph where the browser's language is US English (navigator.language
+// 'en-US', any case); km/h everywhere else, en-GB and a bare 'en' included.
+export function speedUnitsDefault(lang) {
+  return typeof lang === 'string' && lang.toLowerCase() === 'en-us' ? 'mph' : 'kmh';
+}
+
+// The saved choice: 'mph', 'kmh', 'off', or null when the pilot never chose.
+export function loadSpeedUnits(storage) {
+  const store = overlayStore(storage);
+  if (!store) return null;
+  try {
+    const v = store.getItem(SPEED_UNITS_KEY);
+    return SPEED_UNITS.includes(v) ? v : null;
+  } catch (e) { return null; }
+}
+
+// Writes only one of SPEED_UNITS; anything else is refused (false).
+export function saveSpeedUnits(units, storage) {
+  if (!SPEED_UNITS.includes(units)) return false;
+  const store = overlayStore(storage);
+  if (!store) return false;
+  try { store.setItem(SPEED_UNITS_KEY, units); return true; }
+  catch (e) { return false; }
+}
+
+// The units in force: the saved choice, else the language's default.
+export function speedUnitsOn(saved, lang) {
+  return SPEED_UNITS.includes(saved) ? saved : speedUnitsDefault(lang);
+}
+
+// A speed in m/s as the pilot reads it: '9 mph', '35 km/h', or null for
+// 'off' (and for anything that is not one of SPEED_UNITS). Whole units,
+// rounded; a speed that is not a finite number reads 0. { field: true } pads
+// the number to SPEED_FIELD_CHARS, right-aligned and capped at 999 ('  9 mph').
+export function speedText(ms, units, opts) {
+  if (units !== 'mph' && units !== 'kmh') return null;   // off, or not a unit
+  const k = SPEED_UNIT_FACTOR[units];
+  const v = Number(ms);
+  const n = Math.round(Math.abs(Number.isFinite(v) ? v : 0) * k);
+  const s = opts && opts.field ? String(Math.min(n, SPEED_FIELD_MAX)).padStart(SPEED_FIELD_CHARS, ' ') : String(n);
+  return s + ' ' + SPEED_UNIT_LABEL[units];
 }
 
 function clampAxis(v, lo, hi) {
