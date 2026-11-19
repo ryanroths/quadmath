@@ -139,6 +139,22 @@ test('no build flies a retired freestyle class; a 2.5"/5" frame is no build', ()
   }
 });
 
+// Picking a build of another class (Your build, Tune's preset or frame, a
+// ?build= link, a saved build at boot) loads that class's stock PIDs, as the
+// Drone type picker does; the Chrome check is in test_sim_rates_page.mjs.
+// The Mass slider spans the build's AUW range, whoops only.
+test('sim.html: a build of another class loads its PIDs; Mass spans the build AUW range', () => {
+  const html = src.replace(/\r\n/g, '\n');
+  const apply = html.slice(html.indexOf('function applyBuild('), html.indexOf('function readBuildForm('));
+  assert.ok(apply.includes('const prevType=droneType;'), 'applyBuild keeps the class it came from');
+  assert.ok(apply.includes('if(droneType!==prevType)qp.setTune(STOCK_TUNES[DRONE_TYPES[droneType].preset]||STOCK_TUNES.whoop65);'),
+    'applyBuild loads the new class\'s PIDs on a class change only');
+  const m = html.match(/<input type="range" id="s_mass" min="(\d+)" max="(\d+)"/);
+  assert.ok(m, 'the Mass slider');
+  assert.equal(+m[1], normalizeBuild({ ...DEFAULT_BUILD, auwG: 1 }).auwG, 'Mass min is the build AUW floor');
+  assert.equal(+m[2], normalizeBuild({ ...DEFAULT_BUILD, auwG: 9999 }).auwG, 'Mass max is the build AUW ceiling');
+});
+
 test('classDefault maps 65/75/85', () => {
   assert.equal(classDefault(65).frameMm, 65);
   assert.equal(classDefault(75).cells, 1);

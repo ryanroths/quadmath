@@ -329,6 +329,25 @@ test('rates are the pilot\'s: 65, 75, 85 and back keep the same rates on the bf 
       assert.deepEqual(s.srcJs, { text: SRC.jsSaved, shown: true }, s.type);
       assert.equal(s.saved, mine.saved);
     }
+
+    // A build of another class (here Tune's Your build preset) loads that
+    // class's stock PIDs on the js core, as the Drone type picker does; a
+    // build within the class keeps the PIDs flying, a CLI paste's included.
+    const tune = await run(`const out = [];
+      const tuneNow = () => ({ type: document.getElementById('droneType').value, rollP: window._qp.tune.rollP, pitchP: window._qp.tune.pitchP, yawI: window._qp.tune.yawI });
+      const pick = async (id) => { const sel = document.getElementById('buildPreset'); sel.value = id; sel.dispatchEvent(new Event('change')); await R.wait(300); return tuneNow(); };
+      out.push(tuneNow());
+      out.push(await pick('whoop85_2s'));
+      await R.importCli('set p_roll = 71');
+      out.push(tuneNow());
+      out.push(await pick('meteor75pro'));
+      out.push(await pick('air65'));
+      return JSON.stringify(out);`);
+    assert.deepEqual(tune[0], { type: 'whoop65', rollP: 36, pitchP: 37, yawI: 61 }, 'the 65 flies its stock PIDs');
+    assert.deepEqual(tune[1], { type: 'whoop85', rollP: 67, pitchP: 70, yawI: 120 }, 'an 85 build from the 65 loads the 85\'s PIDs');
+    assert.equal(tune[2].rollP, 71, 'the paste sets P roll');
+    assert.deepEqual(tune[3], { type: 'whoop85', rollP: 71, pitchP: 70, yawI: 120 }, 'another 85 build keeps the PIDs flying');
+    assert.deepEqual(tune[4], { type: 'whoop65', rollP: 36, pitchP: 37, yawI: 61 }, 'a 65 build loads the 65\'s PIDs');
   } finally {
     try { if (ws) ws.close(); } catch (e) { /* ignore */ }
     killTree(child);

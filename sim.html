@@ -944,7 +944,7 @@
   <div class="row"><label>Drag</label><span class="val" id="v_drag"></span></div>
   <input type="range" id="s_drag" min="0.05" max="0.8" step="0.01" value="0.28">
   <div class="row"><label>Mass (g)</label><span class="val" id="v_mass"></span></div>
-  <input type="range" id="s_mass" min="15" max="700" step="1" value="27">
+  <input type="range" id="s_mass" min="15" max="90" step="1" value="27">
   <div class="row"><label>Motor Response</label><span class="val" id="v_spool"></span></div>
   <input type="range" id="s_spool" min="0.008" max="0.15" step="0.001" value="0.013">
   <div class="row"><label>Gravity Scale</label><span class="val" id="v_grav"></span></div>
@@ -7028,8 +7028,13 @@ function applyBuild(raw,opts){
     setSlider('spool',phys.spoolTau);
     applyCfgToQp();
     refreshTwr();
+    const prevType=droneType;
     droneType=phys.droneType;
     droneSel.value=droneType;
+    // A build of another class loads that class's stock PIDs (the js core's),
+    // as the Drone type picker does; a build within the class keeps the PIDs
+    // flying, an IMPORT CLI's included.
+    if(droneType!==prevType)qp.setTune(STOCK_TUNES[DRONE_TYPES[droneType].preset]||STOCK_TUNES.whoop65);
   }finally{applyingType=false;}
   syncBuildUI();
   applyCanopyLayout();
