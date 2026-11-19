@@ -22,7 +22,8 @@ name: Sim tests
 #                 page tests the sim-tests job runs with SKIP_CHROME_BOOT:
 #                 test_sim_easy_mode; test_sim_first_flight with
 #                 test_sim_coach_page; test_sim_gap_hunt; and
-#                 test_sim_stick_overlay, test_sim_track_url and
+#                 test_sim_speed_units; test_sim_stick_overlay,
+#                 test_sim_track_url and
 #                 test_sim_track_boards, with test_leaderboard_track_boards
 #                 (custom track boards on `wrangler dev` with a real D1,
 #                 wrangler installed in that entry, which the sim-tests job
@@ -110,6 +111,8 @@ jobs:
           - { suite: page, label: 'first flight, coach', tests: 'tools/test_sim_first_flight.mjs tools/test_sim_coach_page.mjs' }
           # Gap Hunt's page part: three maps, bf and js cores each.
           - { suite: page, label: 'gap hunt', tests: 'tools/test_sim_gap_hunt.mjs' }
+          # Speed units: the OSD's SPD line by language, each option, one width.
+          - { suite: page, label: 'speed units', tests: 'tools/test_sim_speed_units.mjs' }
           # The stick overlay, shared track links and track boards in Chrome,
           # and the track boards' Worker on wrangler dev (wrangler: true).
           - { suite: page, label: 'sticks, track links, track boards', tests: 'tools/test_sim_stick_overlay.mjs tools/test_sim_track_url.mjs tools/test_sim_track_boards.mjs tools/test_leaderboard_track_boards.mjs tools/test_leaderboard_builtin_boards.mjs', wrangler: true }
