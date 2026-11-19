@@ -668,6 +668,33 @@ const PAGE = String.raw`(() => {
     requestAnimationFrame(f);
     return () => { on = false; return Math.round(max * 10) / 10; };
   }
+  // A start and an end on the page's own frames: the first frame whose state
+  // meets start(), then the first after it that meets end(), each read after
+  // the page's loop (as frames()) as that frame's rAF timestamp, the frame
+  // clock the page steps the sim by, and the core's flightMs, the ticks run.
+  // A rAF callback runs every frame. A timer poll (until) on a slow runner
+  // can come frames late, and reads its wall time then against the sim's
+  // time at the last frame, so the two drift apart by how late each end ran.
+  // startMs and endMs: how long each may take on the wall clock (end from the
+  // start's frame). inStart, if given, is called on every frame until start()
+  // is met.
+  function framesUntil(start, end, startMs, endMs, inStart) {
+    return new Promise((resolve) => {
+      let t0 = performance.now();
+      let a = null, b = null;
+      const f = (ts) => {
+        const flightMs = s.coreState().flightMs;
+        if (a === null) {
+          if (inStart) inStart();
+          if (start()) { a = { ts, flightMs }; t0 = performance.now(); }
+          else if (performance.now() - t0 > startMs) { resolve({ a, b }); return; }
+        } else if (end()) b = { ts, flightMs };
+        if (b || (a && performance.now() - t0 > endMs)) { resolve({ a, b }); return; }
+        requestAnimationFrame(f);
+      };
+      requestAnimationFrame(f);
+    });
+  }
   function menus() {
     const on = (id, c) => { const el = document.getElementById(id); return !!(el && el.classList.contains(c)); };
     return { start: on('startMenu', 'open'), looks: !!(s.looks && s.looks.menuOpen), layer: on('menuLayer', 'show'), prompt: on('feelPrompt', 'show'), picker: !!document.getElementById('gpPicker') };
@@ -772,7 +799,7 @@ const PAGE = String.raw`(() => {
     if (c.kind === 'bf') s.bfCore().teleport({ x: c.position.x, y: c.position.y, z: 2.5 }, q, { x: 0, y: 0, z: -25 });
     else { window._qp.position.z = 2.5; window._qp.velocity.z = -40; }
   }
-  window.__easy = { s, wait, until, axis, thr, upZ, tickUp, lowS, held, simWait, speed, landed, settled, fc, menus, state, flip, drop, spots, restOn, recover, frames };
+  window.__easy = { s, wait, until, axis, thr, upZ, tickUp, lowS, held, simWait, speed, landed, settled, fc, menus, state, flip, drop, spots, restOn, recover, frames, framesUntil };
   return true;
 })()`;
 
@@ -929,15 +956,15 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         // Throttle to the bottom in the air: armed all the way down; then the
         // 0.5 s. The hold counts the page's input time, which is the sim's: so
         // it is timed on the sim's clock (the core's flight time), with the
-        // wall's as a floor (the sim never runs ahead of it).
+        // wall's as a floor (the sim never runs ahead of it). Both from the
+        // first frame landed to the first frame disarmed (framesUntil), the
+        // wall on those frames' timestamps.
         r = await js(`
           E.thr(0);
           let armedInAir = true;
-          const down = await E.until(() => { if (!E.landed()) armedInAir = armedInAir && E.s.coreState().armed; return E.landed(); }, 8000);
-          const t0 = performance.now(), s0 = E.s.coreState().flightMs;
-          let earliest = null, sim = null;
-          const off = await E.until(() => { if (!E.s.coreState().armed && earliest === null) { earliest = performance.now() - t0; sim = E.s.coreState().flightMs - s0; } return earliest !== null; }, 6000);
-          return JSON.stringify({ down, armedInAir, off, ms: earliest, simMs: sim });`);
+          const fr = await E.framesUntil(E.landed, () => !E.s.coreState().armed, 8000, 6000, () => { if (!E.landed()) armedInAir = armedInAir && E.s.coreState().armed; });
+          const down = !!fr.a, off = !!fr.b;
+          return JSON.stringify({ down, armedInAir, off, ms: off ? fr.b.ts - fr.a.ts : null, simMs: off ? fr.b.flightMs - fr.a.flightMs : null });`);
         console.log('disarm: ' + JSON.stringify(r));
         assert.equal(r.down, true, 'it landed');
         assert.equal(r.armedInAir, true, 'armed in the air at zero throttle');
@@ -1353,10 +1380,10 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
           await E.wait(700);
           const up = E.state();
           E.thr(0);
-          const down = await E.until(E.landed, 8000);
-          const t0 = performance.now(), s0 = E.s.coreState().flightMs;
-          const off = await E.until(() => !E.s.coreState().armed, 6000);
-          return JSON.stringify({ held, armed, up: up.z, down, off, ms: performance.now() - t0, simMs: E.s.coreState().flightMs - s0, reason: E.s.easy().disarmReason });`);
+          // First frame landed to first frame disarmed, on both clocks (framesUntil).
+          const fr = await E.framesUntil(E.landed, () => !E.s.coreState().armed, 8000, 6000);
+          const down = !!fr.a, off = !!fr.b;
+          return JSON.stringify({ held, armed, up: up.z, down, off, ms: off ? fr.b.ts - fr.a.ts : null, simMs: off ? fr.b.flightMs - fr.a.flightMs : null, reason: E.s.easy().disarmReason });`);
         console.log('js radio: ' + JSON.stringify(r));
         assert.equal(r.held, true, 'the page held the throttle down a second');
         assert.equal(r.armed, true, 'armed by throttle');

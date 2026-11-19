@@ -613,12 +613,17 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
   let flightUs = 0;
   let pending = [];
   let inputErrors = 0;
+  // The stamp of the last sample the ring took (input()), -1 after a boot: a
+  // sample stamped before it is refused, so a page stepping on the sim's own
+  // samples (sim.html bfTurtleSample) waits for the sim to pass it.
+  let lastInputUs = -1;
   const g = airframe.values.gravity ? airframe.values.gravity.value : 9.81;
   const weightN = airframe.values.mass.value * g;
   const tmaxN = airframe.values.tmax.value;
   // Whatever reboots the instance: a fresh clock, ring and link, disarmed.
   const rebooted = () => {
     clock.rebase();
+    lastInputUs = -1;
     link.reset(sim);
     if (auxSource === 'radio') link.drop();
     aux.arm = false;
@@ -644,6 +649,7 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
     get tickUs() { return sim.tickUs; },
     get flightMs() { return flightUs / 1000; },
     get inputErrors() { return inputErrors; },
+    get lastInputUs() { return lastInputUs; },
     stamp(wallMs) { return clock.stamp(sim, wallMs); },
     anchor(wallMs) { clock.anchor(sim, wallMs); },
     // The loaded config's aux ranges (auxRanges), and the page's modes and
@@ -681,6 +687,7 @@ export async function createBfCore({ SimCore, wasm, airframe, diff, world }) {
       }
       try {
         sim.input(bfChannels(sample, aux, ranges), stampUs);
+        lastInputUs = stampUs;
         link.sample(stampUs);
         if (aux.holdThrottle && holdUntilUs === null) holdUntilUs = stampUs + HOLD_US;
       } catch (err) {

@@ -55,9 +55,10 @@ site lists both 150 and 50).
 | `halfmavvy` | Half Mavvy | Intermediate | 400 | 400 | Phase matcher, as the owner flies it: **forward pitch, a roll of 180 ± 45° between its halves, forward pitch on to upright**: **330–450° of forward pitch net**, a **climb ≥3 m**, the segment **≥2 s**, ending **upright**, **through an object**: under one (an object above, within 2.3 m) for **≥25 %** of the maneuver, and flown **against the nose ≥30 %** of the time after the roll. The pull-up before it may turn 120° back; the pitch may run on through the roll. Without the object it is a Barani. Scores above Maverick, Matty and Barani. |
 | `cubik` | Cubik's Rube | Intermediate | 350 | 450 | 180° roll → 360° flip → 180° roll, same roll direction. Open air. |
 | `rubik` | Rubik's Cube | Intermediate | 325 | 450 | 180° flip → 360° roll → 180° flip, same pitch direction. Open air. |
-| `ham` | Ham Spin | Intermediate | 300 | 300 | **Inverted yaw spin**: **≥300° of yaw counted only while inverted** (up-Z below −0.5, tilted more than 120° from level). The yaw is the turn about the vertical. A **half flip in and a half flip out are allowed** and the whole maneuver is one Ham, not a Flip: the flips turn little about the vertical. A flip or roll that only passes through inverted, and upright yaw, are not Ham; a full Roll stays a Roll, and an inverted spin that orbits is a Trippy. Also called ham. |
-| `trippy` | Trippy Spin | Intermediate | 500 | 500 | **≥360° of yaw at ≥150°/s while the path orbits a centre ≥360°**: radius 0.3–2.5 m (the path's curvature), its direction turning a **full 360°** one way over the whole spin, at ≥1 m/s. Yaw is the turn about the vertical, so a tilted spin counts in full. Upright or inverted; the body may roll as it spins (the owner's rolls 600–780°). A nearby pole/post at the centre (within 0.5 m) is a bonus: 1.25× points. |
-| `barani` | Barani | Novice | 100 | 125 | **A flip with a half twist**, as the owner flies it: **≥300° of pitch path** (the pitch turned either way, summed; the term fades over 20°) with a **half twist of 180 ± 45° inside it** (≥60° of pitch path before the twist is half done, and after), ending **upright** (up-Z ≥ 0.5). The twist is the turn about the **body axis nearest the flight path**: **roll** when the nose is along it (flying level), **yaw** when the up axis is (punched up, or inverted and falling); under 3 m/s, whichever of the two turns faster. Any climb, any time. Scores above Flip and Maverick. |
+| `ham` | Ham Spin | Intermediate | 300 | 300 | **Inverted yaw spin**: **≥300° of yaw counted only while inverted** (up-Z below −0.5, tilted more than 120° from level). The yaw is the turn about the vertical. A **half flip in and a half flip out are allowed** and the whole maneuver is one Ham, not a Flip: the flips turn little about the vertical. A flip or roll that only passes through inverted, and upright yaw, are not Ham; a full Roll stays a Roll, and an inverted orbit is a Trippy. Also called ham. |
+| `trippy` | Trippy Spin | Intermediate | 500 | 500 | **≥360° of yaw at ≥150°/s while the path orbits a centre ≥360°**, radius **0.3 m or more** (the path's curvature), its direction turning a **full 360°** one way over the whole spin, at ≥1 m/s, **the tail to the centre or the body inverted** for **≥70 %** of the orbit: tilted back round it (nose up, away from the centre, within 0.7 of the plane through it) or upside down. Tilt-independent: the body's attitude, not the camera's. Yaw is the turn about the vertical, so a tilted spin counts in full. The body may roll as it spins (the owner's rolls 600–1490°). An upright orbit with the nose on the centre is an Orbit, never a Trippy. A nearby pole/post at the centre (within 0.5 m) is a bonus: 1.25× points. |
+| `orbit` | Orbit | Beginner | 75 | 100 | **An upright orbit**: **≥360° of yaw inside 4.4 s at ≥90°/s** while the path orbits a centre ≥360° (0.3 m or more, at ≥1 m/s, as Trippy's), the tail to the centre or inverted **≤30 %** of it (the nose on the centre, or the nose all round). One orbit scores once, however long it goes on: a piece after the 4.5 s cap that goes on orbiting the same way scores nothing. The same pole bonus as the Trippy's. |
+| `barani` | Barani | Novice | 100 | 125 | **A flip with a half twist**, as the owner flies it: **≥300° of pitch path** (the pitch turned either way, summed; the term fades over 20°) with a **half twist of 180 ± 45° inside it** (≥60° of pitch path before the twist is half done, and after), ending **upright** (up-Z ≥ 0.5). The twist is the turn about the **body axis nearest the flight path** (**roll** when the nose is along it, flying level; **yaw** when the up axis is, punched up or inverted and falling; under 3 m/s, whichever of the two turns faster) **or the heading's turn**: the yaw's own turn about the vertical made **inverted** (up-Z below −0.5), the owner's yaw at the top, **120–225°**; whichever scores, nearer 180° when both do. Any climb, any time. Scores above Flip and Maverick. |
 
 ## Decision boundaries
 
@@ -207,20 +208,36 @@ Mirrors: the same two turns in the other order and the other way up.
   about the vertical there, so it is not Ham; a full Roll (≥300° in 1.5 s
   at ≥250°/s) that also turns about the vertical stays a Roll. Normal
   upright yaw is a Yaw Spin, not Ham.
-- Trippy Spin: **≥360° of yaw at ≥150°/s while the path orbits ≥360°**.
-  The yaw is the turn about the vertical (a tilted spin turns the heading at
-  the full rate); the body may roll as it spins. Over the whole spin (for as
-  long as the yaw keeps turning the same way at 120°/s or more) the path goes all the way round
-  a centre: radius 0.3–2.5 m, its direction turning a full turn (360°) or
-  more, one way, at 1 m/s or more. Half or three-quarters of an orbit is
-  not a Trippy. Upright or inverted: an inverted spin that orbits is a
-  Trippy, not Ham. A spin in place (no orbit) is a Yaw Spin or Ham Spin.
-  A camera-lock orbit (one turn of yaw per orbit) is a Trippy when it is
-  tight and fast enough: 0.3–2.5 m at 150°/s or more.
-  A nearby pole or post (a collider at most 0.5 m across and 1 m tall)
-  within 0.5 m of the orbit's centre earns 1.25× the points.
-- A coordinated turn, carve, or slight yaw is not a Trippy — those do not
-  go all the way round a centre 2.5 m or closer at 150°/s.
+- Trippy Spin: **≥360° of yaw at ≥150°/s while the path orbits ≥360°,
+  the tail to the centre or the body inverted**. The yaw is the turn about
+  the vertical (a tilted spin turns the heading at the full rate); the body
+  may roll as it spins. Over the whole spin (for as long as the yaw keeps
+  turning the same way at 120°/s or more) the path goes all the way round
+  a centre: radius 0.3 m or more (no top), its direction turning a full
+  turn (360°) or more, one way, at 1 m/s or more. Half or three-quarters of
+  an orbit is not a Trippy. Over that orbit, **70 % or more** of the steps
+  have the tail to the centre (the nose pointing away from it, within 0.7
+  of the vertical plane through it: tilted back round it, which is what
+  turns the owner's picture upside down) or the body inverted (up-Z below
+  0). The centre is square to the velocity, on the side the path turns to.
+  The term is the body's, not the camera's: the same move scores the same
+  at any cam tilt. The owner's Trippies read 0.92–1.0 (24 logged steps
+  each), the owner's orbits 0; the inverted half has no flown trace yet (synthetic
+  only). An inverted orbit is a Trippy, not Ham. A spin in place (no
+  orbit) is a Yaw Spin or Ham Spin. A nearby pole or post (a collider at
+  most 0.5 m across and 1 m tall) within 0.5 m of the orbit's centre earns
+  1.25× the points.
+- Orbit: the same orbit **upright**, the tail to the centre or inverted
+  30 % of it or less (the nose on the centre, a camera lock; or spinning on
+  its own, a quarter), slower: **≥360° inside 4.4 s at ≥90°/s**. An upright
+  orbit is never a Trippy, however tight and fast. One orbit scores once:
+  the 4.5 s cap cuts a slow one into pieces, and a piece that goes on
+  orbiting the same way (an Orbit, or a slower piece turning on at 72°/s or
+  more, half a turn or more, the path half way round, which alone is
+  nothing or a Yaw Spin) under 0.8 s after the last scores nothing. The
+  Trippy's pole bonus.
+- A coordinated turn, carve, or slight yaw is neither — those do not go all
+  the way round a centre at 90°/s.
 
 ### Barani vs Flip vs Juicy Flick
 
@@ -231,6 +248,20 @@ Mirrors: the same two turns in the other order and the other way up.
   level, yaw punched up or falling inverted. A roll made nose down while the
   thrust carries the quad along its up axis turns across the path, not
   about it: a Flip.
+- Or the half twist is the heading's: the owner yaws at the top of the
+  flip, upside down, and the twist about the path reads only 49–101° of
+  it. The heading's turn is the yaw's own turn about the vertical while
+  inverted: each step's yaw times up-Z, counted while up-Z is below −0.5.
+  So it means something only with the nose off the vertical (with the nose
+  near vertical up-Z is near 0 and the yaw counts nothing; the twist about
+  the path has it there), and a yaw made upright counts nothing (a flip, a
+  yaw, a flip is no Barani by it), nor do the pitch and roll: a flip about
+  a banked axis turns the body about the vertical by the bank's share of
+  the pitch (about 145° for a 22° bank), with no yaw. The heading's half
+  twist runs from **120°** (the owner's read 132–166°; the twist about the
+  path keeps 135°). Whichever of the two scores; nearer 180° when both do (the owner's Ham-session seq 14, 189°
+  about the path, stays a Barani). Flip, a 260° yaw inverted, flip reads
+  253–261° and stays a Flip.
 - Flip: the pitch with little roll or twist. Juicy Flick: half a flip to
   inverted, then a 180° roll (pitch path about 180°).
 - Half Mavvy: the same flip and twist (forward, a half roll, forward) over
@@ -389,7 +420,8 @@ it keeps turning, up to **10 s**: a turn about the vertical at Trippy's
 rate (≥360° at ≥150°/s: a Trippy, a Yaw Spin) while it keeps 120°/s over
 the last 0.5 s, or a loop's pitch (≥300° in 3.5 s with the velocity
 turning: a run of Powerloops) while it keeps 69°/s. So a long Trippy is
-one Trippy and a double loop one Double Powerloop. While
+one Trippy and a double loop one Double Powerloop. A slower orbit is cut
+at the cap; the Orbit scores once across its pieces (above). While
 **inverted**, settle is longer so a Cradle does not split on a brief
 rate dip. Consecutive unscored segments with pauses under 0.8 s are also
 scored as one for the matcher's tricks (compound tricks, above).

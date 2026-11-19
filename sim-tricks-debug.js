@@ -26,16 +26,17 @@ import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
-} from './sim-tricks.js?v=7e842d305df4';
+  HIST_W, BH_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE, BARANI_HD_LO,
+} from './sim-tricks.js?v=b0e0781d13b6';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
 export const CLASS_IDS = Object.freeze([
-  'halfmavvy', 'rubik', 'cubik', 'barani', 'immelmann', 'ham', 'trippy', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
+  'halfmavvy', 'rubik', 'cubik', 'barani', 'immelmann', 'ham', 'trippy', 'orbit', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
   'powerloop', 'matty', 'maverick', 'splits', 'cradle', 'flip', 'roll', 'yawspin',
 ]);
 export const SPEC = Object.freeze({
-  halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, barani: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
+  halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, barani: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, orbit: 0.05, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
   halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
   cradle: 0.08, flip: 0, roll: 0, yawspin: 0,
 });
@@ -81,11 +82,17 @@ export const GATES = Object.freeze({
     ge('rollFirst', 0.0, 0.12), ge('v.inv', 0.12, 0.08), le('absY', 2.4, 0.7),
   ],
   trippy: [
-    ge('v.yawSpan', 6.2832, 0), ge('v.yawRate', 2.618, 0), band('f.orbitR', 0.3, 2.5, 0),
+    ge('v.yawSpan', 6.2832, 0), ge('v.yawRate', 2.618, 0), ge('f.orbitR', 0.3, 0),
     ge('f.orbitSweep', 6.2832, 0), ge('f.orbitTurn', 0.8, 0), ge('f.orbitSpd', 1.0, 0),
+    ge('f.orbitTail', 0.7, 0),
+  ],
+  orbit: [
+    ge('v.slowSpan', 6.2832, 0), ge('v.slowRate', 1.571, 0), ge('f.orbit2R', 0.3, 0),
+    ge('f.orbit2Sweep', 6.2832, 0), ge('f.orbit2Turn', 0.8, 0), ge('f.orbit2Spd', 1.0, 0),
+    le('f.orbit2Tail', 0.3, 0),
   ],
   barani: [
-    ge('f.barP', 5.236, 0.35), band('f.barR', 2.356, 3.927, 0), ge('f.upEnd', 0.5, 0),
+    ge('f.barP', 5.236, 0.35), either(band('barRTwist', 2.356, 3.927, 0), band('barRHead', 2.094, 3.927, 0)), ge('f.upEnd', 0.5, 0),
   ],
   immelmann: [
     ge('f.phImmel', 1, 1),
@@ -170,11 +177,11 @@ export const OVERRIDE_TEXT = Object.freeze(OVERRIDES.map((r) => r.text));
 const ANGLE_SRC = new Set([
   'absP', 'absR', 'absY', 'v.pathP', 'v.pathR', 'v.pathY', 'f.pitch', '-f.pitch', 'v.head',
   'Math.max(absR, v.pathR)', 'Math.max(absY, v.pathY)', 'v.pathP - absP',
-  'v.flipSpan', 'v.rollSpan', 'v.loopSpan', 'v.loopSweep', 'v.yawSpan', 'f.orbitSweep', 'f.barP', 'f.barR',
-  'v.invYaw',
+  'v.flipSpan', 'v.rollSpan', 'v.loopSpan', 'v.loopSweep', 'v.yawSpan', 'f.orbitSweep', 'f.barP', 'f.barR', 'barRTwist', 'barRHead',
+  'v.invYaw', 'v.slowSpan', 'f.orbit2Sweep',
 ]);
 // Angular rates (shown in degrees a second).
-const RATE_SRC = new Set(['v.rollRate', 'v.yawRate']);
+const RATE_SRC = new Set(['v.rollRate', 'v.yawRate', 'v.slowRate']);
 
 function atLeast(x, a, fade) {
   if (x >= a) return 1;
@@ -222,7 +229,12 @@ function context(f) {
     'v.loopSpan': v.loopSpan, 'v.loopRise': v.loopRise, 'v.loopRet': v.loopRet, 'v.loopSweep': v.loopSweep,
     'v.yawSpan': v.yawSpan, 'v.yawRate': v.yawRate, 'v.invYaw': v.invYaw,
     'f.orbitR': f.orbitR, 'f.orbitSweep': f.orbitSweep, 'f.orbitTurn': f.orbitTurn, 'f.orbitSpd': f.orbitSpd,
+    'f.orbitTail': f.orbitTail, 'v.slowSpan': v.slowSpan, 'v.slowRate': v.slowRate,
+    'f.orbit2R': f.orbit2R, 'f.orbit2Sweep': f.orbit2Sweep, 'f.orbit2Turn': f.orbit2Turn, 'f.orbit2Spd': f.orbit2Spd,
+    'f.orbit2Tail': f.orbit2Tail,
     'f.barP': f.barP, 'f.barR': f.barR, 'f.upEnd': f.upEnd,
+    // The Barani's twist by which measure gave it (-1 for the other).
+    barRTwist: f.barVia ? -1 : f.barR, barRHead: f.barVia ? f.barR : -1,
     'f.phFlip': f.phFlip, 'f.phLoop': f.phLoop, 'f.phSplits': f.phSplits, 'f.phImmel': f.phImmel,
     'f.phMav': f.phMav, 'f.phMatty': f.phMatty, 'f.phHMatty': f.phHMatty, 'f.phHMavvy': f.phHMavvy,
   };
@@ -307,10 +319,19 @@ function sawOf(f, v, ctx) {
     vyawDeg: degOf(v.yawSpan), vyawRateDeg: degOf(v.yawRate),
     orbitR: r3(f.orbitR), orbitSweepDeg: degOf(f.orbitSweep), orbitTurn: r3(f.orbitTurn), orbitSpd: r3(f.orbitSpd),
     orbitFit: r3(f.orbitFit), orbitPole: f.orbitPole,
-    baraniPitchDeg: degOf(f.barP), baraniTwistDeg: degOf(f.barR), upEnd: r3(f.upEnd),
+    // Trippy's share of the orbit tilted back or inverted; Orbit's turn
+    // inside ORBIT_WIN_S, its orbit and that share.
+    orbitTail: r3(f.orbitTail),
+    slowYawDeg: degOf(v.slowSpan), slowRateDeg: degOf(v.slowRate),
+    orbit2R: r3(f.orbit2R), orbit2SweepDeg: degOf(f.orbit2Sweep), orbit2Turn: r3(f.orbit2Turn), orbit2Spd: r3(f.orbit2Spd),
+    orbit2Tail: r3(f.orbit2Tail), orbit2Pole: f.orbit2Pole,
+    // baraniVia: 1 when the heading's turn gave the twist.
+    baraniPitchDeg: degOf(f.barP), baraniTwistDeg: degOf(f.barR), baraniVia: f.barVia || 0, upEnd: r3(f.upEnd),
     // The segment's twist: its turn about the body axis nearest the flight
-    // path, roll or yaw (the Barani's).
-    twistDeg: degOf(f.twist),
+    // path, roll or yaw (the Barani's); and the heading's turn (the yaw's
+    // own turn about the vertical while inverted: each step's yaw times the
+    // body's up-Z while it is below -0.5, summed).
+    twistDeg: degOf(f.twist), yawVDeg: degOf(f.yawV),
     // Ham: the turn about the vertical while up-Z < -0.5, and that time's
     // share of the segment.
     invYawDeg: degOf(v.invYaw), inv50: r3(f.dur > 0 ? f.invYawT / f.dur : 0),
@@ -563,6 +584,15 @@ export function createTrickObserver(det, opts) {
   let sameDescent = false;   // still in the descent of a dive just recorded
   let gapSeq = 0;
   let seq = 0;
+  // The camera, for the debug log only (nothing scores it): each step of a
+  // live segment, the body's up-Z, the camera's up-Z and the camera's axis
+  // (sim-core frame: x forward, z up) at the page's cam tilt (info().camDeg;
+  // 30 when the page gives none), the position (m), and the body's nose and
+  // up axes. camRecord reads them over the orbit's window when the segment
+  // ends.
+  const CAM_W = 14, CAM_CAP = 4096;
+  const camBuf = new Float64Array(CAM_CAP * CAM_W);
+  let camN = 0, camDeg = 30, camFrom = 'default', camWs = 3.5;
   const view = {
     t: 0, armed: false, contact: false, rate: 0, lockout: 0, diving: false, live: 0, liveT: 0,
     vz: 0, speed: 0, alt: 0, thr: 0, gap: null, clr: null, diveOn: 0, diveDrop: 0, diveCd: 0, gapCd: 0,
@@ -579,18 +609,21 @@ export function createTrickObserver(det, opts) {
     rec.t0 = r3(segT0);
     // A compound trick: the merge's label (the detector's), and what merged.
     const mg = det.lastMerge;
-    rec.result = mg ? det.lastId : ex.id;
+    // An orbit going on (the one before it scored): the detector's nothing.
+    rec.result = mg || det.lastCont ? (det.lastId || null) : ex.id;
     rec.merged = mg ? { id: mg.id, segs: mg.segs, t: r3(mg.t), score: r3(mg.score), alone: ex.id } : null;
     rec.event = ev || null;
     rec.why = det.lastWhy || '';
     rec.dir = ex.id === 'flip' || ex.id === 'powerloop' ? (det.lastDir < 0 ? 'back' : 'front') : null;
-    rec.pole = ex.id === 'trippy' && det.lastPole ? TRIPPY_POLE_MUL : 0;
+    rec.pole = (ex.id === 'trippy' || ex.id === 'orbit') && det.lastPole ? TRIPPY_POLE_MUL : 0;
     rec.loops = ex.id === 'powerloop' ? (det.lastLoops || 1) : 0;
     rec.sloppy = det.lastSloppy ? 1 : 0;
     rec.bump = det.lastBump ? 1 : 0;
     rec.mismatch = ex.mismatch;
     rec.pre = ex.pre;
     rec.saw = ex.saw;
+    rec.cam = camRecord(f);
+    rec.barani = baraniProbe(f);
     rec.phases = phaseRecord(det.lastPhases);
     rec.gapBack = ex.id === 'maverick' && det.lastGapBack ? MAV_GAP_MUL : 0;
     rec.pick = ex.pick;
@@ -602,8 +635,194 @@ export function createTrickObserver(det, opts) {
     else if (!ex.id) rec.reason = 'no candidate reached ' + PICK_MIN + ' (top ' + (ex.pick.topId || '—') + ' ' + ex.pick.top + ')';
     else rec.reason = ex.candidates.find((c) => c.id === ex.id)?.reason || (ex.id === 'dive' ? 'dive fallback' : '');
     if (mg) rec.reason = 'merged with the ' + (mg.segs - 1) + ' segment(s) before (pauses under 0.8 s): ' + mg.id + '; this one alone: ' + (ex.id || 'nothing');
+    if (det.lastCont) rec.reason = 'the orbit before it goes on (one orbit scores once)';
     rec._explain = ex;
     emit(rec);
+  }
+
+  // One step of the camera: t the segment's clock (feat.dur, the history's
+  // column 0), the body's axes from the attitude (the detector's own nose
+  // and up columns), the camera's axis and up pitched up by the cam tilt.
+  function camPush(s, t) {
+    if (camN >= CAM_CAP) return;
+    const x = s.qx || 0, y = s.qy || 0, z = s.qz || 0, w = s.qw == null ? 1 : s.qw;
+    const fx = 1 - 2 * (y * y + z * z), fy = 2 * (x * y + w * z), fz = 2 * (x * z - w * y);
+    const ux = 2 * (x * z + w * y), uy = 2 * (y * z - w * x), uz = 1 - 2 * (x * x + y * y);
+    const c = camDeg * Math.PI / 180, cc = Math.cos(c), sc = Math.sin(c);
+    const k = camN * CAM_W;
+    camBuf[k] = t; camBuf[k + 1] = uz; camBuf[k + 2] = cc * uz - sc * fz;
+    camBuf[k + 3] = cc * fx + sc * ux; camBuf[k + 4] = cc * fy + sc * uy; camBuf[k + 5] = cc * fz + sc * uz;
+    // toScene: wx = -y, wz = -x (scene units).
+    camBuf[k + 6] = -(s.wz || 0) / camWs; camBuf[k + 7] = -(s.wx || 0) / camWs;
+    camBuf[k + 8] = s.alt != null ? s.alt : (s.wy || 0) / camWs;
+    camBuf[k + 9] = fx; camBuf[k + 10] = fy; camBuf[k + 11] = fz; camBuf[k + 12] = ux; camBuf[k + 13] = uy;
+    camN++;
+  }
+
+  // The camera over the orbit's window (lastFeat.orbitTa..orbitTb; the whole
+  // segment when no orbit was fitted). Its up-Z: min, mean, max, the share
+  // below 0 (the picture upside down) and below -0.35, and the body's share
+  // below 0 beside it. Toward the orbit's centre, at the quad's height: the
+  // camera axis's angle to it (deg: mean, median, the share within 45), its
+  // azimuth off the centre's bearing (deg, mean), the distance (m, mean).
+  // The camera's elevation (deg, mean; 90 straight up).
+  // The body against the centre, whatever the cam tilt: in the vertical
+  // plane through the quad and the centre, the nose's angle (noseDeg: 0
+  // level at the centre, -90 straight down, 90 straight up, 180 level away
+  // from it; -90..270), the share past 90 (tailShare: nose up and over, the
+  // tail toward the centre), the nose out of that plane (side: 0 in it, 1
+  // square to it; mean), and the up axis's lean toward the centre from
+  // vertical (leanDeg: 0 upright, 90 on its side toward the centre, 180
+  // inverted). Quantiles as the up-Z's. rows: 24 steps evenly over the
+  // window, as cols.
+  function camRecord(f) {
+    const orb = f.orbitR > 0 && f.orbitTb > f.orbitTa;
+    const ta = orb ? f.orbitTa : -Infinity, tb = orb ? f.orbitTb : Infinity;
+    const cx = -f.orbitCz / camWs, cy = -f.orbitCx / camWs;
+    const idx = [];
+    let segNeg = 0;
+    for (let i = 0; i < camN; i++) {
+      const t = camBuf[i * CAM_W];
+      if (camBuf[i * CAM_W + 2] < 0) segNeg++;
+      if (t >= ta - 1e-6 && t <= tb + 1e-6) idx.push(i);
+    }
+    const out = { deg: camDeg, degFrom: camFrom, win: orb ? [r3(ta), r3(tb)] : null, n: idx.length, segUpZNeg: camN ? r3(segNeg / camN) : 0 };
+    if (!idx.length) return out;
+    const D = 180 / Math.PI, cl = (u) => (u > 1 ? 1 : u < -1 ? -1 : u);
+    let mn = Infinity, mx = -Infinity, sum = 0, neg = 0, neg35 = 0, bodyNeg = 0, el = 0;
+    let offN = 0, offIn = 0, azSum = 0, azN = 0, dSum = 0;
+    const offs = [], cus = [], ups = [], noses = [], leans = [];
+    let tail = 0, sideSum = 0;
+    const at = (i) => {
+      const k = i * CAM_W, ax = camBuf[k + 3], ay = camBuf[k + 4], az = camBuf[k + 5];
+      const r = { t: camBuf[k], up: camBuf[k + 1], cu: camBuf[k + 2], el: Math.asin(cl(az)) * D, off: null, azOff: null, d: null, nose: null, lean: null, side: null };
+      if (orb) {
+        const dx = cx - camBuf[k + 6], dy = cy - camBuf[k + 7], d = Math.hypot(dx, dy), ah = Math.hypot(ax, ay);
+        r.d = d;
+        if (d > 0.05) {
+          r.off = Math.acos(cl((ax * dx + ay * dy) / d)) * D;
+          if (ah > 1e-3) r.azOff = Math.acos(cl((ax * dx + ay * dy) / (d * ah))) * D;
+          const hx = dx / d, hy = dy / d;
+          let nose = Math.atan2(camBuf[k + 11], camBuf[k + 9] * hx + camBuf[k + 10] * hy) * D;
+          if (nose < -90) nose += 360;
+          r.nose = nose;
+          r.side = Math.abs(-camBuf[k + 9] * hy + camBuf[k + 10] * hx);
+          r.lean = Math.atan2(camBuf[k + 12] * hx + camBuf[k + 13] * hy, camBuf[k + 1]) * D;
+        }
+      }
+      return r;
+    };
+    for (const i of idx) {
+      const r = at(i);
+      if (r.cu < mn) mn = r.cu;
+      if (r.cu > mx) mx = r.cu;
+      sum += r.cu; el += r.el; cus.push(r.cu); ups.push(r.up);
+      if (r.cu < 0) neg++;
+      if (r.cu < -0.35) neg35++;
+      if (r.up < 0) bodyNeg++;
+      if (r.off != null) { offs.push(r.off); offN++; if (r.off <= 45) offIn++; }
+      if (r.azOff != null) { azSum += r.azOff; azN++; }
+      if (r.d != null) dSum += r.d;
+      if (r.nose != null) { noses.push(r.nose); leans.push(r.lean); sideSum += r.side; if (r.nose > 90) tail++; }
+    }
+    const n = idx.length;
+    out.upZMin = r3(mn); out.upZMean = r3(sum / n); out.upZMax = r3(mx);
+    out.upZNeg = r3(neg / n); out.upZNeg35 = r3(neg35 / n); out.bodyUpZNeg = r3(bodyNeg / n);
+    out.elDegMean = Math.round(el / n);
+    // Quantiles (10, 25, 50, 75, 90 %) of the camera's up-Z and the body's,
+    // so a gate's level can be set with margin from the log.
+    const q = (a) => { a.sort((x, y) => x - y); return [0.1, 0.25, 0.5, 0.75, 0.9].map((p) => r3(a[Math.min(a.length - 1, Math.floor(p * a.length))])); };
+    out.upZQ = q(cus); out.bodyUpZQ = q(ups);
+    if (offN) {
+      offs.sort((a, b) => a - b);
+      out.offDegMean = Math.round(offs.reduce((a, b) => a + b, 0) / offN);
+      out.offDegMed = Math.round(offs[offN >> 1]);
+      out.offIn45 = r3(offIn / offN);
+      out.distMean = r3(dSum / n);
+    }
+    if (azN) out.azDegMean = Math.round(azSum / azN);
+    if (noses.length) {
+      const N = noses.length;
+      out.noseDegMean = Math.round(noses.reduce((a, b) => a + b, 0) / N);
+      out.noseDegQ = q(noses).map((x) => Math.round(x));
+      out.tailShare = r3(tail / N);
+      out.sideMean = r3(sideSum / N);
+      out.leanDegQ = q(leans).map((x) => Math.round(x));
+    }
+    out.cols = ['t', 'upZ', 'camUpZ', 'offDeg', 'azDeg', 'elDeg', 'dist', 'noseDeg', 'leanDeg', 'side'];
+    out.rows = [];
+    const R = Math.min(24, n);
+    for (let j = 0; j < R; j++) {
+      const r = at(idx[R > 1 ? Math.round((j * (n - 1)) / (R - 1)) : 0]);
+      const rd = (x) => (x == null ? null : Math.round(x));
+      out.rows.push([r3(r.t), r3(r.up), r3(r.cu), rd(r.off), rd(r.azOff), Math.round(r.el), r.d == null ? null : r3(r.d), rd(r.nose), rd(r.lean), r.side == null ? null : r3(r.side)]);
+    }
+    return out;
+  }
+
+  // The Barani's terms over the finished segment's history (det.hist, read
+  // only), as baraniWithin scans it but with the band ignored: the stretch
+  // of BARANI_P less BARANI_FADE or more of pitch path whose twist is
+  // nearest 180, without and with BARANI_SIDE (pitch path before and after
+  // the row where the twist is half done), each with its pitch path, twist
+  // and the pitch path either side (deg), its time (s) and which twist
+  // (via: 'twist', the body axis nearest the path, or 'heading', the
+  // heading's turn); which term zeroed it (limit: barP, barR band,
+  // BARANI_SIDE, upEnd, or none).
+  function baraniProbe(f) {
+    const H = det.hist, n = det.histN, W = HIST_W, D = 180 / Math.PI;
+    const lo = BARANI_P - BARANI_FADE, bandLo = 2.356, bandHi = 3.927;
+    const out = { pathDeg: degOf(f.pathP), twistDeg: degOf(f.twist), upEnd: r3(f.upEnd), band: [135, 225], bandHeading: [degOf(BARANI_HD_LO), 225], sideDeg: degOf(BARANI_SIDE), any: null, inside: null, limit: null };
+    if (!H || n < 2 || !(f.pathP >= lo)) { out.limit = 'barP'; return out; }
+    const stride = Math.max(1, Math.ceil(n / PH_ROWS));
+    // The twist (column 15) and the heading's turn (the yaw's own turn about
+    // the vertical while inverted, the body history's fourth), as
+    // baraniWithin.
+    const B = det.bh;
+    const pp = [0], cols = [[H[15]], [B[3]]], tt = [H[0]];
+    let path = 0;
+    for (let r = 1; r < n; r++) {
+      path += Math.abs(H[r * W + 1] - H[(r - 1) * W + 1]);
+      if (r === n - 1 || r % stride === 0) { pp.push(path); cols[0].push(H[r * W + 15]); cols[1].push(B[r * BH_W + 3]); tt.push(H[r * W]); }
+    }
+    const m = pp.length;
+    const half = (A, ja, jb) => {
+      const raw = A[jb] - A[ja], T = Math.abs(raw), sg = raw >= 0 ? 1 : -1;
+      let k = ja + 1;
+      while (k < jb && sg * (A[k] - A[ja]) < T / 2) k++;
+      return { before: pp[k] - pp[ja], after: pp[jb] - pp[k] };
+    };
+    const row = (c, ja, jb) => {
+      const A = cols[c], h = half(A, ja, jb);
+      return { pDeg: Math.round((pp[jb] - pp[ja]) * D), twistDeg: Math.round(Math.abs(A[jb] - A[ja]) * D), beforeDeg: Math.round(h.before * D), afterDeg: Math.round(h.after * D), t: [r3(tt[ja]), r3(tt[jb])], via: c ? 'heading' : 'twist' };
+    };
+    // Each stretch's twist in its measure's band (the heading's from
+    // BARANI_HD_LO): the in-band one nearest 180 first, else the nearest.
+    const inBandC = (c, T) => T >= (c ? BARANI_HD_LO : bandLo) - 1e-9 && T <= bandHi + 1e-9;
+    const better = (ok, off, bOk, bOff) => (ok && !bOk) || (ok === bOk && off < bOff);
+    let anyOff = 9, anyOk = false, anyA = -1, anyB = -1, anyC = 0, inOff = 9, inOk = false, inA = -1, inB = -1, inC = 0;
+    for (let ja = 0; ja < m - 1; ja++) {
+      for (let jb = m - 1; jb > ja; jb--) {
+        if (pp[jb] - pp[ja] < lo) break;
+        for (let c = 0; c < 2; c++) {
+          const A = cols[c];
+          const T = Math.abs(A[jb] - A[ja]), off = Math.abs(T - Math.PI), ok = inBandC(c, T);
+          if (better(ok, off, anyOk, anyOff)) { anyOff = off; anyOk = ok; anyA = ja; anyB = jb; anyC = c; }
+          if (better(ok, off, inOk, inOff)) {
+            const h = half(A, ja, jb);
+            if (h.before >= BARANI_SIDE && h.after >= BARANI_SIDE) { inOff = off; inOk = ok; inA = ja; inB = jb; inC = c; }
+          }
+        }
+      }
+    }
+    if (anyA >= 0) out.any = row(anyC, anyA, anyB);
+    if (inA >= 0) out.inside = row(inC, inA, inB);
+    if (anyA < 0) out.limit = 'barP';
+    else if (!anyOk) out.limit = 'barR band';
+    else if (!(inA >= 0 && inOk)) out.limit = 'BARANI_SIDE';
+    else if (!(f.upEnd >= 0.5)) out.limit = 'upEnd';
+    else out.limit = 'none';
+    return out;
   }
 
   function emitAbort(t, f, why) {
@@ -649,6 +868,15 @@ export function createTrickObserver(det, opts) {
     view.diving = diving; view.vz = vz; view.speed = speed; view.alt = alt; view.thr = thr;
     view.clr = det.clr; view.gap = gapState(det, s.frameW, s.ws);
     view.diveOn = det.diveOn; view.diveDrop = det.diveDrop; view.diveCd = det.diveCd; view.gapCd = det.gapCd;
+
+    // The camera's steps (camRecord): from a segment's first step to the one
+    // that ends it.
+    if (!st.live && det.live) {
+      const i = info() || {};
+      const given = typeof i.camDeg === 'number' && isFinite(i.camDeg);
+      camN = 0; camDeg = given ? i.camDeg : 30; camFrom = given ? 'page' : 'default'; camWs = ws;
+    }
+    if (det.live || st.live) camPush(s, det.live ? det.feat.dur : det.lastFeat.dur);
 
     // Rotation segments.
     let finished = false;
@@ -958,6 +1186,13 @@ export function createTrickDebug(opts) {
         + (r.pole ? ' <span class="ok">· pole ×' + r.pole + '</span>' : '')
         + '  <span class="d">P' + (s.pitchDeg ?? '?') + ' R' + (s.rollDeg ?? '?') + ' Y' + (s.yawDeg ?? '?') + ' ' + (s.dur ?? '?') + 's</span>');
       L.push('<span class="d">  ' + esc(r.reason || '') + '</span>');
+      const c = r.cam;
+      if (c && c.n) {
+        L.push('<span class="d">  cam ' + c.deg + '°' + (c.win ? ' over the orbit ' + c.win[0] + '-' + c.win[1] + 's' : ' over the segment')
+          + '  cam up-Z<0 ' + c.upZNeg.toFixed(2) + ' (body ' + c.bodyUpZNeg.toFixed(2) + ')  mean ' + c.upZMean.toFixed(2)
+          + (c.offDegMean != null ? '  to centre ' + c.offDegMean + '° (az ' + c.azDegMean + '°, el ' + c.elDegMean + '°, ' + c.distMean.toFixed(1) + ' m)' : '  el ' + c.elDegMean + '°')
+          + (c.noseDegMean != null ? '  nose ' + c.noseDegMean + '° tail ' + c.tailShare.toFixed(2) + ' lean ' + c.leanDegQ[2] + '°' : '') + '</span>');
+      }
       if (s.travelH != null) {
         L.push('<span class="d">  travelH ' + s.travelH.toFixed(1) + ' close ' + s.close.toFixed(2) + ' span ' + s.span.toFixed(1) + 'm drop ' + s.drop.toFixed(1)
           + 'm fol ' + s.follow.toFixed(2) + ' ag ' + s.against.toFixed(2) + ' inv ' + s.inv.toFixed(2) + ' spd ' + s.spdPeak.toFixed(1) + '</span>');
