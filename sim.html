@@ -123,6 +123,11 @@
   #osdBC .osdbc-why{position:relative}
   #osdBC .osdbc-why>span{position:absolute;left:50%;top:0;transform:translateX(-50%);white-space:nowrap}
   #osdBL{display:none}
+  /* SPD's number is padded to a fixed 3 characters (sim-feel.js speedText),
+     so 9, 10 and 100 leave the unit where it was; pre keeps the padding.
+     Speed units Off hides the line but keeps its box, so ALT and BATT stay. */
+  #osdTL .osd-spd{white-space:pre}
+  #osdTL .osd-spd.off{visibility:hidden}
   #osdBR{bottom:18px;right:16px;text-align:right}
   #osdGate{top:14px;left:50%;transform:translateX(-50%);color:var(--txt);font-weight:600}
   #osdLap{top:84px;left:16px;font-weight:600;z-index:6} /* over the key legend (5): in a short window it reaches up to here, and would hide the result's buttons */
@@ -353,7 +358,7 @@
   body.menu-open #touchLayer{visibility:hidden}
   body:has(#panel.open) #feelHud{opacity:0}
   .seg{display:flex;gap:6px;margin-bottom:10px}
-  #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#camTiltPreset,#fpvStyle,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
+  #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#camTiltPreset,#fpvStyle,#speedUnits,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
     color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
   .menu-layer.wide{width:min(420px,92vw)}
   /* Ghost room card */
@@ -858,6 +863,12 @@
   <div class="row"><label>Motion blur</label><input type="checkbox" id="cbMotionBlur" style="accent-color:var(--orange)"></div>
   <div class="row"><label>Show canopy</label><input type="checkbox" id="cbCanopy" style="accent-color:var(--orange)"></div>
   <div class="row"><label>Show crosshair</label><input type="checkbox" id="cbCrosshair" style="accent-color:var(--orange)"></div>
+  <div class="row"><label for="speedUnits">Speed units</label></div>
+  <select id="speedUnits" title="The OSD's SPD line. Off hides it. Until you choose: mph for US English browsers, km/h for the rest.">
+    <option value="mph">mph</option>
+    <option value="kmh">km/h</option>
+    <option value="off">Off</option>
+  </select>
   <div class="row"><label>Stick overlay</label><input type="checkbox" id="cbStickOverlay" style="accent-color:var(--orange)" title="Your two sticks as the sim reads them (Mode 2). On for keyboard and touch, off for a radio or gamepad, until you choose. H hides it with the HUD."></div>
   <div class="row"><label>Trick HUD</label><input type="checkbox" id="cbTricksHud" checked style="accent-color:var(--orange)" title="Freestyle combo meter. Hidden in races."></div>
   <div class="row"><label>Trick debug</label><input type="checkbox" id="cbTrickDebug" style="accent-color:var(--orange)" title="Classifier overlay. Records last maneuver JSON — Copy last trace. Also ?trickdebug=1"></div>
@@ -1144,7 +1155,8 @@ import {
 } from "./sim-room.js?v=dfa4b922ade4";
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z,
   loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT,
-  loadStickOverlay,saveStickOverlay,stickOverlayOn,createStickOverlay,STICK_OVERLAY_PHONE} from "./sim-feel.js?v=1855c2687977";
+  loadStickOverlay,saveStickOverlay,stickOverlayOn,createStickOverlay,STICK_OVERLAY_PHONE,
+  SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText} from "./sim-feel.js?v=1b41471c0d9d";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -1362,6 +1374,29 @@ function applyCrosshair(){
   if(cb)cb.checked=!!crosshairOn;
 }
 applyCrosshair();
+// ---------- Speed units (sim-feel.js speedText) ----------
+// The OSD's SPD line in mph, km/h, or Off (hidden). The pilot's choice (Tune:
+// Camera, Speed units; quadmathSimSpeedUnits) wins; until they choose, mph for
+// a US English browser (navigator.language en-US), km/h for the rest. The
+// default is never saved, so it keeps following the browser.
+let speedUnitsSaved=loadSpeedUnits();
+function speedUnitsNow(){return speedUnitsOn(speedUnitsSaved,navigator.language);}
+function setSpeedUnits(v){
+  if(!SPEED_UNITS.includes(v))return false;
+  speedUnitsSaved=v;
+  saveSpeedUnits(v);
+  const sel=document.getElementById('speedUnits');
+  if(sel)sel.value=v;
+  updateOSD();   // the menu or the panel may have the sim paused: show it now
+  return true;
+}
+{
+  const sel=document.getElementById('speedUnits');
+  if(sel){
+    sel.value=speedUnitsNow();
+    sel.onchange=()=>setSpeedUnits(sel.value);
+  }
+}
 // ---------- The stick overlay (sim-feel.js createStickOverlay) ----------
 // The sticks the core flies on: the module's `stick`, as readInput and the
 // 4 ms poll leave it (axis map, calibration, deadband; before rates), drawn
@@ -5636,7 +5671,9 @@ function toast(m,opts){
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toastEl.style.opacity=0;toastEl.classList.remove('has-action');},o.ms||1500);
 }
 function updateOSD(){
-  const spd=(state.vel.length()*3.6).toFixed(0),alt=state.pos.y.toFixed(1);
+  // state is in scene units (WS per metre): SPD and ALT read true m/s and m.
+  // SPD shows in the pilot's Speed units; Off keeps the line's box, hidden.
+  const spd=speedText(state.vel.length()/WS,speedUnitsNow(),{field:true}),alt=(state.pos.y/WS).toFixed(1);
   const t=(simClockMs/1000)|0; // flight time on the sim clock
   // Betaflight-style low-battery warnings off the SAGGED voltage: punch-outs
   // flicker the warning early, exactly like a real 1S on the edge. Master
@@ -5654,7 +5691,7 @@ function updateOSD(){
     landEl.style.display=battV<=BATT_CRIT?'block':'none';                  // LAND NOW center-screen
     if(battV<=BATT_CRIT)landEl.style.opacity=flash?'1':'0.15';
   }else landEl.style.display='none';
-  osdTL.innerHTML=`SPD ${spd} km/h<br>ALT ${alt} m${battLine}`;
+  osdTL.innerHTML=`<span class="osd-spd${spd?'':' off'}">SPD ${spd||''}</span><br>ALT ${alt} m${battLine}`;
   // Which core flies, always: JS CORE whenever Betaflight is not flying (a
   // class with no sim-core plant, ?core=js, or the bf core still loading or
   // failed), so nobody takes the js core for Betaflight.
@@ -9829,6 +9866,8 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   openSkinsCard,openTrackPicker,SKINS,SECRET_SKINS,skinPalette,SECRETS_KEY,secrets,placementsFor,isSecretsMap,
   crosshairEnabled:()=>crosshairOn,
   setCrosshairOn(v){crosshairOn=!!v;saveCrosshairOn(crosshairOn);applyCrosshair();},
+  speedUnits:()=>({on:speedUnitsNow(),saved:speedUnitsSaved,lang:navigator.language}),setSpeedUnits,SPEED_UNITS_KEY,
+  osdState:()=>state,updateOSD,
   setMap,findTrack,detectPassOrMiss,MISS_PENALTY_MS,encodeShare,decodeShare,
   startFreestyle,flyPickedTrack,leaveRace,resolveFly,isFreestyleTrackId,freestyleIdFor,persistableSelection,
   isLineTrackId,demoLineGhostForShot,ghostVisible:()=>ghostVisible,ghostMesh,
