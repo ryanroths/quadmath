@@ -375,7 +375,45 @@ const PAGE = String.raw`(() => {
     return out;
   }
   const close = (a, b, eps) => ['r', 'p', 'y', 't'].every((k) => Math.abs(a[k] - b[k]) <= eps);
-  window.__so = { s, wait, until, frame, pixels, seen, layout, close };
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const upZ = (q) => 1 - 2 * (q.x * q.x + q.y * q.y);
+  // The flight as the page has it, for a failure's message: armed, height,
+  // which way up, the sticks, the turtle and its stick hold, the last disarm.
+  function state() {
+    const c = s.coreState(), e = s.easy(), b = s.bfCore(), k = s.stickOverlay().stick;
+    return { armed: c.armed, z: r2(c.position.z), upZ: r2(upZ(c.quaternion)), stick: { r: r2(k.r), p: r2(k.p), y: r2(k.y), t: r2(k.t) },
+      stickHold: e.stickHold, turtle: b ? b.turtlePhase : null, disarmReason: e.disarmReason, crashAt: e.crashAt, arm: e.arm, pilotError: s.testPilotError() };
+  }
+  // A hover on the bf core, flown on the sim's own samples (_sim.setTestPilot:
+  // every 4 ms of sim time, on that tick's state, however long the frames run):
+  // nothing until it is armed (a raised throttle would refuse the arm), then
+  // level (roll and pitch centred), no yaw, and the throttle that holds it at
+  // z0 metres, closed on the core's own thrust-to-weight. The keys still move
+  // the page's sticks, which are what the overlay draws; the core flies this.
+  // env: how it flew, from the arm on.
+  const env = { samples: 0, maxZ: null, minUpZ: null, disarmed: false, turtle: false, hold: false };
+  function hover(z0) {
+    let t = 0;
+    s.setTestPilot((cs) => {
+      if (!cs.armed) {
+        if (env.samples) env.disarmed = true;
+        t = 0;
+        return { r: 0, p: 0, y: 0, t: 0 };
+      }
+      const z = cs.position.z, up = upZ(cs.quaternion);
+      const a = Math.max(-3, Math.min(3, 2.5 * (z0 - z) - 2.5 * cs.velocity.z));
+      t = Math.max(0, Math.min(1, t + 0.01 * ((1 + a / 9.81) / Math.max(up, 0.5) - cs.twr)));
+      env.samples++;
+      env.maxZ = env.maxZ === null ? z : Math.max(env.maxZ, z);
+      env.minUpZ = env.minUpZ === null ? up : Math.min(env.minUpZ, up);
+      const b = s.bfCore();
+      if (b && b.turtlePhase != null) env.turtle = true;
+      if (s.easy().stickHold) env.hold = true;
+      return { r: 0, p: 0, y: 0, t };
+    });
+    return true;
+  }
+  window.__so = { s, wait, until, frame, pixels, seen, layout, close, state, hover, env };
   return true;
 })()`;
 
@@ -471,8 +509,10 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
   }
 
   const sim = (query) => `${origin}/sim.html?quality=low&${query}`;
-  // The overlay drawn: the values it painted are the sticks the core has (a
-  // frame apart at most: eps), and the green dot is under each one.
+  // The overlay drawn: the values it painted are the page's sticks (the keys,
+  // the pad or the touch sticks as the poll leaves them; the keyboard pass's
+  // core flies a test pilot's hover instead), a frame apart at most (eps),
+  // and the green dot is under each one.
   const tracks = async (js, label, eps = 0.02) => {
     const r = await js(`await S.frame(); await S.frame(); return JSON.stringify({ o: S.s.stickOverlay(), px: S.pixels(), seen: S.seen(), armed: S.s.coreState().armed });`);
     assert.equal(r.o.shown, true, label + ': shown');
@@ -525,21 +565,34 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         let hud = await clearOfHud('at rest');
         assert.equal(hud.core, 'bf');
         assert.ok(hud.osdBC, 'the throttle bar is up');
+        // Each wait is on the page's own state, and must get there: a miss
+        // fails here, with the flight's state, not later on a stale read.
+        const until = async (label, cond, ms = 8000) => {
+          const w = await js(`const ok = await S.until(() => (${cond}), ${ms}); return JSON.stringify({ ok, st: S.state() });`);
+          assert.equal(w.ok, true, `${label}: ${JSON.stringify(w.st)}`);
+          return w.st;
+        };
+        // The core flies a hover, not the keys (S.hover: a test pilot on the
+        // sim's samples holds it level at 1.5 m) while the keys move the
+        // page's sticks, which are what the overlay draws. Flown on the keys
+        // (full throttle, roll, yaw, then pitch), it reached the rig's 6 m
+        // ceiling in every run and often went over onto its back; now and then
+        // it came down on its back, crashed, and the turtle that followed held
+        // roll and pitch at zero, so the arrows moved nothing.
+        await js(`return S.hover(1.5);`);
         // Throttle up (W ramps it, and it stays when let go), then roll right
         // and yaw right. Easy mode arms on the throttle once it has been down a
         // second (the page's own count), so W waits for that; roll and yaw wait
-        // until it is armed and off the floor (the page's own state): full roll
-        // before lift-off tips it over on the floor, a crash, and the turtle
-        // that follows holds roll and pitch at zero until both are centred.
-        await js(`await S.until(() => { const a = S.s.easy().arm; return !!a && a.lowS >= 1; }, 8000); return 1;`);
+        // until it is armed and the pilot has it off the floor.
+        await until('a second of low throttle', `(() => { const a = S.s.easy().arm; return !!a && a.lowS >= 1; })()`);
         await hold(true, 'w', 'KeyW', 87);
-        await js(`await S.until(() => S.s.coreState().armed && S.s.coreState().position.z > 0.5, 8000); return 1;`);
+        await until('armed and off the floor', `S.s.coreState().armed && S.s.coreState().position.z > 0.5`);
         await hold(true, 'ArrowRight', 'ArrowRight', 39);
         await hold(true, 'd', 'KeyD', 68);
         // The keys move the sticks in sim time (W ramps the throttle 1.4 a
         // second): held until they are there, however fast this machine runs
         // the sim against the wall clock (a CI runner's is about half).
-        await js(`await S.until(() => { const k = S.s.stickOverlay().stick; return k.r > 0.9 && k.y > 0.9 && k.t > 0.4; }, 8000); return 1;`);
+        await until('roll, yaw and throttle up', `(() => { const k = S.s.stickOverlay().stick; return k.r > 0.9 && k.y > 0.9 && k.t > 0.4; })()`);
         await hold(false, 'w', 'KeyW', 87);
         await js(`await S.wait(500); return 1;`);
         r = await tracks(js, 'keys held');
@@ -559,7 +612,7 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         await hold(false, 'ArrowRight', 'ArrowRight', 39);
         await hold(true, 'ArrowUp', 'ArrowUp', 38);
         // The arrows glide the stick in sim time too: held until it is there.
-        await js(`await S.until(() => S.s.stickOverlay().stick.p > 0.9, 8000); return 1;`);
+        await until('pitch forward', `S.s.stickOverlay().stick.p > 0.9`);
         r = await tracks(js, 'pitch forward');
         assert.ok(r.o.stick.p > 0.9 && r.o.dots.r.y < r.o.box * 0.2, 'pitch forward: the right dot up ' + JSON.stringify({ stick: r.o.stick, dots: r.o.dots, box: r.o.box, armed: r.armed }));
         await hold(false, 'ArrowUp', 'ArrowUp', 38);
@@ -579,22 +632,37 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         assert.equal(r.o.shown, true, 'H again shows it');
         assert.deepEqual(r.layout, before, 'H moved nothing else');
 
+        // The hover held from the arm to here: the pilot flew the core on
+        // every sample since, with no error, well under the ceiling, level,
+        // never disarmed, never turtled, roll and pitch never held at zero.
+        r = await js(`return JSON.stringify({ env: S.env, st: S.state() });`);
+        console.log('hover: ' + JSON.stringify(r.env));
+        assert.equal(r.st.pilotError, null, 'the pilot flew without an error');
+        assert.ok(r.env.samples > 0, 'the pilot flew the core ' + JSON.stringify(r.env));
+        assert.ok(r.env.maxZ < 3, 'under 3 m (the ceiling is at 6) ' + JSON.stringify(r.env));
+        assert.ok(r.env.minUpZ > 0.9, 'level ' + JSON.stringify(r.env));
+        assert.equal(r.env.disarmed, false, 'never disarmed ' + JSON.stringify(r.st));
+        assert.equal(r.env.turtle, false, 'never turtled');
+        assert.equal(r.env.hold, false, 'roll and pitch never held at zero');
         // A crash: still armed, it is dropped onto the floor at 25 m/s (as
-        // test_sim_easy_mode.mjs drop()); if it has crashed on its own already,
-        // that crash is the one. The throttle comes down to under a quarter
-        // first (S), as that test's 20 %: left where W put it, the quad climbs
-        // straight off the floor and never comes to rest to be disarmed. The
-        // page disarms it as a crash and shows the arm hint; the card keeps its box.
+        // test_sim_easy_mode.mjs drop()). The throttle comes down to under a
+        // quarter first (S), as that test's 20 %: left where W put it, the quad
+        // climbs straight off the floor and never comes to rest to be disarmed.
+        // The pilot lets go of the core in the drop's own step, so the keys fly
+        // it from there. The page disarms it as a crash and shows the arm hint;
+        // the card keeps its box.
         await hold(true, 's', 'KeyS', 83);
-        await js(`await S.until(() => S.s.stickOverlay().stick.t < 0.25, 8000); return 1;`);
+        await until('throttle under a quarter', `S.s.stickOverlay().stick.t < 0.25`);
         await hold(false, 's', 'KeyS', 83);
-        r = await js(`const c = S.s.coreState(), was = c.armed;
+        r = await js(`S.s.setTestPilot(null);
+          const c = S.s.coreState(), was = c.armed;
           if (was) S.s.bfCore().teleport({ x: c.position.x, y: c.position.y, z: 2.5 }, { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: 0, z: -25 });
           const off = await S.until(() => !S.s.coreState().armed, 6000);
           await S.until(() => document.getElementById('hudArmHint').classList.contains('show'), 2000);
           await S.frame();
           return JSON.stringify({ was, off, reason: S.s.easy().disarmReason, L: S.layout(), hint: document.getElementById('hudArmHint').classList.contains('show') });`);
         console.log('crash: ' + JSON.stringify({ dropped: r.was, reason: r.reason }));
+        assert.equal(r.was, true, 'armed until the drop');
         assert.equal(r.off, true, 'disarmed after the crash');
         assert.equal(r.reason, 'crash', 'as a crash');
         assert.equal(r.hint, true, 'the arm hint shows after the crash');
