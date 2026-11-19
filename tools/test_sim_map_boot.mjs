@@ -230,16 +230,22 @@ const JS_CASES = [...new Set(MAP_IDS)].map((map) => ({
 // each (sim.html BF_CLASSES): the 75 boots its own Betaflight core, the
 // Fractal75.
 const BF_QUAD = { whoop65: 'AIR65', whoop75: 'FRACTAL75' };
-// The default core on classes sim-core has no plant for: the js core flies
-// them, with JS CORE on the OSD. The class is the one the page restores. The
-// gym case is also the reload that used to catch the gym's kit landing before
-// its boot-time restyle (sim-art-gym.js inGymArt). The living case with the 75
-// flies Betaflight.
+// The class the page restores at boot. The 85, which sim-core has no plant
+// for, flies the js core, with JS CORE on the OSD; the living case with the 75
+// flies Betaflight. The gym case restores a retired class (the 5" freestyle,
+// removed with the 2.5"): it must land on the 65 (lands), on Betaflight, with
+// no error. It is also the reload that used to catch the gym's kit landing
+// before its boot-time restyle (sim-art-gym.js inGymArt).
 const FALLBACK_CASES = [
   { map: 'living', track: null, look: 'livingWhoop', q: 'med', droneType: 'whoop75' },
   { map: 'living', track: null, look: 'livingWhoop', q: 'med', droneType: 'whoop85' },
-  { map: 'gym', track: null, look: 'gymWhoop', q: 'med', droneType: 'freestyle5' },
+  { map: 'gym', track: null, look: 'gymWhoop', q: 'med', droneType: 'freestyle5', lands: 'whoop65' },
 ];
+// The class a case flies: the one it restores, or the one a retired class
+// lands on; the 65 with nothing restored.
+function flyingClassOf(spec) {
+  return spec.lands || spec.droneType || 'whoop65';
+}
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -354,15 +360,16 @@ async function waitForCdpPage(run, pred, tries, deadline) {
 }
 
 // The core a case should fly: bf by default on the 65 (the class a fresh
-// profile starts on) and the 75, js for ?core=js and for a class with no
-// sim-core plant.
+// profile starts on, and the one a retired class lands on) and the 75, js for
+// ?core=js and for the 85, which has no sim-core plant.
 function wantCoreOf(spec) {
-  return spec.core === 'js' || (spec.droneType && !BF_QUAD[spec.droneType]) ? 'js' : 'bf';
+  return spec.core === 'js' || !BF_QUAD[flyingClassOf(spec)] ? 'js' : 'bf';
 }
 
 // How a case is named in every failure: map, core, and what else sets it apart.
 function labelOf(spec) {
-  const extra = [spec.droneType, spec.track, 'q=' + spec.q].filter(Boolean).join(', ');
+  const cls = spec.lands ? spec.droneType + ' saved, lands ' + spec.lands : spec.droneType;
+  const extra = [cls, spec.track, 'q=' + spec.q].filter(Boolean).join(', ');
   return `${spec.map} (${wantCoreOf(spec)} core${spec.core === 'js' ? ' via ?core=js' : ''}, ${extra})`;
 }
 
@@ -537,10 +544,11 @@ async function bootPageAttached(spec, boot, run, url, wantCore) {
             avg = n ? sum/(n*3) : 0;
           }
         } catch (e) { return { evalError: String(e), map: map, vibe: vibe, artError: artError }; }
-        var osd = document.getElementById('osdTR');
+        var osd = document.getElementById('osdTR'), cls = document.getElementById('droneType');
         var ratesJs = document.querySelector('#panel .rates-js'), ratesBf = document.querySelector('#panel .rates-bf');
         return { map: map, track: s.track ? s.track() : null, vibeId: vibe && vibe.id, artError: artError, avg: avg, n: n, triangles: triangles,
           core: s.core ? s.core() : null, osdTR: osd ? osd.innerText : null,
+          cls: cls ? cls.value : null, classes: cls ? Array.prototype.map.call(cls.options, function (o) { return o.value; }) : null,
           ratesJs: ratesJs ? getComputedStyle(ratesJs).display : null, ratesBf: ratesBf ? getComputedStyle(ratesBf).display : null };
       })())`,
       returnByValue: true,
@@ -627,7 +635,8 @@ test('shards split the cases: every case in exactly one shard, for any count', (
 test('a failure names the map and the core', () => {
   assert.equal(labelOf({ map: 'depot', q: 'med' }), 'depot (bf core, q=med)');
   assert.equal(labelOf({ map: 'depot', q: 'med', core: 'js' }), 'depot (js core via ?core=js, q=med)');
-  assert.equal(labelOf({ map: 'gym', q: 'med', droneType: 'freestyle5' }), 'gym (js core, freestyle5, q=med)');
+  assert.equal(labelOf({ map: 'living', q: 'med', droneType: 'whoop85' }), 'living (js core, whoop85, q=med)');
+  assert.equal(labelOf({ map: 'gym', q: 'med', droneType: 'freestyle5', lands: 'whoop65' }), 'gym (bf core, freestyle5 saved, lands whoop65, q=med)');
 });
 
 test('resolveSimBoot keeps every catalog map off City unless asked', () => {
@@ -700,8 +709,12 @@ async function bootCases(title, cases) {
       // The core that flies, and the OSD line that says so.
       const warns = got.warnings || [];
       if (got.core !== got.wantCore) failures.push(name + ': flies the ' + got.core + ' core, want ' + got.wantCore);
-      const line = got.wantCore === 'bf' ? 'BF CORE · ' + BF_QUAD[spec.droneType || 'whoop65'] : 'JS CORE';
+      const line = got.wantCore === 'bf' ? 'BF CORE · ' + BF_QUAD[flyingClassOf(spec)] : 'JS CORE';
       if (!String(got.osdTR || '').includes(line)) failures.push(name + ': OSD has no ' + line + ': ' + JSON.stringify(got.osdTR));
+      // The class the page restored, or the one a retired class lands on, and
+      // the Drone type picker: the 65, the 75 and the 85, no retired class.
+      if (spec.droneType && got.cls !== flyingClassOf(spec)) failures.push(name + ': Drone type ' + got.cls + ', want ' + flyingClassOf(spec));
+      if (spec.droneType && (got.classes || []).join(',') !== 'whoop65,whoop75,whoop85') failures.push(name + ': Drone type offers ' + JSON.stringify(got.classes));
       // Tune's rates drive the js core only: on bf they give way to the IMPORT CLI line.
       const ratesShown = got.ratesJs !== 'none' && got.ratesBf === 'none';
       const cliShown = got.ratesJs === 'none' && got.ratesBf !== 'none';
@@ -950,7 +963,7 @@ function runsBoots(t, core, cases) {
   return true;
 }
 
-test('headless Chrome boots every map on the default core (Betaflight) without errors or a blank FPV; classes with no plant fly JS CORE', { timeout: limitFor(BF_RUN) }, async (t) => {
+test('headless Chrome boots every map on the default core (Betaflight) without errors or a blank FPV; the 85, with no plant, flies JS CORE, and a retired class boots the 65', { timeout: limitFor(BF_RUN) }, async (t) => {
   if (!runsBoots(t, 'bf', BF_RUN)) return;
   assert.equal((await bootCases(`Default core, shard ${SHARD.k}/${SHARD.n}`, BF_RUN)).join('\n'), '');
 });

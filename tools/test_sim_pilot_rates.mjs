@@ -159,7 +159,7 @@ test('sim.html: a class switch never touches the rates; the bf config is the cla
   assert.ok(onchange.includes('applyDroneType();') && !/rates/i.test(onchange), 'the class picker sets no rates');
   const types = html.slice(html.indexOf('const DRONE_TYPES={'), html.indexOf('};', html.indexOf('const DRONE_TYPES={')));
   assert.ok(!/\bsr:/.test(types), 'DRONE_TYPES carry no rates');
-  for (const keep of ['mass:', 'drag:', 'spool:', 'cam:', 'fov:']) assert.equal(types.split(keep).length - 1, 5, 'every class keeps its ' + keep);
+  for (const keep of ['mass:', 'drag:', 'spool:', 'cam:', 'fov:']) assert.equal(types.split(keep).length - 1, 3, 'every class keeps its ' + keep);
   assert.ok(html.includes('const rates=Object.assign({quickRatesRcExpo:false},pilotRatesDefault());'));
   // The bf core: the flying class's config, built from that class's diff (the
   // 65's card on top of the Air65's; the 75's Fractal75 diff as it is).

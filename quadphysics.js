@@ -32,16 +32,6 @@ export const PRESETS = {
     mass: 0.048, wheelbase: 0.085, propDiameter: 0.051,   // 2" props
     maxThrustPerMotor: 0.542, motorTau: 0.015, kQ: 0.78, idleThrottle: 0.055,
   },
-  freestyle25: {
-    name: '2.5" freestyle',
-    mass: 0.120, wheelbase: 0.115, propDiameter: 0.063,
-    maxThrustPerMotor: 1.4, motorTau: 0.040, kQ: 0.80, idleThrottle: 0.045,
-  },
-  freestyle5: {
-    name: '5" freestyle',
-    mass: 0.650, wheelbase: 0.225, propDiameter: 0.127,
-    maxThrustPerMotor: 9.0, motorTau: 0.060, kQ: 1.00, idleThrottle: 0.040,
-  },
 };
 
 // Default FC tune — Betaflight-flavored. Loadable from your tune DB:
@@ -855,5 +845,5 @@ export class QuadPhysics {
 // 9. FEEL CALIBRATION. If rotation feels sluggish/twitchy, adjust P_SCALE etc.
 //    as a set — they're the bridge between Betaflight numbers and this sim's
 //    physical units. Tune once on the 65mm preset until a real Air65 pilot
-//    (you) says it's close, then check the 5" feels appropriately heavier.
+//    (you) says it's close, then check the 85 feels appropriately heavier.
 //    That relative difference now comes from inertia + thrust — free realism.

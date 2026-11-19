@@ -120,6 +120,25 @@ test('deep link carries build, track, mode', () => {
   assert.equal(new URL(dev).searchParams.get('dev'), '1');
 });
 
+// The 2.5" and 5" freestyle classes are retired: no build, link or preset
+// names one. A link for one, or for a 2.5"/5" frame, decodes to nothing (the
+// page then keeps the pilot's saved class, or the 65), and an odd frame in a
+// build is the 65.
+test('no build flies a retired freestyle class; a 2.5"/5" frame is no build', () => {
+  assert.deepEqual(Object.keys(PRESETS), ['whoop65', 'whoop75', 'whoop85']);
+  for (const code of ['QB1.freestyle5', 'QB1.freestyle25', 'QB1.127-2600-51x3-1s450-650', 'QB1.250-1750-63x3-6s1300-650']) {
+    assert.equal(decodeBuild(code), null, code);
+  }
+  for (const frameMm of [63, 127, 225, 250]) {
+    const b = normalizeBuild({ ...DEFAULT_BUILD, frameMm });
+    assert.equal(b.frameMm, 65, 'frame ' + frameMm);
+    assert.equal(physicsFromBuild(b).droneType, 'whoop65', 'frame ' + frameMm);
+  }
+  for (const p of Object.values(BUILD_PRESETS)) {
+    assert.ok(['whoop65', 'whoop75', 'whoop85'].includes(physicsFromBuild(p).droneType), p.id);
+  }
+});
+
 test('classDefault maps 65/75/85', () => {
   assert.equal(classDefault(65).frameMm, 65);
   assert.equal(classDefault(75).cells, 1);
