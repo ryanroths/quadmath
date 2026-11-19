@@ -1619,6 +1619,163 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.deepEqual(r, { down: true, off: true, rest: true, started: true, upright: true }, 'touch: disarms, turtles');
       });
     });
+
+    // In the page, for the stick hold after Easy mode's turtle: the turtle
+    // running (either core), the lean the core flies in the body's own frame
+    // (roll right and nose down positive, whatever way it faces), and a watch
+    // read on every frame for ms on the wall clock and as much on the sim's
+    // (simClockMs, both cores); each(o), if given, runs first on every frame.
+    const HOLD_PAGE = `
+      const s = E.s;
+      E.busy = () => (s.coreState().kind === 'bf' ? s.bfCore().turtlePhase !== null : !!s.easy().jsTurtle);
+      E.lean = () => {
+        const { x, y, z, w } = s.coreState().quaternion;
+        const r20 = 2 * (x * z - w * y), r21 = 2 * (y * z + w * x), r22 = 1 - 2 * (x * x + y * y);
+        return { r: Math.atan2(r21, r22) * 180 / Math.PI, p: Math.atan2(-r20, r22) * 180 / Math.PI };
+      };
+      E.watch = (ms, each) => new Promise((resolve) => {
+        const w0 = performance.now(), c0 = s.simClockMs();
+        const o = { frames: 0, minUp: 1, turtle: false, hold: true, armed: true, stick: 0 };
+        const f = () => {
+          if (each) each(o);
+          o.frames++;
+          o.minUp = Math.min(o.minUp, E.upZ());
+          o.turtle = o.turtle || E.busy();
+          o.hold = o.hold && !!s.easy().stickHold;
+          o.armed = o.armed && s.coreState().armed;
+          const k = s.stickOverlay().stick;
+          o.stick = Math.max(o.stick, Math.abs(k.r), Math.abs(k.p));
+          o.wallMs = Math.round(performance.now() - w0); o.simMs = Math.round(s.simClockMs() - c0);
+          if ((o.wallMs >= ms && o.simMs >= ms) || o.wallMs > 20000) { resolve(o); return; }
+          requestAnimationFrame(f);
+        };
+        requestAnimationFrame(f);
+      });
+      return JSON.stringify(1);`;
+    // Held: upright every frame, armed, no second turtle, the hold on, roll and pitch at zero.
+    const heldOn = (name, r, ms) => {
+      assert.ok(r.wallMs >= ms && r.simMs >= ms, `${name}: watched ${ms} ms ${JSON.stringify(r)}`);
+      assert.ok(r.minUp > 0.9, `${name}: stays upright ${JSON.stringify(r)}`);
+      assert.equal(r.turtle, false, `${name}: no second turtle ${JSON.stringify(r)}`);
+      assert.equal(r.armed, true, `${name}: stays armed ${JSON.stringify(r)}`);
+      assert.equal(r.hold, true, `${name}: the hold stays on ${JSON.stringify(r)}`);
+      assert.ok(r.stick < 0.15, `${name}: roll and pitch held at zero ${JSON.stringify(r)}`);
+    };
+
+    // An arrow held through Easy mode's turtle, on each core: the turtle rights
+    // it and re-arms, and the stick hold keeps roll and pitch at zero for as
+    // long as the arrow stays down, so it stays upright; let go, the hold ends,
+    // and pressed again the arrow flies it. The hold read the arrows' glide,
+    // which its own zero starts over: on polls under 17.6 ms apart that read
+    // as centred with the arrow still down, the hold let go, and the glide's
+    // full stick put the quad straight back on its back.
+    const ARROWS = [['ArrowRight', 39, 'r', 1, 'ArrowLeft', 37], ['ArrowLeft', 37, 'r', -1, 'ArrowRight', 39],
+      ['ArrowUp', 38, 'p', 1, 'ArrowDown', 40], ['ArrowDown', 40, 'p', -1, 'ArrowUp', 38]];
+    for (const [core, query] of [['bf', 'map=rig'], ['js', 'core=js&map=rig']]) {
+      await t.test(`the keyboard on the ${core} core: an arrow held through the turtle, it stays upright; let go and pressed again, it flies`, async () => {
+        await pass(query, core === 'js' ? { core: 'js' } : {}, async ({ js, key }) => {
+          await js(`window._feel.hideFirstRun(); return JSON.stringify(1);`);
+          await js(HOLD_PAGE);
+          const down = async (k, code, vk) => { await key('rawKeyDown', k, code, vk); await key('keyDown', k, code, vk); };
+          for (const [k, vk, axis, sign, ok, ovk] of ARROWS) {
+            const name = `${core}, ${k}`;
+            // On its back at rest, the arrow down and held: the turtle rights
+            // it and re-arms, and the hold has roll and pitch at zero.
+            let r = await js(`return JSON.stringify(await E.flip());`);
+            assert.equal(r, true, `${name}: on its back at rest`);
+            await down(k, k, vk);
+            r = await js(`
+              const started = await E.until(E.busy, 3000);
+              const flyable = await E.until(() => !E.busy() && E.s.coreState().armed && E.upZ() > 0.9, 8000);
+              return JSON.stringify({ started, flyable, hold: E.s.easy().stickHold, st: E.state() });`);
+            assert.equal(r.started, true, `${name}: the arrow starts the turtle ${JSON.stringify(r.st)}`);
+            assert.equal(r.flyable, true, `${name}: upright and re-armed ${JSON.stringify(r.st)}`);
+            // Still held: 1.5 s on both clocks.
+            r = await js(`return JSON.stringify(await E.watch(1500));`);
+            console.log(`${name}, held: ` + JSON.stringify({ ...r, minUp: +r.minUp.toFixed(3) }));
+            heldOn(`${name}, held`, r, 1500);
+            // The opposite arrow as well, then let go of it with the first
+            // still down: both down is a centred stick, but neither arrow is
+            // up, so the hold stays on through both.
+            await down(ok, ok, ovk);
+            r = await js(`return JSON.stringify(await E.watch(500));`);
+            heldOn(`${name} and ${ok}`, r, 500);
+            await key('keyUp', ok, ok, ovk);
+            r = await js(`return JSON.stringify(await E.watch(500));`);
+            heldOn(`${name}, ${ok} let go`, r, 500);
+            // Let go: the hold ends.
+            await key('keyUp', k, k, vk);
+            r = await js(`const off = await E.until(() => !E.s.easy().stickHold, 3000); return JSON.stringify({ off, up: E.upZ(), armed: E.s.coreState().armed });`);
+            assert.equal(r.off, true, `${name}: let go, the hold ends ${JSON.stringify(r)}`);
+            assert.ok(r.up > 0.9 && r.armed, `${name}: upright and armed when let go ${JSON.stringify(r)}`);
+            // Pressed again, it flies: W lifts it off, then the arrow reaches
+            // full stick and leans it that way past 15 degrees, no hold, no turtle.
+            await down('w', 'KeyW', 87);
+            r = await js(`const z0 = E.s.coreState().position.z; const off = await E.until(() => E.s.coreState().position.z > z0 + 0.3, 6000); return JSON.stringify({ off, st: E.state() });`);
+            await key('keyUp', 'w', 'KeyW', 87);
+            assert.equal(r.off, true, `${name}: W lifts it off ${JSON.stringify(r.st)}`);
+            await down(k, k, vk);
+            r = await js(`
+              let lean = null;
+              const flew = await E.until(() => {
+                const st = E.s.stickOverlay().stick[${JSON.stringify(axis)}] * ${sign}, l = E.lean()[${JSON.stringify(axis)}] * ${sign};
+                if (st > 0.9 && l > 15) { lean = E.lean(); return true; }
+                return false;
+              }, 6000);
+              return JSON.stringify({ flew, lean, hold: E.s.easy().stickHold, turtle: E.busy(), armed: E.s.coreState().armed, stick: E.s.stickOverlay().stick, now: E.lean(), st: E.state() });`);
+            await key('keyUp', k, k, vk);
+            console.log(`${name}, pressed again: ` + JSON.stringify({ flew: r.flew, lean: r.lean, now: r.now }));
+            assert.equal(r.flew, true, `${name}: pressed again, it leans that way ${JSON.stringify(r)}`);
+            assert.equal(r.hold, false, `${name}: no hold ${JSON.stringify(r)}`);
+            assert.equal(r.turtle, false, `${name}: no turtle ${JSON.stringify(r)}`);
+            assert.equal(r.armed, true, `${name}: armed ${JSON.stringify(r)}`);
+            // Down and disarmed for the next arrow (S, and landed 0.5 s; a crash
+            // on the way down disarms it too).
+            await down('s', 'KeyS', 83);
+            r = await js(`await E.wait(1100); const landed = await E.until(E.landed, 8000); const off = await E.until(() => !E.s.coreState().armed, 6000); return JSON.stringify({ landed, off, st: E.state() });`);
+            await key('keyUp', 's', 'KeyS', 83);
+            assert.equal(r.landed && r.off, true, `${name}: down and disarmed ${JSON.stringify(r.st)}`);
+          }
+        });
+      });
+    }
+
+    // A gamepad's stick held through the turtle, with Chrome's empty polls
+    // (getGamepads with no pad, the pad still plugged in) on every other
+    // frame: such a poll writes no stick, so the hold's own zero was all it
+    // read, and it let go with the stick still over. Read only off a poll that
+    // read the pad, the hold stays on; centred, it ends.
+    const PAD = { on: true, id: 'Xbox One Game Controller (STANDARD GAMEPAD)', mapping: 'standard', axes: [0, 0, 0, 0], buttons: 0 };
+    for (const [core, query] of [['bf', 'map=rig'], ['js', 'core=js&map=rig']]) {
+      await t.test(`a gamepad on the ${core} core: the stick held through the turtle, with empty polls, it stays upright; centred, the hold ends`, async () => {
+        await pass(query, core === 'js' ? { core: 'js', pad: PAD } : { pad: PAD }, async ({ js }) => {
+          await js(`window._feel.hideFirstRun(); return JSON.stringify(1);`);
+          await js(HOLD_PAGE);
+          const name = `${core}, gamepad`;
+          let r = await js(`return JSON.stringify(await E.flip());`);
+          assert.equal(r, true, `${name}: on its back at rest`);
+          r = await js(`
+            E.axis(2, 1);
+            const started = await E.until(E.busy, 3000);
+            const flyable = await E.until(() => !E.busy() && E.s.coreState().armed && E.upZ() > 0.9, 8000);
+            return JSON.stringify({ started, flyable, kind: E.s.stickOverlay().kind, st: E.state() });`);
+          assert.equal(r.kind, 'gamepad', `${name}: the pad flies it ${JSON.stringify(r)}`);
+          assert.equal(r.started, true, `${name}: the stick starts the turtle ${JSON.stringify(r.st)}`);
+          assert.equal(r.flyable, true, `${name}: upright and re-armed ${JSON.stringify(r.st)}`);
+          r = await js(`
+            const o = await E.watch(1500, (o) => { const on = o.frames % 2 === 1; if (!on) o.empty = (o.empty || 0) + 1; window.__pads.on = on; });
+            window.__pads.on = true;
+            return JSON.stringify({ ...o, kind: E.s.stickOverlay().kind });`);
+          console.log(`${name}, held with empty polls: ` + JSON.stringify({ ...r, minUp: +r.minUp.toFixed(3) }));
+          assert.ok(r.empty >= 3, `${name}: empty polls on every other frame ${JSON.stringify(r)}`);
+          assert.equal(r.kind, 'gamepad', `${name}: the pad still flies it ${JSON.stringify(r)}`);
+          heldOn(`${name}, held with empty polls`, r, 1500);
+          r = await js(`E.axis(2, 0); const off = await E.until(() => !E.s.easy().stickHold, 3000); return JSON.stringify({ off, up: E.upZ(), armed: E.s.coreState().armed });`);
+          assert.equal(r.off, true, `${name}: centred, the hold ends ${JSON.stringify(r)}`);
+          assert.ok(r.up > 0.9 && r.armed, `${name}: upright and armed when centred ${JSON.stringify(r)}`);
+        });
+      });
+    }
   } finally {
     await new Promise((res) => server.close(res));
   }
