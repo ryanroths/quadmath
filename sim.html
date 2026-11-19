@@ -7031,10 +7031,15 @@ function applyBuild(raw,opts){
     const prevType=droneType;
     droneType=phys.droneType;
     droneSel.value=droneType;
-    // A build of another class loads that class's stock PIDs (the js core's),
-    // as the Drone type picker does; a build within the class keeps the PIDs
-    // flying, an IMPORT CLI's included.
-    if(droneType!==prevType)qp.setTune(STOCK_TUNES[DRONE_TYPES[droneType].preset]||STOCK_TUNES.whoop65);
+    // A build of another class loads that class's stock PIDs (the js core's)
+    // and its camera angle, a saved angle beating it, as the Drone type picker
+    // does; a build within the class keeps the PIDs flying, an IMPORT CLI's
+    // included, and the angle flying.
+    if(droneType!==prevType){
+      const t=DRONE_TYPES[droneType];
+      qp.setTune(STOCK_TUNES[t.preset]||STOCK_TUNES.whoop65);
+      if(t.cam!=null)setSlider('cam',camSaved!=null?camSaved:t.cam);
+    }
   }finally{applyingType=false;}
   syncBuildUI();
   applyCanopyLayout();

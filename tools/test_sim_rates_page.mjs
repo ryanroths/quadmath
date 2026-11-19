@@ -331,10 +331,12 @@ test('rates are the pilot\'s: 65, 75, 85 and back keep the same rates on the bf 
     }
 
     // A build of another class (here Tune's Your build preset) loads that
-    // class's stock PIDs on the js core, as the Drone type picker does; a
-    // build within the class keeps the PIDs flying, a CLI paste's included.
+    // class's stock PIDs on the js core and its camera angle (the 65 30, the
+    // 85 15; a saved angle beats it), as the Drone type picker does; a build
+    // within the class keeps the PIDs and the angle flying, a CLI paste's
+    // PIDs included.
     const tune = await run(`const out = [];
-      const tuneNow = () => ({ type: document.getElementById('droneType').value, rollP: window._qp.tune.rollP, pitchP: window._qp.tune.pitchP, yawI: window._qp.tune.yawI });
+      const tuneNow = () => ({ type: document.getElementById('droneType').value, rollP: window._qp.tune.rollP, pitchP: window._qp.tune.pitchP, yawI: window._qp.tune.yawI, cam: +document.getElementById('s_cam').value });
       const pick = async (id) => { const sel = document.getElementById('buildPreset'); sel.value = id; sel.dispatchEvent(new Event('change')); await R.wait(300); return tuneNow(); };
       out.push(tuneNow());
       out.push(await pick('whoop85_2s'));
@@ -342,12 +344,24 @@ test('rates are the pilot\'s: 65, 75, 85 and back keep the same rates on the bf 
       out.push(tuneNow());
       out.push(await pick('meteor75pro'));
       out.push(await pick('air65'));
+      R.slider('s_cam', 22);
+      await R.wait(100);
+      out.push(Object.assign(tuneNow(), { saved: localStorage.getItem('quadmathSimCamDeg') }));
+      out.push(await pick('whoop85_2s'));
+      out.push(await pick('meteor75pro'));
+      await R.cls('whoop65', 'js');
+      out.push(tuneNow());
       return JSON.stringify(out);`);
-    assert.deepEqual(tune[0], { type: 'whoop65', rollP: 36, pitchP: 37, yawI: 61 }, 'the 65 flies its stock PIDs');
-    assert.deepEqual(tune[1], { type: 'whoop85', rollP: 67, pitchP: 70, yawI: 120 }, 'an 85 build from the 65 loads the 85\'s PIDs');
+    assert.deepEqual(tune[0], { type: 'whoop65', rollP: 36, pitchP: 37, yawI: 61, cam: 30 }, 'the 65 flies its stock PIDs at its 30 degrees');
+    assert.deepEqual(tune[1], { type: 'whoop85', rollP: 67, pitchP: 70, yawI: 120, cam: 15 }, 'an 85 build from the 65 loads the 85\'s PIDs and its 15 degrees');
     assert.equal(tune[2].rollP, 71, 'the paste sets P roll');
-    assert.deepEqual(tune[3], { type: 'whoop85', rollP: 71, pitchP: 70, yawI: 120 }, 'another 85 build keeps the PIDs flying');
-    assert.deepEqual(tune[4], { type: 'whoop65', rollP: 36, pitchP: 37, yawI: 61 }, 'a 65 build loads the 65\'s PIDs');
+    assert.deepEqual(tune[3], { type: 'whoop85', rollP: 71, pitchP: 70, yawI: 120, cam: 15 }, 'another 85 build keeps the PIDs and the angle flying');
+    assert.deepEqual(tune[4], { type: 'whoop65', rollP: 36, pitchP: 37, yawI: 61, cam: 30 }, 'a 65 build loads the 65\'s PIDs and its 30 degrees');
+    assert.equal(tune[5].cam, 22, 'the Cam angle slider sets 22');
+    assert.equal(tune[5].saved, '22', 'and saves it');
+    assert.deepEqual([tune[6].type, tune[6].cam], ['whoop85', 22], 'an 85 build keeps a saved angle over the 85 default, as the Drone type picker does');
+    assert.deepEqual([tune[7].type, tune[7].cam], ['whoop85', 22], 'another 85 build keeps it');
+    assert.deepEqual([tune[8].type, tune[8].cam], ['whoop65', 22], 'and so does the Drone type picker');
   } finally {
     try { if (ws) ws.close(); } catch (e) { /* ignore */ }
     killTree(child);

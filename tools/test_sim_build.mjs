@@ -140,15 +140,20 @@ test('no build flies a retired freestyle class; a 2.5"/5" frame is no build', ()
 });
 
 // Picking a build of another class (Your build, Tune's preset or frame, a
-// ?build= link, a saved build at boot) loads that class's stock PIDs, as the
-// Drone type picker does; the Chrome check is in test_sim_rates_page.mjs.
+// ?build= link, a saved build at boot) loads that class's stock PIDs and its
+// camera angle (a saved angle beats it), as the Drone type picker does; the
+// Chrome check is in test_sim_rates_page.mjs.
 // The Mass slider spans the build's AUW range, whoops only.
 test('sim.html: a build of another class loads its PIDs; Mass spans the build AUW range', () => {
   const html = src.replace(/\r\n/g, '\n');
   const apply = html.slice(html.indexOf('function applyBuild('), html.indexOf('function readBuildForm('));
   assert.ok(apply.includes('const prevType=droneType;'), 'applyBuild keeps the class it came from');
-  assert.ok(apply.includes('if(droneType!==prevType)qp.setTune(STOCK_TUNES[DRONE_TYPES[droneType].preset]||STOCK_TUNES.whoop65);'),
-    'applyBuild loads the new class\'s PIDs on a class change only');
+  const change = apply.slice(apply.indexOf('if(droneType!==prevType){'), apply.indexOf('}finally{'));
+  assert.ok(change.includes('qp.setTune(STOCK_TUNES[t.preset]||STOCK_TUNES.whoop65);'),
+    'applyBuild loads the new class PIDs on a class change only');
+  assert.ok(change.includes("if(t.cam!=null)setSlider('cam',camSaved!=null?camSaved:t.cam);"),
+    'and its camera angle, a saved one beating it, as applyDroneType does');
+  assert.ok(html.includes("if(d.cam!=null)setSlider('cam',camSaved!=null?camSaved:d.cam);"), 'the Drone type picker rule it copies');
   const m = html.match(/<input type="range" id="s_mass" min="(\d+)" max="(\d+)"/);
   assert.ok(m, 'the Mass slider');
   assert.equal(+m[1], normalizeBuild({ ...DEFAULT_BUILD, auwG: 1 }).auwG, 'Mass min is the build AUW floor');
