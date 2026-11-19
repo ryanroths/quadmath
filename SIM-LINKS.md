@@ -53,7 +53,7 @@ Indoor whoop tracks to prefer: `rig-loop` (no `dev=1` needed); with `dev=1`: `li
 | --- | --- | --- |
 | `whoopBeginner` | Betaflight | Soft indoor whoop. |
 | `whoopRace` | Betaflight | Faster whoop race. |
-| `freestyle` | Betaflight | 5-inch-ish freestyle. |
+| `freestyle` | Betaflight | Faster freestyle whoop rates (a rate style, not a class). |
 | `ryanActual` | Actual | Center 40, max 740 / 740 / 700, expo 0.56. Token `ACTUAL.4.74.56.4.74.56.4.70.56`. |
 
 Published cards (also `?rates=card.<id>`):

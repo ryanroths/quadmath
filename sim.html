@@ -426,7 +426,7 @@
   .track-maps button.on,.track-list button.on{border-color:var(--orange);color:var(--orange);background:rgba(255,77,26,.12)}
   .track-list{display:flex;flex-direction:column;gap:6px}
   .track-list button{width:100%;text-align:left;display:flex;justify-content:space-between;gap:8px}
-  .track-list .best{color:var(--dim);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px}
+  .track-list .best{color:var(--dim);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;text-align:right}
   .room-form{display:grid;grid-template-columns:1fr 1fr 1fr 72px;gap:6px;margin:10px 0 8px;align-items:end}
   .room-form label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--dim)}
   .room-form input,.room-form select{width:100%;background:rgba(8,9,12,.55);border:1px solid var(--line);color:var(--txt);
@@ -847,7 +847,7 @@
   <div class="row"><label>Cam angle</label><span class="val" id="v_cam"></span></div>
   <input type="range" id="s_cam" min="0" max="60" step="1" value="15">
   <div class="row"><label>Tilt preset</label></div>
-  <select id="camTiltPreset" title="Indoor whoop 15°. Race whoop 25°. 30°: the 65mm and 75mm defaults (the owner's Air65 and Fractal75) and the 5-inch number.">
+  <select id="camTiltPreset" title="Indoor whoop 15°. Race whoop 25°. 30°: the 65mm and 75mm defaults (the owner's Air65 and Fractal75).">
     <option value="15" selected>Indoor whoop 15°</option>
     <option value="25">Race whoop 25°</option>
     <option value="30">Freestyle 30°</option>
@@ -1080,7 +1080,7 @@
 <script type="module">
 "use strict";
 import * as THREE from "three";
-import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=d6d792c3aefd";
+import {QuadPhysics,PRESETS,PHYSICS_HZ_DEFAULT,PHYSICS_HZ_FAST,FLOATINESS_DEFAULT,FLOOR_CLEARANCE_M} from "./quadphysics.js?v=9a5cd370f29a";
 import {
   WS as CORE_WS, TICK_US, SAMPLE_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux, rangeActive,
@@ -1224,8 +1224,8 @@ function ensureGltf(){
   return gltfReady;
 }
 // The default core is quadmath-sim-core (Betaflight 4.5.1 in WASM: the 65 is
-// the Air65, the 75 the Fractal75); classes it has no plant for fly the js core, quadphysics.js, with
-// JS CORE on the OSD. ?core=js keeps the js core for every class, for one
+// the Air65, the 75 the Fractal75); the 85, which it has no plant for, flies the js core,
+// quadphysics.js, with JS CORE on the OSD. ?core=js keeps the js core for every class, for one
 // release. Read once, at boot.
 const CORE_KIND=new URLSearchParams(location.search).get('core')==='js'?'js':'bf';
 if(CORE_KIND==='js')console.warn('sim-core: ?core=js is deprecated, removed next release; the js core flies every class');
@@ -3656,10 +3656,6 @@ const STOCK_TUNES={
            rollF:120,pitchF:128,yawF:160},
   whoop85:{rollP:67,rollI:120,rollD:40,pitchP:70,pitchI:126,pitchD:45,yawP:67,yawI:120,yawD:0,
            rollF:120,pitchF:128,yawF:160},
-  freestyle25:{rollP:48,rollI:85,rollD:35,pitchP:50,pitchI:88,pitchD:38,yawP:48,yawI:85,yawD:0,
-           rollF:120,pitchF:128,yawF:160},
-  freestyle5:{rollP:45,rollI:80,rollD:30,pitchP:47,pitchI:84,pitchD:34,yawP:45,yawI:80,yawD:0,
-           rollF:120,pitchF:128,yawF:160},
 };
 qp.setTune(STOCK_TUNES.whoop65);
 // Base thrust before voltage sag scales it each frame.
@@ -5692,8 +5688,8 @@ function updateOSD(){
     if(battV<=BATT_CRIT)landEl.style.opacity=flash?'1':'0.15';
   }else landEl.style.display='none';
   osdTL.innerHTML=`<span class="osd-spd${spd?'':' off'}">SPD ${spd||''}</span><br>ALT ${alt} m${battLine}`;
-  // Which core flies, always: JS CORE whenever Betaflight is not flying (a
-  // class with no sim-core plant, ?core=js, or the bf core still loading or
+  // Which core flies, always: JS CORE whenever Betaflight is not flying (the
+  // 85, which has no sim-core plant, ?core=js, or the bf core still loading or
   // failed), so nobody takes the js core for Betaflight.
   osdTR.innerHTML=(cs.kind==='bf'?'BF CORE · '+bfQuad(bfFlyingType()).toUpperCase()+'<br>':'JS CORE<br>')+`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):(touchCtl&&touchCtl.enabled?'TOUCH':'KEYBOARD')}${axisMap&&gpConnected?' (CAL)':''}<br>`+
     // Rates are per axis; name the one being shown so it cannot read as global.
@@ -6720,7 +6716,7 @@ if(camTiltSel){
 syncCamTiltPreset();
 // Push panel values into the physics core. Mass changes must re-derive the
 // inertia tensor (same flat-box formula the module uses) or a 28g quad would
-// keep a 5"-sized rotational inertia; motors are left spooled so dragging a
+// keep a heavier quad's rotational inertia; motors are left spooled so dragging a
 // slider mid-flight does not stall the props.
 function applyCfgToQp(){
   qp.cfg.mass=CFG.massG/1000;
@@ -6863,19 +6859,20 @@ syncWhoopUI();
 // Masses are now REAL AUW (grams) and thrust is absolute (maxThrustN, Newtons),
 // so a lighter drone genuinely accelerates harder. drag matches the authentic
 // less-floaty tuning (0.55+), not the old floaty 0.28.
-// No rates here: rates are the pilot's, one profile for every class.
+// No rates here: rates are the pilot's, one profile for every class. The 85's
+// label says classic physics: it flies the js core (JS CORE on the OSD) until
+// sim-core has its plant. A class saved before the 2.5" and 5" freestyle
+// classes were retired (freestyle25, freestyle5) boots the 65, below.
 const DRONE_TYPES={
   whoop65:{frame:65,label:'65mm Whoop',preset:'whoop65',drag:0.55,mass:27,spool:0.013,cam:30,fov:VFOV_DEFAULT},
   whoop75:{frame:75,label:'75mm Whoop',preset:'whoop75',drag:0.60,mass:32,spool:0.014,cam:30,fov:VFOV_DEFAULT},
-  whoop85:{frame:85,label:'85mm Whoop (2")',preset:'whoop85',drag:0.62,mass:48,spool:0.015,cam:15,fov:VFOV_DEFAULT},
-  freestyle25:{label:'2.5" Freestyle',preset:'freestyle25',drag:0.65,mass:120,spool:0.040,cam:30,fov:VFOV_DEFAULT},
-  freestyle5:{label:'5" Freestyle',preset:'freestyle5',drag:0.70,mass:650,spool:0.060,cam:30,fov:VFOV_DEFAULT}
+  whoop85:{frame:85,label:'85mm Whoop (2") · classic physics',preset:'whoop85',drag:0.62,mass:48,spool:0.015,cam:15,fov:VFOV_DEFAULT}
 };
 let droneType='whoop65';
 try{droneType=localStorage.getItem('ryflyDroneType')||'whoop65';}catch(e){}
 if(!DRONE_TYPES[droneType])droneType='whoop65';
 // The class's own map (sim-tracks.js classDefaultMap): the 65 the Rig, the 75
-// and 85 The Warehouse, a freestyle class the Rig. A pilot with nothing saved
+// and 85 The Warehouse. A pilot with nothing saved
 // (savedSelection null) boots there and Fly marks it; an explicit ?map= or
 // ?track= and a saved map win, and every archive or unknown-map fallback is
 // still the Rig (DEFAULT_MAP). A saved build sets droneType before the boot.
@@ -6914,8 +6911,8 @@ function setSlider(id,val){
   s.value=val;s.dispatchEvent(new Event('input'));
 }
 // Camera tilt follows the class default (DRONE_TYPES[...].cam: the 65 at 30°,
-// the owner's Air65; the 75 at 30°, the owner's Fractal75; the 85 at 15°;
-// freestyle 30°) until the pilot
+// the owner's Air65; the 75 at 30°, the owner's Fractal75; the 85 at 15°)
+// until the pilot
 // moves the Cam angle slider: then their angle is saved (quadmathSimCamDeg)
 // and beats every class default. setSlider() dispatches synthetic 'input'
 // events, so a suppress flag separates user drags from class switches. The
@@ -6951,9 +6948,7 @@ droneSel.onchange=()=>{
   droneType=droneSel.value;
   try{localStorage.setItem('ryflyDroneType',droneType);}catch(e){}
   applyDroneType();
-  const d=DRONE_TYPES[droneType];
-  if(d&&d.frame) applyBuild(classDefault(d.frame),{save:true,announce:false});
-  else saveBuild(null);
+  applyBuild(classDefault(DRONE_TYPES[droneType].frame),{save:true,announce:false});
   toast(DRONE_TYPES[droneType].label.toUpperCase());
   selectCore();
   followClassMap();
@@ -7082,11 +7077,13 @@ function wireBuildUI(){
     catch(e){document.getElementById('buildCode').select();toast('COPY THE LINK IN THE BOX');}
   };
 }
+// An 85 build's row says classic physics, as the Drone type picker does: the
+// 85 flies the js core until sim-core has its plant.
 function openBuildPicker(){
   const layer=document.getElementById('menuLayer');
   const rows=Object.values(BUILD_PRESETS).map(p=>{
     const on=matchPresetId(currentBuild)===p.id?'on':'';
-    return '<button type="button" class="'+on+'" data-bid="'+p.id+'"><span>'+p.label+(p.approx?' ≈':'')+'</span><span class="best">'+p.frameMm+'mm '+p.cells+'S</span></button>';
+    return '<button type="button" class="'+on+'" data-bid="'+p.id+'"><span>'+p.label+(p.approx?' ≈':'')+'</span><span class="best">'+p.frameMm+'mm '+p.cells+'S'+(p.frameMm===85?' · classic physics':'')+'</span></button>';
   }).join('');
   showMenuLayer('<h2>Your build</h2><p>Approximate whoop physics. Named presets use bench AUW where noted. Customize in Tune.<span class="dev-only"> Paint colors and canopy with Paint whoop.</span></p>'+
     '<div class="track-list">'+rows+'</div>'+
@@ -8764,7 +8761,7 @@ function trickFrameW(){
   if(v&&v.wheelbase&&v.ductOuterRadius)trickFrameM=v.wheelbase.value/Math.SQRT2+2*v.ductOuterRadius.value;
   else{
     const t=DRONE_TYPES[droneType]||{};
-    trickFrameM=t.frame?t.frame/1000*1.26:(droneType==='freestyle5'?0.3:0.15);
+    trickFrameM=(t.frame||65)/1000*1.26;
   }
   return trickFrameM;
 }
@@ -8856,8 +8853,8 @@ function onCoreEvent(ev){
 // quad's (a Meteor75 Pro), so the Fractal75 flies its diff's own P, I and D.
 // Rates are the pilot's: the two diffs hold the same stick rates, so every
 // class flies them (the Fractal75's adds its throttle curve, thr_mid 65 and
-// thr_expo 35, flown as it is). The 85 and the freestyle classes fly the js
-// core until sim-core has their plants. World: every collider as a
+// thr_expo 35, flown as it is). The 85 flies the js core until sim-core has
+// its plant. World: every collider as a
 // module-frame box, plus the city portals as triggers; a changed world is
 // sent on the next spawn, or when the quad is disarmed.
 const BF_CLASSES={
@@ -9014,8 +9011,8 @@ function bfWanted(){return CORE_KIND==='bf'&&!!BF_CLASSES[droneType];}
 function syncCoreUI(){document.body.classList.toggle('bf-core',core.kind==='bf');}
 // The 65 and 75 boards hold Betaflight runs. A run the js core flew any part
 // of (runSawJs) that lands on one of them (the board class comes from the
-// build: a bf class under ?core=js or after a failed bf load, a 2.5"/5" on a
-// 65 or 75 build, or a class switch mid-run) is not that physics: it stays off
+// build: a bf class under ?core=js or after a failed bf load, or a class
+// switch mid-run) is not that physics: it stays off
 // the boards and the Daily Line, local and online, refused as the Worker
 // refuses another physics version. The 85 boards are js boards: not affected.
 const BF_FRAMES=new Set(Object.keys(BF_CLASSES).map(t=>DRONE_TYPES[t].frame));
@@ -9029,8 +9026,8 @@ function bfPark(){
 }
 // Pick the flying core for the class: the class's bf core for the 65 and the
 // 75 (the default; loaded the first time the class flies, the js core flying
-// meanwhile), the js core for a class with no sim-core plant, silently (JS
-// CORE on the OSD, one console note per class), and for every class under
+// meanwhile), the js core for the 85, which has no sim-core plant, silently
+// (JS CORE on the OSD, one console note per class), and for every class under
 // ?core=js.
 const bfFallbackNoted=new Set();
 function selectCore(){
@@ -9042,7 +9039,7 @@ function selectCore(){
     syncCoreUI();
     if(!bfFallbackNoted.has(droneType)){
       bfFallbackNoted.add(droneType);
-      console.info('sim-core: sim-core has plants for the 65 (Air65) and the 75 (Fractal75) only; '+(DRONE_TYPES[droneType]||{label:droneType}).label+' flies the js core');
+      console.info('sim-core: sim-core has plants for the 65 (Air65) and the 75 (Fractal75) only; the '+((DRONE_TYPES[droneType]||{}).frame||droneType)+' flies the js core (classic physics)');
     }
     return;
   }
