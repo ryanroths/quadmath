@@ -318,7 +318,7 @@ test('speed units in Chrome: the default by language, each option, the stored ch
       '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
       '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
       '--mute-audio', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update',
-      '--disable-background-networking', '--disable-sync', '--window-size=960,540', `--lang=${lang}`,
+      '--disable-background-networking', '--disable-sync', '--window-size=960,540',
       '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank',
     ], { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
@@ -346,7 +346,8 @@ test('speed units in Chrome: the default by language, each option, the stored ch
       await cdp(ws, 'Page.enable');
       // A desktop screen (the headless window's own viewport is under the phone breakpoint's 500 px).
       await cdp(ws, 'Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
-      // The browser's language, whatever the machine's: navigator.language follows Accept-Language.
+      // The browser's language, whatever the machine's: navigator.language follows the
+      // Accept-Language override (alone: no --lang, which Chrome on Linux may ignore).
       const { userAgent } = await cdp(ws, 'Browser.getVersion');
       await cdp(ws, 'Emulation.setUserAgentOverride', { userAgent, acceptLanguage: lang });
       // Same origin first, for localStorage before the page's scripts.
