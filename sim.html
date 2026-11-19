@@ -4548,6 +4548,11 @@ function nudgeCam(dir){
   toast('CAM '+v+'°',{ms:1000});
 }
 let kbThrottle=0,gpConnected=false,gpName='';
+// A roll or pitch arrow down at the last poll (readInput): 1 while any is,
+// opposite arrows together too (their stick is centred, but neither key is
+// up); 0 with none or off the keyboard. The turtle's stick hold (pollInput)
+// waits for the arrows to come up as well as for the sticks to centre.
+let kbRollPitchKey=0;
 // The controller's name is the device's own text: escaped where it becomes
 // markup, once. Here for Tune's radio line; sim-feel.js is handed the name as
 // written and escapes it in the first-run prompt itself (twice would show the
@@ -4756,6 +4761,7 @@ function updateRadioInfo(){
 let padLive=false; // this frame actually read a gamepad (not an empty Chrome poll)
 let padLookAt=0;
 function readInput(dt){
+  kbRollPitchKey=0;
   const pads=navigator.getGamepads&&navigator.getGamepads();
   let gp=gpConnected&&pads?pads[gpIndex]:null;
   if(gp&&gp.connected===false)gp=null;
@@ -4844,6 +4850,7 @@ function readInput(dt){
     const tR=(keys['arrowright']?1:0)-(keys['arrowleft']?1:0);
     const tP=(keys['arrowup']?1:0)-(keys['arrowdown']?1:0);
     const tY=(keys['d']?1:0)-(keys['a']?1:0);
+    kbRollPitchKey=(keys['arrowright']||keys['arrowleft']||keys['arrowup']||keys['arrowdown'])?1:0;
     stick.aux=null;
     const sm=dt>0?1-Math.pow(0.0001,dt):0;
     stick.r+=(tR-stick.r)*sm;stick.p+=(tP-stick.p)*sm;stick.y+=(tY-stick.y)*sm;
@@ -9180,7 +9187,19 @@ function pollInput(){
     }
   }
   if(turtleStickHold){
-    if(Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15)turtleStickHold=false;
+    // Centred: on a poll that read the sticks, both under 0.15 and, on the
+    // keyboard, no roll or pitch arrow down. The zero below stays in stick
+    // until something writes over it, and two inputs read it back as centred
+    // with the stick still over; the hold let go, and the stick put the quad
+    // straight back on its back:
+    // - The arrows' glide is stick itself: the zero starts it over, and the
+    //   next poll reads one step of it (sm, readInput), under 0.15 whenever
+    //   polls come under 17.6 ms apart.
+    // - A radio or a gamepad on Chrome's empty poll (padLive false): readInput
+    //   returns before it writes stick, so the poll reads the zero itself.
+    // Touch reads its own sticks afresh every poll.
+    const read=!gpConnected||padLive;
+    if(read&&Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15&&!kbRollPitchKey)turtleStickHold=false;
     else stick.r=stick.p=0;
   }
   // The pool's cut with a radio (yardHoldArm): a copy, stick.aux stays the radio's.
