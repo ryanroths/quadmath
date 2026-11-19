@@ -347,6 +347,26 @@ test('bf core: TX16S stick forward is pitch above 1500, a nose-down rate, and +X
   assert.ok(s2.flightMs > 3000, 'the flight clock runs');
 });
 
+test('js core: holdRollPitch zeroes roll and pitch in the held sample and every queued one (the turtle re-arm)', () => {
+  const qp = new QuadPhysics(PRESETS.whoop65);
+  qp.setPhysicsHz(1000);
+  const seen = [];
+  const core = createJsCore({ qp, tick: (sample) => { seen.push({ ...sample }); } });
+  const t0 = core.simTimeUs;
+  // The stick over (full roll, half pitch) now and in a sample stamped 3 ms
+  // ahead, queued in front of anything the page sends after it.
+  core.input({ r: -1, p: 0.5, y: 0.2, t: 0.3 }, t0);
+  core.input({ r: -1, p: 0.5, y: 0.25, t: 0.35 }, t0 + 3000);
+  core.advance(1);
+  assert.deepEqual(seen.pop(), { r: -1, p: 0.5, y: 0.2, t: 0.3 }, 'the stick over, before the hold');
+  core.holdRollPitch();
+  seen.length = 0;
+  core.advance(5);
+  assert.ok(seen.every((s) => s.r === 0 && s.p === 0), 'no tick after the hold flies roll or pitch ' + JSON.stringify(seen));
+  assert.deepEqual(seen.map((s) => s.y), [0.2, 0.2, 0.25, 0.25, 0.25], 'yaw kept, the queued sample still lands at its stamp');
+  assert.deepEqual(seen.map((s) => s.t), [0.3, 0.3, 0.35, 0.35, 0.35], 'throttle kept');
+});
+
 test('js core: fixed 1 kHz ticks, sample-and-hold input, interpolated pose', () => {
   const qp = new QuadPhysics(PRESETS.whoop65);
   qp.setPhysicsHz(1000);

@@ -227,7 +227,7 @@ test('sim.html: the overlay reads the merged stick in the frame loop, and hides 
   assert.match(html, /core\.input\(held===stick\.aux\?stick:/, 'the core flies the same object');
   // Placed only on a resize and a touch-stick change.
   assert.match(html, /addEventListener\('resize',\(\)=>placeStickOverlay\(\)\);/, 'on a resize');
-  assert.match(html, /new ResizeObserver\(\(\)=>placeStickOverlay\(\)\);\r?\n\s+for\(const id of \['legend','feelHud'\]\)/, 'when a card it avoids changes size');
+  assert.match(html, /new ResizeObserver\(\(\)=>placeStickOverlay\(\)\);\r?\n\s+for\(const id of \['legend','feelHud','hudArmSlot'\]\)/, 'when a card it avoids, or the arm hint\'s slot, changes size');
   assert.match(html, /touchCtl=createTouchControls\(\{[\s\S]{0,400}?\nsyncTouchSettingsUI\(\);\r?\n\/\/[^\n]*\r?\nplaceStickOverlay\(\);/, 'at boot, once the touch sticks exist');
   assert.match(extract('placeStickOverlay'), /getElementById\('legend'\)[\s\S]*getElementById\('feelHud'\)/);
   assert.match(extract('enableTouchLayer'), /placeStickOverlay\(\);/);
@@ -361,10 +361,11 @@ const PAGE = String.raw`(() => {
   try {
     new PerformanceObserver((l) => { for (const e of l.getEntries()) shifts.push(e.value); }).observe({ type: 'layout-shift', buffered: false });
   } catch (e) { /* no layout-shift entries in this browser */ }
-  // The boxes whose text does not tick every frame (the OSD's readouts do).
+  // The boxes whose size does not tick with what they read: the OSD's corner
+  // readouts do; #osdBC keeps one box (osdBcHtml), so it is in the list.
   function layout() {
     const out = { shifts: shifts.length };
-    for (const id of ['feelHud', 'legend', 'touchLayer', 'menuBtn', 'gear']) {
+    for (const id of ['feelHud', 'legend', 'touchLayer', 'menuBtn', 'gear', 'osdBC']) {
       const e = document.getElementById(id);
       if (!e) continue;
       const b = e.getBoundingClientRect();
@@ -374,7 +375,45 @@ const PAGE = String.raw`(() => {
     return out;
   }
   const close = (a, b, eps) => ['r', 'p', 'y', 't'].every((k) => Math.abs(a[k] - b[k]) <= eps);
-  window.__so = { s, wait, until, frame, pixels, seen, layout, close };
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const upZ = (q) => 1 - 2 * (q.x * q.x + q.y * q.y);
+  // The flight as the page has it, for a failure's message: armed, height,
+  // which way up, the sticks, the turtle and its stick hold, the last disarm.
+  function state() {
+    const c = s.coreState(), e = s.easy(), b = s.bfCore(), k = s.stickOverlay().stick;
+    return { armed: c.armed, z: r2(c.position.z), upZ: r2(upZ(c.quaternion)), stick: { r: r2(k.r), p: r2(k.p), y: r2(k.y), t: r2(k.t) },
+      stickHold: e.stickHold, turtle: b ? b.turtlePhase : null, disarmReason: e.disarmReason, crashAt: e.crashAt, arm: e.arm, pilotError: s.testPilotError() };
+  }
+  // A hover on the bf core, flown on the sim's own samples (_sim.setTestPilot:
+  // every 4 ms of sim time, on that tick's state, however long the frames run):
+  // nothing until it is armed (a raised throttle would refuse the arm), then
+  // level (roll and pitch centred), no yaw, and the throttle that holds it at
+  // z0 metres, closed on the core's own thrust-to-weight. The keys still move
+  // the page's sticks, which are what the overlay draws; the core flies this.
+  // env: how it flew, from the arm on.
+  const env = { samples: 0, maxZ: null, minUpZ: null, disarmed: false, turtle: false, hold: false };
+  function hover(z0) {
+    let t = 0;
+    s.setTestPilot((cs) => {
+      if (!cs.armed) {
+        if (env.samples) env.disarmed = true;
+        t = 0;
+        return { r: 0, p: 0, y: 0, t: 0 };
+      }
+      const z = cs.position.z, up = upZ(cs.quaternion);
+      const a = Math.max(-3, Math.min(3, 2.5 * (z0 - z) - 2.5 * cs.velocity.z));
+      t = Math.max(0, Math.min(1, t + 0.01 * ((1 + a / 9.81) / Math.max(up, 0.5) - cs.twr)));
+      env.samples++;
+      env.maxZ = env.maxZ === null ? z : Math.max(env.maxZ, z);
+      env.minUpZ = env.minUpZ === null ? up : Math.min(env.minUpZ, up);
+      const b = s.bfCore();
+      if (b && b.turtlePhase != null) env.turtle = true;
+      if (s.easy().stickHold) env.hold = true;
+      return { r: 0, p: 0, y: 0, t };
+    });
+    return true;
+  }
+  window.__so = { s, wait, until, frame, pixels, seen, layout, close, state, hover, env };
   return true;
 })()`;
 
@@ -423,6 +462,8 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
       await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
       await cdp(ws, 'Runtime.enable');
       await cdp(ws, 'Page.enable');
+      // SIM_CPU_THROTTLE=6: the page's CPU slowed 6x, to run as on a slow CI runner.
+      if (process.env.SIM_CPU_THROTTLE) await cdp(ws, 'Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
       if (seed.phone) {
         const [w, h] = seed.phone;
         await cdp(ws, 'Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: w > h ? 'landscapePrimary' : 'portraitPrimary', angle: w > h ? 90 : 0 } });
@@ -468,10 +509,12 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
   }
 
   const sim = (query) => `${origin}/sim.html?quality=low&${query}`;
-  // The overlay drawn: the values it painted are the sticks the core has (a
-  // frame apart at most: eps), and the green dot is under each one.
+  // The overlay drawn: the values it painted are the page's sticks (the keys,
+  // the pad or the touch sticks as the poll leaves them; the keyboard pass's
+  // core flies a test pilot's hover instead), a frame apart at most (eps),
+  // and the green dot is under each one.
   const tracks = async (js, label, eps = 0.02) => {
-    const r = await js(`await S.frame(); await S.frame(); return JSON.stringify({ o: S.s.stickOverlay(), px: S.pixels(), seen: S.seen() });`);
+    const r = await js(`await S.frame(); await S.frame(); return JSON.stringify({ o: S.s.stickOverlay(), px: S.pixels(), seen: S.seen(), armed: S.s.coreState().armed });`);
     assert.equal(r.o.shown, true, label + ': shown');
     assert.equal(r.seen.display, 'block', label);
     assert.equal(r.seen.visibility, 'visible', label);
@@ -496,31 +539,72 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         assert.equal(r.seen.rect.bottom, 720 - STICK_OVERLAY_BOTTOM_PX, 'bottom centre');
         assert.equal(r.seen.rect.left, (1280 - r.seen.rect.w) / 2);
         await tracks(js, 'at rest');
+        // At rest, disarmed: the arm hint shows, in its own slot outside the
+        // card, so the card's box is the one it has armed (checked below).
+        const rest = await js(`await S.frame(); const h = document.getElementById('hudArmHint');
+          return JSON.stringify({ L: S.layout(), armed: S.s.coreState().armed, hint: h.classList.contains('show') && getComputedStyle(h).display !== 'none', text: h.textContent, inCard: !!h.closest('.feel-meta') });`);
+        assert.equal(rest.armed, false, 'disarmed at rest');
+        assert.equal(rest.hint, true, 'the arm hint shows at rest: ' + rest.text);
+        assert.equal(rest.inCard, false, 'the arm hint is outside the card');
+        const cardBox = rest.L.feelHud;
+        const osdBox = rest.L.osdBC;
         // Clear of the HUD around it, with the bf core's arming flags under the throttle bar.
         const clearOfHud = async (label) => {
-          const h = await js(`await S.frame(); const b = (id) => { const e = document.getElementById(id); const r = e && e.getBoundingClientRect(); return r && r.width > 0 && getComputedStyle(e).opacity !== '0' ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom, lines: e.innerHTML.split('<br>').length } : null; };
-            return JSON.stringify({ seen: S.seen(), osdBC: b('osdBC'), legend: b('legend'), feelHud: b('feelHud'), core: S.s.core() });`);
-          for (const id of ['osdBC', 'legend', 'feelHud']) {
+          const h = await js(`await S.frame(); const b = (id) => { const e = document.getElementById(id); const r = e && e.getBoundingClientRect(); const cs = e && getComputedStyle(e); return r && r.width > 0 && cs.opacity !== '0' && cs.visibility !== 'hidden' ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom, lines: e.innerHTML.split('<br>').length } : null; };
+            return JSON.stringify({ seen: S.seen(), osdBC: b('osdBC'), legend: b('legend'), feelHud: b('feelHud'), hudArmHint: b('hudArmHint'), core: S.s.core(),
+              L: S.layout(), hudArm: document.getElementById('hudArm').textContent, hint: document.getElementById('hudArmHint').classList.contains('show'),
+              st: { armed: S.s.coreState().armed, z: +S.s.coreState().position.z.toFixed(2), reason: S.s.easy().disarmReason, arm: S.s.easy().arm, t: +S.s.stickOverlay().stick.t.toFixed(2), hint: document.getElementById('hudArmHint').textContent } });`);
+          for (const id of ['osdBC', 'legend', 'feelHud', 'hudArmHint']) {
             if (h[id]) assert.equal(overlaps(h.seen.rect, h[id]), false, `${label}: over #${id} ${JSON.stringify({ o: h.seen.rect, b: h[id] })}`);
           }
+          // The arm hint, outside the card, covers neither the key legend nor the throttle bar.
+          if (h.hudArmHint && h.legend) assert.equal(overlaps(h.hudArmHint, h.legend), false, `${label}: the arm hint over the key legend`);
+          if (h.hudArmHint && h.osdBC) assert.equal(overlaps(h.hudArmHint, h.osdBC), false, `${label}: the arm hint over the throttle bar`);
           return h;
         };
         let hud = await clearOfHud('at rest');
         assert.equal(hud.core, 'bf');
         assert.ok(hud.osdBC, 'the throttle bar is up');
-        // Roll right, yaw right, throttle up (W ramps it, and it stays when let go).
+        // Each wait is on the page's own state, and must get there: a miss
+        // fails here, with the flight's state, not later on a stale read.
+        const until = async (label, cond, ms = 8000) => {
+          const w = await js(`const ok = await S.until(() => (${cond}), ${ms}); return JSON.stringify({ ok, st: S.state() });`);
+          assert.equal(w.ok, true, `${label}: ${JSON.stringify(w.st)}`);
+          return w.st;
+        };
+        // The core flies a hover, not the keys (S.hover: a test pilot on the
+        // sim's samples holds it level at 1.5 m) while the keys move the
+        // page's sticks, which are what the overlay draws. Flown on the keys
+        // (full throttle, roll, yaw, then pitch), it reached the rig's 6 m
+        // ceiling in every run and often went over onto its back; now and then
+        // it came down on its back, crashed, and the turtle that followed held
+        // roll and pitch at zero, so the arrows moved nothing.
+        await js(`return S.hover(1.5);`);
+        // Throttle up (W ramps it, and it stays when let go), then roll right
+        // and yaw right. Easy mode arms on the throttle once it has been down a
+        // second (the page's own count), so W waits for that; roll and yaw wait
+        // until it is armed and the pilot has it off the floor.
+        await until('a second of low throttle', `(() => { const a = S.s.easy().arm; return !!a && a.lowS >= 1; })()`);
+        await hold(true, 'w', 'KeyW', 87);
+        await until('armed and off the floor', `S.s.coreState().armed && S.s.coreState().position.z > 0.5`);
         await hold(true, 'ArrowRight', 'ArrowRight', 39);
         await hold(true, 'd', 'KeyD', 68);
-        await hold(true, 'w', 'KeyW', 87);
         // The keys move the sticks in sim time (W ramps the throttle 1.4 a
         // second): held until they are there, however fast this machine runs
         // the sim against the wall clock (a CI runner's is about half).
-        await js(`await S.until(() => { const k = S.s.stickOverlay().stick; return k.r > 0.9 && k.y > 0.9 && k.t > 0.4; }, 8000); return 1;`);
+        await until('roll, yaw and throttle up', `(() => { const k = S.s.stickOverlay().stick; return k.r > 0.9 && k.y > 0.9 && k.t > 0.4; })()`);
         await hold(false, 'w', 'KeyW', 87);
         await js(`await S.wait(500); return 1;`);
         r = await tracks(js, 'keys held');
         hud = await clearOfHud('keys held');
         console.log('osdBC lines with W up: ' + hud.osdBC.lines);
+        // Armed, as the HUD itself says (its label and the hint are written in
+        // one update, read here in one snapshot, the read above: no extra round
+        // trip while the keys still fly it).
+        assert.equal(hud.hudArm, 'ARMED', 'armed by the throttle ' + JSON.stringify(hud.st));
+        assert.equal(hud.hint, false, 'no arm hint while armed');
+        assert.deepEqual(hud.L.feelHud, cardBox, '#feelHud: the same box armed as disarmed');
+        assert.deepEqual(hud.L.osdBC, osdBox, '#osdBC: the same box armed as disarmed');
         assert.ok(r.o.stick.r > 0.9 && r.o.stick.y > 0.9 && r.o.stick.t > 0.4, 'the keys moved the sticks ' + JSON.stringify(r.o.stick));
         assert.ok(r.o.dots.r.x > r.o.box * 0.8 && r.o.dots.l.x > r.o.box * 0.8, 'both dots to the right');
         assert.ok(r.o.dots.l.y < r.o.box * 0.7, 'throttle up');
@@ -528,9 +612,9 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         await hold(false, 'ArrowRight', 'ArrowRight', 39);
         await hold(true, 'ArrowUp', 'ArrowUp', 38);
         // The arrows glide the stick in sim time too: held until it is there.
-        await js(`await S.until(() => S.s.stickOverlay().stick.p > 0.9, 8000); return 1;`);
+        await until('pitch forward', `S.s.stickOverlay().stick.p > 0.9`);
         r = await tracks(js, 'pitch forward');
-        assert.ok(r.o.stick.p > 0.9 && r.o.dots.r.y < r.o.box * 0.2, 'pitch forward: the right dot up');
+        assert.ok(r.o.stick.p > 0.9 && r.o.dots.r.y < r.o.box * 0.2, 'pitch forward: the right dot up ' + JSON.stringify({ stick: r.o.stick, dots: r.o.dots, box: r.o.box, armed: r.armed }));
         await hold(false, 'ArrowUp', 'ArrowUp', 38);
         await hold(false, 'd', 'KeyD', 68);
         await js(`await S.wait(800); return 1;`);
@@ -547,6 +631,80 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         r = await js(`await S.frame(); return JSON.stringify({ o: S.s.stickOverlay(), layout: S.layout() });`);
         assert.equal(r.o.shown, true, 'H again shows it');
         assert.deepEqual(r.layout, before, 'H moved nothing else');
+
+        // The hover held from the arm to here: the pilot flew the core on
+        // every sample since, with no error, well under the ceiling, level,
+        // never disarmed, never turtled, roll and pitch never held at zero.
+        r = await js(`return JSON.stringify({ env: S.env, st: S.state() });`);
+        console.log('hover: ' + JSON.stringify(r.env));
+        assert.equal(r.st.pilotError, null, 'the pilot flew without an error');
+        assert.ok(r.env.samples > 0, 'the pilot flew the core ' + JSON.stringify(r.env));
+        assert.ok(r.env.maxZ < 3, 'under 3 m (the ceiling is at 6) ' + JSON.stringify(r.env));
+        assert.ok(r.env.minUpZ > 0.9, 'level ' + JSON.stringify(r.env));
+        assert.equal(r.env.disarmed, false, 'never disarmed ' + JSON.stringify(r.st));
+        assert.equal(r.env.turtle, false, 'never turtled');
+        assert.equal(r.env.hold, false, 'roll and pitch never held at zero');
+        // A crash: still armed, it is dropped onto the floor at 25 m/s (as
+        // test_sim_easy_mode.mjs drop()). The throttle comes down to under a
+        // quarter first (S), as that test's 20 %: left where W put it, the quad
+        // climbs straight off the floor and never comes to rest to be disarmed.
+        // The pilot lets go of the core in the drop's own step, so the keys fly
+        // it from there. The page disarms it as a crash and shows the arm hint;
+        // the card keeps its box.
+        await hold(true, 's', 'KeyS', 83);
+        await until('throttle under a quarter', `S.s.stickOverlay().stick.t < 0.25`);
+        await hold(false, 's', 'KeyS', 83);
+        r = await js(`S.s.setTestPilot(null);
+          const c = S.s.coreState(), was = c.armed;
+          if (was) S.s.bfCore().teleport({ x: c.position.x, y: c.position.y, z: 2.5 }, { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: 0, z: -25 });
+          const off = await S.until(() => !S.s.coreState().armed, 6000);
+          await S.until(() => document.getElementById('hudArmHint').classList.contains('show'), 2000);
+          await S.frame();
+          return JSON.stringify({ was, off, reason: S.s.easy().disarmReason, L: S.layout(), hint: document.getElementById('hudArmHint').classList.contains('show') });`);
+        console.log('crash: ' + JSON.stringify({ dropped: r.was, reason: r.reason }));
+        assert.equal(r.was, true, 'armed until the drop');
+        assert.equal(r.off, true, 'disarmed after the crash');
+        assert.equal(r.reason, 'crash', 'as a crash');
+        assert.equal(r.hint, true, 'the arm hint shows after the crash');
+        assert.deepEqual(r.L.feelHud, cardBox, '#feelHud: the same box after a crash');
+        assert.deepEqual(r.L.osdBC, osdBox, '#osdBC: the same box after a crash, with the won\'t-arm line');
+        await clearOfHud('after the crash');
+
+        // At rest after the crash, nothing flying: the readouts' widths, on the page's own formatters.
+        // #hudBtns keeps one width whatever the fps readout says: 9, 10, 99 and
+        // 100 fps on every quality label (the page's own formatter and labels).
+        r = await js(`const el = document.getElementById('fpsHud'), btns = document.getElementById('hudBtns');
+          const live = el.textContent, w0 = btns.getBoundingClientRect().width, labels = S.s.looks.qualityLabels, widths = {};
+          for (const f of [9, 10, 99, 100]) for (const q of labels) { el.textContent = S.s.looks.fpsHudText(f, q); widths[f + ' fps ' + q] = btns.getBoundingClientRect().width; }
+          el.textContent = live;
+          return JSON.stringify({ live, w0, labels, widths });`);
+        assert.ok(r.labels.length >= 3, 'every quality label ' + JSON.stringify(r.labels));
+        assert.ok(r.w0 > 0, '#hudBtns is on screen');
+        for (const [k, w] of Object.entries(r.widths)) assert.equal(w, r.w0, `#hudBtns width at ${k} (as at "${r.live}")`);
+        // #osdBC keeps one box whatever it reads: the throttle at 0, 9, 10 and
+        // 100 %, TWR under and over 10 and past what its field holds (a
+        // hand-lightened build; reverse thrust in 3D), the flight clock up to
+        // and past 999:59, and every arming flag at once on the won't-arm line
+        // (the page's own markup, osdBcHtml).
+        r = await js(`const el = document.getElementById('osdBC'), live = el.innerHTML, box = () => { const b = el.getBoundingClientRect(); return [b.width, b.height].map((v) => Math.round(v * 10) / 10); };
+          const { armingFlagNames } = await import('/sim-core-adapter.js');
+          const all = armingFlagNames(0x3fffffff).join(' '), w0 = box(), out = {};
+          for (const [l, bar] of [['0', 0], ['9', 0.09], ['10', 0.1], ['100', 1]]) for (const twr of [0, 9.96, 10.5, 122.3, -10.4]) for (const t of [7, 600, 5999, 6000, 59999, 60061]) for (const why of ['', all]) {
+            el.innerHTML = S.s.osdBcHtml(bar, l, t, twr, false, why); out[[l + '%', 'TWR ' + twr, t + ' s', why ? 'all flags' : 'armed'].join(', ')] = box(); }
+          const d3 = {};
+          for (const l of ['0', '+9', '-10', '+100', '-100']) for (const twr of [1.2, -10.4, -150, 12.5, 122.3]) { el.innerHTML = S.s.osdBcHtml(0.5, l, 7, twr, true, ''); d3[l + '% TWR ' + twr] = box(); }
+          el.innerHTML = live;
+          const txt = { flt: S.s.osdBcHtml(0, '0', 60061, 0, false, ''), twr2: S.s.osdBcHtml(0, '0', 7, 122.3, false, ''), twr3: S.s.osdBcHtml(0.5, '-100', 7, -150, true, '') };
+          return JSON.stringify({ w0, out, d3, flags: all.length, txt });`);
+        assert.ok(r.flags > 60, 'a long list of flags ' + r.flags);
+        for (const [k, b] of Object.entries(r.out)) assert.deepEqual(b, r.w0, `#osdBC box at ${k}`);
+        const d3 = Object.values(r.d3);
+        for (const b of d3) assert.deepEqual(b, d3[0], '#osdBC box in 3D ' + JSON.stringify(r.d3));
+        // The box can't see the clock run backwards: past 999:59 it holds there.
+        assert.ok(r.txt.flt.includes('FLT 999:59'), 'the flight clock holds at 999:59 ' + JSON.stringify(r.txt.flt));
+        assert.ok(r.txt.twr2.includes('TWR 99.9'), 'TWR holds at 99.9 ' + JSON.stringify(r.txt.twr2));
+        assert.ok(r.txt.twr3.includes('TWR -99.9'), 'TWR holds at -99.9 in 3D ' + JSON.stringify(r.txt.twr3));
+        await cardSweep(js, 'keyboard 1280x720');
 
         // The menu (Esc) hides it; closing it brings it back. The frame loop
         // (syncStickOverlay) shows or hides it, so each read waits for the
@@ -642,6 +800,15 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         assert.equal(r.o.box, STICK_BOX_PHONE_PX, 'the phone box');
         assert.equal(r.sticks.length, 2);
         for (const b of r.sticks) assert.equal(overlaps(r.seen.rect, b), false, 'never over a stick ' + JSON.stringify({ o: r.seen.rect, b }));
+        await hintClear(js, r, 'landscape', true);
+        // The Coach card comes down the middle from the top: the hint hides
+        // while it is up, and its slot keeps its box (nothing moves).
+        ok = await js(`const sl = document.getElementById('hudArmSlot'), coach = document.getElementById('coachHud'), bx = () => { const b = sl.getBoundingClientRect(); return [b.left, b.top, b.width, b.height]; };
+          const a = bx(); coach.classList.add('show'); const vis = getComputedStyle(sl).visibility, b = bx(); coach.classList.remove('show');
+          return JSON.stringify({ same: JSON.stringify(a) === JSON.stringify(b), vis, back: getComputedStyle(sl).visibility });`);
+        assert.equal(ok.vis, 'hidden', 'the hint hides under the Coach card');
+        assert.equal(ok.same, true, 'its slot keeps its box');
+        assert.equal(ok.back, 'visible');
         await tracks(js, 'touch at rest');
         // A thumb on the right stick, pushed right and up.
         const [L, R] = r.sticks;
@@ -679,12 +846,55 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         for (const b of r.sticks) assert.equal(overlaps(r.seen.rect, b), false, 'portrait: never over a stick ' + JSON.stringify({ o: r.seen.rect, b }));
         assert.ok(r.seen.rect.bottom <= Math.min(...r.sticks.map((b) => b.top)), 'above the sticks');
         assert.ok(r.seen.rect.top >= 0);
+        await hintClear(js, r, 'portrait');
       });
     });
   } finally {
     server.close();
   }
 });
+
+// Under touch, the arm hint's slot is laid out (whether the hint shows or not)
+// and covers neither thumb stick nor the stick overlay, and stays on screen;
+// with shown, the hint shows in it. r: { sticks, seen } as the touch test reads them.
+async function hintClear(js, r, label, shown = false) {
+  const h = await js(`await S.frame(); const e = document.getElementById('hudArmHint'), b = document.getElementById('hudArmSlot').getBoundingClientRect();
+    return JSON.stringify({ laid: b.width > 0 && b.height > 0, shown: e.classList.contains('show') && getComputedStyle(e).display !== 'none', box: { left: b.left, right: b.right, top: b.top, bottom: b.bottom }, vw: innerWidth, vh: innerHeight, text: e.textContent });`);
+  console.log(`touch ${label}: arm hint slot ${h.laid ? JSON.stringify(h.box) : 'not laid out'}, ${h.shown ? 'showing "' + h.text + '"' : 'hidden'}`);
+  assert.equal(h.laid, true, `${label}: the arm hint's slot is laid out`);
+  if (shown) assert.equal(h.shown, true, `${label}: the arm hint shows at rest, disarmed`);
+  for (const s of r.sticks) assert.equal(overlaps(h.box, s), false, `${label}: the arm hint over a thumb stick ${JSON.stringify({ h: h.box, s })}`);
+  assert.equal(overlaps(h.box, r.seen.rect), false, `${label}: the arm hint over the stick overlay`);
+  assert.ok(h.box.left >= 0 && h.box.right <= h.vw && h.box.top >= 0 && h.box.bottom <= h.vh, `${label}: the arm hint on screen ${JSON.stringify(h.box)}`);
+  await cardSweep(js, label);
+}
+
+// #feelHud and the arm hint's slot keep one box whatever the card reads, in
+// one synchronous sweep through the page's own formatters (sim-feel.js
+// updateHud, sim-3d.js throttleHudText): the throttle 0-100 % and 3D's
+// -100-+100 %, BATT off and every reading from 2.50 to 8.50 V (1S and 2S),
+// every flight mode, armed and disarmed. The next frame puts the live
+// readouts back.
+async function cardSweep(js, label) {
+  const c = await js(`const { throttleHudText } = await import('/sim-3d.js');
+    const card = document.getElementById('feelHud'), slot = document.getElementById('hudArmSlot');
+    const bx = (e) => { const b = e.getBoundingClientRect(); return [b.left, b.top, b.width, b.height].map((v) => Math.round(v * 10) / 10).join(','); };
+    const base = { stick: { r: 0, p: 0, y: 0, t: 0 }, battV: 4.2, battOn: true, mode: 'angle', armed: false, threeD: false };
+    const seen = {};
+    const u = (k, o) => { const s = { ...base, ...o }; s.thrText = throttleHudText(s.stick.t, s.threeD); window._feel.updateHud(s); const b = bx(card) + ' | ' + bx(slot); (seen[b] = seen[b] || []).push(k); };
+    for (let i = 0; i <= 100; i++) for (const threeD of [false, true]) u('THR stick ' + i + (threeD ? ' 3D' : ''), { stick: { r: 0, p: 0, y: 0, t: i / 100 }, threeD });
+    for (let v = 250; v <= 850; v++) u('BATT ' + (v / 100).toFixed(2), { battV: v / 100 });
+    for (const mode of ['angle', 'horizon', 'acro']) for (const armed of [false, true]) for (const battOn of [false, true]) for (const threeD of [false, true])
+      u([mode, armed ? 'armed' : 'disarmed', battOn ? 'BATT on' : 'BATT off', threeD ? '3D' : '2D'].join(' '), { mode, armed, battOn, threeD });
+    // The card took the sweep (updateHud writes nothing while the HUD is hidden).
+    u('probe', { battV: 4.44, mode: 'horizon', armed: true });
+    const probe = ['hudBatt', 'hudMode', 'hudArm'].map((id) => document.getElementById(id).textContent).join(' ');
+    return JSON.stringify({ probe, groups: Object.entries(seen).map(([b, ks]) => ({ box: b, n: ks.length, e: ks.slice(0, 3) })) });`);
+  console.log(`${label}: #feelHud | hint slot boxes across the card sweep ${JSON.stringify(c.groups)}`);
+  assert.equal(c.probe, 'BATT 4.44V HORIZON ARMED', `${label}: the card took the sweep`);
+  assert.ok(c.groups.reduce((n, x) => n + x.n, 0) > 800, `${label}: the sweep ran ${JSON.stringify(c.groups)}`);
+  assert.equal(c.groups.length, 1, `${label}: #feelHud and the hint slot keep one box whatever the card reads ${JSON.stringify(c.groups)}`);
+}
 
 function S_near(a, b, eps) {
   return ['r', 'p', 'y', 't'].every((k) => Math.abs(a[k] - b[k]) <= eps);

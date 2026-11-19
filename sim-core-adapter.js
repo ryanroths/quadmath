@@ -240,6 +240,14 @@ export function createJsCore({ qp, tick, extras }) {
       ring.push({ tUs: stampUs, s: { r: sample.r, p: sample.p, y: sample.y, t: sample.t } });
       if (ring.length > 1024) ring.shift();
     },
+    // Roll and pitch at zero from the next tick on: in the sample held and in
+    // every one queued (copies, input() above). A hold the page starts now
+    // must reach the ticks not yet run, which fly samples stamped before the
+    // page's next one (Easy mode's turtle re-arm, sim.html turtleStickHold).
+    holdRollPitch() {
+      held = { ...held, r: 0, p: 0 };
+      for (const e of ring) { e.s.r = 0; e.s.p = 0; }
+    },
     // Frame time in, whole 1 ms ticks out (at most 250 a frame: a longer
     // frame is a pause). Returns the ticks run. onSample: after each tick
     // that lands on a multiple of SAMPLE_US (want and onEvent are the bf
