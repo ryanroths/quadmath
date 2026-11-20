@@ -96,13 +96,47 @@ async function readJson(request) {
 // bucket: 'score' or 'share'. The window is the bucket and the UTC hour
 // (rows from before the split, the bare hour, are not read).
 // One statement, so posts sent at once can't all read the count before any
-// of them adds to it.
+// of them adds to it. The client is rateClientKey's hash, never the address
+// (the rate_limit column is still named ip); a client's first post of an
+// hour prunes the rows of earlier hours (pruneRates).
 async function checkRate(env, ip, now, bucket) {
-  const window = bucket + ':' + rateWindowId(now);
+  const hour = rateWindowId(now);
+  const window = bucket + ':' + hour;
   const row = await env.DB.prepare(
     'INSERT INTO rate_limit (ip, window, n) VALUES (?, ?, 1) ON CONFLICT(ip, window) DO UPDATE SET n = n + 1 RETURNING n',
-  ).bind(ip, window).first();
+  ).bind(await rateClientKey(env, ip, window), window).first();
+  if (row && row.n === 1) await pruneRates(env, hour);
   return !!row && row.n <= RATE_MAX[bucket];
+}
+
+// A client in rate_limit: HMAC-SHA-256 of its address and the window under
+// the RATE_KEY secret (wrangler secret put RATE_KEY), 128 bits of it, a new
+// one every hour. Without the secret, a plain SHA-256 of the same: still not
+// the address, but one a list of addresses could be tried against, so the
+// secret is set before a deploy (DEPLOY.md).
+const hex16 = (buf) => [...new Uint8Array(buf).slice(0, 16)].map((b) => b.toString(16).padStart(2, '0')).join('');
+async function rateClientKey(env, ip, window) {
+  const enc = new TextEncoder();
+  const data = enc.encode(ip + '|' + window);
+  if (env && env.RATE_KEY) {
+    const key = await crypto.subtle.importKey('raw', enc.encode(env.RATE_KEY), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return 'hmac:' + hex16(await crypto.subtle.sign('HMAC', key, data));
+  }
+  return 'sha:' + hex16(await crypto.subtle.digest('SHA-256', data));
+}
+
+// The rows of earlier hours (any bucket, and the bare-hour rows from before
+// the buckets), deleted at most RATE_PRUNE_MAX at a time: a backlog from
+// before this (raw addresses, kept indefinitely) drains a little with each
+// new client-hour rather than in one statement's writes. Housekeeping only:
+// a prune that fails is left for the next one, never the post's failure.
+const RATE_PRUNE_MAX = 200;
+async function pruneRates(env, hour) {
+  try {
+    await env.DB.prepare(
+      'DELETE FROM rate_limit WHERE rowid IN (SELECT rowid FROM rate_limit WHERE substr(window, -13) < ? LIMIT ?)',
+    ).bind(hour, RATE_PRUNE_MAX).run();
+  } catch (e) { /* the next client-hour prunes */ }
 }
 
 // The anonymous counts' rate limit (POST /api/count): in this isolate's memory

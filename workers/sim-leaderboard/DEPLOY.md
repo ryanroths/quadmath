@@ -625,6 +625,53 @@ refuses every query, the boards' too, until 00:00 UTC; counts reach it alone
 at about 16,000 full-funnel visitors a day). `counts` grows by at most 144
 rows a day (6 events x 3 classes x 2 cores x 4 inputs).
 
+## The boards' rate limit stores no addresses
+
+The score and share limits (30 score posts and 12 shares per client per UTC
+hour) count in `rate_limit`. A client there is a hash of its address and the
+hour, never the address: an HMAC-SHA-256 under the `RATE_KEY` secret
+(`hmac:` + 32 hex), or, until the secret is set, a plain SHA-256 (`sha:`; not
+the address, but one a list of addresses could be tried against). The key
+changes every hour. A client's first post of an hour deletes the rows of
+earlier hours, at most 200 at a time, so the table holds about one hour.
+
+Rows written before this hold raw addresses and were never deleted. Count
+them before the deploy:
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT COUNT(*) AS rows, SUM(ip NOT LIKE 'hmac:%' AND ip NOT LIKE 'sha:%') AS raw, MIN(window) AS oldest, MAX(window) AS newest FROM rate_limit"
+```
+
+Deleting a row is 2 rows written (the row and its key's index entry). After
+the deploy, either run the cleanup (idempotent, raw-address rows only) when
+2 x `raw` fits the day's write budget:
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --file=./src/migrate-rate-limit.sql
+```
+
+or leave the backlog to the Worker, which deletes up to 200 old rows with
+each new client-hour (at most 400 rows written a time).
+
+## This release's deploy (counts and the rate limit), in order
+
+```bash
+git pull --ff-only
+cd workers/sim-leaderboard
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT COUNT(*) AS rows, SUM(ip NOT LIKE 'hmac:%' AND ip NOT LIKE 'sha:%') AS raw, MIN(window) AS oldest, MAX(window) AS newest FROM rate_limit"
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --file=./src/migrate-counts.sql
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+npx wrangler secret put RATE_KEY
+npm run predeploy
+npm run deploy
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --file=./src/migrate-rate-limit.sql
+```
+
+Paste the printed value when `wrangler secret put` asks (it is not needed
+again: a new one only starts every client's hour afresh). `npm run
+predeploy` prints PHYS_VER 7. Skip the last line if `raw` is too many rows
+for today (see above).
+
 ## Local
 
 The client takes `https://` leaderboard URLs only, so run the Worker over

@@ -11,7 +11,11 @@
 //   - migrate-counts.sql runs twice on a database from before it (the boards'
 //     tables and rows) and twice on one that has it, and changes no rows;
 //   - DEPLOY.md's funnel and by-input commands, run as written (but --local),
-//     on what the pings wrote.
+//     on what the pings wrote;
+//   - the boards' rate limit (RATE_KEY set): an hourly HMAC, never the
+//     address, and a client's first post of an hour prunes earlier hours'
+//     rows (raw addresses from before included); migrate-rate-limit.sql
+//     deletes raw-address rows only, twice.
 // Needs wrangler: workers/sim-rooms' or workers/sim-leaderboard's own
 // (npm install there), or WRANGLER=<path to bin/wrangler.js>. Without one it
 // skips (CI's sim-tests job installs none). The same in process, on SQLite:
@@ -52,7 +56,7 @@ function deployQueries() {
 test('anonymous flight counts on wrangler dev (real D1)', { timeout: 420000 }, async (t) => {
   const bin = findWrangler();
   if (!bin) { t.skip('no wrangler (npm install in workers/sim-rooms or workers/sim-leaderboard, or WRANGLER=)'); return; }
-  const w = await startLeaderboardDev(bin, { ALLOWED_ORIGIN: ORIGIN });
+  const w = await startLeaderboardDev(bin, { ALLOWED_ORIGIN: ORIGIN, RATE_KEY: 'wrangler-rate-key' });
   const fetch = async (url, init) => {
     try { return await globalThis.fetch(url, init); }
     catch (e) { await new Promise((r) => setTimeout(r, 500)); return globalThis.fetch(url, init); }
@@ -111,6 +115,26 @@ test('anonymous flight counts on wrangler dev (real D1)', { timeout: 420000 }, a
         { day, input: 'radio', ready: 2, arm: 1, flew30: 1, pack2: 1, lap: 1, name: 1 },
         { day, input: 'gamepad', ready: 0, arm: 0, flew30: 0, pack2: 0, lap: RATE_COUNT_MAX + 1, name: 0 },
       ]);
+    });
+
+    await t.test('the boards\' rate limit on real D1: an hourly HMAC, never the address; earlier hours pruned', async () => {
+      const post = (ip) => fetch(w.base + '/api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': ip }, body: '{' })
+        .then(async (r) => ({ status: r.status, json: await r.json() }));
+      // Rows from before this: raw addresses, an old hour, both buckets and the bare hour.
+      d1(bin, w.persist, ['--command', "INSERT INTO rate_limit (ip, window, n) VALUES ('192.0.2.1', 'score:2020-01-01T00', 4), ('192.0.2.2', '2020-01-01T00', 1), ('192.0.2.3', 'share:2020-01-01T00', 2)"]);
+      assert.deepEqual(await post('203.0.113.77'), { status: 400, json: { ok: false, reason: 'BAD JSON' } }, 'counted, then refused for its body');
+      assert.deepEqual(await post('203.0.113.77'), { status: 400, json: { ok: false, reason: 'BAD JSON' } });
+      const rate = rows(bin, w.persist, 'SELECT ip, window, n FROM rate_limit');
+      assert.equal(rate.length, 1, 'the old rows pruned on the first post of the hour: ' + JSON.stringify(rate));
+      assert.match(rate[0].ip, /^hmac:[0-9a-f]{32}$/);
+      assert.match(rate[0].window, /^score:\d{4}-\d\d-\d\dT\d\d$/);
+      assert.equal(rate[0].n, 2);
+      assert.ok(!JSON.stringify(rate).includes('203.0.113.77'), 'no address in D1');
+      // The cleanup migration, twice: raw rows go, hashed rows stay.
+      d1(bin, w.persist, ['--command', "INSERT INTO rate_limit (ip, window, n) VALUES ('192.0.2.9', 'score:" + rate[0].window.slice(6) + "', 1)"]);
+      d1(bin, w.persist, ['--file', join(SRC, 'migrate-rate-limit.sql')]);
+      d1(bin, w.persist, ['--file', join(SRC, 'migrate-rate-limit.sql')]);
+      assert.deepEqual(rows(bin, w.persist, 'SELECT ip FROM rate_limit'), [{ ip: rate[0].ip }]);
     });
 
     await t.test('migrate-counts.sql runs twice: on a database from before it, and on one that has it', () => {
