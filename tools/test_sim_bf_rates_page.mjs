@@ -172,7 +172,13 @@ const PAGE = `(() => {
   document.body.classList.remove('menu-open');
   if (s.looks && s.looks.setMenuOpen) s.looks.setMenuOpen(false);
   if (window._feel && window._feel.hideFirstRun) window._feel.hideFirstRun();
-  window.__bf = { wait, snap, cls, preset, slider, link, importCli };
+  // The default's toast: it waits for no other toast to be up, so up to ms.
+  async function toastOr(ms) {
+    const t0 = performance.now();
+    while (performance.now() - t0 < ms && !window.__toasts.some((x) => /^RATES: CRUISE/.test(x))) await wait(100);
+    return snap();
+  }
+  window.__bf = { wait, snap, toastOr, cls, preset, slider, link, importCli };
   return true;
 })()`;
 
@@ -245,7 +251,7 @@ test('Tune\'s Rates on the bf core: presets, sliders, a paste, class changes, re
 
     // Nothing saved: Cruise flies on the 65, said once; nothing is saved.
     await open(base);
-    const first = await run('await B.wait(2600); return JSON.stringify(B.snap());');
+    const first = await run('return JSON.stringify(await B.toastOr(10000));');
     assert.equal(first.type, 'whoop65');
     assert.deepEqual(first.held, CRUISE, 'Betaflight holds Cruise');
     assert.equal(first.info.from, 'default');
@@ -336,8 +342,7 @@ test('Tune\'s Rates on the bf core: presets, sliders, a paste, class changes, re
     // A reload: the saved rates fly on boot and on the other class; no toast.
     await open(base);
     const again = await run(`const out = [];
-      await B.wait(2600);
-      out.push(B.snap());
+      out.push(await B.toastOr(5000));
       out.push(await B.cls(B.snap().type === 'whoop65' ? 'whoop75' : 'whoop65', 'bf'));
       return JSON.stringify(out);`);
     for (const s of again) {
@@ -350,13 +355,13 @@ test('Tune\'s Rates on the bf core: presets, sliders, a paste, class changes, re
     // all: Cruise and the toast.
     await evaluate(ws, `localStorage.removeItem(${JSON.stringify(BF_RATES_KEY)}), true`);
     await open(base);
-    const seen = await run('await B.wait(2600); return JSON.stringify(B.snap());');
+    const seen = await run('return JSON.stringify(await B.toastOr(5000));');
     assert.deepEqual(seen.held, CRUISE);
     assert.equal(seen.info.from, 'default');
     assert.ok(!seen.toasts.includes(toastText), 'the toast shows once');
     await evaluate(ws, `localStorage.removeItem(${JSON.stringify(BF_RATES_TOAST_KEY)}), true`);
     await open(base);
-    const fresh = await run('await B.wait(2600); return JSON.stringify(B.snap());');
+    const fresh = await run('return JSON.stringify(await B.toastOr(10000));');
     assert.deepEqual(fresh.held, CRUISE);
     assert.ok(fresh.toasts.includes(toastText));
 

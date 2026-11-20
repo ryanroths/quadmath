@@ -7473,15 +7473,19 @@ function bfRatesFromLink(st){
   bfRatesLinked=st;
   if(bfCore)bfApplyRates();
 }
-// Nothing saved: Cruise flies, said once in this browser, after the core's own toast.
+// Nothing saved: Cruise flies, said once in this browser, after the core's own
+// toast, and only while no other toast is up (never over a finish card's
+// SHARE): until then it waits.
 function bfRatesBootToast(){
   if(bfRatesFrom()!=='default'||bfRatesToastTimer)return;
   try{if(localStorage.getItem(BF_RATES_TOAST_KEY))return;}catch(e){/* no storage: say it */}
-  bfRatesToastTimer=setTimeout(()=>{
+  const say=()=>{
     if(bfRatesFrom()!=='default'||core.kind!=='bf')return;
+    if(toastEl.style.opacity==='1'){bfRatesToastTimer=setTimeout(say,700);return;}
     toast('RATES: '+BF_RATE_PRESETS[BF_RATES_DEFAULT].label.toUpperCase()+' — change in Tune',{ms:4000});
     try{localStorage.setItem(BF_RATES_TOAST_KEY,'1');}catch(e){}
-  },1600);
+  };
+  bfRatesToastTimer=setTimeout(say,1600);
 }
 // Tune's bf rates show what Betaflight flies, as Actual (a paste's other rate
 // type converted, the max marked ≈): its preset (Custom for none), roll and
