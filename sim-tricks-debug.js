@@ -46,6 +46,18 @@ export const SPEC_MIN = 0.15;
 export const FLIP_FALLBACK = 5.236;
 const FLIP_WIN_LABEL = '1.2 s';
 
+// The object beside the path (rec.side), for the debug log only: nothing
+// scores it. The observer keeps every step, in a segment or not, in a ring
+// of cap steps; a maneuver's rec.side reads it from preS before the
+// segment's first step to its end, and again postS after the end (a glide
+// back can outlast the segment). A box is beside the path when its height
+// overlaps the quad's within bandM and the quad is not over or under it;
+// a pass is the box's nearest point going from ahead of the nose's heading
+// to behind it (fwd) or back (back), by more than hystM either way. rows:
+// that many steps evenly over the window. passM: passes farther than this
+// are counted, not listed.
+export const SIDE = Object.freeze({ preS: 3, postS: 2, bandM: 0.5, hystM: 0.1, rows: 48, cap: 4096, passM: 8, passMax: 12 });
+
 // stepDetector's spatial constants (sim-tricks.js DIVE_*, GAP_*), the dive
 // fallback inside classifyFeat, and the segment-start numbers.
 export const DIVE = Object.freeze({ vzStart: -6.5, speedStart: 8, altStart: 4, drop: 3.4, speedHold: 5.5, vzHold: -4.5, vzCancel: -2, cooldown: 3.2 });
@@ -570,6 +582,9 @@ export function gapState(det, frameW, ws) {
 export function createTrickObserver(det, opts) {
   const o = opts || {};
   const emit = o.onAttempt || function () {};
+  // A maneuver's rec.side refreshed past the segment's end (the same record
+  // onAttempt had).
+  const onSide = o.onSide || function () {};
   const now = o.now || function () { return 0; };
   const info = o.info || function () { return {}; };
   const pre = makeFeat();
@@ -593,6 +608,23 @@ export function createTrickObserver(det, opts) {
   const CAM_W = 14, CAM_CAP = 4096;
   const camBuf = new Float64Array(CAM_CAP * CAM_W);
   let camN = 0, camDeg = 30, camFrom = 'default', camWs = 3.5;
+  // The object beside the path (rec.side), logged only: each step the
+  // observer's clock, the segment (1 live), the position (sim-core frame,
+  // m: x forward, y left, z up, as camPush's), the velocity (m/s), the
+  // nose, the heading (the body's left axis turned to forward, so a pitch
+  // up past vertical keeps it; the nose's when the body is on its side),
+  // the nearest box beside the path (its index, nearest point, horizontal
+  // distance) and the nearest in 3-D (index, distance, the nearest point's
+  // height above the quad), and the body's up-Z. sideRecord reads it.
+  const SW = 22, SCAP = SIDE.cap;
+  const sideBuf = new Float64Array(SCAP * SW);
+  let sideN = 0, sideHead = 0, sideCols = null, sideFx = 1, sideFy = 0, sideWs = 3.5;
+  // The ring's own clock, the sim's (each step's dt; the page's now() is
+  // the frame's wall time, the same for every step in a frame), and its
+  // reading at the open segment's first step.
+  let simT = 0, segSim0 = 0;
+  const sideWsOf = () => sideWs;
+  const sidePend = [];
   const view = {
     t: 0, armed: false, contact: false, rate: 0, lockout: 0, diving: false, live: 0, liveT: 0,
     vz: 0, speed: 0, alt: 0, thr: 0, gap: null, clr: null, diveOn: 0, diveDrop: 0, diveCd: 0, gapCd: 0,
@@ -623,6 +655,8 @@ export function createTrickObserver(det, opts) {
     rec.pre = ex.pre;
     rec.saw = ex.saw;
     rec.cam = camRecord(f);
+    rec.side = sideRecord(segSim0, simT, simT);
+    sidePend.push({ rec, t0: segSim0, t1: simT, due: simT + SIDE.postS });
     rec.barani = baraniProbe(f);
     rec.phases = phaseRecord(det.lastPhases);
     rec.gapBack = ex.id === 'maverick' && det.lastGapBack ? MAV_GAP_MUL : 0;
@@ -825,6 +859,156 @@ export function createTrickObserver(det, opts) {
     return out;
   }
 
+  // One step into the side ring (see SIDE). The colliders are the page's
+  // boxes (scene units: y up; sim-core x = -z, y = -x, over ws).
+  function sidePush(s, t, live) {
+    const ws = s.ws || 3.5;
+    sideWs = ws;
+    const px = -(s.wz || 0) / ws, py = -(s.wx || 0) / ws, pz = (s.wy || 0) / ws;
+    if (sideN) {
+      const k0 = ((sideHead - 1) % SCAP + SCAP) % SCAP * SW;
+      // A respawn or a map change: the path before it is another flight.
+      if (Math.hypot(px - sideBuf[k0 + 2], py - sideBuf[k0 + 3], pz - sideBuf[k0 + 4]) > 2) sideN = 0;
+    }
+    const x = s.qx || 0, y = s.qy || 0, z = s.qz || 0, w = s.qw == null ? 1 : s.qw;
+    const fx = 1 - 2 * (y * y + z * z), fy = 2 * (x * y + w * z), fz = 2 * (x * z - w * y);
+    const lx = 2 * (x * y - w * z), ly = 1 - 2 * (x * x + z * z);
+    const uz = 1 - 2 * (x * x + y * y);
+    const lh = Math.hypot(lx, ly), fh = Math.hypot(fx, fy);
+    if (lh > 0.25) { sideFx = ly / lh; sideFy = -lx / lh; } else if (fh > 0.25) { sideFx = fx / fh; sideFy = fy / fh; }
+    let bH = -1, dH = Infinity, cx = 0, cy = 0, cz = 0, b3 = -1, d3 = Infinity, u3 = 0;
+    const cols = s.colliders;
+    if (cols && cols.length) {
+      sideCols = cols;
+      const band = SIDE.bandM;
+      for (let i = 0; i < cols.length; i++) {
+        const b = cols[i];
+        if (!b || !b.min || !b.max) continue;
+        const x0 = -b.max.z / ws, x1 = -b.min.z / ws, y0 = -b.max.x / ws, y1 = -b.min.x / ws, z0 = b.min.y / ws, z1 = b.max.y / ws;
+        const qx = px < x0 ? x0 : (px > x1 ? x1 : px), qy = py < y0 ? y0 : (py > y1 ? y1 : py), qz = pz < z0 ? z0 : (pz > z1 ? z1 : pz);
+        const d = Math.hypot(qx - px, qy - py, qz - pz);
+        if (d < d3) { d3 = d; b3 = i; u3 = qz - pz; }
+        if (z1 >= pz - band && z0 <= pz + band && !(px >= x0 && px <= x1 && py >= y0 && py <= y1)) {
+          const h = Math.hypot(qx - px, qy - py);
+          if (h < dH) { dH = h; bH = i; cx = qx; cy = qy; cz = qz; }
+        }
+      }
+    }
+    const k = sideHead * SW;
+    sideBuf[k] = t; sideBuf[k + 1] = live ? 1 : 0;
+    sideBuf[k + 2] = px; sideBuf[k + 3] = py; sideBuf[k + 4] = pz;
+    sideBuf[k + 5] = s.vx || 0; sideBuf[k + 6] = s.vy || 0; sideBuf[k + 7] = s.vz || 0;
+    sideBuf[k + 8] = fx; sideBuf[k + 9] = fy; sideBuf[k + 10] = fz;
+    sideBuf[k + 11] = sideFx; sideBuf[k + 12] = sideFy;
+    sideBuf[k + 13] = bH; sideBuf[k + 14] = cx; sideBuf[k + 15] = cy; sideBuf[k + 16] = cz; sideBuf[k + 17] = bH >= 0 ? dH : -1;
+    sideBuf[k + 18] = b3; sideBuf[k + 19] = b3 >= 0 ? d3 : -1; sideBuf[k + 20] = u3; sideBuf[k + 21] = uz;
+    sideHead = (sideHead + 1) % SCAP;
+    if (sideN < SCAP) sideN++;
+  }
+
+  // rec.side, over the ring from SIDE.preS before t0 (the segment's first
+  // step, on the ring's clock) to tEnd; times relative to t0 (s; dur the
+  // segment's, to the window's end). In the heading's frame (F
+  // forward, L its left): along and lat (+ left) of the beside box's nearest
+  // point (m), up its height above the quad; vAlong (+ toward the nose's
+  // heading, - backwards), vLat; noseEl the nose above the horizon (deg);
+  // noseDot the velocity along the nose (-1 straight against it; null under
+  // 0.85 m/s). nearest: the window's closest beside box and 3-D box. boxes:
+  // the beside boxes it saw, nearest first (sim-core m: x0 y0 z0 x1 y1 z1).
+  // passes: see SIDE, each read where the box was nearest on its way past.
+  function sideRecord(t0, t1, tEnd) {
+    const D = 180 / Math.PI, F = SW;
+    const out = { dur: r3(t1 - t0), to: r3(tEnd - t0), post: tEnd > t1 + 1e-9, n: 0, cut: false, boxN: sideCols ? sideCols.length : 0 };
+    const idx = [];
+    const ta = t0 - SIDE.preS;
+    for (let i = 0; i < sideN; i++) {
+      const k = ((sideHead - sideN + i) % SCAP + SCAP) % SCAP * F;
+      const t = sideBuf[k];
+      if (t >= ta - 1e-9 && t <= tEnd + 1e-9) idx.push(k);
+    }
+    out.n = idx.length;
+    if (!idx.length) return out;
+    out.cut = sideBuf[idx[0]] > ta + 0.05;
+    out.from = r3(sideBuf[idx[0]] - t0);
+    const row = (k) => {
+      const Fx = sideBuf[k + 11], Fy = sideBuf[k + 12], Lx = -Fy, Ly = Fx;
+      const px = sideBuf[k + 2], py = sideBuf[k + 3], pz = sideBuf[k + 4];
+      const vx = sideBuf[k + 5], vy = sideBuf[k + 6], vz = sideBuf[k + 7];
+      const fx = sideBuf[k + 8], fy = sideBuf[k + 9], fz = sideBuf[k + 10];
+      const box = sideBuf[k + 13];
+      const rx = sideBuf[k + 14] - px, ry = sideBuf[k + 15] - py, rz = sideBuf[k + 16] - pz;
+      const sp = Math.hypot(vx, vy, vz);
+      return {
+        t: sideBuf[k] - t0, live: sideBuf[k + 1], x: px, y: py, z: pz,
+        vAlong: vx * Fx + vy * Fy, vLat: vx * Lx + vy * Ly, vz,
+        noseEl: Math.asin(fz > 1 ? 1 : fz < -1 ? -1 : fz) * D,
+        noseDot: sp > 0.85 ? (vx * fx + vy * fy + vz * fz) / sp : null,
+        hd: Math.atan2(Fy, Fx) * D,
+        box, dH: box >= 0 ? sideBuf[k + 17] : null,
+        along: box >= 0 ? rx * Fx + ry * Fy : null, lat: box >= 0 ? rx * Lx + ry * Ly : null, up: box >= 0 ? rz : null,
+        box3: sideBuf[k + 18], d3: sideBuf[k + 18] >= 0 ? sideBuf[k + 19] : null, up3: sideBuf[k + 18] >= 0 ? sideBuf[k + 20] : null,
+        upZ: sideBuf[k + 21],
+      };
+    };
+    const R = idx.map(row);
+    const pr = (r) => ({
+      t: r3(r.t), live: r.live, box: r.box, dH: r3(r.dH), along: r3(r.along), lat: r3(r.lat), up: r3(r.up),
+      vAlong: r3(r.vAlong), vLat: r3(r.vLat), vz: r3(r.vz), noseEl: Math.round(r.noseEl), noseDot: r.noseDot == null ? null : r3(r.noseDot), d3: r3(r.d3),
+    });
+    // Nearest.
+    let iH = -1, i3 = -1;
+    const seen = new Map();
+    for (let j = 0; j < R.length; j++) {
+      const r = R[j];
+      if (r.box >= 0) {
+        if (iH < 0 || r.dH < R[iH].dH) iH = j;
+        const b = seen.get(r.box);
+        if (!b || r.dH < b.dH) seen.set(r.box, { dH: r.dH, t: r.t });
+      }
+      if (r.box3 >= 0 && (i3 < 0 || r.d3 < R[i3].d3)) i3 = j;
+    }
+    out.nearest = {
+      beside: iH >= 0 ? pr(R[iH]) : null,
+      d3: i3 >= 0 ? { t: r3(R[i3].t), box: R[i3].box3, d: r3(R[i3].d3), up: r3(R[i3].up3), live: R[i3].live } : null,
+    };
+    const ws = 3.5;
+    out.boxes = [...seen.entries()].sort((a, b) => a[1].dH - b[1].dH).slice(0, 4).map(([i, v]) => {
+      const b = sideCols && sideCols[i];
+      const bx = b && b.min && b.max ? [-b.max.z, -b.max.x, b.min.y, -b.min.z, -b.min.x, b.max.y].map((u) => r3(u / (sideWsOf() || ws))) : null;
+      return { i, dH: r3(v.dH), t: r3(v.t), box: bx, tag: b && b._tag ? String(b._tag) : null };
+    });
+    // Passes.
+    const h = SIDE.hystM, passes = [];
+    let sg = 0, best = -1, far = 0;
+    for (let j = 0; j < R.length; j++) {
+      const r = R[j];
+      if (r.box < 0) { sg = 0; best = -1; continue; }
+      if (best < 0 || r.dH < R[best].dH) best = j;
+      const a = r.along;
+      const now = a >= h ? 1 : a <= -h ? -1 : 0;
+      if (!now) continue;
+      if (sg && now !== sg) {
+        const b = R[best];
+        if (b.dH <= SIDE.passM) {
+          if (passes.length < SIDE.passMax) passes.push({ way: now < 0 ? 'fwd' : 'back', at: r3(r.t), ...pr(b) });
+        } else far++;
+      }
+      sg = now; best = j;
+    }
+    out.passes = passes;
+    out.passFar = far;
+    out.cols = ['t', 'live', 'x', 'y', 'z', 'vAlong', 'vLat', 'vz', 'noseEl', 'noseDot', 'hd', 'box', 'dH', 'along', 'lat', 'up', 'box3', 'd3', 'up3', 'upZ'];
+    out.rows = [];
+    const M = Math.min(SIDE.rows, R.length);
+    for (let j = 0; j < M; j++) {
+      const r = R[M > 1 ? Math.round((j * (R.length - 1)) / (M - 1)) : 0];
+      out.rows.push([r3(r.t), r.live, r3(r.x), r3(r.y), r3(r.z), r3(r.vAlong), r3(r.vLat), r3(r.vz), Math.round(r.noseEl), r.noseDot == null ? null : r3(r.noseDot), Math.round(r.hd),
+        r.box, r.dH == null ? null : r3(r.dH), r.along == null ? null : r3(r.along), r.lat == null ? null : r3(r.lat), r.up == null ? null : r3(r.up),
+        r.box3, r.d3 == null ? null : r3(r.d3), r.up3 == null ? null : r3(r.up3), r3(r.upZ)]);
+    }
+    return out;
+  }
+
   function emitAbort(t, f, why) {
     const rec = base('abort', t);
     rec.t0 = r3(segT0);
@@ -877,6 +1061,15 @@ export function createTrickObserver(det, opts) {
       camN = 0; camDeg = given ? i.camDeg : 30; camFrom = given ? 'page' : 'default'; camWs = ws;
     }
     if (det.live || st.live) camPush(s, det.live ? det.feat.dur : det.lastFeat.dur);
+    // The side ring, every step; a maneuver's rec.side again SIDE.postS on.
+    simT += step;
+    if (!st.live && det.live) segSim0 = simT;
+    sidePush(s, simT, det.live || st.live);
+    while (sidePend.length && simT >= sidePend[0].due - 1e-9) {
+      const p = sidePend.shift();
+      p.rec.side = sideRecord(p.t0, p.t1, simT);
+      try { onSide(p.rec); } catch (e) { /* never break the frame */ }
+    }
 
     // Rotation segments.
     let finished = false;
@@ -1045,6 +1238,10 @@ export function createTrickDebug(opts) {
 
   const obs = createTrickObserver(tricks.detector(), {
     now, info,
+    onSide(rec) {
+      dirty = true;
+      try { if (out) out.info(JSON.stringify({ kind: 'quadmath-trick-side', seq: rec.seq, side: rec.side })); } catch (e) { /* never break the frame */ }
+    },
     onAttempt(rec) {
       const ex = rec._explain;
       delete rec._explain;
@@ -1192,6 +1389,12 @@ export function createTrickDebug(opts) {
           + '  cam up-Z<0 ' + c.upZNeg.toFixed(2) + ' (body ' + c.bodyUpZNeg.toFixed(2) + ')  mean ' + c.upZMean.toFixed(2)
           + (c.offDegMean != null ? '  to centre ' + c.offDegMean + '° (az ' + c.azDegMean + '°, el ' + c.elDegMean + '°, ' + c.distMean.toFixed(1) + ' m)' : '  el ' + c.elDegMean + '°')
           + (c.noseDegMean != null ? '  nose ' + c.noseDegMean + '° tail ' + c.tailShare.toFixed(2) + ' lean ' + c.leanDegQ[2] + '°' : '') + '</span>');
+      }
+      const sd = r.side;
+      if (sd && sd.n) {
+        const nb = sd.nearest && sd.nearest.beside;
+        L.push('<span class="d">  side' + (sd.post ? '' : ' (to the end)') + (nb ? '  nearest beside ' + nb.dH.toFixed(1) + ' m ' + (nb.lat >= 0 ? 'L' : 'R') + ' at ' + nb.t.toFixed(1) + 's' : '  nothing beside')
+          + (sd.passes.length ? '  passes ' + sd.passes.map((p) => p.way + ' ' + (p.lat >= 0 ? 'L' : 'R') + ' ' + p.dH.toFixed(1) + 'm ' + (p.t >= 0 ? '+' : '') + p.t.toFixed(1) + 's nose ' + p.noseEl + '°').join(' · ') : '  no pass') + '</span>');
       }
       if (s.travelH != null) {
         L.push('<span class="d">  travelH ' + s.travelH.toFixed(1) + ' close ' + s.close.toFixed(2) + ' span ' + s.span.toFixed(1) + 'm drop ' + s.drop.toFixed(1)

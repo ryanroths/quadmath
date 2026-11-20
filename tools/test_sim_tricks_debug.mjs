@@ -15,7 +15,7 @@ import {
 } from '../sim-tricks.js';
 import {
   GATES, CLASS_IDS, SPEC, OVERRIDES, DIVE, DIVE_FALLBACK, GAP, SEG, FOCUS,
-  explainFeat, createTrickObserver, createTrickDebug, gateText,
+  explainFeat, createTrickObserver, createTrickDebug, gateText, SIDE,
 } from '../sim-tricks-debug.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -629,3 +629,101 @@ test('observer: the Barani probe (rec.barani) names the term that zeroed it', ()
   // An orbit: too little pitch to scan.
   assert.equal(camOrbit({ pitch: 50, toCentre: true, info: { camDeg: 30 } }).barani.limit, 'barP');
 });
+
+// The object beside the path in the log (rec.side), for setting the
+// Cradle's from the owner's flying: logged only, nothing scores it. A pole
+// 0.2 m square, 6 m tall, at x 5 (sim-core m), its near face 0.9 m to one
+// side of the line y 0 the quad flies along x at 5 m/s from x -10; past it, the nose
+// pitches up 57 degrees while the quad drifts 2 m across and stops, then it
+// flies back along x against the nose (the pole's other side), and hovers
+// past the record's refresh. side: +1, the pole on the quad's left (+y).
+function sideFlight(side, withObs) {
+  const ws = 3.5, c = side * 1.0;
+  const pole = { min: { x: -(c + 0.1) * ws, y: 0, z: -5.1 * ws }, max: { x: -(c - 0.1) * ws, y: 6 * ws, z: -4.9 * ws }, _tag: 'map' };
+  const d = makeDetector();
+  const recs = [], evs = [];
+  let t = 0;
+  const obs = withObs ? createTrickObserver(d, { now: () => t, onAttempt: (r) => recs.push(r) }) : null;
+  const dt = 0.004;
+  const p = { x: -10, y: 0, z: 3 };
+  let q = { x: 0, y: 0, z: 0, w: 1 };
+  const phases = [
+    { t: 3.4, v: [5, 0, 0] },
+    { t: 0.5, rate: [0, -2, 0], v: [1, side * 4, 0] },
+    { t: 1.3, v: [-5, 0, 0] },
+    { t: 3.0 },
+  ];
+  const s = { armed: true, colliders: [pole], ws, throttle: 0.5, clearance: 3 };
+  const fill = (w, v) => {
+    s.qx = q.x; s.qy = q.y; s.qz = q.z; s.qw = q.w;
+    s.ox = w[0]; s.oy = w[1]; s.oz = w[2];
+    s.wx = -p.y * ws; s.wy = p.z * ws; s.wz = -p.x * ws; s.alt = p.z;
+    s.vx = v[0]; s.vy = v[1]; s.vz = v[2]; s.speed = Math.hypot(v[0], v[1], v[2]);
+  };
+  fill([0, 0, 0], [5, 0, 0]);
+  resetDetector(d, s);
+  d.lockout = 0;
+  for (const ph of phases) {
+    const w = ph.rate || [0, 0, 0], v = ph.v || [0, 0, 0];
+    for (let i = 0, n = Math.round(ph.t / dt); i < n; i++) {
+      const m = Math.hypot(...w);
+      if (m) q = qMul(q, qAxis(w[0] / m, w[1] / m, w[2] / m, m * dt));
+      p.x += v[0] * dt; p.y += v[1] * dt; p.z += v[2] * dt;
+      fill(w, v);
+      t += dt;
+      if (obs) obs.before(s, dt);
+      const ev = stepDetector(d, s, dt);
+      if (obs) obs.after(s, dt, ev);
+      if (ev) evs.push(ev);
+    }
+  }
+  return { recs, evs, why: d.lastWhy, id: d.lastId };
+}
+
+test('observer: the object beside the path (rec.side), its side on each pass, logged only', () => {
+  const near = (got, want, tol, what) => assert.ok(Math.abs(got - want) <= tol, what + ': ' + got + ', want ' + want);
+  for (const side of [1, -1]) {
+    const { recs } = sideFlight(side, true);
+    const m = recs.filter((r) => r.type === 'maneuver');
+    assert.equal(m.length, 1, 'one maneuver');
+    const sd = m[0].side;
+    // Refreshed SIDE.postS past the segment's end, from SIDE.preS before it.
+    assert.equal(sd.post, true);
+    near(sd.to - sd.dur, SIDE.postS, 0.01, 'refreshed after the end');
+    near(sd.from, -SIDE.preS, 0.01, 'from preS before the start');
+    assert.equal(sd.cut, false);
+    assert.equal(sd.boxN, 1);
+    assert.deepEqual(sd.boxes.map((b) => b.i), [0]);
+    assert.deepEqual(sd.boxes[0].box, [4.9, c3(side * 1.0 - 0.1), 0, 5.1, c3(side * 1.0 + 0.1), 6]);
+    // Forward past it on one side (before the segment opens), back past it
+    // against the nose on the other, the nose up.
+    assert.equal(sd.passes.length, 2, JSON.stringify(sd.passes));
+    const [a, b] = sd.passes;
+    assert.equal(a.way, 'fwd'); assert.equal(b.way, 'back');
+    near(a.lat, side * 0.9, 0.02, 'first pass lat'); near(b.lat, -side * 0.9, 0.02, 'second pass lat'); near(b.dH, 0.9, 0.02, 'second pass distance');
+    near(a.dH, 0.9, 0.02, 'first pass distance');
+    assert.ok(a.t < 0 && a.live === 0, 'the first pass before the segment: ' + a.t);
+    near(a.noseEl, 0, 1, 'level going out');
+    near(b.noseEl, 57, 2, 'nose up coming back');
+    assert.ok(b.vAlong < -4.9 && b.noseDot < -0.5, 'backwards, against the nose: ' + b.vAlong + ' ' + b.noseDot);
+    assert.equal(Math.sign(a.lat), -Math.sign(b.lat), 'the other side');
+    // The rows: t from -preS, the pole's side flips between the passes.
+    assert.equal(sd.rows.length, SIDE.rows);
+    assert.equal(sd.cols.length, sd.rows[0].length);
+    const I = Object.fromEntries(sd.cols.map((k, i) => [k, i]));
+    near(sd.rows[0][I.t], -SIDE.preS, 0.01, 'first row');
+    assert.ok(sd.rows.some((r) => Math.sign(r[I.lat]) === side) && sd.rows.some((r) => Math.sign(r[I.lat]) === -side));
+  }
+  // Nothing scores it: the same flight with and without the observer.
+  const a = sideFlight(1, true), b = sideFlight(1, false);
+  assert.deepEqual(a.evs, b.evs);
+  assert.equal(a.why, b.why);
+  assert.equal(a.id, b.id);
+  // The overlay reads only the sample and the record (no detector state).
+  const dSrc = readFileSync(join(root, 'sim-tricks-debug.js'), 'utf8');
+  const sideSrc = dSrc.slice(dSrc.indexOf('function sidePush('), dSrc.indexOf('function emitAbort('));
+  assert.ok(sideSrc.length > 1000);
+  assert.equal(/\bdet\b/.test(sideSrc), false, 'the side probe never reads the detector');
+});
+
+function c3(x) { return Math.round(x * 1000) / 1000; }
