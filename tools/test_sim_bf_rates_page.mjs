@@ -217,7 +217,6 @@ test('Tune\'s Rates on the bf core: presets, sliders, a paste, class changes, re
   const CRUISE = held(bfRatesPreset('cruise'));
   const { server, port } = await serveRoot();
   const profile = mkdtempSync(join(tmpdir(), 'qm-bfrates-'));
-  const debugPort = 9700 + (process.pid % 250);
   // ?map= closes the start menu, so the sim (and its OSD) runs.
   const base = `http://127.0.0.1:${port}/sim.html?quality=low&map=rig`;
   const child = spawnBrowser(resolveChrome(), [
@@ -225,15 +224,23 @@ test('Tune\'s Rates on the bf core: presets, sliders, a paste, class changes, re
     '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
     '--mute-audio', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update',
     '--disable-background-networking', '--disable-sync', '--window-size=640,360',
-    `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profile}`, 'about:blank',
+    '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank',
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   let stderr = '';
   child.stderr.on('data', (d) => { stderr += d.toString(); });
   let ws = null;
   try {
+    // Chrome picks its DevTools port (port 0) and writes it in the profile:
+    // no port this test could share with anything else on the machine.
+    let debugPort = 0;
+    for (let i = 0; i < 300 && !debugPort; i++) {
+      await sleep(100);
+      try { debugPort = +readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]; } catch (e) { /* not yet */ }
+    }
+    assert.ok(debugPort, 'no DevTools port\n' + stderr.slice(-400));
     let page = null;
-    for (let i = 0; i < 100 && !page; i++) {
-      await sleep(200);
+    for (let i = 0; i < 300 && !page; i++) {
+      await sleep(100);
       try {
         const pages = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json();
         page = pages.find((p) => p.type === 'page' && p.webSocketDebuggerUrl);
@@ -246,29 +253,43 @@ test('Tune\'s Rates on the bf core: presets, sliders, a paste, class changes, re
     await cdp(ws, 'Page.enable');
     await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: TOASTS });
     await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: PADS });
-    // sim-core's own complaints: a readback that is not what Tune set, a load
-    // that failed.
+    // sim-core's own complaints (a readback that is not what Tune set, a load
+    // that failed), and for a failure's message what sim-core said and what threw.
     const coreErrors = [];
+    const said = [];
     ws.addEventListener('message', (msg) => {
       try {
         const o = JSON.parse(typeof msg.data === 'string' ? msg.data : msg.data.toString());
-        if (o.method !== 'Runtime.consoleAPICalled' || !['error', 'warning'].includes(o.params.type)) return;
+        if (o.method === 'Runtime.exceptionThrown') {
+          const ex = o.params.exceptionDetails || {};
+          said.push('THREW ' + ((ex.exception && (ex.exception.description || ex.exception.value)) || ex.text));
+        }
+        if (o.method !== 'Runtime.consoleAPICalled') return;
         const text = (o.params.args || []).map((a) => a.value).join(' ');
-        if (/sim-core/.test(text)) coreErrors.push(text);
+        if (/sim-core/.test(text)) said.push(o.params.type + ' ' + text);
+        if (['error', 'warning'].includes(o.params.type) && /sim-core/.test(text)) coreErrors.push(text);
       } catch (e) { /* ignore */ }
     });
+    const pageState = `JSON.stringify({ sim: !!window._sim, booted: !!window._simQueryBooted, core: window._sim && window._sim.core ? window._sim.core() : null,
+      back: !!(window._sim && window._sim.bfRates && window._sim.bfRates().back), report: !!(window._sim && window._sim.bfReport && window._sim.bfReport()) })`;
     // Load url and wait for the given core to fly with Tune's rates read back.
     const open = async (url, core = 'bf') => {
       await cdp(ws, 'Page.navigate', { url });
       let ok = false;
-      for (let i = 0; i < 240 && !ok; i++) {
+      // Up to 2 minutes: a CI runner on SwiftShader loads the page and the wasm slowly.
+      const t0 = Date.now();
+      while (!ok && Date.now() - t0 < 120000) {
         await sleep(250);
         try {
           ok = await evaluate(ws, `!!(window._sim && typeof window._sim.bfRates === 'function' && window._simQueryBooted && window._sim.core() === '${core}'`
             + (core === 'bf' ? ` && !!window._sim.bfRates().back)` : ')'));
         } catch (e) { /* navigating */ }
       }
-      assert.ok(ok, url + ': the ' + core + ' core flies');
+      if (!ok) {
+        let st = null;
+        try { st = await evaluate(ws, pageState); } catch (e) { st = String(e); }
+        assert.fail(url + ': the ' + core + ' core flies; page ' + st + '; sim-core: ' + JSON.stringify(said.slice(-12)));
+      }
       await evaluate(ws, PAGE);
     };
     const run = async (js) => JSON.parse(await evaluate(ws, `(async () => { const B = window.__bf; ${js} })()`));

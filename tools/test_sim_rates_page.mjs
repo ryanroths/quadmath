@@ -182,22 +182,28 @@ test('rates are the pilot\'s: 65, 75, 85 and back keep the same rates on the bf 
 
   const { server, port } = await serveRoot();
   const profile = mkdtempSync(join(tmpdir(), 'qm-rates-'));
-  const debugPort = 9400 + (process.pid % 300);
   const base = `http://127.0.0.1:${port}/sim.html?quality=low`;
   const child = spawnBrowser(resolveChrome(), [
     '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
     '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
     '--mute-audio', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update',
     '--disable-background-networking', '--disable-sync', '--window-size=640,360',
-    `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profile}`, base,
+    '--remote-debugging-port=0', `--user-data-dir=${profile}`, base,
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   let stderr = '';
   child.stderr.on('data', (d) => { stderr += d.toString(); });
   let ws = null;
   try {
+    // Chrome picks its DevTools port (port 0) and writes it in the profile.
+    let debugPort = 0;
+    for (let i = 0; i < 300 && !debugPort; i++) {
+      await sleep(100);
+      try { debugPort = +readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]; } catch (e) { /* not yet */ }
+    }
+    assert.ok(debugPort, 'no DevTools port\n' + stderr.slice(-400));
     let page = null;
-    for (let i = 0; i < 100 && !page; i++) {
-      await sleep(200);
+    for (let i = 0; i < 300 && !page; i++) {
+      await sleep(100);
       try {
         const pages = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json();
         page = pages.find((p) => p.type === 'page' && p.webSocketDebuggerUrl && String(p.url).includes('/sim.html'));
@@ -206,17 +212,37 @@ test('rates are the pilot\'s: 65, 75, 85 and back keep the same rates on the bf 
     assert.ok(page, 'no CDP page\n' + stderr.slice(-400));
     ws = new WebSocket(page.webSocketDebuggerUrl);
     await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
+    // For a failure's message: what sim-core said and what threw.
+    const said = [];
+    ws.addEventListener('message', (msg) => {
+      try {
+        const o = JSON.parse(typeof msg.data === 'string' ? msg.data : msg.data.toString());
+        if (o.method === 'Runtime.exceptionThrown') {
+          const ex = o.params.exceptionDetails || {};
+          said.push('THREW ' + ((ex.exception && (ex.exception.description || ex.exception.value)) || ex.text));
+        }
+        if (o.method !== 'Runtime.consoleAPICalled') return;
+        const text = (o.params.args || []).map((a) => a.value).join(' ');
+        if (/sim-core/.test(text)) said.push(o.params.type + ' ' + text);
+      } catch (e) { /* ignore */ }
+    });
     await cdp(ws, 'Runtime.enable');
     await cdp(ws, 'Page.enable');
     const ready = async (core) => {
       let ok = false;
-      for (let i = 0; i < 200 && !ok; i++) {
+      // Up to 2 minutes: a CI runner on SwiftShader loads the page and the wasm slowly.
+      const t0 = Date.now();
+      while (!ok && Date.now() - t0 < 120000) {
         await sleep(250);
         try {
           ok = await evaluate(ws, `!!(window._sim && typeof window._sim.rates === 'function' && window._simQueryBooted && window._sim.core() === '${core}')`);
         } catch (e) { /* navigating */ }
       }
-      assert.ok(ok, 'the ' + core + ' core flies');
+      if (!ok) {
+        let st = null;
+        try { st = await evaluate(ws, `JSON.stringify({ sim: !!window._sim, booted: !!window._simQueryBooted, core: window._sim && window._sim.core ? window._sim.core() : null })`); } catch (e) { st = String(e); }
+        assert.fail('the ' + core + ' core flies; page ' + st + '; sim-core: ' + JSON.stringify(said.slice(-12)));
+      }
       await evaluate(ws, PAGE);
     };
     const run = async (js) => JSON.parse(await evaluate(ws, `(async () => { const R = window.__rates; ${js} })()`));
