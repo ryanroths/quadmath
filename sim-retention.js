@@ -60,6 +60,87 @@ export const LINE_TIME_TOL_MS = 150;
 // other way round.
 export const RATE_SCORE_MAX = 30;
 export const RATE_SHARE_MAX = 12;
+
+// ---- Anonymous daily flight counts (sim.html countNote, the Worker's POST
+// /api/count): how far visitors get, as daily totals and nothing else. A page
+// load sends each event at most once (flags in memory only: nothing stored on
+// the device), and a ping carries only the event, the class, the core and the
+// input. The Worker keeps the UTC day's total per event, class, core and
+// input; no address, no agent, no time finer than the day.
+//   ready   loaded and flyable (the class's core flying: Betaflight once it
+//           has taken over, the js core for the 85 or ?core=js)
+//   arm     the first arm
+//   flew30  30 s of sim time armed and in the air (COUNT_FLEW_MS)
+//   pack2   a fresh pack after an arm (a second pack started)
+//   lap     the first timed lap finished (a loop's lap, a line's finish)
+//   name    a board took a run under the pilot's name (claiming it)
+export const COUNT_EVENTS = Object.freeze(['ready', 'arm', 'flew30', 'pack2', 'lap', 'name']);
+export const COUNT_CLASSES = Object.freeze([65, 75, 85]);
+export const COUNT_CORES = Object.freeze(['bf', 'js']);
+export const COUNT_INPUTS = Object.freeze(['radio', 'gamepad', 'keyboard', 'touch']);
+export const COUNT_FLEW_MS = 30000;
+// A ping is about 60 bytes; anything past this is not one.
+export const COUNT_BODY_MAX = 256;
+// Pings per client per UTC hour (the Worker's checkRate, its own 'count'
+// bucket): five full funnels, and never the boards' or SHARE's budget.
+export const RATE_COUNT_MAX = 30;
+const COUNT_KEYS = Object.freeze(['event', 'class', 'core', 'input']);
+
+// A ping as the Worker takes it: exactly { event, class, core, input }, each
+// one of its allowed values (class a number); anything else is refused.
+export function normalizeCountPing(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return { ok: false, reason: 'BAD PING' };
+  const keys = Object.keys(body);
+  if (keys.length !== COUNT_KEYS.length || !COUNT_KEYS.every((k) => keys.includes(k))) return { ok: false, reason: 'BAD PING' };
+  if (typeof body.event !== 'string' || !COUNT_EVENTS.includes(body.event)) return { ok: false, reason: 'BAD EVENT' };
+  if (!Number.isInteger(body.class) || !COUNT_CLASSES.includes(body.class)) return { ok: false, reason: 'BAD CLASS' };
+  if (typeof body.core !== 'string' || !COUNT_CORES.includes(body.core)) return { ok: false, reason: 'BAD CORE' };
+  if (typeof body.input !== 'string' || !COUNT_INPUTS.includes(body.input)) return { ok: false, reason: 'BAD INPUT' };
+  return { ok: true, event: body.event, class: body.class, core: body.core, input: body.input };
+}
+
+// Why this page load sends no counts, or '' to send: Global Privacy Control
+// on (gpc: navigator.globalPrivacyControl), Do Not Track on (dnt:
+// navigator.doNotTrack or window.doNotTrack), a local page (loc: localhost,
+// *.localhost, 127.x.x.x, 0.0.0.0, ::1, or no host: a file), ?dev=1, or a
+// test's pilot (testPilot: sim.html _sim.setTestPilot has flown in this page).
+// isLocalHost is not enough here: it reads ::1 as its first : field.
+export function countPingsOff({ gpc, dnt, loc, testPilot } = {}) {
+  if (gpc === true) return 'gpc';
+  if (dnt === '1' || dnt === 1 || dnt === 'yes' || dnt === true) return 'dnt';
+  const host = String((loc && loc.hostname) || '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (!host || host === 'localhost' || host.endsWith('.localhost') || /^127\./.test(host) || host === '0.0.0.0' || host === '::1') return 'local';
+  try {
+    if (new URLSearchParams(String((loc && loc.search) || '')).get('dev') === '1') return 'dev';
+  } catch (e) { return 'local'; }
+  if (testPilot) return 'test';
+  return '';
+}
+
+// A page load's pings: note(event, ctx) sends the event once (send(body)),
+// unless off() gives a reason not to; ctx is { class, core, input }, or a
+// function giving it, read only once the event is due. Every event but
+// ready waits for ready, and pack2 for an arm, so a day's funnel only
+// narrows. true when this call sent it.
+export function createCountPings({ send, off } = {}) {
+  const sent = new Set();
+  return {
+    has: (event) => sent.has(event),
+    sent: () => [...sent],
+    note(event, ctx) {
+      if (sent.has(event) || !COUNT_EVENTS.includes(event)) return false;
+      if (event !== 'ready' && !sent.has('ready')) return false;
+      if (event === 'pack2' && !sent.has('arm')) return false;
+      if (off && off()) return false;
+      const c = (typeof ctx === 'function' ? ctx() : ctx) || {};
+      const ping = normalizeCountPing({ event, class: c.class, core: c.core, input: c.input });
+      if (!ping.ok) return false;
+      sent.add(event);
+      try { if (send) send({ event: ping.event, class: ping.class, core: ping.core, input: ping.input }); } catch (e) { /* never in the pilot's way */ }
+      return true;
+    },
+  };
+}
 // A line run's sweep: the most a step may miss a gate by and still pass it,
 // and the longest step between samples (the page samples every 67 ms; a
 // hitched frame is longer).

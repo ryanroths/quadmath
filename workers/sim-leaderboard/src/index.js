@@ -33,6 +33,10 @@ import {
   isTestPilotGhost,
   RATE_SCORE_MAX,
   RATE_SHARE_MAX,
+  RATE_COUNT_MAX,
+  COUNT_BODY_MAX,
+  normalizeCountPing,
+  allowedOriginList,
 } from '../../../sim-retention.js';
 import { decodeLineCode, lineIdOf, LINE_CODE_MAX, LINE_ID_RE } from '../../../sim-share.js';
 import { pilotNameProblem, pilotNameKey, pilotDisplayName, nameHasBlockedWord } from '../../../sim-pilot-names.js';
@@ -45,10 +49,11 @@ const CORS_METHODS = {
   Vary: 'Origin',
 };
 
-// Posts per IP per UTC hour (sim-retention.js RATE_SCORE_MAX, RATE_SHARE_MAX:
-// this module exports only the handler, as workerd reads every named export
-// of a Worker's entry module as an entrypoint).
-const RATE_MAX = { score: RATE_SCORE_MAX, share: RATE_SHARE_MAX };
+// Posts per client per UTC hour (sim-retention.js RATE_SCORE_MAX,
+// RATE_SHARE_MAX, RATE_COUNT_MAX: this module exports only the handler, as
+// workerd reads every named export of a Worker's entry module as an
+// entrypoint).
+const RATE_MAX = { score: RATE_SCORE_MAX, share: RATE_SHARE_MAX, count: RATE_COUNT_MAX };
 // A builder track's board keeps this many rows per class, as a built-in's.
 const CUSTOM_BOARD_ROWS = BUILTIN_BOARD_ROWS;
 const JSON_LIMIT = 350_000;
@@ -89,16 +94,35 @@ async function readJson(request) {
   catch (e) { return { error: 'BAD JSON' }; }
 }
 
-// bucket: 'score' or 'share'. The window is the bucket and the UTC hour
-// (rows from before the split, the bare hour, are not read).
+// bucket: 'score', 'share' or 'count'. The window is the bucket and the UTC
+// hour (rows from before the split, the bare hour, are not read).
 // One statement, so posts sent at once can't all read the count before any
 // of them adds to it.
+// The 'count' bucket (POST /api/count, anonymous) never stores the address:
+// its client is countClientKey's keyed hash of the address and the window,
+// a new one every hour, and its rows from earlier hours are deleted when an
+// hour's first ping from a client lands (the rate_limit_window index makes
+// that a range, not a scan).
 async function checkRate(env, ip, now, bucket) {
   const window = bucket + ':' + rateWindowId(now);
+  const who = bucket === 'count' ? await countClientKey(env, ip, window) : ip;
   const row = await env.DB.prepare(
     'INSERT INTO rate_limit (ip, window, n) VALUES (?, ?, 1) ON CONFLICT(ip, window) DO UPDATE SET n = n + 1 RETURNING n',
-  ).bind(ip, window).first();
+  ).bind(who, window).first();
+  if (bucket === 'count' && row && row.n === 1) {
+    await env.DB.prepare("DELETE FROM rate_limit WHERE window >= 'count:' AND window < ?").bind(window).run();
+  }
   return !!row && row.n <= RATE_MAX[bucket];
+}
+
+// HMAC-SHA-256 of the address and the window under the COUNT_KEY secret
+// (wrangler secret put COUNT_KEY), 128 bits of it: not the address, and not
+// one that can be worked back from the table without the secret.
+async function countClientKey(env, ip, window) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(env.COUNT_KEY), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(ip + '|' + window)));
+  return 'hmac:' + [...mac.slice(0, 16)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 // The scores.week column holds boardKeyFor(week): the week (or Daily Line day
@@ -630,6 +654,31 @@ export async function handleLeaderboard(request, env) {
       'INSERT OR IGNORE INTO lines (id, code, created_ms) VALUES (?, ?, ?)',
     ).bind(id, code, Date.now()).run();
     return reply({ ok: true, id });
+  }
+
+  // Anonymous daily flight counts (sim-retention.js COUNT_EVENTS): one ping
+  // adds one to the UTC day's total for its event, class, core and input.
+  // Checked before anything is written; refused from a page another site
+  // serves; rate-limited per client (the 'count' bucket, RATE_COUNT_MAX an
+  // hour) on a keyed hash, so with no COUNT_KEY secret nothing is counted.
+  if (request.method === 'POST' && path === '/api/count') {
+    if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);
+    const len = Number(request.headers.get('Content-Length') || 0);
+    const text = len > COUNT_BODY_MAX ? '' : await request.text();
+    if (len > COUNT_BODY_MAX || text.length > COUNT_BODY_MAX) return reply({ ok: false, reason: 'PAYLOAD TOO LARGE' }, 400);
+    let body = null;
+    try { body = JSON.parse(text); } catch (e) { return reply({ ok: false, reason: 'BAD JSON' }, 400); }
+    const ping = normalizeCountPing(body);
+    if (!ping.ok) return reply({ ok: false, reason: ping.reason }, 400);
+    const origin = request.headers.get('Origin');
+    const allowed = allowedOriginList((env && env.ALLOWED_ORIGIN) || DEFAULT_ALLOWED_ORIGIN);
+    if (origin && !allowed.includes('*') && !allowed.includes(origin)) return reply({ ok: false, reason: 'ORIGIN' }, 403);
+    if (!env.COUNT_KEY) return reply({ ok: false, reason: 'NOT CONFIGURED' }, 503);
+    if (!(await checkRate(env, clientIp(request), Date.now(), 'count'))) return reply({ ok: false, reason: 'RATE LIMIT' }, 429);
+    await env.DB.prepare(
+      'INSERT INTO counts (day, event, class, core, input, n) VALUES (?, ?, ?, ?, ?, 1) ON CONFLICT(day, event, class, core, input) DO UPDATE SET n = n + 1',
+    ).bind(utcDateId(), ping.event, ping.class, ping.core, ping.input).run();
+    return new Response(null, { status: 204, headers: corsHeaders(env, request) });
   }
 
   if (request.method === 'GET' && path === '/api/line') {

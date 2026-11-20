@@ -17,6 +17,21 @@ CREATE TABLE IF NOT EXISTS rate_limit (
   n INTEGER NOT NULL,
   PRIMARY KEY (ip, window)
 );
+-- The 'count' bucket prunes its earlier hours by window (migrate-counts.sql).
+CREATE INDEX IF NOT EXISTS rate_limit_window ON rate_limit (window);
+
+-- Anonymous daily flight counts (migrate-counts.sql, POST /api/count): the
+-- UTC day's total per event, class, core and input. No address, no agent,
+-- no time finer than the day.
+CREATE TABLE IF NOT EXISTS counts (
+  day TEXT NOT NULL,
+  event TEXT NOT NULL,
+  class INTEGER NOT NULL,
+  core TEXT NOT NULL,
+  input TEXT NOT NULL,
+  n INTEGER NOT NULL,
+  PRIMARY KEY (day, event, class, core, input)
+);
 
 -- "Fly my line" (sim-share.js): line codes behind short links, by content id.
 CREATE TABLE IF NOT EXISTS lines (

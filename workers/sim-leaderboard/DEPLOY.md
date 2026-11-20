@@ -538,6 +538,100 @@ npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT key,
 
 Removing a row: `DELETE FROM custom_scores WHERE key='c.…' AND class=65 AND name='SomeName'`.
 
+## Anonymous flight counts (`/api/count`)
+
+How far visitors get, as daily totals. The sim sends one small ping per event,
+each at most once per page load (`sim-retention.js` `COUNT_EVENTS`):
+
+| event | when |
+|---|---|
+| `ready` | the sim has loaded and the class's core flies (Betaflight once it has taken over) |
+| `arm` | the first arm |
+| `flew30` | 30 s of sim time armed and in the air |
+| `pack2` | a fresh pack after an arm (a second pack started) |
+| `lap` | the first timed lap finished (a loop's lap, a line's finish) |
+| `name` | a board took a run under the pilot's name, which claims it |
+
+A ping carries only the event, the class (65/75/85), the core (bf/js) and the
+input (radio/gamepad/keyboard/touch). Nothing is stored on the device: no
+cookie, no localStorage, no id; the flags live in the page's memory. No pings
+at all with Global Privacy Control or Do Not Track on, on localhost, under
+`?dev=1`, or once a test's pilot has flown (`_sim.setTestPilot`).
+
+`POST /api/count` checks the ping against the allowed values (anything else
+is a 400 and writes nothing), refuses a page served by another origin (403),
+and adds one to `counts` for the UTC day, event, class, core and input. The
+table has no address, no user agent and no time finer than the day.
+
+Rate limit: 30 pings per client per UTC hour (`RATE_COUNT_MAX`: five full
+funnels), in `rate_limit`'s own `count` bucket, so it never uses up the
+boards' 30 or SHARE's 12. The bucket never stores the address: its key is an
+HMAC-SHA-256 of the address and the hour under the `COUNT_KEY` secret, a new
+one every hour, and its rows from earlier hours are deleted as each hour's
+first ping from a client lands. Without `COUNT_KEY` the route answers 503
+(`NOT CONFIGURED`) and counts nothing.
+
+Deploy order (the page copes with either: until the Worker answers, a ping
+fails quietly):
+
+1. Merge the PR (Pages ships the page).
+2. From the main checkout, add the table and the index, set the secret once,
+   then deploy through the guard:
+
+   ```bash
+   git pull --ff-only
+   cd workers/sim-leaderboard
+   npx wrangler d1 execute quadmath-sim-leaderboard --remote --file=./src/migrate-counts.sql
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   npx wrangler secret put COUNT_KEY
+   npm run predeploy
+   npm run deploy
+   ```
+
+   Paste the printed value when `wrangler secret put` asks for it (it is
+   never needed again; a new one only restarts the hour's limit). The
+   migration is idempotent (`IF NOT EXISTS`), safe to run twice, and changes
+   no rows: it adds `counts` and an index on `rate_limit (window)`.
+   `npm run predeploy` prints PHYS_VER 7: no board changes.
+
+3. Check: a ping is taken, a bad one refused:
+
+   ```bash
+   curl -sS -o /dev/null -w '%{http_code}\n' -X POST -H 'Origin: https://quadmath.com' --data '{"event":"ready","class":65,"core":"bf","input":"keyboard"}' https://sim-leaderboard.ryan-roths.workers.dev/api/count
+   curl -sS -X POST -H 'Origin: https://quadmath.com' --data '{"event":"hello","class":65,"core":"bf","input":"keyboard"}' https://sim-leaderboard.ryan-roths.workers.dev/api/count
+   ```
+
+   The first prints `204`, the second `{"ok":false,"reason":"BAD EVENT"}`
+   (400). The check's own ping is one `ready` in today's counts.
+
+The last 14 days as a funnel per day:
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT day, SUM(CASE WHEN event = 'ready' THEN n ELSE 0 END) AS ready, SUM(CASE WHEN event = 'arm' THEN n ELSE 0 END) AS arm, SUM(CASE WHEN event = 'flew30' THEN n ELSE 0 END) AS flew30, SUM(CASE WHEN event = 'pack2' THEN n ELSE 0 END) AS pack2, SUM(CASE WHEN event = 'lap' THEN n ELSE 0 END) AS lap, SUM(CASE WHEN event = 'name' THEN n ELSE 0 END) AS name FROM counts WHERE day >= date('now', '-13 days') GROUP BY day ORDER BY day DESC"
+```
+
+The same, split by input:
+
+```bash
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT day, input, SUM(CASE WHEN event = 'ready' THEN n ELSE 0 END) AS ready, SUM(CASE WHEN event = 'arm' THEN n ELSE 0 END) AS arm, SUM(CASE WHEN event = 'flew30' THEN n ELSE 0 END) AS flew30, SUM(CASE WHEN event = 'pack2' THEN n ELSE 0 END) AS pack2, SUM(CASE WHEN event = 'lap' THEN n ELSE 0 END) AS lap, SUM(CASE WHEN event = 'name' THEN n ELSE 0 END) AS name FROM counts WHERE day >= date('now', '-13 days') GROUP BY day, input ORDER BY day DESC, ready DESC"
+```
+
+Days are UTC (`date('now')` in D1 is UTC). For class or core, put `class` or
+`core` where `input` is.
+
+Cost: a page load sends at most six pings, so six requests. Rows written, as
+D1 counts them (an index entry is a row; measured on a local D1): the
+client's first ping in an hour 3 for its rate row, 1 for its counts row, and
+about 1 more for deleting an earlier hour's row; each further ping 2 (its rate
+row and its counts row). That is 2k + 3 for k pings: 5 for a visit that only
+loads, 15 for one that does all six. Per 1,000 visitors a day: 1,000 to 6,000
+requests (Workers Free: 100,000 a day) and 5,000 to 15,000 rows written (D1
+Free: 100,000 a day, shared with the boards; at the limit D1 refuses every
+query, the boards' too, until 00:00 UTC). Reads are a few rows a ping (the
+prune is a range on `rate_limit_window`), under 25,000 per 1,000 visitors
+against 5,000,000. `counts` grows by at most 144 rows a day (6 events x 3
+classes x 2 cores x 4 inputs).
+
 ## Local
 
 The client takes `https://` leaderboard URLs only, so run the Worker over
