@@ -33,6 +33,10 @@ import {
   isTestPilotGhost,
   RATE_SCORE_MAX,
   RATE_SHARE_MAX,
+  RATE_COUNT_MAX,
+  COUNT_BODY_MAX,
+  normalizeCountPing,
+  allowedOriginList,
 } from '../../../sim-retention.js';
 import { decodeLineCode, lineIdOf, LINE_CODE_MAX, LINE_ID_RE } from '../../../sim-share.js';
 import { pilotNameProblem, pilotNameKey, pilotDisplayName, nameHasBlockedWord } from '../../../sim-pilot-names.js';
@@ -45,9 +49,9 @@ const CORS_METHODS = {
   Vary: 'Origin',
 };
 
-// Posts per IP per UTC hour (sim-retention.js RATE_SCORE_MAX, RATE_SHARE_MAX:
-// this module exports only the handler, as workerd reads every named export
-// of a Worker's entry module as an entrypoint).
+// Posts per client per UTC hour (sim-retention.js RATE_SCORE_MAX,
+// RATE_SHARE_MAX: this module exports only the handler, as workerd reads
+// every named export of a Worker's entry module as an entrypoint).
 const RATE_MAX = { score: RATE_SCORE_MAX, share: RATE_SHARE_MAX };
 // A builder track's board keeps this many rows per class, as a built-in's.
 const CUSTOM_BOARD_ROWS = BUILTIN_BOARD_ROWS;
@@ -92,13 +96,65 @@ async function readJson(request) {
 // bucket: 'score' or 'share'. The window is the bucket and the UTC hour
 // (rows from before the split, the bare hour, are not read).
 // One statement, so posts sent at once can't all read the count before any
-// of them adds to it.
+// of them adds to it. The client is rateClientKey's hash, never the address
+// (the rate_limit column is still named ip); a client's first post of an
+// hour prunes the rows of earlier hours (pruneRates).
 async function checkRate(env, ip, now, bucket) {
-  const window = bucket + ':' + rateWindowId(now);
+  const hour = rateWindowId(now);
+  const window = bucket + ':' + hour;
   const row = await env.DB.prepare(
     'INSERT INTO rate_limit (ip, window, n) VALUES (?, ?, 1) ON CONFLICT(ip, window) DO UPDATE SET n = n + 1 RETURNING n',
-  ).bind(ip, window).first();
+  ).bind(await rateClientKey(env, ip, window), window).first();
+  if (row && row.n === 1) await pruneRates(env, hour);
   return !!row && row.n <= RATE_MAX[bucket];
+}
+
+// A client in rate_limit: HMAC-SHA-256 of its address and the window under
+// the RATE_KEY secret (wrangler secret put RATE_KEY), 128 bits of it, a new
+// one every hour. Without the secret, a plain SHA-256 of the same: still not
+// the address, but one a list of addresses could be tried against, so the
+// secret is set before a deploy (DEPLOY.md).
+const hex16 = (buf) => [...new Uint8Array(buf).slice(0, 16)].map((b) => b.toString(16).padStart(2, '0')).join('');
+async function rateClientKey(env, ip, window) {
+  const enc = new TextEncoder();
+  const data = enc.encode(ip + '|' + window);
+  if (env && env.RATE_KEY) {
+    const key = await crypto.subtle.importKey('raw', enc.encode(env.RATE_KEY), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return 'hmac:' + hex16(await crypto.subtle.sign('HMAC', key, data));
+  }
+  return 'sha:' + hex16(await crypto.subtle.digest('SHA-256', data));
+}
+
+// The rows of earlier hours (any bucket, and the bare-hour rows from before
+// the buckets), deleted at most RATE_PRUNE_MAX at a time: a backlog from
+// before this (raw addresses, kept indefinitely) drains a little with each
+// new client-hour rather than in one statement's writes. Housekeeping only:
+// a prune that fails is left for the next one, never the post's failure.
+const RATE_PRUNE_MAX = 200;
+async function pruneRates(env, hour) {
+  try {
+    await env.DB.prepare(
+      'DELETE FROM rate_limit WHERE rowid IN (SELECT rowid FROM rate_limit WHERE substr(window, -13) < ? LIMIT ?)',
+    ).bind(hour, RATE_PRUNE_MAX).run();
+  } catch (e) { /* the next client-hour prunes */ }
+}
+
+// The anonymous counts' rate limit (POST /api/count): in this isolate's memory
+// only, never D1. A client's pings this UTC hour, RATE_COUNT_MAX of them; a
+// new hour, or more clients than COUNT_CLIENTS_MAX, starts over. Nothing in it
+// is written anywhere or outlives the isolate, and it is per isolate: a client
+// spread over several gets the limit in each.
+const COUNT_CLIENTS_MAX = 50000;
+const countSeen = { window: '', clients: new Map() };
+function countAllowed(ip, now) {
+  const window = rateWindowId(now);
+  if (countSeen.window !== window || countSeen.clients.size >= COUNT_CLIENTS_MAX) {
+    countSeen.window = window;
+    countSeen.clients = new Map();
+  }
+  const n = (countSeen.clients.get(ip) || 0) + 1;
+  countSeen.clients.set(ip, n);
+  return n <= RATE_COUNT_MAX;
 }
 
 // The scores.week column holds boardKeyFor(week): the week (or Daily Line day
@@ -630,6 +686,33 @@ export async function handleLeaderboard(request, env) {
       'INSERT OR IGNORE INTO lines (id, code, created_ms) VALUES (?, ?, ?)',
     ).bind(id, code, Date.now()).run();
     return reply({ ok: true, id });
+  }
+
+  // Anonymous daily flight counts (sim-retention.js COUNT_EVENTS): one ping
+  // adds one to the UTC day's total for its event, class, core and input, in
+  // one D1 write (counts is WITHOUT ROWID: no index row beside it). Checked
+  // before anything; refused from a page another site serves; rate-limited
+  // in memory (countAllowed). A write that fails is dropped: the ping still
+  // gets its 204, and nothing about it reaches the boards.
+  if (request.method === 'POST' && path === '/api/count') {
+    if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);
+    const len = Number(request.headers.get('Content-Length') || 0);
+    const text = len > COUNT_BODY_MAX ? '' : await request.text();
+    if (len > COUNT_BODY_MAX || text.length > COUNT_BODY_MAX) return reply({ ok: false, reason: 'PAYLOAD TOO LARGE' }, 400);
+    let body = null;
+    try { body = JSON.parse(text); } catch (e) { return reply({ ok: false, reason: 'BAD JSON' }, 400); }
+    const ping = normalizeCountPing(body);
+    if (!ping.ok) return reply({ ok: false, reason: ping.reason }, 400);
+    const origin = request.headers.get('Origin');
+    const allowed = allowedOriginList((env && env.ALLOWED_ORIGIN) || DEFAULT_ALLOWED_ORIGIN);
+    if (origin && !allowed.includes('*') && !allowed.includes(origin)) return reply({ ok: false, reason: 'ORIGIN' }, 403);
+    if (!countAllowed(clientIp(request), Date.now())) return reply({ ok: false, reason: 'RATE LIMIT' }, 429);
+    try {
+      await env.DB.prepare(
+        'INSERT INTO counts (day, event, class, core, input, n) VALUES (?, ?, ?, ?, ?, 1) ON CONFLICT(day, event, class, core, input) DO UPDATE SET n = n + 1',
+      ).bind(utcDateId(), ping.event, ping.class, ping.core, ping.input).run();
+    } catch (e) { /* dropped: a count never fails a request, or reaches the boards */ }
+    return new Response(null, { status: 204, headers: corsHeaders(env, request) });
   }
 
   if (request.method === 'GET' && path === '/api/line') {

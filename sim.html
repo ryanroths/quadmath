@@ -1238,13 +1238,14 @@ import {
   defaultWhoopKit, ghostFromObj, shareTrackPayload, fromShareTrackPayload,
   customBoardKey, customTrackCode, normalizeTrackSubmit, isCustomBoardTrackId, customTrackProblem,
   CUSTOM_TRACK_MIN_GATES, CUSTOM_TRACK_CODE_MAX, builtinFloorMs,
-} from "./sim-retention.js?v=e1c175aad068";
+  createCountPings, countPingsOff, COUNT_FLEW_MS,
+} from "./sim-retention.js?v=4ca26c28d4aa";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=e266883e789f";
+} from "./sim-secrets.js?v=d445e670707a";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
   fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=3f4158ced8a5";
 window._simBooted=true; // tells the watchdog above the module actually executed
@@ -1273,6 +1274,53 @@ if(CORE_KIND==='js')console.warn('sim-core: ?core=js is deprecated, removed next
 // its tutorial, Skins, Paint whoop, the quality presets, and the Chase and
 // Orbit replay cameras. Without it quality runs on Auto and replays are FPV.
 const DEV_UI=new URLSearchParams(location.search).get('dev')==='1';
+// ---------- Anonymous flight counts (sim-retention.js COUNT_EVENTS) ----------
+// How far visitors get, as the leaderboard Worker's daily totals (POST
+// /api/count): ready, arm, flew30, pack2, lap and name, each at most once a
+// page load. The flags live in this object, in memory, for this page load
+// only: no cookie, no storage, no id. A ping carries the event, the class,
+// the core and the input, nothing else. None at all with Global Privacy
+// Control or Do Not Track on, on a local page, under ?dev=1, or once a test's
+// pilot has flown here (countPingsOff). Sent as a beacon (a keepalive fetch
+// where there is none); a ping that fails is dropped, never retried, never said.
+// The signals that hold for the whole load, read once; a test's pilot can
+// start later (testPilotUsed).
+const countOffAtLoad=countPingsOff({gpc:navigator.globalPrivacyControl,dnt:navigator.doNotTrack||window.doNotTrack,loc:location});
+const countPings=createCountPings({
+  off:()=>countOffAtLoad||(testPilotUsed?'test':''),
+  send:(body)=>{
+    const url=leaderboardUrl();
+    if(!onlineBoardsEnabled(url))return;
+    const data=JSON.stringify(body);
+    let queued=false;
+    try{queued=!!(navigator.sendBeacon&&navigator.sendBeacon(url+'/api/count',data));}catch(e){}
+    if(!queued){
+      try{fetch(url+'/api/count',{method:'POST',body:data,keepalive:true,credentials:'omit',mode:'no-cors'}).catch(()=>{});}catch(e){}
+    }
+  },
+});
+// What a ping says of the pilot: the class flown, the core flying it, the
+// input (bfInputKind: a radio, another pad, touch or the keyboard).
+function countNote(event){
+  return countPings.note(event,()=>({class:classId(currentBuild&&currentBuild.frameMm),core:core.kind,input:bfInputKind()}));
+}
+// ready: the page booted and the class's core flies (a bf class once
+// Betaflight has taken over or failed to load). Asked each frame until sent.
+function countReadyWatch(){
+  if(countPings.has('ready')||!window._simQueryBooted)return;
+  if(core.kind!=='bf'&&bfWanted()&&!bfOf().failed)return;
+  countNote('ready');
+}
+// arm and flew30, from each step of the core: the first arm, then 30 s of sim
+// time armed and in the air (ms: the sim time this step ran).
+let countAirMs=0;
+function countFlight(ms){
+  if(!cs.armed)return;
+  countNote('arm');
+  if(!countPings.has('arm')||!cs.airborne||countPings.has('flew30'))return;
+  countAirMs+=ms;
+  if(countAirMs>=COUNT_FLEW_MS)countNote('flew30');
+}
 // A closed map asked for without ?dev=1 (Freestyle this map, a share or duel
 // code): the Rig instead, with this toast (archivedToRig).
 const ARCHIVE_TOAST='THAT MAP IS IN THE ARCHIVE (?dev=1)';
@@ -2039,6 +2087,7 @@ function startRun(){
 // best, and announce total + the three splits
 function finishRun(){
   runActive=false;
+  countNote('lap');   // a line's finish (a loop's first lap is counted as it ends)
   const id=ensureTrackStats(activeTrackId);
   const line=isLineTrackId(activeTrackId);
   let total;
@@ -2183,6 +2232,7 @@ function updateGates(){
       missesThisLap=0;
       const id=ensureTrackStats(activeTrackId);
       runSplits.push(split);
+      countNote('lap');
       lastLapMs[id]=split;
       if(!bestLapMs[id]||split<bestLapMs[id]){ // per-lap best still tracked
         bestLapMs[id]=split;
@@ -3842,6 +3892,8 @@ function resetSpawnPos(){
   return startPad(t||{gates:[]});
 }
 function placeQuadAt(x,y,z,yaw,opts){
+  // A fresh pack after an arm: a second pack started.
+  if(opts&&opts.freshPack&&countPings.has('arm'))countNote('pack2');
   state.pos.set(x,Math.max(0.15,y),z);state.vel.set(0,0,0);state.q.identity();
   prevGatePos.copy(state.pos);
   qp.reset(toModule(state.pos,{x:0,y:0,z:0}));
@@ -8655,6 +8707,7 @@ async function maybeSubmitTrackBoard(id,total,rec){
   // limit or no answer: those leave the run to be sent again.
   if(j&&(j.key===checked.key||(j.refused&&j.status!==429)))trackBoardSent.add(sentKey);
   if(j&&j.key===checked.key){
+    countNote('name');
     // Any board request still out for this track is older than this answer.
     nextTrackBoardSeq(track.id);
     noteTrackBoard(track,checked.key,trackCodeOf(track),body.frameMm,j.entries);
@@ -8689,7 +8742,7 @@ async function maybeSubmitOnline(id, total, rec){
       body: JSON.stringify(body),
     });
     const j=await r.json();
-    if(j&&j.ok)toast(j.improved?'ONLINE BEST':'ONLINE RECORDED');
+    if(j&&j.ok){countNote('name');toast(j.improved?'ONLINE BEST':'ONLINE RECORDED');}
     else if(j&&j.reason)toast(String(j.reason));
   }catch(e){ /* local boards still hold the time */ }
 }
@@ -8714,7 +8767,7 @@ async function maybeSubmitDailyLine(challenge, total, rec, splits){
       body: JSON.stringify(body),
     });
     const j=await r.json();
-    if(j&&j.ok)toast(j.improved?'DAILY ONLINE BEST':'DAILY ONLINE');
+    if(j&&j.ok){countNote('name');toast(j.improved?'DAILY ONLINE BEST':'DAILY ONLINE');}
     else if(j&&j.reason)toast(String(j.reason));
   }catch(e){ /* offline — local daily PB still saved */ }
 }
@@ -9117,6 +9170,7 @@ function onTrickSample(){
 }
 // Advance the flying core by one frame, then read it: events, then state.
 function stepCore(frameMs,now){
+  const simAtMs=simClockMs;
   try{
     if(testPilotOn()){
       // The test pilot's frame in pieces the core samples (under 249 ms,
@@ -9142,6 +9196,7 @@ function stepCore(frameMs,now){
   core.anchor(now);
   for(const ev of core.events())onCoreEvent(ev);
   syncStateFromCore();
+  countFlight(simClockMs-simAtMs);
   if(runActive&&core.kind==='js')runSawJs=true;
   bfArmWatch();
   bfWorldWatch(now);
@@ -9657,6 +9712,7 @@ function loop(now){
     try{performance.mark('sim-first-frame');}catch(e){}
   }
   let dt=(now-last)/1000;last=now;dt=Math.min(dt,.05);
+  countReadyWatch();
   if(classBackdrop&&coreArmed())classBackdrop=null; // armed: this map is the pilot's now (followClassMap)
   if(looks)looks.tick(now);
   try{

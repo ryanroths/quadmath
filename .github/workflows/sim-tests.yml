@@ -121,7 +121,7 @@ jobs:
           # reloads, links, the input default and the js carry, read back from
           # Betaflight; and the one profile across 65, 75 and 85 on both cores.
           # About 1.5 minutes on a Linux box with SwiftShader.
-          - { suite: page, label: 'rates', tests: 'tools/test_sim_bf_rates_page.mjs tools/test_sim_rates_page.mjs' }
+          - { suite: page, label: 'rates, counts', tests: 'tools/test_sim_bf_rates_page.mjs tools/test_sim_rates_page.mjs tools/test_leaderboard_counts.mjs tools/test_sim_count_page.mjs', wrangler: true }
 
     steps:
       - name: Check out

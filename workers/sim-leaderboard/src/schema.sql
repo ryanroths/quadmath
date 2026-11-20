@@ -18,6 +18,19 @@ CREATE TABLE IF NOT EXISTS rate_limit (
   PRIMARY KEY (ip, window)
 );
 
+-- Anonymous daily flight counts (migrate-counts.sql, POST /api/count): the
+-- UTC day's total per event, class, core and input. No address, no agent,
+-- no time finer than the day. WITHOUT ROWID: one row written per ping.
+CREATE TABLE IF NOT EXISTS counts (
+  day TEXT NOT NULL,
+  event TEXT NOT NULL,
+  class INTEGER NOT NULL,
+  core TEXT NOT NULL,
+  input TEXT NOT NULL,
+  n INTEGER NOT NULL,
+  PRIMARY KEY (day, event, class, core, input)
+) WITHOUT ROWID;
+
 -- "Fly my line" (sim-share.js): line codes behind short links, by content id.
 CREATE TABLE IF NOT EXISTS lines (
   id TEXT PRIMARY KEY,
