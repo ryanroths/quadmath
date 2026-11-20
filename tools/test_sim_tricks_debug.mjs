@@ -792,4 +792,42 @@ test('observer: rec.side survives a respawn, and a roll, a gap or a split box fa
   assert.ok(sp[sp.length - 1].lat1 < 0 && sp[sp.length - 1].vAlong < 0 && Math.abs(sp[sp.length - 1].d - 0.9) < 0.02, 'back on the right');
 });
 
+test('createTrickDebug: the overlay shows the side line, each pass by object and side', () => {
+  const doc = fakeDoc();
+  const con = { info: () => {}, warn: () => {} };
+  let t = 0;
+  const tricks = createTricks({ document: null, storage: null, now: () => t });
+  tricks.setActive(true, 'depot');
+  const dbg = createTrickDebug({ document: doc, tricks, now: () => t, info: () => ({ core: 'bf', map: 'depot' }), console: con });
+  const ws = 3.5, b = pole(5, 1);
+  const s = { armed: true, ws, throttle: 0.5, clearance: 3,
+    colliders: [{ min: { x: -b.y1 * ws, y: b.z0 * ws, z: -b.x1 * ws }, max: { x: -b.y0 * ws, y: b.z1 * ws, z: -b.x0 * ws } }] };
+  const p = { x: -10, y: 0, z: 3 };
+  let q = { x: 0, y: 0, z: 0, w: 1 };
+  const dt = 0.004;
+  let first = true;
+  for (const ph of cradlePhases(1)) {
+    const w = ph.rate || [0, 0, 0], v = ph.v || [0, 0, 0];
+    for (let i = 0, n = Math.round(ph.t / dt); i < n; i++) {
+      const m = Math.hypot(...w);
+      if (m) q = qMul(q, qAxis(w[0] / m, w[1] / m, w[2] / m, m * dt));
+      p.x += v[0] * dt; p.y += v[1] * dt; p.z += v[2] * dt;
+      Object.assign(s, { qx: q.x, qy: q.y, qz: q.z, qw: q.w, ox: w[0], oy: w[1], oz: w[2], wx: -p.y * ws, wy: p.z * ws, wz: -p.x * ws, alt: p.z, vx: v[0], vy: v[1], vz: v[2], speed: Math.hypot(...v) });
+      if (first) { tricks.resetDetector(s); tricks.detector().lockout = 0; first = false; }
+      t += dt;
+      dbg.before(s, dt);
+      const ev = tricks.tick(s, dt);
+      dbg.after(s, dt, ev);
+    }
+  }
+  const man = dbg.attempts().filter((r) => r.type === 'maneuver');
+  assert.equal(man.length, 1);
+  assert.equal(man[0].side.why, 'post');
+  dbg.paint(true);
+  const html = doc.getElementById('trickXrBody').innerHTML;
+  assert.match(html, /side {2}nearest 0\.9 m/);
+  assert.match(html, /passes #\d+ L 0\.9m -0\.\ds fwd nose 0° · #\d+ R 0\.9m \+1\.0s back nose 57°/);
+  assert.match(html, /nose max 57°/);
+});
+
 function c3(x) { return Math.round(x * 1000) / 1000; }
