@@ -81,8 +81,8 @@ export const COUNT_INPUTS = Object.freeze(['radio', 'gamepad', 'keyboard', 'touc
 export const COUNT_FLEW_MS = 30000;
 // A ping is about 60 bytes; anything past this is not one.
 export const COUNT_BODY_MAX = 256;
-// Pings per client per UTC hour (the Worker's checkRate, its own 'count'
-// bucket): five full funnels, and never the boards' or SHARE's budget.
+// Pings per client per UTC hour, counted in the Worker's memory
+// (countAllowed), never in D1: five full funnels.
 export const RATE_COUNT_MAX = 30;
 const COUNT_KEYS = Object.freeze(['event', 'class', 'core', 'input']);
 

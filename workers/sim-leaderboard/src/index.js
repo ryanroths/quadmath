@@ -50,10 +50,9 @@ const CORS_METHODS = {
 };
 
 // Posts per client per UTC hour (sim-retention.js RATE_SCORE_MAX,
-// RATE_SHARE_MAX, RATE_COUNT_MAX: this module exports only the handler, as
-// workerd reads every named export of a Worker's entry module as an
-// entrypoint).
-const RATE_MAX = { score: RATE_SCORE_MAX, share: RATE_SHARE_MAX, count: RATE_COUNT_MAX };
+// RATE_SHARE_MAX: this module exports only the handler, as workerd reads
+// every named export of a Worker's entry module as an entrypoint).
+const RATE_MAX = { score: RATE_SCORE_MAX, share: RATE_SHARE_MAX };
 // A builder track's board keeps this many rows per class, as a built-in's.
 const CUSTOM_BOARD_ROWS = BUILTIN_BOARD_ROWS;
 const JSON_LIMIT = 350_000;
@@ -94,35 +93,34 @@ async function readJson(request) {
   catch (e) { return { error: 'BAD JSON' }; }
 }
 
-// bucket: 'score', 'share' or 'count'. The window is the bucket and the UTC
-// hour (rows from before the split, the bare hour, are not read).
+// bucket: 'score' or 'share'. The window is the bucket and the UTC hour
+// (rows from before the split, the bare hour, are not read).
 // One statement, so posts sent at once can't all read the count before any
 // of them adds to it.
-// The 'count' bucket (POST /api/count, anonymous) never stores the address:
-// its client is countClientKey's keyed hash of the address and the window,
-// a new one every hour, and its rows from earlier hours are deleted when an
-// hour's first ping from a client lands (the rate_limit_window index makes
-// that a range, not a scan).
 async function checkRate(env, ip, now, bucket) {
   const window = bucket + ':' + rateWindowId(now);
-  const who = bucket === 'count' ? await countClientKey(env, ip, window) : ip;
   const row = await env.DB.prepare(
     'INSERT INTO rate_limit (ip, window, n) VALUES (?, ?, 1) ON CONFLICT(ip, window) DO UPDATE SET n = n + 1 RETURNING n',
-  ).bind(who, window).first();
-  if (bucket === 'count' && row && row.n === 1) {
-    await env.DB.prepare("DELETE FROM rate_limit WHERE window >= 'count:' AND window < ?").bind(window).run();
-  }
+  ).bind(ip, window).first();
   return !!row && row.n <= RATE_MAX[bucket];
 }
 
-// HMAC-SHA-256 of the address and the window under the COUNT_KEY secret
-// (wrangler secret put COUNT_KEY), 128 bits of it: not the address, and not
-// one that can be worked back from the table without the secret.
-async function countClientKey(env, ip, window) {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey('raw', enc.encode(env.COUNT_KEY), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(ip + '|' + window)));
-  return 'hmac:' + [...mac.slice(0, 16)].map((b) => b.toString(16).padStart(2, '0')).join('');
+// The anonymous counts' rate limit (POST /api/count): in this isolate's memory
+// only, never D1. A client's pings this UTC hour, RATE_COUNT_MAX of them; a
+// new hour, or more clients than COUNT_CLIENTS_MAX, starts over. Nothing in it
+// is written anywhere or outlives the isolate, and it is per isolate: a client
+// spread over several gets the limit in each.
+const COUNT_CLIENTS_MAX = 50000;
+const countSeen = { window: '', clients: new Map() };
+function countAllowed(ip, now) {
+  const window = rateWindowId(now);
+  if (countSeen.window !== window || countSeen.clients.size >= COUNT_CLIENTS_MAX) {
+    countSeen.window = window;
+    countSeen.clients = new Map();
+  }
+  const n = (countSeen.clients.get(ip) || 0) + 1;
+  countSeen.clients.set(ip, n);
+  return n <= RATE_COUNT_MAX;
 }
 
 // The scores.week column holds boardKeyFor(week): the week (or Daily Line day
@@ -657,10 +655,11 @@ export async function handleLeaderboard(request, env) {
   }
 
   // Anonymous daily flight counts (sim-retention.js COUNT_EVENTS): one ping
-  // adds one to the UTC day's total for its event, class, core and input.
-  // Checked before anything is written; refused from a page another site
-  // serves; rate-limited per client (the 'count' bucket, RATE_COUNT_MAX an
-  // hour) on a keyed hash, so with no COUNT_KEY secret nothing is counted.
+  // adds one to the UTC day's total for its event, class, core and input, in
+  // one D1 write (counts is WITHOUT ROWID: no index row beside it). Checked
+  // before anything; refused from a page another site serves; rate-limited
+  // in memory (countAllowed). A write that fails is dropped: the ping still
+  // gets its 204, and nothing about it reaches the boards.
   if (request.method === 'POST' && path === '/api/count') {
     if (!env || !env.DB) return reply({ ok: false, reason: 'NO DATABASE' }, 503);
     const len = Number(request.headers.get('Content-Length') || 0);
@@ -673,11 +672,12 @@ export async function handleLeaderboard(request, env) {
     const origin = request.headers.get('Origin');
     const allowed = allowedOriginList((env && env.ALLOWED_ORIGIN) || DEFAULT_ALLOWED_ORIGIN);
     if (origin && !allowed.includes('*') && !allowed.includes(origin)) return reply({ ok: false, reason: 'ORIGIN' }, 403);
-    if (!env.COUNT_KEY) return reply({ ok: false, reason: 'NOT CONFIGURED' }, 503);
-    if (!(await checkRate(env, clientIp(request), Date.now(), 'count'))) return reply({ ok: false, reason: 'RATE LIMIT' }, 429);
-    await env.DB.prepare(
-      'INSERT INTO counts (day, event, class, core, input, n) VALUES (?, ?, ?, ?, ?, 1) ON CONFLICT(day, event, class, core, input) DO UPDATE SET n = n + 1',
-    ).bind(utcDateId(), ping.event, ping.class, ping.core, ping.input).run();
+    if (!countAllowed(clientIp(request), Date.now())) return reply({ ok: false, reason: 'RATE LIMIT' }, 429);
+    try {
+      await env.DB.prepare(
+        'INSERT INTO counts (day, event, class, core, input, n) VALUES (?, ?, ?, ?, ?, 1) ON CONFLICT(day, event, class, core, input) DO UPDATE SET n = n + 1',
+      ).bind(utcDateId(), ping.event, ping.class, ping.core, ping.input).run();
+    } catch (e) { /* dropped: a count never fails a request, or reaches the boards */ }
     return new Response(null, { status: 204, headers: corsHeaders(env, request) });
   }
 

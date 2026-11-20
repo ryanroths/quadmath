@@ -560,39 +560,35 @@ at all with Global Privacy Control or Do Not Track on, on localhost, under
 
 `POST /api/count` checks the ping against the allowed values (anything else
 is a 400 and writes nothing), refuses a page served by another origin (403),
-and adds one to `counts` for the UTC day, event, class, core and input. The
-table has no address, no user agent and no time finer than the day.
+and adds one to `counts` for the UTC day, event, class, core and input: one
+D1 statement, one row written (the table is `WITHOUT ROWID`, so there is no
+index row beside it). The table has no address, no user agent and no time
+finer than the day. If that write fails (a D1 error, the daily limit), the
+ping is dropped and still answered 204: a count never fails a request or
+reaches the boards.
 
 Rate limit: 30 pings per client per UTC hour (`RATE_COUNT_MAX`: five full
-funnels), in `rate_limit`'s own `count` bucket, so it never uses up the
-boards' 30 or SHARE's 12. The bucket never stores the address: its key is an
-HMAC-SHA-256 of the address and the hour under the `COUNT_KEY` secret, a new
-one every hour, and its rows from earlier hours are deleted as each hour's
-first ping from a client lands. Without `COUNT_KEY` the route answers 503
-(`NOT CONFIGURED`) and counts nothing.
+funnels), counted in the Worker isolate's memory (`countAllowed`), never in
+D1. Nothing of it is stored or outlives the isolate. It is per isolate: a
+client whose pings land on several isolates (or locations) gets 30 in each.
 
 Deploy order (the page copes with either: until the Worker answers, a ping
 fails quietly):
 
 1. Merge the PR (Pages ships the page).
-2. From the main checkout, add the table and the index, set the secret once,
-   then deploy through the guard:
+2. From the main checkout, add the table, then deploy through the guard:
 
    ```bash
    git pull --ff-only
    cd workers/sim-leaderboard
    npx wrangler d1 execute quadmath-sim-leaderboard --remote --file=./src/migrate-counts.sql
-   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-   npx wrangler secret put COUNT_KEY
    npm run predeploy
    npm run deploy
    ```
 
-   Paste the printed value when `wrangler secret put` asks for it (it is
-   never needed again; a new one only restarts the hour's limit). The
-   migration is idempotent (`IF NOT EXISTS`), safe to run twice, and changes
-   no rows: it adds `counts` and an index on `rate_limit (window)`.
-   `npm run predeploy` prints PHYS_VER 7: no board changes.
+   The migration is idempotent (`CREATE TABLE IF NOT EXISTS counts` only),
+   safe to run twice, and touches no other table. `npm run predeploy` prints
+   PHYS_VER 7: no board changes.
 
 3. Check: a ping is taken, a bad one refused:
 
@@ -619,18 +615,15 @@ npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT day,
 Days are UTC (`date('now')` in D1 is UTC). For class or core, put `class` or
 `core` where `input` is.
 
-Cost: a page load sends at most six pings, so six requests. Rows written, as
-D1 counts them (an index entry is a row; measured on a local D1): the
-client's first ping in an hour 3 for its rate row, 1 for its counts row, and
-about 1 more for deleting an earlier hour's row; each further ping 2 (its rate
-row and its counts row). That is 2k + 3 for k pings: 5 for a visit that only
-loads, 15 for one that does all six. Per 1,000 visitors a day: 1,000 to 6,000
-requests (Workers Free: 100,000 a day) and 5,000 to 15,000 rows written (D1
-Free: 100,000 a day, shared with the boards; at the limit D1 refuses every
-query, the boards' too, until 00:00 UTC). Reads are a few rows a ping (the
-prune is a range on `rate_limit_window`), under 25,000 per 1,000 visitors
-against 5,000,000. `counts` grows by at most 144 rows a day (6 events x 3
-classes x 2 cores x 4 inputs).
+Cost: a page load sends at most six pings, so six requests, and each ping is
+exactly one row written (measured on a local D1: the day's first row for a
+combination and every one after it, 1 each; no reads). Per 1,000 visitors a
+day: 1,000 to 6,000 requests (Workers Free: 100,000 a day for the account,
+this Worker's boards and the rooms Worker included) and 1,000 to 6,000
+rows written (D1 Free: 100,000 a day, shared with the boards: at the limit D1
+refuses every query, the boards' too, until 00:00 UTC; counts reach it alone
+at about 16,000 full-funnel visitors a day). `counts` grows by at most 144
+rows a day (6 events x 3 classes x 2 cores x 4 inputs).
 
 ## Local
 

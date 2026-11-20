@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // The leaderboard Worker's anonymous flight counts on real D1, under wrangler
 // dev (tools/sim_rooms_dev.mjs startLeaderboardDev, a local D1 made from
-// schema.sql, COUNT_KEY set):
+// schema.sql):
 //   - each event counts once per ping: a page load's six pings are six rows of
 //     1; the same ping again adds one;
 //   - a bad value (event, class, core, input, an extra key, not JSON, too
 //     big) is a 400 and writes nothing; another site's page a 403;
-//   - the rate limit: RATE_COUNT_MAX pings an hour per client, then 429;
-//     rate_limit holds an hourly HMAC for it, never the address;
+//   - a ping is one D1 write: no rate_limit row, the limit is in memory
+//     (RATE_COUNT_MAX pings an hour per client, then 429); no address in D1;
 //   - migrate-counts.sql runs twice on a database from before it (the boards'
 //     tables and rows) and twice on one that has it, and changes no rows;
 //   - DEPLOY.md's funnel and by-input commands, run as written (but --local),
@@ -52,7 +52,7 @@ function deployQueries() {
 test('anonymous flight counts on wrangler dev (real D1)', { timeout: 420000 }, async (t) => {
   const bin = findWrangler();
   if (!bin) { t.skip('no wrangler (npm install in workers/sim-rooms or workers/sim-leaderboard, or WRANGLER=)'); return; }
-  const w = await startLeaderboardDev(bin, { ALLOWED_ORIGIN: ORIGIN, COUNT_KEY: 'wrangler-test-key' });
+  const w = await startLeaderboardDev(bin, { ALLOWED_ORIGIN: ORIGIN });
   const fetch = async (url, init) => {
     try { return await globalThis.fetch(url, init); }
     catch (e) { await new Promise((r) => setTimeout(r, 500)); return globalThis.fetch(url, init); }
@@ -88,23 +88,18 @@ test('anonymous flight counts on wrangler dev (real D1)', { timeout: 420000 }, a
       assert.deepEqual(after, before, 'nothing written, not even a rate row');
     });
 
-    await t.test('the rate limit: RATE_COUNT_MAX an hour per client, keyed on an hourly HMAC, never the address', async () => {
+    await t.test('the rate limit: RATE_COUNT_MAX an hour per client, in memory: no rate_limit row, no address in D1', async () => {
       assert.equal(RATE_COUNT_MAX, 30);
       const p = { event: 'lap', class: 85, core: 'js', input: 'gamepad' };
       for (let i = 0; i < RATE_COUNT_MAX; i++) assert.equal((await ping(p, '198.51.100.9')).status, 204, 'ping ' + (i + 1));
       assert.deepEqual(await ping(p, '198.51.100.9'), { status: 429, json: { ok: false, reason: 'RATE LIMIT' } });
       assert.equal((await ping(p, '198.51.100.10')).status, 204, 'another client is not held');
       assert.deepEqual(rows(bin, w.persist, "SELECT n FROM counts WHERE event = 'lap' AND input = 'gamepad'"), [{ n: RATE_COUNT_MAX + 1 }]);
-      const rate = rows(bin, w.persist, 'SELECT ip, window, n FROM rate_limit ORDER BY n DESC');
-      assert.ok(rate.length >= 3, JSON.stringify(rate));
-      for (const r of rate) {
-        assert.match(r.ip, /^hmac:[0-9a-f]{32}$/, 'a keyed hash: ' + r.ip);
-        assert.match(r.window, /^count:\d{4}-\d\d-\d\dT\d\d$/);
-      }
-      assert.equal(rate[0].n, RATE_COUNT_MAX + 1);
-      const all = JSON.stringify(rows(bin, w.persist, 'SELECT * FROM rate_limit')) + JSON.stringify(rows(bin, w.persist, 'SELECT * FROM counts'));
+      assert.deepEqual(rows(bin, w.persist, 'SELECT * FROM rate_limit'), [], 'every ping so far wrote its counts row and nothing else');
+      const all = JSON.stringify(rows(bin, w.persist, 'SELECT * FROM counts'));
       for (const ip of ['203.0.113.7', '198.51.100.9', '198.51.100.10']) assert.ok(!all.includes(ip), 'no address in D1: ' + ip);
       assert.deepEqual(rows(bin, w.persist, "SELECT name FROM pragma_table_info('counts') ORDER BY cid").map((r) => r.name), ['day', 'event', 'class', 'core', 'input', 'n'], 'no address, agent or time column');
+      assert.deepEqual(rows(bin, w.persist, "SELECT sql LIKE '%WITHOUT ROWID' AS bare FROM sqlite_master WHERE name = 'counts'"), [{ bare: 1 }], 'one row written a ping');
     });
 
     await t.test('DEPLOY.md\'s funnel and by-input commands, as written, on the rows the pings wrote', () => {
@@ -120,12 +115,10 @@ test('anonymous flight counts on wrangler dev (real D1)', { timeout: 420000 }, a
 
     await t.test('migrate-counts.sql runs twice: on a database from before it, and on one that has it', () => {
       const file = join(SRC, 'migrate-counts.sql');
-      // Before it: schema.sql without counts and the prune index, with rows.
+      // Before it: schema.sql without counts, with the boards' rows.
       const schema = readFileSync(join(SRC, 'schema.sql'), 'utf8');
-      const old = schema
-        .replace(/CREATE TABLE IF NOT EXISTS counts \([^;]+\);/, '')
-        .replace('CREATE INDEX IF NOT EXISTS rate_limit_window ON rate_limit (window);', '');
-      assert.ok(!/CREATE TABLE IF NOT EXISTS counts|INDEX IF NOT EXISTS rate_limit_window/.test(old), 'the schema from before');
+      const old = schema.replace(/CREATE TABLE IF NOT EXISTS counts \([^;]+\) WITHOUT ROWID;/, '');
+      assert.ok(!/CREATE TABLE IF NOT EXISTS counts/.test(old), 'the schema from before');
       const oldFile = join(scratch, 'old-schema.sql');
       writeFileSync(oldFile, old);
       const persist = join(scratch, 'old-db');
@@ -137,7 +130,6 @@ test('anonymous flight counts on wrangler dev (real D1)', { timeout: 420000 }, a
       assert.deepEqual(rows(bin, persist, 'SELECT * FROM rate_limit'), [{ ip: '192.0.2.1', window: 'score:2026-11-01T10', n: 3 }]);
       assert.deepEqual(rows(bin, persist, 'SELECT id FROM lines'), [{ id: 'abc' }]);
       assert.deepEqual(rows(bin, persist, 'SELECT * FROM counts'), []);
-      assert.deepEqual(rows(bin, persist, "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'rate_limit_window'"), [{ name: 'rate_limit_window' }]);
       // On the dev database, which has it: twice more, its rows kept.
       const before = rows(bin, w.persist, 'SELECT * FROM counts ORDER BY event, input');
       d1(bin, w.persist, ['--file', file]);

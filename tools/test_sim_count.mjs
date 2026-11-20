@@ -7,10 +7,11 @@
 //     counter), every event after ready, pack2 after an arm;
 //   - the opt-out signals send nothing: Global Privacy Control, Do Not Track,
 //     a local page, ?dev=1, a test's pilot;
-//   - the Worker on real SQLite (tools/d1_sqlite.mjs): a ping adds one to its
-//     day's row, a bad one is a 400 and writes nothing, another site's page is
-//     a 403, no COUNT_KEY a 503; the rate limit (RATE_COUNT_MAX an hour) keys
-//     on an hourly HMAC, never the address, and prunes its earlier hours;
+//   - the Worker on real SQLite (tools/d1_sqlite.mjs): a ping is one D1 write
+//     (its day's row, WITHOUT ROWID), a bad one is a 400 and writes nothing,
+//     another site's page is a 403; a write that fails is dropped (204) and
+//     the boards are untouched; the rate limit (RATE_COUNT_MAX an hour) is in
+//     the Worker's memory, never D1;
 //   - DEPLOY.md's funnel and by-input queries on those rows;
 //   - sim.html sends with a beacon and stores nothing for this.
 // tools/test_leaderboard_counts.mjs runs the Worker on wrangler dev (real
@@ -21,7 +22,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  COUNT_EVENTS, COUNT_CLASSES, COUNT_CORES, COUNT_INPUTS, COUNT_FLEW_MS, COUNT_BODY_MAX, RATE_COUNT_MAX, RATE_SCORE_MAX,
+  COUNT_EVENTS, COUNT_CLASSES, COUNT_CORES, COUNT_INPUTS, COUNT_FLEW_MS, COUNT_BODY_MAX, RATE_COUNT_MAX,
   normalizeCountPing, countPingsOff, createCountPings, utcDateId, LEADERBOARD_URL,
 } from '../sim-retention.js';
 import { handleLeaderboard } from '../workers/sim-leaderboard/src/index.js';
@@ -124,21 +125,49 @@ test('each event counts once per page load; ready first, pack2 after an arm; off
   assert.equal(lazy.length, 1);
 });
 
-// The Worker in process on SQLite: what a ping writes.
-function worker(vars = {}) {
-  const DB = sqliteD1();
-  const env = { DB, ALLOWED_ORIGIN: ORIGIN, COUNT_KEY: 'test-count-key', ...vars };
-  const post = async (body, { ip = '203.0.113.7', origin = ORIGIN, raw } = {}) => {
+// The Worker in process on SQLite: what a ping writes. Its rate limit is the
+// module's memory (one isolate), so each worker here pings from its own
+// addresses.
+let nextIp = 1;
+function worker(vars = {}, DB = sqliteD1()) {
+  const env = { DB, ALLOWED_ORIGIN: ORIGIN, ...vars };
+  const own = '203.0.113.' + nextIp++;
+  const post = async (body, { ip = own, origin = ORIGIN, raw } = {}) => {
     const headers = { 'Content-Type': 'text/plain;charset=UTF-8', 'CF-Connecting-IP': ip };
     if (origin) headers.Origin = origin;
     const r = await handleLeaderboard(new Request('https://w.test/api/count', { method: 'POST', headers, body: raw != null ? raw : JSON.stringify(body) }), env);
     return { status: r.status, json: r.status === 204 ? null : await r.json() };
   };
-  return { DB, env, post, counts: () => DB.rows('SELECT day, event, class, core, input, n FROM counts ORDER BY event, input') };
+  return { DB, env, post, ip: own, counts: () => DB.rows('SELECT day, event, class, core, input, n FROM counts ORDER BY event, input') };
+}
+// A D1 that counts what each statement writes (its run's changes), and can be
+// made to fail on the counts table.
+function countingD1() {
+  const DB = sqliteD1();
+  const log = [];
+  let failCounts = false;
+  const prepare = DB.prepare;
+  DB.prepare = (sql) => {
+    const st = prepare(sql);
+    const wrap = (s) => ({
+      bind: (...a) => wrap(s.bind(...a)),
+      first: (c) => s.first(c),
+      all: () => s.all(),
+      async run() {
+        if (failCounts && /INTO counts/.test(sql)) throw new Error('D1_ERROR: Exceeded maximum daily rows written');
+        const r = await s.run();
+        log.push({ sql, changes: r.meta.changes });
+        return r;
+      },
+    });
+    return wrap(st);
+  };
+  return { DB, log, fail: (on) => { failCounts = on; } };
 }
 
-test('POST /api/count: a ping adds one to its day\'s row; anything else is refused and writes nothing', async () => {
-  const w = worker();
+test('POST /api/count: a ping adds one to its day\'s row in one write; anything else is refused and writes nothing', async () => {
+  const { DB, log } = countingD1();
+  const w = worker({}, DB);
   const day = utcDateId();
   assert.equal((await w.post(PING)).status, 204);
   assert.equal((await w.post(PING)).status, 204);
@@ -147,7 +176,10 @@ test('POST /api/count: a ping adds one to its day\'s row; anything else is refus
     { day, event: 'arm', class: 65, core: 'bf', input: 'keyboard', n: 1 },
     { day, event: 'ready', class: 65, core: 'bf', input: 'keyboard', n: 2 },
   ]);
-  const before = { counts: w.counts(), rate: w.DB.rows('SELECT * FROM rate_limit') };
+  assert.equal(log.length, 3, 'one statement a ping: ' + JSON.stringify(log));
+  assert.ok(log.every((l) => /^INSERT INTO counts /.test(l.sql) && l.changes === 1), 'and it is the counts upsert, one row');
+  assert.deepEqual(DB.rows('SELECT * FROM rate_limit'), [], 'no rate row: the limit is in memory');
+  const before = { counts: w.counts(), statements: log.length };
   const refused = [
     [{ ...PING, event: 'hello' }, 'BAD EVENT'],
     [{ ...PING, class: 90 }, 'BAD CLASS'],
@@ -159,55 +191,52 @@ test('POST /api/count: a ping adds one to its day\'s row; anything else is refus
   assert.deepEqual(await w.post(null, { raw: '{not json' }), { status: 400, json: { ok: false, reason: 'BAD JSON' } });
   assert.deepEqual(await w.post(null, { raw: JSON.stringify({ ...PING, pad: 'x'.repeat(COUNT_BODY_MAX) }) }), { status: 400, json: { ok: false, reason: 'PAYLOAD TOO LARGE' } });
   assert.deepEqual(await w.post(PING, { origin: 'https://evil.example' }), { status: 403, json: { ok: false, reason: 'ORIGIN' } });
-  assert.deepEqual({ counts: w.counts(), rate: w.DB.rows('SELECT * FROM rate_limit') }, before, 'a refused ping writes nothing, not even a rate row');
+  assert.deepEqual({ counts: w.counts(), statements: log.length }, before, 'a refused ping writes nothing');
   // A beacon from the page carries its Origin; one without (a tool) is taken.
   assert.equal((await w.post({ ...PING, event: 'lap' }, { origin: null })).status, 204);
   // GET is no route.
   const g = await handleLeaderboard(new Request('https://w.test/api/count'), w.env);
   assert.equal(g.status, 404);
-  // No secret: nothing counted, and never the address in its place.
-  const n = worker({ COUNT_KEY: '' });
-  assert.deepEqual(await n.post(PING), { status: 503, json: { ok: false, reason: 'NOT CONFIGURED' } });
-  assert.deepEqual(n.counts(), []);
-  assert.deepEqual(n.DB.rows('SELECT * FROM rate_limit'), []);
 });
 
-test('the rate limit: RATE_COUNT_MAX an hour per client, its own bucket, an hourly HMAC for a key, earlier hours pruned', async (t) => {
+test('the safety valve: a count write that fails is dropped, still a 204, and the boards are untouched', async () => {
+  const c = countingD1();
+  const w = worker({}, c.DB);
+  assert.equal((await w.post(PING)).status, 204);
+  c.fail(true);
+  assert.equal((await w.post({ ...PING, event: 'arm' })).status, 204, 'dropped, silently');
+  assert.equal((await w.post({ ...PING, event: 'flew30' })).status, 204);
+  c.fail(false);
+  assert.deepEqual(w.counts().map((r) => [r.event, r.n]), [['ready', 1]], 'nothing half written');
+  // The boards answer as before on the same database.
+  const r = await handleLeaderboard(new Request('https://w.test/api/board?class=65', { headers: { Origin: ORIGIN } }), w.env);
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).online, true);
+  // And the counts' failures never reach the top-level catch (500).
+  c.fail(true);
+  const all = await Promise.all(COUNT_EVENTS.map((event) => w.post({ ...PING, event })));
+  c.fail(false);
+  assert.ok(all.every((x) => x.status === 204), JSON.stringify(all));
+});
+
+test('the rate limit: RATE_COUNT_MAX an hour per client, in memory, never D1; a new hour starts over', async (t) => {
   assert.equal(RATE_COUNT_MAX, 30);
   const w = worker();
   for (let i = 0; i < RATE_COUNT_MAX; i++) assert.equal((await w.post(PING)).status, 204, 'ping ' + (i + 1));
   assert.deepEqual(await w.post(PING), { status: 429, json: { ok: false, reason: 'RATE LIMIT' } });
   assert.equal(w.counts()[0].n, RATE_COUNT_MAX, 'a refused ping is not counted');
   assert.equal((await w.post(PING, { ip: '198.51.100.2' })).status, 204, 'another client is not held');
-  const rate = w.DB.rows('SELECT ip, window, n FROM rate_limit');
-  assert.equal(rate.length, 2);
-  for (const r of rate) {
-    assert.match(r.ip, /^hmac:[0-9a-f]{32}$/, 'a keyed hash, not the address');
-    assert.match(r.window, /^count:\d{4}-\d\d-\d\dT\d\d$/);
-  }
-  const dump = JSON.stringify(w.DB.rows('SELECT * FROM rate_limit')) + JSON.stringify(w.counts());
-  for (const ip of ['203.0.113.7', '198.51.100.2']) assert.ok(!dump.includes(ip), 'no address anywhere: ' + ip);
-  // The same address under another secret, or in another hour, is another key.
-  const other = worker({ COUNT_KEY: 'another-key' });
-  await other.post(PING);
-  const [a] = other.DB.rows('SELECT ip FROM rate_limit');
-  assert.ok(!rate.some((r) => r.ip === a.ip), 'the key depends on the secret');
-  // The boards' bucket is untouched: a score post still has its 30.
-  assert.ok(!w.DB.rows("SELECT window FROM rate_limit WHERE window NOT LIKE 'count:%'").length);
-  assert.equal(RATE_SCORE_MAX, 30);
-
-  // An hour later: the client's first ping prunes every earlier count row,
-  // and leaves the boards' rows alone.
-  w.DB.exec("INSERT INTO rate_limit (ip, window, n) VALUES ('203.0.113.9', 'score:2020-01-01T00', 3)");
+  assert.deepEqual(w.DB.rows('SELECT * FROM rate_limit'), [], 'nothing of it in D1');
+  const dump = JSON.stringify(w.DB.rows("SELECT * FROM counts"));
+  for (const ip of [w.ip, '198.51.100.2']) assert.ok(!dump.includes(ip), 'no address in D1: ' + ip);
+  // The boards' limit is its own: a score post from the held client is still taken by its limit.
+  const s = await handleLeaderboard(new Request('https://w.test/api/submit', { method: 'POST', headers: { 'CF-Connecting-IP': w.ip, Origin: ORIGIN }, body: '{' }), w.env);
+  assert.deepEqual([s.status, (await s.json()).reason], [400, 'BAD JSON'], 'not RATE LIMIT');
+  // An hour later: a new budget.
   const realNow = Date.now;
   t.after(() => { Date.now = realNow; });
   Date.now = () => realNow() + 3600_000;
   assert.equal((await w.post(PING)).status, 204, 'a new hour, a new budget');
-  const left = w.DB.rows('SELECT ip, window, n FROM rate_limit ORDER BY window');
-  assert.equal(left.filter((r) => r.window.startsWith('count:')).length, 1, 'earlier count hours pruned: ' + JSON.stringify(left));
-  assert.equal(left.find((r) => r.window.startsWith('count:')).n, 1);
-  assert.ok(!rate.some((r) => r.ip === left.find((x) => x.window.startsWith('count:')).ip), 'a new key every hour');
-  assert.ok(left.some((r) => r.window === 'score:2020-01-01T00'), 'other buckets kept');
 });
 
 // DEPLOY.md's two report commands, as written there.
@@ -285,24 +314,27 @@ test('sim.html: one beacon per event, the events where they happen, nothing stor
   assert.ok(connect.includes(new URL(LEADERBOARD_URL).origin), 'connect-src has ' + LEADERBOARD_URL);
 });
 
-test('the Worker and its schema: the counts table and the prune index, idempotent', () => {
+test('the Worker and its schema: the counts table, one write a ping, idempotent', () => {
   const schema = read('workers/sim-leaderboard/src/schema.sql');
   const mig = read('workers/sim-leaderboard/src/migrate-counts.sql');
-  const table = 'CREATE TABLE IF NOT EXISTS counts (\n  day TEXT NOT NULL,\n  event TEXT NOT NULL,\n  class INTEGER NOT NULL,\n  core TEXT NOT NULL,\n  input TEXT NOT NULL,\n  n INTEGER NOT NULL,\n  PRIMARY KEY (day, event, class, core, input)\n);';
+  const table = 'CREATE TABLE IF NOT EXISTS counts (\n  day TEXT NOT NULL,\n  event TEXT NOT NULL,\n  class INTEGER NOT NULL,\n  core TEXT NOT NULL,\n  input TEXT NOT NULL,\n  n INTEGER NOT NULL,\n  PRIMARY KEY (day, event, class, core, input)\n) WITHOUT ROWID;';
   assert.ok(schema.replace(/\r\n/g, '\n').includes(table) && mig.replace(/\r\n/g, '\n').includes(table));
-  for (const sql of [schema, mig]) assert.ok(sql.includes('CREATE INDEX IF NOT EXISTS rate_limit_window ON rate_limit (window);'));
-  for (const stmt of mig.replace(/--[^\n]*/g, '').split(';').map((s) => s.trim()).filter(Boolean)) {
-    assert.match(stmt, /^CREATE (TABLE|INDEX) IF NOT EXISTS /, 'only IF NOT EXISTS: ' + stmt.slice(0, 60));
-  }
+  const stmts = mig.replace(/--[^\n]*/g, '').split(';').map((x) => x.trim()).filter(Boolean);
+  assert.equal(stmts.length, 1, 'the counts table and nothing else');
+  assert.match(stmts[0], /^CREATE TABLE IF NOT EXISTS counts /);
   // Twice on a database that has the boards' tables and rows: nothing changes but counts.
   const db = sqliteD1();
-  db.exec("INSERT INTO rate_limit (ip, window, n) VALUES ('1.2.3.4', 'score:2026-01-01T00', 4)");
+  db.exec("INSERT INTO rate_limit (ip, window, n) VALUES ('hmac:0123', 'score:2026-01-01T00', 4)");
   db.exec(mig);
   db.exec(mig);
-  assert.deepEqual(db.rows('SELECT * FROM rate_limit'), [{ ip: '1.2.3.4', window: 'score:2026-01-01T00', n: 4 }]);
+  assert.deepEqual(db.rows('SELECT * FROM rate_limit'), [{ ip: 'hmac:0123', window: 'score:2026-01-01T00', n: 4 }]);
   assert.deepEqual(db.rows('SELECT * FROM counts'), []);
+  assert.deepEqual(db.rows("SELECT name FROM sqlite_master WHERE tbl_name = 'counts' AND type = 'index'"), [], 'no index beside it (WITHOUT ROWID)');
   const idx = read('workers/sim-leaderboard/src/index.js');
-  assert.ok(idx.includes("const who = bucket === 'count' ? await countClientKey(env, ip, window) : ip;"));
-  assert.ok(idx.includes("DELETE FROM rate_limit WHERE window >= 'count:' AND window < ?"));
+  const route = idx.slice(idx.indexOf("if (request.method === 'POST' && path === '/api/count') {"), idx.indexOf("if (request.method === 'GET' && path === '/api/line') {"));
+  assert.equal(route.split('env.DB.prepare(').length - 1, 1, 'one D1 statement in the route');
+  assert.ok(route.includes('if (!countAllowed(clientIp(request), Date.now()))') && !route.includes('checkRate'), 'the limit in memory, not checkRate');
+  assert.ok(/try \{\s*await env\.DB\.prepare\(\s*'INSERT INTO counts/.test(route) && route.includes('} catch (e) { /* dropped'), 'the write in a try, dropped on failure');
+  assert.ok(!/COUNT_KEY|countClientKey/.test(idx));
   assert.ok(!/headers\.get\('User-Agent'\)|user-agent/i.test(idx), 'no user agent read');
 });
