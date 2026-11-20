@@ -707,7 +707,8 @@ test('track boards in Chrome: a link\'s run lands on its board, a second profile
         assert.ok(wk.calls.includes('POST /api/track/submit'), wk.calls.join(', '));
         assert.match(r.board.text, /1 RyFly \d/, 'the run on the board: ' + r.board.text);
         assert.equal(r.errors.length, 0, r.errors.join(' | '));
-        assert.ok(!r.toasts.some((x) => /NOT SENT|ONLINE|RATE|TAKEN|BAD/.test(x)), 'no board toasts: ' + JSON.stringify(r.toasts));
+        // RATE LIMIT is the Worker's reason; "RATES: CRUISE" is Tune's default, not the board's.
+        assert.ok(!r.toasts.some((x) => /NOT SENT|ONLINE|RATE LIMIT|TAKEN|BAD/.test(x)), 'no board toasts: ' + JSON.stringify(r.toasts));
         const row = [...wk.env.DB.scores.values()][0];
         assert.equal(row.key, key, 'the board keyed by the gates');
         assert.equal(wk.env.DB.tracks.get(key).gates, 4);

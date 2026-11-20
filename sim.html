@@ -197,11 +197,12 @@
   #cliPaste,#ghostCode,#pilotName{width:100%;background:rgba(8,9,12,.55);border:1px solid var(--line);color:var(--txt);
     font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;padding:8px;resize:vertical;border-radius:10px}
   #cliPaste:focus,#ghostCode:focus,#pilotName:focus{outline:none;border-color:var(--orange)}
-  #rateCurve{width:100%;height:72px;margin:6px 0 10px;background:rgba(8,9,12,.55);border:1px solid var(--line);border-radius:4px;display:block}
+  #rateCurve,#bfRateCurve{width:100%;height:72px;margin:6px 0 10px;background:rgba(8,9,12,.55);border:1px solid var(--line);border-radius:4px;display:block}
   #ratesShareRow button{width:auto;flex:1;margin-top:6px}
-  #cliImportStatus{display:block;font-size:11px;color:var(--dim);margin:6px 0 10px;white-space:pre-wrap;line-height:1.45;min-height:1.2em}
-  #cliImportStatus.err{color:#ff6b6b}
-  #cliImportStatus.ok{color:var(--green)}
+  #cliImportStatus,#bfRatesStatus{display:block;font-size:11px;color:var(--dim);margin:6px 0 10px;white-space:pre-wrap;line-height:1.45;min-height:1.2em}
+  #cliImportStatus.err,#bfRatesStatus.err{color:#ff6b6b}
+  #cliImportStatus.ok,#bfRatesStatus.ok{color:var(--green)}
+  #bfRates .bf-axis-name{color:var(--txt);font-weight:600}
   #pilotName{margin-bottom:4px}
   button:hover{background:var(--orange);color:var(--bg)}
   /* Top right, one row: the fps readout, MENU (the in-flight menu, as Esc: on
@@ -336,8 +337,8 @@
      own list; dev-only needs ?dev=1 (body.dev); menu-hide never shows. */
   #startMenu:not(.in-flight) .menu-flight,#startMenu.in-flight .menu-launch,
     body:not(.dev) .dev-only,.menu-hide{display:none!important}
-  /* Tune's rates drive the js core only: on the bf core (body.bf-core) they
-     hide behind a line pointing to IMPORT CLI. */
+  /* Tune's rates, a set per core: the js core's (.rates-js) and, on the bf
+     core (body.bf-core), Betaflight's (.rates-bf). */
   body.bf-core .rates-js,body:not(.bf-core) .rates-bf{display:none!important}
   .menu-layer{pointer-events:auto;margin-left:0;width:min(360px,90vw);padding:22px 20px;
     max-height:calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
@@ -358,7 +359,7 @@
   body.menu-open #touchLayer{visibility:hidden}
   body:has(#panel.open) #feelHud{opacity:0}
   .seg{display:flex;gap:6px;margin-bottom:10px}
-  #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#camTiltPreset,#fpvStyle,#speedUnits,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
+  #radioPreset,#armSwitch,#droneType,#ratesType,#ratePreset,#bfRatePreset,#camTiltPreset,#fpvStyle,#speedUnits,#qualityPanel,#touchStickMode{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
     color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
   .menu-layer.wide{width:min(420px,92vw)}
   /* Ghost room card */
@@ -801,12 +802,48 @@
 
   <h2>Rates</h2>
   <!-- Where the flying rates come from, a line per core (syncRatesSource;
-       sim-rates.js ratesSourceText): one profile for every class. -->
-  <p class="build-note rates-bf" id="ratesSourceBf">Rates: your Air65 diff (bf)</p>
+       sim-rates.js ratesSourceText). -->
+  <p class="build-note rates-bf" id="ratesSourceBf">Rates: Cruise, the default (bf)</p>
   <p class="build-note rates-js" id="ratesSourceJs"></p>
-  <!-- The rates below drive the js core only (body.bf-core hides them):
-       Betaflight flies the rates in its diff, changed through IMPORT CLI. -->
-  <p class="build-note rates-bf">Betaflight flies the rates in the class's diff, the Air65's or the Fractal75's (TUNE on the OSD). To fly yours, paste set lines (on top of it) or your full diff (in its place) below and press IMPORT CLI, disarmed. It lasts the session.</p>
+  <!-- The bf core's rates (body.bf-core shows them): Actual rates, one
+       profile for the 65 and the 75, saved in this browser. Each change goes
+       to Betaflight as set lines through IMPORT CLI's own path and is read
+       back (bfSetRates, importCliToBf); the sliders show what it flies. -->
+  <div class="rates-bf" id="bfRates">
+  <p class="build-note">Betaflight's rates (Actual), set as IMPORT CLI sets them, disarmed. A paste below with rate lines flies its own for the session, and the sliders show them.</p>
+  <div class="row"><label for="bfRatePreset">Preset</label></div>
+  <select id="bfRatePreset" title="Beginner is slowest; RyFly (stock) is the rates in the Air65 and Fractal75 diffs."></select>
+  <div class="row"><label for="cbBfRatesLink">Link roll and pitch</label><input type="checkbox" id="cbBfRatesLink" checked style="accent-color:var(--orange)"></div>
+  <div id="bfAxis_roll">
+  <div class="row"><label class="bf-axis-name" id="bfAxisName_roll">Roll + pitch</label><span class="val" id="bfMax_roll"></span></div>
+  <div class="row"><label for="bfs_roll_rcRate">Centre sensitivity</label><span class="val" id="bfv_roll_rcRate"></span></div>
+  <input type="range" id="bfs_roll_rcRate" data-axis="roll" data-field="rcRate" min="10" max="250" step="10" value="70">
+  <div class="row"><label for="bfs_roll_srate">Max rate</label><span class="val" id="bfv_roll_srate"></span></div>
+  <input type="range" id="bfs_roll_srate" data-axis="roll" data-field="srate" min="100" max="1800" step="10" value="450">
+  <div class="row"><label for="bfs_roll_expo">Expo</label><span class="val" id="bfv_roll_expo"></span></div>
+  <input type="range" id="bfs_roll_expo" data-axis="roll" data-field="expo" min="0" max="1" step="0.01" value="0.3">
+  </div>
+  <div id="bfAxis_pitch" hidden>
+  <div class="row"><label class="bf-axis-name">Pitch</label><span class="val" id="bfMax_pitch"></span></div>
+  <div class="row"><label for="bfs_pitch_rcRate">Centre sensitivity</label><span class="val" id="bfv_pitch_rcRate"></span></div>
+  <input type="range" id="bfs_pitch_rcRate" data-axis="pitch" data-field="rcRate" min="10" max="250" step="10" value="70">
+  <div class="row"><label for="bfs_pitch_srate">Max rate</label><span class="val" id="bfv_pitch_srate"></span></div>
+  <input type="range" id="bfs_pitch_srate" data-axis="pitch" data-field="srate" min="100" max="1800" step="10" value="450">
+  <div class="row"><label for="bfs_pitch_expo">Expo</label><span class="val" id="bfv_pitch_expo"></span></div>
+  <input type="range" id="bfs_pitch_expo" data-axis="pitch" data-field="expo" min="0" max="1" step="0.01" value="0.3">
+  </div>
+  <div id="bfAxis_yaw">
+  <div class="row"><label class="bf-axis-name">Yaw</label><span class="val" id="bfMax_yaw"></span></div>
+  <div class="row"><label for="bfs_yaw_rcRate">Centre sensitivity</label><span class="val" id="bfv_yaw_rcRate"></span></div>
+  <input type="range" id="bfs_yaw_rcRate" data-axis="yaw" data-field="rcRate" min="10" max="250" step="10" value="70">
+  <div class="row"><label for="bfs_yaw_srate">Max rate</label><span class="val" id="bfv_yaw_srate"></span></div>
+  <input type="range" id="bfs_yaw_srate" data-axis="yaw" data-field="srate" min="100" max="1800" step="10" value="400">
+  <div class="row"><label for="bfs_yaw_expo">Expo</label><span class="val" id="bfv_yaw_expo"></span></div>
+  <input type="range" id="bfs_yaw_expo" data-axis="yaw" data-field="expo" min="0" max="1" step="0.01" value="0.3">
+  </div>
+  <canvas id="bfRateCurve" width="280" height="88" aria-label="Roll rate curve Betaflight flies"></canvas>
+  <div id="bfRatesStatus"></div>
+  </div>
   <div class="rates-js">
   <div class="row"><label>Rate type</label></div>
   <select id="ratesType" title="Betaflight rates_type. CLI import sets this from the dump.">
@@ -838,7 +875,7 @@
   <textarea id="cliPaste" rows="4" placeholder="set roll_rc_rate = 110&#10;set roll_srate = 72&#10;set roll_expo = 25&#10;…or a full dump / diff all"></textarea>
   <div class="seg" id="ratesShareRow">
     <button type="button" id="btnCliImport">IMPORT CLI</button>
-    <button type="button" id="btnRatesShare" class="rates-js">COPY RATES LINK</button>
+    <button type="button" id="btnRatesShare">COPY RATES LINK</button>
   </div>
   <span class="val rates-js" id="ratesTypeBadge">BETAFLIGHT</span>
   <div id="cliImportStatus"></div>
@@ -1165,7 +1202,10 @@ import {
   drawRateCurve, normalizeRateType, isRateType, bfCurve as bfCurveOf,
   actualRate as actualRateOf, encodeRates, decodeRates, ratesDeepLink, RATE_CARDS,
   pilotRatesDefault, ratesSourceText,
-} from "./sim-rates.js?v=c776b0804b34";
+  BF_RATE_PRESETS, BF_RATES_DEFAULT, BF_RATES_TOAST_KEY, BF_RATE_KEYS, BF_RATE_SLIDERS, bfPresetId, bfRatesPreset,
+  bfRatesLines, bfRatesFromGet, bfRatesSame, bfRatesPresetOf, bfRatesActual, loadBfRates, saveBfRates, bfRatesOsd,
+  bfRatesDefaultId, bfRatesDefaultToast, bfRatesFromJs, BF_RATES_FROM_JS_KEY, BF_RATES_SAVED_TOAST,
+} from "./sim-rates.js?v=366eea45d0dc";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -4975,8 +5015,11 @@ function syncRatesSource(){
   // exists), and for the class whose core it is: a class switch refreshes
   // Tune before selectCore hands over, which refreshes it again.
   if(bf&&bfCore){
-    const t=bfFlyingType(),cli=bfOf(t).cliText;
-    bf.textContent=ratesSourceText({core:'bf',quad:bfQuad(t),cli:!cli?'':bfPasteReplaces(cli)?'replace':'top'});
+    const b=bfOf(bfFlyingType()),cli=b.cliText;
+    const src={from:bfRatesFrom(),preset:bfRatesPresetOf(bfRatesWant()),paste:bfPasteWins(b),input:bfInputKind(),js:!!(bfRatesSaved&&bfRatesSaved.js)};
+    bf.textContent=ratesSourceText({core:'bf',cli:!cli?'':bfPasteReplaces(cli)?'replace':'top',bf:src});
+    bfRatesOsdText=bfRatesOsd(src);
+    syncBfRatesUI();
   }
 }
 function setRateAxis(ax){rateAxis=ax;refreshRatesUI();}
@@ -5693,7 +5736,7 @@ function updateOSD(){
   // failed), so nobody takes the js core for Betaflight.
   osdTR.innerHTML=(cs.kind==='bf'?'BF CORE · '+bfQuad(bfFlyingType()).toUpperCase()+'<br>':'JS CORE<br>')+`${gpConnected?(isRadio({id:gpName})?'RADIO':'GAMEPAD'):(touchCtl&&touchCtl.enabled?'TOUCH':'KEYBOARD')}${axisMap&&gpConnected?' (CAL)':''}<br>`+
     // Rates are per axis; name the one being shown so it cannot read as global.
-    (cs.kind==='bf'?`TUNE ${bfOf().diffLoaded&&bfOf().diffLoaded===bfDiff()?bfTuneId():'CLI IMPORT'}<br>`:
+    (cs.kind==='bf'?`TUNE ${bfOf().cliText?'CLI IMPORT':bfTuneId()} · RATES ${bfRatesOsdText}<br>`:
     `RATES ${rateAxis.toUpperCase()} ${maxRateDps(rateAxis).toFixed(0)}°/s ${rates.type}<br>`)+
     `CAM ${CFG.camDeg}° FOV ${Math.round(fpvFov())}${usingGltf?'<br>GLTF MAP':''}`+
     (ghostRoom?`<br>ROOM ${ghostRoom.code} · ${ghostRoom.pilots.size+1}/${ghostRoom.max}`:'');
@@ -7140,44 +7183,82 @@ function setCliStatus(text,kind){
   el.classList.toggle('ok',kind==='ok');
 }
 // IMPORT CLI on the bf core: the paste goes to Betaflight, and Betaflight
-// decides what it takes. Set lines go on top of the owner's diff (a later set
-// wins, so a few rate lines change just those); a full diff, which starts
-// from `defaults`, takes the owner's diff's place. The js core's rates are
-// left alone, and the paste stays with the class it was pasted on for the
-// session (bfOf().cliText; selectCore loads it again on the way back).
+// decides what it takes. Set lines go on top of the class config and Tune's
+// rates (a later set wins, so a few rate lines change just those); a full
+// diff, which starts from `defaults`, takes the config's place, its own rates
+// with it. The js core's rates are left alone, and the paste stays with the
+// class it was pasted on for the session (bfOf().cliText; selectCore loads it
+// again on the way back).
+// Tune's rates on the bf core take this path too (bfSetRates, bfApplyRates):
+// opts.rates, text is their set lines (sim-rates.js bfRatesLines), sent as the
+// rates part of the same config, under the class's paste or, once the pilot
+// changed them after it (opts.ratesLast), on top of it; read back from
+// Betaflight after, and checked against what the lines set.
 function bfPasteReplaces(text){return /^\s*defaults\b/im.test(text);}
-function bfDiffWith(text){return !text?bfDiff():bfPasteReplaces(text)?text:bfDiff()+'\n'+text;}
-function bfWantDiff(){return bfDiffWith(bfOf().cliText);}
+// What a class boots on: its config (bfDiff), Tune's rate lines and this
+// session's paste, in the order they were set; a full-diff paste in place of
+// the config and of any rates set before it. at: each part's lines in the
+// report (1-based, first and last).
+function bfCompose(paste,ratesText,ratesLast){
+  const full=!!paste&&bfPasteReplaces(paste);
+  const parts=full?[]:[['diff',bfDiff()]];
+  if(paste&&!ratesLast){if(!full&&ratesText)parts.push(['rates',ratesText]);parts.push(['paste',paste]);}
+  else{if(paste)parts.push(['paste',paste]);if(ratesText)parts.push(['rates',ratesText]);}
+  const at={};
+  let n=1;
+  for(const [k,t] of parts){const len=String(t).split('\n').length;at[k]=[n,n+len-1];n+=len;}
+  return {text:parts.map(p=>p[1]).join('\n'),at};
+}
+function bfWantDiff(){const b=bfOf();return bfCompose(b.cliText,bfRatesText(),b.ratesLast).text;}
 // A pasted line that changes something: a setting or feature Betaflight took,
 // or a config command with arguments (get, dump, diff, a bare aux, ... only print).
 function bfLineChanges(l){
   return l.status==='applied'&&!!(l.setting||l.feature||/^\s*(aux|adjrange|serial|map|resource|timer|dma|led|color|mode_color|rxrange|rxfail|vtxtable|beacon|mmix|smix|servo)\s+\S/i.test(l.text||''));
 }
-function importCliToBf(text){
+// The settings a text's set lines set, as Betaflight's get prints them.
+function bfSetsOf(text){
+  const o={};
+  for(const m of String(text).matchAll(/^[ \t]*set[ \t]+(\w+)[ \t]*=[ \t]*(\S+)[ \t]*\r?$/gim))o[m[1].toLowerCase()]=m[2];
+  return o;
+}
+// The rates the flying class's Betaflight holds (its active rate profile),
+// read back after each load; the sliders show them.
+function bfReadRates(b){
+  try{b.ratesBack=bfRatesFromGet(bfCore.sim.get(BF_RATE_KEYS.slice()));}
+  catch(e){b.ratesBack=null;console.warn('sim-core: reading the rates back failed ('+(e&&e.message||e)+')');}
+  return b.ratesBack;
+}
+function importCliToBf(text,opts){
+  const o=opts||{},rates=!!o.rates;
+  const status=rates?setBfRatesStatus:setCliStatus;
   if(!bfCore){
     const msg='BETAFLIGHT IS STILL LOADING — try again in a moment';
-    toast(msg);setCliStatus(msg,'err');
+    toast(msg);status(msg,'err');
     return null;
   }
+  const b=bfOf();
   const prev=bfWantDiff();
-  const label=()=>bfOf().cliText?'CLI import':bfTuneId();
+  const label=()=>b.cliText?'CLI import':bfTuneId();
+  const ratesLast=rates?(o.ratesLast!=null?!!o.ratesLast:b.ratesLast):false;
+  const want=rates?bfCompose(b.cliText,text,ratesLast):bfCompose(text,bfRatesText(),false);
   let r;
   try{
-    r=bfLoadDiff(bfDiffWith(text),'CLI import');
+    r=bfLoadDiff(want.text,rates?(o.label||'rates'):'CLI import',{quiet:!!o.quiet});
   }catch(e){
     // Betaflight did not boot with it (sim-core keeps the image that flies);
     // the adapter's stored diff goes back to that one too.
-    try{bfLoadDiff(prev,label());}catch(e2){console.warn('sim-core: restoring the diff failed ('+(e2&&e2.message||e2)+')');}
-    setCliStatus('Betaflight did not boot with it ('+(e&&e.message||e)+'); it flies what it flew before','err');
+    try{bfLoadDiff(prev,label(),{quiet:rates});}catch(e2){console.warn('sim-core: restoring the diff failed ('+(e2&&e2.message||e2)+')');}
+    if(rates)b.ratesFailed=want.text;
+    status('Betaflight did not boot with it ('+(e&&e.message||e)+'); it flies what it flew before','err');
     return null;
   }
   if(!r){
-    setCliStatus('DISARM TO LOAD A DIFF — Betaflight did not take it','err');
+    status('DISARM TO LOAD A DIFF — Betaflight did not take it','err');
     return null;
   }
-  // Count the paste's own lines (after the owner's diff when it goes on top).
-  const from=bfPasteReplaces(text)?0:bfDiff().split('\n').length;
-  const mine=(r.lines||[]).filter(l=>l.n>from);
+  // Count this load's own lines: the paste's, or the rates'.
+  const [lo,hi]=want.at[rates?'rates':'paste'];
+  const mine=(r.lines||[]).filter(l=>l.n>=lo&&l.n<=hi);
   const took=mine.filter(bfLineChanges).length;
   const refused=mine.filter(l=>l.status==='rejected').length,missing=mine.filter(l=>l.status==='error').length;
   // A setting the sim sets itself (sim-core's policy, rpm_filter_harmonics):
@@ -7186,14 +7267,37 @@ function importCliToBf(text){
   const detail=(refused>0?', refused '+refused:'')+(missing>0?', '+missing+' not in the sim target':'')+(over.length>0?', '+over.length+' set by the sim':'');
   const notes=[...new Set(over.map(l=>l.msg).filter(Boolean))];
   const noteText=notes.length?'\n'+notes.join('\n'):'';
-  if(took<=0){
-    // Nothing taken: Betaflight goes back to what it flew before this paste.
-    bfLoadDiff(prev,label());
+  const sets=rates?Object.keys(bfSetsOf(text)).length:0;
+  if(rates?took<sets:took<=0){
+    // Not all taken (rates) or none (a paste): Betaflight goes back to what it
+    // flew before this load.
+    bfLoadDiff(prev,label(),{quiet:rates});
+    if(rates){
+      b.ratesFailed=want.text;
+      status('Betaflight took '+took+' of the '+sets+' rate lines'+detail+'; it flies what it flew before'+noteText,'err');
+      return null;
+    }
     setCliStatus('Betaflight took none of it'+detail+'; it flies what it flew before'+noteText,'err');
     return r;
   }
-  bfOf().cliText=text;
+  if(rates)b.ratesLast=ratesLast;
+  else{b.cliText=text;b.ratesLast=false;}
+  b.ratesFailed=null;
+  const back=bfReadRates(b);
   syncRatesSource();
+  if(rates){
+    // Tune's lines are the last word unless a paste after them set its own:
+    // then Betaflight must hold exactly what they set.
+    const last=!b.cliText||ratesLast;
+    const asked=bfRatesFromGet(bfSetsOf(text));
+    if(last&&!bfRatesSame(back,asked)){
+      console.error('sim-core: Betaflight holds rates '+JSON.stringify(back)+', not the rates Tune set ('+JSON.stringify(asked)+')');
+      status('Betaflight read back '+bfRatesSummary(back)+', not '+bfRatesSummary(asked),'err');
+      return null;
+    }
+    status('Betaflight took '+took+' rate line'+(took===1?'':'s')+(bfPasteWins(b)?' under your paste, whose own rates fly':'')+'; it flies '+bfRatesSummary(back)+' (read back)'+detail+noteText,'ok');
+    return r;
+  }
   setCliStatus('Betaflight took '+took+' line'+(took===1?'':'s')+(bfPasteReplaces(text)?' (a full diff, in place of '+bfTuneId()+')':' on top of '+bfTuneId())+detail+noteText,'ok');
   return r;
 }
@@ -7266,7 +7370,10 @@ document.getElementById('btnCliImport').onclick=()=>importCli(document.getElemen
 {
   const shareRates=document.getElementById('btnRatesShare');
   if(shareRates)shareRates.onclick=async()=>{
-    const token=encodeRates(rates);
+    // The flying core's: on bf what Betaflight flies (read back), on js the profile.
+    const on=core.kind==='bf'&&bfCore?bfRatesShown():rates;
+    const token=encodeRates(on);
+    const maxOf=ax=>maxRateDpsOf(on.type,on[ax]).toFixed(0);
     if(!token){toast('RATES LINK FAILED');return;}
     const url=ratesDeepLink({
       origin:location.origin,
@@ -7280,7 +7387,7 @@ document.getElementById('btnCliImport').onclick=()=>importCli(document.getElemen
     });
     try{
       await navigator.clipboard.writeText(url);
-      toast('RATES LINK COPIED · max '+maxRateDps('roll').toFixed(0)+'/'+maxRateDps('pitch').toFixed(0)+'/'+maxRateDps('yaw').toFixed(0)+' °/s');
+      toast('RATES LINK COPIED · max '+maxOf('roll')+'/'+maxOf('pitch')+'/'+maxOf('yaw')+' °/s');
     }catch(e){
       toast('COPY FAILED');
     }
@@ -7292,6 +7399,206 @@ window._rates=()=>({state:JSON.parse(JSON.stringify(rates)),axis:rateAxis,
   token:encodeRates(rates),
   cards:Object.keys(RATE_CARDS),
   maxDps:{roll:+maxRateDps('roll').toFixed(0),pitch:+maxRateDps('pitch').toFixed(0),yaw:+maxRateDps('yaw').toFixed(0)}});
+
+// ---------- Rates on the bf core (Tune: Rates; sim-rates.js BF_RATE_PRESETS) ----------
+// One profile, the pilot's, for the 65 and the 75: saved in this browser once
+// they pick a preset or move a slider (bfRatesSaved), a rates link's for the
+// session (bfRatesLinked), or until then a default by input (bfInputKind:
+// Beginner on a gamepad that is not a radio, Cruise on a radio, the keyboard
+// or touch). The js core's saved rates, where they differ from its default,
+// are carried over once, as the pilot's own. Every change goes to
+// Betaflight as set lines through importCliToBf (opts.rates), the one way
+// rates reach it, and is read back; the boot and each class change send them
+// too (bfApplyRates). A paste with rate lines flies its own for the session,
+// on the class it was pasted on, until the pilot changes the rates there.
+// Not Coach/Rig lines, ghosts or bots: they keep the rates they were flown
+// with. The js core (the 85, ?core=js) keeps its own profile (rates).
+let bfRatesSaved=loadBfRates();
+// Once in this browser: the js core's saved profile (ryflyRates, loaded into
+// rates above) where it differs from the js default, saved as the bf core's,
+// Custom (bfRatesFromJs).
+try{
+  if(!localStorage.getItem(BF_RATES_FROM_JS_KEY)){
+    const st=!bfRatesSaved&&ratesAreCustom?bfRatesFromJs(rates,pilotRatesDefault()):null;
+    if(st){
+      bfRatesSaved={preset:'',link:bfRatesSame({...st,pitch:st.roll},st),js:true,rates:st};
+      saveBfRates(bfRatesSaved);
+    }
+    localStorage.setItem(BF_RATES_FROM_JS_KEY,'1');
+  }
+}catch(e){/* no storage: nothing carried */}
+let bfRatesLinked=null;
+let bfRatesLinkRP=bfRatesSaved?bfRatesSaved.link:true;   // roll and pitch as one
+let bfRatesOsdText='';
+let bfRatesToastTimer=null,bfRatesToastFor=null;
+// The pilot's input as the default sees it: a pad the page takes for a radio
+// (padIsRadio: its name, or a radio preset picked for it), another pad, touch,
+// or the keyboard.
+function bfInputKind(){return gpConnected?(padIsRadio({id:gpName})?'radio':'gamepad'):(touchCtl&&touchCtl.enabled?'touch':'keyboard');}
+function bfRatesWant(){return bfRatesLinked||(bfRatesSaved&&bfRatesSaved.rates)||bfRatesPreset(bfRatesDefaultId(bfInputKind()));}
+function bfRatesFrom(){return bfRatesLinked?'link':bfRatesSaved?'saved':'default';}
+function bfRatesText(){return bfRatesLines(bfRatesWant());}
+// The paste's own rates fly: it came after Tune's and set others (a full diff
+// always carries its own).
+function bfPasteWins(b){return !!b.cliText&&!b.ratesLast&&(bfPasteReplaces(b.cliText)||!bfRatesSame(b.ratesBack,bfRatesWant()));}
+// What Betaflight flies on the flying class (read back), or Tune's while it loads.
+function bfRatesShown(){const b=bfCore?bfOf(bfFlyingType()):null;return (b&&b.ratesBack)||bfRatesWant();}
+function bfRatesSummary(st){
+  if(!st)return 'no rates';
+  const p=bfRatesPresetOf(st);
+  const ax=a=>{const s=st[a];return st.type==='ACTUAL'?(s.rcRate*10)+'/'+(s.srate*10)+'/'+s.expo.toFixed(2):Math.round(maxRateDpsOf(st.type,s))+' max';};
+  return (p?BF_RATE_PRESETS[p].label+' ':'')+(RATE_TYPE_LABELS[st.type]||st.type)+' roll '+ax('roll')+', pitch '+ax('pitch')+', yaw '+ax('yaw');
+}
+function setBfRatesStatus(text,kind){
+  const el=document.getElementById('bfRatesStatus');
+  if(!el)return;
+  el.textContent=text||'';
+  el.classList.toggle('err',kind==='err');
+  el.classList.toggle('ok',kind==='ok');
+}
+// The flying class's Betaflight on what it should fly (bfWantDiff): its
+// config, Tune's rates and its paste. On the core's first takeover, a class
+// change and, disarmed, whenever it holds something else (bfRatesWatch: a
+// load refused while armed). A load Betaflight refused is not tried again.
+function bfApplyRates(){
+  const b=bfOf();
+  if(!bfCore||b.core!==bfCore)return null;
+  const want=bfWantDiff();
+  if(want===b.diffLoaded){if(!b.ratesBack)bfReadRates(b);syncRatesSource();bfRatesNote();return true;}
+  if(want===b.ratesFailed)return null;
+  const r=importCliToBf(bfRatesText(),{rates:true,quiet:true});
+  bfRatesNote();
+  return r;
+}
+// Tune's line names the input the default goes by: refreshed when it changes.
+let bfInputSeen=null;
+function bfInputWatch(){
+  const k=bfInputKind();
+  if(k===bfInputSeen)return;
+  bfInputSeen=k;
+  syncRatesSource();
+}
+function bfRatesWatch(){
+  const b=bfOf();
+  if(b.core&&b.core===bfCore&&bfWantDiff()!==b.diffLoaded)bfApplyRates();
+}
+// The pilot's change (a preset, a slider, the link box): to Betaflight on
+// top of any paste, saved once it flies; refused (armed, or Betaflight did
+// not take it), the sliders go back to what flies.
+function bfSetRates(next){
+  if(!bfCore||!next)return false;
+  const p=bfRatesPresetOf(next);
+  const r=importCliToBf(bfRatesLines(next),{rates:true,ratesLast:true,quiet:true});
+  const ok=!!r&&bfRatesSame(bfOf().ratesBack,next);
+  if(ok){
+    bfRatesLinked=null;
+    bfRatesSaved={preset:p,link:bfRatesLinkRP,rates:next};
+    saveBfRates(bfRatesSaved);
+  }
+  syncRatesSource();
+  return ok;
+}
+// A rates link's rates (?preset=, ?rates=), for the session: sent now if a bf
+// core flies, otherwise when it takes over.
+function bfRatesFromLink(st){
+  bfRatesLinked=st;
+  if(bfCore)bfApplyRates();
+}
+// Rates nobody picked in Tune, said on the bf core: the default by input
+// each time it is another than the one said last (BF_RATES_TOAST_KEY), and
+// the js core's carried over, once. After the core's own toast, and only
+// while no other toast is up (never over a finish card's SHARE).
+function bfRatesUnpicked(){
+  const from=bfRatesFrom();
+  return from==='default'?bfRatesDefaultId(bfInputKind()):from==='saved'&&bfRatesSaved.js?'js':null;
+}
+function bfRatesNote(){
+  const what=bfRatesUnpicked();
+  if(!what||what===bfRatesToastFor)return;
+  let said=null;
+  try{said=localStorage.getItem(BF_RATES_TOAST_KEY);}catch(e){/* no storage: say it */}
+  if(said===what)return;
+  bfRatesToastFor=what;
+  clearTimeout(bfRatesToastTimer);
+  const say=()=>{
+    if(bfRatesUnpicked()!==what||core.kind!=='bf'){bfRatesToastFor=null;return;}
+    if(toastEl.style.opacity==='1'){bfRatesToastTimer=setTimeout(say,700);return;}
+    toast(what==='js'?BF_RATES_SAVED_TOAST:bfRatesDefaultToast(bfInputKind()),{ms:4000});
+    bfRatesToastFor=null;
+    try{localStorage.setItem(BF_RATES_TOAST_KEY,what);}catch(e){}
+  };
+  bfRatesToastTimer=setTimeout(say,1600);
+}
+// Tune's bf rates show what Betaflight flies, as Actual (a paste's other rate
+// type converted, the max marked ≈): its preset (Custom for none), roll and
+// pitch as one while linked and equal.
+function syncBfRatesUI(){
+  const S=id=>document.getElementById(id);
+  const st=bfRatesShown(),act=bfRatesActual(st);
+  if(!act)return;
+  const same=['rcRate','srate','expo'].every(f=>act.roll[f]===act.pitch[f]);
+  const linked=bfRatesLinkRP&&same;
+  const cb=S('cbBfRatesLink');
+  if(cb)cb.checked=linked;
+  const pitch=S('bfAxis_pitch');
+  if(pitch)pitch.hidden=linked;
+  const name=S('bfAxisName_roll');
+  if(name)name.textContent=linked?'Roll + pitch':'Roll';
+  for(const ax of RATE_AXES){
+    for(const f of ['rcRate','srate','expo']){
+      const v=act[ax][f]*BF_RATE_SLIDERS[f].scale;
+      const el=S('bfs_'+ax+'_'+f);
+      if(el)el.value=String(v);
+      const lbl=S('bfv_'+ax+'_'+f);
+      if(lbl)lbl.textContent=f==='expo'?v.toFixed(2):Math.round(v)+' °/s';
+    }
+    const m=S('bfMax_'+ax);
+    if(m)m.textContent='max '+Math.round(maxRateDpsOf(st.type,st[ax]))+' °/s'+(act.exact?'':' ('+(RATE_TYPE_LABELS[st.type]||st.type)+', shown as Actual ≈)');
+  }
+  const sel=S('bfRatePreset');
+  if(sel)sel.value=bfRatesPresetOf(st);
+  drawRateCurve(S('bfRateCurve'),st.type,st.roll);
+}
+{
+  const sel=document.getElementById('bfRatePreset');
+  if(sel){
+    for(const [id,p] of Object.entries(BF_RATE_PRESETS)){
+      const o=document.createElement('option');
+      o.value=id;o.textContent=p.label;
+      sel.appendChild(o);
+    }
+    const custom=document.createElement('option');
+    custom.value='';custom.textContent='Custom';custom.disabled=true;
+    sel.appendChild(custom);
+    sel.onchange=()=>{if(sel.value&&bfSetRates(bfRatesPreset(sel.value)))toast('RATES: '+BF_RATE_PRESETS[sel.value].label.toUpperCase());};
+  }
+  // The sliders' value under the pointer as it moves; to Betaflight on release.
+  const next=(ax,f,v)=>{
+    const st=bfRatesActual(bfRatesShown());
+    delete st.exact;
+    st[ax][f]=f==='expo'?Math.round(v*100)/100:Math.round(v/BF_RATE_SLIDERS[f].scale);
+    if(ax==='roll'&&bfRatesLinkRP)st.pitch={...st.roll};
+    return st;
+  };
+  document.querySelectorAll('#bfRates input[type=range]').forEach(el=>{
+    const ax=el.dataset.axis,f=el.dataset.field;
+    el.addEventListener('input',()=>{
+      const v=parseFloat(el.value),lbl=document.getElementById('bfv_'+ax+'_'+f);
+      if(lbl)lbl.textContent=f==='expo'?v.toFixed(2):Math.round(v)+' °/s';
+    });
+    el.addEventListener('change',()=>bfSetRates(next(ax,f,parseFloat(el.value))));
+  });
+  const link=document.getElementById('cbBfRatesLink');
+  if(link)link.onchange=()=>{
+    bfRatesLinkRP=link.checked;
+    const st=bfRatesActual(bfRatesShown());
+    delete st.exact;
+    if(bfRatesLinkRP&&!bfRatesSame({...st,pitch:st.roll},st)){bfSetRates({...st,pitch:{...st.roll}});return;}
+    if(bfRatesSaved){bfRatesSaved.link=bfRatesLinkRP;saveBfRates(bfRatesSaved);}
+    syncBfRatesUI();
+  };
+  syncBfRatesUI();
+}
 
 // ---------- Ghost replay (built on the lap timer) ----------
 // Records quad pose every 2nd frame with elapsed-lap-time stamps; on a new
@@ -8885,7 +9192,7 @@ const SIM_CORE_VERSION='v0.8.0';
 // failed load (the js core then flies that class for the session).
 const bfClasses={};
 function bfOf(type=droneType){
-  return bfClasses[type]||(bfClasses[type]={core:null,airframe:null,ownerDiff:null,diffLoaded:null,plantMap:null,worldSigSent:'',cliText:'',memo:null,loading:null,failed:false});
+  return bfClasses[type]||(bfClasses[type]={core:null,airframe:null,ownerDiff:null,diffLoaded:null,plantMap:null,worldSigSent:'',cliText:'',ratesLast:false,ratesBack:null,ratesFailed:null,memo:null,loading:null,failed:false});
 }
 // The quad the bf core flies for a class, for the OSD and the console.
 function bfQuad(type=droneType){return BF_CLASSES[type]?BF_CLASSES[type].quad:'';}
@@ -8980,7 +9287,7 @@ function bfAudio(b){
 }
 // Feed a CLI diff to the bf core (configure: Betaflight reboots, disarmed),
 // then put the quad back where it stands. Disarmed only.
-function bfLoadDiff(text,label){
+function bfLoadDiff(text,label,opts){
   if(core.kind!=='bf')return null;
   if(coreArmed()){toast('DISARM TO LOAD A DIFF');return null;}
   const r=core.loadDiff(text);
@@ -8988,7 +9295,7 @@ function bfLoadDiff(text,label){
   placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
   bfSyncMode();
   console.info('sim-core: '+label+': '+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target'+bfOverrideNote(r)+'; '+bfConfigNote(core));
-  toast('BETAFLIGHT — '+label.toUpperCase());
+  if(!(opts&&opts.quiet))toast('BETAFLIGHT — '+label.toUpperCase());
   return r;
 }
 // Respawn the bf core at a module pose, with the world sent again if it changed.
@@ -9007,7 +9314,9 @@ function bfSpawn(pos,q,opts){
 function bfWorldWatch(now){
   if(core.kind!=='bf'||now-bfWorldCheckAt<500)return;
   bfWorldCheckAt=now;
+  bfInputWatch();
   if(coreArmed())return;
+  bfRatesWatch();
   const b=bfOf();
   const sig=bfWorldSig();
   if(sig===b.worldSigSent)return;
@@ -9061,12 +9370,11 @@ function selectCore(){
       bfCore=b.core;
       core=b.core;
       // On this class's core: respawned (disarmed) where the quad stands, with
-      // the map's contact profile, then its diff (with this class's CLI import
-      // on top) if it differs.
+      // the map's contact profile, then its config with Tune's rates and this
+      // class's CLI import (bfWantDiff) if it holds something else.
       placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
       bfSyncPlant();
-      const want=bfWantDiff();
-      if(bfDiff()&&want!==b.diffLoaded)bfLoadDiff(want,b.cliText?'CLI import':bfTuneId());
+      bfApplyRates();
       core.setMode(flightMode);
       bfSyncMode();
       bfAudio(b);
@@ -9118,6 +9426,8 @@ function selectCore(){
       syncCoreUI();
       syncRatesSource();
       placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
+      // Tune's rates, through importCliToBf, on top of the class config it booted on.
+      bfApplyRates();
       toast('BETAFLIGHT CORE — '+c.quad.toUpperCase());
     });
   }).catch(e=>{
@@ -9733,15 +10043,16 @@ function applyQueryBoot(){
   }
   const presetRaw=q.get('preset');
   const ratesRaw=q.get('rates');
-  // Rates links set the js core's rates; Betaflight flies its diff's.
-  if((presetRaw||ratesRaw)&&bfWanted()&&!bfOf().failed)toast('RATES LINK — JS CORE ONLY; BETAFLIGHT FLIES ITS DIFF (TUNE → IMPORT CLI)');
-  // Query rates are session-only: rates= > preset= > saved ryflyRates. Do not persist.
+  // Query rates are session-only: rates= > preset= > saved. Do not persist.
+  // Both cores: the js profile (a js preset name) and Betaflight's (a bf
+  // preset, or a js preset's bf alias: sim-rates.js bfPresetId).
   if(presetRaw&&applyRatePreset(rates,presetRaw)){
     const sel=document.getElementById('ratePreset');
     if(sel)sel.value=presetRaw;
     ratesFromLink=true;
     refreshRatesUI();
   }
+  if(presetRaw&&bfPresetId(presetRaw)&&!ratesRaw)bfRatesFromLink(bfRatesPreset(presetRaw));
   if(ratesRaw){
     const decoded=decodeRates(ratesRaw);
     if(decoded&&!decoded.error){
@@ -9749,6 +10060,7 @@ function applyQueryBoot(){
       for(const ax of RATE_AXES)Object.assign(rates[ax],decoded[ax]);
       ratesFromLink=true;
       refreshRatesUI();
+      bfRatesFromLink({type:decoded.type,roll:{...decoded.roll},pitch:{...decoded.pitch},yaw:{...decoded.yaw}});
     }else{
       toast('RATES LINK INVALID');
     }
@@ -9883,6 +10195,9 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   osdBcHtml,core:()=>core.kind,coreState:()=>cs,bfReport:()=>bfCore&&bfCore.report,bfCore:()=>bfCore,
   simClockMs:()=>simClockMs,
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
+  // Tune's bf rates: what they ask for and where from, what the flying class's
+  // Betaflight holds (read back), whether a paste's fly, the OSD's word.
+  bfRates:()=>{const b=bfCore?bfOf(bfFlyingType()):null;return JSON.parse(JSON.stringify({want:bfRatesWant(),from:bfRatesFrom(),saved:bfRatesSaved,link:bfRatesLinkRP,back:b&&b.ratesBack,pasteWins:!!b&&bfPasteWins(b),ratesLast:!!b&&b.ratesLast,osd:bfRatesOsdText,source:(document.getElementById('ratesSourceBf')||{}).textContent,status:(document.getElementById('bfRatesStatus')||{}).textContent}));},
   audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},setTestPilot(fn){testPilot=typeof fn==='function'?fn:null;if(testPilot)testPilotUsed=true;testPilotError=null;},testPilotError:()=>testPilotError,testPilotUsed:()=>testPilotUsed,
   // A built-in track's online board floor (sim-retention.js builtinFloorMs, as the Worker has it), or null.
   builtinFloorMs:(id,c)=>{const t=findTrack(id);return t?builtinFloorMs(t,c):null;},

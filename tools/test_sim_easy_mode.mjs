@@ -34,6 +34,14 @@ import {
 } from '../sim-touch.js';
 import { switchAux, radioAux, auxRanges, createBfCore, armingFlagNames, WS } from '../sim-core-adapter.js';
 import { SimCore } from '../vendor/sim-core/sim-core.js';
+import { saveBfRates, bfRatesPreset } from '../sim-rates.js';
+
+// The bf core flies the rates these flights were written on, the class diffs'
+// own (RyFly (stock)), saved in every pass's profile: not Tune's default,
+// which goes by input and so changes as a pass plugs a pad in or out. A pass
+// that seeds its own keeps them.
+const BF_RATES_SEED = {};
+saveBfRates({ rates: bfRatesPreset('ryfly'), link: true }, { setItem: (k, v) => { BF_RATES_SEED[k] = v; } });
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const DIFF = readFileSync(join(root, 'vendor/sim-core/configs/air65-ryfly-2026-10-23.txt'), 'utf8');
@@ -852,7 +860,7 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
       await sleep(250);
       await evaluate(ws, `(() => {
         localStorage.clear();
-        const seed = ${JSON.stringify(seed.storage || {})};
+        const seed = ${JSON.stringify({ ...BF_RATES_SEED, ...(seed.storage || {}) })};
         for (const k of Object.keys(seed)) localStorage.setItem(k, seed[k]);
         sessionStorage.setItem('__fakePads', JSON.stringify(${JSON.stringify(seed.pad || { on: false, id: '', mapping: '', axes: [], buttons: 0 })}));
         return true;
