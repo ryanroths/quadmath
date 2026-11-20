@@ -620,10 +620,10 @@ export function createTrickObserver(det, opts) {
   // The object beside the path (rec.side), logged only: each step (SW
   // columns) the ring's clock, the segment's number (0 none), the position
   // (sim-core frame, m: x forward, y left, z up, as camPush's), the velocity
-  // (m/s), the nose, the heading (the body's left axis turned forward, so a
-  // pitch past vertical keeps it, the nose's when the body is on its side;
-  // never reversed from one step to the next, so a roll past 90 keeps it
-  // too), the body's up-Z, and the objects beside the path nearest first
+  // (m/s), the nose, the heading (the nose's, level; the body's left axis
+  // turned forward when the nose is within 66 degrees of vertical; never
+  // reversed from one step to the next, so a pitch over the top or a roll
+  // past 90 keeps it), the body's up-Z, and the objects beside the path nearest first
   // (object id + 1, its nearest box's index, nearest point, distance).
   // sideRecord reads it.
   const SB = 15, SK = SIDE.kNear, SW = SB + SK * 6, SCAP = SIDE.cap;
@@ -670,7 +670,7 @@ export function createTrickObserver(det, opts) {
     rec.pre = ex.pre;
     rec.saw = ex.saw;
     rec.cam = camRecord(f);
-    try { sideAttach(rec); } catch (e) { rec.side = null; }
+    try { sideAttach(rec, det.lastMerge); } catch (e) { rec.side = null; }
     rec.barani = baraniProbe(f);
     rec.phases = phaseRecord(det.lastPhases);
     rec.gapBack = ex.id === 'maverick' && det.lastGapBack ? MAV_GAP_MUL : 0;
@@ -873,11 +873,12 @@ export function createTrickObserver(det, opts) {
     return out;
   }
 
-  // The colliders as sim-core boxes; true when they changed (not the first).
+  // The colliders as sim-core boxes and objects; true when they changed.
   function sideColsSet(cols, ws) {
     const n = cols && cols.length ? cols.length : 0;
     if (cols === sideCols && n === sideColsN && ws === sideWs && (!n || (cols[0] === sideCol0 && cols[n - 1] === sideColL))) return false;
-    const was = sideColsN >= 0;
+    // A change (not the first): the pending records finish on the old set.
+    if (sideColsN >= 0) sideReset('colliders');
     sideCols = cols || null; sideColsN = n; sideWs = ws;
     sideCol0 = n ? cols[0] : null; sideColL = n ? cols[n - 1] : null;
     sideBox = new Float64Array(n * 6);
@@ -887,26 +888,30 @@ export function createTrickObserver(det, opts) {
       sideBox[k] = -b.max.z / ws; sideBox[k + 1] = -b.max.x / ws; sideBox[k + 2] = b.min.y / ws;
       sideBox[k + 3] = -b.min.z / ws; sideBox[k + 4] = -b.min.x / ws; sideBox[k + 5] = b.max.y / ws;
     }
-    // Objects: union the boxes face to face (touching within cellM on one
-    // axis) whose faces match (each overlap 80 % of the larger's on the
-    // other two). A sweep along x.
-    const B = sideBox, tol = SIDE.cellM, par = new Int32Array(n);
+    // Objects: union the boxes face to face (touching on one axis within
+    // cellM, or 12 % of the smaller box's least extent, both thicker than
+    // that there) whose faces match (each overlap 80 % of the larger's on
+    // the other two). A sweep along x.
+    const B = sideBox, par = new Int32Array(n);
+    const least = (a) => Math.min(B[a + 3] - B[a], B[a + 4] - B[a + 1], B[a + 5] - B[a + 2]);
     for (let i = 0; i < n; i++) par[i] = i;
     const root = (i) => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
     const ord = [];
     for (let i = 0; i < n; i++) if (B[i * 6] === B[i * 6]) ord.push(i);
     ord.sort((a, b) => B[a * 6] - B[b * 6]);
     for (let u = 0; u < ord.length; u++) {
-      const a = ord[u] * 6;
+      const a = ord[u] * 6, la = least(a), tolA = Math.max(SIDE.cellM, 0.12 * la);
       for (let v = u + 1; v < ord.length; v++) {
         const b = ord[v] * 6;
-        if (B[b] > B[a + 3] + tol) break;
+        if (B[b] > B[a + 3] + tolA) break;
+        const tol = Math.max(SIDE.cellM, 0.12 * Math.min(la, least(b)));
         let touch = -1, ok = 1;
         for (let ax = 0; ax < 3 && ok; ax++) {
+          const ea = B[a + 3 + ax] - B[a + ax], eb = B[b + 3 + ax] - B[b + ax];
           const o = Math.min(B[a + 3 + ax], B[b + 3 + ax]) - Math.max(B[a + ax], B[b + ax]);
-          if (Math.abs(o) <= tol) { if (touch >= 0) ok = 0; else touch = ax; }
-          else if (o < 0) ok = 0;
-          else if (o < 0.8 * Math.max(B[a + 3 + ax] - B[a + ax], B[b + 3 + ax] - B[b + ax])) ok = 0;
+          if (Math.abs(o) <= tol && ea > tol && eb > tol) { if (touch >= 0) ok = 0; else touch = ax; }
+          else if (o < -tol) ok = 0;
+          else if (o < 0.8 * Math.max(ea, eb) - 1e-9) ok = 0;
         }
         if (ok && touch >= 0) { const ra = root(ord[u]), rb = root(ord[v]); if (ra !== rb) par[rb] = ra; }
       }
@@ -929,7 +934,7 @@ export function createTrickObserver(det, opts) {
         if (!(sideObjBox[o + 3 + ax] >= B[i * 6 + 3 + ax])) sideObjBox[o + 3 + ax] = B[i * 6 + 3 + ax];
       }
     }
-    return was;
+    return true;
   }
 
   // The pending records, finished now (at the ring's last step), then the
@@ -948,7 +953,7 @@ export function createTrickObserver(det, opts) {
   function sidePush(s, t, seg) {
     const ws = s.ws || 3.5;
     const px = -(s.wz || 0) / ws, py = -(s.wx || 0) / ws, pz = (s.wy || 0) / ws;
-    if (sideColsSet(s.colliders, ws)) sideReset('colliders');
+    sideColsSet(s.colliders, ws);
     if (sideN) {
       const k0 = ((sideHead - 1) % SCAP + SCAP) % SCAP * SW;
       if (Math.hypot(px - sideBuf[k0 + 2], py - sideBuf[k0 + 3], pz - sideBuf[k0 + 4]) > 2) sideReset('jump');
@@ -959,7 +964,7 @@ export function createTrickObserver(det, opts) {
     const uz = 1 - 2 * (x * x + y * y);
     const lh = Math.hypot(lx, ly), fh = Math.hypot(fx, fy);
     let hx = 0, hy = 0;
-    if (lh > 0.25) { hx = ly / lh; hy = -lx / lh; } else if (fh > 0.25) { hx = fx / fh; hy = fy / fh; }
+    if (fh > 0.4) { hx = fx / fh; hy = fy / fh; } else if (lh > 0.25) { hx = ly / lh; hy = -lx / lh; }
     if (hx || hy) {
       // Kept from the step before; on a fresh ring, the nose's way.
       const ref = sideHdOn ? hx * sideFx + hy * sideFy : hx * fx + hy * fy;
@@ -1012,8 +1017,7 @@ export function createTrickObserver(det, opts) {
 
   // A record's rec.side now, and again SIDE.postS after its end. The window
   // opens SIDE.preS before the segment, or before the merge it closed.
-  function sideAttach(rec) {
-    const mg = det.lastMerge;
+  function sideAttach(rec, mg) {
     const ta = mg && mg.t > 0 ? Math.min(segSim0, simT - mg.t) : segSim0;
     const p = { rec, t0: segSim0, t1: simT, ta, due: simT + SIDE.postS };
     rec.side = sideRecord(p, simT, 'end');
@@ -1034,8 +1038,10 @@ export function createTrickObserver(det, opts) {
   // direction of travel there (+ left), latH of the heading, lat1 of the
   // direction of travel at the object's first pass (a Cradle: one sign, then
   // the other), ux uy that direction of travel, and the quad's state.
-  // segs: the segments in the window ([start, end], s). stops: vAlong
-  // through 0 (by 0.3 m/s). noseMax: the most pitchH. objs: the objects
+  // segs: the segments in the window ([start, end], s; 8 at most). stops:
+  // the level travel turned round. noseMax: the most pitchH (unwrapped).
+  // passDrop: passes over passMax (the nearest in time to the segment are
+  // kept); passOver: passes over or under an object (no side), not listed. objs: the objects
   // passed and the nearest (bounds, sim-core m: x0 y0 z0 x1 y1 z1).
   function sideRecord(p, tEnd, why) {
     const D = 180 / Math.PI, F = SW, t0 = p.t0;
@@ -1069,8 +1075,8 @@ export function createTrickObserver(det, opts) {
       return { obj: sideBuf[o] - 1, box: sideBuf[o + 1], cx: sideBuf[o + 2], cy: sideBuf[o + 3], cz: sideBuf[o + 4], d: sideBuf[o + 5] };
     };
     // Passes, per object.
-    const per = new Map(), passes = [];
-    let drop = 0, near = null;
+    const per = new Map(), all = [];
+    let over = 0, near = null;
     const thr = SIDE.minSpd, h0 = SIDE.hystM, hk = SIDE.hystK;
     for (let j = 0; j < ks.length; j++) {
       const k = ks[j];
@@ -1081,7 +1087,11 @@ export function createTrickObserver(det, opts) {
         const c = slot(k, m), ob = c.obj;
         if (!near || c.d < near.c.d) near = { k, c };
         let q = per.get(ob);
-        if (!q) { q = { sg: 0, bk: k, bc: c, ux: 0, uy: 0, n1: null }; per.set(ob, q); }
+        if (!q) { q = { sg: 0, bk: k, bc: c, ux: 0, uy: 0, n1: null, tl: sideBuf[k] }; per.set(ob, q); }
+        // Out of the list for a while (not beside the path, or 12 nearer):
+        // its way past is unknown.
+        if (sideBuf[k] - q.tl > 0.1) { q.sg = 0; q.bk = k; q.bc = c; }
+        q.tl = sideBuf[k];
         if (c.d < q.bc.d) { q.bk = k; q.bc = c; }
         if (spd < thr) continue;
         const ux = vx / spd, uy = vy / spd;
@@ -1096,40 +1106,59 @@ export function createTrickObserver(det, opts) {
           const r = st(q.bk), b = q.bc;
           const brx = b.cx - r.x, bry = b.cy - r.y;
           const pu = r.spd >= thr ? [r.vx / r.spd, r.vy / r.spd] : [ux, uy];
-          if (!q.n1) q.n1 = pu;
-          if (passes.length < SIDE.passMax) {
-            passes.push({
+          const latT = -brx * pu[1] + bry * pu[0];
+          // Over or under it (no side): counted, not listed.
+          if (Math.abs(latT) < h0) over++;
+          else if (all.length < 400) {
+            if (!q.n1) q.n1 = pu;
+            all.push({
               t: r3(r.t), at: r3(sideBuf[k] - t0), obj: ob, box: b.box, d: r3(b.d), dH: r3(Math.hypot(brx, bry)), up: r3(b.cz - r.z),
-              latT: r3(-brx * pu[1] + bry * pu[0]), latH: r3(-brx * r.Fy + bry * r.Fx), lat1: r3(-brx * q.n1[1] + bry * q.n1[0]),
+              latT: r3(latT), latH: r3(-brx * r.Fy + bry * r.Fx), lat1: r3(-brx * q.n1[1] + bry * q.n1[0]),
               ux: r3(pu[0]), uy: r3(pu[1]), spd: r3(r.spd), vAlong: r3(r.vAlong), vz: r3(r.vz),
               noseEl: Math.round(r.noseEl), pitchH: Math.round(r.pitchH), noseDot: r.noseDot == null ? null : r3(r.noseDot),
               hd: Math.round(r.hd), upZ: r3(r.upZ), x: r3(r.x), y: r3(r.y), z: r3(r.z), seg: r.seg,
             });
-          } else drop++;
+          }
         }
         q.sg = now;
       }
     }
+    // The passMax nearest in time to the segment, in order.
+    const off = (x) => (x.t < 0 ? -x.t : x.t > p.t1 - t0 ? x.t - (p.t1 - t0) : 0);
+    const passes = all.length > SIDE.passMax ? all.slice().sort((a, b) => off(a) - off(b)).slice(0, SIDE.passMax).sort((a, b) => a.t - b.t) : all;
     out.passes = passes;
-    out.passDrop = drop;
+    out.passDrop = all.length - passes.length;
+    out.passOver = over;
     // The window: its segments, the stops, the nose.
+    // The stops: the level travel turned round (by 120 degrees or more,
+    // moving at minSpd) from where it last went; pitchH unwrapped over the
+    // window (a back flip reads 360).
     const segs = [];
-    let cur = 0, stopSg = 0, nm = null, tPrev = 0;
+    let cur = 0, open = 0, tPrev = 0, rx0 = 0, ry0 = 0, pw = 0, pPrev = 0, nm = null;
     const stops = [];
     for (let j = 0; j < ks.length; j++) {
       const r = st(ks[j]);
       if (r.seg !== cur) {
-        if (cur && segs.length) segs[segs.length - 1][1] = r3(tPrev);
-        if (r.seg && segs.length < 8) segs.push([r3(r.t), null]);
+        if (open) { segs[segs.length - 1][1] = r3(tPrev); open = 0; }
+        if (r.seg && segs.length < 8) { segs.push([r3(r.t), null]); open = 1; }
         cur = r.seg;
       }
       tPrev = r.t;
-      const sg = r.vAlong >= 0.3 ? 1 : r.vAlong <= -0.3 ? -1 : 0;
-      if (sg && stopSg && sg !== stopSg && stops.length < 8) stops.push({ t: r3(r.t), to: sg < 0 ? 'back' : 'fwd', pitchH: Math.round(r.pitchH) });
-      if (sg) stopSg = sg;
-      if (!nm || r.pitchH > nm.pitchH) nm = { t: r3(r.t), pitchH: Math.round(r.pitchH), noseEl: Math.round(r.noseEl), upZ: r3(r.upZ) };
+      if (r.spd >= thr) {
+        const ux = r.vx / r.spd, uy = r.vy / r.spd;
+        if (!rx0 && !ry0) { rx0 = ux; ry0 = uy; }
+        else if (ux * rx0 + uy * ry0 <= -0.5) {
+          if (stops.length < 8) stops.push({ t: r3(r.t), to: r.vAlong < 0 ? 'back' : 'fwd', pitchH: Math.round(r.pitchH), noseDot: r.noseDot == null ? null : r3(r.noseDot) });
+          rx0 = ux; ry0 = uy;
+        }
+      }
+      let dp = r.pitchH - pPrev;
+      if (j) { while (dp > 180) dp -= 360; while (dp < -180) dp += 360; pw += dp; } else pw = r.pitchH;
+      pPrev = r.pitchH;
+      if (!nm || pw > nm.raw) nm = { raw: pw, t: r.t, noseEl: r.noseEl, upZ: r.upZ };
     }
-    if (cur && segs.length && segs[segs.length - 1][1] == null) segs[segs.length - 1][1] = r3(sideBuf[ks[ks.length - 1]] - t0);
+    if (open) segs[segs.length - 1][1] = r3(sideBuf[ks[ks.length - 1]] - t0);
+    if (nm) nm = { t: r3(nm.t), pitchH: Math.round(nm.raw), noseEl: Math.round(nm.noseEl), upZ: r3(nm.upZ) };
     out.segs = segs;
     out.stops = stops;
     out.noseMax = nm;
@@ -1164,7 +1193,7 @@ export function createTrickObserver(det, opts) {
     rec.result = null;
     rec.reason = why;
     rec.saw = { dur: r3(f.dur), n: f.n, pitchDeg: degOf(f.pitch), rollDeg: degOf(f.roll), yawDeg: degOf(f.yaw) };
-    try { sideAttach(rec); } catch (e) { rec.side = null; }
+    try { sideAttach(rec, null); } catch (e) { rec.side = null; }
     emit(rec);
   }
 

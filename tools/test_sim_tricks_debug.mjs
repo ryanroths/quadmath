@@ -635,10 +635,12 @@ test('observer: the Barani probe (rec.barani) names the term that zeroed it', ()
 // sideRun flies a kinematic path (sim-core m, 4 ms steps) past boxes given
 // in sim-core m ({ x0, y0, z0, x1, y1, z1 }), from start, through phases
 // { t, rate: [r, p, y] rad/s body, v: [x, y, z] m/s, to: [x, y, z] (a
-// jump) }; withObs false steps the detector alone.
+// jump), boxes (a new collider set) }; withObs false steps the detector
+// alone.
 function sideRun(boxes, phases, start, withObs = true) {
   const ws = 3.5;
-  const cols = boxes.map((b) => ({ min: { x: -b.y1 * ws, y: b.z0 * ws, z: -b.x1 * ws }, max: { x: -b.y0 * ws, y: b.z1 * ws, z: -b.x0 * ws }, _tag: 'map' }));
+  const toCols = (bs) => bs.map((b) => ({ min: { x: -b.y1 * ws, y: b.z0 * ws, z: -b.x1 * ws }, max: { x: -b.y0 * ws, y: b.z1 * ws, z: -b.x0 * ws }, _tag: 'map' }));
+  const cols = toCols(boxes);
   const d = makeDetector();
   const recs = [], evs = [];
   let t = 0;
@@ -658,6 +660,7 @@ function sideRun(boxes, phases, start, withObs = true) {
   d.lockout = 0;
   for (const ph of phases) {
     if (ph.to) { p.x = ph.to[0]; p.y = ph.to[1]; p.z = ph.to[2]; }
+    if (ph.boxes) s.colliders = toCols(ph.boxes);
     const w = ph.rate || [0, 0, 0], v = ph.v || [0, 0, 0];
     for (let i = 0, n = Math.round((ph.t || 0) / dt); i < n; i++) {
       const m = Math.hypot(...w);
@@ -738,10 +741,9 @@ test('observer: rec.side, a Cradle round a pole: forward past it on one side, ba
   assert.equal(a.why, b.why);
   assert.equal(a.id, b.id);
   // The side code reads only the sample and its own ring (no detector
-  // state), but for the merge's start where the window opens.
+  // state; the caller passes the merge).
   const dSrc = readFileSync(join(root, 'sim-tricks-debug.js'), 'utf8');
-  const sideSrc = dSrc.slice(dSrc.indexOf('function sideColsSet('), dSrc.indexOf('function sideAttach('))
-    + dSrc.slice(dSrc.indexOf('function sideRecord('), dSrc.indexOf('function emitAbort('));
+  const sideSrc = dSrc.slice(dSrc.indexOf('function sideColsSet('), dSrc.indexOf('function emitAbort('));
   assert.ok(sideSrc.length > 4000);
   assert.equal(/\bdet\b/.test(sideSrc), false, 'the side probe never reads the detector');
 });
@@ -753,12 +755,20 @@ test('observer: rec.side survives a respawn, and a roll, a gap or a split box fa
   assert.equal(r.why, 'jump');
   assert.equal(r.passes.length, 2, JSON.stringify(r.passes));
   assert.ok(r.passes[0].lat1 > 0 && r.passes[1].lat1 < 0);
+  // A new collider set then (a map change): finished on the old one.
+  const sw = sideRun([pole(5, 1)], cradlePhases(1, [{ t: 1.2 }, { t: 1.5, boxes: [{ x0: 50, y0: 50, z0: 0, x1: 51, y1: 51, z1: 1 }] }]), { x: -10, y: 0, z: 3 }).man[0].side;
+  assert.equal(sw.why, 'colliders');
+  assert.equal(sw.passes.length, 2);
+  assert.deepEqual(sw.objs[0].box, [4.9, 0.9, 0, 5.1, 1.1, 6]);
   // Past the pole upright, then a half roll 1 m on, flying on inverted: one
   // pass, and the heading never turns round (it is not "backwards").
   const roll = sideRun([pole(5, 1)], [{ t: 3.2, v: [5, 0, 0] }, { t: 0.35, rate: [9, 0, 0], v: [5, 0, 0] }, { t: 2.5, v: [5, 0, 0] }], { x: -10, y: 0, z: 3 }).man[0].side;
   assert.equal(roll.passes.length, 1, JSON.stringify(roll.passes));
   const hd = roll.cols.indexOf('hd'), va = roll.cols.indexOf('vAlong');
   assert.ok(roll.rows.every((x) => Math.abs(x[hd]) <= 2 && x[va] > 4.9), 'heading kept through the roll');
+  // The same with the nose 25 degrees down (forward flight): kept.
+  const tilt = sideRun([pole(5, 1)], [{ t: 0.1, rate: [0, 25 * Math.PI / 180 / 0.1, 0], v: [5, 0, 0] }, { t: 3.1, v: [5, 0, 0] }, { t: 0.35, rate: [9, 0, 0], v: [5, 0, 0] }, { t: 5 }], { x: -10, y: 0, z: 3 }).man;
+  for (const m of tilt) assert.ok(m.side.rows.every((x) => Math.abs(x[hd]) <= 2), 'heading kept, nose down: ' + JSON.stringify(m.side.rows.map((x) => x[hd])));
   // Out through a gap between two poles (0.6 m each side) and back through
   // it: each pole passed twice on the same side (no side change).
   const gap = sideRun([pole(5, 0.7), pole(5, -0.7)], [{ t: 3.4, v: [5, 0, 0] }, { t: 0.5, rate: [0, -2, 0], v: [1, 0, 0] }, { t: 1.3, v: [-5, 0, 0] }, { t: 4.5 }], { x: -10, y: 0, z: 3 }).man[0].side;
