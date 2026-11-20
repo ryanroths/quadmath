@@ -13,7 +13,11 @@
 //     (js core) shows its own rates UI;
 //   - the default and its toast only with nothing saved;
 //   - ?preset= and ?rates= links fly on bf for the session, unsaved, with no
-//     "JS CORE ONLY" toast.
+//     "JS CORE ONLY" toast;
+//   - nothing saved, the default by input: a gamepad Beginner, a radio Cruise,
+//     the keyboard Cruise, each said in its toast;
+//   - the js core's saved rates carried once, as Custom, where they differ
+//     from its default: "RATES: YOUR SAVED RATES", once.
 // tools/test_sim_bf_rates.mjs holds the presets and the set lines in Node.
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs); skipped under
 // SKIP_CHROME_BOOT=1.
@@ -27,7 +31,8 @@ import { dirname, join, extname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
-  BF_RATE_KEYS, BF_RATE_PRESETS, BF_RATES_KEY, BF_RATES_TOAST_KEY, bfRatesCli, bfRatesPreset, ratesSourceText, encodeRates,
+  BF_RATE_KEYS, BF_RATE_PRESETS, BF_RATES_KEY, BF_RATES_TOAST_KEY, BF_RATES_FROM_JS_KEY, bfRatesCli, bfRatesPreset, ratesSourceText, encodeRates,
+  pilotRatesDefault, rateSetpoint,
 } from '../sim-rates.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -97,6 +102,19 @@ function killTree(child) {
   if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
   else { try { child.kill('SIGKILL'); } catch (e) { /* ignore */ } }
 }
+
+// A virtual pad for navigator.getGamepads(), unplugged at each page load:
+// window.__plug(id, axes) and window.__unplug(), as a browser reports them.
+const PADS = String.raw`(() => {
+  const pad = { on: false, id: '', axes: [] };
+  const make = () => ({ id: pad.id, index: 0, mapping: /STANDARD/.test(pad.id) ? 'standard' : '', connected: true, timestamp: performance.now(), axes: pad.axes.slice(),
+    buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) });
+  Object.defineProperty(Navigator.prototype, 'getGamepads', { configurable: true, value() { return [pad.on ? make() : null, null, null, null]; } });
+  window.__plug = (id, axes) => { pad.on = true; pad.id = id; pad.axes = axes; const e = new Event('gamepadconnected'); e.gamepad = make(); window.dispatchEvent(e); };
+  window.__unplug = () => { const g = make(); g.connected = false; pad.on = false; const e = new Event('gamepaddisconnected'); e.gamepad = g; window.dispatchEvent(e); };
+})()`;
+const XBOX = 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)';
+const TX16S = 'RM TX16S Joystick (Vendor: 1209 Product: 4f54)';
 
 // Every toast the page shows, from before its scripts run.
 const TOASTS = `window.__toasts = [];
@@ -172,13 +190,19 @@ const PAGE = `(() => {
   document.body.classList.remove('menu-open');
   if (s.looks && s.looks.setMenuOpen) s.looks.setMenuOpen(false);
   if (window._feel && window._feel.hideFirstRun) window._feel.hideFirstRun();
-  // The default's toast: it waits for no other toast to be up, so up to ms.
-  async function toastOr(ms) {
+  // A rates toast waits for no other toast to be up: up to ms for one like re.
+  async function toastOr(ms, re = '^RATES: CRUISE') {
     const t0 = performance.now();
-    while (performance.now() - t0 < ms && !window.__toasts.some((x) => /^RATES: CRUISE/.test(x))) await wait(100);
+    while (performance.now() - t0 < ms && !window.__toasts.some((x) => new RegExp(re).test(x))) await wait(100);
     return snap();
   }
-  window.__bf = { wait, snap, toastOr, cls, preset, slider, link, importCli };
+  async function until(fn, ms) {
+    const t0 = performance.now();
+    while (performance.now() - t0 < ms && !fn()) await wait(100);
+    await wait(200);
+    return snap();
+  }
+  window.__bf = { wait, snap, toastOr, until, cls, preset, slider, link, importCli };
   return true;
 })()`;
 
@@ -221,6 +245,7 @@ test('Tune\'s Rates on the bf core: presets, sliders, a paste, class changes, re
     await cdp(ws, 'Runtime.enable');
     await cdp(ws, 'Page.enable');
     await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: TOASTS });
+    await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: PADS });
     // sim-core's own complaints: a readback that is not what Tune set, a load
     // that failed.
     const coreErrors = [];
@@ -258,7 +283,7 @@ test('Tune\'s Rates on the bf core: presets, sliders, a paste, class changes, re
     assert.equal(first.src, ratesSourceText({ core: 'bf', bf: { from: 'default', preset: 'cruise' } }));
     assert.match(first.osd, /TUNE 65-betafpv-ryfly-1219s · RATES CRUISE/);
     assert.ok(first.toasts.includes(toastText), 'the default\'s toast: ' + JSON.stringify(first.toasts));
-    assert.equal(first.toastSeen, '1');
+    assert.equal(first.toastSeen, 'cruise', 'the default said');
     assert.equal(first.saved, null, 'the default is not saved');
     assert.ok(first.bfShown && !first.jsShown, 'the bf Rates section, not the js one');
     assert.equal(first.preset, 'cruise');
@@ -275,6 +300,17 @@ test('Tune\'s Rates on the bf core: presets, sliders, a paste, class changes, re
       assert.equal(s.preset, id);
       assert.equal(s.src, ratesSourceText({ core: 'bf', bf: { from: 'saved', preset: id } }));
       assert.ok(s.osd.includes('RATES ' + BF_RATE_PRESETS[id].osd), id + ': ' + s.osd);
+      if (id === 'ryfly') {
+        // The running core's own setpoint (sim-core rateCurve) on each axis:
+        // the Actual curve of 20/740/0.56 (yaw 700), to the hundredth.
+        const curves = JSON.parse(await evaluate(ws, 'JSON.stringify([0, 1, 2].map((i) => window._sim.bfCore().sim.rateCurve(i, 101)))'));
+        const st = bfRatesPreset('ryfly');
+        curves.forEach((curve, i) => {
+          const ax = ['roll', 'pitch', 'yaw'][i];
+          const worst = Math.max(...curve.map((c) => Math.abs(Math.abs(c.rate) - Math.abs(rateSetpoint('ACTUAL', c.stick, st[ax])))));
+          assert.ok(worst < 0.01, `ryfly ${ax}: the running core's setpoint is ${worst} °/s off the Actual curve`);
+        });
+      }
     }
 
     // A slider: to the core on release, read back; linked, pitch follows roll.
@@ -394,6 +430,70 @@ test('Tune\'s Rates on the bf core: presets, sliders, a paste, class changes, re
     await open(base);
     const after = await run('return JSON.stringify(B.snap());');
     assert.deepEqual(after.held, held(bfRatesPreset('beginner')), 'without the link: the saved rates');
+
+    // Nothing saved, the default by input: the keyboard Cruise; a gamepad
+    // that is not a radio Beginner, said; unplugged, Cruise again, said; a
+    // radio Cruise, nothing new to say.
+    await evaluate(ws, `localStorage.removeItem(${JSON.stringify(BF_RATES_KEY)}), localStorage.setItem(${JSON.stringify(BF_RATES_TOAST_KEY)}, 'cruise'), true`);
+    await open(base);
+    const pads = await run(`const out = [B.snap()];
+      window.__plug(${JSON.stringify(XBOX)}, [0, 0, 0, 0]);
+      await B.until(() => window._sim.bfRates().osd === 'BEGINNER', 8000);
+      out.push(await B.toastOr(8000, '^RATES: BEGINNER'));
+      window.__unplug();
+      await B.until(() => window._sim.bfRates().osd === 'CRUISE', 8000);
+      out.push(await B.toastOr(8000, '^RATES: CRUISE'));
+      window.__plug(${JSON.stringify(TX16S)}, [0, 0, -1, 0, -1, -1, -1, -1]);
+      await B.until(() => /for a radio/.test(document.getElementById('ratesSourceBf').textContent), 8000);
+      await B.wait(2500);
+      out.push(B.snap());
+      return JSON.stringify(out);`);
+    assert.deepEqual(pads[0].held, CRUISE, 'the keyboard: Cruise');
+    assert.equal(pads[0].src, 'Rates: Cruise, the default (bf)');
+    assert.deepEqual(pads[1].held, held(bfRatesPreset('beginner')), 'a gamepad: Beginner, read back');
+    assert.equal(pads[1].src, 'Rates: Beginner, the default for a gamepad (bf)');
+    assert.ok(pads[1].osd.includes('RATES BEGINNER'), pads[1].osd);
+    assert.ok(pads[1].toasts.includes('RATES: BEGINNER (GAMEPAD) — change in Tune'), JSON.stringify(pads[1].toasts));
+    assert.equal(pads[1].saved, null, 'the default is not saved');
+    assert.deepEqual(pads[2].held, CRUISE, 'unplugged: Cruise again');
+    assert.equal(pads[2].toasts.filter((x) => x === toastText).length, 1, 'and said: ' + JSON.stringify(pads[2].toasts));
+    assert.deepEqual(pads[3].held, CRUISE, 'a radio: Cruise');
+    assert.equal(pads[3].src, 'Rates: Cruise, the default for a radio (bf)');
+    assert.ok(!pads[3].toasts.some((x) => /^RATES: CRUISE \(RADIO\)/.test(x)), 'Cruise was said already: ' + JSON.stringify(pads[3].toasts));
+    assert.equal(pads[3].toastSeen, 'cruise');
+
+    // The js core's saved rates, where they differ from its default: carried
+    // once, as the pilot's own (Custom), said once.
+    const own = { quickRatesRcExpo: false, type: 'ACTUAL', roll: { rcRate: 4, srate: 74, expo: 0.56 }, pitch: { rcRate: 4, srate: 74, expo: 0.56 }, yaw: { rcRate: 4, srate: 70, expo: 0.56 } };
+    const seed = (rates) => evaluate(ws, `localStorage.clear(), localStorage.setItem('ryflyRates', ${JSON.stringify(JSON.stringify(rates))}), true`);
+    await seed(own);
+    await open(base);
+    const carried = await run(`return JSON.stringify(await B.toastOr(10000, '^RATES: YOUR SAVED RATES$'));`);
+    assert.deepEqual(carried.held, held(own), 'Betaflight flies the js core\'s saved rates');
+    assert.equal(carried.info.from, 'saved');
+    assert.equal(JSON.parse(carried.saved).js, true, 'saved as the bf core\'s, carried');
+    assert.equal(carried.preset, '', 'Custom');
+    assert.equal(carried.src, 'Rates: your own, from the js core (bf, saved in this browser)');
+    assert.ok(carried.toasts.includes('RATES: YOUR SAVED RATES'), JSON.stringify(carried.toasts));
+    assert.ok(!carried.toasts.some((x) => /change in Tune/.test(x)), 'no default toast');
+    assert.equal(await evaluate(ws, `localStorage.getItem(${JSON.stringify(BF_RATES_FROM_JS_KEY)})`), '1');
+    await open(base);
+    const again2 = await run(`return JSON.stringify(await B.toastOr(5000, '^RATES: YOUR SAVED RATES$'));`);
+    assert.deepEqual(again2.held, held(own), 'after a reload: still the carried rates');
+    assert.ok(!again2.toasts.includes('RATES: YOUR SAVED RATES'), 'said once');
+    // Once only: with the bf rates gone, js rates saved since are not carried.
+    await evaluate(ws, `localStorage.removeItem(${JSON.stringify(BF_RATES_KEY)}), localStorage.setItem('ryflyRates', ${JSON.stringify(JSON.stringify({ ...own, roll: { rcRate: 9, srate: 60, expo: 0.1 } }))}), true`);
+    await open(base);
+    const once = await run('return JSON.stringify(B.snap());');
+    assert.deepEqual(once.held, CRUISE, 'carried once: now the default');
+    assert.equal(once.saved, null);
+    // The js default saved as it is: not carried; the default, and its toast.
+    await seed({ quickRatesRcExpo: false, ...pilotRatesDefault() });
+    await open(base);
+    const same = await run('return JSON.stringify(await B.toastOr(10000));');
+    assert.deepEqual(same.held, CRUISE, 'the js default is not carried');
+    assert.equal(same.saved, null);
+    assert.ok(same.toasts.includes(toastText));
     assert.deepEqual(coreErrors, [], 'sim-core warned');
   } finally {
     try { if (ws) ws.close(); } catch (e) { /* ignore */ }

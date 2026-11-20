@@ -4,8 +4,12 @@
 //   - each preset's set lines, on each bf class's config (the 65's Air65
 //     diff with its card's PIDs, the 75's Fractal75 diff), all taken by
 //     Betaflight through the cli policy and read back as set;
-//   - RyFly (stock) is the class diffs' own rates; Beginner and Race are
-//     sim-feel.js RATE_PRESETS' whoopBeginner and whoopRace, fitted;
+//   - RyFly (stock) is the class diffs' own rates, and Betaflight's own
+//     setpoint on each diff is the Actual curve they make (the conversion);
+//     Beginner and Race are sim-feel.js RATE_PRESETS' whoopBeginner and
+//     whoopRace, fitted;
+//   - nothing saved, the default by input (a gamepad Beginner, a radio, the
+//     keyboard and touch Cruise); the js core's saved rates carried once;
 //   - saved per browser (and a storage that throws or holds junk);
 //   - the Tune line and the OSD word;
 //   - one way to Betaflight: the rate lines go only through importCliToBf;
@@ -21,6 +25,7 @@ import { BF_CLASS_TUNES, bfClassDiff, createBfCore } from '../sim-core-adapter.j
 import { SimCore } from '../vendor/sim-core/sim-core.js';
 import {
   BF_RATE_PRESETS, BF_RATES_DEFAULT, BF_RATES_KEY, BF_RATE_KEYS, BF_RATE_SLIDERS, RATE_SLIDER_RANGES, BF_PRESET_ALIASES,
+  BF_RATES_DEFAULT_BY_INPUT, bfRatesDefaultId, bfRatesDefaultToast, bfRatesFromJs, BF_RATES_SAVED_TOAST,
   bfPresetId, bfRatesPreset, bfRatesCli, bfRatesLines, bfRatesFromGet, bfRatesSame, bfRatesPresetOf, bfRatesActual,
   loadBfRates, saveBfRates, bfRatesOsd, ratesSourceText, rateSetpoint, pilotRatesDefault, decodeRates, encodeRates,
 } from '../sim-rates.js';
@@ -109,6 +114,37 @@ test('RyFly (stock) is the class diffs\' own rates; Beginner and Race are the js
   for (const js of Object.keys(BF_PRESET_ALIASES)) assert.ok(RATE_PRESETS[js], js + ' is a js preset');
 });
 
+test('RyFly (stock): the diffs\' lines as Betaflight holds them, and its own setpoint is the Actual curve sim-rates.js makes of them', async () => {
+  // Both diffs (Betaflight 4.5.0) set rateprofile 0 with no rates_type line:
+  // 4.5's default, ACTUAL. Actual: rc_rate is the centre sensitivity / 10,
+  // srate the max / 10, expo x 100 (fc/rc.c applyActualRates).
+  for (const f of ['air65-ryfly-2026-10-23', 'fractal75-ryfly-2026-11-03']) {
+    const text = read(`vendor/sim-core/configs/${f}.txt`);
+    assert.match(text, /^# Betaflight \/ \S+ \(\S+\) 4\.5\.0 /m, f);
+    assert.ok(!/rates_type/.test(text), f + ': no rates_type line');
+    const lines = text.split('\n').filter((l) => /^set (roll|pitch|yaw)_(rc_rate|srate|expo) = /.test(l)).sort();
+    assert.deepEqual(lines, ['set pitch_expo = 56', 'set pitch_rc_rate = 2', 'set pitch_srate = 74', 'set roll_expo = 56', 'set roll_rc_rate = 2', 'set roll_srate = 74', 'set yaw_expo = 56', 'set yaw_rc_rate = 2', 'set yaw_srate = 70'], f);
+  }
+  const stock = bfRatesPreset('ryfly');
+  assert.deepEqual(AXES.map((a) => [stock[a].rcRate * 10, stock[a].srate * 10, stock[a].expo]), [[20, 740, 0.56], [20, 740, 0.56], [20, 700, 0.56]], 'centre °/s, max °/s, expo');
+  for (const cls of Object.keys(CLASSES)) {
+    const bf = await core(cls);
+    const got = bf.sim.get(BF_RATE_KEYS.slice());
+    assert.equal(got.rates_type, 'ACTUAL', cls);
+    assert.ok(bfRatesSame(bfRatesFromGet(got), stock), cls + ': read back');
+    // Betaflight's setpoint at 201 stick positions (sim-core rateCurve: no rate
+    // formula in JS) against sim-rates.js's Actual curve of the read-back rates.
+    // Yaw's sign is Betaflight's yaw convention; the size is the rate.
+    for (let i = 0; i < 3; i++) {
+      const curve = bf.sim.rateCurve(i, 201);
+      const worst = Math.max(...curve.map((c) => Math.abs(Math.abs(c.rate) - Math.abs(rateSetpoint('ACTUAL', c.stick, stock[AXES[i]])))));
+      assert.ok(worst < 0.01, `${cls} ${AXES[i]}: Betaflight's setpoint within ${worst.toFixed(4)} °/s of the Actual curve`);
+      const full = curve[curve.length - 1].rate;
+      assert.equal(Math.round(Math.abs(full)), stock[AXES[i]].srate * 10, cls + ' ' + AXES[i] + ' at full stick');
+    }
+  }
+});
+
 test('each preset\'s set lines go through the cli policy on each bf class and read back as set', async () => {
   for (const cls of Object.keys(CLASSES)) {
     const bf = await core(cls);
@@ -156,6 +192,34 @@ test('rates as set lines, read back, as Actual for the sliders', () => {
   assert.equal(bfRatesSame(null, bfRatesPreset('cruise')), false);
 });
 
+test('nothing saved: the default by input, and the toast says which', () => {
+  assert.deepEqual({ ...BF_RATES_DEFAULT_BY_INPUT }, { gamepad: 'beginner', radio: 'cruise', keyboard: 'cruise', touch: 'cruise' });
+  assert.equal(bfRatesDefaultId('nope'), BF_RATES_DEFAULT);
+  assert.equal(bfRatesDefaultId('toString'), BF_RATES_DEFAULT);
+  assert.equal(bfRatesDefaultToast('keyboard'), 'RATES: CRUISE — change in Tune', 'the keyboard as before');
+  assert.equal(bfRatesDefaultToast('touch'), 'RATES: CRUISE — change in Tune', 'touch as before');
+  assert.equal(bfRatesDefaultToast('radio'), 'RATES: CRUISE (RADIO) — change in Tune');
+  assert.equal(bfRatesDefaultToast('gamepad'), 'RATES: BEGINNER (GAMEPAD) — change in Tune');
+  assert.equal(BF_RATES_SAVED_TOAST, 'RATES: YOUR SAVED RATES');
+});
+
+test('the js core\'s saved rates for the bf core: as they are, only when they differ from the js default', () => {
+  const def = pilotRatesDefault();
+  assert.equal(bfRatesFromJs(def, def), null, 'the js default: not carried');
+  assert.equal(bfRatesFromJs({ quickRatesRcExpo: false, ...def }, def), null, 'as sim.html holds it');
+  assert.equal(bfRatesFromJs(def), null, 'the default is pilotRatesDefault');
+  const race = { type: 'BETAFLIGHT', roll: { ...RATE_PRESETS.whoopRace.roll }, pitch: { ...RATE_PRESETS.whoopRace.pitch }, yaw: { ...RATE_PRESETS.whoopRace.yaw } };
+  const got = bfRatesFromJs(race, def);
+  assert.ok(bfRatesSame(got, race), 'another rate type, as it is');
+  assert.equal(got.type, 'BETAFLIGHT');
+  const own = { type: 'ACTUAL', roll: { rcRate: 4, srate: 74, expo: 0.56 }, pitch: { rcRate: 4, srate: 74, expo: 0.56 }, yaw: { rcRate: 4, srate: 70, expo: 0.56 } };
+  assert.ok(bfRatesSame(bfRatesFromJs(own, def), own), 'one field off the default');
+  assert.equal(bfRatesPresetOf(bfRatesFromJs(own, def)), '', 'Custom');
+  assert.equal(bfRatesFromJs({ type: 'ACTUAL', roll: { rcRate: 0, srate: 74, expo: 0.5 }, pitch: own.pitch, yaw: own.yaw }, def), null, 'out of range');
+  assert.equal(bfRatesFromJs(null, def), null);
+  assert.equal(bfRatesFromJs({ type: 'NOPE', roll: {}, pitch: {}, yaw: {} }, def), null);
+});
+
 test('saved per browser: a round trip, nothing saved, junk, and a storage that throws', () => {
   const mem = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), m }; };
   const st = mem();
@@ -166,6 +230,10 @@ test('saved per browser: a round trip, nothing saved, junk, and a storage that t
   const back = loadBfRates(st);
   assert.equal(back.preset, 'race');
   assert.equal(back.link, true);
+  assert.equal(back.js, false);
+  saveBfRates({ rates: race, link: true, js: true }, st);
+  assert.equal(JSON.parse(st.m.get(BF_RATES_KEY)).js, true);
+  assert.equal(loadBfRates(st).js, true, 'carried from the js core');
   assert.ok(bfRatesSame(back.rates, race));
   const own = { type: 'ACTUAL', roll: { rcRate: 9, srate: 61, expo: 0.12 }, pitch: { rcRate: 10, srate: 62, expo: 0.13 }, yaw: { rcRate: 11, srate: 63, expo: 0.14 } };
   saveBfRates({ rates: own, link: false }, st);
@@ -182,6 +250,11 @@ test('saved per browser: a round trip, nothing saved, junk, and a storage that t
 test('the Tune line and the OSD say which rates fly', () => {
   const bf = (b, cli) => ratesSourceText({ core: 'bf', bf: b, cli });
   assert.equal(bf({ from: 'default', preset: 'cruise' }), 'Rates: Cruise, the default (bf)');
+  assert.equal(bf({ from: 'default', input: 'keyboard' }), 'Rates: Cruise, the default (bf)');
+  assert.equal(bf({ from: 'default', input: 'touch' }), 'Rates: Cruise, the default (bf)');
+  assert.equal(bf({ from: 'default', input: 'radio' }), 'Rates: Cruise, the default for a radio (bf)');
+  assert.equal(bf({ from: 'default', input: 'gamepad' }), 'Rates: Beginner, the default for a gamepad (bf)');
+  assert.equal(bf({ from: 'saved', preset: '', js: true }), 'Rates: your own, from the js core (bf, saved in this browser)');
   assert.equal(bf({ from: 'saved', preset: 'race' }), 'Rates: Race (bf, saved in this browser)');
   assert.equal(bf({ from: 'saved', preset: 'ryfly' }), 'Rates: RyFly (stock) (bf, saved in this browser)');
   assert.equal(bf({ from: 'saved', preset: '' }), 'Rates: your own (bf, saved in this browser)');
@@ -219,7 +292,7 @@ test('sim.html: one way to Betaflight for rates, importCliToBf; applied on boot,
   assert.equal(html.split('bfRatesLines(').length - 1, 2, 'bfRatesText and bfSetRates');
   assert.ok(extract(html, 'bfRatesText').includes('return bfRatesLines(bfRatesWant());'));
   assert.ok(extract(html, 'bfSetRates').includes('importCliToBf(bfRatesLines(next),{rates:true,ratesLast:true,quiet:true})'));
-  assert.ok(extract(html, 'bfApplyRates').includes('return importCliToBf(bfRatesText(),{rates:true,quiet:true});'));
+  assert.ok(extract(html, 'bfApplyRates').includes('const r=importCliToBf(bfRatesText(),{rates:true,quiet:true});'));
   // Betaflight is configured only through bfLoadDiff (and the core's own boot).
   assert.equal(html.split('core.loadDiff(').length - 1, 1, 'bfLoadDiff only');
   assert.ok(extract(html, 'bfLoadDiff').includes('const r=core.loadDiff(text);'));
@@ -235,12 +308,19 @@ test('sim.html: one way to Betaflight for rates, importCliToBf; applied on boot,
   // Applied on the core's takeover, on a class change, and disarmed whenever it holds something else.
   const select = html.slice(html.indexOf('function selectCore'), html.indexOf('// ---------- Input poll'));
   assert.equal(select.split('bfApplyRates();').length - 1, 2, 'a loaded core taking over, and a new one');
-  assert.ok(select.indexOf("bfApplyRates();\n      toast('BETAFLIGHT CORE — '+c.quad.toUpperCase());\n      bfRatesBootToast();") > 0);
-  assert.ok(extract(html, 'bfWorldWatch').includes('if(coreArmed())return;\n  bfRatesWatch();'));
-  // The default's toast, once, only with nothing saved.
-  const toastFn = extract(html, 'bfRatesBootToast');
-  assert.ok(toastFn.includes("if(bfRatesFrom()!=='default'||bfRatesToastTimer)return;") && toastFn.includes('localStorage.setItem(BF_RATES_TOAST_KEY,\'1\')'));
-  assert.ok(toastFn.includes("toast('RATES: '+BF_RATE_PRESETS[BF_RATES_DEFAULT].label.toUpperCase()+' — change in Tune',{ms:4000});"));
+  assert.ok(select.indexOf("bfApplyRates();\n      toast('BETAFLIGHT CORE — '+c.quad.toUpperCase());") > 0);
+  assert.ok(extract(html, 'bfWorldWatch').includes('bfInputWatch();\n  if(coreArmed())return;\n  bfRatesWatch();'));
+  // Nothing saved: the default by input; said each time it is another, after any other toast.
+  assert.ok(extract(html, 'bfRatesWant').includes('bfRatesPreset(bfRatesDefaultId(bfInputKind()))'));
+  assert.ok(extract(html, 'bfInputKind').includes("gpConnected?(padIsRadio({id:gpName})?'radio':'gamepad'):(touchCtl&&touchCtl.enabled?'touch':'keyboard')"));
+  const note = extract(html, 'bfRatesNote');
+  assert.ok(note.includes('if(said===what)return;') && note.includes('localStorage.setItem(BF_RATES_TOAST_KEY,what)'));
+  assert.ok(note.includes("if(toastEl.style.opacity==='1'){bfRatesToastTimer=setTimeout(say,700);return;}"), 'it waits for no other toast');
+  assert.ok(note.includes("toast(what==='js'?BF_RATES_SAVED_TOAST:bfRatesDefaultToast(bfInputKind()),{ms:4000});"));
+  assert.ok(extract(html, 'bfApplyRates').split('bfRatesNote();').length - 1 === 2);
+  // The js core's saved rates, carried once.
+  assert.ok(html.includes("if(!localStorage.getItem(BF_RATES_FROM_JS_KEY)){\n    const st=!bfRatesSaved&&ratesAreCustom?bfRatesFromJs(rates,pilotRatesDefault()):null;"));
+  assert.ok(html.includes("localStorage.setItem(BF_RATES_FROM_JS_KEY,'1');"));
   // Links: on bf too; the old toast is gone.
   assert.ok(!html.includes('JS CORE ONLY'));
   const boot = extract(html, 'applyQueryBoot');

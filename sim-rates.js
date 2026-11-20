@@ -249,6 +249,33 @@ export const BF_RATE_PRESETS = Object.freeze({
   race: Object.freeze({ label: 'Race', osd: 'RACE', rp: Object.freeze([150, 780, 0.67]), yaw: Object.freeze([150, 780, 0.67]) }),
   ryfly: Object.freeze({ label: 'RyFly (stock)', osd: 'RYFLY', card: PILOT_RATES_CARD }),
 });
+// With nothing saved, the default goes by the pilot's input: a gamepad that is
+// not a radio flies Beginner; a radio, the keyboard and touch fly Cruise.
+export const BF_RATES_DEFAULT_BY_INPUT = Object.freeze({ gamepad: 'beginner', radio: 'cruise', keyboard: 'cruise', touch: 'cruise' });
+export function bfRatesDefaultId(input) {
+  return Object.prototype.hasOwnProperty.call(BF_RATES_DEFAULT_BY_INPUT, input) ? BF_RATES_DEFAULT_BY_INPUT[input] : BF_RATES_DEFAULT;
+}
+// The toast naming the default that flies, and for a gamepad or a radio why.
+export function bfRatesDefaultToast(input) {
+  const why = input === 'gamepad' ? ' (GAMEPAD)' : input === 'radio' ? ' (RADIO)' : '';
+  return 'RATES: ' + BF_RATE_PRESETS[bfRatesDefaultId(input)].label.toUpperCase() + why + ' — change in Tune';
+}
+// The js core's saved rates carried to the bf core: done once
+// (BF_RATES_FROM_JS_KEY), saved as the pilot's own (Custom), said once.
+export const BF_RATES_FROM_JS_KEY = 'quadmathSimBfRatesFromJs';
+export const BF_RATES_SAVED_TOAST = 'RATES: YOUR SAVED RATES';
+// The js profile as saved (sim.html ryflyRates: { type, roll, pitch, yaw })
+// for the bf core: as it is, any rate type (Betaflight flies them all), when
+// it decodes and differs from the js default (defaults, pilotRatesDefault);
+// otherwise null.
+export function bfRatesFromJs(saved, defaults) {
+  const cli = bfRatesCli(saved);
+  if (!cli) return null;
+  const ax = (a) => [cli[`${a}_rc_rate`], cli[`${a}_srate`], cli[`${a}_expo`]];
+  const d = decodedFromCliAxes(cli.rates_type, ax('roll'), ax('pitch'), ax('yaw'));
+  if (d.error || bfRatesSame(d, defaults || pilotRatesDefault())) return null;
+  return d;
+}
 // A ?preset= link's js preset (sim-feel.js RATE_PRESETS) on the bf core.
 export const BF_PRESET_ALIASES = Object.freeze({ whoopBeginner: 'beginner', whoopRace: 'race', ryanActual: 'ryfly' });
 export function bfPresetId(name) {
@@ -337,7 +364,8 @@ export function bfRatesActual(state) {
   return out;
 }
 // Tune's bf rates as saved: { preset: id or '', link: roll and pitch linked,
-// rates }, or null for nothing saved (or a saved value that does not decode).
+// js: carried from the js core (bfRatesFromJs), rates }, or null for nothing
+// saved (or a saved value that does not decode).
 export function loadBfRates(storage) {
   try {
     const st = storage || globalThis.localStorage;
@@ -347,16 +375,16 @@ export function loadBfRates(storage) {
     if (!o || o.v !== 1) return null;
     const d = decodedFromCliAxes(o.type, o.roll || [], o.pitch || [], o.yaw || []);
     if (d.error) return null;
-    return { preset: bfRatesPresetOf(d), link: o.link !== false, rates: d };
+    return { preset: bfRatesPresetOf(d), link: o.link !== false, js: o.js === true, rates: d };
   } catch (e) { return null; }
 }
-export function saveBfRates({ rates, link } = {}, storage) {
+export function saveBfRates({ rates, link, js } = {}, storage) {
   const cli = bfRatesCli(rates);
   if (!cli) return false;
   const ax = (a) => [cli[`${a}_rc_rate`], cli[`${a}_srate`], cli[`${a}_expo`]];
   try {
     const st = storage || globalThis.localStorage;
-    st.setItem(BF_RATES_KEY, JSON.stringify({ v: 1, preset: bfRatesPresetOf(rates), link: link !== false, type: cli.rates_type, roll: ax('roll'), pitch: ax('pitch'), yaw: ax('yaw') }));
+    st.setItem(BF_RATES_KEY, JSON.stringify({ v: 1, preset: bfRatesPresetOf(rates), link: link !== false, ...(js ? { js: true } : {}), type: cli.rates_type, roll: ax('roll'), pitch: ax('pitch'), yaw: ax('yaw') }));
     return true;
   } catch (e) { return false; }
 }
@@ -370,9 +398,10 @@ export function bfRatesOsd({ from, preset, paste } = {}) {
 }
 
 // The Tune panel's line naming where the flying rates come from. core 'bf':
-// Tune's (bf: from 'default', Cruise until the pilot picks, 'saved' in this
-// browser, or 'link' for the session; preset the preset they are, '' for the
-// pilot's own), with this session's IMPORT CLI paste on top of them (cli
+// Tune's (bf: from 'default', by input until the pilot picks (input:
+// bfRatesDefaultId), 'saved' in this browser (js: carried from the js core),
+// or 'link' for the session; preset the preset they are, '' for the pilot's
+// own), with this session's IMPORT CLI paste on top of them (cli
 // 'top') or a full diff's in the class config's place (cli 'replace'); paste:
 // the paste's rates fly (it set its own, after Tune's). core 'js': the page's
 // one profile, the pilot's ('saved'), a rates link's for the session
@@ -384,8 +413,8 @@ export function ratesSourceText({ core, cli, js, bf } = {}) {
     const p = BF_RATE_PRESETS[b.preset];
     let s;
     if (b.from === 'link') s = 'Rates: ' + (p ? p.label + ', ' : '') + 'the rates link (bf, this session)';
-    else if (b.from === 'saved') s = 'Rates: ' + (p ? p.label : 'your own') + ' (bf, saved in this browser)';
-    else s = 'Rates: ' + BF_RATE_PRESETS[BF_RATES_DEFAULT].label + ', the default (bf)';
+    else if (b.from === 'saved') s = 'Rates: ' + (p ? p.label : b.js ? 'your own, from the js core' : 'your own') + ' (bf, saved in this browser)';
+    else s = 'Rates: ' + BF_RATE_PRESETS[bfRatesDefaultId(b.input)].label + ', the default' + (b.input === 'gamepad' ? ' for a gamepad' : b.input === 'radio' ? ' for a radio' : '') + ' (bf)';
     if (cli) s += cli === 'replace' ? ', on your pasted diff' : ', your CLI lines on top';
     return s;
   }

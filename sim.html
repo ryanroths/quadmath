@@ -1204,7 +1204,8 @@ import {
   pilotRatesDefault, ratesSourceText,
   BF_RATE_PRESETS, BF_RATES_DEFAULT, BF_RATES_TOAST_KEY, BF_RATE_KEYS, BF_RATE_SLIDERS, bfPresetId, bfRatesPreset,
   bfRatesLines, bfRatesFromGet, bfRatesSame, bfRatesPresetOf, bfRatesActual, loadBfRates, saveBfRates, bfRatesOsd,
-} from "./sim-rates.js?v=695481d66fe1";
+  bfRatesDefaultId, bfRatesDefaultToast, bfRatesFromJs, BF_RATES_FROM_JS_KEY, BF_RATES_SAVED_TOAST,
+} from "./sim-rates.js?v=366eea45d0dc";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -5015,7 +5016,7 @@ function syncRatesSource(){
   // Tune before selectCore hands over, which refreshes it again.
   if(bf&&bfCore){
     const b=bfOf(bfFlyingType()),cli=b.cliText;
-    const src={from:bfRatesFrom(),preset:bfRatesPresetOf(bfRatesWant()),paste:bfPasteWins(b)};
+    const src={from:bfRatesFrom(),preset:bfRatesPresetOf(bfRatesWant()),paste:bfPasteWins(b),input:bfInputKind(),js:!!(bfRatesSaved&&bfRatesSaved.js)};
     bf.textContent=ratesSourceText({core:'bf',cli:!cli?'':bfPasteReplaces(cli)?'replace':'top',bf:src});
     bfRatesOsdText=bfRatesOsd(src);
     syncBfRatesUI();
@@ -7402,7 +7403,10 @@ window._rates=()=>({state:JSON.parse(JSON.stringify(rates)),axis:rateAxis,
 // ---------- Rates on the bf core (Tune: Rates; sim-rates.js BF_RATE_PRESETS) ----------
 // One profile, the pilot's, for the 65 and the 75: saved in this browser once
 // they pick a preset or move a slider (bfRatesSaved), a rates link's for the
-// session (bfRatesLinked), or Cruise until then. Every change goes to
+// session (bfRatesLinked), or until then a default by input (bfInputKind:
+// Beginner on a gamepad that is not a radio, Cruise on a radio, the keyboard
+// or touch). The js core's saved rates, where they differ from its default,
+// are carried over once, as the pilot's own. Every change goes to
 // Betaflight as set lines through importCliToBf (opts.rates), the one way
 // rates reach it, and is read back; the boot and each class change send them
 // too (bfApplyRates). A paste with rate lines flies its own for the session,
@@ -7410,11 +7414,28 @@ window._rates=()=>({state:JSON.parse(JSON.stringify(rates)),axis:rateAxis,
 // Not Coach/Rig lines, ghosts or bots: they keep the rates they were flown
 // with. The js core (the 85, ?core=js) keeps its own profile (rates).
 let bfRatesSaved=loadBfRates();
+// Once in this browser: the js core's saved profile (ryflyRates, loaded into
+// rates above) where it differs from the js default, saved as the bf core's,
+// Custom (bfRatesFromJs).
+try{
+  if(!localStorage.getItem(BF_RATES_FROM_JS_KEY)){
+    const st=!bfRatesSaved&&ratesAreCustom?bfRatesFromJs(rates,pilotRatesDefault()):null;
+    if(st){
+      bfRatesSaved={preset:'',link:bfRatesSame({...st,pitch:st.roll},st),js:true,rates:st};
+      saveBfRates(bfRatesSaved);
+    }
+    localStorage.setItem(BF_RATES_FROM_JS_KEY,'1');
+  }
+}catch(e){/* no storage: nothing carried */}
 let bfRatesLinked=null;
 let bfRatesLinkRP=bfRatesSaved?bfRatesSaved.link:true;   // roll and pitch as one
 let bfRatesOsdText='';
-let bfRatesToastTimer=null;
-function bfRatesWant(){return bfRatesLinked||(bfRatesSaved&&bfRatesSaved.rates)||bfRatesPreset(BF_RATES_DEFAULT);}
+let bfRatesToastTimer=null,bfRatesToastFor=null;
+// The pilot's input as the default sees it: a pad the page takes for a radio
+// (padIsRadio: its name, or a radio preset picked for it), another pad, touch,
+// or the keyboard.
+function bfInputKind(){return gpConnected?(padIsRadio({id:gpName})?'radio':'gamepad'):(touchCtl&&touchCtl.enabled?'touch':'keyboard');}
+function bfRatesWant(){return bfRatesLinked||(bfRatesSaved&&bfRatesSaved.rates)||bfRatesPreset(bfRatesDefaultId(bfInputKind()));}
 function bfRatesFrom(){return bfRatesLinked?'link':bfRatesSaved?'saved':'default';}
 function bfRatesText(){return bfRatesLines(bfRatesWant());}
 // The paste's own rates fly: it came after Tune's and set others (a full diff
@@ -7443,9 +7464,19 @@ function bfApplyRates(){
   const b=bfOf();
   if(!bfCore||b.core!==bfCore)return null;
   const want=bfWantDiff();
-  if(want===b.diffLoaded){if(!b.ratesBack)bfReadRates(b);syncRatesSource();return true;}
+  if(want===b.diffLoaded){if(!b.ratesBack)bfReadRates(b);syncRatesSource();bfRatesNote();return true;}
   if(want===b.ratesFailed)return null;
-  return importCliToBf(bfRatesText(),{rates:true,quiet:true});
+  const r=importCliToBf(bfRatesText(),{rates:true,quiet:true});
+  bfRatesNote();
+  return r;
+}
+// Tune's line names the input the default goes by: refreshed when it changes.
+let bfInputSeen=null;
+function bfInputWatch(){
+  const k=bfInputKind();
+  if(k===bfInputSeen)return;
+  bfInputSeen=k;
+  syncRatesSource();
 }
 function bfRatesWatch(){
   const b=bfOf();
@@ -7473,17 +7504,28 @@ function bfRatesFromLink(st){
   bfRatesLinked=st;
   if(bfCore)bfApplyRates();
 }
-// Nothing saved: Cruise flies, said once in this browser, after the core's own
-// toast, and only while no other toast is up (never over a finish card's
-// SHARE): until then it waits.
-function bfRatesBootToast(){
-  if(bfRatesFrom()!=='default'||bfRatesToastTimer)return;
-  try{if(localStorage.getItem(BF_RATES_TOAST_KEY))return;}catch(e){/* no storage: say it */}
+// Rates nobody picked in Tune, said on the bf core: the default by input
+// each time it is another than the one said last (BF_RATES_TOAST_KEY), and
+// the js core's carried over, once. After the core's own toast, and only
+// while no other toast is up (never over a finish card's SHARE).
+function bfRatesUnpicked(){
+  const from=bfRatesFrom();
+  return from==='default'?bfRatesDefaultId(bfInputKind()):from==='saved'&&bfRatesSaved.js?'js':null;
+}
+function bfRatesNote(){
+  const what=bfRatesUnpicked();
+  if(!what||what===bfRatesToastFor)return;
+  let said=null;
+  try{said=localStorage.getItem(BF_RATES_TOAST_KEY);}catch(e){/* no storage: say it */}
+  if(said===what)return;
+  bfRatesToastFor=what;
+  clearTimeout(bfRatesToastTimer);
   const say=()=>{
-    if(bfRatesFrom()!=='default'||core.kind!=='bf')return;
+    if(bfRatesUnpicked()!==what||core.kind!=='bf'){bfRatesToastFor=null;return;}
     if(toastEl.style.opacity==='1'){bfRatesToastTimer=setTimeout(say,700);return;}
-    toast('RATES: '+BF_RATE_PRESETS[BF_RATES_DEFAULT].label.toUpperCase()+' — change in Tune',{ms:4000});
-    try{localStorage.setItem(BF_RATES_TOAST_KEY,'1');}catch(e){}
+    toast(what==='js'?BF_RATES_SAVED_TOAST:bfRatesDefaultToast(bfInputKind()),{ms:4000});
+    bfRatesToastFor=null;
+    try{localStorage.setItem(BF_RATES_TOAST_KEY,what);}catch(e){}
   };
   bfRatesToastTimer=setTimeout(say,1600);
 }
@@ -9272,6 +9314,7 @@ function bfSpawn(pos,q,opts){
 function bfWorldWatch(now){
   if(core.kind!=='bf'||now-bfWorldCheckAt<500)return;
   bfWorldCheckAt=now;
+  bfInputWatch();
   if(coreArmed())return;
   bfRatesWatch();
   const b=bfOf();
@@ -9386,7 +9429,6 @@ function selectCore(){
       // Tune's rates, through importCliToBf, on top of the class config it booted on.
       bfApplyRates();
       toast('BETAFLIGHT CORE — '+c.quad.toUpperCase());
-      bfRatesBootToast();
     });
   }).catch(e=>{
     b.failed=true;
