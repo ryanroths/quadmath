@@ -27,18 +27,19 @@ import {
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
   HIST_W, BH_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE, BARANI_HD_LO,
-} from './sim-tricks.js?v=b0e0781d13b6';
+  CRADLE, groupBoxes, simBoxes, cradlePostList,
+} from './sim-tricks.js?v=94c56cba4d86';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
 export const CLASS_IDS = Object.freeze([
   'halfmavvy', 'rubik', 'cubik', 'barani', 'immelmann', 'ham', 'trippy', 'orbit', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
-  'powerloop', 'matty', 'maverick', 'splits', 'cradle', 'flip', 'roll', 'yawspin',
+  'powerloop', 'matty', 'maverick', 'splits', 'flip', 'roll', 'yawspin',
 ]);
 export const SPEC = Object.freeze({
   halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, barani: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, orbit: 0.05, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
   halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
-  cradle: 0.08, flip: 0, roll: 0, yawspin: 0,
+  flip: 0, roll: 0, yawspin: 0,
 });
 export const PICK_MIN = 0.42;
 export const SPEC_MIN = 0.15;
@@ -61,16 +62,25 @@ const FLIP_WIN_LABEL = '1.2 s';
 // direction of travel to behind it, by hystM or hystK of its distance
 // either way, moving at minSpd or more and the direction of travel turned
 // under turnDot's angle (a turnaround is no pass); read where the object
-// was nearest since it was last ahead. Rolls and yaws do not move it.
+// was nearest since it was last ahead. Rolls and yaws do not move it. The
+// objects are sim-tricks.js groupBoxes' (cellM: CRADLE.cellM) and the posts
+// its cradlePostList's (CRADLE), the Cradle's own.
 export const SIDE = Object.freeze({
-  preS: 3, postS: 4, cap: 6144, bandM: 2, kNear: 12, cellM: 0.03,
+  preS: 3, postS: 4, cap: 6144, bandM: 2, kNear: 12,
   passM: 4, minSpd: 0.5, hystM: 0.1, hystK: 0.25, turnDot: 0.7, passMax: 24, rows: 32,
-  // A post (a pole, a post, a tree): an object whose footprint is postW or
-  // less across and near square (the short side postRatio of the long one
-  // or more), postH or more tall. postLat: its crossings farther to the
-  // side than this are not listed.
-  postW: 0.5, postRatio: 0.6, postH: 1.0, postLat: 4, postMax: 8,
+  // postLat: a post's crossings farther to the side than this are not
+  // listed; postMax: posts listed at most.
+  postLat: 4, postMax: 8,
 });
+
+// The Cradle's own log (a record of type 'cradle' per verdict of
+// sim-tricks.js cradleStep: each Cradle, and each miss that got as far as an
+// attempt). Its inputs, every step, from preS before the first pass to the
+// verdict, and again (the same record) to postS after it, at most cap steps
+// kept: enough to replay the verdict (makeCradleGate, then cradleStep on
+// each row; the rows past it let a replay whose rounded positions put the
+// second pass a step later still see it).
+export const CRADLE_LOG = Object.freeze({ preS: 0.6, postS: 0.3, cap: 2048 });
 
 // stepDetector's spatial constants (sim-tricks.js DIVE_*, GAP_*), the dive
 // fallback inside classifyFeat, and the segment-start numbers.
@@ -157,11 +167,6 @@ export const GATES = Object.freeze({
   splits: [
     ge('f.phSplits', 1, 1),
   ],
-  cradle: [
-    band('v.pathP', 1.3, 4.4, 0.45), le('absP', 3.6, 0.5), le('v.inv', 0.22, 0.1),
-    ge('v.against - v.follow', 0.08, 0.12), le('absR', 2.2, 0.6), ge('f.travelH', 1.6, 0.6), ge('f.dur', 0.4, 0.1),
-    floorOf(ge('v.obj', 0.08, 0.08), 0.55),
-  ],
   flip: [
     ge('f.phFlip', 1, 1),
   ],
@@ -195,7 +200,6 @@ export const OVERRIDES = Object.freeze([
   { from: 'snapback', to: 'cubik', text: 'snapback→cubik: cubik > snapback + 0.04', when: (c) => c.sc.cubik > c.sc.snapback + 0.04 },
   { from: 'rubik', to: 'cubik', max: true, text: 'rubik→cubik: rollFirst > 0.06', when: (c) => c.rollFirst > 0.06 },
   { from: 'cubik', to: 'rubik', max: true, text: 'cubik→rubik: pitchFirst > 0.06', when: (c) => c.pitchFirst > 0.06 },
-  { from: 'maverick', to: 'cradle', text: 'maverick→cradle: against > follow + 0.08, cradle > 0.4', when: (c) => c.v.against > c.v.follow + 0.08 && c.sc.cradle > 0.4 },
 ]);
 export const OVERRIDE_TEXT = Object.freeze(OVERRIDES.map((r) => r.text));
 
@@ -224,6 +228,7 @@ function inBand(x, lo, hi, fade) {
 }
 
 const r3 = (x) => (Number.isFinite(x) ? Math.round(x * 1000) / 1000 : x);
+const r4 = (x) => (Number.isFinite(x) ? Math.round(x * 10000) / 10000 : x);
 const degOf = (r) => Math.round((r || 0) * 180 / Math.PI);
 
 // The values classifyFeat computes before its score terms, by the
@@ -638,13 +643,19 @@ export function createTrickObserver(det, opts) {
   // object, and each object's bounds and box count, rebuilt when the array,
   // its length or its ends change.
   let sideCols = null, sideColsN = -1, sideCol0 = null, sideColL = null, sideWs = 3.5, sideBox = new Float64Array(0);
-  let sideObj = new Int32Array(0), sideObjBox = new Float64Array(0), sideObjN = new Int32Array(0);
+  let sideObj = new Int32Array(0), sideObjBox = new Float64Array(0), sideObjN = new Int32Array(0), sidePost = new Set();
   // The ring's own clock, the sim's (each step's dt; the page's now() is
   // the frame's wall time, the same for every step in a frame), its reading
   // at the open segment's first step, and the segments' count.
   let simT = 0, segSim0 = 0, segN = 0;
   const candD = new Float64Array(SK), candI = new Int32Array(SK), candP = new Float64Array(SK * 3), candO = new Int32Array(SK);
   const sidePend = [];
+  // The Cradle's inputs (det.cg.inp: the clock, position, velocity, nose,
+  // up-Z, contact), and armed, each step (CG_W columns), for its records.
+  const CG_W = 13, CG_CAP = CRADLE_LOG.cap;
+  const cgBuf = new Float64Array(CG_CAP * CG_W);
+  let cgN = 0, cgHead = 0, cgSeq = 0, cgT = NaN;
+  const cgPend = [];
   const view = {
     t: 0, armed: false, contact: false, rate: 0, lockout: 0, diving: false, live: 0, liveT: 0,
     vz: 0, speed: 0, alt: 0, thr: 0, gap: null, clr: null, diveOn: 0, diveDrop: 0, diveCd: 0, gapCd: 0,
@@ -662,7 +673,9 @@ export function createTrickObserver(det, opts) {
     // A compound trick: the merge's label (the detector's), and what merged.
     const mg = det.lastMerge;
     // An orbit going on (the one before it scored): the detector's nothing.
-    rec.result = mg || det.lastCont ? (det.lastId || null) : ex.id;
+    // A segment open at a Cradle's second pass: the detector's Cradle.
+    rec.result = mg || det.lastCont || det.lastCradleSeg ? (det.lastId || null) : ex.id;
+    rec.cradle = det.lastCradleSeg || 0;
     rec.merged = mg ? { id: mg.id, segs: mg.segs, t: r3(mg.t), score: r3(mg.score), alone: ex.id } : null;
     rec.event = ev || null;
     rec.why = det.lastWhy || '';
@@ -689,6 +702,7 @@ export function createTrickObserver(det, opts) {
     else rec.reason = ex.candidates.find((c) => c.id === ex.id)?.reason || (ex.id === 'dive' ? 'dive fallback' : '');
     if (mg) rec.reason = 'merged with the ' + (mg.segs - 1) + ' segment(s) before (pauses under 0.8 s): ' + mg.id + '; this one alone: ' + (ex.id || 'nothing');
     if (det.lastCont) rec.reason = 'the orbit before it goes on (one orbit scores once)';
+    if (det.lastCradleSeg) rec.reason = 'closed at a Cradle\'s second pass (the cradle record after this one); this one alone: ' + (ex.id || 'nothing');
     rec._explain = ex;
     emit(rec);
   }
@@ -886,59 +900,11 @@ export function createTrickObserver(det, opts) {
     if (sideColsN >= 0) sideReset('colliders');
     sideCols = cols || null; sideColsN = n; sideWs = ws;
     sideCol0 = n ? cols[0] : null; sideColL = n ? cols[n - 1] : null;
-    sideBox = new Float64Array(n * 6);
-    for (let i = 0; i < n; i++) {
-      const b = cols[i], k = i * 6;
-      if (!b || !b.min || !b.max) { sideBox[k] = NaN; continue; }
-      sideBox[k] = -b.max.z / ws; sideBox[k + 1] = -b.max.x / ws; sideBox[k + 2] = b.min.y / ws;
-      sideBox[k + 3] = -b.min.z / ws; sideBox[k + 4] = -b.min.x / ws; sideBox[k + 5] = b.max.y / ws;
-    }
-    // Objects: union the boxes face to face (touching on one axis within
-    // cellM, or 12 % of the smaller box's least extent, both thicker than
-    // that there) whose faces match (each overlap 80 % of the larger's on
-    // the other two). A sweep along x.
-    const B = sideBox, par = new Int32Array(n);
-    const least = (a) => Math.min(B[a + 3] - B[a], B[a + 4] - B[a + 1], B[a + 5] - B[a + 2]);
-    for (let i = 0; i < n; i++) par[i] = i;
-    const root = (i) => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
-    const ord = [];
-    for (let i = 0; i < n; i++) if (B[i * 6] === B[i * 6]) ord.push(i);
-    ord.sort((a, b) => B[a * 6] - B[b * 6]);
-    for (let u = 0; u < ord.length; u++) {
-      const a = ord[u] * 6, la = least(a), tolA = Math.max(SIDE.cellM, 0.12 * la);
-      for (let v = u + 1; v < ord.length; v++) {
-        const b = ord[v] * 6;
-        if (B[b] > B[a + 3] + tolA) break;
-        const tol = Math.max(SIDE.cellM, 0.12 * Math.min(la, least(b)));
-        let touch = -1, ok = 1;
-        for (let ax = 0; ax < 3 && ok; ax++) {
-          const ea = B[a + 3 + ax] - B[a + ax], eb = B[b + 3 + ax] - B[b + ax];
-          const o = Math.min(B[a + 3 + ax], B[b + 3 + ax]) - Math.max(B[a + ax], B[b + ax]);
-          if (Math.abs(o) <= tol && ea > tol && eb > tol) { if (touch >= 0) ok = 0; else touch = ax; }
-          else if (o < -tol) ok = 0;
-          else if (o < 0.8 * Math.max(ea, eb) - 1e-9) ok = 0;
-        }
-        if (ok && touch >= 0) { const ra = root(ord[u]), rb = root(ord[v]); if (ra !== rb) par[rb] = ra; }
-      }
-    }
-    sideObj = new Int32Array(n);
-    const idOf = new Map();
-    for (let i = 0; i < n; i++) {
-      const r = root(i);
-      if (!idOf.has(r)) idOf.set(r, idOf.size);
-      sideObj[i] = idOf.get(r);
-    }
-    sideObjBox = new Float64Array(idOf.size * 6).fill(NaN);
-    sideObjN = new Int32Array(idOf.size);
-    for (let i = 0; i < n; i++) {
-      if (B[i * 6] !== B[i * 6]) continue;
-      const o = sideObj[i] * 6;
-      sideObjN[sideObj[i]]++;
-      for (let ax = 0; ax < 3; ax++) {
-        if (!(sideObjBox[o + ax] <= B[i * 6 + ax])) sideObjBox[o + ax] = B[i * 6 + ax];
-        if (!(sideObjBox[o + 3 + ax] >= B[i * 6 + 3 + ax])) sideObjBox[o + 3 + ax] = B[i * 6 + 3 + ax];
-      }
-    }
+    sideBox = simBoxes(cols, ws, null);
+    // Objects: sim-tricks.js groupBoxes (the Cradle's posts are the same).
+    const grp = groupBoxes(sideBox, n, CRADLE.cellM);
+    sideObj = grp.obj; sideObjBox = grp.box; sideObjN = grp.cnt;
+    sidePost = new Set(cradlePostList(sideBox, n, grp).map((p) => p[6]));
     return true;
   }
 
@@ -1064,8 +1030,8 @@ export function createTrickObserver(det, opts) {
       if (out.length >= SIDE.postMax) break;
       const o = ob * 6, B = sideObjBox;
       const x0 = B[o], y0 = B[o + 1], z0 = B[o + 2], x1 = B[o + 3], y1 = B[o + 4], z1 = B[o + 5];
-      const w = Math.max(x1 - x0, y1 - y0), w2 = Math.min(x1 - x0, y1 - y0), h = z1 - z0;
-      if (!(w <= SIDE.postW && w2 >= SIDE.postRatio * w && h >= SIDE.postH)) continue;
+      const w = Math.max(x1 - x0, y1 - y0), h = z1 - z0;
+      if (!sidePost.has(ob)) continue;
       const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
       const rec = { obj: ob, box: [x0, y0, z0, x1, y1, z1].map(r3), w: r3(w), h: r3(h), dMin: null, tMin: null, hd1: null, crossings: [] };
       let F1 = null, sg = 0, sgH = 0, dMin = Infinity, tMin = 0, segMin = Infinity, segNose = -Infinity;
@@ -1267,6 +1233,51 @@ export function createTrickObserver(det, opts) {
     emit(rec);
   }
 
+  // The Cradle's inputs from ta to tb (its clock), as rows of the record.
+  function cgRows(ta, tb) {
+    const rows = [];
+    for (let i = 0; i < cgN; i++) {
+      const k = ((cgHead - cgN + i) % CG_CAP + CG_CAP) % CG_CAP * CG_W;
+      const tt = cgBuf[k];
+      if (tt < ta - 1e-9 || tt > tb + 1e-9) continue;
+      rows.push([Math.round(tt * 10000) / 10000, r4(cgBuf[k + 1]), r4(cgBuf[k + 2]), r4(cgBuf[k + 3]), r3(cgBuf[k + 4]), r3(cgBuf[k + 5]), r3(cgBuf[k + 6]),
+        r4(cgBuf[k + 7]), r4(cgBuf[k + 8]), r4(cgBuf[k + 9]), r4(cgBuf[k + 10]), cgBuf[k + 11], cgBuf[k + 12]]);
+    }
+    return rows;
+  }
+
+  // A cradle record: the verdict (sim-tricks.js cradleStep's), the numbers it
+  // was judged by, the posts near the path, and the inputs from
+  // CRADLE_LOG.preS before the first pass to the verdict.
+  function emitCradle(t, v, ev) {
+    const rec = base('cradle', t);
+    rec.result = v.result || null;
+    rec.event = ev || null;
+    rec.reason = v.result
+      ? 'Cradle round post ' + v.obj + ': out ' + Math.abs(v.lat1).toFixed(2) + ' m, nose ' + v.pMax + '°, back ' + Math.abs(v.lat2).toFixed(2) + ' m the other side at ' + (-v.vBack).toFixed(1) + ' m/s, ' + v.offNose + '° off the nose, ' + v.dt.toFixed(2) + ' s'
+      : 'no Cradle round post ' + v.obj + ': ' + v.why;
+    rec.closed = det.lastCradleSeg && det.lastCradleSeg === v.seq ? 1 : 0;
+    const gate = {};
+    for (const k in v) if (k !== 'seq') gate[k] = v[k];
+    rec.gate = gate;
+    rec.need = CRADLE;
+    const cols = ['t', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'fx', 'fy', 'fz', 'upZ', 'contact', 'armed'];
+    const ta = v.t1 - CRADLE_LOG.preS;
+    const rows = cgRows(ta, v.t2);
+    rec.inputs = { cols, rows, to: r3(v.t2), cut: rows.length > 0 && rows[0][0] > ta + 0.05 ? 1 : 0 };
+    cgPend.push({ rec, ta, due: v.t2 + CRADLE_LOG.postS });
+    // The posts within CRADLE.near (level) of the path, as the gate has them.
+    const g = det.cg, P = g.post, posts = [];
+    for (let i = 0; i < g.postN; i++) {
+      const q = i * 9;
+      let near = false;
+      for (let j = 0; j < rows.length && !near; j++) near = Math.hypot(P[q] - rows[j][1], P[q + 1] - rows[j][2]) <= CRADLE.near;
+      if (near) posts.push([r3(P[q + 2]), r3(P[q + 3]), r3(P[q + 4]), r3(P[q + 5]), r3(P[q + 6]), r3(P[q + 7]), P[q + 8]]);
+    }
+    rec.posts = posts;
+    emit(rec);
+  }
+
   function before(sample, dt) {
     void sample; void dt;
     if (heldLive && !det.live) {
@@ -1417,6 +1428,33 @@ export function createTrickObserver(det, opts) {
       }
     }
 
+    // The Cradle: its inputs this step (once per detector step), then each
+    // verdict since the last step (after the segment it closed, if any).
+    try {
+      const g = det.cg;
+      if (g && g.inp && g.inp.t !== cgT) {
+        const I = g.inp, k = cgHead * CG_W;
+        cgT = I.t;
+        cgBuf[k] = I.t; cgBuf[k + 1] = I.x; cgBuf[k + 2] = I.y; cgBuf[k + 3] = I.z;
+        cgBuf[k + 4] = I.vx; cgBuf[k + 5] = I.vy; cgBuf[k + 6] = I.vz;
+        cgBuf[k + 7] = I.fx; cgBuf[k + 8] = I.fy; cgBuf[k + 9] = I.fz; cgBuf[k + 10] = I.upZ;
+        cgBuf[k + 11] = I.contact ? 1 : 0; cgBuf[k + 12] = armed ? 1 : 0;
+        cgHead = (cgHead + 1) % CG_CAP;
+        if (cgN < CG_CAP) cgN++;
+      }
+      if (g && g.seq !== cgSeq) {
+        for (const v of g.out) if (v.seq > cgSeq) emitCradle(t, v, ev);
+        cgSeq = g.seq;
+      }
+      // The records' inputs again, postS past their verdicts.
+      while (cgPend.length && cgT >= cgPend[0].due - 1e-9) {
+        const p = cgPend.shift();
+        p.rec.inputs.rows = cgRows(p.ta, p.due);
+        p.rec.inputs.to = r3(p.due);
+        try { onSide(p.rec); } catch (e) { /* never break the frame */ }
+      }
+    } catch (e) { /* logged only: never break the observer */ }
+
     // Gaps: each pass or skim the detector resolves (gapSeq). Not a trick.
     if (det.gapSeq !== gapSeq) {
       const rec = base('gap', t);
@@ -1484,6 +1522,7 @@ export function createTrickDebug(opts) {
   let lastEx = null;         // the last one the classifier scored: { rec, ex }
   let lastDive = null;
   let lastGap = null;
+  let lastCradle = null;
   let el = null;
   let paintedAt = -1;
   let dirty = true;
@@ -1502,6 +1541,7 @@ export function createTrickDebug(opts) {
       if (ex && ex.candidates && ex.candidates.length) lastEx = { rec, ex };
       if (rec.type === 'dive') lastDive = rec;
       else if (rec.type === 'gap') lastGap = rec;
+      else if (rec.type === 'cradle') lastCradle = rec;
       dirty = true;
       try { if (out) out.info(JSON.stringify(rec)); } catch (e) { /* never break the frame */ }
       if (rec.mismatch && out) { try { out.warn('tricks debug: replica disagrees with classifyFeat', rec.result, rec.pick && rec.pick.id); } catch (e) { /* ignore */ } }
@@ -1602,6 +1642,27 @@ export function createTrickDebug(opts) {
     return '<span class="d">  ' + pad('gap passes', 18) + pad('—', 5) + '</span> ' + s + '  <span class="d">(not a trick)</span>';
   }
 
+  // The Cradle (a path event round a post, not a segment's label): its last
+  // verdict, or the first pass it is watching (the latest), or what it needs.
+  function cradleLine(t) {
+    const det = tricks.detector(), g = det && det.cg;
+    const fresh = lastCradle && t - lastCradle.t < 6;
+    let s;
+    if (fresh) s = (lastCradle.result ? '<span class="ok">fired</span> ' : '') + esc(lastCradle.reason) + '  <span class="d">' + (t - lastCradle.t).toFixed(1) + 's ago</span>';
+    else if (g && g.armN) {
+      let j = -1;
+      for (let i = 0; i < g.postN; i++) if (g.arm[i] && (j < 0 || g.t1[i] > g.t1[j])) j = i;
+      s = '<span class="near">first pass</span> post ' + g.post[j * 9 + 8] + ' ' + (g.lat1[j] > 0 ? 'L' : 'R') + ' ' + Math.abs(g.lat1[j]).toFixed(2) + ' m'
+        + '  nose ' + Math.round(g.pMax[j]) + '°/' + CRADLE.noseUp + '° ' + mark(g.pMax[j] >= CRADLE.noseUp)
+        + '  ' + (g.inp.t - g.t1[j]).toFixed(1) + '/' + CRADLE.maxS + ' s';
+    } else {
+      s = '<span class="d">' + (g ? g.postN : 0) + ' posts here: pass one flying forward (≤' + CRADLE.outLat + ' m out), nose up ≥' + CRADLE.noseUp
+        + '° (never over the top), back past it against the nose the other side (≤' + CRADLE.backLat + ' m)</span>';
+    }
+    const ok = fresh && !!lastCradle.result;
+    return '<span class="' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓' : '✗') + ' ' + pad('Cradle', 18) + pad('—', 5) + '</span> ' + s;
+  }
+
   function paint(force) {
     const t = now();
     if (!force && !dirty && t - paintedAt < 0.1) return;
@@ -1665,6 +1726,7 @@ export function createTrickDebug(opts) {
       if (c) L.push(candidateLine(c));
       else L.push('<span class="no">· ' + esc(pad(nameOf(id).replace(' (Ham)', ''), 18)) + pad('—', 5) + '</span> <span class="d">no classified maneuver yet</span>');
     }
+    L.push(cradleLine(t));
     L.push(gapLine(t));
     if (ex) {
       const others = ex.candidates.filter((c) => FOCUS.indexOf(c.id) < 0).map((c) => (c.verdict === 'fired' ? '✓' : '') + c.id + ' ' + c.total.toFixed(2));

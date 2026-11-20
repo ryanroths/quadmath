@@ -46,7 +46,8 @@
 //     as the top above the entry, below);
 //   - log 1 seq 82, log 2 seq 73 (Half Matty): a half roll then a forward
 //     pitch, the old Half Matty; the owner's is a forward half loop over an
-//     object ending inverted. 82 is a Cradle (its next best), 73 nothing;
+//     object ending inverted. 82 was a Cradle (its next best; nothing now,
+//     as every Cradle, below), 73 nothing;
 // - log 3, with the owner's Maverick, Matty and Half Mavvy as the owner
 //   flies them and compound tricks merged across segments (replayLog): six
 //   labels change, all the owner's:
@@ -91,6 +92,23 @@
 // All four logs predate the twist (saw.twistDeg): their Barani terms were
 // the old window's, the net pitch inside 1.5 s and the roll alone, and in
 // log 4 that read 0 on every segment (baraniFrom, below).
+//
+// The Cradle (2026-11-20) is no segment's label any more: it is two passes
+// round a post, a path event (sim-tricks.js CRADLE, cradleStep). No maneuver
+// here classifies as one, and the logs from before the owner's Cradle dumps
+// cannot be checked for one: they carry no positions. So every Cradle they
+// fired loses the label, by the owner's ruling: log 1 seq 55, 71 and 82 (82
+// fired Half Matty), log 2 seq 31 and 61, the Bando Baranis' seq 14, the
+// Warehouse Baranis' seq 8 and the build flight's seq 18. They pitched nose
+// down (a Cradle is nose up), but four came right after a pull-up and may
+// have been a real Cradle's pull and push, which the gate cannot place round
+// a post with no positions: log 1 seq 54 -> 55 (back 78, then forward 138,
+// 0.17 s apart) and 69 -> 71 (back 108, then 149, 0.08 s), log 3 seq 65 ->
+// 66 (back 138, then 131: merged, the Maverick, which it stays) and the
+// Bando Baranis' 12 -> 14 (a Barani back 117, then forward 104). The owner's
+// Cradle dumps (tools/fixtures/tricklog-depot-bf-cradle-1 and -2) carry
+// positions, 32 rows a record (rec.side): the gate, run on them, calls the
+// owner's 12 Cradles and none of the misses (the last test).
 //   node --test tools/test_sim_tricks_attempt_log.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -102,8 +120,10 @@ import {
   classifyFeat, featView, makeFeat, loopCount, trickName, LOOP_WIN_S, SAMPLE_S, HAM_UPZ, HAM_MIN,
   PHASE_SPECS, PHASE_FIELD, matchSpec, MERGE_GAP_S, MANEUVER_MAX_S,
   NOSE_SIDE, ORBIT_WIN_S, ORBIT_RATE, TRIPPY_HOLD, BARANI_P, BARANI_FADE, BARANI_HD_LO,
+  CRADLE, makeCradleGate, cradlePosts, cradleStep,
 } from '../sim-tricks.js';
 import { explainFeat, SPEC } from '../sim-tricks-debug.js';
+import { DEPOT_PLAY, DEPOT_WS } from '../sim-maps.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEG = Math.PI / 180;
@@ -541,7 +561,9 @@ const LOGS = [
     NEW: {
       4: 'powerloop', 59: 'powerloop', 79: 'powerloop', 22: 'trippy', 23: 'trippy', 24: 'trippy', 25: 'trippy', 75: 'powerloop',
       12: 'ham', 40: 'ham', 67: 'ham',
-      14: null, 21: null, 33: null, 80: 'immelmann', 82: 'cradle',
+      14: null, 21: null, 33: null, 80: 'immelmann', 82: null,
+      // Cradles fired; no label now (see the top).
+      55: null, 71: null,
     },
   },
   {
@@ -554,6 +576,8 @@ const LOGS = [
       9: 'ham', 20: 'ham', 26: 'ham', 77: 'ham', 29: 'trippy', 30: 'trippy', 4: 'powerloop',
       82: 'ham', 84: 'ham',
       51: null, 71: null, 73: null,
+      // Cradles fired; no label now (see the top).
+      31: null, 61: null,
       // The owner's Barani, estimated (see the top).
       33: 'barani', 40: 'barani',
     },
@@ -601,8 +625,9 @@ const LOGS = [
   },
   {
     name: 'bando baranis', map: 'bando', file: 'tools/fixtures/tricklog-bando-bf-barani.jsonl.gz', records: 31, maneuvers: 16, fired: 5,
-    // Seq 6, 12, 17 and 28 fired Barani and stay.
-    NEW: {},
+    // Seq 6, 12, 17 and 28 fired Barani and stay; seq 14 fired Cradle (no
+    // label now: see the top).
+    NEW: { 14: null },
     // Unmatched to an attempt: 139 of yaw inverted over 381 of pitch path,
     // upright at the end, a Barani by the estimate (baraniFrom).
     OPEN: { 9: 'barani' },
@@ -623,8 +648,9 @@ const LOGS = [
     name: 'depot baranis', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-barani.jsonl.gz', records: 26, maneuvers: 18, fired: 1,
     // The re-fly's Baranis, none fired: seq 4, 11, 18 and 22, by the
     // heading's estimate (the turn about the vertical made inverted: 159,
-    // 132, 161, 166; the heading's band from 120).
-    NEW: { 4: 'barani', 11: 'barani', 18: 'barani', 22: 'barani' },
+    // 132, 161, 166; the heading's band from 120). Seq 8 fired Cradle (no
+    // label now: see the top).
+    NEW: { 4: 'barani', 11: 'barani', 18: 'barani', 22: 'barani', 8: null },
   },
   {
     name: 'depot build flight', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-build.jsonl.gz', lines: [0, 60], records: 60, maneuvers: 39, fired: 10,
@@ -640,11 +666,24 @@ const LOGS = [
     // and never Barani: every label as fired. Flips 1, 3, 4, 24, 26 and 27,
     // and 17 the banked back flip (rolled 140 as it flipped, turned 258
     // about the vertical, 3 of it inverted); Rolls 7, 8 and 12.
-    NEW: {},
-    exact: true,
     // Right after 17, which ended on its side (up-Z -0.08) with a bump: 158
-    // of forward pitch, not inverted, fired Cradle. Not the owner's label.
-    OPEN: { 18: 'cradle' },
+    // of forward pitch, not inverted, fired Cradle. Not the owner's label;
+    // no label now (see the top).
+    NEW: { 18: null },
+    exact: true,
+  },
+  // The owner's Cradle dumps (2026-11-20), with rec.side's positions. The
+  // first: three Cradles round the spin pole, each a pull then a push (seq
+  // 1-2, 3-4, 5-6), none fired. The second: Cradles round the spin pole and
+  // the mezzanine's columns, two bad ones on purpose (one back on the same
+  // side, one never back), a Cradle that clipped a column and crashed, and
+  // a Maverick up through the hatch. Seq 3, 19, 22, 23, 25 and 31 fired
+  // Cradle; a segment never labels one now (see the top): the gate's calls
+  // are checked on the positions (the last test).
+  { name: 'depot cradles 1', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-cradle-1.jsonl.gz', records: 6, maneuvers: 6, fired: 0, NEW: {} },
+  {
+    name: 'depot cradles 2', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-cradle-2.jsonl.gz', records: 36, maneuvers: 32, fired: 6,
+    NEW: { 3: null, 19: null, 22: null, 23: null, 25: null, 31: null },
   },
 ];
 for (const L of LOGS) {
@@ -779,9 +818,10 @@ test('every label a log fired stays the same (but log 2 seq 26, the phase matche
   const changed = LOGS.slice(0, 4).flatMap((L) => L.scored.filter((r) => r.seq in L.NEW && L.NEW[r.seq] !== r.result && (r.result || L.name === 'log 3' || L.NEW[r.seq] === 'barani')).map((r) => L.name + ' seq ' + r.seq + ' ' + (r.result || 'none') + '->' + (L.NEW[r.seq] || 'none')));
   assert.deepEqual(changed, [
     'log 1 seq 14 maverick->none', 'log 1 seq 21 maverick->none', 'log 1 seq 33 matty->none',
-    'log 1 seq 80 snapback->immelmann', 'log 1 seq 82 halfmatty->cradle',
-    'log 2 seq 26 flip->ham', 'log 2 seq 33 none->barani', 'log 2 seq 40 none->barani',
-    'log 2 seq 51 maverick->none', 'log 2 seq 71 maverick->none', 'log 2 seq 73 halfmatty->none',
+    'log 1 seq 55 cradle->none', 'log 1 seq 71 cradle->none',
+    'log 1 seq 80 snapback->immelmann', 'log 1 seq 82 halfmatty->none',
+    'log 2 seq 26 flip->ham', 'log 2 seq 31 cradle->none', 'log 2 seq 33 none->barani', 'log 2 seq 40 none->barani',
+    'log 2 seq 51 maverick->none', 'log 2 seq 61 cradle->none', 'log 2 seq 71 maverick->none', 'log 2 seq 73 halfmatty->none',
     'log 3 seq 20 barani->halfmavvy', 'log 3 seq 27 barani->halfmavvy', 'log 3 seq 50 none->matty', 'log 3 seq 53 none->matty',
     'log 3 seq 56 none->barani', 'log 3 seq 63 cradle->maverick', 'log 3 seq 66 cradle->maverick',
     'log 4 seq 4 none->barani', 'log 4 seq 6 none->barani', 'log 4 seq 8 maverick->barani', 'log 4 seq 11 none->barani',
@@ -790,15 +830,19 @@ test('every label a log fired stays the same (but log 2 seq 26, the phase matche
 
 test('the dumps of 2026-11-17 and 18: every label that changes, and the open ones', () => {
   const NEWER = LOGS.slice(4);
-  const changed = NEWER.flatMap((L) => L.scored.filter((r) => r.seq in L.NEW && L.NEW[r.seq] !== r.result).map((r) => L.name + ' seq ' + r.seq + ' ' + (r.result || 'none') + '->' + L.NEW[r.seq]));
+  const changed = NEWER.flatMap((L) => L.scored.filter((r) => r.seq in L.NEW && L.NEW[r.seq] !== r.result).map((r) => L.name + ' seq ' + r.seq + ' ' + (r.result || 'none') + '->' + (L.NEW[r.seq] || 'none')));
   assert.deepEqual(changed, [
     'bando orbits seq 7 trippy->orbit', 'bando orbits seq 11 trippy->orbit',
+    'bando baranis seq 14 cradle->none',
     'rig orbits seq 3 trippy->orbit', 'rig orbits seq 8 trippy->orbit',
-    'depot baranis seq 4 none->barani', 'depot baranis seq 11 none->barani', 'depot baranis seq 18 none->barani', 'depot baranis seq 22 none->barani',
+    'depot baranis seq 4 none->barani', 'depot baranis seq 8 cradle->none', 'depot baranis seq 11 none->barani', 'depot baranis seq 18 none->barani', 'depot baranis seq 22 none->barani',
+    'depot build flips and rolls seq 18 cradle->none',
+    'depot cradles 2 seq 3 cradle->none', 'depot cradles 2 seq 19 cradle->none', 'depot cradles 2 seq 22 cradle->none',
+    'depot cradles 2 seq 23 cradle->none', 'depot cradles 2 seq 25 cradle->none', 'depot cradles 2 seq 31 cradle->none',
   ]);
   // What the open ones read now (not asserted as the owner's).
   const open = NEWER.flatMap((L) => Object.keys(L.OPEN || {}).map((seq) => L.name + ' seq ' + seq + ' ' + (replayed(L).get(Number(seq)).id || 'none')));
-  assert.deepEqual(open, ['bando baranis seq 9 barani', 'depot build flips and rolls seq 18 cradle']);
+  assert.deepEqual(open, ['bando baranis seq 9 barani']);
   // Every label they fired that stays: the Trippies, Hams and Baranis.
   const kept = (L, id) => L.scored.filter((r) => r.result === id && replayed(L).get(r.seq).id === id).map((r) => r.seq);
   const [BO, BT, BH, BB, RT] = NEWER;
@@ -860,7 +904,7 @@ test('the build flight of flips and rolls: exact terms, each label as it fired, 
     if (!r.pre.tiny) assert.ok('f.orbitTail' in g && 'v.slowSpan' in g && ('barRHead' in g || 'barRTwist' in g), 'seq ' + r.seq + ' gates');
   }
   const out = replayed(L);
-  const fired = L.scored.filter((r) => out.get(r.seq).id && !(r.seq in L.OPEN)).map((r) => r.seq + ' ' + out.get(r.seq).id);
+  const fired = L.scored.filter((r) => out.get(r.seq).id && !(L.OPEN && r.seq in L.OPEN)).map((r) => r.seq + ' ' + out.get(r.seq).id);
   assert.deepEqual(fired, ['1 flip', '3 flip', '4 flip', '7 roll', '8 roll', '12 roll', '17 flip', '24 flip', '26 flip', '27 flip']);
   for (const r of L.scored) {
     assert.notEqual(out.get(r.seq).id, 'barani', 'seq ' + r.seq);
@@ -1010,8 +1054,9 @@ test('log 3: the Mavericks split across segments are one Maverick each, and no C
   // Both dropped back near an object (the push and glide records 0.95-1.0
   // of their steps within 2 m of one).
   for (const seq of [61, 62, 63, 65, 66]) assert.ok(LOG3.bySeq.get(seq).saw.obj >= 0.9, 'seq ' + seq + ' near an object');
-  // Alone, the glide back is still a Cradle; merged, it is not one.
-  assert.equal(classify(featNow(LOG3, LOG3.bySeq.get(66)).f).id, 'cradle');
+  // Alone, the glide back is nothing (no segment labels a Cradle: it is two
+  // passes round a post); merged, the Maverick.
+  assert.ok(!classify(featNow(LOG3, LOG3.bySeq.get(66)).f).id);
   assert.ok(MERGE_GAP_S > 0.79 && MERGE_GAP_S < 0.81);
 });
 
@@ -1078,4 +1123,83 @@ test('loop count: one from 300 degrees, two from 600, one more per further 360',
   assert.equal(trickName('powerloop', 1, 1), 'Powerloop');
   assert.equal(trickName('powerloop', 1, 3), 'Triple Powerloop');
   assert.equal(trickName('powerloop', 1, 4), '4× Powerloop');
+});
+
+// The owner's Cradle dumps' positions (rec.side.rows: 32 rows a record, each
+// t, seg, x, y, z (sim-core m), the velocity along and across the heading,
+// vz, the nose's elevation, its pitch in the heading's plane, noseDot, the
+// heading, up-Z, ...), merged over the overlapping records (a row every 0.03
+// s or more), on the detector's clock (rec.t0 + t). The nose rebuilt from
+// its elevation and heading (turned round past 90 of pitch in the heading's
+// plane), the velocity from the heading's frame. No floor contact is logged,
+// so none is fed. A gap of 0.4 s in the rows starts the gate over. The posts:
+// the Warehouse's, as the page builds its colliders (DEPOT_PLAY's boxes at
+// DEPOT_WS), the objects the dumps name (the spin pole 1109, the mezzanine's
+// columns 699 and 700).
+const DEPOT_COLS = DEPOT_PLAY.boxes.map((b) => ({
+  min: { x: b.min[0] * DEPOT_WS, y: b.min[1] * DEPOT_WS, z: b.min[2] * DEPOT_WS },
+  max: { x: b.max[0] * DEPOT_WS, y: b.max[1] * DEPOT_WS, z: b.max[2] * DEPOT_WS },
+}));
+function gateOnRows(L) {
+  const rows = [];
+  for (const r of L.recs) {
+    if (!r.side || !r.side.rows) continue;
+    for (const w of r.side.rows) rows.push({ t: r.t0 + w[0], w });
+  }
+  rows.sort((a, b) => a.t - b.t);
+  const fresh = () => { const g = makeCradleGate([]); cradlePosts(g, DEPOT_COLS, DEPOT_WS); return g; };
+  let g = fresh(), seen = 0, prev = -1e9;
+  const out = [];
+  const drain = () => { while (seen < g.seq) { seen++; const v = g.out.find((o) => o.seq === seen); if (v) out.push(v); } };
+  for (const { t, w } of rows) {
+    if (t - prev < 0.03) continue;
+    if (t - prev > 0.4) { drain(); g = fresh(); seen = 0; }
+    prev = t;
+    const [, , x, y, z, va, vl, vz, nEl, pH, , hd, upZ] = w;
+    const h = hd * DEG, az = (Math.abs(pH) > 90 ? hd + 180 : hd) * DEG, el = nEl * DEG;
+    const Fx = Math.cos(h), Fy = Math.sin(h);
+    Object.assign(g.inp, {
+      t, x, y, z, vx: va * Fx - vl * Fy, vy: va * Fy + vl * Fx, vz,
+      fx: Math.cos(el) * Math.cos(az), fy: Math.cos(el) * Math.sin(az), fz: Math.sin(el), upZ, contact: 0,
+    });
+    cradleStep(g);
+    drain();
+  }
+  return out;
+}
+
+test('the owner\'s Cradle dumps: the gate, on their positions, calls each of the 12 Cradles at its second pass, and none of the misses', () => {
+  const [C1, C2] = LOGS.slice(-2);
+  const v1 = gateOnRows(C1), v2 = gateOnRows(C2);
+  const r1 = (x) => Math.round(x * 10) / 10;
+  const calls = (vs) => vs.filter((v) => v.result === 'cradle').map((v) => v.obj + ' ' + r1(v.t1) + '-' + r1(v.t2));
+  // The first dump: three round the spin pole.
+  assert.deepEqual(calls(v1), ['1109 13.6-14.9', '1109 18.5-19.7', '1109 22.9-24.2']);
+  // The second: six round the spin pole, three round the columns (699 once,
+  // 700 twice), in the order flown.
+  assert.deepEqual(calls(v2), [
+    '1109 23.7-24.5', '1109 27.3-28.3', '699 33-33.9', '1109 52.5-53.7', '1109 55.9-57.3',
+    '700 60.9-62.3', '700 65.4-66.7', '1109 75.8-76.9', '1109 79-80.2',
+  ]);
+  // The misses that were flown as Cradles: the one that clipped column 699
+  // and crashed (16.4-18.6 s), the one back on the same side, climbing
+  // (37.4 s), the one that slid wide and never came back abeam (44.5 s).
+  const why = (obj, t) => { const v = v2.find((o) => !o.result && o.obj === obj && Math.abs(o.t1 - t) < 0.3); return v ? v.why : 'none'; };
+  assert.equal(why(699, 17.2), 'hit the post');
+  assert.equal(why(1109, 37.5), 'same side');
+  assert.equal(why(1109, 44.5), 'no second pass in ' + CRADLE.maxS + ' s');
+  // The Maverick up through the hatch (68.9-71.5 s) is no Cradle.
+  assert.ok(!v2.some((v) => v.result && v.t2 > 68 && v.t2 < 72));
+  // Every Cradle clear of each threshold: the margins the gate was set with.
+  for (const v of [...v1, ...v2].filter((o) => o.result)) {
+    const tag = v.obj + ' ' + v.t1;
+    assert.ok(Math.abs(v.lat1) <= CRADLE.outLat - 0.5, tag + ' out ' + v.lat1);
+    assert.ok(Math.abs(v.lat2) <= CRADLE.backLat - 0.5, tag + ' back ' + v.lat2);
+    assert.ok(Math.sign(v.lat1) !== Math.sign(v.lat2), tag + ' the other side');
+    assert.ok(v.pMax >= CRADLE.noseUp + 10 && v.pMax <= CRADLE.overTop - 10, tag + ' nose ' + v.pMax);
+    assert.ok(v.offNose >= CRADLE.backDeg + 15, tag + ' off the nose ' + v.offNose);
+    assert.ok(-v.vBack >= CRADLE.backSpd + 1.5, tag + ' back at ' + v.vBack);
+    assert.ok(v.upZ >= CRADLE.upZ + 0.25, tag + ' up-Z ' + v.upZ);
+    assert.ok(v.dt <= CRADLE.maxS - 1, tag + ' ' + v.dt + ' s');
+  }
 });

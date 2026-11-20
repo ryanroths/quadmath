@@ -12,10 +12,11 @@ import { dirname, join } from 'node:path';
 import {
   classifyFeat, makeFeat, makeDetector, stepDetector, resetDetector, createTricks,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, featView, matchSpec, PHASE_SPECS,
+  CRADLE, makeCradleGate, cradleStep,
 } from '../sim-tricks.js';
 import {
   GATES, CLASS_IDS, SPEC, OVERRIDES, DIVE, DIVE_FALLBACK, GAP, SEG, FOCUS,
-  explainFeat, createTrickObserver, createTrickDebug, gateText, SIDE,
+  explainFeat, createTrickObserver, createTrickDebug, gateText, SIDE, CRADLE_LOG,
 } from '../sim-tricks-debug.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -630,8 +631,9 @@ test('observer: the Barani probe (rec.barani) names the term that zeroed it', ()
   assert.equal(camOrbit({ pitch: 50, toCentre: true, info: { camDeg: 30 } }).barani.limit, 'barP');
 });
 
-// The object beside the path in the log (rec.side), for setting the
-// Cradle's from the owner's flying: logged only, nothing scores it.
+// The object beside the path in the log (rec.side), from the owner's
+// flying: logged only, nothing scores it. (The Cradle itself is sim-tricks.js
+// cradleStep, with its own record: the tests after these.)
 // sideRun flies a kinematic path (sim-core m, 4 ms steps) past boxes given
 // in sim-core m ({ x0, y0, z0, x1, y1, z1 }), from start, through phases
 // { t, rate: [r, p, y] rad/s body, v: [x, y, z] m/s, to: [x, y, z] (a
@@ -852,3 +854,151 @@ test('createTrickDebug: the overlay shows the side line, each pass by object and
 });
 
 function c3(x) { return Math.round(x * 1000) / 1000; }
+
+// The Cradle (sim-tricks.js cradleStep): called at the second pass, logged
+// by the observer as a record of type 'cradle' with its inputs; replaying
+// those through a fresh gate (makeCradleGate on the record's posts) gives
+// the same verdict.
+function replayCradle(rec) {
+  const g = makeCradleGate(rec.posts);
+  const c = rec.inputs.cols, ix = (k) => c.indexOf(k);
+  const I = ['t', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'fx', 'fy', 'fz', 'upZ', 'contact'].map(ix);
+  for (const row of rec.inputs.rows) {
+    if (!row[ix('armed')]) continue;
+    const s = g.inp;
+    [s.t, s.x, s.y, s.z, s.vx, s.vy, s.vz, s.fx, s.fy, s.fz, s.upZ, s.contact] = I.map((k) => row[k]);
+    cradleStep(g);
+  }
+  return g.out;
+}
+
+test('the Cradle, round a pole: called at the second pass; its record holds the inputs, and they replay to the same verdict', () => {
+  for (const side of [1, -1]) {
+    const r = sideRun([pole(5, side * 1.0), pole(9, side * 2.5)], cradlePhases(side), { x: -10, y: 0, z: 3 });
+    assert.deepEqual(r.evs, ['cradle'], 'side ' + side);
+    const cr = r.recs.filter((x) => x.type === 'cradle');
+    assert.equal(cr.length, 1, JSON.stringify(cr.map((x) => x.reason)));
+    const rec = cr[0], v = rec.gate;
+    assert.equal(rec.result, 'cradle');
+    assert.equal(rec.event, 'cradle');
+    assert.equal(rec.closed, 0, 'the pull had settled before the second pass');
+    near(v.lat1, side, 0.02, 'out'); near(v.lat2, -side, 0.02, 'back');
+    near(v.pMax, 57, 2, 'nose'); near(v.offNose, 180, 1, 'against the nose'); near(v.vBack, -5, 0.01, 'back at');
+    near(v.upZ, Math.cos(57 * Math.PI / 180), 0.03, 'up-Z');
+    assert.match(rec.reason, /^Cradle round post \d+: out 1\.00 m, nose 57°, back 1\.00 m the other side at 5\.0 m\/s, 180° off the nose/);
+    assert.deepEqual(rec.need, CRADLE);
+    // The inputs from CRADLE_LOG.preS before the first pass to postS past the
+    // verdict (refreshed then), every step; the posts near the path (the far
+    // pole, 2.5 m out, too).
+    const rows = rec.inputs.rows, t = rec.inputs.cols.indexOf('t');
+    near(rows[0][t], v.t1 - CRADLE_LOG.preS, 0.005, 'from preS before');
+    near(rows[rows.length - 1][t], v.t2 + CRADLE_LOG.postS, 0.005, 'to postS past the verdict');
+    near(rec.inputs.to, v.t2 + CRADLE_LOG.postS, 0.005, 'to');
+    assert.ok(rows.length >= (v.t2 - v.t1 + CRADLE_LOG.preS + CRADLE_LOG.postS) / 0.004 - 2, rows.length + ' rows');
+    assert.equal(rec.posts.length, 2);
+    // The replay: the same verdict, on the same step or the next (the rows
+    // rounded to 0.1 mm can put the second pass a step on).
+    const out = replayCradle(rec);
+    const w = out.find((x) => x.result === 'cradle');
+    assert.ok(w, 'the replay calls it: ' + JSON.stringify(out));
+    assert.equal(w.obj, v.obj);
+    near(w.t1, v.t1, 0.0045, 't1'); near(w.t2, v.t2, 0.0045, 't2');
+    for (const [k, tol] of [['lat1', 0.03], ['lat2', 0.03], ['pMax', 1], ['offNose', 1], ['vBack', 0.01], ['upZ', 0.01]]) near(w[k], v[k], tol, k);
+  }
+  // A segment still open at the second pass (the nose pitching back down at
+  // 1 rad/s through it): it closes there as the Cradle.
+  const live = sideRun([pole(5, 1)], [{ t: 3.4, v: [5, 0, 0] }, { t: 0.5, rate: [0, -2, 0], v: [1, 4, 0] }, { t: 1.3, rate: [0, 1, 0], v: [-5, 0, 0] }, { t: 2 }], { x: -10, y: 0, z: 3 });
+  assert.deepEqual(live.evs, ['cradle']);
+  const m = live.recs.find((x) => x.type === 'maneuver' && x.result === 'cradle');
+  assert.ok(m, JSON.stringify(live.recs.map((x) => [x.type, x.result, x.reason])));
+  assert.match(m.reason, /^closed at a Cradle's second pass/);
+  const c = live.recs.find((x) => x.type === 'cradle');
+  assert.equal(c.closed, 1);
+  assert.ok(m.cradle > 0, 'the maneuver names the Cradle that closed it');
+  assert.equal(live.recs.indexOf(c), live.recs.indexOf(m) + 1, 'the cradle record right after the segment it closed');
+});
+
+test('the Cradle\'s posts: a pole, a column or a tree standing; a chair or table leg on the floor; never a wall, clutter or a hanging strand', () => {
+  // The same flight at 0.3 m round each object (its centre 1 m out); the
+  // leg's and the stub's tops under the over margin of the path.
+  const at = (x0, y0, z0, x1, y1, z1) => ({ x0, y0, z0, x1, y1, z1 });
+  const fly = (boxes, z = 0.3, phases = cradlePhases(1)) => sideRun(boxes, phases, { x: -10, y: 0, z });
+  const called = (r) => r.evs.includes('cradle');
+  const verdicts = (r) => r.recs.filter((x) => x.type === 'cradle');
+  // A table leg (6 cm square, 0.36 m, the House's coffee table's) and a
+  // chair's (0.39 m): legs.
+  assert.ok(called(fly([at(4.97, 0.97, 0, 5.03, 1.03, 0.36)])), 'a 0.36 m table leg');
+  assert.ok(called(fly([at(4.97, 0.97, 0, 5.03, 1.03, 0.39)])), 'a 0.39 m chair leg');
+  // Under legH, a stub; not slender (a pot, 0.4 wide and 0.45 tall); off
+  // the floor (a leg on a shelf): no post, no verdict.
+  for (const [what, b] of [
+    ['a 0.25 m stub', at(4.97, 0.97, 0, 5.03, 1.03, 0.25)],
+    ['a pot', at(4.8, 0.8, 0, 5.2, 1.2, 0.45)],
+    ['a leg on a shelf', at(4.97, 0.97, 0.2, 5.03, 1.03, 0.6)],
+  ]) {
+    const r = fly([b]);
+    assert.ok(!called(r) && !verdicts(r).length, what + ': ' + r.evs.join(','));
+  }
+  // Tall: standing on the floor or on a box (a column on a deck); a strand
+  // hanging (nothing under it) is no post. Flown at 1.5 m.
+  assert.ok(called(fly([at(4.9, 0.9, 0, 5.1, 1.1, 3.05)], 1.5)), 'a column');
+  assert.ok(called(fly([at(4.9, 0.9, 0.5, 5.1, 1.1, 3.5), at(4.5, 0.5, 0, 5.5, 1.5, 0.5)], 1.5)), 'a column on a deck');
+  assert.ok(!called(fly([at(4.97, 0.97, 0.5, 5.03, 1.03, 3.5)], 1.5)), 'a hanging strand');
+  // A wall beside the path (4 m long): no post.
+  assert.ok(!called(fly([at(3, 0.9, 0, 7, 1.1, 6)], 1.5)), 'a wall');
+  // Over a leg (2 m above its top): no first pass.
+  const over = fly([at(4.97, 0.97, 0, 5.03, 1.03, 0.39)], 2.4);
+  assert.ok(!called(over) && !verdicts(over).length, 'over a leg');
+  // The nose over the top (a pull of 103 degrees): no Cradle, the verdict
+  // says so.
+  const top = fly([pole(5, 1)], 3, [{ t: 3.4, v: [5, 0, 0] }, { t: 0.9, rate: [0, -2, 0], v: [0.5, 2.2, 0] }, { t: 1.3, v: [-5, 0, 0] }, { t: 2 }]);
+  assert.ok(!called(top));
+  assert.equal(verdicts(top)[0].gate.why, 'over the top');
+  // Back on the same side: the verdict says so.
+  const same = fly([pole(5, 1)], 3, [{ t: 3.4, v: [5, 0, 0] }, { t: 0.5, rate: [0, -2, 0], v: [1, 0, 0] }, { t: 1.3, v: [-5, 0, 0] }, { t: 2 }]);
+  assert.ok(!called(same));
+  assert.equal(verdicts(same)[0].gate.why, 'same side');
+  // Into the pole on the way back (its centre 0.05 m off the path).
+  const into = fly([pole(5, 1)], 3, [{ t: 3.4, v: [5, 0, 0] }, { t: 0.5, rate: [0, -2, 0], v: [1, 2, 0] }, { t: 1.3, v: [-5, 0, 0] }, { t: 2 }]);
+  assert.ok(!called(into));
+  assert.equal(verdicts(into)[0].gate.why, 'hit the post');
+});
+
+test('createTrickDebug: the overlay\'s Cradle line, waiting, watching a first pass, then fired', () => {
+  const doc = fakeDoc();
+  let t = 0;
+  const tricks = createTricks({ document: null, storage: null, now: () => t });
+  tricks.setActive(true, 'depot');
+  const dbg = createTrickDebug({ document: doc, tricks, now: () => t, info: () => ({ core: 'bf', map: 'depot' }), console: { info: () => {}, warn: () => {} } });
+  const ws = 3.5, b = pole(5, 1);
+  const s = { armed: true, ws, throttle: 0.5, clearance: 3,
+    colliders: [{ min: { x: -b.y1 * ws, y: b.z0 * ws, z: -b.x1 * ws }, max: { x: -b.y0 * ws, y: b.z1 * ws, z: -b.x0 * ws } }] };
+  const p = { x: -10, y: 0, z: 3 };
+  let q = { x: 0, y: 0, z: 0, w: 1 };
+  const dt = 0.004;
+  let first = true;
+  const html = () => { dbg.paint(true); return doc.getElementById('trickXrBody').innerHTML; };
+  const seen = [];
+  for (const ph of cradlePhases(1)) {
+    const w = ph.rate || [0, 0, 0], v = ph.v || [0, 0, 0];
+    for (let i = 0, n = Math.round(ph.t / dt); i < n; i++) {
+      const m = Math.hypot(...w);
+      if (m) q = qMul(q, qAxis(w[0] / m, w[1] / m, w[2] / m, m * dt));
+      p.x += v[0] * dt; p.y += v[1] * dt; p.z += v[2] * dt;
+      Object.assign(s, { qx: q.x, qy: q.y, qz: q.z, qw: q.w, ox: w[0], oy: w[1], oz: w[2], wx: -p.y * ws, wy: p.z * ws, wz: -p.x * ws, alt: p.z, vx: v[0], vy: v[1], vz: v[2], speed: Math.hypot(...v) });
+      if (first) { tricks.resetDetector(s); tricks.detector().lockout = 0; first = false; }
+      t += dt;
+      dbg.before(s, dt);
+      const ev = tricks.tick(s, dt);
+      dbg.after(s, dt, ev);
+      if (i === 10) seen.push(html());
+    }
+  }
+  // Cruising in, on the pull (the first pass made), coming back (the nose
+  // was up 57), then after the second pass.
+  assert.match(seen[0], /Cradle {12}— {4}<\/span> <span class="d">1 posts here: pass one flying forward/);
+  assert.match(seen[1], /<span class="near">first pass<\/span> post \d+ L 1\.00 m {2}nose \d+°\/25° /);
+  assert.match(seen[2], /<span class="near">first pass<\/span> post \d+ L 1\.00 m {2}nose 57°\/25° ✓/);
+  assert.match(seen[3], /✓ Cradle {12}— {4}<\/span> <span class="ok">fired<\/span> Cradle round post \d+: out 1\.00 m, nose 57°/);
+  assert.ok(dbg.attempts().some((r) => r.type === 'cradle' && r.result === 'cradle'));
+});
