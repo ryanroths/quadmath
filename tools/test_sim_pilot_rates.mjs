@@ -185,7 +185,7 @@ test('the Tune panel names where the rates come from', () => {
   assert.ok(html.includes('body.bf-core .rates-js,body:not(.bf-core) .rates-bf{display:none!important}'));
   const sync = extract(html, 'syncRatesSource');
   assert.ok(sync.includes("js:ratesFromLink?'link':ratesAreCustom?'saved':'default'"), sync);
-  assert.ok(sync.includes("const b=bfOf(bfFlyingType()),cli=b.cliText;") && sync.includes("const src={from:bfRatesFrom(),preset:bfRatesPresetOf(bfRatesWant()),paste:bfPasteWins(b)};"), sync);
+  assert.ok(sync.includes("const b=bfOf(bfFlyingType()),cli=b.cliText;") && sync.includes("const src={from:bfRatesFrom(),preset:bfRatesPresetOf(bfRatesWant()),paste:bfPasteWins(b),input:bfInputKind(),js:!!(bfRatesSaved&&bfRatesSaved.js)};"), sync);
   assert.ok(sync.includes("bf.textContent=ratesSourceText({core:'bf',cli:!cli?'':bfPasteReplaces(cli)?'replace':'top',bf:src});"), sync);
   assert.ok(extract(html, 'refreshRatesUI').includes('syncRatesSource();'));
   const imp = extract(html, 'importCliToBf');
