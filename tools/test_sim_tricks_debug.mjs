@@ -631,45 +631,35 @@ test('observer: the Barani probe (rec.barani) names the term that zeroed it', ()
 });
 
 // The object beside the path in the log (rec.side), for setting the
-// Cradle's from the owner's flying: logged only, nothing scores it. A pole
-// 0.2 m square, 6 m tall, at x 5 (sim-core m), its near face 0.9 m to one
-// side of the line y 0 the quad flies along x at 5 m/s from x -10; past it, the nose
-// pitches up 57 degrees while the quad drifts 2 m across and stops, then it
-// flies back along x against the nose (the pole's other side), and hovers
-// past the record's refresh. side: +1, the pole on the quad's left (+y).
-// A second pole at x 9, 2.5 m out on the same side, is the nearest box
-// beside the path while the quad drifts across: the nearest box changes
-// from one behind to one ahead, which is no pass.
-function sideFlight(side, withObs) {
-  const ws = 3.5, c = side * 1.0, c2 = side * 2.5;
-  const pole = { min: { x: -(c + 0.1) * ws, y: 0, z: -5.1 * ws }, max: { x: -(c - 0.1) * ws, y: 6 * ws, z: -4.9 * ws }, _tag: 'map' };
-  const pole2 = { min: { x: -(c2 + 0.1) * ws, y: 0, z: -9.1 * ws }, max: { x: -(c2 - 0.1) * ws, y: 6 * ws, z: -8.9 * ws }, _tag: 'map' };
+// Cradle's from the owner's flying: logged only, nothing scores it.
+// sideRun flies a kinematic path (sim-core m, 4 ms steps) past boxes given
+// in sim-core m ({ x0, y0, z0, x1, y1, z1 }), from start, through phases
+// { t, rate: [r, p, y] rad/s body, v: [x, y, z] m/s, to: [x, y, z] (a
+// jump) }; withObs false steps the detector alone.
+function sideRun(boxes, phases, start, withObs = true) {
+  const ws = 3.5;
+  const cols = boxes.map((b) => ({ min: { x: -b.y1 * ws, y: b.z0 * ws, z: -b.x1 * ws }, max: { x: -b.y0 * ws, y: b.z1 * ws, z: -b.x0 * ws }, _tag: 'map' }));
   const d = makeDetector();
   const recs = [], evs = [];
   let t = 0;
   const obs = withObs ? createTrickObserver(d, { now: () => t, onAttempt: (r) => recs.push(r) }) : null;
   const dt = 0.004;
-  const p = { x: -10, y: 0, z: 3 };
+  const p = { ...start };
   let q = { x: 0, y: 0, z: 0, w: 1 };
-  const phases = [
-    { t: 3.4, v: [5, 0, 0] },
-    { t: 0.5, rate: [0, -2, 0], v: [1, side * 4, 0] },
-    { t: 1.3, v: [-5, 0, 0] },
-    { t: 3.0 },
-  ];
-  const s = { armed: true, colliders: [pole, pole2], ws, throttle: 0.5, clearance: 3 };
+  const s = { armed: true, colliders: cols, ws, throttle: 0.5, clearance: 3 };
   const fill = (w, v) => {
     s.qx = q.x; s.qy = q.y; s.qz = q.z; s.qw = q.w;
     s.ox = w[0]; s.oy = w[1]; s.oz = w[2];
     s.wx = -p.y * ws; s.wy = p.z * ws; s.wz = -p.x * ws; s.alt = p.z;
     s.vx = v[0]; s.vy = v[1]; s.vz = v[2]; s.speed = Math.hypot(v[0], v[1], v[2]);
   };
-  fill([0, 0, 0], [5, 0, 0]);
+  fill([0, 0, 0], phases[0].v || [0, 0, 0]);
   resetDetector(d, s);
   d.lockout = 0;
   for (const ph of phases) {
+    if (ph.to) { p.x = ph.to[0]; p.y = ph.to[1]; p.z = ph.to[2]; }
     const w = ph.rate || [0, 0, 0], v = ph.v || [0, 0, 0];
-    for (let i = 0, n = Math.round(ph.t / dt); i < n; i++) {
+    for (let i = 0, n = Math.round((ph.t || 0) / dt); i < n; i++) {
       const m = Math.hypot(...w);
       if (m) q = qMul(q, qAxis(w[0] / m, w[1] / m, w[2] / m, m * dt));
       p.x += v[0] * dt; p.y += v[1] * dt; p.z += v[2] * dt;
@@ -681,56 +671,115 @@ function sideFlight(side, withObs) {
       if (ev) evs.push(ev);
     }
   }
-  return { recs, evs, why: d.lastWhy, id: d.lastId };
+  return { recs, evs, why: d.lastWhy, id: d.lastId, man: recs.filter((r) => r.type === 'maneuver') };
 }
+// A pole 0.2 m square, 6 m tall, at x 5, its near face 0.9 m to one side
+// (side +1: the quad's left, +y) of the line y 0 the quad flies along x at
+// 5 m/s from x -10; past it, the nose pitches up 57 degrees while the quad
+// drifts 2 m across and stops, then it flies back along x against the
+// nose (the pole's other side), and hovers past the record's refresh. A
+// second pole at x 9, 2.5 m out on the same side, is ahead all the way
+// out and behind once the quad turns round: a turnaround is no pass.
+const pole = (x, y, w = 0.1) => ({ x0: x - w, y0: y - w, z0: 0, x1: x + w, y1: y + w, z1: 6 });
+const cradlePhases = (side, tail = [{ t: 4.5 }]) => [
+  { t: 3.4, v: [5, 0, 0] },
+  { t: 0.5, rate: [0, -2, 0], v: [1, side * 4, 0] },
+  { t: 1.3, v: [-5, 0, 0] },
+  ...tail,
+];
+const near = (got, want, tol, what) => assert.ok(Math.abs(got - want) <= tol, what + ': ' + got + ', want ' + want);
 
-test('observer: the object beside the path (rec.side), its side on each pass, logged only', () => {
-  const near = (got, want, tol, what) => assert.ok(Math.abs(got - want) <= tol, what + ': ' + got + ', want ' + want);
+test('observer: rec.side, a Cradle round a pole: forward past it on one side, back past it against the nose on the other', () => {
   for (const side of [1, -1]) {
-    const { recs } = sideFlight(side, true);
-    const m = recs.filter((r) => r.type === 'maneuver');
-    assert.equal(m.length, 1, 'one maneuver');
-    const sd = m[0].side;
+    const { man } = sideRun([pole(5, side * 1.0), pole(9, side * 2.5)], cradlePhases(side), { x: -10, y: 0, z: 3 });
+    assert.equal(man.length, 1, 'one maneuver');
+    const sd = man[0].side;
     // Refreshed SIDE.postS past the segment's end, from SIDE.preS before it.
-    assert.equal(sd.post, true);
+    assert.equal(sd.why, 'post');
     near(sd.to - sd.dur, SIDE.postS, 0.01, 'refreshed after the end');
     near(sd.from, -SIDE.preS, 0.01, 'from preS before the start');
     assert.equal(sd.cut, false);
     assert.equal(sd.boxN, 2);
-    assert.deepEqual(sd.boxes.map((b) => b.i), [0, 1]);
-    assert.deepEqual(sd.boxes[0].box, [4.9, c3(side * 1.0 - 0.1), 0, 5.1, c3(side * 1.0 + 0.1), 6]);
-    // Forward past it on one side (before the segment opens), back past it
-    // against the nose on the other, the nose up.
+    assert.deepEqual(sd.segs, [[0, sd.dur]]);
+    // Two passes, one object, the first pole; none of the second (it went
+    // from ahead to behind as the quad turned round).
     assert.equal(sd.passes.length, 2, JSON.stringify(sd.passes));
     const [a, b] = sd.passes;
-    assert.equal(a.box, 0); assert.equal(b.box, 0);
-    assert.equal(a.way, 'fwd'); assert.equal(b.way, 'back');
-    near(a.lat, side * 0.9, 0.02, 'first pass lat'); near(b.lat, -side * 0.9, 0.02, 'second pass lat'); near(b.dH, 0.9, 0.02, 'second pass distance');
-    near(a.dH, 0.9, 0.02, 'first pass distance');
-    assert.ok(a.t < 0 && a.live === 0, 'the first pass before the segment: ' + a.t);
-    near(a.noseEl, 0, 1, 'level going out');
-    near(b.noseEl, 57, 2, 'nose up coming back');
+    assert.equal(a.obj, b.obj); assert.equal(a.box, 0); assert.equal(b.box, 0);
+    near(a.d, 0.9, 0.02, 'first pass distance'); near(b.d, 0.9, 0.02, 'second pass distance');
+    // The side: of the first pass's direction of travel, one sign then the
+    // other; of the travel each time, the same (it went round the pole).
+    near(a.lat1, side * 0.9, 0.02, 'first pass lat1'); near(b.lat1, -side * 0.9, 0.02, 'second pass lat1');
+    near(a.latT, side * 0.9, 0.02, 'first pass latT'); near(b.latT, side * 0.9, 0.02, 'second pass latT');
+    near(b.latH, -side * 0.9, 0.02, 'second pass, of the heading');
+    // Out level, along the nose, before the segment opened; back against it,
+    // the nose up 57, after it closed.
+    assert.ok(a.t < 0 && a.seg === 0, 'the first pass before the segment: ' + a.t);
+    assert.ok(b.t > sd.dur && b.seg === 0, 'the second after it: ' + b.t + ' > ' + sd.dur);
+    near(a.pitchH, 0, 1, 'level going out'); near(a.vAlong, 5, 0.01, 'forward');
+    near(b.pitchH, 57, 2, 'nose up coming back'); near(b.noseEl, 57, 2, 'nose up');
     assert.ok(b.vAlong < -4.9 && b.noseDot < -0.5, 'backwards, against the nose: ' + b.vAlong + ' ' + b.noseDot);
-    assert.equal(Math.sign(a.lat), -Math.sign(b.lat), 'the other side');
-    // The rows: t from -preS, the pole's side flips between the passes.
+    // The stop between them, nose up; the nose's most.
+    assert.equal(sd.stops.length, 1, JSON.stringify(sd.stops));
+    assert.equal(sd.stops[0].to, 'back'); near(sd.stops[0].pitchH, 57, 2, 'nose at the stop');
+    near(sd.noseMax.pitchH, 57, 2, 'nose max');
+    assert.equal(sd.nearest.box, 0); near(sd.nearest.d, 0.9, 0.02, 'nearest');
+    assert.deepEqual(sd.objs.map((x) => x.obj), [a.obj]);
+    assert.deepEqual(sd.objs[0].box, [4.9, c3(side - 0.1), 0, 5.1, c3(side + 0.1), 6]);
+    assert.equal(sd.objs[0].boxes, 1);
     assert.equal(sd.rows.length, SIDE.rows);
     assert.equal(sd.cols.length, sd.rows[0].length);
-    const I = Object.fromEntries(sd.cols.map((k, i) => [k, i]));
-    near(sd.rows[0][I.t], -SIDE.preS, 0.01, 'first row');
-    assert.ok(sd.rows.some((r) => Math.sign(r[I.lat]) === side) && sd.rows.some((r) => Math.sign(r[I.lat]) === -side));
-    // The second pole was the nearest for a while, ahead of the first.
-    assert.ok(sd.rows.some((r) => r[I.box] === 1 && r[I.along] > 0), 'the nearest box changes');
+    near(sd.rows[0][0], -SIDE.preS, 0.01, 'first row');
   }
   // Nothing scores it: the same flight with and without the observer.
-  const a = sideFlight(1, true), b = sideFlight(1, false);
+  const a = sideRun([pole(5, 1), pole(9, 2.5)], cradlePhases(1), { x: -10, y: 0, z: 3 });
+  const b = sideRun([pole(5, 1), pole(9, 2.5)], cradlePhases(1), { x: -10, y: 0, z: 3 }, false);
   assert.deepEqual(a.evs, b.evs);
   assert.equal(a.why, b.why);
   assert.equal(a.id, b.id);
-  // The overlay reads only the sample and the record (no detector state).
+  // The side code reads only the sample and its own ring (no detector
+  // state), but for the merge's start where the window opens.
   const dSrc = readFileSync(join(root, 'sim-tricks-debug.js'), 'utf8');
-  const sideSrc = dSrc.slice(dSrc.indexOf('function sidePush('), dSrc.indexOf('function emitAbort('));
-  assert.ok(sideSrc.length > 1000);
+  const sideSrc = dSrc.slice(dSrc.indexOf('function sideColsSet('), dSrc.indexOf('function sideAttach('))
+    + dSrc.slice(dSrc.indexOf('function sideRecord('), dSrc.indexOf('function emitAbort('));
+  assert.ok(sideSrc.length > 4000);
   assert.equal(/\bdet\b/.test(sideSrc), false, 'the side probe never reads the detector');
+});
+
+test('observer: rec.side survives a respawn, and a roll, a gap or a split box fakes no side change', () => {
+  // A respawn 1.2 s after the segment ends (before the refresh): the
+  // record is finished at the last step before it, both passes kept.
+  const r = sideRun([pole(5, 1)], cradlePhases(1, [{ t: 1.2 }, { t: 1.5, to: [40, 30, 3] }]), { x: -10, y: 0, z: 3 }).man[0].side;
+  assert.equal(r.why, 'jump');
+  assert.equal(r.passes.length, 2, JSON.stringify(r.passes));
+  assert.ok(r.passes[0].lat1 > 0 && r.passes[1].lat1 < 0);
+  // Past the pole upright, then a half roll 1 m on, flying on inverted: one
+  // pass, and the heading never turns round (it is not "backwards").
+  const roll = sideRun([pole(5, 1)], [{ t: 3.2, v: [5, 0, 0] }, { t: 0.35, rate: [9, 0, 0], v: [5, 0, 0] }, { t: 2.5, v: [5, 0, 0] }], { x: -10, y: 0, z: 3 }).man[0].side;
+  assert.equal(roll.passes.length, 1, JSON.stringify(roll.passes));
+  const hd = roll.cols.indexOf('hd'), va = roll.cols.indexOf('vAlong');
+  assert.ok(roll.rows.every((x) => Math.abs(x[hd]) <= 2 && x[va] > 4.9), 'heading kept through the roll');
+  // Out through a gap between two poles (0.6 m each side) and back through
+  // it: each pole passed twice on the same side (no side change).
+  const gap = sideRun([pole(5, 0.7), pole(5, -0.7)], [{ t: 3.4, v: [5, 0, 0] }, { t: 0.5, rate: [0, -2, 0], v: [1, 0, 0] }, { t: 1.3, v: [-5, 0, 0] }, { t: 4.5 }], { x: -10, y: 0, z: 3 }).man[0].side;
+  const by = new Map();
+  for (const x of gap.passes) by.set(x.obj, [...(by.get(x.obj) || []), x]);
+  assert.equal(by.size, 2, JSON.stringify(gap.passes));
+  for (const [, ps] of by) {
+    assert.equal(ps.length, 2);
+    assert.equal(Math.sign(ps[0].lat1), Math.sign(ps[1].lat1), 'the same side both ways');
+  }
+  // A block split into three boxes along the path: one object. (Its far
+  // end, 1.6 m off, is passed a third time on the drift across, moving
+  // sideways, on the first side.)
+  const cells = [4.4, 4.8, 5.2].map((x0) => ({ x0, y0: 0.9, z0: 0, x1: x0 + 0.4, y1: 1.1, z1: 6 }));
+  const split = sideRun(cells, cradlePhases(1), { x: -10, y: 0, z: 3 }).man[0].side;
+  const sp = split.passes;
+  assert.ok(sp.length >= 2 && sp.every((x) => x.obj === sp[0].obj), JSON.stringify(sp));
+  assert.equal(split.objs[0].boxes, 3);
+  assert.deepEqual(split.objs[0].box, [4.4, 0.9, 0, 5.6, 1.1, 6]);
+  assert.ok(sp[0].lat1 > 0 && sp[0].vAlong > 0, 'out on the left');
+  assert.ok(sp[sp.length - 1].lat1 < 0 && sp[sp.length - 1].vAlong < 0 && Math.abs(sp[sp.length - 1].d - 0.9) < 0.02, 'back on the right');
 });
 
 function c3(x) { return Math.round(x * 1000) / 1000; }
