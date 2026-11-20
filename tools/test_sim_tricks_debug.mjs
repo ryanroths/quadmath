@@ -637,9 +637,13 @@ test('observer: the Barani probe (rec.barani) names the term that zeroed it', ()
 // pitches up 57 degrees while the quad drifts 2 m across and stops, then it
 // flies back along x against the nose (the pole's other side), and hovers
 // past the record's refresh. side: +1, the pole on the quad's left (+y).
+// A second pole at x 9, 2.5 m out on the same side, is the nearest box
+// beside the path while the quad drifts across: the nearest box changes
+// from one behind to one ahead, which is no pass.
 function sideFlight(side, withObs) {
-  const ws = 3.5, c = side * 1.0;
+  const ws = 3.5, c = side * 1.0, c2 = side * 2.5;
   const pole = { min: { x: -(c + 0.1) * ws, y: 0, z: -5.1 * ws }, max: { x: -(c - 0.1) * ws, y: 6 * ws, z: -4.9 * ws }, _tag: 'map' };
+  const pole2 = { min: { x: -(c2 + 0.1) * ws, y: 0, z: -9.1 * ws }, max: { x: -(c2 - 0.1) * ws, y: 6 * ws, z: -8.9 * ws }, _tag: 'map' };
   const d = makeDetector();
   const recs = [], evs = [];
   let t = 0;
@@ -653,7 +657,7 @@ function sideFlight(side, withObs) {
     { t: 1.3, v: [-5, 0, 0] },
     { t: 3.0 },
   ];
-  const s = { armed: true, colliders: [pole], ws, throttle: 0.5, clearance: 3 };
+  const s = { armed: true, colliders: [pole, pole2], ws, throttle: 0.5, clearance: 3 };
   const fill = (w, v) => {
     s.qx = q.x; s.qy = q.y; s.qz = q.z; s.qw = q.w;
     s.ox = w[0]; s.oy = w[1]; s.oz = w[2];
@@ -692,13 +696,14 @@ test('observer: the object beside the path (rec.side), its side on each pass, lo
     near(sd.to - sd.dur, SIDE.postS, 0.01, 'refreshed after the end');
     near(sd.from, -SIDE.preS, 0.01, 'from preS before the start');
     assert.equal(sd.cut, false);
-    assert.equal(sd.boxN, 1);
-    assert.deepEqual(sd.boxes.map((b) => b.i), [0]);
+    assert.equal(sd.boxN, 2);
+    assert.deepEqual(sd.boxes.map((b) => b.i), [0, 1]);
     assert.deepEqual(sd.boxes[0].box, [4.9, c3(side * 1.0 - 0.1), 0, 5.1, c3(side * 1.0 + 0.1), 6]);
     // Forward past it on one side (before the segment opens), back past it
     // against the nose on the other, the nose up.
     assert.equal(sd.passes.length, 2, JSON.stringify(sd.passes));
     const [a, b] = sd.passes;
+    assert.equal(a.box, 0); assert.equal(b.box, 0);
     assert.equal(a.way, 'fwd'); assert.equal(b.way, 'back');
     near(a.lat, side * 0.9, 0.02, 'first pass lat'); near(b.lat, -side * 0.9, 0.02, 'second pass lat'); near(b.dH, 0.9, 0.02, 'second pass distance');
     near(a.dH, 0.9, 0.02, 'first pass distance');
@@ -713,6 +718,8 @@ test('observer: the object beside the path (rec.side), its side on each pass, lo
     const I = Object.fromEntries(sd.cols.map((k, i) => [k, i]));
     near(sd.rows[0][I.t], -SIDE.preS, 0.01, 'first row');
     assert.ok(sd.rows.some((r) => Math.sign(r[I.lat]) === side) && sd.rows.some((r) => Math.sign(r[I.lat]) === -side));
+    // The second pole was the nearest for a while, ahead of the first.
+    assert.ok(sd.rows.some((r) => r[I.box] === 1 && r[I.along] > 0), 'the nearest box changes');
   }
   // Nothing scores it: the same flight with and without the observer.
   const a = sideFlight(1, true), b = sideFlight(1, false);

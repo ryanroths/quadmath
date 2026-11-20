@@ -53,7 +53,8 @@ const FLIP_WIN_LABEL = '1.2 s';
 // back can outlast the segment). A box is beside the path when its height
 // overlaps the quad's within bandM and the quad is not over or under it;
 // a pass is the box's nearest point going from ahead of the nose's heading
-// to behind it (fwd) or back (back), by more than hystM either way. rows:
+// to behind it (fwd) or back (back), by more than hystM either way, on the
+// steps that box was the nearest beside the path. rows:
 // that many steps evenly over the window. passM: passes farther than this
 // are counted, not listed.
 export const SIDE = Object.freeze({ preS: 3, postS: 2, bandM: 0.5, hystM: 0.1, rows: 48, cap: 4096, passM: 8, passMax: 12 });
@@ -977,23 +978,28 @@ export function createTrickObserver(det, opts) {
       const bx = b && b.min && b.max ? [-b.max.z, -b.max.x, b.min.y, -b.min.z, -b.min.x, b.max.y].map((u) => r3(u / (sideWsOf() || ws))) : null;
       return { i, dH: r3(v.dH), t: r3(v.t), box: bx, tag: b && b._tag ? String(b._tag) : null };
     });
-    // Passes.
-    const h = SIDE.hystM, passes = [];
-    let sg = 0, best = -1, far = 0;
+    // Passes, per box (the nearest beside box can change from one box to
+    // another ahead or behind; that is no pass): its nearest point's side
+    // of the heading on the steps it was the nearest, read at its nearest
+    // step since it was last ahead or behind.
+    const h = SIDE.hystM, passes = [], per = new Map();
+    let far = 0;
     for (let j = 0; j < R.length; j++) {
       const r = R[j];
-      if (r.box < 0) { sg = 0; best = -1; continue; }
-      if (best < 0 || r.dH < R[best].dH) best = j;
+      if (r.box < 0) continue;
+      let st = per.get(r.box);
+      if (!st) { st = { sg: 0, best: j }; per.set(r.box, st); }
+      if (r.dH < R[st.best].dH) st.best = j;
       const a = r.along;
       const now = a >= h ? 1 : a <= -h ? -1 : 0;
       if (!now) continue;
-      if (sg && now !== sg) {
-        const b = R[best];
+      if (st.sg && now !== st.sg) {
+        const b = R[st.best];
         if (b.dH <= SIDE.passM) {
           if (passes.length < SIDE.passMax) passes.push({ way: now < 0 ? 'fwd' : 'back', at: r3(r.t), ...pr(b) });
         } else far++;
       }
-      sg = now; best = j;
+      st.sg = now; st.best = j;
     }
     out.passes = passes;
     out.passFar = far;
@@ -1238,10 +1244,9 @@ export function createTrickDebug(opts) {
 
   const obs = createTrickObserver(tricks.detector(), {
     now, info,
-    onSide(rec) {
-      dirty = true;
-      try { if (out) out.info(JSON.stringify({ kind: 'quadmath-trick-side', seq: rec.seq, side: rec.side })); } catch (e) { /* never break the frame */ }
-    },
+    // rec.side refreshed (the record in attempts, for Copy trick log; the
+    // console keeps one line per attempt, as it was emitted).
+    onSide() { dirty = true; },
     onAttempt(rec) {
       const ex = rec._explain;
       delete rec._explain;
