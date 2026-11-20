@@ -733,6 +733,20 @@ test('observer: rec.side, a Cradle round a pole: forward past it on one side, ba
     assert.equal(sd.rows.length, SIDE.rows);
     assert.equal(sd.cols.length, sd.rows[0].length);
     near(sd.rows[0][0], -SIDE.preS, 0.01, 'first row');
+    // The pole as a post: across its line out on one side, back on the
+    // other, against the nose, the nose up between (the second pole, never
+    // crossed, has none).
+    const post = sd.posts.find((x) => x.obj === a.obj);
+    assert.ok(post && post.w === 0.2 && post.h === 6, JSON.stringify(sd.posts));
+    assert.equal(post.hd1, 0);
+    assert.deepEqual(post.crossings.map((x) => x.way), ['fwd', 'back']);
+    const [c1, c2] = post.crossings;
+    near(c1.lat, side, 0.01, 'out, lat'); near(c2.lat, -side, 0.01, 'back, lat');
+    near(c1.vAlong, 5, 0.01, 'out, forward'); near(c2.vAlong, -5, 0.01, 'back, backwards');
+    near(c2.noseMax, 57, 2, 'nose up between'); near(c2.dMin, 0.9, 0.02, 'nearest between');
+    assert.ok(c2.noseDot < -0.5);
+    near(post.dMin, 0.9, 0.02, 'nearest');
+    assert.ok(sd.posts.every((x) => x === post || !x.crossings.length));
   }
   // Nothing scores it: the same flight with and without the observer.
   const a = sideRun([pole(5, 1), pole(9, 2.5)], cradlePhases(1), { x: -10, y: 0, z: 3 });
@@ -779,6 +793,13 @@ test('observer: rec.side survives a respawn, and a roll, a gap or a split box fa
     assert.equal(ps.length, 2);
     assert.equal(Math.sign(ps[0].lat1), Math.sign(ps[1].lat1), 'the same side both ways');
   }
+  // A wide way back (2.3 m off the pole), curving: the post's crossing
+  // back is on the other side.
+  const wide = sideRun([pole(5, 1)], [{ t: 3.4, v: [5, 0, 0] }, { t: 0.5, rate: [0, -2, 0], v: [0.5, 4, 0] }, { t: 0.6, v: [-3, 2, 0] }, { t: 1.2, v: [-4, 0.5, 0] }, { t: 4.5 }], { x: -10, y: 0, z: 3 }).man[0].side;
+  const wp = wide.posts.find((x) => x.crossings.length);
+  assert.deepEqual(wp.crossings.map((x) => x.way), ['fwd', 'back'], JSON.stringify(wp));
+  near(wp.crossings[0].lat, 1, 0.01, 'wide: out');
+  near(wp.crossings[1].lat, -2.27, 0.02, 'wide: back');
   // A block split into three boxes along the path: one object. (Its far
   // end, 1.6 m off, is passed a third time on the drift across, moving
   // sideways, on the first side.)

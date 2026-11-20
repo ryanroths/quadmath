@@ -65,6 +65,11 @@ const FLIP_WIN_LABEL = '1.2 s';
 export const SIDE = Object.freeze({
   preS: 3, postS: 4, cap: 6144, bandM: 2, kNear: 12, cellM: 0.03,
   passM: 4, minSpd: 0.5, hystM: 0.1, hystK: 0.25, turnDot: 0.7, passMax: 24, rows: 32,
+  // A post (a pole, a post, a tree): an object whose footprint is postW or
+  // less across and near square (the short side postRatio of the long one
+  // or more), postH or more tall. postLat: its crossings farther to the
+  // side than this are not listed.
+  postW: 0.5, postRatio: 0.6, postH: 1.0, postLat: 4, postMax: 8,
 });
 
 // stepDetector's spatial constants (sim-tricks.js DIVE_*, GAP_*), the dive
@@ -1041,8 +1046,72 @@ export function createTrickObserver(det, opts) {
   // segs: the segments in the window ([start, end], s; 8 at most). stops:
   // the level travel turned round. noseMax: the most pitchH (unwrapped).
   // passDrop: passes over passMax (the nearest in time to the segment are
-  // kept); passOver: passes over or under an object (no side), not listed. objs: the objects
+  // kept); passOver: passes over or under an object (no side), not listed.
+  // posts: each post seen (see SIDE), its footprint, its nearest (dMin,
+  // tMin), and each crossing of the line square to the heading through its
+  // centre, in the frame of the heading at its first crossing moving
+  // forward (hd1: F1, its left L1): fwd (moving along F1, the post going
+  // behind) or back (against F1, the post coming ahead), lat its side then
+  // (+ left of F1, m; a Cradle: one sign, then the other), at every step;
+  // with d to it, vAlong (along F1), noseDot, pitchH, and, since the
+  // crossing before, the nearest (dMin) and the most pitchH (noseMax). objs: the objects
   // passed and the nearest (bounds, sim-core m: x0 y0 z0 x1 y1 z1).
+  // The posts' crossings (rec.side.posts): per post seen in the window (an
+  // object listed beside the path at any step), at every step.
+  function postRecord(ks, t0, per) {
+    const D = 180 / Math.PI, out = [];
+    for (const ob of per.keys()) {
+      if (out.length >= SIDE.postMax) break;
+      const o = ob * 6, B = sideObjBox;
+      const x0 = B[o], y0 = B[o + 1], z0 = B[o + 2], x1 = B[o + 3], y1 = B[o + 4], z1 = B[o + 5];
+      const w = Math.max(x1 - x0, y1 - y0), w2 = Math.min(x1 - x0, y1 - y0), h = z1 - z0;
+      if (!(w <= SIDE.postW && w2 >= SIDE.postRatio * w && h >= SIDE.postH)) continue;
+      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+      const rec = { obj: ob, box: [x0, y0, z0, x1, y1, z1].map(r3), w: r3(w), h: r3(h), dMin: null, tMin: null, hd1: null, crossings: [] };
+      let F1 = null, sg = 0, sgH = 0, dMin = Infinity, tMin = 0, segMin = Infinity, segNose = -Infinity;
+      for (let j = 0; j < ks.length; j++) {
+        const k = ks[j];
+        const px = sideBuf[k + 2], py = sideBuf[k + 3], pz = sideBuf[k + 4];
+        const qx = px < x0 ? x0 : (px > x1 ? x1 : px), qy = py < y0 ? y0 : (py > y1 ? y1 : py), qz = pz < z0 ? z0 : (pz > z1 ? z1 : pz);
+        const d = Math.hypot(qx - px, qy - py, qz - pz);
+        const t = sideBuf[k] - t0;
+        if (d < dMin) { dMin = d; tMin = t; }
+        if (d < segMin) segMin = d;
+        const fz = sideBuf[k + 10], Fx = sideBuf[k + 11], Fy = sideBuf[k + 12];
+        const pitchH = Math.atan2(fz, sideBuf[k + 8] * Fx + sideBuf[k + 9] * Fy) * D;
+        if (pitchH > segNose) segNose = pitchH;
+        const vx = sideBuf[k + 5], vy = sideBuf[k + 6], vz = sideBuf[k + 7];
+        const rx = cx - px, ry = cy - py;
+        if (!F1) {
+          // The first crossing moving forward, in the heading's frame.
+          const a = rx * Fx + ry * Fy, nowH = a >= SIDE.hystM ? 1 : a <= -SIDE.hystM ? -1 : 0;
+          if (nowH) {
+            if (sgH === 1 && nowH === -1 && vx * Fx + vy * Fy >= SIDE.minSpd) { F1 = [Fx, Fy]; sg = -1; rec.hd1 = Math.round(Math.atan2(Fy, Fx) * D); }
+            sgH = nowH;
+          }
+          if (!F1) continue;
+        } else {
+          const a = rx * F1[0] + ry * F1[1], now = a >= SIDE.hystM ? 1 : a <= -SIDE.hystM ? -1 : 0;
+          if (!now || now === sg) continue;
+          sg = now;
+        }
+        const lat = -rx * F1[1] + ry * F1[0];
+        const va = vx * F1[0] + vy * F1[1], sp = Math.hypot(vx, vy, vz);
+        if (Math.abs(lat) <= SIDE.postLat && rec.crossings.length < 8) {
+          rec.crossings.push({
+            t: r3(t), way: sg < 0 ? 'fwd' : 'back', lat: r3(lat), d: r3(d), z: r3(pz), vAlong: r3(va),
+            noseDot: sp > 0.85 ? r3((vx * sideBuf[k + 8] + vy * sideBuf[k + 9] + vz * fz) / sp) : null,
+            pitchH: Math.round(pitchH), dMin: r3(segMin), noseMax: Math.round(segNose), seg: sideBuf[k + 1],
+          });
+        }
+        segMin = Infinity; segNose = -Infinity;
+      }
+      rec.dMin = r3(dMin); rec.tMin = r3(tMin);
+      out.push(rec);
+    }
+    return out;
+  }
+
   function sideRecord(p, tEnd, why) {
     const D = 180 / Math.PI, F = SW, t0 = p.t0;
     const out = { why, dur: r3(p.t1 - t0), to: r3(tEnd - t0), a0: r3(p.ta - t0), simT0: r3(t0), epoch: sideEpoch, n: 0, cut: false, boxN: sideColsN > 0 ? sideColsN : 0 };
@@ -1129,6 +1198,7 @@ export function createTrickObserver(det, opts) {
     out.passes = passes;
     out.passDrop = all.length - passes.length;
     out.passOver = over;
+    out.posts = postRecord(ks, t0, per);
     // The window: its segments, the stops, the nose.
     // The stops: the level travel turned round (by 120 degrees or more,
     // moving at minSpd) from where it last went; pitchH unwrapped over the
