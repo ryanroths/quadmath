@@ -46,7 +46,7 @@ site lists both 150 and 50).
 | `maverick` | Maverick Loop | Beginner | 100 | 100 | Phase matcher, as the owner flies it: a **pull back of 120–225° climbing ≥1 m** (it need not go inverted), then a **forward pitch ≥60°** that stops it, then **back towards the entry against the nose** (velocity·nose ≤ −0.3 on average) for **≥0.3 s**: the glide back. **No twist** between the pull and the push: the roll and the yaw each turn **under 60°** across them (the owner's Maverick uses no yaw). The push and glide back **drop back under or through an object**: near one (within 2 m) for **≥25 %** of them, or back out through an authored gap. In open air it is not a Maverick. Often two segments, the pull and the push, merged (below). Back out through the authored gap it came in by (passed at most 1.5 s before, or in the maneuver): **1.25×** points. |
 | `splits` | Split-S | Beginner | 100 | 100 | Phase matcher: a **roll of 103–258°**, then a **back pitch of 69–258°** (pull), the path dropping ≥0.35 m, flying with the nose. The old terms' tolerances, so it fires where it did. |
 | `immelmann` | Immelmann | Beginner | 100 | 100 | Phase matcher, the Split-S's mirror: **back pitch 180 ± 45° climbing ≥1 m**, then a **roll of 180 ± 45°**, ending **upright**, the **heading reversed** (180 ± 45°), **out higher** than in. |
-| `cradle` | Cradle | Beginner | 150 | 150 | As the owner flies it (2026-11-20): **past a post flying forward** with it on one side (**≤2 m** out), the **nose up ≥25°** in that heading's plane and **never over the top**, then **back past it travelling backwards, against the nose** (**≥115°** off it, **≥1.5 m/s**, upright) **on the other side** (**≤3 m** out), within **2.5 s**. Called at the second pass, no wait. A post: a pole, column, tree or post (**≤0.5 m** across, near square, **≥1 m** tall, standing), or a chair or table leg (**≥0.31 m**, on the floor, slender); never a wall, floor or ceiling. Touching the post, contact or a crash between the passes voids it. Both passes round a post make a Cradle however high the nose comes (short of over the top); the Maverick is the open-air move. See "The Cradle" below. |
+| `cradle` | Cradle | Beginner | 150 | 150 | As the owner flies it (2026-11-20): **past a post flying forward** with it on one side (**≤2 m** out), the **nose up ≥25°**, **never over the top** and **keeping its heading** (**≤55°** off it), then **back past it travelling backwards, against the nose** (**≥115°** off it, **≥1.5 m/s**, not upside down) **on the other side** (**≤3 m** out), within **2.5 s**, both passes beside the post (within its height). Called at the second pass, no wait. A post: a pole, column, tree or post (**≤0.5 m** across, near square, **≥1 m** tall, standing), or a chair or table leg (**≥0.31 m**, on the floor, slender); never a wall, floor or ceiling. A touch (of the post or anything), a crash, a disarm or a respawn between the passes voids it. Both passes round a post make a Cradle however high the nose comes (short of over the top); the Maverick is the open-air move. See "The Cradle" below. |
 | `dive` | Building Dive | Beginner | 100 | 100 | Climb or start high, cut, nose down, fast altitude dump, level near the ground. |
 | `prox` | Proximity | Beginner | 150 | 150 | Wall near-miss at speed. Sim-only spatial; TPW Wall Ride/Tap need a knife-edge roll or tap we do not require. |
 | `powerloop` | Powerloop | Novice | 200 | 200 | Phase matcher: **≥300° of pitch within any 3.5 s** (its own window: a loop is slower than a flip), little net roll/yaw, on a **path that loops**: it climbs **≥1.5 m** above the entry, after its top comes back down to **at most 1.5 m above the entry**, and the velocity turns **≥270°** in the vertical plane of the entry heading, the way the pitch turns. Otherwise a flip is a Flip. Loops are counted over the whole turn of pitch: **≥600° is a Double Powerloop**, then one more loop per further 360° (Triple from 960°); each loop scores the 200 points. |
@@ -392,8 +392,10 @@ Order of the 180° axis is the split.
   quarter of the push and glide). Split from its pull by a pause under
   0.8 s, it is the Maverick (compound tricks, above). If its pull and glide
   pass round a post on its two sides with the nose short of over the top,
-  it is a Cradle (called at the second pass, before the Maverick's push
-  ends); a pull over the top voids the Cradle and leaves the Maverick.
+  it is a Cradle: a Maverick that finishes while the Cradle is half flown
+  waits for the second pass, and the Cradle replaces it (or it is called
+  when the Cradle comes to nothing). A pull over the top voids the Cradle
+  and leaves the Maverick.
 - Matty: a forward flip over an object, climbed into.
 
 ### The Cradle
@@ -410,37 +412,51 @@ backwards on the opposite side. `sim-tricks.js` `CRADLE`, `cradleStep`:
   from a header), or a leg: **≥0.31 m** tall, on the floor, and **≥3** times
   its width tall (the House's coffee-table, chair, stool and patio-table
   legs, 0.36–0.90 m; not a pot, a nightstand or the mower). Walls, decks,
-  floors and ceilings are never posts. The census (2026-11-20): Rig 15,
-  House 34 indoors (28 of them legs), Warehouse 125, Bando 59, and no
-  clutter.
-- **First pass.** The post's centre goes from ahead of the line square to the
-  way the quad travels to behind it (0.1 m of hysteresis, the travel not
-  turned round meanwhile), flying **forward** (≥1 m/s level, within 60° of
-  the nose's level heading), the post **≤2 m** to the side, the quad no more
-  than 0.3 m above the post's top. The frame from then on is the **nose's
-  level heading at this pass** (F1).
-- **Between.** The nose's pitch in F1's vertical plane must reach **25°** and
-  never pass **90°** (over the top: then it is no Cradle).
+  floors and ceilings are never posts. The census (2026-11-20, as the page
+  builds the colliders): Rig 15, House 52 (28 of them legs), Warehouse 125,
+  Bando 59, and no clutter.
+- **A pass** is the post's centre crossing the line square to a level
+  direction through the quad (0.1 m of hysteresis), the quad **beside** it:
+  within 0.05 m of the post's height (not over a table, not under the beam
+  a post stands on).
+- **First pass.** The post goes from ahead of the line square to the way the
+  quad travels to behind it (the travel not turned round meanwhile), flying
+  **forward** (≥1 m/s level, within 60° of the nose's level heading), the
+  post **≤2 m** to the side, no touch in the 0.3 s before. The frame from
+  then on is the **nose's level heading at this pass** (F1). Until the nose
+  comes up, a later pass forward is the first pass.
+- **Between.** The nose's elevation must reach **25°**; its pitch in F1's
+  vertical plane never passes **90°** (over the top); and the nose **keeps
+  its heading**: its level heading never more than **55°** off F1 while it
+  is under 70° up, its turn about the vertical **≤150°** in all (an orbit or
+  a Trippy round the post turns the nose with the path, a Cradle does not).
 - **Second pass**, within **2.5 s**: the post's centre back across the line
   square to F1 (the quad went back past it), **on the other side**, **≤3 m**
   out, travelling back along F1 at **≥1.5 m/s** and **≥115°** off the
-  nose's level heading, **upright** (up-Z ≥0.3), within 0.3 m of the post's
-  height. The Cradle is called on that step, with no wait; an open
-  rotation segment closes there as the Cradle and the chain of unscored
-  segments before it ends.
-- **Void.** The quad's centre within **0.08 m** of the post (a clip: the
-  detector's floor contact never sees a post's side), floor contact, a
-  crash, a disarm or a respawn between the passes: a Cradle that ends in a
-  crash does not score.
+  nose's level heading (off F1 when the nose is over 60° up), **not upside
+  down** (no cap on the nose but over the top). The Cradle is called on
+  that step, with no wait; an open rotation segment closes there as the
+  Cradle and the chain of unscored segments before it ends. A trick that
+  finished while the Cradle was half flown (a Maverick's pull and push
+  round the post) waits for it: the Cradle replaces it, or it is called
+  when the Cradle comes to nothing. A second pass the other way flown
+  forward is a first pass of its own.
+- **Void.** A touch (the quad's centre within **0.06 m** of the post, or of
+  any box: the detector's floor contact never sees a post's side), floor
+  contact, a crash, a disarm or a respawn between the passes: a Cradle that
+  ends in a crash does not score.
 
-Set from the owner's 12 Cradles (two dumps, 2026-11-20): first pass
-0.28–1.41 m out; nose 39–77°; second pass 0.27–2.31 m out on the other
-side, 3.0–7.1 m/s back, 134–178° off the nose, up-Z ≥0.56; 0.60–1.44 s
-apart. The misses flown with them: one that clipped a column and crashed
-(touched the post), one back on the same side climbing, one that slid wide
-and never came back abeam. The debug log (`?tricks=debug`) writes a record
-of type `cradle` per verdict (each Cradle, and each miss past an attempt)
-with its inputs every step, which replay to the same verdict.
+Set from the owner's 12 Cradles (two dumps, 2026-11-20, replayed through the
+gate from the positions they logged): first pass 0.14–1.41 m out; nose up
+39–77°; the heading within 35° of F1 (a turn of 91° about the vertical at
+most, row to row); second pass 0.49–2.47 m out on the other side,
+3.35–7.21 m/s back, 144–179° off the nose, up-Z ≥0.58; 0.79–1.44 s apart.
+The misses flown with them: one that clipped a column and crashed, one back
+on the same side climbing, one that slid wide and never came back abeam.
+The debug log (`?tricks=debug`) writes a record of type `cradle` per step
+with a verdict (each Cradle, and each miss past an attempt: the nose up;
+the other posts' verdicts that step in `others`), with the gate's inputs
+every step, which replay to the same verdict.
 
 ## Scoring (TPW-inspired)
 

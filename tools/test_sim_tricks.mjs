@@ -17,7 +17,7 @@ import {
   makeCombo, resetCombo, pushCombo, comboRemain,
   createTricks, makeFeat, trickLineupText, TRIPPY_POLE_MUL, TRIPPY_TAIL, ORBIT_TAIL,
   trickName, MANEUVER_MAX_S, MANEUVER_SUSTAIN_S,
-  PHASE_SPECS, matchSpec, MAV_GAP_MUL, PH_SLOP, MERGE_GAP_S, TWIST_SPD, CRADLE,
+  PHASE_SPECS, matchSpec, MAV_GAP_MUL, PH_SLOP, MERGE_GAP_S, TWIST_SPD, CRADLE, makeCradleGate, cradlePosts,
 } from '../sim-tricks.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
 import { mapThrottle3d } from '../sim-3d.js';
@@ -1311,8 +1311,6 @@ test('bf core, compound tricks: a Maverick split at a pause is one Maverick; a p
   assert.equal(r.ends.length, 2, 'two segments: ' + JSON.stringify(r.ends.map((e) => e.id)));
   assert.equal(r.ends[0].id, null, 'the pull alone scores nothing');
   assert.equal(r.ends[1].merged, 2, 'the push merged with the pull');
-  // Alone, the glide back is no Cradle (two passes round a post make one).
-  assert.doesNotMatch(r.ends[1].why, /this one alone: cradle/, 'the glide back alone is no Cradle');
   const [back, fwd] = r.merge.ms.ph;
   assert.ok(inDeg(back.turn, 120, 225) && back.climb >= 1 && fwd.turn >= 60 * DEG && r.merge.ms.tail >= 0.3, phTag({ phases: { m: r.merge } }, 'm'));
   // 1.08 s between them: two maneuvers, neither a Maverick, and the glide
@@ -1320,6 +1318,23 @@ test('bf core, compound tricks: a Maverick split at a pause is one Maverick; a p
   const apart = await flyBf(mavInTwo(1.5), MAV_TWO_OPTS);
   assert.ok(!apart.hits.includes('maverick') && !apart.hits.includes('cradle'), 'apart: ' + apart.hits.join(','));
   assert.ok(MERGE_GAP_S > 0.79 && MERGE_GAP_S < 0.81);
+});
+
+// The Cradle's posts on the public maps, as the page builds their colliders
+// (buildMap; the census of 2026-11-20): every tall post standing and the
+// House's 28 furniture legs (its coffee table's, chairs', stools' and patio
+// table's), no clutter (pots, nightstands, the mower, hanging strands).
+test('the Cradle\'s posts on the maps: Rig 15, the House 52 with its 28 furniture legs, the Warehouse 125, the Bando 59', () => {
+  const want = { rig: [15, 0], house: [52, 28], depot: [125, 0], bando: [59, 0] };
+  for (const [id, [n, legs]] of Object.entries(want)) {
+    const g = makeCradleGate([]);
+    cradlePosts(g, buildMap(THREE, id).colliders, WS);
+    assert.equal(g.postN, n, id + ' posts');
+    const short = [];
+    for (let i = 0; i < g.postN; i++) { const h = g.post[i * 9 + 7] - g.post[i * 9 + 4]; if (h < CRADLE.postH) short.push(Math.round(h * 100) / 100); }
+    assert.equal(short.length, legs, id + ' legs: ' + short.join(' '));
+    if (id === 'house') assert.deepEqual([...new Set(short)].sort((a, b) => a - b), [0.36, 0.39, 0.62, 0.69, 0.9]);
+  }
 });
 
 // The owner's Cradle on the bf core (BF_CRADLES): called at the second pass,

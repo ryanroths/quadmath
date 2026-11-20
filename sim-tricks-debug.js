@@ -28,7 +28,7 @@ import {
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
   HIST_W, BH_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE, BARANI_HD_LO,
   CRADLE, groupBoxes, simBoxes, cradlePostList,
-} from './sim-tricks.js?v=94c56cba4d86';
+} from './sim-tricks.js?v=353aa2ca3f22';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
@@ -73,9 +73,11 @@ export const SIDE = Object.freeze({
   postLat: 4, postMax: 8,
 });
 
-// The Cradle's own log (a record of type 'cradle' per verdict of
-// sim-tricks.js cradleStep: each Cradle, and each miss that got as far as an
-// attempt). Its inputs, every step, from preS before the first pass to the
+// The Cradle's own log: a record of type 'cradle' per step with verdicts of
+// sim-tricks.js cradleStep (each Cradle, and each miss that got as far as an
+// attempt: the nose up; a crash, a respawn or a disarm ends one too), the
+// first (the Cradle, if one) in gate, the rest in others. Its inputs, every
+// step, from preS before the first pass to the
 // verdict, and again (the same record) to postS after it, at most cap steps
 // kept: enough to replay the verdict (makeCradleGate, then cradleStep on
 // each row; the rows past it let a replay whose rounded positions put the
@@ -651,8 +653,10 @@ export function createTrickObserver(det, opts) {
   const candD = new Float64Array(SK), candI = new Int32Array(SK), candP = new Float64Array(SK * 3), candO = new Int32Array(SK);
   const sidePend = [];
   // The Cradle's inputs (det.cg.inp: the clock, position, velocity, nose,
-  // up-Z, contact), and armed, each step (CG_W columns), for its records.
-  const CG_W = 13, CG_CAP = CRADLE_LOG.cap;
+  // up-Z, contact), armed, the turn about the vertical and fresh (the first
+  // step after a reset), each step (CG_W columns), for its records.
+  const CG_W = 15, CG_CAP = CRADLE_LOG.cap;
+  const CG_COLS = ['t', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'fx', 'fy', 'fz', 'upZ', 'contact', 'armed', 'yr', 'fresh'];
   const cgBuf = new Float64Array(CG_CAP * CG_W);
   let cgN = 0, cgHead = 0, cgSeq = 0, cgT = NaN;
   const cgPend = [];
@@ -703,6 +707,10 @@ export function createTrickObserver(det, opts) {
     if (mg) rec.reason = 'merged with the ' + (mg.segs - 1) + ' segment(s) before (pauses under 0.8 s): ' + mg.id + '; this one alone: ' + (ex.id || 'nothing');
     if (det.lastCont) rec.reason = 'the orbit before it goes on (one orbit scores once)';
     if (det.lastCradleSeg) rec.reason = 'closed at a Cradle\'s second pass (the cradle record after this one); this one alone: ' + (ex.id || 'nothing');
+    // Held for a half-flown Cradle (sim-tricks.js cradleHolds): called when
+    // it comes to nothing, or replaced by it.
+    rec.held = det.held ? 1 : 0;
+    if (det.held) rec.reason += '; held: a Cradle round a post is half flown (replaced by it, or called when it comes to nothing)';
     rec._explain = ex;
     emit(rec);
   }
@@ -1241,31 +1249,40 @@ export function createTrickObserver(det, opts) {
       const tt = cgBuf[k];
       if (tt < ta - 1e-9 || tt > tb + 1e-9) continue;
       rows.push([Math.round(tt * 10000) / 10000, r4(cgBuf[k + 1]), r4(cgBuf[k + 2]), r4(cgBuf[k + 3]), r3(cgBuf[k + 4]), r3(cgBuf[k + 5]), r3(cgBuf[k + 6]),
-        r4(cgBuf[k + 7]), r4(cgBuf[k + 8]), r4(cgBuf[k + 9]), r4(cgBuf[k + 10]), cgBuf[k + 11], cgBuf[k + 12]]);
+        r4(cgBuf[k + 7]), r4(cgBuf[k + 8]), r4(cgBuf[k + 9]), r3(cgBuf[k + 10]), cgBuf[k + 11], cgBuf[k + 12], r4(cgBuf[k + 13]), cgBuf[k + 14]]);
     }
     return rows;
   }
 
-  // A cradle record: the verdict (sim-tricks.js cradleStep's), the numbers it
-  // was judged by, the posts near the path, and the inputs from
-  // CRADLE_LOG.preS before the first pass to the verdict.
-  function emitCradle(t, v, ev) {
+  // A cradle record: this step's verdicts (sim-tricks.js cradleStep's; the
+  // Cradle, if one, first), the numbers they were judged by, the posts near
+  // the path, and the inputs from CRADLE_LOG.preS before the earliest first
+  // pass to the verdict (again to postS past it). lost: verdicts the gate's
+  // list dropped before this step read them.
+  function cradleWhy(v) {
+    return v.result
+      ? 'Cradle round post ' + v.obj + ': out ' + Math.abs(v.lat1).toFixed(2) + ' m, nose ' + v.elMax + '°, back ' + Math.abs(v.lat2).toFixed(2) + ' m the other side at ' + (-v.vBack).toFixed(1) + ' m/s, ' + v.offNose + '° off the nose, ' + v.dt.toFixed(2) + ' s'
+      : 'no Cradle round post ' + v.obj + ': ' + v.why;
+  }
+  function emitCradle(t, vs, ev, lost) {
+    const v = vs.find((x) => x.result) || vs[0];
+    const others = vs.filter((x) => x !== v);
     const rec = base('cradle', t);
     rec.result = v.result || null;
-    rec.event = ev || null;
-    rec.reason = v.result
-      ? 'Cradle round post ' + v.obj + ': out ' + Math.abs(v.lat1).toFixed(2) + ' m, nose ' + v.pMax + '°, back ' + Math.abs(v.lat2).toFixed(2) + ' m the other side at ' + (-v.vBack).toFixed(1) + ' m/s, ' + v.offNose + '° off the nose, ' + v.dt.toFixed(2) + ' s'
-      : 'no Cradle round post ' + v.obj + ': ' + v.why;
+    rec.event = v.result ? ev || null : null;
+    rec.reason = cradleWhy(v) + (others.length ? ' (and post ' + others.map((o) => o.obj + ' ' + (o.result || o.why)).join(', post ') + ')' : '');
     rec.closed = det.lastCradleSeg && det.lastCradleSeg === v.seq ? 1 : 0;
-    const gate = {};
-    for (const k in v) if (k !== 'seq') gate[k] = v[k];
-    rec.gate = gate;
+    rec.replaced = v.result && det.lastCradleRepl ? det.lastCradleRepl : null;
+    rec.gate = v;
+    rec.others = others;
+    if (lost > 0) rec.lost = lost;
     rec.need = CRADLE;
-    const cols = ['t', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'fx', 'fy', 'fz', 'upZ', 'contact', 'armed'];
-    const ta = v.t1 - CRADLE_LOG.preS;
-    const rows = cgRows(ta, v.t2);
-    rec.inputs = { cols, rows, to: r3(v.t2), cut: rows.length > 0 && rows[0][0] > ta + 0.05 ? 1 : 0 };
-    cgPend.push({ rec, ta, due: v.t2 + CRADLE_LOG.postS });
+    let ta = Infinity, tb = -Infinity;
+    for (const x of vs) { if (x.t1 < ta) ta = x.t1; if (x.t2 > tb) tb = x.t2; }
+    ta -= CRADLE_LOG.preS;
+    const rows = cgRows(ta, tb);
+    rec.inputs = { cols: CG_COLS, rows, to: r3(tb), cut: rows.length > 0 && rows[0][0] > ta + 0.05 ? 1 : 0 };
+    cgPend.push({ rec, ta, due: tb + CRADLE_LOG.postS });
     // The posts within CRADLE.near (level) of the path, as the gate has them.
     const g = det.cg, P = g.post, posts = [];
     for (let i = 0; i < g.postN; i++) {
@@ -1439,11 +1456,13 @@ export function createTrickObserver(det, opts) {
         cgBuf[k + 4] = I.vx; cgBuf[k + 5] = I.vy; cgBuf[k + 6] = I.vz;
         cgBuf[k + 7] = I.fx; cgBuf[k + 8] = I.fy; cgBuf[k + 9] = I.fz; cgBuf[k + 10] = I.upZ;
         cgBuf[k + 11] = I.contact ? 1 : 0; cgBuf[k + 12] = armed ? 1 : 0;
+        cgBuf[k + 13] = I.yr || 0; cgBuf[k + 14] = I.fresh ? 1 : 0;
         cgHead = (cgHead + 1) % CG_CAP;
         if (cgN < CG_CAP) cgN++;
       }
       if (g && g.seq !== cgSeq) {
-        for (const v of g.out) if (v.seq > cgSeq) emitCradle(t, v, ev);
+        const vs = g.out.filter((v) => v.seq > cgSeq);
+        if (vs.length) emitCradle(t, vs, ev, g.seq - cgSeq - vs.length);
         cgSeq = g.seq;
       }
       // The records' inputs again, postS past their verdicts.
@@ -1646,14 +1665,17 @@ export function createTrickDebug(opts) {
   // verdict, or the first pass it is watching (the latest), or what it needs.
   function cradleLine(t) {
     const det = tricks.detector(), g = det && det.cg;
-    const fresh = lastCradle && t - lastCradle.t < 6;
+    let fresh = lastCradle && t - lastCradle.t < 6;
+    // The latest first pass, if after the last verdict: it shows first.
+    let j = -1;
+    if (g && g.armN) for (let i = 0; i < g.postN; i++) if (g.arm[i] && (j < 0 || g.t1[i] > g.t1[j])) j = i;
+    if (j >= 0 && lastCradle && lastCradle.gate && g.t1[j] <= lastCradle.gate.t2) j = -1;
+    if (j >= 0) fresh = false;
     let s;
     if (fresh) s = (lastCradle.result ? '<span class="ok">fired</span> ' : '') + esc(lastCradle.reason) + '  <span class="d">' + (t - lastCradle.t).toFixed(1) + 's ago</span>';
-    else if (g && g.armN) {
-      let j = -1;
-      for (let i = 0; i < g.postN; i++) if (g.arm[i] && (j < 0 || g.t1[i] > g.t1[j])) j = i;
+    else if (j >= 0) {
       s = '<span class="near">first pass</span> post ' + g.post[j * 9 + 8] + ' ' + (g.lat1[j] > 0 ? 'L' : 'R') + ' ' + Math.abs(g.lat1[j]).toFixed(2) + ' m'
-        + '  nose ' + Math.round(g.pMax[j]) + '°/' + CRADLE.noseUp + '° ' + mark(g.pMax[j] >= CRADLE.noseUp)
+        + '  nose ' + Math.round(g.elMax[j]) + '°/' + CRADLE.noseUp + '° ' + mark(g.elMax[j] >= CRADLE.noseUp)
         + '  ' + (g.inp.t - g.t1[j]).toFixed(1) + '/' + CRADLE.maxS + ' s';
     } else {
       s = '<span class="d">' + (g ? g.postN : 0) + ' posts here: pass one flying forward (≤' + CRADLE.outLat + ' m out), nose up ≥' + CRADLE.noseUp

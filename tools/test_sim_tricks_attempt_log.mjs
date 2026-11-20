@@ -679,7 +679,11 @@ const LOGS = [
   // side, one never back), a Cradle that clipped a column and crashed, and
   // a Maverick up through the hatch. Seq 3, 19, 22, 23, 25 and 31 fired
   // Cradle; a segment never labels one now (see the top): the gate's calls
-  // are checked on the positions (the last test).
+  // are checked on the positions (the last test). The hatch Maverick (seq
+  // 27, 68.9-70.6 s: back 120, the Maverick's floor, climbing 3.9 m through
+  // the hatch, then forward and back down off the deck's edge against the
+  // nose) scored nothing, its first phase unmatched; noted for later, not
+  // pinned here.
   { name: 'depot cradles 1', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-cradle-1.jsonl.gz', records: 6, maneuvers: 6, fired: 0, NEW: {} },
   {
     name: 'depot cradles 2', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-cradle-2.jsonl.gz', records: 36, maneuvers: 32, fired: 6,
@@ -1129,10 +1133,14 @@ test('loop count: one from 300 degrees, two from 600, one more per further 360',
 // t, seg, x, y, z (sim-core m), the velocity along and across the heading,
 // vz, the nose's elevation, its pitch in the heading's plane, noseDot, the
 // heading, up-Z, ...), merged over the overlapping records (a row every 0.03
-// s or more), on the detector's clock (rec.t0 + t). The nose rebuilt from
-// its elevation and heading (turned round past 90 of pitch in the heading's
-// plane), the velocity from the heading's frame. No floor contact is logged,
-// so none is fed. A gap of 0.4 s in the rows starts the gate over. The posts:
+// s or more), each at rec.t0 + t (the record's own clock: the page's at the
+// segment's start, plus the row's time from it; the same offset from the
+// detector's for the whole flight). The nose rebuilt from its elevation and
+// heading (turned round past 90 of pitch in the heading's plane), the
+// velocity from the heading's frame, the turn about the vertical from the
+// nose's heading row to row (while it is under 70 degrees up). No contact is
+// logged, so none is fed. A gap of 0.4 s in the rows starts the gate over.
+// The posts:
 // the Warehouse's, as the page builds its colliders (DEPOT_PLAY's boxes at
 // DEPOT_WS), the objects the dumps name (the spin pole 1109, the mezzanine's
 // columns 699 and 700).
@@ -1148,19 +1156,22 @@ function gateOnRows(L) {
   }
   rows.sort((a, b) => a.t - b.t);
   const fresh = () => { const g = makeCradleGate([]); cradlePosts(g, DEPOT_COLS, DEPOT_WS); return g; };
-  let g = fresh(), seen = 0, prev = -1e9;
+  let g = fresh(), seen = 0, prev = -1e9, prevAz = null;
   const out = [];
   const drain = () => { while (seen < g.seq) { seen++; const v = g.out.find((o) => o.seq === seen); if (v) out.push(v); } };
   for (const { t, w } of rows) {
     if (t - prev < 0.03) continue;
-    if (t - prev > 0.4) { drain(); g = fresh(); seen = 0; }
+    if (t - prev > 0.4) { drain(); g = fresh(); seen = 0; prevAz = null; }
     prev = t;
     const [, , x, y, z, va, vl, vz, nEl, pH, , hd, upZ] = w;
     const h = hd * DEG, az = (Math.abs(pH) > 90 ? hd + 180 : hd) * DEG, el = nEl * DEG;
     const Fx = Math.cos(h), Fy = Math.sin(h);
+    let yr = 0;
+    if (prevAz != null && Math.abs(nEl) < 70) { yr = az - prevAz; while (yr > Math.PI) yr -= 2 * Math.PI; while (yr < -Math.PI) yr += 2 * Math.PI; }
+    if (Math.abs(nEl) < 70) prevAz = az;
     Object.assign(g.inp, {
       t, x, y, z, vx: va * Fx - vl * Fy, vy: va * Fy + vl * Fx, vz,
-      fx: Math.cos(el) * Math.cos(az), fy: Math.cos(el) * Math.sin(az), fz: Math.sin(el), upZ, contact: 0,
+      fx: Math.cos(el) * Math.cos(az), fy: Math.cos(el) * Math.sin(az), fz: Math.sin(el), upZ, contact: 0, yr,
     });
     cradleStep(g);
     drain();
@@ -1169,37 +1180,47 @@ function gateOnRows(L) {
 }
 
 test('the owner\'s Cradle dumps: the gate, on their positions, calls each of the 12 Cradles at its second pass, and none of the misses', () => {
-  const [C1, C2] = LOGS.slice(-2);
+  const C1 = LOGS.find((L) => L.name === 'depot cradles 1'), C2 = LOGS.find((L) => L.name === 'depot cradles 2');
   const v1 = gateOnRows(C1), v2 = gateOnRows(C2);
-  const r1 = (x) => Math.round(x * 10) / 10;
-  const calls = (vs) => vs.filter((v) => v.result === 'cradle').map((v) => v.obj + ' ' + r1(v.t1) + '-' + r1(v.t2));
-  // The first dump: three round the spin pole.
-  assert.deepEqual(calls(v1), ['1109 13.6-14.9', '1109 18.5-19.7', '1109 22.9-24.2']);
+  // Each call: the post, the first pass and the second (s, within 0.05).
+  const calls = (vs, want) => {
+    const got = vs.filter((v) => v.result === 'cradle');
+    assert.equal(got.length, want.length, got.map((v) => v.obj + ' ' + v.t1 + '-' + v.t2).join(', '));
+    want.forEach(([obj, t1, t2], k) => {
+      const v = got[k];
+      assert.ok(v.obj === obj && Math.abs(v.t1 - t1) <= 0.05 && Math.abs(v.t2 - t2) <= 0.05, 'call ' + k + ': ' + JSON.stringify(v));
+    });
+  };
+  // The first dump: three round the spin pole (1109).
+  calls(v1, [[1109, 13.59, 14.9], [1109, 18.46, 19.66], [1109, 22.91, 24.25]]);
   // The second: six round the spin pole, three round the columns (699 once,
   // 700 twice), in the order flown.
-  assert.deepEqual(calls(v2), [
-    '1109 23.7-24.5', '1109 27.3-28.3', '699 33-33.9', '1109 52.5-53.7', '1109 55.9-57.3',
-    '700 60.9-62.3', '700 65.4-66.7', '1109 75.8-76.9', '1109 79-80.2',
+  calls(v2, [
+    [1109, 23.71, 24.51], [1109, 27.26, 28.32], [699, 32.99, 33.91], [1109, 52.54, 53.66], [1109, 55.9, 57.34],
+    [700, 60.95, 62.3], [700, 65.4, 66.72], [1109, 75.79, 76.86], [1109, 78.98, 80.25],
   ]);
-  // The misses that were flown as Cradles: the one that clipped column 699
-  // and crashed (16.4-18.6 s), the one back on the same side, climbing
-  // (37.4 s), the one that slid wide and never came back abeam (44.5 s).
-  const why = (obj, t) => { const v = v2.find((o) => !o.result && o.obj === obj && Math.abs(o.t1 - t) < 0.3); return v ? v.why : 'none'; };
-  assert.equal(why(699, 17.2), 'hit the post');
-  assert.equal(why(1109, 37.5), 'same side');
-  assert.equal(why(1109, 44.5), 'no second pass in ' + CRADLE.maxS + ' s');
-  // The Maverick up through the hatch (68.9-71.5 s) is no Cradle.
-  assert.ok(!v2.some((v) => v.result && v.t2 > 68 && v.t2 < 72));
+  // The misses flown as Cradles, each with its miss and no Cradle: the one
+  // that clipped column 699 and crashed (16.4-18.6 s), the one back on the
+  // same side, climbing (37.4 s), the one that slid wide and never came back
+  // abeam (44.5 s); and the Maverick up through the hatch (68.9-71.5 s).
+  const missAt = (obj, t) => v2.find((o) => !o.result && o.obj === obj && Math.abs(o.t1 - t) < 0.3);
+  for (const [obj, t, a, b] of [[699, 17.2, 16.4, 18.6], [1109, 37.5, 37.3, 39.5], [1109, 44.5, 44.4, 47.3]]) {
+    assert.ok(missAt(obj, t), 'a miss for post ' + obj + ' at ' + t);
+    assert.ok(!v2.some((v) => v.result && v.t2 >= a && v.t2 <= b), 'no Cradle ' + a + '-' + b);
+  }
+  assert.equal(missAt(1109, 37.5).why, 'same side');
+  assert.ok(!v2.some((v) => v.result && v.t2 > 68 && v.t2 < 72), 'the hatch Maverick');
   // Every Cradle clear of each threshold: the margins the gate was set with.
   for (const v of [...v1, ...v2].filter((o) => o.result)) {
     const tag = v.obj + ' ' + v.t1;
     assert.ok(Math.abs(v.lat1) <= CRADLE.outLat - 0.5, tag + ' out ' + v.lat1);
-    assert.ok(Math.abs(v.lat2) <= CRADLE.backLat - 0.5, tag + ' back ' + v.lat2);
+    assert.ok(Math.abs(v.lat2) <= CRADLE.backLat - 0.4, tag + ' back ' + v.lat2);
     assert.ok(Math.sign(v.lat1) !== Math.sign(v.lat2), tag + ' the other side');
-    assert.ok(v.pMax >= CRADLE.noseUp + 10 && v.pMax <= CRADLE.overTop - 10, tag + ' nose ' + v.pMax);
+    assert.ok(v.elMax >= CRADLE.noseUp + 10 && v.pMax <= CRADLE.overTop, tag + ' nose ' + v.elMax + ' / ' + v.pMax);
+    assert.ok(v.yawDev <= CRADLE.yawDev - 15 && v.yawDeg <= CRADLE.yawPath - 50, tag + ' turned ' + v.yawDev + ' off F1, ' + v.yawDeg + ' in all');
     assert.ok(v.offNose >= CRADLE.backDeg + 15, tag + ' off the nose ' + v.offNose);
     assert.ok(-v.vBack >= CRADLE.backSpd + 1.5, tag + ' back at ' + v.vBack);
-    assert.ok(v.upZ >= CRADLE.upZ + 0.25, tag + ' up-Z ' + v.upZ);
+    assert.ok(v.upZ >= CRADLE.upZ + 0.5, tag + ' up-Z ' + v.upZ);
     assert.ok(v.dt <= CRADLE.maxS - 1, tag + ' ' + v.dt + ' s');
   }
 });

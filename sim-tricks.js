@@ -1792,11 +1792,11 @@ export function classifyFeat(f, out) {
 // Cradle however far the nose comes up short of over the top; the Maverick
 // is the open-air move. The Cradle is called at the second pass, with no
 // wait, whatever a rotation segment is doing: an open segment closes there
-// as the Cradle (its pull and push were the Cradle's). A touch of the post
-// (the quad's centre within hitM of it: the floor contact the detector reads
-// is under the quad, so a clip on a post's side never sets it), contact, a
-// crash, a disarm or a respawn between the passes voids it: a Cradle that
-// ends in a crash does not score.
+// as the Cradle (its pull and push were the Cradle's), and a trick that
+// finished while it was half flown (a Maverick's pull and push round the
+// post) waits for it: the Cradle replaces it, or it is called when the
+// Cradle comes to nothing. A touch, a crash, a disarm or a respawn between
+// the passes voids it: a Cradle that ends in a crash does not score.
 //
 // A post: a group of boxes (groupBoxes) postW across or less, its short side
 // postRatio of its long side or more, and either postH tall or more and
@@ -1805,31 +1805,45 @@ export function classifyFeat(f, out) {
 // or more, on the floor, and slender (legK times its width or taller: a
 // chair's, a table's or a stool's leg; not a pot, a nightstand or a mower).
 // The two tiers keep the House's 28 furniture legs (0.36-0.90 m) and its 24
-// tall posts, and no clutter on any map (the census of 2026-11-20: nothing
-// floor-standing and slender under 0.34 m; the mower 0.35 m, but 0.5 wide).
-// A pass: the post's
-// centre crossing the line square to a level direction through the quad,
-// with hyst of hysteresis. Pass one: flying forward (level speed fwdSpd or
-// more, within fwdDeg of the nose's level heading), the travel turned less
-// than turnDot since the post was last ahead, the post outLat or less to the
-// side in the frame of the nose's level heading then (F1), the quad at most
-// `over` above the post's top or below its bottom. Between the passes, the
-// nose's pitch in F1's vertical plane reaches noseUp and never passes
-// overTop. Pass two, within maxS: the post's centre back across the line
-// square to F1 (the post ahead again: the quad went back past it), on the
-// other side, backLat out or less; travelling back along F1 at backSpd or
-// more, backDeg or more off the nose's level heading; upright (up-Z upZ or
-// more); within `over` of the post's height. Posts are looked at within
-// `near` (level). The owner's 12 Cradles (dumps 1 and 2, 2026-11-20): first
-// pass 0.28-1.41 m out; nose 39-77 deg; second pass 0.27-2.31 m out, 3.0-7.1
-// m/s back, 134-178 deg off the nose, up-Z 0.56 or more; 0.60-1.44 s apart.
+// tall posts (the yard's included), and no clutter on any map (the census of
+// 2026-11-20: nothing floor-standing and slender under 0.34 m; the mower
+// 0.35 m, but 0.5 wide).
+//
+// A pass: the post's centre crossing the line square to a level direction
+// through the quad, with hyst of hysteresis, the quad within `over` of the
+// post's height (beside it: not over a table or under a beam). Pass one:
+// flying forward (level speed fwdSpd or more, within fwdDeg of the nose's
+// level heading), the travel turned less than turnDot since the post was
+// last ahead, the post outLat or less to the side in the frame of the nose's
+// level heading then (F1), and no touch in the touchS before. Between the
+// passes: the nose's elevation reaches noseUp; its pitch in F1's vertical
+// plane never passes overTop (over the top); and the nose keeps its heading
+// (an orbit or a Trippy round the post turns it with the path): its level
+// heading never more than yawDev off F1 while it is under yawEl up, and its
+// turn about the vertical yawPath or less in all. Pass two, within maxS: the
+// post's centre
+// back across the line square to F1 (the post ahead again: the quad went
+// back past it), on the other side, backLat out or less; travelling back
+// along F1 at backSpd or more and backDeg or more off the nose's level
+// heading (off F1 when the nose is over 60 degrees up: its heading is then
+// a wobble); not upside down (up-Z upZ or more; no cap on the nose but over
+// the top). A pass back the other way flown forward is a first pass of its
+// own. A touch (the quad's centre within hitM of the post, or of any box:
+// the floor contact the detector reads is under the quad, so a clip on a
+// post's side never sets it), a crash, a disarm or a respawn voids it.
+// Posts are looked at within `near` (level). The owner's 12 Cradles (dumps 1
+// and 2, 2026-11-20, replayed through the gate: the attempt-log test): first
+// pass 0.14-1.41 m out; nose up 39-77 deg; the heading 35 deg off F1 at most
+// (a turn of 91 about the vertical at most, row to row); second pass
+// 0.49-2.47 m out, 3.35-7.21 m/s back, 144-179 deg off the nose, up-Z 0.58 or
+// more; 0.79-1.44 s apart.
 export const CRADLE = Object.freeze({
   postW: 0.5, postRatio: 0.6, postH: 1.0, legH: 0.31, legK: 3, floorM: 0.05, cellM: 0.03,
-  near: 4, hyst: 0.1, turnDot: 0.7, over: 0.3,
+  near: 4, hyst: 0.1, turnDot: 0.7, over: 0.05,
   fwdSpd: 1.0, fwdDeg: 60, outLat: 2.0,
-  noseUp: 25, overTop: 90,
-  backLat: 3.0, backSpd: 1.5, backDeg: 115, upZ: 0.3, maxS: 2.5,
-  contact: 0.08, hitM: 0.08,
+  noseUp: 25, overTop: 90, yawDev: 55, yawEl: 70, yawPath: 150,
+  backLat: 3.0, backSpd: 1.5, backDeg: 115, upZ: 0, maxS: 2.5,
+  contact: 0.08, hitM: 0.06, touchS: 0.3,
 });
 
 // Boxes as objects: union the boxes face to face (touching on one axis
@@ -1940,24 +1954,30 @@ export function simBoxes(cols, ws, B) {
 // The Cradle's state. Posts (P_W per post: centre x y, bounds x0 y0 z0 x1
 // y1 z1, the object id), rebuilt when the colliders' array, its length or
 // its ends change. Per post: the side of the line square to the travel the
-// post was last on (sgA: 1 ahead, -1 behind, 0 not looked at) and that
-// travel (ux, uy); after a first pass (arm 1): its clock (t1), F1 (fx, fy),
-// the side (lat1, m, + left of F1), the nose's most pitch (pMax, deg), the
-// side of the line square to F1 the post was last on (sgF). The step's
-// inputs (inp: the clock t, position x y z, m, velocity vx vy vz, m/s, the
-// nose fx fy fz, up-Z, contact 0/1), and the verdicts: the last (last), the
-// latest few (out, oldest first, for the debug log), and their count (seq).
+// post was last on (sgA: 1 ahead, -1 behind, 0 not looked at), that travel
+// (ux, uy), when the quad last touched it (hitT); after a first pass (arm 1):
+// its clock (t1), F1 (fx, fy), the side (lat1, m, + left of F1), the nose's
+// most pitch in F1's plane and most elevation (pMax, elMax, deg), its turn
+// about the vertical since (yawP, rad) and its level heading's most off F1
+// (yawD, deg), the side of the line square to F1
+// the post was last on (sgF). When the quad last touched anything (touchT).
+// The step's inputs (inp: the clock t, position x y z, m, velocity vx vy vz,
+// m/s, the nose fx fy fz, up-Z, contact 0/1 (the floor, or any box within
+// hitM), the turn about the vertical this step yr (rad), fresh 1 on the
+// first step after a reset), and the verdicts: the last (last), the latest
+// few (out, oldest first, for the debug log), and their count (seq).
 const P_W = 9;
-const CRADLE_OUT = 8;
+const CRADLE_OUT = 32;
 function makeCradle() {
   return {
     cols: null, colsN: -1, col0: null, colL: null, ws: 0,
     B: new Float64Array(0), post: new Float64Array(0), postN: 0,
-    sgA: new Int8Array(0), ux: new Float64Array(0), uy: new Float64Array(0),
+    sgA: new Int8Array(0), ux: new Float64Array(0), uy: new Float64Array(0), hitT: new Float64Array(0),
     arm: new Uint8Array(0), t1: new Float64Array(0), fx: new Float64Array(0), fy: new Float64Array(0),
-    lat1: new Float64Array(0), pMax: new Float64Array(0), sgF: new Int8Array(0), armN: 0,
+    lat1: new Float64Array(0), pMax: new Float64Array(0), elMax: new Float64Array(0), yawP: new Float64Array(0),
+    yawD: new Float64Array(0), sgF: new Int8Array(0), armN: 0, touchT: -1e9,
     have: 0, px: 0, py: 0, pz: 0,
-    inp: { t: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, fx: 1, fy: 0, fz: 0, upZ: 1, contact: 0 },
+    inp: { t: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, fx: 1, fy: 0, fz: 0, upZ: 1, contact: 0, yr: 0, fresh: 0 },
     seq: 0, last: null, out: [],
   };
 }
@@ -1973,14 +1993,15 @@ function cradleSetPosts(g, list) {
     for (let a = 0; a < 6; a++) g.post[q + 2 + a] = b[a];
     g.post[q + 8] = b[6] == null ? j : b[6];
   }
-  g.sgA = new Int8Array(m); g.ux = new Float64Array(m); g.uy = new Float64Array(m);
+  g.sgA = new Int8Array(m); g.ux = new Float64Array(m); g.uy = new Float64Array(m); g.hitT = new Float64Array(m).fill(-1e9);
   g.arm = new Uint8Array(m); g.t1 = new Float64Array(m); g.fx = new Float64Array(m); g.fy = new Float64Array(m);
-  g.lat1 = new Float64Array(m); g.pMax = new Float64Array(m); g.sgF = new Int8Array(m); g.armN = 0;
+  g.lat1 = new Float64Array(m); g.pMax = new Float64Array(m); g.elMax = new Float64Array(m); g.yawP = new Float64Array(m);
+  g.yawD = new Float64Array(m); g.sgF = new Int8Array(m); g.armN = 0; g.touchT = -1e9;
 }
 
 // A Cradle on given posts (each [x0, y0, z0, x1, y1, z1, obj], sim-core m)
 // and no colliders: to replay a cradle record's logged inputs (set inp, then
-// cradleStep, each row).
+// cradleStep, each row; cradleReset on a row marked fresh).
 export function makeCradleGate(posts) {
   const g = makeCradle();
   cradleSetPosts(g, posts || []);
@@ -1993,10 +2014,24 @@ function cradleCancel(g) {
   g.armN = 0;
 }
 
-function cradleReset(g) {
+// Start over (a crash, a respawn, a disarm, a jump: why). A first pass that
+// had come to an attempt (the nose up) leaves a verdict, a miss, why.
+export function cradleReset(g, why) {
+  if (g.armN && why) {
+    for (let i = 0; i < g.postN; i++) if (g.arm[i] && g.elMax[i] >= CRADLE.noseUp) cradleVerdict(g, i, null, why, null, g.inp);
+  }
   cradleCancel(g);
   for (let i = 0; i < g.postN; i++) g.sgA[i] = 0;
   g.have = 0;
+  g.touchT = -1e9;
+}
+
+// A trick held for the Cradle: a first pass made and the nose up since,
+// nothing void yet (the Cradle is half flown).
+function cradleHolds(g) {
+  if (!g.armN) return false;
+  for (let i = 0; i < g.postN; i++) if (g.arm[i] && g.elMax[i] >= CRADLE.noseUp) return true;
+  return false;
 }
 
 // The posts, from the colliders (a change: every pass state starts over).
@@ -2012,51 +2047,86 @@ export function cradlePosts(g, cols, ws) {
   return true;
 }
 
+// A first pass of post i on this step (s), in the frame of the nose's level
+// heading (nx, ny).
+function cradleArm(g, i, s, rx, ry, nx, ny) {
+  const C = CRADLE, D = 180 / Math.PI;
+  g.arm[i] = 1; g.armN++;
+  g.t1[i] = s.t; g.fx[i] = nx; g.fy[i] = ny; g.lat1[i] = -rx * ny + ry * nx;
+  const el = Math.asin(s.fz > 1 ? 1 : s.fz < -1 ? -1 : s.fz) * D;
+  g.pMax[i] = el; g.elMax[i] = el; g.yawP[i] = 0; g.yawD[i] = 0;
+  const b = rx * nx + ry * ny;
+  g.sgF[i] = b >= C.hyst ? 1 : b <= -C.hyst ? -1 : 0;
+}
+
 // One step of the Cradle on its inputs (g.inp; sim-core frame, m). Returns 1
 // when the second pass makes a Cradle this step (g.last: the verdict), else
-// 0. A first pass that comes to nothing leaves a verdict (miss) only when it
-// got far enough to be an attempt: the nose up noseUp, or a second pass.
+// 0. A first pass that comes to nothing leaves a verdict (a miss) only when
+// it got as far as an attempt: the nose up noseUp.
 export function cradleStep(g) {
   const s = g.inp, C = CRADLE, D = 180 / Math.PI;
   const spd = Math.hypot(s.vx, s.vy), nh = Math.hypot(s.fx, s.fy);
   const nx = nh > 1e-9 ? s.fx / nh : 0, ny = nh > 1e-9 ? s.fy / nh : 0;
   const cosVN = spd > 1e-9 && nh > 0.25 ? (s.vx * nx + s.vy * ny) / spd : NaN;
   const fwd = spd >= C.fwdSpd && cosVN >= Math.cos(C.fwdDeg / D);
+  const el = Math.asin(s.fz > 1 ? 1 : s.fz < -1 ? -1 : s.fz) * D;
+  const yr = Math.abs(s.yr || 0);
+  if (s.contact) g.touchT = s.t;
+  const calm = s.t - g.touchT > C.touchS;
   const P = g.post;
   let award = 0;
   for (let i = 0; i < g.postN && !award; i++) {
     const q = i * P_W, rx = P[q] - s.x, ry = P[q + 1] - s.y;
+    if (!g.arm[i] && (Math.abs(rx) > C.near || Math.abs(ry) > C.near || rx * rx + ry * ry > C.near * C.near)) { g.sgA[i] = 0; continue; }
+    // A touch: the quad's centre within hitM of the post's box.
+    const bx = s.x < P[q + 2] ? P[q + 2] : s.x > P[q + 5] ? P[q + 5] : s.x;
+    const by = s.y < P[q + 3] ? P[q + 3] : s.y > P[q + 6] ? P[q + 6] : s.y;
+    const bz = s.z < P[q + 4] ? P[q + 4] : s.z > P[q + 7] ? P[q + 7] : s.z;
+    const touched = Math.hypot(bx - s.x, by - s.y, bz - s.z) <= C.hitM;
+    if (touched) g.hitT[i] = s.t;
     const hOk = s.z <= P[q + 7] + C.over && s.z >= P[q + 4] - C.over;
     if (!g.arm[i]) {
-      if (!fwd || Math.abs(rx) > C.near || Math.abs(ry) > C.near || rx * rx + ry * ry > C.near * C.near) { g.sgA[i] = 0; continue; }
+      if (!fwd) { g.sgA[i] = 0; continue; }
       const ux = s.vx / spd, uy = s.vy / spd, a = rx * ux + ry * uy;
       const now = a >= C.hyst ? 1 : a <= -C.hyst ? -1 : 0;
       if (!now) continue;
       if (g.sgA[i] === 1 && now === -1 && ux * g.ux[i] + uy * g.uy[i] >= C.turnDot) {
-        const lat = -rx * ny + ry * nx;
-        if (Math.abs(lat) <= C.outLat && hOk && nh > 0.25) {
-          g.arm[i] = 1; g.armN++;
-          g.t1[i] = s.t; g.fx[i] = nx; g.fy[i] = ny; g.lat1[i] = lat; g.pMax[i] = -180;
-          const b = rx * nx + ry * ny;
-          g.sgF[i] = b >= C.hyst ? 1 : b <= -C.hyst ? -1 : 0;
-        }
+        if (Math.abs(-rx * ny + ry * nx) <= C.outLat && hOk && nh > 0.25 && calm && s.t - g.hitT[i] > C.touchS) cradleArm(g, i, s, rx, ry, nx, ny);
       }
       g.sgA[i] = now; g.ux[i] = ux; g.uy[i] = uy;
       continue;
     }
-    // A first pass made: watch for the second.
+    // A first pass made: watch for the second. Before the nose comes up, a
+    // later pass forward is the first pass.
+    if (fwd) {
+      const ux = s.vx / spd, uy = s.vy / spd, a = rx * ux + ry * uy;
+      const now = a >= C.hyst ? 1 : a <= -C.hyst ? -1 : 0;
+      if (now) {
+        const again = g.sgA[i] === 1 && now === -1 && ux * g.ux[i] + uy * g.uy[i] >= C.turnDot && g.elMax[i] < C.noseUp;
+        g.sgA[i] = now; g.ux[i] = ux; g.uy[i] = uy;
+        if (again && Math.abs(-rx * ny + ry * nx) <= C.outLat && hOk && nh > 0.25 && calm && s.t - g.hitT[i] > C.touchS) {
+          g.arm[i] = 0; g.armN--;
+          cradleArm(g, i, s, rx, ry, nx, ny);
+          continue;
+        }
+      }
+    } else g.sgA[i] = 0;
     const Fx = g.fx[i], Fy = g.fy[i];
     const p = Math.atan2(s.fz, s.fx * Fx + s.fy * Fy) * D;
     if (p > g.pMax[i]) g.pMax[i] = p;
-    // The post touched: the quad's centre within hitM of its box.
-    const qx = s.x < P[q + 2] ? P[q + 2] : s.x > P[q + 5] ? P[q + 5] : s.x;
-    const qy = s.y < P[q + 3] ? P[q + 3] : s.y > P[q + 6] ? P[q + 6] : s.y;
-    const qz = s.z < P[q + 4] ? P[q + 4] : s.z > P[q + 7] ? P[q + 7] : s.z;
-    const dPost = Math.hypot(qx - s.x, qy - s.y, qz - s.z);
+    if (el > g.elMax[i]) g.elMax[i] = el;
+    g.yawP[i] += yr;
+    if (el < C.yawEl && nh > 0.3) {
+      let dh = Math.atan2(ny, nx) - Math.atan2(Fy, Fx);
+      if (dh > Math.PI) dh -= 2 * Math.PI; else if (dh < -Math.PI) dh += 2 * Math.PI;
+      dh = Math.abs(dh) * D;
+      if (dh > g.yawD[i]) g.yawD[i] = dh;
+    }
     let why = '';
-    if (dPost <= C.hitM) why = 'hit the post';
+    if (touched) why = 'hit the post';
     else if (s.contact) why = 'contact';
-    else if (g.pMax[i] > C.overTop) why = 'over the top';
+    else if (g.yawD[i] > C.yawDev || g.yawP[i] * D > C.yawPath) why = 'turned round';
+    else if (p > C.overTop) why = s.fz >= 0.5 ? 'over the top' : 'turned round';
     else if (s.t - g.t1[i] > C.maxS) why = 'no second pass in ' + C.maxS + ' s';
     let m = null;
     if (!why) {
@@ -2066,20 +2136,26 @@ export function cradleStep(g) {
       g.sgF[i] = now;
       if (!back) continue;
       const lat = -rx * Fy + ry * Fx, vF = s.vx * Fx + s.vy * Fy;
-      const off = cosVN === cosVN ? Math.acos(cosVN > 1 ? 1 : cosVN < -1 ? -1 : cosVN) * D : (vF < 0 ? 180 : 0);
+      // Off the nose's level heading; over 60 degrees up, off F1.
+      const cosOff = spd > 1e-9 ? (nh >= 0.5 ? cosVN : vF / spd) : (vF < 0 ? -1 : 1);
+      const off = Math.acos(cosOff > 1 ? 1 : cosOff < -1 ? -1 : cosOff) * D;
       m = { lat2: lat, vBack: vF, offNose: off, upZ: s.upZ, dt: s.t - g.t1[i], z: s.z };
       if ((lat > 0) === (g.lat1[i] > 0)) why = 'same side';
       else if (Math.abs(lat) > C.backLat) why = 'second pass too wide';
       else if (!(vF <= -C.backSpd)) why = 'not going back';
       else if (!(off >= C.backDeg)) why = 'not against the nose';
-      else if (!(s.upZ >= C.upZ)) why = 'not upright';
-      else if (!(g.pMax[i] >= C.noseUp)) why = 'nose not up';
+      else if (!(s.upZ >= C.upZ)) why = 'upside down';
+      else if (!(g.elMax[i] >= C.noseUp)) why = 'nose not up';
       else if (!hOk) why = 'over or under the post';
     }
-    const attempt = m || g.pMax[i] >= C.noseUp;
     if (why) {
-      if (attempt) cradleVerdict(g, i, null, why, m, s);
+      if (g.elMax[i] >= C.noseUp) cradleVerdict(g, i, null, why, m, s);
       g.arm[i] = 0; g.armN--;
+      // A pass back the other way flown forward: a first pass of its own.
+      if (m && fwd && Math.abs(-rx * ny + ry * nx) <= C.outLat && hOk && nh > 0.25 && calm && s.t - g.hitT[i] > C.touchS) {
+        cradleArm(g, i, s, rx, ry, nx, ny);
+        g.sgA[i] = -1; g.ux[i] = s.vx / spd; g.uy[i] = s.vy / spd;
+      }
       continue;
     }
     cradleVerdict(g, i, 'cradle', '', m, s);
@@ -2095,8 +2171,8 @@ function cradleVerdict(g, i, result, why, m, s) {
   g.last = {
     seq: g.seq, result, why: why || null, obj: P[q + 8],
     box: [P[q + 2], P[q + 3], P[q + 4], P[q + 5], P[q + 6], P[q + 7]].map(r3c),
-    t1: r3c(g.t1[i]), t2: r3c(s.t), lat1: r3c(g.lat1[i]), pMax: Math.round(g.pMax[i]),
-    hd1: Math.round(Math.atan2(g.fy[i], g.fx[i]) * 180 / Math.PI),
+    t1: r3c(g.t1[i]), t2: r3c(s.t), lat1: r3c(g.lat1[i]), pMax: Math.round(g.pMax[i]), elMax: Math.round(g.elMax[i]),
+    yawDeg: Math.round(g.yawP[i] * 180 / Math.PI), yawDev: Math.round(g.yawD[i]), hd1: Math.round(Math.atan2(g.fy[i], g.fx[i]) * 180 / Math.PI),
     lat2: m ? r3c(m.lat2) : null, vBack: m ? r3c(m.vBack) : null, offNose: m ? Math.round(m.offNose) : null,
     upZ: m ? r3c(m.upZ) : null, dt: m ? r3c(m.dt) : r3c(s.t - g.t1[i]),
   };
@@ -2121,6 +2197,9 @@ export function makeDetector() {
     // record that closed the last segment (its seq; 0 when none did).
     cg: makeCradle(),
     lastCradleSeg: 0,
+    // A trick held for a half-flown Cradle (cradleHolds): its id and the
+    // last-trick fields it set; and the one the last Cradle replaced.
+    held: null, lastCradleRepl: '',
     // The open segment's attitude history (t, pitch, roll, yaw per row) and
     // the scratch the rotation windows use.
     hist: new Float64Array(HIST_CAP * HIST_W),
@@ -2253,8 +2332,9 @@ export function resetDetector(d, sample) {
   d.susCol = 0;
   d.recJson = '';
   d.orbitEnd = -1e9; d.orbitSg = 0; d.lastCont = 0;
-  if (d.cg) cradleReset(d.cg);
+  if (d.cg) cradleReset(d.cg, 'reset');
   d.lastCradleSeg = 0;
+  d.held = null;
   if (sample) {
     d.qx = sample.qx || 0; d.qy = sample.qy || 0; d.qz = sample.qz || 0; d.qw = sample.qw == null ? 1 : sample.qw;
     d.haveQ = 1;
@@ -2744,7 +2824,9 @@ function finishCradle(d) {
     : '');
   d.lastId = 'cradle';
   d.lastDir = 1; d.lastLoops = 0; d.lastPole = 0; d.lastGapBack = 0; d.lastSloppy = 0; d.lastBump = 0;
-  try { d.recJson = d.lastCradleSeg ? encodeRecJson(d) : ''; } catch (e) { d.recJson = ''; }
+  if (d.lastCradleSeg) { try { d.recJson = encodeRecJson(d); } catch (e) { d.recJson = ''; } }
+  d.lastCradleRepl = d.held ? d.held.id : '';
+  d.held = null;
   if (d.lastCradleSeg) resetFeat(d.feat);
   d.chainOn = 0;
   d.lockout = LOCKOUT_S;
@@ -2849,17 +2931,20 @@ export function stepDetector(d, sample, dt) {
     const I = g.inp;
     const px = -wz / ws, py = -wx / ws, pz = wy / ws;
     // A jump (a respawn the page did not reset the detector for): start over.
-    if (g.have && Math.hypot(px - g.px, py - g.py, pz - g.pz) > 2) cradleReset(g);
+    if (g.have && Math.hypot(px - g.px, py - g.py, pz - g.pz) > 2) cradleReset(g, 'jump');
+    I.fresh = g.have ? 0 : 1;
     I.t = d.clock; I.x = px; I.y = py; I.z = pz;
     if (sample.vx != null && sample.vy != null) { I.vx = sample.vx; I.vy = sample.vy; I.vz = sample.vz || 0; }
     else if (g.have) { I.vx = (px - g.px) / step; I.vy = (py - g.py) / step; I.vz = (pz - g.pz) / step; }
     else { I.vx = 0; I.vy = 0; I.vz = 0; }
     I.fx = 1 - 2 * (sy * sy + sz * sz); I.fy = 2 * (sx * sy + sw * sz); I.fz = 2 * (sx * sz - sw * sy);
     I.upZ = upZ;
-    I.contact = (sample.clearance != null ? sample.clearance : 1) <= CRADLE.contact ? 1 : 0;
+    // Contact: the floor under the quad, or any box within hitM (a clip).
+    I.contact = contact || d.clr.near / ws <= CRADLE.hitM ? 1 : 0;
+    I.yr = dv;
     g.px = px; g.py = py; g.pz = pz; g.have = 1;
     if (armed) cradle = cradleStep(g);
-    else cradleReset(g);
+    else { cradleReset(g, 'disarm'); d.held = null; }
   }
 
   let hit = null;
@@ -2869,7 +2954,7 @@ export function stepDetector(d, sample, dt) {
   if (d.altN < ALT_RING) d.altN += 1;
   const rotating = rate >= RATE_START;
   const diving = thr < 0.18 && rate < 1.55 && vz < -3.8;
-  if (armed && !contact && rotating && !d.live && d.lockout <= 0 && !diving) {
+  if (armed && !contact && rotating && !d.live && d.lockout <= 0 && !diving && !cradle) {
     beginFeat(d, alt, wx, wz, head, speed, thr, upZ, vx, vy, vz);
     chainBegin(d, d.feat, head);
   }
@@ -2900,6 +2985,23 @@ export function stepDetector(d, sample, dt) {
     }
   }
   if (cradle && !hit) hit = finishCradle(d);
+  // A trick finished while a Cradle is half flown waits for it (cradleHolds):
+  // the Cradle replaces it (finishCradle), or it is called once the Cradle
+  // comes to nothing. One at a time; a disarm drops it.
+  if (hit && hit !== 'cradle' && !d.held && cradleHolds(d.cg)) {
+    d.held = {
+      id: hit, why: d.lastWhy, dir: d.lastDir, loops: d.lastLoops, pole: d.lastPole, gapBack: d.lastGapBack,
+      sloppy: d.lastSloppy, bump: d.lastBump, merge: d.lastMerge, cont: d.lastCont, at: d.clock,
+    };
+    hit = null;
+  } else if (!hit && d.held && !cradleHolds(d.cg)) {
+    const h = d.held;
+    d.held = null;
+    d.lastId = h.id; d.lastWhy = h.why + '\n  held ' + (d.clock - h.at).toFixed(2) + ' s for a Cradle that came to nothing';
+    d.lastDir = h.dir; d.lastLoops = h.loops; d.lastPole = h.pole; d.lastGapBack = h.gapBack;
+    d.lastSloppy = h.sloppy; d.lastBump = h.bump; d.lastMerge = h.merge; d.lastCont = h.cont;
+    hit = h.id;
+  }
 
   d.px = wx; d.py = wy; d.pz = wz;
 
@@ -3387,8 +3489,10 @@ export function createTricks(opts) {
         det.lastWhy = 'crash 0';
       }
       det.chainOn = 0;
-      // A Cradle half flown (one pass made) does not survive a crash.
-      cradleReset(det.cg);
+      // A Cradle half flown (one pass made) does not survive a crash, nor a
+      // trick held for it.
+      cradleReset(det.cg, 'crash');
+      det.held = null;
       return bank('crash');
     } catch (e) { return 0; }
   }
