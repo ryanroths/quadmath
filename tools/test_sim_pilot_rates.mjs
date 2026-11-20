@@ -8,7 +8,8 @@
 //   - The 75's bf config is the owner's Fractal75 diff as it is: the Air65
 //     diff's stick rates, and its own throttle curve and PIDs.
 //   - A class switch (sim.html applyDroneType) never touches the rates.
-//   - The Tune panel names where the rates come from.
+//   - The Tune panel names where the rates come from. On bf those are Tune's
+//     (tools/test_sim_bf_rates.mjs): the diffs' own fly as RyFly (stock).
 // tools/test_sim_rates_page.mjs flies the same in headless Chrome.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -170,11 +171,10 @@ test('sim.html: a class switch never touches the rates; the bf config is the cla
 });
 
 test('the Tune panel names where the rates come from', () => {
-  assert.equal(ratesSourceText({ core: 'bf' }), 'Rates: your Air65 diff (bf)');
-  assert.equal(ratesSourceText({ core: 'bf', cli: 'top' }), 'Rates: your Air65 diff, your CLI lines on top (bf, this session)');
-  assert.equal(ratesSourceText({ core: 'bf', cli: 'replace' }), 'Rates: your pasted diff (bf, this session)');
-  assert.equal(ratesSourceText({ core: 'bf', quad: 'Fractal75' }), 'Rates: your Fractal75 diff (bf)', 'on the 75');
-  assert.equal(ratesSourceText({ core: 'bf', quad: 'Fractal75', cli: 'top' }), 'Rates: your Fractal75 diff, your CLI lines on top (bf, this session)');
+  assert.equal(ratesSourceText({ core: 'bf' }), 'Rates: Cruise, the default (bf)');
+  assert.equal(ratesSourceText({ core: 'bf', cli: 'top', bf: { from: 'saved', preset: 'ryfly' } }), 'Rates: RyFly (stock) (bf, saved in this browser), your CLI lines on top');
+  assert.equal(ratesSourceText({ core: 'bf', cli: 'replace', bf: { paste: true } }), 'Rates: your pasted diff (bf, this session)');
+  assert.equal(ratesSourceText({ core: 'bf', cli: 'top', bf: { paste: true } }), 'Rates: your pasted CLI lines (bf, this session)');
   assert.equal(ratesSourceText({ core: 'js', js: 'saved' }), 'Rates: your saved profile (js, every class)');
   assert.equal(ratesSourceText({ core: 'js', js: 'link' }), 'Rates: the rates link (js, this session)');
   assert.equal(ratesSourceText({ core: 'js', js: 'default' }), 'Rates: your Air65 diff\'s (js default, every class)');
@@ -185,9 +185,11 @@ test('the Tune panel names where the rates come from', () => {
   assert.ok(html.includes('body.bf-core .rates-js,body:not(.bf-core) .rates-bf{display:none!important}'));
   const sync = extract(html, 'syncRatesSource');
   assert.ok(sync.includes("js:ratesFromLink?'link':ratesAreCustom?'saved':'default'"), sync);
-  assert.ok(sync.includes("const t=bfFlyingType(),cli=bfOf(t).cliText;") && sync.includes("quad:bfQuad(t),cli:!cli?'':bfPasteReplaces(cli)?'replace':'top'"), sync);
+  assert.ok(sync.includes("const b=bfOf(bfFlyingType()),cli=b.cliText;") && sync.includes("const src={from:bfRatesFrom(),preset:bfRatesPresetOf(bfRatesWant()),paste:bfPasteWins(b)};"), sync);
+  assert.ok(sync.includes("bf.textContent=ratesSourceText({core:'bf',cli:!cli?'':bfPasteReplaces(cli)?'replace':'top',bf:src});"), sync);
   assert.ok(extract(html, 'refreshRatesUI').includes('syncRatesSource();'));
-  assert.ok(html.includes('  bfOf().cliText=text;\n  syncRatesSource();\n'), 'an IMPORT CLI paste renames the bf source');
+  const imp = extract(html, 'importCliToBf');
+  assert.ok(imp.indexOf('else{b.cliText=text;b.ratesLast=false;}') < imp.indexOf('syncRatesSource();'), 'an IMPORT CLI paste renames the bf source');
   assert.equal(html.split('ratesFromLink=true;').length - 1, 2, 'preset= and rates= links');
   assert.ok(extract(html, 'saveRates').includes('ratesFromLink=false;\n  syncRatesSource();'));
 });

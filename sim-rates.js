@@ -226,17 +226,168 @@ export function pilotRatesDefault() {
   return decodeRateCard('card.' + PILOT_RATES_CARD);
 }
 
+// ---- Rates on the bf core (sim.html Tune: Rates) ----
+// Betaflight flies the 65 and the 75. Tune sets its rates as a pilot sets a
+// quad's: set lines (rates_type and each axis's rc_rate, srate and expo) that
+// go to Betaflight through IMPORT CLI's own path (sim.html importCliToBf, the
+// cli policy), read back from it after. Tune's are Actual rates, in CLI
+// integers: rc_rate is the centre sensitivity / 10, srate the max rate / 10,
+// expo x 100. One profile, the pilot's, for both bf classes, saved in this
+// browser (BF_RATES_KEY); the js core (the 85, ?core=js) keeps its own.
+export const BF_RATES_KEY = 'quadmathSimBfRates';
+// Set once the default's toast has shown (sim.html bfRatesBootToast).
+export const BF_RATES_TOAST_KEY = 'quadmathSimBfRatesToast';
+export const BF_RATES_DEFAULT = 'cruise';
+// [centre °/s, max °/s, expo]: rp roll and pitch, yaw. Beginner and Race are
+// sim-feel.js RATE_PRESETS' whoopBeginner and whoopRace, fitted to Actual
+// (max within 10 °/s, the curve within 2 °/s rms); RyFly (stock) is the class
+// diffs' own (PILOT_RATES_CARD: the Air65's and the Fractal75's rateprofile 0).
+export const BF_RATE_PRESETS = Object.freeze({
+  beginner: Object.freeze({ label: 'Beginner', osd: 'BEGINNER', rp: Object.freeze([50, 230, 0.46]), yaw: Object.freeze([60, 220, 0.49]) }),
+  cruise: Object.freeze({ label: 'Cruise', osd: 'CRUISE', rp: Object.freeze([70, 450, 0.30]), yaw: Object.freeze([70, 400, 0.30]) }),
+  freestyle: Object.freeze({ label: 'Freestyle', osd: 'FREESTYLE', rp: Object.freeze([80, 850, 0.50]), yaw: Object.freeze([80, 700, 0.45]) }),
+  race: Object.freeze({ label: 'Race', osd: 'RACE', rp: Object.freeze([150, 780, 0.67]), yaw: Object.freeze([150, 780, 0.67]) }),
+  ryfly: Object.freeze({ label: 'RyFly (stock)', osd: 'RYFLY', card: PILOT_RATES_CARD }),
+});
+// A ?preset= link's js preset (sim-feel.js RATE_PRESETS) on the bf core.
+export const BF_PRESET_ALIASES = Object.freeze({ whoopBeginner: 'beginner', whoopRace: 'race', ryanActual: 'ryfly' });
+export function bfPresetId(name) {
+  const s = String(name == null ? '' : name).trim();
+  if (Object.prototype.hasOwnProperty.call(BF_RATE_PRESETS, s)) return s;
+  return Object.prototype.hasOwnProperty.call(BF_PRESET_ALIASES, s) ? BF_PRESET_ALIASES[s] : null;
+}
+// A preset's rates as sim.html holds rates ({ type, roll, pitch, yaw }, the
+// sim's stored units), a fresh copy each call; null for no such preset.
+export function bfRatesPreset(id) {
+  const p = BF_RATE_PRESETS[bfPresetId(id)];
+  if (!p) return null;
+  if (p.card) return decodeRateCard('card.' + p.card);
+  const ax = ([c, m, e]) => ({ rcRate: c / 10, srate: m / 10, expo: e });
+  return { type: 'ACTUAL', roll: ax(p.rp), pitch: ax(p.rp), yaw: ax(p.yaw) };
+}
+// The settings Tune sets and reads back, in this order.
+export const BF_RATE_KEYS = Object.freeze(['rates_type', ...RATE_AXES.flatMap((a) => [`${a}_rc_rate`, `${a}_srate`, `${a}_expo`])]);
+// Rates as Betaflight's settings ({ rates_type, roll_rc_rate, ... } with CLI
+// integers), or null.
+export function bfRatesCli(state) {
+  const type = normalizeRateType(state && state.type);
+  if (!isRateType(type)) return null;
+  const out = { rates_type: type };
+  for (const a of RATE_AXES) {
+    const s = state[a];
+    if (!s) return null;
+    for (const [field, key] of [['rcRate', 'rc_rate'], ['srate', 'srate'], ['expo', 'expo']]) {
+      const v = cliFromState(type, field, s[field]);
+      if (!Number.isFinite(v)) return null;
+      out[`${a}_${key}`] = Math.round(v);
+    }
+  }
+  return out;
+}
+// The set lines for those rates (one string, a line each), or null.
+export function bfRatesLines(state) {
+  const cli = bfRatesCli(state);
+  return cli ? BF_RATE_KEYS.map((k) => `set ${k} = ${cli[k]}`).join('\n') : null;
+}
+// Betaflight's get of BF_RATE_KEYS (strings, as it prints them) as rates, or null.
+export function bfRatesFromGet(got) {
+  const type = normalizeRateType(got && got.rates_type);
+  if (!isRateType(type)) return null;
+  const out = { type };
+  for (const a of RATE_AXES) {
+    const n = (k) => (got[`${a}_${k}`] == null || got[`${a}_${k}`] === '' ? NaN : Number(got[`${a}_${k}`]));
+    out[a] = { rcRate: scaleCliField(type, 'rcRate', n('rc_rate')), srate: scaleCliField(type, 'srate', n('srate')), expo: scaleCliField(type, 'expo', n('expo')) };
+    if (!TOKEN_FIELDS.every((f) => Number.isFinite(out[a][f]))) return null;
+  }
+  return out;
+}
+// The same rates to Betaflight: every setting's CLI integer equal.
+export function bfRatesSame(a, b) {
+  const x = bfRatesCli(a), y = bfRatesCli(b);
+  return !!(x && y && BF_RATE_KEYS.every((k) => x[k] === y[k]));
+}
+// The preset those rates are, or '' (the pilot's own).
+export function bfRatesPresetOf(state) {
+  return Object.keys(BF_RATE_PRESETS).find((id) => bfRatesSame(bfRatesPreset(id), state)) || '';
+}
+// Tune's bf sliders, in what they show: the centre and the max in °/s (CLI x
+// 10, so a step is one CLI integer), expo 0 to 1. Inside RATE_SLIDER_RANGES
+// ACTUAL, so a rates link of them decodes.
+export const BF_RATE_SLIDERS = Object.freeze({
+  rcRate: Object.freeze({ label: 'Centre sensitivity', min: 10, max: 250, step: 10, scale: 10 }),
+  srate: Object.freeze({ label: 'Max rate', min: 100, max: 1800, step: 10, scale: 10 }),
+  expo: Object.freeze({ label: 'Expo', min: 0, max: 1, step: 0.01, scale: 1 }),
+});
+// Rates as Actual, for the sliders: as they are when Actual, otherwise
+// converted (convertAxisFamily: the centre and the max kept, the curve
+// between them Actual's) to CLI integers. exact: false for a conversion.
+export function bfRatesActual(state) {
+  const type = normalizeRateType(state && state.type);
+  if (!isRateType(type)) return null;
+  const out = { type: 'ACTUAL', exact: type === 'ACTUAL' };
+  for (const a of RATE_AXES) {
+    const c = convertAxisFamily(state[a], type, 'ACTUAL');
+    const lim = RATE_SLIDER_RANGES.ACTUAL;
+    out[a] = {
+      rcRate: constrain(Math.round(c.rcRate), lim.rcRate.min, lim.rcRate.max),
+      srate: constrain(Math.round(c.srate), lim.srate.min, lim.srate.max),
+      expo: constrain(Math.round(c.expo * 100) / 100, 0, 1),
+    };
+  }
+  return out;
+}
+// Tune's bf rates as saved: { preset: id or '', link: roll and pitch linked,
+// rates }, or null for nothing saved (or a saved value that does not decode).
+export function loadBfRates(storage) {
+  try {
+    const st = storage || globalThis.localStorage;
+    const raw = st && st.getItem(BF_RATES_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    if (!o || o.v !== 1) return null;
+    const d = decodedFromCliAxes(o.type, o.roll || [], o.pitch || [], o.yaw || []);
+    if (d.error) return null;
+    return { preset: bfRatesPresetOf(d), link: o.link !== false, rates: d };
+  } catch (e) { return null; }
+}
+export function saveBfRates({ rates, link } = {}, storage) {
+  const cli = bfRatesCli(rates);
+  if (!cli) return false;
+  const ax = (a) => [cli[`${a}_rc_rate`], cli[`${a}_srate`], cli[`${a}_expo`]];
+  try {
+    const st = storage || globalThis.localStorage;
+    st.setItem(BF_RATES_KEY, JSON.stringify({ v: 1, preset: bfRatesPresetOf(rates), link: link !== false, type: cli.rates_type, roll: ax('roll'), pitch: ax('pitch'), yaw: ax('yaw') }));
+    return true;
+  } catch (e) { return false; }
+}
+// Which rates fly on the bf core, for the OSD's TUNE line: the preset's name,
+// CUSTOM (the pilot's own), LINK (a rates link's own) or CLI (a paste's).
+export function bfRatesOsd({ from, preset, paste } = {}) {
+  if (paste) return 'CLI';
+  const p = BF_RATE_PRESETS[preset];
+  if (p) return p.osd;
+  return from === 'link' ? 'LINK' : 'CUSTOM';
+}
+
 // The Tune panel's line naming where the flying rates come from. core 'bf':
-// the bf config's rates (the flying quad's diff, quad: the Air65's on the 65,
-// the Fractal75's on the 75; the two hold the same stick rates), with a session's
-// IMPORT CLI paste on top (cli 'top') or in its place (cli 'replace'). core
-// 'js': the page's one profile, the pilot's ('saved'), a rates link's for the
-// session ('link'), or the Air65 diff's until they change it ('default').
-export function ratesSourceText({ core, cli, js, quad = 'Air65' } = {}) {
+// Tune's (bf: from 'default', Cruise until the pilot picks, 'saved' in this
+// browser, or 'link' for the session; preset the preset they are, '' for the
+// pilot's own), with this session's IMPORT CLI paste on top of them (cli
+// 'top') or a full diff's in the class config's place (cli 'replace'); paste:
+// the paste's rates fly (it set its own, after Tune's). core 'js': the page's
+// one profile, the pilot's ('saved'), a rates link's for the session
+// ('link'), or the Air65 diff's until they change it ('default').
+export function ratesSourceText({ core, cli, js, bf } = {}) {
   if (core === 'bf') {
-    if (cli === 'replace') return 'Rates: your pasted diff (bf, this session)';
-    if (cli === 'top') return 'Rates: your ' + quad + ' diff, your CLI lines on top (bf, this session)';
-    return 'Rates: your ' + quad + ' diff (bf)';
+    const b = bf || {};
+    if (b.paste) return cli === 'replace' ? 'Rates: your pasted diff (bf, this session)' : 'Rates: your pasted CLI lines (bf, this session)';
+    const p = BF_RATE_PRESETS[b.preset];
+    let s;
+    if (b.from === 'link') s = 'Rates: ' + (p ? p.label + ', ' : '') + 'the rates link (bf, this session)';
+    else if (b.from === 'saved') s = 'Rates: ' + (p ? p.label : 'your own') + ' (bf, saved in this browser)';
+    else s = 'Rates: ' + BF_RATE_PRESETS[BF_RATES_DEFAULT].label + ', the default (bf)';
+    if (cli) s += cli === 'replace' ? ', on your pasted diff' : ', your CLI lines on top';
+    return s;
   }
   if (js === 'saved') return 'Rates: your saved profile (js, every class)';
   if (js === 'link') return 'Rates: the rates link (js, this session)';

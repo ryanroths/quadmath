@@ -1,0 +1,265 @@
+// SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
+// Tune's Rates on the bf core, in Node (sim-rates.js BF_RATE_PRESETS and the
+// set lines; sim.html sends them through importCliToBf):
+//   - each preset's set lines, on each bf class's config (the 65's Air65
+//     diff with its card's PIDs, the 75's Fractal75 diff), all taken by
+//     Betaflight through the cli policy and read back as set;
+//   - RyFly (stock) is the class diffs' own rates; Beginner and Race are
+//     sim-feel.js RATE_PRESETS' whoopBeginner and whoopRace, fitted;
+//   - saved per browser (and a storage that throws or holds junk);
+//   - the Tune line and the OSD word;
+//   - one way to Betaflight: the rate lines go only through importCliToBf;
+//   - no board floor or held run reads rates.
+// tools/test_sim_bf_rates_page.mjs flies them in headless Chrome.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
+import { BF_CLASS_TUNES, bfClassDiff, createBfCore } from '../sim-core-adapter.js';
+import { SimCore } from '../vendor/sim-core/sim-core.js';
+import {
+  BF_RATE_PRESETS, BF_RATES_DEFAULT, BF_RATES_KEY, BF_RATE_KEYS, BF_RATE_SLIDERS, RATE_SLIDER_RANGES, BF_PRESET_ALIASES,
+  bfPresetId, bfRatesPreset, bfRatesCli, bfRatesLines, bfRatesFromGet, bfRatesSame, bfRatesPresetOf, bfRatesActual,
+  loadBfRates, saveBfRates, bfRatesOsd, ratesSourceText, rateSetpoint, pilotRatesDefault, decodeRates, encodeRates,
+} from '../sim-rates.js';
+import { RATE_PRESETS } from '../sim-feel.js';
+
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const read = (p) => readFileSync(join(root, p), 'utf8');
+const AXES = ['roll', 'pitch', 'yaw'];
+
+function card65() {
+  const w = {};
+  vm.runInNewContext(read('tune-database.js'), { window: w, document: { readyState: 'complete', getElementById: () => null } });
+  return w.QuadMathTunes.tunes.find((t) => t.id === BF_CLASS_TUNES.whoop65);
+}
+// Each bf class's config as sim.html bfDiff builds it, on its airframe.
+const CLASSES = {
+  whoop65: { airframe: 'vendor/sim-core/airframes/air65.json', diff: () => bfClassDiff(read('vendor/sim-core/configs/air65-ryfly-2026-10-23.txt'), card65().pids) },
+  whoop75: { airframe: 'vendor/sim-core/airframes/fractal75.json', diff: () => read('vendor/sim-core/configs/fractal75-ryfly-2026-11-03.txt') },
+};
+const core = (cls) => createBfCore({
+  SimCore, wasm: readFileSync(join(root, 'vendor/sim-core/sim-core.wasm')),
+  airframe: JSON.parse(read(CLASSES[cls].airframe)), diff: CLASSES[cls].diff(), world: { floorZ: 0 },
+});
+
+test('the presets: Beginner, Cruise, Freestyle, Race, RyFly (stock), Actual, roll and pitch the same; Cruise the default', () => {
+  assert.deepEqual(Object.keys(BF_RATE_PRESETS), ['beginner', 'cruise', 'freestyle', 'race', 'ryfly']);
+  assert.deepEqual(Object.values(BF_RATE_PRESETS).map((p) => p.label), ['Beginner', 'Cruise', 'Freestyle', 'Race', 'RyFly (stock)']);
+  assert.equal(BF_RATES_DEFAULT, 'cruise');
+  const cli = (id) => bfRatesCli(bfRatesPreset(id));
+  assert.deepEqual(Object.fromEntries(Object.keys(BF_RATE_PRESETS).map((id) => [id, AXES.map((a) => [cli(id)[a + '_rc_rate'] * 10, cli(id)[a + '_srate'] * 10, cli(id)[a + '_expo'] / 100])])), {
+    beginner: [[50, 230, 0.46], [50, 230, 0.46], [60, 220, 0.49]],
+    cruise: [[70, 450, 0.3], [70, 450, 0.3], [70, 400, 0.3]],
+    freestyle: [[80, 850, 0.5], [80, 850, 0.5], [80, 700, 0.45]],
+    race: [[150, 780, 0.67], [150, 780, 0.67], [150, 780, 0.67]],
+    ryfly: [[20, 740, 0.56], [20, 740, 0.56], [20, 700, 0.56]],
+  }, 'centre °/s, max °/s, expo per axis');
+  for (const id of Object.keys(BF_RATE_PRESETS)) {
+    const p = bfRatesPreset(id);
+    assert.equal(p.type, 'ACTUAL', id);
+    assert.deepEqual(p.pitch, p.roll, id + ': roll and pitch the same');
+    assert.equal(bfRatesPresetOf(p), id);
+    // Inside the sliders, so each shows on them; and a rates link of it decodes.
+    for (const a of AXES) {
+      for (const f of ['rcRate', 'srate', 'expo']) {
+        const v = p[a][f] * BF_RATE_SLIDERS[f].scale, s = BF_RATE_SLIDERS[f];
+        assert.ok(v >= s.min && v <= s.max && Math.abs(v / s.step - Math.round(v / s.step)) < 1e-9, `${id} ${a} ${f} ${v} on the slider`);
+      }
+    }
+    assert.ok(bfRatesSame(decodeRates(encodeRates(p)), p), id + ': a rates link round trip');
+    const a = bfRatesPreset(id);
+    a.roll.srate = 1;
+    assert.notEqual(bfRatesPreset(id).roll.srate, 1, 'a fresh copy each call');
+  }
+  // Slower to faster at full stick, roll: Beginner, Cruise, then the rest.
+  const max = (id) => rateSetpoint('ACTUAL', 1, bfRatesPreset(id).roll);
+  assert.ok(max('beginner') < max('cruise') && max('cruise') < max('ryfly') && max('cruise') < max('race') && max('cruise') < max('freestyle'));
+  // The bf sliders sit inside the js core's Actual ranges, so their links decode there too.
+  assert.ok(BF_RATE_SLIDERS.rcRate.min / 10 >= RATE_SLIDER_RANGES.ACTUAL.rcRate.min && BF_RATE_SLIDERS.rcRate.max / 10 <= RATE_SLIDER_RANGES.ACTUAL.rcRate.max);
+  assert.ok(BF_RATE_SLIDERS.srate.min / 10 >= RATE_SLIDER_RANGES.ACTUAL.srate.min && BF_RATE_SLIDERS.srate.max / 10 <= RATE_SLIDER_RANGES.ACTUAL.srate.max);
+});
+
+test('RyFly (stock) is the class diffs\' own rates; Beginner and Race are the js presets\' whoopBeginner and whoopRace, fitted to Actual', async () => {
+  const stock = pilotRatesDefault();
+  assert.ok(bfRatesSame(bfRatesPreset('ryfly'), stock), 'the Air65 diff\'s rateprofile 0');
+  for (const cls of Object.keys(CLASSES)) {
+    const bf = await core(cls);
+    assert.ok(bfRatesSame(bfRatesFromGet(bf.sim.get(BF_RATE_KEYS.slice())), bfRatesPreset('ryfly')), cls + ': its config alone flies RyFly (stock)');
+  }
+  // Fitted: the max within 10 °/s, the curve within 3 °/s rms over the stick.
+  const xs = Array.from({ length: 21 }, (_, i) => i / 20);
+  for (const [id, from] of [['beginner', 'whoopBeginner'], ['race', 'whoopRace']]) {
+    const js = RATE_PRESETS[from], bf = bfRatesPreset(id);
+    for (const a of AXES) {
+      const err = Math.sqrt(xs.reduce((s, x) => s + (rateSetpoint('ACTUAL', x, bf[a]) - rateSetpoint(js.type, x, js[a])) ** 2, 0) / xs.length);
+      assert.ok(Math.abs(rateSetpoint('ACTUAL', 1, bf[a]) - rateSetpoint(js.type, 1, js[a])) <= 10, `${id} ${a} max`);
+      assert.ok(err < 3, `${id} ${a}: ${err.toFixed(2)} °/s rms from ${from}`);
+    }
+  }
+  assert.equal(bfPresetId('whoopBeginner'), 'beginner');
+  assert.equal(bfPresetId('whoopRace'), 'race');
+  assert.equal(bfPresetId('ryanActual'), 'ryfly');
+  assert.equal(bfPresetId('freestyle'), 'freestyle');
+  assert.equal(bfPresetId('cruise'), 'cruise');
+  assert.equal(bfPresetId('toString'), null);
+  assert.equal(bfPresetId('nope'), null);
+  for (const js of Object.keys(BF_PRESET_ALIASES)) assert.ok(RATE_PRESETS[js], js + ' is a js preset');
+});
+
+test('each preset\'s set lines go through the cli policy on each bf class and read back as set', async () => {
+  for (const cls of Object.keys(CLASSES)) {
+    const bf = await core(cls);
+    const diff = CLASSES[cls].diff();
+    const before = bf.sim.get(['thr_mid', 'thr_expo', 'p_roll', 'd_yaw', 'roll_rate_limit']);
+    const from = diff.split('\n').length + 1;
+    for (const id of Object.keys(BF_RATE_PRESETS)) {
+      const lines = bfRatesLines(bfRatesPreset(id));
+      assert.equal(lines.split('\n').length, 10, 'rates_type and nine settings');
+      assert.ok(lines.startsWith('set rates_type = ACTUAL\nset roll_rc_rate = '), lines);
+      const r = bf.loadDiff(diff + '\n' + lines);
+      const mine = r.lines.filter((l) => l.n >= from);
+      assert.equal(mine.length, 10);
+      for (const l of mine) assert.equal(l.status, 'applied', `${cls} ${id}: ${JSON.stringify(l)}`);
+      const got = bf.sim.get(BF_RATE_KEYS.slice());
+      assert.deepEqual(got, Object.fromEntries(Object.entries(bfRatesCli(bfRatesPreset(id))).map(([k, v]) => [k, String(v)])), `${cls} ${id} read back`);
+      assert.equal(bfRatesPresetOf(bfRatesFromGet(got)), id);
+      assert.deepEqual(bf.sim.get(['thr_mid', 'thr_expo', 'p_roll', 'd_yaw', 'roll_rate_limit']), before, cls + ': nothing but the rates changes');
+    }
+    // A slider's rates (not a preset) the same way.
+    const own = { type: 'ACTUAL', roll: { rcRate: 9, srate: 61, expo: 0.12 }, pitch: { rcRate: 10, srate: 62, expo: 0.13 }, yaw: { rcRate: 11, srate: 63, expo: 0.14 } };
+    bf.loadDiff(diff + '\n' + bfRatesLines(own));
+    assert.ok(bfRatesSame(bfRatesFromGet(bf.sim.get(BF_RATE_KEYS.slice())), own), cls + ': a slider\'s rates');
+    assert.equal(bfRatesPresetOf(own), '');
+  }
+});
+
+test('rates as set lines, read back, as Actual for the sliders', () => {
+  const st = { type: 'BETAFLIGHT', roll: { rcRate: 1, srate: 0.7, expo: 0 }, pitch: { rcRate: 1, srate: 0.7, expo: 0 }, yaw: { rcRate: 1.1, srate: 0.72, expo: 0.25 } };
+  assert.equal(bfRatesLines(st), [
+    'set rates_type = BETAFLIGHT',
+    'set roll_rc_rate = 100', 'set roll_srate = 70', 'set roll_expo = 0',
+    'set pitch_rc_rate = 100', 'set pitch_srate = 70', 'set pitch_expo = 0',
+    'set yaw_rc_rate = 110', 'set yaw_srate = 72', 'set yaw_expo = 25',
+  ].join('\n'), 'another rate type flies as itself');
+  const back = bfRatesFromGet({ rates_type: 'BETAFLIGHT', roll_rc_rate: '100', roll_srate: '70', roll_expo: '0', pitch_rc_rate: '100', pitch_srate: '70', pitch_expo: '0', yaw_rc_rate: '110', yaw_srate: '72', yaw_expo: '25' });
+  assert.ok(bfRatesSame(back, st));
+  const act = bfRatesActual(back);
+  assert.equal(act.exact, false);
+  assert.deepEqual(act.roll, { rcRate: 20, srate: 67, expo: 0 }, 'the centre and the max kept, as Actual');
+  assert.equal(bfRatesActual(bfRatesPreset('cruise')).exact, true);
+  assert.equal(bfRatesFromGet({ rates_type: 'ACTUAL', roll_rc_rate: '7' }), null, 'a missing setting');
+  assert.equal(bfRatesFromGet({ rates_type: 'NOPE' }), null);
+  assert.equal(bfRatesLines(null), null);
+  assert.equal(bfRatesSame(null, bfRatesPreset('cruise')), false);
+});
+
+test('saved per browser: a round trip, nothing saved, junk, and a storage that throws', () => {
+  const mem = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), m }; };
+  const st = mem();
+  assert.equal(loadBfRates(st), null, 'nothing saved');
+  const race = bfRatesPreset('race');
+  assert.equal(saveBfRates({ rates: race, link: true }, st), true);
+  assert.deepEqual(JSON.parse(st.m.get(BF_RATES_KEY)), { v: 1, preset: 'race', link: true, type: 'ACTUAL', roll: [15, 78, 67], pitch: [15, 78, 67], yaw: [15, 78, 67] });
+  const back = loadBfRates(st);
+  assert.equal(back.preset, 'race');
+  assert.equal(back.link, true);
+  assert.ok(bfRatesSame(back.rates, race));
+  const own = { type: 'ACTUAL', roll: { rcRate: 9, srate: 61, expo: 0.12 }, pitch: { rcRate: 10, srate: 62, expo: 0.13 }, yaw: { rcRate: 11, srate: 63, expo: 0.14 } };
+  saveBfRates({ rates: own, link: false }, st);
+  assert.deepEqual([loadBfRates(st).preset, loadBfRates(st).link], ['', false]);
+  for (const junk of ['{', 'null', '{"v":2}', '{"v":1,"type":"ACTUAL","roll":[0,74,56],"pitch":[2,74,56],"yaw":[2,70,56]}', '{"v":1,"type":"NOPE","roll":[2,74,56]}']) {
+    st.setItem(BF_RATES_KEY, junk);
+    assert.equal(loadBfRates(st), null, junk);
+  }
+  const broken = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
+  assert.equal(loadBfRates(broken), null);
+  assert.equal(saveBfRates({ rates: race }, broken), false);
+});
+
+test('the Tune line and the OSD say which rates fly', () => {
+  const bf = (b, cli) => ratesSourceText({ core: 'bf', bf: b, cli });
+  assert.equal(bf({ from: 'default', preset: 'cruise' }), 'Rates: Cruise, the default (bf)');
+  assert.equal(bf({ from: 'saved', preset: 'race' }), 'Rates: Race (bf, saved in this browser)');
+  assert.equal(bf({ from: 'saved', preset: 'ryfly' }), 'Rates: RyFly (stock) (bf, saved in this browser)');
+  assert.equal(bf({ from: 'saved', preset: '' }), 'Rates: your own (bf, saved in this browser)');
+  assert.equal(bf({ from: 'link', preset: 'race' }), 'Rates: Race, the rates link (bf, this session)');
+  assert.equal(bf({ from: 'link', preset: '' }), 'Rates: the rates link (bf, this session)');
+  assert.equal(bf({ from: 'saved', preset: 'race' }, 'top'), 'Rates: Race (bf, saved in this browser), your CLI lines on top');
+  assert.equal(bf({ from: 'saved', preset: 'race' }, 'replace'), 'Rates: Race (bf, saved in this browser), on your pasted diff');
+  assert.equal(bf({ paste: true }, 'top'), 'Rates: your pasted CLI lines (bf, this session)');
+  assert.equal(bf({ paste: true }, 'replace'), 'Rates: your pasted diff (bf, this session)');
+  assert.equal(bfRatesOsd({ from: 'default', preset: 'cruise' }), 'CRUISE');
+  assert.equal(bfRatesOsd({ from: 'saved', preset: 'ryfly' }), 'RYFLY');
+  assert.equal(bfRatesOsd({ from: 'saved', preset: '' }), 'CUSTOM');
+  assert.equal(bfRatesOsd({ from: 'link', preset: '' }), 'LINK');
+  assert.equal(bfRatesOsd({ from: 'saved', preset: 'race', paste: true }), 'CLI');
+  const html = read('sim.html');
+  assert.ok(html.includes("(cs.kind==='bf'?`TUNE ${bfOf().cliText?'CLI IMPORT':bfTuneId()} · RATES ${bfRatesOsdText}<br>`:"), 'the OSD\'s TUNE line');
+  assert.ok(html.includes(`<p class="build-note rates-bf" id="ratesSourceBf">${bf({ from: 'default', preset: 'cruise' })}</p>`));
+});
+
+// sim.html is one inline module; its rates path is checked in its source.
+function extract(src, name) {
+  const start = src.indexOf(`function ${name}(`);
+  assert.notEqual(start, -1, `${name}() not found in sim.html`);
+  let i = src.indexOf('{', start), depth = 0;
+  for (; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}' && --depth === 0) return src.slice(start, i + 1);
+  }
+  assert.fail(`${name}() has unbalanced braces`);
+}
+
+test('sim.html: one way to Betaflight for rates, importCliToBf; applied on boot, a class change and a link; the js core\'s rates UI kept', () => {
+  const html = read('sim.html').replace(/\r\n/g, '\n');
+  // The rate lines are made in two places, and both go to importCliToBf.
+  assert.equal(html.split('bfRatesLines(').length - 1, 2, 'bfRatesText and bfSetRates');
+  assert.ok(extract(html, 'bfRatesText').includes('return bfRatesLines(bfRatesWant());'));
+  assert.ok(extract(html, 'bfSetRates').includes('importCliToBf(bfRatesLines(next),{rates:true,ratesLast:true,quiet:true})'));
+  assert.ok(extract(html, 'bfApplyRates').includes('return importCliToBf(bfRatesText(),{rates:true,quiet:true});'));
+  // Betaflight is configured only through bfLoadDiff (and the core's own boot).
+  assert.equal(html.split('core.loadDiff(').length - 1, 1, 'bfLoadDiff only');
+  assert.ok(extract(html, 'bfLoadDiff').includes('const r=core.loadDiff(text);'));
+  assert.ok(!/\.sim\.edit\(|bfCore\.loadDiff\(|\.configure\(/.test(html), 'no other configure');
+  // bfWantDiff (what selectCore and the watch compare against) is the same composition.
+  assert.ok(extract(html, 'bfWantDiff').includes('bfCompose(b.cliText,bfRatesText(),b.ratesLast).text'));
+  const imp = extract(html, 'importCliToBf');
+  assert.ok(imp.includes('const want=rates?bfCompose(b.cliText,text,ratesLast):bfCompose(text,bfRatesText(),false);'));
+  assert.ok(imp.includes("r=bfLoadDiff(want.text,rates?(o.label||'rates'):'CLI import',{quiet:!!o.quiet});"));
+  // Read back and checked against what the lines set, when they are the last word.
+  assert.ok(imp.includes('const back=bfReadRates(b);') && imp.includes('if(last&&!bfRatesSame(back,asked)){'));
+  assert.ok(extract(html, 'bfReadRates').includes('bfCore.sim.get(BF_RATE_KEYS.slice())'));
+  // Applied on the core's takeover, on a class change, and disarmed whenever it holds something else.
+  const select = html.slice(html.indexOf('function selectCore'), html.indexOf('// ---------- Input poll'));
+  assert.equal(select.split('bfApplyRates();').length - 1, 2, 'a loaded core taking over, and a new one');
+  assert.ok(select.indexOf("bfApplyRates();\n      toast('BETAFLIGHT CORE — '+c.quad.toUpperCase());\n      bfRatesBootToast();") > 0);
+  assert.ok(extract(html, 'bfWorldWatch').includes('if(coreArmed())return;\n  bfRatesWatch();'));
+  // The default's toast, once, only with nothing saved.
+  const toastFn = extract(html, 'bfRatesBootToast');
+  assert.ok(toastFn.includes("if(bfRatesFrom()!=='default'||bfRatesToastTimer)return;") && toastFn.includes('localStorage.setItem(BF_RATES_TOAST_KEY,\'1\')'));
+  assert.ok(toastFn.includes("toast('RATES: '+BF_RATE_PRESETS[BF_RATES_DEFAULT].label.toUpperCase()+' — change in Tune',{ms:4000});"));
+  // Links: on bf too; the old toast is gone.
+  assert.ok(!html.includes('JS CORE ONLY'));
+  const boot = extract(html, 'applyQueryBoot');
+  assert.ok(boot.includes('if(presetRaw&&bfPresetId(presetRaw)&&!ratesRaw)bfRatesFromLink(bfRatesPreset(presetRaw));'));
+  assert.ok(boot.includes('bfRatesFromLink({type:decoded.type,'));
+  // The js core's rates UI is as it was: its own sliders, type and presets.
+  const js = html.slice(html.indexOf('<div class="rates-js">'), html.indexOf('<h2>Paste Betaflight CLI dump</h2>'));
+  for (const id of ['ratesType', 'ax_roll', 's_rc', 's_sr', 's_ex', 'rateCurve']) assert.ok(js.includes(`id="${id}"`), id);
+  assert.ok(html.includes('<select id="ratePreset" class="rates-js"></select>'));
+  const bfUi = html.slice(html.indexOf('<div class="rates-bf" id="bfRates">'), html.indexOf('<div class="rates-js">'));
+  for (const a of AXES) for (const f of ['rcRate', 'srate', 'expo']) assert.ok(bfUi.includes(`id="bfs_${a}_${f}" data-axis="${a}" data-field="${f}"`), a + ' ' + f);
+  assert.ok(bfUi.includes('id="bfRatePreset"') && bfUi.includes('id="cbBfRatesLink" checked'));
+});
+
+test('no board floor, held run or PHYS_VER reads rates', () => {
+  const ret = read('sim-retention.js');
+  assert.ok(!/sim-rates|rc_rate|srate|rateSetpoint/.test(ret), 'sim-retention.js (the boards\' and the Worker\'s rules) knows no rates');
+  assert.match(ret, /export const PHYS_VER = 7;/);
+  assert.match(read('sim-whoop.js'), /PHYSICS_VER\s*=\s*7\b/);
+  const floor = ret.slice(ret.indexOf('export function builtinFloorMs'), ret.indexOf('export async function builtinTrackHash'));
+  assert.ok(floor.includes('CLASS_MAX_SPEED[classId(frameMm)]') && !/rate/i.test(floor), 'a floor is the gate path at the class speed cap');
+});

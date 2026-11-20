@@ -879,7 +879,7 @@ test('the bf core is the default; ?core=js is deprecated; the OSD names the js c
   assert.equal('BF CORE · ' + quad('whoop75'), 'BF CORE · FRACTAL75');
 });
 
-test('a js-core run on a bf class (the 65, the 75) stays off the boards (PHYS MISMATCH); Tune hides the rates on bf behind IMPORT CLI', () => {
+test('a js-core run on a bf class (the 65, the 75) stays off the boards (PHYS MISMATCH); Tune shows Betaflight\'s rates on bf, the js core\'s on js', () => {
   const html = readFileSync('sim.html', 'utf8').replace(/\r\n/g, '\n');
   // Any js-core time in a run that lands on a 65 or 75 board (the build's
   // class), not the class name; the 85 boards are js boards.
@@ -897,19 +897,25 @@ test('a js-core run on a bf class (the 65, the 75) stays off the boards (PHYS MI
   assert.ok(finish.includes("if(String(id)===String(today.trackId)&&offBoards){\n      extra=(extra?extra+' · ':'')+'PHYS MISMATCH';\n    }else if(String(id)===String(today.trackId)){"));
   assert.ok(finish.indexOf('&&offBoards){') < finish.indexOf('recordDailyLineFinish('));
 
-  // IMPORT CLI on bf: to Betaflight on top of the owner's diff, ahead of the js
-  // parse (Betaflight decides), refused while loading or armed, js rates untouched.
+  // IMPORT CLI on bf: to Betaflight on top of the class config and Tune's
+  // rates, ahead of the js parse (Betaflight decides), refused while loading
+  // or armed, js rates untouched.
   const imp = html.slice(html.indexOf('function importCli(text){'), html.indexOf('function importCli(text){') + 120);
   assert.ok(imp.includes('if(bfWanted()&&!bfOf().failed)return importCliToBf(text);'));
   assert.ok(imp.indexOf('importCliToBf') < imp.indexOf('parseCli') || imp.indexOf('parseCli') === -1);
-  const toBf = html.slice(html.indexOf('function importCliToBf(text){'), html.indexOf('function importCli(text){'));
-  // Set lines on top of the owner's diff; a full diff (from `defaults`) in its place.
-  assert.ok(html.includes("function bfDiffWith(text){return !text?bfDiff():bfPasteReplaces(text)?text:bfDiff()+'\\n'+text;}"));
-  assert.ok(toBf.includes("r=bfLoadDiff(bfDiffWith(text),'CLI import');"));
+  const toBf = html.slice(html.indexOf('function importCliToBf(text,opts){'), html.indexOf('function importCli(text){'));
+  // Set lines on top of the class config and Tune's rates; a full diff (from
+  // `defaults`) in place of both (tools/test_sim_bf_rates.mjs has the rates).
+  const compose = html.slice(html.indexOf('function bfCompose('), html.indexOf('function bfWantDiff('));
+  assert.ok(compose.includes("const parts=full?[]:[['diff',bfDiff()]];"));
+  assert.ok(compose.includes("if(paste&&!ratesLast){if(!full&&ratesText)parts.push(['rates',ratesText]);parts.push(['paste',paste]);}"));
+  assert.ok(toBf.includes(":bfCompose(text,bfRatesText(),false);"));
+  assert.ok(toBf.includes("r=bfLoadDiff(want.text,rates?(o.label||'rates'):'CLI import',{quiet:!!o.quiet});"));
   assert.ok(toBf.includes("if(!bfCore){"));
-  assert.ok(toBf.includes("setCliStatus('DISARM TO LOAD A DIFF — Betaflight did not take it','err');"));
+  assert.ok(toBf.includes("status('DISARM TO LOAD A DIFF — Betaflight did not take it','err');"));
   // A boot fault restores what flew; the count is the paste's own changing lines.
-  assert.ok(toBf.includes('}catch(e){') && toBf.indexOf('bfLoadDiff(prev,label());') < toBf.indexOf("if(!r){"));
+  assert.ok(toBf.includes('}catch(e){') && toBf.indexOf('bfLoadDiff(prev,label(),{quiet:rates});') < toBf.indexOf("if(!r){"));
+  assert.ok(toBf.includes("const [lo,hi]=want.at[rates?'rates':'paste'];"));
   assert.ok(toBf.includes('const took=mine.filter(bfLineChanges).length;'));
   // A line the sim sets itself (sim-core v0.8.0: 'overridden', with a note):
   // counted as set by the sim, not refused, and its note shown in the status.
@@ -918,15 +924,20 @@ test('a js-core run on a bf class (the 65, the 75) stays off the boards (PHYS MI
   assert.ok(toBf.includes("+'; it flies what it flew before'+noteText,'err');"));
   assert.ok(toBf.includes("+detail+noteText,'ok');"));
   for (const js of ['saveRates', 'rates[ax]', 'qp.setTune']) assert.ok(!toBf.includes(js), 'the bf import leaves the js core alone: ' + js);
-  assert.ok(html.includes("const want=bfWantDiff();\n      if(bfDiff()&&want!==b.diffLoaded)bfLoadDiff(want,b.cliText?'CLI import':bfTuneId());"));
+  // A class's core taking over loads what it should fly, if it holds something else.
+  const apply = html.slice(html.indexOf('function bfApplyRates('), html.indexOf('function bfRatesWatch('));
+  assert.ok(apply.includes('const want=bfWantDiff();\n  if(want===b.diffLoaded){'));
 
   const css = 'body.bf-core .rates-js,body:not(.bf-core) .rates-bf{display:none!important}';
   assert.ok(html.includes(css));
   const rates = html.slice(html.indexOf('<div class="rates-js">'), html.indexOf('<h2>Paste Betaflight CLI dump</h2>'));
   for (const id of ['ratesType', 'ax_roll', 's_rc', 's_sr', 's_ex', 'rateCurve']) assert.ok(rates.includes(`id="${id}"`), id + ' is in the js-only rates');
-  assert.match(html, /<p class="build-note rates-bf">[^<]*IMPORT CLI[^<]*<\/p>/);
+  // On bf, Betaflight's own: a preset and Actual sliders, set as IMPORT CLI sets them.
+  const bfRates = html.slice(html.indexOf('<div class="rates-bf" id="bfRates">'), html.indexOf('<div class="rates-js">'));
+  for (const id of ['bfRatePreset', 'cbBfRatesLink', 'bfs_roll_rcRate', 'bfs_yaw_srate', 'bfRateCurve', 'bfRatesStatus']) assert.ok(bfRates.includes(`id="${id}"`), id + ' is in the bf rates');
+  assert.match(bfRates, /<p class="build-note">[^<]*IMPORT CLI[^<]*<\/p>/);
   assert.ok(html.includes('<select id="ratePreset" class="rates-js">'));
-  assert.ok(html.includes('id="btnRatesShare" class="rates-js"'));
+  assert.ok(html.includes('<button type="button" id="btnRatesShare">COPY RATES LINK</button>'), 'a rates link of either core\'s');
   assert.ok(html.includes("function syncCoreUI(){document.body.classList.toggle('bf-core',core.kind==='bf');}"));
   // After every core switch in selectCore (to the js core, to a loaded bf
   // core, the js core while one loads) and the bf load.
