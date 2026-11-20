@@ -462,7 +462,6 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
     return;
   }
   const { server, port } = await serveRoot();
-  const debugPort = 9300 + (process.pid % 300);
 
   // A pass: a fresh Chrome profile, the given pad and localStorage, the page.
   async function pass(query, seed, flow) {
@@ -472,15 +471,23 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
       '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
       '--mute-audio', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update',
       '--disable-background-networking', '--disable-sync', '--window-size=960,540', ...(process.env.SIM_GPU_OFF === '1' ? ['--disable-gpu'] : []),
-      `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profile}`, 'about:blank',
+      '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank',
     ], { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     child.stderr.on('data', (d) => { stderr += d.toString(); });
     let ws = null;
     try {
+      // Chrome picks its DevTools port (port 0) and writes it in the profile:
+      // no guessed port, and the job's first Chrome may take a while to start.
+      let debugPort = 0;
+      for (let i = 0; i < 600 && !debugPort; i++) {
+        await sleep(100);
+        try { debugPort = +readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]; } catch (e) { /* not yet */ }
+      }
+      assert.ok(debugPort, 'no DevTools port\n' + stderr.slice(-400));
       let page = null;
-      for (let i = 0; i < 100 && !page; i++) {
-        await sleep(200);
+      for (let i = 0; i < 300 && !page; i++) {
+        await sleep(100);
         try {
           const pages = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json();
           page = pages.find((p) => p.type === 'page' && p.webSocketDebuggerUrl);
