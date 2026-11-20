@@ -77,7 +77,9 @@ export const SIDE = Object.freeze({
 // sim-tricks.js cradleStep (each Cradle, and each miss that got as far as an
 // attempt: the nose up; a crash, a respawn or a disarm ends one too), the
 // first (the Cradle, if one) in gate, the rest in others. Its inputs, every
-// step (a miss's every missDt, and on to CRADLE.maxS past its first pass:
+// step (a miss's every missDt, a row standing for the steps since the last:
+// their turn summed, a touch, reset or disarm on any; and on to CRADLE.maxS
+// past its first pass:
 // what came after an early void; a miss whose window starts inside the
 // last miss record's shares its rows: inputs.same, that record's seq,
 // which runs on to cover both, 6 s at most), from preS before the first
@@ -1247,18 +1249,29 @@ export function createTrickObserver(det, opts) {
   }
 
   // The Cradle's inputs from ta to tb (its clock), as rows of the record, a
-  // row every dt or more (0: every step).
+  // row every dt or more (0: every step). A step left out goes on the next
+  // row kept: its turn added to that row's, and a touch, a reset or a
+  // disarm on it marked there (a replay of the rows then sees the whole turn
+  // and every touch).
   function cgRows(ta, tb, dt) {
     const rows = [];
-    let last = -Infinity;
+    let last = -Infinity, yrA = 0, cA = 0, fA = 0, aA = 1;
     for (let i = 0; i < cgN; i++) {
       const k = ((cgHead - cgN + i) % CG_CAP + CG_CAP) % CG_CAP * CG_W;
       const tt = cgBuf[k];
       if (tt < ta - 1e-9 || tt > tb + 1e-9) continue;
-      if (dt > 0 && tt < last + dt - 1e-9) continue;
+      if (dt > 0 && tt < last + dt - 1e-9) {
+        yrA += cgBuf[k + 13];
+        if (cgBuf[k + 11]) cA = 1;
+        if (!cgBuf[k + 12]) aA = 0;
+        if (cgBuf[k + 14]) fA = 1;
+        continue;
+      }
       last = tt;
       rows.push([Math.round(tt * 10000) / 10000, r4(cgBuf[k + 1]), r4(cgBuf[k + 2]), r4(cgBuf[k + 3]), r3(cgBuf[k + 4]), r3(cgBuf[k + 5]), r3(cgBuf[k + 6]),
-        r4(cgBuf[k + 7]), r4(cgBuf[k + 8]), r4(cgBuf[k + 9]), r3(cgBuf[k + 10]), cgBuf[k + 11], cgBuf[k + 12], r4(cgBuf[k + 13]), cgBuf[k + 14]]);
+        r4(cgBuf[k + 7]), r4(cgBuf[k + 8]), r4(cgBuf[k + 9]), r3(cgBuf[k + 10]), cA || cgBuf[k + 11] ? 1 : 0, aA && cgBuf[k + 12] ? 1 : 0,
+        r4(cgBuf[k + 13] + yrA), fA || cgBuf[k + 14] ? 1 : 0]);
+      yrA = 0; cA = 0; fA = 0; aA = 1;
     }
     return rows;
   }

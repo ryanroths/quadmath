@@ -1062,6 +1062,16 @@ test('the Cradle\'s edges: the nose up to 88 degrees; beside a leg, not over its
   assert.equal(wv.inputs.every, CRADLE_LOG.missDt);
   near(wr[wr.length - 1][wt], wv.gate.t1 + CRADLE.maxS + CRADLE_LOG.postS, 0.01, 'to maxS past the first pass');
   assert.ok(wr[1][wt] - wr[0][wt] >= CRADLE_LOG.missDt - 1e-6);
+  // The steps left out: their turn on the next row kept. The nose up, a yaw
+  // on the spot and no second pass; the rows' turn from the first pass to
+  // the void is the gate's (each step's, not every other).
+  const yaw = sideRun([pole(5, 1)], [{ t: 3.4, v: [5, 0, 0] }, { t: 0.5, rate: [0, -2, 0], v: [1, 4, 0] }, { t: 0.5, rate: [0, 0, 2] }, { t: 4 }], { x: -10, y: 0, z: 3 });
+  const yv = verdicts(yaw)[0];
+  assert.ok(yv && !yv.result && yv.gate.yawDeg >= 10, 'a miss with a turn: ' + JSON.stringify(verdicts(yaw).map((x) => x.reason + ' ' + x.gate.yawDeg)));
+  const yc = yv.inputs.cols, yt = yc.indexOf('t'), yy = yc.indexOf('yr');
+  assert.equal(yv.inputs.every, CRADLE_LOG.missDt);
+  const turn = yv.inputs.rows.filter((w) => w[yt] > yv.gate.t1 + 1e-6 && w[yt] <= yv.gate.t2 + 1e-6).reduce((a, w) => a + w[yy], 0);
+  near(Math.abs(turn) * 180 / Math.PI, yv.gate.yawDeg, 1, 'the rows\' turn');
   // A Trippy entered past the pole (the nose radial out, 30 degrees behind,
   // tilted back 55): the nose turns with the path, so it stays a Trippy.
   const R0 = Math.hypot(0.4, 1.2), th0 = Math.atan2(-1.2, 0.4), om = 4 / R0, frames = [];

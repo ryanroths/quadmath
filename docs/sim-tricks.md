@@ -461,7 +461,8 @@ The debug log (`?tricks=debug`) writes a record of type `cradle` per step
 with a verdict (each Cradle, and each miss past an attempt: the nose up;
 the other posts' verdicts that step in `others`), with the gate's inputs
 every step, which replay to the same verdict. A miss's inputs run on to
-2.5 s past its first pass (every 8 ms), and a miss inside the last miss
+2.5 s past its first pass (every 8 ms: a row carries the turn of the step
+left out before it, and any touch on it), and a miss inside the last miss
 record's window shares its rows (`inputs.same`).
 
 ## Scoring (TPW-inspired)
