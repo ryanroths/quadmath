@@ -1337,6 +1337,46 @@ test('the Cradle\'s posts on the maps: Rig 15, the House 52 with its 28 furnitur
   }
 });
 
+// A Cradle round a leg of the House's patio table (0.69 m, under its top),
+// on the page's colliders, flown at 0.3 m (kinematic, the page's mapping):
+// past it 0.5 m out, the nose up 57 sliding 1 m across, back against the nose.
+test('the Cradle round a leg of the House\'s patio table, on the page\'s colliders, at leg height', () => {
+  const cols = buildMap(THREE, 'house').colliders;
+  const g = makeCradleGate([]);
+  cradlePosts(g, cols, WS);
+  let leg = null;
+  for (let i = 0; i < g.postN; i++) {
+    const q = i * 9, h = g.post[q + 7] - g.post[q + 4];
+    if (Math.abs(h - 0.69) < 0.01 && (!leg || g.post[q] + g.post[q + 1] > leg[0] + leg[1])) leg = [g.post[q], g.post[q + 1], g.post[q + 8]];
+  }
+  assert.ok(leg, 'a patio table leg');
+  const fly = (side) => {
+    const d = makeDetector(), hits = [];
+    const s = { armed: true, colliders: cols, ws: WS, throttle: 0.5, clearance: 0.3 };
+    const p = { x: leg[0] - 3, y: leg[1] + side, z: 0.3 };
+    let q = { x: 0, y: 0, z: 0, w: 1 }, first = true;
+    for (const ph of [{ t: 0.9, v: [4, 0] }, { t: 0.5, rate: -2, v: [0.8, -side * 4] }, { t: 1.2, v: [-4, 0] }, { t: 1 }]) {
+      for (let i = 0, n = Math.round(ph.t / 0.004); i < n; i++) {
+        const w = ph.rate || 0, v = ph.v || [0, 0];
+        if (w) { const a = w * 0.004 / 2, r = { x: 0, y: Math.sin(a), z: 0, w: Math.cos(a) }; q = { x: q.w * r.x + q.x * r.w + q.y * r.z - q.z * r.y, y: q.w * r.y - q.x * r.z + q.y * r.w + q.z * r.x, z: q.w * r.z + q.x * r.y - q.y * r.x + q.z * r.w, w: q.w * r.w - q.x * r.x - q.y * r.y - q.z * r.z }; }
+        p.x += v[0] * 0.004; p.y += v[1] * 0.004;
+        Object.assign(s, { qx: q.x, qy: q.y, qz: q.z, qw: q.w, ox: 0, oy: w, oz: 0, wx: -p.y * WS, wy: p.z * WS, wz: -p.x * WS, alt: p.z, vx: v[0], vy: v[1], vz: 0, speed: Math.hypot(v[0], v[1]) });
+        if (first) { resetDetector(d, s); d.lockout = 0; first = false; continue; }
+        const ev = stepDetector(d, s, 0.004);
+        if (ev && TRICK_BY_ID[ev]) hits.push(ev);
+      }
+    }
+    return { hits, v: d.cg.out.filter((x) => x.result) };
+  };
+  // Outside the table, back under its top on the leg's inner side; and the
+  // other way round.
+  for (const side of [0.5, -0.5]) {
+    const r = fly(side);
+    assert.deepEqual(r.hits, ['cradle'], 'side ' + side + ': ' + JSON.stringify(r.v));
+    assert.equal(r.v[0].obj, leg[2]);
+  }
+});
+
 // The owner's Cradle on the bf core (BF_CRADLES): called at the second pass,
 // no wait, with the post on the other side; and what is not one.
 test('bf core, the Cradle as the owner flies it: past a post on one side, nose up, back past it against the nose on the other; called at the second pass', async () => {
@@ -1351,6 +1391,9 @@ test('bf core, the Cradle as the owner flies it: past a post on one side, nose u
     assert.ok(Math.sign(g.lat1) !== Math.sign(g.lat2), c.name + ' the other side');
     assert.ok(g.pMax >= 40 && g.pMax <= 65, c.name + ' nose ' + g.pMax);
     assert.ok(g.offNose >= 125 && -g.vBack >= 4 && g.upZ >= 0.55 && g.dt < 1.2, c.name + ' ' + JSON.stringify(g));
+    // The nose kept its heading: off F1, the net turn about the vertical (the
+    // roll in and out included), and the yaw at the second pass.
+    assert.ok(g.yawDev <= CRADLE.yawDev - 15 && g.yawDeg <= CRADLE.yawTurn - 100 && g.yawRecent <= CRADLE.yawRecent - 15, c.name + ' ' + JSON.stringify(g));
   }
   // The mirror flies the other way round the other side.
   const a = await flyBf(BF_CRADLES[0].phases, BF_CRADLES[0].opts), b = await flyBf(BF_CRADLES[2].phases, BF_CRADLES[2].opts);

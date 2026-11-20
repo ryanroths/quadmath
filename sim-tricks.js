@@ -1819,8 +1819,10 @@ export function classifyFeat(f, out) {
 // passes: the nose's elevation reaches noseUp; its pitch in F1's vertical
 // plane never passes overTop (over the top); and the nose keeps its heading
 // (an orbit or a Trippy round the post turns it with the path): its level
-// heading never more than yawDev off F1 while it is under yawEl up, and its
-// turn about the vertical yawPath or less in all. Pass two, within maxS: the
+// heading never more than yawDev off F1 while it is under yawEl up, its net
+// turn about the vertical never past yawTurn either way, and it is not still
+// turning at the second pass (yawRecent or less about the vertical in the
+// yawWin before it: a Trippy yaws through it). Pass two, within maxS: the
 // post's centre
 // back across the line square to F1 (the post ahead again: the quad went
 // back past it), on the other side, backLat out or less; travelling back
@@ -1833,15 +1835,16 @@ export function classifyFeat(f, out) {
 // post's side never sets it), a crash, a disarm or a respawn voids it.
 // Posts are looked at within `near` (level). The owner's 12 Cradles (dumps 1
 // and 2, 2026-11-20, replayed through the gate: the attempt-log test): first
-// pass 0.14-1.41 m out; nose up 39-77 deg; the heading 35 deg off F1 at most
-// (a turn of 91 about the vertical at most, row to row); second pass
+// pass 0.14-1.41 m out; nose up 39-77 deg; the heading 38 deg off F1 at most,
+// 27 deg of yaw at most in the quarter second before the second pass (the
+// Trippies a nose lag makes Cradles of, on the js core: 57-89); second pass
 // 0.49-2.47 m out, 3.35-7.21 m/s back, 144-179 deg off the nose, up-Z 0.58 or
 // more; 0.79-1.44 s apart.
 export const CRADLE = Object.freeze({
   postW: 0.5, postRatio: 0.6, postH: 1.0, legH: 0.31, legK: 3, floorM: 0.05, cellM: 0.03,
   near: 4, hyst: 0.1, turnDot: 0.7, over: 0.05,
   fwdSpd: 1.0, fwdDeg: 60, outLat: 2.0,
-  noseUp: 25, overTop: 90, yawDev: 55, yawEl: 70, yawPath: 150,
+  noseUp: 25, overTop: 90, yawDev: 55, yawEl: 70, yawTurn: 180, yawRecent: 45, yawWin: 0.25,
   backLat: 3.0, backSpd: 1.5, backDeg: 115, upZ: 0, maxS: 2.5,
   contact: 0.08, hitM: 0.06, touchS: 0.3,
 });
@@ -1957,10 +1960,13 @@ export function simBoxes(cols, ws, B) {
 // post was last on (sgA: 1 ahead, -1 behind, 0 not looked at), that travel
 // (ux, uy), when the quad last touched it (hitT); after a first pass (arm 1):
 // its clock (t1), F1 (fx, fy), the side (lat1, m, + left of F1), the nose's
-// most pitch in F1's plane and most elevation (pMax, elMax, deg), its turn
-// about the vertical since (yawP, rad) and its level heading's most off F1
-// (yawD, deg), the side of the line square to F1
+// most pitch in F1's plane and most elevation (pMax, elMax, deg), its net
+// turn about the vertical since (yawP, rad, signed) and the most of it
+// either way (yawX, rad), its level heading's most off F1 (yawD, deg), the
+// side of the line square to F1
 // the post was last on (sgF). When the quad last touched anything (touchT).
+// The turn about the vertical of the last steps (yrT, yrV: a ring of YR_N,
+// yrH the next slot).
 // The step's inputs (inp: the clock t, position x y z, m, velocity vx vy vz,
 // m/s, the nose fx fy fz, up-Z, contact 0/1 (the floor, or any box within
 // hitM), the turn about the vertical this step yr (rad), fresh 1 on the
@@ -1968,6 +1974,7 @@ export function simBoxes(cols, ws, B) {
 // few (out, oldest first, for the debug log), and their count (seq).
 const P_W = 9;
 const CRADLE_OUT = 32;
+const YR_N = 128;
 function makeCradle() {
   return {
     cols: null, colsN: -1, col0: null, colL: null, ws: 0,
@@ -1975,7 +1982,8 @@ function makeCradle() {
     sgA: new Int8Array(0), ux: new Float64Array(0), uy: new Float64Array(0), hitT: new Float64Array(0),
     arm: new Uint8Array(0), t1: new Float64Array(0), fx: new Float64Array(0), fy: new Float64Array(0),
     lat1: new Float64Array(0), pMax: new Float64Array(0), elMax: new Float64Array(0), yawP: new Float64Array(0),
-    yawD: new Float64Array(0), sgF: new Int8Array(0), armN: 0, touchT: -1e9,
+    yawD: new Float64Array(0), yawX: new Float64Array(0), sgF: new Int8Array(0), armN: 0, touchT: -1e9,
+    yrT: new Float64Array(YR_N).fill(-1e9), yrV: new Float64Array(YR_N), yrH: 0,
     have: 0, px: 0, py: 0, pz: 0,
     inp: { t: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, fx: 1, fy: 0, fz: 0, upZ: 1, contact: 0, yr: 0, fresh: 0 },
     seq: 0, last: null, out: [],
@@ -1996,7 +2004,7 @@ function cradleSetPosts(g, list) {
   g.sgA = new Int8Array(m); g.ux = new Float64Array(m); g.uy = new Float64Array(m); g.hitT = new Float64Array(m).fill(-1e9);
   g.arm = new Uint8Array(m); g.t1 = new Float64Array(m); g.fx = new Float64Array(m); g.fy = new Float64Array(m);
   g.lat1 = new Float64Array(m); g.pMax = new Float64Array(m); g.elMax = new Float64Array(m); g.yawP = new Float64Array(m);
-  g.yawD = new Float64Array(m); g.sgF = new Int8Array(m); g.armN = 0; g.touchT = -1e9;
+  g.yawD = new Float64Array(m); g.yawX = new Float64Array(m); g.sgF = new Int8Array(m); g.armN = 0; g.touchT = -1e9;
 }
 
 // A Cradle on given posts (each [x0, y0, z0, x1, y1, z1, obj], sim-core m)
@@ -2024,6 +2032,7 @@ export function cradleReset(g, why) {
   for (let i = 0; i < g.postN; i++) g.sgA[i] = 0;
   g.have = 0;
   g.touchT = -1e9;
+  g.yrT.fill(-1e9);
 }
 
 // A trick held for the Cradle: a first pass made and the nose up since,
@@ -2054,7 +2063,7 @@ function cradleArm(g, i, s, rx, ry, nx, ny) {
   g.arm[i] = 1; g.armN++;
   g.t1[i] = s.t; g.fx[i] = nx; g.fy[i] = ny; g.lat1[i] = -rx * ny + ry * nx;
   const el = Math.asin(s.fz > 1 ? 1 : s.fz < -1 ? -1 : s.fz) * D;
-  g.pMax[i] = el; g.elMax[i] = el; g.yawP[i] = 0; g.yawD[i] = 0;
+  g.pMax[i] = el; g.elMax[i] = el; g.yawP[i] = 0; g.yawD[i] = 0; g.yawX[i] = 0;
   const b = rx * nx + ry * ny;
   g.sgF[i] = b >= C.hyst ? 1 : b <= -C.hyst ? -1 : 0;
 }
@@ -2070,7 +2079,8 @@ export function cradleStep(g) {
   const cosVN = spd > 1e-9 && nh > 0.25 ? (s.vx * nx + s.vy * ny) / spd : NaN;
   const fwd = spd >= C.fwdSpd && cosVN >= Math.cos(C.fwdDeg / D);
   const el = Math.asin(s.fz > 1 ? 1 : s.fz < -1 ? -1 : s.fz) * D;
-  const yr = Math.abs(s.yr || 0);
+  const yr = s.yr || 0;
+  g.yrT[g.yrH] = s.t; g.yrV[g.yrH] = yr; g.yrH = (g.yrH + 1) % YR_N;
   if (s.contact) g.touchT = s.t;
   const calm = s.t - g.touchT > C.touchS;
   const P = g.post;
@@ -2116,6 +2126,8 @@ export function cradleStep(g) {
     if (p > g.pMax[i]) g.pMax[i] = p;
     if (el > g.elMax[i]) g.elMax[i] = el;
     g.yawP[i] += yr;
+    const yx = Math.abs(g.yawP[i]);
+    if (yx > g.yawX[i]) g.yawX[i] = yx;
     if (el < C.yawEl && nh > 0.3) {
       let dh = Math.atan2(ny, nx) - Math.atan2(Fy, Fx);
       if (dh > Math.PI) dh -= 2 * Math.PI; else if (dh < -Math.PI) dh += 2 * Math.PI;
@@ -2125,7 +2137,7 @@ export function cradleStep(g) {
     let why = '';
     if (touched) why = 'hit the post';
     else if (s.contact) why = 'contact';
-    else if (g.yawD[i] > C.yawDev || g.yawP[i] * D > C.yawPath) why = 'turned round';
+    else if (g.yawD[i] > C.yawDev || g.yawX[i] * D > C.yawTurn) why = 'turned round';
     else if (p > C.overTop) why = s.fz >= 0.5 ? 'over the top' : 'turned round';
     else if (s.t - g.t1[i] > C.maxS) why = 'no second pass in ' + C.maxS + ' s';
     let m = null;
@@ -2139,11 +2151,16 @@ export function cradleStep(g) {
       // Off the nose's level heading; over 60 degrees up, off F1.
       const cosOff = spd > 1e-9 ? (nh >= 0.5 ? cosVN : vF / spd) : (vF < 0 ? -1 : 1);
       const off = Math.acos(cosOff > 1 ? 1 : cosOff < -1 ? -1 : cosOff) * D;
-      m = { lat2: lat, vBack: vF, offNose: off, upZ: s.upZ, dt: s.t - g.t1[i], z: s.z };
+      // The turn about the vertical in the last yawWin (net).
+      let rec = 0;
+      for (let k = 0; k < YR_N; k++) if (g.yrT[k] > s.t - C.yawWin - 1e-9) rec += g.yrV[k];
+      rec = Math.abs(rec) * D;
+      m = { lat2: lat, vBack: vF, offNose: off, upZ: s.upZ, dt: s.t - g.t1[i], z: s.z, rec };
       if ((lat > 0) === (g.lat1[i] > 0)) why = 'same side';
       else if (Math.abs(lat) > C.backLat) why = 'second pass too wide';
       else if (!(vF <= -C.backSpd)) why = 'not going back';
       else if (!(off >= C.backDeg)) why = 'not against the nose';
+      else if (!(rec <= C.yawRecent)) why = 'still turning';
       else if (!(s.upZ >= C.upZ)) why = 'upside down';
       else if (!(g.elMax[i] >= C.noseUp)) why = 'nose not up';
       else if (!hOk) why = 'over or under the post';
@@ -2172,7 +2189,8 @@ function cradleVerdict(g, i, result, why, m, s) {
     seq: g.seq, result, why: why || null, obj: P[q + 8],
     box: [P[q + 2], P[q + 3], P[q + 4], P[q + 5], P[q + 6], P[q + 7]].map(r3c),
     t1: r3c(g.t1[i]), t2: r3c(s.t), lat1: r3c(g.lat1[i]), pMax: Math.round(g.pMax[i]), elMax: Math.round(g.elMax[i]),
-    yawDeg: Math.round(g.yawP[i] * 180 / Math.PI), yawDev: Math.round(g.yawD[i]), hd1: Math.round(Math.atan2(g.fy[i], g.fx[i]) * 180 / Math.PI),
+    yawDeg: Math.round(g.yawX[i] * 180 / Math.PI), yawDev: Math.round(g.yawD[i]), yawRecent: m ? Math.round(m.rec) : null,
+    hd1: Math.round(Math.atan2(g.fy[i], g.fx[i]) * 180 / Math.PI),
     lat2: m ? r3c(m.lat2) : null, vBack: m ? r3c(m.vBack) : null, offNose: m ? Math.round(m.offNose) : null,
     upZ: m ? r3c(m.upZ) : null, dt: m ? r3c(m.dt) : r3c(s.t - g.t1[i]),
   };

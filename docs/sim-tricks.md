@@ -428,13 +428,16 @@ backwards on the opposite side. `sim-tricks.js` `CRADLE`, `cradleStep`:
 - **Between.** The nose's elevation must reach **25°**; its pitch in F1's
   vertical plane never passes **90°** (over the top); and the nose **keeps
   its heading**: its level heading never more than **55°** off F1 while it
-  is under 70° up, its turn about the vertical **≤150°** in all (an orbit or
-  a Trippy round the post turns the nose with the path, a Cradle does not).
+  is under 70° up, and its net turn about the vertical never past **180°**
+  either way (an orbit or a Trippy round the post turns the nose with the
+  path, a Cradle does not).
 - **Second pass**, within **2.5 s**: the post's centre back across the line
   square to F1 (the quad went back past it), **on the other side**, **≤3 m**
   out, travelling back along F1 at **≥1.5 m/s** and **≥115°** off the
-  nose's level heading (off F1 when the nose is over 60° up), **not upside
-  down** (no cap on the nose but over the top). The Cradle is called on
+  nose's level heading (off F1 when the nose is over 60° up), **not still
+  turning** (**≤45°** about the vertical in the 0.25 s before: a Trippy
+  yaws through it), **not upside down** (no cap on the nose but over the
+  top). The Cradle is called on
   that step, with no wait; an open rotation segment closes there as the
   Cradle and the chain of unscored segments before it ends. A trick that
   finished while the Cradle was half flown (a Maverick's pull and push
@@ -448,15 +451,18 @@ backwards on the opposite side. `sim-tricks.js` `CRADLE`, `cradleStep`:
 
 Set from the owner's 12 Cradles (two dumps, 2026-11-20, replayed through the
 gate from the positions they logged): first pass 0.14–1.41 m out; nose up
-39–77°; the heading within 35° of F1 (a turn of 91° about the vertical at
-most, row to row); second pass 0.49–2.47 m out on the other side,
+39–77°; the heading within 38° of F1, 27° of yaw at most in the quarter
+second before the second pass (the Trippies a nose lag turns into Cradles,
+on the js core: 57–89°); second pass 0.49–2.47 m out on the other side,
 3.35–7.21 m/s back, 144–179° off the nose, up-Z ≥0.58; 0.79–1.44 s apart.
 The misses flown with them: one that clipped a column and crashed, one back
 on the same side climbing, one that slid wide and never came back abeam.
 The debug log (`?tricks=debug`) writes a record of type `cradle` per step
 with a verdict (each Cradle, and each miss past an attempt: the nose up;
 the other posts' verdicts that step in `others`), with the gate's inputs
-every step, which replay to the same verdict.
+every step, which replay to the same verdict. A miss's inputs run on to
+2.5 s past its first pass (every 8 ms), and a miss inside the last miss
+record's window shares its rows (`inputs.same`).
 
 ## Scoring (TPW-inspired)
 

@@ -1217,7 +1217,7 @@ test('the owner\'s Cradle dumps: the gate, on their positions, calls each of the
     assert.ok(Math.abs(v.lat2) <= CRADLE.backLat - 0.4, tag + ' back ' + v.lat2);
     assert.ok(Math.sign(v.lat1) !== Math.sign(v.lat2), tag + ' the other side');
     assert.ok(v.elMax >= CRADLE.noseUp + 10 && v.pMax <= CRADLE.overTop, tag + ' nose ' + v.elMax + ' / ' + v.pMax);
-    assert.ok(v.yawDev <= CRADLE.yawDev - 15 && v.yawDeg <= CRADLE.yawPath - 50, tag + ' turned ' + v.yawDev + ' off F1, ' + v.yawDeg + ' in all');
+    assert.ok(v.yawDev <= CRADLE.yawDev - 15 && v.yawDeg <= CRADLE.yawTurn - 90 && v.yawRecent <= CRADLE.yawRecent - 10, tag + ' turned ' + v.yawDev + ' off F1, ' + v.yawDeg + ' net, ' + v.yawRecent + ' at the second pass');
     assert.ok(v.offNose >= CRADLE.backDeg + 15, tag + ' off the nose ' + v.offNose);
     assert.ok(-v.vBack >= CRADLE.backSpd + 1.5, tag + ' back at ' + v.vBack);
     assert.ok(v.upZ >= CRADLE.upZ + 0.5, tag + ' up-Z ' + v.upZ);

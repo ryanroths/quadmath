@@ -28,7 +28,7 @@ import {
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
   HIST_W, BH_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE, BARANI_HD_LO,
   CRADLE, groupBoxes, simBoxes, cradlePostList,
-} from './sim-tricks.js?v=353aa2ca3f22';
+} from './sim-tricks.js?v=db0c667a41a5';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
@@ -77,12 +77,16 @@ export const SIDE = Object.freeze({
 // sim-tricks.js cradleStep (each Cradle, and each miss that got as far as an
 // attempt: the nose up; a crash, a respawn or a disarm ends one too), the
 // first (the Cradle, if one) in gate, the rest in others. Its inputs, every
-// step, from preS before the first pass to the
+// step (a miss's every missDt, and on to CRADLE.maxS past its first pass:
+// what came after an early void; a miss whose window starts inside the
+// last miss record's shares its rows: inputs.same, that record's seq,
+// which runs on to cover both, 6 s at most), from preS before the first
+// pass to the
 // verdict, and again (the same record) to postS after it, at most cap steps
 // kept: enough to replay the verdict (makeCradleGate, then cradleStep on
 // each row; the rows past it let a replay whose rounded positions put the
 // second pass a step later still see it).
-export const CRADLE_LOG = Object.freeze({ preS: 0.6, postS: 0.3, cap: 2048 });
+export const CRADLE_LOG = Object.freeze({ preS: 0.6, postS: 0.3, cap: 2048, missDt: 0.008 });
 
 // stepDetector's spatial constants (sim-tricks.js DIVE_*, GAP_*), the dive
 // fallback inside classifyFeat, and the segment-start numbers.
@@ -660,6 +664,7 @@ export function createTrickObserver(det, opts) {
   const cgBuf = new Float64Array(CG_CAP * CG_W);
   let cgN = 0, cgHead = 0, cgSeq = 0, cgT = NaN;
   const cgPend = [];
+  let cgMiss = null;   // the last miss record's pending refresh (rows to share)
   const view = {
     t: 0, armed: false, contact: false, rate: 0, lockout: 0, diving: false, live: 0, liveT: 0,
     vz: 0, speed: 0, alt: 0, thr: 0, gap: null, clr: null, diveOn: 0, diveDrop: 0, diveCd: 0, gapCd: 0,
@@ -1241,13 +1246,17 @@ export function createTrickObserver(det, opts) {
     emit(rec);
   }
 
-  // The Cradle's inputs from ta to tb (its clock), as rows of the record.
-  function cgRows(ta, tb) {
+  // The Cradle's inputs from ta to tb (its clock), as rows of the record, a
+  // row every dt or more (0: every step).
+  function cgRows(ta, tb, dt) {
     const rows = [];
+    let last = -Infinity;
     for (let i = 0; i < cgN; i++) {
       const k = ((cgHead - cgN + i) % CG_CAP + CG_CAP) % CG_CAP * CG_W;
       const tt = cgBuf[k];
       if (tt < ta - 1e-9 || tt > tb + 1e-9) continue;
+      if (dt > 0 && tt < last + dt - 1e-9) continue;
+      last = tt;
       rows.push([Math.round(tt * 10000) / 10000, r4(cgBuf[k + 1]), r4(cgBuf[k + 2]), r4(cgBuf[k + 3]), r3(cgBuf[k + 4]), r3(cgBuf[k + 5]), r3(cgBuf[k + 6]),
         r4(cgBuf[k + 7]), r4(cgBuf[k + 8]), r4(cgBuf[k + 9]), r3(cgBuf[k + 10]), cgBuf[k + 11], cgBuf[k + 12], r4(cgBuf[k + 13]), cgBuf[k + 14]]);
     }
@@ -1277,12 +1286,28 @@ export function createTrickObserver(det, opts) {
     rec.others = others;
     if (lost > 0) rec.lost = lost;
     rec.need = CRADLE;
-    let ta = Infinity, tb = -Infinity;
+    let ta = Infinity, tb = -Infinity, tEnd = -Infinity;
     for (const x of vs) { if (x.t1 < ta) ta = x.t1; if (x.t2 > tb) tb = x.t2; }
+    // A miss: on to maxS past its first pass, every missDt.
+    const dt = v.result ? 0 : CRADLE_LOG.missDt;
+    tEnd = v.result ? tb : Math.max(tb, ta + CRADLE.maxS);
     ta -= CRADLE_LOG.preS;
-    const rows = cgRows(ta, tb);
-    rec.inputs = { cols: CG_COLS, rows, to: r3(tb), cut: rows.length > 0 && rows[0][0] > ta + 0.05 ? 1 : 0 };
-    cgPend.push({ rec, ta, due: tb + CRADLE_LOG.postS });
+    const due = tEnd + CRADLE_LOG.postS;
+    let rows;
+    if (!v.result && cgMiss && ta >= cgMiss.ta - 1e-9 && ta <= cgMiss.due && due - cgMiss.ta <= 6) {
+      // Inside the last miss record's window: its rows, on to this one's end
+      // (refreshed again then; 6 s at most, inside the ring).
+      rec.inputs = { cols: CG_COLS, same: cgMiss.rec.seq };
+      if (due > cgMiss.due) cgMiss.due = due;
+      if (cgPend.indexOf(cgMiss) < 0) cgPend.push(cgMiss);
+      rows = cgMiss.rec.inputs.rows;
+    } else {
+      rows = cgRows(ta, tb, dt);
+      rec.inputs = { cols: CG_COLS, rows, to: r3(tb), every: dt, cut: rows.length > 0 && rows[0][0] > ta + 0.05 ? 1 : 0 };
+      const p = { rec, ta, dt, due };
+      cgPend.push(p);
+      if (!v.result) cgMiss = p;
+    }
     // The posts within CRADLE.near (level) of the path, as the gate has them.
     const g = det.cg, P = g.post, posts = [];
     for (let i = 0; i < g.postN; i++) {
@@ -1466,9 +1491,10 @@ export function createTrickObserver(det, opts) {
         cgSeq = g.seq;
       }
       // The records' inputs again, postS past their verdicts.
-      while (cgPend.length && cgT >= cgPend[0].due - 1e-9) {
-        const p = cgPend.shift();
-        p.rec.inputs.rows = cgRows(p.ta, p.due);
+      for (let k = 0; k < cgPend.length; k++) {
+        if (cgT < cgPend[k].due - 1e-9) continue;
+        const p = cgPend.splice(k--, 1)[0];
+        p.rec.inputs.rows = cgRows(p.ta, p.due, p.dt);
         p.rec.inputs.to = r3(p.due);
         try { onSide(p.rec); } catch (e) { /* never break the frame */ }
       }

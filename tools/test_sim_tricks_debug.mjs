@@ -1054,7 +1054,14 @@ test('the Cradle\'s edges: the nose up to 88 degrees; beside a leg, not over its
   // A wall touched at the stop between the passes (0.05 m off): void.
   const wall = sideRun([pole(5, 1), at(7.55, 1.5, 0, 8.55, 2.5, 6)], cradlePhases(1), { x: -10, y: 0, z: 3 });
   assert.ok(!called(wall), 'a touch between the passes');
-  assert.equal(verdicts(wall)[0].gate.why, 'contact');
+  const wv = verdicts(wall)[0];
+  assert.equal(wv.gate.why, 'contact');
+  // A miss's inputs run on to maxS past its first pass (what came after the
+  // void), every missDt.
+  const wr = wv.inputs.rows, wt = wv.inputs.cols.indexOf('t');
+  assert.equal(wv.inputs.every, CRADLE_LOG.missDt);
+  near(wr[wr.length - 1][wt], wv.gate.t1 + CRADLE.maxS + CRADLE_LOG.postS, 0.01, 'to maxS past the first pass');
+  assert.ok(wr[1][wt] - wr[0][wt] >= CRADLE_LOG.missDt - 1e-6);
   // A Trippy entered past the pole (the nose radial out, 30 degrees behind,
   // tilted back 55): the nose turns with the path, so it stays a Trippy.
   const R0 = Math.hypot(0.4, 1.2), th0 = Math.atan2(-1.2, 0.4), om = 4 / R0, frames = [];
