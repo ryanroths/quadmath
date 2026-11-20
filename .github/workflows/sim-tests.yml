@@ -27,8 +27,9 @@ name: Sim tests
 #                 test_sim_track_boards, with test_leaderboard_track_boards
 #                 (custom track boards on `wrangler dev` with a real D1,
 #                 wrangler installed in that entry, which the sim-tests job
-#                 skips for want of wrangler). Each entry under about 10
-#                 minutes.
+#                 skips for want of wrangler); and test_sim_bf_rates_page
+#                 with test_sim_rates_page (Tune's rates on both cores, read
+#                 back from Betaflight). Each entry under about 10 minutes.
 #                 test_sim_sound has no entry for now: it samples the page
 #                 once a frame, so its result depends on the frame rate.
 #   asset-stamps  scripts/ci/stamp_asset_cache.py --check. The stamper's own
@@ -116,6 +117,11 @@ jobs:
           # The stick overlay, shared track links and track boards in Chrome,
           # and the track boards' Worker on wrangler dev (wrangler: true).
           - { suite: page, label: 'sticks, track links, track boards', tests: 'tools/test_sim_stick_overlay.mjs tools/test_sim_track_url.mjs tools/test_sim_track_boards.mjs tools/test_leaderboard_track_boards.mjs tools/test_leaderboard_builtin_boards.mjs', wrangler: true }
+          # Tune's rates: on bf, presets, sliders, a paste, class changes,
+          # reloads, links, the input default and the js carry, read back from
+          # Betaflight; and the one profile across 65, 75 and 85 on both cores.
+          # About 1.5 minutes on a Linux box with SwiftShader.
+          - { suite: page, label: 'rates', tests: 'tools/test_sim_bf_rates_page.mjs tools/test_sim_rates_page.mjs' }
 
     steps:
       - name: Check out
