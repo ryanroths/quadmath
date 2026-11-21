@@ -235,8 +235,9 @@ test('sim.html: the overlay reads the merged stick in the frame loop, and hides 
   // The old #feelHud pads are gone (one stick display).
   assert.equal(html.includes('stick-pad'), false);
   assert.equal(read('sim-feel.js').includes('stickDotL'), false);
-  // The input the overlay names is the one the OSD names.
-  assert.match(extract('stickInputKind'), /gpConnected\?\(isRadio\(\{id:gpName\}\)\?'radio':'gamepad'\):\(touchCtl&&touchCtl\.enabled\?'touch':'keyboard'\)/);
+  // The input the overlay names is the one the OSD names: a radio as the page
+  // knows one (padIsRadio: its USB id, name or shape, or a radio preset).
+  assert.match(extract('stickInputKind'), /gpConnected\?\(padIsRadio\(\{id:gpName\}\)\?'radio':'gamepad'\):\(touchCtl&&touchCtl\.enabled\?'touch':'keyboard'\)/);
 });
 
 // ---- headless Chrome ----

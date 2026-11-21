@@ -506,16 +506,267 @@ export function sanitizeId(id) {
   return String(id == null ? '' : id).replace(/[^a-z0-9]+/gi, '_').slice(0, 64);
 }
 
+function padId(gp) {
+  return gp && gp.id != null ? String(gp.id) : '';
+}
+
+// Every EdgeTX and OpenTX radio enumerates as USB 1209:4F54 (pid.codes),
+// whatever the model, so the USB numbers in the id name it even when the
+// browser has no product name for it: Chrome "Unknown Gamepad (Vendor: 1209
+// Product: 4f54)", Firefox "1209-4f54-…". Both numbers, never 1209 alone:
+// other pid.codes devices share that vendor.
+const EDGETX_USB_RE = /vendor:\s*0*1209\s+product:\s*0*4f54(?![0-9a-f])|(?:^|[^0-9a-f])0*1209[-:_ ]0*4f54(?![0-9a-f])|vid_1209&pid_4f54/i;
+// EdgeTX/OpenTX radios by name, for a browser that shows a name only.
+const EDGETX_NAME_RE = /edgetx|opentx|radiomaster|tx16|tx15|tx12|mt12|gx12|pocket|boxer|zorro|jumper|frsky|taranis/i;
+// Radios on their own firmware.
+const OTHER_RADIO_NAME_RE = /betafpv|literadio|flysky/i;
+
+export function isEdgeTxUsb(gp) {
+  return EDGETX_USB_RE.test(padId(gp));
+}
+
+// A device the browser maps to the standard layout is a gamepad, whatever its
+// name ("Retroid Pocket Controller" is a handheld). Chrome never maps
+// 1209:4f54 to it, and a standard mapping always shows 4 axes, so it says
+// nothing about Classic mode. By id alone, Chrome's "STANDARD GAMEPAD" tag.
+function isStandardPad(gp) {
+  return !!gp && (gp.mapping === 'standard' || /STANDARD GAMEPAD/i.test(padId(gp)));
+}
+
+export function isEdgeTxRadio(gp) {
+  const id = padId(gp);
+  return EDGETX_USB_RE.test(id) || (!isStandardPad(gp) && EDGETX_NAME_RE.test(id));
+}
+
 export function isRadio(gp) {
-  const id = gp && gp.id != null ? String(gp.id) : '';
-  return /opentx|edgetx|radiomaster|tx16|frsky|taranis|jumper|betafpv|flysky/i.test(id);
+  return isEdgeTxRadio(gp) || (!isStandardPad(gp) && OTHER_RADIO_NAME_RE.test(padId(gp)));
+}
+
+// The stick axes a flyable device sends: roll, pitch, yaw and throttle.
+export const STICK_AXES = 4;
+// EdgeTX's Classic USB joystick sends 8 axes (CH1-8 as X, Y, Z, Rx, Ry, Rz,
+// Slider, Dial) and 24 buttons. Browsers show fewer of them: Chrome and
+// Firefox on Windows all 8, an OpenTX 2.3 radio 7 (it declares Slider twice),
+// Safari and Firefox on macOS 6 (X to Rz only). So fewer than 6 is never
+// Classic: Advanced mode (or its Gamepad / MultiAxis interface), whose
+// channels are whatever the model sets, none at all until it sets them, and
+// whose Sim controls (the throttle among them) Firefox drops and Chrome puts
+// at the lowest free index.
+export const EDGETX_CLASSIC_MIN_AXES = 6;
+export const RADIO_CLASSIC_MSG = "Radio found, but throttle isn't coming through. On the radio: Model Settings → USB Joystick → Classic, then replug.";
+
+function axisCount(gp) {
+  const a = gp && gp.axes;
+  return a && Number.isFinite(a.length) ? a.length : 0;
+}
+
+// A device nothing names as a radio, shaped like one: 6+ axes, a mapping that
+// is not 'standard', some resting at -1 (a radio's throttle and switches; a
+// gamepad's sticks rest at 0) and two or more off the rails (centred gimbals,
+// not a dead interface that reads -1 everywhere).
+export function looksLikeRadio(gp) {
+  if (!gp || gp.mapping === 'standard') return false;
+  const ax = gp.axes || [];
+  if (ax.length < 6) return false;
+  let low = 0, mid = 0;
+  for (let i = 0; i < ax.length; i++) {
+    const v = Number(ax[i]);
+    if (!Number.isFinite(v)) continue;
+    if (v <= -0.95) low++;
+    else if (Math.abs(v) < 0.95) mid++;
+  }
+  return low >= 1 && mid >= 2;
+}
+
+// What the page makes of a device: a radio and how it knows (its USB id, its
+// name, or its shape), an EdgeTX/OpenTX radio, enough stick axes to fly, and
+// 'classic' when it is an EdgeTX radio sending fewer axes than Classic ever
+// shows.
+export function classifyPad(gp) {
+  const n = axisCount(gp);
+  const edgetx = isEdgeTxRadio(gp);
+  const how = isEdgeTxUsb(gp) ? 'usb' : isRadio(gp) ? 'name' : looksLikeRadio(gp) ? 'shape' : null;
+  return {
+    radio: !!how,
+    how,
+    edgetx,
+    axes: n,
+    sticks: n >= STICK_AXES,
+    issue: edgetx && !isStandardPad(gp) && n < EDGETX_CLASSIC_MIN_AXES ? 'classic' : null,
+  };
 }
 
 export function radioScore(gp) {
   if (!gp) return 0;
-  if (/tx16|zorro|edgetx|opentx|joystick|1209|radiomaster|frsky|taranis|jumper|betafpv|flysky/i.test(gp.id || '')) return 2;
+  if (isEdgeTxUsb(gp)) return 2;
+  if (isStandardPad(gp)) return 0;
+  if (/tx16|tx15|tx12|mt12|gx12|zorro|boxer|pocket|edgetx|opentx|joystick|1209|radiomaster|frsky|taranis|jumper|betafpv|flysky/i.test(gp.id || '')) return 2;
+  // A device only shaped like a radio ranks with the other unnamed ones, as
+  // on main: a TX16S beside it still flies.
   if (gp.mapping === 'standard') return 0;
   return 1;
+}
+
+// Stick movement per device, from the polls the page makes. A device whose
+// axes have never moved (a keyboard's gamepad interface, a headset with
+// axes) is passed over while another can fly; one that stops moving while
+// another moves has been put down.
+export const PAD_MOVE_MIN = 0.2;     // this far off where it was first seen: it has moved
+const PAD_MOVE_STEP = 0.05;          // this far off its last moving value: it is moving
+export const PAD_STALE_MS = 4000;    // no movement this long: put down
+export const PAD_MOVING_MS = 1000;   // moved PAD_MOVE_MIN this recently: in the pilot's hands
+
+function padKey(gp) {
+  return padId(gp) + '#' + (gp && Number.isFinite(gp.index) ? gp.index : -1);
+}
+
+function axisNum(v) {
+  const x = Number(v);
+  return Number.isFinite(x) ? x : 0;
+}
+
+// Fed every input poll (4 ms), so it allocates only when a device appears or
+// moves: one record per browser slot, reset when another id takes the slot.
+export function createPadTracker() {
+  const seen = new Map();
+  const rec = (gp) => {
+    const r = gp ? seen.get(gp.index) : null;
+    return r && r.id === gp.id ? r : null;
+  };
+  return {
+    see(pads, nowMs) {
+      if (!pads) return;
+      for (let k = 0; k < pads.length; k++) {
+        const gp = pads[k];
+        if (!gp || gp.connected === false) continue;
+        const ax = gp.axes || [];
+        const n = ax.length;
+        const r = seen.get(gp.index);
+        if (!r || r.id !== gp.id || r.n !== n) {
+          const first = Array.from(ax, axisNum);
+          seen.set(gp.index, { id: gp.id, n, first, anchor: first.slice(), big: first.slice(), seenAt: nowMs, moveAt: null, bigAt: null, moved: false });
+          continue;
+        }
+        let step = false, big = false;
+        for (let i = 0; i < n; i++) {
+          const v = axisNum(ax[i]);
+          if (!r.moved && Math.abs(v - r.first[i]) >= PAD_MOVE_MIN) r.moved = true;
+          if (Math.abs(v - r.anchor[i]) >= PAD_MOVE_STEP) step = true;
+          if (Math.abs(v - r.big[i]) >= PAD_MOVE_MIN) big = true;
+        }
+        if (step) {
+          for (let i = 0; i < n; i++) r.anchor[i] = axisNum(ax[i]);
+          r.moveAt = nowMs;
+        }
+        if (big) {
+          for (let i = 0; i < n; i++) r.big[i] = axisNum(ax[i]);
+          r.bigAt = nowMs;
+        }
+      }
+    },
+    moved(gp) { const r = rec(gp); return !!(r && r.moved); },
+    // Its axes when the browser first showed it: what its kind is judged on.
+    first(gp) { const r = rec(gp); return r ? r.first.slice() : null; },
+    // It moved after it was picked: it was in the pilot's hands.
+    movedSincePick(gp) {
+      const r = rec(gp);
+      return !!(r && r.moveAt != null && (r.pickedAt == null || r.moveAt > r.pickedAt));
+    },
+    // The pilot picked it (or the page did): idle from then, so the device
+    // just picked is never taken for one put down.
+    picked(gp, nowMs) {
+      if (!rec(gp)) this.see([gp], nowMs);
+      const r = rec(gp);
+      if (r) r.pickedAt = nowMs;
+    },
+    idleMs(gp, nowMs) {
+      const r = rec(gp);
+      if (!r) return 0;
+      const since = Math.max(r.moveAt != null ? r.moveAt : r.seenAt, r.pickedAt != null ? r.pickedAt : -Infinity);
+      return nowMs - since;
+    },
+    // Moved PAD_MOVE_MIN within PAD_MOVING_MS: picked up, not a jitter.
+    movingNow(gp, nowMs) {
+      const r = rec(gp);
+      return !!(r && r.bigAt != null && nowMs - r.bigAt < PAD_MOVING_MS);
+    },
+  };
+}
+
+// A device with sticks to fly: four axes or more. Never a headset, a media
+// remote or a keyboard's gamepad interface with fewer.
+export function usablePad(gp) {
+  return !!gp && gp.connected !== false && classifyPad(gp).sticks;
+}
+
+// A device known to be a controller: a radio, a standard-mapped gamepad, or
+// one whose axes have moved. Until then a device nothing names may be a
+// keyboard's gamepad interface, whose axes never do.
+export function provenPad(gp, tracker) {
+  if (!gp) return false;
+  if (classifyPad(gp).radio || gp.mapping === 'standard' || !tracker) return true;
+  return tracker.moved(gp);
+}
+
+// The usable devices, radios first, in the browser's order among equals.
+// Unproven ones only when nothing proven is there: alone, a device that has
+// not moved yet may still be the pilot's.
+export function rankPads(pads, tracker) {
+  const live = (pads || []).filter(usablePad);
+  const proven = live.filter((gp) => provenPad(gp, tracker));
+  return (proven.length ? proven : live).sort((a, b) => radioScore(b) - radioScore(a));
+}
+
+// The active device has sent no stick movement for PAD_STALE_MS (since it
+// moved or was picked) and another usable one is in the pilot's hands: that
+// one, radios first. Never down the ranks (a radio's sticks never go to a
+// gamepad), and among equals only from a device that was used and put down.
+// Null otherwise. The caller never asks it while armed or for the pilot's
+// own pick.
+export function staleSwitchTarget(active, pads, tracker, nowMs) {
+  if (!active || !tracker || tracker.idleMs(active, nowMs) < PAD_STALE_MS) return null;
+  const k = padKey(active), rank = radioScore(active), used = tracker.movedSincePick(active);
+  return rankPads(pads, tracker).find((gp) => padKey(gp) !== k && tracker.movingNow(gp, nowMs)
+    && (radioScore(gp) > rank || (radioScore(gp) === rank && used))) || null;
+}
+
+// A device's kind for the session, from its id, its mapping and the axes the
+// browser first showed (a radio at rest), never a later snapshot.
+export function sessionKind(gp, tracker) {
+  const first = tracker && tracker.first(gp);
+  return classifyPad(first ? { id: gp.id, index: gp.index, mapping: gp.mapping, axes: first } : gp).radio;
+}
+
+// The plug-and-fly preset for a device of that kind: by its id (an EdgeTX or
+// a named radio's), else 'aetr' for one taken for a radio by its shape, else
+// 'pad'. Never from live axes.
+export function presetGuess(gp, radio) {
+  const g = guessRadioPreset({ id: padId(gp), mapping: gp && gp.mapping });
+  return g !== 'pad' ? g : (radio ? 'aetr' : 'pad');
+}
+
+// main saved a name guess for any id with 'pocket', 'boxer', 'zorro',
+// 'jumper'… in it, a standard-layout handheld included: that saved preset is
+// main's mistake, not the pilot's choice.
+export function staleNamePreset(gp, preset) {
+  if (!isStandardPad(gp) || isEdgeTxUsb(gp) || !RADIO_PRESETS[preset] || ['auto', 'pad', 'custom'].includes(preset)) return false;
+  return nameGuess(padId(gp)) === preset;
+}
+
+// Once per device, ever (a flag in storage): a preset the pilot picks later
+// is the pilot's, whatever it matches.
+export const PRESET_CHECKED_PREFIX = 'quadmathSimPresetChecked_';
+export function migrateNamePreset(gp, preset, storage) {
+  const store = storeOf(storage);
+  if (!store || !gp || !isStandardPad(gp)) return preset;
+  const key = PRESET_CHECKED_PREFIX + sanitizeId(gp.id);
+  try {
+    if (store.getItem(key)) return preset;
+    store.setItem(key, '1');
+  } catch (e) { return preset; }
+  if (!staleNamePreset(gp, preset)) return preset;
+  saveRadioPreset(gp.id, 'auto', store);
+  return 'auto';
 }
 
 // Bump when a default HID sign changes so loadRadioProfile can migrate
@@ -541,6 +792,8 @@ export const PAD_MAP = Object.freeze({
   t: Object.freeze({ i: 1, min: 0, max: -1, spring: true }),
 });
 
+// From the id only, never the live axes: a layout must not change in flight.
+// A device taken for a radio by its shape is passed in as one (effectiveAxisMap).
 export function defaultMapFor(gp) {
   return isRadio(gp) ? AETR_MAP : PAD_MAP;
 }
@@ -561,15 +814,19 @@ export const RADIO_PRESETS = Object.freeze({
     }),
   },
   flysky: { label: 'FlySky (AETR)', map: AETR_MAP },
+  // A device shaped like a radio that nothing names (looksLikeRadio).
+  aetr: { label: 'Other radio (AETR, Mode 2)', map: AETR_MAP },
   pad: { label: 'Xbox / PlayStation controller', map: PAD_MAP },
   custom: { label: 'Custom — run calibration', map: null },
 });
 
-export function effectiveAxisMap(axisMap, radioPreset, gp) {
+// radio: the device was taken for a radio when it was picked (by its USB id,
+// name or shape, decided once for the session), so Auto-detect keeps AETR.
+export function effectiveAxisMap(axisMap, radioPreset, gp, radio) {
   if (axisMap) return axisMap;
   const preset = RADIO_PRESETS[radioPreset];
   if (preset && preset.map) return preset.map;
-  return defaultMapFor(gp);
+  return radio ? AETR_MAP : defaultMapFor(gp);
 }
 
 function axisAt(axes, i) {
@@ -577,30 +834,49 @@ function axisAt(axes, i) {
   return Number.isFinite(v) ? v : 0;
 }
 
-export function guessRadioPreset(gp) {
-  const id = gp && gp.id != null ? String(gp.id) : '';
+// The preset a radio's name says, or '' (the name alone, whatever the mapping).
+function nameGuess(id) {
   if (/jumper/i.test(id)) return 'jumper';
   if (/frsky|taranis/i.test(id)) return 'frsky';
   if (/literadio/i.test(id)) return 'literadio';
   if (/flysky/i.test(id)) return 'flysky';
-  if (/tx16|radiomaster|edgetx|opentx|zorro|boxer|pocket/i.test(id)) return 'radiomaster';
-  if (isRadio(gp)) return 'radiomaster';
+  if (/tx16|tx15|tx12|mt12|gx12|radiomaster|edgetx|opentx|zorro|boxer|pocket/i.test(id)) return 'radiomaster';
+  if (/betafpv/i.test(id)) return 'radiomaster';
+  return '';
+}
+
+export function guessRadioPreset(gp) {
+  const id = padId(gp);
+  if (!isStandardPad(gp)) {
+    const byName = nameGuess(id);
+    if (byName) return byName;
+  }
+  if (isRadio(gp)) return 'radiomaster';   // by USB id alone: any EdgeTX radio
+  if (looksLikeRadio(gp)) return 'aetr';
   return 'pad';
 }
 
 export function radioShortName(gp) {
-  const id = gp && gp.id != null ? String(gp.id) : '';
+  const id = padId(gp);
   if (/tx16/i.test(id)) return 'TX16S';
+  if (/tx15/i.test(id)) return 'TX15';
+  if (/tx12/i.test(id)) return 'TX12';
+  if (/mt12/i.test(id)) return 'MT12';
+  if (/gx12/i.test(id)) return 'GX12';
   if (/zorro/i.test(id)) return 'Zorro';
+  if (/boxer/i.test(id)) return 'Boxer';
+  if (/pocket/i.test(id)) return 'Pocket';
   if (/jumper/i.test(id)) return 'Jumper';
   if (/frsky|taranis/i.test(id)) return 'FrSky';
   if (/literadio/i.test(id)) return 'LiteRadio';
   if (/flysky/i.test(id)) return 'FlySky';
-  if (isRadio(gp)) return 'Radio';
+  if (isEdgeTxUsb(gp)) return 'EdgeTX radio';
+  if (isRadio(gp) || looksLikeRadio(gp)) return 'Radio';
   return 'Gamepad';
 }
 
-// Known EdgeTX/OpenTX radios: Mode 2 AETR, throttle on ax2, ±1 until calibrated.
+// Radios by USB id, name or shape: Mode 2 AETR, throttle on ax2, ±1 until
+// calibrated.
 export function isKnownRadio(gp) {
   const p = guessRadioPreset(gp);
   return p !== 'pad';
@@ -1009,6 +1285,80 @@ export function saveAxisMap(id, axisMap, storage) {
   } catch (e) { /* ignore quota / private mode */ }
 }
 
+// Tune's "forget this device": its saved choice, calibration and preset.
+// Other devices' keys, and every other ryfly* key, stay.
+export function forgetDevice(id, storage) {
+  const store = storeOf(storage);
+  if (!store || !id) return false;
+  const sid = sanitizeId(id);
+  try {
+    if (store.getItem(GP_ID_KEY) === id) store.removeItem(GP_ID_KEY);
+    store.removeItem(AXIS_MAP_PREFIX + sid);
+    store.removeItem(RADIO_PRESET_PREFIX + sid);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// A saved calibration made on the layout the device sends now: the same
+// axis count (saved with it, n), every stick on an axis it has. One from
+// before the count was saved, or from Classic on an Advanced layout, is not.
+export function calibratedOnLayout(map, gp) {
+  const n = axisCount(gp);
+  if (!isValidAxisMap(map) || map.n !== n) return false;
+  return ['r', 'p', 'y', 't'].every((k) => map[k].i < n);
+}
+
+// The first connected EdgeTX radio whose throttle cannot be coming through
+// (classifyPad issue 'classic'), unless it was calibrated on the layout it
+// sends now. Null when there is none.
+export function radioIssuePad(pads, storage) {
+  for (const gp of pads || []) {
+    if (!gp || gp.connected === false || classifyPad(gp).issue !== 'classic') continue;
+    if (calibratedOnLayout(loadRadioProfile(gp.id, storage).axisMap, gp)) continue;
+    return gp;
+  }
+  return null;
+}
+
+// The Classic message, told once per radio plugged. It is gone only once no
+// such radio has been seen for ISSUE_GONE_MS: Chrome gives empty polls with
+// the radio still plugged in, and those neither clear it nor tell it again.
+export const ISSUE_GONE_MS = 1500;
+const RETELL_MS = 9000;
+export function createIssueNotice() {
+  let id = '', goneAt = null, toldAt = -Infinity;
+  return {
+    // pads: a getGamepads() list. changed: the message appeared or went;
+    // tell: it appeared (say it).
+    see(pads, storage, nowMs) {
+      const gp = radioIssuePad(pads, storage);
+      const now = gp ? gp.id : '';
+      if (now === id) { goneAt = null; return { changed: false, tell: false, id }; }
+      if (!now) {
+        if (goneAt === null) goneAt = nowMs;
+        if (nowMs - goneAt < ISSUE_GONE_MS) return { changed: false, tell: false, id };
+      }
+      goneAt = null;
+      id = now;
+      if (now) toldAt = nowMs;
+      return { changed: true, tell: !!now, id };
+    },
+    // Told (by the page's toast, or the radio's own plug toast) at nowMs.
+    told(newId, nowMs) { id = newId || ''; goneAt = null; toldAt = Number.isFinite(nowMs) ? nowMs : toldAt; },
+    // A pick just toasted over it: say it again, if it was said in the last
+    // RETELL_MS, the radio is still here, and it is not the one flying (its
+    // own toast says it).
+    retellDue(pads, storage, activeId, nowMs) {
+      if (!id || id === activeId || nowMs - toldAt >= RETELL_MS) return false;
+      const gp = radioIssuePad(pads, storage);
+      return !!gp && gp.id === id;
+    },
+    get id() { return id; },
+  };
+}
+
 export function saveRadioPreset(id, preset, storage) {
   const store = storeOf(storage);
   if (!store || !id) return;
@@ -1035,6 +1385,13 @@ export function createCalibState() {
     thrCand: new Set(),
     lo: null,
     hi: null,
+    // Per axis, this step: the value it last moved to and how long it has
+    // held there; where it was when the step began, and how many polls it
+    // has spent part-way from there (a stick sweeps, a switch jumps).
+    anchor: null,
+    still: null,
+    start: null,
+    swept: null,
   };
 }
 
@@ -1157,6 +1514,117 @@ function clearSweep(calib) {
   calib.lo = null;
   calib.hi = null;
   calib.timer = 0;
+  calib.anchor = null;
+  calib.still = null;
+  calib.start = null;
+  calib.prevAx = null;
+  calib.swept = null;
+}
+
+// Polls this step with the axis part-way: off where it began by more than
+// 0.15 and short of a rail. A stick or a throttle passes through there; a
+// switch jumps rail to rail (or middle to rail) between two reports.
+const SWEPT_POLLS = 3;
+function trackSwept(calib, ax) {
+  if (!calib.start || calib.start.length !== ax.length) {
+    calib.start = ax.slice();
+    calib.prevAx = ax.slice();
+    calib.swept = ax.map(() => 0);
+    return;
+  }
+  for (let i = 0; i < ax.length; i++) {
+    // A new value each time (0.01 past the last one counted, however slowly
+    // it gets there): a 3-position switch sitting at its middle is one value,
+    // a stick on its way passes through many.
+    if (Math.abs(ax[i]) < 0.9 && Math.abs(ax[i] - calib.start[i]) > 0.15 && Math.abs(ax[i] - calib.prevAx[i]) > 0.01) {
+      calib.swept[i]++;
+      calib.prevAx[i] = ax[i];
+    }
+  }
+}
+
+function sweptOver(calib, i) {
+  return !!calib.swept && calib.swept[i] >= SWEPT_POLLS;
+}
+
+// R/P/Y when none of 0-3 moved: a gimbal past axis 3 (Advanced mode). It
+// rested mid-stick at CENTER, began this step there (not left off it by an
+// earlier step) and swept, as a stick does; never a switch.
+function midAuxMoved(calib, ax) {
+  let best = null;
+  for (let i = STICK_AXIS_COUNT; i < ax.length; i++) {
+    if (calib.used.has(i)) continue;
+    const rest = Number.isFinite(calib.center[i]) ? calib.center[i] : 0;
+    if (Math.abs(rest) >= 0.55) continue;
+    if (!calib.start || Math.abs(calib.start[i] - rest) >= 0.3) continue;
+    if (!sweptOver(calib, i)) continue;
+    const d = ax[i] - rest;
+    if (Math.abs(d) > 0.6 && (!best || Math.abs(d) > Math.abs(best.d))) best = { i, d };
+  }
+  return best;
+}
+
+// How long each axis has held within 0.02 of where it last moved to. An
+// anchor, not the previous poll: at 4 ms polls a slow sweep moves less than
+// that between two of them.
+function trackStill(calib, ax, dt) {
+  if (!calib.anchor || calib.anchor.length !== ax.length) {
+    calib.anchor = ax.slice();
+    calib.still = ax.map(() => 0);
+    return;
+  }
+  for (let i = 0; i < ax.length; i++) {
+    if (Math.abs(ax[i] - calib.anchor[i]) < 0.02) calib.still[i] += dt;
+    else { calib.anchor[i] = ax[i]; calib.still[i] = 0; }
+  }
+}
+
+function stillFor(calib, i) {
+  return calib.still && Number.isFinite(calib.still[i]) ? calib.still[i] : 0;
+}
+
+// A throttle that stops short of the rails (a model with limits below
+// 100 %): its rest is short of the rail too, and limits are symmetric, so
+// full is held for 2 s at the mirror of the rest (rest -0.8, full +0.8),
+// with nothing past it seen. Never when it rested on a rail: a pause part-way
+// up is not full.
+const SHORT_HOLD_S = 1.0;
+const SHORT_FULL_HOLD_S = 2.0;
+// Held at the bottom this long at THROTTLE FULL UP: a reversed channel's
+// full, not a dip on the way to the top.
+const REVERSED_HOLD_S = 0.4;
+function heldShort(calib, ax, i) {
+  if (stillFor(calib, i) < SHORT_FULL_HOLD_S) return false;
+  const rest = calib.center && Number.isFinite(calib.center[i]) ? calib.center[i] : 0;
+  const v = ax[i];
+  if (Math.abs(rest) >= 0.95 || Math.abs(rest) < 0.5) return false;
+  if (Math.sign(v) !== -Math.sign(rest) || Math.abs(Math.abs(v) - Math.abs(rest)) > 0.03) return false;
+  return !calib.hi || (v > 0 ? calib.hi[i] <= v + 0.02 : calib.lo[i] >= v - 0.02);
+}
+
+// THROTTLE FULL UP on an axis past 3: in Advanced mode the throttle can come
+// through anywhere. Only while no gimbal axis (0-3) is off its CENTER rest,
+// so a throttle on its way up there wins; and only an axis that swept during
+// this step (sweptOver: a switch flipped now jumps, one flipped in an earlier
+// step does not move) and is held at the end it moved to.
+function auxThrottleUp(calib, ax) {
+  const n = ax.length;
+  for (let i = 0; i < Math.min(STICK_AXIS_COUNT, n); i++) {
+    if (calib.used.has(i)) continue;
+    const rest = Number.isFinite(calib.center[i]) ? calib.center[i] : 0;
+    if (Math.abs(ax[i] - rest) >= 0.3) return null;
+  }
+  let best = null;
+  for (let i = STICK_AXIS_COUNT; i < n; i++) {
+    if (calib.used.has(i)) continue;
+    const lo = calib.lo[i], hi = calib.hi[i], span = hi - lo;
+    if (span < 1.0 || !sweptOver(calib, i)) continue;
+    const atHi = Math.abs(ax[i] - hi) <= 0.05, atLo = Math.abs(ax[i] - lo) <= 0.05;
+    if (!atHi && !atLo) continue;
+    if (Math.abs(ax[i]) < 0.95 && !heldShort(calib, ax, i)) continue;
+    if (!best || span > best.span) best = { i, span, max: ax[i], min: atHi ? lo : hi };
+  }
+  return best;
 }
 
 export function stepCalib(calib, gp, dt) {
@@ -1166,6 +1634,18 @@ export function stepCalib(calib, gp, dt) {
   }
   const ax = listAxes(gp);
   const ui = { state: calib, done: false, label: st.label, hint: st.hint };
+  // Axes past 3 for a stick only off Classic: a Classic EdgeTX radio sends its
+  // sticks on 0-3 and its switches and pots after, and calibrates as on main.
+  const auxOk = !(isEdgeTxRadio(gp) && ax.length >= 8);
+  // A radio by its USB id or name: a ratcheted throttle, full at +1. Anything
+  // else may be a sprung stick (a gamepad's full is -1, its low the centre).
+  const how = classifyPad(gp).how;
+  const ratchet = how === 'usb' || how === 'name';
+
+  trackStill(calib, ax, dt);
+  trackSwept(calib, ax);
+  // The layout it was made on (calibratedOnLayout).
+  calib.result.n = ax.length;
 
   if (st.key === 'center') {
     calib.timer += dt;
@@ -1208,14 +1688,42 @@ export function stepCalib(calib, gp, dt) {
       const live = ax[hit.i];
       const peak = Number.isFinite(hit.max) ? hit.max : live;
       // Full-up means a rail. A mid-travel sweep (span 1.2 at ax=0.25)
-      // must not lock max too early.
-      if (Math.abs(live) < 0.95 && Math.abs(peak) < 0.95) hit = null;
+      // must not lock max too early. A throttle that stops short of the
+      // rails has to be held there for a second (heldShort).
+      if (Math.abs(live) < 0.95 && Math.abs(peak) < 0.95 && !heldShort(calib, ax, hit.i)) hit = null;
+    }
+    if (!hit && auxOk) hit = auxThrottleUp(calib, ax);
+    if (hit) {
+      const r = Number.isFinite(calib.center[hit.i]) ? calib.center[hit.i] : 0;
+      const v = ax[hit.i];
+      const reversed = v <= -0.95 && stillFor(calib, hit.i) >= REVERSED_HOLD_S;
+      if (r > -0.5 && (ratchet || r >= 0.5)) {
+        // Not low at CENTER (left mid or up), on a radio, or up on anything:
+        // EdgeTX's full is +1, so a trip to the bottom is the pilot moving it,
+        // and full is the value held at the top once it gets there (it may
+        // read a hair short of 1). Only a hold at the bottom, as the prompt
+        // asks, is a reversed channel (low at +1).
+        if (v >= 0.95) hit = { i: hit.i, max: v, min: r >= 0.5 ? (calib.lo[hit.i] <= -0.5 ? calib.lo[hit.i] : -1) : r };
+        else if (!reversed) hit = null;
+      } else if (Math.abs(v - r) < 0.5) {
+        // Back at its CENTER rest (a push that stopped short and dropped
+        // back): not full up, whatever it reached on the way.
+        hit = null;
+      }
     }
     if (hit) {
       calib.timer += dt;
       if (calib.timer > 0.1) {
         const rail = Math.abs(ax[hit.i]) >= Math.abs(hit.max) ? ax[hit.i] : hit.max;
-        calib.result.t = { i: hit.i, max: rail, min: hit.min };
+        // Low is where it rested at CENTER, unless it rested up there too
+        // (throttle left high): then the other end of the sweep.
+        let min = hit.min;
+        if (!Number.isFinite(min) || Math.abs(min - rail) < 0.5) {
+          const lo = calib.lo ? calib.lo[hit.i] : rail, hi = calib.hi ? calib.hi[hit.i] : rail;
+          const other = Math.abs(lo - rail) >= Math.abs(hi - rail) ? lo : hi;
+          min = Math.abs(other - rail) >= 0.5 ? other : -(Math.sign(rail) || 1);
+        }
+        calib.result.t = { i: hit.i, max: rail, min };
         calib.used.add(hit.i);
         calib.step++;
         clearSweep(calib);
@@ -1237,12 +1745,37 @@ export function stepCalib(calib, gp, dt) {
       ? calib.center[ti]
       : (Number.isFinite(t.min) ? t.min : 0);
     const peak = Number.isFinite(t.max) ? t.max : ax[ti];
-    const nearRest = Math.abs(ax[ti] - rest) <= 0.4;
-    const awayFromMax = Math.abs(ax[ti] - peak) > 0.5;
-    if (nearRest || awayFromMax) {
+    trackSweep(calib, ax);
+    // A sprung stick (a gamepad, or a device only shaped like a radio), or a
+    // throttle that rested at the far end at CENTER (throttle low): back
+    // there, or well on its way, is low.
+    if (!ratchet || Math.abs(rest - peak) >= 1.5) {
+      const nearRest = Math.abs(ax[ti] - rest) <= 0.4;
+      const awayFromMax = Math.abs(ax[ti] - peak) > 0.5;
+      if (nearRest || awayFromMax) {
+        calib.timer += dt;
+        if (calib.timer > 0.1) {
+          calib.result.t.min = nearRest ? ax[ti] : rest;
+          calib.result.t.max = peak;
+          calib.step++;
+          clearSweep(calib);
+          ui.done = calib.step >= CAL_STEPS.length;
+        }
+      } else calib.timer = 0;
+      return ui;
+    }
+    // A radio throttle that did not rest low at CENTER (left mid-stick, or
+    // up): low is the end the stick is moved to now, wherever that is, held
+    // at a rail or for a second. Never the CENTER pose, which would leave the
+    // travel below it dead, and never before it has moved.
+    const v = ax[ti];
+    const far = Math.abs(calib.lo[ti] - peak) >= Math.abs(calib.hi[ti] - peak) ? calib.lo[ti] : calib.hi[ti];
+    const moved = calib.hi[ti] - calib.lo[ti] >= 0.3;
+    const held = Math.abs(v) >= 0.95 ? Math.abs(v - far) <= 0.05 : stillFor(calib, ti) >= SHORT_HOLD_S;
+    if (moved && Math.abs(v - peak) >= 0.5 && held) {
       calib.timer += dt;
       if (calib.timer > 0.1) {
-        calib.result.t.min = nearRest ? ax[ti] : rest;
+        calib.result.t.min = v;
         calib.result.t.max = peak;
         calib.step++;
         clearSweep(calib);
@@ -1254,7 +1787,8 @@ export function stepCalib(calib, gp, dt) {
   // r / p / y: still a hold on a self-centering gimbal, but never assign an
   // axis that was already at an extreme during CENTER (the throttle), and
   // never an aux pot resting at -1.
-  const moved = bestUnusedAxis(ax, calib.center, calib.used, 0.6, skipForStick(calib, ax));
+  let moved = bestUnusedAxis(ax, calib.center, calib.used, 0.6, skipForStick(calib, ax));
+  if (!moved && auxOk) moved = midAuxMoved(calib, ax);
   if (moved) {
     calib.timer += dt;
     if (calib.timer > 0.6) {
@@ -1266,6 +1800,64 @@ export function stepCalib(calib, gp, dt) {
   } else calib.timer = 0;
   ui.done = calib.step >= CAL_STEPS.length;
   return ui;
+}
+
+// The axes the pilot can tap for this step when calibration does not pick
+// one up: every axis, less those taken for other sticks (the throttle's own
+// axis stays on offer at THROTTLE FULL DOWN). None at CENTER.
+export function calibAxisChoices(calib, gp) {
+  const st = calib && CAL_STEPS[calib.step];
+  if (!st || st.key === 'center' || !gp) return [];
+  const ax = listAxes(gp);
+  const own = st.key === 'tlo' && calib.result.t ? calib.result.t.i : -1;
+  const out = [];
+  for (let i = 0; i < ax.length; i++) if (!calib.used.has(i) || i === own) out.push(i);
+  return out;
+}
+
+// The pilot tapped axis i for this step. A stick takes the sign it is
+// deflected to (or +1 at rest). THROTTLE FULL UP: up is the way it moved
+// from its CENTER rest (+1, EdgeTX's, if it has not moved); full is the value
+// held if it is near that end (a throttle that stops short), else the rail;
+// low is the CENTER rest when that is on the other rail, else the other
+// rail. FULL DOWN
+// takes the value it is held at as low. Then the next step, as if detected.
+export function calibPickAxis(calib, gp, i) {
+  const st = calib && CAL_STEPS[calib.step];
+  const ax = listAxes(gp);
+  const none = { state: calib, done: false, picked: false };
+  if (!st || !gp || !calibAxisChoices(calib, gp).includes(i)) return none;
+  const rest = calib.center && Number.isFinite(calib.center[i]) ? calib.center[i] : 0;
+  const v = ax[i];
+  const how = classifyPad(gp).how;
+  const sprung = !(how === 'usb' || how === 'name');
+  if (st.key === 'thi') {
+    // A sprung stick (a gamepad's): up is -1 if it has not moved, low is
+    // where it centres.
+    const d = v - rest;
+    const dir = Math.abs(d) >= 0.3 ? Math.sign(d) : (sprung ? -1 : 1);
+    const max = Math.abs(v) >= 0.75 && Math.sign(v) === dir ? v : dir;
+    const min = sprung ? rest : (Math.abs(rest) >= 0.95 && Math.sign(rest) === -dir ? rest : -dir);
+    calib.result.t = { i, max, min };
+    calib.used.add(i);
+  } else if (st.key === 'tlo') {
+    const t = calib.result.t;
+    if (t && t.i !== i) calib.used.delete(t.i);
+    const low = Math.abs(v) >= 0.3 ? Math.sign(v) : -1;
+    const max = t && t.i === i ? t.max : -low;
+    // A sprung stick's low is where it centres, wherever it is held now.
+    const min = sprung ? rest : (Math.abs(v - max) >= 0.5 ? v : -(Math.sign(max) || 1));
+    calib.result.t = { i, max, min };
+    calib.used.add(i);
+  } else {
+    const d = v - rest;
+    calib.result[st.key] = { i, sign: Math.abs(d) >= 0.3 ? (Math.sign(d) || 1) : 1 };
+    calib.used.add(i);
+  }
+  calib.result.n = ax.length;
+  calib.step++;
+  clearSweep(calib);
+  return { state: calib, done: calib.step >= CAL_STEPS.length, picked: true };
 }
 
 function listFromGetGamepads(getGamepads) {
@@ -1281,10 +1873,11 @@ function listFromGetGamepads(getGamepads) {
 // unasked (the first one Chrome shows), so an Xbox pad seen before the TX16S
 // beside it must not keep the radio off the sticks. Among equals the
 // remembered one wins.
-export function pickPreferredPad(pads, rememberedId) {
-  const live = (pads || []).filter(Boolean);
+// Only usable devices (usablePad): a remembered headset is passed over.
+export function pickPreferredPad(pads, rememberedId, tracker) {
+  const live = rankPads(pads, tracker);
   if (!live.length) return null;
-  const best = live.slice().sort((a, b) => radioScore(b) - radioScore(a))[0];
+  const best = live[0];
   const match = rememberedId && live.find((p) => p.id === rememberedId);
   return match && radioScore(match) >= radioScore(best) ? match : best;
 }
@@ -1300,6 +1893,13 @@ export function createRadioRouter(opts) {
         ? navigator.getGamepads() : [];
     } catch (e) { return []; }
   };
+  const now = o.now || (() => Date.now());
+  const tracker = createPadTracker();
+  // Each device's kind, decided the first time it is picked and kept for the
+  // session (its layout must not change in flight).
+  const kinds = new Map();
+  let pilotPick = '';
+  let notice = '';
   let gpIndex = -1;
   let gpConnected = false;
   let gpName = '';
@@ -1315,12 +1915,18 @@ export function createRadioRouter(opts) {
     if (remember && storage) {
       try { storage.setItem(GP_ID_KEY, gp.id); } catch (e) { /* ignore */ }
     }
+    tracker.picked(gp, now());
+    if (!kinds.has(gp.id)) kinds.set(gp.id, sessionKind(gp, tracker));
     const prof = loadRadioProfile(gp.id, storage);
     radioPreset = prof.radioPreset;
     axisMap = prof.axisMap;
+    // A calibration made on another layout (Classic, now Advanced) is not
+    // flown on this one; it stays saved for when the radio is back.
+    if (axisMap && Number.isFinite(axisMap.n) && axisMap.n !== axisCount(gp)) axisMap = null;
+    if (!axisMap) radioPreset = migrateNamePreset(gp, radioPreset, storage);
     // No saved calib → plug-and-fly the matching AETR preset (±1 throttle).
-    if (!axisMap && isKnownRadio(gp)) {
-      const guessed = guessRadioPreset(gp);
+    if (!axisMap && kinds.get(gp.id)) {
+      const guessed = presetGuess(gp, true);
       if (guessed !== 'pad' && (radioPreset === 'auto' || !RADIO_PRESETS[radioPreset] || !RADIO_PRESETS[radioPreset].map)) {
         radioPreset = guessed;
         saveRadioPreset(gp.id, radioPreset, storage);
@@ -1328,15 +1934,70 @@ export function createRadioRouter(opts) {
     }
   }
 
+  function see() {
+    const raw = listFromGetGamepads(getGamepads);
+    tracker.see(raw, now());
+    return raw;
+  }
+
+  // The usable devices, radios first (what Tune's device list offers).
+  function list() {
+    return rankPads(see(), tracker);
+  }
+
   function pick() {
-    const pads = listFromGetGamepads(getGamepads);
+    const raw = see();
+    notice = radioIssuePad(raw, storage) ? RADIO_CLASSIC_MSG : '';
+    const pads = rankPads(raw, tracker);
     if (!pads.length) return null;
+    // The device the pilot picked keeps the sticks while it is here.
+    const kept = gpConnected && gpName === pilotPick && pads.find((p) => p.index === gpIndex && p.id === gpName);
+    if (kept) return kept;
     let remembered = null;
     try { remembered = storage ? storage.getItem(GP_ID_KEY) : null; } catch (e) { /* ignore */ }
     const chosen = pickPreferredPad(pads, remembered);
     if (!chosen) return null;
-    select(chosen, !remembered || chosen.id === remembered || pads.length === 1);
+    // A remembered device that is here but cannot fly (a headset picked by
+    // mistake) is replaced by the one flying, unasked. One that is here and
+    // only not offered yet (its sticks have not moved) keeps its place.
+    const here = remembered ? raw.filter((p) => p.id === remembered) : [];
+    // (A device here that cannot fly: fewer than 4 axes.)
+    const cannot = here.length > 0 && here.every((p) => !usablePad(p));
+    select(chosen, !remembered || chosen.id === remembered || cannot || (pads.length === 1 && !here.length));
     return chosen;
+  }
+
+  // Tune's device list: fly this one, and remember it.
+  function selectId(id) {
+    const gp = list().find((p) => p.id === id);
+    if (!gp) return null;
+    pilotPick = gp.id;
+    select(gp, true);
+    return gp;
+  }
+
+  // Tune's "forget this device" (the active one by default), then the best
+  // connected one, as if it were never seen.
+  function forget(id) {
+    const target = id || rememberedId();
+    if (!target) return false;
+    forgetDevice(target, storage);
+    if (pilotPick === target) pilotPick = '';
+    kinds.delete(target);
+    if (gpName === target) { drop(); axisMap = null; radioPreset = 'auto'; }
+    pick();
+    return true;
+  }
+
+  // The active device put down while another moves: that one, radios first,
+  // remembered. Never while armed.
+  function checkStale(info) {
+    if (!gpConnected || (info && info.armed) || gpName === pilotPick) return null;
+    const raw = see();
+    const active = currentPad();
+    const to = staleSwitchTarget(active, raw, tracker, now());
+    if (to) select(to, true);
+    return to;
   }
 
   function currentPad() {
@@ -1351,16 +2012,18 @@ export function createRadioRouter(opts) {
   }
 
   function drop() {
+    if (pilotPick === gpName) pilotPick = '';
     gpIndex = -1;
     gpConnected = false;
     gpName = '';
   }
 
   function readStick() {
+    see();
     const gp = currentPad();
     if (gpConnected) {
       if (!gp) return { source: 'gamepad', stick: lastStick, touch: false, emptyPoll: true };
-      const map = effectiveAxisMap(axisMap, radioPreset, gp);
+      const map = effectiveAxisMap(axisMap, radioPreset, gp, takenForRadio());
       lastStick = applyAxisMap(gp.axes, map, { threeD: !!o.threeD });
       return { source: 'gamepad', stick: lastStick, touch: false, map, emptyPoll: false };
     }
@@ -1394,6 +2057,11 @@ export function createRadioRouter(opts) {
     return { done: false, label: out.label, hint: out.hint, touch: false };
   }
 
+  // A radio by its kind when picked, unless the pilot chose the gamepad preset.
+  function takenForRadio() {
+    return !!kinds.get(gpName) && radioPreset !== 'pad';
+  }
+
   function rememberedId() {
     if (gpName) return gpName;
     try { return storage ? storage.getItem(GP_ID_KEY) : ''; } catch (e) { return ''; }
@@ -1410,6 +2078,10 @@ export function createRadioRouter(opts) {
 
   return {
     pick,
+    list,
+    selectId,
+    forget,
+    checkStale,
     drop,
     readStick,
     startCalib,
@@ -1425,5 +2097,7 @@ export function createRadioRouter(opts) {
     get radioPreset() { return radioPreset; },
     get lastStick() { return lastStick; },
     get calibrating() { return !!calib; },
+    get notice() { return notice; },
+    get kind() { const gp = currentPad(); return gp ? Object.assign(classifyPad(gp), { radio: takenForRadio() }) : null; },
   };
 }
