@@ -136,10 +136,25 @@
     text-shadow:0 0 16px rgba(255,59,47,.7);pointer-events:none;display:none}
   #c{touch-action:none}
   #panel,#startMenu,#menuLayer,#feelPrompt,#calib{touch-action:pan-y;-webkit-user-select:text;user-select:text}
+  /* Flying on touch, the footer's top is the bottom of the screen: the sticks,
+     #osdBC and the stick overlay (sim-feel.js stickOverlayPlacement, from
+     #osdBC's box) sit on it, or on an iPhone's home-indicator inset where that
+     is taller. The footer is one to four 14 px lines, by the screen's width and
+     the map's credit; the page measures it into --footer-h (measureFooter).
+     Over the sticks it took the thumb: the knob where it rests and the
+     throttle-down band were the footer's (z-index 45 over 18), so a first
+     thumb on the knob moved nothing and armed nothing. --stick-inset-y keeps
+     the knob, which hangs 5% of the stick below the circle at the bottom,
+     clear of it. The footer's licence notice stays as it is, on screen. */
+  :root{--hud-floor:max(var(--footer-h, 29px), env(safe-area-inset-bottom, 0px))}
+  body.touch-on #osdBC{bottom:calc(var(--hud-floor) + 3px)}
+  /* While flying, the footer takes no touch, its links included (a thumb
+     sliding off a stick must not leave the page); with the menu open they tap. */
+  body.touch-on:not(.menu-open) footer{pointer-events:none}
   #touchLayer{position:fixed;inset:0;z-index:18;display:none;pointer-events:none;
-    --stick-size:112px;--stick-opacity:.7;--stick-inset-x:18px;--stick-inset-y:28px}
+    --stick-size:112px;--stick-opacity:.7;--stick-inset-x:18px;--stick-inset-y:12px}
   #touchLayer.on{display:block}
-  #touchLayer .vstick{position:absolute;bottom:max(var(--stick-inset-y), env(safe-area-inset-bottom, 0px));
+  #touchLayer .vstick{position:absolute;bottom:calc(var(--hud-floor) + var(--stick-inset-y));
     width:var(--stick-size);height:var(--stick-size);
     border:1px solid var(--line);border-radius:50%;background:rgba(16,18,24,calc(var(--stick-opacity)*0.55));
     pointer-events:auto;touch-action:none}
@@ -166,7 +181,7 @@
   body.touch-on #feelHud{right:max(12px, env(safe-area-inset-right, 0px));bottom:auto;
     top:max(52px, calc(env(safe-area-inset-top, 0px) + 44px));
     z-index:20;flex-direction:column;align-items:flex-end;
-    max-height:calc(100dvh - var(--stick-size, 112px) - 56px - env(safe-area-inset-bottom, 0px))}
+    max-height:calc(100dvh - var(--stick-size, 112px) - 56px - var(--hud-floor))}
   /* Under touch the card hangs from the top: its arm hint goes below it. The
      Coach card and the tutorial come down the middle from the top, where a
      short screen puts the hint: hidden while either is up (still laid out, so
@@ -396,7 +411,7 @@
     .menu-quality{margin-top:8px}
     .menu-sparks{margin:6px 0 0}
     body.touch-on #feelHud{top:max(48px, calc(env(safe-area-inset-top, 0px) + 40px));
-      max-height:calc(100dvh - var(--stick-size, 112px) - 40px - env(safe-area-inset-bottom, 0px))}
+      max-height:calc(100dvh - var(--stick-size, 112px) - 40px - var(--hud-floor))}
     /* One width that holds the card's widest line (BATT 4.44V makes it
        80.9 px at 11 px Inter; THR +100% and the ANGLE button come just under),
        so the card keeps its box as BATT's proportional digits tick, on arm
@@ -409,7 +424,6 @@
     body.touch-on #hudAcro{order:-2;margin:0 0 4px}
     body.touch-on #hud3d{order:-1;margin:0 0 4px}
     body.touch-on #osdLap{top:max(8px, env(safe-area-inset-top, 0px));max-width:42vw;font-size:11px}
-    #touchLayer .vstick{bottom:max(10px, env(safe-area-inset-bottom, 0px))}
     #touchBtns{top:max(6px, env(safe-area-inset-top, 0px))}
   }
   /* Phones: every menu button is a thumb's 44 px target, and on a small
@@ -1150,14 +1164,14 @@ import {
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
   parseThreeDQuery, runCountsForBoards, throttleHudText,
   throttleCollective, armHintText, stepEasyArm, isLanded,
-} from "./sim-3d.js?v=94cd3bb74398";
+} from "./sim-3d.js?v=af80783173d2";
 import {
   WHOOP_KEY, PHYSICS_VER, BOUNCE_MAPS,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=b246f97ca059";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=27881deb663c";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=67997562a985";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -1190,7 +1204,7 @@ import {
   armSwitchValue, stepArmSwitch,
   loadRadioSwitches, saveRadioSwitches, switchesAxisMap, auxNumberOfAxis,
   createSwitchWizard, stepSwitchWizard, skipSwitchWizard, switchWizardResult,
-} from "./sim-touch.js?v=2f5be7ad372b";
+} from "./sim-touch.js?v=357550a0a4fd";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -1215,7 +1229,7 @@ import {
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z,
   loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT,
   loadStickOverlay,saveStickOverlay,stickOverlayOn,createStickOverlay,STICK_OVERLAY_PHONE,
-  SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText} from "./sim-feel.js?v=1b41471c0d9d";
+  SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText} from "./sim-feel.js?v=238bfce32111";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -1538,10 +1552,25 @@ function placeStickOverlay(){
   const sticks=touch?Array.from(document.querySelectorAll('#touchLayer .vstick'),box):[];
   // The legend fades out under touch (body.touch-on #legend).
   const avoid=[touch?null:box(document.getElementById('legend')),box(document.getElementById('feelHud')),box(document.getElementById('hudArmSlot'))];
+  // Under touch #osdBC sits on the footer (--hud-floor); the overlay keeps above it.
+  const readout=touch?box(document.getElementById('osdBC')):null;
   const de=document.documentElement;
   let phone=false;
   try{phone=matchMedia(STICK_OVERLAY_PHONE).matches;}catch(e){}
-  stickOverlay.place({vw:de.clientWidth,vh:de.clientHeight,phone,sticks,avoid,dpr:window.devicePixelRatio});
+  stickOverlay.place({vw:de.clientWidth,vh:de.clientHeight,phone,sticks,avoid,readout,dpr:window.devicePixelRatio});
+}
+// The footer's height into --footer-h, for the touch layout (--hud-floor):
+// one 14 px line on a wide screen, up to four on a narrow phone, and the map's
+// credit changes it. On a change the sticks have moved, so the overlay is placed again.
+const footerEl=document.querySelector('footer');
+let footerH=-1;
+function measureFooter(){
+  if(!footerEl)return false;
+  const h=Math.ceil(footerEl.getBoundingClientRect().height);
+  if(h===footerH)return false;
+  footerH=h;
+  document.documentElement.style.setProperty('--footer-h',h+'px');
+  return true;
 }
 // Each frame: the checkbox shows what is in force, and the dots follow the
 // sticks while the overlay is on screen. No layout read or style write here
@@ -6252,21 +6281,23 @@ function syncMenuShare(){
 // House, The Warehouse, The Bando), each with its thumbnail; with ?dev=1 an archived map
 // flown last is offered too. The last map flown (the saved selection) is
 // marked and has the focus, so Fly then Enter flies it again; with none saved,
-// the class's map (classMap). A tap flies that map.
+// the class's map (classMap), marked and focused but not labelled Last flown
+// (a first visit has flown nothing). A tap flies that map.
 const FLY_THUMBS={rig:'assets/sim-thumbs/rig.jpg',house:'assets/sim-thumbs/house.jpg',depot:'assets/sim-thumbs/depot.jpg',bando:'assets/sim-thumbs/bando.jpg'};
 function flyMapChoices(){
   const maps=MAPS.filter(m=>mapOpen(m.id,false));
   const saved=savedSelection();
   const own=saved&&MAPS.find(m=>m.id===saved.map);
   if(own&&mapOpen(own.id,DEV_UI)&&!maps.includes(own))maps.push(own);
-  return {maps,last:own&&maps.includes(own)?own.id:classMap()};
+  const flown=!!(own&&maps.includes(own));
+  return {maps,last:flown?own.id:classMap(),flown};
 }
 function openFlyPicker(){
-  const {maps,last}=flyMapChoices();
+  const {maps,last,flown}=flyMapChoices();
   showMenuLayer('<h2>Fly</h2><p>Free flight: no gates, no timer. Pick a map.</p><div class="fly-maps'+(maps.length>2?' many':'')+(maps.length>3?' four':'')+'">'+
     maps.map(m=>'<button type="button" class="fly-map'+(m.id===last?' on':'')+'" data-fly-map="'+m.id+'">'+
       (FLY_THUMBS[m.id]?'<img src="'+FLY_THUMBS[m.id]+'" alt="" width="480" height="270">':'')+
-      '<span>'+escapeHtml(m.name)+'</span>'+(m.id===last?'<small>Last flown</small>':'')+'</button>').join('')+
+      '<span>'+escapeHtml(m.name)+'</span>'+(m.id===last&&flown?'<small>Last flown</small>':'')+'</button>').join('')+
     '</div><button type="button" id="layerClose">Close</button>');
   document.getElementById('menuLayer').classList.add('wide');
   document.querySelectorAll('#menuLayer [data-fly-map]').forEach(b=>{b.onclick=()=>startFreestyle(b.dataset.flyMap);});
@@ -10051,7 +10082,7 @@ function loop(now){
     if(feel){
       state.stickT=stick.t;
       feel.updateHud({stick,battV,battOn:CFG.battSimOn||cs.kind==='bf',mode:cs.flightMode,armed:cs.armed,threeD,thrText:throttleHudText(stick.t,threeD),
-        armHint:bfRadio()?'Arm on the radio (AUX'+(pilotAux('arm')||'?')+')':armHintText({threeD,easy:easyMode(),autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked})});
+        armHint:bfRadio()?'Arm on the radio (AUX'+(pilotAux('arm')||'?')+')':armHintText({threeD,easy:easyMode(),autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked,touch:touchThrottleSide(),low:throttleSafeToArm(stick.t,threeD)})});
       feel.tickTutorial(state,dt,cs.armed);
       const upZ=bodyUpZ(cs.quaternion);
       const clearanceM=cs.clearance;
@@ -10178,6 +10209,13 @@ function openCoachPicker(){
   if(close)close.onclick=hideMenuLayer;
 }
 guardPageGestures(document);
+// The touch throttle stick's side for the arm hint (sim-3d.js armHintText),
+// or null with the touch sticks off: the left in Mode 2, else the right (as
+// sim-touch.js holdYFor).
+function touchThrottleSide(){
+  if(!(touchCtl&&touchCtl.enabled))return null;
+  return touchCtl.settings.mode===2?'left':'right';
+}
 function touchViewport(){
   return {width:innerWidth,height:innerHeight,mobile:mobileHint,touchEnabled:!!(touchCtl&&touchCtl.enabled)};
 }
@@ -10229,12 +10267,16 @@ touchCtl=createTouchControls({
   onRespawn(){resetQuad();},
 });
 syncTouchSettingsUI();
-// The stick overlay: placed now, and again on a resize or a card changing size.
+// The stick overlay: placed now, and again on a resize or a card, #osdBC
+// (empty until the OSD's first frame) or the footer changing size (the
+// footer's height first: the sticks stand on it).
+measureFooter();
 placeStickOverlay();
-addEventListener('resize',()=>placeStickOverlay());
+addEventListener('resize',()=>{measureFooter();placeStickOverlay();});
 if(typeof ResizeObserver==='function'){
-  const ro=new ResizeObserver(()=>placeStickOverlay());
-  for(const id of ['legend','feelHud','hudArmSlot']){const el=document.getElementById(id);if(el)ro.observe(el);}
+  const ro=new ResizeObserver(()=>{measureFooter();placeStickOverlay();});
+  for(const id of ['legend','feelHud','hudArmSlot','osdBC']){const el=document.getElementById(id);if(el)ro.observe(el);}
+  if(footerEl)ro.observe(footerEl);
 }
 // Test hook: the stick overlay, what it is showing and why.
 Object.assign(window._sim,{

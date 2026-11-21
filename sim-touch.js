@@ -131,6 +131,16 @@ export function pointerToStick(px, py, origin, radius) {
   return { x: dx / mag, y: dy / mag };
 }
 
+// The held throttle stick under a thumb: it starts from where the stick is,
+// not from where the thumb lands, and moves by the thumb's travel (screen Y
+// up is stick up; one radius of travel is half the stick's range). Per move,
+// from the last point, so a thumb past the end turns back at once.
+export function dragStickY(y, fromPy, toPy, radius) {
+  const rad = Math.max(8, Number(radius) || 56);
+  const d = (Number(fromPy) - Number(toPy)) / rad;
+  return clamp((Number(y) || 0) + (Number.isFinite(d) ? d : 0), -1, 1);
+}
+
 export function releaseStick(prev, opts) {
   const o = opts || {};
   const p = prev || { x: 0, y: 0 };
@@ -398,6 +408,21 @@ export function createTouchControls(ctx) {
     return x < width * 0.5 ? 'L' : 'R';
   }
 
+  // The held throttle (holdYFor) follows the thumb's travel from where the
+  // stick is (dragStickY): a first touch, wherever it lands, leaves the
+  // throttle where it was, so a thumb on the knob and up arms from the
+  // bottom. Its other axis, and the sprung stick, go where the thumb is.
+  const lastPy = { L: null, R: null };
+  function pointerSample(side, e) {
+    const o = originOf(side);
+    if (!holdYFor(side)) return pointerToStick(e.clientX, e.clientY, o, o.r);
+    const cur = side === 'R' ? state.right : state.left;
+    const x = clamp((e.clientX - o.x) / Math.max(8, o.r), -1, 1);
+    const y = lastPy[side] == null ? cur.y : dragStickY(cur.y, lastPy[side], e.clientY, o.r);
+    lastPy[side] = e.clientY;
+    return { x, y };
+  }
+
   function onPointerDown(e) {
     if (!state.enabled || !root) return;
     if (e.target && e.target.closest && e.target.closest('button,a,input,select,textarea,#feelHud,#osdLap,#gear')) return;
@@ -405,9 +430,8 @@ export function createTouchControls(ctx) {
     if (state.active[side] != null) return;
     state.active[side] = e.pointerId;
     try { e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
-    const o = originOf(side);
-    const s = pointerToStick(e.clientX, e.clientY, o, o.r);
-    setStick(side, s);
+    lastPy[side] = null;
+    setStick(side, pointerSample(side, e));
     paint();
     if (e.cancelable) e.preventDefault();
   }
@@ -416,8 +440,7 @@ export function createTouchControls(ctx) {
     if (!state.enabled) return;
     for (const side of ['L', 'R']) {
       if (state.active[side] !== e.pointerId) continue;
-      const o = originOf(side);
-      setStick(side, pointerToStick(e.clientX, e.clientY, o, o.r));
+      setStick(side, pointerSample(side, e));
       paint();
       if (e.cancelable) e.preventDefault();
     }
@@ -427,6 +450,7 @@ export function createTouchControls(ctx) {
     for (const side of ['L', 'R']) {
       if (state.active[side] !== e.pointerId) continue;
       state.active[side] = null;
+      lastPy[side] = null;
       const next = releaseStick(side === 'R' ? state.right : state.left, { holdY: holdYFor(side) });
       setStick(side, next);
       paint();
