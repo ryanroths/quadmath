@@ -1720,3 +1720,23 @@ test('review3 h: forget and Tune\u2019s list re-pick without the first-run promp
   assert.ok(simSrc.includes('  selectPad(gp,true,true);\n') || simSrc.includes('  selectPad(gp,true,true);\r\n'), 'Tune\u2019s list');
   assert.ok(/selectPad\(best,[^,)]+,quiet\)/.test(simSrc), 'choosePad passes it on (forget)');
 });
+
+test('an EdgeTX radio with no product name is shown as "EdgeTX radio" (display only)', async () => {
+  const { padDisplayName } = await import('../sim-touch.js');
+  assert.equal(typeof padDisplayName, 'function', 'sim-touch.js padDisplayName');
+  for (const id of ['Unknown Gamepad (Vendor: 1209 Product: 4f54)', ' (Vendor: 1209 Product: 4f54)', '1209-4f54-Unknown Gamepad', '1209-4f54-Unknown Device', '1209-4f54-Unknown', '1209-4f54-']) {
+    assert.equal(padDisplayName(id), 'EdgeTX radio', JSON.stringify(id));
+  }
+  // A name the radio gives, and anything that is not EdgeTX by USB id, as it is.
+  for (const id of [TX16S_ID, 'RadioMaster TX15 Joystick (Vendor: 1209 Product: 4f54)', '1209-4f54-Radiomaster TX16S Joystick', XBOX,
+    'Unknown Gamepad (Vendor: 0483 Product: 5750)', 'Unknown Gamepad (Vendor: 1209 Product: 0001)', HEADSET]) {
+    assert.equal(padDisplayName(id), id, id);
+  }
+  // Detection is untouched: the id still says what it is.
+  assert.equal(classifyPad(pad(UNKNOWN_EDGETX, 0, CLASSIC_REST)).how, 'usb');
+  assert.equal(radioShortName({ id: UNKNOWN_EDGETX }), 'EdgeTX radio', 'the plug toast and FORGOTTEN say it too');
+  // The page shows it in Tune's radio line, Tune's device list and the picker.
+  assert.ok(simSrc.includes('function gpNameHtml(){return escapeHtml(padDisplayName(gpName).slice(0,40));}'));
+  assert.ok(simSrc.includes("o.textContent=(classifyPad(gp).radio?'📻 ':'🎮 ')+padDisplayName(gp.id).slice(0,60);"));
+  assert.ok(simSrc.includes("b.textContent=(classifyPad(gp).radio||radioScore(gp)===2?'📻 ':'🎮 ')+padDisplayName(gp.id).slice(0,60);"));
+});

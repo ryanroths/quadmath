@@ -525,6 +525,18 @@ export function isEdgeTxUsb(gp) {
   return EDGETX_USB_RE.test(padId(gp));
 }
 
+// What the page calls a device: its id, except an EdgeTX radio the browser
+// has no product name for ("Unknown Gamepad (Vendor: 1209 Product: 4f54)",
+// "1209-4f54-Unknown Gamepad"), which is "EdgeTX radio". Display only.
+export const EDGETX_UNNAMED = 'EdgeTX radio';
+export function padDisplayName(id) {
+  const s = id == null ? '' : String(id);
+  if (!EDGETX_USB_RE.test(s)) return s;
+  const m = /^(.*?)\s*\((?:STANDARD GAMEPAD\s*)?Vendor:/i.exec(s) || /^[0-9a-f]{1,4}-[0-9a-f]{1,4}-(.*)$/i.exec(s);
+  const name = (m ? m[1] : s).trim();
+  return !name || /^unknown(\s+(gamepad|device))?$/i.test(name) ? EDGETX_UNNAMED : s;
+}
+
 // A device the browser maps to the standard layout is a gamepad, whatever its
 // name ("Retroid Pocket Controller" is a handheld). Chrome never maps
 // 1209:4f54 to it, and a standard mapping always shows 4 axes, so it says

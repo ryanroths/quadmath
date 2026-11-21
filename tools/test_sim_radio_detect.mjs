@@ -206,16 +206,22 @@ test('radio detection and device picking in Chrome: USB id, headset, Classic mes
   try {
     await t.test('a headset remembered by mistake beside an EdgeTX radio with no product name: the radio flies AETR, radio rates', async () => {
       await pass('map=rig', { storage: { [GP_ID_KEY]: HEADSET }, pads: [pad(HEADSET, [], { buttons: 4 }), pad(EDGETX, CLASSIC_REST)] }, 'bf', async ({ js }) => {
-        // Tune's radio line shows the first 40 characters of the name.
-        const shown = EDGETX.slice(0, 40);
-        let r = await js(`await U.until(() => U.info().includes(${JSON.stringify(shown)}), 6000);
+        // No product name: Tune's radio line, its device list and the plug
+        // toast call it "EdgeTX radio", never "Unknown Gamepad (Vendor: …)".
+        const shown = 'EdgeTX radio';
+        let r = await js(`await U.until(() => U.info().startsWith(${JSON.stringify(shown)}), 6000);
           return JSON.stringify({ info: U.info(), remembered: localStorage.getItem(${JSON.stringify(GP_ID_KEY)}), devices: U.devices(),
             preset: U.$('radioPreset').value, kind: window._sim.stickOverlay().kind });`);
         assert.ok(r.info.includes(shown), 'the radio flies: ' + r.info);
         assert.equal(r.remembered, EDGETX, 'and replaces the remembered headset');
-        assert.deepEqual(r.devices.map((d) => d.text.replace(/^\S+ /, '')), [EDGETX], 'the headset is never offered');
+        assert.deepEqual(r.devices.map((d) => d.text.replace(/^\S+ /, '')), ['EdgeTX radio'], 'the headset is never offered; the radio by its display name');
+        assert.ok(!r.info.includes('Unknown Gamepad'), r.info);
         assert.equal(r.preset, 'radiomaster', 'the EdgeTX AETR preset');
         assert.equal(r.kind, 'radio');
+        r = await js(`const n = U.toasts.length; U.pick('EdgeTX radio');
+          await U.until(() => U.toasts.slice(n).some((s) => s.startsWith('EdgeTX radio detected, Mode 2 loaded.')), 2000);
+          return JSON.stringify({ toasts: U.toasts.slice(n) });`);
+        assert.ok(r.toasts.some((s) => s.startsWith('EdgeTX radio detected, Mode 2 loaded.')), 'the plug toast: ' + JSON.stringify(r.toasts));
         // Throttle on ax2, resting at -1: low, then the safety gate opens and
         // mid-stick is half throttle (the AETR map, not a sprung gamepad's).
         r = await js(`

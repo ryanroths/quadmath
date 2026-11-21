@@ -1149,7 +1149,7 @@ import {
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=b246f97ca059";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=a30bd8d29d13";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=4c8433bc1543";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -1174,14 +1174,14 @@ import {
   saveRadioPreset, clearRadioCalibration, GP_ID_KEY, createCalibState, stepCalib,
   guessRadioPreset, isKnownRadio, radioShortName,
   classifyPad, usablePad, rankPads, provenPad, createPadTracker, staleSwitchTarget, forgetDevice,
-  sessionKind, presetGuess, migrateNamePreset,
+  sessionKind, presetGuess, migrateNamePreset, padDisplayName,
   radioIssuePad, createIssueNotice, RADIO_CLASSIC_MSG, calibAxisChoices, calibPickAxis,
   loadAutoArm, saveAutoArm,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
   loadRadioSwitches, saveRadioSwitches, switchesAxisMap, auxNumberOfAxis,
   createSwitchWizard, stepSwitchWizard, skipSwitchWizard, switchWizardResult,
-} from "./sim-touch.js?v=5c2586f22075";
+} from "./sim-touch.js?v=117a0f0a7781";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -4690,7 +4690,7 @@ let kbRollPitchKey=0;
 // markup, once. Here for Tune's radio line; sim-feel.js is handed the name as
 // written and escapes it in the first-run prompt itself (twice would show the
 // pilot "&lt;").
-function gpNameHtml(){return escapeHtml(gpName.slice(0,40));}
+function gpNameHtml(){return escapeHtml(padDisplayName(gpName).slice(0,40));}
 let threeD=false;
 // ---------- gamepad selection ----------
 // Never assume index 0: scan ALL non-null pads, prefer radios. A TX16S
@@ -4850,7 +4850,7 @@ function showGpPicker(pads){
     '<div style="color:var(--dim);font-size:11px">choice is remembered per device</div>';
   for(const gp of pads){
     const b=document.createElement('button');
-    b.textContent=(classifyPad(gp).radio||radioScore(gp)===2?'📻 ':'🎮 ')+gp.id.slice(0,60);
+    b.textContent=(classifyPad(gp).radio||radioScore(gp)===2?'📻 ':'🎮 ')+padDisplayName(gp.id).slice(0,60);
     b.style.marginTop='6px';b.style.textAlign='left';
     b.onclick=()=>{padPilotPick=gp.id;selectPad(gp,true);gpPickerEl.remove();gpPickerEl=null;};
     gpPickerEl.appendChild(b);
@@ -4943,7 +4943,7 @@ function fillDeviceUI(){
     for(const gp of pads){
       const o=document.createElement('option');
       o.value=String(gp.index);
-      o.textContent=(classifyPad(gp).radio?'📻 ':'🎮 ')+gp.id.slice(0,60);
+      o.textContent=(classifyPad(gp).radio?'📻 ':'🎮 ')+padDisplayName(gp.id).slice(0,60);
       deviceSel.appendChild(o);
     }
   }
