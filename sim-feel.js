@@ -556,7 +556,13 @@ export function stickDots(s, box) {
 // box by STICK_CLEAR_PX, else the nearest spot along that line that does; with
 // none, centred and up above the boxes under it, as far as it takes. Never off
 // screen; over a box only when the screen is too small to miss it.
-export function stickOverlayPlacement({ vw, vh, box, sticks, avoid } = {}) {
+// readout: #osdBC's box, where it sits higher than STICK_OVERLAY_BOTTOM_PX
+// allows for (flying on touch it sits on the page's footer, one to four lines
+// tall): the overlay's line rises with it, and so does everything above.
+export function stickOverlayPlacement({ vw, vh: screenH, box, sticks, avoid, readout } = {}) {
+  const lift = readout && readout.bottom > readout.top
+    ? Math.max(0, Math.round(screenH - readout.top) - STICK_OVERLAY_BOTTOM_PX) : 0;
+  const vh = screenH - lift;
   const w = box * 2 + STICK_GAP_PX, h = box;
   const C = STICK_CLEAR_PX;
   const list = [...(sticks || []), ...(avoid || [])].filter((b) => b && b.right > b.left && b.bottom > b.top);
@@ -583,12 +589,12 @@ export function stickOverlayPlacement({ vw, vh, box, sticks, avoid } = {}) {
     }
   }
   bottom = Math.max(0, Math.min(bottom, vh - h - 8));
-  return { left, bottom, w, h };
+  return { left, bottom: bottom + lift, w, h };
 }
 
 // The overlay on canvas (an HTMLCanvasElement; null draws nothing). Returns
 // { place(opts), draw(stick), setShown(on), state }.
-//   place({vw, vh, phone, sticks, avoid, dpr}): size and position.
+//   place({vw, vh, phone, sticks, avoid, readout, dpr}): size and position.
 //   draw(stick): repaint if a dot moved since the last paint; true if it did.
 //   setShown(on): the canvas's 'on' class, written only when it changes.
 export function createStickOverlay(canvas, { lineColor } = {}) {
@@ -603,10 +609,10 @@ export function createStickOverlay(canvas, { lineColor } = {}) {
   let drawn = null;
   let placed = null;
 
-  function place({ vw, vh, phone, sticks, avoid, dpr: ratio } = {}) {
+  function place({ vw, vh, phone, sticks, avoid, readout, dpr: ratio } = {}) {
     box = phone ? STICK_BOX_PHONE_PX : STICK_BOX_PX;
     dpr = Math.max(1, Math.min(3, Number(ratio) || 1));
-    placed = stickOverlayPlacement({ vw, vh, box, sticks, avoid });
+    placed = stickOverlayPlacement({ vw, vh, box, sticks, avoid, readout });
     if (canvas) {
       const bw = Math.round(placed.w * dpr), bh = Math.round(placed.h * dpr);
       if (canvas.width !== bw) canvas.width = bw;

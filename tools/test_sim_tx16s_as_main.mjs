@@ -143,7 +143,10 @@ const SCRIPT = String.raw`(async () => {
   trace.disarmed = await until(() => !s.coreState().armed, 6000);
   await wait(500);
   trace.after = look();
-  trace.toasts = window.__toasts.slice();
+  // Every toast, none new and none missing; sorted, because the rates toast
+  // waits for a free toast slot on its own 700 ms retry, so its place among
+  // the others (ARMED) is a race between two timers, not behaviour.
+  trace.toasts = window.__toasts.slice().sort();
   trace.saved = Object.keys(localStorage).filter((k) => /^ryfly/.test(k)).sort().map((k) => [k, k === 'ryflyRates' ? '(rates)' : localStorage.getItem(k)]);
   return JSON.stringify(trace);
 })()`;

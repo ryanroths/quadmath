@@ -131,6 +131,16 @@ export function pointerToStick(px, py, origin, radius) {
   return { x: dx / mag, y: dy / mag };
 }
 
+// The held throttle stick under a thumb: it starts from where the stick is,
+// not from where the thumb lands, and moves by the thumb's travel (screen Y
+// up is stick up; one radius of travel is half the stick's range). Per move,
+// from the last point, so a thumb past the end turns back at once.
+export function dragStickY(y, fromPy, toPy, radius) {
+  const rad = Math.max(8, Number(radius) || 56);
+  const d = (Number(fromPy) - Number(toPy)) / rad;
+  return clamp((Number(y) || 0) + (Number.isFinite(d) ? d : 0), -1, 1);
+}
+
 export function releaseStick(prev, opts) {
   const o = opts || {};
   const p = prev || { x: 0, y: 0 };
@@ -398,6 +408,21 @@ export function createTouchControls(ctx) {
     return x < width * 0.5 ? 'L' : 'R';
   }
 
+  // The held throttle (holdYFor) follows the thumb's travel from where the
+  // stick is (dragStickY): a first touch, wherever it lands, leaves the
+  // throttle where it was, so a thumb on the knob and up arms from the
+  // bottom. Its other axis, and the sprung stick, go where the thumb is.
+  const lastPy = { L: null, R: null };
+  function pointerSample(side, e) {
+    const o = originOf(side);
+    if (!holdYFor(side)) return pointerToStick(e.clientX, e.clientY, o, o.r);
+    const cur = side === 'R' ? state.right : state.left;
+    const x = clamp((e.clientX - o.x) / Math.max(8, o.r), -1, 1);
+    const y = lastPy[side] == null ? cur.y : dragStickY(cur.y, lastPy[side], e.clientY, o.r);
+    lastPy[side] = e.clientY;
+    return { x, y };
+  }
+
   function onPointerDown(e) {
     if (!state.enabled || !root) return;
     if (e.target && e.target.closest && e.target.closest('button,a,input,select,textarea,#feelHud,#osdLap,#gear')) return;
@@ -405,9 +430,8 @@ export function createTouchControls(ctx) {
     if (state.active[side] != null) return;
     state.active[side] = e.pointerId;
     try { e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
-    const o = originOf(side);
-    const s = pointerToStick(e.clientX, e.clientY, o, o.r);
-    setStick(side, s);
+    lastPy[side] = null;
+    setStick(side, pointerSample(side, e));
     paint();
     if (e.cancelable) e.preventDefault();
   }
@@ -416,8 +440,7 @@ export function createTouchControls(ctx) {
     if (!state.enabled) return;
     for (const side of ['L', 'R']) {
       if (state.active[side] !== e.pointerId) continue;
-      const o = originOf(side);
-      setStick(side, pointerToStick(e.clientX, e.clientY, o, o.r));
+      setStick(side, pointerSample(side, e));
       paint();
       if (e.cancelable) e.preventDefault();
     }
@@ -427,6 +450,7 @@ export function createTouchControls(ctx) {
     for (const side of ['L', 'R']) {
       if (state.active[side] !== e.pointerId) continue;
       state.active[side] = null;
+      lastPy[side] = null;
       const next = releaseStick(side === 'R' ? state.right : state.left, { holdY: holdYFor(side) });
       setStick(side, next);
       paint();
@@ -1404,6 +1428,9 @@ export function createCalibState() {
     still: null,
     start: null,
     swept: null,
+    // Time on this step with no axis on offer moving (calibView names the
+    // stick it waits for).
+    quiet: 0,
   };
 }
 
@@ -1531,6 +1558,7 @@ function clearSweep(calib) {
   calib.start = null;
   calib.prevAx = null;
   calib.swept = null;
+  calib.quiet = 0;
 }
 
 // Polls this step with the axis part-way: off where it began by more than
@@ -1656,6 +1684,10 @@ export function stepCalib(calib, gp, dt) {
 
   trackStill(calib, ax, dt);
   trackSwept(calib, ax);
+  if (st.key !== 'center') {
+    const moving = calib.start && calibAxisChoices(calib, gp).some((i) => Math.abs(ax[i] - calib.start[i]) >= 0.3);
+    calib.quiet = moving ? 0 : calib.quiet + dt;
+  }
   // The layout it was made on (calibratedOnLayout).
   calib.result.n = ax.length;
 
@@ -1812,6 +1844,48 @@ export function stepCalib(calib, gp, dt) {
   } else calib.timer = 0;
   ui.done = calib.step >= CAL_STEPS.length;
   return ui;
+}
+
+// What the calibration overlay shows, from the calibration and the device as
+// the browser has it (gp: null when it gives nothing; the page passes the
+// last one seen). noDataMs: how long the device has sent nothing (no pad at
+// the poll, or no axis changed since the overlay opened), measured by the
+// page. Never blank: a label, a hint, the device, progress and, when it
+// waits on something, the reason.
+export const CALIB_NO_DATA_MS = 2000;
+export const CALIB_QUIET_S = 3;
+export const CALIB_NO_DATA_MSG = "The radio is connected but isn't sending stick data. Move a stick. If nothing changes: on the radio, Model Settings \u2192 USB Joystick \u2192 Classic, then replug.";
+export const CALIB_SAVES_MSG = 'Saves automatically when all four sticks are set';
+export const CAL_STICKS = Object.freeze([
+  Object.freeze({ key: 'r', name: 'Roll', where: 'right stick, left and right' }),
+  Object.freeze({ key: 'p', name: 'Pitch', where: 'right stick, up and down' }),
+  Object.freeze({ key: 'y', name: 'Yaw', where: 'left stick, left and right' }),
+  Object.freeze({ key: 't', name: 'Throttle', where: 'left stick, up and down' }),
+]);
+export function calibView(calib, gp, opt) {
+  const o = opt || {};
+  const done = calib.step >= CAL_STEPS.length;
+  const st = CAL_STEPS[Math.min(calib.step, CAL_STEPS.length - 1)];
+  const axes = gp ? listAxes(gp) : [];
+  const buttons = gp && gp.buttons ? gp.buttons.length : 0;
+  const now = st.key === 'thi' || st.key === 'tlo' ? 't' : st.key;
+  const progress = CAL_STICKS.map((s) => {
+    const got = calib.result[s.key];
+    const set = s.key === 't' ? done : !!got;
+    return { key: s.key, name: s.name, axis: got && Number.isFinite(got.i) ? got.i : null, state: set ? 'set' : (!done && s.key === now ? 'now' : 'todo') };
+  });
+  const few = !!gp && axes.length < STICK_AXES;
+  const noData = !few && (o.noDataMs || 0) >= CALIB_NO_DATA_MS;
+  let missing = null;
+  if (!few && !noData && !done && st.key !== 'center' && gp) {
+    if (!calibAxisChoices(calib, gp).length || (calib.quiet || 0) >= CALIB_QUIET_S) missing = CAL_STICKS.find((s) => s.key === now) || null;
+  }
+  return {
+    label: st.label, hint: st.hint, step: st.key, done, progress, saves: CALIB_SAVES_MSG,
+    few, noData, missing,
+    device: gp ? { name: padDisplayName(gp.id), axes: axes.length, buttons } : null,
+    bars: axes,
+  };
 }
 
 // The axes the pilot can tap for this step when calibration does not pick

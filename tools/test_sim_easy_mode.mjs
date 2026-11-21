@@ -163,6 +163,17 @@ test('isLanded and the hint texts', () => {
   assert.equal(armHintText({ easy: true }), 'Throttle down 1 s, then up to fly');
   assert.equal(armHintText({ easy: true, autoArm: false }), 'Throttle down + Space/arm switch to arm', 'Tune: auto-arm off');
   assert.equal(armHintText({ easy: true, hasSwitch: true }), 'Flip arm switch');
+  // Touch sticks: the gesture itself (touch: the throttle stick's side; low:
+  // the throttle in the arm-safe band now).
+  assert.equal(armHintText({ easy: true, touch: 'left', low: true }), 'Thumb on the left stick, slide up to fly');
+  assert.equal(armHintText({ easy: true, touch: 'left', low: false }), 'Left stick down 1 s, then slide up to fly');
+  assert.equal(armHintText({ easy: true, touch: 'right', low: true }), 'Thumb on the right stick, slide up to fly', 'Mode 1');
+  assert.equal(armHintText({ easy: true, touch: 'left', threeD: true, low: false }), 'Left stick to centre 1 s, then slide up to fly');
+  assert.equal(armHintText({ easy: false, autoArm: true, touch: 'left', low: true }), 'Thumb on the left stick, slide up to fly', 'the auto-arm outside Easy');
+  assert.equal(armHintText({ easy: true, touch: 'left', autoArm: false, low: true }), 'Tap ARM to arm');
+  assert.equal(armHintText({ easy: true, touch: 'left', autoArm: false, low: false }), 'Left stick down, then tap ARM');
+  assert.equal(armHintText({ easy: true, touch: 'left', hasSwitch: true }), 'Flip arm switch', 'a switch wins');
+  assert.equal(armHintText({ easy: true, touch: null, low: true }), 'Throttle down 1 s, then up to fly', 'no touch sticks: as before');
   assert.equal(flipHintText({ easy: true, core: 'bf', armed: false }), 'FLIPPED — FULL ROLL OR PITCH STICK · R RESPAWNS');
   assert.equal(flipHintText({ easy: true, core: 'js', touch: true }), 'FLIPPED — FULL ROLL OR PITCH STICK · OR RESPAWN');
 });
@@ -1274,7 +1285,9 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
             return prompt() !== was;
           };
           const drawn = [];
-          drawn.push(await next(3000));    // its first prompt drawn (the text was still the wizard's)
+          // Its first prompt is drawn at the click (startCalib draws the overlay
+          // at once, never blank), not on a later poll.
+          drawn.push(/^CENTER/.test(prompt()));
           drawn.push(await next(10000));   // the centre taken
           for (const i of [0, 1, 3]) { E.axis(i, 1); drawn.push(await next(6000)); E.axis(i, 0); await hold(60); }
           E.axis(2, 1); drawn.push(await next(4000));

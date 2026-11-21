@@ -223,6 +223,16 @@ export function armHintText(threeDOrOpts, extra) {
     if (o.blocked) return o.threeD ? 'Center throttle to arm' : 'Lower throttle to arm';
     return 'Flip arm switch';
   }
+  // Touch sticks (touch: the throttle stick's side, 'left' or 'right'): the
+  // gesture itself. The held throttle moves by the thumb's travel, so with it
+  // at the bottom (low: in the arm-safe band now) a thumb on the stick and up
+  // arms; anywhere else it goes down first, for the auto-arm's 1 s hold.
+  if (o.touch === 'left' || o.touch === 'right') {
+    const Stick = o.touch === 'left' ? 'Left stick' : 'Right stick';
+    const down = o.threeD ? ' to centre' : ' down';
+    if (o.autoArm === false) return o.low ? 'Tap ARM to arm' : Stick + down + ', then tap ARM';
+    return o.low ? 'Thumb on the ' + o.touch + ' stick, slide up to fly' : Stick + down + ' 1 s, then slide up to fly';
+  }
   if (o.easy && o.autoArm !== false) {
     return o.threeD ? 'Throttle centred 1 s, then move it to fly' : 'Throttle down 1 s, then up to fly';
   }
