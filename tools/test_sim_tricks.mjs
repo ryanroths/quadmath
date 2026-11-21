@@ -17,7 +17,7 @@ import {
   makeCombo, resetCombo, pushCombo, comboRemain,
   createTricks, makeFeat, trickLineupText, TRIPPY_POLE_MUL, TRIPPY_TAIL, ORBIT_TAIL,
   trickName, MANEUVER_MAX_S, MANEUVER_SUSTAIN_S,
-  PHASE_SPECS, matchSpec, MAV_GAP_MUL, PH_SLOP, MERGE_GAP_S, TWIST_SPD,
+  PHASE_SPECS, matchSpec, MAV_GAP_MUL, PH_SLOP, MERGE_GAP_S, TWIST_SPD, CRADLE, makeCradleGate, cradlePosts,
 } from '../sim-tricks.js';
 import { QuadPhysics, PRESETS } from '../quadphysics.js';
 import { mapThrottle3d } from '../sim-3d.js';
@@ -321,9 +321,10 @@ const LIBRARY = [
   { id: 'sideloop', name: 'sl-std', phases: [{ t: 0.38, yaw: 6.2, thr: 0.55 }, { t: 0.95, roll: 7.0, yaw: 2.4, thr: 0.85 }, { t: 0.32, roll: 6.2, yaw: 1.0, thr: 0.22 }, { t: 0.4, roll: 0, yaw: 0, thr: 0.55 }], opts: { z0: 4.5, vx: 5.5, maxT: 2.8, colliders: OBJ_BAR } },
   { id: 'sideloop', name: 'sl-fast', phases: [{ t: 0.32, yaw: 7.0, thr: 0.58 }, { t: 0.82, roll: 8.0, yaw: 2.6, thr: 0.88 }, { t: 0.28, roll: 6.5, yaw: 1.1, thr: 0.2 }, { t: 0.4, roll: 0, yaw: 0, thr: 0.55 }], opts: { z0: 4.8, vx: 6.0, maxT: 2.5, colliders: OBJ_BAR } },
   { id: 'sideloop', name: 'sl-slow', phases: [{ t: 0.48, yaw: 5.4, thr: 0.52 }, { t: 1.1, roll: 6.2, yaw: 2.0, thr: 0.8 }, { t: 0.38, roll: 5.6, yaw: 0.9, thr: 0.24 }, { t: 0.45, roll: 0, yaw: 0, thr: 0.52 }], opts: { z0: 4.2, vx: 5.0, maxT: 3.1, colliders: OBJ_BAR } },
-  { id: 'cradle', name: 'crd-std', phases: [{ t: 0.38, pitch: -4.2, thr: 0.42 }, { t: 0.38, pitch: 3.6, thr: 0.4 }, { t: 0.5, pitch: 0, thr: 0.45 }], opts: { z0: 3.6, vx: 5.5, maxT: 1.9, colliders: OBJ_POLE } },
-  { id: 'cradle', name: 'crd-slow', phases: [{ t: 0.48, pitch: -3.4, thr: 0.4 }, { t: 0.45, pitch: 3.0, thr: 0.38 }, { t: 0.5, pitch: 0, thr: 0.44 }], opts: { z0: 3.4, vx: 4.8, maxT: 2.1, colliders: OBJ_POLE } },
-  { id: 'cradle', name: 'crd-fast', phases: [{ t: 0.32, pitch: -4.6, thr: 0.44 }, { t: 0.32, pitch: 4.0, thr: 0.42 }, { t: 0.45, pitch: 0, thr: 0.45 }], opts: { z0: 3.8, vx: 6.0, maxT: 1.75, colliders: OBJ_POLE } },
+  // No Cradle here: it is two passes round a post (sim-tricks.js CRADLE), read
+  // from the positions against the nose and the velocity, and this harness
+  // maps positions 90 degrees from the page (qpSample). The Cradles fly on
+  // the bf core with the page's mapping (BF_CRADLES).
   { id: 'juicyflick', name: 'jf-fast', phases: [{ t: 0.42, pitch: 8.4, thr: 0.88 }, { t: 0.28, pitch: 0, roll: 11, thr: 0.5 }, { t: 0.4, roll: 0, thr: 0.5 }], opts: { z0: 5, vx: 6, maxT: 1.7 } },
   { id: 'juicyflick', name: 'jf-slow', phases: [{ t: 0.52, pitch: 7.0, thr: 0.82 }, { t: 0.32, pitch: 0, roll: 10, thr: 0.48 }, { t: 0.4, roll: 0, thr: 0.48 }], opts: { z0: 5.2, vx: 5.2, maxT: 1.85 } },
   { id: 'juicyflick', name: 'jf-high', phases: [{ t: 0.44, pitch: 8.0, thr: 0.9 }, { t: 0.28, pitch: 0, roll: 11, thr: 0.5 }, { t: 0.4, roll: 0, thr: 0.5 }], opts: { z0: 6.5, vx: 5.8, maxT: 1.75 } },
@@ -372,7 +373,7 @@ const PILOT_LIBRARY = [
 
 test('new storage key only; never writes old ryfly* keys', () => {
   assert.equal(TRICKS_KEY, 'quadmathSimTricks');
-  assert.equal(STORE_VER, 3);
+  assert.equal(STORE_VER, 4);
   assert.ok(src.includes('setItem(TRICKS_KEY') || src.includes('store.setItem(TRICKS_KEY'));
   assert.equal(src.includes('ryflyDroneType'), false);
   assert.equal(src.includes('ryflyRates'), false);
@@ -1122,7 +1123,10 @@ async function flyBf(phases, opts) {
     const p = s.position, v = s.velocity, q = s.quaternion, w = s.omega;
     sample.qx = q.x; sample.qy = q.y; sample.qz = q.z; sample.qw = q.w;
     sample.ox = w.x; sample.oy = w.y; sample.oz = w.z;
-    sample.wx = p.x * WS; sample.wy = p.z * WS; sample.wz = -p.y * WS;   // as qpSample
+    // As qpSample, or (o.page) as the page (sim.html toScene: wx = -y, wz = -x),
+    // which the Cradle needs (positions against the core's nose and velocity).
+    if (o.page) { sample.wx = -p.y * WS; sample.wy = p.z * WS; sample.wz = -p.x * WS; }
+    else { sample.wx = p.x * WS; sample.wy = p.z * WS; sample.wz = -p.y * WS; }
     sample.alt = p.z;
     sample.vx = v.x; sample.vy = v.y; sample.vz = v.z; sample.speed = Math.hypot(v.x, v.y, v.z);
     sample.clearance = s.clearance; sample.armed = s.armed; sample.throttle = stick.t;
@@ -1130,10 +1134,12 @@ async function flyBf(phases, opts) {
     samples++;
     if (first) { resetDetector(d, sample); d.lockout = 0; first = false; return; }
     const wasLive = d.live;
+    const clock = d.clock;
     const ev = stepDetector(d, sample, 0.004);
-    if (ev && TRICK_BY_ID[ev]) hits.push(ev);
-    if (wasLive && !d.live) ends.push({ id: d.lastId || null, merged: d.lastMerge ? d.lastMerge.segs : 0, why: d.lastWhy });
+    if (ev && TRICK_BY_ID[ev]) { hits.push(ev); hitAt.push(clock); }
+    if (wasLive && !d.live) ends.push({ id: d.lastId || null, merged: d.lastMerge ? d.lastMerge.segs : 0, why: d.lastWhy, cradle: d.lastCradleSeg });
   };
+  const hitAt = [];
   const ends = [];
   let t = 0, phaseI = 0, phaseT = 0;
   const maxT = o.maxT || 3.2;
@@ -1149,7 +1155,7 @@ async function flyBf(phases, opts) {
     t += 0.004; phaseT += 0.004;
     if (ph.t != null && phaseT >= ph.t - 1e-9 && phaseI < phases.length - 1) { phaseI++; phaseT = 0; }
   }
-  return { hits, why: d.lastWhy, dir: d.lastDir, samples, feat: d.lastFeat, phases: d.lastPhases, gapBack: d.lastGapBack, merge: d.lastMerge, ends, gapSeq: d.gapSeq, gapNote: d.gapNote };
+  return { hits, hitAt, why: d.lastWhy, dir: d.lastDir, samples, feat: d.lastFeat, phases: d.lastPhases, gapBack: d.lastGapBack, merge: d.lastMerge, ends, gapSeq: d.gapSeq, gapNote: d.gapNote, cradle: d.cg.out.slice(), posts: d.cg.postN };
 }
 
 // One flight per trick type: the library's own where it flies the same on the
@@ -1170,13 +1176,39 @@ const BF_BARANI_YAW = { phases: [{ t: 0.4, tS: 1.0 }, { t: 0.3, pitch: -10.5, tS
 const BF_BARANI_ROLL = { phases: [{ t: 0.15, tS: 0.5 }, { t: 0.38, pitch: 10.5, tS: 0.3 }, { t: 0.286, roll: 11, tS: 0.3 }, { t: 0.16, pitch: 10.5, tS: 0.4 }, { t: 0.8, tS: 0.5 }], opts: { z0: 6, vx: 7, maxT: 2.6 } };
 // BF_MAVERICK with a yaw of yawT seconds at 7.2 rad/s at its top.
 const mavYaw = (yawT) => [{ t: 0.1, tS: 0.6 }, { t: 0.25, pitch: -6.3, tS: 1.0 }, { t: 0.25, pitch: -6.3, tS: 0.15 }, { t: yawT, yaw: 7.2, tS: 0.2 }, { t: 0.8, pitch: 3.5, tS: 0.25 }, { t: 0.7, tS: 0.5 }];
+// The owner's Cradle (2026-11-20) on the bf core, the page's mapping: a pole
+// (a scene box over core x px, y py, w square, h tall from z0) 3 m ahead,
+// beside the path. At 5 m/s, level, past it on one side; then a pull back
+// to about 50 degrees of nose up with a quarter second of roll toward the
+// pole's side and the roll taken out (the path slides across behind it), a
+// hold, a push back to level. It decelerates, goes back past the pole on
+// its other side against the nose (130-140 degrees off it), and the Cradle
+// is called there. roll: the roll's sign (-1 left, toward a pole at +y).
+const poleCore = (px, py, w = 0.1, h = 9, z0 = 0) => [{
+  min: { x: -(py + w / 2) * WS, y: z0 * WS, z: -(px + w / 2) * WS },
+  max: { x: -(py - w / 2) * WS, y: (z0 + h) * WS, z: -(px - w / 2) * WS },
+}];
+const crdPhases = (roll, R, T, P) => [
+  { t: 0.95, tS: 0.42 }, { t: T, pitch: -P, roll: roll * R, tS: 0.5 }, { t: T, pitch: -P * 0.3, roll: -roll * R, tS: 0.5 },
+  { t: 0.6, tS: 0.55 }, { t: 0.3, pitch: 2.5, tS: 0.5 }, { t: 1, tS: 0.45 },
+];
+const CRD_OPTS = (cols, z0) => ({ z0: z0 == null ? 3 : z0, vx: 5, maxT: 3, page: true, colliders: cols });
+const BF_CRADLES = [
+  { id: 'cradle', name: 'crd-std', phases: crdPhases(-1, 3, 0.25, 3), opts: CRD_OPTS(poleCore(3, 0.4)) },
+  { id: 'cradle', name: 'crd-slow', phases: crdPhases(-1, 2.5, 0.3, 2.5), opts: CRD_OPTS(poleCore(3, 0.4)) },
+  { id: 'cradle', name: 'crd-mirror', phases: crdPhases(1, 3, 0.25, 3), opts: CRD_OPTS(poleCore(3, -0.4)) },
+  // A mezzanine column (0.2 m square, 3.05 m tall), flown under its top.
+  { id: 'cradle', name: 'crd-column', phases: crdPhases(-1, 3, 0.25, 3), opts: CRD_OPTS(poleCore(3, 0.45, 0.2, 3.05), 1.8) },
+];
+
 // The Maverick as the owner flies it in two segments: the pull, a pause
 // (MERGE_GAP_S or less after the first settles), the push gliding back.
 const mavInTwo = (pause) => [{ t: 0.1, tS: 0.6 }, { t: 0.8, pitch: -3.0, tS: 0.9 }, { t: pause, tS: 0.55 }, { t: 0.6, pitch: 3.8, tS: 0.25 }, { t: 0.8, tS: 0.4 }];
 const MAV_TWO_OPTS = { z0: 8, vx: 6, maxT: 4.2, colliders: MAV_WALL };
 const BF_LIBRARY = [
   ...['flip-front', 'flip-back', 'roll-fast', 'yaw-fast', 'ss-fast', 'pole-spin', 'ham-inv', 'ham-flip-yaw-flip',
-    'sl-std', 'crd-std', 'jf-fast', 'sb-fast', 'rk-std', 'ck-std', 'dive-std', 'gap-generic-slot', 'prox-std'].map((n) => LIBRARY.find((c) => c.name === n)),
+    'sl-std', 'jf-fast', 'sb-fast', 'rk-std', 'ck-std', 'dive-std', 'gap-generic-slot', 'prox-std'].map((n) => LIBRARY.find((c) => c.name === n)),
+  ...BF_CRADLES,
   { id: 'powerloop', name: 'bf-powerloop', phases: [{ t: 0.25, pitch: 0, tS: 0.75 }, { t: 1.0, pitch: -6.4, tS: 1.0 }, { t: 0.6, pitch: 0, tS: 0.35 }], opts: { z0: 6, vx: 7, maxT: 2.6 } },
   BF_MATTY, BF_HALFMATTY, BF_MAVERICK, BF_IMMELMANN, BF_HALFMAVVY,
 ];
@@ -1272,20 +1304,138 @@ test('bf core, Maverick: a pull back of 120-225 climbing 1 m, forward 60 or more
   assert.ok(!short.hits.includes('maverick'), 'a short pull: ' + short.hits.join(','));
 });
 
-test('bf core, compound tricks: a Maverick split at a pause is one Maverick (its glide back alone a Cradle); a pause over MERGE_GAP_S keeps them apart', async () => {
+test('bf core, compound tricks: a Maverick split at a pause is one Maverick; a pause over MERGE_GAP_S keeps them apart (and beside a wall, no post, the glide back is no Cradle)', async () => {
   // The pull settles inverted-ish (0.42 s), then 0.28 s of pause, then the push.
   const r = await flyBf(mavInTwo(0.7), MAV_TWO_OPTS);
   assert.deepEqual(r.hits, ['maverick'], r.why);
   assert.equal(r.ends.length, 2, 'two segments: ' + JSON.stringify(r.ends.map((e) => e.id)));
   assert.equal(r.ends[0].id, null, 'the pull alone scores nothing');
   assert.equal(r.ends[1].merged, 2, 'the push merged with the pull');
-  assert.match(r.ends[1].why, /this one alone: cradle/, 'the glide back alone is a Cradle, and it does not fire');
   const [back, fwd] = r.merge.ms.ph;
   assert.ok(inDeg(back.turn, 120, 225) && back.climb >= 1 && fwd.turn >= 60 * DEG && r.merge.ms.tail >= 0.3, phTag({ phases: { m: r.merge } }, 'm'));
-  // 1.08 s between them: two maneuvers, the glide back a Cradle.
+  // 1.08 s between them: two maneuvers, neither a Maverick, and the glide
+  // back beside the wall is no Cradle (a wall is no post).
   const apart = await flyBf(mavInTwo(1.5), MAV_TWO_OPTS);
-  assert.ok(!apart.hits.includes('maverick') && apart.hits.includes('cradle'), 'apart: ' + apart.hits.join(','));
+  assert.ok(!apart.hits.includes('maverick') && !apart.hits.includes('cradle'), 'apart: ' + apart.hits.join(','));
   assert.ok(MERGE_GAP_S > 0.79 && MERGE_GAP_S < 0.81);
+});
+
+// The Cradle's posts on the public maps, as the page builds their colliders
+// (buildMap; the census of 2026-11-20): every tall post standing and the
+// House's 28 furniture legs (its coffee table's, chairs', stools' and patio
+// table's), no clutter (pots, nightstands, the mower, hanging strands).
+test('the Cradle\'s posts on the maps: Rig 15, the House 52 with its 28 furniture legs, the Warehouse 125, the Bando 59', () => {
+  const want = { rig: [15, 0], house: [52, 28], depot: [125, 0], bando: [59, 0] };
+  for (const [id, [n, legs]] of Object.entries(want)) {
+    const g = makeCradleGate([]);
+    cradlePosts(g, buildMap(THREE, id).colliders, WS);
+    assert.equal(g.postN, n, id + ' posts');
+    const short = [];
+    for (let i = 0; i < g.postN; i++) { const h = g.post[i * 9 + 7] - g.post[i * 9 + 4]; if (h < CRADLE.postH) short.push(Math.round(h * 100) / 100); }
+    assert.equal(short.length, legs, id + ' legs: ' + short.join(' '));
+    if (id === 'house') assert.deepEqual([...new Set(short)].sort((a, b) => a - b), [0.36, 0.39, 0.62, 0.69, 0.9]);
+  }
+});
+
+// A Cradle round a leg of the House's patio table (0.69 m, under its top),
+// on the page's colliders, flown at 0.3 m (kinematic, the page's mapping):
+// past it 0.5 m out, the nose up 57 sliding 1 m across, back against the nose.
+test('the Cradle round a leg of the House\'s patio table, on the page\'s colliders, at leg height', () => {
+  const cols = buildMap(THREE, 'house').colliders;
+  const g = makeCradleGate([]);
+  cradlePosts(g, cols, WS);
+  let leg = null;
+  for (let i = 0; i < g.postN; i++) {
+    const q = i * 9, h = g.post[q + 7] - g.post[q + 4];
+    if (Math.abs(h - 0.69) < 0.01 && (!leg || g.post[q] + g.post[q + 1] > leg[0] + leg[1])) leg = [g.post[q], g.post[q + 1], g.post[q + 8]];
+  }
+  assert.ok(leg, 'a patio table leg');
+  const fly = (side) => {
+    const d = makeDetector(), hits = [];
+    const s = { armed: true, colliders: cols, ws: WS, throttle: 0.5, clearance: 0.3 };
+    const p = { x: leg[0] - 3, y: leg[1] + side, z: 0.3 };
+    let q = { x: 0, y: 0, z: 0, w: 1 }, first = true;
+    for (const ph of [{ t: 0.9, v: [4, 0] }, { t: 0.5, rate: -2, v: [0.8, -side * 4] }, { t: 1.2, v: [-4, 0] }, { t: 1 }]) {
+      for (let i = 0, n = Math.round(ph.t / 0.004); i < n; i++) {
+        const w = ph.rate || 0, v = ph.v || [0, 0];
+        if (w) { const a = w * 0.004 / 2, r = { x: 0, y: Math.sin(a), z: 0, w: Math.cos(a) }; q = { x: q.w * r.x + q.x * r.w + q.y * r.z - q.z * r.y, y: q.w * r.y - q.x * r.z + q.y * r.w + q.z * r.x, z: q.w * r.z + q.x * r.y - q.y * r.x + q.z * r.w, w: q.w * r.w - q.x * r.x - q.y * r.y - q.z * r.z }; }
+        p.x += v[0] * 0.004; p.y += v[1] * 0.004;
+        Object.assign(s, { qx: q.x, qy: q.y, qz: q.z, qw: q.w, ox: 0, oy: w, oz: 0, wx: -p.y * WS, wy: p.z * WS, wz: -p.x * WS, alt: p.z, vx: v[0], vy: v[1], vz: 0, speed: Math.hypot(v[0], v[1]) });
+        if (first) { resetDetector(d, s); d.lockout = 0; first = false; continue; }
+        const ev = stepDetector(d, s, 0.004);
+        if (ev && TRICK_BY_ID[ev]) hits.push(ev);
+      }
+    }
+    return { hits, v: d.cg.out.filter((x) => x.result) };
+  };
+  // Outside the table, back under its top on the leg's inner side; and the
+  // other way round.
+  for (const side of [0.5, -0.5]) {
+    const r = fly(side);
+    assert.deepEqual(r.hits, ['cradle'], 'side ' + side + ': ' + JSON.stringify(r.v));
+    assert.equal(r.v[0].obj, leg[2]);
+  }
+});
+
+// The owner's Cradle on the bf core (BF_CRADLES): called at the second pass,
+// no wait, with the post on the other side; and what is not one.
+test('bf core, the Cradle as the owner flies it: past a post on one side, nose up, back past it against the nose on the other; called at the second pass', async () => {
+  for (const c of BF_CRADLES) {
+    const r = await flyBf(c.phases, c.opts);
+    assert.deepEqual(r.hits, ['cradle'], c.name + ': ' + r.hits.join(',') + ' ' + JSON.stringify(r.cradle));
+    const v = r.cradle.filter((o) => o.result === 'cradle');
+    assert.equal(v.length, 1, c.name);
+    const g = v[0];
+    // Called on the step of the second pass.
+    assert.ok(Math.abs(r.hitAt[0] - g.t2) < 1e-6, c.name + ': called at ' + r.hitAt[0] + ', the pass at ' + g.t2);
+    assert.ok(Math.sign(g.lat1) !== Math.sign(g.lat2), c.name + ' the other side');
+    assert.ok(g.pMax >= 40 && g.pMax <= 65, c.name + ' nose ' + g.pMax);
+    assert.ok(g.offNose >= 125 && -g.vBack >= 4 && g.upZ >= 0.55 && g.dt < 1.2, c.name + ' ' + JSON.stringify(g));
+    // The nose kept its heading: the net turn about the vertical (the roll in
+    // and out included), and the yaw at the second pass.
+    assert.ok(g.yawDeg <= CRADLE.yawTurn - 15 && g.yawRecent <= CRADLE.yawRecent - 15, c.name + ' ' + JSON.stringify(g));
+  }
+  // The mirror flies the other way round the other side.
+  const a = await flyBf(BF_CRADLES[0].phases, BF_CRADLES[0].opts), b = await flyBf(BF_CRADLES[2].phases, BF_CRADLES[2].opts);
+  assert.ok(a.cradle[0].lat1 > 0 && b.cradle[0].lat1 < 0);
+  // Not a Cradle: the same flight in open air (no post: no verdict at all),
+  // beside a wall (no post), with the drift too small (back on the same
+  // side), and into the pole (the quad's centre within hitM of it).
+  const none = async (phases, cols) => flyBf(phases, CRD_OPTS(cols));
+  const open = await none(crdPhases(-1, 3, 0.25, 3), null);
+  assert.ok(!open.hits.includes('cradle') && open.cradle.length === 0 && open.posts === 0, 'open air: ' + open.hits.join(','));
+  const wall = await none(crdPhases(-1, 3, 0.25, 3), [{ min: { x: -1.0 * WS, y: 0, z: -6 * WS }, max: { x: -0.4 * WS, y: 9 * WS, z: 0 } }]);
+  assert.ok(!wall.hits.includes('cradle') && wall.posts === 0, 'a wall: ' + wall.hits.join(','));
+  const same = await none(crdPhases(-1, 2, 0.2, 2.5), poleCore(3, 0.8));
+  assert.ok(!same.hits.includes('cradle'), 'same side: ' + same.hits.join(','));
+  assert.equal(same.cradle[0].why, 'same side');
+  const hit = await none(crdPhases(-1, 2, 0.2, 3), poleCore(3, 0.4));
+  assert.ok(!hit.hits.includes('cradle'), 'into the pole: ' + hit.hits.join(','));
+  assert.equal(hit.cradle[0].why, 'hit the post');
+});
+
+// Back past a pole nose first is no Cradle (not going backwards): the nose
+// over 60 degrees down, pointing back the way the quad goes, the travel back
+// along -F1 on the post's other side. A turnaround: past the pole at 5 m/s
+// drifting across, a pull to 74 up, a half turn of yaw at the top with a
+// little pitch on (the nose comes round and down to 77 down), on. A
+// hammerhead: a pull to 85 up, 150 of yaw at the top pushing (the nose to
+// 66 down, its heading 72 off F1, the travel 76 off it: nose side first),
+// both ways round. A Split-S: a pop, a half roll, a pull to 70 down. They
+// read 148-178 off F1 the way back.
+test('bf core, back past a pole nose first is no Cradle: a turnaround by yaw at the top, a hammerhead, a Split-S', async () => {
+  const opts = (z0, m = 1) => ({ z0, vx: 5, vy: 2 * m, maxT: 3, page: true, colliders: poleCore(2, 1.1 * m) });
+  const turn = await flyBf([{ t: 0.62, tS: 0.42 }, { t: 74 * DEG / 10, pitch: -10, tS: 0.5 }, { t: Math.PI / 10, yaw: 10, pitch: 0.8, tS: 0.6 }, { t: 2, tS: 0.5 }], opts(3));
+  const hammer = (m) => flyBf([{ t: 0.62, tS: 0.42 }, { t: 85 * DEG / 10, pitch: -10, tS: 0.5 }, { t: 150 * DEG / 10, yaw: 10 * m, pitch: 3, tS: 0.6 }, { t: 2, tS: 0.5 }], opts(3, m));
+  const splits = await flyBf([{ t: 0.5, tS: 0.42 }, { t: 0.2, pitch: -4.5, tS: 0.6 }, { t: 0.2, pitch: 4.5, tS: 0.5 }, { t: 0.26, roll: 12, tS: 0.3 }, { t: 0.22, pitch: -9, tS: 0.4 }, { t: 1.5, tS: 0.5 }], opts(4));
+  for (const [name, r] of [['turnaround', turn], ['hammerhead', await hammer(1)], ['hammerhead mirrored', await hammer(-1)], ['Split-S', splits]]) {
+    assert.ok(!r.hits.includes('cradle'), name + ': ' + r.hits.join(',') + ' ' + JSON.stringify(r.cradle));
+    // The post passed on one side and back on the other, nose up 25 or more
+    // between, going back fast enough: judged on the nose.
+    const v = r.cradle.find((o) => o.obj === 0 && o.lat2 != null);
+    assert.ok(v && Math.sign(v.lat1) !== Math.sign(v.lat2) && -v.vBack >= CRADLE.backSpd && v.elMax >= CRADLE.noseUp, name + ': ' + JSON.stringify(r.cradle));
+    assert.equal(v.why, 'not against the nose', name + ': ' + JSON.stringify(v));
+  }
 });
 
 test('bf core, Matty: 250-400 degrees of forward pitch over an object, climbed into from 1 s before, against the nose, upright; no climb before it, or open air, is a Flip', async () => {
@@ -2044,13 +2194,15 @@ test('normalizeStore rejects junk and keeps hud default on', () => {
   assert.equal(formatScoreFull(2400), '2,400');
 });
 
-// Store version 2: a gap no longer scores, and the bests saved before it
-// counted the Gap trick. Loading drops them (a store with no version is the
-// first); the HUD and debug settings stay, and so do version 2's bests.
-test('store version 3: bests saved under versions 1 (Gap scored) and 2 (an upright orbit scored as a Trippy) are dropped on load; the HUD and debug settings stay', () => {
+// Store versions: 2, a gap no longer scores (the bests saved before counted
+// the Gap trick); 3, an upright orbit scored as a Trippy; 4, the Cradle
+// scored with no post. Loading drops the bests of an older version (a store
+// with no version is the first); the HUD and debug settings stay, and so do
+// version 4's bests.
+test('store version 4: bests saved under versions 1 (Gap scored), 2 (an upright orbit scored as a Trippy) and 3 (the Cradle scored with no post) are dropped on load; the HUD and debug settings stay', () => {
   const old = { v: 1, hud: false, debug: true, maps: { rig: { bestCombo: 3000, bestSession: 9000 }, city: { bestCombo: 400, bestSession: 700 } } };
   const s1 = normalizeStore(old);
-  assert.equal(s1.v, 3);
+  assert.equal(s1.v, 4);
   assert.equal(s1.hud, false, 'HUD setting kept');
   assert.equal(s1.debug, true, 'debug setting kept');
   assert.deepEqual(Object.keys(s1.maps), [], 'version 1 bests dropped');
@@ -2063,9 +2215,14 @@ test('store version 3: bests saved under versions 1 (Gap scored) and 2 (an uprig
   const s2 = normalizeStore({ v: 2, hud: true, debug: false, maps: { rig: { bestCombo: 120, bestSession: 340 } } });
   assert.deepEqual(bestForMap(s2, 'rig'), { bestCombo: 0, bestSession: 0 });
   assert.equal(s2.hud, true);
-  // Version 3's own bests stay.
-  const s3 = normalizeStore({ v: 3, hud: true, debug: false, maps: { rig: { bestCombo: 120, bestSession: 340 } } });
-  assert.deepEqual(bestForMap(s3, 'rig'), { bestCombo: 120, bestSession: 340 });
+  // Version 3's go too (the Cradle scored with no post).
+  const s3 = normalizeStore({ v: 3, hud: true, debug: true, maps: { depot: { bestCombo: 900, bestSession: 1500 } } });
+  assert.deepEqual(bestForMap(s3, 'depot'), { bestCombo: 0, bestSession: 0 });
+  assert.equal(s3.hud, true);
+  assert.equal(s3.debug, true);
+  // Version 4's own bests stay.
+  const s4 = normalizeStore({ v: 4, hud: true, debug: false, maps: { rig: { bestCombo: 120, bestSession: 340 } } });
+  assert.deepEqual(bestForMap(s4, 'rig'), { bestCombo: 120, bestSession: 340 });
   // Through the page's own path: a browser holding a version 1 store.
   const store = memStore();
   store.setItem(TRICKS_KEY, JSON.stringify(old));
@@ -2073,10 +2230,10 @@ test('store version 3: bests saved under versions 1 (Gap scored) and 2 (an uprig
   assert.deepEqual(tricks.bestFor('rig'), { bestCombo: 0, bestSession: 0 }, 'no old best in the menu');
   assert.equal(tricks.hudOn(), false);
   assert.equal(tricks.debugOn(), true);
-  // The next save writes version 3, without the old bests.
+  // The next save writes version 4, without the old bests.
   tricks.setHudOn(true);
   const saved = JSON.parse(store.getItem(TRICKS_KEY));
-  assert.equal(saved.v, 3);
+  assert.equal(saved.v, 4);
   assert.equal(saved.hud, true);
   assert.equal(saved.debug, true);
   assert.deepEqual(saved.maps, {});

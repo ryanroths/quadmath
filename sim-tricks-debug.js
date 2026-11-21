@@ -27,24 +27,68 @@ import {
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
   HIST_W, BH_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE, BARANI_HD_LO,
-} from './sim-tricks.js?v=b0e0781d13b6';
+  CRADLE, groupBoxes, simBoxes, cradlePostList,
+} from './sim-tricks.js?v=d7c9767ee9c7';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
 export const CLASS_IDS = Object.freeze([
   'halfmavvy', 'rubik', 'cubik', 'barani', 'immelmann', 'ham', 'trippy', 'orbit', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
-  'powerloop', 'matty', 'maverick', 'splits', 'cradle', 'flip', 'roll', 'yawspin',
+  'powerloop', 'matty', 'maverick', 'splits', 'flip', 'roll', 'yawspin',
 ]);
 export const SPEC = Object.freeze({
   halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, barani: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, orbit: 0.05, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
   halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
-  cradle: 0.08, flip: 0, roll: 0, yawspin: 0,
+  flip: 0, roll: 0, yawspin: 0,
 });
 export const PICK_MIN = 0.42;
 export const SPEC_MIN = 0.15;
 // classifyFeat's flip fallback: a pitch rotation this big is never nothing.
 export const FLIP_FALLBACK = 5.236;
 const FLIP_WIN_LABEL = '1.2 s';
+
+// The object beside the path (rec.side), for the debug log only: nothing
+// scores it. The observer keeps every step, in a segment or not, in a ring
+// of cap steps. A maneuver's (or a dropped segment's) rec.side reads it from
+// preS before the segment's first step (the merge's, for a compound trick)
+// to its end, and again postS after the end (a glide back outlasts the
+// segment), or sooner at a respawn or a change of colliders, which clear the
+// ring. An object is a box, or boxes face to face with matching faces
+// (within cellM; the cells a mesh is split into); a pole touching a ceiling
+// is two. A box is beside the path when the quad is not over or under it
+// and its height comes within bandM of the quad's; each step the kNear
+// nearest objects beside the path within passM are logged (each by its
+// nearest box). A pass: an object's nearest point going from ahead of the
+// direction of travel to behind it, by hystM or hystK of its distance
+// either way, moving at minSpd or more and the direction of travel turned
+// under turnDot's angle (a turnaround is no pass); read where the object
+// was nearest since it was last ahead. Rolls and yaws do not move it. The
+// objects are sim-tricks.js groupBoxes' (cellM: CRADLE.cellM) and the posts
+// its cradlePostList's (CRADLE), the Cradle's own.
+export const SIDE = Object.freeze({
+  preS: 3, postS: 4, cap: 6144, bandM: 2, kNear: 12,
+  passM: 4, minSpd: 0.5, hystM: 0.1, hystK: 0.25, turnDot: 0.7, passMax: 24, rows: 32,
+  // postLat: a post's crossings farther to the side than this are not
+  // listed; postMax: posts listed at most.
+  postLat: 4, postMax: 8,
+});
+
+// The Cradle's own log: a record of type 'cradle' per step with verdicts of
+// sim-tricks.js cradleStep (each Cradle, and each miss that got as far as an
+// attempt: the nose up; a crash, a respawn or a disarm ends one too), the
+// first (the Cradle, if one) in gate, the rest in others. Its inputs, every
+// step (a miss's every missDt, a row standing for the steps since the last:
+// their turn summed, a touch, reset or disarm on any; and on to CRADLE.maxS
+// past its first pass:
+// what came after an early void; a miss whose window starts inside the
+// last miss record's shares its rows: inputs.same, that record's seq,
+// which runs on to cover both, 6 s at most), from preS before the first
+// pass to the
+// verdict, and again (the same record) to postS after it, at most cap steps
+// kept: enough to replay the verdict (makeCradleGate, then cradleStep on
+// each row; the rows past it let a replay whose rounded positions put the
+// second pass a step later still see it).
+export const CRADLE_LOG = Object.freeze({ preS: 0.6, postS: 0.3, cap: 2048, missDt: 0.008 });
 
 // stepDetector's spatial constants (sim-tricks.js DIVE_*, GAP_*), the dive
 // fallback inside classifyFeat, and the segment-start numbers.
@@ -131,11 +175,6 @@ export const GATES = Object.freeze({
   splits: [
     ge('f.phSplits', 1, 1),
   ],
-  cradle: [
-    band('v.pathP', 1.3, 4.4, 0.45), le('absP', 3.6, 0.5), le('v.inv', 0.22, 0.1),
-    ge('v.against - v.follow', 0.08, 0.12), le('absR', 2.2, 0.6), ge('f.travelH', 1.6, 0.6), ge('f.dur', 0.4, 0.1),
-    floorOf(ge('v.obj', 0.08, 0.08), 0.55),
-  ],
   flip: [
     ge('f.phFlip', 1, 1),
   ],
@@ -169,7 +208,6 @@ export const OVERRIDES = Object.freeze([
   { from: 'snapback', to: 'cubik', text: 'snapback→cubik: cubik > snapback + 0.04', when: (c) => c.sc.cubik > c.sc.snapback + 0.04 },
   { from: 'rubik', to: 'cubik', max: true, text: 'rubik→cubik: rollFirst > 0.06', when: (c) => c.rollFirst > 0.06 },
   { from: 'cubik', to: 'rubik', max: true, text: 'cubik→rubik: pitchFirst > 0.06', when: (c) => c.pitchFirst > 0.06 },
-  { from: 'maverick', to: 'cradle', text: 'maverick→cradle: against > follow + 0.08, cradle > 0.4', when: (c) => c.v.against > c.v.follow + 0.08 && c.sc.cradle > 0.4 },
 ]);
 export const OVERRIDE_TEXT = Object.freeze(OVERRIDES.map((r) => r.text));
 
@@ -198,6 +236,7 @@ function inBand(x, lo, hi, fade) {
 }
 
 const r3 = (x) => (Number.isFinite(x) ? Math.round(x * 1000) / 1000 : x);
+const r4 = (x) => (Number.isFinite(x) ? Math.round(x * 10000) / 10000 : x);
 const degOf = (r) => Math.round((r || 0) * 180 / Math.PI);
 
 // The values classifyFeat computes before its score terms, by the
@@ -570,6 +609,9 @@ export function gapState(det, frameW, ws) {
 export function createTrickObserver(det, opts) {
   const o = opts || {};
   const emit = o.onAttempt || function () {};
+  // A maneuver's rec.side refreshed past the segment's end (the same record
+  // onAttempt had).
+  const onSide = o.onSide || function () {};
   const now = o.now || function () { return 0; };
   const info = o.info || function () { return {}; };
   const pre = makeFeat();
@@ -593,6 +635,38 @@ export function createTrickObserver(det, opts) {
   const CAM_W = 14, CAM_CAP = 4096;
   const camBuf = new Float64Array(CAM_CAP * CAM_W);
   let camN = 0, camDeg = 30, camFrom = 'default', camWs = 3.5;
+  // The object beside the path (rec.side), logged only: each step (SW
+  // columns) the ring's clock, the segment's number (0 none), the position
+  // (sim-core frame, m: x forward, y left, z up, as camPush's), the velocity
+  // (m/s), the nose, the heading (the nose's, level; the body's left axis
+  // turned forward when the nose is within 66 degrees of vertical; never
+  // reversed from one step to the next, so a pitch over the top or a roll
+  // past 90 keeps it), the body's up-Z, and the objects beside the path nearest first
+  // (object id + 1, its nearest box's index, nearest point, distance).
+  // sideRecord reads it.
+  const SB = 15, SK = SIDE.kNear, SW = SB + SK * 6, SCAP = SIDE.cap;
+  const sideBuf = new Float64Array(SCAP * SW);
+  let sideN = 0, sideHead = 0, sideFx = 1, sideFy = 0, sideHdOn = 0, sideEpoch = 0;
+  // The colliders, as sim-core boxes (x0 y0 z0 x1 y1 z1, m), each box's
+  // object, and each object's bounds and box count, rebuilt when the array,
+  // its length or its ends change.
+  let sideCols = null, sideColsN = -1, sideCol0 = null, sideColL = null, sideWs = 3.5, sideBox = new Float64Array(0);
+  let sideObj = new Int32Array(0), sideObjBox = new Float64Array(0), sideObjN = new Int32Array(0), sidePost = new Set();
+  // The ring's own clock, the sim's (each step's dt; the page's now() is
+  // the frame's wall time, the same for every step in a frame), its reading
+  // at the open segment's first step, and the segments' count.
+  let simT = 0, segSim0 = 0, segN = 0;
+  const candD = new Float64Array(SK), candI = new Int32Array(SK), candP = new Float64Array(SK * 3), candO = new Int32Array(SK);
+  const sidePend = [];
+  // The Cradle's inputs (det.cg.inp: the clock, position, velocity, nose,
+  // up-Z, contact), armed, the turn about the vertical and fresh (the first
+  // step after a reset), each step (CG_W columns), for its records.
+  const CG_W = 15, CG_CAP = CRADLE_LOG.cap;
+  const CG_COLS = ['t', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'fx', 'fy', 'fz', 'upZ', 'contact', 'armed', 'yr', 'fresh'];
+  const cgBuf = new Float64Array(CG_CAP * CG_W);
+  let cgN = 0, cgHead = 0, cgSeq = 0, cgT = NaN;
+  const cgPend = [];
+  let cgMiss = null;   // the last miss record's pending refresh (rows to share)
   const view = {
     t: 0, armed: false, contact: false, rate: 0, lockout: 0, diving: false, live: 0, liveT: 0,
     vz: 0, speed: 0, alt: 0, thr: 0, gap: null, clr: null, diveOn: 0, diveDrop: 0, diveCd: 0, gapCd: 0,
@@ -610,7 +684,9 @@ export function createTrickObserver(det, opts) {
     // A compound trick: the merge's label (the detector's), and what merged.
     const mg = det.lastMerge;
     // An orbit going on (the one before it scored): the detector's nothing.
-    rec.result = mg || det.lastCont ? (det.lastId || null) : ex.id;
+    // A segment open at a Cradle's second pass: the detector's Cradle.
+    rec.result = mg || det.lastCont || det.lastCradleSeg ? (det.lastId || null) : ex.id;
+    rec.cradle = det.lastCradleSeg || 0;
     rec.merged = mg ? { id: mg.id, segs: mg.segs, t: r3(mg.t), score: r3(mg.score), alone: ex.id } : null;
     rec.event = ev || null;
     rec.why = det.lastWhy || '';
@@ -623,6 +699,7 @@ export function createTrickObserver(det, opts) {
     rec.pre = ex.pre;
     rec.saw = ex.saw;
     rec.cam = camRecord(f);
+    try { sideAttach(rec, det.lastMerge); } catch (e) { rec.side = null; }
     rec.barani = baraniProbe(f);
     rec.phases = phaseRecord(det.lastPhases);
     rec.gapBack = ex.id === 'maverick' && det.lastGapBack ? MAV_GAP_MUL : 0;
@@ -636,6 +713,11 @@ export function createTrickObserver(det, opts) {
     else rec.reason = ex.candidates.find((c) => c.id === ex.id)?.reason || (ex.id === 'dive' ? 'dive fallback' : '');
     if (mg) rec.reason = 'merged with the ' + (mg.segs - 1) + ' segment(s) before (pauses under 0.8 s): ' + mg.id + '; this one alone: ' + (ex.id || 'nothing');
     if (det.lastCont) rec.reason = 'the orbit before it goes on (one orbit scores once)';
+    if (det.lastCradleSeg) rec.reason = 'closed at a Cradle\'s second pass (the cradle record after this one); this one alone: ' + (ex.id || 'nothing');
+    // Held for a half-flown Cradle (sim-tricks.js cradleHolds): called when
+    // it comes to nothing, or replaced by it.
+    rec.held = det.held ? 1 : 0;
+    if (det.held) rec.reason += '; held: a Cradle round a post is half flown (replaced by it, or called when it comes to nothing)';
     rec._explain = ex;
     emit(rec);
   }
@@ -825,12 +907,429 @@ export function createTrickObserver(det, opts) {
     return out;
   }
 
+  // The colliders as sim-core boxes and objects; true when they changed.
+  function sideColsSet(cols, ws) {
+    const n = cols && cols.length ? cols.length : 0;
+    if (cols === sideCols && n === sideColsN && ws === sideWs && (!n || (cols[0] === sideCol0 && cols[n - 1] === sideColL))) return false;
+    // A change (not the first): the pending records finish on the old set.
+    if (sideColsN >= 0) sideReset('colliders');
+    sideCols = cols || null; sideColsN = n; sideWs = ws;
+    sideCol0 = n ? cols[0] : null; sideColL = n ? cols[n - 1] : null;
+    sideBox = simBoxes(cols, ws, null);
+    // Objects: sim-tricks.js groupBoxes (the Cradle's posts are the same).
+    const grp = groupBoxes(sideBox, n, CRADLE.cellM);
+    sideObj = grp.obj; sideObjBox = grp.box; sideObjN = grp.cnt;
+    sidePost = new Set(cradlePostList(sideBox, n, grp).map((p) => p[6]));
+    return true;
+  }
+
+  // The pending records, finished now (at the ring's last step), then the
+  // ring cleared: a respawn or a map change starts another flight.
+  function sideReset(why) {
+    const tEnd = sideN ? sideBuf[((sideHead - 1) % SCAP + SCAP) % SCAP * SW] : simT;
+    while (sidePend.length) {
+      const p = sidePend.shift();
+      p.rec.side = sideRecord(p, tEnd, why);
+      try { onSide(p.rec); } catch (e) { /* never break the frame */ }
+    }
+    sideN = 0; sideHdOn = 0; sideEpoch++;
+  }
+
+  // One step into the side ring (see SIDE).
+  function sidePush(s, t, seg) {
+    const ws = s.ws || 3.5;
+    const px = -(s.wz || 0) / ws, py = -(s.wx || 0) / ws, pz = (s.wy || 0) / ws;
+    sideColsSet(s.colliders, ws);
+    if (sideN) {
+      const k0 = ((sideHead - 1) % SCAP + SCAP) % SCAP * SW;
+      if (Math.hypot(px - sideBuf[k0 + 2], py - sideBuf[k0 + 3], pz - sideBuf[k0 + 4]) > 2) sideReset('jump');
+    }
+    const x = s.qx || 0, y = s.qy || 0, z = s.qz || 0, w = s.qw == null ? 1 : s.qw;
+    const fx = 1 - 2 * (y * y + z * z), fy = 2 * (x * y + w * z), fz = 2 * (x * z - w * y);
+    const lx = 2 * (x * y - w * z), ly = 1 - 2 * (x * x + z * z);
+    const uz = 1 - 2 * (x * x + y * y);
+    const lh = Math.hypot(lx, ly), fh = Math.hypot(fx, fy);
+    let hx = 0, hy = 0;
+    if (fh > 0.4) { hx = fx / fh; hy = fy / fh; } else if (lh > 0.25) { hx = ly / lh; hy = -lx / lh; }
+    if (hx || hy) {
+      // Kept from the step before; on a fresh ring, the nose's way.
+      const ref = sideHdOn ? hx * sideFx + hy * sideFy : hx * fx + hy * fy;
+      if (ref < 0) { hx = -hx; hy = -hy; }
+      sideFx = hx; sideFy = hy; sideHdOn = 1;
+    }
+    // The kNear nearest objects beside the path within passM, nearest
+    // first, each by its nearest box.
+    let cn = 0;
+    const B = sideBox, O = sideObj, nb = sideColsN > 0 ? sideColsN : 0, band = SIDE.bandM, dMax = SIDE.passM * SIDE.passM;
+    for (let i = 0; i < nb; i++) {
+      const k = i * 6, x0 = B[k];
+      if (x0 !== x0) continue;
+      const y0 = B[k + 1], z0 = B[k + 2], x1 = B[k + 3], y1 = B[k + 4], z1 = B[k + 5];
+      if (z1 < pz - band || z0 > pz + band) continue;
+      if (px >= x0 && px <= x1 && py >= y0 && py <= y1) continue;
+      const qx = px < x0 ? x0 : (px > x1 ? x1 : px), qy = py < y0 ? y0 : (py > y1 ? y1 : py), qz = pz < z0 ? z0 : (pz > z1 ? z1 : pz);
+      const dd = (qx - px) * (qx - px) + (qy - py) * (qy - py) + (qz - pz) * (qz - pz);
+      if (dd > dMax || (cn === SK && dd >= candD[SK - 1])) continue;
+      const ob = O[i];
+      // The object once, by its nearest box.
+      let j = -1;
+      for (let m = 0; m < cn; m++) if (candO[m] === ob) { j = m; break; }
+      if (j >= 0) {
+        if (dd >= candD[j]) continue;
+      } else j = cn < SK ? cn++ : SK - 1;
+      while (j > 0 && candD[j - 1] > dd) {
+        candD[j] = candD[j - 1]; candI[j] = candI[j - 1]; candO[j] = candO[j - 1];
+        candP[j * 3] = candP[j * 3 - 3]; candP[j * 3 + 1] = candP[j * 3 - 2]; candP[j * 3 + 2] = candP[j * 3 - 1];
+        j--;
+      }
+      candD[j] = dd; candI[j] = i; candO[j] = ob; candP[j * 3] = qx; candP[j * 3 + 1] = qy; candP[j * 3 + 2] = qz;
+    }
+    const k = sideHead * SW;
+    sideBuf[k] = t; sideBuf[k + 1] = seg;
+    sideBuf[k + 2] = px; sideBuf[k + 3] = py; sideBuf[k + 4] = pz;
+    sideBuf[k + 5] = s.vx || 0; sideBuf[k + 6] = s.vy || 0; sideBuf[k + 7] = s.vz || 0;
+    sideBuf[k + 8] = fx; sideBuf[k + 9] = fy; sideBuf[k + 10] = fz;
+    sideBuf[k + 11] = sideFx; sideBuf[k + 12] = sideFy; sideBuf[k + 13] = uz; sideBuf[k + 14] = 0;
+    for (let j = 0; j < cn; j++) {
+      const o = k + SB + j * 6;
+      sideBuf[o] = candO[j] + 1; sideBuf[o + 1] = candI[j];
+      sideBuf[o + 2] = candP[j * 3]; sideBuf[o + 3] = candP[j * 3 + 1]; sideBuf[o + 4] = candP[j * 3 + 2];
+      sideBuf[o + 5] = Math.sqrt(candD[j]);
+    }
+    if (cn < SK) sideBuf[k + SB + cn * 6] = 0;
+    sideHead = (sideHead + 1) % SCAP;
+    if (sideN < SCAP) sideN++;
+  }
+
+  // A record's rec.side now, and again SIDE.postS after its end. The window
+  // opens SIDE.preS before the segment, or before the merge it closed.
+  function sideAttach(rec, mg) {
+    const ta = mg && mg.t > 0 ? Math.min(segSim0, simT - mg.t) : segSim0;
+    const p = { rec, t0: segSim0, t1: simT, ta, due: simT + SIDE.postS };
+    rec.side = sideRecord(p, simT, 'end');
+    sidePend.push(p);
+  }
+
+  // rec.side over the ring from p.ta - SIDE.preS to tEnd. Times relative to
+  // p.t0, the segment's first step (s). why: 'end' (at the segment's end),
+  // 'post' (SIDE.postS later), 'jump' or 'colliders' (finished early at a
+  // respawn or a change of colliders). In the heading's frame (F forward,
+  // L its left): vAlong (+ toward the heading, - backwards), vLat. noseEl
+  // the nose above the horizon, pitchH its angle in the heading's vertical
+  // plane (0 level, 90 straight up, 180 over the top), deg. noseDot the
+  // velocity along the nose (-1 straight against it; null under 0.85 m/s).
+  // A pass (see SIDE): its object (obj) and box, read at the object's nearest
+  // (t; at: when it went behind): d (3-D) and dH (level) to the box's
+  // nearest point (m), up its height above the quad, latT its side of the
+  // direction of travel there (+ left), latH of the heading, lat1 of the
+  // direction of travel at the object's first pass (a Cradle: one sign, then
+  // the other), ux uy that direction of travel, and the quad's state.
+  // segs: the segments in the window ([start, end], s; 8 at most). stops:
+  // the level travel turned round. noseMax: the most pitchH (unwrapped).
+  // passDrop: passes over passMax (the nearest in time to the segment are
+  // kept); passOver: passes over or under an object (no side), not listed.
+  // posts: each post seen (see SIDE), its footprint, its nearest (dMin,
+  // tMin), and each crossing of the line square to the heading through its
+  // centre, in the frame of the heading at its first crossing moving
+  // forward (hd1: F1, its left L1): fwd (moving along F1, the post going
+  // behind) or back (against F1, the post coming ahead), lat its side then
+  // (+ left of F1, m; a Cradle: one sign, then the other), at every step;
+  // with d to it, vAlong (along F1), noseDot, pitchH, and, since the
+  // crossing before, the nearest (dMin) and the most pitchH (noseMax). objs: the objects
+  // passed and the nearest (bounds, sim-core m: x0 y0 z0 x1 y1 z1).
+  // The posts' crossings (rec.side.posts): per post seen in the window (an
+  // object listed beside the path at any step), at every step.
+  function postRecord(ks, t0, per) {
+    const D = 180 / Math.PI, out = [];
+    for (const ob of per.keys()) {
+      if (out.length >= SIDE.postMax) break;
+      const o = ob * 6, B = sideObjBox;
+      const x0 = B[o], y0 = B[o + 1], z0 = B[o + 2], x1 = B[o + 3], y1 = B[o + 4], z1 = B[o + 5];
+      const w = Math.max(x1 - x0, y1 - y0), h = z1 - z0;
+      if (!sidePost.has(ob)) continue;
+      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+      const rec = { obj: ob, box: [x0, y0, z0, x1, y1, z1].map(r3), w: r3(w), h: r3(h), dMin: null, tMin: null, hd1: null, crossings: [] };
+      let F1 = null, sg = 0, sgH = 0, dMin = Infinity, tMin = 0, segMin = Infinity, segNose = -Infinity;
+      for (let j = 0; j < ks.length; j++) {
+        const k = ks[j];
+        const px = sideBuf[k + 2], py = sideBuf[k + 3], pz = sideBuf[k + 4];
+        const qx = px < x0 ? x0 : (px > x1 ? x1 : px), qy = py < y0 ? y0 : (py > y1 ? y1 : py), qz = pz < z0 ? z0 : (pz > z1 ? z1 : pz);
+        const d = Math.hypot(qx - px, qy - py, qz - pz);
+        const t = sideBuf[k] - t0;
+        if (d < dMin) { dMin = d; tMin = t; }
+        if (d < segMin) segMin = d;
+        const fz = sideBuf[k + 10], Fx = sideBuf[k + 11], Fy = sideBuf[k + 12];
+        const pitchH = Math.atan2(fz, sideBuf[k + 8] * Fx + sideBuf[k + 9] * Fy) * D;
+        if (pitchH > segNose) segNose = pitchH;
+        const vx = sideBuf[k + 5], vy = sideBuf[k + 6], vz = sideBuf[k + 7];
+        const rx = cx - px, ry = cy - py;
+        if (!F1) {
+          // The first crossing moving forward, in the heading's frame.
+          const a = rx * Fx + ry * Fy, nowH = a >= SIDE.hystM ? 1 : a <= -SIDE.hystM ? -1 : 0;
+          if (nowH) {
+            if (sgH === 1 && nowH === -1 && vx * Fx + vy * Fy >= SIDE.minSpd) { F1 = [Fx, Fy]; sg = -1; rec.hd1 = Math.round(Math.atan2(Fy, Fx) * D); }
+            sgH = nowH;
+          }
+          if (!F1) continue;
+        } else {
+          const a = rx * F1[0] + ry * F1[1], now = a >= SIDE.hystM ? 1 : a <= -SIDE.hystM ? -1 : 0;
+          if (!now || now === sg) continue;
+          sg = now;
+        }
+        const lat = -rx * F1[1] + ry * F1[0];
+        const va = vx * F1[0] + vy * F1[1], sp = Math.hypot(vx, vy, vz);
+        if (Math.abs(lat) <= SIDE.postLat && rec.crossings.length < 8) {
+          rec.crossings.push({
+            t: r3(t), way: sg < 0 ? 'fwd' : 'back', lat: r3(lat), d: r3(d), z: r3(pz), vAlong: r3(va),
+            noseDot: sp > 0.85 ? r3((vx * sideBuf[k + 8] + vy * sideBuf[k + 9] + vz * fz) / sp) : null,
+            pitchH: Math.round(pitchH), dMin: r3(segMin), noseMax: Math.round(segNose), seg: sideBuf[k + 1],
+          });
+        }
+        segMin = Infinity; segNose = -Infinity;
+      }
+      rec.dMin = r3(dMin); rec.tMin = r3(tMin);
+      out.push(rec);
+    }
+    return out;
+  }
+
+  function sideRecord(p, tEnd, why) {
+    const D = 180 / Math.PI, F = SW, t0 = p.t0;
+    const out = { why, dur: r3(p.t1 - t0), to: r3(tEnd - t0), a0: r3(p.ta - t0), simT0: r3(t0), epoch: sideEpoch, n: 0, cut: false, boxN: sideColsN > 0 ? sideColsN : 0 };
+    const ks = [];
+    const ta = p.ta - SIDE.preS;
+    for (let i = 0; i < sideN; i++) {
+      const k = ((sideHead - sideN + i) % SCAP + SCAP) % SCAP * F;
+      const t = sideBuf[k];
+      if (t >= ta - 1e-9 && t <= tEnd + 1e-9) ks.push(k);
+    }
+    out.n = ks.length;
+    if (!ks.length) { out.passes = []; return out; }
+    out.cut = sideBuf[ks[0]] > ta + 0.05;
+    out.from = r3(sideBuf[ks[0]] - t0);
+    const st = (k) => {
+      const Fx = sideBuf[k + 11], Fy = sideBuf[k + 12];
+      const vx = sideBuf[k + 5], vy = sideBuf[k + 6], vz = sideBuf[k + 7];
+      const fx = sideBuf[k + 8], fy = sideBuf[k + 9], fz = sideBuf[k + 10];
+      const sp = Math.hypot(vx, vy, vz);
+      return {
+        t: sideBuf[k] - t0, seg: sideBuf[k + 1], x: sideBuf[k + 2], y: sideBuf[k + 3], z: sideBuf[k + 4],
+        vAlong: vx * Fx + vy * Fy, vLat: -vx * Fy + vy * Fx, vz, spd: Math.hypot(vx, vy),
+        noseEl: Math.asin(fz > 1 ? 1 : fz < -1 ? -1 : fz) * D, pitchH: Math.atan2(fz, fx * Fx + fy * Fy) * D,
+        noseDot: sp > 0.85 ? (vx * fx + vy * fy + vz * fz) / sp : null,
+        hd: Math.atan2(Fy, Fx) * D, upZ: sideBuf[k + 13], Fx, Fy, vx, vy,
+      };
+    };
+    const slot = (k, m) => {
+      const o = k + SB + m * 6;
+      return { obj: sideBuf[o] - 1, box: sideBuf[o + 1], cx: sideBuf[o + 2], cy: sideBuf[o + 3], cz: sideBuf[o + 4], d: sideBuf[o + 5] };
+    };
+    // Passes, per object.
+    const per = new Map(), all = [];
+    let over = 0, near = null;
+    const thr = SIDE.minSpd, h0 = SIDE.hystM, hk = SIDE.hystK;
+    for (let j = 0; j < ks.length; j++) {
+      const k = ks[j];
+      const px = sideBuf[k + 2], py = sideBuf[k + 3], vx = sideBuf[k + 5], vy = sideBuf[k + 6];
+      const spd = Math.hypot(vx, vy);
+      for (let m = 0; m < SK; m++) {
+        if (!sideBuf[k + SB + m * 6]) break;
+        const c = slot(k, m), ob = c.obj;
+        if (!near || c.d < near.c.d) near = { k, c };
+        let q = per.get(ob);
+        if (!q) { q = { sg: 0, bk: k, bc: c, ux: 0, uy: 0, n1: null, tl: sideBuf[k] }; per.set(ob, q); }
+        // Out of the list for a while (not beside the path, or 12 nearer):
+        // its way past is unknown.
+        if (sideBuf[k] - q.tl > 0.1) { q.sg = 0; q.bk = k; q.bc = c; }
+        q.tl = sideBuf[k];
+        if (c.d < q.bc.d) { q.bk = k; q.bc = c; }
+        if (spd < thr) continue;
+        const ux = vx / spd, uy = vy / spd;
+        const rx = c.cx - px, ry = c.cy - py;
+        const a = rx * ux + ry * uy, bnd = Math.max(h0, hk * Math.hypot(rx, ry));
+        const now = a >= bnd ? 1 : a <= -bnd ? -1 : 0;
+        if (!now) continue;
+        if (now === 1) {
+          if (q.sg !== 1) { q.bk = k; q.bc = c; }
+          q.ux = ux; q.uy = uy;
+        } else if (q.sg === 1 && ux * q.ux + uy * q.uy >= SIDE.turnDot) {
+          const r = st(q.bk), b = q.bc;
+          const brx = b.cx - r.x, bry = b.cy - r.y;
+          const pu = r.spd >= thr ? [r.vx / r.spd, r.vy / r.spd] : [ux, uy];
+          const latT = -brx * pu[1] + bry * pu[0];
+          // Over or under it (no side): counted, not listed.
+          if (Math.abs(latT) < h0) over++;
+          else if (all.length < 400) {
+            if (!q.n1) q.n1 = pu;
+            all.push({
+              t: r3(r.t), at: r3(sideBuf[k] - t0), obj: ob, box: b.box, d: r3(b.d), dH: r3(Math.hypot(brx, bry)), up: r3(b.cz - r.z),
+              latT: r3(latT), latH: r3(-brx * r.Fy + bry * r.Fx), lat1: r3(-brx * q.n1[1] + bry * q.n1[0]),
+              ux: r3(pu[0]), uy: r3(pu[1]), spd: r3(r.spd), vAlong: r3(r.vAlong), vz: r3(r.vz),
+              noseEl: Math.round(r.noseEl), pitchH: Math.round(r.pitchH), noseDot: r.noseDot == null ? null : r3(r.noseDot),
+              hd: Math.round(r.hd), upZ: r3(r.upZ), x: r3(r.x), y: r3(r.y), z: r3(r.z), seg: r.seg,
+            });
+          }
+        }
+        q.sg = now;
+      }
+    }
+    // The passMax nearest in time to the segment, in order.
+    const off = (x) => (x.t < 0 ? -x.t : x.t > p.t1 - t0 ? x.t - (p.t1 - t0) : 0);
+    const passes = all.length > SIDE.passMax ? all.slice().sort((a, b) => off(a) - off(b)).slice(0, SIDE.passMax).sort((a, b) => a.t - b.t) : all;
+    out.passes = passes;
+    out.passDrop = all.length - passes.length;
+    out.passOver = over;
+    out.posts = postRecord(ks, t0, per);
+    // The window: its segments, the stops, the nose.
+    // The stops: the level travel turned round (by 120 degrees or more,
+    // moving at minSpd) from where it last went; pitchH unwrapped over the
+    // window (a back flip reads 360).
+    const segs = [];
+    let cur = 0, open = 0, tPrev = 0, rx0 = 0, ry0 = 0, pw = 0, pPrev = 0, nm = null;
+    const stops = [];
+    for (let j = 0; j < ks.length; j++) {
+      const r = st(ks[j]);
+      if (r.seg !== cur) {
+        if (open) { segs[segs.length - 1][1] = r3(tPrev); open = 0; }
+        if (r.seg && segs.length < 8) { segs.push([r3(r.t), null]); open = 1; }
+        cur = r.seg;
+      }
+      tPrev = r.t;
+      if (r.spd >= thr) {
+        const ux = r.vx / r.spd, uy = r.vy / r.spd;
+        if (!rx0 && !ry0) { rx0 = ux; ry0 = uy; }
+        else if (ux * rx0 + uy * ry0 <= -0.5) {
+          if (stops.length < 8) stops.push({ t: r3(r.t), to: r.vAlong < 0 ? 'back' : 'fwd', pitchH: Math.round(r.pitchH), noseDot: r.noseDot == null ? null : r3(r.noseDot) });
+          rx0 = ux; ry0 = uy;
+        }
+      }
+      let dp = r.pitchH - pPrev;
+      if (j) { while (dp > 180) dp -= 360; while (dp < -180) dp += 360; pw += dp; } else pw = r.pitchH;
+      pPrev = r.pitchH;
+      if (!nm || pw > nm.raw) nm = { raw: pw, t: r.t, noseEl: r.noseEl, upZ: r.upZ };
+    }
+    if (open) segs[segs.length - 1][1] = r3(sideBuf[ks[ks.length - 1]] - t0);
+    if (nm) nm = { t: r3(nm.t), pitchH: Math.round(nm.raw), noseEl: Math.round(nm.noseEl), upZ: r3(nm.upZ) };
+    out.segs = segs;
+    out.stops = stops;
+    out.noseMax = nm;
+    if (near) {
+      const r = st(near.k), c = near.c, rx = c.cx - r.x, ry = c.cy - r.y;
+      out.nearest = { t: r3(r.t), obj: c.obj, box: c.box, d: r3(c.d), dH: r3(Math.hypot(rx, ry)), up: r3(c.cz - r.z), latH: r3(-rx * r.Fy + ry * r.Fx), seg: r.seg };
+    } else out.nearest = null;
+    // The objects passed and the nearest: bounds (sim-core m) and boxes.
+    const ids = [];
+    for (const q of passes) if (!ids.includes(q.obj)) ids.push(q.obj);
+    if (near && !ids.includes(near.c.obj)) ids.push(near.c.obj);
+    out.objs = ids.slice(0, 16).map((i) => ({
+      obj: i, boxes: sideObjN[i] || 0, box: i < sideObjN.length ? [0, 1, 2, 3, 4, 5].map((u) => r3(sideObjBox[i * 6 + u])) : null,
+    }));
+    out.cols = ['t', 'seg', 'x', 'y', 'z', 'vAlong', 'vLat', 'vz', 'noseEl', 'pitchH', 'noseDot', 'hd', 'upZ', 'obj', 'box', 'd', 'dH', 'latH', 'up'];
+    out.rows = [];
+    const M = Math.min(SIDE.rows, ks.length);
+    for (let j = 0; j < M; j++) {
+      const k = ks[M > 1 ? Math.round((j * (ks.length - 1)) / (M - 1)) : 0];
+      const r = st(k), c = sideBuf[k + SB] ? slot(k, 0) : null;
+      const rx = c ? c.cx - r.x : 0, ry = c ? c.cy - r.y : 0;
+      out.rows.push([r3(r.t), r.seg, r3(r.x), r3(r.y), r3(r.z), r3(r.vAlong), r3(r.vLat), r3(r.vz), Math.round(r.noseEl), Math.round(r.pitchH),
+        r.noseDot == null ? null : r3(r.noseDot), Math.round(r.hd), r3(r.upZ),
+        c ? c.obj : null, c ? c.box : null, c ? r3(c.d) : null, c ? r3(Math.hypot(rx, ry)) : null, c ? r3(-rx * r.Fy + ry * r.Fx) : null, c ? r3(c.cz - r.z) : null]);
+    }
+    return out;
+  }
+
   function emitAbort(t, f, why) {
     const rec = base('abort', t);
     rec.t0 = r3(segT0);
     rec.result = null;
     rec.reason = why;
     rec.saw = { dur: r3(f.dur), n: f.n, pitchDeg: degOf(f.pitch), rollDeg: degOf(f.roll), yawDeg: degOf(f.yaw) };
+    try { sideAttach(rec, null); } catch (e) { rec.side = null; }
+    emit(rec);
+  }
+
+  // The Cradle's inputs from ta to tb (its clock), as rows of the record, a
+  // row every dt or more (0: every step). A step left out goes on the next
+  // row kept: its turn added to that row's, and a touch, a reset or a
+  // disarm on it marked there (a replay of the rows then sees the whole turn
+  // and every touch).
+  function cgRows(ta, tb, dt) {
+    const rows = [];
+    let last = -Infinity, yrA = 0, cA = 0, fA = 0, aA = 1;
+    for (let i = 0; i < cgN; i++) {
+      const k = ((cgHead - cgN + i) % CG_CAP + CG_CAP) % CG_CAP * CG_W;
+      const tt = cgBuf[k];
+      if (tt < ta - 1e-9 || tt > tb + 1e-9) continue;
+      if (dt > 0 && tt < last + dt - 1e-9) {
+        yrA += cgBuf[k + 13];
+        if (cgBuf[k + 11]) cA = 1;
+        if (!cgBuf[k + 12]) aA = 0;
+        if (cgBuf[k + 14]) fA = 1;
+        continue;
+      }
+      last = tt;
+      rows.push([Math.round(tt * 10000) / 10000, r4(cgBuf[k + 1]), r4(cgBuf[k + 2]), r4(cgBuf[k + 3]), r3(cgBuf[k + 4]), r3(cgBuf[k + 5]), r3(cgBuf[k + 6]),
+        r4(cgBuf[k + 7]), r4(cgBuf[k + 8]), r4(cgBuf[k + 9]), r3(cgBuf[k + 10]), cA || cgBuf[k + 11] ? 1 : 0, aA && cgBuf[k + 12] ? 1 : 0,
+        r4(cgBuf[k + 13] + yrA), fA || cgBuf[k + 14] ? 1 : 0]);
+      yrA = 0; cA = 0; fA = 0; aA = 1;
+    }
+    return rows;
+  }
+
+  // A cradle record: this step's verdicts (sim-tricks.js cradleStep's; the
+  // Cradle, if one, first), the numbers they were judged by, the posts near
+  // the path, and the inputs from CRADLE_LOG.preS before the earliest first
+  // pass to the verdict (again to postS past it). lost: verdicts the gate's
+  // list dropped before this step read them.
+  function cradleWhy(v) {
+    return v.result
+      ? 'Cradle round post ' + v.obj + ': out ' + Math.abs(v.lat1).toFixed(2) + ' m, nose ' + v.elMax + '°, back ' + Math.abs(v.lat2).toFixed(2) + ' m the other side at ' + (-v.vBack).toFixed(1) + ' m/s, ' + v.offNose + '° off the nose, ' + v.dt.toFixed(2) + ' s'
+      : 'no Cradle round post ' + v.obj + ': ' + v.why;
+  }
+  function emitCradle(t, vs, ev, lost) {
+    const v = vs.find((x) => x.result) || vs[0];
+    const others = vs.filter((x) => x !== v);
+    const rec = base('cradle', t);
+    rec.result = v.result || null;
+    rec.event = v.result ? ev || null : null;
+    rec.reason = cradleWhy(v) + (others.length ? ' (and post ' + others.map((o) => o.obj + ' ' + (o.result || o.why)).join(', post ') + ')' : '');
+    rec.closed = det.lastCradleSeg && det.lastCradleSeg === v.seq ? 1 : 0;
+    rec.replaced = v.result && det.lastCradleRepl ? det.lastCradleRepl : null;
+    rec.gate = v;
+    rec.others = others;
+    if (lost > 0) rec.lost = lost;
+    rec.need = CRADLE;
+    let ta = Infinity, tb = -Infinity, tEnd = -Infinity;
+    for (const x of vs) { if (x.t1 < ta) ta = x.t1; if (x.t2 > tb) tb = x.t2; }
+    // A miss: on to maxS past its first pass, every missDt.
+    const dt = v.result ? 0 : CRADLE_LOG.missDt;
+    tEnd = v.result ? tb : Math.max(tb, ta + CRADLE.maxS);
+    ta -= CRADLE_LOG.preS;
+    const due = tEnd + CRADLE_LOG.postS;
+    let rows;
+    if (!v.result && cgMiss && ta >= cgMiss.ta - 1e-9 && ta <= cgMiss.due && due - cgMiss.ta <= 6) {
+      // Inside the last miss record's window: its rows, on to this one's end
+      // (refreshed again then; 6 s at most, inside the ring).
+      rec.inputs = { cols: CG_COLS, same: cgMiss.rec.seq };
+      if (due > cgMiss.due) cgMiss.due = due;
+      if (cgPend.indexOf(cgMiss) < 0) cgPend.push(cgMiss);
+      rows = cgMiss.rec.inputs.rows;
+    } else {
+      rows = cgRows(ta, tb, dt);
+      rec.inputs = { cols: CG_COLS, rows, to: r3(tb), every: dt, cut: rows.length > 0 && rows[0][0] > ta + 0.05 ? 1 : 0 };
+      const p = { rec, ta, dt, due };
+      cgPend.push(p);
+      if (!v.result) cgMiss = p;
+    }
+    // The posts within CRADLE.near (level) of the path, as the gate has them.
+    const g = det.cg, P = g.post, posts = [];
+    for (let i = 0; i < g.postN; i++) {
+      const q = i * 9;
+      let near = false;
+      for (let j = 0; j < rows.length && !near; j++) near = Math.hypot(P[q] - rows[j][1], P[q + 1] - rows[j][2]) <= CRADLE.near;
+      if (near) posts.push([r3(P[q + 2]), r3(P[q + 3]), r3(P[q + 4]), r3(P[q + 5]), r3(P[q + 6]), r3(P[q + 7]), P[q + 8]]);
+    }
+    rec.posts = posts;
     emit(rec);
   }
 
@@ -877,6 +1376,18 @@ export function createTrickObserver(det, opts) {
       camN = 0; camDeg = given ? i.camDeg : 30; camFrom = given ? 'page' : 'default'; camWs = ws;
     }
     if (det.live || st.live) camPush(s, det.live ? det.feat.dur : det.lastFeat.dur);
+    // The side ring, every step; a record's rec.side again SIDE.postS on.
+    // Logged only: a throw here skips the side, nothing else.
+    simT += step;
+    if (!st.live && det.live) { segSim0 = simT; segN++; }
+    try {
+      sidePush(s, simT, det.live || st.live ? segN : 0);
+      while (sidePend.length && simT >= sidePend[0].due - 1e-9) {
+        const p = sidePend.shift();
+        p.rec.side = sideRecord(p, simT, 'post');
+        try { onSide(p.rec); } catch (e) { /* never break the frame */ }
+      }
+    } catch (e) { /* never break the observer */ }
 
     // Rotation segments.
     let finished = false;
@@ -972,6 +1483,36 @@ export function createTrickObserver(det, opts) {
       }
     }
 
+    // The Cradle: its inputs this step (once per detector step), then each
+    // verdict since the last step (after the segment it closed, if any).
+    try {
+      const g = det.cg;
+      if (g && g.inp && g.inp.t !== cgT) {
+        const I = g.inp, k = cgHead * CG_W;
+        cgT = I.t;
+        cgBuf[k] = I.t; cgBuf[k + 1] = I.x; cgBuf[k + 2] = I.y; cgBuf[k + 3] = I.z;
+        cgBuf[k + 4] = I.vx; cgBuf[k + 5] = I.vy; cgBuf[k + 6] = I.vz;
+        cgBuf[k + 7] = I.fx; cgBuf[k + 8] = I.fy; cgBuf[k + 9] = I.fz; cgBuf[k + 10] = I.upZ;
+        cgBuf[k + 11] = I.contact ? 1 : 0; cgBuf[k + 12] = armed ? 1 : 0;
+        cgBuf[k + 13] = I.yr || 0; cgBuf[k + 14] = I.fresh ? 1 : 0;
+        cgHead = (cgHead + 1) % CG_CAP;
+        if (cgN < CG_CAP) cgN++;
+      }
+      if (g && g.seq !== cgSeq) {
+        const vs = g.out.filter((v) => v.seq > cgSeq);
+        if (vs.length) emitCradle(t, vs, ev, g.seq - cgSeq - vs.length);
+        cgSeq = g.seq;
+      }
+      // The records' inputs again, postS past their verdicts.
+      for (let k = 0; k < cgPend.length; k++) {
+        if (cgT < cgPend[k].due - 1e-9) continue;
+        const p = cgPend.splice(k--, 1)[0];
+        p.rec.inputs.rows = cgRows(p.ta, p.due, p.dt);
+        p.rec.inputs.to = r3(p.due);
+        try { onSide(p.rec); } catch (e) { /* never break the frame */ }
+      }
+    } catch (e) { /* logged only: never break the observer */ }
+
     // Gaps: each pass or skim the detector resolves (gapSeq). Not a trick.
     if (det.gapSeq !== gapSeq) {
       const rec = base('gap', t);
@@ -1039,12 +1580,16 @@ export function createTrickDebug(opts) {
   let lastEx = null;         // the last one the classifier scored: { rec, ex }
   let lastDive = null;
   let lastGap = null;
+  let lastCradle = null;
   let el = null;
   let paintedAt = -1;
   let dirty = true;
 
   const obs = createTrickObserver(tricks.detector(), {
     now, info,
+    // rec.side refreshed (the record in attempts, for Copy trick log; the
+    // console keeps one line per attempt, as it was emitted).
+    onSide() { dirty = true; },
     onAttempt(rec) {
       const ex = rec._explain;
       delete rec._explain;
@@ -1054,6 +1599,7 @@ export function createTrickDebug(opts) {
       if (ex && ex.candidates && ex.candidates.length) lastEx = { rec, ex };
       if (rec.type === 'dive') lastDive = rec;
       else if (rec.type === 'gap') lastGap = rec;
+      else if (rec.type === 'cradle') lastCradle = rec;
       dirty = true;
       try { if (out) out.info(JSON.stringify(rec)); } catch (e) { /* never break the frame */ }
       if (rec.mismatch && out) { try { out.warn('tricks debug: replica disagrees with classifyFeat', rec.result, rec.pick && rec.pick.id); } catch (e) { /* ignore */ } }
@@ -1154,6 +1700,31 @@ export function createTrickDebug(opts) {
     return '<span class="d">  ' + pad('gap passes', 18) + pad('—', 5) + '</span> ' + s + '  <span class="d">(not a trick)</span>';
   }
 
+  // The Cradle (a path event round a post, not a segment's label): its last
+  // verdict, or the first pass it is watching (the latest), or what it needs.
+  function cradleLine(t) {
+    const det = tricks.detector(), g = det && det.cg;
+    let fresh = lastCradle && t - lastCradle.t < 6;
+    // The latest first pass, if after the last verdict: it shows first.
+    let j = -1;
+    if (g && g.armN) for (let i = 0; i < g.postN; i++) if (g.arm[i] && (j < 0 || g.t1[i] > g.t1[j])) j = i;
+    if (j >= 0 && lastCradle && lastCradle.gate && g.t1[j] <= lastCradle.gate.t2) j = -1;
+    if (j >= 0) fresh = false;
+    let s;
+    if (fresh) s = (lastCradle.result ? '<span class="ok">fired</span> ' : '') + esc(lastCradle.reason) + '  <span class="d">' + (t - lastCradle.t).toFixed(1) + 's ago</span>';
+    else if (j >= 0) {
+      s = '<span class="near">first pass</span> post ' + g.post[j * 9 + 8] + ' ' + (g.lat1[j] > 0 ? 'L' : 'R') + ' ' + Math.abs(g.lat1[j]).toFixed(2) + ' m'
+        + '  nose ' + Math.round(g.elMax[j]) + '°/' + CRADLE.noseUp + '° ' + mark(g.elMax[j] >= CRADLE.noseUp)
+        + '  turn ' + Math.round(g.yawX[j] * 180 / Math.PI) + '°/' + CRADLE.yawTurn + '° ' + mark(g.yawX[j] * 180 / Math.PI <= CRADLE.yawTurn)
+        + '  ' + (g.inp.t - g.t1[j]).toFixed(1) + '/' + CRADLE.maxS + ' s';
+    } else {
+      s = '<span class="d">' + (g ? g.postN : 0) + ' posts here: pass one flying forward (≤' + CRADLE.outLat + ' m out), nose up ≥' + CRADLE.noseUp
+        + '° (never over the top, turning ≤' + CRADLE.yawTurn + '° about the vertical), back past it against the nose the other side (≤' + CRADLE.backLat + ' m)</span>';
+    }
+    const ok = fresh && !!lastCradle.result;
+    return '<span class="' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓' : '✗') + ' ' + pad('Cradle', 18) + pad('—', 5) + '</span> ' + s;
+  }
+
   function paint(force) {
     const t = now();
     if (!force && !dirty && t - paintedAt < 0.1) return;
@@ -1193,6 +1764,15 @@ export function createTrickDebug(opts) {
           + (c.offDegMean != null ? '  to centre ' + c.offDegMean + '° (az ' + c.azDegMean + '°, el ' + c.elDegMean + '°, ' + c.distMean.toFixed(1) + ' m)' : '  el ' + c.elDegMean + '°')
           + (c.noseDegMean != null ? '  nose ' + c.noseDegMean + '° tail ' + c.tailShare.toFixed(2) + ' lean ' + c.leanDegQ[2] + '°' : '') + '</span>');
       }
+      const sd = r.side;
+      if (sd && sd.n) {
+        const nb = sd.nearest;
+        const lr = (x) => (Math.abs(x) < 0.05 ? '·' : x > 0 ? 'L' : 'R');
+        L.push('<span class="d">  side' + (sd.why === 'end' ? ' (to the end)' : sd.why === 'post' ? '' : ' (' + sd.why + ')')
+          + (nb ? '  nearest ' + nb.d.toFixed(1) + ' m at ' + nb.t.toFixed(1) + 's' : '  nothing beside')
+          + (sd.passes.length ? '  passes ' + sd.passes.map((q) => '#' + q.obj + ' ' + lr(q.lat1) + ' ' + q.d.toFixed(1) + 'm ' + (q.t >= 0 ? '+' : '') + q.t.toFixed(1) + 's ' + (q.vAlong < 0 ? 'back' : 'fwd') + ' nose ' + q.pitchH + '°').join(' · ') : '  no pass')
+          + (sd.noseMax ? '  nose max ' + sd.noseMax.pitchH + '°' : '') + '</span>');
+      }
       if (s.travelH != null) {
         L.push('<span class="d">  travelH ' + s.travelH.toFixed(1) + ' close ' + s.close.toFixed(2) + ' span ' + s.span.toFixed(1) + 'm drop ' + s.drop.toFixed(1)
           + 'm fol ' + s.follow.toFixed(2) + ' ag ' + s.against.toFixed(2) + ' inv ' + s.inv.toFixed(2) + ' spd ' + s.spdPeak.toFixed(1) + '</span>');
@@ -1208,6 +1788,7 @@ export function createTrickDebug(opts) {
       if (c) L.push(candidateLine(c));
       else L.push('<span class="no">· ' + esc(pad(nameOf(id).replace(' (Ham)', ''), 18)) + pad('—', 5) + '</span> <span class="d">no classified maneuver yet</span>');
     }
+    L.push(cradleLine(t));
     L.push(gapLine(t));
     if (ex) {
       const others = ex.candidates.filter((c) => FOCUS.indexOf(c.id) < 0).map((c) => (c.verdict === 'fired' ? '✓' : '') + c.id + ' ' + c.total.toFixed(2));

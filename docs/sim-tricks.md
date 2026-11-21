@@ -10,8 +10,11 @@ The detector does **not** run independent overlapping triggers. It segments a
 rotation into one maneuver, then classifies it as **exactly one** label (most
 specific wins). Atomic Flip / Roll / Yaw Spin only score when the maneuver is
 not a bigger named trick. Spatial tricks (Dive, Proximity) only score when
-no rotation segment is open. Flying through a gap is not a trick and scores
-nothing (Gap Hunt answers it; see "Gap passes (not a trick)" below).
+no rotation segment is open. The Cradle is the exception: a **path event**,
+two passes round a post, called at the second pass whatever the rotation is
+doing (an open segment closes there as the Cradle; see "The Cradle" below).
+Flying through a gap is not a trick and scores nothing (Gap Hunt answers
+it; see "Gap passes (not a trick)" below).
 
 The page steps the detector on the **sim clock**: every 4 ms of sim time the
 core hands it the latest physics tick (sim-core-adapter.js `SAMPLE_US`,
@@ -25,9 +28,9 @@ backflip (negative pitch).
 
 Many TPW loops are object-relative (under/over a bar, table, gate). The
 owner's Matty, Half Matty and Half Mavvy need one: over it, under it or
-through an authored gap (the phase matcher, below). Elsewhere colliders are a
-**bonus** feature, and open air (no collider) still classifies from motion, so
-City freestyle without a pole still scores.
+through an authored gap (the phase matcher, below); the Cradle needs a post.
+Elsewhere colliders are a **bonus** feature, and open air (no collider) still
+classifies from motion, so City freestyle without a pole still scores.
 
 ## Definitions (supported)
 
@@ -43,7 +46,7 @@ site lists both 150 and 50).
 | `maverick` | Maverick Loop | Beginner | 100 | 100 | Phase matcher, as the owner flies it: a **pull back of 120–225° climbing ≥1 m** (it need not go inverted), then a **forward pitch ≥60°** that stops it, then **back towards the entry against the nose** (velocity·nose ≤ −0.3 on average) for **≥0.3 s**: the glide back. **No twist** between the pull and the push: the roll and the yaw each turn **under 60°** across them (the owner's Maverick uses no yaw). The push and glide back **drop back under or through an object**: near one (within 2 m) for **≥25 %** of them, or back out through an authored gap. In open air it is not a Maverick. Often two segments, the pull and the push, merged (below). Back out through the authored gap it came in by (passed at most 1.5 s before, or in the maneuver): **1.25×** points. |
 | `splits` | Split-S | Beginner | 100 | 100 | Phase matcher: a **roll of 103–258°**, then a **back pitch of 69–258°** (pull), the path dropping ≥0.35 m, flying with the nose. The old terms' tolerances, so it fires where it did. |
 | `immelmann` | Immelmann | Beginner | 100 | 100 | Phase matcher, the Split-S's mirror: **back pitch 180 ± 45° climbing ≥1 m**, then a **roll of 180 ± 45°**, ending **upright**, the **heading reversed** (180 ± 45°), **out higher** than in. |
-| `cradle` | Cradle | Beginner | 150 | 150 | Pass an object, pitch back to keep it in view, level out **flying backward** clear of it. Not a flip. |
+| `cradle` | Cradle | Beginner | 150 | 150 | As the owner flies it (2026-11-20): **past a post flying forward** with it on one side (**≤2 m** out), the **nose up ≥25°**, **never over the top** and **not turning round** (**≤55°** about the vertical), then **back past it travelling backwards, against the nose** (**≥115°** off it, **≥1.5 m/s**, not upside down) **on the other side** (**≤3 m** out), within **2.5 s**, both passes beside the post (within its height). Called at the second pass, no wait. A post: a pole, column, tree or post (**≤0.5 m** across, near square, **≥1 m** tall, standing), or a chair or table leg (**≥0.31 m**, on the floor, slender); never a wall, floor or ceiling. A touch (of the post or anything), a crash, a disarm or a respawn between the passes voids it. Both passes round a post make a Cradle however high the nose comes (short of over the top); the Maverick is the open-air move. See "The Cradle" below. |
 | `dive` | Building Dive | Beginner | 100 | 100 | Climb or start high, cut, nose down, fast altitude dump, level near the ground. |
 | `prox` | Proximity | Beginner | 150 | 150 | Wall near-miss at speed. Sim-only spatial; TPW Wall Ride/Tap need a knife-edge roll or tap we do not require. |
 | `powerloop` | Powerloop | Novice | 200 | 200 | Phase matcher: **≥300° of pitch within any 3.5 s** (its own window: a loop is slower than a flip), little net roll/yaw, on a **path that loops**: it climbs **≥1.5 m** above the entry, after its top comes back down to **at most 1.5 m above the entry**, and the velocity turns **≥270°** in the vertical plane of the entry heading, the way the pitch turns. Otherwise a flip is a Flip. Loops are counted over the whole turn of pitch: **≥600° is a Double Powerloop**, then one more loop per further 360° (Triple from 960°); each loop scores the 200 points. |
@@ -101,8 +104,9 @@ between them is under **0.8 s** and none of them scored, and when a segment
 finishes it scores the matcher's tricks (all but Flip, Powerloop and
 Split-S) over the run from each earlier segment's start to now, at most
 4.5 s. A match stands over the segment's own label (unless that is a matcher
-trick ranked above it): the glide back of a split Maverick is that Maverick,
-not a Cradle. A segment that scored ends the run.
+trick ranked above it): the glide back of a split Maverick is that Maverick.
+A segment that scored ends the run, and so does a Cradle (called on its own
+second pass, below).
 
 Flip and Powerloop are one phase each, the largest turn of pitch inside
 their window (1.2 s, 3.5 s); Split-S is a half roll then a back pitch. Their
@@ -286,7 +290,10 @@ that answers flying a gap. Until 2026-11-14 `gap` scored 125 (TPW medium
 gap); it was taken out because a pass is the hunt's, not a freestyle trick.
 The per-map bests saved before then counted it, so the store went to
 version 2 (`STORE_VER`): loading drops bests saved under version 1, and
-keeps the HUD and debug settings.
+keeps the HUD and debug settings. Version 3 (2026-11-18) dropped them again
+(an upright orbit had scored as a 500-point Trippy), and version 4
+(2026-11-20) once more: the Cradle had scored 150 on a segment's pitch with
+no post.
 
 The detector still **tracks every pass**, exactly as it did when it scored,
 because tricks read them:
@@ -377,13 +384,104 @@ Order of the 180° axis is the split.
 
 ### Cradle vs Maverick / Matty
 
-- Cradle: look-back at a passed object, then level **backward**. Small invert
-  fraction. Not a loop closure.
+- Cradle: two passes round a post, forward then backward against the nose,
+  on its two sides, the nose up between and never over the top (below).
+  Not a segment's label.
 - Maverick: a pull back, the pitch reversed, flown back against the nose
   and dropped back under or through an object (near one, within 2 m, a
-  quarter of the push and glide). Its glide back alone looks like a Cradle; split from its pull by a pause
-  under 0.8 s, it is the Maverick (compound tricks, above).
+  quarter of the push and glide). Split from its pull by a pause under
+  0.8 s, it is the Maverick (compound tricks, above). If its pull and glide
+  pass round a post on its two sides with the nose short of over the top,
+  it is a Cradle: a Maverick that finishes while the Cradle is half flown
+  waits for the second pass, and the Cradle replaces it (or it is called
+  when the Cradle comes to nothing). A pull over the top voids the Cradle
+  and leaves the Maverick.
 - Matty: a forward flip over an object, climbed into.
+
+### The Cradle
+
+The owner's definition (2026-11-20): there is a close object; the quad
+passes it on one side, the nose goes up, and it comes back past it going
+backwards on the opposite side. `sim-tricks.js` `CRADLE`, `cradleStep`:
+
+- **Posts.** The colliders, grouped into objects (boxes face to face with
+  matching faces: a pole split into cells is one object), each **≤0.5 m**
+  across with its short side **≥0.6** of its long one, and either **≥1 m**
+  tall and standing (on the floor, or its foot on a box's top: poles,
+  columns, trees, rack uprights, a column on a deck; not a chain hanging
+  from a header), or a leg: **≥0.31 m** tall, on the floor, and **≥3** times
+  its width tall (the House's coffee-table, chair, stool and patio-table
+  legs, 0.36–0.90 m; not a pot, a nightstand or the mower). Walls, decks,
+  floors and ceilings are never posts. The census (2026-11-20, as the page
+  builds the colliders): Rig 15, House 52 (28 of them legs), Warehouse 125,
+  Bando 59, and no clutter.
+- **A pass** is the post's centre crossing the line square to a level
+  direction through the quad (0.1 m of hysteresis), the quad **beside** it:
+  within 0.05 m of the post's height (not over a table, not under the beam
+  a post stands on).
+- **First pass.** The post goes from ahead of the line square to the way the
+  quad travels to behind it (the travel not turned round meanwhile), flying
+  **forward** (≥1 m/s level, within 60° of the nose's level heading), the
+  post **≤2 m** to the side, no touch in the 0.3 s before. The frame from
+  then on is the **nose's level heading at this pass** (F1). Until the nose
+  comes up, a later pass forward is the first pass.
+- **Between.** The nose's elevation must reach **25°**; its pitch in F1's
+  vertical plane never passes **90°** (over the top); and the quad **does
+  not turn round**: its net turn about the vertical never past **55°**
+  either way (an orbit or a Trippy round the post turns the nose with the
+  path, a Cradle does not; a roll about the nose counts sin(nose) of
+  itself). Between the passes the nose's level heading is judged only
+  through over the top (the nose up, pitch past 90° in F1's plane is the
+  heading more than 90° off F1). It is logged. With the nose 50–65° up a
+  yaw at the top (or a pull while banked) swings it far, a body yaw
+  turning the heading by about 1/cos(nose) of itself and the quad about
+  the vertical by cos(nose) of it (56° and 58° off F1 on two of the
+  owner's Cradles that turned 40° and 27°).
+- **Second pass**, within **2.5 s**: the post's centre back across the line
+  square to F1 (the quad went back past it), **on the other side**, **≤3 m**
+  out, travelling back along F1 at **≥1.5 m/s** and **≥115°** off the
+  nose's level heading (off F1 when the nose is over 60° from level, its
+  heading within 90° of F1 and the level travel behind square of it; else
+  off the heading: a turnaround, a hammerhead or a Split-S comes back nose
+  side first; past 75° from level the heading is undefined, a void), **not
+  still turning** (**≤45°** about the vertical in the 0.25 s before: a
+  Trippy over 180°/s yaws through it), **not upside down** (no cap on the
+  nose but over the top). The Cradle is called on that step, with no
+  wait; an open rotation segment closes there as the Cradle and the chain
+  of unscored segments before it ends. A trick that
+  finished while the Cradle was half flown (a Maverick's pull and push
+  round the post) waits for it: the Cradle replaces it, or it is called
+  when the Cradle comes to nothing. A second pass the other way flown
+  forward is a first pass of its own.
+- **Void.** A touch (the quad's centre within **0.06 m** of the post, or of
+  any box: the detector's floor contact never sees a post's side), floor
+  contact, a crash, a disarm or a respawn between the passes: a Cradle that
+  ends in a crash does not score.
+
+Set from the owner's 18 Cradles (two dumps and a fly on the gate's build,
+2026-11-20, replayed through the gate from the positions and inputs they
+logged): first pass 0.14–1.41 m out; nose up 39–77°; 11–40° of net turn
+about the vertical on fly 3 (the dumps log positions only: their heading
+turned 7–38°), against 63–80° by the second pass for slow orbits round a
+post with the nose turning with the path 15–30° behind the radial
+(kinematic; further behind, from 39°, they turn 55° or less and most are
+Cradles, as with the old heading rule; at Trippy speed those 34–38° behind
+stay Trippies, the cap voiding the Cradle first: at 60° the Cradle would
+cut them short); 21° of yaw at most in the quarter second before the second pass (the dumps'
+heading; 8° on fly 3; the Trippies a nose lag
+turns into Cradles, on the js core: 57–89°); second pass 0.42–2.47 m out
+on the other side, 3.35–7.21 m/s back, 123–179° off the nose, up-Z ≥0.45;
+0.79–1.44 s apart.
+The misses flown with them: two that clipped a column (one crashed), two
+back on the same side climbing, one that slid wide and never came back
+abeam, and one over the top into the floor.
+The debug log (`?tricks=debug`) writes a record of type `cradle` per step
+with a verdict (each Cradle, and each miss past an attempt: the nose up;
+the other posts' verdicts that step in `others`), with the gate's inputs
+every step, which replay to the same verdict. A miss's inputs run on to
+2.5 s past its first pass (every 8 ms: a row carries the turn of the step
+left out before it, and any touch on it), and a miss inside the last miss
+record's window shares its rows (`inputs.same`).
 
 ## Scoring (TPW-inspired)
 
@@ -397,7 +495,8 @@ TPW rules we do use:
   (compounding −50%). Stacks with repeat. Ends the combo window.
 - **Sloppy** (broken constant loop motion — a mid-maneuver pause then the
   rotation resumes): ×0.65. Ends combo.
-- **Bump** (contact during the maneuver): ×0.50. Ends combo.
+- **Bump** (contact during the maneuver): ×0.50. Ends combo. (The Cradle
+  has none: contact between its passes voids it.)
 - **Crash / disarm while a rotation is live**: that maneuver is 0. Combo
   already in the bank stays (our combo). Streak resets to 1.0.
 
@@ -422,7 +521,7 @@ the last 0.5 s, or a loop's pitch (≥300° in 3.5 s with the velocity
 turning: a run of Powerloops) while it keeps 69°/s. So a long Trippy is
 one Trippy and a double loop one Double Powerloop. A slower orbit is cut
 at the cap; the Orbit scores once across its pieces (above). While
-**inverted**, settle is longer so a Cradle does not split on a brief
+**inverted**, settle is longer so a maneuver does not split on a brief
 rate dip. Consecutive unscored segments with pauses under 0.8 s are also
 scored as one for the matcher's tricks (compound tricks, above).
 
