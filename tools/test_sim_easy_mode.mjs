@@ -1285,7 +1285,9 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
             return prompt() !== was;
           };
           const drawn = [];
-          drawn.push(await next(3000));    // its first prompt drawn (the text was still the wizard's)
+          // Its first prompt is drawn at the click (startCalib draws the overlay
+          // at once, never blank), not on a later poll.
+          drawn.push(/^CENTER/.test(prompt()));
           drawn.push(await next(10000));   // the centre taken
           for (const i of [0, 1, 3]) { E.axis(i, 1); drawn.push(await next(6000)); E.axis(i, 0); await hold(60); }
           E.axis(2, 1); drawn.push(await next(4000));

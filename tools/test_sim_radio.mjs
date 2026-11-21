@@ -1740,3 +1740,60 @@ test('an EdgeTX radio with no product name is shown as "EdgeTX radio" (display o
   assert.ok(simSrc.includes("o.textContent=(classifyPad(gp).radio?'📻 ':'🎮 ')+padDisplayName(gp.id).slice(0,60);"));
   assert.ok(simSrc.includes("b.textContent=(classifyPad(gp).radio||radioScore(gp)===2?'📻 ':'🎮 ')+padDisplayName(gp.id).slice(0,60);"));
 });
+
+// ---- The calibration overlay is never blank ----
+test('calibration overlay: what it shows for a device that sends nothing, too few axes, a missing stick, and progress', async () => {
+  const m = await import('../sim-touch.js');
+  assert.equal(typeof m.calibView, 'function', 'sim-touch.js calibView');
+  const { calibView, CALIB_NO_DATA_MSG, CALIB_SAVES_MSG, CALIB_NO_DATA_MS, CALIB_QUIET_S } = m;
+  assert.equal(CALIB_NO_DATA_MSG, "The radio is connected but isn't sending stick data. Move a stick. If nothing changes: on the radio, Model Settings → USB Joystick → Classic, then replug.");
+  assert.equal(CALIB_SAVES_MSG, 'Saves automatically when all four sticks are set');
+  const tx = pad(UNKNOWN_EDGETX, 0, CLASSIC_REST);
+  // At the start, from the device as it is: a label, a hint, the device, progress.
+  let c = createCalibState();
+  let v = calibView(c, tx, { noDataMs: 0 });
+  assert.equal(v.label, CAL_STEPS[0].label);
+  assert.ok(v.hint);
+  assert.deepEqual(v.device, { name: 'EdgeTX radio', axes: 8, buttons: 24 });
+  assert.equal(v.bars.length, 8);
+  assert.deepEqual(v.progress.map((p) => p.state), ['todo', 'todo', 'todo', 'todo']);
+  assert.equal(v.noData, false);
+  // Listed, but nothing from it for CALIB_NO_DATA_MS: the no-data message, with the device as last seen.
+  v = calibView(c, tx, { noDataMs: CALIB_NO_DATA_MS + 1 });
+  assert.equal(v.noData, true);
+  assert.equal(v.device.name, 'EdgeTX radio');
+  // A placeholder for a device the browser gives nothing for at all.
+  v = calibView(c, { id: UNKNOWN_EDGETX, index: 0, axes: [], buttons: [] }, { noDataMs: 0 });
+  assert.equal(v.few, true, 'no axes at all');
+  // Zero and three axes: too few to fly, said at once.
+  for (const n of [0, 3]) {
+    const gp = pad('RadioMaster TX15 Joystick (Vendor: 1209 Product: 4f54)', 0, [0, 0, 0].slice(0, n), { buttons: Array.from({ length: n ? 24 : 4 }, () => ({ pressed: false, value: 0 })) });
+    v = calibView(createCalibState(), gp, { noDataMs: 0 });
+    assert.equal(v.few, true, n + ' axes');
+    assert.equal(v.device.axes, n);
+    assert.equal(v.label, CAL_STEPS[0].label, 'never blank');
+  }
+  // Progress: roll and pitch set, yaw now, throttle not yet.
+  c = createCalibState();
+  runCal(c, [0, 0, -1, 0, -1, -1, -1, -1], 0.4, 3);
+  runCal(c, [1, 0, -1, 0, -1, -1, -1, -1], 0.25, 3);
+  runCal(c, [0, -1, -1, 0, -1, -1, -1, -1], 0.25, 3);
+  v = calibView(c, tx, { noDataMs: 0 });
+  assert.deepEqual(v.progress.map((p) => [p.name, p.state, p.axis]), [['Roll', 'set', 0], ['Pitch', 'set', 1], ['Yaw', 'now', null], ['Throttle', 'todo', null]]);
+  // A step with no axis moving for CALIB_QUIET_S: the stick it waits for is named.
+  runCal(c, [0, 0, -1, 0, -1, -1, -1, -1], 0.25, 4 * CALIB_QUIET_S);
+  assert.ok(c.quiet >= CALIB_QUIET_S);
+  v = calibView(c, tx, { noDataMs: 0 });
+  assert.equal(v.missing && v.missing.name, 'Yaw');
+  // Advanced mode, 4 axes, the throttle a Sim control that never comes: once
+  // roll, pitch and yaw are set, FULL UP names the throttle as missing.
+  const four = createCalibState();
+  const g4 = (axes) => ({ id: ADV6, index: 0, mapping: '', axes: axes.slice() });
+  const run4 = (axes, n) => { for (let i = 0; i < n && four.step < CAL_STEPS.length; i++) stepCalib(four, g4(axes), 0.25); };
+  run4([0, 0, 0, 0], 5); run4([1, 0, 0, 0], 3); run4([0, -1, 0, 0], 3); run4([0, 0, 1, 0], 3);
+  assert.equal(CAL_STEPS[four.step].key, 'thi');
+  assert.equal(calibView(four, g4([0, 0, 0, 0]), { noDataMs: 0 }).missing, null, 'not before CALIB_QUIET_S');
+  run4([0, 0, 0, 0], 4 * CALIB_QUIET_S + 1);
+  v = calibView(four, g4([0, 0, 0, 0]), { noDataMs: 0 });
+  assert.equal(v.missing && v.missing.name, 'Throttle', 'the throttle is missing');
+});

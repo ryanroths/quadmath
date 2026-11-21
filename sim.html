@@ -274,6 +274,11 @@
   #calibBars{font-size:12px;color:var(--txt);text-align:left;line-height:1.8}
   /* The axis list: what calibration did not pick up, the pilot taps. */
   #calibPick{margin-top:14px;font-size:12px;color:var(--dim);max-width:440px}
+  /* What the calibration waits on, large: no data, a missing stick, too few axes. */
+  #calibNote{font-size:18px;line-height:1.35;color:var(--orange);max-width:560px;margin:0 0 14px}
+  #calibNote:empty{display:none}
+  #calibDevice{font-size:12px;color:var(--dim);margin-bottom:10px}
+  #calibProgress{font-size:13px;color:var(--txt);margin-top:12px;max-width:560px;line-height:1.5}
   #calibPick button{width:auto;margin:6px 4px 0;padding:6px 12px}
   .radio-warn{color:var(--orange)}
   #calibCancel{width:200px;margin-top:24px}
@@ -792,7 +797,10 @@
   <h2 id="calibTitle">RADIO CALIBRATION</h2>
   <div id="calibStep"></div>
   <div id="calibHint"></div>
+  <div id="calibNote"></div>
+  <div id="calibDevice"></div>
   <div id="calibBars"></div>
+  <div id="calibProgress"></div>
   <div id="calibPick"></div>
   <button id="calibCancel">CANCEL</button>
   <button id="calibSkip" style="display:none">SKIP</button>
@@ -1163,7 +1171,7 @@ import {
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=b246f97ca059";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=dc09c998f4a3";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=67997562a985";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -1190,12 +1198,13 @@ import {
   classifyPad, usablePad, rankPads, provenPad, createPadTracker, staleSwitchTarget, forgetDevice,
   sessionKind, presetGuess, migrateNamePreset, padDisplayName,
   radioIssuePad, createIssueNotice, RADIO_CLASSIC_MSG, calibAxisChoices, calibPickAxis,
+  calibView, CALIB_NO_DATA_MSG,
   loadAutoArm, saveAutoArm,
   hasArmSwitch, listArmCandidates, detectArmSwitch, snapshotArmInputs,
   armSwitchValue, stepArmSwitch,
   loadRadioSwitches, saveRadioSwitches, switchesAxisMap, auxNumberOfAxis,
   createSwitchWizard, stepSwitchWizard, skipSwitchWizard, switchWizardResult,
-} from "./sim-touch.js?v=6efab1c86b2e";
+} from "./sim-touch.js?v=357550a0a4fd";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -4178,16 +4187,33 @@ function setCalibrating(on){
 }
 function startCalib(){
   const pads=navigator.getGamepads&&navigator.getGamepads();
-  const gp=gpIndex>=0&&pads?pads[gpIndex]:null; // calibrate the SELECTED device, never blindly index 0
+  let gp=gpIndex>=0&&pads?pads[gpIndex]:null; // calibrate the SELECTED device, never blindly index 0
+  if(gp&&gp.id!==gpName)gp=null;
+  // Nothing from it this moment (an empty poll): as last seen. Nothing
+  // flying: an EdgeTX radio that cannot fly (fewer than 4 axes), to say why.
+  if(!gp&&gpConnected)gp=listPads().find((p)=>p.id===gpName)||(pollGp&&pollGp.id===gpName?pollGp:null)||{id:gpName,index:gpIndex,axes:[],buttons:[]};
+  if(!gp&&!gpConnected)gp=radioIssuePad(pads?Array.from(pads):[]);
   if(!gp){toast('NO GAMEPAD — plug in, wiggle stick');return;}
   enableTouchLayer(false);
   if(feel&&feel.hideFirstRun)feel.hideFirstRun();
   if(gpPickerEl){gpPickerEl.remove();gpPickerEl=null;}
+  // The input poll does not run under the menu: the steps would never come.
+  hideMenuLayer();
+  toggleStartMenu(false);
   calibIssue=!!radioIssuePad([gp]);
   clearCalibPick();
   calib=createCalibState();
+  calibId=gp.id;calibLastGp=gp;calibStartAt=performance.now();calibDataAt=null;calibFirstAxes=null;calibChanged=false;
   setCalibrating(true);
   calibEl.classList.add('show');
+  // Drawn now from the device as it is, and every 250 ms from what the
+  // browser has for it, whether or not the poll gets anything: never blank.
+  drawCalibView(gp);
+  clearInterval(calibViewTimer);
+  calibViewTimer=setInterval(()=>{
+    if(!calib||switchWiz){clearInterval(calibViewTimer);calibViewTimer=null;return;}
+    drawCalibView(calibPadNow());
+  },250);
 }
 document.getElementById('btnCalib').onclick=startCalib;
 document.getElementById('calibCancel').onclick=()=>{
@@ -4205,10 +4231,47 @@ let calibDrawAt=0;
 // startCalib: every step says why it may not pick a stick up, from its start,
 // so the axis list below never moves under a tap.
 let calibIssue=false;
+// The device being calibrated (calibId), the last pad seen for it, when the
+// overlay opened, when the poll last brought data, the axes it first read,
+// and whether any has changed since: what calibView's "no data" is made of.
+let calibId='',calibLastGp=null,calibStartAt=0,calibDataAt=null,calibFirstAxes=null,calibChanged=false,calibViewTimer=null;
+const calibNoteEl=document.getElementById('calibNote');
+const calibDeviceEl=document.getElementById('calibDevice');
+const calibProgressEl=document.getElementById('calibProgress');
+function calibPadNow(){
+  const pads=navigator.getGamepads&&navigator.getGamepads();
+  const p=pads&&gpIndex>=0?pads[gpIndex]:null;
+  return p&&p.id===calibId?p:null;
+}
+// No data: the poll has brought nothing for 2 s, or no axis has changed
+// since the overlay opened (its CENTER second aside).
+function calibNoDataMs(now){
+  const stale=calibDataAt===null?now-calibStartAt:now-calibDataAt;
+  const still=calibChanged?0:Math.max(0,now-calibStartAt-1000);
+  return Math.max(stale,still);
+}
+function drawCalibView(gp){
+  if(!calib)return;
+  if(gp)calibLastGp=gp;
+  const v=calibView(calib,calibLastGp,{noDataMs:calibNoDataMs(performance.now())});
+  calibStepEl.textContent=v.label;
+  calibHintEl.textContent=calibIssue&&!v.few?v.hint+' · '+RADIO_CLASSIC_MSG:v.hint;
+  calibNoteEl.textContent=v.few?'Only '+v.device.axes+' axes come through: a radio needs four sticks. '+RADIO_CLASSIC_MSG
+    :v.noData?CALIB_NO_DATA_MSG
+    :v.missing?'No axis moves for '+v.missing.name+' ('+v.missing.where+'). '+RADIO_CLASSIC_MSG:'';
+  calibDeviceEl.textContent=v.device?v.device.name.slice(0,60)+' · '+v.device.axes+' axes · '+v.device.buttons+' buttons':'';
+  calibProgressEl.textContent=v.progress.map((p)=>p.name+(p.state==='set'?' \u2713'+(p.axis!=null?' ax'+p.axis:''):p.state==='now'?' \u2026 now':' \u2014 not set')).join('  \u00b7  ')+'. '+v.saves+'.';
+  calibBarsEl.innerHTML=v.bars.map((a,i)=>
+    `ax${i} ${'▮'.repeat(Math.round((a+1)*5)).padEnd(10,'▯')} ${Number(a).toFixed(2)}`).join('<br>');
+  if(gp&&!v.few)drawCalibPick(gp);
+}
 // The axis list (calibAxisChoices): redrawn only when it changes, so a tap
 // is never lost to a redraw. One listener for its buttons.
 const calibPickEl=document.getElementById('calibPick');
-function clearCalibPick(){calibPickEl.innerHTML='';calibPickEl.dataset.sig='';}
+function clearCalibPick(){
+  calibPickEl.innerHTML='';calibPickEl.dataset.sig='';
+  for(const id of ['calibNote','calibDevice','calibProgress']){const el=document.getElementById(id);if(el)el.textContent='';}
+}
 function drawCalibPick(gp){
   const ch=calibAxisChoices(calib,gp);
   const sig=calib.step+':'+ch.join(',');
@@ -4229,20 +4292,20 @@ calibPickEl.addEventListener('click',(e)=>{
   if(out.done)finishCalib();
 });
 function runCalib(gp,dt){
+  const nowMs=performance.now();
+  // Data from the device: this poll brought it, and whether it has changed.
+  calibDataAt=nowMs;
+  const ax=gp.axes||[];
+  if(!calibFirstAxes)calibFirstAxes=Array.prototype.slice.call(ax);
+  else if(!calibChanged)for(let i=0;i<ax.length;i++)if(Math.abs((+ax[i]||0)-(+calibFirstAxes[i]||0))>=0.02){calibChanged=true;break;}
   const out=stepCalib(calib,gp,dt);
   calib=out.state;
   // Stepped from the 4 ms input poll; the DOM is drawn at most every 60 ms.
-  const nowMs=performance.now();
-  if(out.done||nowMs-calibDrawAt>60){
+  if(out.done){finishCalib();return;}
+  if(nowMs-calibDrawAt>60){
     calibDrawAt=nowMs;
-    calibStepEl.textContent=out.label;
-    calibHintEl.textContent=calibIssue?out.hint+' · '+RADIO_CLASSIC_MSG:out.hint;
-    if(!out.done)drawCalibPick(gp);
-    const ax=Array.prototype.slice.call(gp.axes||[]);
-    calibBarsEl.innerHTML=ax.map((a,i)=>
-      `ax${i} ${'▮'.repeat(Math.round((a+1)*5)).padEnd(10,'▯')} ${Number(a).toFixed(2)}`).join('<br>');
+    drawCalibView(gp);
   }
-  if(out.done)finishCalib();
 }
 // "Use my radio switches": flip each switch, once; the same overlay as the
 // calibration. Run from the input poll, so the menus close while it does.
@@ -5133,12 +5196,20 @@ function readInput(dt){
   }
   padLive=!!(gp&&gpConnected);
   pollGp=padLive?gp:null;
+  if(calib&&!gpConnected){
+    // The overlay is up for a radio that cannot fly (it says why): the
+    // keyboard and touch do not fly meanwhile.
+    stick.r=stick.p=stick.y=0;stick.aux=null;stick.t=threeD?0.5:0;
+    return;
+  }
   if(gpConnected){
     // Connected radio/gamepad owns the sticks even on Chrome's empty polls.
     // Falling through to touch was the W6 regression (channel map "off").
     // But a pad missing for PAD_GONE_MS is unplugged, event or not: drop it
     // and fly the keyboard (or touch) from here.
     if(!gp){
+      // Calibrating: the overlay says the device sends nothing, and waits.
+      if(calib)return;
       if(padMissingSince===null)padMissingSince=performance.now();
       else if(performance.now()-padMissingSince>=PAD_GONE_MS)dropPad('CONTROLLER GONE');
       return;
