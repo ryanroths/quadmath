@@ -898,24 +898,26 @@ test('a js-core run on a bf class (the 65, the 75) stays off the boards (PHYS MI
   assert.ok(finish.indexOf('&&offBoards){') < finish.indexOf('recordDailyLineFinish('));
 
   // IMPORT CLI on bf: to Betaflight on top of the class config and Tune's
-  // rates, ahead of the js parse (Betaflight decides), refused while loading
-  // or armed, js rates untouched.
-  const imp = html.slice(html.indexOf('function importCli(text){'), html.indexOf('function importCli(text){') + 120);
-  assert.ok(imp.includes('if(bfWanted()&&!bfOf().failed)return importCliToBf(text);'));
+  // rates, ahead of the js parse (Betaflight decides), refused while loading,
+  // kept while armed, js rates untouched.
+  const imp = html.slice(html.indexOf('function importCli(text){'), html.indexOf('function importCli(text){') + 480);
+  assert.ok(imp.includes('if(bfWanted()&&!bfOf().failed){') && imp.includes('return importCliToBf(text);'))
+  // In flight the paste is kept and imported at the landing (bfPend).
+  assert.ok(imp.includes("if(bfCore&&coreArmed()){bfPend({k:'paste',type:droneType,text});return null;}"));
   assert.ok(imp.indexOf('importCliToBf') < imp.indexOf('parseCli') || imp.indexOf('parseCli') === -1);
   const toBf = html.slice(html.indexOf('function importCliToBf(text,opts){'), html.indexOf('function importCli(text){'));
   // Set lines on top of the class config and Tune's rates; a full diff (from
   // `defaults`) in place of both (tools/test_sim_bf_rates.mjs has the rates).
   const compose = html.slice(html.indexOf('function bfCompose('), html.indexOf('function bfWantDiff('));
   assert.ok(compose.includes("const parts=full?[]:[['diff',bfDiff()]];"));
-  assert.ok(compose.includes("if(paste&&!ratesLast){if(!full&&ratesText)parts.push(['rates',ratesText]);parts.push(['paste',paste]);}"));
-  assert.ok(toBf.includes(":bfCompose(text,bfRatesText(),false);"));
+  assert.ok(compose.includes("if(ratesText)(paste&&!ratesLast?under:over).push(['rates',ratesText]);") && compose.includes('if(!full)parts.push(...under);'));
+  assert.ok(toBf.includes(":bfCompose(text,bfRatesText(),false,thrText,false);"));
   assert.ok(toBf.includes("r=bfLoadDiff(want.text,rates?(o.label||'rates'):'CLI import',{quiet:!!o.quiet});"));
   assert.ok(toBf.includes("if(!bfCore){"));
-  assert.ok(toBf.includes("status('DISARM TO LOAD A DIFF — Betaflight did not take it','err');"));
+  assert.ok(toBf.includes("status('Not loaded: Betaflight takes settings only while disarmed. Land and disarm, then try again.','err');"));
   // A boot fault restores what flew; the count is the paste's own changing lines.
   assert.ok(toBf.includes('}catch(e){') && toBf.indexOf('bfLoadDiff(prev,label(),{quiet:rates});') < toBf.indexOf("if(!r){"));
-  assert.ok(toBf.includes("const [lo,hi]=want.at[rates?'rates':'paste'];"));
+  assert.ok(toBf.includes('const ranges=own.map(k=>want.at[k]);') && toBf.includes('const mine=(r.lines||[]).filter(l=>ranges.some(([lo,hi])=>l.n>=lo&&l.n<=hi));'));
   assert.ok(toBf.includes('const took=mine.filter(bfLineChanges).length;'));
   // A line the sim sets itself (sim-core v0.8.0: 'overridden', with a note):
   // counted as set by the sim, not refused, and its note shown in the status.

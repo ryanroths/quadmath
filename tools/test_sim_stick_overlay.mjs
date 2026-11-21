@@ -1074,19 +1074,21 @@ async function cardSweep(js, label) {
   const c = await js(`const { throttleHudText } = await import('/sim-3d.js');
     const card = document.getElementById('feelHud'), slot = document.getElementById('hudArmSlot');
     const bx = (e) => { const b = e.getBoundingClientRect(); return [b.left, b.top, b.width, b.height].map((v) => Math.round(v * 10) / 10).join(','); };
-    const base = { stick: { r: 0, p: 0, y: 0, t: 0 }, battV: 4.2, battOn: true, mode: 'angle', armed: false, threeD: false };
+    const base = { stick: { r: 0, p: 0, y: 0, t: 0 }, battV: 4.2, battOn: true, mode: 'angle', armed: false, threeD: false, quad: 'AIR65' };
     const seen = {};
     const u = (k, o) => { const s = { ...base, ...o }; s.thrText = throttleHudText(s.stick.t, s.threeD); window._feel.updateHud(s); const b = bx(card) + ' | ' + bx(slot); (seen[b] = seen[b] || []).push(k); };
     for (let i = 0; i <= 100; i++) for (const threeD of [false, true]) u('THR stick ' + i + (threeD ? ' 3D' : ''), { stick: { r: 0, p: 0, y: 0, t: i / 100 }, threeD });
     for (let v = 250; v <= 850; v++) u('BATT ' + (v / 100).toFixed(2), { battV: v / 100 });
     for (const mode of ['angle', 'horizon', 'acro']) for (const armed of [false, true]) for (const battOn of [false, true]) for (const threeD of [false, true])
       u([mode, armed ? 'armed' : 'disarmed', battOn ? 'BATT on' : 'BATT off', threeD ? '3D' : '2D'].join(' '), { mode, armed, battOn, threeD });
+    // The quad that flies (sim.html flyingQuadName), each name with the widest BATT.
+    for (const quad of ['AIR65', 'FRACTAL75', '85 CLASSIC', '65 CLASSIC', '75 CLASSIC']) u('quad ' + quad, { quad, battV: 4.44, mode: 'horizon', armed: true });
     // The card took the sweep (updateHud writes nothing while the HUD is hidden).
     u('probe', { battV: 4.44, mode: 'horizon', armed: true });
-    const probe = ['hudBatt', 'hudMode', 'hudArm'].map((id) => document.getElementById(id).textContent).join(' ');
+    const probe = ['hudQuad', 'hudBatt', 'hudMode', 'hudArm'].map((id) => document.getElementById(id).textContent).join(' ');
     return JSON.stringify({ probe, groups: Object.entries(seen).map(([b, ks]) => ({ box: b, n: ks.length, e: ks.slice(0, 3) })) });`);
   console.log(`${label}: #feelHud | hint slot boxes across the card sweep ${JSON.stringify(c.groups)}`);
-  assert.equal(c.probe, 'BATT 4.44V HORIZON ARMED', `${label}: the card took the sweep`);
+  assert.equal(c.probe, 'AIR65 BATT 4.44V HORIZON ARMED', `${label}: the card took the sweep`);
   assert.ok(c.groups.reduce((n, x) => n + x.n, 0) > 800, `${label}: the sweep ran ${JSON.stringify(c.groups)}`);
   assert.equal(c.groups.length, 1, `${label}: #feelHud and the hint slot keep one box whatever the card reads ${JSON.stringify(c.groups)}`);
 }

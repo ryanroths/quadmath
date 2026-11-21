@@ -131,9 +131,37 @@
   #osdBR{bottom:18px;right:16px;text-align:right}
   #osdGate{top:14px;left:50%;transform:translateX(-50%);color:var(--txt);font-weight:600}
   #osdLap{top:84px;left:16px;font-weight:600;z-index:6} /* over the key legend (5): in a short window it reaches up to here, and would hide the result's buttons */
-  #osdLand{position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);z-index:6;
+  /* One line (it wrapped to two on a 390 px portrait phone: a fixed box from
+     the middle has half the screen to shrink into), so the pack hint below
+     sits under it on every screen. */
+  #osdLand{position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);z-index:6;white-space:nowrap;
     font-size:34px;font-weight:700;letter-spacing:3px;color:#ff3b2f;
     text-shadow:0 0 16px rgba(255,59,47,.7);pointer-events:none;display:none}
+  /* P = new pack, under LAND NOW and under the toast line (#toast, 44%:
+     no toast is ever drawn over it), from the low-battery warning on
+     (syncPackHint). Words for the keys; on touch a 44 px button where a tap
+     does it (.tap: landed, or any time in Coach, Daily and Boards), above the
+     touch layer (18) and clear of both sticks; in the air in free flight,
+     words only, so no box sits over the view. Not over the Coach card, the
+     tutorial, the menus or a replay. */
+  #packHint{position:fixed;top:calc(44% + 44px);left:50%;transform:translateX(-50%);z-index:19;
+    width:auto;margin:0;padding:4px 10px;font-size:13px;font-weight:700;letter-spacing:1px;white-space:nowrap;
+    color:#ffd400;background:none;border:0;text-shadow:0 1px 8px rgba(0,0,0,.85);pointer-events:none}
+  #packHint[hidden]{display:none}
+  body.touch-on #packHint.tap{pointer-events:auto;min-height:44px;padding:8px 18px;border:1px solid #ffd400;
+    border-radius:12px;background:var(--glass);text-shadow:none}
+  body.menu-open #packHint,body.builder-on #packHint,body.calibrating #packHint,
+    body:has(#coachHud.show) #packHint,body:has(#feelTutorial.show) #packHint,
+    body:has(#toast.has-action) #packHint{display:none}
+  /* 44% + 44px clears a toast of two lines (a portrait phone wraps one). A
+     short landscape has one-line toasts and the stick overlay 72 px from the
+     bottom: just under the toast, over the overlay; the arm hint left of the
+     card meets the button there, so while it shows (landed on a low pack, a
+     new pack is the next step) the arm hint gives way, still laid out. */
+  @media (max-height:430px){
+    #packHint{top:calc(44% + 20px)}
+    body.touch-on:has(#packHint.tap:not([hidden])) #hudArmSlot{visibility:hidden}
+  }
   #c{touch-action:none}
   #panel,#startMenu,#menuLayer,#feelPrompt,#calib{touch-action:pan-y;-webkit-user-select:text;user-select:text}
   /* Flying on touch, the footer's top is the bottom of the screen: the sticks,
@@ -213,6 +241,13 @@
     font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;padding:8px;resize:vertical;border-radius:10px}
   #cliPaste:focus,#ghostCode:focus,#pilotName:focus{outline:none;border-color:var(--orange)}
   #rateCurve,#bfRateCurve{width:100%;height:72px;margin:6px 0 10px;background:rgba(8,9,12,.55);border:1px solid var(--line);border-radius:4px;display:block}
+  /* Tune's bf rates and throttle: the value is a box to type in, beside its
+     slider. 16 px on a phone, so iOS does not zoom the page on focus. */
+  #bfRates .bf-num{display:inline-flex;align-items:baseline;gap:4px}
+  #bfRates .bf-num input{width:5.4em;margin:0;padding:2px 5px;font:inherit;text-align:right;color:var(--txt);
+    background:rgba(8,9,12,.55);border:1px solid var(--line);border-radius:4px}
+  #bfRates .bf-num input:focus{outline:none;border-color:var(--orange)}
+  @media (pointer:coarse){#bfRates .bf-num input{font-size:16px;min-height:32px}}
   #ratesShareRow button{width:auto;flex:1;margin-top:6px}
   #cliImportStatus,#bfRatesStatus{display:block;font-size:11px;color:var(--dim);margin:6px 0 10px;white-space:pre-wrap;line-height:1.45;min-height:1.2em}
   #cliImportStatus.err,#bfRatesStatus.err{color:#ff6b6b}
@@ -366,6 +401,9 @@
   /* Tune's rates, a set per core: the js core's (.rates-js) and, on the bf
      core (body.bf-core), Betaflight's (.rates-bf). */
   body.bf-core .rates-js,body:not(.bf-core) .rates-bf{display:none!important}
+  /* Tune's classic-physics controls (Your build's numbers, Physics, Whoop
+     feel): the js core's only; on the bf core a note in their place. */
+  body.bf-core .phys-js,body:not(.bf-core) .phys-bf{display:none!important}
   .menu-layer{pointer-events:auto;margin-left:0;width:min(360px,90vw);padding:22px 20px;
     max-height:calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
@@ -502,6 +540,10 @@
     border-radius:12px;background:var(--glass);backdrop-filter:blur(12px);font-size:11px;min-width:108px}
   .feel-meta span{color:var(--txt)}
   #hudArm.on{color:var(--green)}
+  /* The quad that flies (flyingQuadName): one line, a touch smaller and
+     spaced, held to one line and inside the card's minimum width for the
+     widest name (85 CLASSIC), so a class change never moves the card. */
+  #hudQuad{font-size:10px;font-weight:600;letter-spacing:.5px;white-space:nowrap;color:var(--orange)}
   /* The arm hint is outside the card, in a slot of fixed size anchored to it
      (above it here; below it under touch; beside it on a short landscape
      screen), so the card is the same size and in the same place armed or
@@ -527,6 +569,7 @@
     font-size:14px;font-weight:600;line-height:1.5;color:var(--txt);pointer-events:none}
   #firstFlight.show{display:block}
   #firstFlight.keys{width:min(560px,92vw)}
+  #firstFlight .ff-pack{font-size:12px;font-weight:500;color:var(--dim);margin-top:2px}
   #firstFlight img{display:block;width:auto;height:auto;max-width:100%;max-height:52vh;margin:10px auto 0}
   #feelTutMsg{font-size:14px;font-weight:600;margin-bottom:8px}
   #feelTutorial button{width:auto;display:inline-block;margin:4px 6px}
@@ -652,6 +695,7 @@
     <p class="menu-lead menu-flight">Paused. Opening the menu ends a race run. Resume (or Esc) flies on; Home goes back to the start screen.</p>
     <button class="primary menu-launch" id="menuFly">Fly</button>
     <button class="primary menu-flight" id="menuResume">Resume</button>
+    <button class="menu-flight" id="menuPack">New pack [P]</button>
     <button class="menu-hide" id="menuFreestyle">Freestyle</button>
     <button class="menu-launch" id="menuDaily">Daily</button>
     <button class="menu-launch dev-only" id="menuDailyLine">Daily Line</button>
@@ -692,6 +736,9 @@
 <div class="osd" id="osdGate"></div>
 <div class="osd" id="osdLap"></div>
 <div id="osdLand">LAND NOW</div>
+<!-- Under a low battery (warning on), and under LAND NOW: a new pack. On
+     touch it is the tap target (newPack); elsewhere it reads P. -->
+<button type="button" id="packHint" hidden>P = new pack</button>
 <div id="touchLayer" hidden aria-hidden="true">
   <div id="touchLandscape" data-touch="landscape" hidden>Rotate to landscape for easier sticks</div>
   <div class="vstick left" data-stick="L"><i></i></div>
@@ -755,6 +802,7 @@
   <b>K — Share last run (link)</b><br>
   <b>C — Coach / line</b><br>
   <b>R — Respawn last gate</b><br>
+  <b>P — New pack</b><br>
   <b>F — Sim flip when upside down</b><br>
   <b>↑/↓ — Cam angle ±5° (radio or pad)</b><br>
   <b>ESC — Menu</b><br>
@@ -763,6 +811,7 @@
 <div id="feelPrompt" aria-hidden="true"></div>
 <div id="feelHud">
   <div class="feel-meta">
+    <span id="hudQuad">AIR65</span>
     <span id="hudThr">THR 0%</span>
     <span id="hudBatt">BATT --</span>
     <span id="hudMode">ANGLE</span>
@@ -842,36 +891,46 @@
        to Betaflight as set lines through IMPORT CLI's own path and is read
        back (bfSetRates, importCliToBf); the sliders show what it flies. -->
   <div class="rates-bf" id="bfRates">
-  <p class="build-note">Betaflight's rates (Actual), set as IMPORT CLI sets them, disarmed. A paste below with rate lines flies its own for the session, and the sliders show them.</p>
+  <p class="build-note">Betaflight's rates (Actual), set as IMPORT CLI sets them, to Betaflight's own limits; type a number in a box, or drag. Betaflight takes them disarmed: a change in flight waits until you land. A paste below with rate lines flies its own for the session, and the sliders show them.</p>
   <div class="row"><label for="bfRatePreset">Preset</label></div>
   <select id="bfRatePreset" title="Beginner is slowest; RyFly (stock) is the rates in the Air65 and Fractal75 diffs."></select>
   <div class="row"><label for="cbBfRatesLink">Link roll and pitch</label><input type="checkbox" id="cbBfRatesLink" checked style="accent-color:var(--orange)"></div>
   <div id="bfAxis_roll">
   <div class="row"><label class="bf-axis-name" id="bfAxisName_roll">Roll + pitch</label><span class="val" id="bfMax_roll"></span></div>
-  <div class="row"><label for="bfs_roll_rcRate">Centre sensitivity</label><span class="val" id="bfv_roll_rcRate"></span></div>
-  <input type="range" id="bfs_roll_rcRate" data-axis="roll" data-field="rcRate" min="10" max="250" step="10" value="70">
-  <div class="row"><label for="bfs_roll_srate">Max rate</label><span class="val" id="bfv_roll_srate"></span></div>
-  <input type="range" id="bfs_roll_srate" data-axis="roll" data-field="srate" min="100" max="1800" step="10" value="450">
-  <div class="row"><label for="bfs_roll_expo">Expo</label><span class="val" id="bfv_roll_expo"></span></div>
+  <div class="row"><label for="bfs_roll_rcRate">Centre sensitivity</label><span class="val bf-num"><input type="number" id="bfn_roll_rcRate" data-axis="roll" data-field="rcRate" min="10" max="2000" step="10" inputmode="numeric" aria-label="Roll centre sensitivity, degrees a second"> °/s</span></div>
+  <input type="range" id="bfs_roll_rcRate" data-axis="roll" data-field="rcRate" min="10" max="2000" step="10" value="70">
+  <div class="row"><label for="bfs_roll_srate">Max rate</label><span class="val bf-num"><input type="number" id="bfn_roll_srate" data-axis="roll" data-field="srate" min="0" max="2000" step="10" inputmode="numeric" aria-label="Roll max rate, degrees a second"> °/s</span></div>
+  <input type="range" id="bfs_roll_srate" data-axis="roll" data-field="srate" min="0" max="2000" step="10" value="450">
+  <div class="row"><label for="bfs_roll_expo">Expo</label><span class="val bf-num"><input type="number" id="bfn_roll_expo" data-axis="roll" data-field="expo" min="0" max="1" step="0.01" inputmode="decimal" aria-label="Roll expo"></span></div>
   <input type="range" id="bfs_roll_expo" data-axis="roll" data-field="expo" min="0" max="1" step="0.01" value="0.3">
   </div>
   <div id="bfAxis_pitch" hidden>
   <div class="row"><label class="bf-axis-name">Pitch</label><span class="val" id="bfMax_pitch"></span></div>
-  <div class="row"><label for="bfs_pitch_rcRate">Centre sensitivity</label><span class="val" id="bfv_pitch_rcRate"></span></div>
-  <input type="range" id="bfs_pitch_rcRate" data-axis="pitch" data-field="rcRate" min="10" max="250" step="10" value="70">
-  <div class="row"><label for="bfs_pitch_srate">Max rate</label><span class="val" id="bfv_pitch_srate"></span></div>
-  <input type="range" id="bfs_pitch_srate" data-axis="pitch" data-field="srate" min="100" max="1800" step="10" value="450">
-  <div class="row"><label for="bfs_pitch_expo">Expo</label><span class="val" id="bfv_pitch_expo"></span></div>
+  <div class="row"><label for="bfs_pitch_rcRate">Centre sensitivity</label><span class="val bf-num"><input type="number" id="bfn_pitch_rcRate" data-axis="pitch" data-field="rcRate" min="10" max="2000" step="10" inputmode="numeric" aria-label="Pitch centre sensitivity, degrees a second"> °/s</span></div>
+  <input type="range" id="bfs_pitch_rcRate" data-axis="pitch" data-field="rcRate" min="10" max="2000" step="10" value="70">
+  <div class="row"><label for="bfs_pitch_srate">Max rate</label><span class="val bf-num"><input type="number" id="bfn_pitch_srate" data-axis="pitch" data-field="srate" min="0" max="2000" step="10" inputmode="numeric" aria-label="Pitch max rate, degrees a second"> °/s</span></div>
+  <input type="range" id="bfs_pitch_srate" data-axis="pitch" data-field="srate" min="0" max="2000" step="10" value="450">
+  <div class="row"><label for="bfs_pitch_expo">Expo</label><span class="val bf-num"><input type="number" id="bfn_pitch_expo" data-axis="pitch" data-field="expo" min="0" max="1" step="0.01" inputmode="decimal" aria-label="Pitch expo"></span></div>
   <input type="range" id="bfs_pitch_expo" data-axis="pitch" data-field="expo" min="0" max="1" step="0.01" value="0.3">
   </div>
   <div id="bfAxis_yaw">
   <div class="row"><label class="bf-axis-name">Yaw</label><span class="val" id="bfMax_yaw"></span></div>
-  <div class="row"><label for="bfs_yaw_rcRate">Centre sensitivity</label><span class="val" id="bfv_yaw_rcRate"></span></div>
-  <input type="range" id="bfs_yaw_rcRate" data-axis="yaw" data-field="rcRate" min="10" max="250" step="10" value="70">
-  <div class="row"><label for="bfs_yaw_srate">Max rate</label><span class="val" id="bfv_yaw_srate"></span></div>
-  <input type="range" id="bfs_yaw_srate" data-axis="yaw" data-field="srate" min="100" max="1800" step="10" value="400">
-  <div class="row"><label for="bfs_yaw_expo">Expo</label><span class="val" id="bfv_yaw_expo"></span></div>
+  <div class="row"><label for="bfs_yaw_rcRate">Centre sensitivity</label><span class="val bf-num"><input type="number" id="bfn_yaw_rcRate" data-axis="yaw" data-field="rcRate" min="10" max="2000" step="10" inputmode="numeric" aria-label="Yaw centre sensitivity, degrees a second"> °/s</span></div>
+  <input type="range" id="bfs_yaw_rcRate" data-axis="yaw" data-field="rcRate" min="10" max="2000" step="10" value="70">
+  <div class="row"><label for="bfs_yaw_srate">Max rate</label><span class="val bf-num"><input type="number" id="bfn_yaw_srate" data-axis="yaw" data-field="srate" min="0" max="2000" step="10" inputmode="numeric" aria-label="Yaw max rate, degrees a second"> °/s</span></div>
+  <input type="range" id="bfs_yaw_srate" data-axis="yaw" data-field="srate" min="0" max="2000" step="10" value="400">
+  <div class="row"><label for="bfs_yaw_expo">Expo</label><span class="val bf-num"><input type="number" id="bfn_yaw_expo" data-axis="yaw" data-field="expo" min="0" max="1" step="0.01" inputmode="decimal" aria-label="Yaw expo"></span></div>
   <input type="range" id="bfs_yaw_expo" data-axis="yaw" data-field="expo" min="0" max="1" step="0.01" value="0.3">
+  </div>
+  <!-- Betaflight's thr_mid and thr_expo, per class (sim-rates.js
+       BF_THR_SLIDERS): the class config's own until the pilot sets them;
+       on the bf core they stand in for the js core's Throttle Curve. -->
+  <div id="bfThrottle">
+  <div class="row"><label class="bf-axis-name">Throttle</label><span class="val" id="bfThrFrom"></span></div>
+  <div class="row"><label for="bfs_thr_mid">Throttle mid</label><span class="val bf-num"><input type="number" id="bfn_thr_mid" data-thr="mid" min="0" max="0.99" step="0.01" inputmode="decimal" aria-label="Throttle mid, 0 to 0.99"></span></div>
+  <input type="range" id="bfs_thr_mid" data-thr="mid" min="0" max="99" step="1" value="50" title="Betaflight thr_mid: where the throttle curve's middle sits (0.50 is half stick). Stops at 0.99: Betaflight's throttle maths divides by 1 minus it.">
+  <div class="row"><label for="bfs_thr_expo">Throttle expo</label><span class="val bf-num"><input type="number" id="bfn_thr_expo" data-thr="expo" min="0" max="1" step="0.01" inputmode="decimal" aria-label="Throttle expo, 0 to 1"></span></div>
+  <input type="range" id="bfs_thr_expo" data-thr="expo" min="0" max="100" step="1" value="0" title="Betaflight thr_expo: flattens the throttle around its mid, for a finer hover.">
   </div>
   <canvas id="bfRateCurve" width="280" height="88" aria-label="Roll rate curve Betaflight flies"></canvas>
   <div id="bfRatesStatus"></div>
@@ -965,7 +1024,12 @@
   <button id="musicBtn">🔇 MUSIC</button>
 
   <h2>Your build</h2>
-  <p class="build-note">Approximate whoop physics — not a thrust-stand log. Feeds mass, inertia, thrust, spool, and battery sag. Betaflight CLI paste still sets rates/filters only.</p>
+  <!-- Classic physics only (.phys-js, hidden on the bf core, which flies its
+       class's own airframe; .phys-bf says so there): every control below
+       that does not reach the bf core (tools/test_sim_pilot_fixes_page.mjs flies
+       each at both ends on bf and finds the flight unchanged). -->
+  <p class="build-note phys-js">Approximate whoop physics — not a thrust-stand log. Feeds mass, inertia, thrust, spool, and battery sag. Betaflight CLI paste still sets rates/filters only.</p>
+  <p class="build-note phys-bf">Betaflight flies the class's own measured airframe, the Air65 or the Fractal75: Preset and Frame pick the class. KV, prop, blades, cells, mAh and AUW are classic physics only (the 85).</p>
   <div class="row"><label>Preset</label></div>
   <select id="buildPreset"></select>
   <div class="row"><label>Frame</label></div>
@@ -974,6 +1038,7 @@
     <option value="75">75mm</option>
     <option value="85">85mm</option>
   </select>
+  <div class="phys-js">
   <div class="row"><label>Motor KV</label><span class="val" id="v_buildKv"></span></div>
   <input type="range" id="s_buildKv" min="8000" max="40000" step="500" value="23000">
   <div class="row"><label>Prop</label></div>
@@ -998,6 +1063,7 @@
   <div class="row"><label>AUW (g)</label><span class="val" id="v_buildAuw"></span></div>
   <input type="range" id="s_buildAuw" min="18" max="80" step="0.1" value="27">
   <p class="build-note" id="buildHint">Values are approximate.</p>
+  </div>
   <textarea id="buildCode" rows="2" readonly spellcheck="false"></textarea>
   <button type="button" id="btnBuildShare">COPY BUILD LINK</button>
 
@@ -1006,6 +1072,9 @@
   <select id="droneType"></select>
   <div class="row rates-js"><label>Rate preset</label></div>
   <select id="ratePreset" class="rates-js"></select>
+  <div class="row"><label>Auto-arm</label><input type="checkbox" id="cbAutoArm" checked style="accent-color:var(--orange)" title="Arm by raising the throttle after holding it at the bottom for a second. Off when an arm switch is mapped. Space still toggles."></div>
+  <p class="build-note phys-bf">Classic physics only, so not shown on Betaflight: Thrust:weight, Floatiness, Drag, Mass, Motor Response, Gravity Scale, Throttle Curve, 3D, Battery Simulation and sag, and the Whoop feel (duct bounce, crash speed, ground effect, propwash, drafts). They shape the 85. The Air65 and Fractal75 fly their own measured airframe, with its own ground effect, duct bounce and a pack that always drains and sags. The throttle curve on Betaflight: Rates, Throttle mid and expo.</p>
+  <div class="phys-js">
   <div class="row"><label>Thrust:weight</label><span class="val" id="v_twr"></span></div>
   <input type="range" id="s_twr" min="2" max="14" step="0.1" value="5" disabled title="Derived from thrust ÷ weight — adjust Mass to change it">
   <div class="row"><label>Floatiness</label><span class="val" id="v_float"></span></div>
@@ -1021,7 +1090,6 @@
   <div class="row"><label>Throttle Curve</label><span class="val" id="v_thc"></span></div>
   <input type="range" id="s_thc" min="0.4" max="2.6" step="0.05" value="1.0">
   <div class="row"><label>3D mode</label><input type="checkbox" id="cb3d" style="accent-color:var(--orange)" title="Reversible motors. Center stick = zero thrust. Acro only."></div>
-  <div class="row"><label>Auto-arm</label><input type="checkbox" id="cbAutoArm" checked style="accent-color:var(--orange)" title="Arm by raising the throttle after holding it at the bottom for a second. Off when an arm switch is mapped. Space still toggles."></div>
   <p class="build-note">Betaflight 3D: throttle center is zero, below center reverses the props. Flown in Acro. 3D runs are not counted on boards or as ghosts.</p>
   <div class="row"><label>Battery Simulation</label><input type="checkbox" id="cbBattSim" checked style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Sag affects thrust</label><input type="checkbox" id="cbSagThrust" checked style="accent-color:var(--orange)"></div>
@@ -1047,6 +1115,7 @@
   <div class="row"><label>Indoor drafts</label><input type="checkbox" id="cbDraft" style="accent-color:var(--orange)"></div>
   <div class="row"><label style="padding-left:14px">↳ Drafts</label><span class="val" id="v_draft"></span></div>
   <input type="range" id="s_draft" min="0" max="2" step="0.05" value="0.55" title="Light turbulence near walls. Stronger on small indoor whoops.">
+  </div>
 
   <h2 id="ghostHead">Ghost Sharing</h2>
   <div class="row"><label>Pilot name</label></div>
@@ -1084,7 +1153,7 @@
     Phones/tablets: dual on-screen sticks. TX16S: EdgeTX USB = <b>Joystick</b>.<br>
     <b>W/S</b> throttle &nbsp;<b>A/D</b> yaw<br>
     <b>↑/↓</b> pitch &nbsp;<b>←/→</b> roll<br>
-    <b>R</b> last-gate respawn &nbsp;<b>P</b> new pack (bf) &nbsp;<b>Tab</b> panel<br>
+    <b>R</b> last-gate respawn &nbsp;<b>P</b> new pack &nbsp;<b>Tab</b> panel<br>
     🔊 <b>M</b> mute &nbsp;<b>N</b> next track &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
     Throttle down 1 s, then up: armed. Down 0.5 s landed: disarmed. Upside down or on its side: full roll or pitch.<br>
     3D (Tune panel): center throttle = zero, below = reverse. Acro only. Not counted on boards.<br>
@@ -1227,9 +1296,9 @@ import {
   formatRoomSize, parseRoomQuery,
 } from "./sim-room.js?v=dfa4b922ade4";
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z,
-  loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT,
+  loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT,FIRST_FLIGHT_PACK_TEXT,
   loadStickOverlay,saveStickOverlay,stickOverlayOn,createStickOverlay,STICK_OVERLAY_PHONE,
-  SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText} from "./sim-feel.js?v=238bfce32111";
+  SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText} from "./sim-feel.js?v=c0aced47aab2";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -1241,7 +1310,9 @@ import {
   BF_RATE_PRESETS, BF_RATES_DEFAULT, BF_RATES_TOAST_KEY, BF_RATE_KEYS, BF_RATE_SLIDERS, bfPresetId, bfRatesPreset,
   bfRatesLines, bfRatesFromGet, bfRatesSame, bfRatesPresetOf, bfRatesActual, loadBfRates, saveBfRates, bfRatesOsd,
   bfRatesDefaultId, bfRatesDefaultToast, bfRatesFromJs, BF_RATES_FROM_JS_KEY, BF_RATES_SAVED_TOAST,
-} from "./sim-rates.js?v=366eea45d0dc";
+  bfFieldValue, BF_THR_KEYS, BF_THR_SLIDERS, bfThrFromSets, bfThrDefault, bfThrLines, bfThrSame, bfThrText,
+  bfThrFieldValue, loadBfThrottle, saveBfThrottle, SETPOINT_LIMIT,
+} from "./sim-rates.js?v=8abad00cccab";
 import {
   BUILD_KEY, BUILD_PREFIX, BUILD_PRESETS, DEFAULT_BUILD,
   normalizeBuild, encodeBuild, decodeBuild, physicsFromBuild, batteryFromBuild,
@@ -4016,14 +4087,17 @@ function resetQuad(){
   updateGateUI();updateGateHighlight();
   toast(attemptTrack()?'NEW ATTEMPT — NEW PACK':'RESET');
 }
-// P, on the bf core: a new pack. In Coach, Daily or Boards that is a new
-// attempt (R does it); elsewhere the pack swaps where the quad sits, once it
-// has landed (the respawn reboots Betaflight, disarmed).
+// P (or the NEW PACK tap target under a low battery, or the in-flight menu):
+// a new pack. In Coach, Daily or Boards that is a new attempt (R does it);
+// elsewhere the pack swaps where the quad sits, once it has landed: on the bf
+// core a respawn (Betaflight reboots, disarmed), on the js core the page's
+// own pack refilled.
 function newPack(){
-  if(core.kind!=='bf'||replayOn)return;
+  if(replayOn)return;
   if((coach&&coach.isActive())||attemptTrack()){resetQuad();toast('NEW PACK');return;}
   if(cs.airborne){toast('LAND FOR A NEW PACK');return;}
-  placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading(),FRESH);
+  if(core.kind==='bf')placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading(),FRESH);
+  else{battCharge=1;battV=BATT_FULL;}
   toast('NEW PACK');
 }
 // ---------- The House's backyard at boot ----------
@@ -4689,7 +4763,7 @@ function updateMotorSound(live){
 // no type-ahead, so the browser's shortcuts (Ctrl+R, Ctrl+F, ...) go through.
 const SIM_KEYS=new Set(['w','a','s','d','1','2','3','h','r','p','m','n','f','g','v','c','l','k']);
 addEventListener('keydown',e=>{
-  if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&(e.target.type==='text'||e.target.type==='range'))))return; // typing in the CLI/ghost/pilot-name boxes must not trigger R/M/F/G hotkeys
+  if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&(e.target.type==='text'||e.target.type==='range'||e.target.type==='number'))))return; // typing in the CLI/ghost/pilot-name boxes (or a Tune number: 3 is acro) must not trigger R/M/F/G hotkeys
   if(e.target&&e.target.tagName==='SELECT'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&SIM_KEYS.has(e.key.toLowerCase()))e.preventDefault();
   if(builderOn){
     if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();document.getElementById('builderDel').click();return;}
@@ -5348,8 +5422,8 @@ function applyRateSliderRanges(actual){
   // extract the markup-matching BF ranges. Other families overlay after.
   const rc=document.getElementById('s_rc'), sr=document.getElementById('s_sr'), ex=document.getElementById('s_ex');
   if(actual){
-    rc.min='1'; rc.max='25'; rc.step='0.1';
-    sr.min='5'; sr.max='200'; sr.step='0.5';
+    rc.min='1'; rc.max='200'; rc.step='0.1';
+    sr.min='0'; sr.max='200'; sr.step='0.5';
   }else{
     rc.min='0.5'; rc.max='2.5'; rc.step='0.01';
     sr.min='0'; sr.max='0.95'; sr.step='0.01';
@@ -5536,7 +5610,7 @@ function tryArm(opts){
   if(armGate&&padLive){toast('STICKS NOT SAFE');return false;}
   // A bf class waits for Betaflight: armed on the js core meanwhile, the quad
   // would be respawned and disarmed mid-flight when the bf core takes over.
-  if(core.kind!=='bf'&&bfWanted()&&!bfOf().core&&!bfOf().failed){toast('LOADING BETAFLIGHT CORE…');return false;}
+  if(bfLoadPending()){bfArmHeld=droneType;toast(BF_LOADING_TOAST,{ms:2400});return false;}
   if(!(opts&&opts.fromAuto)&&!throttleSafeToArm(stick.t,threeD)){
     toast(threeD?'CENTER THROTTLE TO ARM':'Lower throttle to arm');
     return false;
@@ -5695,6 +5769,12 @@ function paintFirstFlight(kind){
   const line=document.createElement('div');
   line.textContent=FIRST_FLIGHT_TEXT;
   firstFlightEl.appendChild(line);
+  // A new pack, for the input that flies (newPack: P, the NEW PACK tap
+  // target, the in-flight menu).
+  const pack=document.createElement('div');
+  pack.className='ff-pack';
+  pack.textContent=FIRST_FLIGHT_PACK_TEXT[gpConnected?'controller':(touchCtl&&touchCtl.enabled)?'touch':'keyboard'];
+  firstFlightEl.appendChild(pack);
   if(kind==='keys'){
     const img=document.createElement('img');
     img.src=FIRST_FLIGHT_KEYS_IMG;img.width=520;img.height=232;img.alt=FIRST_FLIGHT_KEYS_ALT;
@@ -6098,6 +6178,28 @@ function toast(m,opts){
   toastEl.style.opacity=1;
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toastEl.style.opacity=0;toastEl.classList.remove('has-action');},o.ms||1500);
 }
+// P = new pack under a low battery (from the warning, under LAND NOW): words
+// for the keys (and a pad: or the menu's New pack); on touch a NEW PACK
+// button where a tap does it, landed, or any time in Coach, Daily and Boards,
+// where a new pack is a new attempt and it says so; in the air in free
+// flight, words. Written only when it changes; none in a replay.
+const packHintEl=document.getElementById('packHint');
+let packHintSaid='';
+function syncPackHint(low){
+  if(!packHintEl)return;
+  const touch=!!(touchCtl&&touchCtl.enabled);
+  const attempt=(coach&&coach.isActive())||attemptTrack();
+  const tap=!!low&&touch&&(attempt||!cs.airborne);
+  const text=!low?'':touch?(tap?'NEW PACK':'Land for a new pack'):gpConnected?'P or MENU = new pack':'P = new pack';
+  const say=text&&attempt?text+' (new attempt)':text;
+  const key=say+(tap?'|tap':'');
+  if(key===packHintSaid)return;
+  packHintSaid=key;
+  packHintEl.hidden=!say;
+  packHintEl.classList.toggle('tap',tap);
+  if(say)packHintEl.textContent=say;
+}
+if(packHintEl)packHintEl.addEventListener('click',e=>{e.preventDefault();newPack();packHintEl.blur();});
 function updateOSD(){
   // state is in scene units (WS per metre): SPD and ALT read true m/s and m.
   // SPD shows in the pilot's Speed units; Off keeps the line's box, hidden.
@@ -6119,6 +6221,7 @@ function updateOSD(){
     landEl.style.display=battV<=BATT_CRIT?'block':'none';                  // LAND NOW center-screen
     if(battV<=BATT_CRIT)landEl.style.opacity=flash?'1':'0.15';
   }else landEl.style.display='none';
+  syncPackHint((CFG.battSimOn||cs.kind==='bf')&&battV<=BATT_WARN&&!replayOn);
   osdTL.innerHTML=`<span class="osd-spd${spd?'':' off'}">SPD ${spd||''}</span><br>ALT ${alt} m${battLine}`;
   // Which core flies, always: JS CORE whenever Betaflight is not flying (the
   // 85, which has no sim-core plant, ?core=js, or the bf core still loading or
@@ -6147,7 +6250,7 @@ function updateOSD(){
   const thrBarSrc=threeD?(thrShow+1)/2:stick.t;
   // The bf core shows why Betaflight will not arm, as its OSD would.
   osdBC.innerHTML=osdBcHtml(thrBarSrc,thrLabel,t,cs.twr||0,threeD,
-    cs.kind==='bf'&&!cs.armed&&cs.armingDisableFlags?armingFlagNames(cs.armingDisableFlags).join(' '):'');
+    bfLoadPending()?'LOADING BETAFLIGHT':cs.kind==='bf'&&!cs.armed&&cs.armingDisableFlags?armingFlagNames(cs.armingDisableFlags).join(' '):'');
   osdBR.innerHTML=`<span style="font-size:.85em;opacity:.85">`+
     `M4 ${bar(mo[3])}&nbsp;M2 ${bar(mo[1])}<br>`+
     `M3 ${bar(mo[2])}&nbsp;M1 ${bar(mo[0])}</span>`;
@@ -6989,6 +7092,8 @@ function wireLooksUI(){
   // and Calibrate buttons), and Resume / Home move between the two screens.
   const on=(id,fn)=>{const b=document.getElementById(id);if(b)b.onclick=fn;};
   on('menuResume',()=>{hideMenuLayer();toggleStartMenu(false);});
+  // A new pack, then back to flying (landed; in flight it says land first).
+  on('menuPack',()=>{hideMenuLayer();toggleStartMenu(false);newPack();});
   on('menuHome',()=>{hideMenuLayer();document.getElementById('startMenu').classList.remove('in-flight');});
   on('menuReplay',()=>{hideMenuLayer();startReplay();});
   on('menuShare',()=>{shareLine();});
@@ -7011,7 +7116,7 @@ function wireLooksUI(){
     showMenuLayer('<h2>Controls</h2><p>TX16S: EdgeTX USB mode = <b style="color:var(--txt)">Joystick</b>.</p>'+
       '<p><span class="n">W/S</span> throttle · <span class="n">A/D</span> yaw<br>'+
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
-      '<span class="n">R</span> last-gate respawn · <span class="n">P</span> new pack (bf) · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
+      '<span class="n">R</span> last-gate respawn · <span class="n">P</span> new pack · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
       '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
       'Throttle down 1 s, then up: armed. Down 0.5 s landed: disarmed. Upside down or on its side: full roll or pitch.<br>'+
       '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">N</span> next track · <span class="n">G</span> ghost · <span class="n">C</span> coach · <span class="n">K</span> share last run<br>'+
@@ -7584,23 +7689,31 @@ function setCliStatus(text,kind){
 // opts.rates, text is their set lines (sim-rates.js bfRatesLines), sent as the
 // rates part of the same config, under the class's paste or, once the pilot
 // changed them after it (opts.ratesLast), on top of it; read back from
-// Betaflight after, and checked against what the lines set.
+// Betaflight after, and checked against what the lines set. Tune's throttle
+// mid and expo (opts.thr, the class's own when the pilot set them) go as a
+// part of their own the same way (opts.thrLast): a paste's own thr_mid or
+// thr_expo flies until the pilot changes the throttle after it.
 function bfPasteReplaces(text){return /^\s*defaults\b/im.test(text);}
-// What a class boots on: its config (bfDiff), Tune's rate lines and this
-// session's paste, in the order they were set; a full-diff paste in place of
-// the config and of any rates set before it. at: each part's lines in the
-// report (1-based, first and last).
-function bfCompose(paste,ratesText,ratesLast){
+// What a class boots on: its config (bfDiff), Tune's rate lines, Tune's
+// throttle lines and this session's paste; each of Tune's parts under the
+// paste, or on top of it once the pilot changed it after the paste
+// (ratesLast, thrLast); a full-diff paste in place of the config and of any
+// part under it. at: each part's lines in the report (1-based, first and last).
+function bfCompose(paste,ratesText,ratesLast,thrText,thrLast){
   const full=!!paste&&bfPasteReplaces(paste);
   const parts=full?[]:[['diff',bfDiff()]];
-  if(paste&&!ratesLast){if(!full&&ratesText)parts.push(['rates',ratesText]);parts.push(['paste',paste]);}
-  else{if(paste)parts.push(['paste',paste]);if(ratesText)parts.push(['rates',ratesText]);}
+  const under=[],over=[];
+  if(ratesText)(paste&&!ratesLast?under:over).push(['rates',ratesText]);
+  if(thrText)(paste&&!thrLast?under:over).push(['thr',thrText]);
+  if(!full)parts.push(...under);
+  if(paste)parts.push(['paste',paste]);
+  parts.push(...over);
   const at={};
   let n=1;
   for(const [k,t] of parts){const len=String(t).split('\n').length;at[k]=[n,n+len-1];n+=len;}
   return {text:parts.map(p=>p[1]).join('\n'),at};
 }
-function bfWantDiff(){const b=bfOf();return bfCompose(b.cliText,bfRatesText(),b.ratesLast).text;}
+function bfWantDiff(){const b=bfOf();return bfCompose(b.cliText,bfRatesText(),b.ratesLast,bfThrLinesWant(),b.thrLast).text;}
 // A pasted line that changes something: a setting or feature Betaflight took,
 // or a config command with arguments (get, dump, diff, a bare aux, ... only print).
 function bfLineChanges(l){
@@ -7615,8 +7728,10 @@ function bfSetsOf(text){
 // The rates the flying class's Betaflight holds (its active rate profile),
 // read back after each load; the sliders show them.
 function bfReadRates(b){
-  try{b.ratesBack=bfRatesFromGet(bfCore.sim.get(BF_RATE_KEYS.slice()));}
-  catch(e){b.ratesBack=null;console.warn('sim-core: reading the rates back failed ('+(e&&e.message||e)+')');}
+  // One get (each makes a config instance): the rates, and the throttle mid
+  // and expo Tune sets beside them (BF_THR_KEYS).
+  try{const got=bfCore.sim.get([...BF_RATE_KEYS,...BF_THR_KEYS]);b.ratesBack=bfRatesFromGet(got);b.thrBack=bfThrFromSets(got);}
+  catch(e){b.ratesBack=null;b.thrBack=null;console.warn('sim-core: reading the rates back failed ('+(e&&e.message||e)+')');}
   return b.ratesBack;
 }
 function importCliToBf(text,opts){
@@ -7631,7 +7746,16 @@ function importCliToBf(text,opts){
   const prev=bfWantDiff();
   const label=()=>b.cliText?'CLI import':bfTuneId();
   const ratesLast=rates?(o.ratesLast!=null?!!o.ratesLast:b.ratesLast):false;
-  const want=rates?bfCompose(b.cliText,text,ratesLast):bfCompose(text,bfRatesText(),false);
+  const thrText=rates&&o.thr!==undefined?o.thr:bfThrLinesWant();
+  const thrLast=rates?(o.thrLast!=null?!!o.thrLast:b.thrLast):false;
+  const want=rates?bfCompose(b.cliText,text,ratesLast,thrText,thrLast):bfCompose(text,bfRatesText(),false,thrText,false);
+  // This load's own parts: Tune's (a full-diff paste stands in for any under
+  // it), or the paste.
+  const own=rates?['rates','thr'].filter(k=>want.at[k]):['paste'];
+  if(!own.length){
+    status('Your pasted full diff stands in for Tune\'s rates and throttle on this class: change them here to fly Tune\'s on top of it.','err');
+    return null;
+  }
   let r;
   try{
     r=bfLoadDiff(want.text,rates?(o.label||'rates'):'CLI import',{quiet:!!o.quiet});
@@ -7644,12 +7768,15 @@ function importCliToBf(text,opts){
     return null;
   }
   if(!r){
-    status('DISARM TO LOAD A DIFF — Betaflight did not take it','err');
+    // Armed: Betaflight reboots to take a config, so it takes one disarmed
+    // only. Tune's rates and an IMPORT CLI paste in flight wait for the
+    // landing instead (bfTunePending); this is what else ends here.
+    status('Not loaded: Betaflight takes settings only while disarmed. Land and disarm, then try again.','err');
     return null;
   }
-  // Count this load's own lines: the paste's, or the rates'.
-  const [lo,hi]=want.at[rates?'rates':'paste'];
-  const mine=(r.lines||[]).filter(l=>l.n>=lo&&l.n<=hi);
+  // Count this load's own lines: the paste's, or Tune's.
+  const ranges=own.map(k=>want.at[k]);
+  const mine=(r.lines||[]).filter(l=>ranges.some(([lo,hi])=>l.n>=lo&&l.n<=hi));
   const took=mine.filter(bfLineChanges).length;
   const refused=mine.filter(l=>l.status==='rejected').length,missing=mine.filter(l=>l.status==='error').length;
   // A setting the sim sets itself (sim-core's policy, rpm_filter_harmonics):
@@ -7658,7 +7785,7 @@ function importCliToBf(text,opts){
   const detail=(refused>0?', refused '+refused:'')+(missing>0?', '+missing+' not in the sim target':'')+(over.length>0?', '+over.length+' set by the sim':'');
   const notes=[...new Set(over.map(l=>l.msg).filter(Boolean))];
   const noteText=notes.length?'\n'+notes.join('\n'):'';
-  const sets=rates?Object.keys(bfSetsOf(text)).length:0;
+  const sets=rates?Object.keys(bfSetsOf(own.map(k=>k==='rates'?text:thrText).join('\n'))).length:0;
   if(rates?took<sets:took<=0){
     // Not all taken (rates) or none (a paste): Betaflight goes back to what it
     // flew before this load.
@@ -7671,8 +7798,8 @@ function importCliToBf(text,opts){
     setCliStatus('Betaflight took none of it'+detail+'; it flies what it flew before'+noteText,'err');
     return r;
   }
-  if(rates)b.ratesLast=ratesLast;
-  else{b.cliText=text;b.ratesLast=false;}
+  if(rates){b.ratesLast=ratesLast;b.thrLast=thrLast;}
+  else{b.cliText=text;b.ratesLast=false;b.thrLast=false;}
   b.ratesFailed=null;
   const back=bfReadRates(b);
   syncRatesSource();
@@ -7681,19 +7808,31 @@ function importCliToBf(text,opts){
     // then Betaflight must hold exactly what they set.
     const last=!b.cliText||ratesLast;
     const asked=bfRatesFromGet(bfSetsOf(text));
-    if(last&&!bfRatesSame(back,asked)){
+    if(want.at.rates&&last&&!bfRatesSame(back,asked)){
       console.error('sim-core: Betaflight holds rates '+JSON.stringify(back)+', not the rates Tune set ('+JSON.stringify(asked)+')');
       status('Betaflight read back '+bfRatesSummary(back)+', not '+bfRatesSummary(asked),'err');
       return null;
     }
-    status('Betaflight took '+took+' rate line'+(took===1?'':'s')+(bfPasteWins(b)?' under your paste, whose own rates fly':'')+'; it flies '+bfRatesSummary(back)+' (read back)'+detail+noteText,'ok');
+    // Tune's throttle mid and expo, when sent and the last word: held exactly.
+    const thrAsked=want.at.thr?bfThrFromSets(bfSetsOf(thrText)):null;
+    if((!b.cliText||thrLast)&&thrAsked&&!bfThrSame(b.thrBack,thrAsked)){
+      console.error('sim-core: Betaflight holds throttle '+JSON.stringify(b.thrBack)+', not the throttle Tune set ('+JSON.stringify(thrAsked)+')');
+      status('Betaflight read back throttle '+bfThrSummary(b.thrBack)+', not '+bfThrSummary(thrAsked),'err');
+      return null;
+    }
+    status('Betaflight took '+took+' rate line'+(took===1?'':'s')+(bfPasteWins(b)?' under your paste, whose own rates fly':'')+'; it flies '+bfRatesSummary(back)+', throttle '+bfThrSummary(b.thrBack)+(bfThrPasteWins(b)?' (your paste\'s)':'')+' (read back)'+detail+noteText,'ok');
     return r;
   }
   setCliStatus('Betaflight took '+took+' line'+(took===1?'':'s')+(bfPasteReplaces(text)?' (a full diff, in place of '+bfTuneId()+')':' on top of '+bfTuneId())+detail+noteText,'ok');
   return r;
 }
 function importCli(text){
-  if(bfWanted()&&!bfOf().failed)return importCliToBf(text);
+  if(bfWanted()&&!bfOf().failed){
+    // In flight: kept, and imported when the pilot lands (bfTunePending).
+    if(bfCore&&coreArmed()){bfPend({k:'paste',type:droneType,text});return null;}
+    if(bfCore&&bfPendAfter({k:'paste',type:droneType,text})!=null)return null;
+    return importCliToBf(text);
+  }
   let p;
   try{
     p=parseCli(text,rates.type);
@@ -7828,7 +7967,32 @@ let bfRatesToastTimer=null,bfRatesToastFor=null;
 function bfInputKind(){return gpConnected?(padIsRadio({id:gpName})?'radio':'gamepad'):(touchCtl&&touchCtl.enabled?'touch':'keyboard');}
 function bfRatesWant(){return bfRatesLinked||(bfRatesSaved&&bfRatesSaved.rates)||bfRatesPreset(bfRatesDefaultId(bfInputKind()));}
 function bfRatesFrom(){return bfRatesLinked?'link':bfRatesSaved?'saved':'default';}
+// Tune's throttle mid and expo (sim-rates.js BF_THR_SLIDERS), per class: the
+// pilot's once set there (saved in this browser), sent beside the rates;
+// until then no throttle lines go, and the class config's own fly (the
+// Fractal75 diff's 65 and 35, Betaflight's 50 and 0 on the Air65).
+let bfThrSaved=loadBfThrottle();
+function bfThrWant(type=droneType){return bfThrSaved[type]||null;}
+function bfThrDefaultOf(type=droneType){return bfThrDefault(bfSetsOf(bfDiff(type)||''));}
+// What Betaflight flies on the flying class (read back), else Tune's, else its config's.
+// (No bf core yet, as at boot, before the class tables below exist: the
+// pilot's for the class, or Betaflight's.)
+function bfThrShown(){
+  if(!bfCore)return bfThrWant()||bfThrDefault({});
+  const t=bfFlyingType(),b=bfOf(t);
+  return b.thrBack||bfThrWant(t)||bfThrDefaultOf(t);
+}
+function bfThrSummary(t){return t?'mid '+bfThrText(t.mid)+', expo '+bfThrText(t.expo):'unread';}
 function bfRatesText(){return bfRatesLines(bfRatesWant());}
+// Tune's throttle lines for a class: the pilot's own there, or none.
+function bfThrLinesWant(type=droneType){const t=bfThrWant(type);return t?bfThrLines(t):null;}
+// A paste's own throttle flies: it sets thr_mid or thr_expo (a full diff
+// always carries them), and the pilot has not changed the throttle since.
+function bfThrPasteWins(b){
+  if(!b||!b.cliText||b.thrLast)return false;
+  const sets=bfSetsOf(b.cliText);
+  return bfPasteReplaces(b.cliText)||'thr_mid' in sets||'thr_expo' in sets;
+}
 // The paste's own rates fly: it came after Tune's and set others (a full diff
 // always carries its own).
 function bfPasteWins(b){return !!b.cliText&&!b.ratesLast&&(bfPasteReplaces(b.cliText)||!bfRatesSame(b.ratesBack,bfRatesWant()));}
@@ -7869,22 +8033,109 @@ function bfInputWatch(){
   bfInputSeen=k;
   syncRatesSource();
 }
+// Disarmed (bfWorldWatch, every 500 ms): what the pilot changed in flight
+// goes in once the quad is down and upright (each load reboots Betaflight and
+// respawns the quad where it is: never a falling or flipped one), then
+// anything else Betaflight should hold.
 function bfRatesWatch(){
   const b=bfOf();
-  if(b.core&&b.core===bfCore&&bfWantDiff()!==b.diffLoaded)bfApplyRates();
+  if(!(b.core&&b.core===bfCore))return;
+  if(bfPendingHere()){if(!cs.airborne&&bodyUpZ(cs.quaternion)>0.5)bfApplyPending();return;}
+  if(bfWantDiff()!==b.diffLoaded)bfApplyRates();
 }
-// The pilot's change (a preset, a slider, the link box): to Betaflight on
-// top of any paste, saved once it flies; refused (armed, or Betaflight did
-// not take it), the sliders go back to what flies.
-function bfSetRates(next){
+// Tune's changes made armed: Betaflight reboots to take a config, so it
+// takes one disarmed only, as a quad on the bench. Kept here, in the order
+// made, and sent at the landing (bfRatesWatch) as if made then, the sliders
+// showing them meanwhile; never dropped. Each is {k:'rates',edit(st)} (the
+// pilot's one profile, for every class), {k:'thr',type,edit(thr)} or
+// {k:'paste',type,text} (for the class it was set on, which keeps it until
+// that class lands). An edit is the change itself (a slider's one field),
+// made again on what flies at the landing, after any paste before it.
+let bfTunePending=null;
+function bfPend(op){
+  (bfTunePending=bfTunePending||[]).push(op);
+  toast(op.k==='paste'?'CLI IMPORT APPLIES WHEN YOU LAND':'RATES CHANGE APPLIES WHEN YOU LAND',{ms:2600});
+  const what=op.k==='paste'?'Your IMPORT CLI paste':op.k==='thr'?'Your throttle change':'Your rates change';
+  (op.k==='paste'?setCliStatus:setBfRatesStatus)(what+' is kept: Betaflight takes settings only while disarmed, so it goes in when you land and disarm.','ok');
+  syncRatesSource();
+}
+// Kept for the flying class: the rates, and its own throttle and pastes.
+function bfPendMine(o,type=droneType){return o.k==='rates'||o.type===type;}
+function bfPendingHere(){return !!bfTunePending&&bfTunePending.some(o=>bfPendMine(o));}
+// What shows meanwhile: the kept rates edits made on what flies, and the
+// class's last kept throttle.
+function bfPendRates(st){let out=st;for(const o of bfTunePending||[])if(o.k==='rates')out=o.edit(out);return out;}
+function bfPendThr(){let t=null;for(const o of bfTunePending||[])if(o.k==='thr'&&o.type===droneType)t=o.edit(t||bfThrShown());return t;}
+// A change made disarmed while kept ones still wait for this class (the quad
+// down but not upright yet): it goes in after them, all now, in the order
+// made. Otherwise null: the caller loads it.
+function bfPendAfter(op){
+  if(!bfPendingHere())return null;
+  bfTunePending.push(op);
+  return bfApplyPending();
+}
+function bfApplyPending(){
+  const now=bfTunePending.filter(o=>bfPendMine(o));
+  const later=bfTunePending.filter(o=>!bfPendMine(o));
+  bfTunePending=later.length?later:null;
+  let ok=true;
+  for(let i=0;i<now.length;){
+    // A paste counts as taken only when Betaflight took some of it (it is
+    // then the class's session paste).
+    if(now[i].k==='paste'){const t=now[i].text;importCliToBf(t);ok=ok&&bfOf().cliText===t;i++;continue;}
+    // A run of rates and throttle changes: one load, made on what flies now
+    // (after any paste before them).
+    let rates=null,thr=null;
+    for(;i<now.length&&now[i].k!=='paste';i++){
+      if(now[i].k==='rates')rates=now[i].edit(rates||bfRatesShown());
+      else thr=now[i].edit(thr||bfThrShown());
+    }
+    const got=bfSetTune(rates||bfRatesWant(),thr||bfThrWant(),{rates:!!rates,thr:!!thr});
+    ok=ok&&(!rates||got.rates)&&(!thr||got.thr);
+  }
+  if(ok&&now.length)toast('RATES CHANGE APPLIED');
+  syncRatesSource();
+  return ok;
+}
+// The pilot's change (a preset, a slider, the link box, a typed number): to
+// Betaflight on top of any paste, saved once it flies; armed, kept until the
+// landing (bfPend: edit, the change itself, is made again on what flies then;
+// without one, these rates); refused by Betaflight, the sliders go back to
+// what flies.
+function bfSetRates(next,edit){
   if(!bfCore||!next)return false;
-  const p=bfRatesPresetOf(next);
-  const r=importCliToBf(bfRatesLines(next),{rates:true,ratesLast:true,quiet:true});
-  const ok=!!r&&bfRatesSame(bfOf().ratesBack,next);
-  if(ok){
+  const op={k:'rates',edit:edit||(()=>next)};
+  if(coreArmed()){bfPend(op);return false;}
+  const after=bfPendAfter(op);
+  if(after!=null)return after;
+  return bfSetTune(next,bfThrWant(),{rates:true}).rates;
+}
+// Tune's throttle mid and expo for the flying class, the same way (edit: the
+// one field, made again on what flies at the landing).
+function bfSetThrottle(next,edit){
+  if(!bfCore||!next)return false;
+  const op={k:'thr',type:droneType,edit:edit||(()=>next)};
+  if(coreArmed()){bfPend(op);return false;}
+  const after=bfPendAfter(op);
+  if(after!=null)return after;
+  return bfSetTune(bfRatesWant(),next,{thr:true}).thr;
+}
+// One load for both (a reboot each). Each part on top of any paste once the
+// pilot changed it there (ratesLast, thrLast): a throttle change leaves a
+// paste's own rates flying, a rates change a paste's own throttle. Each part
+// saved once read back.
+function bfSetTune(nextRates,nextThr,save){
+  const r=importCliToBf(bfRatesLines(nextRates),{rates:true,thr:nextThr?bfThrLines(nextThr):null,ratesLast:save.rates?true:undefined,thrLast:save.thr?true:undefined,quiet:true});
+  const b=bfOf();
+  const ok={rates:!!r&&bfRatesSame(b.ratesBack,nextRates),thr:!!r&&!!nextThr&&bfThrSame(b.thrBack,nextThr)};
+  if(ok.rates&&save.rates){
     bfRatesLinked=null;
-    bfRatesSaved={preset:p,link:bfRatesLinkRP,rates:next};
+    bfRatesSaved={preset:bfRatesPresetOf(nextRates),link:bfRatesLinkRP,rates:nextRates};
     saveBfRates(bfRatesSaved);
+  }
+  if(ok.thr&&save.thr){
+    bfThrSaved={...bfThrSaved,[droneType]:nextThr};
+    saveBfThrottle(bfThrSaved);
   }
   syncRatesSource();
   return ok;
@@ -7923,9 +8174,15 @@ function bfRatesNote(){
 // Tune's bf rates show what Betaflight flies, as Actual (a paste's other rate
 // type converted, the max marked ≈): its preset (Custom for none), roll and
 // pitch as one while linked and equal.
+// A change made in flight (bfTunePending) shows until it goes in. A box the
+// pilot is typing in is left alone.
+function bfRatesOnScreen(){return bfPendRates(bfRatesShown());}
+function bfThrOnScreen(){return bfPendThr()||bfThrShown();}
+function bfFieldText(f,v){return f==='expo'?Number(v).toFixed(2):String(Math.round(v));}
+function setBfNum(id,text){const el=document.getElementById(id);if(el&&document.activeElement!==el)el.value=text;}
 function syncBfRatesUI(){
   const S=id=>document.getElementById(id);
-  const st=bfRatesShown(),act=bfRatesActual(st);
+  const st=bfRatesOnScreen(),act=bfRatesActual(st);
   if(!act)return;
   const same=['rcRate','srate','expo'].every(f=>act.roll[f]===act.pitch[f]);
   const linked=bfRatesLinkRP&&same;
@@ -7940,15 +8197,27 @@ function syncBfRatesUI(){
       const v=act[ax][f]*BF_RATE_SLIDERS[f].scale;
       const el=S('bfs_'+ax+'_'+f);
       if(el)el.value=String(v);
-      const lbl=S('bfv_'+ax+'_'+f);
-      if(lbl)lbl.textContent=f==='expo'?v.toFixed(2):Math.round(v)+' °/s';
+      setBfNum('bfn_'+ax+'_'+f,bfFieldText(f,v));
     }
-    const m=S('bfMax_'+ax);
-    if(m)m.textContent='max '+Math.round(maxRateDpsOf(st.type,st[ax]))+' °/s'+(act.exact?'':' ('+(RATE_TYPE_LABELS[st.type]||st.type)+', shown as Actual ≈)');
+    // The setpoint Betaflight flies at full stick (capped at rate_limit, 1998).
+    const m=S('bfMax_'+ax),full=maxRateDpsOf(st.type,st[ax]);
+    if(m)m.textContent='max '+Math.round(full)+' °/s'+(full>=SETPOINT_LIMIT?' (Betaflight\'s limit)':'')+(act.exact?'':' ('+(RATE_TYPE_LABELS[st.type]||st.type)+', shown as Actual ≈)');
   }
   const sel=S('bfRatePreset');
   if(sel)sel.value=bfRatesPresetOf(st);
   drawRateCurve(S('bfRateCurve'),st.type,st.roll);
+  // Throttle: the flying class's, and where it comes from.
+  const thr=bfThrOnScreen(),type=bfCore?bfFlyingType():droneType;
+  for(const f of ['mid','expo']){
+    const r=S('bfs_thr_'+f);
+    if(r)r.value=String(thr[f]);
+    setBfNum('bfn_thr_'+f,bfThrText(thr[f]));
+  }
+  const from=S('bfThrFrom');
+  // Where it comes from: a change kept in flight or the pilot's own; a paste's
+  // own (it set them, after Tune's); or the class config's.
+  const pasted=bfCore&&bfThrPasteWins(bfOf(type));
+  if(from)from.textContent=bfPendThr()||(bfThrWant(type)&&!pasted)?'your own ('+((DRONE_TYPES[type]||{}).frame||'')+'mm)':pasted?'your pasted CLI':((bfCore&&bfQuad(type))||'class')+' default';
 }
 {
   const sel=document.getElementById('bfRatePreset');
@@ -7963,28 +8232,57 @@ function syncBfRatesUI(){
     sel.appendChild(custom);
     sel.onchange=()=>{if(sel.value&&bfSetRates(bfRatesPreset(sel.value)))toast('RATES: '+BF_RATE_PRESETS[sel.value].label.toUpperCase());};
   }
-  // The sliders' value under the pointer as it moves; to Betaflight on release.
-  const next=(ax,f,v)=>{
-    const st=bfRatesActual(bfRatesShown());
+  // The sliders' value under the pointer as it moves; to Betaflight on
+  // release. The box beside each holds the same value to type: Enter or
+  // leaving the box sends it, rounded to the step and held inside
+  // Betaflight's limits (sim-rates.js bfFieldValue). The change is one
+  // field (edit), made on what shows (a change kept in flight included), so a
+  // second change keeps the first; kept in flight, it is made again on what
+  // flies at the landing.
+  const edit=(ax,f,v,link=bfRatesLinkRP)=>(from)=>{
+    const st=bfRatesActual(from);
     delete st.exact;
     st[ax][f]=f==='expo'?Math.round(v*100)/100:Math.round(v/BF_RATE_SLIDERS[f].scale);
-    if(ax==='roll'&&bfRatesLinkRP)st.pitch={...st.roll};
+    if(ax==='roll'&&link)st.pitch={...st.roll};
     return st;
   };
-  document.querySelectorAll('#bfRates input[type=range]').forEach(el=>{
+  const set=(ax,f,v)=>{const e=edit(ax,f,v,bfRatesLinkRP&&document.getElementById('bfAxis_pitch').hidden);return bfSetRates(e(bfRatesOnScreen()),e);};
+  document.querySelectorAll('#bfRates input[type=range][data-axis]').forEach(el=>{
     const ax=el.dataset.axis,f=el.dataset.field;
-    el.addEventListener('input',()=>{
-      const v=parseFloat(el.value),lbl=document.getElementById('bfv_'+ax+'_'+f);
-      if(lbl)lbl.textContent=f==='expo'?v.toFixed(2):Math.round(v)+' °/s';
+    const num=document.getElementById('bfn_'+ax+'_'+f);
+    el.addEventListener('input',()=>{if(num)num.value=bfFieldText(f,parseFloat(el.value));});
+    el.addEventListener('change',()=>set(ax,f,parseFloat(el.value)));
+    if(num)num.addEventListener('change',()=>{
+      // Out of the box first: what shows after is what flies (a refused value
+      // does not stay typed in it).
+      num.blur();
+      const v=bfFieldValue(f,num.value);
+      if(v==null){syncBfRatesUI();return;}
+      el.value=String(v);num.value=bfFieldText(f,v);
+      set(ax,f,v);
     });
-    el.addEventListener('change',()=>bfSetRates(next(ax,f,parseFloat(el.value))));
   });
+  // Throttle mid and expo: the same, per class (bfSetThrottle).
+  for(const f of ['mid','expo']){
+    const el=document.getElementById('bfs_thr_'+f),num=document.getElementById('bfn_thr_'+f);
+    if(!el)continue;
+    const send=v=>bfSetThrottle({...bfThrOnScreen(),[f]:v},(from)=>({...from,[f]:v}));
+    el.addEventListener('input',()=>{if(num)num.value=bfThrText(parseInt(el.value,10));});
+    el.addEventListener('change',()=>send(parseInt(el.value,10)));
+    if(num)num.addEventListener('change',()=>{
+      num.blur();
+      const v=bfThrFieldValue(f,num.value);
+      if(v==null){syncBfRatesUI();return;}
+      el.value=String(v);num.value=bfThrText(v);
+      send(v);
+    });
+  }
   const link=document.getElementById('cbBfRatesLink');
   if(link)link.onchange=()=>{
     bfRatesLinkRP=link.checked;
-    const st=bfRatesActual(bfRatesShown());
+    const st=bfRatesActual(bfRatesOnScreen());
     delete st.exact;
-    if(bfRatesLinkRP&&!bfRatesSame({...st,pitch:st.roll},st)){bfSetRates({...st,pitch:{...st.roll}});return;}
+    if(bfRatesLinkRP&&!bfRatesSame({...st,pitch:st.roll},st)){bfSetRates({...st,pitch:{...st.roll}},(from)=>{const a=bfRatesActual(from);delete a.exact;return {...a,pitch:{...a.roll}};});return;}
     if(bfRatesSaved){bfRatesSaved.link=bfRatesLinkRP;saveBfRates(bfRatesSaved);}
     syncBfRatesUI();
   };
@@ -8435,6 +8733,7 @@ function startReplay(mode){
   const rec=lastRunReplayRec;
   if(!rec||rec.length<2){toast('NO RUN TO REPLAY');return false;}
   replayOn=true;
+  syncPackHint(false); // the OSD stops in a replay: no new pack to offer over it
   replayState.mode=mode||replayState.mode||'chase';
   replayState.t=rec[0][0]||0;
   replayState.end=rec[rec.length-1][0]||0;
@@ -9586,10 +9885,25 @@ const SIM_CORE_VERSION='v0.8.0';
 // failed load (the js core then flies that class for the session).
 const bfClasses={};
 function bfOf(type=droneType){
-  return bfClasses[type]||(bfClasses[type]={core:null,airframe:null,ownerDiff:null,diffLoaded:null,plantMap:null,worldSigSent:'',cliText:'',ratesLast:false,ratesBack:null,ratesFailed:null,memo:null,loading:null,failed:false});
+  return bfClasses[type]||(bfClasses[type]={core:null,airframe:null,ownerDiff:null,diffLoaded:null,plantMap:null,worldSigSent:'',cliText:'',ratesLast:false,thrLast:false,ratesBack:null,thrBack:null,ratesFailed:null,memo:null,loading:null,failed:false});
 }
 // The quad the bf core flies for a class, for the OSD and the console.
 function bfQuad(type=droneType){return BF_CLASSES[type]?BF_CLASSES[type].quad:'';}
+// The quad that flies, for the THR/BATT card (sim-feel.js updateHud quad):
+// the bf core's airframe (AIR65, FRACTAL75), or the class on classic physics
+// (85 CLASSIC; a 65 or 75 while Betaflight loads, under ?core=js or after a
+// failed load). Keyed off cs.kind, as the OSD's core line is.
+function flyingQuadName(){return cs.kind==='bf'?bfQuad(bfFlyingType()).toUpperCase():((DRONE_TYPES[droneType]||{}).frame||'')+' CLASSIC';}
+// Betaflight is on its way for this class: arming waits for it (tryArm), and
+// the pilot is told so in plain words, on the won't-arm line, in the arm hint
+// and in a toast. Released by the core, or by a failed load.
+function bfLoadPending(){return core.kind!=='bf'&&bfWanted()&&!bfOf().core&&!bfOf().failed;}
+const BF_LOADING_TOAST='BETAFLIGHT IS LOADING — ARM IN A MOMENT';
+const BF_LOADING_HINT='Betaflight is loading… arm in a moment';
+const BF_TOOK_OVER_TOAST='SWITCHED TO BETAFLIGHT — DISARMED, ARM AGAIN';
+// Said last: a class switch toasts its class after selectCore returns.
+function bfSayTookOver(){setTimeout(()=>toast(BF_TOOK_OVER_TOAST,{ms:3000}),0);}
+let bfArmHeld=''; // the class the pilot tried to arm while its core loaded: that takeover says it is ready
 // The class whose core bfCore is (the class picker can be ahead of it
 // mid-switch).
 function bfFlyingType(){return Object.keys(bfClasses).find(t=>bfCore&&bfClasses[t].core===bfCore)||droneType;}
@@ -9759,6 +10073,9 @@ function selectCore(){
   const b=bfOf();
   if(b.core){
     if(core!==b.core){
+      // Armed on the js core (the 85, then a class switch in flight): the
+      // takeover respawns disarmed where the quad is, and says so.
+      const jsArmed=core.kind==='js'&&!!qp.armed;
       bfPark(); // the other class's core, if it was flying
       bfDrop3D();
       bfCore=b.core;
@@ -9767,11 +10084,13 @@ function selectCore(){
       // the map's contact profile, then its config with Tune's rates and this
       // class's CLI import (bfWantDiff) if it holds something else.
       placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
+      bfWasArmed=false;
       bfSyncPlant();
       bfApplyRates();
       core.setMode(flightMode);
       bfSyncMode();
       bfAudio(b);
+      if(jsArmed)bfSayTookOver();
     }
     syncPackForCore();
     syncCoreUI();
@@ -9807,6 +10126,7 @@ function selectCore(){
       console.info('sim-core '+SIM_CORE_VERSION+': '+c.quad+', '+c.diff+' ('+r.applied+' lines applied, '+r.rejected+' refused, '+r.errors+' not in the sim target'+bfOverrideNote(r)+'; '+bfConfigNote(bf)+'); tune shown: '+bfTuneId(type)+'; '+bfWorld().boxes.length+' world boxes; the Build\'s cells and mAh are not used (the plant is the '+c.quad+')');
       // The class can change while the wasm loads: this core waits for it.
       if(!bfWanted()||droneType!==type)return;
+      const jsArmed=core.kind==='js'&&!!qp.armed;
       bfCore=bf;
       bfAudio(b);
       // The map can change while the wasm loads (the boot map landing): its
@@ -9820,13 +10140,22 @@ function selectCore(){
       syncCoreUI();
       syncRatesSource();
       placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
+      bfWasArmed=false; // a fresh core, disarmed: no stale DISARMED from a class parked armed
       // Tune's rates, through importCliToBf, on top of the class config it booted on.
       bfApplyRates();
-      toast('BETAFLIGHT CORE — '+c.quad.toUpperCase());
+      // The last toast of the takeover (one toast element): what the pilot
+      // needs now. Armed on the js core, that it disarmed; a refused arm while
+      // it loaded, that it is ready; otherwise the quad.
+      toast(jsArmed?BF_TOOK_OVER_TOAST:bfArmHeld===type?'BETAFLIGHT READY — ARM AGAIN':'BETAFLIGHT CORE — '+c.quad.toUpperCase());
+      if(jsArmed)bfSayTookOver();
+      if(bfArmHeld===type)bfArmHeld='';
     });
   }).catch(e=>{
     b.failed=true;
     console.warn('sim-core: the bf core for the '+c.quad+' did not load ('+(e&&e.message||e)+'); flying the js core');
+    // Arming waited for it (bfLoadPending): say it is free now, on classic physics.
+    if(droneType===type)toast('BETAFLIGHT DID NOT LOAD — FLYING CLASSIC PHYSICS',{ms:3500});
+    if(bfArmHeld===type)bfArmHeld='';
   });
 }
 // ---------- Input poll: every 4 ms, stamped in sim time ----------
@@ -10081,8 +10410,8 @@ function loop(now){
     updateSunShadow();updateOSD();updateGates();updateGapHunt();updateGhost();syncLineBanner();updatePortals();updateDust(dt);
     if(feel){
       state.stickT=stick.t;
-      feel.updateHud({stick,battV,battOn:CFG.battSimOn||cs.kind==='bf',mode:cs.flightMode,armed:cs.armed,threeD,thrText:throttleHudText(stick.t,threeD),
-        armHint:bfRadio()?'Arm on the radio (AUX'+(pilotAux('arm')||'?')+')':armHintText({threeD,easy:easyMode(),autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked,touch:touchThrottleSide(),low:throttleSafeToArm(stick.t,threeD)})});
+      feel.updateHud({stick,battV,battOn:CFG.battSimOn||cs.kind==='bf',mode:cs.flightMode,armed:cs.armed,threeD,thrText:throttleHudText(stick.t,threeD),quad:flyingQuadName(),
+        armHint:bfLoadPending()?BF_LOADING_HINT:bfRadio()?'Arm on the radio (AUX'+(pilotAux('arm')||'?')+')':armHintText({threeD,easy:easyMode(),autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked,touch:touchThrottleSide(),low:throttleSafeToArm(stick.t,threeD)})});
       feel.tickTutorial(state,dt,cs.armed);
       const upZ=bodyUpZ(cs.quaternion);
       const clearanceM=cs.clearance;
@@ -10578,6 +10907,9 @@ fetchBuiltinTracks().then(list=>{
 Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks.confirmSaves(),
   setLookSpot:(n)=>looks&&looks.setLookSpot(n),setQuality:(n)=>looks&&looks.setQuality(n),
   placeQuadAt, map:()=>currentMap, track:()=>activeTrackId, colliders:()=>colliders, artError:()=>window._artError||null,
+  // The js core's pack (the bf core's is the plant's: bfCore().sim.reinit),
+  // for a test to run it low: jsPack(charge) sets the charge the next tick sags from.
+  jsPack(charge){if(charge!=null&&Number.isFinite(+charge))battCharge=Math.max(0,Math.min(1,+charge));return {charge:battCharge,v:battV};},
   artStats:()=>artStats(renderer,currentMap==='city'?cityWorld:indoorWorld),vibe:()=>vibeFor(currentMap),VIBES,qualityWantsBloom,
   rain:()=>loadRain(),setRain(v){saveRain(!!v);if(currentMap==='city')applyCityArt(looks&&looks.applied);},RAIN_KEY,
   QUALITY_KEY,FLOATINESS_KEY,CANOPY_KEY,WHOOP_KIT_KEY,CROSSHAIR_KEY,canopyGroup,craftGroup,skinTrail,
@@ -10603,7 +10935,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   rates:()=>JSON.parse(JSON.stringify(rates)),bfDiff,
   // Tune's bf rates: what they ask for and where from, what the flying class's
   // Betaflight holds (read back), whether a paste's fly, the OSD's word.
-  bfRates:()=>{const b=bfCore?bfOf(bfFlyingType()):null;return JSON.parse(JSON.stringify({want:bfRatesWant(),from:bfRatesFrom(),saved:bfRatesSaved,link:bfRatesLinkRP,back:b&&b.ratesBack,pasteWins:!!b&&bfPasteWins(b),ratesLast:!!b&&b.ratesLast,osd:bfRatesOsdText,source:(document.getElementById('ratesSourceBf')||{}).textContent,status:(document.getElementById('bfRatesStatus')||{}).textContent}));},
+  bfRates:()=>{const b=bfCore?bfOf(bfFlyingType()):null;return JSON.parse(JSON.stringify({want:bfRatesWant(),from:bfRatesFrom(),saved:bfRatesSaved,link:bfRatesLinkRP,back:b&&b.ratesBack,thrBack:b&&b.thrBack,thrWant:bfThrWant(),thrDefault:bfCore?bfThrDefaultOf(bfFlyingType()):null,thrSaved:bfThrSaved,pending:bfTunePending,pasteWins:!!b&&bfPasteWins(b),ratesLast:!!b&&b.ratesLast,osd:bfRatesOsdText,source:(document.getElementById('ratesSourceBf')||{}).textContent,status:(document.getElementById('bfRatesStatus')||{}).textContent}));},
   audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},setTestPilot(fn){testPilot=typeof fn==='function'?fn:null;if(testPilot)testPilotUsed=true;testPilotError=null;},testPilotError:()=>testPilotError,testPilotUsed:()=>testPilotUsed,
   // A built-in track's online board floor (sim-retention.js builtinFloorMs, as the Worker has it), or null.
   builtinFloorMs:(id,c)=>{const t=findTrack(id);return t?builtinFloorMs(t,c):null;},

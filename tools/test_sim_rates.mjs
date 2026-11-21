@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import {
   RATE_TYPES, parseCli, bfCurve, actualRate, kissRate, raceFlightRate, quickRate,
   rateSetpoint, maxRateDps, convertAxisFamily, normalizeRateType, formatCliSummary,
-  SETPOINT_LIMIT, encodeRates, decodeRates, ratesDeepLink, RATE_CARDS,
+  SETPOINT_LIMIT, encodeRates, decodeRates, ratesDeepLink, RATE_CARDS, pilotRatesDefault,
 } from '../sim-rates.js';
 import { RATE_PRESETS, applyRatePreset } from '../sim-feel.js';
 
@@ -412,13 +412,13 @@ test('ratesDeepLink encodes map/track/mode/build/rates and no CLI dump', () => {
   assert.equal(new URL(dev).searchParams.get('dev'), '1');
 });
 
-test('ryanActual preset is Actual 40/740/700 expo 0.56', () => {
+test('ryanActual preset is Actual 20/740/700 expo 0.56, the owner\'s diffs\' rates', () => {
   const p = RATE_PRESETS.ryanActual;
   assert.ok(p);
   assert.equal(p.type, 'ACTUAL');
-  assert.equal(p.roll.rcRate, 4);
-  assert.equal(p.pitch.rcRate, 4);
-  assert.equal(p.yaw.rcRate, 4);
+  assert.equal(p.roll.rcRate, 2);
+  assert.equal(p.pitch.rcRate, 2);
+  assert.equal(p.yaw.rcRate, 2);
   assert.equal(p.roll.srate, 74);
   assert.equal(p.pitch.srate, 74);
   assert.equal(p.yaw.srate, 70);
@@ -433,7 +433,8 @@ test('ryanActual preset is Actual 40/740/700 expo 0.56', () => {
     yaw: { rcRate: 1, srate: 0.5, expo: 0 },
   };
   assert.equal(applyRatePreset(rates, 'ryanActual'), true);
-  assert.equal(encodeRates(rates), 'ACTUAL.4.74.56.4.74.56.4.70.56');
+  assert.equal(encodeRates(rates), 'ACTUAL.2.74.56.2.74.56.2.70.56');
+  assert.equal(encodeRates(rates), encodeRates(pilotRatesDefault()), 'the same as the diffs\' rates (the bf core\'s RyFly)');
 });
 
 test('convertAxisFamily keeps full-stick max across families', () => {

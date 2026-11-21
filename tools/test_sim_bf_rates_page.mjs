@@ -32,7 +32,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   BF_RATE_KEYS, BF_RATE_PRESETS, BF_RATES_KEY, BF_RATES_TOAST_KEY, BF_RATES_FROM_JS_KEY, bfRatesCli, bfRatesPreset, ratesSourceText, encodeRates,
-  pilotRatesDefault, rateSetpoint,
+  pilotRatesDefault, rateSetpoint, BF_THR_KEYS, BF_THR_KEY,
 } from '../sim-rates.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -129,6 +129,7 @@ const PAGE = `(() => {
   const s = window._sim;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const KEYS = ${JSON.stringify(BF_RATE_KEYS)};
+  const THR = ${JSON.stringify(BF_THR_KEYS)};
   const shown = (el) => !!el && getComputedStyle(el).display !== 'none' && !el.closest('[hidden]');
   function snap() {
     const bf = s.core() === 'bf' ? s.bfCore().sim : null;
@@ -143,7 +144,31 @@ const PAGE = `(() => {
       osd: document.getElementById('osdTR').innerText, src: document.getElementById('ratesSourceBf').textContent,
       saved: localStorage.getItem(${JSON.stringify(BF_RATES_KEY)}), toastSeen: localStorage.getItem(${JSON.stringify(BF_RATES_TOAST_KEY)}),
       toasts: window.__toasts.slice(), status: document.getElementById('bfRatesStatus').textContent,
+      // The number boxes, Tune's throttle and what Betaflight holds of it, the max readouts.
+      nums: Object.fromEntries([...document.querySelectorAll('#bfRates input[type=number]')].map((el) => [el.id, el.value])),
+      thrHeld: bf && bf.get(THR), thrFrom: document.getElementById('bfThrFrom').textContent,
+      thrSaved: localStorage.getItem(${JSON.stringify(BF_THR_KEY)}),
+      max: { roll: document.getElementById('bfMax_roll').textContent, yaw: document.getElementById('bfMax_yaw').textContent },
+      pending: s.bfRates().pending, armed: s.coreState().armed, mode: s.coreState().flightMode,
     };
+  }
+  // A typed number in a box: Enter or leaving it sends it.
+  async function num(id, v) {
+    const el = document.getElementById(id);
+    el.focus();
+    el.value = String(v);
+    el.dispatchEvent(new Event('change'));
+    el.blur();
+    await wait(300);
+    return snap();
+  }
+  async function thrSlider(f, v) {
+    const el = document.getElementById('bfs_thr_' + f);
+    el.value = String(v);
+    el.dispatchEvent(new Event('input'));
+    el.dispatchEvent(new Event('change'));
+    await wait(300);
+    return snap();
   }
   async function cls(type, core) {
     const sel = document.getElementById('droneType');
@@ -202,7 +227,7 @@ const PAGE = `(() => {
     await wait(200);
     return snap();
   }
-  window.__bf = { wait, snap, toastOr, until, cls, preset, slider, link, importCli };
+  window.__bf = { wait, snap, toastOr, until, cls, preset, slider, link, importCli, num, thrSlider };
   return true;
 })()`;
 
@@ -515,6 +540,161 @@ test('Tune\'s Rates on the bf core: presets, sliders, a paste, class changes, re
     assert.deepEqual(same.held, CRUISE, 'the js default is not carried');
     assert.equal(same.saved, null);
     assert.ok(same.toasts.includes(toastText));
+
+    // Typed numbers, to Betaflight's own limits: yaw 300 / 800 / 0 (a pilot
+    // could not get past 250 centre), read back, shown, saved; kept through
+    // another slider, a reload and a rates link. Over the top clamps to 2000,
+    // which flies Betaflight's 1998 setpoint cap; a junk box changes nothing.
+    await evaluate(ws, 'localStorage.clear(), true');
+    await open(base);
+    const typed = await run(`const out = [];
+      out.push(await B.num('bfn_yaw_rcRate', 300));
+      out.push(await B.num('bfn_yaw_srate', 800));
+      out.push(await B.num('bfn_yaw_expo', 0));
+      out.push(await B.slider('roll', 'rcRate', 80));
+      out.push(await B.num('bfn_roll_srate', 2500));
+      out.push(await B.num('bfn_roll_expo', 'junk'));
+      return JSON.stringify(out);`);
+    const yaw300 = { yaw_rc_rate: '30', yaw_srate: '80', yaw_expo: '0' };
+    assert.deepEqual(typed[2].held, { ...CRUISE, ...yaw300 }, 'yaw 300/800/0 typed: Betaflight holds it');
+    assert.deepEqual([typed[2].sliders.yaw_rcRate, typed[2].sliders.yaw_srate, typed[2].sliders.yaw_expo], [300, 800, 0], 'the sliders show it');
+    assert.deepEqual([typed[2].nums.bfn_yaw_rcRate, typed[2].nums.bfn_yaw_srate, typed[2].nums.bfn_yaw_expo], ['300', '800', '0.00'], 'and the boxes');
+    assert.equal(typed[2].max.yaw, 'max 800 °/s');
+    assert.deepEqual(JSON.parse(typed[2].saved).yaw, [30, 80, 0], 'saved');
+    assert.deepEqual(typed[3].held, { ...CRUISE, ...yaw300, roll_rc_rate: '8', pitch_rc_rate: '8' }, 'another slider moved: yaw stays 300');
+    assert.equal(typed[4].held.roll_srate, '200', '2500 typed: Betaflight\'s 2000');
+    assert.equal(typed[4].nums.bfn_roll_srate, '2000');
+    assert.equal(typed[4].max.roll, 'max 1998 °/s (Betaflight\'s limit)', 'the setpoint cap, said');
+    assert.deepEqual(typed[5].held, typed[4].held, 'junk in a box: nothing sent');
+    assert.equal(typed[5].nums.bfn_roll_expo, '0.30', 'and the box shows what flies');
+    // A digit typed in a box is not a hotkey (3 is acro).
+    const key = await run(`const el = document.getElementById('bfn_roll_expo'); el.focus();
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: '3', code: 'Digit3', bubbles: true })); await B.wait(200); el.blur();
+      return JSON.stringify(B.snap());`);
+    assert.equal(key.mode, typed[5].mode, 'typing 3 in a box leaves the flight mode');
+    const typedHeld = typed[5].held;
+    await open(base);
+    const reloaded = await run('return JSON.stringify(B.snap());');
+    assert.deepEqual(reloaded.held, typedHeld, 'a reload: the typed rates fly');
+    const token = encodeRates({ type: 'ACTUAL', roll: { rcRate: 7, srate: 45, expo: 0.3 }, pitch: { rcRate: 7, srate: 45, expo: 0.3 }, yaw: { rcRate: 30, srate: 80, expo: 0 } });
+    await open(base + '&rates=' + token);
+    const linked = await run('await B.wait(600); return JSON.stringify(B.snap());');
+    assert.deepEqual(linked.held, { ...CRUISE, ...yaw300 }, 'a rates link of yaw 300/800/0 flies it');
+
+    // Throttle mid and expo: each class's config's own (the Air65 diff sets
+    // none: Betaflight's 0.50/0.00; the Fractal75's 0.65/0.35), until the
+    // pilot sets that class's own, read back and saved for that class.
+    await open(base);
+    const thr = await run(`const out = [B.snap()];
+      out.push(await B.num('bfn_thr_mid', '0.40'));
+      out.push(await B.thrSlider('expo', 30));
+      out.push(await B.cls('whoop75', 'bf'));
+      out.push(await B.num('bfn_thr_mid', '1.00'));
+      out.push(await B.cls('whoop65', 'bf'));
+      return JSON.stringify(out);`);
+    assert.deepEqual(thr[0].thrHeld, { thr_mid: '50', thr_expo: '0' }, 'the 65: Betaflight\'s, from its diff');
+    assert.deepEqual([thr[0].nums.bfn_thr_mid, thr[0].nums.bfn_thr_expo, thr[0].thrFrom], ['0.50', '0.00', 'Air65 default']);
+    assert.deepEqual(thr[1].thrHeld, { thr_mid: '40', thr_expo: '0' }, 'throttle mid 0.40 typed: read back');
+    assert.match(thr[1].status, /^Betaflight took 12 rate lines; .*throttle mid 0\.40, expo 0\.00 \(read back\)/);
+    assert.deepEqual(thr[2].thrHeld, { thr_mid: '40', thr_expo: '30' }, 'expo from its slider');
+    assert.equal(thr[2].thrFrom, 'your own (65mm)');
+    assert.deepEqual(thr[3].thrHeld, { thr_mid: '65', thr_expo: '35' }, 'the 75 flies its diff\'s own');
+    assert.deepEqual([thr[3].nums.bfn_thr_mid, thr[3].nums.bfn_thr_expo, thr[3].thrFrom], ['0.65', '0.35', 'Fractal75 default']);
+    assert.deepEqual(thr[4].thrHeld, { thr_mid: '99', thr_expo: '35' }, '1.00 typed stops at 0.99 (100 divides by zero in Betaflight)');
+    assert.deepEqual(thr[5].thrHeld, { thr_mid: '40', thr_expo: '30' }, 'back on the 65: its own');
+    assert.deepEqual(JSON.parse(thr[5].thrSaved), { v: 1, classes: { whoop65: [40, 30], whoop75: [99, 35] } });
+    assert.deepEqual(thr[5].held, typedHeld, 'the rates are not touched by the throttle');
+    await open(base);
+    const thrAgain = await run(`const out = [B.snap()]; out.push(await B.cls('whoop75', 'bf')); return JSON.stringify(out);`);
+    assert.deepEqual(thrAgain.map((x) => x.thrHeld), [{ thr_mid: '40', thr_expo: '30' }, { thr_mid: '99', thr_expo: '35' }], 'after a reload, each class its own');
+
+    // Armed: a rates and a throttle change are kept, said, shown on the
+    // sliders; disarmed in the air they wait (a load respawns the quad where
+    // it is), and go to Betaflight once it is down.
+    await open(base);
+    const SPACE = "window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space' }))";
+    const inFlight = await run(`const s = window._sim;
+      if (B.snap().type !== 'whoop65') await B.cls('whoop65', 'bf');
+      s.setTestStick({ r: 0, p: 0, y: 0, t: 0 }); await B.wait(300);
+      ${SPACE}; await B.until(() => s.coreState().armed, 4000);
+      s.setTestStick({ r: 0, p: 0, y: 0, t: 0.5 });
+      await B.until(() => s.coreState().airborne, 6000);
+      const a = await B.slider('yaw', 'rcRate', 500);
+      const b = await B.num('bfn_thr_mid', '0.45');
+      ${SPACE}; await B.wait(120);
+      const air = B.snap(); air.airborne = s.coreState().airborne;
+      s.setTestStick({ r: 0, p: 0, y: 0, t: 0 });
+      const c = await B.until(() => !s.bfRates().pending && B.snap().held.yaw_rc_rate === '50', 10000);
+      s.setTestStick(null);
+      return JSON.stringify([a, b, air, c]);`);
+    const kept = (x, k) => Array.isArray(x.pending) && x.pending.some((o) => o.k === k);
+    assert.ok(inFlight[0].armed, 'armed, flying');
+    assert.deepEqual(inFlight[0].held, reloaded.held, 'in flight Betaflight still flies what it flew');
+    assert.equal(inFlight[0].sliders.yaw_rcRate, 500, 'the slider keeps the change');
+    assert.ok(kept(inFlight[0], 'rates'), 'kept: ' + JSON.stringify(inFlight[0].pending));
+    assert.ok(inFlight[0].toasts.includes('RATES CHANGE APPLIES WHEN YOU LAND'), JSON.stringify(inFlight[0].toasts.slice(-4)));
+    assert.match(inFlight[0].status, /kept: Betaflight takes settings only while disarmed/);
+    assert.deepEqual(inFlight[1].thrHeld, { thr_mid: '40', thr_expo: '30' }, 'throttle kept too, not sent');
+    assert.equal(inFlight[1].nums.bfn_thr_mid, '0.45');
+    assert.ok(!inFlight[2].armed && inFlight[2].airborne, 'disarmed in the air');
+    assert.ok(kept(inFlight[2], 'rates') && kept(inFlight[2], 'thr'), 'still kept in the air');
+    assert.equal(inFlight[2].held.yaw_rc_rate, reloaded.held.yaw_rc_rate, 'nothing loaded in the air');
+    assert.ok(!inFlight[3].armed, 'landed, disarmed');
+    assert.equal(inFlight[3].pending, null, 'nothing left waiting');
+    assert.equal(inFlight[3].held.yaw_rc_rate, '50', 'the rates change went in once down');
+    assert.deepEqual(inFlight[3].thrHeld, { thr_mid: '45', thr_expo: '30' }, 'and the throttle');
+    assert.ok(inFlight[3].toasts.includes('RATES CHANGE APPLIED'), JSON.stringify(inFlight[3].toasts.slice(-4)));
+    assert.deepEqual(JSON.parse(inFlight[3].saved).yaw, [50, 80, 0], 'saved once it flew');
+    assert.deepEqual(JSON.parse(inFlight[3].thrSaved).classes.whoop65, [45, 30]);
+    assert.ok(!inFlight[3].toasts.includes('DISARM TO LOAD A DIFF'), 'never the old refusal');
+
+    // A paste and the throttle, each of Tune's parts under a paste until the
+    // pilot changes it after the paste: the paste's own thr_mid flies; a rates
+    // change after it leaves that throttle; a throttle change after it goes on
+    // top. A full diff pasted stands in for Tune's lines, and a throttle change
+    // after it flies on top of it (it used to throw).
+    const AIR65_DIFF = readFileSync(join(root, 'vendor/sim-core/configs/air65-ryfly-2026-10-23.txt'), 'utf8');
+    const order = await run(`const out = [];
+      out.push(await B.importCli('set thr_mid = 60'));
+      out.push(await B.slider('roll', 'srate', 500));
+      out.push(await B.num('bfn_thr_mid', '0.42'));
+      out.push(await B.importCli(JSON.parse(${JSON.stringify(JSON.stringify(AIR65_DIFF))})));
+      out.push(await B.num('bfn_thr_mid', '0.38'));
+      return JSON.stringify(out);`);
+    assert.deepEqual(order[0].thrHeld, { thr_mid: '60', thr_expo: '30' }, 'the paste\'s own thr_mid flies over Tune\'s');
+    assert.equal(order[0].thrFrom, 'your pasted CLI');
+    assert.equal(order[1].held.roll_srate, '50', 'a rates change after the paste');
+    assert.deepEqual(order[1].thrHeld, { thr_mid: '60', thr_expo: '30' }, '... leaves the paste\'s throttle');
+    assert.deepEqual(order[2].thrHeld, { thr_mid: '42', thr_expo: '30' }, 'a throttle change after the paste goes on top');
+    assert.equal(order[2].thrFrom, 'your own (65mm)');
+    assert.deepEqual(JSON.parse(order[2].thrSaved).classes.whoop65, [42, 30]);
+    assert.match(order[3].cliStatus, /a full diff, in place of/);
+    assert.deepEqual(order[3].held, held(bfRatesPreset('ryfly')), 'the full diff\'s own rates fly');
+    assert.deepEqual(order[3].thrHeld, { thr_mid: '50', thr_expo: '0' }, 'and its own throttle (it sets none: Betaflight\'s)');
+    assert.equal(order[3].thrFrom, 'your pasted CLI');
+    assert.deepEqual(order[4].thrHeld, { thr_mid: '38', thr_expo: '0' }, 'a throttle change after a full diff flies on top of it');
+    assert.deepEqual(order[4].held, held(bfRatesPreset('ryfly')), '... leaving its rates');
+    assert.match(order[4].status, /^Betaflight took 2 rate lines under your paste, whose own rates fly; .*throttle mid 0\.38, expo 0\.00 \(read back\)/, 'the two throttle lines, on the paste\'s rates');
+
+    // A throttle change kept on one class waits for that class: a switch to
+    // the other bf class in flight keeps it, and it goes in when the first
+    // class is back, landed.
+    const keep = await run(`const s = window._sim;
+      s.setTestStick({ r: 0, p: 0, y: 0, t: 0 }); await B.wait(300);
+      ${SPACE}; await B.until(() => s.coreState().armed, 4000);
+      const a = await B.num('bfn_thr_mid', '0.47');
+      await B.cls('whoop75', 'bf'); await B.wait(1500);
+      const y = B.snap();
+      await B.cls('whoop65', 'bf');
+      const w = await B.until(() => !s.bfRates().pending, 8000);
+      s.setTestStick(null);
+      return JSON.stringify([a, y, w]);`);
+    assert.ok(keep[0].armed && kept(keep[0], 'thr'), 'armed on the 65: kept');
+    assert.equal(keep[1].type, 'whoop75');
+    assert.deepEqual(keep[1].thrHeld, { thr_mid: '99', thr_expo: '35' }, 'the 75 flies its own');
+    assert.ok(kept(keep[1], 'thr'), 'the 65\'s change still kept on the 75');
+    assert.equal(keep[2].pending, null);
+    assert.deepEqual(keep[2].thrHeld, { thr_mid: '47', thr_expo: '0' }, 'back on the 65, down: it went in');
     assert.deepEqual(coreErrors, [], 'sim-core warned');
   } finally {
     try { if (ws) ws.close(); } catch (e) { /* ignore */ }
