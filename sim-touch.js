@@ -1404,6 +1404,9 @@ export function createCalibState() {
     still: null,
     start: null,
     swept: null,
+    // Time on this step with no axis on offer moving (calibView names the
+    // stick it waits for).
+    quiet: 0,
   };
 }
 
@@ -1531,6 +1534,7 @@ function clearSweep(calib) {
   calib.start = null;
   calib.prevAx = null;
   calib.swept = null;
+  calib.quiet = 0;
 }
 
 // Polls this step with the axis part-way: off where it began by more than
@@ -1656,6 +1660,10 @@ export function stepCalib(calib, gp, dt) {
 
   trackStill(calib, ax, dt);
   trackSwept(calib, ax);
+  if (st.key !== 'center') {
+    const moving = calib.start && calibAxisChoices(calib, gp).some((i) => Math.abs(ax[i] - calib.start[i]) >= 0.3);
+    calib.quiet = moving ? 0 : calib.quiet + dt;
+  }
   // The layout it was made on (calibratedOnLayout).
   calib.result.n = ax.length;
 
@@ -1812,6 +1820,48 @@ export function stepCalib(calib, gp, dt) {
   } else calib.timer = 0;
   ui.done = calib.step >= CAL_STEPS.length;
   return ui;
+}
+
+// What the calibration overlay shows, from the calibration and the device as
+// the browser has it (gp: null when it gives nothing; the page passes the
+// last one seen). noDataMs: how long the device has sent nothing (no pad at
+// the poll, or no axis changed since the overlay opened), measured by the
+// page. Never blank: a label, a hint, the device, progress and, when it
+// waits on something, the reason.
+export const CALIB_NO_DATA_MS = 2000;
+export const CALIB_QUIET_S = 3;
+export const CALIB_NO_DATA_MSG = "The radio is connected but isn't sending stick data. Move a stick. If nothing changes: on the radio, Model Settings \u2192 USB Joystick \u2192 Classic, then replug.";
+export const CALIB_SAVES_MSG = 'Saves automatically when all four sticks are set';
+export const CAL_STICKS = Object.freeze([
+  Object.freeze({ key: 'r', name: 'Roll', where: 'right stick, left and right' }),
+  Object.freeze({ key: 'p', name: 'Pitch', where: 'right stick, up and down' }),
+  Object.freeze({ key: 'y', name: 'Yaw', where: 'left stick, left and right' }),
+  Object.freeze({ key: 't', name: 'Throttle', where: 'left stick, up and down' }),
+]);
+export function calibView(calib, gp, opt) {
+  const o = opt || {};
+  const done = calib.step >= CAL_STEPS.length;
+  const st = CAL_STEPS[Math.min(calib.step, CAL_STEPS.length - 1)];
+  const axes = gp ? listAxes(gp) : [];
+  const buttons = gp && gp.buttons ? gp.buttons.length : 0;
+  const now = st.key === 'thi' || st.key === 'tlo' ? 't' : st.key;
+  const progress = CAL_STICKS.map((s) => {
+    const got = calib.result[s.key];
+    const set = s.key === 't' ? done : !!got;
+    return { key: s.key, name: s.name, axis: got && Number.isFinite(got.i) ? got.i : null, state: set ? 'set' : (!done && s.key === now ? 'now' : 'todo') };
+  });
+  const few = !!gp && axes.length < STICK_AXES;
+  const noData = !few && (o.noDataMs || 0) >= CALIB_NO_DATA_MS;
+  let missing = null;
+  if (!few && !noData && !done && st.key !== 'center' && gp) {
+    if (!calibAxisChoices(calib, gp).length || (calib.quiet || 0) >= CALIB_QUIET_S) missing = CAL_STICKS.find((s) => s.key === now) || null;
+  }
+  return {
+    label: st.label, hint: st.hint, step: st.key, done, progress, saves: CALIB_SAVES_MSG,
+    few, noData, missing,
+    device: gp ? { name: padDisplayName(gp.id), axes: axes.length, buttons } : null,
+    bars: axes,
+  };
 }
 
 // The axes the pilot can tap for this step when calibration does not pick

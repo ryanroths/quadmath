@@ -402,6 +402,48 @@ test('radio detection and device picking in Chrome: USB id, headset, Classic mes
       });
     });
 
+    await t.test('the calibration overlay is never blank: under the start menu, with polls that bring nothing, with 3 and 0 axes', async () => {
+      const view = `JSON.stringify({ show: U.$('calib').classList.contains('show'), step: U.$('calibStep').textContent, hint: U.$('calibHint').textContent,
+        note: (U.$('calibNote') || {}).textContent || '', device: (U.$('calibDevice') || {}).textContent || '', bars: U.$('calibBars').textContent.length,
+        progress: (U.$('calibProgress') || {}).textContent || '', menu: !!(window._sim.looks && window._sim.looks.menuOpen) })`;
+      await pass('core=js&map=rig', { pads: [pad(EDGETX, CLASSIC_REST)] }, 'js', async ({ js, key }) => {
+        // From the start menu (the input poll does not run under it).
+        await js(`await U.until(() => U.info().startsWith('EdgeTX radio'), 6000); return 1;`);
+        await key(true, 'Escape', 'Escape', 27); await key(false, 'Escape', 'Escape', 27);
+        let r = await js(`await U.wait(400); const menu = !!(window._sim.looks && window._sim.looks.menuOpen); U.$('btnCalib').click();
+          const at0 = ${view}; await U.wait(2000); return JSON.stringify({ menu, at0: JSON.parse(at0), later: JSON.parse(${view}) });`);
+        console.log('calib, from the menu: ' + JSON.stringify(r));
+        assert.equal(r.menu, true, 'the start menu was open');
+        assert.equal(r.at0.show, true);
+        assert.ok(r.at0.step && r.at0.hint && r.at0.bars > 0, 'drawn at once: ' + JSON.stringify(r.at0));
+        assert.ok(r.at0.device.startsWith('EdgeTX radio · 8 axes · 24 buttons'), r.at0.device);
+        assert.match(r.at0.progress, /Saves automatically when all four sticks are set/);
+        assert.equal(r.later.menu, false, 'the menu is closed, so the steps come');
+        assert.match(r.later.step, /ROLL/, 'CENTER done: ' + r.later.step);
+        // Polls that bring nothing from it: still drawn, and after ~2 s it says so.
+        r = await js(`U.$('calibCancel').click(); await U.wait(200);
+          U.$('btnCalib').click(); window.__emptyFor = { fn: 'readInput', n: 1e9 };
+          const at0 = ${view}; await U.wait(2600); const later = ${view}; window.__emptyFor = null;
+          return JSON.stringify({ at0: JSON.parse(at0), later: JSON.parse(later) });`);
+        console.log('calib, no data: ' + JSON.stringify(r));
+        assert.ok(r.at0.step && r.at0.bars > 0, 'drawn at once');
+        assert.equal(r.later.show, true, 'still open');
+        assert.ok(r.later.note.includes("isn't sending stick data"), r.later.note);
+        assert.ok(r.later.device.startsWith('EdgeTX radio · 8 axes'), r.later.device);
+      });
+      for (const [n, buttons] of [[3, 24], [0, 4]]) {
+        await pass('core=js&map=rig', { pads: [pad(TX15_3AX, [0, 0, 0].slice(0, n), { buttons })] }, 'js', async ({ js }) => {
+          const r = await js(`await U.wait(1200); U.$('btnCalib').click(); await U.wait(600); return ${view};`);
+          console.log(`calib, ${n} axes: ` + JSON.stringify(r));
+          assert.equal(r.show, true, 'the overlay opens for the radio that cannot fly');
+          assert.ok(r.step && r.hint, 'never blank');
+          assert.ok(r.note.startsWith(`Only ${n} axes come through`), r.note);
+          assert.ok(r.note.includes('USB Joystick → Classic'), r.note);
+          assert.ok(r.device.includes(`${n} axes · ${buttons} buttons`), r.device);
+        });
+      }
+    });
+
     await t.test('a keyboard gamepad interface alone: taken at first, passed over once the keyboard flies and it has not moved', async () => {
       await pass('core=js&map=rig', { pads: [pad(KB_PAD, [0, 0, 0, 0], { buttons: 8 })] }, 'js', async ({ js, key }) => {
         let r = await js(`await U.until(() => U.info().includes('Gaming Keyboard'), 6000); return JSON.stringify({ info: U.info() });`);
