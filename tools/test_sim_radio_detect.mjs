@@ -379,10 +379,12 @@ test('radio detection and device picking in Chrome: USB id, headset, Classic mes
       await pass('core=js&map=rig', { pads: [pad('RM TX16S Joystick (Vendor: 1209 Product: 4f54)', CLASSIC_REST)] }, 'js', async ({ js }) => {
         const r = await js(`
           await U.until(() => U.info().includes('TX16S'), 6000);
-          // Throttle low, then half: auto-arm, flying.
-          await U.wait(800);
+          // Throttle low, then half: auto-arm, flying. Auto-arm wants the
+          // throttle low a second of sim time first, which on CI's slow
+          // SwiftShader frames takes longer than a second of wall time.
+          await U.wait(3000);
           window.__pads[0].axes[2] = 0;
-          const flying = await U.until(() => window._sim.coreState().armed && U.axis().t > 0.45, 5000);
+          const flying = await U.until(() => window._sim.coreState().armed && U.axis().t > 0.45, 10000);
           const t0 = U.axis().t;
           window.__pads[1] = { id: ${JSON.stringify(HEADSET)}, mapping: '', axes: [], buttons: 4 };
           window.__plugEvent(1);
