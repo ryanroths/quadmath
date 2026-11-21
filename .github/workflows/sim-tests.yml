@@ -114,6 +114,7 @@ jobs:
           - { suite: page, label: 'gap hunt', tests: 'tools/test_sim_gap_hunt.mjs' }
           # Speed units: the OSD's SPD line by language, each option, one width.
           - { suite: page, label: 'speed units', tests: 'tools/test_sim_speed_units.mjs' }
+          - { suite: page, label: 'radio detect', tests: 'tools/test_sim_radio_detect.mjs' }
           # The stick overlay, shared track links and track boards in Chrome,
           # and the track boards' Worker on wrangler dev (wrangler: true).
           - { suite: page, label: 'sticks, track links, track boards', tests: 'tools/test_sim_stick_overlay.mjs tools/test_sim_track_url.mjs tools/test_sim_track_boards.mjs tools/test_leaderboard_track_boards.mjs tools/test_leaderboard_builtin_boards.mjs', wrangler: true }
@@ -121,7 +122,7 @@ jobs:
           # reloads, links, the input default and the js carry, read back from
           # Betaflight; and the one profile across 65, 75 and 85 on both cores.
           # About 1.5 minutes on a Linux box with SwiftShader.
-          - { suite: page, label: 'rates', tests: 'tools/test_sim_bf_rates_page.mjs tools/test_sim_rates_page.mjs' }
+          - { suite: page, label: 'rates, counts', tests: 'tools/test_sim_bf_rates_page.mjs tools/test_sim_rates_page.mjs tools/test_leaderboard_counts.mjs tools/test_sim_count_page.mjs', wrangler: true }
 
     steps:
       - name: Check out

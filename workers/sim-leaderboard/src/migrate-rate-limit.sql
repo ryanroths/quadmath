@@ -1,0 +1,12 @@
+-- The boards' rate limit (rate_limit) no longer stores addresses: a client is
+-- a hash of its address and the hour (index.js rateClientKey: 'hmac:' under
+-- the RATE_KEY secret, 'sha:' without it), and rows of earlier hours are
+-- pruned as new ones land. Rows written before that hold raw addresses, kept
+-- indefinitely: this deletes them (the current hour's too; that only gives
+-- those clients a fresh hour). Idempotent: safe to run twice, and after the
+-- first run there is nothing left for it to delete.
+--   npx wrangler d1 execute quadmath-sim-leaderboard --remote --file=./src/migrate-rate-limit.sql
+-- Run it after the deploy (the old Worker writes raw rows until then). Each
+-- deleted row is 2 rows written in D1 (the row and its key's index entry):
+-- count them first (DEPLOY.md).
+DELETE FROM rate_limit WHERE ip NOT LIKE 'hmac:%' AND ip NOT LIKE 'sha:%';

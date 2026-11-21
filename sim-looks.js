@@ -4,7 +4,7 @@
 // Visual only. Does not touch physics, colliders, tracks, ghosts, or existing
 // localStorage keys. New keys: quadmathSimQuality, quadmathSimFpv,
 // quadmathSimCrosshair.
-import { resolveAutoQuality, gpuTier, autoQualityStep } from './sim-touch.js?v=3656bcad2aa9';
+import { resolveAutoQuality, gpuTier, autoQualityStep } from './sim-touch.js?v=117a0f0a7781';
 import { updateSceneLighting } from './sim-lighting.js?v=db386ea7cfd2';
 import { LOOK } from './sim-look.js?v=73378d552076';
 
