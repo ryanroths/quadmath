@@ -1233,7 +1233,8 @@ test('the owner\'s Cradle dumps: the gate, on their positions, calls each of the
     assert.ok(Math.abs(v.lat2) <= CRADLE.backLat - 0.4, tag + ' back ' + v.lat2);
     assert.ok(Math.sign(v.lat1) !== Math.sign(v.lat2), tag + ' the other side');
     assert.ok(v.elMax >= CRADLE.noseUp + 10 && v.pMax <= CRADLE.overTop, tag + ' nose ' + v.elMax + ' / ' + v.pMax);
-    // (The dumps' turn is their heading's, row to row: positions only.)
+    // (The dumps' turn is their heading's, row to row: positions only. It
+    // stands in for the turn about the vertical, known on fly 3 alone.)
     assert.ok(v.yawDeg <= CRADLE.yawTurn - 20 && v.yawRecent <= CRADLE.yawRecent - 10, tag + ' turned ' + v.yawDeg + ' net, ' + v.yawRecent + ' at the second pass');
     assert.ok(v.offNose >= CRADLE.backDeg + 15, tag + ' off the nose ' + v.offNose);
     assert.ok(-v.vBack >= CRADLE.backSpd + 1.5, tag + ' back at ' + v.vBack);
@@ -1294,7 +1295,8 @@ test('fly 3 on the gate\'s build: its cradle records replay to the owner\'s six 
   want.forEach(([obj, t1, t2], k) => assert.ok(near(got[k], obj, t1, t2), 'Cradle ' + k + ': ' + JSON.stringify(got[k])));
   // The misses flown with them: the clip of column 700 (the quad's centre
   // within 0.06 m of it), the hatch climb back on 700's same side, and the
-  // nose over the top round the pole (then the floor).
+  // nose over the top round the pole (a pull while banked: its pitch in
+  // F1's plane peaks at 93, 3 past overTop; then the floor).
   const miss = (obj, t1, why) => vs.find((v) => !v.result && v.obj === obj && Math.abs(v.t1 - t1) <= 0.02 && v.why === why);
   assert.ok(miss(700, 17.06, 'hit the post'), 'the clip');
   assert.ok(miss(700, 37.512, 'same side'), 'the hatch climb');
@@ -1310,7 +1312,8 @@ test('fly 3 on the gate\'s build: its cradle records replay to the owner\'s six 
   }
   // Every Cradle's turn about the vertical clear of the cap (the debug test:
   // the slow orbits that are not, 63 or more), and not turning at the pass.
-  // Seq 12's 40 is rebuilt from rows every 8 ms (to a degree or so).
+  // Seq 12's 40 and seq 31's 27 are rebuilt from rows every 8 ms (to a
+  // degree or so).
   for (const v of got) assert.ok(v.yawDeg <= CRADLE.yawTurn - 15 && v.yawRecent <= CRADLE.yawRecent - 10, v.obj + ' ' + v.t1 + ' turned ' + v.yawDeg + ', ' + v.yawRecent + ' at the pass');
   // The sloppiest, seq 12 round column 700: back 2.13 m out, 123 off the nose
   // (8 over backDeg), up-Z 0.45.

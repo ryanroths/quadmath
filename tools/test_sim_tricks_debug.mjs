@@ -1088,12 +1088,14 @@ test('the Cradle\'s edges: the nose up to 88 degrees; beside a leg, not over its
 
 // Slow orbits round the pole (kinematic: 3-4 m/s, 1.3 and 1.9 m out, the
 // nose 35-65 up): the nose held on F1 past the pole, then turning with the
-// path 15 or 30 behind the radial, both ways round. Too slow for a Trippy;
-// by the second pass they have turned 63-80 about the vertical (with no cap,
-// 24 of these 48 are Cradles, the rest back not against the nose or still
-// turning), against the owner's Cradles' 11-40 (the attempt-log test). Never
-// a Cradle: the cap voids all 48 turned round. Further behind (35-50: 43-60
-// at the pass) they are Cradles, as with the old heading rule: not pinned.
+// path 15 or 30 behind the radial, both ways round. Mostly too slow for a
+// Trippy (at 4 m/s 1.3 m out, one); by the second pass they have turned
+// 63-80 about the vertical (with no cap, 24 of these 48 are Cradles, the
+// rest back not against the nose or still turning), against the owner's
+// Cradles' 11-40 (the attempt-log test). Never a Cradle: the cap voids all
+// 48 turned round. Further behind they turn less (35-50: 43-60 at the
+// pass) and most are Cradles: not pinned. Those 34-38 behind (55-60) are
+// new with the cap: the old heading rule (55 off F1) voided them.
 test('slow orbits round the pole, the nose up and turning with the path, are never Cradles: the cap on the turn about the vertical', () => {
   const DEG = Math.PI / 180;
   const orbit = (spd, rx, ry, lag, tilt, m) => {

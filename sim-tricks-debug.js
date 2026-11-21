@@ -28,7 +28,7 @@ import {
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
   HIST_W, BH_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE, BARANI_HD_LO,
   CRADLE, groupBoxes, simBoxes, cradlePostList,
-} from './sim-tricks.js?v=6f715410483e';
+} from './sim-tricks.js?v=67ab99185222';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.
@@ -1715,10 +1715,11 @@ export function createTrickDebug(opts) {
     else if (j >= 0) {
       s = '<span class="near">first pass</span> post ' + g.post[j * 9 + 8] + ' ' + (g.lat1[j] > 0 ? 'L' : 'R') + ' ' + Math.abs(g.lat1[j]).toFixed(2) + ' m'
         + '  nose ' + Math.round(g.elMax[j]) + '°/' + CRADLE.noseUp + '° ' + mark(g.elMax[j] >= CRADLE.noseUp)
+        + '  turn ' + Math.round(g.yawX[j] * 180 / Math.PI) + '°/' + CRADLE.yawTurn + '° ' + mark(g.yawX[j] * 180 / Math.PI <= CRADLE.yawTurn)
         + '  ' + (g.inp.t - g.t1[j]).toFixed(1) + '/' + CRADLE.maxS + ' s';
     } else {
       s = '<span class="d">' + (g ? g.postN : 0) + ' posts here: pass one flying forward (≤' + CRADLE.outLat + ' m out), nose up ≥' + CRADLE.noseUp
-        + '° (never over the top), back past it against the nose the other side (≤' + CRADLE.backLat + ' m)</span>';
+        + '° (never over the top, turning ≤' + CRADLE.yawTurn + '° about the vertical), back past it against the nose the other side (≤' + CRADLE.backLat + ' m)</span>';
     }
     const ok = fresh && !!lastCradle.result;
     return '<span class="' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓' : '✗') + ' ' + pad('Cradle', 18) + pad('—', 5) + '</span> ' + s;

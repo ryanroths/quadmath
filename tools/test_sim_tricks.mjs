@@ -1418,14 +1418,17 @@ test('bf core, the Cradle as the owner flies it: past a post on one side, nose u
 // over 60 degrees down, pointing back the way the quad goes, the travel back
 // along -F1 on the post's other side. A turnaround: past the pole at 5 m/s
 // drifting across, a pull to 74 up, a half turn of yaw at the top with a
-// little pitch on (the nose comes round and down), on. A Split-S: a pop, a
-// half roll, a pull to 70 down. Both read 173-178 off F1 the way back; the
-// nose's own heading points the way they go.
-test('bf core, back past a pole nose first is no Cradle: a turnaround by yaw at the top, a Split-S', async () => {
-  const opts = (z0) => ({ z0, vx: 5, vy: 2, maxT: 3, page: true, colliders: poleCore(2, 1.1) });
+// little pitch on (the nose comes round and down to 77 down), on. A
+// hammerhead: a pull to 85 up, 150 of yaw at the top pushing (the nose to
+// 66 down, its heading 72 off F1, the travel 76 off it: nose side first),
+// both ways round. A Split-S: a pop, a half roll, a pull to 70 down. They
+// read 148-178 off F1 the way back.
+test('bf core, back past a pole nose first is no Cradle: a turnaround by yaw at the top, a hammerhead, a Split-S', async () => {
+  const opts = (z0, m = 1) => ({ z0, vx: 5, vy: 2 * m, maxT: 3, page: true, colliders: poleCore(2, 1.1 * m) });
   const turn = await flyBf([{ t: 0.62, tS: 0.42 }, { t: 74 * DEG / 10, pitch: -10, tS: 0.5 }, { t: Math.PI / 10, yaw: 10, pitch: 0.8, tS: 0.6 }, { t: 2, tS: 0.5 }], opts(3));
+  const hammer = (m) => flyBf([{ t: 0.62, tS: 0.42 }, { t: 85 * DEG / 10, pitch: -10, tS: 0.5 }, { t: 150 * DEG / 10, yaw: 10 * m, pitch: 3, tS: 0.6 }, { t: 2, tS: 0.5 }], opts(3, m));
   const splits = await flyBf([{ t: 0.5, tS: 0.42 }, { t: 0.2, pitch: -4.5, tS: 0.6 }, { t: 0.2, pitch: 4.5, tS: 0.5 }, { t: 0.26, roll: 12, tS: 0.3 }, { t: 0.22, pitch: -9, tS: 0.4 }, { t: 1.5, tS: 0.5 }], opts(4));
-  for (const [name, r] of [['turnaround', turn], ['Split-S', splits]]) {
+  for (const [name, r] of [['turnaround', turn], ['hammerhead', await hammer(1)], ['hammerhead mirrored', await hammer(-1)], ['Split-S', splits]]) {
     assert.ok(!r.hits.includes('cradle'), name + ': ' + r.hits.join(',') + ' ' + JSON.stringify(r.cradle));
     // The post passed on one side and back on the other, nose up 25 or more
     // between, going back fast enough: judged on the nose.
