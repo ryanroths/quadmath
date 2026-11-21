@@ -108,7 +108,9 @@
 // Bando Baranis' 12 -> 14 (a Barani back 117, then forward 104). The owner's
 // Cradle dumps (tools/fixtures/tricklog-depot-bf-cradle-1 and -2) carry
 // positions, 32 rows a record (rec.side): the gate, run on them, calls the
-// owner's 12 Cradles and none of the misses (the last test).
+// owner's 12 Cradles and none of the misses. Fly 3 (-3, on the gate's build)
+// carries the gate's own inputs (its cradle records): they replay to the
+// owner's six Cradles and its three misses (the last two tests).
 //   node --test tools/test_sim_tricks_attempt_log.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -120,7 +122,7 @@ import {
   classifyFeat, featView, makeFeat, loopCount, trickName, LOOP_WIN_S, SAMPLE_S, HAM_UPZ, HAM_MIN,
   PHASE_SPECS, PHASE_FIELD, matchSpec, MERGE_GAP_S, MANEUVER_MAX_S,
   NOSE_SIDE, ORBIT_WIN_S, ORBIT_RATE, TRIPPY_HOLD, BARANI_P, BARANI_FADE, BARANI_HD_LO,
-  CRADLE, makeCradleGate, cradlePosts, cradleStep,
+  CRADLE, makeCradleGate, cradlePosts, cradleStep, cradleReset,
 } from '../sim-tricks.js';
 import { explainFeat, SPEC } from '../sim-tricks-debug.js';
 import { DEPOT_PLAY, DEPOT_WS } from '../sim-maps.js';
@@ -679,7 +681,7 @@ const LOGS = [
   // side, one never back), a Cradle that clipped a column and crashed, and
   // a Maverick up through the hatch. Seq 3, 19, 22, 23, 25 and 31 fired
   // Cradle; a segment never labels one now (see the top): the gate's calls
-  // are checked on the positions (the last test). The hatch Maverick (seq
+  // are checked on the positions (the dumps test). The hatch Maverick (seq
   // 27, 68.9-70.6 s: back 120, the Maverick's floor, climbing 3.9 m through
   // the hatch, then forward and back down off the deck's edge against the
   // nose) scored nothing, its first phase unmatched; noted for later, not
@@ -688,6 +690,19 @@ const LOGS = [
   {
     name: 'depot cradles 2', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-cradle-2.jsonl.gz', records: 36, maneuvers: 32, fired: 6,
     NEW: { 3: null, 19: null, 22: null, 23: null, 25: null, 31: null },
+  },
+  // Fly 3 (2026-11-20), on the gate's build, with its cradle records (the
+  // gate's inputs; the last test): Cradles round the spin pole, column 699
+  // and column 700, a clip of 700, three loops up through the hatch (no
+  // Maverick: the hatch miss above), and one over the top round the pole
+  // into the floor. Seq 7, 14 and 35 closed at a Cradle's second pass (the
+  // record's result is the Cradle's; the segment alone scores none). Seq 41
+  // fired Roll, right after the floor (as fired; the owner's label not given).
+  // Its decimated rows predate 214bf09 (yrLost: a row's yr is its own step's
+  // only).
+  {
+    name: 'depot cradles 3', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-cradle-3.jsonl.gz', records: 42, maneuvers: 25, fired: 4,
+    NEW: { 7: null, 14: null, 35: null }, yrLost: true,
   },
 ];
 for (const L of LOGS) {
@@ -843,6 +858,7 @@ test('the dumps of 2026-11-17 and 18: every label that changes, and the open one
     'depot build flips and rolls seq 18 cradle->none',
     'depot cradles 2 seq 3 cradle->none', 'depot cradles 2 seq 19 cradle->none', 'depot cradles 2 seq 22 cradle->none',
     'depot cradles 2 seq 23 cradle->none', 'depot cradles 2 seq 25 cradle->none', 'depot cradles 2 seq 31 cradle->none',
+    'depot cradles 3 seq 7 cradle->none', 'depot cradles 3 seq 14 cradle->none', 'depot cradles 3 seq 35 cradle->none',
   ]);
   // What the open ones read now (not asserted as the owner's).
   const open = NEWER.flatMap((L) => Object.keys(L.OPEN || {}).map((seq) => L.name + ' seq ' + seq + ' ' + (replayed(L).get(Number(seq)).id || 'none')));
@@ -1217,10 +1233,87 @@ test('the owner\'s Cradle dumps: the gate, on their positions, calls each of the
     assert.ok(Math.abs(v.lat2) <= CRADLE.backLat - 0.4, tag + ' back ' + v.lat2);
     assert.ok(Math.sign(v.lat1) !== Math.sign(v.lat2), tag + ' the other side');
     assert.ok(v.elMax >= CRADLE.noseUp + 10 && v.pMax <= CRADLE.overTop, tag + ' nose ' + v.elMax + ' / ' + v.pMax);
-    assert.ok(v.yawDev <= CRADLE.yawDev - 15 && v.yawDeg <= CRADLE.yawTurn - 90 && v.yawRecent <= CRADLE.yawRecent - 10, tag + ' turned ' + v.yawDev + ' off F1, ' + v.yawDeg + ' net, ' + v.yawRecent + ' at the second pass');
+    // (The dumps' turn is their heading's, row to row: positions only.)
+    assert.ok(v.yawDeg <= CRADLE.yawTurn - 20 && v.yawRecent <= CRADLE.yawRecent - 10, tag + ' turned ' + v.yawDeg + ' net, ' + v.yawRecent + ' at the second pass');
     assert.ok(v.offNose >= CRADLE.backDeg + 15, tag + ' off the nose ' + v.offNose);
     assert.ok(-v.vBack >= CRADLE.backSpd + 1.5, tag + ' back at ' + v.vBack);
     assert.ok(v.upZ >= CRADLE.upZ + 0.5, tag + ' up-Z ' + v.upZ);
     assert.ok(v.dt <= CRADLE.maxS - 1, tag + ' ' + v.dt + ' s');
   }
+});
+
+// Fly 3's cradle records replayed: makeCradleGate on the record's posts, then
+// cradleStep a row at a time (a reset before a fresh row; a disarmed row a
+// reset and no step), on the record's rows or those of the record it shares
+// (inputs.same). A log's decimated rows from before 214bf09 (L.yrLost; fly
+// 3's misses, every 8 ms) carry a row's yr for its own step only (the step
+// left out before it lost), so each is taken times the 4 ms steps it stands
+// for; later logs sum it. Returns the verdicts.
+function replayFly(L, rec) {
+  const src = rec.inputs.rows ? rec : L.bySeq.get(rec.inputs.same);
+  const { cols, rows, every } = src.inputs;
+  const ix = (k) => cols.indexOf(k);
+  const I = ['t', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'fx', 'fy', 'fz', 'upZ', 'contact', 'yr'].map(ix);
+  const g = makeCradleGate(rec.posts);
+  let prevT = null;
+  for (const row of rows) {
+    if (row[ix('fresh')]) cradleReset(g);
+    const s = g.inp;
+    [s.t, s.x, s.y, s.z, s.vx, s.vy, s.vz, s.fx, s.fy, s.fz, s.upZ, s.contact, s.yr] = I.map((k) => row[k]);
+    if (L.yrLost && every > 0 && prevT != null) s.yr *= Math.max(1, Math.round((s.t - prevT) / 0.004));
+    prevT = s.t;
+    if (!row[ix('armed')]) { cradleReset(g); continue; }
+    cradleStep(g);
+  }
+  return g.out;
+}
+
+test('fly 3 on the gate\'s build: its cradle records replay to the owner\'s six Cradles, the clip, the same side and the one over the top', () => {
+  const L = LOGS.find((x) => x.name === 'depot cradles 3');
+  const recs = L.recs.filter((r) => r.type === 'cradle');
+  assert.equal(recs.length, 10);
+  // As logged (the build's heading rule: the nose's level heading within 55
+  // of F1): four Cradles; the two the owner labels Cradles as well (seq 12
+  // round column 700, seq 31 round the pole) were voided turned round, 55
+  // off F1 with the nose 51-64 up, though they turned 38 and 22 about the
+  // vertical.
+  assert.deepEqual(recs.filter((r) => r.result).map((r) => r.gate.obj + ' ' + r.gate.t1), ['1109 5.552', '699 13.764', '700 24.656', '1109 46.684']);
+  for (const seq of [12, 31]) {
+    const g = L.bySeq.get(seq).gate;
+    assert.ok(g.why === 'turned round' && g.yawDev >= 55 && g.yawDeg <= 40, 'seq ' + seq + ' ' + JSON.stringify(g));
+  }
+  // Replayed now: each verdict once (records that share rows replay alike),
+  // in the order flown (the gate's clock, s).
+  const seen = new Map();
+  for (const r of recs) for (const v of replayFly(L, r)) seen.set(v.obj + ' ' + v.t1 + ' ' + v.t2, v);
+  const vs = [...seen.values()].sort((a, b) => a.t2 - b.t2);
+  const near = (v, obj, t1, t2) => v.obj === obj && Math.abs(v.t1 - t1) <= 0.02 && Math.abs(v.t2 - t2) <= 0.02;
+  const got = vs.filter((v) => v.result === 'cradle');
+  const want = [[1109, 5.552, 6.64], [699, 13.764, 14.552], [700, 20.804, 21.924], [700, 24.656, 25.692], [1109, 43.76, 44.688], [1109, 46.684, 47.752]];
+  assert.equal(got.length, want.length, got.map((v) => v.obj + ' ' + v.t1 + '-' + v.t2).join(', '));
+  want.forEach(([obj, t1, t2], k) => assert.ok(near(got[k], obj, t1, t2), 'Cradle ' + k + ': ' + JSON.stringify(got[k])));
+  // The misses flown with them: the clip of column 700 (the quad's centre
+  // within 0.06 m of it), the hatch climb back on 700's same side, and the
+  // nose over the top round the pole (then the floor).
+  const miss = (obj, t1, why) => vs.find((v) => !v.result && v.obj === obj && Math.abs(v.t1 - t1) <= 0.02 && v.why === why);
+  assert.ok(miss(700, 17.06, 'hit the post'), 'the clip');
+  assert.ok(miss(700, 37.512, 'same side'), 'the hatch climb');
+  assert.ok(miss(1109, 49.68, 'over the top'), 'over the top');
+  // Nothing else: seq 30's attempt round 700 (armed at 42.6, turning) is
+  // dropped unjudged when the Cradle round the pole is called at 44.688.
+  assert.equal(vs.length, 9, vs.map((v) => (v.result || v.why) + ' ' + v.obj + ' ' + v.t1).join(', '));
+  // The clip and the same side are judged as the build judged them: their
+  // turn as logged (the rows' yr made whole, L.yrLost).
+  for (const [seq, obj, t1, why] of [[10, 700, 17.06, 'hit the post'], [26, 700, 37.512, 'same side']]) {
+    const lg = L.bySeq.get(seq).gate, v = miss(obj, t1, why);
+    assert.ok(lg.obj === obj && lg.why === why && Math.abs(v.yawDeg - lg.yawDeg) <= 1, 'seq ' + seq + ' logged ' + lg.yawDeg + ', replayed ' + v.yawDeg);
+  }
+  // Every Cradle's turn about the vertical clear of the cap (the debug test:
+  // the slow orbits that are not, 63 or more), and not turning at the pass.
+  // Seq 12's 40 is rebuilt from rows every 8 ms (to a degree or so).
+  for (const v of got) assert.ok(v.yawDeg <= CRADLE.yawTurn - 15 && v.yawRecent <= CRADLE.yawRecent - 10, v.obj + ' ' + v.t1 + ' turned ' + v.yawDeg + ', ' + v.yawRecent + ' at the pass');
+  // The sloppiest, seq 12 round column 700: back 2.13 m out, 123 off the nose
+  // (8 over backDeg), up-Z 0.45.
+  const s12 = got[2];
+  assert.ok(Math.abs(s12.lat2) <= CRADLE.backLat - 0.8 && s12.offNose >= CRADLE.backDeg + 5 && s12.upZ >= 0.4, JSON.stringify(s12));
 });

@@ -1391,9 +1391,9 @@ test('bf core, the Cradle as the owner flies it: past a post on one side, nose u
     assert.ok(Math.sign(g.lat1) !== Math.sign(g.lat2), c.name + ' the other side');
     assert.ok(g.pMax >= 40 && g.pMax <= 65, c.name + ' nose ' + g.pMax);
     assert.ok(g.offNose >= 125 && -g.vBack >= 4 && g.upZ >= 0.55 && g.dt < 1.2, c.name + ' ' + JSON.stringify(g));
-    // The nose kept its heading: off F1, the net turn about the vertical (the
-    // roll in and out included), and the yaw at the second pass.
-    assert.ok(g.yawDev <= CRADLE.yawDev - 15 && g.yawDeg <= CRADLE.yawTurn - 100 && g.yawRecent <= CRADLE.yawRecent - 15, c.name + ' ' + JSON.stringify(g));
+    // The nose kept its heading: the net turn about the vertical (the roll in
+    // and out included), and the yaw at the second pass.
+    assert.ok(g.yawDeg <= CRADLE.yawTurn - 20 && g.yawRecent <= CRADLE.yawRecent - 15, c.name + ' ' + JSON.stringify(g));
   }
   // The mirror flies the other way round the other side.
   const a = await flyBf(BF_CRADLES[0].phases, BF_CRADLES[0].opts), b = await flyBf(BF_CRADLES[2].phases, BF_CRADLES[2].opts);
@@ -1412,6 +1412,27 @@ test('bf core, the Cradle as the owner flies it: past a post on one side, nose u
   const hit = await none(crdPhases(-1, 2, 0.2, 3), poleCore(3, 0.4));
   assert.ok(!hit.hits.includes('cradle'), 'into the pole: ' + hit.hits.join(','));
   assert.equal(hit.cradle[0].why, 'hit the post');
+});
+
+// Back past a pole nose first is no Cradle (not going backwards): the nose
+// over 60 degrees down, pointing back the way the quad goes, the travel back
+// along -F1 on the post's other side. A turnaround: past the pole at 5 m/s
+// drifting across, a pull to 74 up, a half turn of yaw at the top with a
+// little pitch on (the nose comes round and down), on. A Split-S: a pop, a
+// half roll, a pull to 70 down. Both read 173-178 off F1 the way back; the
+// nose's own heading points the way they go.
+test('bf core, back past a pole nose first is no Cradle: a turnaround by yaw at the top, a Split-S', async () => {
+  const opts = (z0) => ({ z0, vx: 5, vy: 2, maxT: 3, page: true, colliders: poleCore(2, 1.1) });
+  const turn = await flyBf([{ t: 0.62, tS: 0.42 }, { t: 74 * DEG / 10, pitch: -10, tS: 0.5 }, { t: Math.PI / 10, yaw: 10, pitch: 0.8, tS: 0.6 }, { t: 2, tS: 0.5 }], opts(3));
+  const splits = await flyBf([{ t: 0.5, tS: 0.42 }, { t: 0.2, pitch: -4.5, tS: 0.6 }, { t: 0.2, pitch: 4.5, tS: 0.5 }, { t: 0.26, roll: 12, tS: 0.3 }, { t: 0.22, pitch: -9, tS: 0.4 }, { t: 1.5, tS: 0.5 }], opts(4));
+  for (const [name, r] of [['turnaround', turn], ['Split-S', splits]]) {
+    assert.ok(!r.hits.includes('cradle'), name + ': ' + r.hits.join(',') + ' ' + JSON.stringify(r.cradle));
+    // The post passed on one side and back on the other, nose up 25 or more
+    // between, going back fast enough: judged on the nose.
+    const v = r.cradle.find((o) => o.obj === 0 && o.lat2 != null);
+    assert.ok(v && Math.sign(v.lat1) !== Math.sign(v.lat2) && -v.vBack >= CRADLE.backSpd && v.elMax >= CRADLE.noseUp, name + ': ' + JSON.stringify(r.cradle));
+    assert.equal(v.why, 'not against the nose', name + ': ' + JSON.stringify(v));
+  }
 });
 
 test('bf core, Matty: 250-400 degrees of forward pitch over an object, climbed into from 1 s before, against the nose, upright; no climb before it, or open air, is a Flip', async () => {

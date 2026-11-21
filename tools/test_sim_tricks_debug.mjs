@@ -1086,6 +1086,59 @@ test('the Cradle\'s edges: the nose up to 88 degrees; beside a leg, not over its
   assert.equal(tr.verdicts[0].why, 'turned round');
 });
 
+// Slow orbits round the pole (kinematic: 3-4 m/s, 1.3 and 1.9 m out, the
+// nose 35-65 up): the nose held on F1 past the pole, then turning with the
+// path 15 or 30 behind the radial, both ways round. Too slow for a Trippy;
+// by the second pass they have turned 63-80 about the vertical (with no cap,
+// 24 of these 48 are Cradles, the rest back not against the nose or still
+// turning), against the owner's Cradles' 11-40 (the attempt-log test). Never
+// a Cradle: the cap voids all 48 turned round. Further behind (35-50: 43-60
+// at the pass) they are Cradles, as with the old heading rule: not pinned.
+test('slow orbits round the pole, the nose up and turning with the path, are never Cradles: the cap on the turn about the vertical', () => {
+  const DEG = Math.PI / 180;
+  const orbit = (spd, rx, ry, lag, tilt, m) => {
+    const R0 = Math.hypot(rx, ry), th0 = Math.atan2(-ry, rx), om = spd / R0, fr = [];
+    for (let x = -6; x < 5 + rx; x += spd * 0.004) fr.push({ p: [x, 0, 1.6], v: [spd, 0], az: 0, el: -5 * DEG, w: [0, 0, 0] });
+    for (let tt = 0; tt < 1.6 * 2 * Math.PI / om; tt += 0.004) {
+      const th = th0 + om * tt, k = Math.min(1, tt / 0.25), sm = k * k * (3 - 2 * k), az = Math.max(0, th - lag * DEG);
+      fr.push({ p: [5 + R0 * Math.cos(th), m * (ry + R0 * Math.sin(th)), 1.6], v: [-spd * Math.sin(th), m * spd * Math.cos(th)], az: m * az, el: (-5 + sm * tilt) * DEG, w: [0, 0, az > 0 ? m * om : 0] });
+    }
+    for (let i = 0; i < 400; i++) fr.push({ ...fr[fr.length - 1], v: [0, 0], w: [0, 0, 0], az: 0, el: 0 });
+    return attRun([{ x0: 4.95, y0: m * ry - 0.05, z0: 0, x1: 5.05, y1: m * ry + 0.05, z1: 6 }], fr);
+  };
+  let n = 0;
+  for (const spd of [3, 4]) for (const [rx, ry] of [[0.4, 1.2], [0.6, 1.8]]) for (const lag of [15, 30]) for (const tilt of [40, 55, 70]) for (const m of [1, -1]) {
+    const r = orbit(spd, rx, ry, lag, tilt, m), tag = [spd, rx, ry, lag, tilt, m].join(' ');
+    n++;
+    assert.ok(!r.evs.includes('cradle'), tag + ': ' + JSON.stringify(r.verdicts));
+    assert.ok(r.verdicts.length === 1 && r.verdicts[0].why === 'turned round', tag + ': ' + JSON.stringify(r.verdicts));
+  }
+  assert.equal(n, 48);
+});
+
+// Back past the post with the nose pitched down through the pass (to 85
+// down, its heading on F1: going backwards, the nose ahead and down) is a
+// Cradle: over 60 from level it is judged off F1, as the nose up is. Flown
+// past a pole at 5 m/s, braked with the nose 55 up, drifting 1 m across.
+test('the Cradle with the nose pitched down through the second pass, its heading on F1, is still a Cradle', () => {
+  const DEG = Math.PI / 180;
+  for (const E of [-30, -70, -85]) {
+    const fr = [];
+    let x = -6;
+    for (; x < 5.0; x += 5 * 0.004) fr.push({ p: [x, 0, 2], v: [5, 0], az: 0, el: -5 * DEG, w: [0, 0, 0] });
+    const x0 = x;
+    for (let t = 0; t < 1.6; t += 0.004) {
+      const xx = t < 1 ? x0 + 5 * t - 5 * t * t : x0 - 5 * (t - 1), k = Math.min(1, t / 0.6), kp = Math.min(1, t / 0.15), kd = Math.max(0, Math.min(1, (t - 0.7) / 0.2));
+      const el = -5 + 60 * kp * kp * (3 - 2 * kp) + (E - 55) * kd;
+      fr.push({ p: [xx, k * k * (3 - 2 * k), 2], v: [Math.max(-5, 5 - 10 * t), 6 * k * (1 - k) / 0.6], az: 0, el: el * DEG, w: [0, 0, 0] });
+    }
+    for (let i = 0; i < 300; i++) fr.push({ ...fr[fr.length - 1], v: [0, 0] });
+    const r = attRun([{ x0: 4.95, y0: 0.45, z0: 0, x1: 5.05, y1: 0.55, z1: 6 }], fr);
+    assert.ok(r.evs.includes('cradle'), E + ': ' + JSON.stringify(r.verdicts));
+    assert.ok(r.verdicts[0].offNose >= 170, E + ': ' + JSON.stringify(r.verdicts[0]));
+  }
+});
+
 test('the Cradle replaces a Maverick flown round a post, held from its end to the second pass; beside a block (no post) it is the Maverick', () => {
   const DEG = Math.PI / 180;
   const fly = (b) => sideRun([b], [

@@ -1818,33 +1818,44 @@ export function classifyFeat(f, out) {
 // level heading then (F1), and no touch in the touchS before. Between the
 // passes: the nose's elevation reaches noseUp; its pitch in F1's vertical
 // plane never passes overTop (over the top); and the nose keeps its heading
-// (an orbit or a Trippy round the post turns it with the path): its level
-// heading never more than yawDev off F1 while it is under yawEl up, its net
-// turn about the vertical never past yawTurn either way, and it is not still
-// turning at the second pass (yawRecent or less about the vertical in the
-// yawWin before it: a Trippy yaws through it). Pass two, within maxS: the
-// post's centre
+// (an orbit or a Trippy round the post turns it with the path): the quad's
+// net turn about the vertical never past yawTurn either way (a roll about
+// the nose counts sin(nose) of itself), and it is not still turning at the
+// second pass (yawRecent or less about the vertical in the yawWin before
+// it: a Trippy yaws through it). The nose's level heading is judged only
+// through over the top (the nose up, its pitch in F1's plane past 90 is the
+// heading more than 90 off F1), and logged (its most off F1 while it is
+// under yawEl up): with the nose 50-65 degrees up a yaw at the top (or a
+// pull while banked) swings it far, a body yaw turning the heading about
+// 1/cos(nose) of itself and the quad about the vertical cos(nose) of it;
+// 56 and 58 degrees off F1 on two of the owner's Cradles that turned 40 and
+// 27 about the vertical. Pass two, within maxS: the post's centre
 // back across the line square to F1 (the post ahead again: the quad went
 // back past it), on the other side, backLat out or less; travelling back
 // along F1 at backSpd or more and backDeg or more off the nose's level
-// heading (off F1 when the nose is over 60 degrees up: its heading is then
-// a wobble); not upside down (up-Z upZ or more; no cap on the nose but over
-// the top). A pass back the other way flown forward is a first pass of its
-// own. A touch (the quad's centre within hitM of the post, or of any box:
+// heading (off F1 when the nose is over 60 degrees from level with its
+// heading within 90 of F1: the heading is then a wobble; turned further, the
+// heading: a turnaround or a Split-S comes back nose first, nose down); not
+// upside down (up-Z upZ or more; no cap on the nose but over the top). A pass back the other way flown forward is a first
+// pass of its own. A touch (the quad's centre within hitM of the post, or of any box:
 // the floor contact the detector reads is under the quad, so a clip on a
 // post's side never sets it), a crash, a disarm or a respawn voids it.
-// Posts are looked at within `near` (level). The owner's 12 Cradles (dumps 1
-// and 2, 2026-11-20, replayed through the gate: the attempt-log test): first
-// pass 0.14-1.41 m out; nose up 39-77 deg; the heading 38 deg off F1 at most,
-// 27 deg of yaw at most in the quarter second before the second pass (the
-// Trippies a nose lag makes Cradles of, on the js core: 57-89); second pass
-// 0.49-2.47 m out, 3.35-7.21 m/s back, 144-179 deg off the nose, up-Z 0.58 or
-// more; 0.79-1.44 s apart.
+// Posts are looked at within `near` (level). The owner's 18 Cradles (dumps 1
+// and 2 and fly 3, 2026-11-20, replayed through the gate: the attempt-log
+// test): first pass 0.14-1.41 m out; nose up 39-77 deg; 11-40 deg of net
+// turn about the vertical on fly 3 (the dumps log positions only: their
+// heading turned 7-38), against 63-80 by the second pass for slow orbits
+// round a post with the nose turning with the path (kinematic, the debug
+// test; turning less, 43-60, they are Cradles); 21 deg of yaw at most in the
+// quarter second before the second pass (the dumps' heading; 8 on fly 3;
+// the Trippies a nose lag makes Cradles of, on the js core: 57-89); second
+// pass 0.42-2.47 m out, 3.35-7.21 m/s back, 123-179 deg off the nose, up-Z
+// 0.45 or more; 0.79-1.44 s apart.
 export const CRADLE = Object.freeze({
   postW: 0.5, postRatio: 0.6, postH: 1.0, legH: 0.31, legK: 3, floorM: 0.05, cellM: 0.03,
   near: 4, hyst: 0.1, turnDot: 0.7, over: 0.05,
   fwdSpd: 1.0, fwdDeg: 60, outLat: 2.0,
-  noseUp: 25, overTop: 90, yawDev: 55, yawEl: 70, yawTurn: 180, yawRecent: 45, yawWin: 0.25,
+  noseUp: 25, overTop: 90, yawEl: 70, yawTurn: 60, yawRecent: 45, yawWin: 0.25,
   backLat: 3.0, backSpd: 1.5, backDeg: 115, upZ: 0, maxS: 2.5,
   contact: 0.08, hitM: 0.06, touchS: 0.3,
 });
@@ -1962,9 +1973,8 @@ export function simBoxes(cols, ws, B) {
 // its clock (t1), F1 (fx, fy), the side (lat1, m, + left of F1), the nose's
 // most pitch in F1's plane and most elevation (pMax, elMax, deg), its net
 // turn about the vertical since (yawP, rad, signed) and the most of it
-// either way (yawX, rad), its level heading's most off F1 (yawD, deg), the
-// side of the line square to F1
-// the post was last on (sgF). When the quad last touched anything (touchT).
+// either way (yawX, rad), its level heading's most off F1 (yawD, deg; only
+// logged), the side of the line square to F1 the post was last on (sgF). When the quad last touched anything (touchT).
 // The turn about the vertical of the last steps (yrT, yrV: a ring of YR_N,
 // yrH the next slot).
 // The step's inputs (inp: the clock t, position x y z, m, velocity vx vy vz,
@@ -2137,7 +2147,7 @@ export function cradleStep(g) {
     let why = '';
     if (touched) why = 'hit the post';
     else if (s.contact) why = 'contact';
-    else if (g.yawD[i] > C.yawDev || g.yawX[i] * D > C.yawTurn) why = 'turned round';
+    else if (g.yawX[i] * D > C.yawTurn) why = 'turned round';
     else if (p > C.overTop) why = s.fz >= 0.5 ? 'over the top' : 'turned round';
     else if (s.t - g.t1[i] > C.maxS) why = 'no second pass in ' + C.maxS + ' s';
     let m = null;
@@ -2148,8 +2158,11 @@ export function cradleStep(g) {
       g.sgF[i] = now;
       if (!back) continue;
       const lat = -rx * Fy + ry * Fx, vF = s.vx * Fx + s.vy * Fy;
-      // Off the nose's level heading; over 60 degrees up, off F1.
-      const cosOff = spd > 1e-9 ? (nh >= 0.5 ? cosVN : vF / spd) : (vF < 0 ? -1 : 1);
+      // Off the nose's level heading. Over 60 degrees from level, off F1
+      // while the heading is within 90 of F1 (nose up, over the top keeps it
+      // so); turned further (a turnaround or a Split-S: nose down and first),
+      // off the heading.
+      const cosOff = spd > 1e-9 ? (nh >= 0.5 || s.fx * Fx + s.fy * Fy <= 0 ? cosVN : vF / spd) : (vF < 0 ? -1 : 1);
       const off = Math.acos(cosOff > 1 ? 1 : cosOff < -1 ? -1 : cosOff) * D;
       // The turn about the vertical in the last yawWin (net).
       let rec = 0;
