@@ -148,10 +148,9 @@
      clear of it. The footer's licence notice stays as it is, on screen. */
   :root{--hud-floor:max(var(--footer-h, 29px), env(safe-area-inset-bottom, 0px))}
   body.touch-on #osdBC{bottom:calc(var(--hud-floor) + 3px)}
-  /* While flying, only the footer's links take a touch; a thumb that lands on
-     the rest of it reaches the canvas. */
+  /* While flying, the footer takes no touch, its links included (a thumb
+     sliding off a stick must not leave the page); with the menu open they tap. */
   body.touch-on:not(.menu-open) footer{pointer-events:none}
-  body.touch-on:not(.menu-open) footer a{pointer-events:auto}
   #touchLayer{position:fixed;inset:0;z-index:18;display:none;pointer-events:none;
     --stick-size:112px;--stick-opacity:.7;--stick-inset-x:18px;--stick-inset-y:12px}
   #touchLayer.on{display:block}

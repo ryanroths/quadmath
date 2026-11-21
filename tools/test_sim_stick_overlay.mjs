@@ -275,7 +275,8 @@ test('sim.html: the overlay reads the merged stick in the frame loop, and hides 
   assert.match(html, /:root\{--hud-floor:max\(var\(--footer-h, 29px\), env\(safe-area-inset-bottom, 0px\)\)\}/);
   assert.match(html, /#touchLayer \.vstick\{position:absolute;bottom:calc\(var\(--hud-floor\) \+ var\(--stick-inset-y\)\);/);
   assert.match(html, /body\.touch-on #osdBC\{bottom:calc\(var\(--hud-floor\) \+ 3px\)\}/);
-  assert.match(html, /body\.touch-on:not\(\.menu-open\) footer\{pointer-events:none\}\r?\n\s*body\.touch-on:not\(\.menu-open\) footer a\{pointer-events:auto\}/);
+  assert.match(html, /body\.touch-on:not\(\.menu-open\) footer\{pointer-events:none\}/);
+  assert.doesNotMatch(html, /footer a\{pointer-events:auto\}/, 'its links take no touch either while flying');
   assert.match(extract('enableTouchLayer'), /placeStickOverlay\(\);/);
   assert.match(extract('applyTouchFromUI'), /placeStickOverlay\(\);/);
   // The old #feelHud pads are gone (one stick display).
@@ -984,6 +985,7 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
             await js(`await S.wait(400); await S.frame(); return 1;`);
             await footerClear(js, `${w2}x${h2}`);
           }
+          await menuLinks(js, `${w}x${h}`);
         });
       });
     }
@@ -996,8 +998,8 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
 // stick (its last 5 %, where the throttle-down band lay when a touch set the
 // throttle where it landed) are the stick's to the hit test, and all of the
 // stick, the knob, #osdBC and the stick overlay sit above the footer, which
-// stays on screen with its links tappable (the rest of it lets a touch
-// through). Returns the knob's centre.
+// stays on screen and lets a touch through, its links too (with the menu
+// open they tap: menuLinks). Returns the knob's centre.
 async function footerClear(js, label) {
   const g = await js(`await S.frame();
     const R = (e) => { const b = e.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom }; };
@@ -1029,10 +1031,22 @@ async function footerClear(js, label) {
   for (const s of g.sticks) assert.equal(overlaps(g.overlay, s), false, `${label}: the stick overlay clear of a stick ${JSON.stringify({ o: g.overlay, s })}`);
   assert.equal(g.shown, true, `${label}: the footer shows`);
   assert.ok(g.lic.top >= g.footer.top && g.lic.bottom <= g.vh && g.lic.right <= g.vw && g.lic.left >= 0, `${label}: the licence notice on screen ${JSON.stringify(g.lic)}`);
-  assert.equal(g.logoHit, true, `${label}: the footer's QuadMath link still taps`);
-  assert.equal(g.licHit, true, `${label}: the footer's licence link still taps`);
+  assert.equal(g.logoHit, false, `${label}: the footer's QuadMath link takes no touch while flying`);
+  assert.equal(g.licHit, false, `${label}: the footer's licence link takes no touch while flying`);
   assert.equal(g.creditIn, false, `${label}: the rest of the footer lets a touch through, not ${g.creditHit}`);
   return g;
+}
+
+// Not flying (the menu open, from its button), the footer's two links are
+// what a tap at each one's centre hits.
+async function menuLinks(js, label) {
+  const m = await js(`document.getElementById('menuBtn').click();
+    await S.until(() => document.body.classList.contains('menu-open'), 3000); await S.frame();
+    const f = document.querySelector('footer');
+    const hit = (sel) => { const b = f.querySelector(sel).getBoundingClientRect(); const e = document.elementFromPoint((b.left + b.right) / 2, (b.top + b.bottom) / 2);
+      return e ? (e.closest && e.closest(sel) ? true : e.tagName.toLowerCase() + (e.id ? '#' + e.id : '')) : null; };
+    return JSON.stringify({ menu: document.body.classList.contains('menu-open'), logo: hit('a.sf-logo'), lic: hit('a.sf-license') });`);
+  assert.deepEqual(m, { menu: true, logo: true, lic: true }, `${label}: with the menu open, the footer's links tap`);
 }
 
 // Under touch, the arm hint's slot is laid out (whether the hint shows or not)
