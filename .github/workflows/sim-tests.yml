@@ -115,6 +115,11 @@ jobs:
           # Speed units: the OSD's SPD line by language, each option, one width.
           - { suite: page, label: 'speed units', tests: 'tools/test_sim_speed_units.mjs' }
           - { suite: page, label: 'radio detect', tests: 'tools/test_sim_radio_detect.mjs' }
+          # Pilot feedback fixes: the quad on the THR/BATT card, a new pack
+          # (P, the NEW PACK tap target, the menu), Tune's classic-physics gate
+          # flown on bf (bit-identical with each hidden control at both ends),
+          # and arming while Betaflight loads; a desktop and two phone layouts.
+          - { suite: page, label: 'pilot fixes', tests: 'tools/test_sim_pilot_fixes_page.mjs' }
           # The stick overlay, shared track links and track boards in Chrome,
           # and the track boards' Worker on wrangler dev (wrangler: true).
           - { suite: page, label: 'sticks, track links, track boards', tests: 'tools/test_sim_stick_overlay.mjs tools/test_sim_track_url.mjs tools/test_sim_track_boards.mjs tools/test_leaderboard_track_boards.mjs tools/test_leaderboard_builtin_boards.mjs', wrangler: true }

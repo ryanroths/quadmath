@@ -67,10 +67,11 @@ test('the card says what the owner wrote, and its storage round-trips', () => {
   assert.equal(FIRST_FLIGHT_KEYS_AFTER_S, 3);
   assert.ok(existsSync(join(root, FIRST_FLIGHT_KEYS_IMG)), 'the keyboard layout image is in the repo');
   const svg = readFileSync(join(root, FIRST_FLIGHT_KEYS_IMG), 'utf8');
-  for (const k of ['>W<', '>A<', '>S<', '>D<', '>Space<', '>Esc<', '>R<', 'throttle', 'yaw', 'pitch', 'roll', 'respawn', 'menu']) {
+  for (const k of ['>W<', '>A<', '>S<', '>D<', '>Space<', '>Esc<', '>R<', '>P<', 'throttle', 'yaw', 'pitch', 'roll', 'respawn', 'new pack', 'menu']) {
     assert.ok(svg.includes(k), `the layout shows ${k}`);
   }
   assert.match(FIRST_FLIGHT_KEYS_ALT, /W and S throttle/);
+  assert.match(FIRST_FLIGHT_KEYS_ALT, /P new pack/);
   const store = memStore();
   assert.deepEqual(FIRST_FLIGHT_SEEN, ['keys', 'keyboard', 'touch', 'controller']);
   assert.deepEqual(loadFirstFlight(store), NONE, 'a fresh profile');

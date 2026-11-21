@@ -28,6 +28,8 @@ import {
   BF_RATES_DEFAULT_BY_INPUT, bfRatesDefaultId, bfRatesDefaultToast, bfRatesFromJs, BF_RATES_SAVED_TOAST,
   bfPresetId, bfRatesPreset, bfRatesCli, bfRatesLines, bfRatesFromGet, bfRatesSame, bfRatesPresetOf, bfRatesActual,
   loadBfRates, saveBfRates, bfRatesOsd, ratesSourceText, rateSetpoint, pilotRatesDefault, decodeRates, encodeRates,
+  bfFieldValue, BF_THR_KEYS, BF_THR_KEY, BF_THR_SLIDERS, BF_THR_DEFAULT, bfThr, bfThrFromSets, bfThrDefault, bfThrLines,
+  bfThrSame, bfThrText, bfThrFieldValue, loadBfThrottle, saveBfThrottle, maxRateDps, SETPOINT_LIMIT,
 } from '../sim-rates.js';
 import { RATE_PRESETS } from '../sim-feel.js';
 
@@ -172,6 +174,122 @@ test('each preset\'s set lines go through the cli policy on each bf class and re
   }
 });
 
+// A pilot flying yaw 300 / 800 / 0 could not get past 250 centre.
+const YAW300 = { type: 'ACTUAL', roll: { rcRate: 7, srate: 45, expo: 0.3 }, pitch: { rcRate: 7, srate: 45, expo: 0.3 }, yaw: { rcRate: 30, srate: 80, expo: 0 } };
+
+test('the sliders reach Betaflight\'s own Actual limits: centre 10-2000, max 0-2000 °/s, expo 0-1; yaw 300/800/0 survives a link, a save and a slider move', () => {
+  assert.deepEqual([BF_RATE_SLIDERS.rcRate.min, BF_RATE_SLIDERS.rcRate.max, BF_RATE_SLIDERS.rcRate.step], [10, 2000, 10]);
+  assert.deepEqual([BF_RATE_SLIDERS.srate.min, BF_RATE_SLIDERS.srate.max, BF_RATE_SLIDERS.srate.step], [0, 2000, 10]);
+  assert.deepEqual([BF_RATE_SLIDERS.expo.min, BF_RATE_SLIDERS.expo.max], [0, 1]);
+  // The markup's ranges and number boxes are those (and so are the js core's Actual ranges).
+  const html = read('sim.html');
+  for (const a of AXES) {
+    for (const f of ['rcRate', 'srate', 'expo']) {
+      const s = BF_RATE_SLIDERS[f];
+      for (const id of [`bfs_${a}_${f}`, `bfn_${a}_${f}`]) {
+        const tag = html.slice(html.indexOf(`id="${id}"`), html.indexOf('>', html.indexOf(`id="${id}"`)));
+        assert.match(tag, new RegExp(`min="${s.min}" max="${s.max}" step="${s.step}"`), id);
+      }
+    }
+  }
+  assert.deepEqual([RATE_SLIDER_RANGES.ACTUAL.rcRate.min, RATE_SLIDER_RANGES.ACTUAL.rcRate.max, RATE_SLIDER_RANGES.ACTUAL.srate.min, RATE_SLIDER_RANGES.ACTUAL.srate.max], [1, 200, 0, 200]);
+  // The pilot's yaw: a link, the sliders (no clamp back to 250), a save and reload.
+  assert.ok(bfRatesSame(decodeRates(encodeRates(YAW300)), YAW300), 'a rates link round trip');
+  const act = bfRatesActual(YAW300);
+  assert.deepEqual([act.yaw.rcRate, act.yaw.srate, act.yaw.expo], [30, 80, 0], 'shown as set, not clamped');
+  const mem = new Map();
+  const st = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)) };
+  assert.ok(saveBfRates({ rates: YAW300, link: true }, st));
+  assert.ok(bfRatesSame(loadBfRates(st).rates, YAW300), 'reloaded as saved');
+  // Moving another slider starts from what shows, so yaw stays 300.
+  const moved = bfRatesActual(YAW300); moved.roll.rcRate = 8;
+  assert.equal(moved.yaw.rcRate, 30);
+  // The top: 2000 °/s, which flies Betaflight's 1998 setpoint cap.
+  const top = { type: 'ACTUAL', roll: { rcRate: 200, srate: 200, expo: 0 }, pitch: { rcRate: 200, srate: 200, expo: 0 }, yaw: { rcRate: 200, srate: 200, expo: 0 } };
+  assert.ok(bfRatesSame(decodeRates(encodeRates(top)), top));
+  assert.equal(maxRateDps('ACTUAL', top.roll), SETPOINT_LIMIT);
+  assert.equal(SETPOINT_LIMIT, 1998);
+  assert.equal(decodeRates('ACTUAL.201.74.56.2.74.56.2.70.56').error, 'rates token out of range', 'over Betaflight\'s 200: refused');
+  // A typed number: rounded to the step, held inside the range.
+  assert.equal(bfFieldValue('rcRate', 300), 300);
+  assert.equal(bfFieldValue('rcRate', 304), 300);
+  assert.equal(bfFieldValue('rcRate', 306), 310);
+  assert.equal(bfFieldValue('rcRate', 5), 10);
+  assert.equal(bfFieldValue('rcRate', 99999), 2000);
+  assert.equal(bfFieldValue('srate', -40), 0);
+  assert.equal(bfFieldValue('expo', 0.567), 0.57);
+  assert.equal(bfFieldValue('expo', 3), 1);
+  for (const junk of ['', 'abc', null, undefined, NaN]) assert.equal(bfFieldValue('rcRate', junk), null, String(junk));
+});
+
+test('Betaflight takes the new limits: yaw 300/800/0 and 200 (2000 °/s) read back as set; 201 is put back to 200 at boot, so it is refused', async () => {
+  for (const cls of Object.keys(CLASSES)) {
+    const bf = await core(cls);
+    const diff = CLASSES[cls].diff();
+    const from = diff.split('\n').length + 1;
+    bf.loadDiff(diff + '\n' + bfRatesLines(YAW300));
+    assert.ok(bfRatesSame(bfRatesFromGet(bf.sim.get(BF_RATE_KEYS.slice())), YAW300), cls + ': yaw 300/800/0 read back');
+    const r200 = bf.loadDiff(diff + '\nset rates_type = ACTUAL\nset yaw_rc_rate = 200\nset yaw_srate = 200');
+    assert.ok(r200.lines.filter((l) => l.n >= from).every((l) => l.status === 'applied'), cls + ': 200 taken');
+    assert.deepEqual([bf.sim.get(['yaw_rc_rate']).yaw_rc_rate, bf.sim.get(['yaw_srate']).yaw_srate], ['200', '200']);
+    const r201 = bf.loadDiff(diff + '\nset rates_type = ACTUAL\nset yaw_rc_rate = 201');
+    const l201 = r201.lines.find((l) => l.n === from + 1);
+    assert.equal(l201.status, 'rejected', cls + ': 201 ' + JSON.stringify(l201));
+    assert.match(l201.msg, /changed yaw_rc_rate to '200'/);
+  }
+});
+
+test('throttle mid and expo: the class config\'s own (Fractal75 65/35, the Air65 Betaflight\'s 50/0), set lines read back, thr_mid stops at 99', async () => {
+  assert.deepEqual(BF_THR_KEYS, ['thr_mid', 'thr_expo']);
+  assert.deepEqual(BF_THR_DEFAULT, { mid: 50, expo: 0 });
+  assert.deepEqual([BF_THR_SLIDERS.mid.min, BF_THR_SLIDERS.mid.max, BF_THR_SLIDERS.expo.min, BF_THR_SLIDERS.expo.max], [0, 99, 0, 100]);
+  // The slider and its box in the markup: CLI integers on the slider, 0.00-1.00 in the box.
+  const html = read('sim.html');
+  for (const [id, re] of [['bfs_thr_mid', /min="0" max="99" step="1"/], ['bfs_thr_expo', /min="0" max="100" step="1"/], ['bfn_thr_mid', /min="0" max="0.99" step="0.01"/], ['bfn_thr_expo', /min="0" max="1" step="0.01"/]]) {
+    const at = html.indexOf(`id="${id}"`);
+    assert.ok(at > html.indexOf('<div class="rates-bf" id="bfRates">') && at < html.indexOf('<div class="rates-js">'), id + ' in the bf rates block');
+    assert.match(html.slice(at, html.indexOf('>', at)), re, id);
+  }
+  assert.deepEqual(bfThrDefault({ thr_mid: '65', thr_expo: '35' }), { mid: 65, expo: 35 });
+  assert.deepEqual(bfThrDefault({}), { mid: 50, expo: 0 });
+  assert.equal(bfThrLines({ mid: 40, expo: 20 }), 'set thr_mid = 40\nset thr_expo = 20');
+  assert.equal(bfThrLines({ mid: 100, expo: 0 }), null, 'thr_mid 100 never goes');
+  assert.equal(bfThr(40.5, 0), null);
+  assert.ok(bfThrSame(bfThrFromSets({ thr_mid: '40', thr_expo: '20' }), { mid: 40, expo: 20 }));
+  assert.equal(bfThrText(65), '0.65');
+  assert.equal(bfThrFieldValue('mid', '0.65'), 65);
+  assert.equal(bfThrFieldValue('mid', 1), 99, 'a typed 1.00 stops at 0.99');
+  assert.equal(bfThrFieldValue('expo', 1), 100);
+  assert.equal(bfThrFieldValue('expo', ''), null);
+  // Per class, saved in this browser; junk is dropped.
+  const mem = new Map();
+  const st = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)) };
+  assert.deepEqual(loadBfThrottle(st), {});
+  assert.ok(saveBfThrottle({ whoop75: { mid: 60, expo: 30 }, bogus: { mid: 1, expo: 1 } }, st));
+  assert.deepEqual(JSON.parse(mem.get(BF_THR_KEY)), { v: 1, classes: { whoop75: [60, 30] } });
+  assert.deepEqual(loadBfThrottle(st), { whoop75: { mid: 60, expo: 30 } });
+  mem.set(BF_THR_KEY, '{"v":1,"classes":{"whoop65":[100,0],"whoop75":"x"}}');
+  assert.deepEqual(loadBfThrottle(st), {}, 'out of range or junk: none');
+  // Betaflight: each class's own, then Tune's lines beside the rates, read back.
+  const own = { whoop65: { mid: 50, expo: 0 }, whoop75: { mid: 65, expo: 35 } };
+  for (const cls of Object.keys(CLASSES)) {
+    const bf = await core(cls);
+    const diff = CLASSES[cls].diff();
+    assert.deepEqual(bfThrFromSets(bf.sim.get([...BF_RATE_KEYS, ...BF_THR_KEYS])), own[cls], cls + ': its config\'s own');
+    assert.deepEqual(bfThrDefault(Object.fromEntries([...diff.matchAll(/^set (\w+) = (\S+)/gm)].map((m) => [m[1], m[2]]))), own[cls], cls + ': read from its diff as the page does');
+    const lines = bfRatesLines(bfRatesPreset('cruise')) + '\n' + bfThrLines({ mid: 40, expo: 20 });
+    const from = diff.split('\n').length + 1;
+    const r = bf.loadDiff(diff + '\n' + lines);
+    assert.equal(r.lines.filter((l) => l.n >= from && l.status === 'applied').length, 12, cls + ': ten rate lines and two throttle');
+    const got = bf.sim.get([...BF_RATE_KEYS, ...BF_THR_KEYS]);
+    assert.deepEqual(bfThrFromSets(got), { mid: 40, expo: 20 }, cls);
+    assert.ok(bfRatesSame(bfRatesFromGet(got), bfRatesPreset('cruise')), cls + ': the rates as set');
+    // Why the slider stops at 99: at 100 Betaflight's throttle lookup divides
+    // by zero, and the wasm traps (the page restores what flew before).
+    assert.throws(() => bf.loadDiff(diff + '\nset thr_mid = 100'), /divide by zero/, cls + ': thr_mid 100');
+  }
+});
+
 test('rates as set lines, read back, as Actual for the sliders', () => {
   const st = { type: 'BETAFLIGHT', roll: { rcRate: 1, srate: 0.7, expo: 0 }, pitch: { rcRate: 1, srate: 0.7, expo: 0 }, yaw: { rcRate: 1.1, srate: 0.72, expo: 0.25 } };
   assert.equal(bfRatesLines(st), [
@@ -288,27 +406,46 @@ function extract(src, name) {
 
 test('sim.html: one way to Betaflight for rates, importCliToBf; applied on boot, a class change and a link; the js core\'s rates UI kept', () => {
   const html = read('sim.html').replace(/\r\n/g, '\n');
-  // The rate lines are made in two places, and both go to importCliToBf.
-  assert.equal(html.split('bfRatesLines(').length - 1, 2, 'bfRatesText and bfSetRates');
+  // The rate lines are made in two places, and both go to importCliToBf;
+  // Tune's throttle lines (the class's own, once the pilot set them) beside
+  // them, a part of their own under or over a paste (thrLast).
+  assert.equal(html.split('bfRatesLines(').length - 1, 2, 'bfRatesText and bfSetTune');
   assert.ok(extract(html, 'bfRatesText').includes('return bfRatesLines(bfRatesWant());'));
-  assert.ok(extract(html, 'bfSetRates').includes('importCliToBf(bfRatesLines(next),{rates:true,ratesLast:true,quiet:true})'));
+  assert.ok(extract(html, 'bfThrLinesWant').includes('const t=bfThrWant(type);return t?bfThrLines(t):null;'));
+  assert.ok(extract(html, 'bfSetTune').includes('importCliToBf(bfRatesLines(nextRates),{rates:true,thr:nextThr?bfThrLines(nextThr):null,ratesLast:save.rates?true:undefined,thrLast:save.thr?true:undefined,quiet:true})'));
+  const compose = extract(html, 'bfCompose');
+  assert.ok(compose.includes("if(ratesText)(paste&&!ratesLast?under:over).push(['rates',ratesText]);"));
+  assert.ok(compose.includes("if(thrText)(paste&&!thrLast?under:over).push(['thr',thrText]);"));
+  assert.ok(compose.includes('if(!full)parts.push(...under);'), 'a full diff stands in for the parts under it');
+  assert.ok(extract(html, 'bfSetRates').includes('return bfSetTune(next,bfThrWant(),{rates:true}).rates;'));
+  assert.ok(extract(html, 'bfSetThrottle').includes('return bfSetTune(bfRatesWant(),next,{thr:true}).thr;'));
+  // Armed, a change is kept and goes in at the landing, never dropped.
+  for (const fn of ['bfSetRates', 'bfSetThrottle']) assert.ok(extract(html, fn).includes('if(coreArmed()){bfPend('), fn + ' keeps an armed change');
+  // ... once the quad is down and upright (a load respawns it where it is).
+  assert.ok(extract(html, 'bfRatesWatch').includes('if(bfPendingHere()){if(!cs.airborne&&bodyUpZ(cs.quaternion)>0.5)bfApplyPending();return;}'));
+  // A change made disarmed while kept ones still wait goes in after them, in order.
+  for (const fn of ['bfSetRates', 'bfSetThrottle']) assert.ok(extract(html, fn).includes('const after=bfPendAfter(op);\n  if(after!=null)return after;'), fn + ' after the kept changes');
+  assert.ok(extract(html, 'bfApplyPending').includes('thr=now[i].edit(thr||bfThrShown());'), 'a kept throttle change is made again on what flies');
   assert.ok(extract(html, 'bfApplyRates').includes('const r=importCliToBf(bfRatesText(),{rates:true,quiet:true});'));
   // Betaflight is configured only through bfLoadDiff (and the core's own boot).
   assert.equal(html.split('core.loadDiff(').length - 1, 1, 'bfLoadDiff only');
   assert.ok(extract(html, 'bfLoadDiff').includes('const r=core.loadDiff(text);'));
   assert.ok(!/\.sim\.edit\(|bfCore\.loadDiff\(|\.configure\(/.test(html), 'no other configure');
   // bfWantDiff (what selectCore and the watch compare against) is the same composition.
-  assert.ok(extract(html, 'bfWantDiff').includes('bfCompose(b.cliText,bfRatesText(),b.ratesLast).text'));
+  assert.ok(extract(html, 'bfWantDiff').includes('bfCompose(b.cliText,bfRatesText(),b.ratesLast,bfThrLinesWant(),b.thrLast).text'));
   const imp = extract(html, 'importCliToBf');
-  assert.ok(imp.includes('const want=rates?bfCompose(b.cliText,text,ratesLast):bfCompose(text,bfRatesText(),false);'));
+  assert.ok(imp.includes('const want=rates?bfCompose(b.cliText,text,ratesLast,thrText,thrLast):bfCompose(text,bfRatesText(),false,thrText,false);'));
+  assert.ok(imp.includes("const own=rates?['rates','thr'].filter(k=>want.at[k]):['paste'];") && imp.indexOf('if(!own.length){') < imp.indexOf('r=bfLoadDiff('), 'nothing of Tune\'s left to load: no reboot');
   assert.ok(imp.includes("r=bfLoadDiff(want.text,rates?(o.label||'rates'):'CLI import',{quiet:!!o.quiet});"));
   // Read back and checked against what the lines set, when they are the last word.
-  assert.ok(imp.includes('const back=bfReadRates(b);') && imp.includes('if(last&&!bfRatesSame(back,asked)){'));
-  assert.ok(extract(html, 'bfReadRates').includes('bfCore.sim.get(BF_RATE_KEYS.slice())'));
+  assert.ok(imp.includes('const back=bfReadRates(b);') && imp.includes('if(want.at.rates&&last&&!bfRatesSame(back,asked)){'));
+  assert.ok(extract(html, 'bfReadRates').includes('bfCore.sim.get([...BF_RATE_KEYS,...BF_THR_KEYS])'));
+  assert.ok(imp.includes('if((!b.cliText||thrLast)&&thrAsked&&!bfThrSame(b.thrBack,thrAsked)){'), 'Tune\'s throttle read back too');
   // Applied on the core's takeover, on a class change, and disarmed whenever it holds something else.
   const select = html.slice(html.indexOf('function selectCore'), html.indexOf('// ---------- Input poll'));
   assert.equal(select.split('bfApplyRates();').length - 1, 2, 'a loaded core taking over, and a new one');
-  assert.ok(select.indexOf("bfApplyRates();\n      toast('BETAFLIGHT CORE — '+c.quad.toUpperCase());") > 0);
+  assert.ok(select.indexOf("bfApplyRates();\n      // The last toast of the takeover") > 0, 'the takeover\'s toast comes last, after the rates');
+  assert.ok(select.includes("toast(jsArmed?BF_TOOK_OVER_TOAST:bfArmHeld===type?'BETAFLIGHT READY — ARM AGAIN':'BETAFLIGHT CORE — '+c.quad.toUpperCase());"));
   assert.ok(extract(html, 'bfWorldWatch').includes('bfInputWatch();\n  if(coreArmed())return;\n  bfRatesWatch();'));
   // Nothing saved: the default by input; said each time it is another, after any other toast.
   assert.ok(extract(html, 'bfRatesWant').includes('bfRatesPreset(bfRatesDefaultId(bfInputKind()))'));

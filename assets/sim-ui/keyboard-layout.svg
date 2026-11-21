@@ -13,6 +13,9 @@
   <rect class="k" x="126" y="60" width="44" height="44" rx="7"/><text class="c" x="148" y="88">D</text>
   <text class="l" x="30" y="128">W / S</text><text class="d" x="78" y="128">throttle up / down</text>
   <text class="l" x="30" y="148">A / D</text><text class="d" x="78" y="148">yaw left / right</text>
+  <!-- a new pack -->
+  <rect class="k" x="200" y="10" width="44" height="44" rx="7"/><text class="c" x="222" y="38">P</text>
+  <text class="d" x="252" y="37">new pack</text>
   <!-- pitch and roll -->
   <rect class="k" x="398" y="10" width="44" height="44" rx="7"/><text class="c" x="420" y="38">&#8593;</text>
   <rect class="k" x="350" y="60" width="44" height="44" rx="7"/><text class="c" x="372" y="88">&#8592;</text>

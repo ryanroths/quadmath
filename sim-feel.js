@@ -147,13 +147,15 @@ export const RATE_PRESETS = {
     pitch: { rcRate: 1.30, srate: 0.80, expo: 0.30 },
     yaw:   { rcRate: 1.20, srate: 0.75, expo: 0.35 },
   },
-  // Ryan / RyFly Actual: center 40, max 740/740/700, expo 0.56 (stored = CLI for ACTUAL).
+  // Ryan / RyFly Actual: centre 20, max 740/740/700, expo 0.56 (stored = CLI
+  // for ACTUAL): the owner's Air65 and Fractal75 diffs' rateprofile 0
+  // (rc_rate 2), as the bf core's RyFly (stock) preset.
   ryanActual: {
     label: 'Ryan Actual',
     type: 'ACTUAL',
-    roll:  { rcRate: 4, srate: 74, expo: 0.56 },
-    pitch: { rcRate: 4, srate: 74, expo: 0.56 },
-    yaw:   { rcRate: 4, srate: 70, expo: 0.56 },
+    roll:  { rcRate: 2, srate: 74, expo: 0.56 },
+    pitch: { rcRate: 2, srate: 74, expo: 0.56 },
+    yaw:   { rcRate: 2, srate: 70, expo: 0.56 },
   },
 };
 
@@ -286,7 +288,14 @@ export function wantsEasyTurtle(info) {
 export const FIRST_FLIGHT_KEY = 'quadmathSimFirstFlight';
 export const FIRST_FLIGHT_TEXT = 'Throttle up to fly · Full stick to flip back over · Esc for menu';
 export const FIRST_FLIGHT_KEYS_IMG = 'assets/sim-ui/keyboard-layout.svg';
-export const FIRST_FLIGHT_KEYS_ALT = 'Keyboard: W and S throttle, A and D yaw, up and down arrows pitch, left and right arrows roll, Space arm or disarm, R respawn, Esc menu.';
+export const FIRST_FLIGHT_KEYS_ALT = 'Keyboard: W and S throttle, A and D yaw, up and down arrows pitch, left and right arrows roll, Space arm or disarm, R respawn, P new pack, Esc menu.';
+// The card's second line: a new pack when the battery runs low (sim.html
+// newPack), as the input that flies gets one.
+export const FIRST_FLIGHT_PACK_TEXT = Object.freeze({
+  keyboard: 'Battery low? P = new pack',
+  touch: 'Battery low? Tap NEW PACK',
+  controller: 'Battery low? P, or MENU then New pack',
+});
 export const FIRST_FLIGHT_KEYS_AFTER_S = 3;
 export const FIRST_FLIGHT_MIN_S = 2.5;
 const FIRST_FLIGHT_STICK = 0.2;
@@ -692,6 +701,7 @@ export function createFeel(ctx) {
   const hudBatt = document.getElementById('hudBatt');
   const hudMode = document.getElementById('hudMode');
   const hudArm = document.getElementById('hudArm');
+  const hudQuad = document.getElementById('hudQuad');
 
   function setHudVisible(v) {
     hudVisible = !!v;
@@ -718,6 +728,8 @@ export function createFeel(ctx) {
     if (!hudEl || !hudVisible) return;
     // The sticks themselves are the stick overlay's (createStickOverlay).
     const st = s.stick || { r: 0, p: 0, y: 0, t: 0 };
+    // The quad that flies (sim.html flyingQuadName): AIR65, FRACTAL75, 85 CLASSIC.
+    if (hudQuad && s.quad != null && hudQuad.textContent !== s.quad) hudQuad.textContent = s.quad;
     if (hudThr) {
       if (s.thrText) hudThr.textContent = s.thrText;
       else hudThr.textContent = 'THR ' + ((st.t * 100) | 0) + '%';

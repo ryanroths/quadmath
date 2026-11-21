@@ -79,9 +79,14 @@ export const RATE_SLIDER_RANGES = Object.freeze({
     srate: Object.freeze({ min: 0, max: 0.95, step: 0.01 }),
     expo: Object.freeze({ min: 0, max: 1, step: 0.01 }),
   }),
+  // Betaflight's own limits for Actual (CLI rc_rate 1..200, srate 0..200,
+  // expo 0..100): centre 10..2000 °/s, max 0..2000 °/s. The CLI takes up to
+  // 255, but Betaflight puts anything over 200 back to 200 when it saves and
+  // boots (controlrate_profile.c ratesSettingLimits, config.c
+  // validateAndFixRatesSettings), so 200 is the last value that flies.
   ACTUAL: Object.freeze({
-    rcRate: Object.freeze({ min: 1, max: 25, step: 0.1 }),
-    srate: Object.freeze({ min: 5, max: 200, step: 0.5 }),
+    rcRate: Object.freeze({ min: 1, max: 200, step: 0.1 }),
+    srate: Object.freeze({ min: 0, max: 200, step: 0.5 }),
     expo: Object.freeze({ min: 0, max: 1, step: 0.01 }),
   }),
   KISS: Object.freeze({
@@ -338,13 +343,119 @@ export function bfRatesPresetOf(state) {
   return Object.keys(BF_RATE_PRESETS).find((id) => bfRatesSame(bfRatesPreset(id), state)) || '';
 }
 // Tune's bf sliders, in what they show: the centre and the max in °/s (CLI x
-// 10, so a step is one CLI integer), expo 0 to 1. Inside RATE_SLIDER_RANGES
-// ACTUAL, so a rates link of them decodes.
+// 10, so a step is one CLI integer), expo 0 to 1. Betaflight's own limits for
+// Actual (RATE_SLIDER_RANGES ACTUAL, which a rates link decodes inside): a
+// pilot flying yaw 300 / 800 / 0 sets it here. Each has a box beside it for
+// a typed number (sim.html bfFieldValue: rounded to the step, held inside
+// these). Betaflight caps every setpoint at rate_limit (1998 °/s by default,
+// SETPOINT_LIMIT), so a max over 1998 flies 1998 and the readout says so.
 export const BF_RATE_SLIDERS = Object.freeze({
-  rcRate: Object.freeze({ label: 'Centre sensitivity', min: 10, max: 250, step: 10, scale: 10 }),
-  srate: Object.freeze({ label: 'Max rate', min: 100, max: 1800, step: 10, scale: 10 }),
+  rcRate: Object.freeze({ label: 'Centre sensitivity', min: 10, max: 2000, step: 10, scale: 10 }),
+  srate: Object.freeze({ label: 'Max rate', min: 0, max: 2000, step: 10, scale: 10 }),
   expo: Object.freeze({ label: 'Expo', min: 0, max: 1, step: 0.01, scale: 1 }),
 });
+// A typed or dragged value for a bf slider field: rounded to the slider's
+// step and held inside its range (expo to two places); null for no number.
+export function bfFieldValue(field, v) {
+  const s = BF_RATE_SLIDERS[field];
+  const n = Number(v);
+  if (!s || v === '' || v == null || !Number.isFinite(n)) return null;
+  const w = constrain(Math.round(n / s.step) * s.step, s.min, s.max);
+  return field === 'expo' ? Math.round(w * 100) / 100 : Math.round(w);
+}
+
+// ---- Throttle mid and expo on the bf core (sim.html Tune: Rates) ----
+// Betaflight's thr_mid and thr_expo (in the rate profile, CLI 0..100), shown
+// as the Configurator shows them, 0.00 to 1.00. They go to Betaflight with
+// Tune's rate lines, as set lines through IMPORT CLI's path (sim.html
+// bfTuneLines), and are read back after. Per class: a class flies its
+// config's own (the Fractal75 diff's 65 and 35; the Air65 diff sets none, so
+// Betaflight's 50 and 0) until the pilot sets that class's own, saved in this
+// browser (BF_THR_KEY). thr_mid stops at 99: Betaflight's throttle lookup
+// (rc.c initRcProcessing) divides by 100 - thr_mid, and at 100 the wasm traps
+// on that divide by zero (sim-core's configure throws; an ARM flight
+// controller's divide gives 0 and flies on).
+export const BF_THR_KEYS = Object.freeze(['thr_mid', 'thr_expo']);
+export const BF_THR_KEY = 'quadmathSimBfThrottle';
+// Betaflight's defaults (controlrate_profile.c), for a config that sets none.
+export const BF_THR_DEFAULT = Object.freeze({ mid: 50, expo: 0 });
+export const BF_THR_SLIDERS = Object.freeze({
+  mid: Object.freeze({ label: 'Throttle mid', key: 'thr_mid', min: 0, max: 99, step: 1 }),
+  expo: Object.freeze({ label: 'Throttle expo', key: 'thr_expo', min: 0, max: 100, step: 1 }),
+});
+function thrInt(field, v) {
+  const s = BF_THR_SLIDERS[field];
+  if (v === '' || v == null) return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= s.min && n <= s.max ? n : null;
+}
+// { mid, expo } as CLI integers, or null for one out of range.
+export function bfThr(mid, expo) {
+  const m = thrInt('mid', mid), e = thrInt('expo', expo);
+  return m == null || e == null ? null : { mid: m, expo: e };
+}
+// From Betaflight's get or a text's set lines ({ thr_mid, thr_expo }, as
+// strings): both there and in range, or null.
+export function bfThrFromSets(sets) {
+  return sets ? bfThr(sets.thr_mid, sets.thr_expo) : null;
+}
+// A class config's own throttle (its set lines): Betaflight's default for one
+// it sets none of.
+export function bfThrDefault(sets) {
+  const pick = (f) => {
+    const n = thrInt(f, sets && sets[BF_THR_SLIDERS[f].key]);
+    return n == null ? BF_THR_DEFAULT[f] : n;
+  };
+  return { mid: pick('mid'), expo: pick('expo') };
+}
+export function bfThrLines(thr) {
+  const t = thr && bfThr(thr.mid, thr.expo);
+  return t ? `set thr_mid = ${t.mid}\nset thr_expo = ${t.expo}` : null;
+}
+export function bfThrSame(a, b) {
+  return !!(a && b && a.mid === b.mid && a.expo === b.expo);
+}
+// As the Configurator shows them: 0.65.
+export function bfThrText(v) {
+  return Number.isFinite(v) ? (v / 100).toFixed(2) : '';
+}
+// A typed value (0.00 to 1.00) as a CLI integer inside the field's range, or
+// null for no number.
+export function bfThrFieldValue(field, typed) {
+  const s = BF_THR_SLIDERS[field];
+  const n = Number(typed);
+  if (!s || typed === '' || typed == null || !Number.isFinite(n)) return null;
+  return constrain(Math.round(n * 100), s.min, s.max);
+}
+// The pilot's throttle per class ({ whoop75: { mid, expo }, ... }); {} for
+// none saved or a saved value that does not decode.
+export function loadBfThrottle(storage) {
+  try {
+    const st = storage || globalThis.localStorage;
+    const raw = st && st.getItem(BF_THR_KEY);
+    if (!raw) return {};
+    const o = JSON.parse(raw);
+    if (!o || o.v !== 1 || !o.classes || typeof o.classes !== 'object') return {};
+    const out = {};
+    for (const [k, v] of Object.entries(o.classes)) {
+      const t = Array.isArray(v) ? bfThr(v[0], v[1]) : null;
+      if (t && /^whoop\d+$/.test(k)) out[k] = t;
+    }
+    return out;
+  } catch (e) { return {}; }
+}
+export function saveBfThrottle(map, storage) {
+  const classes = {};
+  for (const [k, t] of Object.entries(map || {})) {
+    const c = t && bfThr(t.mid, t.expo);
+    if (c && /^whoop\d+$/.test(k)) classes[k] = [c.mid, c.expo];
+  }
+  try {
+    const st = storage || globalThis.localStorage;
+    st.setItem(BF_THR_KEY, JSON.stringify({ v: 1, classes }));
+    return true;
+  } catch (e) { return false; }
+}
 // Rates as Actual, for the sliders: as they are when Actual, otherwise
 // converted (convertAxisFamily: the centre and the max kept, the curve
 // between them Actual's) to CLI integers. exact: false for a conversion.
