@@ -114,7 +114,9 @@ test('the page: no name goes into markup as written', () => {
   // line in the page, the first-run prompt in sim-feel.js, which is handed the
   // name as written (escaped twice it would show the pilot "&lt;").
   assert.match(html, /el\.innerHTML='<b>'\+gpNameHtml\(\)\+'<\/b><br>'\+/, 'the radio line');
-  assert.match(html, /function gpNameHtml\(\)\{return escapeHtml\(gpName\.slice\(0,40\)\);\}/);
+  // Escaped once, from the name as the page shows it (an EdgeTX radio with
+  // no product name: "EdgeTX radio", sim-touch.js padDisplayName).
+  assert.match(html, /function gpNameHtml\(\)\{return escapeHtml\(padDisplayName\(gpName\)\.slice\(0,40\)\);\}/);
   const handed = [...html.matchAll(/\bfeel\.\w+\(\{[^}]*\bgpName\b[^}]*\}/g)].map((m) => m[0]);
   assert.equal(handed.length, 3, 'the three places the prompt is given a controller name');
   for (const call of handed) assert.doesNotMatch(call, /gpName\s*:/, 'the name as written: ' + call);
