@@ -93,8 +93,12 @@ test('the dots: Mode 2, inside their boxes, whatever the sticks say', () => {
 
 const overlaps = (a, b, m = 0) => a.left < b.right + m && a.right > b.left - m && a.top < b.bottom + m && a.bottom > b.top - m;
 const boxOf = (p, vh) => ({ left: p.left, right: p.left + p.w, top: vh - p.bottom - p.h, bottom: vh - p.bottom });
-// The touch sticks as sim.html lays them out (#touchLayer .vstick).
-function touchSticks(vw, vh, size, insetX = 18, insetY = vh <= 430 ? 10 : 28) {
+// The page's footer height under touch, about: four 14 px lines on a phone's
+// portrait width, two on its landscape width, one on a wide screen.
+const footerOf = (vw) => (vw < 560 ? 57 : vw < 900 ? 29 : 15);
+// The touch sticks as sim.html lays them out (#touchLayer .vstick): 12 px
+// (--stick-inset-y) above the footer.
+function touchSticks(vw, vh, size, insetX = 18, insetY = footerOf(vw) + 12) {
   return [
     { left: insetX, right: insetX + size, top: vh - insetY - size, bottom: vh - insetY },
     { left: vw - insetX - size, right: vw - insetX, top: vh - insetY - size, bottom: vh - insetY },
@@ -152,6 +156,38 @@ test('placement: above a three-line throttle readout, and clear of the key legen
   const slid = stickOverlayPlacement({ vw: 683, vh: 720, box: STICK_BOX_PX, avoid: hud(683, 720, 108) });
   assert.equal(slid.bottom, STICK_OVERLAY_BOTTOM_PX);
   assert.equal(slid.left, 290 + STICK_CLEAR_PX);
+});
+
+test('placement: above #osdBC wherever it sits; under touch that is on the footer', () => {
+  // #osdBC as sim.html sets it under touch: 3 px above the footer, 54 px tall.
+  const readoutAt = (vw, vh) => {
+    const bottom = footerOf(vw) + 3;
+    return { left: vw / 2 - 74, right: vw / 2 + 74, top: vh - bottom - 54, bottom: vh - bottom };
+  };
+  // At 18 px up, where STICK_OVERLAY_BOTTOM_PX already clears it: nothing moves.
+  const at18 = { left: 566, right: 714, top: 720 - 72, bottom: 720 - 18 };
+  assert.deepEqual(stickOverlayPlacement({ vw: 1280, vh: 720, box: STICK_BOX_PX, readout: at18 }), stickOverlayPlacement({ vw: 1280, vh: 720, box: STICK_BOX_PX }));
+  // A landscape phone, two footer lines: the line rises with #osdBC, centred between the sticks.
+  const r = readoutAt(812, 375);
+  const p = stickOverlayPlacement({ vw: 812, vh: 375, box: STICK_BOX_PHONE_PX, sticks: touchSticks(812, 375, 112), readout: r });
+  assert.equal(p.bottom, STICK_OVERLAY_BOTTOM_PX + (footerOf(812) + 3 - 18));
+  assert.equal(p.left, Math.round((812 - p.w) / 2));
+  // No readout (none laid out yet), or an empty box: the old line.
+  assert.equal(stickOverlayPlacement({ vw: 812, vh: 375, box: STICK_BOX_PHONE_PX, sticks: touchSticks(812, 375, 112), readout: null }).bottom, STICK_OVERLAY_BOTTOM_PX);
+  assert.equal(stickOverlayPlacement({ vw: 812, vh: 375, box: STICK_BOX_PHONE_PX, readout: { left: 0, right: 0, top: 0, bottom: 0 } }).bottom, STICK_OVERLAY_BOTTOM_PX);
+  // Every stick size on phones and tablets both ways: clear of the sticks and of #osdBC, and on screen.
+  for (const [vw, vh] of [[375, 812], [812, 375], [667, 375], [320, 568], [390, 844], [844, 390], [932, 430], [768, 1024], [1024, 768]]) {
+    const ro = readoutAt(vw, vh);
+    for (let size = 64; size <= 180; size += 4) {
+      const s = touchSticks(vw, vh, size);
+      for (const box of [STICK_BOX_PX, STICK_BOX_PHONE_PX]) {
+        const o = boxOf(stickOverlayPlacement({ vw, vh, box, sticks: s, readout: ro }), vh);
+        for (const b of s) assert.equal(overlaps(o, b), false, `${vw}x${vh} size ${size} box ${box}: over a stick ${JSON.stringify({ o, b })}`);
+        assert.equal(overlaps(o, ro), false, `${vw}x${vh} size ${size} box ${box}: over #osdBC ${JSON.stringify({ o, ro })}`);
+        assert.ok(o.top >= 0, `${vw}x${vh} size ${size}: on screen`);
+      }
+    }
+  }
 });
 
 // A canvas stand-in: its 2D calls counted, its class list and style kept.
@@ -225,11 +261,21 @@ test('sim.html: the overlay reads the merged stick in the frame loop, and hides 
   assert.match(sync, /const shown=want&&!covered&&/);
   assert.match(extract('loop'), /\n\s+syncStickOverlay\(\);\r?\n/);
   assert.match(html, /core\.input\(held===stick\.aux\?stick:/, 'the core flies the same object');
-  // Placed only on a resize and a touch-stick change.
-  assert.match(html, /addEventListener\('resize',\(\)=>placeStickOverlay\(\)\);/, 'on a resize');
-  assert.match(html, /new ResizeObserver\(\(\)=>placeStickOverlay\(\)\);\r?\n\s+for\(const id of \['legend','feelHud','hudArmSlot'\]\)/, 'when a card it avoids, or the arm hint\'s slot, changes size');
-  assert.match(html, /touchCtl=createTouchControls\(\{[\s\S]{0,400}?\nsyncTouchSettingsUI\(\);\r?\n\/\/[^\n]*\r?\nplaceStickOverlay\(\);/, 'at boot, once the touch sticks exist');
+  // Placed only on a resize and a touch-stick change, the footer's height
+  // (which the touch sticks stand on) measured first.
+  assert.match(html, /addEventListener\('resize',\(\)=>\{measureFooter\(\);placeStickOverlay\(\);\}\);/, 'on a resize');
+  assert.match(html, /new ResizeObserver\(\(\)=>\{measureFooter\(\);placeStickOverlay\(\);\}\);\r?\n\s+for\(const id of \['legend','feelHud','hudArmSlot','osdBC'\]\)[^\n]*\r?\n\s+if\(footerEl\)ro\.observe\(footerEl\);/,
+    'when a card it avoids, the arm hint\'s slot, #osdBC or the footer changes size');
+  assert.match(html, /touchCtl=createTouchControls\(\{[\s\S]{0,400}?\nsyncTouchSettingsUI\(\);\r?\n(\/\/[^\n]*\r?\n)+measureFooter\(\);\r?\nplaceStickOverlay\(\);/, 'at boot, once the touch sticks exist');
   assert.match(extract('placeStickOverlay'), /getElementById\('legend'\)[\s\S]*getElementById\('feelHud'\)/);
+  assert.match(extract('placeStickOverlay'), /const readout=touch\?box\(document\.getElementById\('osdBC'\)\):null;[\s\S]*stickOverlay\.place\(\{[^}]*readout/, 'above #osdBC wherever it sits, under touch');
+  assert.match(extract('measureFooter'), /setProperty\('--footer-h',h\+'px'\)/);
+  // Under touch the sticks and #osdBC stand on the footer (--hud-floor), and
+  // while flying only its links take a touch.
+  assert.match(html, /:root\{--hud-floor:max\(var\(--footer-h, 29px\), env\(safe-area-inset-bottom, 0px\)\)\}/);
+  assert.match(html, /#touchLayer \.vstick\{position:absolute;bottom:calc\(var\(--hud-floor\) \+ var\(--stick-inset-y\)\);/);
+  assert.match(html, /body\.touch-on #osdBC\{bottom:calc\(var\(--hud-floor\) \+ 3px\)\}/);
+  assert.match(html, /body\.touch-on:not\(\.menu-open\) footer\{pointer-events:none\}\r?\n\s*body\.touch-on:not\(\.menu-open\) footer a\{pointer-events:auto\}/);
   assert.match(extract('enableTouchLayer'), /placeStickOverlay\(\);/);
   assert.match(extract('applyTouchFromUI'), /placeStickOverlay\(\);/);
   // The old #feelHud pads are gone (one stick display).
@@ -825,9 +871,11 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         assert.ok(r.o.stick.r > 0.3 && r.o.stick.p > 0.3, 'roll right, pitch forward ' + JSON.stringify(r.o.stick));
         await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
         // A thumb on the left stick, up: throttle (it holds where it is left).
+        // It moves by the thumb's travel from the bottom (72 px of a 112 px
+        // stick), not to where the thumb landed.
         await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: lc.x, y: lc.y, id: 2 }] });
         for (let i = 1; i <= 6; i++) {
-          await send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: lc.x, y: lc.y - i * 8, id: 2 }] });
+          await send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: lc.x, y: lc.y - i * 12, id: 2 }] });
           await sleep(30);
         }
         await js(`await S.wait(200); return 1;`);
@@ -850,10 +898,142 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         await hintClear(js, r, 'portrait');
       });
     });
+
+    // A first-time pilot's thumb: on the left stick's knob, where it rests,
+    // then up. The footer (one to four lines by width, fixed at the bottom,
+    // z-index 45) once sat over the knob and the bottom of the stick, so the
+    // touch went to the footer: no throttle, no arm. And a first touch set the
+    // throttle where it landed (the stick's centre: 50 %, over the Air65's
+    // 37.5 % hover); now it moves by the thumb's travel from where it is.
+    // Then a crash, and the same gesture arms again. Each screen a fresh page,
+    // and the layout checked at the other screens of its kind (a tablet too).
+    const HOVER = 0.375; // vendor/sim-core/airframes/air65.json
+    for (const [w, h, more] of [[375, 812, [[320, 568], [390, 844]]], [812, 375, [[932, 430], [844, 390]]], [667, 375, []], [1024, 768, [[768, 1024]]]]) {
+      await t.test(`touch ${w}x${h}: the left knob and the stick's bottom take the thumb, clear of the footer; a first touch keeps the throttle; thumb on the knob and up arms, and again after a crash`, async () => {
+        await pass(sim('map=rig'), { phone: [w, h], storage: { quadmathSimInputChoice: 'touch' } }, async ({ js, cdp: send }) => {
+          const touch = (type, x, y) => send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 7 }] });
+          const slide = async (x, y, dy, n = 10) => {
+            for (let i = 1; i <= n; i++) { await touch('touchMove', x, y + (i * dy) / n); await sleep(30); }
+          };
+          const thr = async () => (await js(`await S.frame(); await S.frame(); return JSON.stringify(S.state().stick.t);`));
+          const on = await js(`return JSON.stringify(await S.until(() => document.body.classList.contains('touch-on') && !document.body.classList.contains('menu-open'), 8000));`);
+          assert.equal(on, true, 'flying on touch sticks');
+          const g = await footerClear(js, `${w}x${h}`);
+          // A first touch anywhere on the throttle stick leaves the throttle
+          // at the bottom: its centre, its top, its bottom.
+          const o = { x: (g.stick.left + g.stick.right) / 2, y: (g.stick.top + g.stick.bottom) / 2 };
+          for (const [name, y] of [['centre', o.y], ['top', g.stick.top + 6], ['bottom', g.stick.bottom - 6]]) {
+            await touch('touchStart', o.x, y);
+            const t0 = await thr();
+            await touch('touchEnd');
+            assert.ok(t0 <= HOVER + 0.03, `a first touch at the stick's ${name}: throttle ${t0}, not over hover (${HOVER})`);
+            assert.ok(t0 <= 0.05, `a first touch at the stick's ${name} leaves the throttle at the bottom (${t0})`);
+          }
+          // 1 s of the throttle at the bottom on the page's own hold count
+          // (Easy mode's auto-arm, sim-3d.js stepEasyArm), with the bf core in:
+          // an arm asked before it loads is refused and the hold starts over.
+          const held = async (what) => {
+            const r = await js(`const ok = await S.until(() => S.s.core() === 'bf' && S.s.easy().arm && S.s.easy().arm.lowS >= 1, 30000);
+              return JSON.stringify({ ok, core: S.s.core(), easy: S.s.easy().mode, arm: S.s.easy().arm, st: S.state() });`);
+            assert.ok(r.ok, `${what}: the bf core in, the throttle held down 1 s ` + JSON.stringify(r));
+            assert.equal(r.st.armed, false, `${what}: not armed before the thumb`);
+          };
+          // The thumb on the knob, then 50 px up.
+          const armByThumb = async (what) => {
+            await touch('touchStart', g.knob.x, g.knob.y);
+            await slide(g.knob.x, g.knob.y, -50);
+            const r = await js(`const ok = await S.until(() => S.s.coreState().armed, 10000); return JSON.stringify({ ok, st: S.state() });`);
+            assert.ok(r.ok, `${what}: thumb on the knob and up: armed on the bf core ` + JSON.stringify(r.st));
+            assert.ok(Math.abs(r.st.stick.t - 50 / (g.stick.bottom - g.stick.top)) < 0.06, `${what}: the throttle moved by the thumb's travel ` + JSON.stringify(r.st.stick));
+            await touch('touchEnd');
+          };
+          // The arm hint says that gesture.
+          const hint = () => js(`await S.frame(); const e = document.getElementById('hudArmHint'); return JSON.stringify({ shown: e.classList.contains('show'), text: e.textContent });`);
+          let hh = await hint();
+          assert.deepEqual(hh, { shown: true, text: 'Thumb on the left stick, slide up to fly' }, 'the hint at rest');
+          await held('first arm');
+          await armByThumb('first arm');
+          // A crash: dropped onto the floor at speed (as test_sim_easy_mode),
+          // the throttle under hover first (a thumb on the knob, down 28 px:
+          // about 20 %), or a quad left at 45 % flies on and never comes to rest.
+          const k0 = await js(`const b = document.querySelector('#touchLayer .vstick.left i').getBoundingClientRect(); return JSON.stringify({ x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2 });`);
+          await touch('touchStart', k0.x, k0.y);
+          await slide(k0.x, k0.y, 28, 4);
+          await touch('touchEnd');
+          const t20 = await thr();
+          assert.ok(t20 > 0.12 && t20 < HOVER, 'the throttle under hover, not at the bottom ' + t20);
+          let r = await js(`const c = S.s.coreState();
+            S.s.bfCore().teleport({ x: c.position.x, y: c.position.y, z: 2.5 }, { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: 0, z: -25 });
+            const off = await S.until(() => !S.s.coreState().armed, 8000);
+            return JSON.stringify({ off, reason: S.s.easy().disarmReason, st: S.state() });`);
+          assert.equal(r.off, true, 'disarmed by the crash ' + JSON.stringify(r));
+          hh = await hint();
+          assert.deepEqual(hh, { shown: true, text: 'Left stick down 1 s, then slide up to fly' }, 'the hint with the throttle left up');
+          // Re-arm, a thumb's way: on the stick, slide down past the bottom,
+          // lift; the hold; then the knob and up, as the first time.
+          const k = await js(`const b = document.querySelector('#touchLayer .vstick.left i').getBoundingClientRect(); return JSON.stringify({ x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2 });`);
+          await touch('touchStart', k.x, k.y);
+          await slide(k.x, k.y, 90);
+          await touch('touchEnd');
+          assert.ok((await thr()) <= 0.05, 'the throttle down at the bottom');
+          await held('after the crash');
+          await armByThumb('after the crash');
+          // The same layout at the other screens of its kind.
+          for (const [w2, h2] of more) {
+            await send('Emulation.setDeviceMetricsOverride', { width: w2, height: h2, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: w2 > h2 ? 'landscapePrimary' : 'portraitPrimary', angle: w2 > h2 ? 90 : 0 } });
+            await js(`await S.wait(400); await S.frame(); return 1;`);
+            await footerClear(js, `${w2}x${h2}`);
+          }
+        });
+      });
+    }
   } finally {
     server.close();
   }
 });
+
+// Flying on touch, at this screen: the left stick's knob and the bottom of the
+// stick (its last 5 %, where the throttle-down band lay when a touch set the
+// throttle where it landed) are the stick's to the hit test, and all of the
+// stick, the knob, #osdBC and the stick overlay sit above the footer, which
+// stays on screen with its links tappable (the rest of it lets a touch
+// through). Returns the knob's centre.
+async function footerClear(js, label) {
+  const g = await js(`await S.frame();
+    const R = (e) => { const b = e.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom }; };
+    const mid = (b) => ({ x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2 });
+    const what = (p) => { const e = document.elementFromPoint(p.x, p.y); return e ? e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\\s+/).join('.') : '') : null; };
+    const inside = (p, sel) => { const e = document.elementFromPoint(p.x, p.y); return !!(e && e.closest && e.closest(sel)); };
+    const L = document.querySelector('#touchLayer .vstick.left'), stick = R(L), knobBox = R(L.querySelector('i'));
+    const o = mid(stick), rad = (stick.right - stick.left) / 2, knob = mid(knobBox);
+    const tAt = (p) => Math.max(0, Math.min(1, ((o.y - p.y) / rad + 1) / 2));
+    const band = [[0, 0.92], [0, 0.98], [-0.2, 0.92], [0.2, 0.92]].map(([dx, dy]) => ({ x: o.x + dx * rad, y: o.y + dy * rad }));
+    const f = document.querySelector('footer'), fs = getComputedStyle(f);
+    const logo = R(f.querySelector('.sf-logo')), lic = R(f.querySelector('.sf-license')), credit = R(f.querySelector('.sf-credit'));
+    return JSON.stringify({ vw: innerWidth, vh: innerHeight, stick, knob, knobBox, rad,
+      knobHit: { on: inside(knob, '#touchLayer .vstick.left'), what: what(knob), t: tAt(knob) },
+      band: band.map((p) => ({ p, t: tAt(p), on: inside(p, '#touchLayer .vstick.left'), what: what(p) })),
+      footer: R(f), shown: fs.display !== 'none' && fs.visibility === 'visible' && +fs.opacity === 1, lic, logo,
+      logoHit: inside(mid(logo), 'a.sf-logo'), licHit: inside(mid(lic), 'a.sf-license'), creditHit: what(mid(credit)), creditIn: inside(mid(credit), 'footer'),
+      osdBC: R(document.getElementById('osdBC')), overlay: S.seen().rect, sticks: [...document.querySelectorAll('#touchLayer .vstick')].map(R) });`);
+  console.log(`touch ${label}: footer ${JSON.stringify(g.footer)}, left stick ${JSON.stringify(g.stick)}, knob ${JSON.stringify(g.knobHit)}, #osdBC ${JSON.stringify(g.osdBC)}, overlay ${JSON.stringify(g.overlay)}`);
+  assert.equal(g.knobHit.on, true, `${label}: the knob is the left stick's to a thumb, not ${g.knobHit.what}`);
+  for (const b of g.band) {
+    assert.ok(b.t <= 0.05, `${label}: a point in the stick's bottom 5 % ${JSON.stringify(b)}`);
+    assert.equal(b.on, true, `${label}: the stick's bottom is the left stick's to a thumb, not ${b.what} ${JSON.stringify(b.p)}`);
+  }
+  for (const s of g.sticks) assert.ok(s.bottom <= g.footer.top, `${label}: a stick above the footer ${JSON.stringify({ s, footer: g.footer })}`);
+  assert.ok(g.knobBox.bottom <= g.footer.top, `${label}: the knob above the footer ${JSON.stringify({ knob: g.knobBox, footer: g.footer })}`);
+  assert.ok(g.osdBC.bottom <= g.footer.top, `${label}: #osdBC above the footer ${JSON.stringify({ osdBC: g.osdBC, footer: g.footer })}`);
+  assert.equal(overlaps(g.overlay, g.osdBC), false, `${label}: the stick overlay clear of #osdBC ${JSON.stringify({ o: g.overlay, osdBC: g.osdBC })}`);
+  for (const s of g.sticks) assert.equal(overlaps(g.overlay, s), false, `${label}: the stick overlay clear of a stick ${JSON.stringify({ o: g.overlay, s })}`);
+  assert.equal(g.shown, true, `${label}: the footer shows`);
+  assert.ok(g.lic.top >= g.footer.top && g.lic.bottom <= g.vh && g.lic.right <= g.vw && g.lic.left >= 0, `${label}: the licence notice on screen ${JSON.stringify(g.lic)}`);
+  assert.equal(g.logoHit, true, `${label}: the footer's QuadMath link still taps`);
+  assert.equal(g.licHit, true, `${label}: the footer's licence link still taps`);
+  assert.equal(g.creditIn, false, `${label}: the rest of the footer lets a touch through, not ${g.creditHit}`);
+  return g;
+}
 
 // Under touch, the arm hint's slot is laid out (whether the hint shows or not)
 // and covers neither thumb stick nor the stick overlay, and stays on screen;
