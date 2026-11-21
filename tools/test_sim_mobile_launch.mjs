@@ -2,8 +2,8 @@
 // Fly's map chooser at 390x844 (portrait) and 844x390 (landscape). The five
 // launch buttons are on screen and on top where a thumb lands; Fly opens the
 // chooser, whose four cards (The Rig, The House, The Warehouse, The Bando) and
-// thumbnails (loaded) are on screen and on top; a tap on The House's
-// thumbnail flies The House.
+// thumbnails (loaded) are on screen and on top, none labelled Last flown (a
+// first visit); a tap on The House's thumbnail flies The House.
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -198,12 +198,15 @@ for (const size of [{ name: 'portrait 390x844', width: 390, height: 844 }, { nam
       for (let i = 0; i < 20; i++) {
         await sleep(200);
         C = JSON.parse(await evaluate(ws, `JSON.stringify({ shown: document.getElementById('menuLayer').classList.contains('show'),
-          cards: __probe('#menuLayer [data-fly-map]'), thumbs: __probe('#menuLayer [data-fly-map]', 'img'), close: __probe('#layerClose') })`));
+          cards: __probe('#menuLayer [data-fly-map]'), thumbs: __probe('#menuLayer [data-fly-map]', 'img'), close: __probe('#layerClose'),
+          tags: [...document.querySelectorAll('#menuLayer [data-fly-map] small')].map((e) => e.textContent) })`));
         if (C.shown && C.thumbs.length && C.thumbs.every((th) => th.loaded)) break;
       }
       console.log(size.name + ' chooser: ' + JSON.stringify(C));
       assert.ok(C.shown, 'a tap on Fly opens the chooser');
       assert.deepEqual(C.cards.map((c) => c.label), ['rig', 'house', 'depot', 'bando']);
+      // A first visit (a fresh profile) has flown nothing: no card says Last flown.
+      assert.deepEqual(C.tags, [], 'no Last flown label on a first visit');
       for (const th of C.thumbs) {
         assert.ok(th.loaded, `${th.label} thumbnail loaded`);
         assert.ok(th.inView, `${th.label} thumbnail wholly on screen (${JSON.stringify(th)})`);
