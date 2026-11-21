@@ -46,7 +46,7 @@ site lists both 150 and 50).
 | `maverick` | Maverick Loop | Beginner | 100 | 100 | Phase matcher, as the owner flies it: a **pull back of 120–225° climbing ≥1 m** (it need not go inverted), then a **forward pitch ≥60°** that stops it, then **back towards the entry against the nose** (velocity·nose ≤ −0.3 on average) for **≥0.3 s**: the glide back. **No twist** between the pull and the push: the roll and the yaw each turn **under 60°** across them (the owner's Maverick uses no yaw). The push and glide back **drop back under or through an object**: near one (within 2 m) for **≥25 %** of them, or back out through an authored gap. In open air it is not a Maverick. Often two segments, the pull and the push, merged (below). Back out through the authored gap it came in by (passed at most 1.5 s before, or in the maneuver): **1.25×** points. |
 | `splits` | Split-S | Beginner | 100 | 100 | Phase matcher: a **roll of 103–258°**, then a **back pitch of 69–258°** (pull), the path dropping ≥0.35 m, flying with the nose. The old terms' tolerances, so it fires where it did. |
 | `immelmann` | Immelmann | Beginner | 100 | 100 | Phase matcher, the Split-S's mirror: **back pitch 180 ± 45° climbing ≥1 m**, then a **roll of 180 ± 45°**, ending **upright**, the **heading reversed** (180 ± 45°), **out higher** than in. |
-| `cradle` | Cradle | Beginner | 150 | 150 | As the owner flies it (2026-11-20): **past a post flying forward** with it on one side (**≤2 m** out), the **nose up ≥25°**, **never over the top** and **not turning round** (**≤60°** about the vertical), then **back past it travelling backwards, against the nose** (**≥115°** off it, **≥1.5 m/s**, not upside down) **on the other side** (**≤3 m** out), within **2.5 s**, both passes beside the post (within its height). Called at the second pass, no wait. A post: a pole, column, tree or post (**≤0.5 m** across, near square, **≥1 m** tall, standing), or a chair or table leg (**≥0.31 m**, on the floor, slender); never a wall, floor or ceiling. A touch (of the post or anything), a crash, a disarm or a respawn between the passes voids it. Both passes round a post make a Cradle however high the nose comes (short of over the top); the Maverick is the open-air move. See "The Cradle" below. |
+| `cradle` | Cradle | Beginner | 150 | 150 | As the owner flies it (2026-11-20): **past a post flying forward** with it on one side (**≤2 m** out), the **nose up ≥25°**, **never over the top** and **not turning round** (**≤55°** about the vertical), then **back past it travelling backwards, against the nose** (**≥115°** off it, **≥1.5 m/s**, not upside down) **on the other side** (**≤3 m** out), within **2.5 s**, both passes beside the post (within its height). Called at the second pass, no wait. A post: a pole, column, tree or post (**≤0.5 m** across, near square, **≥1 m** tall, standing), or a chair or table leg (**≥0.31 m**, on the floor, slender); never a wall, floor or ceiling. A touch (of the post or anything), a crash, a disarm or a respawn between the passes voids it. Both passes round a post make a Cradle however high the nose comes (short of over the top); the Maverick is the open-air move. See "The Cradle" below. |
 | `dive` | Building Dive | Beginner | 100 | 100 | Climb or start high, cut, nose down, fast altitude dump, level near the ground. |
 | `prox` | Proximity | Beginner | 150 | 150 | Wall near-miss at speed. Sim-only spatial; TPW Wall Ride/Tap need a knife-edge roll or tap we do not require. |
 | `powerloop` | Powerloop | Novice | 200 | 200 | Phase matcher: **≥300° of pitch within any 3.5 s** (its own window: a loop is slower than a flip), little net roll/yaw, on a **path that loops**: it climbs **≥1.5 m** above the entry, after its top comes back down to **at most 1.5 m above the entry**, and the velocity turns **≥270°** in the vertical plane of the entry heading, the way the pitch turns. Otherwise a flip is a Flip. Loops are counted over the whole turn of pitch: **≥600° is a Double Powerloop**, then one more loop per further 360° (Triple from 960°); each loop scores the 200 points. |
@@ -427,7 +427,7 @@ backwards on the opposite side. `sim-tricks.js` `CRADLE`, `cradleStep`:
   comes up, a later pass forward is the first pass.
 - **Between.** The nose's elevation must reach **25°**; its pitch in F1's
   vertical plane never passes **90°** (over the top); and the quad **does
-  not turn round**: its net turn about the vertical never past **60°**
+  not turn round**: its net turn about the vertical never past **55°**
   either way (an orbit or a Trippy round the post turns the nose with the
   path, a Cradle does not; a roll about the nose counts sin(nose) of
   itself). Between the passes the nose's level heading is judged only
@@ -464,9 +464,10 @@ logged): first pass 0.14–1.41 m out; nose up 39–77°; 11–40° of net turn
 about the vertical on fly 3 (the dumps log positions only: their heading
 turned 7–38°), against 63–80° by the second pass for slow orbits round a
 post with the nose turning with the path 15–30° behind the radial
-(kinematic; further behind they turn less and most are Cradles, those
-34–38° behind turning 55–60°, which the old heading rule voided); 21° of
-yaw at most in the quarter second before the second pass (the dumps'
+(kinematic; further behind, from 39°, they turn 55° or less and most are
+Cradles, as with the old heading rule; at Trippy speed those 34–38° behind
+stay Trippies, the cap voiding the Cradle first: at 60° the Cradle would
+cut them short); 21° of yaw at most in the quarter second before the second pass (the dumps'
 heading; 8° on fly 3; the Trippies a nose lag
 turns into Cradles, on the js core: 57–89°); second pass 0.42–2.47 m out
 on the other side, 3.35–7.21 m/s back, 123–179° off the nose, up-Z ≥0.45;

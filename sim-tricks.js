@@ -1849,8 +1849,10 @@ export function classifyFeat(f, out) {
 // (the dumps log positions only: their heading turned 7-38), against 63-80
 // by the second pass for slow orbits round a post with the nose turning
 // with the path 15-30 behind the radial (kinematic, the debug test; further
-// behind they turn less and most are Cradles, those 34-38 behind turning
-// 55-60, which the old heading rule voided); 21 deg of yaw at most in the
+// behind, from 39, they turn 55 or less and most are Cradles, as with the
+// old heading rule; at Trippy speed those 34-38 behind stay Trippies, the
+// cap voiding the Cradle first: at 60 the Cradle would cut them short); 21
+// deg of yaw at most in the
 // quarter second before the second pass (the dumps' heading; 8 on fly 3;
 // the Trippies a nose lag makes Cradles of, on the js core: 57-89); second
 // pass 0.42-2.47 m out, 3.35-7.21 m/s back, 123-179 deg off the nose, up-Z
@@ -1859,7 +1861,7 @@ export const CRADLE = Object.freeze({
   postW: 0.5, postRatio: 0.6, postH: 1.0, legH: 0.31, legK: 3, floorM: 0.05, cellM: 0.03,
   near: 4, hyst: 0.1, turnDot: 0.7, over: 0.05,
   fwdSpd: 1.0, fwdDeg: 60, outLat: 2.0,
-  noseUp: 25, overTop: 90, yawEl: 70, yawTurn: 60, yawRecent: 45, yawWin: 0.25,
+  noseUp: 25, overTop: 90, yawEl: 70, yawTurn: 55, yawRecent: 45, yawWin: 0.25,
   backLat: 3.0, backSpd: 1.5, backDeg: 115, upZ: 0, maxS: 2.5,
   contact: 0.08, hitM: 0.06, touchS: 0.3,
 });

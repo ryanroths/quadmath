@@ -1393,7 +1393,7 @@ test('bf core, the Cradle as the owner flies it: past a post on one side, nose u
     assert.ok(g.offNose >= 125 && -g.vBack >= 4 && g.upZ >= 0.55 && g.dt < 1.2, c.name + ' ' + JSON.stringify(g));
     // The nose kept its heading: the net turn about the vertical (the roll in
     // and out included), and the yaw at the second pass.
-    assert.ok(g.yawDeg <= CRADLE.yawTurn - 20 && g.yawRecent <= CRADLE.yawRecent - 15, c.name + ' ' + JSON.stringify(g));
+    assert.ok(g.yawDeg <= CRADLE.yawTurn - 15 && g.yawRecent <= CRADLE.yawRecent - 15, c.name + ' ' + JSON.stringify(g));
   }
   // The mirror flies the other way round the other side.
   const a = await flyBf(BF_CRADLES[0].phases, BF_CRADLES[0].opts), b = await flyBf(BF_CRADLES[2].phases, BF_CRADLES[2].opts);

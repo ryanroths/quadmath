@@ -28,7 +28,7 @@ import {
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
   HIST_W, BH_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE, BARANI_HD_LO,
   CRADLE, groupBoxes, simBoxes, cradlePostList,
-} from './sim-tricks.js?v=67ab99185222';
+} from './sim-tricks.js?v=d7c9767ee9c7';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs.

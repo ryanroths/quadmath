@@ -697,12 +697,17 @@ const LOGS = [
   // Maverick: the hatch miss above), and one over the top round the pole
   // into the floor. Seq 7, 14 and 35 closed at a Cradle's second pass (the
   // record's result is the Cradle's; the segment alone scores none). Seq 41
-  // fired Roll, right after the floor (as fired; the owner's label not given).
+  // fired Roll, right after the floor (left open: below).
   // Its decimated rows predate 214bf09 (yrLost: a row's yr is its own step's
   // only).
   {
     name: 'depot cradles 3', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-cradle-3.jsonl.gz', records: 42, maneuvers: 25, fired: 4,
     NEW: { 7: null, 14: null, 35: null }, yrLost: true,
+    // The owner does not remember these (2026-11-21): seq 13 (29.0-33.1 s,
+    // a Maverick meant at 31.5 s?), seq 16 (36.2-40.4 s) and seq 29
+    // (49.8-52.5 s, Trippy attempts?), and the Roll seq 41 fired (60.8-62.9
+    // s: flown, or the tumble after the floor?).
+    OPEN: { 13: null, 16: null, 29: null, 41: 'roll' },
   },
 ];
 for (const L of LOGS) {
@@ -862,7 +867,7 @@ test('the dumps of 2026-11-17 and 18: every label that changes, and the open one
   ]);
   // What the open ones read now (not asserted as the owner's).
   const open = NEWER.flatMap((L) => Object.keys(L.OPEN || {}).map((seq) => L.name + ' seq ' + seq + ' ' + (replayed(L).get(Number(seq)).id || 'none')));
-  assert.deepEqual(open, ['bando baranis seq 9 barani']);
+  assert.deepEqual(open, ['bando baranis seq 9 barani', 'depot cradles 3 seq 13 none', 'depot cradles 3 seq 16 none', 'depot cradles 3 seq 29 none', 'depot cradles 3 seq 41 roll']);
   // Every label they fired that stays: the Trippies, Hams and Baranis.
   const kept = (L, id) => L.scored.filter((r) => r.result === id && replayed(L).get(r.seq).id === id).map((r) => r.seq);
   const [BO, BT, BH, BB, RT] = NEWER;
@@ -1235,7 +1240,7 @@ test('the owner\'s Cradle dumps: the gate, on their positions, calls each of the
     assert.ok(v.elMax >= CRADLE.noseUp + 10 && v.pMax <= CRADLE.overTop, tag + ' nose ' + v.elMax + ' / ' + v.pMax);
     // (The dumps' turn is their heading's, row to row: positions only. It
     // stands in for the turn about the vertical, known on fly 3 alone.)
-    assert.ok(v.yawDeg <= CRADLE.yawTurn - 20 && v.yawRecent <= CRADLE.yawRecent - 10, tag + ' turned ' + v.yawDeg + ' net, ' + v.yawRecent + ' at the second pass');
+    assert.ok(v.yawDeg <= CRADLE.yawTurn - 15 && v.yawRecent <= CRADLE.yawRecent - 10, tag + ' turned ' + v.yawDeg + ' net, ' + v.yawRecent + ' at the second pass');
     assert.ok(v.offNose >= CRADLE.backDeg + 15, tag + ' off the nose ' + v.offNose);
     assert.ok(-v.vBack >= CRADLE.backSpd + 1.5, tag + ' back at ' + v.vBack);
     assert.ok(v.upZ >= CRADLE.upZ + 0.5, tag + ' up-Z ' + v.upZ);
@@ -1314,7 +1319,7 @@ test('fly 3 on the gate\'s build: its cradle records replay to the owner\'s six 
   // the slow orbits that are not, 63 or more), and not turning at the pass.
   // Seq 12's 40 and seq 31's 27 are rebuilt from rows every 8 ms (to a
   // degree or so).
-  for (const v of got) assert.ok(v.yawDeg <= CRADLE.yawTurn - 15 && v.yawRecent <= CRADLE.yawRecent - 10, v.obj + ' ' + v.t1 + ' turned ' + v.yawDeg + ', ' + v.yawRecent + ' at the pass');
+  for (const v of got) assert.ok(v.yawDeg <= CRADLE.yawTurn - 12 && v.yawRecent <= CRADLE.yawRecent - 10, v.obj + ' ' + v.t1 + ' turned ' + v.yawDeg + ', ' + v.yawRecent + ' at the pass');
   // The sloppiest, seq 12 round column 700: back 2.13 m out, 123 off the nose
   // (8 over backDeg), up-Z 0.45.
   const s12 = got[2];

@@ -1093,9 +1093,11 @@ test('the Cradle\'s edges: the nose up to 88 degrees; beside a leg, not over its
 // 63-80 about the vertical (with no cap, 24 of these 48 are Cradles, the
 // rest back not against the nose or still turning), against the owner's
 // Cradles' 11-40 (the attempt-log test). Never a Cradle: the cap voids all
-// 48 turned round. Further behind they turn less (35-50: 43-60 at the
-// pass) and most are Cradles: not pinned. Those 34-38 behind (55-60) are
-// new with the cap: the old heading rule (55 off F1) voided them.
+// 48 turned round. Further behind they turn less: from 39 behind (55 or
+// less at the pass) most are Cradles, as with the old heading rule (55 off
+// F1): not pinned. At Trippy speed (5 m/s 1.9 m out, 151 deg/s) those 34-38
+// behind (55-59 at the pass) stay Trippies: the cap voids the Cradle first
+// (at 60 the Cradle would cut each Trippy short at its second pass).
 test('slow orbits round the pole, the nose up and turning with the path, are never Cradles: the cap on the turn about the vertical', () => {
   const DEG = Math.PI / 180;
   const orbit = (spd, rx, ry, lag, tilt, m) => {
@@ -1116,6 +1118,10 @@ test('slow orbits round the pole, the nose up and turning with the path, are nev
     assert.ok(r.verdicts.length === 1 && r.verdicts[0].why === 'turned round', tag + ': ' + JSON.stringify(r.verdicts));
   }
   assert.equal(n, 48);
+  for (const lag of [34, 36, 38]) for (const m of [1, -1]) {
+    const r = orbit(5, 0.6, 1.8, lag, 55, m);
+    assert.ok(r.evs.includes('trippy') && !r.evs.includes('cradle'), 'Trippy speed ' + lag + ' ' + m + ': ' + r.evs.join(',') + ' ' + JSON.stringify(r.verdicts));
+  }
 });
 
 // Back past the post with the nose pitched down through the pass (to 85
