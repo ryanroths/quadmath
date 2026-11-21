@@ -9,7 +9,7 @@ import { PRESETS, phoneLookOverrides } from '../sim-looks.js';
 import {
   TOUCH_KEY, FLIGHT_MODE_KEY, DEFAULT_TOUCH,
   normalizeTouch, loadTouch, saveTouch,
-  applyDeadzone, applyExpo, shapeAxis, mapStickAxes, pointerToStick,
+  applyDeadzone, applyExpo, shapeAxis, mapStickAxes, pointerToStick, dragStickY,
   releaseStick, throttleFromStickY,
   detectMobile, resolveAutoQuality, gpuTier, autoQualityStep, hasSavedSettings,
   loadFlightMode, saveFlightMode, defaultFlightMode, toggleAcro,
@@ -83,6 +83,92 @@ test('pointerToStick flips screen Y and clamps to the rim', () => {
   const far = pointerToStick(400, 100, o, 50);
   assert.ok(Math.abs(Math.hypot(far.x, far.y) - 1) < 1e-9);
   assert.ok(far.x > 0.99);
+});
+
+test('dragStickY: the held throttle moves by the thumb\'s travel from where it is, and turns back at the end at once', () => {
+  assert.equal(dragStickY(-1, 300, 300, 56), -1, 'a touch that has not moved moves nothing');
+  assert.ok(Math.abs(dragStickY(-1, 300, 272, 56) + 0.5) < 1e-9, 'half a radius up: a quarter of the range');
+  assert.equal(dragStickY(0.9, 300, 200, 56), 1, 'clamped at the top');
+  assert.equal(dragStickY(-0.9, 200, 300, 56), -1, 'clamped at the bottom');
+  // Past the top and back: per move from the last point, so down answers at once.
+  let y = -1, py = 300;
+  for (const to of [250, 150, 50]) { y = dragStickY(y, py, to, 56); py = to; }
+  assert.equal(y, 1);
+  assert.ok(Math.abs(dragStickY(y, py, py + 14, 56) - 0.75) < 1e-9);
+  assert.equal(dragStickY(-1, NaN, 10, 56), -1, 'no last point: no move');
+});
+
+// A #touchLayer stand-in: two pads in a landscape phone's layout, and the
+// pointer events the layer listens for.
+function fakeTouchRoot(vw = 812, vh = 375, size = 112) {
+  const on = {};
+  const pad = (left) => {
+    const knob = { style: {} };
+    return { knob, getBoundingClientRect: () => ({ left, top: vh - 41 - size, right: left + size, bottom: vh - 41, width: size, height: size }), querySelector: () => knob };
+  };
+  const pads = { L: pad(18), R: pad(vw - 18 - size) };
+  const root = {
+    hidden: true, style: { setProperty() {} }, classList: { toggle() {} }, setAttribute() {},
+    ownerDocument: { documentElement: { clientWidth: vw } },
+    addEventListener(type, fn) { on[type] = fn; },
+    querySelector(sel) {
+      const side = /data-stick="R"/.test(sel) ? 'R' : /data-stick="L"/.test(sel) ? 'L' : null;
+      if (!side) return null;
+      return / i$/.test(sel) ? pads[side].knob : pads[side];
+    },
+  };
+  const target = { closest: () => null, setPointerCapture() {} };
+  const ev = (type, id, x, y) => on[type]({ pointerId: id, clientX: x, clientY: y, target, cancelable: true, preventDefault() {} });
+  const mid = (side) => { const b = pads[side].getBoundingClientRect(); return { x: b.left + size / 2, y: b.top + size / 2, top: b.top, bottom: b.bottom }; };
+  return { root, ev, mid };
+}
+
+test('createTouchControls: a first touch on the throttle stick, wherever it lands, leaves the throttle where it is; the thumb\'s travel moves it', () => {
+  const f = fakeTouchRoot();
+  const ctl = createTouchControls({ root: f.root, settings: { mode: 2, deadzone: 0, expo: 0 } });
+  ctl.setEnabled(true);
+  const L = f.mid('L'), R = f.mid('R');
+  // Throttle at the bottom; a thumb lands on the stick's centre, its top, the knob's rest.
+  for (const y of [L.y, L.top + 2, L.bottom - 12]) {
+    f.ev('pointerdown', 1, L.x, y);
+    assert.equal(ctl.read().t, 0, `a touch at y ${y} leaves the throttle at 0`);
+    assert.equal(ctl.read().y, 0, 'on the stick\'s centre line: no yaw');
+    f.ev('pointerup', 1, L.x, y);
+  }
+  // Thumb on the knob, then up 50 px: half a stick of travel is 56 px.
+  f.ev('pointerdown', 2, L.x, L.bottom - 12);
+  for (let i = 1; i <= 10; i++) f.ev('pointermove', 2, L.x, L.bottom - 12 - i * 5);
+  assert.ok(Math.abs(ctl.read().t - 50 / 112) < 1e-9, 'up by the thumb\'s travel ' + ctl.read().t);
+  f.ev('pointerup', 2, L.x, L.bottom - 62);
+  assert.ok(Math.abs(ctl.read().t - 50 / 112) < 1e-9, 'held where it was left');
+  // A new touch high on the stick: still where it was; then down past the bottom: 0.
+  f.ev('pointerdown', 3, L.x, L.top + 4);
+  assert.ok(Math.abs(ctl.read().t - 50 / 112) < 1e-9, 'a second touch does not jump either');
+  f.ev('pointermove', 3, L.x, L.top + 300);
+  assert.equal(ctl.read().t, 0, 'down to the bottom');
+  f.ev('pointerup', 3, L.x, L.top + 300);
+  // Yaw (the throttle stick's other axis) and the right stick go where the thumb is.
+  f.ev('pointerdown', 4, L.x + 56, L.y);
+  assert.ok(Math.abs(ctl.read().y - 1) < 1e-9, 'yaw where the thumb is');
+  f.ev('pointerup', 4, L.x + 56, L.y);
+  assert.equal(ctl.read().y, 0, 'yaw springs back');
+  f.ev('pointerdown', 5, R.x, R.y - 56);
+  assert.ok(Math.abs(ctl.read().p - 1) < 1e-9, 'pitch where the thumb is');
+  f.ev('pointerup', 5, R.x, R.y - 56);
+  // Mode 1: the right stick holds the throttle and drags; the left goes where the thumb is.
+  const g = fakeTouchRoot();
+  const m1 = createTouchControls({ root: g.root, settings: { mode: 1, deadzone: 0, expo: 0 } });
+  m1.setEnabled(true);
+  const R1 = g.mid('R');
+  g.ev('pointerdown', 6, R1.x, R1.top + 2);
+  assert.equal(m1.read().t, 0, 'mode 1: no jump on the right stick');
+  // Sprung throttle (thrSpring): not held, so it goes where the thumb is.
+  const h = fakeTouchRoot();
+  const sp = createTouchControls({ root: h.root, settings: { mode: 2, thrSpring: true, deadzone: 0, expo: 0 } });
+  sp.setEnabled(true);
+  const L2 = h.mid('L');
+  h.ev('pointerdown', 7, L2.x, L2.y - 56);
+  assert.ok(Math.abs(sp.read().t - 1) < 1e-9, 'a sprung throttle goes where the thumb is');
 });
 
 test('throttle hold keeps Y; spring centers both axes', () => {
