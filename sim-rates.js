@@ -368,7 +368,7 @@ export function bfFieldValue(field, v) {
 // Betaflight's thr_mid and thr_expo (in the rate profile, CLI 0..100), shown
 // as the Configurator shows them, 0.00 to 1.00. They go to Betaflight with
 // Tune's rate lines, as set lines through IMPORT CLI's path (sim.html
-// bfTuneLines), and are read back after. Per class: a class flies its
+// bfSetTune), and are read back after. Per class: a class flies its
 // config's own (the Fractal75 diff's 65 and 35; the Air65 diff sets none, so
 // Betaflight's 50 and 0) until the pilot sets that class's own, saved in this
 // browser (BF_THR_KEY). thr_mid stops at 99: Betaflight's throttle lookup
