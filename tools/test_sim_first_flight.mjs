@@ -831,7 +831,9 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           const shown = await F.until(() => F.card().on, 5000);
           const at = F.live();
           await F.until(() => { const i = document.querySelector('#firstFlight img'); return i && i.complete; }, 3000);
+          // The card is painted by the input poll, the hint by the frame after it.
           const h = document.getElementById('hudArmHint');
+          await F.until(() => h.classList.contains('show'), 2000);
           return JSON.stringify({ pausedOnMenu, onMenu, shown, at, card: F.card(), map: F.s.map(), hint: h.classList.contains('show') ? h.textContent : null });`);
         console.log('keyboard: ' + JSON.stringify({ atMs: Math.round(r.at), img: r.card.img, saved: r.card.saved, hint: r.hint }));
         assert.equal(r.pausedOnMenu, true);
