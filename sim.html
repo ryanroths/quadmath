@@ -5747,7 +5747,9 @@ function tickEasyArm(dt){
   const flipped=!threeD&&bodyUpZ(cs.quaternion)<EASY_TURTLE_UP_Z&&cs.clearance<=0.04;
   const out=stepEasyArm(easyArmState,{
     t:stick.t,threeD,dt,armed:coreArmed(),autoArm:autoArmOn,
-    seenLow:!threeD&&kbFromRest&&stickInputKind()==='keyboard',
+    // The keys' own throttle only: a test stick (setTestStick) over it is not
+    // a raise from the bottom.
+    seenLow:!threeD&&kbFromRest&&stickInputKind()==='keyboard'&&stick.t===kbThrottle,
     ready:!(armGate&&padLive),
     landed:isLanded({clearanceM:cs.clearance,speed,omega}),
     crashed:flipped||simClockMs-easyCrashAt<EASY_CRASH_MEMORY_MS,
@@ -10437,7 +10439,7 @@ function loop(now){
     if(feel){
       state.stickT=stick.t;
       feel.updateHud({stick,battV,battOn:CFG.battSimOn||cs.kind==='bf',mode:cs.flightMode,armed:cs.armed,threeD,thrText:throttleHudText(stick.t,threeD),quad:flyingQuadName(),
-        armHint:bfLoadPending()?BF_LOADING_HINT:bfRadio()?'Arm on the radio (AUX'+(pilotAux('arm')||'?')+')':armHintText({threeD,easy:easyMode(),autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked,touch:touchThrottleSide(),keys:stickInputKind()==='keyboard',low:throttleSafeToArm(stick.t,threeD)||(kbFromRest&&stickInputKind()==='keyboard')})});
+        armHint:bfLoadPending()?BF_LOADING_HINT:bfRadio()?'Arm on the radio (AUX'+(pilotAux('arm')||'?')+')':armHintText({threeD,easy:easyMode(),autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked,touch:touchThrottleSide(),keys:stickInputKind()==='keyboard',low:throttleSafeToArm(stick.t,threeD)||(kbFromRest&&stickInputKind()==='keyboard'&&stick.t===kbThrottle)})});
       feel.tickTutorial(state,dt,cs.armed);
       const upZ=bodyUpZ(cs.quaternion);
       const clearanceM=cs.clearance;
