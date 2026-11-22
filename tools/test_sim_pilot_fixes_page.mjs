@@ -170,6 +170,19 @@ const PAGE = `(() => {
   const rect = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
   const shown = (el) => !!el && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden' && !el.closest('[hidden]') && el.getBoundingClientRect().width > 0;
   const overlap = (a, b) => !!a && !!b && a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+  // fn comes true within ms of wall time, polled every 50 ms: true, or false
+  // once it ran out. The card, the OSD, the hints and the core's state (cs)
+  // are copied once a frame, so a read after a flat wait races a slow frame
+  // on a slow runner: each such read is polled, and its assert prints the snap.
+  async function until(fn, ms = 5000) {
+    const t0 = performance.now();
+    while (performance.now() - t0 < ms) { if (fn()) return true; await wait(50); }
+    return !!fn();
+  }
+  // Easy mode's own count of the throttle held low before a raise arms
+  // (sim-3d.js stepEasyArm, EASY_ARM_HOLD_S: 1 s of input time), not a wall
+  // time: where polls run late, 1300 ms of wall time can count for less.
+  const heldLow = () => until(() => { const e = s.easy && s.easy().arm; return !!e && +e.lowS >= 1; }, 30000);
   ['startMenu', 'feelPrompt', 'menuLayer', 'firstFlight'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) { el.classList.remove('open', 'show'); el.style.display = 'none'; }
@@ -198,7 +211,8 @@ const PAGE = `(() => {
       s.bfCore().sim.reinit({ battery: { soc, vbatFiltered: v } });
       s.placeQuadAt(-cs.position.y * 3.5, cs.position.z * 3.5, -cs.position.x * 3.5);
     } else s.jsPack(soc);
-    await wait(700);
+    // The warning, drawn from the per-frame state.
+    await until(() => snap().hint !== null);
     return snap();
   }
   // The scripted flight (sim time since the respawn's reboot: the core's
@@ -207,6 +221,8 @@ const PAGE = `(() => {
   // forward, then down to the floor.
   const cs0 = s.coreState();
   const pad = { x: -cs0.position.y * 3.5, y: cs0.position.z * 3.5, z: -cs0.position.x * 3.5 };
+  // Where pad was read from, for the asserts' messages.
+  const padFrom = { kind: cs0.kind, pos: { ...cs0.position }, clearance: cs0.clearance, airborne: cs0.airborne, core: s.core() };
   function stick(t) {
     if (t < 0.2) return { r: 0, p: 0, y: 0, t: 0 };
     if (t < 1.0) return { r: 0, p: 0, y: 0, t: 0.41 };
@@ -220,7 +236,7 @@ const PAGE = `(() => {
   async function fly(ms = 5200) {
     const bf = s.bfCore();
     const rec = new Map();
-    let t0 = null, contacts = 0, armedAt = null, last = null;
+    let t0 = null, contacts = 0, armedAt = null, last = null, first = null, lowZ = Infinity;
     s.setTestPilot(null);
     s.placeQuadAt(pad.x, pad.y, pad.z, 0.0001, { freshPack: true });
     s.setTestPilot((st) => {
@@ -230,6 +246,8 @@ const PAGE = `(() => {
       if (t >= 0.1 && !bf.aux.arm) bf.setArm(true);
       rec.set(Math.round((us - t0) / 4000), [st.position.x, st.position.y, st.position.z, st.quaternion.w, st.quaternion.x, st.quaternion.y, st.quaternion.z]);
       if (st.contactFlags) contacts++;
+      if (first === null) first = { ...st.position };
+      lowZ = Math.min(lowZ, st.position.z);
       if (st.armed && armedAt === null) armedAt = t;
       last = t;
       return stick(t);
@@ -238,8 +256,15 @@ const PAGE = `(() => {
     while ((last === null || last < ms / 1000) && performance.now() - w0 < ms * 12) await wait(50);
     s.setTestPilot(null);
     bf.setArm(false);
+    // Disarmed before the next change: a Tune change made armed is kept until
+    // the landing (sim.html bfSetThrottle, bfPend, as coreArmed reads it), and
+    // the next flight arms at 0.1 s, before it goes in. On a slow runner the
+    // page can still read armed 250 ms after the switch went off.
+    const armed = () => s.coreState().armed || bf.aux.arm || bf.turtlePhase !== null;
+    for (let i = 0; i < 100 && armed(); i++) await wait(50);
+    if (armed()) throw new Error('still armed 5 s after the flight');
     await wait(250);
-    return { rec, n: rec.size, contacts, armedAt, end: last, err: s.testPilotError() };
+    return { rec, n: rec.size, contacts, armedAt, end: last, err: s.testPilotError(), first, lowZ, pad, padFrom };
   }
   function diff(a, b) {
     let worst = 0, common = 0;
@@ -263,7 +288,7 @@ const PAGE = `(() => {
   // load; act() in the air (land first), then landed (a new pack).
   async function packFlight(act) {
     const out = [await lowPack(0.02, 3.32)];
-    s.setTestStick({ r: 0, p: 0, y: 0, t: 0 }); await wait(1300);
+    s.setTestStick({ r: 0, p: 0, y: 0, t: 0 }); await heldLow();
     s.setTestStick({ r: 0, p: 0, y: 0, t: 0.5 });
     for (let i = 0; i < 100 && !snap().land; i++) await wait(100);
     out.push(snap());
@@ -273,12 +298,13 @@ const PAGE = `(() => {
     for (let i = 0; i < 100 && (s.coreState().airborne || s.coreState().armed); i++) await wait(100);
     await wait(500);
     out.push(snap());
-    await act(); await wait(800);
+    await act();
+    await until(() => { const x = snap(); return x.v > 4.15 && x.hint === null; });
     out.push(snap());
     s.setTestStick(null);
     return out;
   }
-  window.__pf = { s, wait, key, rect, shown, overlap, snap, lowPack, fly, diff, set, packFlight };
+  window.__pf = { s, wait, until, heldLow, key, rect, shown, overlap, snap, lowPack, fly, diff, set, packFlight };
   return true;
 })()`;
 
@@ -379,30 +405,40 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
     // Arming while Betaflight loads: held, said plainly; ready, said.
     let held = null;
     await open(b, port, { seed: KEYS, ready: "window._sim.core() === 'js'", hold: async () => { held = await holdWasm(b); } });
-    const loading = await run(b, `await P.wait(600);
+    const loading = await run(b, `await P.until(() => { const x = P.snap(); return x.quad === '65 CLASSIC' && x.why === 'LOADING BETAFLIGHT' && x.armHint === ${JSON.stringify(LOADING_HINT)}; });
       P.key(' '); await P.wait(300);
       const a = P.snap();
       // The throttle gesture, its own toast (the log emptied first).
-      s.setTestStick({ r: 0, p: 0, y: 0, t: 0 }); await P.wait(2500);
+      s.setTestStick({ r: 0, p: 0, y: 0, t: 0 }); await P.heldLow();
       window.__toasts.length = 0;
-      s.setTestStick({ r: 0, p: 0, y: 0, t: 0.6 }); await P.wait(800);
+      s.setTestStick({ r: 0, p: 0, y: 0, t: 0.6 }); await P.until(() => window.__toasts.includes(${JSON.stringify(LOADING_TOAST)}));
+      await P.wait(300);
       const c = P.snap(); s.setTestStick({ r: 0, p: 0, y: 0, t: 0 });
       return JSON.stringify([a, c]);`);
     for (const x of loading) {
       assert.equal(x.core, 'js');
       assert.equal(x.armed, false, 'not armed while Betaflight loads');
-      assert.equal(x.quad, '65 CLASSIC', 'the card says what flies meanwhile');
-      assert.equal(x.why, 'LOADING BETAFLIGHT', 'the won\'t-arm line says why');
-      assert.equal(x.armHint, LOADING_HINT);
+      assert.equal(x.quad, '65 CLASSIC', 'the card says what flies meanwhile: ' + JSON.stringify(x));
+      assert.equal(x.why, 'LOADING BETAFLIGHT', 'the won\'t-arm line says why: ' + JSON.stringify(x));
+      assert.equal(x.armHint, LOADING_HINT, JSON.stringify(x));
     }
     assert.equal(loading[0].toast, LOADING_TOAST, 'Space: said plainly');
     assert.ok(loading[1].toasts.includes(LOADING_TOAST), 'the throttle gesture said it too: ' + JSON.stringify(loading[1].toasts));
     await held.release(false);
-    const ready = await run(b, `for (let i = 0; i < 400 && s.core() !== 'bf'; i++) await P.wait(100); await P.wait(400); s.setTestStick(null); return JSON.stringify(P.snap());`);
+    // The card names the quad from the core's state (flyingQuadName reads cs),
+    // a frame or two after the core changes: on a slow runner, later than 400 ms.
+    const ready = await run(b, `for (let i = 0; i < 400 && s.core() !== 'bf'; i++) await P.wait(100);
+      await P.until(() => { const x = P.snap(); return x.quad === 'AIR65' && x.why !== 'LOADING BETAFLIGHT'; });
+      await P.wait(400); s.setTestStick(null); return JSON.stringify(P.snap());`);
     assert.equal(ready.core, 'bf');
-    assert.equal(ready.quad, 'AIR65');
-    assert.equal(ready.toast, READY_TOAST, 'ready, said last: ' + JSON.stringify(ready.toasts));
-    assert.equal(ready.why === 'LOADING BETAFLIGHT', false);
+    assert.equal(ready.quad, 'AIR65', JSON.stringify(ready));
+    // Ready, said after the loading toast, as the takeover's last. Only the
+    // rates note may follow it (bfRatesNote: 1.6 s after the takeover, once
+    // the 1.5 s toast is gone), and a slow runner can read that late.
+    const said = ready.toasts.lastIndexOf(READY_TOAST);
+    assert.ok(said > ready.toasts.lastIndexOf(LOADING_TOAST), 'ready, said after loading: ' + JSON.stringify(ready.toasts));
+    assert.ok(ready.toasts.slice(said + 1).every((x) => /^RATES: /.test(x)), 'ready, said last (the rates note may follow): ' + JSON.stringify(ready.toasts));
+    assert.equal(ready.why === 'LOADING BETAFLIGHT', false, JSON.stringify(ready));
 
     // The classic-physics gate on bf: hidden, its note shown.
     await open(b, port, { seed: KEYS });
@@ -413,7 +449,7 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
     // dead control at one end, then the other, still bit-identical.
     const ab = await run(b, `const out = {};
       const base = await P.fly();
-      out.base = { n: base.n, contacts: base.contacts, armedAt: base.armedAt, end: base.end, err: base.err };
+      out.base = { n: base.n, contacts: base.contacts, armedAt: base.armedAt, end: base.end, err: base.err, first: base.first, lowZ: base.lowZ, pad: base.pad, padFrom: base.padFrom };
       out.aa = P.diff(base, await P.fly());
       const DEAD = ${JSON.stringify(DEAD)};
       for (const end of ['min', 'max']) {
@@ -435,8 +471,10 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
         let ref = base;
         if (id === 'bfs_thr_mid') { P.set('bfs_thr_expo', 100); await P.wait(500); ref = await P.fly(); out.expoRef = get(); }
         for (const v of [lo, hi]) {
+          const n = window.__toasts.length;
           P.set(id, v); await P.wait(500);
-          out[id + '_' + v] = { d: P.diff(ref, await P.fly()).worst, held: get() };
+          const kept = window.__toasts.slice(n).filter((x) => /WHEN YOU LAND/.test(x));
+          out[id + '_' + v] = { d: P.diff(ref, await P.fly()).worst, held: get(), kept };
         }
         P.set(id, was); if (id === 'bfs_thr_mid') P.set('bfs_thr_expo', 0);
         await P.wait(500);
@@ -444,7 +482,7 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
       return JSON.stringify(out);`);
     assert.equal(ab.base.err, null);
     assert.ok(ab.base.n > 1200 && ab.base.armedAt !== null && ab.base.armedAt < 0.2, 'flown, armed at 0.1 s: ' + JSON.stringify(ab.base));
-    assert.ok(ab.base.contacts > 0, 'the flight meets the floor or a wall (bounce, crash, cushion)');
+    assert.ok(ab.base.contacts > 0, 'the flight meets the floor or a wall (bounce, crash, cushion): ' + JSON.stringify(ab.base));
     assert.equal(ab.aa.worst, 0, 'the same flight twice: bit-identical');
     for (const end of ['min', 'max']) {
       for (const [id, v] of Object.entries(DEAD[end])) assert.equal(ab[end + 'Back'][id], v, `${end}: #${id} flew at ${JSON.stringify(v)}`);
@@ -458,6 +496,8 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
     const want = { bfs_thr_expo_0: ['thr_expo', '0'], bfs_thr_expo_100: ['thr_expo', '100'], bfs_thr_mid_0: ['thr_mid', '0'], bfs_thr_mid_99: ['thr_mid', '99'],
       bfs_roll_rcRate_10: ['roll_rc_rate', '1'], bfs_roll_rcRate_2000: ['roll_rc_rate', '200'], bfs_roll_srate_0: ['roll_srate', '0'], bfs_roll_srate_2000: ['roll_srate', '200'],
       bfs_roll_expo_0: ['roll_expo', '0'], bfs_roll_expo_1: ['roll_expo', '100'] };
+    // Made disarmed, each went in at once, not kept for the landing.
+    for (const k of Object.keys(want)) assert.deepEqual(ab[k].kept, [], `${k}: made disarmed, it goes in at once`);
     for (const [k, [key, v]] of Object.entries(want)) assert.equal(ab[k].held[key], v, `${k}: Betaflight holds ${key} ${v}`);
     for (const k of ['bfs_thr_mid_0', 'bfs_thr_mid_99']) assert.equal(ab[k].held.thr_expo, '100', k + ' flown with expo 1.00');
     for (const [k, why] of [['bfs_thr_expo_100', 'throttle expo 1.00'], ['bfs_thr_mid_0', 'throttle mid 0.00 against 0.50 (expo 1.00)'], ['bfs_thr_mid_99', 'throttle mid 0.99 against 0.50 (expo 1.00)'],
@@ -470,7 +510,7 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
     // A new pack: the hint from the low-battery warning, under LAND NOW in
     // flight; P in the air says land first, landed it is a new pack.
     const pack = await run(b, `return JSON.stringify(await P.packFlight(async () => P.key('p')));`);
-    assert.equal(pack[0].hint, 'P = new pack', 'BATT low at rest: the hint, ' + pack[0].v + ' V');
+    assert.equal(pack[0].hint, 'P = new pack', 'BATT low at rest: the hint: ' + JSON.stringify(pack[0]));
     assert.equal(pack[0].land, false, 'no LAND NOW yet');
     assert.ok(pack[1].land && pack[1].airborne, 'flown to LAND NOW at ' + pack[1].v + ' V');
     assert.equal(pack[1].hint, 'P = new pack');
@@ -480,8 +520,8 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
     assert.ok(pack[2].toastShown && pack[2].hint && !P_overlap(pack[2].toastRect, pack[2].hintRect), 'the toast is not over the hint: ' + JSON.stringify([pack[2].toastRect, pack[2].hintRect]));
     assert.ok(pack[2].v < 3.6, 'the pack kept in the air');
     assert.ok(!pack[3].airborne, 'landed');
-    assert.equal(pack[4].v.toFixed(1), '4.2', 'P landed: a new pack');
-    assert.equal(pack[4].hint, null, 'and the hint goes');
+    assert.equal(pack[4].v.toFixed(1), '4.2', 'P landed: a new pack: ' + JSON.stringify(pack[4]));
+    assert.equal(pack[4].hint, null, 'and the hint goes: ' + JSON.stringify(pack[4]));
     assert.equal(pack[4].toast, 'NEW PACK');
     // The in-flight menu lists it, and it does it.
     const menu = await run(b, `await P.lowPack(0.02, 3.32);
@@ -489,20 +529,25 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
       P.key('Escape'); await P.wait(400);
       const btn = document.getElementById('menuPack');
       const a = { shown: P.shown(btn), text: btn.textContent, menu: document.body.classList.contains('menu-open'), inFlight: document.getElementById('startMenu').classList.contains('in-flight') };
-      btn.click(); await P.wait(800);
+      btn.click(); await P.until(() => P.snap().v > 4.15);
       return JSON.stringify([a, P.snap(), document.body.classList.contains('menu-open')]);`);
     assert.ok(menu[0].menu && menu[0].inFlight && menu[0].shown, 'the in-flight menu shows New pack: ' + JSON.stringify(menu[0]));
     assert.equal(menu[0].text, 'New pack [P]');
-    assert.equal(menu[1].v.toFixed(1), '4.2', 'from the menu: a new pack');
+    assert.equal(menu[1].v.toFixed(1), '4.2', 'from the menu: a new pack: ' + JSON.stringify(menu[1]));
     assert.equal(menu[2], false, 'and back to flying');
     // The first-flight card's line, for the keyboard: no input chosen yet, so
     // the card on the first arm attempt (a pilot who chose Fly with keyboard has
     // the keyboard layout from the start instead, with the same lines).
     await open(b, port, { seed: { ryflyDroneType: KEYS.ryflyDroneType, quadmathSimFirstFlight: 'touch,controller' } });
-    const card = await run(b, `s.tryArm(); await P.wait(400);
+    const card = await run(b, `s.tryArm();
       const el = document.getElementById('firstFlight');
-      return JSON.stringify({ show: el.classList.contains('show'), lines: [...el.children].map((c) => c.textContent) });`);
-    assert.ok(card.show, 'the first-flight card');
+      await P.until(() => el.classList.contains('show'), 3000);
+      // That arm lands before the class switch below. One still pending when
+      // the core parks is never cleared on the js core, and fires a stale NOT
+      // ARMED at the takeover back to bf (sim.html bfArmWatch, bfArmPendingMs).
+      await P.until(() => s.coreState().armed, 3000);
+      return JSON.stringify({ show: el.classList.contains('show'), lines: [...el.children].map((c) => c.textContent), snap: P.snap() });`);
+    assert.ok(card.show, 'the first-flight card: ' + JSON.stringify(card));
     assert.equal(card.lines[0], FIRST_FLIGHT_TEXT);
     assert.equal(card.lines[1], FIRST_FLIGHT_PACK_TEXT.keyboard);
 
@@ -510,18 +555,18 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
     const c85 = await run(b, `const sel = document.getElementById('droneType');
       sel.value = 'whoop85'; sel.dispatchEvent(new Event('change'));
       for (let i = 0; i < 80 && s.core() !== 'js'; i++) await P.wait(100);
-      await P.wait(600);
+      await P.until(() => P.snap().quad === '85 CLASSIC');
       const a = P.snap();
       const low = await P.lowPack(0.01);
-      P.key('p'); await P.wait(600);
+      P.key('p'); await P.until(() => { const x = P.snap(); return x.charge > 0.99 && x.hint === null; });
       return JSON.stringify([a, low, P.snap()]);`);
     assert.equal(c85[0].core, 'js');
-    assert.equal(c85[0].quad, '85 CLASSIC');
+    assert.equal(c85[0].quad, '85 CLASSIC', JSON.stringify(c85[0]));
     assert.deepEqual(c85[0].physJs, [true, true, true], 'the 85 shows the classic controls');
     assert.deepEqual(c85[0].physBf, [false, false]);
-    assert.equal(c85[1].hint, 'P = new pack', 'the 85 runs low: ' + c85[1].v + ' V');
-    assert.ok(c85[2].charge > 0.99 && c85[2].v > 4.1, 'P on the js core: a new pack (' + c85[2].charge + ', ' + c85[2].v + ' V)');
-    assert.equal(c85[2].hint, null);
+    assert.equal(c85[1].hint, 'P = new pack', 'the 85 runs low: ' + JSON.stringify(c85[1]));
+    assert.ok(c85[2].charge > 0.99 && c85[2].v > 4.1, 'P on the js core: a new pack: ' + JSON.stringify(c85[2]));
+    assert.equal(c85[2].hint, null, JSON.stringify(c85[2]));
     // Card box: the same for every name it shows.
     const box = await run(b, `const out = {};
       for (const q of ['AIR65', 'FRACTAL75', '85 CLASSIC', '65 CLASSIC', '75 CLASSIC']) {
@@ -540,21 +585,30 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
       const sel = document.getElementById('droneType'); sel.value = 'whoop65'; sel.dispatchEvent(new Event('change'));
       for (let i = 0; i < 200 && s.core() !== 'bf'; i++) await P.wait(50);
       await P.wait(300); s.setTestStick(null);
-      return JSON.stringify({ armed, after: P.snap() });`);
+      const after = P.snap();
+      // The card after the toast is read: its poll must not hold the stick up
+      // longer (a NOT ARMED can follow then, sim.html bfArmWatch).
+      await P.until(() => P.snap().quad === 'AIR65');
+      return JSON.stringify({ armed, after, card: P.snap() });`);
     assert.ok(over.armed, 'armed on the 85');
     assert.equal(over.after.core, 'bf');
     assert.equal(over.after.toast, TOOK_OVER, 'said last: ' + JSON.stringify(over.after.toasts));
-    assert.equal(over.after.quad, 'AIR65');
+    assert.equal(over.card.quad, 'AIR65', JSON.stringify(over.card));
 
     // A failed load frees arming, and says so.
     let fail = null;
     await open(b, port, { seed: KEYS, ready: "window._sim.core() === 'js'", hold: async () => { fail = await holdWasm(b); } });
     await fail.release(true);
-    const failed = await run(b, `await P.wait(1500); const a = P.snap(); P.key(' '); await P.wait(500); return JSON.stringify([a, P.snap()]);`);
-    assert.ok(failed[0].toasts.includes(FAILED), JSON.stringify(failed[0].toasts));
-    assert.equal(failed[0].why, '', 'no LOADING line once it failed');
-    assert.equal(failed[0].quad, '65 CLASSIC');
-    assert.equal(failed[1].armed, true, 'arming works on the js core');
+    // Space arms the js core at once (tryArm, qp.arm), but cs, which the snap
+    // reads, is copied a frame later: polled up to 3 s, as the Space arm above.
+    const failed = await run(b, `await P.until(() => { const x = P.snap(); return x.toasts.includes(${JSON.stringify(FAILED)}) && x.why === '' && x.quad === '65 CLASSIC'; }, 10000);
+      const a = P.snap(); P.key(' ');
+      await P.until(() => s.coreState().armed, 3000);
+      return JSON.stringify([a, P.snap()]);`);
+    assert.ok(failed[0].toasts.includes(FAILED), JSON.stringify(failed[0]));
+    assert.equal(failed[0].why, '', 'no LOADING line once it failed: ' + JSON.stringify(failed[0]));
+    assert.equal(failed[0].quad, '65 CLASSIC', JSON.stringify(failed[0]));
+    assert.equal(failed[1].armed, true, 'arming works on the js core: ' + JSON.stringify(failed[1]));
     assert.deepEqual(b.thrown, [], 'nothing threw');
   } finally {
     await close(b);
@@ -578,19 +632,19 @@ for (const [w, h] of [[844, 390], [667, 375], [390, 844]]) {
       // Loading, on touch: the hint the pilot reads under the card.
       let held = null;
       await open(b, port, { seed: { ryflyDroneType: 'whoop65', quadmathSimFirstFlight: 'keys,keyboard,touch,controller' }, ready: "window._sim.core() === 'js'", hold: async () => { held = await holdWasm(b); } });
-      const loading = await run(b, `await P.wait(500); return JSON.stringify(P.snap());`);
-      assert.equal(loading.quad, '65 CLASSIC');
-      assert.equal(loading.armHint, LOADING_HINT);
+      const loading = await run(b, `await P.until(() => { const x = P.snap(); return x.quad === '65 CLASSIC' && x.armHint === ${JSON.stringify(LOADING_HINT)}; }); return JSON.stringify(P.snap());`);
+      assert.equal(loading.quad, '65 CLASSIC', JSON.stringify(loading));
+      assert.equal(loading.armHint, LOADING_HINT, JSON.stringify(loading));
       await held.release(false);
       await run(b, `for (let i = 0; i < 400 && s.core() !== 'bf'; i++) await P.wait(100); return JSON.stringify(1);`);
-      const page = await run(b, `await P.wait(600);
+      const page = await run(b, `await P.until(() => P.snap().quad === 'AIR65');
         const sticks = [...document.querySelectorAll('#touchLayer .vstick')].map(P.rect);
         const a = P.snap();
         a.sticks = sticks; a.touchOn = document.body.classList.contains('touch-on');
         a.btns = P.rect(document.getElementById('touchBtns'));
         return JSON.stringify(a);`);
       assert.ok(page.touchOn, 'touch sticks');
-      assert.equal(page.quad, 'AIR65');
+      assert.equal(page.quad, 'AIR65', JSON.stringify(page));
       for (const st of page.sticks) assert.ok(!P_overlap(page.card, st), 'the card is clear of a stick: ' + JSON.stringify([page.card, st]));
       assert.ok(page.card.r <= w && page.card.b <= h && page.card.l >= 0, 'the card is on screen');
       // A low pack: in the air in free flight, words under LAND NOW (no box
@@ -600,14 +654,15 @@ for (const [w, h] of [[844, 390], [667, 375], [390, 844]]) {
       await evaluate(b.ws, `window.__probeHint = () => { const el = document.getElementById('packHint'), r = el.getBoundingClientRect();
         const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { hitSelf: at === el, x: r.left + r.width / 2, y: r.top + r.height / 2 }; }; true`);
       const lowRest = await run(b, `return JSON.stringify(await P.lowPack(0.02, 3.32));`);
-      await run(b, `s.setTestStick({ r: 0, p: 0, y: 0, t: 0 }); await P.wait(1300); s.setTestStick({ r: 0, p: 0, y: 0, t: 0.5 });
+      await run(b, `s.setTestStick({ r: 0, p: 0, y: 0, t: 0 }); await P.heldLow(); s.setTestStick({ r: 0, p: 0, y: 0, t: 0.5 });
         for (let i = 0; i < 100 && !P.snap().land; i++) await P.wait(100); return JSON.stringify(1);`);
       const inAir = await run(b, `const a = P.snap(); P.key('p'); await P.wait(250); a.after = P.snap(); return JSON.stringify(a);`);
-      await run(b, `s.setTestStick({ r: 0, p: 0, y: 0, t: 0 }); for (let i = 0; i < 100 && (s.coreState().airborne || s.coreState().armed); i++) await P.wait(100); await P.wait(600); return JSON.stringify(1);`);
+      await run(b, `s.setTestStick({ r: 0, p: 0, y: 0, t: 0 }); for (let i = 0; i < 100 && (s.coreState().airborne || s.coreState().armed); i++) await P.wait(100);
+        await P.until(() => { const x = P.snap(); return x.hint === 'NEW PACK' && x.hintTap; }); return JSON.stringify(1);`);
       const landed = await run(b, `const a = P.snap(); a.probe = window.__probeHint(); return JSON.stringify(a);`);
       await tap(b, landed.probe.x, landed.probe.y);
-      const after = await run(b, `await P.wait(800); s.setTestStick(null); return JSON.stringify(P.snap());`);
-      assert.equal(lowRest.hint, 'NEW PACK', 'landed with a low pack: the button, from the warning: ' + lowRest.v + ' V');
+      const after = await run(b, `await P.until(() => { const x = P.snap(); return x.v > 4.15 && x.hint === null; }); s.setTestStick(null); return JSON.stringify(P.snap());`);
+      assert.equal(lowRest.hint, 'NEW PACK', 'landed with a low pack: the button, from the warning: ' + JSON.stringify(lowRest));
       assert.ok(lowRest.hintTap, 'a tap target');
       assert.ok(inAir.land && inAir.airborne, 'flown to LAND NOW');
       assert.ok(inAir.landRect.h < 60 && inAir.landRect.r <= w && inAir.landRect.l >= 0, 'LAND NOW on one line, on screen: ' + JSON.stringify(inAir.landRect));
@@ -618,8 +673,8 @@ for (const [w, h] of [[844, 390], [667, 375], [390, 844]]) {
       assert.equal(inAir.after.toast, 'LAND FOR A NEW PACK');
       assert.ok(inAir.after.toastShown && !P_overlap(inAir.after.toastRect, inAir.after.hintRect), 'no toast over the hint: ' + JSON.stringify([inAir.after.toastRect, inAir.after.hintRect]));
       assert.ok(!landed.airborne, 'landed');
-      assert.equal(landed.hint, 'NEW PACK');
-      assert.ok(landed.hintTap && landed.hintPe === 'auto', 'landed: a button');
+      assert.equal(landed.hint, 'NEW PACK', JSON.stringify(landed));
+      assert.ok(landed.hintTap && landed.hintPe === 'auto', 'landed: a button: ' + JSON.stringify(landed));
       assert.ok(landed.hintRect.h >= 44, 'a thumb\'s 44 px: ' + landed.hintRect.h);
       assert.ok(landed.probe.hitSelf, 'nothing covers it');
       for (const st of page.sticks) assert.ok(!P_overlap(landed.hintRect, st), 'clear of a stick: ' + JSON.stringify([landed.hintRect, st]));
@@ -628,8 +683,8 @@ for (const [w, h] of [[844, 390], [667, 375], [390, 844]]) {
       assert.ok(!landed.armSlot || !P_overlap(landed.hintRect, landed.armSlot), 'clear of the arm hint: ' + JSON.stringify([landed.hintRect, landed.armSlot]));
       for (const x of [inAir, landed]) assert.ok(!x.overlay || !P_overlap(x.hintRect, x.overlay), 'clear of the stick overlay: ' + JSON.stringify([x.hintRect, x.overlay]));
       assert.ok(landed.hintRect.b <= h, 'on screen');
-      assert.equal(after.v.toFixed(1), '4.2', 'tapped landed: a new pack');
-      assert.equal(after.hint, null);
+      assert.equal(after.v.toFixed(1), '4.2', 'tapped landed: a new pack: ' + JSON.stringify(after));
+      assert.equal(after.hint, null, JSON.stringify(after));
       // Tune on a phone: the bf boxes are 16 px (no iOS zoom), inside the
       // panel; the classic-only blocks are hidden, the note shown.
       const tune = await run(b, `document.getElementById('panel').classList.add('open'); await P.wait(400);
@@ -647,8 +702,9 @@ for (const [w, h] of [[844, 390], [667, 375], [390, 844]]) {
       assert.deepEqual(tune.physBf, [true, true]);
       // The first-flight card on touch says how to get a new pack.
       await open(b, port, { seed: { ryflyDroneType: 'whoop65', quadmathSimFirstFlight: 'keys,keyboard,controller' } });
-      const ffTouch = await run(b, `s.tryArm(); await P.wait(400);
+      const ffTouch = await run(b, `s.tryArm();
         const el = document.getElementById('firstFlight');
+        await P.until(() => el.classList.contains('show'), 3000);
         return JSON.stringify({ show: el.classList.contains('show'), lines: [...el.children].map((c) => c.textContent), touch: !!(window._touch && window._touch.enabled) });`);
       assert.ok(ffTouch.touch && ffTouch.show, 'the card, on touch: ' + JSON.stringify(ffTouch));
       assert.deepEqual(ffTouch.lines, [FIRST_FLIGHT_TEXT, FIRST_FLIGHT_PACK_TEXT.touch]);
