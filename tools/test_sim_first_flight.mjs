@@ -1090,6 +1090,55 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
       });
     });
 
+    await t.test('keyboard: W held through a disarm (Space, or a crash) does not re-arm; let go and pressed again, it arms', async () => {
+      await pass('', {}, async ({ js, hold, key, enter }) => {
+        await enter();
+        let r = await js(`${fly} return JSON.stringify({ flying });`);
+        assert.equal(r.flying, true);
+        const noArm = (what) => js(`const armed = await F.within(F.sim, () => F.s.coreState().armed || (F.s.bfCore() && F.s.bfCore().turtlePhase !== null), 800);
+          return JSON.stringify({ armed, t: ${T}, reason: F.s.easy().disarmReason });`);
+        const armAgain = async (what) => {
+          await hold(false, 'w', 'KeyW', 87);
+          const r0 = await js(`await F.passed(F.sim, 200); return JSON.stringify({ armed: F.s.coreState().armed, t: ${T} });`);
+          assert.equal(r0.armed, false, `${what}: let go, still disarmed`);
+          assert.equal(r0.t, 0, `${what}: let go, the throttle at the bottom`);
+          await hold(true, 'w', 'KeyW', 87);
+          const r1 = await js(`const armed = await F.within(F.sim, () => F.s.coreState().armed, 2500); return JSON.stringify({ armed, flags: F.s.coreState().armingDisableFlags });`);
+          assert.equal(r1.armed, true, `${what}: pressed again, it arms (flags ${r1.flags})`);
+        };
+        // Armed on W, and W kept down.
+        await hold(true, 'w', 'KeyW', 87);
+        r = await js(`const armed = await F.within(F.sim, () => F.s.coreState().armed, 2500); return JSON.stringify({ armed });`);
+        assert.equal(r.armed, true, 'W arms');
+        // Space with W down: disarmed, and W still down does not arm it again.
+        await key(' ', 'Space', 32);
+        r = await js(`const off = await F.within(F.sim, () => !F.s.coreState().armed, 1500); return JSON.stringify({ off });`);
+        assert.equal(r.off, true, 'Space disarms');
+        r = await noArm('Space');
+        console.log('keyboard, W held through Space: ' + JSON.stringify(r));
+        assert.equal(r.armed, false, 'W held through the disarm: no re-arm');
+        assert.ok(r.t > 0.05, 'the throttle where W holds it ' + r.t);
+        await armAgain('after Space');
+        // A crash with W down: on its back on the floor, held there by its
+        // own thrust, at rest: Easy mode's crash disarm. Then set upright,
+        // W still down: no arm until it is let go and pressed again.
+        r = await js(`await F.passed(F.sim, 300); const c = F.s.coreState();
+          F.s.bfCore().teleport({ x: c.position.x, y: c.position.y, z: 0.06 }, { x: 1, y: 0, z: 0, w: 0 }, { x: 0, y: 0, z: 0 });
+          const off = await F.within(F.sim, () => !F.s.coreState().armed && F.s.bfCore().turtlePhase === null, 6000);
+          return JSON.stringify({ off, reason: F.s.easy().disarmReason, t: ${T} });`);
+        console.log('keyboard, crash with W held: ' + JSON.stringify(r));
+        assert.equal(r.off, true, 'the crash disarms');
+        r = await js(`const c = F.s.coreState();
+          F.s.bfCore().teleport({ x: c.position.x, y: c.position.y, z: 0.06 }, { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: 0, z: 0 });
+          await F.passed(F.sim, 300); return JSON.stringify(1);`);
+        r = await noArm('crash');
+        console.log('keyboard, upright after the crash, W held: ' + JSON.stringify(r));
+        assert.equal(r.armed, false, 'W held through the crash disarm: no re-arm, upright');
+        await armAgain('after the crash');
+        await hold(false, 'w', 'KeyW', 87);
+      });
+    });
+
     await t.test('touch: no keyboard layout; the card on the first throttle up', async () => {
       await pass('core=js&map=rig', { core: 'js', storage: { quadmathSimInputChoice: 'touch' } }, async ({ js }) => {
         const r = await js(`

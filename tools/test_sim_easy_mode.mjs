@@ -1538,6 +1538,17 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         assert.deepEqual(r, { down: true, off: true }, 'S to the bottom, landed 0.5 s: disarmed');
         r = await js(`const rest = await E.flip(); await E.wait(200); return JSON.stringify({ rest });`);
         assert.equal(r.rest, true);
+        // W on its back, at rest: no normal arm (Easy mode's arm is blocked
+        // flipped, W's raise from the bottom included); the way back is the
+        // turtle, below.
+        await key('rawKeyDown', 'w', 'KeyW', 87);
+        await key('keyDown', 'w', 'KeyW', 87);
+        r = await js(`const armed = await E.until(() => E.s.coreState().armed || E.fc().armed, 600); return JSON.stringify({ armed, turtle: E.s.bfCore().turtlePhase, upZ: E.upZ() });`);
+        await key('keyUp', 'w', 'KeyW', 87);
+        assert.equal(r.armed, false, 'W on its back does not arm');
+        assert.equal(r.turtle, null, 'nor start a turtle');
+        assert.ok(r.upZ < 0, 'still on its back ' + r.upZ);
+        r = await js(`await E.wait(200); return JSON.stringify(1);`);
         await key('rawKeyDown', 'ArrowRight', 'ArrowRight', 39);
         await key('keyDown', 'ArrowRight', 'ArrowRight', 39);
         r = await js(`
