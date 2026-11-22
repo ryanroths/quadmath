@@ -571,6 +571,11 @@
   #firstFlight.keys{width:min(560px,92vw)}
   #firstFlight .ff-pack{font-size:12px;font-weight:500;color:var(--dim);margin-top:2px}
   #firstFlight img{display:block;width:auto;height:auto;max-width:100%;max-height:52vh;margin:10px auto 0}
+  /* The keyboard layout shows the keys bigger than the key legend, which it
+     covers on a small screen: the legend steps aside while it is up, its box
+     kept (placeStickOverlay steers by it), so nothing moves. A rule of its
+     own: a browser without :has() drops only this. */
+  body:has(#firstFlight.show.keys) #legend{visibility:hidden}
   #feelTutMsg{font-size:14px;font-weight:600;margin-bottom:8px}
   #feelTutorial button{width:auto;display:inline-block;margin:4px 6px}
   button.primary{background:var(--orange);color:#140802;border-color:var(--orange)}
@@ -793,6 +798,9 @@
   <div class="lgc lgc-tr"></div>
   <div class="lgc lgc-bl"></div>
   <div class="lgc lgc-br"></div>
+  <b>W/S — Throttle</b><br>
+  <b>A/D — Yaw</b><br>
+  <b>Arrows — Pitch / Roll</b><br>
   <b>M — Sound On/Off</b><br>
   <b>N — Next Music Track</b><br>
   <b>1/2/3 — Angle / Horizon / Acro</b><br>
@@ -1233,7 +1241,7 @@ import {
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
   parseThreeDQuery, runCountsForBoards, throttleHudText,
   throttleCollective, armHintText, stepEasyArm, isLanded,
-} from "./sim-3d.js?v=af80783173d2";
+} from "./sim-3d.js?v=26ff81b1d879";
 import {
   WHOOP_KEY, PHYSICS_VER, BOUNCE_MAPS,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
@@ -1298,7 +1306,7 @@ import {
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z,
   loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT,FIRST_FLIGHT_PACK_TEXT,
   loadStickOverlay,saveStickOverlay,stickOverlayOn,createStickOverlay,STICK_OVERLAY_PHONE,
-  SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText} from "./sim-feel.js?v=c0aced47aab2";
+  SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText} from "./sim-feel.js?v=5c00aa42f1a9";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -4847,6 +4855,8 @@ function nudgeCam(dir){
   toast('CAM '+v+'°',{ms:1000});
 }
 let kbThrottle=0,gpConnected=false,gpName='';
+let kbLoadWait=false;  // W went down while Betaflight loaded: the throttle stays at rest until it is let go
+let kbFromRest=false;  // disarmed, the keys' throttle has risen only from exactly the bottom (Easy arm hold)
 // A roll or pitch arrow down at the last poll (readInput): 1 while any is,
 // opposite arrows together too (their stick is centred, but neither key is
 // up); 0 with none or off the keyboard. The turtle's stick hold (pollInput)
@@ -5345,9 +5355,24 @@ function readInput(dt){
     stick.aux=null;
     const sm=dt>0?1-Math.pow(0.0001,dt):0;
     stick.r+=(tR-stick.r)*sm;stick.p+=(tP-stick.p)*sm;stick.y+=(tY-stick.y)*sm;
-    if(keys['w'])kbThrottle+=1.4*dt;
+    // The keyboard's throttle: W and S. Disarmed, it is at rest (the bottom;
+    // centre in 3D) unless W holds it up, so a W let go before an arm takes,
+    // or a disarm, never leaves it up where nothing arms: a keyboard has no
+    // stick position to keep. While Betaflight loads, a W gets the loading
+    // toast and the throttle stays at rest until that W is let go; the next
+    // W, once loaded, arms (kbLoadWait).
+    const rest=threeD?0.5:0,disarmed=!coreArmed();
+    if(!keys['w'])kbLoadWait=false;
+    else if(disarmed&&!kbLoadWait&&bfLoadPending()){kbLoadWait=true;bfArmHeld=droneType;toast(BF_LOADING_TOAST,{ms:2400});}
+    if(keys['w']&&!kbLoadWait)kbThrottle+=1.4*dt;
     if(keys['s'])kbThrottle-=1.4*dt;
     kbThrottle=THREE.MathUtils.clamp(kbThrottle,0,1);
+    if(disarmed&&(!keys['w']||kbLoadWait))kbThrottle=rest;
+    // A raise from exactly the bottom, disarmed: Easy mode's arm hold is met
+    // (tickEasyArm). The hold guards a radio's throttle left up; the keys'
+    // throttle is at the bottom until W.
+    if(!disarmed)kbFromRest=false;
+    else if(kbThrottle===0)kbFromRest=true;
     stick.t=kbThrottle;
   }
 }
@@ -5722,6 +5747,9 @@ function tickEasyArm(dt){
   const flipped=!threeD&&bodyUpZ(cs.quaternion)<EASY_TURTLE_UP_Z&&cs.clearance<=0.04;
   const out=stepEasyArm(easyArmState,{
     t:stick.t,threeD,dt,armed:coreArmed(),autoArm:autoArmOn,
+    // The keys' own throttle only: a test stick (setTestStick) over it is not
+    // a raise from the bottom.
+    seenLow:!threeD&&kbFromRest&&stickInputKind()==='keyboard'&&stick.t===kbThrottle,
     ready:!(armGate&&padLive),
     landed:isLanded({clearanceM:cs.clearance,speed,omega}),
     crashed:flipped||simClockMs-easyCrashAt<EASY_CRASH_MEMORY_MS,
@@ -5793,7 +5821,7 @@ function tickFirstFlight(dt){
   if(!firstFlightState.show&&firstFlightSeen[input]&&(input!=='keyboard'||firstFlightSeen.keys))return;
   const was=firstFlightState.show||null;
   const out=stepFirstFlight(firstFlightState,{dt,seen:firstFlightSeen,attempt,armed,key,stick,
-    controller:on.controller,touch:on.touch});
+    controller:on.controller,touch:on.touch,keysAtOnce:input==='keyboard'&&!!feel&&feel.loadInputChoice()==='keyboard'});
   firstFlightState=out.state;
   if(out.changed){
     firstFlightSeen=out.seen;
@@ -10411,7 +10439,7 @@ function loop(now){
     if(feel){
       state.stickT=stick.t;
       feel.updateHud({stick,battV,battOn:CFG.battSimOn||cs.kind==='bf',mode:cs.flightMode,armed:cs.armed,threeD,thrText:throttleHudText(stick.t,threeD),quad:flyingQuadName(),
-        armHint:bfLoadPending()?BF_LOADING_HINT:bfRadio()?'Arm on the radio (AUX'+(pilotAux('arm')||'?')+')':armHintText({threeD,easy:easyMode(),autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked,touch:touchThrottleSide(),low:throttleSafeToArm(stick.t,threeD)})});
+        armHint:bfLoadPending()?BF_LOADING_HINT:bfRadio()?'Arm on the radio (AUX'+(pilotAux('arm')||'?')+')':armHintText({threeD,easy:easyMode(),autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked,touch:touchThrottleSide(),keys:stickInputKind()==='keyboard',low:throttleSafeToArm(stick.t,threeD)||(kbFromRest&&stickInputKind()==='keyboard'&&stick.t===kbThrottle)})});
       feel.tickTutorial(state,dt,cs.armed);
       const upZ=bodyUpZ(cs.quaternion);
       const clearanceM=cs.clearance;

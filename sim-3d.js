@@ -149,7 +149,9 @@ export function stepAutoArm(state, sample) {
 // for EASY_DISARM_HOLD_S: disarmed, so a new pilot does not sit on the floor
 // armed after a flight (half a second: long enough for a touch-and-go, short
 // enough that the props stop as the quad settles). A crash (the page's latch)
-// disarms once the quad has come to rest.
+// disarms once the quad has come to rest. seenLow: the input's throttle came
+// up from exactly the bottom, which meets the hold at once (the keyboard's:
+// it is at the bottom until W; the hold is for a stick left up).
 export const EASY_ARM_HOLD_S = 1;
 export const EASY_DISARM_HOLD_S = 0.5;
 const EASY_LANDED_CLEARANCE_M = 0.04;
@@ -207,7 +209,7 @@ export function stepEasyArm(state, sample) {
   if (safe || !wants) return none;
   // Raised: the auto-arm's own rule, its "seen low" earned by the hold. Raised
   // too soon, or from where it cannot arm, the hold starts over.
-  const held = next.lowS >= EASY_ARM_HOLD_S - 1e-9;
+  const held = s.seenLow === true || next.lowS >= EASY_ARM_HOLD_S - 1e-9;
   next.lowS = 0;
   if (s.blocked) return none;
   const arm = stepAutoArm({ seenLow: held }, { t: s.t, threeD: s.threeD, armed: false, autoArm: s.autoArm, hasSwitch: false }).arm;
@@ -232,6 +234,14 @@ export function armHintText(threeDOrOpts, extra) {
     const down = o.threeD ? ' to centre' : ' down';
     if (o.autoArm === false) return o.low ? 'Tap ARM to arm' : Stick + down + ', then tap ARM';
     return o.low ? 'Thumb on the ' + o.touch + ' stick, slide up to fly' : Stick + down + ' 1 s, then slide up to fly';
+  }
+  // The keyboard (keys): W is the throttle, at the bottom (low) until W. In
+  // Easy mode W arms; outside it Space does. Not low only while W is held
+  // and nothing has armed (the page puts a disarmed keys throttle back).
+  if (o.keys) {
+    const base = o.threeD ? 'W/S to centre' : 'S to the bottom';
+    if (o.easy && o.autoArm !== false) return o.low ? 'Hold W to fly' : base + ', then W';
+    return o.low ? 'Space to arm, then W to fly' : base + ', then Space';
   }
   if (o.easy && o.autoArm !== false) {
     return o.threeD ? 'Throttle centred 1 s, then move it to fly' : 'Throttle down 1 s, then up to fly';

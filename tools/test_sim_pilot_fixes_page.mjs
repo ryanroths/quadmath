@@ -495,8 +495,10 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
     assert.equal(menu[0].text, 'New pack [P]');
     assert.equal(menu[1].v.toFixed(1), '4.2', 'from the menu: a new pack');
     assert.equal(menu[2], false, 'and back to flying');
-    // The first-flight card's line, for the keyboard.
-    await open(b, port, { seed: { ...KEYS, quadmathSimFirstFlight: 'touch,controller' } });
+    // The first-flight card's line, for the keyboard: no input chosen yet, so
+    // the card on the first arm attempt (a pilot who chose Fly with keyboard has
+    // the keyboard layout from the start instead, with the same lines).
+    await open(b, port, { seed: { ryflyDroneType: KEYS.ryflyDroneType, quadmathSimFirstFlight: 'touch,controller' } });
     const card = await run(b, `s.tryArm(); await P.wait(400);
       const el = document.getElementById('firstFlight');
       return JSON.stringify({ show: el.classList.contains('show'), lines: [...el.children].map((c) => c.textContent) });`);
