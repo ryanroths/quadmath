@@ -6310,21 +6310,22 @@ function osdBcHtml(barSrc,label,tSec,twr,threeD,why){
 const panel=document.getElementById('panel');
 document.getElementById('gear').onclick=()=>panel.classList.toggle('open');
 // The flight keys skip a focused slider or number box (the keydown handler),
-// and a click on one gives it the focus: after a Tune slider moved with the
-// mouse, W, S, A, D, Space and the arrows did nothing until a click elsewhere.
-// A slider let go of (mouseup, touchend, or its change) lets go of the focus,
-// after its own change; a step made with its arrow keys keeps it, so a slider
-// reached with Tab steps on. A number box keeps it while typing: Enter sends
-// what is typed (the box's change handler, after syncBfRatesUI), Esc puts
-// back what was in it, and either one lets go.
+// and a click on one gives it the focus: after a slider moved with the mouse
+// (Tune's, the replay's scrub, the menu's volume), W, S, A, D, Space, Esc and
+// the arrows did nothing until a click elsewhere. A slider let go of
+// (mouseup, touchend, or its change) lets go of the focus, after its own
+// change; a step made with its arrow keys keeps it, so a slider reached with
+// Tab steps on. A Tune number box keeps it while typing: Enter sends what is
+// typed (the box's change handler, after syncBfRatesUI), Esc puts back what
+// was in it, and either one lets go.
 {
-  const tuneSlider=(el)=>!!el&&el.tagName==='INPUT'&&el.type==='range'&&panel.contains(el);
+  const slider=(el)=>!!el&&el.tagName==='INPUT'&&el.type==='range';
   const tuneNumber=(el)=>!!el&&el.tagName==='INPUT'&&el.type==='number'&&panel.contains(el);
-  const letGo=()=>setTimeout(()=>{const el=document.activeElement;if(tuneSlider(el))el.blur();},0);
+  const letGo=()=>setTimeout(()=>{const el=document.activeElement;if(slider(el))el.blur();},0);
   for(const type of ['mouseup','touchend','touchcancel'])addEventListener(type,letGo,{capture:true,passive:true});
-  let stepKey=null;  // the slider a key is down on, for this task: its change is a step
-  panel.addEventListener('keydown',e=>{stepKey=e.target;setTimeout(()=>{stepKey=null;},0);},true);
-  panel.addEventListener('change',e=>{if(tuneSlider(e.target)&&e.target!==stepKey)letGo();});
+  let stepKey=null;  // what a key is down on, for this task: a slider's change then is a step
+  addEventListener('keydown',e=>{stepKey=e.target;setTimeout(()=>{stepKey=null;},0);},true);
+  addEventListener('change',e=>{if(slider(e.target)&&e.target!==stepKey)letGo();},true);
   let was='';  // what the focused number box held when it took the focus
   panel.addEventListener('focusin',e=>{if(tuneNumber(e.target))was=e.target.value;});
   panel.addEventListener('keydown',e=>{

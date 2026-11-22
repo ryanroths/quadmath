@@ -17,8 +17,9 @@
 //     who arms on Space (the layout, no text card), the keyboard's arming (W
 //     held at once arms and climbs; a tap of W, then W; Space, then W; W
 //     while Betaflight loads, then W; a Tune slider moved with the mouse,
-//     then W; Tune's number boxes let go on Enter and Esc), touch, and a radio
-//     on its own switches (no card: the throttle is not its arm).
+//     then W; Tune's number boxes let go on Enter and Esc; the replay's scrub
+//     and the menu's volume moved with the mouse, then Space and Esc), touch,
+//     and a radio on its own switches (no card: the throttle is not its arm).
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -1244,6 +1245,54 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         console.log('tune, a slider on its arrow keys: ' + JSON.stringify(r));
         assert.equal(r.focus, 'bfs_roll_expo', 'arrow steps keep the focus');
         assert.equal(Math.round((+r.slider - v0) * 100), 2, `two steps (${v0} to ${r.slider})`);
+      });
+    });
+
+    await t.test('keyboard: the replay\'s scrub and the menu\'s volume, moved with the mouse, let go on release: Space plays the replay, Esc goes back', async () => {
+      await pass('', {}, async ({ js, key, enter, mouse }) => {
+        await enter();
+        let r = await js(`${fly} return JSON.stringify({ flying });`);
+        assert.equal(r.flying, true, 'flying');
+        // Pressed at one point of the slider's width, dragged to another, let go.
+        const drag = async (sel, from, to) => {
+          const b = await js(`const el = document.querySelector(${JSON.stringify(sel)}); el.scrollIntoView({ block: 'center' }); await F.wait(150);
+            const b = el.getBoundingClientRect(); return JSON.stringify({ l: b.left, t: b.top, w: b.width, h: b.height });`);
+          const y = b.t + b.h / 2;
+          await mouse('mousePressed', b.l + b.w * from, y);
+          const pressed = await js(`return JSON.stringify(document.activeElement === document.querySelector(${JSON.stringify(sel)}));`);
+          for (const f of [1, 2, 3]) { await mouse('mouseMoved', b.l + b.w * (from + (to - from) * f / 3), y); await js(`await F.wait(30); return JSON.stringify(1);`); }
+          await mouse('mouseReleased', b.l + b.w * to, y);
+          const after = await js(`await F.wait(200); const el = document.querySelector(${JSON.stringify(sel)});
+            return JSON.stringify({ focused: document.activeElement === el, focus: document.activeElement.id || document.activeElement.tagName, value: el.value });`);
+          return { pressed, ...after };
+        };
+        // The replay's scrub: dragged (the replay stops on it), then Space plays it again.
+        r = await js(`F.s.demoReplayForShot(); await F.wait(300); return JSON.stringify({ on: F.s.replayOn() });`);
+        assert.equal(r.on, true, 'a replay');
+        let d = await drag('#replayScrub', 0.2, 0.6);
+        console.log('the replay scrub let go: ' + JSON.stringify(d));
+        assert.equal(d.pressed, true, 'pressed: the scrub has the focus');
+        assert.equal(d.focused, false, 'let go: the scrub lets go of the focus ' + JSON.stringify(d));
+        r = await js(`return JSON.stringify({ play: document.getElementById('replayPlay').textContent });`);
+        assert.equal(r.play, 'Play', 'the scrub stopped the replay');
+        await key(' ', 'Space', 32);
+        r = await js(`await F.wait(200); return JSON.stringify({ play: document.getElementById('replayPlay').textContent, on: F.s.replayOn() });`);
+        assert.equal(r.play, 'Pause', 'then Space plays it ' + JSON.stringify(r));
+        await js(`F.s.stopReplay(); await F.wait(300); return JSON.stringify(1);`);
+        // The menu's volume (Controls): dragged, then Esc goes back from Controls.
+        await key('Escape', 'Escape', 27);
+        r = await js(`const open = await F.until(() => F.paused(), 2000); document.getElementById('menuControls').click(); await F.wait(300);
+          return JSON.stringify({ open, layer: document.getElementById('menuLayer').classList.contains('show'), vol: !!document.querySelector('#menuLayer .sound-vol') });`);
+        assert.equal(r.open, true, 'the menu');
+        assert.ok(r.layer && r.vol, 'Controls, with the volume ' + JSON.stringify(r));
+        d = await drag('#menuLayer .sound-vol', 0.3, 0.8);
+        console.log('the menu volume let go: ' + JSON.stringify(d));
+        assert.equal(d.pressed, true, 'pressed: the volume has the focus');
+        assert.equal(d.focused, false, 'let go: the volume lets go of the focus ' + JSON.stringify(d));
+        await key('Escape', 'Escape', 27);
+        r = await js(`await F.wait(200); return JSON.stringify({ layer: document.getElementById('menuLayer').classList.contains('show'), menu: document.body.classList.contains('menu-open') });`);
+        assert.equal(r.layer, false, 'then Esc goes back from Controls ' + JSON.stringify(r));
+        assert.equal(r.menu, true, 'to the menu');
       });
     });
 
