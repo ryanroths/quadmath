@@ -1,8 +1,9 @@
 // The first-flight card: on the first arm attempt, "Throttle up to fly · Full
 // stick to flip back over · Esc for menu"; with no controller 3 s into the
-// flying page, the keyboard layout as an image card. Dismissed by any stick or
-// key. Once per profile for each kind of input (keyboard, touch, controller),
-// never shown again on that input.
+// flying page, the keyboard layout as an image card (from the first moment for
+// a pilot who chose Fly with keyboard, and kept through the first arm).
+// Dismissed by any stick or key. Once per profile for each kind of input
+// (keyboard, touch, controller), never shown again on that input.
 //   - In node: the card's rules (sim-feel.js stepFirstFlight) and its storage.
 //   - In headless Chrome, a fresh profile each: a fake TX16S (the card on the
 //     first throttle raise, armed or not; it does not pause the flight; gone
@@ -10,10 +11,13 @@
 //     page loads with its throttle at the bottom (there at the page's first
 //     look, or handed over by gamepadconnected after its scripts: the first
 //     throttle-up arms and shows the card), the keyboard through the
-//     real launch path (the layout image after 3 s, there until a key; then
-//     the same profile opened again with the TX16S awake: its card), a
-//     keyboard pilot who arms at once (the text card, no layout), touch, and
-//     a radio on its own switches (no card: the throttle is not its arm).
+//     real launch path (Enter on Fly with keyboard, which has the focus; the
+//     layout image at once, there through the W that arms; then the same
+//     profile opened again with the TX16S awake: its card), a keyboard pilot
+//     who arms on Space (the layout, no text card), the keyboard's arming (W
+//     held at once arms and climbs; a tap of W, then W; Space, then W; W
+//     while Betaflight loads, then W), touch, and a radio on its own
+//     switches (no card: the throttle is not its arm).
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -152,6 +156,36 @@ test('no controller after 3 s: the keyboard layout; not on touch, not once armed
   assert.equal(r.show, null);
   assert.deepEqual(r.seen, { ...NONE, keys: true, keyboard: true }, 'the layout is not needed');
   assert.equal(run(r, 10, {}).show, null);
+});
+
+test('Fly with keyboard chosen (keysAtOnce): the layout at once; no key takes it before the first arm, nor the W that arms', () => {
+  const K = { keysAtOnce: true };
+  let r = run({}, DT, K);
+  assert.equal(r.show, 'keys', 'from the first sample');
+  assert.deepEqual(r.seen, { ...NONE, keys: true, keyboard: true }, 'the layout uses up the keyboard card');
+  // Keys, the arrows and W (the throttle moves) before any arm: it stays.
+  r = run(r, 4, (t) => ({ ...K, key: Math.abs(t - 1) < 0.002 || Math.abs(t - 3) < 0.002, stick: { ...REST, r: t > 2 ? 1 : 0 } }));
+  assert.equal(r.show, 'keys', 'keys before the first arm do not take it away');
+  // The W that arms (an attempt, then armed, the throttle up): still up, and no second card.
+  r = run(r, 0.5, (t) => ({ ...K, attempt: t === 0, armed: t > 0.1, key: t === 0, stick: { ...REST, t: 0.5 } }));
+  assert.equal(r.show, 'keys', 'the W that arms leaves it up');
+  r = run(r, 1.9, { ...K, armed: true, stick: { ...REST, t: 0.5 } });
+  assert.equal(r.show, 'keys', 'under 2.5 s armed: still up');
+  // 2.5 s armed, with the throttle up from where it was (a stick that moved): gone.
+  r = run(r, 0.3, { ...K, armed: true, stick: { ...REST, t: 0.5 } });
+  assert.equal(r.show, null, 'gone once it has been armed 2.5 s, on the throttle that is up');
+  assert.deepEqual(r.seen, { ...NONE, keys: true, keyboard: true });
+  assert.equal(run(r, 3, (t) => ({ ...K, attempt: t === 0 })).show, null, 'a later attempt on the keys: no second card');
+  // An arm attempt in the very first sample: the layout, not the text card.
+  r = run({}, DT, { ...K, attempt: true });
+  assert.equal(r.show, 'keys');
+  assert.deepEqual(r.seen, { ...NONE, keys: true, keyboard: true });
+  // A controller that wakes takes it away (as without keysAtOnce), once it has been up 2.5 s.
+  r = run({}, 1, K);
+  r = run(r, 2, { ...K, controller: true });
+  assert.equal(r.show, null);
+  // Without keysAtOnce: the 3 s layout, gone on a key, as before.
+  assert.equal(run({}, 2.9, {}).show, null);
 });
 
 test('one card for each input: the keys used up, a radio and touch sticks still get theirs', () => {
@@ -514,6 +548,20 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         sessionStorage.setItem('__fakePads', JSON.stringify(${JSON.stringify(seed.pad || { on: false, id: '', mapping: '', axes: [], buttons: 0 })}));
         return true;
       })()`);
+      // seed.holdWasm: Betaflight's wasm held back (CDP Fetch) until the flow
+      // lets it go (releaseWasm): the js core flies and the bf core is loading.
+      const wasmHeld = [];
+      let wasmGo = !seed.holdWasm;
+      if (seed.holdWasm) {
+        ws.addEventListener('message', (m) => {
+          let o = null;
+          try { o = JSON.parse(typeof m.data === 'string' ? m.data : m.data.toString()); } catch (e) { return; }
+          if (o.method !== 'Fetch.requestPaused') return;
+          if (wasmGo) cdp(ws, 'Fetch.continueRequest', { requestId: o.params.requestId }).catch(() => {});
+          else wasmHeld.push(o.params.requestId);
+        });
+        await cdp(ws, 'Fetch.enable', { patterns: [{ urlPattern: '*sim-core.wasm*', requestStage: 'Request' }] });
+      }
       await cdp(ws, 'Page.navigate', { url });
       const boot = async (core = seed.core || 'bf') => {
         let ready = false;
@@ -538,6 +586,13 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
           await cdp(ws, 'Input.dispatchKeyEvent', { type: 'rawKeyDown', key, code, windowsVirtualKeyCode: vk });
           await cdp(ws, 'Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: vk });
         },
+        // Enter as a keyboard types it (keyDown with its text): a focused button takes it.
+        enter: async () => {
+          await cdp(ws, 'Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
+          await cdp(ws, 'Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+        },
+        wasmHeld: () => wasmHeld.length,
+        releaseWasm: async () => { wasmGo = true; for (const id of wasmHeld.splice(0)) await cdp(ws, 'Fetch.continueRequest', { requestId: id }); },
       });
     } finally {
       try { if (ws) ws.close(); } catch (e) { /* ignore */ }
@@ -755,81 +810,33 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
       });
     }
 
-    await t.test('a fresh profile with no controller: Fly with keyboard, Fly, the Rig; 3 s later the keyboard layout, there until a key; never again', async () => {
-      await pass('', {}, async ({ js, reload, key, hold }) => {
-        let r = await js(`
-          const prompt = !!document.getElementById('feelKeys');
-          document.getElementById('feelKeys').click();
-          await F.wait(150);
+    await t.test('a fresh profile with no controller: Enter takes Fly with keyboard (it has the focus); Fly, the Rig; the keyboard layout at once, there through the W that arms; never again', async () => {
+      await pass('', {}, async ({ js, reload, key, hold, enter }) => {
+        let r = await js(`return JSON.stringify({ prompt: !!document.getElementById('feelKeys'), focus: document.activeElement ? document.activeElement.id : null });`);
+        assert.equal(r.prompt, true, 'the first-run prompt offers the keyboard');
+        assert.equal(r.focus, 'feelKeys', 'Fly with keyboard has the focus');
+        await enter();
+        r = await js(`const gone = await F.until(() => !(window._feel && window._feel.promptOpen), 3000);
+          return JSON.stringify({ gone, choice: localStorage.getItem('quadmathSimInputChoice') });`);
+        assert.equal(r.gone, true, 'Enter takes it: no mouse needed');
+        assert.equal(r.choice, 'keyboard');
+        r = await js(`
           document.getElementById('menuFly').click();
           await F.wait(200);
           const pausedOnMenu = F.paused();
-          // Frames as a busy device has them around the click that starts the
-          // flight: none from 100 ms before it until 8 ms after it, so input
-          // polls run before the first frame of the flight. A page that steps
-          // the time it was paused (its first frame flying from the last
-          // paused frame's timestamp) is then that 100 ms and the click's own
-          // work ahead of the wall, and shows the layout that much early: on
-          // CI, where frames are that slow by themselves, 2778 ms of wall time
-          // in. The input poll takes at most 250 ms in one step, so how early
-          // stops just past the 200 ms the check below allows; the sim's clock
-          // against the wall's is the check that does not depend on that.
-          const raf = window.requestAnimationFrame.bind(window);
-          let holdUntil = 0;
-          const HOLD_BEFORE = 100, HOLD_AFTER = 8;
-          window.requestAnimationFrame = (cb) => raf((ts) => {
-            const run = () => { if (performance.now() < holdUntil) setTimeout(run, 4); else cb(ts); };
-            run();
-          });
-          await F.wait(3500);
           const onMenu = F.card();
-          // The layout's moment as the poll that paints it does (a
-          // MutationObserver runs in that poll's task, before any frame can).
-          const el = document.getElementById('firstFlight');
-          // The input clock itself: the stamp of each poll the page reads
-          // (the sim time of its wall time, in us). None while the menu is up.
-          // The flying page starts at the first one; the layout's poll is the
-          // last one when it is painted. The core's flight time is a frame
-          // behind the stamps, up to 250 ms of sim time on a slow runner, so
-          // it is read for the log only.
-          const bf = F.s.bfCore(), stamp = bf.stamp.bind(bf);
-          let firstUs = null, lastUs = null;
-          bf.stamp = (wallMs) => { const us = stamp(wallMs); if (us !== null) { if (firstUs === null) firstUs = us; lastUs = us; } return us; };
-          let onUs = null, onSim = null, onWall = null;
-          const mo = new MutationObserver(() => {
-            if (onSim === null && el.classList.contains('show')) { onUs = lastUs; onSim = F.s.coreState().flightMs; onWall = performance.now(); mo.disconnect(); }
-          });
-          mo.observe(el, { attributes: true, attributeFilter: ['class'] });
-          holdUntil = performance.now() + 5000;
-          await F.wait(HOLD_BEFORE);
           document.querySelector('#menuLayer [data-fly-map="rig"]').click();
-          holdUntil = performance.now() + HOLD_AFTER;
-          // The layout's 3 s is on the sim's clock (the input poll's time), as
-          // the card's is: read at 1.8 s of the core's flight time, and timed
-          // on the polls' own stamps. The ceilings keep this call inside CDP's 45 s.
-          const t0 = F.s.coreState().flightMs, t0Wall = performance.now();
-          const at18 = await F.until(() => F.s.coreState().flightMs - t0 >= 1800, 15000);
-          const early = F.card();
-          const shown = await F.until(() => F.card().on || F.s.coreState().flightMs - t0 > 6000, 20000) && F.card().on;
-          const ms = onUs === null || firstUs === null ? null : (onUs - firstUs) / 1000;
-          const msSim = (onSim === null ? F.s.coreState().flightMs : onSim) - t0;
-          const msWall = (onWall === null ? performance.now() : onWall) - t0Wall;
+          const shown = await F.until(() => F.card().on, 5000);
+          const at = F.live();
           await F.until(() => { const i = document.querySelector('#firstFlight img'); return i && i.complete; }, 3000);
-          return JSON.stringify({ prompt, pausedOnMenu, onMenu, at18, early, shown, ms, msSim, msWall, card: F.card(), map: F.s.map() });`);
-        console.log('keyboard: ' + JSON.stringify({ shownMs: r.ms === null ? null : Math.round(r.ms), flightMs: Math.round(r.msSim), wallMs: Math.round(r.msWall), img: r.card.img, saved: r.card.saved }));
-        assert.equal(r.prompt, true, 'the first-run prompt offers the keyboard');
+          const h = document.getElementById('hudArmHint');
+          return JSON.stringify({ pausedOnMenu, onMenu, shown, at, card: F.card(), map: F.s.map(), hint: h.classList.contains('show') ? h.textContent : null });`);
+        console.log('keyboard: ' + JSON.stringify({ atMs: Math.round(r.at), img: r.card.img, saved: r.card.saved, hint: r.hint }));
         assert.equal(r.pausedOnMenu, true);
-        assert.equal(r.onMenu.on, false, 'time on the menus does not count');
+        assert.equal(r.onMenu.on, false, 'not on the menus');
         assert.equal(r.map, 'rig');
-        assert.equal(r.at18, true, '1.8 s of sim time on the flying page');
-        assert.equal(r.early.on, false, 'not at 1.8 s');
         assert.equal(r.shown, true, 'the keyboard layout shows');
-        assert.ok(r.ms !== null, 'the input clock was read at the first poll of the flying page and at the layout');
-        assert.ok(r.ms >= 2800 && r.ms < 5000, `about 3 s into the flying page (${Math.round(r.ms)} ms of input time)`);
-        assert.ok(r.msWall >= 2800, `not before 3 s of wall time either (${Math.round(r.msWall)} ms)`);
-        // From the click to the layout the page was never paused: the sim has
-        // flown that wall time or less, never more.
-        assert.ok(r.msSim <= r.msWall, `the sim is never ahead of the wall: no paused time is flown (${Math.round(r.msSim)} ms of flight time in ${Math.round(r.msWall)} ms of wall time)`);
+        assert.ok(r.at < 300, `at once: ${Math.round(r.at)} ms into the flying page`);
         assert.equal(r.card.kind, 'keys');
         assert.equal(r.card.text, FIRST_FLIGHT_TEXT, 'under the same line');
         assert.ok(r.card.img, 'an image card');
@@ -838,26 +845,28 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         assert.equal(r.card.img.alt, FIRST_FLIGHT_KEYS_ALT);
         assert.ok(r.card.img.w >= 300, `at a readable size (${r.card.img.w} px wide)`);
         assert.equal(r.card.inView, true, 'all of it on screen');
-        assert.equal(r.card.saved, 'keys');
+        assert.equal(r.card.saved, 'keys,keyboard', 'the layout uses up the keyboard card');
+        assert.equal(r.hint, 'Hold W to fly', 'the arm hint names the key');
 
-        // No input: it stays, 3.2 s of its own time on screen. Then any key:
-        // gone within 0.8 s of sim time.
+        // A key before any arm: it stays, 3.2 s of its own time on screen.
+        await key('ArrowLeft', 'ArrowLeft', 37);
         r = await js(`const stood = await F.passed(F.up, 3200); return JSON.stringify({ stood, card: F.card() });`);
         assert.equal(r.stood, true, '3.2 s on screen, on the card\'s clock');
-        assert.equal(r.card.on, true, 'there until a key');
-        await key('ArrowLeft', 'ArrowLeft', 37);
-        r = await js(`const gone = await F.goneIn(800); return JSON.stringify({ gone });`);
-        assert.equal(r.gone, true, 'a key takes it away');
+        assert.equal(r.card.on, true, 'a key before the first arm does not take it away');
 
-        // W arms: the layout carried the line, so no second card.
+        // W arms, and the layout stays through it: no second card. Armed 2.5 s, a key takes it.
         await hold(true, 'w', 'KeyW', 87);
-        r = await js(`
-          const armed = await F.within(F.sim, () => F.s.coreState().armed, 2500);
-          await F.wait(400);
-          return JSON.stringify({ armed, card: F.card() });`);
+        r = await js(`const armed = await F.within(F.sim, () => F.s.coreState().armed, 2500); return JSON.stringify({ armed });`);
         await hold(false, 'w', 'KeyW', 87);
         assert.equal(r.armed, true, 'W arms');
-        assert.equal(r.card.on, false, 'no second card on the keys');
+        r = await js(`const stood = await F.passed(F.sim, 1500); return JSON.stringify({ stood, card: F.card() });`);
+        assert.equal(r.stood, true);
+        assert.equal(r.card.on, true, 'the W that arms leaves it up');
+        assert.equal(r.card.kind, 'keys', 'no second card on the keys');
+        r = await js(`await F.passed(F.sim, 1300); return JSON.stringify(1);`);
+        await key('ArrowLeft', 'ArrowLeft', 37);
+        r = await js(`const gone = await F.goneIn(1200); return JSON.stringify({ gone, card: F.card() });`);
+        assert.equal(r.gone, true, 'armed 2.5 s, a key takes it away');
         assert.equal(r.card.saved, 'keys,keyboard');
 
         await reload();
@@ -912,7 +921,7 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
       });
     });
 
-    await t.test('a keyboard pilot who arms at once: the card on Space, there until a key, and no layout after it', async () => {
+    await t.test('a keyboard pilot who arms on Space: the layout from the start, there through the arm; armed 2.5 s, a key takes it; no text card', async () => {
       await pass('map=rig', {}, async ({ js, key }) => {
         // Betaflight arms only once its own guards are clear (its boot grace
         // runs on the sim clock, which the prompt paused): Space once its
@@ -921,31 +930,125 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         let ready = await js(`document.getElementById('feelKeys').click();
           const s0 = F.s.bfCore().simTimeUs;
           const ok = await F.until(() => !F.paused() && F.s.bfCore().simTimeUs - s0 >= 50000 && F.s.coreState().armingDisableFlags === 0, 30000);
-          return JSON.stringify({ ok, flags: F.s.coreState().armingDisableFlags, paused: F.paused(), simMs: Math.round((F.s.bfCore().simTimeUs - s0) / 1000) });`);
+          return JSON.stringify({ ok, flags: F.s.coreState().armingDisableFlags, paused: F.paused(), simMs: Math.round((F.s.bfCore().simTimeUs - s0) / 1000), card: F.card() });`);
         assert.equal(ready.ok, true, 'Betaflight ready to arm after the prompt: ' + JSON.stringify(ready));
+        assert.equal(ready.card.on, true, 'the layout from the start of the flying page');
+        assert.equal(ready.card.kind, 'keys');
         await key(' ', 'Space', 32);
         let r = await js(`
-          const shown = await F.shownIn(1000);
-          const first = F.card();
           const armed = await F.within(F.sim, () => F.s.coreState().armed, 1200);
-          // 3.4 s of the card's own time on screen: past the layout's 3 s.
-          const stood = await F.passed(F.up, 3400);
-          return JSON.stringify({ shown, first, armed, stood, flags: F.s.coreState().armingDisableFlags, later: F.card() });`);
-        assert.equal(r.shown, true, 'Space is an arm attempt');
-        assert.equal(r.stood, true, '3.4 s on screen, on the card\'s clock');
-        assert.equal(r.first.kind, 'card');
-        assert.equal(r.first.img, null);
+          const stood = await F.passed(F.sim, 2800);
+          return JSON.stringify({ armed, stood, flags: F.s.coreState().armingDisableFlags, later: F.card() });`);
         assert.equal(r.armed, true, `Space arms (flags ${r.flags})`);
-        assert.equal(r.later.on, true, 'the key that raised it does not dismiss it; no input, it stays');
-        assert.equal(r.later.kind, 'card', 'still the card, not the layout');
+        assert.equal(r.stood, true);
+        assert.equal(r.later.on, true, 'no input since: it stays');
+        assert.equal(r.later.kind, 'keys', 'still the layout, no text card');
         await key('ArrowLeft', 'ArrowLeft', 37);
         r = await js(`
           const gone = await F.goneIn(800);
           await F.wait(1500);
           return JSON.stringify({ gone, card: F.card() });`);
-        assert.equal(r.gone, true, 'a key takes it away');
-        assert.equal(r.card.on, false, 'armed by 3 s: no keyboard layout');
+        assert.equal(r.gone, true, 'armed 2.5 s, a key takes it away');
+        assert.equal(r.card.on, false, 'and nothing follows');
         assert.equal(r.card.saved, 'keys,keyboard');
+      });
+    });
+
+    // A first keyboard visit's arming, real keys: W, the arm hold Easy mode
+    // asks of a radio not asked of the keys (its throttle is at the bottom
+    // until W), and a throttle that never stays up while nothing arms.
+    const fly = `await F.until(() => !(window._feel && window._feel.promptOpen), 3000);
+      document.getElementById('menuFly').click(); await F.wait(200);
+      document.querySelector('#menuLayer [data-fly-map="rig"]').click();
+      const flying = await F.until(() => !F.paused(), 3000);`;
+    const T = `F.s.stickOverlay().stick.t`;
+    await t.test('keyboard: W held straight after the map pick arms and climbs', async () => {
+      await pass('', {}, async ({ js, hold, enter }) => {
+        await enter();
+        let r = await js(`${fly} const h = document.getElementById('hudArmHint'); await F.until(() => h.classList.contains('show'), 2000);
+          return JSON.stringify({ flying, core: F.s.core(), hint: h.classList.contains('show') ? h.textContent : null, lowS: F.lowS() });`);
+        assert.equal(r.flying, true, 'flying');
+        assert.equal(r.core, 'bf');
+        assert.equal(r.hint, 'Hold W to fly');
+        await hold(true, 'w', 'KeyW', 87);
+        r = await js(`const z0 = F.s.coreState().position.z;
+          const armed = await F.within(F.sim, () => F.s.coreState().armed, 2500);
+          const climbed = await F.within(F.sim, () => F.s.coreState().position.z - z0 > 0.3, 2500);
+          return JSON.stringify({ armed, climbed, z0, z: F.s.coreState().position.z, t: ${T}, flags: F.s.coreState().armingDisableFlags });`);
+        await hold(false, 'w', 'KeyW', 87);
+        console.log('keyboard, W at once: ' + JSON.stringify(r));
+        assert.equal(r.armed, true, `W held at once arms (flags ${r.flags})`);
+        assert.equal(r.climbed, true, `and climbs (z ${r.z0} to ${r.z})`);
+      });
+    });
+
+    await t.test('keyboard: a short early W, then W again, arms; Space disarms on the floor, and W arms again', async () => {
+      await pass('', {}, async ({ js, hold, key, enter }) => {
+        await enter();
+        let r = await js(`${fly} return JSON.stringify({ flying });`);
+        assert.equal(r.flying, true);
+        // A tap of W, let go before the throttle could arm: back to the bottom, not armed.
+        await hold(true, 'w', 'KeyW', 87);
+        await hold(false, 'w', 'KeyW', 87);
+        r = await js(`await F.passed(F.sim, 300); return JSON.stringify({ armed: F.s.coreState().armed, t: ${T} });`);
+        // Where one input poll spans a long frame it can see the tap held long
+        // enough to arm: also no dead end. Otherwise: not armed, and the throttle
+        // back at the bottom.
+        console.log('keyboard, a tap of W: ' + JSON.stringify(r));
+        assert.ok(r.armed || r.t === 0, 'a tap of W: armed, or the throttle back at the bottom ' + JSON.stringify(r));
+        // W again: arms. Let go at once: the throttle under hover, on the floor.
+        await hold(true, 'w', 'KeyW', 87);
+        r = await js(`const armed = await F.within(F.sim, () => F.s.coreState().armed, 2500); return JSON.stringify({ armed, flags: F.s.coreState().armingDisableFlags });`);
+        await hold(false, 'w', 'KeyW', 87);
+        assert.equal(r.armed, true, `W again arms (flags ${r.flags})`);
+        r = await js(`await F.passed(F.sim, 400); return JSON.stringify({ armed: F.s.coreState().armed, t: ${T}, z: F.s.coreState().position.z });`);
+        assert.equal(r.armed, true);
+        assert.ok(r.t < 0.375, 'the throttle where W left it, under hover: on the floor ' + r.t);
+        // Space disarms: the throttle (W up) back at the bottom.
+        await key(' ', 'Space', 32);
+        r = await js(`const off = await F.within(F.sim, () => !F.s.coreState().armed, 1500); await F.passed(F.sim, 200);
+          const h = document.getElementById('hudArmHint');
+          return JSON.stringify({ off, t: ${T}, hint: h.classList.contains('show') ? h.textContent : null });`);
+        assert.equal(r.off, true, 'Space disarms');
+        assert.equal(r.t, 0, 'disarmed, W up: the throttle at the bottom');
+        assert.equal(r.hint, 'Hold W to fly');
+        await hold(true, 'w', 'KeyW', 87);
+        r = await js(`const armed = await F.within(F.sim, () => F.s.coreState().armed, 2500); return JSON.stringify({ armed, flags: F.s.coreState().armingDisableFlags });`);
+        await hold(false, 'w', 'KeyW', 87);
+        assert.equal(r.armed, true, `then W arms again (flags ${r.flags})`);
+      });
+    });
+
+    await t.test('keyboard: W while Betaflight loads: the loading toast and hint, the throttle at the bottom, no arm; once loaded, the next W arms', async () => {
+      await pass('', { holdWasm: true, core: 'js' }, async ({ js, hold, enter, wasmHeld, releaseWasm }) => {
+        await enter();
+        let r = await js(`${fly} return JSON.stringify({ flying, core: F.s.core() });`);
+        assert.equal(r.flying, true);
+        assert.equal(r.core, 'js', 'Betaflight not in yet');
+        assert.ok(wasmHeld() > 0, 'its wasm held back');
+        await hold(true, 'w', 'KeyW', 87);
+        r = await js(`await F.wait(600); const h = document.getElementById('hudArmHint');
+          return JSON.stringify({ armed: F.s.coreState().armed, t: ${T}, toast: document.getElementById('toast').textContent, hint: h.classList.contains('show') ? h.textContent : null, core: F.s.core() });`);
+        await hold(false, 'w', 'KeyW', 87);
+        console.log('keyboard, W while loading: ' + JSON.stringify(r));
+        assert.equal(r.core, 'js');
+        assert.equal(r.armed, false, 'no arm while Betaflight loads');
+        assert.equal(r.t, 0, 'the throttle stays at the bottom under W');
+        assert.equal(r.toast, 'BETAFLIGHT IS LOADING — ARM IN A MOMENT');
+        assert.equal(r.hint, 'Betaflight is loading… arm in a moment');
+        await releaseWasm();
+        r = await js(`const bf = await F.until(() => F.s.core() === 'bf', 30000); await F.wait(300);
+          const h = document.getElementById('hudArmHint');
+          return JSON.stringify({ bf, t: ${T}, armed: F.s.coreState().armed, hint: h.classList.contains('show') ? h.textContent : null });`);
+        assert.equal(r.bf, true, 'Betaflight takes over');
+        assert.equal(r.armed, false);
+        assert.equal(r.t, 0);
+        assert.equal(r.hint, 'Hold W to fly');
+        await hold(true, 'w', 'KeyW', 87);
+        r = await js(`const armed = await F.within(F.sim, () => F.s.coreState().armed, 2500); return JSON.stringify({ armed, flags: F.s.coreState().armingDisableFlags, core: F.s.core() });`);
+        await hold(false, 'w', 'KeyW', 87);
+        assert.equal(r.armed, true, `the next W arms, on Betaflight (flags ${r.flags})`);
+        assert.equal(r.core, 'bf');
       });
     });
 

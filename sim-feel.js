@@ -328,7 +328,11 @@ export function saveFirstFlight(seen, storage) {
 // One sample of the flying page (not paused). state: {} to start. sample: dt
 // (s), seen (as loadFirstFlight), attempt (an arm attempt in this sample),
 // armed, controller (a gamepad or radio is connected), touch (touch sticks, or
-// a phone), stick { r, p, y, t }, key (a key went down since the last sample).
+// a phone), stick { r, p, y, t }, key (a key went down since the last sample),
+// keysAtOnce (the pilot chose Fly with keyboard: the keyboard layout from the
+// first sample, not after FIRST_FLIGHT_KEYS_AFTER_S, and no key or stick takes
+// it away until FIRST_FLIGHT_MIN_S after the first arm, so the W that arms
+// leaves it up).
 // Returns the next state, the card on screen (null, 'card' or 'keys'), seen,
 // and changed: seen is to be saved.
 export function stepFirstFlight(state, sample) {
@@ -337,13 +341,15 @@ export function stepFirstFlight(state, sample) {
   const dt = Number.isFinite(s.dt) && s.dt > 0 ? s.dt : 0;
   const seen = {};
   for (const k of FIRST_FLIGHT_SEEN) seen[k] = !!(s.seen && s.seen[k]);
-  const st = { liveS: (+was.liveS || 0) + dt, show: was.show || null, shownS: +was.shownS || 0, base: was.base || null, input: !!was.input };
+  const st = { liveS: (+was.liveS || 0) + dt, show: was.show || null, shownS: +was.shownS || 0, base: was.base || null, input: !!was.input, armedS: +was.armedS || 0 };
   const stick = s.stick || {};
   const at = (k) => +stick[k] || 0;
   if (st.show) {
     st.shownS += dt;
+    if (s.armed) st.armedS += dt;
     const moved = ['r', 'p', 'y', 't'].some((k) => Math.abs(at(k) - (+st.base[k] || 0)) >= FIRST_FLIGHT_STICK);
-    if (s.key || moved || (st.show === 'keys' && s.controller)) st.input = true;
+    const counts = !(st.show === 'keys' && s.keysAtOnce) || st.armedS >= FIRST_FLIGHT_MIN_S - 1e-9;
+    if (((s.key || moved) && counts) || (st.show === 'keys' && s.controller)) st.input = true;
     if (st.input && st.shownS >= FIRST_FLIGHT_MIN_S - 1e-9) st.show = null;
     return { state: st, show: st.show, seen, changed: false };
   }
@@ -351,11 +357,19 @@ export function stepFirstFlight(state, sample) {
     st.show = kind;
     st.shownS = 0;
     st.input = false;
+    st.armedS = 0;
     st.base = { r: at('r'), p: at('p'), y: at('y'), t: at('t') };
   };
   const input = firstFlightInput(s);
   let changed = false;
-  if (s.attempt && !seen[input]) {
+  if (s.keysAtOnce && input === 'keyboard' && !seen.keys && !s.armed) {
+    // Fly with keyboard chosen: the layout from the first sample. It carries
+    // the card's line, so the keyboard's card is used up with it.
+    seen.keys = true;
+    seen.keyboard = true;
+    changed = true;
+    open('keys');
+  } else if (s.attempt && !seen[input]) {
     seen[input] = true;
     changed = true;
     // After the keyboard layout, which carries the same line, an arm on the
@@ -832,6 +846,9 @@ export function createFeel(ctx) {
       hideFirstRun();
       if (onKeyboard) onKeyboard();
     };
+    // No controller on a computer: Fly with keyboard is the card's first
+    // button, and has the focus, so Enter takes it with no mouse.
+    if (kb && !has && !mobile) { try { kb.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
     const touchBtn = document.getElementById('feelTouch');
     if (touchBtn) touchBtn.onclick = function () {
       saveInputChoice('touch');

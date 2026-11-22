@@ -156,6 +156,21 @@ test('easy disarm: a crash, once it has come to rest, at any throttle; the arm a
   assert.equal(run(down.state, 0.05, { t: 0.5, armed: false }).out.arm, true, 'down 1 s and up again');
 });
 
+test('easy arm: a throttle up from exactly the bottom (seenLow: the keyboard) meets the hold at once; without it, the hold', () => {
+  // Raised at once, 20 ms in: no arm without seenLow (the hold starts over) ...
+  let r = run({}, 0.02, { t: 0, armed: false });
+  assert.equal(run(r.state, 0.1, { t: 0.5, armed: false }).out, null, 'raised too soon: no arm');
+  // ... and an arm with it.
+  r = run({}, 0.02, { t: 0, armed: false });
+  const k = run(r.state, 0.1, { t: 0.5, armed: false, seenLow: true });
+  assert.equal(k.out && k.out.arm, true, 'seenLow: armed');
+  // Not when flipped (blocked), and not with the auto-arm off.
+  assert.equal(run({}, 0.1, { t: 0.5, armed: false, seenLow: true, blocked: true }).out, null, 'flipped: no arm');
+  assert.equal(run({}, 0.1, { t: 0.5, armed: false, seenLow: true, autoArm: false }).out, null, 'auto-arm off: no arm');
+  // Only true counts.
+  assert.equal(run({}, 0.1, { t: 0.5, armed: false, seenLow: 1 }).out, null);
+});
+
 test('isLanded and the hint texts', () => {
   assert.equal(isLanded({ clearanceM: 0.01, speed: 0.1, omega: 0.2 }), true);
   assert.equal(isLanded({ clearanceM: 0.2, speed: 0.1, omega: 0.2 }), false, 'in the air');
@@ -174,6 +189,14 @@ test('isLanded and the hint texts', () => {
   assert.equal(armHintText({ easy: true, touch: 'left', autoArm: false, low: false }), 'Left stick down, then tap ARM');
   assert.equal(armHintText({ easy: true, touch: 'left', hasSwitch: true }), 'Flip arm switch', 'a switch wins');
   assert.equal(armHintText({ easy: true, touch: null, low: true }), 'Throttle down 1 s, then up to fly', 'no touch sticks: as before');
+  // The keyboard (keys): W is the throttle.
+  assert.equal(armHintText({ easy: true, keys: true, low: true }), 'Hold W to fly');
+  assert.equal(armHintText({ easy: true, keys: true, low: false }), 'S to the bottom, then W');
+  assert.equal(armHintText({ easy: false, keys: true, low: true }), 'Space to arm, then W to fly', 'outside Easy mode Space arms');
+  assert.equal(armHintText({ easy: false, keys: true, low: false }), 'S to the bottom, then Space');
+  assert.equal(armHintText({ easy: true, autoArm: false, keys: true, low: true }), 'Space to arm, then W to fly', 'auto-arm off');
+  assert.equal(armHintText({ easy: true, keys: true, threeD: true, low: false }), 'W/S to centre, then W');
+  assert.equal(armHintText({ easy: true, keys: true, hasSwitch: true }), 'Flip arm switch', 'a switch wins');
   assert.equal(flipHintText({ easy: true, core: 'bf', armed: false }), 'FLIPPED — FULL ROLL OR PITCH STICK · R RESPAWNS');
   assert.equal(flipHintText({ easy: true, core: 'js', touch: true }), 'FLIPPED — FULL ROLL OR PITCH STICK · OR RESPAWN');
 });
