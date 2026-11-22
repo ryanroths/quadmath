@@ -571,6 +571,11 @@
   #firstFlight.keys{width:min(560px,92vw)}
   #firstFlight .ff-pack{font-size:12px;font-weight:500;color:var(--dim);margin-top:2px}
   #firstFlight img{display:block;width:auto;height:auto;max-width:100%;max-height:52vh;margin:10px auto 0}
+  /* The keyboard layout shows the keys bigger than the key legend, which it
+     covers on a small screen: the legend steps aside while it is up, its box
+     kept (placeStickOverlay steers by it), so nothing moves. A rule of its
+     own: a browser without :has() drops only this. */
+  body:has(#firstFlight.show.keys) #legend{visibility:hidden}
   #feelTutMsg{font-size:14px;font-weight:600;margin-bottom:8px}
   #feelTutorial button{width:auto;display:inline-block;margin:4px 6px}
   button.primary{background:var(--orange);color:#140802;border-color:var(--orange)}
