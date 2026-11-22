@@ -1831,6 +1831,59 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
         });
       });
     }
+    await t.test('the launch screen and the menu: Space does not arm behind them; flying, it arms; with the menu up, it disarms (as the menu closes)', async () => {
+      await pass('', { storage: { quadmathSimInputChoice: 'keyboard' } }, async ({ js, key }) => {
+        const space = async () => { await key('rawKeyDown', ' ', 'Space', 32); await key('keyUp', ' ', 'Space', 32); };
+        const armedNow = `E.s.coreState().armed || E.fc().armed || E.s.bfCore().aux.arm`;
+        // The launch screen, and Betaflight ready to arm behind it (its own
+        // guards clear), so a refusal is the page's.
+        let r = await js(`const ok = await E.until(() => E.s.coreState().armingDisableFlags === 0, 20000);
+          return JSON.stringify({ ok, flags: E.s.coreState().armingDisableFlags, menu: document.body.classList.contains('menu-open'), launch: !document.getElementById('startMenu').classList.contains('in-flight') });`);
+        assert.equal(r.menu, true, 'the launch screen is up');
+        assert.equal(r.launch, true);
+        assert.equal(r.ok, true, 'Betaflight ready to arm ' + JSON.stringify(r));
+        await space();
+        r = await js(`const armed = await E.until(() => ${armedNow}, 800); return JSON.stringify({ armed, toast: document.getElementById('toast').textContent });`);
+        assert.equal(r.armed, false, 'Space on the launch screen does not arm');
+        assert.equal(r.toast, 'CLOSE THE MENU TO ARM');
+        // Flying: Space arms.
+        r = await js(`document.getElementById('menuFly').click(); await E.wait(200);
+          document.querySelector('#menuLayer [data-fly-map="rig"]').click();
+          const flying = await E.until(() => !document.body.classList.contains('menu-open'), 3000);
+          const ok = await E.until(() => E.s.coreState().armingDisableFlags === 0, 10000);
+          return JSON.stringify({ flying, ok, armed: ${armedNow} });`);
+        assert.equal(r.flying, true);
+        assert.equal(r.armed, false, 'not armed from the launch screen');
+        await space();
+        r = await js(`const armed = await E.until(() => E.s.coreState().armed, 1500); return JSON.stringify({ armed, flags: E.s.coreState().armingDisableFlags });`);
+        assert.equal(r.armed, true, `flying, Space arms (flags ${r.flags})`);
+        // The menu up (Esc): Space disarms. The menu pauses the flight, so the
+        // page's ARM switch goes off at once and Betaflight takes it on its
+        // next step: disarmed as the menu closes, and it stays so.
+        const esc = async () => { await key('rawKeyDown', 'Escape', 'Escape', 27); await key('keyUp', 'Escape', 'Escape', 27); };
+        await esc();
+        r = await js(`const menu = await E.until(() => document.body.classList.contains('menu-open'), 1500); return JSON.stringify({ menu });`);
+        assert.equal(r.menu, true, 'Esc: the menu');
+        await space();
+        r = await js(`await E.wait(200); return JSON.stringify({ sw: E.s.bfCore().aux.arm });`);
+        assert.equal(r.sw, false, 'with the menu up, Space turns the ARM switch off');
+        await esc();
+        r = await js(`const flying = await E.until(() => !document.body.classList.contains('menu-open'), 1500);
+          const off = await E.until(() => !(${armedNow}), 1500); await E.wait(500);
+          return JSON.stringify({ flying, off, still: !(${armedNow}) });`);
+        assert.equal(r.flying, true);
+        assert.equal(r.off, true, 'disarmed as the menu closes');
+        assert.equal(r.still, true, 'and stays disarmed');
+        // The menu up again, disarmed: Space does not arm behind it.
+        await esc();
+        r = await js(`const menu = await E.until(() => document.body.classList.contains('menu-open'), 1500); return JSON.stringify({ menu });`);
+        assert.equal(r.menu, true);
+        await space();
+        r = await js(`const armed = await E.until(() => ${armedNow}, 800); return JSON.stringify({ armed, toast: document.getElementById('toast').textContent });`);
+        assert.equal(r.armed, false, 'Space behind the in-flight menu does not arm');
+        assert.equal(r.toast, 'CLOSE THE MENU TO ARM');
+      });
+    });
   } finally {
     await new Promise((res) => server.close(res));
   }
