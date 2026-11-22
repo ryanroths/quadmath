@@ -5631,6 +5631,10 @@ function setThreeD(on,persist){
   return threeD;
 }
 function tryArm(opts){
+  // Never behind the launch screen or a menu: the quad would sit armed under
+  // the card and fly at the first stick once it closed. Disarming always
+  // goes through (toggleArm, coreDisarm do not come here).
+  if(document.body.classList.contains('menu-open')){toast('CLOSE THE MENU TO ARM');return false;}
   firstFlightAttempt=true;
   if(armGate&&padLive){toast('STICKS NOT SAFE');return false;}
   // A bf class waits for Betaflight: armed on the js core meanwhile, the quad
