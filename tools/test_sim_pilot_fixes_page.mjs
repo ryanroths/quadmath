@@ -715,4 +715,38 @@ for (const [w, h] of [[844, 390], [667, 375], [390, 844]]) {
     }
   });
 }
+// An arm still waiting on Betaflight's answer when the class changes: the
+// js core never answers it (bfArmWatch skips it), so the way back to bf
+// toasted a stale NOT ARMED (sim.html bfPark clears it). The arm and the
+// switch are in one task, before any input poll: the arm is still pending.
+test('desktop, keyboard: an arm asked on the 65, the 85 at once, back to the 65: no stale NOT ARMED, not armed', { timeout: 5 * 60 * 1000 }, async (t) => {
+  if (process.env.SKIP_CHROME_BOOT === '1') { t.skip('SKIP_CHROME_BOOT'); return; }
+  const { server, port } = await serveRoot();
+  const b = await launch({ w: 1280, h: 720 });
+  try {
+    await open(b, port, { seed: { ryflyDroneType: 'whoop65', quadmathSimFirstFlight: 'keys,keyboard,touch,controller' } });
+    const r = await run(b, `const sel = document.getElementById('droneType');
+      s.tryArm();
+      sel.value = 'whoop85'; sel.dispatchEvent(new Event('change'));
+      const js = await P.until(() => s.core() === 'js', 8000);
+      await P.wait(1000);
+      window.__toasts.length = 0;
+      sel.value = 'whoop65'; sel.dispatchEvent(new Event('change'));
+      const bf = await P.until(() => s.core() === 'bf', 20000);
+      // Past bfArmWatch's 300 ms, on Betaflight's own clock (a slow runner's
+      // wall time is not its time).
+      const t0 = s.bfCore().simTimeUs;
+      const ran = await P.until(() => s.bfCore().simTimeUs - t0 > 1000000, 20000);
+      return JSON.stringify({ js, bf, ran, toasts: window.__toasts.slice(), snap: P.snap() });`);
+    assert.equal(r.js, true, 'the 85 flies the js core');
+    assert.equal(r.bf, true, 'back on the 65: Betaflight');
+    assert.equal(r.ran, true, 'Betaflight ran 1 s after the switch back');
+    assert.ok(!r.toasts.some((x) => /^NOT ARMED/.test(x)), 'no stale NOT ARMED: ' + JSON.stringify(r));
+    assert.equal(r.snap.armed, false, 'and not armed: ' + JSON.stringify(r.snap));
+    assert.deepEqual(b.thrown, [], 'nothing threw');
+  } finally {
+    await close(b);
+    await new Promise((res) => server.close(res));
+  }
+});
 function P_overlap(a, b) { return !!a && !!b && a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b; }
