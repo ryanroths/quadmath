@@ -1182,6 +1182,16 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         assert.equal(r.slider, '0.5', 'Enter sends it ' + JSON.stringify(r));
         assert.equal(r.expo, 0.5, 'to Betaflight, disarmed: at once');
         assert.equal(r.pending, false);
+        // Clicked into, Enter with nothing typed (no change for the box to send): out of it too.
+        await mouse('mousePressed', b.l + b.w / 2, b.t + b.h / 2);
+        await mouse('mouseReleased', b.l + b.w / 2, b.t + b.h / 2);
+        r = await state();
+        assert.equal(r.focus, 'bfn_roll_expo');
+        await enter();
+        r = await js(`await F.wait(200); return JSON.stringify(1);`);
+        r = await state();
+        assert.notEqual(r.focus, 'bfn_roll_expo', 'Enter, nothing typed: out of the box');
+        assert.equal(r.num, '0.50');
         // Typed again, Esc: out of the box, what was in it put back, no menu.
         await mouse('mousePressed', b.l + b.w / 2, b.t + b.h / 2);
         await mouse('mouseReleased', b.l + b.w / 2, b.t + b.h / 2);
@@ -1224,6 +1234,16 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         assert.equal(r.open, true, 'Tune still open');
         assert.equal(r.armed, true, `W arms (flags ${r.flags})`);
         assert.equal(r.climbed, true, `and climbs (z ${r.z0} to ${r.z})`);
+        // A slider reached with the keys (Tab) steps on its arrow keys and keeps the focus.
+        r = await js(`const el = document.getElementById('bfs_roll_expo'); el.focus(); return JSON.stringify({ v: el.value });`);
+        const v0 = +r.v;
+        await key('ArrowRight', 'ArrowRight', 39);
+        await key('ArrowRight', 'ArrowRight', 39);
+        r = await js(`await F.wait(200); return JSON.stringify(1);`);
+        r = await state();
+        console.log('tune, a slider on its arrow keys: ' + JSON.stringify(r));
+        assert.equal(r.focus, 'bfs_roll_expo', 'arrow steps keep the focus');
+        assert.equal(Math.round((+r.slider - v0) * 100), 2, `two steps (${v0} to ${r.slider})`);
       });
     });
 
