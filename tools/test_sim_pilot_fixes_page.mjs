@@ -238,6 +238,13 @@ const PAGE = `(() => {
     while ((last === null || last < ms / 1000) && performance.now() - w0 < ms * 12) await wait(50);
     s.setTestPilot(null);
     bf.setArm(false);
+    // Disarmed before the next change: a Tune change made armed is kept until
+    // the landing (sim.html bfSetThrottle, bfPend, as coreArmed reads it), and
+    // the next flight arms at 0.1 s, before it goes in. On a slow runner the
+    // page can still read armed 250 ms after the switch went off.
+    const armed = () => s.coreState().armed || bf.aux.arm || bf.turtlePhase !== null;
+    for (let i = 0; i < 100 && armed(); i++) await wait(50);
+    if (armed()) throw new Error('still armed 5 s after the flight');
     await wait(250);
     return { rec, n: rec.size, contacts, armedAt, end: last, err: s.testPilotError() };
   }
@@ -398,10 +405,19 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
     assert.equal(loading[0].toast, LOADING_TOAST, 'Space: said plainly');
     assert.ok(loading[1].toasts.includes(LOADING_TOAST), 'the throttle gesture said it too: ' + JSON.stringify(loading[1].toasts));
     await held.release(false);
-    const ready = await run(b, `for (let i = 0; i < 400 && s.core() !== 'bf'; i++) await P.wait(100); await P.wait(400); s.setTestStick(null); return JSON.stringify(P.snap());`);
+    // The card names the quad from the core's state (flyingQuadName reads cs),
+    // a frame or two after the core changes: on a slow runner, later than 400 ms.
+    const ready = await run(b, `for (let i = 0; i < 400 && s.core() !== 'bf'; i++) await P.wait(100);
+      for (let i = 0; i < 50 && P.snap().quad !== 'AIR65'; i++) await P.wait(100);
+      await P.wait(400); s.setTestStick(null); return JSON.stringify(P.snap());`);
     assert.equal(ready.core, 'bf');
     assert.equal(ready.quad, 'AIR65');
-    assert.equal(ready.toast, READY_TOAST, 'ready, said last: ' + JSON.stringify(ready.toasts));
+    // Ready, said after the loading toast, as the takeover's last. Only the
+    // rates note may follow it (bfRatesNote: 1.6 s after the takeover, once
+    // the 1.5 s toast is gone), and a slow runner can read that late.
+    const said = ready.toasts.lastIndexOf(READY_TOAST);
+    assert.ok(said > ready.toasts.lastIndexOf(LOADING_TOAST), 'ready, said after loading: ' + JSON.stringify(ready.toasts));
+    assert.ok(ready.toasts.slice(said + 1).every((x) => /^RATES: /.test(x)), 'ready, said last (the rates note may follow): ' + JSON.stringify(ready.toasts));
     assert.equal(ready.why === 'LOADING BETAFLIGHT', false);
 
     // The classic-physics gate on bf: hidden, its note shown.
@@ -435,8 +451,10 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
         let ref = base;
         if (id === 'bfs_thr_mid') { P.set('bfs_thr_expo', 100); await P.wait(500); ref = await P.fly(); out.expoRef = get(); }
         for (const v of [lo, hi]) {
+          const n = window.__toasts.length;
           P.set(id, v); await P.wait(500);
-          out[id + '_' + v] = { d: P.diff(ref, await P.fly()).worst, held: get() };
+          const kept = window.__toasts.slice(n).filter((x) => /WHEN YOU LAND/.test(x));
+          out[id + '_' + v] = { d: P.diff(ref, await P.fly()).worst, held: get(), kept };
         }
         P.set(id, was); if (id === 'bfs_thr_mid') P.set('bfs_thr_expo', 0);
         await P.wait(500);
@@ -458,6 +476,8 @@ test('desktop, keyboard: the quad on the card, a held Betaflight load, a new pac
     const want = { bfs_thr_expo_0: ['thr_expo', '0'], bfs_thr_expo_100: ['thr_expo', '100'], bfs_thr_mid_0: ['thr_mid', '0'], bfs_thr_mid_99: ['thr_mid', '99'],
       bfs_roll_rcRate_10: ['roll_rc_rate', '1'], bfs_roll_rcRate_2000: ['roll_rc_rate', '200'], bfs_roll_srate_0: ['roll_srate', '0'], bfs_roll_srate_2000: ['roll_srate', '200'],
       bfs_roll_expo_0: ['roll_expo', '0'], bfs_roll_expo_1: ['roll_expo', '100'] };
+    // Made disarmed, each went in at once, not kept for the landing.
+    for (const k of Object.keys(want)) assert.deepEqual(ab[k].kept, [], `${k}: made disarmed, it goes in at once`);
     for (const [k, [key, v]] of Object.entries(want)) assert.equal(ab[k].held[key], v, `${k}: Betaflight holds ${key} ${v}`);
     for (const k of ['bfs_thr_mid_0', 'bfs_thr_mid_99']) assert.equal(ab[k].held.thr_expo, '100', k + ' flown with expo 1.00');
     for (const [k, why] of [['bfs_thr_expo_100', 'throttle expo 1.00'], ['bfs_thr_mid_0', 'throttle mid 0.00 against 0.50 (expo 1.00)'], ['bfs_thr_mid_99', 'throttle mid 0.99 against 0.50 (expo 1.00)'],
