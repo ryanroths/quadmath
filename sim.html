@@ -1379,14 +1379,14 @@ import {
   defaultWhoopKit, ghostFromObj, shareTrackPayload, fromShareTrackPayload,
   customBoardKey, customTrackCode, normalizeTrackSubmit, isCustomBoardTrackId, customTrackProblem,
   CUSTOM_TRACK_MIN_GATES, CUSTOM_TRACK_CODE_MAX, builtinFloorMs,
-  createCountPings, countPingsOff, COUNT_FLEW_MS,
-} from "./sim-retention.js?v=a89f92241c31";
+  createCountPings, countPingsOff, countOwnerOff, COUNT_FLEW_MS,
+} from "./sim-retention.js?v=386425b94a04";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=40d66b41f644";
+} from "./sim-secrets.js?v=e8077957043f";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
   fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=3f4158ced8a5";
 window._simBooted=true; // tells the watchdog above the module actually executed
@@ -1415,18 +1415,24 @@ if(CORE_KIND==='js')console.warn('sim-core: ?core=js is deprecated, removed next
 // its tutorial, Skins, Paint whoop, the quality presets, and the Chase and
 // Orbit replay cameras. Without it quality runs on Auto and replays are FPV.
 const DEV_UI=new URLSearchParams(location.search).get('dev')==='1';
+// The owner's opt-out (sim-retention.js countOwnerOff): a load with
+// ?nocount=1 in a browser, and the counts below send nothing there from then
+// on; ?nocount=0 undoes it. The only storage the counts touch, and only that
+// key; nothing is stored for a visitor.
+const countOwner=(()=>{try{return countOwnerOff(localStorage,location.search);}catch(e){return false;}})();
 // ---------- Anonymous flight counts (sim-retention.js COUNT_EVENTS) ----------
 // How far visitors get, as the leaderboard Worker's daily totals (POST
-// /api/count): ready, arm, flew30, pack2, race, lap and name, each at most once a
-// page load. The flags live in this object, in memory, for this page load
-// only: no cookie, no storage, no id. A ping carries the event, the class,
-// the core and the input, nothing else. None at all with Global Privacy
-// Control or Do Not Track on, on a local page, under ?dev=1, or once a test's
-// pilot has flown here (countPingsOff). Sent as a beacon (a keepalive fetch
-// where there is none); a ping that fails is dropped, never retried, never said.
+// /api/count): ready, kbd, arm, flew30, pack2, race, lap and name, each at most
+// once a page load. The flags live in this object, in memory, for this page
+// load only: no cookie, no storage, no id. A ping carries the event, the
+// class, the core and the input, nothing else. None at all with Global
+// Privacy Control or Do Not Track on, on a local page, under ?dev=1, in the
+// owner's own browser (countOwner), or once a test's pilot has flown here
+// (countPingsOff). Sent as a beacon (a keepalive fetch where there is none); a
+// ping that fails is dropped, never retried, never said.
 // The signals that hold for the whole load, read once; a test's pilot can
 // start later (testPilotUsed).
-const countOffAtLoad=countPingsOff({gpc:navigator.globalPrivacyControl,dnt:navigator.doNotTrack||window.doNotTrack,loc:location});
+const countOffAtLoad=countPingsOff({gpc:navigator.globalPrivacyControl,dnt:navigator.doNotTrack||window.doNotTrack,loc:location,owner:countOwner});
 const countPings=createCountPings({
   off:()=>countOffAtLoad||(testPilotUsed?'test':''),
   send:(body)=>{
@@ -1451,14 +1457,29 @@ function countReadyWatch(){
   if(countPings.has('ready')||!window._simQueryBooted)return;
   if(core.kind!=='bf'&&bfWanted()&&!bfOf().failed)return;
   countNote('ready');
+  if(countKbdChosen)countNote('kbd');
 }
+// kbd: the first-run prompt's Fly with keyboard (a click, or Enter on it).
+// Every event waits for ready, so a choice made while Betaflight still loads
+// is kept here and sent just after ready.
+let countKbdChosen=false;
+function countKbd(){
+  countKbdChosen=true;
+  countNote('kbd');
+}
+// In the air, for flew30 and the race offer's 30 s: the core's airborne flag,
+// and clear of whatever is under it. The bf plant reads airborne with the quad
+// still on the floor at 30% throttle (the Air65 on the Rig, floor contact,
+// clearance 0), so the flag alone counted idling on the ground as flying.
+const AIR_CLEARANCE_M=0.04;
+function inTheAir(){return !!cs.airborne&&cs.clearance>AIR_CLEARANCE_M;}
 // arm and flew30, from each step of the core: the first arm, then 30 s of sim
 // time armed and in the air (ms: the sim time this step ran).
 let countAirMs=0;
 function countFlight(ms){
   if(!cs.armed)return;
   countNote('arm');
-  if(!countPings.has('arm')||!cs.airborne||countPings.has('flew30'))return;
+  if(!countPings.has('arm')||!inTheAir()||countPings.has('flew30'))return;
   countAirMs+=ms;
   if(countAirMs>=COUNT_FLEW_MS)countNote('flew30');
 }
@@ -1494,7 +1515,7 @@ function tickRaceOffer(ms){
   raceOffer.wasArmed=armed;
   if(!t){raceOffer.due=false;showRaceOffer(null);return;}
   if(raceOffer.shows===0){
-    if(armed&&cs.airborne)raceOffer.airMs+=ms;
+    if(armed&&inTheAir())raceOffer.airMs+=ms;
     if(raceOffer.airMs>=RACE_OFFER_AIR_MS)raceOffer.due=true;
   }else if(raceOffer.shows===1&&was&&!armed)raceOffer.due=true;
   const tune=panel.classList.contains('open');
@@ -10830,7 +10851,7 @@ feel=createFeel({
   THREE,scene,toast,decorateGate,LIGHTING,
   onCalibrate(){sessionLive=true;toggleStartMenu(false);startCalib();enableTouchLayer(false);},
   onRadio(){flyWithRadio();if(gpConnected)announcePlugAndFly(activePad()||{id:gpName});else toast('PLUG A RADIO — USB JOYSTICK');},
-  onKeyboard(){toast('KEYBOARD — HOLD W TO FLY');enableTouchLayer(false);},
+  onKeyboard(){countKbd();toast('KEYBOARD — HOLD W TO FLY');enableTouchLayer(false);},
   onTouch(){
     if(gpConnected){
       toast('RADIO CONNECTED — TOUCH OFF');

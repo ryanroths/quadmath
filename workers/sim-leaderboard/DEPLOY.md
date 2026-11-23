@@ -546,18 +546,47 @@ each at most once per page load (`sim-retention.js` `COUNT_EVENTS`):
 | event | when |
 |---|---|
 | `ready` | the sim has loaded and the class's core flies (Betaflight once it has taken over) |
+| `kbd` | a first visit chose the keyboard: the first-run prompt's Fly with keyboard |
 | `arm` | the first arm |
-| `flew30` | 30 s of sim time armed and in the air |
+| `flew30` | 30 s of sim time armed and in the air (off the ground: see below) |
 | `pack2` | a fresh pack after an arm (a second pack started) |
 | `race` | a race started: gate 0 of any race passed |
 | `lap` | the first timed lap finished (a loop's lap, a line's finish) |
 | `name` | a board took a run under the pilot's name, which claims it |
 
 A ping carries only the event, the class (65/75/85), the core (bf/js) and the
-input (radio/gamepad/keyboard/touch). Nothing is stored on the device: no
-cookie, no localStorage, no id; the flags live in the page's memory. No pings
-at all with Global Privacy Control or Do Not Track on, on localhost, under
-`?dev=1`, or once a test's pilot has flown (`_sim.setTestPilot`).
+input (radio/gamepad/keyboard/touch). Nothing is stored on a visitor's device:
+no cookie, no localStorage, no id; the flags live in the page's memory. No
+pings at all with Global Privacy Control or Do Not Track on, on localhost,
+under `?dev=1`, in a browser the owner has opted out (below), or once a test's
+pilot has flown (`_sim.setTestPilot`).
+
+What the columns mean:
+
+- **`ready`'s input is the input at load.** A browser lists a controller only
+  once a stick or button on it moves, so at load nearly every visitor is
+  `keyboard` (or `touch` on a phone), controller pilots included. Read the
+  input from `arm` on; `kbd` is the keyboard choice itself.
+- **`kbd`** is sent when the first-run prompt's Fly with keyboard is clicked
+  (or Enter pressed on it). The prompt shows until an input is chosen in that
+  browser, so it is first visits on a computer; a radio pilot picks Radio
+  there. A choice made while Betaflight still loads is sent just after
+  `ready`.
+- **`flew30`** counts sim time armed, airborne and more than 4 cm clear of
+  whatever is under the quad (`sim.html` `inTheAir`). Until the PR that added
+  `kbd`, it read the core's airborne flag alone, and the bf plant reads that
+  true with the quad still on the floor at 30% throttle (measured: the Air65
+  on the Rig, floor contact, clearance 0, counted second for second). So
+  earlier days' `flew30` can include idling on the ground; days from that
+  deploy on do not. The race offer's 30 s uses the same rule.
+
+The owner's opt-out: open the sim once with `?nocount=1` in each browser you
+fly from (`https://quadmath.com/sim.html?nocount=1`). That browser keeps
+`quadmathNoCount` in its localStorage and sends no counts from then on, on
+every load. `?nocount=1` again does nothing more; `?nocount=0` takes the key
+out. The page writes only that key, only on a `?nocount` load: a visitor who
+never uses it has nothing stored. A private window, or cleared site data,
+forgets it.
 
 `POST /api/count` checks the ping against the allowed values (anything else
 is a 400 and writes nothing), refuses a page served by another origin (403),
@@ -568,7 +597,7 @@ finer than the day. If that write fails (a D1 error, the daily limit), the
 ping is dropped and still answered 204: a count never fails a request or
 reaches the boards.
 
-Rate limit: 30 pings per client per UTC hour (`RATE_COUNT_MAX`: four full
+Rate limit: 30 pings per client per UTC hour (`RATE_COUNT_MAX`: three full
 funnels), counted in the Worker isolate's memory (`countAllowed`), never in
 D1. Nothing of it is stored or outlives the isolate. It is per isolate: a
 client whose pings land on several isolates (or locations) gets 30 in each.
@@ -601,38 +630,38 @@ fails quietly):
    The first prints `204`, the second `{"ok":false,"reason":"BAD EVENT"}`
    (400). The check's own ping is one `ready` in today's counts.
 
-A new event (`race`, added after the first deploy): the page and the Worker
-share `COUNT_EVENTS`, and `npm run predeploy` deploys only main, so the
-Worker learns the name from the merged PR. Merge, then deploy the Worker at
-once (no migration: `counts` takes any event name the Worker lets through).
-Until it is deployed the page's `race` pings are refused (400) and dropped;
-every other event counts as before. Check with the first curl above, `ready`
-put to `race`: `204`.
+A new event (`race`, then `kbd`, each added after the first deploy): the page
+and the Worker share `COUNT_EVENTS`, and `npm run predeploy` deploys only
+main, so the Worker learns the name from the merged PR. Merge, then deploy
+the Worker at once (no migration: `counts` takes any event name the Worker
+lets through). Until it is deployed the page's pings of the new event are
+refused (400) and dropped; every other event counts as before. Check with the
+first curl above, `ready` put to the new name: `204`.
 
 The last 14 days as a funnel per day:
 
 ```bash
-npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT day, SUM(CASE WHEN event = 'ready' THEN n ELSE 0 END) AS ready, SUM(CASE WHEN event = 'arm' THEN n ELSE 0 END) AS arm, SUM(CASE WHEN event = 'flew30' THEN n ELSE 0 END) AS flew30, SUM(CASE WHEN event = 'pack2' THEN n ELSE 0 END) AS pack2, SUM(CASE WHEN event = 'race' THEN n ELSE 0 END) AS race, SUM(CASE WHEN event = 'lap' THEN n ELSE 0 END) AS lap, SUM(CASE WHEN event = 'name' THEN n ELSE 0 END) AS name FROM counts WHERE day >= date('now', '-13 days') GROUP BY day ORDER BY day DESC"
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT day, SUM(CASE WHEN event = 'ready' THEN n ELSE 0 END) AS ready, SUM(CASE WHEN event = 'kbd' THEN n ELSE 0 END) AS kbd, SUM(CASE WHEN event = 'arm' THEN n ELSE 0 END) AS arm, SUM(CASE WHEN event = 'flew30' THEN n ELSE 0 END) AS flew30, SUM(CASE WHEN event = 'pack2' THEN n ELSE 0 END) AS pack2, SUM(CASE WHEN event = 'race' THEN n ELSE 0 END) AS race, SUM(CASE WHEN event = 'lap' THEN n ELSE 0 END) AS lap, SUM(CASE WHEN event = 'name' THEN n ELSE 0 END) AS name FROM counts WHERE day >= date('now', '-13 days') GROUP BY day ORDER BY day DESC"
 ```
 
 The same, split by input:
 
 ```bash
-npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT day, input, SUM(CASE WHEN event = 'ready' THEN n ELSE 0 END) AS ready, SUM(CASE WHEN event = 'arm' THEN n ELSE 0 END) AS arm, SUM(CASE WHEN event = 'flew30' THEN n ELSE 0 END) AS flew30, SUM(CASE WHEN event = 'pack2' THEN n ELSE 0 END) AS pack2, SUM(CASE WHEN event = 'race' THEN n ELSE 0 END) AS race, SUM(CASE WHEN event = 'lap' THEN n ELSE 0 END) AS lap, SUM(CASE WHEN event = 'name' THEN n ELSE 0 END) AS name FROM counts WHERE day >= date('now', '-13 days') GROUP BY day, input ORDER BY day DESC, ready DESC"
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT day, input, SUM(CASE WHEN event = 'ready' THEN n ELSE 0 END) AS ready, SUM(CASE WHEN event = 'kbd' THEN n ELSE 0 END) AS kbd, SUM(CASE WHEN event = 'arm' THEN n ELSE 0 END) AS arm, SUM(CASE WHEN event = 'flew30' THEN n ELSE 0 END) AS flew30, SUM(CASE WHEN event = 'pack2' THEN n ELSE 0 END) AS pack2, SUM(CASE WHEN event = 'race' THEN n ELSE 0 END) AS race, SUM(CASE WHEN event = 'lap' THEN n ELSE 0 END) AS lap, SUM(CASE WHEN event = 'name' THEN n ELSE 0 END) AS name FROM counts WHERE day >= date('now', '-13 days') GROUP BY day, input ORDER BY day DESC, ready DESC"
 ```
 
 Days are UTC (`date('now')` in D1 is UTC). For class or core, put `class` or
 `core` where `input` is.
 
-Cost: a page load sends at most seven pings, so seven requests, and each ping is
+Cost: a page load sends at most eight pings, so eight requests, and each ping is
 exactly one row written (measured on a local D1: the day's first row for a
 combination and every one after it, 1 each; no reads). Per 1,000 visitors a
-day: 1,000 to 7,000 requests (Workers Free: 100,000 a day for the account,
-this Worker's boards and the rooms Worker included) and 1,000 to 7,000
+day: 1,000 to 8,000 requests (Workers Free: 100,000 a day for the account,
+this Worker's boards and the rooms Worker included) and 1,000 to 8,000
 rows written (D1 Free: 100,000 a day, shared with the boards: at the limit D1
 refuses every query, the boards' too, until 00:00 UTC; counts reach it alone
-at about 14,000 full-funnel visitors a day). `counts` grows by at most 168
-rows a day (7 events x 3 classes x 2 cores x 4 inputs).
+at about 12,000 full-funnel visitors a day). `counts` grows by at most 192
+rows a day (8 events x 3 classes x 2 cores x 4 inputs).
 
 ## The boards' rate limit stores no addresses
 
