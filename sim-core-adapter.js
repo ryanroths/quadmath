@@ -495,28 +495,27 @@ export function bfChannels(sample, aux, ranges) {
 }
 
 // The airframe with a map's contact profile (sim-whoop.js BOUNCE_MAPS) on its
-// plant: sim-core has no per-box restitution, so a bounce map scales the
-// plant's crash threshold (crashScale) for every contact there, its wall
-// restitution (wallRestitution, a box's vertical faces since sim-core v0.4.0;
-// at most 1, which sim-core accepts) and its restitution for every other
-// contact (bounceScale). No profile: the airframe as it is.
+// plant: a bounce map scales the plant's crash threshold (crashScale) for
+// every contact there, so the crash events (Easy disarm, trick and coach
+// crash, camera shake) fire where they did. Nothing else: since sim-core
+// v0.9.0 the plant's contact is its own (wallFriction, contactRestitution,
+// floorFriction), and the owner dropped the bounce x2 (bounceScale) and the
+// wall x1.37 (wallRestitution) on the bf core after the A/B of 2026-11-23.
+// The js core reads its profile itself (resolveDuctHit). No profile: the
+// airframe as it is.
 export function contactPlant(airframe, profile) {
   if (!profile || !airframe || !airframe.values) return airframe;
   const v = airframe.values;
-  const scaled = (key, k, max = Infinity) => {
+  const scaled = (key, k) => {
     const f = v[key];
     if (!f || !Number.isFinite(f.value) || !(k > 0)) return f;
-    const value = Math.min(max, f.value * k);
-    const how = 'x' + k + (value < f.value * k ? ', capped at ' + max : '');
-    return { ...f, value, note: (f.note ? f.note + '; ' : '') + how + ' for a bounce map' };
+    return { ...f, value: f.value * k, note: (f.note ? f.note + '; ' : '') + 'x' + k + ' for a bounce map' };
   };
   return {
     ...airframe,
     values: {
       ...v,
       crashScale: scaled('crashScale', profile.crash),
-      bounceScale: scaled('bounceScale', profile.bounce),
-      wallRestitution: scaled('wallRestitution', profile.wall, 1),
     },
   };
 }

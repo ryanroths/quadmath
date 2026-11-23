@@ -24,6 +24,13 @@ applies them in name order to a copy of the tree:
       terms go NaN in crash flip), reported upstream as
       betaflight/betaflight#15910:
       https://github.com/betaflight/betaflight/issues/15910
+  patches/0004-yaw-spin-recovery-in-simulator-build.patch
+      runs Betaflight's yaw-spin check in the simulator build, which
+      upstream leaves out (sensors/gyro.c), as it runs on the quad. Its
+      threshold is Betaflight's own, yaw_spin_recovery AUTO's rule off the
+      pilot's yaw rate (fc/rc.c: the max yaw rate plus a quarter of it, at
+      least 200 deg/s). While the yaw gyro stays under the threshold the
+      build is bit-identical to one without the patch.
 
 PORTED FROM QUADMATH
 

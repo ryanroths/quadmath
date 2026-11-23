@@ -1245,7 +1245,7 @@
   "imports": {
     "three": "./vendor/three.module.min.js?v=e2b5ee6bccd3",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
-    "./vendor/sim-core/cli-policy.js": "./vendor/sim-core/cli-policy.js?v=v0.8.0"
+    "./vendor/sim-core/cli-policy.js": "./vendor/sim-core/cli-policy.js?v=v0.9.0"
   }
 }
 </script>
@@ -1257,7 +1257,7 @@ import {
   WS as CORE_WS, TICK_US, SAMPLE_US, toScene, toModule, boxToModule, emptyState,
   createJsCore, createBfCore, contactPlant, armingFlagNames, switchAux, rangeActive,
   BF_CLASS_TUNES, bfClassDiff,
-} from "./sim-core-adapter.js?v=0005193cf64f";
+} from "./sim-core-adapter.js?v=2c623fc457f6";
 import {LINE_URL_MAX,LINE_ID_RE,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=c7b112319e28";
 import {pilotNameProblem} from "./sim-pilot-names.js?v=265d8504aeef";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
@@ -1273,7 +1273,7 @@ import {
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
-} from "./sim-whoop.js?v=b246f97ca059";
+} from "./sim-whoop.js?v=62c2945fdf20";
 import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=67997562a985";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
@@ -1289,7 +1289,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=2cb300829b94";
+} from "./sim-art.js?v=2528f7c1d996";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, loadFlightMode, saveFlightMode, toggleAcro,
@@ -1322,17 +1322,17 @@ import {
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
   trackLink, trackCodeFromHash, trackFromLinkCode,
-} from "./sim-tracks.js?v=830f74397b43";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=bae83928661c";
+} from "./sim-tracks.js?v=3c7faa6393fc";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=c008acc98d7a";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=dfa4b922ade4";
+} from "./sim-room.js?v=4677d4b6d668";
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z,
   loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT,FIRST_FLIGHT_PACK_TEXT,
   loadStickOverlay,saveStickOverlay,stickOverlayOn,createStickOverlay,STICK_OVERLAY_PHONE,
-  SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText} from "./sim-feel.js?v=5c00aa42f1a9";
+  SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText} from "./sim-feel.js?v=b567d9439c08";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -1354,7 +1354,7 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=4d1a58da78f3";
+} from "./sim-coach.js?v=e76871a4c16c";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=d7c9767ee9c7";
@@ -1380,15 +1380,15 @@ import {
   customBoardKey, customTrackCode, normalizeTrackSubmit, isCustomBoardTrackId, customTrackProblem,
   CUSTOM_TRACK_MIN_GATES, CUSTOM_TRACK_CODE_MAX, builtinFloorMs,
   createCountPings, countPingsOff, countOwnerOff, COUNT_FLEW_MS,
-} from "./sim-retention.js?v=386425b94a04";
+} from "./sim-retention.js?v=1a623289ad54";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=e8077957043f";
+} from "./sim-secrets.js?v=f5baad7efa7e";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
-  fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=3f4158ced8a5";
+  fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=67029750692c";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -10098,7 +10098,7 @@ const BF_CLASSES={
 // ./cli-policy.js itself, unversioned (the vendor files ship byte for byte), so
 // the import map above maps that URL to ?v= this version too: a browser holding
 // the last release's cli-policy.js must not pair it with this sim-core.js.
-const SIM_CORE_VERSION='v0.8.0';
+const SIM_CORE_VERSION='v0.9.0';
 // Per class: its core once made (bfCore is the flying class's), the airframe
 // and diff as fetched, the CLI text the core last configured with, the map
 // whose contact profile its plant carries ('' = none), the world last sent to
@@ -10134,8 +10134,9 @@ function bfTuneId(type=droneType){
   const c=BF_CLASSES[type];
   return !c?'':c.tune||c.diff.replace(/^.*\//,'').replace(/\.txt$/,'');
 }
-// The bf plant carries the current map's contact profile (BOUNCE_MAPS: the
-// Rig's bounce walls), set when the map changes or a class's core takes over;
+// The bf plant carries the current map's contact profile (BOUNCE_MAPS: on
+// the bf core its crash threshold only, since sim-core v0.9.0), set when the
+// map changes or a class's core takes over;
 // Betaflight reboots on it.
 function bfSyncPlant(){
   const b=bfOf();
