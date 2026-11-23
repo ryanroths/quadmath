@@ -748,13 +748,17 @@ test('bf core F flip: a disarm (Space) or a respawn (R) ends it, the sticks back
   assert.equal(core.simFlips, 3, 'each F that started counted once');
 });
 
+// The ceiling is 10 m across (sim-core v0.9.0; it was 2 m): on the floor's
+// Coulomb friction the crash flip's thrust scoots the quad along the floor, and
+// under the 2 m slab it slid 1.1 m out from under it in 1.2 s and came up
+// there, where v0.8.0's drag of 0.85 a tick held it within 3 cm.
 test('bf core F flip: one that cannot come up (a ceiling over it) gives up after 3 s, FLIP and ARM off', async () => {
   const core = await createBfCore({
     SimCore,
     wasm: readFileSync('vendor/sim-core/sim-core.wasm'),
     airframe: JSON.parse(readFileSync('vendor/sim-core/airframes/air65.json', 'utf8')),
     diff: OWNER_DIFF,
-    world: { floorZ: 0, boxes: [{ min: [-1, -1, 0.05], max: [1, 1, 0.5] }] },
+    world: { floorZ: 0, boxes: [{ min: [-5, -5, 0.05], max: [5, 5, 0.5] }] },
   });
   let wall = 0;
   const events = [];

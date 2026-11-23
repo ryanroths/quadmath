@@ -475,8 +475,8 @@ test('sim.html: one way to Betaflight for rates, importCliToBf; applied on boot,
 test('no board floor, held run or PHYS_VER reads rates', () => {
   const ret = read('sim-retention.js');
   assert.ok(!/sim-rates|rc_rate|srate|rateSetpoint/.test(ret), 'sim-retention.js (the boards\' and the Worker\'s rules) knows no rates');
-  assert.match(ret, /export const PHYS_VER = 7;/);
-  assert.match(read('sim-whoop.js'), /PHYSICS_VER\s*=\s*7\b/);
+  assert.match(ret, /export const PHYS_VER = 8;/);
+  assert.match(read('sim-whoop.js'), /PHYSICS_VER\s*=\s*8\b/);
   const floor = ret.slice(ret.indexOf('export function builtinFloorMs'), ret.indexOf('export async function builtinTrackHash'));
   assert.ok(floor.includes('CLASS_MAX_SPEED[classId(frameMm)]') && !/rate/i.test(floor), 'a floor is the gate path at the class speed cap');
 });
