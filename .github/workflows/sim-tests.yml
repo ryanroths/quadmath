@@ -29,7 +29,9 @@ name: Sim tests
 #                 wrangler installed in that entry, which the sim-tests job
 #                 skips for want of wrangler); and test_sim_bf_rates_page
 #                 with test_sim_rates_page (Tune's rates on both cores, read
-#                 back from Betaflight). Each entry under about 10 minutes.
+#                 back from Betaflight); and test_sim_race_offer_page (the
+#                 race offer and the race count). Each entry under about 10
+#                 minutes.
 #                 test_sim_sound has no entry for now: it samples the page
 #                 once a frame, so its result depends on the frame rate.
 #   asset-stamps  scripts/ci/stamp_asset_cache.py --check. The stamper's own
@@ -128,6 +130,10 @@ jobs:
           # Betaflight; and the one profile across 65, 75 and 85 on both cores.
           # About 1.5 minutes on a Linux box with SwiftShader.
           - { suite: page, label: 'rates, counts', tests: 'tools/test_sim_bf_rates_page.mjs tools/test_sim_rates_page.mjs tools/test_leaderboard_counts.mjs tools/test_sim_count_page.mjs', wrangler: true }
+          # The race offer in free flight (30 s in the air, T or RACE, the Rig
+          # Loop) and the race count at gate 0; a desktop and a phone at three
+          # sizes. About 2.5 minutes on a Windows desktop.
+          - { suite: page, label: 'race offer', tests: 'tools/test_sim_race_offer_page.mjs' }
 
     steps:
       - name: Check out
