@@ -16,8 +16,10 @@
 //     profile opened again with the TX16S awake: its card), a keyboard pilot
 //     who arms on Space (the layout, no text card), the keyboard's arming (W
 //     held at once arms and climbs; a tap of W, then W; Space, then W; W
-//     while Betaflight loads, then W), touch, and a radio on its own
-//     switches (no card: the throttle is not its arm).
+//     while Betaflight loads, then W; a Tune slider moved with the mouse,
+//     then W; Tune's number boxes let go on Enter and Esc; the replay's scrub
+//     and the menu's volume moved with the mouse, then Space and Esc), touch,
+//     and a radio on its own switches (no card: the throttle is not its arm).
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -593,6 +595,14 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         },
         // A desktop screen of this size (CSS px).
         view: (w, h) => cdp(ws, 'Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false }),
+        // The mouse's left button at a CSS point: mousePressed, mouseMoved (held), mouseReleased.
+        mouse: (type, x, y) => cdp(ws, 'Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 }),
+        // In the focused box: all of it selected (Ctrl+A), then text typed over it.
+        typeOver: async (text) => {
+          await cdp(ws, 'Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2, commands: ['selectAll'] });
+          await cdp(ws, 'Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 });
+          await cdp(ws, 'Input.insertText', { text });
+        },
         wasmHeld: () => wasmHeld.length,
         releaseWasm: async () => { wasmGo = true; for (const id of wasmHeld.splice(0)) await cdp(ws, 'Fetch.continueRequest', { requestId: id }); },
       });
@@ -1136,6 +1146,153 @@ test('the first-flight card in Chrome', { timeout: 8 * 60 * 1000 }, async (t) =>
         assert.equal(r.armed, false, 'W held through the crash disarm: no re-arm, upright');
         await armAgain('after the crash');
         await hold(false, 'w', 'KeyW', 87);
+      });
+    });
+
+    // A click on a slider or number box gives it the focus, and the flight
+    // keys skip a focused one (sim.html's keydown handler): Tune lets go of it.
+    await t.test('keyboard: Tune open, a number box keeps the keys while typing, Enter or Esc lets go; a slider moved with the mouse lets go on release, then W arms and climbs', async () => {
+      await pass('', {}, async ({ js, hold, key, enter, mouse, typeOver }) => {
+        await enter();
+        let r = await js(`${fly} return JSON.stringify({ flying, core: F.s.core() });`);
+        assert.equal(r.flying, true, 'flying');
+        assert.equal(r.core, 'bf');
+        await key('Tab', 'Tab', 9);
+        // An element's box once Tune has slid in, scrolled into its view.
+        const box = (id) => js(`const p = document.getElementById('panel');
+          const open = await F.until(() => p.classList.contains('open') && Math.abs(p.getBoundingClientRect().right - innerWidth) < 1, 3000);
+          const el = document.getElementById(${JSON.stringify(id)}); el.scrollIntoView({ block: 'center' }); await F.wait(150);
+          const b = el.getBoundingClientRect();
+          return JSON.stringify({ open, l: b.left, t: b.top, w: b.width, h: b.height });`);
+        const state = () => js(`const a = document.activeElement, w = F.s.bfRates().want;
+          return JSON.stringify({ focus: a && a.id || a.tagName, slider: document.getElementById('bfs_roll_expo').value, num: document.getElementById('bfn_roll_expo').value,
+            expo: w && w.roll ? w.roll.expo : null, pending: !!F.s.bfRates().pending, menu: document.body.classList.contains('menu-open'), armed: F.s.coreState().armed });`);
+        // The number box: clicked into, typed in, Enter.
+        let b = await box('bfn_roll_expo');
+        assert.equal(b.open, true, 'Tune open');
+        await mouse('mousePressed', b.l + b.w / 2, b.t + b.h / 2);
+        await mouse('mouseReleased', b.l + b.w / 2, b.t + b.h / 2);
+        await typeOver('0.5');
+        r = await state();
+        assert.equal(r.focus, 'bfn_roll_expo', 'typing: the box keeps the focus ' + JSON.stringify(r));
+        await enter();
+        r = await js(`await F.wait(200); return JSON.stringify(1);`);
+        r = await state();
+        console.log('tune, a number box, Enter: ' + JSON.stringify(r));
+        assert.notEqual(r.focus, 'bfn_roll_expo', 'Enter: out of the box');
+        assert.equal(r.slider, '0.5', 'Enter sends it ' + JSON.stringify(r));
+        assert.equal(r.expo, 0.5, 'to Betaflight, disarmed: at once');
+        assert.equal(r.pending, false);
+        // Clicked into, Enter with nothing typed (no change for the box to send): out of it too.
+        await mouse('mousePressed', b.l + b.w / 2, b.t + b.h / 2);
+        await mouse('mouseReleased', b.l + b.w / 2, b.t + b.h / 2);
+        r = await state();
+        assert.equal(r.focus, 'bfn_roll_expo');
+        await enter();
+        r = await js(`await F.wait(200); return JSON.stringify(1);`);
+        r = await state();
+        assert.notEqual(r.focus, 'bfn_roll_expo', 'Enter, nothing typed: out of the box');
+        assert.equal(r.num, '0.50');
+        // Typed again, Esc: out of the box, what was in it put back, no menu.
+        await mouse('mousePressed', b.l + b.w / 2, b.t + b.h / 2);
+        await mouse('mouseReleased', b.l + b.w / 2, b.t + b.h / 2);
+        await typeOver('0.9');
+        r = await state();
+        assert.equal(r.focus, 'bfn_roll_expo');
+        assert.equal(r.num, '0.9');
+        await key('Escape', 'Escape', 27);
+        r = await js(`await F.wait(200); return JSON.stringify(1);`);
+        r = await state();
+        console.log('tune, a number box, Esc: ' + JSON.stringify(r));
+        assert.notEqual(r.focus, 'bfn_roll_expo', 'Esc: out of the box');
+        assert.equal(r.num, '0.50', 'Esc puts back what was in it');
+        assert.equal(r.slider, '0.5', 'and sends nothing');
+        assert.equal(r.expo, 0.5);
+        assert.equal(r.menu, false, 'that Esc is the box\'s, not the menu\'s');
+        // The slider, dragged with the mouse from 0.5 to the right.
+        b = await box('bfs_roll_expo');
+        const y = b.t + b.h / 2;
+        await mouse('mousePressed', b.l + b.w * 0.5, y);
+        r = await state();
+        assert.equal(r.focus, 'bfs_roll_expo', 'pressed: the slider has the focus');
+        for (const f of [0.6, 0.7, 0.8]) { await mouse('mouseMoved', b.l + b.w * f, y); await js(`await F.wait(30); return JSON.stringify(1);`); }
+        await mouse('mouseReleased', b.l + b.w * 0.8, y);
+        r = await js(`await F.wait(200); return JSON.stringify(1);`);
+        r = await state();
+        console.log('tune, a slider let go: ' + JSON.stringify(r));
+        assert.notEqual(r.focus, 'bfs_roll_expo', 'let go: the slider lets go of the focus');
+        assert.ok(+r.slider > 0.6, 'the slider moved ' + r.slider);
+        assert.equal(r.expo, +r.slider, 'and its change went in');
+        assert.equal(r.menu, false);
+        // Tune still open: W arms and climbs.
+        await hold(true, 'w', 'KeyW', 87);
+        r = await js(`const z0 = F.s.coreState().position.z;
+          const armed = await F.within(F.sim, () => F.s.coreState().armed, 2500);
+          const climbed = await F.within(F.sim, () => F.s.coreState().position.z - z0 > 0.3, 2500);
+          return JSON.stringify({ armed, climbed, z0, z: F.s.coreState().position.z, open: document.getElementById('panel').classList.contains('open'), flags: F.s.coreState().armingDisableFlags });`);
+        await hold(false, 'w', 'KeyW', 87);
+        console.log('tune, W after the slider: ' + JSON.stringify(r));
+        assert.equal(r.open, true, 'Tune still open');
+        assert.equal(r.armed, true, `W arms (flags ${r.flags})`);
+        assert.equal(r.climbed, true, `and climbs (z ${r.z0} to ${r.z})`);
+        // A slider reached with the keys (Tab) steps on its arrow keys and keeps the focus.
+        r = await js(`const el = document.getElementById('bfs_roll_expo'); el.focus(); return JSON.stringify({ v: el.value });`);
+        const v0 = +r.v;
+        await key('ArrowRight', 'ArrowRight', 39);
+        await key('ArrowRight', 'ArrowRight', 39);
+        r = await js(`await F.wait(200); return JSON.stringify(1);`);
+        r = await state();
+        console.log('tune, a slider on its arrow keys: ' + JSON.stringify(r));
+        assert.equal(r.focus, 'bfs_roll_expo', 'arrow steps keep the focus');
+        assert.equal(Math.round((+r.slider - v0) * 100), 2, `two steps (${v0} to ${r.slider})`);
+      });
+    });
+
+    await t.test('keyboard: the replay\'s scrub and the menu\'s volume, moved with the mouse, let go on release: Space plays the replay, Esc goes back', async () => {
+      await pass('', {}, async ({ js, key, enter, mouse }) => {
+        await enter();
+        let r = await js(`${fly} return JSON.stringify({ flying });`);
+        assert.equal(r.flying, true, 'flying');
+        // Pressed at one point of the slider's width, dragged to another, let go.
+        const drag = async (sel, from, to) => {
+          const b = await js(`const el = document.querySelector(${JSON.stringify(sel)}); el.scrollIntoView({ block: 'center' }); await F.wait(150);
+            const b = el.getBoundingClientRect(); return JSON.stringify({ l: b.left, t: b.top, w: b.width, h: b.height });`);
+          const y = b.t + b.h / 2;
+          await mouse('mousePressed', b.l + b.w * from, y);
+          const pressed = await js(`return JSON.stringify(document.activeElement === document.querySelector(${JSON.stringify(sel)}));`);
+          for (const f of [1, 2, 3]) { await mouse('mouseMoved', b.l + b.w * (from + (to - from) * f / 3), y); await js(`await F.wait(30); return JSON.stringify(1);`); }
+          await mouse('mouseReleased', b.l + b.w * to, y);
+          const after = await js(`await F.wait(200); const el = document.querySelector(${JSON.stringify(sel)});
+            return JSON.stringify({ focused: document.activeElement === el, focus: document.activeElement.id || document.activeElement.tagName, value: el.value });`);
+          return { pressed, ...after };
+        };
+        // The replay's scrub: dragged (the replay stops on it), then Space plays it again.
+        r = await js(`F.s.demoReplayForShot(); await F.wait(300); return JSON.stringify({ on: F.s.replayOn() });`);
+        assert.equal(r.on, true, 'a replay');
+        let d = await drag('#replayScrub', 0.2, 0.6);
+        console.log('the replay scrub let go: ' + JSON.stringify(d));
+        assert.equal(d.pressed, true, 'pressed: the scrub has the focus');
+        assert.equal(d.focused, false, 'let go: the scrub lets go of the focus ' + JSON.stringify(d));
+        r = await js(`return JSON.stringify({ play: document.getElementById('replayPlay').textContent });`);
+        assert.equal(r.play, 'Play', 'the scrub stopped the replay');
+        await key(' ', 'Space', 32);
+        r = await js(`await F.wait(200); return JSON.stringify({ play: document.getElementById('replayPlay').textContent, on: F.s.replayOn() });`);
+        assert.equal(r.play, 'Pause', 'then Space plays it ' + JSON.stringify(r));
+        await js(`F.s.stopReplay(); await F.wait(300); return JSON.stringify(1);`);
+        // The menu's volume (Controls): dragged, then Esc goes back from Controls.
+        await key('Escape', 'Escape', 27);
+        r = await js(`const open = await F.until(() => F.paused(), 2000); document.getElementById('menuControls').click(); await F.wait(300);
+          return JSON.stringify({ open, layer: document.getElementById('menuLayer').classList.contains('show'), vol: !!document.querySelector('#menuLayer .sound-vol') });`);
+        assert.equal(r.open, true, 'the menu');
+        assert.ok(r.layer && r.vol, 'Controls, with the volume ' + JSON.stringify(r));
+        d = await drag('#menuLayer .sound-vol', 0.3, 0.8);
+        console.log('the menu volume let go: ' + JSON.stringify(d));
+        assert.equal(d.pressed, true, 'pressed: the volume has the focus');
+        assert.equal(d.focused, false, 'let go: the volume lets go of the focus ' + JSON.stringify(d));
+        await key('Escape', 'Escape', 27);
+        r = await js(`await F.wait(200); return JSON.stringify({ layer: document.getElementById('menuLayer').classList.contains('show'), menu: document.body.classList.contains('menu-open') });`);
+        assert.equal(r.layer, false, 'then Esc goes back from Controls ' + JSON.stringify(r));
+        assert.equal(r.menu, true, 'to the menu');
       });
     });
 
