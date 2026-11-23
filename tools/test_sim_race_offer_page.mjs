@@ -1,19 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // Headless Chrome: the race offer and the race count (sim.html tickRaceOffer,
 // raceThisMap, startRun's countNote('race')).
-//   - Desktop, keyboard, 1280x720: free flight on the Rig, 30 s of sim time
+//   - Desktop, keyboard (flown at 640x360, placed at 1280x720): free flight on the Rig, 30 s of sim time
 //     in the air, and the prompt shows, not before: "RACE THE RIG · 17 gates
-//     · T", off the view's centre and clear of the HUD, for 10 s of sim time.
-//     The next disarm shows it once more; the disarm after that does not.
-//     T (one key) flies the Rig Loop as the Tracks picker does: on its pad,
-//     disarmed, the START ring there, the arm hint up at once (two frames).
+//     · T", off the view's centre and clear of the HUD (the Warehouse's
+//     longer name too), for 10 s of sim time. The next disarm shows it once
+//     more, held while Tune is open (which hides it) until Tune closes; the
+//     disarm after that does not. From the air, T (one key) flies the Rig
+//     Loop as the Tracks picker does: on its pad, disarmed, the START ring
+//     there, the arm hint up at once (two frames).
 //     Space arms, the quad flies through gate 0, and the race ping goes out
 //     once: { event: 'race', class: 65, core: 'bf', input: 'keyboard' }.
 //   - Phone, touch, 812x375: the launch screen's line about tracks, its five
 //     buttons clear (and at 667x375; 375x812 keeps the whole blurb). In the
 //     air 30 s: the prompt with a RACE button, 44 px or more, clear of the
-//     sticks, the footer and the HUD at 812x375, 667x375 and 375x812. One
-//     tap on RACE: the Rig Loop, the arm hint at once, ARM, gate 0, the race
+//     sticks, the footer and the HUD at 812x375, 667x375 and 375x812 (the
+//     Warehouse's name too). One tap on RACE from the air: the Rig Loop, the
+//     arm hint at once, ARM, gate 0, the race
 //     ping with input 'touch'. Back in free flight after that race, a disarm
 //     shows nothing: no offer once a race has started.
 //   - In the source: no offer for a test's pilot; T is in SIM_KEYS and the
@@ -242,6 +245,8 @@ async function openPage({ mobile, w, h }) {
   ] });
   await cdp('Runtime.enable');
   await cdp('Page.enable');
+  // SIM_CPU_THROTTLE=6: a slow runner's frame rate (the pilot steers once a frame).
+  if (process.env.SIM_CPU_THROTTLE) await cdp('Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
   const size = async (W, H) => {
     await cdp('Emulation.setDeviceMetricsOverride', mobile
       ? { width: W, height: H, deviceScaleFactor: 2.625, mobile: true, screenOrientation: W > H ? { type: 'landscapePrimary', angle: 90 } : { type: 'portraitPrimary', angle: 0 } }
@@ -253,7 +258,7 @@ async function openPage({ mobile, w, h }) {
   }
   await size(w, h);
   const key = async (k, code, vk) => {
-    await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk, text: k === ' ' ? ' ' : k });
+    await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk, ...(k.length === 1 ? { text: k } : {}) });
     await sleep(50);
     await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk });
   };
@@ -309,12 +314,15 @@ async function flyUntilOffer(P, arm) {
   await arm();
   await P.until(async () => (await P.sim()).armed, 5000, 'armed');
   const t0 = Date.now();
-  let s = null;
+  let s = null, aloft = Date.now();
   while (Date.now() - t0 < 120000) {
     s = await P.sim();
     assert.equal(s.offer.shown && s.offer.airMs < 30000, false, 'not before 30 s in the air: ' + JSON.stringify(s));
     if (s.offer.shown) break;
-    if (!s.armed) { await arm(); await P.evaluate(`window.__pilot.hover(1.0), true`); }
+    if (s.air) aloft = Date.now();
+    if (!s.armed) { await arm(); await P.evaluate(`window.__pilot.hover(1.0), true`); aloft = Date.now(); }
+    // Down but armed (a slow frame rate let the hover touch): up again.
+    else if (Date.now() - aloft > 1500) { await P.evaluate(`window.__pilot.hover(1.0), true`); aloft = Date.now(); }
     await sleep(200);
   }
   assert.ok(s.offer.shown, 'the offer after 30 s in the air: ' + JSON.stringify(s));
@@ -359,7 +367,10 @@ test('the race offer in the source: no offer for a test pilot; T in SIM_KEYS and
 
 test('desktop, keyboard: 30 s in the air, the offer; once more at the next disarm, not after; T, the Rig Loop, the arm hint at once, gate 0, the race ping', { timeout: 6 * 60 * 1000 }, async (t) => {
   if (process.env.SKIP_CHROME_BOOT === '1') { t.skip('SKIP_CHROME_BOOT'); return; }
-  const P = await openPage({ mobile: false, w: 1280, h: 720 });
+  // Flown at 640x360 (a slow runner's frame rate holds the hover); every
+  // placement is measured at 1280x720.
+  const P = await openPage({ mobile: false, w: 640, h: 360 });
+  const at1280 = async (fn) => { await P.size(1280, 720); await sleep(250); await P.frames(); try { return await fn(); } finally { await P.size(640, 360); } };
   try {
     await P.open();
     // As a visitor: the keyboard on the first-run prompt, Fly, the Rig.
@@ -371,23 +382,43 @@ test('desktop, keyboard: 30 s in the air, the offer; once more at the next disar
     await P.until(async () => !(await P.evaluate(`document.body.classList.contains('menu-open')`)), 10000, 'flying');
     await P.cdp('Page.bringToFront');
     const space = () => P.key(' ', 'Space', 32);
-    const shownAt = await flyUntilOffer(P, space);
-    const o1 = await P.offer();
-    assert.equal(o1.text, 'RACE THE RIG · 17 gates · T');
-    assert.equal(o1.go, null, 'no button on a keyboard');
-    assertPlaced(o1, 'desktop 1280x720');
-    // 10 s of sim time.
+    await flyUntilOffer(P, space);
+    await at1280(async () => {
+      const o1 = await P.offer();
+      assert.equal(o1.text, 'RACE THE RIG · 17 gates · T');
+      assert.equal(o1.go, null, 'no button on a keyboard');
+      assertPlaced(o1, 'desktop 1280x720');
+      await P.evaluate(`document.getElementById('raceOfferMap').textContent = 'RACE THE WAREHOUSE', document.getElementById('raceOfferGates').textContent = '19 gates', true`);
+      await P.frames();
+      assertPlaced(await P.offer(), 'desktop 1280x720, RACE THE WAREHOUSE');
+      await P.evaluate(`document.getElementById('raceOfferMap').textContent = 'RACE THE RIG', document.getElementById('raceOfferGates').textContent = '17 gates', true`);
+    });
+    // 10 s of sim time, by the page's own clock (the step that ends it can run
+    // up to a frame past).
     let s = await P.until(async () => { const v = await P.sim(); return v.offer.shown ? null : v; }, 30000, 'the offer goes after 10 s');
-    assert.ok(s.clock - shownAt >= 9900 && s.clock - shownAt < 11000, 'shown 10 s: ' + (s.clock - shownAt));
-    // Down and disarmed: once more, at once.
+    const held = s.offer.hiddenAt - s.offer.shownAt;
+    assert.ok(held >= 10000 && held < 10600, 'shown 10 s of sim time: ' + held);
+    // Down and disarmed with Tune open: the showing waits for Tune (which
+    // hides it), then comes when Tune closes.
     await P.evaluate(`window.__pilot.mode = 'land', true`);
     await P.until(async () => !(await P.sim()).air, 20000, 'landed');
+    await P.key('Tab', 'Tab', 9);
+    await P.until(() => P.evaluate(`document.getElementById('panel').classList.contains('open')`), 3000, 'Tune open');
     await space();
-    s = await P.until(async () => { const v = await P.sim(); return !v.armed && v.offer.shown ? v : null; }, 3000, 'the offer again at the disarm');
+    await P.until(async () => !(await P.sim()).armed, 3000, 'disarmed');
+    await sleep(1200);
+    s = await P.sim();
+    assert.equal(s.offer.shown, false, 'not while Tune is open');
+    assert.equal(s.offer.shows, 1, 'the showing not spent behind Tune');
+    assert.equal(s.offer.due, true, 'it waits for Tune');
+    await P.key('Tab', 'Tab', 9);
+    s = await P.until(async () => { const v = await P.sim(); return !v.armed && v.offer.shown ? v : null; }, 3000, 'the offer again once Tune closes');
     assert.equal(s.offer.shows, 2);
-    const o2 = await P.offer();
-    assert.equal(o2.text, 'RACE THE RIG · 17 gates · T');
-    assertPlaced(o2, 'desktop, disarmed (the arm hint up)');
+    await at1280(async () => {
+      const o2 = await P.offer();
+      assert.equal(o2.text, 'RACE THE RIG · 17 gates · T');
+      assertPlaced(o2, 'desktop 1280x720, disarmed (the arm hint up)');
+    });
     await P.until(async () => !(await P.sim()).offer.shown, 30000, 'the second showing goes');
     // Up and down again: never a third time.
     await P.evaluate(`window.__pilot.hover(1.0), true`);
@@ -402,9 +433,13 @@ test('desktop, keyboard: 30 s in the air, the offer; once more at the next disar
     s = await P.sim();
     assert.equal(s.offer.shown, false, 'no third showing');
     assert.equal(s.offer.shows, 2);
-    // T: the Rig Loop, on its pad, disarmed, the START ring; the arm hint
-    // within two painted frames.
-    await P.evaluate(`window.__pilot.mode = 'off', true`);
+    // In the air again, then T: the Rig Loop, on its pad, disarmed, the START
+    // ring; the arm hint, which flying hides, within two painted frames.
+    await P.evaluate(`window.__pilot.hover(1.0), true`);
+    await space();
+    await P.until(async () => (await P.sim()).air, 8000, 'flying before T');
+    await sleep(800);
+    assert.equal(await P.evaluate('window.__ro.hint()'), null, 'no arm hint while armed');
     await P.key('t', 'KeyT', 84);
     await P.frames();
     const hint = await P.evaluate('window.__ro.hint()');
@@ -465,11 +500,18 @@ test('phone, touch: the launch line about tracks; the offer with RACE, clear at 
       assert.equal(o.text, 'RACE THE RIG 17 gates RACE', `${W}x${H}`);
       assertPlaced(o, `phone ${W}x${H}`);
       assert.ok(o.go && o.go.h >= 44 && o.go.w >= 44 && o.go.uncovered, `${W}x${H}: RACE, 44 px or more and clear ` + JSON.stringify(o.go));
+      // The longest map's name (The Warehouse) stays clear too.
+      await P.evaluate(`document.getElementById('raceOfferMap').textContent = 'RACE THE WAREHOUSE', document.getElementById('raceOfferGates').textContent = '19 gates', true`);
+      await P.frames();
+      assertPlaced(await P.offer(), `phone ${W}x${H}, RACE THE WAREHOUSE`);
+      await P.evaluate(`document.getElementById('raceOfferMap').textContent = 'RACE THE RIG', document.getElementById('raceOfferGates').textContent = '17 gates', true`);
     }
     await P.size(812, 375);
     await sleep(300);
-    // One tap: the Rig Loop, the arm hint within two painted frames.
-    await P.evaluate(`window.__pilot.mode = 'off', true`);
+    // One tap, from the air: the Rig Loop, the arm hint (which flying hides)
+    // within two painted frames.
+    assert.equal((await P.sim()).armed, true, 'flying');
+    assert.equal(await P.evaluate('window.__ro.hint()'), null, 'no arm hint while armed');
     await P.tap('#raceOfferGo');
     await P.frames();
     const hint = await P.evaluate('window.__ro.hint()');

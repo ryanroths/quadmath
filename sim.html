@@ -1191,7 +1191,7 @@
     🔊 <b>M</b> mute &nbsp;<b>N</b> next track &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
     Throttle down 1 s, then up: armed. Down 0.5 s landed: disarmed. Upside down or on its side: full roll or pitch.<br>
     3D (Tune panel): center throttle = zero, below = reverse. Acro only. Not counted on boards.<br>
-    <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach<br>
+    <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach &nbsp;<b>T</b> race this map<br>
     <b>F</b> upside down on bf: sim flip (logged as an assist); else next mode
   </div>
   <button type="button" id="btnFreestyle">FREESTYLE THIS MAP</button>
@@ -1417,7 +1417,7 @@ if(CORE_KIND==='js')console.warn('sim-core: ?core=js is deprecated, removed next
 const DEV_UI=new URLSearchParams(location.search).get('dev')==='1';
 // ---------- Anonymous flight counts (sim-retention.js COUNT_EVENTS) ----------
 // How far visitors get, as the leaderboard Worker's daily totals (POST
-// /api/count): ready, arm, flew30, pack2, lap and name, each at most once a
+// /api/count): ready, arm, flew30, pack2, race, lap and name, each at most once a
 // page load. The flags live in this object, in memory, for this page load
 // only: no cookie, no storage, no id. A ping carries the event, the class,
 // the core and the input, nothing else. None at all with Global Privacy
@@ -1468,11 +1468,12 @@ function countFlight(ms){
 // names the map's race and its gates (RACE THE RIG · 17 gates · T) for 10 s
 // of sim time; once more at the next disarm; then never again this page load.
 // Never once a race has started here (startRun), nor for a test's pilot, nor
-// in Coach, the builder, a replay or a room. T (or the prompt's RACE on touch)
-// flies the map's race as the Tracks picker does.
+// in Coach, the builder, a replay or a room. Tune open hides it: a showing
+// waits for Tune to close, and its 10 s stand still. T (or the prompt's RACE
+// on touch) flies the map's race as the Tracks picker does.
 const RACE_OFFER_AIR_MS=30000;
 const RACE_OFFER_SHOW_MS=10000;
-const raceOffer={airMs:0,shows:0,until:0,wasArmed:false,raceStarted:false,track:null,placedAt:-Infinity};
+const raceOffer={airMs:0,shows:0,due:false,until:0,wasArmed:false,raceStarted:false,track:null,shownAt:null,hiddenAt:null,placedAt:-Infinity};
 const raceOfferEl=document.getElementById('raceOffer');
 // The map's own race: its first built-in track with gates (sim-tracks.js
 // BUILTIN_TRACK_FILES order: Rig Loop, House Loop, Warehouse Loop, Bando
@@ -1491,12 +1492,15 @@ function tickRaceOffer(ms){
   const t=raceOfferTrack();
   const armed=!!cs.armed,was=raceOffer.wasArmed;
   raceOffer.wasArmed=armed;
-  if(!t){showRaceOffer(null);return;}
+  if(!t){raceOffer.due=false;showRaceOffer(null);return;}
   if(raceOffer.shows===0){
     if(armed&&cs.airborne)raceOffer.airMs+=ms;
-    if(raceOffer.airMs>=RACE_OFFER_AIR_MS)showRaceOffer(t);
-  }else if(raceOffer.shows===1&&was&&!armed)showRaceOffer(t);
+    if(raceOffer.airMs>=RACE_OFFER_AIR_MS)raceOffer.due=true;
+  }else if(raceOffer.shows===1&&was&&!armed)raceOffer.due=true;
+  const tune=panel.classList.contains('open');
+  if(raceOffer.due&&!tune){raceOffer.due=false;showRaceOffer(t);}
   if(!raceOffer.until)return;
+  if(tune){raceOffer.until+=ms;return;}
   if(simClockMs>=raceOffer.until)showRaceOffer(null);
   else if(performance.now()-raceOffer.placedAt>250)placeRaceOffer();
 }
@@ -1505,10 +1509,11 @@ function showRaceOffer(t){
   if(!raceOfferEl)return;
   if(!t){
     raceOffer.until=0;
-    if(!raceOfferEl.hidden)raceOfferEl.hidden=true;
+    if(!raceOfferEl.hidden){raceOfferEl.hidden=true;raceOffer.hiddenAt=simClockMs;}
     return;
   }
   raceOffer.shows++;
+  raceOffer.shownAt=simClockMs;
   raceOffer.until=simClockMs+RACE_OFFER_SHOW_MS;
   raceOffer.track=t.id;
   const map=(MAPS.find(m=>m.id===t.map)||{name:t.map}).name;
@@ -7305,7 +7310,7 @@ function wireLooksUI(){
       '<span class="n">R</span> last-gate respawn · <span class="n">P</span> new pack · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
       '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
       'Throttle down 1 s, then up: armed. Down 0.5 s landed: disarmed. Upside down or on its side: full roll or pitch.<br>'+
-      '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">N</span> next track · <span class="n">G</span> ghost · <span class="n">C</span> coach · <span class="n">K</span> share last run<br>'+
+      '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">N</span> next track · <span class="n">G</span> ghost · <span class="n">C</span> coach · <span class="n">T</span> race this map · <span class="n">K</span> share last run<br>'+
       '<span class="n">F</span> upside down on bf: sim flip (logged as an assist) · else next flight mode</p>'+
       '<div class="row"><label>Angle mode</label><input type="checkbox" class="cb-angle-mode" style="accent-color:var(--orange)"></div>'+
       '<div class="row"><label>Use my radio switches</label><input type="checkbox" class="cb-radio-switches" style="accent-color:var(--orange)"></div>'+
@@ -11070,8 +11075,8 @@ function publishTracks(){
   Object.assign(window._sim,{tracks:()=>builtinTracks.concat(customTracks),findTrack:(id)=>findTrack(id)});
 }
 // The race offer's state, read only (tools/test_sim_race_offer_page.mjs).
-Object.assign(window._sim,{raceOffer:()=>({airMs:raceOffer.airMs,shows:raceOffer.shows,shown:!!(raceOfferEl&&!raceOfferEl.hidden),
-  track:raceOffer.track,raceStarted:raceOffer.raceStarted,mapRace:(mapRace(currentMap)||{}).id||null})});
+Object.assign(window._sim,{raceOffer:()=>({airMs:raceOffer.airMs,shows:raceOffer.shows,due:raceOffer.due,shown:!!(raceOfferEl&&!raceOfferEl.hidden),
+  shownAt:raceOffer.shownAt,hiddenAt:raceOffer.hiddenAt,track:raceOffer.track,raceStarted:raceOffer.raceStarted,mapRace:(mapRace(currentMap)||{}).id||null})});
 // The page is built on City. Land on the boot map now, not when the tracks
 // fetch below lets applyQueryBoot run, so the launch screen never shows a
 // closed map first; applyQueryBoot then adds only what the boot needs.
