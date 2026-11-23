@@ -6,12 +6,18 @@
 // (CDP Fetch): a ping is recorded and answered 204; nothing reaches the
 // Worker, or Cloudflare's analytics.
 //   - A normal flight (a fresh profile, the keyboard, the bf core, the 65; no
-//     test pilot): ready, then arm, then flew30 (30 s armed in the air, held
+//     test pilot): ready, then kbd (a real click on the first-run prompt's
+//     Fly with keyboard), then arm, then flew30 (30 s armed in the air, held
 //     on real W and S keys), each once, each { event, class, core, input }
 //     and nothing more; nothing stored for it (no cookie, no storage key).
-//     A reload is a new page load: ready again.
+//     A reload is a new page load: ready again (no prompt, no kbd).
+//   - The keyboard chosen while Betaflight's wasm is held: nothing before
+//     ready, then ready and kbd.
+//   - Armed on the floor at 30% throttle for 33 s of sim time (the bf plant
+//     reads that airborne): no flew30, no race-offer air time.
 //   - Nothing at all with Global Privacy Control on, Do Not Track on, ?dev=1,
-//     or on 127.0.0.1, booted and armed.
+//     on 127.0.0.1, or the owner's ?nocount=1 and the loads after it, booted
+//     and armed; ?nocount=0 counts again, its key gone.
 // tools/test_sim_count.mjs holds the counter and the Worker in Node.
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs); skipped under
 // SKIP_CHROME_BOOT=1.
@@ -104,7 +110,7 @@ const UNPAUSE = `(() => {
 })()`;
 const STATE = `JSON.stringify((() => { const c = window._sim.coreState(); return { armed: !!c.armed, air: !!c.airborne, z: c.position.z, vz: c.velocity.z, core: window._sim.core() }; })())`;
 
-test('anonymous flight counts: a normal flight sends ready, arm, flew30 in order; the opt-outs send nothing', { timeout: 10 * 60 * 1000 }, async (t) => {
+test('anonymous flight counts: a normal flight sends ready, kbd, arm, flew30 in order; kbd chosen before ready goes after it; idling on the floor is not flying; the opt-outs, the owner\'s included, send nothing', { timeout: 10 * 60 * 1000 }, async (t) => {
   if (process.env.SKIP_CHROME_BOOT === '1') { t.skip('SKIP_CHROME_BOOT'); return; }
   const { server, port } = await serveRoot();
   const site = `http://${HOST}:${port}`;
@@ -141,11 +147,20 @@ test('anonymous flight counts: a normal flight sends ready, arm, flew30 in order
     const pings = [];
     const caught = [];
     let currentPage = 'none';
+    // Betaflight's wasm, held while holdWasm is set (the keyboard chosen
+    // before ready), let through otherwise.
+    let holdWasm = false;
+    const heldWasm = [];
     ws.addEventListener('message', (msg) => {
       let o;
       try { o = JSON.parse(typeof msg.data === 'string' ? msg.data : msg.data.toString()); } catch (e) { return; }
       if (!o || o.method !== 'Fetch.requestPaused') return;
       const { requestId, request } = o.params;
+      if (/sim-core\.wasm/.test(request.url)) {
+        if (holdWasm) heldWasm.push(requestId);
+        else cdp(ws, 'Fetch.continueRequest', { requestId }).catch(() => {});
+        return;
+      }
       caught.push(request.method + ' ' + request.url);
       if (request.url === LEADERBOARD_URL + '/api/count' && request.method === 'POST') {
         pings.push({ at: Date.now(), body: request.postData, type: o.params.resourceType, page: currentPage });
@@ -157,6 +172,7 @@ test('anonymous flight counts: a normal flight sends ready, arm, flew30 in order
     await cdp(ws, 'Fetch.enable', { patterns: [
       { urlPattern: LEADERBOARD_URL + '/*' }, { urlPattern: 'https://sim-rooms.ryan-roths.workers.dev/*' },
       { urlPattern: 'https://static.cloudflareinsights.com/*' }, { urlPattern: 'https://cloudflareinsights.com/*' },
+      { urlPattern: '*sim-core.wasm*' },
     ] });
     await cdp(ws, 'Runtime.enable');
     await cdp(ws, 'Page.enable');
@@ -181,8 +197,9 @@ test('anonymous flight counts: a normal flight sends ready, arm, flew30 in order
     };
     const W = ['w', 'KeyW', 87], S = ['s', 'KeyS', 83];
     // Load url as page `label` (an opt-out set up by script, or none) and
-    // wait for it to boot with Betaflight flying.
-    const open = async (label, url, script) => {
+    // wait for it to boot with Betaflight flying. keepPrompt: leave the
+    // first-run prompt up (the keyboard choice is clicked on it).
+    const open = async (label, url, script, opts = {}) => {
       currentPage = label;
       let scriptId = null;
       if (script) scriptId = (await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: script })).identifier;
@@ -195,7 +212,7 @@ test('anonymous flight counts: a normal flight sends ready, arm, flew30 in order
       }
       assert.ok(ok, label + ': booted on the bf core');
       if (scriptId) await cdp(ws, 'Page.removeScriptToEvaluateOnNewDocument', { identifier: scriptId });
-      await evaluate(ws, UNPAUSE);
+      if (!opts.keepPrompt) await evaluate(ws, UNPAUSE);
     };
     const events = (label) => pings.filter((p) => p.page === label).map((p) => JSON.parse(p.body).event);
     const waitFor = async (label, event, ms) => {
@@ -203,11 +220,26 @@ test('anonymous flight counts: a normal flight sends ready, arm, flew30 in order
       while (Date.now() - t0 < ms && !events(label).includes(event)) await sleep(100);
       return events(label).includes(event);
     };
+    // A real click on the first-run prompt's Fly with keyboard.
+    const clickKeys = async () => {
+      const r = JSON.parse(await evaluate(ws, `JSON.stringify((() => { const b = document.getElementById('feelKeys'); if (!b) return null; const x = b.getBoundingClientRect(); return x.width ? { x: x.left + x.width / 2, y: x.top + x.height / 2 } : null; })())`));
+      assert.ok(r, 'Fly with keyboard on screen');
+      await cdp(ws, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: r.x, y: r.y });
+      await cdp(ws, 'Input.dispatchMouseEvent', { type: 'mousePressed', x: r.x, y: r.y, button: 'left', clickCount: 1 });
+      await sleep(40);
+      await cdp(ws, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x: r.x, y: r.y, button: 'left', clickCount: 1 });
+    };
+    // Space toggles the arm: one keydown (rawKeyDown and keyDown would be two).
+    const space = async () => { await key('rawKeyDown', ' ', 'Space', 32); await sleep(50); await key('keyUp', ' ', 'Space', 32); };
 
-    // A normal flight: keyboard, the 65 on Betaflight, the Rig.
-    await open('flight', `${site}/sim.html?quality=low&map=rig`);
+    // A normal flight: a first visit, the keyboard chosen on the first-run
+    // prompt (after ready), the 65 on Betaflight, the Rig.
+    await open('flight', `${site}/sim.html?quality=low&map=rig`, null, { keepPrompt: true });
     assert.ok(await waitFor('flight', 'ready', 15000), 'ready: ' + JSON.stringify(caught.slice(-5)));
-    assert.deepEqual(events('flight'), ['ready'], 'nothing else before the arm');
+    assert.deepEqual(events('flight'), ['ready'], 'nothing else before the keyboard choice');
+    await clickKeys();
+    assert.ok(await waitFor('flight', 'kbd', 5000), 'kbd on Fly with keyboard');
+    await evaluate(ws, UNPAUSE);
     // Hold a hover at 1.2 m on W and S: W from the bottom arms it (Easy mode),
     // then taps as far off the height (and its rate) as it is.
     const t0 = Date.now();
@@ -224,19 +256,73 @@ test('anonymous flight counts: a normal flight sends ready, arm, flew30 in order
     assert.ok(events('flight').includes('flew30'), 'flew30 after 30 s in the air: ' + JSON.stringify(st));
     await sleep(2000);
     const flight = pings.filter((p) => p.page === 'flight');
-    assert.deepEqual(flight.map((p) => JSON.parse(p.body).event), ['ready', 'arm', 'flew30'], 'in order, each once');
+    assert.deepEqual(flight.map((p) => JSON.parse(p.body).event), ['ready', 'kbd', 'arm', 'flew30'], 'in order, each once');
     for (const p of flight) assert.deepEqual(Object.keys(JSON.parse(p.body)), ['event', 'class', 'core', 'input'], 'nothing else: ' + p.body);
     assert.deepEqual(JSON.parse(flight[0].body), { event: 'ready', class: 65, core: 'bf', input: 'keyboard' });
-    assert.equal(flight[1].type, 'Ping', 'sent as a beacon');
+    assert.deepEqual(JSON.parse(flight[1].body), { event: 'kbd', class: 65, core: 'bf', input: 'keyboard' });
+    assert.equal(flight[2].type, 'Ping', 'sent as a beacon');
     // Nothing stored for it.
     const stored = JSON.parse(await evaluate(ws, `JSON.stringify({ cookie: document.cookie, local: Object.keys(localStorage), session: Object.keys(sessionStorage) })`));
     assert.equal(stored.cookie, '', 'no cookie');
     for (const k of stored.local.concat(stored.session)) assert.ok(!/count|ping|visit|funnel/i.test(k), 'no storage key for it: ' + k);
-    // A reload is a new page load: ready again, nothing carried over.
+    // A reload is a new page load: ready again, nothing carried over; the
+    // keyboard is chosen already, so no prompt and no kbd.
     await open('reload', `${site}/sim.html?quality=low&map=rig`);
     assert.ok(await waitFor('reload', 'ready', 15000));
     await sleep(1500);
     assert.deepEqual(events('reload'), ['ready']);
+
+    // The keyboard chosen while Betaflight still loads (its wasm held): kbd
+    // waits for ready and goes just after it. A first visit again: no input
+    // chosen in this browser.
+    currentPage = 'early';
+    holdWasm = true;
+    const fresh = (await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: "try { localStorage.removeItem('quadmathSimInputChoice'); } catch (e) {}" })).identifier;
+    await cdp(ws, 'Page.navigate', { url: `${site}/sim.html?quality=low&map=rig` });
+    let up = false;
+    for (let i = 0; i < 240 && !up; i++) {
+      await sleep(250);
+      try { up = await evaluate(ws, `!!(window._sim && window._simQueryBooted && document.getElementById('feelKeys'))`); } catch (e) { /* navigating */ }
+    }
+    await cdp(ws, 'Page.removeScriptToEvaluateOnNewDocument', { identifier: fresh });
+    assert.ok(up, 'early: the first-run prompt is up');
+    assert.ok(heldWasm.length > 0, 'early: Betaflight\'s wasm held');
+    assert.notEqual(await evaluate(ws, `window._sim.core()`), 'bf', 'early: Betaflight not flying yet');
+    await clickKeys();
+    await sleep(1000);
+    assert.deepEqual(events('early'), [], 'nothing before ready, kbd included');
+    holdWasm = false;
+    for (const id of heldWasm.splice(0)) cdp(ws, 'Fetch.continueRequest', { requestId: id }).catch(() => {});
+    assert.ok(await waitFor('early', 'kbd', 60000), 'kbd once ready: ' + JSON.stringify(events('early')));
+    await sleep(1000);
+    assert.deepEqual(events('early'), ['ready', 'kbd'], 'kbd just after ready');
+
+    // Armed on the floor at 30% throttle, still: the bf plant reads airborne,
+    // but 33 s of it count as no flying (flew30, the race offer's 30 s).
+    await open('floor', `${site}/sim.html?quality=low&map=rig`);
+    assert.ok(await waitFor('floor', 'ready', 15000));
+    await evaluate(ws, `window._sim.setTestStick({ r: 0, p: 0, y: 0, t: 0 }), true`);
+    await space();
+    let armedUp = false;
+    for (let i = 0; i < 40 && !armedUp; i++) { await sleep(100); armedUp = await evaluate(ws, `window._sim.coreState().armed`); }
+    assert.ok(armedUp, 'floor: armed on the pad');
+    await evaluate(ws, `window._sim.setTestStick({ r: 0, p: 0, y: 0, t: 0.3 }), true`);
+    const f0 = await evaluate(ws, `window._sim.simClockMs()`);
+    let sawAir = false, lifted = 0, last = null;
+    while ((await evaluate(ws, `window._sim.simClockMs()`)) - f0 < 33000) {
+      last = JSON.parse(await evaluate(ws, `JSON.stringify((() => { const c = window._sim.coreState(); return { air: !!c.airborne, clr: c.clearance, armed: !!c.armed, airMs: window._sim.raceOffer().airMs }; })())`));
+      sawAir = sawAir || last.air;
+      lifted = Math.max(lifted, last.clr);
+      await sleep(250);
+    }
+    await evaluate(ws, `window._sim.setTestStick({ r: 0, p: 0, y: 0, t: 0 }), true`);
+    t.diagnostic('floor: ' + JSON.stringify({ sawAir, lifted, last }));
+    assert.ok(last.armed, 'floor: armed throughout');
+    assert.ok(lifted <= 0.04, 'floor: never off the floor: ' + lifted);
+    assert.equal(last.airMs, 0, 'floor: no race-offer air time');
+    assert.deepEqual(events('floor'), ['ready', 'arm'], 'floor: no flew30');
+    await evaluate(ws, `window._sim.setTestStick(null), true`);
+    await space();
 
     // The opt-outs: booted, armed and flown a moment, and not one ping.
     const optOuts = [
@@ -244,6 +330,9 @@ test('anonymous flight counts: a normal flight sends ready, arm, flew30 in order
       ['dnt', `${site}/sim.html?quality=low&map=rig`, "Object.defineProperty(Navigator.prototype, 'doNotTrack', { get: () => '1', configurable: true });"],
       ['dev', `${site}/sim.html?quality=low&map=rig&dev=1`, null],
       ['local', `http://127.0.0.1:${port}/sim.html?quality=low&map=rig`, null],
+      // The owner: ?nocount=1 once, then plain loads: nothing from either.
+      ['owner', `${site}/sim.html?quality=low&map=rig&nocount=1`, null],
+      ['owner, later', `${site}/sim.html?quality=low&map=rig`, null],
     ];
     for (const [label, url, script] of optOuts) {
       await open(label, url, script);
@@ -254,7 +343,13 @@ test('anonymous flight counts: a normal flight sends ready, arm, flew30 in order
       await sleep(1000);
       assert.deepEqual(events(label), [], label + ': nothing sent');
     }
-    assert.equal(pings.length, 4, 'four pings in all: ' + JSON.stringify(pings.map((p) => p.page + ':' + p.body)));
+    assert.equal(await evaluate(ws, `localStorage.getItem('quadmathNoCount')`), '1', 'the owner\'s key, kept');
+    // ?nocount=0: the key out, counted again.
+    await open('owner, undone', `${site}/sim.html?quality=low&map=rig&nocount=0`);
+    assert.ok(await waitFor('owner, undone', 'ready', 15000), '?nocount=0: counted again');
+    assert.equal(await evaluate(ws, `localStorage.getItem('quadmathNoCount')`), null, 'the key gone');
+    await sleep(1000);
+    assert.equal(pings.length, 10, 'ten pings in all: ' + JSON.stringify(pings.map((p) => p.page + ':' + JSON.parse(p.body).event)));
   } finally {
     try { if (ws) ws.close(); } catch (e) { /* ignore */ }
     killTree(child);

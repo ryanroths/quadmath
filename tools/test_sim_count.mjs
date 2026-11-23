@@ -5,9 +5,10 @@
 //     anything else is refused;
 //   - each event counts once per page load (the flags in memory, in the
 //     counter), every event after ready, pack2 after an arm; race at a
-//     race's gate 0;
+//     race's gate 0; kbd at the keyboard choice, or just after ready;
 //   - the opt-out signals send nothing: Global Privacy Control, Do Not Track,
-//     a local page, ?dev=1, a test's pilot;
+//     a local page, ?dev=1, the owner's browser (?nocount=1 once: its one
+//     key), a test's pilot;
 //   - the Worker on real SQLite (tools/d1_sqlite.mjs): a ping is one D1 write
 //     (its day's row, WITHOUT ROWID), a bad one is a 400 and writes nothing,
 //     another site's page is a 403; a write that fails is dropped (204) and
@@ -24,7 +25,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   COUNT_EVENTS, COUNT_CLASSES, COUNT_CORES, COUNT_INPUTS, COUNT_FLEW_MS, COUNT_BODY_MAX, RATE_COUNT_MAX,
-  normalizeCountPing, countPingsOff, createCountPings, utcDateId, LEADERBOARD_URL,
+  normalizeCountPing, countPingsOff, countOwnerOff, COUNT_OWNER_KEY, createCountPings, utcDateId, LEADERBOARD_URL,
 } from '../sim-retention.js';
 import { handleLeaderboard } from '../workers/sim-leaderboard/src/index.js';
 import { sqliteD1 } from './d1_sqlite.mjs';
@@ -35,7 +36,7 @@ const ORIGIN = 'https://quadmath.com';
 const PING = { event: 'ready', class: 65, core: 'bf', input: 'keyboard' };
 
 test('a ping is exactly { event, class, core, input }, each an allowed value', () => {
-  assert.deepEqual([...COUNT_EVENTS], ['ready', 'arm', 'flew30', 'pack2', 'race', 'lap', 'name']);
+  assert.deepEqual([...COUNT_EVENTS], ['ready', 'kbd', 'arm', 'flew30', 'pack2', 'race', 'lap', 'name']);
   assert.deepEqual([...COUNT_CLASSES], [65, 75, 85]);
   assert.deepEqual([...COUNT_CORES], ['bf', 'js']);
   assert.deepEqual([...COUNT_INPUTS], ['radio', 'gamepad', 'keyboard', 'touch']);
@@ -45,13 +46,13 @@ test('a ping is exactly { event, class, core, input }, each an allowed value', (
     assert.deepEqual(normalizeCountPing({ event, class: c, core, input }), { ok: true, event, class: c, core, input });
     n++;
   }
-  assert.equal(n, 168, 'at most 168 rows a day');
+  assert.equal(n, 192, 'at most 192 rows a day');
   const bad = [
     [null, 'BAD PING'], ['ready', 'BAD PING'], [[], 'BAD PING'], [{}, 'BAD PING'],
     [{ ...PING, extra: 1 }, 'BAD PING'], [{ event: 'ready', class: 65, core: 'bf' }, 'BAD PING'],
     [{ ...PING, id: 'abc' }, 'BAD PING'], [{ ...PING, ip: '1.2.3.4' }, 'BAD PING'],
     [{ ...PING, event: 'hello' }, 'BAD EVENT'], [{ ...PING, event: 'READY' }, 'BAD EVENT'], [{ ...PING, event: 7 }, 'BAD EVENT'],
-    [{ ...PING, event: 'toString' }, 'BAD EVENT'], [{ ...PING, event: 'RACE' }, 'BAD EVENT'], [{ ...PING, event: 'start' }, 'BAD EVENT'],
+    [{ ...PING, event: 'toString' }, 'BAD EVENT'], [{ ...PING, event: 'RACE' }, 'BAD EVENT'], [{ ...PING, event: 'start' }, 'BAD EVENT'], [{ ...PING, event: 'keyboard' }, 'BAD EVENT'],
     [{ ...PING, class: '65' }, 'BAD CLASS'], [{ ...PING, class: 66 }, 'BAD CLASS'], [{ ...PING, class: 65.5 }, 'BAD CLASS'], [{ ...PING, class: null }, 'BAD CLASS'],
     [{ ...PING, core: 'BF' }, 'BAD CORE'], [{ ...PING, core: 'sim' }, 'BAD CORE'],
     [{ ...PING, input: 'mouse' }, 'BAD INPUT'], [{ ...PING, input: ['keyboard'] }, 'BAD INPUT'],
@@ -59,7 +60,7 @@ test('a ping is exactly { event, class, core, input }, each an allowed value', (
   for (const [body, reason] of bad) assert.deepEqual(normalizeCountPing(body), { ok: false, reason }, JSON.stringify(body));
 });
 
-test('the opt-out signals: Global Privacy Control, Do Not Track, a local page, ?dev=1, a test\'s pilot', () => {
+test('the opt-out signals: Global Privacy Control, Do Not Track, a local page, ?dev=1, the owner, a test\'s pilot', () => {
   const site = { hostname: 'quadmath.com', search: '' };
   assert.equal(countPingsOff({ loc: site }), '', 'the site, nothing set: send');
   assert.equal(countPingsOff({ loc: site, gpc: false, dnt: '0' }), '');
@@ -73,6 +74,33 @@ test('the opt-out signals: Global Privacy Control, Do Not Track, a local page, ?
   assert.equal(countPingsOff({ loc: { hostname: 'quadmath.com', search: '?map=rig&dev=1' } }), 'dev');
   assert.equal(countPingsOff({ loc: { hostname: 'quadmath.com', search: '?dev=0' } }), '');
   assert.equal(countPingsOff({ loc: site, testPilot: true }), 'test');
+  assert.equal(countPingsOff({ loc: site, owner: true }), 'owner');
+  assert.equal(countPingsOff({ loc: site, owner: false }), '');
+  assert.equal(countPingsOff({ loc: { hostname: 'quadmath.com', search: '?dev=1' }, owner: true }), 'dev', 'the earlier reason wins');
+});
+
+test('the owner\'s opt-out: ?nocount=1 keeps one key, every load after is off; ?nocount=0 takes it out; nothing else stored', () => {
+  assert.equal(COUNT_OWNER_KEY, 'quadmathNoCount');
+  const store = () => {
+    const m = new Map();
+    return { m, getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) };
+  };
+  const s = store();
+  assert.equal(countOwnerOff(s, ''), false, 'a visitor: on');
+  assert.equal(countOwnerOff(s, '?map=rig'), false);
+  assert.deepEqual([...s.m], [], 'nothing stored for a visitor');
+  assert.equal(countOwnerOff(s, '?nocount=1'), true, '?nocount=1: off');
+  assert.deepEqual([...s.m], [['quadmathNoCount', '1']], 'that one key, nothing else');
+  assert.equal(countOwnerOff(s, ''), true, 'every load after: off');
+  assert.equal(countOwnerOff(s, '?map=house'), true);
+  assert.equal(countOwnerOff(s, '?nocount=yes'), true, 'another value changes nothing');
+  assert.equal(countOwnerOff(s, '?nocount=0'), false, '?nocount=0: on again');
+  assert.deepEqual([...s.m], [], 'and the key gone');
+  assert.equal(countOwnerOff(s, ''), false);
+  // Storage refused (a private window may throw): ?nocount=1 still silences that load.
+  const broken = { getItem() { throw new Error('no'); }, setItem() { throw new Error('no'); }, removeItem() { throw new Error('no'); } };
+  assert.equal(countOwnerOff(broken, '?nocount=1'), true);
+  assert.equal(countOwnerOff(broken, ''), false);
 });
 
 test('each event counts once per page load; ready first, pack2 after an arm; off sends nothing', () => {
@@ -83,7 +111,7 @@ test('each event counts once per page load; ready first, pack2 after an arm; off
   assert.equal(pings.note('pack2', ctx), false);
   assert.equal(pings.note('ready', ctx), true);
   assert.equal(pings.note('pack2', ctx), false, 'pack2 waits for an arm');
-  for (const e of ['arm', 'flew30', 'pack2', 'race', 'lap', 'name']) assert.equal(pings.note(e, ctx), true, e);
+  for (const e of ['kbd', 'arm', 'flew30', 'pack2', 'race', 'lap', 'name']) assert.equal(pings.note(e, ctx), true, e);
   for (let i = 0; i < 3; i++) for (const e of COUNT_EVENTS) assert.equal(pings.note(e, ctx), false, e + ' again');
   assert.equal(pings.note('hello', ctx), false);
   assert.deepEqual(sent.map((b) => b.event), [...COUNT_EVENTS], 'each once, in order');
@@ -197,9 +225,11 @@ test('POST /api/count: a ping adds one to its day\'s row in one write; anything 
   assert.deepEqual({ counts: w.counts(), statements: log.length }, before, 'a refused ping writes nothing');
   // A beacon from the page carries its Origin; one without (a tool) is taken.
   assert.equal((await w.post({ ...PING, event: 'lap' }, { origin: null })).status, 204);
-  // race, the newest name, is taken like the rest.
+  // race and kbd, the newest names, are taken like the rest.
   assert.equal((await w.post({ ...PING, event: 'race' })).status, 204, 'race');
   assert.deepEqual(w.counts().filter((r) => r.event === 'race').map((r) => r.n), [1]);
+  assert.equal((await w.post({ ...PING, event: 'kbd' })).status, 204, 'kbd');
+  assert.deepEqual(w.counts().filter((r) => r.event === 'kbd').map((r) => r.n), [1]);
   // GET is no route.
   const g = await handleLeaderboard(new Request('https://w.test/api/count'), w.env);
   assert.equal(g.status, 404);
@@ -258,22 +288,22 @@ test('DEPLOY.md: the last 14 days as a funnel per day, and split by input, on re
   const w = worker();
   const day = (d) => new Date(Date.now() - d * 86400_000).toISOString().slice(0, 10);
   const add = (d, event, input, n) => w.DB.exec(`INSERT INTO counts (day, event, class, core, input, n) VALUES ('${day(d)}', '${event}', 65, 'bf', '${input}', ${n})`);
-  for (const [event, n] of [['ready', 100], ['arm', 60], ['flew30', 40], ['pack2', 10], ['race', 9], ['lap', 8], ['name', 2]]) add(0, event, 'keyboard', n);
+  for (const [event, n] of [['ready', 100], ['kbd', 70], ['arm', 60], ['flew30', 40], ['pack2', 10], ['race', 9], ['lap', 8], ['name', 2]]) add(0, event, 'keyboard', n);
   for (const [event, n] of [['ready', 20], ['arm', 15], ['flew30', 12]]) add(0, event, 'radio', n);
   add(1, 'ready', 'gamepad', 7);
   add(13, 'ready', 'touch', 5);
   add(14, 'ready', 'touch', 999);
   const f = w.DB.rows(funnel);
   assert.deepEqual(f, [
-    { day: day(0), ready: 120, arm: 75, flew30: 52, pack2: 10, race: 9, lap: 8, name: 2 },
-    { day: day(1), ready: 7, arm: 0, flew30: 0, pack2: 0, race: 0, lap: 0, name: 0 },
-    { day: day(13), ready: 5, arm: 0, flew30: 0, pack2: 0, race: 0, lap: 0, name: 0 },
+    { day: day(0), ready: 120, kbd: 70, arm: 75, flew30: 52, pack2: 10, race: 9, lap: 8, name: 2 },
+    { day: day(1), ready: 7, kbd: 0, arm: 0, flew30: 0, pack2: 0, race: 0, lap: 0, name: 0 },
+    { day: day(13), ready: 5, kbd: 0, arm: 0, flew30: 0, pack2: 0, race: 0, lap: 0, name: 0 },
   ], 'newest first, 14 days, the 15th day ago left out');
-  assert.deepEqual(Object.keys(f[0]), ['day', 'ready', 'arm', 'flew30', 'pack2', 'race', 'lap', 'name'], 'the funnel\'s order');
+  assert.deepEqual(Object.keys(f[0]), ['day', 'ready', 'kbd', 'arm', 'flew30', 'pack2', 'race', 'lap', 'name'], 'the funnel\'s order');
   const s = w.DB.rows(byInput);
   assert.deepEqual(s.filter((r) => r.day === day(0)), [
-    { day: day(0), input: 'keyboard', ready: 100, arm: 60, flew30: 40, pack2: 10, race: 9, lap: 8, name: 2 },
-    { day: day(0), input: 'radio', ready: 20, arm: 15, flew30: 12, pack2: 0, race: 0, lap: 0, name: 0 },
+    { day: day(0), input: 'keyboard', ready: 100, kbd: 70, arm: 60, flew30: 40, pack2: 10, race: 9, lap: 8, name: 2 },
+    { day: day(0), input: 'radio', ready: 20, kbd: 0, arm: 15, flew30: 12, pack2: 0, race: 0, lap: 0, name: 0 },
   ]);
   assert.equal(s.length, 4);
 });
@@ -297,7 +327,9 @@ test('sim.html: one beacon per event, the events where they happen, nothing stor
   for (const part of [block, flight]) {
     for (const store of ['localStorage', 'sessionStorage', 'document.cookie', 'indexedDB', 'issuePilotToken', 'pilotToken']) assert.ok(!part.includes(store), 'stores nothing: ' + store);
   }
-  assert.ok(block.includes("const countOffAtLoad=countPingsOff({gpc:navigator.globalPrivacyControl,dnt:navigator.doNotTrack||window.doNotTrack,loc:location});"));
+  assert.ok(block.includes("const countOffAtLoad=countPingsOff({gpc:navigator.globalPrivacyControl,dnt:navigator.doNotTrack||window.doNotTrack,loc:location,owner:countOwner});"));
+  // The owner's opt-out is the one storage read, outside the counts, by its own key only.
+  assert.ok(html.includes("const countOwner=(()=>{try{return countOwnerOff(localStorage,location.search);}catch(e){return false;}})();\n// ---------- Anonymous flight counts"));
   assert.ok(block.includes("off:()=>countOffAtLoad||(testPilotUsed?'test':''),"));
   assert.ok(block.includes("navigator.sendBeacon(url+'/api/count',data)") && block.includes("keepalive:true,credentials:'omit'"));
   assert.ok(!/toast\(/.test(block), 'never says anything');
@@ -306,7 +338,15 @@ test('sim.html: one beacon per event, the events where they happen, nothing stor
   assert.ok(extract(html, 'loop').includes('countReadyWatch();'));
   assert.ok(extract(html, 'countReadyWatch').includes("if(core.kind!=='bf'&&bfWanted()&&!bfOf().failed)return;"));
   assert.ok(extract(html, 'stepCore').includes('countFlight(simClockMs-simAtMs);'));
-  assert.ok(flight.includes("countNote('arm');") && flight.includes('if(countAirMs>=COUNT_FLEW_MS)countNote(\'flew30\');') && flight.includes('!cs.airborne'));
+  assert.ok(flight.includes("countNote('arm');") && flight.includes('if(countAirMs>=COUNT_FLEW_MS)countNote(\'flew30\');') && flight.includes('!inTheAir()'));
+  // In the air: airborne and clear of the ground (the bf plant reads airborne on the floor at 30%).
+  assert.ok(html.includes('const AIR_CLEARANCE_M=0.04;\nfunction inTheAir(){return !!cs.airborne&&cs.clearance>AIR_CLEARANCE_M;}'));
+  assert.ok(extract(html, 'tickRaceOffer').includes('if(armed&&inTheAir())raceOffer.airMs+=ms;'), 'the race offer\'s 30 s by the same rule');
+  assert.ok(!/cs\.airborne/.test(flight) && !/cs\.airborne/.test(extract(html, 'tickRaceOffer')), 'neither reads the flag alone');
+  // kbd: at the keyboard choice, or just after ready.
+  assert.ok(extract(html, 'countKbd').includes("countKbdChosen=true;\n  countNote('kbd');"));
+  assert.ok(extract(html, 'countReadyWatch').includes("countNote('ready');\n  if(countKbdChosen)countNote('kbd');"));
+  assert.ok(html.includes("onKeyboard(){countKbd();"), 'the first-run prompt\'s Fly with keyboard');
   assert.ok(extract(html, 'placeQuadAt').includes("if(opts&&opts.freshPack&&countPings.has('arm'))countNote('pack2');"));
   assert.ok(extract(html, 'startRun').includes("countNote('race');"), 'race: gate 0 of any race, a line or a loop (both start here)');
   assert.ok(extract(html, 'finishRun').includes("countNote('lap');"));
@@ -314,7 +354,7 @@ test('sim.html: one beacon per event, the events where they happen, nothing stor
   assert.ok(extract(html, 'maybeSubmitOnline').includes("if(j&&j.ok){countNote('name');"));
   assert.ok(extract(html, 'maybeSubmitDailyLine').includes("if(j&&j.ok){countNote('name');"));
   assert.ok(extract(html, 'maybeSubmitTrackBoard').includes("countNote('name');"));
-  assert.equal(html.split("countNote('").length - 1, 10, 'ready, arm, flew30, pack2, race, two laps, three names');
+  assert.equal(html.split("countNote('").length - 1, 12, 'ready, kbd twice (the choice, after ready), arm, flew30, pack2, race, two laps, three names');
   // The beacon's host is in connect-src.
   const csp = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
   const connect = csp.split(';').map((s) => s.trim()).find((s) => s.startsWith('connect-src')).split(/\s+/);

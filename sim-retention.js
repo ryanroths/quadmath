@@ -68,14 +68,20 @@ export const RATE_SHARE_MAX = 12;
 // input. The Worker keeps the UTC day's total per event, class, core and
 // input; no address, no agent, no time finer than the day.
 //   ready   loaded and flyable (the class's core flying: Betaflight once it
-//           has taken over, the js core for the 85 or ?core=js)
+//           has taken over, the js core for the 85 or ?core=js). Its input
+//           is the input at load: a browser lists a controller only once a
+//           stick or button moves, so controller pilots read keyboard (or
+//           touch) here; read the input from arm on.
+//   kbd     a first visit chose the keyboard (the first-run prompt's Fly
+//           with keyboard); a choice made before ready is sent just after it
 //   arm     the first arm
-//   flew30  30 s of sim time armed and in the air (COUNT_FLEW_MS)
+//   flew30  30 s of sim time armed and in the air (COUNT_FLEW_MS): the
+//           core's airborne flag and clear of the ground (sim.html inTheAir)
 //   pack2   a fresh pack after an arm (a second pack started)
 //   race    a race started: gate 0 of any race passed (sim.html startRun)
 //   lap     the first timed lap finished (a loop's lap, a line's finish)
 //   name    a board took a run under the pilot's name (claiming it)
-export const COUNT_EVENTS = Object.freeze(['ready', 'arm', 'flew30', 'pack2', 'race', 'lap', 'name']);
+export const COUNT_EVENTS = Object.freeze(['ready', 'kbd', 'arm', 'flew30', 'pack2', 'race', 'lap', 'name']);
 export const COUNT_CLASSES = Object.freeze([65, 75, 85]);
 export const COUNT_CORES = Object.freeze(['bf', 'js']);
 export const COUNT_INPUTS = Object.freeze(['radio', 'gamepad', 'keyboard', 'touch']);
@@ -83,7 +89,7 @@ export const COUNT_FLEW_MS = 30000;
 // A ping is about 60 bytes; anything past this is not one.
 export const COUNT_BODY_MAX = 256;
 // Pings per client per UTC hour, counted in the Worker's memory
-// (countAllowed), never in D1: four full funnels of seven.
+// (countAllowed), never in D1: three full funnels of eight.
 export const RATE_COUNT_MAX = 30;
 const COUNT_KEYS = Object.freeze(['event', 'class', 'core', 'input']);
 
@@ -104,9 +110,10 @@ export function normalizeCountPing(body) {
 // on (gpc: navigator.globalPrivacyControl), Do Not Track on (dnt:
 // navigator.doNotTrack or window.doNotTrack), a local page (loc: localhost,
 // *.localhost, 127.x.x.x, 0.0.0.0, ::1, or no host: a file), ?dev=1, or a
-// test's pilot (testPilot: sim.html _sim.setTestPilot has flown in this page).
+// the owner's own browser (owner: countOwnerOff), or a test's pilot
+// (testPilot: sim.html _sim.setTestPilot has flown in this page).
 // isLocalHost is not enough here: it reads ::1 as its first : field.
-export function countPingsOff({ gpc, dnt, loc, testPilot } = {}) {
+export function countPingsOff({ gpc, dnt, loc, owner, testPilot } = {}) {
   if (gpc === true) return 'gpc';
   if (dnt === '1' || dnt === 1 || dnt === 'yes' || dnt === true) return 'dnt';
   const host = String((loc && loc.hostname) || '').toLowerCase().replace(/^\[|\]$/g, '');
@@ -114,8 +121,27 @@ export function countPingsOff({ gpc, dnt, loc, testPilot } = {}) {
   try {
     if (new URLSearchParams(String((loc && loc.search) || '')).get('dev') === '1') return 'dev';
   } catch (e) { return 'local'; }
+  if (owner) return 'owner';
   if (testPilot) return 'test';
   return '';
+}
+
+// The owner's opt-out, for the browsers the site's owner flies on: a load
+// with ?nocount=1 puts COUNT_OWNER_KEY in that browser's storage, and from
+// then on its loads send no counts ('owner'); ?nocount=0 takes it out. Only
+// that key, only on a ?nocount load is it written; a visitor never has it.
+// storage: localStorage (or a stand-in); search: location.search. true: off.
+export const COUNT_OWNER_KEY = 'quadmathNoCount';
+export function countOwnerOff(storage, search) {
+  let q = null;
+  try { q = new URLSearchParams(String(search || '')).get('nocount'); } catch (e) { /* none */ }
+  try {
+    if (q === '1') storage.setItem(COUNT_OWNER_KEY, '1');
+    else if (q === '0') storage.removeItem(COUNT_OWNER_KEY);
+    return storage.getItem(COUNT_OWNER_KEY) === '1';
+  } catch (e) {
+    return q === '1';
+  }
 }
 
 // A page load's pings: note(event, ctx) sends the event once (send(body)),
