@@ -887,7 +887,7 @@ test('Backyard Lap: threads at least 7 named yard gaps, in one face and out the 
 // ---------------------------------------------------------------------------
 // The House's own tracks and ghosts, as on origin/main 8b5119e (LF bytes).
 // A ghost's phys tag is the physics version (sim-whoop.js PHYSICS_VER), bumped
-// with each sim-core release that moves the physics (7 since v0.7.0), so the
+// with each sim-core release that moves the physics (8 since v0.9.0), so the
 // ghost is pinned with its tag read as 8b5119e's (6), and the tag is checked
 // against PHYSICS_VER on its own. Every other byte is 8b5119e's.
 const PHYS_TAG = /"phys":\d+,/;

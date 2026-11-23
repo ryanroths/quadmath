@@ -517,7 +517,16 @@ for (const [where, boxes, top] of SURFACES) {
   }
 }
 
-test('bf core: resting against a wall, on a duct and leaning on it, the stick brings it back', async () => {
+// Skipped since sim-core v0.9.0 (owner, 2026-11-23; quadmath#364 item 13): on
+// the floor's Coulomb friction (floorFriction 0.2, provisional) the duct slides
+// out and the quad comes to rest on its back (up Z -0.787), at every lean from
+// 60 to 88 degrees and every drop height tried, a lip at its foot or not;
+// v0.8.0's drag of 0.85 a tick held it propped (up Z -0.42). Rebuilt once the
+// owner's slide video sets the floor's friction, from a propped pose that
+// physics gives.
+test('bf core: resting against a wall, on a duct and leaning on it, the stick brings it back', {
+  skip: 'no propped rest on sim-core v0.9.0\'s floor friction (provisional); rebuilt after the slide video (quadmath#364 item 13)',
+}, async () => {
   const half = -75 * Math.PI / 360;
   const rig = await restRig({ x: Math.sin(half), y: 0, z: 0, w: Math.cos(half) }, [{ min: [-1, 0.04, 0], max: [1, 0.24, 1] }], -0.025);
   assert.ok(rig.upZ() > -0.7 && rig.upZ() < 0.5, `propped, neither upright nor on its back (up Z ${rig.upZ().toFixed(3)})`);
@@ -1498,7 +1507,11 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
               checkFlyableTime(name, r.ms, r.stepMs);
               assert.ok(r.up > 0.9, `${name}: upright (${r.up.toFixed(3)})`);
               assert.equal(r.armed, true, `${name}: armed`);
-              assert.ok(Math.hypot(r.pos.x - spot.x, r.pos.y - spot.y) < 0.6 && Math.abs(r.pos.z - spot.z) < 0.3, `${name}: where it lay, no respawn (${JSON.stringify(r.pos)})`);
+              // Within 1 m of where it lay (0.6 m before sim-core v0.9.0): on
+              // the floor's Coulomb friction the turtle's thrust skids the
+              // quad along the floor, 0.81 m from its left side on the open
+              // floor (owner, 2026-11-23).
+              assert.ok(Math.hypot(r.pos.x - spot.x, r.pos.y - spot.y) < 1.0 && Math.abs(r.pos.z - spot.z) < 0.3, `${name}: where it lay, no respawn (${JSON.stringify(r.pos)})`);
               assert.equal(r.map, 'rig', `${name}: same map`);
             }
             // And it flies from there, in the same session.

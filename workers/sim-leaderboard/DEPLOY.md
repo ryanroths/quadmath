@@ -154,14 +154,17 @@ Anti-cheat on POST `/api/submit`:
   only for 36 hours after Monday 00:00 UTC.
 - Board GET filters by that week's track id.
 - Ghost `phys` must equal current physics version (`PHYS_VER` in
-  `sim-retention.js`: 7 since sim-core v0.7.0 turned the RPM filter off in
+  `sim-retention.js`: 8 since sim-core v0.9.0's contact (walls scrub, hard
+  landings stop, the floor's Coulomb friction, Betaflight's yaw-spin
+  recovery) with the bf core's bounce maps on the crash threshold only, 7
+  since sim-core v0.7.0 turned the RPM filter off in
   the sim's policy, kept by v0.8.0, which changes only the config report and
   no trace, 6 since sim-core v0.6.0 put the 75 on the bf core
   (the Fractal75), 5 since sim-core v0.4.0's wall contact, 4 since the
   bf core became the default, 3 for the fixed 1 kHz cores before it).
 - Every board is kept per physics version: `scores.week` holds
   `boardKeyFor(week)`, the week (or Daily Line `D`+day) plus `.p` and
-  `PHYS_VER`, e.g. `2026-W46.p7`. A `PHYS_VER` bump needs no D1 migration:
+  `PHYS_VER`, e.g. `2026-W48.p8`. A `PHYS_VER` bump needs no D1 migration:
   once deployed, the Worker reads and writes the new keys, the boards start
   empty, and the old rows stay in D1 unlisted. Deploy it when the page with
   the same `PHYS_VER` goes live: until then each side refuses the other's
@@ -228,10 +231,10 @@ npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT week
 ## Removing a row
 
 `name` is the name as the board shows it and `week` the board key from the
-query above (e.g. `2026-W47.p7`):
+query above (e.g. `2026-W48.p8`):
 
 ```bash
-npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM scores WHERE week='2026-W47.p7' AND class=65 AND name='SomeName'"
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "DELETE FROM scores WHERE week='2026-W48.p8' AND class=65 AND name='SomeName'"
 ```
 
 Built-in boards, freeing a name and bans: see "Built-in track boards, names
@@ -327,7 +330,7 @@ npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT COUN
 npm run predeploy
 ```
 
-Check that its `PHYS_VER` line shows 7 and its `bundles` line lists
+Check that its `PHYS_VER` line shows 8 and its `bundles` line lists
 `sim-builtin-boards.js` and `sim-pilot-names.js`, then:
 
 ```bash
@@ -521,7 +524,7 @@ these routes, a 404 hides the board quietly):
 3. Check:
 
    ```bash
-   curl -sS 'https://sim-leaderboard.ryan-roths.workers.dev/api/track/board?key=c.0123456789abcdef.p7&class=65'
+   curl -sS 'https://sim-leaderboard.ryan-roths.workers.dev/api/track/board?key=c.0123456789abcdef.p8&class=65'
    curl -sS 'https://sim-leaderboard.ryan-roths.workers.dev/api/track/board?key=bad'
    ```
 
@@ -618,7 +621,8 @@ fails quietly):
 
    The migration is idempotent (`CREATE TABLE IF NOT EXISTS counts` only),
    safe to run twice, and touches no other table. `npm run predeploy` prints
-   PHYS_VER 7: no board changes.
+   the PHYS_VER of main (8 since sim-core v0.9.0); the migration changes no
+   board.
 
 3. Check: a ping is taken, a bad one refused:
 
@@ -707,7 +711,7 @@ npx wrangler d1 execute quadmath-sim-leaderboard --remote --file=./src/migrate-r
 
 Paste the printed value when `wrangler secret put` asks (it is not needed
 again: a new one only starts every client's hour afresh). `npm run
-predeploy` prints PHYS_VER 7. Skip the last line if `raw` is too many rows
+predeploy` prints PHYS_VER 8. Skip the last line if `raw` is too many rows
 for today (see above).
 
 ## Local

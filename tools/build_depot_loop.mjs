@@ -103,8 +103,13 @@ export function depotLoopGhost() {
 // The autopilot's speed caps along the line, m/s: 4 through the threaded
 // gaps (the doors and the curtain, under the forks, the rack, between the
 // pallet stacks, the trusses, the hatch), 7 elsewhere; it slows for the
-// curves itself.
-const THREADED = ['roll-up door', 'chain curtain', 'under the forks', 'rack gap', 'pallet stacks', 'truss', 'over the rail', 'the hatch'];
+// curves itself. 'down the aisle' (gate 8) is threaded since sim-core v0.9.0
+// (owner, 2026-11-23): out of the rack gap at 7 m/s the line drifted wide of
+// it lap by lap (0.51, 0.83, 1.03 world units from its centre on v0.8.0,
+// against a 1.26 u radius), and the small shift from the take-off off v0.9.0's
+// floor missed it on lap 3 (1.68 u). At 4 it passes within 0.19 of its radius
+// on every lap.
+const THREADED = ['roll-up door', 'chain curtain', 'under the forks', 'rack gap', 'down the aisle', 'pallet stacks', 'truss', 'over the rail', 'the hatch'];
 export const DEPOT_FLY = Object.freeze({ cap: 7, threaded: 4, reach: 2.5, laps: 3 });
 
 // The plan: off the pad, onto the line, the line `laps` times, and on through

@@ -98,13 +98,20 @@ export const PLANT_FIELDS = Object.freeze([
   'ocvOverDischarge',
   'ductHeight', 'wallFriction', 'wallRestitution',
   'thrustExponent',
+  'contactPulse',
+  'contactRestitution', 'floorFriction',
+  'packDrop', 'packLength', 'packWidth', 'packX',
 ]);
-const PLANT_LEN = 55;
+const PLANT_LEN = 62;
 const PLANT_COUNT = { ocv: 7, ocvOverDischarge: 3 };
 const PB_WHEELBASE = 2;
 const PB_DUCT_RADIUS = 40;
 const PB_HULL_BELOW = 41;
 const PB_HULL_ABOVE = 42;
+const PB_PACK_DROP = 58;
+const PB_PACK_LENGTH = 59;
+const PB_PACK_WIDTH = 60;
+const PB_PACK_X = 61;
 const PLANT_MODELS = Object.freeze({ rest: 0, physical: 1, parity: 2 });
 const PLANT_DERIVED = Object.freeze([
   'kvRad', 'ktMotor', 'omegaFull', 'ktProp', 'kqProp', 'rWinding', 'jRotor', 'omegaHover', 'dutyHover',
@@ -747,15 +754,22 @@ export class SimCore {
 
   // The plant's derived motor and body constants (src/plant/plant.h), for
   // reports; zero for the rest plant.
-  // The physical model's five contact points in the module frame (m): the four
-  // duct rims (motor order) and the canopy top, for hosts and tests. Null on
-  // the rest and parity models, which touch with the CG only.
+  // The physical model's contact points in the module frame (m): the four duct
+  // rims (motor order), the canopy top and, when the airframe gives the pack a
+  // size, the pack's four corners, for hosts and tests. Null on the rest and
+  // parity models, which touch with the CG only.
   get footprint() {
     if (!this.plant || this.plant[0] !== PLANT_MODELS.physical) return null;
     const b = this.plant;
     const reach = (b[PB_WHEELBASE] * 0.5 + b[PB_DUCT_RADIUS]) * Math.SQRT1_2;
     const body = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([x, y]) => [x * reach, y * reach, -b[PB_HULL_BELOW]]);
     body.push([0, 0, b[PB_HULL_ABOVE]]);
+    // The pack's underside (v0.9.0), when the airframe gives it a size.
+    if (b[PB_PACK_LENGTH] > 0 && b[PB_PACK_WIDTH] > 0) {
+      for (let c = 0; c < 4; c++) {
+        body.push([b[PB_PACK_X] + (c & 1 ? 0.5 : -0.5) * b[PB_PACK_LENGTH], (c & 2 ? 0.5 : -0.5) * b[PB_PACK_WIDTH], -b[PB_HULL_BELOW] - b[PB_PACK_DROP]]);
+      }
+    }
     const { pos, quat } = this.state;
     return body.map((r) => rotate(quat, r).map((v, k) => v + pos[k]));
   }

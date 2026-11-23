@@ -12,8 +12,8 @@
 // the time the last one was found in. No meshes, no textures: the page shows
 // it as a toast, a list in the menu and a card.
 
-import { mapGaps } from './sim-maps.js?v=bae83928661c';
-import { gateCrossing } from './sim-coach.js?v=4d1a58da78f3';
+import { mapGaps } from './sim-maps.js?v=c008acc98d7a';
+import { gateCrossing } from './sim-coach.js?v=e76871a4c16c';
 
 export const GAP_HUNT_KEY = 'qm_gap_hunt_v1';
 
