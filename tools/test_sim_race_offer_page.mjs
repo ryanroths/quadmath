@@ -131,8 +131,13 @@ const PAGE = `(() => {
       const g0 = t && t.gates && t.gates[0];
       const start = g ? g.children.filter((o) => o.isSprite && g0 && Math.hypot(o.position.x - g0.x, o.position.z - g0.z) < 0.5 && o.position.y > g0.y) : [];
       const c = s.coreState();
+      const a = document.activeElement, P = window.__pilot;
       return { map: s.map(), track: String(s.track()), gates: t && t.gates ? t.gates.length : 0, rings: rings.length, startRing: rings.length > 0 && start.length === 1,
-        armed: !!c.armed, offer: s.raceOffer(), gate: document.getElementById('osdGate').textContent };
+        armed: !!c.armed, offer: s.raceOffer(), gate: document.getElementById('osdGate').textContent,
+        // For a failure: the throttle the page read, focus, where the quad is.
+        diag: { air: !!c.airborne, z: +c.position.z.toFixed(2), clearance: +c.clearance.toFixed(2), vz: +c.velocity.z.toFixed(2), thr: +s.stickOverlay().stick.t.toFixed(3),
+          focus: a ? (a.id || a.tagName) : null, clock: s.simClockMs(), menuOpen: document.body.classList.contains('menu-open'),
+          pilot: P ? { mode: P.mode, frames: P.frames, error: P.error } : null, contact: c.contactFlags } };
     },
   };
   return true;
@@ -140,7 +145,10 @@ const PAGE = `(() => {
 
 // The pilot, once a frame in the page (requestAnimationFrame), through
 // _sim.setTestStick: the Coach autopilot along a path, a slow landing, or
-// sticks at rest; disarmed, sticks at rest (the throttle down, to arm).
+// sticks at rest; disarmed, sticks at rest (the throttle down, to arm). The
+// landing is 0.12 down to the floor and 0 on it: ground contact by clearance,
+// not the core's airborne flag (the bf plant can hold that true on the floor
+// at 12%).
 const PILOT = `import('/tools/coach_rig_autopilot.mjs').then((A) => {
   const s = window._sim;
   const P = window.__pilot = { mode: 'off', path: null, mem: null, frames: 0, error: null };
@@ -166,7 +174,7 @@ const PILOT = `import('/tools/coach_rig_autopilot.mjs').then((A) => {
     try {
       const cs = s.coreState();
       if (!cs.armed || P.mode === 'off') s.setTestStick({ r: 0, p: 0, y: 0, t: 0 });
-      else if (P.mode === 'land') s.setTestStick({ r: 0, p: 0, y: 0, t: cs.airborne ? 0.12 : 0 });
+      else if (P.mode === 'land') s.setTestStick({ r: 0, p: 0, y: 0, t: cs.clearance <= 0.04 ? 0 : 0.12 });
       else if (P.mode === 'hold') {
         const e = P.h - cs.position.z;
         P.I = Math.max(-0.35, Math.min(0.35, P.I + e * 0.01));
@@ -316,7 +324,7 @@ async function openPage({ mobile, w, h, before }) {
   };
   const race = async () => JSON.parse(await evaluate(`JSON.stringify(window.__ro.race())`));
   const offer = async () => JSON.parse(await evaluate(`JSON.stringify(window.__ro.offer())`));
-  const sim = async () => JSON.parse(await evaluate(`JSON.stringify((() => { const s = window._sim, c = s.coreState(); return { clock: s.simClockMs(), armed: !!c.armed, air: !!c.airborne, z: c.position.z, offer: s.raceOffer(), testPilot: s.testPilotUsed() }; })())`));
+  const sim = async () => JSON.parse(await evaluate(`JSON.stringify((() => { const s = window._sim, c = s.coreState(), v = c.velocity; return { clock: s.simClockMs(), armed: !!c.armed, air: !!c.airborne, z: c.position.z, clr: c.clearance, speed: Math.hypot(v.x, v.y, v.z), offer: s.raceOffer(), testPilot: s.testPilotUsed() }; })())`));
   // Two painted frames from now.
   const frames = () => evaluate(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))`);
   return { cdp, evaluate, key, tap, click, size, open, until, race, offer, sim, frames, pings, close };
@@ -352,6 +360,21 @@ async function flyUntilOffer(P, arm, o = {}) {
   assert.equal(s.offer.track, o.race || 'rig-loop', 'the map\'s race');
   assert.equal(s.testPilot, false, 'no test pilot: the counter is on');
   return s.clock;
+}
+
+// On the floor and still: clearance and speed, as tools/test_sim_easy_mode.mjs.
+const landed = (s) => s.clr <= 0.04 && s.speed < 0.5;
+// Down and disarmed: the pilot lands; Easy mode disarms it 0.5 s after it is
+// down with the throttle at the bottom. If it has not in 2 s, the arm control
+// (Space, the touch ARM) once: Easy mode would have by then, so this never
+// arms it again.
+async function landAndDisarm(P, toggle) {
+  await P.evaluate(`window.__pilot.mode = 'land', true`);
+  await P.until(async () => landed(await P.sim()), 20000, 'landed');
+  const t0 = Date.now();
+  while (Date.now() - t0 < 2000 && (await P.sim()).armed) await sleep(100);
+  if ((await P.sim()).armed) await toggle();
+  await P.until(async () => !(await P.sim()).armed, 3000, 'disarmed');
 }
 
 // Off the view's centre, inside the view, over nothing of the HUD.
@@ -429,12 +452,9 @@ test('desktop, keyboard: T armed before 30 s does nothing; the offer at 30 s; on
     assert.ok(held >= 10000 && held < 10600, 'shown 10 s of sim time: ' + held);
     // Down and disarmed with Tune open: the showing waits for Tune (which
     // hides it), then comes when Tune closes.
-    await P.evaluate(`window.__pilot.mode = 'land', true`);
-    await P.until(async () => !(await P.sim()).air, 20000, 'landed');
     await P.key('Tab', 'Tab', 9);
     await P.until(() => P.evaluate(`document.getElementById('panel').classList.contains('open')`), 3000, 'Tune open');
-    await space();
-    await P.until(async () => !(await P.sim()).armed, 3000, 'disarmed');
+    await landAndDisarm(P, space);
     await sleep(1200);
     s = await P.sim();
     assert.equal(s.offer.shown, false, 'not while Tune is open');
@@ -454,10 +474,7 @@ test('desktop, keyboard: T armed before 30 s does nothing; the offer at 30 s; on
     await space();
     await P.until(async () => (await P.sim()).air, 8000, 'in the air again');
     await sleep(1500);
-    await P.evaluate(`window.__pilot.mode = 'land', true`);
-    await P.until(async () => !(await P.sim()).air, 20000, 'landed again');
-    await space();
-    await P.until(async () => !(await P.sim()).armed, 3000, 'disarmed again');
+    await landAndDisarm(P, space);
     await sleep(1500);
     s = await P.sim();
     assert.equal(s.offer.shown, false, 'no third showing');
@@ -654,7 +671,7 @@ test('phone, touch: the launch line about tracks; the offer with RACE, clear at 
     // Back to free flight on the Rig: a disarm would have brought the second
     // showing; after a race, nothing.
     await P.evaluate(`window.__pilot.mode = 'land', true`);
-    await P.until(async () => !(await P.sim()).air, 20000, 'landed');
+    await P.until(async () => landed(await P.sim()), 20000, 'landed');
     await P.tap('#menuBtn');
     await sleep(600);
     await P.tap('#menuTracks');
@@ -662,13 +679,10 @@ test('phone, touch: the launch line about tracks; the offer with RACE, clear at 
     await P.tap('.track-list [data-tid="rig-freestyle"]');
     await P.until(async () => /freestyle/.test((await P.race()).track), 10000, 'free flight');
     await P.evaluate(`window.__pilot.hover(1.0), true`);
-    await arm();
+    if (!(await P.sim()).armed) await arm();
     await P.until(async () => (await P.sim()).air, 8000, 'in the air');
     await sleep(1000);
-    await P.evaluate(`window.__pilot.mode = 'land', true`);
-    await P.until(async () => !(await P.sim()).air, 20000, 'landed again');
-    await arm();
-    await P.until(async () => !(await P.sim()).armed, 3000, 'disarmed');
+    await landAndDisarm(P, arm);
     await sleep(1500);
     const s = await P.sim();
     assert.equal(s.offer.shown, false, 'no offer once a race has started');
