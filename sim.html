@@ -10106,6 +10106,9 @@ function runOffBoards(){return (runSawJs||core.kind==='js')&&BF_FRAMES.has(class
 function bfPark(){
   if(core.kind!=='bf')return;
   core.setArm(false); // parked: no arm intent left for the way back
+  // Nor an arm still waiting on Betaflight's answer: bfArmWatch skips the js
+  // core, so the way back toasted a stale NOT ARMED for an arm it never asked.
+  bfArmAsked=false;bfArmPendingMs=null;
   core=jsCore;
   placeQuadAt(state.pos.x,state.pos.y,state.pos.z,curHeading());
 }

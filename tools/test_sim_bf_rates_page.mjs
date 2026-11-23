@@ -131,6 +131,11 @@ const PAGE = `(() => {
   const KEYS = ${JSON.stringify(BF_RATE_KEYS)};
   const THR = ${JSON.stringify(BF_THR_KEYS)};
   const shown = (el) => !!el && getComputedStyle(el).display !== 'none' && !el.closest('[hidden]');
+  // The OSD (osdTR, sim.html updateOSD) and the core's state (cs) are drawn
+  // once a frame: a snap after a change waits for two frames painted, not a
+  // wall time alone (on a slow runner 300 ms can pass before the next frame).
+  const frames = (n = 2) => new Promise((r) => { const f = (k) => (k ? requestAnimationFrame(() => f(k - 1)) : r()); f(n); });
+  async function painted() { await frames(); return snap(); }
   function snap() {
     const bf = s.core() === 'bf' ? s.bfCore().sim : null;
     const sl = {};
@@ -160,7 +165,7 @@ const PAGE = `(() => {
     el.dispatchEvent(new Event('change'));
     el.blur();
     await wait(300);
-    return snap();
+    return painted();
   }
   async function thrSlider(f, v) {
     const el = document.getElementById('bfs_thr_' + f);
@@ -168,7 +173,7 @@ const PAGE = `(() => {
     el.dispatchEvent(new Event('input'));
     el.dispatchEvent(new Event('change'));
     await wait(300);
-    return snap();
+    return painted();
   }
   async function cls(type, core) {
     const sel = document.getElementById('droneType');
@@ -176,14 +181,14 @@ const PAGE = `(() => {
     sel.dispatchEvent(new Event('change'));
     for (let i = 0; i < 80 && s.core() !== core; i++) await wait(100);
     await wait(400);
-    return snap();
+    return painted();
   }
   async function preset(id) {
     const sel = document.getElementById('bfRatePreset');
     sel.value = id;
     sel.dispatchEvent(new Event('change'));
     await wait(300);
-    return snap();
+    return painted();
   }
   async function slider(ax, f, v) {
     const el = document.getElementById('bfs_' + ax + '_' + f);
@@ -191,20 +196,20 @@ const PAGE = `(() => {
     el.dispatchEvent(new Event('input'));
     el.dispatchEvent(new Event('change'));
     await wait(300);
-    return snap();
+    return painted();
   }
   async function link(on) {
     const el = document.getElementById('cbBfRatesLink');
     el.checked = on;
     el.dispatchEvent(new Event('change'));
     await wait(300);
-    return snap();
+    return painted();
   }
   async function importCli(text) {
     document.getElementById('cliPaste').value = text;
     document.getElementById('btnCliImport').click();
     await wait(500);
-    return Object.assign(snap(), { cliStatus: document.getElementById('cliImportStatus').textContent });
+    return Object.assign(await painted(), { cliStatus: document.getElementById('cliImportStatus').textContent });
   }
   // The start menu and a fresh profile's first-run prompt pause the sim, and
   // with it the OSD (as tools/test_sim_map_boot.mjs closes them).
@@ -219,15 +224,15 @@ const PAGE = `(() => {
   async function toastOr(ms, re = '^RATES: CRUISE') {
     const t0 = performance.now();
     while (performance.now() - t0 < ms && !window.__toasts.some((x) => new RegExp(re).test(x))) await wait(100);
-    return snap();
+    return painted();
   }
   async function until(fn, ms) {
     const t0 = performance.now();
     while (performance.now() - t0 < ms && !fn()) await wait(100);
     await wait(200);
-    return snap();
+    return painted();
   }
-  window.__bf = { wait, snap, toastOr, until, cls, preset, slider, link, importCli, num, thrSlider };
+  window.__bf = { wait, frames, snap, painted, toastOr, until, cls, preset, slider, link, importCli, num, thrSlider };
   return true;
 })()`;
 
@@ -621,7 +626,10 @@ test('Tune\'s Rates on the bf core: presets, sliders, a paste, class changes, re
       await B.until(() => s.coreState().airborne, 6000);
       const a = await B.slider('yaw', 'rcRate', 500);
       const b = await B.num('bfn_thr_mid', '0.45');
-      ${SPACE}; await B.wait(120);
+      // Disarmed on the next input sample, read from cs a frame later: polled
+      // (50 ms steps, so it is read while still falling), not a flat 120 ms.
+      ${SPACE};
+      for (let i = 0; i < 60 && s.coreState().armed; i++) await B.wait(50);
       const air = B.snap(); air.airborne = s.coreState().airborne;
       s.setTestStick({ r: 0, p: 0, y: 0, t: 0 });
       const c = await B.until(() => !s.bfRates().pending && B.snap().held.yaw_rc_rate === '50', 10000);
@@ -636,10 +644,10 @@ test('Tune\'s Rates on the bf core: presets, sliders, a paste, class changes, re
     assert.match(inFlight[0].status, /kept: Betaflight takes settings only while disarmed/);
     assert.deepEqual(inFlight[1].thrHeld, { thr_mid: '40', thr_expo: '30' }, 'throttle kept too, not sent');
     assert.equal(inFlight[1].nums.bfn_thr_mid, '0.45');
-    assert.ok(!inFlight[2].armed && inFlight[2].airborne, 'disarmed in the air');
+    assert.ok(!inFlight[2].armed && inFlight[2].airborne, 'disarmed in the air: ' + JSON.stringify(inFlight[2]));
     assert.ok(kept(inFlight[2], 'rates') && kept(inFlight[2], 'thr'), 'still kept in the air');
     assert.equal(inFlight[2].held.yaw_rc_rate, reloaded.held.yaw_rc_rate, 'nothing loaded in the air');
-    assert.ok(!inFlight[3].armed, 'landed, disarmed');
+    assert.ok(!inFlight[3].armed, 'landed, disarmed: ' + JSON.stringify(inFlight[3]));
     assert.equal(inFlight[3].pending, null, 'nothing left waiting');
     assert.equal(inFlight[3].held.yaw_rc_rate, '50', 'the rates change went in once down');
     assert.deepEqual(inFlight[3].thrHeld, { thr_mid: '45', thr_expo: '30' }, 'and the throttle');
