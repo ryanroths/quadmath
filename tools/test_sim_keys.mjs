@@ -157,7 +157,7 @@ async function evaluate(ws, expression) {
 // A real key through CDP: trusted, so a focused select takes it as type-ahead.
 // modifiers: CDP's bit field (2 is Ctrl); a held modifier types no text.
 async function press(ws, key, vk, modifiers) {
-  const code = /^[0-9]$/.test(key) ? 'Digit' + key : 'Key' + key.toUpperCase();
+  const code = 'Key' + key.toUpperCase();
   const mods = modifiers ? { modifiers } : { text: key };
   await cdp(ws, 'Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: vk, ...mods });
   await cdp(ws, 'Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: vk, ...(modifiers ? { modifiers } : {}) });
@@ -278,13 +278,17 @@ test('keys in Chrome: M mutes from the page and from every select, never the cla
       last = now;
     }
 
-    // A key the sim does not use still picks on a select: 7, the first 75mm
-    // preset. (Every letter a preset starts with, A C F M T, is a sim key.)
+    // T, the race key elsewhere, keeps its type-ahead on a select: the
+    // TreeTopper 75 on the Preset, and no race (disarmed, T would fly the
+    // map's race anywhere else).
+    assert.match(await evaluate(ws, `String(window._sim.track())`), /freestyle/, 'free flight before T');
     await evaluate(ws, `document.getElementById('buildPreset').focus(), true`);
-    await press(ws, '7', 55);
+    await press(ws, 't', 84);
     const tree = await state();
-    assert.equal(tree.selects.buildPreset, 'whoop75_1s', '7 on the Preset picks the 75mm 1S');
+    assert.equal(tree.selects.buildPreset, 'treetopper75', 'T on the Preset picks the TreeTopper');
     assert.equal(tree.frame, '75', 'and its frame');
+    // The 75 may move to its class's map; it is still free flight, no race.
+    assert.match(await evaluate(ws, `String(window._sim.track())`), /freestyle/, 'and T starts no race');
   } finally {
     try { if (ws) ws.close(); } catch (e) { /* ignore */ }
     killTree(child);

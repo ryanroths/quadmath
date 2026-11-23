@@ -1550,6 +1550,8 @@ function placeRaceOffer(){
   st.right='16px';
   st.top=Math.round(Math.max(tr.bottom,56)+10)+'px';
 }
+// The prompt on screen now (T flies the race while it is, armed or not).
+function raceOfferUp(){return !!raceOffer.until&&!!raceOfferEl&&!raceOfferEl.hidden;}
 // T and the prompt's RACE: the map's race, through the Tracks picker's own
 // flyPickedTrack (on its pad, disarmed, a fresh pack).
 function raceThisMap(){
@@ -4900,7 +4902,7 @@ function updateMotorSound(live){
 // the class as it muted. On a select these keys do only their own job; any
 // other letter still picks an option. With Ctrl, Cmd or Alt held there is
 // no type-ahead, so the browser's shortcuts (Ctrl+R, Ctrl+F, ...) go through.
-const SIM_KEYS=new Set(['w','a','s','d','1','2','3','h','r','p','m','n','f','g','v','c','l','k','t']);
+const SIM_KEYS=new Set(['w','a','s','d','1','2','3','h','r','p','m','n','f','g','v','c','l','k']);
 addEventListener('keydown',e=>{
   if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&(e.target.type==='text'||e.target.type==='range'||e.target.type==='number'))))return; // typing in the CLI/ghost/pilot-name boxes (or a Tune number: 3 is acro) must not trigger R/M/F/G hotkeys
   if(e.target&&e.target.tagName==='SELECT'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&SIM_KEYS.has(e.key.toLowerCase()))e.preventDefault();
@@ -4968,8 +4970,15 @@ addEventListener('keydown',e=>{
     if(coach&&coach.isActive()){coach.toggleRibbon();return;}
     openCoachPicker();
   }
-  // T: this map's race, as the race offer says (raceThisMap).
-  if(e.key.toLowerCase()==='t'&&!e.repeat&&!e.ctrlKey&&!e.metaKey&&!e.altKey){raceThisMap();return;}
+  // T: this map's race (raceThisMap), disarmed or while the race offer is up;
+  // armed with no offer up (in a race too) it does nothing. A focused select
+  // keeps T for its type-ahead (not in SIM_KEYS); a text, number or range
+  // input never gets here (the first line).
+  if(e.key.toLowerCase()==='t'&&!e.repeat&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+    if(e.target&&e.target.tagName==='SELECT')return;
+    if(!cs.armed||raceOfferUp())raceThisMap();
+    return;
+  }
   if(e.key.toLowerCase()==='l'){
     if(!shadowHelper){shadowHelper=new THREE.CameraHelper(sun.shadow.camera);shadowHelper.visible=false;scene.add(shadowHelper);}
     shadowHelper.visible=!shadowHelper.visible;

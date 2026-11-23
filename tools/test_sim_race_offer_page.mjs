@@ -1,26 +1,35 @@
 // SPDX-License-Identifier: GPL-3.0-or-later. Part of the QuadMath simulator; see SIM-NOTICE.txt.
 // Headless Chrome: the race offer and the race count (sim.html tickRaceOffer,
 // raceThisMap, startRun's countNote('race')).
-//   - Desktop, keyboard (flown at 640x360, placed at 1280x720): free flight on the Rig, 30 s of sim time
+//   - Desktop, keyboard (flown at 640x360, placed at 1280x720): T armed
+//     before the offer does nothing. Free flight on the Rig, 30 s of sim time
 //     in the air, and the prompt shows, not before: "RACE THE RIG · 17 gates
 //     · T", off the view's centre and clear of the HUD (the Warehouse's
 //     longer name too), for 10 s of sim time. The next disarm shows it once
 //     more, held while Tune is open (which hides it) until Tune closes; the
-//     disarm after that does not. From the air, T (one key) flies the Rig
-//     Loop as the Tracks picker does: on its pad, disarmed, the START ring
-//     there, the arm hint up at once (two frames).
-//     Space arms, the quad flies through gate 0, and the race ping goes out
-//     once: { event: 'race', class: 65, core: 'bf', input: 'keyboard' }.
+//     disarm after that does not. Disarmed, T from a text or number box does
+//     nothing; T itself flies the Rig Loop as the Tracks picker does: on its
+//     pad, the START ring there, the arm hint up. Space arms, the quad flies
+//     through gate 0, and the race ping goes out once: { event: 'race',
+//     class: 65, core: 'bf', input: 'keyboard' }. T armed in the race does
+//     nothing.
+//   - Desktop, a gamepad (Angle): the offer at 30 s; T while it is up, from
+//     the air: the Rig Loop, the arm hint at once (two frames); gate 0, the
+//     race ping with input 'gamepad'.
+//   - Desktop, the 85 on classic physics (the js core, The Warehouse): the
+//     offer names the Warehouse Loop's 19 gates; T flies it.
 //   - Phone, touch, 812x375: the launch screen's line about tracks, its five
 //     buttons clear (and at 667x375; 375x812 keeps the whole blurb). In the
 //     air 30 s: the prompt with a RACE button, 44 px or more, clear of the
 //     sticks, the footer and the HUD at 812x375, 667x375 and 375x812 (the
 //     Warehouse's name too). One tap on RACE from the air: the Rig Loop, the
-//     arm hint at once, ARM, gate 0, the race
-//     ping with input 'touch'. Back in free flight after that race, a disarm
-//     shows nothing: no offer once a race has started.
-//   - In the source: no offer for a test's pilot; T is in SIM_KEYS and the
-//     legend; T and RACE go through flyPickedTrack, the Tracks picker's own.
+//     arm hint at once, ARM, gate 0, the race ping with input 'touch'. Back
+//     in free flight after that race, a disarm shows nothing: no offer once a
+//     race has started.
+//   - In the source: no offer for a test's pilot; T is not in SIM_KEYS (a
+//     select keeps its type-ahead; tools/test_sim_keys.mjs) and does nothing
+//     from a select, or armed with no offer up; T and RACE go through
+//     flyPickedTrack, the Tracks picker's own.
 // The sticks are set once a frame by the Coach autopilot through
 // _sim.setTestStick, which leaves the counter on (_sim.setTestPilot turns it
 // off). The page is served as sim.quadmath.test (the counter is off on a
@@ -151,11 +160,18 @@ const PILOT = `import('/tools/coach_rig_autopilot.mjs').then((A) => {
     P.mode = 'fly';
   };
   P.to = (pts, v) => { P.plan([P.here().p, ...pts], v); P.mode = 'fly'; };
+  // Hold h metres up, the other sticks centred: no Coach tune needed.
+  P.hold = (h) => { P.h = h; P.I = 0; P.mode = 'hold'; };
   const tick = () => {
     try {
       const cs = s.coreState();
       if (!cs.armed || P.mode === 'off') s.setTestStick({ r: 0, p: 0, y: 0, t: 0 });
       else if (P.mode === 'land') s.setTestStick({ r: 0, p: 0, y: 0, t: cs.airborne ? 0.12 : 0 });
+      else if (P.mode === 'hold') {
+        const e = P.h - cs.position.z;
+        P.I = Math.max(-0.35, Math.min(0.35, P.I + e * 0.01));
+        s.setTestStick({ r: 0, p: 0, y: 0, t: Math.max(0.05, Math.min(0.95, 0.4 + P.I + 0.3 * e - 0.25 * cs.velocity.z)) });
+      }
       else { const c = A.track(P.path, A.sceneState(cs), P.mem, {}); s.setTestStick({ r: c.r, p: c.p, y: c.y, t: c.t }); }
       P.frames++;
     } catch (e) { P.error = String(e && e.stack || e); }
@@ -166,7 +182,7 @@ const PILOT = `import('/tools/coach_rig_autopilot.mjs').then((A) => {
 })`;
 
 // One Chrome, one page: { cdp, evaluate, key, tap, click, pings, close }.
-async function openPage({ mobile, w, h }) {
+async function openPage({ mobile, w, h, before }) {
   const { server, port } = await serveRoot();
   const site = `http://${HOST}:${port}`;
   const profile = mkdtempSync(join(tmpdir(), 'qm-race-offer-'));
@@ -245,6 +261,7 @@ async function openPage({ mobile, w, h }) {
   ] });
   await cdp('Runtime.enable');
   await cdp('Page.enable');
+  if (before) await cdp('Page.addScriptToEvaluateOnNewDocument', { source: before });
   // SIM_CPU_THROTTLE=6: a slow runner's frame rate (the pilot steers once a frame).
   if (process.env.SIM_CPU_THROTTLE) await cdp('Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
   const size = async (W, H) => {
@@ -306,29 +323,33 @@ async function openPage({ mobile, w, h }) {
 }
 
 // Free flight, armed and holding 1 m, until the prompt shows: never before
-// 30 s of sim time in the air. Returns the sim clock when it showed.
-async function flyUntilOffer(P, arm) {
+// 30 s of sim time in the air. o.race: the map's race; o.up: the pilot's way
+// up ('hover', the Coach autopilot, or 'hold'); o.early: run once, 3 s into
+// the air. Returns the sim clock when it showed.
+async function flyUntilOffer(P, arm, o = {}) {
+  const up = `window.__pilot.${o.up || 'hover'}(1.0), true`;
   await P.evaluate(PILOT);
   await P.until(() => P.evaluate(`!!window.__pilot`), 5000, 'the pilot loaded');
-  await P.evaluate(`window.__pilot.hover(1.0), true`);
+  await P.evaluate(up);
   await arm();
   await P.until(async () => (await P.sim()).armed, 5000, 'armed');
   const t0 = Date.now();
-  let s = null, aloft = Date.now();
+  let s = null, aloft = Date.now(), early = !o.early;
   while (Date.now() - t0 < 120000) {
     s = await P.sim();
     assert.equal(s.offer.shown && s.offer.airMs < 30000, false, 'not before 30 s in the air: ' + JSON.stringify(s));
     if (s.offer.shown) break;
     if (s.air) aloft = Date.now();
-    if (!s.armed) { await arm(); await P.evaluate(`window.__pilot.hover(1.0), true`); aloft = Date.now(); }
+    if (!early && s.armed && s.air && s.offer.airMs > 3000) { early = true; await o.early(); }
+    if (!s.armed) { await arm(); await P.evaluate(up); aloft = Date.now(); }
     // Down but armed (a slow frame rate let the hover touch): up again.
-    else if (Date.now() - aloft > 1500) { await P.evaluate(`window.__pilot.hover(1.0), true`); aloft = Date.now(); }
+    else if (Date.now() - aloft > 1500) { await P.evaluate(up); aloft = Date.now(); }
     await sleep(200);
   }
   assert.ok(s.offer.shown, 'the offer after 30 s in the air: ' + JSON.stringify(s));
   assert.ok(s.offer.airMs >= 30000 && s.offer.airMs < 31500, '30 s in the air: ' + s.offer.airMs);
   assert.equal(s.offer.shows, 1);
-  assert.equal(s.offer.track, 'rig-loop', 'the Rig\'s race');
+  assert.equal(s.offer.track, o.race || 'rig-loop', 'the map\'s race');
   assert.equal(s.testPilot, false, 'no test pilot: the counter is on');
   return s.clock;
 }
@@ -351,7 +372,7 @@ async function throughGate0(P) {
   })()`);
 }
 
-test('the race offer in the source: no offer for a test pilot; T in SIM_KEYS and the legend; T and RACE through the Tracks picker\'s flyPickedTrack', () => {
+test('the race offer in the source: no offer for a test pilot; T not in SIM_KEYS, not from a select, only disarmed or with the offer up; T and RACE through the Tracks picker\'s flyPickedTrack', () => {
   const html = readFileSync(join(root, 'sim.html'), 'utf8').replace(/\r\n/g, '\n');
   const fn = (name) => { const i = html.indexOf(`function ${name}(`); assert.ok(i > 0, name); return html.slice(i, html.indexOf('\n}', i) + 2); };
   assert.ok(fn('raceOfferTrack').includes('testPilotUsed'), 'none for a test pilot');
@@ -359,13 +380,13 @@ test('the race offer in the source: no offer for a test pilot; T in SIM_KEYS and
   assert.ok(fn('startRun').includes("countNote('race');") && fn('startRun').includes('raceOffer.raceStarted=true;'));
   assert.ok(fn('raceThisMap').includes('return flyPickedTrack(currentMap,t.id);'), 'the Tracks picker\'s own way in');
   assert.ok(html.includes('flyPickedTrack(pickerMap,id);'), 'which the Tracks picker\'s rows call');
-  assert.match(html, /const SIM_KEYS=new Set\(\[[^\]]*'t'[^\]]*\]\)/, 'T is a sim key: no type-ahead on a select');
-  assert.ok(html.includes("if(e.key.toLowerCase()==='t'&&!e.repeat&&!e.ctrlKey&&!e.metaKey&&!e.altKey){raceThisMap();return;}"));
+  assert.doesNotMatch(html, /const SIM_KEYS=new Set\(\[[^\]]*'t'[^\]]*\]\)/, 'T is not a sim key: a select keeps T for its type-ahead');
+  assert.ok(html.includes("if(e.key.toLowerCase()==='t'&&!e.repeat&&!e.ctrlKey&&!e.metaKey&&!e.altKey){\n    if(e.target&&e.target.tagName==='SELECT')return;\n    if(!cs.armed||raceOfferUp())raceThisMap();\n    return;\n  }"));
   assert.ok(html.includes('<b>T — Race this map</b><br>'), 'the legend');
   assert.ok(html.includes("go.addEventListener('click',e=>{e.preventDefault();go.blur();raceThisMap();});"), 'RACE on touch');
 });
 
-test('desktop, keyboard: 30 s in the air, the offer; once more at the next disarm, not after; T, the Rig Loop, the arm hint at once, gate 0, the race ping', { timeout: 6 * 60 * 1000 }, async (t) => {
+test('desktop, keyboard: T armed before 30 s does nothing; the offer at 30 s; once more at the next disarm, not after; T from a text or number box does nothing; T disarmed, the Rig Loop, gate 0, the race ping; T in the race does nothing', { timeout: 6 * 60 * 1000 }, async (t) => {
   if (process.env.SKIP_CHROME_BOOT === '1') { t.skip('SKIP_CHROME_BOOT'); return; }
   // Flown at 640x360 (a slow runner's frame rate holds the hover); every
   // placement is measured at 1280x720.
@@ -382,7 +403,15 @@ test('desktop, keyboard: 30 s in the air, the offer; once more at the next disar
     await P.until(async () => !(await P.evaluate(`document.body.classList.contains('menu-open')`)), 10000, 'flying');
     await P.cdp('Page.bringToFront');
     const space = () => P.key(' ', 'Space', 32);
-    await flyUntilOffer(P, space);
+    const tKey = () => P.key('t', 'KeyT', 84);
+    // T armed, no offer up yet: nothing.
+    await flyUntilOffer(P, space, { early: async () => {
+      await tKey();
+      await P.frames();
+      const r = await P.race();
+      assert.equal(r.track, 'rig-freestyle', 'T armed before the offer: still free flight ' + JSON.stringify(r));
+      assert.equal(r.armed, true, 'and still flying');
+    } });
     await at1280(async () => {
       const o1 = await P.offer();
       assert.equal(o1.text, 'RACE THE RIG · 17 gates · T');
@@ -433,14 +462,18 @@ test('desktop, keyboard: 30 s in the air, the offer; once more at the next disar
     s = await P.sim();
     assert.equal(s.offer.shown, false, 'no third showing');
     assert.equal(s.offer.shows, 2);
-    // In the air again, then T: the Rig Loop, on its pad, disarmed, the START
-    // ring; the arm hint, which flying hides, within two painted frames.
-    await P.evaluate(`window.__pilot.hover(1.0), true`);
-    await space();
-    await P.until(async () => (await P.sim()).air, 8000, 'flying before T');
-    await sleep(800);
-    assert.equal(await P.evaluate('window.__ro.hint()'), null, 'no arm hint while armed');
-    await P.key('t', 'KeyT', 84);
+    // Disarmed, no offer up: T from Tune's pilot name (text) or a rates box
+    // (number) does nothing.
+    for (const id of ['pilotName', 'bfn_roll_expo']) {
+      assert.ok(await P.evaluate(`(() => { const el = document.getElementById('${id}'); el.focus(); return document.activeElement === el; })()`), id + ' focused');
+      await tKey();
+      await P.frames();
+      assert.equal((await P.race()).track, 'rig-freestyle', 'T in #' + id + ' starts no race');
+      await P.evaluate(`document.activeElement && document.activeElement.blur(), true`);
+    }
+    // Disarmed: T flies the Rig Loop, on its pad, the START ring, the arm hint
+    // up within two painted frames.
+    await tKey();
     await P.frames();
     const hint = await P.evaluate('window.__ro.hint()');
     const r = await P.race();
@@ -466,6 +499,95 @@ test('desktop, keyboard: 30 s in the air, the offer; once more at the next disar
     const events = P.pings.map((p) => p.body.event);
     assert.ok(events.indexOf('race') > events.indexOf('ready'), 'after ready: ' + events.join(' '));
     assert.equal((await P.sim()).testPilot, false);
+    // Armed in the race: T does nothing (the run goes on, no new pad).
+    const before = await P.race();
+    await tKey();
+    await sleep(500);
+    const after = await P.race();
+    assert.equal(after.track, 'rig-loop');
+    assert.equal(after.armed, true, 'still flying the race');
+    assert.match(after.gate, /LINE/, 'the run goes on: ' + after.gate + ' (was ' + before.gate + ')');
+  } finally { await P.close(); }
+});
+
+// A gamepad before the page's scripts: navigator.getGamepads() with one pad,
+// as Chrome reports an Xbox pad (tools/test_sim_easy_mode.mjs FAKE_PADS).
+const XBOX = `(() => {
+  const pad = { id: 'Xbox One Game Controller (STANDARD GAMEPAD)', index: 0, mapping: 'standard', connected: true,
+    axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) };
+  Object.defineProperty(Navigator.prototype, 'getGamepads', { configurable: true, value() { pad.timestamp = performance.now(); return [pad, null, null, null]; } });
+})()`;
+
+test('desktop, gamepad: the offer at 30 s; T while it is up, from the air: the Rig Loop, the arm hint at once; gate 0, the race ping says gamepad', { timeout: 6 * 60 * 1000 }, async (t) => {
+  if (process.env.SKIP_CHROME_BOOT === '1') { t.skip('SKIP_CHROME_BOOT'); return; }
+  const P = await openPage({ mobile: false, w: 640, h: 360, before: XBOX });
+  try {
+    await P.open();
+    await P.evaluate(`window._feel && window._feel.hideFirstRun && window._feel.hideFirstRun(), true`);
+    await P.click('#menuFly');
+    await sleep(700);
+    if (await P.evaluate(`!!document.querySelector('#menuLayer .fly-map.on') && window.__ro.shown(document.querySelector('#menuLayer .fly-map.on'))`)) await P.click('#menuLayer .fly-map.on');
+    await P.until(async () => !(await P.evaluate(`document.body.classList.contains('menu-open')`)), 10000, 'flying');
+    await P.cdp('Page.bringToFront');
+    // A pad starts in Acro; the pilot flies Angle (1).
+    await P.key('1', 'Digit1', 49);
+    await P.until(() => P.evaluate(`window._sim.coreState().flightMode === 'angle'`), 3000, 'Angle');
+    const space = () => P.key(' ', 'Space', 32);
+    await flyUntilOffer(P, space);
+    const o = await P.offer();
+    assert.equal(o.text, 'RACE THE RIG · 17 gates · T');
+    // T with the offer up, armed in the air: the race, the arm hint at once.
+    assert.equal(await P.evaluate('window.__ro.hint()'), null, 'no arm hint while armed');
+    await P.key('t', 'KeyT', 84);
+    await P.frames();
+    const hint = await P.evaluate('window.__ro.hint()');
+    const r = await P.race();
+    assert.equal(r.track, 'rig-loop', 'the Rig Loop: ' + JSON.stringify(r));
+    assert.equal(r.rings, 17);
+    assert.ok(r.startRing, 'the START ring');
+    assert.equal(r.armed, false);
+    assert.ok(hint, 'the arm hint at once, for the pad: ' + hint);
+    await throughGate0(P);
+    await space();
+    await P.until(async () => /LINE/.test((await P.race()).gate), 30000, 'gate 0 passed');
+    await P.until(async () => P.pings.some((p) => p.body.event === 'race'), 5000, 'the race ping');
+    const race = P.pings.filter((p) => p.body.event === 'race');
+    assert.equal(race.length, 1);
+    assert.deepEqual(race[0].body, { event: 'race', class: 65, core: 'bf', input: 'gamepad' });
+  } finally { await P.close(); }
+});
+
+test('desktop, the 85 on classic physics: the offer for the Warehouse at 30 s; T flies the Warehouse Loop', { timeout: 6 * 60 * 1000 }, async (t) => {
+  if (process.env.SKIP_CHROME_BOOT === '1') { t.skip('SKIP_CHROME_BOOT'); return; }
+  const P = await openPage({ mobile: false, w: 640, h: 360 });
+  try {
+    await P.open();
+    await P.click('#feelKeys');
+    await sleep(500);
+    // The 85 (Your build's drone type), before the first flight: classic
+    // physics (the js core), its class's map The Warehouse.
+    await P.evaluate(`(() => { const sel = document.getElementById('droneType'); sel.value = 'whoop85'; sel.dispatchEvent(new Event('change')); return true; })()`);
+    await P.until(() => P.evaluate(`window._sim.core() === 'js'`), 15000, 'the 85 on the js core');
+    await P.click('#menuFly');
+    await sleep(700);
+    await P.click('#menuLayer .fly-map.on');
+    await P.until(async () => !(await P.evaluate(`document.body.classList.contains('menu-open')`)), 10000, 'flying');
+    await P.until(() => P.evaluate(`window._sim.map() === 'depot'`), 10000, 'The Warehouse');
+    await P.cdp('Page.bringToFront');
+    const space = () => P.key(' ', 'Space', 32);
+    await flyUntilOffer(P, space, { race: 'depot-loop', up: 'hold' });
+    const o = await P.offer();
+    assert.equal(o.text, 'RACE THE WAREHOUSE · 19 gates · T');
+    await P.key('t', 'KeyT', 84);
+    await P.frames();
+    const r = await P.race();
+    assert.equal(r.map, 'depot');
+    assert.equal(r.track, 'depot-loop', 'the Warehouse Loop: ' + JSON.stringify(r));
+    assert.equal(r.rings, 19);
+    assert.ok(r.startRing, 'the START ring');
+    assert.equal(r.armed, false);
+    assert.equal(await P.evaluate(`window._sim.core()`), 'js', 'still classic physics');
+    assert.ok(await P.evaluate('window.__ro.hint()'), 'the arm hint at once');
   } finally { await P.close(); }
 });
 
