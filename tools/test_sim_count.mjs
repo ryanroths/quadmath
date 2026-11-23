@@ -4,7 +4,8 @@
 //   - a ping is exactly { event, class, core, input } with allowed values;
 //     anything else is refused;
 //   - each event counts once per page load (the flags in memory, in the
-//     counter), every event after ready, pack2 after an arm;
+//     counter), every event after ready, pack2 after an arm; race at a
+//     race's gate 0;
 //   - the opt-out signals send nothing: Global Privacy Control, Do Not Track,
 //     a local page, ?dev=1, a test's pilot;
 //   - the Worker on real SQLite (tools/d1_sqlite.mjs): a ping is one D1 write
@@ -34,7 +35,7 @@ const ORIGIN = 'https://quadmath.com';
 const PING = { event: 'ready', class: 65, core: 'bf', input: 'keyboard' };
 
 test('a ping is exactly { event, class, core, input }, each an allowed value', () => {
-  assert.deepEqual([...COUNT_EVENTS], ['ready', 'arm', 'flew30', 'pack2', 'lap', 'name']);
+  assert.deepEqual([...COUNT_EVENTS], ['ready', 'arm', 'flew30', 'pack2', 'race', 'lap', 'name']);
   assert.deepEqual([...COUNT_CLASSES], [65, 75, 85]);
   assert.deepEqual([...COUNT_CORES], ['bf', 'js']);
   assert.deepEqual([...COUNT_INPUTS], ['radio', 'gamepad', 'keyboard', 'touch']);
@@ -44,13 +45,13 @@ test('a ping is exactly { event, class, core, input }, each an allowed value', (
     assert.deepEqual(normalizeCountPing({ event, class: c, core, input }), { ok: true, event, class: c, core, input });
     n++;
   }
-  assert.equal(n, 144, 'at most 144 rows a day');
+  assert.equal(n, 168, 'at most 168 rows a day');
   const bad = [
     [null, 'BAD PING'], ['ready', 'BAD PING'], [[], 'BAD PING'], [{}, 'BAD PING'],
     [{ ...PING, extra: 1 }, 'BAD PING'], [{ event: 'ready', class: 65, core: 'bf' }, 'BAD PING'],
     [{ ...PING, id: 'abc' }, 'BAD PING'], [{ ...PING, ip: '1.2.3.4' }, 'BAD PING'],
     [{ ...PING, event: 'hello' }, 'BAD EVENT'], [{ ...PING, event: 'READY' }, 'BAD EVENT'], [{ ...PING, event: 7 }, 'BAD EVENT'],
-    [{ ...PING, event: 'toString' }, 'BAD EVENT'],
+    [{ ...PING, event: 'toString' }, 'BAD EVENT'], [{ ...PING, event: 'RACE' }, 'BAD EVENT'], [{ ...PING, event: 'start' }, 'BAD EVENT'],
     [{ ...PING, class: '65' }, 'BAD CLASS'], [{ ...PING, class: 66 }, 'BAD CLASS'], [{ ...PING, class: 65.5 }, 'BAD CLASS'], [{ ...PING, class: null }, 'BAD CLASS'],
     [{ ...PING, core: 'BF' }, 'BAD CORE'], [{ ...PING, core: 'sim' }, 'BAD CORE'],
     [{ ...PING, input: 'mouse' }, 'BAD INPUT'], [{ ...PING, input: ['keyboard'] }, 'BAD INPUT'],
@@ -82,7 +83,7 @@ test('each event counts once per page load; ready first, pack2 after an arm; off
   assert.equal(pings.note('pack2', ctx), false);
   assert.equal(pings.note('ready', ctx), true);
   assert.equal(pings.note('pack2', ctx), false, 'pack2 waits for an arm');
-  for (const e of ['arm', 'flew30', 'pack2', 'lap', 'name']) assert.equal(pings.note(e, ctx), true, e);
+  for (const e of ['arm', 'flew30', 'pack2', 'race', 'lap', 'name']) assert.equal(pings.note(e, ctx), true, e);
   for (let i = 0; i < 3; i++) for (const e of COUNT_EVENTS) assert.equal(pings.note(e, ctx), false, e + ' again');
   assert.equal(pings.note('hello', ctx), false);
   assert.deepEqual(sent.map((b) => b.event), [...COUNT_EVENTS], 'each once, in order');
@@ -182,6 +183,8 @@ test('POST /api/count: a ping adds one to its day\'s row in one write; anything 
   const before = { counts: w.counts(), statements: log.length };
   const refused = [
     [{ ...PING, event: 'hello' }, 'BAD EVENT'],
+    [{ ...PING, event: 'start' }, 'BAD EVENT'],
+    [{ ...PING, event: 'races' }, 'BAD EVENT'],
     [{ ...PING, class: 90 }, 'BAD CLASS'],
     [{ ...PING, core: 'x' }, 'BAD CORE'],
     [{ ...PING, input: 'joystick' }, 'BAD INPUT'],
@@ -194,6 +197,9 @@ test('POST /api/count: a ping adds one to its day\'s row in one write; anything 
   assert.deepEqual({ counts: w.counts(), statements: log.length }, before, 'a refused ping writes nothing');
   // A beacon from the page carries its Origin; one without (a tool) is taken.
   assert.equal((await w.post({ ...PING, event: 'lap' }, { origin: null })).status, 204);
+  // race, the newest name, is taken like the rest.
+  assert.equal((await w.post({ ...PING, event: 'race' })).status, 204, 'race');
+  assert.deepEqual(w.counts().filter((r) => r.event === 'race').map((r) => r.n), [1]);
   // GET is no route.
   const g = await handleLeaderboard(new Request('https://w.test/api/count'), w.env);
   assert.equal(g.status, 404);
@@ -252,22 +258,22 @@ test('DEPLOY.md: the last 14 days as a funnel per day, and split by input, on re
   const w = worker();
   const day = (d) => new Date(Date.now() - d * 86400_000).toISOString().slice(0, 10);
   const add = (d, event, input, n) => w.DB.exec(`INSERT INTO counts (day, event, class, core, input, n) VALUES ('${day(d)}', '${event}', 65, 'bf', '${input}', ${n})`);
-  for (const [event, n] of [['ready', 100], ['arm', 60], ['flew30', 40], ['pack2', 10], ['lap', 8], ['name', 2]]) add(0, event, 'keyboard', n);
+  for (const [event, n] of [['ready', 100], ['arm', 60], ['flew30', 40], ['pack2', 10], ['race', 9], ['lap', 8], ['name', 2]]) add(0, event, 'keyboard', n);
   for (const [event, n] of [['ready', 20], ['arm', 15], ['flew30', 12]]) add(0, event, 'radio', n);
   add(1, 'ready', 'gamepad', 7);
   add(13, 'ready', 'touch', 5);
   add(14, 'ready', 'touch', 999);
   const f = w.DB.rows(funnel);
   assert.deepEqual(f, [
-    { day: day(0), ready: 120, arm: 75, flew30: 52, pack2: 10, lap: 8, name: 2 },
-    { day: day(1), ready: 7, arm: 0, flew30: 0, pack2: 0, lap: 0, name: 0 },
-    { day: day(13), ready: 5, arm: 0, flew30: 0, pack2: 0, lap: 0, name: 0 },
+    { day: day(0), ready: 120, arm: 75, flew30: 52, pack2: 10, race: 9, lap: 8, name: 2 },
+    { day: day(1), ready: 7, arm: 0, flew30: 0, pack2: 0, race: 0, lap: 0, name: 0 },
+    { day: day(13), ready: 5, arm: 0, flew30: 0, pack2: 0, race: 0, lap: 0, name: 0 },
   ], 'newest first, 14 days, the 15th day ago left out');
-  assert.deepEqual(Object.keys(f[0]), ['day', 'ready', 'arm', 'flew30', 'pack2', 'lap', 'name'], 'the funnel\'s order');
+  assert.deepEqual(Object.keys(f[0]), ['day', 'ready', 'arm', 'flew30', 'pack2', 'race', 'lap', 'name'], 'the funnel\'s order');
   const s = w.DB.rows(byInput);
   assert.deepEqual(s.filter((r) => r.day === day(0)), [
-    { day: day(0), input: 'keyboard', ready: 100, arm: 60, flew30: 40, pack2: 10, lap: 8, name: 2 },
-    { day: day(0), input: 'radio', ready: 20, arm: 15, flew30: 12, pack2: 0, lap: 0, name: 0 },
+    { day: day(0), input: 'keyboard', ready: 100, arm: 60, flew30: 40, pack2: 10, race: 9, lap: 8, name: 2 },
+    { day: day(0), input: 'radio', ready: 20, arm: 15, flew30: 12, pack2: 0, race: 0, lap: 0, name: 0 },
   ]);
   assert.equal(s.length, 4);
 });
@@ -302,12 +308,13 @@ test('sim.html: one beacon per event, the events where they happen, nothing stor
   assert.ok(extract(html, 'stepCore').includes('countFlight(simClockMs-simAtMs);'));
   assert.ok(flight.includes("countNote('arm');") && flight.includes('if(countAirMs>=COUNT_FLEW_MS)countNote(\'flew30\');') && flight.includes('!cs.airborne'));
   assert.ok(extract(html, 'placeQuadAt').includes("if(opts&&opts.freshPack&&countPings.has('arm'))countNote('pack2');"));
+  assert.ok(extract(html, 'startRun').includes("countNote('race');"), 'race: gate 0 of any race, a line or a loop (both start here)');
   assert.ok(extract(html, 'finishRun').includes("countNote('lap');"));
   assert.ok(html.includes("      runSplits.push(split);\n      countNote('lap');"), 'a loop\'s lap');
   assert.ok(extract(html, 'maybeSubmitOnline').includes("if(j&&j.ok){countNote('name');"));
   assert.ok(extract(html, 'maybeSubmitDailyLine').includes("if(j&&j.ok){countNote('name');"));
   assert.ok(extract(html, 'maybeSubmitTrackBoard').includes("countNote('name');"));
-  assert.equal(html.split("countNote('").length - 1, 9, 'ready, arm, flew30, pack2, two laps, three names');
+  assert.equal(html.split("countNote('").length - 1, 10, 'ready, arm, flew30, pack2, race, two laps, three names');
   // The beacon's host is in connect-src.
   const csp = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
   const connect = csp.split(';').map((s) => s.trim()).find((s) => s.startsWith('connect-src')).split(/\s+/);

@@ -72,9 +72,10 @@ export const RATE_SHARE_MAX = 12;
 //   arm     the first arm
 //   flew30  30 s of sim time armed and in the air (COUNT_FLEW_MS)
 //   pack2   a fresh pack after an arm (a second pack started)
+//   race    a race started: gate 0 of any race passed (sim.html startRun)
 //   lap     the first timed lap finished (a loop's lap, a line's finish)
 //   name    a board took a run under the pilot's name (claiming it)
-export const COUNT_EVENTS = Object.freeze(['ready', 'arm', 'flew30', 'pack2', 'lap', 'name']);
+export const COUNT_EVENTS = Object.freeze(['ready', 'arm', 'flew30', 'pack2', 'race', 'lap', 'name']);
 export const COUNT_CLASSES = Object.freeze([65, 75, 85]);
 export const COUNT_CORES = Object.freeze(['bf', 'js']);
 export const COUNT_INPUTS = Object.freeze(['radio', 'gamepad', 'keyboard', 'touch']);
@@ -82,7 +83,7 @@ export const COUNT_FLEW_MS = 30000;
 // A ping is about 60 bytes; anything past this is not one.
 export const COUNT_BODY_MAX = 256;
 // Pings per client per UTC hour, counted in the Worker's memory
-// (countAllowed), never in D1: five full funnels.
+// (countAllowed), never in D1: four full funnels of seven.
 export const RATE_COUNT_MAX = 30;
 const COUNT_KEYS = Object.freeze(['event', 'class', 'core', 'input']);
 

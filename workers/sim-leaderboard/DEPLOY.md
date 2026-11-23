@@ -549,6 +549,7 @@ each at most once per page load (`sim-retention.js` `COUNT_EVENTS`):
 | `arm` | the first arm |
 | `flew30` | 30 s of sim time armed and in the air |
 | `pack2` | a fresh pack after an arm (a second pack started) |
+| `race` | a race started: gate 0 of any race passed |
 | `lap` | the first timed lap finished (a loop's lap, a line's finish) |
 | `name` | a board took a run under the pilot's name, which claims it |
 
@@ -567,7 +568,7 @@ finer than the day. If that write fails (a D1 error, the daily limit), the
 ping is dropped and still answered 204: a count never fails a request or
 reaches the boards.
 
-Rate limit: 30 pings per client per UTC hour (`RATE_COUNT_MAX`: five full
+Rate limit: 30 pings per client per UTC hour (`RATE_COUNT_MAX`: four full
 funnels), counted in the Worker isolate's memory (`countAllowed`), never in
 D1. Nothing of it is stored or outlives the isolate. It is per isolate: a
 client whose pings land on several isolates (or locations) gets 30 in each.
@@ -600,30 +601,38 @@ fails quietly):
    The first prints `204`, the second `{"ok":false,"reason":"BAD EVENT"}`
    (400). The check's own ping is one `ready` in today's counts.
 
+A new event (`race`, added after the first deploy): the page and the Worker
+share `COUNT_EVENTS`, and `npm run predeploy` deploys only main, so the
+Worker learns the name from the merged PR. Merge, then deploy the Worker at
+once (no migration: `counts` takes any event name the Worker lets through).
+Until it is deployed the page's `race` pings are refused (400) and dropped;
+every other event counts as before. Check with the first curl above, `ready`
+put to `race`: `204`.
+
 The last 14 days as a funnel per day:
 
 ```bash
-npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT day, SUM(CASE WHEN event = 'ready' THEN n ELSE 0 END) AS ready, SUM(CASE WHEN event = 'arm' THEN n ELSE 0 END) AS arm, SUM(CASE WHEN event = 'flew30' THEN n ELSE 0 END) AS flew30, SUM(CASE WHEN event = 'pack2' THEN n ELSE 0 END) AS pack2, SUM(CASE WHEN event = 'lap' THEN n ELSE 0 END) AS lap, SUM(CASE WHEN event = 'name' THEN n ELSE 0 END) AS name FROM counts WHERE day >= date('now', '-13 days') GROUP BY day ORDER BY day DESC"
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT day, SUM(CASE WHEN event = 'ready' THEN n ELSE 0 END) AS ready, SUM(CASE WHEN event = 'arm' THEN n ELSE 0 END) AS arm, SUM(CASE WHEN event = 'flew30' THEN n ELSE 0 END) AS flew30, SUM(CASE WHEN event = 'pack2' THEN n ELSE 0 END) AS pack2, SUM(CASE WHEN event = 'race' THEN n ELSE 0 END) AS race, SUM(CASE WHEN event = 'lap' THEN n ELSE 0 END) AS lap, SUM(CASE WHEN event = 'name' THEN n ELSE 0 END) AS name FROM counts WHERE day >= date('now', '-13 days') GROUP BY day ORDER BY day DESC"
 ```
 
 The same, split by input:
 
 ```bash
-npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT day, input, SUM(CASE WHEN event = 'ready' THEN n ELSE 0 END) AS ready, SUM(CASE WHEN event = 'arm' THEN n ELSE 0 END) AS arm, SUM(CASE WHEN event = 'flew30' THEN n ELSE 0 END) AS flew30, SUM(CASE WHEN event = 'pack2' THEN n ELSE 0 END) AS pack2, SUM(CASE WHEN event = 'lap' THEN n ELSE 0 END) AS lap, SUM(CASE WHEN event = 'name' THEN n ELSE 0 END) AS name FROM counts WHERE day >= date('now', '-13 days') GROUP BY day, input ORDER BY day DESC, ready DESC"
+npx wrangler d1 execute quadmath-sim-leaderboard --remote --command "SELECT day, input, SUM(CASE WHEN event = 'ready' THEN n ELSE 0 END) AS ready, SUM(CASE WHEN event = 'arm' THEN n ELSE 0 END) AS arm, SUM(CASE WHEN event = 'flew30' THEN n ELSE 0 END) AS flew30, SUM(CASE WHEN event = 'pack2' THEN n ELSE 0 END) AS pack2, SUM(CASE WHEN event = 'race' THEN n ELSE 0 END) AS race, SUM(CASE WHEN event = 'lap' THEN n ELSE 0 END) AS lap, SUM(CASE WHEN event = 'name' THEN n ELSE 0 END) AS name FROM counts WHERE day >= date('now', '-13 days') GROUP BY day, input ORDER BY day DESC, ready DESC"
 ```
 
 Days are UTC (`date('now')` in D1 is UTC). For class or core, put `class` or
 `core` where `input` is.
 
-Cost: a page load sends at most six pings, so six requests, and each ping is
+Cost: a page load sends at most seven pings, so seven requests, and each ping is
 exactly one row written (measured on a local D1: the day's first row for a
 combination and every one after it, 1 each; no reads). Per 1,000 visitors a
-day: 1,000 to 6,000 requests (Workers Free: 100,000 a day for the account,
-this Worker's boards and the rooms Worker included) and 1,000 to 6,000
+day: 1,000 to 7,000 requests (Workers Free: 100,000 a day for the account,
+this Worker's boards and the rooms Worker included) and 1,000 to 7,000
 rows written (D1 Free: 100,000 a day, shared with the boards: at the limit D1
 refuses every query, the boards' too, until 00:00 UTC; counts reach it alone
-at about 16,000 full-funnel visitors a day). `counts` grows by at most 144
-rows a day (6 events x 3 classes x 2 cores x 4 inputs).
+at about 14,000 full-funnel visitors a day). `counts` grows by at most 168
+rows a day (7 events x 3 classes x 2 cores x 4 inputs).
 
 ## The boards' rate limit stores no addresses
 
