@@ -2,7 +2,7 @@
 // The leaderboard Worker's anonymous flight counts on real D1, under wrangler
 // dev (tools/sim_rooms_dev.mjs startLeaderboardDev, a local D1 made from
 // schema.sql):
-//   - each event counts once per ping: a page load's six pings are six rows of
+//   - each event counts once per ping: a page load's seven pings are seven rows of
 //     1; the same ping again adds one;
 //   - a bad value (event, class, core, input, an extra key, not JSON, too
 //     big) is a 400 and writes nothing; another site's page a 403;
@@ -70,7 +70,7 @@ test('anonymous flight counts on wrangler dev (real D1)', { timeout: 420000 }, a
   const day = utcDateId();
   const scratch = mkdtempSync(join(tmpdir(), 'qm-counts-'));
   try {
-    await t.test('each event counts once per ping: a page load\'s six are six rows of 1', async () => {
+    await t.test('each event counts once per ping: a page load\'s seven are seven rows of 1', async () => {
       for (const event of COUNT_EVENTS) assert.equal((await ping({ event, class: 75, core: 'bf', input: 'radio' })).status, 204, event);
       const got = rows(bin, w.persist, "SELECT day, event, class, core, input, n FROM counts WHERE input = 'radio' ORDER BY event");
       assert.deepEqual(got, [...COUNT_EVENTS].sort().map((event) => ({ day, event, class: 75, core: 'bf', input: 'radio', n: 1 })));
@@ -109,11 +109,11 @@ test('anonymous flight counts on wrangler dev (real D1)', { timeout: 420000 }, a
     await t.test('DEPLOY.md\'s funnel and by-input commands, as written, on the rows the pings wrote', () => {
       const { funnel, byInput } = deployQueries();
       const f = rows(bin, w.persist, funnel);
-      assert.deepEqual(f, [{ day, ready: 2, arm: 1, flew30: 1, pack2: 1, lap: RATE_COUNT_MAX + 2, name: 1 }]);
+      assert.deepEqual(f, [{ day, ready: 2, arm: 1, flew30: 1, pack2: 1, race: 1, lap: RATE_COUNT_MAX + 2, name: 1 }]);
       const s = rows(bin, w.persist, byInput);
       assert.deepEqual(s, [
-        { day, input: 'radio', ready: 2, arm: 1, flew30: 1, pack2: 1, lap: 1, name: 1 },
-        { day, input: 'gamepad', ready: 0, arm: 0, flew30: 0, pack2: 0, lap: RATE_COUNT_MAX + 1, name: 0 },
+        { day, input: 'radio', ready: 2, arm: 1, flew30: 1, pack2: 1, race: 1, lap: 1, name: 1 },
+        { day, input: 'gamepad', ready: 0, arm: 0, flew30: 0, pack2: 0, race: 0, lap: RATE_COUNT_MAX + 1, name: 0 },
       ]);
     });
 

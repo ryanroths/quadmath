@@ -278,12 +278,17 @@ test('keys in Chrome: M mutes from the page and from every select, never the cla
       last = now;
     }
 
-    // A letter the sim does not use still picks on a select: T, the TreeTopper 75.
+    // T, the race key elsewhere, keeps its type-ahead on a select: the
+    // TreeTopper 75 on the Preset, and no race (disarmed, T would fly the
+    // map's race anywhere else).
+    assert.match(await evaluate(ws, `String(window._sim.track())`), /freestyle/, 'free flight before T');
     await evaluate(ws, `document.getElementById('buildPreset').focus(), true`);
     await press(ws, 't', 84);
     const tree = await state();
     assert.equal(tree.selects.buildPreset, 'treetopper75', 'T on the Preset picks the TreeTopper');
     assert.equal(tree.frame, '75', 'and its frame');
+    // The 75 may move to its class's map; it is still free flight, no race.
+    assert.match(await evaluate(ws, `String(window._sim.track())`), /freestyle/, 'and T starts no race');
   } finally {
     try { if (ws) ws.close(); } catch (e) { /* ignore */ }
     killTree(child);

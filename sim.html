@@ -162,6 +162,26 @@
     #packHint{top:calc(44% + 20px)}
     body.touch-on:has(#packHint.tap:not([hidden])) #hudArmSlot{visibility:hidden}
   }
+  /* The race offer (tickRaceOffer): the map's race and its gate count, off to
+     the side, never over the view's centre. placeRaceOffer puts it under the
+     top-right readouts on a desktop, one line with its key. On touch it is
+     the name over the gate count over a RACE button (a 44 px target, the only
+     part that takes a touch), narrow enough to stay out of the middle third
+     of a 667 px wide phone: above the left stick in landscape, under the
+     top-left readouts in portrait (there the stick's top is in the middle
+     third). Not over the menus, the builder, Tune or the Coach card. */
+  #raceOffer{position:fixed;z-index:19;display:flex;align-items:center;gap:6px;
+    max-width:calc(100vw - 32px);padding:6px 12px;border:1px solid rgba(255,77,26,.55);border-radius:12px;
+    background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    font-size:12px;font-weight:700;letter-spacing:.6px;color:var(--txt);white-space:nowrap;pointer-events:none}
+  #raceOffer .ro-key{color:var(--orange)}
+  #raceOfferGo{display:none}
+  body.touch-on #raceOffer{flex-direction:column;align-items:flex-start;gap:2px;padding:8px 12px}
+  body.touch-on #raceOffer .ro-sep,body.touch-on #raceOffer .ro-key{display:none}
+  body.touch-on #raceOfferGo{display:block;width:auto;min-width:72px;min-height:44px;margin:6px 0 0;padding:8px 16px;
+    font-size:13px;letter-spacing:1px;pointer-events:auto}
+  #raceOffer[hidden],body.menu-open #raceOffer,body.builder-on #raceOffer,body.calibrating #raceOffer,
+    body:has(#panel.open) #raceOffer,body:has(#coachHud.show) #raceOffer{display:none}
   #c{touch-action:none}
   #panel,#startMenu,#menuLayer,#feelPrompt,#calib{touch-action:pan-y;-webkit-user-select:text;user-select:text}
   /* Flying on touch, the footer's top is the bottom of the screen: the sticks,
@@ -480,9 +500,12 @@
     #startMenu{padding-bottom:calc(32px + env(safe-area-inset-bottom, 0px))}
     .menu-card,.menu-layer{max-height:calc(100dvh - 40px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))}
   }
-  /* A landscape phone: the five 44 px launch buttons need the blurb's room. */
+  /* A landscape phone: the five 44 px launch buttons need the blurb's room.
+     Its line about tracks stays, on its own (.menu-tracks). */
+  .menu-tracks{display:none;font-size:12px;line-height:1.35;color:var(--dim);margin-bottom:6px}
   @media (max-height:430px) and (pointer:coarse){
     .menu-lead{display:none}
+    .menu-tracks{display:block}
   }
   .track-maps{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
   .track-maps button,.track-list button{width:auto;flex:1;min-width:72px;margin-top:0;padding:7px 8px;font-size:11px;
@@ -697,6 +720,7 @@
          in-flight menu (menu-flight) on Esc or MENU. dev-only shows with
          ?dev=1; menu-hide never shows. Nothing here is removed, only hidden. -->
     <p class="menu-lead menu-launch">Browser FPV whoop sim. Fly is free flight — no gates, no timer. In flight, Esc or MENU opens tracks, coach, the track builder and replays. Paste your Betaflight rates. No install.</p>
+    <p class="menu-tracks menu-launch">In flight, MENU opens tracks, coach, the track builder and replays.</p>
     <p class="menu-lead menu-flight">Paused. Opening the menu ends a race run. Resume (or Esc) flies on; Home goes back to the start screen.</p>
     <button class="primary menu-launch" id="menuFly">Fly</button>
     <button class="primary menu-flight" id="menuResume">Resume</button>
@@ -744,6 +768,7 @@
 <!-- Under a low battery (warning on), and under LAND NOW: a new pack. On
      touch it is the tap target (newPack); elsewhere it reads P. -->
 <button type="button" id="packHint" hidden>P = new pack</button>
+<div id="raceOffer" hidden><span id="raceOfferMap"></span><span class="ro-sep">·</span><span id="raceOfferGates"></span><span class="ro-key">· T</span><button type="button" id="raceOfferGo">RACE</button></div>
 <div id="touchLayer" hidden aria-hidden="true">
   <div id="touchLandscape" data-touch="landscape" hidden>Rotate to landscape for easier sticks</div>
   <div class="vstick left" data-stick="L"><i></i></div>
@@ -809,6 +834,7 @@
   <b id="legendGhost">G — Ghost Replay</b><br>
   <b>K — Share last run (link)</b><br>
   <b>C — Coach / line</b><br>
+  <b>T — Race this map</b><br>
   <b>R — Respawn last gate</b><br>
   <b>P — New pack</b><br>
   <b>F — Sim flip when upside down</b><br>
@@ -1165,7 +1191,7 @@
     🔊 <b>M</b> mute &nbsp;<b>N</b> next track &nbsp;<b>1/2/3</b> angle/horizon/acro &nbsp;<b>Space</b> arm<br>
     Throttle down 1 s, then up: armed. Down 0.5 s landed: disarmed. Upside down or on its side: full roll or pitch.<br>
     3D (Tune panel): center throttle = zero, below = reverse. Acro only. Not counted on boards.<br>
-    <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach<br>
+    <b>H</b> HUD &nbsp;<b id="kbdGhost">G</b> ghost &nbsp;<b>C</b> coach &nbsp;<b>T</b> race this map<br>
     <b>F</b> upside down on bf: sim flip (logged as an assist); else next mode
   </div>
   <button type="button" id="btnFreestyle">FREESTYLE THIS MAP</button>
@@ -1354,13 +1380,13 @@ import {
   customBoardKey, customTrackCode, normalizeTrackSubmit, isCustomBoardTrackId, customTrackProblem,
   CUSTOM_TRACK_MIN_GATES, CUSTOM_TRACK_CODE_MAX, builtinFloorMs,
   createCountPings, countPingsOff, COUNT_FLEW_MS,
-} from "./sim-retention.js?v=4ca26c28d4aa";
+} from "./sim-retention.js?v=a89f92241c31";
 import {
   SECRETS_KEY, SECRET_SKINS, createSecrets, loadSecrets, saveSecrets,
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=d445e670707a";
+} from "./sim-secrets.js?v=40d66b41f644";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
   fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=3f4158ced8a5";
 window._simBooted=true; // tells the watchdog above the module actually executed
@@ -1391,7 +1417,7 @@ if(CORE_KIND==='js')console.warn('sim-core: ?core=js is deprecated, removed next
 const DEV_UI=new URLSearchParams(location.search).get('dev')==='1';
 // ---------- Anonymous flight counts (sim-retention.js COUNT_EVENTS) ----------
 // How far visitors get, as the leaderboard Worker's daily totals (POST
-// /api/count): ready, arm, flew30, pack2, lap and name, each at most once a
+// /api/count): ready, arm, flew30, pack2, race, lap and name, each at most once a
 // page load. The flags live in this object, in memory, for this page load
 // only: no cookie, no storage, no id. A ping carries the event, the class,
 // the core and the input, nothing else. None at all with Global Privacy
@@ -1436,6 +1462,110 @@ function countFlight(ms){
   countAirMs+=ms;
   if(countAirMs>=COUNT_FLEW_MS)countNote('flew30');
 }
+// ---------- The race offer ----------
+// Free flight has no gates, and a race was three inputs deep in the menu. So:
+// 30 s of sim time armed and in the air in free flight, and one small prompt
+// names the map's race and its gates (RACE THE RIG · 17 gates · T) for 10 s
+// of sim time; once more at the next disarm; then never again this page load.
+// Never once a race has started here (startRun), nor for a test's pilot, nor
+// in Coach, the builder, a replay or a room. Tune open hides it: a showing
+// waits for Tune to close, and its 10 s stand still. T (or the prompt's RACE
+// on touch) flies the map's race as the Tracks picker does.
+const RACE_OFFER_AIR_MS=30000;
+const RACE_OFFER_SHOW_MS=10000;
+const raceOffer={airMs:0,shows:0,due:false,until:0,wasArmed:false,raceStarted:false,track:null,shownAt:null,hiddenAt:null,placedAt:-Infinity};
+const raceOfferEl=document.getElementById('raceOffer');
+// The map's own race: its first built-in track with gates (sim-tracks.js
+// BUILTIN_TRACK_FILES order: Rig Loop, House Loop, Warehouse Loop, Bando
+// Loop), or null.
+function mapRace(mapId){
+  return builtinTracks.find(t=>t.map===mapId&&t.legacyId==null&&!t.freestyle&&t.gates&&t.gates.length>1)||null;
+}
+function raceOfferTrack(){
+  if(raceOffer.raceStarted||testPilotUsed||builderOn||replayOn||(coach&&coach.isActive())||ghostRoom)return null;
+  if(!isFreeFlight(currentTrackObj,activeTrackId))return null;
+  return mapRace(currentMap);
+}
+// Each step of the core (stepCore), with the sim time it ran: not while
+// paused, so a menu holds the prompt's 10 s.
+function tickRaceOffer(ms){
+  const t=raceOfferTrack();
+  const armed=!!cs.armed,was=raceOffer.wasArmed;
+  raceOffer.wasArmed=armed;
+  if(!t){raceOffer.due=false;showRaceOffer(null);return;}
+  if(raceOffer.shows===0){
+    if(armed&&cs.airborne)raceOffer.airMs+=ms;
+    if(raceOffer.airMs>=RACE_OFFER_AIR_MS)raceOffer.due=true;
+  }else if(raceOffer.shows===1&&was&&!armed)raceOffer.due=true;
+  const tune=panel.classList.contains('open');
+  if(raceOffer.due&&!tune){raceOffer.due=false;showRaceOffer(t);}
+  if(!raceOffer.until)return;
+  if(tune){raceOffer.until+=ms;return;}
+  if(simClockMs>=raceOffer.until)showRaceOffer(null);
+  else if(performance.now()-raceOffer.placedAt>250)placeRaceOffer();
+}
+// t: show it for that track (one of its two showings); null: hide it.
+function showRaceOffer(t){
+  if(!raceOfferEl)return;
+  if(!t){
+    raceOffer.until=0;
+    if(!raceOfferEl.hidden){raceOfferEl.hidden=true;raceOffer.hiddenAt=simClockMs;}
+    return;
+  }
+  raceOffer.shows++;
+  raceOffer.shownAt=simClockMs;
+  raceOffer.until=simClockMs+RACE_OFFER_SHOW_MS;
+  raceOffer.track=t.id;
+  const map=(MAPS.find(m=>m.id===t.map)||{name:t.map}).name;
+  document.getElementById('raceOfferMap').textContent='RACE '+String(map).toUpperCase();
+  document.getElementById('raceOfferGates').textContent=t.gates.length+' gates';
+  raceOfferEl.hidden=false;
+  placeRaceOffer();
+}
+// Off to the side, its left edge with the left stick's on touch: above that
+// stick in landscape, in portrait under the top-left readouts (#osdTL,
+// #osdLap, the rotate note); without touch under the top-right readouts
+// (#osdTR), at the right edge.
+function placeRaceOffer(){
+  if(!raceOfferEl||raceOfferEl.hidden)return;
+  raceOffer.placedAt=performance.now();
+  const st=raceOfferEl.style;
+  const stick=touchCtl&&touchCtl.enabled?document.querySelector('#touchLayer .vstick.left'):null;
+  const r=stick?stick.getBoundingClientRect():null;
+  if(r&&r.height){
+    st.right='';
+    st.left=Math.round(r.left)+'px';
+    if(innerHeight>innerWidth){
+      const under=(id)=>{const el=document.getElementById(id);const b=el&&!el.hidden?el.getBoundingClientRect():null;return b&&b.height?b.bottom:0;};
+      st.bottom='';
+      st.top=Math.round(Math.max(56,under('osdTL'),under('osdLap'),under('touchLandscape'))+10)+'px';
+    }else{
+      st.top='';
+      st.bottom=Math.round(innerHeight-r.top+10)+'px';
+    }
+    return;
+  }
+  const tr=document.getElementById('osdTR').getBoundingClientRect();
+  st.left=st.bottom='';
+  st.right='16px';
+  st.top=Math.round(Math.max(tr.bottom,56)+10)+'px';
+}
+// The prompt on screen now (T flies the race while it is, armed or not).
+function raceOfferUp(){return !!raceOffer.until&&!!raceOfferEl&&!raceOfferEl.hidden;}
+// T and the prompt's RACE: the map's race, through the Tracks picker's own
+// flyPickedTrack (on its pad, disarmed, a fresh pack).
+function raceThisMap(){
+  const t=mapRace(currentMap);
+  if(!t){toast('NO RACE ON THIS MAP');return null;}
+  if(replayOn)stopReplay();
+  showRaceOffer(null);
+  return flyPickedTrack(currentMap,t.id);
+}
+{
+  const go=document.getElementById('raceOfferGo');
+  if(go)go.addEventListener('click',e=>{e.preventDefault();go.blur();raceThisMap();});
+}
+addEventListener('resize',placeRaceOffer);
 // A closed map asked for without ?dev=1 (Freestyle this map, a share or duel
 // code): the Rig instead, with this toast (archivedToRig).
 const ARCHIVE_TOAST='THAT MAP IS IN THE ARCHIVE (?dev=1)';
@@ -2212,6 +2342,9 @@ function startRun(){
   missTotal=0;
   lastGateSplit=0;
   startGhostRec();
+  countNote('race');   // gate 0 of any race: a line's start, a loop's first gate
+  raceOffer.raceStarted=true;
+  showRaceOffer(null);
 }
 // run over: stop the clock, stash results, store best total + ghost on a new
 // best, and announce total + the three splits
@@ -4837,6 +4970,15 @@ addEventListener('keydown',e=>{
     if(coach&&coach.isActive()){coach.toggleRibbon();return;}
     openCoachPicker();
   }
+  // T: this map's race (raceThisMap), disarmed or while the race offer is up;
+  // armed with no offer up (in a race too) it does nothing. A focused select
+  // keeps T for its type-ahead (not in SIM_KEYS); a text, number or range
+  // input never gets here (the first line).
+  if(e.key.toLowerCase()==='t'&&!e.repeat&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+    if(e.target&&e.target.tagName==='SELECT')return;
+    if(!cs.armed||raceOfferUp())raceThisMap();
+    return;
+  }
   if(e.key.toLowerCase()==='l'){
     if(!shadowHelper){shadowHelper=new THREE.CameraHelper(sun.shadow.camera);shadowHelper.visible=false;scene.add(shadowHelper);}
     shadowHelper.visible=!shadowHelper.visible;
@@ -7177,7 +7319,7 @@ function wireLooksUI(){
       '<span class="n">R</span> last-gate respawn · <span class="n">P</span> new pack · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
       '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
       'Throttle down 1 s, then up: armed. Down 0.5 s landed: disarmed. Upside down or on its side: full roll or pitch.<br>'+
-      '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">N</span> next track · <span class="n">G</span> ghost · <span class="n">C</span> coach · <span class="n">K</span> share last run<br>'+
+      '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">N</span> next track · <span class="n">G</span> ghost · <span class="n">C</span> coach · <span class="n">T</span> race this map · <span class="n">K</span> share last run<br>'+
       '<span class="n">F</span> upside down on bf: sim flip (logged as an assist) · else next flight mode</p>'+
       '<div class="row"><label>Angle mode</label><input type="checkbox" class="cb-angle-mode" style="accent-color:var(--orange)"></div>'+
       '<div class="row"><label>Use my radio switches</label><input type="checkbox" class="cb-radio-switches" style="accent-color:var(--orange)"></div>'+
@@ -9893,6 +10035,7 @@ function stepCore(frameMs,now){
   for(const ev of core.events())onCoreEvent(ev);
   syncStateFromCore();
   countFlight(simClockMs-simAtMs);
+  tickRaceOffer(simClockMs-simAtMs);
   if(runActive&&core.kind==='js')runSawJs=true;
   bfArmWatch();
   bfWorldWatch(now);
@@ -10940,6 +11083,9 @@ function publishTracks(){
   // findTrack: any flyable track by id, the generated ones (daily, weekly) too.
   Object.assign(window._sim,{tracks:()=>builtinTracks.concat(customTracks),findTrack:(id)=>findTrack(id)});
 }
+// The race offer's state, read only (tools/test_sim_race_offer_page.mjs).
+Object.assign(window._sim,{raceOffer:()=>({airMs:raceOffer.airMs,shows:raceOffer.shows,due:raceOffer.due,shown:!!(raceOfferEl&&!raceOfferEl.hidden),
+  shownAt:raceOffer.shownAt,hiddenAt:raceOffer.hiddenAt,track:raceOffer.track,raceStarted:raceOffer.raceStarted,mapRace:(mapRace(currentMap)||{}).id||null})});
 // The page is built on City. Land on the boot map now, not when the tracks
 // fetch below lets applyQueryBoot run, so the launch screen never shows a
 // closed map first; applyQueryBoot then adds only what the boot needs.

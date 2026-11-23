@@ -1787,9 +1787,30 @@ test('Easy mode in Chrome', { timeout: 10 * 60 * 1000 }, async (t) => {
             // Down and disarmed for the next arrow (S, and landed 0.5 s; a crash
             // on the way down disarms it too).
             await down('s', 'KeyS', 83);
-            r = await js(`await E.wait(1100); const landed = await E.until(E.landed, 8000); const off = await E.until(() => !E.s.coreState().armed, 6000); return JSON.stringify({ landed, off, st: E.state() });`);
+            // While S is down: the throttle the page read, where focus was, the
+            // race prompt's state; where the quad was and what it touched
+            // (printed each time, and in the assert).
+            r = await js(`
+              const seen = { thr: [], focus: new Set(), prompt: new Set() };
+              const look = () => {
+                seen.thr.push(+E.s.stickOverlay().stick.t.toFixed(3));
+                const a = document.activeElement; seen.focus.add(a ? (a.id || a.tagName) : null);
+                const o = E.s.raceOffer ? E.s.raceOffer() : null; seen.prompt.add(o ? (o.shown ? 'shown' : 'hidden') + ' shows ' + o.shows : 'no offer (main)');
+              };
+              look();
+              const tick = setInterval(look, 100);
+              const c0 = E.s.coreState();
+              const at = { x: +c0.position.x.toFixed(2), y: +c0.position.y.toFixed(2), z: +c0.position.z.toFixed(2) };
+              await E.wait(1100); const landed = await E.until(E.landed, 8000); const off = await E.until(() => !E.s.coreState().armed, 6000);
+              clearInterval(tick); look();
+              const c1 = E.s.coreState(), thr = seen.thr;
+              const diag = { at, end: { x: +c1.position.x.toFixed(2), y: +c1.position.y.toFixed(2), z: +c1.position.z.toFixed(2) }, contact: c1.contactFlags,
+                thr: { first: thr.slice(0, 3), last: thr.slice(-3), min: Math.min(...thr), max: Math.max(...thr), n: thr.length },
+                focus: [...seen.focus], prompt: [...seen.prompt], offer: E.s.raceOffer ? E.s.raceOffer() : null, airMs: E.s.raceOffer ? E.s.raceOffer().airMs : null };
+              return JSON.stringify({ landed, off, st: E.state(), diag });`);
             await key('keyUp', 's', 'KeyS', 83);
-            assert.equal(r.landed && r.off, true, `${name}: down and disarmed ${JSON.stringify(r.st)}`);
+            console.log(`${name}, down: ` + JSON.stringify({ landed: r.landed, off: r.off, diag: r.diag }));
+            assert.equal(r.landed && r.off, true, `${name}: down and disarmed ${JSON.stringify(r.st)} ${JSON.stringify(r.diag)}`);
           }
         });
       });
