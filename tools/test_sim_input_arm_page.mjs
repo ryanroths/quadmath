@@ -378,7 +378,9 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         // Back in flight (the input poll waits under the menu), the pad sends input: it flies again.
         await a.key('esc');
         await a.key('esc');
-        r = await a.js(`await I.until(() => !document.body.classList.contains('menu-open'), 2000); await I.wait(500); return JSON.stringify(I.snap());`);
+        // Past the page's 3 s hold on re-picking a device just dropped (PAD_REPICK_MS):
+        // what keeps it out then is the set-aside.
+        r = await a.js(`await I.until(() => !document.body.classList.contains('menu-open'), 2000); await I.wait(4000); return JSON.stringify(I.snap());`);
         assert.equal(r.help.kind, 'keyboard', 'set aside, the pad stays out while it rests');
         r = await a.js(`I.axis(0, 2, 0.6); await I.until(() => I.s.armHelp().kind === 'gamepad', 3000); I.axis(0, 2, 0); return JSON.stringify(I.snap());`);
         assert.equal(r.help.kind, 'gamepad', 'a controller that moves takes the sticks: ' + JSON.stringify(r.help));
