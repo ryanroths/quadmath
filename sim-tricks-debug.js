@@ -26,19 +26,20 @@ import {
   classifyFeat, featView, makeFeat, copyFeat, upZParts, trickName,
   RATE_START, TRICK_BY_ID, mapIsIndoor,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
-  HIST_W, BH_W, PH_ROWS, BARANI_P, BARANI_FADE, BARANI_SIDE, BARANI_HD_LO,
-  CRADLE, groupBoxes, simBoxes, cradlePostList,
-} from './sim-tricks.js?v=d7c9767ee9c7';
+  HIST_W, BH_W, PH_ROWS,
+  CRADLE, groupBoxes, simBoxes, cradlePostList, LOOP,
+} from './sim-tricks.js?v=bb7876acedc2';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
-// CLASS_IDS, SPEC), and the score a pick needs.
+// CLASS_IDS, SPEC), and the score a pick needs. Barani, Powerloop and
+// Maverick are the loop gate's (sim-tricks.js LOOP), never a segment's.
 export const CLASS_IDS = Object.freeze([
-  'halfmavvy', 'rubik', 'cubik', 'barani', 'immelmann', 'ham', 'trippy', 'orbit', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
-  'powerloop', 'matty', 'maverick', 'splits', 'flip', 'roll', 'yawspin',
+  'halfmavvy', 'rubik', 'cubik', 'immelmann', 'ham', 'trippy', 'orbit', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
+  'matty', 'splits', 'flip', 'roll', 'yawspin',
 ]);
 export const SPEC = Object.freeze({
-  halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, barani: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, orbit: 0.05, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
-  halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
+  halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, orbit: 0.05, sideloop: 0.11, juicyflick: 0.11,
+  snapback: 0.11, halfmatty: 0.10, matty: 0.11, splits: 0.10,
   flip: 0, roll: 0, yawspin: 0,
 });
 export const PICK_MIN = 0.42;
@@ -90,6 +91,15 @@ export const SIDE = Object.freeze({
 // second pass a step later still see it).
 export const CRADLE_LOG = Object.freeze({ preS: 0.6, postS: 0.3, cap: 2048, missDt: 0.008 });
 
+// The loop gate's own log: a record of type 'loop' per verdict of
+// sim-tricks.js loopStep (each Barani, Powerloop and Maverick, and each loop
+// that got over its object and came to nothing), with the gate's inputs at
+// every step from preS before the loop (or its chain of loops) began to
+// postS past the verdict, and the boxes it saw over and under the quad:
+// enough to replay it (makeLoopGate on the boxes, then inp from each row and
+// loopStep). The camera's tilt, vertical FOV and aspect once a record (cam).
+export const LOOP_LOG = Object.freeze({ preS: 0.5, postS: 0.4, cap: 4096 });
+
 // stepDetector's spatial constants (sim-tricks.js DIVE_*, GAP_*), the dive
 // fallback inside classifyFeat, and the segment-start numbers.
 export const DIVE = Object.freeze({ vzStart: -6.5, speedStart: 8, altStart: 4, drop: 3.4, speedHold: 5.5, vzHold: -4.5, vzCancel: -2, cooldown: 3.2 });
@@ -101,7 +111,7 @@ export const SEG = Object.freeze({ divingThr: 0.18, divingRate: 1.55, divingVz: 
 // The ten the overlay spells out (the brief's list). Inverted yaw spin is
 // Ham Spin ('ham'); dive is stepDetector's state machine. Gap passes are not
 // a trick: the overlay shows them on a line of their own, after these.
-export const FOCUS = Object.freeze(['flip', 'roll', 'powerloop', 'splits', 'matty', 'trippy', 'juicyflick', 'ham', 'barani', 'dive']);
+export const FOCUS = Object.freeze(['flip', 'roll', 'splits', 'matty', 'trippy', 'juicyflick', 'ham', 'dive']);
 
 const ge = (src, a, fade) => ({ op: '>=', src, a, fade });
 const le = (src, a, fade) => ({ op: '<=', src, a, fade });
@@ -135,9 +145,6 @@ export const GATES = Object.freeze({
     ge('f.orbit2Sweep', 6.2832, 0), ge('f.orbit2Turn', 0.8, 0), ge('f.orbit2Spd', 1.0, 0),
     le('f.orbit2Tail', 0.3, 0),
   ],
-  barani: [
-    ge('f.barP', 5.236, 0.35), either(band('barRTwist', 2.356, 3.927, 0), band('barRHead', 2.094, 3.927, 0)), ge('f.upEnd', 0.5, 0),
-  ],
   immelmann: [
     ge('f.phImmel', 1, 1),
   ],
@@ -163,14 +170,8 @@ export const GATES = Object.freeze({
   halfmatty: [
     ge('f.phHMatty', 1, 1),
   ],
-  powerloop: [
-    ge('f.phLoop', 1, 1),
-  ],
   matty: [
     ge('f.phMatty', 1, 1),
-  ],
-  maverick: [
-    ge('f.phMav', 1, 1),
   ],
   splits: [
     ge('f.phSplits', 1, 1),
@@ -198,9 +199,6 @@ export const OVERRIDES = Object.freeze([
   { from: 'yawspin', to: 'trippy', text: 'yawspin→trippy: trippy > 0.42', when: (c) => c.sc.trippy > 0.42 },
   { from: 'roll', to: 'sideloop', text: 'roll→sideloop: sideloop > 0.4', when: (c) => c.sc.sideloop > 0.4 },
   { from: 'yawspin', to: 'sideloop', text: 'yawspin→sideloop: sideloop > 0.4', when: (c) => c.sc.sideloop > 0.4 },
-  { from: 'maverick', to: 'powerloop', text: 'maverick→powerloop: absP > 4.3, pitch < 0, powerloop > 0.5', when: (c) => c.absP > 4.3 && c.f.pitch < 0 && c.sc.powerloop > 0.5 },
-  { from: 'powerloop', to: 'matty', keep: true, text: 'powerloop→matty: pitch > 0, matty > 0.42', when: (c) => c.f.pitch > 0 && c.sc.matty > 0.42 },
-  { from: 'matty', to: 'powerloop', keep: true, text: 'matty→powerloop: pitch < 0, powerloop > 0.42', when: (c) => c.f.pitch < 0 && c.sc.powerloop > 0.42 },
   { from: 'matty', to: 'juicyflick', text: 'matty→juicyflick: absR > 2.1, pitchFirst > 0.02, juicyflick > 0.3', when: (c) => c.absR > 2.1 && c.pitchFirst > 0.02 && c.sc.juicyflick > 0.3 },
   { from: 'juicyflick', to: 'halfmatty', text: 'juicyflick→halfmatty: rollFirst > 0.04, halfmatty > 0.35', when: (c) => c.rollFirst > 0.04 && c.sc.halfmatty > 0.35 },
   { from: 'snapback', to: 'splits', text: 'snapback→splits: rollFirst > 0.04, splits > 0.35', when: (c) => c.rollFirst > 0.04 && c.sc.splits > 0.35 },
@@ -215,7 +213,7 @@ export const OVERRIDE_TEXT = Object.freeze(OVERRIDES.map((r) => r.text));
 const ANGLE_SRC = new Set([
   'absP', 'absR', 'absY', 'v.pathP', 'v.pathR', 'v.pathY', 'f.pitch', '-f.pitch', 'v.head',
   'Math.max(absR, v.pathR)', 'Math.max(absY, v.pathY)', 'v.pathP - absP',
-  'v.flipSpan', 'v.rollSpan', 'v.loopSpan', 'v.loopSweep', 'v.yawSpan', 'f.orbitSweep', 'f.barP', 'f.barR', 'barRTwist', 'barRHead',
+  'v.flipSpan', 'v.rollSpan', 'v.loopSpan', 'v.loopSweep', 'v.yawSpan', 'f.orbitSweep',
   'v.invYaw', 'v.slowSpan', 'f.orbit2Sweep',
 ]);
 // Angular rates (shown in degrees a second).
@@ -271,11 +269,9 @@ function context(f) {
     'f.orbitTail': f.orbitTail, 'v.slowSpan': v.slowSpan, 'v.slowRate': v.slowRate,
     'f.orbit2R': f.orbit2R, 'f.orbit2Sweep': f.orbit2Sweep, 'f.orbit2Turn': f.orbit2Turn, 'f.orbit2Spd': f.orbit2Spd,
     'f.orbit2Tail': f.orbit2Tail,
-    'f.barP': f.barP, 'f.barR': f.barR, 'f.upEnd': f.upEnd,
-    // The Barani's twist by which measure gave it (-1 for the other).
-    barRTwist: f.barVia ? -1 : f.barR, barRHead: f.barVia ? f.barR : -1,
-    'f.phFlip': f.phFlip, 'f.phLoop': f.phLoop, 'f.phSplits': f.phSplits, 'f.phImmel': f.phImmel,
-    'f.phMav': f.phMav, 'f.phMatty': f.phMatty, 'f.phHMatty': f.phHMatty, 'f.phHMavvy': f.phHMavvy,
+    'f.upEnd': f.upEnd,
+    'f.phFlip': f.phFlip, 'f.phSplits': f.phSplits, 'f.phImmel': f.phImmel,
+    'f.phMatty': f.phMatty, 'f.phHMatty': f.phHMatty, 'f.phHMavvy': f.phHMavvy,
   };
   return { f, v, absP, absR, absY, rollFirst, pitchFirst, yawFirst, tR, tP, tY, val, sc: Object.create(null) };
 }
@@ -364,20 +360,20 @@ function sawOf(f, v, ctx) {
     slowYawDeg: degOf(v.slowSpan), slowRateDeg: degOf(v.slowRate),
     orbit2R: r3(f.orbit2R), orbit2SweepDeg: degOf(f.orbit2Sweep), orbit2Turn: r3(f.orbit2Turn), orbit2Spd: r3(f.orbit2Spd),
     orbit2Tail: r3(f.orbit2Tail), orbit2Pole: f.orbit2Pole,
-    // baraniVia: 1 when the heading's turn gave the twist.
-    baraniPitchDeg: degOf(f.barP), baraniTwistDeg: degOf(f.barR), baraniVia: f.barVia || 0, upEnd: r3(f.upEnd),
+    upEnd: r3(f.upEnd),
     // The segment's twist: its turn about the body axis nearest the flight
-    // path, roll or yaw (the Barani's); and the heading's turn (the yaw's
-    // own turn about the vertical while inverted: each step's yaw times the
-    // body's up-Z while it is below -0.5, summed).
+    // path, roll or yaw; and the heading's turn (the yaw's own turn about
+    // the vertical while inverted: each step's yaw times the body's up-Z
+    // while it is below -0.5, summed). Logged only: the loop gate scores the
+    // Barani.
     twistDeg: degOf(f.twist), yawVDeg: degOf(f.yawV),
     // Ham: the turn about the vertical while up-Z < -0.5, and that time's
     // share of the segment.
     invYawDeg: degOf(v.invYaw), inv50: r3(f.dur > 0 ? f.invYawT / f.dur : 0),
     // The phase matcher's scores (PHASE_SPECS), and the Maverick's gap.
     ph: {
-      flip: r3(f.phFlip), powerloop: r3(f.phLoop), splits: r3(f.phSplits), immelmann: r3(f.phImmel),
-      maverick: r3(f.phMav), matty: r3(f.phMatty), halfmatty: r3(f.phHMatty), halfmavvy: r3(f.phHMavvy),
+      flip: r3(f.phFlip), splits: r3(f.phSplits), immelmann: r3(f.phImmel),
+      matty: r3(f.phMatty), halfmatty: r3(f.phHMatty), halfmavvy: r3(f.phHMavvy),
     },
     gapIn: f.gapIn, gapBack: f.gapBack,
     // The altitude 1.0 s before the segment began (the Matty's climb).
@@ -667,6 +663,14 @@ export function createTrickObserver(det, opts) {
   let cgN = 0, cgHead = 0, cgSeq = 0, cgT = NaN;
   const cgPend = [];
   let cgMiss = null;   // the last miss record's pending refresh (rows to share)
+  // The loop gate's inputs (det.lg.inp: the clock, position, velocity, nose,
+  // up axis, the step's body pitch, roll and yaw) and flags (1 contact, 2
+  // armed, 4 fresh), each step (LG_W columns), for its records.
+  const LG_W = 17, LG_CAP = LOOP_LOG.cap;
+  const LG_COLS = ['t', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'fx', 'fy', 'fz', 'ux', 'uy', 'uz', 'dp', 'dr', 'dy', 'flags'];
+  const lgBuf = new Float64Array(LG_CAP * LG_W);
+  let lgN = 0, lgHead = 0, lgSeq = 0, lgT = NaN;
+  const lgPend = [];
   const view = {
     t: 0, armed: false, contact: false, rate: 0, lockout: 0, diving: false, live: 0, liveT: 0,
     vz: 0, speed: 0, alt: 0, thr: 0, gap: null, clr: null, diveOn: 0, diveDrop: 0, diveCd: 0, gapCd: 0,
@@ -684,15 +688,17 @@ export function createTrickObserver(det, opts) {
     // A compound trick: the merge's label (the detector's), and what merged.
     const mg = det.lastMerge;
     // An orbit going on (the one before it scored): the detector's nothing.
-    // A segment open at a Cradle's second pass: the detector's Cradle.
-    rec.result = mg || det.lastCont || det.lastCradleSeg ? (det.lastId || null) : ex.id;
+    // A segment open at a Cradle's second pass: the detector's Cradle; at a
+    // loop gate's call: its Barani, Powerloop or Maverick.
+    rec.result = mg || det.lastCont || det.lastCradleSeg || det.lastLoopSeg ? (det.lastId || null) : ex.id;
     rec.cradle = det.lastCradleSeg || 0;
+    rec.loop = det.lastLoopSeg || 0;
     rec.merged = mg ? { id: mg.id, segs: mg.segs, t: r3(mg.t), score: r3(mg.score), alone: ex.id } : null;
     rec.event = ev || null;
     rec.why = det.lastWhy || '';
-    rec.dir = ex.id === 'flip' || ex.id === 'powerloop' ? (det.lastDir < 0 ? 'back' : 'front') : null;
+    rec.dir = rec.result === 'flip' || rec.result === 'powerloop' ? (det.lastDir < 0 ? 'back' : 'front') : null;
     rec.pole = (ex.id === 'trippy' || ex.id === 'orbit') && det.lastPole ? TRIPPY_POLE_MUL : 0;
-    rec.loops = ex.id === 'powerloop' ? (det.lastLoops || 1) : 0;
+    rec.loops = rec.result === 'powerloop' ? (det.lastLoops || 1) : 0;
     rec.sloppy = det.lastSloppy ? 1 : 0;
     rec.bump = det.lastBump ? 1 : 0;
     rec.mismatch = ex.mismatch;
@@ -700,9 +706,8 @@ export function createTrickObserver(det, opts) {
     rec.saw = ex.saw;
     rec.cam = camRecord(f);
     try { sideAttach(rec, det.lastMerge); } catch (e) { rec.side = null; }
-    rec.barani = baraniProbe(f);
     rec.phases = phaseRecord(det.lastPhases);
-    rec.gapBack = ex.id === 'maverick' && det.lastGapBack ? MAV_GAP_MUL : 0;
+    rec.gapBack = rec.result === 'maverick' && det.lastGapBack ? MAV_GAP_MUL : 0;
     rec.pick = ex.pick;
     rec.candidates = ex.candidates.map((c) => ({ id: c.id, total: c.total, score: c.score, verdict: c.verdict, reason: c.reason, gates: c.gates }));
     const fb = diveFallbackRow(ex);
@@ -714,10 +719,11 @@ export function createTrickObserver(det, opts) {
     if (mg) rec.reason = 'merged with the ' + (mg.segs - 1) + ' segment(s) before (pauses under 0.8 s): ' + mg.id + '; this one alone: ' + (ex.id || 'nothing');
     if (det.lastCont) rec.reason = 'the orbit before it goes on (one orbit scores once)';
     if (det.lastCradleSeg) rec.reason = 'closed at a Cradle\'s second pass (the cradle record after this one); this one alone: ' + (ex.id || 'nothing');
+    if (det.lastLoopSeg) rec.reason = 'closed at the loop gate\'s call (the loop record after this one); this one alone: ' + (ex.id || 'nothing');
     // Held for a half-flown Cradle (sim-tricks.js cradleHolds): called when
     // it comes to nothing, or replaced by it.
     rec.held = det.held ? 1 : 0;
-    if (det.held) rec.reason += '; held: a Cradle round a post is half flown (replaced by it, or called when it comes to nothing)';
+    if (det.held) rec.reason += '; held: a Cradle round a post or a loop round an object is half flown (replaced by it, or called when it comes to nothing)';
     rec._explain = ex;
     emit(rec);
   }
@@ -839,71 +845,6 @@ export function createTrickObserver(det, opts) {
       const rd = (x) => (x == null ? null : Math.round(x));
       out.rows.push([r3(r.t), r3(r.up), r3(r.cu), rd(r.off), rd(r.azOff), Math.round(r.el), r.d == null ? null : r3(r.d), rd(r.nose), rd(r.lean), r.side == null ? null : r3(r.side)]);
     }
-    return out;
-  }
-
-  // The Barani's terms over the finished segment's history (det.hist, read
-  // only), as baraniWithin scans it but with the band ignored: the stretch
-  // of BARANI_P less BARANI_FADE or more of pitch path whose twist is
-  // nearest 180, without and with BARANI_SIDE (pitch path before and after
-  // the row where the twist is half done), each with its pitch path, twist
-  // and the pitch path either side (deg), its time (s) and which twist
-  // (via: 'twist', the body axis nearest the path, or 'heading', the
-  // heading's turn); which term zeroed it (limit: barP, barR band,
-  // BARANI_SIDE, upEnd, or none).
-  function baraniProbe(f) {
-    const H = det.hist, n = det.histN, W = HIST_W, D = 180 / Math.PI;
-    const lo = BARANI_P - BARANI_FADE, bandLo = 2.356, bandHi = 3.927;
-    const out = { pathDeg: degOf(f.pathP), twistDeg: degOf(f.twist), upEnd: r3(f.upEnd), band: [135, 225], bandHeading: [degOf(BARANI_HD_LO), 225], sideDeg: degOf(BARANI_SIDE), any: null, inside: null, limit: null };
-    if (!H || n < 2 || !(f.pathP >= lo)) { out.limit = 'barP'; return out; }
-    const stride = Math.max(1, Math.ceil(n / PH_ROWS));
-    // The twist (column 15) and the heading's turn (the yaw's own turn about
-    // the vertical while inverted, the body history's fourth), as
-    // baraniWithin.
-    const B = det.bh;
-    const pp = [0], cols = [[H[15]], [B[3]]], tt = [H[0]];
-    let path = 0;
-    for (let r = 1; r < n; r++) {
-      path += Math.abs(H[r * W + 1] - H[(r - 1) * W + 1]);
-      if (r === n - 1 || r % stride === 0) { pp.push(path); cols[0].push(H[r * W + 15]); cols[1].push(B[r * BH_W + 3]); tt.push(H[r * W]); }
-    }
-    const m = pp.length;
-    const half = (A, ja, jb) => {
-      const raw = A[jb] - A[ja], T = Math.abs(raw), sg = raw >= 0 ? 1 : -1;
-      let k = ja + 1;
-      while (k < jb && sg * (A[k] - A[ja]) < T / 2) k++;
-      return { before: pp[k] - pp[ja], after: pp[jb] - pp[k] };
-    };
-    const row = (c, ja, jb) => {
-      const A = cols[c], h = half(A, ja, jb);
-      return { pDeg: Math.round((pp[jb] - pp[ja]) * D), twistDeg: Math.round(Math.abs(A[jb] - A[ja]) * D), beforeDeg: Math.round(h.before * D), afterDeg: Math.round(h.after * D), t: [r3(tt[ja]), r3(tt[jb])], via: c ? 'heading' : 'twist' };
-    };
-    // Each stretch's twist in its measure's band (the heading's from
-    // BARANI_HD_LO): the in-band one nearest 180 first, else the nearest.
-    const inBandC = (c, T) => T >= (c ? BARANI_HD_LO : bandLo) - 1e-9 && T <= bandHi + 1e-9;
-    const better = (ok, off, bOk, bOff) => (ok && !bOk) || (ok === bOk && off < bOff);
-    let anyOff = 9, anyOk = false, anyA = -1, anyB = -1, anyC = 0, inOff = 9, inOk = false, inA = -1, inB = -1, inC = 0;
-    for (let ja = 0; ja < m - 1; ja++) {
-      for (let jb = m - 1; jb > ja; jb--) {
-        if (pp[jb] - pp[ja] < lo) break;
-        for (let c = 0; c < 2; c++) {
-          const A = cols[c];
-          const T = Math.abs(A[jb] - A[ja]), off = Math.abs(T - Math.PI), ok = inBandC(c, T);
-          if (better(ok, off, anyOk, anyOff)) { anyOff = off; anyOk = ok; anyA = ja; anyB = jb; anyC = c; }
-          if (better(ok, off, inOk, inOff)) {
-            const h = half(A, ja, jb);
-            if (h.before >= BARANI_SIDE && h.after >= BARANI_SIDE) { inOff = off; inOk = ok; inA = ja; inB = jb; inC = c; }
-          }
-        }
-      }
-    }
-    if (anyA >= 0) out.any = row(anyC, anyA, anyB);
-    if (inA >= 0) out.inside = row(inC, inA, inB);
-    if (anyA < 0) out.limit = 'barP';
-    else if (!anyOk) out.limit = 'barR band';
-    else if (!(inA >= 0 && inOk)) out.limit = 'BARANI_SIDE';
-    else if (!(f.upEnd >= 0.5)) out.limit = 'upEnd';
-    else out.limit = 'none';
     return out;
   }
 
@@ -1276,6 +1217,38 @@ export function createTrickObserver(det, opts) {
     return rows;
   }
 
+  // The loop gate's inputs from ta to tb (its clock), every step.
+  function lgRows(ta, tb) {
+    const rows = [];
+    const r5 = (x) => Math.round(x * 1e5) / 1e5, r6 = (x) => Math.round(x * 1e6) / 1e6;
+    for (let i = 0; i < lgN; i++) {
+      const k = ((lgHead - lgN + i) % LG_CAP + LG_CAP) % LG_CAP * LG_W;
+      const tt = lgBuf[k];
+      if (tt < ta - 1e-9 || tt > tb + 1e-9) continue;
+      rows.push([Math.round(tt * 10000) / 10000, r4(lgBuf[k + 1]), r4(lgBuf[k + 2]), r4(lgBuf[k + 3]), r3(lgBuf[k + 4]), r3(lgBuf[k + 5]), r3(lgBuf[k + 6]),
+        r5(lgBuf[k + 7]), r5(lgBuf[k + 8]), r5(lgBuf[k + 9]), r5(lgBuf[k + 10]), r5(lgBuf[k + 11]), r5(lgBuf[k + 12]),
+        r6(lgBuf[k + 13]), r6(lgBuf[k + 14]), r6(lgBuf[k + 15]), lgBuf[k + 16]]);
+    }
+    return rows;
+  }
+
+  // A loop record: the gate's verdict (its numbers and the boxes it saw),
+  // its constants, the camera, and the inputs from LOOP_LOG.preS before the
+  // loop (or its chain) began to LOOP_LOG.postS past the verdict.
+  function emitLoop(t, v) {
+    const g = det.lg, I = g.inp;
+    const rec = base('loop', t);
+    rec.result = v.result || null;
+    rec.reason = (v.result ? v.result + ': ' : 'no loop trick: ') + (v.why || '');
+    rec.gate = v;
+    rec.need = LOOP;
+    rec.cam = { camDeg: r3(I.camDeg), vfov: r3(I.vfov), aspect: r3(I.aspect) };
+    const ta = v.tFrom - LOOP_LOG.preS, due = v.t2 + LOOP_LOG.postS;
+    rec.inputs = { cols: LG_COLS, rows: lgRows(ta, due), from: r3(ta), to: r3(due) };
+    lgPend.push({ rec, ta, due });
+    emit(rec);
+  }
+
   // A cradle record: this step's verdicts (sim-tricks.js cradleStep's; the
   // Cradle, if one, first), the numbers they were judged by, the posts near
   // the path, and the inputs from CRADLE_LOG.preS before the earliest first
@@ -1513,6 +1486,34 @@ export function createTrickObserver(det, opts) {
       }
     } catch (e) { /* logged only: never break the observer */ }
 
+    // The loop gate: its inputs this step (once per detector step), then
+    // each verdict since the last; the records' rows again postS on.
+    try {
+      const g = det.lg;
+      if (g && g.inp && g.inp.t !== lgT) {
+        const I = g.inp, k = lgHead * LG_W;
+        lgT = I.t;
+        lgBuf[k] = I.t; lgBuf[k + 1] = I.x; lgBuf[k + 2] = I.y; lgBuf[k + 3] = I.z;
+        lgBuf[k + 4] = I.vx; lgBuf[k + 5] = I.vy; lgBuf[k + 6] = I.vz;
+        lgBuf[k + 7] = I.fx; lgBuf[k + 8] = I.fy; lgBuf[k + 9] = I.fz;
+        lgBuf[k + 10] = I.ux; lgBuf[k + 11] = I.uy; lgBuf[k + 12] = I.uz;
+        lgBuf[k + 13] = I.dp; lgBuf[k + 14] = I.dr; lgBuf[k + 15] = I.dy;
+        lgBuf[k + 16] = (I.contact ? 1 : 0) + (armed ? 2 : 0) + (I.fresh ? 4 : 0);
+        lgHead = (lgHead + 1) % LG_CAP;
+        if (lgN < LG_CAP) lgN++;
+      }
+      if (g && g.seq !== lgSeq) {
+        for (const v of g.out) if (v.seq > lgSeq) emitLoop(t, v);
+        lgSeq = g.seq;
+      }
+      for (let k = 0; k < lgPend.length; k++) {
+        if (lgT < lgPend[k].due - 1e-9) continue;
+        const p = lgPend.splice(k--, 1)[0];
+        p.rec.inputs.rows = lgRows(p.ta, p.due);
+        try { onSide(p.rec); } catch (e) { /* never break the frame */ }
+      }
+    } catch (e) { /* logged only: never break the observer */ }
+
     // Gaps: each pass or skim the detector resolves (gapSeq). Not a trick.
     if (det.gapSeq !== gapSeq) {
       const rec = base('gap', t);
@@ -1581,6 +1582,7 @@ export function createTrickDebug(opts) {
   let lastDive = null;
   let lastGap = null;
   let lastCradle = null;
+  let lastLoop = null;
   let el = null;
   let paintedAt = -1;
   let dirty = true;
@@ -1600,6 +1602,7 @@ export function createTrickDebug(opts) {
       if (rec.type === 'dive') lastDive = rec;
       else if (rec.type === 'gap') lastGap = rec;
       else if (rec.type === 'cradle') lastCradle = rec;
+      else if (rec.type === 'loop') lastLoop = rec;
       dirty = true;
       try { if (out) out.info(JSON.stringify(rec)); } catch (e) { /* never break the frame */ }
       if (rec.mismatch && out) { try { out.warn('tricks debug: replica disagrees with classifyFeat', rec.result, rec.pick && rec.pick.id); } catch (e) { /* ignore */ } }
@@ -1725,6 +1728,25 @@ export function createTrickDebug(opts) {
     return '<span class="' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓' : '✗') + ' ' + pad('Cradle', 18) + pad('—', 5) + '</span> ' + s;
   }
 
+  // The loop gate: a loop under way (under an object, the climb, over it
+  // or not yet), else the last verdict for 6 s, else what it looks for.
+  function loopLine(t) {
+    const det = tricks.detector(), g = det && det.lg;
+    const fresh = lastLoop && t - lastLoop.t < 6;
+    let s;
+    if (g && g.on && !g.run) {
+      s = '<span class="near">under</span> box ' + g.anc[0] + '  ' + (g.inp.t - g.t1).toFixed(1) + '/' + LOOP.maxS + ' s  over it ' + mark(g.over)
+        + '  up-Z min ' + g.upMin.toFixed(2) + '  yaw upside down ' + Math.round(g.yawV * 180 / Math.PI) + '°'
+        + (g.pend ? '  <span class="ok">Powerloop ×' + g.pend.loops + ' waiting</span>' : '');
+    } else if (fresh) {
+      s = (lastLoop.result ? '<span class="ok">fired</span> ' : '') + esc(lastLoop.reason) + '  <span class="d">' + (t - lastLoop.t).toFixed(1) + 's ago</span>';
+    } else {
+      s = '<span class="d">under an object, over it, back under it (≤' + LOOP.maxS + ' s): Barani upside down with 120-225° of yaw, Powerloop upside down, Maverick upright with a fast push at the top</span>';
+    }
+    const ok = fresh && !!lastLoop.result;
+    return '<span class="' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓' : '✗') + ' ' + pad('Barani/Loop/Mav', 18) + pad('—', 5) + '</span> ' + s;
+  }
+
   function paint(force) {
     const t = now();
     if (!force && !dirty && t - paintedAt < 0.1) return;
@@ -1789,6 +1811,7 @@ export function createTrickDebug(opts) {
       else L.push('<span class="no">· ' + esc(pad(nameOf(id).replace(' (Ham)', ''), 18)) + pad('—', 5) + '</span> <span class="d">no classified maneuver yet</span>');
     }
     L.push(cradleLine(t));
+    L.push(loopLine(t));
     L.push(gapLine(t));
     if (ex) {
       const others = ex.candidates.filter((c) => FOCUS.indexOf(c.id) < 0).map((c) => (c.verdict === 'fired' ? '✓' : '') + c.id + ' ' + c.total.toFixed(2));

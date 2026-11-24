@@ -19,7 +19,7 @@ export const TRICKS_KEY = 'quadmathSimTricks';
 // 4 (2026-11-20): the Cradle scored on a segment's pitch with no post (a
 // nose-down flip, a dive's pull-out), 150 points each; it is now two passes
 // round a post (CRADLE). Bests saved before are dropped the same way.
-export const STORE_VER = 4;
+export const STORE_VER = 5;
 export const COMBO_WINDOW_S = 2.8;
 export const MUL_CAP = 6;
 export const LOCKOUT_S = 0.45;
@@ -57,7 +57,7 @@ export const ROLL_WIN_S = 1.5;
 // one within 2 m), the
 // authored gaps passed so far, the velocity along physics y, the heading
 // (rad), the yaw about the body's up axis and the twist (rad, each summed
-// from the segment's start; the twist below, BARANI_P). MANEUVER_SUSTAIN_S
+// from the segment's start; the twist below, TWIST_SPD). MANEUVER_SUSTAIN_S
 // at 1 ms steps fits.
 export const HIST_CAP = 10240;
 export const HIST_W = 16;
@@ -105,26 +105,12 @@ export const POLE_W_M = 0.5;
 export const POLE_H_M = 1.0;
 export const POLE_NEAR_M = 0.5;
 export const TRIPPY_POLE_MUL = 1.25;
-// Barani, as the owner flies it: BARANI_P or more of pitch path (the pitch
-// turned either way, summed: a twist turns the body round, so the same flip
-// pitches the body the other way after it) with a half twist (180 +- 45
-// degrees) inside it, ending upright. Any climb, any time. The twist is the
-// turn about the body axis nearest the flight path: roll when the nose is
-// along it (flying level), yaw when the up axis is (punched up, or inverted
-// and falling); slower than TWIST_SPD (m/s), where the path is no direction
-// to speak of, whichever of the two turns faster. Or the heading's turn: the
-// yaw's own turn about the vertical while inverted (the owner yaws the half
-// twist upside down at the top of the loop, moving along the nose, where the
-// twist above sees the roll only; baraniWithin). Whichever of the two
-// scores, nearer 180 when both do; the heading's from BARANI_HD_LO (120
-// degrees: the owner's yaw at the top reads 132-166 of it), the twist's
-// from 135. Inside: BARANI_SIDE of
-// pitch path or more before the twist is half done, and after. 300 degrees
-// fades over BARANI_FADE (the owner's 38.1 s Barani turned 299).
-export const BARANI_P = 5.236;
+// Barani: the loop gate's (LOOP). The yaw made upside down, its band's low
+// end (120 degrees: the owner's read 125-197).
 export const BARANI_HD_LO = 2.094;
-export const BARANI_FADE = 0.35;
-export const BARANI_SIDE = 1.047;
+// The segment's twist (logged only): each step's turn about the body axis
+// nearest the flight path, roll when the nose is along it, yaw when the up
+// axis is; slower than TWIST_SPD (m/s), whichever of the two turns faster.
 export const TWIST_SPD = 3;
 // Ham Spin (the inverted yaw spin): >= HAM_MIN of turn about the vertical
 // counted only while inverted, up-Z below HAM_UPZ (tilted more than 120
@@ -142,8 +128,9 @@ export const PH_ROWS = 200;
 export const PH_OVER = 1;
 export const PH_UNDER = 2;
 export const PH_NEAR = 4;
-// Maverick: back out through the authored gap it came in by (passed at most
-// MAV_GAP_S before the segment began, or in it) earns MAV_GAP_MUL points.
+// Maverick (the loop gate's): back out through the authored gap it came in
+// by (passed at most MAV_GAP_S before the loop began, the same gap passed
+// again after it climbed over the object) earns MAV_GAP_MUL points.
 export const MAV_GAP_S = 1.5;
 export const MAV_GAP_MUL = 1.25;
 // Compound tricks across segments: consecutive segments with pauses under
@@ -199,7 +186,7 @@ export const TRICK_LIST = Object.freeze([
   Object.freeze({ id: 'cubik', name: "Cubik's Rube", tier: 'Intermediate', points: 350, pointsIn: 450, type: 'Open Air' }),
   Object.freeze({ id: 'ham', name: 'Ham Spin', tier: 'Intermediate', points: 300, pointsIn: 300, type: 'Open Air' }),
   Object.freeze({ id: 'trippy', name: 'Trippy Spin', tier: 'Intermediate', points: 500, pointsIn: 500, type: 'Pole Dancing' }),
-  Object.freeze({ id: 'barani', name: 'Barani', tier: 'Novice', points: 100, pointsIn: 125, type: 'Open Air' }),
+  Object.freeze({ id: 'barani', name: 'Barani', tier: 'Master', points: 750, pointsIn: 800, type: 'Powerloops' }),
 ]);
 
 const BY_ID = Object.create(null);
@@ -216,16 +203,18 @@ const TAU = PI * 2;
 const HALF = PI * 0.78;
 const FULL = 5.2;
 const QTR = 1.15;
+// The segment's candidates. Barani, Powerloop and Maverick are the loop
+// gate's (LOOP), never a segment's.
 const CLASS_IDS = [
-  'halfmavvy', 'rubik', 'cubik', 'barani', 'immelmann', 'ham', 'trippy', 'orbit', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
-  'powerloop', 'matty', 'maverick', 'splits', 'flip', 'roll', 'yawspin',
+  'halfmavvy', 'rubik', 'cubik', 'immelmann', 'ham', 'trippy', 'orbit', 'sideloop', 'juicyflick', 'snapback', 'halfmatty',
+  'matty', 'splits', 'flip', 'roll', 'yawspin',
 ];
 const SPEC = {
-  halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, barani: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, orbit: 0.05, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
-  halfmatty: 0.10, powerloop: 0.11, matty: 0.11, maverick: 0.10, splits: 0.10,
+  halfmavvy: 0.13, rubik: 0.12, cubik: 0.12, immelmann: 0.12, ham: 0.11, trippy: 0.11, orbit: 0.05, sideloop: 0.11, juicyflick: 0.11, snapback: 0.11,
+  halfmatty: 0.10, matty: 0.11, splits: 0.10,
   flip: 0, roll: 0, yawspin: 0,
 };
-const LOOP_IDS = { powerloop: 1, matty: 1, maverick: 1, splits: 1, halfmatty: 1, trippy: 1, sideloop: 1, halfmavvy: 1, immelmann: 1 };
+const LOOP_IDS = { matty: 1, splits: 1, halfmatty: 1, trippy: 1, sideloop: 1, halfmavvy: 1, immelmann: 1 };
 
 function makeDlt() { return { r: 0, p: 0, y: 0 }; }
 function makeClr() { return { up: 50, dn: 50, px: 50, nx: 50, pz: 50, nz: 50, near: 50, over: 50 }; }
@@ -540,7 +529,7 @@ export function makeFeat() {
     // Barani's heading).
     yawV: 0,
     // The twist (rad, summed): each step's turn about the body axis nearest
-    // the flight path, roll or yaw (BARANI_P).
+    // the flight path, roll or yaw (TWIST_SPD; logged only).
     twist: 0,
     orbitR: 0, orbitFit: 9, orbitSweep: 0, orbitTurn: 0, orbitSpd: 0, orbitCx: 0, orbitCz: 0, orbitPole: 0,
     // The orbit's window (s from the segment's start), for the debug log's
@@ -553,10 +542,8 @@ export function makeFeat() {
     // and the orbit over it, as Trippy's (ORBIT_RATE).
     slowUp: 0, slowDn: 0, slowUpT: 0, slowDnT: 0,
     orbit2R: 0, orbit2Sweep: 0, orbit2Turn: 0, orbit2Spd: 0, orbit2Tail: 0, orbit2Pole: 0,
-    // Barani (baraniWithin): the pitch path and |twist| of the stretch that
-    // scores best as a Barani's, the twist inside the pitch; up-Z at the end.
-    // barVia: 1 when the heading's turn gave the twist.
-    barP: 0, barR: 0, barVia: 0, upEnd: 1,
+    // Up-Z at the end.
+    upEnd: 1,
     // Ham: the turn about the vertical while up-Z < HAM_UPZ (rad): its
     // running sum (invC) and that sum's lowest and highest so far (invLo,
     // invHi) give the largest rise and fall (invYawUp, invYawDn); invYawT is
@@ -564,7 +551,7 @@ export function makeFeat() {
     invC: 0, invLo: 0, invHi: 0, invYawUp: 0, invYawDn: 0, invYawT: 0,
     // The phase matcher's scores, one per trick it defines (PHASE_SPECS,
     // 0-1), set when the segment finishes.
-    phFlip: 0, phLoop: 0, phSplits: 0, phImmel: 0, phMav: 0, phMatty: 0, phHMatty: 0, phHMavvy: 0,
+    phFlip: 0, phSplits: 0, phImmel: 0, phMatty: 0, phHMatty: 0, phHMavvy: 0,
     // The entry's horizontal direction of travel (unit, physics x and y; 0, 0
     // until it moves), authored gaps passed in the segment, and the Maverick's
     // gap: the volume it came in by (index + 1, 0: none) and that pass's entry
@@ -602,9 +589,9 @@ export function resetFeat(f) {
   f.orbitTa = 0; f.orbitTb = 0; f.orbitTail = 0;
   f.slowUp = 0; f.slowDn = 0; f.slowUpT = 0; f.slowDnT = 0;
   f.orbit2R = 0; f.orbit2Sweep = 0; f.orbit2Turn = 0; f.orbit2Spd = 0; f.orbit2Tail = 0; f.orbit2Pole = 0;
-  f.barP = 0; f.barR = 0; f.barVia = 0; f.upEnd = 1;
+  f.upEnd = 1;
   f.invC = 0; f.invLo = 0; f.invHi = 0; f.invYawUp = 0; f.invYawDn = 0; f.invYawT = 0;
-  f.phFlip = 0; f.phLoop = 0; f.phSplits = 0; f.phImmel = 0; f.phMav = 0; f.phMatty = 0; f.phHMatty = 0; f.phHMavvy = 0;
+  f.phFlip = 0; f.phSplits = 0; f.phImmel = 0; f.phMatty = 0; f.phHMatty = 0; f.phHMavvy = 0;
   f.u0x = 0; f.u0y = 0; f.gapN = 0; f.gapIn = 0; f.gapInFin = -1; f.gapBack = 0;
   f.alt1s = 0;
   return f;
@@ -644,11 +631,11 @@ export function copyFeat(src, dst) {
   d.slowUp = src.slowUp; d.slowDn = src.slowDn; d.slowUpT = src.slowUpT; d.slowDnT = src.slowDnT;
   d.orbit2R = src.orbit2R; d.orbit2Sweep = src.orbit2Sweep; d.orbit2Turn = src.orbit2Turn; d.orbit2Spd = src.orbit2Spd;
   d.orbit2Tail = src.orbit2Tail; d.orbit2Pole = src.orbit2Pole;
-  d.barP = src.barP; d.barR = src.barR; d.barVia = src.barVia; d.upEnd = src.upEnd;
+  d.upEnd = src.upEnd;
   d.invC = src.invC; d.invLo = src.invLo; d.invHi = src.invHi;
   d.invYawUp = src.invYawUp; d.invYawDn = src.invYawDn; d.invYawT = src.invYawT;
-  d.phFlip = src.phFlip; d.phLoop = src.phLoop; d.phSplits = src.phSplits; d.phImmel = src.phImmel;
-  d.phMav = src.phMav; d.phMatty = src.phMatty; d.phHMatty = src.phHMatty; d.phHMavvy = src.phHMavvy;
+  d.phFlip = src.phFlip; d.phSplits = src.phSplits; d.phImmel = src.phImmel;
+  d.phMatty = src.phMatty; d.phHMatty = src.phHMatty; d.phHMavvy = src.phHMavvy;
   d.u0x = src.u0x; d.u0y = src.u0y; d.gapN = src.gapN; d.gapIn = src.gapIn; d.gapInFin = src.gapInFin; d.gapBack = src.gapBack;
   d.alt1s = src.alt1s;
   return d;
@@ -739,72 +726,6 @@ export function orbitFit(hist, a, b, out, w) {
   o.r = sweep > 1e-6 ? path / sweep : 99;
   o.spd = dt > 0 ? path / dt : 0;
   o.cx = cx; o.cz = cz; o.kr = kr; o.fit = kr > 0 ? Math.sqrt(res / n) / kr : 9;
-  return o;
-}
-
-// Barani: over a segment's history (rows of stride w), the stretch a..b
-// whose pitch path (the pitch turned either way, summed) and |twist| (the
-// twist column's change) score best as a Barani's: BARANI_P of pitch path
-// (faded over BARANI_FADE) and a twist of 180 +- 45 degrees, the twist
-// inside the pitch (BARANI_SIDE of pitch path or more before the row where
-// the twist is half done, and after it). Ends on every PH_ROWS-th row, the
-// pitch path summed over every row; among equals, the twist nearer 180.
-// The twist is the twist column's change or, with bh (the body history,
-// BH_W) passed, the heading's turn, whichever scores (nearer 180 when both
-// do). The heading's turn is the yaw's own turn about the vertical while
-// inverted (bh's fourth: each step's yaw times the body's up-Z, while up-Z
-// is below HAM_UPZ), the owner's half twist: the yaw made at the top of the
-// flip. It means something only with the nose off the vertical: with the
-// nose near vertical the up axis is near level, and a yaw there counts
-// nothing (the twist column has that turn, about the flight path); nor does
-// a yaw made upright (a flip, a yaw, a flip is no Barani), or the pitch or
-// roll, so a flip about a banked axis, which turns the body about the
-// vertical by the bank's share of it, counts nothing. A yaw made inverted
-// and near level reads within a few degrees of the body's yaw. out:
-// { p, r, via } (rad; 0 when none; via 1: the heading's turn).
-const _barPP = new Float64Array(PH_ROWS + 2);
-const _barTW = new Float64Array(PH_ROWS + 2);
-const _barVH = new Float64Array(PH_ROWS + 2);
-export function baraniWithin(hist, n, out, w, bh) {
-  const W = w || HIST_W;
-  const o = out || {};
-  o.p = 0; o.r = 0; o.via = 0;
-  if (!hist || n < 2) return o;
-  const stride = Math.max(1, Math.ceil(n / PH_ROWS));
-  const m = Math.ceil((n - 1) / stride) + 1;
-  // The pitch path, the twist and the heading's turn at each kept row.
-  let path = 0, j = 0;
-  _barPP[0] = 0; _barTW[0] = hist[15]; _barVH[0] = bh ? bh[3] : 0;
-  for (let r = 1; r < n; r++) {
-    path += Math.abs(hist[r * W + 1] - hist[(r - 1) * W + 1]);
-    if (r === n - 1 || r % stride === 0) {
-      j++; _barPP[j] = path; _barTW[j] = hist[r * W + 15]; _barVH[j] = bh ? bh[r * BH_W + 3] : 0;
-    }
-  }
-  const lo = BARANI_P - BARANI_FADE;
-  if (path < lo) return o;
-  const cols = bh ? 2 : 1;
-  let best = 0, bestOff = 9;
-  for (let ja = 0; ja < m - 1; ja++) {
-    for (let jb = m - 1; jb > ja; jb--) {
-      const P = _barPP[jb] - _barPP[ja];
-      if (P < lo) break;
-      for (let c = 0; c < cols; c++) {
-        const A = c ? _barVH : _barTW;
-        const raw = A[jb] - A[ja], T = Math.abs(raw);
-        const sc = atLeast(P, BARANI_P, BARANI_FADE) * inBand(T, c ? BARANI_HD_LO : 2.356, 3.927, 0);
-        if (!(sc > 0)) continue;
-        const off = Math.abs(T - Math.PI);
-        if (sc < best - 1e-9 || (sc <= best + 1e-9 && off >= bestOff)) continue;
-        // Inside the pitch: the row where the twist is half done.
-        const sg = raw >= 0 ? 1 : -1;
-        let k = ja + 1;
-        while (k < jb && sg * (A[k] - A[ja]) < T / 2) k++;
-        if (_barPP[k] - _barPP[ja] < BARANI_SIDE || _barPP[jb] - _barPP[k] < BARANI_SIDE) continue;
-        best = sc; bestOff = off; o.p = P; o.r = T; o.via = c;
-      }
-    }
-  }
   return o;
 }
 
@@ -951,13 +872,6 @@ export const PHASE_SPECS = Object.freeze({
     ph: [{ ax: 'p', sg: 0, lo: 5.236, win: FLIP_WIN_S }],
     seg: [['absR', '<=', 1.7, 0.6], ['absY', '<=', 1.9, 0.6]],
   }),
-  // Powerloop: >= 300 degrees of pitch inside LOOP_WIN_S, whose path climbs
-  // 1.5 m, comes back down to 1.5 m above its entry or lower and turns its
-  // velocity 270 degrees the way the pitch turns.
-  powerloop: Object.freeze({
-    ph: [{ ax: 'p', sg: 0, lo: 5.236, win: LOOP_WIN_S }],
-    seg: [['absR', '<=', 1.7, 0.6], ['absY', '<=', 1.9, 0.6], ['loopRise', '>=', 1.5, 0], ['loopRet', '>=', -1.5, 0], ['loopSweep', '>=', 4.712, 0]],
-  }),
   // Split-S: a roll of 103-258 degrees, then a back pitch of 69-258, the
   // path dropping 0.35 m, flying with the nose.
   splits: Object.freeze({
@@ -970,23 +884,6 @@ export const PHASE_SPECS = Object.freeze({
   immelmann: Object.freeze({
     ph: [{ ax: 'p', sg: -1, lo: 2.356, hi: 3.927, climb: 1 }, { ax: 'r', sg: 0, lo: 2.356, hi: 3.927 }],
     seg: [['upEnd', '>=', 0.5, 0], ['head', '>=', 2.356, 0], ['drop', '<=', 0, 0]],
-    merge: 1,
-  }),
-  // Maverick, as the owner flies it: a pull back of 120-225 degrees,
-  // climbing 1 m, a forward pitch of 60 or more that stops it, then back
-  // towards the entry against the nose (velocity·nose -0.3 or less) for
-  // 0.3 s: the glide back. It need not go inverted (the owner's top out at
-  // about 70 degrees past level). Often two segments (the pull, the push).
-  // No twist between the pull and the push: the roll and the yaw each turn
-  // under 60 degrees across them (a Barani twisted with yaw at its top
-  // pitches the body back, then forward, too). The push and the glide back
-  // drop back under or through an object: near one (within 2 m) a quarter of
-  // the time or more, or back through an authored gap.
-  maverick: Object.freeze({
-    ph: [{ ax: 'p', sg: -1, lo: 2.094, hi: 3.927, climb: 1 }, { ax: 'p', sg: 1, lo: 1.047 }],
-    tail: { dot: -0.3, t: 0.3 },
-    still: 1.047,
-    near: 0.25,
     merge: 1,
   }),
   // Matty, as the owner flies it: 250-400 degrees of forward pitch over an
@@ -1019,8 +916,8 @@ export const PHASE_SPECS = Object.freeze({
 });
 // The feature each trick's score goes to.
 export const PHASE_FIELD = Object.freeze({
-  flip: 'phFlip', powerloop: 'phLoop', splits: 'phSplits', immelmann: 'phImmel',
-  maverick: 'phMav', matty: 'phMatty', halfmatty: 'phHMatty', halfmavvy: 'phHMavvy',
+  flip: 'phFlip', splits: 'phSplits', immelmann: 'phImmel',
+  matty: 'phMatty', halfmatty: 'phHMatty', halfmavvy: 'phHMavvy',
 });
 const PH_COL = { p: 1, r: 2, v: 3 };
 const PH_TIE = 0.05;
@@ -1577,21 +1474,6 @@ export function classifyFeat(f, out) {
     atLeast(v.inv, 0.12, 0.08),
     atMost(absY, 2.4, 0.7),
   );
-  // Barani, as the owner flies it: BARANI_P of pitch path with a half twist
-  // (180 +- 45, roll or yaw: the axis nearest the flight path; or the
-  // heading's turn, the yaw made inverted, 120-225) inside it,
-  // ending upright (up-Z 0.5, as the Half Mavvy's and the Immelmann's). Any
-  // climb, any time. A Half Mavvy turns the same way and goes under an
-  // object against the nose after its roll; it ranks above.
-  // (5.236 and 0.35: BARANI_P and BARANI_FADE.)
-  // The twist by the measure that gave it (-1 for the other): the heading's
-  // from BARANI_HD_LO (120), the twist's from 135.
-  const barRTwist = f.barVia ? -1 : f.barR, barRHead = f.barVia ? f.barR : -1;
-  _sc.barani = mul(
-    atLeast(f.barP, 5.236, 0.35),
-    Math.max(inBand(barRTwist, 2.356, 3.927, 0), inBand(barRHead, 2.094, 3.927, 0)),
-    atLeast(f.upEnd, 0.5, 0),
-  );
   {
     // Trippy Spin: >= 360 degrees of turn about the vertical at >= 150 deg/s
     // between its two ends, while the path orbits a centre over the whole
@@ -1687,24 +1569,10 @@ export function classifyFeat(f, out) {
   _sc.immelmann = mul(
     atLeast(f.phImmel, 1, 1),
   );
-  // Powerloop: >= 300 degrees of pitch inside LOOP_WIN_S (its own window, a
-  // loop is slower than a flip), with Flip's roll and yaw limits, whose path
-  // climbs at least 1.5 m above the entry, after its top comes back down to
-  // 1.5 m above the entry or lower, and turns its velocity through at least
-  // 270 degrees in the vertical plane of the entry heading, the way the pitch
-  // turns. A flip whose path does not is a Flip. v.loops counts the loops.
-  _sc.powerloop = mul(
-    atLeast(f.phLoop, 1, 1),
-  );
   // Matty: 250-400 degrees of forward pitch over an object, climbed into
   // (1 m from 1.0 s before), flown against the nose, upright at the end.
   _sc.matty = mul(
     atLeast(f.phMatty, 1, 1),
-  );
-  // Maverick: a pull back of 120-225 climbing 1 m, a forward pitch of 60 or
-  // more, then back towards the entry against the nose for 0.3 s.
-  _sc.maverick = mul(
-    atLeast(f.phMav, 1, 1),
   );
   // Split-S: a half roll, then a back pitch of 69-258, dropping 0.35 m.
   _sc.splits = mul(
@@ -1767,9 +1635,6 @@ export function classifyFeat(f, out) {
   if (bestId === 'yawspin' && _sc.trippy > 0.42) { bestId = 'trippy'; best = _sc.trippy; }
   if (bestId === 'roll' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
   if (bestId === 'yawspin' && _sc.sideloop > 0.4) { bestId = 'sideloop'; best = _sc.sideloop; }
-  if (bestId === 'maverick' && absP > 4.3 && f.pitch < 0 && _sc.powerloop > 0.5) { bestId = 'powerloop'; best = _sc.powerloop; }
-  if (bestId === 'powerloop' && f.pitch > 0) { bestId = _sc.matty > 0.42 ? 'matty' : bestId; }
-  if (bestId === 'matty' && f.pitch < 0) { bestId = _sc.powerloop > 0.42 ? 'powerloop' : bestId; }
   if (bestId === 'matty' && absR > 2.1 && pitchFirst > 0.02 && _sc.juicyflick > 0.3) { bestId = 'juicyflick'; best = _sc.juicyflick; }
   if (bestId === 'juicyflick' && rollFirst > 0.04 && _sc.halfmatty > 0.35) { bestId = 'halfmatty'; best = _sc.halfmatty; }
   if (bestId === 'snapback' && rollFirst > 0.04 && _sc.splits > 0.35) { bestId = 'splits'; best = _sc.splits; }
@@ -2219,6 +2084,482 @@ function cradleVerdict(g, i, result, why, m, s) {
   if (g.out.length > CRADLE_OUT) g.out.shift();
 }
 
+// ---- The loop gate: Barani, Powerloop and Maverick, round an object ----
+// The owner's rulings (2026-11-24), on the Tricktionary's definitions
+// (prowhooper.com): each is a loop round one object, judged on the path, not
+// on a segment's rotation. Three passes:
+// - U1: under an object (a box over the quad, its underside LOOP.underM
+//   above or less), the quad level (up-Z LOOP.level or more) at LOOP.minSpd
+//   or more. The loop starts at the step it leaves the object's underside.
+//   (A climb that passes under something higher, the roof truss over the
+//   stairs, is not level: it does not start the loop over.)
+// - O: over the same object (over a box of it, its top LOOP.overM below or
+//   less).
+// - U2: under the same object again, LOOP.drop or more below the highest
+//   point since U1, inside LOOP.maxS of U1.
+// The same object: a box within LOOP.sameM of a U1 box across the floor (the
+// gap between their footprints), its underside and its top each within
+// LOOP.sameH of that box's: a staircase's steps and the mezzanine edge they
+// join (the owner's first Barani came back under 1.4 m along the stairs);
+// not a step 1.63 m on but 1.13 m higher, nor the roof truss 0.94 m from them
+// across the floor and 4.4 m above. Provisional: fitted to the Warehouse's
+// stairs; no verdict of the owner's 2026-11-24 re-fly turns on 1.5 or 2.0 m.
+// A touch between U1 and U2 voids the loop, and nothing after U2 does: the
+// physics core's own contact (the sample's contactFlags: the floor or a
+// box) where the core gives it (the bf core), else the detector's (the
+// floor within 0.08 m, or a box within CRADLE.hitM). A crash, a disarm or a
+// respawn between the passes voids it too. At U2:
+// - Barani: upside down (up-Z LOOP.inv or less) at some step; the yaw made
+//   upside down (yawV: each step's body yaw times up-Z, while up-Z is below
+//   HAM_UPZ) LOOP.hdLo to LOOP.hdHi either way; the horizon in view before
+//   the yaw: where the body's yaw that way began (LOOP.twist0 turned from
+//   its last low; LOOP.restS slower than LOOP.restRate starts it over), the
+//   camera (the page's tilt) at no more than half the vertical FOV above
+//   the horizon (the horizon in the frame, or the camera past it: above
+//   that it sees only sky); LOOP.barBack or more of back pitch before the
+//   yaw began, LOOP.barFwd or more forward after it; and through U2 upright
+//   (up-Z LOOP.upright) flying against the nose (velocity·nose LOOP.backDot
+//   or less): the Matty back under. The yaw in its band with anything else
+//   short is nothing (no Power Swap in this change).
+// - Powerloop: upside down at some step; the yaw made upside down under
+//   LOOP.loopYaw; LOOP.loopBack or more of back pitch net; the roll net
+//   LOOP.loopRoll or less. A loop on round the same object (its U1 the last
+//   one's U2) is one more loop: the call waits for it LOOP.chainS after a
+//   loop, and past that only while the next one is over the object upside
+//   down; then it calls them all as one Powerloop of that many loops (a
+//   Double Powerloop scores twice). Flying back over the object upright
+//   after the last loop does not hold the call.
+// - Maverick: never upside down (up-Z above LOOP.inv at every step; the
+//   owner's dips to -0.2); LOOP.mavPull or more of back pitch, then above
+//   the object's top a fast forward pitch, LOOP.mavPush or more inside
+//   LOOP.mavPushS; then LOOP.mavGlide or more of gliding down backwards
+//   before U2: descending, and across the floor moving back against the
+//   nose's heading (LOOP.glideDot or less; velocity·nose itself is positive
+//   there, the nose down as it falls: the owner's read 0.2-0.7). Called
+//   LOOP.mavWaitS after U2, so a pass back out through the authored gap it
+//   came in by (MAV_GAP_MUL points) is seen. The object in the camera's
+//   view on the glide is logged (objView: the share of the glide's steps
+//   with the object's nearest point or centre in the frame), not judged:
+//   the logs to date (path rows 0.3 s apart, no roll) cannot measure it.
+// A loop's pass under while another one is half flown (not yet over it)
+// starts over from that object.
+export const LOOP = Object.freeze({
+  minSpd: 1.0, upright: 0.5, level: 0.9, underM: 2.5, overM: 6, sameM: 2.0, sameH: 1.0, drop: 2.0, maxS: 4.0,
+  inv: -0.5, hdLo: BARANI_HD_LO, hdHi: 3.927, twist0: 0.262, restS: 0.15, restRate: 1.047, twistLock: 1.047,
+  barBack: 2.356, barFwd: 1.571, backDot: -0.3,
+  loopYaw: 1.571, loopBack: 4.712, loopRoll: 1.7, chainS: 1.6,
+  mavPull: 0.873, mavPush: 1.047, mavPushS: 0.4, mavGlide: 0.3, glideDot: -0.5, mavWaitS: 0.3,
+  holdPull: 0.785, maxBoxes: 32, seenMax: 64,
+});
+
+// The loop gate's state. Boxes (B: x0 y0 z0 x1 y1 z1 per box, sim-core m,
+// n of them; rebuilt when the colliders' array, its length or its ends
+// change). This step's boxes over the quad (up) and under it (dn). The
+// step's inputs (inp: the clock t, position x y z, m, velocity vx vy vz, m/s,
+// the nose fx fy fz and the body's up axis ux uy uz, this step's body pitch,
+// roll and yaw dp dr dy, rad, contact 0/1, fresh 1 on the first step after a
+// reset, the camera's tilt camDeg and vertical FOV vfov, deg, and the
+// frame's aspect). The loop: on (a U1 made), run (still under the object),
+// the U1 boxes (anc) and their highest top (ancTop), the boxes seen over or
+// under since the loop (or the chain) began (seen, for the log), the run's
+// start (tRun), U1 (t1, z1), the highest point since (zTop), O (over, tO),
+// the verdict whose U2 began this loop (chainFrom); since U1 the body's
+// pitch, roll and yaw (P, R, Y), the yaw made upside down (yawV), the
+// lowest up-Z and pitch (upMin, pMin); the yaw's start each way (tw*: 0 for
+// +, 1 for -; T its clock or -1, E the camera's elevation there, Back the
+// back pitch before it, PMin the pitch's low since, Low the yaw's low it
+// rose from, Lock once it has turned LOOP.twistLock); rest (s slower than
+// LOOP.restRate); the Maverick's push (a ring of clock and pitch), pull,
+// push and glide. pend: a Powerloop waiting for the next loop; queue: calls
+// due ({ v, due }); the verdicts (lastV the latest, out the latest few,
+// oldest first; seq) and the call taken (last).
+const LG_PUSH = 128;
+const LG_OUT = 32;
+function makeLoop() {
+  return {
+    cols: null, colsN: -1, col0: null, colL: null, ws: 0,
+    B: new Float64Array(0), n: 0,
+    up: new Int32Array(LOOP.maxBoxes), upN: 0, dn: new Int32Array(LOOP.maxBoxes), dnN: 0,
+    have: 0, px: 0, py: 0, pz: 0, tPrev: -1,
+    inp: {
+      t: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, fx: 1, fy: 0, fz: 0, ux: 0, uy: 0, uz: 1,
+      dp: 0, dr: 0, dy: 0, contact: 0, fresh: 0, camDeg: 30, vfov: 90, aspect: 16 / 9,
+    },
+    on: 0, run: 0, anc: new Int32Array(LOOP.maxBoxes), ancN: 0, ancTop: 0,
+    seen: new Int32Array(LOOP.seenMax), seenN: 0, tFrom: 0,
+    tRun: 0, t1: 0, z1: 0, zTop: 0, over: 0, tO: 0, chainFrom: 0,
+    P: 0, R: 0, Y: 0, yawV: 0, upMin: 1, pMin: 0,
+    twT: new Float64Array(2), twE: new Float64Array(2), twBack: new Float64Array(2),
+    twPMin: new Float64Array(2), twLow: new Float64Array(2), twFrom: new Float64Array(2), twLock: new Uint8Array(2), rest: 0,
+    pT: new Float64Array(LG_PUSH), pP: new Float64Array(LG_PUSH), pH: 0, pN: 0,
+    pull: 0, pushT: -1, pushDeg: 0, glideT: 0, glideN: 0, viewN: 0,
+    pend: null, queue: [],
+    seq: 0, lastV: null, last: null, out: [],
+  };
+}
+
+// A loop gate on given boxes (each [x0, y0, z0, x1, y1, z1], sim-core m) and
+// no colliders: to replay a loop record's logged inputs (set inp, then
+// loopStep, each row).
+export function makeLoopGate(boxes) {
+  const g = makeLoop();
+  const m = boxes ? boxes.length : 0;
+  g.B = new Float64Array(m * 6);
+  for (let i = 0; i < m; i++) for (let a = 0; a < 6; a++) g.B[i * 6 + a] = boxes[i][a];
+  g.n = m;
+  return g;
+}
+
+// The boxes, from the colliders (a change: the loop starts over).
+export function loopBoxes(g, cols, ws) {
+  const n = cols && cols.length ? cols.length : 0;
+  if (cols === g.cols && n === g.colsN && ws === g.ws && (!n || (cols[0] === g.col0 && cols[n - 1] === g.colL))) return false;
+  g.cols = cols || null; g.colsN = n; g.ws = ws;
+  g.col0 = n ? cols[0] : null; g.colL = n ? cols[n - 1] : null;
+  g.B = simBoxes(cols, ws, null);
+  g.n = n;
+  loopReset(g, '');
+  return true;
+}
+
+// Is box b (B: 6 per box) the same object as box a: within LOOP.sameM of it
+// across the floor, its underside and its top each within LOOP.sameH of a's.
+function sameBoxAt(B, a, b) {
+  const A = a * 6, C = b * 6;
+  const dx = Math.max(0, B[C] - B[A + 3], B[A] - B[C + 3]);
+  const dy = Math.max(0, B[C + 1] - B[A + 4], B[A + 1] - B[C + 4]);
+  return dx * dx + dy * dy <= LOOP.sameM * LOOP.sameM
+    && Math.abs(B[A + 2] - B[C + 2]) <= LOOP.sameH && Math.abs(B[A + 5] - B[C + 5]) <= LOOP.sameH;
+}
+
+// The same object, for two boxes given as [x0, y0, z0, x1, y1, z1].
+export function sameObject(a, b) {
+  const B = new Float64Array(12);
+  for (let i = 0; i < 6; i++) { B[i] = a[i]; B[6 + i] = b[i]; }
+  return sameBoxAt(B, 0, 1);
+}
+
+function loopAnchored(g, i) {
+  for (let j = 0; j < g.ancN; j++) if (g.anc[j] === i || sameBoxAt(g.B, g.anc[j], i)) return true;
+  return false;
+}
+
+function loopAddAnc(g, i) {
+  for (let j = 0; j < g.ancN; j++) if (g.anc[j] === i) return;
+  if (g.ancN < LOOP.maxBoxes) g.anc[g.ancN++] = i;
+  const top = g.B[i * 6 + 5];
+  if (g.ancN === 1 || top > g.ancTop) g.ancTop = top;
+}
+
+function loopSee(g, i) {
+  for (let j = 0; j < g.seenN; j++) if (g.seen[j] === i) return;
+  if (g.seenN < LOOP.seenMax) g.seen[g.seenN++] = i;
+}
+
+// This step's boxes over and under the quad (their footprints over its
+// point): over within LOOP.underM of their underside, under within
+// LOOP.overM of their top.
+function loopScan(g, s) {
+  const B = g.B, L = LOOP;
+  g.upN = 0; g.dnN = 0;
+  for (let i = 0; i < g.n; i++) {
+    const k = i * 6, x0 = B[k];
+    if (x0 !== x0) continue;
+    if (s.x < x0 || s.x > B[k + 3] || s.y < B[k + 1] || s.y > B[k + 4]) continue;
+    if (B[k + 2] > s.z) { if (B[k + 2] - s.z <= L.underM && g.upN < L.maxBoxes) g.up[g.upN++] = i; }
+    else if (B[k + 5] < s.z) { if (s.z - B[k + 5] <= L.overM && g.dnN < L.maxBoxes) g.dn[g.dnN++] = i; }
+  }
+}
+
+// The camera's elevation above the horizon (rad), at the page's tilt.
+function loopCamEl(s) {
+  const c = (s.camDeg || 0) * Math.PI / 180;
+  const z = s.fz * Math.cos(c) + s.uz * Math.sin(c);
+  return Math.asin(z > 1 ? 1 : z < -1 ? -1 : z);
+}
+
+// Is a point in the camera's frame (the page's tilt, vertical FOV, aspect)?
+function loopInFrame(s, px, py, pz) {
+  const c = (s.camDeg || 0) * Math.PI / 180, cc = Math.cos(c), sc = Math.sin(c);
+  const ax = s.fx * cc + s.ux * sc, ay = s.fy * cc + s.uy * sc, az = s.fz * cc + s.uz * sc;
+  const ux = s.ux * cc - s.fx * sc, uy = s.uy * cc - s.fy * sc, uz = s.uz * cc - s.fz * sc;
+  const rx = ay * uz - az * uy, ry = az * ux - ax * uz, rz = ax * uy - ay * ux;
+  const dx = px - s.x, dy = py - s.y, dz = pz - s.z;
+  const zc = dx * ax + dy * ay + dz * az;
+  if (!(zc > 1e-6)) return false;
+  const tv = Math.tan((s.vfov > 0 ? s.vfov : 90) * Math.PI / 360);
+  const th = tv * (s.aspect > 0 ? s.aspect : 16 / 9);
+  return Math.abs((dx * ux + dy * uy + dz * uz) / zc) <= tv && Math.abs((dx * rx + dy * ry + dz * rz) / zc) <= th;
+}
+
+// The object in the frame: the nearest U1 box's nearest point or centre.
+function loopObjInView(g, s) {
+  const B = g.B;
+  let best = -1, bd = Infinity;
+  for (let j = 0; j < g.ancN; j++) {
+    const k = g.anc[j] * 6;
+    const qx = s.x < B[k] ? B[k] : s.x > B[k + 3] ? B[k + 3] : s.x;
+    const qy = s.y < B[k + 1] ? B[k + 1] : s.y > B[k + 4] ? B[k + 4] : s.y;
+    const qz = s.z < B[k + 2] ? B[k + 2] : s.z > B[k + 5] ? B[k + 5] : s.z;
+    const dd = (qx - s.x) * (qx - s.x) + (qy - s.y) * (qy - s.y) + (qz - s.z) * (qz - s.z);
+    if (dd < bd) { bd = dd; best = k; }
+  }
+  if (best < 0) return false;
+  const k = best;
+  const qx = s.x < B[k] ? B[k] : s.x > B[k + 3] ? B[k + 3] : s.x;
+  const qy = s.y < B[k + 1] ? B[k + 1] : s.y > B[k + 4] ? B[k + 4] : s.y;
+  const qz = s.z < B[k + 2] ? B[k + 2] : s.z > B[k + 5] ? B[k + 5] : s.z;
+  return loopInFrame(s, qx, qy, qz)
+    || loopInFrame(s, (B[k] + B[k + 3]) / 2, (B[k + 1] + B[k + 4]) / 2, (B[k + 2] + B[k + 5]) / 2);
+}
+
+// The loop's sums from this step (the step it is still under the object).
+function loopZero(g, s) {
+  g.t1 = s.t; g.z1 = s.z; g.zTop = s.z;
+  g.P = 0; g.R = 0; g.Y = 0; g.yawV = 0; g.upMin = s.uz; g.pMin = 0;
+  for (let w = 0; w < 2; w++) { g.twT[w] = -1; g.twLow[w] = 0; g.twLock[w] = 0; g.twPMin[w] = 0; g.twBack[w] = 0; g.twE[w] = 0; g.twFrom[w] = 0; }
+  g.rest = 0;
+  g.pH = 0; g.pN = 0;
+  g.pull = 0; g.pushT = -1; g.pushDeg = 0; g.glideT = 0; g.glideN = 0; g.viewN = 0;
+}
+
+// A loop from this step's boxes over the quad (those of the same object as
+// the last loop's, when it goes on from that one's U2: chainFrom).
+function loopBegin(g, s, chainFrom) {
+  const keep = [];
+  for (let k = 0; k < g.upN; k++) if (!chainFrom || loopAnchored(g, g.up[k])) keep.push(g.up[k]);
+  g.on = 1; g.run = 1; g.over = 0; g.tO = 0; g.ancN = 0; g.chainFrom = chainFrom || 0;
+  if (!chainFrom) { g.seenN = 0; g.tFrom = s.t; }
+  g.tRun = s.t;
+  for (let k = 0; k < keep.length; k++) loopAddAnc(g, keep[k]);
+  loopZero(g, s);
+}
+
+function r3l(x) { return Math.round(x * 1000) / 1000; }
+
+// A verdict: result (an id, or null for a loop that came to nothing), why,
+// and the numbers it was judged by. A call goes in the queue, due at due.
+function loopVerdict(g, result, why, s, m, due) {
+  const D = 180 / Math.PI, B = g.B;
+  g.seq++;
+  const v = {
+    seq: g.seq, result: result || null, why: why || null,
+    tFrom: r3l(g.tFrom), tRun: r3l(g.tRun), t1: r3l(g.t1), tO: g.over ? r3l(g.tO) : null, t2: r3l(s.t),
+    z1: r3l(g.z1), zTop: r3l(g.zTop), z2: r3l(s.z),
+    obj: [], boxes: [],
+    upMin: r3l(g.upMin), yawVDeg: Math.round(g.yawV * D), pitchDeg: Math.round(g.P * D), rollDeg: Math.round(g.R * D),
+    loops: 0, chainFrom: g.chainFrom,
+  };
+  for (let j = 0; j < g.ancN; j++) v.obj.push(g.anc[j]);
+  for (let j = 0; j < g.seenN; j++) {
+    const k = g.seen[j] * 6;
+    v.boxes.push([g.seen[j], r3l(B[k]), r3l(B[k + 1]), r3l(B[k + 2]), r3l(B[k + 3]), r3l(B[k + 4]), r3l(B[k + 5])]);
+  }
+  if (m) for (const key in m) v[key] = m[key];
+  g.lastV = v;
+  g.out.push(v);
+  if (g.out.length > LG_OUT) g.out.shift();
+  if (result) g.queue.push({ v, due: due == null ? s.t : due });
+  return v;
+}
+
+// The Powerloop waiting for the next loop: called now (its loops so far).
+function loopFlush(g, s) {
+  const p = g.pend;
+  if (!p) return;
+  g.pend = null;
+  const v = p.v;
+  v.loops = p.loops;
+  if (p.loops > 1) v.why = p.loops + ' loops round the same object; ' + v.why;
+  g.queue.push({ v, due: s.t });
+}
+
+// U2: the loop's verdict.
+function loopJudge(g, s, vd) {
+  const L = LOOP, D = 180 / Math.PI;
+  const inv = g.upMin <= L.inv;
+  const hd = Math.abs(g.yawV);
+  const m = {};
+  if (inv && hd >= L.hdLo) {
+    // The body's yaw the way the yaw made upside down went (yawV is the
+    // yaw times up-Z, negative up-Z: the other sign).
+    const w = g.yawV < 0 ? 0 : 1;
+    const half = (s.vfov > 0 ? s.vfov : 90) / 2;
+    const has = g.twT[w] >= 0;
+    const eDeg = has ? g.twE[w] * D : NaN;
+    const back = has ? g.twBack[w] : -g.pMin, fwd = has ? g.P - g.twPMin[w] : 0;
+    m.twistT = has ? r3l(g.twT[w]) : null; m.camElDeg = has ? Math.round(eDeg) : null; m.halfFovDeg = Math.round(half * 10) / 10;
+    m.backDeg = Math.round(back * D); m.fwdDeg = Math.round(fwd * D); m.upZ2 = r3l(s.uz); m.dot2 = vd === vd ? r3l(vd) : null;
+    let why = '';
+    if (hd > L.hdHi) why = 'yawed ' + Math.round(hd * D) + '° upside down (over ' + Math.round(L.hdHi * D) + ')';
+    else if (!has) why = 'no start to the yaw';
+    else if (!(eDeg <= half + 1e-9)) why = 'the horizon not in view before the yaw: the camera ' + Math.round(eDeg) + '° up (half the FOV ' + Math.round(half) + ')';
+    else if (!(back >= L.barBack)) why = 'pulled back ' + Math.round(back * D) + '° before the yaw (needs ' + Math.round(L.barBack * D) + ')';
+    else if (!(fwd >= L.barFwd)) why = 'forward ' + Math.round(fwd * D) + '° after the yaw (needs ' + Math.round(L.barFwd * D) + ')';
+    else if (!(s.uz >= L.upright)) why = 'not upright back under it (up-Z ' + s.uz.toFixed(2) + ')';
+    else if (!(vd <= L.backDot)) why = 'not flying back under it against the nose (' + (vd === vd ? vd.toFixed(2) : 'slow') + ')';
+    if (g.pend) loopFlush(g, s);
+    loopVerdict(g, why ? null : 'barani', why || 'under, over upside down, ' + Math.round(hd * D) + '° of yaw upside down, the horizon in view (camera ' + Math.round(eDeg) + '°), back under', s, m);
+    return;
+  }
+  if (inv) {
+    m.backDeg = Math.round(-g.P * D);
+    let why = '';
+    if (hd >= L.loopYaw) why = 'yawed ' + Math.round(hd * D) + '° upside down (a loop: under ' + Math.round(L.loopYaw * D) + ', a Barani: ' + Math.round(L.hdLo * D) + ' or more)';
+    else if (!(-g.P >= L.loopBack)) why = 'back pitch ' + Math.round(-g.P * D) + '° (needs ' + Math.round(L.loopBack * D) + ')';
+    else if (!(Math.abs(g.R) <= L.loopRoll)) why = 'rolled ' + Math.round(Math.abs(g.R) * D) + '° (at most ' + Math.round(L.loopRoll * D) + ')';
+    if (why) {
+      if (g.pend) loopFlush(g, s);
+      loopVerdict(g, null, why, s, m);
+      return;
+    }
+    // A loop on from the last one's U2 adds a loop; else a new Powerloop.
+    const chained = g.pend && g.chainFrom && g.chainFrom === g.pend.seq;
+    if (g.pend && !chained) loopFlush(g, s);
+    const v = loopVerdict(g, null, 'a loop round the object, upside down over it', s, m);
+    v.result = 'powerloop';
+    if (chained) { g.pend.loops++; g.pend.v = v; g.pend.seq = v.seq; g.pend.tU2 = s.t; v.loops = g.pend.loops; }
+    else { g.pend = { v, loops: 1, seq: v.seq, tU2: s.t }; v.loops = 1; }
+    return;
+  }
+  if (g.pend) loopFlush(g, s);
+  m.pullDeg = Math.round(g.pull * D); m.pushDeg = Math.round(g.pushDeg * D); m.pushT = g.pushT >= 0 ? r3l(g.pushT) : null;
+  m.glideS = r3l(g.glideT); m.objView = g.glideN ? r3l(g.viewN / g.glideN) : null;
+  let why = '';
+  if (g.pushT < 0) why = 'no fast forward pitch over the object (' + Math.round(L.mavPush * D) + '° inside ' + L.mavPushS + ' s)';
+  else if (!(g.pull >= L.mavPull)) why = 'pulled back ' + Math.round(g.pull * D) + '° (needs ' + Math.round(L.mavPull * D) + ')';
+  else if (!(g.glideT >= L.mavGlide)) why = 'glided down backwards ' + g.glideT.toFixed(2) + ' s (needs ' + L.mavGlide + ')';
+  loopVerdict(g, why ? null : 'maverick', why || 'under, over it upright, a fast push at the top, the glide back down, back under', s, m, s.t + L.mavWaitS);
+}
+
+// Start over (a crash, a respawn, a disarm, a jump, new colliders: why). A
+// loop that got over its object leaves a verdict, a miss, why. A Powerloop
+// waiting for its next loop, and calls not yet due, are dropped.
+export function loopReset(g, why) {
+  if (g.on && !g.run && g.over && why) loopVerdict(g, null, why, g.inp, null);
+  g.queue.length = 0;
+  g.pend = null;
+  g.on = 0; g.run = 0; g.ancN = 0; g.seenN = 0;
+  g.have = 0; g.tPrev = -1;
+}
+
+// A trick held for a loop half flown: pulled back LOOP.holdPull since U1 or
+// over the object, a Powerloop waiting for its next loop, or a call due.
+export function loopHolds(g) {
+  return !!g.pend || g.queue.length > 0 || (g.on && !g.run && (g.over || -g.pMin >= LOOP.holdPull));
+}
+
+// A call taken this step (g.last) put back: another call closed the segment.
+export function loopUnpop(g) {
+  if (g.last) g.queue.unshift({ v: g.last, due: g.inp.t });
+}
+
+// One step of the loop gate on its inputs (g.inp; sim-core frame, m).
+// Returns 1 when a call is due this step (g.last: its verdict), else 0.
+export function loopStep(g) {
+  const s = g.inp, L = LOOP;
+  if (s.fresh) { g.on = 0; g.run = 0; g.pend = null; g.queue.length = 0; g.tPrev = -1; }
+  const dt = g.tPrev >= 0 ? s.t - g.tPrev : 0;
+  g.tPrev = s.t;
+  loopScan(g, s);
+  const spd = Math.hypot(s.vx, s.vy, s.vz);
+  const vd = spd > 0.85 ? (s.vx * s.fx + s.vy * s.fy + s.vz * s.fz) / spd : NaN;
+  if (s.contact) {
+    // A touch voids the loop; a Powerloop already flown is called now.
+    if (g.on && !g.run && g.over) loopVerdict(g, null, 'a touch', s, null);
+    g.on = 0; g.run = 0;
+    if (g.pend) loopFlush(g, s);
+  } else {
+    if (g.on) {
+      for (let k = 0; k < g.upN; k++) loopSee(g, g.up[k]);
+      for (let k = 0; k < g.dnN; k++) loopSee(g, g.dn[k]);
+    }
+    let anc = 0;
+    if (g.on) for (let k = 0; k < g.upN && !anc; k++) if (loopAnchored(g, g.up[k])) anc = 1;
+    const upright = s.uz >= L.level && spd >= L.minSpd;
+    if (g.on && g.run) {
+      if (anc) {
+        for (let k = 0; k < g.upN; k++) if (loopAnchored(g, g.up[k])) loopAddAnc(g, g.up[k]);
+        loopZero(g, s);
+      } else g.run = 0;
+    } else if (g.on && g.over && anc && s.z <= g.zTop - L.drop && s.t - g.t1 <= L.maxS && spd >= L.minSpd) {
+      loopJudge(g, s, vd);
+      loopBegin(g, s, g.lastV ? g.lastV.seq : 0);
+    } else if (g.on && !g.over && anc) {
+      // Back under the same object before climbing over it: from here.
+      g.run = 1;
+      for (let k = 0; k < g.upN; k++) if (loopAnchored(g, g.up[k])) loopAddAnc(g, g.up[k]);
+      loopZero(g, s);
+    } else if (g.upN && upright && (!g.on || (!g.over && !anc))) {
+      loopBegin(g, s, 0);
+      for (let k = 0; k < g.upN; k++) loopSee(g, g.up[k]);
+    }
+    if (g.on && !g.run) {
+      g.P += s.dp; g.R += s.dr; g.Y += s.dy;
+      if (s.uz < HAM_UPZ) g.yawV += s.uz * s.dy;
+      if (s.uz < g.upMin) g.upMin = s.uz;
+      if (g.P < g.pMin) g.pMin = g.P;
+      if (s.z > g.zTop) g.zTop = s.z;
+      if (!g.over) for (let k = 0; k < g.dnN; k++) if (loopAnchored(g, g.dn[k])) { g.over = 1; g.tO = s.t; break; }
+      // The yaw's start, each way: LOOP.twist0 from its last low (a pause
+      // starts it over), locked once it has turned LOOP.twistLock.
+      if (dt > 0 && Math.abs(s.dy) < L.restRate * dt) g.rest += dt; else g.rest = 0;
+      const e = loopCamEl(s);
+      for (let w = 0; w < 2; w++) {
+        const y = w ? -g.Y : g.Y;
+        if (g.twLock[w]) { if (g.P < g.twPMin[w]) g.twPMin[w] = g.P; continue; }
+        if (y < g.twLow[w] || g.rest >= L.restS) { g.twLow[w] = y; g.twT[w] = -1; }
+        else if (g.twT[w] < 0 && y - g.twLow[w] >= L.twist0) {
+          g.twT[w] = s.t; g.twE[w] = e; g.twBack[w] = -g.pMin; g.twPMin[w] = g.P; g.twFrom[w] = g.twLow[w];
+        }
+        if (g.twT[w] >= 0) {
+          if (g.P < g.twPMin[w]) g.twPMin[w] = g.P;
+          if (y - g.twFrom[w] >= L.twistLock) g.twLock[w] = 1;
+        }
+      }
+      // The Maverick: the push over the object's top (the pitch's rise
+      // inside LOOP.mavPushS), then the glide down backwards.
+      const h = g.pH;
+      g.pT[h] = s.t; g.pP[h] = g.P; g.pH = (h + 1) % LG_PUSH; if (g.pN < LG_PUSH) g.pN++;
+      if (s.z > g.ancTop && (g.pushT < 0 || s.t - g.pushT <= L.mavPushS)) {
+        let mn = g.P;
+        for (let k = 0; k < g.pN; k++) {
+          const j = (g.pH - 1 - k + LG_PUSH) % LG_PUSH;
+          if (s.t - g.pT[j] > L.mavPushS + 1e-9) break;
+          if (g.pP[j] < mn) mn = g.pP[j];
+        }
+        const push = g.P - mn;
+        if (g.pushT < 0 && push >= L.mavPush) { g.pushT = s.t; g.pull = -g.pMin; }
+        if (g.pushT >= 0 && push > g.pushDeg) g.pushDeg = push;
+      }
+      if (g.pushT >= 0 && s.vz < 0) {
+        // The nose's heading across the floor (the body unrolled: the nose
+        // levelled about the body's side axis).
+        const c = Math.sqrt(Math.max(0, 1 - s.fz * s.fz));
+        const hx = s.fx * c - s.ux * s.fz, hy = s.fy * c - s.uy * s.fz;
+        const hn = Math.hypot(hx, hy), vh = Math.hypot(s.vx, s.vy);
+        if (hn > 1e-6 && vh >= 0.5 && (s.vx * hx + s.vy * hy) / (hn * vh) <= L.glideDot) {
+          g.glideT += dt; g.glideN++;
+          if (loopObjInView(g, s)) g.viewN++;
+        }
+      }
+      if (s.t - g.t1 > L.maxS) {
+        if (g.over) loopVerdict(g, null, 'not back under it inside ' + L.maxS + ' s', s, null);
+        g.on = 0;
+      }
+    }
+    // The Powerloop waiting: called LOOP.chainS after its U2 unless the next
+    // loop round the object is over it upside down by then.
+    if (g.pend && !(g.on && g.chainFrom === g.pend.seq && (s.t - g.pend.tU2 <= L.chainS || (g.over && g.upMin <= L.inv)))) loopFlush(g, s);
+  }
+  if (g.queue.length && s.t >= g.queue[0].due - 1e-9) {
+    g.last = g.queue.shift().v;
+    g.last.calledT = r3l(s.t);
+    return 1;
+  }
+  return 0;
+}
+
 export function makeDetector() {
   return {
     dlt: makeDlt(),
@@ -2239,6 +2580,13 @@ export function makeDetector() {
     // A trick held for a half-flown Cradle (cradleHolds): its id and the
     // last-trick fields it set; and the one the last Cradle replaced.
     held: null, lastCradleRepl: '',
+    // The loop gate (Barani, Powerloop, Maverick round an object: makeLoop),
+    // the call that closed the last segment (its seq; 0 when none did), the
+    // trick its call replaced, and the authored gaps passed lately (index,
+    // clock; the Maverick's way back out).
+    lg: makeLoop(),
+    lastLoopSeg: 0, lastLoopRepl: '',
+    gapLog: [],
     // The open segment's attitude history (t, pitch, roll, yaw per row) and
     // the scratch the rotation windows use.
     hist: new Float64Array(HIST_CAP * HIST_W),
@@ -2281,7 +2629,6 @@ export function makeDetector() {
     orb: { r: 0, fit: 9, sweep: 0, turn: 0, spd: 0, cx: 0, cz: 0, kr: 0 },
     orb2: { r: 0, fit: 9, sweep: 0, turn: 0, spd: 0, cx: 0, cz: 0, kr: 0 },
     wid: { a: 0, b: 0 },
-    bar: { p: 0, r: 0, via: 0 },
     // The nose beside each history row (BH_W).
     bh: new Float64Array(HIST_CAP * BH_W),
     // An orbit scores once: when the last orbit segment ended (clock), and
@@ -2373,6 +2720,9 @@ export function resetDetector(d, sample) {
   d.orbitEnd = -1e9; d.orbitSg = 0; d.lastCont = 0;
   if (d.cg) cradleReset(d.cg, 'reset');
   d.lastCradleSeg = 0;
+  if (d.lg) loopReset(d.lg, 'reset');
+  d.lastLoopSeg = 0;
+  d.gapLog = [];
   d.held = null;
   if (sample) {
     d.qx = sample.qx || 0; d.qy = sample.qy || 0; d.qz = sample.qz || 0; d.qw = sample.qw == null ? 1 : sample.qw;
@@ -2755,16 +3105,12 @@ export function windowFeat(d) {
     f.orbit2Tail = o2.kr > 0 ? tailShare(d.hist, d.bh, a2, b2) : 0;
     f.orbit2Pole = o2.kr > 0 ? poleNear(d.cols, o2.cx * ws, o2.cz * ws, ws) : 0;
   }
-  // Barani: only worth the scan when a flip's worth of pitch path is there.
-  if ((f.pathP || 0) >= BARANI_P - BARANI_FADE) {
-    const bw = baraniWithin(d.hist, d.histN, d.bar, HIST_W, d.bh);
-    f.barP = bw.p; f.barR = bw.r; f.barVia = bw.via;
-  } else { f.barP = 0; f.barR = 0; f.barVia = 0; }
   return f;
 }
 
 function finishManeuver(d) {
   d.lastCradleSeg = 0;
+  d.lastLoopSeg = 0;
   windowFeat(d);
   d.lastPhases = phaseFeat(d);
   copyFeat(d.feat, d.lastFeat);
@@ -2815,9 +3161,9 @@ function finishManeuver(d) {
   d.lastWhy = why;
   d.lastId = id;
   d.lastDir = (d.feat.flipUp || 0) >= (d.feat.flipDn || 0) ? 1 : -1;
-  d.lastLoops = id === 'powerloop' ? Math.max(1, loopCount(d.feat.loopTot || 0)) : 0;
+  d.lastLoops = 0;
   d.lastPole = (id === 'trippy' && d.feat.orbitPole) || (id === 'orbit' && d.feat.orbit2Pole) ? 1 : 0;
-  d.lastGapBack = id === 'maverick' && (d.lastMerge ? d.lastMerge.gapBack : d.feat.gapBack) ? 1 : 0;
+  d.lastGapBack = 0;
   d.lastSloppy = (d.feat.seg && LOOP_IDS[id]) ? 1 : 0;
   d.lastBump = d.feat.bump ? 1 : 0;
   try { d.recJson = encodeRecJson(d); } catch (e) { d.recJson = ''; }
@@ -2845,6 +3191,7 @@ function finishManeuver(d) {
 function finishCradle(d) {
   const v = d.cg.last;
   d.lastCradleSeg = 0;
+  d.lastLoopSeg = 0;
   if (d.live) {
     windowFeat(d);
     d.lastPhases = phaseFeat(d);
@@ -2876,6 +3223,74 @@ function finishCradle(d) {
   d.gapOn = 0;
   d.proxT = 0;
   return 'cradle';
+}
+
+// The loop gate's call (loopStep: a Barani, a Powerloop or a Maverick). An
+// open segment that began before the pass back under (U2) closes here as the
+// call (its rotation was the loop's); one begun after it (a call that waited
+// for a Powerloop's next loop or a Maverick's gap) flies on, its own. The
+// chain of unscored segments before it ends with it. The verdict notes the
+// segment it closed (closed: its seq, 0 none). A trick held for
+// the loop is replaced by it, but a Half Mavvy, which holds a Maverick's
+// loop and more: it stands, and the Maverick is not called.
+function finishLoop(d) {
+  const v = d.lg.last;
+  d.lastCradleSeg = 0;
+  d.lastLoopSeg = 0;
+  if (d.live && (!v || d.clock - d.feat.dur < v.t2 + 1e-6)) {
+    windowFeat(d);
+    d.lastPhases = phaseFeat(d);
+    copyFeat(d.feat, d.lastFeat);
+    d.live = 0;
+    d.quiet = 0;
+    d.lastLoopSeg = v ? v.seq : 1;
+  }
+  d.lastMerge = null;
+  d.lastCont = 0;
+  const h = d.held;
+  if (h && h.id === 'halfmavvy' && v && v.result === 'maverick') {
+    d.held = null;
+    d.lastId = h.id; d.lastWhy = h.why + '\n  the Maverick inside it (the loop gate) not called';
+    d.lastDir = h.dir; d.lastLoops = h.loops; d.lastPole = h.pole; d.lastGapBack = h.gapBack;
+    d.lastSloppy = h.sloppy; d.lastBump = h.bump; d.lastLoopRepl = '';
+  } else {
+    const id = v ? v.result : 'powerloop';
+    const def = BY_ID[id];
+    d.lastId = id;
+    d.lastWhy = def.name + '  ' + def.tier + '  ' + def.points + (v ? '\n  ' + v.why : '');
+    d.lastDir = id === 'powerloop' ? -1 : 1;
+    d.lastLoops = id === 'powerloop' ? Math.max(1, (v && v.loops) || 1) : 0;
+    d.lastPole = 0; d.lastSloppy = 0; d.lastBump = 0;
+    d.lastGapBack = id === 'maverick' && v ? loopGapBack(d, v) : 0;
+    d.lastLoopRepl = h ? h.id : '';
+    d.held = null;
+  }
+  if (v) v.closed = d.lastLoopSeg ? v.seq : 0;
+  if (d.lastLoopSeg) { try { d.recJson = encodeRecJson(d); } catch (e) { d.recJson = ''; } }
+  if (d.lastLoopSeg) resetFeat(d.feat);
+  d.chainOn = 0;
+  d.lockout = LOCKOUT_S;
+  d.hangGot = 1;
+  d.hangT = 0;
+  d.diveOn = 0;
+  d.diveCd = Math.max(d.diveCd, 2.4);
+  d.gapOn = 0;
+  d.proxT = 0;
+  return d.lastId;
+}
+
+// A Maverick back out through the authored gap it came in by: that gap
+// passed at most MAV_GAP_S before the loop began (or in it, before it
+// climbed over the object) and again after it climbed over (the gate's
+// clock; the call waits LOOP.mavWaitS for the second).
+function loopGapBack(d, v) {
+  const L = d.gapLog;
+  for (let i = 0; i < L.length; i++) {
+    const a = L[i];
+    if (a.t < v.t1 - MAV_GAP_S || a.t > v.tO) continue;
+    for (let j = i + 1; j < L.length; j++) if (L[j].i === a.i && L[j].t >= v.tO) return 1;
+  }
+  return 0;
 }
 
 // Past MANEUVER_MAX_S, does the segment's rotation go on? What turns is looked
@@ -2985,6 +3400,30 @@ export function stepDetector(d, sample, dt) {
     if (armed) cradle = cradleStep(g);
     else { cradleReset(g, 'disarm'); d.held = null; }
   }
+  // The loop gate: the boxes, and this step on them (loopStep), on the same
+  // frame and inputs as the Cradle's, with the body's up axis, this step's
+  // turns and the camera (the page's tilt, vertical FOV and aspect). Its
+  // call closes an open segment as the Barani, Powerloop or Maverick.
+  let loopCall = 0;
+  {
+    const g = d.lg, C = d.cg.inp;
+    loopBoxes(g, sample.colliders || null, ws);
+    const I = g.inp;
+    if (g.have && Math.hypot(C.x - g.px, C.y - g.py, C.z - g.pz) > 2) loopReset(g, 'jump');
+    I.fresh = g.have ? 0 : 1;
+    I.t = C.t; I.x = C.x; I.y = C.y; I.z = C.z; I.vx = C.vx; I.vy = C.vy; I.vz = C.vz;
+    I.fx = C.fx; I.fy = C.fy; I.fz = C.fz;
+    I.ux = 2 * (sx * sz + sw * sy); I.uy = 2 * (sy * sz - sw * sx); I.uz = upZ;
+    I.dp = dp; I.dr = dr; I.dy = dy;
+    I.contact = sample.contactFlags != null ? ((sample.contactFlags & 3) ? 1 : 0) : C.contact;
+    I.camDeg = sample.camDeg != null ? sample.camDeg : 30;
+    I.vfov = sample.vfov > 0 ? sample.vfov : 90;
+    I.aspect = sample.aspect > 0 ? sample.aspect : 16 / 9;
+    g.px = C.x; g.py = C.y; g.pz = C.z; g.have = 1;
+    if (armed) loopCall = loopStep(g);
+    else loopReset(g, 'disarm');
+  }
+  let loopUsed = 0;
 
   let hit = null;
   // The altitude ring: this step's, at the clock before it advances.
@@ -3019,24 +3458,30 @@ export function stepDetector(d, sample, dt) {
       && (d.feat.dur >= MANEUVER_SUSTAIN_S || !sustained(d));
     const settled = d.quiet >= quietNeed && d.feat.dur >= 0.22;
     if (cradle) hit = finishCradle(d);
+    else if (loopCall) { hit = finishLoop(d); loopUsed = 1; }
     else if (settled || timedOut || (contact && d.feat.dur > 0.2)) {
       hit = finishManeuver(d);
     }
   }
   if (cradle && !hit) hit = finishCradle(d);
-  // A trick finished while a Cradle is half flown waits for it (cradleHolds):
-  // the Cradle replaces it (finishCradle), or it is called once the Cradle
-  // comes to nothing. One at a time; a disarm drops it.
-  if (hit && hit !== 'cradle' && !d.held && cradleHolds(d.cg)) {
+  else if (loopCall && !hit) { hit = finishLoop(d); loopUsed = 1; }
+  // Both on one step: the loop's call waits for the next.
+  if (loopCall && !loopUsed) loopUnpop(d.lg);
+  // A trick finished while a Cradle or a loop is half flown waits for it
+  // (cradleHolds, loopHolds): the call replaces it (finishCradle,
+  // finishLoop), or it is called once neither is half flown. One at a
+  // time; a disarm drops it.
+  const holding = cradleHolds(d.cg) || loopHolds(d.lg);
+  if (hit && hit !== 'cradle' && !loopUsed && !d.held && holding) {
     d.held = {
       id: hit, why: d.lastWhy, dir: d.lastDir, loops: d.lastLoops, pole: d.lastPole, gapBack: d.lastGapBack,
       sloppy: d.lastSloppy, bump: d.lastBump, merge: d.lastMerge, cont: d.lastCont, at: d.clock,
     };
     hit = null;
-  } else if (!hit && d.held && !cradleHolds(d.cg)) {
+  } else if (!hit && d.held && !holding) {
     const h = d.held;
     d.held = null;
-    d.lastId = h.id; d.lastWhy = h.why + '\n  held ' + (d.clock - h.at).toFixed(2) + ' s for a Cradle that came to nothing';
+    d.lastId = h.id; d.lastWhy = h.why + '\n  held ' + (d.clock - h.at).toFixed(2) + ' s for a Cradle or a loop that came to nothing';
     d.lastDir = h.dir; d.lastLoops = h.loops; d.lastPole = h.pole; d.lastGapBack = h.gapBack;
     d.lastSloppy = h.sloppy; d.lastBump = h.bump; d.lastMerge = h.merge; d.lastCont = h.cont;
     hit = h.id;
@@ -3070,6 +3515,11 @@ export function stepDetector(d, sample, dt) {
   // disarm on that step is returned now; a scored gap used to hide it.)
   d.clock += step;
   const passed = authoredGapStep(d, sample.gaps, d.gx, d.gy, d.gz, wx, wy, wz);
+  // The authored gaps passed lately, on the gate's clock (the step's).
+  if (passed && d.gapPassI >= 0) {
+    d.gapLog.push({ i: d.gapPassI, t: d.clock - step });
+    if (d.gapLog.length > 8) d.gapLog.shift();
+  }
   let inAuthored = 0;
   if (d.gapFace) for (let i = 0; i < d.gapFace.length; i++) if (d.gapFace[i] !== -1) { inAuthored = 1; break; }
   if (!inAuthored) inAuthored = nearAuthored(sample.gaps, wx, wy, wz, GAP_NEAR_M * ws);
@@ -3531,6 +3981,7 @@ export function createTricks(opts) {
       // A Cradle half flown (one pass made) does not survive a crash, nor a
       // trick held for it.
       cradleReset(det.cg, 'crash');
+      loopReset(det.lg, 'crash');
       det.held = null;
       return bank('crash');
     } catch (e) { return 0; }

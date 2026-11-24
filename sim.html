@@ -1383,7 +1383,7 @@ import {
 } from "./sim-coach.js?v=e76871a4c16c";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
-} from "./sim-tricks.js?v=d7c9767ee9c7";
+} from "./sim-tricks.js?v=bb7876acedc2";
 import {
   DAILY_KEY, DAILY_LINE_KEY, BOARD_KEY, SKIN_KEY, SHARE_PREFIX as QM2_PREFIX, DUEL_KIND,
   utcDateId, utcWeekId, dailyTrackFor, weeklyTrackFor, trackFromRetentionId,
@@ -10071,6 +10071,12 @@ function onTrickSample(){
     trickSample.ws=WS;
     trickSample.gaps=trickGaps;
     trickSample.frameW=trickFrameW();
+    // The FPV camera (the loop gate's horizon check, sim-tricks.js LOOP):
+    // its tilt, vertical FOV and aspect, whatever view is drawn.
+    trickSample.camDeg=CFG.camDeg;trickSample.vfov=fpvFov();trickSample.aspect=camera.aspect;
+    // The core's own contact (the bf core's: the floor, a box; null on the
+    // js core): the loop gate's touch.
+    trickSample.contactFlags=s.contactFlags;
     // A gap in the samples (the first, a pause, a respawn, a coach drill):
     // start the detector over from this pose.
     if(!(dt>0&&dt<=0.05)){tricks.resetDetector(trickSample);dt=SAMPLE_US/1e6;}
@@ -10952,7 +10958,7 @@ window._tricks=tricks;
 // the file is never fetched.
 try{
   if(new URLSearchParams(location.search).get('tricks')==='debug'){
-    import('./sim-tricks-debug.js?v=08a7764e87bc').then((m)=>{
+    import('./sim-tricks-debug.js?v=063f2e230e14').then((m)=>{
       trickDebug=m.createTrickDebug({document,tricks,now:()=>performance.now()*0.001,info:()=>({core:cs.kind,map:currentMap,camDeg:CFG.camDeg})});
       window._trickDebug=trickDebug;
       trickDebug.paint();

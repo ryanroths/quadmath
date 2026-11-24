@@ -12,11 +12,11 @@ import { dirname, join } from 'node:path';
 import {
   classifyFeat, makeFeat, makeDetector, stepDetector, resetDetector, createTricks,
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, featView, matchSpec, PHASE_SPECS,
-  CRADLE, makeCradleGate, cradleStep, cradleReset,
+  CRADLE, makeCradleGate, cradleStep, cradleReset, makeLoopGate, loopStep, LOOP,
 } from '../sim-tricks.js';
 import {
   GATES, CLASS_IDS, SPEC, OVERRIDES, DIVE, DIVE_FALLBACK, GAP, SEG, FOCUS,
-  explainFeat, createTrickObserver, createTrickDebug, gateText, SIDE, CRADLE_LOG,
+  explainFeat, createTrickObserver, createTrickDebug, gateText, SIDE, CRADLE_LOG, LOOP_LOG,
 } from '../sim-tricks-debug.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -195,8 +195,8 @@ function randFeat(r) {
   f.postMin = f.altMax - u(0, Math.max(0.01, f.altMax - f.altMin));
   if (r() < 0.3) f.postMin = f.alt0 + u(-0.5, 2.5);
   f.sweep = (r() < 0.5 ? -1 : 1) * near(4.712);
-  // Trippy and Barani: the turn about the vertical, the orbit, the Barani
-  // window and the end's up-Z, near their thresholds often.
+  // Trippy: the turn about the vertical and the orbit, near their
+  // thresholds often; the end's up-Z.
   f.yawUp = r() < 0.5 ? near(6.2832) : u(0, 4); f.yawDn = r() < 0.5 ? near(6.2832) : u(0, 4);
   f.yawUpT = u(0.5, 2.4); f.yawDnT = u(0.5, 2.4);
   f.orbitR = r() < 0.5 ? u(0.1, 3) : u(0.3, 2.5); f.orbitSweep = near(6.2832); f.orbitTurn = u(0.6, 1); f.orbitSpd = u(0.5, 3);
@@ -207,7 +207,7 @@ function randFeat(r) {
   f.slowUpT = u(0.5, 4.4); f.slowDnT = u(0.5, 4.4);
   f.orbit2R = r() < 0.5 ? u(0.1, 3) : u(0.3, 2.5); f.orbit2Sweep = near(6.2832); f.orbit2Turn = u(0.6, 1); f.orbit2Spd = u(0.5, 3);
   f.orbit2Tail = r() < 0.5 ? u(0, 0.5) : u(0, 1);
-  f.barP = r() < 0.5 ? near(5.236) : u(0, 4); f.barR = u(1.5, 4.5); f.barVia = r() < 0.5 ? 1 : 0; f.upEnd = r() < 0.6 ? u(0.5, 1) : u(-1, 1);
+  f.upEnd = r() < 0.6 ? u(0.5, 1) : u(-1, 1);
   if (r() < 0.12) {
     // A yaw spin, upright or inverted: little pitch and roll, a full turn of
     // yaw in place (Yaw Spin, Trippy and Ham live here).
@@ -223,17 +223,15 @@ function randFeat(r) {
   // often; none when the segment never passed up-Z -0.5.
   f.invYawUp = f.upMin < -0.5 ? (r() < 0.5 ? near(5.236) : u(0, 3)) : 0;
   f.invYawDn = f.upMin < -0.5 && r() < 0.3 ? near(5.236) : 0;
-  // The phase matcher's scores: Flip, Powerloop and Split-S as the matcher
-  // scores what these features measured; the other tricks' phases are not
-  // in the features, so their scores are drawn (often 0, often 1, some
-  // between).
+  // The phase matcher's scores: Flip and Split-S as the matcher scores what
+  // these features measured; the other tricks' phases are not in the
+  // features, so their scores are drawn (often 0, often 1, some between).
   const v = featView(f);
   const one = (turn) => ({ ph: [{ turn, t: 0 }] });
   f.phFlip = matchSpec(PHASE_SPECS.flip, one(v.flipSpan), f, v);
-  f.phLoop = matchSpec(PHASE_SPECS.powerloop, one(v.loopSpan), f, v);
   f.phSplits = matchSpec(PHASE_SPECS.splits, { ph: [{ turn: v.absR, cross: 0, back: 0 }, { turn: -f.pitch, cross: 0, back: 0 }] }, f, v);
   const drawn = () => (r() < 0.7 ? 0 : r() < 0.6 ? 1 : u(0, 1));
-  f.phImmel = drawn(); f.phMav = drawn(); f.phMatty = drawn(); f.phHMatty = drawn(); f.phHMavvy = drawn();
+  f.phImmel = drawn(); f.phMatty = drawn(); f.phHMatty = drawn(); f.phHMavvy = drawn();
   return f;
 }
 
@@ -257,7 +255,7 @@ test('the copy picks what classifyFeat picks (id, best, second) on 150k random s
   }
   // Every candidate was in the top two often enough for its terms to count.
   for (const id of CLASS_IDS) assert.ok((seenTop[id] || 0) >= 30, id + ' in the top two only ' + (seenTop[id] || 0) + ' times');
-  for (const id of ['flip', 'roll', 'yawspin', 'juicyflick', 'snapback', 'powerloop', 'matty', 'splits', 'ham']) {
+  for (const id of ['flip', 'roll', 'yawspin', 'juicyflick', 'snapback', 'matty', 'splits', 'ham']) {
     assert.ok((seenId[id] || 0) >= 5, id + ' picked only ' + (seenId[id] || 0) + ' times');
   }
 });
@@ -363,9 +361,8 @@ test('observer: a flip is one maneuver record whose result is the detector\'s la
   assert.ok(m[0].saw.pitchDeg > 300);
   const flip = m[0].candidates.find((c) => c.id === 'flip');
   assert.equal(flip.verdict, 'fired');
-  const pl = m[0].candidates.find((c) => c.id === 'powerloop');
-  assert.equal(pl.verdict, 'missed');
-  assert.match(pl.reason, /loopRise|loopRet|loopSweep/);
+  // Barani, Powerloop and Maverick are the loop gate's, never a segment's.
+  assert.deepEqual(m[0].candidates.filter((c) => ['barani', 'powerloop', 'maverick'].includes(c.id)), []);
   JSON.parse(JSON.stringify(m[0]));
 });
 
@@ -458,7 +455,7 @@ function fakeDoc() {
   return doc;
 }
 
-test('createTrickDebug: overlay lists the ten candidates, then the gap passes (not a trick), and the console gets one JSON line per attempt', () => {
+test('createTrickDebug: overlay lists the eight candidates, the Cradle and loop gate lines, then the gap passes (not a trick), and the console gets one JSON line per attempt', () => {
   const doc = fakeDoc();
   const lines = [];
   const con = { info: (s) => lines.push(s), warn: () => {} };
@@ -498,10 +495,13 @@ test('createTrickDebug: overlay lists the ten candidates, then the gap passes (n
   assert.equal(dbg.logText().split('\n').length, json.length, 'one line per attempt');
   assert.deepEqual(dbg.logText().split('\n').map((l) => JSON.parse(l).seq), json.map((r) => r.seq));
   for (const id of FOCUS) {
-    const name = { flip: 'Flip', roll: 'Roll', powerloop: 'Powerloop', splits: 'Split-S', matty: 'Matty Flip', trippy: 'Trippy Spin', juicyflick: 'Juicy Flick', ham: 'Inverted yaw spin', barani: 'Barani', dive: 'Dive' }[id];
+    const name = { flip: 'Flip', roll: 'Roll', splits: 'Split-S', matty: 'Matty Flip', trippy: 'Trippy Spin', juicyflick: 'Juicy Flick', ham: 'Inverted yaw spin', dive: 'Dive' }[id];
     assert.ok(el.innerHTML.includes(name), 'overlay lists ' + name);
   }
-  assert.equal(FOCUS.length, 10);
+  assert.equal(FOCUS.length, 8);
+  // Barani, Powerloop and Maverick: the loop gate's line.
+  assert.ok(el.innerHTML.includes('Barani/Loop/Mav'), 'the loop gate line');
+  assert.ok(el.innerHTML.includes('Cradle'), 'the Cradle line');
   assert.equal(FOCUS.includes('gap'), false, 'a gap is not a candidate trick');
   assert.ok(el.innerHTML.includes('gap passes'), 'the gap passes line');
   assert.ok(el.innerHTML.includes('(not a trick)'));
@@ -606,29 +606,75 @@ test('observer: the camera terms (rec.cam) over the orbit, logged only', () => {
   assert.ok(simSrc.includes('info:()=>({core:cs.kind,map:currentMap,camDeg:CFG.camDeg})'), 'sim.html passes camDeg');
 });
 
-test('observer: the Barani probe (rec.barani) names the term that zeroed it', () => {
-  // A front flip with a half roll inside it, nose down (90 of pitch, the
-  // roll, 270 more: upright at the end): the probe's best stretch twists
-  // about 180 with the pitch either side.
-  const flip = (rollT) => run([
+// A loop round a bar (sim-core m: across the path in y, 0.3 m along it, its
+// underside 2.5 m up), kinematic, through sideRun: the circle of radius 2.5
+// centred 3.5 m up, flown in 64 straight pieces a half turn. Barani: under
+// the bar, the half loop back to the top, 180 deg of yaw upside down
+// drifting back, the Matty (forward pitch) down the far side, and back under
+// the bar flying backwards.
+const LBAR = { x0: -0.15, y0: -2, z0: 2.5, x1: 0.15, y1: 2, z1: 2.8 };
+function loopArc(cx, a0, a1, rateP, w) {
+  const R = 2.5, n = 64, T = Math.abs(a1 - a0) / w, out = [];
+  for (let k = 0; k < n; k++) {
+    const a = a0 + (a1 - a0) * (k + 0.5) / n, s = Math.sign(a1 - a0);
+    out.push({ t: T / n, rate: [0, rateP, 0], v: [s * R * w * Math.cos(a), 0, s * R * w * Math.sin(a)] });
+  }
+  return out;
+}
+const baraniPhases = () => [
+  { t: 1.0, v: [6, 0, 0] },
+  ...loopArc(0, 0, Math.PI, -2.4, 2.4),
+  { t: 0.5, rate: [0, 0, Math.PI / 0.5], v: [-2.4, 0, 0] },
+  ...loopArc(-1.2, Math.PI, 2 * Math.PI, 2.4, 2.4),
+  { t: 0.7, v: [6, 0, 0] }, { t: 1.2, v: [4, 0, 0] },
+];
+
+test('observer: the loop gate\'s record (type loop) holds its inputs every step and the boxes it saw; they replay to the same verdict', () => {
+  const r = sideRun([LBAR], baraniPhases(), { x: -6, y: 0, z: 1 });
+  assert.deepEqual(r.evs, ['barani']);
+  const lr = r.recs.filter((x) => x.type === 'loop');
+  assert.equal(lr.length, 1);
+  const rec = lr[0], v = rec.gate;
+  assert.equal(rec.result, 'barani');
+  assert.match(rec.reason, /^barani: under, over upside down, 18\d° of yaw upside down/);
+  assert.deepEqual(rec.cam, { camDeg: 30, vfov: 90, aspect: 1.778 });
+  assert.deepEqual(rec.need, { ...LOOP });
+  // The rotation settled just before the pass back under (as the owner's
+  // do): its segment alone scores nothing, and the call closes none.
+  assert.deepEqual(r.man.map((x) => [x.result, x.loop]), [[null, 0]]);
+  // Every 4 ms step from LOOP_LOG.preS before the loop to postS past its
+  // verdict.
+  const rows = rec.inputs.rows, C = rec.inputs.cols;
+  assert.deepEqual(C, ['t', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'fx', 'fy', 'fz', 'ux', 'uy', 'uz', 'dp', 'dr', 'dy', 'flags']);
+  assert.ok(Math.abs(rows[0][0] - (v.tFrom - LOOP_LOG.preS)) <= 0.0045 && Math.abs(rows[rows.length - 1][0] - (v.t2 + LOOP_LOG.postS)) <= 0.0045);
+  for (let i = 1; i < rows.length; i++) assert.ok(Math.abs(rows[i][0] - rows[i - 1][0] - 0.004) < 1e-6, 'row ' + i);
+  assert.deepEqual(v.boxes.map((b) => b.slice(1)), [[-0.15, -2, 2.5, 0.15, 2, 2.8]]);
+  // The replay: the record's boxes, each row's inputs, loopStep.
+  const g = makeLoopGate(v.boxes.map((b) => b.slice(1)));
+  const ix = Object.fromEntries(C.map((c, i) => [c, i]));
+  rows.forEach((row, i) => {
+    const I = g.inp;
+    for (const c of C) if (c !== 'flags') I[c] = row[ix[c]];
+    I.contact = row[ix.flags] & 1; I.fresh = i === 0 ? 1 : (row[ix.flags] & 4 ? 1 : 0);
+    I.camDeg = rec.cam.camDeg; I.vfov = rec.cam.vfov; I.aspect = rec.cam.aspect;
+    loopStep(g);
+  });
+  const back = g.out.find((x) => Math.abs(x.t2 - v.t2) < 1e-6);
+  assert.ok(back, 'replayed: ' + JSON.stringify(g.out));
+  for (const k of ['result', 'yawVDeg', 'upMin', 'camElDeg', 'backDeg', 'fwdDeg', 'z1', 'zTop', 'tO']) assert.equal(back[k], v[k], k);
+  JSON.parse(JSON.stringify(rec));
+});
+
+test('observer: the old twist Barani (a front flip with a half roll inside it, open air) is no Barani: no object, and the roll measure no longer counts', () => {
+  const half = run([
     { t: Math.PI / 2 / 6, rate: [0, 6, 0] },
-    { t: rollT, rate: [9, 0, 0] },
+    { t: Math.PI / 9, rate: [9, 0, 0] },
     { t: 1.5 * Math.PI / 6, rate: [0, 6, 0] },
     { t: 0.8 },
   ]).recs.filter((r) => r.type === 'maneuver');
-  const half = flip(Math.PI / 9);
   assert.equal(half.length, 1);
-  const b = half[0].barani;
-  assert.ok(b.inside && Math.abs(b.inside.twistDeg - 180) <= 6, JSON.stringify(b));
-  assert.ok(b.inside.beforeDeg >= 60 && b.inside.afterDeg >= 60, JSON.stringify(b.inside));
-  assert.equal(b.limit, 'none');
-  assert.equal(half[0].result, 'barani');
-  // 110 of roll: under the band.
-  const short = flip((110 * Math.PI / 180) / 9)[0].barani;
-  assert.equal(short.limit, 'barR band', JSON.stringify(short));
-  assert.ok(Math.abs(short.any.twistDeg - 110) <= 6, JSON.stringify(short.any));
-  // An orbit: too little pitch to scan.
-  assert.equal(camOrbit({ pitch: 50, toCentre: true, info: { camDeg: 30 } }).barani.limit, 'barP');
+  assert.notEqual(half[0].result, 'barani');
+  assert.equal('barani' in half[0], false, 'no Barani probe');
 });
 
 // The object beside the path in the log (rec.side), from the owner's
@@ -1147,7 +1193,7 @@ test('the Cradle with the nose pitched down through the second pass, its heading
   }
 });
 
-test('the Cradle replaces a Maverick flown round a post, held from its end to the second pass; beside a block (no post) it is the Maverick', () => {
+test('a Maverick-shaped pull and push round a post is a Cradle; beside a block (no post) it is nothing: a Maverick loops round an object (the loop gate)', () => {
   const DEG = Math.PI / 180;
   const fly = (b) => sideRun([b], [
     { t: 0.1, rate: [0, 40 * DEG / 0.1, 0], v: [5, 0, 0] }, { t: 3.1, v: [5, 0, 0] },
@@ -1156,12 +1202,11 @@ test('the Cradle replaces a Maverick flown round a post, held from its end to th
   ], { x: -10, y: 0, z: 3 });
   const r = fly({ x0: 4.9, y0: 0.5, z0: 0, x1: 5.1, y1: 0.7, z1: 6 });
   assert.deepEqual(r.evs, ['cradle']);
-  const m = r.recs.find((x) => x.type === 'maneuver' && x.held);
-  assert.ok(m && m.result === 'maverick', 'the Maverick, held: ' + JSON.stringify(r.recs.map((x) => [x.type, x.result, x.held])));
   const c = r.recs.find((x) => x.type === 'cradle' && x.result === 'cradle');
-  assert.equal(c.replaced, 'maverick');
+  assert.ok(c, 'the Cradle record');
   const b = fly({ x0: 4.4, y0: 0.5, z0: 0, x1: 5.6, y1: 0.7, z1: 6 });
-  assert.deepEqual(b.evs, ['maverick']);
+  assert.deepEqual(b.evs, []);
+  assert.deepEqual(b.recs.filter((x) => x.type === 'loop'), [], 'never under or over the block: no loop');
 });
 
 test('the Cradle\'s log: a crash between the passes leaves its miss; a flip past six legs is one record', () => {
