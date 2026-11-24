@@ -16,9 +16,9 @@
 //   - In headless Chrome, as a returning visitor with the music on
 //     (ryflyMusicOn=1): the page loads with no audio request and no page
 //     error; the first gesture fetches one track and it plays, its title and
-//     artist in the toast; N fetches one more, the same; every listed file
-//     plays; Tune opens and shows each credit and licence link. Logs the
-//     page weight at load.
+//     artist in the toast; N fetches one more, the same; the two-line toast
+//     clears #packHint on phone sizes; every listed file plays; Tune opens
+//     and shows each credit and licence link. Logs the page weight at load.
 // Requires Chrome for the last part (CHROME, as tools/test_sim_map_boot.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -384,6 +384,24 @@ test('music in Chrome: a returning visitor loads no audio; the first gesture pla
     assert.equal(second.title, titleOf.get(srcPath(second.src)), 'its title');
     assert.deepEqual(audioUrls(), [first.src, second.src], 'N fetched one track, the one playing');
     await toasted(`♪ TRACK ${second.idx + 1}/${TITLES.length}\n${second.title} — ${ARTIST}`, 'N names the track');
+
+    // The two-line toast keeps clear of #packHint (P = new pack), which sits
+    // at 44% + 20 px on a short landscape and 44% + 44 px otherwise; measured
+    // on the longest title, on a landscape phone and a small portrait one.
+    for (const [w, h, gap] of [[844, 390, 20], [568, 320, 20], [320, 568, 44], [375, 667, 44]]) {
+      await s.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
+      await sleep(300);
+      const box = await s.evaluate(`(() => {
+        const el = document.getElementById('toast');
+        el.classList.add('music-toast');
+        el.textContent = '♪ TRACK 2/5\\nFunky Boxstep — Kevin MacLeod';
+        const r = el.getBoundingClientRect();
+        return { bottom: r.bottom, height: r.height, line: innerHeight * 0.44 + ${gap}, lines: Math.round(r.height / parseFloat(getComputedStyle(el).lineHeight)) };
+      })()`);
+      assert.ok(box.bottom <= box.line, `${w}x${h}: the music toast (${box.lines} lines, bottom ${box.bottom.toFixed(1)}) clears #packHint at ${box.line.toFixed(1)}`);
+    }
+    await s.send('Emulation.clearDeviceMetricsOverride');
+    await sleep(300);
 
     // Every listed file plays in Chrome, each on its own element.
     const plays = await s.evaluate(`(async () => {
