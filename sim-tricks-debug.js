@@ -28,7 +28,7 @@ import {
   GAP_SIDE_K, GAP_MIN_DEPTH_M, GAP_NEAR_M, FRAME_W_M, TRIPPY_POLE_MUL, MAV_GAP_MUL, PHASE_SPECS,
   HIST_W, BH_W, PH_ROWS,
   CRADLE, groupBoxes, simBoxes, cradlePostList, LOOP,
-} from './sim-tricks.js?v=326697a9f3a9';
+} from './sim-tricks.js?v=b621908b17f6';
 
 // classifyFeat's candidate order and specificity bonus (sim-tricks.js
 // CLASS_IDS, SPEC), and the score a pick needs. Barani, Powerloop and

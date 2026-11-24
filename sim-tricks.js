@@ -2089,19 +2089,25 @@ function cradleVerdict(g, i, result, why, m, s) {
 // (prowhooper.com): each is a loop round one object, judged on the path, not
 // on a segment's rotation. Three passes:
 // - U1: under an object (a box over the quad, its underside LOOP.underM
-//   above or less), the quad upright (up-Z LOOP.upright) at LOOP.minSpd or
-//   more. The loop starts at the step it leaves the object's underside.
+//   above or less), the quad level (up-Z LOOP.level or more) at LOOP.minSpd
+//   or more. The loop starts at the step it leaves the object's underside.
+//   (A climb that passes under something higher, the roof truss over the
+//   stairs, is not level: it does not start the loop over.)
 // - O: over the same object (over a box of it, its top LOOP.overM below or
 //   less).
 // - U2: under the same object again, LOOP.drop or more below the highest
 //   point since U1, inside LOOP.maxS of U1.
 // The same object: a box within LOOP.sameM of a U1 box across the floor, its
 // underside and its top each within LOOP.sameH of that box's: a staircase's
-// steps and the mezzanine edge they join (the owner's Barani came back
-// under 1.4 m along the stairs); not the roof truss 0.94 m from them across
-// the floor and 4.4 m above. Provisional: fitted to the Warehouse's stairs.
-// A touch (the floor, or any box within CRADLE.hitM), a crash, a disarm or a
-// respawn between the passes voids the loop. At U2:
+// steps and the mezzanine edge they join (the owner's Baranis came back
+// under 1.4 m along the stairs and over them 1.6 m along); not the roof truss
+// 0.94 m from them across the floor and 4.4 m above. Provisional: fitted to
+// the Warehouse's stairs.
+// A touch between U1 and U2 voids the loop, and nothing after U2 does: the
+// physics core's own contact (the sample's contactFlags: the floor or a
+// box) where the core gives it (the bf core), else the detector's (the
+// floor within 0.08 m, or a box within CRADLE.hitM). A crash, a disarm or a
+// respawn between the passes voids it too. At U2:
 // - Barani: upside down (up-Z LOOP.inv or less) at some step; the yaw made
 //   upside down (yawV: each step's body yaw times up-Z, while up-Z is below
 //   HAM_UPZ) LOOP.hdLo to LOOP.hdHi either way; the horizon in view before
@@ -2123,7 +2129,7 @@ function cradleVerdict(g, i, result, why, m, s) {
 //   Double Powerloop scores twice). Flying back over the object upright
 //   after the last loop does not hold the call.
 // - Maverick: never upside down (up-Z above LOOP.inv at every step; the
-//   owner's dips to -0.06); LOOP.mavPull or more of back pitch, then above
+//   owner's dips to -0.2); LOOP.mavPull or more of back pitch, then above
 //   the object's top a fast forward pitch, LOOP.mavPush or more inside
 //   LOOP.mavPushS; then LOOP.mavGlide or more of gliding down backwards
 //   before U2: descending, and across the floor moving back against the
@@ -2137,11 +2143,11 @@ function cradleVerdict(g, i, result, why, m, s) {
 // A loop's pass under while another one is half flown (not yet over it)
 // starts over from that object.
 export const LOOP = Object.freeze({
-  minSpd: 1.0, upright: 0.5, underM: 2.5, overM: 6, sameM: 1.5, sameH: 1.0, drop: 2.0, maxS: 4.0,
+  minSpd: 1.0, upright: 0.5, level: 0.9, underM: 2.5, overM: 6, sameM: 2.0, sameH: 1.0, drop: 2.0, maxS: 4.0,
   inv: -0.5, hdLo: BARANI_HD_LO, hdHi: 3.927, twist0: 0.262, restS: 0.15, restRate: 1.047, twistLock: 1.047,
   barBack: 2.356, barFwd: 1.571, backDot: -0.3,
   loopYaw: 1.571, loopBack: 4.712, loopRoll: 1.7, chainS: 1.6,
-  mavPull: 1.047, mavPush: 1.047, mavPushS: 0.4, mavGlide: 0.3, glideDot: -0.5, mavWaitS: 0.3,
+  mavPull: 0.873, mavPush: 1.047, mavPushS: 0.4, mavGlide: 0.3, glideDot: -0.5, mavWaitS: 0.3,
   holdPull: 0.785, maxBoxes: 32, seenMax: 64,
 });
 
@@ -2469,7 +2475,7 @@ export function loopStep(g) {
     }
     let anc = 0;
     if (g.on) for (let k = 0; k < g.upN && !anc; k++) if (loopAnchored(g, g.up[k])) anc = 1;
-    const upright = s.uz >= L.upright && spd >= L.minSpd;
+    const upright = s.uz >= L.level && spd >= L.minSpd;
     if (g.on && g.run) {
       if (anc) {
         for (let k = 0; k < g.upN; k++) if (loopAnchored(g, g.up[k])) loopAddAnc(g, g.up[k]);
@@ -2547,6 +2553,7 @@ export function loopStep(g) {
   }
   if (g.queue.length && s.t >= g.queue[0].due - 1e-9) {
     g.last = g.queue.shift().v;
+    g.last.calledT = r3l(s.t);
     return 1;
   }
   return 0;
@@ -3218,15 +3225,18 @@ function finishCradle(d) {
 }
 
 // The loop gate's call (loopStep: a Barani, a Powerloop or a Maverick). An
-// open segment closes here as the call (its rotation was the loop's), and
-// the chain of unscored segments before it ends with it. A trick held for
+// open segment that began before the pass back under (U2) closes here as the
+// call (its rotation was the loop's); one begun after it (a call that waited
+// for a Powerloop's next loop or a Maverick's gap) flies on, its own. The
+// chain of unscored segments before it ends with it. The verdict notes the
+// segment it closed (closed: its seq, 0 none). A trick held for
 // the loop is replaced by it, but a Half Mavvy, which holds a Maverick's
 // loop and more: it stands, and the Maverick is not called.
 function finishLoop(d) {
   const v = d.lg.last;
   d.lastCradleSeg = 0;
   d.lastLoopSeg = 0;
-  if (d.live) {
+  if (d.live && (!v || d.clock - d.feat.dur < v.t2 + 1e-6)) {
     windowFeat(d);
     d.lastPhases = phaseFeat(d);
     copyFeat(d.feat, d.lastFeat);
@@ -3254,6 +3264,7 @@ function finishLoop(d) {
     d.lastLoopRepl = h ? h.id : '';
     d.held = null;
   }
+  if (v) v.closed = d.lastLoopSeg ? v.seq : 0;
   if (d.lastLoopSeg) { try { d.recJson = encodeRecJson(d); } catch (e) { d.recJson = ''; } }
   if (d.lastLoopSeg) resetFeat(d.feat);
   d.chainOn = 0;
@@ -3403,7 +3414,7 @@ export function stepDetector(d, sample, dt) {
     I.fx = C.fx; I.fy = C.fy; I.fz = C.fz;
     I.ux = 2 * (sx * sz + sw * sy); I.uy = 2 * (sy * sz - sw * sx); I.uz = upZ;
     I.dp = dp; I.dr = dr; I.dy = dy;
-    I.contact = C.contact;
+    I.contact = sample.contactFlags != null ? ((sample.contactFlags & 3) ? 1 : 0) : C.contact;
     I.camDeg = sample.camDeg != null ? sample.camDeg : 30;
     I.vfov = sample.vfov > 0 ? sample.vfov : 90;
     I.aspect = sample.aspect > 0 ? sample.aspect : 16 / 9;

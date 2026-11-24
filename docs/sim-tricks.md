@@ -43,7 +43,7 @@ site lists both 150 and 50).
 | `flip` | Flip | Beginner | 50 | 75 | Phase matcher: **≥300° of pitch within any 1.2 s**, little net roll/yaw. Any speed, any travel. Front or back by the way the pitch turned (the pop says Front Flip / Back Flip). |
 | `roll` | Roll | Beginner | 50 | 75 | **≥300° of roll within any 1.5 s at a mean rate of ≥250°/s**, little net pitch/yaw. Slower turns are not tricks. |
 | `yawspin` | Yaw Spin | Beginner | 50 | 75 | Continuous ~360° yaw, mostly upright. |
-| `maverick` | Maverick Loop | Beginner | 100 | 100 | **The loop gate** (below), as the owner flies it: **under an object**, the climb **over the same object**, **never upside down** (up-Z above −0.5 throughout; the owner's dip to −0.06 counts), a pull back of **≥60°**, then above the object's top a **fast forward pitch**: **≥60° inside 0.4 s** (a slow level-out is not one), then **≥0.3 s gliding down backwards** (descending, moving back against the nose's heading across the floor), and **back under the same object**, all inside **4 s**. A touch between the passes voids it. The object in the camera's view on the glide is logged, not judged. Called 0.3 s after the pass back under; back out through the authored gap it came in by: **1.25×** points. A wall beside the path, or open air, is no Maverick. |
+| `maverick` | Maverick Loop | Beginner | 100 | 100 | **The loop gate** (below), as the owner flies it: **under an object**, the climb **over the same object**, **never upside down** (up-Z above −0.5 throughout; the owner's dip to −0.06 counts), a pull back of **≥50°**, then above the object's top a **fast forward pitch**: **≥60° inside 0.4 s** (a slow level-out is not one), then **≥0.3 s gliding down backwards** (descending, moving back against the nose's heading across the floor), and **back under the same object**, all inside **4 s**. A touch between the passes voids it. The object in the camera's view on the glide is logged, not judged. Called 0.3 s after the pass back under; back out through the authored gap it came in by: **1.25×** points. A wall beside the path, or open air, is no Maverick. |
 | `splits` | Split-S | Beginner | 100 | 100 | Phase matcher: a **roll of 103–258°**, then a **back pitch of 69–258°** (pull), the path dropping ≥0.35 m, flying with the nose. The old terms' tolerances, so it fires where it did. |
 | `immelmann` | Immelmann | Beginner | 100 | 100 | Phase matcher, the Split-S's mirror: **back pitch 180 ± 45° climbing ≥1 m**, then a **roll of 180 ± 45°**, ending **upright**, the **heading reversed** (180 ± 45°), **out higher** than in. |
 | `cradle` | Cradle | Beginner | 150 | 150 | As the owner flies it (2026-11-20): **past a post flying forward** with it on one side (**≤2 m** out), the **nose up ≥25°**, **never over the top** and **not turning round** (**≤55°** about the vertical), then **back past it travelling backwards, against the nose** (**≥115°** off it, **≥1.5 m/s**, not upside down) **on the other side** (**≤3 m** out), within **2.5 s**, both passes beside the post (within its height). Called at the second pass, no wait. A post: a pole, column, tree or post (**≤0.5 m** across, near square, **≥1 m** tall, standing), or a chair or table leg (**≥0.31 m**, on the floor, slender); never a wall, floor or ceiling. A touch (of the post or anything), a crash, a disarm or a respawn between the passes voids it. Both passes round a post make a Cradle however high the nose comes (short of over the top); the Maverick is the open-air move. See "The Cradle" below. |
@@ -242,7 +242,9 @@ The owner's rulings of 2026-11-24, on the Tricktionary's definitions: each of
 the three is a **loop round one object**, judged on the path, not on a
 segment's rotation (`sim-tricks.js` `LOOP`, `loopStep`). Like the Cradle it
 runs beside the segments, every 4 ms step, and its call closes an open
-segment as the trick; a trick a segment finished while a loop is half flown
+segment as the trick when that segment began before the pass back under (one
+begun after it flies on as its own: a roll after a Powerloop is a Roll, not
+part of the Powerloop); a trick a segment finished while a loop is half flown
 (pulled back 45° or over the object) waits for it, and is replaced by the
 call (a Half Mavvy, which holds a Maverick's loop and more, stands) or called
 when the loop comes to nothing.
@@ -250,21 +252,29 @@ when the loop comes to nothing.
 Three passes:
 
 1. **Under** an object (a box over the quad, its underside ≤2.5 m above),
-   upright, ≥1 m/s. The loop starts where the quad leaves its underside.
+   level (up-Z ≥0.9), ≥1 m/s. The loop starts where the quad leaves its
+   underside. A climb that passes under something higher (the roof truss, at
+   up-Z 0.72 in the owner's re-fly) is not level, so it doesn't start the loop
+   over.
 2. **Over** the same object (over a box of it, its top ≤6 m below).
 3. **Back under** the same object, ≥2 m below the highest point since,
    inside **4 s** of the first.
 
 **The same object** (provisional, fitted to the Warehouse's stairs): a box
-within **1.5 m** of a first-pass box across the floor, its underside and top
+within **2.0 m** of a first-pass box across the floor, its underside and top
 each within **1 m** of that box's. That joins a staircase's steps and the
-mezzanine edge they meet (the owner's Barani came back under 1.4 m along the
-stairs), and not the roof truss 0.94 m from them across the floor but 4.4 m
-higher. The detector's own objects split a staircase into its steps, and
+mezzanine edge they meet (the owner's passes crossed the stairs 1.4 m and
+1.6 m along from where they went under), and not the roof truss 0.94 m from
+them across the floor but 4.4 m higher. The detector's own objects split a staircase into its steps, and
 boxes that touch join the whole Warehouse into one.
 
-A **touch** (the floor, or any box within 6 cm), a crash, a disarm or a
-respawn between the passes voids the loop.
+A **touch**, a crash, a disarm or a respawn between the first pass under and
+the pass back under voids the loop; a touch after the pass back under
+doesn't. The touch is the physics core's own contact where the core gives
+one (the bf core's `contactFlags`: the floor or a box), else the detector's
+(the floor within 8 cm, a box within 6 cm). The owner's three voided
+Baranis of the re-fly each met the bf core's floor contact before the pass
+back under.
 
 At the pass back under, the gate calls:
 
@@ -281,7 +291,8 @@ At the pass back under, the gate calls:
 - **Powerloop**: upside down at some step; under 90° of yaw upside down;
   ≥270° of back pitch; the roll ≤97° net. Loops on round the same object
   are one Powerloop of that many loops.
-- **Maverick**: never upside down; ≥60° pulled back; above the object's top
+- **Maverick**: never upside down; ≥50° pulled back (the owner's read 60–112°,
+  one 59.8°); above the object's top
   ≥60° forward inside 0.4 s; then ≥0.3 s descending while moving back
   against the nose's heading (the nose is down as it falls, so velocity·nose
   itself is positive there). The object in the camera's view on that glide
@@ -296,7 +307,10 @@ Each verdict goes in the debug log as a record of type `loop` with the
 gate's inputs at every step (position, velocity, nose, up axis, the step's
 body turns, flags) from 0.5 s before the loop began to 0.4 s past the
 verdict, the boxes it saw, and the camera's tilt and FOV: a replay
-(`makeLoopGate`, then `loopStep` on each row) gives the same verdict.
+(`makeLoopGate`, then `loopStep` on each row) gives the same verdict. A
+called loop also notes when it was called (`calledT`) and whether the call
+closed a segment (`closed`: the record's seq, 0 when it closed none, as for a
+Double Powerloop called at the chain wait).
 
 ### Gap passes (not a trick)
 

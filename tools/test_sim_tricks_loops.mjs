@@ -111,14 +111,14 @@ function baraniSkyYaw() {
 // The Maverick: pull up to the nose 80 deg up on the climb, a push of 120
 // deg forward over pushS at the top, the glide over and down the far side
 // backwards, level, and through again.
-function maverick(pushS) {
-  const ps = pushS || 0.25, aP = 0.75 * Math.PI, aG = aP + 0.1 * Math.PI * (ps / 0.25);
+function maverick(pushS, pullDeg) {
+  const ps = pushS || 0.25, aP = 0.75 * Math.PI, aG = aP + 0.1 * Math.PI * (ps / 0.25), pull = pullDeg || 80;
   return [
     approach,
-    { T: aP / RATE, pos: arc(0, CZ, R, 0, aP), p: -80 * DEG / (aP / RATE) },
+    { T: aP / RATE, pos: arc(0, CZ, R, 0, aP), p: -pull * DEG / (aP / RATE) },
     { T: ps, pos: arc(0, CZ, R, aP, aG), p: 120 * DEG / ps },
     { T: (1.5 * Math.PI - aG) / RATE, pos: arc(0, CZ, R, aG, 1.5 * Math.PI) },
-    { T: 0.5 * Math.PI / RATE, pos: arc(0, CZ, R, 1.5 * Math.PI, 2 * Math.PI), p: -40 * DEG / (0.5 * Math.PI / RATE) },
+    { T: 0.5 * Math.PI / RATE, pos: arc(0, CZ, R, 1.5 * Math.PI, 2 * Math.PI), p: (pull - 120) * DEG / (0.5 * Math.PI / RATE) },
     out(2.0),
   ];
 }
@@ -146,7 +146,8 @@ function runGate(steps, boxes, cam) {
 function sceneBox(b, ws) {
   return { min: { x: -b[4] * ws, y: b[2] * ws, z: -b[3] * ws }, max: { x: -b[1] * ws, y: b[5] * ws, z: -b[0] * ws } };
 }
-function runDetector(steps, boxes) {
+function runDetector(steps, boxes, opts) {
+  const o = opts || {};
   const ws = 3.5, d = makeDetector(), cols = boxes.map((b) => sceneBox(b, ws)), ev = [];
   for (const s of steps) {
     const smp = {
@@ -155,8 +156,11 @@ function runDetector(steps, boxes) {
       vx: s.v[0], vy: s.v[1], vz: s.v[2], clearance: s.contact ? 0 : s.p[2], throttle: 0.5, armed: true,
       colliders: cols, ws, camDeg: 30, vfov: 90, aspect: 16 / 9,
     };
+    // The core's own contact, when the run gives it: o.flags at a touch step
+    // (the clearance says 0 there either way).
+    if (o.flags != null) smp.contactFlags = s.contact ? o.flags : 0;
     const e = stepDetector(d, smp, DT);
-    if (e) ev.push({ e, t: s.t, loops: d.lastLoops, why: d.lastWhy });
+    if (e) ev.push({ e, t: s.t, loops: d.lastLoops, why: d.lastWhy, called: d.lg.last && d.lg.last.calledT, closed: d.lg.last && d.lg.last.closed });
   }
   return ev;
 }
@@ -292,4 +296,54 @@ test('Barani is the Tricktionary\'s Master trick, 750 outdoors and 800 under-ove
   assert.deepEqual([b.tier, b.points, b.pointsIn], ['Master', 750, 800]);
   assert.equal(STORE_VER, 5);
   assert.equal(LOOP.hdLo, 2.094);
+});
+
+test('re-fly rulings (2026-11-24): the Maverick pulls back from 50; a pull of 40 is no Maverick', () => {
+  assert.equal(LOOP.mavPull, 0.873);
+  assert.deepEqual(runGate(fly(maverick(0.25, 55)), [BAR]).calls.map((v) => v.result), ['maverick']);
+  const low = runGate(fly(maverick(0.25, 40)), [BAR]);
+  assert.deepEqual(low.calls, []);
+  assert.match(low.verdicts[0].why, /^pulled back (39|4\d)° \(needs 50\)/);
+});
+
+test('re-fly rulings: a climb under something higher (not level) does not start the loop over', () => {
+  // A beam across the climb, 2.2 m over it, while the nose is 34 deg up
+  // (up-Z 0.83): the loop goes on round the bar.
+  const steps = fly(POWERLOOP);
+  const k = steps.findIndex((x) => x.t >= 0.5 + 0.6 / RATE);
+  const c = steps[k];
+  assert.ok(rot(c.q, [0, 0, 1])[2] < LOOP.level && rot(c.q, [0, 0, 1])[2] > LOOP.upright);
+  const beam = [c.p[0] - 0.2, -2, c.p[2] + 2.2, c.p[0] + 0.2, 2, c.p[2] + 2.3];
+  assert.deepEqual(runGate(steps, [BAR, beam]).calls.map((v) => v.result), ['powerloop']);
+  assert.equal(LOOP.level, 0.9);
+});
+
+test('re-fly rulings: a call closes only a segment begun before the pass back under; a roll begun after the loop is its own', () => {
+  // The loop, then on out, and 1.2 s after the pass back under a roll of
+  // 360 at 300 deg/s: the Powerloop is called inside it (LOOP.chainS on).
+  const steps = fly([approach, { T: 2 * Math.PI / RATE, pos: arc(0, CZ, R, 0, 2 * Math.PI), p: -RATE }, out(1.2),
+    { T: 1.2, pos: line([7.2, 0, 1], [14.4, 0, 1]), r: 300 * DEG }, { T: 1.5, pos: line([14.4, 0, 1], [23.4, 0, 1]) }]);
+  const ev = runDetector(steps, [BAR]);
+  assert.deepEqual(ev.map((x) => x.e), ['powerloop', 'roll'], JSON.stringify(ev));
+  assert.equal(ev[0].closed, 0, 'the call closed no segment');
+  assert.ok(ev[0].called > 0);
+});
+
+test('re-fly rulings: the touch is the core contact flag when the core gives it, between the passes only', () => {
+  // Over the bar at 1.8 s, back under it at 3.1: a step at 2.2 with the
+  // clearance at 0 but no contact from the core is no touch; the core's
+  // floor contact there voids the loop.
+  const steps = fly(POWERLOOP, { touchAt: 2.2 });
+  assert.deepEqual(runDetector(steps, [BAR], { flags: 0 }).map((x) => x.e), ['powerloop']);
+  assert.deepEqual(runDetector(steps, [BAR], { flags: 1 }).map((x) => x.e), []);
+  // After the pass back under (3.1 s), a touch voids nothing.
+  assert.deepEqual(runDetector(fly(POWERLOOP, { touchAt: 3.4 }), [BAR], { flags: 1 }).map((x) => x.e), ['powerloop']);
+});
+
+test('re-fly rulings: the same object reaches 2.0 m across the floor (1 m in height): the stairs re-crossed 1.6 m along', () => {
+  assert.equal(LOOP.sameM, 2.0);
+  // Two steps 1.63 m apart across the floor, within 1 m in height.
+  assert.ok(sameObject([-1.56, 18.06, 2.19, -1.16, 18.94, 2.25], [-3.19, 18.06, 3.09, -2.78, 18.94, 3.15]));
+  // 1.13 m higher: not the same.
+  assert.equal(sameObject([-1.56, 18.06, 2.19, -1.16, 18.94, 2.25], [-3.59, 18.06, 3.32, -3.19, 18.94, 3.37]), false);
 });
