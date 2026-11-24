@@ -261,11 +261,13 @@ Three passes:
    inside **4 s** of the first.
 
 **The same object** (provisional, fitted to the Warehouse's stairs): a box
-within **2.0 m** of a first-pass box across the floor, its underside and top
-each within **1 m** of that box's. That joins a staircase's steps and the
-mezzanine edge they meet (the owner's passes crossed the stairs 1.4 m and
-1.6 m along from where they went under), and not the roof truss 0.94 m from
-them across the floor but 4.4 m higher. The detector's own objects split a staircase into its steps, and
+within **2.0 m** of a first-pass box across the floor (the gap between their
+footprints), its underside and top each within **1 m** of that box's. That
+joins a staircase's steps and the mezzanine edge they meet (the owner's first
+Barani came back under 1.4 m along the stairs), and not a step 1.63 m on but
+1.13 m higher (the re-fly's attempt 35 crossed one) or the roof truss 0.94 m
+from them across the floor but 4.4 m higher. No verdict of the re-fly turns
+on 1.5 or 2.0 m. The detector's own objects split a staircase into its steps, and
 boxes that touch join the whole Warehouse into one.
 
 A **touch**, a crash, a disarm or a respawn between the first pass under and
@@ -314,10 +316,14 @@ Double Powerloop called at the chain wait).
 
 The owner's re-fly of 2026-11-24 (16 loop records,
 `tools/fixtures/tricklog-depot-bf-refly-loops.jsonl.gz`) replays on today's
-gate to his calls: two Baranis of eight attempts (three touched the floor
-between the passes), the Powerloop and the Double, four Mavericks, and
-nothing for the early yaw, the half loop rolled at the top or the flips
-(`tools/test_sim_tricks_loops.mjs`).
+gate to his tricks: two Baranis of eight attempts (three touched the floor
+between the passes), the Powerloop, the Double (two loops, pending when its
+rows end: its call is due 1.6 s after its pass back under), four Mavericks,
+and nothing for the early yaw, the half loop rolled at the top or the flips
+(`tools/test_sim_tricks_loops.mjs`). Its touches are the detector's (the
+log predates the core's contact), and no verdict in it turns on the same
+object's reach or on which segment a call closes: the kinematic tests pin
+those.
 
 ### Gap passes (not a trick)
 

@@ -343,14 +343,24 @@ test('re-fly rulings: the touch is the core contact flag when the core gives it,
   assert.deepEqual(runDetector(steps, [BAR], { flags: 1 }).map((x) => x.e), []);
   // After the pass back under (3.1 s), a touch voids nothing.
   assert.deepEqual(runDetector(fly(POWERLOOP, { touchAt: 3.4 }), [BAR], { flags: 1 }).map((x) => x.e), ['powerloop']);
+  // Nor while a Maverick waits LOOP.mavWaitS for its call after the pass
+  // back under: it is still called.
+  const mav = runGate(fly(maverick()), [BAR]).calls[0];
+  assert.ok(mav.calledT - mav.t2 >= LOOP.mavWaitS - 1e-6);
+  const mid = Math.round((mav.t2 + LOOP.mavWaitS / 2) / DT) * DT;
+  assert.deepEqual(runDetector(fly(maverick(), { touchAt: mid }), [BAR], { flags: 1 }).map((x) => x.e), ['maverick']);
 });
 
-test('re-fly rulings: the same object reaches 2.0 m across the floor (1 m in height): the stairs re-crossed 1.6 m along', () => {
+test('re-fly rulings: the same object reaches 2.0 m across the floor, box to box (1 m in height)', () => {
   assert.equal(LOOP.sameM, 2.0);
-  // Two steps 1.63 m apart across the floor, within 1 m in height.
-  assert.ok(sameObject([-1.56, 18.06, 2.19, -1.16, 18.94, 2.25], [-3.19, 18.06, 3.09, -2.78, 18.94, 3.15]));
-  // 1.13 m higher: not the same.
-  assert.equal(sameObject([-1.56, 18.06, 2.19, -1.16, 18.94, 2.25], [-3.59, 18.06, 3.32, -3.19, 18.94, 3.37]), false);
+  // A step and one 1.8 m on along the stairs (box to box), within 1 m in
+  // height: the same object (1.5 m would split them); 2.1 m on: not.
+  const step = [-1.56, 18.06, 2.19, -1.16, 18.94, 2.25];
+  assert.ok(sameObject(step, [-3.76, 18.06, 2.69, -3.36, 18.94, 2.75]));
+  assert.equal(sameObject(step, [-4.06, 18.06, 2.69, -3.66, 18.94, 2.75]), false);
+  // The re-fly's attempt 35: the step it crossed upside down, 1.63 m on
+  // and 1.13 m higher: not the same.
+  assert.equal(sameObject(step, [-3.59, 18.06, 3.32, -3.19, 18.94, 3.37]), false);
 });
 
 // The owner's re-fly of 2026-11-24 (D:/qm-tricklogs/Barani.txt, outside
@@ -362,11 +372,21 @@ test('re-fly rulings: the same object reaches 2.0 m across the floor (1 m in hei
 // record whose rows are the first rows of a longer record of its paste has
 // its "rows" cut and "same" (that record's seq) in their place, its from
 // and to kept (5 of them; 1.3 MB gzipped down to 0.88). The rows are the
-// gate's inputs every 4 ms (LOOP_LOG), so a replay is exact but for their
-// rounding (to the ms, 4 decimals: a 4 ms step, 0.01 m, a degree; on
-// 4070103's gate as on today's). The open-air loops left none (no box below
-// them); the two Baranis the gate never judged (attempts 11 and 35: no
-// record) are left unasserted.
+// gate's inputs every 4 ms (LOOP_LOG), rounded (1e-4 s and m, 1e-5 on the
+// nose and up axes), and the boxes to the mm, so a replay can cross a
+// threshold a step apart from the live gate (reflyTol). Replayed on
+// 4070103's own gate (outside the repo, 2026-11-24), every record gives its
+// logged verdict within that, but for the Double's why (rewritten when it
+// was called, after its record).
+//
+// What the log cannot show, left to the kinematic tests above: the same
+// object's reach (no verdict here turns on 1.5 or 2.0 m), the Maverick's
+// pull floor below 59.8 (the lowest flown), the core's own contact (the log
+// carries the detector's touch: the floor within 0.08 m, a box within 0.06),
+// a touch after a pass back under (none flown), and which segment a call
+// closes (no segments in a loop record). The open-air loops left no record
+// (no box below them); the two Baranis the gate never judged (attempts 11
+// and 35: no record) are left unasserted.
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const REFLY_FILE = 'tools/fixtures/tricklog-depot-bf-refly-loops.jsonl.gz';
 const REFLY = [
@@ -392,11 +412,12 @@ function reflyRows(P, rec) {
   return src.inputs.rows.filter((row) => row[0] >= rec.inputs.from - 1e-6 && row[0] <= rec.inputs.to + 1e-6);
 }
 
-// A record replayed as stepDetector runs the gate: a fresh gate on the
-// record's boxes; each row's inputs; a jump of over 2 m starts it over; the
-// first row, or one flagged fresh (4), is fresh; an armed row (2) steps it,
-// an unarmed one resets it. touch(t), if given, in place of the logged
-// touch (flag 1). The gate's verdicts (out) and its calls.
+// A record replayed on the gate alone, stepped as stepDetector steps it: a
+// fresh gate on the record's boxes; each row's inputs; a jump of over 2 m
+// starts it over; the first row, or one flagged fresh (4), is fresh; an
+// armed row (2) steps it, an unarmed one resets it. The touch is the
+// logged one (flag 1, the detector's then), or touch(t) if given. The
+// gate (g), its verdicts (out) and its calls.
 function replayRefly(P, rec, touch) {
   const rows = reflyRows(P, rec), C = rec.inputs.cols;
   const ix = Object.fromEntries(C.map((c, i) => [c, i]));
@@ -414,7 +435,7 @@ function replayRefly(P, rec, touch) {
     if (row[ix.flags] & 2) { if (loopStep(g)) calls.push(g.last); }
     else loopReset(g, 'disarm');
   });
-  return { out: g.out, calls, rows, ix };
+  return { g, out: g.out, calls, rows, ix };
 }
 const vText = (v) => (v.result || '-') + (v.loops > 1 ? ' x' + v.loops : '') + ' ' + v.t1 + '-' + v.t2 + (v.result ? '' : ' ' + v.why);
 const cText = (v) => v.result + (v.loops > 1 ? ' x' + v.loops : '') + ' @' + v.calledT;
@@ -450,13 +471,15 @@ test('re-fly fixture: the owner\'s 16 loop records of 2026-11-24, as logged, on 
 
 // What each record replays to on today's gate: every verdict its rows hold,
 // in order, and every call, when (a Barani at its pass back under, a
-// Maverick LOOP.mavWaitS on, a Powerloop with no loop on LOOP.chainS on; the
-// Double's call, 27.16 + 1.6 s, falls past its rows). The owner's labels:
-// two Baranis of eight (three touched the floor, one came back over the
-// stairs, two never judged), nothing for the early yaw (114 upside down)
-// and the half loop rolled at the top (an Immelmann's, flown away: no pass
-// back under), the Powerloop and the Double, and four Mavericks, the last
-// pulled back 59.8.
+// Maverick LOOP.mavWaitS on, a Powerloop with no loop on LOOP.chainS on).
+// The Double is not called inside its rows: they end at 27.56 and its call
+// is due at 27.16 + 1.6 s, so it is pinned as the gate holds it there,
+// pending with two loops (the log's why shows 4070103 called it). The
+// owner's labels: two Baranis of eight (three touched the floor, one came
+// back over the stairs, two never judged), nothing for the early yaw (114
+// upside down) and the half loop rolled at the top (an Immelmann's, flown
+// away: no pass back under), the Powerloop and the Double, and four
+// Mavericks, the last pulled back 59.8.
 const MAV = ['maverick 14.612-17.52', 'maverick 17.676-20.668', 'maverick 20.888-24.404', 'maverick 26.904-29.632'];
 const MAV_CALLS = ['maverick @17.82', 'maverick @20.968', 'maverick @24.704', 'maverick @29.932'];
 const PL = ['powerloop 13.044-15.568', 'powerloop 22.144-24.6', 'powerloop x2 24.816-27.16'];
@@ -486,7 +509,7 @@ const REFLY_REPLAY = {
   'flips rolls, ham spin': { 16: [[], []] },
 };
 
-test('re-fly: each record replays to the owner\'s calls on today\'s gate: two Baranis, the Powerloop and the Double, four Mavericks, and nothing else', () => {
+test('re-fly: each record replays to the owner\'s tricks on today\'s gate: two Baranis, the Powerloop, the Double (two loops, its call due past its rows), four Mavericks, and nothing else', () => {
   for (const P of REFLY) {
     const want = REFLY_REPLAY[P.name];
     assert.deepEqual(P.recs.map((r) => r.seq), Object.keys(want).map(Number), P.name);
@@ -497,16 +520,21 @@ test('re-fly: each record replays to the owner\'s calls on today\'s gate: two Ba
   }
   // When: a Barani at once, a Maverick LOOP.mavWaitS on, a Powerloop
   // LOOP.chainS on (a step later: the wait runs out the step after).
-  const P = REFLY[3], { out, calls } = replayRefly(P, P.bySeq.get(15));
+  const P = REFLY[3], { g, out, calls, rows } = replayRefly(P, P.bySeq.get(15));
   assert.ok(Math.abs(calls[0].calledT - out[0].t2 - LOOP.chainS - 0.004) < 1e-6);
   const M = REFLY[5], m = replayRefly(M, M.bySeq.get(26));
   m.calls.forEach((c, k) => assert.ok(Math.abs(c.calledT - m.out[k].t2 - LOOP.mavWaitS) < 1e-6, MAV_CALLS[k]));
-  // The Double: its second loop chained from the first, two loops.
+  // The Double: its second loop chained from the first, two loops, still
+  // pending when the rows end (its call due LOOP.chainS after its pass back
+  // under, past them).
   assert.deepEqual([out[2].loops, out[2].chainFrom, out[1].chainFrom], [2, 2, 1]);
+  assert.ok(g.pend && g.pend.v === out[2] && g.pend.loops === 2, JSON.stringify(g.pend && { loops: g.pend.loops, tU2: g.pend.tU2 }));
+  assert.ok(rows[rows.length - 1][0] < g.pend.tU2 + LOOP.chainS);
 });
 
-// The rows' rounding: what a replay can move a logged value by (a 4 ms step
-// on a time, 0.01 m, a degree, 0.01 else), on 4070103's gate as on today's.
+// What the rounding can move a logged value by, a threshold crossed a step
+// apart: a 4 ms step on a time, 0.01 m, a degree, 0.01 else (Maverick 7's
+// first pass, on box 932's mm-rounded edge, moves a step: 14.608 to 14.612).
 const reflyTol = (k) => /^t|T$/.test(k) ? 0.0041 : /^z/.test(k) ? 0.01 : /Deg$/.test(k) ? 1 : 0.01;
 
 test('re-fly: every logged verdict replays within the rows\' rounding, but for the rulings\' changes', () => {
@@ -561,37 +589,64 @@ test('re-fly: every logged verdict replays within the rows\' rounding, but for t
 });
 
 // The rule's touch is the core's own contact, between the first pass under
-// and the pass back under. The log's touch flag is the detector's (the
-// floor within 0.08 m), so it comes first. The bf core, placed still at each
-// logged pose for one 1 ms tick (reconstructed 2026-11-24; the log has no
-// core contact), first met the floor 8 to 24 ms after the flag, each before
-// any pass back under: the three voids stand.
+// and the pass back under; the log's flag is the detector's (the floor
+// within 0.08 m), which comes first. Baranis 17, 21 and 44 void whenever
+// the core met the floor: with no touch at all, none comes back under in
+// its rows (17 and 44 still on when they end, 21 disarmed on the floor).
+// The bf core placed still at each logged pose for one 1 ms tick
+// (reconstructed 2026-11-24, outside the repo) first met the floor at
+// these times; 21's logged velocity jumps a step earlier, at 45.488.
 const REFLY_CORE_TOUCH = { 17: 40.036, 21: 45.492, 44: 75.604 };
 
-test('re-fly: Baranis 17, 21 and 44 touched the floor between the passes by the core\'s own contact (reconstructed): each void', () => {
+test('re-fly: Baranis 17, 21 and 44 touched the floor between the passes, and no touch time would save them: each void', () => {
   const P = REFLY[0];
   for (const [seq, tc] of Object.entries(REFLY_CORE_TOUCH)) {
     const r = P.bySeq.get(Number(seq)), v = r.gate;
-    const { rows, ix } = replayRefly(P, r);
-    const flag = rows.find((row) => row[0] >= v.t1 && (row[ix.flags] & 1));
-    assert.ok(flag[0] === v.t2 && tc > flag[0] && tc - flag[0] <= 0.025, seq + ' flag ' + flag[0]);
+    // No touch: no call in the rows.
+    assert.deepEqual(replayRefly(P, r, () => false).calls, [], seq);
+    // The core's touch, reconstructed: void there.
     const { out } = replayRefly(P, r, (t) => Math.abs(t - tc) < 1e-6);
     assert.deepEqual(out.map(vText), ['- ' + v.t1 + '-' + tc + ' a touch'], seq);
   }
 });
 
-test('re-fly: every called loop is clear of a touch between its passes (no detector flag: the floor within 0.08 m, a box within 0.06, past the Air65\'s duct rims at 0.051), so the core\'s contact calls it too', () => {
-  let n = 0;
+// Clear of the floor and of every box in the Warehouse between the passes,
+// by more than the Air65's reach from its centre (its duct rims 0.051 m
+// out, its hull 0.030 m above and 0.010 below: under 0.09 m) and half the
+// farthest a row moved from the last: no touch the 4 ms rows could hide,
+// so the core's contact calls each of them too.
+const AIR65_REACH = 0.09;
+
+test('re-fly: every called loop stays clear of the floor and the boxes between its passes, so the core\'s contact calls it too', () => {
+  const cols = buildMap(THREE, 'depot').colliders, B = simBoxes(cols, WS, null), nb = cols.length;
+  const boxDist = (x, y, z) => {
+    let best = Infinity;
+    for (let i = 0; i < nb; i++) {
+      const k = i * 6;
+      if (B[k] !== B[k]) continue;
+      const dx = Math.max(B[k] - x, 0, x - B[k + 3]), dy = Math.max(B[k + 1] - y, 0, y - B[k + 4]), dz = Math.max(B[k + 2] - z, 0, z - B[k + 5]);
+      best = Math.min(best, Math.hypot(dx, dy, dz));
+    }
+    return best;
+  };
+  const clear = [];
   for (const P of REFLY) {
     for (const r of P.recs.filter((x) => x.inputs.rows)) {
       const { out, rows, ix } = replayRefly(P, r);
       for (const v of out.filter((x) => x.result)) {
-        const hit = rows.filter((row) => row[0] >= v.t1 - 1e-6 && row[0] <= v.t2 + 1e-6 && (row[ix.flags] & 1));
-        assert.deepEqual(hit.map((row) => row[0]), [], P.name + ' ' + r.seq + ' ' + vText(v));
-        n++;
+        const span = rows.filter((row) => row[0] >= v.t1 - 1e-6 && row[0] <= v.t2 + 1e-6);
+        let floor = Infinity, box = Infinity, step = 0;
+        span.forEach((row, i) => {
+          floor = Math.min(floor, row[ix.z]);
+          box = Math.min(box, boxDist(row[ix.x], row[ix.y], row[ix.z]));
+          if (i) step = Math.max(step, Math.hypot(row[ix.x] - span[i - 1][ix.x], row[ix.y] - span[i - 1][ix.y], row[ix.z] - span[i - 1][ix.z]));
+        });
+        const margin = Math.min(floor, box) - step / 2;
+        assert.ok(margin > AIR65_REACH, P.name + ' ' + r.seq + ' ' + vText(v) + ': floor ' + floor + ', box ' + box + ', step ' + step);
+        clear.push(Math.round(margin * 100) / 100);
       }
     }
   }
   // Barani 6 and 51, the three Powerloops, the four Mavericks.
-  assert.equal(n, 9);
+  assert.equal(clear.length, 9);
 });
