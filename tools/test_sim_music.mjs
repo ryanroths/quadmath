@@ -429,8 +429,22 @@ test('music in Chrome: a returning visitor loads no audio; the first gesture pla
 
     // A visitor finds the credits in Tune (the start menu's Tune, or ⚙ TUNE
     // and Tab in flight), under Audio: on screen, not only in the DOM.
-    const via = await s.evaluate(`(() => { const m = document.body.classList.contains('menu-open') && document.getElementById('menuTune'); (m || document.getElementById('gear')).click(); return m ? 'menuTune' : 'gear'; })()`);
-    await sleep(800); // the panel slides in
+    // The panel's 0.2 s slide runs on animation frames, which CI's software
+    // GPU draws few of (its first run here found the panel still off screen
+    // 800 ms after the click): the slide is off for this check, which is
+    // about where the open panel puts the credits, not the animation.
+    const via = await s.evaluate(`(() => {
+      document.getElementById('panel').style.transition = 'none';
+      const m = document.body.classList.contains('menu-open') && document.getElementById('menuTune');
+      (m || document.getElementById('gear')).click();
+      return m ? 'menuTune' : 'gear';
+    })()`);
+    let slid = null;
+    for (let i = 0; i < 100; i++) {
+      slid = await s.evaluate(`(() => { const p = document.getElementById('panel').getBoundingClientRect(); return { left: p.left, right: p.right, w: innerWidth, fps: window._sim.looks.fps.avg }; })()`);
+      if (slid.left < slid.w && Math.abs(slid.right - slid.w) < 1) break;
+      await sleep(100);
+    }
     const seen = await s.evaluate(`(() => {
       const vis = (el) => el.checkVisibility({ opacityProperty: true, visibilityProperty: true });
       const p = document.getElementById('panel').getBoundingClientRect();
@@ -442,7 +456,7 @@ test('music in Chrome: a returning visitor loads no audio; the first gesture pla
         items: [...box.querySelectorAll('li')].map((li) => vis(li) && li.getBoundingClientRect().height > 0),
         links: [...box.querySelectorAll('a')].map((a) => vis(a) && a.getBoundingClientRect().width > 0) };
     })()`);
-    assert.ok(seen.open && seen.panelOn, `Tune opens (${via}): ${JSON.stringify(seen)}`);
+    assert.ok(seen.open && seen.panelOn, `Tune opens (${via}): ${JSON.stringify(seen)}, panel ${JSON.stringify(slid)}`);
     assert.ok(seen.box, 'the credits box is shown inside the panel');
     assert.deepEqual(seen.items, TITLES.map(() => true), 'each credit is shown');
     assert.deepEqual(seen.links, TITLES.map(() => true), 'each licence link is shown');
