@@ -598,7 +598,7 @@ test('re-fly: every logged verdict replays within the rows\' rounding, but for t
 // these times; 21's logged velocity jumps a step earlier, at 45.488.
 const REFLY_CORE_TOUCH = { 17: 40.036, 21: 45.492, 44: 75.604 };
 
-test('re-fly: Baranis 17, 21 and 44 touched the floor between the passes, and no touch time would save them: each void', () => {
+test('re-fly: Baranis 17, 21 and 44 touched the floor between the passes, and no touch time in their rows would save them: each void', () => {
   const P = REFLY[0];
   for (const [seq, tc] of Object.entries(REFLY_CORE_TOUCH)) {
     const r = P.bySeq.get(Number(seq)), v = r.gate;

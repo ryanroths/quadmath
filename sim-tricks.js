@@ -2097,12 +2097,13 @@ function cradleVerdict(g, i, result, why, m, s) {
 //   less).
 // - U2: under the same object again, LOOP.drop or more below the highest
 //   point since U1, inside LOOP.maxS of U1.
-// The same object: a box within LOOP.sameM of a U1 box across the floor, its
-// underside and its top each within LOOP.sameH of that box's: a staircase's
-// steps and the mezzanine edge they join (the owner's Baranis came back
-// under 1.4 m along the stairs and over them 1.6 m along); not the roof truss
-// 0.94 m from them across the floor and 4.4 m above. Provisional: fitted to
-// the Warehouse's stairs.
+// The same object: a box within LOOP.sameM of a U1 box across the floor (the
+// gap between their footprints), its underside and its top each within
+// LOOP.sameH of that box's: a staircase's steps and the mezzanine edge they
+// join (the owner's first Barani came back under 1.4 m along the stairs);
+// not a step 1.63 m on but 1.13 m higher, nor the roof truss 0.94 m from them
+// across the floor and 4.4 m above. Provisional: fitted to the Warehouse's
+// stairs; no verdict of the owner's 2026-11-24 re-fly turns on 1.5 or 2.0 m.
 // A touch between U1 and U2 voids the loop, and nothing after U2 does: the
 // physics core's own contact (the sample's contactFlags: the floor or a
 // box) where the core gives it (the bf core), else the detector's (the
