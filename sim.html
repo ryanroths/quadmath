@@ -291,6 +291,10 @@
     color:var(--orange);text-shadow:0 0 12px rgba(255,77,26,.6);pointer-events:none;opacity:0;
     transition:opacity .3s;text-align:center;max-width:90vw}
   #toast.has-action{pointer-events:auto}
+  /* ARMED (flashArmed): full strength on the arm frame, no fade in; held, then gone in 1.1 s. */
+  #toast.arm-flash{transition:none;animation:armFlash 1.1s linear forwards;color:var(--green);
+    text-shadow:0 0 14px rgba(61,220,151,.55);font-size:34px;letter-spacing:.06em}
+  @keyframes armFlash{0%,55%{opacity:1}100%{opacity:0}}
   /* Gap Hunt (sim-gap-hunt.js): a found gap's small toast; a hidden gap's, gold. */
   #toast.gap-toast{font-size:16px;letter-spacing:.04em}
   #toast.gap-secret{font-size:20px;color:#ffd400;text-shadow:0 0 14px rgba(255,212,0,.7)}
@@ -439,6 +443,10 @@
   .menu-layer p,.menu-layer li{font-size:13px;line-height:1.55;color:var(--dim)}
   .menu-layer ol{padding-left:18px}
   .menu-layer button{width:auto;margin-top:12px}
+  /* Controls' "Fly with": three buttons in a row, the one flying pressed. */
+  .input-pick{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px}
+  .menu-layer .input-pick button{flex:1 1 0;margin-top:0;min-width:7em}
+  .input-pick button[aria-pressed="true"]{border-color:var(--orange);color:var(--orange)}
   body.menu-open #firstFlight,body.builder-on #firstFlight,body.calibrating #firstFlight{display:none}
   body.menu-open #legend,body.menu-open #audioHint,body.menu-open #gear,body.menu-open #menuBtn,body.menu-open #fpsHud,
     body.menu-open .osd,body.menu-open #feelHud,body.menu-open #feelTutorial,body.menu-open #coachHud,
@@ -585,6 +593,12 @@
     border-radius:10px;background:var(--glass);backdrop-filter:blur(12px);color:var(--orange);
     font-size:11px;line-height:1.3;text-align:right}
   #hudArmHint.show{display:block}
+  /* A controller's hint is two lines: what to do, then its live throttle (\n). */
+  #hudArmHint{white-space:pre-line}
+  /* Calibrate, beside the hint when it says why the controller cannot arm. */
+  #hudArmCal{position:absolute;right:calc(100% + 6px);bottom:0;pointer-events:auto;width:auto;margin:0;
+    padding:4px 10px;font-size:11px;border-radius:10px;white-space:nowrap}
+  #hudArmCal[hidden]{display:none}
   #s_wash{width:auto;min-width:72px;margin:0;padding:4px 6px}
   #feelTutorial{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:13;display:none;
     width:min(420px,92vw);padding:14px 16px;background:var(--glass);border:1px solid var(--line);
@@ -754,6 +768,7 @@
     <button class="menu-flight" id="menuFreestyleMap">Freestyle this map</button>
     <button class="menu-flight" id="menuGaps" style="display:none">Gaps</button>
     <button class="menu-flight" id="menuGhostRoom">Room</button>
+    <button class="menu-flight" id="menuControlsFlight">Controls</button>
     <button class="menu-flight" id="menuRecalib">Recalibrate</button>
     <button class="menu-hide" id="menuWhoop">Whoop</button>
     <button class="menu-launch" id="menuTune">Tune</button>
@@ -866,7 +881,7 @@
     <button type="button" id="hudAcro">ACRO</button>
     <button type="button" id="hud3d" aria-pressed="false">3D</button>
   </div>
-  <div id="hudArmSlot"><span id="hudArmHint">Raise throttle to fly (auto-arm)</span></div>
+  <div id="hudArmSlot"><button type="button" id="hudArmCal" hidden>Calibrate</button><span id="hudArmHint">Raise throttle to fly (auto-arm)</span></div>
 </div>
 <canvas id="stickOverlay" width="152" height="72" aria-hidden="true"></canvas>
 <div id="firstFlight" role="status" aria-live="polite"></div>
@@ -1287,20 +1302,21 @@ import {
 import {LINE_URL_MAX,LINE_ID_RE,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=c7b112319e28";
 import {pilotNameProblem} from "./sim-pilot-names.js?v=265d8504aeef";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
-import {createSimAudio,airframeBlades} from "./sim-audio.js?v=2a6524de162e";
+import {createSimAudio,airframeBlades,DISARM_BEEPER_MUTE_S} from "./sim-audio.js?v=37e419c76236";
 import {
   THREED_KEY, THREED_DEADBAND, THROTTLE_MID_DEFAULT,
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
   parseThreeDQuery, runCountsForBoards, throttleHudText,
-  throttleCollective, armHintText, stepEasyArm, isLanded,
-} from "./sim-3d.js?v=26ff81b1d879";
+  throttleCollective, armHintText, stepEasyArm, isLanded, EASY_ARM_HOLD_S,
+  sticksUnsafe, stepThrottleWatch, controllerArmHelp, RADIO_CENTRE_TOL, PAD_CENTRE_TOL,
+} from "./sim-3d.js?v=4bdfa98b9321";
 import {
   WHOOP_KEY, PHYSICS_VER, BOUNCE_MAPS,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=62c2945fdf20";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=67997562a985";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=085986479ed2";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -1333,7 +1349,7 @@ import {
   armSwitchValue, stepArmSwitch,
   loadRadioSwitches, saveRadioSwitches, switchesAxisMap, auxNumberOfAxis,
   createSwitchWizard, stepSwitchWizard, skipSwitchWizard, switchWizardResult,
-} from "./sim-touch.js?v=357550a0a4fd";
+} from "./sim-touch.js?v=0ccf2286071c";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -4402,6 +4418,7 @@ let liveMap=null;
 // the radio. radioSwitches is the selected pad's record, null with no pad.
 let radioSwitches=null;
 let easyArmState={};
+let easyReady=false;                // the 1 s hold done, not armed: the next raise arms (tickEasyArm)
 let easyCrashAt=-Infinity;          // simClockMs of the last crash (hitEffects)
 let easyDisarmReason=null;          // why Easy mode last disarmed (test hook)
 const EASY_CRASH_MEMORY_MS=3000;    // a crash still counts this long, while it comes to rest
@@ -4622,6 +4639,7 @@ function finishCalib(){
   if(presetSel)presetSel.value='custom';
   saveMap();
   calib=null;setCalibrating(false);calibEl.classList.remove('show');
+  thrWatch={};thrStuck=false; // the throttle reads anew on the new map
   toast('CALIBRATED — SAVED');
   updateRadioInfo();
 }
@@ -5004,6 +5022,19 @@ addEventListener('keydown',e=>{
     return;
   }
   if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
+  // Touch sticks flying, no controller, and a flight key (W, an arrow, Space):
+  // there is a keyboard. Offer it, one press (Enter, or the toast's button),
+  // in place of the key's touch-mode job: Space armed with no throttle the
+  // keys could fly, an arrow nudged the Cam.
+  if(touchCtl&&touchCtl.enabled&&!gpConnected&&!replayOn&&!document.body.classList.contains('menu-open')){
+    const k=e.key.toLowerCase();
+    if(k==='enter'&&keyboardOfferUp()){e.preventDefault();setInputChoice('keyboard');return;}
+    if(e.code==='Space'||k==='w'||k.startsWith('arrow')){
+      e.preventDefault();
+      if(!keyboardOfferUp())offerKeyboard();
+      return;
+    }
+  }
   if(e.code==='Space'){
     e.preventDefault();
     if(replayOn){toggleReplayPlay();return;}
@@ -5095,6 +5126,12 @@ const padKinds=new Map();
 // A radio by its kind, unless the pilot chose the gamepad preset for it.
 function padTakenForRadio(){return gpRadio&&radioPreset!=='pad';}
 let armGate=false;       // safety: throttle dead after device connect/change until sticks proven safe
+let armGateWhy=null;     // while armGate holds: what holds it (sim-3d.js sticksUnsafe), for the arm hint
+const padPre={r:0,p:0,y:0,t:0}; // the controller's sticks before armGate holds the throttle (readInput)
+// The calibration offer (sim-3d.js stepThrottleWatch): a controller's
+// throttle, disarmed, steady at its lowest and above the arm line. Fresh for
+// each device picked.
+let thrWatch={},thrStuck=false;
 let gpPickerEl=null;
 // Stick movement per device (sim-touch.js createPadTracker), fed each input
 // poll and each listing.
@@ -5102,6 +5139,10 @@ const padTracker=createPadTracker();
 // Devices the keyboard was flown past (readInput): nothing names them and
 // their sticks never moved. Passed over until they do.
 const padsPassed=new Set();
+// Devices set aside by the pilot's Keyboard or Touch pick in Controls
+// (setInputChoice): passed over until they move again (padTracker's pick is
+// stamped then), when a controller that sends input flies, as it always has.
+const padsAside=new Set();
 // The devices the pilot can fly, radios first (rankPads): four stick axes or
 // more, never a headset or a media remote; one whose axes have never moved
 // only when nothing else is there.
@@ -5109,7 +5150,7 @@ function listPads(){
   const out=[],pads=navigator.getGamepads?navigator.getGamepads():[];
   padTracker.see(pads,performance.now());
   for(const gp of pads)if(gp&&gp.connected!==false&&!padRecentlyGone(gp))out.push(gp);
-  return rankPads(out.filter((gp)=>!(padsPassed.has(gp.id)&&!padTracker.moved(gp))),padTracker);
+  return rankPads(out.filter((gp)=>!(padsPassed.has(gp.id)&&!padTracker.moved(gp))&&!(padsAside.has(gp.id)&&!padTracker.movedSincePick(gp))),padTracker);
 }
 // The selected device as the browser has it now, or null.
 function activePad(){
@@ -5206,6 +5247,55 @@ function flyWithRadio(){
     feel.saveInputChoice('radio');
   }
 }
+// The pilot's input pick (Controls' "Fly with", or the keyboard offer): saved
+// (sim-feel.js INPUT_CHOICE_KEY) and flown at once. Keyboard or Touch with a
+// controller connected sets every controller aside (padsAside) until it moves
+// again. Radio / Gamepad flies one that is there, or says to plug one in (the
+// keyboard, or touch on a phone, meanwhile). Armed, the quad disarms first:
+// the new input's throttle starts at the bottom.
+function setInputChoice(kind){
+  if(coreArmed())coreDisarm();
+  easyArmState={};
+  if(kind==='keyboard'||kind==='touch'){
+    if(feel)feel.saveInputChoice(kind);
+    const now=performance.now();
+    for(const p of (navigator.getGamepads?Array.from(navigator.getGamepads()):[]))if(p&&p.connected!==false){padsAside.add(p.id);padTracker.picked(p,now);}
+    if(gpConnected)dropPad();
+    // The keys' throttle at rest, disarmed: a W from here arms at once
+    // (kbFromRest), even one pressed before the next input poll.
+    kbThrottle=threeD?0.5:0;
+    kbFromRest=!threeD;
+    if(kind==='touch')setFlightMode(defaultFlightMode(),false);
+    enableTouchLayer(kind==='touch');
+    toast(kind==='touch'?'TOUCH STICKS — THROTTLE UP TO FLY':'KEYBOARD — HOLD W TO FLY');
+  }else{
+    padsAside.clear();
+    if(feel)feel.saveInputChoice('radio');
+    if(!gpConnected&&listPads().length)pickGamepad();
+    if(gpConnected)toast((padIsRadio(activePad()||{id:gpName})?'RADIO':'GAMEPAD')+' — FLYING');
+    else{bootTouchLayer();toast('PLUG IN A RADIO OR GAMEPAD, THEN MOVE A STICK',{ms:2600});}
+  }
+  followInputMode();
+  syncInputPick();
+}
+// Controls' "Fly with" buttons: the one flying now is pressed.
+function syncInputPick(){
+  const btns=document.querySelectorAll('.input-pick [data-input]');
+  if(!btns.length)return;
+  const kind=stickInputKind(),on=kind==='radio'||kind==='gamepad'?'pad':kind;
+  btns.forEach(b=>b.setAttribute('aria-pressed',b.dataset.input===on?'true':'false'));
+}
+function wireInputPick(root){
+  root.querySelectorAll('.input-pick [data-input]').forEach(b=>{b.onclick=()=>setInputChoice(b.dataset.input);});
+  syncInputPick();
+}
+// Touch flying on a device with a keyboard (a flight key came): one press back.
+function offerKeyboard(){
+  toast('KEYBOARD? <button type="button" id="toastKeys">Fly with keyboard [Enter]</button>',{html:true,ms:6000});
+}
+function keyboardOfferUp(){
+  return !!document.getElementById('toastKeys')&&+toastEl.style.opacity>0;
+}
 // quiet: no first-run prompt (Tune's list, forget: the pilot is in Tune).
 function selectPad(gp,remember,quiet){
   gpIndex=gp.index;gpConnected=true;gpName=gp.id;
@@ -5215,6 +5305,8 @@ function selectPad(gp,remember,quiet){
   if(remember)try{localStorage.setItem(GP_ID_KEY,gp.id);}catch(e){}
   loadDeviceProfile(gp.id,gp);   // per-device preset + calibration
   armGate=true;               // block throttle until sticks proven safe once
+  thrWatch={};thrStuck=false;
+  padsAside.delete(gp.id);
   enableTouchLayer(false);    // radio wins; empty Chrome polls must not mix touch
   followInputMode();
   updateRadioInfo();
@@ -5252,6 +5344,7 @@ function dropPad(why){
   if(padPilotPick===id)padPilotPick='';
   gpIndex=-1;gpConnected=false;gpName='';gpRadio=false;
   armGate=false; // keyboard must not stay FC-disarmed after the pad is gone
+  armGateWhy=null;thrWatch={};thrStuck=false;
   padLive=false;pollGp=null;padMissingSince=null;
   if(was&&id)padGone={id,at:performance.now()};
   // Nothing the pad last sent may stay: its sticks, its AUX, its arm switch
@@ -5532,6 +5625,9 @@ function readInput(dt){
     // The bf core takes the radio's channels 1:1 (Betaflight owns stick shaping).
     const next=applyAxisMap(gp.axes,map,core.kind==='bf'?{threeD,deadzone:0}:{threeD});
     stick.r=next.r;stick.p=next.p;stick.y=next.y;stick.t=next.t;
+    // The sticks as the device sends them, before the safety gate below holds
+    // the throttle: what the arm hint's readout shows (armHelpNow).
+    padPre.r=next.r;padPre.p=next.p;padPre.y=next.y;padPre.t=next.t;
     // On bf with "use my radio switches", the radio's AUX channels go to
     // Betaflight: its own arm, mode and turtle switches, on the diff's aux
     // lines. In Easy mode the page drives them, whatever the radio's layout.
@@ -5545,13 +5641,19 @@ function readInput(dt){
     // sticks have been seen safe once (throttle <5%, r/p/y near center) — a
     // pad plugged in mid-flight or a wrong map can't punch the quad away.
     // In 3D, "safe" is center (zero thrust). Forcing t=0 would be full reverse.
+    // A spring gamepad's sticks are centred within PAD_CENTRE_TOL (they rest
+    // where they rest), a radio's within RADIO_CENTRE_TOL. While it holds,
+    // armGateWhy says what holds it, and the arm hint says so (armHelpNow).
     if(armGate){
-      const thrOk=throttleSafeToArm(stick.t,threeD);
-      if(thrOk&&Math.abs(stick.r)<0.15&&Math.abs(stick.p)<0.15&&Math.abs(stick.y)<0.15){
+      armGateWhy=sticksUnsafe(stick,threeD,padIsRadio(gp)?RADIO_CENTRE_TOL:PAD_CENTRE_TOL);
+      if(!armGateWhy){
         armGate=false;
         if(performance.now()>skipSafeUntil)toast('STICKS SAFE — LIVE');
       }else stick.t=threeD?0.5:0;
-    }
+    }else armGateWhy=null;
+    // The calibration offer: steady at its lowest, above the arm line.
+    const tw=stepThrottleWatch(thrWatch,{t:padPre.t,dt,armed:coreArmed(),live:true,threeD});
+    thrWatch=tw.state;thrStuck=tw.stuck&&!armGate;
     if(!stick.aux&&switchesOn()&&radioSwitches.angle){
       const m=armSwitchValue(gp,radioSwitches.angle)>0.5?'angle':'acro';
       if(m!==flightMode&&!threeD)setFlightMode(m,false);
@@ -5802,6 +5904,7 @@ function toggleFlightMode(){
 let flyingInput='keyboard';
 let modeFromLink=false;
 function followInputMode(){
+  syncInputPick();
   const input=gpConnected?'pad':'keyboard';
   if(input===flyingInput)return;
   flyingInput=input;
@@ -5871,7 +5974,7 @@ function tryArm(opts){
   }
   qp.arm();
   qp.setPhysicsHz(PHYSICS_HZ_FAST);
-  toast('ARMED');return true;
+  return true; // ARMED: armFxWatch, on the frame the core shows it
 }
 // Arming through whichever core flies: the js core arms itself; on the bf core
 // the intent drives the diff's ARM switch and Betaflight's arming checks
@@ -5910,7 +6013,7 @@ function bfArmAsk(){bfArmAsked=true;bfArmPendingMs=null;}
 function bfArmWatch(){
   if(core.kind!=='bf')return;
   if(core.turtlePhase!=null){bfWasArmed=cs.armed;return;}
-  if(cs.armed&&!bfWasArmed){toast('ARMED');bfArmAsked=false;bfArmPendingMs=null;}
+  if(cs.armed&&!bfWasArmed){bfArmAsked=false;bfArmPendingMs=null;} // ARMED: armFxWatch
   else if(!cs.armed&&bfWasArmed){if(!yardSt.muteDisarm)toast('DISARMED');yardSt.muteDisarm=false;}
   else if(bfArmPendingMs!=null&&!cs.armed&&simClockMs-bfArmPendingMs>300){
     bfArmPendingMs=null;
@@ -5919,6 +6022,25 @@ function bfArmWatch(){
     toast('NOT ARMED'+(why.length?' — '+why.join(' '):''));
   }
   bfWasArmed=cs.armed;
+}
+// The arm and the disarm as the pilot sees and hears them, once a frame, on
+// the frame the flying core's own state changes (Betaflight's armed on the bf
+// core, the js core's): ARMED at full strength at once (flashArmed), and a
+// tone. On the bf core Betaflight's own arming beep is the arm tone; the js
+// core plays the same pattern (sim-audio.js CUES). The disarm tone is the
+// page's on both cores, Betaflight's disarm beeps held off under it. A
+// turtle's own arms and disarms (bf: core.turtlePhase) and a change of core
+// are not news.
+let armFxWas=null,armFxCore=null;
+function armFxWatch(){
+  const armed=!!cs.armed,was=armFxWas,same=armFxCore===core;
+  armFxWas=armed;armFxCore=core;
+  if(!same||was===null||armed===was)return;
+  if(core.kind==='bf'&&core.turtlePhase!=null)return;
+  if(armed){
+    flashArmed();
+    if(core.kind!=='bf')simAudio.cue('arm');
+  }else simAudio.cue('disarm',{muteBeeperS:core.kind==='bf'?DISARM_BEEPER_MUTE_S:0});
 }
 function tickArming(gp,dt){
   if(calib||switchWiz||easyTurtleBusy())return;
@@ -5950,6 +6072,7 @@ function tickArming(gp,dt){
     armSwitchBlocked=false;
     tickEasyArm(dt);
   }
+  if(hasSw||!easyMode())easyReady=false;
   // The poll runs at 250 Hz; the panel's live readout needs ten.
   const nowMs=performance.now();
   if(nowMs-armUiAt>100&&document.getElementById('panel')&&document.getElementById('panel').classList.contains('open')){
@@ -5975,6 +6098,11 @@ function tickEasyArm(dt){
     blocked:flipped,
   });
   easyArmState=out.state;
+  // The 1 s hold done, so the next raise arms: a tick, and a controller's hint
+  // says "Ready". Not on the keyboard, whose W arms from rest with no hold.
+  const ready=!out.arm&&!coreArmed()&&!flipped&&autoArmOn&&out.state.lowS>=EASY_ARM_HOLD_S-1e-9&&stickInputKind()!=='keyboard';
+  if(ready&&!easyReady)simAudio.cue('ready');
+  easyReady=ready;
   if(out.arm){
     easyCrashAt=-Infinity;
     tryArm({fromAuto:true});
@@ -6409,12 +6537,14 @@ const toastEl=document.getElementById('toast');let toastTimer;
 function toast(m,opts){
   const o=opts||{};
   toastEl.classList.toggle('has-action',!!o.html);
-  toastEl.classList.remove('gap-toast','gap-secret','radio-msg','music-toast');
+  toastEl.classList.remove('gap-toast','gap-secret','radio-msg','music-toast','arm-flash');
   if(o.cls)toastEl.classList.add(...String(o.cls).split(' ').filter(Boolean));
   if(o.html){
     toastEl.innerHTML=m;
     const rec=document.getElementById('toastRecalib');
     if(rec)rec.onclick=function(e){e.preventDefault();startCalib();};
+    const keysBtn=document.getElementById('toastKeys');
+    if(keysBtn)keysBtn.onclick=function(e){e.preventDefault();setInputChoice('keyboard');};
     const replayBtn=document.getElementById('toastReplay');
     if(replayBtn)replayBtn.onclick=function(e){e.preventDefault();startReplay();};
     const shareBtn=document.getElementById('toastShare');
@@ -6424,6 +6554,20 @@ function toast(m,opts){
   }else toastEl.textContent=m;
   toastEl.style.opacity=1;
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toastEl.style.opacity=0;toastEl.classList.remove('has-action');},o.ms||1500);
+}
+// ARMED in the toast's place, at full strength on the frame it is called
+// (armFxWatch: the frame the core arms), with no fade in: .arm-flash holds it
+// a moment and fades it (its animation wins over the inline opacity). The
+// next toast takes the element back.
+function flashArmed(){
+  toastEl.classList.remove('has-action','gap-toast','gap-secret','radio-msg','music-toast','arm-flash');
+  toastEl.textContent='ARMED';
+  void toastEl.offsetWidth;         // restart the animation on a second arm
+  toastEl.classList.add('arm-flash');
+  // Up (opacity 1) while it shows, as any toast, so a toast that waits for
+  // the element to be free waits for it.
+  toastEl.style.opacity=1;
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toastEl.style.opacity=0;},1100);
 }
 // P = new pack under a low battery (from the warning, under LAND NOW): words
 // for the keys (and a pad: or the menu's New pack); on touch a NEW PACK
@@ -7385,8 +7529,17 @@ function wireLooksUI(){
   // The HUD's MENU is the Esc key, exactly, for pilots with no keyboard (touch,
   // or a radio on a phone or tablet).
   on('menuBtn',()=>dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'})));
-  document.getElementById('menuControls').onclick=()=>{
-    showMenuLayer('<h2>Controls</h2><p>TX16S: EdgeTX USB mode = <b style="color:var(--txt)">Joystick</b>.</p>'+
+  // Controls: on the launch screen and in the in-flight menu. Its first row
+  // is the input the pilot flies with (setInputChoice), changeable any time.
+  const openControls=()=>{
+    showMenuLayer('<h2>Controls</h2>'+
+      '<div class="row"><label>Fly with</label></div>'+
+      '<div class="input-pick" role="group" aria-label="Fly with">'+
+        '<button type="button" data-input="keyboard">Keyboard</button>'+
+        '<button type="button" data-input="touch">Touch</button>'+
+        '<button type="button" data-input="pad">Radio / Gamepad</button>'+
+      '</div>'+
+      '<p>TX16S: EdgeTX USB mode = <b style="color:var(--txt)">Joystick</b>.</p>'+
       '<p><span class="n">W/S</span> throttle · <span class="n">A/D</span> yaw<br>'+
       '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
       '<span class="n">R</span> last-gate respawn · <span class="n">P</span> new pack · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
@@ -7403,8 +7556,11 @@ function wireLooksUI(){
       '<button type="button" id="layerClose">Close</button>');
     wireSoundControls(document.getElementById('menuLayer'));
     wireEasyControls(document.getElementById('menuLayer'));
+    wireInputPick(document.getElementById('menuLayer'));
     document.getElementById('layerClose').onclick=hideMenuLayer;
   };
+  document.getElementById('menuControls').onclick=openControls;
+  document.getElementById('menuControlsFlight').onclick=openControls;
   document.getElementById('menuHowTo').onclick=()=>{
     showMenuLayer('<h2>How to</h2><ol>'+
       '<li>Throttle down for a second, then up, arms and flies. Space arms too. Upside down or on its side, a full roll or pitch stick flips it back and re-arms. Angle on keyboard and touch, acro on a radio or gamepad; angle is a toggle in Controls (1 / 2 / 3 = Angle / Horizon / Acro). 3D (Tune panel) is reversible-motor acro — center throttle is zero, below center inverts thrust. 3D runs are not counted on boards.</li>'+
@@ -10117,6 +10273,7 @@ function stepCore(frameMs,now){
   tickRaceOffer(simClockMs-simAtMs);
   if(runActive&&core.kind==='js')runSawJs=true;
   bfArmWatch();
+  armFxWatch();
   bfWorldWatch(now);
   yardWatch();
 }
@@ -10695,7 +10852,8 @@ function loop(now){
     if(feel){
       state.stickT=stick.t;
       feel.updateHud({stick,battV,battOn:CFG.battSimOn||cs.kind==='bf',mode:cs.flightMode,armed:cs.armed,threeD,thrText:throttleHudText(stick.t,threeD),quad:flyingQuadName(),
-        armHint:bfLoadPending()?BF_LOADING_HINT:bfRadio()?'Arm on the radio (AUX'+(pilotAux('arm')||'?')+')':armHintText({threeD,easy:easyMode(),autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked,touch:touchThrottleSide(),keys:stickInputKind()==='keyboard',low:throttleSafeToArm(stick.t,threeD)||(kbFromRest&&stickInputKind()==='keyboard'&&stick.t===kbThrottle)})});
+        armHint:bfLoadPending()?BF_LOADING_HINT:armHelpNow()});
+      syncArmCal();
       feel.tickTutorial(state,dt,cs.armed);
       const upZ=bodyUpZ(cs.quaternion);
       const clearanceM=cs.clearance;
@@ -10822,6 +10980,30 @@ function openCoachPicker(){
   if(close)close.onclick=hideMenuLayer;
 }
 guardPageGestures(document);
+// The arm hint (feel.updateHud), once a frame. A controller the page arms (a
+// radio or a gamepad, disarmed, 2D) gets why it cannot arm (the connect-time
+// check holding: the throttle, or which stick is off centre; or a throttle
+// steady at its lowest above the line) with Calibrate offered, or the hint with
+// its live throttle and the line under it (sim-3d.js controllerArmHelp).
+let armCalOffer=false;
+function armHelpNow(){
+  armCalOffer=false;
+  if(bfRadio())return 'Arm on the radio (AUX'+(pilotAux('arm')||'?')+')';
+  const kind=stickInputKind();
+  const base=armHintText({threeD,easy:easyMode(),autoArm:autoArmOn,hasSwitch:hasArmSwitch(liveMap),blocked:armSwitchBlocked,touch:touchThrottleSide(),keys:kind==='keyboard',ready:easyReady,low:throttleSafeToArm(stick.t,threeD)||(kbFromRest&&kind==='keyboard'&&stick.t===kbThrottle)});
+  if(!padLive||threeD||cs.armed||calib||switchWiz)return base;
+  const h=controllerArmHelp({base,unsafe:armGate?armGateWhy:null,stuck:thrStuck,t:padPre.t});
+  armCalOffer=h.cal;
+  return h.text;
+}
+// The arm hint's Calibrate (#hudArmCal), offered with it.
+function syncArmCal(){
+  const b=document.getElementById('hudArmCal');
+  if(!b)return;
+  const on=armCalOffer&&!cs.armed&&!bfLoadPending();
+  if(b.hidden===on)b.hidden=!on;
+}
+document.getElementById('hudArmCal').onclick=(e)=>{e.preventDefault();startCalib();};
 // The touch throttle stick's side for the arm hint (sim-3d.js armHintText),
 // or null with the touch sticks off: the left in Mode 2, else the right (as
 // sim-touch.js holdYFor).
@@ -10838,6 +11020,7 @@ function enableTouchLayer(on){
   touchCtl.syncLandscape(touchViewport());
   document.body.classList.toggle('touch-on',!!on);
   placeStickOverlay();
+  syncInputPick();
 }
 function syncTouchSettingsUI(s){
   const st=s||(touchCtl?touchCtl.settings:loadTouch());
@@ -11232,6 +11415,10 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   // The radio's ARM hold after a splash (tests): hold true/false sets it first.
   yardHoldArm:(aux,hold)=>{if(hold!=null)yardSt.armHold=!!hold;const out=yardHoldArm(aux);
     return {aux:out,hold:yardSt.armHold,arm:core.kind==='bf'?(core.auxRanges||[]).filter(r=>r.box===0):[]};},
+  // The arm, as the pilot is told it: the connect-time check and what holds
+  // it, the throttle before it, the calibration offer, ready; the input pick.
+  armHelp:()=>({gate:armGate,why:armGateWhy,pre:Object.assign({},padPre),stuck:thrStuck,watch:Object.assign({},thrWatch),ready:easyReady,cal:armCalOffer,
+    choice:feel?feel.loadInputChoice():null,kind:stickInputKind(),aside:[...padsAside]}),
   easy:()=>({mode:easyMode(),switches:radioSwitches,wizard:switchWiz?{step:switchWiz.step,picks:switchWiz.picks}:null,flightMode,arm:easyArmState,jsTurtle,crashAt:easyCrashAt,disarmReason:easyDisarmReason,stickHold:turtleStickHold}),
   encodeBuild,decodeBuild,BUILD_KEY,ROOM_KEY,COACH_KEY,DAILY_KEY,BOARD_KEY,SKIN_KEY,applyRoomSpec,planRoom,
   encodeDuel,dailyTrackFor,weeklyTrackFor,DUEL_KIND,unlockedSkins,allSkins,loadSecrets,

@@ -17,6 +17,11 @@ export const SWITCHES_PREFIX = 'quadmathSimSwitches_';
 // extra hole that must rescale like touch ((abs-d)/(1-d)) or center reads
 // as a notch. 0.02 is enough for HID noise without eating micro-corrections.
 export const RADIO_DZ = 0.02;
+// A spring gamepad's throttle (PAD_MAP, uncalibrated): a stick resting up to
+// 12% off centre reads 0, so a worn stick that rests a little up still arms
+// (the arm line is 5%, sim-3d.js throttleSafeToArm). Radios have no spring
+// map and keep their full travel; a calibrated pad's map starts at its rest.
+export const PAD_THR_DEADZONE = 0.12;
 
 export const DEFAULT_TOUCH = Object.freeze({
   mode: 2,
@@ -930,9 +935,11 @@ export function applyAxisMap(axes, map, opts) {
   let t;
   // Spring pads only. A ratcheted TX16S throttle is min/max ±1 — never the
   // bipolar spring map, or full-up (+1) would collapse to stick.t = 0.
+  // 2D: the stick up from its rest, past PAD_THR_DEADZONE (a worn stick rests
+  // off centre), rescaled so full stick is still full throttle.
   if (m.t && m.t.spring) {
     if (threeD) t = clamp((1 - traw) / 2, 0, 1);
-    else t = clamp(-traw, 0, 1);
+    else t = clamp(applyDeadzone(-traw, PAD_THR_DEADZONE), 0, 1);
   } else {
     const min = m.t && Number.isFinite(m.t.min) ? m.t.min : -1;
     const max = m.t && Number.isFinite(m.t.max) ? m.t.max : 1;
