@@ -272,7 +272,8 @@ export const PAD_CENTRE_TOL = 0.25;
 // The arm line, as the readout states it (throttleSafeToArm).
 export const ARM_LOW_LINE = 0.05;
 // The calibration offer: the throttle, disarmed, at the lowest it has read
-// since the device was picked, steady (within THR_STEADY) for THR_STEADY_S, and
+// since the device was picked or last disarmed (a trim bumped in flight shows
+// at the next landing), steady (within THR_STEADY) for THR_STEADY_S, and
 // above the line but not above THR_STUCK_MAX. A throttle left higher is left
 // up, not stuck: a radio parked at half throttle gets the readout and no offer.
 export const THR_STEADY = 0.01;

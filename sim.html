@@ -1309,7 +1309,7 @@ import {
   parseThreeDQuery, runCountsForBoards, throttleHudText,
   throttleCollective, armHintText, stepEasyArm, isLanded, EASY_ARM_HOLD_S,
   sticksUnsafe, stepThrottleWatch, controllerArmHelp, RADIO_CENTRE_TOL, PAD_CENTRE_TOL,
-} from "./sim-3d.js?v=4bdfa98b9321";
+} from "./sim-3d.js?v=5b104f46762e";
 import {
   WHOOP_KEY, PHYSICS_VER, BOUNCE_MAPS,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
@@ -5026,7 +5026,7 @@ addEventListener('keydown',e=>{
   // there is a keyboard. Offer it, one press (Enter, or the toast's button),
   // in place of the key's touch-mode job: Space armed with no throttle the
   // keys could fly, an arrow nudged the Cam.
-  if(touchCtl&&touchCtl.enabled&&!gpConnected&&!replayOn&&!document.body.classList.contains('menu-open')){
+  if(touchCtl&&touchCtl.enabled&&!gpConnected&&!replayOn&&!e.altKey&&!e.ctrlKey&&!e.metaKey&&!document.body.classList.contains('menu-open')){
     const k=e.key.toLowerCase();
     if(k==='enter'&&keyboardOfferUp()){e.preventDefault();setInputChoice('keyboard');return;}
     if(e.code==='Space'||k==='w'||k.startsWith('arrow')){
@@ -5260,6 +5260,7 @@ function setInputChoice(kind){
     if(feel)feel.saveInputChoice(kind);
     const now=performance.now();
     for(const p of (navigator.getGamepads?Array.from(navigator.getGamepads()):[]))if(p&&p.connected!==false){padsAside.add(p.id);padTracker.picked(p,now);}
+    if(gpName)padsAside.add(gpName); // the one flying, on an empty poll too
     if(gpConnected)dropPad();
     // The keys' throttle at rest, disarmed: a W from here arms at once
     // (kbFromRest), even one pressed before the next input poll.
@@ -6029,8 +6030,8 @@ function bfArmWatch(){
 // tone. On the bf core Betaflight's own arming beep is the arm tone; the js
 // core plays the same pattern (sim-audio.js CUES). The disarm tone is the
 // page's on both cores, Betaflight's disarm beeps held off under it. A
-// turtle's own arms and disarms (bf: core.turtlePhase) and a change of core
-// are not news.
+// turtle's own arms and disarms (bf: core.turtlePhase), a change of core and
+// a splash's disarm (yardSt.muteDisarm, as its DISARMED toast) are not news.
 let armFxWas=null,armFxCore=null;
 function armFxWatch(){
   const armed=!!cs.armed,was=armFxWas,same=armFxCore===core;
@@ -6040,10 +6041,10 @@ function armFxWatch(){
   if(armed){
     flashArmed();
     if(core.kind!=='bf')simAudio.cue('arm');
-  }else simAudio.cue('disarm',{muteBeeperS:core.kind==='bf'?DISARM_BEEPER_MUTE_S:0});
+  }else if(!yardSt.muteDisarm)simAudio.cue('disarm',{muteBeeperS:core.kind==='bf'?DISARM_BEEPER_MUTE_S:0});
 }
 function tickArming(gp,dt){
-  if(calib||switchWiz||easyTurtleBusy())return;
+  if(calib||switchWiz||easyTurtleBusy()){easyReady=false;return;}
   const map=liveMap||(gp?liveAxisMap(gp):null);
   if(armDetecting&&gp){
     const found=detectArmSwitch(armDetectPrev,gp,map);
@@ -9171,6 +9172,7 @@ function startReplay(mode){
   replayState.clipUntil=null;
   if(qp)qp.armed=false;
   if(core.kind==='bf')core.setArm(false);
+  armFxWas=null; // the frames after it start over: no disarm tone for the replay's own disarm
   chaseCamOn=false;
   if(looks){looks.setMenuOpen(false);looks.setLookSpot(null);}
   hideMenuLayer();
@@ -10272,8 +10274,8 @@ function stepCore(frameMs,now){
   countFlight(simClockMs-simAtMs);
   tickRaceOffer(simClockMs-simAtMs);
   if(runActive&&core.kind==='js')runSawJs=true;
-  bfArmWatch();
   armFxWatch();
+  bfArmWatch();
   bfWorldWatch(now);
   yardWatch();
 }
