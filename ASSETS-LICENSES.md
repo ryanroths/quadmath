@@ -106,6 +106,25 @@ License text: `assets/sim-looks/fonts/JetBrainsMono-OFL.txt`
 
 Used only for numeric readouts (OSD values, sliders, CLI/ghost fields).
 
+## Music — Kevin MacLeod, Creative Commons Attribution 4.0
+
+License: http://creativecommons.org/licenses/by/4.0/
+Source: incompetech.com (https://incompetech.com)
+
+The sim's background music, played by the MUSIC button and N (`TRACKS` in `sim.html`). Each file is fetched only when it is about to play. CC BY 4.0 needs visible credit: each credit line below is on the sim page (the Tune panel, under Audio) and in `SIM-NOTICE.txt`.
+
+Changes to every track: re-encoded to MP3 at 128 kbps, 44.1 kHz stereo; leading and trailing silence trimmed; one gain to -14 LUFS integrated, with a peak limiter so the decoded file peaks at -1 dBTP or lower.
+
+| File | Title | Artist | Source | Licence | Credit line |
+|---|---|---|---|---|---|
+| `audio/track1.mp3` | Galactic Rap | Kevin MacLeod | incompetech.com | CC BY 4.0 | "Galactic Rap" Kevin MacLeod (incompetech.com) Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/ |
+| `audio/track2.mp3` | Funky Boxstep | Kevin MacLeod | incompetech.com | CC BY 4.0 | "Funky Boxstep" Kevin MacLeod (incompetech.com) Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/ |
+| `audio/track3.mp3` | Brain Dance | Kevin MacLeod | incompetech.com | CC BY 4.0 | "Brain Dance" Kevin MacLeod (incompetech.com) Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/ |
+| `audio/track4.mp3` | Tyrant | Kevin MacLeod | incompetech.com | CC BY 4.0 | "Tyrant" Kevin MacLeod (incompetech.com) Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/ |
+| `audio/track5.mp3` | Robobozo | Kevin MacLeod | incompetech.com | CC BY 4.0 | "Robobozo" Kevin MacLeod (incompetech.com) Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/ |
+
+These five replace the sim's three earlier tracks, which had no licence record; they were removed. The file names `audio/track1.mp3` to `audio/track3.mp3` are reused, so the page asks for each file with its content hash (`?v=`), and a browser's cached copy of an earlier song is never played under these credits.
+
 ## Already in the repo (unchanged)
 
 | Asset | License | Credit |

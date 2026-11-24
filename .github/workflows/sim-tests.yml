@@ -30,8 +30,9 @@ name: Sim tests
 #                 skips for want of wrangler); and test_sim_bf_rates_page
 #                 with test_sim_rates_page (Tune's rates on both cores, read
 #                 back from Betaflight); and test_sim_race_offer_page (the
-#                 race offer and the race count). Each entry under about 10
-#                 minutes.
+#                 race offer and the race count); and test_sim_music (no
+#                 audio with the page, each track plays, the credits). Each
+#                 entry under about 10 minutes.
 #                 test_sim_sound has no entry for now: it samples the page
 #                 once a frame, so its result depends on the frame rate.
 #   asset-stamps  scripts/ci/stamp_asset_cache.py --check. The stamper's own
@@ -134,6 +135,11 @@ jobs:
           # Loop) and the race count at gate 0; a desktop and a phone at three
           # sizes. About 2.5 minutes on a Windows desktop.
           - { suite: page, label: 'race offer', tests: 'tools/test_sim_race_offer_page.mjs' }
+          # The music: no audio with the page for a returning visitor with
+          # the music on, the first gesture and N each fetch and play one
+          # track (title and artist in the toast), every listed file plays,
+          # the credits are on the page.
+          - { suite: page, label: 'music', tests: 'tools/test_sim_music.mjs' }
 
     steps:
       - name: Check out

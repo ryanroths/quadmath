@@ -25,5 +25,29 @@ vendor/sim-core/VERSION. It compiles Betaflight
 (https://github.com/betaflight/betaflight, GPL-3.0-or-later) to WebAssembly.
 Its own notice is vendor/sim-core/NOTICE.
 
-three.js (MIT), vendored in vendor/. Asset licences (Kenney CC0 kits, fonts)
-are listed in ASSETS-LICENSES.md.
+three.js (MIT), vendored in vendor/. Asset licences (Kenney CC0 kits, fonts,
+music) are listed in ASSETS-LICENSES.md.
+
+MUSIC
+
+The background music (audio/track1.mp3 to audio/track5.mp3) is five tracks by
+Kevin MacLeod (incompetech.com), each under the Creative Commons Attribution
+4.0 licence, http://creativecommons.org/licenses/by/4.0/. The GPL above does
+not cover them. Changes: each is re-encoded to 128 kbps MP3, with its leading
+and trailing silence trimmed and its loudness matched to -14 LUFS. The same
+credits are in the simulator's Tune panel, under Audio.
+
+"Galactic Rap" Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/
+
+"Funky Boxstep" Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/
+
+"Brain Dance" Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/
+
+"Tyrant" Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/
+
+"Robobozo" Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/

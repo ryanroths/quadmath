@@ -154,7 +154,8 @@
     body:has(#coachHud.show) #packHint,body:has(#feelTutorial.show) #packHint,
     body:has(#toast.has-action) #packHint{display:none}
   /* 44% + 44px clears a toast of two lines (a portrait phone wraps one). A
-     short landscape has one-line toasts and the stick overlay 72 px from the
+     short landscape has one-line toasts (the music toast's two lines at
+     14 px, under 40 px) and the stick overlay 72 px from the
      bottom: just under the toast, over the overlay; the arm hint left of the
      card meets the button there, so while it shows (landed on a low pack, a
      new pack is the next step) the arm hint gives way, still laid out. */
@@ -295,6 +296,10 @@
   #toast.gap-secret{font-size:20px;color:#ffd400;text-shadow:0 0 14px rgba(255,212,0,.7)}
   /* A radio message to read, not a callout: the Classic-mode one, "looks like a radio". */
   #toast.radio-msg{font-size:16px;line-height:1.4;max-width:min(560px,90vw)}
+  /* Music: the line (MUSIC ON, TRACK 2/5), then the track's title and artist on its own line. */
+  #toast.music-toast{font-size:18px;line-height:1.35;white-space:pre-line}
+  /* A short landscape puts #packHint 20 px under the toast's centre: two lines under 40 px. */
+  @media (max-height:430px){#toast.music-toast{font-size:14px;line-height:1.2}}
   #toast a,#toast button{display:inline-block;width:auto;margin:10px auto 0;padding:6px 14px;font-size:13px;font-weight:600;
     color:var(--orange);background:rgba(16,18,24,.85);border:1px solid rgba(255,77,26,.55);border-radius:10px;cursor:pointer}
   #toast button+button{margin-left:8px}
@@ -606,6 +611,14 @@
   #buildPreset,#buildFrame,#buildProp,#buildBlades,#buildCells{width:100%;margin-bottom:8px;background:rgba(8,9,12,.55);
     color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-family:inherit}
   .build-note{font-size:11px;color:var(--dim);line-height:1.45;margin:0 0 8px}
+  /* Music credits under Audio (CC BY 4.0): each track's credit line, then its licence line. */
+  .music-credits{margin:10px 0 0}
+  .music-credits ul{list-style:none;margin:0;padding:0}
+  .music-credits li{font-size:10px;color:var(--dim);line-height:1.4;margin:0 0 7px}
+  .music-credits li span{display:block}
+  .music-credits li span:first-child{color:var(--txt)}
+  .music-credits a{color:inherit;overflow-wrap:anywhere}
+  .music-credits a:hover{color:var(--orange)}
   #buildCode{width:100%;min-height:44px;background:rgba(8,9,12,.55);border:1px solid var(--line);color:var(--txt);
     font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;padding:8px;border-radius:10px;margin-bottom:8px}
   /* W4 Coach — same glass card as How-to / tutorial, isolated from race chrome */
@@ -1056,6 +1069,19 @@
        is what you see is when the module never ran — and then it must not
        claim sound. -->
   <button id="musicBtn">🔇 MUSIC</button>
+  <!-- CC BY 4.0 asks for visible credit: each track's credit line exactly as
+       incompetech.com gives it, with the licence link (tools/test_sim_music.mjs
+       checks the text). The same lines are in SIM-NOTICE.txt. -->
+  <div class="music-credits" id="musicCredits">
+    <p class="build-note">Music credits. Each track is re-encoded for the sim: silence trimmed, levels matched.</p>
+    <ul>
+      <li><span>"Galactic Rap" Kevin MacLeod (incompetech.com)</span><span>Licensed under Creative Commons: By Attribution 4.0 License, <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">http://creativecommons.org/licenses/by/4.0/</a></span></li>
+      <li><span>"Funky Boxstep" Kevin MacLeod (incompetech.com)</span><span>Licensed under Creative Commons: By Attribution 4.0 License, <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">http://creativecommons.org/licenses/by/4.0/</a></span></li>
+      <li><span>"Brain Dance" Kevin MacLeod (incompetech.com)</span><span>Licensed under Creative Commons: By Attribution 4.0 License, <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">http://creativecommons.org/licenses/by/4.0/</a></span></li>
+      <li><span>"Tyrant" Kevin MacLeod (incompetech.com)</span><span>Licensed under Creative Commons: By Attribution 4.0 License, <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">http://creativecommons.org/licenses/by/4.0/</a></span></li>
+      <li><span>"Robobozo" Kevin MacLeod (incompetech.com)</span><span>Licensed under Creative Commons: By Attribution 4.0 License, <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">http://creativecommons.org/licenses/by/4.0/</a></span></li>
+    </ul>
+  </div>
 
   <h2>Your build</h2>
   <!-- Classic physics only (.phys-js, hidden on the bf core, which flies its
@@ -4689,7 +4715,24 @@ function unlockAudio(){
 }
 for(const type of ['keydown','pointerdown','pointerup','touchend'])addEventListener(type,unlockAudio,{capture:true,passive:true});
 // ---------- background music playlist (audio/track*.mp3) — the MUSIC button, paused by default ----------
-const TRACKS=['audio/track1.mp3','audio/track2.mp3','audio/track3.mp3'];
+// Kevin MacLeod (incompetech.com), CC BY 4.0: each track's credit line is in
+// the Tune panel (#musicCredits), SIM-NOTICE.txt and ASSETS-LICENSES.md.
+// ?v= is the first 8 hex of the file's SHA-256: these names held other songs
+// before, and a browser keeps an mp3 for four hours (tools/test_sim_music.mjs
+// checks each stamp against its file).
+const TRACKS=[
+  {src:'audio/track1.mp3?v=645077cc',title:'Galactic Rap',artist:'Kevin MacLeod'},
+  {src:'audio/track2.mp3?v=8338bf81',title:'Funky Boxstep',artist:'Kevin MacLeod'},
+  {src:'audio/track3.mp3?v=68b68a64',title:'Brain Dance',artist:'Kevin MacLeod'},
+  {src:'audio/track4.mp3?v=2c3ad355',title:'Tyrant',artist:'Kevin MacLeod'},
+  {src:'audio/track5.mp3?v=a22af3af',title:'Robobozo',artist:'Kevin MacLeod'},
+];
+// The one place an index becomes a track. Anything that is not an index into
+// TRACKS (a removed track's, a stale or junk value) is the first track, never
+// an error.
+function trackAt(i){
+  return TRACKS[Number.isInteger(i)&&i>=0&&i<TRACKS.length?i:0];
+}
 const MUSIC_VOL_KEY='ryflyMusicVol';
 const MUSIC_ON_KEY='ryflyMusicOn';
 let musicOn=false,musicOrder=[],musicIdx=0;
@@ -4708,7 +4751,10 @@ function saveMusicPref(on){
   try{localStorage.setItem(MUSIC_ON_KEY,on?'1':'0');}catch(e){}
 }
 let musicWanted=loadMusicPref();
+// No src until a track is about to play (playCurrentTrack, startMusic), and
+// preload none, so nothing of the music downloads with the page.
 const musicEl=new Audio();
+musicEl.preload='none';
 const musicVolEl=document.getElementById('musicVol');
 const musicBtnEl=document.getElementById('musicBtn');
 const musicVolLabel=document.getElementById('v_musicVol');
@@ -4744,8 +4790,14 @@ function shuffleOrder(){
   }
   musicIdx=0;
 }
+function currentTrack(){return trackAt(musicOrder[musicIdx]);}
+// What a music toast says: the line, then the current track's title and artist.
+function musicToast(head){
+  const t=currentTrack();
+  toast(head+'\n'+t.title+' — '+t.artist,{cls:'music-toast'});
+}
 function playCurrentTrack(){
-  musicEl.src=TRACKS[musicOrder[musicIdx]];
+  musicEl.src=currentTrack().src;
   console.log('[music] playCurrentTrack →',(musicIdx+1)+'/'+musicOrder.length,musicEl.src);
   musicEl.play().catch(()=>{});
 }
@@ -4790,7 +4842,7 @@ function toggleMusic(){
     // leave the button claiming 🔊 over silence. Reload it instead of un-pausing.
     if(musicEl.src&&!musicEl.error)musicEl.play().catch(()=>{});else playCurrentTrack();
   }else musicEl.pause();
-  toast(musicOn?'♪ MUSIC ON':'MUSIC OFF');
+  if(musicOn)musicToast('♪ MUSIC ON');else toast('MUSIC OFF');
   musicStarted=true;   // the button is itself the start; don't let a later gesture re-trigger
   syncMusicUI();
   return !musicOn;
@@ -4808,7 +4860,7 @@ function skipTrack(){
   trackFailStreak=0;
   if(!musicOrder.length)shuffleOrder();
   nextTrack();
-  toast('♪ TRACK '+(musicIdx+1)+'/'+musicOrder.length);
+  musicToast('♪ TRACK '+(musicIdx+1)+'/'+musicOrder.length);
   syncMusicUI();
 }
 // First-gesture music start (unlockAudio), for the saved ryflyMusicOn choice.
@@ -4828,12 +4880,12 @@ function startMusic(){
   }
   musicStarted=true;musicUnlockTries++;
   if(!musicOrder.length)shuffleOrder();
-  musicEl.src=TRACKS[musicOrder[musicIdx]];
+  musicEl.src=currentTrack().src;
   console.log('[music] startMusic — first gesture, attempt '+musicUnlockTries+' →',musicEl.src);
   musicEl.play().then(()=>{
     musicOn=true;trackFailStreak=0;
     dismissAudioHint();
-    toast('♪ MUSIC ON');
+    musicToast('♪ MUSIC ON');
     syncMusicUI();
     console.log('[music] startMusic ok — playing');
   }).catch(()=>{musicStarted=false;console.log('[music] startMusic blocked — latch released, the next gesture tries again');});
@@ -6357,7 +6409,7 @@ const toastEl=document.getElementById('toast');let toastTimer;
 function toast(m,opts){
   const o=opts||{};
   toastEl.classList.toggle('has-action',!!o.html);
-  toastEl.classList.remove('gap-toast','gap-secret','radio-msg');
+  toastEl.classList.remove('gap-toast','gap-secret','radio-msg','music-toast');
   if(o.cls)toastEl.classList.add(...String(o.cls).split(' ').filter(Boolean));
   if(o.html){
     toastEl.innerHTML=m;
@@ -11171,7 +11223,7 @@ Object.assign(window._sim,{usingGltf:()=>usingGltf,confirmSaves:()=>looks&&looks
   // Tune's bf rates: what they ask for and where from, what the flying class's
   // Betaflight holds (read back), whether a paste's fly, the OSD's word.
   bfRates:()=>{const b=bfCore?bfOf(bfFlyingType()):null;return JSON.parse(JSON.stringify({want:bfRatesWant(),from:bfRatesFrom(),saved:bfRatesSaved,link:bfRatesLinkRP,back:b&&b.ratesBack,thrBack:b&&b.thrBack,thrWant:bfThrWant(),thrDefault:bfCore?bfThrDefaultOf(bfFlyingType()):null,thrSaved:bfThrSaved,pending:bfTunePending,pasteWins:!!b&&bfPasteWins(b),ratesLast:!!b&&b.ratesLast,osd:bfRatesOsdText,source:(document.getElementById('ratesSourceBf')||{}).textContent,status:(document.getElementById('bfRatesStatus')||{}).textContent}));},
-  audio:simAudio,music:()=>({on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src}),setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},setTestPilot(fn){testPilot=typeof fn==='function'?fn:null;if(testPilot)testPilotUsed=true;testPilotError=null;},testPilotError:()=>testPilotError,testPilotUsed:()=>testPilotUsed,
+  audio:simAudio,music:()=>{const t=musicEl.src?currentTrack():null;return {on:musicOn,idx:musicIdx,n:musicOrder.length,src:musicEl.src,title:t&&t.title,artist:t&&t.artist,t:musicEl.currentTime,paused:musicEl.paused,err:musicEl.error?musicEl.error.code:0,tracks:TRACKS.map((x)=>x.src)};},setTestStick(s){testStick=s?{r:+s.r||0,p:+s.p||0,y:+s.y||0,t:+s.t||0}:null;},setTestPilot(fn){testPilot=typeof fn==='function'?fn:null;if(testPilot)testPilotUsed=true;testPilotError=null;},testPilotError:()=>testPilotError,testPilotUsed:()=>testPilotUsed,
   // A built-in track's online board floor (sim-retention.js builtinFloorMs, as the Worker has it), or null.
   builtinFloorMs:(id,c)=>{const t=findTrack(id);return t?builtinFloorMs(t,c):null;},
   firstFlight:()=>({show:firstFlightState.show||null,seen:{...firstFlightSeen},liveS:firstFlightState.liveS||0,shownS:firstFlightState.shownS||0}),
