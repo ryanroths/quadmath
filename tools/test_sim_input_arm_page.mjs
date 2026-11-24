@@ -34,6 +34,7 @@ import {
 } from '../sim-3d.js';
 import { applyAxisMap, PAD_MAP, AETR_MAP, PAD_THR_DEADZONE } from '../sim-touch.js';
 import { CUES, DISARM_BEEPER_MUTE_S } from '../sim-audio.js';
+import { HOTKEYS, HOTKEY_GROUPS, legendHtml } from '../sim-feel.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -109,6 +110,23 @@ test('the cues: the js arm tone is Betaflight\'s arming beep pattern; the disarm
   assert.ok(!html.includes("toast('ARMED')"), 'ARMED is the flash, on the arm frame');
 });
 
+test('one list of keys: the legend is drawn from it as it read before; every key the page answers is in it', () => {
+  const lines = legendHtml().split('<br>');
+  assert.equal(lines.length, 18);
+  assert.equal(lines[0], '<b>W/S — Throttle</b>');
+  assert.equal(lines[8], '<b id="legendGhost">G — Ghost Replay</b>');
+  assert.equal(lines[17], '<b>TAB — Tune Panel</b>');
+  for (const k of HOTKEYS) assert.ok(HOTKEY_GROUPS.includes(k.group), k.keys + ': a group the card shows');
+  const html = readFileSync(join(root, 'sim.html'), 'utf8');
+  const legend = html.match(/<div id="legend">([\s\S]*?)<\/div>\s*<div id="feelPrompt"/);
+  assert.ok(legend && !/<b[ >]/.test(legend[1].replace(/<div class="lgc[^>]*><\/div>/g, '')), 'no legend line written in the markup: they come from the list');
+  // The letters the keydown handler answers (L: the shadow camera's helper, a developer's switch).
+  const letters = new Set([...html.matchAll(/e\.key\.toLowerCase\(\)==='([a-z])'/g)].map((m) => m[1]));
+  const listed = new Set(HOTKEYS.flatMap((k) => k.keys.toLowerCase().split(/\/| or /)).map((x) => x.trim()));
+  for (const c of ['w', 's', 'a', 'd', 'q', 'e', ...letters]) if (c !== 'l') assert.ok(listed.has(c), c.toUpperCase() + ' is in the list');
+  for (const k of ['1', '2', '3', '?', 'tab', 'esc', 'space', 'enter', 'delete']) assert.ok(listed.has(k), k + ' is in the list');
+});
+
 // ---------- Chrome ----------
 function resolveChrome() {
   const names = [process.env.CHROME, 'google-chrome', 'google-chrome-stable', 'chromium-browser', 'chromium', 'chrome'].filter(Boolean);
@@ -162,6 +180,7 @@ function killTree(child) {
   else { try { child.kill('SIGKILL'); } catch (e) { /* ignore */ } }
 }
 
+const PHONE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 const TX = 'RM TX16S Joystick (Vendor: 1209 Product: 4f54)';
 const XBOX = 'Xbox 360 Controller (XInput STANDARD GAMEPAD)';
 // TX16S Classic: roll, pitch, THROTTLE, yaw, then AUX1..4 at rest.
@@ -255,7 +274,12 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
       await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
       await cdp(ws, 'Runtime.enable');
       await cdp(ws, 'Page.enable');
-      await cdp(ws, 'Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
+      // opts.mobile: a phone (as tools/test_sim_mobile_launch.mjs): its screen, touch, its user agent.
+      await cdp(ws, 'Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: opts.mobile ? 3 : 1, mobile: !!opts.mobile });
+      if (opts.mobile) {
+        await cdp(ws, 'Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+        await cdp(ws, 'Emulation.setUserAgentOverride', { userAgent: PHONE_UA, platform: 'Android' });
+      }
       if (process.env.SIM_CPU_THROTTLE) await cdp(ws, 'Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
       await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: FAKE_PADS });
       await cdp(ws, 'Page.navigate', { url: `http://127.0.0.1:${port}/robots.txt` });
@@ -275,7 +299,8 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
       };
       await boot();
       const keyEv = (type, key, code, vk) => cdp(ws, 'Input.dispatchKeyEvent', { type, key, code, windowsVirtualKeyCode: vk });
-      const KEYS = { w: ['w', 'KeyW', 87], space: [' ', 'Space', 32], enter: ['Enter', 'Enter', 13], up: ['ArrowUp', 'ArrowUp', 38], esc: ['Escape', 'Escape', 27] };
+      const KEYS = { w: ['w', 'KeyW', 87], space: [' ', 'Space', 32], enter: ['Enter', 'Enter', 13], up: ['ArrowUp', 'ArrowUp', 38], esc: ['Escape', 'Escape', 27],
+        tab: ['Tab', 'Tab', 9], help: ['?', 'Slash', 191] };
       const api = {
         js: async (body) => { const v = await evaluate(ws, `(async () => { const I = window.__ia, s = I.s; ${body} })()`); return typeof v === 'string' ? JSON.parse(v) : v; },
         reload: async () => { await cdp(ws, 'Page.reload', {}); await boot(); },
@@ -289,6 +314,15 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
           assert.ok(b, sel + ' on screen');
           await api.click(b.x, b.y);
         },
+        // A finger on it and off (a real touch, as a phone).
+        tapSel: async (sel) => {
+          const b = await evaluate(ws, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null; })()`);
+          assert.ok(b, sel + ' on screen');
+          await cdp(ws, 'Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: b.x, y: b.y }] });
+          await sleep(60);
+          await cdp(ws, 'Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        },
+        view: (vw, vh) => cdp(ws, 'Emulation.setDeviceMetricsOverride', { width: vw, height: vh, deviceScaleFactor: opts.mobile ? 3 : 1, mobile: !!opts.mobile }),
       };
       await flow(api);
     } finally {
@@ -478,6 +512,94 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         assert.equal(r.help.stuck, false, 'parked at 50%: no offer');
         assert.equal(r.cal, false);
         assert.equal(r.hint, 'Throttle down 1 s, then up to fly\nTHR 50% · arm under 5%');
+      });
+    });
+
+    // Tune's close button as drawn: open, where, whether it is what a click
+    // there hits, and the panel's last element (the site link).
+    const TUNE = `const p = document.getElementById('panel'), b = document.getElementById('panelClose');
+      const r = b.getBoundingClientRect(), pr = p.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return JSON.stringify({ open: p.classList.contains('open'), top: Math.round(r.top), h: Math.round(r.height), inPanel: r.left >= pr.left - 1 && r.right <= pr.right + 1,
+        onTop: hit === b || b.contains(hit), last: p.lastElementChild && p.lastElementChild.id, text: b.textContent });`;
+
+    await t.test('Tune\'s close button on a desktop: at the top, nothing over it, still there scrolled to the bottom; a click closes Tune; the site link is last; Tab and Esc still close Tune', async () => {
+      await pass({ view: [1280, 720], query: 'map=rig', storage: { quadmathSimInputChoice: 'keyboard' } }, async (a) => {
+        await a.key('tab');
+        let r = await a.js(`await I.wait(400); ${TUNE}`);
+        assert.equal(r.open, true);
+        assert.ok(r.top >= 0 && r.top < 40, 'at the top: ' + JSON.stringify(r));
+        assert.equal(r.onTop, true, 'nothing over it: ' + JSON.stringify(r));
+        assert.equal(r.inPanel, true);
+        assert.equal(r.text, '✕ CLOSE');
+        assert.equal(r.last, 'panelHome', 'Back to QuadMath at the bottom');
+        r = await a.js(`const p = document.getElementById('panel'); p.scrollTop = p.scrollHeight; await I.wait(300); ${TUNE}`);
+        assert.ok(r.top >= 0 && r.top < 40 && r.onTop, 'scrolled to the bottom, still at the top: ' + JSON.stringify(r));
+        await a.clickSel('#panelClose');
+        r = await a.js(`await I.wait(300); ${TUNE}`);
+        assert.equal(r.open, false, 'a click closes Tune');
+        await a.key('tab');
+        r = await a.js(`await I.wait(300); ${TUNE}`);
+        assert.equal(r.open, true);
+        await a.key('tab');
+        r = await a.js(`await I.wait(300); ${TUNE}`);
+        assert.equal(r.open, false, 'Tab closes it');
+        await a.key('tab');
+        await a.js('await I.wait(300); return 1;');
+        await a.key('esc');
+        r = await a.js(`await I.wait(300); ${TUNE}`);
+        assert.equal(r.open, false, 'Esc closes it');
+      });
+    });
+
+    await t.test('Tune\'s close button on a phone: Tune tapped open from the HUD, the close at the top, still there scrolled down, and a tap closes Tune (two landscape screens)', async () => {
+      await pass({ mobile: true, view: [844, 390], query: 'map=rig' }, async (a) => {
+        for (const [vw, vh] of [[844, 390], [667, 375]]) {
+          const size = vw + 'x' + vh;
+          await a.view(vw, vh);
+          await a.js('await I.wait(600); return 1;');
+          await a.tapSel('#gear');
+          let r = await a.js(`await I.wait(500); ${TUNE}`);
+          assert.equal(r.open, true, size + ': the HUD\'s TUNE opens it');
+          assert.ok(r.top >= 0 && r.top < 40 && r.onTop && r.h >= 30, size + ': at the top, a thumb\'s size, nothing over it: ' + JSON.stringify(r));
+          r = await a.js(`const p = document.getElementById('panel'); p.scrollTop = p.scrollHeight; await I.wait(300); ${TUNE}`);
+          assert.ok(r.top >= 0 && r.top < 40 && r.onTop, size + ': scrolled down, still at the top: ' + JSON.stringify(r));
+          await a.tapSel('#panelClose');
+          r = await a.js(`await I.wait(500); ${TUNE}`);
+          assert.equal(r.open, false, size + ': a tap closes Tune');
+        }
+      });
+    });
+
+    await t.test('the keys card: ? in flight opens it over the menu, ? again closes it back to flight; Controls\' All keys opens it, Esc goes back to the menu; it lists every key in the list, and the legend shows the list\'s lines', async () => {
+      await pass({ view: [1280, 720], query: 'map=rig', storage: { quadmathSimInputChoice: 'keyboard' } }, async (a) => {
+        const CARD = `const L = document.getElementById('menuLayer'); const up = L.classList.contains('show') && !!L.querySelector('.keys-card');
+          return JSON.stringify({ up, menu: document.body.classList.contains('menu-open'),
+            rows: [...L.querySelectorAll('.keys-card .keys-list dt')].map((dt) => dt.textContent + ' — ' + dt.nextElementSibling.textContent),
+            groups: [...L.querySelectorAll('.keys-card .keys-group')].map((h) => h.textContent),
+            legend: [...document.querySelectorAll('#legend b')].map((b) => b.textContent) });`;
+        let r = await a.js(`await I.wait(300); ${CARD}`);
+        assert.deepEqual(r.legend, HOTKEYS.filter((k) => k.legend).map((k) => k.keys + ' — ' + k.does), 'the legend: the list\'s lines');
+        assert.equal(r.up, false);
+        await a.key('help');
+        r = await a.js(`await I.wait(300); ${CARD}`);
+        assert.equal(r.up, true, '? opens the keys card');
+        assert.equal(r.menu, true, 'over the menu (the sim waits)');
+        assert.deepEqual(r.groups, HOTKEY_GROUPS);
+        assert.deepEqual(r.rows, HOTKEY_GROUPS.flatMap((g) => HOTKEYS.filter((k) => k.group === g).map((k) => k.keys + ' — ' + k.does)), 'every key in the list');
+        await a.key('help');
+        r = await a.js(`await I.wait(300); ${CARD}`);
+        assert.equal(r.up, false, '? again closes it');
+        assert.equal(r.menu, false, 'back to flight');
+        await a.key('esc');
+        await a.js(`await I.until(() => document.body.classList.contains('menu-open'), 2000); document.getElementById('menuControlsFlight').click(); await I.wait(300); return 1;`);
+        await a.clickSel('#keysOpen');
+        r = await a.js(`await I.wait(300); ${CARD}`);
+        assert.equal(r.up, true, 'Controls\' All keys opens it');
+        await a.key('esc');
+        r = await a.js(`await I.wait(300); ${CARD}`);
+        assert.equal(r.up, false);
+        assert.equal(r.menu, true, 'Esc: back to the menu');
       });
     });
 

@@ -88,7 +88,10 @@
   footer .sf-license{color:var(--txt);text-decoration:none;white-space:nowrap}
   footer .sf-license:hover{color:var(--orange)}
   footer .sf-l-short{display:none}
-  #panelHome{display:inline-block;color:var(--dim);font-size:11px;text-decoration:none;margin-bottom:8px}
+  #panelHome{display:inline-block;color:var(--dim);font-size:11px;text-decoration:none;margin-top:18px}
+  /* Tune's close: first in the panel, held at its top while the panel scrolls (a phone has no Tab). */
+  #panelClose{position:sticky;top:0;z-index:2;display:block;width:auto;margin:-8px 0 10px;padding:9px 16px;
+    background:rgba(13,14,18,.94);font-size:12px;letter-spacing:.06em}
   #panelHome:hover{color:var(--orange)}
   /* G does nothing until a ghost exists (own best run, or a hosted/pasted
      rival), so the hint reads dimmed until then. */
@@ -443,6 +446,12 @@
   .menu-layer p,.menu-layer li{font-size:13px;line-height:1.55;color:var(--dim)}
   .menu-layer ol{padding-left:18px}
   .menu-layer button{width:auto;margin-top:12px}
+  /* The keys card (keysCardHtml): a heading per group, key and what it does in two columns. */
+  #menuLayer .keys-group{font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:1.2px;margin:12px 0 4px}
+  #menuLayer .keys-list{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:0;font-size:12px;text-align:left}
+  #menuLayer .keys-list dt{white-space:nowrap}
+  #menuLayer .keys-list dd{margin:0;color:var(--dim)}
+  #menuLayer .keys-list kbd{font-family:inherit;font-weight:700;color:var(--txt)}
   /* Controls' "Fly with": three buttons in a row, the one flying pressed. */
   .input-pick{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px}
   .menu-layer .input-pick button{flex:1 1 0;margin-top:0;min-width:7em}
@@ -846,29 +855,12 @@
   </div>
 </div>
 <div id="audioHint">🔊 Sound starts on your first key, click or stick move · M mutes</div>
+<!-- The legend's lines: sim-feel.js HOTKEYS (legendHtml), filled at boot. -->
 <div id="legend">
   <div class="lgc lgc-tl"></div>
   <div class="lgc lgc-tr"></div>
   <div class="lgc lgc-bl"></div>
   <div class="lgc lgc-br"></div>
-  <b>W/S — Throttle</b><br>
-  <b>A/D — Yaw</b><br>
-  <b>Arrows — Pitch / Roll</b><br>
-  <b>M — Sound On/Off</b><br>
-  <b>N — Next Music Track</b><br>
-  <b>1/2/3 — Angle / Horizon / Acro</b><br>
-  <b>Space — Arm / Disarm</b><br>
-  <b>H — Stick HUD</b><br>
-  <b id="legendGhost">G — Ghost Replay</b><br>
-  <b>K — Share last run (link)</b><br>
-  <b>C — Coach / line</b><br>
-  <b>T — Race this map</b><br>
-  <b>R — Respawn last gate</b><br>
-  <b>P — New pack</b><br>
-  <b>F — Sim flip when upside down</b><br>
-  <b>↑/↓ — Cam angle ±5° (radio or pad)</b><br>
-  <b>ESC — Menu</b><br>
-  <b>TAB — Tune Panel</b>
 </div>
 <div id="feelPrompt" aria-hidden="true"></div>
 <div id="feelHud">
@@ -923,7 +915,7 @@
   <button id="gear">⚙<span class="hud-lbl"> TUNE [Tab]</span></button>
 </div>
 <div id="panel">
-  <a id="panelHome" href="/">← Back to QuadMath</a>
+  <button type="button" id="panelClose" title="Close Tune (Tab or Esc)">✕ CLOSE</button>
   <h1>QUADMATH SIM</h1>
   <div class="sub">Angle on keyboard and touch, acro on a radio or gamepad. Throttle down, then up to fly · 1/2/3 mode · H HUD · touch sticks on phones</div>
 
@@ -1237,6 +1229,7 @@
   </div>
   <button type="button" id="btnFreestyle">FREESTYLE THIS MAP</button>
   <button id="btnReset">RESET QUAD [R]</button>
+  <a id="panelHome" href="/">← Back to QuadMath</a>
 </div>
 
 <script>
@@ -1374,7 +1367,8 @@ import {
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z,
   loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT,FIRST_FLIGHT_PACK_TEXT,
   loadStickOverlay,saveStickOverlay,stickOverlayOn,createStickOverlay,STICK_OVERLAY_PHONE,
-  SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText} from "./sim-feel.js?v=b567d9439c08";
+  SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText,
+  legendHtml,keysCardHtml} from "./sim-feel.js?v=543e27fe53f1";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -5022,6 +5016,12 @@ addEventListener('keydown',e=>{
     return;
   }
   if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
+  if(e.key==='?'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+    e.preventDefault();
+    if(keysCardUp()){hideMenuLayer();if(keysFromFlight)toggleStartMenu(false);}
+    else openKeysCard();
+    return;
+  }
   // Touch sticks flying, no controller, and a flight key (W, an arrow, Space):
   // there is a keyboard. Offer it, one press (Enter, or the toast's button),
   // in place of the key's touch-mode job: Space armed with no throttle the
@@ -5279,6 +5279,18 @@ function setInputChoice(kind){
   followInputMode();
   syncInputPick();
 }
+// The keys card: every key the sim answers (sim-feel.js HOTKEYS, the list the
+// corner legend is drawn from). ? opens it over the menu from anywhere, and
+// closes it again (back to flight when ? opened it from there); Esc goes back
+// to the menu, as from any card.
+let keysFromFlight=false;
+function openKeysCard(){
+  keysFromFlight=!document.body.classList.contains('menu-open');
+  if(keysFromFlight)toggleStartMenu(true);
+  showMenuLayer('<div class="keys-card"><h2>Keys</h2>'+keysCardHtml()+'<button type="button" id="layerClose">Close</button></div>');
+  document.getElementById('layerClose').onclick=hideMenuLayer;
+}
+function keysCardUp(){return !!document.querySelector('#menuLayer.show .keys-card');}
 // Controls' "Fly with" buttons: the one flying now is pressed.
 function syncInputPick(){
   const btns=document.querySelectorAll('.input-pick [data-input]');
@@ -6696,6 +6708,10 @@ document.getElementById('gear').onclick=()=>panel.classList.toggle('open');
   });
 }
 document.getElementById('btnReset').onclick=resetQuad;
+// Tune's close (the panel's own button: a phone has no Tab or Esc).
+document.getElementById('panelClose').onclick=()=>panel.classList.remove('open');
+// The corner legend's lines, from the one list of keys (sim-feel.js HOTKEYS).
+document.getElementById('legend').insertAdjacentHTML('beforeend',legendHtml());
 function setActiveTrack(id){
   const t=findTrack(id);
   if(!t)return;
@@ -7541,13 +7557,8 @@ function wireLooksUI(){
         '<button type="button" data-input="pad">Radio / Gamepad</button>'+
       '</div>'+
       '<p>TX16S: EdgeTX USB mode = <b style="color:var(--txt)">Joystick</b>.</p>'+
-      '<p><span class="n">W/S</span> throttle · <span class="n">A/D</span> yaw<br>'+
-      '<span class="n">↑/↓</span> pitch · <span class="n">←/→</span> roll<br>'+
-      '<span class="n">R</span> last-gate respawn · <span class="n">P</span> new pack · <span class="n">Tab</span> tune · <span class="n">Esc</span> menu<br>'+
-      '<span class="n">Space</span> arm · <span class="n">1/2/3</span> angle/horizon/acro · Tune → 3D<br>'+
-      'Throttle down 1 s, then up: armed. Down 0.5 s landed: disarmed. Upside down or on its side: full roll or pitch.<br>'+
-      '<span class="n">H</span> HUD · <span class="n">M</span> mute · <span class="n">N</span> next track · <span class="n">G</span> ghost · <span class="n">C</span> coach · <span class="n">T</span> race this map · <span class="n">K</span> share last run<br>'+
-      '<span class="n">F</span> upside down on bf: sim flip (logged as an assist) · else next flight mode</p>'+
+      '<p>Throttle down 1 s, then up: armed. Down 0.5 s landed: disarmed. Upside down or on its side: full roll or pitch.</p>'+
+      '<button type="button" id="keysOpen">All keys [?]</button>'+
       '<div class="row"><label>Angle mode</label><input type="checkbox" class="cb-angle-mode" style="accent-color:var(--orange)"></div>'+
       '<div class="row"><label>Use my radio switches</label><input type="checkbox" class="cb-radio-switches" style="accent-color:var(--orange)"></div>'+
       '<div class="kbd switches-info"></div>'+
@@ -7558,6 +7569,7 @@ function wireLooksUI(){
     wireSoundControls(document.getElementById('menuLayer'));
     wireEasyControls(document.getElementById('menuLayer'));
     wireInputPick(document.getElementById('menuLayer'));
+    document.getElementById('keysOpen').onclick=openKeysCard;
     document.getElementById('layerClose').onclick=hideMenuLayer;
   };
   document.getElementById('menuControls').onclick=openControls;
