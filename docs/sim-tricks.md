@@ -43,13 +43,13 @@ site lists both 150 and 50).
 | `flip` | Flip | Beginner | 50 | 75 | Phase matcher: **≥300° of pitch within any 1.2 s**, little net roll/yaw. Any speed, any travel. Front or back by the way the pitch turned (the pop says Front Flip / Back Flip). |
 | `roll` | Roll | Beginner | 50 | 75 | **≥300° of roll within any 1.5 s at a mean rate of ≥250°/s**, little net pitch/yaw. Slower turns are not tricks. |
 | `yawspin` | Yaw Spin | Beginner | 50 | 75 | Continuous ~360° yaw, mostly upright. |
-| `maverick` | Maverick Loop | Beginner | 100 | 100 | Phase matcher, as the owner flies it: a **pull back of 120–225° climbing ≥1 m** (it need not go inverted), then a **forward pitch ≥60°** that stops it, then **back towards the entry against the nose** (velocity·nose ≤ −0.3 on average) for **≥0.3 s**: the glide back. **No twist** between the pull and the push: the roll and the yaw each turn **under 60°** across them (the owner's Maverick uses no yaw). The push and glide back **drop back under or through an object**: near one (within 2 m) for **≥25 %** of them, or back out through an authored gap. In open air it is not a Maverick. Often two segments, the pull and the push, merged (below). Back out through the authored gap it came in by (passed at most 1.5 s before, or in the maneuver): **1.25×** points. |
+| `maverick` | Maverick Loop | Beginner | 100 | 100 | **The loop gate** (below), as the owner flies it: **under an object**, the climb **over the same object**, **never upside down** (up-Z above −0.5 throughout; the owner's dip to −0.06 counts), a pull back of **≥60°**, then above the object's top a **fast forward pitch**: **≥60° inside 0.4 s** (a slow level-out is not one), then **≥0.3 s gliding down backwards** (descending, moving back against the nose's heading across the floor), and **back under the same object**, all inside **4 s**. A touch between the passes voids it. The object in the camera's view on the glide is logged, not judged. Called 0.3 s after the pass back under; back out through the authored gap it came in by: **1.25×** points. A wall beside the path, or open air, is no Maverick. |
 | `splits` | Split-S | Beginner | 100 | 100 | Phase matcher: a **roll of 103–258°**, then a **back pitch of 69–258°** (pull), the path dropping ≥0.35 m, flying with the nose. The old terms' tolerances, so it fires where it did. |
 | `immelmann` | Immelmann | Beginner | 100 | 100 | Phase matcher, the Split-S's mirror: **back pitch 180 ± 45° climbing ≥1 m**, then a **roll of 180 ± 45°**, ending **upright**, the **heading reversed** (180 ± 45°), **out higher** than in. |
 | `cradle` | Cradle | Beginner | 150 | 150 | As the owner flies it (2026-11-20): **past a post flying forward** with it on one side (**≤2 m** out), the **nose up ≥25°**, **never over the top** and **not turning round** (**≤55°** about the vertical), then **back past it travelling backwards, against the nose** (**≥115°** off it, **≥1.5 m/s**, not upside down) **on the other side** (**≤3 m** out), within **2.5 s**, both passes beside the post (within its height). Called at the second pass, no wait. A post: a pole, column, tree or post (**≤0.5 m** across, near square, **≥1 m** tall, standing), or a chair or table leg (**≥0.31 m**, on the floor, slender); never a wall, floor or ceiling. A touch (of the post or anything), a crash, a disarm or a respawn between the passes voids it. Both passes round a post make a Cradle however high the nose comes (short of over the top); the Maverick is the open-air move. See "The Cradle" below. |
 | `dive` | Building Dive | Beginner | 100 | 100 | Climb or start high, cut, nose down, fast altitude dump, level near the ground. |
 | `prox` | Proximity | Beginner | 150 | 150 | Wall near-miss at speed. Sim-only spatial; TPW Wall Ride/Tap need a knife-edge roll or tap we do not require. |
-| `powerloop` | Powerloop | Novice | 200 | 200 | Phase matcher: **≥300° of pitch within any 3.5 s** (its own window: a loop is slower than a flip), little net roll/yaw, on a **path that loops**: it climbs **≥1.5 m** above the entry, after its top comes back down to **at most 1.5 m above the entry**, and the velocity turns **≥270°** in the vertical plane of the entry heading, the way the pitch turns. Otherwise a flip is a Flip. Loops are counted over the whole turn of pitch: **≥600° is a Double Powerloop**, then one more loop per further 360° (Triple from 960°); each loop scores the 200 points. |
+| `powerloop` | Powerloop | Novice | 200 | 200 | **The loop gate** (below): **under an object**, over **the same object**, **upside down** at the top (up-Z ≤ −0.5), and **back under it**, inside **4 s**, with **≥270° of back pitch**, the roll **≤97°** net and **under 90°** of yaw made upside down. The object must be **inside the loop**: a box 2 m to the side, a crate passed over but never under, or open air, is no Powerloop (a loop that fast is a Flip). A loop on round the same object adds a loop: the call waits 1.6 s for the next climb over it, then scores them all at once (**≥2 loops: Double Powerloop**, each loop the Powerloop's points). A touch voids the loop flying. |
 | `sideloop` | Side Loop | Novice | 200 | 225 | 90° **yaw** under the object, then a **roll-driven** vertical loop (roll + some yaw) over inverted, cut, reapply, level under. Carves a loop **sideways**, not a pitch Powerloop. Indoor 225 = TPW Under/Over. |
 | `matty` | Matty Flip | Novice | 200 | 200 | Phase matcher, as the owner flies it: **250–400° of forward pitch over an object** (the object below at or before the top), **climbed into**: the top ≥1 m above the altitude **1.0 s before the maneuver began**, and no lower at the start than then (a climb made inside the flip after a descent does not count). Flown **against the nose** half the time or more (or of the inverted part), ending **upright**. |
 | `juicyflick` | Juicy Flick | Novice | 200 | 225 | Open-air: pitch **forward** with throttle to inverted, then a prompt **180° roll**. Travel stays forward. |
@@ -61,17 +61,17 @@ site lists both 150 and 50).
 | `ham` | Ham Spin | Intermediate | 300 | 300 | **Inverted yaw spin**: **≥300° of yaw counted only while inverted** (up-Z below −0.5, tilted more than 120° from level). The yaw is the turn about the vertical. A **half flip in and a half flip out are allowed** and the whole maneuver is one Ham, not a Flip: the flips turn little about the vertical. A flip or roll that only passes through inverted, and upright yaw, are not Ham; a full Roll stays a Roll, and an inverted orbit is a Trippy. Also called ham. |
 | `trippy` | Trippy Spin | Intermediate | 500 | 500 | **≥360° of yaw at ≥150°/s while the path orbits a centre ≥360°**, radius **0.3 m or more** (the path's curvature), its direction turning a **full 360°** one way over the whole spin, at ≥1 m/s, **the tail to the centre or the body inverted** for **≥70 %** of the orbit: tilted back round it (nose up, away from the centre, within 0.7 of the plane through it) or upside down. Tilt-independent: the body's attitude, not the camera's. Yaw is the turn about the vertical, so a tilted spin counts in full. The body may roll as it spins (the owner's rolls 600–1490°). An upright orbit with the nose on the centre is an Orbit, never a Trippy. A nearby pole/post at the centre (within 0.5 m) is a bonus: 1.25× points. |
 | `orbit` | Orbit | Beginner | 75 | 100 | **An upright orbit**: **≥360° of yaw inside 4.4 s at ≥90°/s** while the path orbits a centre ≥360° (0.3 m or more, at ≥1 m/s, as Trippy's), the tail to the centre or inverted **≤30 %** of it (the nose on the centre, or the nose all round). One orbit scores once, however long it goes on: a piece after the 4.5 s cap that goes on orbiting the same way scores nothing. The same pole bonus as the Trippy's. |
-| `barani` | Barani | Novice | 100 | 125 | **A flip with a half twist**, as the owner flies it: **≥300° of pitch path** (the pitch turned either way, summed; the term fades over 20°) with a **half twist of 180 ± 45° inside it** (≥60° of pitch path before the twist is half done, and after), ending **upright** (up-Z ≥ 0.5). The twist is the turn about the **body axis nearest the flight path** (**roll** when the nose is along it, flying level; **yaw** when the up axis is, punched up or inverted and falling; under 3 m/s, whichever of the two turns faster) **or the heading's turn**: the yaw's own turn about the vertical made **inverted** (up-Z below −0.5), the owner's yaw at the top, **120–225°**; whichever scores, nearer 180° when both do. Any climb, any time. Scores above Flip and Maverick. |
+| `barani` | Barani | **Master** | **750** | **800** | **The loop gate** (below), the Tricktionary's: **under an object**, a **half loop back to upside down over the same object**, the **horizon in view before the yaw** (where the yaw begins, the camera no more than half the vertical FOV above the horizon: 45° at the default 90°), **120–225° of yaw upside down** (each step's yaw times up-Z, counted while up-Z is below −0.5), then the **Matty back under the same object**: ≥90° forward, **upright**, **flying backwards** (velocity·nose ≤ −0.3), inside **4 s** of the first pass. Pulled back ≥135° before the yaw. A touch voids it. The roll measure (a twist about the flight path) no longer counts: a flip with a twist in open air is no Barani. |
 
 ## Decision boundaries
 
 ### Phase matcher
 
-Flip, Powerloop, Split-S, Immelmann, Maverick, Matty, Half Matty and Half
-Mavvy are one matcher in `sim-tricks.js` (`PHASE_SPECS`, `measureSpec`): each
+Flip, Split-S, Immelmann, Matty, Half Matty and Half Mavvy are one matcher
+in `sim-tricks.js` (`PHASE_SPECS`, `measureSpec`): each
 is **ordered phases** in one segment of at most 4.5 s. A phase is a turn about
 one axis (pitch, roll, or the turn about the vertical) in a stated way (pitch
-**back = nose up**, the Powerloop's way; **forward = nose down**, a front
+**back = nose up**, a back flip's way; **forward = nose down**, a front
 flip's) and size, 180 ± 45° unless the trick says otherwise. A phase may
 also ask:
 
@@ -88,8 +88,8 @@ and roll each turn at most 45°; inside a phase, the other of the two turns
 at most 45°, and its own axis turns back against its way at most 45° (a
 phase is one turn, not one and part of the next). A trick may also ask of
 the whole segment: an end state, a **heading change**, a **drop or climb**
-from entry to exit, and a **velocity-vs-nose** stretch (the Maverick's tail:
-the last stretch flown back towards the entry with velocity·nose ≤ −0.3).
+from entry to exit, and a **velocity-vs-nose** stretch (the last stretch
+flown back towards the entry with velocity·nose at most a given value).
 A trick may allow more turning before its first phase (the Half Mavvy's
 pull-up, 120°) or across a phase (its pitch through the roll, 90°). The
 matcher finds the best phase bounds in the segment's history (every 4 ms
@@ -97,49 +97,39 @@ row, scanned on at most 200) and scores the trick 0–1; that score is the
 trick's term in the classifier.
 
 **Compound tricks across segments.** The segmentation ends a maneuver when
-the rates go quiet, so a trick flown with a pause in it (the owner's
-Maverick: the pull, a breath, the push) comes out as two segments. The
+the rates go quiet, so a trick flown with a pause in it (a pull, a breath,
+a push) comes out as two segments. The
 detector keeps one history across consecutive segments while each pause
 between them is under **0.8 s** and none of them scored, and when a segment
-finishes it scores the matcher's tricks (all but Flip, Powerloop and
-Split-S) over the run from each earlier segment's start to now, at most
-4.5 s. A match stands over the segment's own label (unless that is a matcher
-trick ranked above it): the glide back of a split Maverick is that Maverick.
+finishes it scores the matcher's tricks (all but Flip and Split-S) over the
+run from each earlier segment's start to now, at most 4.5 s. A match stands
+over the segment's own label (unless that is a matcher trick ranked above
+it).
 A segment that scored ends the run, and so does a Cradle (called on its own
 second pass, below).
 
-Flip and Powerloop are one phase each, the largest turn of pitch inside
-their window (1.2 s, 3.5 s); Split-S is a half roll then a back pitch. Their
-scores are exactly their old terms, so on the owner's logs they fire where
-they did. Maverick, Matty and Half Mavvy are the owner's as flown in the
-third log; Half Matty and Immelmann as first defined (docs/sim-tricks-audit.md
-sections 9 and 10).
+Flip is one phase, the largest turn of pitch inside 1.2 s; Split-S is a
+half roll then a back pitch. Their scores are exactly their old terms, so on
+the owner's logs they fire where they did. Matty and Half Mavvy are the
+owner's as flown in the third log; Half Matty and Immelmann as first defined
+(docs/sim-tricks-audit.md sections 9 and 10). Barani, Powerloop and Maverick
+are not the matcher's: they are the loop gate's (below).
 
 The Half Mavvy's shape: forward to the nose straight down (after a pull-up),
 the half roll there, then forward on through to upright (the owner's turn
-360–430° forward net), under an object. A Barani turns the same way, and is
-the Half Mavvy's shape without the object.
+360–430° forward net), under an object. Without the object it is nothing.
+A phase may also ask a share of it flown **against the nose** (the Half
+Mavvy's after its roll, 0.3).
 
-The Maverick's **still**: across its phases, first to last, the roll and the
-yaw (about the body's up axis) each turn at most 60° (from lowest to
-highest). A Barani twisted by yaw at its top pitches the body back, then
-forward, as a Maverick does; the twist tells them apart. A phase may also
-ask a share of it flown **against the nose** (the Half Mavvy's after its
-roll, 0.3), and a trick a share of its last phase and what follows **near an
-object** (the Maverick's, 0.25, within 2 m; an authored gap passed counts
-whole).
-
-### Flip, Roll, Powerloop: rotation first, path second
+### Flip and Roll: rotation first
 
 - Flip is decided by the rotation alone: ≥300° of pitch inside a 1.2 s
   window of the segment. Speed and travel do not matter. A pitch rotation that
   big is **never nothing**: when no trick reaches the 0.42 score (its roll or
   yaw too big for Flip's own terms), it is a Flip.
-- Powerloop has its own window: ≥300° of pitch inside 3.5 s (a slow loop
-  turns 150–200°/s, under a Flip's 300° in 1.2 s), on a path that loops
-  (climb ≥1.5 m, back down to at most 1.5 m above the entry, ≥270° of
-  velocity turn). A flip at speed whose path stays straight is a Flip, not
-  nothing. Two loops (≥600° of pitch) are one Double Powerloop.
+- A loop of pitch is a Powerloop only round an object (the loop gate,
+  below). In open air it is nothing, or a Flip when it turns 300° inside
+  1.2 s.
 - Roll is ≥300° of roll inside a 1.5 s window at ≥250°/s on average between
   the window's two ends. A slow rolling turnaround (the Fractal75's after a
   punch: 300°+ over 3–4.5 s at under 272°/s) is not a Roll.
@@ -148,14 +138,14 @@ whole).
 
 These are **not** the same family.
 
-- Powerloop: a flip, normally **back** pitch (pull), whose **path loops**:
-  ≥300° of pitch inside 3.5 s, it climbs ≥1.5 m, comes back down to at most
-  1.5 m above the entry, and the velocity turns ≥270° the way the pitch turns.
+- Powerloop: a **back** loop round an object (the loop gate, below): under
+  it, over it upside down, back under it.
 - Matty: a **forward** flip or loop (nose down) of 250–400° **over an
   object**, climbed into from the second before, against the nose, upright.
   Without the object, or without the climb into it, it is a Flip.
 
-Pitch **sign** is the primary split. A Powerloop must never also score as Matty.
+Pitch **sign** is the primary split. A loop the gate calls a Powerloop closes
+its segment as that: it never also scores as Matty.
 
 ### Matty vs Half Matty
 
@@ -173,17 +163,20 @@ Pitch **sign** is the primary split. A Powerloop must never also score as Matty.
 
 ### Maverick Loop vs Powerloop
 
-- Powerloop: a full loop of pitch (≥300° within 3.5 s) on a looping path.
-  Net pitch ≈ path pitch.
-- Maverick: a pull back (120–225°, climbing), then the pitch **reverses**
-  (forward ≥60°) and the quad glides back towards the entry **against the
-  nose** (camera away from where it goes). It need not go inverted. Path
-  pitch ≫ net pitch. Back out through the gap it came in by is the bonus.
+Both are the same circuit round one object (the loop gate, below): under
+it, over it, back under it. The owner's split:
+
+- Powerloop: **upside down at the top**, the loop finished by pitching on
+  back, like a long, moving back flip.
+- Maverick: **never upside down**: at the apex a **fast forward pitch**
+  (the level-out, ≥60° inside 0.4 s) so the camera looks at the object, then
+  the glide down backwards and back under it. Back out through the gap it
+  came in by is the bonus.
 
 ### Half Mavvy vs Maverick
 
-- Maverick: back, then forward, no roll and no yaw (each under 60° across
-  it); flown back against the nose, dropping back near an object.
+- Maverick: the loop gate's circuit round an object, never upside down, a
+  fast push at the top, the glide down backwards.
 - Half Mavvy: forward, a **half roll**, forward on to upright, 330–450° net,
   climbing 3 m, 2 s or longer. The roll and the way of the pitch are the
   split; Half Mavvy scores above both Maverick and Matty.
@@ -243,43 +236,67 @@ Mirrors: the same two turns in the other order and the other way up.
 - A coordinated turn, carve, or slight yaw is neither — those do not go all
   the way round a centre at 90°/s.
 
-### Barani vs Flip vs Juicy Flick
+### The loop gate: Barani, Powerloop, Maverick
 
-- Barani: a full flip's **pitch path** (≥300°, the pitch turned either way:
-  a twist turns the body round, so the same flip pitches the body the other
-  way after it) **and** a half twist (180 ± 45°) inside it, ending upright.
-  The twist is about the body axis nearest the flight path: roll flying
-  level, yaw punched up or falling inverted. A roll made nose down while the
-  thrust carries the quad along its up axis turns across the path, not
-  about it: a Flip.
-- Or the half twist is the heading's: the owner yaws at the top of the
-  flip, upside down, and the twist about the path reads only 49–101° of
-  it. The heading's turn is the yaw's own turn about the vertical while
-  inverted: each step's yaw times up-Z, counted while up-Z is below −0.5.
-  So it means something only with the nose off the vertical (with the nose
-  near vertical up-Z is near 0 and the yaw counts nothing; the twist about
-  the path has it there), and a yaw made upright counts nothing (a flip, a
-  yaw, a flip is no Barani by it), nor do the pitch and roll: a flip about
-  a banked axis turns the body about the vertical by the bank's share of
-  the pitch (about 145° for a 22° bank), with no yaw. The heading's half
-  twist runs from **120°** (the owner's read 132–166°; the twist about the
-  path keeps 135°). Whichever of the two scores; nearer 180° when both do (the owner's Ham-session seq 14, 189°
-  about the path, stays a Barani). Flip, a 260° yaw inverted, flip reads
-  253–261° and stays a Flip.
-- Flip: the pitch with little roll or twist. Juicy Flick: half a flip to
-  inverted, then a 180° roll (pitch path about 180°).
-- Half Mavvy: the same flip and twist (forward, a half roll, forward) over
-  2 s or more, climbing 3 m or more, **through an object** (under one a
-  quarter of the time, against the nose after the roll). Without the object
-  it is a Barani.
+The owner's rulings of 2026-11-24, on the Tricktionary's definitions: each of
+the three is a **loop round one object**, judged on the path, not on a
+segment's rotation (`sim-tricks.js` `LOOP`, `loopStep`). Like the Cradle it
+runs beside the segments, every 4 ms step, and its call closes an open
+segment as the trick; a trick a segment finished while a loop is half flown
+(pulled back 45° or over the object) waits for it, and is replaced by the
+call (a Half Mavvy, which holds a Maverick's loop and more, stands) or called
+when the loop comes to nothing.
 
-### Barani vs Maverick
+Three passes:
 
-- Maverick: a pull back, the pitch reversed, glided back against the nose;
-  the roll and yaw under 60° across it.
-- Barani twisted by yaw at its top (the owner's 28.6 and 34.2 s): the body
-  pitches back, yaws 180°, pitches forward: a Maverick's pitch, with a twist.
-  Barani.
+1. **Under** an object (a box over the quad, its underside ≤2.5 m above),
+   upright, ≥1 m/s. The loop starts where the quad leaves its underside.
+2. **Over** the same object (over a box of it, its top ≤6 m below).
+3. **Back under** the same object, ≥2 m below the highest point since,
+   inside **4 s** of the first.
+
+**The same object** (provisional, fitted to the Warehouse's stairs): a box
+within **1.5 m** of a first-pass box across the floor, its underside and top
+each within **1 m** of that box's. That joins a staircase's steps and the
+mezzanine edge they meet (the owner's Barani came back under 1.4 m along the
+stairs), and not the roof truss 0.94 m from them across the floor but 4.4 m
+higher. The detector's own objects split a staircase into its steps, and
+boxes that touch join the whole Warehouse into one.
+
+A **touch** (the floor, or any box within 6 cm), a crash, a disarm or a
+respawn between the passes voids the loop.
+
+At the pass back under, the gate calls:
+
+- **Barani**: upside down at some step; 120–225° of yaw made upside down;
+  the **horizon in view before the yaw**: where the body's yaw that way began
+  (15° on from its last low; a pause of 0.15 s under 60°/s starts it over),
+  the camera (the page's tilt) at no more than half the vertical FOV above
+  the horizon. Above that it sees only sky: the yaw began before the half
+  loop came over. Pulled back ≥135° before the yaw, ≥90° forward after it,
+  through the pass upright and flying backwards (velocity·nose ≤ −0.3):
+  the Matty back under. A yaw in the band with anything else short is
+  **nothing** (Power Swap and True Barani are queued for later, with the
+  audit).
+- **Powerloop**: upside down at some step; under 90° of yaw upside down;
+  ≥270° of back pitch; the roll ≤97° net. Loops on round the same object
+  are one Powerloop of that many loops.
+- **Maverick**: never upside down; ≥60° pulled back; above the object's top
+  ≥60° forward inside 0.4 s; then ≥0.3 s descending while moving back
+  against the nose's heading (the nose is down as it falls, so velocity·nose
+  itself is positive there). The object in the camera's view on that glide
+  is logged (`objView`), not judged: the logs to date cannot measure it.
+
+The owner's Baranis of 2026-11-24 read 125–188° of yaw upside down, the
+camera at +2° to +29° where they went upside down (the frame's top half),
+2.7–3.5 s from pass to pass; the Powerloops' lowest up-Z −0.85 to −1, the
+Mavericks' 0.14 to 0.47.
+
+Each verdict goes in the debug log as a record of type `loop` with the
+gate's inputs at every step (position, velocity, nose, up axis, the step's
+body turns, flags) from 0.5 s before the loop began to 0.4 s past the
+verdict, the boxes it saw, and the camera's tilt and FOV: a replay
+(`makeLoopGate`, then `loopStep` on each row) gives the same verdict.
 
 ### Gap passes (not a trick)
 
@@ -293,16 +310,15 @@ version 2 (`STORE_VER`): loading drops bests saved under version 1, and
 keeps the HUD and debug settings. Version 3 (2026-11-18) dropped them again
 (an upright orbit had scored as a 500-point Trippy), and version 4
 (2026-11-20) once more: the Cradle had scored 150 on a segment's pitch with
-no post.
+no post. Version 5 (2026-11-24) again: the Barani, Powerloop and Maverick
+had scored with no object round them, and the Barani is 750 now.
 
 The detector still **tracks every pass**, exactly as it did when it scored,
 because tricks read them:
 
-- the Maverick's drop back **under or through an object**: a pass in its
-  push and glide back counts as near an object the whole time;
-- the Maverick's **1.25×** for back out through the gap it came in by;
-- compound tricks across segments: the chain keeps its own passes, so a
-  Maverick split at a pause still sees them;
+- the Maverick's **1.25×** for back out through the gap it came in by (the
+  loop gate reads the passes);
+- compound tricks across segments: the chain keeps its own passes;
 - the phase matcher's per-phase "under / through" measurement counts a
   pass too, though no trick asks for it today (the Matty and Half Matty
   ask for an object **over** them, the Half Mavvy for one **above** it:
@@ -387,15 +403,9 @@ Order of the 180° axis is the split.
 - Cradle: two passes round a post, forward then backward against the nose,
   on its two sides, the nose up between and never over the top (below).
   Not a segment's label.
-- Maverick: a pull back, the pitch reversed, flown back against the nose
-  and dropped back under or through an object (near one, within 2 m, a
-  quarter of the push and glide). Split from its pull by a pause under
-  0.8 s, it is the Maverick (compound tricks, above). If its pull and glide
-  pass round a post on its two sides with the nose short of over the top,
-  it is a Cradle: a Maverick that finishes while the Cradle is half flown
-  waits for the second pass, and the Cradle replaces it (or it is called
-  when the Cradle comes to nothing). A pull over the top voids the Cradle
-  and leaves the Maverick.
+- Maverick: a loop round an object, under it, over it and back under (the
+  loop gate). A pull and push round a post, past it on its two sides with
+  the nose short of over the top, is a Cradle.
 - Matty: a forward flip over an object, climbed into.
 
 ### The Cradle
@@ -449,9 +459,8 @@ backwards on the opposite side. `sim-tricks.js` `CRADLE`, `cradleStep`:
   nose but over the top). The Cradle is called on that step, with no
   wait; an open rotation segment closes there as the Cradle and the chain
   of unscored segments before it ends. A trick that
-  finished while the Cradle was half flown (a Maverick's pull and push
-  round the post) waits for it: the Cradle replaces it, or it is called
-  when the Cradle comes to nothing. A second pass the other way flown
+  finished while the Cradle was half flown waits for it: the Cradle
+  replaces it, or it is called when the Cradle comes to nothing. A second pass the other way flown
   forward is a first pass of its own.
 - **Void.** A touch (the quad's centre within **0.06 m** of the post, or of
   any box: the detector's floor contact never sees a post's side), floor
@@ -518,8 +527,9 @@ for a slow camera-lock orbit). A **sustained** rotation runs past it while
 it keeps turning, up to **10 s**: a turn about the vertical at Trippy's
 rate (≥360° at ≥150°/s: a Trippy, a Yaw Spin) while it keeps 120°/s over
 the last 0.5 s, or a loop's pitch (≥300° in 3.5 s with the velocity
-turning: a run of Powerloops) while it keeps 69°/s. So a long Trippy is
-one Trippy and a double loop one Double Powerloop. A slower orbit is cut
+turning: a run of loops) while it keeps 69°/s. So a long Trippy is one
+Trippy and a run of loops one segment (the loop gate scores the Powerloops).
+A slower orbit is cut
 at the cap; the Orbit scores once across its pieces (above). While
 **inverted**, settle is longer so a maneuver does not split on a brief
 rate dip. Consecutive unscored segments with pauses under 0.8 s are also
@@ -530,8 +540,9 @@ Cruise / carving / hover wobble must classify as **none**.
 ## Added vs skipped
 
 **Added** (besides the original set, retuned to TPW): Cradle, Juicy Flick,
-Snapback, Rubik's Cube, Cubik's Rube, **Side Loop**, **Ham Spin**, and from
-the phase matcher **Immelmann** and **Half Mavvy**. Each has a distinct
+Snapback, Rubik's Cube, Cubik's Rube, **Side Loop**, **Ham Spin**, from the
+phase matcher **Immelmann** and **Half Mavvy**, and from the loop gate the
+Tricktionary's **Barani**. Each has a distinct
 axis-order or pitch-sign signature. The matrix covers both the synthetic
 rad/s library and **pilot traces** (imperfect stick, varying throttle,
 Actual/KISS curves from `sim-rates.js`).
@@ -541,9 +552,8 @@ Actual/KISS curves from `sim-rates.js`).
 - **Gap** — scored until 2026-11-14, now not a trick: Gap Hunt answers
   flying a gap. The passes are still tracked (above).
 - **Inverted Hang** — not a TPW trick.
-- **Barani / Power Swap** — Barani requires horizon or back-wall in view
-  before the inverted yaw; without a camera feature they collapse into
-  “half loop + 180 yaw vs 180 roll”. Too easy to steal Powerloop / Matty.
+- **Power Swap / True Barani** — queued with the Tricktionary audit (a
+  failed Barani horizon check, or a roll at the top, scores nothing today).
 - **Mavvelmann** — a Maverick into an Immelmann; not defined yet.
 - **Anti Matty / Power Matty / Matty Roll / …** — extra flips on a Matty;
   would double-count or steal Matty.

@@ -19,79 +19,51 @@
 //   build (2026-11-18) in the Warehouse, one after the other in the file
 //   (each from seq 1): Trippies, Orbits and Baranis (lines 1-60), then flips
 //   and rolls (lines 61-91). Every term it scores is logged, so its labels
-//   are exact, no estimate.
+//   are exact, no estimate;
+// - tools/fixtures/tricklog-depot-bf-loops.jsonl.gz, the owner's Baranis
+//   round the stairs, a false Barani, an open-air loop by the container, and
+//   Powerloops and Mavericks round the hatch's strip (2026-11-24), with
+//   positions (rec.side, 0.3 s apart).
 //
 // Each maneuver record carries what the detector saw (saw, rounded) and every
 // candidate's gate values (3 decimals, rad). The test rebuilds the segment's
 // features from them, checks the rebuild reproduces every logged gate value,
 // and runs classifyFeat on it:
-// - log 1: seq 4 (701 deg of pitch), 59 (606) and 79 (372) are Powerloops,
-//   4 and 59 Double Powerloops; seq 22, 23 and 24 (a trippy rolling 600-780
-//   deg as it spins) are Trippy;
-// - log 2: seq 9, 20, 26 and 77 (the inverted yaw spins) are Ham Spins; seq
-//   29 and 30 Trippy; seq 4 a Powerloop;
 // - every label a log fired stays the same, except log 2's seq 26 (it fired
-//   Flip, and is a Ham Spin) and the ones the phase matcher's definitions
-//   change (below), and every other maneuver keeps the label pinned here (no
-//   label for most);
-// - Flip, Powerloop and Split-S, now the phase matcher's, fire exactly where
-//   they did; the owner's Maverick, Matty and Half Matty and the new
-//   Immelmann change eight labels:
-//   - log 1 seq 14 and 21, log 2 seq 51 and 71 (Maverick): none topped out
-//     inverted after 150-210 degrees back (back 117, 260, 63 and 85; 14,
-//     51 and 71 never went inverted): no label;
-//   - log 1 seq 33 (Matty): 202 degrees of forward pitch, no climb: none;
-//   - log 1 seq 80 (Snapback): back 171, roll 163, a climb of 1.26 m, out
-//     0.26 m higher, the heading turned 168: an Immelmann (the climb taken
-//     as the top above the entry, below);
-//   - log 1 seq 82, log 2 seq 73 (Half Matty): a half roll then a forward
-//     pitch, the old Half Matty; the owner's is a forward half loop over an
-//     object ending inverted. 82 was a Cradle (its next best; nothing now,
-//     as every Cradle, below), 73 nothing;
-// - log 3, with the owner's Maverick, Matty and Half Mavvy as the owner
-//   flies them and compound tricks merged across segments (replayLog): six
-//   labels change, all the owner's:
-//   - seq 20 and 27 (Barani): Half Mavvies, forward 427 and 364 degrees net
-//     with a half roll between, climbing 6.6 and 5.3 m over 3.1 s, under an
-//     object 0.44 and 0.28 of the time (without one, a Barani);
-//   - seq 50 and 53 (none): Matties, 286 and 296 degrees of forward pitch
-//     over an object, against the nose, climbed into from 1.0 s before
-//     (1.2 and 1.7 m, by the records around then);
-//   - seq 63 and 66 (Cradle): Mavericks, each the glide back of a pull a
-//     pause of under 0.8 s before (63 with 61 and 62, 66 with 65), one
-//     trick, and no Cradle;
-//   - the Immelmanns (seq 6, 10, 18) stay; seq 56 (forward 260 net with a
-//     half roll and 85 back, cut at 4.5 s) is not a Matty (a Barani, below);
-// - log 4, with the owner's Barani (a pitch path of 300 with a half twist
-//   by roll or yaw inside it, any climb), the Maverick without a twist and
-//   the Half Mavvy through an object: the three Baranis, which scored
-//   nothing and a Maverick (34.2 s), are Baranis. By the same Barani, as
-//   estimated (baraniFrom), four maneuvers nobody labelled read Barani:
-//   - log 2 seq 33 and 40 (82.6 and 91.4 s): back about 240 and 200, a yaw
-//     of 165 and 171 turning the heading as far, forward, upright; the
-//     shape of the owner's 34.2 s Barani, in the inverted yaw spin log;
-//   - log 3 seq 56 (124.0 s, flown as a Matty): 429 of pitch path, a roll
-//     of 171, upright (the log cannot say whether the roll was inside the
-//     pitch, which the detector asks);
-//   - log 4 seq 4 (23.9 s): back about 190, a yaw of 187, forward 244,
-//     up-Z 0.66 at the end.
+//   Flip, and is a Ham Spin), the ones the phase matcher's definitions
+//   change, the Cradles (below) and the loop gate's (below); every other
+//   maneuver keeps the label pinned here (no label for most);
+// - Flip and Split-S, now the phase matcher's, fire exactly where they did;
+//   the owner's Matty, Half Matty, Half Mavvy and the Immelmann change these
+//   labels: log 1 seq 33 (Matty, 202 of forward pitch, no climb: none), 80
+//   (Snapback: back 171, a roll of 163, out higher, the heading turned: an
+//   Immelmann) and 82 (Half Matty: a half roll then a forward pitch, the old
+//   Half Matty; none); log 2 seq 73 (the same: none); log 3 seq 20 and 27
+//   (fired Barani: Half Mavvies, forward 427 and 364 net with a half roll
+//   between, under an object 0.44 and 0.28 of the time) and 50 and 53
+//   (none: Matties over an object, climbed into from 1.0 s before);
+// - Trippy and Orbit: the tail to the centre or upside down, against the
+//   upright orbit (the dumps' tests).
 //
-// Both logs predate two features; the replay uses what the logged ones say:
-// - the Powerloop's own window (LOOP_WIN_S), bounded from below (loopFrom):
-//   for the loops above the pitch only turned one way (pathP = |pitch|), so
-//   the whole turn is exact and the window's bound is far past 300 degrees;
-// - Ham's turn about the vertical while inverted (invYawFrom): none for a
-//   segment that never passed up-Z HAM_UPZ (exact); for the others it is
-//   taken as the segment's turn about the vertical (the logged v.yawSpan, its
-//   largest inside 2.4 s). A half flip in, a yaw and a half flip out turn
-//   within a few degrees of that while inverted, flown on both cores
-//   (tools/test_sim_tricks.mjs). A roll that turns about the vertical is a
-//   Roll first (classifyFeat's ham -> roll), whatever it turned inverted.
-// Logs recorded from now on carry invYawDeg and the gate's own value, and
-// replay it exactly.
-// All four logs predate the twist (saw.twistDeg): their Barani terms were
-// the old window's, the net pitch inside 1.5 s and the roll alone, and in
-// log 4 that read 0 on every segment (baraniFrom, below).
+// Barani, Powerloop and Maverick are the loop gate's (sim-tricks.js LOOP,
+// the owner's rulings of 2026-11-24): a pass under an object, a climb over
+// the same object, and a pass back under it, judged on the path. No
+// segment scores one, and no log before the gate carries its inputs: every
+// maneuver a log pinned or fired as one is unasserted (LOOPED; 28 of them,
+// the segment alone nothing but one Ham). The 2026-11-24 paste's positions,
+// 0.3 s apart, find the owner's loops with the gate's three passes and its
+// same-object rule (an estimate: pathLoops); so do the Cradle dumps' loops up
+// through the hatch, Mavericks the old rule missed.
+//
+// The logs predate Ham's turn about the vertical while inverted
+// (invYawFrom): none for a segment that never passed up-Z HAM_UPZ (exact);
+// for the others it is taken as the segment's turn about the vertical (the
+// logged v.yawSpan, its largest inside 2.4 s). A half flip in, a yaw and a
+// half flip out turn within a few degrees of that while inverted, flown on
+// both cores (tools/test_sim_tricks.mjs). A roll that turns about the
+// vertical is a Roll first (classifyFeat's ham -> roll), whatever it turned
+// inverted. Logs recorded from then on carry invYawDeg and the gate's own
+// value, and replay it exactly.
 //
 // The Cradle (2026-11-20) is no segment's label any more: it is two passes
 // round a post, a path event (sim-tricks.js CRADLE, cradleStep). No maneuver
@@ -104,8 +76,8 @@
 // have been a real Cradle's pull and push, which the gate cannot place round
 // a post with no positions: log 1 seq 54 -> 55 (back 78, then forward 138,
 // 0.17 s apart) and 69 -> 71 (back 108, then 149, 0.08 s), log 3 seq 65 ->
-// 66 (back 138, then 131: merged, the Maverick, which it stays) and the
-// Bando Baranis' 12 -> 14 (a Barani back 117, then forward 104). The owner's
+// 66 (back 138, then 131: the owner's Maverick, the loop gate's now) and the
+// Bando Baranis' 12 -> 14 (back 117, then forward 104). The owner's
 // Cradle dumps (tools/fixtures/tricklog-depot-bf-cradle-1 and -2) carry
 // positions, 32 rows a record (rec.side): the gate, run on them, calls the
 // owner's 12 Cradles and none of the misses. Fly 3 (-3, on the gate's build)
@@ -121,11 +93,13 @@ import { dirname, join } from 'node:path';
 import {
   classifyFeat, featView, makeFeat, loopCount, trickName, LOOP_WIN_S, SAMPLE_S, HAM_UPZ, HAM_MIN,
   PHASE_SPECS, PHASE_FIELD, matchSpec, MERGE_GAP_S, MANEUVER_MAX_S,
-  NOSE_SIDE, ORBIT_WIN_S, ORBIT_RATE, TRIPPY_HOLD, BARANI_P, BARANI_FADE, BARANI_HD_LO,
-  CRADLE, makeCradleGate, cradlePosts, cradleStep, cradleReset,
+  NOSE_SIDE, ORBIT_WIN_S, ORBIT_RATE, TRIPPY_HOLD,
+  CRADLE, makeCradleGate, cradlePosts, cradleStep, cradleReset, LOOP, sameObject, simBoxes,
 } from '../sim-tricks.js';
 import { explainFeat, SPEC } from '../sim-tricks-debug.js';
-import { DEPOT_PLAY, DEPOT_WS } from '../sim-maps.js';
+import { DEPOT_PLAY, DEPOT_WS, buildMap } from '../sim-maps.js';
+import { WS } from '../sim-core-adapter.js';
+import * as THREE from '../vendor/three.module.min.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEG = Math.PI / 180;
@@ -184,48 +158,6 @@ export function invYawFrom(s, g) {
   return { v: 'v.yawSpan' in g ? g['v.yawSpan'] : s.vyawDeg * DEG, exact: false };
 }
 
-// The Barani's terms (f.barP, f.barR): the gates' when the log has the
-// twist (saw.twistDeg); before it, estimated. The pitch path is the
-// segment's (pathP, the most any stretch of it can have). The twist is
-// about the body axis nearest the flight path, which the logs do not say:
-// the roll counts whole, and the yaw as far as the turn about the vertical
-// it made (v.yawSpan): a twist by yaw is made with the up axis along the
-// path, punched up or falling inverted, so the body's yaw turns the heading
-// about as much; a yaw made on its side, the path across the up axis, turns
-// it little. The larger of the two. Whether the twist was inside the pitch
-// is not in the logs either: taken as inside.
-// Since the twist, the Barani takes the heading's turn too (the yaw's own
-// turn about the vertical, yawVDeg), whichever scores, nearer 180 when both
-// do: a log with yawVDeg has the gates' (exact); one with the twist but not
-// the heading has the twist's stretch exactly and the heading's estimated,
-// from the turn about the vertical made inverted (invYawDeg; flip, yaw
-// while inverted, flip, on the bf core, the two agree within 2 degrees,
-// tools/test_sim_tricks.mjs), over the segment's pitch path, inside the
-// pitch.
-export function baraniFrom(s, g) {
-  if (s.twistDeg != null) {
-    // Logged since the heading: the twist by the measure that gave it
-    // (barRTwist, barRHead), and which (baraniVia).
-    const via = s.baraniVia || 0, rk = via ? 'barRHead' : 'barRTwist';
-    const tw = { p: 'f.barP' in g ? g['f.barP'] : s.baraniPitchDeg * DEG, r: rk in g ? g[rk] : 'f.barR' in g ? g['f.barR'] : s.baraniTwistDeg * DEG, exact: true, via };
-    if (s.yawVDeg != null || s.invYawDeg == null) return tw;
-    const hd = { p: s.pathP, r: s.invYawDeg * DEG, exact: false, via: 1 };
-    const sc = (b) => atLeastL(b.p, BARANI_P, BARANI_FADE) * (b.r >= (b.via ? BARANI_HD_LO : 2.356) && b.r <= 3.927 ? 1 : 0);
-    const a = sc(tw), b = sc(hd);
-    if (b > a + 1e-9 || (b > 0 && Math.abs(b - a) <= 1e-9 && Math.abs(hd.r - Math.PI) < Math.abs(tw.r - Math.PI))) return hd;
-    return tw;
-  }
-  const yawSpan = 'v.yawSpan' in g ? g['v.yawSpan'] : s.vyawDeg * DEG;
-  return { p: s.pathP, r: Math.max(Math.abs(s.roll), Math.min(Math.abs(s.yaw), yawSpan)), exact: false };
-}
-
-// classifyFeat's atLeast, for the estimates above.
-function atLeastL(x, a, fade) {
-  if (x >= a) return 1;
-  if (!(fade > 0) || x <= a - fade) return 0;
-  return (x - (a - fade)) / fade;
-}
-
 // Trippy's and Orbit's tail share (f.orbitTail, f.orbit2Tail), which no log
 // has yet. Estimated: from the camera's rows when the log has them (rec.cam,
 // 24 steps over the orbit's window) by the detector's own rule (a row
@@ -277,9 +209,8 @@ export function slowFrom(rec, g) {
 // The phase matcher's scores (PHASE_SPECS), for logs that predate them or
 // the current definitions, with matchSpec on what the logs measured (a log
 // whose definition of a trick is today's replays its logged score):
-// - Flip and Powerloop are one turn of pitch inside a window: the logged
-//   flip window (exact) and the replay's loop window (loopFrom). Their
-//   scores are the old terms' exactly;
+// - Flip is one turn of pitch inside a window: the logged flip window
+//   (exact). Its score is the old terms' exactly;
 // - Split-S is a half roll then a back pitch: the whole roll and the net
 //   pitch (the old terms', exactly; the order is in its rollFirst term);
 // - the others are estimated. The pitch turned back B and forward F, from
@@ -295,13 +226,11 @@ export function slowFrom(rec, g) {
 //   flew against the nose more than with it (where in the segment the logs
 //   do not say). The Half Mavvy's forward pitch splits evenly round the
 //   roll, the pull before it (B) its lead. Turning outside and across the
-//   phases is not in the logs: none, but the roll across the Maverick's and
-//   the Matty's pitch. The Maverick's twist across its phases is the
-//   segment's roll or yaw, the larger (net), and its push and glide back
-//   near an object the segment's share (obj), or 1 when it went back out
-//   through the gap it came in by; the Half Mavvy's share against the nose
-//   after the roll the segment's (against, or of the inverted part, the
-//   larger).
+//   phases is not in the logs: none, but the roll across the Matty's pitch.
+//   The Half Mavvy's share against the nose after the roll the segment's
+//   (against, or of the inverted part, the larger).
+// (Barani, Powerloop and Maverick are the loop gate's, sim-tricks.js LOOP:
+// never a segment's, and no log before the gate carries its inputs.)
 export function phasesFromLog(s, f, v, flipSpan, flipDir, loop, pre) {
   const absR = Math.abs(s.roll);
   const B = Math.max(0, (s.pathP - s.pitch) / 2), F = Math.max(0, (s.pathP + s.pitch) / 2);
@@ -313,10 +242,8 @@ export function phasesFromLog(s, f, v, flipSpan, flipDir, loop, pre) {
   const ms = (list, x) => ({ ph: list, lead: 0, trail: 0, tail: 0, ...x });
   const est = {
     flip: ms([{ turn: flipSpan, t: 0 }]),
-    powerloop: ms([{ turn: Math.max(loop.up, loop.dn), t: 0 }]),
     splits: ms([{ turn: absR, cross: 0, back: 0 }, { turn: -s.pitch, cross: 0, back: 0 }]),
     immelmann: rollFirst < 0 ? ms([ph(B, { back: F }), ph(absR, { climb: 0 })]) : null,
-    maverick: B >= 1 * DEG ? ms([ph(B, { cross: absR }), ph(F, { climb: 0, cross: absR })], { tail: s.against > s.follow ? s.against * s.dur : 0, still: Math.max(absR, Math.abs(s.yaw)), near: s.gapBack ? 1 : s.obj }) : null,
     matty: ms([ph(F, { climb: pre === pre && pre != null && s.alt0 >= pre ? top - pre : 0, over: over ? 1 : 0, back: B, cross: absR })]),
     halfmatty: ms([ph(F, { over: over ? 1 : 0, up: s.upEnd, back: B })]),
     halfmavvy: rollFirst < 0 ? ms([ph(F / 2, { climb: 0 }), ph(absR, { climb: 0 }), ph(F / 2, { climb: 0, ag: Math.max(s.against, s.invAg) })], { lead: B }) : null,
@@ -329,15 +256,14 @@ export function phasesFromLog(s, f, v, flipSpan, flipDir, loop, pre) {
 // The matcher tricks whose definitions a log's logged score still is:
 // unchanged since the matcher came in. (The Immelmann's climb is measured
 // from its low now, never less than from its start: a logged 1 stands.)
-const LOGGED_PH = new Set(['flip', 'powerloop', 'splits', 'immelmann']);
+const LOGGED_PH = new Set(['flip', 'splits', 'immelmann']);
 // A log from the compound tricks on (its records carry merged: log 4)
 // measured the other matcher tricks as today but for what changed since:
-// the Maverick's twist and the Half Mavvy's object. Its logged scores times
-// those terms, estimated as phasesFromLog does.
+// the Half Mavvy's object. Its logged scores times that term, estimated as
+// phasesFromLog does.
 const SINCE_MERGE = {
   matty: () => 1,
   halfmatty: () => 1,
-  maverick: (s) => (Math.max(Math.abs(s.roll), Math.abs(s.yaw)) <= PHASE_SPECS.maverick.still && (s.gapBack || s.obj >= PHASE_SPECS.maverick.near) ? 1 : 0),
   halfmavvy: (s) => (s.under >= 0.25 && Math.max(s.against, s.invAg) >= 0.3 ? 1 : 0),
 };
 
@@ -389,8 +315,6 @@ export function featFromLog(rec, ctx) {
   f.orbit2Spd = 'f.orbit2Spd' in g ? g['f.orbit2Spd'] : (s.orbit2Spd != null ? s.orbit2Spd : f.orbitSpd);
   f.orbit2Tail = tail.v2;
   f.orbit2Pole = s.orbit2Pole != null ? s.orbit2Pole : f.orbitPole;
-  const bar = baraniFrom(s, g);
-  f.barP = bar.p; f.barR = bar.r; f.barVia = bar.via || 0;
   // The logged sweep is the velocity's turn the flip's way.
   const loopSweep = val('v.loopSweep', s.loopSweepDeg);
   f.sweep = flipDir > 0 ? -loopSweep : loopSweep;
@@ -411,7 +335,7 @@ export function featFromLog(rec, ctx) {
     else if (k in g && 'merged' in rec && SINCE_MERGE[id]) f[PHASE_FIELD[id]] = g[k] * SINCE_MERGE[id](s);
     else f[PHASE_FIELD[id]] = est[id];
   }
-  return { f, g, flipDir, loop: lp, inv, phExact, tail, slow, bar };
+  return { f, g, flipDir, loop: lp, inv, phExact, tail, slow };
 }
 
 // The altitude at time t (s, the log's clock) from the maneuver records
@@ -429,14 +353,10 @@ export function altAt(man, t) {
 }
 
 // A compound trick across consecutive records (mergeFeat in the detector),
-// estimated for the pitch-only ones, Maverick and Matty: each record's
-// pitch is its back B then its forward F; the phases are the runs of one
-// way, a turn back the other way of PH_CROSS or less inside a run kept in
-// it. The Maverick's pull is the first back run, its push the rest; the
-// Matty's loop the forward run. The climb is the pull's records' (as
-// phasesFromLog), the Matty's from pre; the tail the last record's. The
-// others (Immelmann, Half Matty, Half Mavvy) turn about two axes and are
-// not merged here. { id: score }.
+// estimated for the pitch-only one, the Matty: each record's pitch is its
+// back B then its forward F; the Matty's loop the forward run, its climb
+// from pre. The others (Immelmann, Half Matty, Half Mavvy) turn about two
+// axes and are not merged here. { id: score }.
 export function mergeFromLog(win, pre) {
   const moves = [];
   for (const r of win) {
@@ -447,44 +367,13 @@ export function mergeFromLog(win, pre) {
   }
   const out = {};
   const last = win[win.length - 1].saw;
-  const tail = last.against > last.follow ? last.against * last.dur : 0;
-  const riseOf = (s) => (s.alt1 >= s.alt0 + s.loopRise - 0.05 ? s.span : s.loopRise);
   const f = { upEnd: last.upEnd, dur: win[win.length - 1].t - win[0].t0 };
   let aN = 0, ag = 0, iN = 0, ia = 0;
   for (const r of win) { aN += r.saw.alignN || 0; ag += (r.saw.against || 0) * (r.saw.alignN || 0); iN += r.saw.alignN || 0; ia += (r.saw.invAg || 0) * (r.saw.alignN || 0); }
   const v = { against: aN ? ag / aN : 0, invAg: iN ? ia / iN : 0 };
-  // The roll across the pitch: the most any record of it rolled. The twist
-  // across the Maverick: that, or the most any record yawed, or the run's
-  // whole roll or yaw.
-  let roll = 0, still = 0, sR = 0, sY = 0;
-  for (const r of win) {
-    roll = Math.max(roll, Math.abs(r.saw.roll));
-    still = Math.max(still, Math.abs(r.saw.roll), Math.abs(r.saw.yaw));
-    sR += r.saw.roll; sY += r.saw.yaw;
-  }
-  still = Math.max(still, Math.abs(sR), Math.abs(sY));
-  // Maverick: the first back run, then the rest forward.
-  if (moves.length >= 2 && moves[0].turn < 0) {
-    let i = 0, pull = 0, climb = 0;
-    while (i < moves.length && moves[i].turn < 0) { pull -= moves[i].turn; climb = Math.max(climb, riseOf(moves[i].r.saw)); i++; }
-    let push = 0, back = 0, bigBack = 0;
-    // The push and glide back near an object: the share its records were
-    // (obj, by their steps), or 1 when the last went back out through a gap.
-    const pushRecs = new Set();
-    for (; i < moves.length; i++) {
-      push += moves[i].turn;
-      pushRecs.add(moves[i].r);
-      if (moves[i].turn < 0) { back = Math.max(back, -moves[i].turn); if (-moves[i].turn > 0.785) bigBack = 1; }
-    }
-    let nN = 0, nObj = 0;
-    for (const r of pushRecs) { nN += r.saw.n || 0; nObj += (r.saw.obj || 0) * (r.saw.n || 0); }
-    const near = win[win.length - 1].saw.gapBack ? 1 : (nN ? nObj / nN : 0);
-    const ms = { ph: [
-      { turn: pull, t: 0, climb, up: 0, over: 0, under: 0, cross: roll, back: 0 },
-      { turn: push, t: 0, climb: 0, up: 0, over: 0, under: 0, cross: roll, back: bigBack ? 9 : back },
-    ], lead: 0, trail: 0, tail, still, near };
-    out.maverick = matchSpec(PHASE_SPECS.maverick, ms, f, v);
-  }
+  // The roll across the pitch: the most any record of it rolled.
+  let roll = 0;
+  for (const r of win) roll = Math.max(roll, Math.abs(r.saw.roll));
   // Matty: one forward run.
   {
     let fwd = 0, back = 0, top = -Infinity, over = 0;
@@ -709,14 +598,66 @@ const LOGS = [
     // s: flown, or the tumble after the floor?).
     OPEN: { 13: null, 16: null, 29: null, 41: 'roll' },
   },
+  // The owner's Baranis and loops of 2026-11-24, flown before the loop gate,
+  // with the owner's labels: Baranis seq 5, 7, 17 and 19 round the stairs
+  // (each fired Barani; 7 logged a touch near the floor on its way out), 32
+  // a false one (fired Barani: one 4 s segment of two pull-ups, at column
+  // 1109 and under the roof truss, never inverted, its twist the roll of
+  // banked turns), 33 and 35 the open-air loop near the container (scored
+  // nothing), Powerloops 41 to 48 and 63 (41 fired a Double Powerloop, 48 a
+  // Powerloop) and Mavericks 51 to 58 (none scored) round the hatch's strip.
+  // Its records carry rec.side's positions (0.3 s apart), not the gate's
+  // inputs: the segments alone are pinned (none of these is a segment's
+  // label now), and the loops are found on the positions, an estimate (the
+  // paste's test).
+  {
+    name: 'depot loops', map: 'depot', file: 'tools/fixtures/tricklog-depot-bf-loops.jsonl.gz', records: 66, maneuvers: 31, fired: 8,
+    NEW: { 5: null, 7: null, 17: null, 19: null, 32: null, 41: null, 48: null },
+  },
 ];
+// Barani, Powerloop and Maverick are the loop gate's (sim-tricks.js LOOP,
+// the owner's rulings of 2026-11-24): judged on the path round an object,
+// never on a segment, and no log before the gate carries its inputs. Every
+// maneuver a log pinned or fired as one of them is left unasserted (LOOPED,
+// by the ruling); what its segment alone reads now is listed (the labels
+// test).
+const LOOP_TRICKS = new Set(['barani', 'powerloop', 'maverick']);
 for (const L of LOGS) {
   // A file can hold more than one flight (seq restarts at 1): lines [a, b).
   L.recs = readLog(L.file).slice(...(L.lines || []));
   L.bySeq = new Map(L.recs.map((r) => [r.seq, r]));
   L.scored = L.recs.filter((r) => r.type === 'maneuver' && r.saw && !r.pre.short);
   L.man = L.scored.slice().sort((a, b) => a.t0 - b.t0);
+  L.LOOPED = {};
+  for (const r of L.scored) {
+    const pin = L.OPEN && r.seq in L.OPEN ? L.OPEN[r.seq] : r.seq in L.NEW ? L.NEW[r.seq] : r.result;
+    if (LOOP_TRICKS.has(pin)) L.LOOPED[r.seq] = pin;
+  }
 }
+// The unasserted rows (LOOPED) and what each segment alone reads now:
+// nothing, but the Bando Ham log's seq 14, a Ham alone.
+const LOOPED_ROWS = [
+  'log 1 seq 4 powerloop (alone: none)', 'log 1 seq 59 powerloop (alone: none)', 'log 1 seq 75 powerloop (alone: none)', 'log 1 seq 79 powerloop (alone: none)',
+  'log 2 seq 4 powerloop (alone: none)', 'log 2 seq 33 barani (alone: none)', 'log 2 seq 40 barani (alone: none)',
+  'log 3 seq 56 barani (alone: none)', 'log 3 seq 63 maverick (alone: none)', 'log 3 seq 66 maverick (alone: none)',
+  'log 4 seq 4 barani (alone: none)', 'log 4 seq 6 barani (alone: none)', 'log 4 seq 8 barani (alone: none)', 'log 4 seq 11 barani (alone: none)',
+  'bando hams seq 14 barani (alone: ham)',
+  'bando baranis seq 6 barani (alone: none)', 'bando baranis seq 9 barani (alone: none)', 'bando baranis seq 12 barani (alone: none)',
+  'bando baranis seq 17 barani (alone: none)', 'bando baranis seq 28 barani (alone: none)',
+  'depot baranis seq 4 barani (alone: none)', 'depot baranis seq 11 barani (alone: none)', 'depot baranis seq 18 barani (alone: none)', 'depot baranis seq 22 barani (alone: none)',
+  'depot build flight seq 15 barani (alone: none)', 'depot build flight seq 39 barani (alone: none)', 'depot build flight seq 44 barani (alone: none)', 'depot build flight seq 52 barani (alone: none)',
+];
+// The paste's loops on its positions (the estimate's test): each the loop
+// gate's trick and the segment its climb over the object fell in. The
+// Baranis 5, 7, 17 and 19; the Powerloops two in 41 (the Double), one
+// across 43 and 48, one in 48 and one in 63; the Mavericks four (the first
+// climbs over the strip as 48 ends, then 51, 56 and 58): the owner's.
+const PASTE_LOOPS = [
+  'barani 5', 'barani 7', 'barani 17', 'barani 19',
+  'powerloop 41', 'powerloop 41', 'powerloop 43', 'powerloop 48',
+  'maverick 48', 'maverick 51', 'maverick 56', 'maverick 58',
+  'powerloop 63',
+];
 // Each log as the detector scores it today (merges and all), by seq.
 const REPLAY = new Map();
 const replayed = (L) => { if (!REPLAY.has(L)) REPLAY.set(L, replayLog(L)); return REPLAY.get(L); };
@@ -741,7 +682,7 @@ test('the rebuilt features reproduce every logged gate value', () => {
   for (const L of LOGS) {
     for (const r of L.scored) {
       if (r.pre.tiny) continue;
-      const { f, g, flipDir, bar } = featFromLog(r);
+      const { f, g, flipDir } = featFromLog(r);
       const now = gateValues(explainFeat(f));
       const loopDir = featView(f).loopDir;
       for (const k of Object.keys(g)) {
@@ -751,9 +692,6 @@ test('the rebuilt features reproduce every logged gate value', () => {
         if (!(k in now)) continue;   // a gate a later change removed
         // A matcher trick defined differently since the log (log 3's).
         if (/^f\.ph(Mav|Matty|HMatty|HMavvy)$/.test(k)) continue;
-        // The Barani's terms, measured since by the twist, and by the
-        // heading where it scores (baraniFrom).
-        if ((k === 'f.barP' || k === 'f.barR') && (r.saw.twistDeg == null || (r.saw.yawVDeg == null && bar.via))) continue;
         const tol = 0.0025 + 0.002 * Math.abs(g[k]);
         assert.ok(Math.abs(now[k] - g[k]) <= tol, L.name + ' seq ' + r.seq + ' ' + k + ': logged ' + g[k] + ', rebuilt ' + now[k]);
       }
@@ -761,18 +699,17 @@ test('the rebuilt features reproduce every logged gate value', () => {
   }
 });
 
-test('log 1: seq 4, 59 and 79 are Powerloops; 4 and 59 are Double Powerloops', () => {
-  const want = { 4: 2, 59: 2, 79: 1 };
-  for (const [seq, loops] of Object.entries(want)) {
-    const r = LOG1.bySeq.get(Number(seq));
-    assert.equal(r.result, null, 'seq ' + seq + ' scored nothing in the log');
-    const { f, loop } = featFromLog(r);
-    assert.ok(loop.exact, 'seq ' + seq + ': the pitch turned one way only');
-    const cls = classify(f);
-    assert.equal(cls.id, 'powerloop', 'seq ' + seq + ': ' + cls.id + '\n' + cls.why);
-    const v = featView(f);
-    assert.equal(v.loops, loops, 'seq ' + seq + ' loops');
-    assert.equal(trickName('powerloop', v.flipDir, v.loops), loops === 2 ? 'Double Powerloop' : 'Powerloop');
+test('logs 1 and 2: the old rule\'s Powerloops, loops of pitch with no positions, are nothing alone now (the loop gate cannot be run on them)', () => {
+  // Log 1 seq 4 (701 deg of pitch), 59 (606), 75 (372) and 79 (372); log 2
+  // seq 4: loops of back pitch the old rule scored, each loop's path round
+  // nothing it can name (no positions). Too slow for a Flip.
+  for (const [L, seq, loops] of [[LOG1, 4, 2], [LOG1, 59, 2], [LOG1, 75, 1], [LOG1, 79, 1], [LOG2, 4, 1]]) {
+    const r = L.bySeq.get(seq);
+    assert.equal(r.result, null, L.name + ' seq ' + seq + ' scored nothing in the log');
+    const { f } = featFromLog(r);
+    assert.equal(featView(f).loops, loops, L.name + ' seq ' + seq + ' loops of pitch');
+    assert.equal(replayed(L).get(seq).id, null, L.name + ' seq ' + seq);
+    assert.equal(L.LOOPED[seq], 'powerloop', L.name + ' seq ' + seq + ' unasserted');
   }
 });
 
@@ -807,20 +744,13 @@ test('log 2: seq 9, 20, 26 and 77 (half flip in, yaw while inverted, half flip o
   }
 });
 
-test('log 2: seq 29 and 30 are Trippy Spins, seq 4 a Powerloop', () => {
+test('log 2: seq 29 and 30 are Trippy Spins', () => {
   for (const seq of [29, 30]) {
     const r = LOG2.bySeq.get(seq);
     assert.equal(r.result, null, 'seq ' + seq + ' scored nothing in the log');
     const cls = classify(featFromLog(r).f);
     assert.equal(cls.id, 'trippy', 'seq ' + seq + ': ' + cls.id + '\n' + cls.why);
   }
-  const r = LOG2.bySeq.get(4);
-  assert.equal(r.result, null, 'seq 4 scored nothing in the log');
-  const { f, loop } = featFromLog(r);
-  assert.ok(loop.exact, 'seq 4: the pitch turned one way only');
-  const cls = classify(f);
-  assert.equal(cls.id, 'powerloop', 'seq 4: ' + cls.id + '\n' + cls.why);
-  assert.equal(featView(f).loops, 1);
 });
 
 test('every label a log fired stays the same (but log 2 seq 26, the phase matcher\'s eight, log 3\'s six and log 4\'s Barani), and no other maneuver changes', () => {
@@ -830,7 +760,7 @@ test('every label a log fired stays the same (but log 2 seq 26, the phase matche
     const out = replayed(L);
     const off = [];
     for (const r of L.scored) {
-      if (L.OPEN && r.seq in L.OPEN) continue;
+      if ((L.OPEN && r.seq in L.OPEN) || r.seq in L.LOOPED) continue;
       const got = out.get(r.seq).id;
       const want = r.seq in L.NEW ? L.NEW[r.seq] : r.result;
       if (got !== want) off.push('seq ' + r.seq + ' is ' + got + ', want ' + want + ' (the log fired ' + r.result + ')');
@@ -839,42 +769,45 @@ test('every label a log fired stays the same (but log 2 seq 26, the phase matche
   }
   // The labels that change: every fired one listed, and the unlabelled ones
   // that score now.
-  const changed = LOGS.slice(0, 4).flatMap((L) => L.scored.filter((r) => r.seq in L.NEW && L.NEW[r.seq] !== r.result && (r.result || L.name === 'log 3' || L.NEW[r.seq] === 'barani')).map((r) => L.name + ' seq ' + r.seq + ' ' + (r.result || 'none') + '->' + (L.NEW[r.seq] || 'none')));
+  const changed = LOGS.slice(0, 4).flatMap((L) => L.scored.filter((r) => !(r.seq in L.LOOPED) && r.seq in L.NEW && L.NEW[r.seq] !== r.result && (r.result || L.name === 'log 3')).map((r) => L.name + ' seq ' + r.seq + ' ' + (r.result || 'none') + '->' + (L.NEW[r.seq] || 'none')));
   assert.deepEqual(changed, [
     'log 1 seq 14 maverick->none', 'log 1 seq 21 maverick->none', 'log 1 seq 33 matty->none',
     'log 1 seq 55 cradle->none', 'log 1 seq 71 cradle->none',
     'log 1 seq 80 snapback->immelmann', 'log 1 seq 82 halfmatty->none',
-    'log 2 seq 26 flip->ham', 'log 2 seq 31 cradle->none', 'log 2 seq 33 none->barani', 'log 2 seq 40 none->barani',
+    'log 2 seq 26 flip->ham', 'log 2 seq 31 cradle->none',
     'log 2 seq 51 maverick->none', 'log 2 seq 61 cradle->none', 'log 2 seq 71 maverick->none', 'log 2 seq 73 halfmatty->none',
     'log 3 seq 20 barani->halfmavvy', 'log 3 seq 27 barani->halfmavvy', 'log 3 seq 50 none->matty', 'log 3 seq 53 none->matty',
-    'log 3 seq 56 none->barani', 'log 3 seq 63 cradle->maverick', 'log 3 seq 66 cradle->maverick',
-    'log 4 seq 4 none->barani', 'log 4 seq 6 none->barani', 'log 4 seq 8 maverick->barani', 'log 4 seq 11 none->barani',
   ]);
+  // Unasserted (the loop gate's tricks, no positions: the ruling), with
+  // what the segment alone reads now.
+  const looped = LOGS.flatMap((L) => Object.keys(L.LOOPED).map((seq) => L.name + ' seq ' + seq + ' ' + L.LOOPED[seq] + ' (alone: ' + (replayed(L).get(Number(seq)).id || 'none') + ')'));
+  assert.deepEqual(looped, LOOPED_ROWS);
 });
 
 test('the dumps of 2026-11-17 and 18: every label that changes, and the open ones', () => {
   const NEWER = LOGS.slice(4);
-  const changed = NEWER.flatMap((L) => L.scored.filter((r) => r.seq in L.NEW && L.NEW[r.seq] !== r.result).map((r) => L.name + ' seq ' + r.seq + ' ' + (r.result || 'none') + '->' + (L.NEW[r.seq] || 'none')));
+  const changed = NEWER.flatMap((L) => L.scored.filter((r) => !(r.seq in L.LOOPED) && r.seq in L.NEW && L.NEW[r.seq] !== r.result).map((r) => L.name + ' seq ' + r.seq + ' ' + (r.result || 'none') + '->' + (L.NEW[r.seq] || 'none')));
   assert.deepEqual(changed, [
     'bando orbits seq 7 trippy->orbit', 'bando orbits seq 11 trippy->orbit',
     'bando baranis seq 14 cradle->none',
     'rig orbits seq 3 trippy->orbit', 'rig orbits seq 8 trippy->orbit',
-    'depot baranis seq 4 none->barani', 'depot baranis seq 8 cradle->none', 'depot baranis seq 11 none->barani', 'depot baranis seq 18 none->barani', 'depot baranis seq 22 none->barani',
+    'depot baranis seq 8 cradle->none',
     'depot build flips and rolls seq 18 cradle->none',
     'depot cradles 2 seq 3 cradle->none', 'depot cradles 2 seq 19 cradle->none', 'depot cradles 2 seq 22 cradle->none',
     'depot cradles 2 seq 23 cradle->none', 'depot cradles 2 seq 25 cradle->none', 'depot cradles 2 seq 31 cradle->none',
     'depot cradles 3 seq 7 cradle->none', 'depot cradles 3 seq 14 cradle->none', 'depot cradles 3 seq 35 cradle->none',
+    // The paste of 2026-11-24: segments alone, the loops the gate's.
+    'depot loops seq 5 barani->none', 'depot loops seq 7 barani->none', 'depot loops seq 17 barani->none', 'depot loops seq 19 barani->none',
+    'depot loops seq 32 barani->none', 'depot loops seq 41 powerloop->none', 'depot loops seq 48 powerloop->none',
   ]);
   // What the open ones read now (not asserted as the owner's).
   const open = NEWER.flatMap((L) => Object.keys(L.OPEN || {}).map((seq) => L.name + ' seq ' + seq + ' ' + (replayed(L).get(Number(seq)).id || 'none')));
-  assert.deepEqual(open, ['bando baranis seq 9 barani', 'depot cradles 3 seq 13 none', 'depot cradles 3 seq 16 none', 'depot cradles 3 seq 29 none', 'depot cradles 3 seq 41 roll']);
-  // Every label they fired that stays: the Trippies, Hams and Baranis.
+  assert.deepEqual(open, ['bando baranis seq 9 none', 'depot cradles 3 seq 13 none', 'depot cradles 3 seq 16 none', 'depot cradles 3 seq 29 none', 'depot cradles 3 seq 41 roll']);
+  // Every label they fired that stays: the Trippies and Hams.
   const kept = (L, id) => L.scored.filter((r) => r.result === id && replayed(L).get(r.seq).id === id).map((r) => r.seq);
   const [BO, BT, BH, BB, RT] = NEWER;
   assert.deepEqual(kept(BT, 'trippy'), [11, 13, 15]);
   assert.deepEqual(kept(BH, 'ham'), [3, 8, 12]);
-  assert.deepEqual(kept(BH, 'barani'), [14]);
-  assert.deepEqual(kept(BB, 'barani'), [6, 12, 17, 28]);
   assert.deepEqual(kept(RT, 'trippy'), [6, 10, 23]);
   assert.equal(BO.scored.filter((r) => r.result === 'trippy').length, 2);
 });
@@ -900,33 +833,30 @@ test('the dumps: Trippy is the tail to the centre, an upright orbit with the nos
   for (const [a, b] of [[2, 3], [6, 7], [7, 8]]) assert.ok(RO.bySeq.get(b).t0 - RO.bySeq.get(a).t < MERGE_GAP_S, a + ' to ' + b);
 });
 
-test('the build flight: every Trippy, Orbit and Barani term logged (exact, no estimate), and each label as it fired', () => {
+test('the build flight: every Trippy and Orbit term logged (exact, no estimate), and each label as it fired but its Baranis (the loop gate\'s, unasserted)', () => {
   const L = LOGS.find((x) => x.name === 'depot build flight');
   for (const r of L.scored) {
     const g = gateValues(r);
-    const { tail, slow, bar } = featFromLog(r, { pre: altAt(L.man, r.t0 - 1.0) });
-    assert.ok(tail.exact && slow.exact && bar.exact, 'seq ' + r.seq + ' exact');
+    const { tail, slow } = featFromLog(r, { pre: altAt(L.man, r.t0 - 1.0) });
+    assert.ok(tail.exact && slow.exact, 'seq ' + r.seq + ' exact');
     assert.ok(r.saw.yawVDeg != null && r.saw.orbitTail != null && r.saw.slowYawDeg != null, 'seq ' + r.seq + ' logged');
     // Each segment big enough for the candidates logs their gates.
-    if (!r.pre.tiny) assert.ok('f.orbitTail' in g && 'v.slowSpan' in g && ('barRHead' in g || 'barRTwist' in g), 'seq ' + r.seq + ' gates');
+    if (!r.pre.tiny) assert.ok('f.orbitTail' in g && 'v.slowSpan' in g, 'seq ' + r.seq + ' gates');
   }
   const out = replayed(L);
   const fired = L.scored.filter((r) => out.get(r.seq).id).map((r) => r.seq + ' ' + out.get(r.seq).id);
-  assert.deepEqual(fired, ['2 orbit', '15 barani', '18 trippy', '21 ham', '26 juicyflick', '39 barani', '44 barani', '48 trippy', '52 barani', '54 orbit']);
-  // The Baranis' half twists: by the heading (the yaw made inverted) 197,
-  // 174, 179; seq 44 by the twist about the path, 166.
-  const tw = (seq) => { const b = featFromLog(L.bySeq.get(seq)).bar; return [b.via, Math.round(b.r / DEG)]; };
-  assert.deepEqual([15, 39, 44, 52].map(tw), [[1, 197], [1, 174], [0, 166], [1, 179]]);
+  assert.deepEqual(fired, ['2 orbit', '18 trippy', '21 ham', '26 juicyflick', '48 trippy', '54 orbit']);
+  assert.deepEqual(Object.keys(L.LOOPED).map(Number), [15, 39, 44, 52]);
 });
 
 test('the build flight of flips and rolls: exact terms, each label as it fired, and never a Barani', () => {
   const L = LOGS.find((x) => x.name === 'depot build flips and rolls');
   for (const r of L.scored) {
     const g = gateValues(r);
-    const { tail, slow, bar } = featFromLog(r, { pre: altAt(L.man, r.t0 - 1.0) });
-    assert.ok(tail.exact && slow.exact && bar.exact, 'seq ' + r.seq + ' exact');
+    const { tail, slow } = featFromLog(r, { pre: altAt(L.man, r.t0 - 1.0) });
+    assert.ok(tail.exact && slow.exact, 'seq ' + r.seq + ' exact');
     assert.ok(r.saw.yawVDeg != null && r.saw.orbitTail != null && r.saw.slowYawDeg != null, 'seq ' + r.seq + ' logged');
-    if (!r.pre.tiny) assert.ok('f.orbitTail' in g && 'v.slowSpan' in g && ('barRHead' in g || 'barRTwist' in g), 'seq ' + r.seq + ' gates');
+    if (!r.pre.tiny) assert.ok('f.orbitTail' in g && 'v.slowSpan' in g, 'seq ' + r.seq + ' gates');
   }
   const out = replayed(L);
   const fired = L.scored.filter((r) => out.get(r.seq).id && !(L.OPEN && r.seq in L.OPEN)).map((r) => r.seq + ' ' + out.get(r.seq).id);
@@ -936,18 +866,14 @@ test('the build flight of flips and rolls: exact terms, each label as it fired, 
     assert.notEqual(classify(featNow(L, r).f).id, 'barani', 'seq ' + r.seq);
   }
   // Seq 17, the banked back flip: 258 about the vertical, but 3 of it made
-  // inverted, so the heading reads no half twist. The twist about the path
-  // reads 161, in its band: it is no Barani because it ended on its side
-  // (BARANI_SIDE, up-Z -0.08).
-  const r17 = L.bySeq.get(17), s17 = r17.saw;
+  // upside down: far under the loop gate's 120, and round no object.
+  const s17 = L.bySeq.get(17).saw;
   assert.ok(Math.abs(s17.rollDeg) >= 135 && s17.vyawDeg >= 250 && Math.abs(s17.yawVDeg) <= 5, 'seq 17');
-  assert.ok(Math.abs(s17.yawVDeg) * DEG < BARANI_HD_LO, 'seq 17 heading');
-  assert.equal(r17.barani.limit, 'BARANI_SIDE');
-  assert.ok(Math.abs(r17.barani.twistDeg) >= 135 && Math.abs(r17.barani.twistDeg) <= 225, 'seq 17 twist ' + r17.barani.twistDeg);
+  assert.ok(Math.abs(s17.yawVDeg) * DEG < LOOP.hdLo, 'seq 17 heading');
 });
 
-test('Flip, Powerloop and Split-S, now the phase matcher\'s, fire on every log exactly where they did', () => {
-  const OLD = new Set(['flip', 'powerloop', 'splits']);
+test('Flip and Split-S, now the phase matcher\'s, fire on every log exactly where they did', () => {
+  const OLD = new Set(['flip', 'splits']);
   for (const L of LOGS) {
     const out = replayed(L);
     for (const r of L.scored) {
@@ -956,24 +882,20 @@ test('Flip, Powerloop and Split-S, now the phase matcher\'s, fire on every log e
       if (OLD.has(was) || OLD.has(got)) assert.equal(got, was, L.name + ' seq ' + r.seq);
     }
   }
-  // The flips and Split-S the logs fired, and the Powerloops pinned above.
+  // The flips and Split-S the logs fired.
   const fired = (L, id) => L.scored.filter((r) => (r.seq in L.NEW ? L.NEW[r.seq] : r.result) === id).map((r) => r.seq);
   assert.deepEqual(fired(LOG1, 'flip'), [7, 86]);
   assert.deepEqual(fired(LOG1, 'splits'), [19]);
-  assert.deepEqual(fired(LOG1, 'powerloop'), [4, 59, 75, 79]);
   assert.deepEqual(fired(LOG2, 'flip'), [55, 67, 78]);
   assert.deepEqual(fired(LOG2, 'splits'), [19]);
-  assert.deepEqual(fired(LOG2, 'powerloop'), [4]);
 });
 
-test('the phase matcher\'s Maverick, Matty and Half Matty, and Immelmann, on both logs', () => {
-  // The Mavericks logs 1 and 2 fired: back B, forward F from the whole pitch
-  // and the net; none pulled back 120-225.
+test('the phase matcher\'s Matty and Half Matty, and Immelmann, on both logs; the Mavericks logs 1 and 2 fired are nothing', () => {
+  // The Mavericks logs 1 and 2 fired (the old rule: near an object): no
+  // segment's label now, and these were no loop round an object either.
   for (const [L, seq] of [[LOG1, 14], [LOG1, 21], [LOG2, 51], [LOG2, 71]]) {
-    const s = L.bySeq.get(seq).saw;
-    const back = (s.pathP - s.pitch) / 2 / DEG;
-    assert.ok(back < 120 || back > 225, L.name + ' seq ' + seq + ': back ' + back.toFixed(0));
-    assert.equal(featNow(L, L.bySeq.get(seq)).f.phMav, 0);
+    assert.equal(L.bySeq.get(seq).result, 'maverick');
+    assert.equal(replayed(L).get(seq).id, null, L.name + ' seq ' + seq);
   }
   // Log 1 seq 33: a Matty of 202 degrees that did not climb.
   const s33 = LOG1.bySeq.get(33).saw;
@@ -987,8 +909,8 @@ test('the phase matcher\'s Maverick, Matty and Half Matty, and Immelmann, on bot
     assert.equal(featNow(L, r).f.phMatty, 1, L.name + ' seq ' + seq);
     assert.equal(replayed(L).get(seq).id, 'matty', L.name + ' seq ' + seq);
   }
-  // Log 1 seq 7 (a Flip) and 75 (a Powerloop) climbed inside the flip after
-  // a descent: not climbed into, not Matties.
+  // Log 1 seq 7 (a Flip) and 75 (a loop) climbed inside the flip after a
+  // descent: not climbed into, not Matties.
   for (const seq of [7, 75]) {
     const r = LOG1.bySeq.get(seq);
     assert.ok(r.saw.alt0 < altAt(LOG1.man, r.t0 - 1.0), 'seq ' + seq + ' came down into it');
@@ -1008,7 +930,7 @@ test('the phase matcher\'s Maverick, Matty and Half Matty, and Immelmann, on bot
   }
 });
 
-test('log 3: the owner\'s Immelmanns stay; seq 20 and 27 are Half Mavvies, through an object, not Baranis', () => {
+test('log 3: the owner\'s Immelmanns stay; seq 20 and 27 are Half Mavvies, through an object', () => {
   const out = replayed(LOG3);
   for (const seq of [6, 10, 18]) {
     assert.equal(LOG3.bySeq.get(seq).result, 'immelmann');
@@ -1025,17 +947,13 @@ test('log 3: the owner\'s Immelmanns stay; seq 20 and 27 are Half Mavvies, throu
     const { f } = featNow(LOG3, r);
     assert.equal(f.phHMavvy, 1, 'seq ' + seq);
     assert.equal(out.get(seq).id, 'halfmavvy', 'seq ' + seq);
-    // A Barani's shape too (575 and 486 of pitch path, the half roll the
-    // twist); the Half Mavvy goes through an object: under one 0.44 and 0.28
-    // of the time, against the nose after the roll (by the segment's share,
-    // 0.40 and 0.38), and ranks above.
-    const bar = explainFeat(f).candidates.find((c) => c.id === 'barani');
-    assert.ok(bar.score > 0.9, 'seq ' + seq + ' Barani ' + bar.reason);
+    // Through an object: under one 0.44 and 0.28 of the time, against the
+    // nose after the roll (by the segment's share, 0.40 and 0.38).
     assert.ok(s.under >= 0.25 && Math.max(s.against, s.invAg) >= 0.3, 'seq ' + seq + ' under ' + s.under);
   }
 });
 
-test('log 3: seq 50 and 53 are Matties, climbed into; seq 56 does not fit (a Barani by the estimate)', () => {
+test('log 3: seq 50 and 53 are Matties, climbed into; seq 56 does not fit (nothing alone)', () => {
   const out = replayed(LOG3);
   for (const seq of [50, 53]) {
     const r = LOG3.bySeq.get(seq), s = r.saw;
@@ -1052,60 +970,32 @@ test('log 3: seq 50 and 53 are Matties, climbed into; seq 56 does not fit (a Bar
   const s56 = LOG3.bySeq.get(56).saw;
   assert.ok(Math.abs(s56.rollDeg) > 45 && s56.dur >= 4.5, 'seq 56');
   assert.equal(featNow(LOG3, LOG3.bySeq.get(56)).f.phMatty, 0);
-  // A pitch path of 429 with a roll of 171, upright: the owner's Barani, as
-  // far as the log says (it cannot say the roll was inside the pitch).
+  // The old rule's Barani (a pitch path of 429 with a roll of 171,
+  // upright): the loop gate's now, unasserted.
   assert.ok(s56.pathP >= 300 * DEG && Math.abs(s56.rollDeg) >= 135 && s56.upEnd >= 0.5);
-  assert.equal(out.get(56).id, 'barani');
+  assert.equal(out.get(56).id, null);
+  assert.equal(LOG3.LOOPED[56], 'barani');
 });
 
-test('log 3: the Mavericks split across segments are one Maverick each, and no Cradle', () => {
+test('log 3: the Mavericks split across segments (the old rule\'s, merged) are nothing now, and no Cradle', () => {
   const out = replayed(LOG3);
   // 151.4 + 152.0: seq 65 pulls back 138 (never inverted), seq 66 pushes 131
   // forward against the nose, 0.08 s apart. 148.2: seq 61 pulls back 152
   // and pitches forward, seq 62 pulls 27, seq 63 pushes 121 against the
-  // nose, the pauses 0.57 and 0.07 s.
+  // nose, the pauses 0.57 and 0.07 s. The owner's Mavericks; the loop
+  // gate's now (no positions: unasserted), and no merge makes one.
   const s65 = LOG3.bySeq.get(65).saw, s66 = LOG3.bySeq.get(66).saw;
   assert.ok(s65.pitchDeg === -138 && s65.upMin > 0 && s66.pitchDeg === 131 && s66.against >= 0.85);
-  for (const [seq, segs, before] of [[66, 2, [65]], [63, 3, [61, 62]]]) {
-    const r = LOG3.bySeq.get(seq);
-    assert.equal(r.result, 'cradle', 'seq ' + seq + ' fired Cradle');
-    assert.deepEqual(out.get(seq), { id: 'maverick', merged: segs }, 'seq ' + seq);
-    for (const b of before) {
-      assert.equal(LOG3.bySeq.get(b).result, null, 'seq ' + b + ' scored nothing');
-      assert.equal(out.get(b).id, null, 'seq ' + b);
-      assert.ok(r.t0 - LOG3.bySeq.get(b).t < 2 && r.t0 > LOG3.bySeq.get(b).t);
-    }
+  for (const seq of [61, 62, 63, 65, 66]) assert.equal(out.get(seq).id, null, 'seq ' + seq);
+  for (const seq of [63, 66]) {
+    assert.equal(LOG3.bySeq.get(seq).result, 'cradle', 'seq ' + seq + ' fired Cradle');
+    assert.equal(LOG3.LOOPED[seq], 'maverick');
   }
-  // Both dropped back near an object (the push and glide records 0.95-1.0
-  // of their steps within 2 m of one).
-  for (const seq of [61, 62, 63, 65, 66]) assert.ok(LOG3.bySeq.get(seq).saw.obj >= 0.9, 'seq ' + seq + ' near an object');
-  // Alone, the glide back is nothing (no segment labels a Cradle: it is two
-  // passes round a post); merged, the Maverick.
-  assert.ok(!classify(featNow(LOG3, LOG3.bySeq.get(66)).f).id);
   assert.ok(MERGE_GAP_S > 0.79 && MERGE_GAP_S < 0.81);
 });
 
-test('log 4: the Barani terms read 0 on every segment: no 1.5 s window held 300 degrees of net pitch, and the twist was roll alone', () => {
-  for (const r of LOG4.scored) {
-    assert.equal(r.saw.baraniPitchDeg, 0, 'seq ' + r.seq);
-    assert.equal(r.saw.baraniTwistDeg, 0, 'seq ' + r.seq);
-    assert.equal(r.saw.twistDeg, undefined, 'seq ' + r.seq + ': the log predates the twist');
-  }
-  // The old terms looked only where a 1.5 s window held 300 of net pitch.
-  // The pitch turned back B and forward F (each way once: from the path and
-  // the net), and neither reached 300: 28.6 and 34.2 s twisted by yaw, which
-  // turns the body round, so the flip pitched it one way, then the other
-  // (net -8 and -51 of 466 and 397); 38.1 s turned 299 one way, over 3.3 s.
-  for (const [seq, net, path] of [[6, -8, 466], [8, -51, 397], [11, 299, 299]]) {
-    const s = LOG4.bySeq.get(seq).saw;
-    const B = (s.pathP - s.pitch) / 2, F = (s.pathP + s.pitch) / 2;
-    assert.equal(s.pitchDeg, net, 'seq ' + seq);
-    assert.equal(Math.round(s.pathP / DEG), path, 'seq ' + seq);
-    assert.ok(Math.max(B, F) < 300 * DEG, 'seq ' + seq + ': back ' + Math.round(B / DEG) + ', forward ' + Math.round(F / DEG));
-  }
-});
 
-test('log 4: 28.6, 34.2 and 38.1 s are Baranis (twisted by yaw, yaw and roll); 34.2 s is not a Maverick; none is a Half Mavvy', () => {
+test('log 4: the owner\'s Baranis (28.6, 34.2 and 38.1 s), with no positions, are nothing alone (the loop gate\'s, unasserted); none is a Half Mavvy', () => {
   const out = replayed(LOG4);
   for (const [seq, by] of [[6, 'yaw'], [8, 'yaw'], [11, 'roll']]) {
     const r = LOG4.bySeq.get(seq), s = r.saw;
@@ -1113,27 +1003,11 @@ test('log 4: 28.6, 34.2 and 38.1 s are Baranis (twisted by yaw, yaw and roll); 3
     // The twist: 180 +- 45 by the axis the owner names, the other small.
     const twist = by === 'yaw' ? Math.abs(s.yawDeg) : Math.abs(s.rollDeg);
     assert.ok(twist >= 135 && twist <= 225, 'seq ' + seq + ' ' + by + ' ' + twist);
-    if (by === 'yaw') assert.ok(Math.abs(s.rollDeg) < 45 && s.vyawDeg >= 135, 'seq ' + seq + ': the yaw turned the heading ' + s.vyawDeg);
-    const { f } = featNow(LOG4, r);
-    assert.ok(f.barP >= s.pathP - 1e-9 && f.barR >= 135 * DEG && f.barR <= 225 * DEG && f.upEnd >= 0.5, 'seq ' + seq);
-    assert.equal(out.get(seq).id, 'barani', 'seq ' + seq);
+    assert.equal(out.get(seq).id, null, 'seq ' + seq);
+    assert.equal(LOG4.LOOPED[seq], 'barani');
     // Not a Half Mavvy: under an object 0.03, 0.11 and 0.01 of the time.
-    assert.ok(s.under < 0.25 && f.phHMavvy === 0, 'seq ' + seq + ' under ' + s.under);
+    assert.ok(s.under < 0.25 && featNow(LOG4, r).f.phHMavvy === 0, 'seq ' + seq + ' under ' + s.under);
   }
-  // 38.1 s: 299 of pitch path, a hair under 300 (the term fades over 20);
-  // up-Z 0.595 at the end (upright from 0.5, as the Half Mavvy's).
-  const f11 = featNow(LOG4, LOG4.bySeq.get(11)).f;
-  const bar11 = explainFeat(f11).candidates.find((c) => c.id === 'barani');
-  assert.ok(bar11.score >= 0.9 && bar11.score < 1, 'seq 11 Barani ' + bar11.score);
-  // 34.2 s fired Maverick: back 224 climbing 5.7 m, forward 173, 0.93 s
-  // against the nose (as logged, today's Maverick but for the twist), and a
-  // yaw of 184 between (at most 60 allowed).
-  const r8 = LOG4.bySeq.get(8);
-  const mv = r8.phases.maverick;
-  assert.ok(mv.score === 1 && mv.ph[0].deg === 224 && mv.ph[1].deg === 173 && mv.tail >= 0.3, 'logged ' + JSON.stringify(mv));
-  assert.equal(Math.abs(r8.saw.yawDeg), 184);
-  assert.equal(featNow(LOG4, r8).f.phMav, 0);
-  assert.equal(PHASE_SPECS.maverick.still, 1.047);
 });
 
 test('loop count: one from 300 degrees, two from 600, one more per further 360', () => {
@@ -1199,6 +1073,105 @@ function gateOnRows(L) {
   }
   return out;
 }
+
+// The loop gate's three passes on a log's positions (rec.side's rows, 0.3 s
+// apart): an estimate. Every record's rows on the sim clock, one track,
+// interpolated to 0.02 s (a gap over 0.6 s or a new epoch breaks it); each
+// step's boxes over the quad (their underside LOOP.underM above or less) and
+// under it (their top LOOP.overM below or less), on the Warehouse's own
+// boxes; a loop: the first step under a box, then over a box of the same
+// object (sameObject, the gate's rule), then under one again LOOP.drop or
+// more below the top since, inside LOOP.maxS. Each with its lowest up-Z
+// (the rows', interpolated) and the over pass's clock. The Barani's yaw
+// upside down is the segment's (saw.yawVDeg of the record the over pass
+// fell in); the rows have no attitude but up-Z.
+let DEPOT_B = null;
+function depotBoxes() {
+  if (!DEPOT_B) { const cols = buildMap(THREE, 'depot').colliders; DEPOT_B = { B: simBoxes(cols, WS, null), n: cols.length }; }
+  return DEPOT_B;
+}
+function pathLoops(L) {
+  const { B, n } = depotBoxes();
+  const pts = new Map();
+  for (const r of L.recs) {
+    const sd = r.side;
+    if (!sd || !sd.rows) continue;
+    const ix = Object.fromEntries(sd.cols.map((c, i) => [c, i]));
+    for (const row of sd.rows) {
+      const T = Math.round((sd.simT0 + row[0]) * 1000) / 1000;
+      pts.set(T, { T, off: r.t0 - sd.simT0, x: row[ix.x], y: row[ix.y], z: row[ix.z], upZ: row[ix.upZ], ep: sd.epoch });
+    }
+  }
+  const tr = [...pts.values()].sort((a, b) => a.T - b.T);
+  const box = (i) => Array.from(B.slice(i * 6, i * 6 + 6));
+  const steps = [];
+  for (let i = 0; i + 1 < tr.length; i++) {
+    const a = tr[i], b = tr[i + 1];
+    if (b.T - a.T > 0.6 || a.ep !== b.ep) { steps.push(null); continue; }
+    const m = Math.max(1, Math.round((b.T - a.T) / 0.02));
+    for (let j = 0; j < m; j++) {
+      const u = j / m, x = a.x + (b.x - a.x) * u, y = a.y + (b.y - a.y) * u, z = a.z + (b.z - a.z) * u;
+      const up = [], dn = [];
+      for (let k = 0; k < n; k++) {
+        const q = k * 6;
+        if (B[q] !== B[q] || x < B[q] || x > B[q + 3] || y < B[q + 1] || y > B[q + 4]) continue;
+        if (B[q + 2] > z) { if (B[q + 2] - z <= LOOP.underM) up.push(k); } else if (B[q + 5] < z && z - B[q + 5] <= LOOP.overM) dn.push(k);
+      }
+      steps.push({ T: a.T + (b.T - a.T) * u, off: a.off, z, upZ: a.upZ + (b.upZ - a.upZ) * u, up, dn });
+    }
+  }
+  const same = (A, k) => A.some((a) => a === k || sameObject(box(a), box(k)));
+  const out = [];
+  for (let i = 0; i < steps.length; i++) {
+    const e = steps[i];
+    if (!e || !e.up.length) continue;
+    const prev = steps[i - 1];
+    if (prev && prev.up.some((k) => same(e.up, k))) continue;
+    let over = null, top = e.z, upMin = e.upZ, left = false;
+    for (let j = i + 1; j < steps.length && steps[j] && steps[j].T - e.T <= LOOP.maxS; j++) {
+      const f = steps[j];
+      top = Math.max(top, f.z); upMin = Math.min(upMin, f.upZ);
+      if (!f.up.some((k) => same(e.up, k))) left = true;
+      if (!over) { if (f.dn.some((k) => same(e.up, k))) over = f; continue; }
+      if (left && f.up.some((k) => same(e.up, k)) && f.z <= top - LOOP.drop) {
+        // On the log's clock, the segment the over pass fell in.
+        const tO = over.T + over.off;
+        const seg = L.scored.find((r) => r.t0 <= tO + 1e-6 && tO <= r.t + 1e-6) || null;
+        const yawV = seg && seg.saw.yawVDeg != null ? Math.abs(seg.saw.yawVDeg) : 0;
+        const id = upMin <= LOOP.inv ? (yawV >= LOOP.hdLo / DEG - 1e-9 ? 'barani' : 'powerloop') : 'maverick';
+        out.push({ id, t1: +(e.T + e.off).toFixed(2), tO: +tO.toFixed(2), t2: +(f.T + f.off).toFixed(2), upMin: +upMin.toFixed(2), seg: seg ? seg.seq : null, obj: e.up[0] });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+test('the paste of 2026-11-24 on its positions (an estimate, 0.3 s rows): the loop gate\'s passes find the owner\'s Baranis round the stairs, Powerloops and Mavericks round the hatch\'s strip, and nothing at 32 or 33-35', () => {
+  const L = LOGS.find((x) => x.name === 'depot loops');
+  const loops = pathLoops(L);
+  const got = loops.map((x) => x.id + ' ' + x.seg);
+  assert.deepEqual(got, PASTE_LOOPS);
+  // The Baranis: under a step of the stairs, over it upside down, back under
+  // (seq 17 1.4 m along them, under the mezzanine edge they join).
+  for (const x of loops.filter((y) => y.id === 'barani')) assert.ok(x.upMin <= -0.9 && x.t2 - x.t1 <= LOOP.maxS, JSON.stringify(x));
+  // The Powerloops upside down at the top (-0.85 to -1); the Mavericks never
+  // (their lowest up-Z 0.14-0.28).
+  for (const x of loops.filter((y) => y.id === 'powerloop')) assert.ok(x.upMin <= -0.8, JSON.stringify(x));
+  for (const x of loops.filter((y) => y.id === 'maverick')) assert.ok(x.upMin >= 0.1, JSON.stringify(x));
+  // Nothing round 32 (two pull-ups, never under anything) or 33-35 (the
+  // open-air loop beside the container).
+  for (const x of loops) assert.ok(x.seg !== 32 && x.seg !== 33 && x.seg !== 35, JSON.stringify(x));
+});
+
+test('the Cradle dumps\' loops up through the hatch (an estimate, on their positions): the hatch Maverick of dump 2 and the three of fly 3, upright round the strip', () => {
+  const C2 = LOGS.find((x) => x.name === 'depot cradles 2'), C3 = LOGS.find((x) => x.name === 'depot cradles 3');
+  const two = pathLoops(C2), three = pathLoops(C3);
+  assert.deepEqual(two.map((x) => x.id), ['maverick']);
+  assert.deepEqual(three.map((x) => x.id), ['maverick', 'maverick', 'maverick']);
+  // Dump 2's tips 3 degrees past vertical (up-Z -0.06): no upside down.
+  assert.ok(two[0].upMin < 0 && two[0].upMin > LOOP.inv, JSON.stringify(two[0]));
+});
 
 test('the owner\'s Cradle dumps: the gate, on their positions, calls each of the 12 Cradles at its second pass, and none of the misses', () => {
   const C1 = LOGS.find((L) => L.name === 'depot cradles 1'), C2 = LOGS.find((L) => L.name === 'depot cradles 2');
