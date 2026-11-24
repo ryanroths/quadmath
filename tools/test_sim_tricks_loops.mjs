@@ -4,13 +4,18 @@
 // and the body's turn rates integrated step by step (4 ms), round a bar 0.3
 // m wide whose underside is 2.5 m up; through the gate alone
 // (makeLoopGate) and through the whole detector (stepDetector, the page's
-// samples). The same-object rule on the Warehouse's own boxes.
+// samples). The same-object rule on the Warehouse's own boxes. The owner's
+// re-fly of 2026-11-24: its loop records, replayed (the last tests).
 // node --test tools/test_sim_tricks_loops.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  LOOP, makeLoopGate, loopStep, sameObject, makeDetector, stepDetector, simBoxes, groupBoxes, CRADLE,
+  LOOP, makeLoopGate, loopStep, loopReset, sameObject, makeDetector, stepDetector, simBoxes, groupBoxes, CRADLE,
   bodyDeltaParts, TRICK_BY_ID, STORE_VER,
 } from '../sim-tricks.js';
 import { buildMap } from '../sim-maps.js';
@@ -346,4 +351,247 @@ test('re-fly rulings: the same object reaches 2.0 m across the floor (1 m in hei
   assert.ok(sameObject([-1.56, 18.06, 2.19, -1.16, 18.94, 2.25], [-3.19, 18.06, 3.09, -2.78, 18.94, 3.15]));
   // 1.13 m higher: not the same.
   assert.equal(sameObject([-1.56, 18.06, 2.19, -1.16, 18.94, 2.25], [-3.59, 18.06, 3.32, -3.19, 18.94, 3.37]), false);
+});
+
+// The owner's re-fly of 2026-11-24 (D:/qm-tricklogs/Barani.txt, outside
+// git): seven pastes flown on 4070103's gate (the bf core, the Warehouse,
+// ?tricks=debug, the Air65), each under a label of what was flown. Its 16
+// loop records are tools/fixtures/tricklog-depot-bf-refly-loops.jsonl.gz,
+// one a line, each line byte for byte as logged, the pastes one after the
+// other (REFLY: lines [a, b); seq restarts in each), with one change: a
+// record whose rows are the first rows of a longer record of its paste has
+// its "rows" cut and "same" (that record's seq) in their place, its from
+// and to kept (5 of them; 1.3 MB gzipped down to 0.88). The rows are the
+// gate's inputs every 4 ms (LOOP_LOG), so a replay is exact but for their
+// rounding (to the ms, 4 decimals: a 4 ms step, 0.01 m, a degree; on
+// 4070103's gate as on today's). The open-air loops left none (no box below
+// them); the two Baranis the gate never judged (attempts 11 and 35: no
+// record) are left unasserted.
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const REFLY_FILE = 'tools/fixtures/tricklog-depot-bf-refly-loops.jsonl.gz';
+const REFLY = [
+  { name: 'Barani', lines: [0, 6] },
+  { name: 'yaw early', lines: [6, 7] },
+  { name: 'half loop 180 roll at top', lines: [7, 8] },
+  { name: 'powerloop and double powerloop', lines: [8, 11] },
+  { name: 'open air loops', lines: [11, 11] },
+  { name: 'mavericks - last one did not register', lines: [11, 15] },
+  { name: 'flips rolls, ham spin', lines: [15, 16] },
+];
+const REFLY_RECS = gunzipSync(readFileSync(join(root, REFLY_FILE))).toString('utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+for (const P of REFLY) {
+  P.recs = REFLY_RECS.slice(...P.lines);
+  P.bySeq = new Map(P.recs.map((r) => [r.seq, r]));
+}
+
+// A record's rows: its own, or those of the record it shares (same) from
+// its from to its to.
+function reflyRows(P, rec) {
+  if (rec.inputs.rows) return rec.inputs.rows;
+  const src = P.bySeq.get(rec.inputs.same);
+  return src.inputs.rows.filter((row) => row[0] >= rec.inputs.from - 1e-6 && row[0] <= rec.inputs.to + 1e-6);
+}
+
+// A record replayed as stepDetector runs the gate: a fresh gate on the
+// record's boxes; each row's inputs; a jump of over 2 m starts it over; the
+// first row, or one flagged fresh (4), is fresh; an armed row (2) steps it,
+// an unarmed one resets it. touch(t), if given, in place of the logged
+// touch (flag 1). The gate's verdicts (out) and its calls.
+function replayRefly(P, rec, touch) {
+  const rows = reflyRows(P, rec), C = rec.inputs.cols;
+  const ix = Object.fromEntries(C.map((c, i) => [c, i]));
+  const g = makeLoopGate(rec.gate.boxes.map((b) => b.slice(1)));
+  const calls = [];
+  let prev = null;
+  rows.forEach((row, i) => {
+    if (prev && Math.hypot(row[ix.x] - prev[ix.x], row[ix.y] - prev[ix.y], row[ix.z] - prev[ix.z]) > 2) loopReset(g, 'jump');
+    prev = row;
+    const I = g.inp;
+    for (const c of C) if (c !== 'flags') I[c] = row[ix[c]];
+    I.contact = touch ? (touch(row[0]) ? 1 : 0) : row[ix.flags] & 1;
+    I.fresh = i === 0 || (row[ix.flags] & 4) ? 1 : 0;
+    I.camDeg = rec.cam.camDeg; I.vfov = rec.cam.vfov; I.aspect = rec.cam.aspect;
+    if (row[ix.flags] & 2) { if (loopStep(g)) calls.push(g.last); }
+    else loopReset(g, 'disarm');
+  });
+  return { out: g.out, calls, rows, ix };
+}
+const vText = (v) => (v.result || '-') + (v.loops > 1 ? ' x' + v.loops : '') + ' ' + v.t1 + '-' + v.t2 + (v.result ? '' : ' ' + v.why);
+const cText = (v) => v.result + (v.loops > 1 ? ' x' + v.loops : '') + ' @' + v.calledT;
+
+test('re-fly fixture: the owner\'s 16 loop records of 2026-11-24, as logged, on the gate before the rulings', () => {
+  assert.equal(REFLY_RECS.length, 16);
+  assert.deepEqual(REFLY.map((P) => P.recs.length), [6, 1, 1, 3, 0, 4, 1]);
+  for (const P of REFLY) {
+    for (const r of P.recs) {
+      const key = P.name + ' ' + r.seq;
+      assert.deepEqual([r.kind, r.type, r.core, r.map], ['quadmath-trick-attempt', 'loop', 'bf', 'depot'], key);
+      assert.deepEqual(r.cam, { camDeg: 30, vfov: 79.2, aspect: 2.094 }, key);
+      // A shared record's rows are the first rows of a longer one's.
+      if (!r.inputs.rows) {
+        const src = P.bySeq.get(r.inputs.same);
+        assert.ok(src.inputs.rows && src.inputs.from === r.inputs.from && src.inputs.to > r.inputs.to, key);
+      }
+      // Every 4 ms from its from to its to, none missing.
+      const rows = reflyRows(P, r);
+      assert.equal(rows.length, Math.round((r.inputs.to - r.inputs.from) / 0.004) + 1, key);
+      assert.ok(Math.abs(rows[0][0] - r.inputs.from) < 1e-6 && Math.abs(rows[rows.length - 1][0] - r.inputs.to) < 1e-6, key);
+    }
+  }
+  assert.deepEqual(REFLY_RECS.filter((r) => !r.inputs.rows).map((r) => r.seq + ' in ' + r.inputs.same), ['6 in 15', '13 in 15', '7 in 26', '12 in 26', '18 in 26']);
+  // The gate it was flown on: today's LOOP but for the rulings (the
+  // Maverick's pull 60 then 50, the same object 1.5 then 2.0 m, the level
+  // first pass new).
+  const need = REFLY_RECS[0].need;
+  for (const r of REFLY_RECS) assert.deepEqual(r.need, need);
+  assert.deepEqual([need.mavPull, need.sameM, 'level' in need], [1.047, 1.5, false]);
+  assert.deepEqual({ ...need, mavPull: LOOP.mavPull, sameM: LOOP.sameM, level: LOOP.level }, { ...LOOP });
+});
+
+// What each record replays to on today's gate: every verdict its rows hold,
+// in order, and every call, when (a Barani at its pass back under, a
+// Maverick LOOP.mavWaitS on, a Powerloop with no loop on LOOP.chainS on; the
+// Double's call, 27.16 + 1.6 s, falls past its rows). The owner's labels:
+// two Baranis of eight (three touched the floor, one came back over the
+// stairs, two never judged), nothing for the early yaw (114 upside down)
+// and the half loop rolled at the top (an Immelmann's, flown away: no pass
+// back under), the Powerloop and the Double, and four Mavericks, the last
+// pulled back 59.8.
+const MAV = ['maverick 14.612-17.52', 'maverick 17.676-20.668', 'maverick 20.888-24.404', 'maverick 26.904-29.632'];
+const MAV_CALLS = ['maverick @17.82', 'maverick @20.968', 'maverick @24.704', 'maverick @29.932'];
+const PL = ['powerloop 13.044-15.568', 'powerloop 22.144-24.6', 'powerloop x2 24.816-27.16'];
+const REFLY_REPLAY = {
+  'Barani': {
+    6: [['barani 17.44-20.108'], ['barani @20.108']],
+    17: [['- 37.108-40.012 a touch'], []],
+    21: [['- 43.068-45.484 a touch'], []],
+    31: [['- 54.216-58.22 not back under it inside 4 s'], []],
+    44: [['- 73.072-75.584 a touch'], []],
+    51: [['barani 80.008-82.696'], ['barani @82.696']],
+  },
+  'yaw early': { 5: [['- 8.392-10.952 yawed 114° upside down (a loop: under 90, a Barani: 120 or more)'], []] },
+  'half loop 180 roll at top': { 6: [['- 16.46-20.464 not back under it inside 4 s'], []] },
+  'powerloop and double powerloop': {
+    6: [PL.slice(0, 1), []],
+    13: [PL.slice(0, 2), ['powerloop @17.172']],
+    15: [PL, ['powerloop @17.172']],
+  },
+  'open air loops': {},
+  'mavericks - last one did not register': {
+    7: [MAV.slice(0, 1), MAV_CALLS.slice(0, 1)],
+    12: [MAV.slice(0, 2), MAV_CALLS.slice(0, 2)],
+    18: [MAV.slice(0, 3), MAV_CALLS.slice(0, 3)],
+    26: [MAV, MAV_CALLS],
+  },
+  'flips rolls, ham spin': { 16: [[], []] },
+};
+
+test('re-fly: each record replays to the owner\'s calls on today\'s gate: two Baranis, the Powerloop and the Double, four Mavericks, and nothing else', () => {
+  for (const P of REFLY) {
+    const want = REFLY_REPLAY[P.name];
+    assert.deepEqual(P.recs.map((r) => r.seq), Object.keys(want).map(Number), P.name);
+    for (const r of P.recs) {
+      const { out, calls } = replayRefly(P, r);
+      assert.deepEqual([out.map(vText), calls.map(cText)], want[r.seq], P.name + ' ' + r.seq);
+    }
+  }
+  // When: a Barani at once, a Maverick LOOP.mavWaitS on, a Powerloop
+  // LOOP.chainS on (a step later: the wait runs out the step after).
+  const P = REFLY[3], { out, calls } = replayRefly(P, P.bySeq.get(15));
+  assert.ok(Math.abs(calls[0].calledT - out[0].t2 - LOOP.chainS - 0.004) < 1e-6);
+  const M = REFLY[5], m = replayRefly(M, M.bySeq.get(26));
+  m.calls.forEach((c, k) => assert.ok(Math.abs(c.calledT - m.out[k].t2 - LOOP.mavWaitS) < 1e-6, MAV_CALLS[k]));
+  // The Double: its second loop chained from the first, two loops.
+  assert.deepEqual([out[2].loops, out[2].chainFrom, out[1].chainFrom], [2, 2, 1]);
+});
+
+// The rows' rounding: what a replay can move a logged value by (a 4 ms step
+// on a time, 0.01 m, a degree, 0.01 else), on 4070103's gate as on today's.
+const reflyTol = (k) => /^t|T$/.test(k) ? 0.0041 : /^z/.test(k) ? 0.01 : /Deg$/.test(k) ? 1 : 0.01;
+
+test('re-fly: every logged verdict replays within the rows\' rounding, but for the rulings\' changes', () => {
+  const changed = [];
+  for (const P of REFLY) {
+    for (const r of P.recs) {
+      const v = r.gate, key = P.name + ' ' + r.seq;
+      const { out, rows, ix } = replayRefly(P, r);
+      const back = out.find((x) => Math.abs(x.t1 - v.t1) <= 0.0041 && Math.abs(x.t2 - v.t2) <= 0.0041);
+      if (!back) {
+        // The first pass under must be level now: this one never was, from
+        // its start to the pass.
+        const run = rows.filter((row) => row[0] >= v.tRun - 1e-6 && row[0] <= v.t1 + 1e-6);
+        assert.ok(run.length && run.every((row) => row[ix.uz] < LOOP.level), key);
+        changed.push(key + ': no verdict, up-Z ' + Math.max(...run.map((row) => row[ix.uz])) + ' at most to its pass under');
+        continue;
+      }
+      const ids = (o) => o.map((i) => v.boxes[i][0]).sort((a, b) => a - b);
+      const diffs = [];
+      for (const k of Object.keys(v)) {
+        // The replay's own count; its input.
+        if (k === 'seq' || k === 'boxes') continue;
+        const a = v[k], b = back[k];
+        if (k === 'obj') {
+          const la = a.slice().sort((x, y) => x - y), lb = ids(b);
+          if (JSON.stringify(la) !== JSON.stringify(lb)) diffs.push('obj ' + la + ' -> ' + lb);
+        } else if (typeof a === 'number' && typeof b === 'number') {
+          if (!(Math.abs(a - b) <= reflyTol(k))) diffs.push(k + ' ' + a + ' -> ' + b);
+        } else if (a !== b) diffs.push(k + ' ' + JSON.stringify(a) + ' -> ' + JSON.stringify(b));
+      }
+      if (diffs.length) changed.push(key + ': ' + diffs.join('; '));
+      // A later start: the logged one not level, its objects fewer.
+      if (Math.abs(back.tRun - v.tRun) > 0.0041) {
+        const uz = rows.find((row) => row[0] >= v.tRun - 1e-6)[ix.uz];
+        assert.ok(back.tRun > v.tRun && uz >= LOOP.upright && uz < LOOP.level, key + ' up-Z ' + uz);
+        assert.ok(ids(back.obj).every((id) => v.obj.includes(id)), key);
+      }
+    }
+  }
+  assert.deepEqual(changed, [
+    // The level first pass: three Baranis start later (their earlier
+    // starts at up-Z 0.87, 0.87 and 0.80); the flips' loop never starts.
+    'Barani 17: tFrom 31.524 -> 31.588; tRun 31.524 -> 31.588',
+    'Barani 31: tFrom 51.856 -> 54.032; tRun 51.856 -> 54.032; obj 1025,1026,1027,1028,1030,1033 -> 1025,1026',
+    'Barani 51: tFrom 79.828 -> 79.948; tRun 79.828 -> 79.948; obj 1034,1035,1036 -> 1034,1036',
+    // The Double's why, rewritten when it was called (after its record).
+    'powerloop and double powerloop 15: why "2 loops round the same object; a loop round the object, upside down over it" -> "a loop round the object, upside down over it"',
+    // The Maverick's pull from 50: 59.8 (logged 60) was short of 60.
+    'mavericks - last one did not register 26: result null -> "maverick"; why "pulled back 60° (needs 60)" -> "under, over it upright, a fast push at the top, the glide back down, back under"',
+    'flips rolls, ham spin 16: no verdict, up-Z 0.87488 at most to its pass under',
+  ]);
+});
+
+// The rule's touch is the core's own contact, between the first pass under
+// and the pass back under. The log's touch flag is the detector's (the
+// floor within 0.08 m), so it comes first. The bf core, placed still at each
+// logged pose for one 1 ms tick (reconstructed 2026-11-24; the log has no
+// core contact), first met the floor 8 to 24 ms after the flag, each before
+// any pass back under: the three voids stand.
+const REFLY_CORE_TOUCH = { 17: 40.036, 21: 45.492, 44: 75.604 };
+
+test('re-fly: Baranis 17, 21 and 44 touched the floor between the passes by the core\'s own contact (reconstructed): each void', () => {
+  const P = REFLY[0];
+  for (const [seq, tc] of Object.entries(REFLY_CORE_TOUCH)) {
+    const r = P.bySeq.get(Number(seq)), v = r.gate;
+    const { rows, ix } = replayRefly(P, r);
+    const flag = rows.find((row) => row[0] >= v.t1 && (row[ix.flags] & 1));
+    assert.ok(flag[0] === v.t2 && tc > flag[0] && tc - flag[0] <= 0.025, seq + ' flag ' + flag[0]);
+    const { out } = replayRefly(P, r, (t) => Math.abs(t - tc) < 1e-6);
+    assert.deepEqual(out.map(vText), ['- ' + v.t1 + '-' + tc + ' a touch'], seq);
+  }
+});
+
+test('re-fly: every called loop is clear of a touch between its passes (no detector flag: the floor within 0.08 m, a box within 0.06, past the Air65\'s duct rims at 0.051), so the core\'s contact calls it too', () => {
+  let n = 0;
+  for (const P of REFLY) {
+    for (const r of P.recs.filter((x) => x.inputs.rows)) {
+      const { out, rows, ix } = replayRefly(P, r);
+      for (const v of out.filter((x) => x.result)) {
+        const hit = rows.filter((row) => row[0] >= v.t1 - 1e-6 && row[0] <= v.t2 + 1e-6 && (row[ix.flags] & 1));
+        assert.deepEqual(hit.map((row) => row[0]), [], P.name + ' ' + r.seq + ' ' + vText(v));
+        n++;
+      }
+    }
+  }
+  // Barani 6 and 51, the three Powerloops, the four Mavericks.
+  assert.equal(n, 9);
 });

@@ -312,6 +312,13 @@ called loop also notes when it was called (`calledT`) and whether the call
 closed a segment (`closed`: the record's seq, 0 when it closed none, as for a
 Double Powerloop called at the chain wait).
 
+The owner's re-fly of 2026-11-24 (16 loop records,
+`tools/fixtures/tricklog-depot-bf-refly-loops.jsonl.gz`) replays on today's
+gate to his calls: two Baranis of eight attempts (three touched the floor
+between the passes), the Powerloop and the Double, four Mavericks, and
+nothing for the early yaw, the half loop rolled at the top or the flips
+(`tools/test_sim_tricks_loops.mjs`).
+
 ### Gap passes (not a trick)
 
 A gap is **not a trick**: no callout, no points, no row in the list above,
