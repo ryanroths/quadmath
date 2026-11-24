@@ -262,7 +262,8 @@ test('keys in Chrome: M mutes from the page and from every select, never the cla
     assert.deepEqual((await state()).selects, pre.selects, 'neither changes a select');
 
     // N: the music starts on the next track; every N after it plays a
-    // different track, across the reshuffle after the third.
+    // different track, across the reshuffle at the fifth (five tracks; the
+    // first N starts the music on the order's second).
     await evaluate(ws, `document.activeElement && document.activeElement.blur(), true`);
     const quiet = await state();
     let last = quiet;
@@ -270,8 +271,8 @@ test('keys in Chrome: M mutes from the page and from every select, never the cla
       await press(ws, 'n', 78);
       const now = await state();
       assert.equal(now.music.on, true, 'N plays music');
-      assert.match(now.toast, /^♪ TRACK \d\/\d$/, `N says the track (${now.toast})`);
-      assert.match(now.music.src, /audio\/track\d\.mp3$/, 'a track is loaded');
+      assert.match(now.toast, /^♪ TRACK \d\/5\n.+ — Kevin MacLeod$/, `N says the track, its title and artist (${now.toast})`);
+      assert.match(now.music.src, /audio\/track\d\.mp3\?v=[0-9a-f]{8}$/, 'a track is loaded');
       assert.notEqual(now.music.src, last.music.src, `N ${i + 1} plays another track`);
       assert.equal(now.muted, quiet.muted, 'N leaves the mute alone');
       assert.deepEqual(now.selects, quiet.selects, 'N changes no select');
