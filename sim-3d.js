@@ -219,8 +219,12 @@ export function stepEasyArm(state, sample) {
 
 // ---------- The keyboard's hover spring (Easy mode) ----------
 // On the keys in Easy mode (2D, Angle or Horizon), armed: no key holds the
-// hover throttle, W holds hover + KEYS_CLIMB, S hover - KEYS_SINK, and the
-// throttle eases to that at KEYS_SLEW a second. A keyboard has no stick to
+// hover throttle, W holds hover + a climb, S hover - a sink, and the throttle
+// eases to that at KEYS_SLEW a second. The climb and the sink go with the
+// hover: KEYS_CLIMB and KEYS_SINK at the Air65's (KEYS_STEP_AT), in
+// proportion elsewhere. A fixed 0.30 on the Fractal75 (hover 0.23, a curved
+// throttle) hit the Warehouse's ceiling at 9.1 m/s and latched a crash; in
+// proportion it is 7.1 m/s, no crash. A keyboard has no stick to
 // leave where it is: on the old keys a W ramped the throttle 0 to 100% in
 // 0.7 s and it stayed there when let go, so a first flight met the ceiling
 // a second after lift-off. Disarmed, nothing here: the keys arm as before.
@@ -232,6 +236,7 @@ export function stepEasyArm(state, sample) {
 // at 6.2 m/s (a 6 m drop at 0) latch no crash; 10.8 m/s into the ceiling did.
 export const KEYS_CLIMB = 0.30;
 export const KEYS_SINK = 0.30;
+export const KEYS_STEP_AT = 0.41;
 export const KEYS_SLEW = 2.5;              // throttle a second
 export const KEYS_LIFT_M = 0.3;
 // No key is a hover, not only the hover throttle: at thrust-to-weight 1 the
@@ -250,7 +255,8 @@ export const KEYS_DAMP = 0.06;             // throttle per m/s
 // thrust over weight: the battery's sag and the build's mass are in it.
 // Measured hovers (vz 0 for 2 s at 1.5 m): Air65 0.407 (0.413 after 60 s),
 // Fractal75 0.232 (0.246), the js core's 85 0.356 (0.375), its 65 0.307.
-// The seeds are those, until a flight has read the quad's own.
+// The seeds are those (the js core's 75, flown only when Betaflight fails to
+// load, takes its 65's: not measured), until a flight reads the quad's own.
 export const KEYS_HOVER_SEED = Object.freeze({
   bf: Object.freeze({ whoop65: 0.41, whoop75: 0.23 }),
   js: Object.freeze({ whoop65: 0.31, whoop75: 0.31, whoop85: 0.36 }),
@@ -278,7 +284,8 @@ export function hoverFromTwr(t, twr) {
 // {} to start (phase 'idle': armed, no W yet). sample: dt (s), w, s (held),
 // t (the throttle now), clearance (m), landed (isLanded), upZ (the body's up
 // axis, world z), vz (m/s, up), twr, contact (the core's contactFlags: a box,
-// the ceiling among them, is bit 1), seed (the hover before any reading).
+// the ceiling among them, is bit 1), crashed (Easy mode's crash latch),
+// seed (the hover before any reading).
 // Returns the next state and the throttle.
 export function stepKeysHover(state, sample) {
   const s = sample || {};
@@ -300,17 +307,24 @@ export function stepKeysHover(state, sample) {
   if (next.phase === 'idle' && w) next.phase = 'lift';
   if (next.phase === 'lift' && (down || clear > KEYS_LIFT_M)) next.phase = 'fly';
   // Tilted, the thrust's vertical part is upZ of it: thrust goes as t squared.
-  // Not against a box: a quad wedged on a wall at 70 degrees held there on
-  // the extra throttle; without it, it slides down and lands.
+  // Upright only (upZ 0.5 or more): tipped further, or upside down after a
+  // hit, more throttle (or the damping's, falling) only drives it at the
+  // floor. Not against a box either: a quad propped on a wall at 70 degrees
+  // held there on the extra throttle; without it, it slides down and lands.
   const boxed = !!((s.contact | 0) & 2);
-  const level = boxed ? 1 : Math.sqrt(clamp(upZ, 0.5, 1));
-  const vz = Number.isFinite(s.vz) ? s.vz : 0;
+  const upright = upZ >= 0.5;
+  const level = boxed || !upright ? 1 : Math.sqrt(clamp(upZ, 0.5, 1));
+  const vz = upright && Number.isFinite(s.vz) ? s.vz : 0;
+  const climb = next.hover * (1 + KEYS_CLIMB / KEYS_STEP_AT);
+  const sink = next.hover * (1 - KEYS_SINK / KEYS_STEP_AT);
   let want;
-  if (next.phase === 'idle') want = 0;
-  else if (next.phase === 'lift') want = (next.hover + KEYS_CLIMB) / level;
+  // A crash (Easy mode's latch, still fresh): 0, so the quad comes to rest
+  // and Easy mode disarms it, as on any input; W after that arms again.
+  if (next.phase === 'idle' || s.crashed) want = 0;
+  else if (next.phase === 'lift') want = climb / level;
   else if (s.landed && !w) want = 0;
-  else if (w) want = (next.hover + KEYS_CLIMB) / level;
-  else if (down) want = (next.hover - KEYS_SINK) / level;
+  else if (w) want = climb / level;
+  else if (down) want = sink / level;
   else want = next.hover / level - KEYS_DAMP * vz;
   want = clamp(want, 0, 1);
   const step = KEYS_SLEW * dt;

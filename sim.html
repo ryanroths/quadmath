@@ -1346,7 +1346,7 @@ import {
   throttleCollective, armHintText, stepEasyArm, isLanded, EASY_ARM_HOLD_S,
   stepKeysHover, keysHoverSeed, KEYS_HINT,
   sticksUnsafe, stepThrottleWatch, controllerArmHelp, RADIO_CENTRE_TOL, PAD_CENTRE_TOL,
-} from "./sim-3d.js?v=c68e08049ef9";
+} from "./sim-3d.js?v=878163602740";
 import {
   WHOOP_KEY, PHYSICS_VER, BOUNCE_MAPS,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
@@ -5167,7 +5167,7 @@ function keysHoverStep(dt){
   const omega=Math.hypot(cs.omega.x,cs.omega.y,cs.omega.z);
   const out=stepKeysHover(keysHover,{dt,w:!!keys['w']&&!kbLoadWait,s:!!keys['s'],t:kbThrottle,
     clearance:cs.clearance,landed:isLanded({clearanceM:cs.clearance,speed,omega}),upZ:bodyUpZ(cs.quaternion),vz:cs.velocity.z,
-    twr:cs.twr,contact:cs.contactFlags,seed:keysHoverSeed(core.kind,droneType)});
+    twr:cs.twr,contact:cs.contactFlags,crashed:simClockMs-easyCrashAt<EASY_CRASH_MEMORY_MS,seed:keysHoverSeed(core.kind,droneType)});
   keysHover=Object.assign(out.state,{key});
   keysHoverSeen.set(key,out.state.hover);
   return out.t;
