@@ -454,6 +454,11 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         assert.equal(r.help.gate, true);
         assert.equal(r.hint, 'Roll 30% off centre — centre the sticks');
         assert.equal(r.cal, true, 'Calibrate offered');
+        // The pick holds STICKS SAFE back 3.6 s (announcePlugAndFly), and it came
+        // before the look above (the gate held): centred past that, it is said.
+        r = await a.js(`await I.wait(3700); return JSON.stringify(I.snap());`);
+        assert.equal(r.help.gate, true, 'still held off centre');
+        assert.equal(r.hint, 'Roll 30% off centre — centre the sticks');
         r = await a.js(`I.axis(0, 0, 0); await I.until(() => !I.s.armHelp().gate, 3000); await I.wait(100); return JSON.stringify(I.snap());`);
         assert.equal(r.help.gate, false);
         assert.equal(r.cal, false);
@@ -533,7 +538,7 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         assert.equal(r.inPanel, true);
         assert.equal(r.text, '✕ CLOSE');
         assert.equal(r.last, 'panelHome', 'Back to QuadMath at the bottom');
-        r = await a.js(`const p = document.getElementById('panel'); p.scrollTop = p.scrollHeight; await I.wait(300); ${TUNE}`);
+        r = await a.js(`const pn = document.getElementById('panel'); pn.scrollTop = pn.scrollHeight; await I.wait(300); ${TUNE}`);
         assert.ok(r.top >= 0 && r.top < 40 && r.onTop, 'scrolled to the bottom, still at the top: ' + JSON.stringify(r));
         await a.clickSel('#panelClose');
         r = await a.js(`await I.wait(300); ${TUNE}`);
@@ -562,7 +567,7 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
           let r = await a.js(`await I.wait(500); ${TUNE}`);
           assert.equal(r.open, true, size + ': the HUD\'s TUNE opens it');
           assert.ok(r.top >= 0 && r.top < 40 && r.onTop && r.h >= 30, size + ': at the top, a thumb\'s size, nothing over it: ' + JSON.stringify(r));
-          r = await a.js(`const p = document.getElementById('panel'); p.scrollTop = p.scrollHeight; await I.wait(300); ${TUNE}`);
+          r = await a.js(`const pn = document.getElementById('panel'); pn.scrollTop = pn.scrollHeight; await I.wait(300); ${TUNE}`);
           assert.ok(r.top >= 0 && r.top < 40 && r.onTop, size + ': scrolled down, still at the top: ' + JSON.stringify(r));
           await a.tapSel('#panelClose');
           r = await a.js(`await I.wait(500); ${TUNE}`);
