@@ -336,6 +336,21 @@
   #resultCard .rc-btns button{flex:1 1 0;width:auto;min-height:44px;margin:0;font-size:14px}
   #resultCard button.primary{background:var(--orange);color:#140802;border-color:var(--orange)}
   #resultCard button:disabled{opacity:.6;cursor:default}
+  /* A landscape phone: the asking card in the screen's top half, clear of the
+     keyboard that comes up for the field. The field, Post and Not now on one
+     row, still 44 px. */
+  @media (pointer:coarse) and (max-height:500px){
+    #resultCard{padding:8px 12px 10px;width:min(460px,92vw)}
+    #rcTime{font-size:22px}
+    #rcAsk{display:grid;grid-template-columns:minmax(0,1fr) auto auto;column-gap:8px;align-items:center}
+    #rcAsk[hidden]{display:none}
+    #rcAsk label{grid-row:1;grid-column:1/-1;margin:6px 0 3px}
+    #rcAsk #rcName{grid-row:2;grid-column:1}
+    #rcAsk .rc-btns{display:contents}
+    #rcAsk #rcPost{grid-row:2;grid-column:2;padding:0 16px}
+    #rcAsk #rcLater{grid-row:2;grid-column:3;padding:0 12px}
+    #rcAsk #rcWhy{grid-row:3;grid-column:1/-1;min-height:0}
+  }
   #rcPlace{margin:10px 0 2px;font-size:13px;line-height:1.4}
   #rcBoard .board-list{margin:6px 0 0;gap:3px}
   #rcBoard .board-row{padding:2px 6px;border-radius:6px}
@@ -1631,6 +1646,10 @@ let resultAsk=null;
 // The run a finish leaves for the card to ask about (noteRetentionFinish),
 // taken by finishRun once its toast is up.
 let finishAsk=null;
+let lastFinishView=null;
+// Why the last finish is not on its board (noteBoardRefusal), for the lap
+// panel's line under the result until the next run starts: {id, text}.
+let boardNote=null;
 const RACE_OFFER_AIR_MS=30000;
 const RACE_OFFER_SHOW_MS=10000;
 const raceOffer={airMs:0,shows:0,due:false,until:0,wasArmed:false,raceStarted:false,track:null,shownAt:null,hiddenAt:null,placedAt:-Infinity};
@@ -2496,6 +2515,7 @@ function startRun(){
   runSawJs=core.kind==='js';
   runSimFlips=0;
   runRespawned=false;
+  boardNote=null;
   runActive=true;
   runStartTime=simNowMs();
   lapStartTime=runStartTime;
@@ -2589,6 +2609,9 @@ function finishRun(){
   const buttons=(lastRunReplayRec&&lastRunReplayRec.length>1?'<button type="button" id="toastReplay">Replay</button>':'')+
     (lastRunLine?'<button type="button" id="toastShare">SHARE</button>':'');
   toast(escapeHtml(head)+(splits?'<span class="toast-splits">'+escapeHtml(splits)+'</span>':'')+(buttons?buttons:''),{html:true,ms:buttons?5200:1500});
+  // What the card shows if a named pilot's post comes back refused for the
+  // name (afterAutoPost): the board's answer arrives after this frame.
+  lastFinishView={id:String(id),total,best,splits};
   // No pilot name, and a board the run would go on: the result card asks.
   if(finishAsk){
     const ask=finishAsk;
@@ -6692,6 +6715,8 @@ function updateLapOSD(){
   }
   const rv=activeRival(); // racing a shared/hosted ghost — show who + their time
   if(rv)html+='<br><span style="color:#FF4D1A">VS '+escapeHtml(rv.name)+(rv.lapTime?' '+fmtLap(rv.lapTime):'')+'</span>';
+  // Why the result is not on its board (noteBoardRefusal).
+  if(!runActive&&lastRunTotal[id]&&boardNote&&boardNote.id===String(activeTrackId))html+='<br>'+escapeHtml(boardNote.text);
   if(!runActive&&lastRunTotal[id])html+=lapActionsHtml();
   if(!runActive)html+=trackBoardHtml();
   // Drawn only when it changes: a button replaced every frame cannot be clicked.
@@ -9719,17 +9744,17 @@ function noteRetentionFinish(id, total, rec, submitRec, fullRec){
     saveBoard(board);
     extra=(extra?extra+' · ':'')+'LOCAL BOARD';
     if(testPilotUsed)held=true;
-    else maybeSubmitOnline(id, total, submitRec||rec);
+    else maybeSubmitOnline(id, total, submitRec||rec).then((j)=>afterAutoPost({kind:'weekly',id:String(id),total,rec:submitRec||rec},j));
   }
   // A builder track (not a built-in course, a daily or a weekly): its own board.
   if(isCustomBoardTrackId(id)&&!offBoards){
     if(testPilotUsed)held=true;
-    else maybeSubmitTrackBoard(id, total, submitRec||rec);
+    else maybeSubmitTrackBoard(id, total, submitRec||rec).then((j)=>afterAutoPost({kind:'custom',id:String(id),total,rec:submitRec||rec},j));
   }
   // A built-in race on a public map (the maps' loops): its own board.
   if(builtinBoardTrack(id)&&!offBoards){
     if(testPilotUsed)held=true;
-    else if(!runRespawned)maybeSubmitBuiltin(id, total, fullRec||submitRec||rec);
+    else if(!runRespawned)maybeSubmitBuiltin(id, total, fullRec||submitRec||rec).then((j)=>afterAutoPost({kind:'builtin',id:String(id),total,rec:fullRec||submitRec||rec},j));
   }
   if(held)extra=(extra?extra+' · ':'')+'TEST PILOT · NOT SENT';
   // R in the run (runRespawned): the ghost jumps, so the run stays here.
@@ -9951,7 +9976,7 @@ async function maybeSubmitTrackBoard(id,total,rec){
   };
   let checked;
   try{checked=await normalizeTrackSubmit(body);}catch(e){checked={ok:false,reason:String(e&&e.message||e)};}
-  if(!checked.ok){console.warn('track board submit not sent: '+checked.reason);return null;}
+  if(!checked.ok){console.warn('track board submit not sent: '+checked.reason);noteBoardRefusal(id,checked.reason);return null;}
   const pb=bestRunMs[ensureTrackStats(id)]||0;
   const sentKey=checked.key+'|'+body.frameMm;
   if(pb&&total>pb&&trackBoardSent.has(sentKey))return;
@@ -9993,6 +10018,7 @@ async function maybeSubmitOnline(id, total, rec, opts){
     // Said, not dropped: a run the Worker would refuse stays on the local board.
     console.warn('weekly submit not sent: '+checked.reason);
     if(!quiet)toast('NOT SENT: '+String(checked.reason));
+    noteBoardRefusal(id,checked.reason);
     return {refused:String(checked.reason),status:0};
   }
   try{
@@ -10091,7 +10117,7 @@ async function maybeSubmitBuiltin(id,total,rec,opts){
   if(!t||!onlineBoardsEnabled(leaderboardUrl()))return null;
   const body=await builtinBody(id,total,rec);
   const checked=await builtinCheck(body);
-  if(!checked.ok){console.warn('built-in board submit not sent: '+checked.reason);return null;}
+  if(!checked.ok){console.warn('built-in board submit not sent: '+checked.reason);noteBoardRefusal(id,checked.reason);return null;}
   if(!onlineNameOk())return null;
   const pb=bestRunMs[ensureTrackStats(id)]||0;
   const sentKey=checked.key+'|'+body.frameMm;
@@ -10152,19 +10178,39 @@ async function boardRunCheck(run){
       frameMm:trackBoardClass(),name:currentPilotName(),timeMs:run.total,ghost,build:currentBuild,token:''});
   }catch(e){return {ok:false,reason:String(e&&e.message||e)};}
 }
+// A finish its board will not take, said on the lap panel under the result
+// (updateLapOSD) until the next run starts. In the Worker's words, plainer for
+// the ones a pilot can do something about.
+const BOARD_REASON_WORDS={'SPARSE SAMPLES':'LOW FRAME RATE','IMPLAUSIBLE FLIGHT':'TOO MANY HARD HITS','SPEED LIMIT':'A JUMP IN THE FLIGHT','NAME TAKEN':'NAME TAKEN BY ANOTHER PILOT'};
+function noteBoardRefusal(id,reason){
+  if(runActive||!reason)return;
+  boardNote={id:String(id),text:'NOT ON THE BOARD · '+(BOARD_REASON_WORDS[reason]||String(reason))};
+}
+// A named pilot's finish, posted with no card (noteRetentionFinish): refused
+// for the name (taken, not allowed), the card asks for another and says why;
+// refused for anything else, the lap panel says why.
+function afterAutoPost(run,j){
+  if(!j||!j.refused)return;
+  noteBoardRefusal(run.id,j.refused);
+  if(!NAME_REFUSALS.has(j.refused))return;
+  const v=lastFinishView&&lastFinishView.id===run.id?lastFinishView:{total:run.total,best:false,splits:''};
+  openResultAsk(run,v,j.refused);
+}
 function postBoardRun(run){
   if(run.kind==='builtin')return maybeSubmitBuiltin(run.id,run.total,run.rec,{post:true});
   if(run.kind==='weekly')return maybeSubmitOnline(run.id,run.total,run.rec,{quiet:true});
   return maybeSubmitTrackBoard(run.id,run.total,run.rec);
 }
-// view: {total, best, splits}. Resolves true once the card is up.
-async function openResultAsk(run,view){
+// view: {total, best, splits}. why: the board refused the pilot's name (a
+// NAME_REFUSALS reason): the card asks for another, the name in the field.
+// Resolves true once the card is up.
+async function openResultAsk(run,view,why){
   const seq=++resultAskSeq;
   const ok=await boardRunCheck(run);
   if(seq!==resultAskSeq)return false;
   resultNotAsked=ok.ok?'':String(ok.reason||'');
-  if(!ok.ok){console.warn('result card: not asked, '+ok.reason);return false;}
-  if(runActive||resultAsk||onlineNameOk()||nameLater()||!resultCardEl)return false;
+  if(!ok.ok){console.warn('result card: not asked, '+ok.reason);noteBoardRefusal(run.id,ok.reason);return false;}
+  if(runActive||resultAsk||(!why&&onlineNameOk())||nameLater()||!resultCardEl)return false;
   resultAsk={run,posting:false};
   rcEl('rcTitle').textContent=trackLabel(run.id);
   rcEl('rcTime').textContent=fmtLap(view.total);
@@ -10172,11 +10218,11 @@ async function openResultAsk(run,view){
   rcEl('rcSplits').textContent=view.splits||'';
   rcEl('rcAsk').hidden=false;
   rcEl('rcBoard').hidden=true;
-  rcEl('rcWhy').textContent='';
+  rcEl('rcWhy').textContent=why?nameWhyText(why):'';
   rcEl('rcPost').disabled=false;
   rcEl('rcLater').disabled=false;
   const input=rcEl('rcName');
-  input.value='';
+  input.value=why?currentPilotName():'';
   // The flight keys let go: the card has the keyboard until Fly on.
   for(const k of Object.keys(keys))keys[k]=false;
   resultCardEl.hidden=false;
@@ -10224,7 +10270,7 @@ async function resultPost(){
   ask.posting=false;
   rcEl('rcPost').disabled=false;
   rcEl('rcLater').disabled=false;
-  if(j&&j.ok){showResultBoard(ask.run,j,'');return;}
+  if(j&&j.ok){boardNote=null;showResultBoard(ask.run,j,'');return;}
   const reason=j&&j.refused?String(j.refused):'';
   // A name the board will not take: not kept, and the field asks again.
   if(NAME_REFUSALS.has(reason)){savePilotName(was);why.textContent=nameWhyText(reason);input.focus({preventScroll:true});return;}
@@ -10232,6 +10278,8 @@ async function resultPost(){
 }
 // After Post: the board with the pilot's row lit, or why there is none.
 function showResultBoard(run,j,reason){
+  // The field's done: a phone's keyboard goes with it.
+  if(document.activeElement===rcEl('rcName'))rcEl('rcName').blur();
   rcEl('rcAsk').hidden=true;
   rcEl('rcBoard').hidden=false;
   const place=rcEl('rcPlace'),rows=rcEl('rcRows');

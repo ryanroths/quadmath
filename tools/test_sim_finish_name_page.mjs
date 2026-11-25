@@ -40,6 +40,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   LEADERBOARD_URL, PHYS_VER, builtinTrackHash, normalizeBuiltinSubmit, lineRunPasses, flightSpikes,
+  weeklyTrackFor, utcWeekId, validateSubmittedRun,
 } from '../sim-retention.js';
 import { fetchBuiltinTracks, PUBLIC_MAPS, encodeShare, trackLink } from '../sim-tracks.js';
 import { BUILTIN_BOARD_TRACKS } from '../sim-builtin-boards.js';
@@ -77,7 +78,7 @@ function rigWaypoints(track) {
   const wps = [];
   track.gates.forEach((g, i) => {
     const c = m(g);
-    if (i === 14) wps.push([-9.05, 4.875, 0.45], [-9.05, 4.2, -0.2]);
+    if (track.id === 'rig-loop' && i === 14) wps.push([-9.05, 4.875, 0.45], [-9.05, 4.2, -0.2]);
     const n = track.gates[i + 1] ? m(track.gates[i + 1]) : null, p = track.gates[i - 1] ? m(track.gates[i - 1]) : null;
     let nx = Math.sin(g.ry), nz = Math.cos(g.ry);
     const dir = n ? [n[0] - c[0], n[2] - c[2]] : [c[0] - p[0], c[2] - p[2]];
@@ -87,6 +88,34 @@ function rigWaypoints(track) {
   return wps;
 }
 const PATH_PLAN = (wps) => ({ wps: wps.map((p) => ({ p, v: 9 })), yaw0: 0, limits: { lat: 12, acc: 9, dec: 13 }, vEnd: 9 });
+const pathLengths = (path) => {
+  const S = [0];
+  for (let i = 1; i < path.length; i++) S.push(S[i - 1] + Math.hypot(path[i].p.x - path[i - 1].p.x, path[i].p.y - path[i - 1].p.y, path[i].p.z - path[i - 1].p.z));
+  return S;
+};
+// A bumpy Rig Loop (the page flight's o.kicks): n path distances, each midway
+// between two gates, where the quad put 0.5 m up for 0.3 m either side stays
+// 10 cm clear of the Rig's boxes (the Crates' slits sit midway from g4 to g5).
+async function rigKicks(t, n) {
+  const path = buildPath(PATH_PLAN(rigWaypoints(t)));
+  const S = pathLengths(path);
+  const world = await mapWorld('rig');
+  const R = 0.1;
+  const clear = (p) => {
+    const m = toModule({ x: p.x * WS, y: (p.y + 0.5) * WS, z: p.z * WS }, {});
+    return !world.boxes.some((b) => m.x > b.min[0] - R && m.x < b.max[0] + R && m.y > b.min[1] - R && m.y < b.max[1] + R && m.z > b.min[2] - R && m.z < b.max[2] + R);
+  };
+  const out = [];
+  for (let i = 0; i + 1 < t.gates.length && out.length < n; i++) {
+    const a = t.gates[i], b = t.gates[i + 1];
+    const mx = (a.x + b.x) / 2 / WS, my = (a.y + b.y) / 2 / WS, mz = (a.z + b.z) / 2 / WS;
+    let k = 0, be = Infinity;
+    path.forEach((q, j) => { const e = Math.hypot(q.p.x - mx, q.p.y - my, q.p.z - mz); if (e < be) { be = e; k = j; } });
+    if (path.every((q, j) => Math.abs(S[j] - S[k]) > 0.35 || clear(q.p))) out.push(+S[k].toFixed(3));
+  }
+  assert.equal(out.length, n, 'enough clear places for the bumps');
+  return out;
+}
 
 test('the page\'s built-in race tracks are the Worker\'s, gate for gate: the same ids, the same hashes', async () => {
   const tracks = await pageTracks();
@@ -116,7 +145,7 @@ test('the test\'s flight of the Rig Loop: clear of the Rig\'s boxes, and its sam
   const at = (d) => { let lo = 0, hi = S.length - 1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (S[mid] <= d) lo = mid; else hi = mid; } return path[lo].p; };
   const near = (g) => { let b = 0, bd = Infinity; path.forEach((q, i) => { const d = Math.hypot(q.p.x - g.x / WS, q.p.y - g.y / WS, q.p.z - g.z / WS); if (d < bd) { bd = d; b = i; } }); return S[b]; };
   const d0 = near(t.gates[0]), d1 = near(t.gates[t.gates.length - 1]);
-  for (const speed of [4, 5]) {
+  for (const speed of [2, 4]) {
     const samples = [];
     for (let ms = 0; ; ms += 67) {
       const d = Math.min(d1, d0 + speed * ms / 1000), q = at(d);
@@ -132,13 +161,70 @@ test('the test\'s flight of the Rig Loop: clear of the Rig\'s boxes, and its sam
     assert.equal(r.held, false, 'over the floor');
     assert.ok(flightSpikes(samples, 65) <= 1, 'no force spikes');
   }
+  // With the page test's eight bumps (its refused run), at 2 m/s (FLY's most): refused
+  // for them, every gate still flown.
+  const kicks = await rigKicks(t, 8);
+  const samples = [];
+  for (let ms = 0; ; ms += 67) {
+    const d = Math.min(d1, d0 + 2 * ms / 1000), q = at(d), up = kicks.some((k) => Math.abs(d - k) < 0.3) ? 0.5 : 0;
+    samples.push([d === d1 ? Math.round((d1 - d0) / 2 * 1000) : ms, +(q.x * WS).toFixed(2), +((q.y + up) * WS).toFixed(2), +(q.z * WS).toFixed(2), 0, 0, 0, 1]);
+    if (d === d1) break;
+  }
+  const pass = lineRunPasses(samples, t);
+  assert.ok(pass.start >= 0 && pass.finish >= 0, 'bumped: every gate in order');
+  const timeMs = samples[pass.finish][0] - samples[pass.start][0];
+  const ghost = { v: 1, phys: PHYS_VER, track: t.id, name: 'Tester', lapTime: timeMs, samples };
+  const r = await normalizeBuiltinSubmit({ track: t.id, trackHash: await builtinTrackHash(t), frameMm: 65, name: 'Tester', timeMs, ghost, token: 'x' }, BUILTIN_BOARD_TRACKS);
+  assert.equal(r.reason, 'IMPLAUSIBLE FLIGHT', 'the bumps refused: ' + flightSpikes(samples, 65) + ' spikes');
+});
+
+// The weekly the Chrome test flies is the week's (weeklyTrackFor, a generated
+// Rig course), so the flight must hold for any week CI runs in: the same
+// path, every gate in order, and the weekly's own check passes it.
+test('the test\'s flight of the weekly: this week and the next 13, every gate in order, the weekly check passes', () => {
+  const now = Date.now();
+  for (let k = 0; k < 14; k++) {
+    const week = utcWeekId(now + k * 7 * 864e5);
+    const t = weeklyTrackFor(week);
+    assert.equal(t.map, 'rig', week + ' on the Rig');
+    const path = buildPath(PATH_PLAN(rigWaypoints(t)));
+    const S = pathLengths(path);
+    const at = (d) => { let lo = 0, hi = S.length - 1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (S[mid] <= d) lo = mid; else hi = mid; } return path[lo].p; };
+    const near = (g) => { let b = 0, bd = Infinity; path.forEach((q, i) => { const d = Math.hypot(q.p.x - g.x / WS, q.p.y - g.y / WS, q.p.z - g.z / WS); if (d < bd) { bd = d; b = i; } }); return S[b]; };
+    const d0 = near(t.gates[0]), d1 = near(t.gates[t.gates.length - 1]);
+    const samples = [];
+    for (let ms = 0; ; ms += 67) {
+      const d = Math.min(d1, d0 + 4 * ms / 1000), q = at(d);
+      samples.push([d === d1 ? Math.round((d1 - d0) / 4 * 1000) : ms, +(q.x * WS).toFixed(2), +(q.y * WS).toFixed(2), +(q.z * WS).toFixed(2), 0, 0, 0, 1]);
+      if (d === d1) break;
+    }
+    const pass = lineRunPasses(samples, t);
+    assert.ok(pass.start >= 0 && pass.finish >= 0, week + ': every gate in order (' + pass.passed + ' of ' + t.gates.length + ')');
+    const timeMs = samples[pass.finish][0] - samples[pass.start][0];
+    const ghost = { v: 1, phys: PHYS_VER, track: t.id, name: 'Tester', lapTime: timeMs, samples };
+    const v = validateSubmittedRun({ ghost, track: t, frameMm: 65, timeMs });
+    assert.equal(v.ok, true, week + ': ' + v.reason);
+  }
 });
 
 test('the result card in the source: a pause only while it asks, Not now for the tab session, R keeps a run off, a refused run not asked about, no note sending pilots to Tune', () => {
   assert.match(html, /function simPaused\(\)\{return [^}]*\|\|!!resultAsk;\}/, 'the sim waits behind the card');
   assert.doesNotMatch(html, /SET A PILOT NAME|onlineNameNote/, 'the Tune note is gone');
   const finish = extract('noteRetentionFinish');
-  assert.match(finish, /if\(builtinBoardTrack\(id\)&&!offBoards\)\{\s*if\(testPilotUsed\)held=true;\s*else if\(!runRespawned\)maybeSubmitBuiltin\(id, total, fullRec\|\|submitRec\|\|rec\);/);
+  assert.match(finish, /if\(builtinBoardTrack\(id\)&&!offBoards\)\{\s*if\(testPilotUsed\)held=true;\s*else if\(!runRespawned\)maybeSubmitBuiltin\(id, total, fullRec\|\|submitRec\|\|rec\)\.then\(\(j\)=>afterAutoPost\(\{kind:'builtin'/);
+  // A named pilot's post refused: the name, the card asks again; else the reason line.
+  for (const [fn, kind] of [['maybeSubmitOnline', 'weekly'], ['maybeSubmitTrackBoard', 'custom']]) {
+    assert.match(finish, new RegExp(fn + '\\(id, total, submitRec\\|\\|rec\\)\\.then\\(\\(j\\)=>afterAutoPost\\(\\{kind:\'' + kind + '\''), fn);
+  }
+  const after = extract('afterAutoPost');
+  assert.match(after, /noteBoardRefusal\(run\.id,j\.refused\);\s*if\(!NAME_REFUSALS\.has\(j\.refused\)\)return;/);
+  assert.match(after, /openResultAsk\(run,v,j\.refused\);/);
+  assert.match(extract('openResultAsk'), /if\(runActive\|\|resultAsk\|\|\(!why&&onlineNameOk\(\)\)\|\|nameLater\(\)\|\|!resultCardEl\)return false;/);
+  assert.match(extract('openResultAsk'), /input\.value=why\?currentPilotName\(\):'';/);
+  // The reason line: every check that keeps a run off its board says why.
+  for (const fn of ['maybeSubmitBuiltin', 'maybeSubmitTrackBoard', 'maybeSubmitOnline', 'openResultAsk']) assert.match(extract(fn), /noteBoardRefusal\((id|run\.id),(checked|ok)\.reason\);/, fn);
+  assert.match(extract('startRun'), /boardNote=null;/);
+  assert.match(extract('updateLapOSD'), /if\(!runActive&&lastRunTotal\[id\]&&boardNote&&boardNote\.id===String\(activeTrackId\)\)html\+='<br>'\+escapeHtml\(boardNote\.text\);/);
   assert.match(finish, /!onlineNameOk\(\)&&!nameLater\(\)&&onlineBoardsEnabled\(leaderboardUrl\(\)\)/, 'asked only with no name, not after Not now');
   assert.match(extract('finishRun'), /downsampleGhost\(ghostRec,BUILTIN_GHOST_MAX_SAMPLES\)/, 'a long loop keeps its full rate');
   // R in a run: a jump the boards refuse; the built-in and builder posts skip it.
@@ -226,19 +312,52 @@ const FLY = String.raw`import('/tools/coach_rig_autopilot.mjs').then((A) => {
   let wasUp = false;
   const watch = () => { const up = !!s.resultCard().up; if (up && !wasUp) W.cards++; wasUp = up; requestAnimationFrame(watch); };
   requestAnimationFrame(watch);
-  W.start = (wps, speed) => {
+  // o.kicks: path distances (rigKicks) where the quad is put 0.5 m up for
+  // 0.6 m of path, a hit and back, each far past the force a whoop can make
+  // (sim-retention.js flightSpikes).
+  W.start = (wps, speed, o = {}) => {
     const path = A.buildPath({ wps: wps.map((p) => ({ p, v: 9 })), yaw0: 0, limits: { lat: 12, acc: 9, dec: 13 }, vEnd: 9 });
     const S = [0];
     for (let i = 1; i < path.length; i++) S.push(S[i - 1] + Math.hypot(path[i].p.x - path[i - 1].p.x, path[i].p.y - path[i - 1].p.y, path[i].p.z - path[i - 1].p.z));
     const at = (d) => { let lo = 0, hi = S.length - 1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (S[mid] <= d) lo = mid; else hi = mid; } return path[lo].p; };
     const t = s.findTrack(s.track()), g0 = t.gates[0];
+    const kicks = Array.isArray(o.kicks) ? o.kicks : [];
     let d = 0, bd = Infinity;
     path.forEach((q, i) => { const e = Math.hypot(q.p.x - g0.x / 3.5, q.p.y - g0.y / 3.5, q.p.z - g0.z / 3.5); if (e < bd) { bd = e; d = S[i]; } });
     d = Math.max(0, d - 0.6);
     const b = s.bfCore();
-    // Rising at the speed 250 ms of free fall brings back to the path.
-    const put = (p) => b.teleport({ x: -p.z, y: -p.x, z: p.y }, { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: 0, z: 9.81 * 0.125 });
-    const f = W.flight = { over: false, frames: 0, longestMs: 0, d, total: S[S.length - 1], t0: performance.now() };
+    const core = (p) => ({ x: -p.z, y: -p.x, z: p.y });
+    // Along the path at a speed held in sim time, whatever the frames: before
+    // each frame steps the sim (__preFrame, the frame's own timestamp), the
+    // quad is put where the path is at the sim time the frame will end at,
+    // still, rising at the speed the frame's free fall takes back. Each ghost
+    // sample, taken at the frame's end, is then on the path at its own time.
+    // At most 2 m/s: a 330 ms frame (10x CPU throttle) moves it 0.66 m, inside
+    // the smallest gate's 0.8 m (the page checks gates once a frame).
+    // (Tried: moved after the frame by its length, a short frame after a long
+    // one made a 50 m/s step in the ghost; by wall time 10 cm a frame at
+    // most, the speed swung with the frames and read as hits.)
+    const v = Math.min(speed, 2);
+    const d0 = d;
+    const f = W.flight = { over: false, frames: 0, longestMs: 0, d, total: S[S.length - 1], t0: performance.now(), speed: v,
+      // What the keys and the core do between frames: armed frames, the
+      // throttle the keys hold, the quad's furthest drift from where it was put.
+      armed: 0, thrMin: Infinity, thrMax: -Infinity, drift: 0 };
+    let target = null, lastTs = null, sim0 = null;
+    window.__preFrame = (ts) => {
+      if (f.over) { window.__preFrame = null; return; }
+      const frameMs = lastTs == null ? 0 : Math.max(0, ts - lastTs);
+      lastTs = ts;
+      if (!s.resultCard().paused) {
+        const simEnd = s.simClockMs() + frameMs;
+        if (sim0 == null) sim0 = simEnd;
+        f.d = d0 + v * (simEnd - sim0) / 1000;
+      }
+      const p = at(Math.min(f.d, f.total));
+      const q = kicks.some((k) => Math.abs(f.d - k) < 0.3) ? { x: p.x, y: p.y + 0.5, z: p.z } : p;
+      b.teleport(core(q), { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: 0, z: 9.81 * Math.min(frameMs, 249) / 2000 });
+      target = core(q);
+    };
     let last = performance.now();
     const step = () => {
       if (f.over) return;
@@ -253,16 +372,73 @@ const FLY = String.raw`import('/tools/coach_rig_autopilot.mjs').then((A) => {
         return;
       }
       if (f.d >= f.total) { f.over = true; f.ms = Math.round(performance.now() - f.t0); f.ran = true; return; }
-      put(at(f.d));
+      const cs = s.coreState(), thr = s.stickOverlay().stick.t;
+      if (cs.armed) f.armed++;
+      f.thrMin = Math.min(f.thrMin, thr); f.thrMax = Math.max(f.thrMax, thr);
+      if (target && cs.position) f.drift = Math.max(f.drift, Math.hypot(cs.position.x - target.x, cs.position.y - target.y, cs.position.z - target.z));
       const now = performance.now(), ms = now - last;
       last = now; f.frames++; f.longestMs = Math.max(f.longestMs, ms);
-      // No frame moves it more than 10 cm: a long frame slows the run, skips no gate.
-      if (!s.resultCard().paused) f.d += Math.min(ms / 1000 * speed, 0.1);
       requestAnimationFrame(step);
     };
     // The toast from before (the track's name) is not this flight's finish.
     $('toast').textContent = '';
     requestAnimationFrame(step);
+    return true;
+  };
+  // A flown run: the Coach autopilot (coach_rig_autopilot.mjs track) on the
+  // armed quad, its sticks through _sim.setTestStick (the page's own 4 ms
+  // input poll, as a pad's; not setTestPilot, whose runs go on no board). It
+  // sees the core as the last frame left it, carried forward by the time
+  // since that frame, as a pilot sees the screen. From the pad: up, then the
+  // waypoints at cap m/s. f: frame times, wall touches (the core's box
+  // contact), the fastest touch, disarms.
+  W.auto = (wps, o = {}) => {
+    const st0 = A.sceneState(s.coreState());
+    const pad = [st0.p.x, st0.p.y, st0.p.z];
+    const cap = o.cap || 3;
+    // o.slow: waypoint indices flown at 1.2 m/s (the Crates' slits, the pipe).
+    const slow = new Set(o.slow || []);
+    const plan = { wps: [{ p: pad, v: 0.5 }, { p: [pad[0], pad[1] + 0.8, pad[2]], v: 1.5 }, ...wps.map((p, i) => ({ p, v: slow.has(i) ? 1.2 : cap }))], yaw0: st0.yaw, limits: { lat: 8, acc: 5, dec: 8 }, vEnd: 1.5 };
+    const path = A.buildPath(plan);
+    const mem = A.trackerMemory();
+    const f = W.flight = { over: false, frames: 0, longestMs: 0, t0: performance.now(), frameMs: [], touches: 0, touchV: 0, disarms: 0, armedAtStart: !!s.coreState().armed, end: false,
+      // W.state's teleport-flight fields.
+      d: 0, total: 0, armed: 0, thrMin: 0, thrMax: 0, drift: 0 };
+    let lastFrame = performance.now(), wasTouch = false, wasArmed = !!s.coreState().armed;
+    const frame = () => {
+      if (f.over) return;
+      const now = performance.now();
+      if (f.frames) f.frameMs.push(Math.round(now - lastFrame));
+      f.longestMs = Math.max(f.longestMs, now - lastFrame);
+      lastFrame = now; f.frames++;
+      const cs = s.coreState();
+      const touch = !!((cs.contactFlags | 0) & 2);
+      if (touch && !wasTouch) { f.touches++; f.touchV = Math.max(f.touchV, Math.hypot(cs.velocity.x, cs.velocity.y, cs.velocity.z)); }
+      wasTouch = touch;
+      if (wasArmed && !cs.armed) f.disarms++;
+      wasArmed = !!cs.armed;
+      // Down and disarmed 3 s (a crash): the flight is over, unfinished.
+      if (!cs.armed && f.disarms) { f.downAt = f.downAt || now; if (now - f.downAt > 3000) { f.over = true; f.crashed = true; f.toast = $('toast').textContent; clearInterval(f.iv); s.setTestStick({ r: 0, p: 0, y: 0, t: 0 }); return; } } else f.downAt = 0;
+      if (/^(LINE|RUN) \d/.test($('toast').textContent) && +getComputedStyle($('toast')).opacity > 0.05 || s.resultCard().up) {
+        f.over = true; f.ms = Math.round(performance.now() - f.t0); f.toast = $('toast').textContent;
+        // Level and hovering, till the test lets go.
+        s.setTestStick({ r: 0, p: 0, y: 0, t: mem.hover });
+        clearInterval(f.iv);
+        return;
+      }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+    f.iv = setInterval(() => {
+      if (f.over) return;
+      const st = A.sceneState(s.coreState());
+      const lead = (performance.now() - lastFrame) / 1000;
+      st.p = { x: st.p.x + st.v.x * lead, y: st.p.y + st.v.y * lead, z: st.p.z + st.v.z * lead };
+      const c = A.track(path, st, mem);
+      // At the path's end 5 s with no finish (gates missed): lost the line.
+      if (c.end) { f.end = true; f.endAt = f.endAt || performance.now(); if (performance.now() - f.endAt > 5000) { f.over = true; f.lost = true; clearInterval(f.iv); s.setTestStick({ r: 0, p: 0, y: 0, t: mem.hover }); return; } }
+      s.setTestStick({ r: c.r, p: c.p, y: c.y, t: c.t });
+    }, 4);
     return true;
   };
   W.line = (e) => { if (!e || !e.textContent) return null; const r = e.getBoundingClientRect(); return { h: Math.round(r.height), lh: parseFloat(getComputedStyle(e).lineHeight) || parseFloat(getComputedStyle(e).fontSize) * 1.3, right: Math.round(r.right), text: e.textContent }; };
@@ -282,6 +458,7 @@ const FLY = String.raw`import('/tools/coach_rig_autopilot.mjs').then((A) => {
       toastButtons: [...document.querySelectorAll('#toast button')].filter(shown).map((e) => Math.round(e.getBoundingClientRect().height)),
       toast: $('toast').textContent, lap: $('osdLap').innerText, touchLayer: getComputedStyle($('touchLayer') || document.body).visibility,
       flight: W.flight ? { over: W.flight.over, frames: W.flight.frames, longestMs: Math.round(W.flight.longestMs), d: +W.flight.d.toFixed(1), total: +W.flight.total.toFixed(1), ran: !!W.flight.ran, ms: W.flight.ms,
+        armed: W.flight.armed, thr: [+W.flight.thrMin.toFixed(2), +W.flight.thrMax.toFixed(2)], drift: +W.flight.drift.toFixed(3),
         toast: W.flight.toast, toastSplits: W.flight.toastSplits, toastButtons: W.flight.toastButtons } : null,
       name: localStorage.getItem('quadmath_pilotName'), later: sessionStorage.getItem('quadmathSimNameLater') };
   };
@@ -289,13 +466,16 @@ const FLY = String.raw`import('/tools/coach_rig_autopilot.mjs').then((A) => {
 })`;
 
 // One Chrome, one page, its Worker: { open, evaluate, key, type, tap, click, state, pings, calls, worker, close }.
-async function openPage({ mobile, w, h }) {
+// gpu 'd3d11': the machine's GPU (Windows), not SwiftShader; vsync: Chrome's
+// frame rate held to that many a second (--fake-vsync-rate).
+async function openPage({ mobile, w, h, gpu, vsync }) {
   const { server, port } = await serveRoot();
   const site = `http://${HOST}:${port}`;
   const profile = mkdtempSync(join(tmpdir(), 'qm-finish-name-'));
   const child = spawnBrowser(resolveChrome(), [
     '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--ignore-gpu-blocklist',
-    '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--hide-scrollbars',
+    '--use-gl=angle', ...(gpu === 'd3d11' ? ['--use-angle=d3d11'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader']),
+    ...(vsync ? [`--fake-vsync-rate=${vsync}`] : []), '--enable-webgl', '--hide-scrollbars',
     '--mute-audio', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-component-update',
     '--disable-background-networking', '--disable-sync', '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
     `--window-size=${w},${h}`, `--host-resolver-rules=MAP ${HOST} 127.0.0.1`, `--unsafely-treat-insecure-origin-as-secure=${site}`,
@@ -353,7 +533,7 @@ async function openPage({ mobile, w, h }) {
   // recorded and answered 204; the rooms Worker and Cloudflare's analytics
   // are refused.
   const worker = { env: { DB: sqliteD1(), ALLOWED_ORIGIN: site } };
-  const pings = [], calls = [], replies = [];
+  const pings = [], calls = [], replies = [], bodies = [];
   ws.addEventListener('message', async (msg) => {
     let o;
     try { o = JSON.parse(typeof msg.data === 'string' ? msg.data : msg.data.toString()); } catch (e) { return; }
@@ -368,6 +548,7 @@ async function openPage({ mobile, w, h }) {
         return;
       }
       calls.push(request.method + ' ' + path);
+      if (request.method === 'POST' && /\/submit$/.test(path) && request.postData) bodies.push({ path, body: request.postData });
       // hang: a score post never answered (a hung connection).
       if (worker.hang && request.method === 'POST' && /\/submit$/.test(path)) return;
       const headers = { ...request.headers };
@@ -393,6 +574,15 @@ async function openPage({ mobile, w, h }) {
   ] });
   await cdp('Runtime.enable');
   await cdp('Page.enable');
+  // No pad of this machine's in the page: a paired controller that wakes
+  // mid-run turned the keyboard visitor into a radio pilot.
+  await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `Object.defineProperty(Navigator.prototype, 'getGamepads', { value: () => [], configurable: true });` });
+  // window.__preFrame(ts): called once a frame, before any of the frame's
+  // callbacks (the page's loop included), with the frame's timestamp, the one
+  // the page steps its sim by (loop: stepCore(now - lastFrameAt)). FLY puts
+  // the quad there for the sim time the frame will end at.
+  await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `(() => { const raf = window.requestAnimationFrame.bind(window); let last = -1;
+    window.requestAnimationFrame = (cb) => raf((ts) => { if (ts !== last) { last = ts; const h = window.__preFrame; if (h) { try { h(ts); } catch (e) { window.__preFrameError = String(e && e.stack || e); } } } cb(ts); }); })();` });
   if (process.env.SIM_CPU_THROTTLE) await cdp('Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
   await cdp('Emulation.setDeviceMetricsOverride', mobile
     ? { width: w, height: h, deviceScaleFactor: 2.625, mobile: true, screenOrientation: w > h ? { type: 'landscapePrimary', angle: 90 } : { type: 'portraitPrimary', angle: 0 } }
@@ -446,7 +636,8 @@ async function openPage({ mobile, w, h }) {
   const open = async (input, keep, url) => {
     await cdp('Page.navigate', { url: `${site}/robots.txt` });
     await sleep(250);
-    if (!keep) await evaluate(`(localStorage.clear(), sessionStorage.clear(), localStorage.setItem('quadmathSimInputChoice', ${JSON.stringify(input)}), true)`);
+    // input null: a first visit, the first screen's choice still to make.
+    if (!keep) await evaluate(`(localStorage.clear(), sessionStorage.clear(), ${input ? `localStorage.setItem('quadmathSimInputChoice', ${JSON.stringify(input)}), ` : ''}true)`);
     await cdp('Page.navigate', { url: url ? site + url : `${site}/sim.html?quality=low` });
     let ok = false;
     const t0 = Date.now();
@@ -468,11 +659,11 @@ async function openPage({ mobile, w, h }) {
   // The active track flown along wps (metres) to its finish.
   const flyTrack = async (wps, speed, o = {}) => {
     await sleep(500);
-    await evaluate(`window.__fn.start(${JSON.stringify(wps)}, ${speed})`);
+    await evaluate(`window.__fn.start(${JSON.stringify(wps)}, ${speed}, ${JSON.stringify({ kicks: o.kicks || [] })})`);
     if (o.hold) await keyDown('a', 'KeyA', 65, false);
     const t0 = Date.now();
     let s;
-    while (Date.now() - t0 < 240000) {
+    while (Date.now() - t0 < 400000) {
       s = await state();
       if (s.flight && s.flight.over) break;
       await sleep(250);
@@ -480,19 +671,52 @@ async function openPage({ mobile, w, h }) {
     assert.ok(s.flight && s.flight.over && !s.flight.ran, 'the finish, before the path ran out: ' + JSON.stringify(s));
     return s;
   };
+  // The Rig Loop flown armed by the autopilot (W.auto), from its pad: the
+  // sticks down, Space, armed, then the pilot to the finish.
+  const flyRigArmed = async (o = {}) => {
+    await evaluate(`(window._sim.flyPickedTrack('rig', 'rig-loop'), true)`);
+    await until(async () => (await state()).track === 'rig-loop', 10000, 'on the Rig Loop');
+    await sleep(800);
+    await evaluate(`(window._sim.setTestStick({ r: 0, p: 0, y: 0, t: 0 }), true)`);
+    await sleep(300);
+    await key(' ', 'Space', 32);
+    await until(() => evaluate(`!!window._sim.coreState().armed`), 5000, 'armed on the pad');
+    // rigWaypoints: three a gate, the pipe's two before gate 14's. Slow from
+    // gate 4 to gate 5 (the Crates) and from gate 13 to gate 14 (the pipe).
+    const slow = [12, 13, 14, 15, 16, 17, 39, 40, 41, 42, 43, 44, 45, 46];
+    await evaluate(`window.__fn.auto(${JSON.stringify(rigWaypoints(rig))}, ${JSON.stringify({ slow, ...o })})`);
+    const t0 = Date.now();
+    let s;
+    while (Date.now() - t0 < 240000) {
+      s = await state();
+      if (s.flight && s.flight.over) break;
+      await sleep(250);
+    }
+    const f = JSON.parse(await evaluate(`JSON.stringify((() => { const f = window.__fn.flight; const ms = f.frameMs.slice().sort((a, b) => a - b); return { frames: f.frames, ms: f.ms, fps: +(1000 / (ms[ms.length >> 1] || 1)).toFixed(1), p90: ms[Math.floor(ms.length * 0.9)], longestMs: Math.round(f.longestMs), touches: f.touches, touchV: +f.touchV.toFixed(2), disarms: f.disarms, crashed: !!f.crashed, lost: !!f.lost, toast: f.toast || '', armed: !!window._sim.coreState().armed }; })())`));
+    if (o.mayCrash) return { s, f };
+    assert.ok(s.flight && s.flight.over && !f.crashed && !f.lost, 'the armed flight finished: ' + JSON.stringify({ f, lap: s.lap, toast: s.toast }));
+    return { s, f };
+  };
   const board = async () => {
     const r = await handleLeaderboard(new Request(LEADERBOARD_URL + '/api/builtin/board?track=rig-loop&class=65', { headers: { Origin: site } }), worker.env);
     return (await r.json()).entries;
   };
-  return { cdp, evaluate, key, keyDown, keyUp, size, frames, type, tap, click, state, until, open, flyRig, flyTrack, board, pings, calls, replies, worker, site, close };
+  return { cdp, evaluate, key, keyDown, keyUp, size, frames, type, tap, click, state, until, open, flyRig, flyRigArmed, flyTrack, board, pings, calls, replies, bodies, worker, site, close };
 }
 
 const skipChrome = (t) => { if (process.env.SKIP_CHROME_BOOT === '1') { t.skip('SKIP_CHROME_BOOT'); return true; } return false; };
 
 // A fresh visitor's finish, named and posted; then the same pilot's next
 // finish, faster, posted with no card. press(id): a click or a tap.
-async function nameAndPost(P, { mobile, input, press, name, taken }) {
-  await P.open(input);
+async function nameAndPost(P, { mobile, input, press, name, taken, firstVisit }) {
+  if (firstVisit) {
+    // A first visit, the way in since #388: the first screen's Fly with
+    // keyboard flies the Rig straight away; then the Rig Loop.
+    await P.open(null);
+    await P.click('feelKeys');
+    await P.until(async () => !(await P.evaluate(`document.body.classList.contains('menu-open')`)), 10000, 'flying from the first screen');
+    await P.until(() => P.evaluate(`window._sim.map() === 'rig'`), 10000, 'The Rig');
+  } else await P.open(input);
   // Desktop: a flight key (A, yaw) held through the finish. (Not W: the
   // throttle would lift the quad off its path between frames.)
   const fin = await P.flyRig(4, { hold: !mobile });
@@ -520,6 +744,8 @@ async function nameAndPost(P, { mobile, input, press, name, taken }) {
     for (const k of ['name', 'post', 'later']) assert.ok(x.boxes[k] && x.boxes[k].h >= 44, where + ': ' + k + ' is a thumb\'s 44 px: ' + JSON.stringify(x.boxes));
     const c = x.boxes.card;
     assert.ok(c && c.top >= 0 && c.left >= 0 && c.right <= x.view[0] && c.bottom <= x.view[1], where + ': the card inside the view ' + JSON.stringify(c) + ' ' + x.view);
+    // A phone: in the top half, clear of the keyboard the field brings up.
+    assert.ok(c.bottom <= x.view[1] / 2, where + ': the card in the top half ' + JSON.stringify(c) + ' ' + x.view);
     assert.ok(x.splits.h <= x.splits.lh * 1.5 && x.splits.right <= x.view[0], where + ': the splits on one line ' + JSON.stringify(x.splits));
   };
   if (mobile) {
@@ -530,6 +756,18 @@ async function nameAndPost(P, { mobile, input, press, name, taken }) {
       await P.frames();
       await sleep(300);
       fits(await P.state(), W + 'x' + H);
+    }
+    await P.size(812, 375);
+    await P.frames();
+    // Post with the field empty: the card says why, and with that line it
+    // still keeps to the top half.
+    await press('rcPost');
+    await P.until(async () => /Type a name/.test((await P.state()).why), 5000, 'the empty name said');
+    for (const [W, H] of [[812, 375], [667, 375], [375, 812]]) {
+      await P.size(W, H);
+      await P.frames();
+      await sleep(300);
+      fits(await P.state(), W + 'x' + H + ', a why line');
     }
     await P.size(812, 375);
     await P.frames();
@@ -604,7 +842,7 @@ async function nameAndPost(P, { mobile, input, press, name, taken }) {
   const rows2 = await P.board();
   assert.deepEqual(rows2.map((r) => r.name), [name], 'one row, theirs');
   assert.equal(rows2[0].timeMs, Math.min(first, rows2[0].timeMs), 'the board keeps their best');
-  return { first, second: rows2[0].timeMs, flights: [fin.flight, f2].map((f) => ({ frames: f.frames, ms: f.ms, longestMs: f.longestMs })) };
+  return { first, second: rows2[0].timeMs, flights: [fin.flight, f2].map((f) => ({ frames: f.frames, ms: f.ms, longestMs: f.longestMs, armed: f.armed, thr: f.thr, drift: f.drift })) };
 }
 
 test('desktop, keyboard: a fresh visitor finishes the Rig Loop, names, posts (Enter), sees their row; the next finish posts with no card; another visitor\'s Not now holds', { timeout: 10 * 60 * 1000 }, async (t) => {
@@ -614,7 +852,7 @@ test('desktop, keyboard: a fresh visitor finishes the Rig Loop, names, posts (En
   // 80 ms median step (SPARSE SAMPLES), and the card rightly does not ask.
   const P = await openPage({ mobile: false, w: 640, h: 360 });
   try {
-    const r = await nameAndPost(P, { mobile: false, input: 'keyboard', press: P.click, name: 'FirstLap', taken: 'TakenOne' });
+    const r = await nameAndPost(P, { mobile: false, input: 'keyboard', press: P.click, name: 'FirstLap', taken: 'TakenOne', firstVisit: true });
     t.diagnostic('desktop: ' + JSON.stringify(r));
     // Another fresh visitor (a new page load, storage cleared): Not now.
     await P.open('keyboard');
@@ -703,6 +941,141 @@ test('desktop: a builder track\'s finish (a #trk= link, no name) asks, posts and
     await P.until(async () => (await P.state()).clock > c1, 5000, 'the sim runs again');
     P.worker.hang = false;
   } finally { await P.close(); }
+});
+
+test('desktop: a bumpy run says on the lap panel why it is not on the board; the weekly\'s finish asks, posts, lights the row; a taken name set before the finish brings the card back with why', { timeout: 15 * 60 * 1000 }, async (t) => {
+  if (skipChrome(t)) return;
+  const P = await openPage({ mobile: false, w: 640, h: 360 });
+  const posts = (call) => P.calls.filter((c) => c === call).length;
+  try {
+    // A fresh visitor's Rig Loop with eight hard bumps: the board's own check
+    // refuses it, so no card, nothing sent, and the lap panel says why.
+    await P.open('keyboard');
+    await P.flyRig(4, { kicks: await rigKicks(BUILTIN_BOARD_TRACKS.find((b) => b.id === 'rig-loop'), 8) });
+    let s = await P.until(async () => { const x = await P.state(); return /NOT ON THE BOARD/.test(x.lap) ? x : null; }, 10000, 'the reason line');
+    // Hits, or (slow frames: two samples close in time) a jump: either way
+    // the board's own check, said in the lap panel's words.
+    assert.match(s.lap, /RESULT [\s\S]*NOT ON THE BOARD · (TOO MANY HARD HITS|A JUMP IN THE FLIGHT)/, s.lap);
+    assert.ok(['IMPLAUSIBLE FLIGHT', 'SPEED LIMIT'].includes(s.card.notAsked), s.card.notAsked);
+    await sleep(1000);
+    s = await P.state();
+    assert.equal(s.cards, 0, 'no card');
+    assert.equal(posts('POST /api/builtin/submit'), 0, 'nothing sent');
+    // The weekly, as a visitor reaches it: Boards, Fly this week.
+    await P.open('keyboard');
+    await P.evaluate(`(document.getElementById('menuBoards').click(), true)`);
+    await P.until(() => P.evaluate(`!!document.getElementById('boardFly')`), 5000, 'the Boards card');
+    await P.evaluate(`(document.getElementById('boardFly').click(), true)`);
+    await P.until(async () => /^weekly-/.test((await P.state()).track), 10000, 'on the weekly');
+    const wk = JSON.parse(await P.evaluate(`JSON.stringify(window._sim.findTrack(window._sim.track()))`));
+    assert.equal(wk.map, 'rig', 'this week\'s course is on the Rig');
+    await P.flyTrack(rigWaypoints(wk), 4);
+    s = await P.until(async () => { const x = await P.state(); return x.card.up && x.card.asking ? x : null; }, 10000, 'the weekly\'s result card');
+    assert.equal(s.card.kind, 'weekly');
+    assert.equal(s.card.paused, true);
+    await P.type('Week Pilot');
+    await P.key('Enter', 'Enter', 13);
+    s = await P.until(async () => { const x = await P.state(); return x.card.posted ? x : null; }, 15000, 'the weekly posted');
+    assert.match(s.place, /^#1 of 1 · this week's board$/, s.place);
+    assert.equal(s.me.length, 1, 'the row lit: ' + JSON.stringify(s.rows));
+    assert.match(s.me[0], /^1 Week Pilot/);
+    assert.equal(posts('POST /api/submit'), 1, 'the weekly\'s post');
+    assert.ok(P.pings.some((p) => p.event === 'name'), 'the name ping');
+    await P.key('Enter', 'Enter', 13);
+    await P.until(async () => !(await P.state()).card.up, 5000, 'Fly on');
+    // A name another browser holds, set before this visit (Tune or the
+    // menu): the post at the finish is refused, and the card asks for another.
+    const taken = 'Taken Two';
+    await P.worker.env.DB.prepare('INSERT INTO pilot_keys (key, name, token_hash, claimed_ms) VALUES (?, ?, ?, ?)').bind(pilotNameKey(taken), taken, 'e'.repeat(64), 1).run();
+    await P.open('keyboard');
+    await P.evaluate(`(localStorage.setItem('quadmath_pilotName', ${JSON.stringify(taken)}), true)`);
+    await P.open('keyboard', true);
+    const before = posts('POST /api/builtin/submit');
+    await P.flyRig(4);
+    s = await P.until(async () => { const x = await P.state(); return x.card.up && x.card.asking ? x : null; }, 15000, 'the card, for the taken name');
+    assert.equal(posts('POST /api/builtin/submit'), before + 1, 'posted at the finish, refused');
+    assert.equal(s.why, 'Another pilot has that name. Try another.');
+    assert.equal(s.field, taken, 'the name in the field');
+    assert.equal(s.card.paused, true, 'the sim waits for the answer');
+    assert.match(s.lap, /NOT ON THE BOARD · NAME TAKEN BY ANOTHER PILOT/, s.lap);
+    await P.evaluate(`(document.getElementById('rcName').value = '', true)`);
+    await P.type('Fresh Two');
+    await P.key('Enter', 'Enter', 13);
+    s = await P.until(async () => { const x = await P.state(); return x.card.posted ? x : null; }, 15000, 'posted under the new name');
+    assert.match(s.place, /^#1 of 1 · Rig Loop · 65 mm$/, s.place);
+    assert.match(s.me[0] || '', /^1 Fresh Two/);
+    assert.equal(s.name, 'Fresh Two');
+    await P.key('Enter', 'Enter', 13);
+    s = await P.until(async () => { const x = await P.state(); return !x.card.up && /ONLINE #1 OF 1/.test(x.lap) ? x : null; }, 5000, 'Fly on, the place on the lap panel');
+    assert.doesNotMatch(s.lap, /NOT ON THE BOARD/, 'the reason line gone with the post');
+  } finally { await P.close(); }
+});
+
+// A flown run's ghost against the board's check, in Node: its steps, its hits.
+const ghostFacts = async (body) => {
+  const b = JSON.parse(body);
+  const smp = b.ghost.samples;
+  const steps = smp.slice(1).map((p, i) => p[0] - smp[i][0]).sort((x, y) => x - y);
+  const r = await normalizeBuiltinSubmit({ ...b, token: 'x' }, BUILTIN_BOARD_TRACKS);
+  return { samples: smp.length, medianStepMs: steps[steps.length >> 1], maxStepMs: steps[steps.length - 1], spikes: flightSpikes(smp, b.frameMm), spikesMax: 3 + Math.floor(17 / 4), check: r.ok ? (r.held ? 'held' : 'ok') : r.reason };
+};
+
+test('desktop: the Rig Loop flown armed (the autopilot on the keys\' input poll, wall touches and all) finishes, asks, posts and lights the row', { timeout: 10 * 60 * 1000 }, async (t) => {
+  if (skipChrome(t)) return;
+  // Local only. A pilot that sees the quad a frame late (as a person does)
+  // flips in the Crates' slits when frames stall for 200 ms, as SwiftShader's
+  // do here and more so on CI's runners; the machine's GPU (FNP_GPU, d3d11 by
+  // default, Windows) keeps them even.
+  if (process.env.CI) { t.skip('local only: a flown run needs even frames'); return; }
+  if (process.env.SIM_CPU_THROTTLE) { t.skip('a flown run needs even frames: not under a CPU throttle'); return; }
+  if (process.platform !== 'win32' && !process.env.FNP_GPU) { t.skip('d3d11 is Windows\'s: set FNP_GPU'); return; }
+  const P = await openPage({ mobile: false, w: 640, h: 360, gpu: process.env.FNP_GPU || 'd3d11' });
+  try {
+    await P.open('keyboard');
+    const { s: s0, f } = await P.flyRigArmed({ cap: 3 });
+    t.diagnostic('armed: ' + JSON.stringify(f));
+    let s = await P.until(async () => { const x = await P.state(); return x.card.up && x.card.asking ? x : null; }, 10000, 'the result card after a flown run: ' + JSON.stringify(f) + ' ' + s0.lap);
+    assert.equal(s.card.kind, 'builtin');
+    await P.type('Flown Lap');
+    await P.key('Enter', 'Enter', 13);
+    s = await P.until(async () => { const x = await P.state(); return x.card.posted ? x : null; }, 15000, 'posted');
+    assert.match(s.place, /^#1 of 1 · Rig Loop · 65 mm$/, s.place);
+    assert.match(s.me[0] || '', /^1 Flown Lap/);
+    const sent = P.bodies.filter((b) => b.path === '/api/builtin/submit');
+    t.diagnostic('ghost: ' + JSON.stringify(await ghostFacts(sent[sent.length - 1].body)));
+    await P.evaluate(`(window._sim.setTestStick(null), true)`);
+  } finally { await P.close(); }
+});
+
+// Ryan's question (2026-11-25): does a run really flown on a slow device post?
+// The Rig Loop flown armed by the autopilot on the machine's GPU, Chrome's
+// frame rate held to FNP_FPS (e.g. 30,20); a named pilot, so it posts at the
+// finish or the lap panel says why not. Local only: FNP_FPS unset skips it.
+test('probe: the Rig Loop flown armed at a held frame rate, posted or why not', { timeout: 20 * 60 * 1000 }, async (t) => {
+  if (skipChrome(t) || !process.env.FNP_FPS) { t.skip('FNP_FPS unset'); return; }
+  const out = [];
+  for (const fps of process.env.FNP_FPS.split(',').map(Number)) {
+    for (const cap of (process.env.FNP_CAPS || '3,5').split(',').map(Number)) {
+      const P = await openPage({ mobile: false, w: 812, h: 375, gpu: process.env.FNP_GPU || 'd3d11', vsync: fps });
+      try {
+        await P.open('keyboard');
+        await P.evaluate(`(localStorage.setItem('quadmath_pilotName', 'Probe ${fps}x${cap}'), true)`);
+        await P.open('keyboard', true);
+        const { s: s0, f } = await P.flyRigArmed({ cap, mayCrash: true });
+        // Crashed, or lost the line (missed gates, no finish): the pilot's, not the board's.
+        f.finished = !!(s0.flight && s0.flight.over) && !f.crashed && !f.lost;
+        if (f.finished) await P.until(async () => /ONLINE #|NOT ON THE BOARD/.test((await P.state()).lap), 15000, 'posted or why not');
+        const s = await P.state();
+        const sent = P.bodies.filter((b) => b.path === '/api/builtin/submit');
+        const reply = P.replies.filter((r) => r.call === 'POST /api/builtin/submit').at(-1);
+        const row = { fps, cap, flight: f, posted: !!reply && reply.status === 200, reply: reply ? reply.status + ' ' + reply.body.slice(0, 80) : null,
+          line: (s.lap.match(/ONLINE #[^\n]*|NOT ON THE BOARD[^\n]*/) || [''])[0], notAsked: s.card.notAsked,
+          ghost: sent.length ? await ghostFacts(sent[sent.length - 1].body) : null };
+        out.push(row);
+        t.diagnostic('probe: ' + JSON.stringify(row));
+      } finally { await P.close(); }
+    }
+  }
 });
 
 test('phone, touch, 812x375: a fresh visitor finishes the Rig Loop, names, taps Post, sees their row, 44 px targets, splits on one line; the next finish posts with no card', { timeout: 10 * 60 * 1000 }, async (t) => {
