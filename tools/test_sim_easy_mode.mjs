@@ -190,7 +190,7 @@ test('isLanded and the hint texts', () => {
   assert.equal(armHintText({ easy: true, touch: 'left', hasSwitch: true }), 'Flip arm switch', 'a switch wins');
   assert.equal(armHintText({ easy: true, touch: null, low: true }), 'Throttle down 1 s, then up to fly', 'no touch sticks: as before');
   // The keyboard (keys): W is the throttle.
-  assert.equal(armHintText({ easy: true, keys: true, low: true }), 'Hold W to fly');
+  assert.equal(armHintText({ easy: true, keys: true, low: true }), 'W up · S down');
   assert.equal(armHintText({ easy: true, keys: true, low: false }), 'S to the bottom, then W');
   assert.equal(armHintText({ easy: false, keys: true, low: true }), 'Space to arm, then W to fly', 'outside Easy mode Space arms');
   assert.equal(armHintText({ easy: false, keys: true, low: false }), 'S to the bottom, then Space');

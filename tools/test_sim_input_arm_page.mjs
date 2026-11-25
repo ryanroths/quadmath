@@ -80,7 +80,7 @@ test('the readout: one decimal under 10%, never 5.0% for a reading over the line
   assert.deepEqual(controllerArmHelp({ base: 'Ready — throttle up', t: 0 }), { text: 'Ready — throttle up\nTHR 0.0% · arm under 5%', cal: false, why: null });
   assert.equal(armHintText({ easy: true, ready: true }), 'Ready — throttle up');
   assert.equal(armHintText({ easy: true, ready: true, touch: 'left', low: true }), 'Thumb on the left stick, slide up to fly', 'touch keeps its words');
-  assert.equal(armHintText({ easy: true, ready: true, keys: true, low: true }), 'Hold W to fly', 'the keys keep theirs');
+  assert.equal(armHintText({ easy: true, ready: true, keys: true, low: true }), 'W up · S down', 'the keys keep theirs');
 });
 
 test('the calibration offer: steady 1 s at its lowest, above the line, up to 20%; not a throttle that went lower, not one parked high, not armed', () => {
