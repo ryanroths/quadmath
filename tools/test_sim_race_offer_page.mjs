@@ -46,6 +46,7 @@ import { dirname, join, extname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { LEADERBOARD_URL } from '../sim-retention.js';
+import { legendHtml } from '../sim-feel.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const HOST = 'sim.quadmath.test';
@@ -405,7 +406,7 @@ test('the race offer in the source: no offer for a test pilot; T not in SIM_KEYS
   assert.ok(html.includes('flyPickedTrack(pickerMap,id);'), 'which the Tracks picker\'s rows call');
   assert.doesNotMatch(html, /const SIM_KEYS=new Set\(\[[^\]]*'t'[^\]]*\]\)/, 'T is not a sim key: a select keeps T for its type-ahead');
   assert.ok(html.includes("if(e.key.toLowerCase()==='t'&&!e.repeat&&!e.ctrlKey&&!e.metaKey&&!e.altKey){\n    if(e.target&&e.target.tagName==='SELECT')return;\n    if(!cs.armed||raceOfferUp())raceThisMap();\n    return;\n  }"));
-  assert.ok(html.includes('<b>T — Race this map</b><br>'), 'the legend');
+  assert.ok(legendHtml().includes('<b>T — Race this map</b><br>'), 'the legend (sim-feel.js HOTKEYS)');
   assert.ok(html.includes("go.addEventListener('click',e=>{e.preventDefault();go.blur();raceThisMap();});"), 'RACE on touch');
 });
 

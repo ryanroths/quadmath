@@ -243,7 +243,10 @@ export function armHintText(threeDOrOpts, extra) {
     if (o.easy && o.autoArm !== false) return o.low ? 'Hold W to fly' : base + ', then W';
     return o.low ? 'Space to arm, then W to fly' : base + ', then Space';
   }
+  // A controller in Easy mode: ready once the 1 s hold is done (the next
+  // raise arms).
   if (o.easy && o.autoArm !== false) {
+    if (o.ready) return o.threeD ? 'Ready — move the throttle' : 'Ready — throttle up';
     return o.threeD ? 'Throttle centred 1 s, then move it to fly' : 'Throttle down 1 s, then up to fly';
   }
   if (o.autoArm !== false) {
@@ -252,4 +255,91 @@ export function armHintText(threeDOrOpts, extra) {
   return o.threeD
     ? 'Center throttle + Space/arm switch to arm'
     : 'Throttle down + Space/arm switch to arm';
+}
+
+// ---------- A controller's arm, said: the connect-time check, the readout ----------
+// When a radio or gamepad is picked, the page holds its throttle at zero until
+// its sticks have been seen safe once (sim.html readInput's armGate): the
+// throttle low (throttleSafeToArm) and roll, pitch and yaw centred within a
+// tolerance. A radio's sticks centre within RADIO_CENTRE_TOL. A spring
+// gamepad's rest where they rest: a worn stick sits 0.2 off, and Microsoft's
+// recommended XInput thumbstick deadzones are 0.24 (left, 7849/32767) and 0.27
+// (right, 8689/32767), so a pad's are centred within PAD_CENTRE_TOL, which
+// takes 0.2 of drift with room to spare. Only this check widens: the sticks
+// still fly what the pad sends.
+export const RADIO_CENTRE_TOL = 0.15;
+export const PAD_CENTRE_TOL = 0.25;
+// The arm line, as the readout states it (throttleSafeToArm).
+export const ARM_LOW_LINE = 0.05;
+// The calibration offer: the throttle, disarmed, at the lowest it has read
+// since the device was picked or last disarmed (a trim bumped in flight shows
+// at the next landing), steady (within THR_STEADY) for THR_STEADY_S, and
+// above the line but not above THR_STUCK_MAX. A throttle left higher is left
+// up, not stuck: a radio parked at half throttle gets the readout and no offer.
+export const THR_STEADY = 0.01;
+export const THR_STEADY_S = 1;
+export const THR_STUCK_MAX = 0.2;
+
+const STICK_NAMES = Object.freeze({ t: 'Throttle', r: 'Roll', p: 'Pitch', y: 'Yaw' });
+
+// What keeps the connect-time check from passing: null when the sticks are
+// safe, else { stick: 't' | 'r' | 'p' | 'y', v } (the throttle first, then the
+// stick furthest off centre). st: the sticks (r, p, y in -1..1, t 0..1) before
+// the check holds the throttle; tol: the centre tolerance.
+export function sticksUnsafe(st, threeD, tol) {
+  const s = st || {};
+  if (!throttleSafeToArm(s.t, threeD)) return { stick: 't', v: clamp(s.t, 0, 1) };
+  const lim = Number.isFinite(tol) ? tol : RADIO_CENTRE_TOL;
+  let worst = null;
+  for (const k of ['r', 'p', 'y']) {
+    const v = Number(s[k]) || 0;
+    if (Math.abs(v) >= lim && (!worst || Math.abs(v) > Math.abs(worst.v))) worst = { stick: k, v };
+  }
+  return worst;
+}
+
+// One input sample of the throttle watch (the calibration offer). state: {}
+// to start; sample: t (the controller's throttle before the connect-time
+// check), dt (s), armed, live (a controller flying), threeD. stuck: the offer
+// is due.
+export function stepThrottleWatch(state, sample) {
+  const s = sample || {};
+  const t = Number(s.t);
+  if (s.armed || !s.live || s.threeD || !Number.isFinite(t)) return { state: {}, stuck: false };
+  const was = state || {};
+  const dt = Number.isFinite(s.dt) && s.dt > 0 ? s.dt : 0;
+  const minT = Number.isFinite(was.minT) ? Math.min(was.minT, t) : t;
+  let ref = was.ref;
+  let steadyS = +was.steadyS || 0;
+  if (!Number.isFinite(ref) || Math.abs(t - ref) > THR_STEADY) { ref = t; steadyS = 0; }
+  else steadyS += dt;
+  const stuck = t > ARM_LOW_LINE && t <= THR_STUCK_MAX && steadyS >= THR_STEADY_S - 1e-9 && t <= minT + THR_STEADY;
+  return { state: { minT, ref, steadyS }, stuck };
+}
+
+// A throttle as a percentage against the arm line: one decimal under 10 %,
+// rounded away from the line, so a reading just over 5 % never shows as 5.0.
+export function throttlePct(t) {
+  const x = clamp(t, 0, 1);
+  const pct = x * 100;
+  if (pct >= 10) return Math.round(pct) + '%';
+  const tenths = x > ARM_LOW_LINE ? Math.ceil(pct * 10 - 1e-9) : Math.floor(pct * 10 + 1e-9);
+  return (tenths / 10).toFixed(1) + '%';
+}
+
+export function throttleReadout(t) {
+  return 'THR ' + throttlePct(t) + ' · arm under ' + Math.round(ARM_LOW_LINE * 100) + '%';
+}
+
+// A controller's arm hint while disarmed (2D): why it cannot arm, or the hint
+// (base) with the live throttle under it. h: base, ready, unsafe (sticksUnsafe
+// while the connect-time check holds), stuck (stepThrottleWatch), t (the
+// throttle before the check). cal: offer Calibrate.
+export function controllerArmHelp(h) {
+  const o = h || {};
+  const u = o.unsafe;
+  if (u && u.stick === 't') return { text: 'Throttle reads ' + throttlePct(u.v) + ' — needs under 5%', cal: true, why: 'throttle' };
+  if (u) return { text: STICK_NAMES[u.stick] + ' ' + Math.round(Math.abs(u.v) * 100) + '% off centre — centre the sticks', cal: true, why: u.stick };
+  if (o.stuck) return { text: 'Throttle stays at ' + throttlePct(o.t) + ' — needs under 5%', cal: true, why: 'stuck' };
+  return { text: (o.base || '') + '\n' + throttleReadout(o.t), cal: false, why: null };
 }

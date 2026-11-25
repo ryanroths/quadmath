@@ -33,6 +33,7 @@ import {
 import { ghostPayloadError, ghostFromObj, shareTrackPayload, fromShareTrackPayload, LEADERBOARD_URL } from '../sim-retention.js';
 import { CUSTOM_TRACKS_KEY } from '../sim-tracks.js';
 import { WS } from '../sim-core-adapter.js';
+import { legendHtml } from '../sim-feel.js';
 import { handleLeaderboard } from '../workers/sim-leaderboard/src/index.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -338,7 +339,7 @@ test('the files: sim-share.js imports nothing (the Worker bundles it), is stampe
   assert.match(html, /<button class="menu-flight" id="menuShare" disabled>Finish a run to share<\/button>/, 'SHARE in the pause menu');
   assert.match(html, /if\(e\.key\.toLowerCase\(\)==='k'&&!e\.repeat&&!e\.ctrlKey&&!e\.metaKey&&!e\.altKey\)shareLine\(\);/, 'K shares');
   assert.match(html, /if\(e\.key\.toLowerCase\(\)==='h'\)\{\s+if\(feel\)toast\(feel\.toggleHud\(\)/, 'H is the stick HUD already, so SHARE is K');
-  assert.match(html, /<b>K — Share last run \(link\)<\/b>/, 'K is in the legend');
+  assert.match(legendHtml(), /<b>K — Share last run \(link\)<\/b>/, 'K is in the legend (sim-feel.js HOTKEYS)');
   assert.match(html, /syncBuildUI\(\);\s+applyLineLink\(\);\s+\}\s+function publishTracks/, 'a line link is read once the boot has landed its map and track');
   assert.match(html, /<div id="lineBanner" role="status"><\/div>/);
 });

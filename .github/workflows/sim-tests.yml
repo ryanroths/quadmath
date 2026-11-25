@@ -140,6 +140,11 @@ jobs:
           # track (title and artist in the toast), every listed file plays,
           # the credits are on the page.
           - { suite: page, label: 'music', tests: 'tools/test_sim_music.mjs' }
+          # First flights: the input pick (touch on a desktop and back, a pad
+          # set aside), a controller that cannot arm says why (pad deadzones,
+          # a radio's check, Calibrate), the arm frame's flash and tones on
+          # both cores. About 2.5 minutes on a Windows desktop.
+          - { suite: page, label: 'input and arm', tests: 'tools/test_sim_input_arm_page.mjs' }
 
     steps:
       - name: Check out

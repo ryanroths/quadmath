@@ -171,6 +171,66 @@ export function saveInputChoice(v) {
   try { localStorage.setItem(INPUT_CHOICE_KEY, v); } catch (e) { /* ignore */ }
 }
 
+// ---------- Every key, in one list ----------
+// The keys the sim answers, once: the corner legend (#legend: the ones marked
+// legend, in this order) and the keys card (? or Controls, All keys) are both
+// drawn from it, so neither can show a key the other lacks or word it another
+// way. keys: as shown; does: what it does; group: the keys card's heading;
+// legend: on the corner legend; id: that legend line's element id (G greys
+// out until there is a ghost). L (the shadow camera's helper) is a
+// developer's switch and is not listed.
+export const HOTKEY_GROUPS = Object.freeze(['Flying', 'Camera and sound', 'Runs, races and ghosts', 'Menus', 'In a replay', 'In the track builder']);
+export const HOTKEYS = Object.freeze([
+  { keys: 'W/S', does: 'Throttle', group: 'Flying', legend: true },
+  { keys: 'A/D', does: 'Yaw', group: 'Flying', legend: true },
+  { keys: 'Arrows', does: 'Pitch / Roll', group: 'Flying', legend: true },
+  { keys: 'M', does: 'Sound On/Off', group: 'Camera and sound', legend: true },
+  { keys: 'N', does: 'Next Music Track', group: 'Camera and sound', legend: true },
+  { keys: '1/2/3', does: 'Angle / Horizon / Acro', group: 'Flying', legend: true },
+  { keys: 'Space', does: 'Arm / Disarm', group: 'Flying', legend: true },
+  { keys: 'H', does: 'Stick HUD', group: 'Camera and sound', legend: true },
+  { keys: 'G', does: 'Ghost Replay', group: 'Runs, races and ghosts', legend: true, id: 'legendGhost' },
+  { keys: 'K', does: 'Share last run (link)', group: 'Runs, races and ghosts', legend: true },
+  { keys: 'C', does: 'Coach / line', group: 'Runs, races and ghosts', legend: true },
+  { keys: 'T', does: 'Race this map', group: 'Runs, races and ghosts', legend: true },
+  { keys: 'R', does: 'Respawn last gate', group: 'Flying', legend: true },
+  { keys: 'P', does: 'New pack', group: 'Flying', legend: true },
+  { keys: 'F', does: 'Sim flip when upside down', group: 'Flying', legend: true },
+  { keys: 'F', does: 'Right side up: the next flight mode (on bf a flip is logged as an assist)', group: 'Flying' },
+  { keys: '\u2191/\u2193', does: 'Cam angle \u00b15\u00b0 (radio or pad)', group: 'Camera and sound', legend: true },
+  { keys: 'ESC', does: 'Menu', group: 'Menus', legend: true },
+  { keys: 'TAB', does: 'Tune Panel', group: 'Menus', legend: true },
+  { keys: '?', does: 'All keys (this list)', group: 'Menus' },
+  { keys: 'Enter', does: 'On touch sticks, after W, an arrow or Space: fly with the keyboard', group: 'Menus' },
+  { keys: 'V', does: 'Replay the last run', group: 'Runs, races and ghosts' },
+  { keys: 'Space', does: 'Play / pause', group: 'In a replay' },
+  { keys: 'V or ESC', does: 'Leave the replay', group: 'In a replay' },
+  { keys: 'Q/E', does: 'Rotate the piece', group: 'In the track builder' },
+  { keys: 'Delete or Backspace', does: 'Remove the piece', group: 'In the track builder' },
+  { keys: 'ESC', does: 'Close the builder', group: 'In the track builder' },
+]);
+
+function escKeyText(raw) {
+  return String(raw).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// The corner legend's lines (after its corner marks): "W/S \u2014 Throttle", ...
+export function legendHtml(list = HOTKEYS) {
+  return list.filter((k) => k.legend)
+    .map((k) => '<b' + (k.id ? ' id="' + escKeyText(k.id) + '"' : '') + '>' + escKeyText(k.keys) + ' \u2014 ' + escKeyText(k.does) + '</b>')
+    .join('<br>');
+}
+
+// The keys card: every key, under its group's heading, in the list's order.
+export function keysCardHtml(list = HOTKEYS) {
+  return HOTKEY_GROUPS.map((g) => {
+    const rows = list.filter((k) => k.group === g);
+    if (!rows.length) return '';
+    return '<h3 class="keys-group">' + escKeyText(g) + '</h3><dl class="keys-list">' +
+      rows.map((k) => '<dt><kbd>' + escKeyText(k.keys) + '</kbd></dt><dd>' + escKeyText(k.does) + '</dd>').join('') + '</dl>';
+  }).join('');
+}
+
 export function applyRatePreset(rates, name) {
   const p = RATE_PRESETS[name];
   if (!p || !rates) return false;

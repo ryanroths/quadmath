@@ -62,6 +62,26 @@ const SCRAPE_REF_MS = 3;
 const SCRAPE_HOLD_S = 0.12;           // contactFlags is the latest tick's: bridge the gaps
 const BEEPER_HZ = 1600;
 const BEEPER_GAIN = 0.12;
+// The page's own cues (cue()): steps of [start s, length s, Hz] of a square
+// at the beeper's level, so they sound like Betaflight's beeper.
+//   arm     the js core's arm tone: the pattern Betaflight beeps when the bf
+//           core arms (300 ms, 50 off, 50; measured on the vendored core,
+//           beeper.c beep_armingBeep). On the bf core Betaflight's own beep is
+//           the arm tone, and no cue is added over it.
+//   disarm  both cores: Betaflight's disarm rhythm (150 ms, 50 off, 150),
+//           falling a fifth. On the bf core Betaflight's own disarm beeps are
+//           held off under it (muteBeeperS), so one sound says disarmed.
+//   ready   Easy mode's 1 s throttle hold done (the next raise arms): a tick,
+//           at half the level.
+export const CUES = Object.freeze({
+  arm: Object.freeze([Object.freeze([0, 0.3, BEEPER_HZ]), Object.freeze([0.35, 0.05, BEEPER_HZ])]),
+  disarm: Object.freeze([Object.freeze([0, 0.15, BEEPER_HZ]), Object.freeze([0.2, 0.15, BEEPER_HZ * 2 / 3])]),
+  ready: Object.freeze([Object.freeze([0, 0.03, BEEPER_HZ * 1.5])]),
+});
+const CUE_LEVEL = Object.freeze({ arm: 1, disarm: 1, ready: 0.5 });
+// The disarm cue's length: Betaflight's disarm beeps (150, 50, 150) are held
+// off this long after it starts.
+export const DISARM_BEEPER_MUTE_S = 0.4;
 const THUD_MIN_MS = 0.3;              // impact speed below this is a touch, not a thud
 const THUD_REF_MS = 5;
 const THUD_GAP_S = 0.03;
@@ -232,6 +252,9 @@ export function createSimAudio(opts = {}) {
   const turtleGain = [0, 0, 0, 0];
   const t = { propHz: 0, propQ: PROP_Q, propGain: 0, windHz: 0, windGain: 0, scrapeGain: 0, scrapeRate: 1, beeper: 0 };
   const remotes = new Map();         // id -> a remote quad's voice
+  let beeperMuteUntil = -1;          // ctx time: Betaflight's beeper held off until then (a disarm cue)
+  const cuesPlayed = { arm: 0, disarm: 0, ready: 0 };
+  let lastCue = null;                // { name, at: ctx time }
 
   const masterLevel = () => (muted ? 0 : vol);
 
@@ -444,7 +467,7 @@ export function createSimAudio(opts = {}) {
       const sliding = wallAt >= 0 && now - wallAt < SCRAPE_HOLD_S;
       t.scrapeGain = sliding ? SCRAPE_GAIN * clamp(speed / SCRAPE_REF_MS, 0, 1) : 0;
       t.scrapeRate = clamp(0.6 + 0.25 * speed, 0.6, 2);
-      t.beeper = s.beeper === true ? BEEPER_GAIN : 0;
+      t.beeper = s.beeper === true && ctx.currentTime >= beeperMuteUntil ? BEEPER_GAIN : 0;
       apply();
     },
     // A remote quad (ghost rooms), once a frame: its rpm[4] and its distance
@@ -482,6 +505,40 @@ export function createSimAudio(opts = {}) {
       }
       r.level.disconnect();
       r.levelFlight.disconnect();
+    },
+    // A cue (CUES): arm, disarm or ready, on its own voice, so it sounds on
+    // either core (update() silences the motor voices off the bf core).
+    // muteBeeperS: Betaflight's beeper held off that long from now. false
+    // when nothing could sound (no gesture yet, the context asleep).
+    cue(name, o = {}) {
+      const steps = CUES[name];
+      if (!steps || !g || ctx.state !== 'running') return false;
+      const now = ctx.currentTime;
+      const level = BEEPER_GAIN * (CUE_LEVEL[name] || 1);
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      const gain = g.voice(0);
+      gain.gain.setValueAtTime(0, now);
+      let end = now;
+      for (const [at, len, hz] of steps) {
+        osc.frequency.setValueAtTime(hz, now + at);
+        // A 2 ms edge, as the beeper's own (apply: 4 ms), so no click.
+        gain.gain.setTargetAtTime(level, now + at, 0.002);
+        gain.gain.setTargetAtTime(0, now + at + len, 0.002);
+        end = Math.max(end, now + at + len);
+      }
+      osc.connect(gain);
+      osc.start(now);
+      osc.stop(end + 0.03);
+      osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+      if (o.muteBeeperS > 0) {
+        beeperMuteUntil = now + o.muteBeeperS;
+        t.beeper = 0;
+        ramp(g.beep.gain, 0, 0.002);
+      }
+      cuesPlayed[name]++;
+      lastCue = { name, at: now };
+      return true;
     },
     // A CONTACT event: impact speed (m/s) and whether it was a crash.
     contact(impactMs, crashed) {
@@ -546,6 +603,8 @@ export function createSimAudio(opts = {}) {
         windTargetGain: t.windGain,
         scrapeGain: g.scrape.gain.value,
         beeperGain: g.beep.gain.value,
+        cues: Object.assign({}, cuesPlayed),
+        lastCue: lastCue ? Object.assign({}, lastCue) : null,
         thuds,
         blades,
         remotes: [...remotes].map(([id, r]) => ({

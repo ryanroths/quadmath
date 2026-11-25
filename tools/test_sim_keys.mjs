@@ -22,6 +22,7 @@ import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { HOTKEYS, legendHtml } from '../sim-feel.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const html = readFileSync(join(root, 'sim.html'), 'utf8');
@@ -55,10 +56,12 @@ test('keys in the source: M is toggleMute, N is skipTrack, one action per key, S
   const hooks = [...html.matchAll(/muted(?:\(\)\{return |:\(\)=>)([^;},\r\n]+)/g)].map((m) => m[1]);
   assert.equal(hooks.length, 2, 'the secret chime and the trick blip hooks: ' + hooks.join(' | '));
   for (const h of hooks) assert.match(h, /^simAudio\.muted\|\|!musicOn$/, 'muted by M: ' + h);
-  assert.match(html, /<b>M — Sound On\/Off<\/b>/, 'the legend: M is sound');
-  assert.match(html, /<b>N — Next Music Track<\/b>/, 'the legend: N');
+  // The legend and the keys card (the menu's Controls, All keys) are drawn
+  // from one list, sim-feel.js HOTKEYS.
+  assert.match(legendHtml(), /<b>M — Sound On\/Off<\/b>/, 'the legend: M is sound');
+  assert.match(legendHtml(), /<b>N — Next Music Track<\/b>/, 'the legend: N');
   assert.match(html, /<b>M<\/b> mute &nbsp;<b>N<\/b> next track/, 'Tune\'s Controls');
-  assert.match(html, /<span class="n">M<\/span> mute · <span class="n">N<\/span> next track/, 'the menu\'s Controls card');
+  assert.ok(HOTKEYS.some((k) => k.keys === 'M' && /sound/i.test(k.does)) && HOTKEYS.some((k) => k.keys === 'N' && /track/i.test(k.does)), 'the keys card: M and N');
 });
 
 // N never restarts the track that just played: sim.html's own shuffleOrder
