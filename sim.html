@@ -310,6 +310,39 @@
   #toast a,#toast button{display:inline-block;width:auto;margin:10px auto 0;padding:6px 14px;font-size:13px;font-weight:600;
     color:var(--orange);background:rgba(16,18,24,.85);border:1px solid rgba(255,77,26,.55);border-radius:10px;cursor:pointer}
   #toast button+button{margin-left:8px}
+  /* A finish's splits: one line under the time, cut at the toast's edge,
+     never wrapped across the screen (finishRun). */
+  #toast .toast-splits,#resultCard .rc-splits{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    max-width:100%;font-size:13px;font-weight:500;letter-spacing:0;color:var(--txt);text-shadow:none;margin-top:4px}
+  @media (pointer:coarse){#toast a,#toast button{min-height:44px}}
+  /* The result card (openResultAsk): a board race's finish with no pilot
+     name. The sim waits behind it. Its buttons and its field are a thumb's
+     44 px on a phone; at the top, so a phone's keyboard leaves it in view. */
+  #resultCard{position:fixed;z-index:50;left:50%;top:max(10px, env(safe-area-inset-top, 0px));transform:translateX(-50%);
+    width:min(380px,92vw);max-height:calc(100dvh - 20px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;
+    padding:14px 16px 16px;background:var(--glass);border:1px solid var(--line);border-radius:16px;color:var(--txt);
+    backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 24px 60px rgba(0,0,0,.35);pointer-events:auto;text-shadow:none}
+  #resultCard[hidden]{display:none}
+  #resultCard .rc-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  #rcTitle{font-size:13px;font-weight:600;color:var(--dim)}
+  #rcTime{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:26px;font-weight:700;color:var(--orange)}
+  #rcBest{font-size:12px;font-weight:700;color:var(--green)}
+  #resultCard label{display:block;margin:12px 0 4px;font-size:13px;font-weight:600}
+  #rcName,#nameIn{width:100%;min-height:44px;box-sizing:border-box;background:rgba(8,9,12,.55);border:1px solid var(--line);color:var(--txt);
+    font-family:'JetBrains Mono',ui-monospace,monospace;font-size:16px;padding:8px 10px;border-radius:10px}
+  #rcName:focus,#nameIn:focus{outline:none;border-color:var(--orange)}
+  #rcWhy{min-height:16px;margin-top:4px;font-size:12px;line-height:1.35;color:var(--orange)}
+  #resultCard .rc-btns{display:flex;gap:8px;margin-top:8px}
+  #resultCard .rc-btns button{flex:1 1 0;width:auto;min-height:44px;margin:0;font-size:14px}
+  #resultCard button.primary{background:var(--orange);color:#140802;border-color:var(--orange)}
+  #resultCard button:disabled{opacity:.6;cursor:default}
+  #rcPlace{margin:10px 0 2px;font-size:13px;line-height:1.4}
+  #rcBoard .board-list{margin:6px 0 0;gap:3px}
+  #rcBoard .board-row{padding:2px 6px;border-radius:6px}
+  #rcBoard .board-row.me{background:rgba(255,77,26,.16);color:var(--orange);font-weight:700}
+  #rcBoard .board-row.me span{color:var(--orange)}
+  #rcBoard .board-gap{margin:2px 6px;font-size:11px;color:var(--dim)}
+  body.result-ask #touchLayer,body.result-ask #raceOffer,body.result-ask #menuBtn,body.result-ask #gear{visibility:hidden}
   /* The finished run's Replay and SHARE under its result (updateLapOSD). The HUD takes no clicks; these do. */
   #osdLap .lap-actions{display:block;margin-top:6px}
   /* A builder track's online board under the result (trackBoardHtml). */
@@ -779,6 +812,7 @@
     <button class="menu-launch dev-only" id="menuDailyLine">Daily Line</button>
     <button class="menu-launch" id="menuBoards" aria-disabled="true">Boards</button>
     <button class="menu-flight" id="menuTracks">Tracks</button>
+    <button class="menu-flight" id="menuName">Pilot name</button>
     <button class="menu-flight" id="menuCoach">Coach</button>
     <button class="menu-flight" id="menuBuilder">Track builder</button>
     <button class="menu-flight dev-only" id="menuRoom">Your room</button>
@@ -819,6 +853,21 @@
      touch it is the tap target (newPack); elsewhere it reads P. -->
 <button type="button" id="packHint" hidden>P = new pack</button>
 <div id="raceOffer" hidden><span id="raceOfferMap"></span><span class="ro-sep">·</span><span id="raceOfferGates"></span><span class="ro-key">· T</span><button type="button" id="raceOfferGo">RACE</button></div>
+<div id="resultCard" hidden role="dialog" aria-modal="true" aria-labelledby="rcTitle">
+  <div class="rc-head"><span id="rcTitle"></span><span id="rcTime"></span><span id="rcBest"></span></div>
+  <span class="rc-splits" id="rcSplits"></span>
+  <div id="rcAsk">
+    <label for="rcName">Name for the board</label>
+    <input type="text" id="rcName" maxlength="16" placeholder="PILOT" autocomplete="nickname" autocapitalize="off" spellcheck="false" enterkeyhint="send">
+    <div id="rcWhy" aria-live="polite"></div>
+    <div class="rc-btns"><button type="button" class="primary" id="rcPost">Post</button><button type="button" id="rcLater">Not now</button></div>
+  </div>
+  <div id="rcBoard" hidden>
+    <div id="rcPlace" aria-live="polite"></div>
+    <div id="rcRows"></div>
+    <div class="rc-btns"><button type="button" class="primary" id="rcDone">Fly on</button></div>
+  </div>
+</div>
 <div id="touchLayer" hidden aria-hidden="true">
   <div id="touchLandscape" data-touch="landscape" hidden>Rotate to landscape for easier sticks</div>
   <div class="vstick left" data-stick="L"><i></i></div>
@@ -1336,7 +1385,7 @@ import {
   BF_CLASS_TUNES, bfClassDiff,
 } from "./sim-core-adapter.js?v=2c623fc457f6";
 import {LINE_URL_MAX,LINE_ID_RE,lineForLink,lineLink,lineFromHash,decodeLineCode,lineBannerText} from "./sim-share.js?v=c7b112319e28";
-import {pilotNameProblem} from "./sim-pilot-names.js?v=265d8504aeef";
+import {pilotNameProblem,pilotNameKey} from "./sim-pilot-names.js?v=265d8504aeef";
 import {openRoom,createRoom,roomsUrl,normalizeRoomCode,roomPilotName,POSE_HZ,ROOM_MAX} from "./sim-ghost-rooms.js?v=11abf898ae0b";
 import {createSimAudio,airframeBlades,DISARM_BEEPER_MUTE_S} from "./sim-audio.js?v=37e419c76236";
 import {
@@ -1459,6 +1508,7 @@ import {
   defaultWhoopKit, ghostFromObj, shareTrackPayload, fromShareTrackPayload,
   customBoardKey, customTrackCode, normalizeTrackSubmit, isCustomBoardTrackId, customTrackProblem,
   CUSTOM_TRACK_MIN_GATES, CUSTOM_TRACK_CODE_MAX, builtinFloorMs,
+  builtinTrackHash, normalizeBuiltinSubmit, BUILTIN_GHOST_MAX_SAMPLES,
   createCountPings, countPingsOff, countOwnerOff, COUNT_FLEW_MS,
 } from "./sim-retention.js?v=1a623289ad54";
 import {
@@ -1575,6 +1625,12 @@ function countFlight(ms){
 // in Coach, the builder, a replay or a room. Tune open hides it: a showing
 // waits for Tune to close, and its 10 s stand still. T (or the prompt's RACE
 // on touch) flies the map's race as the Tracks picker does.
+// The result card while it asks for a pilot name (openResultAsk), else null:
+// the sim waits behind it (simPaused).
+let resultAsk=null;
+// The run a finish leaves for the card to ask about (noteRetentionFinish),
+// taken by finishRun once its toast is up.
+let finishAsk=null;
 const RACE_OFFER_AIR_MS=30000;
 const RACE_OFFER_SHOW_MS=10000;
 const raceOffer={airMs:0,shows:0,due:false,until:0,wasArmed:false,raceStarted:false,track:null,shownAt:null,hiddenAt:null,placedAt:-Infinity};
@@ -2432,9 +2488,14 @@ let runSawJs=false;
 // one counts as any other.
 let runSimFlips=0;
 const lastRunSimFlips={};
+// R in a run on a built-in or builder track (resetQuad: back to the last gate,
+// the clock running): the ghost jumps there, which a board refuses (SPEED
+// LIMIT), so that run is kept on this browser and not posted.
+let runRespawned=false;
 function startRun(){
   runSawJs=core.kind==='js';
   runSimFlips=0;
+  runRespawned=false;
   runActive=true;
   runStartTime=simNowMs();
   lapStartTime=runStartTime;
@@ -2489,6 +2550,9 @@ function finishRun(){
   // A weekly submit sends the run at up to 15 Hz for 100 s, not the stored
   // 480-sample ghost (strided on a run over 32 s).
   const submitRec=ghostRec&&ghostRec.length?downsampleGhost(ghostRec,WEEKLY_SUBMIT_GHOST_MAX):null;
+  // A built-in board's run: up to BUILTIN_GHOST_MAX_SAMPLES (15 Hz for 180 s),
+  // so a long loop keeps the Worker's 80 ms median step.
+  const fullRec=ghostRec&&ghostRec.length?downsampleGhost(ghostRec,BUILTIN_GHOST_MAX_SAMPLES):null;
   lastRunGhostRec=rec;
   let best=false;
   // A test pilot's run (testPilotUsed) counts nowhere: no local best, board
@@ -2510,18 +2574,27 @@ function finishRun(){
     const gt=loadGhostTotal(id);
     if(!gt||total<gt)commitGhost(id,total);
   }
-  const extra=counted?noteRetentionFinish(id,total,rec,submitRec):(testPilotUsed?'TEST PILOT · NOT SENT':(threeD?'3D — NOT COUNTED':''));
+  finishAsk=null;
+  const extra=counted?noteRetentionFinish(id,total,rec,submitRec,fullRec):(testPilotUsed?'TEST PILOT · NOT SENT':(threeD?'3D — NOT COUNTED':''));
   const label=line?'LINE':'RUN';
   const parts=line?runGateSplits:runSplits;
   lastRunReplayRec=replayRec&&replayRec.length?downsampleGhost(replayRec,REPLAY_GHOST_MAX):(rec&&rec.length?rec:null);
   // The run SHARE links to (shareLine): this one, whatever is flown next.
   lastRunLine=rec&&rec.length>1?{track:shareTrackParam(),map:currentMap,total,rec,testPilot:testPilotUsed}:null;
   syncMenuShare();
-  const msg=label+' '+fmtLap(total)+(parts.length?' ['+parts.map(fmtLap).join(' / ')+']':'')+(best?' — NEW BEST!':'')+(extra?' · '+extra:'')+(runSimFlips?' · SIM FLIP ×'+runSimFlips:'');
+  // The time first, then its splits on a line of their own that never wraps
+  // (cut at the toast's edge on a phone).
+  const head=label+' '+fmtLap(total)+(best?' — NEW BEST!':'')+(extra?' · '+extra:'')+(runSimFlips?' · SIM FLIP ×'+runSimFlips:'');
+  const splits=parts.length?parts.map(fmtLap).join(' / '):'';
   const buttons=(lastRunReplayRec&&lastRunReplayRec.length>1?'<button type="button" id="toastReplay">Replay</button>':'')+
     (lastRunLine?'<button type="button" id="toastShare">SHARE</button>':'');
-  if(buttons)toast(msg+'<br>'+buttons,{html:true,ms:5200});
-  else toast(msg);
+  toast(escapeHtml(head)+(splits?'<span class="toast-splits">'+escapeHtml(splits)+'</span>':'')+(buttons?buttons:''),{html:true,ms:buttons?5200:1500});
+  // No pilot name, and a board the run would go on: the result card asks.
+  if(finishAsk){
+    const ask=finishAsk;
+    finishAsk=null;
+    openResultAsk(ask,{total,best,splits});
+  }
 }
 function liveTrackIds(){
   const ids=[];
@@ -4315,6 +4388,7 @@ function resetQuad(){
     return;
   }
   if(hasGate){
+    if(runActive)runRespawned=true;
     placeQuadAt(lastPassedGate.x,lastPassedGate.y,lastPassedGate.z);
     toast('RESPAWN — LAST GATE');
     return;
@@ -5038,6 +5112,14 @@ const SIM_KEYS=new Set(['w','a','s','d','1','2','3','h','r','p','m','n','f','g',
 addEventListener('keydown',e=>{
   if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&(e.target.type==='text'||e.target.type==='range'||e.target.type==='number'))))return; // typing in the CLI/ghost/pilot-name boxes (or a Tune number: 3 is acro) must not trigger R/M/F/G hotkeys
   if(e.target&&e.target.tagName==='SELECT'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&SIM_KEYS.has(e.key.toLowerCase()))e.preventDefault();
+  // The result card up (openResultAsk): Esc is Not now (or Fly on, once
+  // posted), Enter is Fly on once posted; nothing else flies or opens.
+  if(resultAsk){
+    const posted=!document.getElementById('rcBoard').hidden;
+    if(e.key==='Escape'){e.preventDefault();if(posted)closeResultCard();else resultLater();}
+    else if(e.key==='Enter'&&posted){e.preventDefault();closeResultCard();}
+    return;
+  }
   if(builderOn){
     if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();document.getElementById('builderDel').click();return;}
     if(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E'){e.preventDefault();document.getElementById('builderRot').click();return;}
@@ -6561,6 +6643,8 @@ function lineHudHtml(id, now){
   }
   if(missTotal)html+='<br>MISS +'+(missTotal*missPenaltyMs()/1000).toFixed(1)+'s';
   html+='<br>PB '+(pb?fmtLap(pb):'--:--.--');
+  // A built-in race's place on its board, once posted or read (maybeSubmitBuiltin).
+  if(!runActive&&lastRunTotal[id])html+=builtinPlaceHtml(activeTrackId);
   if(dailyLineLive)html='<span class="daily-badge">DAILY</span> '+html;
   return html;
 }
@@ -7232,9 +7316,11 @@ function openBoardsCard(){
     '<div id="boardBody"></div>'+
     (online?'<button type="button" id="boardRefresh">Refresh online</button>':'')+
     '<button type="button" class="primary" id="boardFly">Fly this week</button>'+
+    '<button type="button" id="boardName">Pilot name: '+escapeHtml(onlineNameOk()?currentPilotName():'not set')+'</button>'+
     '<button type="button" id="boardSkins" class="dev-only">Skins</button>'+
     '<button type="button" id="layerClose">Close</button>');
   document.getElementById('boardFly').onclick=()=>flyGeneratedTrack(t);
+  document.getElementById('boardName').onclick=()=>openNameCard();
   document.getElementById('boardSkins').onclick=()=>openSkinsCard();
   document.getElementById('layerClose').onclick=hideMenuLayer;
   const localRows=boardRows(loadBoard(), week, cls);
@@ -7586,6 +7672,8 @@ function wireLooksUI(){
   if(btnDailyLine)btnDailyLine.onclick=()=>openDailyLineCard();
   const btnBoards=document.getElementById('menuBoards');
   if(btnBoards)btnBoards.onclick=()=>openBoardsCard();
+  const btnName=document.getElementById('menuName');
+  if(btnName)btnName.onclick=()=>openNameCard();
   const btnCoach=document.getElementById('menuCoach');
   if(btnCoach)btnCoach.onclick=()=>openCoachPicker();
   const btnRoom=document.getElementById('menuRoom');
@@ -9557,10 +9645,6 @@ function currentPilotName(){
 // under a name the Worker would refuse; the finish says why instead.
 function onlineNameProblem(){return pilotNameProblem(currentPilotName());}
 function onlineNameOk(){return !onlineNameProblem();}
-function onlineNameNote(){
-  const why=onlineNameProblem();
-  return why?(why==='SET A NAME'?'SET A PILOT NAME (TUNE)':'PILOT NAME '+why):'';
-}
 function skinProgress(){
   const medals=(coach&&coach.progress())?coach.progress().medals:{};
   return { medals, daily: loadDaily() };
@@ -9594,7 +9678,7 @@ function ghostPayloadOf(id, samples, timeMs){
   if(testPilotUsed)g.testPilot=true;
   return g;
 }
-function noteRetentionFinish(id, total, rec, submitRec){
+function noteRetentionFinish(id, total, rec, submitRec, fullRec){
   let extra='';
   let held=false; // a test pilot's run, kept off the online boards
   const offBoards=runOffBoards();
@@ -9639,11 +9723,20 @@ function noteRetentionFinish(id, total, rec, submitRec){
     if(testPilotUsed)held=true;
     else maybeSubmitTrackBoard(id, total, submitRec||rec);
   }
+  // A built-in race on a public map (the maps' loops): its own board.
+  if(builtinBoardTrack(id)&&!offBoards){
+    if(testPilotUsed)held=true;
+    else if(!runRespawned)maybeSubmitBuiltin(id, total, fullRec||submitRec||rec);
+  }
   if(held)extra=(extra?extra+' · ':'')+'TEST PILOT · NOT SENT';
-  // A board run not sent for the pilot's name: the finish says so.
-  if(!held&&onlineBoardsEnabled(leaderboardUrl())&&(isWeeklyTrackId(id)||isCustomBoardTrackId(id)||(dailyLineLive&&String(id)===String(dailyLineFor(utcDateId()).trackId)))&&!offBoards){
-    const note=onlineNameNote();
-    if(note)extra=(extra?extra+' · ':'')+note;
+  // R in the run (runRespawned): the ghost jumps, so the run stays here.
+  const boardRace=!offBoards&&(builtinBoardTrack(id)||isWeeklyTrackId(id)||customBoardTrack(id));
+  if(boardRace&&!held&&runRespawned&&!isWeeklyTrackId(id))extra=(extra?extra+' · ':'')+'R USED · NOT ON THE BOARD';
+  // No pilot name: the result card asks for one (finishRun, openResultAsk)
+  // instead of a note, unless Not now this tab session.
+  else if(boardRace&&!held&&!onlineNameOk()&&!nameLater()&&onlineBoardsEnabled(leaderboardUrl())){
+    const kind=builtinBoardTrack(id)?'builtin':(isWeeklyTrackId(id)?'weekly':'custom');
+    finishAsk={kind,id:String(id),total,rec:kind==='builtin'?(fullRec||submitRec||rec):(submitRec||rec)};
   }
   if(activeDuel&&rivalGhost&&rivalMatches(rivalGhost.track,id)){
     const r=duelResult(total, rivalGhost.lapTime);
@@ -9842,10 +9935,12 @@ function queueBuilderBoard(){
 // so a run is sent when it is this browser's best, or the first run this
 // session on that board (a best from before the board existed); the Worker
 // keeps only a pilot's lowest time anyway.
+// Resolves to the Worker's reply ({key, entries} taken, {refused, status}),
+// or null: not sent, or no answer.
 async function maybeSubmitTrackBoard(id,total,rec){
-  if(testPilotUsed)return;
+  if(testPilotUsed||runRespawned)return null;
   const track=customBoardTrack(id);
-  if(!track||!rec||rec.length<2||!onlineBoardsEnabled(leaderboardUrl()))return;
+  if(!track||!rec||rec.length<2||!onlineBoardsEnabled(leaderboardUrl()))return null;
   const body={
     track:{id:track.id,name:track.name,map:track.map,gates:track.gates,flags:track.flags||[]},
     frameMm:trackBoardClass(),name:currentPilotName(),timeMs:total,
@@ -9853,15 +9948,15 @@ async function maybeSubmitTrackBoard(id,total,rec){
   };
   let checked;
   try{checked=await normalizeTrackSubmit(body);}catch(e){checked={ok:false,reason:String(e&&e.message||e)};}
-  if(!checked.ok){console.warn('track board submit not sent: '+checked.reason);return;}
+  if(!checked.ok){console.warn('track board submit not sent: '+checked.reason);return null;}
   const pb=bestRunMs[ensureTrackStats(id)]||0;
   const sentKey=checked.key+'|'+body.frameMm;
   if(pb&&total>pb&&trackBoardSent.has(sentKey))return;
-  if(!onlineNameOk())return;
+  if(!onlineNameOk())return null;
   const j=await trackBoardFetch('/api/track/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),refusal:true});
   // Sent once the Worker answered, taken or refused, but not for the rate
   // limit or no answer: those leave the run to be sent again.
-  if(j&&(j.key===checked.key||(j.refused&&j.status!==429)))trackBoardSent.add(sentKey);
+  if(j&&(j.key===checked.key||(j.refused&&j.status!==429&&!NAME_REFUSALS.has(j.refused))))trackBoardSent.add(sentKey);
   if(j&&j.key===checked.key){
     countNote('name');
     // Any board request still out for this track is older than this answer.
@@ -9872,12 +9967,17 @@ async function maybeSubmitTrackBoard(id,total,rec){
     // stands, by GET (no rate limit, no claim); hidden if that fails too.
     loadTrackBoard(track);
   }
+  return j;
 }
-async function maybeSubmitOnline(id, total, rec){
-  if(testPilotUsed)return;
+// The weekly's online board. Resolves to the Worker's reply ({ok, entries}
+// or {refused, status}), or null: not sent, or no answer. opts.quiet: no
+// toast (the result card says it).
+async function maybeSubmitOnline(id, total, rec, opts){
+  const quiet=!!(opts&&opts.quiet);
+  if(testPilotUsed)return null;
   const url=leaderboardUrl();
-  if(!onlineBoardsEnabled(url)||!rec||!rec.length)return;
-  if(!onlineNameOk())return;
+  if(!onlineBoardsEnabled(url)||!rec||!rec.length)return null;
+  if(!onlineNameOk())return null;
   const track=findTrack(id);
   const ghost=ghostPayloadOf(id, rec, total);
   const body={
@@ -9889,8 +9989,8 @@ async function maybeSubmitOnline(id, total, rec){
   if(!checked.ok){
     // Said, not dropped: a run the Worker would refuse stays on the local board.
     console.warn('weekly submit not sent: '+checked.reason);
-    toast('NOT SENT: '+String(checked.reason));
-    return;
+    if(!quiet)toast('NOT SENT: '+String(checked.reason));
+    return {refused:String(checked.reason),status:0};
   }
   try{
     const r=await fetch(url+'/api/submit', {
@@ -9898,9 +9998,10 @@ async function maybeSubmitOnline(id, total, rec){
       body: JSON.stringify(body),
     });
     const j=await r.json();
-    if(j&&j.ok){countNote('name');toast(j.improved?'ONLINE BEST':'ONLINE RECORDED');}
-    else if(j&&j.reason)toast(String(j.reason));
+    if(j&&j.ok){countNote('name');if(!quiet)toast(j.improved?'ONLINE BEST':'ONLINE RECORDED');return j;}
+    if(j&&j.reason){if(!quiet)toast(String(j.reason));return {refused:String(j.reason),status:r.status};}
   }catch(e){ /* local boards still hold the time */ }
+  return null;
 }
 async function maybeSubmitDailyLine(challenge, total, rec, splits){
   if(testPilotUsed)return;
@@ -9926,6 +10027,276 @@ async function maybeSubmitDailyLine(challenge, total, rec, splits){
     if(j&&j.ok){countNote('name');toast(j.improved?'DAILY ONLINE BEST':'DAILY ONLINE');}
     else if(j&&j.reason)toast(String(j.reason));
   }catch(e){ /* offline — local daily PB still saved */ }
+}
+// ---------- Built-in track boards (the public maps' races) ----------
+// A built-in race on a public map (sim-tracks.js BUILTIN_TRACK_FILES on
+// PUBLIC_MAPS, not a city loop: the tracks tools/build_builtin_boards.mjs
+// gives the Worker) has a board per class on the leaderboard Worker
+// (/api/builtin/submit, /api/builtin/board). The Worker checks a run against
+// its own copy of the gates; the page sends the track's id and its gates'
+// hash (builtinTrackHash). A run is checked here first as the Worker checks
+// it (normalizeBuiltinSubmit): one it would refuse is not sent, and the
+// result card does not ask about it. A run is sent when it is this browser's
+// best, or the first on that board this session (posts share an hourly
+// budget with the weekly and SHARE); another finish reads the pilot's place
+// by GET. The place goes on the lap panel under the result.
+const builtinHashes=new Map();      // track id -> its gates' hash (a promise)
+const builtinSent=new Set();        // board key | class a run was posted to this session
+const builtinPlaces=new Map();      // track id | class -> {rank, count}
+function builtinBoardTrack(id){
+  const t=builtinTracks.find((b)=>b.id===String(id));
+  return t&&t.legacyId==null&&!t.freestyle&&mapOpen(t.map,false)&&Array.isArray(t.gates)&&t.gates.length>1?t:null;
+}
+function builtinHashOf(t){
+  if(!builtinHashes.has(t.id))builtinHashes.set(t.id,builtinTrackHash(t).catch(()=>null));
+  return builtinHashes.get(t.id);
+}
+// The submit's body, without the pilot's token (the post adds it), or null.
+async function builtinBody(id,total,rec){
+  const t=builtinBoardTrack(id);
+  if(!t||!rec||rec.length<2)return null;
+  const trackHash=await builtinHashOf(t);
+  if(!trackHash)return null;
+  return {track:t.id,trackHash,frameMm:classId(currentBuild&&currentBuild.frameMm),name:currentPilotName(),timeMs:total,
+    ghost:ghostPayloadOf(id,rec,total),build:currentBuild,token:''};
+}
+async function builtinCheck(body){
+  if(!body)return {ok:false,reason:'NO RUN'};
+  try{return await normalizeBuiltinSubmit(body,[builtinBoardTrack(body.track)]);}
+  catch(e){return {ok:false,reason:String(e&&e.message||e)};}
+}
+function builtinBoardGet(t,cls){
+  return trackBoardFetch('/api/builtin/board?track='+encodeURIComponent(t.id)+'&class='+cls+'&name='+encodeURIComponent(currentPilotName()));
+}
+function noteBuiltinPlace(t,cls,j){
+  const rank=j.rank||(j.you&&j.you.rank)||null;
+  builtinPlaces.set(t.id+'|'+cls,{rank,count:j.count||(Array.isArray(j.entries)?j.entries.length:0)});
+}
+// The lap panel's line under a built-in race's result: the pilot's place.
+function builtinPlaceHtml(id){
+  const t=builtinBoardTrack(id);
+  const p=t&&builtinPlaces.get(t.id+'|'+classId(currentBuild&&currentBuild.frameMm));
+  return p&&p.rank?'<br>ONLINE #'+p.rank+(p.count?' OF '+p.count:''):'';
+}
+// A finished built-in race to its board. Resolves to the Worker's reply
+// ({ok, entries, rank, count} posted or read; {refused, status}), or null:
+// not sent (no name, a run the board would refuse), or no answer.
+// opts.post: posted whatever this session sent before (the card's Post).
+async function maybeSubmitBuiltin(id,total,rec,opts){
+  if(testPilotUsed||runRespawned)return null;
+  const t=builtinBoardTrack(id);
+  if(!t||!onlineBoardsEnabled(leaderboardUrl()))return null;
+  const body=await builtinBody(id,total,rec);
+  const checked=await builtinCheck(body);
+  if(!checked.ok){console.warn('built-in board submit not sent: '+checked.reason);return null;}
+  if(!onlineNameOk())return null;
+  const pb=bestRunMs[ensureTrackStats(id)]||0;
+  const sentKey=checked.key+'|'+body.frameMm;
+  let j;
+  if(!(opts&&opts.post)&&pb&&total>pb&&builtinSent.has(sentKey))j=await builtinBoardGet(t,body.frameMm);
+  else{
+    body.token=issuePilotToken();
+    j=await trackBoardFetch('/api/builtin/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),refusal:true});
+    // Sent once the Worker answered, taken or refused, but not for the rate
+    // limit, a name it would not take, or no answer: those leave the run to
+    // be sent again.
+    if(j&&(j.ok||(j.refused&&j.status!==429&&!NAME_REFUSALS.has(j.refused))))builtinSent.add(sentKey);
+    if(j&&j.ok)countNote('name');
+  }
+  if(j&&j.ok)noteBuiltinPlace(t,body.frameMm,j);
+  return j;
+}
+// ---------- The result card ----------
+// A board race's finish (a built-in race, the weekly, a builder track) with
+// no pilot name: the time, its splits on one line, and one field, "Name for
+// the board", with Post (Enter) and Not now (Esc). The sim waits behind it
+// (simPaused). Post saves the name, puts the run up and shows the board with
+// the pilot's row; Not now keeps the time on this browser and the card asks
+// no more this tab session (sessionStorage). A run its board would refuse
+// (checked as the Worker checks it) is not asked about. With a name set
+// there is no card: the run posts at the finish, and the lap panel (or the
+// weekly's toast, or the builder track's board) shows its place.
+const NAME_LATER_KEY='quadmathSimNameLater';
+const NAME_REFUSALS=new Set(['SET A NAME','BAD NAME','NAME NOT ALLOWED','NAME TAKEN']);
+const resultCardEl=document.getElementById('resultCard');
+const rcEl=(id)=>document.getElementById(id);
+let resultAskSeq=0;
+let resultNotAsked='';   // why the last finish's card did not ask (its board's check), for tests
+function nameLater(){try{return sessionStorage.getItem(NAME_LATER_KEY)==='1';}catch(e){return false;}}
+function savePilotName(v){
+  try{localStorage.setItem('quadmath_pilotName',v);}catch(e){}
+  if(pilotNameEl)pilotNameEl.value=v;
+}
+// The name rules (sim-pilot-names.js) and the Worker's name refusals, said.
+function nameWhyText(why){
+  return ({'SET A NAME':'Type a name: 3 to 16 letters or numbers.',
+    'BAD NAME':'3 to 16 letters or numbers; a space, . - or _ only between them.',
+    'NAME NOT ALLOWED':'That name is not allowed. Try another.',
+    'NAME TAKEN':'Another pilot has that name. Try another.'})[why]||String(why||'');
+}
+// The run the card asks about, checked as its board would check it.
+async function boardRunCheck(run){
+  try{
+    const frameMm=classId(currentBuild&&currentBuild.frameMm);
+    const ghost=ghostPayloadOf(run.id,run.rec,run.total);
+    if(run.kind==='builtin')return await builtinCheck(await builtinBody(run.id,run.total,run.rec));
+    if(run.kind==='weekly')return validateSubmittedRun({ghost,track:findTrack(run.id),frameMm,timeMs:run.total});
+    const t=customBoardTrack(run.id);
+    if(!t)return {ok:false,reason:'NO BOARD'};
+    return await normalizeTrackSubmit({track:{id:t.id,name:t.name,map:t.map,gates:t.gates,flags:t.flags||[]},
+      frameMm:trackBoardClass(),name:currentPilotName(),timeMs:run.total,ghost,build:currentBuild,token:''});
+  }catch(e){return {ok:false,reason:String(e&&e.message||e)};}
+}
+function postBoardRun(run){
+  if(run.kind==='builtin')return maybeSubmitBuiltin(run.id,run.total,run.rec,{post:true});
+  if(run.kind==='weekly')return maybeSubmitOnline(run.id,run.total,run.rec,{quiet:true});
+  return maybeSubmitTrackBoard(run.id,run.total,run.rec);
+}
+// view: {total, best, splits}. Resolves true once the card is up.
+async function openResultAsk(run,view){
+  const seq=++resultAskSeq;
+  const ok=await boardRunCheck(run);
+  if(seq!==resultAskSeq)return false;
+  resultNotAsked=ok.ok?'':String(ok.reason||'');
+  if(!ok.ok){console.warn('result card: not asked, '+ok.reason);return false;}
+  if(runActive||resultAsk||onlineNameOk()||nameLater()||!resultCardEl)return false;
+  resultAsk={run,posting:false};
+  rcEl('rcTitle').textContent=trackLabel(run.id);
+  rcEl('rcTime').textContent=fmtLap(view.total);
+  rcEl('rcBest').textContent=view.best?'NEW BEST':'';
+  rcEl('rcSplits').textContent=view.splits||'';
+  rcEl('rcAsk').hidden=false;
+  rcEl('rcBoard').hidden=true;
+  rcEl('rcWhy').textContent='';
+  rcEl('rcPost').disabled=false;
+  rcEl('rcLater').disabled=false;
+  const input=rcEl('rcName');
+  input.value='';
+  // The flight keys let go: the card has the keyboard until Fly on.
+  for(const k of Object.keys(keys))keys[k]=false;
+  resultCardEl.hidden=false;
+  document.body.classList.add('result-ask');
+  // The finish toast says the same: the card stands in for it.
+  clearTimeout(toastTimer);toastEl.style.opacity=0;toastEl.classList.remove('has-action');
+  if(!(touchCtl&&touchCtl.enabled))input.focus({preventScroll:true});
+  return true;
+}
+function closeResultCard(){
+  resultAskSeq++;
+  resultAsk=null;
+  if(resultCardEl)resultCardEl.hidden=true;
+  document.body.classList.remove('result-ask');
+  const a=document.activeElement;
+  if(a&&resultCardEl&&resultCardEl.contains(a))a.blur();
+}
+function resultLater(){
+  if(!resultAsk||resultAsk.posting)return;
+  try{sessionStorage.setItem(NAME_LATER_KEY,'1');}catch(e){}
+  closeResultCard();
+  toast('TIME KEPT ON THIS BROWSER');
+}
+async function resultPost(){
+  const ask=resultAsk;
+  if(!ask||ask.posting)return;
+  const input=rcEl('rcName'),why=rcEl('rcWhy');
+  const name=String(input.value||'').trim().replace(/\s+/g,' ');
+  const bad=pilotNameProblem(name);
+  if(bad){why.textContent=nameWhyText(bad);input.focus({preventScroll:true});return;}
+  const was=pilotNameEl?pilotNameEl.value:'';
+  ask.posting=true;
+  rcEl('rcPost').disabled=true;
+  rcEl('rcLater').disabled=true;
+  why.textContent='Posting…';
+  savePilotName(name);
+  let j=null;
+  try{j=await postBoardRun(ask.run);}catch(e){j=null;}
+  if(resultAsk!==ask)return;
+  ask.posting=false;
+  rcEl('rcPost').disabled=false;
+  rcEl('rcLater').disabled=false;
+  if(j&&j.ok){showResultBoard(ask.run,j,'');return;}
+  const reason=j&&j.refused?String(j.refused):'';
+  // A name the board will not take: not kept, and the field asks again.
+  if(NAME_REFUSALS.has(reason)){savePilotName(was);why.textContent=nameWhyText(reason);input.focus({preventScroll:true});return;}
+  showResultBoard(ask.run,null,reason);
+}
+// After Post: the board with the pilot's row lit, or why there is none.
+function showResultBoard(run,j,reason){
+  rcEl('rcAsk').hidden=true;
+  rcEl('rcBoard').hidden=false;
+  const place=rcEl('rcPlace'),rows=rcEl('rcRows');
+  rows.textContent='';
+  if(!j){
+    place.textContent=(reason?'Not posted: '+reason+'.':'The board is offline.')+' Your time is kept on this browser and your name is saved.';
+  }else{
+    const me=pilotNameKey(currentPilotName());
+    const list=Array.isArray(j.entries)?j.entries:[];
+    let rank=j.rank||null;
+    if(!rank){const i=list.findIndex((r)=>pilotNameKey(r.name)===me);rank=i>=0?i+1:null;}
+    const count=j.count||list.length;
+    const cls=run.kind==='custom'?trackBoardClass():classId(currentBuild&&currentBuild.frameMm);
+    place.textContent=(rank?'#'+rank+(count?' of '+count:''):'Posted')+' · '+(run.kind==='weekly'?'this week\'s board':trackLabel(run.id)+' · '+cls+' mm');
+    const n=innerHeight<500?5:10;
+    const wrap=document.createElement('div');
+    wrap.className='board-list';
+    const row=(r,i)=>{
+      const d=document.createElement('div');
+      d.className='board-row'+(pilotNameKey(r.name)===me?' me':'');
+      const b=document.createElement('b');
+      b.textContent=(i+1)+' '+sanitizePilotName(r.name);
+      const s=document.createElement('span');
+      s.textContent=fmtMs(r.timeMs||r.time_ms);
+      d.append(b,s);
+      return d;
+    };
+    list.slice(0,n).forEach((r,i)=>wrap.appendChild(row(r,i)));
+    if(rank&&rank>n){
+      const gap=document.createElement('div');
+      gap.className='board-gap';
+      gap.textContent='…';
+      wrap.appendChild(gap);
+      wrap.appendChild(row(list[rank-1]||{name:currentPilotName(),timeMs:j.timeMs},rank-1));
+    }
+    rows.appendChild(wrap);
+  }
+  if(!(touchCtl&&touchCtl.enabled))rcEl('rcDone').focus({preventScroll:true});
+}
+{
+  const input=rcEl('rcName');
+  if(input)input.addEventListener('keydown',(e)=>{
+    // A flight key still held from the run (W, an arrow) repeats into the
+    // field once it has focus: a repeat types nothing.
+    if(e.repeat){e.preventDefault();return;}
+    if(e.key==='Enter'){e.preventDefault();resultPost();}
+    else if(e.key==='Escape'){e.preventDefault();resultLater();}
+  });
+  const on=(id,fn)=>{const b=rcEl(id);if(b)b.addEventListener('click',(e)=>{e.preventDefault();fn();});};
+  on('rcPost',resultPost);
+  on('rcLater',resultLater);
+  on('rcDone',closeResultCard);
+}
+// The menu's Pilot name (in flight, and Boards on the launch screen): the
+// name the boards show, checked by the boards' own rules as it is saved.
+function openNameCard(){
+  showMenuLayer('<h2>Pilot name</h2>'+
+    '<p>Your runs go on the online boards under this name: 3 to 16 letters or numbers.</p>'+
+    '<input type="text" id="nameIn" maxlength="16" placeholder="PILOT" autocomplete="nickname" autocapitalize="off" spellcheck="false" enterkeyhint="done">'+
+    '<p id="nameWhy" class="daily-meta" aria-live="polite"></p>'+
+    '<button type="button" class="primary" id="nameSave">Save</button>'+
+    '<button type="button" id="layerClose">Close</button>');
+  const input=document.getElementById('nameIn');
+  input.value=pilotNameEl?pilotNameEl.value:'';
+  const save=()=>{
+    const name=String(input.value||'').trim().replace(/\s+/g,' ');
+    const why=pilotNameProblem(name);
+    if(why){document.getElementById('nameWhy').textContent=nameWhyText(why);return;}
+    savePilotName(name);
+    hideMenuLayer();
+    toast('PILOT NAME SAVED');
+  };
+  input.addEventListener('keydown',(e)=>{if(e.key==='Enter'){e.preventDefault();save();}});
+  document.getElementById('nameSave').onclick=save;
+  document.getElementById('layerClose').onclick=hideMenuLayer;
 }
 async function exportDuel(){
   const id=activeTrackId;
@@ -10266,7 +10637,7 @@ function updateDust(dt){
 // wall time in fixed 1 ms ticks (a frame over 250 ms is a pause) and the page
 // draws its interpolated state. dt below is for decoration only.
 let last=performance.now();
-function simPaused(){return replayOn||(looks&&looks.menuOpen)||builderOn||(feel&&feel.promptOpen);}
+function simPaused(){return replayOn||(looks&&looks.menuOpen)||builderOn||(feel&&feel.promptOpen)||!!resultAsk;}
 // The trick detector runs on the sim clock: while it is on, the core calls
 // onTrickSample each time its clock reaches a multiple of SAMPLE_US (4 ms),
 // with the latest tick's state, so a trick reads the same at any frame rate.
@@ -11482,6 +11853,11 @@ function publishTracks(){
 // The race offer's state, read only (tools/test_sim_race_offer_page.mjs).
 Object.assign(window._sim,{raceOffer:()=>({airMs:raceOffer.airMs,shows:raceOffer.shows,due:raceOffer.due,shown:!!(raceOfferEl&&!raceOfferEl.hidden),
   shownAt:raceOffer.shownAt,hiddenAt:raceOffer.hiddenAt,track:raceOffer.track,raceStarted:raceOffer.raceStarted,mapRace:(mapRace(currentMap)||{}).id||null})});
+// The result card (openResultAsk) and the built-in boards, for tests.
+Object.assign(window._sim,{resultCard:()=>({up:!!(resultCardEl&&!resultCardEl.hidden),asking:!!resultAsk,kind:resultAsk?resultAsk.run.kind:null,
+  posted:!!(rcEl('rcBoard')&&!rcEl('rcBoard').hidden),paused:simPaused(),later:nameLater(),respawned:runRespawned,notAsked:resultNotAsked}),
+  builtinBoardTrack:(id)=>{const t=builtinBoardTrack(id);return t?t.id:null;},
+  builtinPlace:(id)=>{const t=builtinBoardTrack(id);return t?builtinPlaces.get(t.id+'|'+classId(currentBuild&&currentBuild.frameMm))||null:null;}});
 // The page is built on City. Land on the boot map now, not when the tracks
 // fetch below lets applyQueryBoot run, so the launch screen never shows a
 // closed map first; applyQueryBoot then adds only what the boot needs.

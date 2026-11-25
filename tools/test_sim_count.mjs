@@ -355,7 +355,9 @@ test('sim.html: one beacon per event, the events where they happen, nothing stor
   assert.ok(extract(html, 'maybeSubmitOnline').includes("if(j&&j.ok){countNote('name');"));
   assert.ok(extract(html, 'maybeSubmitDailyLine').includes("if(j&&j.ok){countNote('name');"));
   assert.ok(extract(html, 'maybeSubmitTrackBoard').includes("countNote('name');"));
-  assert.equal(html.split("countNote('").length - 1, 12, 'ready, kbd twice (the choice, after ready), arm, flew30, pack2, race, two laps, three names');
+  // A built-in race's board: on the post the Worker took (the finish, or the result card's Post).
+  assert.ok(extract(html, 'maybeSubmitBuiltin').includes("if(j&&j.ok)countNote('name');"));
+  assert.equal(html.split("countNote('").length - 1, 13, 'ready, kbd twice (the choice, after ready), arm, flew30, pack2, race, two laps, four names');
   // The beacon's host is in connect-src.
   const csp = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
   const connect = csp.split(';').map((s) => s.trim()).find((s) => s.startsWith('connect-src')).split(/\s+/);
