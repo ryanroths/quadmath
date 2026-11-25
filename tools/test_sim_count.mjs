@@ -340,8 +340,9 @@ test('sim.html: one beacon per event, the events where they happen, nothing stor
   assert.ok(extract(html, 'stepCore').includes('countFlight(simClockMs-simAtMs);'));
   assert.ok(flight.includes("countNote('arm');") && flight.includes('if(countAirMs>=COUNT_FLEW_MS)countNote(\'flew30\');') && flight.includes('!inTheAir()'));
   // In the air: airborne and clear of the ground (the bf plant reads airborne on the floor at 30%),
-  // and touching no box (the bf core's contactFlags bit 1): pinned to a ceiling is not flying.
-  assert.ok(html.includes('const AIR_CLEARANCE_M=0.04;\nfunction inTheAir(){return !!cs.airborne&&cs.clearance>AIR_CLEARANCE_M&&!((cs.contactFlags|0)&2);}'));
+  // and not held by a box (the bf core's contactFlags bit 1), still: pinned to a ceiling, or propped, is not flying.
+  assert.ok(html.includes('function inTheAir(){return !!cs.airborne&&cs.clearance>AIR_CLEARANCE_M&&!heldByBox();}'));
+  assert.ok(html.includes('if(Math.hypot(v.x,v.y,v.z)>=0.3)return false;\n  return cs.twr>1.15||bodyUpZ(cs.quaternion)<0.5;'), 'held: still, and pushing into it or tipped on it');
   assert.ok(extract(html, 'tickRaceOffer').includes('if(armed&&inTheAir())raceOffer.airMs+=ms;'), 'the race offer\'s 30 s by the same rule');
   assert.ok(!/cs\.airborne/.test(flight) && !/cs\.airborne/.test(extract(html, 'tickRaceOffer')), 'neither reads the flag alone');
   // kbd: at the keyboard choice, or just after ready.

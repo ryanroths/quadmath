@@ -13,8 +13,9 @@
 //      before that is done once they are. No WebGL: a plain message.
 //   4. A first visit's Fly with keyboard flies the class's map (the Rig) at
 //      once, on the pad; a link that flies something keeps it.
-//   5. The air time flew30 and the race offer count stops against a box (the
-//      ceiling): pinned at full throttle 6 m up is not flying.
+//   5. The air time flew30 and the race offer count stops while a box holds
+//      the quad, still: pinned (the ceiling at full throttle, 6 m up) or
+//      propped (tipped on a shelf). Hovering beside a wall still counts.
 // The novice: 400 ms reactions (on sim time), held keys, looks about every
 // 3-5 s (A or D for 0.3-0.8 s, or a 0.25 s tap forward and one back); 30 s in
 // the air with no crash, then up, down, a landing on S that disarms, W again.
@@ -182,17 +183,21 @@ test('the seeds: the hovers measured per core and class; the keys\' hint; Space\
   assert.ok(svg.includes('>arm / disarm<') && svg.includes('>drops it in the air<'), 'the keyboard layout says it too');
 });
 
-test('the page: the spring on the keys in Easy mode, 2D, not Acro, armed only; flew30 and the race offer stop against a box; the card hides the toast and the hint; the launch buttons wait; the watchdog keeps an early click and says no WebGL', () => {
+test('the page: the spring on the keys in Easy mode, 2D, not Acro, armed only; flew30 and the race offer stop when a box holds it (pinned or propped); the card hides the toast and the hint; the launch buttons wait; the watchdog keeps an early click and says no WebGL', () => {
   assert.ok(html.includes("function keysSpringOn(){return easyMode()&&!threeD&&flightMode!=='acro';}"));
   assert.ok(html.includes('if(!disarmed&&keysSpringOn())kbThrottle=keysHoverStep(dt);'), 'armed only: disarmed, the keys arm as before');
   assert.ok(html.includes("twr:cs.twr,contact:cs.contactFlags,crashed:simClockMs-easyCrashAt<EASY_CRASH_MEMORY_MS,seed:keysHoverSeed(core.kind,droneType)"), 'the core\'s own thrust-to-weight and contacts, and Easy mode\'s crash latch');
-  assert.ok(html.includes('function inTheAir(){return !!cs.airborne&&cs.clearance>AIR_CLEARANCE_M&&!((cs.contactFlags|0)&2);}'));
+  assert.ok(html.includes('function inTheAir(){return !!cs.airborne&&cs.clearance>AIR_CLEARANCE_M&&!heldByBox();}'));
+  assert.ok(html.includes("if(!((cs.contactFlags|0)&2))return false;") && html.includes('return cs.twr>1.15||bodyUpZ(cs.quaternion)<0.5;'), 'held by a box: still, pinned (pushing) or propped (tipped)');
   assert.ok(html.includes('if(armed&&inTheAir())raceOffer.airMs+=ms;') && html.includes('if(!countPings.has(\'arm\')||!inTheAir()||countPings.has(\'flew30\'))return;'), 'both counts use it');
   assert.ok(html.includes('body.prompt-open #toast,body.prompt-open #hudArmHint{visibility:hidden}'));
   assert.ok(html.includes('<div id="startMenu" class="open wait">'));
   for (const id of ['menuFly', 'menuDaily', 'menuBoards', 'menuTune', 'menuControls']) assert.ok(html.includes(`id="${id}" aria-disabled="true">`), id + ' waits');
   assert.ok(html.includes('wireLooksUI();\nwireBuilderUI();\nmenuWired();\n'), 'wired, then no longer waiting');
-  assert.ok(html.includes("var b=e.target&&e.target.closest?e.target.closest('button.menu-launch'):null;") && html.includes('window.__menuEarly=b.id||null;'), 'the early click kept before the module');
+  // The early click's capture: on the document, from the head, before the menu's markup.
+  const capture = html.indexOf("e.target.closest('#startMenu.wait button.menu-launch')");
+  assert.ok(capture > 0 && html.includes('window.__menuEarly=b.id||null;'), 'the early click kept before the module');
+  assert.ok(capture < html.indexOf('</head>') && capture < html.indexOf('<div id="startMenu"'), 'from the head, before the menu paints');
   assert.ok(html.includes("gl=probe.getContext('webgl2')||probe.getContext('webgl');") && html.includes("document.documentElement.classList.add('no-webgl');"));
   assert.ok(!/HOLD W TO FLY/.test(html), 'no "hold W" left');
   assert.ok(html.includes("toast(kind==='touch'?'TOUCH STICKS — THROTTLE UP TO FLY':'KEYBOARD');"));
@@ -228,6 +233,16 @@ async function serveRoot() {
     try {
       let body = readFileSync(file);
       const headers = { 'content-type': mime(file) };
+      // ?teststall=MS: the page sent up to the end of the launch menu, then
+      // held that long (a slow load's menu, painted before the rest arrives).
+      const stall = rel === '/sim.html' ? +url.searchParams.get('teststall') : 0;
+      if (stall > 0) {
+        const cut = body.indexOf(Buffer.from('<div class="osd" id="osdTL">'));
+        res.writeHead(200, headers);
+        res.write(body.subarray(0, cut));
+        setTimeout(() => res.end(body.subarray(cut)), stall);
+        return;
+      }
       if (GZ.has(extname(file)) && /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) {
         if (!zipped.has(file)) zipped.set(file, gzipSync(body, { level: 6 }));
         body = zipped.get(file);
@@ -300,6 +315,16 @@ const WATCH = String.raw`(() => {
       if (text && W.over.length < 10) W.over.push({ t: Math.round(performance.now()), id: e.id || String(e.className), text: text.slice(0, 48) });
     });
   }, 50);
+})()`;
+
+// From the first document on: every click the page gets, where and on what,
+// and when (before the page's own listeners: registered first).
+const CLICKLOG = String.raw`(() => {
+  const L = window.__clickLog = [];
+  document.addEventListener('click', (e) => {
+    const t = e.target, b = t && t.closest ? t.closest('button') : null;
+    L.push({ at: Math.round(performance.now()), x: Math.round(e.clientX), y: Math.round(e.clientY), target: t ? (t.id || t.tagName) : null, button: b ? b.id || b.tagName : null });
+  }, true);
 })()`;
 
 // In the page: the flight as the novice and the checks read it; the air time
@@ -377,6 +402,7 @@ test('keyboard first flights in Chrome: the hover spring flown by a novice, the 
       await cdp(ws, 'Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
       if (process.env.SIM_CPU_THROTTLE) await cdp(ws, 'Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
       if (opts.watch) await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: WATCH });
+      await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: CLICKLOG });
       await cdp(ws, 'Page.navigate', { url: `http://127.0.0.1:${port}/robots.txt` });
       await sleep(300);
       await evaluate(ws, `(() => { localStorage.clear(); const seed = ${JSON.stringify(opts.storage || {})}; for (const k of Object.keys(seed)) localStorage.setItem(k, seed[k]); return true; })()`);
@@ -539,10 +565,20 @@ test('keyboard first flights in Chrome: the hover spring flown by a novice, the 
         s = await after(200);
         if (!s.armed) { await press('w'); s = await after(1500); await release('w'); }
         if (s.clr > 2.5) { await press('s'); await api.js(`await K.until(() => K.state().clr < 1.8 || !K.state().armed, 8000); return 1;`); await release('s'); }
-        s = await after(2500);
+        // Let go mid-sink, it brakes (late at a software GPU's 8 frames a
+        // second): measured once it has stopped.
+        await api.js(`await K.until(() => Math.abs(K.state().vz) < 0.3, 8000); return 1;`);
+        const before = await api.js('return JSON.stringify(K.state());');
+        // The 2.5 s with no key, traced every 250 ms of sim time.
+        const hold = await api.js(`const t0 = K.sim(), tr = []; let next = 0;
+          await K.until(() => { const st = K.state(), el = K.sim() - t0; if (el >= next) { tr.push([Math.round(el), +st.clr.toFixed(2), +st.vz.toFixed(2), +st.t.toFixed(3)]); next += 250; } return el >= 2500; }, 20000);
+          return JSON.stringify({ tr, st: K.state(), fps: Math.round(K.s.looks.fps.avg || 0) });`);
+        s = hold.st;
+        console.log('no key 2.5 s: ' + JSON.stringify({ from: { clr: +before.clr.toFixed(2), vz: +before.vz.toFixed(2) }, fps: hold.fps, 'ms,clr,vz,t': hold.tr }));
         assert.equal(s.armed, true, 'still flying ' + JSON.stringify(s));
-        assert.ok(s.clr > 0.2 && s.clr < 5.5, 'no key: a hover, clear of the floor and the ceiling ' + s.clr);
-        assert.ok(Math.abs(s.vz) < 1.2, 'not going anywhere fast: vz ' + s.vz);
+        assert.ok(s.clr > 0.05 && s.clr < 5.5, 'no key: a hover, off the floor and under the ceiling ' + s.clr);
+        assert.ok(Math.abs(s.clr - before.clr) < 0.6, `no key: it holds its height (${before.clr.toFixed(2)} to ${s.clr.toFixed(2)} m)`);
+        assert.ok(Math.abs(s.vz) < 0.5, 'not going anywhere: vz ' + s.vz);
         assert.equal(s.hint, KEYS_HINT, 'the hint stays up in flight');
         // W: up.
         const z0 = s.clr;
@@ -566,15 +602,17 @@ test('keyboard first flights in Chrome: the hover spring flown by a novice, the 
         assert.ok(down.st.clr <= 0.05, 'on the floor');
         // W again: arms and lifts to a hover, a tap included.
         await api.js(`const t0 = K.sim(); await K.until(() => K.sim() - t0 >= 600, 6000); return 1;`);
+        // W again, held until the page has armed (polls far apart at a low
+        // frame rate miss a shorter tap), at most 1.5 s of sim time.
         await press('w');
-        await sleep(150);
+        await api.js(`const t0 = K.sim(); await K.until(() => K.state().armed || K.sim() - t0 >= 1500, 12000); return 1;`);
         await release('w');
         const again = await api.js(`const t0 = K.sim(); const armed = await K.until(() => K.state().armed, 6000);
           const lifted = await K.until(() => K.state().clr > 0.3, 12000);
           const t1 = K.sim(); await K.until(() => K.sim() - t1 >= 2000, 14000);
           return JSON.stringify({ armed, lifted, st: K.state() });`);
         console.log('W again: ' + JSON.stringify({ armed: again.armed, lifted: again.lifted, clr: again.st.clr, vz: again.st.vz }));
-        assert.equal(again.armed, true, 'a tap of W arms');
+        assert.equal(again.armed, true, 'W arms again');
         assert.equal(again.lifted, true, 'and lifts');
         assert.equal(again.st.armed, true, 'and stays up, no key held');
         assert.ok(again.st.clr > 0.3 && again.st.clr < 5.5, 'hovering ' + again.st.clr);
@@ -661,9 +699,22 @@ test('keyboard first flights in Chrome: the hover spring flown by a novice, the 
       assert.equal(b.aria, 'true');
       assert.match(b.after, /Loading/, 'it reads Loading…');
       assert.ok(b.opacity < 0.6 && b.cursor === 'progress', 'and looks it');
-      await api.click(b.x, b.y);
-      const kept = await api.raw(`({ early: window.__menuEarly, picked: document.getElementById(${JSON.stringify(id)}).classList.contains('picked'), layer: document.getElementById('menuLayer').classList.contains('show') })`);
-      assert.equal(kept.early, id, 'the click kept');
+      // The card moves while it loads (the fonts, the stylesheet): clicked
+      // where the button is, on two reads 50 ms apart, as a visitor clicks
+      // what is there.
+      let at = null;
+      for (let i = 0; i < 60 && !at; i++) {
+        at = await api.raw(`new Promise((res) => { const where = () => { const e = document.getElementById(${JSON.stringify(id)}), r = e.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+          const hit = document.elementFromPoint(x, y); return { x, y, on: !!(hit && (hit === e || e.contains(hit))) }; };
+          const a = where(); setTimeout(() => { const c = where(); res(a.on && c.on && a.x === c.x && a.y === c.y ? c : null); }, 50); })`);
+      }
+      assert.ok(at, id + ' still under its own centre');
+      await api.click(at.x, at.y);
+      // Kept once the page has handled the click (a page still parsing handles it late).
+      const kept = await api.raw(`new Promise((res) => { const t0 = performance.now(); const f = () => { if (window.__menuEarly || performance.now() - t0 > 2000) res({ early: window.__menuEarly, picked: document.getElementById(${JSON.stringify(id)}).classList.contains('picked'),
+        layer: document.getElementById('menuLayer').classList.contains('show'), clicks: window.__clickLog, wait: document.getElementById('startMenu').classList.contains('wait'), at: Math.round(performance.now()) }); else setTimeout(f, 20); }; f(); })`);
+      console.log(id + ' clicked: ' + JSON.stringify({ moved: at.y !== b.y ? { from: b.y, to: at.y } : null, ...kept }));
+      assert.equal(kept.early, id, 'the click kept ' + JSON.stringify(kept));
       assert.equal(kept.picked, true, 'and marked');
       assert.equal(kept.layer, false, 'nothing done yet');
       return b;
@@ -683,6 +734,18 @@ test('keyboard first flights in Chrome: the hover spring flown by a novice, the 
         assert.equal(r.picker, true, 'the Fly picker opens, no second click');
         assert.equal(r.aria, null);
         assert.equal(r.after, 'none', 'no longer Loading…');
+      });
+    });
+
+    await t.test('the launch menu painted and the rest of the page held 2.5 s: a click on Fly then is kept, and the Fly picker opens once the buttons are wired', async () => {
+      await pass({ view: [1366, 768], storage: { quadmathSimInputChoice: 'keyboard' }, query: 'teststall=2500', boot: false }, async (api) => {
+        const b = await earlyClick(api, 'menuFly');
+        assert.ok(b.at < 2000, `clicked while the page was held (${b.at} ms)`);
+        const r = JSON.parse(await api.raw(`(async () => { const t0 = performance.now(); while (performance.now() - t0 < 120000 && document.getElementById('startMenu').classList.contains('wait')) await new Promise((r) => setTimeout(r, 50));
+          const w0 = performance.now();
+          while (performance.now() - w0 < 5000 && !document.querySelector('#menuLayer.show [data-fly-map]')) await new Promise((r) => setTimeout(r, 50));
+          return JSON.stringify({ picker: !!document.querySelector('#menuLayer.show [data-fly-map]') }); })()`));
+        assert.equal(r.picker, true, 'the Fly picker opens, no second click');
       });
     });
 
