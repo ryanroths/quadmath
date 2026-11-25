@@ -353,7 +353,7 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         assert.equal(r.touchOn, true);
         // An arrow on a focused select is the select's (a synthetic key: its
         // option stays as it is): no offer.
-        r = await a.js(`document.getElementById('bfRatePreset').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true })); await I.wait(300); return JSON.stringify(I.snap());`);
+        r = await a.js(`document.getElementById('bfRatePreset').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true })); await I.wait(300); await I.frames(2); return JSON.stringify(I.snap());`);
         assert.equal(r.offer, false, 'an arrow on a select offers nothing: ' + JSON.stringify(r));
         // W: the keyboard offered, nothing else.
         await a.key('w');
@@ -389,17 +389,17 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         assert.equal(r.seen, true, 'Controls in the in-flight menu');
         assert.deepEqual(r.pick, ['keyboard:true', 'touch:false', 'pad:false']);
         await a.clickSel('#menuLayer [data-input="touch"]');
-        r = await a.js(`await I.wait(200); return JSON.stringify(Object.assign(I.snap(), { pick: [...document.querySelectorAll('#menuLayer [data-input]')].map((x) => x.getAttribute('aria-pressed')) }));`);
+        r = await a.js(`await I.wait(200); await I.frames(2); return JSON.stringify(Object.assign(I.snap(), { pick: [...document.querySelectorAll('#menuLayer [data-input]')].map((x) => x.getAttribute('aria-pressed')) }));`);
         assert.equal(r.help.choice, 'touch');
         assert.equal(r.touchOn, true);
         assert.deepEqual(r.pick, ['false', 'true', 'false']);
         await a.clickSel('#menuLayer [data-input="keyboard"]');
-        r = await a.js(`await I.wait(200); return JSON.stringify(I.snap());`);
+        r = await a.js(`await I.wait(200); await I.frames(2); return JSON.stringify(I.snap());`);
         assert.equal(r.help.choice, 'keyboard');
         assert.equal(r.touchOn, false);
         // Remembered: a reload flies the keyboard, no first-run card.
         await a.reload();
-        r = await a.js(`await I.wait(500); return JSON.stringify(Object.assign(I.snap(), { card: !!(window._feel && window._feel.promptOpen) }));`);
+        r = await a.js(`await I.wait(500); await I.frames(2); return JSON.stringify(Object.assign(I.snap(), { card: !!(window._feel && window._feel.promptOpen) }));`);
         assert.equal(r.help.choice, 'keyboard');
         assert.equal(r.card, false);
         assert.equal(r.touchOn, false);
@@ -408,12 +408,12 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
 
     await t.test('Keyboard picked in Controls with a gamepad flying: the pad is set aside, the keys fly; the pad moves and takes the sticks again', async () => {
       await pass({ query: 'map=rig', storage: { quadmathSimInputChoice: 'radio' }, pads: [xboxPad(0)] }, async (a) => {
-        let r = await a.js(`await I.wait(1500); return JSON.stringify(I.snap());`);
+        let r = await a.js(`await I.wait(1500); await I.frames(2); return JSON.stringify(I.snap());`);
         assert.equal(r.help.kind, 'gamepad');
         await a.key('esc');
         await a.js(`await I.until(() => document.body.classList.contains('menu-open'), 2000); document.getElementById('menuControlsFlight').click(); await I.wait(300); return 1;`);
         await a.clickSel('#menuLayer [data-input="keyboard"]');
-        r = await a.js(`await I.wait(1500); return JSON.stringify(I.snap());`);
+        r = await a.js(`await I.wait(1500); await I.frames(2); return JSON.stringify(I.snap());`);
         assert.equal(r.help.kind, 'keyboard', 'the keys fly: ' + JSON.stringify(r.help));
         assert.deepEqual(r.help.aside, [XBOX]);
         assert.equal(r.help.choice, 'keyboard');
@@ -422,7 +422,7 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         await a.key('esc');
         // Past the page's 3 s hold on re-picking a device just dropped (PAD_REPICK_MS):
         // what keeps it out then is the set-aside.
-        r = await a.js(`await I.until(() => !document.body.classList.contains('menu-open'), 2000); await I.wait(4000); return JSON.stringify(I.snap());`);
+        r = await a.js(`await I.until(() => !document.body.classList.contains('menu-open'), 2000); await I.wait(4000); await I.frames(2); return JSON.stringify(I.snap());`);
         assert.equal(r.help.kind, 'keyboard', 'set aside, the pad stays out while it rests');
         r = await a.js(`I.axis(0, 2, 0.6); await I.until(() => I.s.armHelp().kind === 'gamepad', 3000); I.axis(0, 2, 0); return JSON.stringify(I.snap());`);
         assert.equal(r.help.kind, 'gamepad', 'a controller that moves takes the sticks: ' + JSON.stringify(r.help));
@@ -439,7 +439,7 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         assert.equal(r.cal, false);
         assert.equal(r.actx, 'running');
         assert.ok(r.cues.ready >= 1, 'the ready tick: ' + JSON.stringify(r.cues));
-        r = await a.js(`I.axis(0, 1, -0.6); await I.until(() => I.snap().armed, 4000); await I.wait(800); return JSON.stringify(I.snap());`);
+        r = await a.js(`I.axis(0, 1, -0.6); await I.until(() => I.snap().armed, 4000); await I.wait(800); await I.frames(2); return JSON.stringify(I.snap());`);
         assert.equal(r.armed, true, 'arms: ' + JSON.stringify(r));
         assert.ok(r.z > 0.3, 'and flies: ' + r.z);
         assert.equal(r.calib, false, 'no calibration');
@@ -458,13 +458,13 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
 
     await t.test('a radio off centre: the hint names the stick and offers Calibrate; centred, the sticks go live', async () => {
       await pass({ query: 'map=rig', storage: { quadmathSimInputChoice: 'radio' }, pads: [txPad(-1, 0.3)] }, async (a) => {
-        let r = await a.js(`await I.wait(1500); return JSON.stringify(I.snap());`);
+        let r = await a.js(`await I.wait(1500); await I.frames(2); return JSON.stringify(I.snap());`);
         assert.equal(r.help.gate, true);
         assert.equal(r.hint, 'Roll 30% off centre — centre the sticks');
         assert.equal(r.cal, true, 'Calibrate offered');
         // The pick holds STICKS SAFE back 3.6 s (announcePlugAndFly), and it came
         // before the look above (the gate held): centred past that, it is said.
-        r = await a.js(`await I.wait(3700); return JSON.stringify(I.snap());`);
+        r = await a.js(`await I.wait(3700); await I.frames(2); return JSON.stringify(I.snap());`);
         assert.equal(r.help.gate, true, 'still held off centre');
         assert.equal(r.hint, 'Roll 30% off centre — centre the sticks');
         r = await a.js(`I.axis(0, 0, 0); await I.until(() => !I.s.armHelp().gate, 3000); await I.frames(2); return JSON.stringify(I.snap());`);
@@ -476,12 +476,12 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
 
     await t.test('a radio bottoming at 8%: the hint says why with Calibrate, the raise does nothing; calibrated from that button, it arms', async () => {
       await pass({ query: 'map=rig', storage: { quadmathSimInputChoice: 'radio' }, pads: [txPad(-0.84)] }, async (a) => {
-        let r = await a.js(`await I.wait(1500); return JSON.stringify(I.snap());`);
+        let r = await a.js(`await I.wait(1500); await I.frames(2); return JSON.stringify(I.snap());`);
         assert.equal(r.help.gate, true);
         assert.deepEqual(r.help.why, { stick: 't', v: r.help.why.v });
         assert.equal(r.hint, 'Throttle reads 8.0% — needs under 5%');
         assert.equal(r.cal, true);
-        r = await a.js(`I.axis(0, 2, 0.2); await I.wait(1500); const x = I.snap(); I.axis(0, 2, -0.84); await I.wait(300); return JSON.stringify(x);`);
+        r = await a.js(`I.axis(0, 2, 0.2); await I.wait(1500); await I.frames(2); const x = I.snap(); I.axis(0, 2, -0.84); await I.wait(300); return JSON.stringify(x);`);
         assert.equal(r.armed, false, 'the raise does not arm');
         assert.equal(r.hint, 'Throttle reads 60% — needs under 5%');
         await a.clickSel('#hudArmCal');
@@ -524,7 +524,7 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         assert.equal(r.help.stuck, true, JSON.stringify(r.help));
         assert.equal(r.hint, 'Throttle stays at 8.0% — needs under 5%');
         assert.equal(r.cal, true);
-        r = await a.js(`I.axis(0, 2, 0); await I.wait(2500); return JSON.stringify(I.snap());`);
+        r = await a.js(`I.axis(0, 2, 0); await I.wait(2500); await I.frames(2); return JSON.stringify(I.snap());`);
         assert.equal(r.help.stuck, false, 'parked at 50%: no offer');
         assert.equal(r.cal, false);
         assert.equal(r.hint, 'Throttle down 1 s, then up to fly\nTHR 50% · arm under 5%');
@@ -635,6 +635,10 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
     });
 
     // The arm and disarm frames, from the per-frame record.
+    // Each starts its record and waits three drawn frames (not a fixed time:
+    // CI's software GPU can take over a second a frame) before the arm, so the
+    // record holds frames from before it; and three more before it stops, so it
+    // holds frames from after the arm or disarm.
     const armFrame = (rec) => rec.findIndex((f) => f.armed);
     const flashOn = (f) => f.flash && f.text === 'ARMED' && f.op >= 0.99;
     function checkArm(rec, label, js) {
@@ -662,12 +666,12 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
     await t.test('the arm frame on the js core: ARMED and the arm tone on it (keyboard W); the disarm tone on Space\'s', async () => {
       await pass({ query: 'map=rig&core=js', core: 'js', storage: { quadmathSimInputChoice: 'keyboard' } }, async (a) => {
         await a.click(4, 4);
-        await a.js(`await I.wait(1500); await I.until(() => +getComputedStyle(document.getElementById('toast')).opacity === 0, 6000); I.record(); await I.wait(200); return 1;`);
+        await a.js(`await I.wait(1500); await I.until(() => +getComputedStyle(document.getElementById('toast')).opacity === 0, 6000); I.record(); await I.frames(3); return 1;`);
         await a.hold(true, 'w');
         await a.js(`await I.until(() => I.snap().armed, 4000); await I.wait(300); return 1;`);
         await a.hold(false, 'w');
         await a.key('space');
-        const rec = await a.js(`await I.until(() => !I.snap().armed, 3000); await I.wait(300); return JSON.stringify(I.stopRec());`);
+        const rec = await a.js(`await I.until(() => !I.snap().armed, 3000); await I.wait(300); await I.frames(3); return JSON.stringify(I.stopRec());`);
         assert.equal(rec[0].cues !== null, true, 'the audio unlocked');
         const i = checkArm(rec, 'js keyboard W', true);
         checkDisarm(rec, i, 'js Space', false);
@@ -677,10 +681,10 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
     await t.test('the arm frame on the bf core: ARMED on it, Betaflight\'s beep the tone (a radio\'s raise); the disarm tone on Space\'s, its beeps held off', async () => {
       await pass({ query: 'map=rig', storage: { quadmathSimInputChoice: 'radio' }, pads: [txPad(-1)] }, async (a) => {
         await a.click(4, 4);
-        await a.js(`await I.until(() => I.s.armHelp().ready, 8000); await I.until(() => +getComputedStyle(document.getElementById('toast')).opacity === 0, 6000); I.record(); await I.wait(200); return 1;`);
+        await a.js(`await I.until(() => I.s.armHelp().ready, 8000); await I.until(() => +getComputedStyle(document.getElementById('toast')).opacity === 0, 6000); I.record(); await I.frames(3); return 1;`);
         await a.js(`I.axis(0, 2, -0.4); await I.until(() => I.snap().armed, 4000); await I.wait(500); I.axis(0, 2, -1); return 1;`);
         await a.key('space');
-        const rec = await a.js(`await I.until(() => !I.snap().armed, 3000); await I.wait(500); return JSON.stringify(I.stopRec());`);
+        const rec = await a.js(`await I.until(() => !I.snap().armed, 3000); await I.wait(500); await I.frames(3); return JSON.stringify(I.stopRec());`);
         const i = checkArm(rec, 'bf radio raise', false);
         checkDisarm(rec, i, 'bf Space', true);
       });
@@ -694,16 +698,16 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
           window._touch.read = () => ({ ...stick });
           window._touch.enabled = true;
           await I.wait(1500); await I.until(() => +getComputedStyle(document.getElementById('toast')).opacity === 0, 6000);
-          I.record(); await I.wait(200);
-          stick.t = 0.6; await I.until(() => I.snap().armed, 4000); await I.wait(300); stick.t = 0;
+          I.record(); await I.frames(3);
+          stick.t = 0.6; await I.until(() => I.snap().armed, 4000); await I.wait(300); stick.t = 0; await I.frames(3);
           return JSON.stringify(I.stopRec());`);
         checkArm(rec, 'bf touch raise', false);
       });
       await pass({ query: 'map=rig', storage: { quadmathSimInputChoice: 'keyboard' } }, async (a) => {
         await a.click(4, 4);
-        await a.js(`await I.wait(1500); await I.until(() => +getComputedStyle(document.getElementById('toast')).opacity === 0, 6000); I.record(); await I.wait(200); return 1;`);
+        await a.js(`await I.wait(1500); await I.until(() => +getComputedStyle(document.getElementById('toast')).opacity === 0, 6000); I.record(); await I.frames(3); return 1;`);
         await a.key('space');
-        const rec = await a.js(`await I.until(() => I.snap().armed, 3000); await I.wait(300); return JSON.stringify(I.stopRec());`);
+        const rec = await a.js(`await I.until(() => I.snap().armed, 3000); await I.wait(300); await I.frames(3); return JSON.stringify(I.stopRec());`);
         checkArm(rec, 'bf keyboard Space', false);
       });
     });
