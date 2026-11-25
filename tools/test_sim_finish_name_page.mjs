@@ -41,7 +41,7 @@ import { fileURLToPath } from 'node:url';
 import {
   LEADERBOARD_URL, PHYS_VER, builtinTrackHash, normalizeBuiltinSubmit, lineRunPasses, flightSpikes,
 } from '../sim-retention.js';
-import { fetchBuiltinTracks, PUBLIC_MAPS } from '../sim-tracks.js';
+import { fetchBuiltinTracks, PUBLIC_MAPS, encodeShare, trackLink } from '../sim-tracks.js';
 import { BUILTIN_BOARD_TRACKS } from '../sim-builtin-boards.js';
 import { buildPath } from './coach_rig_autopilot.mjs';
 import { mapWorld } from './coach_rig_pilot.mjs';
@@ -150,13 +150,16 @@ test('the result card in the source: a pause only while it asks, Not now for the
   const submit = extract('maybeSubmitBuiltin');
   assert.ok(submit.indexOf('builtinCheck(body)') < submit.indexOf("'/api/builtin/submit'"), 'checked first');
   assert.match(submit, /if\(!\(opts&&opts\.post\)&&pb&&total>pb&&builtinSent\.has\(sentKey\)\)j=await builtinBoardGet/, 'posted when a best, the first this session, or the card\'s Post; else the place by GET');
-  assert.match(submit, /j\.refused&&j\.status!==429&&!NAME_REFUSALS\.has\(j\.refused\)/, 'a name refused leaves the run to be sent again');
+  assert.match(submit, /if\(j&&\(j\.ok\|\|\(j\.refused&&j\.status!==429\)\)\)builtinSent\.add\(sentKey\);/, 'a refusal is sent; the card\'s Post posts anyway');
+  assert.match(extract('resultPost'), /Promise\.race\(\[postBoardRun\(ask\.run\),new Promise\(\(r\)=>setTimeout\(\(\)=>r\(null\),RESULT_POST_MS\)\)\]\)/, 'a hung post is the board offline');
   assert.match(extract('postBoardRun'), /maybeSubmitBuiltin\(run\.id,run\.total,run\.rec,\{post:true\}\)/);
   assert.match(extract('maybeSubmitTrackBoard'), /j\.refused&&j\.status!==429&&!NAME_REFUSALS\.has\(j\.refused\)/);
   // A flight key held into the field: its repeats type nothing; the keys let go on open.
   assert.match(html, /if\(e\.repeat\)\{e\.preventDefault\(\);return;\}\n    if\(e\.key==='Enter'\)\{e\.preventDefault\(\);resultPost\(\);\}/);
   assert.match(extract('openResultAsk'), /for\(const k of Object\.keys\(keys\)\)keys\[k\]=false;/);
   assert.match(submit, /if\(j&&j\.ok\)countNote\('name'\);/);
+  // The menu opening drops a finish toast's buttons, which sit over it.
+  assert.match(extract('toggleStartMenu'), /if\(toastEl\.classList\.contains\('has-action'\)\)\{clearTimeout\(toastTimer\);toastEl\.style\.opacity=0;toastEl\.classList\.remove\('has-action'\);\}/);
   assert.match(extract('openResultAsk'), /const ok=await boardRunCheck\(run\);[\s\S]*if\(!ok\.ok\)/);
   // Not now: the tab session.
   assert.match(extract('resultLater'), /sessionStorage\.setItem\(NAME_LATER_KEY,'1'\)/);
@@ -350,7 +353,7 @@ async function openPage({ mobile, w, h }) {
   // recorded and answered 204; the rooms Worker and Cloudflare's analytics
   // are refused.
   const worker = { env: { DB: sqliteD1(), ALLOWED_ORIGIN: site } };
-  const pings = [], calls = [];
+  const pings = [], calls = [], replies = [];
   ws.addEventListener('message', async (msg) => {
     let o;
     try { o = JSON.parse(typeof msg.data === 'string' ? msg.data : msg.data.toString()); } catch (e) { return; }
@@ -365,16 +368,20 @@ async function openPage({ mobile, w, h }) {
         return;
       }
       calls.push(request.method + ' ' + path);
+      // hang: a score post never answered (a hung connection).
+      if (worker.hang && request.method === 'POST' && /\/submit$/.test(path)) return;
       const headers = { ...request.headers };
       if (!Object.keys(headers).some((k) => k.toLowerCase() === 'origin')) headers.Origin = site;
       headers['CF-Connecting-IP'] = '203.0.113.7';
       const init = { method: request.method, headers };
       if (request.postData != null) init.body = request.postData;
       const res = await handleLeaderboard(new Request(request.url, init), worker.env);
+      const buf = Buffer.from(await res.arrayBuffer());
+      replies.push({ call: request.method + ' ' + path, status: res.status, body: buf.toString('utf8') });
       await cdp('Fetch.fulfillRequest', {
         requestId, responseCode: res.status,
         responseHeaders: [...res.headers].map(([name, value]) => ({ name, value })),
-        body: Buffer.from(await res.arrayBuffer()).toString('base64'),
+        body: buf.toString('base64'),
       });
     } catch (e) {
       try { await cdp('Fetch.failRequest', { requestId, errorReason: 'Failed' }); } catch (e2) { /* the page is gone */ }
@@ -435,11 +442,12 @@ async function openPage({ mobile, w, h }) {
   // A fresh visitor's page: storage clear but the input choice (no first-run
   // prompt over the race); the Rig Loop picked as the Tracks picker picks it.
   // keep: a later page load of the same browser, its storage as it is.
-  const open = async (input, keep) => {
+  // url: a page of the sim on this site (a #trk= link), else sim.html.
+  const open = async (input, keep, url) => {
     await cdp('Page.navigate', { url: `${site}/robots.txt` });
     await sleep(250);
     if (!keep) await evaluate(`(localStorage.clear(), sessionStorage.clear(), localStorage.setItem('quadmathSimInputChoice', ${JSON.stringify(input)}), true)`);
-    await cdp('Page.navigate', { url: `${site}/sim.html?quality=low` });
+    await cdp('Page.navigate', { url: url ? site + url : `${site}/sim.html?quality=low` });
     let ok = false;
     const t0 = Date.now();
     while (!ok && Date.now() - t0 < 120000) {
@@ -455,8 +463,12 @@ async function openPage({ mobile, w, h }) {
   const flyRig = async (speed, o = {}) => {
     await evaluate(`(window._sim.flyPickedTrack('rig', 'rig-loop'), true)`);
     await until(async () => (await state()).track === 'rig-loop', 10000, 'on the Rig Loop');
+    return flyTrack(rigWaypoints(rig), speed, o);
+  };
+  // The active track flown along wps (metres) to its finish.
+  const flyTrack = async (wps, speed, o = {}) => {
     await sleep(500);
-    await evaluate(`window.__fn.start(${JSON.stringify(rigWaypoints(rig))}, ${speed})`);
+    await evaluate(`window.__fn.start(${JSON.stringify(wps)}, ${speed})`);
     if (o.hold) await keyDown('a', 'KeyA', 65, false);
     const t0 = Date.now();
     let s;
@@ -472,7 +484,7 @@ async function openPage({ mobile, w, h }) {
     const r = await handleLeaderboard(new Request(LEADERBOARD_URL + '/api/builtin/board?track=rig-loop&class=65', { headers: { Origin: site } }), worker.env);
     return (await r.json()).entries;
   };
-  return { cdp, evaluate, key, keyDown, keyUp, size, frames, type, tap, click, state, until, open, flyRig, board, pings, calls, worker, close };
+  return { cdp, evaluate, key, keyDown, keyUp, size, frames, type, tap, click, state, until, open, flyRig, flyTrack, board, pings, calls, replies, worker, site, close };
 }
 
 const skipChrome = (t) => { if (process.env.SKIP_CHROME_BOOT === '1') { t.skip('SKIP_CHROME_BOOT'); return true; } return false; };
@@ -622,6 +634,74 @@ test('desktop, keyboard: a fresh visitor finishes the Rig Loop, names, posts (En
     s = await P.state();
     assert.equal(s.cards, 1, 'no card again: ' + JSON.stringify(s.card));
     assert.equal(P.calls.filter((c) => c === 'POST /api/builtin/submit').length, before, 'nothing posted');
+    // The menu's Pilot name (in flight), then the next finish: posted, no card.
+    await P.key('Escape', 'Escape', 27);
+    await P.until(() => P.evaluate(`!!document.querySelector('#startMenu.open.in-flight')`), 5000, 'the in-flight menu');
+    // The finish toast (Replay/SHARE, over the menu for 5 s) went with the
+    // menu's opening: it took the click meant for the name field.
+    assert.equal(await P.evaluate(`(() => { const t = document.getElementById('toast'); return t.style.opacity + '|' + t.classList.contains('has-action'); })()`), '0|false', 'the finish toast off the menu');
+    await P.click('menuName');
+    await P.until(() => P.evaluate(`!!document.getElementById('nameIn')`), 5000, 'the Pilot name card');
+    await P.click('nameIn');
+    await P.type('Menu Pilot');
+    await P.click('nameSave');
+    s = await P.until(async () => { const x = await P.state(); return x.name === 'Menu Pilot' ? x : null; }, 5000, 'the name saved');
+    await P.click('menuResume');
+    await P.until(async () => !(await P.evaluate(`document.body.classList.contains('menu-open')`)), 5000, 'the menu closed');
+    // Every flight here is the same teleport path, and the Worker refuses a
+    // path that follows another name's stored ghost (COPIED RUN): FirstLap's
+    // goes, so this run is judged as a different pilot's own.
+    await P.worker.env.DB.prepare('DELETE FROM track_ghosts').run();
+    await P.flyRig(4);
+    await P.until(async () => P.calls.filter((c) => c === 'POST /api/builtin/submit').length === before + 1, 15000, 'posted under the menu\'s name');
+    const sent = () => P.replies.filter((r) => r.call === 'POST /api/builtin/submit');
+    const reply = await P.until(async () => sent().length === before + 1 && sent().at(-1), 5000, 'its reply');
+    assert.equal(reply.status, 200, 'taken: ' + reply.body);
+    s = await P.until(async () => { const x = await P.state(); return /ONLINE #\d OF 2/.test(x.lap) ? x : null; }, 15000, 'its place on the lap panel');
+    assert.equal(s.cards, 1, 'no card for it');
+    assert.ok((await P.board()).some((r) => r.name === 'Menu Pilot'), 'on the board');
+  } finally { await P.close(); }
+});
+
+test('desktop: a builder track\'s finish (a #trk= link, no name) asks, posts and lights the row; a hung post says the board is offline and Fly on still flies', { timeout: 10 * 60 * 1000 }, async (t) => {
+  if (skipChrome(t)) return;
+  const P = await openPage({ mobile: false, w: 640, h: 360 });
+  try {
+    // A shared track on the Rig: the Rig Loop's first four gates.
+    const loop = JSON.parse(readFileSync(join(root, 'tracks', 'rig-loop.json'), 'utf8'));
+    const track = { id: 'custom-fnp4gate1', name: 'Desk four', map: 'rig', gates: loop.gates.slice(0, 4), flags: [] };
+    const link = trackLink({ origin: P.site, path: '/sim.html', map: 'rig', code: encodeShare(track) }).replace('?', '?quality=low&').slice(P.site.length);
+    await P.open('keyboard', false, link);
+    await P.until(async () => (await P.state()).track === track.id, 15000, 'on the link\'s track');
+    await P.flyTrack(rigWaypoints(track), 4);
+    let s = await P.until(async () => { const x = await P.state(); return x.card.up && x.card.asking ? x : null; }, 10000, 'the result card');
+    assert.equal(s.card.kind, 'custom');
+    assert.equal(s.title, 'Desk four');
+    await P.type('Desk Pilot');
+    await P.key('Enter', 'Enter', 13);
+    s = await P.until(async () => { const x = await P.state(); return x.card.posted ? x : null; }, 15000, 'posted');
+    assert.match(s.place, /^#1 of 1 · Desk four · 65 mm$/, s.place);
+    assert.equal(s.me.length, 1, 'the row lit: ' + JSON.stringify(s.rows));
+    assert.ok(P.calls.includes('POST /api/track/submit'));
+    assert.ok(P.pings.some((p) => p.event === 'name'), 'the name ping');
+    await P.key('Enter', 'Enter', 13);
+    await P.until(async () => !(await P.state()).card.up, 5000, 'Fly on');
+    // A fresh visitor on the Rig Loop whose post never comes back.
+    P.worker.hang = true;
+    await P.open('keyboard');
+    await P.flyRig(4);
+    await P.until(async () => { const x = await P.state(); return x.card.up && x.card.asking ? x : null; }, 10000, 'the result card');
+    await P.type('No Signal');
+    await P.key('Enter', 'Enter', 13);
+    s = await P.until(async () => { const x = await P.state(); return x.card.posted ? x : null; }, 12000, 'the card gave up on the post');
+    assert.match(s.place, /The board is offline\. Your time is kept on this browser and your name is saved\./, s.place);
+    assert.equal(s.name, 'No Signal');
+    assert.equal(s.card.paused, true);
+    await P.key('Enter', 'Enter', 13);
+    s = await P.until(async () => { const x = await P.state(); return !x.card.up ? x : null; }, 5000, 'Fly on');
+    const c1 = s.clock;
+    await P.until(async () => (await P.state()).clock > c1, 5000, 'the sim runs again');
+    P.worker.hang = false;
   } finally { await P.close(); }
 });
 

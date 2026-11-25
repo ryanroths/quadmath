@@ -6964,7 +6964,10 @@ function toggleStartMenu(force){
   if(!next)leftLaunch=true;
   if(looks)looks.setMenuOpen(next);
   else{el.classList.toggle('open',next);document.body.classList.toggle('menu-open',next);}
-  if(next){panel.classList.remove('open');syncMenuSparks();syncMenuShare();syncMenuGaps();}
+  if(next){panel.classList.remove('open');syncMenuSparks();syncMenuShare();syncMenuGaps();
+    // A finish toast's Replay/SHARE (z-index 30) sits over the menu (22) for
+    // 5 s and takes its taps (the Pilot name field); the menu has its own SHARE.
+    if(toastEl.classList.contains('has-action')){clearTimeout(toastTimer);toastEl.style.opacity=0;toastEl.classList.remove('has-action');}}
 }
 // The pause menu's SHARE: the last finished run, or how to have one.
 function syncMenuShare(){
@@ -10098,9 +10101,10 @@ async function maybeSubmitBuiltin(id,total,rec,opts){
     body.token=issuePilotToken();
     j=await trackBoardFetch('/api/builtin/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),refusal:true});
     // Sent once the Worker answered, taken or refused, but not for the rate
-    // limit, a name it would not take, or no answer: those leave the run to
-    // be sent again.
-    if(j&&(j.ok||(j.refused&&j.status!==429&&!NAME_REFUSALS.has(j.refused))))builtinSent.add(sentKey);
+    // limit or no answer: those leave the run to be sent again. (The result
+    // card's Post, opts.post, posts whatever was sent: a name refused there
+    // is asked again.)
+    if(j&&(j.ok||(j.refused&&j.status!==429)))builtinSent.add(sentKey);
     if(j&&j.ok)countNote('name');
   }
   if(j&&j.ok)noteBuiltinPlace(t,body.frameMm,j);
@@ -10118,6 +10122,7 @@ async function maybeSubmitBuiltin(id,total,rec,opts){
 // weekly's toast, or the builder track's board) shows its place.
 const NAME_LATER_KEY='quadmathSimNameLater';
 const NAME_REFUSALS=new Set(['SET A NAME','BAD NAME','NAME NOT ALLOWED','NAME TAKEN']);
+const RESULT_POST_MS=6000;
 const resultCardEl=document.getElementById('resultCard');
 const rcEl=(id)=>document.getElementById(id);
 let resultAskSeq=0;
@@ -10212,7 +10217,9 @@ async function resultPost(){
   why.textContent='Posting…';
   savePilotName(name);
   let j=null;
-  try{j=await postBoardRun(ask.run);}catch(e){j=null;}
+  // No answer in RESULT_POST_MS (a hung connection) is the board offline:
+  // the card never holds the pilot past it.
+  try{j=await Promise.race([postBoardRun(ask.run),new Promise((r)=>setTimeout(()=>r(null),RESULT_POST_MS))]);}catch(e){j=null;}
   if(resultAsk!==ask)return;
   ask.posting=false;
   rcEl('rcPost').disabled=false;
