@@ -187,7 +187,7 @@ export const HOTKEYS = Object.freeze([
   { keys: 'M', does: 'Sound On/Off', group: 'Camera and sound', legend: true },
   { keys: 'N', does: 'Next Music Track', group: 'Camera and sound', legend: true },
   { keys: '1/2/3', does: 'Angle / Horizon / Acro', group: 'Flying', legend: true },
-  { keys: 'Space', does: 'Arm / Disarm', group: 'Flying', legend: true },
+  { keys: 'Space', does: 'Arm / Disarm (drops it in the air)', group: 'Flying', legend: true },
   { keys: 'H', does: 'Stick HUD', group: 'Camera and sound', legend: true },
   { keys: 'G', does: 'Ghost Replay', group: 'Runs, races and ghosts', legend: true, id: 'legendGhost' },
   { keys: 'K', does: 'Share last run (link)', group: 'Runs, races and ghosts', legend: true },
@@ -348,7 +348,7 @@ export function wantsEasyTurtle(info) {
 export const FIRST_FLIGHT_KEY = 'quadmathSimFirstFlight';
 export const FIRST_FLIGHT_TEXT = 'Throttle up to fly · Full stick to flip back over · Esc for menu';
 export const FIRST_FLIGHT_KEYS_IMG = 'assets/sim-ui/keyboard-layout.svg';
-export const FIRST_FLIGHT_KEYS_ALT = 'Keyboard: W and S throttle, A and D yaw, up and down arrows pitch, left and right arrows roll, Space arm or disarm, R respawn, P new pack, Esc menu.';
+export const FIRST_FLIGHT_KEYS_ALT = 'Keyboard: W and S throttle, A and D yaw, up and down arrows pitch, left and right arrows roll, Space arm or disarm (a disarm in the air drops the quad), R respawn, P new pack, Esc menu.';
 // The card's second line: a new pack when the battery runs low (sim.html
 // newPack), as the input that flies gets one.
 export const FIRST_FLIGHT_PACK_TEXT = Object.freeze({
@@ -825,9 +825,10 @@ export function createFeel(ctx) {
     }
     const hint = document.getElementById('hudArmHint');
     if (hint) {
-      const text = s.armed ? '' : (s.armHint || 'Raise throttle to fly (auto-arm)');
-      hint.textContent = text;
-      hint.classList.toggle('show', !s.armed && !!text);
+      // Armed: flyHint (the keys' W up · S down in Easy mode), or nothing.
+      const text = s.armed ? (s.flyHint || '') : (s.armHint || 'Raise throttle to fly (auto-arm)');
+      if (hint.textContent !== text) hint.textContent = text;
+      hint.classList.toggle('show', !!text);
     }
     const acro = document.getElementById('hudAcro');
     if (acro) {
@@ -844,12 +845,15 @@ export function createFeel(ctx) {
     }
   }
 
+  // body.prompt-open while the card is up: nothing (a toast, the arm hint)
+  // draws over it (sim.html's CSS).
   function hideFirstRun() {
     promptOpen = false;
     if (promptEl) {
       promptEl.classList.remove('show');
       promptEl.setAttribute('aria-hidden', 'true');
     }
+    if (typeof document !== 'undefined' && document.body) document.body.classList.remove('prompt-open');
   }
 
   // Text into the prompt's markup: the five characters markup is made of (as
@@ -862,6 +866,7 @@ export function createFeel(ctx) {
   function showFirstRun(info) {
     if (!promptEl) return;
     promptOpen = true;
+    if (typeof document !== 'undefined' && document.body) document.body.classList.add('prompt-open');
     const has = !!(info && info.hasGamepad);
     const mobile = !!(info && info.mobile);
     const touchy = !!(info && (info.touch || info.mobile));

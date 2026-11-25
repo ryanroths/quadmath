@@ -418,13 +418,10 @@ test('desktop, keyboard: T armed before 30 s does nothing; the offer at 30 s; on
   const at1280 = async (fn) => { await P.size(1280, 720); await sleep(250); await P.frames(); try { return await fn(); } finally { await P.size(640, 360); } };
   try {
     await P.open();
-    // As a visitor: the keyboard on the first-run prompt, Fly, the Rig.
+    // As a visitor: the keyboard on the first-run prompt flies the Rig.
     await P.click('#feelKeys');
-    await sleep(500);
-    await P.click('#menuFly');
-    await sleep(700);
-    await P.click('#menuLayer .fly-map.on');
     await P.until(async () => !(await P.evaluate(`document.body.classList.contains('menu-open')`)), 10000, 'flying');
+    await P.until(() => P.evaluate(`window._sim.map() === 'rig'`), 10000, 'The Rig');
     await P.cdp('Page.bringToFront');
     const space = () => P.key(' ', 'Space', 32);
     const tKey = () => P.key('t', 'KeyT', 84);
@@ -580,15 +577,12 @@ test('desktop, the 85 on classic physics: the offer for the Warehouse at 30 s; T
   const P = await openPage({ mobile: false, w: 640, h: 360 });
   try {
     await P.open();
-    await P.click('#feelKeys');
-    await sleep(500);
     // The 85 (Your build's drone type), before the first flight: classic
-    // physics (the js core), its class's map The Warehouse.
+    // physics (the js core), its class's map The Warehouse. Then the keyboard
+    // on the first-run prompt, which flies the class's map.
     await P.evaluate(`(() => { const sel = document.getElementById('droneType'); sel.value = 'whoop85'; sel.dispatchEvent(new Event('change')); return true; })()`);
     await P.until(() => P.evaluate(`window._sim.core() === 'js'`), 15000, 'the 85 on the js core');
-    await P.click('#menuFly');
-    await sleep(700);
-    await P.click('#menuLayer .fly-map.on');
+    await P.click('#feelKeys');
     await P.until(async () => !(await P.evaluate(`document.body.classList.contains('menu-open')`)), 10000, 'flying');
     await P.until(() => P.evaluate(`window._sim.map() === 'depot'`), 10000, 'The Warehouse');
     await P.cdp('Page.bringToFront');

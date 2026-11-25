@@ -566,6 +566,18 @@
   #feelPrompt{position:fixed;inset:0;z-index:26;display:none;align-items:center;justify-content:center;
     padding:32px;background:rgba(8,10,14,.45)}
   #feelPrompt.show{display:flex}
+  /* Nothing over the No controller card (sim-feel.js showFirstRun). */
+  body.prompt-open #toast,body.prompt-open #hudArmHint{visibility:hidden}
+  /* The launch buttons until the module has wired them (menuWired): each keeps
+     its label, reads Loading…, and looks inert; a click on one is kept
+     (the boot watchdog's script) and done once they are wired. */
+  #startMenu.wait .menu-card button.menu-launch{opacity:.45;cursor:progress;box-shadow:none;filter:grayscale(.6)}
+  #startMenu.wait .menu-card button.menu-launch::after{content:" \00b7  Loading\2026";font-weight:500;opacity:.8}
+  #startMenu.wait .menu-card button.menu-launch.picked{opacity:.75;outline:1px dashed var(--orange);outline-offset:2px}
+  /* No WebGL (the boot watchdog's check): the reason, and no buttons. */
+  #noWebgl{display:none;font-size:15px;line-height:1.5;color:var(--txt)}
+  html.no-webgl #noWebgl{display:block}
+  html.no-webgl #startMenu .menu-card button,html.no-webgl #startMenu .menu-lead,html.no-webgl #startMenu .menu-quality{display:none}
   /* Mode 2: DOM order is LEFT (yaw/throttle) then RIGHT (roll/pitch). Do not
      row-reverse — that painted throttle on the visual right stick. */
   #feelHud{position:fixed;right:16px;bottom:86px;z-index:12;display:flex;align-items:flex-end;gap:10px;
@@ -747,10 +759,11 @@
 </head>
 <body class="menu-open">
 <canvas id="c"></canvas>
-<div id="startMenu" class="open">
+<div id="startMenu" class="open wait">
   <div class="menu-card">
     <div class="menu-brand">QuadMath</div>
     <h1>Sim</h1>
+    <p id="noWebgl">This sim needs WebGL, and this browser has it turned off or does not have it. Turn on hardware acceleration in the browser's settings, or open the sim in a current Chrome, Edge, Firefox or Safari.</p>
     <!-- One card, two screens: the launch screen (menu-launch: Fly, Daily,
          Boards, Tune, Controls) until the pilot first leaves it, then the
          in-flight menu (menu-flight) on Esc or MENU. dev-only shows with
@@ -758,13 +771,13 @@
     <p class="menu-lead menu-launch">Browser FPV whoop sim. Fly is free flight — no gates, no timer. In flight, Esc or MENU opens tracks, coach, the track builder and replays. Paste your Betaflight rates. No install.</p>
     <p class="menu-tracks menu-launch">In flight, MENU opens tracks, coach, the track builder and replays.</p>
     <p class="menu-lead menu-flight">Paused. Opening the menu ends a race run. Resume (or Esc) flies on; Home goes back to the start screen.</p>
-    <button class="primary menu-launch" id="menuFly">Fly</button>
+    <button class="primary menu-launch" id="menuFly" aria-disabled="true">Fly</button>
     <button class="primary menu-flight" id="menuResume">Resume</button>
     <button class="menu-flight" id="menuPack">New pack [P]</button>
     <button class="menu-hide" id="menuFreestyle">Freestyle</button>
-    <button class="menu-launch" id="menuDaily">Daily</button>
+    <button class="menu-launch" id="menuDaily" aria-disabled="true">Daily</button>
     <button class="menu-launch dev-only" id="menuDailyLine">Daily Line</button>
-    <button class="menu-launch" id="menuBoards">Boards</button>
+    <button class="menu-launch" id="menuBoards" aria-disabled="true">Boards</button>
     <button class="menu-flight" id="menuTracks">Tracks</button>
     <button class="menu-flight" id="menuCoach">Coach</button>
     <button class="menu-flight" id="menuBuilder">Track builder</button>
@@ -780,8 +793,8 @@
     <button class="menu-flight" id="menuControlsFlight">Controls</button>
     <button class="menu-flight" id="menuRecalib">Recalibrate</button>
     <button class="menu-hide" id="menuWhoop">Whoop</button>
-    <button class="menu-launch" id="menuTune">Tune</button>
-    <button class="menu-launch" id="menuControls">Controls</button>
+    <button class="menu-launch" id="menuTune" aria-disabled="true">Tune</button>
+    <button class="menu-launch" id="menuControls" aria-disabled="true">Controls</button>
     <button class="menu-launch dev-only" id="menuHowTo">How to</button>
     <button class="menu-flight" id="menuHome">Home</button>
     <div class="menu-quality menu-launch dev-only" id="qualityBtns">
@@ -1257,6 +1270,36 @@
       hint.classList.remove('hide');
     }
   }
+  // No WebGL: the module would die making the renderer and leave the launch
+  // menu up with nothing behind it. Say so at once, plainly (#noWebgl), with
+  // the buttons gone. One throwaway context, let go at once.
+  var gl=null;
+  try{
+    var probe=document.createElement('canvas');
+    gl=probe.getContext('webgl2')||probe.getContext('webgl');
+    var lose=gl&&gl.getExtension('WEBGL_lose_context');
+    if(lose)lose.loseContext();
+  }catch(e){gl=null;}
+  if(!gl){
+    reported=true;
+    document.documentElement.classList.add('no-webgl');
+    var sm=document.getElementById('startMenu');
+    if(sm)sm.classList.remove('wait');
+  }
+  // The launch buttons before the module has wired them (#startMenu.wait): a
+  // click is kept (window.__menuEarly, the button's id) and done once they are
+  // (sim.html menuWired), or once the No controller card is answered.
+  var menu=document.getElementById('startMenu');
+  if(menu)menu.addEventListener('click',function(e){
+    if(!menu.classList.contains('wait'))return;
+    var b=e.target&&e.target.closest?e.target.closest('button.menu-launch'):null;
+    if(!b)return;
+    e.preventDefault();e.stopImmediatePropagation();
+    var was=window.__menuEarly&&document.getElementById(window.__menuEarly);
+    if(was)was.classList.remove('picked');
+    window.__menuEarly=b.id||null;
+    b.classList.add('picked');
+  },true);
   // capture phase — resource load errors don't bubble
   window.addEventListener('error',function(e){
     if(e.target&&e.target.tagName==='SCRIPT')fail('engine failed to load — check your connection and reload.');
@@ -1301,8 +1344,9 @@ import {
   loadThreeD, saveThreeD, mapThrottle3d, throttleSafeToArm,
   parseThreeDQuery, runCountsForBoards, throttleHudText,
   throttleCollective, armHintText, stepEasyArm, isLanded, EASY_ARM_HOLD_S,
+  stepKeysHover, keysHoverSeed, KEYS_HINT,
   sticksUnsafe, stepThrottleWatch, controllerArmHelp, RADIO_CENTRE_TOL, PAD_CENTRE_TOL,
-} from "./sim-3d.js?v=5b104f46762e";
+} from "./sim-3d.js?v=878163602740";
 import {
   WHOOP_KEY, PHYSICS_VER, BOUNCE_MAPS,
   normalizeWhoop, loadWhoop, saveWhoop, whoopScale, whoopGroundK,
@@ -1368,7 +1412,7 @@ import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FL
   loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT,FIRST_FLIGHT_PACK_TEXT,
   loadStickOverlay,saveStickOverlay,stickOverlayOn,createStickOverlay,STICK_OVERLAY_PHONE,
   SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText,
-  legendHtml,keysCardHtml} from "./sim-feel.js?v=b813a85bf61c";
+  legendHtml,keysCardHtml} from "./sim-feel.js?v=9dee7320ddb5";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -1507,8 +1551,11 @@ function countKbd(){
 // and clear of whatever is under it. The bf plant reads airborne with the quad
 // still on the floor at 30% throttle (the Air65 on the Rig, floor contact,
 // clearance 0), so the flag alone counted idling on the ground as flying.
+// Nor against a box (the bf core's contactFlags bit 1): pinned to a ceiling at
+// full throttle read airborne, 6 m clear. A wall or a shelf touched in flight
+// stops the count for that moment too. The js core has no contact flags.
 const AIR_CLEARANCE_M=0.04;
-function inTheAir(){return !!cs.airborne&&cs.clearance>AIR_CLEARANCE_M;}
+function inTheAir(){return !!cs.airborne&&cs.clearance>AIR_CLEARANCE_M&&!((cs.contactFlags|0)&2);}
 // arm and flew30, from each step of the core: the first arm, then 30 s of sim
 // time armed and in the air (ms: the sim time this step ran).
 let countAirMs=0;
@@ -5106,6 +5153,25 @@ function nudgeCam(dir){
 let kbThrottle=0,gpConnected=false,gpName='';
 let kbLoadWait=false;  // W went down while Betaflight loaded: the throttle stays at rest until it is let go
 let kbFromRest=false;  // disarmed, the keys' throttle has risen only from exactly the bottom (Easy arm hold)
+// The keys' hover spring (sim-3d.js stepKeysHover), armed in Easy mode, 2D,
+// Angle or Horizon: no key the hover, W up, S down. Acro and 3D keep the
+// keys' own throttle. The hover it reads is kept per core and class for the
+// page load (keysHoverSeen); before any reading, the class's measured seed.
+let keysHover={phase:'idle'};
+const keysHoverSeen=new Map();
+function keysSpringOn(){return easyMode()&&!threeD&&flightMode!=='acro';}
+function keysHoverStep(dt){
+  const key=core.kind+':'+droneType;
+  if(keysHover.key!==key)keysHover={phase:keysHover.phase,key,hover:keysHoverSeen.get(key)};
+  const speed=Math.hypot(cs.velocity.x,cs.velocity.y,cs.velocity.z);
+  const omega=Math.hypot(cs.omega.x,cs.omega.y,cs.omega.z);
+  const out=stepKeysHover(keysHover,{dt,w:!!keys['w']&&!kbLoadWait,s:!!keys['s'],t:kbThrottle,
+    clearance:cs.clearance,landed:isLanded({clearanceM:cs.clearance,speed,omega}),upZ:bodyUpZ(cs.quaternion),vz:cs.velocity.z,
+    twr:cs.twr,contact:cs.contactFlags,crashed:simClockMs-easyCrashAt<EASY_CRASH_MEMORY_MS,seed:keysHoverSeed(core.kind,droneType)});
+  keysHover=Object.assign(out.state,{key});
+  keysHoverSeen.set(key,out.state.hover);
+  return out.t;
+}
 // A roll or pitch arrow down at the last poll (readInput): 1 while any is,
 // opposite arrows together too (their stick is centred, but neither key is
 // up); 0 with none or off the keyboard. The turtle's stick hold (pollInput)
@@ -5271,7 +5337,7 @@ function setInputChoice(kind){
     kbFromRest=!threeD;
     if(kind==='touch')setFlightMode(defaultFlightMode(),false);
     enableTouchLayer(kind==='touch');
-    toast(kind==='touch'?'TOUCH STICKS — THROTTLE UP TO FLY':'KEYBOARD — HOLD W TO FLY');
+    toast(kind==='touch'?'TOUCH STICKS — THROTTLE UP TO FLY':'KEYBOARD');
   }else{
     padsAside.clear();
     if(feel)feel.saveInputChoice('radio');
@@ -5697,10 +5763,16 @@ function readInput(dt){
     const rest=threeD?0.5:0,disarmed=!coreArmed();
     if(!keys['w'])kbLoadWait=false;
     else if(disarmed&&!kbLoadWait&&bfLoadPending()){kbLoadWait=true;bfArmHeld=droneType;toast(BF_LOADING_TOAST,{ms:2400});}
-    if(keys['w']&&!kbLoadWait)kbThrottle+=1.4*dt;
-    if(keys['s'])kbThrottle-=1.4*dt;
-    kbThrottle=THREE.MathUtils.clamp(kbThrottle,0,1);
-    if(disarmed&&(!keys['w']||kbLoadWait))kbThrottle=rest;
+    // Easy mode, armed: the hover spring (keysHoverStep). Otherwise W and S
+    // move the throttle 1.4 a second and it stays where they leave it.
+    if(!disarmed&&keysSpringOn())kbThrottle=keysHoverStep(dt);
+    else{
+      keysHover.phase='idle';
+      if(keys['w']&&!kbLoadWait)kbThrottle+=1.4*dt;
+      if(keys['s'])kbThrottle-=1.4*dt;
+      kbThrottle=THREE.MathUtils.clamp(kbThrottle,0,1);
+      if(disarmed&&(!keys['w']||kbLoadWait))kbThrottle=rest;
+    }
     // A raise from exactly the bottom, disarmed: Easy mode's arm hold is met
     // (tickEasyArm). The hold guards a radio's throttle left up; the keys'
     // throttle is at the bottom until W.
@@ -10869,7 +10941,8 @@ function loop(now){
     if(feel){
       state.stickT=stick.t;
       feel.updateHud({stick,battV,battOn:CFG.battSimOn||cs.kind==='bf',mode:cs.flightMode,armed:cs.armed,threeD,thrText:throttleHudText(stick.t,threeD),quad:flyingQuadName(),
-        armHint:bfLoadPending()?BF_LOADING_HINT:armHelpNow()});
+        armHint:bfLoadPending()?BF_LOADING_HINT:armHelpNow(),
+        flyHint:stickInputKind()==='keyboard'&&keysSpringOn()?KEYS_HINT:''});
       syncArmCal();
       feel.tickTutorial(state,dt,cs.armed);
       const upZ=bodyUpZ(cs.quaternion);
@@ -11106,11 +11179,52 @@ function bootTouchLayer(){
   const choice=feel?feel.loadInputChoice():null;
   enableTouchLayer(shouldEnableTouch({inputChoice:choice,mobile:mobileHint,hasGamepad:gpConnected,gamepadConnected:gpConnected}));
 }
+// ---------- The launch screen, first seconds ----------
+// Its buttons read Loading… until wireLooksUI has wired them (menuWired); a
+// click on one before that (window.__menuEarly, kept by the boot watchdog's
+// script) is done then, or once the No controller card is answered.
+// firstVisitCard: that card came up at boot (no input picked yet in this
+// browser). Fly with keyboard there flies at once, on the pad: the class's map
+// (startFreestyle: nothing flown yet, so classMap, the Rig on the 65), unless
+// the visit came by a link that flies something (BOOT_LINKED) or an early
+// click asked for something else.
+let firstVisitCard=false;
+let menuEarlyPending=null;
+const BOOT_LINKED=(()=>{try{const q=new URLSearchParams(location.search);
+  return ['map','track','build','builder','mode','preset','rates','drill','3d','daily','dailyline','weekly','room','spark','secret'].some(k=>q.get(k));
+}catch(e){return false;}})();
+function launchScreenUp(){
+  return document.body.classList.contains('menu-open')&&!leftLaunch&&!BOOT_LINKED;
+}
+function menuWired(){
+  const sm=document.getElementById('startMenu');
+  if(sm)sm.classList.remove('wait');
+  document.querySelectorAll('#startMenu button.menu-launch').forEach(b=>{b.removeAttribute('aria-disabled');b.classList.remove('picked');});
+  const id=window.__menuEarly;
+  window.__menuEarly=null;
+  if(!id)return;
+  if(feel&&feel.promptOpen)menuEarlyPending=id;
+  else menuEarlyClick(id);
+}
+function menuEarlyClick(id){
+  const b=id&&document.getElementById(id);
+  if(b&&launchScreenUp())b.click();
+}
+// The card answered (keyboard or touch sticks): the early click, if any; on a
+// first visit, the keyboard flies the Rig (an early Fly too: that is its Fly).
+function afterFirstRunCard(kind){
+  const early=menuEarlyPending;
+  menuEarlyPending=null;
+  const first=firstVisitCard;
+  firstVisitCard=false;
+  if(first&&kind==='keyboard'&&launchScreenUp()&&(!early||early==='menuFly')){startFreestyle();return;}
+  if(early)menuEarlyClick(early);
+}
 feel=createFeel({
   THREE,scene,toast,decorateGate,LIGHTING,
   onCalibrate(){sessionLive=true;toggleStartMenu(false);startCalib();enableTouchLayer(false);},
   onRadio(){flyWithRadio();if(gpConnected)announcePlugAndFly(activePad()||{id:gpName});else toast('PLUG A RADIO — USB JOYSTICK');},
-  onKeyboard(){countKbd();toast('KEYBOARD — HOLD W TO FLY');enableTouchLayer(false);},
+  onKeyboard(){countKbd();toast('KEYBOARD');enableTouchLayer(false);afterFirstRunCard('keyboard');},
   onTouch(){
     if(gpConnected){
       toast('RADIO CONNECTED — TOUCH OFF');
@@ -11118,6 +11232,7 @@ feel=createFeel({
       return;
     }
     setFlightMode(defaultFlightMode(),false);toast('TOUCH STICKS — THROTTLE UP TO FLY');enableTouchLayer(true);
+    afterFirstRunCard('touch');
   },
   onToggleAcro(){setFlightMode(toggleAcro(qp.flightMode||flightMode));},
   onToggleThreeD(){setThreeD(!threeD);},
@@ -11196,7 +11311,7 @@ document.getElementById('ratePreset').onchange=function(){
 // detectMobile only — Chrome desktop ontouchstart/maxTouchPoints must not
 // auto-enable touch and steal a TX16S before the first stick wiggle.
 const touchFirst=!!mobileHint;
-feel.maybeFirstRun({hasGamepad:gpConnected,gpName,mobile:mobileHint,touch:touchFirst});
+firstVisitCard=!!feel.maybeFirstRun({hasGamepad:gpConnected,gpName,mobile:mobileHint,touch:touchFirst});
 bootTouchLayer();
 pickGamepad();
 bootTouchLayer();
@@ -11206,6 +11321,7 @@ selectCore();
 window._touch=touchCtl;
 wireLooksUI();
 wireBuilderUI();
+menuWired();
 customTracks=loadCustomTracks();
 issuePilotToken();
 try{
