@@ -21,22 +21,6 @@
      is listed in connect-src. Tested by tools/test_sim_csp.mjs. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self' data: blob: https://cdn.jsdelivr.net https://sim-leaderboard.ryan-roths.workers.dev https://sim-rooms.ryan-roths.workers.dev wss://sim-rooms.ryan-roths.workers.dev https://cloudflareinsights.com http://localhost:* https://localhost:* ws://localhost:* wss://localhost:* http://127.0.0.1:* https://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:*; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <script src="sim-csp.js?v=8eed1de64e22"></script>
-<script>
-// The launch buttons until the module wires them (#startMenu.wait): a click
-// on one is kept (window.__menuEarly, the button's id; marked .picked) and
-// done once they are (menuWired), or once the No controller card is answered.
-// On the document, from the head: on a slow load the menu paints before any
-// script below it has arrived (the boot watchdog's came too late on CI).
-document.addEventListener('click',function(e){
-  var b=e.target&&e.target.closest?e.target.closest('#startMenu.wait button.menu-launch'):null;
-  if(!b)return;
-  e.preventDefault();e.stopImmediatePropagation();
-  var was=window.__menuEarly&&document.getElementById(window.__menuEarly);
-  if(was)was.classList.remove('picked');
-  window.__menuEarly=b.id||null;
-  b.classList.add('picked');
-},true);
-</script>
 <title>FPV Whoop Simulator in Your Browser | QuadMath</title>
 <meta name="description" content="Free browser FPV sim that flies your own Betaflight rates. Acro and angle, race courses, ghost replay, TX16S/EdgeTX support. No download.">
 <meta name="keywords" content="FPV simulator, browser FPV sim, free drone simulator, Betaflight rates simulator, tiny whoop simulator, FPV practice">
@@ -772,6 +756,22 @@ document.addEventListener('click',function(e){
     .menu-layer.daily-line button{margin-top:8px}
   }
 </style>
+<script>
+// The launch buttons until the module wires them (#startMenu.wait): a click
+// on one is kept (window.__menuEarly, the button's id; marked .picked) and
+// done once they are (menuWired), or once the No controller card is answered.
+// On the document, from the head: on a slow load the menu paints before any
+// script below it has arrived (the boot watchdog's came too late on CI).
+document.addEventListener('click',function(e){
+  var b=e.target&&e.target.closest?e.target.closest('#startMenu.wait button.menu-launch'):null;
+  if(!b)return;
+  e.preventDefault();e.stopImmediatePropagation();
+  var was=window.__menuEarly&&document.getElementById(window.__menuEarly);
+  if(was)was.classList.remove('picked');
+  window.__menuEarly=b.id||null;
+  b.classList.add('picked');
+},true);
+</script>
 </head>
 <body class="menu-open">
 <canvas id="c"></canvas>
