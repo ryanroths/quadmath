@@ -317,6 +317,16 @@ const WATCH = String.raw`(() => {
   }, 50);
 })()`;
 
+// From the first document on: every click the page gets, where and on what,
+// and when (before the page's own listeners: registered first).
+const CLICKLOG = String.raw`(() => {
+  const L = window.__clickLog = [];
+  document.addEventListener('click', (e) => {
+    const t = e.target, b = t && t.closest ? t.closest('button') : null;
+    L.push({ at: Math.round(performance.now()), x: Math.round(e.clientX), y: Math.round(e.clientY), target: t ? (t.id || t.tagName) : null, button: b ? b.id || b.tagName : null });
+  }, true);
+})()`;
+
 // In the page: the flight as the novice and the checks read it; the air time
 // as flew30 counts it (armed, the core's airborne, 4 cm clear, no box touched),
 // added up on the sim clock; the crashes.
@@ -392,6 +402,7 @@ test('keyboard first flights in Chrome: the hover spring flown by a novice, the 
       await cdp(ws, 'Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
       if (process.env.SIM_CPU_THROTTLE) await cdp(ws, 'Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
       if (opts.watch) await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: WATCH });
+      await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: CLICKLOG });
       await cdp(ws, 'Page.navigate', { url: `http://127.0.0.1:${port}/robots.txt` });
       await sleep(300);
       await evaluate(ws, `(() => { localStorage.clear(); const seed = ${JSON.stringify(opts.storage || {})}; for (const k of Object.keys(seed)) localStorage.setItem(k, seed[k]); return true; })()`);
@@ -676,9 +687,22 @@ test('keyboard first flights in Chrome: the hover spring flown by a novice, the 
       assert.equal(b.aria, 'true');
       assert.match(b.after, /Loading/, 'it reads Loading…');
       assert.ok(b.opacity < 0.6 && b.cursor === 'progress', 'and looks it');
-      await api.click(b.x, b.y);
-      const kept = await api.raw(`({ early: window.__menuEarly, picked: document.getElementById(${JSON.stringify(id)}).classList.contains('picked'), layer: document.getElementById('menuLayer').classList.contains('show') })`);
-      assert.equal(kept.early, id, 'the click kept');
+      // The card moves while it loads (the fonts, the stylesheet): clicked
+      // where the button is, on two reads 50 ms apart, as a visitor clicks
+      // what is there.
+      let at = null;
+      for (let i = 0; i < 60 && !at; i++) {
+        at = await api.raw(`new Promise((res) => { const where = () => { const e = document.getElementById(${JSON.stringify(id)}), r = e.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+          const hit = document.elementFromPoint(x, y); return { x, y, on: !!(hit && (hit === e || e.contains(hit))) }; };
+          const a = where(); setTimeout(() => { const c = where(); res(a.on && c.on && a.x === c.x && a.y === c.y ? c : null); }, 50); })`);
+      }
+      assert.ok(at, id + ' still under its own centre');
+      await api.click(at.x, at.y);
+      // Kept once the page has handled the click (a page still parsing handles it late).
+      const kept = await api.raw(`new Promise((res) => { const t0 = performance.now(); const f = () => { if (window.__menuEarly || performance.now() - t0 > 2000) res({ early: window.__menuEarly, picked: document.getElementById(${JSON.stringify(id)}).classList.contains('picked'),
+        layer: document.getElementById('menuLayer').classList.contains('show'), clicks: window.__clickLog, wait: document.getElementById('startMenu').classList.contains('wait'), at: Math.round(performance.now()) }); else setTimeout(f, 20); }; f(); })`);
+      console.log(id + ' clicked: ' + JSON.stringify({ moved: at.y !== b.y ? { from: b.y, to: at.y } : null, ...kept }));
+      assert.equal(kept.early, id, 'the click kept ' + JSON.stringify(kept));
       assert.equal(kept.picked, true, 'and marked');
       assert.equal(kept.layer, false, 'nothing done yet');
       return b;
