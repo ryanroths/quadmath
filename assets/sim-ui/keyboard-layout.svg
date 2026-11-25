@@ -27,7 +27,8 @@
   <rect class="k" x="30" y="176" width="52" height="38" rx="7"/><text class="c" x="56" y="201">Esc</text>
   <text class="d" x="90" y="200">menu</text>
   <rect class="k" x="150" y="176" width="150" height="38" rx="7"/><text class="c" x="225" y="201">Space</text>
-  <text class="d" x="308" y="200">arm / disarm</text>
+  <text class="d" x="308" y="196">arm / disarm</text>
+  <text class="d" x="308" y="211">drops it in the air</text>
   <rect class="k" x="410" y="176" width="38" height="38" rx="7"/><text class="c" x="429" y="201">R</text>
   <text class="d" x="456" y="200">respawn</text>
 </svg>

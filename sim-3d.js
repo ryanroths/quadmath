@@ -217,6 +217,116 @@ export function stepEasyArm(state, sample) {
   return { state: next, arm, disarm: false, reason: null };
 }
 
+// ---------- The keyboard's hover spring (Easy mode) ----------
+// On the keys in Easy mode (2D, Angle or Horizon), armed: no key holds the
+// hover throttle, W holds hover + KEYS_CLIMB, S hover - KEYS_SINK, and the
+// throttle eases to that at KEYS_SLEW a second. A keyboard has no stick to
+// leave where it is: on the old keys a W ramped the throttle 0 to 100% in
+// 0.7 s and it stayed there when let go, so a first flight met the ceiling
+// a second after lift-off. Disarmed, nothing here: the keys arm as before.
+// The first W after an arm lifts to a hover (KEYS_LIFT_M clear of the floor)
+// even as a tap; Space-armed on the pad, the quad idles until that W. At rest on the
+// floor with W up the throttle goes to 0, so Easy mode's landed and crash
+// disarms come as they do. Contact sizes (Air65, the Rig, 2026-11-25): the
+// ceiling at 7.7 m/s (hover + 0.29 held from the floor to 6 m) and the floor
+// at 6.2 m/s (a 6 m drop at 0) latch no crash; 10.8 m/s into the ceiling did.
+export const KEYS_CLIMB = 0.30;
+export const KEYS_SINK = 0.30;
+export const KEYS_SLEW = 2.5;              // throttle a second
+export const KEYS_LIFT_M = 0.3;
+// No key is a hover, not only the hover throttle: at thrust-to-weight 1 the
+// quad keeps whatever vertical speed it has, and a novice reacting 400 ms
+// late rode it from 0.5 m to 5.3 m and back at 6 m/s (2026-11-25). So with
+// no key the throttle takes KEYS_DAMP off per m/s up (adds it per m/s down):
+// a rise or a fall stops in about a third of a second. W and S are plain.
+export const KEYS_DAMP = 0.06;             // throttle per m/s
+// The hover throttle. Thrust goes as the motor output squared, so at a
+// throttle t with thrust-to-weight twr the hover is about t / sqrt(twr):
+// exact at the hover itself (twr 1), whatever the throttle curve, and near it
+// off it (0.1 off the hover: Air65 0.01, Fractal75 0.045, the js core's 85
+// 0.017). So it is read only while no key is held, the quad upright and clear
+// of everything, and the throttle settled on the estimate; each reading is a
+// step of a fixed point that lands on the hover. twr is the core's own
+// thrust over weight: the battery's sag and the build's mass are in it.
+// Measured hovers (vz 0 for 2 s at 1.5 m): Air65 0.407 (0.413 after 60 s),
+// Fractal75 0.232 (0.246), the js core's 85 0.356 (0.375), its 65 0.307.
+// The seeds are those, until a flight has read the quad's own.
+export const KEYS_HOVER_SEED = Object.freeze({
+  bf: Object.freeze({ whoop65: 0.41, whoop75: 0.23 }),
+  js: Object.freeze({ whoop65: 0.31, whoop75: 0.31, whoop85: 0.36 }),
+});
+export const KEYS_HOVER_SEED_ANY = 0.35;
+// The keys' hint in Easy mode, disarmed on the pad and in the air.
+export const KEYS_HINT = 'W up · S down';
+const KEYS_HOVER_TAU = 0.3;                // s
+const KEYS_HOVER_SETTLED_S = 0.15;
+const KEYS_HOVER_NEAR = 0.06;
+const KEYS_HOVER_MIN = 0.08, KEYS_HOVER_MAX = 0.9;
+
+export function keysHoverSeed(core, type) {
+  const c = KEYS_HOVER_SEED[core];
+  const v = c && c[type];
+  return Number.isFinite(v) ? v : KEYS_HOVER_SEED_ANY;
+}
+
+export function hoverFromTwr(t, twr) {
+  if (!(t > 0) || !(twr > 0.05)) return null;
+  return t / Math.sqrt(twr);
+}
+
+// One input sample (every 4 ms), armed. state: { t, hover, phase, settledS },
+// {} to start (phase 'idle': armed, no W yet). sample: dt (s), w, s (held),
+// t (the throttle now), clearance (m), landed (isLanded), upZ (the body's up
+// axis, world z), vz (m/s, up), twr, contact (the core's contactFlags: a box,
+// the ceiling among them, is bit 1), seed (the hover before any reading).
+// Returns the next state and the throttle.
+export function stepKeysHover(state, sample) {
+  const s = sample || {};
+  const was = state || {};
+  const dt = Number.isFinite(s.dt) && s.dt > 0 ? s.dt : 0;
+  const seed = Number.isFinite(s.seed) ? s.seed : KEYS_HOVER_SEED_ANY;
+  const next = {
+    t: Number.isFinite(s.t) ? s.t : (Number.isFinite(was.t) ? was.t : 0),
+    hover: Number.isFinite(was.hover) ? was.hover : seed,
+    phase: was.phase || 'idle',
+    settledS: +was.settledS || 0,
+  };
+  const w = !!s.w, down = !!s.s && !w;
+  const upZ = Number.isFinite(s.upZ) ? s.upZ : 1;
+  const clear = Number.isFinite(s.clearance) ? s.clearance : 0;
+  // Idle is for the pad: taken over in the air (Acro to Angle, a class's
+  // core back), it flies on at the hover.
+  if (next.phase === 'idle' && clear > KEYS_LIFT_M) next.phase = 'fly';
+  if (next.phase === 'idle' && w) next.phase = 'lift';
+  if (next.phase === 'lift' && (down || clear > KEYS_LIFT_M)) next.phase = 'fly';
+  // Tilted, the thrust's vertical part is upZ of it: thrust goes as t squared.
+  // Not against a box: a quad wedged on a wall at 70 degrees held there on
+  // the extra throttle; without it, it slides down and lands.
+  const boxed = !!((s.contact | 0) & 2);
+  const level = boxed ? 1 : Math.sqrt(clamp(upZ, 0.5, 1));
+  const vz = Number.isFinite(s.vz) ? s.vz : 0;
+  let want;
+  if (next.phase === 'idle') want = 0;
+  else if (next.phase === 'lift') want = (next.hover + KEYS_CLIMB) / level;
+  else if (s.landed && !w) want = 0;
+  else if (w) want = (next.hover + KEYS_CLIMB) / level;
+  else if (down) want = (next.hover - KEYS_SINK) / level;
+  else want = next.hover / level - KEYS_DAMP * vz;
+  want = clamp(want, 0, 1);
+  const step = KEYS_SLEW * dt;
+  next.t = clamp(next.t + clamp(want - next.t, -step, step), 0, 1);
+  // The hover, read while it is flown: no key, upright, clear, settled on it.
+  const est = hoverFromTwr(next.t, s.twr);
+  const reading = next.phase === 'fly' && !w && !down && !s.landed && upZ > 0.9 && clear > 0.1 &&
+    !boxed && est != null && Math.abs(next.t - next.hover / level) < KEYS_HOVER_NEAR &&
+    Math.abs(want - next.t) < 0.01;
+  next.settledS = reading ? next.settledS + dt : 0;
+  if (reading && next.settledS >= KEYS_HOVER_SETTLED_S - 1e-9) {
+    next.hover = clamp(next.hover + (est - next.hover) * (1 - Math.exp(-dt / KEYS_HOVER_TAU)), KEYS_HOVER_MIN, KEYS_HOVER_MAX);
+  }
+  return { state: next, t: next.t };
+}
+
 export function armHintText(threeDOrOpts, extra) {
   const o = (threeDOrOpts && typeof threeDOrOpts === 'object')
     ? threeDOrOpts
@@ -236,11 +346,12 @@ export function armHintText(threeDOrOpts, extra) {
     return o.low ? 'Thumb on the ' + o.touch + ' stick, slide up to fly' : Stick + down + ' 1 s, then slide up to fly';
   }
   // The keyboard (keys): W is the throttle, at the bottom (low) until W. In
-  // Easy mode W arms; outside it Space does. Not low only while W is held
-  // and nothing has armed (the page puts a disarmed keys throttle back).
+  // Easy mode W arms and lifts (the hover spring, stepKeysHover); outside it
+  // Space does. Not low only while W is held and nothing has armed (the page
+  // puts a disarmed keys throttle back).
   if (o.keys) {
     const base = o.threeD ? 'W/S to centre' : 'S to the bottom';
-    if (o.easy && o.autoArm !== false) return o.low ? 'Hold W to fly' : base + ', then W';
+    if (o.easy && o.autoArm !== false) return o.low ? KEYS_HINT : base + ', then W';
     return o.low ? 'Space to arm, then W to fly' : base + ', then Space';
   }
   // A controller in Easy mode: ready once the 1 s hold is done (the next
