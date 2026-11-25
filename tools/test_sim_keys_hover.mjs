@@ -194,7 +194,10 @@ test('the page: the spring on the keys in Easy mode, 2D, not Acro, armed only; f
   assert.ok(html.includes('<div id="startMenu" class="open wait">'));
   for (const id of ['menuFly', 'menuDaily', 'menuBoards', 'menuTune', 'menuControls']) assert.ok(html.includes(`id="${id}" aria-disabled="true">`), id + ' waits');
   assert.ok(html.includes('wireLooksUI();\nwireBuilderUI();\nmenuWired();\n'), 'wired, then no longer waiting');
-  assert.ok(html.includes("var b=e.target&&e.target.closest?e.target.closest('button.menu-launch'):null;") && html.includes('window.__menuEarly=b.id||null;'), 'the early click kept before the module');
+  // The early click's capture: on the document, from the head, before the menu's markup.
+  const capture = html.indexOf("e.target.closest('#startMenu.wait button.menu-launch')");
+  assert.ok(capture > 0 && html.includes('window.__menuEarly=b.id||null;'), 'the early click kept before the module');
+  assert.ok(capture < html.indexOf('</head>') && capture < html.indexOf('<div id="startMenu"'), 'from the head, before the menu paints');
   assert.ok(html.includes("gl=probe.getContext('webgl2')||probe.getContext('webgl');") && html.includes("document.documentElement.classList.add('no-webgl');"));
   assert.ok(!/HOLD W TO FLY/.test(html), 'no "hold W" left');
   assert.ok(html.includes("toast(kind==='touch'?'TOUCH STICKS — THROTTLE UP TO FLY':'KEYBOARD');"));
@@ -230,6 +233,16 @@ async function serveRoot() {
     try {
       let body = readFileSync(file);
       const headers = { 'content-type': mime(file) };
+      // ?teststall=MS: the page sent up to the end of the launch menu, then
+      // held that long (a slow load's menu, painted before the rest arrives).
+      const stall = rel === '/sim.html' ? +url.searchParams.get('teststall') : 0;
+      if (stall > 0) {
+        const cut = body.indexOf(Buffer.from('<div class="osd" id="osdTL">'));
+        res.writeHead(200, headers);
+        res.write(body.subarray(0, cut));
+        setTimeout(() => res.end(body.subarray(cut)), stall);
+        return;
+      }
       if (GZ.has(extname(file)) && /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) {
         if (!zipped.has(file)) zipped.set(file, gzipSync(body, { level: 6 }));
         body = zipped.get(file);
@@ -685,6 +698,18 @@ test('keyboard first flights in Chrome: the hover spring flown by a novice, the 
         assert.equal(r.picker, true, 'the Fly picker opens, no second click');
         assert.equal(r.aria, null);
         assert.equal(r.after, 'none', 'no longer Loading…');
+      });
+    });
+
+    await t.test('the launch menu painted and the rest of the page held 2.5 s: a click on Fly then is kept, and the Fly picker opens once the buttons are wired', async () => {
+      await pass({ view: [1366, 768], storage: { quadmathSimInputChoice: 'keyboard' }, query: 'teststall=2500', boot: false }, async (api) => {
+        const b = await earlyClick(api, 'menuFly');
+        assert.ok(b.at < 2000, `clicked while the page was held (${b.at} ms)`);
+        const r = JSON.parse(await api.raw(`(async () => { const t0 = performance.now(); while (performance.now() - t0 < 120000 && document.getElementById('startMenu').classList.contains('wait')) await new Promise((r) => setTimeout(r, 50));
+          const w0 = performance.now();
+          while (performance.now() - w0 < 5000 && !document.querySelector('#menuLayer.show [data-fly-map]')) await new Promise((r) => setTimeout(r, 50));
+          return JSON.stringify({ picker: !!document.querySelector('#menuLayer.show [data-fly-map]') }); })()`));
+        assert.equal(r.picker, true, 'the Fly picker opens, no second click');
       });
     });
 
