@@ -145,6 +145,11 @@ jobs:
           # a radio's check, Calibrate), the arm frame's flash and tones on
           # both cores. About 2.5 minutes on a Windows desktop.
           - { suite: page, label: 'input and arm', tests: 'tools/test_sim_input_arm_page.mjs' }
+          # The keys' hover spring flown by a 400 ms novice (30 s in the air,
+          # no crash, a landing on S, W again), nothing over the No controller
+          # card, early clicks on a 1.6 Mbps load, no WebGL. About 3 minutes
+          # on a Windows desktop.
+          - { suite: page, label: 'keys hover', tests: 'tools/test_sim_keys_hover.mjs' }
 
     steps:
       - name: Check out
