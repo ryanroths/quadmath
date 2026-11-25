@@ -13,8 +13,9 @@
 //      before that is done once they are. No WebGL: a plain message.
 //   4. A first visit's Fly with keyboard flies the class's map (the Rig) at
 //      once, on the pad; a link that flies something keeps it.
-//   5. The air time flew30 and the race offer count stops against a box (the
-//      ceiling): pinned at full throttle 6 m up is not flying.
+//   5. The air time flew30 and the race offer count stops while a box holds
+//      the quad, still: pinned (the ceiling at full throttle, 6 m up) or
+//      propped (tipped on a shelf). Hovering beside a wall still counts.
 // The novice: 400 ms reactions (on sim time), held keys, looks about every
 // 3-5 s (A or D for 0.3-0.8 s, or a 0.25 s tap forward and one back); 30 s in
 // the air with no crash, then up, down, a landing on S that disarms, W again.
@@ -182,11 +183,12 @@ test('the seeds: the hovers measured per core and class; the keys\' hint; Space\
   assert.ok(svg.includes('>arm / disarm<') && svg.includes('>drops it in the air<'), 'the keyboard layout says it too');
 });
 
-test('the page: the spring on the keys in Easy mode, 2D, not Acro, armed only; flew30 and the race offer stop against a box; the card hides the toast and the hint; the launch buttons wait; the watchdog keeps an early click and says no WebGL', () => {
+test('the page: the spring on the keys in Easy mode, 2D, not Acro, armed only; flew30 and the race offer stop when a box holds it (pinned or propped); the card hides the toast and the hint; the launch buttons wait; the watchdog keeps an early click and says no WebGL', () => {
   assert.ok(html.includes("function keysSpringOn(){return easyMode()&&!threeD&&flightMode!=='acro';}"));
   assert.ok(html.includes('if(!disarmed&&keysSpringOn())kbThrottle=keysHoverStep(dt);'), 'armed only: disarmed, the keys arm as before');
   assert.ok(html.includes("twr:cs.twr,contact:cs.contactFlags,crashed:simClockMs-easyCrashAt<EASY_CRASH_MEMORY_MS,seed:keysHoverSeed(core.kind,droneType)"), 'the core\'s own thrust-to-weight and contacts, and Easy mode\'s crash latch');
-  assert.ok(html.includes('function inTheAir(){return !!cs.airborne&&cs.clearance>AIR_CLEARANCE_M&&!((cs.contactFlags|0)&2);}'));
+  assert.ok(html.includes('function inTheAir(){return !!cs.airborne&&cs.clearance>AIR_CLEARANCE_M&&!heldByBox();}'));
+  assert.ok(html.includes("if(!((cs.contactFlags|0)&2))return false;") && html.includes('return cs.twr>1.15||bodyUpZ(cs.quaternion)<0.5;'), 'held by a box: still, pinned (pushing) or propped (tipped)');
   assert.ok(html.includes('if(armed&&inTheAir())raceOffer.airMs+=ms;') && html.includes('if(!countPings.has(\'arm\')||!inTheAir()||countPings.has(\'flew30\'))return;'), 'both counts use it');
   assert.ok(html.includes('body.prompt-open #toast,body.prompt-open #hudArmHint{visibility:hidden}'));
   assert.ok(html.includes('<div id="startMenu" class="open wait">'));
