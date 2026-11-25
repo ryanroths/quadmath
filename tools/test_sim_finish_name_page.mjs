@@ -17,8 +17,8 @@
 //     more. The name typed and Post (Enter on the desktop, a tap on the
 //     phone): the run goes up, the board shows with the pilot's row lit, #1,
 //     the Worker has it, and the lap and name pings went out. Fly on: the sim
-//     runs again. The same pilot's next finish, faster: posted with no card,
-//     the lap panel's place. Desktop, another fresh visitor: Not now closes
+//     runs again. The same pilot's next finish (their next page load):
+//     posted with no card, the lap panel's place. Desktop, another fresh visitor: Not now closes
 //     the card, the time kept; the next finish asks nothing.
 // The leaderboard Worker is its real handler in this process on an in-memory
 // SQLite D1 (tools/d1_sqlite.mjs); every request to it is caught (CDP
@@ -240,7 +240,15 @@ const FLY = String.raw`import('/tools/coach_rig_autopilot.mjs').then((A) => {
     const step = () => {
       if (f.over) return;
       // The finish: the toast's time, or the card; the flight stops there.
-      if (/^(LINE|RUN) \d/.test($('toast').textContent) && +getComputedStyle($('toast')).opacity > 0.05 || s.resultCard().up) { f.over = true; f.ms = Math.round(performance.now() - f.t0); return; }
+      if (/^(LINE|RUN) \d/.test($('toast').textContent) && +getComputedStyle($('toast')).opacity > 0.05 || s.resultCard().up) {
+        f.over = true; f.ms = Math.round(performance.now() - f.t0);
+        // The finish toast as it shows on its first frame.
+        const ts = document.querySelector('#toast .toast-splits');
+        f.toast = $('toast').textContent;
+        f.toastSplits = ts ? W.line(ts) : null;
+        f.toastButtons = [...document.querySelectorAll('#toast button')].filter(shown).map((e) => Math.round(e.getBoundingClientRect().height));
+        return;
+      }
       if (f.d >= f.total) { f.over = true; f.ms = Math.round(performance.now() - f.t0); f.ran = true; return; }
       put(at(f.d));
       const now = performance.now(), ms = now - last;
@@ -254,11 +262,12 @@ const FLY = String.raw`import('/tools/coach_rig_autopilot.mjs').then((A) => {
     requestAnimationFrame(step);
     return true;
   };
+  W.line = (e) => { if (!e || !e.textContent) return null; const r = e.getBoundingClientRect(); return { h: Math.round(r.height), lh: parseFloat(getComputedStyle(e).lineHeight) || parseFloat(getComputedStyle(e).fontSize) * 1.3, right: Math.round(r.right), text: e.textContent }; };
   W.state = () => {
     const card = s.resultCard(), el = $('resultCard');
     const box = (id) => { const e = $(id); if (!shown(e)) return null; const r = e.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), left: Math.round(r.left), right: Math.round(r.right) }; };
     const sp = $('rcSplits'), ts = document.querySelector('#toast .toast-splits');
-    const line = (e) => { if (!e || !e.textContent) return null; const r = e.getBoundingClientRect(); return { h: Math.round(r.height), lh: parseFloat(getComputedStyle(e).lineHeight) || parseFloat(getComputedStyle(e).fontSize) * 1.3, right: Math.round(r.right), text: e.textContent }; };
+    const line = W.line;
     return { card, cards: W.cards, shown: shown(el), clock: s.simClockMs(), track: String(s.track()), view: [innerWidth, innerHeight],
       title: $('rcTitle').textContent, time: $('rcTime').textContent, place: $('rcPlace').textContent,
       me: [...document.querySelectorAll('#rcRows .board-row.me')].map((r) => r.textContent),
@@ -269,7 +278,8 @@ const FLY = String.raw`import('/tools/coach_rig_autopilot.mjs').then((A) => {
       splits: line(sp), toastSplits: shown($('toast')) ? line(ts) : null,
       toastButtons: [...document.querySelectorAll('#toast button')].filter(shown).map((e) => Math.round(e.getBoundingClientRect().height)),
       toast: $('toast').textContent, lap: $('osdLap').innerText, touchLayer: getComputedStyle($('touchLayer') || document.body).visibility,
-      flight: W.flight ? { over: W.flight.over, frames: W.flight.frames, longestMs: Math.round(W.flight.longestMs), d: +W.flight.d.toFixed(1), total: +W.flight.total.toFixed(1), ran: !!W.flight.ran, ms: W.flight.ms } : null,
+      flight: W.flight ? { over: W.flight.over, frames: W.flight.frames, longestMs: Math.round(W.flight.longestMs), d: +W.flight.d.toFixed(1), total: +W.flight.total.toFixed(1), ran: !!W.flight.ran, ms: W.flight.ms,
+        toast: W.flight.toast, toastSplits: W.flight.toastSplits, toastButtons: W.flight.toastButtons } : null,
       name: localStorage.getItem('quadmath_pilotName'), later: sessionStorage.getItem('quadmathSimNameLater') };
   };
   return true;
@@ -424,10 +434,11 @@ async function openPage({ mobile, w, h }) {
   };
   // A fresh visitor's page: storage clear but the input choice (no first-run
   // prompt over the race); the Rig Loop picked as the Tracks picker picks it.
-  const open = async (input) => {
+  // keep: a later page load of the same browser, its storage as it is.
+  const open = async (input, keep) => {
     await cdp('Page.navigate', { url: `${site}/robots.txt` });
     await sleep(250);
-    await evaluate(`(localStorage.clear(), sessionStorage.clear(), localStorage.setItem('quadmathSimInputChoice', ${JSON.stringify(input)}), true)`);
+    if (!keep) await evaluate(`(localStorage.clear(), sessionStorage.clear(), localStorage.setItem('quadmathSimInputChoice', ${JSON.stringify(input)}), true)`);
     await cdp('Page.navigate', { url: `${site}/sim.html?quality=low` });
     let ok = false;
     const t0 = Date.now();
@@ -446,7 +457,7 @@ async function openPage({ mobile, w, h }) {
     await until(async () => (await state()).track === 'rig-loop', 10000, 'on the Rig Loop');
     await sleep(500);
     await evaluate(`window.__fn.start(${JSON.stringify(rigWaypoints(rig))}, ${speed})`);
-    if (o.hold) await keyDown('w', 'KeyW', 87, false);
+    if (o.hold) await keyDown('a', 'KeyA', 65, false);
     const t0 = Date.now();
     let s;
     while (Date.now() - t0 < 240000) {
@@ -470,13 +481,14 @@ const skipChrome = (t) => { if (process.env.SKIP_CHROME_BOOT === '1') { t.skip('
 // finish, faster, posted with no card. press(id): a click or a tap.
 async function nameAndPost(P, { mobile, input, press, name, taken }) {
   await P.open(input);
-  // Desktop: W held through the finish, as a keyboard pilot's throttle is.
+  // Desktop: a flight key (A, yaw) held through the finish. (Not W: the
+  // throttle would lift the quad off its path between frames.)
   const fin = await P.flyRig(4, { hold: !mobile });
   let s = await P.until(async () => { const x = await P.state(); return x.card.up && x.card.asking ? x : null; }, 10000, 'the result card');
   if (!mobile) {
     // Its auto-repeats, the field focused: they type nothing.
-    for (let i = 0; i < 5; i++) { await P.keyDown('w', 'KeyW', 87, true); await sleep(40); }
-    await P.keyUp('w', 'KeyW', 87);
+    for (let i = 0; i < 5; i++) { await P.keyDown('a', 'KeyA', 65, true); await sleep(40); }
+    await P.keyUp('a', 'KeyA', 65);
     assert.equal((await P.state()).field, '', 'a held key types nothing into the field');
   }
   assert.equal(fin.card.up || s.card.up, true);
@@ -485,6 +497,7 @@ async function nameAndPost(P, { mobile, input, press, name, taken }) {
   assert.equal(s.title, 'Rig Loop');
   assert.match(s.time, /^\d+:\d\d\.\d\d$/);
   assert.equal(s.card.paused, true, 'the sim waits');
+  assert.match(s.lap, /RESULT [\s\S]*PB \d/, 'the lap panel behind it has the result: ' + s.lap);
   const c0 = s.clock;
   await sleep(700);
   assert.equal((await P.state()).clock, c0, 'its clock stands still behind the card');
@@ -508,7 +521,17 @@ async function nameAndPost(P, { mobile, input, press, name, taken }) {
     }
     await P.size(812, 375);
     await P.frames();
-  } else assert.equal(s.focus, 'rcName', 'the field has the keyboard');
+  } else {
+    assert.equal(s.focus, 'rcName', 'the field has the keyboard');
+    await P.size(1280, 720);
+    await P.frames();
+    const big = await P.state();
+    const c = big.boxes.card;
+    assert.ok(c && c.top >= 0 && c.right <= 1280 && c.bottom <= 720, '1280x720: the card in view ' + JSON.stringify(c));
+    assert.ok(big.splits.h <= big.splits.lh * 1.5, '1280x720: the splits on one line');
+    await P.size(640, 360);
+    await P.frames();
+  }
   assert.ok(P.pings.some((p) => p.event === 'lap'), 'the lap ping');
   assert.ok(!P.pings.some((p) => p.event === 'name'), 'no name ping yet');
   assert.ok(!P.calls.includes('POST /api/builtin/submit'), 'nothing posted without a name');
@@ -551,24 +574,33 @@ async function nameAndPost(P, { mobile, input, press, name, taken }) {
   assert.equal(s.card.paused, false);
   const c1 = s.clock;
   await P.until(async () => (await P.state()).clock > c1, 5000, 'the clock runs');
-  // The same pilot's next finish, faster: posted, no card.
-  const fin2 = await P.flyRig(5);
+  // The same pilot's next finish, on their next visit (a new page load, the
+  // name and the browser's token kept): posted, no card. (The first run on a
+  // board in a page load posts whatever its time; the Worker keeps the
+  // pilot's best.)
+  await P.open(input, true);
+  const fin2 = await P.flyRig(4);
+  const f2 = fin2.flight;
   assert.equal(fin2.card.up, false, 'no card at the finish');
-  assert.match(fin2.toast, /^LINE \d/, 'the finish toast');
-  if (mobile) assert.ok(fin2.toastButtons.length && fin2.toastButtons.every((hh) => hh >= 44), 'its buttons are 44 px: ' + JSON.stringify(fin2.toastButtons));
-  assert.ok(fin2.toastSplits && fin2.toastSplits.h <= fin2.toastSplits.lh * 1.5 && fin2.toastSplits.right <= fin2.view[0], 'its splits on one line: ' + JSON.stringify(fin2.toastSplits));
+  assert.match(String(f2.toast), /^LINE \d/, 'the finish toast');
+  if (mobile) assert.ok(f2.toastButtons.length && f2.toastButtons.every((hh) => hh >= 44), 'its buttons are 44 px: ' + JSON.stringify(f2.toastButtons));
+  assert.ok(f2.toastSplits && f2.toastSplits.h <= f2.toastSplits.lh * 1.5 && f2.toastSplits.right <= fin2.view[0], 'its splits on one line: ' + JSON.stringify(f2.toastSplits));
+  await P.until(async () => postsNow() === posts + 1, 15000, 'the named run posted');
+  posts++;
   s = await P.until(async () => { const x = await P.state(); return /ONLINE #1 OF 1/.test(x.lap) ? x : null; }, 15000, 'the place on the lap panel');
-  assert.equal(s.cards, 1, 'still the one card');
-  assert.equal(postsNow(), ++posts, 'the new best posted');
+  assert.equal(s.cards, 0, 'no card this page load');
   const rows2 = await P.board();
-  assert.equal(rows2.length, 1);
-  assert.ok(rows2[0].timeMs < first, 'the faster run is the board\'s: ' + rows2[0].timeMs + ' < ' + first);
-  return { first, second: rows2[0].timeMs, flights: [fin.flight, fin2.flight] };
+  assert.deepEqual(rows2.map((r) => r.name), [name], 'one row, theirs');
+  assert.equal(rows2[0].timeMs, Math.min(first, rows2[0].timeMs), 'the board keeps their best');
+  return { first, second: rows2[0].timeMs, flights: [fin.flight, f2].map((f) => ({ frames: f.frames, ms: f.ms, longestMs: f.longestMs })) };
 }
 
 test('desktop, keyboard: a fresh visitor finishes the Rig Loop, names, posts (Enter), sees their row; the next finish posts with no card; another visitor\'s Not now holds', { timeout: 10 * 60 * 1000 }, async (t) => {
   if (skipChrome(t)) return;
-  const P = await openPage({ mobile: false, w: 1280, h: 720 });
+  // Flown at 640x360, as tools/test_sim_race_offer_page.mjs flies: at
+  // 1280x720 a software GPU's frame rate thins the ghost past the board's
+  // 80 ms median step (SPARSE SAMPLES), and the card rightly does not ask.
+  const P = await openPage({ mobile: false, w: 640, h: 360 });
   try {
     const r = await nameAndPost(P, { mobile: false, input: 'keyboard', press: P.click, name: 'FirstLap', taken: 'TakenOne' });
     t.diagnostic('desktop: ' + JSON.stringify(r));
@@ -582,7 +614,7 @@ test('desktop, keyboard: a fresh visitor finishes the Rig Loop, names, posts (En
     assert.equal(s.later, '1', 'for the tab session');
     assert.equal(s.card.paused, false);
     assert.equal(s.name, null, 'no name');
-    assert.match(s.lap, /PB \d/, 'the time kept on this browser: ' + s.lap);
+    assert.match(s.lap, /RESULT [\s\S]*PB \d/, 'the time kept on this browser: ' + s.lap);
     // The next finish asks nothing.
     const fin = await P.flyRig(5);
     assert.equal(fin.card.up, false);

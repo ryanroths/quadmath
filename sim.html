@@ -10176,6 +10176,9 @@ async function openResultAsk(run,view){
   for(const k of Object.keys(keys))keys[k]=false;
   resultCardEl.hidden=false;
   document.body.classList.add('result-ask');
+  // The finish frame drew the lap panel before its gate check, and the sim
+  // waits from here: the result on it now, not the run's live clock.
+  updateLapOSD();
   // The finish toast says the same: the card stands in for it.
   clearTimeout(toastTimer);toastEl.style.opacity=0;toastEl.classList.remove('has-action');
   if(!(touchCtl&&touchCtl.enabled))input.focus({preventScroll:true});
