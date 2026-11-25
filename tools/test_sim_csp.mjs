@@ -285,16 +285,18 @@ async function flows(d, label, { core, share, menus, record }) {
     armed = await d.js(`return await T.until(() => T.state().armed, 1500);`);
   }
   assert.equal(armed, true, label + ': Space arms');
-  // W ramps the page's keyboard throttle by 1.4 per second of input time, and
-  // the page counts input time only on the input polls it keeps. A slow runner
-  // draws few frames and the page drops most polls between them, so the ramp
-  // to full takes many times its 0.7 s there. W is therefore held until the
-  // page reads full throttle, and for at least the 2.2 s it was always held,
-  // counted on the page's sim clock (the core's flight time) so that the quad
-  // has flown as long as on a desktop before the climb is measured.
+  // W eases the page's keyboard throttle to the hover spring's climb (Easy
+  // mode: hover x 1.73, 0.71 on the bf core's Air65, 0.54 on the js core) at
+  // 2.5 a second of input time, and the page counts input time only on the
+  // input polls it keeps. A slow runner draws few frames and the page drops
+  // most polls between them, so the ease takes many times its 0.3 s there. W
+  // is therefore held until the page reads the climb, and for at least the
+  // 2.2 s it was always held, counted on the page's sim clock (the core's
+  // flight time) so that the quad has flown as long as on a desktop before
+  // the climb is measured.
   await d.hold(true, 'w', 'KeyW', 87);
   const wHeld = await d.js(`const f0 = T.s.coreState().flightMs;
-    const ok = await T.until(() => window._axis().stick.t >= 1 && T.s.coreState().flightMs - f0 >= 2200, 40000);
+    const ok = await T.until(() => window._axis().stick.t >= 0.5 && T.s.coreState().flightMs - f0 >= 2200, 40000);
     return JSON.stringify({ ok, throttle: window._axis().stick.t, simMs: Math.round(T.s.coreState().flightMs - f0) });`);
   await d.hold(false, 'w', 'KeyW', 87);
   let st = await d.js(`return T.state();`);
@@ -310,7 +312,7 @@ async function flows(d, label, { core, share, menus, record }) {
   say('input: ' + JSON.stringify(input));
   say('W held: ' + JSON.stringify(wHeld));
   say('armed and flown: ' + JSON.stringify(st));
-  assert.equal(wHeld.ok, true, label + ': W held to full throttle and 2.2 s of sim time: ' + JSON.stringify(wHeld));
+  assert.equal(wHeld.ok, true, label + ': W held to its climb and 2.2 s of sim time: ' + JSON.stringify(wHeld));
   assert.equal(st.armed, true, label + ': still armed');
   assert.ok(st.z > 0.3, label + ': it climbed (' + st.z + ' m)');
   // S the same way: held until the page's throttle is back at zero, and for at

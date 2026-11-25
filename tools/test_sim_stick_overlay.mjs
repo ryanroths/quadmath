@@ -628,8 +628,8 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         // it came down on its back, crashed, and the turtle that followed held
         // roll and pitch at zero, so the arrows moved nothing.
         await js(`return S.hover(1.5);`);
-        // Throttle up (W ramps it, and it stays when let go), then roll right
-        // and yaw right. Easy mode arms on the throttle once it has been down a
+        // Throttle up (W: the keys' hover spring climbs; let go, it holds the
+        // hover), then roll right and yaw right. Easy mode arms on the throttle once it has been down a
         // second (the page's own count), so W waits for that; roll and yaw wait
         // until it is armed and the pilot has it off the floor.
         await until('a second of low throttle', `(() => { const a = S.s.easy().arm; return !!a && a.lowS >= 1; })()`);
@@ -650,10 +650,10 @@ test('the stick overlay in Chrome: keyboard, radio, gamepad, touch', { timeout: 
         // one update, read here in one snapshot, the read above: no extra round
         // trip while the keys still fly it).
         assert.equal(hud.hudArm, 'ARMED', 'armed by the throttle ' + JSON.stringify(hud.st));
-        assert.equal(hud.hint, false, 'no arm hint while armed');
+        assert.equal(hud.hint, true, 'the hint for the keys (W up · S down) stays up while armed in Easy mode');
         assert.deepEqual(hud.L.feelHud, cardBox, '#feelHud: the same box armed as disarmed');
         assert.deepEqual(hud.L.osdBC, osdBox, '#osdBC: the same box armed as disarmed');
-        assert.ok(r.o.stick.r > 0.9 && r.o.stick.y > 0.9 && r.o.stick.t > 0.4, 'the keys moved the sticks ' + JSON.stringify(r.o.stick));
+        assert.ok(r.o.stick.r > 0.9 && r.o.stick.y > 0.9 && r.o.stick.t > 0.2, 'the keys moved the sticks (W let go: about the hover) ' + JSON.stringify(r.o.stick));
         assert.ok(r.o.dots.r.x > r.o.box * 0.8 && r.o.dots.l.x > r.o.box * 0.8, 'both dots to the right');
         assert.ok(r.o.dots.l.y < r.o.box * 0.7, 'throttle up');
         assert.equal(green(r.px.corner), false, 'not painted green everywhere');

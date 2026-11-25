@@ -15,11 +15,13 @@
 //      once, on the pad; a link that flies something keeps it.
 //   5. The air time flew30 and the race offer count stops against a box (the
 //      ceiling): pinned at full throttle 6 m up is not flying.
-// The novice: 400 ms reactions (on sim time), held keys, wanders every 3-5 s
-// on an arrow or A/D for 0.2-0.5 s; 30 s in the air with no crash, then up,
-// down, a landing on S that disarms, W again. (Longer arrow holds pushed it
-// into the Rig's shelves, where a quad can wedge at 70 degrees: not the
-// throttle's doing, and the old keys wedge the same way.)
+// The novice: 400 ms reactions (on sim time), held keys, looks about every
+// 3-5 s (A or D for 0.3-0.8 s, or a 0.25 s tap forward and one back); 30 s in
+// the air with no crash, then up, down, a landing on S that disarms, W again.
+// (With 0.8-2 s arrow holds it reached 30 s too, but ran into the Rig's
+// shelves, propped at 70 degrees or ended on its side, which Easy mode counts
+// as a crash: the walls, not the throttle.) Propped and still 1.5 s, it
+// presses R, as the legend says.
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs) for the page parts;
 // SKIP_CHROME_BOOT=1 runs the Node parts only.
 import test from 'node:test';
@@ -33,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { spawnBrowser } from './browser_guard.mjs';
 import {
-  stepKeysHover, keysHoverSeed, hoverFromTwr, KEYS_CLIMB, KEYS_SINK, KEYS_SLEW, KEYS_LIFT_M, KEYS_HINT, KEYS_DAMP,
+  stepKeysHover, keysHoverSeed, hoverFromTwr, KEYS_CLIMB, KEYS_SINK, KEYS_SLEW, KEYS_LIFT_M, KEYS_HINT, KEYS_DAMP, KEYS_STEP_AT,
   KEYS_HOVER_SEED, KEYS_HOVER_SEED_ANY, armHintText,
 } from '../sim-3d.js';
 import { HOTKEYS, legendHtml, FIRST_FLIGHT_KEYS_ALT, FIRST_FLIGHT_KEYS_IMG } from '../sim-feel.js';
@@ -58,6 +60,7 @@ function run(state, o, secs) {
 test('the hover spring: Space-armed it idles; the first W lifts to a hover, a tap too; then no key the hover, W up, S down, eased 2.5 a second', () => {
   assert.equal(KEYS_CLIMB, 0.30);
   assert.equal(KEYS_SINK, 0.30);
+  assert.equal(KEYS_STEP_AT, 0.41, 'at the Air65 hover: in proportion elsewhere');
   assert.equal(KEYS_SLEW, 2.5);
   assert.equal(KEYS_LIFT_M, 0.3);
   // Armed with Space on the pad: idle until W.
@@ -100,6 +103,16 @@ test('the hover spring: Space-armed it idles; the first W lifts to a hover, a ta
   assert.ok(Math.abs(st.t - 0.71) < 1e-9, 'W: plain');
   st = run(st, { ...fly, vz: -3, s: true }, 1);
   assert.ok(Math.abs(st.t - 0.11) < 1e-9, 'S: plain');
+  // A crash latched: 0 until Easy mode disarms it, whatever key or fall.
+  st = run(st, { ...fly, vz: -6, crashed: true }, 1);
+  assert.equal(st.t, 0, 'crashed: 0');
+  st = run(st, { ...fly, w: true, crashed: true }, 1);
+  assert.equal(st.t, 0, 'crashed, W held: 0');
+  // Tipped past 60 degrees or upside down, falling: the hover, no more.
+  st = run(st, { ...fly, upZ: 0.4, vz: -3 }, 1);
+  assert.ok(Math.abs(st.t - 0.41) < 1e-9, 'tipped, falling: the hover ' + st.t);
+  st = run(st, { ...fly, upZ: -0.7, vz: -3 }, 1);
+  assert.ok(Math.abs(st.t - 0.41) < 1e-9, 'upside down, falling: the hover ' + st.t);
   // Down at rest with W up: 0, for Easy mode's landed and crash disarms.
   st = run(st, { s: true }, 0.5);
   assert.equal(st.t, 0, 'landed, S held: 0');
@@ -108,6 +121,11 @@ test('the hover spring: Space-armed it idles; the first W lifts to a hover, a ta
   assert.equal(st.t, 0, 'landed, no key: 0');
   st = run(st, { w: true }, 0.5);
   assert.ok(Math.abs(st.t - 0.71) < 1e-9, 'landed, W: up again');
+  // Another hover: the climb and the sink in proportion (the Fractal75's 0.23).
+  st = run({ phase: 'fly', hover: 0.23, t: 0.23 }, { clearance: 1, landed: false, contact: 0, w: true }, 1);
+  assert.ok(Math.abs(st.t - 0.23 * (1 + 0.30 / 0.41)) < 1e-9, 'W at hover 0.23: ' + st.t);
+  st = run(st, { clearance: 1, landed: false, contact: 0, s: true }, 1);
+  assert.ok(Math.abs(st.t - 0.23 * (1 - 0.30 / 0.41)) < 1e-9, 'S at hover 0.23: ' + st.t);
   // Taken over in the air (Acro to Angle): the hover, not idle.
   st = run({ t: 0.6 }, { clearance: 2, landed: false, contact: 0 }, 0.5);
   assert.equal(st.phase, 'fly');
@@ -167,7 +185,7 @@ test('the seeds: the hovers measured per core and class; the keys\' hint; Space\
 test('the page: the spring on the keys in Easy mode, 2D, not Acro, armed only; flew30 and the race offer stop against a box; the card hides the toast and the hint; the launch buttons wait; the watchdog keeps an early click and says no WebGL', () => {
   assert.ok(html.includes("function keysSpringOn(){return easyMode()&&!threeD&&flightMode!=='acro';}"));
   assert.ok(html.includes('if(!disarmed&&keysSpringOn())kbThrottle=keysHoverStep(dt);'), 'armed only: disarmed, the keys arm as before');
-  assert.ok(html.includes("twr:cs.twr,contact:cs.contactFlags,seed:keysHoverSeed(core.kind,droneType)"), 'the core\'s own thrust-to-weight and contacts');
+  assert.ok(html.includes("twr:cs.twr,contact:cs.contactFlags,crashed:simClockMs-easyCrashAt<EASY_CRASH_MEMORY_MS,seed:keysHoverSeed(core.kind,droneType)"), 'the core\'s own thrust-to-weight and contacts, and Easy mode\'s crash latch');
   assert.ok(html.includes('function inTheAir(){return !!cs.airborne&&cs.clearance>AIR_CLEARANCE_M&&!((cs.contactFlags|0)&2);}'));
   assert.ok(html.includes('if(armed&&inTheAir())raceOffer.airMs+=ms;') && html.includes('if(!countPings.has(\'arm\')||!inTheAir()||countPings.has(\'flew30\'))return;'), 'both counts use it');
   assert.ok(html.includes('body.prompt-open #toast,body.prompt-open #hudArmHint{visibility:hidden}'));
@@ -449,8 +467,7 @@ test('keyboard first flights in Chrome: the hover spring flown by a novice, the 
         // frames a second) flies nobody, novice or not.
         await cdp(api.ws, 'Emulation.setDeviceMetricsOverride', { width: 640, height: 360, deviceScaleFactor: 1, mobile: false });
         // The novice: decides on what it saw 400 ms of sim time ago; holds
-        // keys; wanders every 3-5 s on an arrow or A/D for 0.2-0.5 s; after a
-        // disarm, lets go, 1 s, W again.
+        // keys; looks about every 3-5 s; after a disarm, lets go, 1 s, W again.
         let seed = 11;
         const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
         const held = new Set();
@@ -496,11 +513,16 @@ test('keyboard first flights in Chrome: the hover spring flown by a novice, the 
           else if (held.has('w') && (d.vz > 0.8 || d.clr > 2.5)) await release('w');
           if (d.clr > 3.0 && d.vz >= -0.3) await press('s');
           else if (held.has('s') && (d.vz < -1.0 || d.clr < 1.5)) await release('s');
-          if (wanderKey && now >= wanderUntil) { await release(wanderKey); wanderKey = null; nextWander = now + 3000 + rnd() * 2000; }
+          if (wanderKey && now >= wanderUntil) {
+            await release(wanderKey);
+            // A look forward is a tap up and as long a tap back (it stays about where it was).
+            if (wanderKey === 'up') { wanderKey = 'down'; wanderUntil = now + 250; await press('down'); }
+            else { wanderKey = null; nextWander = now + 3000 + rnd() * 2000; }
+          }
           if (!wanderKey && now >= nextWander && s.clr > 0.8) {
             const r = rnd();
-            wanderKey = r < 0.4 ? 'up' : r < 0.5 ? 'left' : r < 0.6 ? 'right' : r < 0.8 ? 'a' : 'd';
-            wanderUntil = now + 200 + rnd() * 300;
+            wanderKey = r < 0.4 ? 'up' : r < 0.7 ? 'a' : 'd';
+            wanderUntil = now + (wanderKey === 'up' ? 250 : 300 + rnd() * 500);
             await press(wanderKey);
           }
           await sleep(40);
@@ -533,12 +555,13 @@ test('keyboard first flights in Chrome: the hover spring flown by a novice, the 
         // S: down, and held to the floor: landed, disarmed.
         await press('s');
         const down = await api.js(`const t0 = K.sim(); let low = 9; const off = await K.until(() => { low = Math.min(low, K.state().vz); return !K.state().armed; }, 30000);
-          return JSON.stringify({ off, low, simMs: K.sim() - t0, st: K.state() });`);
+          const t1 = K.sim(); await K.until(() => K.sim() - t1 >= 200, 4000);
+          return JSON.stringify({ off, low, simMs: K.sim() - t0, st: K.state(), flags: K.s.coreState().armingDisableFlags, bf: K.s.core() === 'bf' ? K.s.bfReport && K.s.bfReport() : null });`);
         await release('s');
-        console.log('S: ' + JSON.stringify({ off: down.off, low: down.low, simMs: down.simMs, disarms: down.st.disarms, crashes: down.st.crashes }));
+        console.log('S: ' + JSON.stringify({ off: down.off, low: down.low, simMs: down.simMs, dis: down.st.dis, disarms: down.st.disarms, crashes: down.st.crashes, up: down.st.up, flags: down.flags }));
         assert.ok(down.low <= -0.5, `S sinks (${down.low.toFixed(2)} m/s)`);
         assert.equal(down.off, true, 'S held to the floor disarms');
-        assert.equal(down.st.dis, 'landed', 'a landing, not a crash');
+        assert.equal(down.st.dis, 'landed', 'a landing, not a crash ' + JSON.stringify({ dis: down.st.dis, disarms: down.st.disarms, up: down.st.up, flags: down.flags }));
         assert.equal(down.st.crashes, 0);
         assert.ok(down.st.clr <= 0.05, 'on the floor');
         // W again: arms and lifts to a hover, a tap included.
