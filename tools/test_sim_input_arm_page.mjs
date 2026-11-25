@@ -212,6 +212,10 @@ const PAGE = String.raw`(() => {
   const s = window._sim;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const until = async (fn, ms) => { const t0 = performance.now(); while (performance.now() - t0 < ms) { if (fn()) return true; await wait(8); } return !!fn(); };
+  // n animation frames from now. The arm state moves in the page's 4 ms input
+  // poll and the HUD (hint, Calibrate) is drawn once a frame, after it: wait
+  // for frames, not time, before reading the HUD (CI's software GPU draws few).
+  const frames = (n) => new Promise((res) => { let k = 0; const f = () => (++k >= n ? res() : requestAnimationFrame(f)); requestAnimationFrame(f); });
   const tEl = document.getElementById('toast');
   const toasts = [];
   new MutationObserver(() => { const x = tEl.textContent; if (x && toasts[toasts.length - 1] !== x) toasts.push(x); })
@@ -239,7 +243,7 @@ const PAGE = String.raw`(() => {
   }
   const record = () => { rec = []; requestAnimationFrame(frame); };
   const stopRec = () => { const r = rec; rec = null; return r; };
-  window.__ia = { s, wait, until, snap, axis, record, stopRec, toasts };
+  window.__ia = { s, wait, until, frames, snap, axis, record, stopRec, toasts };
   return true;
 })()`;
 
@@ -463,7 +467,7 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         r = await a.js(`await I.wait(3700); return JSON.stringify(I.snap());`);
         assert.equal(r.help.gate, true, 'still held off centre');
         assert.equal(r.hint, 'Roll 30% off centre — centre the sticks');
-        r = await a.js(`I.axis(0, 0, 0); await I.until(() => !I.s.armHelp().gate, 3000); await I.wait(100); return JSON.stringify(I.snap());`);
+        r = await a.js(`I.axis(0, 0, 0); await I.until(() => !I.s.armHelp().gate, 3000); await I.frames(2); return JSON.stringify(I.snap());`);
         assert.equal(r.help.gate, false);
         assert.equal(r.cal, false);
         assert.ok(r.toasts.includes('STICKS SAFE — LIVE'), JSON.stringify(r.toasts));
@@ -515,7 +519,7 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         let r = await a.js(`await I.until(() => I.s.armHelp().ready, 8000); I.axis(0, 2, -0.2); await I.until(() => I.snap().armed, 4000); return JSON.stringify(I.snap());`);
         assert.equal(r.armed, true);
         await a.key('space');
-        r = await a.js(`await I.until(() => !I.snap().armed, 3000); I.axis(0, 2, -0.84); await I.until(() => I.s.armHelp().stuck, 4000); await I.wait(100); return JSON.stringify(I.snap());`);
+        r = await a.js(`await I.until(() => !I.snap().armed, 3000); I.axis(0, 2, -0.84); await I.until(() => I.s.armHelp().stuck, 4000); await I.frames(2); return JSON.stringify(I.snap());`);
         assert.equal(r.armed, false);
         assert.equal(r.help.stuck, true, JSON.stringify(r.help));
         assert.equal(r.hint, 'Throttle stays at 8.0% — needs under 5%');
