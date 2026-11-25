@@ -31,7 +31,9 @@ name: Sim tests
 #                 with test_sim_rates_page (Tune's rates on both cores, read
 #                 back from Betaflight); and test_sim_race_offer_page (the
 #                 race offer and the race count); and test_sim_music (no
-#                 audio with the page, each track plays, the credits). Each
+#                 audio with the page, each track plays, the credits); and
+#                 test_sim_finish_name_page (a finish to a name on a board,
+#                 its Worker in the test on a local D1). Each
 #                 entry under about 10 minutes.
 #                 test_sim_sound has no entry for now: it samples the page
 #                 once a frame, so its result depends on the frame rate.
@@ -150,6 +152,14 @@ jobs:
           # card, early clicks on a 1.6 Mbps load, no WebGL. About 3 minutes
           # on a Windows desktop.
           - { suite: page, label: 'keys hover', tests: 'tools/test_sim_keys_hover.mjs' }
+          # A finish to a name on a board: the result card (the name, Post,
+          # the board with the pilot's row lit), a named pilot's next finish
+          # posted with no card, Not now, the menu's Pilot name, a builder
+          # track, the weekly, a refused run's reason line, a taken name; a
+          # desktop and a phone at three sizes. Its runs flown armed by the
+          # autopilot (and at held frame rates) skip here: they need even
+          # frames and a GPU, local only. About 8 minutes on a Windows desktop.
+          - { suite: page, label: 'finish and name', tests: 'tools/test_sim_finish_name_page.mjs' }
 
     steps:
       - name: Check out
