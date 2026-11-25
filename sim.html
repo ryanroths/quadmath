@@ -1368,7 +1368,7 @@ import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FL
   loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT,FIRST_FLIGHT_PACK_TEXT,
   loadStickOverlay,saveStickOverlay,stickOverlayOn,createStickOverlay,STICK_OVERLAY_PHONE,
   SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText,
-  legendHtml,keysCardHtml} from "./sim-feel.js?v=543e27fe53f1";
+  legendHtml,keysCardHtml} from "./sim-feel.js?v=b813a85bf61c";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -5016,7 +5016,10 @@ addEventListener('keydown',e=>{
     return;
   }
   if(e.key==='Tab'){e.preventDefault();panel.classList.toggle('open');return;}
-  if(e.key==='?'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+  // ? : the keys card. Not in a replay (it has its own keys), nor while the
+  // calibration or the switch wizard runs: the menu would stop the stick poll
+  // their steps wait on.
+  if(e.key==='?'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!replayOn&&!calib&&!switchWiz){
     e.preventDefault();
     if(keysCardUp()){hideMenuLayer();if(keysFromFlight)toggleStartMenu(false);}
     else openKeysCard();
@@ -5025,8 +5028,8 @@ addEventListener('keydown',e=>{
   // Touch sticks flying, no controller, and a flight key (W, an arrow, Space):
   // there is a keyboard. Offer it, one press (Enter, or the toast's button),
   // in place of the key's touch-mode job: Space armed with no throttle the
-  // keys could fly, an arrow nudged the Cam.
-  if(touchCtl&&touchCtl.enabled&&!gpConnected&&!replayOn&&!e.altKey&&!e.ctrlKey&&!e.metaKey&&!document.body.classList.contains('menu-open')){
+  // keys could fly, an arrow nudged the Cam. A focused select keeps its arrows.
+  if(touchCtl&&touchCtl.enabled&&!gpConnected&&!replayOn&&!e.altKey&&!e.ctrlKey&&!e.metaKey&&!document.body.classList.contains('menu-open')&&!(e.target&&e.target.tagName==='SELECT')){
     const k=e.key.toLowerCase();
     if(k==='enter'&&keyboardOfferUp()){e.preventDefault();setInputChoice('keyboard');return;}
     if(e.code==='Space'||k==='w'||k.startsWith('arrow')){

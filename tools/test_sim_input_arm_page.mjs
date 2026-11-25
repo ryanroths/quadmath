@@ -124,7 +124,7 @@ test('one list of keys: the legend is drawn from it as it read before; every key
   const letters = new Set([...html.matchAll(/e\.key\.toLowerCase\(\)==='([a-z])'/g)].map((m) => m[1]));
   const listed = new Set(HOTKEYS.flatMap((k) => k.keys.toLowerCase().split(/\/| or /)).map((x) => x.trim()));
   for (const c of ['w', 's', 'a', 'd', 'q', 'e', ...letters]) if (c !== 'l') assert.ok(listed.has(c), c.toUpperCase() + ' is in the list');
-  for (const k of ['1', '2', '3', '?', 'tab', 'esc', 'space', 'enter', 'delete']) assert.ok(listed.has(k), k + ' is in the list');
+  for (const k of ['1', '2', '3', '?', 'tab', 'esc', 'space', 'enter', 'delete', 'backspace']) assert.ok(listed.has(k), k + ' is in the list');
 });
 
 // ---------- Chrome ----------
@@ -347,6 +347,10 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         r = await a.js(snap);
         assert.equal(r.help.choice, 'touch');
         assert.equal(r.touchOn, true);
+        // An arrow on a focused select is the select's (a synthetic key: its
+        // option stays as it is): no offer.
+        r = await a.js(`document.getElementById('bfRatePreset').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true })); await I.wait(300); return JSON.stringify(I.snap());`);
+        assert.equal(r.offer, false, 'an arrow on a select offers nothing: ' + JSON.stringify(r));
         // W: the keyboard offered, nothing else.
         await a.key('w');
         r = await a.js(`await I.until(() => I.snap().offer, 2000); return JSON.stringify(I.snap());`);
@@ -479,6 +483,9 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         await a.clickSel('#hudArmCal');
         r = await a.js(`await I.until(() => I.snap().calib, 2000); return JSON.stringify(I.snap());`);
         assert.equal(r.calib, true, 'Calibrate opens the calibration');
+        await a.key('help');
+        r = await a.js(`await I.wait(300); return JSON.stringify({ calib: I.snap().calib, card: !!document.querySelector('#menuLayer.show .keys-card'), menu: document.body.classList.contains('menu-open') });`);
+        assert.deepEqual(r, { calib: true, card: false, menu: false }, '? leaves the calibration be');
         // The steps, as the overlay asks them: centre (throttle low), roll right, pitch up, yaw right, throttle up, throttle down.
         const steps = await a.js(`
           const step = () => document.getElementById('calibStep').textContent;
@@ -522,14 +529,21 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
 
     // Tune's close button as drawn: open, where, whether it is what a click
     // there hits, and the panel's last element (the site link).
-    const TUNE = `const p = document.getElementById('panel'), b = document.getElementById('panelClose');
+    // The panel's 0.2 s slide runs on animation frames, which CI's software GPU
+    // draws few of: it is off here (NO_SLIDE), and each read waits for the open
+    // panel at the window's right edge.
+    const NO_SLIDE = `document.getElementById('panel').style.transition = 'none'; return 1;`;
+    const TUNE = `await I.until(() => { const q = document.getElementById('panel'); return !q.classList.contains('open') || Math.abs(q.getBoundingClientRect().right - innerWidth) < 1; }, 3000);
+      const p = document.getElementById('panel'), b = document.getElementById('panelClose');
       const r = b.getBoundingClientRect(), pr = p.getBoundingClientRect();
       const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return JSON.stringify({ open: p.classList.contains('open'), top: Math.round(r.top), h: Math.round(r.height), inPanel: r.left >= pr.left - 1 && r.right <= pr.right + 1,
-        onTop: hit === b || b.contains(hit), last: p.lastElementChild && p.lastElementChild.id, text: b.textContent });`;
+        onTop: hit === b || b.contains(hit), last: p.lastElementChild && p.lastElementChild.id, text: b.textContent,
+        panel: [Math.round(pr.left), Math.round(pr.right), innerWidth], fps: window._sim.looks.fps.avg });`;
 
     await t.test('Tune\'s close button on a desktop: at the top, nothing over it, still there scrolled to the bottom; a click closes Tune; the site link is last; Tab and Esc still close Tune', async () => {
       await pass({ view: [1280, 720], query: 'map=rig', storage: { quadmathSimInputChoice: 'keyboard' } }, async (a) => {
+        await a.js(NO_SLIDE);
         await a.key('tab');
         let r = await a.js(`await I.wait(400); ${TUNE}`);
         assert.equal(r.open, true);
@@ -559,6 +573,7 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
 
     await t.test('Tune\'s close button on a phone: Tune tapped open from the HUD, the close at the top, still there scrolled down, and a tap closes Tune (two landscape screens)', async () => {
       await pass({ mobile: true, view: [844, 390], query: 'map=rig' }, async (a) => {
+        await a.js(NO_SLIDE);
         for (const [vw, vh] of [[844, 390], [667, 375]]) {
           const size = vw + 'x' + vh;
           await a.view(vw, vh);
@@ -605,6 +620,13 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         r = await a.js(`await I.wait(300); ${CARD}`);
         assert.equal(r.up, false);
         assert.equal(r.menu, true, 'Esc: back to the menu');
+        // ? in a Tune number box is the box's.
+        await a.key('esc');
+        await a.js(`await I.until(() => !document.body.classList.contains('menu-open'), 2000); document.getElementById('panel').classList.add('open');
+          const box = [...document.querySelectorAll('#panel input[type=number], #panel input[type=text]')].find((e) => e.offsetParent); box.focus(); return 1;`);
+        await a.key('help');
+        r = await a.js(`await I.wait(300); return JSON.stringify({ focus: document.activeElement && document.activeElement.type, card: !!document.querySelector('#menuLayer.show .keys-card'), menu: document.body.classList.contains('menu-open') });`);
+        assert.ok(/^(number|text)$/.test(r.focus) && !r.card && !r.menu, '? in a Tune box does not open the card: ' + JSON.stringify(r));
       });
     });
 

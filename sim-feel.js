@@ -206,7 +206,7 @@ export const HOTKEYS = Object.freeze([
   { keys: 'Space', does: 'Play / pause', group: 'In a replay' },
   { keys: 'V or ESC', does: 'Leave the replay', group: 'In a replay' },
   { keys: 'Q/E', does: 'Rotate the piece', group: 'In the track builder' },
-  { keys: 'Delete', does: 'Remove the piece', group: 'In the track builder' },
+  { keys: 'Delete or Backspace', does: 'Remove the piece', group: 'In the track builder' },
   { keys: 'ESC', does: 'Close the builder', group: 'In the track builder' },
 ]);
 
