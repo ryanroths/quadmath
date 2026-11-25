@@ -1551,11 +1551,20 @@ function countKbd(){
 // and clear of whatever is under it. The bf plant reads airborne with the quad
 // still on the floor at 30% throttle (the Air65 on the Rig, floor contact,
 // clearance 0), so the flag alone counted idling on the ground as flying.
-// Nor against a box (the bf core's contactFlags bit 1): pinned to a ceiling at
-// full throttle read airborne, 6 m clear. A wall or a shelf touched in flight
-// stops the count for that moment too. The js core has no contact flags.
+// Nor held by a box (the bf core's contactFlags bit 1) and nearly still:
+// pinned, pushing into it (thrust-to-weight over 1.15: a ceiling at full
+// throttle read airborne, 6 m clear), or propped, tipped past 60 degrees on a
+// wall or a shelf. Hovering beside a wall, or brushing one, still flies (any
+// box at all cost a novice 4.5 to 8.5 s of 60 and flew30). The js core has no
+// contact flags.
 const AIR_CLEARANCE_M=0.04;
-function inTheAir(){return !!cs.airborne&&cs.clearance>AIR_CLEARANCE_M&&!((cs.contactFlags|0)&2);}
+function heldByBox(){
+  if(!((cs.contactFlags|0)&2))return false;
+  const v=cs.velocity;
+  if(Math.hypot(v.x,v.y,v.z)>=0.3)return false;
+  return cs.twr>1.15||bodyUpZ(cs.quaternion)<0.5;
+}
+function inTheAir(){return !!cs.airborne&&cs.clearance>AIR_CLEARANCE_M&&!heldByBox();}
 // arm and flew30, from each step of the core: the first arm, then 30 s of sim
 // time armed and in the air (ms: the sim time this step ran).
 let countAirMs=0;
