@@ -21,6 +21,22 @@
      is listed in connect-src. Tested by tools/test_sim_csp.mjs. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self' data: blob: https://cdn.jsdelivr.net https://sim-leaderboard.ryan-roths.workers.dev https://sim-rooms.ryan-roths.workers.dev wss://sim-rooms.ryan-roths.workers.dev https://cloudflareinsights.com http://localhost:* https://localhost:* ws://localhost:* wss://localhost:* http://127.0.0.1:* https://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:*; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <script src="sim-csp.js?v=8eed1de64e22"></script>
+<script>
+// The launch buttons until the module wires them (#startMenu.wait): a click
+// on one is kept (window.__menuEarly, the button's id; marked .picked) and
+// done once they are (menuWired), or once the No controller card is answered.
+// On the document, from the head: on a slow load the menu paints before any
+// script below it has arrived (the boot watchdog's came too late on CI).
+document.addEventListener('click',function(e){
+  var b=e.target&&e.target.closest?e.target.closest('#startMenu.wait button.menu-launch'):null;
+  if(!b)return;
+  e.preventDefault();e.stopImmediatePropagation();
+  var was=window.__menuEarly&&document.getElementById(window.__menuEarly);
+  if(was)was.classList.remove('picked');
+  window.__menuEarly=b.id||null;
+  b.classList.add('picked');
+},true);
+</script>
 <title>FPV Whoop Simulator in Your Browser | QuadMath</title>
 <meta name="description" content="Free browser FPV sim that flies your own Betaflight rates. Acro and angle, race courses, ghost replay, TX16S/EdgeTX support. No download.">
 <meta name="keywords" content="FPV simulator, browser FPV sim, free drone simulator, Betaflight rates simulator, tiny whoop simulator, FPV practice">
@@ -570,7 +586,7 @@
   body.prompt-open #toast,body.prompt-open #hudArmHint{visibility:hidden}
   /* The launch buttons until the module has wired them (menuWired): each keeps
      its label, reads Loading…, and looks inert; a click on one is kept
-     (the boot watchdog's script) and done once they are wired. */
+     (the click capture in the head) and done once they are wired. */
   #startMenu.wait .menu-card button.menu-launch{opacity:.45;cursor:progress;box-shadow:none;filter:grayscale(.6)}
   #startMenu.wait .menu-card button.menu-launch::after{content:" \00b7  Loading\2026";font-weight:500;opacity:.8}
   #startMenu.wait .menu-card button.menu-launch.picked{opacity:.75;outline:1px dashed var(--orange);outline-offset:2px}
@@ -1286,20 +1302,6 @@
     var sm=document.getElementById('startMenu');
     if(sm)sm.classList.remove('wait');
   }
-  // The launch buttons before the module has wired them (#startMenu.wait): a
-  // click is kept (window.__menuEarly, the button's id) and done once they are
-  // (sim.html menuWired), or once the No controller card is answered.
-  var menu=document.getElementById('startMenu');
-  if(menu)menu.addEventListener('click',function(e){
-    if(!menu.classList.contains('wait'))return;
-    var b=e.target&&e.target.closest?e.target.closest('button.menu-launch'):null;
-    if(!b)return;
-    e.preventDefault();e.stopImmediatePropagation();
-    var was=window.__menuEarly&&document.getElementById(window.__menuEarly);
-    if(was)was.classList.remove('picked');
-    window.__menuEarly=b.id||null;
-    b.classList.add('picked');
-  },true);
   // capture phase — resource load errors don't bubble
   window.addEventListener('error',function(e){
     if(e.target&&e.target.tagName==='SCRIPT')fail('engine failed to load — check your connection and reload.');
@@ -11190,8 +11192,8 @@ function bootTouchLayer(){
 }
 // ---------- The launch screen, first seconds ----------
 // Its buttons read Loading… until wireLooksUI has wired them (menuWired); a
-// click on one before that (window.__menuEarly, kept by the boot watchdog's
-// script) is done then, or once the No controller card is answered.
+// click on one before that (window.__menuEarly, kept by the click capture in
+// the head) is done then, or once the No controller card is answered.
 // firstVisitCard: that card came up at boot (no input picked yet in this
 // browser). Fly with keyboard there flies at once, on the pad: the class's map
 // (startFreestyle: nothing flown yet, so classMap, the Rig on the 65), unless
