@@ -8947,6 +8947,14 @@ const CITY_GHOST_HZ=30; // non-line tracks sample at 30 Hz of sim time (was ever
 let ghosts={0:null,1:null};               // per-track best-RUN recordings (all 3 laps)
 let ghostRec=null,ghostFrame=0;       // in-progress recording + its frame counter
 let ghostLastSampleMs=null;           // line tracks sample at LINE_GHOST_HZ
+// A run's ghost is sampled on the core's own samples (onGhostSample, every
+// 4 ms of sim time inside stepCore's advance), so each lands within 4 ms of
+// its due time at any frame rate. Sampled per frame (sampleGhost) it landed on
+// the first frame after: at a steady 22.5-24.5 fps, or under 12.5, the median
+// step passed the boards' 80 ms (SPARSE SAMPLES) on honest runs. The frame
+// takes the run's first sample (its start frame, inside gate 0) and any frame
+// the core ran in one piece (a pause, a test pilot's frame).
+let ghostTicksRan=false,ghostTickTook=false,ghostTickBaseUs=0,ghostTickBaseMs=0;
 let lastRunGhostRec=null;
 let lastRunReplayRec=null;
 let replayRec=null;
@@ -9057,12 +9065,15 @@ function sampleGhost(){
   const t=simNowMs()-runStartTime;
   // Sampled on sim time: line tracks at LINE_GHOST_HZ, the rest at 30 Hz. The
   // schedule advances by one period (resynced after a gap), so frames that land
-  // between periods do not stretch it.
+  // between periods do not stretch it. On the core's samples (onGhostSample)
+  // once the first is in, unless this frame's step ran in one piece.
   const hz=isLineTrackId(activeTrackId)?LINE_GHOST_HZ:CITY_GHOST_HZ;
-  if(!ghostSampleDue(ghostLastSampleMs,t,hz))return;
-  ghostLastSampleMs=nextSampleMs(ghostLastSampleMs,t,hz);
-  ghostRec.push([Math.round(t),_gr2(state.pos.x),_gr2(state.pos.y),_gr2(state.pos.z),
-    _gr3(state.q.x),_gr3(state.q.y),_gr3(state.q.z),_gr3(state.q.w)]);
+  if(ghostLastSampleMs==null||!ghostTicksRan){
+    if(!ghostSampleDue(ghostLastSampleMs,t,hz))return;
+    ghostLastSampleMs=nextSampleMs(ghostLastSampleMs,t,hz);
+    ghostRec.push([Math.round(t),_gr2(state.pos.x),_gr2(state.pos.y),_gr2(state.pos.z),
+      _gr3(state.q.x),_gr3(state.q.y),_gr3(state.q.z),_gr3(state.q.w)]);
+  }else if(!ghostTickTook)return; // the replay keeps to the frames a ghost sample lands on
   if(replayRec&&ghostSampleDue(replayLastSampleMs,t,REPLAY_GHOST_HZ)){
     replayLastSampleMs=nextSampleMs(replayLastSampleMs,t,REPLAY_GHOST_HZ);
     if(replayRec.length>=REPLAY_GHOST_MAX){
@@ -10774,9 +10785,29 @@ function onTrickSample(){
     if(trickDebug)trickDebug.after(trickSample,dt,trickEv);
   }catch(e){}
 }
+// The run's ghost on the core's samples (stepCore; see ghostTicksRan): at the
+// sample's own sim time, from the tick's pose. The run's first sample is the
+// start frame's (sampleGhost), so the ghost starts inside gate 0.
+const ghostCs=emptyState(),_gtp=new THREE.Vector3(),_gtq=new THREE.Quaternion();
+function onGhostSample(){
+  ghostTicksRan=true;
+  if(!ghostRec||!runActive||ghostLastSampleMs==null)return;
+  const t=ghostTickBaseMs+(core.simTimeUs-ghostTickBaseUs)/1000-runStartTime;
+  const hz=isLineTrackId(activeTrackId)?LINE_GHOST_HZ:CITY_GHOST_HZ;
+  if(!ghostSampleDue(ghostLastSampleMs,t,hz))return;
+  ghostLastSampleMs=nextSampleMs(ghostLastSampleMs,t,hz);
+  const s=core.tickState(ghostCs);
+  toScene(s.position,_gtp);toScene(s.quaternion,_gtq);
+  ghostRec.push([Math.round(t),_gr2(_gtp.x),_gr2(_gtp.y),_gr2(_gtp.z),
+    _gr3(_gtq.x),_gr3(_gtq.y),_gr3(_gtq.z),_gr3(_gtq.w)]);
+  ghostTickTook=true;
+}
+let ghostTickWith=null; // the frame's other sampler, when the ghost rides along
+function ghostAndSample(){ghostTickWith();onGhostSample();}
 // Advance the flying core by one frame, then read it: events, then state.
 function stepCore(frameMs,now){
   const simAtMs=simClockMs;
+  ghostTicksRan=false;ghostTickTook=false;
   try{
     if(testPilotOn()){
       // The test pilot's frame in pieces the core samples (under 249 ms,
@@ -10791,7 +10822,10 @@ function stepCore(frameMs,now){
       bfTurtleSampled=false;
       const turtle=bfTurtleOnTicks(),trick=trickSampling();
       const onSample=turtle?(trick?bfTurtleTrickSample:bfTurtleSample):(trick?onTrickSample:null);
-      simClockMs+=core.advance(frameMs,!calib,onCoreEvent,onSample)*TICK_US/1000;
+      // A run's ghost rides on the same samples (onGhostSample).
+      ghostTickBaseUs=core.simTimeUs;ghostTickBaseMs=simClockMs;ghostTickWith=onSample;
+      const sampler=ghostRec&&runActive?(onSample?ghostAndSample:onGhostSample):onSample;
+      simClockMs+=core.advance(frameMs,!calib,onCoreEvent,sampler)*TICK_US/1000;
     }
   }catch(e){
     // A plant fault stops a bf instance; start over at the map start.
