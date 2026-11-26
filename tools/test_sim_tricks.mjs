@@ -2378,7 +2378,10 @@ test('sim.html wires tricks without touching physics or old keys', () => {
   assert.ok(simSrc.includes('const turtle=bfTurtleOnTicks(),trick=trickSampling();'));
   assert.ok(simSrc.includes('const onSample=turtle?(trick?bfTurtleTrickSample:bfTurtleSample):(trick?onTrickSample:null);'));
   assert.ok(simSrc.includes('function bfTurtleTrickSample(){bfTurtleSample();onTrickSample();}'));
-  assert.ok(simSrc.includes('core.advance(frameMs,!calib,onCoreEvent,onSample)'));
+  // A run's ghost rides on the same samples (sim.html onGhostSample).
+  assert.ok(simSrc.includes('const sampler=ghostRec&&runActive?(onSample?ghostAndSample:onGhostSample):onSample;'));
+  assert.ok(simSrc.includes('core.advance(frameMs,!calib,onCoreEvent,sampler)'));
+  assert.ok(simSrc.includes('function ghostAndSample(){ghostTickWith();onGhostSample();}'));
   assert.ok(simSrc.includes('const s=core.tickState(trickCs);'));
   // The map's authored gaps and the quad's width go with each sample.
   assert.ok(simSrc.includes('trickSample.gaps=trickGaps;') && simSrc.includes('trickSample.frameW=trickFrameW();'));

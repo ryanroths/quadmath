@@ -247,6 +247,16 @@ test('the result card in the source: a pause only while it asks, Not now for the
   assert.match(html, /if\(e\.repeat\)\{e\.preventDefault\(\);return;\}\n    if\(e\.key==='Enter'\)\{e\.preventDefault\(\);resultPost\(\);\}/);
   assert.match(extract('openResultAsk'), /for\(const k of Object\.keys\(keys\)\)keys\[k\]=false;/);
   assert.match(submit, /if\(j&&j\.ok\)countNote\('name'\);/);
+  // The ghost on the core's 4 ms samples, not the frames (a steady 22.5-24.5
+  // fps, or under 12.5, made honest runs SPARSE SAMPLES): the run's first
+  // sample from its start frame (inside gate 0), the frame's only when the
+  // core ran it in one piece.
+  const tick = extract('onGhostSample');
+  assert.match(tick, /if\(!ghostRec\|\|!runActive\|\|ghostLastSampleMs==null\)return;/);
+  assert.match(tick, /const t=ghostTickBaseMs\+\(core\.simTimeUs-ghostTickBaseUs\)\/1000-runStartTime;/);
+  assert.match(tick, /const s=core\.tickState\(ghostCs\);/);
+  assert.match(extract('sampleGhost'), /if\(ghostLastSampleMs==null\|\|!ghostTicksRan\)\{/);
+  assert.match(extract('stepCore'), /ghostTicksRan=false;ghostTickTook=false;[\s\S]*ghostTickBaseUs=core\.simTimeUs;ghostTickBaseMs=simClockMs;ghostTickWith=onSample;/);
   // The menu opening drops a finish toast's buttons, which sit over it.
   assert.match(extract('toggleStartMenu'), /if\(toastEl\.classList\.contains\('has-action'\)\)\{clearTimeout\(toastTimer\);toastEl\.style\.opacity=0;toastEl\.classList\.remove\('has-action'\);\}/);
   assert.match(extract('openResultAsk'), /const ok=await boardRunCheck\(run\);[\s\S]*if\(!ok\.ok\)/);
@@ -330,47 +340,49 @@ const FLY = String.raw`import('/tools/coach_rig_autopilot.mjs').then((A) => {
     d = Math.max(0, d - 0.6);
     const b = s.bfCore();
     const core = (p) => ({ x: -p.z, y: -p.x, z: p.y });
-    // Along the path at a speed held in sim time, whatever the frames: before
-    // each frame steps the sim (__preFrame, the frame's own timestamp), the
-    // quad is put where the path is at the sim time the frame will end at,
-    // still, rising at the speed the frame's free fall takes back. Each ghost
-    // sample, taken at the frame's end, is then on the path at its own time.
+    // Along the path at a speed held in sim time, whatever the frames. The
+    // quad is armed (flyTrack) and holds a hover throttle (o.hover), so the
+    // core's own steps carry it through each frame as a flown quad moves:
+    // before each frame steps the sim (__preFrame), it is put where the path
+    // is at the frame's start, moving along the path at speed, and the next
+    // put only corrects the drift. The ghost's samples, taken on the core's
+    // 4 ms ticks inside the frame, then follow the path at their own times.
     // At most 2 m/s: a 330 ms frame (10x CPU throttle) moves it 0.66 m, inside
     // the smallest gate's 0.8 m (the page checks gates once a frame).
-    // (Tried: moved after the frame by its length, a short frame after a long
-    // one made a 50 m/s step in the ghost; by wall time 10 cm a frame at
-    // most, the speed swung with the frames and read as hits.)
+    // (Tried: put still, unarmed, rising at the speed the frame's free fall
+    // takes back: once the ghost was sampled on ticks, each long frame's fall
+    // read as hits; moved after the frame by its length, a short frame after
+    // a long one made a 50 m/s step; by wall time 10 cm a frame at most, the
+    // speed swung with the frames.)
     const v = Math.min(speed, 2);
     const d0 = d;
     const f = W.flight = { over: false, frames: 0, longestMs: 0, d, total: S[S.length - 1], t0: performance.now(), speed: v,
       // What the keys and the core do between frames: armed frames, the
-      // throttle the keys hold, the quad's furthest drift from where it was put.
+      // throttle held, the quad's furthest drift from the path at a frame's end.
       armed: 0, thrMin: Infinity, thrMax: -Infinity, drift: 0 };
-    let target = null, lastTs = null, sim0 = null;
-    window.__preFrame = (ts) => {
+    const hover = o.hover || 0.42;
+    s.setTestStick({ r: 0, p: 0, y: 0, t: hover });
+    const along = (dd) => { const a = at(dd), n = at(Math.min(f.total, dd + 0.05)), L = Math.hypot(n.x - a.x, n.y - a.y, n.z - a.z) || 1; return { x: (n.x - a.x) / L * v, y: (n.y - a.y) / L * v, z: (n.z - a.z) / L * v }; };
+    let sim0 = null;
+    const dAt = (sim) => d0 + v * (sim - sim0) / 1000;
+    window.__preFrame = () => {
       if (f.over) { window.__preFrame = null; return; }
-      // The first frame's length is not known (no timestamp before it): held
-      // at the start, the clock starts on the next (a long first frame once
-      // carried the quad past gate 0 unseen).
-      const first = lastTs == null;
-      const frameMs = first ? 0 : Math.max(0, ts - lastTs);
-      lastTs = ts;
-      if (!first && !s.resultCard().paused) {
-        const simEnd = s.simClockMs() + frameMs;
-        if (sim0 == null) sim0 = simEnd;
-        f.d = d0 + v * (simEnd - sim0) / 1000;
-      }
+      const now = s.simClockMs();
+      if (sim0 == null) sim0 = now;
+      if (!s.resultCard().paused) f.d = dAt(now);
       const p = at(Math.min(f.d, f.total));
       const q = kicks.some((k) => Math.abs(f.d - k) < 0.3) ? { x: p.x, y: p.y + 0.5, z: p.z } : p;
-      b.teleport(core(q), { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: 0, z: 9.81 * Math.min(frameMs, 249) / 2000 });
-      target = core(q);
+      b.teleport(core(q), { x: 0, y: 0, z: 0, w: 1 }, core(along(f.d)));
     };
+    // Done: still where it is, hovering.
+    const stop = () => { const c = s.coreState(); if (c.position) b.teleport({ x: c.position.x, y: c.position.y, z: c.position.z }, { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: 0, z: 0 }); };
     let last = performance.now();
     const step = () => {
       if (f.over) return;
       // The finish: the toast's time, or the card; the flight stops there.
       if (/^(LINE|RUN) \d/.test($('toast').textContent) && +getComputedStyle($('toast')).opacity > 0.05 || s.resultCard().up) {
         f.over = true; f.ms = Math.round(performance.now() - f.t0);
+        stop();
         // The finish toast as it shows on its first frame.
         const ts = document.querySelector('#toast .toast-splits');
         f.toast = $('toast').textContent;
@@ -378,11 +390,11 @@ const FLY = String.raw`import('/tools/coach_rig_autopilot.mjs').then((A) => {
         f.toastButtons = [...document.querySelectorAll('#toast button')].filter(shown).map((e) => Math.round(e.getBoundingClientRect().height));
         return;
       }
-      if (f.d >= f.total) { f.over = true; f.ms = Math.round(performance.now() - f.t0); f.ran = true; return; }
+      if (f.d >= f.total) { f.over = true; f.ms = Math.round(performance.now() - f.t0); f.ran = true; stop(); return; }
       const cs = s.coreState(), thr = s.stickOverlay().stick.t;
       if (cs.armed) f.armed++;
       f.thrMin = Math.min(f.thrMin, thr); f.thrMax = Math.max(f.thrMax, thr);
-      if (target && cs.position) f.drift = Math.max(f.drift, Math.hypot(cs.position.x - target.x, cs.position.y - target.y, cs.position.z - target.z));
+      if (sim0 != null && cs.position) { const w = core(at(Math.min(dAt(s.simClockMs()), f.total))); f.drift = Math.max(f.drift, Math.hypot(cs.position.x - w.x, cs.position.y - w.y, cs.position.z - w.z)); }
       const now = performance.now(), ms = now - last;
       last = now; f.frames++; f.longestMs = Math.max(f.longestMs, ms);
       requestAnimationFrame(step);
@@ -675,8 +687,25 @@ async function openPage({ mobile, w, h, gpu, vsync }) {
     return flyTrack(rigWaypoints(rig), speed, o);
   };
   // The active track flown along wps (metres) to its finish.
+  // Armed on the pad, sticks down: Space; else Easy mode's own arm (the
+  // throttle 1 s at the bottom, then up); on a phone, else the ARM button.
+  const armed = () => evaluate(`!!window._sim.coreState().armed`);
+  const wait = async (ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await armed()) return true; await sleep(100); } return false; };
+  const arm = async () => {
+    if (await armed()) return;
+    await evaluate(`(window._sim.setTestStick({ r: 0, p: 0, y: 0, t: 0 }), true)`);
+    await sleep(300);
+    await key(' ', 'Space', 32);
+    if (await wait(2000)) return;
+    await sleep(1200);
+    await evaluate(`(window._sim.setTestStick({ r: 0, p: 0, y: 0, t: 0.42 }), true)`);
+    if (await wait(3000)) return;
+    if (mobile) { await evaluate(`(window._sim.setTestStick({ r: 0, p: 0, y: 0, t: 0 }), true)`); await tap('touchArm'); if (await wait(3000)) return; }
+    assert.fail('armed on the pad: ' + JSON.stringify(await state()));
+  };
   const flyTrack = async (wps, speed, o = {}) => {
     await sleep(500);
+    await arm();
     await evaluate(`window.__fn.start(${JSON.stringify(wps)}, ${speed}, ${JSON.stringify({ kicks: o.kicks || [] })})`);
     if (o.hold) await keyDown('a', 'KeyA', 65, false);
     const t0 = Date.now();
@@ -1081,6 +1110,32 @@ test('desktop: the Rig Loop flown armed (the autopilot on the keys\' input poll,
 // The Rig Loop flown armed by the autopilot on the machine's GPU, Chrome's
 // frame rate held to FNP_FPS (e.g. 30,20); a named pilot, so it posts at the
 // finish or the lap panel says why not. Local only: FNP_FPS unset skips it.
+// Ryan's ruling (2026-11-25): at a steady 23, 24 and 30 fps a clean flown
+// run posts. Each frame rate held by Chrome (--fake-vsync-rate) on the
+// machine's GPU; a named pilot, so it posts at the finish. Local only, as the
+// armed flight above (and FNP_HELD_FPS overrides the rates).
+test('desktop: the Rig Loop flown armed at a steady 23, 24 and 30 fps: each clean run posts', { timeout: 15 * 60 * 1000 }, async (t) => {
+  if (skipChrome(t)) return;
+  if (process.env.CI) { t.skip('local only: a flown run needs even frames'); return; }
+  if (process.env.SIM_CPU_THROTTLE) { t.skip('a flown run needs even frames: not under a CPU throttle'); return; }
+  if (process.platform !== 'win32' && !process.env.FNP_GPU) { t.skip('d3d11 is Windows\'s: set FNP_GPU'); return; }
+  for (const fps of (process.env.FNP_HELD_FPS || '23,24,30').split(',').map(Number)) {
+    const P = await openPage({ mobile: false, w: 812, h: 375, gpu: process.env.FNP_GPU || 'd3d11', vsync: fps });
+    try {
+      await P.open('keyboard');
+      await P.evaluate(`(localStorage.setItem('quadmath_pilotName', 'Held ${fps}'), true)`);
+      await P.open('keyboard', true);
+      const { f } = await P.flyRigArmed({ cap: 3 });
+      const s = await P.until(async () => { const x = await P.state(); return /ONLINE #|NOT ON THE BOARD/.test(x.lap) ? x : null; }, 15000, fps + ' fps: posted or why not');
+      const sent = P.bodies.filter((b) => b.path === '/api/builtin/submit');
+      const facts = sent.length ? await ghostFacts(sent[sent.length - 1].body) : null;
+      t.diagnostic(fps + ' fps: ' + JSON.stringify({ fps: f.fps, p90: f.p90, touches: f.touches, line: (s.lap.match(/ONLINE #[^\n]*|NOT ON THE BOARD[^\n]*/) || [''])[0], ghost: facts }));
+      assert.match(s.lap, /ONLINE #1 OF 1/, fps + ' fps (measured ' + f.fps + '): posted: ' + s.lap);
+      assert.ok(facts && facts.check === 'ok' && facts.medianStepMs <= 72, fps + ' fps: the ghost on the sim clock: ' + JSON.stringify(facts));
+    } finally { await P.close(); }
+  }
+});
+
 test('probe: the Rig Loop flown armed at a held frame rate, posted or why not', { timeout: 20 * 60 * 1000 }, async (t) => {
   if (skipChrome(t) || !process.env.FNP_FPS) { t.skip('FNP_FPS unset'); return; }
   const out = [];
