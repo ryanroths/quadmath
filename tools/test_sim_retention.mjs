@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY, makePaceGhost, SHARE_PREFIX as TRACK_PREFIX, encodeShare, decodeShare, ghostPayloadError as trackGhostErr, MAPS, BUILTIN_TRACK_FILES } from '../sim-tracks.js';
+import { CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY, makePaceGhost, SHARE_PREFIX as TRACK_PREFIX, encodeShare, decodeShare, ghostPayloadError as trackGhostErr, MAPS, BUILTIN_TRACK_FILES, isSprintTrackId } from '../sim-tracks.js';
 import { BUILD_KEY } from '../sim-build.js';
 import { sqliteD1 } from './d1_sqlite.mjs';
 import { WHOOP_KEY } from '../sim-whoop.js';
@@ -1257,7 +1257,8 @@ test('Daily Line seed is stable, named, and not a city 3-lap', () => {
     // The Warehouse's and The Bando's loops are not in the pool (owner: no
     // Daily asked for them). The House's Backyard Lap is not in the pool either
     // (owner: no Daily asked for it yet; adding it would redraw played days).
-    if (meta.legacyId != null || meta.map === 'depot' || meta.map === 'bando' || meta.id === 'house-backyard-lap') {
+    // Nor are the sprints, the loops' first gates (the same: none asked for).
+    if (meta.legacyId != null || meta.map === 'depot' || meta.map === 'bando' || meta.id === 'house-backyard-lap' || isSprintTrackId(meta.id)) {
       assert.equal(named.has(meta.id), false, meta.id);
       continue;
     }

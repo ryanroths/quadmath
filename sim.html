@@ -338,6 +338,7 @@
   #resultCard .rc-btns button{flex:1 1 0;width:auto;min-height:44px;margin:0;font-size:14px}
   #resultCard button.primary{background:var(--orange);color:#140802;border-color:var(--orange)}
   #resultCard button:disabled{opacity:.6;cursor:default}
+  #resultCard button[hidden]{display:none}
   /* A landscape phone: the asking card in the screen's top half, clear of the
      keyboard that comes up for the field. The field, Post and Not now on one
      row, still 44 px. */
@@ -899,7 +900,7 @@ document.addEventListener('click',function(e){
   <div id="rcBoard" hidden>
     <div id="rcPlace" aria-live="polite"></div>
     <div id="rcRows"></div>
-    <div class="rc-btns"><button type="button" class="primary" id="rcDone">Fly on</button></div>
+    <div class="rc-btns"><button type="button" class="primary" id="rcDone">Fly on</button><button type="button" id="rcLoop" hidden></button></div>
   </div>
 </div>
 <div id="touchLayer" hidden aria-hidden="true">
@@ -1437,7 +1438,7 @@ import {
   restyleBackyard, decorateBackyardGate, pulseBackyardGate, tickBackyardArt,
   restyleRoom, decorateRoomGate, pulseRoomGate, tickRoomArt,
   tryDressCityKit, tryDressGarageKit, tryDressWarehouseKit, tryDressOfficeKit, tryDressGymKit, tryDressLivingKit, tryDressBackyardKit, mergeStaticArt,
-} from "./sim-art.js?v=2528f7c1d996";
+} from "./sim-art.js?v=d9a0790d035a";
 import {
   loadTouch, saveTouch,
   detectMobile, defaultFlightMode, loadFlightMode, saveFlightMode, toggleAcro,
@@ -1470,18 +1471,19 @@ import {
   isLineTrackId, afterLinePass, ghostSampleDue, downsampleGhost, interpolateGhostPose,
   LINE_GHOST_HZ, LINE_GHOST_MAX, lineDeltaMs, fmtSignedDelta, visibleSplits,
   trackLink, trackCodeFromHash, trackFromLinkCode,
-} from "./sim-tracks.js?v=3c7faa6393fc";
-import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=c008acc98d7a";
+  sprintForMap, sprintLoopOf, isSprintTrackId,
+} from "./sim-tracks.js?v=d8055217ad7c";
+import {buildMap, MAP_ORBIT, MAP_LOOKS, makeFlagMesh, setIndoorLights, installCityExploreColliders} from "./sim-maps.js?v=e0051fab8284";
 import {
   ROOM_KEY, ROOM_TRACK_ID, DEFAULT_ROOM,
   normalizeRoomSpec, loadRoom, saveRoom, planRoom, roomSignature,
   formatRoomSize, parseRoomQuery,
-} from "./sim-room.js?v=4677d4b6d668";
+} from "./sim-room.js?v=fa1444cf6cd6";
 import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FLOATINESS_KEY,loadFov,saveFov,fovChosen,VFOV_DEFAULT,CAM_TILT_PRESETS,loadCamDeg,saveCamDeg,nudgeCamDeg,bodyUpZ,wantsTurtle,wantsEasyTurtle,EASY_TURTLE_UP_Z,
   loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT,FIRST_FLIGHT_PACK_TEXT,
   loadStickOverlay,saveStickOverlay,stickOverlayOn,createStickOverlay,STICK_OVERLAY_PHONE,
   SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText,
-  legendHtml,keysCardHtml} from "./sim-feel.js?v=9dee7320ddb5";
+  legendHtml,keysCardHtml} from "./sim-feel.js?v=bb870bcf2619";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -1503,7 +1505,7 @@ import {
 } from "./sim-build.js?v=1dedc1c1fd57";
 import {
   COACH_KEY, createCoach, drillById, roomDoorway,
-} from "./sim-coach.js?v=e76871a4c16c";
+} from "./sim-coach.js?v=515d32fb42ad";
 import {
   TRICKS_KEY, createTricks, trickLineupText,
 } from "./sim-tricks.js?v=bb7876acedc2";
@@ -1536,9 +1538,9 @@ import {
   sparksLabel, menuSparksText, allSkins, catalogSkinById, catalogSkinUnlocked,
   catalogSkinLabel, loadCatalogSkinId, saveCatalogSkinId, resolveCatalogSkin,
   freestyleSecretsActive, placementsFor, isSecretsMap,
-} from "./sim-secrets.js?v=f5baad7efa7e";
+} from "./sim-secrets.js?v=a51727312d96";
 import {hasHunt,huntTitle,makeHunt,huntStep,huntTick,huntReset,huntSave,huntCounts,huntComplete,huntList,
-  fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=67029750692c";
+  fmtHuntTime,huntShareText,GAP_HUNT_KEY} from "./sim-gap-hunt.js?v=4a5ecaff628d";
 window._simBooted=true; // tells the watchdog above the module actually executed
 // GLTFLoader is imported dynamically, and only after the first painted frame:
 // kicking the CDN + ~40 GLBs on boot contended with first paint on phones.
@@ -1648,12 +1650,14 @@ function countFlight(ms){
 // ---------- The race offer ----------
 // Free flight has no gates, and a race was three inputs deep in the menu. So:
 // 30 s of sim time armed and in the air in free flight, and one small prompt
-// names the map's race and its gates (RACE THE RIG · 17 gates · T) for 10 s
+// names the map's race and its gates (RACE THE RIG · 5 gates · T) for 10 s
 // of sim time; once more at the next disarm; then never again this page load.
 // Never once a race has started here (startRun), nor for a test's pilot, nor
 // in Coach, the builder, a replay or a room. Tune open hides it: a showing
 // waits for Tune to close, and its 10 s stand still. T (or the prompt's RACE
-// on touch) flies the map's race as the Tracks picker does.
+// on touch) flies the map's race as the Tracks picker does. The map's race is
+// its sprint (sim-tracks.js sprintForMap: the loop's first gates), else its
+// loop (the Bando). A sprint's result offers the full loop (fullLoopOffer).
 // The result card while it asks for a pilot name (openResultAsk), else null:
 // the sim waits behind it (simPaused).
 let resultAsk=null;
@@ -1668,11 +1672,18 @@ const RACE_OFFER_AIR_MS=30000;
 const RACE_OFFER_SHOW_MS=10000;
 const raceOffer={airMs:0,shows:0,due:false,until:0,wasArmed:false,raceStarted:false,track:null,shownAt:null,hiddenAt:null,placedAt:-Infinity};
 const raceOfferEl=document.getElementById('raceOffer');
-// The map's own race: its first built-in track with gates (sim-tracks.js
+// The map's loop: its first built-in track with gates (sim-tracks.js
 // BUILTIN_TRACK_FILES order: Rig Loop, House Loop, Warehouse Loop, Bando
-// Loop), or null.
-function mapRace(mapId){
+// Loop; each sprint is listed after its loop), or null.
+function mapLoop(mapId){
   return builtinTracks.find(t=>t.map===mapId&&t.legacyId==null&&!t.freestyle&&t.gates&&t.gates.length>1)||null;
+}
+// The map's race, the one the offer, T and RACE fly: its sprint, else its
+// loop, or null.
+function mapRace(mapId){
+  const sid=sprintForMap(mapId);
+  const s=sid?builtinTracks.find(t=>t.id===sid&&t.gates&&t.gates.length>1):null;
+  return s||mapLoop(mapId);
 }
 function raceOfferTrack(){
   if(raceOffer.raceStarted||testPilotUsed||builderOn||replayOn||(coach&&coach.isActive())||ghostRoom)return null;
@@ -1753,6 +1764,32 @@ function raceThisMap(){
   if(replayOn)stopReplay();
   showRaceOffer(null);
   return flyPickedTrack(currentMap,t.id);
+}
+// A sprint's result offers its full loop: "Full loop · 17 gates" on the
+// result card's board (after Post, or its offline and not-posted lines) and
+// in the lap panel's actions under the result (a named pilot, or Not now,
+// has no card), and T while either is up (sprintResultUp). The loop flies as
+// the Tracks picker flies it. Returns {id, gates} for a sprint, else null.
+function fullLoopOffer(id){
+  const lid=sprintLoopOf(id);
+  const t=lid?builtinTracks.find(b=>b.id===lid&&b.gates&&b.gates.length>1):null;
+  return t?{id:t.id,map:t.map,gates:t.gates.length}:null;
+}
+function fullLoopLabel(o){return 'Full loop · '+o.gates+' gates';}
+function flyFullLoop(id){
+  const o=fullLoopOffer(id!=null?id:activeTrackId);
+  if(!o)return null;
+  if(resultAsk||(resultCardEl&&!resultCardEl.hidden))closeResultCard();
+  if(replayOn)stopReplay();
+  showRaceOffer(null);
+  return flyPickedTrack(o.map,o.id);
+}
+// A sprint's result is up: its card's board (posted, or why not), or the
+// lap panel's result with its actions (no run since that finish).
+function sprintResultUp(){
+  if(!fullLoopOffer(activeTrackId))return false;
+  if(resultAsk)return !!resultCardEl&&!rcEl('rcBoard').hidden&&String(resultAsk.run.id)===String(activeTrackId);
+  return !runActive&&!!lastRunTotal[ensureTrackStats(activeTrackId)]&&!!lapActionsHtml();
 }
 {
   const go=document.getElementById('raceOfferGo');
@@ -2620,8 +2657,12 @@ function finishRun(){
   // (cut at the toast's edge on a phone).
   const head=label+' '+fmtLap(total)+(best?' — NEW BEST!':'')+(extra?' · '+extra:'')+(runSimFlips?' · SIM FLIP ×'+runSimFlips:'');
   const splits=parts.length?parts.map(fmtLap).join(' / '):'';
+  // A sprint's finish offers its full loop here too: on a small view the
+  // toast sits over the lap panel's (fullLoopOffer) while it is up.
+  const loop=fullLoopOffer(id);
   const buttons=(lastRunReplayRec&&lastRunReplayRec.length>1?'<button type="button" id="toastReplay">Replay</button>':'')+
-    (lastRunLine?'<button type="button" id="toastShare">SHARE</button>':'');
+    (lastRunLine?'<button type="button" id="toastShare">SHARE</button>':'')+
+    (loop?'<button type="button" id="toastLoop">'+escapeHtml(fullLoopLabel(loop))+'</button>':'');
   toast(escapeHtml(head)+(splits?'<span class="toast-splits">'+escapeHtml(splits)+'</span>':'')+(buttons?buttons:''),{html:true,ms:buttons?5200:1500});
   // What the card shows if a named pilot's post comes back refused for the
   // name (afterAutoPost): the board's answer arrives after this frame.
@@ -4396,18 +4437,19 @@ function placeQuadAt(x,y,z,yaw,opts){
   try{if(tricks)tricks.resetDetector&&tricks.resetDetector();}catch(e){}
 }
 // The pack. Each attempt starts on a full one: a Coach drill (its start,
-// Retry, Next and R), and a Daily or Boards run (Fly, R). On the bf core
+// Retry, Next and R), and a Daily, Boards or sprint run (Fly, R). On the bf core
 // placeQuadAt(..., FRESH) reinits sim-core with a full SoC; the js core's
 // battery refills. Freestyle keeps its draining pack on the bf core: R there
 // respawns on the same pack, and P (newPack) swaps it.
 const FRESH={freshPack:true};
-function attemptTrack(){return isDailyTrackId(activeTrackId)||isWeeklyTrackId(activeTrackId);}
+// A sprint too: R (and P) is a new attempt from its pad.
+function attemptTrack(){return isDailyTrackId(activeTrackId)||isWeeklyTrackId(activeTrackId)||isSprintTrackId(activeTrackId);}
 function freestyleOnBf(){return core.kind==='bf'&&(isFreestyleTrackId(activeTrackId)||activeTrackId==='freestyle');}
 function resetQuad(){
   // Crash / flip recovery: R respawns at the last passed JSON-track gate and
   // keeps gate-progress (nextGateIndex / run / splits). Tutorial has its own pad.
   // Coach drills respawn on their pad, on a fresh pack, and do not start a
-  // race ghost. Daily and Boards: R is a new attempt, the pad on a fresh
+  // race ghost. Daily, Boards and a sprint: R is a new attempt, the pad on a fresh
   // pack. No last gate → map start (city historic pad, indoor startPad).
   const tut=feel&&feel.isTutorial();
   try{if(tricks&&!tut&&!(coach&&coach.isActive()))tricks.noteReset();}catch(e){}
@@ -5150,11 +5192,13 @@ addEventListener('keydown',e=>{
   if(e.target&&(e.target.tagName==='TEXTAREA'||(e.target.tagName==='INPUT'&&(e.target.type==='text'||e.target.type==='range'||e.target.type==='number'))))return; // typing in the CLI/ghost/pilot-name boxes (or a Tune number: 3 is acro) must not trigger R/M/F/G hotkeys
   if(e.target&&e.target.tagName==='SELECT'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&SIM_KEYS.has(e.key.toLowerCase()))e.preventDefault();
   // The result card up (openResultAsk): Esc is Not now (or Fly on, once
-  // posted), Enter is Fly on once posted; nothing else flies or opens.
+  // posted), Enter is Fly on once posted, and on a sprint's board T is its
+  // full loop; nothing else flies or opens.
   if(resultAsk){
     const posted=!document.getElementById('rcBoard').hidden;
     if(e.key==='Escape'){e.preventDefault();if(posted)closeResultCard();else resultLater();}
     else if(e.key==='Enter'&&posted){e.preventDefault();closeResultCard();}
+    else if(e.key.toLowerCase()==='t'&&!e.repeat&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&sprintResultUp()){e.preventDefault();flyFullLoop();}
     return;
   }
   if(builderOn){
@@ -5244,12 +5288,14 @@ addEventListener('keydown',e=>{
     openCoachPicker();
   }
   // T: this map's race (raceThisMap), disarmed or while the race offer is up;
-  // armed with no offer up (in a race too) it does nothing. A focused select
-  // keeps T for its type-ahead (not in SIM_KEYS); a text, number or range
-  // input never gets here (the first line).
+  // armed with no offer up (in a race too) it does nothing. A sprint's result
+  // up (sprintResultUp), armed or not: its full loop (flyFullLoop; on the
+  // result card, above). A focused select keeps T for its type-ahead (not in
+  // SIM_KEYS); a text, number or range input never gets here (the first line).
   if(e.key.toLowerCase()==='t'&&!e.repeat&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
     if(e.target&&e.target.tagName==='SELECT')return;
-    if(!cs.armed||raceOfferUp())raceThisMap();
+    if(sprintResultUp())flyFullLoop();
+    else if(!cs.armed||raceOfferUp())raceThisMap();
     return;
   }
   if(e.key.toLowerCase()==='l'){
@@ -6691,9 +6737,11 @@ function lineHudHtml(id, now){
 function lapActionsHtml(){
   const run=lastRunLine;
   if(!run||run.map!==currentMap||String(run.track)!==String(shareTrackParam()))return '';
+  const loop=fullLoopOffer(activeTrackId);
   return '<span class="lap-actions">'+
     (lastRunReplayRec&&lastRunReplayRec.length>1?'<button type="button" id="lapReplay">Replay</button>':'')+
-    '<button type="button" id="lapShare">SHARE</button></span>';
+    '<button type="button" id="lapShare">SHARE</button>'+
+    (loop?'<button type="button" id="lapLoop">'+escapeHtml(fullLoopLabel(loop))+'</button>':'')+'</span>';
 }
 let lapOsdHtml=null; // what the panel holds now
 function updateLapOSD(){
@@ -6742,6 +6790,8 @@ function updateLapOSD(){
   if(replayBtn)replayBtn.onclick=function(e){e.preventDefault();startReplay();};
   const shareBtn=document.getElementById('lapShare');
   if(shareBtn)shareBtn.onclick=function(e){e.preventDefault();shareLine();};
+  const loopBtn=document.getElementById('lapLoop');
+  if(loopBtn)loopBtn.onclick=function(e){e.preventDefault();loopBtn.blur();flyFullLoop();};
   const boardBtn=document.getElementById('lapBoard');
   if(boardBtn)boardBtn.onclick=function(e){e.preventDefault();openTrackBoardCard();};
 }
@@ -6761,6 +6811,8 @@ function toast(m,opts){
     if(replayBtn)replayBtn.onclick=function(e){e.preventDefault();startReplay();};
     const shareBtn=document.getElementById('toastShare');
     if(shareBtn)shareBtn.onclick=function(e){e.preventDefault();shareLine();};
+    const loopBtn=document.getElementById('toastLoop');
+    if(loopBtn)loopBtn.onclick=function(e){e.preventDefault();loopBtn.blur();flyFullLoop();};
     const presetBtn=document.getElementById('toastPreset');
     if(presetBtn)presetBtn.onclick=function(e){e.preventDefault();openRadioPreset();};
   }else toastEl.textContent=m;
@@ -7442,7 +7494,13 @@ function openTrackPicker(startMap){
   if(layer)layer.classList.add('wide');
   function render(){
     const maps=MAPS.filter(m=>mapOpen(m.id,DEV_UI)).map(m=>'<button type="button" data-map="'+m.id+'" class="'+(m.id===pickerMap?'on':'')+'">'+escapeHtml(m.name)+'</button>').join('');
-    const list=tracksForMap(pickerMap);
+    // Each sprint above its loop (listed after it, so a map's first track
+    // stays its loop: sim-tracks.js BUILTIN_SPRINTS).
+    const list=tracksForMap(pickerMap).slice();
+    for(const t of list.slice()){
+      const lid=sprintLoopOf(t.id),at=lid?list.findIndex(x=>x.id===lid):-1;
+      if(at>=0&&list.indexOf(t)>at){list.splice(list.indexOf(t),1);list.splice(at,0,t);}
+    }
     // A custom track's name and id are whatever its code said: text, here.
     const rows=list.map(t=>{
       const id=t.legacyId!=null?t.legacyId:t.id;
@@ -10308,6 +10366,9 @@ function showResultBoard(run,j,reason){
   if(document.activeElement===rcEl('rcName'))rcEl('rcName').blur();
   rcEl('rcAsk').hidden=true;
   rcEl('rcBoard').hidden=false;
+  // A sprint's board offers its full loop (fullLoopOffer), posted or not.
+  const loop=fullLoopOffer(run.id),loopBtn=rcEl('rcLoop');
+  if(loopBtn){loopBtn.hidden=!loop;loopBtn.textContent=loop?fullLoopLabel(loop):'';}
   const place=rcEl('rcPlace'),rows=rcEl('rcRows');
   rows.textContent='';
   if(!j){
@@ -10358,6 +10419,7 @@ function showResultBoard(run,j,reason){
   on('rcPost',resultPost);
   on('rcLater',resultLater);
   on('rcDone',closeResultCard);
+  on('rcLoop',()=>{const a=resultAsk;flyFullLoop(a?a.run.id:null);});
 }
 // The menu's Pilot name (in flight, and Boards on the launch screen): the
 // name the boards show, checked by the boards' own rules as it is saved.
@@ -11959,7 +12021,8 @@ function publishTracks(){
 }
 // The race offer's state, read only (tools/test_sim_race_offer_page.mjs).
 Object.assign(window._sim,{raceOffer:()=>({airMs:raceOffer.airMs,shows:raceOffer.shows,due:raceOffer.due,shown:!!(raceOfferEl&&!raceOfferEl.hidden),
-  shownAt:raceOffer.shownAt,hiddenAt:raceOffer.hiddenAt,track:raceOffer.track,raceStarted:raceOffer.raceStarted,mapRace:(mapRace(currentMap)||{}).id||null})});
+  shownAt:raceOffer.shownAt,hiddenAt:raceOffer.hiddenAt,track:raceOffer.track,raceStarted:raceOffer.raceStarted,mapRace:(mapRace(currentMap)||{}).id||null,
+  fullLoop:fullLoopOffer(activeTrackId),sprintResultUp:sprintResultUp()})});
 // The result card (openResultAsk) and the built-in boards, for tests.
 Object.assign(window._sim,{resultCard:()=>({up:!!(resultCardEl&&!resultCardEl.hidden),asking:!!resultAsk,kind:resultAsk?resultAsk.run.kind:null,
   posted:!!(rcEl('rcBoard')&&!rcEl('rcBoard').hidden),paused:simPaused(),later:nameLater(),respawned:runRespawned,notAsked:resultNotAsked}),

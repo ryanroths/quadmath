@@ -865,9 +865,12 @@ export function ghostPayloadError(p, expectTrack) {
 
 export const BUILTIN_TRACK_FILES = [
   { id: 'rig-loop', file: 'tracks/rig-loop.json', map: 'rig', name: 'Rig Loop' },
+  { id: 'rig-sprint', file: 'tracks/rig-sprint.json', map: 'rig', name: 'Rig Sprint' },
   { id: 'house-loop', file: 'tracks/house-loop.json', map: 'house', name: 'House Loop' },
+  { id: 'house-sprint', file: 'tracks/house-sprint.json', map: 'house', name: 'House Sprint' },
   { id: 'house-backyard-lap', file: 'tracks/house-backyard-lap.json', map: 'house', name: 'Backyard Lap' },
   { id: 'depot-loop', file: 'tracks/depot-loop.json', map: 'depot', name: 'Warehouse Loop' },
+  { id: 'depot-sprint', file: 'tracks/depot-sprint.json', map: 'depot', name: 'Warehouse Sprint' },
   { id: 'bando-loop-v2', file: 'tracks/bando-loop-v2.json', map: 'bando', name: 'Bando Loop' },
   { id: 'city-loop', file: 'tracks/city-loop.json', legacyId: 0, map: 'city', name: 'City Loop' },
   { id: 'city-zigzag', file: 'tracks/city-zigzag.json', legacyId: 1, map: 'city', name: 'Mesa Zigzag' },
@@ -904,6 +907,32 @@ export const BUILTIN_TRACK_FILES = [
   { id: 'trainer-slalom', file: 'tracks/trainer-slalom.json', map: 'trainer', name: 'Slalom' },
   { id: 'trainer-hairpin', file: 'tracks/trainer-hairpin.json', map: 'trainer', name: 'Hairpin' },
 ];
+
+// The sprints: each the first gates of its map's loop (tracks/<id>.json, a
+// slice of the loop's own file), from the loop's own pad. Listed after their
+// loops above, so a map's first track (firstTrackForMap, setMap's default) is
+// still its loop; the Tracks picker shows each above its loop. The race
+// offer and T fly a map's sprint (sprintForMap; a map with none, its loop),
+// and a sprint's result offers its loop (sprintLoopOf).
+export const BUILTIN_SPRINTS = Object.freeze([
+  Object.freeze({ id: 'rig-sprint', map: 'rig', loop: 'rig-loop' }),
+  Object.freeze({ id: 'house-sprint', map: 'house', loop: 'house-loop' }),
+  Object.freeze({ id: 'depot-sprint', map: 'depot', loop: 'depot-loop' }),
+]);
+
+export function sprintForMap(mapId) {
+  const s = BUILTIN_SPRINTS.find((x) => x.map === mapId);
+  return s ? s.id : null;
+}
+
+export function sprintLoopOf(id) {
+  const s = BUILTIN_SPRINTS.find((x) => x.id === String(id));
+  return s ? s.loop : null;
+}
+
+export function isSprintTrackId(id) {
+  return sprintLoopOf(id) !== null;
+}
 
 export function hostedGhostUrl(id) {
   const legacy = legacyIndex(id);

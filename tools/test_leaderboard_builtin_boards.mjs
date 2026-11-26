@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { makePaceGhost, PUBLIC_MAPS } from '../sim-tracks.js';
+import { makePaceGhost, PUBLIC_MAPS, isSprintTrackId } from '../sim-tracks.js';
 import {
   PHYS_VER, builtinTrackHash, builtinBoardKey, BUILTIN_BOARD_KEY_RE, BUILTIN_BOARD_ROWS, BUILTIN_BOARD_GHOSTS,
   lineRunPasses, lineRunSplits, hashPilotToken, ghostDigest, dailyLineFor, utcDateId, addUtcDays, MISS_PENALTY_MS,
@@ -88,7 +88,7 @@ async function body(t, ghost, extra = {}) {
 test('sim-builtin-boards.js is the public maps\' tracks, as tracks/*.json has them', () => {
   const have = readFileSync(join(root, 'sim-builtin-boards.js'), 'utf8').replace(/\r\n/g, '\n');
   assert.equal(have, builtinBoardsModule(), 'node tools/build_builtin_boards.mjs --write');
-  assert.deepEqual(BUILTIN_BOARD_TRACKS.map((t) => t.id), ['rig-loop', 'house-loop', 'house-backyard-lap', 'depot-loop', 'bando-loop-v2']);
+  assert.deepEqual(BUILTIN_BOARD_TRACKS.map((t) => t.id), ['rig-loop', 'rig-sprint', 'house-loop', 'house-sprint', 'house-backyard-lap', 'depot-loop', 'depot-sprint', 'bando-loop-v2']);
   assert.deepEqual([...new Set(BUILTIN_BOARD_TRACKS.map((t) => t.map))].sort(), [...PUBLIC_MAPS].sort());
   for (const t of builtinBoardTracks()) {
     const file = JSON.parse(readFileSync(join(root, 'tracks', t.id + '.json'), 'utf8'));
@@ -390,7 +390,11 @@ test('a board\'s floor: the gate path at the class cap x 1.10, the same from eve
     for (const c of CLASS_IDS) {
       const floor = builtinFloorMs(t, c);
       assert.equal(floor, Math.round((path / CLASS_MAX_SPEED[c]) * 1000 * 1.1), t.id + ' ' + c);
-      assert.ok(floor > DAILY_LINE_MIN_MS, t.id + ' ' + c + ': above the shortest time a board takes');
+      // A sprint's automatic floor is under the shortest time a board takes
+      // (Ryan, 2026-11-26: floors from his own times later): none is held, and
+      // a run under it is refused BAD TIME.
+      if (isSprintTrackId(t.id)) assert.ok(floor < DAILY_LINE_MIN_MS, t.id + ' ' + c + ': a sprint, under the shortest time a board takes');
+      else assert.ok(floor > DAILY_LINE_MIN_MS, t.id + ' ' + c + ': above the shortest time a board takes');
       // tracks/*.json (what the page loads) and the Worker's generated copy.
       assert.equal(builtinFloorMs(fromJson.find((x) => x.id === t.id), c), floor, t.id + ' ' + c + ' from tracks/*.json');
     }
@@ -621,7 +625,10 @@ test('a clean Daily Line on a built-in track goes to that track\'s board too', a
 test('a built-in board refuses a ghost no whoop could fly, and a nudged or retimed copy of a stored ghost', async () => {
   const { flightSpikes, flightSpikesMax, ghostPathDistance } = await import('../sim-retention.js');
   const env = { DB: sqliteD1() };
-  for (const t of BUILTIN_BOARD_TRACKS) {
+  // Each track's forgeries from an address of its own: the hourly budget is
+  // per address, and there are more tracks than it allows.
+  for (const [ti, t] of BUILTIN_BOARD_TRACKS.entries()) {
+    const ip = '198.51.100.' + (60 + ti);
     // Straight from gate centre to gate centre at 44 u/s, a sample each 50 ms.
     const pts = t.gates.map((g) => [g.x, g.y + 0.03, g.z]);
     const samples = [[0, ...pts[0], 0, 0, 0, 1]];
@@ -632,16 +639,20 @@ test('a built-in board refuses a ghost no whoop could fly, and a nudged or retim
       for (let k = 1; k <= n; k++) { tm += Math.round(L / n / 44 * 1000); samples.push([tm, ...a.map((v, j) => v + (b[j] - v) * k / n), 0, 0, 0, 1]); }
     }
     const forged = { v: 1, track: t.id, phys: PHYS_VER, name: 'Forger', lapTime: tm, samples };
-    assert.ok(flightSpikes(samples, 65) > flightSpikesMax(t.gates.length), t.id);
-    const r = await call(env, 'POST', '/api/builtin/submit', await body(t, forged, { name: 'Forger', token: token('e') }));
-    assert.equal(r.json.reason, 'IMPLAUSIBLE FLIGHT', t.id + ': ' + JSON.stringify(r.json));
+    // A sprint's few turns stay inside its spike allowance; at 44 u/s it is
+    // under the 2.5 s a board takes, and refused for that.
+    const sprint = isSprintTrackId(t.id);
+    if (sprint) assert.ok(tm < DAILY_LINE_MIN_MS, t.id + ' ' + tm);
+    else assert.ok(flightSpikes(samples, 65) > flightSpikesMax(t.gates.length), t.id);
+    const r = await call(env, 'POST', '/api/builtin/submit', await body(t, forged, { name: 'Forger', token: token('e') }), ip);
+    assert.equal(r.json.reason, sprint ? 'BAD TIME' : 'IMPLAUSIBLE FLIGHT', t.id + ': ' + JSON.stringify(r.json));
     // The same, sampled sparsely so the turns spread: the page's rate is required.
     for (const stepMs of [200, 300, 450]) {
       const sparse = [samples[0]];
       for (const p of samples) if (p[0] - sparse[sparse.length - 1][0] >= stepMs) sparse.push(p);
       if (sparse[sparse.length - 1] !== samples[samples.length - 1]) sparse.push(samples[samples.length - 1]);
       const sg = { ...forged, samples: sparse };
-      const rs = await call(env, 'POST', '/api/builtin/submit', await body(t, sg, { name: 'Forger', token: token('e') }));
+      const rs = await call(env, 'POST', '/api/builtin/submit', await body(t, sg, { name: 'Forger', token: token('e') }), ip);
       assert.equal(rs.status, 400, t.id + ' at ' + stepMs + ' ms: ' + JSON.stringify(rs.json));
     }
   }
