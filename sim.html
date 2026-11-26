@@ -293,7 +293,9 @@
   #toast{position:fixed;z-index:30;top:44%;left:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:700;
     color:var(--orange);text-shadow:0 0 12px rgba(255,77,26,.6);pointer-events:none;opacity:0;
     transition:opacity .3s;text-align:center;max-width:90vw}
-  #toast.has-action{pointer-events:auto}
+  /* A toast with buttons takes taps on them only: its text lets them through
+     to what is under it (the lap panel's Replay and SHARE). */
+  #toast.has-action a,#toast.has-action button{pointer-events:auto}
   /* ARMED (flashArmed): full strength on the arm frame, no fade in; held, then gone in 1.1 s. */
   #toast.arm-flash{transition:none;animation:armFlash 1.1s linear forwards;color:var(--green);
     text-shadow:0 0 14px rgba(61,220,151,.55);font-size:34px;letter-spacing:.06em}
@@ -360,6 +362,7 @@
   body.result-ask #touchLayer,body.result-ask #raceOffer,body.result-ask #menuBtn,body.result-ask #gear{visibility:hidden}
   /* The finished run's Replay and SHARE under its result (updateLapOSD). The HUD takes no clicks; these do. */
   #osdLap .lap-actions{display:block;margin-top:6px}
+  #osdLap .lap-note{display:block;margin-top:4px}
   /* A builder track's online board under the result (trackBoardHtml). */
   #osdLap .lap-board{display:block;margin-top:6px;font-weight:500;font-size:11px;line-height:1.45;color:var(--dim)}
   #osdLap .lap-board b{color:var(--txt);font-weight:600}
@@ -6715,9 +6718,10 @@ function updateLapOSD(){
   }
   const rv=activeRival(); // racing a shared/hosted ghost — show who + their time
   if(rv)html+='<br><span style="color:#FF4D1A">VS '+escapeHtml(rv.name)+(rv.lapTime?' '+fmtLap(rv.lapTime):'')+'</span>';
-  // Why the result is not on its board (noteBoardRefusal).
-  if(!runActive&&lastRunTotal[id]&&boardNote&&boardNote.id===String(activeTrackId))html+='<br>'+escapeHtml(boardNote.text);
   if(!runActive&&lastRunTotal[id])html+=lapActionsHtml();
+  // Why the result is not on its board (noteBoardRefusal): under Replay and
+  // SHARE, which stay where they are (over them, the finish toast's box).
+  if(!runActive&&lastRunTotal[id]&&boardNote&&boardNote.id===String(activeTrackId))html+='<span class="lap-note">'+escapeHtml(boardNote.text)+'</span>';
   if(!runActive)html+=trackBoardHtml();
   // Drawn only when it changes: a button replaced every frame cannot be clicked.
   if(html===lapOsdHtml)return;

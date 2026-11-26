@@ -224,7 +224,10 @@ test('the result card in the source: a pause only while it asks, Not now for the
   // The reason line: every check that keeps a run off its board says why.
   for (const fn of ['maybeSubmitBuiltin', 'maybeSubmitTrackBoard', 'maybeSubmitOnline', 'openResultAsk']) assert.match(extract(fn), /noteBoardRefusal\((id|run\.id),(checked|ok)\.reason\);/, fn);
   assert.match(extract('startRun'), /boardNote=null;/);
-  assert.match(extract('updateLapOSD'), /if\(!runActive&&lastRunTotal\[id\]&&boardNote&&boardNote\.id===String\(activeTrackId\)\)html\+='<br>'\+escapeHtml\(boardNote\.text\);/);
+  // Under Replay and SHARE (they stay where they were), and a toast with
+  // buttons takes taps on them only: SHARE is never under its box.
+  assert.match(extract('updateLapOSD'), /html\+=lapActionsHtml\(\);[\s\S]*if\(!runActive&&lastRunTotal\[id\]&&boardNote&&boardNote\.id===String\(activeTrackId\)\)html\+='<span class="lap-note">'\+escapeHtml\(boardNote\.text\)\+'<\/span>';/);
+  assert.ok(html.includes('#toast.has-action a,#toast.has-action button{pointer-events:auto}') && !html.includes('#toast.has-action{pointer-events:auto}'), 'the toast\'s buttons take taps, its text does not');
   assert.match(finish, /!onlineNameOk\(\)&&!nameLater\(\)&&onlineBoardsEnabled\(leaderboardUrl\(\)\)/, 'asked only with no name, not after Not now');
   assert.match(extract('finishRun'), /downsampleGhost\(ghostRec,BUILTIN_GHOST_MAX_SAMPLES\)/, 'a long loop keeps its full rate');
   // R in a run: a jump the boards refuse; the built-in and builder posts skip it.
@@ -346,9 +349,13 @@ const FLY = String.raw`import('/tools/coach_rig_autopilot.mjs').then((A) => {
     let target = null, lastTs = null, sim0 = null;
     window.__preFrame = (ts) => {
       if (f.over) { window.__preFrame = null; return; }
-      const frameMs = lastTs == null ? 0 : Math.max(0, ts - lastTs);
+      // The first frame's length is not known (no timestamp before it): held
+      // at the start, the clock starts on the next (a long first frame once
+      // carried the quad past gate 0 unseen).
+      const first = lastTs == null;
+      const frameMs = first ? 0 : Math.max(0, ts - lastTs);
       lastTs = ts;
-      if (!s.resultCard().paused) {
+      if (!first && !s.resultCard().paused) {
         const simEnd = s.simClockMs() + frameMs;
         if (sim0 == null) sim0 = simEnd;
         f.d = d0 + v * (simEnd - sim0) / 1000;
@@ -440,6 +447,17 @@ const FLY = String.raw`import('/tools/coach_rig_autopilot.mjs').then((A) => {
       s.setTestStick({ r: c.r, p: c.p, y: c.y, t: c.t });
     }, 4);
     return true;
+  };
+  // What a click at an element's centre lands on (as tools/test_sim_csp.mjs
+  // spot() clicks the lap panel's SHARE): hit when it is the element itself.
+  W.top = (id) => {
+    const el = $(id);
+    if (!el || !shown(el)) return { found: false };
+    const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    const top = document.elementFromPoint(x, y);
+    const name = (e) => e ? e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\s+/).join('.') : '') : null;
+    const path = []; for (let e = top; e && path.length < 4; e = e.parentElement) path.push(name(e));
+    return { found: true, hit: top === el, x: Math.round(x), y: Math.round(y), view: [innerWidth, innerHeight], top: path.join(' < ') };
   };
   W.line = (e) => { if (!e || !e.textContent) return null; const r = e.getBoundingClientRect(); return { h: Math.round(r.height), lh: parseFloat(getComputedStyle(e).lineHeight) || parseFloat(getComputedStyle(e).fontSize) * 1.3, right: Math.round(r.right), text: e.textContent }; };
   W.state = () => {
@@ -961,6 +979,18 @@ test('desktop: a bumpy run says on the lap panel why it is not on the board; the
     s = await P.state();
     assert.equal(s.cards, 0, 'no card');
     assert.equal(posts('POST /api/builtin/submit'), 0, 'nothing sent');
+    // The reason line under the result, and the panel's SHARE still the
+    // element at its own centre (tools/test_sim_csp.mjs clicks it there), at
+    // this size and at the csp test's 960x540.
+    for (const [W, H] of [[640, 360], [960, 540], [1280, 720]]) {
+      await P.size(W, H);
+      await P.frames();
+      await sleep(300);
+      const top = JSON.parse(await P.evaluate(`JSON.stringify(window.__fn.top('lapShare'))`));
+      assert.ok(top.found && top.hit, W + 'x' + H + ': SHARE on top at its centre with the reason line: ' + JSON.stringify(top));
+    }
+    await P.size(640, 360);
+    await P.frames();
     // The weekly, as a visitor reaches it: Boards, Fly this week.
     await P.open('keyboard');
     await P.evaluate(`(document.getElementById('menuBoards').click(), true)`);
@@ -1084,5 +1114,17 @@ test('phone, touch, 812x375: a fresh visitor finishes the Rig Loop, names, taps 
   try {
     const r = await nameAndPost(P, { mobile: true, input: 'touch', press: P.tap, name: 'ThumbLap' });
     t.diagnostic('phone: ' + JSON.stringify(r));
+    // A refused run on the phone: the reason line, and SHARE still on top at
+    // its centre, at each phone size.
+    await P.open('touch');
+    await P.flyRig(4, { kicks: await rigKicks(BUILTIN_BOARD_TRACKS.find((b) => b.id === 'rig-loop'), 8) });
+    await P.until(async () => /NOT ON THE BOARD/.test((await P.state()).lap), 10000, 'the reason line on the phone');
+    for (const [W, H] of [[812, 375], [667, 375], [375, 812]]) {
+      await P.size(W, H);
+      await P.frames();
+      await sleep(300);
+      const top = JSON.parse(await P.evaluate(`JSON.stringify(window.__fn.top('lapShare'))`));
+      assert.ok(top.found && top.hit, W + 'x' + H + ': SHARE on top at its centre with the reason line: ' + JSON.stringify(top));
+    }
   } finally { await P.close(); }
 });
