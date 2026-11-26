@@ -325,6 +325,16 @@
     padding:14px 16px 16px;background:var(--glass);border:1px solid var(--line);border-radius:16px;color:var(--txt);
     backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 24px 60px rgba(0,0,0,.35);pointer-events:auto;text-shadow:none}
   #resultCard[hidden]{display:none}
+  /* Radio picked and nothing seen in 10 s (showRadioHelp): three steps, big. */
+  #radioHelp{position:fixed;z-index:60;left:50%;top:50%;transform:translate(-50%,-50%);width:min(480px,92vw);
+    max-height:calc(100dvh - 20px);overflow-y:auto;padding:18px 22px 20px;background:var(--glass);border:1px solid var(--line);
+    border-radius:18px;color:var(--txt);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+    box-shadow:0 24px 60px rgba(0,0,0,.35);pointer-events:auto;text-shadow:none}
+  #radioHelp[hidden]{display:none}
+  #radioHelp h2{margin:0 0 10px;font-size:24px}
+  #radioHelp ol{margin:0;padding-left:1.4em;font-size:22px;font-weight:600;line-height:1.5}
+  #radioHelp p{margin:0 0 10px;font-size:16px;font-weight:600}
+  #radioHelp button{display:block;width:100%;min-height:44px;margin-top:14px;font-size:16px}
   #resultCard .rc-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
   #rcTitle{font-size:13px;font-weight:600;color:var(--dim)}
   #rcTime{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:26px;font-weight:700;color:var(--orange)}
@@ -433,6 +443,8 @@
   .menu-brand{font-size:13px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--orange)}
   .menu-card h1{font-size:42px;font-weight:700;letter-spacing:-.04em;margin:6px 0 8px;color:var(--txt)}
   .menu-lead{font-size:14px;line-height:1.5;color:var(--dim);margin-bottom:18px}
+  /* Safari on a Mac sees no radio (sim-feel.js SAFARI_RADIO_LINE): said plainly. */
+  .menu-card .feel-safari{color:var(--txt);font-weight:600}
   .menu-card button{margin-top:8px}
   .menu-card button.primary{background:var(--orange);color:#140802;border-color:var(--orange)}
   .menu-card button.primary:hover{filter:brightness(1.06)}
@@ -887,6 +899,12 @@ document.addEventListener('click',function(e){
      touch it is the tap target (newPack); elsewhere it reads P. -->
 <button type="button" id="packHint" hidden>P = new pack</button>
 <div id="raceOffer" hidden><span id="raceOfferMap"></span><span class="ro-sep">·</span><span id="raceOfferGates"></span><span class="ro-key">· T</span><button type="button" id="raceOfferGo">RACE</button></div>
+<div id="radioHelp" hidden role="dialog" aria-labelledby="radioHelpTitle">
+  <h2 id="radioHelpTitle">No radio yet</h2>
+  <p id="radioHelpSafari" hidden></p>
+  <ol><li>Pick <b>USB Joystick</b> on the radio.</li><li>Wiggle a stick.</li><li>Try another cable.</li></ol>
+  <button type="button" id="radioHelpOk">OK</button>
+</div>
 <div id="resultCard" hidden role="dialog" aria-modal="true" aria-labelledby="rcTitle">
   <div class="rc-head"><span id="rcTitle"></span><span id="rcTime"></span><span id="rcBest"></span></div>
   <span class="rc-splits" id="rcSplits"></span>
@@ -1422,7 +1440,7 @@ import {
   stepBattery, resolveDuctHit, jsContact, jsSupportZ, stepPropwash, indoorDraft, combineDisturbance,
   emptyWake, tagGhost, ghostSamples, washLevelFromStr, washStrFromLevel,
 } from "./sim-whoop.js?v=62c2945fdf20";
-import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=085986479ed2";
+import {createLooks,decorateGate,pulseGate,QUALITY_KEY,CROSSHAIR_KEY,loadCrosshairOn,saveCrosshairOn} from "./sim-looks.js?v=006c87bc315c";
 import {
   VIBES, vibeFor, resolveMapLighting, restyleCity, restyleLandmarks, decorateVibeGate, pulseCityGate, tickCityArt,
   decorateRigGate, pulseRigGate,
@@ -1440,7 +1458,7 @@ import {
 } from "./sim-art.js?v=2528f7c1d996";
 import {
   loadTouch, saveTouch,
-  detectMobile, defaultFlightMode, loadFlightMode, saveFlightMode, toggleAcro,
+  detectMobile, detectDesktopSafari, defaultFlightMode, loadFlightMode, saveFlightMode, toggleAcro,
   shouldEnableTouch, createTouchControls, guardPageGestures,
   sanitizeId, isRadio, radioScore, pickPreferredPad, RADIO_PRESETS,
   effectiveAxisMap, applyAxisMap, loadRadioProfile, saveAxisMap,
@@ -1455,7 +1473,7 @@ import {
   armSwitchValue, stepArmSwitch,
   loadRadioSwitches, saveRadioSwitches, switchesAxisMap, auxNumberOfAxis,
   createSwitchWizard, stepSwitchWizard, skipSwitchWizard, switchWizardResult,
-} from "./sim-touch.js?v=0ccf2286071c";
+} from "./sim-touch.js?v=227ed2cd16a0";
 import {
   FROZEN_CITY, MAPS, MISS_PENALTY_MS, CUSTOM_TRACKS_KEY, SELECTED_TRACK_KEY,
   cityTrackJson, normalizeTrack, lapLengthMetres, startPad, detectPassOrMiss,
@@ -1481,7 +1499,7 @@ import {createFeel,applyRatePreset,RATE_PRESETS,loadFloatiness,saveFloatiness,FL
   loadFirstFlight,saveFirstFlight,stepFirstFlight,firstFlightInput,FIRST_FLIGHT_TEXT,FIRST_FLIGHT_KEYS_IMG,FIRST_FLIGHT_KEYS_ALT,FIRST_FLIGHT_PACK_TEXT,
   loadStickOverlay,saveStickOverlay,stickOverlayOn,createStickOverlay,STICK_OVERLAY_PHONE,
   SPEED_UNITS,SPEED_UNITS_KEY,loadSpeedUnits,saveSpeedUnits,speedUnitsOn,speedText,
-  legendHtml,keysCardHtml} from "./sim-feel.js?v=9dee7320ddb5";
+  legendHtml,keysCardHtml,SAFARI_RADIO_LINE} from "./sim-feel.js?v=5011b0a4b7f2";
 import {LOOK,lookVfov,yawBlurPx,lookShadowProxy,lookEnableKtx2} from "./sim-look.js?v=73378d552076";
 import {
   RATE_TYPES, RATE_TYPE_LABELS, RATE_FIELDS, RATE_SLIDER_RANGES,
@@ -2146,6 +2164,8 @@ const sunFill=new THREE.DirectionalLight(0x9fc2ff,LIGHTING.fillIntensity);
 sunFill.position.set(-sunDir.x*400,260,-sunDir.z*400);
 scene.add(sunFill);
 const mobileHint=detectMobile(window);
+// Safari on a Mac: no radio ever shows up there (sim-touch.js detectDesktopSafari).
+const safariDesktop=!mobileHint&&detectDesktopSafari(window);
 looksReady=createLooks({
   THREE,renderer,scene,camera,LIGHTING,sun,sunFill,hemi,
   isMobile:mobileHint,
@@ -5435,6 +5455,27 @@ function flyWithRadio(){
     feel.saveInputChoice('radio');
   }
 }
+// Radio picked (Controls' Radio / Gamepad, or the first-run card's Radio)
+// and nothing seen RADIO_HELP_MS later: three steps, big (#radioHelp), and
+// on Safari on a Mac why no radio shows (SAFARI_RADIO_LINE). Gone when a pad
+// arrives (selectPad), the keyboard or touch is picked, or OK.
+const RADIO_HELP_MS=10000;
+let radioHelpTimer=0;
+function armRadioHelp(){
+  clearTimeout(radioHelpTimer);
+  radioHelpTimer=setTimeout(()=>{if(!gpConnected&&!listPads().length&&feel&&feel.loadInputChoice()==='radio')showRadioHelp(true);},RADIO_HELP_MS);
+}
+function showRadioHelp(on){
+  if(!on)clearTimeout(radioHelpTimer);
+  const el=document.getElementById('radioHelp');
+  if(!el)return;
+  if(on){const s=document.getElementById('radioHelpSafari');s.textContent=safariDesktop?SAFARI_RADIO_LINE:'';s.hidden=!safariDesktop;}
+  el.hidden=!on;
+}
+{
+  const ok=document.getElementById('radioHelpOk');
+  if(ok)ok.addEventListener('click',(e)=>{e.preventDefault();ok.blur();showRadioHelp(false);});
+}
 // The pilot's input pick (Controls' "Fly with", or the keyboard offer): saved
 // (sim-feel.js INPUT_CHOICE_KEY) and flown at once. Keyboard or Touch with a
 // controller connected sets every controller aside (padsAside) until it moves
@@ -5455,6 +5496,7 @@ function setInputChoice(kind){
     kbThrottle=threeD?0.5:0;
     kbFromRest=!threeD;
     if(kind==='touch')setFlightMode(defaultFlightMode(),false);
+    showRadioHelp(false);
     enableTouchLayer(kind==='touch');
     toast(kind==='touch'?'TOUCH STICKS — THROTTLE UP TO FLY':'KEYBOARD');
   }else{
@@ -5462,7 +5504,7 @@ function setInputChoice(kind){
     if(feel)feel.saveInputChoice('radio');
     if(!gpConnected&&listPads().length)pickGamepad();
     if(gpConnected)toast((padIsRadio(activePad()||{id:gpName})?'RADIO':'GAMEPAD')+' — FLYING');
-    else{bootTouchLayer();toast('PLUG IN A RADIO OR GAMEPAD, THEN MOVE A STICK',{ms:2600});}
+    else{bootTouchLayer();toast('PLUG IN A RADIO OR GAMEPAD, THEN MOVE A STICK',{ms:2600});armRadioHelp();}
   }
   followInputMode();
   syncInputPick();
@@ -5500,6 +5542,7 @@ function keyboardOfferUp(){
 // quiet: no first-run prompt (Tune's list, forget: the pilot is in Tune).
 function selectPad(gp,remember,quiet){
   gpIndex=gp.index;gpConnected=true;gpName=gp.id;
+  showRadioHelp(false);
   if(!padKinds.has(gp.id))padKinds.set(gp.id,sessionKind(gp,padTracker));
   gpRadio=padKinds.get(gp.id);
   padTracker.picked(gp,performance.now());
@@ -11701,7 +11744,7 @@ function afterFirstRunCard(kind){
 feel=createFeel({
   THREE,scene,toast,decorateGate,LIGHTING,
   onCalibrate(){sessionLive=true;toggleStartMenu(false);startCalib();enableTouchLayer(false);},
-  onRadio(){flyWithRadio();if(gpConnected)announcePlugAndFly(activePad()||{id:gpName});else toast('PLUG A RADIO — USB JOYSTICK');},
+  onRadio(){flyWithRadio();if(gpConnected)announcePlugAndFly(activePad()||{id:gpName});else{toast('PLUG A RADIO — USB JOYSTICK');armRadioHelp();}},
   onKeyboard(){countKbd();toast('KEYBOARD');enableTouchLayer(false);afterFirstRunCard('keyboard');},
   onTouch(){
     if(gpConnected){
@@ -11789,7 +11832,7 @@ document.getElementById('ratePreset').onchange=function(){
 // detectMobile only — Chrome desktop ontouchstart/maxTouchPoints must not
 // auto-enable touch and steal a TX16S before the first stick wiggle.
 const touchFirst=!!mobileHint;
-firstVisitCard=!!feel.maybeFirstRun({hasGamepad:gpConnected,gpName,mobile:mobileHint,touch:touchFirst});
+firstVisitCard=!!feel.maybeFirstRun({hasGamepad:gpConnected,gpName,mobile:mobileHint,touch:touchFirst,safari:safariDesktop});
 bootTouchLayer();
 pickGamepad();
 bootTouchLayer();

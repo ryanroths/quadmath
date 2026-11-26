@@ -159,6 +159,10 @@ export const RATE_PRESETS = {
   },
 };
 
+// Safari on a Mac never sees a radio (sim-touch.js detectDesktopSafari): the
+// No controller card says so at once, and so do the radio steps (sim.html).
+export const SAFARI_RADIO_LINE = 'Radios need Chrome or Edge on a Mac. Safari only sees console-style gamepads.';
+
 export function loadInputChoice() {
   try {
     const v = localStorage.getItem(INPUT_CHOICE_KEY);
@@ -874,11 +878,16 @@ export function createFeel(ctx) {
     // escaped here, where it becomes markup.
     const name = (info && info.gpName) ? escText(String(info.gpName).slice(0, 48)) : '';
     const title = has ? 'Controller / radio detected' : 'No controller';
+    // Safari on a Mac (info.safari): it will not see a radio, said at once.
+    const safari = !has && !mobile && !!(info && info.safari);
     const lead = has
       ? (name ? name : 'Gamepad connected') + ' — one click on Radio and you are flying. Mode 2 AETR is already loaded. Calibrate only if a stick is wrong. Touch sticks stay off while a radio is connected.'
       : (mobile
         ? 'Fly with on-screen sticks, or plug in a radio (Joystick mode) and wiggle a stick.'
-        : 'Fly with the keyboard, or plug in a radio (Joystick mode) and wiggle a stick.');
+        : safari
+          ? 'Fly with the keyboard, or a console-style gamepad.'
+          : 'Fly with the keyboard, or plug in a radio (Joystick mode) and wiggle a stick.');
+    const safariHtml = safari ? '<p class="menu-lead feel-safari" id="feelSafari">' + SAFARI_RADIO_LINE + '</p>' : '';
     // Hide keyboard only on real phones (detectMobile). Chrome desktop
     // ontouchstart / maxTouchPoints must not hide Radio/Keyboard for a TX16S.
     const kbBtn = touchy && mobile ? '' : '<button type="button" id="feelKeys">Fly with keyboard</button>';
@@ -895,12 +904,13 @@ export function createFeel(ctx) {
       : (mobile
         ? touchHtml + kbBtn
         : '<button type="button" class="primary" id="feelKeys">Fly with keyboard</button>' + touchHtml) +
-        '<p class="menu-lead" style="margin-top:10px">TX16S: USB Joystick, then wiggle. Radio is plug-and-fly (Mode 2). Calibrate is optional.</p>';
+        (safari ? '' : '<p class="menu-lead" style="margin-top:10px">TX16S: USB Joystick, then wiggle. Radio is plug-and-fly (Mode 2). Calibrate is optional.</p>');
     promptEl.innerHTML =
       '<div class="menu-card feel-card">' +
         '<div class="menu-brand">QuadMath</div>' +
         '<h1>' + title + '</h1>' +
         '<p class="menu-lead">' + lead + '</p>' +
+        safariHtml +
         buttons +
       '</div>';
     promptEl.classList.add('show');

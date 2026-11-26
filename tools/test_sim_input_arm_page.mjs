@@ -17,6 +17,12 @@
 //      on that frame (on the bf core Betaflight's own beep is the arm tone,
 //      and no cue is added); the disarm tone on the disarm frame, both cores,
 //      Betaflight's disarm beeps held off under it.
+//   4. Safari on a Mac sees no radio: the No controller card says so at once
+//      ("Radios need Chrome or Edge on a Mac. Safari only sees console-style
+//      gamepads."), not on an iPad, nor in Chrome, Edge or Firefox on a Mac.
+//      Radio picked with nothing there: 10 s later three steps, big (USB
+//      Joystick, wiggle a stick, another cable), on Safari with that line; a
+//      pad arriving, the keyboard picked, or OK takes them away.
 // Requires Chrome (CHROME, as tools/test_sim_map_boot.mjs) for the page parts;
 // SKIP_CHROME_BOOT=1 runs the Node parts only.
 import test from 'node:test';
@@ -32,13 +38,38 @@ import {
   sticksUnsafe, stepThrottleWatch, throttlePct, throttleReadout, controllerArmHelp, armHintText,
   RADIO_CENTRE_TOL, PAD_CENTRE_TOL, THR_STUCK_MAX,
 } from '../sim-3d.js';
-import { applyAxisMap, PAD_MAP, AETR_MAP, PAD_THR_DEADZONE } from '../sim-touch.js';
+import { applyAxisMap, PAD_MAP, AETR_MAP, PAD_THR_DEADZONE, detectDesktopSafari } from '../sim-touch.js';
 import { CUES, DISARM_BEEPER_MUTE_S } from '../sim-audio.js';
-import { HOTKEYS, HOTKEY_GROUPS, legendHtml } from '../sim-feel.js';
+import { HOTKEYS, HOTKEY_GROUPS, legendHtml, SAFARI_RADIO_LINE } from '../sim-feel.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 // ---------- Node ----------
+test('Safari on a Mac, and only it: not an iPad, not Chrome, Edge or Firefox on a Mac, not a PC; its line as written', () => {
+  const nav = (userAgent, maxTouchPoints = 0) => ({ navigator: { userAgent, maxTouchPoints } });
+  const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)';
+  const CHROME = ' AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+  assert.equal(detectDesktopSafari(nav(MAC + ' Version/18.1 Safari/605.1.15')), true, 'Safari on a Mac');
+  assert.equal(detectDesktopSafari(nav(MAC + ' Version/17.6 Safari/605.1.15')), true, 'an older Safari');
+  assert.equal(detectDesktopSafari(nav(MAC + ' Version/18.1 Safari/605.1.15', 5)), false, 'an iPad (it says Macintosh, with touch points)');
+  assert.equal(detectDesktopSafari(nav('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' + CHROME)), false, 'Chrome on a Mac');
+  assert.equal(detectDesktopSafari(nav('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' + CHROME + ' Edg/131.0.0.0')), false, 'Edge on a Mac');
+  assert.equal(detectDesktopSafari(nav('Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0')), false, 'Firefox on a Mac');
+  assert.equal(detectDesktopSafari(nav('Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1', 5)), false, 'an iPhone');
+  assert.equal(detectDesktopSafari(nav('Mozilla/5.0 (Windows NT 10.0; Win64; x64)' + CHROME)), false, 'a PC');
+  assert.equal(SAFARI_RADIO_LINE, 'Radios need Chrome or Edge on a Mac. Safari only sees console-style gamepads.');
+  // In the source: the card's line from info.safari, the steps' timer and what takes them away.
+  const feelSrc = readFileSync(join(root, 'sim-feel.js'), 'utf8');
+  assert.ok(feelSrc.includes("const safari = !has && !mobile && !!(info && info.safari);"));
+  const html = readFileSync(join(root, 'sim.html'), 'utf8').replace(/\r\n/g, '\n');
+  assert.ok(html.includes('const safariDesktop=!mobileHint&&detectDesktopSafari(window);'));
+  assert.ok(html.includes('feel.maybeFirstRun({hasGamepad:gpConnected,gpName,mobile:mobileHint,touch:touchFirst,safari:safariDesktop});'));
+  assert.ok(html.includes('const RADIO_HELP_MS=10000;'));
+  assert.ok(html.includes("toast('PLUG IN A RADIO OR GAMEPAD, THEN MOVE A STICK',{ms:2600});armRadioHelp();"), 'Controls\' Radio with nothing there');
+  assert.ok(html.includes("else{toast('PLUG A RADIO — USB JOYSTICK');armRadioHelp();}"), 'the first-run card\'s Radio with nothing there');
+  assert.ok(html.includes('gpIndex=gp.index;gpConnected=true;gpName=gp.id;\n  showRadioHelp(false);'), 'a pad takes them away');
+});
+
 test('a spring gamepad: the throttle rests up to 12% off centre at 0, full stick still 100%; a radio keeps its full travel', () => {
   assert.equal(PAD_THR_DEADZONE, 0.12);
   const padT = (ly) => applyAxisMap([0, ly, 0, 0], PAD_MAP, {}).t;
@@ -181,6 +212,7 @@ function killTree(child) {
 }
 
 const PHONE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+const SAFARI_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15';
 const TX = 'RM TX16S Joystick (Vendor: 1209 Product: 4f54)';
 const XBOX = 'Xbox 360 Controller (XInput STANDARD GAMEPAD)';
 // TX16S Classic: roll, pitch, THROTTLE, yaw, then AUX1..4 at rest.
@@ -284,6 +316,8 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         await cdp(ws, 'Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
         await cdp(ws, 'Emulation.setUserAgentOverride', { userAgent: PHONE_UA, platform: 'Android' });
       }
+      // opts.ua: another browser's user agent (Safari on a Mac), on a desktop.
+      if (opts.ua) await cdp(ws, 'Emulation.setUserAgentOverride', { userAgent: opts.ua, platform: opts.platform || '' });
       if (process.env.SIM_CPU_THROTTLE) await cdp(ws, 'Emulation.setCPUThrottlingRate', { rate: +process.env.SIM_CPU_THROTTLE });
       await cdp(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: FAKE_PADS });
       await cdp(ws, 'Page.navigate', { url: `http://127.0.0.1:${port}/robots.txt` });
@@ -403,6 +437,78 @@ test('first flights in Chrome: the input pick, the arm said, the arm frame', { t
         assert.equal(r.help.choice, 'keyboard');
         assert.equal(r.card, false);
         assert.equal(r.touchOn, false);
+      });
+    });
+
+    // The radio steps as drawn: shown, each step, the font, the Safari line, OK.
+    const help = `const el = document.getElementById('radioHelp'), r = el.getBoundingClientRect(), sl = document.getElementById('radioHelpSafari'), ok = document.getElementById('radioHelpOk');
+      const li = [...el.querySelectorAll('li')];
+      return JSON.stringify({ shown: !el.hidden && r.width > 0, steps: li.map((x) => x.textContent), font: li.length ? parseFloat(getComputedStyle(li[0]).fontSize) : 0,
+        safari: !sl.hidden ? sl.textContent : null, ok: Math.round(ok.getBoundingClientRect().height), inView: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight,
+        top: (() => { const t = document.elementFromPoint(r.left + r.width / 2, r.top + 20); return !!t && el.contains(t); })() });`;
+    const STEPS = ['Pick USB Joystick on the radio.', 'Wiggle a stick.', 'Try another cable.'];
+    // Esc, Controls, Radio / Gamepad: when it was picked (the page's clock).
+    const pickRadio = `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+      await I.until(() => document.body.classList.contains('menu-open'), 2000);
+      document.getElementById('menuControlsFlight').click(); await I.wait(300);
+      const at = performance.now(); document.querySelector('#menuLayer [data-input="pad"]').click(); return at;`;
+    const helpAfter = async (a, at) => a.js(`await I.until(() => !document.getElementById('radioHelp').hidden, 16000); const ms = Math.round(performance.now() - ${at}); ${help.replace('return JSON.stringify({', 'return JSON.stringify({ ms, ')}`);
+
+    await t.test('desktop Safari on a Mac: the No controller card says radios need Chrome or Edge, at once; Radio picked with nothing there, 10 s later the three steps, big, with that line; OK takes them away', async () => {
+      await pass({ view: [1280, 720], ua: SAFARI_UA, platform: 'MacIntel' }, async (a) => {
+        let r = await a.js(`const c = document.getElementById('feelSafari'); return JSON.stringify({ card: !!(window._feel && window._feel.promptOpen), ua: navigator.userAgent,
+          line: c && c.getBoundingClientRect().width > 0 ? c.textContent : null, tx: /TX16S: USB Joystick/.test(document.querySelector('.feel-card').textContent),
+          lead: document.querySelector('.feel-card .menu-lead').textContent, first: document.activeElement && document.activeElement.id });`);
+        assert.equal(r.card, true, 'the No controller card');
+        assert.match(r.ua, /Version\/18\.1 Safari/, 'the page has Safari\'s agent');
+        assert.equal(r.line, SAFARI_RADIO_LINE, 'the line, at once: ' + JSON.stringify(r));
+        assert.equal(r.tx, false, 'no TX16S line on Safari');
+        assert.doesNotMatch(r.lead, /plug in a radio/i, 'nor a lead that says to plug one in: ' + r.lead);
+        assert.equal(r.first, 'feelKeys', 'Fly with keyboard still has the focus');
+        await a.clickSel('#feelKeys');
+        await a.js(`await I.until(() => !document.body.classList.contains('menu-open') && !(window._feel && window._feel.promptOpen), 5000); await I.wait(500); return 1;`);
+        const at = await a.js(pickRadio);
+        r = await a.js(`await I.wait(8000); return JSON.stringify({ hidden: document.getElementById('radioHelp').hidden, ms: Math.round(performance.now() - ${at}) });`);
+        assert.equal(r.hidden, true, 'not before 10 s: ' + JSON.stringify(r));
+        r = await helpAfter(a, at);
+        assert.equal(r.shown, true, 'the steps: ' + JSON.stringify(r));
+        assert.ok(r.ms >= 10000 && r.ms < 13000, 'at 10 s: ' + r.ms);
+        assert.deepEqual(r.steps, STEPS);
+        assert.ok(r.font >= 20, 'big: ' + r.font + ' px');
+        assert.equal(r.safari, SAFARI_RADIO_LINE, 'with Safari\'s line');
+        assert.ok(r.inView && r.top && r.ok >= 44, 'in view, on top, OK 44 px: ' + JSON.stringify(r));
+        await a.clickSel('#radioHelpOk');
+        r = await a.js(`await I.frames(2); return JSON.stringify({ hidden: document.getElementById('radioHelp').hidden });`);
+        assert.equal(r.hidden, true, 'OK takes them away');
+      });
+    });
+
+    await t.test('desktop Chrome: no Safari line on the card; the keyboard picked within 10 s of Radio, no steps; Radio with nothing there, the three steps at 10 s, no Safari line; a pad arriving takes them away', async () => {
+      await pass({ view: [1280, 720] }, async (a) => {
+        let r = await a.js(`return JSON.stringify({ line: !!document.getElementById('feelSafari'), tx: /TX16S: USB Joystick/.test(document.querySelector('.feel-card').textContent) });`);
+        assert.deepEqual(r, { line: false, tx: true }, 'Chrome: the TX16S line, no Safari line');
+        await a.clickSel('#feelKeys');
+        await a.js(`await I.until(() => !document.body.classList.contains('menu-open') && !(window._feel && window._feel.promptOpen), 5000); await I.wait(500); return 1;`);
+        // Radio, then the keyboard 2 s later: no steps at 10 s.
+        let at = await a.js(pickRadio);
+        r = await a.js(`await I.wait(2000); document.querySelector('#menuLayer [data-input="keyboard"]').click(); await I.wait(10500);
+          return JSON.stringify({ hidden: document.getElementById('radioHelp').hidden, ms: Math.round(performance.now() - ${at}), choice: I.s.armHelp().choice });`);
+        assert.equal(r.choice, 'keyboard');
+        assert.equal(r.hidden, true, 'the keyboard picked first: no steps ' + JSON.stringify(r));
+        // Radio again (the menu still open), nothing there: the steps at 10 s.
+        at = await a.js(`const at = performance.now(); document.querySelector('#menuLayer [data-input="pad"]').click(); return at;`);
+        r = await helpAfter(a, at);
+        assert.equal(r.shown, true, 'the steps: ' + JSON.stringify(r));
+        assert.ok(r.ms >= 10000 && r.ms < 13000, 'at 10 s: ' + r.ms);
+        assert.deepEqual(r.steps, STEPS);
+        assert.ok(r.font >= 20, 'big: ' + r.font + ' px');
+        assert.equal(r.safari, null, 'no Safari line in Chrome');
+        assert.ok(r.inView && r.top && r.ok >= 44, 'in view, on top, OK 44 px: ' + JSON.stringify(r));
+        // A radio arrives (plugged in, a stick moved): the steps go.
+        r = await a.js(`window.__pads.list.push({ id: ${JSON.stringify(TX)}, mapping: '', axes: [0, 0, -1, 0, -1, -1, -1, -1], buttons: 24, on: true });
+          window.dispatchEvent(new Event('gamepadconnected')); await I.until(() => document.getElementById('radioHelp').hidden, 3000);
+          return JSON.stringify({ hidden: document.getElementById('radioHelp').hidden, kind: I.s.armHelp().kind });`);
+        assert.equal(r.hidden, true, 'a pad takes them away: ' + JSON.stringify(r));
       });
     });
 
