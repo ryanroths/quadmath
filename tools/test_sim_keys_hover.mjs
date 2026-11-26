@@ -42,7 +42,8 @@ import {
 import { HOTKEYS, legendHtml, FIRST_FLIGHT_KEYS_ALT, FIRST_FLIGHT_KEYS_IMG } from '../sim-feel.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const html = readFileSync(join(root, 'sim.html'), 'utf8');
+// LF whatever the checkout (a Windows one is CRLF): the pins below span lines.
+const html = readFileSync(join(root, 'sim.html'), 'utf8').replace(/\r\n/g, '\n');
 
 // ---------- Node ----------
 // n samples of 4 ms; o: the sample's fields (a function of the state for a plant).
