@@ -178,6 +178,17 @@ test('anonymous flight counts: a normal flight sends ready, kbd, arm, flew30 in 
     await cdp(ws, 'Page.enable');
     const key = async (type, k, code, vk) => cdp(ws, 'Input.dispatchKeyEvent', { type, key: k, code, windowsVirtualKeyCode: vk });
     const hold = async (k, code, vk, ms) => { await key('rawKeyDown', k, code, vk); await key('keyDown', k, code, vk); await sleep(ms); await key('keyUp', k, code, vk); };
+    // The sim samples keys once a frame and runs at most 50 ms a frame: on
+    // CI's software GPU (about 8 frames a second) a 25-150 ms wall-time tap is
+    // seen for no frame or one, so a hover flown on wall time gets a random
+    // gain. Held for ms of sim time instead (at most 10 s wall).
+    const simMs = async () => evaluate(ws, `window._sim.simClockMs()`);
+    const holdSim = async (k, code, vk, ms) => {
+      await key('rawKeyDown', k, code, vk); await key('keyDown', k, code, vk);
+      const s0 = await simMs(), w0 = Date.now();
+      while ((await simMs()) - s0 < ms && Date.now() - w0 < 10000) await sleep(20);
+      await key('keyUp', k, code, vk);
+    };
     const state = async () => JSON.parse(await evaluate(ws, STATE));
     // Easy mode's arm: the throttle down a second, then W raises it. Held
     // until armed (or 2 s); else S to the bottom and again.
@@ -186,12 +197,13 @@ test('anonymous flight counts: a normal flight sends ready, kbd, arm, flew30 in 
         await sleep(1500);
         await key('rawKeyDown', ...W);
         await key('keyDown', ...W);
-        const t0 = Date.now();
+        // Held until armed, up to 2 s of sim time (at most 15 s wall).
+        const s0 = await simMs(), w0 = Date.now();
         let st = await state();
-        while (!st.armed && Date.now() - t0 < 2000) { await sleep(50); st = await state(); }
+        while (!st.armed && (await simMs()) - s0 < 2000 && Date.now() - w0 < 15000) { await sleep(50); st = await state(); }
         await key('keyUp', ...W);
         if (st.armed) return true;
-        await hold(...S, 1200);
+        await holdSim(...S, 1200);
       }
       return false;
     };
@@ -248,11 +260,12 @@ test('anonymous flight counts: a normal flight sends ready, kbd, arm, flew30 in 
       st = await state();
       if (!st.armed) { assert.ok(await arm(), 'W arms it'); continue; }
       const u = (1.2 - st.z) * 1.0 - st.vz * 0.6;
-      if (u > 0.12) { await hold(...W, Math.min(150, Math.max(25, u * 90))); taps++; }
-      else if (u < -0.12) { await hold(...S, Math.min(150, Math.max(25, -u * 90))); taps++; }
+      if (u > 0.12) { await holdSim(...W, Math.min(150, Math.max(25, u * 90))); taps++; }
+      else if (u < -0.12) { await holdSim(...S, Math.min(150, Math.max(25, -u * 90))); taps++; }
       else await sleep(60);
     }
-    t.diagnostic(`flew30 after ${((Date.now() - t0) / 1000).toFixed(1)} s wall, ${taps} taps; last ${JSON.stringify(st)}`);
+    const fps = await evaluate(ws, `Math.round((window._sim.looks && window._sim.looks.fps && window._sim.looks.fps.avg) || 0)`).catch(() => 0);
+    t.diagnostic(`flew30 after ${((Date.now() - t0) / 1000).toFixed(1)} s wall, ${taps} taps, ${fps} fps; last ${JSON.stringify(st)}`);
     assert.ok(events('flight').includes('flew30'), 'flew30 after 30 s in the air: ' + JSON.stringify(st));
     await sleep(2000);
     const flight = pings.filter((p) => p.page === 'flight');
@@ -286,6 +299,9 @@ test('anonymous flight counts: a normal flight sends ready, kbd, arm, flew30 in 
     }
     await cdp(ws, 'Page.removeScriptToEvaluateOnNewDocument', { identifier: fresh });
     assert.ok(up, 'early: the first-run prompt is up');
+    // The prompt can be up before the bf core asks for its wasm (a slow boot
+    // on CI's software GL), so wait for the request, not just the prompt.
+    for (let i = 0; i < 80 && heldWasm.length === 0; i++) await sleep(250);
     assert.ok(heldWasm.length > 0, 'early: Betaflight\'s wasm held');
     assert.notEqual(await evaluate(ws, `window._sim.core()`), 'bf', 'early: Betaflight not flying yet');
     await clickKeys();
@@ -306,17 +322,25 @@ test('anonymous flight counts: a normal flight sends ready, kbd, arm, flew30 in 
     let armedUp = false;
     for (let i = 0; i < 40 && !armedUp; i++) { await sleep(100); armedUp = await evaluate(ws, `window._sim.coreState().armed`); }
     assert.ok(armedUp, 'floor: armed on the pad');
+    const armMs = await evaluate(ws, `window._sim.simClockMs()`);
+    // Frame times (wall ms) against the sim clock, the last 40, so a lift can
+    // be read against the frames around it: a long frame, or steady ones.
+    await evaluate(ws, `(() => { const f = window.__floorFrames = { last: performance.now(), ring: [] }; const tick = (now) => { f.ring.push([Math.round(window._sim.simClockMs()), Math.round(now - f.last)]); f.last = now; if (f.ring.length > 40) f.ring.shift(); if (!f.stop) requestAnimationFrame(tick); }; requestAnimationFrame(tick); return true; })()`);
     await evaluate(ws, `window._sim.setTestStick({ r: 0, p: 0, y: 0, t: 0.3 }), true`);
     const f0 = await evaluate(ws, `window._sim.simClockMs()`);
-    let sawAir = false, lifted = 0, last = null;
+    let sawAir = false, lifted = 0, last = null, liftAt = null;
     while ((await evaluate(ws, `window._sim.simClockMs()`)) - f0 < 33000) {
-      last = JSON.parse(await evaluate(ws, `JSON.stringify((() => { const c = window._sim.coreState(); return { air: !!c.airborne, clr: c.clearance, armed: !!c.armed, airMs: window._sim.raceOffer().airMs }; })())`));
+      last = JSON.parse(await evaluate(ws, `JSON.stringify((() => { const c = window._sim.coreState(); return { ms: window._sim.simClockMs(), air: !!c.airborne, clr: c.clearance, vz: c.velocity && c.velocity.z, twr: c.twr, armed: !!c.armed, airMs: window._sim.raceOffer().airMs }; })())`));
       sawAir = sawAir || last.air;
-      lifted = Math.max(lifted, last.clr);
+      if (last.clr > lifted) {
+        lifted = last.clr;
+        if (lifted > 0.04 && !liftAt) liftAt = { ...last, ms: last.ms - f0, frames: await evaluate(ws, `JSON.stringify(window.__floorFrames.ring.map(([ms, d]) => [ms - ${f0}, d]))`) };
+      }
       await sleep(250);
     }
     await evaluate(ws, `window._sim.setTestStick({ r: 0, p: 0, y: 0, t: 0 }), true`);
-    t.diagnostic('floor: ' + JSON.stringify({ sawAir, lifted, last }));
+    await evaluate(ws, `(window.__floorFrames.stop = true)`);
+    t.diagnostic('floor: ' + JSON.stringify({ sawAir, lifted, armToThrottleMs: Math.round(f0 - armMs), liftAt, last }));
     assert.ok(last.armed, 'floor: armed throughout');
     assert.ok(lifted <= 0.04, 'floor: never off the floor: ' + lifted);
     assert.equal(last.airMs, 0, 'floor: no race-offer air time');
