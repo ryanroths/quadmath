@@ -335,7 +335,7 @@ test('the files: sim-share.js imports nothing (the Worker bundles it), is stampe
   assert.match(read('workers/sim-leaderboard/DEPLOY.md'), /migrate-lines\.sql/);
   const html = read('sim.html');
   assert.match(html, /<button type="button" id="toastShare">SHARE<\/button>/, 'SHARE on the finish screen');
-  assert.match(html, /'<button type="button" id="lapShare">SHARE<\/button><\/span>'/, 'SHARE under the result on the lap panel');
+  assert.match(html, /'<button type="button" id="lapShare">SHARE<\/button>'\+/, 'SHARE under the result on the lap panel (a sprint\'s full loop after it)');
   assert.match(html, /<button class="menu-flight" id="menuShare" disabled>Finish a run to share<\/button>/, 'SHARE in the pause menu');
   assert.match(html, /if\(e\.key\.toLowerCase\(\)==='k'&&!e\.repeat&&!e\.ctrlKey&&!e\.metaKey&&!e\.altKey\)shareLine\(\);/, 'K shares');
   assert.match(html, /if\(e\.key\.toLowerCase\(\)==='h'\)\{\s+if\(feel\)toast\(feel\.toggleHud\(\)/, 'H is the stick HUD already, so SHARE is K');
