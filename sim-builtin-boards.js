@@ -152,6 +152,58 @@ export const BUILTIN_BOARD_TRACKS = Object.freeze([
     ]
   },
   {
+    "id": "rig-sprint",
+    "map": "rig",
+    "name": "Rig Sprint",
+    "start": {
+      "x": -21.35,
+      "y": 1.225,
+      "z": -19.6
+    },
+    "gates": [
+      {
+        "x": -15.225,
+        "y": 4.2,
+        "z": -19.6,
+        "ry": 1.5708,
+        "size": 1.925,
+        "solid": false
+      },
+      {
+        "x": 15.225,
+        "y": 4.2,
+        "z": -19.6,
+        "ry": 1.5708,
+        "size": 1.925,
+        "solid": false
+      },
+      {
+        "x": 26.25,
+        "y": 4.2,
+        "z": -19.6,
+        "ry": 1.1473,
+        "size": 1.75,
+        "solid": false
+      },
+      {
+        "x": 31.5,
+        "y": 4.2,
+        "z": -13.65,
+        "ry": 0.3611,
+        "size": 1.575,
+        "solid": false
+      },
+      {
+        "x": 31.5,
+        "y": 4.2,
+        "z": -4.9,
+        "ry": 0,
+        "size": 1.4,
+        "solid": false
+      }
+    ]
+  },
+  {
     "id": "house-loop",
     "map": "house",
     "name": "House Loop",
@@ -319,6 +371,66 @@ export const BUILTIN_BOARD_TRACKS = Object.freeze([
         "z": 15.0495,
         "ry": 1.5708,
         "size": 1.155,
+        "solid": false
+      }
+    ]
+  },
+  {
+    "id": "house-sprint",
+    "map": "house",
+    "name": "House Sprint",
+    "start": {
+      "x": -14.7,
+      "y": 1.225,
+      "z": 15.05
+    },
+    "gates": [
+      {
+        "x": -8.75,
+        "y": 4.025,
+        "z": 15.05,
+        "ry": 1.5708,
+        "size": 1.575,
+        "solid": false
+      },
+      {
+        "x": -3.15,
+        "y": 4.515,
+        "z": 5.67,
+        "ry": 3.1416,
+        "size": 1.05,
+        "solid": false
+      },
+      {
+        "x": 2.45,
+        "y": 5.075,
+        "z": -3.15,
+        "ry": 1.5708,
+        "size": 1.4,
+        "solid": false
+      },
+      {
+        "x": 8.05,
+        "y": 4.2,
+        "z": 7.7,
+        "ry": 0,
+        "size": 1.4,
+        "solid": false
+      },
+      {
+        "x": 13.825,
+        "y": 4.375,
+        "z": 13.3,
+        "ry": 1.5708,
+        "size": 1.4,
+        "solid": false
+      },
+      {
+        "x": 27.0598,
+        "y": 2.9872,
+        "z": 11.6598,
+        "ry": 2.3562,
+        "size": 1.4,
         "solid": false
       }
     ]
@@ -605,6 +717,58 @@ export const BUILTIN_BOARD_TRACKS = Object.freeze([
         "x": -52.85,
         "y": 6.65,
         "z": 15.4,
+        "ry": 3.1416,
+        "size": 1.575,
+        "solid": false
+      }
+    ]
+  },
+  {
+    "id": "depot-sprint",
+    "map": "depot",
+    "name": "Warehouse Sprint",
+    "start": {
+      "x": -43.225,
+      "y": 1.225,
+      "z": 5.775
+    },
+    "gates": [
+      {
+        "x": -34.475,
+        "y": 4.55,
+        "z": 5.775,
+        "ry": 1.5708,
+        "size": 1.75,
+        "solid": false
+      },
+      {
+        "x": 0,
+        "y": 4.55,
+        "z": 5.775,
+        "ry": 1.5708,
+        "size": 1.75,
+        "solid": false
+      },
+      {
+        "x": 22.75,
+        "y": 4.55,
+        "z": 5.775,
+        "ry": 1.5708,
+        "size": 1.75,
+        "solid": false
+      },
+      {
+        "x": 47.6875,
+        "y": 3.85,
+        "z": 5.775,
+        "ry": 1.5708,
+        "size": 2.1,
+        "solid": false
+      },
+      {
+        "x": 61.25,
+        "y": 4.55,
+        "z": -3.85,
         "ry": 3.1416,
         "size": 1.575,
         "solid": false

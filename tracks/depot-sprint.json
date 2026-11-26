@@ -1,0 +1,15 @@
+{
+  "id": "depot-sprint",
+  "map": "depot",
+  "name": "Warehouse Sprint",
+  "class": "whoop",
+  "start": { "x": -43.225, "y": 1.225, "z": 5.775 },
+  "gates": [
+    { "x": -34.475, "y": 4.55, "z": 5.775, "ry": 1.5708, "size": 1.75, "solid": false },
+    { "x": 0, "y": 4.55, "z": 5.775, "ry": 1.5708, "size": 1.75, "solid": false },
+    { "x": 22.75, "y": 4.55, "z": 5.775, "ry": 1.5708, "size": 1.75, "solid": false },
+    { "x": 47.6875, "y": 3.85, "z": 5.775, "ry": 1.5708, "size": 2.1, "solid": false },
+    { "x": 61.25, "y": 4.55, "z": -3.85, "ry": 3.1416, "size": 1.575, "solid": false }
+  ],
+  "flags": []
+}
