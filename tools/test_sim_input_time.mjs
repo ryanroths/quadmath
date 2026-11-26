@@ -266,7 +266,7 @@ test('input-timed things in Chrome take their time with sparse input polls', { t
   const atMost = (nominal, gaps) => Math.round(nominal + gaps.max + SLACK_MS);
 
   try {
-    await t.test('the keyboard: Easy mode\'s 1 s hold, and the throttle from 0 to full', async () => {
+    await t.test('the keyboard: Easy mode\'s 1 s hold, and the throttle from 0 to full (Acro: the keys\' own ramp)', async () => {
       await pass('', {}, async ({ js, key }) => {
         let r = await js(`
           for (let i = 0; i < 20 && (U.open().prompt || U.open().menu); i++) {
@@ -279,6 +279,14 @@ test('input-timed things in Chrome take their time with sparse input polls', { t
           return JSON.stringify({ open: U.open(), easy: U.s.easy().mode });`);
         assert.deepEqual(r.open, { prompt: false, menu: false }, 'no menu: the poll runs');
         assert.equal(r.easy, true, 'Easy mode');
+        // Acro: the keys' own ramp (1.4 a second, where it is let go), the
+        // measure here. In Angle and Horizon the keys' hover spring has the
+        // throttle (tools/test_sim_keys_hover.mjs); Easy mode's hold is the same.
+        await key(true, '3', 'Digit3', 51);
+        await key(false, '3', 'Digit3', 51);
+        r = await js(`return JSON.stringify({ mode: await U.when(() => U.s.easy().flightMode === 'acro', 3000) !== null, easy: U.s.easy().mode });`);
+        assert.equal(r.mode, true, 'Acro on 3');
+        assert.equal(r.easy, true, 'still Easy mode');
         for (const g of GAPS) {
           // The hold: the throttle at the bottom and the page's count from 0,
           // right after a poll; done at the first poll that has counted 1 s.
