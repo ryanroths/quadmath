@@ -304,7 +304,7 @@ test('sim.html: a builder track\'s finish goes to its board, quietly', () => {
     for (; i < html.length; i++) { if (html[i] === '{') depth++; else if (html[i] === '}' && --depth === 0) return html.slice(start, i + 1); }
     throw new Error(name);
   };
-  assert.match(extract('noteRetentionFinish'), /if\(isCustomBoardTrackId\(id\)&&!offBoards\)\{\s*if\(testPilotUsed\)held=true;\s*else maybeSubmitTrackBoard\(id, total, submitRec\|\|rec\);/);
+  assert.match(extract('noteRetentionFinish'), /if\(isCustomBoardTrackId\(id\)&&!offBoards\)\{\s*if\(testPilotUsed\)held=true;\s*else maybeSubmitTrackBoard\(id, total, submitRec\|\|rec\)/);
   const submit = extract('maybeSubmitTrackBoard');
   assert.match(submit, /normalizeTrackSubmit\(body\)/, 'checked as the Worker checks it');
   assert.doesNotMatch(submit, /toast\(/, 'no toast, refused or not');
