@@ -178,6 +178,17 @@ test('anonymous flight counts: a normal flight sends ready, kbd, arm, flew30 in 
     await cdp(ws, 'Page.enable');
     const key = async (type, k, code, vk) => cdp(ws, 'Input.dispatchKeyEvent', { type, key: k, code, windowsVirtualKeyCode: vk });
     const hold = async (k, code, vk, ms) => { await key('rawKeyDown', k, code, vk); await key('keyDown', k, code, vk); await sleep(ms); await key('keyUp', k, code, vk); };
+    // The sim samples keys once a frame and runs at most 50 ms a frame: on
+    // CI's software GPU (about 8 frames a second) a 25-150 ms wall-time tap is
+    // seen for no frame or one, so a hover flown on wall time gets a random
+    // gain. Held for ms of sim time instead (at most 10 s wall).
+    const simMs = async () => evaluate(ws, `window._sim.simClockMs()`);
+    const holdSim = async (k, code, vk, ms) => {
+      await key('rawKeyDown', k, code, vk); await key('keyDown', k, code, vk);
+      const s0 = await simMs(), w0 = Date.now();
+      while ((await simMs()) - s0 < ms && Date.now() - w0 < 10000) await sleep(20);
+      await key('keyUp', k, code, vk);
+    };
     const state = async () => JSON.parse(await evaluate(ws, STATE));
     // Easy mode's arm: the throttle down a second, then W raises it. Held
     // until armed (or 2 s); else S to the bottom and again.
@@ -186,12 +197,13 @@ test('anonymous flight counts: a normal flight sends ready, kbd, arm, flew30 in 
         await sleep(1500);
         await key('rawKeyDown', ...W);
         await key('keyDown', ...W);
-        const t0 = Date.now();
+        // Held until armed, up to 2 s of sim time (at most 15 s wall).
+        const s0 = await simMs(), w0 = Date.now();
         let st = await state();
-        while (!st.armed && Date.now() - t0 < 2000) { await sleep(50); st = await state(); }
+        while (!st.armed && (await simMs()) - s0 < 2000 && Date.now() - w0 < 15000) { await sleep(50); st = await state(); }
         await key('keyUp', ...W);
         if (st.armed) return true;
-        await hold(...S, 1200);
+        await holdSim(...S, 1200);
       }
       return false;
     };
@@ -248,11 +260,12 @@ test('anonymous flight counts: a normal flight sends ready, kbd, arm, flew30 in 
       st = await state();
       if (!st.armed) { assert.ok(await arm(), 'W arms it'); continue; }
       const u = (1.2 - st.z) * 1.0 - st.vz * 0.6;
-      if (u > 0.12) { await hold(...W, Math.min(150, Math.max(25, u * 90))); taps++; }
-      else if (u < -0.12) { await hold(...S, Math.min(150, Math.max(25, -u * 90))); taps++; }
+      if (u > 0.12) { await holdSim(...W, Math.min(150, Math.max(25, u * 90))); taps++; }
+      else if (u < -0.12) { await holdSim(...S, Math.min(150, Math.max(25, -u * 90))); taps++; }
       else await sleep(60);
     }
-    t.diagnostic(`flew30 after ${((Date.now() - t0) / 1000).toFixed(1)} s wall, ${taps} taps; last ${JSON.stringify(st)}`);
+    const fps = await evaluate(ws, `Math.round((window._sim.looks && window._sim.looks.fps && window._sim.looks.fps.avg) || 0)`).catch(() => 0);
+    t.diagnostic(`flew30 after ${((Date.now() - t0) / 1000).toFixed(1)} s wall, ${taps} taps, ${fps} fps; last ${JSON.stringify(st)}`);
     assert.ok(events('flight').includes('flew30'), 'flew30 after 30 s in the air: ' + JSON.stringify(st));
     await sleep(2000);
     const flight = pings.filter((p) => p.page === 'flight');
