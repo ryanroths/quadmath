@@ -28,3 +28,8 @@ slicer-daily/
 # Local Wrangler / npm bits for the sim leaderboard Worker (source stays tracked).
 workers/**/node_modules/
 workers/**/.wrangler/
+# Wrangler's own ignore lines (its local state, and secrets in .dev.vars; the
+# example file stays tracked).
+.wrangler
+.dev.vars*
+!.dev.vars.example

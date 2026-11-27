@@ -1,0 +1,16 @@
+{
+  "id": "house-sprint",
+  "map": "house",
+  "name": "House Sprint",
+  "class": "whoop",
+  "start": { "x": -14.7, "y": 1.225, "z": 15.05 },
+  "gates": [
+    { "x": -8.75, "y": 4.025, "z": 15.05, "ry": 1.5708, "size": 1.575, "solid": false },
+    { "x": -3.15, "y": 4.515, "z": 5.67, "ry": 3.1416, "size": 1.05, "solid": false },
+    { "x": 2.45, "y": 5.075, "z": -3.15, "ry": 1.5708, "size": 1.4, "solid": false },
+    { "x": 8.05, "y": 4.2, "z": 7.7, "ry": 0, "size": 1.4, "solid": false },
+    { "x": 13.825, "y": 4.375, "z": 13.3, "ry": 1.5708, "size": 1.4, "solid": false },
+    { "x": 27.0598, "y": 2.9872, "z": 11.6598, "ry": 2.3562, "size": 1.4, "solid": false }
+  ],
+  "flags": []
+}

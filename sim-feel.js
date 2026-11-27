@@ -5,7 +5,7 @@
 //   quadmathSimFov, quadmathSimStickOverlay, quadmathSimSpeedUnits.
 // Nothing here is copied from WebFPV.
 
-import { makeWorldLabel } from './sim-art.js?v=2528f7c1d996';
+import { makeWorldLabel } from './sim-art.js?v=d9a0790d035a';
 
 export const INPUT_CHOICE_KEY = 'quadmathSimInputChoice';
 export const FLOATINESS_KEY = 'quadmathSimFloatiness';
