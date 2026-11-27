@@ -171,6 +171,22 @@ export function detectMobile(win) {
   } catch (e) { return false; }
 }
 
+// Safari on a Mac: it sees console-style gamepads only, never a radio (a HID
+// joystick), so a pilot there is told to use Chrome or Edge. Not an iPad,
+// whose Safari says Macintosh too but has touch points; the Mac's other
+// browsers name themselves in the agent string.
+export function detectDesktopSafari(win) {
+  const w = win || (typeof window !== 'undefined' ? window : null);
+  if (!w) return false;
+  try {
+    const nav = w.navigator || {};
+    const ua = String(nav.userAgent || '');
+    if (!/Macintosh/.test(ua) || !/Version\/[\d.]+.*Safari\//.test(ua)) return false;
+    if (/Chrome|Chromium|CriOS|FxiOS|EdgiOS|Edg\/|OPR\/|Firefox/.test(ua)) return false;
+    return !(nav.maxTouchPoints > 1);
+  } catch (e) { return false; }
+}
+
 // WebGL UNMASKED_RENDERER string -> 'low' | 'med' | 'high' | null (unknown).
 // Safari masks every Apple chip as "Apple GPU"; treat it as M-series (Auto
 // steps down if it is an old Intel Mac).
